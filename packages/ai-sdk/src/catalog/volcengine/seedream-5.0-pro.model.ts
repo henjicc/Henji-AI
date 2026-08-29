@@ -2,6 +2,7 @@
 
 import { defineModel } from '../defineModel'
 import type { JsonValue, JsonObject } from '../../types/runtime'
+import { parseSeedreamLayerStack } from '../../structured-output'
 
 const ASPECT_RATIOS = ['1:1', '4:3', '3:4', '16:9', '9:16', '3:2', '2:3', '21:9'] as const
 
@@ -9,7 +10,7 @@ export const volcengineSeedream50ProModel = defineModel({
   meta: {
     id: 'volcengine-seedream-5.0-pro', canonicalModelId: 'seedream-5.0-pro', seriesId: 'seedream', seriesRank: 5.1,
     provider: 'volcengine', type: 'image',
-    tags: ['text-to-image', 'image-to-image', 'supports-image-editing', 'supports-multi-image', 'max-images-10', 'provider-volcengine'],
+    tags: ['text-to-image', 'image-to-image', 'supports-image-editing', 'supports-multi-image', 'supports-layer-decomposition', 'max-images-10', 'provider-volcengine'],
     aliases: ['seedream-5-pro-official']
   },
   inputLimits: {
@@ -34,6 +35,7 @@ export const volcengineSeedream50ProModel = defineModel({
   params: [
     {
       id: 'volcengineSeedream50ProMode', type: 'dropdown', order: 1,
+      transferKey: 'layer-decomposition-mode',
       default: 'generate',
       options: [
         { value: 'generate' },
@@ -54,6 +56,7 @@ export const volcengineSeedream50ProModel = defineModel({
     },
     {
       id: 'volcengineSeedream50ProLayerSize', type: 'dropdown', order: 4,
+      transferKey: 'layer-output-size',
       default: 'auto',
       visible: { condition: 'volcengineSeedream50ProMode === "layer-decomposition"' },
       options: [
@@ -119,6 +122,11 @@ export const volcengineSeedream50ProModel = defineModel({
       if (images.length > 0) body.image = images
       return body
     }
+  },
+  response: {
+    structuredOutput: ({ metadata, params }) => params.volcengineSeedream50ProMode === 'layer-decomposition'
+      ? parseSeedreamLayerStack('volcengine', metadata)
+      : undefined
   },
   pricing: {
     currency: '¥',

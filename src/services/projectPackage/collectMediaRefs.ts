@@ -2,6 +2,11 @@ import type { CanvasNode } from '@/features/canvas/domain/canvasNodes';
 import { mapCanvasNodeMediaReferences } from '@/features/canvas/application/canvasNodeMediaReferences';
 import { isLikelyLocalImagePath } from '@/features/canvas/application/imageData';
 import type { PackageMediaFile } from '@/commands/projectPackage';
+import {
+  reconcileLayerStackMissingResources,
+  validateLayerStackDocument,
+  type LayerStackDocumentV1,
+} from '@/features/canvas/domain/layerStack';
 
 const PACKAGE_MEDIA_PREFIX = 'media/';
 
@@ -60,8 +65,31 @@ export function rewritePackagePathsToLocal(
     return value;
   };
 
-  return nodes.map((node) => ({
-    ...node,
-    data: mapCanvasNodeMediaReferences(node.data as DynamicValueMap, mapValue),
-  })) as CanvasNode[];
+  const existingPaths = new Set(Object.values(pathMap));
+  return nodes.map((node) => {
+    const data = mapCanvasNodeMediaReferences(node.data as DynamicValueMap, mapValue);
+    if (!data.layerStackDocument || typeof data.layerStackDocument !== 'object' || Array.isArray(data.layerStackDocument)) {
+      return { ...node, data } as CanvasNode;
+    }
+    try {
+      const document = reconcileLayerStackMissingResources(
+        validateLayerStackDocument(data.layerStackDocument as unknown as LayerStackDocumentV1),
+        existingPaths,
+      );
+      const composite = document.resources.find((resource) => resource.resourceId === document.compositeResourceId);
+      const thumbnail = document.resources.find((resource) => resource.resourceId === document.thumbnailResourceId);
+      return {
+        ...node,
+        data: {
+          ...data,
+          layerStackDocument: document,
+          imageUrl: composite?.filePath ?? null,
+          previewImageUrl: thumbnail?.filePath ?? composite?.filePath ?? null,
+        },
+      } as CanvasNode;
+    } catch {
+      // 未知旧版本保持原始数据，交由节点迁移器降级；导入器不猜测像素语义。
+      return { ...node, data } as CanvasNode;
+    }
+  });
 }

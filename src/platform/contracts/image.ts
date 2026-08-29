@@ -121,6 +121,55 @@ export interface ImageDiffusionFallbackCapabilities {
   reason?: string
 }
 
+export interface ComposeLayerStackPayload {
+  requestId: string
+  stackId: string
+  layers: Array<{
+    sourceOutputIndex: number
+    source: string
+    zIndex: number
+    role: 'base' | 'content'
+    name?: string
+    description?: string
+    declaredWidth: number
+    declaredHeight: number
+    declaredFormat: 'png' | 'jpeg' | 'webp'
+    boundingBox?: {
+      absolute?: [number, number, number, number]
+      normalized?: [number, number, number, number]
+    }
+    opacity?: number
+    visible?: boolean
+  }>
+  thumbnailMaxSize?: number
+  /** 仅首次接收模型输出时持久化输入层；重新合成必须复用已有受管文件。 */
+  persistSourceLayers?: boolean
+}
+
+export interface ComposeLayerStackResult {
+  stackId: string
+  canvasWidth: number
+  canvasHeight: number
+  resources: Array<{
+    sourceOutputIndex: number
+    filePath: string
+    mimeType: 'image/png' | 'image/webp' | 'image/jpeg'
+    width: number
+    height: number
+    hasAlpha: boolean
+    byteLength: number
+    sha256: string
+    placement: { x: number; y: number; width: number; height: number }
+  }>
+  compositePath: string
+  compositeSha256: string
+  thumbnailPath: string
+  thumbnailSha256: string
+  thumbnailWidth: number
+  thumbnailHeight: number
+  createdFilePaths: string[]
+}
+
 /** 图像处理原生命令；剪贴板能力单独归属 contracts/clipboard.ts。 */
 export interface ImagePlatform {
   splitImage(imageBase64: string, rows: number, cols: number, lineThickness: number): Promise<string[]>
@@ -147,4 +196,7 @@ export interface ImagePlatform {
   readImageInfo(source: string): Promise<ImageInfoResult>
   probeDiffusionFallback(): Promise<ImageDiffusionFallbackCapabilities>
   renderDiffusionFallback(request: ImageDiffusionFallbackRequest): Promise<ImageDiffusionFallbackResult>
+  composeLayerStack(payload: ComposeLayerStackPayload): Promise<ComposeLayerStackResult>
+  cancelLayerStackComposition(requestId: string): Promise<void>
+  releaseLayerStackResources(filePaths: string[]): Promise<void>
 }

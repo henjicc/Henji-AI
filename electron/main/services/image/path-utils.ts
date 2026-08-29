@@ -62,16 +62,46 @@ export function getDebugDir(category: string): string {
 }
 
 export function persistImageBytes(bytes: Buffer, extension: string | undefined): string {
+  return persistImageBytesTracked(bytes, extension).filePath
+}
+
+export interface PersistedImageBytes {
+  filePath: string
+  created: boolean
+}
+
+/** 供需要失败回滚的批处理使用；只能删除本次新建的内容寻址文件。 */
+export function persistImageBytesTracked(bytes: Buffer, extension: string | undefined): PersistedImageBytes {
   if (bytes.length === 0) {
     throw new Error('Image bytes are empty')
   }
   const digest = crypto.createHash('md5').update(bytes).digest('hex')
   const ext = normalizeExtension(extension)
   const targetPath = path.join(getUploadsDir(), `${digest}.${ext}`)
-  if (!fs.existsSync(targetPath)) {
+  const created = !fs.existsSync(targetPath)
+  if (created) {
     fs.writeFileSync(targetPath, bytes)
   }
-  return targetPath
+  return { filePath: targetPath, created }
+}
+
+export function rollbackPersistedImageBytes(entry: PersistedImageBytes): void {
+  if (!entry.created) return
+  try {
+    fs.rmSync(entry.filePath, { force: true })
+  } catch {
+    // 失败回滚属于 best-effort；原始错误必须继续上抛。
+  }
+}
+
+export function releaseManagedImagePaths(filePaths: readonly string[]): void {
+  const uploadsDir = path.resolve(getUploadsDir())
+  const prefix = `${uploadsDir}${path.sep}`
+  for (const filePath of new Set(filePaths)) {
+    const resolved = path.resolve(filePath)
+    if (!resolved.startsWith(prefix)) throw new Error('只能释放 Uploads 目录内的受管图片')
+    fs.rmSync(resolved, { force: true })
+  }
 }
 
 export function sanitizeFileStem(raw: string | undefined): string {

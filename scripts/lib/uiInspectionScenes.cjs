@@ -809,6 +809,58 @@ function createUiInspectionScenes({ canvasFixtureProjectId, settlePage }) {
     await settlePage(page, 900)
   }
 
+  async function setupCanvasLayerStack(page) {
+    const { panoramaSource, projectId } = await seedAndOpenCanvasPanoramaProject(page)
+    const completionId = 'generation-output:__ui_layer_stack_result'
+    let hash = 2166136261
+    for (let index = 0; index < completionId.length; index += 1) {
+      hash ^= completionId.charCodeAt(index)
+      hash = Math.imul(hash, 16777619)
+    }
+    const stackId = `layer-stack:${(hash >>> 0).toString(36)}`
+    await page.getByRole('button', { name: /返回项目|Back to Projects/ }).click()
+    await page.evaluate(async ({ targetProjectId, source, stackId, completionId }) => {
+      const rows = await window.henjiNative.db.select(
+        'SELECT nodes_json, edges_json FROM storyboard_projects WHERE id = ? LIMIT 1',
+        [targetProjectId]
+      )
+      const nodes = JSON.parse(rows[0]?.nodes_json ?? '[]')
+      const edges = JSON.parse(rows[0]?.edges_json ?? '[]')
+      const layerResourceId = `${stackId}:resource:0`
+      const document = {
+        version: 1, stackId, status: 'ready',
+        source: { capabilityId: 'image.layer-separation', sourceNodeId: '__ui_panorama_source', inputResourceId: source, providerId: 'volcengine', modelId: 'volcengine-seedream-5.0-pro', completionId },
+        canvas: { width: 1600, height: 800, colorSpace: 'srgb', alphaMode: 'straight', compositeOperation: 'source-over', clipPolicy: 'canvas-bounds' },
+        compositeResourceId: `${stackId}:composite`, thumbnailResourceId: `${stackId}:thumbnail`,
+        layers: [{ version: 1, layerId: `${stackId}:layer:0`, sourceOutputIndex: 0, providerZIndex: 0, order: 0, role: 'base', name: '本地模拟底图', resourceId: layerResourceId, placement: { x: 0, y: 0, width: 1600, height: 800 }, opacity: 1, visible: true, blendMode: 'normal', alpha: 'opaque' }],
+        resources: [
+          { version: 1, resourceId: layerResourceId, status: 'ready', filePath: source, mimeType: 'image/png', width: 1600, height: 800, hasAlpha: false, byteLength: null, sha256: 'ui-base' },
+          { version: 1, resourceId: `${stackId}:composite`, status: 'ready', filePath: source, mimeType: 'image/png', width: 1600, height: 800, hasAlpha: true, byteLength: null, sha256: 'ui-composite' },
+          { version: 1, resourceId: `${stackId}:thumbnail`, status: 'ready', filePath: source, mimeType: 'image/png', width: 1600, height: 800, hasAlpha: false, byteLength: null, sha256: 'ui-thumbnail' },
+        ],
+      }
+      nodes.push({
+        id: '__ui_layer_stack_result', type: 'layerStackResultNode', position: { x: 720, y: 80 },
+        width: 520, height: 300, measured: { width: 520, height: 300 }, style: { width: 520, height: 300 },
+        data: { displayName: '图层结果（本地模拟）', imageUrl: source, previewImageUrl: source, aspectRatio: '2:1', resultKind: 'layer-stack', layerStackDocument: document, isGenerating: false },
+      })
+      edges.push({ id: '__ui_layer_stack_edge', source: '__ui_panorama_source', target: '__ui_layer_stack_result', sourceHandle: 'source', targetHandle: 'target' })
+      await window.henjiNative.db.execute(
+        'UPDATE storyboard_projects SET node_count = ?, nodes_json = ?, edges_json = ?, viewport_json = ? WHERE id = ?',
+        [nodes.length, JSON.stringify(nodes), JSON.stringify(edges), JSON.stringify({ x: 50, y: 120, zoom: 0.7 }), targetProjectId]
+      )
+    }, { targetProjectId: projectId, source: panoramaSource, stackId, completionId })
+    await page.locator(`[data-project-id="${projectId}"]:visible`).click()
+    const result = page.locator('[data-layer-stack-node-id="__ui_layer_stack_result"][data-layer-stack-status="ready"]')
+    await result.waitFor({ state: 'visible', timeout: 12000 })
+    await result.getByRole('button', { name: /^图层$/ }).click()
+    const editor = page.getByRole('dialog', { name: /^图层 · 1$/ })
+    await editor.waitFor({ state: 'visible', timeout: 12000 })
+    await editor.getByText('本地模拟底图').waitFor({ state: 'visible', timeout: 8000 })
+    await editor.getByRole('button', { name: /^合成$/ }).waitFor({ state: 'visible', timeout: 8000 })
+    await settlePage(page, 900)
+  }
+
   async function setupCanvasNineGrid(page) {
     const { projectId } = await seedAndOpenCanvasPanoramaProject(page)
     const sourceNode = page.locator('.react-flow__node[data-id="__ui_panorama_source"]')
@@ -1672,6 +1724,13 @@ function createUiInspectionScenes({ canvasFixtureProjectId, settlePage }) {
       writesUserData: true,
       name: '画布-元素编辑节点与唯一蒙版编辑器',
       setup: setupCanvasElementEditNode,
+    },
+    {
+      id: 'canvas-layer-stack',
+      surface: '画布',
+      writesUserData: true,
+      name: '画布-图层结果节点与图层界面',
+      setup: setupCanvasLayerStack,
     },
     {
       id: 'canvas-nine-grid',

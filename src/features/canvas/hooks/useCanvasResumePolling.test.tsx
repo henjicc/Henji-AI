@@ -13,6 +13,7 @@ import { useCanvasResumePolling } from './useCanvasResumePolling';
 const generationMocks = vi.hoisted(() => ({
   resumeCanvasGeneration: vi.fn(),
   persistGenerationResult: vi.fn(),
+  commitLayerSeparationGeneration: vi.fn(),
 }));
 
 vi.mock('../generation/runGeneration', () => ({
@@ -21,6 +22,10 @@ vi.mock('../generation/runGeneration', () => ({
 
 vi.mock('../generation/mediaResultPersist', () => ({
   persistGenerationResult: generationMocks.persistGenerationResult,
+}));
+
+vi.mock('../application/layerSeparationGenerationService', () => ({
+  commitLayerSeparationGeneration: generationMocks.commitLayerSeparationGeneration,
 }));
 
 function createResumablePanoramaResult(): CanvasNode {
@@ -48,6 +53,7 @@ describe('useCanvasResumePolling 全景结果恢复', () => {
   beforeEach(() => {
     generationMocks.resumeCanvasGeneration.mockReset();
     generationMocks.persistGenerationResult.mockReset();
+    generationMocks.commitLayerSeparationGeneration.mockReset();
     useCanvasGenerationProgressStore.getState().clearAllProgress();
     const nodes = [createResumablePanoramaResult()];
     useCanvasStore.getState().setCanvasData(
@@ -125,5 +131,49 @@ describe('useCanvasResumePolling 全景结果恢复', () => {
       });
       expect(data?.generationError).toContain('2:1');
     });
+  });
+
+  it('图层栈续查按结构化协议进入专用原子提交而不降级成素材组', async () => {
+    const source: CanvasNode = {
+      id: 'source-image',
+      type: CANVAS_NODE_TYPES.upload,
+      position: { x: -300, y: 0 },
+      data: { displayName: '源图', imageUrl: '/managed/source.png', previewImageUrl: '/managed/source-preview.png', aspectRatio: '1:1' },
+    };
+    const result = createResumablePanoramaResult();
+    result.id = 'layer-result';
+    result.data = {
+      ...result.data,
+      resultKind: 'layer-stack',
+      sourceCapabilityId: 'image.layer-separation',
+      serverTaskId: 'layer-task',
+      serverTaskModelId: 'volcengine-seedream-5.0-pro',
+      generationSourceNodeId: source.id,
+      generationProviderId: 'volcengine',
+      generationInputImages: ['/managed/source.png'],
+    };
+    useCanvasStore.getState().setCanvasData([source, result], [{ id: 'source-to-layer', source: source.id, target: result.id }], { past: [], future: [] });
+    generationMocks.resumeCanvasGeneration.mockResolvedValue({
+      primary: '/managed/base.jpg',
+      outputs: ['/managed/base.jpg'],
+      structuredOutput: {
+        version: 1,
+        kind: 'layer-stack',
+        primary: { version: 1, sourceOutputIndex: 0, url: 'https://fixtures.invalid/base.jpg', filePath: '/managed/base.jpg', zIndex: 0, role: 'base', width: 8, height: 8, format: 'jpeg' },
+        outputs: [{ version: 1, sourceOutputIndex: 0, url: 'https://fixtures.invalid/base.jpg', filePath: '/managed/base.jpg', zIndex: 0, role: 'base', width: 8, height: 8, format: 'jpeg' }],
+        metadata: { colorSpace: 'srgb', alphaMode: 'straight', compositeOperation: 'source-over', order: 'bottom-to-top' },
+      },
+    });
+    generationMocks.commitLayerSeparationGeneration.mockResolvedValue({ resultNodeIds: [result.id] });
+
+    renderHook(() => useCanvasResumePolling());
+
+    await waitFor(() => expect(generationMocks.commitLayerSeparationGeneration).toHaveBeenCalledWith(expect.objectContaining({
+      sourceNodeId: source.id,
+      placeholderNodeId: result.id,
+      sourceImage: '/managed/source.png',
+      providerId: 'volcengine',
+    })));
+    expect(generationMocks.persistGenerationResult).not.toHaveBeenCalled();
   });
 });

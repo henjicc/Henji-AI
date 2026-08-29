@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 
 import { createLogger } from '@/core/logging';
+import { registry } from '@/core/ModelRegistry';
 import { useCanvasGenerationProgressStore } from '@/stores/canvasGenerationProgressStore';
 import { useCanvasStore } from '@/stores/canvasStore';
 
@@ -19,6 +20,7 @@ import {
   commitCanvasGenerationOutputs,
   resolveGenerationOutputStrategy,
 } from '../application/generationOutputApplicationService';
+import { commitLayerSeparationGeneration } from '../application/layerSeparationGenerationService';
 
 const logger = createLogger('features.canvas.hooks.useCanvasResumePolling');
 
@@ -123,6 +125,43 @@ async function resumeNodeTask(input: ResumeNodeTaskInput): Promise<void> {
     const resultOutputs = Array.isArray(result.outputs) && result.outputs.length > 0
       ? result.outputs
       : result.primary ? [result.primary] : [];
+
+    if (result.structuredOutput?.kind === 'layer-stack' || resultNodeData.resultKind === 'layer-stack') {
+      const persistedSourceNodeId = typeof resultNodeData.generationSourceNodeId === 'string'
+        && resultNodeData.generationSourceNodeId.trim().length > 0
+        ? resultNodeData.generationSourceNodeId
+        : undefined;
+      const sourceImage = Array.isArray(resultNodeData.generationInputImages)
+        ? resultNodeData.generationInputImages.find((value): value is string => typeof value === 'string' && value.trim().length > 0)
+        : undefined;
+      const model = registry.getModel(modelId);
+      const persistedProviderId = typeof resultNodeData.generationProviderId === 'string'
+        && resultNodeData.generationProviderId.trim().length > 0
+        ? resultNodeData.generationProviderId
+        : undefined;
+      const resolvedSourceNodeId = persistedSourceNodeId ?? sourceNodeId;
+      const providerId = persistedProviderId ?? model?.meta.provider;
+      if (!resolvedSourceNodeId || !sourceImage || !providerId) {
+        throw new Error('图层拆分恢复缺少来源节点、源图或模型信息');
+      }
+      await commitLayerSeparationGeneration({
+        sourceNodeId: resolvedSourceNodeId,
+        placeholderNodeId: nodeId,
+        resultNodeType,
+        completionId: `generation-output:${nodeId}`,
+        sourceImage,
+        providerId,
+        modelId,
+        result: { ...result, outputs: resultOutputs },
+      });
+      logger.info('[CanvasResume] 结构化图层生成恢复完成', {
+        event: 'canvas.resume_polling.layer_stack.completed',
+        taskId,
+        modelId,
+        context: { nodeId },
+      });
+      return;
+    }
 
     const outputResultKind = sourceCapability?.outputPolicy.resultKind;
     const memberResultKind = outputResultKind === 'panorama' ? 'panorama' : mediaType;

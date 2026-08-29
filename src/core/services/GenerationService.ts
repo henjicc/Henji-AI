@@ -621,6 +621,7 @@ export class GenerationService {
           url: response.url,
           filePath: response.filePath,
           metadata: response.metadata,
+          structuredOutput: response.structuredOutput,
           trace: response.trace,
         }
       }
@@ -664,6 +665,7 @@ export class GenerationService {
         url: response.url,
         filePath: response.filePath,
         metadata: response.metadata,
+        structuredOutput: response.structuredOutput,
         trace: response.trace,
       }
     } catch (error) {
@@ -802,6 +804,7 @@ export class GenerationService {
         url: response.url,
         filePath: response.filePath,
         metadata: response.metadata,
+        structuredOutput: response.structuredOutput,
         trace: response.trace,
       }
     } catch (error) {

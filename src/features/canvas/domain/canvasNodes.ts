@@ -6,6 +6,7 @@ import type {
   CanvasGenerationOutputDescriptorV1,
   CanvasGenerationOutputStrategy,
 } from './generationOutputs';
+import type { LayerStackDocumentV1 } from './layerStack';
 
 export const CANVAS_NODE_TYPES = {
   universalUpload: 'universalUploadNode',
@@ -17,6 +18,8 @@ export const CANVAS_NODE_TYPES = {
   upscaleGen: 'upscaleGenNode',
   portraitTextureGen: 'portraitTextureGenNode',
   elementEditGen: 'elementEditGenNode',
+  layerSeparationGen: 'layerSeparationGenNode',
+  layerStackResult: 'layerStackResultNode',
   exportImage: 'exportImageNode',
   textProcessing: 'textProcessingNode',
   textAnnotation: 'textAnnotationNode',
@@ -295,6 +298,18 @@ export interface ElementEditGenerationNodeData extends ImageEditNodeData {
   fixedSemanticParams: DynamicValueMap;
 }
 
+export interface LayerSeparationGenerationNodeData extends ImageEditNodeData {
+  capabilityId: 'image.layer-separation';
+  promptTemplateVersion: null;
+  fixedSemanticParams: DynamicValueMap;
+}
+
+export interface LayerStackResultNodeData extends NodeImageData {
+  resultKind: 'layer-stack';
+  /** 生成占位期间为空；成功提交后必须是已验证的 V1 文档。 */
+  layerStackDocument?: LayerStackDocumentV1;
+}
+
 export interface MultiAngleGenerationNodeData extends ImageEditNodeData {
   capabilityId: 'image.multi-angle';
   multiAngleConfig: DynamicValueMap;
@@ -466,6 +481,8 @@ export type CanvasNodeData =
   | UpscaleGenerationNodeData
   | PortraitTextureGenerationNodeData
   | ElementEditGenerationNodeData
+  | LayerSeparationGenerationNodeData
+  | LayerStackResultNodeData
   | StoryboardSplitNodeData
   | StoryboardGenNodeData
   | MediaGenNodeData
@@ -563,6 +580,18 @@ export function isElementEditGenerationNode(
   node: CanvasNode | null | undefined
 ): node is Node<ElementEditGenerationNodeData, typeof CANVAS_NODE_TYPES.elementEditGen> {
   return node?.type === CANVAS_NODE_TYPES.elementEditGen;
+}
+
+export function isLayerSeparationGenerationNode(
+  node: CanvasNode | null | undefined
+): node is Node<LayerSeparationGenerationNodeData, typeof CANVAS_NODE_TYPES.layerSeparationGen> {
+  return node?.type === CANVAS_NODE_TYPES.layerSeparationGen;
+}
+
+export function isLayerStackResultNode(
+  node: CanvasNode | null | undefined
+): node is Node<LayerStackResultNodeData, typeof CANVAS_NODE_TYPES.layerStackResult> {
+  return node?.type === CANVAS_NODE_TYPES.layerStackResult;
 }
 
 export function isMultiAngleGenerationNode(

@@ -3,6 +3,7 @@ import { registry } from '@/core/ModelRegistry';
 import { getMultiAngleExecutionModel } from '@/core/modelCatalog/multiAngleExecutionModels';
 import { GenerationService } from '@/core/services/GenerationService';
 import type { GenerateResult, ProgressStatus } from '@/core/providers/base';
+import type { StructuredGenerationOutput } from '@henjicc/ai-sdk';
 import { persistImageLocally } from '@/features/canvas/application/imageData';
 import { extractServerTaskIdFromMetadata } from '@/features/generation/application/taskServerId';
 
@@ -47,6 +48,7 @@ export interface CanvasGenerationOutput {
   outputs: string[];
   /** 首个输出 */
   primary: string;
+  structuredOutput?: StructuredGenerationOutput;
 }
 
 /**
@@ -213,5 +215,6 @@ function toGenerationOutput(result: GenerateResult): CanvasGenerationOutput {
   return {
     outputs,
     primary: outputs[0],
+    structuredOutput: result.structuredOutput,
   };
 }

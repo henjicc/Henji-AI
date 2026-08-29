@@ -70,6 +70,7 @@ export interface GenerationClientResult {
   url: string
   taskId?: string
   metadata: JsonValue
+  structuredOutput?: ProviderExecutionResult['structuredOutput']
 }
 
 export interface GenerationClientRequestInfo {
@@ -348,7 +349,7 @@ async function executeGeneration(
       requestBody,
     }
     hooks.onRequestBuilt?.(info)
-    const result = await provider.adapter.execute({
+    const providerResult = await provider.adapter.execute({
       apiKey,
       route: builtRequest.route,
       method: builtRequest.method,
@@ -358,6 +359,7 @@ async function executeGeneration(
       signal: controller.signal,
       runtime,
     })
+    const result = attachStructuredOutput(providerResult, model, effectiveParams)
     hooks.onCompleted?.({ ...info, result })
     span.end()
     return result
@@ -404,7 +406,7 @@ async function executePolling(
       requestBody: builtRequest.body,
     }
     hooks.onRequestBuilt?.(info)
-    const result = await provider.adapter.continuePolling({
+    const providerResult = await provider.adapter.continuePolling({
       apiKey,
       route: builtRequest.route,
       taskId,
@@ -413,6 +415,7 @@ async function executePolling(
       signal: controller.signal,
       runtime,
     })
+    const result = attachStructuredOutput(providerResult, model, effectiveParams)
     hooks.onCompleted?.({ ...info, result })
     span.end()
     return result
@@ -422,6 +425,22 @@ async function executePolling(
   } finally {
     clearCancelFlag('generation', taskId)
   }
+}
+
+function attachStructuredOutput(
+  result: ProviderExecutionResult,
+  model: ModelRuntimeDefinition,
+  params: JsonObject
+): ProviderExecutionResult {
+  const parser = model.response?.structuredOutput
+  if (!parser || result.status !== 'completed') return result
+  const structuredOutput = parser({
+    status: result.status,
+    url: result.url,
+    metadata: result.metadata,
+    params,
+  })
+  return structuredOutput ? { ...result, structuredOutput } : result
 }
 
 function resolveProvider(

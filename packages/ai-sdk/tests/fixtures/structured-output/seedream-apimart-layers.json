@@ -1,0 +1,23 @@
+{
+  "_fixture": {
+    "source": "https://docs.apimart.ai/cn/api-reference/images/seedream-5-0-pro/generation",
+    "capturedAt": "2026-08-29",
+    "kind": "official-example-stabilized",
+    "note": "保持官方平行数组结构；URL 替换为不可联网地址"
+  },
+  "data": {
+    "status": "completed",
+    "result": {
+      "images": [{
+        "url": ["https://fixtures.invalid/base.jpeg", "https://fixtures.invalid/title.png"],
+        "sizes": ["2048x2048", "1273x265"],
+        "output_formats": ["jpeg", "png"],
+        "layer_decomposition": true,
+        "layers": [
+          { "z_index": 0, "size": "2048x2048", "output_format": "jpeg" },
+          { "z_index": 1, "size": "1273x265", "output_format": "png", "name": "标题文字", "description": "黄色大号衬线字体的标题文字", "bounding_box": { "absolute": [383, 120, 1655, 384], "normalized": [187, 59, 808, 188] } }
+        ]
+      }]
+    }
+  }
+}

@@ -83,6 +83,7 @@ export interface AiGenerateResponseDto {
   filePath?: string
   taskId?: string
   metadata?: JsonValue
+  structuredOutput?: StructuredGenerationOutput
   trace?: AiRuntimeTrace
 }
 
@@ -150,4 +151,42 @@ export interface ProviderExecutionResult {
   url: string
   taskId?: string
   metadata: JsonValue
+  structuredOutput?: StructuredGenerationOutput
 }
+
+export interface StructuredGenerationBoundingBoxV1 {
+  absolute?: [number, number, number, number]
+  normalized?: [number, number, number, number]
+}
+
+export interface StructuredGenerationLayerV1 {
+  version: 1
+  sourceOutputIndex: number
+  url: string
+  /** 宿主完成受管落盘后可补充；SDK 解析器本身不写文件。 */
+  filePath?: string
+  zIndex: number
+  role: 'base' | 'content'
+  name?: string
+  description?: string
+  width: number
+  height: number
+  format: 'png' | 'jpeg' | 'webp'
+  boundingBox?: StructuredGenerationBoundingBoxV1
+}
+
+/** SDK 可移植的图层拆分结果；受管路径与像素校验由宿主补齐。 */
+export interface StructuredGenerationLayerStackV1 {
+  version: 1
+  kind: 'layer-stack'
+  primary: StructuredGenerationLayerV1
+  outputs: StructuredGenerationLayerV1[]
+  metadata: {
+    colorSpace: 'srgb'
+    alphaMode: 'straight'
+    compositeOperation: 'source-over'
+    order: 'bottom-to-top'
+  }
+}
+
+export type StructuredGenerationOutput = StructuredGenerationLayerStackV1

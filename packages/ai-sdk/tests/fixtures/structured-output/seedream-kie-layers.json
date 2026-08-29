@@ -1,0 +1,14 @@
+{
+  "_fixture": {
+    "source": "https://docs.kie.ai/market/seedream/5-pro-layer-decomposition",
+    "capturedAt": "2026-08-29",
+    "kind": "official-example-stabilized",
+    "note": "保持官方 resultJson/layers_data 结构；URL 替换为不可联网地址"
+  },
+  "code": 200,
+  "success": true,
+  "data": {
+    "state": "success",
+    "resultJson": "{\"resultObject\":{\"layers_data\":[{\"z_index\":0,\"size\":\"1080x1080\",\"output_format\":\"jpeg\",\"url\":\"https://fixtures.invalid/base.jpeg\"},{\"z_index\":1,\"size\":\"1179x245\",\"output_format\":\"png\",\"bounding_box\":{\"absolute\":[202,63,872,202],\"normalized\":[187,58,806,186]},\"name\":\"Seedream标题文字\",\"description\":\"提取标题文字\",\"url\":\"https://fixtures.invalid/title.png\"}]}}"
+  }
+}

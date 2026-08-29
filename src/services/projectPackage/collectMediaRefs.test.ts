@@ -4,6 +4,7 @@ import { composeModelDefinition } from '@/core/composeModelDefinition'
 import { registry } from '@/core/ModelRegistry'
 import { derivedMediaStateKey } from '@/core/params/derivedMediaState'
 import { CANVAS_NODE_TYPES, type CanvasNode } from '@/features/canvas/domain/canvasNodes'
+import { createStableLayerId, createStableLayerResourceId, createStableLayerStackId, type LayerStackDocumentV1 } from '@/features/canvas/domain/layerStack'
 import { modelPresentations } from '@/models/presentation'
 import { apimartGptImage2Model } from '../../../packages/ai-sdk/src/catalog/apimart/gpt-image-2.model'
 import { collectAndRewriteMedia, rewritePackagePathsToLocal } from './collectMediaRefs'
@@ -150,5 +151,43 @@ describe('结构化提示词项目包媒体收集', () => {
       apimartGptImage2MaskUrl: ['/unpacked/inpainting-mask.png'],
       [stateKey]: { sourceRef: '/unpacked/source.png', version: 1 },
     })
+  })
+
+  it('导出导入完整重写图层媒体，缺失层明确降级且不保留失效路径', () => {
+    const completionId = 'generation-output:layer-result'
+    const stackId = createStableLayerStackId(completionId)
+    const layerResourceId = createStableLayerResourceId(stackId, 0)
+    const document: LayerStackDocumentV1 = {
+      version: 1,
+      stackId,
+      status: 'ready',
+      source: { capabilityId: 'image.layer-separation', sourceNodeId: 'source', inputResourceId: '/managed/source.png', providerId: 'volcengine', modelId: 'volcengine-seedream-5.0-pro', completionId },
+      canvas: { width: 8, height: 8, colorSpace: 'srgb', alphaMode: 'straight', compositeOperation: 'source-over', clipPolicy: 'canvas-bounds' },
+      compositeResourceId: `${stackId}:composite`,
+      thumbnailResourceId: `${stackId}:thumbnail`,
+      layers: [{ version: 1, layerId: createStableLayerId(stackId, 0), sourceOutputIndex: 0, providerZIndex: 0, order: 0, role: 'base', name: '底图', resourceId: layerResourceId, placement: { x: 0, y: 0, width: 8, height: 8 }, opacity: 1, visible: true, blendMode: 'normal', alpha: 'opaque' }],
+      resources: [
+        { version: 1, resourceId: layerResourceId, status: 'ready', filePath: '/managed/base.jpg', mimeType: 'image/jpeg', width: 8, height: 8, hasAlpha: false, byteLength: 16, sha256: 'base-hash' },
+        { version: 1, resourceId: `${stackId}:composite`, status: 'ready', filePath: '/managed/composite.png', mimeType: 'image/png', width: 8, height: 8, hasAlpha: true, byteLength: null, sha256: 'composite-hash' },
+        { version: 1, resourceId: `${stackId}:thumbnail`, status: 'ready', filePath: '/managed/thumb.webp', mimeType: 'image/webp', width: 8, height: 8, hasAlpha: false, byteLength: null, sha256: 'thumb-hash' },
+      ],
+    }
+    const node = { id: 'layer-result', type: CANVAS_NODE_TYPES.layerStackResult, position: { x: 0, y: 0 }, data: { displayName: '图层结果', imageUrl: '/managed/composite.png', previewImageUrl: '/managed/thumb.webp', aspectRatio: '1:1', resultKind: 'layer-stack', layerStackDocument: document } } as CanvasNode
+    const collected = collectAndRewriteMedia([node])
+    expect(collected.mediaFiles).toHaveLength(3)
+    const packedDocument = collected.nodes[0].data.layerStackDocument as unknown as LayerStackDocumentV1
+    expect(packedDocument.resources.every((resource) => resource.filePath?.startsWith('media/'))).toBe(true)
+
+    const compositePackagePath = packedDocument.resources.find((resource) => resource.resourceId === document.compositeResourceId)?.filePath as string
+    const thumbPackagePath = packedDocument.resources.find((resource) => resource.resourceId === document.thumbnailResourceId)?.filePath as string
+    const restored = rewritePackagePathsToLocal(collected.nodes, {
+      [compositePackagePath]: '/unpacked/composite.png',
+      [thumbPackagePath]: '/unpacked/thumb.webp',
+    })
+    const restoredDocument = restored[0].data.layerStackDocument as unknown as LayerStackDocumentV1
+    expect(restoredDocument.status).toBe('degraded')
+    expect(restoredDocument.resources.find((resource) => resource.resourceId === layerResourceId)).toMatchObject({ status: 'missing', filePath: null, sha256: null })
+    expect(restored[0].data.imageUrl).toBe('/unpacked/composite.png')
+    expect(restored[0].data.previewImageUrl).toBe('/unpacked/thumb.webp')
   })
 })

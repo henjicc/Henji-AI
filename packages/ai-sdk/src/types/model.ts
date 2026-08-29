@@ -9,7 +9,12 @@
  * 契约；JSON DTO 等跨进程数据类型仍位于 `./runtime.ts`。
  */
 
-import type { JsonValue, JsonObject } from './runtime'
+import type {
+  GenerateStatus,
+  JsonValue,
+  JsonObject,
+  StructuredGenerationOutput,
+} from './runtime'
 
 // ========== 基础标识类型 ==========
 
@@ -350,6 +355,20 @@ export interface RuntimeRequestConfig {
   builder?: (params: JsonObject) => JsonObject | Promise<JsonObject>
 }
 
+export interface RuntimeStructuredOutputParserInput {
+  status: GenerateStatus
+  url: string
+  metadata: JsonValue
+  params: JsonObject
+}
+
+export interface RuntimeResponseConfig {
+  /** 模型级响应语义解析；供应商适配器只负责传输与保留原始 metadata。 */
+  structuredOutput?: (
+    input: RuntimeStructuredOutputParserInput
+  ) => StructuredGenerationOutput | undefined
+}
+
 /** 计价单位。非货币单位（如魔搭"魔粒"）的换算规则是展示侧的事，这里只搬类型。 */
 export type Currency = '¥' | '$' | '€' | '£' | '魔粒'
 
@@ -489,6 +508,9 @@ export interface ModelRuntimeDefinition {
 
   /** 请求构建配置（可选，不提供则使用默认字段映射） */
   request?: RuntimeRequestConfig
+
+  /** 可选的模型级响应语义；禁止在 UI/provider 通过 modelId 分支补解析。 */
+  response?: RuntimeResponseConfig
 
   /** 价格配置 */
   pricing: RuntimePricingConfig

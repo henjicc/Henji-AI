@@ -20,6 +20,8 @@ import {
   splitImage,
   splitImageSource,
 } from '../services/image/ops'
+import { composeLayerStack } from '../services/image/layer-stack'
+import { releaseManagedImagePaths } from '../services/image/path-utils'
 import {
   probeSharpDiffusionFallback,
   renderSharpDiffusionFallback,
@@ -27,6 +29,7 @@ import {
 } from '../services/image/diffusion-fallback'
 import type {
   CropImageSourcePayloadDto,
+  ComposeLayerStackPayloadDto,
   MergeStoryboardImagesPayloadDto,
   StoryboardImageMetadataDto,
 } from '../services/image/types'
@@ -86,6 +89,12 @@ interface SaveSuggestedPayload {
 interface SaveDebugPayload extends SaveSuggestedPayload {
   category: string
 }
+
+interface ReleaseLayerStackResourcesPayload {
+  filePaths: string[]
+}
+
+const layerStackCompositionControllers = new Map<string, AbortController>()
 
 export function registerImageIpc(): void {
   registerIpcHandler<SplitImagePayload, string[]>('image:splitImage', parseSplitImagePayload, ({ imageBase64, rows, cols, lineThickness }) => {
@@ -148,6 +157,29 @@ export function registerImageIpc(): void {
   registerIpcHandler<ThumbnailBytesPayload, { bytes: Uint8Array }>('image:generateThumbnailBytes', parseThumbnailBytesPayload, async ({ source, maxSize }) => {
     const bytes = await generateImageThumbnailBytes(source, maxSize)
     return { bytes }
+  })
+  registerIpcHandler<ComposeLayerStackPayloadDto, Awaited<ReturnType<typeof composeLayerStack>>>('image:composeLayerStack', parseComposeLayerStackPayload, async (payload) => {
+    if (layerStackCompositionControllers.has(payload.requestId)) {
+      throw new Error(`图层栈合成请求重复：${payload.requestId}`)
+    }
+    const controller = new AbortController()
+    layerStackCompositionControllers.set(payload.requestId, controller)
+    try {
+      return await composeLayerStack(payload, controller.signal)
+    } finally {
+      if (layerStackCompositionControllers.get(payload.requestId) === controller) {
+        layerStackCompositionControllers.delete(payload.requestId)
+      }
+    }
+  })
+  registerIpcHandler<string, void>('image:cancelLayerStackComposition', (input) => parseStringField(input, 'requestId'), (requestId) => {
+    layerStackCompositionControllers.get(requestId)?.abort()
+  })
+  registerIpcHandler<ReleaseLayerStackResourcesPayload, void>('image:releaseLayerStackResources', (input) => {
+    const record = parseRecord(input)
+    return { filePaths: readStringArray(record, 'filePaths') }
+  }, ({ filePaths }) => {
+    releaseManagedImagePaths(filePaths)
   })
 }
 
@@ -406,4 +438,54 @@ function parseThumbnailBytesPayload(input: unknown): ThumbnailBytesPayload {
     source: readString(record, 'source'),
     maxSize: readOptionalNumber(record, 'maxSize'),
   }
+}
+
+function parseComposeLayerStackPayload(input: unknown): ComposeLayerStackPayloadDto {
+  const record = parseRecord(input)
+  if (!Array.isArray(record.layers)) throw new Error('Expected array field "layers"')
+  return {
+    requestId: readString(record, 'requestId'),
+    stackId: readString(record, 'stackId'),
+    thumbnailMaxSize: readOptionalNumber(record, 'thumbnailMaxSize'),
+    persistSourceLayers: readOptionalBoolean(record, 'persistSourceLayers'),
+    layers: record.layers.map((value) => {
+      const layer = parseRecord(value)
+      const role = layer.role
+      const declaredFormat = layer.declaredFormat
+      if (role !== 'base' && role !== 'content') throw new Error('Expected layer role to be base or content')
+      if (declaredFormat !== 'png' && declaredFormat !== 'jpeg' && declaredFormat !== 'webp') throw new Error('Expected declaredFormat to be png, jpeg or webp')
+      const boundingBox = layer.boundingBox === undefined ? undefined : parseRecord(layer.boundingBox)
+      return {
+        sourceOutputIndex: readNumber(layer, 'sourceOutputIndex'),
+        source: readString(layer, 'source'),
+        zIndex: readNumber(layer, 'zIndex'),
+        role,
+        name: readOptionalString(layer, 'name'),
+        description: readOptionalString(layer, 'description'),
+        declaredWidth: readNumber(layer, 'declaredWidth'),
+        declaredHeight: readNumber(layer, 'declaredHeight'),
+        declaredFormat,
+        opacity: readOptionalNumber(layer, 'opacity'),
+        visible: readOptionalBoolean(layer, 'visible'),
+        ...(boundingBox ? {
+          boundingBox: {
+            absolute: readOptionalNumberTuple(boundingBox, 'absolute'),
+            normalized: readOptionalNumberTuple(boundingBox, 'normalized'),
+          },
+        } : {}),
+      }
+    }),
+  }
+}
+
+function readOptionalNumberTuple(
+  record: Record<string, unknown>,
+  field: string
+): [number, number, number, number] | undefined {
+  const value = record[field]
+  if (value === undefined) return undefined
+  if (!Array.isArray(value) || value.length !== 4 || value.some((item) => typeof item !== 'number' || !Number.isFinite(item))) {
+    throw new Error(`Expected four-number tuple field "${field}"`)
+  }
+  return value as [number, number, number, number]
 }

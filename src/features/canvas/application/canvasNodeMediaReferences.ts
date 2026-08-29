@@ -110,5 +110,21 @@ export function mapCanvasNodeMediaReferences(
     next.params = mapModelParamMediaReferences(modelId, next.params, mapValue)
   }
 
+  const layerStackDocument = next.layerStackDocument
+  if (layerStackDocument && typeof layerStackDocument === 'object' && !Array.isArray(layerStackDocument)) {
+    const document = { ...(layerStackDocument as DynamicValueMap) }
+    if (Array.isArray(document.resources)) {
+      document.resources = document.resources.map((resource) => {
+        if (!resource || typeof resource !== 'object' || Array.isArray(resource)) return resource
+        const nextResource = { ...(resource as DynamicValueMap) }
+        if (typeof nextResource.filePath === 'string' && nextResource.filePath) {
+          nextResource.filePath = mapValue(nextResource.filePath)
+        }
+        return nextResource
+      })
+      next.layerStackDocument = document
+    }
+  }
+
   return next
 }

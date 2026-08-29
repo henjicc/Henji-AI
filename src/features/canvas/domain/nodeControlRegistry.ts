@@ -77,6 +77,13 @@ const elementEditSpecialEditorDataSchema = z.object({
   params: z.record(z.string(), z.unknown()).optional(),
 }).strict()
 
+const layerStackSpecialEditorDataSchema = z.object({
+  layerStackDocument: z.record(z.string(), z.unknown()).optional(),
+  imageUrl: z.string().min(1).max(16 * 1024).nullable().optional(),
+  previewImageUrl: z.string().min(1).max(16 * 1024).nullable().optional(),
+  aspectRatio: z.string().min(1).max(40).optional(),
+}).strict()
+
 interface CanvasNodeControlConfig {
   nodeType: CanvasNodeType
   title: string
@@ -275,6 +282,36 @@ const nodeControlConfigs: CanvasNodeControlConfig[] = [
     aliases: ['局部编辑节点', '蒙版编辑节点', '图片擦除节点'],
     dataSchema: imageGenerationNodeDataSchema,
     specialEditorDataSchema: elementEditSpecialEditorDataSchema,
+    aiDataSchema: {
+      type: 'object',
+      properties: { displayName: { type: 'string', maxLength: 120 } },
+      additionalProperties: false,
+    },
+    requiresModelSchema: false,
+  },
+  {
+    nodeType: CANVAS_NODE_TYPES.layerSeparationGen,
+    title: '图层拆分节点',
+    description: '创建受控 Seedream 图层拆分节点；结构化图层输出由版本化契约维护。',
+    aliases: ['图层分离节点', '图片拆层节点'],
+    dataSchema: imageGenerationNodeDataSchema,
+    aiDataSchema: {
+      type: 'object',
+      properties: {
+        displayName: { type: 'string', maxLength: 120 },
+        prompt: { type: 'string', maxLength: 32 * 1024 },
+      },
+      additionalProperties: false,
+    },
+    requiresModelSchema: false,
+  },
+  {
+    nodeType: CANVAS_NODE_TYPES.layerStackResult,
+    title: '图层结果节点',
+    description: '展示并编辑已验证的版本化图层栈；媒体文件始终由受管资源引用。',
+    aliases: ['图层栈节点', '图层结果'],
+    dataSchema: nodeDataBaseSchema.strict(),
+    specialEditorDataSchema: layerStackSpecialEditorDataSchema,
     aiDataSchema: {
       type: 'object',
       properties: { displayName: { type: 'string', maxLength: 120 } },

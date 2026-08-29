@@ -36,5 +36,8 @@ export function createElectronImage(): ImagePlatform {
     readImageInfo: (source) => getNativeImage().readImageInfo(source),
     probeDiffusionFallback: () => getNativeImage().probeDiffusionFallback(),
     renderDiffusionFallback: (request) => getNativeImage().renderDiffusionFallback(request),
+    composeLayerStack: (payload) => getNativeImage().composeLayerStack(payload),
+    cancelLayerStackComposition: (requestId) => getNativeImage().cancelLayerStackComposition(requestId),
+    releaseLayerStackResources: (filePaths) => getNativeImage().releaseLayerStackResources(filePaths),
   }
 }

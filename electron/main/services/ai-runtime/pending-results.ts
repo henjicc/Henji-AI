@@ -6,6 +6,7 @@ export interface PendingResultPayload {
   url?: string
   filePath?: string
   metadata?: unknown
+  structuredOutput?: unknown
 }
 
 interface PendingResultRow {

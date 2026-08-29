@@ -93,3 +93,57 @@ export interface ImageBytes {
   bytes: Buffer
   extension: string
 }
+
+export interface ComposeLayerStackLayerPayloadDto {
+  sourceOutputIndex: number
+  source: string
+  zIndex: number
+  role: 'base' | 'content'
+  name?: string
+  description?: string
+  declaredWidth: number
+  declaredHeight: number
+  declaredFormat: 'png' | 'jpeg' | 'webp'
+  boundingBox?: {
+    absolute?: [number, number, number, number]
+    normalized?: [number, number, number, number]
+  }
+  opacity?: number
+  visible?: boolean
+}
+
+export interface ComposeLayerStackPayloadDto {
+  requestId: string
+  stackId: string
+  layers: ComposeLayerStackLayerPayloadDto[]
+  thumbnailMaxSize?: number
+  /** 仅首次接收模型输出时持久化输入层；重新合成必须复用已有受管文件。 */
+  persistSourceLayers?: boolean
+}
+
+export interface ComposedLayerStackResourceDto {
+  sourceOutputIndex: number
+  filePath: string
+  mimeType: 'image/png' | 'image/webp' | 'image/jpeg'
+  width: number
+  height: number
+  hasAlpha: boolean
+  byteLength: number
+  sha256: string
+  placement: { x: number; y: number; width: number; height: number }
+}
+
+export interface ComposeLayerStackResultDto {
+  stackId: string
+  canvasWidth: number
+  canvasHeight: number
+  resources: ComposedLayerStackResourceDto[]
+  compositePath: string
+  compositeSha256: string
+  thumbnailPath: string
+  thumbnailSha256: string
+  thumbnailWidth: number
+  thumbnailHeight: number
+  /** 仅用于调用方在画布事务失败时回滚；不会写入图层栈文档。 */
+  createdFilePaths: string[]
+}

@@ -24,6 +24,10 @@ import {
   ELEMENT_EDIT_PROMPT_TEMPLATE_VERSION,
 } from './elementEditPolicy';
 import {
+  LAYER_SEPARATION_MODEL_POLICY,
+  LAYER_STACK_CONTRACT_VERSION,
+} from './layerSeparationPolicy';
+import {
   CANVAS_IMAGE_CAPABILITY_IDS,
   type CanvasImageCapabilityDefinition,
 } from './types';
@@ -33,26 +37,6 @@ const IMAGE_SOURCE = {
   minCount: 1,
   maxCount: 1,
   requireMaterializedMedia: true,
-} as const;
-
-const VERIFIED_MODEL_POLICY = {
-  mode: 'verified-families',
-  allowedCanonicalFamilies: [],
-  requiredTags: [],
-  providerCompatibility: 'verified-combinations-only',
-  allowedProviderConfigurations: [],
-  semanticRequirements: {},
-} as const;
-
-const PLANNED_AVAILABILITY = {
-  releaseStage: 'draft',
-  defaultEnabled: false,
-  unavailableReasonKey: 'imageCapabilities.unavailable.planned',
-} as const;
-
-const PLANNED_IMPLEMENTATION = {
-  status: 'planned',
-  execution: null,
 } as const;
 
 export const builtInCanvasImageCapabilities: readonly CanvasImageCapabilityDefinition[] = [
@@ -338,23 +322,25 @@ export const builtInCanvasImageCapabilities: readonly CanvasImageCapabilityDefin
     order: 80,
     source: IMAGE_SOURCE,
     node: { kind: 'special-generation', editor: 'layers' },
-    implementation: PLANNED_IMPLEMENTATION,
-    availability: PLANNED_AVAILABILITY,
-    modelPolicy: VERIFIED_MODEL_POLICY,
+    implementation: {
+      status: 'implemented',
+      execution: { kind: 'canvas-node', nodeType: CANVAS_NODE_TYPES.layerSeparationGen },
+    },
+    availability: {
+      releaseStage: 'experimental',
+      defaultEnabled: false,
+      unavailableReasonKey: 'imageCapabilities.unavailable.layerSeparationValidation',
+    },
+    modelPolicy: LAYER_SEPARATION_MODEL_POLICY,
     promptPolicy: {
-      hiddenTemplateVersion: 'layer-separation-v1-draft',
-      fixedSemanticParams: {},
-      visibleParameterKeys: ['layerCount'],
+      hiddenTemplateVersion: null,
+      fixedSemanticParams: { layerStackContractVersion: LAYER_STACK_CONTRACT_VERSION },
+      visibleParameterKeys: ['prompt'],
+      visibleParameterTransferKeys: ['layer-output-size'],
     },
     outputPolicy: {
       resultKind: 'layer-stack',
-      count: {
-        mode: 'parameter',
-        parameterKey: 'layerCount',
-        defaultCount: 4,
-        minCount: 2,
-        maxCount: 16,
-      },
+      count: { mode: 'dynamic', minCount: 1, maxCount: 17 },
       postProcess: 'assemble-layer-stack',
       failureMode: 'atomic-results',
     },

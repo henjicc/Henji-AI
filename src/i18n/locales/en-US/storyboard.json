@@ -166,7 +166,8 @@
     },
     "unavailable": {
       "planned": "This feature is being prepared",
-      "experimental": "Experimental results may vary"
+      "experimental": "Experimental results may vary",
+      "layerSeparationValidation": "Real layer quality and billing still require controlled validation"
     },
     "items": {
       "panorama": {
@@ -230,6 +231,8 @@
       "upscaleGeneration": "Upscale",
       "portraitTextureGeneration": "Portrait Texture",
       "elementEditGeneration": "Element Edit",
+      "layerSeparationGeneration": "Layer Separation",
+      "layerStackResult": "Layer Stack",
       "storyboard": "Storyboard Node",
       "storyboardGen": "Storyboard Generation",
       "textProcessing": "Text Processing",
@@ -340,6 +343,12 @@
       "apiKeyRequired": "Configure the selected GPT Image 2 provider API key first",
       "resultTitle": "Element Edit Result",
       "promptPlaceholder": "Describe how to change the masked area"
+    },
+    "layerSeparationGeneration": {
+      "promptRequired": "Layer separation does not require a prompt",
+      "apiKeyRequired": "Configure the selected Seedream 5.0 Pro provider API key first",
+      "resultTitle": "Layer Stack",
+      "promptPlaceholder": "Optional: describe subjects or regions to prioritize"
     },
     "upload": {
       "uploadedAlt": "Uploaded image",

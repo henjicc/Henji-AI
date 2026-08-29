@@ -51,6 +51,8 @@ import {
   migrateUpscaleGenerationData,
   migratePortraitTextureGenerationData,
   migrateElementEditGenerationData,
+  migrateLayerSeparationGenerationData,
+  migrateLayerStackResultData,
   migrateStoryboardGenerationData,
   migrateGenerationPromptData,
   migrateExportImageResultKind,
@@ -339,6 +341,7 @@ function normalizeNodes(rawNodes: CanvasNode[]): CanvasNode[] {
         || node.type === CANVAS_NODE_TYPES.upscaleGen
         || node.type === CANVAS_NODE_TYPES.portraitTextureGen
         || node.type === CANVAS_NODE_TYPES.elementEditGen
+        || node.type === CANVAS_NODE_TYPES.layerSeparationGen
         || node.type === CANVAS_NODE_TYPES.storyboardGen
       ) {
         migrateGenerationNodeData(mergedData as DynamicValueMap);
@@ -352,6 +355,7 @@ function normalizeNodes(rawNodes: CanvasNode[]): CanvasNode[] {
         || node.type === CANVAS_NODE_TYPES.upscaleGen
         || node.type === CANVAS_NODE_TYPES.portraitTextureGen
         || node.type === CANVAS_NODE_TYPES.elementEditGen
+        || node.type === CANVAS_NODE_TYPES.layerSeparationGen
         || node.type === CANVAS_NODE_TYPES.videoGen
         || node.type === CANVAS_NODE_TYPES.audioGen
         || node.type === CANVAS_NODE_TYPES.textProcessing
@@ -381,6 +385,14 @@ function normalizeNodes(rawNodes: CanvasNode[]): CanvasNode[] {
 
       if (node.type === CANVAS_NODE_TYPES.elementEditGen) {
         migrateElementEditGenerationData(mergedData as DynamicValueMap);
+      }
+
+      if (node.type === CANVAS_NODE_TYPES.layerSeparationGen) {
+        migrateLayerSeparationGenerationData(mergedData as DynamicValueMap);
+      }
+
+      if (node.type === CANVAS_NODE_TYPES.layerStackResult) {
+        migrateLayerStackResultData(mergedData as DynamicValueMap);
       }
 
       if (node.type === CANVAS_NODE_TYPES.storyboardGen) {

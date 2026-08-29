@@ -1,0 +1,14 @@
+{
+  "_fixture": {
+    "source": "https://www.volcengine.com/docs/82379/1541523",
+    "capturedAt": "2026-08-29",
+    "kind": "field-table-derived",
+    "note": "官方字段表未给出完整字面响应；URL 与语义值为不可联网稳定化样本"
+  },
+  "created": 1787961600,
+  "model": "doubao-seedream-5-0-pro-260628",
+  "data": [
+    { "url": "https://fixtures.invalid/base.jpeg", "size": "512x512", "output_format": "jpeg", "z_index": 0 },
+    { "url": "https://fixtures.invalid/title.png", "size": "128x64", "output_format": "png", "z_index": 1, "name": "标题", "description": "前景标题", "bounding_box": { "absolute": [32, 48, 160, 112], "normalized": [63, 94, 313, 219] } }
+  ]
+}

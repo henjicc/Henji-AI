@@ -15,6 +15,8 @@ export const DEFAULT_NODE_DISPLAY_NAME: Record<CanvasNodeType, string> = {
   [CANVAS_NODE_TYPES.upscaleGen]: '高清放大',
   [CANVAS_NODE_TYPES.portraitTextureGen]: '人像质感',
   [CANVAS_NODE_TYPES.elementEditGen]: '元素编辑',
+  [CANVAS_NODE_TYPES.layerSeparationGen]: '图层拆分',
+  [CANVAS_NODE_TYPES.layerStackResult]: '图层结果',
   [CANVAS_NODE_TYPES.exportImage]: '结果图片',
   [CANVAS_NODE_TYPES.textProcessing]: '文本处理',
   [CANVAS_NODE_TYPES.textAnnotation]: '文本展示',

@@ -16,7 +16,8 @@ export type CanvasModelCompatibilityReasonCode =
   | 'resolution'
   | 'reference-images'
   | 'output-count'
-  | 'quality';
+  | 'quality'
+  | 'parameter-value';
 
 export interface CanvasModelCompatibilityReason {
   code: CanvasModelCompatibilityReasonCode;
@@ -144,6 +145,36 @@ function mapSemanticRequirements(
   params: DynamicValueMap,
   reasons: CanvasModelCompatibilityReason[],
 ): void {
+  for (const [transferKey, semanticValue] of Object.entries(requirements.parameterValues ?? {})) {
+    const param = model.params.find((item) => item.transferKey === transferKey);
+    if (!param) {
+      reasons.push({ code: 'parameter-value', message: `模型缺少能力参数 ${transferKey}` });
+      continue;
+    }
+    if (typeof semanticValue === 'string' && choiceOptions(param).length > 0) {
+      const exact = findExactChoice(param, semanticValue);
+      if (exact === null) {
+        reasons.push({ code: 'parameter-value', message: `模型参数 ${transferKey} 不支持 ${semanticValue}` });
+      } else {
+        params[param.id] = exact;
+      }
+      continue;
+    }
+    if (param.type === 'number' && typeof semanticValue === 'number') {
+      if ((param.min !== undefined && semanticValue < param.min) || (param.max !== undefined && semanticValue > param.max)) {
+        reasons.push({ code: 'parameter-value', message: `模型参数 ${transferKey} 超出允许范围` });
+      } else {
+        params[param.id] = semanticValue;
+      }
+      continue;
+    }
+    if ((param.type === 'switch' && typeof semanticValue === 'boolean')
+      || (param.type === 'text' && typeof semanticValue === 'string')) {
+      params[param.id] = semanticValue;
+      continue;
+    }
+    reasons.push({ code: 'parameter-value', message: `模型参数 ${transferKey} 无法映射固定能力值` });
+  }
   const ratioResolution = analyzeRatioResolutionParams(model.params, []);
   mapChoiceRequirement(
     model.params.find((param) => param.id === ratioResolution?.aspectParam?.id),

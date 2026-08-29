@@ -1,6 +1,7 @@
 import { defineModel } from "../defineModel";
 import type { JsonValue, JsonObject } from "../../types/runtime";
 import { countUploadedImages } from './mediaSources';
+import { parseSeedreamLayerStack } from '../../structured-output';
 const KIE_CREATE_TASK_ENDPOINT = '/api/v1/jobs/createTask';
 const SUPPORTED_ASPECT_RATIOS = ['1:1', '4:3', '3:4', '16:9', '9:16', '2:3', '3:2', '21:9'] as const;
 export const kieSeedream50ProModel = defineModel({
@@ -11,7 +12,7 @@ export const kieSeedream50ProModel = defineModel({
         seriesRank: 5.0,
         provider: 'kie',
         type: 'image',
-        tags: ['text-to-image', 'image-to-image', 'supports-image-editing', 'supports-multi-image', 'max-images-10', 'provider-kie'],
+        tags: ['text-to-image', 'image-to-image', 'supports-image-editing', 'supports-multi-image', 'supports-layer-decomposition', 'max-images-10', 'provider-kie'],
         aliases: ['seedream-5-pro-kie']
     },
     inputLimits: {
@@ -38,6 +39,7 @@ export const kieSeedream50ProModel = defineModel({
             id: 'kieSeedream50ProMode',
             type: 'dropdown',
             order: 1,
+            transferKey: 'layer-decomposition-mode',
             default: 'generate',
             options: [
                 { value: 'generate' },
@@ -70,6 +72,7 @@ export const kieSeedream50ProModel = defineModel({
             id: 'kieSeedream50ProLayerSize',
             type: 'dropdown',
             order: 4,
+            transferKey: 'layer-output-size',
             default: 'auto',
             visible: { condition: 'kieSeedream50ProMode === "layer-decomposition"' },
             options: [
@@ -152,6 +155,11 @@ export const kieSeedream50ProModel = defineModel({
                 input
             };
         }
+    },
+    response: {
+        structuredOutput: ({ metadata, params }) => params.kieSeedream50ProMode === 'layer-decomposition'
+            ? parseSeedreamLayerStack('kie', metadata)
+            : undefined
     },
     pricing: {
         currency: '$',

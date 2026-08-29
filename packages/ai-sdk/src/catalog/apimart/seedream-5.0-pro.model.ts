@@ -1,12 +1,13 @@
 import { defineModel } from "../defineModel";
 import type { JsonValue, JsonObject } from "../../types/runtime";
+import { parseSeedreamLayerStack } from '../../structured-output';
 const APIMART_IMAGE_ENDPOINT = '/v1/images/generations';
 const ASPECT_RATIOS = ['1:1', '4:3', '3:4', '16:9', '9:16', '3:2', '2:3', '2:1', '1:2', '21:9'] as const;
 export const apimartSeedream50ProModel = defineModel({
     meta: {
         id: 'apimart-seedream-5.0-pro', canonicalModelId: 'seedream-5.0-pro', seriesId: 'seedream', seriesRank: 5.1,
         provider: 'apimart', type: 'image',
-        tags: ['text-to-image', 'image-to-image', 'supports-image-editing', 'supports-multi-image', 'max-images-10', 'provider-apimart'],
+        tags: ['text-to-image', 'image-to-image', 'supports-image-editing', 'supports-multi-image', 'supports-layer-decomposition', 'max-images-10', 'provider-apimart'],
         aliases: ['seedream-5-pro-apimart'], polling: { interval: 3000, maxAttempts: 200, expectedAttempts: 40 }
     },
     inputLimits: {
@@ -31,6 +32,7 @@ export const apimartSeedream50ProModel = defineModel({
     params: [
         {
             id: 'apimartSeedream50ProMode', type: 'dropdown', order: 1,
+            transferKey: 'layer-decomposition-mode',
             default: 'generate',
             options: [
                 { value: 'generate' },
@@ -51,6 +53,7 @@ export const apimartSeedream50ProModel = defineModel({
         },
         {
             id: 'apimartSeedream50ProLayerSize', type: 'dropdown', order: 4,
+            transferKey: 'layer-output-size',
             default: 'auto',
             visible: { condition: 'apimartSeedream50ProMode === "layer-decomposition"' },
             options: [
@@ -120,6 +123,11 @@ export const apimartSeedream50ProModel = defineModel({
                 body.image_urls = images.slice(0, 10);
             return body;
         }
+    },
+    response: {
+        structuredOutput: ({ metadata, params }) => params.apimartSeedream50ProMode === 'layer-decomposition'
+            ? parseSeedreamLayerStack('apimart', metadata)
+            : undefined
     },
     pricing: {
         currency: '$',

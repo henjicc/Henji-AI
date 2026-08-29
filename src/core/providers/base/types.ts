@@ -5,6 +5,7 @@
  */
 
 import type { AiRuntimeTrace } from '@/core/types'
+import type { StructuredGenerationOutput } from '@henjicc/ai-sdk'
 
 /**
  * 生成结果接口
@@ -20,6 +21,7 @@ export interface GenerateResult {
   status: 'completed' | 'pending' | 'failed'
   /** 额外元数据 */
   metadata?: DynamicValueMap
+  structuredOutput?: StructuredGenerationOutput
   /** 真实 API 请求/响应追踪 */
   trace?: AiRuntimeTrace
 }

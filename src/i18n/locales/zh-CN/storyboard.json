@@ -166,7 +166,8 @@
     },
     "unavailable": {
       "planned": "功能正在准备中",
-      "experimental": "实验能力可能存在结果偏差"
+      "experimental": "实验能力可能存在结果偏差",
+      "layerSeparationValidation": "真实图层质量与计费尚待受控验证"
     },
     "items": {
       "panorama": {
@@ -230,6 +231,8 @@
       "upscaleGeneration": "高清放大",
       "portraitTextureGeneration": "人像质感",
       "elementEditGeneration": "元素编辑",
+      "layerSeparationGeneration": "图层拆分",
+      "layerStackResult": "图层结果",
       "storyboard": "分镜节点",
       "storyboardGen": "分镜生成",
       "textProcessing": "文本处理",
@@ -340,6 +343,12 @@
       "apiKeyRequired": "请先配置所选 GPT Image 2 供应商的 API Key",
       "resultTitle": "元素编辑结果",
       "promptPlaceholder": "描述要如何修改蒙版选区"
+    },
+    "layerSeparationGeneration": {
+      "promptRequired": "图层拆分可不填写提示词",
+      "apiKeyRequired": "请先配置所选 Seedream 5.0 Pro 供应商的 API Key",
+      "resultTitle": "图层结果",
+      "promptPlaceholder": "可选：补充希望优先拆出的主体或区域"
     },
     "upload": {
       "uploadedAlt": "已上传图片",

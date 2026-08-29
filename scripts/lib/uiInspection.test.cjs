@@ -142,6 +142,12 @@ test('人像质感有独立的工具条、节点、诚实文案与保存重开�
   assert.equal(scene.writesUserData, true)
 })
 
+test('图层拆分有独立的结果节点与节点外图层界面场景', () => {
+  const scene = UI_INSPECTION_SCENES.find((candidate) => candidate.id === 'canvas-layer-stack')
+  assert.ok(scene)
+  assert.equal(scene.writesUserData, true)
+})
+
 test('九宫格生成与本地宫格切分共用一条真实 Electron 场景', () => {
   const scene = UI_INSPECTION_SCENES.find((candidate) => candidate.id === 'canvas-nine-grid')
   assert.ok(scene)

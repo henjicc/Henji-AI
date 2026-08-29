@@ -17,6 +17,7 @@ import { createMainLogger, sanitizeJsonValue } from '../logging'
 import { saveMediaFromUrl } from './media-store'
 import { getProgressEstimate, recordProgressSample } from './progress'
 import { savePendingResult } from './pending-results'
+import { materializeStructuredOutput } from './structured-output'
 import { sdkAIClient } from './sdk-runtime'
 import { buildContinuePollingTrace, buildGenerateTrace } from './trace'
 
@@ -102,6 +103,7 @@ export async function generate(
     const filePath = providerResult.status === 'completed'
       ? await saveMediaPaths(providerResult.url)
       : undefined
+    const structuredOutput = materializeStructuredOutput(providerResult.structuredOutput, filePath)
 
     logger.info('后端生成响应', {
       event: 'generation.runtime.response_json',
@@ -129,6 +131,7 @@ export async function generate(
       filePath,
       taskId: providerResult.taskId,
       metadata: providerResult.metadata,
+      structuredOutput,
       trace,
     }
     return response
@@ -197,18 +200,21 @@ export async function continuePolling(
       },
     })
     const filePath = await saveMediaPaths(providerResult.url)
+    const structuredOutput = materializeStructuredOutput(providerResult.structuredOutput, filePath)
     const responseResult = {
       status: providerResult.status,
       url: providerResult.url,
       filePath,
       taskId: providerResult.taskId,
       metadata: providerResult.metadata,
+      structuredOutput,
       trace,
     }
     savePendingResult(taskId, {
       url: providerResult.url,
       filePath,
       metadata: providerResult.metadata,
+      structuredOutput,
     })
     logger.info('后端轮询结果', {
       event: 'ai_runtime.poll.result',

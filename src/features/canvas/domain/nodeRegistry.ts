@@ -9,6 +9,8 @@ import {
   type AssetGroupNodeData,
   type ImageEditNodeData,
   type ElementEditGenerationNodeData,
+  type LayerSeparationGenerationNodeData,
+  type LayerStackResultNodeData,
   type MultiAngleGenerationNodeData,
   type PanoramaGenerationNodeData,
   type PortraitTextureGenerationNodeData,
@@ -88,6 +90,12 @@ import {
   PORTRAIT_TEXTURE_TEMPLATE_VERSION,
   preparePortraitTextureRoute,
 } from '../capabilities/portraitTexturePolicy';
+import {
+  LAYER_SEPARATION_DEFAULT_MODEL_ID,
+  LAYER_SEPARATION_MODEL_POLICY,
+  LAYER_STACK_CONTRACT_VERSION,
+  selectDefaultLayerSeparationModel,
+} from '../capabilities/layerSeparationPolicy';
 
 /**
  * 新增画布节点 SOP：
@@ -681,6 +689,75 @@ const elementEditGenerationNodeDefinition: CanvasNodeDefinition<ElementEditGener
   createDefaultData: createElementEditGenerationDefaultData,
 };
 
+function createLayerSeparationGenerationDefaultData(): LayerSeparationGenerationNodeData {
+  const candidates = resolveCanvasCapabilityModelCandidates(
+    registry.getModelsByType('image'),
+    LAYER_SEPARATION_MODEL_POLICY,
+  ).candidates.map(({ model }) => model);
+  const model = selectDefaultLayerSeparationModel(candidates);
+  return {
+    displayName: DEFAULT_NODE_DISPLAY_NAME[CANVAS_NODE_TYPES.layerSeparationGen],
+    imageUrl: null,
+    previewImageUrl: null,
+    aspectRatio: DEFAULT_ASPECT_RATIO,
+    isSizeManuallyAdjusted: false,
+    prompt: '',
+    modelId: model?.meta.id ?? LAYER_SEPARATION_DEFAULT_MODEL_ID,
+    params: model ? mapCanvasCapabilityModelParams(model, LAYER_SEPARATION_MODEL_POLICY).params : {},
+    mediaInputs: {},
+    isGenerating: false,
+    generationStartedAt: null,
+    generationDurationMs: undefined,
+    capabilityId: CANVAS_IMAGE_CAPABILITY_IDS.layerSeparation,
+    promptTemplateVersion: null,
+    fixedSemanticParams: { layerStackContractVersion: LAYER_STACK_CONTRACT_VERSION },
+  };
+}
+
+const layerSeparationGenerationNodeDefinition: CanvasNodeDefinition<LayerSeparationGenerationNodeData> = {
+  type: CANVAS_NODE_TYPES.layerSeparationGen,
+  menuLabelKey: 'node.menu.layerSeparationGeneration',
+  menuIcon: 'imageGeneration',
+  visibleInMenu: false,
+  executionKind: 'standard-generation',
+  capabilities: { toolbar: true, promptInput: true, toolbarGenerate: true },
+  connectivity: {
+    sourceHandle: true,
+    targetHandle: true,
+    connectMenu: { fromSource: true, fromTarget: false },
+    targetHandleMode: 'rows',
+  },
+  media: { kind: 'image', role: 'generator' },
+  ports: { source: { emits: 'image' }, target: { accepts: ['image'] } },
+  generation: { modelType: 'image', resultNodeType: CANVAS_NODE_TYPES.layerStackResult },
+  getOutputs: imageOutputsFromData,
+  createDefaultData: createLayerSeparationGenerationDefaultData,
+};
+
+const layerStackResultNodeDefinition: CanvasNodeDefinition<LayerStackResultNodeData> = {
+  type: CANVAS_NODE_TYPES.layerStackResult,
+  menuLabelKey: 'node.menu.layerStackResult',
+  menuIcon: 'assetGroup',
+  visibleInMenu: false,
+  capabilities: { toolbar: true, promptInput: false, toolbarDownload: true },
+  connectivity: {
+    sourceHandle: true,
+    targetHandle: true,
+    connectMenu: { fromSource: false, fromTarget: false },
+    manualSource: true,
+  },
+  media: { kind: 'image', role: 'result' },
+  ports: { source: { emits: 'image' }, target: { accepts: ['image'] } },
+  getOutputs: imageOutputsFromData,
+  createDefaultData: () => ({
+    displayName: DEFAULT_NODE_DISPLAY_NAME[CANVAS_NODE_TYPES.layerStackResult],
+    imageUrl: null,
+    previewImageUrl: null,
+    aspectRatio: DEFAULT_ASPECT_RATIO,
+    resultKind: 'layer-stack',
+  }),
+};
+
 const exportImageNodeDefinition: CanvasNodeDefinition<ExportImageNodeData> = {
   type: CANVAS_NODE_TYPES.exportImage,
   menuLabelKey: 'node.menu.uploadImage',
@@ -991,6 +1068,8 @@ export const canvasNodeDefinitions: Record<CanvasNodeType, CanvasNodeDefinition>
   [CANVAS_NODE_TYPES.upscaleGen]: upscaleGenerationNodeDefinition,
   [CANVAS_NODE_TYPES.portraitTextureGen]: portraitTextureGenerationNodeDefinition,
   [CANVAS_NODE_TYPES.elementEditGen]: elementEditGenerationNodeDefinition,
+  [CANVAS_NODE_TYPES.layerSeparationGen]: layerSeparationGenerationNodeDefinition,
+  [CANVAS_NODE_TYPES.layerStackResult]: layerStackResultNodeDefinition,
   [CANVAS_NODE_TYPES.exportImage]: exportImageNodeDefinition,
   [CANVAS_NODE_TYPES.textProcessing]: textProcessingNodeDefinition,
   [CANVAS_NODE_TYPES.textAnnotation]: textAnnotationNodeDefinition,

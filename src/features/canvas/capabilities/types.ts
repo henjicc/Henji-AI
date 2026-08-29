@@ -142,6 +142,8 @@ export interface CanvasImageCapabilityModelSemanticRequirements {
   referenceImages?: CanvasImageCapabilityReferenceImageRequirement;
   outputCount?: number;
   quality?: string;
+  /** 供应商无关的 schema `transferKey` → 固定值映射。 */
+  parameterValues?: Readonly<Record<string, CanvasImageCapabilitySemanticValue>>;
 }
 
 export type CanvasImageCapabilitySemanticValue = string | number | boolean;
@@ -151,6 +153,8 @@ export interface CanvasImageCapabilityPromptPolicy {
   hiddenTemplateVersions?: Readonly<Partial<Record<'text' | 'reference', string>>>;
   fixedSemanticParams: Readonly<Record<string, CanvasImageCapabilitySemanticValue>>;
   visibleParameterKeys: readonly string[];
+  /** 跨供应商参数通过 schema transferKey 暴露，禁止在 UI 列举供应商参数 ID。 */
+  visibleParameterTransferKeys?: readonly string[];
 }
 
 export type CanvasImageCapabilityOutputCount =
@@ -167,6 +171,12 @@ export type CanvasImageCapabilityOutputCount =
       defaultCount: number;
       minCount: number;
       maxCount: number;
+    }
+  | {
+      /** 结构化响应决定实际数量；提交前按 min/max 校验完整结果。 */
+      mode: 'dynamic';
+      minCount: number;
+      maxCount: number;
     };
 
 export interface CanvasImageCapabilityOutputPolicy {
@@ -180,9 +190,10 @@ export interface CanvasImageCapabilityOutputPolicy {
 export function resolveCanvasImageCapabilityExpectedOutputCount(
   policy: CanvasImageCapabilityOutputPolicy,
   params: DynamicValueMap,
-): number {
+): number | undefined {
   if (policy.count.mode === 'single') return 1;
   if (policy.count.mode === 'fixed') return policy.count.count;
+  if (policy.count.mode === 'dynamic') return undefined;
   const raw = params[policy.count.parameterKey];
   const parsed = typeof raw === 'number' ? raw : Number(raw);
   const value = Number.isFinite(parsed) ? Math.round(parsed) : policy.count.defaultCount;

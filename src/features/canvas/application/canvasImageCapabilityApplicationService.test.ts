@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import {
   CANVAS_IMAGE_CAPABILITY_IDS,
@@ -15,6 +15,7 @@ import {
 import { useCanvasStore } from '@/stores/canvasStore'
 import { useProjectStore, type Project } from '@/stores/projectStore'
 import { useCanvasSpecialEditorController } from './specialEditorController'
+import { loadRealModelsIntoRegistry } from '@/tests/loadRealModels'
 
 import { undoCanvasBatch, resetCanvasBatchStateForTests } from './canvasBatchService'
 import { resetCanvasApplicationStateForTests } from './canvasApplicationService'
@@ -26,6 +27,10 @@ import {
 
 const projectId = 'image-capability-project'
 const sourceNodeId = 'source-image'
+
+beforeAll(async () => {
+  await loadRealModelsIntoRegistry()
+})
 
 function createSourceNode(): CanvasNode {
   return {
@@ -339,5 +344,24 @@ describe('画布图片能力应用服务', () => {
       editorKey: 'mask',
       isDirty: false,
     })
+  })
+
+  it('图层拆分能力以原厂 Seedream 固定模式创建专用节点并连接单张源图', async () => {
+    const capability = getCanvasImageCapability(CANVAS_IMAGE_CAPABILITY_IDS.layerSeparation)
+    if (!capability) throw new Error('缺少图层拆分能力')
+    const execute = createCanvasImageCapabilityExecutor({ getExecutableCapabilities: () => [capability] })
+    const result = await execute(sourceNodeId, CANVAS_IMAGE_CAPABILITY_IDS.layerSeparation)
+    expect(result).toMatchObject({ kind: 'canvas-node', capabilityId: 'image.layer-separation' })
+    const node = useCanvasStore.getState().nodes.find((item) => item.type === CANVAS_NODE_TYPES.layerSeparationGen)
+    expect(node?.data).toMatchObject({
+      displayName: '图层拆分',
+      capabilityId: 'image.layer-separation',
+      modelId: 'volcengine-seedream-5.0-pro',
+      params: { volcengineSeedream50ProMode: 'layer-decomposition' },
+      fixedSemanticParams: { layerStackContractVersion: 1 },
+    })
+    expect(useCanvasStore.getState().edges).toEqual([
+      expect.objectContaining({ source: sourceNodeId, target: node?.id, targetHandle: 'param:__image' }),
+    ])
   })
 })

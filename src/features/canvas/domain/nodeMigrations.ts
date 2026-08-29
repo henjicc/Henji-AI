@@ -55,6 +55,13 @@ import {
   preparePortraitTextureRoute,
 } from '../capabilities/portraitTexturePolicy';
 import { normalizeNineGridStoryboardData } from '../capabilities/nineGridPolicy';
+import {
+  LAYER_SEPARATION_DEFAULT_MODEL_ID,
+  LAYER_SEPARATION_MODEL_POLICY,
+  LAYER_STACK_CONTRACT_VERSION,
+  selectDefaultLayerSeparationModel,
+} from '../capabilities/layerSeparationPolicy';
+import { validateLayerStackDocument, type LayerStackDocumentV1 } from './layerStack';
 
 const LEGACY_TARGET_HANDLE_ID = 'target';
 const LEGACY_GENERATION_DISPLAY_NAMES: Partial<Record<CanvasNodeType, string>> = {
@@ -502,6 +509,47 @@ export function migrateElementEditGenerationData(data: DynamicValueMap): void {
     ELEMENT_EDIT_MODEL_POLICY,
     supportedStoredParams,
   ).params;
+}
+
+/** 保存重开后恢复唯一图层拆分模式、单图输入和原厂优先模型。 */
+export function migrateLayerSeparationGenerationData(data: DynamicValueMap): void {
+  data.capabilityId = CANVAS_IMAGE_CAPABILITY_IDS.layerSeparation;
+  data.promptTemplateVersion = null;
+  data.fixedSemanticParams = { layerStackContractVersion: LAYER_STACK_CONTRACT_VERSION };
+  const mediaInputs = data.mediaInputs && typeof data.mediaInputs === 'object'
+    ? data.mediaInputs as DynamicValueMap
+    : {};
+  const inlineImages = Array.isArray(mediaInputs.image)
+    ? mediaInputs.image.filter((value): value is string => typeof value === 'string' && value.trim().length > 0).slice(0, 1)
+    : [];
+  data.mediaInputs = { ...mediaInputs, image: inlineImages };
+  const candidates = resolveCanvasCapabilityModelCandidates(
+    registry.getModelsByType('image'),
+    LAYER_SEPARATION_MODEL_POLICY,
+  ).candidates.map(({ model }) => model);
+  const storedModelId = typeof data.modelId === 'string' ? data.modelId.trim() : '';
+  const model = candidates.find((candidate) => candidate.meta.id === storedModelId)
+    ?? selectDefaultLayerSeparationModel(candidates);
+  data.modelId = model?.meta.id ?? LAYER_SEPARATION_DEFAULT_MODEL_ID;
+  if (!model) return;
+  const supportedParamIds = new Set(model.params.map((param) => param.id));
+  const storedParams = data.params && typeof data.params === 'object' ? data.params as DynamicValueMap : {};
+  data.params = mapCanvasCapabilityModelParams(
+    model,
+    LAYER_SEPARATION_MODEL_POLICY,
+    Object.fromEntries(Object.entries(storedParams).filter(([key]) => supportedParamIds.has(key))),
+  ).params;
+}
+
+/** 未知/损坏文档不猜测迁移，保留合成图并降级为普通可连接图片。 */
+export function migrateLayerStackResultData(data: DynamicValueMap): void {
+  try {
+    validateLayerStackDocument(data.layerStackDocument as unknown as LayerStackDocumentV1);
+    data.resultKind = 'layer-stack';
+  } catch {
+    data.resultKind = 'image';
+    delete data.layerStackDocument;
+  }
 }
 
 /** 恢复多角度节点的版本化 profile、隐藏执行模型与单图输入。 */

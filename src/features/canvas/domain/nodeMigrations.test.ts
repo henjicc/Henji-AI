@@ -13,6 +13,8 @@ import {
   migrateMultiAngleGenerationData,
   migrateStoryboardGenerationData,
   migrateUpscaleGenerationData,
+  migrateLayerSeparationGenerationData,
+  migrateLayerStackResultData,
   resetTransientNodeRuntimeState,
 } from './nodeMigrations';
 
@@ -199,6 +201,32 @@ describe('migrateMultiAngleGenerationData', () => {
       },
       multiAngleResultPlaceholderId: null,
     });
+  });
+});
+
+describe('图层拆分迁移', () => {
+  it('固定拆层模式、原厂模型与单张源图', () => {
+    const data: DynamicValueMap = {
+      capabilityId: 'broken',
+      modelId: 'not-a-model',
+      params: { unsupported: true },
+      mediaInputs: { image: ['first.png', 'second.png'] },
+    };
+    migrateLayerSeparationGenerationData(data);
+    expect(data).toMatchObject({
+      capabilityId: 'image.layer-separation',
+      promptTemplateVersion: null,
+      modelId: 'volcengine-seedream-5.0-pro',
+      mediaInputs: { image: ['first.png'] },
+      fixedSemanticParams: { layerStackContractVersion: 1 },
+      params: { volcengineSeedream50ProMode: 'layer-decomposition' },
+    });
+  });
+
+  it('损坏或未知图层文档保留合成图并降级普通图片语义', () => {
+    const data: DynamicValueMap = { resultKind: 'layer-stack', imageUrl: '/managed/composite.png', layerStackDocument: { version: 2 } };
+    migrateLayerStackResultData(data);
+    expect(data).toEqual({ resultKind: 'image', imageUrl: '/managed/composite.png' });
   });
 });
 

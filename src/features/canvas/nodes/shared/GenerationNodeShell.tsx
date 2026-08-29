@@ -39,7 +39,10 @@ import {
   collectInputValues,
   getConnectedParamIds,
 } from '@/features/canvas/application/graphValueResolver';
-import { runCanvasGeneration } from '@/features/canvas/generation/runGeneration';
+import {
+  runCanvasGeneration,
+  type CanvasGenerationOutput,
+} from '@/features/canvas/generation/runGeneration';
 import {
   commitCanvasGenerationOutputs,
   resolveGenerationOutputStrategy,
@@ -91,6 +94,27 @@ export interface GenerationNodeRuntimePreparationContext {
   modelId: string;
 }
 
+export interface GenerationNodeResultCommitContext {
+  sourceNodeId: string;
+  placeholderNodeId: string;
+  resultNodeType: CanvasNodeType;
+  completionId: string;
+  modelId: string;
+  providerId: string;
+  params: DynamicValueMap;
+  inputs: {
+    images: string[];
+    videos: string[];
+    audios: string[];
+  };
+  result: CanvasGenerationOutput;
+}
+
+export interface GenerationNodeResultCommitResult {
+  resultNodeIds: string[];
+  idempotent?: boolean;
+}
+
 export interface GenerationNodeShellProps {
   id: string;
   nodeType: CanvasNodeType;
@@ -115,6 +139,10 @@ export interface GenerationNodeShellProps {
   prepareRuntimeParams?: (
     context: GenerationNodeRuntimePreparationContext,
   ) => Promise<DynamicValueMap> | DynamicValueMap;
+  /** 结构化结果可注入领域提交器；共享壳不按 capabilityId/modelId 判断输出协议。 */
+  commitGenerationResult?: (
+    context: GenerationNodeResultCommitContext,
+  ) => Promise<GenerationNodeResultCommitResult>;
   /** 复用标准生成壳时追加的能力语义行；只放产品设置，不复制模型 schema 参数。 */
   additionalInputRows?: ReactNode;
   minWidth?: number;
@@ -145,6 +173,7 @@ export const GenerationNodeShell = memo(({
   showPromptInput = true,
   requirePrompt = true,
   prepareRuntimeParams,
+  commitGenerationResult,
   additionalInputRows,
   minWidth = 320,
   minHeight = 160,
@@ -271,6 +300,14 @@ export const GenerationNodeShell = memo(({
     onParamsChange: handleParamsChange,
     media: { images: effectiveImages, videos: effectiveVideos, audios: effectiveAudios },
   });
+  const visibleCapabilityParamIds = useMemo(() => {
+    if (!capability) return undefined;
+    const transferKeys = new Set(capability.promptPolicy.visibleParameterTransferKeys ?? []);
+    return [...new Set([
+      ...capability.promptPolicy.visibleParameterKeys,
+      ...schema.filter((param) => param.transferKey && transferKeys.has(param.transferKey)).map((param) => param.id),
+    ])];
+  }, [capability, schema]);
 
   const handleModelChange = useCallback((nextModelId: string) => {
     const transferredParams = transferModelParamOverridesBetweenModels(
@@ -482,6 +519,11 @@ export const GenerationNodeShell = memo(({
         generationStartedAt,
         generationDurationMs,
         displayName: resultNodeTitle,
+        generationSourceNodeId: id,
+        generationProviderId: effectiveModel?.meta.provider ?? null,
+        generationInputImages: [...effectiveImages],
+        generationInputVideos: [...effectiveVideos],
+        generationInputAudios: [...effectiveAudios],
         ...(resultNodeExtraData ?? {}),
         ...(capabilityPreparation?.resultNodeData ?? {}),
       }
@@ -505,6 +547,29 @@ export const GenerationNodeShell = memo(({
           serverTaskModelId: effectiveModelId,
         }),
       });
+
+      const completionId = `generation-output:${newNodeId}`;
+      if (commitGenerationResult) {
+        const committed = await commitGenerationResult({
+          sourceNodeId: id,
+          placeholderNodeId: newNodeId,
+          resultNodeType,
+          completionId,
+          modelId: effectiveModelId,
+          providerId: effectiveModel?.meta.provider ?? '',
+          params: generationParams,
+          inputs: {
+            images: effectiveImages,
+            videos: effectiveVideos,
+            audios: effectiveAudios,
+          },
+          result,
+        });
+        return {
+          status: committed.idempotent ? 'reused' : 'completed',
+          resultNodeIds: committed.resultNodeIds,
+        };
+      }
 
       const outputResultKind = capability?.outputPolicy.resultKind;
       const memberResultKind = outputResultKind === 'panorama' ? 'panorama' : modelType;
@@ -533,7 +598,7 @@ export const GenerationNodeShell = memo(({
             semanticKind: outputResultKind === 'panorama' ? 'panorama' : 'generated-media',
           }),
         },
-        completionId: `generation-output:${newNodeId}`,
+        completionId,
         validateResultPatch: capability
           ? (patch) => validateCanvasCapabilityResultPatch(capability, patch)
           : undefined,
@@ -554,7 +619,7 @@ export const GenerationNodeShell = memo(({
       setNodeGenerationProgress(newNodeId, null);
     }
     return { status: 'completed', resultNodeIds: [newNodeId] };
-  }, [addEdge, addNode, apiKeyRequiredKey, capability, data.videoTrimEnd, data.videoTrimStart, effectiveAudios, effectiveImages, effectiveModel, effectiveModelId, effectivePromptDocument, effectiveVideos, findNodePosition, id, isPromptOverridden, modelParamValues, modelType, prepareCapabilityGeneration, prepareRuntimeValues, promptReferences, promptRequiredKey, providerKeyConfigured, requirePrompt, resultNodeExtraData, resultNodeType, resultTitleKey, setNodeGenerationProgress, t, updateNodeData]);
+  }, [addEdge, addNode, apiKeyRequiredKey, capability, commitGenerationResult, data.videoTrimEnd, data.videoTrimStart, effectiveAudios, effectiveImages, effectiveModel, effectiveModelId, effectivePromptDocument, effectiveVideos, findNodePosition, id, isPromptOverridden, modelParamValues, modelType, prepareCapabilityGeneration, prepareRuntimeValues, promptReferences, promptRequiredKey, providerKeyConfigured, requirePrompt, resultNodeExtraData, resultNodeType, resultTitleKey, setNodeGenerationProgress, t, updateNodeData]);
 
   useEffect(() => registerCanvasNodeExecutor(id, {
     kind: 'standard-generation',
@@ -642,7 +707,7 @@ export const GenerationNodeShell = memo(({
             maxMediaCounts={typeof capabilityReferenceImageMax === 'number'
               ? { image: capabilityReferenceImageMax }
               : undefined}
-            visibleParamIds={capability?.promptPolicy.visibleParameterKeys}
+            visibleParamIds={visibleCapabilityParamIds}
             videoTrimRange={videoTrimRange}
             onVideoTrimRangeChange={handleVideoTrimRangeChange}
           />

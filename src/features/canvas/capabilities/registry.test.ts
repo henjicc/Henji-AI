@@ -102,7 +102,7 @@ describe('画布图片能力注册表', () => {
     expect(filterCanvasImageCapabilities({
       sourceMediaType: 'image',
       implementationStatus: 'planned',
-    })).toHaveLength(1);
+    })).toHaveLength(0);
     expect(filterCanvasImageCapabilities({
       sourceMediaType: 'video',
     })).toEqual([]);

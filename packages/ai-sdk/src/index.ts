@@ -25,6 +25,7 @@ export * from './protocols'
 export * from './upload'
 export * from './providers'
 export * from './types'
+export * from './structured-output'
 
 // 任务 3.1 迁入：模型目录（纯函数 defineModel + 运行时校验）。同样重新导出到包根，
 // 理由同上：`tsconfig.electron.json` 的经典 Node 解析不识别 `exports` 子路径。

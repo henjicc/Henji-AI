@@ -27,6 +27,7 @@ import type {
   LlmModelConfig,
   LlmProviderConfig,
   LlmReasoningConfig,
+  StructuredGenerationOutput,
 } from '@henjicc/ai-sdk'
 import type {
   AgentListThreadsRequest,
@@ -408,6 +409,7 @@ export interface HenjiAiGenerateResponse {
   filePath?: string
   taskId?: string
   metadata?: unknown
+  structuredOutput?: StructuredGenerationOutput
   trace?: unknown
 }
 
@@ -462,7 +464,12 @@ export interface HenjiAiApi {
   cancelTask(taskId: string): Promise<void>
   getProgressEstimate(request: HenjiAiGetProgressEstimateRequest): Promise<HenjiAiProgressEstimate>
   recordProgressSample(request: HenjiAiRecordProgressSampleRequest): Promise<HenjiAiRecordProgressSampleResponse>
-  consumePendingResult(serverTaskId: string): Promise<{ url?: string; filePath?: string; metadata?: unknown } | null>
+  consumePendingResult(serverTaskId: string): Promise<{
+    url?: string
+    filePath?: string
+    metadata?: unknown
+    structuredOutput?: StructuredGenerationOutput
+  } | null>
 }
 
 export interface HenjiLlmApi {
@@ -687,6 +694,54 @@ export interface HenjiImageDiffusionFallbackCapabilities {
   reason?: string
 }
 
+export interface HenjiImageComposeLayerStackPayload {
+  requestId: string
+  stackId: string
+  layers: Array<{
+    sourceOutputIndex: number
+    source: string
+    zIndex: number
+    role: 'base' | 'content'
+    name?: string
+    description?: string
+    declaredWidth: number
+    declaredHeight: number
+    declaredFormat: 'png' | 'jpeg' | 'webp'
+    boundingBox?: {
+      absolute?: [number, number, number, number]
+      normalized?: [number, number, number, number]
+    }
+    opacity?: number
+    visible?: boolean
+  }>
+  thumbnailMaxSize?: number
+  persistSourceLayers?: boolean
+}
+
+export interface HenjiImageComposeLayerStackResult {
+  stackId: string
+  canvasWidth: number
+  canvasHeight: number
+  resources: Array<{
+    sourceOutputIndex: number
+    filePath: string
+    mimeType: 'image/png' | 'image/webp' | 'image/jpeg'
+    width: number
+    height: number
+    hasAlpha: boolean
+    byteLength: number
+    sha256: string
+    placement: { x: number; y: number; width: number; height: number }
+  }>
+  compositePath: string
+  compositeSha256: string
+  thumbnailPath: string
+  thumbnailSha256: string
+  thumbnailWidth: number
+  thumbnailHeight: number
+  createdFilePaths: string[]
+}
+
 export interface HenjiImageApi {
   splitImage(imageBase64: string, rows: number, cols: number, lineThickness: number): Promise<string[]>
   splitImageSource(source: string, rows: number, cols: number, lineThickness: number): Promise<string[]>
@@ -715,6 +770,9 @@ export interface HenjiImageApi {
     maxDimension?: number
   }): Promise<{ fullPath: string; dataUrl: string }>
   generateThumbnailBytes(payload: { source: string; maxSize?: number }): Promise<{ bytes: Uint8Array }>
+  composeLayerStack(payload: HenjiImageComposeLayerStackPayload): Promise<HenjiImageComposeLayerStackResult>
+  cancelLayerStackComposition(requestId: string): Promise<void>
+  releaseLayerStackResources(filePaths: string[]): Promise<void>
 }
 
 export interface HenjiVideoInfoResult {

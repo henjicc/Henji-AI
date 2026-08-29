@@ -1,4 +1,5 @@
 import type { AiRuntimeTrace } from '@/core/types'
+import type { StructuredGenerationOutput } from '@henjicc/ai-sdk'
 
 export interface ProviderKeyStatusDto {
   providerId: string
@@ -57,6 +58,7 @@ export interface AiGenerateResponseDto {
   filePath?: string
   taskId?: string
   metadata?: DynamicValueMap
+  structuredOutput?: StructuredGenerationOutput
   trace?: AiRuntimeTrace
 }
 
