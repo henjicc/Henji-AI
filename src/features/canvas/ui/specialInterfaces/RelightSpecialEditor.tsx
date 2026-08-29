@@ -27,12 +27,11 @@ import {
   type RelightSmartPreset,
 } from '@/features/canvas/capabilities/relightPolicy'
 import { importLocalMedia } from '@/services/localMediaImport'
+import { RelightDirectionVisualizer } from './RelightDirectionVisualizer'
 import { buildRelightEditorDraft } from './relightEditorDraft'
+import { RELIGHT_DIRECTION_LABELS } from './relightDirectionVisualizerState'
 import type { CanvasSpecialEditorSurfaceProps } from './specialEditorRegistry'
 
-const DIRECTION_LABELS: Record<RelightKeyDirection, string> = {
-  none: '不指定', left: '左侧', right: '右侧', top: '上方', bottom: '下方',
-}
 const DIRECTION_ICONS = {
   none: CircleOff, left: ArrowLeft, right: ArrowRight, top: ArrowUp, bottom: ArrowDown,
 } satisfies Record<RelightKeyDirection, typeof ArrowLeft>
@@ -112,6 +111,7 @@ export default function RelightSpecialEditor({
   }
 
   const referenceFiles = settings.smart.lightingReferenceImages.map(resolveImageDisplayUrl)
+  const sourceImageUrl = sourceImage ? resolveImageDisplayUrl(sourceImage) : null
   const close = (): void => { onCancel() }
 
   return (
@@ -139,28 +139,33 @@ export default function RelightSpecialEditor({
         )
       )}
     >
-      <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_21rem]">
-        <div className="flex min-h-0 items-center justify-center p-4">
-          <div className={`relative flex h-full w-full items-center justify-center overflow-hidden rounded-xl border border-veil-subtle ${UI_GLASS_ADAPTIVE_SURFACE_CLASS}`}>
-            {sourceImage ? (
-              <img
-                src={resolveImageDisplayUrl(sourceImage)}
-                alt="待打光源图"
-                className="max-h-full max-w-full object-contain"
-              />
-            ) : (
-              <div className="flex flex-col items-center gap-2 text-text-muted">
-                <SunMedium className="h-8 w-8" />
-                <p className="text-sm">请先为节点连接一张源图</p>
+      <div className="grid min-h-0 flex-1 grid-cols-[22rem_minmax(0,1fr)]">
+        <div className="flex min-h-0 p-4">
+          {settings.lightingMode === 'manual' ? (
+            <RelightDirectionVisualizer
+              direction={settings.manual.keyDirection}
+              sourceImage={sourceImageUrl}
+              onDirectionChange={(keyDirection) => patchManual({ keyDirection })}
+            />
+          ) : (
+            <div className={`relative flex min-h-0 w-full items-center justify-center overflow-hidden rounded-xl ${UI_GLASS_ADAPTIVE_SURFACE_CLASS}`}>
+              {sourceImageUrl ? (
+                <img src={sourceImageUrl} alt="待打光源图" className="max-h-full max-w-full object-contain" />
+              ) : (
+                <div className="flex flex-col items-center gap-2 text-text-muted">
+                  <SunMedium className="h-8 w-8" />
+                  <p className="text-sm">请先为节点连接一张源图</p>
+                </div>
+              )}
+              <div className="pointer-events-none absolute bottom-3 left-3 right-3 rounded-lg bg-overlay px-3 py-2 text-xs text-text-soft">
+                智能打光由提示词与参考图控制，不使用手动灯位。
               </div>
-            )}
-            <div className="pointer-events-none absolute bottom-3 left-3 right-3 rounded-lg bg-overlay px-3 py-2 text-xs text-text-soft">
-              打光由生成模型重绘实现，不是 3D 物理灯光仿真。方向和色调用于引导结果，实际画面可能有偏差。
             </div>
-          </div>
+          )}
         </div>
 
-        <div className={`min-h-0 overflow-y-auto border-l border-veil-subtle p-4 ${UI_GLASS_ADAPTIVE_REGION_CLASS}`}>
+        <div className={`min-h-0 overflow-y-auto border-l border-veil-subtle p-5 ${UI_GLASS_ADAPTIVE_REGION_CLASS}`}>
+          <div className="max-w-3xl">
           <section className="space-y-3">
             <h3 className={UI_TEXT_SECTION_CLASS}>模式</h3>
             <div className="grid grid-cols-2 gap-2">
@@ -206,7 +211,7 @@ export default function RelightSpecialEditor({
                         onClick={() => patchManual({ keyDirection: direction })}
                       >
                         <Icon className="h-4 w-4" />
-                        <span className="text-2xs">{DIRECTION_LABELS[direction]}</span>
+                        <span className="text-2xs">{RELIGHT_DIRECTION_LABELS[direction]}</span>
                       </UiOptionButton>
                     )
                   })}
@@ -323,6 +328,7 @@ export default function RelightSpecialEditor({
               </section>
             </div>
           )}
+          </div>
         </div>
       </div>
     </UiModal>

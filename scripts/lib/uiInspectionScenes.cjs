@@ -526,6 +526,18 @@ function createUiInspectionScenes({ canvasFixtureProjectId, settlePage }) {
     await editor.waitFor({ state: 'visible', timeout: 12000 })
     await editor.getByText('主光方向 · 离散偏好', { exact: true })
       .waitFor({ state: 'visible', timeout: 8000 })
+    const directionControl = editor.locator('[data-relight-direction-control="true"]')
+    await directionControl.waitFor({ state: 'visible', timeout: 8000 })
+    const directionBox = await directionControl.boundingBox()
+    if (!directionBox) throw new Error('图片打光可视化方向控件没有可交互尺寸')
+    await page.mouse.move(directionBox.x + directionBox.width / 2, directionBox.y + directionBox.height / 2)
+    await page.mouse.down()
+    await page.mouse.move(directionBox.x + directionBox.width * 0.84, directionBox.y + directionBox.height / 2, { steps: 10 })
+    await page.mouse.up()
+    if (await directionControl.getAttribute('data-relight-direction') !== 'right') {
+      throw new Error('图片打光拖拽没有映射到右侧模型方向')
+    }
+    await editor.getByText('模型方向 · 右侧', { exact: true }).waitFor({ state: 'visible', timeout: 8000 })
     await editor.getByRole('button', { name: /智能打光/ }).click()
     await editor.getByRole('button', { name: /霓虹氛围/ }).click()
     await editor.getByPlaceholder('例如：在保留背景布局的前提下增强商品高光')
@@ -570,6 +582,11 @@ function createUiInspectionScenes({ canvasFixtureProjectId, settlePage }) {
     await reopened.getByRole('button', { name: /^(调整打光)$/i }).click()
     await editor.waitFor({ state: 'visible', timeout: 12000 })
     await editor.getByText('氛围预设 · 模型近似').waitFor({ state: 'visible', timeout: 8000 })
+    await editor.getByRole('button', { name: /手动打光/ }).click()
+    await editor.locator('[data-relight-direction-control="true"][data-relight-direction="right"]')
+      .waitFor({ state: 'visible', timeout: 8000 })
+    await editor.getByRole('button', { name: '正面', exact: true }).click()
+    await editor.getByRole('button', { name: '透视', exact: true }).click()
     await settlePage(page, 900)
   }
 
