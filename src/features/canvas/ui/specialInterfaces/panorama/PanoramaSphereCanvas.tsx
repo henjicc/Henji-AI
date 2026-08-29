@@ -12,7 +12,6 @@ import type { PerspectiveCamera, Scene, WebGLRenderer } from 'three';
 
 import { webglRgbaToPngDataUrl } from '@/core/media/webglCaptureImage';
 import {
-  PANORAMA_DEFAULT_CAMERA_VIEW,
   normalizePanoramaCameraView,
   type PanoramaCameraView,
 } from '@/features/canvas/domain/panoramaViewer';
@@ -31,6 +30,7 @@ interface PanoramaCameraControlsProps {
   initialView?: PanoramaCameraView;
   currentViewRef?: MutableRefObject<PanoramaCameraView | null>;
   onInteractionStart?: () => void;
+  onInteractionEnd?: () => void;
   onViewChangeEnd?: (view: PanoramaCameraView) => void;
 }
 
@@ -40,10 +40,14 @@ function PanoramaCameraControls({
   initialView,
   currentViewRef,
   onInteractionStart,
+  onInteractionEnd,
   onViewChangeEnd,
 }: PanoramaCameraControlsProps): null {
   const { camera, gl, invalidate } = useThree();
   const normalizedInitialView = normalizePanoramaCameraView(initialView);
+  const initialYaw = normalizedInitialView.yaw;
+  const initialPitch = normalizedInitialView.pitch;
+  const initialFov = normalizedInitialView.fov;
   const yawRef = useRef(normalizedInitialView.yaw);
   const pitchRef = useRef(normalizedInitialView.pitch);
   const wheelCommitTimerRef = useRef<number | null>(null);
@@ -98,6 +102,7 @@ function PanoramaCameraControls({
       }
       element.style.cursor = 'grab';
       onViewChangeEnd?.(readView());
+      onInteractionEnd?.();
     };
     const handleWheel = (event: WheelEvent): void => {
       event.preventDefault();
@@ -110,6 +115,7 @@ function PanoramaCameraControls({
       wheelCommitTimerRef.current = window.setTimeout(() => {
         wheelCommitTimerRef.current = null;
         onViewChangeEnd?.(readView());
+        onInteractionEnd?.();
       }, 150);
     };
     const handleKeyDown = (event: KeyboardEvent): void => {
@@ -134,6 +140,7 @@ function PanoramaCameraControls({
       perspectiveCamera.fov = nextView.fov;
       applyView();
       onViewChangeEnd?.(nextView);
+      onInteractionEnd?.();
     };
 
     element.style.cursor = 'grab';
@@ -161,11 +168,21 @@ function PanoramaCameraControls({
       if (wheelCommitTimerRef.current !== null) window.clearTimeout(wheelCommitTimerRef.current);
       wheelCommitTimerRef.current = null;
     };
-  }, [camera, currentViewRef, gl, interactionLabel, invalidate, onInteractionStart, onViewChangeEnd, readView]);
+  }, [
+    camera,
+    currentViewRef,
+    gl,
+    interactionLabel,
+    invalidate,
+    onInteractionEnd,
+    onInteractionStart,
+    onViewChangeEnd,
+    readView,
+  ]);
 
   useEffect(() => {
     const perspectiveCamera = camera as PerspectiveCamera;
-    const nextView = normalizePanoramaCameraView(initialView ?? PANORAMA_DEFAULT_CAMERA_VIEW);
+    const nextView = { yaw: initialYaw, pitch: initialPitch, fov: initialFov };
     yawRef.current = nextView.yaw;
     pitchRef.current = nextView.pitch;
     perspectiveCamera.fov = nextView.fov;
@@ -174,7 +191,7 @@ function PanoramaCameraControls({
     perspectiveCamera.updateProjectionMatrix();
     if (currentViewRef) currentViewRef.current = nextView;
     invalidate();
-  }, [camera, currentViewRef, initialView, invalidate, resetRevision]);
+  }, [camera, currentViewRef, initialFov, initialPitch, initialYaw, invalidate, resetRevision]);
 
   return null;
 }
@@ -384,6 +401,7 @@ interface PanoramaSphereCanvasProps {
   currentViewRef?: MutableRefObject<PanoramaCameraView | null>;
   captureRef?: MutableRefObject<PanoramaCaptureCurrentView | null>;
   onInteractionStart?: () => void;
+  onInteractionEnd?: () => void;
   onViewChangeEnd?: (view: PanoramaCameraView) => void;
   onFramePresented?: () => void;
   onContextLost?: () => void;
@@ -397,6 +415,7 @@ export function PanoramaSphereCanvas({
   currentViewRef,
   captureRef,
   onInteractionStart,
+  onInteractionEnd,
   onViewChangeEnd,
   onFramePresented,
   onContextLost,
@@ -421,6 +440,7 @@ export function PanoramaSphereCanvas({
           initialView={initialView}
           currentViewRef={currentViewRef}
           onInteractionStart={onInteractionStart}
+          onInteractionEnd={onInteractionEnd}
           onViewChangeEnd={onViewChangeEnd}
         />
         <PanoramaCaptureBridge captureRef={captureRef} />

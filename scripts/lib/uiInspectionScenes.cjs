@@ -1310,6 +1310,33 @@ function createUiInspectionScenes({ canvasFixtureProjectId, settlePage }) {
       throw new Error('节点内环视错误带动了 ReactFlow 视口')
     }
 
+    // 按住拖出节点后不得因移出超时释放 Canvas；外部松手后快速返回也必须继续复用原实例。
+    await primarySphere.evaluate((canvas) => {
+      canvas.dataset.realityPanoramaDragInstance = 'retained'
+    })
+    const dragOutsideBox = await primarySphere.boundingBox()
+    if (!dragOutsideBox) throw new Error('全景节点拖出测试时球面区域不可见')
+    const retainedDragInstanceExists = async () => await primarySphere.evaluateAll((canvases) => (
+      canvases[0]?.dataset.realityPanoramaDragInstance === 'retained'
+    ))
+    await page.mouse.move(
+      dragOutsideBox.x + dragOutsideBox.width * 0.5,
+      dragOutsideBox.y + dragOutsideBox.height * 0.5,
+    )
+    await page.mouse.down()
+    await page.mouse.move(20, 80, { steps: 12 })
+    await page.waitForTimeout(620)
+    if (!await retainedDragInstanceExists()) {
+      throw new Error('按住拖出节点时错误释放了全景 WebGL 实例')
+    }
+    await page.mouse.up()
+    await page.waitForTimeout(80)
+    await primarySurface.hover()
+    await page.waitForTimeout(560)
+    if (!await retainedDragInstanceExists()) {
+      throw new Error('拖出后在外部松手并快速返回时错误重建了全景 WebGL 实例')
+    }
+
     // 指针移出后释放 WebGL，但节点必须冻结在刚才停下的视角，不能回退到原始全景图。
     const interactiveFrame = await screenshotPrimarySurface()
     await page.mouse.move(20, 80)
@@ -1507,8 +1534,10 @@ function createUiInspectionScenes({ canvasFixtureProjectId, settlePage }) {
       || persisted.resultKind !== 'panorama'
       || persisted.viewMode !== 'sphere'
       || persisted.viewportAspectRatio !== '4:3'
-      || !(persisted.cameraView?.yaw > 0)
-      || !(persisted.cameraView?.pitch > 0)
+      || !Number.isFinite(persisted.cameraView?.yaw)
+      || !Number.isFinite(persisted.cameraView?.pitch)
+      || Math.abs(persisted.cameraView.yaw) < 0.01
+      || Math.abs(persisted.cameraView.pitch) < 0.01
       || !persisted.panoramaPreviewImageUrl
       || persisted.snapshotType !== 'exportImageNode'
       || persisted.snapshotResultKind !== 'image'

@@ -30,6 +30,7 @@ interface PanoramaViewerPanelProps {
   onRetry: () => void;
   onRequestSphere: () => void;
   onInteractionStart: () => void;
+  onInteractionEnd: () => void;
   onOpenImmersiveViewer: () => void;
   onViewModeChange: (mode: PanoramaViewMode) => void;
   onViewportAspectRatioChange: (ratio: PanoramaViewportAspectRatio) => void;
@@ -56,6 +57,7 @@ export function PanoramaViewerPanel({
   onRetry,
   onRequestSphere,
   onInteractionStart,
+  onInteractionEnd,
   onOpenImmersiveViewer,
   onViewModeChange,
   onViewportAspectRatioChange,
@@ -94,13 +96,13 @@ export function PanoramaViewerPanel({
             || event.clientY > bounds.bottom
           ) return;
           if (viewMode === 'sphere' && isSphereAvailable && !hasWebglFailure) {
-            setReadyFrozenPreviewUrl(null);
+            if (!renderSphere) setReadyFrozenPreviewUrl(null);
             onRequestSphere();
           }
         }}
         onPointerDown={(event) => {
           event.stopPropagation();
-          if (viewMode === 'sphere' && isSphereAvailable && !hasWebglFailure) onInteractionStart();
+          if (viewMode === 'sphere' && isSphereAvailable && !hasWebglFailure) onRequestSphere();
         }}
         onWheel={(event) => event.stopPropagation()}
         onDoubleClick={(event) => {
@@ -123,6 +125,7 @@ export function PanoramaViewerPanel({
                 currentViewRef={currentViewRef}
                 captureRef={captureRef}
                 onInteractionStart={onInteractionStart}
+                onInteractionEnd={onInteractionEnd}
                 onViewChangeEnd={onCameraViewChangeEnd}
                 onFramePresented={() => {
                   setReadyFrozenPreviewUrl(frozenPreviewUrl);

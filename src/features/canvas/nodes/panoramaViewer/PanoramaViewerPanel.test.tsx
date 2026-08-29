@@ -54,6 +54,7 @@ describe('PanoramaViewerPanel', () => {
         onRetry={vi.fn()}
         onRequestSphere={vi.fn()}
         onInteractionStart={vi.fn()}
+        onInteractionEnd={vi.fn()}
         onOpenImmersiveViewer={vi.fn()}
         onViewModeChange={vi.fn()}
         onViewportAspectRatioChange={vi.fn()}
@@ -96,6 +97,7 @@ describe('PanoramaViewerPanel', () => {
       onRetry: vi.fn(),
       onRequestSphere: vi.fn(),
       onInteractionStart: vi.fn(),
+      onInteractionEnd: vi.fn(),
       onOpenImmersiveViewer: vi.fn(),
       onViewModeChange: vi.fn(),
       onViewportAspectRatioChange: vi.fn(),
@@ -122,6 +124,10 @@ describe('PanoramaViewerPanel', () => {
     expect(document.querySelector('[data-panorama-transition-preview="true"]')).toBeTruthy();
     expect(frozenPreview.classList.contains('opacity-100')).toBe(true);
     fireEvent.click(screen.getByTestId('sphere-canvas'));
+    expect(document.querySelector('[data-panorama-transition-preview="true"]')).toBeNull();
+    expect(frozenPreview.classList.contains('opacity-0')).toBe(true);
+    fireEvent.pointerEnter(screen.getByRole('region'), { clientX: 0, clientY: 0 });
+    expect(commonProps.onRequestSphere).toHaveBeenCalledOnce();
     expect(document.querySelector('[data-panorama-transition-preview="true"]')).toBeNull();
     expect(frozenPreview.classList.contains('opacity-0')).toBe(true);
   });

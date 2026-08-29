@@ -80,6 +80,7 @@ export const PanoramaViewerNode = memo(({
   const currentViewRef = useRef<PanoramaCameraView | null>(null);
   const autoPreviewCaptureRef = useRef(false);
   const freezeDelayTimerRef = useRef<number | null>(null);
+  const interactionActiveRef = useRef(false);
   const lastSourceRef = useRef<string | null>(null);
   const pointerInsideNodeRef = useRef(false);
   const previewCaptureFrameRef = useRef<number | null>(null);
@@ -170,6 +171,7 @@ export const PanoramaViewerNode = memo(({
   }, [cancelScheduledFreeze, claimInlineLease, data.viewMode, hasWebglFailure, id, isContentLodLow]);
 
   const activateSphere = useCallback(() => {
+    interactionActiveRef.current = true;
     setSelectedNode(id);
     requestSphere();
   }, [id, requestSphere, setSelectedNode]);
@@ -235,6 +237,7 @@ export const PanoramaViewerNode = memo(({
 
   const handleViewModeChange = useCallback((viewMode: PanoramaViewMode) => {
     cancelScheduledFreeze();
+    interactionActiveRef.current = false;
     pendingFreezeReleaseRef.current = false;
     if (viewMode === 'sphere') setHasWebglFailure(false);
     updateNodeData(id, { viewMode });
@@ -244,6 +247,7 @@ export const PanoramaViewerNode = memo(({
 
   const handleContextLost = useCallback(() => {
     cancelScheduledFreeze();
+    interactionActiveRef.current = false;
     autoPreviewCaptureRef.current = false;
     pendingFreezeReleaseRef.current = false;
     setHasWebglFailure(true);
@@ -310,11 +314,17 @@ export const PanoramaViewerNode = memo(({
 
   const scheduleFreezeInlineView = useCallback((): void => {
     cancelScheduledFreeze();
+    if (interactionActiveRef.current) return;
     freezeDelayTimerRef.current = window.setTimeout(() => {
       freezeDelayTimerRef.current = null;
       freezeInlineView();
-    }, UI_DURATION.base);
+    }, UI_DURATION.viewer);
   }, [cancelScheduledFreeze, freezeInlineView]);
+
+  const finishSphereInteraction = useCallback((): void => {
+    interactionActiveRef.current = false;
+    if (!pointerInsideNodeRef.current) scheduleFreezeInlineView();
+  }, [scheduleFreezeInlineView]);
 
   const handleFrozenPreviewReady = useCallback(() => {
     if (!pendingFreezeReleaseRef.current) return;
@@ -438,6 +448,7 @@ export const PanoramaViewerNode = memo(({
         onRetry={() => setRetryRevision((revision) => revision + 1)}
         onRequestSphere={requestSphere}
         onInteractionStart={activateSphere}
+        onInteractionEnd={finishSphereInteraction}
         onOpenImmersiveViewer={openImmersiveViewer}
         onViewModeChange={handleViewModeChange}
         onViewportAspectRatioChange={handleViewportAspectRatioChange}
