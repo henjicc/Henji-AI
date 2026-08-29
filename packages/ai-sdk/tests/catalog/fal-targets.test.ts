@@ -3,10 +3,17 @@ import { describe, expect, it } from 'vitest'
 import { analyzeRatioResolutionParams } from '@/core/params/ratioResolution'
 import { composeModelDefinition } from '@/core/composeModelDefinition'
 import { falPresentation } from '@/models/presentation/fal'
-import { catalogIndex, type JsonObject, type ModelRuntimeDefinition } from '@henjicc/ai-sdk'
+import {
+  catalogIndex,
+  evaluateRuntimeCondition,
+  type JsonObject,
+  type ModelRuntimeDefinition,
+} from '@henjicc/ai-sdk'
 import { falGeminiOmniFlashModel as falGeminiOmniFlashRuntime } from '../../src/catalog/fal/gemini-omni-flash.model'
 import { falGptImage2Model as falGptImage2Runtime } from '../../src/catalog/fal/gpt-image-2.model'
 import { falGrokImagine20Model as falGrokImagine20Runtime } from '../../src/catalog/fal/grok-imagine-2.0.model'
+import { hailuo02Model as falHailuo02Runtime } from '../../src/catalog/fal/hailuo-02.model'
+import { hailuo23Model as falHailuo23Runtime } from '../../src/catalog/fal/hailuo-2.3.model'
 import { falKling30Model as falKling30Runtime } from '../../src/catalog/fal/kling-3.0.model'
 import { falKling30TurboModel as falKling30TurboRuntime } from '../../src/catalog/fal/kling-3.0-turbo.model'
 import { falKling30OmniModel as falKling30OmniRuntime } from '../../src/catalog/fal/kling-3.0-omni.model'
@@ -20,6 +27,12 @@ import { falSeedance20MiniModel as falSeedance20MiniRuntime } from '../../src/ca
 import { falSeedance25Model as falSeedance25Runtime } from '../../src/catalog/fal/seedance-2.5.model'
 import { falSeedream50LiteModel as falSeedream50LiteRuntime } from '../../src/catalog/fal/seedream-5.0-lite.model'
 import { falSeedream50ProModel as falSeedream50ProRuntime } from '../../src/catalog/fal/seedream-5.0-pro.model'
+import {
+  countUploadedImages,
+  countUploadedVideos,
+  resolveUploadedImageSources,
+  resolveUploadedVideoSources,
+} from '../../src/catalog/shared/mediaPresence'
 import { zImageTurboModel as zImageTurboRuntime } from '../../src/catalog/fal/z-image-turbo.model'
 
 const compose = (runtime: ModelRuntimeDefinition) =>
@@ -28,6 +41,8 @@ const compose = (runtime: ModelRuntimeDefinition) =>
 const falGeminiOmniFlashModel = compose(falGeminiOmniFlashRuntime)
 const falGptImage2Model = compose(falGptImage2Runtime)
 const falGrokImagine20Model = compose(falGrokImagine20Runtime)
+const falHailuo02Model = compose(falHailuo02Runtime)
+const falHailuo23Model = compose(falHailuo23Runtime)
 const falKling30Model = compose(falKling30Runtime)
 const falKling30TurboModel = compose(falKling30TurboRuntime)
 const falKling30OmniModel = compose(falKling30OmniRuntime)
@@ -72,7 +87,56 @@ function evaluateCatalogBuilder(modelId: string, params: JsonObject) {
   return model!.request!.builder!(params)
 }
 
+function isParamVisible(model: ModelRuntimeDefinition, paramId: string, params: JsonObject): boolean {
+  const param = model.params.find((item) => item.id === paramId)
+  expect(param?.visible?.condition).toBeTypeOf('function')
+  return evaluateRuntimeCondition(param?.visible?.condition, params)
+}
+
 describe('packages/ai-sdk/docs/model-adaptation Fal 目标模型', () => {
+  it('媒体来源会逐候选清洗后回退，并忽略空值与非字符串', () => {
+    const imagesWithFallback = {
+      uploadedFilePaths: [' ', null, 42],
+      images: ['', ' fallback.png ', false],
+      uploadedImages: ['later.png'],
+    }
+    expect(resolveUploadedImageSources(imagesWithFallback)).toEqual(['fallback.png'])
+    expect(countUploadedImages(imagesWithFallback)).toBe(1)
+
+    const uploadedImagesOnly = {
+      uploadedFilePaths: [' ', null],
+      images: [false, ''],
+      uploadedImages: [' ui.png '],
+    }
+    expect(resolveUploadedImageSources(uploadedImagesOnly)).toEqual(['ui.png'])
+    expect(countUploadedImages({ uploadedFilePaths: [' ', null, 42], images: [false] })).toBe(0)
+
+    const richerUploadedImages = {
+      uploadedFilePaths: ['legacy.png'],
+      images: ['image-1.png', 'image-2.png'],
+      uploadedImages: ['fresh-1.png', 'fresh-2.png', 'fresh-3.png'],
+    }
+    expect(resolveUploadedImageSources(richerUploadedImages))
+      .toEqual(['fresh-1.png', 'fresh-2.png', 'fresh-3.png'])
+    expect(countUploadedImages(richerUploadedImages)).toBe(3)
+    expect(resolveUploadedImageSources({
+      uploadedFilePaths: [' path-1.png ', 'path-2.png'],
+      uploadedImages: ['fresh-1.png', 'fresh-2.png'],
+    })).toEqual(['path-1.png', 'path-2.png'])
+
+    const uploadedVideosOnly = {
+      uploadedVideoFilePaths: ['', null],
+      videos: [false, ' '],
+      uploadedVideos: [' ui.mp4 '],
+    }
+    expect(resolveUploadedVideoSources(uploadedVideosOnly)).toEqual(['ui.mp4'])
+    expect(countUploadedVideos({ uploadedVideoFilePaths: [' ', null], videos: [false, 7] })).toBe(0)
+    expect(resolveUploadedVideoSources({
+      uploadedVideoFilePaths: ['legacy.mp4'],
+      uploadedVideos: ['fresh-1.mp4', 'fresh-2.mp4'],
+    })).toEqual(['fresh-1.mp4', 'fresh-2.mp4'])
+  })
+
   it.each([...imageModels, ...videoModels])('$meta.id 在画布使用独立比例与分辨率参数', (model) => {
     expect(model.params.some((param) => param.type === 'composite')).toBe(false)
     const spec = analyzeRatioResolutionParams(model.params, [])
@@ -134,6 +198,115 @@ describe('packages/ai-sdk/docs/model-adaptation Fal 目标模型', () => {
       .toBe('fal-ai/kling-video/o3/pro/reference-to-video')
   })
 
+  it.each([
+    ['standard', false, 0.084],
+    ['standard', true, 0.112],
+    ['pro', false, 0.112],
+    ['pro', true, 0.14],
+  ] as const)('Kling 3.0 Omni %s 档有声=%s 按官方秒价计费', (resolution, generateAudio, rate) => {
+    expect(falKling30OmniModel.pricing.calculator?.({
+      falKling30OmniResolution: resolution,
+      falKling30OmniGenerateAudio: generateAudio,
+      falKling30OmniDuration: 5,
+    })).toBeCloseTo(rate * 5)
+  })
+
+  it.each(['uploadedFilePaths', 'images', 'uploadedImages'] as const)(
+    'MiniMax H3 参考图加价兼容 %s',
+    (imageKey) => {
+      expect(falMiniMaxH3Model.pricing.calculator?.({
+        falMiniMaxH3Mode: 'reference-to-video',
+        falMiniMaxH3Resolution: '2K',
+        falMiniMaxH3Duration: 5,
+        [imageKey]: Array.from({ length: 6 }, (_, index) => `image-${index}.png`),
+      })).toBeCloseTo(0.73)
+    }
+  )
+
+  it('Hailuo 2.3 按实际无图与有图路由计价', async () => {
+    const endpoints = falHailuo23Model.endpoints as { selector: (params: JsonObject) => Promise<string> }
+
+    const standardText = {
+      falHailuo23Version: 'standard', falHailuo23Duration: '6', falHailuo23FastMode: true,
+    }
+    expect(await endpoints.selector(standardText)).toBe('fal-ai/minimax/hailuo-2.3/standard/text-to-video')
+    expect(falHailuo23Model.pricing.calculator?.(standardText)).toBeCloseTo(0.28)
+
+    const proText = {
+      falHailuo23Version: 'pro', falHailuo23Duration: '6', falHailuo23FastMode: true,
+    }
+    expect(await endpoints.selector(proText)).toBe('fal-ai/minimax/hailuo-2.3/pro/text-to-video')
+    expect(falHailuo23Model.pricing.calculator?.(proText)).toBeCloseTo(0.49)
+
+    const standardFastImage = {
+      falHailuo23Version: 'standard', falHailuo23Duration: '10', falHailuo23FastMode: true,
+      uploadedImages: ['source.png'],
+    }
+    expect(await endpoints.selector(standardFastImage))
+      .toBe('fal-ai/minimax/hailuo-2.3-fast/standard/image-to-video')
+    expect(falHailuo23Model.pricing.calculator?.(standardFastImage)).toBeCloseTo(0.32)
+    expect(falHailuo23Model.request?.builder?.({ prompt: 'fast', ...standardFastImage }))
+      .toMatchObject({ image_url: 'source.png', duration: '10' })
+
+    const proFastImage = {
+      falHailuo23Version: 'pro', falHailuo23Duration: '10', falHailuo23FastMode: true,
+      images: ['source.png'],
+    }
+    expect(await endpoints.selector(proFastImage)).toBe('fal-ai/minimax/hailuo-2.3-fast/pro/image-to-video')
+    expect(falHailuo23Model.pricing.calculator?.(proFastImage)).toBeCloseTo(0.33)
+
+    expect(isParamVisible(falHailuo23Runtime, 'falHailuo23FastMode', {})).toBe(false)
+    expect(isParamVisible(falHailuo23Runtime, 'falHailuo23FastMode', { uploadedImages: ['source.png'] })).toBe(true)
+    expect(isParamVisible(falHailuo23Runtime, 'falHailuo23Duration', { falHailuo23Version: 'standard' })).toBe(true)
+    expect(isParamVisible(falHailuo23Runtime, 'falHailuo23Duration', proFastImage)).toBe(false)
+  })
+
+  it('Hailuo-02 计价与 Standard 文生、图生、Pro 和 Fast 路由一致', async () => {
+    const endpoints = falHailuo02Model.endpoints as { selector: (params: JsonObject) => Promise<string> }
+
+    const standardText = {
+      falHailuo02Version: 'standard', falHailuo02Duration: '10', falHailuo02Resolution: '512P',
+      falHailuo02FastMode: false,
+    }
+    expect(await endpoints.selector(standardText)).toBe('fal-ai/minimax/hailuo-02/standard/text-to-video')
+    expect(falHailuo02Model.pricing.calculator?.(standardText)).toBeCloseTo(0.45)
+    expect(falHailuo02Model.request?.builder?.({ prompt: 'text', ...standardText })).not.toHaveProperty('resolution')
+
+    const standardImage = { ...standardText, uploadedFilePaths: ['source.png'] }
+    expect(await endpoints.selector(standardImage)).toBe('fal-ai/minimax/hailuo-02/standard/image-to-video')
+    expect(falHailuo02Model.pricing.calculator?.(standardImage)).toBeCloseTo(0.17)
+
+    const proImage = {
+      falHailuo02Version: 'pro', falHailuo02Duration: '10', falHailuo02FastMode: false,
+      images: ['source.png'],
+    }
+    expect(await endpoints.selector(proImage)).toBe('fal-ai/minimax/hailuo-02/pro/image-to-video')
+    expect(falHailuo02Model.pricing.calculator?.(proImage)).toBeCloseTo(0.48)
+
+    const proFastImage = {
+      falHailuo02Version: 'pro', falHailuo02Duration: '10', falHailuo02FastMode: true,
+      uploadedImages: ['source.png'],
+    }
+    expect(await endpoints.selector(proFastImage)).toBe('fal-ai/minimax/hailuo-02-fast/image-to-video')
+    expect(falHailuo02Model.pricing.calculator?.(proFastImage)).toBeCloseTo(0.17)
+    expect(falHailuo02Model.request?.builder?.({ prompt: 'fast', ...proFastImage }))
+      .toMatchObject({ image_url: 'source.png', duration: '10' })
+
+    const staleFastWithTwoImages = {
+      falHailuo02Version: 'standard', falHailuo02Duration: '10', falHailuo02Resolution: '512P',
+      falHailuo02FastMode: true, uploadedImages: ['first.png', 'last.png'],
+    }
+    expect(await endpoints.selector(staleFastWithTwoImages))
+      .toBe('fal-ai/minimax/hailuo-02/standard/image-to-video')
+    expect(falHailuo02Model.request?.builder?.({ prompt: 'frames', ...staleFastWithTwoImages }))
+      .toMatchObject({
+        image_url: 'first.png', end_image_url: 'last.png', duration: '10', resolution: '512P',
+      })
+
+    expect(isParamVisible(falHailuo02Runtime, 'falHailuo02Duration', proImage)).toBe(false)
+    expect(isParamVisible(falHailuo02Runtime, 'falHailuo02Duration', proFastImage)).toBe(true)
+  })
+
   it('MiniMax 与 Seedance 覆盖首尾帧和多模态参考字段', () => {
     expect(falMiniMaxH3Model.request?.builder?.({
       prompt: 'reference', falMiniMaxH3Mode: 'reference-to-video',
@@ -142,9 +315,79 @@ describe('packages/ai-sdk/docs/model-adaptation Fal 目标模型', () => {
       reference_image_urls: ['a.png'], reference_video_urls: ['v.mp4'], reference_audio_urls: ['voice.mp3'],
       prompt_expansion_mode: 'balanced'
     })
+    expect(falMiniMaxH3Model.request?.builder?.({
+      prompt: 'uploaded references', falMiniMaxH3Mode: 'reference-to-video',
+      uploadedImages: [' first.png ', 'second.png']
+    })).toMatchObject({
+      reference_image_urls: ['first.png', 'second.png'], aspect_ratio: 'adaptive'
+    })
     expect(falSeedance25Model.request?.builder?.({
       prompt: 'frames', images: ['first.png', 'last.png']
     })).toMatchObject({ image_url: 'first.png', end_image_url: 'last.png' })
+  })
+
+  it('MiniMax H3 与 Kling 3.0 Omni 会用 uploadedImages 切换图生视频路由', async () => {
+    const h3 = falMiniMaxH3Model.endpoints as { selector: (params: JsonObject) => Promise<string> }
+    const kling = falKling30OmniModel.endpoints as { selector: (params: JsonObject) => Promise<string> }
+
+    expect(await h3.selector({
+      falMiniMaxH3Mode: 'text-image-to-video', uploadedImages: ['source.png'],
+    })).toBe('minimax/h3/image-to-video')
+    expect(await kling.selector({
+      falKling30OmniMode: 'text-image-to-video', uploadedImages: ['source.png'],
+    })).toBe('fal-ai/kling-video/o3/standard/image-to-video')
+  })
+
+  it.each(['uploadedFilePaths', 'images', 'uploadedImages'] as const)(
+    'MiniMax H3 仅在无图或参考模式显示比例（%s）',
+    (imageKey) => {
+      expect(isParamVisible(falMiniMaxH3Runtime, 'falMiniMaxH3AspectRatio', {
+        falMiniMaxH3Mode: 'text-image-to-video',
+      })).toBe(true)
+      expect(isParamVisible(falMiniMaxH3Runtime, 'falMiniMaxH3AspectRatio', {
+        falMiniMaxH3Mode: 'text-image-to-video', [imageKey]: ['source.png'],
+      })).toBe(false)
+      expect(isParamVisible(falMiniMaxH3Runtime, 'falMiniMaxH3AspectRatio', {
+        falMiniMaxH3Mode: 'reference-to-video', [imageKey]: ['source.png'],
+      })).toBe(true)
+    }
+  )
+
+  it('Grok Imagine 2.0 与 Seedream 5 Pro 按三个图片别名的最大有效数量计价', () => {
+    const media = {
+      uploadedFilePaths: ['legacy.png'],
+      images: ['', 'image-1.png', false],
+      uploadedImages: ['fresh-1.png', ' fresh-2.png ', 'fresh-3.png'],
+    }
+    expect(falGrokImagine20Model.pricing.calculator?.({
+      ...media,
+      falGrokImagine20Resolution: '1K',
+      falGrokImagine20Quality: 'medium',
+      falGrokImagine20NumImages: 1,
+    })).toBeCloseTo(0.09)
+    expect(falSeedream50ProModel.pricing.calculator?.({
+      ...media,
+      falSeedream50ProResolution: '2K',
+      falSeedream50ProNumImages: 1,
+    })).toBeCloseTo(0.144)
+  })
+
+  it('Kling 3.0 Omni 文生与参考模式保留比例，图生隐藏且 uploadedImages 会下发', () => {
+    expect(isParamVisible(falKling30OmniRuntime, 'falKling30OmniAspectRatio', {
+      falKling30OmniMode: 'text-image-to-video',
+    })).toBe(true)
+    expect(isParamVisible(falKling30OmniRuntime, 'falKling30OmniAspectRatio', {
+      falKling30OmniMode: 'text-image-to-video', uploadedImages: ['source.png'],
+    })).toBe(false)
+    expect(isParamVisible(falKling30OmniRuntime, 'falKling30OmniAspectRatio', {
+      falKling30OmniMode: 'reference-to-video', uploadedImages: ['source.png'],
+    })).toBe(true)
+    expect(falKling30OmniModel.request?.builder?.({
+      prompt: 'reference', falKling30OmniMode: 'reference-to-video',
+      falKling30OmniAspectRatio: '9:16', uploadedImages: [' reference.png '],
+    })).toMatchObject({
+      image_urls: ['reference.png'], aspect_ratio: '9:16',
+    })
   })
 
   it('Fal Seedance 校验 2.0 参考素材依赖并支持 2.5 自动时长', () => {

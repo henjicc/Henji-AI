@@ -1,5 +1,6 @@
 import { defineModel } from "../defineModel";
-import type { JsonValue, JsonObject } from "../../types/runtime";
+import type { JsonObject } from "../../types/runtime";
+import { countUploadedImages, resolveUploadedImageSources } from "../shared/mediaPresence";
 export const hailuo23Model = defineModel({
     meta: {
         id: 'fal-ai-minimax-hailuo-2.3',
@@ -31,6 +32,7 @@ export const hailuo23Model = defineModel({
             order: 2,
             type: 'dropdown',
             default: '6',
+            visible: { condition: (params: JsonObject) => params.falHailuo23Version !== 'pro' },
             options: [
                 { value: '6' },
                 { value: '10' }
@@ -40,7 +42,8 @@ export const hailuo23Model = defineModel({
             id: 'falHailuo23FastMode',
             order: 3,
             type: 'switch',
-            default: true
+            default: true,
+            visible: { condition: (params: JsonObject) => countUploadedImages(params) > 0 }
         },
         {
             id: 'falHailuo23PromptOptimizer',
@@ -51,14 +54,10 @@ export const hailuo23Model = defineModel({
     ],
     endpoints: {
         selector: async (params) => {
-            const filterSources = (value: JsonValue): string[] => Array.isArray(value)
-                ? value.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
-                : [];
-            const uploaded = filterSources(params.uploadedFilePaths);
-            const images = uploaded.length > 0 ? uploaded : filterSources(params.images);
+            const imageCount = resolveUploadedImageSources(params).length;
             const version = params.falHailuo23Version || 'standard';
             const fastMode = params.falHailuo23FastMode !== false;
-            if (images.length > 0) {
+            if (imageCount > 0) {
                 if (fastMode) {
                     return version === 'pro'
                         ? 'fal-ai/minimax/hailuo-2.3-fast/pro/image-to-video'
@@ -75,11 +74,7 @@ export const hailuo23Model = defineModel({
     },
     request: {
         builder: (params) => {
-            const filterSources = (value: JsonValue): string[] => Array.isArray(value)
-                ? value.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
-                : [];
-            const uploaded = filterSources(params.uploadedFilePaths);
-            const images = uploaded.length > 0 ? uploaded : filterSources(params.images);
+            const images = resolveUploadedImageSources(params);
             const prompt = params.prompt || '';
             const version = params.falHailuo23Version || 'standard';
             const duration = params.falHailuo23Duration || '6';
@@ -102,7 +97,7 @@ export const hailuo23Model = defineModel({
         calculator: (params) => {
             const duration = params.falHailuo23Duration === '10' ? 10 : 6;
             const version = params.falHailuo23Version === 'pro' ? 'pro' : 'standard';
-            const fastMode = params.falHailuo23FastMode !== false;
+            const fastMode = countUploadedImages(params) > 0 && params.falHailuo23FastMode !== false;
             if (version === 'pro')
                 return fastMode ? 0.33 : 0.49;
             return fastMode

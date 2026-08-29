@@ -1,5 +1,6 @@
 import { defineModel } from "../defineModel";
-import type { JsonValue, JsonObject } from "../../types/runtime";
+import type { JsonObject } from "../../types/runtime";
+import { hasUploadedImage, resolveUploadedImageSources } from "../shared/mediaPresence";
 export const falKling30OmniModel = defineModel({
     meta: {
         id: 'fal-ai-kling-3.0-omni', canonicalModelId: 'kling-video-3.0-omni', seriesId: 'kling-video', seriesRank: 3.02,
@@ -23,6 +24,10 @@ export const falKling30OmniModel = defineModel({
         {
             id: 'falKling30OmniAspectRatio', type: 'dropdown', order: 2,
             default: 'smart',
+            visible: {
+                condition: (params: JsonObject) => params.falKling30OmniMode === 'reference-to-video' ||
+                    !hasUploadedImage(params)
+            },
             options: [
                 { value: 'smart' },
                 { value: '16:9' }, { value: '9:16' }, { value: '1:1' }
@@ -47,8 +52,7 @@ export const falKling30OmniModel = defineModel({
     ],
     endpoints: {
         selector: async (params) => {
-            const uploaded = Array.isArray(params.uploadedFilePaths) ? params.uploadedFilePaths : [];
-            const images = uploaded.length > 0 ? uploaded : (Array.isArray(params.images) ? params.images : []);
+            const images = resolveUploadedImageSources(params);
             const tier = params.falKling30OmniResolution === 'pro' ? 'pro' : 'standard';
             const mode = params.falKling30OmniMode === 'reference-to-video'
                 ? 'reference-to-video' : (images.length > 0 ? 'image-to-video' : 'text-to-video');
@@ -57,10 +61,7 @@ export const falKling30OmniModel = defineModel({
     },
     request: {
         builder: (params) => {
-            const clean = (value: JsonValue): string[] => Array.isArray(value)
-                ? value.filter((item): item is string => typeof item === 'string' && item.trim().length > 0) : [];
-            const uploaded = clean(params.uploadedFilePaths);
-            const images = uploaded.length > 0 ? uploaded : clean(params.images);
+            const images = resolveUploadedImageSources(params);
             const raw = String(params.falKling30OmniAspectRatio || 'smart');
             const ratio = ['9:16', '1:1'].includes(raw) ? raw : '16:9';
             const body: JsonObject = {
@@ -91,9 +92,9 @@ export const falKling30OmniModel = defineModel({
             const duration = Math.min(15, Math.max(3, Math.round(Number(params.falKling30OmniDuration || 5))));
             const audio = params.falKling30OmniGenerateAudio === true;
             const pro = params.falKling30OmniResolution === 'pro';
-            return duration * (pro ? (audio ? 0.168 : 0.112) : (audio ? 0.126 : 0.084));
+            return duration * (pro ? (audio ? 0.14 : 0.112) : (audio ? 0.112 : 0.084));
         },
-        description: '标准 $0.084/$0.126，专业 $0.112/$0.168 每秒（无/有音频，不含语音控制加价档）'
+        description: '标准 $0.084/$0.112，专业 $0.112/$0.14 每秒（无/有音频）'
     }
 });
 export default falKling30OmniModel;

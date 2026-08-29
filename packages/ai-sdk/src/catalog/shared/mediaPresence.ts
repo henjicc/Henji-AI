@@ -13,19 +13,47 @@
 
 import type { JsonValue, JsonObject } from '../../types/runtime'
 
-function firstNonEmptySource(candidates: JsonValue[]): JsonValue[] | null {
+function cleanMediaSources(candidate: JsonValue): string[] {
+  if (!Array.isArray(candidate)) return []
+
+  return candidate.flatMap((item) => {
+    if (typeof item !== 'string') return []
+    const source = item.trim()
+    return source.length > 0 ? [source] : []
+  })
+}
+
+function richestMediaSources(candidates: JsonValue[]): string[] {
+  let resolved: string[] = []
   for (const candidate of candidates) {
-    if (Array.isArray(candidate) && candidate.length > 0) return candidate
+    const sources = cleanMediaSources(candidate)
+    if (sources.length > resolved.length) resolved = sources
   }
-  return null
+  return resolved
+}
+
+function maxMediaSourceCount(candidates: JsonValue[]): number {
+  let count = 0
+  for (const candidate of candidates) {
+    count = Math.max(count, cleanMediaSources(candidate).length)
+  }
+  return count
+}
+
+export function resolveUploadedImageSources(params: JsonObject): string[] {
+  return richestMediaSources([params.uploadedFilePaths, params.images, params.uploadedImages])
+}
+
+export function resolveUploadedVideoSources(params: JsonObject): string[] {
+  return richestMediaSources([params.uploadedVideoFilePaths, params.videos, params.uploadedVideos])
 }
 
 export function countUploadedImages(params: JsonObject): number {
-  return firstNonEmptySource([params.uploadedFilePaths, params.images, params.uploadedImages])?.length ?? 0
+  return maxMediaSourceCount([params.uploadedFilePaths, params.images, params.uploadedImages])
 }
 
 export function countUploadedVideos(params: JsonObject): number {
-  return firstNonEmptySource([params.uploadedVideoFilePaths, params.videos, params.uploadedVideos])?.length ?? 0
+  return maxMediaSourceCount([params.uploadedVideoFilePaths, params.videos, params.uploadedVideos])
 }
 
 export function hasUploadedImage(params: JsonObject): boolean {

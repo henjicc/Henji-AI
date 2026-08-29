@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { catalog } from '@henjicc/ai-sdk'
 
 import {
@@ -7,6 +7,7 @@ import {
 } from '@/core/application-control'
 import { registry } from '@/core/ModelRegistry'
 import { composeModelDefinition } from '@/core/composeModelDefinition'
+import { USD_TO_CNY_RATE_STORAGE_KEY } from '@/core/pricing/priceDisplay'
 import type { ModelDefinition } from '@/core/types'
 import { modelPresentations } from '@/models/presentation'
 
@@ -66,6 +67,7 @@ describe('generationPreparation', () => {
 
   afterEach(() => {
     registry.clear()
+    vi.unstubAllGlobals()
   })
 
   it('按配置搜索并裁剪单模型 schema', () => {
@@ -91,6 +93,32 @@ describe('generationPreparation', () => {
       .toBe(`generation.model.${toApplicationStableIdSegment(testModel.meta.id)}.params`)
     expect(schema.params).toHaveLength(2)
     expect(schema.priceEstimate).toMatchObject({ amount: 0.5, currency: '$' })
+  })
+
+  it('最低估算价排序使用用户设置的美元兑人民币汇率', () => {
+    registry.register({
+      ...testModel,
+      meta: {
+        ...testModel.meta,
+        id: 'agent-preparation-cny-price',
+        provider: 'cny-provider',
+      },
+      pricing: { currency: '¥', fixed: 3.6 },
+    })
+    vi.stubGlobal('localStorage', {
+      getItem: (key: string) => key === USD_TO_CNY_RATE_STORAGE_KEY ? '8' : null,
+    })
+
+    const models = searchGenerationModels({
+      mediaType: 'image',
+      sortBy: 'lowest_estimated_price',
+    })
+
+    expect(models.map((model) => model.modelId)).toEqual([
+      'agent-preparation-cny-price',
+      testModel.meta.id,
+    ])
+    expect(models[1].priceEstimate).toMatchObject({ comparableCnyAmount: 4 })
   })
 
   it('批量候选以紧凑卡片返回，足以一次传递更多模型而不触发目录卸载', () => {

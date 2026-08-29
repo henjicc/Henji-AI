@@ -33,8 +33,36 @@ export const PRICE_ESTIMATE_CURRENCY_MODE_STORAGE_KEY = 'price_estimate_currency
 export const USD_TO_CNY_RATE_STORAGE_KEY = 'usd_to_cny_rate'
 export const PRICE_SETTING_CHANGED_EVENT = 'priceSettingChanged'
 
+function trimPriceFraction(value: string): string {
+  const [integer, fraction] = value.split('.')
+  if (!fraction) return value
+
+  let end = fraction.length
+  while (end > 2 && fraction[end - 1] === '0') end -= 1
+  return `${integer}.${fraction.slice(0, end)}`
+}
+
 function formatPrice(value: number): string {
-  return value.toFixed(2)
+  const absoluteValue = Math.abs(value)
+  if (absoluteValue === 0 || absoluteValue >= 1) {
+    return value.toFixed(2)
+  }
+
+  if (absoluteValue >= 0.01) {
+    return trimPriceFraction(value.toFixed(3))
+  }
+
+  if (absoluteValue >= 0.0001) {
+    return trimPriceFraction(value.toFixed(4))
+  }
+
+  // 更小的价格至少保留两位有效数字；去掉末尾补零后仍保证非零值可辨认。
+  const fractionDigits = Math.max(5, Math.floor(-Math.log10(absoluteValue)) + 2)
+  if (fractionDigits > 100) {
+    return value.toExponential(1).replace(/\.0e/, 'e')
+  }
+
+  return trimPriceFraction(value.toFixed(fractionDigits))
 }
 
 /** 非货币单位（如魔搭魔粒）按整数数量展示，末尾多余的 0 去掉 */

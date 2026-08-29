@@ -155,9 +155,9 @@ describe('catalog consumer contract', () => {
     const stringConditions = conditions.filter((item) => typeof item.condition === 'string')
     const functionConditions = conditions.filter((item) => typeof item.condition === 'function')
 
-    expect(conditions).toHaveLength(159)
-    expect(stringConditions).toHaveLength(121)
-    expect(functionConditions).toHaveLength(38)
+    expect(conditions).toHaveLength(164)
+    expect(stringConditions).toHaveLength(119)
+    expect(functionConditions).toHaveLength(45)
 
     for (const { modelId, condition } of conditions) {
       if (typeof condition === 'string') expect(() => compileRuntimeCondition(condition)).not.toThrow()

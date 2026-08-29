@@ -1,5 +1,11 @@
 import { defineModel } from "../defineModel";
 import type { JsonValue, JsonObject } from "../../types/runtime";
+import {
+    countUploadedImages,
+    hasUploadedImage,
+    resolveUploadedImageSources,
+    resolveUploadedVideoSources
+} from "../shared/mediaPresence";
 export const falMiniMaxH3Model = defineModel({
     meta: {
         id: 'fal-ai-minimax-h3', canonicalModelId: 'minimax-h3', seriesId: 'minimax-hailuo', seriesRank: 3,
@@ -23,6 +29,10 @@ export const falMiniMaxH3Model = defineModel({
         {
             id: 'falMiniMaxH3AspectRatio', type: 'dropdown', order: 2,
             default: 'smart',
+            visible: {
+                condition: (params: JsonObject) => params.falMiniMaxH3Mode === 'reference-to-video' ||
+                    !hasUploadedImage(params)
+            },
             options: [
                 { value: 'smart' },
                 { value: '21:9' }, { value: '16:9' },
@@ -55,8 +65,7 @@ export const falMiniMaxH3Model = defineModel({
     ],
     endpoints: {
         selector: async (params) => {
-            const uploaded = Array.isArray(params.uploadedFilePaths) ? params.uploadedFilePaths : [];
-            const images = uploaded.length > 0 ? uploaded : (Array.isArray(params.images) ? params.images : []);
+            const images = resolveUploadedImageSources(params);
             if (params.falMiniMaxH3Mode === 'reference-to-video')
                 return 'minimax/h3/reference-to-video';
             return images.length > 0 ? 'minimax/h3/image-to-video' : 'minimax/h3/text-to-video';
@@ -65,14 +74,23 @@ export const falMiniMaxH3Model = defineModel({
     request: {
         builder: (params) => {
             const clean = (value: JsonValue): string[] => Array.isArray(value)
-                ? value.filter((item): item is string => typeof item === 'string' && item.trim().length > 0) : [];
-            const pick = (primary: JsonValue, fallback: JsonValue): string[] => {
-                const first = clean(primary);
-                return first.length > 0 ? first : clean(fallback);
+                ? value.flatMap((item) => {
+                    if (typeof item !== 'string')
+                        return [];
+                    const source = item.trim();
+                    return source.length > 0 ? [source] : [];
+                }) : [];
+            const pick = (...candidates: JsonValue[]): string[] => {
+                for (const candidate of candidates) {
+                    const sources = clean(candidate);
+                    if (sources.length > 0)
+                        return sources;
+                }
+                return [];
             };
-            const images = pick(params.uploadedFilePaths, params.images);
-            const videos = pick(params.uploadedVideoFilePaths, params.videos);
-            const audios = pick(params.uploadedAudioFilePaths, params.audios);
+            const images = resolveUploadedImageSources(params);
+            const videos = resolveUploadedVideoSources(params);
+            const audios = pick(params.uploadedAudioFilePaths, params.audios, params.uploadedAudios);
             const ratios = ['21:9', '16:9', '4:3', '1:1', '3:4', '9:16'];
             const raw = String(params.falMiniMaxH3AspectRatio || 'smart');
             const hint = typeof params.__firstImageRatio === 'number' && Number.isFinite(params.__firstImageRatio) && params.__firstImageRatio > 0 ? params.__firstImageRatio : 16 / 9;
@@ -132,8 +150,8 @@ export const falMiniMaxH3Model = defineModel({
         calculator: (params) => {
             const duration = Math.min(15, Math.max(5, Math.round(Number(params.falMiniMaxH3Duration || 5))));
             const rates: Record<string, number> = { '480P': 0.05, '768P': 0.06, '2K': 0.13, '4K': 0.16 };
-            const images = Array.isArray(params.uploadedFilePaths) ? params.uploadedFilePaths.length : (Array.isArray(params.images) ? params.images.length : 0);
-            const referenceExtra = params.falMiniMaxH3Mode === 'reference-to-video' ? Math.max(0, images - 5) * 0.08 : 0;
+            const imageCount = countUploadedImages(params);
+            const referenceExtra = params.falMiniMaxH3Mode === 'reference-to-video' ? Math.max(0, imageCount - 5) * 0.08 : 0;
             return duration * (rates[String(params.falMiniMaxH3Resolution || '2K')] ?? rates['2K']) + referenceExtra;
         },
         description: '480P/768P/2K/4K 为 $0.05/$0.06/$0.13/$0.16 每秒；参考模式第 6 张起图片 +$0.08/张'

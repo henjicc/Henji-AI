@@ -5,9 +5,9 @@
 
 | 项目 | 内容 |
 |---|---|
-| 最后更新 | 2026-08-29 |
-| 模型数量 | 生成主清单 19（图片 10 / 视频 9）+ 供应商专属 10 + SDK 跨项目能力模型 14（ASR 9 / 翻译 3 / LLM 2） |
-| 模型供应商文档数量 | 生成/存量 75 + SDK 跨项目能力 14（另有 Fal 工具 12） |
+| 最后更新 | 2026-08-30 |
+| 模型数量 | 生成主清单 19（图片 10 / 视频 9）+ 主清单外存量 11 + SDK 跨项目能力模型 14（ASR 9 / 翻译 3 / LLM 2） |
+| 模型供应商文档数量 | 生成/存量 77 + SDK 跨项目能力 14（另有 Fal 工具 12） |
 | 覆盖供应商 | 火山引擎（官方）、百炼（官方）、智谱（官方 LLM）、Groq（官方 LLM）、APIMart、KIE、Fal、派欧云、魔搭、Grsai |
 
 另有 12 个按能力按需分发的 Fal 图像工具，不进入默认 105 模型兼容目录：
@@ -106,13 +106,14 @@ docs/model-adaptation/
 
 Grsai 暂未在此表出现：其站内「Veo API」旧版文档给出了 `veo3.1-fast` 视频模型的端点，但该模型**未出现在 dashboard「模型列表」的定价清单中**，可用性与计价未确认，详见 [Grsai 基础文档 §8](供应商/Grsai.md)。
 
-### 供应商专属模型（10）
+### 主清单外存量模型（11）
 
-以下模型**不在主清单里**，但已在代码中适配并对用户开放，文档用于维护现有实现。它们只在单一供应商上提供，未来是否纳入主清单待定。
+以下模型**不在主清单里**，但已在代码中适配并对用户开放，文档用于维护现有实现。部分模型已有多个供应商入口，未来是否纳入主清单待定。
 
 | 模型 | 模态 | 供应商 | 文档 |
 |---|---|---|---|
-| MiniMax Hailuo 2.3 | 视频 | 派欧云 | [Hailuo-2.3_派欧云.md](Hailuo-2.3/Hailuo-2.3_派欧云.md) |
+| MiniMax Hailuo 2.3 | 视频 | 派欧云 / Fal | [派欧云](Hailuo-2.3/Hailuo-2.3_派欧云.md) / [Fal](Hailuo-2.3/Hailuo-2.3_Fal.md) |
+| MiniMax Hailuo 02 | 视频 | Fal | [Hailuo-02_Fal.md](Hailuo-02/Hailuo-02_Fal.md) |
 | Wan 2.5 Preview | 视频 | 派欧云 | [Wan-2.5-Preview_派欧云.md](Wan-2.5-Preview/Wan-2.5-Preview_派欧云.md) |
 | Wan 2.6 | 视频 | 派欧云 | [Wan-2.6_派欧云.md](Wan-2.6/Wan-2.6_派欧云.md) |
 | Wan 2.7 | 视频 | 派欧云 | [Wan-2.7_派欧云.md](Wan-2.7/Wan-2.7_派欧云.md) |
@@ -204,6 +205,8 @@ Grsai 暂未在此表出现：其站内「Veo API」旧版文档给出了 `veo3.
 | Seedance 2.0 Mini | `seedance-2.0-mini` | `bytedance/seedance-2-mini` | `bytedance/seedance-2.0/mini/...` |
 | Seedance 2.5 | `seedance-2.5` | `bytedance/seedance-2-5` | `bytedance/seedance-2.5/...` |
 | MiniMax H3 | `MiniMax-H3`、`MiniMax-H3-Context-IR`、`MiniMax-H3-Regeneration` | `minimax-h3/{text-to-video,image-to-video,reference-to-video}` | `minimax/h3/{text-to-video,image-to-video,reference-to-video}` |
+| MiniMax Hailuo 2.3 | — | — | `fal-ai/minimax/hailuo-2.3/{standard,pro}/{text-to-video,image-to-video}`、`fal-ai/minimax/hailuo-2.3-fast/{standard,pro}/image-to-video` |
+| MiniMax Hailuo 02 | — | — | `fal-ai/minimax/hailuo-02/{standard,pro}/{text-to-video,image-to-video}`、`fal-ai/minimax/hailuo-02-fast/image-to-video` |
 | Kling 3.0 | `kling-v3` | `kling-3.0/video` | `fal-ai/kling-video/v3/{pro,standard}/...`；派欧云 `/v3/async/kling-v3.0-{std,pro,4k}-{t2v,i2v}` |
 | Kling 3.0 Turbo | `kling-3.0-turbo` | `kling/v3-turbo-{text,image}-to-video` | `fal-ai/kling-video/v3/turbo/{pro,standard}/...` |
 | Kling 3.0 Omni | `kling-v3-omni` | `kling-3.0-omni/{text-to-video,image-to-video,reference-to-video,transformation}` | `fal-ai/kling-video/o3/{pro,standard}/...` |

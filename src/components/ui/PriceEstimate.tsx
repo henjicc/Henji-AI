@@ -57,7 +57,7 @@ const PriceEstimate: React.FC<PriceEstimateProps> = ({ modelId, params, variant 
         amount: price,
         sourceCurrencySymbol: model.pricing.currency,
         displayCurrencyMode: priceSettings.currencyMode,
-        language: i18n.language,
+        language: i18n.resolvedLanguage ?? i18n.language,
         usdToCnyRate: priceSettings.usdToCnyRate,
     }).display
 

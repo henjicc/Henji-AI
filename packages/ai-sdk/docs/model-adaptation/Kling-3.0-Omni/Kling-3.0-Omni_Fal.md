@@ -2,7 +2,7 @@
 
 | 项目 | 内容 |
 |---|---|
-| 最后更新 | 2026-08-22 |
+| 最后更新 | 2026-08-30 |
 | 模态 | 视频 |
 | 供应商 | fal.ai（聚合平台） |
 | 平台模型 ID | `fal-ai/kling-video/o3/{pro,standard}/{text-to-video,image-to-video,reference-to-video}` |
@@ -37,11 +37,11 @@
 | `generate_audio` | boolean | 可选 | **`false`** | 原生音频（**注意与非 Omni 的 `kling-video/v3` 默认 `true` 相反**） |
 | `shot_type` | string | 可选 | `customize` | `customize` / `intelligent` |
 
-### 3.2 仅 `text-to-video`
+### 3.2 仅 `text-to-video` 与 `reference-to-video`
 
-| 字段 | 默认 | 取值 |
+| 字段 | 默认 | 取值与说明 |
 |---|---|---|
-| `aspect_ratio` | `16:9` | `16:9`、`9:16`、`1:1` |
+| `aspect_ratio` | `16:9` | `16:9`、`9:16`、`1:1`；图生视频端点不接受该字段，输出比例跟随输入图 |
 
 ### 3.3 仅 `image-to-video`
 
@@ -69,7 +69,7 @@
 
 ## 5. 价格
 
-来源：各端点 `llms.txt`（2026-08-22 读取）。三类端点（文生 / 图生 / 参考生）在同一档位下同价。
+来源：各端点 `llms.txt`（2026-08-30 重新读取）。三类端点（文生 / 图生 / 参考生）在同一档位下同价。
 
 | 档位 | 关音频 | 开音频 |
 |---|---|---|
@@ -78,12 +78,16 @@
 
 例：Pro 5 秒开音频 = $0.70；Standard 5 秒开音频 = $0.56。
 
+**本次计价确认**：Kling O3 开音频后的正确秒价是 Pro `$0.14`、Standard `$0.112`。非 Omni Kling 3.0 的 Pro `$0.168`、Standard `$0.126` 属于另一组端点，不能复用到 O3。
+
 ## 6. 适配要点
 
 - 本项目默认**绝对不显示**：`seed`、负面提示词。Fal 的 o3 端点这两个字段都没有。
 - **`generate_audio` 默认 `false`**，与同平台的 `kling-video/v3`（默认 `true`）相反，两个模型不能共用默认值。
 - `duration` 是**字符串枚举**。
 - 档位与输入形态都通过 **endpoint 路径**选择，共 6 个端点，适配层要做路由。
+- 比例参数只在文生视频与参考生视频显示；图生视频隐藏且不发送。
+- 路由与请求必须共用同一套图片来源解析，兼容生成提交的 `uploadedFilePaths`、画布的 `images` 与对话面板的 `uploadedImages`，并忽略空值。
 - **Fal 上没有 4K 档**（APIMart / KIE 有），也没有 `video_list` 视频编辑 / transformation 能力。
 - 素材引用写法是 `@Image1` / `@Element1`，与 APIMart 的 `<<<image_N>>>`、KIE 的 `@自定义名称` 都不同——提示词模板必须按供应商分开。
 - 「Kling O3 = Kling 3.0 Omni」这层命名映射未见 Fal 官方文档明确背书，接入或排障时要留意。

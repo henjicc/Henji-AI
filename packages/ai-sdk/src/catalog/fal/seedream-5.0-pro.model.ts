@@ -1,5 +1,6 @@
 import { defineModel } from "../defineModel";
 import type { JsonValue, JsonObject } from "../../types/runtime";
+import { countUploadedImages } from "../shared/mediaPresence";
 import { FAL_COMMON_IMAGE_RATIOS, falOneMegapixelSize } from './imageSizing';
 const SEEDREAM_PRO_RATIOS = FAL_COMMON_IMAGE_RATIOS;
 export const falSeedream50ProModel = defineModel({
@@ -80,7 +81,7 @@ export const falSeedream50ProModel = defineModel({
         calculator: (params) => {
             const count = Math.min(6, Math.max(1, Math.round(Number(params.falSeedream50ProNumImages || 1))));
             const base = params.falSeedream50ProResolution === '1K' || params.falSeedream50ProResolution === '1MP' ? 0.0675 : 0.135;
-            const inputs = Array.isArray(params.uploadedFilePaths) ? params.uploadedFilePaths.length : (Array.isArray(params.images) ? params.images.length : 0);
+            const inputs = countUploadedImages(params);
             return count * (base + Math.max(0, inputs - 1) * 0.0045);
         },
         description: '≤1536² $0.0675、最高 2K $0.135/输出图；第 2 张起输入图 +$0.0045/张'

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { getAvailableProviders, getModelInfo } from '@/utils/modelHelpers'
 import PriceEstimate from '@/components/ui/PriceEstimate'
@@ -15,6 +15,7 @@ import { useImageUpload } from './hooks/useImageUpload'
 import { useVideoUpload } from './hooks/useVideoUpload'
 import { useAudioUpload } from './hooks/useAudioUpload'
 import { useGlobalPasteImage } from './hooks/useGlobalPasteImage'
+import { usePriceEstimateParams } from './hooks/usePriceEstimateParams'
 import { useReeditContent } from './hooks/useReeditContent'
 import { PresetManager } from './preset/PresetManager'
 import InputArea from './components/InputArea'
@@ -163,14 +164,19 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
   const providers = getAvailableProviders()
   const currentProvider = providers.find(p => p.id === uiState.selectedProvider)
   const currentModel = getModelInfo(uiState.selectedModel)
-  const priceEstimateParams = useMemo(
-    () => ({
-      ...modelState.params,
-      prompt: uiState.input,
-      text: uiState.input,
-    }),
-    [modelState.params, uiState.input]
-  )
+  const priceEstimateParams = usePriceEstimateParams({
+    modelParams: modelState.params,
+    prompt: uiState.input,
+    uploadedImages: uiState.uploadedImages,
+    uploadedFilePaths: uiState.uploadedFilePaths,
+    uploadedVideos: uiState.uploadedVideos,
+    uploadedVideoFilePaths: uiState.uploadedVideoFilePaths,
+    uploadedAudios: uiState.uploadedAudios,
+    uploadedAudioFilePaths: uiState.uploadedAudioFilePaths,
+    uploadedVideoDuration: uiState.uploadedVideoDuration,
+    uploadedVideoTrimStart: uiState.uploadedVideoTrimStart,
+    uploadedVideoTrimEnd: uiState.uploadedVideoTrimEnd,
+  })
 
   useEffect(() => {
     if (maxImageCount === 0 && uiState.uploadedImages.length > 0) {

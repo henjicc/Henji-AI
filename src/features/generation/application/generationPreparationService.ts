@@ -4,8 +4,8 @@ import { registry } from '@/core/ModelRegistry'
 import { resolveInputLimits } from '@/core/inputs/inputLimits'
 import { hasAlternativeModelInput } from '@/core/inputs/alternativeInput'
 import {
-  DEFAULT_USD_TO_CNY_RATE,
   convertPriceAmount,
+  readPriceEstimateDisplaySettings,
   resolvePricingCurrency,
 } from '@/core/pricing/priceDisplay'
 import { validateParams, type ValidationError } from '@/core/request/paramValidator'
@@ -134,13 +134,14 @@ function modelDescriptionText(model: ModelDefinition): string {
  */
 function createPriceEstimate(
   model: ModelDefinition,
-  params = registry.getDefaultValues(model.meta.id)
+  params = registry.getDefaultValues(model.meta.id),
+  usdToCnyRate = readPriceEstimateDisplaySettings().usdToCnyRate
 ): Record<string, unknown> {
   const calculated = registry.calculatePrice(model.meta.id, params)
   const amount = Number.isFinite(calculated) && calculated >= 0 ? calculated : null
   const sourceCurrency = resolvePricingCurrency(model.pricing.currency)
   const comparableCnyAmount = amount !== null && sourceCurrency
-    ? convertPriceAmount(amount, sourceCurrency, 'CNY', DEFAULT_USD_TO_CNY_RATE)
+    ? convertPriceAmount(amount, sourceCurrency, 'CNY', usdToCnyRate)
     : null
 
   return {
@@ -151,15 +152,15 @@ function createPriceEstimate(
     basis: '当前参数估算',
     description: model.pricing.description ?? null,
     comparableCnyAmount,
-    comparableCnyExchangeRate: sourceCurrency === 'USD' ? DEFAULT_USD_TO_CNY_RATE : null,
+    comparableCnyExchangeRate: sourceCurrency === 'USD' ? usdToCnyRate : null,
     comparisonNote: sourceCurrency
       ? '人民币比较值仅用于候选排序；动态计费模型以提交前的实际参数估算为准。'
       : '该货币暂不参与跨币种比较；以模型原始价格为准。',
   }
 }
 
-function createCatalogPriceEstimate(model: ModelDefinition): Record<string, unknown> {
-  const estimate = createPriceEstimate(model)
+function createCatalogPriceEstimate(model: ModelDefinition, usdToCnyRate: number): Record<string, unknown> {
+  const estimate = createPriceEstimate(model, registry.getDefaultValues(model.meta.id), usdToCnyRate)
   return {
     amount: estimate.amount,
     currency: estimate.currency,
@@ -170,8 +171,8 @@ function createCatalogPriceEstimate(model: ModelDefinition): Record<string, unkn
   }
 }
 
-function createBootstrapPriceEstimate(model: ModelDefinition): Record<string, unknown> {
-  const estimate = createCatalogPriceEstimate(model)
+function createBootstrapPriceEstimate(model: ModelDefinition, usdToCnyRate: number): Record<string, unknown> {
+  const estimate = createCatalogPriceEstimate(model, usdToCnyRate)
   return {
     amount: estimate.amount,
     currency: estimate.currency,
@@ -231,7 +232,7 @@ function createSelectionEvidence(
   }
 }
 
-function toCatalogModel(model: ModelDefinition): Record<string, unknown> {
+function toCatalogModel(model: ModelDefinition, usdToCnyRate: number): Record<string, unknown> {
   const description = compactModelDescription(model)
   return {
     modelId: model.meta.id,
@@ -241,7 +242,7 @@ function toCatalogModel(model: ModelDefinition): Record<string, unknown> {
     name: getI18nText(model.meta.name, 'zh') || getI18nText(model.meta.name, 'en'),
     description,
     tags: (model.meta.tags ?? []).slice(0, 8),
-    priceEstimate: createCatalogPriceEstimate(model),
+    priceEstimate: createCatalogPriceEstimate(model, usdToCnyRate),
     recommendedByDescription: description.includes('推荐使用'),
   }
 }
@@ -270,6 +271,7 @@ export function getGenerationModelSchemaRef(modelId: string) {
  * 提供给 Agent 的紧凑模型目录。它只用于首轮选择，最终提交前仍必须读取单模型 schema。
  */
 export function getGenerationModelCatalogBootstrap(): GenerationModelCatalogBootstrap {
+  const usdToCnyRate = readPriceEstimateDisplaySettings().usdToCnyRate
   const groups = new Map<string, {
     canonicalModelId: string
     mediaType: ModelType
@@ -286,7 +288,7 @@ export function getGenerationModelCatalogBootstrap(): GenerationModelCatalogBoot
     const providerModel = {
       providerId: model.meta.provider,
       modelId: model.meta.id,
-      priceEstimate: createBootstrapPriceEstimate(model),
+      priceEstimate: createBootstrapPriceEstimate(model, usdToCnyRate),
     }
     if (existing) {
       existing.providers.push(providerModel)
@@ -319,6 +321,7 @@ function resolveProviderId(
 }
 
 export function searchGenerationModelCatalog(input: GenerationModelSearchInput): GenerationModelSearchResult {
+  const usdToCnyRate = readPriceEstimateDisplaySettings().usdToCnyRate
   const allModels = registry.listAllModels()
   const terms = normalizeTerms(input.query)
   const provider = resolveProviderId(input.providerId, allModels)
@@ -334,7 +337,7 @@ export function searchGenerationModelCatalog(input: GenerationModelSearchInput):
       return matchedQueryTerms.every((term) => matchesSearchTerm(text, term))
     })
     .map((model) => ({
-      ...toCatalogModel(model),
+      ...toCatalogModel(model, usdToCnyRate),
       selectionEvidence: createSelectionEvidence(model, matchedQueryTerms, ignoredQueryTerms),
     }))
   return {

@@ -1,5 +1,6 @@
 import { defineModel } from "../defineModel";
 import type { JsonValue, JsonObject } from "../../types/runtime";
+import { countUploadedImages } from "../shared/mediaPresence";
 const GROK_RATIOS = ['2:1', '20:9', '19.5:9', '16:9', '4:3', '3:2', '1:1', '2:3', '3:4', '9:16', '9:19.5', '9:20', '1:2'] as const;
 export const falGrokImagine20Model = defineModel({
     meta: {
@@ -77,7 +78,7 @@ export const falGrokImagine20Model = defineModel({
             const quality = params.falGrokImagine20Quality === 'low' ? 'low' : 'medium';
             const prices: Record<string, number> = { '1K-low': 0.04, '1K-medium': 0.06, '2K-low': 0.06, '2K-medium': 0.08 };
             const count = Math.min(4, Math.max(1, Math.round(Number(params.falGrokImagine20NumImages || 1))));
-            const inputs = Array.isArray(params.uploadedFilePaths) ? params.uploadedFilePaths.length : (Array.isArray(params.images) ? params.images.length : 0);
+            const inputs = countUploadedImages(params);
             return count * (prices[`${resolution}-${quality}`] ?? 0.06) + inputs * 0.01;
         },
         description: '1K $0.04/$0.06、2K $0.06/$0.08（低/标准）；编辑另加 $0.01/输入图'

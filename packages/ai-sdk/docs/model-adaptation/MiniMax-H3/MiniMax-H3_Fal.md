@@ -2,7 +2,7 @@
 
 | 项目 | 内容 |
 |---|---|
-| 最后更新 | 2026-08-22 |
+| 最后更新 | 2026-08-30 |
 | 模态 | 视频 |
 | 供应商 | fal.ai（聚合平台） |
 | 平台模型 ID | `minimax/h3/text-to-video`、`minimax/h3/image-to-video`、`minimax/h3/reference-to-video` |
@@ -74,7 +74,7 @@
 
 ## 5. 价格
 
-来源：三个端点的 `llms.txt`（2026-08-22 读取）。
+来源：三个端点的 `llms.txt`（2026-08-30 重新读取）。本次核价确认四档视频秒价及参考图加价规则均如下，静态估价应先按时长乘秒价，再追加超过 5 张的参考图费用。
 
 | 分辨率 | 单价 |
 |---|---|
@@ -83,7 +83,7 @@
 | 2K | **$0.13 / 秒** |
 | 4K | **$0.16 / 秒** |
 
-`reference-to-video` 额外：**前 5 张参考图免费，之后每张 $0.08**。
+`reference-to-video` 额外：**前 5 张参考图免费，之后每张 $0.08**；这笔参考图费用按张追加一次，不再乘视频时长。
 
 ## 6. 适配要点
 
@@ -92,7 +92,9 @@
 - **Fal 独有 `480P` 与 `4K` 档位**（APIMart / KIE 只有 768P / 2K）；且文档明确 2K/4K 是 768P 超分而非原生。
 - `prompt_expansion_mode` 是 Fal 独有的封装：`quality` 相当于自动帮你调了 Context-IR，省去 APIMart 上手动两步。默认 `balanced` 会按端点与时长自动切换，行为不完全可预测——若要结果稳定应显式指定。
 - `image-to-video` 的 `image_url` **是可选的**，不传会静默退化成文生视频，参数校验要覆盖。
+- 比例参数只在文生视频与参考生视频显示；图生视频端点没有 `aspect_ratio`，输出比例跟随输入图。
 - 三种输入形态是三个独立 endpoint，需要路由。
+- 路由、请求与计价必须共用同一套图片来源解析，兼容生成提交的 `uploadedFilePaths`、画布的 `images` 与对话面板的 `uploadedImages`，并忽略空值。
 - `reference-to-video` 的素材在 prompt 中用 `Image 1` / `Video 1` / `Audio 1` 引用（**注意与 Seedance 的 `@Image1` 写法不同**）。
 
 ## 7. 原始链接索引

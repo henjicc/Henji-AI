@@ -2,7 +2,7 @@
 
 | 项目 | 内容 |
 |---|---|
-| 最后更新 | 2026-08-22 |
+| 最后更新 | 2026-08-30 |
 | 模态 | 视频 |
 | 供应商 | fal.ai（聚合平台） |
 | 平台模型 ID | `bytedance/seedance-2.5/text-to-video`、`bytedance/seedance-2.5/image-to-video`、`bytedance/seedance-2.5/reference-to-video` |
@@ -56,7 +56,7 @@
 
 ## 5. 价格
 
-来源：三个端点的 `llms.txt`（2026-08-22 读取）。
+来源：三个端点的 `llms.txt`（2026-08-30 重新读取）。
 
 | 项 | 价格 |
 |---|---|
@@ -64,8 +64,12 @@
 | 480p（按秒，约） | **$0.2205 / 秒** |
 | token 价（480p / 720p） | **$0.0214 / 1000 tokens** |
 | token 价（1080p，约） | **$0.0234 / 1000 tokens** |
+| 1080p 官方页秒价文案 | **约 $1.164 / 秒** |
+| 1080p 按同页 token 公式计算 | **约 $1.13724 / 秒** |
 
 token 数约为 `(输出视频高 × 输出视频宽 × 时长 × 24) / 1024`。
+
+> **官方价格冲突，暂不替供应商猜结论**：同一官方资料同时出现 1080p 约 `$1.164/秒`，以及 `$0.0234/1000 tokens`。按 1920×1080、24 fps 代入同页公式得到 `48,600 tokens/秒 × $0.0234/1000 = $1.13724/秒`，两者不一致。本次只记录冲突，不据此改动静态价格；后续应以 Fal pricing API 或真实 billing event 确认。
 
 `reference-to-video` 有视频输入时：token 数按 `(高 × 宽 × (输入视频时长 + 输出视频时长) × 24) / 1024`，且**价格 × 0.6**——有视频输入 + 720p 时约 **$0.2838 / 秒**。**有视频参考时输入与输出视频都要计费。**
 
@@ -85,5 +89,6 @@ token 数约为 `(输出视频高 × 输出视频宽 × 时长 × 24) / 1024`。
 | 文生视频 schema + 价格 | https://fal.ai/models/bytedance/seedance-2.5/text-to-video/llms.txt | 否 |
 | 图生视频 schema + 价格 | https://fal.ai/models/bytedance/seedance-2.5/image-to-video/llms.txt | 否 |
 | 参考生视频 schema + 价格 | https://fal.ai/models/bytedance/seedance-2.5/reference-to-video/llms.txt | 否 |
+| Fal 当前价格 API | https://fal.ai/docs/platform-apis/v1/models/pricing | 否（调用需 Key） |
 | 队列协议 | https://fal.ai/docs/documentation/model-apis/inference/queue | 否 |
 | API Key 创建 | https://fal.ai/dashboard/keys | **是** |
