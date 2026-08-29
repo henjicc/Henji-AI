@@ -14,6 +14,7 @@ import {
 } from '@/features/canvas/domain/canvasNodes'
 import { useCanvasStore } from '@/stores/canvasStore'
 import { useProjectStore, type Project } from '@/stores/projectStore'
+import { useCanvasSpecialEditorController } from './specialEditorController'
 
 import { undoCanvasBatch, resetCanvasBatchStateForTests } from './canvasBatchService'
 import { resetCanvasApplicationStateForTests } from './canvasApplicationService'
@@ -70,6 +71,7 @@ describe('画布图片能力应用服务', () => {
     resetCanvasApplicationStateForTests()
     resetCanvasBatchStateForTests()
     resetCanvasImageCapabilityApplicationStateForTests()
+    useCanvasSpecialEditorController.getState().discard()
     const sourceNode = createSourceNode()
     const project = createProject(sourceNode)
     useCanvasStore.getState().setCanvasData([sourceNode], [], { past: [], future: [] })
@@ -275,5 +277,41 @@ describe('画布图片能力应用服务', () => {
         targetHandle: 'param:__image',
       }),
     ])
+  })
+
+  it('元素编辑能力创建相邻节点并自动打开唯一蒙版编辑器', async () => {
+    const execute = createCanvasImageCapabilityExecutor()
+    const result = await execute(sourceNodeId, CANVAS_IMAGE_CAPABILITY_IDS.elementEdit)
+    expect(result).toMatchObject({ kind: 'canvas-node', capabilityId: 'image.element-edit' })
+    const elementNode = useCanvasStore.getState().nodes.find(
+      (node) => node.type === CANVAS_NODE_TYPES.elementEditGen,
+    )
+    expect(elementNode?.data).toMatchObject({
+      displayName: '元素编辑',
+      capabilityId: 'image.element-edit',
+      modelId: 'apimart-gpt-image-2',
+      promptTemplateVersion: 'element-edit-mask-v1',
+      fixedSemanticParams: {
+        referenceImageCount: 1,
+        outputCount: 1,
+        quality: 'medium',
+        maskDocumentVersion: 1,
+        maskEncoding: 'alpha',
+        maskPaintMeaning: 'transparent-edit',
+      },
+    })
+    expect(useCanvasStore.getState().edges).toEqual([
+      expect.objectContaining({
+        source: sourceNodeId,
+        target: elementNode?.id,
+        targetHandle: 'param:__image',
+      }),
+    ])
+    expect(useCanvasSpecialEditorController.getState().session).toMatchObject({
+      projectId,
+      nodeId: elementNode?.id,
+      editorKey: 'mask',
+      isDirty: false,
+    })
   })
 })

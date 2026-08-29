@@ -229,6 +229,7 @@
       "multiAngleGeneration": "Multi-angle Views",
       "upscaleGeneration": "Upscale",
       "portraitTextureGeneration": "Portrait Texture",
+      "elementEditGeneration": "Element Edit",
       "storyboard": "Storyboard Node",
       "storyboardGen": "Storyboard Generation",
       "textProcessing": "Text Processing",
@@ -333,6 +334,12 @@
       "resultTitle": "Portrait Texture Result",
       "promptPlaceholder": "Use the controlled additional-request field in the node",
       "approximation": "Model approximation · No face detection · Identity is not guaranteed"
+    },
+    "elementEditGeneration": {
+      "promptRequired": "Describe how the selected area should change",
+      "apiKeyRequired": "Configure the selected GPT Image 2 provider API key first",
+      "resultTitle": "Element Edit Result",
+      "promptPlaceholder": "Describe how to change the masked area"
     },
     "upload": {
       "uploadedAlt": "Uploaded image",

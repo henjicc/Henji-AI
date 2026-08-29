@@ -1,9 +1,58 @@
 import type { PromptMediaBinding } from '@/core/inputs/promptDocument'
+import { registry } from '@/core/ModelRegistry'
+import { derivedMediaStateKey } from '@/core/params/derivedMediaState'
+import type { ParamDef } from '@/core/types'
 
 const MEDIA_URL_FIELDS = ['imageUrl', 'previewImageUrl', 'videoUrl', 'audioUrl'] as const
 const MEDIA_INPUT_KINDS = ['image', 'video', 'audio'] as const
+const MEDIA_PARAM_TYPES = new Set<ParamDef['type']>([
+  'image-upload',
+  'video-upload',
+  'file-upload',
+])
 
 export type CanvasNodeMediaValueMapper = (value: string) => string
+
+function mapMediaParamValue(value: DynamicValue, mapValue: CanvasNodeMediaValueMapper): DynamicValue {
+  if (typeof value === 'string' && value) return mapValue(value)
+  if (!Array.isArray(value)) return value
+  return value.map((item) => (
+    typeof item === 'string' && item ? mapValue(item) : item
+  ))
+}
+
+function mapModelParamMediaReferences(
+  modelId: string,
+  paramsValue: DynamicValue,
+  mapValue: CanvasNodeMediaValueMapper,
+): DynamicValue {
+  if (!paramsValue || typeof paramsValue !== 'object' || Array.isArray(paramsValue)) {
+    return paramsValue
+  }
+  const schema = registry.getSchema(modelId)
+  if (schema.length === 0) return paramsValue
+
+  const params = { ...(paramsValue as DynamicValueMap) }
+  let changed = false
+  for (const param of schema) {
+    if (MEDIA_PARAM_TYPES.has(param.type) && params[param.id] !== undefined) {
+      params[param.id] = mapMediaParamValue(params[param.id], mapValue)
+      changed = true
+    }
+    if (param.type !== 'image-upload' || !param.derivedMediaAuthoring) continue
+    const stateKey = derivedMediaStateKey(param.id)
+    const documentValue = params[stateKey]
+    if (!documentValue || typeof documentValue !== 'object' || Array.isArray(documentValue)) continue
+    const sourceRef = (documentValue as DynamicValueMap).sourceRef
+    if (typeof sourceRef !== 'string' || !sourceRef) continue
+    params[stateKey] = {
+      ...(documentValue as DynamicValueMap),
+      sourceRef: mapValue(sourceRef),
+    }
+    changed = true
+  }
+  return changed ? params : paramsValue
+}
 
 /** 遍历节点全部可落盘媒体值；结构化文档本身只保存 resourceId。 */
 export function mapCanvasNodeMediaReferences(
@@ -54,6 +103,11 @@ export function mapCanvasNodeMediaReferences(
       }
       return nextBinding
     })
+  }
+
+  const modelId = next.modelId
+  if (typeof modelId === 'string' && modelId && next.params !== undefined) {
+    next.params = mapModelParamMediaReferences(modelId, next.params, mapValue)
   }
 
   return next

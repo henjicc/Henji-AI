@@ -31,6 +31,9 @@ interface DerivedMediaParamControlProps {
   onParamChanges?: (changes: DynamicValueMap) => void
   disabled?: boolean
   compact?: boolean
+  editorOpen?: boolean
+  renderTrigger?: boolean
+  onEditorDismiss?: () => void
 }
 
 function normalizeMediaValue(value: DynamicValue): string[] {
@@ -52,9 +55,13 @@ export function DerivedMediaParamControl({
   onParamChanges,
   disabled = false,
   compact = false,
+  editorOpen,
+  renderTrigger = true,
+  onEditorDismiss,
 }: DerivedMediaParamControlProps): JSX.Element | null {
   const { i18n } = useTranslation()
-  const [isEditorOpen, setEditorOpen] = useState(false)
+  const [internalEditorOpen, setInternalEditorOpen] = useState(false)
+  const isEditorOpen = editorOpen ?? internalEditorOpen
   const values = normalizeMediaValue(value)
   const stateKey = derivedMediaStateKey(param.id)
   const sourceImage = resolveDerivedMediaSource(param, allValues)
@@ -103,7 +110,7 @@ export function DerivedMediaParamControl({
         [param.id]: [maskSource],
         [stateKey]: result.document,
       })
-      setEditorOpen(false)
+      setInternalEditorOpen(false)
       logger.info('派生遮罩保存完成', {
         event: 'derived_media.mask.persist.completed',
         paramId: param.id,
@@ -131,7 +138,7 @@ export function DerivedMediaParamControl({
         className={compact ? '!h-7 gap-1.5 !rounded-md !px-2' : 'gap-1.5'}
         disabled={disabled || !sourceImage}
         onMouseDown={compact ? (event) => event.stopPropagation() : undefined}
-        onClick={() => setEditorOpen(true)}
+        onClick={() => setInternalEditorOpen(true)}
         data-derived-media-action={hasMask ? 'edit' : 'create'}
       >
         <Paintbrush className="h-3.5 w-3.5" />
@@ -142,18 +149,21 @@ export function DerivedMediaParamControl({
 
   return (
     <>
-      {compact ? action : (
+      {renderTrigger ? (compact ? action : (
         <div className="flex min-w-0 flex-col">
           <ParamLabel param={param} language={i18n.language} />
           {action}
         </div>
-      )}
+      )) : null}
       {sourceImage ? (
         <MaskEditorModal
           isOpen={isEditorOpen}
           sourceImage={sourceImage}
           initialDocument={initialDocument}
-          onCancel={() => setEditorOpen(false)}
+          onCancel={() => {
+            setInternalEditorOpen(false)
+            onEditorDismiss?.()
+          }}
           onConfirm={handleConfirm}
         />
       ) : null}

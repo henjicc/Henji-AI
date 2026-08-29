@@ -16,6 +16,7 @@ export const CANVAS_NODE_TYPES = {
   multiAngleGen: 'multiAngleGenNode',
   upscaleGen: 'upscaleGenNode',
   portraitTextureGen: 'portraitTextureGenNode',
+  elementEditGen: 'elementEditGenNode',
   exportImage: 'exportImageNode',
   textProcessing: 'textProcessingNode',
   textAnnotation: 'textAnnotationNode',
@@ -288,6 +289,12 @@ export interface PortraitTextureGenerationNodeData extends ImageEditNodeData {
   portraitTextureRouteReasons?: string[];
 }
 
+export interface ElementEditGenerationNodeData extends ImageEditNodeData {
+  capabilityId: 'image.element-edit';
+  promptTemplateVersion: 'element-edit-mask-v1';
+  fixedSemanticParams: DynamicValueMap;
+}
+
 export interface MultiAngleGenerationNodeData extends ImageEditNodeData {
   capabilityId: 'image.multi-angle';
   multiAngleConfig: DynamicValueMap;
@@ -454,6 +461,7 @@ export type CanvasNodeData =
   | MultiAngleGenerationNodeData
   | UpscaleGenerationNodeData
   | PortraitTextureGenerationNodeData
+  | ElementEditGenerationNodeData
   | StoryboardSplitNodeData
   | StoryboardGenNodeData
   | MediaGenNodeData
@@ -545,6 +553,12 @@ export function isPortraitTextureGenerationNode(
   node: CanvasNode | null | undefined
 ): node is Node<PortraitTextureGenerationNodeData, typeof CANVAS_NODE_TYPES.portraitTextureGen> {
   return node?.type === CANVAS_NODE_TYPES.portraitTextureGen;
+}
+
+export function isElementEditGenerationNode(
+  node: CanvasNode | null | undefined
+): node is Node<ElementEditGenerationNodeData, typeof CANVAS_NODE_TYPES.elementEditGen> {
+  return node?.type === CANVAS_NODE_TYPES.elementEditGen;
 }
 
 export function isMultiAngleGenerationNode(

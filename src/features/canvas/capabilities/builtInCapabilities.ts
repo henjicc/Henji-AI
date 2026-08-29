@@ -15,6 +15,11 @@ import {
   PORTRAIT_TEXTURE_TEMPLATE_VERSION,
 } from './portraitTexturePolicy';
 import {
+  ELEMENT_EDIT_FIXED_SEMANTIC_PARAMS,
+  ELEMENT_EDIT_MODEL_POLICY,
+  ELEMENT_EDIT_PROMPT_TEMPLATE_VERSION,
+} from './elementEditPolicy';
+import {
   CANVAS_IMAGE_CAPABILITY_IDS,
   type CanvasImageCapabilityDefinition,
 } from './types';
@@ -276,14 +281,27 @@ export const builtInCanvasImageCapabilities: readonly CanvasImageCapabilityDefin
     icon: 'elementEdit',
     order: 70,
     source: IMAGE_SOURCE,
-    node: { kind: 'special-generation', editor: 'mask' },
-    implementation: PLANNED_IMPLEMENTATION,
-    availability: PLANNED_AVAILABILITY,
-    modelPolicy: VERIFIED_MODEL_POLICY,
+    node: { kind: 'special-generation', editor: 'mask', openEditorOnCreate: true },
+    implementation: {
+      status: 'implemented',
+      execution: {
+        kind: 'canvas-node',
+        nodeType: CANVAS_NODE_TYPES.elementEditGen,
+      },
+    },
+    availability: {
+      releaseStage: 'available',
+      defaultEnabled: true,
+      unavailableReasonKey: null,
+    },
+    modelPolicy: ELEMENT_EDIT_MODEL_POLICY,
     promptPolicy: {
-      hiddenTemplateVersion: 'element-edit-v1-draft',
-      fixedSemanticParams: {},
-      visibleParameterKeys: ['prompt', 'mask'],
+      hiddenTemplateVersion: ELEMENT_EDIT_PROMPT_TEMPLATE_VERSION,
+      fixedSemanticParams: { ...ELEMENT_EDIT_FIXED_SEMANTIC_PARAMS },
+      visibleParameterKeys: [
+        'apimartGptImage2MaskUrl',
+        'falGptImage2MaskUrl',
+      ],
     },
     outputPolicy: {
       resultKind: 'image',

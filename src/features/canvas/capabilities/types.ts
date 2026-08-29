@@ -80,6 +80,8 @@ export interface CanvasImageCapabilitySourceRequirement {
 export interface CanvasImageCapabilityNodePresentation {
   kind: CanvasImageCapabilityNodeKind;
   editor: CanvasImageCapabilityEditorKind;
+  /** 创建节点并完成连线后，是否立即打开已登记的专用编辑器。 */
+  openEditorOnCreate?: boolean;
 }
 
 export type CanvasImageCapabilityExecution =

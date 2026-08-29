@@ -135,4 +135,30 @@ describe('派生遮罩参数控件', () => {
 
     expect(screen.getByRole('button', { name: '绘制' }).className).toContain('!h-7')
   })
+
+  it('允许专用宿主直接打开唯一编辑器，取消不写入且确认仍原子提交', () => {
+    const onEditorDismiss = vi.fn()
+    const onParamChanges = vi.fn()
+    render(
+      <DerivedMediaParamControl
+        param={param}
+        value={[]}
+        allValues={{ uploadedImages: ['data:image/png;base64,source'] }}
+        onChange={() => undefined}
+        onParamChanges={onParamChanges}
+        editorOpen
+        renderTrigger={false}
+        onEditorDismiss={onEditorDismiss}
+      />
+    )
+
+    expect(screen.queryByRole('button', { name: '绘制' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: '取消测试编辑' }))
+    expect(onEditorDismiss).toHaveBeenCalledTimes(1)
+    expect(onParamChanges).not.toHaveBeenCalled()
+
+    fireEvent.click(screen.getByRole('button', { name: '确认测试编辑' }))
+    expect(onParamChanges).toHaveBeenCalledTimes(1)
+    expect(onEditorDismiss).toHaveBeenCalledTimes(1)
+  })
 })

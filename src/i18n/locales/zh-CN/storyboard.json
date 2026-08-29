@@ -229,6 +229,7 @@
       "multiAngleGeneration": "多角度视图",
       "upscaleGeneration": "高清放大",
       "portraitTextureGeneration": "人像质感",
+      "elementEditGeneration": "元素编辑",
       "storyboard": "分镜节点",
       "storyboardGen": "分镜生成",
       "textProcessing": "文本处理",
@@ -333,6 +334,12 @@
       "resultTitle": "人像质感结果",
       "promptPlaceholder": "补充要求请使用节点中的受控入口",
       "approximation": "模型近似 · 未做人脸检测 · 不保证身份稳定"
+    },
+    "elementEditGeneration": {
+      "promptRequired": "请描述需要如何修改选区",
+      "apiKeyRequired": "请先配置所选 GPT Image 2 供应商的 API Key",
+      "resultTitle": "元素编辑结果",
+      "promptPlaceholder": "描述要如何修改蒙版选区"
     },
     "upload": {
       "uploadedAlt": "已上传图片",

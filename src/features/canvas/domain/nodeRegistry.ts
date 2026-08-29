@@ -8,6 +8,7 @@ import {
   type GroupNodeData,
   type AssetGroupNodeData,
   type ImageEditNodeData,
+  type ElementEditGenerationNodeData,
   type MultiAngleGenerationNodeData,
   type PanoramaGenerationNodeData,
   type PortraitTextureGenerationNodeData,
@@ -74,6 +75,13 @@ import {
   createDefaultMultiAngleConfig,
 } from '../capabilities/multiAnglePolicy';
 import { UPSCALE_MODEL_POLICY } from '../capabilities/upscalePolicy';
+import {
+  ELEMENT_EDIT_FIXED_SEMANTIC_PARAMS,
+  ELEMENT_EDIT_DEFAULT_MODEL_ID,
+  ELEMENT_EDIT_MODEL_POLICY,
+  ELEMENT_EDIT_PROMPT_TEMPLATE_VERSION,
+  selectDefaultElementEditModel,
+} from '../capabilities/elementEditPolicy';
 import {
   DEFAULT_PORTRAIT_TEXTURE_SETTINGS,
   PORTRAIT_TEXTURE_DEFAULT_MODEL_ID,
@@ -614,6 +622,65 @@ const portraitTextureGenerationNodeDefinition: CanvasNodeDefinition<PortraitText
   createDefaultData: createPortraitTextureGenerationDefaultData,
 };
 
+function createElementEditGenerationDefaultData(): ElementEditGenerationNodeData {
+  const candidates = resolveCanvasCapabilityModelCandidates(
+    registry.getModelsByType('image'),
+    ELEMENT_EDIT_MODEL_POLICY,
+  ).candidates.map(({ model }) => model);
+  const model = selectDefaultElementEditModel(candidates);
+  const modelId = model?.meta.id ?? ELEMENT_EDIT_DEFAULT_MODEL_ID;
+  const params = model
+    ? mapCanvasCapabilityModelParams(model, ELEMENT_EDIT_MODEL_POLICY).params
+    : {};
+  return {
+    displayName: DEFAULT_NODE_DISPLAY_NAME[CANVAS_NODE_TYPES.elementEditGen],
+    imageUrl: null,
+    previewImageUrl: null,
+    aspectRatio: DEFAULT_ASPECT_RATIO,
+    isSizeManuallyAdjusted: false,
+    prompt: '',
+    modelId,
+    params,
+    mediaInputs: {},
+    isGenerating: false,
+    generationStartedAt: null,
+    generationDurationMs: undefined,
+    capabilityId: CANVAS_IMAGE_CAPABILITY_IDS.elementEdit,
+    promptTemplateVersion: ELEMENT_EDIT_PROMPT_TEMPLATE_VERSION,
+    fixedSemanticParams: { ...ELEMENT_EDIT_FIXED_SEMANTIC_PARAMS },
+  };
+}
+
+const elementEditGenerationNodeDefinition: CanvasNodeDefinition<ElementEditGenerationNodeData> = {
+  type: CANVAS_NODE_TYPES.elementEditGen,
+  menuLabelKey: 'node.menu.elementEditGeneration',
+  menuIcon: 'imageGeneration',
+  visibleInMenu: false,
+  executionKind: 'standard-generation',
+  capabilities: {
+    toolbar: true,
+    promptInput: false,
+    toolbarGenerate: true,
+  },
+  connectivity: {
+    sourceHandle: true,
+    targetHandle: true,
+    connectMenu: { fromSource: true, fromTarget: false },
+    targetHandleMode: 'rows',
+  },
+  media: { kind: 'image', role: 'generator' },
+  ports: {
+    source: { emits: 'image' },
+    target: { accepts: ['image'] },
+  },
+  generation: {
+    modelType: 'image',
+    resultNodeType: CANVAS_NODE_TYPES.exportImage,
+  },
+  getOutputs: imageOutputsFromData,
+  createDefaultData: createElementEditGenerationDefaultData,
+};
+
 const exportImageNodeDefinition: CanvasNodeDefinition<ExportImageNodeData> = {
   type: CANVAS_NODE_TYPES.exportImage,
   menuLabelKey: 'node.menu.uploadImage',
@@ -923,6 +990,7 @@ export const canvasNodeDefinitions: Record<CanvasNodeType, CanvasNodeDefinition>
   [CANVAS_NODE_TYPES.multiAngleGen]: multiAngleGenerationNodeDefinition,
   [CANVAS_NODE_TYPES.upscaleGen]: upscaleGenerationNodeDefinition,
   [CANVAS_NODE_TYPES.portraitTextureGen]: portraitTextureGenerationNodeDefinition,
+  [CANVAS_NODE_TYPES.elementEditGen]: elementEditGenerationNodeDefinition,
   [CANVAS_NODE_TYPES.exportImage]: exportImageNodeDefinition,
   [CANVAS_NODE_TYPES.textProcessing]: textProcessingNodeDefinition,
   [CANVAS_NODE_TYPES.textAnnotation]: textAnnotationNodeDefinition,

@@ -73,6 +73,10 @@ const multiAngleSpecialEditorDataSchema = z.object({
   prompt: z.literal('').optional(),
 }).strict()
 
+const elementEditSpecialEditorDataSchema = z.object({
+  params: z.record(z.string(), z.unknown()).optional(),
+}).strict()
+
 interface CanvasNodeControlConfig {
   nodeType: CanvasNodeType
   title: string
@@ -248,6 +252,20 @@ const nodeControlConfigs: CanvasNodeControlConfig[] = [
     description: '创建受控的保守人像质感编辑节点；预设、强度与身份保护约束由版本化契约维护。',
     aliases: ['人像修图节点', '人像质感调节节点'],
     dataSchema: imageGenerationNodeDataSchema,
+    aiDataSchema: {
+      type: 'object',
+      properties: { displayName: { type: 'string', maxLength: 120 } },
+      additionalProperties: false,
+    },
+    requiresModelSchema: false,
+  },
+  {
+    nodeType: CANVAS_NODE_TYPES.elementEditGen,
+    title: '元素编辑节点',
+    description: '创建使用唯一蒙版编辑器的局部图片编辑节点；源图与蒙版由受管媒体链路维护。',
+    aliases: ['局部编辑节点', '蒙版编辑节点', '图片擦除节点'],
+    dataSchema: imageGenerationNodeDataSchema,
+    specialEditorDataSchema: elementEditSpecialEditorDataSchema,
     aiDataSchema: {
       type: 'object',
       properties: { displayName: { type: 'string', maxLength: 120 } },

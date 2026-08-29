@@ -15,6 +15,7 @@ import { PanoramaGenerationNode } from './PanoramaGenerationNode';
 import { RelightGenerationNode } from './RelightGenerationNode';
 import { MultiAngleGenerationNode } from './MultiAngleGenerationNode';
 import { UpscaleGenerationNode } from './UpscaleGenerationNode';
+import { ElementEditGenerationNode } from './ElementEditGenerationNode';
 import { PortraitTextureGenerationNode } from './PortraitTextureGenerationNode';
 import { ImageNode } from './ImageNode';
 import { StoryboardGenNode } from './StoryboardGenNode';
@@ -75,6 +76,7 @@ export const nodeTypes: NodeTypes = {
   multiAngleGenNode: withNodePaintFrame(MultiAngleGenerationNode, { bottom: 60 }),
   upscaleGenNode: withNodePaintFrame(UpscaleGenerationNode, { bottom: 60 }),
   portraitTextureGenNode: withNodePaintFrame(PortraitTextureGenerationNode, { bottom: 60 }),
+  elementEditGenNode: withNodePaintFrame(ElementEditGenerationNode, { bottom: 60 }),
   storyboardGenNode: withNodePaintFrame(StoryboardGenNode, { bottom: 84 }),
   storyboardNode: withNodePaintFrame(StoryboardNode),
   textAnnotationNode: withNodePaintFrame(TextAnnotationNode),
@@ -106,6 +108,7 @@ export {
   RelightGenerationNode,
   MultiAngleGenerationNode,
   UpscaleGenerationNode,
+  ElementEditGenerationNode,
   PortraitTextureGenerationNode,
   ImageNode,
   StoryboardGenNode,

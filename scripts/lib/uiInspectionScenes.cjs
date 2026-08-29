@@ -686,6 +686,129 @@ function createUiInspectionScenes({ canvasFixtureProjectId, settlePage }) {
     await settlePage(page, 900)
   }
 
+  async function setupCanvasElementEditNode(page) {
+    const { panoramaSource, projectId } = await seedAndOpenCanvasPanoramaProject(page)
+    const sourceNode = page.locator('.react-flow__node[data-id="__ui_panorama_source"]')
+    await sourceNode.click()
+    await page.waitForTimeout(350)
+    let action = page.getByRole('button', { name: /^(元素编辑|Element Edit)$/i }).filter({ visible: true }).first()
+    if (!(await action.count())) {
+      const moreButton = page.getByRole('button').filter({ hasText: /^(更多|More)$/i }).filter({ visible: true }).first()
+      if (!(await moreButton.count())) throw new Error('元素编辑工具入口不可见')
+      await moreButton.click()
+      action = page.getByRole('button', { name: /^(元素编辑|Element Edit)$/i }).filter({ visible: true }).first()
+    }
+    await action.waitFor({ state: 'visible', timeout: 8000 })
+    await action.click()
+
+    const editor = page.getByRole('dialog', { name: /绘制局部重绘遮罩|Draw Inpainting Mask/i })
+    await editor.waitFor({ state: 'visible', timeout: 12000 })
+    const canvasRegion = editor.locator('[data-application-observation-region="mask_editor.canvas"]')
+    const box = await canvasRegion.boundingBox()
+    if (!box) throw new Error('元素编辑遮罩没有可绘制区域')
+    await page.mouse.move(box.x + box.width * 0.36, box.y + box.height * 0.42)
+    await page.mouse.down()
+    await page.mouse.move(box.x + box.width * 0.6, box.y + box.height * 0.58, { steps: 10 })
+    await page.mouse.up()
+    await editor.getByRole('button', { name: /^(完成|Done)$/i }).click()
+    await editor.waitFor({ state: 'hidden', timeout: 12000 })
+
+    const shell = page.locator('[data-generation-node-id][data-generation-node-model-id="apimart-gpt-image-2"]')
+      .filter({ hasText: /元素编辑|Element Edit/ }).last()
+    await shell.waitFor({ state: 'visible', timeout: 12000 })
+    const node = shell.locator('xpath=ancestor::*[contains(@class,"react-flow__node")][1]')
+    const nodeId = await node.getAttribute('data-id')
+    if (!nodeId || nodeId === '__ui_panorama_source') throw new Error('元素编辑工具条未创建独立相邻节点')
+    if (!(await node.evaluate((element) => element.classList.contains('selected')))) {
+      throw new Error('元素编辑工具条创建后未选中新节点')
+    }
+    if (await page.locator('.react-flow__edge').count() < 1) throw new Error('元素编辑工具条未创建源图连线')
+    const prompt = shell.getByRole('textbox', { name: /描述要如何修改蒙版选区|Describe how to change the masked area/i })
+    await prompt.waitFor({ state: 'visible', timeout: 8000 })
+    await prompt.click()
+    const activePrompt = shell.locator('[contenteditable="true"]').first()
+    await activePrompt.waitFor({ state: 'visible', timeout: 8000 })
+    await activePrompt.fill('将选区替换为柔和的云层')
+    await activePrompt.blur()
+    await settlePage(page, 800)
+
+    await page.getByRole('button', { name: /返回项目|Back to Projects/ }).click()
+    await settlePage(page, 500)
+    const persisted = await page.evaluate(async ({ targetProjectId, targetNodeId, source }) => {
+      const rows = await window.henjiNative.db.select(
+        'SELECT nodes_json, edges_json FROM storyboard_projects WHERE id = ? LIMIT 1',
+        [targetProjectId]
+      )
+      const nodes = JSON.parse(rows[0]?.nodes_json ?? '[]')
+      const edges = JSON.parse(rows[0]?.edges_json ?? '[]')
+      const target = nodes.find((candidate) => candidate.id === targetNodeId)
+      const params = target?.data?.params ?? {}
+      const maskKey = Object.keys(params).find((key) => key.endsWith('MaskUrl'))
+      const maskValues = maskKey && Array.isArray(params[maskKey]) ? params[maskKey] : []
+      const document = maskKey ? params[`__henjiDerivedMediaAuthoring__${maskKey}`] : null
+      return {
+        nodeType: target?.type,
+        capabilityId: target?.data?.capabilityId,
+        modelId: target?.data?.modelId,
+        prompt: target?.data?.prompt,
+        hasManagedMask: maskValues.length === 1 && typeof maskValues[0] === 'string' && maskValues[0] !== source,
+        documentVersion: document?.version,
+        documentSourceRef: document?.sourceRef,
+        strokeCount: document?.strokes?.length ?? 0,
+        hasSourceEdge: edges.some((edge) => edge.source === '__ui_panorama_source' && edge.target === targetNodeId),
+      }
+    }, { targetProjectId: projectId, targetNodeId: nodeId, source: panoramaSource })
+    if (persisted.nodeType !== 'elementEditGenNode'
+      || persisted.capabilityId !== 'image.element-edit'
+      || persisted.modelId !== 'apimart-gpt-image-2'
+      || persisted.prompt !== '将选区替换为柔和的云层'
+      || !persisted.hasManagedMask
+      || persisted.documentVersion !== 1
+      || !String(persisted.documentSourceRef ?? '').startsWith('__img_ref__:')
+      || persisted.strokeCount < 1
+      || !persisted.hasSourceEdge) {
+      throw new Error(`元素编辑保存语义或连线丢失：${JSON.stringify(persisted)}`)
+    }
+
+    await page.evaluate(async ({ targetProjectId, targetNodeId, resultSource }) => {
+      const rows = await window.henjiNative.db.select(
+        'SELECT nodes_json, edges_json FROM storyboard_projects WHERE id = ? LIMIT 1',
+        [targetProjectId]
+      )
+      const nodes = JSON.parse(rows[0]?.nodes_json ?? '[]')
+      const edges = JSON.parse(rows[0]?.edges_json ?? '[]')
+      const generator = nodes.find((candidate) => candidate.id === targetNodeId)
+      nodes.push({
+        id: '__ui_element_edit_result', type: 'exportImageNode',
+        position: { x: (generator?.position?.x ?? 720) + 430, y: generator?.position?.y ?? 80 },
+        width: 384, height: 220, measured: { width: 384, height: 220 }, style: { width: 384, height: 220 },
+        data: {
+          displayName: '元素编辑结果（本地模拟）', resultKind: 'image', sourceCapabilityId: 'image.element-edit',
+          imageUrl: resultSource, previewImageUrl: resultSource, aspectRatio: '2:1', isGenerating: false,
+        },
+      })
+      edges.push({
+        id: `__ui_element_edit_result_edge_${targetNodeId}`,
+        source: targetNodeId, target: '__ui_element_edit_result', sourceHandle: 'source', targetHandle: 'target',
+      })
+      await window.henjiNative.db.execute(
+        'UPDATE storyboard_projects SET node_count = ?, nodes_json = ?, edges_json = ?, viewport_json = ? WHERE id = ?',
+        [nodes.length, JSON.stringify(nodes), JSON.stringify(edges), JSON.stringify({ x: 80, y: 120, zoom: 0.62 }), targetProjectId]
+      )
+    }, { targetProjectId: projectId, targetNodeId: nodeId, resultSource: panoramaSource })
+
+    await page.locator(`[data-project-id="${projectId}"]:visible`).click()
+    const reopened = page.locator(`[data-generation-node-id="${nodeId}"][data-generation-node-model-id="apimart-gpt-image-2"]`)
+    await reopened.waitFor({ state: 'visible', timeout: 12000 })
+    await page.locator('.react-flow__node[data-id="__ui_element_edit_result"]')
+      .getByText('元素编辑结果（本地模拟）').waitFor({ state: 'visible', timeout: 8000 })
+    await node.click()
+    const editButton = page.getByRole('button', { name: /^(编辑|Edit)$/i }).filter({ visible: true }).first()
+    await editButton.click()
+    await editor.waitFor({ state: 'visible', timeout: 12000 })
+    await settlePage(page, 900)
+  }
+
   async function setupCanvasPanoramaViewer(page) {
     const { generatedNodeId, projectId } = await setupCanvasPanoramaToolbar(page)
     await page.waitForTimeout(900)
@@ -1438,6 +1561,13 @@ function createUiInspectionScenes({ canvasFixtureProjectId, settlePage }) {
       writesUserData: true,
       name: '画布-人像质感节点与保存重开',
       setup: setupCanvasPortraitTextureNode,
+    },
+    {
+      id: 'canvas-element-edit-node',
+      surface: '画布',
+      writesUserData: true,
+      name: '画布-元素编辑节点与唯一蒙版编辑器',
+      setup: setupCanvasElementEditNode,
     },
     {
       id: 'canvas-midjourney-node',

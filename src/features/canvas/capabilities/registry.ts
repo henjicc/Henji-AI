@@ -55,6 +55,11 @@ function validateCapability(definition: CanvasImageCapabilityDefinition): void {
       `图片能力 ${definition.id} 引用了未知编辑器：${definition.node.editor}`,
     );
   }
+  if (definition.node.openEditorOnCreate && definition.node.editor === 'standard') {
+    throw new CanvasImageCapabilityRegistrationError(
+      `图片能力 ${definition.id} 的标准编辑器不能在创建后自动打开`,
+    );
+  }
   if (!RELEASE_STAGES.includes(definition.availability.releaseStage)) {
     throw new CanvasImageCapabilityRegistrationError(
       `图片能力 ${definition.id} 使用了未知发布状态：${definition.availability.releaseStage}`,

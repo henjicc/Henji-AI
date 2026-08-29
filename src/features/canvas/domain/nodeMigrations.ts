@@ -1,4 +1,5 @@
 import { registry } from '@/core/ModelRegistry';
+import { derivedMediaStateKey } from '@/core/params/derivedMediaState';
 import type { PromptMediaBinding } from '@/core/inputs/promptDocument';
 import { createPlainTextPromptDocument } from '@/core/inputs/promptDocument';
 import {
@@ -34,6 +35,13 @@ import {
   prepareRelightRoute,
 } from '../capabilities/relightPolicy';
 import { UPSCALE_MODEL_POLICY } from '../capabilities/upscalePolicy';
+import {
+  ELEMENT_EDIT_FIXED_SEMANTIC_PARAMS,
+  ELEMENT_EDIT_MODEL_POLICY,
+  ELEMENT_EDIT_PROMPT_TEMPLATE_VERSION,
+  resolveElementEditMaskParam,
+  selectDefaultElementEditModel,
+} from '../capabilities/elementEditPolicy';
 import {
   MULTI_ANGLE_CONTINUOUS_MODEL_ID,
   MULTI_ANGLE_DISCRETE_MODEL_ID,
@@ -451,6 +459,48 @@ export function migratePortraitTextureGenerationData(data: DynamicValueMap): voi
   data.prompt = route.prompt;
   data.promptDocument = createPlainTextPromptDocument(route.prompt);
   data.portraitTextureRouteReasons = [...sourceReasons, ...route.reasons];
+}
+
+/** 恢复元素编辑的真实遮罩模型、单图输入和可编辑文档，不迁移跨模型遮罩。 */
+export function migrateElementEditGenerationData(data: DynamicValueMap): void {
+  data.capabilityId = CANVAS_IMAGE_CAPABILITY_IDS.elementEdit;
+  data.promptTemplateVersion = ELEMENT_EDIT_PROMPT_TEMPLATE_VERSION;
+  data.fixedSemanticParams = { ...ELEMENT_EDIT_FIXED_SEMANTIC_PARAMS };
+
+  const mediaInputs = data.mediaInputs && typeof data.mediaInputs === 'object'
+    ? data.mediaInputs as DynamicValueMap
+    : {};
+  const inlineImages = Array.isArray(mediaInputs.image)
+    ? mediaInputs.image.filter(
+      (value): value is string => typeof value === 'string' && value.trim().length > 0,
+    ).slice(0, 1)
+    : [];
+  data.mediaInputs = { ...mediaInputs, image: inlineImages };
+
+  const candidates = resolveCanvasCapabilityModelCandidates(
+    registry.getModelsByType('image'),
+    ELEMENT_EDIT_MODEL_POLICY,
+  ).candidates.map(({ model }) => model);
+  const storedModelId = typeof data.modelId === 'string' ? data.modelId.trim() : '';
+  const selectedModel = candidates.find((model) => model.meta.id === storedModelId)
+    ?? selectDefaultElementEditModel(candidates);
+  if (!selectedModel) return;
+
+  const maskParam = resolveElementEditMaskParam(selectedModel);
+  const supportedParamIds = new Set(selectedModel.params.map((param) => param.id));
+  if (maskParam) supportedParamIds.add(derivedMediaStateKey(maskParam.id));
+  const storedParams = data.params && typeof data.params === 'object'
+    ? data.params as DynamicValueMap
+    : {};
+  const supportedStoredParams = Object.fromEntries(
+    Object.entries(storedParams).filter(([paramId]) => supportedParamIds.has(paramId)),
+  ) as DynamicValueMap;
+  data.modelId = selectedModel.meta.id;
+  data.params = mapCanvasCapabilityModelParams(
+    selectedModel,
+    ELEMENT_EDIT_MODEL_POLICY,
+    supportedStoredParams,
+  ).params;
 }
 
 /** 恢复多角度节点的版本化 profile、隐藏执行模型与单图输入。 */

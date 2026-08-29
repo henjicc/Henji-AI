@@ -37,6 +37,11 @@ editorDefinitions.set('multiAngle', {
   component: lazy(() => import('./multiAngle/MultiAngleSpecialEditor')),
 });
 
+editorDefinitions.set('mask', {
+  key: 'mask',
+  component: lazy(() => import('./ElementEditSpecialEditor')),
+});
+
 /**
  * 专用编辑器只在运行时注册懒加载组件；能力声明始终只保存稳定 key。
  */

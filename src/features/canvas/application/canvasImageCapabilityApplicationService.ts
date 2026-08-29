@@ -17,6 +17,7 @@ import {
 } from './canvasApplicationService'
 import { runCanvasTransaction } from './canvasBatchService'
 import { selectCanvasNode } from './canvasMutationService'
+import { openCanvasSpecialEditor } from './specialEditorApplicationService'
 
 const logger = createLogger('features.canvas.image_capability')
 
@@ -166,6 +167,18 @@ async function executeCanvasImageCapability(
     const edgeId = createdEdgeId
     // 事务内核合并历史时会重载节点快照；显式恢复业务选中 id。
     useCanvasStore.getState().setSelectedNode(nodeId)
+    if (capability.node.openEditorOnCreate && capability.node.editor !== 'standard') {
+      const createdNode = useCanvasStore.getState().nodes.find((node) => node.id === nodeId)
+      if (!createdNode) {
+        throw new CanvasApplicationError('NOT_FOUND', '图片能力创建后未找到目标节点', true, { nodeId })
+      }
+      openCanvasSpecialEditor({
+        projectId,
+        nodeId,
+        editorKey: capability.node.editor,
+        initialState: createdNode.data as Readonly<DynamicValueMap>,
+      })
+    }
     const result: CanvasImageCapabilityExecutionResult = {
       kind: 'canvas-node',
       capabilityId,
