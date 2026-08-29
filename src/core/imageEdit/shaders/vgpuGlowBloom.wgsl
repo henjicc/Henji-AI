@@ -65,17 +65,31 @@ fn gaussianBlur(uv: vec2f) -> vec3f {
   let w2 = exp(-4.0 * inverseTwoSigmaSquared);
   let w3 = exp(-9.0 * inverseTwoSigmaSquared);
   let w4 = exp(-16.0 * inverseTwoSigmaSquared);
+  let w5 = exp(-25.0 * inverseTwoSigmaSquared);
+  let w6 = exp(-36.0 * inverseTwoSigmaSquared);
+  let w7 = exp(-49.0 * inverseTwoSigmaSquared);
+  let w8 = exp(-64.0 * inverseTwoSigmaSquared);
   let pair12 = w1 + w2;
   let pair34 = w3 + w4;
+  let pair56 = w5 + w6;
+  let pair78 = w7 + w8;
   let offset12 = (w1 + 2.0 * w2) / max(pair12, 0.000001);
   let offset34 = (3.0 * w3 + 4.0 * w4) / max(pair34, 0.000001);
-  let normalization = w0 + 2.0 * (pair12 + pair34);
-  let texel = bloom.direction / bloom.sourceSize * bloom.glow.w;
+  let offset56 = (5.0 * w5 + 6.0 * w6) / max(pair56, 0.000001);
+  let offset78 = (7.0 * w7 + 8.0 * w8) / max(pair78, 0.000001);
+  let normalization = w0 + 2.0 * (pair12 + pair34 + pair56 + pair78);
+  // 始终连续覆盖相邻像素。大范围来自 sigma 与多级金字塔，不能放大 texel 步长，
+  // 否则高对比细节会形成周期性的重影和边界。
+  let texel = bloom.direction / bloom.sourceSize;
   var color = textureSampleLevel(source, linearSampler, uv, 0.0).rgb * w0;
   color += textureSampleLevel(source, linearSampler, uv + texel * offset12, 0.0).rgb * pair12;
   color += textureSampleLevel(source, linearSampler, uv - texel * offset12, 0.0).rgb * pair12;
   color += textureSampleLevel(source, linearSampler, uv + texel * offset34, 0.0).rgb * pair34;
   color += textureSampleLevel(source, linearSampler, uv - texel * offset34, 0.0).rgb * pair34;
+  color += textureSampleLevel(source, linearSampler, uv + texel * offset56, 0.0).rgb * pair56;
+  color += textureSampleLevel(source, linearSampler, uv - texel * offset56, 0.0).rgb * pair56;
+  color += textureSampleLevel(source, linearSampler, uv + texel * offset78, 0.0).rgb * pair78;
+  color += textureSampleLevel(source, linearSampler, uv - texel * offset78, 0.0).rgb * pair78;
   return color / normalization;
 }
 

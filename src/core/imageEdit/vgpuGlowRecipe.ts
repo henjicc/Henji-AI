@@ -1,14 +1,13 @@
 import type { VgpuGlowOperationParams } from './vgpuGlowParams';
 
 export interface VgpuGlowRecipe {
-  schemaVersion: 4;
+  schemaVersion: 5;
   threshold: number;
   knee: number;
   hdrBoost: number;
   intensity: number;
   whiteHeat: number;
   sigma: number;
-  blurStep: number;
   levelWeights: readonly [number, number, number, number, number];
   bloomExposure: number;
   bloomGamma: number;
@@ -35,14 +34,15 @@ export function compileVgpuGlowRecipe(params: VgpuGlowOperationParams): VgpuGlow
       ? { boost: 6.8, intensity: 1.36, bloomExposure: 1.24, bloomGamma: 1.04, core: 1.04 }
       : { boost: 4.6, intensity: 1.14, bloomExposure: 1.02, bloomGamma: 1.18, core: 0.88 };
   return {
-    schemaVersion: 4,
+    schemaVersion: 5,
     threshold: 0.035 + Math.pow(params.sourceThreshold, 1.8) * 0.72,
     knee: 0.08 + (1 - params.sourceThreshold) * 0.24,
     hdrBoost: look.boost,
     intensity: params.intensity * look.intensity,
     whiteHeat: params.whiteHeat,
-    sigma: 1.05 + Math.pow(radius, 1.1) * 2.45,
-    blurStep: 0.45 + Math.pow(radius, 1.35) * 2.2,
+    // 大半径由连续高斯核与五级金字塔共同形成；不要通过拉开采样间距扩张半径，
+    // 否则细线和文字会被离散复制成可见条纹。
+    sigma: 1.05 + Math.pow(radius, 1.1) * 3.95,
     levelWeights: [
       rawWeights[0] / weightSum,
       rawWeights[1] / weightSum,

@@ -23,7 +23,7 @@ describe('VGPU 辉光操作契约', () => {
       expect(recipe.levelWeights.reduce((sum, value) => sum + value, 0)).toBeCloseTo(1, 12);
       expect(recipe.threshold).toBeGreaterThan(0);
       expect(recipe.sigma).toBeGreaterThanOrEqual(0.85);
-      expect(recipe.blurStep).toBeGreaterThan(0);
+      expect(recipe.schemaVersion).toBe(5);
       expect(recipe.levelWeights).toHaveLength(5);
       expect(recipe.tintLinear).toHaveLength(3);
       expect(recipe.tintEnabled).toBe(false);
@@ -51,7 +51,6 @@ describe('VGPU 辉光操作契约', () => {
     });
 
     expect(wide.sigma).toBeGreaterThan(compact.sigma);
-    expect(wide.blurStep).toBeGreaterThan(compact.blurStep);
     expect(wide.levelWeights[4]).toBeGreaterThan(compact.levelWeights[4]);
     expect(wide.levelWeights[0]).toBeLessThan(compact.levelWeights[0]);
     expect(wide.intensity).toBe(compact.intensity);

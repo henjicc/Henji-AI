@@ -286,7 +286,7 @@ function setBloom(
       sourceSize,
       direction,
       params: [recipe.threshold, recipe.knee, recipe.sigma, mode],
-      glow: [recipe.hdrBoost, 0, 0, recipe.blurStep],
+      glow: [recipe.hdrBoost, 0, 0, 0],
     },
   });
 }

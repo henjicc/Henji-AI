@@ -2433,7 +2433,7 @@ function createUiInspectionScenes({ canvasFixtureProjectId, settlePage }) {
         await tint.fill('#ff4bd8')
         await page.getByRole('switch', { name: '启用辉光着色' }).click()
         const radius = page.getByRole('slider', { name: '发光半径' })
-        await radius.fill('0.58')
+        await radius.fill('1')
         const chromaticAberration = page.getByRole('slider', { name: '色差' })
         await chromaticAberration.fill('0')
         if (await page.getByText('辉光预览失败').count()) {
