@@ -183,7 +183,7 @@ describe('画布图片能力应用服务', () => {
     expect(canvas.selectedNodeId).toBe(result.nodeId)
     expect(canvas.nodes.find((node) => node.id === result.nodeId)?.selected).toBe(true)
     expect(canvas.history.past).toHaveLength(1)
-    expect(useProjectStore.getState().saveCurrentProject).toHaveBeenCalled()
+    expect(useProjectStore.getState().saveCurrentProject).toHaveBeenCalledTimes(1)
 
     expect(undoCanvasBatch(projectId, result.undoRef)).toMatchObject({ status: 'undone' })
     expect(useCanvasStore.getState().nodes).toHaveLength(1)

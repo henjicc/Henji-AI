@@ -184,9 +184,11 @@ export async function runCanvasTransaction(
 ): Promise<{ appliedOperations: Record<string, unknown>[]; undoRef: string }> {
   requireCurrentCanvasProject(projectId)
   const canvas = useCanvasStore.getState()
-  const beforeNodes = structuredClone(canvas.nodes)
-  const beforeEdges = structuredClone(canvas.edges)
-  const beforeHistory = structuredClone(canvas.history)
+  // store 写入遵循不可变更新，撤销历史本身也一直保存节点/连线引用。这里保留事务前引用即可；
+  // 深拷贝最多 50 步历史会让一次轻量节点创建随画布体量同步放大，直接阻塞新节点首帧。
+  const beforeNodes = canvas.nodes
+  const beforeEdges = canvas.edges
+  const beforeHistory = canvas.history
   const beforeSelectedNodeId = canvas.selectedNodeId
   logger.info('画布批量写入开始', {
     event: 'canvas.batch.apply.start', projectId, operationCount, ...logContext,
@@ -206,7 +208,6 @@ export async function runCanvasTransaction(
   }
 
   const after = useCanvasStore.getState()
-  const afterSelectedNodeId = after.selectedNodeId
   const undoRef = `canvas-batch-undo:${uuidv4()}`
   undos.set(undoRef, {
     undoRef,
@@ -218,12 +219,18 @@ export async function runCanvasTransaction(
     afterFingerprint: fingerprint(after.nodes, after.edges),
   })
   // 整批只留一条撤销记录：步骤内部各自记录的历史在这里合并。
+  const groupedPast = [...beforeHistory.past, { nodes: beforeNodes, edges: beforeEdges }]
+    .slice(-Math.max(after.history.past.length, 1))
   const groupedHistory: CanvasHistoryState = {
-    past: [...beforeHistory.past, { nodes: beforeNodes, edges: beforeEdges }],
+    past: groupedPast,
     future: [],
   }
-  useCanvasStore.getState().setCanvasData(after.nodes, after.edges, groupedHistory)
-  useCanvasStore.getState().setSelectedNode(afterSelectedNodeId)
+  // 当前 nodes/edges 已由受控 store 写入生成，无需借用 setCanvasData 再迁移整张画布及全部历史。
+  useCanvasStore.setState({
+    history: groupedHistory,
+    dragHistorySnapshot: null,
+    activeHistoryGroup: null,
+  })
   persistCanvasState()
   logger.info('画布批量写入完成', {
     event: 'canvas.batch.apply.completed', projectId, operationCount: results.length, undoRef, ...logContext,

@@ -232,14 +232,20 @@ export function addControlledCanvasNode(input: {
   nodeType: string
   placement: CanvasNodePlacement
   data?: Record<string, unknown>
-}): Record<string, unknown> {
+}, options: { deferCommit?: boolean } = {}): Record<string, unknown> {
   requireCurrentCanvasProject(input.projectId)
   const parsed = parseCanvasControlledNodeData(input.nodeType, input.data)
   const position = resolveNodePosition(input.placement)
   const nodeId = useCanvasStore.getState().addNode(parsed.nodeType, position, parsed.data)
-  const undoRef = rememberCanvasUndo(input.projectId, 'add_node')
-  persistCanvasState()
-  return { projectId: input.projectId, nodeId, nodeType: parsed.nodeType, position, undoRef }
+  const undoRef = options.deferCommit ? undefined : rememberCanvasUndo(input.projectId, 'add_node')
+  if (!options.deferCommit) persistCanvasState()
+  return {
+    projectId: input.projectId,
+    nodeId,
+    nodeType: parsed.nodeType,
+    position,
+    ...(undoRef ? { undoRef } : {}),
+  }
 }
 
 /**
@@ -267,7 +273,7 @@ export function connectCanvasNodes(input: {
   targetNodeId: string
   sourceHandle?: string
   targetHandle?: string
-}): Record<string, unknown> {
+}, options: { deferCommit?: boolean } = {}): Record<string, unknown> {
   requireCurrentCanvasProject(input.projectId)
   if (input.sourceNodeId === input.targetNodeId) {
     throw new CanvasApplicationError('INVALID_INPUT', '画布节点不能连接到自身')
@@ -346,8 +352,8 @@ export function connectCanvasNodes(input: {
   if (!edge) throw new CanvasApplicationError('CAPABILITY_REJECTED', '画布连接未能创建')
   const createdNodeIds = after.nodes.filter((node) => !beforeNodeIds.has(node.id)).map((node) => node.id)
   const createdEdgeIds = after.edges.filter((item) => !beforeEdgeIds.has(item.id)).map((item) => item.id)
-  const undoRef = rememberCanvasUndo(input.projectId, 'connect_nodes')
-  persistCanvasState()
+  const undoRef = options.deferCommit ? undefined : rememberCanvasUndo(input.projectId, 'connect_nodes')
+  if (!options.deferCommit) persistCanvasState()
   return {
     projectId: input.projectId,
     edgeId: edge.id,
@@ -357,7 +363,7 @@ export function connectCanvasNodes(input: {
     ...(createdNodeIds.length > 0 ? { createdNodeIds } : {}),
     ...(createdEdgeIds.length > 0 ? { createdEdgeIds } : {}),
     ...handles,
-    undoRef,
+    ...(undoRef ? { undoRef } : {}),
   }
 }
 

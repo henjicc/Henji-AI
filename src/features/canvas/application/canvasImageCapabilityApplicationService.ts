@@ -152,7 +152,7 @@ async function executeCanvasImageCapability(
               ? { displayName: i18n.t(capability.titleKey) }
               : {}),
           },
-        })
+        }, { deferCommit: true })
         if (typeof created.nodeId !== 'string' || !created.nodeId) {
           throw new CanvasApplicationError('CAPABILITY_REJECTED', '图片能力未能创建目标节点')
         }
@@ -161,7 +161,7 @@ async function executeCanvasImageCapability(
           projectId,
           sourceNodeId,
           targetNodeId: nodeId,
-        })
+        }, { deferCommit: true })
         if (typeof connection.edgeId !== 'string' || !connection.edgeId) {
           throw new CanvasApplicationError('CAPABILITY_REJECTED', '图片能力未能创建目标连线')
         }
@@ -169,11 +169,13 @@ async function executeCanvasImageCapability(
         createdEdgeId = connection.edgeId
 
         const canvas = useCanvasStore.getState()
-        canvas.onNodesChange(canvas.nodes.map((node) => ({
-          id: node.id,
-          type: 'select' as const,
-          selected: node.id === nodeId,
-        })))
+        const selectionChanges = canvas.nodes.flatMap((node) => {
+          const selected = node.id === nodeId
+          return node.selected === selected
+            ? []
+            : [{ id: node.id, type: 'select' as const, selected }]
+        })
+        if (selectionChanges.length > 0) canvas.onNodesChange(selectionChanges)
         const selected = selectCanvasNode(projectId, nodeId)
 
         return [created, connection, selected]

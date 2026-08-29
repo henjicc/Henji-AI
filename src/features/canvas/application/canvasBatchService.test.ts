@@ -91,6 +91,31 @@ describe('canvas batch service', () => {
     expect(useCanvasStore.getState().selectedNodeId).toBe(nodeId)
   })
 
+  it('事务成功只压缩运行时历史，不重新加载并迁移整张画布', async () => {
+    const snapshots = Array.from({ length: 50 }, (_, index) => ({
+      nodes: [{ ...createNode(), data: { displayName: `历史 ${index}`, content: '原内容' } }],
+      edges: [],
+    }))
+    useCanvasStore.getState().setCanvasData([createNode()], [], { past: snapshots, future: [] })
+    const oldestRetainedSnapshot = useCanvasStore.getState().history.past[1]
+    const setCanvasData = vi.spyOn(useCanvasStore.getState(), 'setCanvasData')
+    const plan = planCanvasBatch(projectId, [
+      {
+        kind: 'add_node',
+        nodeType: CANVAS_NODE_TYPES.textAnnotation,
+        placement: { mode: 'absolute', x: 420, y: 180 },
+        data: { displayName: '轻量提交', content: '新增节点' },
+      },
+    ], 2)
+
+    await commitCanvasBatch(String(plan.planRef))
+
+    expect(setCanvasData).not.toHaveBeenCalled()
+    expect(useCanvasStore.getState().history.past).toHaveLength(50)
+    expect(useCanvasStore.getState().history.past[0]).toBe(oldestRetainedSnapshot)
+    setCanvasData.mockRestore()
+  })
+
   it('批次 Effect 解析器按真实步骤数量结算，而不是把整批保守计为一次', () => {
     const capability = CANVAS_BATCH_APPLICATION_CAPABILITIES.find((item) => item.id === 'commit_canvas_batch')
     const effects = capability?.resolveObservedEffects?.({ planRef: 'canvas-plan:test' }, {
