@@ -131,6 +131,64 @@ export async function saveCurrentProject(): Promise<SavedProjectInfo> {
   return await saveProjectDraft(createCurrentProjectDraft())
 }
 
+/** 把画布图片输入同步为工程环境贴图；路径只在工程内部持久化，不进入助手反射字段。 */
+export async function applyProjectEnvironmentImage(
+  projectId: string,
+  environmentImageUrl: string | null,
+): Promise<void> {
+  logger.info('同步 3D 全景环境开始', {
+    event: 'camera_stage.project.environment_sync.start',
+    projectId,
+    context: { enabled: Boolean(environmentImageUrl) },
+  })
+  try {
+    const currentState = useCameraStageStore.getState()
+    if (currentState.currentProjectId === projectId) {
+      if (currentState.sceneSettings.sky.environmentImageUrl !== environmentImageUrl) {
+        currentState.setSceneEnvironmentImageUrl(environmentImageUrl)
+        await saveCurrentProject()
+      }
+    } else {
+      const record = await getCameraStageProjectRecord(projectId)
+      if (!record || !isCurrentCameraStageScene(record.sceneJson)) {
+        logger.info('同步 3D 全景环境完成', {
+          event: 'camera_stage.project.environment_sync.completed',
+          projectId,
+          context: { enabled: Boolean(environmentImageUrl), applied: false },
+        })
+        return
+      }
+      const snapshot = deserializeScene(record.sceneJson)
+      if (snapshot.sceneSettings.sky.environmentImageUrl !== environmentImageUrl) {
+        const sceneJson = serializeScene({
+          objects: snapshot.objects,
+          activeCameraId: snapshot.activeCameraId,
+          sceneSettings: {
+            ...snapshot.sceneSettings,
+            sky: { ...snapshot.sceneSettings.sky, environmentImageUrl },
+          },
+          stateKeyframes: snapshot.stateKeyframes,
+        })
+        await enqueueProjectMutation(projectId, async () => {
+          await upsertCameraStageProjectRecord({ ...record, sceneJson, updatedAt: Date.now() })
+        })
+      }
+    }
+    logger.info('同步 3D 全景环境完成', {
+      event: 'camera_stage.project.environment_sync.completed',
+      projectId,
+      context: { enabled: Boolean(environmentImageUrl) },
+    })
+  } catch (error) {
+    logger.error('同步 3D 全景环境失败', error, {
+      event: 'camera_stage.project.environment_sync.failed',
+      projectId,
+      context: { enabled: Boolean(environmentImageUrl) },
+    })
+    throw error
+  }
+}
+
 /** 新建空白工程：重置为空场景并立即保存入库，返回新工程标识 */
 export async function createNewProject(
   name: string = CAMERA_STAGE_DEFAULT_PROJECT_NAME,

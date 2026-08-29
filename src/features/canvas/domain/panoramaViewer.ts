@@ -1,6 +1,9 @@
 export const PANORAMA_VIEW_MODES = ['sphere', 'flat'] as const;
 export type PanoramaViewMode = (typeof PANORAMA_VIEW_MODES)[number];
 
+export const PANORAMA_PROJECTION_MODES = ['strict-2:1', 'experimental-wide'] as const;
+export type PanoramaProjectionMode = (typeof PANORAMA_PROJECTION_MODES)[number];
+
 export const PANORAMA_VIEWPORT_ASPECT_RATIOS = [
   '21:9',
   '16:9',
@@ -21,6 +24,7 @@ export const PANORAMA_MIN_FOV = 30;
 export const PANORAMA_MAX_FOV = 90;
 export const PANORAMA_MAX_PITCH = Math.PI * 0.47;
 export const PANORAMA_DEFAULT_VIEW_MODE: PanoramaViewMode = 'sphere';
+export const PANORAMA_DEFAULT_PROJECTION_MODE: PanoramaProjectionMode = 'strict-2:1';
 export const PANORAMA_DEFAULT_VIEWPORT_ASPECT_RATIO: PanoramaViewportAspectRatio = '16:9';
 export const PANORAMA_DEFAULT_CAMERA_VIEW: Readonly<PanoramaCameraView> = {
   yaw: 0,
@@ -30,6 +34,18 @@ export const PANORAMA_DEFAULT_CAMERA_VIEW: Readonly<PanoramaCameraView> = {
 
 export function normalizePanoramaViewMode(value: unknown): PanoramaViewMode {
   return value === 'flat' ? 'flat' : PANORAMA_DEFAULT_VIEW_MODE;
+}
+
+export function normalizePanoramaProjectionMode(value: unknown): PanoramaProjectionMode {
+  return value === 'experimental-wide' ? value : PANORAMA_DEFAULT_PROJECTION_MODE;
+}
+
+export function isExperimentalWidePanoramaAspectRatio(value: unknown): boolean {
+  if (typeof value !== 'string') return false;
+  const [width, height] = value.split(':').map(Number);
+  if (!Number.isFinite(width) || !Number.isFinite(height) || height <= 0) return false;
+  const ratio = width / height;
+  return ratio >= 2.2 && ratio <= 2.45;
 }
 
 export function normalizePanoramaViewportAspectRatio(

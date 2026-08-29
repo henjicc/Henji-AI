@@ -9,8 +9,12 @@ import {
   PANORAMA_MAX_FOV,
   PANORAMA_MAX_PITCH,
   PANORAMA_MIN_FOV,
+  isExperimentalWidePanoramaAspectRatio,
 } from '@/features/canvas/domain/panoramaViewer';
-import type { PanoramaCameraView } from '@/features/canvas/domain/panoramaViewer';
+import type {
+  PanoramaCameraView,
+  PanoramaProjectionMode,
+} from '@/features/canvas/domain/panoramaViewer';
 
 export {
   PANORAMA_INITIAL_FOV,
@@ -25,9 +29,17 @@ export interface PanoramaRenderResources {
   material: MeshBasicMaterial;
 }
 
-export function isEquirectangularPanoramaDimensions(width: number, height: number): boolean {
-  return Number.isInteger(width) && Number.isInteger(height) && width > 0 && height > 0
-    && width === height * 2;
+export function isEquirectangularPanoramaDimensions(
+  width: number,
+  height: number,
+  projectionMode: PanoramaProjectionMode = 'strict-2:1',
+): boolean {
+  if (!Number.isInteger(width) || !Number.isInteger(height) || width <= 0 || height <= 0) {
+    return false;
+  }
+  return width === height * 2
+    || (projectionMode === 'experimental-wide'
+      && isExperimentalWidePanoramaAspectRatio(`${width}:${height}`));
 }
 
 export function clampPanoramaFov(value: number): number {

@@ -6,6 +6,9 @@ import { apimartGptImage2Model as apimartRuntime } from '../../../../packages/ai
 import { kieGptImage2Model as kieRuntime } from '../../../../packages/ai-sdk/src/catalog/kie/gpt-image-2.model';
 import { grsaiGptImage2Model as grsaiRuntime } from '../../../../packages/ai-sdk/src/catalog/grsai/gpt-image-2.model';
 import { falGptImage2Model as falRuntime } from '../../../../packages/ai-sdk/src/catalog/fal/gpt-image-2.model';
+import { kieNanoBanana2LiteModel } from '../../../../packages/ai-sdk/src/catalog/kie/nano-banana-2-lite.model';
+import { kieNanoBanana2Model } from '../../../../packages/ai-sdk/src/catalog/kie/nano-banana-2.model';
+import { kieNanoBananaProModel } from '../../../../packages/ai-sdk/src/catalog/kie/nano-banana-pro.model';
 import type { ModelDefinition } from '@/core/types';
 import { CANVAS_IMAGE_CAPABILITY_IDS } from './types';
 import { builtInCanvasImageCapabilities } from './builtInCapabilities';
@@ -34,6 +37,11 @@ const models = [
   compose(grsaiRuntime),
   compose(falRuntime),
 ];
+const nanoModels = [
+  compose(kieNanoBanana2LiteModel),
+  compose(kieNanoBanana2Model),
+  compose(kieNanoBananaProModel),
+];
 
 describe('画布能力模型约束与语义参数映射', () => {
   it('九宫格复用节点 schema 选择器，仅接受图片编辑标签且不伪造平台白名单', () => {
@@ -55,13 +63,13 @@ describe('画布能力模型约束与语义参数映射', () => {
     ]);
   });
 
-  it('全景只接受已确认的 GPT Image 2 平台组合', () => {
+  it('全景接受 GPT Image 2 与 Nano Banana 实验模型，仍拒绝无关模型', () => {
     const unrelated: ModelDefinition = {
       ...models[0],
       meta: { ...models[0].meta, id: 'other-image', canonicalModelId: 'other-image' },
     };
     const result = resolveCanvasCapabilityModelCandidates(
-      [...models, unrelated],
+      [...models, ...nanoModels, unrelated],
       panorama.modelPolicy,
     );
 
@@ -70,9 +78,24 @@ describe('画布能力模型约束与语义参数映射', () => {
       'kie-gpt-image-2',
       'grsai-gpt-image-2',
       'fal-ai-gpt-image-2',
+      'kie-nano-banana-2-lite',
+      'kie-nano-banana-2',
+      'kie-nano-banana-pro',
     ]);
     expect(result.rejected).toHaveLength(1);
     expect(result.rejected[0].reasons.map(({ code }) => code)).toContain('canonical-family');
+  });
+
+  it.each([
+    ['kie-nano-banana-2-lite', 'kieNanoBanana2LiteAspectRatio'],
+    ['kie-nano-banana-2', 'kieNanoBanana2AspectRatio'],
+    ['kie-nano-banana-pro', 'kieNanoBananaAspectRatio'],
+  ])('%s 用 21:9 进入实验全景链路', (modelId, aspectParamId) => {
+    const model = nanoModels.find((candidate) => candidate.meta.id === modelId);
+    if (!model) throw new Error(`缺少测试模型 ${modelId}`);
+    const result = mapCanvasCapabilityModelParams(model, panorama.modelPolicy);
+    expect(result.compatible).toBe(true);
+    expect(result.params[aspectParamId]).toBe('21:9');
   });
 
   it.each([

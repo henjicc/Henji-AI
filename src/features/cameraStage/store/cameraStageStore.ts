@@ -142,6 +142,7 @@ export interface CameraStageState extends CameraStagePathActions {
   setSceneGroundCheckerLightColor: (color: string) => void
   setSceneGroundCheckerDarkColor: (color: string) => void
   setSceneSkyColor: (color: string) => void
+  setSceneEnvironmentImageUrl: (imageUrl: string | null) => void
   setSceneSunlightEnabled: (enabled: boolean) => void
   setSceneSunlightIntensity: (intensity: number) => void
   setSceneSunlightTimeOfDay: (timeOfDay: number) => void
@@ -613,7 +614,15 @@ export const useCameraStageStore = create<CameraStageState>()(
 
   setSceneSkyColor: (color) =>
     set((state) => ({
-      sceneSettings: { ...state.sceneSettings, sky: { color } },
+      sceneSettings: { ...state.sceneSettings, sky: { ...state.sceneSettings.sky, color } },
+    })),
+
+  setSceneEnvironmentImageUrl: (environmentImageUrl) =>
+    set((state) => ({
+      sceneSettings: {
+        ...state.sceneSettings,
+        sky: { ...state.sceneSettings.sky, environmentImageUrl },
+      },
     })),
 
   setSceneSunlightEnabled: (enabled) =>

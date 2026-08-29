@@ -2,6 +2,8 @@ import type { ModelDefinition } from '@/core/types';
 import { mapCanvasCapabilityModelParams } from './modelCompatibility';
 import { buildCanvasCapabilityPrompt } from './promptTemplates';
 import type { CanvasImageCapabilityDefinition } from './types';
+import { isExperimentalWidePanoramaFamily } from './panoramaPolicy';
+import { isExperimentalWidePanoramaAspectRatio } from '../domain/panoramaViewer';
 
 export interface CanvasCapabilityGenerationPreparation {
   compatible: boolean;
@@ -61,6 +63,10 @@ export function prepareCanvasCapabilityGeneration({
   const params = { ...mapping.params };
   delete params.output_format;
   delete params.outputFormat;
+  const panoramaProjectionMode = capability.outputPolicy.resultKind === 'panorama'
+    && isExperimentalWidePanoramaFamily(model.meta.canonicalModelId)
+    ? 'experimental-wide'
+    : 'strict-2:1';
 
   return {
     compatible: mapping.compatible && reasons.length === 0,
@@ -79,6 +85,7 @@ export function prepareCanvasCapabilityGeneration({
       generationCanonicalModelId: model.meta.canonicalModelId,
       generationModelId: model.meta.id,
       generationMappedParams: params,
+      panoramaProjectionMode,
     },
   };
 }
@@ -86,9 +93,13 @@ export function prepareCanvasCapabilityGeneration({
 export function validateCanvasCapabilityResultPatch(
   capability: CanvasImageCapabilityDefinition,
   resultPatch: DynamicValueMap,
+  projectionMode: unknown = 'strict-2:1',
 ): void {
   if (capability.outputPolicy.postProcess !== 'validate-panorama') return;
-  if (resultPatch.aspectRatio !== '2:1') {
+  const valid = resultPatch.aspectRatio === '2:1'
+    || (projectionMode === 'experimental-wide'
+      && isExperimentalWidePanoramaAspectRatio(resultPatch.aspectRatio));
+  if (!valid) {
     throw new Error(`生成结果不是完整全景所需的 2:1（实际为 ${String(resultPatch.aspectRatio ?? '未知')}）`);
   }
 }

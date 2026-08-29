@@ -16,4 +16,16 @@ describe('mapCanvasNodeMediaReferences', () => {
       panoramaPreviewImageUrl: 'mapped:/media/panorama-view.png',
     })
   })
+
+  it('映射 3D 镜头参考节点的环境贴图', () => {
+    const mapped = mapCanvasNodeMediaReferences({
+      environmentImageUrl: '/media/environment.png',
+      mediaInputs: { image: ['/media/environment.png'] },
+    }, (value) => `mapped:${value}`)
+
+    expect(mapped).toMatchObject({
+      environmentImageUrl: 'mapped:/media/environment.png',
+      mediaInputs: { image: ['mapped:/media/environment.png'] },
+    })
+  })
 })

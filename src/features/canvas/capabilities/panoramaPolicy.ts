@@ -8,9 +8,19 @@ export const PANORAMA_REFERENCE_TEMPLATE_VERSION = 'panorama-equirectangular-ref
 export const PANORAMA_DEFAULT_PROMPT_VERSION = 'panorama-user-default-v1';
 export const PANORAMA_DEFAULT_PROMPT = '生成一张完整、自然、可沉浸浏览的 360°×180° 等距柱状全景图，左右边缘无缝衔接。';
 
+export const PANORAMA_EXPERIMENTAL_WIDE_FAMILIES = [
+  'nano-banana-2-lite',
+  'nano-banana-2',
+  'nano-banana-pro',
+] as const;
+
+export function isExperimentalWidePanoramaFamily(canonicalModelId: string): boolean {
+  return (PANORAMA_EXPERIMENTAL_WIDE_FAMILIES as readonly string[]).includes(canonicalModelId);
+}
+
 export const PANORAMA_MODEL_POLICY = {
   mode: 'verified-families',
-  allowedCanonicalFamilies: ['gpt-image-2'],
+  allowedCanonicalFamilies: ['gpt-image-2', ...PANORAMA_EXPERIMENTAL_WIDE_FAMILIES],
   requiredTags: ['text-to-image', 'image-to-image', 'supports-image-editing'],
   providerCompatibility: 'verified-combinations-only',
   allowedProviderConfigurations: [
@@ -24,7 +34,8 @@ export const PANORAMA_MODEL_POLICY = {
     },
   ],
   semanticRequirements: {
-    aspectRatio: '2:1',
+    // GPT Image 2 使用严格 2:1；Nano Banana 系列暂以最接近的 21:9 开放实验。
+    aspectRatio: ['2:1', '21:9'],
     referenceImages: { min: 0, max: 1 },
     outputCount: 1,
   },

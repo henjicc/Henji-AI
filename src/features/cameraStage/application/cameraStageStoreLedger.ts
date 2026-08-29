@@ -49,6 +49,12 @@ export const CAMERA_STAGE_STORE_LEDGER: ApplicationStoreActionLedger<ActionName>
      * 定义收敛在 cameraStageSceneFields.ts，账本条目从 storeActions 派生，不再逐条手写。
      */
     ...fieldLedgerEntries(SCENE_APPEARANCE_FIELDS),
+    setSceneEnvironmentImageUrl: {
+      kind: 'excluded',
+      category: 'internal',
+      reason: '全景环境由画布媒体连线派生并随工程持久化；助手通过画布连线使用同一入口，'
+        + '这里不额外暴露可能包含本地路径的底层字段。',
+    },
     ...fieldLedgerEntries(SCENE_TIMELINE_FIELDS),
 
     /* ── 播放 ───────────────────────────────────────────────── */

@@ -21,6 +21,12 @@ describe('全景球面资源', () => {
     expect(isEquirectangularPanoramaDimensions(0, 0)).toBe(false);
   });
 
+  it('只在实验模式下接受 Nano Banana 的 21:9 宽幅尺寸', () => {
+    expect(isEquirectangularPanoramaDimensions(2520, 1080)).toBe(false);
+    expect(isEquirectangularPanoramaDimensions(2520, 1080, 'experimental-wide')).toBe(true);
+    expect(isEquirectangularPanoramaDimensions(1920, 1080, 'experimental-wide')).toBe(false);
+  });
+
   it('限制俯仰与视场角，避免翻转和过度缩放', () => {
     expect(clampPanoramaFov(1)).toBe(PANORAMA_MIN_FOV);
     expect(clampPanoramaFov(120)).toBe(PANORAMA_MAX_FOV);

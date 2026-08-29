@@ -58,12 +58,13 @@ describe('720°全景节点定义', () => {
     });
   });
 
-  it('全景查看节点是隐藏的图片结果节点，并关闭顶部图片派生能力', () => {
+  it('全景查看节点可独立添加，并用标准图片行接收上传或上游图片', () => {
     const definition = canvasNodeDefinitions[CANVAS_NODE_TYPES.panoramaViewer];
 
     expect(definition).toMatchObject({
       type: CANVAS_NODE_TYPES.panoramaViewer,
-      visibleInMenu: false,
+      visibleInMenu: true,
+      menuIcon: 'panorama',
       capabilities: {
         toolbar: true,
         toolbarDownload: true,
@@ -73,9 +74,10 @@ describe('720°全景节点定义', () => {
         sourceHandle: true,
         targetHandle: true,
         manualSource: true,
+        targetHandleMode: 'rows',
       },
       media: { kind: 'image', role: 'result' },
-      ports: { source: { emits: 'image' } },
+      ports: { source: { emits: 'image' }, target: { accepts: ['image'] } },
     });
     expect(definition.getOutputs?.({
       ...definition.createDefaultData(),
@@ -92,10 +94,24 @@ describe('720°全景节点定义', () => {
       previewImageUrl: null,
       aspectRatio: '2:1',
       resultKind: 'panorama',
+      mediaInputs: {},
+      panoramaProjectionMode: 'strict-2:1',
       panoramaPreviewImageUrl: null,
       viewMode: 'sphere',
       viewportAspectRatio: '16:9',
       cameraView: { yaw: 0, pitch: 0, fov: 70 },
+    });
+  });
+
+  it('3D 镜头参考用标准图片行接收全景环境', () => {
+    const definition = canvasNodeDefinitions[CANVAS_NODE_TYPES.cameraStage];
+    expect(definition).toMatchObject({
+      connectivity: { targetHandle: true, targetHandleMode: 'rows' },
+      ports: { target: { accepts: ['image'] } },
+    });
+    expect(definition.createDefaultData()).toMatchObject({
+      mediaInputs: {},
+      environmentImageUrl: null,
     });
   });
 });

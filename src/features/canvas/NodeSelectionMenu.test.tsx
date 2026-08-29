@@ -30,6 +30,7 @@ describe('NodeSelectionMenu', () => {
       CANVAS_NODE_TYPES.videoGen,
       CANVAS_NODE_TYPES.audioGen,
       CANVAS_NODE_TYPES.storyboardGen,
+      CANVAS_NODE_TYPES.panoramaViewer,
       CANVAS_NODE_TYPES.textProcessing,
       CANVAS_NODE_TYPES.textAnnotation,
       CANVAS_NODE_TYPES.cameraStage,

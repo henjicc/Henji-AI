@@ -9,6 +9,7 @@ import type {
 import type { LayerStackDocumentV1 } from './layerStack';
 import type {
   PanoramaCameraView,
+  PanoramaProjectionMode,
   PanoramaViewMode,
   PanoramaViewportAspectRatio,
 } from './panoramaViewer';
@@ -288,6 +289,9 @@ export interface PanoramaGenerationNodeData extends ImageEditNodeData {
 
 export interface PanoramaViewerNodeData extends NodeImageData {
   resultKind: 'panorama';
+  mediaInputs?: Partial<Record<RowMediaKind, string[]>>;
+  /** 严格 2:1 或 Nano Banana 21:9 实验宽幅球面投影。 */
+  panoramaProjectionMode: PanoramaProjectionMode;
   /** 当前球面相机的节点预览图；与源全景图的等距柱状缩略图分开持久化。 */
   panoramaPreviewImageUrl?: string | null;
   /** 节点内显示方式；不改变源图严格 2:1 的等距柱状投影语义。 */
@@ -451,6 +455,9 @@ export interface CameraStageNodeData extends NodeDisplayData {
   aspectRatio: string;
   durationSec: number | null;
   selectedTimeSec: number;
+  mediaInputs?: Partial<Record<RowMediaKind, string[]>>;
+  /** 由画布图片输入派生，并同步到 3D 工程的球面环境贴图。 */
+  environmentImageUrl?: string | null;
   imageExporting?: boolean;
   imageRenderRequestId?: string | null;
   imageRenderError?: string | null;

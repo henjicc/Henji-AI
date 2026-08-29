@@ -32,4 +32,15 @@ describe('3D 镜头工程快照加载', () => {
       .toMatchObject([{ time: 0, value: 3 }, { time: 2, value: 12 }])
     expect(state.objects[0].transform.position.x).toBe(3)
   })
+
+  it('修改天空颜色不会清掉由画布连线同步的全景环境', () => {
+    const state = useCameraStageStore.getState()
+    state.setSceneEnvironmentImageUrl('/media/panorama.png')
+    state.setSceneSkyColor('next-sky-color')
+
+    expect(useCameraStageStore.getState().sceneSettings.sky).toEqual({
+      color: 'next-sky-color',
+      environmentImageUrl: '/media/panorama.png',
+    })
+  })
 })

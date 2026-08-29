@@ -627,7 +627,11 @@ export const GenerationNodeShell = memo(({
         },
         completionId,
         validateResultPatch: capability
-          ? (patch) => validateCanvasCapabilityResultPatch(capability, patch)
+          ? (patch) => validateCanvasCapabilityResultPatch(
+              capability,
+              patch,
+              capabilityPreparation?.resultNodeData.panoramaProjectionMode,
+            )
           : undefined,
       });
       return { status: 'completed', resultNodeIds: committed.resultNodeIds };

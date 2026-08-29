@@ -13,6 +13,7 @@ import { isCameraStageNode } from '@/features/canvas/domain/canvasNodes';
 // 而它只有在双击 3D 节点、打开这个全屏对话框时才用得到。
 const CameraStageEditor = lazy(() => import('@/features/cameraStage/CameraStageEditor'));
 import {
+  applyProjectEnvironmentImage,
   createNewProject,
   loadProjectIntoScene,
   saveCurrentProject,
@@ -38,6 +39,9 @@ export function CameraStageNodeDialog(): JSX.Element | null {
   const isActiveCameraStageNode = isCameraStageNode(node);
   const nodeProjectId = isActiveCameraStageNode ? node.data.projectId : null;
   const nodeDisplayName = isActiveCameraStageNode ? node.data.displayName : undefined;
+  const nodeEnvironmentImageUrl = isActiveCameraStageNode
+    ? node.data.environmentImageUrl ?? null
+    : null;
   const updateNodeData = useCanvasStore((state) => state.updateNodeData);
 
   useEffect(() => {
@@ -92,6 +96,7 @@ export function CameraStageNodeDialog(): JSX.Element | null {
       } else if (useCameraStageStore.getState().currentProjectId === projectId) {
         await saveCurrentProject();
       }
+      await applyProjectEnvironmentImage(projectId, currentNode.data.environmentImageUrl ?? null);
       updateNodeData(nextNodeId, outputKind === 'image'
         ? {
             imageExporting: true,
@@ -286,6 +291,19 @@ export function CameraStageNodeDialog(): JSX.Element | null {
     })();
     return () => { cancelled = true; };
   }, [isActiveCameraStageNode, nodeDisplayName, nodeId, nodeProjectId, updateNodeData]);
+
+  useEffect(() => {
+    if (!isActiveCameraStageNode || !nodeProjectId) return;
+    void applyProjectEnvironmentImage(
+      nodeProjectId,
+      nodeEnvironmentImageUrl,
+    ).catch((error: unknown) => {
+      logger.error('打开编辑器时同步全景环境失败', error, {
+        event: 'canvas.camera_stage.environment_sync.failed',
+        context: { nodeId, projectId: nodeProjectId },
+      });
+    });
+  }, [isActiveCameraStageNode, nodeEnvironmentImageUrl, nodeId, nodeProjectId]);
 
   const close = useCallback(() => {
     void saveCurrentProject().catch((error: unknown) => {

@@ -4,6 +4,7 @@ import type { ModelRuntimeDefinition } from '@henjicc/ai-sdk';
 import { composeModelDefinition } from '@/core/composeModelDefinition';
 import { modelPresentations } from '@/models/presentation';
 import { apimartGptImage2Model } from '../../../../packages/ai-sdk/src/catalog/apimart/gpt-image-2.model';
+import { kieNanoBanana2Model } from '../../../../packages/ai-sdk/src/catalog/kie/nano-banana-2.model';
 import { CANVAS_IMAGE_CAPABILITY_IDS } from './types';
 import { builtInCanvasImageCapabilities } from './builtInCapabilities';
 import {
@@ -23,6 +24,10 @@ if (!panorama) throw new Error('缺少全景能力定义');
 const model = composeModelDefinition(
   apimartGptImage2Model as ModelRuntimeDefinition,
   modelPresentations[apimartGptImage2Model.meta.id],
+);
+const nanoModel = composeModelDefinition(
+  kieNanoBanana2Model as ModelRuntimeDefinition,
+  modelPresentations[kieNanoBanana2Model.meta.id],
 );
 
 describe('全景能力生成准备', () => {
@@ -59,6 +64,7 @@ describe('全景能力生成准备', () => {
       generationUserPrompt: '日落时分的现代木质客厅',
       generationCanonicalModelId: 'gpt-image-2',
       generationModelId: 'apimart-gpt-image-2',
+      panoramaProjectionMode: 'strict-2:1',
     });
   });
 
@@ -90,6 +96,26 @@ describe('全景能力生成准备', () => {
     expect(() => validateCanvasCapabilityResultPatch(panorama, { aspectRatio: '2:1' }))
       .not.toThrow();
     expect(() => validateCanvasCapabilityResultPatch(panorama, { aspectRatio: '16:9' }))
+      .toThrow('生成结果不是完整全景所需的 2:1');
+  });
+
+  it('Nano Banana 以 21:9 实验宽幅生成并通过对应结果校验', () => {
+    const prepared = prepareCanvasCapabilityGeneration({
+      capability: panorama,
+      model: nanoModel,
+      currentParams: {},
+      userPrompt: '森林环绕的湖边',
+      referenceImageCount: 0,
+    });
+    expect(prepared.compatible).toBe(true);
+    expect(prepared.params.kieNanoBanana2AspectRatio).toBe('21:9');
+    expect(prepared.resultNodeData.panoramaProjectionMode).toBe('experimental-wide');
+    expect(() => validateCanvasCapabilityResultPatch(
+      panorama,
+      { aspectRatio: '21:9' },
+      prepared.resultNodeData.panoramaProjectionMode,
+    )).not.toThrow();
+    expect(() => validateCanvasCapabilityResultPatch(panorama, { aspectRatio: '21:9' }))
       .toThrow('生成结果不是完整全景所需的 2:1');
   });
 });

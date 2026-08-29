@@ -32,6 +32,7 @@ import {
   ICON_NODE_VIDEO_GENERATION,
   ICON_NODE_VIDEO_MODEL,
   ICON_NODE_VIDEO_UPLOAD,
+  ICON_PANORAMA,
 } from '@/core/theme/icons'
 import type { CanvasMediaKind } from '@/features/canvas/canvasUtils'
 import { CANVAS_NODE_TYPES, type CanvasNodeType } from '@/features/canvas/domain/canvasNodes'
@@ -65,6 +66,7 @@ const iconMap: Record<MenuIconKey, typeof ICON_NODE_UPLOAD> = {
   imageGeneration: ICON_NODE_IMAGE_GENERATION,
   videoGeneration: ICON_NODE_VIDEO_GENERATION,
   audioGeneration: ICON_NODE_AUDIO_GENERATION,
+  panorama: ICON_PANORAMA,
   storyboard: ICON_NODE_STORYBOARD,
   textProcessing: ICON_NODE_TEXT_PROCESSING,
   textAnnotation: ICON_NODE_TEXT_ANNOTATION,

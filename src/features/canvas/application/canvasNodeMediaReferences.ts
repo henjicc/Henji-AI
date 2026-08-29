@@ -7,6 +7,7 @@ const MEDIA_URL_FIELDS = [
   'imageUrl',
   'previewImageUrl',
   'panoramaPreviewImageUrl',
+  'environmentImageUrl',
   'videoUrl',
   'audioUrl',
 ] as const

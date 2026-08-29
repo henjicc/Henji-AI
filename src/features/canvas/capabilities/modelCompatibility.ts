@@ -231,16 +231,20 @@ function mapChannel(
 
 function mapChoiceRequirement(
   param: ParamDef | undefined,
-  semanticValue: string | undefined,
+  semanticValue: string | readonly string[] | undefined,
   code: 'aspect-ratio' | 'resolution',
   label: string,
   params: DynamicValueMap,
   reasons: CanvasModelCompatibilityReason[],
 ): void {
   if (!semanticValue) return;
-  const value = findExactChoice(param, semanticValue);
+  const candidates = typeof semanticValue === 'string' ? [semanticValue] : semanticValue;
+  const value = candidates.reduce<string | number | null>(
+    (match, candidate) => match ?? findExactChoice(param, candidate),
+    null,
+  );
   if (!param || value === null) {
-    reasons.push({ code, message: `模型不支持要求的${label} ${semanticValue}` });
+    reasons.push({ code, message: `模型不支持要求的${label} ${candidates.join(' / ')}` });
     return;
   }
   params[param.id] = value;

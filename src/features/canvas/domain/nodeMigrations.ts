@@ -15,6 +15,7 @@ import {
 } from './canvasNodes';
 import {
   normalizePanoramaCameraView,
+  normalizePanoramaProjectionMode,
   normalizePanoramaViewMode,
   normalizePanoramaViewportAspectRatio,
 } from './panoramaViewer';
@@ -102,6 +103,8 @@ export function migrateExportImageResultKind(data: DynamicValueMap): void {
 
 export function migratePanoramaViewerData(data: DynamicValueMap): void {
   data.resultKind = 'panorama';
+  data.mediaInputs = data.mediaInputs && typeof data.mediaInputs === 'object' ? data.mediaInputs : {};
+  data.panoramaProjectionMode = normalizePanoramaProjectionMode(data.panoramaProjectionMode);
   data.viewMode = normalizePanoramaViewMode(data.viewMode);
   data.viewportAspectRatio = normalizePanoramaViewportAspectRatio(data.viewportAspectRatio);
   data.cameraView = normalizePanoramaCameraView(data.cameraView);

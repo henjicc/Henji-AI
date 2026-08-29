@@ -141,7 +141,8 @@ export interface CanvasImageCapabilityReferenceImageRequirement {
 
 /** 产品能力使用的跨供应商语义；执行前会映射成候选模型自己的参数 ID 与合法值。 */
 export interface CanvasImageCapabilityModelSemanticRequirements {
-  aspectRatio?: string;
+  /** 按优先级列出可接受比例；模型会采用它支持的第一个精确值。 */
+  aspectRatio?: string | readonly string[];
   resolution?: string;
   referenceImages?: CanvasImageCapabilityReferenceImageRequirement;
   outputCount?: number;

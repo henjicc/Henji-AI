@@ -228,7 +228,11 @@ async function resumeNodeTask(input: ResumeNodeTaskInput): Promise<void> {
       },
       completionId: `generation-output:${nodeId}`,
       validateResultPatch: sourceCapability
-        ? (patch) => validateCanvasCapabilityResultPatch(sourceCapability, patch)
+        ? (patch) => validateCanvasCapabilityResultPatch(
+            sourceCapability,
+            patch,
+            resultNodeData.panoramaProjectionMode,
+          )
         : undefined,
     });
     if (!isContextCurrent()) return;

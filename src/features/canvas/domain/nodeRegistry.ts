@@ -127,6 +127,7 @@ export type MenuIconKey =
   | 'imageGeneration'
   | 'videoGeneration'
   | 'audioGeneration'
+  | 'panorama'
   | 'storyboard'
   | 'textProcessing'
   | 'textAnnotation'
@@ -349,8 +350,10 @@ const imageEditNodeDefinition: CanvasNodeDefinition<ImageEditNodeData> = {
 const panoramaViewerNodeDefinition: CanvasNodeDefinition<PanoramaViewerNodeData> = {
   type: CANVAS_NODE_TYPES.panoramaViewer,
   menuLabelKey: 'node.menu.panoramaViewer',
-  menuIcon: 'imageGeneration',
-  visibleInMenu: false,
+  menuIcon: 'panorama',
+  visibleInMenu: true,
+  menuSection: 'media',
+  menuOrder: 60,
   capabilities: {
     toolbar: true,
     promptInput: false,
@@ -362,9 +365,10 @@ const panoramaViewerNodeDefinition: CanvasNodeDefinition<PanoramaViewerNodeData>
     targetHandle: true,
     connectMenu: { fromSource: false, fromTarget: false },
     manualSource: true,
+    targetHandleMode: 'rows',
   },
   media: { kind: 'image', role: 'result' },
-  ports: { source: { emits: 'image' } },
+  ports: { source: { emits: 'image' }, target: { accepts: ['image'] } },
   getOutputs: imageOutputsFromData,
   createDefaultData: () => ({
     displayName: DEFAULT_NODE_DISPLAY_NAME[CANVAS_NODE_TYPES.panoramaViewer],
@@ -373,6 +377,8 @@ const panoramaViewerNodeDefinition: CanvasNodeDefinition<PanoramaViewerNodeData>
     aspectRatio: '2:1',
     isSizeManuallyAdjusted: false,
     resultKind: 'panorama',
+    mediaInputs: {},
+    panoramaProjectionMode: 'strict-2:1',
     panoramaPreviewImageUrl: null,
     viewMode: PANORAMA_DEFAULT_VIEW_MODE,
     viewportAspectRatio: PANORAMA_DEFAULT_VIEWPORT_ASPECT_RATIO,
@@ -980,10 +986,12 @@ const cameraStageNodeDefinition: CanvasNodeDefinition<CameraStageNodeData> = {
   capabilities: { toolbar: true, promptInput: false },
   connectivity: {
     sourceHandle: true,
-    targetHandle: false,
+    targetHandle: true,
     connectMenu: { fromSource: false, fromTarget: true },
     manualSource: false,
+    targetHandleMode: 'rows',
   },
+  ports: { source: { emits: 'image' }, target: { accepts: ['image'] } },
   createDefaultData: () => ({
     displayName: DEFAULT_NODE_DISPLAY_NAME[CANVAS_NODE_TYPES.cameraStage],
     projectId: null,
@@ -993,6 +1001,8 @@ const cameraStageNodeDefinition: CanvasNodeDefinition<CameraStageNodeData> = {
     aspectRatio: '16:9',
     durationSec: null,
     selectedTimeSec: 0,
+    mediaInputs: {},
+    environmentImageUrl: null,
     imageExporting: false,
     imageRenderRequestId: null,
     imageRenderError: null,

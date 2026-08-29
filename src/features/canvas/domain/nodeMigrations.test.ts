@@ -68,6 +68,8 @@ describe('全景查看结果迁移', () => {
 
     expect(data).toMatchObject({
       resultKind: 'panorama',
+      mediaInputs: {},
+      panoramaProjectionMode: 'strict-2:1',
       viewMode: 'sphere',
       viewportAspectRatio: '16:9',
       cameraView: {

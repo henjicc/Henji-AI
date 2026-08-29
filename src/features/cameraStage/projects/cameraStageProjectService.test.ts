@@ -1,11 +1,12 @@
 import { describe, expect, it, vi } from 'vitest'
+import type { CameraStageProjectPlatformWrite } from '@/platform/contracts/cameraStageProjects'
 
 const commandMocks = vi.hoisted(() => ({
   deleteRecord: vi.fn<[string], Promise<void>>(),
   getRecord: vi.fn(),
   listSummaries: vi.fn(),
   renameRecord: vi.fn(),
-  upsertRecord: vi.fn<[], Promise<void>>(),
+  upsertRecord: vi.fn<[CameraStageProjectPlatformWrite], Promise<void>>(),
 }))
 
 vi.mock('@/commands/cameraStageProjects', () => ({
@@ -16,7 +17,15 @@ vi.mock('@/commands/cameraStageProjects', () => ({
   upsertCameraStageProjectRecord: commandMocks.upsertRecord,
 }))
 
-import { deleteProject, listProjects, saveProjectDraft, type CameraStageProjectDraft } from './cameraStageProjectService'
+import { createDefaultSceneSettings } from '../domain/sceneDefaults'
+import { deserializeScene, serializeScene } from '../domain/sceneSerialization'
+import {
+  applyProjectEnvironmentImage,
+  deleteProject,
+  listProjects,
+  saveProjectDraft,
+  type CameraStageProjectDraft,
+} from './cameraStageProjectService'
 
 function createDraft(id: string): CameraStageProjectDraft {
   return {
@@ -46,12 +55,38 @@ describe('cameraStageProjectService 工程写入串行化', () => {
       createdAt: 1,
       updatedAt: 2,
       objectCount: 1,
-      sceneJson: JSON.stringify({ schemaVersion: id === 'current' ? 13 : 12 }),
+      sceneJson: JSON.stringify({ schemaVersion: id === 'current' ? 14 : 13 }),
     }))
 
     await expect(listProjects()).resolves.toEqual([
       { id: 'current', name: '新工程', createdAt: 1, updatedAt: 2, objectCount: 1 },
     ])
+  })
+
+  it('把画布全景输入持久化到未打开的 3D 工程', async () => {
+    const record = {
+      id: 'environment-project',
+      name: '环境工程',
+      createdAt: 1,
+      updatedAt: 2,
+      objectCount: 0,
+      sceneJson: serializeScene({
+        objects: [],
+        activeCameraId: null,
+        sceneSettings: createDefaultSceneSettings(),
+        stateKeyframes: [],
+      }),
+    }
+    commandMocks.getRecord.mockResolvedValueOnce(record)
+    commandMocks.upsertRecord.mockResolvedValueOnce(undefined)
+
+    await applyProjectEnvironmentImage(record.id, '/media/panorama.png')
+
+    const saved = commandMocks.upsertRecord.mock.calls.at(-1)?.[0]
+    expect(saved).toBeDefined()
+    if (!saved) throw new Error('未写入工程')
+    expect(deserializeScene(saved.sceneJson).sceneSettings.sky.environmentImageUrl)
+      .toBe('/media/panorama.png')
   })
 
   it('删除等待在途保存完成，并阻止删除后的迟到保存复活工程', async () => {

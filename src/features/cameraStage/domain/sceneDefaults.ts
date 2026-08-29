@@ -124,6 +124,7 @@ export function createDefaultSceneSettings(): StageSceneSettings {
     },
     sky: {
       color: CAMERA_STAGE_COLOR_HEX.stageBg,
+      environmentImageUrl: null,
     },
     sunlight: {
       enabled: true,

@@ -117,6 +117,7 @@ export interface StageGroundSettings {
 
 export interface StageSkySettings {
   color: string
+  environmentImageUrl: string | null
 }
 
 export interface StageSunlightSettings {

@@ -6,6 +6,8 @@ import {
   PANORAMA_MAX_PITCH,
   PANORAMA_MIN_FOV,
   normalizePanoramaCameraView,
+  normalizePanoramaProjectionMode,
+  isExperimentalWidePanoramaAspectRatio,
   normalizePanoramaViewMode,
   normalizePanoramaViewportAspectRatio,
   parsePanoramaViewportAspectRatio,
@@ -13,6 +15,13 @@ import {
 } from './panoramaViewer';
 
 describe('全景查看领域规则', () => {
+  it('实验宽幅只接受接近 21:9 的全景比例', () => {
+    expect(normalizePanoramaProjectionMode('experimental-wide')).toBe('experimental-wide');
+    expect(normalizePanoramaProjectionMode('unknown')).toBe('strict-2:1');
+    expect(isExperimentalWidePanoramaAspectRatio('21:9')).toBe(true);
+    expect(isExperimentalWidePanoramaAspectRatio('16:9')).toBe(false);
+  });
+
   it('只接受注册的显示模式和视口比例', () => {
     expect(normalizePanoramaViewMode('flat')).toBe('flat');
     expect(normalizePanoramaViewMode('sphere')).toBe('sphere');

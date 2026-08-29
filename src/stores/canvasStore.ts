@@ -77,7 +77,13 @@ import {
   resolveConnectionSourceMediaKind,
 } from '@/features/canvas/application/graphValueResolver';
 import { getNodeIndexById, wouldCreateCanvasCycle } from '@/features/canvas/domain/connectionIndex';
-import { PROMPT_PARAM_ID, parseParamPortId } from '@/features/canvas/domain/socketTypes';
+import {
+  PROMPT_PARAM_ID,
+  parseParamPortId,
+  resolveMediaTargetHandle,
+  type RowMediaKind,
+} from '@/features/canvas/domain/socketTypes';
+import { getSourcePortMediaKind } from '@/features/canvas/domain/nodePorts';
 import { useSettingsStore } from '@/stores/settingsStore';
 import {
   reconcileAssetGroupGraph,
@@ -1199,12 +1205,17 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
       return edgeId;
     }
 
+    const sourceDefinition = getCanvasNodeDefinition(sourceNode.type);
+    const mediaKind = getSourcePortMediaKind(sourceDefinition?.ports, 'source');
+    const targetHandle = mediaKind && ['image', 'video', 'audio'].includes(mediaKind)
+      ? resolveMediaTargetHandle(targetNode.type, mediaKind as RowMediaKind)
+      : 'target';
     const newEdge: CanvasEdge = {
       id: edgeId,
       source,
       target,
       sourceHandle: 'source',
-      targetHandle: 'target',
+      targetHandle,
       type: 'disconnectableEdge',
     };
 

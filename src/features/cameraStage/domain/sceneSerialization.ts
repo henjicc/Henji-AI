@@ -16,7 +16,7 @@ import { compileStateKeyframesToAnimation } from './stateKeyframeCompiler'
 import type { StageCameraObject, StageCharacterObject, StageObject, StageSceneSettings } from './sceneTypes'
 
 /** 当前场景数据版本；结构不兼容变更时递增并补迁移分支 */
-export const CAMERA_STAGE_SCENE_SCHEMA_VERSION = 13
+export const CAMERA_STAGE_SCENE_SCHEMA_VERSION = 14
 
 export const UNSUPPORTED_CAMERA_STAGE_SCHEMA = 'UNSUPPORTED_CAMERA_STAGE_SCHEMA'
 
@@ -109,6 +109,10 @@ function parseSceneSettings(raw: unknown): StageSceneSettings {
       },
       sky: {
         color: typeof skyRecord?.color === 'string' ? skyRecord.color : fallback.sky.color,
+        environmentImageUrl:
+          typeof skyRecord?.environmentImageUrl === 'string' && skyRecord.environmentImageUrl.trim()
+            ? skyRecord.environmentImageUrl
+            : null,
       },
       sunlight: {
         enabled:

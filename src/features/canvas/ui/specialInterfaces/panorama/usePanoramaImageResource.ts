@@ -4,6 +4,7 @@ import { createLogger } from '@/core/logging';
 import { resolveImageDisplayUrl } from '@/services/imageSource';
 
 import { isEquirectangularPanoramaDimensions } from './panoramaRenderResources';
+import type { PanoramaProjectionMode } from '@/features/canvas/domain/panoramaViewer';
 
 const logger = createLogger('features.canvas.panoramaViewer');
 
@@ -29,6 +30,7 @@ export function usePanoramaImageResource(
   active: boolean,
   retryRevision: number,
   sourceNodeId?: string | null,
+  projectionMode: PanoramaProjectionMode = 'strict-2:1',
 ): PanoramaImageResource {
   const displayUrl = useMemo(() => resolveImageDisplayUrl(imageUrl), [imageUrl]);
   const [resource, setResource] = useState<PanoramaImageResource>({
@@ -58,7 +60,7 @@ export function usePanoramaImageResource(
         if (cancelled) return;
         const width = image.naturalWidth;
         const height = image.naturalHeight;
-        const isEquirectangular = isEquirectangularPanoramaDimensions(width, height);
+        const isEquirectangular = isEquirectangularPanoramaDimensions(width, height, projectionMode);
         setResource({ status: 'ready', displayUrl, image, width, height, isEquirectangular });
         logger.info('全景图片加载完成', {
           event: 'panorama.viewer.load.completed',
@@ -98,7 +100,7 @@ export function usePanoramaImageResource(
       image.removeEventListener('error', handleError);
       image.src = '';
     };
-  }, [active, displayUrl, retryRevision, sourceNodeId]);
+  }, [active, displayUrl, projectionMode, retryRevision, sourceNodeId]);
 
   return resource;
 }

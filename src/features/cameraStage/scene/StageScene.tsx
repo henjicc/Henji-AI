@@ -1,7 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Canvas } from '@react-three/fiber'
+import { Canvas, useThree } from '@react-three/fiber'
 import { OrbitControls } from '@react-three/drei'
-import type { Group } from 'three'
+import { Color, EquirectangularReflectionMapping, SRGBColorSpace, TextureLoader, type Group } from 'three'
+import { createLogger } from '@/core/logging'
+import { resolveImageDisplayUrl } from '@/services/imageSource'
 import { cameraTargetFromRotation, resolveCameraLookAtTarget } from '../domain/cameraUtils'
 import type { StageCameraObject } from '../domain/sceneTypes'
 import { isStageStyleRenderStyle } from '../render/stageStyleRenderer'
@@ -31,6 +33,58 @@ import StageFixedViewportCamera from './StageFixedViewportCamera'
  */
 
 const RAD2DEG = 180 / Math.PI
+const logger = createLogger('cameraStage.environment')
+
+function StageEnvironment({ imageUrl, fallbackColor }: { imageUrl: string; fallbackColor: string }): null {
+  const scene = useThree((state) => state.scene)
+
+  useEffect(() => {
+    let disposed = false
+    let appliedTexture: ReturnType<TextureLoader['load']> | null = null
+    const previousBackground = scene.background
+    const previousEnvironment = scene.environment
+    const fallbackBackground = new Color(fallbackColor)
+    scene.background = fallbackBackground
+    logger.info('3D 全景环境加载开始', {
+      event: 'camera_stage.environment.load.start',
+      context: { enabled: true },
+    })
+    const loader = new TextureLoader()
+    appliedTexture = loader.load(
+      resolveImageDisplayUrl(imageUrl),
+      (texture) => {
+        if (disposed) return
+        texture.mapping = EquirectangularReflectionMapping
+        texture.colorSpace = SRGBColorSpace
+        texture.needsUpdate = true
+        scene.background = texture
+        scene.environment = texture
+        logger.info('3D 全景环境加载完成', {
+          event: 'camera_stage.environment.load.completed',
+          context: { enabled: true },
+        })
+      },
+      undefined,
+      (error) => {
+        if (disposed) return
+        logger.error('3D 全景环境加载失败', error, {
+          event: 'camera_stage.environment.load.failed',
+          context: { enabled: true },
+        })
+      },
+    )
+    return () => {
+      disposed = true
+      if (scene.background === appliedTexture || scene.background === fallbackBackground) {
+        scene.background = previousBackground
+      }
+      if (scene.environment === appliedTexture) scene.environment = previousEnvironment
+      appliedTexture?.dispose()
+    }
+  }, [fallbackColor, imageUrl, scene])
+
+  return null
+}
 
 interface StageSceneProps {
   /** 截图函数注册位：摄像机视角下读取当前帧为 PNG dataURL */
@@ -189,7 +243,14 @@ const StageScene: React.FC<StageSceneProps> = ({
       style={{ background: sceneSettings.sky.color }}
       onPointerMissed={() => interactive && setSelected(null)}
     >
-      <color attach="background" args={[sceneSettings.sky.color]} />
+      {sceneSettings.sky.environmentImageUrl ? (
+        <StageEnvironment
+          imageUrl={sceneSettings.sky.environmentImageUrl}
+          fallbackColor={sceneSettings.sky.color}
+        />
+      ) : (
+        <color attach="background" args={[sceneSettings.sky.color]} />
+      )}
       {isFixedView && <StageFixedViewportCamera view={viewportSource.view} />}
       {sceneSettings.fog.enabled && (
         <fog
