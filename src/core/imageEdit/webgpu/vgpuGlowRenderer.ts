@@ -14,6 +14,10 @@ interface GlowTargets {
   bloomPing1: Target;
   bloom2: Target;
   bloomPing2: Target;
+  bloom3: Target;
+  bloomPing3: Target;
+  bloom4: Target;
+  bloomPing4: Target;
   output: Target;
 }
 
@@ -28,6 +32,12 @@ interface GlowEffects {
   down2: Effect;
   blurH2: Effect;
   blurV2: Effect;
+  down3: Effect;
+  blurH3: Effect;
+  blurV3: Effect;
+  down4: Effect;
+  blurH4: Effect;
+  blurV4: Effect;
   composite: Effect;
 }
 
@@ -98,14 +108,20 @@ export class VgpuGlowRenderer {
     const submitted = frame(this.gpu, (currentFrame) => {
       currentFrame.pass({ target: this.targets.scene, clear: CLEAR }, this.effects.linearize);
       currentFrame.pass({ target: this.targets.bloom0, clear: CLEAR }, this.effects.extract);
+      currentFrame.pass({ target: this.targets.bloom1, clear: CLEAR }, this.effects.down1);
+      currentFrame.pass({ target: this.targets.bloom2, clear: CLEAR }, this.effects.down2);
+      currentFrame.pass({ target: this.targets.bloom3, clear: CLEAR }, this.effects.down3);
+      currentFrame.pass({ target: this.targets.bloom4, clear: CLEAR }, this.effects.down4);
       currentFrame.pass({ target: this.targets.bloomPing0, clear: CLEAR }, this.effects.blurH0);
       currentFrame.pass({ target: this.targets.bloom0, clear: CLEAR }, this.effects.blurV0);
-      currentFrame.pass({ target: this.targets.bloom1, clear: CLEAR }, this.effects.down1);
       currentFrame.pass({ target: this.targets.bloomPing1, clear: CLEAR }, this.effects.blurH1);
       currentFrame.pass({ target: this.targets.bloom1, clear: CLEAR }, this.effects.blurV1);
-      currentFrame.pass({ target: this.targets.bloom2, clear: CLEAR }, this.effects.down2);
       currentFrame.pass({ target: this.targets.bloomPing2, clear: CLEAR }, this.effects.blurH2);
       currentFrame.pass({ target: this.targets.bloom2, clear: CLEAR }, this.effects.blurV2);
+      currentFrame.pass({ target: this.targets.bloomPing3, clear: CLEAR }, this.effects.blurH3);
+      currentFrame.pass({ target: this.targets.bloom3, clear: CLEAR }, this.effects.blurV3);
+      currentFrame.pass({ target: this.targets.bloomPing4, clear: CLEAR }, this.effects.blurH4);
+      currentFrame.pass({ target: this.targets.bloom4, clear: CLEAR }, this.effects.blurV4);
       currentFrame.pass({ target: this.targets.output, clear: CLEAR }, this.effects.composite);
     });
     await submitted.done;
@@ -127,6 +143,8 @@ export class VgpuGlowRenderer {
     const half = scaleSize(full, 2);
     const quarter = scaleSize(full, 4);
     const eighth = scaleSize(full, 8);
+    const sixteenth = scaleSize(full, 16);
+    const thirtySecond = scaleSize(full, 32);
     this.input.resize(full);
     this.targets.scene.resize(full);
     this.targets.output.resize(full);
@@ -136,6 +154,10 @@ export class VgpuGlowRenderer {
     this.targets.bloomPing1.resize(quarter);
     this.targets.bloom2.resize(eighth);
     this.targets.bloomPing2.resize(eighth);
+    this.targets.bloom3.resize(sixteenth);
+    this.targets.bloomPing3.resize(sixteenth);
+    this.targets.bloom4.resize(thirtySecond);
+    this.targets.bloomPing4.resize(thirtySecond);
   }
 
   private bind(recipe: VgpuGlowRecipe): void {
@@ -143,23 +165,34 @@ export class VgpuGlowRenderer {
     const e = this.effects;
     e.linearize.set({ source: this.input, linearSampler: this.linearSampler });
     setBloom(e.extract, t.scene, t.scene.size, [0, 0], recipe, 0, this.linearSampler);
+    // 先建立未模糊的亮源金字塔，再分别模糊各层。这样每层都代表同一个高光种子的
+    // 独立散射尺度，不会把上一层的模糊反复卷进下一层，避免光晕发灰、发糊。
+    setBloom(e.down1, t.bloom0, t.bloom0.size, [0, 0], recipe, 1, this.linearSampler);
+    setBloom(e.down2, t.bloom1, t.bloom1.size, [0, 0], recipe, 1, this.linearSampler);
+    setBloom(e.down3, t.bloom2, t.bloom2.size, [0, 0], recipe, 1, this.linearSampler);
+    setBloom(e.down4, t.bloom3, t.bloom3.size, [0, 0], recipe, 1, this.linearSampler);
     setBloom(e.blurH0, t.bloom0, t.bloom0.size, [1, 0], recipe, 2, this.linearSampler);
     setBloom(e.blurV0, t.bloomPing0, t.bloom0.size, [0, 1], recipe, 2, this.linearSampler);
-    setBloom(e.down1, t.bloom0, t.bloom0.size, [0, 0], recipe, 1, this.linearSampler);
     setBloom(e.blurH1, t.bloom1, t.bloom1.size, [1, 0], recipe, 2, this.linearSampler);
     setBloom(e.blurV1, t.bloomPing1, t.bloom1.size, [0, 1], recipe, 2, this.linearSampler);
-    setBloom(e.down2, t.bloom1, t.bloom1.size, [0, 0], recipe, 1, this.linearSampler);
     setBloom(e.blurH2, t.bloom2, t.bloom2.size, [1, 0], recipe, 2, this.linearSampler);
     setBloom(e.blurV2, t.bloomPing2, t.bloom2.size, [0, 1], recipe, 2, this.linearSampler);
+    setBloom(e.blurH3, t.bloom3, t.bloom3.size, [1, 0], recipe, 2, this.linearSampler);
+    setBloom(e.blurV3, t.bloomPing3, t.bloom3.size, [0, 1], recipe, 2, this.linearSampler);
+    setBloom(e.blurH4, t.bloom4, t.bloom4.size, [1, 0], recipe, 2, this.linearSampler);
+    setBloom(e.blurV4, t.bloomPing4, t.bloom4.size, [0, 1], recipe, 2, this.linearSampler);
     e.composite.set({
       scene: t.scene,
       bloomNear: t.bloom0,
       bloomMedium: t.bloom1,
       bloomFar: t.bloom2,
+      bloomWide: t.bloom3,
+      bloomAtmosphere: t.bloom4,
       linearSampler: this.linearSampler,
       composite: {
-        params: [recipe.intensity, recipe.shoulder, recipe.rolloff, recipe.whiteHeat],
-        weights: [...recipe.levelWeights, 0],
+        params: [recipe.intensity, recipe.bloomExposure, recipe.bloomGamma, recipe.whiteHeat],
+        weights: recipe.levelWeights.slice(0, 4),
+        tail: [recipe.levelWeights[4], recipe.coreGain, 0, 0],
         tint: [...recipe.tintLinear, recipe.tintEnabled ? 1 : 0],
         optics: [
           1 / Math.max(t.scene.size[0], 1),
@@ -167,7 +200,7 @@ export class VgpuGlowRenderer {
           recipe.chromaticOffsetPx,
           recipe.chromaticAberration,
         ],
-        source: [recipe.threshold, recipe.knee, recipe.hdrBoost, recipe.coreGain],
+        source: [recipe.threshold, recipe.knee, recipe.hdrBoost, 0],
       },
     });
   }
@@ -186,6 +219,12 @@ export class VgpuGlowRenderer {
       e.down2.compile(t.bloom2),
       e.blurH2.compile(t.bloomPing2),
       e.blurV2.compile(t.bloom2),
+      e.down3.compile(t.bloom3),
+      e.blurH3.compile(t.bloomPing3),
+      e.blurV3.compile(t.bloom3),
+      e.down4.compile(t.bloom4),
+      e.blurH4.compile(t.bloomPing4),
+      e.blurV4.compile(t.bloom4),
       e.composite.compile(t.output),
     ]);
   }
@@ -201,6 +240,10 @@ function createTargets(gpu: Gpu): GlowTargets {
     bloomPing1: make(),
     bloom2: make(),
     bloomPing2: make(),
+    bloom3: make(),
+    bloomPing3: make(),
+    bloom4: make(),
+    bloomPing4: make(),
     output: make(),
   };
 }
@@ -217,6 +260,12 @@ function createEffects(gpu: Gpu): GlowEffects {
     down2: effect(gpu, bloomShaderSource, { label: '辉光 Pro 远场降采样' }),
     blurH2: effect(gpu, bloomShaderSource, { label: '辉光 Pro 远场水平' }),
     blurV2: effect(gpu, bloomShaderSource, { label: '辉光 Pro 远场垂直' }),
+    down3: effect(gpu, bloomShaderSource, { label: '辉光 Pro 宽场降采样' }),
+    blurH3: effect(gpu, bloomShaderSource, { label: '辉光 Pro 宽场水平' }),
+    blurV3: effect(gpu, bloomShaderSource, { label: '辉光 Pro 宽场垂直' }),
+    down4: effect(gpu, bloomShaderSource, { label: '辉光 Pro 空气层降采样' }),
+    blurH4: effect(gpu, bloomShaderSource, { label: '辉光 Pro 空气层水平' }),
+    blurV4: effect(gpu, bloomShaderSource, { label: '辉光 Pro 空气层垂直' }),
     composite: effect(gpu, compositeShaderSource, { label: '辉光 Pro 合成' }),
   };
 }
@@ -237,7 +286,7 @@ function setBloom(
       sourceSize,
       direction,
       params: [recipe.threshold, recipe.knee, recipe.sigma, mode],
-      glow: [recipe.hdrBoost, recipe.whiteHeat, 0, 0],
+      glow: [recipe.hdrBoost, 0, 0, recipe.blurStep],
     },
   });
 }

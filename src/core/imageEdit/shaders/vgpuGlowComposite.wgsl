@@ -1,6 +1,7 @@
 struct Composite {
   params: vec4f,
   weights: vec4f,
+  tail: vec4f,
   tint: vec4f,
   optics: vec4f,
   source: vec4f,
@@ -11,7 +12,9 @@ struct Composite {
 @group(0) @binding(2) var bloomNear: texture_2d<f32>;
 @group(0) @binding(3) var bloomMedium: texture_2d<f32>;
 @group(0) @binding(4) var bloomFar: texture_2d<f32>;
-@group(0) @binding(5) var linearSampler: sampler;
+@group(0) @binding(5) var bloomWide: texture_2d<f32>;
+@group(0) @binding(6) var bloomAtmosphere: texture_2d<f32>;
+@group(0) @binding(7) var linearSampler: sampler;
 
 fn emitterBrightness(color: vec3f) -> f32 {
   let luma = dot(color, vec3f(0.2126, 0.7152, 0.0722));
@@ -25,8 +28,7 @@ fn emitterEnergy(color: vec3f) -> f32 {
   let soft = clamp(brightness - threshold + knee, 0.0, 2.0 * knee);
   let softContribution = soft * soft / (4.0 * knee + 0.0001);
   let contribution = max(brightness - threshold, softContribution) / max(brightness, 0.0001);
-  let hot = pow(smoothstep(threshold, 1.0, brightness), 1.6);
-  return brightness * contribution * (1.0 + hot * composite.source.z);
+  return brightness * contribution;
 }
 
 fn bloomEnergy(color: vec3f) -> f32 {
@@ -46,15 +48,27 @@ fn sampleFar(uv: vec2f) -> vec3f {
   return textureSampleLevel(bloomFar, linearSampler, uv, 0.0).rgb;
 }
 
+fn sampleWide(uv: vec2f) -> vec3f {
+  return textureSampleLevel(bloomWide, linearSampler, uv, 0.0).rgb;
+}
+
+fn sampleAtmosphere(uv: vec2f) -> vec3f {
+  return textureSampleLevel(bloomAtmosphere, linearSampler, uv, 0.0).rgb;
+}
+
 fn layeredBloom(uv: vec2f) -> vec3f {
   let near = sampleNear(uv);
   let medium = sampleMedium(uv);
   let far = sampleFar(uv);
-  // 近、中、远三层散射直接连续叠加。边缘亮度来自发光体本身与窄高斯层，
-  // 不再用 DoG 带通或形态学外扩重建一条等宽轮廓。
+  let wide = sampleWide(uv);
+  let atmosphere = sampleAtmosphere(uv);
+  // 五个倍频尺度组成连续的散射 PSF：近场塑造光源密度，空气层只贡献很低频的长尾。
+  // 所有层都来自同一个未模糊高光金字塔，不使用边缘带通或形态学描边。
   return near * composite.weights.x
     + medium * composite.weights.y
-    + far * composite.weights.z;
+    + far * composite.weights.z
+    + wide * composite.weights.w
+    + atmosphere * composite.tail.x;
 }
 
 fn tintBloom(color: vec3f) -> vec3f {
@@ -69,52 +83,54 @@ fn coreEmitter(uv: vec2f) -> vec3f {
   let sourceCore = color * (energy / max(brightness, 0.0001));
   let naturalCore = mix(sourceCore, vec3f(energy), hot * composite.params.w);
   let tintedCore = mix(composite.tint.rgb * energy, vec3f(energy), hot * composite.params.w);
-  return mix(naturalCore, tintedCore, composite.tint.a) * composite.source.w;
+  // 核心使用曝光前的高光种子；能量提升只属于散射层，避免中心过曝成硬白块。
+  return mix(naturalCore, tintedCore, composite.tint.a) * composite.tail.y;
 }
 
-fn rollHighlight(color: vec3f) -> vec3f {
+fn toneBloom(color: vec3f) -> vec3f {
   let peak = max(color.r, max(color.g, color.b));
-  let shoulder = composite.params.y;
-  if (peak <= shoulder) {
-    return color;
+  if (peak <= 0.000001) {
+    return vec3f(0.0);
   }
-  let room = max(1.0 - shoulder, 0.001);
-  let mappedPeak = shoulder + room * (1.0 - exp(-(peak - shoulder) / room));
-  let rolled = color * (mappedPeak / max(peak, 0.0001));
-  return mix(min(color, vec3f(1.0)), rolled, composite.params.z);
+  // Oniric 的指数摄影响应只作用于 Bloom。按峰值映射再等比缩放 RGB，既生成柔和
+  // 白热肩部，也不会因逐通道截断破坏原始色相。
+  let response = 1.0 - exp(-peak * composite.params.y);
+  let mappedPeak = pow(max(response, 0.0), 1.0 / max(composite.params.z, 0.0001));
+  return color * (mappedPeak / peak);
+}
+
+fn preparedBloom(uv: vec2f) -> vec3f {
+  return toneBloom(tintBloom(layeredBloom(uv)));
+}
+
+fn screenLinear(base: vec3f, glow: vec3f) -> vec3f {
+  return base + glow - base * glow;
 }
 
 @fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
   let base = textureSampleLevel(scene, linearSampler, uv, 0.0);
-  let centeredBloom = layeredBloom(uv);
+  let centeredBloom = preparedBloom(uv);
   let chromaOffset = vec2f(composite.optics.x * composite.optics.z, 0.0);
-  let redBloom = layeredBloom(uv + chromaOffset);
-  let blueBloom = layeredBloom(uv - chromaOffset);
-
-  // Glitch 风格 RGB 分离：R 向右、G 留在原位、B 向左。固定方向能形成清楚的彩色重影，
-  // 不再沿轮廓四周生成一圈杂乱的彩边。着色开启时仍用同一能量场生成纯 RGB 分离。
-  let splitSourceBloom = vec3f(redBloom.r, centeredBloom.g, blueBloom.b);
-  let splitTintedBloom = vec3f(
-    bloomEnergy(redBloom),
-    bloomEnergy(centeredBloom),
-    bloomEnergy(blueBloom)
-  );
-  let splitBloom = mix(splitSourceBloom, splitTintedBloom, composite.tint.a);
-  let diffuseGlow = mix(tintBloom(centeredBloom), splitBloom, composite.optics.w);
-
-  // 全分辨率光源核心不经过降采样，保住发光体本身的清晰度；外围只由高斯散射形成。
-  let directEnergy = emitterEnergy(base.rgb);
   let centeredCore = coreEmitter(uv);
-  let redCore = coreEmitter(uv + chromaOffset);
-  let blueCore = coreEmitter(uv - chromaOffset);
-  let splitSourceCore = vec3f(redCore.r, centeredCore.g, blueCore.b);
-  let splitTintedCore = vec3f(
-    emitterEnergy(textureSampleLevel(scene, linearSampler, uv + chromaOffset, 0.0).rgb),
-    directEnergy,
-    emitterEnergy(textureSampleLevel(scene, linearSampler, uv - chromaOffset, 0.0).rgb)
-  ) * composite.source.w;
-  let splitCore = mix(splitSourceCore, splitTintedCore, composite.tint.a);
-  let core = mix(centeredCore, splitCore, composite.optics.w);
-  let emitted = (diffuseGlow + core) * composite.params.x;
-  return vec4f(rollHighlight(base.rgb + emitted), base.a);
+  var diffuseGlow = centeredBloom;
+  var core = centeredCore;
+
+  if (composite.optics.w > 0.0001) {
+    let redBloom = preparedBloom(uv + chromaOffset);
+    let blueBloom = preparedBloom(uv - chromaOffset);
+    let splitBloom = vec3f(redBloom.r, centeredBloom.g, blueBloom.b);
+    diffuseGlow = mix(centeredBloom, splitBloom, composite.optics.w);
+
+    let redCore = coreEmitter(uv + chromaOffset);
+    let blueCore = coreEmitter(uv - chromaOffset);
+    let splitCore = vec3f(redCore.r, centeredCore.g, blueCore.b);
+    core = mix(centeredCore, splitCore, composite.optics.w);
+  }
+
+  // 先把 Bloom 与曝光前核心转为有限的光层，再在线性空间 Screen 到原图。
+  // 原图不参与 Bloom Tone Map，因此暗部、肤色和未发光区域不会被辉光参数改写。
+  let emitted = max(diffuseGlow + core, vec3f(0.0)) * composite.params.x;
+  let glowLayer = vec3f(1.0) - exp(-emitted);
+  let result = screenLinear(clamp(base.rgb, vec3f(0.0), vec3f(1.0)), glowLayer);
+  return vec4f(result, base.a);
 }

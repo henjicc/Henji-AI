@@ -1,16 +1,17 @@
 import type { VgpuGlowOperationParams } from './vgpuGlowParams';
 
 export interface VgpuGlowRecipe {
-  schemaVersion: 3;
+  schemaVersion: 4;
   threshold: number;
   knee: number;
   hdrBoost: number;
   intensity: number;
   whiteHeat: number;
   sigma: number;
-  levelWeights: readonly [number, number, number];
-  shoulder: number;
-  rolloff: number;
+  blurStep: number;
+  levelWeights: readonly [number, number, number, number, number];
+  bloomExposure: number;
+  bloomGamma: number;
   tintLinear: readonly [number, number, number];
   tintEnabled: boolean;
   coreGain: number;
@@ -21,34 +22,39 @@ export interface VgpuGlowRecipe {
 export function compileVgpuGlowRecipe(params: VgpuGlowOperationParams): VgpuGlowRecipe {
   const radius = params.radius;
   const rawWeights = [
-    0.68 - radius * 0.28,
-    0.24 + radius * 0.04,
-    0.08 + radius * 0.24,
+    0.42 - radius * 0.2,
+    0.27 - radius * 0.05,
+    0.16 + radius * 0.02,
+    0.1 + radius * 0.08,
+    0.05 + radius * 0.15,
   ] as const;
-  const weightSum = rawWeights[0] + rawWeights[1] + rawWeights[2];
+  const weightSum = rawWeights.reduce((sum, weight) => sum + weight, 0);
   const look = params.look === 'natural'
-    ? { boost: 3.4, exposure: 1.35, shoulder: 0.84, rolloff: 0.72 }
+    ? { boost: 2.4, intensity: 0.92, bloomExposure: 0.82, bloomGamma: 1.08, core: 0.76 }
     : params.look === 'neon'
-      ? { boost: 8.8, exposure: 2.15, shoulder: 0.72, rolloff: 0.9 }
-      : { boost: 5.8, exposure: 1.75, shoulder: 0.78, rolloff: 0.82 };
+      ? { boost: 6.8, intensity: 1.36, bloomExposure: 1.24, bloomGamma: 1.04, core: 1.04 }
+      : { boost: 4.6, intensity: 1.14, bloomExposure: 1.02, bloomGamma: 1.18, core: 0.88 };
   return {
-    schemaVersion: 3,
+    schemaVersion: 4,
     threshold: 0.035 + Math.pow(params.sourceThreshold, 1.8) * 0.72,
     knee: 0.08 + (1 - params.sourceThreshold) * 0.24,
     hdrBoost: look.boost,
-    intensity: params.intensity * look.exposure,
+    intensity: params.intensity * look.intensity,
     whiteHeat: params.whiteHeat,
-    sigma: 0.85 + Math.pow(radius, 1.2) * 3.45,
+    sigma: 1.05 + Math.pow(radius, 1.1) * 2.45,
+    blurStep: 0.45 + Math.pow(radius, 1.35) * 2.2,
     levelWeights: [
       rawWeights[0] / weightSum,
       rawWeights[1] / weightSum,
       rawWeights[2] / weightSum,
+      rawWeights[3] / weightSum,
+      rawWeights[4] / weightSum,
     ],
-    shoulder: look.shoulder,
-    rolloff: look.rolloff,
+    bloomExposure: look.bloomExposure,
+    bloomGamma: look.bloomGamma,
     tintLinear: parseLinearRgb(params.tintColor),
     tintEnabled: params.tintEnabled,
-    coreGain: 0.7 + params.whiteHeat * 0.75,
+    coreGain: look.core * (0.68 + params.whiteHeat * 0.48),
     chromaticAberration: params.chromaticAberration,
     chromaticOffsetPx: Math.pow(params.chromaticAberration, 1.5) * (1.5 + radius * 4.5),
   };

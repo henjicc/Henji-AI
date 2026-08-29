@@ -12,7 +12,7 @@ import {
 } from './index';
 
 describe('VGPU 辉光操作契约', () => {
-  it('提供可感知差异的三种光感，并保持金字塔能量归一化', () => {
+  it('提供可感知差异的三种光感，并保持五级散射能量归一化', () => {
     const natural = compileVgpuGlowRecipe(applyVgpuGlowLook('natural'));
     const dreamy = compileVgpuGlowRecipe(applyVgpuGlowLook('dreamy'));
     const neon = compileVgpuGlowRecipe(applyVgpuGlowLook('neon'));
@@ -23,6 +23,8 @@ describe('VGPU 辉光操作契约', () => {
       expect(recipe.levelWeights.reduce((sum, value) => sum + value, 0)).toBeCloseTo(1, 12);
       expect(recipe.threshold).toBeGreaterThan(0);
       expect(recipe.sigma).toBeGreaterThanOrEqual(0.85);
+      expect(recipe.blurStep).toBeGreaterThan(0);
+      expect(recipe.levelWeights).toHaveLength(5);
       expect(recipe.tintLinear).toHaveLength(3);
       expect(recipe.tintEnabled).toBe(false);
       expect(recipe.chromaticAberration).toBe(0);
@@ -49,7 +51,9 @@ describe('VGPU 辉光操作契约', () => {
     });
 
     expect(wide.sigma).toBeGreaterThan(compact.sigma);
-    expect(wide.levelWeights[2]).toBeGreaterThan(compact.levelWeights[2]);
+    expect(wide.blurStep).toBeGreaterThan(compact.blurStep);
+    expect(wide.levelWeights[4]).toBeGreaterThan(compact.levelWeights[4]);
+    expect(wide.levelWeights[0]).toBeLessThan(compact.levelWeights[0]);
     expect(wide.intensity).toBe(compact.intensity);
     expect(wide.chromaticOffsetPx).toBeGreaterThan(4);
     expect(compact.chromaticOffsetPx).toBe(0);
