@@ -53,13 +53,13 @@ describe('SDK catalog 应用侧加载入口', () => {
     registry.clear()
   })
 
-  it('把 101 个运行时定义与展示补丁完整合成并注册', async () => {
+  it('把 105 个运行时定义与展示补丁完整合成并注册', async () => {
     await expect(loadAllModels()).resolves.toMatchObject({
-      total: 101,
-      success: 101,
+      total: 105,
+      success: 105,
       failed: 0,
     })
-    expect(registry.listAllModels()).toHaveLength(101)
+    expect(registry.listAllModels()).toHaveLength(105)
   })
 
   it('五个代表模型保留联动、分组与 composite 面板展示', () => {
@@ -77,7 +77,7 @@ describe('SDK catalog 应用侧加载入口', () => {
     expect(modelscopeCustom?.meta.name).toBeTruthy()
   })
 
-  it('ModelRegistry 的十类查询在 101 个合成模型上保持完整行为', () => {
+  it('ModelRegistry 的十类查询在 105 个合成模型上保持完整行为', () => {
     const allModels = registry.listAllModels()
     const firstModel = allModels[0]
     expect(firstModel).toBeTruthy()
@@ -137,9 +137,9 @@ describe('SDK catalog 应用侧加载入口', () => {
     })
 
     const stats = registry.getStats()
-    expect(stats.totalModels).toBe(101)
-    expect(Object.values(stats.providerCounts as Record<string, number>).reduce((sum, count) => sum + count, 0)).toBe(101)
-    expect(Number(stats.imageModels) + Number(stats.videoModels) + Number(stats.audioModels)).toBe(101)
+    expect(stats.totalModels).toBe(105)
+    expect(Object.values(stats.providerCounts as Record<string, number>).reduce((sum, count) => sum + count, 0)).toBe(105)
+    expect(Number(stats.imageModels) + Number(stats.videoModels) + Number(stats.audioModels)).toBe(105)
   })
 
   it('十个迁移代表模型与迁移前结构摘要逐项一致', () => {

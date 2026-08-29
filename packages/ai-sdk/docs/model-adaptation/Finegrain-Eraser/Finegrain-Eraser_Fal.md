@@ -3,7 +3,7 @@
 | 项目 | 内容 |
 |---|---|
 | 最后更新 | 2026-08-28 |
-| SDK 模型 ID | `fal-finegrain-eraser`（可选工具模型，不进入默认 99 目录） |
+| SDK 模型 ID | `fal-finegrain-eraser`（可选工具模型，不进入默认 105 目录） |
 | Fal endpoint ID | `fal-ai/finegrain-eraser/mask` |
 | API 文档 | https://fal.ai/models/fal-ai/finegrain-eraser/mask/api |
 | 价格 | Express $0.04 / Standard $0.13 / Premium $0.22 |

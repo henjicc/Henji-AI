@@ -36,6 +36,10 @@ export const GENERATION_MODEL_DESCRIPTIONS = {
   'seedream-5.0-lite': { zh: '5.0 Pro 的轻量推理版本，能力与画质都弱一些，不过价格相比于 Pro 版本更加友好。', en: '' },
   'seedream-5.0-pro': { zh: '旗舰专业版，侧重更高画质上限、复杂推理、精准局部编辑和多参考控制，适合广告、电商、设计及高要求成片制作。不过价格比较高。', en: '' },
   'topaz-image-upscale': { zh: 'Topaz 专用图片超分模型，提供标准、高保真、低清修复、CGI 和文字优化模式；适合在可控倍率下提升分辨率，不属于普通生图重绘。', en: '' },
+  'topaz-transparent-upscale': { zh: '', en: '' },
+  'seedvr2-image-upscale': { zh: '', en: '' },
+  'bria-creative-upscale': { zh: '', en: '' },
+  'ideogram-upscale': { zh: '', en: '' },
   'z-image': { zh: '6B 开放权重完整模型，兼顾写实画质、风格多样性、中英文字渲染和提示遵循；生成自由度较高，推理速度慢于蒸馏版 Turbo。', en: '' },
   'z-image-turbo': { zh: 'Z-Image 的蒸馏加速版，少量采样步数即可生成，显存要求较低并保留较好的写实及双语文字能力；适合高频本地出图。', en: '' },
 

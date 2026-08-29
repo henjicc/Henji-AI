@@ -3,7 +3,7 @@
 | 项目 | 内容 |
 |---|---|
 | 最后更新 | 2026-08-28 |
-| SDK 模型 ID | `fal-bria-eraser`（可选工具模型，不进入默认 99 目录） |
+| SDK 模型 ID | `fal-bria-eraser`（可选工具模型，不进入默认 105 目录） |
 | Fal endpoint ID | `fal-ai/bria/eraser` |
 | API 文档 | https://fal.ai/models/fal-ai/bria/eraser/api |
 | 价格 | $0.04/次 |

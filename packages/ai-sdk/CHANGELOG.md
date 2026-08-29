@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Fal 图片放大目录新增 Topaz 透明图、SeedVR2、Bria Creative 与 Ideogram 四个单模型 pack；现有 Topaz 入口升级为 Precision / Creative / Generative 显式模式路由。
+- Topaz 计价改为按实时官方输出 MP 阶梯计算，不再将所有超过 48MP 的任务直接估为 `$1.36`。
 - 新增 `openai-responses` 模型步骤协议，与 Chat Completions 并存；标准 Responses SSE、usage、失败与取消统一落到既有模型步骤事件和错误契约。
 - 预制供应商按“供应商端点 × 具体模型”自动选择协议：DeepSeek、火山引擎、百炼、MiniMax 与智谱国内 GLM-5.3 的已确认组合默认 Responses，聚合网关和未确认模型继续 Chat。
 - Anthropic 协议仍未实现，不再向宿主设置界面提供伪选项；自定义未知端点只需在 Chat / Responses 之间选择。

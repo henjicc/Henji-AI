@@ -35,7 +35,7 @@ const model = defineModel({
 })
 
 describe('createGenerationClient', () => {
-  it('在默认 101 模型目录上追加自定义模型并保持生命周期', async () => {
+  it('在默认 105 模型目录上追加自定义模型并保持生命周期', async () => {
     const execute = vi.fn<ProviderAdapter['execute']>(async (input) => ({
       status: 'completed',
       url: 'https://example.com/generated.png',
@@ -51,7 +51,7 @@ describe('createGenerationClient', () => {
       models: [model],
     })
 
-    expect(client.catalog.list()).toHaveLength(102)
+    expect(client.catalog.list()).toHaveLength(106)
     expect('chat' in client).toBe(false)
     await expect(client.generate({
       modelId: model.meta.id,

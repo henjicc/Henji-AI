@@ -3,7 +3,7 @@
 | 项目 | 内容 |
 |---|---|
 | 最后更新 | 2026-08-28 |
-| SDK 模型 ID | `fal-flux-pro-erase`（可选工具模型，不进入默认 99 目录） |
+| SDK 模型 ID | `fal-flux-pro-erase`（可选工具模型，不进入默认 105 目录） |
 | Fal endpoint ID | `fal-ai/flux-pro/v1/erase` |
 | API 文档 | https://fal.ai/models/fal-ai/flux-pro/v1/erase/api |
 | 价格 | 首个生成 MP $0.03，后续 $0.004/MP；参考图 $0.004/MP，至少按 3 MP |

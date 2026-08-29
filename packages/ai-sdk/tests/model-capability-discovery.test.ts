@@ -13,8 +13,8 @@ import { pack as falErasePack } from '../src/packs/tool-packs/fal-image-edit-too
 const generationModels = [...catalog, ...falErasePack.models]
 
 describe('统一模型能力画像与筛选', () => {
-  it('101默认+3可选generation逐项派生合法画像', () => {
-    expect(catalog).toHaveLength(101)
+  it('105默认+3可选generation逐项派生合法画像', () => {
+    expect(catalog).toHaveLength(105)
     expect(falErasePack.models).toHaveLength(3)
     for (const model of generationModels) {
       const profile = profileGenerationModel(model)

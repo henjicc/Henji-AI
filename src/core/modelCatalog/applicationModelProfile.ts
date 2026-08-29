@@ -70,9 +70,9 @@ export function assertHenjiGenerationSelection(
       `received ${[...selectedProviders].join(', ') || '(none)'}`
     )
   }
-  if (models.length !== 101 || modelIds.size !== 101) {
+  if (models.length !== 105 || modelIds.size !== 105) {
     throw new Error(
-      `Henji generation model selection mismatch: expected 101 unique models, ` +
+      `Henji generation model selection mismatch: expected 105 unique models, ` +
       `received ${models.length} entries/${modelIds.size} unique`
     )
   }
@@ -101,7 +101,7 @@ export function createHenjiAIClient(runtime: RuntimeContext): AIClient {
 }
 
 /**
- * 应用统一能力发现入口。筛选只作用于本应用已选的 101 个生成模型和真实 LLM 目录，
+ * 应用统一能力发现入口。筛选只作用于本应用已选的 105 个生成模型和真实 LLM 目录，
  * 不会隐式引入默认目录之外的 Fal 工具 pack。
  */
 export const henjiModelCapabilityDiscovery: ModelCapabilityDiscovery = createModelCapabilityDiscovery({

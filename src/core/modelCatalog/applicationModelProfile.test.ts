@@ -43,9 +43,9 @@ function createRuntime(fetch: RuntimeContext['transport']['fetch'] = async () =>
 }
 
 describe('Henji-AI 显式模型选择', () => {
-  it('组合 8 个 provider pack 并与兼容目录保持严格 101/101 parity', () => {
+  it('组合 8 个 provider pack 并与兼容目录保持严格 105/105 parity', () => {
     expect(HENJI_GENERATION_PROVIDER_PACKS).toHaveLength(8)
-    expect(HENJI_GENERATION_MODELS).toHaveLength(101)
+    expect(HENJI_GENERATION_MODELS).toHaveLength(105)
     expect(new Set(HENJI_GENERATION_MODELS.map((model) => model.meta.id))).toEqual(
       new Set(catalog.map((model) => model.meta.id))
     )
@@ -61,7 +61,7 @@ describe('Henji-AI 显式模型选择', () => {
   it('缺少任一 provider pack 时产品选择门禁明确变红', () => {
     expect(() => assertHenjiGenerationSelection(HENJI_GENERATION_PROVIDER_PACKS.slice(0, -1)))
       .toThrow(/provider selection mismatch/)
-    expect(assertHenjiGenerationSelection(HENJI_GENERATION_PROVIDER_PACKS)).toHaveLength(101)
+    expect(assertHenjiGenerationSelection(HENJI_GENERATION_PROVIDER_PACKS)).toHaveLength(105)
   })
 
   it('生产 client 使用 modular 目录、保留八供应商、取消与 LLM chat', async () => {
@@ -80,7 +80,7 @@ describe('Henji-AI 显式模型选择', () => {
 
     try {
       expect(HENJI_GENERATION_EXECUTION_PACKS).toHaveLength(9)
-      expect(client.catalog.list()).toHaveLength(103)
+      expect(client.catalog.list()).toHaveLength(107)
       expect(new Set(client.providers.list())).toEqual(new Set(HENJI_GENERATION_PROVIDER_IDS))
       expect(client.catalog.get('fal-flux-pro-erase')).toBeUndefined()
       expect(client.catalog.get('fal-qwen-image-edit-2509-multiple-angles')).toBeDefined()
@@ -106,9 +106,9 @@ describe('Henji-AI 显式模型选择', () => {
 })
 
 describe('Henji-AI 统一能力发现', () => {
-  it('只索引已选 101 generation 与真实 LLM 目录，不默认包含 Fal 工具', () => {
+  it('只索引已选 105 generation 与真实 LLM 目录，不默认包含 Fal 工具', () => {
     const items = henjiModelCapabilityDiscovery.list()
-    expect(items.filter((item) => item.sourceKind === 'generation-model')).toHaveLength(101)
+    expect(items.filter((item) => item.sourceKind === 'generation-model')).toHaveLength(105)
     expect(items.filter((item) => item.sourceKind === 'llm-model')).toHaveLength(LLM_MODEL_CATALOG_ENTRIES.length)
     expect(searchHenjiModelCapabilities({ features: 'erase' })).toEqual([])
 

@@ -2,7 +2,7 @@
 
 | 项目 | 内容 |
 |---|---|
-| 最后更新 | 2026-08-28 |
+| 最后更新 | 2026-08-29 |
 | 供应商类型 | 模型 API 平台 + Serverless |
 | 项目内 `providerId` | `fal` |
 | 直连 Base URL | `https://fal.run` |
@@ -134,12 +134,13 @@ curl "https://api.fal.ai/v1/account/billing?expand=credits" \
 | 本地文件 | Electron 真实 E2E + Transport fixture 已通过 | 119 字节 PNG 的 Range 回读与本地 SHA-256 一致；当前实现使用 REST initiate + signed PUT，并经 `RuntimeContext.transport` 覆盖成功、initiate失败、PUT失败与取消。UXP 真机网络仍由插件集成验证 |
 | 价格/余额 API | 尚未用于连接检测 | 文档已记录；余额需 Admin Key，优先级低 |
 | 自定义图片尺寸 | 已接入 | Seedream 5 Pro/Lite、Qwen Image 3、GPT Image 2、Z-Image 可显式选择约 1MP 的 16 对齐对象；各模型默认仍保持 0.1.5 语义，Lite 低于官方面积下限时由 Fal 自动放大 |
+| 图片放大 | 已接入 | Topaz Precision/Creative/Generative、Topaz Transparent、SeedVR2、Bria Creative、Ideogram；共用 Fal 队列与上传，按模型声明倍率、透明通道和计价预检 |
 
 ### 6.1 可选图像编辑模型分发集合
 
 `@henjicc/ai-sdk/tool-packs/fal-image-edit-tools` 按需提供 3 个工具端点：
 `fal-ai/flux-pro/v1/erase`、`fal-ai/bria/eraser`、`fal-ai/finegrain-eraser/mask`。
-它们复用本文件的队列、结果解析和 Fal CDN 上传，不进入默认 99 模型目录，也不进入普通 Fal provider pack。
+它们复用本文件的队列、结果解析和 Fal CDN 上传，不进入默认 105 模型目录，也不进入普通 Fal provider pack。
 该入口只是静态分发集合；运行时按统一能力画像筛选 `operation=image-edit`、`feature=erase`，执行仍走同一生成客户端。
 完整字段与价格见对应单模型文档。
 

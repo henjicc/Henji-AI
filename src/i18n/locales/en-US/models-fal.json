@@ -96,6 +96,26 @@
         "name": "Topaz Image Upscale"
       }
     },
+    "fal-ai-topaz-transparent-upscale": {
+      "meta": {
+        "name": "Topaz Transparent Upscale"
+      }
+    },
+    "fal-ai-seedvr2-image-upscale": {
+      "meta": {
+        "name": "SeedVR2 Image Upscale"
+      }
+    },
+    "fal-ai-bria-creative-upscale": {
+      "meta": {
+        "name": "Bria Creative Upscale"
+      }
+    },
+    "fal-ai-ideogram-upscale": {
+      "meta": {
+        "name": "Ideogram Upscale"
+      }
+    },
     "fal-ai-z-image-turbo": {
       "meta": {
         "name": "Z-Image Turbo"

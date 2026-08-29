@@ -149,7 +149,7 @@ const created = await erase.generate({
 })
 ```
 
-该入口只携带 3 个 Fal 消除模型、Fal adapter 和 Fal CDN 上传；默认 99 目录、其他供应商与 LLM
+该入口只携带 3 个 Fal 消除模型、Fal adapter 和 Fal CDN 上传；默认 105 目录、其他供应商与 LLM
 不会进入静态依赖图。单模型可改用 `tool-models/fal/<model>` 导出的 `pack`。运行时能力筛选只过滤
 已导入候选；要缩小 UXP bundle，必须从 import 边界选择 pack，不能先导入集合再靠筛选期待 tree-shake。
 

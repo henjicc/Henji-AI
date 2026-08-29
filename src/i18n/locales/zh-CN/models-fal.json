@@ -96,6 +96,26 @@
         "name": "Topaz 图片放大"
       }
     },
+    "fal-ai-topaz-transparent-upscale": {
+      "meta": {
+        "name": "Topaz 透明图放大"
+      }
+    },
+    "fal-ai-seedvr2-image-upscale": {
+      "meta": {
+        "name": "SeedVR2 图片放大"
+      }
+    },
+    "fal-ai-bria-creative-upscale": {
+      "meta": {
+        "name": "Bria 创意放大"
+      }
+    },
+    "fal-ai-ideogram-upscale": {
+      "meta": {
+        "name": "Ideogram 图片放大"
+      }
+    },
     "fal-ai-z-image-turbo": {
       "meta": {
         "name": "Z-Image Turbo"
