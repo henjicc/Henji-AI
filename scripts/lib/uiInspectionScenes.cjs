@@ -614,11 +614,27 @@ function createUiInspectionScenes({ canvasFixtureProjectId, settlePage }) {
     const editor = page.getByRole('dialog', { name: /^(多角度视图)$/i })
     await editor.waitFor({ state: 'visible', timeout: 12000 })
     await editor.locator('[data-multi-angle-orbit="demand"] canvas').waitFor({ state: 'visible', timeout: 12000 })
-    await editor.getByText(/不代表真实相机焦距/).waitFor({ state: 'visible', timeout: 8000 })
+    await editor.getByText(/不代表真实焦距/).waitFor({ state: 'visible', timeout: 8000 })
     if (await editor.locator('textarea, [contenteditable="true"]').count()) throw new Error('角度编辑器不应显示提示词')
 
+    const cameraControl = editor.locator('[data-multi-angle-camera-control="true"]')
+    const cameraBounds = await cameraControl.boundingBox()
+    if (!cameraBounds) throw new Error('多角度可视化镜头控制区域不可见')
+    const initialYaw = Number(await cameraControl.getAttribute('data-multi-angle-yaw'))
+    await page.mouse.move(cameraBounds.x + cameraBounds.width / 2, cameraBounds.y + cameraBounds.height / 2)
+    await page.mouse.down()
+    await page.mouse.move(cameraBounds.x + cameraBounds.width / 2 + 80, cameraBounds.y + cameraBounds.height / 2 - 60, { steps: 8 })
+    await page.mouse.up()
+    const draggedCamera = await cameraControl.evaluate((element) => ({
+      yaw: Number(element.getAttribute('data-multi-angle-yaw')),
+      vertical: Number(element.getAttribute('data-multi-angle-vertical')),
+    }))
+    if (!(draggedCamera.yaw < initialYaw) || !(draggedCamera.vertical < 0)) {
+      throw new Error(`多角度镜头拖拽未同步模型控制量：${JSON.stringify(draggedCamera)}`)
+    }
+
     // 修改后取消，验证草稿不会污染节点。
-    await editor.getByRole('slider', { name: /水平控制/ }).fill('20')
+    await editor.getByRole('slider', { name: /水平环绕/ }).fill('20')
     await editor.getByRole('button', { name: /^(取消)$/i }).click()
     await editor.getByRole('button', { name: /^(放弃更改)$/i }).click()
     await editor.waitFor({ state: 'hidden', timeout: 12000 })
@@ -674,6 +690,15 @@ function createUiInspectionScenes({ canvasFixtureProjectId, settlePage }) {
     await reopened.getByRole('button', { name: /^(调整角度)$/i }).click()
     await editor.waitFor({ state: 'visible', timeout: 12000 })
     await editor.getByRole('button', { name: /^顶视$/ }).waitFor({ state: 'visible', timeout: 8000 })
+    await editor.getByRole('button', { name: /连续控制/ }).click()
+    const reopenedCameraControl = editor.locator('[data-multi-angle-camera-control="true"][data-multi-angle-profile="continuous"]')
+    await reopenedCameraControl.waitFor({ state: 'visible', timeout: 8000 })
+    const reopenedBounds = await reopenedCameraControl.boundingBox()
+    if (!reopenedBounds) throw new Error('重新打开后多角度镜头控制区域不可见')
+    await page.mouse.move(reopenedBounds.x + reopenedBounds.width / 2, reopenedBounds.y + reopenedBounds.height / 2)
+    await page.mouse.down()
+    await page.mouse.move(reopenedBounds.x + reopenedBounds.width / 2 + 72, reopenedBounds.y + reopenedBounds.height / 2 - 48, { steps: 8 })
+    await page.mouse.up()
     await settlePage(page, 900)
   }
 

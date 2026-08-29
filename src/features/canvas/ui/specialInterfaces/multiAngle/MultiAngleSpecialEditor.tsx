@@ -26,10 +26,16 @@ import {
   type MultiAngleConfigV1,
   type MultiAngleContinuousViewV1,
   type MultiAngleControlProfile,
+  type MultiAngleDiscretePreset,
   type MultiAngleViewV1,
 } from '@/features/canvas/capabilities/multiAnglePolicy'
 import type { CanvasSpecialEditorSurfaceProps } from '../specialEditorRegistry'
 import { buildMultiAngleEditorDraft } from './multiAngleEditorState'
+import {
+  describeMultiAngleCamera,
+  describeMultiAngleProximity,
+  describeMultiAngleVertical,
+} from './multiAngleCameraVisualizerState'
 import { MultiAngleOrbitPreview } from './MultiAngleOrbitPreview'
 
 function sourceImageFromState(state: Readonly<DynamicValueMap>): string | null {
@@ -76,6 +82,7 @@ function RangeField({
   max,
   step,
   suffix,
+  valueText,
   onChange,
 }: {
   label: string
@@ -84,13 +91,14 @@ function RangeField({
   max: number
   step: number
   suffix: string
+  valueText?: string
   onChange: (value: number) => void
 }): JSX.Element {
   return (
     <label className="block space-y-1.5">
       <span className="flex items-center justify-between gap-3">
         <span className={UI_TEXT_LABEL_CLASS}>{label}</span>
-        <span className={UI_TEXT_META_CLASS}>{value}{suffix}</span>
+        <span className={UI_TEXT_META_CLASS}>{valueText ?? `${value}${suffix}`}</span>
       </span>
       <UiRangeInput
         min={min}
@@ -142,7 +150,29 @@ export default function MultiAngleSpecialEditor({
   }
   const patchContinuous = (patch: Partial<MultiAngleContinuousViewV1>): void => {
     if (!selected || selected.kind !== 'continuous') return
-    updateConfig(replaceView(config, { ...selected, ...patch }))
+    const index = Math.max(config.views.findIndex((view) => view.viewId === selected.viewId), 0)
+    updateConfig(replaceView(config, {
+      ...selected,
+      ...patch,
+      presetId: 'custom',
+      label: `自定义视角 ${index + 1}`,
+    }))
+  }
+  const chooseDiscretePreset = (preset: MultiAngleDiscretePreset): void => {
+    if (!selected || selected.kind !== 'discrete') return
+    const existing = config.views.find((view) => view.kind === 'discrete' && view.preset === preset)
+    if (existing) {
+      setSelectedViewId(existing.viewId)
+      return
+    }
+    const definition = MULTI_ANGLE_DISCRETE_VIEW_PRESETS.find((item) => item.view.preset === preset)
+    if (!definition) return
+    const next = { ...definition.view }
+    updateConfig({
+      ...config,
+      views: config.views.map((view) => view.viewId === selected.viewId ? next : view),
+    })
+    setSelectedViewId(next.viewId)
   }
   const close = (): void => { onCancel() }
 
@@ -180,9 +210,18 @@ export default function MultiAngleSpecialEditor({
                 <p className="text-sm">请先为节点连接一张源图</p>
               </div>
             )}
-            <MultiAngleOrbitPreview views={config.views} selectedViewId={selected?.viewId ?? ''} />
-            <div className="pointer-events-none absolute bottom-3 left-3 right-3 rounded-lg bg-overlay px-3 py-2 text-xs text-text-soft">
-              轨道仅用于表达模型控制方向，不代表真实相机焦距、物理角度或空间重建精度。
+            <MultiAngleOrbitPreview
+              views={config.views}
+              selectedViewId={selected?.viewId ?? ''}
+              onContinuousChange={patchContinuous}
+              onDiscretePresetChange={chooseDiscretePreset}
+            />
+            <div className="pointer-events-none absolute left-3 right-3 top-3 z-sticky rounded-lg bg-overlay px-3 py-2">
+              <p className="truncate text-xs font-medium text-text">{selected ? describeMultiAngleCamera(selected) : '未选择视图'}</p>
+              <p className="mt-0.5 text-3xs text-text-muted">{selected?.kind === 'continuous' ? '拖动改变环绕与俯仰 · 滚轮改变景别' : '拖动或点击，吸附到模型支持的完整方位'}</p>
+            </div>
+            <div className="pointer-events-none absolute bottom-3 left-3 right-3 z-sticky rounded-lg bg-overlay px-3 py-2 text-xs text-text-soft">
+              可视轨道只编辑模型控制量，不代表真实焦距、物理角度或空间重建精度。
             </div>
           </div>
         </div>
@@ -240,11 +279,11 @@ export default function MultiAngleSpecialEditor({
           {selected?.kind === 'continuous' ? (
             <section className="mt-5 space-y-4">
               <h3 className={UI_TEXT_SECTION_CLASS}>当前视图 · 模型控制</h3>
-              <RangeField label="水平控制" value={selected.yawControlDeg} min={-90} max={90} step={1} suffix="" onChange={(value) => patchContinuous({ yawControlDeg: value })} />
-              <RangeField label="垂直控制" value={selected.verticalControl} min={-1} max={1} step={0.05} suffix="" onChange={(value) => patchContinuous({ verticalControl: value })} />
-              <RangeField label="向前移动" value={selected.proximity} min={0} max={10} step={0.5} suffix="" onChange={(value) => patchContinuous({ proximity: value })} />
+              <RangeField label="水平环绕" value={selected.yawControlDeg} min={-90} max={90} step={1} suffix="°" onChange={(value) => patchContinuous({ yawControlDeg: value })} />
+              <RangeField label="垂直俯仰" value={selected.verticalControl} min={-1} max={1} step={0.05} suffix="" valueText={describeMultiAngleVertical(selected.verticalControl)} onChange={(value) => patchContinuous({ verticalControl: value })} />
+              <RangeField label="景别缩放" value={selected.proximity} min={0} max={10} step={0.5} suffix="" valueText={describeMultiAngleProximity(selected.proximity)} onChange={(value) => patchContinuous({ proximity: value })} />
               <div className="flex items-center justify-between gap-3">
-                <span className={UI_TEXT_LABEL_CLASS}>广角倾向</span>
+                <span className={UI_TEXT_LABEL_CLASS}>广角镜头</span>
                 <UiSwitch checked={selected.wideAngle} onCheckedChange={(checked) => patchContinuous({ wideAngle: checked })} />
               </div>
             </section>
