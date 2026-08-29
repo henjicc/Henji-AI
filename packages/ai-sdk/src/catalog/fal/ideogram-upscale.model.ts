@@ -15,6 +15,7 @@ export const falIdeogramUpscaleModel = defineModel({
     tags: ['image-to-image', 'upscaling', 'provider-fal'],
     polling: { interval: 3000, maxAttempts: 200, expectedAttempts: 45 },
   },
+  acceptsPrompt: false,
   inputLimits: { images: { min: 1, max: 1 }, videos: { max: 0 } },
   params: [
     {

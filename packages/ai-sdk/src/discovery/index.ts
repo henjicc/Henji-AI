@@ -156,7 +156,8 @@ export function createModelCapabilityDiscovery(input: CreateCapabilityDiscoveryI
 export function profileGenerationModel(model: ModelRuntimeDefinition): ModelCapabilityProfile {
   const tags = [...new Set(model.meta.tags ?? [])]
   const operations = deriveGenerationOperations(model.meta.type, tags)
-  const inputs = new Set<ModelContentKind>(['text'])
+  const inputs = new Set<ModelContentKind>()
+  if (model.acceptsPrompt !== false) inputs.add('text')
   collectParamInputs(model, inputs)
   collectLimitInputs(model.inputLimits, inputs)
   for (const field of model.runtimeConstraints?.mediaFields ?? []) inputs.add(field.kind)

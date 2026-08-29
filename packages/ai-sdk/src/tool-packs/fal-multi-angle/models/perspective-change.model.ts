@@ -1,5 +1,5 @@
 import { defineModel } from '../../../catalog/defineModel'
-import type { JsonValue } from '../../../types/runtime'
+import { requireSingleMultiAngleImage } from '../shared'
 
 export const FAL_PERSPECTIVE_PRESETS = [
   'front',
@@ -13,10 +13,6 @@ export const FAL_PERSPECTIVE_PRESETS = [
   'three_quarter_right',
 ] as const
 
-function firstMedia(value: JsonValue): string {
-  return Array.isArray(value) && typeof value[0] === 'string' ? value[0].trim() : ''
-}
-
 export const falPerspectiveChangeModel = defineModel({
   meta: {
     id: 'fal-perspective-change',
@@ -26,6 +22,7 @@ export const falPerspectiveChangeModel = defineModel({
     tags: ['image-edit', 'multi-angle', 'perspective-preset', 'provider-fal'],
     polling: { interval: 2_000, maxAttempts: 180, expectedAttempts: 30 },
   },
+  acceptsPrompt: false,
   inputLimits: { images: { exact: 1 }, videos: { max: 0 } },
   requirements: [{
     id: 'fal-perspective-change-source',
@@ -49,7 +46,7 @@ export const falPerspectiveChangeModel = defineModel({
   endpoints: 'fal-ai/image-apps-v2/perspective',
   request: {
     builder: (params) => {
-      const image = firstMedia(params.image)
+      const image = requireSingleMultiAngleImage(params, '透视变换')
       const requested = String(params.targetPerspective || 'front')
       const targetPerspective = FAL_PERSPECTIVE_PRESETS.includes(
         requested as (typeof FAL_PERSPECTIVE_PRESETS)[number]

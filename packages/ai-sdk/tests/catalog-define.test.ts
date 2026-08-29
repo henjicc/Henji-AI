@@ -71,6 +71,11 @@ describe('SDK defineModel（纯函数）', () => {
     expect(() => defineModel(model)).toThrow(ModelRuntimeValidationError)
   })
 
+  it('acceptsPrompt 显式值不是 boolean 时校验失败', () => {
+    const model = baseModel({ acceptsPrompt: 'false' as never })
+    expect(() => defineModel(model)).toThrow('Model acceptsPrompt must be a boolean')
+  })
+
   it('dropdown 缺少 options 时校验失败', () => {
     const model = baseModel({
       params: [
@@ -95,6 +100,32 @@ describe('SDK defineModel（纯函数）', () => {
   it('pricing 既无 fixed 也无 calculator 时校验失败', () => {
     const model = baseModel({ pricing: { currency: '$' } })
     expect(() => defineModel(model)).toThrow('pricing must have either fixed or calculator')
+  })
+
+  it('pricing 单位参考价必须声明非空单位', () => {
+    const valid = baseModel({
+      pricing: { currency: '$', calculator: () => 0.03, estimateMode: 'unit', estimateUnit: 'MP' },
+    })
+    expect(defineModel(valid).pricing).toMatchObject({ estimateMode: 'unit', estimateUnit: 'MP' })
+
+    const missingUnit = baseModel({
+      pricing: { currency: '$', calculator: () => 0.03, estimateMode: 'unit' },
+    })
+    expect(() => defineModel(missingUnit)).toThrow(/estimateUnit must be a non-empty string/)
+  })
+
+  it('pricing estimateMode 只接受 total 或 unit', () => {
+    const invalid = baseModel({
+      pricing: { currency: '$', fixed: 0.03, estimateMode: 'request' as never },
+    })
+    expect(() => defineModel(invalid)).toThrow(/estimateMode must be total or unit/)
+  })
+
+  it('pricing 非单位参考价不能孤立声明 estimateUnit', () => {
+    const invalid = baseModel({
+      pricing: { currency: '$', fixed: 0.03, estimateUnit: 'MP' },
+    })
+    expect(() => defineModel(invalid)).toThrow(/estimateUnit requires estimateMode unit/)
   })
 
   it('重复参数 ID 时校验失败', () => {

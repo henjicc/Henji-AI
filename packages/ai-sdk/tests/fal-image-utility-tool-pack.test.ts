@@ -91,8 +91,14 @@ describe('Fal 图片实用工具 pack', () => {
     expect(models.every((model) => model.inputLimits?.images?.exact === 1)).toBe(true)
     expect(models.every((model) => model.requirements?.[0].require.images?.exact === 1)).toBe(true)
     expect(models.every((model) => model.params.every((param) => (
-      !['prompt', 'negativePrompt', 'seed', 'outputFormat', 'enableSafetyChecker', 'syncMode'].includes(param.id)
+      !['negativePrompt', 'seed', 'outputFormat', 'enableSafetyChecker', 'syncMode'].includes(param.id)
     )))).toBe(true)
+    const outpaintPrompt = modelById('fal-image-apps-v2-outpaint').params
+      .find((param) => param.id === 'prompt')
+    expect(outpaintPrompt).toMatchObject({ type: 'textarea', default: '', maxLength: 500 })
+    expect(outpaintPrompt?.required).not.toBe(true)
+    expect(models.filter((model) => model.meta.id !== 'fal-image-apps-v2-outpaint')
+      .every((model) => model.params.every((param) => param.id !== 'prompt'))).toBe(true)
   })
 
   it('重打光使用 18 个官方风格与对象比例，非法风格回落 natural', () => {
@@ -126,9 +132,11 @@ describe('Fal 图片实用工具 pack', () => {
       lighting_level: 0,
     })
     expect(model.pricing.calculator?.({})).toBe(0.03)
+    expect(model.pricing).toMatchObject({ estimateMode: 'unit', estimateUnit: 'MP' })
+    expect(model.pricing.description).toMatch(/单位参考价.*实际总价/)
   })
 
-  it('扩图夹紧官方范围、截断提示词并拒绝全 0 无操作', () => {
+  it('扩图夹紧官方范围、校验提示词上限并拒绝全 0 无操作', () => {
     const model = modelById('fal-image-apps-v2-outpaint')
     expect(model.request.builder({
       image: ['uxp://source'],
@@ -137,7 +145,7 @@ describe('Fal 图片实用工具 pack', () => {
       expandTop: 0,
       expandBottom: 1.6,
       zoomOutPercentage: 99,
-      prompt: `  ${'x'.repeat(510)}  `,
+      prompt: `  ${'x'.repeat(500)}  `,
     })).toEqual({
       image_url: 'uxp://source',
       expand_left: 700,
@@ -149,6 +157,11 @@ describe('Fal 图片实用工具 pack', () => {
     })
     expect(() => model.request.builder({
       image: ['uxp://source'],
+      expandLeft: 1,
+      prompt: 'x'.repeat(501),
+    })).toThrow(/提示词最多 500 个字符/)
+    expect(() => model.request.builder({
+      image: ['uxp://source'],
       expandLeft: 0,
       expandRight: 0,
       expandTop: 0,
@@ -156,6 +169,8 @@ describe('Fal 图片实用工具 pack', () => {
       zoomOutPercentage: 0,
     })).toThrow(/至少需要扩展一侧/)
     expect(model.pricing.calculator?.({})).toBe(0.035)
+    expect(model.pricing).toMatchObject({ estimateMode: 'unit', estimateUnit: 'MP' })
+    expect(model.pricing.description).toMatch(/单位参考价.*实际总价/)
   })
 
   it('商品摄影使用特殊媒体字段，照片修复要求至少一项功能开启', () => {
@@ -226,11 +241,26 @@ describe('Fal 图片实用工具 pack', () => {
     }
   })
 
+  it('六个工具都兼容 SDK 标准 uploadedImages 媒体键', () => {
+    for (const model of models) {
+      const defaults = Object.fromEntries(model.params.map((param) => [param.id, param.default]))
+      const request = model.request.builder({
+        ...defaults,
+        image: [],
+        uploadedImages: ['sdk-source.png'],
+      })
+      const mediaField = model.meta.id.includes('product-photography')
+        ? 'product_image_url'
+        : 'image_url'
+      expect(request[mediaField], model.meta.id).toBe('sdk-source.png')
+    }
+  })
+
   it.each([
     ['relighting', 'fal-image-apps-v2-relighting', {
       image: ['uxp://source'], lightingStyle: 'golden_hour', aspectRatio: '4:3',
     }],
-    ['control-light', 'fal-control-light', { image: ['uxp://source'], lightingLevel: 0.75 }],
+    ['control-light', 'fal-control-light', { uploadedImages: ['uxp://source'], lightingLevel: 0.75 }],
     ['outpaint', 'fal-image-apps-v2-outpaint', {
       image: ['uxp://source'], expandLeft: 200, expandRight: 200, expandTop: 0, expandBottom: 0,
       zoomOutPercentage: 20, prompt: 'continue the sunset landscape naturally',

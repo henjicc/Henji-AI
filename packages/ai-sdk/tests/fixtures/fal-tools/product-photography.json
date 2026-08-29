@@ -1,5 +1,5 @@
 {
-  "source": "Fal official llms.txt and OpenAPI schema, verified 2026-08-29; URLs replaced with non-network fixtures",
+  "source": "依据 Fal 官方字段表构造（非官方字面响应、非真实日志）；llms.txt: https://fal.ai/models/fal-ai/image-apps-v2/product-photography/llms.txt；OpenAPI: https://fal.ai/api/openapi/queue/openapi.json?endpoint_id=fal-ai/image-apps-v2/product-photography；采集 2026-08-29。input 按该端点请求 schema 构造；submit/status/result 按 Fal 公共队列契约与端点响应 schema 构造，request_id 与结果 URL 替换为不可联网 fixture 值。",
   "endpoint": "fal-ai/image-apps-v2/product-photography",
   "input": {
     "product_image_url": "uxp://source",

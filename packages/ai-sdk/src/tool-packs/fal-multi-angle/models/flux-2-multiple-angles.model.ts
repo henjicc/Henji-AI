@@ -4,12 +4,7 @@ import {
   falOneMegapixelSize,
 } from '../../../catalog/fal/imageSizing'
 import type { JsonObject, JsonValue } from '../../../types/runtime'
-
-function cleanMedia(value: JsonValue): string[] {
-  return Array.isArray(value)
-    ? value.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
-    : []
-}
+import { requireSingleMultiAngleImage } from '../shared'
 
 function clampNumber(value: JsonValue, min: number, max: number, fallback: number): number {
   const numeric = typeof value === 'number' ? value : Number(value)
@@ -35,6 +30,7 @@ export const falFlux2MultipleAnglesModel = defineModel({
     tags: ['image-edit', 'multi-angle', 'camera-control', 'provider-fal'],
     polling: { interval: 2_000, maxAttempts: 180, expectedAttempts: 30 },
   },
+  acceptsPrompt: false,
   inputLimits: { images: { exact: 1 }, videos: { max: 0 } },
   requirements: [{
     id: 'fal-flux-2-multiple-angles-source',
@@ -62,10 +58,7 @@ export const falFlux2MultipleAnglesModel = defineModel({
   endpoints: 'fal-ai/flux-2-lora-gallery/multiple-angles',
   request: {
     builder: (params) => {
-      const images = cleanMedia(params.image)
-      if (images.length !== 1) {
-        throw new Error('FLUX 2 多角度首版必须且只能提供 1 张源图')
-      }
+      const image = requireSingleMultiAngleImage(params, 'FLUX 2 多角度首版')
       const ratio = typeof params.__firstImageRatio === 'number'
         && Number.isFinite(params.__firstImageRatio)
         && params.__firstImageRatio > 0
@@ -73,7 +66,7 @@ export const falFlux2MultipleAnglesModel = defineModel({
         : 1
 
       return {
-        image_urls: images,
+        image_urls: [image],
         horizontal_angle: clampNumber(params.horizontalAngle, 0, 360, 0),
         vertical_angle: clampNumber(params.verticalAngle, 0, 60, 0),
         zoom: clampNumber(params.zoom, 0, 10, 5),

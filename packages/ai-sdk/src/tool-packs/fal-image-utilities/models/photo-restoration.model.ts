@@ -16,6 +16,7 @@ export const falPhotoRestorationModel = defineModel({
     tags: ['image-edit', 'photo-restoration', 'provider-fal'],
     polling: { interval: 2_000, maxAttempts: 180, expectedAttempts: 30 },
   },
+  acceptsPrompt: false,
   inputLimits: { images: { exact: 1 }, videos: { max: 0 } },
   requirements: [{
     id: 'fal-photo-restoration-source',

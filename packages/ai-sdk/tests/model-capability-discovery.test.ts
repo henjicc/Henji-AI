@@ -32,9 +32,64 @@ describe('统一模型能力画像与筛选', () => {
       expect(profile.providerIds).toEqual([model.meta.provider])
       expect(profile.outputModalities).toEqual([model.meta.type])
       expect(profile.operations.length).toBeGreaterThan(0)
-      expect(profile.acceptedInputContentKinds).toContain('text')
+      expect(profile.acceptedInputContentKinds.includes('text')).toBe(model.acceptsPrompt !== false)
       expect(profile.outputContentKinds).toEqual([model.meta.type])
     }
+  })
+
+  it('缺省 acceptsPrompt 保持常规生成模型的共享提示词语义', () => {
+    const regularModel = catalog.find((model) => model.meta.tags?.includes('text-to-image'))
+    expect(regularModel).toBeDefined()
+    expect(regularModel?.acceptsPrompt).toBeUndefined()
+    expect(profileGenerationModel(regularModel!).acceptedInputContentKinds).toContain('text')
+  })
+
+  it('Fal erase 工具只声明媒体输入，不误报 text', () => {
+    expectPromptlessModels(falErasePack.models, [
+      'fal-flux-pro-erase',
+      'fal-bria-eraser',
+      'fal-finegrain-eraser',
+    ])
+  })
+
+  it('Fal 无提示词图片实用工具只声明媒体输入，Outpaint 保留可选 text', () => {
+    const promptlessUtilities = falImageUtilityPack.models.filter(
+      (model) => model.meta.id !== 'fal-image-apps-v2-outpaint'
+    )
+    expectPromptlessModels(promptlessUtilities, [
+      'fal-image-apps-v2-relighting',
+      'fal-control-light',
+      'fal-image-apps-v2-product-photography',
+      'fal-image-apps-v2-photo-restoration',
+      'fal-pixelcut-background-removal',
+    ])
+
+    const outpaint = falImageUtilityPack.models.find(
+      (model) => model.meta.id === 'fal-image-apps-v2-outpaint'
+    )
+    expect(outpaint).toBeDefined()
+    expect(outpaint?.acceptsPrompt).not.toBe(false)
+    expect(outpaint?.params.some((param) => param.id === 'prompt')).toBe(true)
+    expect(profileGenerationModel(outpaint!).acceptedInputContentKinds).toEqual(['text', 'image'])
+  })
+
+  it('Fal 多角度工具只声明媒体输入，不误报 text', () => {
+    expectPromptlessModels(falMultiAnglePack.models, [
+      'fal-qwen-image-edit-2509-multiple-angles',
+      'fal-perspective-change',
+      'fal-flux-2-multiple-angles',
+    ])
+  })
+
+  it('Fal 五个图片放大模型只声明媒体输入，不误报 text', () => {
+    const upscaleModels = catalog.filter((model) => model.meta.tags?.includes('upscaling'))
+    expectPromptlessModels(upscaleModels, [
+      'fal-ai-topaz-image-upscale',
+      'fal-ai-topaz-transparent-upscale',
+      'fal-ai-seedvr2-image-upscale',
+      'fal-ai-bria-creative-upscale',
+      'fal-ai-ideogram-upscale',
+    ])
   })
 
   it('真实LLM目录逐项从input/capabilities派生chat画像', () => {
@@ -177,5 +232,17 @@ function fixtureModule(
       contract: { input: [{ kind: input }], output: [{ kind: output }] },
     },
     execute: async (value) => value,
+  }
+}
+
+function expectPromptlessModels(
+  models: readonly (typeof generationModels)[number][],
+  expectedIds: readonly string[],
+): void {
+  expect(new Set(models.map((model) => model.meta.id))).toEqual(new Set(expectedIds))
+  for (const model of models) {
+    expect(model.acceptsPrompt).toBe(false)
+    expect(profileGenerationModel(model).acceptedInputContentKinds).toContain('image')
+    expect(profileGenerationModel(model).acceptedInputContentKinds).not.toContain('text')
   }
 }

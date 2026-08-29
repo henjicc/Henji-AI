@@ -147,15 +147,81 @@ describe('Fal 多角度按需工具 pack', () => {
     expect(model.pricing?.fixed).toBe(0.04)
   })
 
+  it('三个 profile 统一按标准媒体键优先级读取单张源图', () => {
+    const cases = [
+      {
+        params: {
+          uploadedFilePaths: [' managed://source.png '],
+          images: ['canvas://source.png'],
+          uploadedImages: ['dialog://source.png'],
+          image: ['param://source.png'],
+        },
+        expected: 'managed://source.png',
+      },
+      {
+        params: {
+          uploadedFilePaths: [],
+          images: ['canvas://source.png'],
+          uploadedImages: ['dialog://source.png'],
+          image: ['param://source.png'],
+        },
+        expected: 'canvas://source.png',
+      },
+      {
+        params: {
+          uploadedFilePaths: [],
+          images: [],
+          uploadedImages: ['dialog://source.png'],
+          image: ['param://source.png'],
+        },
+        expected: 'dialog://source.png',
+      },
+      {
+        params: {
+          uploadedFilePaths: [],
+          images: [],
+          uploadedImages: [],
+          image: ['param://source.png'],
+        },
+        expected: 'param://source.png',
+      },
+    ] satisfies Array<{ params: JsonObject; expected: string }>
+
+    for (const model of models) {
+      for (const testCase of cases) {
+        const body = model.request.builder(testCase.params)
+        const source = model.meta.id === 'fal-perspective-change'
+          ? body.image_url
+          : Array.isArray(body.image_urls) ? body.image_urls[0] : undefined
+        expect(source, `${model.meta.id} source`).toBe(testCase.expected)
+      }
+    }
+  })
+
+  it('三个 profile 对空图和优先来源多图保持相同错误语义', () => {
+    for (const model of models) {
+      expect(() => model.request.builder({
+        uploadedFilePaths: [],
+        images: [],
+        uploadedImages: [],
+        image: [],
+      }), `${model.meta.id} empty`).toThrow(/必须且只能提供 1 张源图/)
+      expect(() => model.request.builder({
+        uploadedFilePaths: ['one.png', 'two.png'],
+        images: ['fallback.png'],
+      }), `${model.meta.id} multiple`).toThrow(/必须且只能提供 1 张源图/)
+    }
+  })
+
   it.each([
     ['qwen-image-edit-2509-multiple-angles', 'fal-qwen-image-edit-2509-multiple-angles', {
-      image: ['uxp://source'], rotateRightLeft: 45, verticalAngle: 0, moveForward: 0, wideAngleLens: false,
+      uploadedFilePaths: ['uxp://source'], rotateRightLeft: 45, verticalAngle: 0, moveForward: 0, wideAngleLens: false,
     }],
-    ['perspective-change', 'fal-perspective-change', { image: ['uxp://source'], targetPerspective: 'back' }],
+    ['perspective-change', 'fal-perspective-change', { images: ['uxp://source'], targetPerspective: 'back' }],
     ['flux-2-multiple-angles', 'fal-flux-2-multiple-angles', {
-      image: ['uxp://source'], horizontalAngle: 90, verticalAngle: 30, zoom: 5, __firstImageRatio: 1,
+      uploadedImages: ['uxp://source'], horizontalAngle: 90, verticalAngle: 30, zoom: 5, __firstImageRatio: 1,
     }],
-  ] as const)('%s 通过 Fal 公共上传、队列、轮询与结果解析完成全链路', async (
+  ] as const)('%s 通过标准媒体键、Fal 公共上传、队列、轮询与结果解析完成全链路', async (
     fixtureName,
     modelId,
     params

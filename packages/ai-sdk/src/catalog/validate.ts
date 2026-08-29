@@ -34,6 +34,9 @@ export function validateRuntimeModel(
   fail: ValidationFailure = defaultFail
 ): void {
   validateMeta(model, fail)
+  if (model.acceptsPrompt !== undefined && typeof model.acceptsPrompt !== 'boolean') {
+    fail('Model acceptsPrompt must be a boolean')
+  }
   validateParams(model, fail)
   validateEndpoints(model, fail)
   validatePricing(model, fail)
@@ -339,5 +342,21 @@ function validatePricing(model: ModelRuntimeDefinition, fail: ValidationFailure)
 
   if (hasFixed && pricing.fixed! < 0) {
     fail('Model pricing.fixed must be non-negative')
+  }
+
+  if (
+    pricing.estimateMode !== undefined
+    && pricing.estimateMode !== 'total'
+    && pricing.estimateMode !== 'unit'
+  ) {
+    fail('Model pricing.estimateMode must be total or unit')
+  }
+
+  if (pricing.estimateMode === 'unit') {
+    if (typeof pricing.estimateUnit !== 'string' || pricing.estimateUnit.trim().length === 0) {
+      fail('Model pricing.estimateUnit must be a non-empty string for unit estimates')
+    }
+  } else if (pricing.estimateUnit !== undefined) {
+    fail('Model pricing.estimateUnit requires estimateMode unit')
   }
 }

@@ -1,6 +1,10 @@
 import { defineModel } from '../../../catalog/defineModel'
 import type { JsonObject } from '../../../types/runtime'
-import { clampInteger, clampNumber, requireSingleUtilityImage } from '../shared'
+import {
+  clampInteger,
+  clampNumber,
+  requireSingleUtilityImage,
+} from '../shared'
 
 export const falOutpaintModel = defineModel({
   meta: {
@@ -24,6 +28,7 @@ export const falOutpaintModel = defineModel({
     { id: 'expandTop', type: 'number', order: 4, default: 0, min: 0, max: 700, step: 1 },
     { id: 'expandBottom', type: 'number', order: 5, default: 0, min: 0, max: 700, step: 1 },
     { id: 'zoomOutPercentage', type: 'number', order: 6, default: 20, min: 0, max: 90, step: 1 },
+    { id: 'prompt', type: 'textarea', order: 7, default: '', maxLength: 500 },
   ],
   runtimeConstraints: {
     mediaFields: [{ field: 'image_url', kind: 'image' }],
@@ -56,7 +61,10 @@ export const falOutpaintModel = defineModel({
         expand_bottom: expandBottom,
         zoom_out_percentage: zoomOutPercentage,
       }
-      const prompt = typeof params.prompt === 'string' ? params.prompt.trim().slice(0, 500) : ''
+      const prompt = typeof params.prompt === 'string' ? params.prompt.trim() : ''
+      if (prompt.length > 500) {
+        throw new Error('Fal 扩图提示词最多 500 个字符')
+      }
       if (prompt.length > 0) body.prompt = prompt
       return body
     },
@@ -64,7 +72,9 @@ export const falOutpaintModel = defineModel({
   pricing: {
     currency: '$',
     calculator: () => 0.035,
-    description: '$0.035/百万像素；首版按 1MP 明示估算 $0.035/次',
+    estimateMode: 'unit',
+    estimateUnit: 'MP',
+    description: 'Fal 标示 $0.035/MP 的单位参考价；计费像素口径及实际总价以 Fal 平台账单为准',
   },
 })
 

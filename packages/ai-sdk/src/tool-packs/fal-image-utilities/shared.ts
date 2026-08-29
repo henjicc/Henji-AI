@@ -6,7 +6,12 @@ export const FAL_IMAGE_APP_RATIO_OPTIONS = ['smart', ...FAL_IMAGE_APP_RATIOS] as
 export type FalImageAppRatio = (typeof FAL_IMAGE_APP_RATIOS)[number]
 
 export function requireSingleUtilityImage(params: JsonObject, label: string): string {
-  const images = [params.uploadedFilePaths, params.images, params.image]
+  const images = [
+    params.uploadedFilePaths,
+    params.images,
+    params.uploadedImages,
+    params.image,
+  ]
     .map(cleanMedia)
     .find((items) => items.length > 0) ?? []
   if (images.length !== 1) {

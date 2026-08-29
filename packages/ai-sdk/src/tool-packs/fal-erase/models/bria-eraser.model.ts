@@ -9,6 +9,7 @@ export const briaEraserModel = defineModel({
     tags: ['image-edit', 'erase', 'mask-input', 'provider-fal'],
     polling: { interval: 2_000, maxAttempts: 180, expectedAttempts: 20 },
   },
+  acceptsPrompt: false,
   inputLimits: { images: { exact: 2 }, videos: { max: 0 } },
   requirements: [{
     id: 'fal-bria-eraser-media',

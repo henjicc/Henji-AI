@@ -376,6 +376,10 @@ export interface RuntimePricingConfig {
   currency: Currency
   fixed?: number
   calculator?: (params: JsonObject) => number
+  /** 数值是当前参数总价，还是单个计费单位的参考价；缺省保持既有总价语义。 */
+  estimateMode?: 'total' | 'unit'
+  /** `estimateMode: 'unit'` 时用于展示的计费单位，例如 `MP`。 */
+  estimateUnit?: string
   /** 价格说明，纯字符串（非 I18nText），历史上一直是这样 */
   description?: string
 }
@@ -489,6 +493,13 @@ export interface RuntimeConstraints {
 
 export interface ModelRuntimeDefinition {
   meta: ModelRuntimeMeta
+
+  /**
+   * 是否接受生成协议共享的 `prompt` 文本输入。为兼容既有模型与第三方定义，缺省视为 `true`；
+   * 纯媒体工具必须显式设为 `false`，避免能力发现把它们误报为可接收文本。
+   */
+  acceptsPrompt?: boolean
+
   params: RuntimeParamDef[]
 
   /** 生成前置条件（可选） */

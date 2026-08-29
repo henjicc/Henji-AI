@@ -1,14 +1,9 @@
 import { defineModel } from '../../../catalog/defineModel'
 import { falOneMegapixelSize } from '../../../catalog/fal/imageSizing'
 import type { JsonObject, JsonValue } from '../../../types/runtime'
+import { requireSingleMultiAngleImage } from '../shared'
 
 const CONTINUOUS_IMAGE_RATIOS = ['1:1', '4:3', '3:4', '16:9', '9:16'] as const
-
-function cleanMedia(value: JsonValue): string[] {
-  return Array.isArray(value)
-    ? value.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
-    : []
-}
 
 function clampNumber(value: JsonValue, min: number, max: number, fallback = 0): number {
   const numeric = typeof value === 'number' ? value : Number(value)
@@ -34,6 +29,7 @@ export const falQwenImageEdit2509MultipleAnglesModel = defineModel({
     tags: ['image-edit', 'multi-angle', 'camera-control', 'provider-fal'],
     polling: { interval: 2_000, maxAttempts: 180, expectedAttempts: 30 },
   },
+  acceptsPrompt: false,
   inputLimits: { images: { exact: 1 }, videos: { max: 0 } },
   requirements: [{
     id: 'fal-qwen-image-edit-2509-multiple-angles-source',
@@ -53,7 +49,7 @@ export const falQwenImageEdit2509MultipleAnglesModel = defineModel({
   endpoints: 'fal-ai/qwen-image-edit-2509-lora-gallery/multiple-angles',
   request: {
     builder: (params) => {
-      const images = cleanMedia(params.image)
+      const image = requireSingleMultiAngleImage(params, '多角度生成')
       const ratio = typeof params.__firstImageRatio === 'number'
         && Number.isFinite(params.__firstImageRatio)
         && params.__firstImageRatio > 0
@@ -61,7 +57,7 @@ export const falQwenImageEdit2509MultipleAnglesModel = defineModel({
         : 1
 
       return {
-        image_urls: images.slice(0, 1),
+        image_urls: [image],
         image_size: falOneMegapixelSize(nearestImageRatio(ratio)),
         rotate_right_left: clampNumber(params.rotateRightLeft, -90, 90),
         vertical_angle: clampNumber(params.verticalAngle, -1, 1),

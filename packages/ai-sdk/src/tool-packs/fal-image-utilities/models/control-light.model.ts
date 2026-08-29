@@ -11,6 +11,7 @@ export const falControlLightModel = defineModel({
     tags: ['image-edit', 'low-light-enhancement', 'provider-fal'],
     polling: { interval: 2_000, maxAttempts: 180, expectedAttempts: 30 },
   },
+  acceptsPrompt: false,
   inputLimits: { images: { exact: 1 }, videos: { max: 0 } },
   requirements: [{
     id: 'fal-control-light-source',
@@ -35,7 +36,9 @@ export const falControlLightModel = defineModel({
   pricing: {
     currency: '$',
     calculator: () => 0.03,
-    description: '$0.03/百万像素；首版按 1MP 明示估算 $0.03/次',
+    estimateMode: 'unit',
+    estimateUnit: 'MP',
+    description: 'Fal 标示 $0.03/MP 的单位参考价；计费像素口径及实际总价以 Fal 平台账单为准',
   },
 })
 
