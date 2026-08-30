@@ -1,5 +1,5 @@
 import type { SourceImageMetadata } from './contracts'
-import { throwIfImageSourceAborted } from './abortable-singleflight'
+import { readAssociatedNclxCicp } from './isobmff-cicp'
 
 export function sourceBitsPerSample(metadata: { bitsPerSample?: number; depth?: string }): number {
   if (
@@ -29,16 +29,9 @@ export function cloneSourceMetadata(metadata: SourceImageMetadata): SourceImageM
 }
 
 export async function readNclxCicp(
-  _filePath: string,
-  _format: string | undefined,
+  filePath: string,
+  format: string | undefined,
   signal?: AbortSignal,
 ): Promise<SourceImageMetadata['cicp']> {
-  throwIfImageSourceAborted(signal)
-  /*
-   * Fail closed until CICP is obtained from a parser that validates the HEIF/AVIF
-   * item-property graph. Searching arbitrary file bytes for a `colr/nclx` pattern
-   * lets unrelated or trailing payload bytes turn an SDR source into a false HDR
-   * document. High-bit-depth AVIF still remains 16-bit SDR and is never quantized.
-   */
-  return null
+  return readAssociatedNclxCicp(filePath, format, signal)
 }
