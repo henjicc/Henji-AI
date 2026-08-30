@@ -34,6 +34,8 @@ export function resolveOffloadByteThreshold(contextWindow: number | null | undef
  *
  * `discover_application_capabilities` 是最典型的一个：它返回的不是"可以扫一眼的观察结果"，
  * 而是模型写任何一段脚本都必须完整持有的 scriptApi 契约。
+ * `run_henji_script` 的回执同样是模型判断是否收工的唯一权威；卸载后它还是会全量回读，
+ * 只是平白多一轮并重发整段历史。
  *
  * camera 场景同一份代码连测三次，路径不同结果就差三倍：
  * - 内联（载荷落在下限内）：4 回合 5.75 万 token，零回读
@@ -49,6 +51,7 @@ export function resolveOffloadByteThreshold(contextWindow: number | null | undef
 const INLINE_FLOOR_BY_TOOL: Readonly<Record<string, number>> = {
   search_models: 24 * 1024,
   discover_application_capabilities: 128 * 1024,
+  run_henji_script: 128 * 1024,
 }
 
 /**
@@ -163,4 +166,3 @@ export class AgentArtifactStore {
     for (const artifactRef of artifactRefs) this.artifacts.delete(artifactRef)
   }
 }
-

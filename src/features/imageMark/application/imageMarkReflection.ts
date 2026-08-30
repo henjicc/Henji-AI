@@ -11,7 +11,7 @@ import { imageEditDocumentToMarkDoc, type ImageMarkDoc, type MarkItem } from '@/
 import { useImageEditSessionStore } from '@/features/imageEdit/store/imageEditSessionStore'
 
 import { IMAGE_MARK_ANNOTATION_FIELDS, IMAGE_MARK_DOCUMENT_FIELDS, IMAGE_MARK_ENTITY_TYPES } from './imageMarkFields'
-import { annotationRef, documentRevision, requireSessionDocument, splitAnnotationRef } from './imageMarkSessionAccess'
+import { annotationRef, imageMarkRevision, requireSessionDocument, splitAnnotationRef } from './imageMarkSessionAccess'
 
 function digest(seed: string): string {
   const value = [...seed].reduce((total, char) => (total * 33 + char.charCodeAt(0)) >>> 0, 5381).toString(16)
@@ -43,7 +43,7 @@ class ImageMarkDocumentReflectionProvider implements ApplicationEntityProvider {
     return {
       refs: page.map((sessionId) => ({ kind: this.entityType, id: sessionId })),
       nextCursor,
-      revisions: { image_mark: sessionIds.length },
+      revisions: { image_mark: imageMarkRevision() },
     }
   }
 
@@ -55,16 +55,16 @@ class ImageMarkDocumentReflectionProvider implements ApplicationEntityProvider {
     return {
       ref,
       entityType: this.entityType,
-      revisions: { image_mark: documentRevision(document) },
+      revisions: { image_mark: imageMarkRevision() },
       properties: request.propertyIds ? Object.fromEntries(Object.entries(values).filter(([id]) => request.propertyIds?.includes(id))) : values,
       capturedAt: new Date().toISOString(),
     }
   }
 
   async getPropertyAvailability(ref: ApplicationRef, propertyIds: string[]) {
-    const document = requireSessionDocument(ref.id)
+    requireSessionDocument(ref.id)
     const descriptorMap = new Map(fieldDescriptors(IMAGE_MARK_DOCUMENT_FIELDS).map((item) => [item.id, item]))
-    const revisions = { image_mark: documentRevision(document) }
+    const revisions = { image_mark: imageMarkRevision() }
     return propertyIds.map((propertyId) => {
       const descriptor = descriptorMap.get(propertyId)
       if (!descriptor) throw new Error(`PROPERTY_NOT_FOUND:${propertyId}`)
@@ -81,7 +81,12 @@ class ImageMarkDocumentReflectionProvider implements ApplicationEntityProvider {
   }
 
   async getCollectionAvailability(parent: ApplicationRef) {
-    return unrestrictedCollectionAvailability(this.entityType, parent, { image_mark: 0 }, ['image_mark:write'])
+    return unrestrictedCollectionAvailability(
+      this.entityType,
+      parent,
+      { image_mark: imageMarkRevision() },
+      ['image_mark:write'],
+    )
   }
 }
 
@@ -101,7 +106,7 @@ class ImageMarkAnnotationReflectionProvider implements ApplicationEntityProvider
       imageEditDocumentToMarkDoc(record.document).items.map((item) => annotationRef(sessionId, item))
     )
     const { page, nextCursor } = paginate(refs, request)
-    return { refs: page, nextCursor, revisions: { image_mark: refs.length } }
+    return { refs: page, nextCursor, revisions: { image_mark: imageMarkRevision() } }
   }
 
   async readEntity(ref: ApplicationRef, request: { propertyIds?: string[] }) {
@@ -113,7 +118,7 @@ class ImageMarkAnnotationReflectionProvider implements ApplicationEntityProvider
     return {
       ref,
       entityType: this.entityType,
-      revisions: { image_mark: documentRevision(document) },
+      revisions: { image_mark: imageMarkRevision() },
       properties: request.propertyIds ? Object.fromEntries(Object.entries(values).filter(([id]) => request.propertyIds?.includes(id))) : values,
       capturedAt: new Date().toISOString(),
     }
@@ -124,7 +129,7 @@ class ImageMarkAnnotationReflectionProvider implements ApplicationEntityProvider
     const document = requireSessionDocument(sessionId)
     findAnnotation(imageEditDocumentToMarkDoc(document), annotationId)
     const descriptorMap = new Map(fieldDescriptors(IMAGE_MARK_ANNOTATION_FIELDS).map((item) => [item.id, item]))
-    const revisions = { image_mark: documentRevision(document) }
+    const revisions = { image_mark: imageMarkRevision() }
     return propertyIds.map((propertyId) => {
       const descriptor = descriptorMap.get(propertyId)
       if (!descriptor) throw new Error(`PROPERTY_NOT_FOUND:${propertyId}`)
@@ -141,11 +146,11 @@ class ImageMarkAnnotationReflectionProvider implements ApplicationEntityProvider
   }
 
   async getCollectionAvailability(parent: ApplicationRef) {
-    const document = requireSessionDocument(parent.id)
+    requireSessionDocument(parent.id)
     return unrestrictedCollectionAvailability(
       this.entityType,
       parent,
-      { image_mark: documentRevision(document) },
+      { image_mark: imageMarkRevision() },
       ['image_mark:write'],
     )
   }

@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest'
 
 import type { AgentToolObservation } from '../../../../../src/core/assistant/toolContracts'
+import {
+  runHenjiScriptCapability,
+  runHenjiScriptOutputSchema,
+} from '../../../../../src/core/assistant/capabilities/henjiScriptApplicationCapabilities'
 import type { ModelStepToolCall } from '@henjicc/ai-sdk'
 import { toolMessage } from '../runner/runner-results'
 import { buildAgentContextLayers } from './prompt-layers'
@@ -61,10 +65,17 @@ function observation(): AgentToolObservation {
 function offloadedInObservationLayer(
   resolveHistoryProjection?: (toolName: string) => ((output: unknown) => unknown) | undefined
 ): boolean {
+  return observationWasOffloaded(observation(), resolveHistoryProjection)
+}
+
+function observationWasOffloaded(
+  currentObservation: AgentToolObservation,
+  resolveHistoryProjection?: (toolName: string) => ((output: unknown) => unknown) | undefined
+): boolean {
   const input: AgentContextBuildInput = {
     ...skillBuildInput(undefined),
     contextWindowBudget: CONTEXT_WINDOW,
-    observations: [observation()],
+    observations: [currentObservation],
     conversation: [],
     resolveHistoryProjection,
   }
@@ -144,6 +155,71 @@ describe('分页结果不再被卸载', () => {
  */
 describe('按工具的内联下限', () => {
   const window = 64_000
+
+  it('Henji Script 的完整回执留在当轮，不卸载后再让模型回读', () => {
+    const stepCount = 12
+    const output = runHenjiScriptOutputSchema.parse({
+      ok: true,
+      status: 'completed',
+      scriptRunRef: 'script:run-1',
+      steps: Array.from({ length: stepCount }, (_, index) => ({
+        stepId: `step_${index}`,
+        api: 'entities.update',
+        status: 'completed',
+        location: { line: index + 1, column: 1 },
+        resultRefs: [{ kind: 'canvas.node', id: `node-${index}` }],
+        effectCount: 1,
+        summary: `已更新节点 ${index}`,
+      })),
+      resultRefs: Array.from({ length: stepCount }, (_, index) => ({
+        kind: 'canvas.node', id: `node-${index}`,
+      })),
+      effects: Array.from({ length: stepCount }, (_, index) => ({
+        effect: 'update',
+        entityTypes: ['canvas.node'],
+        propertyIds: ['canvas.node.position'],
+        targetRefs: [{ kind: 'canvas.node', id: `node-${index}` }],
+        count: 1,
+        verified: true,
+        evidence: Array.from(
+          { length: 8 },
+          (_, evidenceIndex) => `step_${index}:read-back:${evidenceIndex}:${'验'.repeat(60)}`,
+        ),
+      })),
+      verification: {
+        passed: true,
+        summary: '全部节点已从正式状态源读回验证。',
+        evidence: ['formal-verification-sentinel'],
+      },
+      error: null,
+      submittedTasks: [],
+      checkpoint: null,
+      revision: stepCount,
+      scopeRevisions: { canvas: stepCount },
+    })
+    const project = (raw: unknown): unknown => runHenjiScriptCapability.projectForHistory?.(
+      runHenjiScriptOutputSchema.parse(raw),
+    )
+    const projected = project(output)
+    const generic = resolveToolOffloadByteThreshold('read_application_entity', window)
+    expect(shouldOffloadObservation(projected, generic), '回执应确实超过通用门槛').toBe(true)
+
+    const currentObservation: AgentToolObservation = {
+      source: { toolName: 'run_henji_script', toolVersion: 1, toolCallId: 'script-call-1' },
+      trust: 'untrusted_observation',
+      dataClasses: ['C1'],
+      summary: `Henji Script 已完成 ${stepCount} 个语义步骤并通过正式验证。`,
+      output,
+    }
+    const call: ModelStepToolCall = {
+      toolCallId: 'script-call-1', toolName: 'run_henji_script', input: {}, dynamic: false,
+    }
+    const message = toolMessage(call, currentObservation, window, () => project)
+
+    expect(JSON.stringify(message)).toContain('formal-verification-sentinel')
+    expect(JSON.stringify(message)).not.toContain('largeResultOmitted')
+    expect(observationWasOffloaded(currentObservation, () => project)).toBe(false)
+  })
 
   /*
    * camera 实测的三条载荷都必须内联：13 项能力约 55KB、20 项能力 66.4KB 与 71.8KB。

@@ -27,6 +27,14 @@ interface ImageEditSessionRecord {
 
 interface ImageEditSessionStoreState {
   sessions: Record<string, ImageEditSessionRecord>
+  /**
+   * image_mark 全域的乐观并发基线。
+   *
+   * 图片编辑器允许同时存在多个 session，但宿主并发信封只发布领域级 scope，不能承载
+   * "每个 session 一份 revision"。因此所有会话状态变化共用这一条单调计数：它比单文档
+   * 内容哈希更保守（另一个会话变化也会触发冲突），但不会让助手绕过用户刚完成的编辑。
+   */
+  revision: number
   /** 幂等：会话已存在时不覆盖，供 StrictMode 下的重复挂载安全调用。 */
   ensureSession: (sessionId: string, initialDocument?: ImageEditDocument) => void
   disposeSession: (sessionId: string) => void
@@ -46,10 +54,12 @@ function requireSession(
 
 export const useImageEditSessionStore = create<ImageEditSessionStoreState>((set, get) => ({
   sessions: {},
+  revision: 0,
 
   ensureSession: (sessionId, initialDocument) => set((state) => {
     if (state.sessions[sessionId]) return state
     return {
+      revision: state.revision + 1,
       sessions: {
         ...state.sessions,
         [sessionId]: { document: initialDocument ?? createEmptyImageEditDocument(), undoStack: [], redoStack: [] },
@@ -60,12 +70,13 @@ export const useImageEditSessionStore = create<ImageEditSessionStoreState>((set,
   disposeSession: (sessionId) => set((state) => {
     if (!(sessionId in state.sessions)) return state
     const { [sessionId]: _removed, ...rest } = state.sessions
-    return { sessions: rest }
+    return { sessions: rest, revision: state.revision + 1 }
   }),
 
   pushHistorySnapshot: (sessionId, base) => set((state) => {
     const session = requireSession(state.sessions, sessionId)
     return {
+      revision: state.revision + 1,
       sessions: {
         ...state.sessions,
         [sessionId]: {
@@ -80,6 +91,7 @@ export const useImageEditSessionStore = create<ImageEditSessionStoreState>((set,
   commitDocument: (sessionId, next, recordHistory = true) => set((state) => {
     const session = requireSession(state.sessions, sessionId)
     return {
+      revision: state.revision + 1,
       sessions: {
         ...state.sessions,
         [sessionId]: {
@@ -93,7 +105,10 @@ export const useImageEditSessionStore = create<ImageEditSessionStoreState>((set,
 
   updateDocumentWithoutHistory: (sessionId, next) => set((state) => {
     const session = requireSession(state.sessions, sessionId)
-    return { sessions: { ...state.sessions, [sessionId]: { ...session, document: next } } }
+    return {
+      sessions: { ...state.sessions, [sessionId]: { ...session, document: next } },
+      revision: state.revision + 1,
+    }
   }),
 
   undo: (sessionId) => {
@@ -101,6 +116,7 @@ export const useImageEditSessionStore = create<ImageEditSessionStoreState>((set,
     const previous = session?.undoStack[session.undoStack.length - 1]
     if (!session || !previous) return null
     set((state) => ({
+      revision: state.revision + 1,
       sessions: {
         ...state.sessions,
         [sessionId]: {
@@ -118,6 +134,7 @@ export const useImageEditSessionStore = create<ImageEditSessionStoreState>((set,
     const next = session?.redoStack[session.redoStack.length - 1]
     if (!session || !next) return null
     set((state) => ({
+      revision: state.revision + 1,
       sessions: {
         ...state.sessions,
         [sessionId]: {

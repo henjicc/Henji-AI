@@ -1,5 +1,5 @@
 import type { ApplicationRef } from '@/core/assistant/applicationCapabilities'
-import { parseImageEditDocument } from '@/core/imageEdit'
+import type { ImageEditDocument } from '@/core/imageEdit'
 import { createLogger } from '@/core/logging'
 import { inspectAsset } from '@/commands/assetLibrary'
 import { readImageInfo } from '@/commands/image'
@@ -15,6 +15,7 @@ import {
 } from '@/features/generation/domain/generationHistoryFilter'
 
 import { createImageEditPreview } from '@/features/imageEdit/application/imageEditApplicationService'
+import { getStoredImageEditPreview } from '@/features/imageEdit/application/imageEditSessionRegistry'
 import type { CapabilityExecutionContext } from './handlerTypes'
 import { openApplicationSurface } from './surfaceRegistry'
 
@@ -24,6 +25,7 @@ interface ResolvedImageSource {
   ref: ApplicationRef
   source: string
   name: string
+  document?: ImageEditDocument
 }
 
 type HistoryRecord = Awaited<ReturnType<typeof databaseService.getHistory>>[number]
@@ -209,10 +211,25 @@ async function resolveImageSource(ref: ApplicationRef): Promise<ResolvedImageSou
       name: asset.displayName || `素材-${asset.id.slice(0, 8)}.png`,
     }
   }
+  if (ref.kind === 'image_edit.preview') {
+    const preview = getStoredImageEditPreview(ref.id)
+    if (!preview) throw new Error('NOT_FOUND')
+    try {
+      const info = await readImageInfo(preview.source)
+      return {
+        ref,
+        source: preview.source,
+        name: info.fileName || `图片编辑预览-${ref.id.slice(-8)}.${info.extension || 'png'}`,
+        document: structuredClone(preview.document),
+      }
+    } catch {
+      throw new Error('NOT_FOUND')
+    }
+  }
   throw new Error('INVALID_INPUT')
 }
 
-function openImageEditor(source: ResolvedImageSource, document?: ReturnType<typeof parseImageEditDocument>): string {
+function openImageEditor(source: ResolvedImageSource, document?: ImageEditDocument): string {
   const sessionRef = `image-edit-session:${source.ref.kind}:${source.ref.id}`
   offerImageEditorHandoff({
     sessionRef,
@@ -233,7 +250,7 @@ export async function openImageEditorWithSource(
     sourceId: sourceRef.id,
   })
   const source = await resolveImageSource(sourceRef)
-  const sessionRef = openImageEditor(source)
+  const sessionRef = openImageEditor(source, source.document)
   const surface = openApplicationSurface('tool.image_edit', correlation)
   logger.info('image_editor.open.completed', {
     event: 'assistant.image_editor.open.completed',
@@ -243,18 +260,17 @@ export async function openImageEditorWithSource(
   })
   return {
     sourceRef,
-    sessionRef,
+    resultRefs: [{ kind: 'application.surface', id: 'tool.image_edit' }],
     ...surface,
   }
 }
 
-export async function createImageEditPreviewFromRef(
+async function createImageEditPreviewForSource(
   input: {
     sourceRef: ApplicationRef
     operations: Record<string, unknown>[]
-  },
-  correlation: Pick<CapabilityExecutionContext, 'requestId' | 'taskId'> = {}
-): Promise<Record<string, unknown>> {
+  }
+): Promise<{ source: ResolvedImageSource; preview: Record<string, unknown> }> {
   logger.debug('image_editor.preview.start', {
     event: 'assistant.image_editor.preview.start',
     sourceKind: input.sourceRef.kind,
@@ -266,24 +282,38 @@ export async function createImageEditPreviewFromRef(
     sourceRef: `${input.sourceRef.kind}:${input.sourceRef.id}`,
     source: source.source,
     operations: input.operations,
+    ...(source.document ? { existingDocument: source.document } : {}),
   })
-  const document = parseImageEditDocument(preview.document)
-  const sessionRef = openImageEditor(source, document)
-  const surface = openApplicationSurface('tool.image_edit', correlation)
   logger.info('image_editor.preview.completed', {
     event: 'assistant.image_editor.preview.completed',
     sourceKind: input.sourceRef.kind,
     sourceId: input.sourceRef.id,
     previewRef: preview.previewRef,
   })
+  return { source, preview }
+}
+
+function imageEditPreviewResult(
+  sourceRef: ApplicationRef,
+  preview: Record<string, unknown>,
+): Record<string, unknown> {
+  const previewRef = String(preview.previewRef)
   return {
-    previewRef: preview.previewRef,
-    sourceRef: input.sourceRef,
-    sessionRef,
+    previewRef,
+    sourceRef,
+    resultRefs: [{ kind: 'image_edit.preview', id: previewRef }],
     operationCount: preview.operationCount,
     hasEffect: preview.hasEffect,
     width: preview.width,
     height: preview.height,
-    ...surface,
   }
+}
+
+/** 创建不可变预览快照；后台能力不得顺带抢占用户当前界面。 */
+export async function createImageEditPreviewFromRef(input: {
+  sourceRef: ApplicationRef
+  operations: Record<string, unknown>[]
+}): Promise<Record<string, unknown>> {
+  const { preview } = await createImageEditPreviewForSource(input)
+  return imageEditPreviewResult(input.sourceRef, preview)
 }

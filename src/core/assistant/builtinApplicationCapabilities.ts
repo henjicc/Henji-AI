@@ -1,6 +1,5 @@
 import { z } from 'zod'
 
-import { imageEditOperationSchema } from '../../features/imageEdit/application/imageEditControlCatalog'
 import {
   applicationRefSchema,
   type ApplicationCapabilityDefinition,
@@ -13,6 +12,7 @@ import {
 import { agentAttachmentSchema } from './attachments'
 import {
   capabilityControl,
+  capabilityOutputSchema,
   directOnlyObservedEffects,
 } from './capabilities/defineApplicationCapability'
 
@@ -327,16 +327,20 @@ export const listGenerationHistoryCapability = defineCapability({
   ],
 })
 
+const imageEditorSourceRefSchema = applicationRefSchema.extend({
+  kind: z.enum(['generation.result', 'asset', 'image_edit.preview']),
+}).strict()
+
 export const openImageEditorWithSourceCapability = defineCapability({
   id: 'open_image_editor_with_source',
-  version: 1,
+  version: 2,
   title: '在图片编辑中打开结果',
-  description: '把生成结果或素材引用直接传给图片编辑器，不经过画布，也不要求先写入素材库。',
+  description: '把生成结果、素材或已创建的图片编辑预览显式打开到图片编辑器，不经过画布。',
   domain: 'image_edit',
   aliases: ['传到图片编辑', '打开图片编辑', '编辑最后一张', 'open image editor'],
   side: 'frontend',
   readOnly: false,
-  control: capabilityControl('navigate', ['image_edit.session', 'application.surface']),
+  control: capabilityControl('navigate', ['application.surface']),
   risk: 'R0',
   dataClasses: ['C1'],
   permission: 'image_edit:write',
@@ -345,20 +349,30 @@ export const openImageEditorWithSourceCapability = defineCapability({
   timeoutMs: 10_000,
   supportsPreview: false,
   supportsUndo: false,
-  requiredScopes: ['generation', 'toolbox', 'navigation'],
-  prerequisites: ['必须提供生成历史或素材能力返回的图片引用。'],
-  acceptsRefs: ['generation.result', 'asset'],
-  producesRefs: ['image_edit.session', 'application.surface'],
-  successEvidence: ['图片编辑器打开并返回对应会话引用。'],
+  requiredScopes: ['toolbox', 'navigation'],
+  prerequisites: ['必须提供生成历史、素材或图片编辑预览能力返回的稳定图片引用。'],
+  acceptsRefs: ['generation.result', 'asset', 'image_edit.preview'],
+  producesRefs: ['application.surface'],
+  successEvidence: ['图片编辑器已打开，返回并验证 Surface ID=tool.image_edit。'],
   failureRecovery: ['引用不存在或不是图片时停止并说明，不创建画布项目。'],
-  inputSchema: z.object({ sourceRef: applicationRefSchema }).strict(),
-  outputSchema: revisionOutputSchema,
+  inputSchema: z.object({ sourceRef: imageEditorSourceRefSchema }).strict(),
+  outputSchema: capabilityOutputSchema({
+    sourceRef: imageEditorSourceRefSchema,
+    surfaceId: z.literal('tool.image_edit'),
+    resultRefs: z.tuple([
+      z.object({ kind: z.literal('application.surface'), id: z.literal('tool.image_edit') }).strict(),
+    ]),
+  }),
   aiInputSchema: {
     type: 'object',
     properties: {
       sourceRef: {
         type: 'object',
-        properties: { kind: { type: 'string' }, id: { type: 'string' }, label: { type: 'string' } },
+        properties: {
+          kind: { type: 'string', enum: ['generation.result', 'asset', 'image_edit.preview'] },
+          id: { type: 'string' },
+          label: { type: 'string' },
+        },
         required: ['kind', 'id'],
         additionalProperties: false,
       },
@@ -366,77 +380,9 @@ export const openImageEditorWithSourceCapability = defineCapability({
     required: ['sourceRef'],
     additionalProperties: false,
   },
-})
-
-export const createImageEditPreviewFromRefCapability = defineCapability({
-  id: 'create_image_edit_preview_from_ref',
-  version: 1,
-  title: '创建图片编辑预览',
-  description: '对生成结果或素材引用创建裁剪、旋转、镜像、标注或模糊预览，并在图片编辑器中显示。',
-  domain: 'image_edit',
-  aliases: ['矩形标注', '文字标注', '图片编辑预览', '图片模糊', '高斯模糊', 'annotate image'],
-  side: 'frontend',
-  readOnly: false,
-  // 同 create_image_edit_preview：预览是新建的实体，create 必须一并声明，Facet 才结得了账。
-  control: capabilityControl('execute', ['image_edit.preview'], {
-    alsoImpacts: [{ effect: 'create', entityTypes: ['image_edit.preview'] }],
-  }),
-  risk: 'R1',
-  dataClasses: ['C1'],
-  permission: 'image_edit:write',
-  idempotent: true,
-  destructive: false,
-  timeoutMs: 15_000,
-  supportsPreview: true,
-  supportsUndo: true,
-  requiredScopes: ['generation', 'toolbox', 'navigation'],
-  prerequisites: ['图片引用有效，标注坐标和文本已明确。'],
-  acceptsRefs: ['generation.result', 'asset'],
-  producesRefs: ['image_edit.preview', 'image_edit.session'],
-  successEvidence: ['返回预览引用、实际尺寸和操作数量，原图未被覆盖。'],
-  failureRecovery: ['输入非法时读取图片信息后修正参数；不得改用画布猜测节点。'],
-  inputSchema: z.object({
-    sourceRef: applicationRefSchema,
-    operations: z.array(imageEditOperationSchema).min(1).max(32),
-  }).strict(),
-  outputSchema: z.object({
-    previewRef: z.string(),
-    sourceRef: applicationRefSchema,
-    operationCount: z.number().int().nonnegative(),
-    hasEffect: z.boolean(),
-    width: z.number().positive(),
-    height: z.number().positive(),
-  }).and(revisionOutputSchema),
-  aiInputSchema: {
-    type: 'object',
-    properties: {
-      sourceRef: {
-        type: 'object',
-        properties: { kind: { type: 'string' }, id: { type: 'string' }, label: { type: 'string' } },
-        required: ['kind', 'id'],
-        additionalProperties: false,
-      },
-      operations: {
-        type: 'array',
-        minItems: 1,
-        maxItems: 32,
-        items: { type: 'object', additionalProperties: true },
-      },
-    },
-    required: ['sourceRef', 'operations'],
-    additionalProperties: false,
-  },
-  resolveObservedEffects: (_input, output) => {
-    const targetRefs = [{ kind: 'image_edit.preview', id: output.previewRef }]
-    return [
-      {
-        effect: 'execute', entityTypes: ['image_edit.preview'], propertyIds: [],
-        targetRefs, count: 1, verified: false, evidence: [],
-      },
-      {
-        effect: 'create', entityTypes: ['image_edit.preview'], propertyIds: [],
-        targetRefs, count: 1, verified: false, evidence: [],
-      },
-    ]
-  },
+  resolveObservedEffects: (_input, output) => [{
+    effect: 'navigate', entityTypes: ['application.surface'], propertyIds: [],
+    targetRefs: [...output.resultRefs],
+    count: 1, verified: false, evidence: [],
+  }],
 })

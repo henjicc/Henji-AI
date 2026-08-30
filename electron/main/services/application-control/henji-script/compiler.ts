@@ -6,9 +6,16 @@ import {
   type HenjiInstruction,
   type HenjiCallKind,
   type HenjiScriptPlan,
-  type HenjiSourceLocation,
   type HenjiValueExpression,
 } from './types'
+import {
+  expressionCallAlternative,
+  locationOf,
+  SCRIPT_RESULT_ALTERNATIVE,
+  sourceSnippet,
+  syntaxAlternative,
+  unsupported,
+} from './compiler-diagnostics'
 
 const MAX_SOURCE_BYTES = 32 * 1024
 const MAX_NESTING = 4
@@ -16,30 +23,6 @@ const MAX_LOOP_ITERATIONS = 64
 const MAX_OPERATIONS = 128
 const FORBIDDEN_PROPERTIES = new Set(['__proto__', 'prototype', 'constructor'])
 const HELPER_NAMES = new Set(['range', 'take', 'lerp', 'clamp', 'sin', 'cos', 'tan', 'find', 'filter'])
-
-/**
- * `.find(x => x.name === '…')` 是模型的第一反应，而受限语言里没有闭包，也不会有。
- *
- * 实测这一条打挂过素材库场景、拖慢过画布与生成场景：模型连撞 `.find`、`let 标志位`、
- * `for...of 读取结果` 三种写法，全被拒，最后放弃。拒绝本身是对的——闭包意味着任意求值——
- * 但只说"不允许"等于不给出路。`app.find(数组, '字段', 值)` 用字段等值替代闭包：
- * 表达力刚好覆盖实测的全部真实用法，又不引入任意代码执行。
- */
-const ARRAY_METHOD_ALTERNATIVE = new Map<string, string>([
-  ['find', "改用 app.find(数组, '字段名', 期望值)，返回第一个命中的元素，没有就是 null。"],
-  ['filter', "改用 app.filter(数组, '字段名', 期望值)，返回全部命中的元素。"],
-  ['some', "改用 app.find(数组, '字段名', 期望值) 再 app.assert.exists / app.assert.absent。"],
-  ['findIndex', "改用 app.find(数组, '字段名', 期望值) 直接拿到那个元素，不要绕道下标。"],
-  ['slice', '改用 app.take(数组, 数量) 取前 N 项；受限语言不支持任意数组方法。'],
-  ['map', '受限语言没有闭包。要取多项里的某个字段，先用 app.filter 选出来再逐项写明。'],
-  ['forEach', '受限语言没有闭包。要对多个已知实体逐个写入，写成多次 app.entities.* 调用。'],
-])
-
-/** 字段名支持点分路径（例如 'ref.id'），与运行期 app.find 的解析保持一致。 */
-function arrayMethodAlternative(pathName: string): string | undefined {
-  const segments = pathName.split('.')
-  return ARRAY_METHOD_ALTERNATIVE.get(segments[segments.length - 1] ?? '')
-}
 const CALL_APIS = new Set([
   'app.action', 'app.recipe',
   'app.entities.list', 'app.entities.read', 'app.entities.create',
@@ -48,69 +31,6 @@ const CALL_APIS = new Set([
 const ASSERT_APIS = new Set([
   'app.assert.equal', 'app.assert.exists', 'app.assert.absent', 'app.assert.matches',
 ])
-
-function locationOf(sourceFile: ts.SourceFile, node: ts.Node): HenjiSourceLocation {
-  const point = sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile))
-  return { line: point.line + 1, column: point.character + 1 }
-}
-
-/**
- * 被拒绝的那几种写法，各自对应到 Henji Script 里能做同一件事的写法。
- *
- * 拒绝信息只写 `不支持语法 NewExpression` 是没用的：`NewExpression` 是 TypeScript 编译器的
- * 内部枚举名，调用方既不知道自己哪一行写了它，也不知道该改成什么。实测素材库那次运行，六段
- * 脚本里有四段直接死在语法上——循环展不开、JSON.stringify、正则字面量、new——每次都只收到
- * 一个 SyntaxKind 名字，只能换个写法再猜一次，四个回合一件事都没做成。
- *
- * 这张表按**模型真的会写出来的东西**列，不追求穷举 SyntaxKind。
- */
-const SYNTAX_ALTERNATIVES: Readonly<Record<string, string>> = {
-  NewExpression: '不要 new 任何对象：脚本里只有字面量、读取结果和 app.* 调用；需要时间戳或随机值就交给宿主生成。',
-  RegularExpressionLiteral: '正则只能作为字符串字面量传给 app.assert.matches，不能写成 /…/ 字面量参与运算。',
-  ArrowFunction: '不允许自定义函数：有界遍历用 for...of，条件用三元表达式。',
-  FunctionExpression: '不允许自定义函数：有界遍历用 for...of，条件用三元表达式。',
-  AwaitExpression: 'await 只能直接写在 app.* 调用前，不能 await 其他表达式。',
-  SpreadElement: '不支持展开运算符；把要写的字段逐条列出来。',
-  ObjectBindingPattern: '不支持解构；用 const 取一次再点访问。',
-  ArrayBindingPattern: '不支持解构；用 const 取一次再按下标访问。',
-  ThisKeyword: '脚本里没有 this。',
-  PrefixUnaryExpression: '一元运算只支持负号字面量；取反请改用三元表达式或 app.assert。',
-  // 模型按 TypeScript 习惯写 `'settings.registry' as const`，本来只想要那个字符串。
-  AsExpression: '不需要类型标注：去掉 as const / as 类型，直接写字符串或数字字面量。',
-  SatisfiesExpression: '不需要类型标注：去掉 satisfies，直接写字面量。',
-  TypeAssertionExpression: '不需要类型标注：去掉尖括号断言，直接写字面量。',
-  NonNullExpression: '不需要非空断言：去掉结尾的 !，字段不存在时宿主会直接告诉你。',
-}
-
-const CALL_ALTERNATIVES: Readonly<Record<string, string>> = {
-  'JSON.stringify': '不要序列化：断言直接比对字段值（app.assert.equal），需要整段内容就把读取结果原样传给下一步。',
-  'JSON.parse': '读取结果已经是结构化对象，不需要解析。',
-  'Math.random': '脚本必须确定性；随机值由宿主生成，不能在脚本里取。',
-  'Date.now': '脚本必须确定性；时间戳由宿主生成，不能在脚本里取。',
-  'Object.keys': '不支持反射遍历；直接写出要用的属性 ID。',
-  'Object.entries': '不支持反射遍历；直接写出要用的属性 ID。',
-  'Array.isArray': '不支持类型判断；结果字段的形状由 scriptApi 的 schema 给出。',
-}
-
-/** 出错那一行的原文，截短后放进错误信息——比 SyntaxKind 名字有用得多。 */
-function sourceSnippet(sourceFile: ts.SourceFile, node: ts.Node): string {
-  const text = node.getText(sourceFile).replace(/\s+/g, ' ').trim()
-  return text.length > 80 ? `${text.slice(0, 80)}…` : text
-}
-
-function unsupported(
-  sourceFile: ts.SourceFile,
-  node: ts.Node,
-  message: string,
-  alternative?: string
-): never {
-  throw new HenjiScriptError(
-    'SCRIPT_UNSUPPORTED_SYNTAX',
-    'compile',
-    `${message}：\`${sourceSnippet(sourceFile, node)}\`${alternative ? `。${alternative}` : ''}`,
-    locationOf(sourceFile, node)
-  )
-}
 
 function apiPath(sourceFile: ts.SourceFile, expression: ts.Expression): string {
   if (ts.isIdentifier(expression)) return expression.text
@@ -131,6 +51,21 @@ function propertyName(sourceFile: ts.SourceFile, name: ts.PropertyName): string 
   return unsupported(sourceFile, name, '对象只允许静态属性名')
 }
 
+function unknownVariable(
+  sourceFile: ts.SourceFile,
+  node: ts.Node,
+  name: string,
+  variables: ReadonlyMap<string, HenjiValueExpression>,
+): never {
+  const available = [...variables.keys()].slice(0, 24)
+  return unsupported(
+    sourceFile, node, `未知变量 ${name}`,
+    available.length > 0
+      ? `当前可用变量：${available.join('、')}；请使用准确的 const 名称。`
+      : '当前还没有任何变量；先用 const 声明字面量或保存 app.* 调用结果。',
+  )
+}
+
 function expressionPath(
   sourceFile: ts.SourceFile,
   node: ts.Expression,
@@ -142,7 +77,12 @@ function expressionPath(
       unsupported(sourceFile, node, `禁止访问属性 ${node.name.text}`)
     }
     const base = expressionPath(sourceFile, node.expression, variables)
-    if (!base) return null
+    if (!base) {
+      if (ts.isIdentifier(node.expression)) {
+        unknownVariable(sourceFile, node.expression, node.expression.text, variables)
+      }
+      return null
+    }
     if (base.kind === 'variable') return { ...base, path: [...base.path, node.name.text] }
     /*
      * 自己刚写出来的 const 也要能读回字段。
@@ -181,7 +121,12 @@ function expressionPath(
       unsupported(sourceFile, node, `禁止访问属性 ${segment}`)
     }
     const base = expressionPath(sourceFile, node.expression, variables)
-    if (!base) return null
+    if (!base) {
+      if (ts.isIdentifier(node.expression)) {
+        unknownVariable(sourceFile, node.expression, node.expression.text, variables)
+      }
+      return null
+    }
     if (base.kind === 'variable') return { ...base, path: [...base.path, segment] }
     if (base.kind === 'helper') return { ...base, path: [...(base.path ?? []), segment] }
     // 与点访问同一条道理：字面量的下标在编译期就确定，静态解析出来既安全也没有歧义。
@@ -274,11 +219,17 @@ function compileExpression(
   if (ts.isCallExpression(node)) {
     const pathName = apiPath(sourceFile, node.expression)
     if (!pathName.startsWith('app.') || !HELPER_NAMES.has(pathName.slice(4))) {
+      const appCallAlternative = CALL_APIS.has(pathName)
+        ? `${pathName} 是应用操作，不是表达式 helper；保存结果要写 const result = await ${pathName}(...)，不使用结果则写 await ${pathName}(...)。`
+        : ASSERT_APIS.has(pathName)
+          ? '断言没有返回值；把 app.assert.*(...) 作为独立语句。'
+          : undefined
       unsupported(
-      sourceFile, node, `表达式中不允许调用 ${pathName}`,
-      CALL_ALTERNATIVES[pathName] ?? arrayMethodAlternative(pathName)
-        ?? `表达式里只能调用 app.${[...HELPER_NAMES].join(' / app.')}`
-    )
+        sourceFile, node, `表达式中不允许调用 ${pathName}`,
+        expressionCallAlternative(sourceFile, node, pathName)
+          ?? appCallAlternative
+          ?? `表达式里只能调用 app.${[...HELPER_NAMES].join(' / app.')}`,
+      )
     }
     return {
       kind: 'helper', name: pathName.slice(4),
@@ -286,10 +237,10 @@ function compileExpression(
     }
   }
   if (ts.isParenthesizedExpression(node)) return compileExpression(sourceFile, node.expression, variables)
-  if (ts.isIdentifier(node)) unsupported(sourceFile, node, `未知变量 ${node.text}`)
+  if (ts.isIdentifier(node)) unknownVariable(sourceFile, node, node.text, variables)
   return unsupported(
     sourceFile, node, `不支持语法 ${ts.SyntaxKind[node.kind]}`,
-    SYNTAX_ALTERNATIVES[ts.SyntaxKind[node.kind]]
+    syntaxAlternative(node.kind),
   )
 }
 
@@ -333,7 +284,12 @@ function compileCall(
 ): void {
   const pathName = apiPath(state.sourceFile, call.expression)
   if (ASSERT_APIS.has(pathName)) {
-    if (assignment) unsupported(state.sourceFile, call, '断言结果不能赋值')
+    if (assignment) {
+      unsupported(
+        state.sourceFile, call, '断言结果不能赋值',
+        '断言没有返回值；去掉 const 赋值，把 app.assert.*(...) 作为独立语句。',
+      )
+    }
     const id = stepId(state)
     state.instructions.push({
       kind: 'assert', stepId: id,
@@ -343,7 +299,22 @@ function compileCall(
     })
     return
   }
-  if (!CALL_APIS.has(pathName)) unsupported(state.sourceFile, call, `未支持的 Henji API：${pathName}`)
+  if (!CALL_APIS.has(pathName)) {
+    let alternative: string
+    if (pathName.startsWith('app.') && HELPER_NAMES.has(pathName.slice(4))) {
+      alternative = `${pathName} 是同步 helper，不能 await 或作为独立应用操作；改写为 const value = ${pathName}(...)，再把 value 传给后续 app.* 调用。`
+    } else if (pathName.startsWith('app.entities.')) {
+      alternative = '实体 API 只支持 app.entities.list / read / create / update / remove；请使用 scriptApi 给出的准确方法。'
+    } else if (pathName.startsWith('app.assert.')) {
+      alternative = '断言只支持 app.assert.equal / exists / absent / matches，且必须作为独立语句。'
+    } else if (/^app\.[^.]+$/.test(pathName)) {
+      const operationId = pathName.slice(4)
+      alternative = `如果 ${operationId} 是发现到的 action ID，请改用 app.action('${operationId}', input)；recipe ID 则用 app.recipe('${operationId}', input)。`
+    } else {
+      alternative = '应用操作只支持 app.action、app.recipe、app.entities.list/read/create/update/remove 和 app.assert.*。'
+    }
+    unsupported(state.sourceFile, call, `未支持的 Henji API：${pathName}`, alternative)
+  }
   const id = stepId(state)
   state.instructions.push({
     kind: 'call', stepId: id,
@@ -388,7 +359,12 @@ function compileStatements(
     if (ts.isExpressionStatement(statement)) {
       const expression = ts.isAwaitExpression(statement.expression)
         ? statement.expression.expression : statement.expression
-      if (!ts.isCallExpression(expression)) unsupported(state.sourceFile, expression, '表达式语句只能调用 app API')
+      if (!ts.isCallExpression(expression)) {
+        unsupported(
+          state.sourceFile, expression, '表达式语句不能作为脚本返回值',
+          SCRIPT_RESULT_ALTERNATIVE,
+        )
+      }
       compileCall(state, expression, null)
       continue
     }
@@ -459,7 +435,7 @@ function compileStatements(
     }
     return unsupported(
       state.sourceFile, statement, `不支持语句 ${ts.SyntaxKind[statement.kind]}`,
-      SYNTAX_ALTERNATIVES[ts.SyntaxKind[statement.kind]]
+      syntaxAlternative(statement.kind)
         ?? '语句只支持 const 声明、for...of、if/else 和 await app.* 调用。'
     )
   }

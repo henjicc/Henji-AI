@@ -129,4 +129,32 @@ describe('toolbox capability handlers', () => {
     expect(mocks.selectToolboxTool).toHaveBeenCalledWith(null)
     expect(closed).toEqual({ toolId: null, surfaceId: null })
   })
+
+  it('后台创建图片预览不会顺带打开图片编辑器', async () => {
+    mocks.createImageEditPreviewFromRef.mockResolvedValue({
+      previewRef: 'preview-1',
+      resultRefs: [{ kind: 'image_edit.preview', id: 'preview-1' }],
+      operationCount: 1,
+      hasEffect: true,
+      width: 512,
+      height: 512,
+    })
+    const handler = registeredHandlers().get('create_image_edit_preview')
+
+    const result = await handler?.({
+      sourceRef: { kind: 'asset', id: 'asset-1' },
+      operations: [{ kind: 'rotate_cw' }],
+    }, context)
+
+    expect(mocks.createImageEditPreviewFromRef).toHaveBeenCalledWith({
+      sourceRef: { kind: 'asset', id: 'asset-1' },
+      operations: [{ kind: 'rotate_cw' }],
+    })
+    expect(mocks.openApplicationSurface).not.toHaveBeenCalled()
+    expect(result).toMatchObject({
+      previewRef: 'preview-1',
+      sourceRef: { kind: 'asset', id: 'asset-1' },
+      resultRefs: [{ kind: 'image_edit.preview', id: 'preview-1' }],
+    })
+  })
 })

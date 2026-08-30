@@ -228,6 +228,29 @@ describe('AgentCapabilityDiscoveryCatalog', () => {
     }
   })
 
+  it('图片预览创建与显式打开都向脚本投影稳定引用和正式返回字段', () => {
+    const result = discover(request({
+      queries: ['创建图片编辑预览', '在图片编辑器打开预览'],
+      domains: ['image_edit'],
+      entityTypes: ['image_edit.preview', 'application.surface'],
+      writes: true,
+    }), 'run-image-edit-contract')
+    const actions = new Map(result.scriptApi.actions.map((action) => [action.id, action]))
+    const createPreview = actions.get('create_image_edit_preview')
+    const openPreview = actions.get('open_image_editor_with_source')
+
+    expect(createPreview?.returns).toMatchObject({ hasResultRefs: true })
+    expect(createPreview?.returns.fields).toEqual(expect.arrayContaining([
+      'previewRef', 'sourceRef', 'resultRefs', 'operationCount',
+    ]))
+    expect(openPreview?.returns).toMatchObject({ hasResultRefs: true })
+    expect(openPreview?.returns.fields).toEqual(expect.arrayContaining([
+      'sourceRef', 'surfaceId', 'resultRefs',
+    ]))
+    expect(result.scriptApi.entities.entityTypes).toContain('image_edit.preview')
+    expect(result.scriptApi.entities.entityTypes).not.toContain('image_edit.session')
+  })
+
   /*
    * 回归：容量不足的 Recipe 被投影出来，模型选中它、失败、重试。
    *
@@ -295,5 +318,3 @@ describe('AgentCapabilityDiscoveryCatalog', () => {
     }
   })
 })
-
-

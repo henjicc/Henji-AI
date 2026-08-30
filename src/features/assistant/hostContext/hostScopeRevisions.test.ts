@@ -6,6 +6,8 @@ import { useCameraStageStore } from '@/features/cameraStage/store/cameraStageSto
 import { useAssetLibraryStore } from '@/features/assets/store/assetLibraryStore'
 import { useCanvasStore } from '@/stores/canvasStore'
 import { useNavigationStore } from '@/stores/navigationStore'
+import { createEmptyImageEditDocument } from '@/core/imageEdit'
+import { useImageEditSessionStore } from '@/features/imageEdit/store/imageEditSessionStore'
 
 import { getHostScopeRevisions, retainHostContextTracking } from './hostContext'
 import { notifyApplicationDomainChanged } from '@/core/application-control/domainChangeSignal'
@@ -28,6 +30,7 @@ describe('宿主作用域 revision', () => {
     release?.()
     release = undefined
     useNavigationStore.setState({ activeToolId: null })
+    useImageEditSessionStore.setState({ sessions: {}, revision: 0 })
   })
 
   it('切换工具箱工具只推进 navigation，不推进 toolbox', () => {
@@ -77,5 +80,18 @@ describe('宿主作用域 revision', () => {
 
     // 这条守的是"别把上一条修过头"：数据变化必须继续推进基线，否则乐观并发就失效了。
     expect(getHostScopeRevisions().toolbox).toBeGreaterThan(before.toolbox)
+  })
+
+  it('图片编辑会话的权威领域计数发布为 image_mark 基线', () => {
+    const before = getHostScopeRevisions().image_mark
+    useImageEditSessionStore.getState().ensureSession('revision-session', createEmptyImageEditDocument())
+    const opened = getHostScopeRevisions().image_mark
+    expect(opened).toBe(before + 1)
+
+    const document = useImageEditSessionStore.getState().sessions['revision-session'].document
+    useImageEditSessionStore.getState().commitDocument('revision-session', structuredClone(document))
+
+    expect(getHostScopeRevisions().image_mark).toBe(opened + 1)
+    expect(getHostScopeRevisions().image_mark).toBe(useImageEditSessionStore.getState().revision)
   })
 })

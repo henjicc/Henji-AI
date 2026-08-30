@@ -7,7 +7,7 @@ import { useImageEditSessionStore } from './imageEditSessionStore'
 const CUSTOM_OPERATION_ID = 'image.diffusion'
 
 function resetStore(): void {
-  useImageEditSessionStore.setState({ sessions: {} })
+  useImageEditSessionStore.setState({ sessions: {}, revision: 0 })
 }
 
 function hasCustomOperation(sessionId: string): boolean {
@@ -82,6 +82,37 @@ describe('imageEditSessionStore（6.1：多实例隔离）', () => {
     useImageEditSessionStore.getState().ensureSession('session-a')
 
     expect(hasCustomOperation('session-a')).toBe(true)
+  })
+
+  it('领域 revision 只在会话状态真实变化时单调推进', () => {
+    const store = useImageEditSessionStore.getState()
+    const initialRevision = store.revision
+
+    store.ensureSession('session-a')
+    const openedRevision = useImageEditSessionStore.getState().revision
+    expect(openedRevision).toBe(initialRevision + 1)
+
+    // StrictMode 重复挂载是幂等空操作，不能制造虚假并发冲突。
+    useImageEditSessionStore.getState().ensureSession('session-a')
+    expect(useImageEditSessionStore.getState().revision).toBe(openedRevision)
+
+    const next = createEmptyImageEditDocument()
+    next.operations.push(createImageEditOperation(CUSTOM_OPERATION_ID, {}))
+    useImageEditSessionStore.getState().commitDocument('session-a', next)
+    const committedRevision = useImageEditSessionStore.getState().revision
+    expect(committedRevision).toBe(openedRevision + 1)
+
+    expect(useImageEditSessionStore.getState().undo('session-a')).not.toBeNull()
+    expect(useImageEditSessionStore.getState().revision).toBe(committedRevision + 1)
+    expect(useImageEditSessionStore.getState().redo('session-a')).not.toBeNull()
+    expect(useImageEditSessionStore.getState().revision).toBe(committedRevision + 2)
+
+    useImageEditSessionStore.getState().disposeSession('session-a')
+    expect(useImageEditSessionStore.getState().revision).toBe(committedRevision + 3)
+    // 重复关闭与空栈撤销同样不能推进。
+    useImageEditSessionStore.getState().disposeSession('session-a')
+    expect(useImageEditSessionStore.getState().undo('missing')).toBeNull()
+    expect(useImageEditSessionStore.getState().revision).toBe(committedRevision + 3)
   })
 
   it('redo 在撤销之后能拿回原文档，且不影响其他会话', () => {

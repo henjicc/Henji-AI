@@ -21,13 +21,13 @@
 
 数字带日期戳。看到日期久远又拿不准时，按「取数方式」重新跑一遍，不要直接引用。
 
-## 一、能力盘（快照：2026-08-29）
+## 一、能力盘（快照：2026-08-31）
 
 | 项 | 数 |
 |---|---|
 | 注册域 | 12 |
-| 实体类型 | 28 |
-| 属性 | 271 |
+| 实体类型 | 29 |
+| 属性 | 281 |
 | 可写实体 | 17 |
 | 写域 | 7：`assets` `camera_stage` `canvas` `generation` `image_mark` `models` `settings` |
 | 只读域 | 5：`artifacts` `assistant_runtime` `image_edit` `storyboard` `toolbox`（每个都有显式 `writeExclusion.reason`，是**有意只读**不是漏做） |
@@ -47,7 +47,7 @@
 - **判据 2（唯一性）**：旧 `HostCommand` / `HostQuery` 执行入口**已删除**，助手与界面共用正式领域服务。
   `AGENTS.md` 明令禁止新增该类工具。双路径一致性由 `check:assistant-capabilities` 守。
 - **判据 3（走得通）**：四大覆盖门禁 `propertyCoverage` / `storeActionCoverage` / `collectionCoverage` /
-  `resultBehaviorCoverage` **零豁免清单**。7 个写域中 6 个有「经模型链路读改验」的回环覆盖
+  `resultBehaviorCoverage` **零豁免清单**。7 个写域全部有「经模型链路读改验」的回环覆盖
   （`assistantHarness.writeLoop.test.ts`）。
 - **判据 4（可自纠）**：拒绝路径的自我修正由 `assistantHarness.rejectionMatrix.test.ts` 守。
 
@@ -80,12 +80,31 @@ Responses 或 Chat Completions，预制模型不再要求用户理解协议；De
 `image.grid-split` 仍是有意保留的本地交互工具，不开放为后台写入。助手枚举与默认开放的节点型图片能力
 由 parity 测试守住，项目错配、本地工具预拒绝、选中态 Effect 与撤销恢复均有精确测试。
 
+2026-08-31 `image_mark` 改用图片编辑会话 store 持有的领域级单调 revision，provider、执行器与宿主
+并发信封读取同一个权威计数，注销 `KNOWN_UNPUBLISHABLE`；L-B 以“用户已打开编辑器”的真实会话状态
+补齐发现、脚本、Gateway、执行器与读回全链路，注销 `KNOWN_UNREACHABLE`。多会话之间会保守冲突，
+但不再出现声明可写、助手却永远拿不到基线的死路。
+
+2026-08-31 图片编辑助手能力收口为“后台创建预览”与“显式打开编辑器”两个可组合动作：移除
+会暗中跳转的迁移残留能力，返回真实 `image_edit.preview` / `application.surface` 稳定引用与精确
+Effect，且允许把预览原样打开或作为下一轮编辑来源，旧文档与标注不会丢失。生成历史新增正式
+`generation.record → generation.result` 反射链，应用重启后仍可沿稳定引用读取结果；脚本 API 最终租约
+只保留真实反射实体，不再把 Surface/准备态等令牌误报成通用实体。助手与界面现在共用同一份图片效果
+schema、文档构建器与互斥规则，`diffusion` 与 `vgpu_glow` 的全量参数均可发现、可校验、可执行，
+不再只停留在界面控件。
+
+2026-08-31 Henji Script 真机验收登记的四条空转问题已全部注销：脚本回执采用 128KB 内联下限
+（仍受上下文 60% 上限约束），常见的裸 `result`、`return result`、数字转字符串、漏写/多写 `await`、
+把 action ID 当方法名以及变量拼写错误都会给出可直接重写的诊断；外部等待续跑的脚本租约已由
+`5bddca16` 恢复。这些修复减少无效重试，不放宽脚本语言的权限边界。
+
 验证层（详见 [testing.md](testing.md) 第四节）：
 
-| 层 | 命令 | 规模（2026-08-18） |
+| 层 | 命令 | 规模（2026-08-31） |
 |---|---|---|
-| L-A 静态不变量 | `npm run check:assistant-capabilities` | 27 文件 / 153 用例（2026-08-29） |
-| L-B 剧本 harness | `npm run test:assistant-harness` | 9 文件 / 34 用例 / 11 秒（2026-08-25，验伪线 60 秒） |
+| L-A 静态不变量 | `npm run check:assistant-capabilities` | 结构检查 + 28 测试文件 / 162 用例 |
+| L-B 剧本 harness | `npm run test:assistant-harness` | 9 文件 / 35 用例 / 15 秒（验伪线 60 秒） |
+| 生产回归 | `npm run test:assistant-production` | 53 文件 / 395 用例 + 持久化进程 43/43 |
 | L-C 真机 | `npm run assistant:live:suite` | 分钟级、真实付费 |
 
 **2026-08-18 真机全量实跑（真 Provider `mimo-v2.5-pro`，`assistant_decides`）：8 个场景全部 `passed`。**
@@ -107,30 +126,8 @@ Responses 或 Chat Completions，预制模型不再要求用户理解协议；De
 
 ## 三、还没通的
 
-**只许变短。** 每一条都必须挂在一个会红的门禁上，否则它会被忘掉。
-
-| 欠账 | 挂在哪个门禁 | 卡在哪 |
-|---|---|---|
-| `image_mark` 的并发基线发布不出来 | `hostScopeCoverage.test.ts` 的 `KNOWN_UNPUBLISHABLE` | provider 的 revision 是**单份会话文档的内容哈希**，每实例一个值；宿主快照发布的是领域级基线，结构上放不下。模型也补不上——`change_application_entities` 的 AI schema 明确 omit 掉 `expectedRevisions`。**后果：用户在图片编辑器里能改，助手改不了。** 修法要改 provider 的并发模型，不是改清单。 |
-| `image_mark` 够不到实例，L-B 没有读改验回环 | `assistantHarness.writeLoop.test.ts` 的 `KNOWN_UNREACHABLE` | 标注文档要先打开图片编辑器会话，会话需要真实素材源；harness 的内存 native 替身只存素材集合，不存素材本身。**先解决这条也没用**——上面那条更硬。 |
-
-两条是同一个域的两处阻塞。**修的顺序是先并发模型，后 harness**，反过来做等于白做。
-
-### 已定位、待修（2026-08-18 真机验收挖出来的）
-
-四条都不是"走不通"，是**走得通但白烧一轮**。它们全在脚本层，不是某个域特有的——只是在
-`storyboard` / `toolbox` 这类任务形状下暴露得最狠（只读列举烧掉 22.3 万 token）。
-
-| # | 症状 | 性质 | 线索 |
-|---|---|---|---|
-| 1 | `run_henji_script` 结果走通用 8KB 卸载门槛 → 卸载成 artifact → 模型回读 → 多一轮 | **最值钱，改一行常量** | `context/offload.ts` 的 `INLINE_FLOOR_BY_TOOL` 只有 `search_models` 与 `discover_application_capabilities`；`0ddd6943` 抬了发现结果的下限，没抬脚本结果的 |
-| 2 | `表达式语句只能调用 app API：result` | 说了不许，没说该怎么交出结果 | `henji-script/compiler.ts:391` |
-| 3 | `不允许调用 count.toString()` | 列了 9 个允许的 helper，但没一个能做数字转字符串（实际 `'' + count` 就行） | 同上，helper 白名单那段 |
-| 4 | 外部等待续跑后子运行报 `SCRIPT_API_NOT_DISCOVERED` | 脚本租约不跨断点，续跑必须重新发现 | 生成场景实测；错误文案本身是合格的（说清了要先 discover） |
-
-第 1 条影响所有脚本调用，应当先做。2–3 是同一类拒绝文案缺陷，建议**一次把脚本编译器的
-拒绝路径整体扫一遍**，而不是逮到一条修一条——已经修过的同类有：数组 `.length`、字段清单、
-读已删除引用（`e5f7b461`）。
+当前没有挂在 `KNOWN_UNPUBLISHABLE` / `KNOWN_UNREACHABLE` 的“声明可写但实际走不通”结构性欠账；
+2026-08-18 真机验收登记的四条脚本空转问题也已全部注销。
 
 ### 真机验收的数据卫生问题
 

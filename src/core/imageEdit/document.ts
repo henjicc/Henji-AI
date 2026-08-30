@@ -10,7 +10,10 @@ import {
   type ImageMarkDoc,
   type OrientationOperationParams,
 } from './types';
-import { imageEditOperationRegistry } from './operations';
+import {
+  getConflictingImageEditOperationIds,
+  imageEditOperationRegistry,
+} from './operations';
 
 const BUILT_IN_INSTANCE_IDS = {
   orientation: 'builtin-orientation',
@@ -95,6 +98,30 @@ export function upsertImageEditOperation<TParams extends object>(
   if (insertIndex < 0) operations.push(operation);
   else operations.splice(insertIndex, 0, operation);
   return { ...document, operations };
+}
+
+/**
+ * 插入或替换一个操作，并在它启用时关闭同组互斥操作。
+ * 依次应用多个操作时，最后启用的操作获胜；被关闭的操作及其参数仍留在文档中。
+ */
+export function upsertImageEditOperationWithExclusivity<TParams extends object>(
+  document: ImageEditDocument,
+  operation: ImageEditOperation<TParams>
+): ImageEditDocument {
+  const conflicts = operation.enabled
+    ? getConflictingImageEditOperationIds(operation.operationId)
+    : [];
+  let normalizedDocument = document;
+  if (conflicts.length > 0) {
+    let changed = false;
+    const operations = document.operations.map((entry) => {
+      if (!entry.enabled || !conflicts.includes(entry.operationId)) return entry;
+      changed = true;
+      return { ...entry, enabled: false };
+    });
+    if (changed) normalizedDocument = { ...document, operations };
+  }
+  return upsertImageEditOperation(normalizedDocument, operation);
 }
 
 export function createImageEditOperation<TParams extends object = object>(

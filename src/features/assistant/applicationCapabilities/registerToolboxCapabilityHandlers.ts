@@ -1,3 +1,4 @@
+import type { ApplicationRef } from '@/core/assistant/applicationCapabilities'
 import { getStoryboardProject, listStoryboardProjects } from '@/features/canvas/application/storyboardProjectService'
 import { commitImageEdit } from '@/features/imageEdit/application/imageEditApplicationService'
 import { getToolboxState, listToolboxTools } from '@/features/toolbox/application/toolboxApplicationService'
@@ -141,16 +142,18 @@ export function registerToolboxCapabilityHandlers(
   registrar.registerHandler('create_image_edit_preview', async (input, context) => {
     throwIfCapabilityAborted(context.signal)
     const parsed = parseCapabilityInput<{
-      assetId: string
+      sourceRef: ApplicationRef
       operations: Record<string, unknown>[]
     }>('create_image_edit_preview', input)
     const preview = await createImageEditPreviewFromRef({
-      sourceRef: { kind: 'asset', id: parsed.assetId },
+      sourceRef: parsed.sourceRef,
       operations: parsed.operations,
-    }, context)
+    })
+    const previewRef = String(preview.previewRef)
     return {
-      previewRef: preview.previewRef,
-      assetId: parsed.assetId,
+      previewRef,
+      sourceRef: parsed.sourceRef,
+      resultRefs: preview.resultRefs,
       operationCount: preview.operationCount,
       hasEffect: preview.hasEffect,
       width: preview.width,

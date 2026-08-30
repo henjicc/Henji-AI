@@ -4,7 +4,6 @@ import {
 } from './applicationCapabilities'
 import {
   closeApplicationSurfaceCapability,
-  createImageEditPreviewFromRefCapability,
   focusApplicationEntityCapability,
   getCurrentApplicationContextCapability,
   listGenerationHistoryCapability,
@@ -40,7 +39,6 @@ export const BUILTIN_APPLICATION_CAPABILITIES: ApplicationCapabilityDefinition[]
   ...SETTINGS_APPLICATION_CAPABILITIES,
   listGenerationHistoryCapability,
   openImageEditorWithSourceCapability,
-  createImageEditPreviewFromRefCapability,
   ...GENERATION_APPLICATION_CAPABILITIES,
   ...ASSET_APPLICATION_CAPABILITIES,
   ...CANVAS_PROJECT_APPLICATION_CAPABILITIES,

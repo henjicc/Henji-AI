@@ -30,14 +30,14 @@ export const IMAGE_EDITOR_TOOL_CONTROL_DEFINITIONS: readonly ImageEditorToolCont
     label: '发光',
     operationId: IMAGE_EDIT_OPERATION_IDS.diffusion,
     operationSchema: imageEditOperationSchema,
-    kinds: [],
+    kinds: ['diffusion'],
   },
   {
     id: 'vgpuGlow',
     label: '辉光 Pro',
     operationId: IMAGE_EDIT_OPERATION_IDS.vgpuGlow,
     operationSchema: imageEditOperationSchema,
-    kinds: [],
+    kinds: ['vgpu_glow'],
   },
 ]
 

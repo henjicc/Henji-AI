@@ -7,8 +7,10 @@ import {
   getApplicationReflectionRegistry,
 } from '@/features/assistant/applicationCapabilities/applicationControlRegistry'
 import type { ApplicationMutationExecutor } from '@/core/application-control'
+import { createEmptyImageEditDocument, imageEditDocumentToMarkDoc } from '@/core/imageEdit'
 import { createHostContextSnapshot } from '@/features/assistant/hostContext/hostContext'
 import { useCameraStageStore } from '@/features/cameraStage/store/cameraStageStore'
+import { useImageEditSessionStore } from '@/features/imageEdit/store/imageEditSessionStore'
 import { getPlatform } from '@/platform/runtime'
 import { useCanvasStore } from '@/stores/canvasStore'
 import { useProjectStore } from '@/stores/projectStore'
@@ -51,6 +53,8 @@ interface WriteLoop {
   property: string
   /** 写进去的新值（脚本字面量）。 */
   value: string
+  /** 为必须由用户先打开的会话态实体准备真实领域状态；在采集 revision 基线之前执行。 */
+  prepare?: () => void | Promise<void>
   /**
    * 可选：绕开 `readEntity` 再对一次账，比脚本内的 `app.assert.equal` 更硬。
    *
@@ -68,12 +72,6 @@ const LOOP_NONCE = 'harness-写回环'
  * 暂时够不到实例的实体。**只许变短**，与其他欠账清单同一性质。
  */
 const KNOWN_UNREACHABLE: Record<string, string> = {
-  image_mark: '标注文档要先打开图片编辑器会话，而会话需要一个真实素材源；'
-    + 'harnessNativeStorage 目前只存素材集合，不存素材本身（素材还要经文件检查与缩略图，'
-    + '那已经越过"只存不判断"这条线），够不到实例。执行器层由 imageMarkReflection.test.ts 覆盖，'
-    + '缺的是"经模型链路"那一段。'
-    + '而且**先解决 platform 也没用**：该域还有一条更硬的阻塞——并发基线发布不出来，'
-    + '见 hostScopeCoverage.test.ts 的 KNOWN_UNPUBLISHABLE，那要改 provider 的并发模型。',
 }
 
 function loops(): WriteLoop[] {
@@ -118,6 +116,32 @@ function loops(): WriteLoop[] {
       ref: 'ref',
       property: 'generation.model.hidden',
       value: 'true',
+    },
+    {
+      /*
+       * image_mark.document 是“用户已打开编辑器”期间存在的会话态实体。harness 预置的只是
+       * 这项真实领域前置状态，不替换 provider、revision、执行器或判断逻辑；脚本仍要自己
+       * 列出稳定引用，再经通用写入链修改并读回。
+       */
+      domain: 'image_mark', entityType: 'image_mark.document',
+      prepare: () => {
+        useImageEditSessionStore.getState().ensureSession(
+          'harness-image-mark-session',
+          createEmptyImageEditDocument(),
+        )
+      },
+      seed: [
+        "const listed = await app.entities.list('image_mark.document');",
+        'app.assert.exists(listed.refs);',
+        'const ref = listed.refs[0];',
+      ].join('\n'),
+      ref: 'ref',
+      property: 'image_mark.document.orientation_rotate',
+      value: "'90'",
+      assertTruthSource: () => {
+        const document = useImageEditSessionStore.getState().sessions['harness-image-mark-session'].document
+        expect(imageEditDocumentToMarkDoc(document).orientation.rotate).toBe(90)
+      },
     },
     {
       /*
@@ -233,6 +257,7 @@ describe('读改验回环的全域穷举', () => {
       projects: [], currentProjectId: null, currentProject: null, isHydrated: true,
     })
     useCanvasStore.getState().setCanvasData([], [], { past: [], future: [] })
+    useImageEditSessionStore.setState({ sessions: {}, revision: 0 })
   })
 
   afterEach(() => {
@@ -265,6 +290,7 @@ describe('读改验回环的全域穷举', () => {
   it('每个写域：读当前值 → 写新值 → 读回来都对得上', async () => {
     const failures: string[] = []
     for (const loop of loops()) {
+      await loop.prepare?.()
       const scopes = declaredRevisionScopes(loop.entityType)
       const before = createHostContextSnapshot().scopeRevisions
       const result = await runAssistantHarness({

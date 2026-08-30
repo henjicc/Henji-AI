@@ -11,12 +11,18 @@ import { APPLICATION_CAPABILITY_CATALOG_VERSION } from '@/core/assistant/applica
 import { listImageEditPreviews, readImageEditPreview, type ImageEditPreviewSnapshot } from './imageEditSessionRegistry'
 
 export const IMAGE_EDIT_ENTITY_TYPES = {
-  session: 'image_edit.session',
+  preview: 'image_edit.preview',
   document: 'image_edit.document',
   layer: 'image_edit.layer',
 } as const
 
 type ImageEditEntityType = typeof IMAGE_EDIT_ENTITY_TYPES[keyof typeof IMAGE_EDIT_ENTITY_TYPES]
+
+const IMAGE_EDIT_SOURCE_REF_KINDS = [
+  'asset',
+  'generation.result',
+  'image_edit.preview',
+] as const
 
 function digest(seed: string): string {
   const value = [...seed].reduce((total, char) => (total * 33 + char.charCodeAt(0)) >>> 0, 5381).toString(16)
@@ -61,21 +67,21 @@ function property(
 /**
  * 图片编辑预览是**不可变快照**：`createImageEditPreview(operations)` 由整组操作一次性构建文档，
  * 存成带 revision 的快照，服务层没有「往已有预览里改一层」的入口。要调整编辑内容，应调
- * `create_image_edit_preview_from_ref` 传完整 operations 列表生成新预览。
+ * `create_image_edit_preview` 传完整 sourceRef 与 operations 列表生成新预览。
  */
 const IMMUTABLE_PREVIEW = '图片编辑预览是不可变快照，改动请用完整 operations 列表生成新预览。'
 
 const IMAGE_EDIT_PARAMS_SCHEMA_REF = schemaRef('property', 'image_edit.layer.params.value')
 
 const properties: Record<ImageEditEntityType, ApplicationPropertyDescriptor[]> = {
-  [IMAGE_EDIT_ENTITY_TYPES.session]: [
-    property(IMAGE_EDIT_ENTITY_TYPES.session, 'source_ref', '来源引用', { kind: 'string', maxLength: 500 }, '来源图片在会话创建时固定。'),
-    property(IMAGE_EDIT_ENTITY_TYPES.session, 'document_ref', '文档引用', { kind: 'ref', refKinds: [IMAGE_EDIT_ENTITY_TYPES.document] }, '文档与会话一一对应，由预览创建时确定。'),
-    property(IMAGE_EDIT_ENTITY_TYPES.session, 'width', '宽度', { kind: 'integer', hardRange: { min: 1 } }, '由来源图片实际尺寸读出。'),
-    property(IMAGE_EDIT_ENTITY_TYPES.session, 'height', '高度', { kind: 'integer', hardRange: { min: 1 } }, '由来源图片实际尺寸读出。'),
+  [IMAGE_EDIT_ENTITY_TYPES.preview]: [
+    property(IMAGE_EDIT_ENTITY_TYPES.preview, 'source_ref', '来源引用', { kind: 'ref', refKinds: [...IMAGE_EDIT_SOURCE_REF_KINDS] }, '来源图片在预览创建时固定。'),
+    property(IMAGE_EDIT_ENTITY_TYPES.preview, 'document_ref', '文档引用', { kind: 'ref', refKinds: [IMAGE_EDIT_ENTITY_TYPES.document] }, '文档与预览一一对应，由预览创建时确定。'),
+    property(IMAGE_EDIT_ENTITY_TYPES.preview, 'width', '宽度', { kind: 'integer', hardRange: { min: 1 } }, '由来源图片实际尺寸读出。'),
+    property(IMAGE_EDIT_ENTITY_TYPES.preview, 'height', '高度', { kind: 'integer', hardRange: { min: 1 } }, '由来源图片实际尺寸读出。'),
   ],
   [IMAGE_EDIT_ENTITY_TYPES.document]: [
-    property(IMAGE_EDIT_ENTITY_TYPES.document, 'session_ref', '会话引用', { kind: 'ref', refKinds: [IMAGE_EDIT_ENTITY_TYPES.session] }, '文档所属会话不可变更。'),
+    property(IMAGE_EDIT_ENTITY_TYPES.document, 'preview_ref', '预览引用', { kind: 'ref', refKinds: [IMAGE_EDIT_ENTITY_TYPES.preview] }, '文档所属预览不可变更。'),
     property(IMAGE_EDIT_ENTITY_TYPES.document, 'layer_refs', '编辑层引用', { kind: 'ref_list', refKinds: [IMAGE_EDIT_ENTITY_TYPES.layer], maxItems: 128 }, IMMUTABLE_PREVIEW),
     property(IMAGE_EDIT_ENTITY_TYPES.document, 'version', '文档版本', { kind: 'integer', hardRange: { min: 1 } }, '版本号由预览生成链路递增。'),
   ],
@@ -101,8 +107,18 @@ function splitLayerRef(ref: ApplicationRef): { previewRef: string; layerId: stri
   }
 }
 
-function previewRef(kind: typeof IMAGE_EDIT_ENTITY_TYPES.session | typeof IMAGE_EDIT_ENTITY_TYPES.document, preview: ImageEditPreviewSnapshot): ApplicationRef {
+function previewRef(kind: typeof IMAGE_EDIT_ENTITY_TYPES.preview | typeof IMAGE_EDIT_ENTITY_TYPES.document, preview: ImageEditPreviewSnapshot): ApplicationRef {
   return { kind, id: preview.previewRef }
+}
+
+function sourceRef(value: string): ApplicationRef {
+  const separator = value.indexOf(':')
+  if (separator < 1 || separator === value.length - 1) throw new Error('INVALID_SOURCE_REF')
+  const kind = value.slice(0, separator)
+  if (!(IMAGE_EDIT_SOURCE_REF_KINDS as readonly string[]).includes(kind)) {
+    throw new Error('INVALID_SOURCE_REF')
+  }
+  return { kind, id: value.slice(separator + 1) }
 }
 
 class ImageEditReflectionProvider implements ApplicationEntityProvider {
@@ -165,17 +181,17 @@ class ImageEditReflectionProvider implements ApplicationEntityProvider {
     if (!layerIdentity && ref.kind !== this.entityType) throw new Error('NOT_FOUND')
     const preview = readImageEditPreview(layerIdentity?.previewRef ?? ref.id)
     if (!preview) throw new Error('NOT_FOUND')
-    if (this.entityType === IMAGE_EDIT_ENTITY_TYPES.session) {
+    if (this.entityType === IMAGE_EDIT_ENTITY_TYPES.preview) {
       return { preview, properties: {
-        'image_edit.session.source_ref': preview.sourceRef,
-        'image_edit.session.document_ref': previewRef(IMAGE_EDIT_ENTITY_TYPES.document, preview),
-        'image_edit.session.width': preview.width,
-        'image_edit.session.height': preview.height,
+        'image_edit.preview.source_ref': sourceRef(preview.sourceRef),
+        'image_edit.preview.document_ref': previewRef(IMAGE_EDIT_ENTITY_TYPES.document, preview),
+        'image_edit.preview.width': preview.width,
+        'image_edit.preview.height': preview.height,
       } }
     }
     if (this.entityType === IMAGE_EDIT_ENTITY_TYPES.document) {
       return { preview, properties: {
-        'image_edit.document.session_ref': previewRef(IMAGE_EDIT_ENTITY_TYPES.session, preview),
+        'image_edit.document.preview_ref': previewRef(IMAGE_EDIT_ENTITY_TYPES.preview, preview),
         'image_edit.document.layer_refs': preview.document.operations.map((operation) => layerRef(preview.previewRef, operation.id)),
         'image_edit.document.version': preview.document.version,
       } }
@@ -192,8 +208,8 @@ class ImageEditReflectionProvider implements ApplicationEntityProvider {
 }
 
 const META: Record<ImageEditEntityType, { title: string; parents: ImageEditEntityType[] }> = {
-  [IMAGE_EDIT_ENTITY_TYPES.session]: { title: '图片编辑会话', parents: [] },
-  [IMAGE_EDIT_ENTITY_TYPES.document]: { title: '图片编辑文档', parents: [IMAGE_EDIT_ENTITY_TYPES.session] },
+  [IMAGE_EDIT_ENTITY_TYPES.preview]: { title: '图片编辑预览', parents: [] },
+  [IMAGE_EDIT_ENTITY_TYPES.document]: { title: '图片编辑文档', parents: [IMAGE_EDIT_ENTITY_TYPES.preview] },
   [IMAGE_EDIT_ENTITY_TYPES.layer]: { title: '图片编辑层', parents: [IMAGE_EDIT_ENTITY_TYPES.document] },
 }
 

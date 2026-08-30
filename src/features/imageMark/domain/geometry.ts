@@ -8,8 +8,11 @@ import type {
   MarkRotation,
   PenMark,
 } from './types';
+import { MIN_IMAGE_EDIT_CROP_SIZE_PX } from '../../../core/imageEdit/constraints';
 import { arrowBoundsPoints } from './arrowGeometry';
 import { penBoundsPoints } from './penGeometry';
+
+export { MIN_IMAGE_EDIT_CROP_SIZE_PX } from '../../../core/imageEdit/constraints';
 
 /** 标签相对偏移的参考点:矩形/椭圆为左上角,箭头为箭头尖 */
 export function labelRefPoint(item: LabeledMark): { x: number; y: number } {
@@ -336,7 +339,7 @@ export function clampCropRect(
   crop: MarkCropRect,
   width: number,
   height: number,
-  minSize = 8
+  minSize = MIN_IMAGE_EDIT_CROP_SIZE_PX
 ): MarkCropRect {
   const w = clamp(crop.width, minSize, width);
   const h = clamp(crop.height, minSize, height);

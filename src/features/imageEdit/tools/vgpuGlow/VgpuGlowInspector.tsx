@@ -132,7 +132,6 @@ export function VgpuGlowInspector(): JSX.Element {
   };
   const setEnabled = (enabled: boolean): void => {
     controller.beginTransaction();
-    if (enabled) controller.setOperationEnabled(IMAGE_EDIT_OPERATION_IDS.diffusion, false);
     controller.setOperationEnabled(IMAGE_EDIT_OPERATION_IDS.vgpuGlow, enabled);
     controller.commitTransaction();
   };

@@ -1,7 +1,17 @@
 import { clamp, getPointsBounds, labelRefPoint } from './geometry';
 import type { LabeledMark } from './types';
+import {
+  DEFAULT_MOSAIC_STRENGTH_PERCENT,
+  MAX_MOSAIC_STRENGTH_PERCENT,
+  MIN_MOSAIC_STRENGTH_PERCENT,
+} from '../../../core/imageEdit/constraints';
 
 export { labelRefPoint };
+export {
+  DEFAULT_MOSAIC_STRENGTH_PERCENT,
+  MAX_MOSAIC_STRENGTH_PERCENT,
+  MIN_MOSAIC_STRENGTH_PERCENT,
+} from '../../../core/imageEdit/constraints';
 
 /**
  * 编辑器(Konva)与光栅化导出共用的度量函数。
@@ -55,10 +65,6 @@ export function numberBadgeRadius(fontSize: number): number {
 }
 
 // ==================== 打码 ====================
-
-export const DEFAULT_MOSAIC_STRENGTH_PERCENT = 2;
-export const MIN_MOSAIC_STRENGTH_PERCENT = 0.5;
-export const MAX_MOSAIC_STRENGTH_PERCENT = 8;
 
 export function resolveMosaicPixelSize(
   width: number,

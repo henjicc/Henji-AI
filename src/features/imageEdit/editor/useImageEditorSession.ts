@@ -6,7 +6,7 @@ import {
   imageEditDocumentToMarkDoc,
   imageEditOperationRegistry,
   replaceMarkDocInImageEditDocument,
-  upsertImageEditOperation,
+  upsertImageEditOperationWithExclusivity,
   type ImageEditDocument,
   type ImageEditOperation,
   type ImageMarkDoc,
@@ -172,7 +172,7 @@ export function useImageEditorSession({
     const nextOperation: ImageEditOperation = current
       ? { ...current, params: nextParams }
       : createImageEditOperation(operationId, nextParams);
-    const nextDocument = upsertImageEditOperation(currentDocument(), nextOperation);
+    const nextDocument = upsertImageEditOperationWithExclusivity(currentDocument(), nextOperation);
     if (transactionBaseRef.current) {
       updateDocumentWithoutHistory(nextDocument);
       return;
@@ -187,7 +187,10 @@ export function useImageEditorSession({
       updateOperation(operationId, (params) => params);
       return;
     }
-    const nextDocument = upsertImageEditOperation(currentDocument(), { ...current, enabled });
+    const nextDocument = upsertImageEditOperationWithExclusivity(
+      currentDocument(),
+      { ...current, enabled },
+    );
     if (transactionBaseRef.current) updateDocumentWithoutHistory(nextDocument);
     else commitDocument(nextDocument);
   }, [commitDocument, currentDocument, updateDocumentWithoutHistory, updateOperation]);
@@ -199,7 +202,7 @@ export function useImageEditorSession({
     const nextOperation: ImageEditOperation = current
       ? { ...current, enabled: true, params: definition.createDefaultParams() }
       : createImageEditOperation(operationId, definition.createDefaultParams());
-    const nextDocument = upsertImageEditOperation(currentDocument(), nextOperation);
+    const nextDocument = upsertImageEditOperationWithExclusivity(currentDocument(), nextOperation);
     if (transactionBaseRef.current) updateDocumentWithoutHistory(nextDocument);
     else commitDocument(nextDocument);
   }, [commitDocument, currentDocument, updateDocumentWithoutHistory]);

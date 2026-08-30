@@ -133,7 +133,6 @@ export function DiffusionInspector(): JSX.Element {
   const cancelRange = (): void => controller.cancelTransaction();
   const setEnabled = (enabled: boolean): void => {
     controller.beginTransaction();
-    if (enabled) controller.setOperationEnabled(IMAGE_EDIT_OPERATION_IDS.vgpuGlow, false);
     controller.setOperationEnabled(IMAGE_EDIT_OPERATION_IDS.diffusion, enabled);
     controller.commitTransaction();
   };

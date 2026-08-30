@@ -51,6 +51,30 @@ export class ImageEditOperationRegistrationError extends Error {}
 export class UnsupportedImageEditOperationError extends Error {}
 export class InvalidImageEditOperationParamsError extends Error {}
 
+const IMAGE_EDIT_EXCLUSIVE_OPERATION_GROUPS: readonly (readonly string[])[] = [[
+  IMAGE_EDIT_OPERATION_IDS.diffusion,
+  IMAGE_EDIT_OPERATION_IDS.vgpuGlow,
+]];
+
+/** 返回启用目标操作时必须关闭的同组操作；互斥关系只在这里声明。 */
+export function getConflictingImageEditOperationIds(operationId: string): readonly string[] {
+  const group = IMAGE_EDIT_EXCLUSIVE_OPERATION_GROUPS.find((ids) => ids.includes(operationId));
+  return group?.filter((id) => id !== operationId) ?? [];
+}
+
+/** 找出文档中同时启用的第一对互斥操作，供执行边界做防御性校验。 */
+export function findImageEditOperationExclusivityConflict(
+  document: ImageEditDocument
+): readonly [string, string] | null {
+  for (const group of IMAGE_EDIT_EXCLUSIVE_OPERATION_GROUPS) {
+    const enabled = group.filter((operationId) => document.operations.some(
+      (operation) => operation.operationId === operationId && operation.enabled
+    ));
+    if (enabled.length > 1) return [enabled[0], enabled[1]];
+  }
+  return null;
+}
+
 export function parseDiffusionOperationParams(value: unknown): DiffusionOperationParams {
   try {
     return parseDiffusionParams(value);
@@ -148,7 +172,14 @@ export class ImageEditOperationRegistry {
       }
       return this.validateOperation(operation);
     });
-    return { ...document, operations };
+    const validated = { ...document, operations };
+    const conflict = findImageEditOperationExclusivityConflict(validated);
+    if (conflict) {
+      throw new InvalidImageEditOperationParamsError(
+        `图片光效不能同时启用：${conflict.join(' 与 ')}；请只启用其中一个。`
+      );
+    }
+    return validated;
   }
 }
 

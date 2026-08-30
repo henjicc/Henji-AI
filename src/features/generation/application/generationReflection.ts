@@ -11,6 +11,7 @@ import {
 } from '@/core/application-control'
 import { normalizeGenerationTaskStatus } from '@/core/assistant/externalWait'
 import { APPLICATION_CAPABILITY_CATALOG_VERSION } from '@/core/assistant/applicationCapabilities'
+import { databaseService, type HistoryRecord } from '@/services/database'
 
 import { useGenerationDraftStore } from '../store/generationDraftStore'
 import { GENERATION_DRAFT_FIELDS } from './generationDraftFields'
@@ -30,9 +31,17 @@ export const GENERATION_ENTITY_TYPES = {
   model: 'generation.model',
   task: 'generation.task',
   result: 'generation.result',
+  record: 'generation.record',
 } as const
 
 type GenerationEntityType = typeof GENERATION_ENTITY_TYPES[keyof typeof GENERATION_ENTITY_TYPES]
+type LiveGenerationEntityType = Exclude<GenerationEntityType, typeof GENERATION_ENTITY_TYPES.record>
+
+const LIVE_GENERATION_ENTITY_TYPES: LiveGenerationEntityType[] = [
+  GENERATION_ENTITY_TYPES.model,
+  GENERATION_ENTITY_TYPES.task,
+  GENERATION_ENTITY_TYPES.result,
+]
 
 function digest(seed: string): string {
   const value = [...seed].reduce((total, char) => (total * 33 + char.charCodeAt(0)) >>> 0, 5381).toString(16)
@@ -79,9 +88,21 @@ const properties: Record<GenerationEntityType, ApplicationPropertyDescriptor[]> 
     property(GENERATION_ENTITY_TYPES.task, 'error_message', '错误摘要', { kind: 'string', maxLength: 1000 }, true),
   ],
   [GENERATION_ENTITY_TYPES.result]: [
-    property(GENERATION_ENTITY_TYPES.result, 'task_ref', '任务引用', { kind: 'ref', refKinds: [GENERATION_ENTITY_TYPES.task] }),
+    property(GENERATION_ENTITY_TYPES.result, 'task_ref', '任务引用', { kind: 'ref', refKinds: [GENERATION_ENTITY_TYPES.task] }, true),
+    property(GENERATION_ENTITY_TYPES.result, 'record_ref', '历史记录引用', { kind: 'ref', refKinds: [GENERATION_ENTITY_TYPES.record] }, true),
     property(GENERATION_ENTITY_TYPES.result, 'media_type', '媒体类型', { kind: 'enum', values: ['image', 'video', 'audio'].map((value) => ({ value, label: value })) }),
     property(GENERATION_ENTITY_TYPES.result, 'media_ref', '稳定媒体引用', { kind: 'ref', refKinds: [GENERATION_ENTITY_TYPES.result] }),
+  ],
+  [GENERATION_ENTITY_TYPES.record]: [
+    property(GENERATION_ENTITY_TYPES.record, 'model_ref', '模型引用', { kind: 'ref', refKinds: [GENERATION_ENTITY_TYPES.model] }),
+    property(GENERATION_ENTITY_TYPES.record, 'result_ref', '结果引用', { kind: 'ref', refKinds: [GENERATION_ENTITY_TYPES.result] }, true),
+    property(GENERATION_ENTITY_TYPES.record, 'provider_id', '供应商 ID', { kind: 'string', maxLength: 120 }),
+    property(GENERATION_ENTITY_TYPES.record, 'media_type', '媒体类型', { kind: 'enum', values: ['image', 'video', 'audio'].map((value) => ({ value, label: value })) }),
+    property(GENERATION_ENTITY_TYPES.record, 'status', '状态', { kind: 'string', maxLength: 40 }),
+    property(GENERATION_ENTITY_TYPES.record, 'prompt', '提示词', { kind: 'string', maxLength: 32 * 1024 }, true),
+    property(GENERATION_ENTITY_TYPES.record, 'error_message', '错误摘要', { kind: 'string', maxLength: 1000 }, true),
+    property(GENERATION_ENTITY_TYPES.record, 'created_at', '创建时间', { kind: 'string', maxLength: 80 }),
+    property(GENERATION_ENTITY_TYPES.record, 'updated_at', '更新时间', { kind: 'string', maxLength: 80 }),
   ],
 }
 
@@ -105,7 +126,7 @@ function taskProperties(task: GenerationTaskStatusSnapshot): Record<string, Json
 }
 
 class GenerationReflectionProvider implements ApplicationEntityProvider {
-  constructor(readonly entityType: GenerationEntityType) {}
+  constructor(readonly entityType: LiveGenerationEntityType) {}
 
   async listEntities(request: { cursor?: string; limit: number }) {
     const refs = this.listRefs()
@@ -120,7 +141,7 @@ class GenerationReflectionProvider implements ApplicationEntityProvider {
 
   async readEntity(ref: ApplicationRef, request: { propertyIds?: string[] }) {
     if (ref.kind !== this.entityType) throw new Error('NOT_FOUND')
-    const { values, revision } = this.readValues(ref.id)
+    const { values, revision } = await this.readValues(ref.id)
     return {
       ref,
       entityType: this.entityType,
@@ -163,20 +184,114 @@ class GenerationReflectionProvider implements ApplicationEntityProvider {
       .map((task) => ({ kind: this.entityType, id: task.taskId }))
   }
 
-  private readValues(id: string): { values: Record<string, JsonValue>; revision: number } {
+  private async readValues(id: string): Promise<{ values: Record<string, JsonValue>; revision: number }> {
     if (this.entityType === GENERATION_ENTITY_TYPES.model) {
       const schema = getGenerationModelSchema(id)
       const source: GenerationModelFieldSource = { modelId: id, meta: schema.meta as Record<string, unknown>, schemaRef: schema.schemaRef }
       return { values: fieldReadValues(GENERATION_MODEL_FIELDS, source), revision: getGenerationModelsRevision() }
     }
     const task = readGenerationTaskStatusSnapshot(id)
+    if (!task && this.entityType === GENERATION_ENTITY_TYPES.result) {
+      await databaseService.init()
+      const record = await databaseService.getHistoryById(id)
+      if (!record || !historyHasResult(record)) throw new Error('NOT_FOUND')
+      return { values: {
+        'generation.result.task_ref': null,
+        'generation.result.record_ref': { kind: GENERATION_ENTITY_TYPES.record, id: record.id },
+        'generation.result.media_type': record.type,
+        'generation.result.media_ref': { kind: GENERATION_ENTITY_TYPES.result, id: record.id },
+      }, revision: historyRevision(record) }
+    }
     if (!task || (this.entityType === GENERATION_ENTITY_TYPES.result && !task.resultAvailable)) throw new Error('NOT_FOUND')
     if (this.entityType === GENERATION_ENTITY_TYPES.task) return { values: taskProperties(task), revision: taskRevision(task) }
     return { values: {
       'generation.result.task_ref': { kind: GENERATION_ENTITY_TYPES.task, id: task.taskId },
+      'generation.result.record_ref': null,
       'generation.result.media_type': task.mediaType,
       'generation.result.media_ref': { kind: GENERATION_ENTITY_TYPES.result, id: task.taskId },
     }, revision: taskRevision(task) }
+  }
+}
+
+function historyHasResult(record: HistoryRecord): boolean {
+  const storedResultUrl = record.params['__resultUrl']
+  return Boolean(record.filePath || (typeof storedResultUrl === 'string' && storedResultUrl.trim()))
+    && (record.status === 'success' || record.status === 'completed')
+}
+
+function historyRevision(record: HistoryRecord): number {
+  const seed = `${record.id}:${record.status}:${record.updatedAt}`
+  return [...seed].reduce((total, character) => (total * 33 + character.charCodeAt(0)) >>> 0, 5381)
+}
+
+function historyProperties(record: HistoryRecord): Record<string, JsonValue> {
+  return {
+    'generation.record.model_ref': { kind: GENERATION_ENTITY_TYPES.model, id: record.modelId },
+    'generation.record.result_ref': historyHasResult(record)
+      ? { kind: GENERATION_ENTITY_TYPES.result, id: record.id }
+      : null,
+    'generation.record.provider_id': record.providerId,
+    'generation.record.media_type': record.type,
+    'generation.record.status': record.status,
+    'generation.record.prompt': record.prompt,
+    'generation.record.error_message': record.errorMessage,
+    'generation.record.created_at': record.createdAt,
+    'generation.record.updated_at': record.updatedAt,
+  }
+}
+
+/** SQLite 生成历史的只读反射；不得暴露 filePath、远程结果 URL 或原始 params。 */
+class GenerationHistoryReflectionProvider implements ApplicationEntityProvider {
+  readonly entityType = GENERATION_ENTITY_TYPES.record
+
+  async listEntities(request: { cursor?: string; limit: number }) {
+    await databaseService.init()
+    const offset = Math.max(0, Number.parseInt(request.cursor ?? '0', 10) || 0)
+    const records = await databaseService.getHistory({ offset, limit: request.limit + 1 })
+    const page = records.slice(0, request.limit)
+    return {
+      refs: page.map((record) => ({ kind: this.entityType, id: record.id })),
+      nextCursor: records.length > request.limit ? String(offset + page.length) : null,
+      revisions: { generation: Math.max(0, ...page.map(historyRevision)) },
+    }
+  }
+
+  async readEntity(ref: ApplicationRef, request: { propertyIds?: string[] }) {
+    if (ref.kind !== this.entityType) throw new Error('NOT_FOUND')
+    await databaseService.init()
+    const record = await databaseService.getHistoryById(ref.id)
+    if (!record) throw new Error('NOT_FOUND')
+    const values = historyProperties(record)
+    return {
+      ref,
+      entityType: this.entityType,
+      revisions: { generation: historyRevision(record) },
+      properties: request.propertyIds
+        ? Object.fromEntries(Object.entries(values).filter(([id]) => request.propertyIds?.includes(id)))
+        : values,
+      capturedAt: new Date().toISOString(),
+    }
+  }
+
+  async getPropertyAvailability(ref: ApplicationRef, propertyIds: string[]) {
+    const snapshot = await this.readEntity(ref, {})
+    const descriptorMap = new Map(properties[this.entityType].map((item) => [item.id, item]))
+    return propertyIds.map((propertyId) => {
+      const descriptor = descriptorMap.get(propertyId)
+      if (!descriptor) throw new Error(`PROPERTY_NOT_FOUND:${propertyId}`)
+      return {
+        propertyId,
+        readable: true,
+        writable: false,
+        reasons: [descriptor.readOnlyReason ?? '生成历史由正式生成链路维护。'],
+        requiredPermissions: descriptor.requiredPermissions.read,
+        revisions: snapshot.revisions,
+      }
+    })
+  }
+
+  async getCollectionAvailability(parent: ApplicationRef) {
+    return unrestrictedCollectionAvailability(this.entityType, parent, { generation: 0 }, ['generation:write'])
   }
 }
 
@@ -188,7 +303,7 @@ function modelSchemaDocuments(): Array<{ ref: ApplicationSchemaRef; value: JsonV
 }
 
 export function createGenerationReflectionRegistrations(): ApplicationEntityRegistration[] {
-  return (Object.values(GENERATION_ENTITY_TYPES) as GenerationEntityType[]).map((entityType) => ({
+  const liveRegistrations: ApplicationEntityRegistration[] = LIVE_GENERATION_ENTITY_TYPES.map((entityType) => ({
     entity: {
       id: entityType,
       domain: entityType === GENERATION_ENTITY_TYPES.model ? 'models' : 'generation',
@@ -198,9 +313,15 @@ export function createGenerationReflectionRegistrations(): ApplicationEntityRegi
       refKind: entityType,
       dataClass: entityType === GENERATION_ENTITY_TYPES.model ? 'C0' : 'C1',
       exposures: ['ui', 'assistant', 'local_adapter'],
-      parentTypes: entityType === GENERATION_ENTITY_TYPES.result ? [GENERATION_ENTITY_TYPES.task] : [],
+      parentTypes: entityType === GENERATION_ENTITY_TYPES.result
+        ? [GENERATION_ENTITY_TYPES.task, GENERATION_ENTITY_TYPES.record]
+        : [],
       revisionScopes: [entityType === GENERATION_ENTITY_TYPES.model ? 'models' : 'generation'],
-      queryCapabilityIds: [entityType === GENERATION_ENTITY_TYPES.model ? 'get_model_schema' : 'get_generation_task'],
+      queryCapabilityIds: entityType === GENERATION_ENTITY_TYPES.model
+        ? ['get_model_schema']
+        : entityType === GENERATION_ENTITY_TYPES.result
+          ? ['get_generation_task', 'list_generation_history']
+          : ['get_generation_task'],
       schemaRef: schemaRef('entity', entityType),
       /*
        * model 一支不再整体 writeExclusion（4.4）：hidden 已经可写，provider_id/media_type/
@@ -222,6 +343,27 @@ export function createGenerationReflectionRegistrations(): ApplicationEntityRegi
       ...modelSchemaDocuments(),
     ] : [],
   }))
+  const historyRegistration: ApplicationEntityRegistration = {
+    entity: {
+      id: GENERATION_ENTITY_TYPES.record,
+      domain: 'generation',
+      version: 1,
+      title: '生成历史记录',
+      description: 'SQLite 中持久保存的生成历史摘要，不暴露本地路径与原始请求参数。',
+      refKind: GENERATION_ENTITY_TYPES.record,
+      dataClass: 'C1',
+      exposures: ['ui', 'assistant', 'local_adapter'],
+      parentTypes: [],
+      revisionScopes: ['generation'],
+      queryCapabilityIds: ['list_generation_history'],
+      schemaRef: schemaRef('entity', GENERATION_ENTITY_TYPES.record),
+      writeExclusion: { reason: '生成历史由正式生成链路维护，只能通过历史查询读取。' },
+    },
+    properties: properties[GENERATION_ENTITY_TYPES.record],
+    provider: new GenerationHistoryReflectionProvider(),
+    schemaDocuments: [],
+  }
+  return [...liveRegistrations, historyRegistration]
 }
 
 /*

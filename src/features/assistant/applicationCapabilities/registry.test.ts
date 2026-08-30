@@ -107,17 +107,58 @@ describe('application capability handler coverage', () => {
     ].join('\n')).toEqual([])
   })
 
-  it('所有声明产生应用 Surface 的能力都绑定导航作用域和界面成功证据', () => {
+  it('所有声明产生应用 Surface 的能力都绑定导航 Effect 与界面成功证据', () => {
     const surfaceCapabilities = BUILTIN_APPLICATION_CAPABILITY_REGISTRY
       .list()
       .filter((definition) => definition.producesRefs.includes('application.surface'))
 
     for (const definition of surfaceCapabilities) {
       expect(definition.requiredScopes, definition.id).toContain('navigation')
+      if (!definition.readOnly) {
+        expect(
+          definition.control.impacts.map((impact) => impact.effect),
+          `${definition.id} 会产生应用 Surface，却没有声明 navigate Effect`,
+        ).toContain('navigate')
+      }
       expect(definition.successEvidence.join(' '), definition.id).toMatch(
         /Surface|页面|工作区|编辑器|定位/
       )
     }
+  })
+
+  it('图片编辑预览只走 canonical v2，打开能力只声明真实 Surface 导航', () => {
+    expect(BUILTIN_APPLICATION_CAPABILITY_REGISTRY.get('create_image_edit_preview_from_ref'))
+      .toBeUndefined()
+    const createPreview = BUILTIN_APPLICATION_CAPABILITY_REGISTRY.get('create_image_edit_preview')
+    expect(createPreview?.version).toBe(2)
+    expect(createPreview?.acceptsRefs).toEqual([
+      'asset',
+      'generation.result',
+      'image_edit.preview',
+    ])
+
+    const openEditor = BUILTIN_APPLICATION_CAPABILITY_REGISTRY.get('open_image_editor_with_source')
+    expect(openEditor?.acceptsRefs).toContain('image_edit.preview')
+    expect(openEditor?.producesRefs).toEqual(['application.surface'])
+    const output = {
+      sourceRef: { kind: 'image_edit.preview', id: 'preview-1' },
+      surfaceId: 'tool.image_edit' as const,
+      resultRefs: [{ kind: 'application.surface' as const, id: 'tool.image_edit' as const }] as const,
+      revision: 1,
+      scopeRevisions: {},
+    }
+    expect(openEditor?.outputSchema.safeParse(output).success).toBe(true)
+    const effects = openEditor?.resolveObservedEffects?.(
+      { sourceRef: output.sourceRef },
+      output,
+    ) ?? []
+    expect(effects.map((effect) => agentObservedEffectSchema.parse(effect))).toEqual([
+      expect.objectContaining({
+        effect: 'navigate',
+        entityTypes: ['application.surface'],
+        targetRefs: [{ kind: 'application.surface', id: 'tool.image_edit' }],
+      }),
+    ])
   })
 
   it('所有写入和导航能力都能把成功结果记成强类型 Effect', () => {

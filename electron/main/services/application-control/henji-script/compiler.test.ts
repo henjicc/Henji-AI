@@ -142,6 +142,46 @@ describe('Henji Script compiler', () => {
       source: "const kind = 'settings.registry' as const; await app.entities.list(kind, {});",
       contains: ['as const', '直接写字符串或数字字面量'],
     },
+    {
+      label: '裸结果表达式',
+      source: "const result = await app.action('x', {}); result;",
+      contains: ['result', '删除这一行', 'resultRefs、Effect 和 verification'],
+    },
+    {
+      label: 'return 结果',
+      source: "const result = await app.action('x', {}); return result;",
+      contains: ['return result', '没有 return 返回值', 'resultRefs、Effect 和 verification'],
+    },
+    {
+      label: '数字 toString',
+      source: "const result = await app.action('x', {}); const label = result.count.toString(); await app.action('y', { label });",
+      contains: ['result.count.toString()', "'' + result.count", '`${result.count}`'],
+    },
+    {
+      label: 'String 转换',
+      source: "const result = await app.action('x', {}); const label = String(result.count); await app.action('y', { label });",
+      contains: ['String(result.count)', "'' + result.count", '`${result.count}`'],
+    },
+    {
+      label: '应用操作漏写 await',
+      source: "const result = app.action('x', {}); await app.action('y', { result });",
+      contains: ["app.action('x', {})", '应用操作', 'const result = await app.action(...)'],
+    },
+    {
+      label: '同步 helper 多写 await',
+      source: "const first = await app.take([1, 2], 1); await app.action('x', { first });",
+      contains: ['app.take', '同步 helper', 'const value = app.take(...)'],
+    },
+    {
+      label: '把 action ID 当方法名',
+      source: "await app.create_canvas_project({ name: '测试' });",
+      contains: ['app.create_canvas_project', "app.action('create_canvas_project', input)"],
+    },
+    {
+      label: '变量名拼错',
+      source: "const result = await app.action('x', {}); await app.action('y', { value: reslt.count });",
+      contains: ['未知变量 reslt', '当前可用变量：result'],
+    },
   ])('拒绝 $label 时同时给出原文与可用的替代写法', ({ source, contains }) => {
     let message = ''
     try {
@@ -151,6 +191,16 @@ describe('Henji Script compiler', () => {
     }
     expect(message).not.toBe('')
     for (const fragment of contains) expect(message).toContain(fragment)
+  })
+
+  it('拒绝数字 toString 时建议的两种写法都能编译', () => {
+    const plan = compile(`
+      const result = await app.action('x', {});
+      const withTemplate = ` + "`count:${result.count}`" + `;
+      const withConcat = '' + result.count;
+      await app.action('y', { withTemplate: withTemplate, withConcat: withConcat });
+    `)
+    expect(plan.instructions).toHaveLength(2)
   })
 
 

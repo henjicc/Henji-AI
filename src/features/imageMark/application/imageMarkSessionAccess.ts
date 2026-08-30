@@ -17,13 +17,13 @@ export function requireSessionDocument(sessionId: string): ImageEditDocument {
 }
 
 /**
- * 会话文档没有专属的自增修订号（imageEditSessionStore 只按 sessionId 分片，不额外维护
- * revision 字段）——内容哈希已经足够表达"变没变"，与 generationReflection.ts 的
- * taskRevision() 是同一个先例，不为此单独往 6.1 的 store 里加字段。
+ * image_mark 的领域级乐观并发基线。
+ *
+ * 宿主 expected-revision 信封按领域发布，不能携带每个 session 各自的内容哈希；provider、
+ * 执行器和宿主必须共同读取会话 store 里的这一个权威计数，避免形成第二份 revision 镜像。
  */
-export function documentRevision(document: ImageEditDocument): number {
-  const seed = JSON.stringify(document)
-  return [...seed].reduce((total, character) => (total * 33 + character.charCodeAt(0)) >>> 0, 5381)
+export function imageMarkRevision(): number {
+  return useImageEditSessionStore.getState().revision
 }
 
 /** 标注稳定引用形如 `sessionId:annotationId`——与 camera_stage 的 `projectId:shotId` 同一惯例。 */

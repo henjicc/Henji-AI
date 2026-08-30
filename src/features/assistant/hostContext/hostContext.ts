@@ -13,6 +13,7 @@ import { useProjectStore } from '@/stores/projectStore'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useUiStore } from '@/stores/uiStore'
 import { useCameraStageStore } from '@/features/cameraStage/store/cameraStageStore'
+import { useImageEditSessionStore } from '@/features/imageEdit/store/imageEditSessionStore'
 import { getGenerationModelsRevision } from '@/features/generation/application/generationModelFields'
 import { useGenerationDraftStore } from '@/features/generation/store/generationDraftStore'
 import {
@@ -51,6 +52,7 @@ const scopeRevisions: HostScopeRevisions = {
   surface: 0,
   generation_draft: 0,
   models: 0,
+  image_mark: 0,
 }
 
 const listeners = new Set<() => void>()
@@ -72,7 +74,8 @@ function syncAssetDomainRevision(): void {
 /**
  * 从**权威计数直接拉取**，而不是订阅后自增镜像。
  *
- * 这两个 scope 的真相在各自的领域里（草稿 store 的 `revision`、模型可见性事件的计数），
+ * 这些 scope 的真相在各自的领域里（草稿 store 的 `revision`、模型可见性事件计数、
+ * 图片编辑会话 store 的 `revision`），
  * 执行器返回的 `resultingRevisions` 用的也是同一个数。镜像一份出来就有两个真相源，
  * 而漂移的方向恰恰是基线失真——模型拿着对不上的期望值写入，只会得到无从修复的 CONFLICT。
  * 拉取没有这个问题：读到的永远就是执行器会拿来比对的那个数。
@@ -80,6 +83,7 @@ function syncAssetDomainRevision(): void {
 function syncPulledRevisions(): void {
   scopeRevisions.generation_draft = useGenerationDraftStore.getState().revision
   scopeRevisions.models = getGenerationModelsRevision()
+  scopeRevisions.image_mark = useImageEditSessionStore.getState().revision
 }
 
 /**

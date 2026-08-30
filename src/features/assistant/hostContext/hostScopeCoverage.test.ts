@@ -31,24 +31,6 @@ import { createHostContextSnapshot } from './hostContext'
  * 登记在这里不等于可以放着——它意味着那批属性对助手是死的，用户在界面上做得到、助手做不到。
  */
 const KNOWN_UNPUBLISHABLE: Record<string, string> = {
-  /*
-   * `image_mark` 的 revision 是**单份会话文档的内容哈希**（`documentRevision()` 对文档做
-   * djb2），每个实例一个值，不是领域级的单调计数器——宿主快照发布的是领域级基线，
-   * 结构上放不下它。而模型也补不上：`change_application_entities` 的 AI schema 明确
-   * `omit({ expectedRevisions: true })`，期望值只能来自 Gateway 信封的 HostScope。
-   *
-   * 后果：`image_mark.document.*` 与 `image_mark.annotation.data` 声明可写，经通用动词写入
-   * 必然 `EXPECTED_REVISION_REQUIRED:image_mark`，且没有恢复路径。用户在图片编辑器里能改，
-   * 助手改不了。
-   *
-   * 修法二选一，都要改 provider 而不是改这份清单：
-   * (a) 让 image_mark provider 改报领域级单调计数（任一会话文档变化即 +1），与 canvas /
-   *     settings 等域一致，宿主随即发布得出来；代价是并发基线变粗，多会话同时编辑时会有
-   *     多余的 CONFLICT——单用户桌面场景可以接受。
-   * (b) 若确认这些属性不需要乐观并发（写入前的 availability 复核已经够），就去掉
-   *     `revisionScopes` 声明，别要一个谁都给不出的期望值。
-   */
-  image_mark: '会话文档内容哈希是每实例一个值，领域级快照放不下；需要 provider 改报领域级计数或取消 revisionScopes 声明',
 }
 
 describe('宿主必须发布 provider 需要的全部 revision scope', () => {
@@ -158,7 +140,7 @@ describe('宿主必须发布 provider 需要的全部 revision scope', () => {
      * 第二次写入必然 CONFLICT。这条确认几个已知有真实来源的 scope 至少能读出来。
      */
     const snapshot = createHostContextSnapshot()
-    for (const scope of ['generation_draft', 'models']) {
+    for (const scope of ['generation_draft', 'models', 'image_mark']) {
       expect(
         typeof snapshot.scopeRevisions[scope],
         `${scope} 必须发布成数字，缺失说明只加了 schema 没接数据源`,

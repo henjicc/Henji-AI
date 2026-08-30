@@ -54,9 +54,6 @@ export class UnifiedImageEditExecution implements ImageEditExecutionPort {
       if (!params && !vgpuGlowParams) {
         throw new Error('统一 GPU 执行器未收到启用的光效操作');
       }
-      if (params && vgpuGlowParams) {
-        throw new Error('“发光”和“辉光 Pro”暂不支持叠加，请只启用其中一个以便对比效果');
-      }
       if (usesVgpuGlow) {
         logger.info('image_edit.vgpu_glow.execution.start', {
           requestId,

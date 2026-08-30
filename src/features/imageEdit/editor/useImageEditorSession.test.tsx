@@ -78,6 +78,23 @@ describe('useImageEditorSession', () => {
     expect(result.current.documentController.getOperation(IMAGE_EDIT_OPERATION_IDS.diffusion)).toBeNull();
   });
 
+  it('启用光效时由核心文档操作自动关闭另一个互斥光效', () => {
+    const { result } = renderHook(() => useImageEditorSession({}));
+
+    act(() => {
+      result.current.documentController.setOperationEnabled(IMAGE_EDIT_OPERATION_IDS.diffusion, true);
+      result.current.documentController.setOperationEnabled(IMAGE_EDIT_OPERATION_IDS.vgpuGlow, true);
+    });
+    expect(result.current.documentController.getOperation(IMAGE_EDIT_OPERATION_IDS.diffusion)?.enabled).toBe(false);
+    expect(result.current.documentController.getOperation(IMAGE_EDIT_OPERATION_IDS.vgpuGlow)?.enabled).toBe(true);
+
+    act(() => {
+      result.current.documentController.setOperationEnabled(IMAGE_EDIT_OPERATION_IDS.diffusion, true);
+    });
+    expect(result.current.documentController.getOperation(IMAGE_EDIT_OPERATION_IDS.diffusion)?.enabled).toBe(true);
+    expect(result.current.documentController.getOperation(IMAGE_EDIT_OPERATION_IDS.vgpuGlow)?.enabled).toBe(false);
+  });
+
   it('6.1：两个 hook 实例各有独立的 sessionId，互相隔离（模拟同时开着两个宿主）', () => {
     const first = renderHook(() => useImageEditorSession({}));
     const second = renderHook(() => useImageEditorSession({}));

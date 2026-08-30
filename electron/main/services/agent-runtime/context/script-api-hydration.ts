@@ -24,8 +24,21 @@ export function hydrateHenjiScriptApi(
   output: ApplicationCapabilityDiscoveryOutput,
   description: Record<string, unknown>,
 ): ApplicationCapabilityDiscoveryOutput {
-  const entityTypeSet = new Set(output.scriptApi.entities.entityTypes)
-  const entityDefinitions = records(description.entities).flatMap((item) => {
+  const describedEntities = records(description.entities)
+  const describedEntityTypeSet = new Set(describedEntities.flatMap((item) => (
+    typeof item.id === 'string' ? [item.id] : []
+  )))
+  /*
+   * impacts / acceptsRefs / producesRefs 里的类型还包含 Surface、schema、批次计划等协议对象；
+   * 它们能参与 action 排序和参数传递，但不是 app.entities 可读写的业务实体。最终租约必须以
+   * 反射 describe 的真相收口，否则模型会照着不存在的类型调用 read，必然撞
+   * ENTITY_TYPE_NOT_FOUND。真实业务引用漏注册（如 image_edit.preview）应补反射，而不是留在这里。
+   */
+  const entityTypes = output.scriptApi.entities.entityTypes.filter((entityType) => (
+    describedEntityTypeSet.has(entityType)
+  ))
+  const entityTypeSet = new Set(entityTypes)
+  const entityDefinitions = describedEntities.flatMap((item) => {
     if (typeof item.id !== 'string' || !entityTypeSet.has(item.id)) return []
     const parsed = henjiScriptEntityDefinitionSchema.safeParse(item)
     return parsed.success ? [parsed.data] : []
@@ -61,6 +74,7 @@ export function hydrateHenjiScriptApi(
       ...output.scriptApi,
       entities: {
         ...output.scriptApi.entities,
+        entityTypes,
         propertyIds,
         entityDefinitions,
         propertyDefinitions,

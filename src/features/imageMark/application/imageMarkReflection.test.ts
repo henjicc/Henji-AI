@@ -22,7 +22,7 @@ const executionContext: ApplicationExecutionContext = {
 }
 
 function resetStore(): void {
-  useImageEditSessionStore.setState({ sessions: {} })
+  useImageEditSessionStore.setState({ sessions: {}, revision: 0 })
 }
 
 describe('image_mark 反射与执行器（6.2）', () => {

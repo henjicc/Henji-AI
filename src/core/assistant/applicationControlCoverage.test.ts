@@ -19,6 +19,7 @@ import { listAnimatablePropertyPaths } from '@/features/cameraStage/domain/anima
 import { getImageEditorTools } from '@/features/imageEdit/tools/registry'
 import { listApplicationSettingIds } from '@/features/assistant/applicationCapabilities/settingsRegistry'
 import { listApplicationSurfaces } from '@/features/assistant/applicationCapabilities/surfaceRegistry'
+import { getApplicationReflectionRegistry } from '@/features/assistant/applicationCapabilities/applicationControlRegistry'
 import { BUILTIN_APPLICATION_CAPABILITIES } from './builtinApplicationCapabilityRegistry'
 import { createApplicationControlCoverageManifest } from './applicationControlCoverage'
 
@@ -34,6 +35,19 @@ function createManifest() {
 }
 
 describe('application control coverage', () => {
+  it('关键业务能力返回的稳定引用存在同名正式反射实体', () => {
+    const reflection = getApplicationReflectionRegistry()
+    const description = reflection.describe({}, {
+      exposure: 'assistant',
+      permissions: new Set(reflection.listDeclaredPropertyPermissions()),
+      acceptedDataClasses: new Set(['C0', 'C1', 'C2']),
+    })
+    const registered = new Set(description.entities.map((entity) => entity.id))
+    expect(registered.has('image_edit.preview')).toBe(true)
+    expect(registered.has('generation.record')).toBe(true)
+    expect(registered.has('image_edit.session')).toBe(false)
+  })
+
   it('每项现有能力都有唯一迁移结论、目标和验证来源', () => {
     const manifest = createManifest()
     const actualIds = BUILTIN_APPLICATION_CAPABILITIES.map((capability) => capability.id).sort()
@@ -62,6 +76,17 @@ describe('application control coverage', () => {
     }
     const identities = manifest.publicControls.map((item) => `${item.kind}:${item.id}`)
     expect(new Set(identities).size).toBe(identities.length)
+  })
+
+  it('每个图片编辑器工具都向助手公开至少一种可执行操作', () => {
+    const missing = getImageEditorTools()
+      .filter((tool) => tool.control.kinds.length === 0)
+      .map((tool) => tool.id)
+    expect(missing, [
+      '以下图片编辑器工具只有界面入口，没有助手可执行操作：',
+      ...missing,
+      '在共享 imageEditOperationSchema 中登记参数，并在工具控制目录声明 kinds。',
+    ].join('\n')).toEqual([])
   })
 
   it('每个注册 Surface 都有受限观察提供者、遮罩和验证方式', () => {

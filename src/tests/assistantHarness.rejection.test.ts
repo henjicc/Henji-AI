@@ -186,7 +186,7 @@ describe('超限拒绝必须说清撞的是哪条线', () => {
       goal: '发现图片编辑能力',
       intent: 'image_edit',
       steps: [
-        DISCOVER('image_edit', ['image_edit.session', 'image_edit.document']),
+        DISCOVER('image_edit', ['image_edit.preview', 'image_edit.document']),
         { actions: [{ type: 'text', value: '已拿到图片编辑能力目录。' }] },
       ],
     })

@@ -1,7 +1,13 @@
 import { z } from 'zod'
 
-import { imageEditOperationSchema } from '../../../features/imageEdit/application/imageEditControlCatalog'
-import type { ApplicationCapabilityDefinition } from '../applicationCapabilities'
+import {
+  createImageEditPreviewInputContract,
+  IMAGE_EDIT_PREVIEW_CAPABILITY_METADATA,
+} from '../../../features/imageEdit/application/imageEditControlCatalog'
+import {
+  applicationRefSchema,
+  type ApplicationCapabilityDefinition,
+} from '../applicationCapabilities'
 import {
   capabilityControl,
   capabilityOutputSchema,
@@ -93,17 +99,24 @@ const selectToolboxTool = defineApplicationCapability({
   summarize: (output) => `当前工具：${output.toolId ?? '工具箱首页'}。`,
 })
 
+const imageEditPreviewSourceRefSchema = applicationRefSchema.extend({
+  kind: z.enum(['asset', 'generation.result', 'image_edit.preview']),
+}).strict()
+
+const createImageEditPreviewInput = createImageEditPreviewInputContract({
+  sourceRef: imageEditPreviewSourceRefSchema,
+})
+
 const createImageEditPreview = defineApplicationCapability({
   id: 'create_image_edit_preview',
-  version: 1,
-  title: '创建图片编辑预览',
-  description: '对明确图片素材应用旋转、翻转、裁剪、标记或模糊操作，生成不覆盖原图的预览。',
+  version: 2,
+  title: IMAGE_EDIT_PREVIEW_CAPABILITY_METADATA.title,
+  description: IMAGE_EDIT_PREVIEW_CAPABILITY_METADATA.description,
   domain: 'image_edit',
-  aliases: ['编辑素材图片', '图片标注预览', '图片模糊', '高斯模糊', 'create image edit preview'],
+  aliases: [...IMAGE_EDIT_PREVIEW_CAPABILITY_METADATA.aliases],
   readOnly: false,
   // 预览是新建出来的实体，不只是一次运算：漏声明 create，「做一张编辑预览」的 Facet 结不了账。
   control: capabilityControl('execute', ['image_edit.preview'], {
-    revisionScopes: ['assets'],
     alsoImpacts: [{ effect: 'create', entityTypes: ['image_edit.preview'] }],
   }),
   risk: 'R1',
@@ -114,32 +127,48 @@ const createImageEditPreview = defineApplicationCapability({
   timeoutMs: 30_000,
   supportsPreview: true,
   supportsUndo: false,
-  requiredScopes: ['toolbox', 'assets'],
-  acceptsRefs: ['asset'],
+  requiredScopes: ['toolbox'],
+  acceptsRefs: ['asset', 'generation.result', 'image_edit.preview'],
   producesRefs: ['image_edit.preview'],
-  inputSchema: z.object({
-    assetId: z.string().min(1),
-    operations: z.array(imageEditOperationSchema).min(1).max(32),
-  }).strict(),
+  inputSchema: createImageEditPreviewInput.inputSchema,
+  aiInputSchema: createImageEditPreviewInput.aiInputSchema,
   outputSchema: capabilityOutputSchema({
     previewRef: z.string(),
-    assetId: z.string(),
+    sourceRef: imageEditPreviewSourceRefSchema,
+    resultRefs: z.tuple([
+      z.object({ kind: z.literal('image_edit.preview'), id: z.string().min(1) }).strict(),
+    ]),
     operationCount: z.number().int().nonnegative(),
     hasEffect: z.boolean(),
     width: z.number().positive(),
     height: z.number().positive(),
   }),
   concurrencyKey: 'image_edit',
-  resolveConcurrencyKey: (input) => `image_edit:${input.assetId}`,
-  resolveTargetIds: (input) => ({ assetId: input.assetId }),
+  resolveConcurrencyKey: (input) => `image_edit:${input.sourceRef.kind}:${input.sourceRef.id}`,
+  resolveTargetIds: (input) => ({ sourceKind: input.sourceRef.kind, sourceId: input.sourceRef.id }),
   preview: (input) => ({
     title: '创建图片编辑预览',
-    summary: `对素材 ${input.assetId} 应用 ${input.operations.length} 项编辑，不覆盖原图。`,
-    targetIds: { assetId: input.assetId },
-    reversible: true,
+    summary: `对 ${input.sourceRef.kind}:${input.sourceRef.id} 应用 ${input.operations.length} 项编辑，不覆盖原图。`,
+    targetIds: { sourceKind: input.sourceRef.kind, sourceId: input.sourceRef.id },
+    reversible: false,
     dataClasses: ['C1'],
   }),
-  summarize: (output) => `已为素材 ${output.assetId} 创建图片编辑预览 ${output.previewRef}。`,
+  resolveObservedEffects: (_input, output) => {
+    const targetRefs = [...output.resultRefs]
+    return [
+      {
+        effect: 'execute' as const,
+        entityTypes: ['image_edit.preview'], propertyIds: [],
+        targetRefs, count: 1, verified: false, evidence: [],
+      },
+      {
+        effect: 'create' as const,
+        entityTypes: ['image_edit.preview'], propertyIds: [],
+        targetRefs, count: 1, verified: false, evidence: [],
+      },
+    ]
+  },
+  summarize: (output) => `已创建图片编辑预览 ${output.previewRef}。`,
 })
 
 const commitImageEdit = defineApplicationCapability({

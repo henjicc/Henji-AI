@@ -19,7 +19,7 @@ function registeredHandlers(): Map<string, CapabilityHandler> {
 
 describe('registerImageMarkCapabilityHandlers（6.2）', () => {
   afterEach(() => {
-    useImageEditSessionStore.setState({ sessions: {} })
+    useImageEditSessionStore.setState({ sessions: {}, revision: 0 })
   })
 
   it('撤销/重做直接驱动 imageEditSessionStore 的 undo/redo 栈', async () => {

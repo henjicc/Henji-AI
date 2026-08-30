@@ -1,6 +1,5 @@
 import {
   closeApplicationSurfaceCapability,
-  createImageEditPreviewFromRefCapability,
   focusApplicationEntityCapability,
   getCurrentApplicationContextCapability,
   listGenerationHistoryCapability,
@@ -31,11 +30,7 @@ import { APPLICATION_REFLECTION_APPLICATION_CAPABILITIES } from '@/core/assistan
 
 import { applicationReflectionHandlers } from './applicationReflectionAdapter'
 import { createHostContextSnapshot } from '../hostContext/hostContext'
-import {
-  createImageEditPreviewFromRef,
-  listGenerationHistory,
-  openImageEditorWithSource,
-} from './generationCapabilities'
+import { listGenerationHistory, openImageEditorWithSource } from './generationCapabilities'
 import {
   getApplicationSettings,
   listApplicationSettingIds,
@@ -182,10 +177,6 @@ function registerBuiltins(): void {
   registry.registerHandler(openImageEditorWithSourceCapability.id, async (input, context) => {
     const parsed = openImageEditorWithSourceCapability.inputSchema.parse(input)
     return await openImageEditorWithSource(parsed.sourceRef, context)
-  })
-  registry.registerHandler(createImageEditPreviewFromRefCapability.id, async (input, context) => {
-    const parsed = createImageEditPreviewFromRefCapability.inputSchema.parse(input)
-    return await createImageEditPreviewFromRef(parsed, context)
   })
 }
 

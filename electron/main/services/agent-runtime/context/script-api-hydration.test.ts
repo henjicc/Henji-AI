@@ -26,6 +26,41 @@ function baseOutput(): ApplicationCapabilityDiscoveryOutput {
 }
 
 describe('hydrateHenjiScriptApi', () => {
+  it('最终租约只保留反射真实存在的实体，不把 Surface 或临时 token 宣称为通用实体', () => {
+    const output = {
+      ...baseOutput(),
+      scriptApi: {
+        ...baseOutput().scriptApi,
+        entities: {
+          ...baseOutput().scriptApi.entities,
+          entityTypes: [
+            'image_edit.preview',
+            'generation.record',
+            'application.surface',
+            'generation.preparation',
+            'canvas.batch_plan',
+          ],
+        },
+      },
+    }
+    const description = {
+      entities: [
+        { id: 'image_edit.preview', title: '图片编辑预览', description: '不可变预览', parentTypes: [] },
+        { id: 'generation.record', title: '生成历史记录', description: '持久历史', parentTypes: [] },
+      ],
+      properties: [],
+    }
+
+    const hydrated = hydrateHenjiScriptApi(output, description)
+
+    expect(hydrated.scriptApi.entities.entityTypes).toEqual([
+      'image_edit.preview',
+      'generation.record',
+    ])
+    const reflected = new Set((description.entities).map((entity) => entity.id))
+    expect(hydrated.scriptApi.entities.entityTypes.every((entityType) => reflected.has(entityType))).toBe(true)
+  })
+
   it('把反射层枚举约束投影到首次发现结果，不要求模型猜设置值', () => {
     const registry = createBuiltinAgentToolRegistry(async () => {
       throw new Error('测试不执行前端工具')
@@ -170,5 +205,4 @@ describe('hydrateHenjiScriptApi', () => {
     ])
   })
 })
-
 

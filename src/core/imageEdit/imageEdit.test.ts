@@ -8,7 +8,9 @@ import {
   coerceImageEditSession,
   createBuiltInImageEditOperationRegistry,
   createDefaultDiffusionOperationParams,
+  createDefaultVgpuGlowOperationParams,
   createEmptyImageEditDocument,
+  createImageEditOperation,
   createImageEditDocumentFromMarkDoc,
   createImageEditExecutionPort,
   compileDiffusionRecipe,
@@ -16,6 +18,9 @@ import {
   imageEditDocumentToMarkDoc,
   parseDiffusionOperationParams,
   replaceMarkDocInImageEditDocument,
+  getImageEditOperation,
+  upsertImageEditOperation,
+  upsertImageEditOperationWithExclusivity,
   type ImageEditDocument,
   type ImageMarkDoc,
 } from './index';
@@ -154,6 +159,57 @@ describe('图片编辑文档兼容契约', () => {
 });
 
 describe('图片操作注册与执行端口', () => {
+  it('核心文档操作让后启用的光效获胜并保留被关闭项参数', () => {
+    const diffusion = createImageEditOperation(
+      IMAGE_EDIT_OPERATION_IDS.diffusion,
+      createDefaultDiffusionOperationParams(),
+      'diffusion-instance',
+    );
+    const vgpuGlow = createImageEditOperation(
+      IMAGE_EDIT_OPERATION_IDS.vgpuGlow,
+      createDefaultVgpuGlowOperationParams(),
+      'vgpu-glow-instance',
+    );
+    const withDiffusion = upsertImageEditOperationWithExclusivity(
+      createEmptyImageEditDocument(),
+      diffusion,
+    );
+    const withVgpuGlow = upsertImageEditOperationWithExclusivity(withDiffusion, vgpuGlow);
+
+    expect(getImageEditOperation(withVgpuGlow, IMAGE_EDIT_OPERATION_IDS.diffusion)).toMatchObject({
+      id: 'diffusion-instance',
+      enabled: false,
+      params: diffusion.params,
+    });
+    expect(getImageEditOperation(withVgpuGlow, IMAGE_EDIT_OPERATION_IDS.vgpuGlow)?.enabled).toBe(true);
+
+    const diffusionWinsAgain = upsertImageEditOperationWithExclusivity(
+      withVgpuGlow,
+      { ...diffusion, enabled: true },
+    );
+    expect(getImageEditOperation(diffusionWinsAgain, IMAGE_EDIT_OPERATION_IDS.diffusion)?.enabled).toBe(true);
+    expect(getImageEditOperation(diffusionWinsAgain, IMAGE_EDIT_OPERATION_IDS.vgpuGlow)?.enabled).toBe(false);
+  });
+
+  it('执行前用同一互斥定义拒绝外部构造的冲突文档', () => {
+    const conflicting = upsertImageEditOperation(
+      upsertImageEditOperation(
+        createEmptyImageEditDocument(),
+        createImageEditOperation(
+          IMAGE_EDIT_OPERATION_IDS.diffusion,
+          createDefaultDiffusionOperationParams(),
+        ),
+      ),
+      createImageEditOperation(
+        IMAGE_EDIT_OPERATION_IDS.vgpuGlow,
+        createDefaultVgpuGlowOperationParams(),
+      ),
+    );
+
+    expect(() => createBuiltInImageEditOperationRegistry().validateDocument(conflicting))
+      .toThrow('请只启用其中一个');
+  });
+
   it('拒绝重复和未知操作，并在执行前传入校验后的完整文档', async () => {
     const registry = createBuiltInImageEditOperationRegistry();
     const document = createImageEditDocumentFromMarkDoc(createMarkDoc());

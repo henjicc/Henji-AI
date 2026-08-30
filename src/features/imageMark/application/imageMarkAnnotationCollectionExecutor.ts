@@ -15,7 +15,7 @@ import {
 import { useImageEditSessionStore } from '@/features/imageEdit/store/imageEditSessionStore'
 
 import { IMAGE_MARK_ENTITY_TYPES } from './imageMarkFields'
-import { annotationRef, documentRevision, requireSessionDocument, splitAnnotationRef } from './imageMarkSessionAccess'
+import { annotationRef, imageMarkRevision, requireSessionDocument, splitAnnotationRef } from './imageMarkSessionAccess'
 
 type CollectionStep = Extract<ApplicationPlannedStep, { kind: 'collection' }>
 
@@ -87,7 +87,7 @@ export class ImageMarkAnnotationCollectionExecutor implements ApplicationCollect
     if (!undoToken.startsWith(UNDO_PREFIX)) throw new Error('IMAGE_MARK_ANNOTATION_COLLECTION_UNDO_INVALID')
     const { sessionId, previousDocument } = JSON.parse(undoToken.slice(UNDO_PREFIX.length)) as UndoPayload
     useImageEditSessionStore.getState().commitDocument(sessionId, previousDocument)
-    const revision = documentRevision(previousDocument)
+    const revision = imageMarkRevision()
     return {
       status: 'completed',
       resultingRevisions: { image_mark: revision },
@@ -108,7 +108,7 @@ export class ImageMarkAnnotationCollectionExecutor implements ApplicationCollect
     refs: Array<{ kind: string; id: string }>,
     fact: string,
   ): ApplicationCompletedStepResult {
-    const revision = documentRevision(nextDocument)
+    const revision = imageMarkRevision()
     logger.info('标注集合写入完成', { event: 'image_mark.annotation_collection.apply.completed', sessionId, fact })
     return {
       status: 'completed',
