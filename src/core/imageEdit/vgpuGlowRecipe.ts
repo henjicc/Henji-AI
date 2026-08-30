@@ -1,12 +1,19 @@
 import type { VgpuGlowOperationParams } from './vgpuGlowParams';
 
-export const VGPU_GLOW_RECIPE_VERSION = 9 as const;
+export const VGPU_GLOW_RECIPE_VERSION = 10 as const;
 
 /**
  * LDR 高光重建的有限肩部。0.88 让 255 仍映射到各光感的完整 ceiling，同时把
  * 254→255 的辐射跳变控制在约 2% 内，避免 8-bit/JPEG 量化被放大成光斑断层。
  */
 export const VGPU_GLOW_RADIANCE_SHOULDER = 0.88;
+
+/**
+ * 多通道高亮的光谱覆盖补偿只在明确亮源区渐入。暗部和抗锯齿边缘仍严格使用
+ * 单通道峰值，避免灰雾；高亮渐变则用三次范数消除主导通道切换造成的能量暗沟。
+ */
+export const VGPU_GLOW_SPECTRAL_GATE_START = 0.28;
+export const VGPU_GLOW_SPECTRAL_GATE_END = 0.72;
 
 export interface VgpuGlowScatterLevel {
   /** 相对全分辨率的连续 2× 降采样倍数。 */
@@ -293,6 +300,34 @@ export function reconstructVirtualRadiance(value: number, ceiling: number): numb
   );
 }
 
+/**
+ * 与 WGSL spectralEmissionPeak 完全一致的 CPU 参考。
+ *
+ * 不能直接对 RGB 求和，否则中性灰会比饱和单色凭空亮很多；也不能继续只取 max，
+ * 因为青→黄→橙的渐变会在主导通道交换处形成可见能量谷。RGB 三次范数提供平滑的
+ * 光谱覆盖度，再用显示峰值门控，让 max<=0.28 的暗部与抗锯齿像素逐位保持原值。
+ */
+export function resolveSpectralEmissionPeak(
+  displayRgb: readonly [number, number, number]
+): number {
+  const red = clamp(displayRgb[0], 0, 1);
+  const green = clamp(displayRgb[1], 0, 1);
+  const blue = clamp(displayRgb[2], 0, 1);
+  const exactPeak = Math.max(red, green, blue);
+  if (exactPeak <= 0) return 0;
+
+  const spectralPeak = Math.min(
+    Math.cbrt(red * red * red + green * green * green + blue * blue * blue),
+    1
+  );
+  const gate = smoothstep(
+    VGPU_GLOW_SPECTRAL_GATE_START,
+    VGPU_GLOW_SPECTRAL_GATE_END,
+    exactPeak
+  );
+  return interpolate(exactPeak, spectralPeak, gate);
+}
+
 /** 与 WGSL bright-pass 完全一致的 CPU 参考，用于量化边界与颜色渐变回归。 */
 export function extractVirtualEmitterRadiance(
   displayValue: number,
@@ -333,6 +368,11 @@ function assertImageDimension(value: number, label: string): void {
 
 function interpolate(start: number, end: number, amount: number): number {
   return start + (end - start) * amount;
+}
+
+function smoothstep(edge0: number, edge1: number, value: number): number {
+  const amount = clamp((value - edge0) / (edge1 - edge0), 0, 1);
+  return amount * amount * (3 - 2 * amount);
 }
 
 function clamp(value: number, minimum: number, maximum: number): number {

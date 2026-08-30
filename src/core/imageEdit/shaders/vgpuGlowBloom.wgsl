@@ -11,11 +11,27 @@ struct Bloom {
 
 const RADIANCE_SHOULDER: f32 = 0.88;
 
-fn linearToSrgb(value: f32) -> f32 {
-  let safeValue = max(value, 0.0);
+fn linearToSrgb(value: vec3f) -> vec3f {
+  let safeValue = max(value, vec3f(0.0));
   let low = safeValue * 12.92;
-  let high = 1.055 * pow(safeValue, 1.0 / 2.4) - 0.055;
-  return select(high, low, safeValue <= 0.0031308);
+  let high = 1.055 * pow(safeValue, vec3f(1.0 / 2.4)) - vec3f(0.055);
+  return select(high, low, safeValue <= vec3f(0.0031308));
+}
+
+fn spectralEmissionPeak(displayColor: vec3f) -> f32 {
+  let exactPeak = max(displayColor.r, max(displayColor.g, displayColor.b));
+  if (exactPeak <= 0.000001) {
+    return 0.0;
+  }
+
+  // max 会在主导通道交换处形成斜率折角，并让宽色域渐变出现能量暗沟。RGB 三次范数
+  // 连续衡量多个高亮通道的光谱覆盖度；门控确保暗部与抗锯齿边缘仍严格等于 max。
+  let spectralPeak = min(
+    pow(dot(displayColor * displayColor, displayColor), 1.0 / 3.0),
+    1.0
+  );
+  let gate = smoothstep(0.28, 0.72, exactPeak);
+  return mix(exactPeak, spectralPeak, gate);
 }
 
 fn reconstructRadiance(displayValue: f32, ceiling: f32) -> f32 {
@@ -47,9 +63,10 @@ fn extractEmitter(color: vec3f) -> vec4f {
     return vec4f(0.0);
   }
 
-  // 门槛和 LDR 高光重建都在显示域工作；色度仍取线性 RGB。这样 Photoshop/sRGB
-  // 渐变的肉眼亮度不会在线性化后被误判成能量深坑，同时饱和色仍由峰值通道发光。
-  let displayPeak = clamp(linearToSrgb(linearPeak), 0.0, 1.0);
+  // 门槛和 LDR 高光重建都在逐通道显示域工作；色度仍取线性 RGB。这样既不会把
+  // Photoshop/sRGB 渐变挖成暗沟，也不会改变实际散射光的颜色比例。
+  let displayColor = clamp(linearToSrgb(color), vec3f(0.0), vec3f(1.0));
+  let displayPeak = spectralEmissionPeak(displayColor);
   let ceiling = max(bloom.params.z, 0.001);
   let radiance = reconstructRadiance(displayPeak, ceiling);
   let emittedRadiance = radiance * brightPassFraction(displayPeak);

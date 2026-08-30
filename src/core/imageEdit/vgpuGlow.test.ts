@@ -17,6 +17,7 @@ import {
   parseVgpuGlowOperationParams,
   rebaseVgpuGlowRecipeForScale,
   reconstructVirtualRadiance,
+  resolveSpectralEmissionPeak,
   type VgpuGlowRecipe,
 } from './index';
 
@@ -79,7 +80,7 @@ describe('VGPU 辉光操作契约', () => {
     expect(weightedMeanFraction(dreamy)).toBeGreaterThan(weightedMeanFraction(natural));
     expect(neon.sourceGain).toBeGreaterThan(dreamy.sourceGain);
     for (const recipe of [natural, dreamy, neon]) {
-      expect(recipe.schemaVersion).toBe(9);
+      expect(recipe.schemaVersion).toBe(10);
       expect(recipe.scatterLevels.length).toBeGreaterThanOrEqual(4);
       expect(recipe.scatterLevels.length).toBeLessThanOrEqual(12);
       expect(recipe.scatterLevels[0].divisor).toBe(2);
@@ -238,23 +239,46 @@ describe('VGPU 辉光操作契约', () => {
     expect(samples.at(-1)! / almostWhite).toBeLessThan(1.03);
   });
 
-  it('在显示域提取亮源，让青色到暖色的可见渐变保持连续能量', () => {
+  it('以高亮光谱覆盖率提取亮源，让青色到暖色的真实渐变保持连续能量', () => {
     const recipe = compileVgpuGlowRecipe(applyVgpuGlowLook('dreamy'), UHD);
-    const emission = (displayPeak: number) => extractVirtualEmitterRadiance(
-      displayPeak,
-      recipe.sourceThresholdDisplay,
-      recipe.sourceKneeDisplay,
-      recipe.sourceRadianceCeiling
-    );
-    // 来自“发光测试.jpg”中「界」字同一水平笔画的实测显示域峰值。
-    const cyan = emission(255 / 255);
-    const warmTransition = emission(196 / 255);
-    const orange = emission(247 / 255);
+    const emission = (displayRgb: readonly [number, number, number]) =>
+      extractVirtualEmitterRadiance(
+        resolveSpectralEmissionPeak(displayRgb),
+        recipe.sourceThresholdDisplay,
+        recipe.sourceKneeDisplay,
+        recipe.sourceRadianceCeiling
+      );
+    // 来自“发光测试.jpg”中「界」字同一水平笔画的真实显示域 RGB 样本。
+    const transitionSamples = [
+      [1, 255, 216],
+      [132, 234, 184],
+      [188, 196, 149],
+      [220, 157, 113],
+      [247, 84, 53],
+    ].map((rgb) => rgb.map((channel) => channel / 255) as [number, number, number]);
+    const transitionEmission = transitionSamples.map(emission);
+    const endpointMean = (
+      transitionEmission[0] + transitionEmission[transitionEmission.length - 1]
+    ) / 2;
 
-    expect(emission(0)).toBe(0);
-    expect(cyan / warmTransition).toBeLessThan(2.5);
-    expect(orange / warmTransition).toBeLessThan(2.5);
-    expect(emission(255 / 255) / emission(254 / 255)).toBeLessThan(1.03);
+    expect(emission([0, 0, 0])).toBe(0);
+    expect(Math.min(...transitionEmission) / endpointMean).toBeGreaterThan(0.93);
+    expect(Math.max(...transitionEmission) / Math.min(...transitionEmission)).toBeLessThan(1.15);
+
+    // 暗部和抗锯齿边缘必须逐值回退到 max，不能因多通道补偿形成灰雾。
+    expect(resolveSpectralEmissionPeak([0.1, 0.2, 0.28])).toBe(0.28);
+    expect(resolveSpectralEmissionPeak([0.5, 0.5, 0.5])).toBeLessThan(0.62);
+
+    // 高亮主导通道交换处应接近光滑，不能保留 max 的 V 形折角。
+    const delta = 1 / 255;
+    const center = resolveSpectralEmissionPeak([0.75, 0.75, 0.1]);
+    const left = resolveSpectralEmissionPeak([0.75 - delta, 0.75, 0.1]);
+    const right = resolveSpectralEmissionPeak([0.75 + delta, 0.75, 0.1]);
+    expect((left + right - 2 * center) / delta).toBeLessThan(0.01);
+
+    const white = emission([1, 1, 1]);
+    const almostWhite = emission([254 / 255, 254 / 255, 254 / 255]);
+    expect(white / almostWhite).toBeLessThan(1.03);
   });
 
   it('拒绝越界参数，并由内置注册表按 effect 阶段校验', () => {
@@ -321,7 +345,9 @@ describe('VGPU 辉光操作契约', () => {
 
   it('着色器在显示域有限重建辐射，并让白热只走独立核心 PSF', () => {
     expect(bloomShaderSource).toContain('let linearPeak = max(color.r, max(color.g, color.b))');
-    expect(bloomShaderSource).toContain('let displayPeak = clamp(linearToSrgb(linearPeak)');
+    expect(bloomShaderSource).toContain('let displayColor = clamp(linearToSrgb(color)');
+    expect(bloomShaderSource).toContain('let displayPeak = spectralEmissionPeak(displayColor)');
+    expect(bloomShaderSource).toContain('dot(displayColor * displayColor, displayColor)');
     expect(bloomShaderSource).toContain('1.0 - RADIANCE_SHOULDER * clamp(displayValue');
     expect(bloomShaderSource).not.toContain('-log(max(1.0 - min(');
     expect(bloomShaderSource).toContain('return vec4f(coloredEmitter, whiteCore)');
