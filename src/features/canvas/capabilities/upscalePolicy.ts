@@ -1,13 +1,7 @@
+import type { ModelDefinition } from '@/core/types'
 import type { CanvasImageCapabilityModelPolicy } from './types'
 
-/** 统一注册表选择默认高清模型时使用的稳定 canonical ID。 */
 export const UPSCALE_DEFAULT_CANONICAL_MODEL_ID = 'topaz-image-upscale'
-
-export const UPSCALE_OUTPUT_MAX_MEGAPIXELS = 48
-export const UPSCALE_INPUT_MAX_FILE_BYTES = 20 * 1024 * 1024
-export const UPSCALE_FACTORS = [2, 4] as const
-
-export type UpscaleFactor = (typeof UPSCALE_FACTORS)[number]
 
 export interface UpscaleImageInfo {
   width: number
@@ -18,23 +12,59 @@ export interface UpscaleImageInfo {
 }
 
 export interface UpscalePreflightResult {
-  factor: UpscaleFactor
+  factor: number
   sourceWidth: number
   sourceHeight: number
   sourceMegapixels: number
   outputWidth: number
   outputHeight: number
   outputMegapixels: number
-  estimatedPriceUsd: 0.08 | 0.16
-  pricingTier: 'up-to-24mp' | 'up-to-48mp'
   runtimeParams: {
-    __falTopazOutputMegapixels: number
+    __upscaleInputMegapixels: number
+    __upscaleOutputMegapixels: number
   }
+}
+
+interface UpscalePreflightProfile {
+  factor: { mode: 'fixed'; value: number } | { mode: 'parameter'; transferKey: string }
+  allowedFactors?: readonly number[]
+  maxInputFileBytes?: number
+  maxOutputMegapixels?: number
+  alpha: 'preserve' | 'reject'
+}
+
+const UPSCALE_PREFLIGHT_PROFILES: Readonly<Record<string, UpscalePreflightProfile>> = {
+  'topaz-image-upscale': {
+    factor: { mode: 'parameter', transferKey: 'upscaleFactor' },
+    allowedFactors: [2, 4],
+    maxInputFileBytes: 20 * 1024 * 1024,
+    maxOutputMegapixels: 48,
+    alpha: 'reject',
+  },
+  'topaz-transparent-upscale': {
+    factor: { mode: 'fixed', value: 4 },
+    maxInputFileBytes: 20 * 1024 * 1024,
+    alpha: 'preserve',
+  },
+  'seedvr2-image-upscale': {
+    factor: { mode: 'parameter', transferKey: 'upscaleFactor' },
+    allowedFactors: [2, 4],
+    alpha: 'reject',
+  },
+  'bria-creative-upscale': {
+    factor: { mode: 'fixed', value: 2 },
+    maxOutputMegapixels: 10,
+    alpha: 'preserve',
+  },
+  'ideogram-upscale': {
+    factor: { mode: 'fixed', value: 2 },
+    alpha: 'reject',
+  },
 }
 
 export const UPSCALE_MODEL_POLICY = {
   mode: 'verified-families',
-  allowedCanonicalFamilies: ['topaz-image-upscale'],
+  allowedCanonicalFamilies: Object.keys(UPSCALE_PREFLIGHT_PROFILES),
   requiredTags: ['image-to-image', 'upscaling'],
   providerCompatibility: 'verified-combinations-only',
   allowedProviderConfigurations: [{ providerId: 'fal' }],
@@ -55,35 +85,41 @@ function normalizeDimension(value: number, name: '宽度' | '高度'): number {
   return value
 }
 
-function normalizeFactor(value: unknown): UpscaleFactor {
-  const factor = Number(value)
-  if (!UPSCALE_FACTORS.includes(factor as UpscaleFactor)) {
-    throw new Error('高清放大倍率必须是 2× 或 4×')
+function resolveFactor(
+  model: ModelDefinition,
+  params: DynamicValueMap,
+  profile: UpscalePreflightProfile,
+): number {
+  const factorProfile = profile.factor
+  if (factorProfile.mode === 'fixed') return factorProfile.value
+  const param = model.params.find((candidate) => candidate.transferKey === factorProfile.transferKey)
+  const factor = Number(param ? params[param.id] ?? param.default : Number.NaN)
+  if (!Number.isFinite(factor) || factor <= 0 || !profile.allowedFactors?.includes(factor)) {
+    throw new Error('当前模型的放大倍率无效，请重新选择')
   }
-  return factor as UpscaleFactor
+  return factor
 }
 
-/**
- * 高清任务提交前的唯一像素、文件、透明度与费用预检。
- *
- * 输出尺寸按 EXIF 方向修正后的视觉宽高计算；结果仅允许进入 Fal 官方
- * 24MP / 48MP 两个可精确报价的阶梯。该函数不发起上传或供应商请求。
- */
 export function prepareUpscalePreflight(
   imageInfo: UpscaleImageInfo,
-  factorValue: unknown,
+  model: ModelDefinition,
+  params: DynamicValueMap,
 ): UpscalePreflightResult {
+  const profile = UPSCALE_PREFLIGHT_PROFILES[model.meta.canonicalModelId]
+  if (!profile) throw new Error('当前模型未通过高清放大预检')
+
   const rawWidth = normalizeDimension(imageInfo.width, '宽度')
   const rawHeight = normalizeDimension(imageInfo.height, '高度')
-  const factor = normalizeFactor(factorValue)
+  const factor = resolveFactor(model, params, profile)
   if (!Number.isSafeInteger(imageInfo.fileSizeBytes) || imageInfo.fileSizeBytes <= 0) {
     throw new Error('无法读取源图文件大小，请重新导入有效图片')
   }
-  if (imageInfo.fileSizeBytes > UPSCALE_INPUT_MAX_FILE_BYTES) {
-    throw new Error('源图文件超过 20MiB，尚未上传或创建付费任务')
+  if (profile.maxInputFileBytes && imageInfo.fileSizeBytes > profile.maxInputFileBytes) {
+    const maxMiB = profile.maxInputFileBytes / 1024 / 1024
+    throw new Error(`源图文件超过 ${maxMiB}MiB，尚未上传或创建付费任务`)
   }
-  if (imageInfo.hasAlpha) {
-    throw new Error('当前高清服务输出为 JPEG，暂不支持包含透明通道的源图')
+  if (imageInfo.hasAlpha && profile.alpha === 'reject') {
+    throw new Error('当前放大模型不保留透明通道，请改用 Topaz 透明图放大或 Bria')
   }
 
   const sourceWidth = isOrientedQuarterTurn(imageInfo.orientation) ? rawHeight : rawWidth
@@ -95,13 +131,12 @@ export function prepareUpscalePreflight(
   }
   const sourceMegapixels = sourceWidth * sourceHeight / 1_000_000
   const outputMegapixels = outputWidth * outputHeight / 1_000_000
-  if (outputMegapixels > UPSCALE_OUTPUT_MAX_MEGAPIXELS) {
+  if (profile.maxOutputMegapixels && outputMegapixels > profile.maxOutputMegapixels) {
     throw new Error(
-      `预计输出 ${outputWidth}×${outputHeight}（${outputMegapixels.toFixed(2)}MP），超过首版 48MP 上限，尚未上传或创建付费任务`,
+      `预计输出 ${outputWidth}×${outputHeight}（${outputMegapixels.toFixed(2)}MP），超过当前模型 ${profile.maxOutputMegapixels}MP 上限，尚未上传或创建付费任务`,
     )
   }
 
-  const upTo24Mp = outputMegapixels <= 24
   return {
     factor,
     sourceWidth,
@@ -110,10 +145,9 @@ export function prepareUpscalePreflight(
     outputWidth,
     outputHeight,
     outputMegapixels,
-    estimatedPriceUsd: upTo24Mp ? 0.08 : 0.16,
-    pricingTier: upTo24Mp ? 'up-to-24mp' : 'up-to-48mp',
     runtimeParams: {
-      __falTopazOutputMegapixels: outputMegapixels,
+      __upscaleInputMegapixels: sourceMegapixels,
+      __upscaleOutputMegapixels: outputMegapixels,
     },
   }
 }

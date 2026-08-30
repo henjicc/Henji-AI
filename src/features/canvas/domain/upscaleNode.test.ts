@@ -23,7 +23,7 @@ describe('高清放大节点定义', () => {
     });
   });
 
-  it('默认数据锁定 Topaz、2 倍与首版安全上限', () => {
+  it('默认数据锁定 Topaz 精确放大与第二版预检契约', () => {
     expect(canvasNodeDefinitions[CANVAS_NODE_TYPES.upscaleGen].createDefaultData()).toMatchObject({
       displayName: '高清放大',
       capabilityId: CANVAS_IMAGE_CAPABILITY_IDS.upscale,
@@ -32,13 +32,13 @@ describe('高清放大节点定义', () => {
       modelId: 'fal-ai-topaz-image-upscale',
       mediaInputs: {},
       params: {
-        falTopazUpscaleModel: 'High Fidelity V2',
+        falTopazUpscaleMode: 'precision',
+        falTopazPrecisionModel: 'High Fidelity V3',
         falTopazUpscaleFactor: 2,
         falTopazFaceEnhancement: false,
       },
       fixedSemanticParams: {
-        maxOutputMegapixels: 48,
-        maxInputFileBytes: 20 * 1024 * 1024,
+        upscaleContractVersion: 2,
       },
     });
   });

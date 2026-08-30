@@ -1,7 +1,9 @@
 import { memo, useCallback } from 'react';
 import type { NodeProps } from '@xyflow/react';
+import { useTranslation } from 'react-i18next';
 
 import { readImageInfo } from '@/commands/image';
+import { registry } from '@/core/ModelRegistry';
 import { ICON_UPSCALE } from '@/core/theme/icons';
 import {
   CANVAS_IMAGE_CAPABILITY_IDS,
@@ -32,17 +34,22 @@ export const UpscaleGenerationNode = memo(({
   width,
   height,
 }: UpscaleGenerationNodeProps) => {
+  const { t } = useTranslation();
   const prepareRuntimeParams = useCallback(async ({
     images,
     params,
+    modelId,
   }: GenerationNodeRuntimePreparationContext): Promise<DynamicValueMap> => {
     if (images.length !== 1) {
       throw new Error('高清放大必须且只能提供 1 张源图');
     }
+    const model = registry.getModel(modelId);
+    if (!model) throw new Error('当前高清放大模型不存在');
     const info = await readImageInfo(images[0]);
     return prepareUpscalePreflight(
       info,
-      params.falTopazUpscaleFactor,
+      model,
+      params,
     ).runtimeParams;
   }, []);
 
@@ -63,7 +70,9 @@ export const UpscaleGenerationNode = memo(({
       showPromptInput={false}
       requirePrompt={false}
       prepareRuntimeParams={prepareRuntimeParams}
-      minHeight={152}
+      layoutMode="workbench"
+      workbenchSummary={t('node.upscaleGeneration.workbenchSummary')}
+      minHeight={300}
     />
   );
 });

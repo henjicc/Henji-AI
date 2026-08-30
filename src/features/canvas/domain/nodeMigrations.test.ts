@@ -186,13 +186,14 @@ describe('migrateRelightGenerationData', () => {
 });
 
 describe('migrateUpscaleGenerationData', () => {
-  it('保存重开后恢复唯一模型、安全上限和单张内联源图', () => {
+  it('保存重开后恢复默认模型、新参数契约和单张内联源图', () => {
     const data: DynamicValueMap = {
       capabilityId: 'broken',
       prompt: 'do not redraw',
       modelId: 'apimart-gpt-image-2',
       params: {
-        falTopazUpscaleModel: 'CGI',
+        falTopazUpscaleMode: 'precision',
+        falTopazPrecisionModel: 'CGI',
         falTopazUpscaleFactor: 4,
         falTopazFaceEnhancement: true,
         unsupported: 'drop-me',
@@ -208,14 +209,14 @@ describe('migrateUpscaleGenerationData', () => {
       promptTemplateVersion: null,
       modelId: 'fal-ai-topaz-image-upscale',
       params: {
-        falTopazUpscaleModel: 'CGI',
+        falTopazUpscaleMode: 'precision',
+        falTopazPrecisionModel: 'CGI',
         falTopazUpscaleFactor: 4,
         falTopazFaceEnhancement: true,
       },
       mediaInputs: { image: ['first.png'] },
       fixedSemanticParams: {
-        maxOutputMegapixels: 48,
-        maxInputFileBytes: 20 * 1024 * 1024,
+        upscaleContractVersion: 2,
       },
     });
     expect((data.params as DynamicValueMap).unsupported).toBeUndefined();

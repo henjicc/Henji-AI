@@ -278,6 +278,7 @@ describe('画布图片能力应用服务', () => {
         generationUi: {
           promptMode,
           modelMode: 'locked',
+          layoutMode: 'workbench',
           excludeParamIds: ['image'],
           ...(promptMaxCharacters ? { promptMaxCharacters } : {}),
         },
@@ -369,6 +370,8 @@ describe('画布图片能力应用服务', () => {
       capabilityId: 'image.upscale',
       modelId: 'fal-ai-topaz-image-upscale',
       params: {
+        falTopazUpscaleMode: 'precision',
+        falTopazPrecisionModel: 'High Fidelity V3',
         falTopazUpscaleFactor: 2,
         falTopazFaceEnhancement: false,
       },
@@ -409,7 +412,7 @@ describe('画布图片能力应用服务', () => {
     ])
   })
 
-  it('元素编辑能力创建相邻节点并自动打开唯一蒙版编辑器', async () => {
+  it('局部重绘能力只创建相邻工作台节点，不自动打开独立蒙版编辑器', async () => {
     const execute = createCanvasImageCapabilityExecutor()
     const result = await execute(sourceNodeId, CANVAS_IMAGE_CAPABILITY_IDS.elementEdit)
     expect(result).toMatchObject({ kind: 'canvas-node', capabilityId: 'image.element-edit' })
@@ -417,17 +420,23 @@ describe('画布图片能力应用服务', () => {
       (node) => node.type === CANVAS_NODE_TYPES.elementEditGen,
     )
     expect(elementNode?.data).toMatchObject({
-      displayName: '元素编辑',
+      displayName: '局部重绘',
       capabilityId: 'image.element-edit',
       modelId: 'apimart-gpt-image-2',
-      promptTemplateVersion: 'element-edit-mask-v1',
+      promptTemplateVersion: 'local-redraw-crop-v2',
       fixedSemanticParams: {
         referenceImageCount: 1,
         outputCount: 1,
-        quality: 'medium',
-        maskDocumentVersion: 1,
+        localRedrawContractVersion: 2,
         maskEncoding: 'alpha',
         maskPaintMeaning: 'transparent-edit',
+      },
+      localRedrawSettings: {
+        contextScale: 2,
+        aspectRatio: 'auto',
+        registrationQuality: 'precise',
+        featherPixels: 12,
+        forceRegistration: false,
       },
     })
     expect(useCanvasStore.getState().edges).toEqual([
@@ -437,12 +446,7 @@ describe('画布图片能力应用服务', () => {
         targetHandle: 'param:__image',
       }),
     ])
-    expect(useCanvasSpecialEditorController.getState().session).toMatchObject({
-      projectId,
-      nodeId: elementNode?.id,
-      editorKey: 'mask',
-      isDirty: false,
-    })
+    expect(useCanvasSpecialEditorController.getState().session).toBeNull()
   })
 
   it('图层拆分能力以原厂 Seedream 固定模式创建专用节点并连接单张源图', async () => {

@@ -31,6 +31,7 @@ import {
   CANVAS_IMAGE_CAPABILITY_IDS,
   type CanvasImageCapabilityDefinition,
 } from './types';
+import { createFalUtilityCapability } from './falUtilityCapability';
 
 const IMAGE_SOURCE = {
   mediaTypes: ['image'],
@@ -38,68 +39,6 @@ const IMAGE_SOURCE = {
   maxCount: 1,
   requireMaterializedMedia: true,
 } as const;
-
-function falUtilityCapability(options: {
-  id: CanvasImageCapabilityDefinition['id'];
-  titleKey: string;
-  descriptionKey: string;
-  group: CanvasImageCapabilityDefinition['group'];
-  icon: CanvasImageCapabilityDefinition['icon'];
-  order: number;
-  modelId: string;
-  promptMode?: 'optional' | 'hidden';
-  promptMaxCharacters?: number;
-}): CanvasImageCapabilityDefinition {
-  return {
-    id: options.id,
-    titleKey: options.titleKey,
-    descriptionKey: options.descriptionKey,
-    group: options.group,
-    groupLabelKey: `imageCapabilities.groups.${options.group}`,
-    icon: options.icon,
-    order: options.order,
-    source: IMAGE_SOURCE,
-    node: { kind: 'standard-generation', editor: 'standard' },
-    implementation: {
-      status: 'implemented',
-      execution: {
-        kind: 'canvas-node',
-        nodeType: CANVAS_NODE_TYPES.imageEdit,
-        useLocalizedDisplayName: true,
-        initialData: {
-          modelId: options.modelId,
-          params: {},
-          generationUi: {
-            promptMode: options.promptMode ?? 'hidden',
-            modelMode: 'locked',
-            layoutMode: 'workbench',
-            excludeParamIds: ['image'],
-            ...(options.promptMaxCharacters
-              ? { promptMaxCharacters: options.promptMaxCharacters }
-              : {}),
-          },
-        },
-      },
-    },
-    availability: {
-      releaseStage: 'available',
-      defaultEnabled: true,
-      unavailableReasonKey: null,
-    },
-    modelPolicy: { mode: 'not-applicable' },
-    promptPolicy: {
-      hiddenTemplateVersion: null,
-      fixedSemanticParams: {},
-      visibleParameterKeys: [],
-    },
-    outputPolicy: {
-      resultKind: 'image',
-      count: { mode: 'single' },
-      postProcess: 'none',
-      failureMode: 'single-result',
-    },
-  };
-}
 
 export const builtInCanvasImageCapabilities: readonly CanvasImageCapabilityDefinition[] = [
   {
@@ -172,7 +111,7 @@ export const builtInCanvasImageCapabilities: readonly CanvasImageCapabilityDefin
       failureMode: 'single-result',
     },
   },
-  falUtilityCapability({
+  createFalUtilityCapability({
     id: CANVAS_IMAGE_CAPABILITY_IDS.presetRelight,
     titleKey: 'imageCapabilities.items.presetRelight.title',
     descriptionKey: 'imageCapabilities.items.presetRelight.description',
@@ -181,7 +120,7 @@ export const builtInCanvasImageCapabilities: readonly CanvasImageCapabilityDefin
     order: 21,
     modelId: 'fal-image-apps-v2-relighting',
   }),
-  falUtilityCapability({
+  createFalUtilityCapability({
     id: CANVAS_IMAGE_CAPABILITY_IDS.lowLightEnhancement,
     titleKey: 'imageCapabilities.items.lowLightEnhancement.title',
     descriptionKey: 'imageCapabilities.items.lowLightEnhancement.description',
@@ -190,7 +129,7 @@ export const builtInCanvasImageCapabilities: readonly CanvasImageCapabilityDefin
     order: 22,
     modelId: 'fal-control-light',
   }),
-  falUtilityCapability({
+  createFalUtilityCapability({
     id: CANVAS_IMAGE_CAPABILITY_IDS.outpaint,
     titleKey: 'imageCapabilities.items.outpaint.title',
     descriptionKey: 'imageCapabilities.items.outpaint.description',
@@ -201,7 +140,7 @@ export const builtInCanvasImageCapabilities: readonly CanvasImageCapabilityDefin
     promptMode: 'optional',
     promptMaxCharacters: 500,
   }),
-  falUtilityCapability({
+  createFalUtilityCapability({
     id: CANVAS_IMAGE_CAPABILITY_IDS.productPhotography,
     titleKey: 'imageCapabilities.items.productPhotography.title',
     descriptionKey: 'imageCapabilities.items.productPhotography.description',
@@ -210,7 +149,7 @@ export const builtInCanvasImageCapabilities: readonly CanvasImageCapabilityDefin
     order: 24,
     modelId: 'fal-image-apps-v2-product-photography',
   }),
-  falUtilityCapability({
+  createFalUtilityCapability({
     id: CANVAS_IMAGE_CAPABILITY_IDS.photoRestoration,
     titleKey: 'imageCapabilities.items.photoRestoration.title',
     descriptionKey: 'imageCapabilities.items.photoRestoration.description',
@@ -219,7 +158,7 @@ export const builtInCanvasImageCapabilities: readonly CanvasImageCapabilityDefin
     order: 25,
     modelId: 'fal-image-apps-v2-photo-restoration',
   }),
-  falUtilityCapability({
+  createFalUtilityCapability({
     id: CANVAS_IMAGE_CAPABILITY_IDS.backgroundRemoval,
     titleKey: 'imageCapabilities.items.backgroundRemoval.title',
     descriptionKey: 'imageCapabilities.items.backgroundRemoval.description',
@@ -341,13 +280,23 @@ export const builtInCanvasImageCapabilities: readonly CanvasImageCapabilityDefin
     promptPolicy: {
       hiddenTemplateVersion: null,
       fixedSemanticParams: {
-        maxOutputMegapixels: 48,
-        maxInputFileBytes: 20 * 1024 * 1024,
+        upscaleContractVersion: 2,
       },
-      visibleParameterKeys: [
-        'falTopazUpscaleModel',
-        'falTopazUpscaleFactor',
-        'falTopazFaceEnhancement',
+      visibleParameterKeys: [],
+      visibleParameterTransferKeys: [
+        'upscaleMode',
+        'upscalePrecisionModel',
+        'upscaleCreativeModel',
+        'upscaleGenerativeModel',
+        'upscaleFactor',
+        'faceEnhancement',
+        'upscaleCreativity',
+        'colorPreservation',
+        'enhancementStrength',
+        'noiseScale',
+        'preserveAlpha',
+        'upscaleResemblance',
+        'upscaleDetail',
       ],
     },
     outputPolicy: {
