@@ -164,7 +164,7 @@ describe('SharpSourceProvider', () => {
   it.each([
     { transferCharacteristics: 16, label: 'PQ' },
     { transferCharacteristics: 18, label: 'HLG' },
-  ])('从 AVIF nclx 解析 $label CICP 并判定 HDR', async ({ transferCharacteristics }) => {
+  ])('不会把 AVIF 尾部伪造的 $label nclx 识别成 HDR', async ({ transferCharacteristics }) => {
     const avif = await sharp({
       create: { width: 8, height: 8, channels: 3, background: { r: 187, g: 187, b: 187 } },
     }).avif({ bitdepth: 10 }).toBuffer()
@@ -181,26 +181,17 @@ describe('SharpSourceProvider', () => {
 
     expect(await provider.readMetadata(resource.id)).toMatchObject({
       format: 'heif',
-      cicp: {
-        colorPrimaries: 9,
-        transferCharacteristics,
-        matrixCoefficients: 9,
-        fullRange: true,
-      },
-      hdr: true,
+      bitsPerSample: 10,
+      cicp: null,
+      hdr: false,
     })
     expect(await provider.readTile({ resourceId: resource.id, mip: 0, tileX: 0, tileY: 0 }))
       .toMatchObject({
-        bitDepth: 32,
-        sampleFormat: 'float',
-        numericRange: 'scene-linear',
-        colorSpace: 'scrgb',
-        transferFunction: 'linear',
+        bitDepth: 16,
+        sampleFormat: 'uint',
+        numericRange: 'unorm16',
       })
-    await expect(provider.readTile({
-      resourceId: resource.id, mip: 0, tileX: 0, tileY: 0, bitDepth: 16,
-    })).rejects.toThrow('Float32 scRGB')
-    await expect(provider.readFastProxy(resource.id, 64)).rejects.toThrow('Float32 tile preview')
+    await expect(provider.readFastProxy(resource.id, 64)).resolves.toMatchObject({ format: 'webp' })
   })
 
   it.each([10, 12] as const)('%s 位 AVIF 保留真实位深，缺少 nclx 时不猜测 HDR', async (bitdepth) => {

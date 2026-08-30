@@ -37,6 +37,7 @@ import { ManagedSourcePyramid, type SourcePyramidTileLayout } from './source-pyr
 
 const MAX_MIP_LEVEL = 30
 const MAX_TILE_HALO = 2048
+const MAX_SOURCE_ICC_PROFILE_BYTES = 16 * 1024 * 1024
 /** 覆盖 200MP 目标并给极端长宽比留余量，同时拒绝无界解压。 */
 export const IMAGE_EDIT_MAX_SOURCE_PIXELS = 1_000_000_000
 export const IMAGE_EDIT_METADATA_CACHE_LIMIT = 256
@@ -218,7 +219,7 @@ export class SharpSourceProvider implements SourceProvider {
         const cached = await this.derivedCache.get(address)
         throwIfImageSourceAborted(signal)
         if (cached) {
-          const metadataPipeline = sharp(cached, { failOn: 'error' })
+          const metadataPipeline = sharp(cached, { failOn: 'warning' })
           const metadata = await runSharpOperation(metadataPipeline, signal, () => metadataPipeline.metadata())
           if (metadata.width && metadata.height) {
             return { resourceId, width: metadata.width, height: metadata.height, format: 'webp', bytes: cached }
@@ -233,7 +234,7 @@ export class SharpSourceProvider implements SourceProvider {
     const pipeline = sharp(this.resources.getFilesystemPath(resourceId), {
       limitInputPixels: IMAGE_EDIT_MAX_SOURCE_PIXELS,
       sequentialRead: true,
-      failOn: 'error',
+      failOn: 'warning',
     })
       .autoOrient()
       .resize({
@@ -335,7 +336,7 @@ export class SharpSourceProvider implements SourceProvider {
     let pipeline = sharp(this.resources.getFilesystemPath(request.resourceId), {
       limitInputPixels: IMAGE_EDIT_MAX_SOURCE_PIXELS,
       sequentialRead: false,
-      failOn: 'error',
+      failOn: 'warning',
     }).extract({
       left: encodedRegion.left,
       top: encodedRegion.top,
@@ -412,7 +413,7 @@ export class SharpSourceProvider implements SourceProvider {
     const pipeline = sharp(this.resources.getFilesystemPath(resourceId), {
       limitInputPixels: IMAGE_EDIT_MAX_SOURCE_PIXELS,
       sequentialRead: true,
-      failOn: 'error',
+      failOn: 'warning',
     })
     const metadata = await runSharpOperation(pipeline, signal, () => pipeline.metadata())
     if (!metadata.width || !metadata.height) throw new Error(`Image dimensions unavailable: ${resourceId}`)
@@ -436,6 +437,9 @@ export class SharpSourceProvider implements SourceProvider {
       metadata.format,
       signal,
     )
+    if ((metadata.icc?.byteLength ?? 0) > MAX_SOURCE_ICC_PROFILE_BYTES) {
+      throw new Error(`Source ICC profile exceeds ${MAX_SOURCE_ICC_PROFILE_BYTES} bytes`)
+    }
     const iccProfile = metadata.icc?.byteLength
       ? await this.resources.putBuffer(metadata.icc, {
         mediaType: 'application/vnd.iccprofile',

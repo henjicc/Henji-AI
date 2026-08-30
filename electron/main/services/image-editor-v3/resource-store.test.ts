@@ -78,4 +78,16 @@ describe('ContentAddressedResourceStore', () => {
     await expect(store.putBuffer(Buffer.from('ok'), { maxBytes: 0 }))
       .rejects.toThrow('positive safe integer')
   })
+
+  it('putFile 只读取已打开的普通文件并拒绝符号链接', async () => {
+    const sourcePath = path.join(rootDir, 'source.bin')
+    const linkPath = path.join(rootDir, 'source-link.bin')
+    await fsp.writeFile(sourcePath, 'source-bytes')
+    await fsp.symlink(sourcePath, linkPath)
+
+    await expect(store.putFile(sourcePath, { maxBytes: 32 }))
+      .resolves.toMatchObject({ byteLength: 12 })
+    await expect(store.putFile(linkPath, { maxBytes: 32 }))
+      .rejects.toThrow('symbolic link')
+  })
 })

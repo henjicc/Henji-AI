@@ -143,7 +143,21 @@ export class ContentAddressedResourceStore {
 
   async putFile(sourcePath: string, options: PutResourceOptions = {}): Promise<PutResourceResult> {
     throwIfAborted(options.signal)
-    const stream = fs.createReadStream(sourcePath)
+    const sourcePathStats = await fsp.lstat(sourcePath)
+    if (sourcePathStats.isSymbolicLink()) {
+      throw new Error('Resource source must not be a symbolic link')
+    }
+    const source = await fsp.open(sourcePath, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW)
+    const stats = await source.stat()
+    if (!stats.isFile()) {
+      await source.close()
+      throw new Error('Resource source is not a regular file')
+    }
+    if (options.maxBytes !== undefined && stats.size > options.maxBytes) {
+      await source.close()
+      throw new Error(`Resource exceeds maximum byte length of ${options.maxBytes}`)
+    }
+    const stream = source.createReadStream({ autoClose: false })
     const onAbort = (): void => {
       stream.destroy(abortError())
     }
@@ -152,6 +166,8 @@ export class ContentAddressedResourceStore {
       return await this.putReadable(stream, options)
     } finally {
       options.signal?.removeEventListener('abort', onAbort)
+      stream.destroy()
+      await source.close().catch(() => undefined)
     }
   }
 
