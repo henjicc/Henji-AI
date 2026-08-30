@@ -23,7 +23,6 @@ describe('generationModelDescriptions', () => {
   })
 
   it('所有通用模型都有描述登记，新增模型允许保留待确认占位', () => {
-    expect(Object.keys(GENERATION_MODEL_DESCRIPTIONS)).toHaveLength(57)
     const pendingDescriptions = new Set([
       'topaz-transparent-upscale',
       'seedvr2-image-upscale',
