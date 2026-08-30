@@ -73,6 +73,7 @@ export function PanoramaViewerPanel({
   const [readyFrozenPreviewUrl, setReadyFrozenPreviewUrl] = useState<string | null>(null);
   const isReady = resource.status === 'ready';
   const isSphereAvailable = isReady && resource.isEquirectangular;
+  const canRequestSphere = resource.status === 'loading' || isSphereAvailable;
   const showStaticResource = viewMode === 'flat'
     || (viewMode === 'sphere' && !renderSphere && !frozenPreviewUrl);
   const showFrozenPreview = viewMode === 'sphere' && Boolean(frozenPreviewUrl);
@@ -95,14 +96,14 @@ export function PanoramaViewerPanel({
             || event.clientY < bounds.top
             || event.clientY > bounds.bottom
           ) return;
-          if (viewMode === 'sphere' && isSphereAvailable && !hasWebglFailure) {
+          if (viewMode === 'sphere' && canRequestSphere && !hasWebglFailure) {
             if (!renderSphere) setReadyFrozenPreviewUrl(null);
             onRequestSphere();
           }
         }}
         onPointerDown={(event) => {
           event.stopPropagation();
-          if (viewMode === 'sphere' && isSphereAvailable && !hasWebglFailure) onRequestSphere();
+          if (viewMode === 'sphere' && canRequestSphere && !hasWebglFailure) onRequestSphere();
         }}
         onWheel={(event) => event.stopPropagation()}
         onDoubleClick={(event) => {

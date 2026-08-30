@@ -75,6 +75,13 @@ function attachUiInspectionCanvasPanorama(context) {
     )
     const primarySurface = inlineViewer.locator('[data-panorama-inline-surface]')
     const secondarySurface = secondaryInlineViewer.locator('[data-panorama-inline-surface]')
+    const waitForPanoramaCanvas = async (canvas, stage) => {
+      try {
+        await canvas.waitFor({ state: 'visible', timeout: 12000 })
+      } catch (error) {
+        throw new Error(`全景 Canvas 未就绪（${stage}）：${error.message}`)
+      }
+    }
     const screenshotPrimarySurface = async () => {
       const box = await primarySurface.boundingBox()
       if (!box) throw new Error('全景节点预览区域不可见')
@@ -89,7 +96,7 @@ function attachUiInspectionCanvasPanorama(context) {
     await page.mouse.move(20, 80)
     await primarySurface.hover()
     const primarySphere = primarySurface.locator('[data-panorama-surface="sphere"] canvas')
-    await primarySphere.waitFor({ state: 'visible', timeout: 12000 })
+    await waitForPanoramaCanvas(primarySphere, '初次指针激活')
     await primarySurface.locator('[data-panorama-transition-preview="true"]')
       .waitFor({ state: 'detached', timeout: 8000 })
     // 快速移出再移入必须复用同一个 WebGL 实例，不能先冻结再重建造成卡顿。
@@ -108,11 +115,13 @@ function attachUiInspectionCanvasPanorama(context) {
     }
     if (await activeInlineCanvases.count() > 1) throw new Error('全景节点内嵌 WebGL Canvas 超过 1 个')
     await secondarySurface.hover()
-    await secondarySurface.locator('[data-panorama-surface="sphere"] canvas')
-      .waitFor({ state: 'visible', timeout: 12000 })
+    await waitForPanoramaCanvas(
+      secondarySurface.locator('[data-panorama-surface="sphere"] canvas'),
+      '切换到次节点租约',
+    )
     if (await activeInlineCanvases.count() > 1) throw new Error('租约切换后全景内嵌 Canvas 超过 1 个')
     await primarySurface.hover()
-    await primarySphere.waitFor({ state: 'visible', timeout: 12000 })
+    await waitForPanoramaCanvas(primarySphere, '切回主节点租约')
     await primarySurface.locator('[data-panorama-transition-preview="true"]')
       .waitFor({ state: 'detached', timeout: 8000 })
 
@@ -130,7 +139,7 @@ function attachUiInspectionCanvasPanorama(context) {
     await primarySurface.locator('img').waitFor({ state: 'visible', timeout: 8000 })
     if (await activeInlineCanvases.count()) throw new Error('WebGL context lost 后仍保留内嵌 Canvas')
     await resultNode.getByRole('button', { name: /^(球面|Sphere)$/i }).click()
-    await primarySphere.waitFor({ state: 'visible', timeout: 12000 })
+    await waitForPanoramaCanvas(primarySphere, 'WebGL 上下文丢失后恢复')
     await page.waitForTimeout(240)
 
     // 节点内第一次指针手势就直接环视，不得带动节点或 ReactFlow 视口。
@@ -204,7 +213,7 @@ function attachUiInspectionCanvasPanorama(context) {
     await frozenPreview.waitFor({ state: 'visible', timeout: 12000 })
     await page.mouse.move(20, 80)
     await primarySurface.hover()
-    await primarySphere.waitFor({ state: 'visible', timeout: 12000 })
+    await waitForPanoramaCanvas(primarySphere, '项目重开后恢复')
     await primarySurface.locator('[data-panorama-transition-preview="true"]')
       .waitFor({ state: 'detached', timeout: 8000 })
 
@@ -214,7 +223,7 @@ function attachUiInspectionCanvasPanorama(context) {
     await primarySurface.locator('img').waitFor({ state: 'visible', timeout: 8000 })
     if (await primarySphere.count()) throw new Error('平面模式仍保留全景 WebGL Canvas')
     await sphereButton.click()
-    await primarySphere.waitFor({ state: 'visible', timeout: 12000 })
+    await waitForPanoramaCanvas(primarySphere, '平面切回球面')
 
     const viewportRatioButton = resultNode.getByRole('button', { name: /^(视口比例|Viewport ratio)$/i })
     await viewportRatioButton.click()
@@ -248,7 +257,7 @@ function attachUiInspectionCanvasPanorama(context) {
 
     // 节点内交互完成后，双击仍可进入沉浸式查看器。
     await primarySurface.hover()
-    await primarySphere.waitFor({ state: 'visible', timeout: 12000 })
+    await waitForPanoramaCanvas(primarySphere, '截取视角后恢复')
     await primarySurface.dblclick({ position: { x: 80, y: 80 } })
 
     const viewer = page.locator('[data-panorama-viewer="true"]')
@@ -409,8 +418,10 @@ function attachUiInspectionCanvasPanorama(context) {
     }
     const reopenedSurface = reopenedInlineViewer.locator('[data-panorama-inline-surface]')
     await reopenedSurface.hover()
-    await reopenedSurface.locator('[data-panorama-surface="sphere"] canvas')
-      .waitFor({ state: 'visible', timeout: 12000 })
+    await waitForPanoramaCanvas(
+      reopenedSurface.locator('[data-panorama-surface="sphere"] canvas'),
+      '最终持久化核验后重开',
+    )
     await reopenedSurface.dblclick({ position: { x: 80, y: 80 } })
     await viewer.waitFor({ state: 'visible', timeout: 12000 })
     await viewer.locator('[data-panorama-surface="sphere"] canvas').waitFor({ state: 'visible', timeout: 12000 })

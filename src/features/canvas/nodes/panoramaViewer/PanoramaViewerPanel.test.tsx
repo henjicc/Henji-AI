@@ -29,6 +29,41 @@ afterEach(() => {
 });
 
 describe('PanoramaViewerPanel', () => {
+  it('鼠标先进入加载中的球面预览时保留激活意图', () => {
+    const onRequestSphere = vi.fn();
+    render(
+      <PanoramaViewerPanel
+        resource={{ status: 'loading', displayUrl: 'panorama-source.png' }}
+        viewMode="sphere"
+        viewportAspectRatio="16:9"
+        cameraView={{ yaw: 0, pitch: 0, fov: 70 }}
+        currentViewRef={createRef<PanoramaCameraView>()}
+        frozenPreviewUrl="data:image/png;base64,last-view"
+        renderSphere={false}
+        isGenerating={false}
+        generationError={null}
+        isCapturing={false}
+        hasWebglFailure={false}
+        captureRef={{ current: null }}
+        onRetry={vi.fn()}
+        onRequestSphere={onRequestSphere}
+        onInteractionStart={vi.fn()}
+        onInteractionEnd={vi.fn()}
+        onOpenImmersiveViewer={vi.fn()}
+        onViewModeChange={vi.fn()}
+        onViewportAspectRatioChange={vi.fn()}
+        onCameraViewChangeEnd={vi.fn()}
+        onSphereFramePresented={vi.fn()}
+        onCapture={vi.fn()}
+        onFrozenPreviewReady={vi.fn()}
+        onContextLost={vi.fn()}
+      />,
+    );
+
+    fireEvent.pointerEnter(screen.getByRole('region'), { clientX: 0, clientY: 0 });
+    expect(onRequestSphere).toHaveBeenCalledOnce();
+  });
+
   it('没有图片时在预览区提示用户连接上传节点', () => {
     render(
       <PanoramaViewerPanel
