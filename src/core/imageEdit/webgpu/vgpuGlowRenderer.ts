@@ -2,6 +2,7 @@ import { effect, frame, initFromDevice, sampler, target } from 'vgpu';
 import type { Effect, Gpu, Target, Texture } from 'vgpu';
 import bloomShaderSource from '../shaders/vgpuGlowBloom.wgsl?raw';
 import compositeShaderSource from '../shaders/vgpuGlowComposite.wgsl?raw';
+import copyShaderSource from '../shaders/vgpuGlowCopy.wgsl?raw';
 import linearizeShaderSource from '../shaders/vgpuGlowLinearize.wgsl?raw';
 import upsampleShaderSource from '../shaders/vgpuGlowUpsample.wgsl?raw';
 import type { VgpuGlowRecipe } from '../vgpuGlowRecipe';
@@ -11,6 +12,7 @@ interface GlowTargets {
   scene: Target;
   levels: Target[];
   accumulations: Target[];
+  globalBloom: Target;
   output: Target;
 }
 
@@ -19,7 +21,16 @@ interface GlowEffects {
   extract: Effect;
   downsample: Effect[];
   upsample: Effect[];
+  copy: Effect;
   composite: Effect;
+}
+
+/**
+ * 超大图分块导出期间保留的一份整图散射。它属于创建它的 renderer，只在 release 前有效。
+ */
+export interface VgpuGlowGlobalScatter {
+  readonly target: Target;
+  release(): void;
 }
 
 const MAX_SCATTER_LEVELS = 12;
@@ -77,11 +88,24 @@ export class VgpuGlowRenderer {
     height: number;
     recipe: VgpuGlowRecipe;
     isCancelled?: () => boolean;
+    scatter?: {
+      global: VgpuGlowGlobalScatter;
+      region: readonly [number, number, number, number];
+    };
   }): Promise<GpuTexture> {
     assertNotCancelled(input.isCancelled);
     const levelCount = assertScatterLevels(input.recipe);
-    this.resize(input.width, input.height, input.recipe);
-    this.bind(input.recipe);
+    if (input.scatter) {
+      this.resizeComposite(input.width, input.height);
+      this.bindComposite(
+        input.recipe,
+        input.scatter.global.target,
+        input.scatter.region
+      );
+    } else {
+      this.resize(input.width, input.height, input.recipe);
+      this.bind(input.recipe);
+    }
     await this.compile(levelCount);
     this.vgpuError = null;
     this.gpu.gpu.queue.copyExternalImageToTexture(
@@ -91,19 +115,7 @@ export class VgpuGlowRenderer {
     );
     const submitted = frame(this.gpu, (currentFrame) => {
       currentFrame.pass({ target: this.targets.scene, clear: CLEAR }, this.effects.linearize);
-      currentFrame.pass({ target: this.targets.levels[0], clear: CLEAR }, this.effects.extract);
-      for (let index = 1; index < levelCount; index += 1) {
-        currentFrame.pass(
-          { target: this.targets.levels[index], clear: CLEAR },
-          this.effects.downsample[index - 1]
-        );
-      }
-      for (let index = levelCount - 2; index >= 0; index -= 1) {
-        currentFrame.pass(
-          { target: this.targets.accumulations[index], clear: CLEAR },
-          this.effects.upsample[index]
-        );
-      }
+      if (!input.scatter) this.encodeScatter(currentFrame, levelCount);
       currentFrame.pass({ target: this.targets.output, clear: CLEAR }, this.effects.composite);
     });
     await submitted.done;
@@ -114,9 +126,65 @@ export class VgpuGlowRenderer {
     return this.targets.output.color.gpu as unknown as GpuTexture;
   }
 
+  /**
+   * 在降采样后的完整画面上只计算一次宽尺度散射，供所有导出 Tile 共享。
+   *
+   * 这不是性能捷径，而是无缝导出的必要条件：每块独立计算只能看到自己的像素与 halo，
+   * 半径大于 halo 的能量必然在块边界断开。官方 Target 的 color 在 resize/destroy 前保持
+   * 稳定，因此先复制到独立 target，再改变 scene/output 的块尺寸是安全的。
+   */
+  async buildGlobalScatter(input: {
+    bitmap: ImageBitmap;
+    width: number;
+    height: number;
+    recipe: VgpuGlowRecipe;
+    isCancelled?: () => boolean;
+  }): Promise<VgpuGlowGlobalScatter> {
+    assertNotCancelled(input.isCancelled);
+    const levelCount = assertScatterLevels(input.recipe);
+    this.resize(input.width, input.height, input.recipe);
+    this.bind(input.recipe);
+    this.targets.globalBloom.resize(this.targets.accumulations[0].size);
+    this.effects.copy.set({
+      source: this.targets.accumulations[0],
+      linearSampler: this.linearSampler,
+    });
+    await this.compile(levelCount);
+    this.vgpuError = null;
+    this.gpu.gpu.queue.copyExternalImageToTexture(
+      { source: input.bitmap },
+      { texture: this.input.gpu },
+      [input.width, input.height]
+    );
+    const submitted = frame(this.gpu, (currentFrame) => {
+      currentFrame.pass({ target: this.targets.scene, clear: CLEAR }, this.effects.linearize);
+      this.encodeScatter(currentFrame, levelCount);
+      currentFrame.pass(
+        { target: this.targets.globalBloom, clear: CLEAR },
+        this.effects.copy
+      );
+    });
+    await submitted.done;
+    await this.gpu.settled();
+    assertNotCancelled(input.isCancelled);
+    const reportedError = this.vgpuError as Error | null;
+    if (reportedError) throw new Error(`VGPU 全局散射渲染失败：${reportedError.message}`);
+
+    let released = false;
+    return {
+      target: this.targets.globalBloom,
+      release: () => {
+        if (released) return;
+        released = true;
+        this.targets.globalBloom.resize(UNUSED_SIZE);
+      },
+    };
+  }
+
   destroy(): void {
     this.input.destroy();
     destroyTarget(this.targets.scene);
+    destroyTarget(this.targets.globalBloom);
     destroyTarget(this.targets.output);
     for (const value of this.targets.levels) destroyTarget(value);
     for (const value of this.targets.accumulations) destroyTarget(value);
@@ -125,9 +193,7 @@ export class VgpuGlowRenderer {
 
   private resize(width: number, height: number, recipe: VgpuGlowRecipe): void {
     const full = normalizeSize(width, height);
-    this.input.resize(full);
-    this.targets.scene.resize(full);
-    this.targets.output.resize(full);
+    this.resizeComposite(full[0], full[1]);
     for (let index = 0; index < MAX_SCATTER_LEVELS; index += 1) {
       const level = recipe.scatterLevels[index];
       const size = level ? scaleSize(full, level.divisor) : UNUSED_SIZE;
@@ -136,6 +202,13 @@ export class VgpuGlowRenderer {
         level && index < recipe.scatterLevels.length - 1 ? size : UNUSED_SIZE
       );
     }
+  }
+
+  private resizeComposite(width: number, height: number): void {
+    const full = normalizeSize(width, height);
+    this.input.resize(full);
+    this.targets.scene.resize(full);
+    this.targets.output.resize(full);
   }
 
   private bind(recipe: VgpuGlowRecipe): void {
@@ -172,9 +245,20 @@ export class VgpuGlowRenderer {
       lowAccumulation = targets.accumulations[index];
     }
 
+    this.bindComposite(recipe, targets.accumulations[0], [0, 0, 1, 1]);
+  }
+
+  private bindComposite(
+    recipe: VgpuGlowRecipe,
+    bloomPyramid: Target,
+    scatterRegion: readonly [number, number, number, number]
+  ): void {
+    const effects = this.effects;
+    const targets = this.targets;
+    effects.linearize.set({ source: this.input, linearSampler: this.linearSampler });
     effects.composite.set({
       scene: targets.scene,
-      bloomPyramid: targets.accumulations[0],
+      bloomPyramid,
       linearSampler: this.linearSampler,
       composite: {
         params: [recipe.intensity, recipe.bloomExposure, recipe.bloomGamma, recipe.whiteHeat],
@@ -187,8 +271,25 @@ export class VgpuGlowRenderer {
         ],
         source: [recipe.threshold, recipe.knee, recipe.hdrBoost, 0],
         core: [recipe.coreGain, recipe.coreRadiusPx, recipe.ditherAmount, 0],
+        scatterRegion: [...scatterRegion],
       },
     });
+  }
+
+  private encodeScatter(currentFrame: ReturnType<typeof frame>, levelCount: number): void {
+    currentFrame.pass({ target: this.targets.levels[0], clear: CLEAR }, this.effects.extract);
+    for (let index = 1; index < levelCount; index += 1) {
+      currentFrame.pass(
+        { target: this.targets.levels[index], clear: CLEAR },
+        this.effects.downsample[index - 1]
+      );
+    }
+    for (let index = levelCount - 2; index >= 0; index -= 1) {
+      currentFrame.pass(
+        { target: this.targets.accumulations[index], clear: CLEAR },
+        this.effects.upsample[index]
+      );
+    }
   }
 
   private async compile(levelCount: number): Promise<void> {
@@ -197,6 +298,7 @@ export class VgpuGlowRenderer {
       jobs.push(
         this.effects.linearize.compile(this.targets.scene),
         this.effects.extract.compile(this.targets.levels[0]),
+        this.effects.copy.compile(this.targets.globalBloom),
         this.effects.composite.compile(this.targets.output)
       );
     }
@@ -219,6 +321,7 @@ function createTargets(gpu: Gpu): GlowTargets {
     scene: make(),
     levels: Array.from({ length: MAX_SCATTER_LEVELS }, make),
     accumulations: Array.from({ length: MAX_SCATTER_LEVELS }, make),
+    globalBloom: make(),
     output: make(),
   };
 }
@@ -233,6 +336,7 @@ function createEffects(gpu: Gpu): GlowEffects {
     upsample: Array.from({ length: MAX_SCATTER_LEVELS - 1 }, (_, index) =>
       effect(gpu, upsampleShaderSource, { label: `辉光 Pro 散射重建 ${index + 1}` })
     ),
+    copy: effect(gpu, copyShaderSource, { label: '辉光 Pro 全局散射保留' }),
     composite: effect(gpu, compositeShaderSource, { label: '辉光 Pro 光学合成' }),
   };
 }

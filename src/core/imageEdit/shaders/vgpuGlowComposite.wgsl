@@ -9,6 +9,8 @@ struct Composite {
   source: vec4f,
   // micro-core gain, micro-core radius px, dither amount, reserved
   core: vec4f,
+  // global scatter offset XY, scale XY; [0, 0, 1, 1] means local/full-frame scatter
+  scatterRegion: vec4f,
 }
 
 @group(0) @binding(0) var<uniform> composite: Composite;
@@ -58,7 +60,8 @@ fn softCore(uv: vec2f) -> vec3f {
 }
 
 fn sampleTintedBloom(uv: vec2f) -> vec3f {
-  return tintGlow(textureSampleLevel(bloomPyramid, linearSampler, uv, 0.0).rgb);
+  let scatterUv = composite.scatterRegion.xy + uv * composite.scatterRegion.zw;
+  return tintGlow(textureSampleLevel(bloomPyramid, linearSampler, scatterUv, 0.0).rgb);
 }
 
 fn toneBloom(color: vec3f) -> vec3f {

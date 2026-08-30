@@ -24,7 +24,10 @@ import {
   fitWithinPixelBudget,
   IMAGE_EDIT_PREVIEW_MAX_PIXELS,
 } from './exportPrototype'
-import { VgpuGlowRenderer } from '../webgpu/vgpuGlowRenderer'
+import {
+  VgpuGlowRenderer,
+  type VgpuGlowGlobalScatter,
+} from '../webgpu/vgpuGlowRenderer'
 import { collectRelevantGpuLimits } from './webgpuCapabilities'
 import type {
   ImageEditExportFormat,
@@ -623,7 +626,11 @@ export class WorkerWebGpuRuntime {
     width: number,
     height: number,
     recipe: VgpuGlowRecipe,
-    isCancelled?: () => boolean
+    isCancelled?: () => boolean,
+    scatter?: {
+      global: VgpuGlowGlobalScatter
+      region: readonly [number, number, number, number]
+    }
   ): Promise<ImageBitmap> {
     this.assertTextureSize(state, width, height)
     const renderer = await this.ensureVgpuGlowRenderer(state)
@@ -633,6 +640,7 @@ export class WorkerWebGpuRuntime {
       height,
       recipe,
       isCancelled,
+      scatter,
     })
     const canvas = new OffscreenCanvas(width, height)
     const context = getWebGpuContext(canvas)
@@ -680,43 +688,75 @@ export class WorkerWebGpuRuntime {
       }
       options.onProgress(plan.totalTiles, plan.totalTiles)
     } else {
-      for (const tile of plan.tiles) {
-        if (options.isCancelled()) throw new DOMException('图片编辑任务已取消', 'AbortError')
-        const tileBitmap = await createImageBitmap(
-          bitmap,
-          tile.expandedX,
-          tile.expandedY,
-          tile.expandedWidth,
-          tile.expandedHeight
-        )
-        try {
-          const rendered = await this.renderVgpuGlowBitmap(
-            state,
-            tileBitmap,
-            tile.expandedWidth,
-            tile.expandedHeight,
+      const globalBitmap = await createImageBitmap(bitmap, {
+        resizeWidth: plan.globalScatterWidth,
+        resizeHeight: plan.globalScatterHeight,
+        resizeQuality: 'high',
+      })
+      const renderer = await this.ensureVgpuGlowRenderer(state)
+      let globalScatter: VgpuGlowGlobalScatter | null = null
+      try {
+        globalScatter = await renderer.buildGlobalScatter({
+          bitmap: globalBitmap,
+          width: plan.globalScatterWidth,
+          height: plan.globalScatterHeight,
+          recipe: rebaseVgpuGlowRecipeForScale(
             recipe,
-            options.isCancelled
+            plan.globalScatterWidth,
+            plan.globalScatterHeight
+          ),
+          isCancelled: options.isCancelled,
+        })
+        for (const tile of plan.tiles) {
+          if (options.isCancelled()) throw new DOMException('图片编辑任务已取消', 'AbortError')
+          const tileBitmap = await createImageBitmap(
+            bitmap,
+            tile.expandedX,
+            tile.expandedY,
+            tile.expandedWidth,
+            tile.expandedHeight
           )
           try {
-            context.drawImage(
-              rendered,
-              tile.cropX,
-              tile.cropY,
-              tile.width,
-              tile.height,
-              tile.x,
-              tile.y,
-              tile.width,
-              tile.height
+            const rendered = await this.renderVgpuGlowBitmap(
+              state,
+              tileBitmap,
+              tile.expandedWidth,
+              tile.expandedHeight,
+              recipe,
+              options.isCancelled,
+              {
+                global: globalScatter,
+                region: [
+                  tile.expandedX / width,
+                  tile.expandedY / height,
+                  tile.expandedWidth / width,
+                  tile.expandedHeight / height,
+                ],
+              }
             )
+            try {
+              context.drawImage(
+                rendered,
+                tile.cropX,
+                tile.cropY,
+                tile.width,
+                tile.height,
+                tile.x,
+                tile.y,
+                tile.width,
+                tile.height
+              )
+            } finally {
+              rendered.close()
+            }
           } finally {
-            rendered.close()
+            tileBitmap.close()
           }
-        } finally {
-          tileBitmap.close()
+          options.onProgress(tile.index + 1, plan.totalTiles)
         }
-        options.onProgress(tile.index + 1, plan.totalTiles)
+      } finally {
+        globalScatter?.release()
+        globalBitmap.close()
       }
     }
     const finalOutput = await this.applyAnnotationsAndCrop(canvas, options.composition)
