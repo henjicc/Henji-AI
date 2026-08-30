@@ -1,6 +1,5 @@
 import { sanitizeMarkItem } from '../markCodec';
 import {
-  IMAGE_EDIT_BLEND_MODES_V3,
   collectImageEditLayerIdsV3,
   type ImageEditGroupLayerV3,
   type ImageEditJsonObjectV3,
@@ -11,19 +10,24 @@ import type { ImageEditDocumentV3 } from './documentTypes';
 import type {
   ImageEditCommandApplyResultV3,
   ImageEditCommandV3,
-  ImageEditHistoryResourceReferenceV3,
   ImageEditLayerCommonPatchV3,
   ImageEditRasterTileDeltaCommandV3,
 } from './commandTypes';
+import { normalizeImageEditLayerCommonPatchV3 } from './commandCommonPatch';
+import { applyImageEditOutputGeometryCommandV3 } from './commandDocumentReducer';
 import {
-  collectImageEditCommandResourceReferencesV3,
-  mergeImageEditHistoryResourceReferencesV3,
-} from './commandTypes';
+  ImageEditCommandValidationErrorV3,
+  ImageEditLayerLockedErrorV3,
+  ImageEditRevisionConflictErrorV3,
+} from './commandErrors';
+import { calculateImageEditCommandHistoryResourcesV3 } from './commandHistoryResources';
 import { cloneImageEditJsonObjectV3 } from './documentCodec';
 
-export class ImageEditRevisionConflictErrorV3 extends Error {}
-export class ImageEditCommandValidationErrorV3 extends Error {}
-export class ImageEditLayerLockedErrorV3 extends Error {}
+export {
+  ImageEditCommandValidationErrorV3,
+  ImageEditLayerLockedErrorV3,
+  ImageEditRevisionConflictErrorV3,
+} from './commandErrors';
 
 interface LayerLocation {
   layer: ImageEditLayerV3;
@@ -207,34 +211,6 @@ function inverseBase(command: ImageEditCommandV3, revision: number): Pick<ImageE
   return { commandId: `${command.commandId}:inverse`, expectedRevision: revision };
 }
 
-function normalizeCommonPatch(patch: ImageEditLayerCommonPatchV3): ImageEditLayerCommonPatchV3 {
-  const allowedKeys = new Set(['name', 'visible', 'locked', 'opacity', 'blendMode', 'transform']);
-  const keys = Object.keys(patch);
-  if (keys.length === 0 || keys.some((key) => !allowedKeys.has(key))) {
-    throw new ImageEditCommandValidationErrorV3('图层公共属性补丁为空或包含未知字段');
-  }
-  if (patch.name !== undefined && typeof patch.name !== 'string') throw new ImageEditCommandValidationErrorV3('图层名称无效');
-  if (patch.visible !== undefined && typeof patch.visible !== 'boolean') throw new ImageEditCommandValidationErrorV3('图层显隐值无效');
-  if (patch.locked !== undefined && typeof patch.locked !== 'boolean') throw new ImageEditCommandValidationErrorV3('图层锁定值无效');
-  if (patch.opacity !== undefined && (!Number.isFinite(patch.opacity) || patch.opacity < 0 || patch.opacity > 1)) {
-    throw new ImageEditCommandValidationErrorV3('图层不透明度必须在 0～1 之间');
-  }
-  if (patch.blendMode !== undefined && !IMAGE_EDIT_BLEND_MODES_V3.includes(patch.blendMode)) {
-    throw new ImageEditCommandValidationErrorV3('图层混合模式无效');
-  }
-  if (patch.transform !== undefined && (patch.transform.length !== 6 || !patch.transform.every(Number.isFinite))) {
-    throw new ImageEditCommandValidationErrorV3('图层变换无效');
-  }
-  return {
-    ...(patch.name === undefined ? {} : { name: patch.name }),
-    ...(patch.visible === undefined ? {} : { visible: patch.visible }),
-    ...(patch.locked === undefined ? {} : { locked: patch.locked }),
-    ...(patch.opacity === undefined ? {} : { opacity: patch.opacity }),
-    ...(patch.blendMode === undefined ? {} : { blendMode: patch.blendMode }),
-    ...(patch.transform === undefined ? {} : { transform: [...patch.transform] }),
-  };
-}
-
 function applyLayerCommand(
   document: ImageEditDocumentV3,
   command: ImageEditCommandV3,
@@ -346,7 +322,7 @@ function applyLayerContentCommand(
   const location = findLayerLocation(document.layers, layerId);
   if (!location) throw new ImageEditCommandValidationErrorV3(`图层不存在：${layerId}`);
   if (command.type === 'layer.update-common') {
-    const patch = normalizeCommonPatch(command.patch);
+    const patch = normalizeImageEditLayerCommonPatchV3(command.patch);
     const keys = Object.keys(patch) as (keyof ImageEditLayerCommonPatchV3)[];
     if (location.layer.locked && keys.some((key) => key !== 'locked')) throw new ImageEditLayerLockedErrorV3(`图层已锁定：${layerId}`);
     if (location.ancestors.some((ancestor) => ancestor.locked)) throw new ImageEditLayerLockedErrorV3(`图层所在组已锁定：${layerId}`);
@@ -476,18 +452,6 @@ function applyLayerContentCommand(
   throw new ImageEditCommandValidationErrorV3(`不支持的图片编辑命令：${command.type}`);
 }
 
-function sumKnownResourceBytes(resources: readonly ImageEditHistoryResourceReferenceV3[]): number {
-  let total = 0;
-  for (const resource of resources) {
-    if (resource.byteSize === null) continue;
-    total += resource.byteSize;
-    if (!Number.isSafeInteger(total)) {
-      throw new ImageEditCommandValidationErrorV3('栅格瓦片历史字节数溢出');
-    }
-  }
-  return total;
-}
-
 export function applyImageEditCommandV3(
   document: ImageEditDocumentV3,
   command: ImageEditCommandV3
@@ -504,28 +468,27 @@ export function applyImageEditCommandV3(
     throw new ImageEditCommandValidationErrorV3('图片文档 revision 无效或已耗尽');
   }
   const nextRevision = document.revision + 1;
-  const result = applyLayerCommand(document, command, nextRevision);
-  const historyMetadataBytes = new TextEncoder().encode(JSON.stringify([command, result.inverse])).byteLength;
-  let historyResources: ImageEditHistoryResourceReferenceV3[];
-  try {
-    historyResources = mergeImageEditHistoryResourceReferencesV3([
-      ...collectImageEditCommandResourceReferencesV3(command),
-      ...collectImageEditCommandResourceReferencesV3(result.inverse),
-    ]);
-  } catch (error) {
-    throw new ImageEditCommandValidationErrorV3(
-      error instanceof Error ? error.message : '图片编辑历史资源引用无效'
-    );
-  }
-  const historyBytes = historyMetadataBytes + sumKnownResourceBytes(historyResources);
+  const documentResult = command.type === 'document.update-output-geometry'
+    ? applyImageEditOutputGeometryCommandV3(document, command, nextRevision)
+    : null;
+  const layerResult = documentResult ? null : applyLayerCommand(document, command, nextRevision);
+  const inverse = documentResult?.inverse ?? layerResult?.inverse;
+  if (!inverse) throw new ImageEditCommandValidationErrorV3('图片编辑命令没有生成逆向补丁');
+  const historyMetadataBytes = new TextEncoder().encode(JSON.stringify([command, inverse])).byteLength;
+  const history = calculateImageEditCommandHistoryResourcesV3(command, inverse);
+  const historyBytes = historyMetadataBytes + history.bytes;
   if (!Number.isSafeInteger(historyBytes)) {
     throw new ImageEditCommandValidationErrorV3('图片编辑历史字节数溢出');
   }
   return {
-    document: { ...document, revision: nextRevision, layers: result.layers },
-    inverse: result.inverse,
+    document: {
+      ...document,
+      revision: nextRevision,
+      ...(documentResult ? { geometry: documentResult.geometry } : { layers: layerResult?.layers ?? document.layers }),
+    },
+    inverse,
     historyMetadataBytes,
-    historyResources,
+    historyResources: history.resources,
     historyBytes,
   };
 }

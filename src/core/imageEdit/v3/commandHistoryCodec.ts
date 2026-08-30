@@ -190,10 +190,29 @@ function validateIndex(value: unknown, label: string): void {
   safeInteger(value, label);
 }
 
+function validateOutputGeometryCommand(command: Record<string, unknown>): void {
+  validateBase(command, ['orientation', 'crop']);
+  if (!isRecord(command.orientation)) fail('图片输出方向无效');
+  exactKeys(command.orientation, ['rotate', 'mirrored'], '图片输出方向');
+  if (![0, 90, 180, 270].includes(Number(command.orientation.rotate))
+    || typeof command.orientation.mirrored !== 'boolean') fail('图片输出方向无效');
+  if (command.crop === null) return;
+  if (!isRecord(command.crop)) fail('图片裁剪范围无效');
+  exactKeys(command.crop, ['x', 'y', 'width', 'height'], '图片裁剪范围');
+  const values = [command.crop.x, command.crop.y, command.crop.width, command.crop.height];
+  if (!values.every((entry) => typeof entry === 'number' && Number.isFinite(entry))
+    || Number(command.crop.x) < 0 || Number(command.crop.y) < 0
+    || Number(command.crop.width) <= 0 || Number(command.crop.height) <= 0) {
+    fail('图片裁剪范围无效');
+  }
+}
+
 function validateCommand(value: unknown): ImageEditCommandV3 {
   if (!isRecord(value) || typeof value.type !== 'string') fail('历史命令无效');
   const command = value;
   switch (command.type) {
+    case 'document.update-output-geometry':
+      validateOutputGeometryCommand(command); break;
     case 'layer.add':
       validateBase(command, ['parentId', 'index', 'layer']); validateNullableId(command.parentId, '父图层 ID');
       validateIndex(command.index, '图层位置'); validateLayer(command.layer); break;
@@ -306,6 +325,8 @@ function validateInversePair(forward: ImageEditCommandV3, inverse: ImageEditComm
   if (inverse.commandId !== `${forward.commandId}:inverse`
     || inverse.expectedRevision !== forward.expectedRevision + 1) fail('历史逆向补丁基线无效');
   switch (forward.type) {
+    case 'document.update-output-geometry':
+      if (inverse.type !== 'document.update-output-geometry') fail('图片输出几何逆向补丁无效'); break;
     case 'layer.add':
       if (inverse.type !== 'layer.delete' || inverse.layerId !== forward.layer.id) fail('新增图层逆向补丁无效'); break;
     case 'layer.delete':

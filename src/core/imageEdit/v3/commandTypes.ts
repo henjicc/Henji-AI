@@ -1,5 +1,9 @@
 import type { MarkItem } from '../types';
-import type { ImageEditDocumentV3 } from './documentTypes';
+import type {
+  ImageEditCropRectV3,
+  ImageEditDocumentV3,
+  ImageEditOrientationV3,
+} from './documentTypes';
 import type {
   ImageEditBlendModeV3,
   ImageEditGroupLayerV3,
@@ -12,6 +16,12 @@ import type {
 export interface ImageEditCommandBaseV3 {
   commandId: string;
   expectedRevision: number;
+}
+
+export interface ImageEditDocumentUpdateOutputGeometryCommandV3 extends ImageEditCommandBaseV3 {
+  type: 'document.update-output-geometry';
+  orientation: ImageEditOrientationV3;
+  crop: ImageEditCropRectV3 | null;
 }
 
 export type ImageEditLayerCommonPatchV3 = Partial<{
@@ -127,6 +137,7 @@ export interface ImageEditRasterTileDeltaCommandV3 extends ImageEditCommandBaseV
 }
 
 export type ImageEditCommandV3 =
+  | ImageEditDocumentUpdateOutputGeometryCommandV3
   | ImageEditLayerAddCommandV3
   | ImageEditLayerDeleteCommandV3
   | ImageEditLayerMoveCommandV3

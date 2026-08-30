@@ -164,6 +164,26 @@ describe('图片编辑 V3 命令历史', () => {
       .toThrow(ImageEditRevisionConflictErrorV3);
   });
 
+  it('输出裁剪与方向命令可随历史快照恢复和重做', () => {
+    const history = new ImageEditCommandHistoryV3();
+    const source = createPaintDocument();
+    const cropped = history.execute(source, {
+      commandId: 'crop-history',
+      expectedRevision: 0,
+      type: 'document.update-output-geometry',
+      orientation: { rotate: 90, mirrored: false },
+      crop: { x: 4, y: 5, width: 60, height: 90 },
+    });
+    const undone = history.undo(cropped).document;
+    const restored = new ImageEditCommandHistoryV3();
+    restored.restore(undone, history.stringifySnapshot());
+
+    expect(restored.redo(undone).document.geometry).toMatchObject({
+      orientation: { rotate: 90, mirrored: false },
+      crop: { x: 4, y: 5, width: 60, height: 90 },
+    });
+  });
+
   it('拒绝未知字段、篡改大小、危险键、超限和未知版本，失败时不污染现有历史', () => {
     const history = new ImageEditCommandHistoryV3({ maxCommands: 2, maxBytes: 100_000 });
     const document = addTile(history, createPaintDocument(), 0, 128);

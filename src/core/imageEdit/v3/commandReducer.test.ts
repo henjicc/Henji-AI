@@ -21,6 +21,42 @@ function createDocument(layers: ImageEditLayerV3[]): ImageEditDocumentV3 {
 }
 
 describe('图片编辑 V3 命令归约器', () => {
+  it('非破坏性更新方向与裁剪，并以一条逆向命令恢复', () => {
+    const source = createDocument([createImageEditRasterLayerV3('source', '原图')]);
+    const cropped = applyImageEditCommandV3(source, {
+      commandId: 'crop',
+      expectedRevision: 0,
+      type: 'document.update-output-geometry',
+      orientation: { rotate: 90, mirrored: true },
+      crop: { x: 5, y: 10, width: 60, height: 80 },
+    });
+
+    expect(cropped.document.geometry).toEqual({
+      width: 100,
+      height: 80,
+      orientation: { rotate: 90, mirrored: true },
+      crop: { x: 5, y: 10, width: 60, height: 80 },
+    });
+    expect(cropped.document.layers).toBe(source.layers);
+    const restored = applyImageEditCommandV3(cropped.document, cropped.inverse);
+    expect(restored.document.geometry).toEqual(source.geometry);
+
+    expect(() => applyImageEditCommandV3(source, {
+      commandId: 'invalid-crop',
+      expectedRevision: 0,
+      type: 'document.update-output-geometry',
+      orientation: { rotate: 0, mirrored: false },
+      crop: { x: 90, y: 0, width: 20, height: 20 },
+    })).toThrow(ImageEditCommandValidationErrorV3);
+    expect(() => applyImageEditCommandV3(source, {
+      commandId: 'unchanged-geometry',
+      expectedRevision: 0,
+      type: 'document.update-output-geometry',
+      orientation: { rotate: 0, mirrored: false },
+      crop: null,
+    })).toThrow(ImageEditCommandValidationErrorV3);
+  });
+
   it('把连续图层组成可逆嵌套组，且每次持久命令只增加一次 revision', () => {
     const raster = createImageEditRasterLayerV3('raster', '原图', 'sha256:source');
     const marks = createImageEditAnnotationLayerV3('marks', '标注');
