@@ -36,6 +36,21 @@ export interface ImageEditPerformanceSummaryV3 {
   p95Ms: number;
 }
 
+export interface ImageEditResourceUsageSampleV3 {
+  operation: number;
+  totalBytes: number;
+}
+
+export interface ImageEditResourceDriftSummaryV3 {
+  sampleCount: number;
+  baselineBytes: number;
+  finalBytes: number;
+  peakBytes: number;
+  driftBytes: number;
+  allowedDriftBytes: number;
+  withinLimit: boolean;
+}
+
 function percentile(sorted: readonly number[], ratio: number): number {
   if (sorted.length === 0) return 0;
   const index = Math.min(sorted.length - 1, Math.max(0, Math.ceil(sorted.length * ratio) - 1));
@@ -65,10 +80,37 @@ export function imageEditResourceDriftWithinLimitV3(
   baselineBytes: number,
   finalBytes: number,
 ): boolean {
-  const drift = Math.max(0, finalBytes - baselineBytes);
+  const normalizedBaseline = Math.max(0, baselineBytes);
+  const normalizedFinal = Math.max(0, finalBytes);
+  const drift = Math.max(0, normalizedFinal - normalizedBaseline);
   const allowed = Math.max(
+    IMAGE_EDIT_PERFORMANCE_TARGETS_V3.resourceDriftBytes,
+    normalizedBaseline * IMAGE_EDIT_PERFORMANCE_TARGETS_V3.resourceDriftRatio,
+  );
+  return drift <= allowed;
+}
+
+export function summarizeImageEditResourceDriftV3(
+  samples: readonly ImageEditResourceUsageSampleV3[],
+): ImageEditResourceDriftSummaryV3 {
+  const values = samples
+    .filter((sample) => Number.isFinite(sample.totalBytes))
+    .map((sample) => Math.max(0, sample.totalBytes));
+  const baselineBytes = values[0] ?? 0;
+  const finalBytes = values.at(-1) ?? baselineBytes;
+  const peakBytes = values.reduce((peak, value) => Math.max(peak, value), baselineBytes);
+  const driftBytes = Math.max(0, finalBytes - baselineBytes);
+  const allowedDriftBytes = Math.max(
     IMAGE_EDIT_PERFORMANCE_TARGETS_V3.resourceDriftBytes,
     baselineBytes * IMAGE_EDIT_PERFORMANCE_TARGETS_V3.resourceDriftRatio,
   );
-  return drift <= allowed;
+  return {
+    sampleCount: values.length,
+    baselineBytes,
+    finalBytes,
+    peakBytes,
+    driftBytes,
+    allowedDriftBytes,
+    withinLimit: driftBytes <= allowedDriftBytes,
+  };
 }

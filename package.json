@@ -62,6 +62,7 @@
     "electron:canvas-stress": "node scripts/electron-phase4-canvas-stress.cjs",
     "electron:pan-bench": "node scripts/electron-canvas-pan-bench.cjs",
     "electron:media-import-bench": "node scripts/electron-media-import-bench.cjs",
+    "image-editor:v3:perf": "vite-node scripts/image-editor-v3-performance-bench.ts",
     "check:canvas-visual": "node scripts/electron-canvas-visual-check.cjs",
     "electron:dpi-check": "node scripts/electron-phase4-dpi-check.cjs",
     "electron:updater-e2e": "node scripts/electron-phase4-updater-e2e.cjs",

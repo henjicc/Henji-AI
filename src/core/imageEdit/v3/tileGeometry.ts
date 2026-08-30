@@ -24,11 +24,52 @@ export interface ImageEditTileRegion {
   halo: number;
 }
 
+export interface ImageEditTileExecutionPlanOptions {
+  /** 每个执行单元在四周额外读取的像素，使用当前 mip 坐标。 */
+  halo?: number;
+  /** 单个像素在一个工作表面中的字节数，例如 rgba16float 为 8。 */
+  bytesPerPixel?: number;
+  /** 同时驻留的输入、输出及中间表面数量。 */
+  workingSurfaceCount?: number;
+  /** 单个执行单元可使用的硬工作集上限；不足时自动从 supertile 降为存储瓦片。 */
+  maxWorkingSetBytes?: number;
+  preferSupertile?: boolean;
+}
+
+export interface ImageEditTileExecutionPlan {
+  mip: number;
+  mipSize: ImageEditSize;
+  storageTileSize: number;
+  executionTileSize: number;
+  storageGrid: ImageEditSize;
+  executionGrid: ImageEditSize;
+  storageTileCount: number;
+  executionUnitCount: number;
+  halo: number;
+  maxSourceRegion: ImageEditSize;
+  maxSourceRegionPixels: number;
+  estimatedWorkingSetBytes: number;
+  usesSupertile: boolean;
+}
+
 function positiveInteger(value: number, name: string): number {
   if (!Number.isSafeInteger(value) || value <= 0) {
     throw new Error(`${name} 必须是正整数`);
   }
   return value;
+}
+
+function nonNegativeInteger(value: number, name: string): number {
+  if (!Number.isSafeInteger(value) || value < 0) {
+    throw new Error(`${name} 必须是非负整数`);
+  }
+  return value;
+}
+
+function safeProduct(values: readonly number[], name: string): number {
+  const product = values.reduce((total, value) => total * value, 1);
+  if (!Number.isSafeInteger(product)) throw new Error(`${name} 超出安全整数范围`);
+  return product;
 }
 
 export function mipSize(source: ImageEditSize, mip: number): ImageEditSize {
@@ -142,4 +183,66 @@ export function gaussianBlurHalo(radiusInDocumentPixels: number, mip: number): n
     throw new Error('模糊半径不能为负数');
   }
   return Math.ceil((radiusInDocumentPixels / (2 ** mip)) * 3);
+}
+
+/**
+ * 只计算瓦片执行几何与最坏工作集，不枚举像素，也不会创建整图表面。
+ * 512 是权威存储粒度；1024 仅是预算允许时的调度 supertile。
+ */
+export function planTileExecution(
+  source: ImageEditSize,
+  mip: number,
+  options: ImageEditTileExecutionPlanOptions = {},
+): ImageEditTileExecutionPlan {
+  const size = mipSize(source, mip);
+  const halo = nonNegativeInteger(Math.ceil(options.halo ?? 0), 'halo');
+  const bytesPerPixel = positiveInteger(options.bytesPerPixel ?? 8, '每像素字节数');
+  const workingSurfaceCount = positiveInteger(
+    options.workingSurfaceCount ?? 2,
+    '工作表面数量',
+  );
+  const maxWorkingSetBytes = options.maxWorkingSetBytes === undefined
+    ? Number.MAX_SAFE_INTEGER
+    : nonNegativeInteger(options.maxWorkingSetBytes, '工作集预算');
+  const candidates = options.preferSupertile === false
+    ? [IMAGE_EDIT_STORAGE_TILE_SIZE]
+    : [IMAGE_EDIT_SUPERTILE_SIZE, IMAGE_EDIT_STORAGE_TILE_SIZE];
+
+  const estimate = (executionTileSize: number) => {
+    const width = Math.min(size.width, executionTileSize + halo * 2);
+    const height = Math.min(size.height, executionTileSize + halo * 2);
+    const pixels = safeProduct([width, height], '瓦片来源区域像素数');
+    const bytes = safeProduct(
+      [pixels, bytesPerPixel, workingSurfaceCount],
+      '瓦片执行工作集',
+    );
+    return { width, height, pixels, bytes };
+  };
+  const selected = candidates
+    .map((executionTileSize) => ({ executionTileSize, estimate: estimate(executionTileSize) }))
+    .find((candidate) => candidate.estimate.bytes <= maxWorkingSetBytes);
+  if (!selected) {
+    throw new Error('工作集预算不足以容纳一个 512×512 存储瓦片及其 halo');
+  }
+
+  const storageGrid = tileGridSize(source, mip, IMAGE_EDIT_STORAGE_TILE_SIZE);
+  const executionGrid = tileGridSize(source, mip, selected.executionTileSize);
+  return {
+    mip,
+    mipSize: size,
+    storageTileSize: IMAGE_EDIT_STORAGE_TILE_SIZE,
+    executionTileSize: selected.executionTileSize,
+    storageGrid,
+    executionGrid,
+    storageTileCount: safeProduct([storageGrid.width, storageGrid.height], '存储瓦片数量'),
+    executionUnitCount: safeProduct([executionGrid.width, executionGrid.height], '执行单元数量'),
+    halo,
+    maxSourceRegion: {
+      width: selected.estimate.width,
+      height: selected.estimate.height,
+    },
+    maxSourceRegionPixels: selected.estimate.pixels,
+    estimatedWorkingSetBytes: selected.estimate.bytes,
+    usesSupertile: selected.executionTileSize === IMAGE_EDIT_SUPERTILE_SIZE,
+  };
 }
