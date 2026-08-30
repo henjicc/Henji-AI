@@ -1,8 +1,15 @@
-import { readImageEditorV3FastProxy } from '@/commands/imageEditorV3'
+import {
+  describeImageEditorV3SourcePyramid,
+  prewarmImageEditorV3SourcePyramid,
+  readImageEditorV3FastProxy,
+} from '@/commands/imageEditorV3'
+import { createLogger } from '@/core/logging'
 import type { ImageEditDocumentV3 } from '@/core/imageEdit/v3/documentTypes'
 import type { ImageEditRenderQuality } from '@/core/imageEdit/v3/renderNodeDefinition'
 import type {
   ImageEditorV3FastProxy,
+  ImageEditorV3PyramidDescriptor,
+  ImageEditorV3PyramidPrewarmResult,
   ImageEditorV3ResourceRef,
 } from '@/platform/contracts/imageEditorV3'
 import { collectImageEditorPreviewResourceRequestsV3 } from './previewDocumentV3'
@@ -49,6 +56,23 @@ type ProxyReaderV3 = (
   signal?: AbortSignal,
 ) => Promise<ImageEditorV3FastProxy>
 
+type PyramidDescriptorReaderV3 = (
+  request: { requestId: string; resourceRef: ImageEditorV3ResourceRef },
+  signal?: AbortSignal,
+) => Promise<ImageEditorV3PyramidDescriptor>
+
+type PyramidPrewarmerV3 = (
+  request: {
+    requestId: string
+    resourceRef: ImageEditorV3ResourceRef
+    minimumMip?: number
+    maximumMip?: number
+    tileBudget?: number
+    bitDepth?: 8 | 16 | 32
+  },
+  signal?: AbortSignal,
+) => Promise<ImageEditorV3PyramidPrewarmResult>
+
 interface PreviewUrlFactoryV3 {
   create(bytes: ArrayBuffer, mediaType: string): string
   revoke(url: string): void
@@ -58,6 +82,8 @@ export interface ImageEditorPreviewClientOptionsV3 {
   sessionId: string
   workerFactory?: ImageEditorPreviewWorkerFactoryV3
   readFastProxy?: ProxyReaderV3
+  describePyramid?: PyramidDescriptorReaderV3
+  prewarmPyramid?: PyramidPrewarmerV3
   urlFactory?: PreviewUrlFactoryV3
   proxyCacheMaxBytes?: number
 }
@@ -77,6 +103,8 @@ const defaultUrlFactory: PreviewUrlFactoryV3 = {
 }
 
 export const IMAGE_EDITOR_PREVIEW_PROXY_CACHE_MAX_BYTES_V3 = 128 * 1024 * 1024
+export const IMAGE_EDITOR_PREVIEW_PYRAMID_PREWARM_TILE_BUDGET_V3 = 64
+const logger = createLogger('image_editor_v3.preview_client')
 
 function createDefaultWorker(): ImageEditorPreviewWorkerPortV3 {
   if (typeof Worker === 'undefined') throw new Error('当前环境不支持图片预览 Worker')
@@ -100,6 +128,7 @@ export class ImageEditorPreviewClientV3 {
   private running: ScheduledJobV3 | null = null
   private pending: ScheduledJobV3 | null = null
   private sequence = 0
+  private prewarmSequence = 0
   private latestSequence = 0
   private disposed = false
   private readonly proxyCache = new Map<string, ImageEditorV3FastProxy>()
@@ -108,11 +137,17 @@ export class ImageEditorPreviewClientV3 {
   private readonly resultLeases = new Set<() => void>()
   private readonly workerFactory: ImageEditorPreviewWorkerFactoryV3
   private readonly proxyReader: ProxyReaderV3
+  private readonly pyramidDescriptorReader: PyramidDescriptorReaderV3
+  private readonly pyramidPrewarmer: PyramidPrewarmerV3
   private readonly urlFactory: PreviewUrlFactoryV3
+  private readonly pyramidPrewarms = new Map<string, AbortController>()
+  private readonly startedPyramidPrewarms = new Set<string>()
 
   constructor(private readonly options: ImageEditorPreviewClientOptionsV3) {
     this.workerFactory = options.workerFactory ?? createDefaultWorker
     this.proxyReader = options.readFastProxy ?? readImageEditorV3FastProxy
+    this.pyramidDescriptorReader = options.describePyramid ?? describeImageEditorV3SourcePyramid
+    this.pyramidPrewarmer = options.prewarmPyramid ?? prewarmImageEditorV3SourcePyramid
     this.urlFactory = options.urlFactory ?? defaultUrlFactory
     this.proxyCacheMaxBytes = options.proxyCacheMaxBytes
       ?? IMAGE_EDITOR_PREVIEW_PROXY_CACHE_MAX_BYTES_V3
@@ -162,6 +197,9 @@ export class ImageEditorPreviewClientV3 {
       this.worker = null
     }
     for (const release of [...this.resultLeases]) release()
+    for (const controller of this.pyramidPrewarms.values()) controller.abort()
+    this.pyramidPrewarms.clear()
+    this.startedPyramidPrewarms.clear()
     this.clearProxyCache()
   }
 
@@ -185,6 +223,12 @@ export class ImageEditorPreviewClientV3 {
   private async prepareAndPost(job: ScheduledJobV3): Promise<void> {
     const worker = this.ensureWorker()
     const requests = collectImageEditorPreviewResourceRequestsV3(job.document, job.maxDimension)
+    for (const request of requests) {
+      this.startPyramidPrewarm(
+        request.resourceId as ImageEditorV3ResourceRef,
+        typeof job.document.color.bitDepth === 'number' ? job.document.color.bitDepth : 32,
+      )
+    }
     const proxies = await Promise.all(requests.map(async (request) => {
       const key = `${request.resourceId}:${request.maxDimension}`
       let proxy = this.proxyCache.get(key)
@@ -334,5 +378,46 @@ export class ImageEditorPreviewClientV3 {
   private clearProxyCache(): void {
     this.proxyCache.clear()
     this.proxyCacheBytes = 0
+  }
+
+  private startPyramidPrewarm(
+    resourceRef: ImageEditorV3ResourceRef,
+    bitDepth: 8 | 16 | 32,
+  ): void {
+    if (this.startedPyramidPrewarms.has(resourceRef)) return
+    const controller = new AbortController()
+    this.startedPyramidPrewarms.add(resourceRef)
+    this.pyramidPrewarms.set(resourceRef, controller)
+    const requestPrefix = `${this.options.sessionId}:pyramid:${++this.prewarmSequence}`
+    void this.pyramidDescriptorReader({
+      requestId: `${requestPrefix}:pyramid-describe`,
+      resourceRef,
+    }, controller.signal).then((descriptor) => {
+      const firstCoarse = descriptor.levels.find((level) => Math.max(level.width, level.height) <= 2_048)
+        ?? descriptor.levels.at(-1)
+      const last = descriptor.levels.at(-1)
+      if (!firstCoarse || !last || controller.signal.aborted) return undefined
+      return this.pyramidPrewarmer({
+        requestId: `${requestPrefix}:pyramid-prewarm`,
+        resourceRef,
+        minimumMip: firstCoarse.mip,
+        maximumMip: last.mip,
+        tileBudget: IMAGE_EDITOR_PREVIEW_PYRAMID_PREWARM_TILE_BUDGET_V3,
+        bitDepth,
+      }, controller.signal)
+    }).catch((error: unknown) => {
+      if (controller.signal.aborted) return
+      logger.warn('图片源金字塔后台预热失败，继续按需读取', {
+        event: 'image_editor_v3.preview.pyramid_prewarm.failed',
+        context: {
+          resourceRef,
+          message: error instanceof Error ? error.message : String(error),
+        },
+      })
+    }).finally(() => {
+      if (this.pyramidPrewarms.get(resourceRef) === controller) {
+        this.pyramidPrewarms.delete(resourceRef)
+      }
+    })
   }
 }

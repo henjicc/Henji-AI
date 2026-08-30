@@ -141,6 +141,13 @@ export function describeImageEditorV3SourcePyramid(
   return runCancellable(request.requestId, signal, (platform) => platform.describeSourcePyramid(request))
 }
 
+export function prewarmImageEditorV3SourcePyramid(
+  request: Parameters<ImageEditorV3Platform['prewarmSourcePyramid']>[0],
+  signal?: AbortSignal,
+): ReturnType<ImageEditorV3Platform['prewarmSourcePyramid']> {
+  return runCancellable(request.requestId, signal, (platform) => platform.prewarmSourcePyramid(request))
+}
+
 export function readImageEditorV3FastProxy(
   request: Parameters<ImageEditorV3Platform['readFastProxy']>[0],
   signal?: AbortSignal,

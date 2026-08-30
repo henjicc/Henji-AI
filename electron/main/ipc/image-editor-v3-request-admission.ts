@@ -6,6 +6,7 @@ const MAX_ACTIVE_REQUESTS_PER_SENDER = 4
 const OPERATION_LIMITS_PER_SENDER: Readonly<Record<string, number>> = {
   'source.import': 1,
   'source.ingest': 1,
+  'source.pyramid_prewarm': 1,
   'source.tile': 2,
   'brush_tiles.persist': 1,
   'brush_tiles.read': 2,
@@ -117,6 +118,11 @@ export function estimateImageEditorV3TileRequestBytes(request: {
 export function estimateImageEditorV3ProxyRequestBytes(maxDimension: number): number {
   // 解码工作表面 + 编码代理 + IPC 副本；按 RGBA 上界预留。
   return maxDimension * maxDimension * 4 + 16 * 1024 * 1024
+}
+
+export function estimateImageEditorV3PyramidPrewarmBytes(bitDepth: 8 | 16 | 32 = 8): number {
+  // 预热严格串行；只需为一个解码瓦片、缓存发布副本与 libvips 工作区准入。
+  return estimateImageEditorV3TileRequestBytes({ halo: 0, bitDepth }) + 16 * 1024 * 1024
 }
 
 export function estimateImageEditorV3BrushPersistBytes(rawByteLength: number): number {

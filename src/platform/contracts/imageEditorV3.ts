@@ -76,6 +76,12 @@ export interface ImageEditorV3PyramidDescriptor {
   }>
 }
 
+export interface ImageEditorV3PyramidPrewarmResult {
+  plannedTiles: number
+  completedTiles: number
+  truncated: boolean
+}
+
 export interface ImageEditorV3FastProxy {
   resourceRef: ImageEditorV3ResourceRef
   width: number
@@ -239,6 +245,14 @@ export interface ImageEditorV3Platform {
     requestId: string
     resourceRef: ImageEditorV3ResourceRef
   }): Promise<ImageEditorV3PyramidDescriptor>
+  prewarmSourcePyramid(request: {
+    requestId: string
+    resourceRef: ImageEditorV3ResourceRef
+    minimumMip?: number
+    maximumMip?: number
+    tileBudget?: number
+    bitDepth?: 8 | 16 | 32
+  }): Promise<ImageEditorV3PyramidPrewarmResult>
   readFastProxy(request: {
     requestId: string
     resourceRef: ImageEditorV3ResourceRef

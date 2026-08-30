@@ -40,6 +40,26 @@ describe('图片编辑 V3 preload 契约', () => {
     expect(invoke).toHaveBeenNthCalledWith(2, 'imageEditorV3:request:cancel', { requestId: 'tile-16' })
   })
 
+  it('粗 mip 金字塔预热使用独立可取消 IPC，不暴露路径', async () => {
+    const invoke = vi.fn(async () => ({ plannedTiles: 8, completedTiles: 8, truncated: false }))
+    const api = createImageEditorV3Api(
+      invoke as unknown as Parameters<typeof createImageEditorV3Api>[0],
+    )
+    const request = {
+      requestId: 'pyramid-prewarm',
+      resourceRef: RESOURCE_REF,
+      minimumMip: 4,
+      maximumMip: 8,
+      tileBudget: 32,
+      bitDepth: 16 as const,
+    }
+
+    await api.prewarmSourcePyramid(request)
+
+    expect(invoke).toHaveBeenCalledWith('imageEditorV3:source:pyramidPrewarm', request)
+    expect(request).not.toHaveProperty('filePath')
+  })
+
   it('已有宿主来源只返回受管资源契约，不把主进程落盘路径带回渲染层', async () => {
     const invoke = vi.fn(async () => ({
       resource: { resourceRef: RESOURCE_REF, byteLength: 4, mediaType: 'image/png' },

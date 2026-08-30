@@ -4,6 +4,7 @@ import { createImageEditDocumentV3 } from '@/core/imageEdit/v3/documentFactory'
 import type { ImageEditorV3FastProxy } from '@/platform/contracts/imageEditorV3'
 import {
   IMAGE_EDITOR_PREVIEW_PROXY_CACHE_MAX_BYTES_V3,
+  IMAGE_EDITOR_PREVIEW_PYRAMID_PREWARM_TILE_BUDGET_V3,
   ImageEditorPreviewClientV3,
   ImageEditorPreviewSupersededErrorV3,
 } from './imageEditorPreviewClientV3'
@@ -152,6 +153,8 @@ describe('ImageEditorPreviewClientV3 调度与资源所有权', () => {
     }))
     const client = new ImageEditorPreviewClientV3({
       sessionId: 'managed', workerFactory: () => worker, readFastProxy: reader,
+      describePyramid: async () => ({ tileSize: 512, levels: [] }),
+      prewarmPyramid: async () => ({ plannedTiles: 0, completedTiles: 0, truncated: false }),
     })
     const rendered = client.render({ document, quality: 'stable', maxDimension: 1_600 })
     await waitForRender(worker)
@@ -170,6 +173,71 @@ describe('ImageEditorPreviewClientV3 调度与资源所有权', () => {
       width: 1_600, height: 800, diagnostics: [], bitmap: output,
     })
     ;(await rendered).release()
+    client.dispose()
+  })
+
+  it('首帧不等待后台粗 mip 金字塔预热，且同一资源每会话只启动一次', async () => {
+    const worker = new FakePreviewWorker()
+    const resourceId = `sha256:${'f'.repeat(64)}` as const
+    const document = createImageEditDocumentV3({
+      width: 20_000,
+      height: 10_000,
+      documentId: 'pyramid-prewarm',
+      sourceResourceId: resourceId,
+      idFactory: () => 'raster',
+    })
+    const reader = vi.fn(async (request): Promise<ImageEditorV3FastProxy> => ({
+      resourceRef: request.resourceRef,
+      width: 1_600,
+      height: 800,
+      mediaType: 'image/webp',
+      bytes: new ArrayBuffer(8),
+    }))
+    const describePyramid = vi.fn(async () => ({
+      tileSize: 512 as const,
+      levels: [
+        { mip: 0, width: 20_000, height: 10_000, columns: 40, rows: 20 },
+        { mip: 4, width: 1_250, height: 625, columns: 3, rows: 2 },
+        { mip: 15, width: 1, height: 1, columns: 1, rows: 1 },
+      ],
+    }))
+    const prewarmPyramid = vi.fn(async () => ({
+      plannedTiles: 7,
+      completedTiles: 7,
+      truncated: false,
+    }))
+    const client = new ImageEditorPreviewClientV3({
+      sessionId: 'prewarm', workerFactory: () => worker, readFastProxy: reader,
+      describePyramid, prewarmPyramid,
+    })
+
+    const first = client.render({ document, quality: 'stable', maxDimension: 1_600 })
+    await waitForRender(worker)
+    for (let attempt = 0; attempt < 10 && prewarmPyramid.mock.calls.length === 0; attempt += 1) await flush()
+    expect(prewarmPyramid).toHaveBeenCalledWith(expect.objectContaining({
+      resourceRef: resourceId,
+      minimumMip: 4,
+      maximumMip: 15,
+      tileBudget: IMAGE_EDITOR_PREVIEW_PYRAMID_PREWARM_TILE_BUDGET_V3,
+      bitDepth: 8,
+    }), expect.any(AbortSignal))
+    const firstOutput = bitmap()
+    worker.emit({
+      type: 'rendered-bitmap', requestId: worker.renders()[0].requestId, sequence: 1,
+      width: 1_600, height: 800, diagnostics: [], bitmap: firstOutput,
+    })
+    ;(await first).release()
+
+    const second = client.render({ document, quality: 'stable', maxDimension: 1_600 })
+    await waitForRender(worker, 2)
+    const secondOutput = bitmap()
+    worker.emit({
+      type: 'rendered-bitmap', requestId: worker.renders()[1].requestId, sequence: 2,
+      width: 1_600, height: 800, diagnostics: [], bitmap: secondOutput,
+    })
+    ;(await second).release()
+    expect(describePyramid).toHaveBeenCalledTimes(1)
+    expect(prewarmPyramid).toHaveBeenCalledTimes(1)
     client.dispose()
   })
 
@@ -208,6 +276,8 @@ describe('ImageEditorPreviewClientV3 调度与资源所有权', () => {
       sessionId: 'bounded-cache',
       workerFactory: () => worker,
       readFastProxy: reader,
+      describePyramid: async () => ({ tileSize: 512, levels: [] }),
+      prewarmPyramid: async () => ({ plannedTiles: 0, completedTiles: 0, truncated: false }),
       proxyCacheMaxBytes: 0,
     })
     const resourceId = `sha256:${'e'.repeat(64)}`

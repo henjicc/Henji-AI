@@ -27,6 +27,7 @@ const MAX_DOCUMENT_BYTES = 64 * 1024 * 1024
 const MAX_RESOURCE_REFS = 50_000
 const MAX_PROXY_DIMENSION = 4_096
 const MAX_IPC_TILE_HALO = 512
+const MAX_PYRAMID_PREWARM_TILES = 4_096
 const MAX_LOCAL_PATH_CHARACTERS = 32_768
 const MAX_HTTP_URL_CHARACTERS = 8_192
 const MAX_BRUSH_TILES_PER_REQUEST = 16
@@ -47,6 +48,12 @@ export interface SaveDocumentPayload extends BasePayload {
 }
 export interface ResourcePayload extends BasePayload { resourceRef: ResourceId }
 export interface FastProxyPayload extends ResourcePayload { maxDimension: number }
+export interface PyramidPrewarmPayload extends ResourcePayload {
+  minimumMip?: number
+  maximumMip?: number
+  tileBudget?: number
+  bitDepth?: 8 | 16 | 32
+}
 export interface TilePayload extends ResourcePayload {
   mip: number
   tileX: number
@@ -281,6 +288,37 @@ export function parseImageEditorV3FastProxyPayload(input: unknown): FastProxyPay
   return {
     ...parseImageEditorV3ResourcePayload(input),
     maxDimension: readSafeInteger(record, 'maxDimension', 32, MAX_PROXY_DIMENSION),
+  }
+}
+
+export function parseImageEditorV3PyramidPrewarmPayload(input: unknown): PyramidPrewarmPayload {
+  const record = parseRecord(input)
+  assertExactKeys(record, [
+    'requestId', 'resourceRef', 'minimumMip', 'maximumMip', 'tileBudget', 'bitDepth',
+  ], 'source pyramid prewarm payload')
+  const minimumMip = record.minimumMip === undefined
+    ? undefined
+    : readSafeInteger(record, 'minimumMip', 0, 30)
+  const maximumMip = record.maximumMip === undefined
+    ? undefined
+    : readSafeInteger(record, 'maximumMip', 0, 30)
+  if (minimumMip !== undefined && maximumMip !== undefined && maximumMip < minimumMip) {
+    throw new Error('Invalid source pyramid prewarm mip range')
+  }
+  const bitDepth = record.bitDepth === undefined
+    ? undefined
+    : record.bitDepth === 8 || record.bitDepth === 16 || record.bitDepth === 32
+      ? record.bitDepth
+      : null
+  if (bitDepth === null) throw new Error('Invalid source pyramid prewarm bitDepth')
+  return {
+    ...parseImageEditorV3ResourcePayload(input),
+    minimumMip,
+    maximumMip,
+    tileBudget: record.tileBudget === undefined
+      ? undefined
+      : readSafeInteger(record, 'tileBudget', 1, MAX_PYRAMID_PREWARM_TILES),
+    bitDepth,
   }
 }
 

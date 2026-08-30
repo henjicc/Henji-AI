@@ -19,6 +19,7 @@ function createPlatform(): ImageEditorV3Platform {
     ingestSource: vi.fn(),
     readSourceMetadata: vi.fn(),
     describeSourcePyramid: vi.fn(),
+    prewarmSourcePyramid: vi.fn(),
     readFastProxy: vi.fn(),
     readSourceTile: vi.fn(),
     persistBrushTiles: vi.fn(),

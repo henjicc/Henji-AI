@@ -19,6 +19,7 @@ import {
   parseImageEditorV3LoadPayload,
   parseImageEditorV3FastProxyPayload,
   parseImageEditorV3IngestSourcePayload,
+  parseImageEditorV3PyramidPrewarmPayload,
   parseImageEditorV3SavePayload,
   parseImageEditorV3TilePayload,
 } from './image-editor-v3'
@@ -158,6 +159,25 @@ describe('图片编辑 V3 IPC 边界', () => {
       resourceRef: RESOURCE_A,
       maxDimension: 4_097,
     })).toThrow('Invalid maxDimension')
+  })
+
+  it('限制源金字塔预热范围、精度和瓦片预算', () => {
+    expect(parseImageEditorV3PyramidPrewarmPayload({
+      requestId: 'pyramid-prewarm',
+      resourceRef: RESOURCE_A,
+      minimumMip: 4,
+      maximumMip: 8,
+      tileBudget: 64,
+      bitDepth: 16,
+    })).toMatchObject({ minimumMip: 4, maximumMip: 8, tileBudget: 64, bitDepth: 16 })
+    expect(() => parseImageEditorV3PyramidPrewarmPayload({
+      requestId: 'pyramid-prewarm', resourceRef: RESOURCE_A,
+      minimumMip: 9, maximumMip: 8, tileBudget: 64,
+    })).toThrow('mip range')
+    expect(() => parseImageEditorV3PyramidPrewarmPayload({
+      requestId: 'pyramid-prewarm', resourceRef: RESOURCE_A,
+      tileBudget: 4_097,
+    })).toThrow('tileBudget')
   })
 
   it('只接受受限的本地、HTTP(S) 与 Data URL 来源描述', () => {

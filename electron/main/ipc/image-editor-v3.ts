@@ -30,6 +30,7 @@ import {
   parseImageEditorV3GarbageCollectPayload,
   parseImageEditorV3IngestSourcePayload,
   parseImageEditorV3LoadPayload,
+  parseImageEditorV3PyramidPrewarmPayload,
   parseImageEditorV3ResourcePayload,
   parseImageEditorV3SavePackagePayload,
   parseImageEditorV3SavePayload,
@@ -39,6 +40,7 @@ import {
 import { registerIpcHandler } from './registry'
 import {
   estimateImageEditorV3ProxyRequestBytes,
+  estimateImageEditorV3PyramidPrewarmBytes,
   estimateImageEditorV3TileRequestBytes,
   ImageEditorV3RequestAdmission,
 } from './image-editor-v3-request-admission'
@@ -47,6 +49,7 @@ export {
   parseImageEditorV3FastProxyPayload,
   parseImageEditorV3IngestSourcePayload,
   parseImageEditorV3LoadPayload,
+  parseImageEditorV3PyramidPrewarmPayload,
   parseImageEditorV3SavePayload,
   parseImageEditorV3TilePayload,
 } from './image-editor-v3-payloads'
@@ -380,6 +383,15 @@ export function registerImageEditorV3Ipc(): void {
     runRequest('source.pyramid', payload.requestId, event.sender.id, (signal) => (
       getRuntime().sources.describePyramid(payload.resourceRef, signal)
     ))
+  ), guard)
+  registerIpcHandler('imageEditorV3:source:pyramidPrewarm', parseImageEditorV3PyramidPrewarmPayload, (payload, event) => (
+    runRequest('source.pyramid_prewarm', payload.requestId, event.sender.id, (signal) => (
+      getRuntime().sources.prewarmPyramid({
+        resourceId: payload.resourceRef, minimumMip: payload.minimumMip,
+        maximumMip: payload.maximumMip, tileBudget: payload.tileBudget,
+        bitDepth: payload.bitDepth, signal,
+      })
+    ), estimateImageEditorV3PyramidPrewarmBytes(payload.bitDepth))
   ), guard)
   registerIpcHandler('imageEditorV3:source:fastProxy', parseImageEditorV3FastProxyPayload, (payload, event) => (
     runRequest('source.fast_proxy', payload.requestId, event.sender.id, async (signal) => {

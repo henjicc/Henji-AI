@@ -18,6 +18,7 @@ export function createElectronImageEditorV3(): ImageEditorV3Platform {
     ingestSource: (request) => getNativeImageEditorV3().ingestSource(request),
     readSourceMetadata: (request) => getNativeImageEditorV3().readSourceMetadata(request),
     describeSourcePyramid: (request) => getNativeImageEditorV3().describeSourcePyramid(request),
+    prewarmSourcePyramid: (request) => getNativeImageEditorV3().prewarmSourcePyramid(request),
     readFastProxy: (request) => getNativeImageEditorV3().readFastProxy(request),
     readSourceTile: (request) => getNativeImageEditorV3().readSourceTile(request),
     persistBrushTiles: (request) => getNativeImageEditorV3().persistBrushTiles(request),

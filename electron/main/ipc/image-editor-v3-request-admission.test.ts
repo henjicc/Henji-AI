@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import {
   estimateImageEditorV3BrushPersistBytes,
   estimateImageEditorV3BrushReadBytes,
+  estimateImageEditorV3PyramidPrewarmBytes,
   estimateImageEditorV3TileRequestBytes,
   ImageEditorV3RequestAdmission,
   IMAGE_EDITOR_V3_REQUEST_BUDGET_BYTES,
@@ -35,6 +36,11 @@ describe('图片编辑 V3 请求准入', () => {
   it('按 halo、位深和三份在途缓冲估算瓦片峰值', () => {
     expect(estimateImageEditorV3TileRequestBytes({ halo: 512, bitDepth: 32 }))
       .toBe(1_536 * 1_536 * 4 * 4 * 3)
+  })
+
+  it('金字塔预热按单瓦片串行工作集准入，而不是按整层像素估算', () => {
+    expect(estimateImageEditorV3PyramidPrewarmBytes(32))
+      .toBe(512 * 512 * 4 * 4 * 3 + 16 * 1024 * 1024)
   })
 
   it('画笔批次按输入、解压结果与 IPC 副本计入统一资源账本', () => {

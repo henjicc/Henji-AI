@@ -24,6 +24,7 @@ import {
   ImageEditorV3CommandRepository,
   ingestImageEditorV3Source,
   persistImageEditorV3BrushTiles,
+  prewarmImageEditorV3SourcePyramid,
   readImageEditorV3BrushTiles,
   readImageEditorV3FastProxy,
 } from './imageEditorV3'
@@ -44,6 +45,7 @@ function createPlatform(): ImageEditorV3Platform {
     ingestSource: vi.fn(),
     readSourceMetadata: vi.fn(),
     describeSourcePyramid: vi.fn(),
+    prewarmSourcePyramid: vi.fn(),
     readFastProxy: vi.fn(),
     readSourceTile: vi.fn(),
     persistBrushTiles: vi.fn(),
@@ -248,6 +250,29 @@ describe('图片编辑 V3 commands 契约', () => {
 
     expect(platform.ingestSource).toHaveBeenCalledWith(request)
     expect(result.resource.resourceRef).toBe(SOURCE_REF)
+  })
+
+  it('金字塔预热通过可取消 PAL 命令透传有界范围', async () => {
+    const platform = createPlatform()
+    vi.mocked(platform.prewarmSourcePyramid).mockResolvedValue({
+      plannedTiles: 12,
+      completedTiles: 12,
+      truncated: false,
+    })
+    mocks.getPlatform.mockReturnValue({ imageEditorV3: platform })
+    const request = {
+      requestId: 'image-editor-v3:pyramid-prewarm:test',
+      resourceRef: SOURCE_REF,
+      minimumMip: 4,
+      maximumMip: 8,
+      tileBudget: 64,
+      bitDepth: 16 as const,
+    }
+
+    await expect(prewarmImageEditorV3SourcePyramid(request)).resolves.toMatchObject({
+      completedTiles: 12,
+    })
+    expect(platform.prewarmSourcePyramid).toHaveBeenCalledWith(request)
   })
 
   it('画笔命令在 PAL 边界复制 Float32 数据并映射内容寻址引用', async () => {
