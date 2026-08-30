@@ -5,7 +5,11 @@ import compositeShaderSource from '../shaders/vgpuGlowComposite.wgsl?raw';
 import copyShaderSource from '../shaders/vgpuGlowCopy.wgsl?raw';
 import linearizeShaderSource from '../shaders/vgpuGlowLinearize.wgsl?raw';
 import upsampleShaderSource from '../shaders/vgpuGlowUpsample.wgsl?raw';
-import type { VgpuGlowRecipe } from '../vgpuGlowRecipe';
+import {
+  VGPU_GLOW_RECIPE_VERSION,
+  effectiveScatterSigmaPx,
+  type VgpuGlowRecipe,
+} from '../vgpuGlowRecipe';
 import type { GpuDevice, GpuTexture } from '../worker/webgpuRuntimeSupport';
 
 interface GlowTargets {
@@ -261,7 +265,7 @@ export class VgpuGlowRenderer {
       bloomPyramid,
       linearSampler: this.linearSampler,
       composite: {
-        params: [recipe.intensity, recipe.bloomExposure, recipe.bloomGamma, recipe.whiteHeat],
+        params: [recipe.intensity, recipe.responseExposure, recipe.whiteHeat, 0],
         tint: [...recipe.tintLinear, recipe.tintEnabled ? 1 : 0],
         optics: [
           1 / Math.max(targets.scene.size[0], 1),
@@ -269,8 +273,7 @@ export class VgpuGlowRenderer {
           recipe.chromaticOffsetPx,
           recipe.chromaticAberration,
         ],
-        source: [recipe.threshold, recipe.knee, recipe.hdrBoost, 0],
-        core: [recipe.coreGain, recipe.coreRadiusPx, recipe.ditherAmount, 0],
+        finish: [recipe.ditherAmount, 0, 0, 0],
         scatterRegion: [...scatterRegion],
       },
     });
@@ -352,12 +355,20 @@ function setBloom(
     source,
     linearSampler,
     bloom: {
-      params: [recipe.threshold, recipe.knee, recipe.hdrBoost, mode],
+      params: [
+        recipe.sourceThresholdRadiance,
+        recipe.sourceKneeRadiance,
+        recipe.sourceRadianceCeiling,
+        mode === 0 ? recipe.sourceGain : -1,
+      ],
     },
   });
 }
 
 function assertScatterLevels(recipe: VgpuGlowRecipe): number {
+  if (recipe.schemaVersion !== VGPU_GLOW_RECIPE_VERSION) {
+    throw new Error(`VGPU 辉光配方版本无效：${recipe.schemaVersion}`);
+  }
   const count = recipe.scatterLevels.length;
   if (count < 2 || count > MAX_SCATTER_LEVELS) {
     throw new Error(`VGPU 辉光散射层数无效：${count}`);
@@ -366,6 +377,10 @@ function assertScatterLevels(recipe: VgpuGlowRecipe): number {
     const expectedDivisor = 2 ** (index + 1);
     if (recipe.scatterLevels[index].divisor !== expectedDivisor) {
       throw new Error(`VGPU 辉光散射层 ${index} 必须使用连续 2× mip`);
+    }
+    const expectedSigma = effectiveScatterSigmaPx(expectedDivisor);
+    if (Math.abs(recipe.scatterLevels[index].effectiveSigmaPx - expectedSigma) > 0.0001) {
+      throw new Error(`VGPU 辉光散射层 ${index} 的核尺度无效`);
     }
   }
   return count;

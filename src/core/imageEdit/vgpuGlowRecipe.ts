@@ -1,11 +1,13 @@
 import type { VgpuGlowOperationParams } from './vgpuGlowParams';
 
-export const VGPU_GLOW_RECIPE_VERSION = 6 as const;
+export const VGPU_GLOW_RECIPE_VERSION = 7 as const;
 
 export interface VgpuGlowScatterLevel {
   /** 相对全分辨率的连续 2× 降采样倍数。 */
   divisor: number;
-  /** 逐通道归一化能量；通道间的轻微尺度错位模拟波长相关散射。 */
+  /** 当前 13-tap + progressive tent 链在全分辨率像素中的实测等效标准差。 */
+  effectiveSigmaPx: number;
+  /** 逐通道归一化能量；色差为零时三个通道严格相同。 */
   weight: readonly [number, number, number];
 }
 
@@ -16,21 +18,23 @@ export interface VgpuGlowRecipe {
     height: number;
     referenceDimension: number;
   };
-  threshold: number;
-  knee: number;
-  hdrBoost: number;
+  /** 以下三个量都位于虚拟场景辐射域，而不是显示域 0～1 亮度。 */
+  sourceThresholdRadiance: number;
+  sourceKneeRadiance: number;
+  sourceRadianceCeiling: number;
+  sourceGain: number;
   intensity: number;
+  responseExposure: number;
   whiteHeat: number;
-  /** Spencer 人眼眩光模型映射到图片空间时使用的视场角。越小，光晕越宽。 */
-  fieldOfViewDegrees: number;
   scatterLevels: readonly VgpuGlowScatterLevel[];
-  bloomExposure: number;
-  bloomGamma: number;
+  /** 预览缩放时据此重新离散同一个连续 PSF，而不是近似搬运旧 mip 权重。 */
+  scatterModel: {
+    envelopeFraction: number;
+    optical: VgpuGlowOpticalScatterModel;
+    chromaticAberration: number;
+  };
   tintLinear: readonly [number, number, number];
   tintEnabled: boolean;
-  /** 只补足 1～2px 近场散射，不再把未模糊亮源当描边叠回去。 */
-  coreGain: number;
-  coreRadiusPx: number;
   chromaticAberration: number;
   chromaticOffsetPx: number;
   /** 只在辉光层存在时启用的亚量化抖动，用于打散低位深渐变条带。 */
@@ -42,19 +46,31 @@ export interface CompileVgpuGlowRecipeOptions {
   height: number;
 }
 
+export interface VgpuGlowOpticalScatterModel {
+  coreEnergy: number;
+  inverseCubeEnergy: number;
+  inverseSquareEnergy: number;
+  coreSigmaPx: number;
+  coreLogWidth: number;
+  reachScale: number;
+}
+
 const MIN_SCATTER_LEVEL_COUNT = 4;
 const MAX_SCATTER_LEVEL_COUNT = 12;
-// 各通道只在 octave 之间搬运少量能量：红端略向长尾，蓝端略向近场；每通道仍归一。
-const CHANNEL_SCALE_TILT = [0.08, 0, -0.08] as const;
 
 /**
- * 把界面参数编译成与分辨率无关的物理眩光配方。
+ * 把界面参数编译成与分辨率无关的光学散射配方。
  *
- * 散射曲线来自 Spencer 等人的 photopic glare PSF：一个极紧的高斯核心，加上
- * inverse-cube 中场和 inverse-square 长尾。离散到 mip 金字塔时乘以尺度面积 σ²，
- * 得到每个面积归一模糊层应承担的能量；这比手工摆五个高斯权重更接近真实光学，也不会
- * 在最大半径处暴露层级边界。半径仍保留创作语义：Blender Fog Glow 的视场角映射控制
- * 物理曲线宽度，Oniric 式平滑包络控制长尾可见范围。
+ * 这里不再把 Spencer PSF 在每个名义 mip 尺度采样一次。那种做法既忽略了 GPU 滤波链
+ * 的真实方差，也把极窄的中心峰和长尾硬塞进同一组权重，容易在相邻 octave 之间形成
+ * 可见的肩部。新配方按眼内眩光研究中的 core / skirt 分解构造三个连续分量：
+ *
+ * 1. 对数高斯核心：模拟衍射、失焦和传感器附近的紧致散射；
+ * 2. 每 octave 能量约为 1/σ 的近场裙部：对应径向反三次方衰减；
+ * 3. 每 octave 近似等能量的远场光幕：对应 Deep Glow 与经典眩光模型的反平方衰减。
+ *
+ * 三部分都使用实际滤波核的等效 σ，并由同一个光滑包络控制可见范围。总能量逐通道
+ * 严格归一，半径只改变能量在尺度间的分布，不会凭空把整张图越调越亮。
  */
 export function compileVgpuGlowRecipe(
   params: VgpuGlowOperationParams,
@@ -66,38 +82,64 @@ export function compileVgpuGlowRecipe(
   const radius = params.radius;
   const look = params.look === 'natural'
     ? {
-      boost: 2.8,
-      intensity: 0.94,
-      bloomExposure: 0.9,
-      bloomGamma: 1.06,
-      core: 0.22,
-      fieldOfViewScale: 1.12,
+      intensity: 0.92,
+      responseExposure: 0.72,
+      sourceGain: 0.46,
+      radianceCeiling: 7.2,
+      scatter: {
+        coreEnergy: 0.34,
+        inverseCubeEnergy: 0.48,
+        inverseSquareEnergy: 0.18,
+        coreSigmaPx: 2.8,
+        coreLogWidth: 0.85,
+        reachScale: 0.9,
+      },
     }
     : params.look === 'neon'
       ? {
-        boost: 7.2,
-        intensity: 1.38,
-        bloomExposure: 1.28,
-        bloomGamma: 1.02,
-        core: 0.32,
-        fieldOfViewScale: 0.92,
+        intensity: 1.28,
+        responseExposure: 0.88,
+        sourceGain: 0.62,
+        radianceCeiling: 9.2,
+        scatter: {
+          coreEnergy: 0.48,
+          inverseCubeEnergy: 0.4,
+          inverseSquareEnergy: 0.12,
+          coreSigmaPx: 2.45,
+          coreLogWidth: 0.82,
+          reachScale: 0.8,
+        },
       }
       : {
-        boost: 4.9,
-        intensity: 1.16,
-        bloomExposure: 1.08,
-        bloomGamma: 1.12,
-        core: 0.18,
-        fieldOfViewScale: 0.82,
+        intensity: 1.12,
+        responseExposure: 0.8,
+        sourceGain: 0.52,
+        radianceCeiling: 8.2,
+        scatter: {
+          coreEnergy: 0.24,
+          inverseCubeEnergy: 0.38,
+          inverseSquareEnergy: 0.38,
+          coreSigmaPx: 4.0,
+          coreLogWidth: 0.9,
+          reachScale: 1.05,
+        },
       };
-  const fieldOfViewDegrees = clamp(
-    interpolate(180, 10, Math.cbrt(radius)) * look.fieldOfViewScale,
-    8,
-    180
+  const thresholdDisplay = 0.035 + Math.pow(params.sourceThreshold, 1.8) * 0.72;
+  const kneeDisplay = 0.025 + (1 - params.sourceThreshold) * 0.1;
+  const thresholdRadiance = reconstructVirtualRadiance(
+    thresholdDisplay,
+    look.radianceCeiling
+  );
+  const kneeRadiance = Math.max(
+    0.025,
+    reconstructVirtualRadiance(
+      Math.min(0.98, thresholdDisplay + kneeDisplay),
+      look.radianceCeiling
+    ) - thresholdRadiance
   );
   const scatterEnvelopeFraction = interpolate(
-    1 / 256,
-    0.48,
+    1 / 320,
+    0.46 * look.scatter.reachScale,
     Math.pow(radius, 1.35)
   );
 
@@ -108,33 +150,36 @@ export function compileVgpuGlowRecipe(
       height: options.height,
       referenceDimension,
     },
-    threshold: 0.035 + Math.pow(params.sourceThreshold, 1.8) * 0.72,
-    knee: 0.08 + (1 - params.sourceThreshold) * 0.24,
-    hdrBoost: look.boost,
+    sourceThresholdRadiance: thresholdRadiance,
+    sourceKneeRadiance: kneeRadiance,
+    sourceRadianceCeiling: look.radianceCeiling,
+    sourceGain: look.sourceGain,
     intensity: params.intensity * look.intensity,
+    responseExposure: look.responseExposure,
     whiteHeat: params.whiteHeat,
-    fieldOfViewDegrees,
-    scatterLevels: compilePhotopicScatterLevels(
+    scatterLevels: compileOpticalScatterLevels(
       referenceDimension,
-      fieldOfViewDegrees,
-      scatterEnvelopeFraction
+      scatterEnvelopeFraction,
+      look.scatter,
+      params.chromaticAberration
     ),
-    bloomExposure: look.bloomExposure,
-    bloomGamma: look.bloomGamma,
+    scatterModel: {
+      envelopeFraction: scatterEnvelopeFraction,
+      optical: look.scatter,
+      chromaticAberration: params.chromaticAberration,
+    },
     tintLinear: parseLinearRgb(params.tintColor),
     tintEnabled: params.tintEnabled,
-    coreGain: look.core * (0.72 + params.whiteHeat * 0.38),
-    coreRadiusPx: 1.15 + (1 - radius) * 0.85,
     chromaticAberration: params.chromaticAberration,
-    // RGB 分离只作用在已经柔化的散射层。偏移可以明显，但不会再复制原图硬边。
-    chromaticOffsetPx: Math.pow(params.chromaticAberration, 1.65) * (1 + radius * 7),
+    // 位移只作用于柔化后的散射层，最大值仍足以形成清晰但没有硬边副本的 RGB 分离。
+    chromaticOffsetPx: Math.pow(params.chromaticAberration, 1.55) * (0.75 + radius * 5.25),
     ditherAmount: 0.00075,
   };
 }
 
 /**
- * 预览会先缩到像素预算内。这里把完整图片上的尺度能量投影到预览的连续 2× mip 网格，
- * 保持光晕占画面比例、色散偏移和近场核心一致，而不是让同一个 divisor 在预览中变宽。
+ * 预览会先缩到像素预算内。这里在新分辨率上重新离散同一个连续 core/skirt 模型，
+ * 避免把原图的离散 mip 权重近似搬运后在小尺寸预览里放大误差。
  */
 export function rebaseVgpuGlowRecipeForScale(
   recipe: VgpuGlowRecipe,
@@ -145,87 +190,72 @@ export function rebaseVgpuGlowRecipeForScale(
   assertImageDimension(height, 'height');
   const referenceDimension = Math.max(width, height);
   const scale = referenceDimension / recipe.image.referenceDimension;
+  const scaledOptical = {
+    ...recipe.scatterModel.optical,
+    coreSigmaPx: Math.max(0.5, recipe.scatterModel.optical.coreSigmaPx * scale),
+  };
   return {
     ...recipe,
     image: { width, height, referenceDimension },
-    scatterLevels: projectScatterLevels(recipe.scatterLevels, scale),
-    coreRadiusPx: Math.max(0.65, recipe.coreRadiusPx * scale),
+    scatterLevels: compileOpticalScatterLevels(
+      referenceDimension,
+      recipe.scatterModel.envelopeFraction,
+      scaledOptical,
+      recipe.scatterModel.chromaticAberration
+    ),
+    scatterModel: {
+      ...recipe.scatterModel,
+      optical: scaledOptical,
+    },
     chromaticOffsetPx: recipe.chromaticOffsetPx * scale,
   };
 }
 
-function compilePhotopicScatterLevels(
+/**
+ * 当前 GPU 链的单轴方差：13-tap 连续降采样、逐层 3×3 tent 重建与最终双线性放大
+ * 合并后为 1.5d² - 3.25。这个量来自离散脉冲响应测量；d=2 时 σ≈1.658px，随后
+ * 渐近于 1.224745d。所有 PSF 计算必须使用它，不能再把 d 当成 σ。
+ */
+export function effectiveScatterSigmaPx(divisor: number): number {
+  return Math.sqrt(Math.max(0.25, 1.5 * divisor * divisor - 3.25));
+}
+
+function compileOpticalScatterLevels(
   referenceDimension: number,
-  fieldOfViewDegrees: number,
-  envelopeFraction: number
+  envelopeFraction: number,
+  model: VgpuGlowOpticalScatterModel,
+  chromaticAberration: number
 ): readonly VgpuGlowScatterLevel[] {
   const count = resolveScatterLevelCount(referenceDimension);
   const divisors = Array.from({ length: count }, (_, index) => 2 ** (index + 1));
-  const channels = CHANNEL_SCALE_TILT.map((scaleTilt) =>
-    normalizeWeights(divisors.map((divisor) => {
-      const sigmaFraction = divisor / referenceDimension;
-      const thetaDegrees = sigmaFraction * fieldOfViewDegrees;
-      const envelope = Math.exp(-0.5 * Math.pow(sigmaFraction / envelopeFraction, 2));
-      // 每层模糊都面积归一，所以乘 σ² 把径向 PSF 振幅换算为该 octave 的总能量。
-      return spencerPhotopicPsf(thetaDegrees)
-        * sigmaFraction * sigmaFraction
-        * envelope
-        * Math.pow(divisor, scaleTilt);
-    }))
+  const sigmas = divisors.map(effectiveScatterSigmaPx);
+  const envelope = sigmas.map((sigma) =>
+    Math.exp(-0.5 * Math.pow(sigma / referenceDimension / envelopeFraction, 2))
   );
+  const core = normalizeWeights(sigmas.map((sigma, index) =>
+    Math.exp(-0.5 * Math.pow(Math.log(sigma / model.coreSigmaPx) / model.coreLogWidth, 2))
+      * envelope[index]
+  ));
+  const inverseCube = normalizeWeights(sigmas.map((sigma, index) =>
+    envelope[index] / sigma
+  ));
+  const inverseSquare = normalizeWeights(envelope);
+  const base = normalizeWeights(sigmas.map((_, index) =>
+    core[index] * model.coreEnergy
+      + inverseCube[index] * model.inverseCubeEnergy
+      + inverseSquare[index] * model.inverseSquareEnergy
+  ));
+  const spectralTilt = 0.07 * chromaticAberration;
+  const channels = [spectralTilt, 0, -spectralTilt].map((tilt) =>
+    normalizeWeights(base.map((weight, index) =>
+      weight * Math.pow(sigmas[index] / sigmas[0], tilt)
+    ))
+  );
+
   return divisors.map((divisor, index) => ({
     divisor,
+    effectiveSigmaPx: sigmas[index],
     weight: [channels[0][index], channels[1][index], channels[2][index]] as const,
-  }));
-}
-
-function spencerPhotopicPsf(thetaDegrees: number): number {
-  const theta = Math.max(thetaDegrees, 0);
-  const tightCore = 2.61e6 * Math.exp(-Math.pow(theta / 0.02, 2));
-  const mediumScatter = 20.91 / Math.pow(theta + 0.02, 3);
-  const longScatter = 72.37 / Math.pow(theta + 0.02, 2);
-  return tightCore * 0.384 + mediumScatter * 0.478 + longScatter * 0.138;
-}
-
-function projectScatterLevels(
-  levels: readonly VgpuGlowScatterLevel[],
-  scale: number
-): readonly VgpuGlowScatterLevel[] {
-  const maximumTarget = Math.max(2, ...levels.map((level) => level.divisor * scale));
-  const count = clamp(
-    Math.ceil(Math.log2(maximumTarget)),
-    MIN_SCATTER_LEVEL_COUNT,
-    MAX_SCATTER_LEVEL_COUNT
-  );
-  const divisors = Array.from({ length: count }, (_, index) => 2 ** (index + 1));
-  const channelWeights = divisors.map(() => [0, 0, 0]);
-
-  for (const level of levels) {
-    const target = Math.max(2, level.divisor * scale);
-    const position = clamp(Math.log2(target) - 1, 0, count - 1);
-    const lower = Math.floor(position);
-    const upper = Math.min(count - 1, lower + 1);
-    const upperAmount = position - lower;
-    for (const channel of [0, 1, 2] as const) {
-      channelWeights[lower][channel] += level.weight[channel] * (1 - upperAmount);
-      channelWeights[upper][channel] += level.weight[channel] * upperAmount;
-    }
-  }
-
-  for (const channel of [0, 1, 2] as const) {
-    const normalized = normalizeWeights(channelWeights.map((weight) => weight[channel]));
-    for (let index = 0; index < channelWeights.length; index += 1) {
-      channelWeights[index][channel] = normalized[index];
-    }
-  }
-
-  return divisors.map((divisor, index) => ({
-    divisor,
-    weight: [
-      channelWeights[index][0],
-      channelWeights[index][1],
-      channelWeights[index][2],
-    ] as const,
   }));
 }
 
@@ -241,6 +271,15 @@ function normalizeWeights(raw: readonly number[]): number[] {
   const sum = raw.reduce((total, value) => total + value, 0);
   if (!Number.isFinite(sum) || sum <= 0) return raw.map(() => 1 / Math.max(1, raw.length));
   return raw.map((value) => value / sum);
+}
+
+/** 与亮源提取 WGSL 一致的有限逆指数响应，供配方和数值回归共同使用。 */
+export function reconstructVirtualRadiance(value: number, ceiling: number): number {
+  const maximumDisplayValue = 1 - Math.exp(-ceiling);
+  return Math.min(
+    ceiling,
+    -Math.log(Math.max(1 - clamp(value, 0, maximumDisplayValue), Math.exp(-ceiling)))
+  );
 }
 
 function parseLinearRgb(color: string): readonly [number, number, number] {

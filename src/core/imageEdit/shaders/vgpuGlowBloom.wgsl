@@ -1,5 +1,5 @@
 struct Bloom {
-  // threshold, knee, HDR boost, mode（0=亮源提取，1=相邻层降采样）
+  // 辐射域 threshold、knee、ceiling；w>=0 时为亮源增益，w<0 时仅降采样
   params: vec4f,
 }
 
@@ -10,24 +10,43 @@ struct Bloom {
 fn extractEmitter(color: vec3f) -> vec3f {
   let luma = dot(color, vec3f(0.2126, 0.7152, 0.0722));
   let brightness = max(luma, max(color.r, max(color.g, color.b)) * 0.82);
+  if (brightness <= 0.000001) {
+    return vec3f(0.0);
+  }
+
+  // 输入是已经显示映射过的 LDR 图片。先用指数相机响应的逆函数重建有限的虚拟 HDR
+  // 辐射，再在这个线性辐射域做门槛；饱和白和饱和色因此都能携带高于 1 的发光能量。
+  let ceiling = max(bloom.params.z, 0.001);
+  let radiance = min(
+    -log(max(1.0 - min(brightness, 1.0 - exp(-ceiling)), exp(-ceiling))),
+    ceiling
+  );
   let threshold = bloom.params.x;
   let knee = max(bloom.params.y, 0.0001);
-  let soft = clamp(brightness - threshold + knee, 0.0, 2.0 * knee);
-  let softContribution = soft * soft / (4.0 * knee + 0.0001);
-  let contribution = max(brightness - threshold, softContribution) / max(brightness, 0.0001);
-  let hot = pow(smoothstep(threshold, 1.0, brightness), 1.6);
-  return color * contribution * (1.0 + hot * bloom.params.z);
+  let soft = clamp(radiance - threshold + knee, 0.0, 2.0 * knee);
+  let softContribution = soft * soft / (4.0 * knee);
+  let emittedRadiance = max(radiance - threshold, softContribution);
+  return color * (emittedRadiance / brightness) * max(bloom.params.w, 0.0);
+}
+
+fn insideImage(uv: vec2f) -> f32 {
+  return select(
+    0.0,
+    1.0,
+    all(uv >= vec2f(0.0)) && all(uv <= vec2f(1.0))
+  );
 }
 
 fn sampleSource(uv: vec2f, offset: vec2f, extract: bool) -> vec3f {
   let dimensions = max(vec2f(textureDimensions(source)), vec2f(1.0));
-  let color = textureSampleLevel(source, linearSampler, uv + offset / dimensions, 0.0);
+  let sampleUv = uv + offset / dimensions;
+  let color = textureSampleLevel(source, linearSampler, sampleUv, 0.0);
   if (extract) {
-    // scene 保存直通颜色；只有被 Alpha 覆盖的辐射才是真实存在的发光能量。
-    // 这同时阻止透明 PNG 中不可见的隐藏 RGB 在远处产生脏光和暗边。
-    return extractEmitter(color.rgb * color.a);
+    // 先从直通颜色重建辐射，再乘覆盖率。若先把 Alpha 乘进非线性逆响应，抗锯齿边缘
+    // 会被错误压暗并收缩，正是亮物体周围容易形成刻意描边的来源之一。
+    return extractEmitter(color.rgb) * color.a * insideImage(sampleUv);
   }
-  return color.rgb;
+  return color.rgb * insideImage(sampleUv);
 }
 
 /**
@@ -55,5 +74,5 @@ fn downsample13(uv: vec2f, extract: bool) -> vec3f {
 }
 
 @fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
-  return vec4f(downsample13(uv, bloom.params.w < 0.5), 1.0);
+  return vec4f(downsample13(uv, bloom.params.w >= 0.0), 1.0);
 }
