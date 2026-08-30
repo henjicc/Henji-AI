@@ -74,7 +74,35 @@ describe('图片编辑 V2 → V3 迁移', () => {
       'vendor.future-effect',
       IMAGE_EDIT_OPERATION_IDS.diffusion,
     ]);
+    expect(migrated.layers[1]).toMatchObject({
+      type: 'effect',
+      effectId: IMAGE_EDIT_OPERATION_IDS.blur,
+      params: { algorithm: 'gaussian', strength: 0.3, radiusPixels: 1.2 },
+      renderable: true,
+    });
     expect(migrated.layers[3].visible).toBe(false);
+  });
+
+  it('把旧模糊半径冻结为源图坐标并保留 120px 封顶', () => {
+    const source = createV2Document();
+    const blur = source.operations.find(
+      (operation) => operation.operationId === IMAGE_EDIT_OPERATION_IDS.blur,
+    );
+    if (!blur) throw new Error('测试文档缺少模糊操作');
+    blur.params = { schemaVersion: 1, algorithm: 'gaussian', strength: 1 };
+
+    const migrated = migrateImageEditDocumentV2ToV3(source, {
+      width: 20_000,
+      height: 10_000,
+      sourceResourceId: 'sha256:source',
+      documentId: 'document-large-blur',
+    });
+
+    expect(migrated.layers[1]).toMatchObject({
+      type: 'effect',
+      effectId: IMAGE_EDIT_OPERATION_IDS.blur,
+      params: { algorithm: 'gaussian', strength: 1, radiusPixels: 120 },
+    });
   });
 
   it('未知操作保持原始 JSON 且明确不可渲染', () => {

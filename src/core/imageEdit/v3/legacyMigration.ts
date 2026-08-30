@@ -1,4 +1,5 @@
 import { decodeImageEditDocument } from '../documentCodec';
+import { parseBlurOperationParams } from '../blurParams';
 import {
   IMAGE_EDIT_DOCUMENT_VERSION,
   IMAGE_EDIT_OPERATION_IDS,
@@ -79,7 +80,9 @@ function createLegacyEffectLayer(
 
 function createEffectLayer(
   operation: ImageEditOperation,
-  layerId: string
+  layerId: string,
+  sourceWidth: number,
+  sourceHeight: number,
 ): ImageEditEffectLayerV3 {
   if (!RENDERABLE_EFFECT_IDS.has(operation.operationId)) {
     return createLegacyEffectLayer(operation, layerId);
@@ -89,8 +92,23 @@ function createEffectLayer(
     type: 'effect',
     visible: operation.enabled,
     effectId: operation.operationId,
-    params: paramsToJson(operation.params),
+    params: operation.operationId === IMAGE_EDIT_OPERATION_IDS.blur
+      ? legacyBlurParams(operation, sourceWidth, sourceHeight)
+      : paramsToJson(operation.params),
     renderable: true,
+  };
+}
+
+function legacyBlurParams(
+  operation: ImageEditOperation,
+  sourceWidth: number,
+  sourceHeight: number,
+): ImageEditJsonObjectV3 {
+  const params = parseBlurOperationParams(operation.params);
+  return {
+    ...paramsToJson(params),
+    // 旧执行器在完整源尺寸上把 strength 换算为 CSS blur sigma，并封顶 120px。
+    radiusPixels: Math.min(120, params.strength * Math.min(sourceWidth, sourceHeight) * 0.04),
   };
 }
 
@@ -149,7 +167,9 @@ export function migrateImageEditDocumentV2ToV3(
     ) continue;
     layers.push(createEffectLayer(
       operation,
-      uniqueLayerId(`layer-${operation.id}`, seenLayerIds, idFactory)
+      uniqueLayerId(`layer-${operation.id}`, seenLayerIds, idFactory),
+      options.width,
+      options.height,
     ));
   }
 

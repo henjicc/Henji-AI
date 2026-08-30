@@ -35,6 +35,16 @@ export const GAUSSIAN_BLUR_V2_CONTRACT: CpuReferenceKernelContract = {
   maskMix: 'source-to-processed',
 };
 
+export const LEGACY_GAUSSIAN_BLUR_V1_CONTRACT: CpuReferenceKernelContract = {
+  id: 'effect.blur-v1',
+  version: 1,
+  inputColorDomain: 'perceptual-working',
+  outputColorDomain: 'perceptual-working',
+  alpha: 'premultiplied',
+  precision: 'float32',
+  maskMix: 'source-to-processed',
+};
+
 const DEFAULT_PYRAMID_TARGET_RADIUS = 16;
 
 export function resolveGaussianBlurV2Geometry(
@@ -70,7 +80,35 @@ export function applyGaussianBlurV2(
   parameters: GaussianBlurV2Parameters,
   options: Float32TileProcessOptions = {},
 ): Float32PremultipliedRgbaTile {
-  assertFloat32PremultipliedRgbaTile(tile, GAUSSIAN_BLUR_V2_CONTRACT.inputColorDomain);
+  return applyGaussianBlurInDomain(
+    tile,
+    parameters,
+    options,
+    GAUSSIAN_BLUR_V2_CONTRACT.inputColorDomain,
+  );
+}
+
+/** V2 `image.blur` 的像素兼容内核：保留旧 Canvas/CSS Blur 的感知域语义和 120px 封顶。 */
+export function applyLegacyGaussianBlurV1(
+  tile: Float32PremultipliedRgbaTile,
+  radiusPixels: number,
+  options: Float32TileProcessOptions = {},
+): Float32PremultipliedRgbaTile {
+  return applyGaussianBlurInDomain(
+    tile,
+    { radius: Math.min(120, Math.max(0, radiusPixels)), mip: 0 },
+    options,
+    LEGACY_GAUSSIAN_BLUR_V1_CONTRACT.inputColorDomain,
+  );
+}
+
+function applyGaussianBlurInDomain(
+  tile: Float32PremultipliedRgbaTile,
+  parameters: GaussianBlurV2Parameters,
+  options: Float32TileProcessOptions,
+  colorDomain: CpuReferenceKernelContract['inputColorDomain'],
+): Float32PremultipliedRgbaTile {
+  assertFloat32PremultipliedRgbaTile(tile, colorDomain);
   const geometry = resolveGaussianBlurV2Geometry(parameters);
   if (geometry.radiusAtMip === 0) {
     const copy = createFloat32PremultipliedRgbaTile(

@@ -49,6 +49,16 @@ function scalePreviewEffects(
         },
       }
     }
+    if (layer.type === 'effect' && layer.effectId === 'image.blur') {
+      const radiusPixels = Number(layer.params.radiusPixels ?? 0)
+      return {
+        ...layer,
+        params: {
+          ...layer.params,
+          radiusPixels: Number.isFinite(radiusPixels) ? Math.max(0, radiusPixels * scale) : 0,
+        },
+      }
+    }
     return layer
   })
 }

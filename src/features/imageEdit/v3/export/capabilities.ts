@@ -15,6 +15,7 @@ import { resolveImageEditorV3ExportGeometry } from './geometry'
 const SUPPORTED_NODE_IDS = new Set([
   'source.raster',
   'vector.annotation',
+  'effect.blur-v1',
   'effect.gaussian-blur',
   'adjustment.exposure',
   'adjustment.curves',

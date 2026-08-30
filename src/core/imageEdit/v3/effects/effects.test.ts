@@ -2,10 +2,12 @@ import { describe, expect, it } from 'vitest';
 import {
   applyExposureAdjustment,
   applyGaussianBlurV2,
+  applyLegacyGaussianBlurV1,
   createFloat32MaskTile,
   createFloat32PremultipliedRgbaTile,
   EXPOSURE_ADJUSTMENT_CONTRACT,
   GAUSSIAN_BLUR_V2_CONTRACT,
+  LEGACY_GAUSSIAN_BLUR_V1_CONTRACT,
   resolveGaussianBlurV2Geometry,
 } from './index';
 
@@ -133,5 +135,31 @@ describe('Gaussian Blur v2 CPU 参考实现', () => {
     expect(result.data[0] / result.data[3]).toBeCloseTo(2, 5);
     expect(result.data[1] / result.data[3]).toBeCloseTo(0.5, 5);
     expect(result.data[2]).toBe(0);
+  });
+});
+
+describe('旧版 Blur v1 像素兼容内核', () => {
+  it('保持感知域、预乘 alpha 与旧版 120px 半径封顶契约', () => {
+    const source = createFloat32PremultipliedRgbaTile(
+      3,
+      1,
+      'perceptual-working',
+      new Float32Array([
+        0, 0, 0, 0,
+        1, 1, 1, 1,
+        0, 0, 0, 0,
+      ]),
+    );
+    const capped = applyLegacyGaussianBlurV1(source, 320);
+    const legacyMaximum = applyLegacyGaussianBlurV1(source, 120);
+
+    expect(capped.data).toEqual(legacyMaximum.data);
+    expect(capped.data[0]).toBeGreaterThan(0);
+    expect(capped.data[4]).toBeLessThan(1);
+    expect(LEGACY_GAUSSIAN_BLUR_V1_CONTRACT).toMatchObject({
+      version: 1,
+      inputColorDomain: 'perceptual-working',
+      alpha: 'premultiplied',
+    });
   });
 });

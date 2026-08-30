@@ -160,6 +160,33 @@ describe('图片编辑 V3 分块导出渲染', () => {
     expect(clear[(1 * 32 + 15) * 4]).toBe(255)
   })
 
+  it('允许迁移后的 Blur v1 在分块导出中保持旧版感知域模糊', async () => {
+    const document = createImageEditDocumentV3({
+      width: 32,
+      height: 4,
+      documentId: 'legacy-blur-export',
+      sourceResourceId: SOURCE,
+    })
+    const annotation = createImageEditAnnotationLayerV3('annotation', '标注')
+    const blur = createImageEditEffectLayerV3(
+      'legacy-blur',
+      '旧版模糊',
+      'image.blur',
+      { algorithm: 'gaussian', strength: 0.5, radiusPixels: 1 },
+    )
+    document.layers.push(annotation, blur)
+
+    const output = await collectPixels(
+      document,
+      16,
+      new Map([[SOURCE, solidImage(32, 4)]]),
+      annotationImpulse(15, 1),
+    )
+
+    expect(output[(1 * 32 + 14) * 4]).toBeGreaterThan(0)
+    expect(output[(1 * 32 + 15) * 4]).toBeLessThan(255)
+  })
+
   it('在效果层用灰度蒙版混合原结果和曝光结果', async () => {
     const document = createImageEditDocumentV3({
       width: 32,

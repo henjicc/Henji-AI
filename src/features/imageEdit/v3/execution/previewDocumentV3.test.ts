@@ -116,6 +116,22 @@ describe('ImageEditor V3 瞬态预览文档', () => {
     expect(clearMarks.outputHash).not.toBe(blurredMarks.outputHash)
   })
 
+  it('按代理缩放旧版 Blur v1 的冻结源图半径', () => {
+    const document = documentWithLayers()
+    document.layers[2] = createImageEditEffectLayerV3(
+      'legacy-blur',
+      '旧版模糊',
+      'image.blur',
+      { algorithm: 'gaussian', strength: 1, radiusPixels: 120 },
+    )
+
+    const plan = compileImageEditorPreviewPlanV3(document, 'stable', 1_600)
+    const blurNode = plan.nodes.find((node) => node.layerId === 'legacy-blur')
+
+    expect(blurNode?.definitionId).toBe('effect.blur-v1')
+    expect(blurNode?.parameters.radiusPixels).toBeCloseTo(9.6, 6)
+  })
+
   it('只收集合法的受管栅格、稀疏瓦片和蒙版资源', () => {
     const document = documentWithLayers()
     const raster = document.layers[0]

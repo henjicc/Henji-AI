@@ -2,6 +2,7 @@ import {
   applyCurvesAdjustment,
   applyExposureAdjustment,
   applyGaussianBlurV2,
+  applyLegacyGaussianBlurV1,
   applyHslAdjustment,
   applyTemperatureTintAdjustment,
   compileCurvesAdjustment,
@@ -179,6 +180,14 @@ async function executeEffect(
   mask: Float32MaskTile | undefined,
   context: ImageEditCpuRenderContextV3,
 ): Promise<Float32PremultipliedRgbaTile> {
+  if (node.definitionId === 'effect.blur-v1') {
+    const perceptual = convertFloat32TileColorDomainV3(source, 'perceptual-working');
+    return applyLegacyGaussianBlurV1(
+      perceptual,
+      numberParameter(node, 'radiusPixels', 0),
+      { mask },
+    );
+  }
   if (node.definitionId === 'effect.gaussian-blur') {
     const linear = convertFloat32TileColorDomainV3(source, 'linear-light');
     return applyGaussianBlurV2(linear, {
