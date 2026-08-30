@@ -398,6 +398,11 @@ export function resolveCanvasCapabilityVisibleParamIds(
   policy: CanvasImageCapabilityModelPolicy,
   promptPolicy: CanvasImageCapabilityPromptPolicy,
 ): string[] {
+  if (promptPolicy.showAllModelParameters) {
+    return model.params
+      .filter((param) => !['image-upload', 'video-upload', 'file-upload'].includes(param.type))
+      .map((param) => param.id);
+  }
   const ids = new Set(promptPolicy.visibleParameterKeys);
   const transferKeys = new Set(promptPolicy.visibleParameterTransferKeys ?? []);
   model.params.forEach((param) => {

@@ -1,62 +1,28 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-
 import type { CanvasSpecialEditorSession } from '@/features/canvas/application/specialEditorController'
-
 import ElementEditSpecialEditor from './ElementEditSpecialEditor'
 
-vi.mock('@/core/ModelRegistry', () => ({
-  registry: {
-    getModel: () => ({
-      params: [{
-        id: 'apimartGptImage2MaskUrl',
-        type: 'image-upload',
-        order: 2,
-        name: { zh: '遮罩', en: 'Mask' },
-        description: { zh: '受管遮罩', en: 'Managed mask' },
-        default: [],
-        derivedMediaAuthoring: {
-          kind: 'mask',
-          source: { kind: 'first-image' },
-          editor: { kind: 'mask' },
-          output: {
-            format: 'png',
-            maskEncoding: 'alpha',
-            dimensions: 'source',
-            paintMeaning: 'transparent-edit',
-          },
-          onSourceChange: 'invalidate',
-          actions: { create: { zh: '绘制', en: 'Draw' }, edit: { zh: '编辑', en: 'Edit' } },
-        },
-      }],
-    }),
-  },
+vi.mock('@/commands/image', () => ({
+  persistImageSource: vi.fn(async () => '/managed/local-redraw-mask.png'),
 }))
-
-vi.mock('@/components/params/DerivedMediaParamControl', () => ({
-  DerivedMediaParamControl: ({
-    editorOpen,
-    renderTrigger,
-    onParamChanges,
-    onEditorDismiss,
-  }: {
-    editorOpen: boolean
-    renderTrigger: boolean
-    onParamChanges: (changes: DynamicValueMap) => void
-    onEditorDismiss: () => void
+vi.mock('@/features/maskEditor', () => ({
+  parseMaskEditorDocument: (value: unknown) => value ?? null,
+  MaskEditorModal: ({ onConfirm, onCancel }: {
+    onConfirm: (result: DynamicValueMap) => void
+    onCancel: () => void
   }) => (
     <div>
-      <span>{editorOpen && !renderTrigger ? '唯一遮罩编辑器' : '错误宿主'}</span>
-      <div role="button" tabIndex={0} onClick={() => onParamChanges({
-        apimartGptImage2MaskUrl: ['/managed/mask.png'],
-        __henjiDerivedMediaAuthoring__apimartGptImage2MaskUrl: {
-          version: 1,
-          sourceRef: '/managed/source.png',
-        },
-      })}>确认遮罩</div>
-      <div role="button" tabIndex={0} onClick={onEditorDismiss}>取消遮罩</div>
+      <span>唯一遮罩编辑器</span>
+      <button type="button" onClick={() => onConfirm({
+        maskDataUrl: 'data:image/png;base64,bWFzaw==',
+        width: 1024,
+        height: 768,
+        document: { version: 1, sourceRef: '/managed/source.png', width: 1024, height: 768, strokes: [{ id: 'paint' }] },
+      })}>确认遮罩</button>
+      <button type="button" onClick={onCancel}>取消遮罩</button>
     </div>
   ),
 }))
@@ -71,59 +37,46 @@ function session(): CanvasSpecialEditorSession {
     params: { apimartGptImage2Quality: 'medium' },
   }
   return {
-    sessionId: 'element-session',
-    projectId: 'project-1',
-    nodeId: 'element-node',
-    editorKey: 'mask',
-    initialState: state,
-    draftState: state,
-    isDirty: false,
-    discardConfirmationRequested: false,
+    sessionId: 'element-session', projectId: 'project-1', nodeId: 'element-node', editorKey: 'mask',
+    initialState: state, draftState: state, isDirty: false, discardConfirmationRequested: false,
   }
 }
 
-describe('元素编辑专用宿主', () => {
-  it('复用唯一遮罩控件并将遮罩与文档一次写入节点草稿', () => {
+describe('局部重绘专用遮罩宿主', () => {
+  it('保持唯一遮罩编辑器，先持久化遮罩再写入节点级字段', async () => {
     const onDraftChange = vi.fn()
     const onConfirm = vi.fn()
-    render(
-      <ElementEditSpecialEditor
-        session={session()}
-        onDraftChange={onDraftChange}
-        onConfirm={onConfirm}
-        onCancel={vi.fn(() => 'closed')}
-        onKeepEditing={vi.fn()}
-        onDiscard={vi.fn()}
-      />
-    )
-
+    render(<ElementEditSpecialEditor
+      session={session()}
+      onDraftChange={onDraftChange}
+      onConfirm={onConfirm}
+      onCancel={vi.fn(() => 'closed')}
+      onKeepEditing={vi.fn()}
+      onDiscard={vi.fn()}
+    />)
     expect(screen.getByText('唯一遮罩编辑器')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: '确认遮罩' }))
-    expect(onDraftChange).toHaveBeenCalledWith(expect.objectContaining({
-      params: expect.objectContaining({
-        apimartGptImage2Quality: 'medium',
-        apimartGptImage2MaskUrl: ['/managed/mask.png'],
-        __henjiDerivedMediaAuthoring__apimartGptImage2MaskUrl: expect.objectContaining({
-          sourceRef: '/managed/source.png',
-        }),
-      }),
-    }))
-    expect(onConfirm).toHaveBeenCalledTimes(1)
+    await waitFor(() => {
+      expect(onDraftChange).toHaveBeenCalledWith(expect.objectContaining({
+        localRedrawMaskSource: '/managed/local-redraw-mask.png',
+        localRedrawMaskDocument: expect.objectContaining({ sourceRef: '/managed/source.png' }),
+        params: { apimartGptImage2Quality: 'medium' },
+      }))
+      expect(onConfirm).toHaveBeenCalledTimes(1)
+    })
   })
 
   it('取消时不写入草稿', () => {
     const onDraftChange = vi.fn()
     const onCancel = vi.fn(() => 'closed' as const)
-    render(
-      <ElementEditSpecialEditor
-        session={session()}
-        onDraftChange={onDraftChange}
-        onConfirm={vi.fn()}
-        onCancel={onCancel}
-        onKeepEditing={vi.fn()}
-        onDiscard={vi.fn()}
-      />
-    )
+    render(<ElementEditSpecialEditor
+      session={session()}
+      onDraftChange={onDraftChange}
+      onConfirm={vi.fn()}
+      onCancel={onCancel}
+      onKeepEditing={vi.fn()}
+      onDiscard={vi.fn()}
+    />)
     fireEvent.click(screen.getByRole('button', { name: '取消遮罩' }))
     expect(onDraftChange).not.toHaveBeenCalled()
     expect(onCancel).toHaveBeenCalledTimes(1)

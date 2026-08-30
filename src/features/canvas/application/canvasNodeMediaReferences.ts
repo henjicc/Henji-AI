@@ -8,6 +8,7 @@ const MEDIA_URL_FIELDS = [
   'previewImageUrl',
   'panoramaPreviewImageUrl',
   'environmentImageUrl',
+  'localRedrawMaskSource',
   'videoUrl',
   'audioUrl',
 ] as const
@@ -115,6 +116,24 @@ export function mapCanvasNodeMediaReferences(
   const modelId = next.modelId
   if (typeof modelId === 'string' && modelId && next.params !== undefined) {
     next.params = mapModelParamMediaReferences(modelId, next.params, mapValue)
+  }
+
+  const localRedrawMaskDocument = next.localRedrawMaskDocument
+  if (localRedrawMaskDocument && typeof localRedrawMaskDocument === 'object' && !Array.isArray(localRedrawMaskDocument)) {
+    const document = { ...(localRedrawMaskDocument as DynamicValueMap) }
+    if (typeof document.sourceRef === 'string' && document.sourceRef) {
+      document.sourceRef = mapValue(document.sourceRef)
+    }
+    next.localRedrawMaskDocument = document
+  }
+
+  const generationLocalRedrawContext = next.generationLocalRedrawContext
+  if (generationLocalRedrawContext && typeof generationLocalRedrawContext === 'object' && !Array.isArray(generationLocalRedrawContext)) {
+    const context = { ...(generationLocalRedrawContext as DynamicValueMap) }
+    ;(['source', 'mask'] as const).forEach((field) => {
+      if (typeof context[field] === 'string' && context[field]) context[field] = mapValue(context[field])
+    })
+    next.generationLocalRedrawContext = context
   }
 
   const layerStackDocument = next.layerStackDocument

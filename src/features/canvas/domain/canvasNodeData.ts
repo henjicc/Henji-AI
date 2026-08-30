@@ -244,11 +244,11 @@ export interface PortraitTextureGenerationNodeData extends ImageEditNodeData {
 
 export interface ElementEditGenerationNodeData extends ImageEditNodeData {
   capabilityId: 'image.element-edit';
-  promptTemplateVersion: 'element-edit-mask-v1' | 'local-redraw-crop-v2';
+  promptTemplateVersion: 'local-redraw-crop-v2';
   fixedSemanticParams: DynamicValueMap;
   localRedrawMaskSource?: string | null;
   localRedrawMaskDocument?: MaskEditorDocument | null;
-  localRedrawSettings?: LocalRedrawSettings;
+  localRedrawSettings: LocalRedrawSettings;
 }
 
 export interface LayerSeparationGenerationNodeData extends ImageEditNodeData {

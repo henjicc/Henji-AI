@@ -15,7 +15,7 @@ export const DEFAULT_NODE_DISPLAY_NAME: Record<CanvasNodeType, string> = {
   [CANVAS_NODE_TYPES.multiAngleGen]: '多角度视图',
   [CANVAS_NODE_TYPES.upscaleGen]: '高清放大',
   [CANVAS_NODE_TYPES.portraitTextureGen]: '人像质感',
-  [CANVAS_NODE_TYPES.elementEditGen]: '元素编辑',
+  [CANVAS_NODE_TYPES.elementEditGen]: '局部重绘',
   [CANVAS_NODE_TYPES.layerSeparationGen]: '图层拆分',
   [CANVAS_NODE_TYPES.layerStackResult]: '图层结果',
   [CANVAS_NODE_TYPES.exportImage]: '结果图片',

@@ -14,6 +14,7 @@ export default defineConfig({
         input: {
           index: resolve(__dirname, 'electron/main/index.ts'),
           'agent-utility': resolve(__dirname, 'electron/main/agent-utility.ts'),
+          'image-registration-worker': resolve(__dirname, 'electron/main/image-registration-worker.ts'),
         },
         output: {
           format: 'cjs',

@@ -1,0 +1,277 @@
+import { registry } from '@/core/ModelRegistry';
+import type { PromptMediaBinding } from '@/core/inputs/promptDocument';
+import {
+  analyzeRatioResolutionParams,
+  isSmartAspectValue,
+} from '@/core/params/ratioResolution';
+
+import {
+  CANVAS_NODE_TYPES,
+  type CanvasNode,
+  type CanvasNodeType,
+  type ExportImageNodeResultKind,
+} from './canvasNodes';
+import { getDefaultModelId } from './defaultModels';
+import { DEFAULT_NODE_DISPLAY_NAME } from './nodeDisplay';
+import { getCanvasNodeDefinition } from './nodeRegistry';
+import {
+  normalizePanoramaCameraView,
+  normalizePanoramaProjectionMode,
+  normalizePanoramaViewMode,
+  normalizePanoramaViewportAspectRatio,
+} from './panoramaViewer';
+import { hasGenerationResult, hasResumableServerTask } from './resumableTask';
+import { resolveMediaTargetHandle, type RowMediaKind } from './socketTypes';
+
+const LEGACY_TARGET_HANDLE_ID = 'target';
+const LEGACY_GENERATION_DISPLAY_NAMES: Partial<Record<CanvasNodeType, string>> = {
+  [CANVAS_NODE_TYPES.imageEdit]: 'AI 图片',
+  [CANVAS_NODE_TYPES.videoGen]: 'AI 视频',
+  [CANVAS_NODE_TYPES.audioGen]: 'AI 音频',
+  [CANVAS_NODE_TYPES.textAnnotation]: '文本注释',
+};
+
+const LEGACY_EXPORT_RESULT_KINDS = new Set<ExportImageNodeResultKind>([
+  'generic',
+  'storyboardGenOutput',
+  'storyboardSplitExport',
+  'storyboardFrameEdit',
+]);
+/**
+ * 普通图片结果只保留自身与当前仍在使用的分镜来源语义。
+ */
+export function migrateExportImageResultKind(data: DynamicValueMap): void {
+  const resultKind = data.resultKind;
+  if (
+    typeof resultKind === 'string'
+    && (
+      LEGACY_EXPORT_RESULT_KINDS.has(resultKind as ExportImageNodeResultKind)
+      || resultKind === 'image'
+    )
+  ) {
+    return;
+  }
+  data.resultKind = 'image';
+}
+
+export function migratePanoramaViewerData(data: DynamicValueMap): void {
+  data.resultKind = 'panorama';
+  data.mediaInputs = data.mediaInputs && typeof data.mediaInputs === 'object' ? data.mediaInputs : {};
+  data.panoramaProjectionMode = normalizePanoramaProjectionMode(data.panoramaProjectionMode);
+  data.viewMode = normalizePanoramaViewMode(data.viewMode);
+  data.viewportAspectRatio = normalizePanoramaViewportAspectRatio(data.viewportAspectRatio);
+  data.cameraView = normalizePanoramaCameraView(data.cameraView);
+}
+
+/** 只迁移精确匹配的旧默认标题，用户自行编辑过的标题保持原样。 */
+export function migrateLegacyGenerationDisplayName(
+  nodeType: CanvasNodeType,
+  data: DynamicValueMap
+): void {
+  const legacyName = LEGACY_GENERATION_DISPLAY_NAMES[nodeType];
+  if (legacyName && data.displayName === legacyName) {
+    data.displayName = DEFAULT_NODE_DISPLAY_NAME[nodeType];
+  }
+}
+
+function isPromptMediaBinding(value: unknown): value is PromptMediaBinding {
+  if (!value || typeof value !== 'object') return false;
+  const binding = value as Partial<PromptMediaBinding>;
+  return typeof binding.resourceId === 'string'
+    && binding.resourceId.trim().length > 0
+    && (binding.mediaType === 'image' || binding.mediaType === 'video' || binding.mediaType === 'audio')
+    && (typeof binding.dataUrl === 'string' || typeof binding.filePath === 'string');
+}
+
+/**
+ * 标准生成节点提示词载体的轻量迁移：兼容字段始终为字符串，binding 只保留合法记录。
+ * promptDocument 的完整版本校验由共享核心 adapter 负责，以便损坏数据能记录降级诊断。
+ */
+export function migrateGenerationPromptData(data: DynamicValueMap): void {
+  if (typeof data.prompt !== 'string') {
+    data.prompt = '';
+  }
+  if (data.promptMediaBindings === undefined) return;
+  data.promptMediaBindings = Array.isArray(data.promptMediaBindings)
+    ? data.promptMediaBindings.filter(isPromptMediaBinding)
+    : [];
+}
+
+/**
+ * 清理无法跨应用生命周期恢复的节点运行态。
+ * 直接修改传入对象；调用方应传入节点数据副本，避免影响当前运行中的任务。
+ */
+export function resetTransientNodeRuntimeState(
+  nodeType: CanvasNodeType,
+  data: DynamicValueMap
+): void {
+  // 已登记服务端任务 ID 的生成中节点是可恢复的：任务还在供应商那边跑，
+  // 清成 false 会让重启后既看不到进度、也再没人去取结果。保留生成态，
+  // 交给 useCanvasResumePolling 接着轮询。
+  if (data.isGenerating === true && !hasResumableServerTask(data)) {
+    data.isGenerating = false;
+    if (
+      !hasGenerationResult(data)
+      && (typeof data.generationError !== 'string' || data.generationError.trim().length === 0)
+    ) {
+      data.generationError = '生成在项目切换或应用关闭前未返回，请重新生成';
+    }
+    if ('generationStartedAt' in data) {
+      data.generationStartedAt = null;
+    }
+  }
+
+  if (nodeType !== CANVAS_NODE_TYPES.cameraStage) {
+    return;
+  }
+
+  data.videoExporting = false;
+  data.videoProgress = null;
+  data.videoRenderPhase = null;
+  data.videoRenderRequestId = null;
+  data.videoRenderError = null;
+  data.imageExporting = false;
+  data.imageRenderRequestId = null;
+  data.imageRenderError = null;
+}
+
+/**
+ * 节点由旧版单一 target Handle 迁移为逐行媒体端口（connectivity.targetHandleMode: 'rows'）后，
+ * 历史画布里残留的 'target' 连线需要重新指向对应媒体类型的专属端口，否则连线会失去锚点。
+ * 仅在该节点只声明了一种可接受媒体类型时才能无歧义推断；多媒体类型节点保留原值不处理。
+ */
+export function migrateLegacyTargetHandle(targetNode: CanvasNode, targetHandle: string): string {
+  if (targetHandle !== LEGACY_TARGET_HANDLE_ID) {
+    return targetHandle;
+  }
+
+  const definition = getCanvasNodeDefinition(targetNode.type);
+  if (definition?.connectivity.targetHandleMode !== 'rows') {
+    return targetHandle;
+  }
+
+  const acceptedRowKinds = (definition.ports?.target?.accepts ?? []).filter(
+    (kind): kind is RowMediaKind => kind === 'image' || kind === 'video' || kind === 'audio'
+  );
+  if (acceptedRowKinds.length !== 1) {
+    return targetHandle;
+  }
+
+  return resolveMediaTargetHandle(targetNode.type, acceptedRowKinds[0]);
+}
+
+/**
+ * 旧版生成节点数据（model/size/requestAspectRatio/extraParams）
+ * 迁移为新版 schema 驱动结构（modelId/params）。
+ *
+ * 迁移是幂等的：已迁移的数据只做旧键清理。
+ */
+
+const LEGACY_KEYS = ['model', 'size', 'requestAspectRatio', 'extraParams'] as const;
+
+function resolveMigratedModelId(legacyModelId: DynamicValue): string {
+  const requested = typeof legacyModelId === 'string' ? legacyModelId.trim() : '';
+  if (requested && registry.getModel(requested)) {
+    return requested;
+  }
+
+  const imageModels = registry.getModelsByType('image');
+  if (requested) {
+    const shortId = requested.includes('/') ? requested.split('/').pop() ?? requested : requested;
+    const matched = imageModels.find(
+      (model) =>
+        model.meta.id === requested
+        || model.meta.id === shortId
+        || (model.meta.aliases ?? []).includes(requested)
+        || model.meta.id.endsWith(`/${shortId}`)
+    );
+    if (matched) {
+      return matched.meta.id;
+    }
+  }
+
+  return getDefaultModelId('image');
+}
+
+function buildMigratedParams(
+  modelId: string,
+  legacy: DynamicValueMap
+): DynamicValueMap {
+  const schema = registry.getSchema(modelId);
+  const params: DynamicValueMap = {};
+
+  const legacyExtraParams = legacy.extraParams;
+  if (legacyExtraParams && typeof legacyExtraParams === 'object') {
+    const schemaIds = new Set(schema.map((param) => param.id));
+    for (const [key, value] of Object.entries(legacyExtraParams as DynamicValueMap)) {
+      if (schemaIds.has(key)) {
+        params[key] = value;
+      }
+    }
+  }
+
+  const spec = analyzeRatioResolutionParams(schema, []);
+
+  const legacyAspect = typeof legacy.requestAspectRatio === 'string' ? legacy.requestAspectRatio : '';
+  if (spec?.aspectParam) {
+    if (legacyAspect && legacyAspect !== 'auto') {
+      const matched = spec.aspectParam.options.find((option) => option.value === legacyAspect);
+      if (matched) {
+        params[spec.aspectParam.id] = matched.value;
+      }
+    } else if (legacyAspect === 'auto') {
+      const smartOption = spec.aspectParam.options.find((option) => isSmartAspectValue(option.value));
+      if (smartOption) {
+        params[spec.aspectParam.id] = smartOption.value;
+      }
+    }
+  }
+
+  const legacySize = typeof legacy.size === 'string' ? legacy.size : '';
+  if (legacySize && spec?.resolutionParam) {
+    const matched = spec.resolutionParam.options.find((option) => option.value === legacySize);
+    if (matched) {
+      params[spec.resolutionParam.id] = matched.value;
+    }
+  }
+
+  return params;
+}
+
+function stripLegacyKeys(data: DynamicValueMap): void {
+  for (const key of LEGACY_KEYS) {
+    if (key in data) {
+      delete data[key];
+    }
+  }
+}
+
+/**
+ * 迁移生成类节点（AI 图片 / 分镜生成）的模型数据。
+ * 直接修改传入对象（normalizeNodes 中的 mergedData 是新对象，安全）。
+ */
+export function migrateGenerationNodeData(data: DynamicValueMap): void {
+  // 模型清单尚未加载时跳过，等待下次 normalize
+  if (registry.getModelsByType('image').length === 0) {
+    return;
+  }
+
+  const existingModelId = typeof data.modelId === 'string' ? data.modelId.trim() : '';
+  if (existingModelId && registry.getModel(existingModelId)) {
+    stripLegacyKeys(data);
+    if (!data.params || typeof data.params !== 'object') {
+      data.params = {};
+    }
+    return;
+  }
+
+  const modelId = resolveMigratedModelId(data.model);
+  const params = buildMigratedParams(modelId, data);
+
+  data.modelId = modelId;
+  data.params = {
+    ...params,
+    ...((data.params && typeof data.params === 'object') ? (data.params as DynamicValueMap) : {}),
+  };
+  stripLegacyKeys(data);
+}

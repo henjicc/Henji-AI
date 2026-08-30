@@ -72,6 +72,7 @@ function falUtilityCapability(options: {
           generationUi: {
             promptMode: options.promptMode ?? 'hidden',
             modelMode: 'locked',
+            layoutMode: 'workbench',
             excludeParamIds: ['image'],
             ...(options.promptMaxCharacters
               ? { promptMaxCharacters: options.promptMaxCharacters }
@@ -400,7 +401,7 @@ export const builtInCanvasImageCapabilities: readonly CanvasImageCapabilityDefin
     icon: 'elementEdit',
     order: 70,
     source: IMAGE_SOURCE,
-    node: { kind: 'special-generation', editor: 'mask', openEditorOnCreate: true },
+    node: { kind: 'special-generation', editor: 'mask' },
     implementation: {
       status: 'implemented',
       execution: {
@@ -417,10 +418,8 @@ export const builtInCanvasImageCapabilities: readonly CanvasImageCapabilityDefin
     promptPolicy: {
       hiddenTemplateVersion: ELEMENT_EDIT_PROMPT_TEMPLATE_VERSION,
       fixedSemanticParams: { ...ELEMENT_EDIT_FIXED_SEMANTIC_PARAMS },
-      visibleParameterKeys: [
-        'apimartGptImage2MaskUrl',
-        'falGptImage2MaskUrl',
-      ],
+      visibleParameterKeys: [],
+      showAllModelParameters: true,
     },
     outputPolicy: {
       resultKind: 'image',

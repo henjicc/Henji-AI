@@ -24,6 +24,15 @@ import {
   splitImageSource,
 } from '../services/image/ops'
 import { composeLayerStack } from '../services/image/layer-stack'
+import {
+  composeLocalRedraw,
+  prepareLocalRedraw,
+  type ComposeLocalRedrawPayloadDto,
+  type LocalRedrawAspectRatio,
+  type LocalRedrawContextDto,
+  type LocalRedrawSettingsDto,
+  type PrepareLocalRedrawPayloadDto,
+} from '../services/image/local-redraw'
 import { releaseManagedGenerationMediaPaths, releaseManagedImagePaths } from '../services/image/path-utils'
 import {
   probeSharpDiffusionFallback,
@@ -44,6 +53,7 @@ import {
   readNumber,
   readOptionalBoolean,
   readOptionalNumber,
+  readOptionalNumberArray,
   readOptionalNumberTuple,
   readOptionalString,
   readOptionalStringArray,
@@ -126,6 +136,8 @@ export function registerImageIpc(): void {
     return prepareNodeImageBinary(bytes, extension, maxPreviewDimension)
   })
   registerIpcHandler<CropImageSourcePayloadDto, string>('image:cropImageSource', parseCropPayload, (payload) => cropImageSource(payload))
+  registerIpcHandler<PrepareLocalRedrawPayloadDto, Awaited<ReturnType<typeof prepareLocalRedraw>>>('image:prepareLocalRedraw', parsePrepareLocalRedrawPayload, prepareLocalRedraw)
+  registerIpcHandler<ComposeLocalRedrawPayloadDto, Awaited<ReturnType<typeof composeLocalRedraw>>>('image:composeLocalRedraw', parseComposeLocalRedrawPayload, composeLocalRedraw)
   registerIpcHandler<MergeStoryboardImagesPayloadDto, Awaited<ReturnType<typeof mergeStoryboardImages>>>('image:mergeStoryboardImages', parseMergePayload, (payload) => {
     return mergeStoryboardImages(payload)
   })
@@ -292,6 +304,56 @@ function parseCropPayload(input: unknown): CropImageSourcePayloadDto {
     cropWidth: readOptionalNumber(record, 'cropWidth'),
     cropHeight: readOptionalNumber(record, 'cropHeight'),
   }
+}
+
+function parseLocalRedrawSettings(value: unknown): LocalRedrawSettingsDto {
+  const record = parseRecord(value)
+  const aspectRatio = readString(record, 'aspectRatio')
+  const registrationQuality = readString(record, 'registrationQuality')
+  const allowedRatios: LocalRedrawAspectRatio[] = ['auto', '1:1', '4:3', '3:4', '16:9', '9:16']
+  if (!allowedRatios.includes(aspectRatio as LocalRedrawAspectRatio)) throw new Error('Invalid local redraw aspect ratio')
+  if (!['fast', 'precise', 'extreme'].includes(registrationQuality)) throw new Error('Invalid registration quality')
+  return {
+    contextScale: Math.max(1, Math.min(5, readNumber(record, 'contextScale'))),
+    aspectRatio: aspectRatio as LocalRedrawAspectRatio,
+    registrationQuality: registrationQuality as LocalRedrawSettingsDto['registrationQuality'],
+    featherPixels: Math.max(0, Math.min(128, readNumber(record, 'featherPixels'))),
+    forceRegistration: readOptionalBoolean(record, 'forceRegistration') === true,
+  }
+}
+
+function parsePrepareLocalRedrawPayload(input: unknown): PrepareLocalRedrawPayloadDto {
+  const record = parseRecord(input)
+  return {
+    source: readString(record, 'source'),
+    mask: readString(record, 'mask'),
+    settings: parseLocalRedrawSettings(record.settings),
+    preferredAspectRatios: readOptionalNumberArray(record, 'preferredAspectRatios'),
+  }
+}
+
+function parseComposeLocalRedrawPayload(input: unknown): ComposeLocalRedrawPayloadDto {
+  const record = parseRecord(input)
+  const rawContext = parseRecord(record.context)
+  if (readNumber(rawContext, 'version') !== 2) throw new Error('Invalid local redraw context version')
+  const rawCrop = parseRecord(rawContext.crop)
+  const context: LocalRedrawContextDto = {
+    version: 2,
+    requestId: readString(rawContext, 'requestId'),
+    source: readString(rawContext, 'source'),
+    mask: readString(rawContext, 'mask'),
+    sourceWidth: readNumber(rawContext, 'sourceWidth'),
+    sourceHeight: readNumber(rawContext, 'sourceHeight'),
+    crop: {
+      x: readNumber(rawCrop, 'x'),
+      y: readNumber(rawCrop, 'y'),
+      width: readNumber(rawCrop, 'width'),
+      height: readNumber(rawCrop, 'height'),
+    },
+    matchedAspectRatio: readOptionalNumber(rawContext, 'matchedAspectRatio') ?? null,
+    settings: parseLocalRedrawSettings(rawContext.settings),
+  }
+  return { generatedSource: readString(record, 'generatedSource'), context }
 }
 
 function parseMergePayload(input: unknown): MergeStoryboardImagesPayloadDto {

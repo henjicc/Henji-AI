@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import {
   Circle,
   Ellipse,
@@ -134,6 +134,18 @@ function MaskMarkPreview({ mark }: { mark: MaskMark }): JSX.Element | null {
     : <MaskShapePreview shape={mark} />;
 }
 
+const MaskDocumentPreview = memo(function MaskDocumentPreview({
+  marks,
+}: {
+  marks: readonly MaskMark[];
+}): JSX.Element {
+  return (
+    <>
+      {marks.map((mark) => <MaskMarkPreview key={mark.id} mark={mark} />)}
+    </>
+  );
+});
+
 function createDraft(
   tool: MaskTool,
   mode: MaskStrokeMode,
@@ -187,6 +199,8 @@ export function MaskEditorCanvas({
 }: MaskEditorCanvasProps): JSX.Element {
   const viewportRef = useRef<HTMLDivElement>(null);
   const draftRef = useRef<MaskMark | null>(null);
+  const cursorPointRef = useRef<MaskPoint | null>(null);
+  const renderFrameRef = useRef<number | null>(null);
   const [draft, setDraft] = useState<MaskMark | null>(null);
   const [cursorPoint, setCursorPoint] = useState<MaskPoint | null>(null);
   const [viewportSize, setViewportSize] = useState({ width: 1, height: 1 });
@@ -195,10 +209,13 @@ export function MaskEditorCanvas({
     const viewport = viewportRef.current;
     if (!viewport) return;
     const updateSize = () => {
-      setViewportSize({
-        width: Math.max(1, viewport.clientWidth),
-        height: Math.max(1, viewport.clientHeight),
-      });
+      const width = Math.max(1, viewport.clientWidth);
+      const height = Math.max(1, viewport.clientHeight);
+      setViewportSize((current) => (
+        current.width === width && current.height === height
+          ? current
+          : { width, height }
+      ));
     };
     updateSize();
     const observer = new ResizeObserver(updateSize);
@@ -207,10 +224,19 @@ export function MaskEditorCanvas({
   }, []);
 
   useEffect(() => {
+    if (renderFrameRef.current !== null) {
+      window.cancelAnimationFrame(renderFrameRef.current);
+      renderFrameRef.current = null;
+    }
     draftRef.current = null;
+    cursorPointRef.current = null;
     setDraft(null);
     setCursorPoint(null);
   }, [document.sourceRef, mode, tool]);
+
+  useEffect(() => () => {
+    if (renderFrameRef.current !== null) window.cancelAnimationFrame(renderFrameRef.current);
+  }, []);
 
   const fit = fitMaskStage(
     viewportSize.width,
@@ -230,39 +256,53 @@ export function MaskEditorCanvas({
     );
   }, [document.height, document.width, fit.scale]);
 
+  const scheduleInteractiveRender = useCallback(() => {
+    if (renderFrameRef.current !== null) return;
+    renderFrameRef.current = window.requestAnimationFrame(() => {
+      renderFrameRef.current = null;
+      setDraft(draftRef.current);
+      setCursorPoint(cursorPointRef.current);
+    });
+  }, []);
+
   const updateDraft = useCallback((next: MaskMark | null) => {
     draftRef.current = next;
-    setDraft(next);
-  }, []);
+    scheduleInteractiveRender();
+  }, [scheduleInteractiveRender]);
 
   const handlePointerDown = useCallback((event: KonvaEventObject<MouseEvent | TouchEvent>) => {
     event.evt.preventDefault();
     const point = resolvePoint(event);
     if (!point) return;
-    if (event.evt instanceof MouseEvent) setCursorPoint(point);
+    if (event.evt instanceof MouseEvent) cursorPointRef.current = point;
     updateDraft(createDraft(tool, mode, point, brushSize, brushHardness));
   }, [brushHardness, brushSize, mode, resolvePoint, tool, updateDraft]);
 
   const handlePointerMove = useCallback((event: KonvaEventObject<MouseEvent | TouchEvent>) => {
     const point = resolvePoint(event);
     if (!point) return;
-    if (event.evt instanceof MouseEvent) setCursorPoint(point);
+    if (event.evt instanceof MouseEvent) {
+      cursorPointRef.current = point;
+      scheduleInteractiveRender();
+    }
     const current = draftRef.current;
     if (!current) return;
     event.evt.preventDefault();
     const next = updateDraftPoint(current, point);
     if (next !== current) updateDraft(next);
-  }, [resolvePoint, updateDraft]);
+  }, [resolvePoint, scheduleInteractiveRender, updateDraft]);
 
   const handlePointerUp = useCallback(() => {
     const current = draftRef.current;
     if (!current) return;
-    updateDraft(null);
+    draftRef.current = null;
+    setDraft(null);
     if (isMeaningfulMark(current)) onMarkComplete(current);
-  }, [onMarkComplete, updateDraft]);
+  }, [onMarkComplete]);
 
   const handleMouseLeave = useCallback(() => {
     handlePointerUp();
+    cursorPointRef.current = null;
     setCursorPoint(null);
   }, [handlePointerUp]);
 
@@ -298,9 +338,7 @@ export function MaskEditorCanvas({
               height={document.height}
               fill="transparent"
             />
-            {document.strokes.map((mark) => (
-              <MaskMarkPreview key={mark.id} mark={mark} />
-            ))}
+            <MaskDocumentPreview marks={document.strokes} />
             {draft ? <MaskMarkPreview mark={draft} /> : null}
             {showBrushCursor ? (
               <>

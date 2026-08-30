@@ -2,7 +2,6 @@ import { beforeAll, describe, expect, it } from 'vitest'
 
 import { composeModelDefinition } from '@/core/composeModelDefinition'
 import { registry } from '@/core/ModelRegistry'
-import { derivedMediaStateKey } from '@/core/params/derivedMediaState'
 import { CANVAS_NODE_TYPES, type CanvasNode } from '@/features/canvas/domain/canvasNodes'
 import { createStableLayerId, createStableLayerResourceId, createStableLayerStackId, type LayerStackDocumentV1 } from '@/features/canvas/domain/layerStack'
 import { modelPresentations } from '@/models/presentation'
@@ -100,13 +99,12 @@ describe('结构化提示词项目包媒体收集', () => {
     })
   })
 
-  it('收集元素编辑参数中的受管遮罩并同步改写编辑文档来源', () => {
+  it('收集局部重绘节点的受管遮罩并同步改写编辑文档来源', () => {
     const sourcePath = '/managed/source.png'
     const maskPath = '/managed/inpainting-mask.png'
-    const stateKey = derivedMediaStateKey('apimartGptImage2MaskUrl')
     const node = {
       id: 'element-edit-node',
-      type: CANVAS_NODE_TYPES.imageEdit,
+      type: CANVAS_NODE_TYPES.elementEditGen,
       position: { x: 0, y: 0 },
       data: {
         imageUrl: null,
@@ -114,42 +112,50 @@ describe('结构化提示词项目包媒体收集', () => {
         prompt: '把选中区域改成红色雨伞',
         modelId: 'apimart-gpt-image-2',
         mediaInputs: { image: [sourcePath] },
-        params: {
-          apimartGptImage2Version: 'official',
-          apimartGptImage2MaskUrl: [maskPath],
-          [stateKey]: {
-            version: 1,
-            sourceRef: sourcePath,
-            width: 1024,
-            height: 768,
-            strokes: [{
-              id: 'paint-1',
-              kind: 'rectangle',
-              mode: 'paint',
-              points: [{ x: 20, y: 30 }, { x: 120, y: 140 }],
-            }],
+        localRedrawMaskSource: maskPath,
+        localRedrawMaskDocument: {
+          version: 1,
+          sourceRef: sourcePath,
+          width: 1024,
+          height: 768,
+          strokes: [{
+            id: 'paint-1',
+            kind: 'rectangle',
+            mode: 'paint',
+            points: [{ x: 20, y: 30 }, { x: 120, y: 140 }],
+          }],
           },
+        generationLocalRedrawContext: {
+          version: 1,
+          source: sourcePath,
+          mask: maskPath,
+          sourceWidth: 1024,
+          sourceHeight: 768,
+          crop: { x: 10, y: 20, width: 400, height: 400 },
+          settings: { contextScale: 2, aspectRatio: 'auto', registrationQuality: 'precise', featherPixels: 12, forceRegistration: false },
         },
-      },
-    } as CanvasNode
+        },
+      } as CanvasNode
 
     const collected = collectAndRewriteMedia([node])
     expect(collected.mediaFiles).toEqual([
-      { srcPath: sourcePath, packagePath: 'media/1-source.png' },
-      { srcPath: maskPath, packagePath: 'media/2-inpainting-mask.png' },
+      { srcPath: maskPath, packagePath: 'media/1-inpainting-mask.png' },
+      { srcPath: sourcePath, packagePath: 'media/2-source.png' },
     ])
-    expect((collected.nodes[0].data.params as DynamicValueMap)).toMatchObject({
-      apimartGptImage2MaskUrl: ['media/2-inpainting-mask.png'],
-      [stateKey]: { sourceRef: 'media/1-source.png', version: 1 },
+    expect(collected.nodes[0].data).toMatchObject({
+      localRedrawMaskSource: 'media/1-inpainting-mask.png',
+      localRedrawMaskDocument: { sourceRef: 'media/2-source.png', version: 1 },
+      generationLocalRedrawContext: { source: 'media/2-source.png', mask: 'media/1-inpainting-mask.png' },
     })
 
     const restored = rewritePackagePathsToLocal(collected.nodes, {
-      'media/1-source.png': '/unpacked/source.png',
-      'media/2-inpainting-mask.png': '/unpacked/inpainting-mask.png',
+      'media/1-inpainting-mask.png': '/unpacked/inpainting-mask.png',
+      'media/2-source.png': '/unpacked/source.png',
     })
-    expect((restored[0].data.params as DynamicValueMap)).toMatchObject({
-      apimartGptImage2MaskUrl: ['/unpacked/inpainting-mask.png'],
-      [stateKey]: { sourceRef: '/unpacked/source.png', version: 1 },
+    expect(restored[0].data).toMatchObject({
+      localRedrawMaskSource: '/unpacked/inpainting-mask.png',
+      localRedrawMaskDocument: { sourceRef: '/unpacked/source.png', version: 1 },
+      generationLocalRedrawContext: { source: '/unpacked/source.png', mask: '/unpacked/inpainting-mask.png' },
     })
   })
 

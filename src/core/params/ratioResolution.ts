@@ -26,7 +26,7 @@ const SMART_VALUES = new Set(['smart', 'auto', 'adaptive', '智能'])
 const RATIO_PATTERN = /^(\d+)\s*:\s*(\d+)$/
 const RATIO_TEXT_PATTERN = /(\d+\s*:\s*\d+)/
 const RESOLUTION_PATTERN = /^(\d{3,4}[pP]|[1248][kK]|\d+\s*[x*]\s*\d+)$/
-const ASPECT_HINT_PATTERN = /(aspect|ratio|宽高比|比例)/i
+const ASPECT_HINT_PATTERN = /(?:^|[^a-z])(aspect|ratio)(?:[^a-z]|$)|宽高比|比例/i
 const RESOLUTION_HINT_PATTERN = /(resolution|size|分辨率|尺寸)/i
 const QUALITY_HINT_PATTERN = /(quality|画质)/i
 const DURATION_HINT_PATTERN = /(duration|video[_\s-]?length|时长|秒)/i
@@ -87,7 +87,10 @@ function toLabelText(label: I18nText): string {
 }
 
 function toSearchText(param: ChoiceParamDescriptor): string {
-  return [param.id, param.apiField, toLabelText(param.name)].filter(Boolean).join(' ')
+  return [param.id, param.apiField, toLabelText(param.name)]
+    .filter(Boolean)
+    .join(' ')
+    .replace(/([a-z])([A-Z])/g, '$1 $2')
 }
 
 export function isSmartAspectValue(value: DynamicValue): boolean {
@@ -338,6 +341,15 @@ function toAspectValueCandidates(param: ChoiceParamDescriptor): AspectValueCandi
     }
     return acc
   }, [])
+}
+
+/** 收集模型 schema 中真实可请求的宽高比，供局部重绘在裁剪前匹配模型输出画幅。 */
+export function getSupportedAspectRatios(params: ParamDef[]): number[] {
+  const ratios = getAspectChoiceParams(params)
+    .flatMap(toAspectValueCandidates)
+    .map((candidate) => candidate.ratio)
+    .filter((ratio) => Number.isFinite(ratio) && ratio > 0)
+  return [...new Set(ratios.map((ratio) => Number(ratio.toFixed(6))))]
 }
 
 export function findSquareAspectValue(param: ChoiceParamDescriptor): string | number | null {

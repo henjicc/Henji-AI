@@ -159,6 +159,8 @@ export interface CanvasImageCapabilityPromptPolicy {
   hiddenTemplateVersions?: Readonly<Partial<Record<'text' | 'reference', string>>>;
   fixedSemanticParams: Readonly<Record<string, CanvasImageCapabilitySemanticValue>>;
   visibleParameterKeys: readonly string[];
+  /** 特殊能力仅改变输入/输出流水线时，完整开放候选模型自己的 schema 参数。 */
+  showAllModelParameters?: boolean;
   /** 通过通用 schema 语义发现参数，不泄漏供应商参数 ID。 */
   visibleParameterSemantics?: readonly ('channel' | 'resolution' | 'quality')[];
   /** 跨供应商参数通过 schema transferKey 暴露，禁止在 UI 列举供应商参数 ID。 */

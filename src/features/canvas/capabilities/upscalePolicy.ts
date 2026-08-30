@@ -1,5 +1,8 @@
 import type { CanvasImageCapabilityModelPolicy } from './types'
 
+/** 统一注册表选择默认高清模型时使用的稳定 canonical ID。 */
+export const UPSCALE_DEFAULT_CANONICAL_MODEL_ID = 'topaz-image-upscale'
+
 export const UPSCALE_OUTPUT_MAX_MEGAPIXELS = 48
 export const UPSCALE_INPUT_MAX_FILE_BYTES = 20 * 1024 * 1024
 export const UPSCALE_FACTORS = [2, 4] as const
