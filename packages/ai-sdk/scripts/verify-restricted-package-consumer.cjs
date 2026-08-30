@@ -111,6 +111,10 @@ function restrictedContext() {
   if (JSON.stringify(codecs) !== JSON.stringify(['undefined', 'undefined'])) {
     fail(`VM 意外存在文本编解码全局：${JSON.stringify(codecs)}`)
   }
+  vm.runInContext('delete Array.prototype.at', context)
+  if (vm.runInContext('typeof Array.prototype.at', context) !== 'undefined') {
+    fail('VM 未能模拟缺少 Array.prototype.at 的 ES2020 宿主')
+  }
   return context
 }
 
@@ -133,6 +137,59 @@ async function verify() {
     '@henjicc/ai-sdk/capabilities/speech-recognition/bailian/realtime',
     'HenjiPackedBailianRealtimeAsr',
     [...commonForbidden, '/dist/capabilities/translation/', '/dist/llm/'],
+  )
+  const volcengineAsr = bundle(
+    'VolcengineAsr',
+    '@henjicc/ai-sdk/capabilities/speech-recognition/volcengine',
+    'HenjiPackedVolcengineAsr',
+    [
+      ...commonForbidden,
+      '/dist/capabilities/speech-recognition/volcengine/realtime/',
+      '/dist/capabilities/speech-recognition/bailian/',
+      '/dist/capabilities/speech-recognition/siliconflow/',
+      '/dist/capabilities/speech-recognition/groq/',
+      '/dist/capabilities/translation/',
+      '/dist/llm/',
+    ],
+  )
+  const volcengineRealtime = bundle(
+    'VolcengineRealtimeAsr',
+    '@henjicc/ai-sdk/capabilities/speech-recognition/volcengine/realtime',
+    'HenjiPackedVolcengineRealtimeAsr',
+    [
+      ...commonForbidden,
+      '/dist/capabilities/speech-recognition/bailian/',
+      '/dist/capabilities/speech-recognition/siliconflow/',
+      '/dist/capabilities/speech-recognition/groq/',
+      '/dist/capabilities/translation/',
+      '/dist/llm/',
+    ],
+  )
+  const siliconFlowAsr = bundle(
+    'SiliconFlowAsr',
+    '@henjicc/ai-sdk/capabilities/speech-recognition/siliconflow',
+    'HenjiPackedSiliconFlowAsr',
+    [
+      ...commonForbidden,
+      '/dist/capabilities/speech-recognition/bailian/',
+      '/dist/capabilities/speech-recognition/volcengine/',
+      '/dist/capabilities/speech-recognition/groq/',
+      '/dist/capabilities/translation/',
+      '/dist/llm/',
+    ],
+  )
+  const groqAsr = bundle(
+    'GroqAsr',
+    '@henjicc/ai-sdk/capabilities/speech-recognition/groq',
+    'HenjiPackedGroqAsr',
+    [
+      ...commonForbidden,
+      '/dist/capabilities/speech-recognition/bailian/',
+      '/dist/capabilities/speech-recognition/volcengine/',
+      '/dist/capabilities/speech-recognition/siliconflow/',
+      '/dist/capabilities/translation/',
+      '/dist/llm/',
+    ],
   )
   const translation = bundle(
     'BailianTranslation',
@@ -169,6 +226,10 @@ async function verify() {
   const context = restrictedContext()
   const asrApi = evaluate(context, asr, 'HenjiPackedBailianAsr')
   const realtimeApi = evaluate(context, realtime, 'HenjiPackedBailianRealtimeAsr')
+  const volcengineAsrApi = evaluate(context, volcengineAsr, 'HenjiPackedVolcengineAsr')
+  const volcengineRealtimeApi = evaluate(context, volcengineRealtime, 'HenjiPackedVolcengineRealtimeAsr')
+  const siliconFlowAsrApi = evaluate(context, siliconFlowAsr, 'HenjiPackedSiliconFlowAsr')
+  const groqAsrApi = evaluate(context, groqAsr, 'HenjiPackedGroqAsr')
   const translationApi = evaluate(context, translation, 'HenjiPackedBailianTranslation')
   const groqApi = evaluate(context, groq, 'HenjiPackedGroq')
   const bigmodelApi = evaluate(context, bigmodel, 'HenjiPackedBigmodel')
@@ -176,6 +237,10 @@ async function verify() {
 
   if (asrApi.bailianNonRealtimeAsrPresets.length !== 5) fail('非实时 ASR 不是 5 个')
   if (realtimeApi.bailianRealtimeAsrPresets.length !== 4) fail('实时 ASR 不是 4 个')
+  if (volcengineAsrApi.volcengineFileAsrPresets.length !== 1) fail('火山文件 ASR 不是 1 个')
+  if (volcengineRealtimeApi.volcengineRealtimeAsrPresets.length !== 1) fail('火山实时 ASR 不是 1 个')
+  if (siliconFlowAsrApi.siliconFlowAsrPresets.length !== 2) fail('硅基流动 ASR 不是 2 个')
+  if (groqAsrApi.groqAsrPresets.length !== 2) fail('Groq ASR 不是 2 个')
   if (Object.keys(translationApi.BAILIAN_QWEN_MT_PRESETS).length !== 3) fail('Qwen-MT 不是 3 个')
   if (!asrApi.bailianNonRealtimeAsrPresets.every((preset) => (
     preset.id === `bailian.speech-recognition.${preset.modelId}`
@@ -185,6 +250,28 @@ async function verify() {
     preset.id === `bailian.speech-recognition.${preset.modelId}`
     && preset.descriptor.providerIds[0] === 'bailian'
   ))) fail('实时 ASR 坐标不规范')
+  for (const [label, presets, providerId] of [
+    ['火山文件 ASR', volcengineAsrApi.volcengineFileAsrPresets, 'volcengine'],
+    ['火山实时 ASR', volcengineRealtimeApi.volcengineRealtimeAsrPresets, 'volcengine'],
+    ['硅基流动 ASR', siliconFlowAsrApi.siliconFlowAsrPresets, 'siliconflow'],
+    ['Groq ASR', groqAsrApi.groqAsrPresets, 'groq'],
+  ]) {
+    if (!presets.every((preset) => (
+      preset.id === `${providerId}.speech-recognition.${preset.modelId}`
+      && preset.descriptor.providerIds[0] === providerId
+    ))) fail(`${label} 坐标不规范`)
+  }
+  const groqWordOnly = groqAsrApi.parseGroqTranscription({
+    text: 'restricted host fixture',
+    words: [
+      { word: 'restricted', start: 0, end: 0.4 },
+      { word: 'host', start: 0.4, end: 0.8 },
+    ],
+  })
+  if (groqWordOnly.segments?.[0]?.endMs !== 800
+    || groqWordOnly.segments[0].words?.length !== 2) {
+    fail('Groq 词级响应在无 Array.prototype.at 宿主中归一化失败')
+  }
   if (groqApi.GROQ_DEFAULT_MODEL_CONFIG.providerId !== 'groq'
     || groqApi.GROQ_DEFAULT_MODEL_CONFIG.modelId !== 'openai/gpt-oss-20b') {
     fail('Groq 默认模型坐标不匹配')
@@ -261,6 +348,10 @@ async function verify() {
     textDecoder: false,
     asr: { models: 5, bytes: asr.bytes, modules: asr.inputs.length },
     realtimeAsr: { models: 4, bytes: realtime.bytes, modules: realtime.inputs.length },
+    volcengineAsr: { models: 1, bytes: volcengineAsr.bytes, modules: volcengineAsr.inputs.length },
+    volcengineRealtimeAsr: { models: 1, bytes: volcengineRealtime.bytes, modules: volcengineRealtime.inputs.length },
+    siliconFlowAsr: { models: 2, bytes: siliconFlowAsr.bytes, modules: siliconFlowAsr.inputs.length },
+    groqAsr: { models: 2, bytes: groqAsr.bytes, modules: groqAsr.inputs.length },
     translation: { models: 3, bytes: translation.bytes, modules: translation.inputs.length },
     groq: { models: 1, bytes: groq.bytes, modules: groq.inputs.length },
     bigmodel: { models: 1, bytes: bigmodel.bytes, modules: bigmodel.inputs.length },

@@ -1,0 +1,95 @@
+{
+  "kind": "capability",
+  "classification": "field-construction",
+  "source": {
+    "checkedAt": "2026-08-31",
+    "contract": "由火山官方字段表与当前官方 Python 附件逐字段构造，用于锁定 SDK 发送边界；不是服务端录制。"
+  },
+  "taskId": "11111111-1111-4111-8111-111111111111",
+  "file": {
+    "resourceId": "volc.seedasr.auc",
+    "submitUrl": "https://openspeech.bytedance.com/api/v3/auc/bigmodel/submit",
+    "queryUrl": "https://openspeech.bytedance.com/api/v3/auc/bigmodel/query",
+    "submitHeaders": {
+      "X-Api-Status-Code": "20000000",
+      "X-Api-Message": "OK",
+      "X-Tt-Logid": "fixture-file-log-id"
+    },
+    "queuedHeaders": {
+      "X-Api-Status-Code": "20000002",
+      "X-Api-Message": "task queued"
+    },
+    "processingHeaders": {
+      "X-Api-Status-Code": "20000001",
+      "X-Api-Message": "task processing"
+    },
+    "successHeaders": {
+      "X-Api-Status-Code": "20000000",
+      "X-Api-Message": "OK",
+      "X-Tt-Logid": "fixture-file-query-log-id"
+    },
+    "submitBody": {
+      "user": { "uid": "11111111-1111-4111-8111-111111111111" },
+      "audio": {
+        "url": "https://audio.example/meeting.mp3",
+        "format": "mp3",
+        "language": "zh-CN"
+      },
+      "request": {
+        "model_name": "bigmodel",
+        "enable_itn": true,
+        "enable_punc": true,
+        "enable_ddc": false,
+        "show_utterances": true
+      }
+    },
+    "successPayload": {
+      "audio_info": { "duration": 1080 },
+      "result": {
+        "text": "你好世界。",
+        "utterances": [
+          {
+            "definite": true,
+            "start_time": 0,
+            "end_time": 1080,
+            "text": "你好世界。",
+            "words": [
+              { "start_time": 0, "end_time": 520, "text": "你好" },
+              { "start_time": 520, "end_time": 1080, "text": "世界。" }
+            ]
+          }
+        ]
+      }
+    }
+  },
+  "realtime": {
+    "resourceId": "volc.seedasr.sauc.duration",
+    "url": "wss://openspeech.bytedance.com/api/v3/sauc/bigmodel_async",
+    "fullRequestHeaderHex": "11111100",
+    "audioRequestHeaderHex": "11211100",
+    "lastAudioRequestHeaderHex": "11231100",
+    "partialPayload": {
+      "audio_info": { "duration": 400 },
+      "result": {
+        "additions": { "log_id": "fixture-realtime-log-id" },
+        "text": "你好",
+        "utterances": [
+          { "definite": false, "start_time": 0, "end_time": 400, "text": "你好" }
+        ]
+      }
+    },
+    "startPayload": {
+      "user": { "uid": "11111111-1111-4111-8111-111111111111" },
+      "audio": { "format": "pcm", "codec": "raw", "rate": 16000, "bits": 16, "channel": 1 },
+      "request": {
+        "model_name": "bigmodel",
+        "enable_itn": true,
+        "enable_punc": true,
+        "enable_ddc": false,
+        "show_utterances": true,
+        "enable_nonstream": false,
+        "result_type": "full"
+      }
+    }
+  }
+}

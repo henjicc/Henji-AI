@@ -19,7 +19,7 @@ function read(file) {
 
 function hostsFromUrls(text) {
   const hosts = new Set()
-  for (const match of text.matchAll(/https?:\/\/([^/'"`\s)]+)/g)) {
+  for (const match of text.matchAll(/(?:https?|wss?):\/\/([^/'"`\s)]+)/g)) {
     const host = match[1]
     if (!host.includes('{') && !host.endsWith('.localhost')) hosts.add(host)
   }
@@ -43,6 +43,10 @@ function collectRuntimeDomains() {
     'upload/fal-transport.ts',
     'llm/defaults.ts',
     'llm/streaming.ts',
+    'capabilities/speech-recognition/groq/module.ts',
+    'capabilities/speech-recognition/siliconflow/module.ts',
+    'capabilities/speech-recognition/volcengine/module.ts',
+    'capabilities/speech-recognition/volcengine/realtime/module.ts',
   ]
   const hosts = new Set()
   for (const relative of runtimeFiles) {

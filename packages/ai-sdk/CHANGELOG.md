@@ -2,7 +2,12 @@
 
 ## Unreleased
 
-## 0.2.7 - 2026-08-29
+## 0.2.7 - 2026-08-31
+
+- ASR 按需能力从百炼 9 个模型扩展到 15 个：新增火山引擎 SeedASR 2.0 文件 submit/query 与二进制实时 WebSocket、硅基流动 SenseVoiceSmall/TeleSpeechASR，以及 Groq Whisper Large v3/Turbo。
+- 火山实时协议严格校验 V1 大端二进制帧、sequence、payload size、gzip 与终包语义；文件标准版只接受官方要求的公网 URL，不为本地文件伪造上传能力。
+- Groq 与硅基流动使用各自官方 multipart 转写契约并统一输出 `SpeechRecognitionOutput`；Groq `verbose_json` 额外归一化时长、分句和词级时间戳，免费层默认按 25 MB 本地上限保护，消费宿主可按套餐显式调整。
+- 新增四个 ASR 独立 exports、官方来源 fixture、协议断牙测试、bundle 隔离、仓外 Vite/Node ESM 与无全局 TextEncoder/TextDecoder 的受限宿主门禁。
 
 - 默认生成目录从 99 个扩展到 105 个模型，新增六个 Fal 入口：IC-Light v2 重打光，以及 Topaz、Topaz 透明图、SeedVR2、Bria Creative、Ideogram 高清放大；按需工具仍不混入默认目录。
 - IC-Light v2 固定单图约 1MP 重打光契约，并提供五档官方初始光照方向；Fal GPT Image 2 新增 `2:1` 比例和显式约 2K 输出档。

@@ -130,6 +130,14 @@ export const PROVIDER_METADATA: readonly ProviderMetadata[] = [
     docs: 'docs/model-adaptation/供应商/派欧云.md',
   },
   {
+    providerId: 'siliconflow',
+    displayName: '硅基流动',
+    websiteUrl: 'https://siliconflow.cn/',
+    apiKeyUrl: 'https://cloud.siliconflow.cn/account/ak',
+    websiteUrlKind: 'official',
+    docs: 'docs/model-adaptation/供应商/硅基流动.md',
+  },
+  {
     providerId: 'volcengine',
     displayName: '火山引擎（豆包）',
     websiteUrl: 'https://www.volcengine.com/product/ark',
@@ -153,4 +161,3 @@ export function findProviderMetadata(
     : normalized
   return PROVIDER_METADATA.find(provider => provider.providerId === resolvedId) ?? null
 }
-

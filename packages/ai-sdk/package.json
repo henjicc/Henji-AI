@@ -123,6 +123,26 @@
       "import": "./dist/capabilities/speech-recognition/bailian/realtime/index.js",
       "default": "./dist/capabilities/speech-recognition/bailian/realtime/index.js"
     },
+    "./capabilities/speech-recognition/volcengine": {
+      "types": "./dist/capabilities/speech-recognition/volcengine/index.d.ts",
+      "import": "./dist/capabilities/speech-recognition/volcengine/index.js",
+      "default": "./dist/capabilities/speech-recognition/volcengine/index.js"
+    },
+    "./capabilities/speech-recognition/volcengine/realtime": {
+      "types": "./dist/capabilities/speech-recognition/volcengine/realtime/index.d.ts",
+      "import": "./dist/capabilities/speech-recognition/volcengine/realtime/index.js",
+      "default": "./dist/capabilities/speech-recognition/volcengine/realtime/index.js"
+    },
+    "./capabilities/speech-recognition/siliconflow": {
+      "types": "./dist/capabilities/speech-recognition/siliconflow/index.d.ts",
+      "import": "./dist/capabilities/speech-recognition/siliconflow/index.js",
+      "default": "./dist/capabilities/speech-recognition/siliconflow/index.js"
+    },
+    "./capabilities/speech-recognition/groq": {
+      "types": "./dist/capabilities/speech-recognition/groq/index.d.ts",
+      "import": "./dist/capabilities/speech-recognition/groq/index.js",
+      "default": "./dist/capabilities/speech-recognition/groq/index.js"
+    },
     "./capabilities/translation": {
       "types": "./dist/capabilities/translation/index.d.ts",
       "import": "./dist/capabilities/translation/index.js",
@@ -169,6 +189,7 @@
     "@ai-sdk/openai-compatible": "2.0.62",
     "@ai-sdk/provider-utils": "4.0.40",
     "ai": "6.0.234",
+    "fflate": "0.8.2",
     "zod": "4.4.3"
   },
   "devDependencies": {

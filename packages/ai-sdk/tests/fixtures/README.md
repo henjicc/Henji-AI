@@ -12,6 +12,26 @@
 已替换为不可联网占位值。官方字面样本与依据字段表构造的样本必须明确区分；合成负例单独标记，
 不得冒充官方示例。
 
+## Groq / 硅基流动 ASR capability fixture
+
+Groq 语音转写 fixture 单独放在 `groq-asr/`，避免与 `groq/` 下现有 LLM fixture 混淆：
+
+- `groq-asr/transcription-success.json`：逐字取自 Groq API Reference 的完整
+  `{text,x_groq}` 成功响应示例，标记为 `official-literal`；
+- `groq-asr/transcription-verbose.json`：按同页公开的 `text/language/duration/segments/words`
+  字段组合，用于覆盖时间戳归一化；文本和时间值均为占位内容，明确标记为按官方字段构造；
+- `groq-asr/transcription-error.json`：逐字取自 Groq 官方 Errors 页的
+  `{error:{message,type}}` 示例，并记录对应 HTTP status。
+
+硅基流动语音转写 fixture 放在 `siliconflow/`：
+
+- `siliconflow/transcription-success.json`：逐字取自官方转写端点的 `{text:"<string>"}` 响应示例；
+- `siliconflow/transcription-error.json`：逐字取自官方通用错误页的 400 “模型不存在”示例。该例
+  证明平台 `{code,message,data}` 形状，不代表转写端点的所有错误都是这一形状。
+
+以上五份都标记 `kind: "capability"`，均不是真实或付费请求日志；每份 `source` 均记录官方直链、
+采集日期、是否需登录以及“官方字面”/“按官方字段构造”的分类。
+
 ## LLM fixture 补充（任务 9.9）
 
 ## GLM-5.3-Flash fixture 补充（任务 13.2）

@@ -1,0 +1,17 @@
+{
+  "kind": "capability",
+  "status": 400,
+  "source": {
+    "url": "https://console.groq.com/docs/errors",
+    "capturedAt": "2026-08-31",
+    "loginRequired": false,
+    "classification": "official-literal",
+    "notes": "错误形状和字面占位文案来自 Groq 官方 Errors 页；用于契约回归，非真实请求日志。"
+  },
+  "payload": {
+    "error": {
+      "message": "String - description of the specific error",
+      "type": "invalid_request_error"
+    }
+  }
+}

@@ -1,7 +1,7 @@
 # @henjicc/ai-sdk
 
 痕迹AI 的多供应商模型 SDK：内含 8 个生成供应商、105 个图片/视频/音频模型，以及
-7 家 LLM 供应商预设（加上派欧云聚合入口共 8 个预设项）。另有 12 个 FAL 图片工具使用独立按需入口，不进入默认 105 模型目录。预制 LLM 会按供应商与具体模型自动选择 Responses API 或 Chat Completions，宿主不需要暴露逐模型协议设置。SDK 负责目录、请求构建、媒体预处理、
+7 家 LLM 供应商预设（加上派欧云聚合入口共 8 个预设项）和 15 个按需 ASR 模型。另有 12 个 FAL 图片工具使用独立按需入口，不进入默认 105 模型目录。预制 LLM 会按供应商与具体模型自动选择 Responses API 或 Chat Completions，宿主不需要暴露逐模型协议设置。SDK 负责目录、请求构建、媒体预处理、
 供应商调用、轮询、SSE 与错误归一化；宿主只需注入网络、凭据、媒体读取和日志。
 
 ## 5 分钟快速开始
@@ -409,17 +409,23 @@ await capabilities.dispose()
 注销、`unregisterSource(namespace)` 和 dispose，并统一错误边界。跨类型筛选使用上面的
 `ModelCapabilityProfile`；执行仍走各自稳定的轮询、流式或扩展 handle，不复制协议。
 
-`0.2.0` 新增以下可选供应商入口，只有显式 import 才进入消费方 bundle：
+以下可选供应商入口只有显式 import 才进入消费方 bundle：
 
 - `capabilities/speech-recognition/bailian`：5 个百炼短音频/文件 ASR；
 - `capabilities/speech-recognition/bailian/realtime`：4 个百炼 Fun-ASR/Qwen 实时 ASR；
+- `capabilities/speech-recognition/volcengine`：SeedASR 2.0 文件 submit/query；官方标准版只接受公网 URL；
+- `capabilities/speech-recognition/volcengine/realtime`：SeedASR 2.0 gzip 二进制 WebSocket 实时识别；
+- `capabilities/speech-recognition/siliconflow`：SenseVoiceSmall 与 TeleSpeechASR multipart 文件转写；
+- `capabilities/speech-recognition/groq`：Whisper Large v3 Turbo/v3 文件转写与可选词/句时间戳；
 - `capabilities/translation/bailian`：Qwen-MT Flash/Plus/Lite；
 - `llm/groq`：Groq GPT-OSS 20B 默认配置、流式聊天和模型发现。
 - `llm/bigmodel`：智谱同一 provider family 下的中国大陆/Global 端点 profile、独立凭据槽与 GLM-5.3-Flash 能力。
 - `llm/modules`：外部包、插件与内置 LLM 共用的注册、执行、发现、取消和 namespace 卸载边界。
 
-百炼 ASR module ID 固定为 `bailian.speech-recognition.<modelId>`，翻译固定为
-`bailian.translation.<modelId>`；供应商 ID 使用 `bailian` / `groq`，没有 `funasr` 兼容供应商别名。
+ASR module ID 固定为 `<providerId>.speech-recognition.<modelId>`，翻译固定为
+`bailian.translation.<modelId>`；供应商 ID 使用 `bailian` / `volcengine` / `siliconflow` / `groq`，
+没有 `funasr` 兼容供应商别名。火山文件标准版不会读取本地 bytes/media-ref；宿主必须先通过自己受控的
+对象存储发布成供应商可访问 URL。SDK 不提供公共 URL 文本框或冒充上传成功的回退路径。
 
 外部 LLM 不属于 ASR/translation `CapabilityModule`。宿主从插件 manifest 构造 `LlmModule`，插件本身
 只实现宿主约定的轻量 ABI，无需导入或打包 SDK：
@@ -457,7 +463,7 @@ module 只发送 Token/ReasoningToken 增量并返回最终结果。`createGroqL
 ## 已知限制与验证边界
 
 - 私有 GitHub Packages 消费方必须配置 `read:packages` 与对应私有仓库读权限；SDK 不提供无认证的公开 npm 镜像。
-- Electron 宿主已经完整构建、桌面冒烟与真实 KIE/LLM 请求验证；`0.1.2` 已在真实 macOS Tauri 2.11.0 WebView + Rust `tauri-plugin-http` 中以 loopback fixture 跑通 create/poll、multi-chunk SSE 与 AbortSignal。`0.2.0` 的 generation-only、单工具、Fal erase tool pack、ASR、翻译、Groq 与 UXP LLM streaming 入口已通过静态依赖、受限 VM 和零网络生命周期门禁；窄 LLM 入口在完全没有 `TextEncoder` / `TextDecoder` 的 VM 中覆盖 UTF-8 跨 chunk、reasoning、text、usage、stop、`[DONE]` 与取消。百炼 ASR/翻译和 Groq 本轮使用官方/脱敏 fixture，未发起付费网络请求。Photoshop UXP 真机网络稳定性仍由插件集成任务验证，Grayscale/LAB/CMYK 图层字节读取也未真机复验。
+- Electron 宿主已经完整构建、桌面冒烟与真实 KIE/LLM 请求验证；`0.1.2` 已在真实 macOS Tauri 2.11.0 WebView + Rust `tauri-plugin-http` 中以 loopback fixture 跑通 create/poll、multi-chunk SSE 与 AbortSignal。`0.2.0` 的 generation-only、单工具、Fal erase tool pack、ASR、翻译、Groq 与 UXP LLM streaming 入口已通过静态依赖、受限 VM 和零网络生命周期门禁；窄 LLM 入口在完全没有 `TextEncoder` / `TextDecoder` 的 VM 中覆盖 UTF-8 跨 chunk、reasoning、text、usage、stop、`[DONE]` 与取消。`0.2.7` 新增的火山文件/实时、硅基流动和 Groq ASR 四个按需入口也已纳入独立 bundle 与受限宿主门禁；百炼、火山、硅基流动、Groq 的 ASR/翻译验证均使用官方来源或明确分类的构造 fixture，没有发起真实或付费网络请求。Photoshop UXP 真机网络稳定性仍由插件集成任务验证，Grayscale/LAB/CMYK 图层字节读取也未真机复验。
 - Fal 官方存储上传已在 Electron/Node real profile 中用无隐私合成 PNG 跑通真实端到端：119 字节上传与 Range 回读 SHA-256 一致，未触发模型请求或费用。`0.1.4` 将同一 initiate + signed PUT 协议收口到 `RuntimeContext.transport`，不再依赖 `@fal-ai/client` 或构造 `File`，并补齐成功、失败与取消 fixture；真实证据仍来自迁移前已核对的同一官方协议。CDN URL 公开，生产代码未显式设置 lifecycle，保留期依赖 Fal 账户设置。
 - 四个历史 override 模型均已完成真实供应商 create/poll/result URL 验证。KIE Seedream 4.0/4.5 首轮各一次完成；Fal Seedream 4.0 首轮 create 后暴露 `0.1.2` status route 重建 405 并按首败停止，后在新的独立费用授权下，修复后 4.0 completed 才继续 4.5，两者均 completed 且无 create 重试。优先保存供应商完整 `status_url` 的修复已在私有 `0.1.3` 发布，并通过远程干净安装与标准 Vite 五入口回归。
 - KIE、APIMart、PPIO 的正式只读 probe 均已得到 HTTP 200 且分类为 connected/verified；KIE/APIMart 余额已在正式 Electron real-profile 设置页显示，对应截图已实际打开目视。首轮场景选择器失败仍保留在 6.6 交接，没有用后台日志冒充 UI 证据。

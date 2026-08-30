@@ -316,6 +316,9 @@ const speechCapability = bundle('SpeechRecognitionCapability', [
 ].join('\n'), (inputs) => {
   const forbidden = inputs.filter((input) => (
     input.includes('/capabilities/speech-recognition/bailian/') ||
+    input.includes('/capabilities/speech-recognition/volcengine/') ||
+    input.includes('/capabilities/speech-recognition/siliconflow/') ||
+    input.includes('/capabilities/speech-recognition/groq/') ||
     input.includes('/capabilities/translation/') ||
     modelPattern.test(`/${input}`) ||
     providerPattern.test(`/${input}`) ||
@@ -357,6 +360,54 @@ const bailianRealtimeAsrCapability = bundle('BailianRealtimeAsrCapability', [
     fail('百炼实时 ASR 按需入口未包含执行模块')
   }
 })
+
+function providerAsrCapability(name, provider, entry, requiredModule, extraForbidden = []) {
+  return bundle(name, [
+    `export * from './capabilities/speech-recognition/${entry}/index'`,
+  ].join('\n'), (inputs) => {
+    const siblingProviders = ['bailian', 'volcengine', 'siliconflow', 'groq']
+      .filter((candidate) => candidate !== provider)
+    const forbidden = inputs.filter((input) => (
+      siblingProviders.some((candidate) => input.includes(`/capabilities/speech-recognition/${candidate}/`)) ||
+      extraForbidden.some((marker) => input.includes(marker)) ||
+      input.includes('/capabilities/translation/') ||
+      modelPattern.test(`/${input}`) ||
+      providerPattern.test(`/${input}`) ||
+      input.includes('/src/generation') ||
+      input.includes('/src/llm/')
+    ))
+    if (forbidden.length > 0) fail(`${name} 按需入口带入无关能力/模型：${forbidden.join(', ')}`)
+    if (!inputs.some((input) => input.includes(requiredModule))) {
+      fail(`${name} 按需入口未包含执行模块`)
+    }
+  })
+}
+
+const volcengineAsrCapability = providerAsrCapability(
+  'VolcengineAsrCapability',
+  'volcengine',
+  'volcengine',
+  '/capabilities/speech-recognition/volcengine/module.ts',
+  ['/capabilities/speech-recognition/volcengine/realtime/']
+)
+const volcengineRealtimeAsrCapability = providerAsrCapability(
+  'VolcengineRealtimeAsrCapability',
+  'volcengine',
+  'volcengine/realtime',
+  '/capabilities/speech-recognition/volcengine/realtime/module.ts'
+)
+const siliconFlowAsrCapability = providerAsrCapability(
+  'SiliconFlowAsrCapability',
+  'siliconflow',
+  'siliconflow',
+  '/capabilities/speech-recognition/siliconflow/module.ts'
+)
+const groqAsrCapability = providerAsrCapability(
+  'GroqAsrCapability',
+  'groq',
+  'groq',
+  '/capabilities/speech-recognition/groq/module.ts'
+)
 
 const translationCapability = bundle('TranslationCapability', [
   "export * from './capabilities/translation/index'",
@@ -526,6 +577,10 @@ const metrics = {
   speechRecognitionCapability: { iife: speechCapability.iife.bytes, esm: speechCapability.esm.bytes, modules: speechCapability.iife.modules },
   bailianAsrCapability: { iife: bailianAsrCapability.iife.bytes, esm: bailianAsrCapability.esm.bytes, modules: bailianAsrCapability.iife.modules },
   bailianRealtimeAsrCapability: { iife: bailianRealtimeAsrCapability.iife.bytes, esm: bailianRealtimeAsrCapability.esm.bytes, modules: bailianRealtimeAsrCapability.iife.modules },
+  volcengineAsrCapability: { iife: volcengineAsrCapability.iife.bytes, esm: volcengineAsrCapability.esm.bytes, modules: volcengineAsrCapability.iife.modules },
+  volcengineRealtimeAsrCapability: { iife: volcengineRealtimeAsrCapability.iife.bytes, esm: volcengineRealtimeAsrCapability.esm.bytes, modules: volcengineRealtimeAsrCapability.iife.modules },
+  siliconFlowAsrCapability: { iife: siliconFlowAsrCapability.iife.bytes, esm: siliconFlowAsrCapability.esm.bytes, modules: siliconFlowAsrCapability.iife.modules },
+  groqAsrCapability: { iife: groqAsrCapability.iife.bytes, esm: groqAsrCapability.esm.bytes, modules: groqAsrCapability.iife.modules },
   translationCapability: { iife: translationCapability.iife.bytes, esm: translationCapability.esm.bytes, modules: translationCapability.iife.modules },
   bailianTranslationCapability: { iife: bailianTranslationCapability.iife.bytes, esm: bailianTranslationCapability.esm.bytes, modules: bailianTranslationCapability.iife.modules },
   groqLlm: { iife: groqLlm.iife.bytes, esm: groqLlm.esm.bytes, modules: groqLlm.iife.modules },

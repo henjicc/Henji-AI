@@ -1,0 +1,16 @@
+{
+  "kind": "capability",
+  "classification": "synthetic-negative",
+  "source": {
+    "note": "以下值专门用于断牙、未知事件、错误帧与状态机负例，不声称来自真实服务。"
+  },
+  "unknownEvent": 314159,
+  "serverError": {
+    "code": 45000001,
+    "payload": { "message": "synthetic invalid request" }
+  },
+  "terminalFileError": {
+    "X-Api-Status-Code": "45000002",
+    "X-Api-Message": "synthetic empty audio"
+  }
+}

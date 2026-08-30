@@ -13,6 +13,18 @@ import {
   bailianRealtimeAsrPresets,
 } from '../src/capabilities/speech-recognition/bailian/realtime'
 import {
+  groqAsrPresets,
+} from '../src/capabilities/speech-recognition/groq'
+import {
+  siliconFlowAsrPresets,
+} from '../src/capabilities/speech-recognition/siliconflow'
+import {
+  volcengineFileAsrPresets,
+} from '../src/capabilities/speech-recognition/volcengine'
+import {
+  volcengineRealtimeAsrPresets,
+} from '../src/capabilities/speech-recognition/volcengine/realtime'
+import {
   BAILIAN_QWEN_MT_PRESETS,
   createBailianQwenMtTranslationModule,
 } from '../src/capabilities/translation/bailian'
@@ -28,6 +40,10 @@ const FIXTURE_RUNTIME: RuntimeContext = {
 const asrDescriptors = [
   ...bailianNonRealtimeAsrPresets,
   ...bailianRealtimeAsrPresets,
+  ...volcengineFileAsrPresets,
+  ...volcengineRealtimeAsrPresets,
+  ...siliconFlowAsrPresets,
+  ...groqAsrPresets,
 ].map((preset) => preset.descriptor)
 
 const translationModules = Object.values(BAILIAN_QWEN_MT_PRESETS).map((preset) => (
@@ -62,14 +78,14 @@ function moduleOf(value: CapabilityDescriptor, dispose = vi.fn()): CapabilityMod
 }
 
 describe('能力 ID、来源命名空间与按需注册收口', () => {
-  it('9 个 ASR、3 个 Qwen-MT 与 Groq 默认模型均可发现且坐标唯一', () => {
+  it('15 个 ASR、3 个 Qwen-MT 与 Groq 默认模型均可发现且坐标唯一', () => {
     const discovery = createModelCapabilityDiscovery({
       extensions: [...asrDescriptors, ...translationDescriptors],
       llmModels: [GROQ_DEFAULT_MODEL_CONFIG],
     })
     const items = discovery.list()
     const ids = items.map((item) => item.id)
-    expect(items).toHaveLength(13)
+    expect(items).toHaveLength(19)
     expect(new Set(ids)).toHaveLength(ids.length)
 
     const asr = discovery.search({
@@ -89,9 +105,18 @@ describe('能力 ID、来源命名空间与按需注册收口', () => {
       id: 'groq:openai/gpt-oss-20b',
       profile: { providerIds: ['groq'] },
     }])
+    expect(discovery.search({
+      providerIds: 'volcengine', operations: 'speech-to-text', features: 'realtime',
+    })).toHaveLength(1)
+    expect(discovery.search({
+      providerIds: 'siliconflow', operations: 'speech-to-text', features: 'file-transcription',
+    })).toHaveLength(2)
+    expect(discovery.search({
+      providerIds: 'groq', operations: 'speech-to-text', features: 'file-transcription',
+    })).toHaveLength(2)
 
     const providerIds = items.flatMap((item) => item.profile.providerIds)
-    expect(new Set(providerIds)).toEqual(new Set(['bailian', 'groq']))
+    expect(new Set(providerIds)).toEqual(new Set(['bailian', 'groq', 'siliconflow', 'volcengine']))
     expect(providerIds).not.toContain('funasr')
     expect(asrDescriptors.every((item) => (
       item.source.kind === 'builtin' && item.source.namespace === '@henjicc/ai-sdk'

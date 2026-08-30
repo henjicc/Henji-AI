@@ -5,10 +5,10 @@
 
 | 项目 | 内容 |
 |---|---|
-| 最后更新 | 2026-08-30 |
-| 模型数量 | 生成主清单 19（图片 10 / 视频 9）+ 主清单外存量 12 + SDK 跨项目能力模型 14（ASR 9 / 翻译 3 / LLM 2） |
-| 模型供应商文档数量 | 生成/存量 80 + SDK 跨项目能力 14（另有 Fal 工具 12） |
-| 覆盖供应商 | 火山引擎（官方）、百炼（官方）、智谱（官方 LLM）、Groq（官方 LLM）、APIMart、KIE、Fal、派欧云、魔搭、Grsai |
+| 最后更新 | 2026-08-31 |
+| 模型数量 | 生成主清单 19（图片 10 / 视频 9）+ 主清单外存量 12 + SDK 跨项目能力模型 20（ASR 15 / 翻译 3 / LLM 2） |
+| 模型供应商文档数量 | 生成/存量 80 + SDK 跨项目能力 20（另有 Fal 工具 12） |
+| 覆盖供应商 | 火山引擎（官方生成/ASR）、百炼（官方）、硅基流动（官方 ASR）、智谱（官方 LLM）、Groq（官方 LLM/ASR）、APIMart、KIE、Fal、派欧云、魔搭、Grsai |
 
 另有 12 个按能力按需分发的 Fal 图像工具，不进入默认 105 模型兼容目录：
 
@@ -30,6 +30,7 @@ docs/model-adaptation/
 │   ├── KIE.md
 │   ├── Fal.md
 │   ├── Groq.md
+│   ├── 硅基流动.md
 │   ├── 百炼.md
 │   ├── 火山引擎.md
 │   ├── 派欧云.md
@@ -39,23 +40,24 @@ docs/model-adaptation/
 ```
 
 - **供应商名**使用项目内统一的显示名：
-  派欧云 / Fal / 魔搭 / KIE / APIMart / 百炼 / 火山引擎 / Grsai / Groq（Grsai/Groq 沿用官方品牌拼写）
+  派欧云 / Fal / 魔搭 / KIE / APIMart / 百炼 / 火山引擎 / 硅基流动 / Grsai / Groq（Grsai/Groq 沿用官方品牌拼写）
 - 每个供应商文件都是**自包含**的：接入协议、能力清单、请求参数、响应结构、价格、适配要点、原始链接索引，看完这一份就能完成该供应商的适配
 - 每份文件都标注**信息来源链接**以及**该链接是否需要登录**
 
 ### 供应商基础文档
 
-模型适配前先看 [快速适配供应商](供应商/快速适配供应商.md)，确认供应商公共层已经覆盖端点、鉴权、上传、任务查询、结果解析和计价。现有九家基础文档：
+模型适配前先看 [快速适配供应商](供应商/快速适配供应商.md)，确认供应商公共层已经覆盖端点、鉴权、上传、任务查询、结果解析和计价。现有十家基础文档：
 
 - [APIMart](供应商/APIMart.md)：含中国大陆备用线路与图片上传协议
 - [KIE](供应商/KIE.md)：生成任务、文件上传、实际扣费与余额查询
 - [Fal](供应商/Fal.md)：同步 / 队列协议、Fal CDN、官方计价 API
 - [百炼](供应商/百炼.md)：地域端点、临时 OSS 上传与同步 / 异步边界
-- [火山引擎](供应商/火山引擎.md)：方舟端点、图片结果与 Files API 使用边界
+- [火山引擎](供应商/火山引擎.md)：方舟图片，以及 SeedASR 2.0 实时/文件两套独立协议与计费
+- [硅基流动](供应商/硅基流动.md)：multipart 文件转写、免费模型与在线文档/历史公告冲突
 - [派欧云](供应商/派欧云.md)：异步任务协议、**无官方上传（借用 KIE）**、实名认证前置、在售清单极小
 - [魔搭](供应商/魔搭.md)：API-Inference 统一接口、**魔粒积分计费**、仅图片、可用性判定方法
 - [Grsai](供应商/Grsai.md)：聚合中转，**同一模型拆多个「渠道」**（`-cl`/`-vip`/`-vt`/`-lite` 等后缀，价差可达 10 倍以上）、无独立上传接口（图片直接 base64/URL 塞进请求体）、双线路连通性探测
-- [Groq](供应商/Groq.md)：OpenAI 兼容 LLM、动态模型发现、GPT-OSS 推理参数与错误边界
+- [Groq](供应商/Groq.md)：OpenAI 兼容 LLM、Whisper 文件转写、动态模型发现、价格/免费层与错误边界
 - [智谱 GLM](../llm-adaptation/供应商/智谱GLM.md)：国内 BigModel / 国际 Z.AI 两个 endpoint profile、OpenAI 兼容 Chat 与供应商级思考约定；模型专属契约仍以本目录模型文件为准
 
 尚未适配的图片工具供应商候选统一记录在[图片工具候选供应商调研](供应商/候选供应商调研-图片工具.md)：当前优先级为 Segmind / WaveSpeedAI（P0）、PiAPI（P1）、Replicate（P2）、Novita AI（P3）；中国内地访问友好性均需真实网络验证，不能仅凭中文站或支付方式下结论。
@@ -128,9 +130,9 @@ Grsai 暂未在此表出现：其站内「Veo API」旧版文档给出了 `veo3.
 
 魔搭侧另有 5 个已适配的开源图像模型（`Qwen/Qwen-Image`、`Qwen/Qwen-Image-Edit-2509`、`black-forest-labs/FLUX.1-Krea-dev`、`MusePublic/majicMIX_realistic`、`MusePublic/14_ckpt_SD_XL`）。它们共用魔搭 API-Inference 的同一套端点与参数，差异只有 model ID、尺寸上限和魔粒档位，因此不单独建文件，统一记在 [供应商/魔搭.md](供应商/魔搭.md) 第 7 节。
 
-### Say-It 语音识别（9）
+### SDK / Say-It 语音识别（15）
 
-以下是 Say-It 当前已展示的全部百炼云端 ASR，按用户授权全部保留。它们是后续 SDK 能力实现的资料清单，**不表示当前 SDK 已有真实 ASR 运行时**。
+以下 15 个模型均有独立 SDK capability descriptor 与按需执行模块；消费应用仍需显式导入和注册，升级包版本不会自动增加界面入口。火山文件版只接受供应商可访问的公网 URL，Say-It 在没有受管上传/TOS 之前不得把它伪装成本地文件入口。
 
 | 模型 | 模式 | 主协议 | 上限 | 文档 |
 |---|---|---|---|---|
@@ -143,6 +145,12 @@ Grsai 暂未在此表出现：其站内「Veo API」旧版文档给出了 `veo3.
 | `qwen3-asr-flash-2026-02-10` | 短音频快照 | OpenAI 兼容 / DashScope 同步 | 5 分钟 / 10 MB | [百炼](Qwen3-ASR-Flash-2026-02-10/Qwen3-ASR-Flash-2026-02-10_百炼.md) |
 | `fun-asr` | 文件异步 | 提交 + 轮询 + 结果 JSON | 12 小时 / 2 GB | [百炼](Fun-ASR/Fun-ASR_百炼.md) |
 | `qwen3-asr-flash-filetrans` | 文件异步 | 提交 + 轮询 | 12 小时 / 2 GB | [百炼](Qwen3-ASR-Flash-Filetrans/Qwen3-ASR-Flash-Filetrans_百炼.md) |
+| `seedasr-2.0-realtime` | 实时 | 火山二进制 WebSocket | PCM S16LE / 16kHz / mono | [火山引擎](SeedASR-2.0-Realtime/SeedASR-2.0-Realtime_火山引擎.md) |
+| `seedasr-2.0-file` | 文件异步 | HTTP submit + query | 仅公网 URL；本地文件需外部 TOS/受管上传 | [火山引擎](SeedASR-2.0-File/SeedASR-2.0-File_火山引擎.md) |
+| `FunAudioLLM/SenseVoiceSmall` | 文件同步 | multipart HTTP | 1 小时 / 50 MB | [硅基流动](SenseVoiceSmall/SenseVoiceSmall_硅基流动.md) |
+| `TeleAI/TeleSpeechASR` | 文件同步 | multipart HTTP | 1 小时 / 50 MB | [硅基流动](TeleSpeechASR/TeleSpeechASR_硅基流动.md) |
+| `whisper-large-v3-turbo` | 文件同步 | OpenAI-compatible multipart | 免费层 25 MB；Developer 100 MB | [Groq](Whisper-Large-v3-Turbo/Whisper-Large-v3-Turbo_Groq.md) |
+| `whisper-large-v3` | 文件同步 | OpenAI-compatible multipart | 免费层 25 MB；Developer 100 MB | [Groq](Whisper-Large-v3/Whisper-Large-v3_Groq.md) |
 
 ### Say-It 翻译（3）
 
@@ -221,9 +229,10 @@ Grsai 的平台模型 ID 未并入本表：它把「渠道」直接编码进 `mo
 
 | 供应商 | Base URL | 鉴权 | 提交 | 查询 | 结果字段 |
 |---|---|---|---|---|---|
-| **火山引擎** | `https://ark.cn-beijing.volces.com` | `Authorization: Bearer $ARK_API_KEY` | `POST /api/v3/images/generations`（**同步**） | — | `data[].url` / `b64_json` |
+| **火山引擎** | 方舟 `https://ark.cn-beijing.volces.com`；语音 `https://openspeech.bytedance.com` | 方舟 Bearer；语音 `X-Api-Key` + Resource/Request ID | 图片同步；SeedASR 实时 WSS；文件 `POST /api/v3/auc/bigmodel/submit` | 文件 `POST /api/v3/auc/bigmodel/query` | 图片 `data[]`；ASR `result.text/utterances[]` |
 | **百炼** | `https://{WorkspaceId}.<region>.maas.aliyuncs.com` | `Authorization: Bearer sk-xxxx` | 生成/短 ASR/Qwen-MT 为同步 HTTP；实时 ASR 为 `/api-ws/v1/inference` 或 `/api-ws/v1/realtime` WSS；文件 ASR 为 `POST /api/v1/services/audio/asr/transcription` + `X-DashScope-Async: enable` | 异步 `GET /api/v1/tasks/{task_id}` | 按能力分为图像 `content[].image`、转写事件/文本、`transcription_url`、翻译 `choices[].message.content` |
-| **Groq** | `https://api.groq.com/openai/v1` | `Authorization: Bearer <GROQ_API_KEY>` | `POST /chat/completions`（同步/SSE）；`GET /models` 发现 | — | `choices[].message.content/reasoning`；流式 `choices[].delta` |
+| **Groq** | `https://api.groq.com/openai/v1` | `Authorization: Bearer <GROQ_API_KEY>` | `POST /chat/completions`（同步/SSE）；`POST /audio/transcriptions`；`GET /models` | — | Chat choices/delta；ASR `text/language/duration/segments/words` |
+| **硅基流动** | `https://api.siliconflow.cn/v1` | `Authorization: Bearer <API Key>` | `POST /audio/transcriptions` multipart | — | `text`；响应头 `x-siliconcloud-trace-id` |
 | **智谱** | 国内 `https://open.bigmodel.cn/api/paas/v4`；国际 `https://api.z.ai/api/paas/v4` | `Authorization: Bearer <API Key>`；两区凭据分离 | `POST /chat/completions`（同步/SSE） | — | `choices[].message.content/reasoning_content/tool_calls`；流式 `choices[].delta` |
 | **APIMart** | `https://api.apimart.ai`；大陆备用线路见[基础文档](供应商/APIMart.md) | `Authorization: Bearer <KEY>` | `POST /v1/images/generations`、`POST /v1/videos/generations` | `GET /v1/tasks/{task_id}` | `result.images[]` / `result.videos[]` |
 | **KIE** | `https://api.kie.ai` | `Authorization: Bearer <KEY>` | `POST /api/v1/jobs/createTask` | `GET /api/v1/jobs/recordInfo?taskId=` | `JSON.parse(resultJson).resultUrls` |
@@ -237,6 +246,7 @@ Grsai 的平台模型 ID 未并入本表：它把「渠道」直接编码进 `mo
 - KIE：`waiting` / `queuing` / `generating` / `success` / `fail`
 - Fal：`IN_QUEUE` / `IN_PROGRESS` / `COMPLETED`
 - 百炼异步：`PENDING` / `RUNNING` / `SUCCEEDED` / `FAILED` / `CANCELED` / `UNKNOWN`
+- 火山文件 ASR：响应头 `20000002` 排队 / `20000001` 处理中 / `20000000` 成功；`20000003` 静音终态；`45/55*` 失败
 - 派欧云：`TASK_STATUS_QUEUED` / `TASK_STATUS_PROCESSING` / `TASK_STATUS_SUCCEED` / `TASK_STATUS_FAILED`
 - 魔搭：`SUCCEED` / `FAILED`
 - Grsai：`running` / `violation`（违规，独立终态）/ `succeeded` / `failed`
@@ -253,12 +263,18 @@ Grsai 的平台模型 ID 未并入本表：它把「渠道」直接编码进 `mo
 | Fal 单模型 schema | `https://fal.ai/models/<endpoint-id>/llms.txt` | 否 |
 | 火山方舟图片生成 API | https://www.volcengine.com/docs/82379/1541523 | 否 |
 | 火山方舟模型价格 | https://www.volcengine.com/docs/82379/1544106 | 否 |
+| 火山 SeedASR 实时 WebSocket | https://docs.volcengine.com/docs/6561/2630027?lang=zh | 否 |
+| 火山 SeedASR 文件 submit/query | https://docs.volcengine.com/docs/6561/1354868?lang=zh | 否 |
+| 火山 SeedASR 价格/免费额度 | https://docs.volcengine.com/docs/6561/1359369?lang=zh | 否 |
 | 百炼模型价格 | https://help.aliyun.com/zh/model-studio/model-pricing | 否 |
 | 百炼 ASR 模型与音频规格 | https://help.aliyun.com/zh/model-studio/asr-model/ | 否 |
 | 百炼 Qwen-MT API | https://help.aliyun.com/zh/model-studio/qwen-mt-api | 否 |
 | Groq 模型/价格 | https://console.groq.com/docs/models | 否 |
 | Groq API 参考 | https://console.groq.com/docs/api-reference | 否 |
 | Groq Reasoning | https://console.groq.com/docs/reasoning | 否 |
+| Groq Speech-to-Text | https://console.groq.com/docs/speech-to-text | 否 |
+| 硅基流动音频转写 API | https://api-docs.siliconflow.cn/docs/api/audio-transcriptions-post | 否 |
+| 硅基流动价格 | https://siliconflow.cn/pricing | 否 |
 | 可灵官方视频能力地图（仅参考） | https://www.klingai.com/document-api/guides/capability-map/video | 否 |
 | 派欧云文档索引 | https://ppio.com/docs/llms.txt | 否 |
 | 派欧云定价页 | https://ppio.com/pricing | 否 |
@@ -270,6 +286,7 @@ Grsai 的平台模型 ID 未并入本表：它把「渠道」直接编码进 `mo
 | 火山方舟 API Key | https://console.volcengine.com/ark/region:cn-beijing/apiKey | **是** |
 | 百炼 API Key | https://bailian.console.aliyun.com/?apiKey=1#/api-key | **是** |
 | Groq API Key | https://console.groq.com/keys | **是** |
+| 硅基流动 API Key | https://cloud.siliconflow.cn/account/ak | **是** |
 | 智谱 GLM-5.3-Flash 模型/API | https://docs.bigmodel.cn/cn/guide/models/vlm/glm-5.3-flash | 否 |
 | 智谱模型价格 | https://open.bigmodel.cn/pricing | 否 |
 | 国际 Z.AI GLM-5.3-Flash | https://docs.z.ai/guides/vlm/glm-5.3-flash | 否 |

@@ -1,0 +1,45 @@
+{
+  "kind": "capability",
+  "source": {
+    "url": "https://console.groq.com/docs/speech-to-text",
+    "capturedAt": "2026-08-31",
+    "loginRequired": false,
+    "classification": "constructed-from-official-response-fields",
+    "notes": "顶层 text/language/duration/segments/words 与段字段均来自官方 Speech-to-Text 页；文本和时间值替换为不可识别占位内容，非真实请求日志。"
+  },
+  "payload": {
+    "text": "fixture transcription",
+    "language": "en",
+    "duration": 2.4,
+    "segments": [
+      {
+        "id": 0,
+        "seek": 0,
+        "start": 0,
+        "end": 1.1,
+        "text": "fixture",
+        "tokens": [],
+        "temperature": 0,
+        "avg_logprob": -0.2,
+        "compression_ratio": 1,
+        "no_speech_prob": 0.01
+      },
+      {
+        "id": 1,
+        "seek": 0,
+        "start": 1.1,
+        "end": 2.4,
+        "text": "transcription",
+        "tokens": [],
+        "temperature": 0,
+        "avg_logprob": -0.2,
+        "compression_ratio": 1,
+        "no_speech_prob": 0.01
+      }
+    ],
+    "words": [
+      { "word": "fixture", "start": 0, "end": 1.1 },
+      { "word": "transcription", "start": 1.1, "end": 2.4 }
+    ]
+  }
+}

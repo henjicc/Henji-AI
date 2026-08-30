@@ -1,0 +1,45 @@
+{
+  "kind": "capability",
+  "classification": "official-redacted",
+  "source": {
+    "checkedAt": "2026-08-31",
+    "realtimeApi": "https://docs.volcengine.com/docs/6561/2630027?lang=zh",
+    "realtimeAttachment": "https://portal.volccdn.com/obj/volcfe/cloud-universal-doc/upload_084f2effab285cf82e5196388e0bd354.zip",
+    "note": "handshake/progressEmpty/final 逐字段来自附件自带成功 run.log；仅 log_id 替换为不可联网占位值。"
+  },
+  "realtime": {
+    "handshake": {
+      "audio_info": { "duration": 0 },
+      "result": { "additions": { "log_id": "fixture-realtime-log-id" }, "text": "" }
+    },
+    "progressEmpty": {
+      "audio_info": { "duration": 197 },
+      "result": { "additions": { "log_id": "fixture-realtime-log-id" }, "text": "" }
+    },
+    "final": {
+      "audio_info": { "duration": 5700 },
+      "result": {
+        "additions": { "log_id": "fixture-realtime-log-id" },
+        "text": "打开客厅空调，退出。",
+        "utterances": [
+          {
+            "definite": true,
+            "end_time": 4800,
+            "start_time": 120,
+            "text": "打开客厅空调，退出。",
+            "words": [
+              { "end_time": 360, "start_time": 120, "text": "打" },
+              { "end_time": 560, "start_time": 360, "text": "开" },
+              { "end_time": 760, "start_time": 560, "text": "客" },
+              { "end_time": 1000, "start_time": 760, "text": "厅" },
+              { "end_time": 1280, "start_time": 1000, "text": "空" },
+              { "end_time": 1520, "start_time": 1280, "text": "调" },
+              { "end_time": 4480, "start_time": 4160, "text": "退" },
+              { "end_time": 4800, "start_time": 4480, "text": "出" }
+            ]
+          }
+        ]
+      }
+    }
+  }
+}

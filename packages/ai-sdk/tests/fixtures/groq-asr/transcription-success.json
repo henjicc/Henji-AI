@@ -1,0 +1,16 @@
+{
+  "kind": "capability",
+  "source": {
+    "url": "https://console.groq.com/docs/api-reference",
+    "capturedAt": "2026-08-31",
+    "loginRequired": false,
+    "classification": "official-literal",
+    "notes": "payload 逐字取自 Groq 官方 API Reference 的 Create transcription 成功示例，非真实请求日志。"
+  },
+  "payload": {
+    "text": "Your transcribed text appears here...",
+    "x_groq": {
+      "id": "req_unique_id"
+    }
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "kind": "capability",
+  "source": {
+    "url": "https://docs.siliconflow.cn/docs/api/audio-transcriptions-post",
+    "capturedAt": "2026-08-31",
+    "loginRequired": false,
+    "classification": "official-literal",
+    "notes": "payload 逐字取自硅基流动官方语音转文字成功响应示例；字符串为官方 schema 占位值，非真实请求日志。"
+  },
+  "payload": {
+    "text": "<string>"
+  }
+}

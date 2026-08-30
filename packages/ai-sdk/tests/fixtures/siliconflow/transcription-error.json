@@ -1,0 +1,16 @@
+{
+  "kind": "capability",
+  "status": 400,
+  "source": {
+    "url": "https://docs.siliconflow.cn/cn/faqs/error-code",
+    "capturedAt": "2026-08-31",
+    "loginRequired": false,
+    "classification": "official-literal",
+    "notes": "HTTP status 与 payload 逐字取自硅基流动官方通用错误处理页；该页用模型不存在演示 400 错误，非本仓库真实请求日志。"
+  },
+  "payload": {
+    "code": 20012,
+    "message": "Model does not exist. Please check it carefully.",
+    "data": null
+  }
+}
