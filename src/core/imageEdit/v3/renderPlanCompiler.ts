@@ -176,7 +176,18 @@ function groupCanPassThrough(layer: ImageEditGroupLayerV3): boolean {
     && layer.blendMode === 'normal'
     && layer.opacity === 1
     && layer.mask === null
-    && transformIsIdentity(layer.transform);
+    && transformIsIdentity(layer.transform)
+    // 效果/调整图层的作用域必须止于当前组。若把父级 backdrop 直接作为组内
+    // 初始输入，它们会错误处理组外图层；这种组必须先形成独立的组内结果。
+    && !groupContainsScopedProcessor(layer);
+}
+
+function groupContainsScopedProcessor(layer: ImageEditGroupLayerV3): boolean {
+  return layer.children.some((child) => (
+    child.type === 'effect'
+    || child.type === 'adjustment'
+    || (child.type === 'group' && groupContainsScopedProcessor(child))
+  ));
 }
 
 function compileGroup(

@@ -34,7 +34,7 @@ describe('图片编辑 V3 调度器', () => {
       activePreviewSessions: 1,
     });
     gate.resolve();
-    await expect(first).resolves.toBe(1);
+    await expect(first).rejects.toBeInstanceOf(ImageEditTaskSupersededError);
     await expect(third).resolves.toBe(3);
   });
 
@@ -69,13 +69,49 @@ describe('图片编辑 V3 调度器', () => {
       },
     });
     const pending = scheduler.schedule({
-      id: 'pending', sessionId: 's', revision: 2, kind: 'preview', lane: 'gpu', priority: 500,
+      id: 'pending', sessionId: 's', revision: 2, kind: 'export', lane: 'gpu', priority: 200,
       run: async () => 'pending',
     });
     scheduler.cancelSession('s');
     await expect(pending).rejects.toBeInstanceOf(ImageEditTaskCancelledError);
     expect(aborted).toHaveBeenCalledOnce();
     gate.resolve();
-    await expect(active).resolves.toBe('done');
+    await expect(active).rejects.toBeInstanceOf(ImageEditTaskCancelledError);
+  });
+
+  it('同 revision 的新预览也取代旧 PreviewOverride，旧帧不会成功返回', async () => {
+    const scheduler = new ImageEditRenderScheduler();
+    const gate = deferred<void>();
+    const oldFrame = scheduler.schedule({
+      id: 'same-old', sessionId: 'same', revision: 4, kind: 'preview', lane: 'gpu', priority: 500,
+      run: async () => { await gate.promise; return 'old'; },
+    });
+    const newFrame = scheduler.schedule({
+      id: 'same-new', sessionId: 'same', revision: 4, kind: 'preview', lane: 'gpu', priority: 500,
+      run: async () => 'new',
+    });
+    gate.resolve();
+
+    await expect(oldFrame).rejects.toBeInstanceOf(ImageEditTaskSupersededError);
+    await expect(newFrame).resolves.toBe('new');
+  });
+
+  it('拒绝倒退 revision 和未结束的重复任务 ID', async () => {
+    const scheduler = new ImageEditRenderScheduler();
+    const gate = deferred<void>();
+    const latest = scheduler.schedule({
+      id: 'unique', sessionId: 'revision', revision: 5, kind: 'preview', lane: 'gpu', priority: 500,
+      run: async () => { await gate.promise; return 5; },
+    });
+    await expect(scheduler.schedule({
+      id: 'unique', sessionId: 'other', revision: 1, kind: 'export', lane: 'cpu', priority: 200,
+      run: async () => 1,
+    })).rejects.toThrow('ID 重复');
+    await expect(scheduler.schedule({
+      id: 'stale', sessionId: 'revision', revision: 4, kind: 'preview', lane: 'gpu', priority: 500,
+      run: async () => 4,
+    })).rejects.toBeInstanceOf(ImageEditTaskSupersededError);
+    gate.resolve();
+    await expect(latest).resolves.toBe(5);
   });
 });

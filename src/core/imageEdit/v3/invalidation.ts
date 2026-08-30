@@ -28,14 +28,6 @@ function expandRect(rect: ImageEditRect, halo: number): ImageEditRect {
   };
 }
 
-function unionRect(left: ImageEditRect, right: ImageEditRect): ImageEditRect {
-  const x = Math.min(left.x, right.x);
-  const y = Math.min(left.y, right.y);
-  const rightEdge = Math.max(left.x + left.width, right.x + right.width);
-  const bottomEdge = Math.max(left.y + left.height, right.y + right.height);
-  return { x, y, width: rightEdge - x, height: bottomEdge - y };
-}
-
 export function computeImageEditPlanInvalidationV3(
   previous: ImageEditRenderPlan,
   next: ImageEditRenderPlan,
@@ -65,7 +57,9 @@ export function computeImageEditPlanInvalidationV3(
       if (definition?.category === 'global-analysis') analysisNodeIds.push(node.id);
       if (definition?.localHalo && localCause) {
         const halo = definition.localHalo(node.parameters, localCause.mip);
-        dirtyRect = unionRect(dirtyRect, expandRect(localCause.dirtyRect, halo));
+        // 有序图层链中的局部效果会逐级扩大依赖范围；第二个模糊必须基于第一个
+        // 已扩大的 dirty 区继续增加 halo，而不是永远只和最初区域取并集。
+        dirtyRect = expandRect(dirtyRect, halo);
       }
     }
   } else {

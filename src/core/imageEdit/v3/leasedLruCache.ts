@@ -36,7 +36,14 @@ export class LeasedLruCache<T> {
   set(key: string, value: T, bytes: number): boolean {
     const normalizedBytes = normalizeCacheBytes(bytes);
     if (normalizedBytes > this.maxBytes) return false;
-    this.delete(key);
+    const existing = this.entries.get(key);
+    if (existing?.leases) {
+      // 同一缓存键代表同一不可变结果。旧值仍被消费者租用时不能覆盖 Map 槽位，
+      // 否则旧 lease 释放时将失去可定位的 entry，资源和预算都会永久泄漏。
+      existing.evictWhenReleased = true;
+      return false;
+    }
+    if (existing) this.removeEntry(key, existing);
     this.entries.set(key, {
       value,
       bytes: normalizedBytes,

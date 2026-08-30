@@ -55,6 +55,21 @@ describe('图片编辑 V3 失效传播', () => {
     expect(result.retainedUnderlyingCaches).toBe(true);
   });
 
+  it('连续局部效果逐层累加 dirty halo', () => {
+    const beforeDocument = doc('a', 8);
+    beforeDocument.layers.splice(2, 0, { ...blur(16), id: 'blur-second' });
+    const afterDocument = doc('b', 8);
+    afterDocument.layers.splice(2, 0, { ...blur(16), id: 'blur-second' });
+    const before = compileImageEditRenderPlanV3(beforeDocument, registry, 'stable');
+    const after = compileImageEditRenderPlanV3(afterDocument, registry, 'stable');
+    const result = computeImageEditPlanInvalidationV3(before, after, {
+      kind: 'content', layerId: 'source', mip: 0,
+      dirtyRect: { x: 100, y: 100, width: 20, height: 20 },
+    }, registry);
+
+    expect(result.dirtyRect).toEqual({ x: 28, y: 28, width: 164, height: 164 });
+  });
+
   it('只改变裁剪窗口时保留全部底层缓存', () => {
     const plan = compileImageEditRenderPlanV3(doc('a', 8), registry, 'stable');
     expect(computeImageEditPlanInvalidationV3(plan, plan, { kind: 'crop' }, registry))

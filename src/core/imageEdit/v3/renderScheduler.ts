@@ -65,6 +65,7 @@ export class ImageEditRenderScheduler {
   private readonly pendingTasks: ScheduledTask[] = [];
   private readonly activeTasks = new Map<string, ScheduledTask>();
   private readonly activePreviewSessions = new Set<string>();
+  private readonly taskIds = new Set<string>();
   private sequence = 0;
   private runningGpu = 0;
   private runningCpu = 0;
@@ -78,8 +79,19 @@ export class ImageEditRenderScheduler {
   }
 
   schedule<T>(task: ImageEditRenderTask<T>): Promise<T> {
-    if (!task.id || !task.sessionId || !Number.isSafeInteger(task.revision) || task.revision < 0) {
+    if (
+      !task.id
+      || !task.sessionId
+      || !Number.isSafeInteger(task.revision)
+      || task.revision < 0
+      || !Number.isFinite(task.priority)
+      || (task.lane !== 'gpu' && task.lane !== 'cpu')
+      || !['preview', 'export', 'prefetch'].includes(task.kind)
+    ) {
       return Promise.reject(new Error('图片编辑任务身份无效'));
+    }
+    if (this.taskIds.has(task.id)) {
+      return Promise.reject(new Error(`图片编辑任务 ID 重复：${task.id}`));
     }
     return new Promise<T>((resolve, reject) => {
       const scheduled: ScheduledTask<T> = {
@@ -89,6 +101,7 @@ export class ImageEditRenderScheduler {
         resolve,
         reject,
       };
+      this.taskIds.add(task.id);
       if (task.kind === 'preview') this.enqueuePreview(scheduled);
       else this.pendingTasks.push(scheduled as ScheduledTask);
       this.pump();
@@ -99,18 +112,24 @@ export class ImageEditRenderScheduler {
     const pendingPreview = this.pendingPreviews.get(sessionId);
     if (pendingPreview) {
       this.pendingPreviews.delete(sessionId);
-      pendingPreview.controller.abort();
-      pendingPreview.reject(new ImageEditTaskCancelledError(pendingPreview.task.id));
+      const error = new ImageEditTaskCancelledError(pendingPreview.task.id);
+      pendingPreview.controller.abort(error);
+      this.taskIds.delete(pendingPreview.task.id);
+      pendingPreview.reject(error);
     }
     for (let index = this.pendingTasks.length - 1; index >= 0; index -= 1) {
       const pending = this.pendingTasks[index];
       if (pending.task.sessionId !== sessionId) continue;
       this.pendingTasks.splice(index, 1);
-      pending.controller.abort();
-      pending.reject(new ImageEditTaskCancelledError(pending.task.id));
+      const error = new ImageEditTaskCancelledError(pending.task.id);
+      pending.controller.abort(error);
+      this.taskIds.delete(pending.task.id);
+      pending.reject(error);
     }
     for (const active of this.activeTasks.values()) {
-      if (active.task.sessionId === sessionId) active.controller.abort();
+      if (active.task.sessionId === sessionId) {
+        active.controller.abort(new ImageEditTaskCancelledError(active.task.id));
+      }
     }
   }
 
@@ -127,14 +146,29 @@ export class ImageEditRenderScheduler {
   private enqueuePreview<T>(scheduled: ScheduledTask<T>): void {
     const sessionId = scheduled.task.sessionId;
     const pending = this.pendingPreviews.get(sessionId);
-    if (pending) {
-      pending.controller.abort();
-      pending.reject(new ImageEditTaskSupersededError(pending.task.id));
-    }
     const active = [...this.activeTasks.values()].find((candidate) => (
       candidate.task.kind === 'preview' && candidate.task.sessionId === sessionId
     ));
-    if (active && scheduled.task.revision > active.task.revision) active.controller.abort();
+    const newestRevision = Math.max(
+      pending?.task.revision ?? -1,
+      active?.task.revision ?? -1,
+    );
+    if (scheduled.task.revision < newestRevision) {
+      const error = new ImageEditTaskSupersededError(scheduled.task.id);
+      scheduled.controller.abort(error);
+      this.taskIds.delete(scheduled.task.id);
+      scheduled.reject(error);
+      return;
+    }
+    if (pending) {
+      const error = new ImageEditTaskSupersededError(pending.task.id);
+      pending.controller.abort(error);
+      this.taskIds.delete(pending.task.id);
+      pending.reject(error);
+    }
+    // 同 revision 的 PreviewOverride 也代表更新帧；协作取消旧任务，并在其返回时
+    // 再检查 signal，保证旧帧绝不覆盖已经排队的新帧。
+    if (active) active.controller.abort(new ImageEditTaskSupersededError(active.task.id));
     this.pendingPreviews.set(sessionId, scheduled as ScheduledTask);
   }
 
@@ -189,10 +223,19 @@ export class ImageEditRenderScheduler {
       },
     };
     void scheduled.task.run(context).then(
-      (value) => scheduled.resolve(value),
-      (error: unknown) => scheduled.reject(error),
+      (value) => {
+        if (scheduled.controller.signal.aborted) {
+          scheduled.reject(this.abortReason(scheduled));
+        } else {
+          scheduled.resolve(value);
+        }
+      },
+      (error: unknown) => scheduled.reject(
+        scheduled.controller.signal.aborted ? this.abortReason(scheduled) : error,
+      ),
     ).finally(() => {
       this.activeTasks.delete(scheduled.task.id);
+      this.taskIds.delete(scheduled.task.id);
       if (scheduled.task.lane === 'gpu') this.runningGpu -= 1;
       else this.runningCpu -= 1;
       if (scheduled.task.kind === 'preview') {
@@ -200,5 +243,10 @@ export class ImageEditRenderScheduler {
       }
       this.pump();
     });
+  }
+
+  private abortReason(scheduled: ScheduledTask): unknown {
+    return scheduled.controller.signal.reason
+      ?? new ImageEditTaskCancelledError(scheduled.task.id);
   }
 }

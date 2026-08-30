@@ -110,6 +110,30 @@ describe('图片编辑 V3 有序 RenderPlan', () => {
     ))).toBe(true);
   });
 
+  it('组内效果只处理同组下方兄弟，不泄漏到组外 backdrop', () => {
+    const scopedGroup: ImageEditGroupLayerV3 = {
+      ...createImageEditLayerCommonV3('group-scoped', '局部效果组'),
+      type: 'group',
+      isolated: false,
+      children: [
+        { ...annotationLayer(), id: 'group-annotation' },
+        { ...blurLayer(), id: 'group-blur' },
+      ],
+    };
+    const plan = compileImageEditRenderPlanV3(
+      document([baseLayer(), scopedGroup]), registry, 'stable',
+    );
+    const blur = plan.nodes.find((node) => node.layerId === 'group-blur');
+    const groupAnnotation = plan.nodes
+      .filter((node) => node.layerId === 'group-annotation')
+      .at(-1);
+
+    expect(blur?.inputNodeIds).toEqual([groupAnnotation?.id]);
+    expect(plan.nodes).toContainEqual(expect.objectContaining({
+      layerId: 'group-scoped', definitionId: 'group.isolated',
+    }));
+  });
+
   it('连续无蒙版点式调整融合为一个 pass', () => {
     const plan = compileImageEditRenderPlanV3(document([
       baseLayer(),
