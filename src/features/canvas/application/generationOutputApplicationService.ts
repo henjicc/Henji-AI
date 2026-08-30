@@ -10,12 +10,9 @@ import {
   type CanvasNodeType,
 } from '../domain/canvasNodes';
 import {
-  CANVAS_GENERATION_RESULT_KINDS,
-  CANVAS_GENERATION_OUTPUT_STRATEGIES,
-  type CanvasGenerationOutputBatchContractV1,
+  createLayerStackCompositeOutputDescriptor,
   type CanvasGenerationOutputDescriptorV1,
   type CanvasGenerationOutputItem,
-  type CanvasGenerationOutputStrategy,
 } from '../domain/generationOutputs';
 import { getResultNodeMediaType } from '../domain/nodeRegistry';
 import type { RowMediaKind } from '../domain/socketTypes';
@@ -25,49 +22,24 @@ import { validateLayerStackDocument, type LayerStackDocumentV1 } from '../domain
 import { runCanvasTransaction } from './canvasBatchService';
 import { requireCurrentCanvasProject } from './canvasApplicationService';
 import { canvasNodeFactory } from './canvasServices';
+import {
+  GenerationOutputApplicationError,
+  type CommitCanvasGenerationOutputsInput,
+  type CommitCanvasGenerationOutputsResult,
+} from './generationOutputApplicationContracts';
+import { validateGenerationOutputBatchContract } from './generationOutputContract';
 
 const logger = createLogger('features.canvas.generation-output');
 
-export class GenerationOutputApplicationError extends Error {
-  constructor(
-    readonly code: 'INVALID_INPUT' | 'NOT_FOUND' | 'CONFLICT' | 'UNSUPPORTED_STRATEGY',
-    message: string,
-  ) {
-    super(message);
-    this.name = 'GenerationOutputApplicationError';
-  }
-}
-
-export interface CommitCanvasGenerationOutputsInput {
-  /** 旧工程可能在任务运行期间删除来源连线；缺省时仍恢复结果，但不补来源边。 */
-  sourceNodeId?: string;
-  /** 模型生成可传已有进度占位节点；本地确定性处理可省略，由本服务在事务内创建首个结果。 */
-  placeholderNodeId?: string;
-  resultNodeType: CanvasNodeType;
-  /** 无占位节点时用于初始化首个结果，不得携带媒体路径。 */
-  resultNodeData?: Partial<CanvasNodeData>;
-  contract: CanvasGenerationOutputBatchContractV1;
-  completionId?: string;
-  groupTitle?: string;
-  validateResultPatch?: (patch: DynamicValueMap, descriptor: CanvasGenerationOutputDescriptorV1) => void;
-  /** 测试与后续本地处理器可注入；生产默认走统一媒体落盘入口。 */
-  persistOutput?: (mediaType: RowMediaKind, source: string) => Promise<
-    DynamicValueMap | { patch: DynamicValueMap; createdFilePaths: string[] }
-  >;
-  /** 测试可注入；生产复用受管图片资源释放通道。 */
-  releaseCreatedFiles?: (filePaths: string[]) => Promise<void>;
-  /** layer-stack 必须由主进程全量验证/合成后注入，通用落图器不会自行猜图层语义。 */
-  preparedLayerStack?: LayerStackDocumentV1;
-}
-
-export interface CommitCanvasGenerationOutputsResult {
-  projectId: string;
-  completionId: string;
-  strategy: CanvasGenerationOutputStrategy;
-  resultNodeIds: string[];
-  groupNodeId: string | null;
-  idempotent: boolean;
-}
+export { GenerationOutputApplicationError } from './generationOutputApplicationContracts';
+export type {
+  CommitCanvasGenerationOutputsInput,
+  CommitCanvasGenerationOutputsResult,
+} from './generationOutputApplicationContracts';
+export {
+  resolveGenerationOutputStrategy,
+  validateGenerationOutputBatchContract,
+} from './generationOutputContract';
 
 function requireCurrentProjectId(): string {
   const project = useProjectStore.getState();
@@ -77,136 +49,11 @@ function requireCurrentProjectId(): string {
   return project.currentProjectId;
 }
 
-function requireNonEmptyString(value: unknown, field: string): string {
-  if (typeof value !== 'string' || value.trim().length === 0) {
-    throw new GenerationOutputApplicationError('INVALID_INPUT', `多结果输出字段 ${field} 不能为空`);
-  }
-  return value.trim();
-}
-
 function validatePersistedMediaPatch(mediaType: RowMediaKind, patch: DynamicValueMap): void {
   const field = mediaType === 'image' ? 'imageUrl' : mediaType === 'video' ? 'videoUrl' : 'audioUrl';
-  requireNonEmptyString(patch[field], field);
-}
-
-/**
- * 纯契约校验同时返回稳定顺序；调用方不得按网络完成顺序落图。
- */
-export function validateGenerationOutputBatchContract(
-  contract: CanvasGenerationOutputBatchContractV1,
-): CanvasGenerationOutputItem[] {
-  if (contract.version !== 1) {
-    throw new GenerationOutputApplicationError('INVALID_INPUT', `不支持的多结果契约版本：${String(contract.version)}`);
+  if (typeof patch[field] !== 'string' || patch[field].trim().length === 0) {
+    throw new GenerationOutputApplicationError('INVALID_INPUT', `多结果输出字段 ${field} 不能为空`);
   }
-  if (contract.outputs.length === 0) {
-    throw new GenerationOutputApplicationError('INVALID_INPUT', '生成结果为空，无法创建结果节点');
-  }
-  if (!CANVAS_GENERATION_OUTPUT_STRATEGIES.includes(contract.strategy)) {
-    throw new GenerationOutputApplicationError('INVALID_INPUT', `未知的多结果落图策略：${String(contract.strategy)}`);
-  }
-  if (!CANVAS_GENERATION_RESULT_KINDS.includes(contract.resultKind)) {
-    throw new GenerationOutputApplicationError('INVALID_INPUT', `未知的结果语义：${String(contract.resultKind)}`);
-  }
-  if (
-    contract.expectedOutputCount !== undefined
-    && (!Number.isInteger(contract.expectedOutputCount) || contract.expectedOutputCount < 1)
-  ) {
-    throw new GenerationOutputApplicationError('INVALID_INPUT', '预期输出数量必须为正整数');
-  }
-  if (
-    contract.expectedOutputCount !== undefined
-    && contract.outputs.length !== contract.expectedOutputCount
-  ) {
-    throw new GenerationOutputApplicationError(
-      'INVALID_INPUT',
-      `生成结果数量不符：预期 ${contract.expectedOutputCount}，实际 ${contract.outputs.length}`,
-    );
-  }
-  if (contract.strategy === 'single' && contract.outputs.length !== 1) {
-    throw new GenerationOutputApplicationError('INVALID_INPUT', 'single 策略必须且只能包含一个输出');
-  }
-  if (contract.strategy === 'assetGroup' && contract.outputs.length < 2) {
-    throw new GenerationOutputApplicationError('INVALID_INPUT', 'assetGroup 策略至少需要两个输出');
-  }
-  if (
-    contract.strategy === 'assetGroup'
-    && contract.resultKind !== 'image-group'
-    && contract.resultKind !== 'media-group'
-  ) {
-    throw new GenerationOutputApplicationError('INVALID_INPUT', 'assetGroup 策略的结果语义必须为 image-group 或 media-group');
-  }
-  if (contract.strategy === 'layer-stack' && contract.resultKind !== 'layer-stack') {
-    throw new GenerationOutputApplicationError('INVALID_INPUT', 'layer-stack 策略的结果语义必须为 layer-stack');
-  }
-
-  const outputIds = new Set<string>();
-  const sourceIndexes = new Set<number>();
-  const orders = new Set<number>();
-  for (const item of contract.outputs) {
-    requireNonEmptyString(item.source, 'source');
-    const descriptor = item.descriptor;
-    if (descriptor.version !== 1) {
-      throw new GenerationOutputApplicationError('INVALID_INPUT', '输出描述符版本必须为 1');
-    }
-    const outputId = requireNonEmptyString(descriptor.outputId, 'outputId');
-    if (outputIds.has(outputId)) {
-      throw new GenerationOutputApplicationError('INVALID_INPUT', `输出编号重复：${outputId}`);
-    }
-    outputIds.add(outputId);
-    if (!Number.isInteger(descriptor.order) || descriptor.order < 0 || orders.has(descriptor.order)) {
-      throw new GenerationOutputApplicationError('INVALID_INPUT', `输出顺序无效或重复：${descriptor.order}`);
-    }
-    orders.add(descriptor.order);
-    if (
-      !Number.isInteger(descriptor.sourceOutputIndex)
-      || descriptor.sourceOutputIndex < 0
-      || sourceIndexes.has(descriptor.sourceOutputIndex)
-    ) {
-      throw new GenerationOutputApplicationError(
-        'INVALID_INPUT',
-        `来源输出索引无效或重复：${descriptor.sourceOutputIndex}`,
-      );
-    }
-    sourceIndexes.add(descriptor.sourceOutputIndex);
-    requireNonEmptyString(descriptor.semantic.kind, 'semantic.kind');
-    if (!CANVAS_GENERATION_RESULT_KINDS.includes(descriptor.semantic.resultKind)) {
-      throw new GenerationOutputApplicationError('INVALID_INPUT', `未知的成员结果语义：${String(descriptor.semantic.resultKind)}`);
-    }
-    if (!['image', 'video', 'audio'].includes(descriptor.mediaType)) {
-      throw new GenerationOutputApplicationError('INVALID_INPUT', `未知的媒体类型：${String(descriptor.mediaType)}`);
-    }
-    if (descriptor.profile) {
-      requireNonEmptyString(descriptor.profile.id, 'profile.id');
-      if (descriptor.profile.precision !== undefined) {
-        requireNonEmptyString(descriptor.profile.precision, 'profile.precision');
-      }
-    }
-    if (contract.strategy === 'layer-stack') {
-      if (!descriptor.layer || descriptor.layer.index !== descriptor.order) {
-        throw new GenerationOutputApplicationError('INVALID_INPUT', '图层栈输出必须提供与顺序一致的 layer.index');
-      }
-      if (
-        descriptor.layer.opacity !== undefined
-        && (!Number.isFinite(descriptor.layer.opacity)
-          || descriptor.layer.opacity < 0
-          || descriptor.layer.opacity > 1)
-      ) {
-        throw new GenerationOutputApplicationError('INVALID_INPUT', '图层透明度必须位于 0 到 1 之间');
-      }
-      if (descriptor.layer.blendMode !== undefined) {
-        requireNonEmptyString(descriptor.layer.blendMode, 'layer.blendMode');
-      }
-    }
-  }
-
-  const ordered = [...contract.outputs].sort((left, right) => (
-    left.descriptor.order - right.descriptor.order
-    || left.descriptor.sourceOutputIndex - right.descriptor.sourceOutputIndex
-  ));
-  if (ordered.some((item, index) => item.descriptor.order !== index)) {
-    throw new GenerationOutputApplicationError('INVALID_INPUT', '输出顺序必须从 0 开始且连续');
-  }
-  return ordered;
 }
 
 function findExistingCommit(
@@ -288,15 +135,6 @@ function createResultGroupGraph(input: {
   }
   useCanvasStore.getState().commitAssetGroupGraph(reordered, group.id);
   return { groupId: group.id };
-}
-
-export function resolveGenerationOutputStrategy(input: {
-  outputCount: number;
-  resultKind?: string;
-}): CanvasGenerationOutputStrategy {
-  if (input.resultKind === 'layer-stack') return 'layer-stack';
-  if (input.outputCount === 1) return 'single';
-  return 'assetGroup';
 }
 
 export async function commitCanvasGenerationOutputs(
@@ -593,6 +431,7 @@ async function commitPreparedLayerStack(input: CommitCanvasGenerationOutputsInpu
       serverTaskId: null,
       serverTaskModelId: null,
       generationOutputCommitId: input.completionId,
+      generationOutputDescriptor: createLayerStackCompositeOutputDescriptor(),
       generationOutputStrategy: 'layer-stack',
       generationOutputDescriptors: input.ordered.map((item) => item.descriptor),
     });

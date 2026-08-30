@@ -1,17 +1,13 @@
-import { createLogger } from '@/core/logging'
-import { embedStoryboardImageMetadata } from '@/commands/image'
 import type { StoryboardGenNodeData } from '@/features/canvas/domain/canvasNodes'
 import { runCanvasGeneration } from '@/features/canvas/generation/runGeneration'
-import { prepareNodeImage } from '@/features/canvas/application/imageData'
-import { sanitizeStoryboardPromptText, sanitizeStoryboardText } from '@/features/canvas/application/storyboardText'
-import {
-  createStoryboardGridOutputContract,
-  isNineGridStoryboard,
-} from '@/features/canvas/capabilities/nineGridPolicy'
+import { sanitizeStoryboardPromptText } from '@/features/canvas/application/storyboardText'
+import { isNineGridStoryboard } from '@/features/canvas/capabilities/nineGridPolicy'
 import type { CanvasGenerationOutputBatchContractV1 } from '@/features/canvas/domain/generationOutputs'
+import {
+  prepareStoryboardGenerationOutputContract,
+  type StoryboardGenerationResumeContextV1,
+} from '@/features/canvas/application/storyboardGenerationOutputService'
 import { generateGridImageDataUrl } from './shared'
-
-const logger = createLogger('features.canvas.nodes.storyboardGen.generation')
 
 interface BuildStoryboardPromptParams {
   nodeData: StoryboardGenNodeData
@@ -27,14 +23,12 @@ interface GenerateStoryboardImageParams {
   params: DynamicValueMap
   incomingImages: string[]
   frameAspectRatioValue: string
-  gridRows: number
-  gridCols: number
+  resumeContext: StoryboardGenerationResumeContextV1
   /** 栅格参考图绘制分辨率（如 '2K'） */
   gridImageResolution: string
-  frames: StoryboardGenNodeData['frames']
-  frameDescriptionDrafts: Record<string, string>
-  ignoreAtTagWhenCopyingAndGenerating: boolean
   onProgress?: (progress: number) => void
+  onTaskId?: (taskId: string) => void
+  assertCurrent?: () => Promise<void> | void
 }
 
 export interface GeneratedStoryboardImage {
@@ -84,18 +78,16 @@ export async function generateStoryboardImage({
   params,
   incomingImages,
   frameAspectRatioValue,
-  gridRows,
-  gridCols,
+  resumeContext,
   gridImageResolution,
-  frames,
-  frameDescriptionDrafts,
-  ignoreAtTagWhenCopyingAndGenerating,
   onProgress,
+  onTaskId,
+  assertCurrent,
 }: GenerateStoryboardImageParams): Promise<GeneratedStoryboardImage> {
   const gridImageDataUrl = generateGridImageDataUrl(
     frameAspectRatioValue,
-    gridRows,
-    gridCols,
+    resumeContext.gridRows,
+    resumeContext.gridCols,
     gridImageResolution
   )
   const allReferenceImages = [...incomingImages, gridImageDataUrl]
@@ -105,34 +97,14 @@ export async function generateStoryboardImage({
     params,
     referenceImages: allReferenceImages,
     onProgress,
+    onTaskId,
+    assertCurrent,
   })
 
-  const metadataFrameNotes = frames
-    .slice(0, gridRows * gridCols)
-    .map((frame) => {
-      const description = frameDescriptionDrafts[frame.id] ?? frame.description
-      return sanitizeStoryboardText(description, ignoreAtTagWhenCopyingAndGenerating)
-    })
-  let sources = generated.outputs
-  if (generated.outputs.length === 1) {
-    const prepared = await prepareNodeImage(generated.primary)
-    const imageWithMetadata = await embedStoryboardImageMetadata(prepared.imageUrl, {
-      gridRows,
-      gridCols,
-      frameNotes: metadataFrameNotes,
-    }).catch((error) => {
-      logger.warn('[StoryboardMetadata] embed failed on generation output', error)
-      return prepared.imageUrl
-    })
-    sources = [imageWithMetadata]
-  }
-
   return {
-    contract: createStoryboardGridOutputContract({
-      sources,
-      rows: gridRows,
-      cols: gridCols,
-      frameNotes: metadataFrameNotes,
+    contract: await prepareStoryboardGenerationOutputContract({
+      outputs: generated.outputs,
+      context: resumeContext,
     }),
   }
 }

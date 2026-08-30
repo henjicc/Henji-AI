@@ -88,6 +88,48 @@ describe('useCanvasConnectionActions.handleConnect', () => {
     expect(showToast).toHaveBeenCalled();
   });
 
+  it('文本展示已有上游时拒绝第二条连线并提示', () => {
+    const firstSourceId = useCanvasStore.getState().addNode(
+      CANVAS_NODE_TYPES.stringSource,
+      { x: 0, y: 0 },
+      { value: '第一个输入' },
+    );
+    const secondSourceId = useCanvasStore.getState().addNode(
+      CANVAS_NODE_TYPES.stringSource,
+      { x: 0, y: 160 },
+      { value: '第二个输入' },
+    );
+    const displayId = useCanvasStore.getState().addNode(
+      CANVAS_NODE_TYPES.textAnnotation,
+      { x: 360, y: 0 },
+      { content: '' },
+    );
+    useCanvasStore.getState().onConnect({
+      source: firstSourceId,
+      target: displayId,
+      sourceHandle: 'source',
+      targetHandle: 'target',
+    });
+    const showToast = vi.fn();
+    const { result } = renderHook(() => useCanvasConnectionActions({
+      connectNodes: useCanvasStore.getState().onConnect,
+      connectMany: useCanvasStore.getState().connectMany,
+      schedulePersist: () => undefined,
+      showToast,
+      t: ((key: string) => key) as unknown as TFunction,
+    }));
+
+    result.current.handleConnect({
+      source: secondSourceId,
+      target: displayId,
+      sourceHandle: 'source',
+      targetHandle: 'target',
+    });
+
+    expect(useCanvasStore.getState().edges).toHaveLength(1);
+    expect(showToast).toHaveBeenCalledWith('canvas.connection.singleInputOccupied');
+  });
+
   it('从素材组端口拖出时转为整组绑定', () => {
     const bindAssetGroup = vi.spyOn(assetGroupApplicationService, 'bindAssetGroup')
       .mockReturnValue({ connected: 2, pending: 1, unsupported: 0, excluded: 0 });

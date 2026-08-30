@@ -29,7 +29,10 @@ import {
 } from '../domain/socketTypes'
 import { validateParamConnection } from './graphValueResolver'
 import { undoCanvasBatch } from './canvasBatchService'
-import { wouldCreateCanvasCycle } from '../domain/connectionIndex'
+import {
+  getAuthoritativeIncomingEdge,
+  wouldCreateCanvasCycle,
+} from '../domain/connectionIndex'
 
 const MAX_UNDO_RECORDS = 100
 const FOCUS_HANDLER_WAIT_MS = 2_000
@@ -287,6 +290,12 @@ export function connectCanvasNodes(input: {
       targetNodeId: input.targetNodeId,
     })
   }
+  if (
+    targetNode.type === CANVAS_NODE_TYPES.textAnnotation
+    && getAuthoritativeIncomingEdge(canvas.edges, targetNode.id)
+  ) {
+    throw new CanvasApplicationError('CONFLICT', '文本展示节点只能连接一个上游输入')
+  }
   if (wouldCreateCanvasCycle(input.sourceNodeId, input.targetNodeId, canvas.edges)) {
     throw new CanvasApplicationError('CONFLICT', '该连接会形成画布循环依赖')
   }
@@ -326,7 +335,6 @@ export function connectCanvasNodes(input: {
   if (existing) {
     throw new CanvasApplicationError('CONFLICT', '节点连接已存在', true, { edgeId: existing.id })
   }
-
   const beforeNodeIds = new Set(canvas.nodes.map((node) => node.id))
   const beforeEdgeIds = new Set(canvas.edges.map((edge) => edge.id))
   canvas.onConnect({

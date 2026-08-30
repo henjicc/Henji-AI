@@ -202,6 +202,8 @@ export interface CanvasNodeDefinition<TData extends CanvasNodeData = CanvasNodeD
     kind: MediaKind;
     role: 'source' | 'generator' | 'result';
   };
+  /** 动态类型占位等无法声明固定 media.kind、但仍必须提供媒体才能越过的执行边界。 */
+  executionBoundary?: 'media';
   /** 端口媒体类型声明（连接校验与连接菜单依据） */
   ports?: NodePorts;
   /** 生成类节点的生成规格 */
@@ -236,6 +238,7 @@ const universalUploadNodeDefinition: CanvasNodeDefinition<UniversalUploadNodeDat
   menuOrder: 10,
   menuAggregationKey: 'upload',
   menuBehavior: 'chooseMediaBeforeCreate',
+  executionBoundary: 'media',
   capabilities: { toolbar: true, promptInput: false },
   connectivity: {
     sourceHandle: true,

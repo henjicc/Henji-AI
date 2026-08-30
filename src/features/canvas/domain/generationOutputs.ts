@@ -85,6 +85,24 @@ export interface CanvasGenerationOutputBatchContractV1 {
   outputs: CanvasGenerationOutputItem[];
 }
 
+/**
+ * 图层栈的多项输出描述符描述各个可编辑图层；画布向下游发布的则是合成后的单一媒体节点。
+ * completionId 已区分不同生成批次，因此这里使用固定语义身份，避免恢复与正常完成产生两套引用。
+ */
+export function createLayerStackCompositeOutputDescriptor(): CanvasGenerationOutputDescriptorV1 {
+  return {
+    version: 1,
+    outputId: 'layer-stack-composite',
+    order: 0,
+    sourceOutputIndex: 0,
+    mediaType: 'image',
+    semantic: {
+      kind: 'layer-stack-composite',
+      resultKind: 'layer-stack',
+    },
+  };
+}
+
 export function createDefaultGenerationOutputItems(input: {
   sources: readonly string[];
   mediaType: RowMediaKind;

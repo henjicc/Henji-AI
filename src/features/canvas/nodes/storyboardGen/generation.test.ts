@@ -23,6 +23,7 @@ vi.mock('@/commands/image', () => ({ embedStoryboardImageMetadata }))
 vi.mock('./shared', () => ({ generateGridImageDataUrl: () => 'data:image/png;base64,grid' }))
 
 import { buildStoryboardPrompt, generateStoryboardImage } from './generation'
+import { createStoryboardGenerationResumeContext } from '@/features/canvas/application/storyboardGenerationOutputService'
 
 function nodeData(): StoryboardGenNodeData {
   return {
@@ -37,17 +38,22 @@ function nodeData(): StoryboardGenNodeData {
 
 function generationInput() {
   const data = nodeData()
+  const frameDescriptionDrafts = Object.fromEntries(
+    data.frames.map((frame) => [frame.id, frame.description]),
+  )
   return {
     modelId: 'test-image-model',
     params: { prompt: '九宫格' },
     incomingImages: ['/source.png'],
     frameAspectRatioValue: '1:1',
-    gridRows: 3,
-    gridCols: 3,
     gridImageResolution: '2K',
-    frames: data.frames,
-    frameDescriptionDrafts: Object.fromEntries(data.frames.map((frame) => [frame.id, frame.description])),
-    ignoreAtTagWhenCopyingAndGenerating: false,
+    resumeContext: createStoryboardGenerationResumeContext({
+      gridRows: data.gridRows,
+      gridCols: data.gridCols,
+      frames: data.frames,
+      frameDescriptionDrafts,
+      ignoreAtTagWhenCopyingAndGenerating: false,
+    }),
   }
 }
 
@@ -82,7 +88,9 @@ describe('分镜生成的九宫格双形态输出', () => {
 
   it('单张组合图落盘并嵌入网格元数据', async () => {
     runCanvasGeneration.mockResolvedValue({ outputs: ['/remote/grid.png'], primary: '/remote/grid.png' })
-    const result = await generateStoryboardImage(generationInput())
+    const onTaskId = vi.fn()
+    const result = await generateStoryboardImage({ ...generationInput(), onTaskId })
+    expect(runCanvasGeneration).toHaveBeenCalledWith(expect.objectContaining({ onTaskId }))
     expect(prepareNodeImage).toHaveBeenCalledWith('/remote/grid.png')
     expect(embedStoryboardImageMetadata).toHaveBeenCalledWith('/managed/grid.png', {
       gridRows: 3,

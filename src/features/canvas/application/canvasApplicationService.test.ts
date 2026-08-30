@@ -169,6 +169,41 @@ describe('canvas application service', () => {
     }))
   })
 
+  it('文本展示节点拒绝新增第二条上游连接', () => {
+    const firstSource = addCanvasNode({
+      projectId,
+      nodeType: CANVAS_NODE_TYPES.textProcessing,
+      placement: { mode: 'absolute', x: 0, y: 0 },
+      data: { prompt: '第一个输入' },
+    })
+    const secondSource = addCanvasNode({
+      projectId,
+      nodeType: CANVAS_NODE_TYPES.textProcessing,
+      placement: { mode: 'absolute', x: 0, y: 160 },
+      data: { prompt: '第二个输入' },
+    })
+    const display = addCanvasNode({
+      projectId,
+      nodeType: CANVAS_NODE_TYPES.textAnnotation,
+      placement: { mode: 'absolute', x: 360, y: 0 },
+      data: { content: '' },
+    })
+
+    useCanvasStore.getState().onConnect({
+      source: String(firstSource.nodeId),
+      target: String(display.nodeId),
+      sourceHandle: 'source',
+      targetHandle: 'target',
+    })
+
+    expect(() => connectCanvasNodes({
+      projectId,
+      sourceNodeId: String(secondSource.nodeId),
+      targetNodeId: String(display.nodeId),
+    })).toThrow('只能连接一个上游输入')
+    expect(useCanvasStore.getState().edges).toHaveLength(1)
+  })
+
   it('开启设置后原子插入一个共享文本展示节点并复用于多个目标', () => {
     const processing = addCanvasNode({
       projectId,

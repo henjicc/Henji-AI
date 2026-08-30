@@ -1,38 +1,51 @@
 import { useCallback, useEffect, useRef } from 'react'
 import type { TFunction } from 'i18next'
+import type { TextProcessingPromptTemplate } from '@henjicc/ai-sdk'
 
 import { llmCancelTask, llmChatStream } from '@/commands/llmRuntime'
-import type { PromptReferenceItem } from '@/components/ui'
 import { createLogger } from '@/core/logging'
 import {
   createPlainTextPromptDocument,
+  readPromptDocument,
   toModelPromptText,
-  type PromptDocumentV1,
 } from '@/core/inputs/promptDocument'
 import {
   buildTextProcessingRequest,
   createTextProcessingInputFingerprint,
-  shouldReuseTextProcessingOutput,
+  getTextProcessingMediaKinds,
+  resolveTextProcessingModel,
+  resolveTextProcessingSystemPrompt,
+  TEXT_PROCESSING_CUSTOM_TEMPLATE_ID,
   type TextProcessingMedia,
   type TextProcessingModelChoice,
 } from '@/features/canvas/application/textProcessing'
+import { resolveCanvasGenerationPrompt } from '@/features/canvas/application/generationPromptDocument'
+import { collectInputMedia } from '@/features/canvas/application/graphMediaResolver'
 import {
   registerCanvasNodeExecutor,
   type CanvasNodeExecutionContext,
   type CanvasNodeExecutionResult,
+  type CanvasNodePreflightContext,
 } from '@/features/canvas/application/canvasExecutionService'
-import { collectInputValues } from '@/features/canvas/application/graphValueResolver'
+import {
+  collectInputValues,
+  getConnectedParamIds,
+} from '@/features/canvas/application/graphValueResolver'
 import {
   CANVAS_NODE_TYPES,
   type TextAnnotationNodeData,
   type TextProcessingNodeData,
 } from '@/features/canvas/domain/canvasNodes'
-import { getNodeIndexById } from '@/features/canvas/domain/connectionIndex'
+import {
+  getNodeIndexById,
+  isAuthoritativeIncomingSource,
+} from '@/features/canvas/domain/connectionIndex'
 import { PROMPT_PARAM_ID } from '@/features/canvas/domain/socketTypes'
 import { UploadService } from '@/services/upload/UploadService'
 import { showAlertDialog } from '@/stores/alertDialogStore'
 import { useCanvasStore } from '@/stores/canvasStore'
 import { useCanvasTextStreamStore } from '@/stores/canvasTextStreamStore'
+import { useProjectStore } from '@/stores/projectStore'
 
 const logger = createLogger('features.canvas.text_processing')
 const STREAM_PREVIEW_INTERVAL_MS = 200
@@ -48,22 +61,16 @@ function createRequestId(): string {
 
 interface UseTextProcessingExecutionOptions {
   nodeId: string
-  promptDocument: PromptDocumentV1
-  promptReferences: PromptReferenceItem[]
-  systemPromptDocument: PromptDocumentV1
-  media: TextProcessingMedia
-  selectedChoice: TextProcessingModelChoice | null
+  choices: TextProcessingModelChoice[]
+  promptTemplates: TextProcessingPromptTemplate[]
   setPromptInvalid: (invalid: boolean) => void
   t: TFunction
 }
 
 export function useTextProcessingExecution({
   nodeId,
-  promptDocument,
-  promptReferences,
-  systemPromptDocument,
-  media,
-  selectedChoice,
+  choices,
+  promptTemplates,
   setPromptInvalid,
   t,
 }: UseTextProcessingExecutionOptions): void {
@@ -76,14 +83,54 @@ export function useTextProcessingExecution({
   const run = useCallback(async (
     execution: CanvasNodeExecutionContext,
   ): Promise<CanvasNodeExecutionResult> => {
+    const isProjectCurrent = (): boolean => (
+      !execution.projectId || useProjectStore.getState().currentProjectId === execution.projectId
+    )
+    if (!isProjectCurrent()) throw new Error('画布项目已切换，本次文本处理已停止')
     const canvas = useCanvasStore.getState()
+    const latestNode = canvas.nodes.find((node) => node.id === nodeId)
+    const latestData = latestNode?.data as TextProcessingNodeData | undefined
+    if (!latestData) throw new Error(`画布执行节点不存在：${nodeId}`)
+    const selectedChoice = resolveTextProcessingModel(
+      choices,
+      latestData.providerId,
+      latestData.modelId,
+    )
+    const acceptedMediaKinds = getTextProcessingMediaKinds(selectedChoice?.model ?? null)
+    const incomingMedia = collectInputMedia(nodeId, canvas.nodes, canvas.edges)
+      .filter((output) => acceptedMediaKinds.includes(output.kind as typeof acceptedMediaKinds[number]))
+    const promptCarrier = resolveCanvasGenerationPrompt({
+      nodeId,
+      document: latestData.promptDocument,
+      legacyText: latestData.prompt ?? '',
+      bindings: latestData.promptMediaBindings,
+      mediaInputs: latestData.mediaInputs ?? {},
+      incomingMedia,
+      acceptedMediaKinds,
+    })
     const latestInjectedValues = collectInputValues(nodeId, canvas.nodes, canvas.edges)
     const latestPromptOverride = latestInjectedValues[PROMPT_PARAM_ID]
-    const runtimePromptDocument = typeof latestPromptOverride === 'string'
+    const runtimePromptDocument = getConnectedParamIds(nodeId, canvas.edges).has(PROMPT_PARAM_ID)
+      && typeof latestPromptOverride === 'string'
       ? createPlainTextPromptDocument(latestPromptOverride)
-      : promptDocument
-    const prompt = toModelPromptText(runtimePromptDocument, { references: promptReferences }).trim()
-    const systemPrompt = toModelPromptText(systemPromptDocument).trim()
+      : promptCarrier.document
+    const prompt = toModelPromptText(
+      runtimePromptDocument,
+      { references: promptCarrier.references },
+    ).trim()
+    const customSystemPrompt = toModelPromptText(readPromptDocument({
+      document: latestData.systemPromptDocument,
+      legacyText: latestData.systemPrompt ?? '',
+    }, {
+      carrierType: 'canvas-text-processing-system-prompt',
+      carrierId: nodeId,
+    }).document).trim()
+    const systemPrompt = resolveTextProcessingSystemPrompt(
+      customSystemPrompt,
+      latestData.systemPromptTemplateId ?? TEXT_PROCESSING_CUSTOM_TEMPLATE_ID,
+      promptTemplates,
+    ).trim()
+    const media: TextProcessingMedia = promptCarrier.mediaUrls
     if (!prompt) {
       setPromptInvalid(true)
       throw new Error(t('node.textProcessing.promptRequired'))
@@ -97,6 +144,7 @@ export function useTextProcessingExecution({
       })
       throw new Error(t('node.textProcessing.noModelConfigured'))
     }
+    await execution.assertCurrent()
 
     setPromptInvalid(false)
     const fingerprint = createTextProcessingInputFingerprint({
@@ -106,18 +154,6 @@ export function useTextProcessingExecution({
       modelId: selectedChoice.model.modelId,
       media,
     })
-    const latestNode = canvas.nodes.find((node) => node.id === nodeId)
-    const latestData = latestNode?.data as TextProcessingNodeData | undefined
-    if (shouldReuseTextProcessingOutput({
-      trigger: execution.trigger,
-      fixedResult: latestData?.fixedResult,
-      lastExecutionStatus: latestData?.lastExecutionStatus,
-      lastOutputFingerprint: latestData?.lastOutputFingerprint,
-      fingerprint,
-    })) {
-      return { status: 'reused' }
-    }
-
     canvas.ensureTextDisplayOutput(nodeId, {
       displayName: buildResultTitle(prompt, t('node.textProcessing.resultTitle')),
       content: '',
@@ -129,6 +165,7 @@ export function useTextProcessingExecution({
       .map((edge) => runtimeNodeById.get(edge.target))
       .filter((node): node is NonNullable<typeof node> => (
         node?.type === CANVAS_NODE_TYPES.textAnnotation
+        && isAuthoritativeIncomingSource(runtimeCanvas.edges, node.id, nodeId)
       ))
       .map((node) => node.id)
     const updateNodeData = useCanvasStore.getState().updateNodeData
@@ -156,6 +193,7 @@ export function useTextProcessingExecution({
     let completed = false
     const publishPreview = (): void => {
       previewTimer = null
+      if (!isProjectCurrent()) return
       lastPreviewAt = Date.now()
       for (const displayNodeId of displayNodeIds) {
         useCanvasTextStreamStore.getState().setPreview(displayNodeId, {
@@ -172,6 +210,7 @@ export function useTextProcessingExecution({
     }
     const commitDisplays = (resultPatch: Partial<TextAnnotationNodeData>): void => {
       if (previewTimer !== null) clearTimeout(previewTimer)
+      if (!isProjectCurrent()) return
       publishPreview()
       for (const displayNodeId of displayNodeIds) {
         updateNodeData(displayNodeId, { content: output, ...resultPatch }, { skipHistory: true })
@@ -182,6 +221,7 @@ export function useTextProcessingExecution({
       if (failureHandled) return
       failureHandled = true
       failureMessage = message
+      if (!isProjectCurrent()) return
       updateNodeData(nodeId, { lastExecutionStatus: 'failed' }, { skipHistory: true })
       commitDisplays({
         isGenerating: false,
@@ -210,6 +250,12 @@ export function useTextProcessingExecution({
     })
 
     const uploadService = UploadService.getInstance()
+    const unsubscribeProject = useProjectStore.subscribe((state) => {
+      if (!execution.projectId || state.currentProjectId === execution.projectId) return
+      failureHandled = true
+      failureMessage = '画布项目已切换，本次文本处理已停止'
+      void llmCancelTask(requestId)
+    })
     try {
       await llmChatStream(buildTextProcessingRequest({
         requestId,
@@ -230,6 +276,10 @@ export function useTextProcessingExecution({
         } else if (event.type === 'Error') {
           finishFailure(event.data)
         } else if (event.type === 'Done') {
+          if (output.trim().length === 0) {
+            finishFailure('文本处理没有返回可用文本')
+            return
+          }
           completed = true
           const outputRevision = (latestData?.lastOutputRevision ?? 0) + 1
           updateNodeData(nodeId, {
@@ -257,14 +307,73 @@ export function useTextProcessingExecution({
     } catch (error) {
       finishFailure(error instanceof Error ? error.message : String(error))
     } finally {
+      unsubscribeProject()
       activeRequestIdsRef.current.delete(requestId)
     }
     if (failureHandled) throw new Error(failureMessage || '文本处理失败，已停止运行下游节点')
     return { status: 'completed', resultNodeIds: displayNodeIds }
-  }, [media, nodeId, promptDocument, promptReferences, selectedChoice, setPromptInvalid, systemPromptDocument, t])
+  }, [choices, nodeId, promptTemplates, setPromptInvalid, t])
+
+  const getInputSignatureExtras = useCallback(() => {
+    const latestData = useCanvasStore.getState().nodes.find((node) => node.id === nodeId)
+      ?.data as TextProcessingNodeData | undefined
+    const choice = latestData
+      ? resolveTextProcessingModel(choices, latestData.providerId, latestData.modelId)
+      : null
+    const template = promptTemplates.find((item) => item.id === latestData?.systemPromptTemplateId)
+    const uploadService = UploadService.getInstance()
+    return {
+      contractVersion: 2,
+      upload: {
+        provider: uploadService.getCurrentProvider(),
+        fallback: uploadService.isFallbackEnabled(),
+      },
+      template: template ? { id: template.id, systemPrompt: template.systemPrompt } : null,
+      model: choice ? {
+        providerId: choice.provider.providerId,
+        providerFamilyId: choice.provider.providerFamilyId,
+        endpointProfile: choice.provider.endpointProfile,
+        credentialId: choice.provider.credentialId,
+        providerBaseUrl: choice.provider.baseUrl,
+        providerAdapter: choice.provider.adapter,
+        reasoning: choice.provider.reasoning,
+        modelId: choice.model.modelId,
+        modelBaseUrl: choice.model.baseUrl,
+        modelAdapter: choice.model.adapter,
+        capabilities: choice.model.capabilities,
+      } : null,
+    }
+  }, [choices, nodeId, promptTemplates])
+
+  const preflightBeforeDependencies = useCallback((execution: CanvasNodePreflightContext) => {
+    if (
+      execution.projectId
+      && useProjectStore.getState().currentProjectId !== execution.projectId
+    ) throw new Error('画布项目已切换，本次文本处理已停止')
+    const latestData = useCanvasStore.getState().nodes.find((node) => node.id === nodeId)
+      ?.data as TextProcessingNodeData | undefined
+    const choice = latestData
+      ? resolveTextProcessingModel(choices, latestData.providerId, latestData.modelId)
+      : null
+    if (choice) return
+    showAlertDialog({
+      title: t('common:error'),
+      message: t('node.textProcessing.noModelConfigured'),
+      type: 'warning',
+      settingsTarget: { tab: 'models', sectionId: 'models-providers' },
+    })
+    throw new Error(t('node.textProcessing.noModelConfigured'))
+  }, [choices, nodeId, t])
 
   useEffect(() => registerCanvasNodeExecutor(nodeId, {
     kind: 'text-processing',
+    dependency: { mode: 'auto', outputMode: 'inline' },
+    getInputSignatureExtras,
+    isCachedOutputValid: (node) => (
+      typeof (node.data as TextProcessingNodeData).lastOutput === 'string'
+      && Boolean((node.data as TextProcessingNodeData).lastOutput?.trim())
+    ),
+    preflightBeforeDependencies,
     run,
-  }), [nodeId, run])
+  }), [getInputSignatureExtras, nodeId, preflightBeforeDependencies, run])
 }

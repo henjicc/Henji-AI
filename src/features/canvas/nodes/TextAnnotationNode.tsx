@@ -14,8 +14,11 @@ import { UiTextArea } from '@/components/ui';
 import { useCanvasStore } from '@/stores/canvasStore';
 import { useCanvasTextStreamStore } from '@/stores/canvasTextStreamStore';
 import { createCanvasTextHistoryGroup, useCanvasTextHistory } from '@/features/canvas/hooks/useCanvasTextHistory';
-import { getMainPortConnectionFlags } from '@/features/canvas/domain/connectionIndex';
-import { getIncomingEdges, getNodeIndexById } from '@/features/canvas/domain/connectionIndex';
+import {
+  getAuthoritativeIncomingEdge,
+  getMainPortConnectionFlags,
+  getNodeIndexById,
+} from '@/features/canvas/domain/connectionIndex';
 import { getNodeValueOutput } from '@/features/canvas/domain/nodeRegistry';
 import { getSocketColor } from '@/features/canvas/domain/socketTypes';
 import { NodeGenerationError } from '@/features/canvas/nodes/shared/NodeGenerationError';
@@ -77,13 +80,13 @@ export const TextAnnotationNode = memo(({
   const reasoningContent = isGenerating ? streamPreview?.reasoning ?? '' : '';
   const generationError = typeof data.generationError === 'string' ? data.generationError : null;
   const incomingValue = useCanvasStore((state) => {
-    const edge = getIncomingEdges(state.edges, id).at(-1);
+    const edge = getAuthoritativeIncomingEdge(state.edges, id);
     const source = edge ? getNodeIndexById(state.nodes).get(edge.source) : undefined;
     const output = source ? getNodeValueOutput(source.type, source.data) : undefined;
     return typeof output?.value === 'string' ? output.value : null;
   });
   const incomingRevision = useCanvasStore((state) => {
-    const edge = getIncomingEdges(state.edges, id).at(-1);
+    const edge = getAuthoritativeIncomingEdge(state.edges, id);
     const source = edge ? getNodeIndexById(state.nodes).get(edge.source) : undefined;
     if (!source) return null;
     const output = getNodeValueOutput(source.type, source.data);

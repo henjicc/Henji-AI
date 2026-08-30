@@ -4,31 +4,54 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { useCanvasStore } from '@/stores/canvasStore'
 import { useCanvasExecutionStateStore } from '@/stores/canvasExecutionStateStore'
+import { collectInputMedia } from './graphMediaResolver'
 import {
   CANVAS_NODE_TYPES,
   type CanvasEdge,
   type CanvasNode,
-  type TextProcessingNodeData,
 } from '../domain/canvasNodes'
 import {
   hasReachableNonDisplayConsumer,
+  isCanvasNodeInputSignatureCurrent,
   registerCanvasNodeExecutor,
   resetCanvasExecutionServiceForTests,
   runCanvasNode,
+  type CanvasNodeExecutionResult,
 } from './canvasExecutionService'
+import { createCanvasExecutionValueSignature } from './canvasExecutionCache'
+import { isAuthoritativeIncomingSource } from '../domain/connectionIndex'
 
 function node(id: string, type: CanvasNode['type'], data: Record<string, unknown> = {}): CanvasNode {
   return { id, type, position: { x: 0, y: 0 }, data } as CanvasNode
 }
 
-function edge(source: string, target: string): CanvasEdge {
+function edge(source: string, target: string, targetHandle = 'param:__prompt'): CanvasEdge {
   return {
-    id: `${source}-${target}`,
+    id: `${source}-${target}-${targetHandle}`,
     source,
     target,
     sourceHandle: 'source',
-    targetHandle: 'param:__prompt',
+    targetHandle,
   }
+}
+
+function completed(resultNodeIds: string[] = []): CanvasNodeExecutionResult {
+  return { status: 'completed', resultNodeIds }
+}
+
+function registerRoot(nodeId: string, run?: () => Promise<CanvasNodeExecutionResult>): void {
+  registerCanvasNodeExecutor(nodeId, {
+    kind: 'standard-generation',
+    run: run ?? (async () => completed()),
+  })
+}
+
+function registerText(nodeId: string, run: () => Promise<CanvasNodeExecutionResult>): void {
+  registerCanvasNodeExecutor(nodeId, {
+    kind: 'text-processing',
+    dependency: { mode: 'auto', outputMode: 'inline' },
+    run,
+  })
 }
 
 describe('canvasExecutionService', () => {
@@ -37,170 +60,328 @@ describe('canvasExecutionService', () => {
     useCanvasStore.getState().setCanvasData([], [], { past: [], future: [] })
   })
 
-  it('从目标反向运行文本处理，完成后再读取最新输出运行目标', async () => {
+  it('按执行器的运行时契约校验跨进程任务签名而不是退化为节点 data', async () => {
     useCanvasStore.getState().setCanvasData([
-      node('text', CANVAS_NODE_TYPES.textProcessing, { lastOutput: '' }),
+      node('image', CANVAS_NODE_TYPES.imageEdit, { prompt: '节点里的旧文本不参与运行时签名' }),
+    ], [])
+    let runtime = { prompt: '雪山', images: ['/managed/source.png'] }
+    registerCanvasNodeExecutor('image', {
+      kind: 'standard-generation',
+      inputSignatureScope: 'runtime',
+      getInputSignatureExtras: () => runtime,
+      run: async () => completed(),
+    })
+    const expected = createCanvasExecutionValueSignature({
+      contractVersion: 1,
+      nodeType: CANVAS_NODE_TYPES.imageEdit,
+      executionKind: 'standard-generation',
+      runtime,
+    })
+
+    await expect(isCanvasNodeInputSignatureCurrent('image', expected)).resolves.toBe(true)
+    runtime = { prompt: '海边', images: ['/managed/source.png'] }
+    await expect(isCanvasNodeInputSignatureCurrent('image', expected)).resolves.toBe(false)
+  })
+
+  it('先完成透明展示节点后的上游，再对最新图状态执行目标预检', async () => {
+    useCanvasStore.getState().setCanvasData([
+      node('text', CANVAS_NODE_TYPES.textProcessing, { prompt: '改写' }),
       node('display', CANVAS_NODE_TYPES.textAnnotation, { content: '' }),
       node('image', CANVAS_NODE_TYPES.imageEdit, { prompt: '' }),
     ], [edge('text', 'display'), edge('display', 'image')])
     const order: string[] = []
-    registerCanvasNodeExecutor('text', {
-      kind: 'text-processing',
-      run: async () => {
-        order.push('text')
-        useCanvasStore.getState().updateNodeData('display', { content: '最新提示词' }, { skipHistory: true })
-      },
+    registerText('text', async () => {
+      order.push('text')
+      useCanvasStore.getState().updateNodeData('display', { content: '最新提示词' }, { skipHistory: true })
+      return completed()
     })
     registerCanvasNodeExecutor('image', {
       kind: 'standard-generation',
-      run: async () => {
+      preflight: () => {
         const display = useCanvasStore.getState().nodes.find((item) => item.id === 'display')
-        order.push(`image:${String(display?.data.content)}`)
+        order.push(`preflight:${String(display?.data.content)}`)
+      },
+      run: async () => {
+        order.push('image')
+        return completed()
       },
     })
 
     await expect(runCanvasNode('image')).resolves.toMatchObject({
       executedNodeIds: ['text', 'image'],
     })
-    expect(order).toEqual(['text', 'image:最新提示词'])
+    expect(order).toEqual(['text', 'preflight:最新提示词', 'image'])
     expect(hasReachableNonDisplayConsumer(
-      'text', useCanvasStore.getState().nodes, useCanvasStore.getState().edges
+      'text', useCanvasStore.getState().nodes, useCanvasStore.getState().edges,
     )).toBe(true)
   })
 
-  it('直连目标时同样严格等待文本处理完成', async () => {
+  it('旧图多文本上游的完成顺序反转时仍只消费最后一条权威边', async () => {
+    const runScenario = async (authoritativeFinishesFirst: boolean): Promise<string> => {
+      resetCanvasExecutionServiceForTests()
+      useCanvasStore.getState().setCanvasData([
+        node('text-a', CANVAS_NODE_TYPES.textProcessing, { prompt: 'A' }),
+        node('text-b', CANVAS_NODE_TYPES.textProcessing, { prompt: 'B' }),
+        node('display', CANVAS_NODE_TYPES.textAnnotation, { content: '' }),
+        node('root', CANVAS_NODE_TYPES.imageEdit),
+      ], [
+        edge('text-a', 'display', 'target'),
+        edge('text-b', 'display', 'target'),
+        edge('text-a', 'root'),
+        edge('display', 'root'),
+      ])
+
+      let releaseA: (() => void) | undefined
+      let releaseB: (() => void) | undefined
+      const gateA = new Promise<void>((resolve) => { releaseA = resolve })
+      const gateB = new Promise<void>((resolve) => { releaseB = resolve })
+      const writeIfAuthoritative = (sourceNodeId: string, content: string): void => {
+        const snapshot = useCanvasStore.getState()
+        if (isAuthoritativeIncomingSource(snapshot.edges, 'display', sourceNodeId)) {
+          snapshot.updateNodeData('display', { content }, { skipHistory: true })
+        }
+      }
+      registerText('text-a', async () => {
+        await gateA
+        writeIfAuthoritative('text-a', 'A')
+        return completed()
+      })
+      registerText('text-b', async () => {
+        await gateB
+        writeIfAuthoritative('text-b', 'B')
+        return completed()
+      })
+      let consumed = ''
+      registerRoot('root', async () => {
+        consumed = String(useCanvasStore.getState().nodes.find((item) => item.id === 'display')?.data.content ?? '')
+        return completed()
+      })
+
+      const running = runCanvasNode('root')
+      await vi.waitFor(() => {
+        const active = useCanvasExecutionStateStore.getState().activeNodes
+        expect(active['text-a']).toBeDefined()
+        expect(active['text-b']).toBeDefined()
+      })
+      if (authoritativeFinishesFirst) {
+        releaseB?.()
+        await vi.waitFor(() => expect(
+          useCanvasExecutionStateStore.getState().activeNodes['text-b'],
+        ).toBeUndefined())
+        releaseA?.()
+      } else {
+        releaseA?.()
+        await vi.waitFor(() => expect(
+          useCanvasExecutionStateStore.getState().activeNodes['text-a'],
+        ).toBeUndefined())
+        releaseB?.()
+      }
+      await running
+      return consumed
+    }
+
+    await expect(runScenario(true)).resolves.toBe('B')
+    await expect(runScenario(false)).resolves.toBe('B')
+
+    const reachabilityNodes = [
+      node('text-a', CANVAS_NODE_TYPES.textProcessing),
+      node('text-b', CANVAS_NODE_TYPES.textProcessing),
+      node('display', CANVAS_NODE_TYPES.textAnnotation),
+      node('root', CANVAS_NODE_TYPES.imageEdit),
+    ]
+    const reachabilityEdges = [
+      edge('text-a', 'display', 'target'),
+      edge('text-b', 'display', 'target'),
+      edge('display', 'root'),
+    ]
+    expect(hasReachableNonDisplayConsumer('text-a', reachabilityNodes, reachabilityEdges)).toBe(false)
+    expect(hasReachableNonDisplayConsumer('text-b', reachabilityNodes, reachabilityEdges)).toBe(true)
+  })
+
+  it('上传与结果节点是已有值边界，不继续追溯其上游配方', async () => {
     useCanvasStore.getState().setCanvasData([
-      node('text', CANVAS_NODE_TYPES.textProcessing, { lastOutput: '' }),
-      node('image', CANVAS_NODE_TYPES.imageEdit, { prompt: '' }),
-    ], [edge('text', 'image')])
-    const order: string[] = []
-    registerCanvasNodeExecutor('text', {
-      kind: 'text-processing',
-      run: async () => {
-        await Promise.resolve()
-        useCanvasStore.getState().updateNodeData('text', { lastOutput: '直连提示词' }, { skipHistory: true })
-        order.push('text:done')
-      },
-    })
-    registerCanvasNodeExecutor('image', {
-      kind: 'standard-generation',
-      run: async () => {
-        const source = useCanvasStore.getState().nodes.find((item) => item.id === 'text')
-        order.push(`image:${String(source?.data.lastOutput)}`)
-      },
-    })
+      node('text', CANVAS_NODE_TYPES.textProcessing),
+      node('result', CANVAS_NODE_TYPES.exportImage, { imageUrl: 'result.png', aspectRatio: '1:1' }),
+      node('image', CANVAS_NODE_TYPES.imageEdit),
+    ], [edge('text', 'result'), edge('result', 'image', 'param:__image')])
+    const textRun = vi.fn(async () => completed())
+    registerText('text', textRun)
+    registerRoot('image')
 
     await runCanvasNode('image')
 
-    expect(order).toEqual(['text:done', 'image:直连提示词'])
+    expect(textRun).not.toHaveBeenCalled()
   })
 
-  it('上游失败时阻断目标执行', async () => {
+  it('生成节点直连下游时自动运行，并用稳定结果引用发布媒体', async () => {
     useCanvasStore.getState().setCanvasData([
-      node('text', CANVAS_NODE_TYPES.textProcessing),
-      node('image', CANVAS_NODE_TYPES.imageEdit),
-    ], [edge('text', 'image')])
-    const targetRun = vi.fn()
-    registerCanvasNodeExecutor('text', {
-      kind: 'text-processing',
-      run: async () => { throw new Error('上游失败') },
+      node('generator', CANVAS_NODE_TYPES.imageEdit, { prompt: '猫' }),
+      node('target', CANVAS_NODE_TYPES.imageEdit, { prompt: '动画化' }),
+    ], [edge('generator', 'target', 'param:__image')])
+    const generatorRun = vi.fn(async () => {
+      const resultNodeId = useCanvasStore.getState().addNode(
+        CANVAS_NODE_TYPES.exportImage,
+        { x: 100, y: 0 },
+        {
+          imageUrl: 'generated.png',
+          aspectRatio: '1:1',
+          isGenerating: false,
+          generationSourceNodeId: 'generator',
+          generationOutputCommitId: 'generator-commit',
+          generationOutputDescriptor: { outputId: 'output-1', order: 0 },
+        },
+      )
+      return completed([resultNodeId])
     })
-    registerCanvasNodeExecutor('image', { kind: 'standard-generation', run: targetRun })
-
-    await expect(runCanvasNode('image')).rejects.toThrow('上游失败')
-    expect(targetRun).not.toHaveBeenCalled()
-    expect(useCanvasExecutionStateStore.getState().activeNodes).toEqual({})
-  })
-
-  it('两个目标并发请求同一上游时共享正在运行的任务', async () => {
-    useCanvasStore.getState().setCanvasData([
-      node('text', CANVAS_NODE_TYPES.textProcessing),
-      node('image-a', CANVAS_NODE_TYPES.imageEdit),
-      node('image-b', CANVAS_NODE_TYPES.imageEdit),
-    ], [edge('text', 'image-a'), edge('text', 'image-b')])
-    let release: (() => void) | undefined
-    const gate = new Promise<void>((resolve) => { release = resolve })
-    const upstreamRun = vi.fn(async () => { await gate })
-    registerCanvasNodeExecutor('text', { kind: 'text-processing', run: upstreamRun })
-    registerCanvasNodeExecutor('image-a', { kind: 'standard-generation', run: async () => undefined })
-    registerCanvasNodeExecutor('image-b', { kind: 'standard-generation', run: async () => undefined })
-
-    const first = runCanvasNode('image-a')
-    const second = runCanvasNode('image-b')
-    await vi.waitFor(() => expect(upstreamRun).toHaveBeenCalledTimes(1))
-    release?.()
-    await Promise.all([first, second])
-
-    expect(upstreamRun).toHaveBeenCalledTimes(1)
-  })
-
-  it('按依赖顺序切换当前执行节点，并在完成后清理瞬态状态', async () => {
-    useCanvasStore.getState().setCanvasData([
-      node('text', CANVAS_NODE_TYPES.textProcessing),
-      node('image', CANVAS_NODE_TYPES.imageEdit),
-    ], [edge('text', 'image')])
-    let releaseText: (() => void) | undefined
-    let releaseImage: (() => void) | undefined
-    const textGate = new Promise<void>((resolve) => { releaseText = resolve })
-    const imageGate = new Promise<void>((resolve) => { releaseImage = resolve })
-    registerCanvasNodeExecutor('text', {
-      kind: 'text-processing',
-      run: async () => { await textGate },
-    })
-    registerCanvasNodeExecutor('image', {
+    registerCanvasNodeExecutor('generator', {
       kind: 'standard-generation',
-      run: async () => { await imageGate },
+      dependency: { mode: 'auto', outputMode: 'result-nodes' },
+      run: generatorRun,
+    })
+    let receivedUrls: string[] = []
+    registerRoot('target', async () => {
+      const canvas = useCanvasStore.getState()
+      receivedUrls = collectInputMedia('target', canvas.nodes, canvas.edges).map((item) => item.url)
+      return completed()
     })
 
-    const run = runCanvasNode('image')
-    await vi.waitFor(() => expect(useCanvasExecutionStateStore.getState().activeNodes).toMatchObject({
-      text: { phase: 'processing' },
-    }))
-    expect(useCanvasExecutionStateStore.getState().activeNodes.image).toBeUndefined()
+    await runCanvasNode('target')
 
-    releaseText?.()
-    await vi.waitFor(() => expect(useCanvasExecutionStateStore.getState().activeNodes).toMatchObject({
-      image: { phase: 'generating' },
-    }))
-    expect(useCanvasExecutionStateStore.getState().activeNodes.text).toBeUndefined()
+    expect(receivedUrls).toEqual(['generated.png'])
+    expect(useCanvasStore.getState().nodes.find((item) => item.id === 'generator')?.data.latestExecution)
+      .toMatchObject({ outputMode: 'result-nodes' })
 
-    releaseImage?.()
-    await run
-    expect(useCanvasExecutionStateStore.getState().activeNodes).toEqual({})
+    await runCanvasNode('target')
+    expect(generatorRun).toHaveBeenCalledTimes(1)
+    const current = useCanvasStore.getState()
+    current.setCanvasData(
+      current.nodes.filter((item) => item.type !== CANVAS_NODE_TYPES.exportImage),
+      current.edges,
+      current.history,
+    )
+    await runCanvasNode('target')
+    expect(generatorRun).toHaveBeenCalledTimes(2)
   })
 
-  it('拒绝循环依赖，并识别只有展示节点时没有实际消费方', async () => {
-    const nodes = [
-      node('text', CANVAS_NODE_TYPES.textProcessing),
-      node('display', CANVAS_NODE_TYPES.textAnnotation),
-      node('image', CANVAS_NODE_TYPES.imageEdit),
-    ]
-    const displayOnlyEdges = [edge('text', 'display')]
-    expect(hasReachableNonDisplayConsumer('text', nodes, displayOnlyEdges)).toBe(false)
-
-    useCanvasStore.getState().setCanvasData(nodes, [
-      ...displayOnlyEdges,
-      edge('display', 'image'),
-      edge('image', 'text'),
-    ])
-    registerCanvasNodeExecutor('image', { kind: 'standard-generation', run: async () => undefined })
-    await expect(runCanvasNode('image')).rejects.toThrow('循环依赖')
-    expect(useCanvasExecutionStateStore.getState().activeNodes).toEqual({})
-  })
-
-  it('把执行器声明的复用结果计入复用节点', async () => {
+  it('依赖输入未变且结果有效时复用；输入变化后重新运行', async () => {
     useCanvasStore.getState().setCanvasData([
-      node('text', CANVAS_NODE_TYPES.textProcessing, {
-        fixedResult: true,
-      } satisfies Partial<TextProcessingNodeData>),
+      node('text', CANVAS_NODE_TYPES.textProcessing, { prompt: 'A' }),
       node('image', CANVAS_NODE_TYPES.imageEdit),
     ], [edge('text', 'image')])
-    registerCanvasNodeExecutor('text', {
-      kind: 'text-processing',
-      run: async () => ({ status: 'reused' }),
-    })
-    registerCanvasNodeExecutor('image', { kind: 'standard-generation', run: async () => undefined })
+    const upstreamRun = vi.fn(async () => completed())
+    registerText('text', upstreamRun)
+    registerRoot('image')
 
+    await runCanvasNode('image')
     await expect(runCanvasNode('image')).resolves.toMatchObject({ reusedNodeIds: ['text'] })
+    useCanvasStore.getState().updateNodeData('text', { prompt: 'B' })
+    await runCanvasNode('image')
+
+    expect(upstreamRun).toHaveBeenCalledTimes(2)
   })
+
+  it('兼容 fixedResult=false：依赖每次都重新运行', async () => {
+    useCanvasStore.getState().setCanvasData([
+      node('text', CANVAS_NODE_TYPES.textProcessing, { prompt: 'A', fixedResult: false }),
+      node('image', CANVAS_NODE_TYPES.imageEdit),
+    ], [edge('text', 'image')])
+    const upstreamRun = vi.fn(async () => completed())
+    registerText('text', upstreamRun)
+    registerRoot('image')
+
+    await runCanvasNode('image')
+    await runCanvasNode('image')
+
+    expect(upstreamRun).toHaveBeenCalledTimes(2)
+  })
+
+  it('独立依赖分支并行运行，目标严格等待全部完成', async () => {
+    useCanvasStore.getState().setCanvasData([
+      node('left', CANVAS_NODE_TYPES.textProcessing),
+      node('right', CANVAS_NODE_TYPES.textProcessing),
+      node('image', CANVAS_NODE_TYPES.imageEdit),
+    ], [edge('left', 'image'), edge('right', 'image')])
+    let releaseLeft: (() => void) | undefined
+    let releaseRight: (() => void) | undefined
+    const leftGate = new Promise<void>((resolve) => { releaseLeft = resolve })
+    const rightGate = new Promise<void>((resolve) => { releaseRight = resolve })
+    const rootRun = vi.fn(async () => completed())
+    registerText('left', async () => { await leftGate; return completed() })
+    registerText('right', async () => { await rightGate; return completed() })
+    registerRoot('image', rootRun)
+
+    const running = runCanvasNode('image')
+    await vi.waitFor(() => expect(useCanvasExecutionStateStore.getState().activeNodes).toMatchObject({
+      left: { phase: 'processing' },
+      right: { phase: 'processing' },
+    }))
+    expect(rootRun).not.toHaveBeenCalled()
+    releaseLeft?.()
+    await Promise.resolve()
+    expect(rootRun).not.toHaveBeenCalled()
+    releaseRight?.()
+    await running
+    expect(rootRun).toHaveBeenCalledTimes(1)
+  })
+
+  it('已完成上游在等待并行分支时被修改，不让目标消费旧结果', async () => {
+    useCanvasStore.getState().setCanvasData([
+      node('fast', CANVAS_NODE_TYPES.textProcessing, { prompt: 'A' }),
+      node('slow', CANVAS_NODE_TYPES.textProcessing),
+      node('image', CANVAS_NODE_TYPES.imageEdit),
+    ], [edge('fast', 'image'), edge('slow', 'image')])
+    let releaseSlow: (() => void) | undefined
+    const slowGate = new Promise<void>((resolve) => { releaseSlow = resolve })
+    const rootRun = vi.fn(async () => completed())
+    registerText('fast', async () => completed())
+    registerText('slow', async () => { await slowGate; return completed() })
+    registerRoot('image', rootRun)
+
+    const running = runCanvasNode('image')
+    await vi.waitFor(() => expect(
+      useCanvasStore.getState().nodes.find((item) => item.id === 'fast')?.data.latestExecution,
+    ).toBeDefined())
+    useCanvasStore.getState().updateNodeData('fast', { prompt: 'B' })
+    releaseSlow?.()
+
+    await expect(running).rejects.toThrow('上游节点输入已变化')
+    expect(rootRun).not.toHaveBeenCalled()
+  })
+
+  it('生成分支最多并发两个，释放名额后再启动下一支', async () => {
+    useCanvasStore.getState().setCanvasData([
+      node('generator-a', CANVAS_NODE_TYPES.imageEdit),
+      node('generator-b', CANVAS_NODE_TYPES.imageEdit),
+      node('generator-c', CANVAS_NODE_TYPES.imageEdit),
+      node('target', CANVAS_NODE_TYPES.imageEdit),
+    ], [
+      edge('generator-a', 'target', 'param:__image'),
+      edge('generator-b', 'target', 'param:__image'),
+      edge('generator-c', 'target', 'param:__image'),
+    ])
+    const started: string[] = []
+    const releases = new Map<string, () => void>()
+    for (const nodeId of ['generator-a', 'generator-b', 'generator-c']) {
+      registerCanvasNodeExecutor(nodeId, {
+        kind: 'standard-generation',
+        dependency: { mode: 'auto', outputMode: 'inline' },
+        run: async () => {
+          started.push(nodeId)
+          await new Promise<void>((resolve) => releases.set(nodeId, resolve))
+          return completed()
+        },
+      })
+    }
+    registerRoot('target')
+
+    const running = runCanvasNode('target')
+    await vi.waitFor(() => expect(started).toHaveLength(2))
+    expect(started).toEqual(['generator-a', 'generator-b'])
+    releases.get('generator-a')?.()
+    await vi.waitFor(() => expect(started).toHaveLength(3))
+    releases.get('generator-b')?.()
+    releases.get('generator-c')?.()
+    await running
+  })
+
 })

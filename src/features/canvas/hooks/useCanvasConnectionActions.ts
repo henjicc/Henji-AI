@@ -9,8 +9,12 @@ import {
 } from '@/features/canvas/application/assetGroupApplicationService';
 import { validateParamConnection } from '@/features/canvas/application/graphValueResolver';
 import { planMediaConnections, resolveMediaConnectionSource } from '@/features/canvas/application/mediaConnectionPlanner';
-import { wouldCreateCanvasCycle } from '@/features/canvas/domain/connectionIndex';
 import {
+  getAuthoritativeIncomingEdge,
+  wouldCreateCanvasCycle,
+} from '@/features/canvas/domain/connectionIndex';
+import {
+  CANVAS_NODE_TYPES,
   isAssetGroupNode,
   type CanvasConnectionInput,
   type CanvasEdge,
@@ -61,6 +65,13 @@ export function useCanvasConnectionActions(input: UseCanvasConnectionActionsInpu
     if (!sourceNode || !targetNode) return;
     if (isAssetGroupNode(sourceNode)) {
       bindGroup(sourceNode.id, targetNode.id);
+      return;
+    }
+    if (
+      targetNode.type === CANVAS_NODE_TYPES.textAnnotation
+      && getAuthoritativeIncomingEdge(edges, targetNode.id)
+    ) {
+      showToast(t('canvas.connection.singleInputOccupied'));
       return;
     }
 

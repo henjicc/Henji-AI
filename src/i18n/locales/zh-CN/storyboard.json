@@ -43,6 +43,7 @@
       "mediaLimitExceeded": "{{media}}最多只能连接 {{max}} 个",
       "mediaFallback": "媒体",
       "cycle": "这条连接会形成循环依赖",
+      "singleInputOccupied": "文本展示节点只能连接一个上游输入",
       "batchSummary": "已连接 {{connected}} 个素材，跳过 {{skipped}} 个",
       "skipReason": {
         "source-not-media": "非媒体",

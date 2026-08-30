@@ -43,6 +43,7 @@
       "mediaLimitExceeded": "{{media}} accepts up to {{max}} connection(s).",
       "mediaFallback": "Media",
       "cycle": "This connection would create a dependency cycle.",
+      "singleInputOccupied": "A text display node can only have one upstream input.",
       "batchSummary": "Connected {{connected}} item(s); skipped {{skipped}}",
       "skipReason": {
         "source-not-media": "not media",

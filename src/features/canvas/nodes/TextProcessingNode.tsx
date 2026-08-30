@@ -249,11 +249,8 @@ export const TextProcessingNode = memo(({
 
   useTextProcessingExecution({
     nodeId: id,
-    promptDocument: promptState.document,
-    promptReferences: promptState.references,
-    systemPromptDocument: effectiveSystemPromptDocument,
-    media: promptState.mediaUrls,
-    selectedChoice,
+    choices,
+    promptTemplates,
     setPromptInvalid,
     t,
   })

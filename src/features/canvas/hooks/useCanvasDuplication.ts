@@ -19,6 +19,7 @@ import {
   type DuplicateResult,
 } from '@/features/canvas/canvasUtils'
 import { reconcileAssetGroupGraph } from '@/features/canvas/application/assetGroupGraph'
+import { resetDuplicatedCanvasExecutionData } from '@/features/canvas/application/canvasDuplicationExecutionState'
 
 interface UseCanvasDuplicationParams {
   nodes: CanvasNode[]
@@ -115,12 +116,7 @@ export function useCanvasDuplication(params: UseCanvasDuplicationParams) {
       const sizeMap = new Map<string, { width: number; height: number }>()
       for (const sourceNode of sourceNodes) {
         const data = cloneNodeData(sourceNode.data)
-        if ('isGenerating' in (data as DynamicValueMap)) {
-          (data as { isGenerating?: boolean }).isGenerating = false
-        }
-        if ('generationStartedAt' in (data as DynamicValueMap)) {
-          (data as { generationStartedAt?: number | null }).generationStartedAt = null
-        }
+        resetDuplicatedCanvasExecutionData(sourceNode.type, data as DynamicValueMap)
 
         const nextNodeId = addNode(
           sourceNode.type as CanvasNodeType,

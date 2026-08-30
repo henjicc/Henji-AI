@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { memo, useCallback, useEffect, useMemo, useState } from 'react';
 import { Handle, Position } from '@xyflow/react';
 import { Sparkles } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
@@ -6,8 +6,6 @@ import { useStoreWithEqualityFn } from 'zustand/traditional';
 
 import {
   CANVAS_NODE_TYPES,
-  EXPORT_RESULT_NODE_DEFAULT_WIDTH,
-  EXPORT_RESULT_NODE_LAYOUT_HEIGHT,
   type CanvasNodeData,
   type CanvasNodeType,
 } from '@/features/canvas/domain/canvasNodes';
@@ -27,6 +25,7 @@ import {
   NODE_IDLE_BORDER_CLASS,
   NODE_PORT_NODE_CLASS,
   NODE_PORT_VISIBLE_CLASS,
+  NODE_ROW_GAP_CLASS,
   NODE_SELECTED_BORDER_CLASS,
 } from '@/features/canvas/ui/nodeControlStyles';
 import {
@@ -39,42 +38,20 @@ import {
   collectInputValues,
   getConnectedParamIds,
 } from '@/features/canvas/application/graphValueResolver';
-import {
-  runCanvasGeneration,
-  type CanvasGenerationOutput,
-} from '@/features/canvas/generation/runGeneration';
-import {
-  commitCanvasGenerationOutputs,
-  resolveGenerationOutputStrategy,
-} from '@/features/canvas/application/generationOutputApplicationService';
-import { isCanvasProjectContextCurrent } from '@/features/canvas/application/canvasApplicationService';
-import { createDefaultGenerationOutputItems } from '@/features/canvas/domain/generationOutputs';
-import { createPlainTextPromptDocument, toModelPromptText } from '@/core/inputs/promptDocument';
 import { transferModelParamOverridesBetweenModels } from '@/core/params/modelParamTransfer';
 import { NodeInputRows } from '@/features/canvas/params/NodeInputRows';
 import { useNodeModelParams } from '@/features/canvas/params/useNodeModelParams';
 import { registry } from '@/core/ModelRegistry';
-import { GenerationService } from '@/core/services/GenerationService';
-import {
-  registerCanvasNodeExecutor,
-  runCanvasNode,
-  type CanvasNodeExecutionResult,
-} from '@/features/canvas/application/canvasExecutionService';
+import { runCanvasNode } from '@/features/canvas/application/canvasExecutionService';
 import PriceEstimate from '@/components/ui/PriceEstimate';
 import { GenerationPromptEditor } from './GenerationPromptEditor';
-import {
-  useGenerationPromptDocument,
-  type GenerationNodeShellData,
-} from './useGenerationPromptDocument';
+import { useGenerationPromptDocument } from './useGenerationPromptDocument';
 import {
   resolveGenerationNodeManualDimension,
   useGenerationNodeMinimumHeight,
 } from './useGenerationNodeMinimumHeight';
-import { useCanvasGenerationProgressStore } from '@/stores/canvasGenerationProgressStore';
 import { useCanvasStore } from '@/stores/canvasStore';
-import { useProjectStore } from '@/stores/projectStore';
-import { useSettingsStore } from '@/stores/settingsStore';
-import { DEFAULT_GENERATION_DURATION_MS, PROMPT_PARAM_IDS, ROW_MEDIA_KINDS, buildResultNodeTitle, ensureGenerationProviderConfigured, resolveGenerationPromptInput } from './generationNodeGuards';
+import { PROMPT_PARAM_IDS, ROW_MEDIA_KINDS } from './generationNodeGuards';
 import { useNodeVideoTrimRange } from './useNodeVideoTrimRange';
 import {
   getCanvasImageCapability,
@@ -82,83 +59,19 @@ import {
   resolveCanvasCapabilityModelCandidates,
   resolveCanvasCapabilityVisibleParamIds,
   resolveCanvasCapabilityPromptTemplateVersion,
-  resolveCanvasImageCapabilityExpectedOutputCount,
-  validateCanvasCapabilityResultPatch,
-  type CanvasImageCapabilityId,
 } from '@/features/canvas/capabilities';
+import { useGenerationNodeExecution } from './useGenerationNodeExecution';
+import { ToolWorkbenchSourcePreview } from './ToolWorkbenchNodeFrame';
+import type { GenerationNodeShellProps } from './generationNodeShellTypes';
 
 export type { GenerationNodeShellData } from './useGenerationPromptDocument';
-
-export interface GenerationNodeRuntimePreparationContext {
-  images: string[];
-  videos: string[];
-  audios: string[];
-  params: DynamicValueMap;
-  modelId: string;
-}
-
-export interface GenerationNodeResultCommitContext {
-  sourceNodeId: string;
-  placeholderNodeId: string;
-  resultNodeType: CanvasNodeType;
-  completionId: string;
-  modelId: string;
-  providerId: string;
-  params: DynamicValueMap;
-  inputs: {
-    images: string[];
-    videos: string[];
-    audios: string[];
-  };
-  result: CanvasGenerationOutput;
-}
-
-export interface GenerationNodeResultCommitResult {
-  resultNodeIds: string[];
-  idempotent?: boolean;
-}
-
-export interface GenerationNodeShellProps {
-  id: string;
-  nodeType: CanvasNodeType;
-  data: GenerationNodeShellData;
-  selected?: boolean;
-  width?: number;
-  height?: number;
-  icon?: ReactNode;
-  /** i18n 键：提示词占位/必填提示/无 API Key 提示/结果节点默认标题 */
-  promptPlaceholderKey: string;
-  promptRequiredKey: string;
-  apiKeyRequiredKey: string;
-  resultTitleKey: string;
-  /** 结果节点的附加初始数据（如 resultKind） */
-  resultNodeExtraData?: DynamicValueMap;
-  /** 图片产品能力编号；声明后共享壳会统一执行模型筛选、固定语义、模板和结果记录。 */
-  capabilityId?: CanvasImageCapabilityId;
-  /** 无提示词工具（如忠实超分）可隐藏编辑器，并跳过文本必填校验。 */
-  showPromptInput?: boolean;
-  requirePrompt?: boolean;
-  /** 供应商对可选提示词有更小上限时，同步约束编辑器与执行前校验。 */
-  promptMaxCharacters?: number;
-  /** 固定模型工具隐藏模型行，并忽略历史模型选择器连线覆盖。 */
-  showModelInput?: boolean;
-  /** 已由主媒体行或能力面板承载、不应重复呈现的 schema 参数。 */
-  excludeParamIds?: readonly string[];
-  /** 在供应商配置/上传/计费前执行的本地预检，可补充仅供运行时使用的隐藏参数。 */
-  prepareRuntimeParams?: (
-    context: GenerationNodeRuntimePreparationContext,
-  ) => Promise<DynamicValueMap> | DynamicValueMap;
-  /** 结构化结果可注入领域提交器；共享壳不按 capabilityId/modelId 判断输出协议。 */
-  commitGenerationResult?: (
-    context: GenerationNodeResultCommitContext,
-  ) => Promise<GenerationNodeResultCommitResult>;
-  /** 复用标准生成壳时追加的能力语义行；只放产品设置，不复制模型 schema 参数。 */
-  additionalInputRows?: ReactNode;
-  minWidth?: number;
-  minHeight?: number;
-  maxWidth?: number;
-  maxHeight?: number;
-}
+export type {
+  GenerationNodeRequestPreparation,
+  GenerationNodeResultCommitContext,
+  GenerationNodeResultCommitResult,
+  GenerationNodeRuntimePreparationContext,
+} from './generationNodeExecutionTypes';
+export type { GenerationNodeShellProps, GenerationNodeWorkbenchContext } from './generationNodeShellTypes';
 
 /**
  * 生成类节点通用壳：标题 + 提示词输入（@引用）+ 逐行输入区（媒体/参数/模型）+ 端口。
@@ -185,8 +98,12 @@ export const GenerationNodeShell = memo(({
   showModelInput = true,
   excludeParamIds,
   prepareRuntimeParams,
+  prepareGenerationRequest,
   commitGenerationResult,
   additionalInputRows,
+  layoutMode = 'stacked',
+  workbenchStage,
+  workbenchSummary,
   minWidth = 320,
   minHeight = 160,
   maxWidth = 1400,
@@ -198,11 +115,6 @@ export const GenerationNodeShell = memo(({
 
   const setSelectedNode = useCanvasStore((state) => state.setSelectedNode);
   const updateNodeData = useCanvasStore((state) => state.updateNodeData);
-  const setNodeGenerationProgress = useCanvasGenerationProgressStore((state) => state.setProgress);
-  const addNode = useCanvasStore((state) => state.addNode);
-  const findNodePosition = useCanvasStore((state) => state.findNodePosition);
-  const addEdge = useCanvasStore((state) => state.addEdge);
-  const providerKeyStatus = useSettingsStore((state) => state.providerKeyStatus);
   const hasSourceConnections = useCanvasStore(
     (state) => getMainPortConnectionFlags(state.edges).get(id)?.hasMainSource ?? false
   );
@@ -298,10 +210,6 @@ export const GenerationNodeShell = memo(({
   }, [capability, data.modelId, modelType]);
   const effectiveModelId = showModelInput ? (overrideModelId ?? selectedModelId) : selectedModelId;
   const effectiveModel = useMemo(() => registry.getModel(effectiveModelId), [effectiveModelId]);
-  const providerKeyConfigured = effectiveModel
-    ? providerKeyStatus[effectiveModel.meta.provider] === true
-    : false;
-
   const handleParamsChange = useCallback((nextParams: DynamicValueMap, options?: { historyGroup?: string }) => {
     updateNodeData(id, { params: nextParams }, options);
   }, [id, updateNodeData]);
@@ -352,17 +260,19 @@ export const GenerationNodeShell = memo(({
     () => resolveNodeDisplayName(nodeType, data as CanvasNodeData),
     [data, nodeType]
   );
+  const resolvedMinWidth = layoutMode === 'workbench' ? Math.max(640, minWidth) : minWidth;
+  const resolvedMinHeight = layoutMode === 'workbench' ? Math.max(300, minHeight) : minHeight;
   const {
     rootRef,
     inputRowsRef,
     minimumHeight: resolvedMinimumHeight,
-  } = useGenerationNodeMinimumHeight(minHeight);
+  } = useGenerationNodeMinimumHeight(resolvedMinHeight);
   // ReactFlow 的 width/height 同时包含内容测量值。只有用户拖拽过尺寸后才沿用，
   // 避免旧版参数组内联展开产生的测量高度在收起后继续把节点撑大。
   const isSizeManuallyAdjusted = data.isSizeManuallyAdjusted === true;
   const resolvedWidth = resolveGenerationNodeManualDimension(
     width,
-    minWidth,
+    resolvedMinWidth,
     isSizeManuallyAdjusted,
   );
   // 提示词正文长度不参与最低高度，否则长文本会反向锁死 NodeResizeControl。
@@ -401,283 +311,91 @@ export const GenerationNodeShell = memo(({
     }, { skipHistory: true });
   }, [activePromptTemplateVersion, capability, data.capabilityId, data.promptTemplateVersion, id, updateNodeData]);
 
-  const prepareCapabilityGeneration = useCallback((
-    currentParams: DynamicValueMap,
-    userPrompt: string,
-  ) => {
-    if (!capability) return null;
-    if (!effectiveModel) {
-      throw new Error(t('modelPicker.noCompatibleModels'));
-    }
-    const preparation = prepareCanvasCapabilityGeneration({
-      capability,
-      model: effectiveModel,
-      currentParams,
-      userPrompt,
-      referenceImageCount: effectiveImages.length,
-    });
-    if (!preparation.compatible) {
-      throw new Error(preparation.reasons.join('；') || t('modelPicker.noCompatibleModels'));
-    }
-    return preparation;
-  }, [capability, effectiveImages.length, effectiveModel, t]);
+  useGenerationNodeExecution({
+    nodeId: id,
+    modelType,
+    resultNodeType,
+    acceptedKinds,
+    acceptedMediaKinds,
+    capability,
+    showModelInput,
+    requirePrompt,
+    promptRequiredKey,
+    apiKeyRequiredKey,
+    resultTitleKey,
+    resultNodeExtraData,
+    prepareRuntimeParams,
+    prepareGenerationRequest,
+    commitGenerationResult,
+    setPromptInvalid,
+    t,
+  });
 
-  const prepareRuntimeValues = useCallback(async (
-    values: DynamicValueMap,
-  ): Promise<DynamicValueMap> => {
-    if (!prepareRuntimeParams) return values;
-    return {
-      ...values,
-      ...await prepareRuntimeParams({
+  const promptEditor = showPromptInput ? (
+    <GenerationPromptEditor
+      nodeId={id}
+      selected={Boolean(selected)}
+      value={effectivePromptDocument}
+      references={promptReferences}
+      readOnly={isPromptOverridden}
+      invalid={promptInvalid}
+      placeholder={promptInvalid ? t(promptRequiredKey) : t(promptPlaceholderKey)}
+      maxCharacters={promptMaxCharacters}
+      onChange={handlePromptChange}
+      onSubmit={() => void runCanvasNode(id).catch(() => undefined)}
+      onEditEnd={promptState.onEditEnd}
+      onSelectNode={setSelectedNode}
+    />
+  ) : null;
+
+  const inputRows = (
+    <div
+      ref={layoutMode === 'stacked' ? inputRowsRef : undefined}
+      className={`flex shrink-0 flex-col ${NODE_ROW_GAP_CLASS}`}
+    >
+      <NodeInputRows
+        nodeId={id}
+        modelId={effectiveModelId}
+        mediaType={modelType}
+        acceptedMediaKinds={acceptedMediaKinds}
+        schema={schema}
+        values={modelParamValues}
+        setParam={setParam}
+        setParams={setParams}
+        excludeParamIds={excludedSchemaParamIds}
+        mediaInputs={mediaInputs}
+        onMediaInputChange={handleMediaInputChange}
+        overrideModelId={overrideModelId}
+        storedParams={data.params}
+        onModelChange={handleModelChange}
+        onParamsChange={handleParamsChange}
+        incomingImages={effectiveImages}
+        modelPolicy={capability?.modelPolicy}
+        showModelInput={showModelInput}
+        maxMediaCounts={typeof capabilityReferenceImageMax === 'number'
+          ? { image: capabilityReferenceImageMax }
+          : undefined}
+        visibleParamIds={visibleCapabilityParamIds}
+        videoTrimRange={videoTrimRange}
+        onVideoTrimRangeChange={handleVideoTrimRangeChange}
+      />
+      {additionalInputRows}
+    </div>
+  );
+  const resolvedWorkbenchStage = typeof workbenchStage === 'function'
+    ? workbenchStage({
         images: effectiveImages,
         videos: effectiveVideos,
         audios: effectiveAudios,
-        params: values,
-        modelId: effectiveModelId,
-      }),
-    };
-  }, [effectiveAudios, effectiveImages, effectiveModelId, effectiveVideos, prepareRuntimeParams]);
-
-  const preflightGenerate = useCallback(async (): Promise<void> => {
-    const latestCanvas = useCanvasStore.getState();
-    const latestValues = collectInputValues(id, latestCanvas.nodes, latestCanvas.edges);
-    const runtimeValues = await prepareRuntimeValues({ ...modelParamValues, ...latestValues });
-    const promptInput = resolveGenerationPromptInput(
-      effectiveModel,
-      runtimeValues,
-      toModelPromptText(effectivePromptDocument, { references: promptReferences }),
-      isPromptOverridden ? latestValues[PROMPT_PARAM_ID] : undefined
-    );
-    if (requirePrompt && !promptInput.hasValidInput) {
-      setPromptInvalid(true);
-      throw new Error(t(promptRequiredKey));
-    }
-    setPromptInvalid(false);
-    prepareCapabilityGeneration(runtimeValues, promptInput.prompt);
-    ensureGenerationProviderConfigured(providerKeyConfigured, {
-      title: t('common:providerKeyRequired.title'),
-      message: t('common:providerKeyRequired.message'),
-      error: t(apiKeyRequiredKey),
-    });
-  }, [apiKeyRequiredKey, effectiveModel, effectivePromptDocument, id, isPromptOverridden, modelParamValues, prepareCapabilityGeneration, prepareRuntimeValues, promptReferences, promptRequiredKey, providerKeyConfigured, requirePrompt, t]);
-
-  const handleGenerate = useCallback(async (): Promise<CanvasNodeExecutionResult> => {
-    const generationProjectId = useProjectStore.getState().currentProjectId;
-    if (!generationProjectId) {
-      throw new Error('当前没有可执行生成的画布项目');
-    }
-    const isGenerationProjectCurrent = (): boolean => (
-      isCanvasProjectContextCurrent(generationProjectId)
-    );
-    let serverTaskId: string | null = null;
-    const latestCanvas = useCanvasStore.getState();
-    const latestValues = collectInputValues(id, latestCanvas.nodes, latestCanvas.edges);
-    const latestPromptOverride = latestValues[PROMPT_PARAM_ID];
-    const runtimePromptDocument = isPromptOverridden && typeof latestPromptOverride === 'string'
-      ? createPlainTextPromptDocument(latestPromptOverride)
-      : effectivePromptDocument;
-    const runtimeValues = await prepareRuntimeValues({ ...modelParamValues, ...latestValues });
-    const promptInput = resolveGenerationPromptInput(
-      effectiveModel,
-      runtimeValues,
-      toModelPromptText(runtimePromptDocument, { references: promptReferences }),
-      isPromptOverridden ? latestPromptOverride : undefined
-    );
-    if (requirePrompt && !promptInput.hasValidInput) {
-      setPromptInvalid(true);
-      throw new Error(t(promptRequiredKey));
-    }
-    setPromptInvalid(false);
-    const capabilityPreparation = prepareCapabilityGeneration(runtimeValues, promptInput.prompt);
-    const prompt = capabilityPreparation?.prompt ?? promptInput.prompt;
-
-    // 缺 API Key 是"还没开始生成"的前置失败，不建输出节点；
-    // 它有明确的补救动作，所以走带「去设置」的统一弹窗
-    ensureGenerationProviderConfigured(providerKeyConfigured, {
-      title: t('common:providerKeyRequired.title'),
-      message: t('common:providerKeyRequired.message'),
-      error: t(apiKeyRequiredKey),
-    });
-
-    // 连线注入的标量值优先覆盖内联值（数值/源节点 → 参数端口）
-    const { nodes: graphNodes, edges: graphEdges } = useCanvasStore.getState();
-    const injectedParamValues = collectInputValues(id, graphNodes, graphEdges);
-    const generationParams: DynamicValueMap = {
-      ...(capabilityPreparation?.params ?? {
-        ...modelParamValues,
-        ...injectedParamValues,
-      }),
-      prompt,
-      text: prompt,
-      // 裁剪窗口选中的 [start, end]（若用户裁剪过）；GenerationService 在生成提交时
-      // 用它对完整视频做一次快速裁剪，不在这里提前处理
-      ...(typeof data.videoTrimStart === 'number' ? { uploadedVideoTrimStart: data.videoTrimStart } : {}),
-      ...(typeof data.videoTrimEnd === 'number' ? { uploadedVideoTrimEnd: data.videoTrimEnd } : {}),
-    };
-    const estimateParams: DynamicValueMap = {
-      ...generationParams,
-      ...(effectiveImages.length > 0
-        ? { images: effectiveImages, uploadedFilePaths: effectiveImages }
-        : {}),
-      ...(effectiveVideos.length > 0
-        ? { videos: effectiveVideos, uploadedVideoFilePaths: effectiveVideos }
-        : {}),
-    };
-    const estimate = await GenerationService.getInstance().getProgressEstimate(
-      effectiveModelId,
-      estimateParams
-    );
-    const generationDurationMs = estimate?.durationMs ?? DEFAULT_GENERATION_DURATION_MS;
-    const generationStartedAt = Date.now();
-    const resultNodeTitle = buildResultNodeTitle(promptInput.prompt, t(resultTitleKey));
-
-    const newNodePosition = findNodePosition(
-      id,
-      EXPORT_RESULT_NODE_DEFAULT_WIDTH,
-      EXPORT_RESULT_NODE_LAYOUT_HEIGHT
-    );
-    const newNodeId = addNode(
-      resultNodeType,
-      newNodePosition,
-      {
-        isGenerating: true,
-        generationStartedAt,
-        generationDurationMs,
-        displayName: resultNodeTitle,
-        generationSourceNodeId: id,
-        generationProviderId: effectiveModel?.meta.provider ?? null,
-        generationInputImages: [...effectiveImages],
-        generationInputVideos: [...effectiveVideos],
-        generationInputAudios: [...effectiveAudios],
-        ...(resultNodeExtraData ?? {}),
-        ...(capabilityPreparation?.resultNodeData ?? {}),
-      }
-    );
-    addEdge(id, newNodeId);
-
-    try {
-      const result = await runCanvasGeneration({
-        modelId: effectiveModelId,
-        mediaType: modelType,
-        params: generationParams,
-        upstream: {
-          images: effectiveImages,
-          videos: effectiveVideos,
-          audios: effectiveAudios,
-        },
-        onProgress: (progress) => {
-          if (isGenerationProjectCurrent()) setNodeGenerationProgress(newNodeId, progress);
-        },
-        // 任务一创建就落到节点上：这是应用中途退出后唯一能把这次生成找回来的凭据
-        onTaskId: (taskId) => {
-          serverTaskId = taskId;
-          if (!isGenerationProjectCurrent()) {
-            void GenerationService.getInstance().cancelTask(taskId).catch(() => undefined);
-            return;
-          }
-          updateNodeData(newNodeId, {
-            serverTaskId: taskId,
-            serverTaskModelId: effectiveModelId,
-          });
-        },
-      });
-      if (!isGenerationProjectCurrent()) {
-        if (serverTaskId) {
-          await GenerationService.getInstance().cancelTask(serverTaskId).catch(() => undefined);
-        }
-        return { status: 'completed', resultNodeIds: [newNodeId] };
-      }
-
-      const completionId = `generation-output:${newNodeId}`;
-      if (commitGenerationResult) {
-        const committed = await commitGenerationResult({
-          sourceNodeId: id,
-          placeholderNodeId: newNodeId,
-          resultNodeType,
-          completionId,
-          modelId: effectiveModelId,
-          providerId: effectiveModel?.meta.provider ?? '',
-          params: generationParams,
-          inputs: {
-            images: effectiveImages,
-            videos: effectiveVideos,
-            audios: effectiveAudios,
-          },
-          result,
-        });
-        return {
-          status: committed.idempotent ? 'reused' : 'completed',
-          resultNodeIds: committed.resultNodeIds,
-        };
-      }
-
-      const outputResultKind = capability?.outputPolicy.resultKind;
-      const memberResultKind = outputResultKind === 'panorama' ? 'panorama' : modelType;
-      const strategy = resolveGenerationOutputStrategy({
-        outputCount: result.outputs.length,
-        resultKind: outputResultKind,
-      });
-      const batchResultKind = strategy === 'assetGroup'
-        ? modelType === 'image' ? 'image-group' : 'media-group'
-        : memberResultKind;
-      const committed = await commitCanvasGenerationOutputs({
-        sourceNodeId: id,
-        placeholderNodeId: newNodeId,
-        resultNodeType,
-        contract: {
-          version: 1,
-          strategy,
-          resultKind: outputResultKind ?? batchResultKind,
-          expectedOutputCount: capability
-            ? resolveCanvasImageCapabilityExpectedOutputCount(capability.outputPolicy, generationParams)
-            : undefined,
-          outputs: createDefaultGenerationOutputItems({
-            sources: result.outputs,
-            mediaType: modelType,
-            resultKind: memberResultKind,
-            semanticKind: outputResultKind === 'panorama' ? 'panorama' : 'generated-media',
-          }),
-        },
-        completionId,
-        validateResultPatch: capability
-          ? (patch) => validateCanvasCapabilityResultPatch(
-              capability,
-              patch,
-              capabilityPreparation?.resultNodeData.panoramaProjectionMode,
-            )
-          : undefined,
-      });
-      return { status: 'completed', resultNodeIds: committed.resultNodeIds };
-    } catch (generationError) {
-      // 失败信息写回输出节点：失败的是那次生成，红边和原因就应该长在它自己身上，
-      // 而不是回头挂在发起节点的底部（那里既看不出对应哪次生成，也会把节点撑变形）
-      if (isGenerationProjectCurrent()) {
-        updateNodeData(newNodeId, {
-          isGenerating: false,
-          generationStartedAt: null,
-          generationError:
-            generationError instanceof Error ? generationError.message : t('ai.error'),
-          serverTaskId: null,
-          serverTaskModelId: null,
-        });
-      }
-    } finally {
-      if (isGenerationProjectCurrent()) setNodeGenerationProgress(newNodeId, null);
-    }
-    return { status: 'completed', resultNodeIds: [newNodeId] };
-  }, [addEdge, addNode, apiKeyRequiredKey, capability, commitGenerationResult, data.videoTrimEnd, data.videoTrimStart, effectiveAudios, effectiveImages, effectiveModel, effectiveModelId, effectivePromptDocument, effectiveVideos, findNodePosition, id, isPromptOverridden, modelParamValues, modelType, prepareCapabilityGeneration, prepareRuntimeValues, promptReferences, promptRequiredKey, providerKeyConfigured, requirePrompt, resultNodeExtraData, resultNodeType, resultTitleKey, setNodeGenerationProgress, t, updateNodeData]);
-
-  useEffect(() => registerCanvasNodeExecutor(id, {
-    kind: 'standard-generation',
-    preflight: preflightGenerate,
-    run: handleGenerate,
-  }), [handleGenerate, id, preflightGenerate]);
+      })
+    : workbenchStage;
 
   return (
     <div
       ref={rootRef}
       data-generation-node-id={id}
       data-generation-node-model-id={effectiveModelId}
+      data-generation-node-layout={layoutMode}
       className={`
         canvas-node-dynamic-min-height group relative flex flex-col overflow-visible rounded-[var(--node-radius)] border bg-surface-dark/90 p-2 transition-colors duration-150
         ${selected
@@ -685,8 +403,10 @@ export const GenerationNodeShell = memo(({
           : NODE_IDLE_BORDER_CLASS}
       `}
       style={{
-        width: resolvedWidth !== null ? `${resolvedWidth}px` : 'max-content',
-        minWidth: `${minWidth}px`,
+        width: resolvedWidth !== null
+          ? `${resolvedWidth}px`
+          : layoutMode === 'workbench' ? `${resolvedMinWidth}px` : 'max-content',
+        minWidth: `${resolvedMinWidth}px`,
         maxWidth: `${maxWidth}px`,
         height: `${resolvedHeight}px`,
         minHeight: `${resolvedMinimumHeight}px`,
@@ -711,57 +431,30 @@ export const GenerationNodeShell = memo(({
 
       <NodeLodPlaceholder title={resolvedTitle} icon={icon ?? <Sparkles className="h-6 w-6" />} />
 
-      {/* 数值型下限由参数区实高计算；长提示词只占剩余空间并在内部滚动。 */}
-      <div className="canvas-node-lod-detail relative flex min-h-0 flex-1 flex-col gap-1.5">
-        {/* 提示词区是唯一的伸缩项：节点拉高多出来的空间全部由它吸收，下方各行保持原高与行距 */}
-        {showPromptInput && (
-          <GenerationPromptEditor
-            nodeId={id}
-            selected={Boolean(selected)}
-            value={effectivePromptDocument}
-            references={promptReferences}
-            readOnly={isPromptOverridden}
-            invalid={promptInvalid}
-            // 漏填时把“请输入提示词”直接顶到空框里当占位，比在节点底部加一行红字更省空间
-            placeholder={promptInvalid ? t(promptRequiredKey) : t(promptPlaceholderKey)}
-            maxCharacters={promptMaxCharacters}
-            onChange={handlePromptChange}
-            onSubmit={() => void runCanvasNode(id).catch(() => undefined)}
-            onEditEnd={promptState.onEditEnd}
-            onSelectNode={setSelectedNode}
-          />
-        )}
-
-        <div ref={inputRowsRef} className="shrink-0">
-          <NodeInputRows
-            nodeId={id}
-            modelId={effectiveModelId}
-            mediaType={modelType}
-            acceptedMediaKinds={acceptedMediaKinds}
-            schema={schema}
-            values={modelParamValues}
-            setParam={setParam}
-            setParams={setParams}
-            excludeParamIds={excludedSchemaParamIds}
-            mediaInputs={mediaInputs}
-            onMediaInputChange={handleMediaInputChange}
-            overrideModelId={overrideModelId}
-            storedParams={data.params}
-            onModelChange={handleModelChange}
-            onParamsChange={handleParamsChange}
-            incomingImages={effectiveImages}
-            modelPolicy={capability?.modelPolicy}
-            showModelInput={showModelInput}
-            maxMediaCounts={typeof capabilityReferenceImageMax === 'number'
-              ? { image: capabilityReferenceImageMax }
-              : undefined}
-            visibleParamIds={visibleCapabilityParamIds}
-            videoTrimRange={videoTrimRange}
-            onVideoTrimRangeChange={handleVideoTrimRangeChange}
-          />
-          {additionalInputRows}
+      {layoutMode === 'workbench' ? (
+        <div className="canvas-node-lod-detail grid min-h-0 min-w-0 flex-1 grid-cols-[minmax(0,1.35fr)_minmax(240px,0.65fr)] overflow-hidden rounded-lg bg-bg-dark/45">
+          <main className="nodrag nowheel flex min-h-0 min-w-0 overflow-hidden">
+            {resolvedWorkbenchStage ?? (
+              <ToolWorkbenchSourcePreview
+                source={effectiveImages[0] ?? null}
+                alt={resolvedTitle}
+                icon={icon ?? <Sparkles className="h-8 w-8" />}
+                emptyText={t('node.mediaRow.image')}
+                summary={workbenchSummary}
+              />
+            )}
+          </main>
+          <aside className="nodrag nowheel flex min-h-0 min-w-0 flex-col gap-1.5 overflow-y-auto border-l border-veil-subtle p-2">
+            {promptEditor}
+            {inputRows}
+          </aside>
         </div>
-      </div>
+      ) : (
+        <div className="canvas-node-lod-detail relative flex min-h-0 flex-1 flex-col gap-1.5">
+          {promptEditor}
+          {inputRows}
+        </div>
+      )}
       <Handle
         type="source"
         id="source"
@@ -770,7 +463,7 @@ export const GenerationNodeShell = memo(({
         style={{ background: getSocketColor(modelType.toUpperCase()), right: 0, top: '50%', transform: 'translate(50%, -50%)' }}
       />
       <NodeResizeHandle
-        minWidth={minWidth}
+        minWidth={resolvedMinWidth}
         minHeight={resolvedMinimumHeight}
         maxWidth={maxWidth}
         maxHeight={maxHeight}

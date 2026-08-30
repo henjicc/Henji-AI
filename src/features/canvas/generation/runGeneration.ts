@@ -21,6 +21,8 @@ export interface CanvasGenerationUpstream {
 
 export interface CanvasGenerationRequest {
   modelId: string;
+  /** 贯穿裁剪、模型调用与后处理的稳定链路 ID。 */
+  requestId?: string;
   mediaType?: CanvasMediaType;
   params: DynamicValueMap;
   /** @deprecated 请使用 upstream.images */
@@ -34,10 +36,13 @@ export interface CanvasGenerationRequest {
    * 调用方应把它持久化到结果节点，否则应用中途退出这次生成就再也找不回来了。
    */
   onTaskId?: (taskId: string) => void;
+  /** 本地媒体准备结束后、提交供应商任务前的最后语义门禁。 */
+  assertCurrent?: () => Promise<void> | void;
 }
 
 export interface CanvasResumeRequest {
   modelId: string;
+  requestId?: string;
   mediaType?: CanvasMediaType;
   taskId: string;
   onProgress?: (progress: number) => void;
@@ -48,6 +53,8 @@ export interface CanvasGenerationOutput {
   outputs: string[];
   /** 首个输出 */
   primary: string;
+  /** AI Runtime 本次新建的受管媒体；结果提交完成后必须释放。 */
+  createdFilePaths?: string[];
   structuredOutput?: StructuredGenerationOutput;
 }
 
@@ -169,8 +176,10 @@ export async function runCanvasGeneration(request: CanvasGenerationRequest): Pro
     params.uploadedAudioFilePaths = request.upstream?.audios;
   }
 
+  await request.assertCurrent?.();
   let result = await generationService.generate(modelId, params, handleProgress, {
     progressSource: 'canvas',
+    requestId: request.requestId,
   });
 
   if (result.status === 'pending') {
@@ -181,6 +190,7 @@ export async function runCanvasGeneration(request: CanvasGenerationRequest): Pro
     request.onTaskId?.(taskId);
     result = await generationService.continuePolling(modelId, taskId, params, handleProgress, {
       progressSource: 'canvas',
+      requestId: request.requestId,
     });
   }
 
@@ -201,7 +211,7 @@ export async function resumeCanvasGeneration(
     request.taskId,
     {},
     createThrottledProgressHandler(request.onProgress),
-    { progressSource: 'canvas' }
+    { progressSource: 'canvas', requestId: request.requestId }
   );
   return toGenerationOutput(result);
 }
@@ -215,6 +225,7 @@ function toGenerationOutput(result: GenerateResult): CanvasGenerationOutput {
   return {
     outputs,
     primary: outputs[0],
+    createdFilePaths: [...new Set(result.createdFilePaths ?? [])],
     structuredOutput: result.structuredOutput,
   };
 }

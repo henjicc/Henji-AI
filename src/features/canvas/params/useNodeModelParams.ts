@@ -44,6 +44,53 @@ export interface UseNodeModelParamsResult {
 const EMPTY_MEDIA: string[] = [];
 const MEDIA_KEYS = ['images', 'videos', 'audios'] as const;
 
+function mergeNodeModelParamValues(
+  model: ReturnType<typeof registry.getModel>,
+  defaults: DynamicValueMap,
+  storedParams: DynamicValueMap | undefined,
+  media: UseNodeModelParamsOptions['media'],
+): DynamicValueMap {
+  return {
+    ...defaults,
+    ...normalizeModelAliasParams(model, storedParams ?? {}),
+    images: media?.images ?? EMPTY_MEDIA,
+    videos: media?.videos ?? EMPTY_MEDIA,
+    audios: media?.audios ?? EMPTY_MEDIA,
+  };
+}
+
+export function resolveNodeModelParamValues(
+  modelId: string,
+  storedParams: DynamicValueMap | undefined,
+  media: UseNodeModelParamsOptions['media'],
+): DynamicValueMap {
+  const model = registry.getModel(modelId);
+  const schema = registry.getSchema(modelId);
+  const defaults = applyModelAliasParamDefaults(
+    modelId,
+    model,
+    schema,
+    extractDefaults(schema),
+  );
+  return mergeNodeModelParamValues(model, defaults, storedParams, media);
+}
+
+/** 执行前按最新媒体重新跑联动，避免依赖刚完成而 React effect 尚未来得及回写参数。 */
+export function resolveNodeModelExecutionParamValues(
+  modelId: string,
+  storedParams: DynamicValueMap | undefined,
+  media: UseNodeModelParamsOptions['media'],
+): DynamicValueMap {
+  const model = registry.getModel(modelId);
+  const schema = registry.getSchema(modelId);
+  let values = resolveNodeModelParamValues(modelId, storedParams, media);
+  if (model?.linkages?.length) {
+    const linkageEngine = new LinkageEngine(model.linkages);
+    for (const key of MEDIA_KEYS) values = linkageEngine.execute(key, values, schema);
+  }
+  return reconcileDerivedMediaState(schema, values);
+}
+
 function stripMediaKeys(source: DynamicValueMap): DynamicValueMap {
   const next = { ...source };
   for (const key of MEDIA_KEYS) {
@@ -86,9 +133,7 @@ export function useNodeModelParams({
   const mediaAudios = media?.audios ?? EMPTY_MEDIA;
 
   const values = useMemo(
-    () => ({
-      ...defaults,
-      ...normalizeModelAliasParams(model, storedParams ?? {}),
+    () => mergeNodeModelParamValues(model, defaults, storedParams, {
       images: mediaImages,
       videos: mediaVideos,
       audios: mediaAudios,

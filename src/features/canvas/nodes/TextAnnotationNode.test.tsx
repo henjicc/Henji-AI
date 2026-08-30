@@ -151,6 +151,32 @@ describe('TextAnnotationNode', () => {
     ))
   })
 
+  it('旧图存在多条入边时只读取最后一条权威输入', async () => {
+    storeMocks.nodes = [{
+      id: 'string-source-a',
+      type: 'stringSourceNode',
+      position: { x: 0, y: 0 },
+      data: { value: '旧输入' },
+    }, {
+      id: 'string-source-b',
+      type: 'stringSourceNode',
+      position: { x: 0, y: 0 },
+      data: { value: '权威输入' },
+    }]
+    storeMocks.edges = [
+      { id: 'edge-a', source: 'string-source-a', target: 'text-result-1' },
+      { id: 'edge-b', source: 'string-source-b', target: 'text-result-1' },
+    ]
+
+    render(<TextAnnotationNode {...createProps({ content: '旧内容' })} />)
+
+    await waitFor(() => expect(storeMocks.updateNodeData).toHaveBeenCalledWith(
+      'text-result-1',
+      { content: '权威输入', syncedInputRevision: 'string-source-b:权威输入' },
+      { skipHistory: true },
+    ))
+  })
+
   it('上游修订未变化时保留用户手动编辑的展示内容', () => {
     storeMocks.nodes = [{
       id: 'text-source',

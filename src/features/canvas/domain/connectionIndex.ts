@@ -79,6 +79,25 @@ export function getIncomingEdges(edges: CanvasEdge[], nodeId: string): CanvasEdg
   return getEdgesByTarget(edges).get(nodeId) ?? EMPTY_EDGES;
 }
 
+/**
+ * 单值展示节点的兼容读规则：旧项目可能残留多条入边，始终以边数组中的最后一条为准。
+ * 新连接入口会阻止继续制造多入边；规划、展示和写回必须共用这里。
+ */
+export function getAuthoritativeIncomingEdge(
+  edges: CanvasEdge[],
+  nodeId: string,
+): CanvasEdge | undefined {
+  return getIncomingEdges(edges, nodeId).at(-1);
+}
+
+export function isAuthoritativeIncomingSource(
+  edges: CanvasEdge[],
+  targetNodeId: string,
+  sourceNodeId: string,
+): boolean {
+  return getAuthoritativeIncomingEdge(edges, targetNodeId)?.source === sourceNodeId;
+}
+
 let edgesBySourceCacheKey: CanvasEdge[] | null = null;
 let edgesBySourceCacheValue: Map<string, CanvasEdge[]> | null = null;
 
