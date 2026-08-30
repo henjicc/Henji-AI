@@ -118,7 +118,7 @@ describe('VGPU 辉光操作契约', () => {
     expect(weightedMeanFraction(dreamy)).toBeGreaterThan(weightedMeanFraction(natural));
     expect(neon.sourceGain).toBeGreaterThan(dreamy.sourceGain);
     for (const recipe of [natural, dreamy, neon]) {
-      expect(recipe.schemaVersion).toBe(12);
+      expect(recipe.schemaVersion).toBe(13);
       expect(recipe.scatterLevels.length).toBeGreaterThanOrEqual(4);
       expect(recipe.scatterLevels.length).toBeLessThanOrEqual(12);
       expect(recipe.scatterLevels[0].divisor).toBe(2);
@@ -420,11 +420,12 @@ describe('VGPU 辉光操作契约', () => {
   it('默认关闭着色和 RGB 分离，并拒绝开发期旧参数', () => {
     const defaults = createDefaultVgpuGlowOperationParams();
     expect(defaults).toMatchObject({
-      schemaVersion: 3,
+      schemaVersion: 4,
       tintEnabled: false,
       chromaticAberration: 0,
+      chromaticChannels: ['red', 'blue'],
     });
-    expect(() => parseVgpuGlowOperationParams({ ...defaults, schemaVersion: 2 }))
+    expect(() => parseVgpuGlowOperationParams({ ...defaults, schemaVersion: 3 }))
       .toThrow(InvalidImageEditOperationParamsError);
   });
 
@@ -473,22 +474,18 @@ describe('VGPU 辉光操作契约', () => {
     expect(upsampleShaderSource).toContain('let highUv = position.xy / highDimensions');
     expect(upsampleShaderSource).toContain('let lowUv = position.xy / (2.0 * lowDimensions)');
     expect(upsampleShaderSource).toContain('let low = tentUpsample(lowUv)');
-    expect(upsampleShaderSource).toContain(
-      'return high * accumulate.highWeight + low * accumulate.lowWeight'
-    );
+    expect(upsampleShaderSource).toContain('return AccumulationOutput(');
     expect(compositeShaderSource).not.toContain('softCore');
     expect(compositeShaderSource).not.toContain('toneBloom');
     expect(compositeShaderSource).not.toContain('applyWhiteHeat');
     expect(compositeShaderSource).toContain('let sceneUv = position.xy / dimensions');
     expect(compositeShaderSource).toContain('mappedSourceUv * sourceSize / (2.0 * bloomSize)');
     expect(compositeShaderSource).toContain('all(mappedSourceUv >= vec2f(0.0))');
-    expect(compositeShaderSource).toContain('fn sampleDiffuseBloom(uv: vec2f, blurPx: f32)');
+    expect(compositeShaderSource).toContain('fn sampleCarrier(uv: vec2f) -> vec2f');
+    expect(compositeShaderSource).toContain('let spectral = (');
+    expect(compositeShaderSource).not.toContain('separated');
     expect(compositeShaderSource).toContain(
-      'centered + (separated - softCentered) * composite.optics.w'
-    );
-    expect(compositeShaderSource).not.toContain('diffuse = mix(centered, separated');
-    expect(compositeShaderSource).toContain(
-      'let opticalEnergy = mix(diffuse, vec3f(diffusePeak), whiteBlend)'
+      'let whiteCorrection = (vec3f(centeredPeak) - centered) * whiteBlend'
     );
     expect(compositeShaderSource).not.toContain('+ vec3f(max(centeredBloom.a');
     expect(compositeShaderSource).toContain('let emittedDirection = emitted / max(emittedPeak');

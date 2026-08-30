@@ -12,8 +12,14 @@ export {
   applyVgpuGlowLook,
   createDefaultVgpuGlowOperationParams,
   hasVgpuGlowEffect,
+  replaceVgpuGlowChromaticChannel,
 } from './vgpuGlowParams';
-export type { VgpuGlowLook, VgpuGlowOperationParams } from './vgpuGlowParams';
+export type {
+  VgpuGlowChromaticChannel,
+  VgpuGlowChromaticChannels,
+  VgpuGlowLook,
+  VgpuGlowOperationParams,
+} from './vgpuGlowParams';
 export * from './vgpuGlowRecipe';
 export {
   DEFAULT_IMAGE_BLUR_ALGORITHM,

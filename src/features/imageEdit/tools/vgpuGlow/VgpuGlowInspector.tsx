@@ -4,6 +4,8 @@ import {
   applyVgpuGlowLook,
   createDefaultVgpuGlowOperationParams,
   IMAGE_EDIT_OPERATION_IDS,
+  replaceVgpuGlowChromaticChannel,
+  type VgpuGlowChromaticChannel,
   type VgpuGlowLook,
   type VgpuGlowOperationParams,
 } from '@/core/imageEdit';
@@ -26,6 +28,28 @@ const LOOK_OPTIONS: readonly { value: VgpuGlowLook; label: string; detail: strin
   { value: 'dreamy', label: '梦幻', detail: '柔软、远场光晕更明显' },
   { value: 'neon', label: '霓虹', detail: '明亮、彩色光源更有冲击力' },
 ];
+
+const CHROMATIC_CHANNEL_OPTIONS: readonly {
+  value: VgpuGlowChromaticChannel;
+  label: string;
+}[] = [
+  { value: 'red', label: '红' },
+  { value: 'green', label: '绿' },
+  { value: 'blue', label: '蓝' },
+];
+
+const CHROMATIC_SIDE_OPTIONS = [
+  {
+    index: 0,
+    label: '左侧色光',
+    info: '选择向左散开的颜色；若与右侧重复，会自动交换两侧。',
+  },
+  {
+    index: 1,
+    label: '右侧色光',
+    info: '选择向右散开的颜色；若与左侧重复，会自动交换两侧。',
+  },
+] as const;
 
 interface RangeFieldProps {
   label: string;
@@ -84,6 +108,21 @@ export function VgpuGlowInspector(): JSX.Element {
   const setTintEnabled = (tintEnabled: boolean): void => {
     controller.beginTransaction();
     update((current) => ({ ...current, tintEnabled }));
+    controller.commitTransaction();
+  };
+  const setChromaticChannel = (
+    index: 0 | 1,
+    channel: VgpuGlowChromaticChannel
+  ): void => {
+    controller.beginTransaction();
+    update((current) => ({
+      ...current,
+      chromaticChannels: replaceVgpuGlowChromaticChannel(
+        current.chromaticChannels,
+        index,
+        channel
+      ),
+    }));
     controller.commitTransaction();
   };
   const rangeHandlers = {
@@ -172,10 +211,33 @@ export function VgpuGlowInspector(): JSX.Element {
           <GlowRangeField
             label="色差"
             value={params.chromaticAberration}
-            info="将辉光的红、绿、蓝通道水平错开，形成利落的故障艺术重影。"
+            info="从中远场光晕中柔和分离两种色光；主体与白热核心保持在原位。"
             onChange={setUnit('chromaticAberration')}
             {...rangeHandlers}
           />
+          {CHROMATIC_SIDE_OPTIONS.map((side) => (
+            <UiFormRow
+              key={side.label}
+              label={side.label}
+              info={side.info}
+            >
+              <div className="grid w-36 grid-cols-3 gap-1">
+                {CHROMATIC_CHANNEL_OPTIONS.map((option) => (
+                  <UiOptionButton
+                    key={option.value}
+                    type="button"
+                    variant="menu"
+                    active={params.chromaticChannels[side.index] === option.value}
+                    className="justify-center text-xs"
+                    aria-label={`${side.label}${option.label}`}
+                    onClick={() => setChromaticChannel(side.index, option.value)}
+                  >
+                    {option.label}
+                  </UiOptionButton>
+                ))}
+              </div>
+            </UiFormRow>
+          ))}
         </UiGroup>
 
         <UiGroup gap="row" title="光源" titleTone="overline" divided>

@@ -2364,7 +2364,27 @@ function createUiInspectionScenes({ canvasFixtureProjectId, settlePage }) {
           await surface.waitFor({ state: 'visible', timeout: 12000 })
           const dropTarget = surface.locator('.border-dashed').first()
           await dropTarget.waitFor({ state: 'visible', timeout: 8000 })
-          await dropTarget.evaluate(async (element) => {
+          const fixturePath = process.env.HENJI_VGPU_GLOW_FIXTURE_IMAGE
+          const externalFixture = fixturePath ? {
+            bytes: Array.from(await require('node:fs/promises').readFile(fixturePath)),
+            name: require('node:path').basename(fixturePath),
+            type: fixturePath.toLowerCase().endsWith('.png') ? 'image/png' : 'image/jpeg',
+          } : null
+          await dropTarget.evaluate(async (element, fixture) => {
+            if (fixture) {
+              const transfer = new DataTransfer()
+              transfer.items.add(new File(
+                [Uint8Array.from(fixture.bytes)],
+                fixture.name,
+                { type: fixture.type }
+              ))
+              element.dispatchEvent(new DragEvent('drop', {
+                bubbles: true,
+                cancelable: true,
+                dataTransfer: transfer,
+              }))
+              return
+            }
             const canvas = document.createElement('canvas')
             canvas.width = 1200
             canvas.height = 760
@@ -2411,7 +2431,7 @@ function createUiInspectionScenes({ canvasFixtureProjectId, settlePage }) {
               cancelable: true,
               dataTransfer: transfer,
             }))
-          })
+          }, externalFixture)
           await page.getByRole('button', { name: '辉光 Pro' }).waitFor({ state: 'visible', timeout: 12000 })
           await page.getByRole('button', { name: '辉光 Pro' }).click()
           await page.getByRole('heading', { name: '辉光 Pro' }).waitFor({ state: 'visible', timeout: 8000 })
@@ -2435,7 +2455,9 @@ function createUiInspectionScenes({ canvasFixtureProjectId, settlePage }) {
         const radius = page.getByRole('slider', { name: '发光半径' })
         await radius.fill('1')
         const chromaticAberration = page.getByRole('slider', { name: '色差' })
-        await chromaticAberration.fill('0')
+        await chromaticAberration.fill(process.env.HENJI_VGPU_GLOW_CHROMA ?? '0.78')
+        await page.getByRole('button', { name: '左侧色光绿' }).click()
+        await page.getByRole('button', { name: '右侧色光红' }).click()
         if (await page.getByText('辉光预览失败').count()) {
           throw new Error('重新打开图片编辑器后，辉光预览仍被旧会话 revision 取消')
         }

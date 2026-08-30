@@ -1,5 +1,5 @@
 struct Composite {
-  // intensity, response exposure, reserved, reserved
+  // intensity, response exposure, left chromatic channel, right chromatic channel
   params: vec4f,
   // inverse scene size XY, chromatic offset px, chromatic amount
   optics: vec4f,
@@ -14,7 +14,8 @@ struct Composite {
 @group(0) @binding(0) var<uniform> composite: Composite;
 @group(0) @binding(1) var scene: texture_2d<f32>;
 @group(0) @binding(2) var bloomPyramid: texture_2d<f32>;
-@group(0) @binding(3) var linearSampler: sampler;
+@group(0) @binding(3) var chromaticCarriers: texture_2d<f32>;
+@group(0) @binding(4) var linearSampler: sampler;
 
 fn sampleBloom(uv: vec2f) -> vec4f {
   let mappedSourceUv = composite.scatterRegion.xy + uv * composite.scatterRegion.zw;
@@ -29,18 +30,40 @@ fn sampleBloom(uv: vec2f) -> vec4f {
   return textureSampleLevel(bloomPyramid, linearSampler, scatterUv, 0.0) * inside;
 }
 
-/**
- * 色差只应移动已经散开的光，不应复制紧致热核。用一个小十字低通取得宽散射分量，
- * 随位移增大同步加宽，避免最大色差重新退化成红蓝硬描边。
- */
-fn sampleDiffuseBloom(uv: vec2f, blurPx: f32) -> vec3f {
-  let texel = composite.optics.xy * max(blurPx, 1.0);
-  let center = sampleBloom(uv).rgb;
-  let horizontal = sampleBloom(uv - vec2f(texel.x, 0.0)).rgb
-    + sampleBloom(uv + vec2f(texel.x, 0.0)).rgb;
-  let vertical = sampleBloom(uv - vec2f(0.0, texel.y)).rgb
-    + sampleBloom(uv + vec2f(0.0, texel.y)).rgb;
-  return center * 0.4 + (horizontal + vertical) * 0.15;
+fn sampleCarrier(uv: vec2f) -> vec2f {
+  let mappedSourceUv = composite.scatterRegion.xy + uv * composite.scatterRegion.zw;
+  let sourceSize = max(composite.scatterGeometry.xy, vec2f(1.0));
+  let carrierSize = max(vec2f(textureDimensions(chromaticCarriers)), vec2f(1.0));
+  let carrierUv = mappedSourceUv * sourceSize / (2.0 * carrierSize);
+  let inside = select(
+    0.0,
+    1.0,
+    all(mappedSourceUv >= vec2f(0.0)) && all(mappedSourceUv <= vec2f(1.0))
+  );
+  return textureSampleLevel(chromaticCarriers, linearSampler, carrierUv, 0.0).rg * inside;
+}
+
+/** 半分辨率 carrier 上的四个双线性样本等效于 3×3 正权重 tent，不会振铃或描边。 */
+fn sampleSoftCarrier(uv: vec2f) -> vec2f {
+  let texel = composite.optics.xy;
+  return (
+    sampleCarrier(uv + vec2f(-texel.x, -texel.y))
+    + sampleCarrier(uv + vec2f( texel.x, -texel.y))
+    + sampleCarrier(uv + vec2f(-texel.x,  texel.y))
+    + sampleCarrier(uv + vec2f( texel.x,  texel.y))
+  ) * 0.25;
+}
+
+fn channelColor(index: f32) -> vec3f {
+  if (index < 0.5) { return vec3f(1.0, 0.0, 0.0); }
+  if (index < 1.5) { return vec3f(0.0, 1.0, 0.0); }
+  return vec3f(0.0, 0.0, 1.0);
+}
+
+fn channelEnergy(color: vec3f, index: f32) -> f32 {
+  if (index < 0.5) { return color.r; }
+  if (index < 1.5) { return color.g; }
+  return color.b;
 }
 
 fn hash12(position: vec2f) -> f32 {
@@ -96,29 +119,43 @@ fn compositeGlow(base: vec4f, glowPremultiplied: vec3f) -> vec4f {
   let chromaOffset = vec2f(composite.optics.x * composite.optics.z, 0.0);
   var diffuse = centered;
 
-  // 着色已在源阶段完成。色差以预柔化散射层的位移差分叠回 centered：紧核心始终留在
-  // 原位，只有外围光场产生 Glitch RGB 分离，不会出现三份彩色文字/描边。
+  // 两条 carrier 各自保存所选原始通道的中远场能量。每个通道中心扣除多少，就在对应
+  // 一侧补回多少；不会把 RGB 总和重新染成过亮纯色，也不会复制主体或紧核心。
   if (composite.optics.w > 0.0001) {
-    let separationBlurPx = 1.25 + composite.optics.z * 0.55;
-    let softCentered = max(sampleDiffuseBloom(sceneUv, separationBlurPx), vec3f(0.0));
-    let red = max(sampleDiffuseBloom(sceneUv + chromaOffset, separationBlurPx), vec3f(0.0));
-    let blue = max(sampleDiffuseBloom(sceneUv - chromaOffset, separationBlurPx), vec3f(0.0));
-    let separated = vec3f(red.r, softCentered.g, blue.b);
-    diffuse = max(
-      centered + (separated - softCentered) * composite.optics.w,
+    let amount = clamp(composite.optics.w, 0.0, 1.0);
+    let centeredCarriers = max(sampleCarrier(sceneUv), vec2f(0.0));
+    let leftCenteredCarrier = min(
+      centeredCarriers.x,
+      channelEnergy(centered, composite.params.z)
+    );
+    let rightCenteredCarrier = min(
+      centeredCarriers.y,
+      channelEnergy(centered, composite.params.w)
+    );
+    let remaining = max(
+      centered
+      - channelColor(composite.params.z) * leftCenteredCarrier * amount
+      - channelColor(composite.params.w) * rightCenteredCarrier * amount,
       vec3f(0.0)
     );
+    let leftCarrier = max(sampleSoftCarrier(sceneUv + chromaOffset).x, 0.0);
+    let rightCarrier = max(sampleSoftCarrier(sceneUv - chromaOffset).y, 0.0);
+    let spectral = (
+      channelColor(composite.params.z) * leftCarrier
+      + channelColor(composite.params.w) * rightCarrier
+    ) * amount;
+    diffuse = max(remaining + spectral, vec3f(0.0));
   }
 
-  // A 是只走紧致 PSF 的白热替换置信度。它只把核心色度推向同峰值白色，不再叠加
-  // 第二份白色能量，因此不会在物体边界制造刻意的白描边，远场仍保留光源颜色。
-  let diffusePeak = max(diffuse.r, max(diffuse.g, diffuse.b));
+  // 白热始终锚定未位移的原始核心；色差不参与白热峰值，也不会把两侧色光漂白。
+  let centeredPeak = max(centered.r, max(centered.g, centered.b));
   let whiteBlend = clamp(
-    max(centeredBloom.a, 0.0) / max(diffusePeak, 0.000001),
+    max(centeredBloom.a, 0.0) / max(centeredPeak, 0.000001),
     0.0,
     1.0
   );
-  let opticalEnergy = mix(diffuse, vec3f(diffusePeak), whiteBlend);
+  let whiteCorrection = (vec3f(centeredPeak) - centered) * whiteBlend;
+  let opticalEnergy = max(diffuse + whiteCorrection, vec3f(0.0));
 
   // 只对总能量峰值执行一次标量相机响应，再沿原 RGB 方向缩放。旧的逐通道 exp 会让
   // 高能彩色光自行褪色；标量响应把白化权完全交给上面的核心白热。

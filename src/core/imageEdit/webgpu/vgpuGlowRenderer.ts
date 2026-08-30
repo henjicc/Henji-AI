@@ -153,7 +153,8 @@ export class VgpuGlowRenderer {
     this.bind(input.recipe);
     this.targets.globalBloom.resize(this.targets.accumulations[0].size);
     this.effects.copy.set({
-      source: this.targets.accumulations[0],
+      sourceBloom: this.targets.accumulations[0],
+      sourceCarriers: this.targets.accumulations[0].colors[1],
       linearSampler: this.linearSampler,
     });
     await this.compile(levelCount);
@@ -258,6 +259,9 @@ export class VgpuGlowRenderer {
       effects.upsample[index].set({
         highLevel: targets.levels[index],
         lowAccumulation,
+        lowCarrierAccumulation: firstMerge
+          ? lowAccumulation
+          : lowAccumulation.colors[1],
         linearSampler: this.linearSampler,
         accumulate: {
           highWeight: [
@@ -267,6 +271,12 @@ export class VgpuGlowRenderer {
           lowWeight: [
             ...(firstMerge ? recipe.scatterLevels[index + 1].weight : UNIT_RGB),
             firstMerge ? recipe.scatterLevels[index + 1].whiteCoreWeight : 1,
+          ],
+          carrier: [
+            recipe.scatterLevels[index].chromaticCarrierWeight,
+            firstMerge ? recipe.scatterLevels[index + 1].chromaticCarrierWeight : -1,
+            recipe.chromaticChannelIndices[0],
+            recipe.chromaticChannelIndices[1],
           ],
         },
       });
@@ -293,9 +303,15 @@ export class VgpuGlowRenderer {
     effects.composite.set({
       scene: targets.scene,
       bloomPyramid,
+      chromaticCarriers: bloomPyramid.colors[1],
       linearSampler: this.linearSampler,
       composite: {
-        params: [recipe.intensity, recipe.responseExposure, 0, 0],
+        params: [
+          recipe.intensity,
+          recipe.responseExposure,
+          recipe.chromaticChannelIndices[0],
+          recipe.chromaticChannelIndices[1],
+        ],
         optics: [
           1 / Math.max(targets.scene.size[0], 1),
           1 / Math.max(targets.scene.size[1], 1),
@@ -355,11 +371,18 @@ export class VgpuGlowRenderer {
 
 function createTargets(gpu: Gpu): GlowTargets {
   const make = (): Target => target(gpu, { size: [1, 1], format: 'rgba16float' });
+  const makeAccumulation = (): Target => target(gpu, {
+    size: [1, 1],
+    colors: [
+      { format: 'rgba16float' },
+      { format: 'rg16float' },
+    ],
+  });
   return {
     scene: make(),
     levels: Array.from({ length: MAX_SCATTER_LEVELS }, make),
-    accumulations: Array.from({ length: MAX_SCATTER_LEVELS }, make),
-    globalBloom: make(),
+    accumulations: Array.from({ length: MAX_SCATTER_LEVELS }, makeAccumulation),
+    globalBloom: makeAccumulation(),
     output: make(),
   };
 }
@@ -410,6 +433,27 @@ function assertScatterLevels(recipe: VgpuGlowRecipe): number {
   if (count < 2 || count > MAX_SCATTER_LEVELS) {
     throw new Error(`VGPU 辉光散射层数无效：${count}`);
   }
+  const [leftChannel, rightChannel] = recipe.chromaticChannelIndices;
+  if (
+    !Number.isInteger(leftChannel)
+    || !Number.isInteger(rightChannel)
+    || leftChannel < 0
+    || leftChannel > 2
+    || rightChannel < 0
+    || rightChannel > 2
+    || leftChannel === rightChannel
+  ) {
+    throw new Error('VGPU 辉光色差通道无效');
+  }
+  if (
+    !Number.isFinite(recipe.chromaticAberration)
+    || recipe.chromaticAberration < 0
+    || recipe.chromaticAberration > 1
+    || !Number.isFinite(recipe.chromaticOffsetPx)
+    || recipe.chromaticOffsetPx < 0
+  ) {
+    throw new Error('VGPU 辉光色差光学参数无效');
+  }
   for (let index = 0; index < count; index += 1) {
     const expectedDivisor = 2 ** (index + 1);
     if (recipe.scatterLevels[index].divisor !== expectedDivisor) {
@@ -418,6 +462,14 @@ function assertScatterLevels(recipe: VgpuGlowRecipe): number {
     const expectedSigma = effectiveScatterSigmaPx(expectedDivisor);
     if (Math.abs(recipe.scatterLevels[index].effectiveSigmaPx - expectedSigma) > 0.0001) {
       throw new Error(`VGPU 辉光散射层 ${index} 的核尺度无效`);
+    }
+    const carrierWeight = recipe.scatterLevels[index].chromaticCarrierWeight;
+    if (
+      !Number.isFinite(carrierWeight)
+      || carrierWeight < 0
+      || carrierWeight > recipe.scatterLevels[index].weight[0] + 0.000001
+    ) {
+      throw new Error(`VGPU 辉光散射层 ${index} 的色差载体权重无效`);
     }
   }
   return count;

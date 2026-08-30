@@ -1,6 +1,9 @@
-import type { VgpuGlowOperationParams } from './vgpuGlowParams';
+import type {
+  VgpuGlowChromaticChannel,
+  VgpuGlowOperationParams,
+} from './vgpuGlowParams';
 
-export const VGPU_GLOW_RECIPE_VERSION = 12 as const;
+export const VGPU_GLOW_RECIPE_VERSION = 13 as const;
 
 /**
  * SDR 发射源估计的公共常量。所有值都与 vgpuGlowBloom.wgsl 保持一致，CPU 参考测试
@@ -22,6 +25,8 @@ export interface VgpuGlowScatterLevel {
   weight: readonly [number, number, number];
   /** 白热能量只使用紧致 core PSF；各层之和严格为 1。 */
   whiteCoreWeight: number;
+  /** 只承载中远场的色差柔光能量；始终不超过同层完整辉光权重。 */
+  chromaticCarrierWeight: number;
 }
 
 export interface VgpuGlowRecipe {
@@ -50,6 +55,9 @@ export interface VgpuGlowRecipe {
   tintEnabled: boolean;
   chromaticAberration: number;
   chromaticOffsetPx: number;
+  chromaticChannelIndices: readonly [0 | 1 | 2, 0 | 1 | 2];
+  /** 预览重基准时同步缩放的色差载体最小光学尺度。 */
+  chromaticCarrierMinimumSigmaPx: number;
   /** 只在辉光层存在时启用的亚量化抖动，用于打散低位深渐变条带。 */
   ditherAmount: number;
 }
@@ -149,6 +157,18 @@ export function compileVgpuGlowRecipe(
     0.46 * look.scatter.reachScale,
     Math.pow(radius, 1.35)
   );
+  const chromaticOffsetPx = Math.pow(params.chromaticAberration, 1.55)
+    * (0.75 + radius * 5.25);
+  const chromaticCarrierMinimumSigmaPx = 2.5;
+  const scatterLevels = compileChromaticCarrierWeights(
+    compileOpticalScatterLevels(
+      referenceDimension,
+      scatterEnvelopeFraction,
+      look.scatter
+    ),
+    chromaticOffsetPx,
+    chromaticCarrierMinimumSigmaPx
+  );
 
   return {
     schemaVersion: VGPU_GLOW_RECIPE_VERSION,
@@ -167,11 +187,7 @@ export function compileVgpuGlowRecipe(
       * (0.72 + 1.78 * params.intensity * params.intensity),
     responseExposure: look.responseExposure,
     whiteHeat: params.whiteHeat,
-    scatterLevels: compileOpticalScatterLevels(
-      referenceDimension,
-      scatterEnvelopeFraction,
-      look.scatter
-    ),
+    scatterLevels,
     scatterModel: {
       envelopeFraction: scatterEnvelopeFraction,
       optical: look.scatter,
@@ -179,8 +195,12 @@ export function compileVgpuGlowRecipe(
     tintLinear: parseLinearRgb(params.tintColor),
     tintEnabled: params.tintEnabled,
     chromaticAberration: params.chromaticAberration,
-    // 位移只作用于柔化后的散射层，最大值仍足以形成清晰但没有硬边副本的 RGB 分离。
-    chromaticOffsetPx: Math.pow(params.chromaticAberration, 1.55) * (0.75 + radius * 5.25),
+    // 位移只作用于中远场载体；最大位移始终小于载体启动尺度的 0.65 倍。
+    chromaticOffsetPx,
+    chromaticChannelIndices: params.chromaticChannels.map(
+      resolveChromaticChannelIndex
+    ) as [0 | 1 | 2, 0 | 1 | 2],
+    chromaticCarrierMinimumSigmaPx,
     ditherAmount: 0.00075,
   };
 }
@@ -202,19 +222,29 @@ export function rebaseVgpuGlowRecipeForScale(
     ...recipe.scatterModel.optical,
     coreSigmaPx: Math.max(0.5, recipe.scatterModel.optical.coreSigmaPx * scale),
   };
+  const chromaticOffsetPx = recipe.chromaticOffsetPx * scale;
+  const chromaticCarrierMinimumSigmaPx = Math.max(
+    0.75,
+    recipe.chromaticCarrierMinimumSigmaPx * scale
+  );
   return {
     ...recipe,
     image: { width, height, referenceDimension },
-    scatterLevels: compileOpticalScatterLevels(
-      referenceDimension,
-      recipe.scatterModel.envelopeFraction,
-      scaledOptical
+    scatterLevels: compileChromaticCarrierWeights(
+      compileOpticalScatterLevels(
+        referenceDimension,
+        recipe.scatterModel.envelopeFraction,
+        scaledOptical
+      ),
+      chromaticOffsetPx,
+      chromaticCarrierMinimumSigmaPx
     ),
     scatterModel: {
       ...recipe.scatterModel,
       optical: scaledOptical,
     },
-    chromaticOffsetPx: recipe.chromaticOffsetPx * scale,
+    chromaticOffsetPx,
+    chromaticCarrierMinimumSigmaPx,
   };
 }
 
@@ -268,10 +298,34 @@ function compileOpticalScatterLevels(
     divisor,
     effectiveSigmaPx: sigmas[index],
     // 「色差」是柔化后的 Glitch RGB 空间分离，不是镜头色散。PSF 本身必须
-    // 三通道严格相同，否则会在空间位移之外再叠一层彩色硬边。
+    // 完整辉光的三通道严格相同；色差使用独立的中远场 carrier，不污染主体与紧核心。
     weight: [base[index], base[index], base[index]] as const,
     whiteCoreWeight: core[index],
+    chromaticCarrierWeight: 0,
   }));
+}
+
+function compileChromaticCarrierWeights(
+  levels: readonly VgpuGlowScatterLevel[],
+  offsetPx: number,
+  minimumSigmaPx: number
+): readonly VgpuGlowScatterLevel[] {
+  const startSigma = Math.max(minimumSigmaPx, offsetPx / 0.65);
+  const endSigma = startSigma * 2.2;
+  return levels.map((level) => ({
+    ...level,
+    chromaticCarrierWeight: level.weight[0] * smootherstep(
+      startSigma,
+      endSigma,
+      level.effectiveSigmaPx
+    ),
+  }));
+}
+
+function resolveChromaticChannelIndex(channel: VgpuGlowChromaticChannel): 0 | 1 | 2 {
+  if (channel === 'red') return 0;
+  if (channel === 'green') return 1;
+  return 2;
 }
 
 function finitePowerLawScaleEnergy(
