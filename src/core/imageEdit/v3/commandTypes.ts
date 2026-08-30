@@ -82,6 +82,12 @@ export interface ImageEditLayerUpdateParamsCommandV3 extends ImageEditCommandBas
   params: ImageEditJsonObjectV3;
 }
 
+export interface ImageEditGroupUpdateIsolationCommandV3 extends ImageEditCommandBaseV3 {
+  type: 'group.update-isolation';
+  layerId: string;
+  isolated: boolean;
+}
+
 export interface ImageEditAnnotationAddCommandV3 extends ImageEditCommandBaseV3 {
   type: 'annotation.add';
   layerId: string;
@@ -125,6 +131,7 @@ export type ImageEditCommandV3 =
   | ImageEditLayerUngroupCommandV3
   | ImageEditLayerUpdateCommonCommandV3
   | ImageEditLayerUpdateParamsCommandV3
+  | ImageEditGroupUpdateIsolationCommandV3
   | ImageEditLayerSetMaskCommandV3
   | ImageEditAnnotationAddCommandV3
   | ImageEditAnnotationUpdateCommandV3

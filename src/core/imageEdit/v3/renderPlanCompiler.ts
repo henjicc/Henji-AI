@@ -6,6 +6,7 @@ import {
   type ImageEditGroupLayerV3,
   type ImageEditLayerCommonV3,
   type ImageEditLayerV3,
+  type ImageEditMaskReferenceV3,
 } from './layerTypes';
 import { createImageEditRenderHash, type ImageEditHashValue } from './renderHash';
 import type {
@@ -65,6 +66,7 @@ function appendNode(
   definitionId: string,
   inputNodeIds: readonly string[],
   parameters: Readonly<Record<string, unknown>>,
+  mask: ImageEditMaskReferenceV3 | null = layer.mask,
 ): string | null {
   const definition = state.registry.get(definitionId);
   if (!definition) {
@@ -84,7 +86,7 @@ function appendNode(
     definitionVersion: definition.version,
     inputHashes,
     parameters: hashObject(parameters),
-    mask: layer.mask ? { ...layer.mask } : null,
+    mask: mask ? { ...mask } : null,
   });
   state.nodes.push({
     id,
@@ -95,7 +97,7 @@ function appendNode(
     category: definition.category,
     inputNodeIds: [...inputNodeIds],
     parameters,
-    mask: layer.mask ? { ...layer.mask } : null,
+    mask: mask ? { ...mask } : null,
     subtreeHash,
   });
   return id;
@@ -128,7 +130,7 @@ function compileContentLayer(
   const contentParameters: Record<string, unknown> = layer.type === 'raster'
     ? { source: layer.source, tiles: layer.tiles }
     : { annotations: layer.annotations };
-  const contentNodeId = appendNode(state, layer, path, definitionId, [], contentParameters);
+  const contentNodeId = appendNode(state, layer, path, definitionId, [], contentParameters, null);
   return contentNodeId
     ? compositeContent(state, layer, path, contentNodeId, belowNodeId)
     : belowNodeId ?? '';
@@ -195,7 +197,8 @@ function compileGroup(
     path,
     'group.isolated',
     [isolatedOutput],
-    commonParameters(layer),
+    { isolated: true },
+    null,
   ) ?? isolatedOutput;
   return compositeContent(state, layer, path, groupOutput, belowNodeId);
 }

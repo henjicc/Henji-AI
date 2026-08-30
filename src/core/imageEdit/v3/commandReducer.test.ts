@@ -153,4 +153,18 @@ describe('图片编辑 V3 命令归约器', () => {
       params: { amount: 2 },
     })).toThrow(ImageEditCommandValidationErrorV3);
   });
+
+  it('以可逆命令切换图层组的隔离与穿透语义', () => {
+    const source = createDocument([createImageEditGroupLayerV3('group', '组')]);
+    const isolated = applyImageEditCommandV3(source, {
+      commandId: 'isolate-group',
+      expectedRevision: 0,
+      type: 'group.update-isolation',
+      layerId: 'group',
+      isolated: true,
+    });
+    expect(isolated.document.layers[0]).toMatchObject({ type: 'group', isolated: true });
+    const restored = applyImageEditCommandV3(isolated.document, isolated.inverse);
+    expect(restored.document.layers[0]).toMatchObject({ type: 'group', isolated: false });
+  });
 });

@@ -21,3 +21,4 @@ export * from './renderScheduler';
 export * from './serviceContracts';
 export * from './performanceMetrics';
 export * from './effects';
+export * from './execution';

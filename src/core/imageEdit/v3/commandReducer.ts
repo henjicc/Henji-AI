@@ -372,6 +372,20 @@ function applyLayerContentCommand(
       },
     };
   }
+  if (command.type === 'group.update-isolation') {
+    if (location.layer.type !== 'group') {
+      throw new ImageEditCommandValidationErrorV3('目标不是图层组');
+    }
+    return {
+      layers: replaceLayer(document.layers, location, { ...location.layer, isolated: command.isolated }),
+      inverse: {
+        ...base,
+        type: 'group.update-isolation',
+        layerId,
+        isolated: location.layer.isolated,
+      },
+    };
+  }
   if (command.type === 'layer.set-mask') {
     if (command.mask && (!command.mask.resourceId || typeof command.mask.inverted !== 'boolean')) {
       throw new ImageEditCommandValidationErrorV3('蒙版引用无效');
