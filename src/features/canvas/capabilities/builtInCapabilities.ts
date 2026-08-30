@@ -425,7 +425,7 @@ export const builtInCanvasImageCapabilities: readonly CanvasImageCapabilityDefin
     outputPolicy: {
       resultKind: 'image',
       count: { mode: 'single' },
-      postProcess: 'none',
+      postProcess: 'local-redraw-composite',
       failureMode: 'single-result',
     },
   },

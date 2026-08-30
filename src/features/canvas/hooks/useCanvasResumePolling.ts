@@ -5,6 +5,7 @@ import { registry } from '@/core/ModelRegistry';
 import { useCanvasGenerationProgressStore } from '@/stores/canvasGenerationProgressStore';
 import { useCanvasStore } from '@/stores/canvasStore';
 import { useProjectStore } from '@/stores/projectStore';
+import { getPlatform } from '@/platform';
 
 import {
   resolveCanvasImageCapabilityExpectedOutputCount,
@@ -18,10 +19,29 @@ import { createDefaultGenerationOutputItems } from '../domain/generationOutputs'
 import { readResumableServerTask } from '../domain/resumableTask';
 import { resumeCanvasGeneration } from '../generation/runGeneration';
 import {
+  acquireCanvasGenerationResumeLease,
+  isCanvasGenerationResumeLeaseCurrent,
+  isCanvasGenerationTaskActive,
+  releaseCanvasGenerationResumeLease,
+  releaseCanvasGenerationResumeLeasesForProject,
+} from '../generation/activeGenerationTasks';
+import {
   commitCanvasGenerationOutputs,
   resolveGenerationOutputStrategy,
 } from '../application/generationOutputApplicationService';
+import { isCanvasNodeInputSignatureCurrent } from '../application/canvasExecutionService';
+import { publishCanvasSuccessfulExecution } from '../application/canvasExecutionPublication';
 import { commitLayerSeparationGeneration } from '../application/layerSeparationGenerationService';
+import {
+  commitLocalRedrawGeneration,
+  LOCAL_REDRAW_CONTEXT_FIELD,
+  parseLocalRedrawContext,
+} from '../application/localRedrawGenerationService';
+import {
+  parseStoryboardGenerationResumeContext,
+  prepareStoryboardGenerationOutputContract,
+  STORYBOARD_GENERATION_RESUME_CONTEXT_FIELD,
+} from '../application/storyboardGenerationOutputService';
 
 const logger = createLogger('features.canvas.hooks.useCanvasResumePolling');
 
@@ -39,27 +59,22 @@ export function useCanvasResumePolling(): void {
   const updateNodeData = useCanvasStore((state) => state.updateNodeData);
   const setNodeGenerationProgress = useCanvasGenerationProgressStore((state) => state.setProgress);
 
-  // 同一个任务只续查一次：nodes 每次变化都会重跑 effect，不去重会叠出多条轮询
-  const resumeAttemptsRef = useRef<Map<string, symbol>>(new Map());
   const previousProjectIdRef = useRef<string | null>(projectId);
 
   useEffect(() => {
     const previousProjectId = previousProjectIdRef.current;
     if (previousProjectId !== projectId) {
-      if (previousProjectId) {
-        const prefix = `${previousProjectId}:`;
-        for (const key of resumeAttemptsRef.current.keys()) {
-          if (key.startsWith(prefix)) resumeAttemptsRef.current.delete(key);
-        }
-      }
+      if (previousProjectId) releaseCanvasGenerationResumeLeasesForProject(previousProjectId);
       previousProjectIdRef.current = projectId;
     }
     if (!projectId) return;
 
     for (const node of nodes) {
       const task = readResumableServerTask(node.data as DynamicValueMap);
-      const attemptKey = task ? `${projectId}:${task.taskId}` : null;
-      if (!task || !attemptKey || resumeAttemptsRef.current.has(attemptKey)) {
+      if (
+        !task
+        || isCanvasGenerationTaskActive(task.taskId)
+      ) {
         continue;
       }
 
@@ -73,10 +88,15 @@ export function useCanvasResumePolling(): void {
       const sourceCapability = sourceCapabilityId
         ? getRegisteredCanvasImageCapabilities().find(({ id }) => id === sourceCapabilityId)
         : undefined;
-      const sourceNodeId = useCanvasStore.getState().edges.find((edge) => edge.target === node.id)?.source;
+      const persistedSourceNodeId = typeof node.data.generationSourceNodeId === 'string'
+        && node.data.generationSourceNodeId.trim().length > 0
+        ? node.data.generationSourceNodeId
+        : undefined;
+      const sourceNodeId = persistedSourceNodeId
+        ?? useCanvasStore.getState().edges.find((edge) => edge.target === node.id)?.source;
 
-      const attemptToken = Symbol(attemptKey);
-      resumeAttemptsRef.current.set(attemptKey, attemptToken);
+      const resumeLease = acquireCanvasGenerationResumeLease(projectId, task.taskId);
+      if (!resumeLease) continue;
       logger.info('[CanvasResume] 恢复未完成的异步生成', {
         event: 'canvas.resume_polling.start',
         taskId: task.taskId,
@@ -98,8 +118,9 @@ export function useCanvasResumePolling(): void {
         setNodeGenerationProgress,
         isContextCurrent: () => (
           useProjectStore.getState().currentProjectId === projectId
-          && resumeAttemptsRef.current.get(attemptKey) === attemptToken
+          && isCanvasGenerationResumeLeaseCurrent(projectId, task.taskId, resumeLease)
         ),
+        releaseLease: () => releaseCanvasGenerationResumeLease(projectId, task.taskId, resumeLease),
       });
     }
   }, [nodes, projectId, setNodeGenerationProgress, updateNodeData]);
@@ -120,6 +141,41 @@ interface ResumeNodeTaskInput {
     typeof useCanvasGenerationProgressStore.getState
   >['setProgress'];
   isContextCurrent: () => boolean;
+  releaseLease: () => void;
+}
+
+async function publishResumedExecution(input: {
+  sourceNodeId?: string;
+  resultNodeData: DynamicValueMap;
+  resultNodeIds: string[];
+}): Promise<void> {
+  const inputSignature = input.resultNodeData.generationInputSignature;
+  if (
+    !input.sourceNodeId
+    || typeof inputSignature !== 'string'
+    || inputSignature.length === 0
+    || !useCanvasStore.getState().nodes.some((node) => node.id === input.sourceNodeId)
+  ) return;
+  try {
+    if (!await isCanvasNodeInputSignatureCurrent(input.sourceNodeId, inputSignature)) {
+      logger.info('[CanvasResume] 来源输入已变化，保留恢复结果但跳过发布', {
+        event: 'canvas.resume_polling.publication.skipped_stale',
+        context: { sourceNodeId: input.sourceNodeId, resultNodeIds: input.resultNodeIds },
+      });
+      return;
+    }
+    publishCanvasSuccessfulExecution({
+      sourceNodeId: input.sourceNodeId,
+      inputSignature,
+      outputMode: 'result-nodes',
+      resultNodeIds: input.resultNodeIds,
+    });
+  } catch (error) {
+    logger.error('[CanvasResume] 恢复结果发布失败', error, {
+      event: 'canvas.resume_polling.publication.failed',
+      context: { sourceNodeId: input.sourceNodeId, resultNodeIds: input.resultNodeIds },
+    });
+  }
 }
 
 async function resumeNodeTask(input: ResumeNodeTaskInput): Promise<void> {
@@ -136,25 +192,80 @@ async function resumeNodeTask(input: ResumeNodeTaskInput): Promise<void> {
     updateNodeData,
     setNodeGenerationProgress,
     isContextCurrent,
+    releaseLease,
   } = input;
-
-  if (!isContextCurrent()) return;
-  updateNodeData(nodeId, { isGenerating: true, generationError: null });
+  let createdFilePaths: string[] = [];
 
   try {
+    if (!isContextCurrent()) return;
+    updateNodeData(nodeId, { isGenerating: true, generationError: null });
+    const localRedrawContext = sourceCapability?.outputPolicy.postProcess === 'local-redraw-composite'
+      ? parseLocalRedrawContext(resultNodeData[LOCAL_REDRAW_CONTEXT_FIELD])
+      : null;
     const result = await resumeCanvasGeneration({
       modelId,
+      requestId: localRedrawContext?.requestId,
       mediaType,
       taskId,
       onProgress: (progress) => {
         if (isContextCurrent()) setNodeGenerationProgress(nodeId, progress);
       },
     });
+    createdFilePaths = [...new Set(result.createdFilePaths ?? [])];
     if (!isContextCurrent()) return;
     // 兼容旧测试替身与旧进程边界只返回 primary 的形状；正式运行时始终优先消费 outputs。
     const resultOutputs = Array.isArray(result.outputs) && result.outputs.length > 0
       ? result.outputs
       : result.primary ? [result.primary] : [];
+
+    const storyboardContextValue = resultNodeData[STORYBOARD_GENERATION_RESUME_CONTEXT_FIELD];
+    if (storyboardContextValue !== undefined && storyboardContextValue !== null) {
+      const storyboardContext = parseStoryboardGenerationResumeContext(storyboardContextValue);
+      if (!storyboardContext) throw new Error('分镜生成恢复上下文无效或版本不受支持');
+      const contract = await prepareStoryboardGenerationOutputContract({
+        outputs: resultOutputs,
+        context: storyboardContext,
+      });
+      if (!isContextCurrent()) return;
+      const committed = await commitCanvasGenerationOutputs({
+        sourceNodeId,
+        placeholderNodeId: nodeId,
+        resultNodeType,
+        contract,
+        completionId: `storyboard-grid:${nodeId}`,
+        groupTitle: `${String(resultNodeData.displayName ?? '分镜输出')} · ${contract.outputs.length}`,
+      });
+      if (!isContextCurrent()) return;
+      await publishResumedExecution({ sourceNodeId, resultNodeData, resultNodeIds: committed.resultNodeIds });
+      logger.info('[CanvasResume] 分镜生成恢复完成', {
+        event: 'canvas.resume_polling.storyboard.completed',
+        taskId,
+        modelId,
+        context: { nodeId, outputCount: contract.outputs.length },
+      });
+      return;
+    }
+
+    if (sourceCapability?.outputPolicy.postProcess === 'local-redraw-composite') {
+      if (!localRedrawContext) throw new Error('局部重绘恢复缺少裁剪上下文');
+      const committed = await commitLocalRedrawGeneration({
+        sourceNodeId,
+        placeholderNodeId: nodeId,
+        resultNodeType,
+        completionId: `generation-output:${nodeId}`,
+        context: localRedrawContext,
+        result: { ...result, outputs: resultOutputs },
+      });
+      if (!isContextCurrent()) return;
+      await publishResumedExecution({ sourceNodeId, resultNodeData, resultNodeIds: committed.resultNodeIds });
+      logger.info('[CanvasResume] 局部重绘恢复完成', {
+        event: 'canvas.resume_polling.local_redraw.completed',
+        taskId,
+        modelId,
+        context: { nodeId },
+      });
+      return;
+    }
 
     if (result.structuredOutput?.kind === 'layer-stack' || resultNodeData.resultKind === 'layer-stack') {
       const persistedSourceNodeId = typeof resultNodeData.generationSourceNodeId === 'string'
@@ -174,7 +285,7 @@ async function resumeNodeTask(input: ResumeNodeTaskInput): Promise<void> {
       if (!resolvedSourceNodeId || !sourceImage || !providerId) {
         throw new Error('图层拆分恢复缺少来源节点、源图或模型信息');
       }
-      await commitLayerSeparationGeneration({
+      const committed = await commitLayerSeparationGeneration({
         sourceNodeId: resolvedSourceNodeId,
         placeholderNodeId: nodeId,
         resultNodeType,
@@ -185,6 +296,11 @@ async function resumeNodeTask(input: ResumeNodeTaskInput): Promise<void> {
         result: { ...result, outputs: resultOutputs },
       });
       if (!isContextCurrent()) return;
+      await publishResumedExecution({
+        sourceNodeId: resolvedSourceNodeId,
+        resultNodeData,
+        resultNodeIds: committed.resultNodeIds,
+      });
       logger.info('[CanvasResume] 结构化图层生成恢复完成', {
         event: 'canvas.resume_polling.layer_stack.completed',
         taskId,
@@ -203,7 +319,7 @@ async function resumeNodeTask(input: ResumeNodeTaskInput): Promise<void> {
     const batchResultKind = strategy === 'assetGroup'
       ? mediaType === 'image' ? 'image-group' : 'media-group'
       : memberResultKind;
-    await commitCanvasGenerationOutputs({
+    const committed = await commitCanvasGenerationOutputs({
       sourceNodeId,
       placeholderNodeId: nodeId,
       resultNodeType,
@@ -236,6 +352,7 @@ async function resumeNodeTask(input: ResumeNodeTaskInput): Promise<void> {
         : undefined,
     });
     if (!isContextCurrent()) return;
+    await publishResumedExecution({ sourceNodeId, resultNodeData, resultNodeIds: committed.resultNodeIds });
     logger.info('[CanvasResume] 异步生成恢复完成', {
       event: 'canvas.resume_polling.completed',
       taskId,
@@ -259,8 +376,22 @@ async function resumeNodeTask(input: ResumeNodeTaskInput): Promise<void> {
       context: { nodeId, message },
     });
   } finally {
-    if (isContextCurrent() && useProjectStore.getState().currentProjectId === projectId) {
-      setNodeGenerationProgress(nodeId, null);
+    try {
+      if (mediaType === 'image' && createdFilePaths.length > 0) {
+        await getPlatform().image.releaseManagedGenerationMedia(createdFilePaths).catch((error) => {
+          logger.error('[CanvasResume] 恢复任务临时媒体释放失败', error, {
+            event: 'canvas.resume_polling.resources.release_failed',
+            taskId,
+            modelId,
+            context: { nodeId, createdFileCount: createdFilePaths.length },
+          });
+        });
+      }
+      if (isContextCurrent() && useProjectStore.getState().currentProjectId === projectId) {
+        setNodeGenerationProgress(nodeId, null);
+      }
+    } finally {
+      releaseLease();
     }
   }
 }

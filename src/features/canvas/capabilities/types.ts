@@ -60,7 +60,8 @@ export type CanvasImageCapabilityPostProcess =
   | 'validate-panorama'
   | 'split-grid'
   | 'assemble-image-group'
-  | 'assemble-layer-stack';
+  | 'assemble-layer-stack'
+  | 'local-redraw-composite';
 
 export interface CanvasImageCapabilitySourceRequirement {
   mediaTypes: readonly MediaPortKind[];
