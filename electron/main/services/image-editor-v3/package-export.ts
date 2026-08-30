@@ -129,7 +129,7 @@ async function writeArchive(
     archive.append(`${JSON.stringify(manifest)}\n`, { name: HENJI_IMAGE_PACKAGE_MANIFEST })
     for (const resource of manifest.resources) {
       // 图片/瓦片通常已经压缩，store 避免对 200MP 资源重复执行高成本 deflate。
-      archive.append(fs.createReadStream(request.resourceStore.getFilesystemPath(resource.resourceId)), {
+      archive.append(request.resourceStore.openVerifiedReadStream(resource.resourceId), {
         name: resource.path,
         store: true,
       })

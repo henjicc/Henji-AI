@@ -54,6 +54,10 @@ function isFiniteNumber(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value);
 }
 
+function isSafeInteger(value: unknown): value is number {
+  return typeof value === 'number' && Number.isSafeInteger(value);
+}
+
 function isNonEmptyString(value: unknown): value is string {
   return typeof value === 'string' && value.length > 0;
 }
@@ -180,10 +184,10 @@ function parseGeometry(value: unknown): ImageEditCanvasGeometryV3 | null {
   };
   let crop: ImageEditCropRectV3 | null = null;
   if (value.crop !== null) {
-    if (!isRecord(value.crop) || !isFiniteNumber(value.crop.x) || value.crop.x < 0
-      || !isFiniteNumber(value.crop.y) || value.crop.y < 0
-      || !isFiniteNumber(value.crop.width) || value.crop.width <= 0
-      || !isFiniteNumber(value.crop.height) || value.crop.height <= 0) return null;
+    if (!isRecord(value.crop) || !isSafeInteger(value.crop.x) || value.crop.x < 0
+      || !isSafeInteger(value.crop.y) || value.crop.y < 0
+      || !isSafeInteger(value.crop.width) || value.crop.width <= 0
+      || !isSafeInteger(value.crop.height) || value.crop.height <= 0) return null;
     const rotated = orientation.rotate === 90 || orientation.rotate === 270;
     const orientedWidth = rotated ? Number(value.height) : Number(value.width);
     const orientedHeight = rotated ? Number(value.width) : Number(value.height);

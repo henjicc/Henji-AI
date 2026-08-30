@@ -1,7 +1,7 @@
 import {
   ANNOTATION_DEFAULT_STROKE_HEX,
   ANNOTATION_DEFAULT_TEXT_HEX,
-} from '@/core/theme/colorTokens';
+} from '../theme/colorTokens';
 import {
   createEmptyMarkDoc,
   createEmptyMarkOrientation,

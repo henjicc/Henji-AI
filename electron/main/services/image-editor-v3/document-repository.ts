@@ -14,6 +14,12 @@ import {
 } from './contracts'
 import { parseResourceId } from './resource-store'
 import { KeyedSerialExecutor } from './serial-executor'
+import {
+  mergePersistedImageEditResourceRefsV3,
+  normalizePersistedImageEditDocumentV3,
+  normalizePersistedImageEditHistoryV3,
+} from './history-persistence'
+import type { ImageEditCommandHistorySnapshotV3 } from '../../../../src/core/imageEdit/v3/commandHistoryCodec'
 
 const DOCUMENT_ID_PATTERN = /^[A-Za-z0-9_-]{1,128}$/
 const MAX_DOCUMENT_BYTES = 64 * 1024 * 1024
@@ -36,6 +42,7 @@ export interface CreateDocumentRequest {
   documentId?: string
   revision?: number
   document: unknown
+  history?: ImageEditCommandHistorySnapshotV3 | null
   resourceRefs?: readonly ResourceId[]
   previewRef?: ResourceId
   now?: Date
@@ -47,6 +54,7 @@ export interface SaveDocumentRequest {
   /** 合并多条命令后允许 revision 跳跃，但必须严格大于磁盘 revision。 */
   nextRevision?: number
   document: unknown
+  history?: ImageEditCommandHistorySnapshotV3 | null
   resourceRefs: readonly ResourceId[]
   previewRef?: ResourceId
   now?: Date
@@ -62,13 +70,12 @@ function validateDocumentId(documentId: string): string {
   return documentId
 }
 
-function normalizeResourceRefs(resourceRefs: readonly ResourceId[], previewRef?: ResourceId): ResourceId[] {
+function normalizeResourceRefs(resourceRefs: readonly ResourceId[]): ResourceId[] {
   const unique = new Set<ResourceId>()
   for (const resourceId of resourceRefs) {
     parseResourceId(resourceId)
     unique.add(resourceId)
   }
-  if (previewRef) parseResourceId(previewRef)
   return [...unique].sort()
 }
 
@@ -78,6 +85,13 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 export function validateImageEditDocumentEnvelope(value: unknown): ImageEditDocumentEnvelope {
   if (!isRecord(value)) throw new Error('Invalid image edit document: expected object')
+  const allowedKeys = new Set([
+    'format', 'formatVersion', 'documentId', 'revision', 'createdAt', 'updatedAt',
+    'document', 'history', 'resourceRefs', 'previewRef',
+  ])
+  if (Object.keys(value).some((key) => !allowedKeys.has(key))) {
+    throw new Error('Invalid image edit document: unknown field')
+  }
   if (value.format !== IMAGE_EDIT_DOCUMENT_FORMAT || value.formatVersion !== IMAGE_EDIT_DOCUMENT_VERSION) {
     throw new Error('Unsupported image edit document format')
   }
@@ -96,7 +110,25 @@ export function validateImageEditDocumentEnvelope(value: unknown): ImageEditDocu
   if (previewRef !== undefined && typeof previewRef !== 'string') {
     throw new Error('Invalid image edit document preview reference')
   }
-  const refs = normalizeResourceRefs(value.resourceRefs as ResourceId[], previewRef as ResourceId | undefined)
+  const normalizedPreviewRef = previewRef as ResourceId | undefined
+  if (normalizedPreviewRef) parseResourceId(normalizedPreviewRef)
+  const document = normalizePersistedImageEditDocumentV3(
+    value.document,
+    documentId,
+    value.revision as number,
+  )
+  const history = normalizePersistedImageEditHistoryV3(
+    value.history,
+    document,
+    documentId,
+    value.revision as number,
+  )
+  const refs = mergePersistedImageEditResourceRefsV3(
+    document,
+    normalizeResourceRefs(value.resourceRefs as ResourceId[]),
+    normalizedPreviewRef,
+    history,
+  )
   return {
     format: IMAGE_EDIT_DOCUMENT_FORMAT,
     formatVersion: IMAGE_EDIT_DOCUMENT_VERSION,
@@ -104,9 +136,10 @@ export function validateImageEditDocumentEnvelope(value: unknown): ImageEditDocu
     revision: value.revision as number,
     createdAt: value.createdAt,
     updatedAt: value.updatedAt,
-    document: value.document,
+    document,
+    ...(history ? { history } : {}),
     resourceRefs: refs,
-    previewRef: previewRef as ResourceId | undefined,
+    previewRef: normalizedPreviewRef,
   }
 }
 
@@ -164,6 +197,11 @@ export class ImageEditDocumentRepository {
       if (!Number.isSafeInteger(revision) || revision < 0) {
         throw new Error(`Invalid initial document revision: ${revision}`)
       }
+      const document = normalizePersistedImageEditDocumentV3(
+        request.document,
+        documentId,
+        revision,
+      )
       const envelope: ImageEditDocumentEnvelope = {
         format: IMAGE_EDIT_DOCUMENT_FORMAT,
         formatVersion: IMAGE_EDIT_DOCUMENT_VERSION,
@@ -171,10 +209,22 @@ export class ImageEditDocumentRepository {
         revision,
         createdAt: timestamp,
         updatedAt: timestamp,
-        document: request.document,
-        resourceRefs: normalizeResourceRefs(request.resourceRefs ?? [], request.previewRef),
+        document,
+        history: normalizePersistedImageEditHistoryV3(
+          request.history,
+          document,
+          documentId,
+          revision,
+        ),
+        resourceRefs: [],
         previewRef: request.previewRef,
       }
+      envelope.resourceRefs = mergePersistedImageEditResourceRefsV3(
+        document,
+        normalizeResourceRefs(request.resourceRefs ?? []),
+        envelope.previewRef,
+        envelope.history,
+      )
       await this.persist(envelope, 'create')
       return envelope
     }))
@@ -202,15 +252,36 @@ export class ImageEditDocumentRepository {
         throw new DocumentRevisionConflictError(documentId, request.expectedRevision, current.revision)
       }
       const nextRevision = request.nextRevision ?? current.revision + 1
-      if (!Number.isSafeInteger(nextRevision) || nextRevision <= current.revision) {
+      if (!Number.isSafeInteger(nextRevision) || nextRevision < current.revision) {
         throw new Error(`Invalid next document revision: ${nextRevision}`)
       }
+      const document = normalizePersistedImageEditDocumentV3(
+        request.document,
+        documentId,
+        nextRevision,
+      )
+      if (nextRevision === current.revision
+        && JSON.stringify(document) !== JSON.stringify(current.document)) {
+        throw new Error('Document content changed without advancing revision')
+      }
+      const history = normalizePersistedImageEditHistoryV3(
+        request.history,
+        document,
+        documentId,
+        nextRevision,
+      )
       const envelope: ImageEditDocumentEnvelope = {
         ...current,
         revision: nextRevision,
         updatedAt: (request.now ?? new Date()).toISOString(),
-        document: request.document,
-        resourceRefs: normalizeResourceRefs(request.resourceRefs, request.previewRef),
+        document,
+        history,
+        resourceRefs: mergePersistedImageEditResourceRefsV3(
+          document,
+          normalizeResourceRefs(request.resourceRefs),
+          request.previewRef,
+          history,
+        ),
         previewRef: request.previewRef,
       }
       await this.persist(envelope, 'save')

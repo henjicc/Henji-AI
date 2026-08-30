@@ -46,6 +46,7 @@ import {
   type AgentRuntimeEventPayload,
 } from '../../src/core/assistant/runtimeContracts'
 import { createImageVideoApis } from './image-video-api'
+import { createImageEditorV3Api } from './image-editor-v3-api'
 
 type IpcResultEnvelope<T> =
   | { ok: true; data: T }
@@ -358,6 +359,7 @@ const projectPackageApi: HenjiProjectPackageApi = {
 }
 
 const { imageApi, videoApi } = createImageVideoApis(nativeInvoke)
+const imageEditorV3Api = createImageEditorV3Api(nativeInvoke)
 
 const assetLibraryApi: HenjiAssetLibraryApi = {
   createAsset: (input) => nativeInvoke('assetLibrary:createAsset', input),
@@ -456,6 +458,9 @@ const updaterApi: HenjiUpdaterApi = {
 const api: HenjiNativeApi = {
   runtimeInfo: {
     uiInspectionReadOnly: process.env['HENJI_UI_INSPECTION_READ_ONLY'] === '1',
+    featureFlags: {
+      imageEditorV3: process.env['HENJI_IMAGE_EDITOR_V3'] === '1',
+    },
   },
   assistant: assistantApi,
   ai: aiApi,
@@ -474,6 +479,7 @@ const api: HenjiNativeApi = {
   http: httpApi,
   media: mediaApi,
   image: imageApi,
+  imageEditorV3: imageEditorV3Api,
   video: videoApi,
   audio: audioApi,
   clipboard: clipboardApi,

@@ -13,6 +13,7 @@ import {
   resolveBackgroundThrottling,
   type WindowPresentationMode,
 } from './window-presentation'
+import { isTrustedMainRendererUrl } from './security/main-renderer-url'
 
 const logger = createMainLogger('main.window')
 let mainWindow: BrowserWindow | null = null
@@ -54,6 +55,15 @@ export function createWindow(options: CreateWindowOptions = {}): BrowserWindow {
   mainWindow = win
 
   bindWindowStateEvents(win)
+  win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
+  win.webContents.on('will-navigate', (event, url) => {
+    if (isTrustedMainRendererUrl(url)) return
+    event.preventDefault()
+    logger.warn('已阻止主窗口导航到非应用来源', {
+      event: 'window.navigation.blocked',
+      context: { protocol: (() => { try { return new URL(url).protocol } catch { return 'invalid' } })() },
+    })
+  })
   win.webContents.on('did-start-loading', () => {
     void cleanupAllVideoFrameExports('renderer_reloading')
   })

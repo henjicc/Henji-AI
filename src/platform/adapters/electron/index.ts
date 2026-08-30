@@ -7,6 +7,7 @@ import { createElectronCustomModels } from './customModels'
 import { createElectronSystem } from './system'
 import { createElectronMedia } from './media'
 import { createElectronImage } from './image'
+import { createElectronImageEditorV3 } from './imageEditorV3'
 import { createElectronVideo } from './video'
 import { createElectronClipboard } from './clipboard'
 import { createElectronDragDrop } from './dragDrop'
@@ -31,6 +32,7 @@ export function createElectronPlatform(): PlatformRuntime {
     system: createElectronSystem(),
     media: createElectronMedia(),
     image: createElectronImage(),
+    imageEditorV3: createElectronImageEditorV3(),
     video: createElectronVideo(),
     clipboard: createElectronClipboard(),
     dragDrop: createElectronDragDrop(),

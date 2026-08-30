@@ -87,4 +87,15 @@ describe('图片编辑 V3 文档编解码', () => {
       },
     }).document).toBeNull();
   });
+
+  it('只持久化整数像素裁剪，避免合法文档在导出阶段才失败', () => {
+    const source = createNestedDocument();
+    expect(decodeImageEditDocumentV3({
+      ...source,
+      geometry: {
+        ...source.geometry,
+        crop: { x: 0.5, y: 0, width: 100, height: 100 },
+      },
+    }).document).toBeNull();
+  });
 });

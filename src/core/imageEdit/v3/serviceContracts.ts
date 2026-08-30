@@ -1,4 +1,6 @@
 import type { ImageEditDocumentV3 } from './documentTypes';
+import type { ImageEditCommandHistorySnapshotV3 } from './commandHistoryCodec';
+import type { ImageEditHistoryResourceReferenceV3 } from './commandTypes';
 import type { ImageEditRect, ImageEditSize, ImageEditTileCoordinate } from './tileGeometry';
 
 export interface ImageEditDocumentReferenceV3 {
@@ -9,11 +11,20 @@ export interface ImageEditDocumentReferenceV3 {
 
 export interface ImageEditDocumentSnapshotV3 extends ImageEditDocumentReferenceV3 {
   document: ImageEditDocumentV3;
+  /** 旧 V1/V2/早期 V3 存档没有历史时为 null。 */
+  history: ImageEditCommandHistorySnapshotV3 | null;
+}
+
+export interface ImageEditPersistenceSnapshotV3 {
+  document: ImageEditDocumentV3;
+  history: ImageEditCommandHistorySnapshotV3;
+  retainedResources: ImageEditHistoryResourceReferenceV3[];
 }
 
 export interface ImageEditSaveDocumentOptionsV3 {
   expectedRevision: number;
   previewRef?: string | null;
+  history?: ImageEditCommandHistorySnapshotV3 | null;
   signal?: AbortSignal;
 }
 

@@ -52,4 +52,18 @@ describe('图片编辑 V3 原子文件替换', () => {
     expect(renames[3]?.[0]).toContain('/tmp/output.tif.')
     expect(renames[3]?.[1]).toBe('/tmp/output.tif')
   })
+
+  it('rename 已提交后目录 fsync 失败不谎报保存失败或触发回滚', async () => {
+    const operations: AtomicFileOperations = {
+      rename: vi.fn(async () => undefined),
+      remove: vi.fn(async () => undefined),
+      access: vi.fn(async () => undefined),
+      syncDirectory: vi.fn(async () => { throw new Error('directory fsync failed') }),
+    }
+
+    await expect(replaceFileAtomically('/tmp/output.tmp', '/tmp/output.tif', operations))
+      .resolves.toBeUndefined()
+    expect(operations.rename).toHaveBeenCalledOnce()
+    expect(operations.remove).not.toHaveBeenCalled()
+  })
 })

@@ -21,6 +21,7 @@ export * from './renderCaches';
 export * from './renderScheduler';
 export * from './serviceContracts';
 export * from './performanceMetrics';
+export * from './resourceReferences';
 export * from './effects';
 export * from './execution';
 export * from './brush';

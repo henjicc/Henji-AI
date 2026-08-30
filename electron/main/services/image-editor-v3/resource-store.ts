@@ -2,12 +2,14 @@ import crypto from 'node:crypto'
 import fs from 'node:fs'
 import fsp from 'node:fs/promises'
 import path from 'node:path'
+import { Transform, type TransformCallback } from 'node:stream'
 
 import { createMainLogger } from '../logging'
 import type { ResourceDescriptor, ResourceId, ResourceLease } from './contracts'
 import { KeyedSerialExecutor } from './serial-executor'
 
 const SHA256_PATTERN = /^[a-f0-9]{64}$/
+const STALE_STAGING_AGE_MS = 24 * 60 * 60 * 1_000
 const logger = createMainLogger('main.image_editor_v3.resources')
 
 export interface PutResourceOptions {
@@ -75,6 +77,26 @@ function isMissing(error: unknown): boolean {
   return error instanceof Error && 'code' in error && error.code === 'ENOENT'
 }
 
+class ResourceIntegrityTransform extends Transform {
+  private readonly hash = crypto.createHash('sha256')
+
+  constructor(private readonly expectedSha256: string) {
+    super()
+  }
+
+  override _transform(chunk: Buffer, _encoding: BufferEncoding, callback: TransformCallback): void {
+    this.hash.update(chunk)
+    callback(null, chunk)
+  }
+
+  override _flush(callback: TransformCallback): void {
+    const actual = this.hash.digest('hex')
+    callback(actual === this.expectedSha256
+      ? undefined
+      : new Error(`Corrupt resource: sha256:${this.expectedSha256}`))
+  }
+}
+
 async function verifyExistingObject(
   objectPath: string,
   expectedSha256: string,
@@ -108,6 +130,7 @@ export class ContentAddressedResourceStore {
   private readonly leaseCounts = new Map<ResourceId, number>()
   private readonly objectsDir: string
   private readonly stagingDir: string
+  private initialization: Promise<void> | undefined
 
   constructor(readonly rootDir: string) {
     this.objectsDir = path.join(rootDir, 'objects')
@@ -115,10 +138,36 @@ export class ContentAddressedResourceStore {
   }
 
   async initialize(): Promise<void> {
+    if (this.initialization) return this.initialization
+    const initialization = this.initializeStore()
+    this.initialization = initialization
+    try {
+      await initialization
+    } catch (error) {
+      if (this.initialization === initialization) this.initialization = undefined
+      throw error
+    }
+  }
+
+  private async initializeStore(): Promise<void> {
     await Promise.all([
       fsp.mkdir(this.objectsDir, { recursive: true }),
       fsp.mkdir(this.stagingDir, { recursive: true }),
     ])
+    const cutoff = Date.now() - STALE_STAGING_AGE_MS
+    const removeIfStale = async (candidate: string): Promise<void> => {
+      const stats = await fsp.lstat(candidate).catch(() => null)
+      if (!stats || stats.mtimeMs > cutoff) return
+      await fsp.rm(candidate, { recursive: stats.isDirectory(), force: true })
+    }
+    const stagingEntries = await fsp.readdir(this.stagingDir, { withFileTypes: true }).catch(() => [])
+    await Promise.all(stagingEntries
+      .filter((entry) => entry.isFile() && entry.name.endsWith('.tmp'))
+      .map((entry) => removeIfStale(path.join(this.stagingDir, entry.name))))
+    const rootEntries = await fsp.readdir(this.rootDir, { withFileTypes: true }).catch(() => [])
+    await Promise.all(rootEntries
+      .filter((entry) => entry.isDirectory() && entry.name.startsWith('.henjiimg-import-'))
+      .map((entry) => removeIfStale(path.join(this.rootDir, entry.name))))
   }
 
   getFilesystemPath(resourceId: ResourceId): string {
@@ -127,14 +176,22 @@ export class ContentAddressedResourceStore {
   }
 
   async has(resourceId: ResourceId): Promise<boolean> {
-    return fsp.access(this.getFilesystemPath(resourceId)).then(() => true).catch(() => false)
+    return this.describe(resourceId).then(() => true).catch(() => false)
   }
 
   async describe(resourceId: ResourceId, mediaType?: string): Promise<ResourceDescriptor> {
     const hash = parseResourceId(resourceId)
-    const stats = await fsp.stat(this.getFilesystemPath(resourceId))
-    if (!stats.isFile()) throw new Error(`Resource is not a file: ${resourceId}`)
-    return { id: resourceId, sha256: hash, byteLength: stats.size, mediaType }
+    const handle = await fsp.open(
+      this.getFilesystemPath(resourceId),
+      fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW,
+    )
+    try {
+      const stats = await handle.stat()
+      if (!stats.isFile()) throw new Error(`Resource is not a file: ${resourceId}`)
+      return { id: resourceId, sha256: hash, byteLength: stats.size, mediaType }
+    } finally {
+      await handle.close().catch(() => undefined)
+    }
   }
 
   async putBuffer(bytes: Uint8Array, options: PutResourceOptions = {}): Promise<PutResourceResult> {
@@ -248,7 +305,39 @@ export class ContentAddressedResourceStore {
   }
 
   openReadStream(resourceId: ResourceId): fs.ReadStream {
-    return fs.createReadStream(this.getFilesystemPath(resourceId))
+    const objectPath = this.getFilesystemPath(resourceId)
+    const descriptor = fs.lstatSync(objectPath)
+    if (descriptor.isSymbolicLink()) throw new Error(`Resource is a symbolic link: ${resourceId}`)
+    const fd = fs.openSync(objectPath, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW)
+    try {
+      if (!fs.fstatSync(fd).isFile()) throw new Error(`Resource is not a file: ${resourceId}`)
+      return fs.createReadStream(objectPath, { fd, autoClose: true })
+    } catch (error) {
+      fs.closeSync(fd)
+      throw error
+    }
+  }
+
+  openVerifiedReadStream(resourceId: ResourceId): Transform {
+    const source = this.openReadStream(resourceId)
+    const verifier = new ResourceIntegrityTransform(parseResourceId(resourceId))
+    source.once('error', (error) => verifier.destroy(error))
+    return source.pipe(verifier)
+  }
+
+  async readVerifiedBuffer(resourceId: ResourceId, maxBytes: number): Promise<Buffer> {
+    if (!Number.isSafeInteger(maxBytes) || maxBytes < 1) throw new Error('Invalid resource read limit')
+    const chunks: Buffer[] = []
+    let byteLength = 0
+    for await (const value of this.openVerifiedReadStream(resourceId)) {
+      const chunk = Buffer.isBuffer(value) ? value : Buffer.from(value)
+      if (chunk.byteLength > maxBytes - byteLength) {
+        throw new Error(`Resource exceeds maximum byte length of ${maxBytes}`)
+      }
+      byteLength += chunk.byteLength
+      chunks.push(chunk)
+    }
+    return Buffer.concat(chunks, byteLength)
   }
 
   async verify(resourceId: ResourceId, signal?: AbortSignal): Promise<ResourceDescriptor> {

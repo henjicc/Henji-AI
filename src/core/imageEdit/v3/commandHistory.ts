@@ -191,6 +191,7 @@ export class ImageEditCommandHistoryV3 {
         `历史快照头不匹配：快照 ${decoded.snapshot.documentId}@${decoded.snapshot.headRevision}，文档 ${document.id}@${document.revision}`
       );
     }
+    this.assertSnapshotApplies(document, decoded.snapshot);
     const retainedBefore = this.resourceMap();
     this.undoEntries.splice(0, this.undoEntries.length, ...decoded.snapshot.undo.map(cloneEntry));
     this.redoEntries.splice(0, this.redoEntries.length, ...decoded.snapshot.redo.map(cloneEntry));
@@ -281,6 +282,35 @@ export class ImageEditCommandHistoryV3 {
       maxBytes: this.maxBytes,
       ...(this.maxSnapshotJsonBytes === undefined ? {} : { maxJsonBytes: this.maxSnapshotJsonBytes }),
     };
+  }
+
+  /**
+   * 结构校验之外，还要证明两条可达路径都能从当前文档执行：撤销栈从新到旧应用
+   * inverse，重做栈从栈顶到栈底应用 forward。这样被替换但形状仍合法的补丁不会
+   * 等到用户重启后第一次撤销时才暴露。
+   */
+  private assertSnapshotApplies(
+    document: ImageEditDocumentV3,
+    snapshot: ImageEditCommandHistorySnapshotV3,
+  ): void {
+    let undoDocument = document;
+    for (let index = snapshot.undo.length - 1; index >= 0; index -= 1) {
+      const entry = snapshot.undo[index];
+      if (!entry) continue;
+      undoDocument = applyImageEditCommandV3(
+        undoDocument,
+        withImageEditCommandRevisionV3(entry.inverse, undoDocument.revision),
+      ).document;
+    }
+    let redoDocument = document;
+    for (let index = snapshot.redo.length - 1; index >= 0; index -= 1) {
+      const entry = snapshot.redo[index];
+      if (!entry) continue;
+      redoDocument = applyImageEditCommandV3(
+        redoDocument,
+        withImageEditCommandRevisionV3(entry.forward, redoDocument.revision),
+      ).document;
+    }
   }
 
   private assertHead(document: ImageEditDocumentV3): void {

@@ -1,4 +1,5 @@
 import type { Readable } from 'node:stream'
+import type { ImageEditCommandHistorySnapshotV3 } from '../../../../src/core/imageEdit/v3/commandHistoryCodec'
 
 import type { SourceExifOrientation } from './source-orientation'
 
@@ -21,6 +22,8 @@ export interface ImageEditDocumentEnvelope {
   createdAt: string
   updatedAt: string
   document: unknown
+  /** 早期 V3/迁移文档可缺省；一旦新编辑产生持久命令便写入结构化快照。 */
+  history?: ImageEditCommandHistorySnapshotV3
   resourceRefs: ResourceId[]
   previewRef?: ResourceId
 }

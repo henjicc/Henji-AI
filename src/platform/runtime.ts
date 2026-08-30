@@ -32,6 +32,22 @@ export function isUiInspectionReadOnly(): boolean {
   return native?.runtimeInfo?.uiInspectionReadOnly === true
 }
 
+export interface HenjiRuntimeFeatureFlags {
+  imageEditorV3: boolean
+}
+
+interface HenjiRuntimeInfoShape {
+  featureFlags?: { imageEditorV3?: boolean }
+}
+
+/** V3 默认关闭，只允许宿主入口在明确运行时开关下切换。 */
+export function isImageEditorV3Enabled(runtimeInfo?: HenjiRuntimeInfoShape): boolean {
+  if (runtimeInfo) return runtimeInfo.featureFlags?.imageEditorV3 === true
+  if (typeof window === 'undefined') return false
+  const native = window.henjiNative as { runtimeInfo?: HenjiRuntimeInfoShape } | undefined
+  return native?.runtimeInfo?.featureFlags?.imageEditorV3 === true
+}
+
 let cachedPlatform: PlatformRuntime | null = null
 let cachedShell: ShellKind | null = null
 

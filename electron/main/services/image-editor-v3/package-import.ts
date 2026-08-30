@@ -6,7 +6,7 @@ import type * as yauzl from 'yauzl'
 
 import { createMainLogger } from '../logging'
 import { isSymbolicLinkEntry, iterateEntries, openZip } from '../zip-archive'
-import type { ResourceDescriptor } from './contracts'
+import type { ResourceDescriptor, ResourceLease } from './contracts'
 import type { ContentAddressedResourceStore } from './resource-store'
 import {
   DEFAULT_HENJI_IMAGE_PACKAGE_LIMITS,
@@ -37,6 +37,8 @@ export interface ImportedHenjiImagePackage {
   manifest: HenjiImagePackageManifest
   resources: ResourceDescriptor[]
   thumbnail?: Buffer
+  /** 导入完成前即取得；调用方必须在文档引用原子落盘后释放。 */
+  resourceLease: ResourceLease
 }
 
 function abortError(): Error {
@@ -231,6 +233,9 @@ export async function importHenjiImagePackage(
     const thumbnail = manifest.thumbnail
       ? await fsp.readFile(staged.get(manifest.thumbnail.path)?.filePath ?? '')
       : undefined
+    const resourceLease = await request.resourceStore.acquireLease(
+      resources.map((resource) => resource.id),
+    )
     logger.info('可编辑图片包导入完成', {
       event: 'image_editor_v3.package.import.completed',
       context: {
@@ -239,7 +244,7 @@ export async function importHenjiImagePackage(
         resourceCount: resources.length,
       },
     })
-    return { manifest, resources, thumbnail }
+    return { manifest, resources, thumbnail, resourceLease }
   } catch (error) {
     logger.error('可编辑图片包导入失败', {
       event: 'image_editor_v3.package.import.failed',

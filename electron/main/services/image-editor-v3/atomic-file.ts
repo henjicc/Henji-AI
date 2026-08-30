@@ -2,6 +2,10 @@ import crypto from 'node:crypto'
 import fs from 'node:fs/promises'
 import path from 'node:path'
 
+import { createMainLogger } from '../logging'
+
+const logger = createMainLogger('main.image_editor_v3.atomic_file')
+
 export interface AtomicFileOperations {
   rename(source: string, target: string): Promise<void>
   remove(target: string): Promise<void>
@@ -35,6 +39,23 @@ function isReplaceCompatibilityError(error: unknown): boolean {
   return error.code === 'EEXIST' || error.code === 'EPERM' || error.code === 'ENOTEMPTY'
 }
 
+async function syncPublishedDirectory(
+  targetPath: string,
+  operations: AtomicFileOperations,
+): Promise<void> {
+  try {
+    await operations.syncDirectory?.(path.dirname(targetPath))
+  } catch (error) {
+    // rename 已经提交，目录 fsync 失败只代表断电耐久性无法确认；此时回滚或报告
+    // “保存失败”都会与磁盘上的新目标相矛盾。保留新目标并记录明确的降级证据。
+    logger.warn('文件已原子发布，但目录耐久化无法确认', {
+      event: 'image_editor_v3.atomic_file.durability_uncertain',
+      context: { targetPath },
+      error,
+    })
+  }
+}
+
 /**
  * POSIX 下 rename 会直接原子替换；Windows 不允许覆盖时才退到带备份的兼容路径。
  * 兼容路径若第二次 rename 失败，会尽力恢复旧目标，绝不把半成品当成成功结果。
@@ -46,7 +67,7 @@ export async function replaceFileAtomically(
 ): Promise<void> {
   try {
     await operations.rename(stagedPath, targetPath)
-    await operations.syncDirectory?.(path.dirname(targetPath))
+    await syncPublishedDirectory(targetPath, operations)
     return
   } catch (error) {
     if (!isReplaceCompatibilityError(error)) throw error
@@ -55,7 +76,7 @@ export async function replaceFileAtomically(
   const targetExists = await operations.access(targetPath).then(() => true).catch(() => false)
   if (!targetExists) {
     await operations.rename(stagedPath, targetPath)
-    await operations.syncDirectory?.(path.dirname(targetPath))
+    await syncPublishedDirectory(targetPath, operations)
     return
   }
 
@@ -70,7 +91,7 @@ export async function replaceFileAtomically(
   // 新目标已经发布后，旧备份清理失败不能再被当成发布失败，更不能尝试用旧文件
   // 覆盖已发布目标。残留 backup 可由后续维护清理，目标文件仍是唯一权威结果。
   await operations.remove(backupPath).catch(() => undefined)
-  await operations.syncDirectory?.(path.dirname(targetPath))
+  await syncPublishedDirectory(targetPath, operations)
 }
 
 export async function writeBufferAtomically(

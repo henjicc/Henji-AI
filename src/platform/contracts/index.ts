@@ -6,6 +6,7 @@ import type { CustomModelsPlatform } from './customModels'
 import type { SystemPlatform } from './system'
 import type { MediaPlatform } from './media'
 import type { ImagePlatform } from './image'
+import type { ImageEditorV3Platform } from './imageEditorV3'
 import type { VideoPlatform } from './video'
 import type { ClipboardPlatform } from './clipboard'
 import type { DragDropPlatform } from './dragDrop'
@@ -29,6 +30,7 @@ export interface PlatformRuntime {
   system: SystemPlatform
   media: MediaPlatform
   image: ImagePlatform
+  imageEditorV3: ImageEditorV3Platform
   video: VideoPlatform
   clipboard: ClipboardPlatform
   dragDrop: DragDropPlatform
@@ -53,6 +55,7 @@ export type {
   SystemPlatform,
   MediaPlatform,
   ImagePlatform,
+  ImageEditorV3Platform,
   VideoPlatform,
   ClipboardPlatform,
   DragDropPlatform,
@@ -75,6 +78,7 @@ export * from './customModels'
 export * from './system'
 export * from './media'
 export * from './image'
+export * from './imageEditorV3'
 export * from './video'
 export * from './clipboard'
 export * from './dragDrop'

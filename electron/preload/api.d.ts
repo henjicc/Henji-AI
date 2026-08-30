@@ -26,16 +26,21 @@ import type {
   HenjiShellApi,
   HenjiUpdaterApi,
 } from './api-desktop'
+import type { HenjiImageEditorV3Api } from './image-editor-v3-api'
 
 export * from './api-assistant'
 export * from './api-projects'
 export * from './api-ai'
 export * from './api-media'
 export * from './api-desktop'
+export type { HenjiImageEditorV3Api } from './image-editor-v3-api'
 
 export interface HenjiNativeApi {
   runtimeInfo: {
     uiInspectionReadOnly: boolean
+    featureFlags: {
+      imageEditorV3: boolean
+    }
   }
   assistant: HenjiAssistantApi
   ai: HenjiAiApi
@@ -54,6 +59,7 @@ export interface HenjiNativeApi {
   http: HenjiHttpApi
   media: HenjiMediaApi
   image: HenjiImageApi
+  imageEditorV3: HenjiImageEditorV3Api
   video: HenjiVideoApi
   audio: HenjiAudioApi
   clipboard: HenjiClipboardApi

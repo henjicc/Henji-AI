@@ -14,6 +14,7 @@ import { registerCustomModelsIpc } from './ipc/custom-models'
 import { registerDbIpc } from './ipc/db'
 import { registerDragIpc } from './ipc/drag'
 import { registerImageIpc } from './ipc/image'
+import { disposeImageEditorV3Ipc, registerImageEditorV3Ipc } from './ipc/image-editor-v3'
 import { registerKeystoreIpc } from './ipc/keystore'
 import { registerLlmRuntimeIpc } from './ipc/llm-runtime'
 import { registerLlmProviderSettingsIpc } from './ipc/llm-provider-settings'
@@ -96,6 +97,7 @@ app.whenReady().then(() => {
   registerDbIpc()
   registerDragIpc()
   registerImageIpc()
+  registerImageEditorV3Ipc()
   registerKeystoreIpc()
   registerLlmRuntimeIpc()
   registerLlmProviderSettingsIpc()
@@ -171,4 +173,5 @@ app.on('window-all-closed', () => {
 
 app.on('before-quit', () => {
   void disposeAgentRuntimeService()
+  void disposeImageEditorV3Ipc()
 })

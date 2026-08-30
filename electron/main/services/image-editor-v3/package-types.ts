@@ -6,6 +6,7 @@ import type {
   ResourceId,
 } from './contracts'
 import { validateImageEditDocumentEnvelope } from './document-repository'
+import { collectPersistedImageEditHistoryResourcesV3 } from './history-persistence'
 import { parseResourceId } from './resource-store'
 
 export const HENJI_IMAGE_PACKAGE_FORMAT = 'henjiimg' as const
@@ -207,6 +208,19 @@ export function validateHenjiImagePackageManifest(value: unknown): HenjiImagePac
   for (const resourceId of required) {
     if (!ids.has(resourceId) && !externalIds.has(resourceId)) {
       throw new Error(`Package resource missing from manifest: ${resourceId}`)
+    }
+  }
+  const embeddedById = new Map(resources.map((resource) => [resource.resourceId, resource]))
+  const externalById = new Map((externalSources ?? []).map((source) => (
+    [`sha256:${source.sha256}` as ResourceId, source]
+  )))
+  for (const historyResource of collectPersistedImageEditHistoryResourcesV3(document.history)) {
+    if (historyResource.byteSize === null) continue
+    const embedded = embeddedById.get(historyResource.resourceId as ResourceId)
+    const external = externalById.get(historyResource.resourceId as ResourceId)
+    const actualBytes = embedded?.byteLength ?? external?.byteLength
+    if (actualBytes !== historyResource.byteSize) {
+      throw new Error(`History resource byte length mismatch: ${historyResource.resourceId}`)
     }
   }
   return {

@@ -90,4 +90,36 @@ describe('ContentAddressedResourceStore', () => {
     await expect(store.putFile(linkPath, { maxBytes: 32 }))
       .rejects.toThrow('symbolic link')
   })
+
+  it('所有流式读取都拒绝路径替换，并在结束前复核内容哈希', async () => {
+    const stored = await store.putBuffer(Buffer.from('authoritative'))
+    const resourcePath = store.getFilesystemPath(stored.id)
+    await fsp.writeFile(resourcePath, 'same-length!!')
+
+    await expect(store.readVerifiedBuffer(stored.id, 64)).rejects.toThrow('Corrupt resource')
+    await fsp.rm(resourcePath)
+    await fsp.symlink('/etc/hosts', resourcePath)
+    expect(() => store.openReadStream(stored.id)).toThrow('symbolic link')
+    await expect(store.describe(stored.id)).rejects.toThrow()
+  })
+
+  it('初始化时清理超过一天的中断暂存，但保留仍可能活跃的目录', async () => {
+    const stagingDir = path.join(rootDir, '.staging')
+    const staleFile = path.join(stagingDir, 'stale.tmp')
+    const staleImport = path.join(rootDir, '.henjiimg-import-stale')
+    const freshImport = path.join(rootDir, '.henjiimg-import-fresh')
+    await fsp.mkdir(stagingDir, { recursive: true })
+    await fsp.mkdir(staleImport)
+    await fsp.mkdir(freshImport)
+    await fsp.writeFile(staleFile, 'partial')
+    const staleTime = new Date(Date.now() - 25 * 60 * 60 * 1_000)
+    await fsp.utimes(staleFile, staleTime, staleTime)
+    await fsp.utimes(staleImport, staleTime, staleTime)
+
+    await new ContentAddressedResourceStore(rootDir).initialize()
+
+    await expect(fsp.access(staleFile)).rejects.toThrow()
+    await expect(fsp.access(staleImport)).rejects.toThrow()
+    await expect(fsp.access(freshImport)).resolves.toBeUndefined()
+  })
 })

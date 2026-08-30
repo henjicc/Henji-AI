@@ -7,6 +7,13 @@ import path from 'node:path'
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
+import { ImageEditCommandHistoryV3 } from '../../../../src/core/imageEdit/v3/commandHistory'
+import {
+  createImageEditDocumentV3,
+  createImageEditRasterLayerV3,
+} from '../../../../src/core/imageEdit/v3/documentFactory'
+import type { ImageEditDocumentV3 } from '../../../../src/core/imageEdit/v3/documentTypes'
+
 import {
   IMAGE_EDIT_DOCUMENT_FORMAT,
   IMAGE_EDIT_DOCUMENT_VERSION,
@@ -33,6 +40,15 @@ afterEach(async () => {
 })
 
 function documentEnvelope(resourceId: ResourceId): ImageEditDocumentEnvelope {
+  const document: ImageEditDocumentV3 = {
+    ...createImageEditDocumentV3({
+      width: 100,
+      height: 80,
+      documentId: 'package-document',
+    }),
+    revision: 7,
+    layers: [createImageEditRasterLayerV3('package-source', '原图', resourceId)],
+  }
   return {
     format: IMAGE_EDIT_DOCUMENT_FORMAT,
     formatVersion: IMAGE_EDIT_DOCUMENT_VERSION,
@@ -40,9 +56,43 @@ function documentEnvelope(resourceId: ResourceId): ImageEditDocumentEnvelope {
     revision: 7,
     createdAt: '2026-08-31T00:00:00.000Z',
     updatedAt: '2026-08-31T00:01:00.000Z',
-    document: { layers: [{ type: 'raster', resourceId }] },
+    document,
     resourceRefs: [resourceId],
     previewRef: resourceId,
+  }
+}
+
+function historyEnvelope(resourceId: ResourceId, byteLength: number): ImageEditDocumentEnvelope {
+  const initial: ImageEditDocumentV3 = {
+    ...createImageEditDocumentV3({ width: 32, height: 32, documentId: 'history-package' }),
+    layers: [createImageEditRasterLayerV3('paint', '画笔')],
+  }
+  const history = new ImageEditCommandHistoryV3()
+  history.clear(initial)
+  const painted = history.execute(initial, {
+    type: 'raster.apply-tile-delta',
+    commandId: 'package-paint',
+    expectedRevision: 0,
+    layerId: 'paint',
+    changes: [{
+      tileKey: '0:0:0',
+      previousResourceId: null,
+      previousByteSize: 0,
+      resourceId,
+      byteSize: byteLength,
+    }],
+  })
+  const document = history.undo(painted).document
+  return {
+    format: IMAGE_EDIT_DOCUMENT_FORMAT,
+    formatVersion: IMAGE_EDIT_DOCUMENT_VERSION,
+    documentId: document.id,
+    revision: document.revision,
+    createdAt: '2026-08-31T00:00:00.000Z',
+    updatedAt: '2026-08-31T00:01:00.000Z',
+    document,
+    history: history.createSnapshot(),
+    resourceRefs: [resourceId],
   }
 }
 
@@ -157,6 +207,38 @@ describe('.henjiimg package codec', () => {
     expect(imported.thumbnail?.toString()).toBe('thumbnail')
     expect(await fsp.readFile(targetStore.getFilesystemPath(source.id), 'utf8'))
       .toBe('authoritative pixels')
+    await imported.resourceLease.release()
+  })
+
+  it('自包含包往返命令历史及仅由撤销栈保留的瓦片', async () => {
+    const sourceStore = new ContentAddressedResourceStore(path.join(rootDir, 'history-source-store'))
+    const tile = await sourceStore.putBuffer(Buffer.from('history-only tile'))
+    const envelope = historyEnvelope(tile.id, tile.byteLength)
+    const targetPath = path.join(rootDir, 'history.henjiimg')
+    await new HenjiImagePackageCodec(sourceStore).export({ targetPath, document: envelope })
+
+    const targetStore = new ContentAddressedResourceStore(path.join(rootDir, 'history-target-store'))
+    const imported = await new HenjiImagePackageCodec(targetStore).import(targetPath)
+    expect(imported.manifest.document.history).toEqual(envelope.history)
+    expect(imported.manifest.document.resourceRefs).toContain(tile.id)
+    expect(await fsp.readFile(targetStore.getFilesystemPath(tile.id), 'utf8')).toBe('history-only tile')
+
+    const restored = new ImageEditCommandHistoryV3()
+    restored.restore(
+      imported.manifest.document.document as ImageEditDocumentV3,
+      imported.manifest.document.history,
+    )
+    expect(restored.redo(imported.manifest.document.document as ImageEditDocumentV3).changed).toBe(true)
+    await imported.resourceLease.release()
+  })
+
+  it('拒绝历史声明的瓦片大小与包内权威资源不一致', async () => {
+    const store = new ContentAddressedResourceStore(path.join(rootDir, 'history-size-store'))
+    const tile = await store.putBuffer(Buffer.from('authoritative history tile'))
+    await expect(new HenjiImagePackageCodec(store).export({
+      targetPath: path.join(rootDir, 'tampered-history.henjiimg'),
+      document: historyEnvelope(tile.id, tile.byteLength + 1),
+    })).rejects.toThrow('History resource byte length mismatch')
   })
 
   it('高级外链包不嵌入原图，但保留内容指纹和重连信息', async () => {
@@ -184,6 +266,7 @@ describe('.henjiimg package codec', () => {
     expect(imported.resources).toEqual([])
     expect(imported.manifest.document.resourceRefs).toEqual([source.id])
     expect(await targetStore.has(source.id)).toBe(false)
+    await imported.resourceLease.release()
   })
 
   it('拒绝 zip-slip 且不会向包外落盘', async () => {
