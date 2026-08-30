@@ -13,7 +13,7 @@ export interface VgpuGlowOperationParams {
   intensity: number;
   /** 辉光在图片空间中的扩散半径 0..1。 */
   radius: number;
-  /** 各颜色通道的散射半径差异 0..1。 */
+  /** 柔化辉光层的水平 RGB 空间分离 0..1。 */
   chromaticAberration: number;
   /** 参与发光的亮源门槛 0..1。 */
   sourceThreshold: number;

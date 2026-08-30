@@ -17,7 +17,8 @@ import {
   parseVgpuGlowOperationParams,
   rebaseVgpuGlowRecipeForScale,
   reconstructVirtualRadiance,
-  resolveSpectralEmissionPeak,
+  resolveEmissionPeak,
+  resolveSoftChannelPeak,
   type VgpuGlowRecipe,
 } from './index';
 
@@ -61,6 +62,15 @@ function weightedMeanFraction(recipe: VgpuGlowRecipe, channel = 1): number {
   ) / recipe.image.referenceDimension;
 }
 
+/** 单位能量二维 Gaussian 混合的径向质心：E[r] = σ√(π/2)。 */
+function radialCentroidFraction(recipe: VgpuGlowRecipe, channel = 1): number {
+  return recipe.scatterLevels.reduce(
+    (sum, level) => sum
+      + level.weight[channel] * level.effectiveSigmaPx * Math.sqrt(Math.PI / 2),
+    0
+  ) / recipe.image.referenceDimension;
+}
+
 function amplitude(recipe: VgpuGlowRecipe, radiusFraction: number, channel = 1): number {
   const radiusPixels = radiusFraction * recipe.image.referenceDimension;
   return recipe.scatterLevels.reduce((sum, level) => {
@@ -80,7 +90,7 @@ describe('VGPU 辉光操作契约', () => {
     expect(weightedMeanFraction(dreamy)).toBeGreaterThan(weightedMeanFraction(natural));
     expect(neon.sourceGain).toBeGreaterThan(dreamy.sourceGain);
     for (const recipe of [natural, dreamy, neon]) {
-      expect(recipe.schemaVersion).toBe(10);
+      expect(recipe.schemaVersion).toBe(11);
       expect(recipe.scatterLevels.length).toBeGreaterThanOrEqual(4);
       expect(recipe.scatterLevels.length).toBeLessThanOrEqual(12);
       expect(recipe.scatterLevels[0].divisor).toBe(2);
@@ -149,7 +159,7 @@ describe('VGPU 辉光操作契约', () => {
     expect(maximum.intensity).toBeGreaterThan(2.5);
   });
 
-  it('用真实 GPU 核尺度构造最大半径，核心到远场没有 octave 肩部', () => {
+  it('用真实 GPU 核尺度构造连续正值 PSF，中远场没有 octave 肩部', () => {
     const recipe = compileVgpuGlowRecipe({
       ...createDefaultVgpuGlowOperationParams(),
       radius: 1,
@@ -158,7 +168,23 @@ describe('VGPU 辉光操作契约', () => {
     expect(effectiveScatterSigmaPx(4)).toBeCloseTo(Math.sqrt(20.75), 10);
     expect(effectiveScatterSigmaPx(2048) / 2048).toBeCloseTo(Math.sqrt(1.5), 5);
 
-    const fractions = [4, 8, 16, 32, 64, 128, 256, 512, 1024]
+    for (const level of recipe.scatterLevels) {
+      expect(level.weight.every((weight) => Number.isFinite(weight) && weight >= 0)).toBe(true);
+      expect(Number.isFinite(level.whiteCoreWeight)).toBe(true);
+      expect(level.whiteCoreWeight).toBeGreaterThanOrEqual(0);
+    }
+
+    // 正值 Gaussian basis 的混合必须从中心连续单调衰减，不能出现一圈独立亮边。
+    const monotonicFractions = Array.from({ length: 257 }, (_, index) => index / 512);
+    const radialSamples = monotonicFractions.map((fraction) => amplitude(recipe, fraction));
+    for (let index = 1; index < radialSamples.length; index += 1) {
+      expect(radialSamples[index]).toBeLessThanOrEqual(radialSamples[index - 1]);
+      expect(Number.isFinite(radialSamples[index])).toBe(true);
+      expect(radialSamples[index]).toBeGreaterThan(0);
+    }
+
+    // 紧致 core 允许有限平顶；离开 core 后，应平滑进入 Moffat 中场与反平方远场。
+    const fractions = [8, 16, 32, 64, 128, 256, 512, 1024]
       .map((value) => value / 3840);
     const exponents: number[] = [];
     for (let index = 0; index < fractions.length - 1; index += 1) {
@@ -169,15 +195,53 @@ describe('VGPU 辉光操作契约', () => {
       ) / (Math.log(end) - Math.log(start));
       exponents.push(exponent);
       expect(exponent, `半径 ${(start * 3840).toFixed(0)}→${(end * 3840).toFixed(0)}px`)
-        .toBeGreaterThan(1.8);
+        .toBeGreaterThan(2);
       expect(exponent, `半径 ${(start * 3840).toFixed(0)}→${(end * 3840).toFixed(0)}px`)
-        .toBeLessThan(2.9);
+        .toBeLessThan(2.75);
     }
     for (let index = 1; index < exponents.length; index += 1) {
       expect(
         Math.abs(exponents[index] - exponents[index - 1]),
         `octave 斜率跳变 ${index - 1}→${index}`
-      ).toBeLessThan(0.55);
+      ).toBeLessThan(0.35);
+    }
+  });
+
+  it('用有限核心目标保留反立方 1/σ 与反平方 octave 等权关系', () => {
+    const source = compileVgpuGlowRecipe({
+      ...createDefaultVgpuGlowOperationParams(),
+      radius: 1,
+    }, UHD);
+    const isolate = (
+      inverseCubeEnergy: number,
+      inverseSquareEnergy: number
+    ): VgpuGlowRecipe => rebaseVgpuGlowRecipeForScale({
+      ...source,
+      scatterModel: {
+        ...source.scatterModel,
+        optical: {
+          ...source.scatterModel.optical,
+          coreEnergy: 0,
+          inverseCubeEnergy,
+          inverseSquareEnergy,
+        },
+      },
+    }, UHD.width, UHD.height);
+    const inverseCube = isolate(1, 0);
+    const inverseSquare = isolate(0, 1);
+
+    // 跳过有限核心，且留在远场截止包络明显生效之前。相邻 σ 约翻倍，
+    // 所以反立方的每 octave 能量约减半，反平方则约保持不变。
+    for (const index of [4, 5, 6]) {
+      const cubeRatio = inverseCube.scatterLevels[index + 1].weight[1]
+        / inverseCube.scatterLevels[index].weight[1];
+      const squareRatio = inverseSquare.scatterLevels[index + 1].weight[1]
+        / inverseSquare.scatterLevels[index].weight[1];
+      expect(cubeRatio).toBeGreaterThan(0.43);
+      expect(cubeRatio).toBeLessThan(0.56);
+      expect(squareRatio).toBeGreaterThan(0.9);
+      // 有限核心的启动项会让最前一组比值略高于 1，进入远场后即趋于等权。
+      expect(squareRatio).toBeLessThan(1.02);
     }
   });
 
@@ -186,6 +250,7 @@ describe('VGPU 辉光操作契约', () => {
     const preview = rebaseVgpuGlowRecipeForScale(source, 1885, 1060);
 
     expect(weightedMeanFraction(preview)).toBeCloseTo(weightedMeanFraction(source), 2);
+    expect(radialCentroidFraction(preview)).toBeCloseTo(radialCentroidFraction(source), 2);
     for (const fraction of [0.005, 0.02, 0.08, 0.2]) {
       const ratio = amplitude(preview, fraction) / amplitude(source, fraction);
       // 0.5% 已接近预览图的最小可表达核心尺度；允许一个 mip 的量化误差。
@@ -201,22 +266,17 @@ describe('VGPU 辉光操作契约', () => {
     }
   });
 
-  it('色差为零时不偷偷改变色彩，开启后才错开波长尺度且保持总能量', () => {
-    const neutral = compileVgpuGlowRecipe(createDefaultVgpuGlowOperationParams(), UHD);
-    for (const level of neutral.scatterLevels) {
-      expect(level.weight[0]).toBeCloseTo(level.weight[1], 12);
-      expect(level.weight[1]).toBeCloseTo(level.weight[2], 12);
-    }
-
+  it('RGB 分离只编译为空间位移，不再同时扭曲三通道 PSF', () => {
     const recipe = compileVgpuGlowRecipe({
       ...createDefaultVgpuGlowOperationParams(),
       chromaticAberration: 1,
     }, UHD);
-    const near = recipe.scatterLevels[0].weight;
-    const tail = recipe.scatterLevels[recipe.scatterLevels.length - 1].weight;
 
-    expect(near[2]).toBeGreaterThan(near[0]);
-    expect(tail[0]).toBeGreaterThan(tail[2]);
+    expect(recipe.chromaticOffsetPx).toBeGreaterThan(0);
+    for (const level of recipe.scatterLevels) {
+      expect(level.weight[0]).toBeCloseTo(level.weight[1], 12);
+      expect(level.weight[1]).toBeCloseTo(level.weight[2], 12);
+    }
     for (const channel of [0, 1, 2]) {
       expect(recipe.scatterLevels.reduce(
         (sum, level) => sum + level.weight[channel],
@@ -225,28 +285,40 @@ describe('VGPU 辉光操作契约', () => {
     }
   });
 
-  it('用有限斜率肩部重建 LDR 辐射，不再放大 8-bit 顶值量化', () => {
-    const ceiling = 8.2;
+  it('用有限斜率 SDR emissive prior 重建辐射，不再放大 8-bit 顶值量化', () => {
+    const threshold = 0.12;
+    const knee = 0.07;
+    const maximumRadiance = 8.2;
     const samples = [0, 0.1, 0.5, 0.9, 1]
-      .map((value) => reconstructVirtualRadiance(value, ceiling));
+      .map((value) => reconstructVirtualRadiance(
+        value,
+        threshold,
+        knee,
+        maximumRadiance
+      ));
     expect(samples[0]).toBeCloseTo(0, 12);
     for (let index = 1; index < samples.length; index += 1) {
       expect(samples[index]).toBeGreaterThan(samples[index - 1]);
       expect(Number.isFinite(samples[index])).toBe(true);
     }
-    expect(samples.at(-1)).toBeCloseTo(ceiling, 10);
-    const almostWhite = reconstructVirtualRadiance(254 / 255, ceiling);
-    expect(samples.at(-1)! / almostWhite).toBeLessThan(1.03);
+    expect(samples.at(-1)).toBeCloseTo(maximumRadiance, 10);
+    const almostWhite = reconstructVirtualRadiance(
+      254 / 255,
+      threshold,
+      knee,
+      maximumRadiance
+    );
+    expect(samples.at(-1)! / almostWhite).toBeLessThan(1.015);
   });
 
   it('以高亮光谱覆盖率提取亮源，让青色到暖色的真实渐变保持连续能量', () => {
     const recipe = compileVgpuGlowRecipe(applyVgpuGlowLook('dreamy'), UHD);
     const emission = (displayRgb: readonly [number, number, number]) =>
       extractVirtualEmitterRadiance(
-        resolveSpectralEmissionPeak(displayRgb),
+        resolveEmissionPeak(displayRgb),
         recipe.sourceThresholdDisplay,
         recipe.sourceKneeDisplay,
-        recipe.sourceRadianceCeiling
+        recipe.sourceMaximumRadiance
       );
     // 来自“发光测试.jpg”中「界」字同一水平笔画的真实显示域 RGB 样本。
     const transitionSamples = [
@@ -265,15 +337,18 @@ describe('VGPU 辉光操作契约', () => {
     expect(Math.min(...transitionEmission) / endpointMean).toBeGreaterThan(0.93);
     expect(Math.max(...transitionEmission) / Math.min(...transitionEmission)).toBeLessThan(1.15);
 
-    // 暗部和抗锯齿边缘必须逐值回退到 max，不能因多通道补偿形成灰雾。
-    expect(resolveSpectralEmissionPeak([0.1, 0.2, 0.28])).toBe(0.28);
-    expect(resolveSpectralEmissionPeak([0.5, 0.5, 0.5])).toBeLessThan(0.62);
+    // 中性灰必须严格保持原值；彩色暗边也只能获得有限的光谱覆盖补偿。
+    expect(resolveEmissionPeak([0.5, 0.5, 0.5])).toBeCloseTo(0.5, 12);
+    expect(resolveEmissionPeak([0.1, 0.2, 0.28])).toBeLessThan(0.33);
+    expect(resolveEmissionPeak([0.1, 0.2, 0.28])).toBeGreaterThanOrEqual(
+      resolveSoftChannelPeak([0.1, 0.2, 0.28])
+    );
 
     // 高亮主导通道交换处应接近光滑，不能保留 max 的 V 形折角。
     const delta = 1 / 255;
-    const center = resolveSpectralEmissionPeak([0.75, 0.75, 0.1]);
-    const left = resolveSpectralEmissionPeak([0.75 - delta, 0.75, 0.1]);
-    const right = resolveSpectralEmissionPeak([0.75 + delta, 0.75, 0.1]);
+    const center = resolveEmissionPeak([0.75, 0.75, 0.1]);
+    const left = resolveEmissionPeak([0.75 - delta, 0.75, 0.1]);
+    const right = resolveEmissionPeak([0.75 + delta, 0.75, 0.1]);
     expect((left + right - 2 * center) / delta).toBeLessThan(0.01);
 
     const white = emission([1, 1, 1]);
@@ -343,13 +418,15 @@ describe('VGPU 辉光操作契约', () => {
     expect(translucentResult.every(Number.isFinite)).toBe(true);
   });
 
-  it('着色器在显示域有限重建辐射，并让白热只走独立核心 PSF', () => {
-    expect(bloomShaderSource).toContain('let linearPeak = max(color.r, max(color.g, color.b))');
+  it('着色器分离 SDR 发射幅度与线性色度，并让白热只替换独立核心', () => {
     expect(bloomShaderSource).toContain('let displayColor = clamp(linearToSrgb(color)');
-    expect(bloomShaderSource).toContain('let displayPeak = spectralEmissionPeak(displayColor)');
+    expect(bloomShaderSource).toContain('let channelPeak = softChannelPeak(displayColor)');
+    expect(bloomShaderSource).toContain('let displayPeak = emissionPeak(displayColor)');
     expect(bloomShaderSource).toContain('dot(displayColor * displayColor, displayColor)');
-    expect(bloomShaderSource).toContain('1.0 - RADIANCE_SHOULDER * clamp(displayValue');
-    expect(bloomShaderSource).not.toContain('-log(max(1.0 - min(');
+    expect(bloomShaderSource).toContain('let sourceDirection = color / max(srgbToLinear(channelPeak)');
+    expect(bloomShaderSource).toContain('pow(displayPeak, LDR_EMISSION_GAMMA)');
+    expect(bloomShaderSource).not.toContain('RADIANCE_SHOULDER');
+    expect(bloomShaderSource).not.toContain('-log(');
     expect(bloomShaderSource).toContain('return vec4f(coloredEmitter, whiteCore)');
     expect(bloomShaderSource).toContain('extractEmitter(color.rgb) * color.a');
     expect(bloomShaderSource).toContain('insideImage(sampleUv)');
@@ -359,8 +436,17 @@ describe('VGPU 辉光操作契约', () => {
     expect(compositeShaderSource).not.toContain('softCore');
     expect(compositeShaderSource).not.toContain('toneBloom');
     expect(compositeShaderSource).not.toContain('applyWhiteHeat');
-    expect(compositeShaderSource).toContain('vec3f(max(centeredBloom.a, 0.0))');
-    expect(compositeShaderSource).toContain('var glowLayer = vec3f(1.0) - exp(-emitted)');
+    expect(compositeShaderSource).toContain('fn sampleDiffuseBloom(uv: vec2f, blurPx: f32)');
+    expect(compositeShaderSource).toContain(
+      'centered + (separated - softCentered) * composite.optics.w'
+    );
+    expect(compositeShaderSource).not.toContain('diffuse = mix(centered, separated');
+    expect(compositeShaderSource).toContain(
+      'let opticalEnergy = mix(diffuse, vec3f(diffusePeak), whiteBlend)'
+    );
+    expect(compositeShaderSource).not.toContain('+ vec3f(max(centeredBloom.a');
+    expect(compositeShaderSource).toContain('let emittedDirection = emitted / max(emittedPeak');
+    expect(compositeShaderSource).toContain('let glowLayer = emittedDirection * response');
     expect(compositeShaderSource).toContain('let outAlpha = glowAlpha + baseAlpha * (1.0 - glowAlpha)');
     expect(compositeShaderSource).toContain('return compositeGlow(base, glowLayer)');
     expect(baselineShaderSource).toContain('linear_to_srgb(color.rgb) * alpha');

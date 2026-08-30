@@ -1,8 +1,6 @@
 struct Composite {
   // intensity, response exposure, reserved, reserved
   params: vec4f,
-  // tint RGB, tint enabled
-  tint: vec4f,
   // inverse scene size XY, chromatic offset px, chromatic amount
   optics: vec4f,
   // dither amount, reserved
@@ -16,18 +14,23 @@ struct Composite {
 @group(0) @binding(2) var bloomPyramid: texture_2d<f32>;
 @group(0) @binding(3) var linearSampler: sampler;
 
-fn brightness(color: vec3f) -> f32 {
-  let luma = dot(color, vec3f(0.2126, 0.7152, 0.0722));
-  return max(luma, max(color.r, max(color.g, color.b)) * 0.82);
-}
-
-fn tintGlow(color: vec3f) -> vec3f {
-  return mix(color, composite.tint.rgb * brightness(color), composite.tint.a);
-}
-
 fn sampleBloom(uv: vec2f) -> vec4f {
   let scatterUv = composite.scatterRegion.xy + uv * composite.scatterRegion.zw;
   return textureSampleLevel(bloomPyramid, linearSampler, scatterUv, 0.0);
+}
+
+/**
+ * 色差只应移动已经散开的光，不应复制紧致热核。用一个小十字低通取得宽散射分量，
+ * 随位移增大同步加宽，避免最大色差重新退化成红蓝硬描边。
+ */
+fn sampleDiffuseBloom(uv: vec2f, blurPx: f32) -> vec3f {
+  let texel = composite.optics.xy * max(blurPx, 1.0);
+  let center = sampleBloom(uv).rgb;
+  let horizontal = sampleBloom(uv - vec2f(texel.x, 0.0)).rgb
+    + sampleBloom(uv + vec2f(texel.x, 0.0)).rgb;
+  let vertical = sampleBloom(uv - vec2f(0.0, texel.y)).rgb
+    + sampleBloom(uv + vec2f(0.0, texel.y)).rgb;
+  return center * 0.4 + (horizontal + vertical) * 0.15;
 }
 
 fn hash12(position: vec2f) -> f32 {
@@ -77,36 +80,47 @@ fn compositeGlow(base: vec4f, glowPremultiplied: vec3f) -> vec4f {
 @fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
   let base = textureSampleLevel(scene, linearSampler, uv, 0.0);
   let centeredBloom = sampleBloom(uv);
-  let centered = tintGlow(centeredBloom.rgb);
+  let centered = max(centeredBloom.rgb, vec3f(0.0));
   let chromaOffset = vec2f(composite.optics.x * composite.optics.z, 0.0);
   var diffuse = centered;
 
-  // 顺序是「先着色，再做 RGB 通道位移」。只移动已经柔化的散射层，不移动原图或微核，
-  // 因而得到真正的 RGB 分离而不是三份彩色硬边描边。
+  // 着色已在源阶段完成。色差以预柔化散射层的位移差分叠回 centered：紧核心始终留在
+  // 原位，只有外围光场产生 Glitch RGB 分离，不会出现三份彩色文字/描边。
   if (composite.optics.w > 0.0001) {
-    let red = tintGlow(sampleBloom(uv + chromaOffset).rgb);
-    let blue = tintGlow(sampleBloom(uv - chromaOffset).rgb);
-    let separated = vec3f(red.r, centered.g, blue.b);
-    diffuse = mix(centered, separated, composite.optics.w);
+    let separationBlurPx = 1.25 + composite.optics.z * 0.55;
+    let softCentered = max(sampleDiffuseBloom(uv, separationBlurPx), vec3f(0.0));
+    let red = max(sampleDiffuseBloom(uv + chromaOffset, separationBlurPx), vec3f(0.0));
+    let blue = max(sampleDiffuseBloom(uv - chromaOffset, separationBlurPx), vec3f(0.0));
+    let separated = vec3f(red.r, softCentered.g, blue.b);
+    diffuse = max(
+      centered + (separated - softCentered) * composite.optics.w,
+      vec3f(0.0)
+    );
   }
 
-  // RGB 是保留色彩的完整散射；A 是源阶段生成并只走紧致 core PSF 的白热能量。
-  // 白热不参与着色或 RGB 位移，也不会在相邻颜色卷积重叠后突然整片漂白。
-  let opticalEnergy = max(diffuse, vec3f(0.0))
-    + vec3f(max(centeredBloom.a, 0.0));
+  // A 是只走紧致 PSF 的白热替换置信度。它只把核心色度推向同峰值白色，不再叠加
+  // 第二份白色能量，因此不会在物体边界制造刻意的白描边，远场仍保留光源颜色。
+  let diffusePeak = max(diffuse.r, max(diffuse.g, diffuse.b));
+  let whiteBlend = clamp(
+    max(centeredBloom.a, 0.0) / max(diffusePeak, 0.000001),
+    0.0,
+    1.0
+  );
+  let opticalEnergy = mix(diffuse, vec3f(diffusePeak), whiteBlend);
 
-  // 两层能量一直保留在线性虚拟辐射域。这里只执行一次最终相机响应：
-  // screen(base, 1-exp(-E)) 等价于 1-(1-base)exp(-E)，因此不会像旧链路那样
-  // 对辉光先曝光一次、合成时又指数压缩一次而把核心与裙部压成同一亮度。
+  // 只对总能量峰值执行一次标量相机响应，再沿原 RGB 方向缩放。旧的逐通道 exp 会让
+  // 高能彩色光自行褪色；标量响应把白化权完全交给上面的核心白热。
   let emitted = opticalEnergy * composite.params.x * composite.params.y;
-  var glowLayer = vec3f(1.0) - exp(-emitted);
+  let emittedPeak = max(emitted.r, max(emitted.g, emitted.b));
+  let emittedDirection = emitted / max(emittedPeak, 0.000001);
+  var response = 1.0 - exp(-emittedPeak);
 
-  // 亚量化抖动只存在于可见辉光内，强度小于一个 8-bit 台阶；它打散平滑渐变里的同心色带，
-  // 不会给未发光区域或原图纹理增加噪声。
+  // 抖动只作用于标量响应，RGB 方向保持不变；不会给未发光区域或原图纹理增加噪声。
   let dimensions = max(vec2f(textureDimensions(scene)), vec2f(1.0));
-  let presence = smoothstep(0.001, 0.04, max(glowLayer.r, max(glowLayer.g, glowLayer.b)));
+  let presence = smoothstep(0.001, 0.04, response);
   let dither = (hash12(floor(uv * dimensions)) - 0.5) * composite.finish.x * presence;
-  glowLayer = clamp(glowLayer + vec3f(dither), vec3f(0.0), vec3f(1.0));
+  response = clamp(response + dither, 0.0, 1.0);
+  let glowLayer = emittedDirection * response;
 
   return compositeGlow(base, glowLayer);
 }

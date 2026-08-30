@@ -269,7 +269,6 @@ export class VgpuGlowRenderer {
       linearSampler: this.linearSampler,
       composite: {
         params: [recipe.intensity, recipe.responseExposure, 0, 0],
-        tint: [...recipe.tintLinear, recipe.tintEnabled ? 1 : 0],
         optics: [
           1 / Math.max(targets.scene.size[0], 1),
           1 / Math.max(targets.scene.size[1], 1),
@@ -361,10 +360,11 @@ function setBloom(
       params: [
         recipe.sourceThresholdDisplay,
         recipe.sourceKneeDisplay,
-        recipe.sourceRadianceCeiling,
+        recipe.sourceMaximumRadiance,
         mode === 0 ? recipe.sourceGain : -1,
       ],
       optics: [recipe.whiteHeat, 0, 0, 0],
+      tint: [...recipe.tintLinear, recipe.tintEnabled ? 1 : 0],
     },
   });
 }

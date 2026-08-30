@@ -1,8 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  canRenderVgpuGlowInSinglePass,
+  estimateVgpuGlowSinglePassBytes,
   renderDiffusionExport,
   rebaseDiffusionRecipeForScale,
   rebaseDiffusionRecipeForTile,
+  VGPU_GLOW_SINGLE_PASS_BUDGET_BYTES,
 } from './exportRenderer';
 import { compileDiffusionRecipe } from '../diffusionRecipe';
 import { createDefaultDiffusionOperationParams } from '../diffusionParams';
@@ -97,6 +100,18 @@ describe('柔光导出分块策略', () => {
     }
   });
 
+  it('VGPU 辉光预算不会让普通柔光在原像素上限内提前分块', async () => {
+    // 5120×2880 已超过 VGPU 辉光的保守工作集预算，但普通柔光仍由自己的纹理池管理。
+    const size = { width: 5120, height: 2880 };
+    expect(canRenderVgpuGlowInSinglePass(size.width, size.height, 8192)).toBe(false);
+
+    for (const mode of ['black_mist', 'white_mist'] as const) {
+      const calls = await runExport(mode, size);
+      expect(calls.tiles, mode).toBe(0);
+      expect(calls.global, mode).toEqual([size]);
+    }
+  });
+
   /**
    * 超大图仍要分块，但散射必须只算一次全局的、所有块共用——这正是块边界不再出现
    * 亮度台阶的原因。块自己算各自的散射就会重现那圈矩形边框。
@@ -126,6 +141,30 @@ describe('柔光导出分块策略', () => {
       expect(scaleX).toBeGreaterThan(0);
       expect(scaleY).toBeGreaterThan(0);
     }
+  });
+});
+
+describe('VGPU 辉光单遍显存预算', () => {
+  it('4K 保持整图渲染，低于旧像素阈值的 8K 也会按工作集退回分块', () => {
+    expect(canRenderVgpuGlowInSinglePass(3840, 2160, 8192)).toBe(true);
+
+    const eightKPixels = 7680 * 4320;
+    expect(eightKPixels).toBeLessThan(40_000_000);
+    expect(canRenderVgpuGlowInSinglePass(7680, 4320, 8192)).toBe(false);
+  });
+
+  it('估算包含约 25.3 B/像素的 GPU 工作集和固定宿主驱动余量', () => {
+    expect(estimateVgpuGlowSinglePassBytes(3840, 2160)).toBe(411_451_392);
+    expect(estimateVgpuGlowSinglePassBytes(7680, 4320)).toBe(1_041_825_792);
+    expect(estimateVgpuGlowSinglePassBytes(3840, 2160))
+      .toBeLessThan(VGPU_GLOW_SINGLE_PASS_BUDGET_BYTES);
+    expect(estimateVgpuGlowSinglePassBytes(7680, 4320))
+      .toBeGreaterThan(VGPU_GLOW_SINGLE_PASS_BUDGET_BYTES);
+  });
+
+  it('独立遵守设备纹理边长限制', () => {
+    expect(canRenderVgpuGlowInSinglePass(3840, 2160, 4096)).toBe(true);
+    expect(canRenderVgpuGlowInSinglePass(3840, 2160, 2048)).toBe(false);
   });
 });
 

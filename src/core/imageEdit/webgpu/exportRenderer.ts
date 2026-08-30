@@ -5,14 +5,54 @@ import {
 } from '../worker/exportPrototype';
 import type { ImageEditExportFormat } from '../worker/protocol';
 
+/** 旧柔光管线仍由纹理池管理；这个像素上限不应被 VGPU 辉光的工作集预算连带收紧。 */
+const DIFFUSION_SINGLE_PASS_MAX_PIXELS = 40_000_000;
+
+const MEBIBYTE = 1024 * 1024;
+
 /**
- * 整图单遍渲染的像素上限。
+ * VGPU 辉光整图渲染的保守进程内预算。
  *
- * 单遍需要同时持有底图、散射源、金字塔和输出，rgba16float 下大致是 4 倍图片面积
- * 乘 8 字节；四千万像素约 1.3GB 显存，再往上就该退回分块。四千万像素已经覆盖
- * 8K×5K，本应用的导出尺寸都在里面。
+ * WebGPU 不公开可用显存，因此这里不能假装按设备显存百分比动态推断。512 MiB 是一个
+ * 跨独显、集显都可解释的应用侧上限；其中预留 192 MiB 给源 ImageBitmap、输出 Canvas、
+ * Target.resize() 重建纹理时短暂并存的旧资源以及驱动内部开销。
  */
-const SINGLE_PASS_MAX_PIXELS = 40_000_000;
+export const VGPU_GLOW_SINGLE_PASS_BUDGET_BYTES = 512 * MEBIBYTE;
+export const VGPU_GLOW_SINGLE_PASS_RESERVE_BYTES = 192 * MEBIBYTE;
+
+/**
+ * VGPU 辉光常驻 GPU 工作集约为每个源像素 76/3 字节（约 25.3 B）：
+ *
+ * - rgba8 输入：4N；
+ * - rgba16float scene + output：16N；
+ * - level 与 accumulation 两套半分辨率金字塔：
+ *   2 × 8 × (N/4 + N/16 + ...) = 16N/3。
+ */
+export const VGPU_GLOW_WORKING_SET_BYTES_PER_PIXEL = 76 / 3;
+
+export function estimateVgpuGlowSinglePassBytes(
+  width: number,
+  height: number
+): number {
+  return VGPU_GLOW_SINGLE_PASS_RESERVE_BYTES
+    + width * height * VGPU_GLOW_WORKING_SET_BYTES_PER_PIXEL;
+}
+
+/**
+ * 只有 VGPU 辉光使用工作集预算。普通柔光继续走原有纹理池与像素上限，避免无谓分块。
+ */
+export function canRenderVgpuGlowInSinglePass(
+  width: number,
+  height: number,
+  maxTextureDimension?: number
+): boolean {
+  if (typeof maxTextureDimension === 'number'
+    && Math.max(width, height) > maxTextureDimension) {
+    return false;
+  }
+  return estimateVgpuGlowSinglePassBytes(width, height)
+    <= VGPU_GLOW_SINGLE_PASS_BUDGET_BYTES;
+}
 
 export interface WebGpuDiffusionExportOptions {
   width: number;
@@ -76,7 +116,7 @@ function canRenderInSinglePass(options: WebGpuDiffusionExportOptions): boolean {
   if (typeof limit === 'number' && Math.max(options.width, options.height) > limit) {
     return false;
   }
-  return options.width * options.height <= SINGLE_PASS_MAX_PIXELS;
+  return options.width * options.height <= DIFFUSION_SINGLE_PASS_MAX_PIXELS;
 }
 
 export async function renderDiffusionExport(

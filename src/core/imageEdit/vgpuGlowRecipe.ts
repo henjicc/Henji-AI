@@ -1,19 +1,15 @@
 import type { VgpuGlowOperationParams } from './vgpuGlowParams';
 
-export const VGPU_GLOW_RECIPE_VERSION = 10 as const;
+export const VGPU_GLOW_RECIPE_VERSION = 11 as const;
 
 /**
- * LDR 高光重建的有限肩部。0.88 让 255 仍映射到各光感的完整 ceiling，同时把
- * 254→255 的辐射跳变控制在约 2% 内，避免 8-bit/JPEG 量化被放大成光斑断层。
+ * SDR 发射源估计的公共常量。所有值都与 vgpuGlowBloom.wgsl 保持一致，CPU 参考测试
+ * 用它们钉住渐变连续性、中性灰不变量和 8-bit 顶值稳定性。
  */
-export const VGPU_GLOW_RADIANCE_SHOULDER = 0.88;
-
-/**
- * 多通道高亮的光谱覆盖补偿只在明确亮源区渐入。暗部和抗锯齿边缘仍严格使用
- * 单通道峰值，避免灰雾；高亮渐变则用三次范数消除主导通道切换造成的能量暗沟。
- */
-export const VGPU_GLOW_SPECTRAL_GATE_START = 0.28;
-export const VGPU_GLOW_SPECTRAL_GATE_END = 0.72;
+export const VGPU_GLOW_SOFT_PEAK_TAU = 0.06;
+export const VGPU_GLOW_SPECTRAL_CHROMA_START = 0.025;
+export const VGPU_GLOW_SPECTRAL_CHROMA_END = 0.1;
+export const VGPU_GLOW_LDR_EMISSION_GAMMA = 1.35;
 
 export interface VgpuGlowScatterLevel {
   /** 相对全分辨率的连续 2× 降采样倍数。 */
@@ -36,8 +32,8 @@ export interface VgpuGlowRecipe {
   /** 亮源资格在显示域判断，避免把肉眼连续的 LDR 渐变在线性域中挖出暗洞。 */
   sourceThresholdDisplay: number;
   sourceKneeDisplay: number;
-  /** 有限虚拟 HDR 的最大辐射值。 */
-  sourceRadianceCeiling: number;
+  /** SDR emissive prior 在裁白处达到的有限虚拟 HDR 增益。 */
+  sourceMaximumRadiance: number;
   sourceGain: number;
   intensity: number;
   responseExposure: number;
@@ -47,7 +43,6 @@ export interface VgpuGlowRecipe {
   scatterModel: {
     envelopeFraction: number;
     optical: VgpuGlowOpticalScatterModel;
-    chromaticAberration: number;
   };
   tintLinear: readonly [number, number, number];
   tintEnabled: boolean;
@@ -82,8 +77,8 @@ const MAX_SCATTER_LEVEL_COUNT = 12;
  * 可见的肩部。新配方按眼内眩光研究中的 core / skirt 分解构造三个连续分量：
  *
  * 1. 对数高斯核心：模拟衍射、失焦和传感器附近的紧致散射；
- * 2. 每 octave 能量约为 1/σ 的近场裙部：对应径向反三次方衰减；
- * 3. 每 octave 近似等能量的远场光幕：对应 Deep Glow 与经典眩光模型的反平方衰减。
+ * 2. 有限核心的 Moffat 中场：远离核心后每 octave 能量渐近 1/σ，对应径向反三次方；
+ * 3. 有限核心的远场光幕：远离核心后每 octave 渐近等能量，对应反平方衰减。
  *
  * 三部分都使用实际滤波核的等效 σ，并由同一个光滑包络控制可见范围。总能量逐通道
  * 严格归一，半径只改变能量在尺度间的分布，不会凭空把整张图越调越亮。
@@ -162,7 +157,7 @@ export function compileVgpuGlowRecipe(
     },
     sourceThresholdDisplay: thresholdDisplay,
     sourceKneeDisplay: kneeDisplay,
-    sourceRadianceCeiling: look.radianceCeiling,
+    sourceMaximumRadiance: look.radianceCeiling,
     sourceGain: look.sourceGain,
     // 低段保留精细调节，高段把创作范围扩展到约 2.5×。这不是线性暴力增亮：
     // PSF 总能量仍归一，只让用户能把有限虚拟 HDR 辐射真正推入强发光区。
@@ -173,13 +168,11 @@ export function compileVgpuGlowRecipe(
     scatterLevels: compileOpticalScatterLevels(
       referenceDimension,
       scatterEnvelopeFraction,
-      look.scatter,
-      params.chromaticAberration
+      look.scatter
     ),
     scatterModel: {
       envelopeFraction: scatterEnvelopeFraction,
       optical: look.scatter,
-      chromaticAberration: params.chromaticAberration,
     },
     tintLinear: parseLinearRgb(params.tintColor),
     tintEnabled: params.tintEnabled,
@@ -213,8 +206,7 @@ export function rebaseVgpuGlowRecipeForScale(
     scatterLevels: compileOpticalScatterLevels(
       referenceDimension,
       recipe.scatterModel.envelopeFraction,
-      scaledOptical,
-      recipe.scatterModel.chromaticAberration
+      scaledOptical
     ),
     scatterModel: {
       ...recipe.scatterModel,
@@ -236,8 +228,7 @@ export function effectiveScatterSigmaPx(divisor: number): number {
 function compileOpticalScatterLevels(
   referenceDimension: number,
   envelopeFraction: number,
-  model: VgpuGlowOpticalScatterModel,
-  chromaticAberration: number
+  model: VgpuGlowOpticalScatterModel
 ): readonly VgpuGlowScatterLevel[] {
   const count = resolveScatterLevelCount(referenceDimension);
   const divisors = Array.from({ length: count }, (_, index) => 2 ** (index + 1));
@@ -245,32 +236,49 @@ function compileOpticalScatterLevels(
   const envelope = sigmas.map((sigma) =>
     Math.exp(-0.5 * Math.pow(sigma / referenceDimension / envelopeFraction, 2))
   );
+
+  // 每个 GPU level 都是单位能量的有效 Gaussian basis。对数等距的 σ 上，
+  // coefficient 就是该尺度对应的对数环带能量。因此这里采样连续 PSF 目标，
+  // 而不是把名义 mip divisor 直接当作模糊半径。
   const core = normalizeWeights(sigmas.map((sigma, index) =>
     Math.exp(-0.5 * Math.pow(Math.log(sigma / model.coreSigmaPx) / model.coreLogWidth, 2))
       * envelope[index]
   ));
+
+  // (r² + a²)^(-q/2) 的单位积分 Gaussian 尺度混合，其每个 log-σ 的能量为
+  //   w(σ) ∝ σ^(2-q) exp(-a² / 2σ²)。
+  // q=3 于远场严格回到 1/σ，q=2 严格回到 octave 等权；指数项只负责把
+  // 两个幂律从有限大小的核心平滑地启动，不会造出另一圈描边。
   const inverseCube = normalizeWeights(sigmas.map((sigma, index) =>
-    envelope[index] / sigma
+    finitePowerLawScaleEnergy(sigma, model.coreSigmaPx * 0.5, 3) * envelope[index]
   ));
-  const inverseSquare = normalizeWeights(envelope);
+  const inverseSquare = normalizeWeights(sigmas.map((sigma, index) =>
+    finitePowerLawScaleEnergy(sigma, model.coreSigmaPx * 1.5, 2) * envelope[index]
+  ));
   const base = normalizeWeights(sigmas.map((_, index) =>
     core[index] * model.coreEnergy
       + inverseCube[index] * model.inverseCubeEnergy
       + inverseSquare[index] * model.inverseSquareEnergy
   ));
-  const spectralTilt = 0.07 * chromaticAberration;
-  const channels = [spectralTilt, 0, -spectralTilt].map((tilt) =>
-    normalizeWeights(base.map((weight, index) =>
-      weight * Math.pow(sigmas[index] / sigmas[0], tilt)
-    ))
-  );
 
   return divisors.map((divisor, index) => ({
     divisor,
     effectiveSigmaPx: sigmas[index],
-    weight: [channels[0][index], channels[1][index], channels[2][index]] as const,
+    // 「色差」是柔化后的 Glitch RGB 空间分离，不是镜头色散。PSF 本身必须
+    // 三通道严格相同，否则会在空间位移之外再叠一层彩色硬边。
+    weight: [base[index], base[index], base[index]] as const,
     whiteCoreWeight: core[index],
   }));
+}
+
+function finitePowerLawScaleEnergy(
+  sigma: number,
+  softeningRadius: number,
+  radialExponent: 2 | 3
+): number {
+  const coreRatio = softeningRadius / sigma;
+  return Math.pow(sigma, 2 - radialExponent)
+    * Math.exp(-0.5 * coreRatio * coreRatio);
 }
 
 function resolveScatterLevelCount(referenceDimension: number): number {
@@ -287,63 +295,93 @@ function normalizeWeights(raw: readonly number[]): number[] {
   return raw.map((value) => value / sum);
 }
 
-/**
- * 与亮源提取 WGSL 一致的有限斜率肩部。输入是显示域亮度，输出是虚拟辐射；
- * 与旧的 -log(1-v) 不同，它在 v=1 仍连续且导数有限。
- */
-export function reconstructVirtualRadiance(value: number, ceiling: number): number {
-  const displayValue = clamp(value, 0, 1);
-  const normalization = -Math.log(1 - VGPU_GLOW_RADIANCE_SHOULDER);
-  return ceiling * (
-    -Math.log(1 - VGPU_GLOW_RADIANCE_SHOULDER * displayValue)
-    / normalization
-  );
-}
-
-/**
- * 与 WGSL spectralEmissionPeak 完全一致的 CPU 参考。
- *
- * 不能直接对 RGB 求和，否则中性灰会比饱和单色凭空亮很多；也不能继续只取 max，
- * 因为青→黄→橙的渐变会在主导通道交换处形成可见能量谷。RGB 三次范数提供平滑的
- * 光谱覆盖度，再用显示峰值门控，让 max<=0.28 的暗部与抗锯齿像素逐位保持原值。
- */
-export function resolveSpectralEmissionPeak(
+/** 与 WGSL softChannelPeak 完全一致的可微通道峰值。 */
+export function resolveSoftChannelPeak(
   displayRgb: readonly [number, number, number]
 ): number {
-  const red = clamp(displayRgb[0], 0, 1);
-  const green = clamp(displayRgb[1], 0, 1);
-  const blue = clamp(displayRgb[2], 0, 1);
-  const exactPeak = Math.max(red, green, blue);
-  if (exactPeak <= 0) return 0;
-
-  const spectralPeak = Math.min(
-    Math.cbrt(red * red * red + green * green * green + blue * blue * blue),
-    1
+  const channels = displayRgb.map((value) => clamp(value, 0, 1));
+  const highest = Math.max(...channels);
+  const weights = channels.map((value) =>
+    Math.exp((value - highest) / VGPU_GLOW_SOFT_PEAK_TAU)
   );
-  const gate = smoothstep(
-    VGPU_GLOW_SPECTRAL_GATE_START,
-    VGPU_GLOW_SPECTRAL_GATE_END,
-    exactPeak
-  );
-  return interpolate(exactPeak, spectralPeak, gate);
+  const weightSum = weights.reduce((total, value) => total + value, 0);
+  return channels.reduce(
+    (total, value, index) => total + value * weights[index],
+    0
+  ) / Math.max(weightSum, 0.000001);
 }
 
-/** 与 WGSL bright-pass 完全一致的 CPU 参考，用于量化边界与颜色渐变回归。 */
+/**
+ * SDR 没有真实 emissive buffer，因此用色度受控的光谱覆盖度作为艺术先验：
+ * 中性灰严格保持原值；明确的彩色多通道过渡可获得连续能量，不在 RGB 主导通道
+ * 交换处形成暗沟。该函数只决定发射幅度，线性 RGB 色度仍由原像素单独提供。
+ */
+export function resolveEmissionPeak(
+  displayRgb: readonly [number, number, number]
+): number {
+  const channels = displayRgb.map((value) => clamp(value, 0, 1));
+  const channelPeak = resolveSoftChannelPeak(
+    channels as [number, number, number]
+  );
+  const mean = channels.reduce((total, value) => total + value, 0) / 3;
+  const chroma = Math.sqrt(channels.reduce(
+    (total, value) => total + (value - mean) * (value - mean),
+    0
+  ) / 3);
+  const spectralPeak = Math.min(Math.cbrt(channels.reduce(
+    (total, value) => total + value * value * value,
+    0
+  )), 1);
+  const chromaConfidence = smootherstep(
+    VGPU_GLOW_SPECTRAL_CHROMA_START,
+    VGPU_GLOW_SPECTRAL_CHROMA_END,
+    chroma
+  );
+  return interpolate(channelPeak, spectralPeak, chromaConfidence);
+}
+
+/**
+ * 与 WGSL 的有限虚拟 HDR 扩展一致。输入是已经解析的显示域发射幅度；低于 shoulder
+ * 只做部分 SDR 反响应，接近裁白时平滑到 maximumRadiance，顶端一阶斜率有限。
+ */
+export function reconstructVirtualRadiance(
+  displayValue: number,
+  thresholdDisplay: number,
+  kneeDisplay: number,
+  maximumRadiance: number
+): number {
+  const value = clamp(displayValue, 0, 1);
+  const shoulderStart = clamp(thresholdDisplay + kneeDisplay, 0, 0.9999);
+  const headroom = smootherstep(
+    shoulderStart,
+    1,
+    value
+  );
+  const expansion = interpolate(1, Math.max(maximumRadiance, 1), headroom);
+  return Math.pow(value, VGPU_GLOW_LDR_EMISSION_GAMMA) * expansion;
+}
+
+/** 与 WGSL 亮源资格和虚拟 HDR 扩展完全一致的标量 CPU 参考。 */
 export function extractVirtualEmitterRadiance(
   displayValue: number,
   thresholdDisplay: number,
   kneeDisplay: number,
-  ceiling: number
+  maximumRadiance: number
 ): number {
   const value = clamp(displayValue, 0, 1);
   if (value <= 0) return 0;
   const knee = Math.max(kneeDisplay, 0.0001);
-  const delta = value - thresholdDisplay;
-  const soft = clamp(delta + knee, 0, 2 * knee);
-  const softContribution = soft * soft / (4 * knee);
-  const brightPass = Math.max(delta, softContribution);
-  const fraction = clamp(brightPass / value, 0, 1);
-  return reconstructVirtualRadiance(value, ceiling) * fraction;
+  const confidence = smootherstep(
+    thresholdDisplay - knee,
+    thresholdDisplay + knee,
+    value
+  );
+  return reconstructVirtualRadiance(
+    value,
+    thresholdDisplay,
+    kneeDisplay,
+    maximumRadiance
+  ) * confidence;
 }
 
 function parseLinearRgb(color: string): readonly [number, number, number] {
@@ -370,9 +408,11 @@ function interpolate(start: number, end: number, amount: number): number {
   return start + (end - start) * amount;
 }
 
-function smoothstep(edge0: number, edge1: number, value: number): number {
+function smootherstep(edge0: number, edge1: number, value: number): number {
   const amount = clamp((value - edge0) / (edge1 - edge0), 0, 1);
-  return amount * amount * (3 - 2 * amount);
+  return amount * amount * amount * (
+    amount * (amount * 6 - 15) + 10
+  );
 }
 
 function clamp(value: number, minimum: number, maximum: number): number {
