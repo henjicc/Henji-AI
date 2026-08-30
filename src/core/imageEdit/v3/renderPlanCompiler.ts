@@ -1,4 +1,5 @@
 import type { ImageEditDocumentV3 } from './documentTypes';
+import type { ImageEditColorModeV3 } from './colorTypes';
 import {
   IMAGE_EDIT_IDENTITY_TRANSFORM_V3,
   type ImageEditAdjustmentLayerV3,
@@ -40,6 +41,7 @@ interface CompileState {
   nodes: ImageEditRenderPlanNode[];
   diagnostics: ImageEditRenderPlanDiagnostic[];
   layerEvaluationOrder: string[];
+  color: Readonly<ImageEditColorModeV3>;
   sequence: number;
 }
 
@@ -128,8 +130,8 @@ function compileContentLayer(
 ): string {
   const definitionId = layer.type === 'raster' ? 'source.raster' : 'vector.annotation';
   const contentParameters: Record<string, unknown> = layer.type === 'raster'
-    ? { source: layer.source, tiles: layer.tiles }
-    : { annotations: layer.annotations };
+    ? { source: layer.source, tiles: layer.tiles, colorMode: state.color }
+    : { annotations: layer.annotations, colorMode: state.color };
   const contentNodeId = appendNode(state, layer, path, definitionId, [], contentParameters, null);
   return contentNodeId
     ? compositeContent(state, layer, path, contentNodeId, belowNodeId)
@@ -280,16 +282,24 @@ export function compileImageEditRenderPlanV3(
     nodes: [],
     diagnostics: [],
     layerEvaluationOrder: [],
+    color: document.color,
     sequence: 0,
   };
   const outputNodeId = compileLayers(state, document.layers, [], null);
-  const outputHash = outputNodeId
+  const rootHash = outputNodeId
     ? state.nodes.find((node) => node.id === outputNodeId)?.subtreeHash ?? 'transparent'
     : 'transparent';
+  const outputHash = createImageEditRenderHash(hashObject({
+    rootHash,
+    color: document.color,
+    geometry: document.geometry,
+  }));
   return {
     documentId: document.id,
     revision: document.revision,
     quality,
+    color: document.color,
+    geometry: document.geometry,
     nodes: state.nodes,
     passes: createPasses(state.nodes, registry),
     outputNodeId,

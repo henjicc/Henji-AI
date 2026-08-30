@@ -42,7 +42,10 @@ export function applyContentMaskAndOpacityV3(
       data[offset + channel] = content.data[offset + channel] * amount;
     }
   }
-  return createFloat32PremultipliedRgbaTile(content.width, content.height, content.colorDomain, data);
+  return createFloat32PremultipliedRgbaTile(
+    content.width, content.height, content.colorDomain, data, content.workingSpace,
+    content.transferFunction, content.referenceWhiteNits,
+  );
 }
 
 export function compositePremultipliedTilesV3(
@@ -55,6 +58,9 @@ export function compositePremultipliedTilesV3(
     backdrop.width !== source.width
     || backdrop.height !== source.height
     || backdrop.colorDomain !== source.colorDomain
+    || backdrop.workingSpace !== source.workingSpace
+    || backdrop.transferFunction !== source.transferFunction
+    || backdrop.referenceWhiteNits !== source.referenceWhiteNits
   ) throw new Error('合成瓦片的尺寸或颜色域不一致');
   const data = new Float32Array(source.data.length);
   for (let offset = 0; offset < data.length; offset += 4) {
@@ -71,7 +77,10 @@ export function compositePremultipliedTilesV3(
         + backdropAlpha * sourceAlpha * blended;
     }
   }
-  return createFloat32PremultipliedRgbaTile(source.width, source.height, source.colorDomain, data);
+  return createFloat32PremultipliedRgbaTile(
+    source.width, source.height, source.colorDomain, data, source.workingSpace,
+    source.transferFunction, source.referenceWhiteNits,
+  );
 }
 
 export function mixEffectLayerV3(
@@ -80,8 +89,15 @@ export function mixEffectLayerV3(
   blendMode: ImageEditBlendModeV3,
   opacity: number,
 ): Float32PremultipliedRgbaTile {
-  if (source.width !== processed.width || source.height !== processed.height) {
-    throw new Error('效果结果与输入瓦片尺寸不一致');
+  if (
+    source.width !== processed.width
+    || source.height !== processed.height
+    || source.colorDomain !== processed.colorDomain
+    || source.workingSpace !== processed.workingSpace
+    || source.transferFunction !== processed.transferFunction
+    || source.referenceWhiteNits !== processed.referenceWhiteNits
+  ) {
+    throw new Error('效果结果与输入瓦片契约不一致');
   }
   if (!Number.isFinite(opacity) || opacity < 0 || opacity > 1) throw new Error('效果不透明度必须位于 0～1');
   const data = new Float32Array(source.data.length);
@@ -96,5 +112,8 @@ export function mixEffectLayerV3(
       data[offset + channel] = (original + (blended - original) * opacity) * data[offset + 3];
     }
   }
-  return createFloat32PremultipliedRgbaTile(source.width, source.height, source.colorDomain, data);
+  return createFloat32PremultipliedRgbaTile(
+    source.width, source.height, source.colorDomain, data, source.workingSpace,
+    source.transferFunction, source.referenceWhiteNits,
+  );
 }

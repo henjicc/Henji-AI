@@ -78,6 +78,9 @@ export function applyGaussianBlurV2(
       tile.height,
       tile.colorDomain,
       new Float32Array(tile.data),
+      tile.workingSpace,
+      tile.transferFunction,
+      tile.referenceWhiteNits,
     );
     return mixProcessedWithMask(tile, copy, options.mask);
   }
@@ -115,6 +118,9 @@ export function applyGaussianBlurV2(
     tile.height,
     tile.colorDomain,
     working,
+    tile.workingSpace,
+    tile.transferFunction,
+    tile.referenceWhiteNits,
   );
   return mixProcessedWithMask(tile, processed, options.mask);
 }

@@ -1,4 +1,6 @@
 import type { ImageEditMaskReferenceV3 } from './layerTypes';
+import type { ImageEditColorModeV3 } from './colorTypes';
+import type { ImageEditCanvasGeometryV3 } from './documentTypes';
 import type {
   ImageEditRenderNodeCategory,
   ImageEditRenderQuality,
@@ -33,6 +35,8 @@ export interface ImageEditRenderPlan {
   documentId: string;
   revision: number;
   quality: ImageEditRenderQuality;
+  color: Readonly<ImageEditColorModeV3>;
+  geometry: Readonly<ImageEditCanvasGeometryV3>;
   nodes: readonly ImageEditRenderPlanNode[];
   passes: readonly ImageEditRenderPass[];
   outputNodeId: string | null;

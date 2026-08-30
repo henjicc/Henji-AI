@@ -1,24 +1,31 @@
-import type { ImageEditWorkingSpaceV3 } from '../colorTypes';
 import {
   applyCurvesAdjustment,
   applyExposureAdjustment,
   applyGaussianBlurV2,
   applyHslAdjustment,
   applyTemperatureTintAdjustment,
+  compileCurvesAdjustment,
   createFloat32MaskTile,
   mixProcessedWithMask,
   type CurveControlPoint,
+  type CompiledCurvesAdjustment,
   type Float32MaskTile,
   type Float32PremultipliedRgbaTile,
 } from '../effects';
 import type { ImageEditBlendModeV3, ImageEditMaskReferenceV3 } from '../layerTypes';
 import type { ImageEditRenderPlan, ImageEditRenderPlanNode } from '../renderPlan';
-import { convertFloat32TileColorDomainV3 } from './tileColor';
+import {
+  convertFloat32TileColorDomainV3,
+  convertFloat32TileWorkingSpaceV3,
+} from './tileColor';
 import {
   applyContentMaskAndOpacityV3,
   compositePremultipliedTilesV3,
   mixEffectLayerV3,
 } from './tileBlend';
+
+const MAX_COMPILED_CURVE_CACHE_ENTRIES = 64;
+const compiledCurveCache = new Map<string, CompiledCurvesAdjustment>();
 
 export class ImageEditRenderNodeUnsupportedErrorV3 extends Error {
   constructor(readonly definitionId: string) {
@@ -80,8 +87,27 @@ function curvePoints(value: unknown): CurveControlPoint[] {
   return points.length > 0 ? points : [{ x: 0, y: 0 }, { x: 1, y: 1 }];
 }
 
-function workingSpace(value: unknown): ImageEditWorkingSpaceV3 {
-  return value === 'display-p3' || value === 'rec2020' ? value : 'srgb';
+function compiledCurves(node: ImageEditRenderPlanNode): CompiledCurvesAdjustment {
+  const key = node.subtreeHash;
+  const cached = compiledCurveCache.get(key);
+  if (cached) {
+    compiledCurveCache.delete(key);
+    compiledCurveCache.set(key, cached);
+    return cached;
+  }
+  const compiled = compileCurvesAdjustment({
+    master: curvePoints(node.parameters.master),
+    red: curvePoints(node.parameters.red),
+    green: curvePoints(node.parameters.green),
+    blue: curvePoints(node.parameters.blue),
+  });
+  compiledCurveCache.set(key, compiled);
+  while (compiledCurveCache.size > MAX_COMPILED_CURVE_CACHE_ENTRIES) {
+    const oldest = compiledCurveCache.keys().next().value;
+    if (oldest === undefined) break;
+    compiledCurveCache.delete(oldest);
+  }
+  return compiled;
 }
 
 function isIdentityTransform(value: unknown): value is readonly number[] {
@@ -129,19 +155,14 @@ async function executeAdjustment(
   }
   if (node.definitionId === 'adjustment.curves') {
     const perceptual = convertFloat32TileColorDomainV3(source, 'perceptual-working');
-    return applyCurvesAdjustment(perceptual, {
-      master: curvePoints(node.parameters.master),
-      red: curvePoints(node.parameters.red),
-      green: curvePoints(node.parameters.green),
-      blue: curvePoints(node.parameters.blue),
-    }, { mask });
+    return applyCurvesAdjustment(perceptual, compiledCurves(node), { mask });
   }
   if (node.definitionId === 'adjustment.temperature-tint') {
     const linear = convertFloat32TileColorDomainV3(source, 'linear-light');
     return applyTemperatureTintAdjustment(linear, {
       temperature: numberParameter(node, 'temperature', 0),
       tint: numberParameter(node, 'tint', 0),
-      workingSpace: workingSpace(node.parameters.workingSpace),
+      workingSpace: source.workingSpace,
     }, { mask });
   }
   const perceptual = convertFloat32TileColorDomainV3(source, 'perceptual-working');
@@ -184,7 +205,10 @@ async function executeComposite(
     content = await context.transformContent(content, transform.filter((entry): entry is number => typeof entry === 'number'), node);
   }
   const backdrop = node.inputNodeIds.length > 1 ? requireInput(outputs, node, 0) : null;
-  if (backdrop) content = convertFloat32TileColorDomainV3(content, backdrop.colorDomain);
+  if (backdrop) {
+    content = convertFloat32TileWorkingSpaceV3(content, backdrop.workingSpace);
+    content = convertFloat32TileColorDomainV3(content, backdrop.colorDomain);
+  }
   const masked = applyContentMaskAndOpacityV3(
     content,
     numberParameter(node, 'opacity', 1),

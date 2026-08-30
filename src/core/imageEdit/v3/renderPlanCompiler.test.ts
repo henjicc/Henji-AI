@@ -158,4 +158,21 @@ describe('图片编辑 V3 有序 RenderPlan', () => {
       layerId: 'unknown', code: 'unsupported-layer',
     }));
   });
+
+  it('工作色域进入源节点缓存身份，裁剪只改变最终输出身份', () => {
+    const source = document([baseLayer()]);
+    const baseline = compileImageEditRenderPlanV3(source, registry, 'stable');
+    const p3 = compileImageEditRenderPlanV3({
+      ...source,
+      color: { ...source.color, workingSpace: 'display-p3', bitDepth: 16 },
+    }, registry, 'stable');
+    expect(p3.nodes[0].subtreeHash).not.toBe(baseline.nodes[0].subtreeHash);
+
+    const cropped = compileImageEditRenderPlanV3({
+      ...source,
+      geometry: { ...source.geometry, crop: { x: 10, y: 20, width: 300, height: 200 } },
+    }, registry, 'stable');
+    expect(cropped.nodes[0].subtreeHash).toBe(baseline.nodes[0].subtreeHash);
+    expect(cropped.outputHash).not.toBe(baseline.outputHash);
+  });
 });

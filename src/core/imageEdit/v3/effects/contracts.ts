@@ -1,4 +1,5 @@
 import type { ImageEditColorDomain } from '../renderNodeDefinition';
+import type { ImageEditTransferFunctionV3, ImageEditWorkingSpaceV3 } from '../colorTypes';
 
 export interface Float32PremultipliedRgbaTile {
   readonly width: number;
@@ -6,6 +7,12 @@ export interface Float32PremultipliedRgbaTile {
   readonly data: Float32Array;
   readonly storage: 'rgba-float32';
   readonly colorDomain: ImageEditColorDomain;
+  /** RGB 原色定义与传递函数域分开保存，避免把 P3/Rec.2020 像素误当作 sRGB。 */
+  readonly workingSpace: ImageEditWorkingSpaceV3;
+  /** 从线性域进入 perceptual-working 时采用的文档传递函数。 */
+  readonly transferFunction: ImageEditTransferFunctionV3;
+  /** PQ 绝对亮度与内部 1.0 的换算基准；SDR/HLG 也保留以支持统一显示管线。 */
+  readonly referenceWhiteNits: number;
   readonly alpha: 'premultiplied';
 }
 
@@ -41,6 +48,9 @@ export function createFloat32PremultipliedRgbaTile(
   height: number,
   colorDomain: ImageEditColorDomain,
   data: Float32Array,
+  workingSpace: ImageEditWorkingSpaceV3 = 'srgb',
+  transferFunction: ImageEditTransferFunctionV3 = 'srgb',
+  referenceWhiteNits = 203,
 ): Float32PremultipliedRgbaTile {
   const tile: Float32PremultipliedRgbaTile = {
     width,
@@ -48,6 +58,9 @@ export function createFloat32PremultipliedRgbaTile(
     data,
     storage: 'rgba-float32',
     colorDomain,
+    workingSpace,
+    transferFunction,
+    referenceWhiteNits,
     alpha: 'premultiplied',
   };
   assertFloat32PremultipliedRgbaTile(tile);
@@ -78,6 +91,15 @@ export function assertFloat32PremultipliedRgbaTile(
   if (tile.storage !== 'rgba-float32' || tile.alpha !== 'premultiplied') {
     throw new Error('CPU 参考内核要求预乘 Alpha 的 Float32 RGBA');
   }
+  if (tile.workingSpace !== 'srgb' && tile.workingSpace !== 'display-p3' && tile.workingSpace !== 'rec2020') {
+    throw new Error(`不支持的瓦片工作色域：${String(tile.workingSpace)}`);
+  }
+  if (!['srgb', 'linear', 'pq', 'hlg'].includes(tile.transferFunction)) {
+    throw new Error(`不支持的瓦片传递函数：${String(tile.transferFunction)}`);
+  }
+  if (!Number.isFinite(tile.referenceWhiteNits) || tile.referenceWhiteNits <= 0) {
+    throw new Error('瓦片参考白亮度必须为正有限数');
+  }
   if (expectedColorDomain !== undefined && tile.colorDomain !== expectedColorDomain) {
     throw new Error(`颜色域不匹配：需要 ${expectedColorDomain}，实际为 ${tile.colorDomain}`);
   }
@@ -107,6 +129,9 @@ export function cloneFloat32Tile(
     tile.height,
     tile.colorDomain,
     new Float32Array(tile.data),
+    tile.workingSpace,
+    tile.transferFunction,
+    tile.referenceWhiteNits,
   );
 }
 
@@ -145,6 +170,9 @@ export function mapStraightRgbPreservingAlpha(
     tile.height,
     tile.colorDomain,
     processed,
+    tile.workingSpace,
+    tile.transferFunction,
+    tile.referenceWhiteNits,
   );
   return mixProcessedWithMask(tile, result, options.mask);
 }
@@ -176,6 +204,9 @@ export function mixProcessedWithMask(
     source.height,
     source.colorDomain,
     data,
+    source.workingSpace,
+    source.transferFunction,
+    source.referenceWhiteNits,
   );
 }
 
@@ -189,6 +220,9 @@ function assertCompatibleTiles(
     source.width !== processed.width
     || source.height !== processed.height
     || source.colorDomain !== processed.colorDomain
+    || source.workingSpace !== processed.workingSpace
+    || source.transferFunction !== processed.transferFunction
+    || source.referenceWhiteNits !== processed.referenceWhiteNits
   ) throw new Error('原始与处理后瓦片契约不一致');
 }
 

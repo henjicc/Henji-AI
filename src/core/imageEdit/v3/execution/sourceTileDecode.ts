@@ -1,5 +1,9 @@
 import { createFloat32PremultipliedRgbaTile, type Float32PremultipliedRgbaTile } from '../effects';
-import { decodeSrgbExtended } from './tileColor';
+import type { ImageEditTransferFunctionV3, ImageEditWorkingSpaceV3 } from '../colorTypes';
+import {
+  convertFloat32TileWorkingSpaceV3,
+  decodeTransferFunctionV3,
+} from './tileColor';
 
 export interface InterleavedRgbaSourceTileV3 {
   width: number;
@@ -9,7 +13,9 @@ export interface InterleavedRgbaSourceTileV3 {
   sampleFormat: 'uint' | 'float';
   numericRange: 'unorm8' | 'unorm16' | 'scene-linear';
   byteOrder: 'little-endian';
-  transferFunction: 'srgb' | 'linear';
+  colorSpace?: ImageEditWorkingSpaceV3;
+  transferFunction: ImageEditTransferFunctionV3;
+  referenceWhiteNits?: number;
   alphaMode: 'straight';
   pixels: ArrayBuffer | Uint8Array;
 }
@@ -35,6 +41,17 @@ function assertSourceContract(source: InterleavedRgbaSourceTileV3, bytes: Uint8A
   if (source.bitDepth === 32 && (source.sampleFormat !== 'float' || source.numericRange !== 'scene-linear')) {
     throw new Error('32-bit 源瓦片必须是 scene-linear float');
   }
+  if (source.bitDepth === 32 && source.transferFunction !== 'linear') {
+    throw new Error('scene-linear float 源瓦片必须声明 linear 传递函数');
+  }
+  const colorSpace = source.colorSpace ?? 'srgb';
+  if ((source.transferFunction === 'pq' || source.transferFunction === 'hlg') && colorSpace !== 'rec2020') {
+    throw new Error('PQ/HLG 源瓦片必须声明 Rec.2020 原色');
+  }
+  if (
+    source.referenceWhiteNits !== undefined
+    && (!Number.isFinite(source.referenceWhiteNits) || source.referenceWhiteNits <= 0)
+  ) throw new Error('源瓦片参考白亮度无效');
   if (source.bitDepth === 16 && (source.sampleFormat !== 'uint' || source.numericRange !== 'unorm16')) {
     throw new Error('16-bit 源瓦片必须是 unorm16');
   }
@@ -56,6 +73,7 @@ function readSample(
 /** 将明确格式的 straight RGBA 边界转换为效果内核唯一接受的线性 Float32 预乘瓦片。 */
 export function decodeInterleavedRgbaSourceTileV3(
   source: InterleavedRgbaSourceTileV3,
+  targetWorkingSpace: ImageEditWorkingSpaceV3 = source.colorSpace ?? 'srgb',
 ): Float32PremultipliedRgbaTile {
   const bytes = sourceBytes(source);
   assertSourceContract(source, bytes);
@@ -72,10 +90,23 @@ export function decodeInterleavedRgbaSourceTileV3(
       for (let channel = 0; channel < 3; channel += 1) {
         const encoded = readSample(view, sourceOffset + channel * channelBytes, source);
         if (!Number.isFinite(encoded)) throw new Error('源瓦片颜色通道不是有限数');
-        const linear = source.transferFunction === 'srgb' ? decodeSrgbExtended(encoded) : encoded;
+        const linear = decodeTransferFunctionV3(
+          encoded,
+          source.transferFunction,
+          source.referenceWhiteNits,
+        );
         output[targetOffset + channel] = linear * alpha;
       }
     }
   }
-  return createFloat32PremultipliedRgbaTile(source.width, source.height, 'linear-light', output);
+  const decoded = createFloat32PremultipliedRgbaTile(
+    source.width,
+    source.height,
+    'linear-light',
+    output,
+    source.colorSpace ?? 'srgb',
+    source.transferFunction,
+    source.referenceWhiteNits,
+  );
+  return convertFloat32TileWorkingSpaceV3(decoded, targetWorkingSpace);
 }
