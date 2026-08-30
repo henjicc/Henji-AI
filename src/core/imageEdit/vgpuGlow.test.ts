@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { IMAGE_EDITOR_PRESET_COLORS } from '@/core/theme/colorTokens';
+import bloomShaderSource from './shaders/vgpuGlowBloom.wgsl?raw';
+import compositeShaderSource from './shaders/vgpuGlowComposite.wgsl?raw';
+import baselineShaderSource from './worker/baseline.wgsl?raw';
 import {
   IMAGE_EDIT_OPERATION_IDS,
   InvalidImageEditOperationParamsError,
@@ -14,6 +17,37 @@ import {
 } from './index';
 
 const UHD = { width: 3840, height: 2160 } as const;
+
+type Rgba = readonly [number, number, number, number];
+type Rgb = readonly [number, number, number];
+
+function screen(base: number, glow: number): number {
+  return base + glow - base * glow;
+}
+
+/** 与 WGSL 相同的 W3C source-over + screen 参考实现，用来钉住透明合成不变量。 */
+function compositeGlowReference(base: Rgba, glowPremultiplied: Rgb): Rgba {
+  const baseAlpha = base[3];
+  const glowAlpha = Math.max(...glowPremultiplied);
+  if (glowAlpha <= 1e-6) return base;
+  const glowStraight: Rgb = [
+    glowPremultiplied[0] / glowAlpha,
+    glowPremultiplied[1] / glowAlpha,
+    glowPremultiplied[2] / glowAlpha,
+  ];
+  const outAlpha = glowAlpha + baseAlpha * (1 - glowAlpha);
+  const outPremultiplied = glowStraight.map((source, channel) => (
+    source * glowAlpha * (1 - baseAlpha)
+    + screen(base[channel], source) * glowAlpha * baseAlpha
+    + base[channel] * baseAlpha * (1 - glowAlpha)
+  ));
+  return [
+    outPremultiplied[0] / outAlpha,
+    outPremultiplied[1] / outAlpha,
+    outPremultiplied[2] / outAlpha,
+    outAlpha,
+  ];
+}
 
 function weightedMeanFraction(recipe: VgpuGlowRecipe, channel = 1): number {
   return recipe.scatterLevels.reduce(
@@ -177,5 +211,40 @@ describe('VGPU 辉光操作契约', () => {
     });
     expect(() => parseVgpuGlowOperationParams({ ...defaults, schemaVersion: 2 }))
       .toThrow(InvalidImageEditOperationParamsError);
+  });
+
+  it('透明合成扩展光晕 Alpha，同时严格保持不透明图片原有的 screen 观感', () => {
+    const opaqueBase: Rgba = [0.2, 0.4, 0.7, 1];
+    const glow: Rgb = [0.3, 0.1, 0.2];
+    const opaqueResult = compositeGlowReference(opaqueBase, glow);
+    const legacyScreen: Rgba = [
+      screen(opaqueBase[0], glow[0]),
+      screen(opaqueBase[1], glow[1]),
+      screen(opaqueBase[2], glow[2]),
+      1,
+    ];
+    for (let channel = 0; channel < 4; channel += 1) {
+      expect(opaqueResult[channel]).toBeCloseTo(legacyScreen[channel], 12);
+    }
+
+    const transparentResult = compositeGlowReference([0, 0, 0, 0], glow);
+    expect(transparentResult[3]).toBeCloseTo(0.3, 12);
+    // 最终 encode pass 再预乘后必须精确还原原始光层能量，不能有黑边或被透明度切掉。
+    for (let channel = 0; channel < 3; channel += 1) {
+      expect(transparentResult[channel] * transparentResult[3])
+        .toBeCloseTo(glow[channel], 12);
+    }
+
+    const translucentResult = compositeGlowReference([0.5, 0.25, 0.1, 0.4], glow);
+    expect(translucentResult[3]).toBeCloseTo(0.58, 12);
+    expect(translucentResult.every(Number.isFinite)).toBe(true);
+  });
+
+  it('着色器只让可见辐射发光，并在 premultiplied Surface 前统一预乘', () => {
+    expect(bloomShaderSource).toContain('extractEmitter(color.rgb * color.a)');
+    expect(compositeShaderSource).toContain('return extractEmitter(color.rgb * color.a)');
+    expect(compositeShaderSource).toContain('let outAlpha = glowAlpha + baseAlpha * (1.0 - glowAlpha)');
+    expect(compositeShaderSource).toContain('return compositeGlow(base, glowLayer)');
+    expect(baselineShaderSource).toContain('linear_to_srgb(color.rgb) * alpha');
   });
 });

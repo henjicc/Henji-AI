@@ -39,21 +39,26 @@ fn tintGlow(color: vec3f) -> vec3f {
   return mix(color, composite.tint.rgb * brightness(color), composite.tint.a);
 }
 
+fn sampleEmitter(uv: vec2f) -> vec3f {
+  let color = textureSampleLevel(scene, linearSampler, uv, 0.0);
+  return extractEmitter(color.rgb * color.a);
+}
+
 /**
  * 全分辨率 3×3 tent 微核只补金字塔缺少的 1～2px 近场散射。它是低通后的亮源能量，
  * 不包含形态学边缘、带通或未模糊副本，所以圆环和文字边缘不会再出现人为描边。
  */
 fn softCore(uv: vec2f) -> vec3f {
   let step = composite.optics.xy * composite.core.y;
-  let a = extractEmitter(textureSampleLevel(scene, linearSampler, uv + step * vec2f(-1.0, -1.0), 0.0).rgb);
-  let b = extractEmitter(textureSampleLevel(scene, linearSampler, uv + step * vec2f( 0.0, -1.0), 0.0).rgb);
-  let c = extractEmitter(textureSampleLevel(scene, linearSampler, uv + step * vec2f( 1.0, -1.0), 0.0).rgb);
-  let d = extractEmitter(textureSampleLevel(scene, linearSampler, uv + step * vec2f(-1.0,  0.0), 0.0).rgb);
-  let e = extractEmitter(textureSampleLevel(scene, linearSampler, uv, 0.0).rgb);
-  let f = extractEmitter(textureSampleLevel(scene, linearSampler, uv + step * vec2f( 1.0,  0.0), 0.0).rgb);
-  let g = extractEmitter(textureSampleLevel(scene, linearSampler, uv + step * vec2f(-1.0,  1.0), 0.0).rgb);
-  let h = extractEmitter(textureSampleLevel(scene, linearSampler, uv + step * vec2f( 0.0,  1.0), 0.0).rgb);
-  let i = extractEmitter(textureSampleLevel(scene, linearSampler, uv + step * vec2f( 1.0,  1.0), 0.0).rgb);
+  let a = sampleEmitter(uv + step * vec2f(-1.0, -1.0));
+  let b = sampleEmitter(uv + step * vec2f( 0.0, -1.0));
+  let c = sampleEmitter(uv + step * vec2f( 1.0, -1.0));
+  let d = sampleEmitter(uv + step * vec2f(-1.0,  0.0));
+  let e = sampleEmitter(uv);
+  let f = sampleEmitter(uv + step * vec2f( 1.0,  0.0));
+  let g = sampleEmitter(uv + step * vec2f(-1.0,  1.0));
+  let h = sampleEmitter(uv + step * vec2f( 0.0,  1.0));
+  let i = sampleEmitter(uv + step * vec2f( 1.0,  1.0));
   return (a + c + g + i) * 0.0625
     + (b + d + f + h) * 0.125
     + e * 0.25;
@@ -88,6 +93,40 @@ fn screenLinear(base: vec3f, glow: vec3f) -> vec3f {
   return base + glow - base * glow;
 }
 
+/**
+ * 把辉光看作一层预乘的光学能量，并按 W3C source-over + screen 混合合成到直通原图。
+ * glowAlpha 取光层的峰值，glowStraight 保留其色相：
+ * - 原图不透明时，结果严格等于旧的 screen(base, glowPremultiplied)，观感不漂移；
+ * - 原图透明时，光晕会得到自己的覆盖率，不再被 base.a 截掉；
+ * - 半透明边缘遵守 Porter-Duff，不会出现重复乘 Alpha 的黑边。
+ * 返回值仍是直通颜色，最终写入 premultiplied Surface 时由 encode pass 统一预乘。
+ */
+fn compositeGlow(base: vec4f, glowPremultiplied: vec3f) -> vec4f {
+  let baseAlpha = clamp(base.a, 0.0, 1.0);
+  let baseStraight = clamp(base.rgb, vec3f(0.0), vec3f(1.0));
+  let glowAlpha = clamp(
+    max(glowPremultiplied.r, max(glowPremultiplied.g, glowPremultiplied.b)),
+    0.0,
+    1.0
+  );
+  if (glowAlpha <= 0.000001) {
+    return vec4f(baseStraight, baseAlpha);
+  }
+
+  let glowStraight = clamp(
+    glowPremultiplied / glowAlpha,
+    vec3f(0.0),
+    vec3f(1.0)
+  );
+  let blended = screenLinear(baseStraight, glowStraight);
+  let outAlpha = glowAlpha + baseAlpha * (1.0 - glowAlpha);
+  let outPremultiplied =
+      glowStraight * glowAlpha * (1.0 - baseAlpha)
+    + blended * glowAlpha * baseAlpha
+    + baseStraight * baseAlpha * (1.0 - glowAlpha);
+  return vec4f(outPremultiplied / max(outAlpha, 0.000001), outAlpha);
+}
+
 @fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
   let base = textureSampleLevel(scene, linearSampler, uv, 0.0);
   let centered = sampleTintedBloom(uv);
@@ -114,6 +153,5 @@ fn screenLinear(base: vec3f, glow: vec3f) -> vec3f {
   let dither = (hash12(floor(uv * dimensions)) - 0.5) * composite.core.z * presence;
   glowLayer = clamp(glowLayer + vec3f(dither), vec3f(0.0), vec3f(1.0));
 
-  let result = screenLinear(clamp(base.rgb, vec3f(0.0), vec3f(1.0)), glowLayer);
-  return vec4f(result, base.a);
+  return compositeGlow(base, glowLayer);
 }

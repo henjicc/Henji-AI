@@ -52,5 +52,8 @@ fn fragment_linearize(input: VertexOutput) -> @location(0) vec4<f32> {
 @fragment
 fn fragment_encode(input: VertexOutput) -> @location(0) vec4<f32> {
   let color = textureSample(source_texture, source_sampler, input.uv);
-  return vec4<f32>(linear_to_srgb(color.rgb), color.a);
+  let alpha = clamp(color.a, 0.0, 1.0);
+  // renderToCanvas 将 Surface 配置为 premultiplied。内部纹理始终保存直通颜色，
+  // 因此必须在完成线性→sRGB 编码后只预乘一次，避免透明导出出现暗边或超亮 RGB。
+  return vec4<f32>(linear_to_srgb(color.rgb) * alpha, alpha);
 }

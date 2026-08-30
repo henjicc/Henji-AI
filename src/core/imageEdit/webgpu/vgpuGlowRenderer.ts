@@ -110,7 +110,7 @@ export class VgpuGlowRenderer {
     this.vgpuError = null;
     this.gpu.gpu.queue.copyExternalImageToTexture(
       { source: input.bitmap },
-      { texture: this.input.gpu },
+      { texture: this.input.gpu, premultipliedAlpha: false },
       [input.width, input.height]
     );
     const submitted = frame(this.gpu, (currentFrame) => {
@@ -153,7 +153,7 @@ export class VgpuGlowRenderer {
     this.vgpuError = null;
     this.gpu.gpu.queue.copyExternalImageToTexture(
       { source: input.bitmap },
-      { texture: this.input.gpu },
+      { texture: this.input.gpu, premultipliedAlpha: false },
       [input.width, input.height]
     );
     const submitted = frame(this.gpu, (currentFrame) => {

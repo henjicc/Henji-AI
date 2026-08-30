@@ -21,11 +21,13 @@ fn extractEmitter(color: vec3f) -> vec3f {
 
 fn sampleSource(uv: vec2f, offset: vec2f, extract: bool) -> vec3f {
   let dimensions = max(vec2f(textureDimensions(source)), vec2f(1.0));
-  let color = textureSampleLevel(source, linearSampler, uv + offset / dimensions, 0.0).rgb;
+  let color = textureSampleLevel(source, linearSampler, uv + offset / dimensions, 0.0);
   if (extract) {
-    return extractEmitter(color);
+    // scene 保存直通颜色；只有被 Alpha 覆盖的辐射才是真实存在的发光能量。
+    // 这同时阻止透明 PNG 中不可见的隐藏 RGB 在远处产生脏光和暗边。
+    return extractEmitter(color.rgb * color.a);
   }
-  return color;
+  return color.rgb;
 }
 
 /**

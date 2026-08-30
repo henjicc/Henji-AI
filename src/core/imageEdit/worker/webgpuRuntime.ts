@@ -556,7 +556,7 @@ export class WorkerWebGpuRuntime {
       state.device.pushErrorScope('validation')
       state.device.queue.copyExternalImageToTexture(
         { source: decoded },
-        { texture: sourceTexture },
+        { texture: sourceTexture, premultipliedAlpha: false },
         [decoded.width, decoded.height]
       )
       renderPass(
