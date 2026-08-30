@@ -92,6 +92,7 @@ describe('nodeControlRegistry assistant contract', () => {
       generationUi: {
         promptMode: 'hidden' as const,
         modelMode: 'locked' as const,
+        layoutMode: 'workbench' as const,
         excludeParamIds: ['image'],
       },
     }

@@ -1,7 +1,9 @@
-import { useMemo } from 'react'
-import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, CircleOff, Info, SunMedium } from 'lucide-react'
+import { useId, useMemo, type ReactNode } from 'react'
+import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, CircleOff, SunMedium } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 
 import FileUploader from '@/components/ui/FileUploader'
+import Tooltip from '@/components/ui/Tooltip'
 import { UiButton, UiOptionButton, UiTextAreaField } from '@/components/ui/primitives'
 import { UiModal } from '@/components/ui/UiModal'
 import {
@@ -72,28 +74,40 @@ function readSettings(state: Readonly<DynamicValueMap>): RelightSettingsV1 {
 }
 
 function FieldTitle({ children, tooltip }: { children: string; tooltip: string }): JSX.Element {
+  const tooltipId = useId()
   return (
-    <div className="flex items-center gap-1.5">
-      <span className={UI_TEXT_LABEL_CLASS}>{children}</span>
-      <span title={tooltip} aria-label={tooltip} className="text-text-muted">
-        <Info className="h-3.5 w-3.5" />
-      </span>
+    <div className={UI_TEXT_LABEL_CLASS}>
+      <Tooltip content={tooltip} contentId={tooltipId} delay={200}>
+        <span
+          tabIndex={0}
+          className="inline-block cursor-help rounded-lg outline-none focus-visible:ring-1 focus-visible:ring-accent"
+          aria-describedby={tooltipId}
+        >
+          {children}
+        </span>
+      </Tooltip>
     </div>
   )
 }
 
-export default function RelightSpecialEditor({
-  session,
-  onDraftChange,
-  onConfirm,
-  onCancel,
-  onKeepEditing,
-  onDiscard,
-}: CanvasSpecialEditorSurfaceProps): JSX.Element {
-  const settings = useMemo(() => readSettings(session.draftState), [session.draftState])
-  const sourceImage = sourceImageFromState(session.draftState)
+interface RelightWorkbenchProps {
+  settings: RelightSettingsV1
+  sourceImage: string | null
+  onSettingsChange: (settings: RelightSettingsV1) => void
+  sourceControl?: ReactNode
+  embedded?: boolean
+}
+
+export function RelightWorkbench({
+  settings,
+  sourceImage,
+  onSettingsChange,
+  sourceControl,
+  embedded = false,
+}: RelightWorkbenchProps): JSX.Element {
+  const { t } = useTranslation()
   const updateSettings = (next: RelightSettingsV1): void => {
-    onDraftChange(buildRelightEditorDraft(session.draftState, next))
+    onSettingsChange(normalizeRelightSettings(next))
   }
   const patchManual = (patch: Partial<RelightSettingsV1['manual']>): void => {
     updateSettings({ ...settings, manual: { ...settings.manual, ...patch } })
@@ -112,49 +126,28 @@ export default function RelightSpecialEditor({
 
   const referenceFiles = settings.smart.lightingReferenceImages.map(resolveImageDisplayUrl)
   const sourceImageUrl = sourceImage ? resolveImageDisplayUrl(sourceImage) : null
-  const close = (): void => { onCancel() }
 
   return (
-    <UiModal
-      isOpen
-      title="图片打光"
-      size="workspace"
-      surface="glass"
-      contentClassName="min-h-0 p-0"
-      onClose={close}
-      footer={(
-        session.discardConfirmationRequested ? (
-          <div className="flex w-full items-center justify-between gap-3">
-            <p className={UI_TEXT_META_CLASS}>有尚未确认的打光设置，确定放弃吗？</p>
-            <div className="flex items-center gap-2">
-              <UiButton type="button" variant="ghost" size="sm" onClick={onKeepEditing}>继续编辑</UiButton>
-              <UiButton type="button" variant="primary" size="sm" onClick={onDiscard}>放弃更改</UiButton>
-            </div>
-          </div>
-        ) : (
-          <>
-            <UiButton type="button" variant="ghost" size="sm" onClick={close}>取消</UiButton>
-            <UiButton type="button" variant="primary" size="sm" onClick={onConfirm}>应用设置</UiButton>
-          </>
-        )
-      )}
-    >
-      <div className="grid min-h-0 flex-1 grid-cols-[22rem_minmax(0,1fr)]">
-        <div className="flex min-h-0 p-4">
+      <div
+        data-relight-workbench="true"
+        className="grid min-h-0 min-w-0 flex-1 grid-cols-[minmax(0,1.25fr)_minmax(240px,0.75fr)]"
+      >
+        <div className={`flex min-h-0 ${embedded ? 'p-2' : 'p-4'}`}>
           {settings.lightingMode === 'manual' ? (
             <RelightDirectionVisualizer
               direction={settings.manual.keyDirection}
               sourceImage={sourceImageUrl}
+              sourceAlt={t('node.relightGeneration.sourceAlt')}
               onDirectionChange={(keyDirection) => patchManual({ keyDirection })}
             />
           ) : (
-            <div className={`relative flex min-h-0 w-full items-center justify-center overflow-hidden rounded-xl ${UI_GLASS_ADAPTIVE_SURFACE_CLASS}`}>
+            <div className={`relative flex min-h-0 w-full items-center justify-center overflow-hidden rounded-xl ${embedded ? 'bg-bg-dark/45' : UI_GLASS_ADAPTIVE_SURFACE_CLASS}`}>
               {sourceImageUrl ? (
-                <img src={sourceImageUrl} alt="待打光源图" className="max-h-full max-w-full object-contain" />
+                <img src={sourceImageUrl} alt={t('node.relightGeneration.sourceAlt')} className="max-h-full max-w-full object-contain" />
               ) : (
                 <div className="flex flex-col items-center gap-2 text-text-muted">
                   <SunMedium className="h-8 w-8" />
-                  <p className="text-sm">请先为节点连接一张源图</p>
+                  <p className="text-sm">{t('node.relightGeneration.sourceRequired')}</p>
                 </div>
               )}
               <div className="pointer-events-none absolute bottom-3 left-3 right-3 rounded-lg bg-overlay px-3 py-2 text-xs text-text-soft">
@@ -164,8 +157,9 @@ export default function RelightSpecialEditor({
           )}
         </div>
 
-        <div className={`min-h-0 overflow-y-auto border-l border-veil-subtle p-5 ${UI_GLASS_ADAPTIVE_REGION_CLASS}`}>
+        <div className={`min-h-0 overflow-y-auto border-l border-veil-subtle ${embedded ? 'p-3' : `p-5 ${UI_GLASS_ADAPTIVE_REGION_CLASS}`}`}>
           <div className="max-w-3xl">
+          {sourceControl ? <div className="mb-3">{sourceControl}</div> : null}
           <section className="space-y-3">
             <h3 className={UI_TEXT_SECTION_CLASS}>模式</h3>
             <div className="grid grid-cols-2 gap-2">
@@ -331,6 +325,48 @@ export default function RelightSpecialEditor({
           </div>
         </div>
       </div>
+  )
+}
+
+export default function RelightSpecialEditor({
+  session,
+  onDraftChange,
+  onConfirm,
+  onCancel,
+  onKeepEditing,
+  onDiscard,
+}: CanvasSpecialEditorSurfaceProps): JSX.Element {
+  const settings = useMemo(() => readSettings(session.draftState), [session.draftState])
+  const sourceImage = sourceImageFromState(session.draftState)
+  const close = (): void => { onCancel() }
+  return (
+    <UiModal
+      isOpen
+      title="图片打光"
+      size="workspace"
+      surface="glass"
+      contentClassName="min-h-0 p-0"
+      onClose={close}
+      footer={session.discardConfirmationRequested ? (
+        <div className="flex w-full items-center justify-between gap-3">
+          <p className={UI_TEXT_META_CLASS}>有尚未确认的打光设置，确定放弃吗？</p>
+          <div className="flex items-center gap-2">
+            <UiButton type="button" variant="ghost" size="sm" onClick={onKeepEditing}>继续编辑</UiButton>
+            <UiButton type="button" variant="primary" size="sm" onClick={onDiscard}>放弃更改</UiButton>
+          </div>
+        </div>
+      ) : (
+        <>
+          <UiButton type="button" variant="ghost" size="sm" onClick={close}>取消</UiButton>
+          <UiButton type="button" variant="primary" size="sm" onClick={onConfirm}>应用设置</UiButton>
+        </>
+      )}
+    >
+      <RelightWorkbench
+        settings={settings}
+        sourceImage={sourceImage}
+        onSettingsChange={(next) => onDraftChange(buildRelightEditorDraft(session.draftState, next))}
+      />
     </UiModal>
   )
 }

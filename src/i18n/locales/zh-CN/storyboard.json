@@ -217,7 +217,7 @@
         "description": "创建固定 3×3 的分镜生成节点；生成会使用节点中选择的图片编辑模型"
       },
       "upscale": {
-        "title": "高清",
+        "title": "高清放大",
         "description": "提升图片分辨率并尽量保留原始内容"
       },
       "portraitTexture": {
@@ -225,8 +225,8 @@
         "description": "由生成模型近似调整质感与影调，不做人脸检测或身份识别"
       },
       "elementEdit": {
-        "title": "元素编辑",
-        "description": "选择局部区域并按要求修改画面元素"
+        "title": "局部重绘",
+        "description": "裁剪并放大蒙版区域，调用任意图片编辑模型后对齐贴回原图"
       },
       "layerSeparation": {
         "title": "图层分离",
@@ -261,7 +261,7 @@
       "multiAngleGeneration": "多角度视图",
       "upscaleGeneration": "高清放大",
       "portraitTextureGeneration": "人像质感",
-      "elementEditGeneration": "元素编辑",
+      "elementEditGeneration": "局部重绘",
       "layerSeparationGeneration": "图层拆分",
       "layerStackResult": "图层结果",
       "storyboard": "分镜节点",
@@ -349,11 +349,15 @@
       "promptRequired": "全景提示词可以留空",
       "apiKeyRequired": "请在设置中填写 API Key",
       "resultTitle": "720°全景",
-      "promptPlaceholder": "可补充场景、风格、时间或天气；球面投影与 2:1 比例已经固定"
+      "promptPlaceholder": "可补充场景、风格、时间或天气；球面投影与 2:1 比例已经固定",
+      "workbenchSummary": "围绕源图或文字生成可浏览的全景画面"
     },
     "relightGeneration": {
       "apiKeyRequired": "请先配置当前打光模式所需的供应商 API Key",
-      "resultTitle": "打光结果"
+      "resultTitle": "打光结果",
+      "sourceImage": "源图",
+      "sourceAlt": "待打光源图",
+      "sourceRequired": "请连接一张源图"
     },
     "multiAngleGeneration": {
       "title": "多角度视图",
@@ -367,9 +371,11 @@
       "groupTitle": "多角度视图 · {{count}}",
       "generationFailed": "多角度生成失败",
       "errors": {
+        "nodeMissing": "画布执行节点不存在：{{id}}",
         "singleSource": "多角度生成必须且只能提供 1 张源图",
         "projectMissing": "当前没有可执行生成的画布项目",
         "singleOutput": "多角度单视图预期 1 个输出，实际 {{count}}",
+        "projectSwitched": "画布项目已切换，本次生成结果已丢弃",
         "batchIncomplete": "多角度批次未完整完成"
       },
       "status": {
@@ -474,26 +480,55 @@
       "promptRequired": "高清放大不需要提示词",
       "apiKeyRequired": "请先配置 Fal API Key",
       "resultTitle": "高清结果",
-      "promptPlaceholder": "高清放大不需要提示词"
+      "promptPlaceholder": "高清放大不需要提示词",
+      "workbenchSummary": "在右侧选择放大方式与倍率"
     },
     "portraitTextureGeneration": {
       "promptRequired": "人像质感使用受控预设，不需要单独填写提示词",
       "apiKeyRequired": "请先配置所选 GPT Image 2 供应商的 API Key",
       "resultTitle": "人像质感结果",
       "promptPlaceholder": "补充要求请使用节点中的受控入口",
+      "workbenchSummary": "保留人物结构，集中调整皮肤与细节质感",
       "approximation": "模型近似 · 未做人脸检测 · 不保证身份稳定"
     },
     "elementEditGeneration": {
       "promptRequired": "请描述需要如何修改选区",
-      "apiKeyRequired": "请先配置所选 GPT Image 2 供应商的 API Key",
-      "resultTitle": "元素编辑结果",
-      "promptPlaceholder": "描述要如何修改蒙版选区"
+      "apiKeyRequired": "请先配置所选图片编辑模型供应商的 API Key",
+      "resultTitle": "局部重绘结果",
+      "promptPlaceholder": "描述要如何修改蒙版选区",
+      "maskLabel": "重绘遮罩",
+      "drawMask": "绘制",
+      "editMask": "编辑",
+      "sourceLoadFailed": "无法打开源图",
+      "loadingMask": "正在准备遮罩画布…",
+      "missingInput": "请先连接一张源图并绘制重绘区域",
+      "missingContext": "局部重绘结果缺少裁剪上下文",
+      "summarySaved": "遮罩已自动保存，选中节点可继续绘制",
+      "summaryEmpty": "选中节点后直接绘制，修改会自动保存",
+      "undoMask": "撤销遮罩",
+      "redoMask": "重做遮罩",
+      "clearMask": "清空遮罩",
+      "brushSize": "笔刷 {{size}}",
+      "tools": {
+        "brush": "画笔",
+        "rectangle": "矩形",
+        "circle": "圆形",
+        "lasso": "自由框选",
+        "erase": "擦除"
+      },
+      "autosave": {
+        "saving": "自动保存中…",
+        "saved": "已自动保存",
+        "failed": "自动保存失败，正在重试",
+        "idle": "绘制后自动保存"
+      }
     },
     "layerSeparationGeneration": {
       "promptRequired": "图层拆分可不填写提示词",
       "apiKeyRequired": "请先配置所选 Seedream 5.0 Pro 供应商的 API Key",
       "resultTitle": "图层结果",
-      "promptPlaceholder": "可选：补充希望优先拆出的主体或区域"
+      "promptPlaceholder": "可选：补充希望优先拆出的主体或区域",
+      "workbenchSummary": "生成后可在图层结果节点中调整顺序与透明度"
     },
     "upload": {
       "uploadedAlt": "已上传图片",

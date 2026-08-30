@@ -14,6 +14,7 @@ describe('打光方向可视化控件', () => {
       <RelightDirectionVisualizer
         direction="none"
         sourceImage="asset://source.png"
+        sourceAlt="Source image to relight"
         onDirectionChange={onDirectionChange}
       />,
     )
@@ -27,6 +28,7 @@ describe('打光方向可视化控件', () => {
       <RelightDirectionVisualizer
         direction="right"
         sourceImage="asset://source.png"
+        sourceAlt="Source image to relight"
         onDirectionChange={onDirectionChange}
       />,
     )
@@ -40,6 +42,7 @@ describe('打光方向可视化控件', () => {
       <RelightDirectionVisualizer
         direction="none"
         sourceImage={null}
+        sourceAlt="Source image to relight"
         onDirectionChange={onDirectionChange}
       />,
     )

@@ -1,10 +1,9 @@
 import { memo, useCallback, useEffect, useMemo } from 'react'
-import { Handle, Position, type NodeProps } from '@xyflow/react'
-import { Settings2, SunMedium } from 'lucide-react'
+import { type NodeProps } from '@xyflow/react'
+import { SunMedium } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useStoreWithEqualityFn } from 'zustand/traditional'
 
-import { UiButton } from '@/components/ui'
 import { registry } from '@/core/ModelRegistry'
 import { GenerationService } from '@/core/services/GenerationService'
 import { getI18nText } from '@/core/types'
@@ -16,12 +15,12 @@ import {
   commitCanvasGenerationOutputs,
 } from '@/features/canvas/application/generationOutputApplicationService'
 import {
-  openCanvasSpecialEditor,
-} from '@/features/canvas/application/specialEditorApplicationService'
-import {
   registerCanvasNodeExecutor,
+  type CanvasNodeExecutionContext,
   type CanvasNodeExecutionResult,
+  type CanvasNodePreflightContext,
 } from '@/features/canvas/application/canvasExecutionService'
+import { isCanvasProjectContextCurrent } from '@/features/canvas/application/canvasApplicationService'
 import {
   DEFAULT_RELIGHT_SETTINGS,
   normalizeRelightSettings,
@@ -41,23 +40,21 @@ import {
 } from '@/features/canvas/domain/canvasNodes'
 import { getMainPortConnectionFlags } from '@/features/canvas/domain/connectionIndex'
 import { createDefaultGenerationOutputItems } from '@/features/canvas/domain/generationOutputs'
-import { getSocketColor } from '@/features/canvas/domain/socketTypes'
 import { MediaInputRow } from '@/features/canvas/params/MediaInputRow'
-import { NodeHeader, NODE_HEADER_FLOATING_POSITION_CLASS } from '@/features/canvas/ui/NodeHeader'
-import { NodeLodPlaceholder } from '@/features/canvas/ui/NodeLodPlaceholder'
-import { NodeResizeHandle } from '@/features/canvas/ui/NodeResizeHandle'
-import {
-  NODE_IDLE_BORDER_CLASS,
-  NODE_PORT_NODE_CLASS,
-  NODE_PORT_VISIBLE_CLASS,
-  NODE_SELECTED_BORDER_CLASS,
-} from '@/features/canvas/ui/nodeControlStyles'
 import { runCanvasGeneration } from '@/features/canvas/generation/runGeneration'
+import { createCanvasGenerationTaskLifecycle } from '@/features/canvas/generation/activeGenerationTasks'
 import { useCanvasGenerationProgressStore } from '@/stores/canvasGenerationProgressStore'
 import { useCanvasStore } from '@/stores/canvasStore'
-import { useProjectStore } from '@/stores/projectStore'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { ensureGenerationProviderConfigured } from './shared/generationNodeGuards'
+import {
+  ToolWorkbenchNodeFrame,
+  ToolWorkbenchSourcePreview,
+} from './shared/ToolWorkbenchNodeFrame'
+import {
+  RelightWorkbench,
+} from '@/features/canvas/ui/specialInterfaces/RelightSpecialEditor'
+import { buildRelightEditorDraft } from '@/features/canvas/ui/specialInterfaces/relightEditorDraft'
 
 export interface RelightGenerationNodeData extends ImageEditNodeData {
   capabilityId: 'image.relight'
@@ -104,7 +101,6 @@ export const RelightGenerationNode = memo(({
   const addEdge = useCanvasStore((state) => state.addEdge)
   const findNodePosition = useCanvasStore((state) => state.findNodePosition)
   const providerKeyStatus = useSettingsStore((state) => state.providerKeyStatus)
-  const projectId = useProjectStore((state) => state.currentProjectId)
   const setProgress = useCanvasGenerationProgressStore((state) => state.setProgress)
   const hasSourceConnections = useCanvasStore(
     (state) => getMainPortConnectionFlags(state.edges).get(id)?.hasMainSource ?? false,
@@ -137,7 +133,8 @@ export const RelightGenerationNode = memo(({
 
   const prepareExecution = useCallback(() => {
     const latest = useCanvasStore.getState().nodes.find((node) => node.id === id)
-    const latestData = (latest?.data ?? data) as RelightGenerationNodeData
+    if (!latest) throw new Error(`画布执行节点不存在：${id}`)
+    const latestData = latest.data as RelightGenerationNodeData
     const latestSettings = normalizeRelightSettings(latestData.relightSettings)
     const latestSources = resolveSourceImages(id, latestData)
     const generationInput = prepareRelightGenerationInput(
@@ -158,14 +155,23 @@ export const RelightGenerationNode = memo(({
       settings: latestSettings,
       ...generationInput,
     }
-  }, [data, id, t])
+  }, [id, t])
 
-  const handleGenerate = useCallback(async (): Promise<CanvasNodeExecutionResult> => {
+  const handleGenerate = useCallback(async (
+    execution: CanvasNodeExecutionContext,
+  ): Promise<CanvasNodeExecutionResult> => {
+    const generationProjectId = execution.projectId
+    if (!generationProjectId) throw new Error('当前没有可执行生成的画布项目')
+    const isGenerationProjectCurrent = (): boolean => (
+      isCanvasProjectContextCurrent(generationProjectId)
+    )
     const prepared = prepareExecution()
     const estimate = await GenerationService.getInstance().getProgressEstimate(
       prepared.route.model.meta.id,
       prepared.params,
     )
+    if (!isGenerationProjectCurrent()) throw new Error('画布项目已切换，本次生成已停止')
+    await execution.assertCurrent()
     const newNodeId = addNode(
       CANVAS_NODE_TYPES.exportImage,
       findNodePosition(id, EXPORT_RESULT_NODE_DEFAULT_WIDTH, EXPORT_RESULT_NODE_LAYOUT_HEIGHT),
@@ -176,6 +182,8 @@ export const RelightGenerationNode = memo(({
         displayName: t('node.relightGeneration.resultTitle'),
         resultKind: 'image',
         sourceCapabilityId: CANVAS_IMAGE_CAPABILITY_IDS.relight,
+        generationSourceNodeId: id,
+        generationInputSignature: execution.inputSignature,
         sourceCapabilityTemplateVersion: prepared.route.templateVersion,
         generationPrompt: prepared.route.prompt,
         generationModelId: prepared.route.model.meta.id,
@@ -184,6 +192,13 @@ export const RelightGenerationNode = memo(({
       },
     )
     addEdge(id, newNodeId)
+    const taskLifecycle = createCanvasGenerationTaskLifecycle(
+      isGenerationProjectCurrent,
+      (taskId) => updateNodeData(newNodeId, {
+        serverTaskId: taskId,
+        serverTaskModelId: prepared.route.model.meta.id,
+      }),
+    )
 
     try {
       const result = await runCanvasGeneration({
@@ -191,12 +206,16 @@ export const RelightGenerationNode = memo(({
         mediaType: 'image',
         params: prepared.params,
         upstream: prepared.upstream,
-        onProgress: (progress) => setProgress(newNodeId, progress),
-        onTaskId: (taskId) => updateNodeData(newNodeId, {
-          serverTaskId: taskId,
-          serverTaskModelId: prepared.route.model.meta.id,
-        }),
+        onProgress: (progress) => {
+          if (isGenerationProjectCurrent()) setProgress(newNodeId, progress)
+        },
+        onTaskId: taskLifecycle.onTaskId,
+        assertCurrent: execution.assertCurrent,
       })
+      if (!isGenerationProjectCurrent()) {
+        await taskLifecycle.cancelLatest()
+        throw new Error('画布项目已切换，本次生成结果已丢弃')
+      }
       const committed = await commitCanvasGenerationOutputs({
         sourceNodeId: id,
         placeholderNodeId: newNodeId,
@@ -217,38 +236,53 @@ export const RelightGenerationNode = memo(({
       })
       return { status: 'completed', resultNodeIds: committed.resultNodeIds }
     } catch (error) {
-      updateNodeData(newNodeId, {
-        isGenerating: false,
-        generationStartedAt: null,
-        generationError: error instanceof Error ? error.message : t('ai.error'),
-        serverTaskId: null,
-        serverTaskModelId: null,
-      })
-      return { status: 'completed', resultNodeIds: [newNodeId] }
+      if (isGenerationProjectCurrent()) {
+        updateNodeData(newNodeId, {
+          isGenerating: false,
+          generationStartedAt: null,
+          generationError: error instanceof Error ? error.message : t('ai.error'),
+          serverTaskId: null,
+          serverTaskModelId: null,
+        })
+      }
+      throw error
     } finally {
-      setProgress(newNodeId, null)
+      taskLifecycle.release()
+      if (isGenerationProjectCurrent()) setProgress(newNodeId, null)
     }
   }, [addEdge, addNode, findNodePosition, id, prepareExecution, setProgress, t, updateNodeData])
 
+  const preflightBeforeDependencies = useCallback((execution: CanvasNodePreflightContext) => {
+    if (execution.projectId && !isCanvasProjectContextCurrent(execution.projectId)) {
+      throw new Error('画布项目已切换，本次生成已停止')
+    }
+    const latest = useCanvasStore.getState().nodes.find((node) => node.id === id)
+    if (!latest) throw new Error(`画布执行节点不存在：${id}`)
+    const latestData = latest.data as RelightGenerationNodeData
+    const staticRoute = prepareRelightRoute(
+      normalizeRelightSettings(latestData.relightSettings),
+      registry.getModelsByType('image'),
+      latestData.params,
+    )
+    if (!staticRoute.model) {
+      throw new Error(staticRoute.reasons.join('；') || '当前没有可用的重新打光模型')
+    }
+    ensureGenerationProviderConfigured(
+      useSettingsStore.getState().providerKeyStatus[staticRoute.model.meta.provider] === true,
+      {
+        title: t('common:providerKeyRequired.title'),
+        message: t('common:providerKeyRequired.message'),
+        error: t('node.relightGeneration.apiKeyRequired'),
+      },
+    )
+  }, [id, t])
+
   useEffect(() => registerCanvasNodeExecutor(id, {
     kind: 'standard-generation',
-    preflight: () => { prepareExecution() },
+    dependency: { mode: 'auto', outputMode: 'result-nodes' },
+    preflightBeforeDependencies,
     run: handleGenerate,
-  }), [handleGenerate, id, prepareExecution])
-
-  const openEditor = (): void => {
-    if (!projectId) return
-    openCanvasSpecialEditor({
-      projectId,
-      nodeId: id,
-      editorKey: 'relight',
-      initialState: {
-        ...data,
-        sourceImageUrl: sourceImages[0] ?? null,
-        relightSettings: settings,
-      },
-    })
-  }
+  }), [handleGenerate, id, preflightBeforeDependencies])
 
   const statusText = !route.model
     ? route.reasons[0] ?? '模型不可用'
@@ -257,77 +291,54 @@ export const RelightGenerationNode = memo(({
       : `${getI18nText(route.model.meta.name, 'zh-CN')} · 未配置`
 
   return (
-    <div
-      data-relight-node-id={id}
-      data-relight-mode={settings.lightingMode}
-      className={`group relative flex flex-col gap-2 overflow-visible rounded-[var(--node-radius)] border bg-surface-dark/90 p-2 transition-colors duration-150 ${
-        selected ? NODE_SELECTED_BORDER_CLASS : NODE_IDLE_BORDER_CLASS
-      }`}
-      style={{
-        width: `${Math.max(320, typeof width === 'number' ? width : 340)}px`,
-        minWidth: '320px',
-        maxWidth: '520px',
-        height: `${Math.max(150, typeof height === 'number' ? height : 170)}px`,
-        minHeight: '150px',
+    <ToolWorkbenchNodeFrame
+      nodeId={id}
+      title={data.displayName ?? t('node.menu.relightGeneration')}
+      icon={<SunMedium className="h-4 w-4" />}
+      selected={selected}
+      width={width}
+      height={height}
+      hasSourceConnections={hasSourceConnections}
+      onSelect={() => setSelectedNode(id)}
+      onTitleChange={(displayName) => updateNodeData(id, { displayName })}
+      rightSlot={<span className="max-w-48 truncate text-2xs text-text-muted">{statusText}</span>}
+      dataAttributes={{
+        'data-relight-node-id': id,
+        'data-relight-mode': settings.lightingMode,
       }}
-      onClick={() => setSelectedNode(id)}
     >
-      <NodeHeader
-        className={NODE_HEADER_FLOATING_POSITION_CLASS}
-        icon={<SunMedium className="h-4 w-4" />}
-        titleText={data.displayName ?? t('node.menu.relightGeneration')}
-        editable
-        onTitleChange={(displayName) => updateNodeData(id, { displayName })}
-      />
-      <NodeLodPlaceholder title={data.displayName ?? t('node.menu.relightGeneration')} icon={<SunMedium className="h-6 w-6" />} />
-      <div className="canvas-node-lod-detail flex min-h-0 flex-1 flex-col gap-2">
-        <MediaInputRow
-          nodeId={id}
-          mediaKind="image"
-          label="源图"
-          maxCount={1}
-          inlineValue={sourceInline}
-          onInlineChange={(images) => updateNodeData(id, {
-            mediaInputs: { ...(data.mediaInputs ?? {}), image: images },
-          })}
+      {selected ? (
+        <RelightWorkbench
+          settings={settings}
+          sourceImage={sourceImages[0] ?? null}
+          embedded
+          sourceControl={(
+            <MediaInputRow
+              nodeId={id}
+              mediaKind="image"
+              label={t('node.relightGeneration.sourceImage')}
+              maxCount={1}
+              inlineValue={sourceInline}
+              onInlineChange={(images) => updateNodeData(id, {
+                mediaInputs: { ...(data.mediaInputs ?? {}), image: images },
+              })}
+            />
+          )}
+          onSettingsChange={(nextSettings) => updateNodeData(
+            id,
+            buildRelightEditorDraft(data, nextSettings),
+          )}
         />
-        <div className="flex min-w-0 items-center justify-between gap-2 rounded-lg border border-veil-subtle px-2.5 py-2">
-          <div className="min-w-0">
-            <p className="truncate text-xs font-medium text-text-dark">{summary}</p>
-            <p className="truncate text-2xs text-text-muted" title={statusText}>{statusText}</p>
-          </div>
-          <UiButton
-            type="button"
-            size="sm"
-            variant="muted"
-            className="nodrag shrink-0 gap-1.5"
-            onClick={(event) => {
-              event.stopPropagation()
-              openEditor()
-            }}
-          >
-            <Settings2 className="h-3.5 w-3.5" />
-            调整打光
-          </UiButton>
-        </div>
-        <p className="px-1 text-2xs text-text-muted">
-          方向为离散偏好；亮度、色调与轮廓光均为模型近似。
-        </p>
-      </div>
-      <Handle
-        type="source"
-        id="source"
-        position={Position.Right}
-        className={`${NODE_PORT_NODE_CLASS} ${hasSourceConnections ? NODE_PORT_VISIBLE_CLASS : ''}`}
-        style={{
-          background: getSocketColor('IMAGE'),
-          right: 0,
-          top: '50%',
-          transform: 'translate(50%, -50%)',
-        }}
-      />
-      <NodeResizeHandle minWidth={320} minHeight={150} maxWidth={520} maxHeight={360} />
-    </div>
+      ) : (
+        <ToolWorkbenchSourcePreview
+          source={sourceImages[0] ?? null}
+          alt={t('node.relightGeneration.sourceAlt')}
+          icon={<SunMedium className="h-8 w-8" />}
+          emptyText={t('node.relightGeneration.sourceRequired')}
+          summary={`${summary} · ${statusText}`}
+        />
+      )}
+    </ToolWorkbenchNodeFrame>
   )
 })
 

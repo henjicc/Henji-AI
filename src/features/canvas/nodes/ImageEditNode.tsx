@@ -28,6 +28,7 @@ type ImageEditNodeProps = NodeProps & {
 interface ImageEditGenerationUi {
   promptMode: 'required' | 'optional' | 'hidden';
   modelMode: 'selectable' | 'locked';
+  layoutMode: 'stacked' | 'workbench';
   excludeParamIds: readonly string[];
   promptMaxCharacters?: number;
 }
@@ -35,6 +36,7 @@ interface ImageEditGenerationUi {
 const DEFAULT_GENERATION_UI: ImageEditGenerationUi = {
   promptMode: 'required',
   modelMode: 'selectable',
+  layoutMode: 'stacked',
   excludeParamIds: [],
 };
 
@@ -46,6 +48,7 @@ function resolveGenerationUi(data: ImageEditNodeData): ImageEditGenerationUi {
     ? raw.promptMode
     : 'required';
   const modelMode = raw.modelMode === 'locked' ? 'locked' : 'selectable';
+  const layoutMode = raw.layoutMode === 'workbench' ? 'workbench' : 'stacked';
   const excludeParamIds = Array.isArray(raw.excludeParamIds)
     ? raw.excludeParamIds.filter((item): item is string => typeof item === 'string')
     : [];
@@ -54,7 +57,7 @@ function resolveGenerationUi(data: ImageEditNodeData): ImageEditGenerationUi {
     && raw.promptMaxCharacters > 0
       ? raw.promptMaxCharacters
       : undefined;
-  return { promptMode, modelMode, excludeParamIds, promptMaxCharacters };
+  return { promptMode, modelMode, layoutMode, excludeParamIds, promptMaxCharacters };
 }
 
 export const ImageEditNode = memo(({ id, data, selected, width, height }: ImageEditNodeProps) => {
@@ -111,6 +114,7 @@ export const ImageEditNode = memo(({ id, data, selected, width, height }: ImageE
       showModelInput={generationUi.modelMode !== 'locked'}
       excludeParamIds={generationUi.excludeParamIds}
       prepareRuntimeParams={prepareRuntimeParams}
+      layoutMode={generationUi.layoutMode}
     />
   );
 });

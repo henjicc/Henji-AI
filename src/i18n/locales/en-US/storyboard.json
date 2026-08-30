@@ -225,8 +225,8 @@
         "description": "Approximate finish and tone with a generative model, without face detection or identity recognition"
       },
       "elementEdit": {
-        "title": "Element Edit",
-        "description": "Select a local area and change visual elements as requested"
+        "title": "Local Redraw",
+        "description": "Crop and enlarge the masked area, edit it with any image-editing model, then align and composite it back"
       },
       "layerSeparation": {
         "title": "Layer Separation",
@@ -261,7 +261,7 @@
       "multiAngleGeneration": "Multi-angle Views",
       "upscaleGeneration": "Upscale",
       "portraitTextureGeneration": "Portrait Texture",
-      "elementEditGeneration": "Element Edit",
+      "elementEditGeneration": "Local Redraw",
       "layerSeparationGeneration": "Layer Separation",
       "layerStackResult": "Layer Stack",
       "storyboard": "Storyboard Node",
@@ -349,11 +349,15 @@
       "promptRequired": "The panorama prompt may be left empty",
       "apiKeyRequired": "Please set API key in Settings",
       "resultTitle": "720° Panorama",
-      "promptPlaceholder": "Optionally add a scene, style, time, or weather; spherical projection and 2:1 are fixed"
+      "promptPlaceholder": "Optionally add a scene, style, time, or weather; spherical projection and 2:1 are fixed",
+      "workbenchSummary": "Generate a browsable panorama from a source image or text"
     },
     "relightGeneration": {
       "apiKeyRequired": "Configure the provider API key required by the current relighting mode",
-      "resultTitle": "Relighting Result"
+      "resultTitle": "Relighting Result",
+      "sourceImage": "Source image",
+      "sourceAlt": "Source image to relight",
+      "sourceRequired": "Connect one source image"
     },
     "multiAngleGeneration": {
       "title": "Multi-angle Views",
@@ -367,9 +371,11 @@
       "groupTitle": "Multi-angle Views · {{count}}",
       "generationFailed": "Multi-angle generation failed",
       "errors": {
+        "nodeMissing": "Canvas execution node not found: {{id}}",
         "singleSource": "Multi-angle generation requires exactly one source image",
         "projectMissing": "There is no canvas project available for generation",
         "singleOutput": "A single multi-angle view must return exactly one output; received {{count}}",
+        "projectSwitched": "The canvas project changed, so this generation result was discarded",
         "batchIncomplete": "The multi-angle batch did not complete"
       },
       "status": {
@@ -474,26 +480,55 @@
       "promptRequired": "Upscaling does not require a prompt",
       "apiKeyRequired": "Configure a Fal API key first",
       "resultTitle": "Upscaled Result",
-      "promptPlaceholder": "Upscaling does not require a prompt"
+      "promptPlaceholder": "Upscaling does not require a prompt",
+      "workbenchSummary": "Choose the upscale method and scale on the right"
     },
     "portraitTextureGeneration": {
       "promptRequired": "Portrait texture uses controlled presets and does not require a separate prompt",
       "apiKeyRequired": "Configure the selected GPT Image 2 provider API key first",
       "resultTitle": "Portrait Texture Result",
       "promptPlaceholder": "Use the controlled additional-request field in the node",
+      "workbenchSummary": "Preserve the portrait structure while refining skin and detail texture",
       "approximation": "Model approximation · No face detection · Identity is not guaranteed"
     },
     "elementEditGeneration": {
       "promptRequired": "Describe how the selected area should change",
-      "apiKeyRequired": "Configure the selected GPT Image 2 provider API key first",
-      "resultTitle": "Element Edit Result",
-      "promptPlaceholder": "Describe how to change the masked area"
+      "apiKeyRequired": "Configure the selected image-editing model provider API key first",
+      "resultTitle": "Local Redraw Result",
+      "promptPlaceholder": "Describe how to change the masked area",
+      "maskLabel": "Redraw mask",
+      "drawMask": "Draw",
+      "editMask": "Edit",
+      "sourceLoadFailed": "Unable to open source image",
+      "loadingMask": "Preparing mask canvas…",
+      "missingInput": "Connect a source image and paint a redraw area first",
+      "missingContext": "The local redraw result is missing its crop context",
+      "summarySaved": "Mask saved automatically. Select the node to keep drawing",
+      "summaryEmpty": "Select the node to draw. Changes save automatically",
+      "undoMask": "Undo mask",
+      "redoMask": "Redo mask",
+      "clearMask": "Clear mask",
+      "brushSize": "Brush {{size}}",
+      "tools": {
+        "brush": "Brush",
+        "rectangle": "Rectangle",
+        "circle": "Ellipse",
+        "lasso": "Free selection",
+        "erase": "Erase"
+      },
+      "autosave": {
+        "saving": "Saving…",
+        "saved": "Saved automatically",
+        "failed": "Autosave failed. Retrying",
+        "idle": "Saves automatically after drawing"
+      }
     },
     "layerSeparationGeneration": {
       "promptRequired": "Layer separation does not require a prompt",
       "apiKeyRequired": "Configure the selected Seedream 5.0 Pro provider API key first",
       "resultTitle": "Layer Stack",
-      "promptPlaceholder": "Optional: describe subjects or regions to prioritize"
+      "promptPlaceholder": "Optional: describe subjects or regions to prioritize",
+      "workbenchSummary": "Adjust layer order and opacity in the generated layer result node"
     },
     "upload": {
       "uploadedAlt": "Uploaded image",

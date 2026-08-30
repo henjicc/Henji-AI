@@ -51,6 +51,13 @@
     calc(-1 * var(--canvas-node-paint-bottom))
     calc(-1 * var(--canvas-node-paint-left));
   contain: paint;
+  pointer-events: none;
+}
+
+/* 绘制隔离层的透明扩展区只负责给标题、端口和光晕留出 paint 空间，不能成为命中面。
+   实际节点根恢复交互后，重叠节点只会被看得见的那部分挡住。 */
+.canvas-node-paint-frame > * {
+  pointer-events: auto;
 }
 
 /* 当前执行节点使用独立于选中框的外层光晕：选中仍表示编辑焦点，光晕只表示运行状态。

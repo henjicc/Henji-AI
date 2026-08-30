@@ -1,5 +1,6 @@
 import { memo, useCallback, useMemo } from 'react'
 import type { NodeProps } from '@xyflow/react'
+import { useTranslation } from 'react-i18next'
 
 import { createPlainTextPromptDocument } from '@/core/inputs/promptDocument'
 import { ICON_TOOL_IMAGE_EDIT } from '@/core/theme/icons'
@@ -13,10 +14,12 @@ import {
 } from '@/features/canvas/capabilities'
 import {
   CANVAS_NODE_TYPES,
+  type CanvasNodeData,
   type PortraitTextureGenerationNodeData,
 } from '@/features/canvas/domain/canvasNodes'
 import {
   GenerationNodeShell,
+  type GenerationNodeRuntimePreparationContext,
   type GenerationNodeShellData,
 } from '@/features/canvas/nodes/shared/GenerationNodeShell'
 import { useCanvasStore } from '@/stores/canvasStore'
@@ -45,16 +48,21 @@ export const PortraitTextureGenerationNode = memo(({
   width,
   height,
 }: PortraitTextureGenerationNodeProps) => {
+  const { t } = useTranslation()
   const updateNodeData = useCanvasStore((state) => state.updateNodeData)
   const settings = useMemo(
     () => readSettings(data.portraitTextureSettings),
     [data.portraitTextureSettings],
   )
-  const prepareRuntimeParams = useCallback((): DynamicValueMap => {
+  const prepareRuntimeParams = useCallback(({
+    data: runtimeData,
+  }: GenerationNodeRuntimePreparationContext): DynamicValueMap => {
     // 未知版本必须在付费请求前拒绝；界面可安全展示，但不会静默降级生成。
-    normalizePortraitTextureSettings(data.portraitTextureSettings)
+    normalizePortraitTextureSettings(
+      (runtimeData as PortraitTextureGenerationNodeData).portraitTextureSettings,
+    )
     return {}
-  }, [data.portraitTextureSettings])
+  }, [])
 
   const persistSettings = useCallback((nextSettings: PortraitTextureSettingsV1): void => {
     const prompt = compilePortraitTexturePrompt(nextSettings)
@@ -99,9 +107,11 @@ export const PortraitTextureGenerationNode = memo(({
     />
   ), [id, setSetting, setSettings, settings])
 
-  const resultNodeExtraData = useMemo<DynamicValueMap>(() => ({
-    generationPortraitTextureSettings: settings as unknown as DynamicValue,
-  }), [settings])
+  const resultNodeExtraData = useCallback((runtimeData: CanvasNodeData): DynamicValueMap => ({
+    generationPortraitTextureSettings: (
+      runtimeData as PortraitTextureGenerationNodeData
+    ).portraitTextureSettings as unknown as DynamicValue,
+  }), [])
 
   return (
     <GenerationNodeShell
@@ -122,7 +132,9 @@ export const PortraitTextureGenerationNode = memo(({
       requirePrompt={false}
       additionalInputRows={settingsRows}
       prepareRuntimeParams={prepareRuntimeParams}
-      minHeight={250}
+      layoutMode="workbench"
+      workbenchSummary={t('node.portraitTextureGeneration.workbenchSummary')}
+      minHeight={320}
     />
   )
 })

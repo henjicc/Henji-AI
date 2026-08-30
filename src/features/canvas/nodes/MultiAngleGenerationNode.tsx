@@ -1,11 +1,10 @@
-import { memo, useCallback, useEffect, useMemo, useRef } from 'react'
-import { Handle, Position, type NodeProps } from '@xyflow/react'
-import { Camera, Settings2 } from 'lucide-react'
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { type NodeProps } from '@xyflow/react'
+import { Camera } from 'lucide-react'
 import { useStoreWithEqualityFn } from 'zustand/traditional'
 import { useTranslation } from 'react-i18next'
 import type { TFunction } from 'i18next'
 
-import { UiButton } from '@/components/ui'
 import { GenerationService } from '@/core/services/GenerationService'
 import {
   areMediaOutputListsEqual,
@@ -17,9 +16,9 @@ import {
   executeMultiAngleBatch,
   type MultiAngleBatchSnapshotV1,
 } from '@/features/canvas/application/multiAngleBatchService'
-import { openCanvasSpecialEditor } from '@/features/canvas/application/specialEditorApplicationService'
 import {
   registerCanvasNodeExecutor,
+  type CanvasNodeExecutionContext,
   type CanvasNodeExecutionResult,
 } from '@/features/canvas/application/canvasExecutionService'
 import {
@@ -38,23 +37,20 @@ import {
   type ImageEditNodeData,
 } from '@/features/canvas/domain/canvasNodes'
 import { getMainPortConnectionFlags } from '@/features/canvas/domain/connectionIndex'
-import { getSocketColor } from '@/features/canvas/domain/socketTypes'
 import { runCanvasGeneration, resumeCanvasGeneration } from '@/features/canvas/generation/runGeneration'
 import { MediaInputRow } from '@/features/canvas/params/MediaInputRow'
-import { NodeHeader, NODE_HEADER_FLOATING_POSITION_CLASS } from '@/features/canvas/ui/NodeHeader'
-import { NodeLodPlaceholder } from '@/features/canvas/ui/NodeLodPlaceholder'
-import { NodeResizeHandle } from '@/features/canvas/ui/NodeResizeHandle'
-import {
-  NODE_IDLE_BORDER_CLASS,
-  NODE_PORT_NODE_CLASS,
-  NODE_PORT_VISIBLE_CLASS,
-  NODE_SELECTED_BORDER_CLASS,
-} from '@/features/canvas/ui/nodeControlStyles'
 import { useCanvasStore } from '@/stores/canvasStore'
-import { useProjectStore } from '@/stores/projectStore'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { ensureGenerationProviderConfigured } from './shared/generationNodeGuards'
 import { summarizeLocalizedMultiAngleConfig } from '@/features/canvas/ui/specialInterfaces/multiAngle/multiAngleLocalization'
+import {
+  MultiAngleWorkbench,
+} from '@/features/canvas/ui/specialInterfaces/multiAngle/MultiAngleSpecialEditor'
+import { buildMultiAngleEditorDraft } from '@/features/canvas/ui/specialInterfaces/multiAngle/multiAngleEditorState'
+import {
+  ToolWorkbenchNodeFrame,
+  ToolWorkbenchSourcePreview,
+} from './shared/ToolWorkbenchNodeFrame'
 
 export interface MultiAngleGenerationNodeData extends ImageEditNodeData {
   capabilityId: 'image.multi-angle'
@@ -85,6 +81,7 @@ function requireSingleSource(sources: readonly string[], errorMessage: string): 
 
 function createPlaceholder(
   sourceNodeId: string,
+  inputSignature: string,
   data: MultiAngleGenerationNodeData,
   displayName: string,
 ): string {
@@ -97,6 +94,8 @@ function createPlaceholder(
       isGenerating: true,
       generationStartedAt: Date.now(),
       generationError: null,
+      generationSourceNodeId: sourceNodeId,
+      generationInputSignature: inputSignature,
     })
     return previousId
   }
@@ -109,6 +108,8 @@ function createPlaceholder(
       displayName,
       resultKind: 'image',
       sourceCapabilityId: CANVAS_IMAGE_CAPABILITY_IDS.multiAngle,
+      generationSourceNodeId: sourceNodeId,
+      generationInputSignature: inputSignature,
       generationPrompt: '',
       generationModelId: executionTarget.modelId,
       generationMappedParams: { multiAngleConfig: config },
@@ -145,9 +146,9 @@ export const MultiAngleGenerationNode = memo(({
   height,
 }: MultiAngleGenerationNodeProps) => {
   const { t } = useTranslation()
+  const [workbenchReady, setWorkbenchReady] = useState(false)
   const updateNodeData = useCanvasStore((state) => state.updateNodeData)
   const setSelectedNode = useCanvasStore((state) => state.setSelectedNode)
-  const projectId = useProjectStore((state) => state.currentProjectId)
   const providerConfigured = useSettingsStore((state) => state.providerKeyStatus.fal === true)
   const activeControllerRef = useRef<AbortController | null>(null)
   const hasSourceConnections = useCanvasStore(
@@ -165,9 +166,20 @@ export const MultiAngleGenerationNode = memo(({
   const config = useMemo(() => normalizeMultiAngleConfig(data.multiAngleConfig), [data.multiAngleConfig])
   const summary = useMemo(() => summarizeLocalizedMultiAngleConfig(t, config), [config, t])
 
+  useEffect(() => {
+    if (!selected) {
+      setWorkbenchReady(false)
+      return undefined
+    }
+    // 先让 ReactFlow 提交节点骨架，再在下一帧初始化 Three/WebGL，避免工具条点击被 GPU 上下文创建卡住。
+    const frame = window.requestAnimationFrame(() => setWorkbenchReady(true))
+    return () => window.cancelAnimationFrame(frame)
+  }, [selected])
+
   const prepareExecution = useCallback(() => {
     const latest = useCanvasStore.getState().nodes.find((node) => node.id === id)
-    const latestData = (latest?.data ?? data) as MultiAngleGenerationNodeData
+    if (!latest) throw new Error(t('node.multiAngleGeneration.errors.nodeMissing', { id }))
+    const latestData = latest.data as MultiAngleGenerationNodeData
     const latestConfig = normalizeMultiAngleConfig(latestData.multiAngleConfig)
     const sourceImage = requireSingleSource(
       readSourceImages(id, latestData),
@@ -179,17 +191,21 @@ export const MultiAngleGenerationNode = memo(({
       error: t('node.multiAngleGeneration.apiKeyRequired'),
     })
     return { latestData, latestConfig, sourceImage }
-  }, [data, id, t])
+  }, [id, t])
 
-  const handleGenerate = useCallback(async (): Promise<CanvasNodeExecutionResult> => {
-    const generationProjectId = useProjectStore.getState().currentProjectId
+  const handleGenerate = useCallback(async (
+    execution: CanvasNodeExecutionContext,
+  ): Promise<CanvasNodeExecutionResult> => {
+    const generationProjectId = execution.projectId
     if (!generationProjectId) throw new Error(t('node.multiAngleGeneration.errors.projectMissing'))
     const isGenerationProjectCurrent = (): boolean => (
       isCanvasProjectContextCurrent(generationProjectId)
     )
     const prepared = prepareExecution()
+    await execution.assertCurrent()
     const placeholderNodeId = createPlaceholder(
       id,
+      execution.inputSignature,
       prepared.latestData,
       t('node.multiAngleGeneration.resultTitle'),
     )
@@ -220,6 +236,7 @@ export const MultiAngleGenerationNode = memo(({
                 params: plan.params,
                 upstream: { images: [prepared.sourceImage] },
                 onTaskId: context.onProviderRequestId,
+                assertCurrent: execution.assertCurrent,
               })
           if (generated.outputs.length !== 1) {
             throw new Error(t('node.multiAngleGeneration.errors.singleOutput', {
@@ -234,7 +251,7 @@ export const MultiAngleGenerationNode = memo(({
       })
       if (!isGenerationProjectCurrent()) {
         controller.abort()
-        return { status: 'completed', resultNodeIds: [placeholderNodeId] }
+        throw new Error(t('node.multiAngleGeneration.errors.projectSwitched'))
       }
       if (!result.complete) {
         const error = result.errors.join('; ') || t('node.multiAngleGeneration.errors.batchIncomplete')
@@ -243,7 +260,7 @@ export const MultiAngleGenerationNode = memo(({
           generationStartedAt: null,
           generationError: error,
         })
-        return { status: 'completed', resultNodeIds: [placeholderNodeId] }
+        throw new Error(error)
       }
 
       const committed = await commitCanvasGenerationOutputs({
@@ -269,7 +286,7 @@ export const MultiAngleGenerationNode = memo(({
             : t('node.multiAngleGeneration.generationFailed'),
         })
       }
-      return { status: 'completed', resultNodeIds: [placeholderNodeId] }
+      throw error
     } finally {
       if (activeControllerRef.current === controller) activeControllerRef.current = null
     }
@@ -277,95 +294,78 @@ export const MultiAngleGenerationNode = memo(({
 
   useEffect(() => registerCanvasNodeExecutor(id, {
     kind: 'standard-generation',
-    preflight: () => { prepareExecution() },
+    dependency: { mode: 'auto', outputMode: 'result-nodes' },
+    preflightBeforeDependencies: () => ensureGenerationProviderConfigured(
+      useSettingsStore.getState().providerKeyStatus.fal === true,
+      {
+        title: t('node.multiAngleGeneration.providerRequiredTitle'),
+        message: t('node.multiAngleGeneration.providerRequiredMessage'),
+        error: t('node.multiAngleGeneration.apiKeyRequired'),
+      },
+    ),
     run: handleGenerate,
-  }), [handleGenerate, id, prepareExecution])
+  }), [handleGenerate, id, t])
   useEffect(() => () => activeControllerRef.current?.abort(), [])
 
-  const openEditor = (): void => {
-    if (!projectId) return
-    openCanvasSpecialEditor({
-      projectId,
-      nodeId: id,
-      editorKey: 'multiAngle',
-      initialState: {
-        ...data,
-        sourceImageUrl: sourceImages[0] ?? null,
-        multiAngleConfig: config,
-      },
-    })
-  }
-
   return (
-    <div
-      data-multi-angle-node-id={id}
-      data-multi-angle-profile={config.controlProfile}
-      className={`group relative flex flex-col gap-2 overflow-visible rounded-[var(--node-radius)] border bg-surface-dark/90 p-2 transition-colors duration-150 ${selected ? NODE_SELECTED_BORDER_CLASS : NODE_IDLE_BORDER_CLASS}`}
-      style={{
-        width: `${Math.max(320, typeof width === 'number' ? width : 340)}px`,
-        minWidth: '320px',
-        maxWidth: '520px',
-        height: `${Math.max(150, typeof height === 'number' ? height : 170)}px`,
-        minHeight: '150px',
+    <ToolWorkbenchNodeFrame
+      nodeId={id}
+      title={data.displayName ?? t('node.multiAngleGeneration.title')}
+      icon={<Camera className="h-4 w-4" />}
+      selected={selected}
+      width={width}
+      height={height}
+      hasSourceConnections={hasSourceConnections}
+      onSelect={() => setSelectedNode(id)}
+      onTitleChange={(displayName) => updateNodeData(id, { displayName })}
+      rightSlot={(
+        <span className="max-w-48 truncate text-2xs text-text-muted">
+          {providerConfigured
+            ? batchStatus(data.multiAngleBatch, t)
+            : t('node.multiAngleGeneration.status.falNotConfigured')}
+        </span>
+      )}
+      dataAttributes={{
+        'data-multi-angle-node-id': id,
+        'data-multi-angle-profile': config.controlProfile,
       }}
-      onClick={() => setSelectedNode(id)}
+      defaultWidth={720}
+      defaultHeight={400}
+      minWidth={640}
+      minHeight={340}
     >
-      <NodeHeader
-        className={NODE_HEADER_FLOATING_POSITION_CLASS}
-        icon={<Camera className="h-4 w-4" />}
-        titleText={data.displayName ?? t('node.multiAngleGeneration.title')}
-        editable
-        onTitleChange={(displayName) => updateNodeData(id, { displayName })}
-      />
-      <NodeLodPlaceholder title={data.displayName ?? t('node.multiAngleGeneration.title')} icon={<Camera className="h-6 w-6" />} />
-      <div className="canvas-node-lod-detail flex min-h-0 flex-1 flex-col gap-2">
-        <MediaInputRow
-          nodeId={id}
-          mediaKind="image"
-          label={t('node.multiAngleGeneration.sourceImage')}
-          maxCount={1}
-          inlineValue={inlineSources}
-          onInlineChange={(images) => updateNodeData(id, {
-            mediaInputs: { ...(data.mediaInputs ?? {}), image: images },
-          })}
+      {selected && workbenchReady ? (
+        <MultiAngleWorkbench
+          config={config}
+          sourceImage={sourceImages[0] ?? null}
+          embedded
+          sourceControl={(
+            <MediaInputRow
+              nodeId={id}
+              mediaKind="image"
+              label={t('node.multiAngleGeneration.sourceImage')}
+              maxCount={1}
+              inlineValue={inlineSources}
+              onInlineChange={(images) => updateNodeData(id, {
+                mediaInputs: { ...(data.mediaInputs ?? {}), image: images },
+              })}
+            />
+          )}
+          onConfigChange={(nextConfig) => updateNodeData(
+            id,
+            buildMultiAngleEditorDraft(data, nextConfig),
+          )}
         />
-        <div className="flex min-w-0 items-center justify-between gap-2 rounded-lg border border-veil-subtle px-2.5 py-2">
-          <div className="min-w-0">
-            <p className="truncate text-xs font-medium text-text-dark">{summary}</p>
-            <p className="truncate text-2xs text-text-muted">{providerConfigured
-              ? batchStatus(data.multiAngleBatch, t)
-              : t('node.multiAngleGeneration.status.falNotConfigured')}</p>
-          </div>
-          <UiButton
-            type="button"
-            size="sm"
-            variant="muted"
-            className="nodrag shrink-0 gap-1.5"
-            onClick={(event) => {
-              event.stopPropagation()
-              openEditor()
-            }}
-          >
-            <Settings2 className="h-3.5 w-3.5" />
-            {t('node.multiAngleGeneration.adjustAngles')}
-          </UiButton>
-        </div>
-        <p className="px-1 text-2xs text-text-muted">{t('node.multiAngleGeneration.executionHint')}</p>
-      </div>
-      <Handle
-        type="source"
-        id="source"
-        position={Position.Right}
-        className={`${NODE_PORT_NODE_CLASS} ${hasSourceConnections ? NODE_PORT_VISIBLE_CLASS : ''}`}
-        style={{
-          background: getSocketColor('IMAGE'),
-          right: 0,
-          top: '50%',
-          transform: 'translate(50%, -50%)',
-        }}
-      />
-      <NodeResizeHandle minWidth={320} minHeight={150} maxWidth={520} maxHeight={360} />
-    </div>
+      ) : (
+        <ToolWorkbenchSourcePreview
+          source={sourceImages[0] ?? null}
+          alt={t('node.multiAngleEditor.sourceAlt')}
+          icon={<Camera className="h-8 w-8" />}
+          emptyText={t('node.multiAngleEditor.sourceRequired')}
+          summary={summary}
+        />
+      )}
+    </ToolWorkbenchNodeFrame>
   )
 })
 

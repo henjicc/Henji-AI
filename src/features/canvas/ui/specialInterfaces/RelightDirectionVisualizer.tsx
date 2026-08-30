@@ -49,12 +49,14 @@ function beamPoints(point: RelightDirectionPoint): string {
 interface RelightDirectionVisualizerProps {
   direction: RelightKeyDirection
   sourceImage: string | null
+  sourceAlt: string
   onDirectionChange: (direction: RelightKeyDirection) => void
 }
 
 export function RelightDirectionVisualizer({
   direction,
   sourceImage,
+  sourceAlt,
   onDirectionChange,
 }: RelightDirectionVisualizerProps): JSX.Element {
   const [view, setView] = useState<RelightVisualizerView>('perspective')
@@ -188,7 +190,7 @@ export function RelightDirectionVisualizer({
           className={`pointer-events-none absolute left-1/2 top-1/2 z-raised aspect-[4/3] w-[30%] overflow-hidden rounded-md border border-veil-soft bg-surface-dark ${view === 'perspective' ? '[transform:translate(-50%,-50%)_perspective(360px)_rotateY(-28deg)_rotateZ(4deg)]' : '-translate-x-1/2 -translate-y-1/2'}`}
         >
           {sourceImage ? (
-            <img src={sourceImage} alt="待打光源图" className="h-full w-full object-cover" draggable={false} />
+            <img src={sourceImage} alt={sourceAlt} className="h-full w-full object-cover" draggable={false} />
           ) : (
             <span className="flex h-full w-full items-center justify-center text-text-muted">
               <SunMedium className="h-5 w-5" />

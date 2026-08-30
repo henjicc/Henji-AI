@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useState, type ReactNode } from 'react'
 import { Aperture, Camera, Plus, Trash2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
@@ -117,23 +117,28 @@ function RangeField({
   )
 }
 
-export default function MultiAngleSpecialEditor({
-  session,
-  onDraftChange,
-  onConfirm,
-  onCancel,
-  onKeepEditing,
-  onDiscard,
-}: CanvasSpecialEditorSurfaceProps): JSX.Element {
+interface MultiAngleWorkbenchProps {
+  config: MultiAngleConfigV1
+  sourceImage: string | null
+  onConfigChange: (config: MultiAngleConfigV1) => void
+  sourceControl?: ReactNode
+  embedded?: boolean
+}
+
+export function MultiAngleWorkbench({
+  config,
+  sourceImage,
+  onConfigChange,
+  sourceControl,
+  embedded = false,
+}: MultiAngleWorkbenchProps): JSX.Element {
   const { t } = useTranslation()
-  const config = useMemo(() => readConfig(session.draftState), [session.draftState])
-  const sourceImage = sourceImageFromState(session.draftState)
   const [selectedViewId, setSelectedViewId] = useState(config.views[0]?.viewId ?? '')
   const selected = config.views.find((view) => view.viewId === selectedViewId) ?? config.views[0]
 
   const updateConfig = (next: MultiAngleConfigV1): void => {
     const normalized = normalizeMultiAngleConfig(next)
-    onDraftChange(buildMultiAngleEditorDraft(session.draftState, normalized))
+    onConfigChange(normalized)
     if (!normalized.views.some((view) => view.viewId === selectedViewId)) {
       setSelectedViewId(normalized.views[0]?.viewId ?? '')
     }
@@ -191,34 +196,13 @@ export default function MultiAngleSpecialEditor({
       label: t('node.multiAngleEditor.customFluxView', { index: index + 1 }),
     }))
   }
-  const close = (): void => { onCancel() }
-
   return (
-    <UiModal
-      isOpen
-      title={t('node.multiAngleEditor.title')}
-      size="workspace"
-      surface="glass"
-      contentClassName="min-h-0 p-0"
-      onClose={close}
-      footer={session.discardConfirmationRequested ? (
-        <div className="flex w-full items-center justify-between gap-3">
-          <p className={UI_TEXT_META_CLASS}>{t('node.multiAngleEditor.discardPrompt')}</p>
-          <div className="flex items-center gap-2">
-            <UiButton type="button" variant="ghost" size="sm" onClick={onKeepEditing}>{t('node.multiAngleEditor.keepEditing')}</UiButton>
-            <UiButton type="button" variant="primary" size="sm" onClick={onDiscard}>{t('node.multiAngleEditor.discard')}</UiButton>
-          </div>
-        </div>
-      ) : (
-        <>
-          <UiButton type="button" variant="ghost" size="sm" onClick={close}>{t('common.cancel')}</UiButton>
-          <UiButton type="button" variant="primary" size="sm" onClick={onConfirm}>{t('node.multiAngleEditor.apply')}</UiButton>
-        </>
-      )}
-    >
-      <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_22rem]">
-        <div className="flex min-h-0 items-center justify-center p-4">
-          <div className={`relative flex h-full w-full items-center justify-center overflow-hidden rounded-xl border border-veil-subtle ${UI_GLASS_ADAPTIVE_SURFACE_CLASS}`}>
+      <div
+        data-multi-angle-workbench="true"
+        className="grid min-h-0 min-w-0 flex-1 grid-cols-[minmax(0,1.3fr)_minmax(250px,0.7fr)]"
+      >
+        <div className={`flex min-h-0 items-center justify-center ${embedded ? 'p-2' : 'p-4'}`}>
+          <div className={`relative flex h-full w-full items-center justify-center overflow-hidden rounded-xl ${embedded ? 'bg-bg-dark/45' : `border border-veil-subtle ${UI_GLASS_ADAPTIVE_SURFACE_CLASS}`}`}>
             {sourceImage ? (
               <img src={resolveImageDisplayUrl(sourceImage)} alt={t('node.multiAngleEditor.sourceAlt')} className="max-h-[76%] max-w-[76%] object-contain" />
             ) : (
@@ -254,7 +238,8 @@ export default function MultiAngleSpecialEditor({
           </div>
         </div>
 
-        <div className={`min-h-0 overflow-y-auto border-l border-veil-subtle p-4 ${UI_GLASS_ADAPTIVE_REGION_CLASS}`}>
+        <div className={`min-h-0 overflow-y-auto border-l border-veil-subtle ${embedded ? 'p-3' : `p-4 ${UI_GLASS_ADAPTIVE_REGION_CLASS}`}`}>
+          {sourceControl ? <div className="mb-3">{sourceControl}</div> : null}
           <section className="space-y-3">
             <h3 className={UI_TEXT_SECTION_CLASS}>{t('node.multiAngleEditor.controlMode')}</h3>
             <div className="grid grid-cols-3 gap-2">
@@ -368,6 +353,49 @@ export default function MultiAngleSpecialEditor({
           </div>
         </div>
       </div>
+  )
+}
+
+export default function MultiAngleSpecialEditor({
+  session,
+  onDraftChange,
+  onConfirm,
+  onCancel,
+  onKeepEditing,
+  onDiscard,
+}: CanvasSpecialEditorSurfaceProps): JSX.Element {
+  const { t } = useTranslation()
+  const config = useMemo(() => readConfig(session.draftState), [session.draftState])
+  const sourceImage = sourceImageFromState(session.draftState)
+  const close = (): void => { onCancel() }
+  return (
+    <UiModal
+      isOpen
+      title={t('node.multiAngleEditor.title')}
+      size="workspace"
+      surface="glass"
+      contentClassName="min-h-0 p-0"
+      onClose={close}
+      footer={session.discardConfirmationRequested ? (
+        <div className="flex w-full items-center justify-between gap-3">
+          <p className={UI_TEXT_META_CLASS}>{t('node.multiAngleEditor.discardPrompt')}</p>
+          <div className="flex items-center gap-2">
+            <UiButton type="button" variant="ghost" size="sm" onClick={onKeepEditing}>{t('node.multiAngleEditor.keepEditing')}</UiButton>
+            <UiButton type="button" variant="primary" size="sm" onClick={onDiscard}>{t('node.multiAngleEditor.discard')}</UiButton>
+          </div>
+        </div>
+      ) : (
+        <>
+          <UiButton type="button" variant="ghost" size="sm" onClick={close}>{t('common.cancel')}</UiButton>
+          <UiButton type="button" variant="primary" size="sm" onClick={onConfirm}>{t('node.multiAngleEditor.apply')}</UiButton>
+        </>
+      )}
+    >
+      <MultiAngleWorkbench
+        config={config}
+        sourceImage={sourceImage}
+        onConfigChange={(next) => onDraftChange(buildMultiAngleEditorDraft(session.draftState, next))}
+      />
     </UiModal>
   )
 }

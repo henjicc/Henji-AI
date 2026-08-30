@@ -36,4 +36,52 @@ describe('canvasStore.connectMany', () => {
     expect(useCanvasStore.getState().undo()).toBe(true);
     expect(useCanvasStore.getState().edges).toEqual([]);
   });
+
+  it('同一批也不会给文本展示创建第二条入边', () => {
+    const firstSourceId = useCanvasStore.getState().addNode(
+      CANVAS_NODE_TYPES.stringSource,
+      { x: 0, y: 240 },
+      { value: 'A' },
+    );
+    const secondSourceId = useCanvasStore.getState().addNode(
+      CANVAS_NODE_TYPES.stringSource,
+      { x: 0, y: 400 },
+      { value: 'B' },
+    );
+    const displayId = useCanvasStore.getState().addNode(
+      CANVAS_NODE_TYPES.textAnnotation,
+      { x: 360, y: 240 },
+      { content: '' },
+    );
+
+    const created = useCanvasStore.getState().connectMany([
+      { source: firstSourceId, target: displayId, sourceHandle: 'source', targetHandle: 'target' },
+      { source: secondSourceId, target: displayId, sourceHandle: 'source', targetHandle: 'target' },
+    ]);
+
+    expect(created).toHaveLength(1);
+    expect(useCanvasStore.getState().edges.filter((edge) => edge.target === displayId)).toHaveLength(1);
+  });
+
+  it('通用 addEdge 入口也不会给文本展示创建第二条入边', () => {
+    const firstSourceId = useCanvasStore.getState().addNode(
+      CANVAS_NODE_TYPES.textProcessing,
+      { x: 0, y: 240 },
+      { prompt: 'A' },
+    );
+    const secondSourceId = useCanvasStore.getState().addNode(
+      CANVAS_NODE_TYPES.textProcessing,
+      { x: 0, y: 400 },
+      { prompt: 'B' },
+    );
+    const displayId = useCanvasStore.getState().addNode(
+      CANVAS_NODE_TYPES.textAnnotation,
+      { x: 360, y: 240 },
+      { content: '' },
+    );
+
+    expect(useCanvasStore.getState().addEdge(firstSourceId, displayId)).toBeTruthy();
+    expect(useCanvasStore.getState().addEdge(secondSourceId, displayId)).toBeNull();
+    expect(useCanvasStore.getState().edges.filter((edge) => edge.target === displayId)).toHaveLength(1);
+  });
 });
