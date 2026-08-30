@@ -118,16 +118,63 @@ describe('图片编辑 V3 命令归约器', () => {
       type: 'raster.apply-tile-delta',
       layerId: 'paint',
       changes: [
-        { tileKey: '0/1/1', resourceId: 'sha256:new', byteSize: 2048 },
-        { tileKey: '0/1/2', resourceId: 'sha256:next', byteSize: 2048 },
+        {
+          tileKey: '0/1/1',
+          previousResourceId: 'sha256:old',
+          previousByteSize: 3_072,
+          resourceId: 'sha256:new',
+          byteSize: 2_048,
+        },
+        {
+          tileKey: '0/1/2',
+          previousResourceId: null,
+          previousByteSize: 0,
+          resourceId: 'sha256:next',
+          byteSize: 1_024,
+        },
       ],
     });
     expect(applied.document.layers[0]).toMatchObject({
       tiles: { '0/1/1': 'sha256:new', '0/1/2': 'sha256:next' },
     });
     expect(JSON.stringify(applied.inverse)).not.toContain('pixel');
+    expect(applied.historyResources).toEqual([
+      { resourceId: 'sha256:new', byteSize: 2_048 },
+      { resourceId: 'sha256:next', byteSize: 1_024 },
+      { resourceId: 'sha256:old', byteSize: 3_072 },
+    ]);
+    expect(applied.historyBytes).toBe(applied.historyMetadataBytes + 6_144);
     const restored = applyImageEditCommandV3(applied.document, applied.inverse);
     expect(restored.document.layers[0]).toMatchObject({ tiles: { '0/1/1': 'sha256:old' } });
+  });
+
+  it('拒绝瓦片旧哈希 CAS 不匹配、空操作和伪造旧字节数', () => {
+    const raster = {
+      ...createImageEditRasterLayerV3('paint', '画笔'),
+      tiles: { '0/0/0': 'sha256:old' },
+    };
+    const source = createDocument([raster]);
+    expect(() => applyImageEditCommandV3(source, {
+      commandId: 'stale-tile', expectedRevision: 0, type: 'raster.apply-tile-delta', layerId: 'paint',
+      changes: [{
+        tileKey: '0/0/0', previousResourceId: 'sha256:other', previousByteSize: 1,
+        resourceId: 'sha256:new', byteSize: 2,
+      }],
+    })).toThrow(ImageEditRevisionConflictErrorV3);
+    expect(() => applyImageEditCommandV3(source, {
+      commandId: 'noop-tile', expectedRevision: 0, type: 'raster.apply-tile-delta', layerId: 'paint',
+      changes: [{
+        tileKey: '0/0/0', previousResourceId: 'sha256:old', previousByteSize: 1,
+        resourceId: 'sha256:old', byteSize: 1,
+      }],
+    })).toThrow(ImageEditCommandValidationErrorV3);
+    expect(() => applyImageEditCommandV3(source, {
+      commandId: 'invalid-empty-size', expectedRevision: 0, type: 'raster.apply-tile-delta', layerId: 'paint',
+      changes: [{
+        tileKey: '0/0/0', previousResourceId: 'sha256:old', previousByteSize: 1,
+        resourceId: null, byteSize: 99,
+      }],
+    })).toThrow(ImageEditCommandValidationErrorV3);
   });
 
   it('以单条可逆命令更新效果参数，并拒绝修改旧格式占位图层', () => {

@@ -107,6 +107,8 @@ export function materializeImageEditBrushTileDeltaV3(
     });
     commandChanges.push({
       tileKey: change.tileKey,
+      previousResourceId: change.oldResource?.resourceId ?? null,
+      previousByteSize: change.oldResource?.byteSize ?? 0,
       resourceId: newResource.resourceId,
       byteSize: newResource.byteSize,
     });

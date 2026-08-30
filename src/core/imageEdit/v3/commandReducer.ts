@@ -11,8 +11,13 @@ import type { ImageEditDocumentV3 } from './documentTypes';
 import type {
   ImageEditCommandApplyResultV3,
   ImageEditCommandV3,
+  ImageEditHistoryResourceReferenceV3,
   ImageEditLayerCommonPatchV3,
   ImageEditRasterTileDeltaCommandV3,
+} from './commandTypes';
+import {
+  collectImageEditCommandResourceReferencesV3,
+  mergeImageEditHistoryResourceReferencesV3,
 } from './commandTypes';
 import { cloneImageEditJsonObjectV3 } from './documentCodec';
 
@@ -234,7 +239,7 @@ function applyLayerCommand(
   document: ImageEditDocumentV3,
   command: ImageEditCommandV3,
   nextRevision: number
-): { layers: ImageEditLayerV3[]; inverse: ImageEditCommandV3; pixelBytes?: number } {
+): { layers: ImageEditLayerV3[]; inverse: ImageEditCommandV3 } {
   const base = inverseBase(command, nextRevision);
   if (command.type === 'layer.add') {
     assertContainerEditable(document.layers, command.parentId);
@@ -335,7 +340,7 @@ function applyLayerContentCommand(
   document: ImageEditDocumentV3,
   command: ImageEditCommandV3,
   nextRevision: number
-): { layers: ImageEditLayerV3[]; inverse: ImageEditCommandV3; pixelBytes?: number } {
+): { layers: ImageEditLayerV3[]; inverse: ImageEditCommandV3 } {
   const base = inverseBase(command, nextRevision);
   const layerId = 'layerId' in command ? command.layerId : '';
   const location = findLayerLocation(document.layers, layerId);
@@ -429,36 +434,67 @@ function applyLayerContentCommand(
     const tiles = { ...location.layer.tiles };
     const inverseChanges: ImageEditRasterTileDeltaCommandV3['changes'] = [];
     const keys = new Set<string>();
-    let pixelBytes = 0;
     for (const change of command.changes) {
       if (!change.tileKey || ['__proto__', 'constructor', 'prototype'].includes(change.tileKey)
-        || keys.has(change.tileKey) || !Number.isSafeInteger(change.byteSize) || change.byteSize < 0
-        || (change.resourceId !== null && !change.resourceId)) throw new ImageEditCommandValidationErrorV3('栅格瓦片增量无效');
+        || change.tileKey.length > 128 || keys.has(change.tileKey)
+        || !Number.isSafeInteger(change.byteSize) || change.byteSize < 0
+        || !Number.isSafeInteger(change.previousByteSize) || change.previousByteSize < 0
+        || (change.resourceId === null ? change.byteSize !== 0 : !change.resourceId || change.resourceId.length > 512)
+        || (change.previousResourceId === null
+          ? change.previousByteSize !== 0
+          : !change.previousResourceId || change.previousResourceId.length > 512)) {
+        throw new ImageEditCommandValidationErrorV3('栅格瓦片增量无效');
+      }
+      const currentResourceId = tiles[change.tileKey] ?? null;
+      if (currentResourceId !== change.previousResourceId) {
+        throw new ImageEditRevisionConflictErrorV3(
+          `栅格瓦片 CAS 冲突：${change.tileKey} 期望 ${change.previousResourceId ?? 'empty'}，实际 ${currentResourceId ?? 'empty'}`
+        );
+      }
+      if (change.resourceId === change.previousResourceId && change.byteSize === change.previousByteSize) {
+        throw new ImageEditCommandValidationErrorV3('栅格瓦片增量不能是空操作');
+      }
+      if (change.resourceId === change.previousResourceId && change.byteSize !== change.previousByteSize) {
+        throw new ImageEditCommandValidationErrorV3('同一瓦片资源不能声明不同字节数');
+      }
       keys.add(change.tileKey);
-      inverseChanges.push({ tileKey: change.tileKey, resourceId: tiles[change.tileKey] ?? null, byteSize: change.byteSize });
+      inverseChanges.push({
+        tileKey: change.tileKey,
+        previousResourceId: change.resourceId,
+        previousByteSize: change.byteSize,
+        resourceId: change.previousResourceId,
+        byteSize: change.previousByteSize,
+      });
       if (change.resourceId === null) delete tiles[change.tileKey];
       else tiles[change.tileKey] = change.resourceId;
-      pixelBytes += change.byteSize;
-      if (!Number.isSafeInteger(pixelBytes)) throw new ImageEditCommandValidationErrorV3('栅格瓦片历史字节数溢出');
     }
     return {
       layers: replaceLayer(document.layers, location, { ...location.layer, tiles }),
       inverse: { ...base, type: 'raster.apply-tile-delta', layerId, changes: inverseChanges },
-      pixelBytes,
     };
   }
   throw new ImageEditCommandValidationErrorV3(`不支持的图片编辑命令：${command.type}`);
 }
 
-function estimateHistoryBytes(command: ImageEditCommandV3, inverse: ImageEditCommandV3, pixelBytes = 0): number {
-  const metadataBytes = new TextEncoder().encode(JSON.stringify([command, inverse])).byteLength;
-  return Math.max(metadataBytes, pixelBytes);
+function sumKnownResourceBytes(resources: readonly ImageEditHistoryResourceReferenceV3[]): number {
+  let total = 0;
+  for (const resource of resources) {
+    if (resource.byteSize === null) continue;
+    total += resource.byteSize;
+    if (!Number.isSafeInteger(total)) {
+      throw new ImageEditCommandValidationErrorV3('栅格瓦片历史字节数溢出');
+    }
+  }
+  return total;
 }
 
 export function applyImageEditCommandV3(
   document: ImageEditDocumentV3,
   command: ImageEditCommandV3
 ): ImageEditCommandApplyResultV3 {
+  if (!command.commandId || command.commandId.length > 256) {
+    throw new ImageEditCommandValidationErrorV3('图片编辑命令 ID 无效');
+  }
   if (command.expectedRevision !== document.revision) {
     throw new ImageEditRevisionConflictErrorV3(
       `图片文档 revision 冲突：期望 ${command.expectedRevision}，实际 ${document.revision}`
@@ -469,9 +505,27 @@ export function applyImageEditCommandV3(
   }
   const nextRevision = document.revision + 1;
   const result = applyLayerCommand(document, command, nextRevision);
+  const historyMetadataBytes = new TextEncoder().encode(JSON.stringify([command, result.inverse])).byteLength;
+  let historyResources: ImageEditHistoryResourceReferenceV3[];
+  try {
+    historyResources = mergeImageEditHistoryResourceReferencesV3([
+      ...collectImageEditCommandResourceReferencesV3(command),
+      ...collectImageEditCommandResourceReferencesV3(result.inverse),
+    ]);
+  } catch (error) {
+    throw new ImageEditCommandValidationErrorV3(
+      error instanceof Error ? error.message : '图片编辑历史资源引用无效'
+    );
+  }
+  const historyBytes = historyMetadataBytes + sumKnownResourceBytes(historyResources);
+  if (!Number.isSafeInteger(historyBytes)) {
+    throw new ImageEditCommandValidationErrorV3('图片编辑历史字节数溢出');
+  }
   return {
     document: { ...document, revision: nextRevision, layers: result.layers },
     inverse: result.inverse,
-    historyBytes: estimateHistoryBytes(command, result.inverse, result.pixelBytes),
+    historyMetadataBytes,
+    historyResources,
+    historyBytes,
   };
 }

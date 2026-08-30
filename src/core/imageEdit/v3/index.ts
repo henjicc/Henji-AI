@@ -7,6 +7,7 @@ export * from './legacyMigration';
 export * from './commandTypes';
 export * from './commandReducer';
 export * from './commandHistory';
+export * from './commandHistoryCodec';
 export * from './renderNodeDefinition';
 export * from './builtInRenderNodes';
 export * from './renderPlan';

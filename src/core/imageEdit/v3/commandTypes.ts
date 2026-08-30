@@ -110,9 +110,13 @@ export interface ImageEditAnnotationDeleteCommandV3 extends ImageEditCommandBase
 
 export interface ImageEditRasterTileChangeV3 {
   tileKey: string;
+  /** 应用命令前的瓦片资源；用于校验 CAS 与保留撤销资源。 */
+  previousResourceId: string | null;
+  /** previousResourceId 为 null 时必须为 0。 */
+  previousByteSize: number;
   /** null 表示删除稀疏覆盖，露出图层 source。 */
   resourceId: string | null;
-  /** 此次不可变瓦片增量的实际字节数，仅用于历史预算，不内嵌像素。 */
+  /** resourceId 为 null 时必须为 0；否则为不可变资源的实际字节数。 */
   byteSize: number;
 }
 
@@ -141,7 +145,78 @@ export type ImageEditCommandV3 =
 export interface ImageEditCommandApplyResultV3 {
   document: ImageEditDocumentV3;
   inverse: ImageEditCommandV3;
+  historyMetadataBytes: number;
+  historyResources: ImageEditHistoryResourceReferenceV3[];
   historyBytes: number;
+}
+
+/** null 字节数表示命令引用了资源，但当前文档格式没有保存其大小。 */
+export interface ImageEditHistoryResourceReferenceV3 {
+  resourceId: string;
+  byteSize: number | null;
+}
+
+function collectLayerResources(
+  layer: ImageEditLayerV3,
+  output: ImageEditHistoryResourceReferenceV3[],
+): void {
+  if (layer.mask) output.push({ resourceId: layer.mask.resourceId, byteSize: null });
+  if (layer.type === 'raster') {
+    if (layer.source.kind === 'resource') {
+      output.push({ resourceId: layer.source.resourceId, byteSize: null });
+    }
+    for (const resourceId of Object.values(layer.tiles)) {
+      output.push({ resourceId, byteSize: null });
+    }
+  } else if (layer.type === 'group') {
+    layer.children.forEach((child) => collectLayerResources(child, output));
+  }
+}
+
+/** 枚举命令本身持有的权威资源引用；不会读取文档或像素。 */
+export function collectImageEditCommandResourceReferencesV3(
+  command: ImageEditCommandV3,
+): ImageEditHistoryResourceReferenceV3[] {
+  const resources: ImageEditHistoryResourceReferenceV3[] = [];
+  if (command.type === 'raster.apply-tile-delta') {
+    for (const change of command.changes) {
+      if (change.previousResourceId) {
+        resources.push({ resourceId: change.previousResourceId, byteSize: change.previousByteSize });
+      }
+      if (change.resourceId) {
+        resources.push({ resourceId: change.resourceId, byteSize: change.byteSize });
+      }
+    }
+  } else if (command.type === 'layer.add') {
+    collectLayerResources(command.layer, resources);
+  } else if (command.type === 'layer.group') {
+    collectLayerResources(command.group, resources);
+  } else if (command.type === 'layer.set-mask' && command.mask) {
+    resources.push({ resourceId: command.mask.resourceId, byteSize: null });
+  }
+  return resources;
+}
+
+export function mergeImageEditHistoryResourceReferencesV3(
+  resources: readonly ImageEditHistoryResourceReferenceV3[],
+): ImageEditHistoryResourceReferenceV3[] {
+  const byId = new Map<string, number | null>();
+  for (const resource of resources) {
+    if (!resource.resourceId || resource.resourceId.length > 512
+      || (resource.byteSize !== null
+        && (!Number.isSafeInteger(resource.byteSize) || resource.byteSize < 0))) {
+      throw new Error('图片编辑历史资源引用无效');
+    }
+    const existing = byId.get(resource.resourceId);
+    if (existing !== undefined && existing !== null
+      && resource.byteSize !== null && existing !== resource.byteSize) {
+      throw new Error(`图片编辑历史资源字节数冲突：${resource.resourceId}`);
+    }
+    byId.set(resource.resourceId, existing ?? resource.byteSize);
+  }
+  return [...byId.entries()]
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([resourceId, byteSize]) => ({ resourceId, byteSize }));
 }
 
 export function withImageEditCommandRevisionV3(
