@@ -118,7 +118,7 @@ describe('VGPU 辉光操作契约', () => {
     expect(weightedMeanFraction(dreamy)).toBeGreaterThan(weightedMeanFraction(natural));
     expect(neon.sourceGain).toBeGreaterThan(dreamy.sourceGain);
     for (const recipe of [natural, dreamy, neon]) {
-      expect(recipe.schemaVersion).toBe(13);
+      expect(recipe.schemaVersion).toBe(14);
       expect(recipe.scatterLevels.length).toBeGreaterThanOrEqual(4);
       expect(recipe.scatterLevels.length).toBeLessThanOrEqual(12);
       expect(recipe.scatterLevels[0].divisor).toBe(2);
@@ -299,16 +299,17 @@ describe('VGPU 辉光操作契约', () => {
       )).toBeCloseTo(1, 10);
     }
   });
-  it('RGB 分离只编译为空间位移，不再同时扭曲三通道 PSF', () => {
+  it('RGB 分离同时编译独立 Pixel Offset 与轻量通道半径差，且逐通道守恒', () => {
     const recipe = compileVgpuGlowRecipe({
       ...createDefaultVgpuGlowOperationParams(),
       chromaticAberration: 1,
     }, UHD);
     expect(recipe.chromaticOffsetPx).toBeGreaterThan(0);
-    for (const level of recipe.scatterLevels) {
-      expect(level.weight[0]).toBeCloseTo(level.weight[1], 12);
-      expect(level.weight[1]).toBeCloseTo(level.weight[2], 12);
-    }
+    expect(recipe.chromaticRadiusMultipliers[0]).toBeLessThan(1);
+    expect(recipe.chromaticRadiusMultipliers[1]).toBe(1);
+    expect(recipe.chromaticRadiusMultipliers[2]).toBeGreaterThan(1);
+    expect(weightedMeanFraction(recipe, 0)).toBeLessThan(weightedMeanFraction(recipe, 1));
+    expect(weightedMeanFraction(recipe, 1)).toBeLessThan(weightedMeanFraction(recipe, 2));
     for (const channel of [0, 1, 2]) {
       expect(recipe.scatterLevels.reduce(
         (sum, level) => sum + level.weight[channel],
@@ -474,15 +475,17 @@ describe('VGPU 辉光操作契约', () => {
     expect(upsampleShaderSource).toContain('let highUv = position.xy / highDimensions');
     expect(upsampleShaderSource).toContain('let lowUv = position.xy / (2.0 * lowDimensions)');
     expect(upsampleShaderSource).toContain('let low = tentUpsample(lowUv)');
-    expect(upsampleShaderSource).toContain('return AccumulationOutput(');
+    expect(upsampleShaderSource).toContain(
+      'return high * accumulate.highWeight + low * accumulate.lowWeight'
+    );
     expect(compositeShaderSource).not.toContain('softCore');
     expect(compositeShaderSource).not.toContain('toneBloom');
     expect(compositeShaderSource).not.toContain('applyWhiteHeat');
     expect(compositeShaderSource).toContain('let sceneUv = position.xy / dimensions');
     expect(compositeShaderSource).toContain('mappedSourceUv * sourceSize / (2.0 * bloomSize)');
     expect(compositeShaderSource).toContain('all(mappedSourceUv >= vec2f(0.0))');
-    expect(compositeShaderSource).toContain('fn sampleCarrier(uv: vec2f) -> vec2f');
-    expect(compositeShaderSource).toContain('let spectral = (');
+    expect(compositeShaderSource).not.toContain('sampleCarrier');
+    expect(compositeShaderSource).toContain('let spectralDelta =');
     expect(compositeShaderSource).not.toContain('separated');
     expect(compositeShaderSource).toContain(
       'let whiteCorrection = (vec3f(centeredPeak) - centered) * whiteBlend'

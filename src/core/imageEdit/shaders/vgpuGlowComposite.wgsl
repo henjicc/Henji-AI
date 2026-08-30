@@ -14,8 +14,7 @@ struct Composite {
 @group(0) @binding(0) var<uniform> composite: Composite;
 @group(0) @binding(1) var scene: texture_2d<f32>;
 @group(0) @binding(2) var bloomPyramid: texture_2d<f32>;
-@group(0) @binding(3) var chromaticCarriers: texture_2d<f32>;
-@group(0) @binding(4) var linearSampler: sampler;
+@group(0) @binding(3) var linearSampler: sampler;
 
 fn sampleBloom(uv: vec2f) -> vec4f {
   let mappedSourceUv = composite.scatterRegion.xy + uv * composite.scatterRegion.zw;
@@ -30,30 +29,6 @@ fn sampleBloom(uv: vec2f) -> vec4f {
   return textureSampleLevel(bloomPyramid, linearSampler, scatterUv, 0.0) * inside;
 }
 
-fn sampleCarrier(uv: vec2f) -> vec2f {
-  let mappedSourceUv = composite.scatterRegion.xy + uv * composite.scatterRegion.zw;
-  let sourceSize = max(composite.scatterGeometry.xy, vec2f(1.0));
-  let carrierSize = max(vec2f(textureDimensions(chromaticCarriers)), vec2f(1.0));
-  let carrierUv = mappedSourceUv * sourceSize / (2.0 * carrierSize);
-  let inside = select(
-    0.0,
-    1.0,
-    all(mappedSourceUv >= vec2f(0.0)) && all(mappedSourceUv <= vec2f(1.0))
-  );
-  return textureSampleLevel(chromaticCarriers, linearSampler, carrierUv, 0.0).rg * inside;
-}
-
-/** 半分辨率 carrier 上的四个双线性样本等效于 3×3 正权重 tent，不会振铃或描边。 */
-fn sampleSoftCarrier(uv: vec2f) -> vec2f {
-  let texel = composite.optics.xy;
-  return (
-    sampleCarrier(uv + vec2f(-texel.x, -texel.y))
-    + sampleCarrier(uv + vec2f( texel.x, -texel.y))
-    + sampleCarrier(uv + vec2f(-texel.x,  texel.y))
-    + sampleCarrier(uv + vec2f( texel.x,  texel.y))
-  ) * 0.25;
-}
-
 fn channelColor(index: f32) -> vec3f {
   if (index < 0.5) { return vec3f(1.0, 0.0, 0.0); }
   if (index < 1.5) { return vec3f(0.0, 1.0, 0.0); }
@@ -64,6 +39,25 @@ fn channelEnergy(color: vec3f, index: f32) -> f32 {
   if (index < 0.5) { return color.r; }
   if (index < 1.5) { return color.g; }
   return color.b;
+}
+
+/**
+ * 只在位移终点周围做不到一个原图像素的对称正值软化。这仍是单个完整辉光
+ * PSF：不会沿色散路径复制出多条细线或圆环，也不会产生差分描边和振铃。
+ * 4 个权重归一的双线性样本对常量区域与逐通道总能量均保持不变。
+ */
+fn sampleSoftShiftedBloom(uv: vec2f, offset: vec2f) -> vec3f {
+  let shiftedUv = uv + offset;
+  let softness = composite.optics.xy * (0.75 * clamp(composite.optics.w, 0.0, 1.0));
+  return max(
+    (
+      sampleBloom(shiftedUv + vec2f(-softness.x, -softness.y)).rgb
+      + sampleBloom(shiftedUv + vec2f( softness.x, -softness.y)).rgb
+      + sampleBloom(shiftedUv + vec2f(-softness.x,  softness.y)).rgb
+      + sampleBloom(shiftedUv + vec2f( softness.x,  softness.y)).rgb
+    ) * 0.25,
+    vec3f(0.0)
+  );
 }
 
 fn hash12(position: vec2f) -> f32 {
@@ -119,32 +113,24 @@ fn compositeGlow(base: vec4f, glowPremultiplied: vec3f) -> vec4f {
   let chromaOffset = vec2f(composite.optics.x * composite.optics.z, 0.0);
   var diffuse = centered;
 
-  // 两条 carrier 各自保存所选原始通道的中远场能量。每个通道中心扣除多少，就在对应
-  // 一侧补回多少；不会把 RGB 总和重新染成过亮纯色，也不会复制主体或紧核心。
+  // Pixel Aberration 必须发生在完整辉光上，而不是只搬运远场光幕。对线性 PSF 有
+  // K * T(E) = T(K * E)，所以在相机响应之前位移完整通道，与“先移动发光输入、
+  // 再进行全部近/中/远场卷积”严格等价。平坦区域自动抵消，色边天然只出现在边界。
   if (composite.optics.w > 0.0001) {
-    let amount = clamp(composite.optics.w, 0.0, 1.0);
-    let centeredCarriers = max(sampleCarrier(sceneUv), vec2f(0.0));
-    let leftCenteredCarrier = min(
-      centeredCarriers.x,
-      channelEnergy(centered, composite.params.z)
-    );
-    let rightCenteredCarrier = min(
-      centeredCarriers.y,
-      channelEnergy(centered, composite.params.w)
-    );
-    let remaining = max(
-      centered
-      - channelColor(composite.params.z) * leftCenteredCarrier * amount
-      - channelColor(composite.params.w) * rightCenteredCarrier * amount,
-      vec3f(0.0)
-    );
-    let leftCarrier = max(sampleSoftCarrier(sceneUv + chromaOffset).x, 0.0);
-    let rightCarrier = max(sampleSoftCarrier(sceneUv - chromaOffset).y, 0.0);
-    let spectral = (
-      channelColor(composite.params.z) * leftCarrier
-      + channelColor(composite.params.w) * rightCarrier
-    ) * amount;
-    diffuse = max(remaining + spectral, vec3f(0.0));
+    let leftShifted = sampleSoftShiftedBloom(sceneUv, chromaOffset);
+    let rightShifted = sampleSoftShiftedBloom(sceneUv, -chromaOffset);
+    let spectralDelta =
+      channelColor(composite.params.z) * (
+        channelEnergy(leftShifted, composite.params.z)
+        - channelEnergy(centered, composite.params.z)
+      )
+      + channelColor(composite.params.w) * (
+        channelEnergy(rightShifted, composite.params.w)
+        - channelEnergy(centered, composite.params.w)
+      );
+    // 整体替换逐通道守恒、无负核、无振铃；滑杆只控制连续位移距离。
+    // 不再把原位与位移光峰叠加，所以细线与圆环在任何中间档都不会双影。
+    diffuse = max(centered + spectralDelta, vec3f(0.0));
   }
 
   // 白热始终锚定未位移的原始核心；色差不参与白热峰值，也不会把两侧色光漂白。

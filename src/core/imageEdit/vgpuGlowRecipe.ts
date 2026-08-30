@@ -3,7 +3,7 @@ import type {
   VgpuGlowOperationParams,
 } from './vgpuGlowParams';
 
-export const VGPU_GLOW_RECIPE_VERSION = 13 as const;
+export const VGPU_GLOW_RECIPE_VERSION = 14 as const;
 
 /**
  * SDR 发射源估计的公共常量。所有值都与 vgpuGlowBloom.wgsl 保持一致，CPU 参考测试
@@ -25,8 +25,6 @@ export interface VgpuGlowScatterLevel {
   weight: readonly [number, number, number];
   /** 白热能量只使用紧致 core PSF；各层之和严格为 1。 */
   whiteCoreWeight: number;
-  /** 只承载中远场的色差柔光能量；始终不超过同层完整辉光权重。 */
-  chromaticCarrierWeight: number;
 }
 
 export interface VgpuGlowRecipe {
@@ -56,8 +54,8 @@ export interface VgpuGlowRecipe {
   chromaticAberration: number;
   chromaticOffsetPx: number;
   chromaticChannelIndices: readonly [0 | 1 | 2, 0 | 1 | 2];
-  /** 预览重基准时同步缩放的色差载体最小光学尺度。 */
-  chromaticCarrierMinimumSigmaPx: number;
+  /** Pixel Aberration 之外的轻量 Glow Aberration；每个通道的 PSF 能量仍严格归一。 */
+  chromaticRadiusMultipliers: readonly [number, number, number];
   /** 只在辉光层存在时启用的亚量化抖动，用于打散低位深渐变条带。 */
   ditherAmount: number;
 }
@@ -157,17 +155,29 @@ export function compileVgpuGlowRecipe(
     0.46 * look.scatter.reachScale,
     Math.pow(radius, 1.35)
   );
-  const chromaticOffsetPx = Math.pow(params.chromaticAberration, 1.55)
-    * (0.75 + radius * 5.25);
-  const chromaticCarrierMinimumSigmaPx = 2.5;
-  const scatterLevels = compileChromaticCarrierWeights(
-    compileOpticalScatterLevels(
-      referenceDimension,
-      scatterEnvelopeFraction,
-      look.scatter
-    ),
-    chromaticOffsetPx,
-    chromaticCarrierMinimumSigmaPx
+  const chromaticChannelIndices = params.chromaticChannels.map(
+    resolveChromaticChannelIndex
+  ) as [0 | 1 | 2, 0 | 1 | 2];
+  // Pixel Aberration 的几何间距独立于总辉光半径。满量程约为短边的 0.8%，
+  // 既能在普通预览里明确看见，又不会把主体复制成夸张的 Glitch 重影。
+  const maximumChromaticOffsetPx = clamp(
+    Math.min(options.width, options.height) * 0.008,
+    6,
+    18
+  );
+  // Pixel Aberration 是通道的整体空间位移，不是“原位一份 + 位移一份”
+  // 的交叉混合。因此滑杆只线性控制像素间距；从 0 开始自然连续，同时避免
+  // 中段把细线复制成双峰、把圆环复制成双圈。
+  const chromaticOffsetPx = params.chromaticAberration * maximumChromaticOffsetPx;
+  const chromaticRadiusMultipliers = resolveChromaticRadiusMultipliers(
+    chromaticChannelIndices,
+    params.chromaticAberration
+  );
+  const scatterLevels = compileChromaticScatterLevels(
+    referenceDimension,
+    scatterEnvelopeFraction,
+    look.scatter,
+    chromaticRadiusMultipliers
   );
 
   return {
@@ -195,12 +205,11 @@ export function compileVgpuGlowRecipe(
     tintLinear: parseLinearRgb(params.tintColor),
     tintEnabled: params.tintEnabled,
     chromaticAberration: params.chromaticAberration,
-    // 位移只作用于中远场载体；最大位移始终小于载体启动尺度的 0.65 倍。
+    // 完整辉光通道在相机响应前向相反方向整体位移；卷积与平移可交换，因此这与
+    // “先移动发光输入、再进入 PSF”严格等价，同时保持未发光原图完全不动。
     chromaticOffsetPx,
-    chromaticChannelIndices: params.chromaticChannels.map(
-      resolveChromaticChannelIndex
-    ) as [0 | 1 | 2, 0 | 1 | 2],
-    chromaticCarrierMinimumSigmaPx,
+    chromaticChannelIndices,
+    chromaticRadiusMultipliers,
     ditherAmount: 0.00075,
   };
 }
@@ -223,28 +232,20 @@ export function rebaseVgpuGlowRecipeForScale(
     coreSigmaPx: Math.max(0.5, recipe.scatterModel.optical.coreSigmaPx * scale),
   };
   const chromaticOffsetPx = recipe.chromaticOffsetPx * scale;
-  const chromaticCarrierMinimumSigmaPx = Math.max(
-    0.75,
-    recipe.chromaticCarrierMinimumSigmaPx * scale
-  );
   return {
     ...recipe,
     image: { width, height, referenceDimension },
-    scatterLevels: compileChromaticCarrierWeights(
-      compileOpticalScatterLevels(
-        referenceDimension,
-        recipe.scatterModel.envelopeFraction,
-        scaledOptical
-      ),
-      chromaticOffsetPx,
-      chromaticCarrierMinimumSigmaPx
+    scatterLevels: compileChromaticScatterLevels(
+      referenceDimension,
+      recipe.scatterModel.envelopeFraction,
+      scaledOptical,
+      recipe.chromaticRadiusMultipliers
     ),
     scatterModel: {
       ...recipe.scatterModel,
       optical: scaledOptical,
     },
     chromaticOffsetPx,
-    chromaticCarrierMinimumSigmaPx,
   };
 }
 
@@ -297,29 +298,51 @@ function compileOpticalScatterLevels(
   return divisors.map((divisor, index) => ({
     divisor,
     effectiveSigmaPx: sigmas[index],
-    // 「色差」是柔化后的 Glitch RGB 空间分离，不是镜头色散。PSF 本身必须
-    // 完整辉光的三通道严格相同；色差使用独立的中远场 carrier，不污染主体与紧核心。
+    // 默认三通道使用相同的正值 PSF；Pixel / Glow Aberration 会在下一步分别
+    // 改变空间位置与少量尺度分布，不需要边缘检测、差分核或描边。
     weight: [base[index], base[index], base[index]] as const,
     whiteCoreWeight: core[index],
-    chromaticCarrierWeight: 0,
   }));
 }
 
-function compileChromaticCarrierWeights(
-  levels: readonly VgpuGlowScatterLevel[],
-  offsetPx: number,
-  minimumSigmaPx: number
+function compileChromaticScatterLevels(
+  referenceDimension: number,
+  envelopeFraction: number,
+  model: VgpuGlowOpticalScatterModel,
+  multipliers: readonly [number, number, number]
 ): readonly VgpuGlowScatterLevel[] {
-  const startSigma = Math.max(minimumSigmaPx, offsetPx / 0.65);
-  const endSigma = startSigma * 2.2;
-  return levels.map((level) => ({
+  const base = compileOpticalScatterLevels(
+    referenceDimension,
+    envelopeFraction,
+    model
+  );
+  const channels = multipliers.map((multiplier) => compileOpticalScatterLevels(
+    referenceDimension,
+    envelopeFraction * multiplier,
+    {
+      ...model,
+      coreSigmaPx: model.coreSigmaPx * multiplier,
+    }
+  ));
+  return base.map((level, index) => ({
     ...level,
-    chromaticCarrierWeight: level.weight[0] * smootherstep(
-      startSigma,
-      endSigma,
-      level.effectiveSigmaPx
-    ),
+    weight: [
+      channels[0][index].weight[0],
+      channels[1][index].weight[0],
+      channels[2][index].weight[0],
+    ] as const,
   }));
+}
+
+function resolveChromaticRadiusMultipliers(
+  channels: readonly [0 | 1 | 2, 0 | 1 | 2],
+  amount: number
+): readonly [number, number, number] {
+  const spread = smootherstep(0, 1, amount) * 0.18;
+  const multipliers: [number, number, number] = [1, 1, 1];
+  multipliers[channels[0]] = 1 - spread;
+  multipliers[channels[1]] = 1 + spread;
+  return multipliers;
 }
 
 function resolveChromaticChannelIndex(channel: VgpuGlowChromaticChannel): 0 | 1 | 2 {

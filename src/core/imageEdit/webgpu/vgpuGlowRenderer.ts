@@ -154,7 +154,6 @@ export class VgpuGlowRenderer {
     this.targets.globalBloom.resize(this.targets.accumulations[0].size);
     this.effects.copy.set({
       sourceBloom: this.targets.accumulations[0],
-      sourceCarriers: this.targets.accumulations[0].colors[1],
       linearSampler: this.linearSampler,
     });
     await this.compile(levelCount);
@@ -259,9 +258,6 @@ export class VgpuGlowRenderer {
       effects.upsample[index].set({
         highLevel: targets.levels[index],
         lowAccumulation,
-        lowCarrierAccumulation: firstMerge
-          ? lowAccumulation
-          : lowAccumulation.colors[1],
         linearSampler: this.linearSampler,
         accumulate: {
           highWeight: [
@@ -271,12 +267,6 @@ export class VgpuGlowRenderer {
           lowWeight: [
             ...(firstMerge ? recipe.scatterLevels[index + 1].weight : UNIT_RGB),
             firstMerge ? recipe.scatterLevels[index + 1].whiteCoreWeight : 1,
-          ],
-          carrier: [
-            recipe.scatterLevels[index].chromaticCarrierWeight,
-            firstMerge ? recipe.scatterLevels[index + 1].chromaticCarrierWeight : -1,
-            recipe.chromaticChannelIndices[0],
-            recipe.chromaticChannelIndices[1],
           ],
         },
       });
@@ -303,7 +293,6 @@ export class VgpuGlowRenderer {
     effects.composite.set({
       scene: targets.scene,
       bloomPyramid,
-      chromaticCarriers: bloomPyramid.colors[1],
       linearSampler: this.linearSampler,
       composite: {
         params: [
@@ -371,18 +360,11 @@ export class VgpuGlowRenderer {
 
 function createTargets(gpu: Gpu): GlowTargets {
   const make = (): Target => target(gpu, { size: [1, 1], format: 'rgba16float' });
-  const makeAccumulation = (): Target => target(gpu, {
-    size: [1, 1],
-    colors: [
-      { format: 'rgba16float' },
-      { format: 'rg16float' },
-    ],
-  });
   return {
     scene: make(),
     levels: Array.from({ length: MAX_SCATTER_LEVELS }, make),
-    accumulations: Array.from({ length: MAX_SCATTER_LEVELS }, makeAccumulation),
-    globalBloom: makeAccumulation(),
+    accumulations: Array.from({ length: MAX_SCATTER_LEVELS }, make),
+    globalBloom: make(),
     output: make(),
   };
 }
@@ -454,6 +436,14 @@ function assertScatterLevels(recipe: VgpuGlowRecipe): number {
   ) {
     throw new Error('VGPU 辉光色差光学参数无效');
   }
+  if (
+    recipe.chromaticRadiusMultipliers.length !== 3
+    || recipe.chromaticRadiusMultipliers.some((value) => (
+      !Number.isFinite(value) || value < 0.75 || value > 1.25
+    ))
+  ) {
+    throw new Error('VGPU 辉光色差半径倍率无效');
+  }
   for (let index = 0; index < count; index += 1) {
     const expectedDivisor = 2 ** (index + 1);
     if (recipe.scatterLevels[index].divisor !== expectedDivisor) {
@@ -463,13 +453,17 @@ function assertScatterLevels(recipe: VgpuGlowRecipe): number {
     if (Math.abs(recipe.scatterLevels[index].effectiveSigmaPx - expectedSigma) > 0.0001) {
       throw new Error(`VGPU 辉光散射层 ${index} 的核尺度无效`);
     }
-    const carrierWeight = recipe.scatterLevels[index].chromaticCarrierWeight;
-    if (
-      !Number.isFinite(carrierWeight)
-      || carrierWeight < 0
-      || carrierWeight > recipe.scatterLevels[index].weight[0] + 0.000001
-    ) {
-      throw new Error(`VGPU 辉光散射层 ${index} 的色差载体权重无效`);
+    if (recipe.scatterLevels[index].weight.some((value) => (
+      !Number.isFinite(value) || value < 0
+    ))) throw new Error(`VGPU 辉光散射层 ${index} 的通道权重无效`);
+  }
+  for (const channel of [0, 1, 2]) {
+    const energy = recipe.scatterLevels.reduce(
+      (sum, level) => sum + level.weight[channel],
+      0
+    );
+    if (Math.abs(energy - 1) > 0.0001) {
+      throw new Error(`VGPU 辉光通道 ${channel} 的散射能量未归一`);
     }
   }
   return count;
