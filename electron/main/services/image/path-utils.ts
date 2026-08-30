@@ -3,8 +3,10 @@ import crypto from 'node:crypto'
 import fs from 'node:fs'
 import path from 'node:path'
 import { getCustomDataRoot } from '../dataRoot'
+import { releaseManagedMediaFileLease } from './managed-media-leases'
 
 const APP_IDENTIFIER = 'com.henji.ai'
+const uploadImageLeaseCounts = new Map<string, number>()
 
 export function normalizeExtension(rawExt: string | undefined): string {
   const ext = (rawExt ?? '').trim().replace(/^\./, '').toLowerCase()
@@ -62,33 +64,66 @@ export function getDebugDir(category: string): string {
 }
 
 export function persistImageBytes(bytes: Buffer, extension: string | undefined): string {
-  return persistImageBytesTracked(bytes, extension).filePath
+  return persistContentAddressedImage(bytes, extension).filePath
 }
 
 export interface PersistedImageBytes {
   filePath: string
+  /** true 表示调用方持有一个可释放 lease，不再只表示本次首次创建了文件。 */
   created: boolean
 }
 
-/** 供需要失败回滚的批处理使用；只能删除本次新建的内容寻址文件。 */
-export function persistImageBytesTracked(bytes: Buffer, extension: string | undefined): PersistedImageBytes {
-  if (bytes.length === 0) {
-    throw new Error('Image bytes are empty')
-  }
+interface ContentAddressedImageResult {
+  filePath: string
+  created: boolean
+}
+
+function persistContentAddressedImage(
+  bytes: Buffer,
+  extension: string | undefined,
+): ContentAddressedImageResult {
+  if (bytes.length === 0) throw new Error('Image bytes are empty')
   const digest = crypto.createHash('md5').update(bytes).digest('hex')
   const ext = normalizeExtension(extension)
-  const targetPath = path.join(getUploadsDir(), `${digest}.${ext}`)
-  const created = !fs.existsSync(targetPath)
-  if (created) {
-    fs.writeFileSync(targetPath, bytes)
+  const filePath = path.join(getUploadsDir(), `${digest}.${ext}`)
+  const created = !fs.existsSync(filePath)
+  if (created) fs.writeFileSync(filePath, bytes)
+  return { filePath, created }
+}
+
+function releaseUploadImageLease(filePath: string): void {
+  const leaseCount = uploadImageLeaseCounts.get(filePath)
+  if (leaseCount === undefined) {
+    fs.rmSync(filePath, { force: true })
+    return
   }
-  return { filePath: targetPath, created }
+  if (leaseCount > 1) {
+    uploadImageLeaseCounts.set(filePath, leaseCount - 1)
+    return
+  }
+  uploadImageLeaseCounts.delete(filePath)
+  fs.rmSync(filePath, { force: true })
+}
+
+/**
+ * 供需要失败回滚的批处理使用。相同内容在同一进程内并行持有独立 lease，
+ * 只有最后一个 lease 释放时才删除文件；进程启动前已存在的文件不取得所有权。
+ */
+export function persistImageBytesTracked(bytes: Buffer, extension: string | undefined): PersistedImageBytes {
+  const persisted = persistContentAddressedImage(bytes, extension)
+  const filePath = path.resolve(persisted.filePath)
+  const currentLeaseCount = uploadImageLeaseCounts.get(filePath) ?? 0
+  if (!persisted.created && currentLeaseCount === 0) {
+    return { filePath, created: false }
+  }
+  uploadImageLeaseCounts.set(filePath, currentLeaseCount + 1)
+  return { filePath, created: true }
 }
 
 export function rollbackPersistedImageBytes(entry: PersistedImageBytes): void {
   if (!entry.created) return
   try {
-    fs.rmSync(entry.filePath, { force: true })
+    releaseUploadImageLease(path.resolve(entry.filePath))
   } catch {
     // 失败回滚属于 best-effort；原始错误必须继续上抛。
   }
@@ -100,18 +135,26 @@ export function releaseManagedImagePaths(filePaths: readonly string[]): void {
   for (const filePath of new Set(filePaths)) {
     const resolved = path.resolve(filePath)
     if (!resolved.startsWith(prefix)) throw new Error('只能释放 Uploads 目录内的受管图片')
-    fs.rmSync(resolved, { force: true })
+    releaseUploadImageLease(resolved)
   }
 }
 
 /** 通用生成事务回滚入口；只接受应用数据根内的 Uploads/Media 受管文件。 */
 export function releaseManagedGenerationMediaPaths(filePaths: readonly string[]): void {
-  const managedRoots = ['Uploads', 'Media'].map((segment) => path.resolve(getDataRootDir(), segment))
+  const uploadsRoot = path.resolve(getDataRootDir(), 'Uploads')
+  const mediaRoot = path.resolve(getDataRootDir(), 'Media')
   for (const filePath of new Set(filePaths)) {
     const resolved = path.resolve(filePath)
-    if (!managedRoots.some((root) => resolved.startsWith(`${root}${path.sep}`))) {
+    const isUpload = resolved.startsWith(`${uploadsRoot}${path.sep}`)
+    const isMedia = resolved.startsWith(`${mediaRoot}${path.sep}`)
+    if (!isUpload && !isMedia) {
       throw new Error('只能释放应用数据目录内的受管生成媒体')
     }
+    if (isUpload) {
+      releaseUploadImageLease(resolved)
+      continue
+    }
+    if (isMedia && releaseManagedMediaFileLease(resolved) === 'retained') continue
     fs.rmSync(resolved, { force: true })
   }
 }

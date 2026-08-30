@@ -69,6 +69,12 @@ export interface PrepareNodeImageSourceResultDto {
   createdFilePaths: string[]
 }
 
+export interface PersistImageSourceTrackedResultDto {
+  imagePath: string
+  /** 本次调用取得的可释放 Uploads lease；启动前既有文件不会出现在这里。 */
+  createdFilePaths: string[]
+}
+
 export interface CropImageSourcePayloadDto {
   source: string
   aspectRatio?: string

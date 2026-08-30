@@ -19,6 +19,7 @@ export interface AiContinuePollingRequestDto {
   modelId: string
   taskId: string
   params?: DynamicValueMap
+  requestId?: string
 }
 
 export interface AiGetProgressEstimateRequestDto {
@@ -38,6 +39,7 @@ export interface AiGenerateResponseDto {
   status: 'completed' | 'pending' | 'failed'
   url: string
   filePath?: string
+  createdFilePaths?: string[]
   taskId?: string
   metadata?: DynamicValueMap
   structuredOutput?: StructuredGenerationOutput

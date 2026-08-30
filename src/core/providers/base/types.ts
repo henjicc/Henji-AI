@@ -15,6 +15,8 @@ export interface GenerateResult {
   url: string
   /** 本地文件路径（如果已保存到本地） */
   filePath?: string
+  /** 本次运行新建的受管媒体，转移到权威结果后由调用方释放。 */
+  createdFilePaths?: string[]
   /** 任务ID（用于异步任务跟踪） */
   taskId?: string
   /** 生成状态 */

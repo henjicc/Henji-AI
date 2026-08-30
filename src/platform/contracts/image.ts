@@ -70,6 +70,11 @@ export interface PrepareNodeImageSourceResult {
   createdFilePaths: string[]
 }
 
+export interface PersistImageSourceTrackedResult {
+  imagePath: string
+  createdFilePaths: string[]
+}
+
 export interface CropImageSourcePayload {
   source: string
   aspectRatio?: string
@@ -77,6 +82,68 @@ export interface CropImageSourcePayload {
   cropY?: number
   cropWidth?: number
   cropHeight?: number
+}
+
+export type LocalRedrawRegistrationQuality = 'fast' | 'precise' | 'extreme'
+export type LocalRedrawAspectRatio = 'auto' | '1:1' | '4:3' | '3:4' | '16:9' | '9:16'
+
+export interface LocalRedrawSettings {
+  contextScale: number
+  aspectRatio: LocalRedrawAspectRatio
+  registrationQuality: LocalRedrawRegistrationQuality
+  featherPixels: number
+  forceRegistration: boolean
+}
+
+export interface LocalRedrawContext {
+  version: 2
+  requestId: string
+  source: string
+  mask: string
+  sourceWidth: number
+  sourceHeight: number
+  crop: { x: number; y: number; width: number; height: number }
+  matchedAspectRatio: number | null
+  settings: LocalRedrawSettings
+}
+
+export interface LocalRedrawRegistrationDiagnostics {
+  referenceKeypoints: number
+  movingKeypoints: number
+  matches: number
+  inliers: number
+  inlierRatio: number
+  coverage: number
+  medianError: number
+  structuralScore: number
+  scaleX: number
+  scaleY: number
+  translationX: number
+  translationY: number
+  refinementIterations: number
+  elapsedMs: number
+  acceptanceMode?: 'global' | 'local-anchors' | 'forced'
+  anchorCells?: number
+  anchorSpread?: number
+  anchorStructuralScore?: number
+  anisotropicAccepted?: boolean
+  compositionFallbackReason?: string
+  selectionCoverage?: number
+  selectedChangeFraction?: number
+  selectedMeanAbsoluteDelta?: number
+  reason?: string
+}
+
+export interface PrepareLocalRedrawResult {
+  cropSource: string
+  createdFilePaths: string[]
+  context: LocalRedrawContext
+}
+
+export interface ComposeLocalRedrawResult {
+  source: string
+  registrationApplied: boolean
+  diagnostics: LocalRedrawRegistrationDiagnostics
 }
 
 export interface ImageInfoResult {
@@ -182,6 +249,16 @@ export interface ImagePlatform {
     maxPreviewDimension: number
   ): Promise<PrepareNodeImageSourceResult>
   cropImageSource(payload: CropImageSourcePayload): Promise<string>
+  prepareLocalRedraw(payload: {
+    source: string
+    mask: string
+    settings: LocalRedrawSettings
+    preferredAspectRatios?: number[]
+  }): Promise<PrepareLocalRedrawResult>
+  composeLocalRedraw(payload: {
+    generatedSource: string
+    context: LocalRedrawContext
+  }): Promise<ComposeLocalRedrawResult>
   mergeStoryboardImages(payload: MergeStoryboardImagesPayload): Promise<MergeStoryboardImagesResult>
   readStoryboardImageMetadata(source: string): Promise<StoryboardImageMetadata | null>
   embedStoryboardImageMetadata(source: string, metadata: StoryboardImageMetadata): Promise<string>
@@ -189,6 +266,7 @@ export interface ImagePlatform {
   embedPanoramaImageMetadata(source: string): Promise<PanoramaMetadataEmbedResult>
   loadImage(filePath: string): Promise<string>
   persistImageSource(source: string): Promise<string>
+  persistImageSourceTracked(source: string): Promise<PersistImageSourceTrackedResult>
   persistImageBinary(bytes: Uint8Array, extension: string): Promise<string>
   saveImageSourceToDownloads(source: string, suggestedFileName?: string): Promise<string>
   saveImageSourceToPath(source: string, targetPath: string): Promise<string>

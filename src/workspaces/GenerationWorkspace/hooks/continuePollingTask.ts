@@ -7,6 +7,7 @@ import { resolveProgressSettleDelayMs } from '../utils/progressAnimation'
 import { extractServerTaskIdFromErrorMessage, extractServerTaskIdFromMetadata } from '@/features/generation/application/taskServerId'
 import { normalizeMediaResultForDesktop } from '../utils/mediaResult'
 import { useGenerationTaskProgressStore } from '@/stores/generationTaskProgressStore'
+import { getPlatform } from '@/platform'
 
 const logger = createLogger('workspaces.GenerationWorkspace.hooks.continuePollingTask')
 
@@ -19,6 +20,13 @@ export interface ContinuePollingTaskParams {
   updateTask: (taskId: string, updates: Partial<GenerationTask>) => void
   updateProgress: (taskId: string, progress: number) => void
   toUserMessage: (error: DynamicValue) => string
+}
+
+function normalizeCreatedFilePaths(value: unknown): string[] {
+  if (!Array.isArray(value)) return []
+  return [...new Set(value.filter(
+    (item): item is string => typeof item === 'string' && item.trim().length > 0,
+  ))]
 }
 
 export async function continuePollingTask({
@@ -39,6 +47,8 @@ export async function continuePollingTask({
     return
   }
 
+  let createdFilePaths: string[] = []
+  let ownershipTransferred = false
   try {
     logger.info('[Workspace] 开始再次轮询', { taskId: task.id, model: task.model, serverTaskId })
     const options = { ...(task.options ?? {}) }
@@ -57,6 +67,7 @@ export async function continuePollingTask({
     let resultObj: DynamicValueMap
     if (cached) {
       logger.info('[Workspace] 命中缓存轮询结果，跳过重新轮询', { taskId: task.id, serverTaskId })
+      createdFilePaths = normalizeCreatedFilePaths(cached.createdFilePaths)
       resultObj = {
         url: cached.url,
         filePath: cached.filePath,
@@ -77,6 +88,7 @@ export async function continuePollingTask({
         text: task.prompt,
         ...options,
       }, handleProgress)
+      createdFilePaths = normalizeCreatedFilePaths(result.createdFilePaths)
       resultObj = {
         url: result.url,
         filePath: result.filePath,
@@ -123,6 +135,7 @@ export async function continuePollingTask({
         createdAt: new Date(),
       },
     })
+    ownershipTransferred = true
     // 任务已进入 success（不再渲染进度条），清掉瞬态进度
     useGenerationTaskProgressStore.getState().clearProgress(task.id)
   } catch (error) {
@@ -134,5 +147,15 @@ export async function continuePollingTask({
       serverTaskId: extractServerTaskIdFromErrorMessage(errorMessage) ?? serverTaskId,
     })
     useGenerationTaskProgressStore.getState().clearProgress(task.id)
+  } finally {
+    if (!ownershipTransferred && createdFilePaths.length > 0) {
+      await getPlatform().image.releaseManagedGenerationMedia(createdFilePaths).catch((releaseError) => {
+        logger.error('[Workspace] 续查结果媒体回滚失败', releaseError, {
+          event: 'generation_workspace.polling.media_rollback.failed',
+          taskId: task.id,
+          context: { serverTaskId, createdFileCount: createdFilePaths.length },
+        })
+      })
+    }
   }
 }

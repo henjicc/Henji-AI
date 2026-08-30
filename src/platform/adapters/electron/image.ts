@@ -21,6 +21,8 @@ export function createElectronImage(): ImagePlatform {
     prepareNodeImageBinary: (bytes, extension, maxPreviewDimension) =>
       getNativeImage().prepareNodeImageBinary(bytes, extension, maxPreviewDimension),
     cropImageSource: (payload) => getNativeImage().cropImageSource(payload),
+    prepareLocalRedraw: (payload) => getNativeImage().prepareLocalRedraw(payload),
+    composeLocalRedraw: (payload) => getNativeImage().composeLocalRedraw(payload),
     mergeStoryboardImages: (payload) => getNativeImage().mergeStoryboardImages(payload),
     readStoryboardImageMetadata: (source) => getNativeImage().readStoryboardImageMetadata(source),
     embedStoryboardImageMetadata: (source, metadata) => getNativeImage().embedStoryboardImageMetadata(source, metadata),
@@ -28,6 +30,7 @@ export function createElectronImage(): ImagePlatform {
     embedPanoramaImageMetadata: (source) => getNativeImage().embedPanoramaImageMetadata(source),
     loadImage: (filePath) => getNativeImage().loadImage(filePath),
     persistImageSource: (source) => getNativeImage().persistImageSource(source),
+    persistImageSourceTracked: (source) => getNativeImage().persistImageSourceTracked(source),
     persistImageBinary: (bytes, extension) => getNativeImage().persistImageBinary(bytes, extension),
     saveImageSourceToDownloads: (source, suggestedFileName) => getNativeImage().saveImageSourceToDownloads(source, suggestedFileName),
     saveImageSourceToPath: (source, targetPath) => getNativeImage().saveImageSourceToPath(source, targetPath),

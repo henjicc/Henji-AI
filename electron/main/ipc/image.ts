@@ -8,6 +8,7 @@ import {
   mergeStoryboardImages,
   persistImageBinary,
   persistImageSource,
+  persistImageSourceTracked,
   prepareNodeImageBinary,
   prepareNodeImageSource,
   readImageInfo,
@@ -36,6 +37,19 @@ import type {
   StoryboardImageMetadataDto,
 } from '../services/image/types'
 import { parseRecord, parseStringField, registerIpcHandler } from './registry'
+import {
+  readBytes,
+  readImageFit,
+  readNotePlacement,
+  readNumber,
+  readOptionalBoolean,
+  readOptionalNumber,
+  readOptionalNumberTuple,
+  readOptionalString,
+  readOptionalStringArray,
+  readString,
+  readStringArray,
+} from './image-payload-readers'
 
 interface SplitPayload {
   rows: number
@@ -129,6 +143,7 @@ export function registerImageIpc(): void {
   })
   registerIpcHandler<string, string>('image:loadImage', (input) => parseStringField(input, 'filePath'), (filePath) => loadImage(filePath))
   registerIpcHandler<string, string>('image:persistImageSource', (input) => parseStringField(input, 'source'), (source) => persistImageSource(source))
+  registerIpcHandler<string, Awaited<ReturnType<typeof persistImageSourceTracked>>>('image:persistImageSourceTracked', (input) => parseStringField(input, 'source'), (source) => persistImageSourceTracked(source))
   registerIpcHandler<BinaryPayload, string>('image:persistImageBinary', parseBinaryPayload, ({ bytes, extension }) => persistImageBinary(bytes, extension))
   registerIpcHandler<SaveSuggestedPayload, string>('image:saveImageSourceToDownloads', parseSaveSuggestedPayload, ({ source, suggestedFileName }) => {
     return saveImageSourceToDownloads(source, suggestedFileName)
@@ -348,82 +363,6 @@ function parseSaveDebugPayload(input: unknown): SaveDebugPayload {
   }
 }
 
-function readString(record: Record<string, unknown>, field: string): string {
-  const value = record[field]
-  if (typeof value !== 'string' || value.trim().length === 0) {
-    throw new Error(`Expected non-empty string field "${field}"`)
-  }
-  return value
-}
-
-function readOptionalString(record: Record<string, unknown>, field: string): string | undefined {
-  const value = record[field]
-  if (value === undefined) return undefined
-  if (typeof value !== 'string') throw new Error(`Expected string field "${field}"`)
-  return value
-}
-
-function readNumber(record: Record<string, unknown>, field: string): number {
-  const value = record[field]
-  if (typeof value !== 'number' || !Number.isFinite(value)) {
-    throw new Error(`Expected finite number field "${field}"`)
-  }
-  return value
-}
-
-function readOptionalNumber(record: Record<string, unknown>, field: string): number | undefined {
-  const value = record[field]
-  if (value === undefined) return undefined
-  if (typeof value !== 'number' || !Number.isFinite(value)) {
-    throw new Error(`Expected finite number field "${field}"`)
-  }
-  return value
-}
-
-function readOptionalBoolean(record: Record<string, unknown>, field: string): boolean | undefined {
-  const value = record[field]
-  if (value === undefined) return undefined
-  if (typeof value !== 'boolean') throw new Error(`Expected boolean field "${field}"`)
-  return value
-}
-
-function readBytes(record: Record<string, unknown>, field: string): Uint8Array {
-  const value = record[field]
-  if (!(value instanceof Uint8Array)) {
-    throw new Error(`Expected Uint8Array field "${field}"`)
-  }
-  return value
-}
-
-function readStringArray(record: Record<string, unknown>, field: string): string[] {
-  const value = record[field]
-  if (!Array.isArray(value) || !value.every((item): item is string => typeof item === 'string')) {
-    throw new Error(`Expected string array field "${field}"`)
-  }
-  return value
-}
-
-function readOptionalStringArray(record: Record<string, unknown>, field: string): string[] | undefined {
-  const value = record[field]
-  if (value === undefined) return undefined
-  if (!Array.isArray(value) || !value.every((item): item is string => typeof item === 'string')) {
-    throw new Error(`Expected string array field "${field}"`)
-  }
-  return value
-}
-
-function readNotePlacement(value: unknown): MergeStoryboardImagesPayloadDto['notePlacement'] {
-  if (value === undefined) return undefined
-  if (value === 'overlay' || value === 'bottom') return value
-  throw new Error('Expected notePlacement to be overlay or bottom')
-}
-
-function readImageFit(value: unknown): MergeStoryboardImagesPayloadDto['imageFit'] {
-  if (value === undefined) return undefined
-  if (value === 'cover' || value === 'contain') return value
-  throw new Error('Expected imageFit to be cover or contain')
-}
-
 interface CompressImageSourcePayload {
   source: string
   maxPixels?: number
@@ -490,16 +429,4 @@ function parseComposeLayerStackPayload(input: unknown): ComposeLayerStackPayload
       }
     }),
   }
-}
-
-function readOptionalNumberTuple(
-  record: Record<string, unknown>,
-  field: string
-): [number, number, number, number] | undefined {
-  const value = record[field]
-  if (value === undefined) return undefined
-  if (!Array.isArray(value) || value.length !== 4 || value.some((item) => typeof item !== 'number' || !Number.isFinite(item))) {
-    throw new Error(`Expected four-number tuple field "${field}"`)
-  }
-  return value as [number, number, number, number]
 }

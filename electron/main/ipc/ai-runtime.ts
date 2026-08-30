@@ -39,6 +39,7 @@ function parseContinuePollingRequest(input: unknown): AiContinuePollingRequestDt
     modelId: readString(record, 'modelId'),
     taskId: readString(record, 'taskId'),
     params: record.params === undefined ? undefined : parseJsonObject(record.params, 'params'),
+    requestId: readOptionalString(record, 'requestId'),
   }
 }
 

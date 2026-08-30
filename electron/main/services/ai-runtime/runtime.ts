@@ -14,7 +14,7 @@ import {
 
 import { getAiProviderApiKey, getAiProviderKeyStatus } from '../keystore'
 import { createMainLogger, sanitizeJsonValue } from '../logging'
-import { saveMediaFromUrl } from './media-store'
+import { releaseSavedMediaFileLease, saveMediaFromUrlTracked } from './media-store'
 import { getProgressEstimate, recordProgressSample } from './progress'
 import { savePendingResult } from './pending-results'
 import { materializeStructuredOutput } from './structured-output'
@@ -66,6 +66,7 @@ export async function generate(
   request: AiGenerateRequestDto
 ): Promise<AiGenerateResponseDto> {
   const requestId = resolveRequestId(request)
+  let ownedMediaPaths: string[] = []
   logger.info('后端开始生成', {
     event: 'ai_runtime.generate.start',
     requestId,
@@ -100,9 +101,11 @@ export async function generate(
       info.requestBody,
       providerResult.metadata
     )
-    const filePath = providerResult.status === 'completed'
+    const persistedMedia = providerResult.status === 'completed'
       ? await saveMediaPaths(providerResult.url)
-      : undefined
+      : { filePath: undefined, createdFilePaths: [] }
+    const { filePath, createdFilePaths } = persistedMedia
+    ownedMediaPaths = createdFilePaths
     const structuredOutput = materializeStructuredOutput(providerResult.structuredOutput, filePath)
 
     logger.info('后端生成响应', {
@@ -129,6 +132,7 @@ export async function generate(
       status: providerResult.status,
       url: providerResult.url,
       filePath,
+      createdFilePaths,
       taskId: providerResult.taskId,
       metadata: providerResult.metadata,
       structuredOutput,
@@ -136,6 +140,7 @@ export async function generate(
     }
     return response
   } catch (error) {
+    await rollbackCreatedMedia(ownedMediaPaths)
     logger.error('后端生成失败', {
       event: 'ai_runtime.generate.failed',
       requestId,
@@ -149,8 +154,9 @@ export async function generate(
 export async function continuePolling(
   request: AiContinuePollingRequestDto
 ): Promise<AiGenerateResponseDto> {
-  const requestId = `continue-${request.modelId}-${Date.now()}`
+  const requestId = request.requestId?.trim() || `continue-${request.modelId}-${Date.now()}`
   const taskId = request.taskId.trim()
+  let ownedMediaPaths: string[] = []
   logger.info('后端开始轮询', {
     event: 'ai_runtime.poll.start',
     requestId,
@@ -199,12 +205,14 @@ export async function continuePolling(
         responseBody: trace.responseBody,
       },
     })
-    const filePath = await saveMediaPaths(providerResult.url)
+    const { filePath, createdFilePaths } = await saveMediaPaths(providerResult.url)
+    ownedMediaPaths = createdFilePaths
     const structuredOutput = materializeStructuredOutput(providerResult.structuredOutput, filePath)
     const responseResult = {
       status: providerResult.status,
       url: providerResult.url,
       filePath,
+      createdFilePaths,
       taskId: providerResult.taskId,
       metadata: providerResult.metadata,
       structuredOutput,
@@ -213,6 +221,7 @@ export async function continuePolling(
     savePendingResult(taskId, {
       url: providerResult.url,
       filePath,
+      createdFilePaths,
       metadata: providerResult.metadata,
       structuredOutput,
     })
@@ -226,6 +235,7 @@ export async function continuePolling(
     })
     return responseResult
   } catch (error) {
+    await rollbackCreatedMedia(ownedMediaPaths)
     logger.error('后端轮询失败', {
       event: 'ai_runtime.poll.failed',
       requestId,
@@ -273,15 +283,49 @@ function requireRequestInfo(
   return info
 }
 
-async function saveMediaPaths(joinedUrls: string): Promise<string | undefined> {
+async function saveMediaPaths(joinedUrls: string): Promise<{
+  filePath?: string
+  createdFilePaths: string[]
+}> {
   const savedPaths: string[] = []
-  for (const url of joinedUrls.split('|||').map((item) => item.trim()).filter(Boolean)) {
-    const saved = await saveMediaFromUrl(url)
-    if (saved) {
-      savedPaths.push(saved)
+  const createdFilePaths: string[] = []
+  const createdPathSet = new Set<string>()
+  try {
+    for (const url of joinedUrls.split('|||').map((item) => item.trim()).filter(Boolean)) {
+      const saved = await saveMediaFromUrlTracked(url)
+      if (saved) {
+        savedPaths.push(saved.filePath)
+        if (saved.created && createdPathSet.has(saved.filePath)) {
+          await releaseSavedMediaFileLease(saved.filePath)
+        } else if (saved.created) {
+          createdPathSet.add(saved.filePath)
+          createdFilePaths.push(saved.filePath)
+        }
+      }
     }
+  } catch (error) {
+    await rollbackCreatedMedia(createdFilePaths)
+    throw error
   }
-  return savedPaths.length > 0 ? savedPaths.join('|||') : undefined
+  return {
+    filePath: savedPaths.length > 0 ? savedPaths.join('|||') : undefined,
+    createdFilePaths,
+  }
+}
+
+async function rollbackCreatedMedia(filePaths: readonly string[]): Promise<void> {
+  const uniquePaths = [...new Set(filePaths)]
+  if (uniquePaths.length === 0) return
+  const releases = await Promise.allSettled(
+    uniquePaths.map((filePath) => releaseSavedMediaFileLease(filePath)),
+  )
+  const failedCount = releases.filter((result) => result.status === 'rejected').length
+  if (failedCount > 0) {
+    logger.error('后端生成媒体回滚失败', {
+      event: 'ai_runtime.media_rollback.failed',
+      context: { fileCount: uniquePaths.length, failedCount },
+    })
+  }
 }
 
 export function parseJsonObject(value: unknown, label: string): JsonObject {

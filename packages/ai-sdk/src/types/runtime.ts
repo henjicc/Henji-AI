@@ -48,6 +48,7 @@ export interface AiContinuePollingRequestDto {
   modelId: string
   taskId: string
   params?: JsonObject
+  requestId?: string
 }
 
 export interface AiGetProgressEstimateRequestDto {
@@ -81,6 +82,8 @@ export interface AiGenerateResponseDto {
   status: GenerateStatus
   url: string
   filePath?: string
+  /** 宿主本次响应中新建的受管媒体；消费方完成转移后必须释放。 */
+  createdFilePaths?: string[]
   taskId?: string
   metadata?: JsonValue
   structuredOutput?: StructuredGenerationOutput

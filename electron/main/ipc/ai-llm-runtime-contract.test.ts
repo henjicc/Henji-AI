@@ -4,6 +4,7 @@ const mocks = vi.hoisted(() => ({
   handlers: new Map<string, (event: unknown, input: unknown) => Promise<unknown>>(),
   generate: vi.fn(),
   continuePolling: vi.fn(),
+  consumePendingResult: vi.fn(),
   llmChatStream: vi.fn(),
   llmModelStep: vi.fn(),
 }))
@@ -32,7 +33,7 @@ vi.mock('../services/ai-runtime/runtime', () => ({
 }))
 
 vi.mock('../services/ai-runtime/pending-results', () => ({
-  consumePendingResult: vi.fn(),
+  consumePendingResult: mocks.consumePendingResult,
 }))
 
 vi.mock('../services/ai-runtime/sdk-runtime', () => ({
@@ -79,6 +80,7 @@ describe('AI/LLM IPC 契约', () => {
       status: 'completed',
       url: 'https://example.com/a.png',
       filePath: '/managed/a.png',
+      createdFilePaths: ['/managed/a.png'],
       taskId: 'server-task',
       metadata: { seed: 7 },
       trace: {
@@ -116,12 +118,30 @@ describe('AI/LLM IPC 契约', () => {
       modelId: 'model-a',
       taskId: 'server-task',
       params: { prompt: 'hello' },
+      requestId: 'request-a',
     })).resolves.toEqual({ ok: true, data: pollingResponse })
     expect(mocks.continuePolling).toHaveBeenCalledWith({
       modelId: 'model-a',
       taskId: 'server-task',
       params: { prompt: 'hello' },
+      requestId: 'request-a',
     })
+  })
+
+  it('ai:consumePendingResult 保留缓存结果的新建文件所有权', async () => {
+    const cached = {
+      url: 'https://example.com/cached.png',
+      filePath: '/managed/cached.png',
+      createdFilePaths: ['/managed/cached.png'],
+      metadata: { seed: 9 },
+    }
+    mocks.consumePendingResult.mockReturnValue(cached)
+
+    await expect(handler('ai:consumePendingResult')(
+      { sender: { send: vi.fn() } },
+      { serverTaskId: 'server-task' },
+    )).resolves.toEqual({ ok: true, data: cached })
+    expect(mocks.consumePendingResult).toHaveBeenCalledWith('server-task')
   })
 
   it('llm:chatStream 保留完整 request payload 与 streamId 事件包络', async () => {
