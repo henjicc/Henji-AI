@@ -413,8 +413,8 @@
       "top": "Top",
       "left": "Left",
       "right": "Right",
-      "edgeTrigger": "Enable edge trigger",
-      "edgeHint": "Suppressed during canvas interaction and pointer dragging",
+      "edgeTrigger": "Allow pointer or drag edge trigger",
+      "edgeHint": "When off, only the Assets button in the title bar opens the panel. When on, dwelling or dragging at the chosen window edge also opens it.",
       "triggerEdge": "Trigger edge",
       "delay": "Trigger delay ({{value}} ms)"
     },

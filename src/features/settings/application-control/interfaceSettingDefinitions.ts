@@ -130,7 +130,7 @@ export const INTERFACE_APPLICATION_SETTING_DEFINITIONS: ApplicationSettingDefini
   (value) => useSettingsStore.getState().setAssetPanelPosition(value)),
   storeSetting({
     id: 'assets.edge_trigger', title: '素材库边缘触发', description: '控制鼠标靠近屏幕边缘时是否打开素材库。',
-    aliases: ['边缘触发', '鼠标靠边', 'edge trigger'], schema: z.boolean(), defaultValue: true,
+    aliases: ['边缘触发', '鼠标靠边', 'edge trigger'], schema: z.boolean(), defaultValue: false,
     target: { tab: 'interface', sectionId: 'interface-assets' }, requiresReload: false, requiresRestart: false, sensitive: false,
   }, () => useSettingsStore.getState().assetEdgeTriggerEnabled,
   (value) => useSettingsStore.getState().setAssetEdgeTriggerEnabled(value)),

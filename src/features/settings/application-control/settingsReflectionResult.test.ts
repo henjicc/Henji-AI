@@ -9,6 +9,7 @@ import { useSettingsStore } from '@/stores/settingsStore'
 import { changeLanguage, getCurrentLanguage } from '@/utils/language'
 
 import { getSettingsRegistryRevision } from './settingsApplicationService'
+import { INTERFACE_APPLICATION_SETTING_DEFINITIONS } from './interfaceSettingDefinitions'
 
 describe('设置的正式反射结果', () => {
   let originalLanguage: ReturnType<typeof getCurrentLanguage>
@@ -58,6 +59,15 @@ describe('设置的正式反射结果', () => {
       }],
     }, context(`settings-${id}`))
   }
+
+  it('素材库边缘触发的公开默认值与新装设置保持关闭', () => {
+    const definition = INTERFACE_APPLICATION_SETTING_DEFINITIONS.find(
+      (entry) => entry.id === 'assets.edge_trigger',
+    )
+
+    expect(definition?.defaultValue).toBe(false)
+    expect(useSettingsStore.getState().assetEdgeTriggerEnabled).toBe(false)
+  })
 
   it('通过 describe 与 change 切换 general.language，正式读取值随之变化', async () => {
     const described = await applicationReflectionHandlers.describeEntities({

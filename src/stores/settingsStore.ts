@@ -236,7 +236,7 @@ export const useSettingsStore = create<SettingsState>()(
       startupWorkspace: 'generation',
       assetTabAction: 'floating',
       assetPanelPosition: 'top',
-      assetEdgeTriggerEnabled: true,
+      assetEdgeTriggerEnabled: false,
       assetTriggerEdge: 'right',
       assetEdgeDelayMs: 650,
       assetDragEdgeDelayMs: 180,
@@ -323,15 +323,15 @@ export const useSettingsStore = create<SettingsState>()(
     }),
     {
       name: 'settings-storage',
-      // v10：BizyAir 上传服务下线，旧值需重新归一化到 KIE
-      version: 10,
+      // v11：边缘唤起改为显式选择，避免旧默认值让窗口边缘成为隐藏触发区
+      version: 11,
       // `logCaptureMode` 有意不持久化：应用重启应回落 standard，避免用户忘记关闭
       // "完整捕获" 导致日志长期膨胀。
       partialize: (state) => {
         const { logCaptureMode: _logCaptureMode, ...persisted } = state;
         return persisted;
       },
-      migrate: (persistedState: DynamicValue) => {
+      migrate: (persistedState: DynamicValue, persistedVersion) => {
         const state = (persistedState ?? {}) as {
           apiKey?: string;
           apiKeys?: Record<string, string>;
@@ -340,6 +340,10 @@ export const useSettingsStore = create<SettingsState>()(
           uploadFallbackEnabled?: boolean;
           ignoreAtTagWhenCopyingAndGenerating?: boolean;
           themeColors?: Partial<ThemeColorScheme>;
+          assetEdgeTriggerEnabled?: boolean;
+          assetTriggerEdge?: AssetTriggerEdge;
+          assetEdgeDelayMs?: number;
+          assetDragEdgeDelayMs?: number;
         };
         const normalizedThemeColors = mapLegacyPaletteTheme(state.themeColors);
         const themeColors = shouldUpgradeLegacyNeutralTheme(state.themeColors)
@@ -363,6 +367,12 @@ export const useSettingsStore = create<SettingsState>()(
         );
         const uploadFallbackEnabled =
           state.uploadFallbackEnabled ?? resolveLegacyUploadFallback();
+        const hasUntouchedLegacyEdgeTriggerDefaults =
+          persistedVersion < 11
+          && state.assetEdgeTriggerEnabled === true
+          && (state.assetTriggerEdge === undefined || state.assetTriggerEdge === 'right')
+          && (state.assetEdgeDelayMs === undefined || state.assetEdgeDelayMs === 650)
+          && (state.assetDragEdgeDelayMs === undefined || state.assetDragEdgeDelayMs === 180);
         return {
           ...(persistedState as object),
           providerKeyStatus: migratedProviderStatus,
@@ -370,6 +380,9 @@ export const useSettingsStore = create<SettingsState>()(
           uploadFallbackEnabled,
           ignoreAtTagWhenCopyingAndGenerating,
           themeColors,
+          assetEdgeTriggerEnabled: hasUntouchedLegacyEdgeTriggerDefaults
+            ? false
+            : (state.assetEdgeTriggerEnabled ?? false),
         };
       },
     }

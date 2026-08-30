@@ -54,6 +54,33 @@ describe('资产悬浮面板边缘触发', () => {
     expect(onOpen).not.toHaveBeenCalled()
   })
 
+  it('点击窗口边缘会取消待触发计时，离开边缘前不再重新计时', () => {
+    const onOpen = vi.fn()
+    renderHook(() => useAssetEdgeTrigger({
+      enabled: true,
+      edge: 'right',
+      delayMs: 650,
+      dragDelayMs: 180,
+      open: false,
+      onOpen,
+    }))
+
+    fireEvent.pointerMove(document.body, { clientX: 999, buttons: 0 })
+    vi.advanceTimersByTime(300)
+    fireEvent.pointerDown(document.body, { clientX: 999, buttons: 1 })
+    vi.advanceTimersByTime(1000)
+    expect(onOpen).not.toHaveBeenCalled()
+
+    fireEvent.pointerMove(document.body, { clientX: 998, buttons: 0 })
+    vi.advanceTimersByTime(650)
+    expect(onOpen).not.toHaveBeenCalled()
+
+    fireEvent.pointerMove(document.body, { clientX: 900, buttons: 0 })
+    fireEvent.pointerMove(document.body, { clientX: 999, buttons: 0 })
+    vi.advanceTimersByTime(650)
+    expect(onOpen).toHaveBeenCalledOnce()
+  })
+
   it('拖拽到边缘达到拖拽延迟后打开', () => {
     const onOpen = vi.fn()
     renderHook(() => useAssetEdgeTrigger({
