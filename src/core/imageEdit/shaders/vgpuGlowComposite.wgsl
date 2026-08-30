@@ -1,5 +1,5 @@
 struct Composite {
-  // intensity, response exposure, white heat, reserved
+  // intensity, response exposure, reserved, reserved
   params: vec4f,
   // tint RGB, tint enabled
   tint: vec4f,
@@ -25,19 +25,9 @@ fn tintGlow(color: vec3f) -> vec3f {
   return mix(color, composite.tint.rgb * brightness(color), composite.tint.a);
 }
 
-fn sampleTintedBloom(uv: vec2f) -> vec3f {
+fn sampleBloom(uv: vec2f) -> vec4f {
   let scatterUv = composite.scatterRegion.xy + uv * composite.scatterRegion.zw;
-  return tintGlow(textureSampleLevel(bloomPyramid, linearSampler, scatterUv, 0.0).rgb);
-}
-
-fn applyWhiteHeat(color: vec3f) -> vec3f {
-  let peak = max(color.r, max(color.g, color.b));
-  if (peak <= 0.000001) {
-    return vec3f(0.0);
-  }
-  // 白热只由连续的局部辐射决定，不再从原图边缘生成一份独立的白色微核。
-  let heat = pow(smoothstep(0.35, 3.2, peak), 1.4) * composite.params.z;
-  return mix(color, vec3f(peak), heat);
+  return textureSampleLevel(bloomPyramid, linearSampler, scatterUv, 0.0);
 }
 
 fn hash12(position: vec2f) -> f32 {
@@ -86,25 +76,30 @@ fn compositeGlow(base: vec4f, glowPremultiplied: vec3f) -> vec4f {
 
 @fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
   let base = textureSampleLevel(scene, linearSampler, uv, 0.0);
-  let centered = sampleTintedBloom(uv);
+  let centeredBloom = sampleBloom(uv);
+  let centered = tintGlow(centeredBloom.rgb);
   let chromaOffset = vec2f(composite.optics.x * composite.optics.z, 0.0);
   var diffuse = centered;
 
   // 顺序是「先着色，再做 RGB 通道位移」。只移动已经柔化的散射层，不移动原图或微核，
   // 因而得到真正的 RGB 分离而不是三份彩色硬边描边。
   if (composite.optics.w > 0.0001) {
-    let red = sampleTintedBloom(uv + chromaOffset);
-    let blue = sampleTintedBloom(uv - chromaOffset);
+    let red = tintGlow(sampleBloom(uv + chromaOffset).rgb);
+    let blue = tintGlow(sampleBloom(uv - chromaOffset).rgb);
     let separated = vec3f(red.r, centered.g, blue.b);
     diffuse = mix(centered, separated, composite.optics.w);
   }
 
-  // 散射层一直保留在线性虚拟辐射域。这里只执行一次最终相机响应：
+  // RGB 是保留色彩的完整散射；A 是源阶段生成并只走紧致 core PSF 的白热能量。
+  // 白热不参与着色或 RGB 位移，也不会在相邻颜色卷积重叠后突然整片漂白。
+  let opticalEnergy = max(diffuse, vec3f(0.0))
+    + vec3f(max(centeredBloom.a, 0.0));
+
+  // 两层能量一直保留在线性虚拟辐射域。这里只执行一次最终相机响应：
   // screen(base, 1-exp(-E)) 等价于 1-(1-base)exp(-E)，因此不会像旧链路那样
   // 对辉光先曝光一次、合成时又指数压缩一次而把核心与裙部压成同一亮度。
-  let emitted = max(diffuse, vec3f(0.0))
-    * composite.params.x * composite.params.y;
-  var glowLayer = vec3f(1.0) - exp(-applyWhiteHeat(emitted));
+  let emitted = opticalEnergy * composite.params.x * composite.params.y;
+  var glowLayer = vec3f(1.0) - exp(-emitted);
 
   // 亚量化抖动只存在于可见辉光内，强度小于一个 8-bit 台阶；它打散平滑渐变里的同心色带，
   // 不会给未发光区域或原图纹理增加噪声。

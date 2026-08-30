@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { IMAGE_EDITOR_PRESET_COLORS } from '@/core/theme/colorTokens';
 import bloomShaderSource from './shaders/vgpuGlowBloom.wgsl?raw';
 import compositeShaderSource from './shaders/vgpuGlowComposite.wgsl?raw';
+import upsampleShaderSource from './shaders/vgpuGlowUpsample.wgsl?raw';
 import baselineShaderSource from './worker/baseline.wgsl?raw';
 import {
   IMAGE_EDIT_OPERATION_IDS,
@@ -12,6 +13,7 @@ import {
   createDefaultVgpuGlowOperationParams,
   decodeImageEditDocument,
   effectiveScatterSigmaPx,
+  extractVirtualEmitterRadiance,
   parseVgpuGlowOperationParams,
   rebaseVgpuGlowRecipeForScale,
   reconstructVirtualRadiance,
@@ -77,7 +79,7 @@ describe('VGPU 辉光操作契约', () => {
     expect(weightedMeanFraction(dreamy)).toBeGreaterThan(weightedMeanFraction(natural));
     expect(neon.sourceGain).toBeGreaterThan(dreamy.sourceGain);
     for (const recipe of [natural, dreamy, neon]) {
-      expect(recipe.schemaVersion).toBe(8);
+      expect(recipe.schemaVersion).toBe(9);
       expect(recipe.scatterLevels.length).toBeGreaterThanOrEqual(4);
       expect(recipe.scatterLevels.length).toBeLessThanOrEqual(12);
       expect(recipe.scatterLevels[0].divisor).toBe(2);
@@ -93,6 +95,10 @@ describe('VGPU 辉光操作契约', () => {
           0
         )).toBeCloseTo(1, 10);
       }
+      expect(recipe.scatterLevels.reduce(
+        (sum, level) => sum + level.whiteCoreWeight,
+        0
+      )).toBeCloseTo(1, 10);
       expect(recipe.tintLinear).toHaveLength(3);
       expect(recipe.tintEnabled).toBe(false);
       expect(recipe.chromaticAberration).toBe(0);
@@ -218,7 +224,7 @@ describe('VGPU 辉光操作契约', () => {
     }
   });
 
-  it('从 LDR 单调重建有限虚拟辐射，不再用临时亮度倍增伪造 HDR', () => {
+  it('用有限斜率肩部重建 LDR 辐射，不再放大 8-bit 顶值量化', () => {
     const ceiling = 8.2;
     const samples = [0, 0.1, 0.5, 0.9, 1]
       .map((value) => reconstructVirtualRadiance(value, ceiling));
@@ -228,6 +234,27 @@ describe('VGPU 辉光操作契约', () => {
       expect(Number.isFinite(samples[index])).toBe(true);
     }
     expect(samples.at(-1)).toBeCloseTo(ceiling, 10);
+    const almostWhite = reconstructVirtualRadiance(254 / 255, ceiling);
+    expect(samples.at(-1)! / almostWhite).toBeLessThan(1.03);
+  });
+
+  it('在显示域提取亮源，让青色到暖色的可见渐变保持连续能量', () => {
+    const recipe = compileVgpuGlowRecipe(applyVgpuGlowLook('dreamy'), UHD);
+    const emission = (displayPeak: number) => extractVirtualEmitterRadiance(
+      displayPeak,
+      recipe.sourceThresholdDisplay,
+      recipe.sourceKneeDisplay,
+      recipe.sourceRadianceCeiling
+    );
+    // 来自“发光测试.jpg”中「界」字同一水平笔画的实测显示域峰值。
+    const cyan = emission(255 / 255);
+    const warmTransition = emission(196 / 255);
+    const orange = emission(247 / 255);
+
+    expect(emission(0)).toBe(0);
+    expect(cyan / warmTransition).toBeLessThan(2.5);
+    expect(orange / warmTransition).toBeLessThan(2.5);
+    expect(emission(255 / 255) / emission(254 / 255)).toBeLessThan(1.03);
   });
 
   it('拒绝越界参数，并由内置注册表按 effect 阶段校验', () => {
@@ -292,17 +319,22 @@ describe('VGPU 辉光操作契约', () => {
     expect(translucentResult.every(Number.isFinite)).toBe(true);
   });
 
-  it('着色器先重建直通辐射再乘覆盖率，且最终只执行一次指数相机响应', () => {
-    expect(bloomShaderSource).toContain('let brightness = max(color.r, max(color.g, color.b))');
-    expect(bloomShaderSource).not.toContain('max(color.r, max(color.g, color.b)) * 0.82');
-    expect(bloomShaderSource).toContain('-log(max(1.0 - min(brightness');
+  it('着色器在显示域有限重建辐射，并让白热只走独立核心 PSF', () => {
+    expect(bloomShaderSource).toContain('let linearPeak = max(color.r, max(color.g, color.b))');
+    expect(bloomShaderSource).toContain('let displayPeak = clamp(linearToSrgb(linearPeak)');
+    expect(bloomShaderSource).toContain('1.0 - RADIANCE_SHOULDER * clamp(displayValue');
+    expect(bloomShaderSource).not.toContain('-log(max(1.0 - min(');
+    expect(bloomShaderSource).toContain('return vec4f(coloredEmitter, whiteCore)');
     expect(bloomShaderSource).toContain('extractEmitter(color.rgb) * color.a');
     expect(bloomShaderSource).toContain('insideImage(sampleUv)');
+    expect(upsampleShaderSource).toContain(
+      'return high * accumulate.highWeight + low * accumulate.lowWeight'
+    );
     expect(compositeShaderSource).not.toContain('softCore');
     expect(compositeShaderSource).not.toContain('toneBloom');
-    expect(compositeShaderSource).toContain(
-      'var glowLayer = vec3f(1.0) - exp(-applyWhiteHeat(emitted))'
-    );
+    expect(compositeShaderSource).not.toContain('applyWhiteHeat');
+    expect(compositeShaderSource).toContain('vec3f(max(centeredBloom.a, 0.0))');
+    expect(compositeShaderSource).toContain('var glowLayer = vec3f(1.0) - exp(-emitted)');
     expect(compositeShaderSource).toContain('let outAlpha = glowAlpha + baseAlpha * (1.0 - glowAlpha)');
     expect(compositeShaderSource).toContain('return compositeGlow(base, glowLayer)');
     expect(baselineShaderSource).toContain('linear_to_srgb(color.rgb) * alpha');

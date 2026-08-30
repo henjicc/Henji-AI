@@ -239,10 +239,13 @@ export class VgpuGlowRenderer {
         lowAccumulation,
         linearSampler: this.linearSampler,
         accumulate: {
-          highWeight: [...recipe.scatterLevels[index].weight, 0],
+          highWeight: [
+            ...recipe.scatterLevels[index].weight,
+            recipe.scatterLevels[index].whiteCoreWeight,
+          ],
           lowWeight: [
             ...(firstMerge ? recipe.scatterLevels[index + 1].weight : UNIT_RGB),
-            0,
+            firstMerge ? recipe.scatterLevels[index + 1].whiteCoreWeight : 1,
           ],
         },
       });
@@ -265,7 +268,7 @@ export class VgpuGlowRenderer {
       bloomPyramid,
       linearSampler: this.linearSampler,
       composite: {
-        params: [recipe.intensity, recipe.responseExposure, recipe.whiteHeat, 0],
+        params: [recipe.intensity, recipe.responseExposure, 0, 0],
         tint: [...recipe.tintLinear, recipe.tintEnabled ? 1 : 0],
         optics: [
           1 / Math.max(targets.scene.size[0], 1),
@@ -356,11 +359,12 @@ function setBloom(
     linearSampler,
     bloom: {
       params: [
-        recipe.sourceThresholdRadiance,
-        recipe.sourceKneeRadiance,
+        recipe.sourceThresholdDisplay,
+        recipe.sourceKneeDisplay,
         recipe.sourceRadianceCeiling,
         mode === 0 ? recipe.sourceGain : -1,
       ],
+      optics: [recipe.whiteHeat, 0, 0, 0],
     },
   });
 }

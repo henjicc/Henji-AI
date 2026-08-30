@@ -1,6 +1,12 @@
 import type { VgpuGlowOperationParams } from './vgpuGlowParams';
 
-export const VGPU_GLOW_RECIPE_VERSION = 8 as const;
+export const VGPU_GLOW_RECIPE_VERSION = 9 as const;
+
+/**
+ * LDR 高光重建的有限肩部。0.88 让 255 仍映射到各光感的完整 ceiling，同时把
+ * 254→255 的辐射跳变控制在约 2% 内，避免 8-bit/JPEG 量化被放大成光斑断层。
+ */
+export const VGPU_GLOW_RADIANCE_SHOULDER = 0.88;
 
 export interface VgpuGlowScatterLevel {
   /** 相对全分辨率的连续 2× 降采样倍数。 */
@@ -9,6 +15,8 @@ export interface VgpuGlowScatterLevel {
   effectiveSigmaPx: number;
   /** 逐通道归一化能量；色差为零时三个通道严格相同。 */
   weight: readonly [number, number, number];
+  /** 白热能量只使用紧致 core PSF；各层之和严格为 1。 */
+  whiteCoreWeight: number;
 }
 
 export interface VgpuGlowRecipe {
@@ -18,9 +26,10 @@ export interface VgpuGlowRecipe {
     height: number;
     referenceDimension: number;
   };
-  /** 以下三个量都位于虚拟场景辐射域，而不是显示域 0～1 亮度。 */
-  sourceThresholdRadiance: number;
-  sourceKneeRadiance: number;
+  /** 亮源资格在显示域判断，避免把肉眼连续的 LDR 渐变在线性域中挖出暗洞。 */
+  sourceThresholdDisplay: number;
+  sourceKneeDisplay: number;
+  /** 有限虚拟 HDR 的最大辐射值。 */
   sourceRadianceCeiling: number;
   sourceGain: number;
   intensity: number;
@@ -125,17 +134,11 @@ export function compileVgpuGlowRecipe(
         },
       };
   const thresholdDisplay = 0.035 + Math.pow(params.sourceThreshold, 1.8) * 0.72;
-  const kneeDisplay = 0.025 + (1 - params.sourceThreshold) * 0.1;
-  const thresholdRadiance = reconstructVirtualRadiance(
-    thresholdDisplay,
-    look.radianceCeiling
-  );
-  const kneeRadiance = Math.max(
-    0.025,
-    reconstructVirtualRadiance(
-      Math.min(0.98, thresholdDisplay + kneeDisplay),
-      look.radianceCeiling
-    ) - thresholdRadiance
+  // knee 始终小于 threshold，因此纯黑严格保持零能量；低门槛仍保留柔和过渡。
+  const kneeDisplay = thresholdDisplay * interpolate(
+    0.68,
+    0.32,
+    params.sourceThreshold
   );
   const scatterEnvelopeFraction = interpolate(
     1 / 320,
@@ -150,8 +153,8 @@ export function compileVgpuGlowRecipe(
       height: options.height,
       referenceDimension,
     },
-    sourceThresholdRadiance: thresholdRadiance,
-    sourceKneeRadiance: kneeRadiance,
+    sourceThresholdDisplay: thresholdDisplay,
+    sourceKneeDisplay: kneeDisplay,
     sourceRadianceCeiling: look.radianceCeiling,
     sourceGain: look.sourceGain,
     // 低段保留精细调节，高段把创作范围扩展到约 2.5×。这不是线性暴力增亮：
@@ -259,6 +262,7 @@ function compileOpticalScatterLevels(
     divisor,
     effectiveSigmaPx: sigmas[index],
     weight: [channels[0][index], channels[1][index], channels[2][index]] as const,
+    whiteCoreWeight: core[index],
   }));
 }
 
@@ -276,13 +280,35 @@ function normalizeWeights(raw: readonly number[]): number[] {
   return raw.map((value) => value / sum);
 }
 
-/** 与亮源提取 WGSL 一致的有限逆指数响应，供配方和数值回归共同使用。 */
+/**
+ * 与亮源提取 WGSL 一致的有限斜率肩部。输入是显示域亮度，输出是虚拟辐射；
+ * 与旧的 -log(1-v) 不同，它在 v=1 仍连续且导数有限。
+ */
 export function reconstructVirtualRadiance(value: number, ceiling: number): number {
-  const maximumDisplayValue = 1 - Math.exp(-ceiling);
-  return Math.min(
-    ceiling,
-    -Math.log(Math.max(1 - clamp(value, 0, maximumDisplayValue), Math.exp(-ceiling)))
+  const displayValue = clamp(value, 0, 1);
+  const normalization = -Math.log(1 - VGPU_GLOW_RADIANCE_SHOULDER);
+  return ceiling * (
+    -Math.log(1 - VGPU_GLOW_RADIANCE_SHOULDER * displayValue)
+    / normalization
   );
+}
+
+/** 与 WGSL bright-pass 完全一致的 CPU 参考，用于量化边界与颜色渐变回归。 */
+export function extractVirtualEmitterRadiance(
+  displayValue: number,
+  thresholdDisplay: number,
+  kneeDisplay: number,
+  ceiling: number
+): number {
+  const value = clamp(displayValue, 0, 1);
+  if (value <= 0) return 0;
+  const knee = Math.max(kneeDisplay, 0.0001);
+  const delta = value - thresholdDisplay;
+  const soft = clamp(delta + knee, 0, 2 * knee);
+  const softContribution = soft * soft / (4 * knee);
+  const brightPass = Math.max(delta, softContribution);
+  const fraction = clamp(brightPass / value, 0, 1);
+  return reconstructVirtualRadiance(value, ceiling) * fraction;
 }
 
 function parseLinearRgb(color: string): readonly [number, number, number] {
