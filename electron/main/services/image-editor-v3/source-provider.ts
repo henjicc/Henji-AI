@@ -28,6 +28,11 @@ import {
   sourceBitsPerSample,
   sourceStorageBitDepth,
 } from './source-metadata'
+import {
+  mapOrientedSourceRectToEncoded,
+  normalizeSourceExifOrientation,
+  orientedSourceDimensions,
+} from './source-orientation'
 import { ManagedSourcePyramid, type SourcePyramidTileLayout } from './source-pyramid'
 
 const MAX_MIP_LEVEL = 30
@@ -35,7 +40,7 @@ const MAX_TILE_HALO = 2048
 /** 覆盖 200MP 目标并给极端长宽比留余量，同时拒绝无界解压。 */
 export const IMAGE_EDIT_MAX_SOURCE_PIXELS = 1_000_000_000
 export const IMAGE_EDIT_METADATA_CACHE_LIMIT = 256
-const SOURCE_PROXY_CACHE_VERSION = 1
+const SOURCE_PROXY_CACHE_VERSION = 2
 
 export interface SharpSourceProviderOptions {
   metadataCacheLimit?: number
@@ -125,8 +130,8 @@ function standardTileLayout(
 }
 
 /**
- * Sharp 始终直接接收受管资源路径：metadata 只读文件头，proxy/tile 由 libvips 按需解码；
- * 不经过 fs.readFile，也不会在 JS 堆里构造完整原图 RGBA 表面。
+ * Sharp 始终直接接收受管资源路径：metadata 只读文件头，proxy/tile 在源边界应用 EXIF
+ * 方向并由 libvips 按需解码；不经过 fs.readFile，也不会在 JS 堆里构造完整原图 RGBA 表面。
  */
 export class SharpSourceProvider implements SourceProvider {
   private readonly metadataCache = new Map<ResourceId, SourceImageMetadata>()
@@ -230,6 +235,7 @@ export class SharpSourceProvider implements SourceProvider {
       sequentialRead: true,
       failOn: 'error',
     })
+      .autoOrient()
       .resize({
         width: maxDimension,
         height: maxDimension,
@@ -311,6 +317,15 @@ export class SharpSourceProvider implements SourceProvider {
     const sourceTop = Math.floor(originY * scale)
     const sourceRight = Math.min(metadata.width, Math.ceil(outputRight * scale))
     const sourceBottom = Math.min(metadata.height, Math.ceil(outputBottom * scale))
+    const encodedRegion = mapOrientedSourceRectToEncoded({
+      left: sourceLeft,
+      top: sourceTop,
+      width: sourceRight - sourceLeft,
+      height: sourceBottom - sourceTop,
+    }, {
+      width: metadata.encodedWidth,
+      height: metadata.encodedHeight,
+    }, metadata.orientation)
     const bitDepth = request.bitDepth ?? (metadata.hdr ? 32 : sourceStorageBitDepth(metadata))
     if (metadata.hdr && bitDepth !== 32) {
       throw new Error('HDR source tiles require Float32 scRGB decoding; encoded integer fallback is disabled')
@@ -322,11 +337,11 @@ export class SharpSourceProvider implements SourceProvider {
       sequentialRead: false,
       failOn: 'error',
     }).extract({
-      left: sourceLeft,
-      top: sourceTop,
-      width: sourceRight - sourceLeft,
-      height: sourceBottom - sourceTop,
-    })
+      left: encodedRegion.left,
+      top: encodedRegion.top,
+      width: encodedRegion.width,
+      height: encodedRegion.height,
+    }).autoOrient()
     if (sourceRight - sourceLeft !== outputWidth || sourceBottom - sourceTop !== outputHeight) {
       pipeline = pipeline.resize(outputWidth, outputHeight, { fit: 'fill', kernel: 'lanczos3' })
     }
@@ -358,7 +373,7 @@ export class SharpSourceProvider implements SourceProvider {
       colorSpace: bitDepth === 32 ? 'scrgb' : 'srgb',
       transferFunction: bitDepth === 32 ? 'linear' : 'srgb',
       alphaMode: 'straight',
-      orientationApplied: false,
+      orientationApplied: true,
       originX,
       originY,
       pixels: normalizeRawLittleEndian(data, bitDepth),
@@ -405,6 +420,17 @@ export class SharpSourceProvider implements SourceProvider {
       throw new Error(`Image exceeds ${IMAGE_EDIT_MAX_SOURCE_PIXELS} pixel safety limit: ${resourceId}`)
     }
     const bitsPerSample = sourceBitsPerSample(metadata)
+    const orientation = normalizeSourceExifOrientation(metadata.orientation)
+    const orientedDimensions = orientedSourceDimensions({
+      width: metadata.width,
+      height: metadata.height,
+    }, orientation)
+    if (
+      metadata.autoOrient.width !== orientedDimensions.width
+      || metadata.autoOrient.height !== orientedDimensions.height
+    ) {
+      throw new Error(`Sharp returned inconsistent auto-oriented dimensions: ${resourceId}`)
+    }
     const cicp = await readNclxCicp(
       this.resources.getFilesystemPath(resourceId),
       metadata.format,
@@ -418,14 +444,17 @@ export class SharpSourceProvider implements SourceProvider {
       : null
     return {
       resourceId,
-      width: metadata.width,
-      height: metadata.height,
+      width: orientedDimensions.width,
+      height: orientedDimensions.height,
+      encodedWidth: metadata.width,
+      encodedHeight: metadata.height,
       format: metadata.format,
       channels: metadata.channels,
       depth: metadata.depth,
       bitsPerSample,
       colorSpace: metadata.space,
-      orientation: metadata.orientation,
+      orientation,
+      orientationApplied: true,
       density: metadata.density,
       pages: metadata.pages,
       hasAlpha: metadata.hasAlpha ?? false,

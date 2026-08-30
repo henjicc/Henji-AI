@@ -13,7 +13,7 @@ import {
   type DerivedDiskCache,
 } from './derived-disk-cache'
 
-const SOURCE_PYRAMID_CACHE_VERSION = 1
+const SOURCE_PYRAMID_CACHE_VERSION = 2
 const DEFAULT_PREWARM_TILE_BUDGET = 4_096
 const MAX_PREWARM_TILE_BUDGET = 100_000
 const logger = createMainLogger('main.image_editor_v3.source_pyramid')
@@ -73,7 +73,7 @@ export function sourcePyramidCacheAddress(
       layout.originX,
       layout.originY,
       `rgba${layout.bitDepth}`,
-      'source-orientation',
+      'normalized-source-orientation',
     ].join(':'),
   }
 }
@@ -101,7 +101,7 @@ function createTile(
     colorSpace: bitDepth === 32 ? 'scrgb' : 'srgb',
     transferFunction: bitDepth === 32 ? 'linear' : 'srgb',
     alphaMode: 'straight',
-    orientationApplied: false,
+    orientationApplied: true,
     originX: layout.originX,
     originY: layout.originY,
     pixels,
@@ -127,7 +127,7 @@ function validateDecodedTile(
     || tile.channels !== 4
     || tile.rowStride !== layout.width * 4 * bytesPerSample(layout.bitDepth)
     || tile.alphaMode !== 'straight'
-    || tile.orientationApplied !== false
+    || tile.orientationApplied !== true
     || tile.pixels.byteLength !== expectedPixelBytes(layout)
   ) {
     throw new Error('Source pyramid decoder returned an incompatible tile')

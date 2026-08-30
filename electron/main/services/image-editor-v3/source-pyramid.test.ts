@@ -61,7 +61,7 @@ function decodedTile(
     colorSpace: sourceLayout.bitDepth === 32 ? 'scrgb' : 'srgb',
     transferFunction: sourceLayout.bitDepth === 32 ? 'linear' : 'srgb',
     alphaMode: 'straight',
-    orientationApplied: false,
+    orientationApplied: true,
     originX: sourceLayout.originX,
     originY: sourceLayout.originY,
     pixels: Buffer.alloc(
@@ -85,7 +85,7 @@ describe('ManagedSourcePyramid', () => {
 
     expect(decoder).toHaveBeenCalledOnce()
     expect(cold.pixels.equals(hot.pixels)).toBe(true)
-    expect(hot).toMatchObject({ width: 2, height: 2, orientationApplied: false })
+    expect(hot).toMatchObject({ width: 2, height: 2, orientationApplied: true })
   })
 
   it('并发同键只生产一次，一个等待者取消不会误杀仍在等待的请求', async () => {

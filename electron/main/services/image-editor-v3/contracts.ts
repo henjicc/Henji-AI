@@ -1,5 +1,7 @@
 import type { Readable } from 'node:stream'
 
+import type { SourceExifOrientation } from './source-orientation'
+
 export const IMAGE_EDIT_DOCUMENT_FORMAT = 'henji-image-edit' as const
 export const IMAGE_EDIT_DOCUMENT_VERSION = 3 as const
 export const IMAGE_EDIT_DOCUMENT_REF_PREFIX = 'image-edit-v3:' as const
@@ -43,15 +45,21 @@ export interface ResourceLease {
 
 export interface SourceImageMetadata {
   resourceId: ResourceId
+  /** 已应用 EXIF Orientation 后的逻辑尺寸；文档、代理、瓦片统一使用此坐标系。 */
   width: number
   height: number
+  /** 编码文件头中的物理尺寸，仅供源区域反向映射，不得作为编辑文档尺寸。 */
+  encodedWidth: number
+  encodedHeight: number
   format?: string
   channels?: number
   depth?: string
   /** 源编码的真实采样精度；10/12 位不得归一化成 16。 */
   bitsPerSample: number
   colorSpace?: string
-  orientation?: number
+  /** 原始 EXIF Orientation，仅作来源信息；像素和 width/height 已经应用，禁止再次写入文档方向。 */
+  orientation: SourceExifOrientation
+  orientationApplied: true
   density?: number
   pages?: number
   hasAlpha: boolean
@@ -128,7 +136,8 @@ export interface SourceTile {
   transferFunction: 'srgb' | 'linear'
   /** Sharp raw 输出是 straight alpha；进入效果内核前必须在线性域预乘。 */
   alphaMode: 'straight'
-  orientationApplied: false
+  /** 像素已经归一化到 metadata width/height 使用的视觉方向。 */
+  orientationApplied: true
   /** 相对于当前 mip 左上角的位置，可能因 halo 小于请求瓦片原点。 */
   originX: number
   originY: number

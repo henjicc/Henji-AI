@@ -131,7 +131,7 @@ describe('SharpSourceProvider', () => {
       colorSpace: 'srgb',
       transferFunction: 'srgb',
       alphaMode: 'straight',
-      orientationApplied: false,
+      orientationApplied: true,
     })
     expect(tile.pixels.byteLength).toBe(width * height * 4 * 2)
     const hotTile = await provider.readTile({ resourceId: resource.id, mip: 0, tileX: 0, tileY: 0 })
@@ -156,7 +156,7 @@ describe('SharpSourceProvider', () => {
       originX: 512,
       originY: 512,
       rowStride: 88 * 4,
-      orientationApplied: false,
+      orientationApplied: true,
     })
     expect(tile.pixels.byteLength).toBe(88 * 18 * 4)
   })
@@ -219,19 +219,6 @@ describe('SharpSourceProvider', () => {
       .toMatchObject({ bitDepth: 16, sampleFormat: 'uint', numericRange: 'unorm16' })
   })
 
-  it('代理与瓦片都保留源坐标方向，由文档几何统一应用 EXIF 朝向', async () => {
-    const encoded = await sharp({
-      create: { width: 12, height: 6, channels: 3, background: { r: 20, g: 60, b: 120 } },
-    }).withMetadata({ orientation: 6 }).jpeg().toBuffer()
-    const resource = await store.putBuffer(encoded, { mediaType: 'image/jpeg' })
-    const provider = new SharpSourceProvider(store)
-
-    expect(await provider.readMetadata(resource.id)).toMatchObject({ width: 12, height: 6, orientation: 6 })
-    expect(await provider.readFastProxy(resource.id, 64)).toMatchObject({ width: 12, height: 6 })
-    expect(await provider.readTile({ resourceId: resource.id, mip: 0, tileX: 0, tileY: 0 }))
-      .toMatchObject({ width: 12, height: 6, originX: 0, originY: 0 })
-  })
-
   it('metadata/proxy/tile/openOriginal 都在完整操作期间持有并释放资源 lease', async () => {
     const encoded = await sharp({
       create: { width: 32, height: 32, channels: 3, background: { r: 20, g: 60, b: 120 } },
@@ -285,7 +272,10 @@ describe('SharpSourceProvider', () => {
     const started = new Promise<void>((resolve) => { markStarted = resolve })
     const destroy = vi.fn((error?: Error) => { rejectOutput?.(error) })
     const pipeline = {
-      metadata: async () => ({ width: 1, height: 1, depth: 'uchar' }),
+      metadata: async () => ({
+        width: 1, height: 1, autoOrient: { width: 1, height: 1 }, depth: 'uchar',
+      }),
+      autoOrient: () => pipeline,
       resize: () => pipeline,
       toColourspace: () => pipeline,
       webp: () => pipeline,
@@ -320,7 +310,10 @@ describe('SharpSourceProvider', () => {
     const destroy = vi.fn()
     const toBuffer = vi.fn()
     const pipeline = {
-      metadata: async () => ({ width: 1, height: 1, depth: 'uchar' }),
+      metadata: async () => ({
+        width: 1, height: 1, autoOrient: { width: 1, height: 1 }, depth: 'uchar',
+      }),
+      autoOrient: () => pipeline,
       resize: () => pipeline,
       toColourspace: () => pipeline,
       webp: () => pipeline,
