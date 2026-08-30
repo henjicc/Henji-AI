@@ -1,6 +1,9 @@
 import baselineShaderSource from './baseline.wgsl?raw'
 import type { DiffusionRecipe } from '../diffusionRecipe'
-import type { VgpuGlowRecipe } from '../vgpuGlowRecipe'
+import {
+  rebaseVgpuGlowRecipeForScale,
+  type VgpuGlowRecipe,
+} from '../vgpuGlowRecipe'
 import {
   createRenderPipelineChecked,
   createShaderModuleChecked,
@@ -61,7 +64,8 @@ interface RuntimeState {
   linearizePipeline: GpuRenderPipeline
   encodePipeline: GpuRenderPipeline
   diffusionRenderer: WebGpuDiffusionRenderer
-  vgpuGlowRenderer: VgpuGlowRenderer
+  vgpuGlowRenderer: VgpuGlowRenderer | null
+  vgpuGlowRendererInitialization: Promise<VgpuGlowRenderer> | null
   canvasFormat: string
 }
 
@@ -93,8 +97,7 @@ export class WorkerWebGpuRuntime {
 
   constructor() {
     this.deviceManager.onDeviceLost((reason) => {
-      this.state?.diffusionRenderer.destroy()
-      this.state?.vgpuGlowRenderer.destroy()
+      if (this.state) this.destroyRuntimeState(this.state)
       this.state = null
       this.deviceLostHandler?.(reason)
     })
@@ -135,12 +138,17 @@ export class WorkerWebGpuRuntime {
         try {
         const sourceCacheKey = `${cacheKey ?? (source.kind === 'url' ? `url:${source.url}` : `blob:${Date.now()}`)}:${orientationCacheKey(composition)}`
         if (vgpuGlowRecipe) {
+          const previewRecipe = rebaseVgpuGlowRecipeForScale(
+            vgpuGlowRecipe,
+            composed.bitmap.width,
+            composed.bitmap.height
+          )
           const bitmap = await this.renderVgpuGlowBitmap(
             state,
             composed.bitmap,
             composed.bitmap.width,
             composed.bitmap.height,
-            vgpuGlowRecipe,
+            previewRecipe,
             isCancelled
           )
           return {
@@ -398,7 +406,6 @@ export class WorkerWebGpuRuntime {
       addressModeV: 'clamp-to-edge',
     })
     const diffusionRenderer = await this.createDiffusionRenderer(device, sampler)
-    const vgpuGlowRenderer = await this.createVgpuGlowRenderer(device)
     const state: RuntimeState = {
       provider,
       adapter,
@@ -407,7 +414,10 @@ export class WorkerWebGpuRuntime {
       linearizePipeline,
       encodePipeline,
       diffusionRenderer,
-      vgpuGlowRenderer,
+      // VGPU 只在用户真正启用辉光 Pro 时初始化。普通图片编辑不会创建它的 target、
+      // effect 和 uniform 资源，也不会承担新图形库初始化失败的风险。
+      vgpuGlowRenderer: null,
+      vgpuGlowRendererInitialization: null,
       canvasFormat,
     }
     return state
@@ -496,6 +506,28 @@ export class WorkerWebGpuRuntime {
       return await VgpuGlowRenderer.create(device)
     } catch (error) {
       throw createInitializationError('webgpu-vgpu-glow-pipeline-failed', error)
+    }
+  }
+
+  private async ensureVgpuGlowRenderer(state: RuntimeState): Promise<VgpuGlowRenderer> {
+    if (state.vgpuGlowRenderer) return state.vgpuGlowRenderer
+    const initialization = state.vgpuGlowRendererInitialization
+      ?? this.createVgpuGlowRenderer(state.device)
+    state.vgpuGlowRendererInitialization = initialization
+    try {
+      const renderer = await initialization
+      // 初始化期间设备可能已丢失或 runtime 已销毁。旧 renderer 不能挂回新 state，
+      // 也不能遗留它创建的 target / effect 资源。
+      if (this.state !== state) {
+        renderer.destroy()
+        throw new Error('VGPU 辉光初始化期间 GPU 运行时已失效')
+      }
+      state.vgpuGlowRenderer = renderer
+      return renderer
+    } finally {
+      if (state.vgpuGlowRendererInitialization === initialization) {
+        state.vgpuGlowRendererInitialization = null
+      }
     }
   }
 
@@ -594,7 +626,8 @@ export class WorkerWebGpuRuntime {
     isCancelled?: () => boolean
   ): Promise<ImageBitmap> {
     this.assertTextureSize(state, width, height)
-    const rendered = await state.vgpuGlowRenderer.render({
+    const renderer = await this.ensureVgpuGlowRenderer(state)
+    const rendered = await renderer.render({
       bitmap: decoded,
       width,
       height,
@@ -767,10 +800,17 @@ export class WorkerWebGpuRuntime {
   }
 
   private disposeState(): void {
-    this.state?.diffusionRenderer.destroy()
-    this.state?.vgpuGlowRenderer.destroy()
+    if (this.state) this.destroyRuntimeState(this.state)
     this.deviceManager.invalidate()
     this.state = null
+  }
+
+  private destroyRuntimeState(state: RuntimeState): void {
+    state.diffusionRenderer.destroy()
+    state.vgpuGlowRenderer?.destroy()
+    state.vgpuGlowRenderer = null
+    // 正在进行的初始化由 ensureVgpuGlowRenderer 在发现 state 已失效时负责销毁。
+    state.vgpuGlowRendererInitialization = null
   }
 }
 

@@ -75,7 +75,10 @@ export class UnifiedImageEditExecution implements ImageEditExecutionPort {
         })
         : undefined;
       const vgpuGlowRecipe = vgpuGlowParams
-        ? compileVgpuGlowRecipe(vgpuGlowParams)
+        ? compileVgpuGlowRecipe(vgpuGlowParams, {
+          width: orientedInfo.width,
+          height: orientedInfo.height,
+        })
         : undefined;
       logPreviewBudget(requestId, purpose, orientedInfo, request.maxPixels);
       const normalizedRequest = { ...request, requestId, document };

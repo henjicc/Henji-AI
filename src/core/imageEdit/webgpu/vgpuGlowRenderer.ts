@@ -3,59 +3,45 @@ import type { Effect, Gpu, Target, Texture } from 'vgpu';
 import bloomShaderSource from '../shaders/vgpuGlowBloom.wgsl?raw';
 import compositeShaderSource from '../shaders/vgpuGlowComposite.wgsl?raw';
 import linearizeShaderSource from '../shaders/vgpuGlowLinearize.wgsl?raw';
+import upsampleShaderSource from '../shaders/vgpuGlowUpsample.wgsl?raw';
 import type { VgpuGlowRecipe } from '../vgpuGlowRecipe';
 import type { GpuDevice, GpuTexture } from '../worker/webgpuRuntimeSupport';
 
 interface GlowTargets {
   scene: Target;
-  bloom0: Target;
-  bloomPing0: Target;
-  bloom1: Target;
-  bloomPing1: Target;
-  bloom2: Target;
-  bloomPing2: Target;
-  bloom3: Target;
-  bloomPing3: Target;
-  bloom4: Target;
-  bloomPing4: Target;
+  levels: Target[];
+  accumulations: Target[];
   output: Target;
 }
 
 interface GlowEffects {
   linearize: Effect;
   extract: Effect;
-  blurH0: Effect;
-  blurV0: Effect;
-  down1: Effect;
-  blurH1: Effect;
-  blurV1: Effect;
-  down2: Effect;
-  blurH2: Effect;
-  blurV2: Effect;
-  down3: Effect;
-  blurH3: Effect;
-  blurV3: Effect;
-  down4: Effect;
-  blurH4: Effect;
-  blurV4: Effect;
+  downsample: Effect[];
+  upsample: Effect[];
   composite: Effect;
 }
 
+const MAX_SCATTER_LEVELS = 12;
 const CLEAR = [0, 0, 0, 0] as const;
+const UNIT_RGB = [1, 1, 1] as const;
+const UNUSED_SIZE = [1, 1] as const;
 
 /**
- * VGPU 驱动的独立辉光管线。
+ * VGPU 驱动的连续散射金字塔。
  *
- * 它采用已有 Worker 的 GPUDevice，VGPU 只拥有自己的包装层和纹理，销毁时不会碰宿主
- * device。所有后处理 Pass 在同一个 frame 中编码、一次 submit，避免拖动参数时产生十几次
- * 队列提交。
+ * 亮源从全分辨率开始逐级 2× 降采样，再从最小层用 tent 核逐级重建并同时累加物理 PSF
+ * 权重。所有采样都只访问相邻 texel，半径由层级产生，因此大半径不会出现稀疏采样的
+ * 平行复本，也不会在五个固定高斯层之间露出亮度台阶。整条链仍编码进一个 VGPU frame，
+ * 只有一次队列提交。
  */
 export class VgpuGlowRenderer {
   private readonly input: Texture;
   private readonly targets: GlowTargets;
   private readonly effects: GlowEffects;
   private readonly linearSampler: ReturnType<typeof sampler>;
-  private compiled = false;
+  private compiledBase = false;
+  private compiledLevelCount = 0;
   private vgpuError: Error | null = null;
 
   private constructor(private readonly gpu: Gpu) {
@@ -93,12 +79,10 @@ export class VgpuGlowRenderer {
     isCancelled?: () => boolean;
   }): Promise<GpuTexture> {
     assertNotCancelled(input.isCancelled);
-    this.resize(input.width, input.height);
+    const levelCount = assertScatterLevels(input.recipe);
+    this.resize(input.width, input.height, input.recipe);
     this.bind(input.recipe);
-    if (!this.compiled) {
-      await this.compile();
-      this.compiled = true;
-    }
+    await this.compile(levelCount);
     this.vgpuError = null;
     this.gpu.gpu.queue.copyExternalImageToTexture(
       { source: input.bitmap },
@@ -107,21 +91,19 @@ export class VgpuGlowRenderer {
     );
     const submitted = frame(this.gpu, (currentFrame) => {
       currentFrame.pass({ target: this.targets.scene, clear: CLEAR }, this.effects.linearize);
-      currentFrame.pass({ target: this.targets.bloom0, clear: CLEAR }, this.effects.extract);
-      currentFrame.pass({ target: this.targets.bloom1, clear: CLEAR }, this.effects.down1);
-      currentFrame.pass({ target: this.targets.bloom2, clear: CLEAR }, this.effects.down2);
-      currentFrame.pass({ target: this.targets.bloom3, clear: CLEAR }, this.effects.down3);
-      currentFrame.pass({ target: this.targets.bloom4, clear: CLEAR }, this.effects.down4);
-      currentFrame.pass({ target: this.targets.bloomPing0, clear: CLEAR }, this.effects.blurH0);
-      currentFrame.pass({ target: this.targets.bloom0, clear: CLEAR }, this.effects.blurV0);
-      currentFrame.pass({ target: this.targets.bloomPing1, clear: CLEAR }, this.effects.blurH1);
-      currentFrame.pass({ target: this.targets.bloom1, clear: CLEAR }, this.effects.blurV1);
-      currentFrame.pass({ target: this.targets.bloomPing2, clear: CLEAR }, this.effects.blurH2);
-      currentFrame.pass({ target: this.targets.bloom2, clear: CLEAR }, this.effects.blurV2);
-      currentFrame.pass({ target: this.targets.bloomPing3, clear: CLEAR }, this.effects.blurH3);
-      currentFrame.pass({ target: this.targets.bloom3, clear: CLEAR }, this.effects.blurV3);
-      currentFrame.pass({ target: this.targets.bloomPing4, clear: CLEAR }, this.effects.blurH4);
-      currentFrame.pass({ target: this.targets.bloom4, clear: CLEAR }, this.effects.blurV4);
+      currentFrame.pass({ target: this.targets.levels[0], clear: CLEAR }, this.effects.extract);
+      for (let index = 1; index < levelCount; index += 1) {
+        currentFrame.pass(
+          { target: this.targets.levels[index], clear: CLEAR },
+          this.effects.downsample[index - 1]
+        );
+      }
+      for (let index = levelCount - 2; index >= 0; index -= 1) {
+        currentFrame.pass(
+          { target: this.targets.accumulations[index], clear: CLEAR },
+          this.effects.upsample[index]
+        );
+      }
       currentFrame.pass({ target: this.targets.output, clear: CLEAR }, this.effects.composite);
     });
     await submitted.done;
@@ -134,99 +116,100 @@ export class VgpuGlowRenderer {
 
   destroy(): void {
     this.input.destroy();
-    for (const value of Object.values(this.targets)) destroyTarget(value);
+    destroyTarget(this.targets.scene);
+    destroyTarget(this.targets.output);
+    for (const value of this.targets.levels) destroyTarget(value);
+    for (const value of this.targets.accumulations) destroyTarget(value);
     this.gpu.dispose();
   }
 
-  private resize(width: number, height: number): void {
+  private resize(width: number, height: number, recipe: VgpuGlowRecipe): void {
     const full = normalizeSize(width, height);
-    const half = scaleSize(full, 2);
-    const quarter = scaleSize(full, 4);
-    const eighth = scaleSize(full, 8);
-    const sixteenth = scaleSize(full, 16);
-    const thirtySecond = scaleSize(full, 32);
     this.input.resize(full);
     this.targets.scene.resize(full);
     this.targets.output.resize(full);
-    this.targets.bloom0.resize(half);
-    this.targets.bloomPing0.resize(half);
-    this.targets.bloom1.resize(quarter);
-    this.targets.bloomPing1.resize(quarter);
-    this.targets.bloom2.resize(eighth);
-    this.targets.bloomPing2.resize(eighth);
-    this.targets.bloom3.resize(sixteenth);
-    this.targets.bloomPing3.resize(sixteenth);
-    this.targets.bloom4.resize(thirtySecond);
-    this.targets.bloomPing4.resize(thirtySecond);
+    for (let index = 0; index < MAX_SCATTER_LEVELS; index += 1) {
+      const level = recipe.scatterLevels[index];
+      const size = level ? scaleSize(full, level.divisor) : UNUSED_SIZE;
+      this.targets.levels[index].resize(size);
+      this.targets.accumulations[index].resize(
+        level && index < recipe.scatterLevels.length - 1 ? size : UNUSED_SIZE
+      );
+    }
   }
 
   private bind(recipe: VgpuGlowRecipe): void {
-    const t = this.targets;
-    const e = this.effects;
-    e.linearize.set({ source: this.input, linearSampler: this.linearSampler });
-    setBloom(e.extract, t.scene, t.scene.size, [0, 0], recipe, 0, this.linearSampler);
-    // 先建立未模糊的亮源金字塔，再分别模糊各层。这样每层都代表同一个高光种子的
-    // 独立散射尺度，不会把上一层的模糊反复卷进下一层，避免光晕发灰、发糊。
-    setBloom(e.down1, t.bloom0, t.bloom0.size, [0, 0], recipe, 1, this.linearSampler);
-    setBloom(e.down2, t.bloom1, t.bloom1.size, [0, 0], recipe, 1, this.linearSampler);
-    setBloom(e.down3, t.bloom2, t.bloom2.size, [0, 0], recipe, 1, this.linearSampler);
-    setBloom(e.down4, t.bloom3, t.bloom3.size, [0, 0], recipe, 1, this.linearSampler);
-    setBloom(e.blurH0, t.bloom0, t.bloom0.size, [1, 0], recipe, 2, this.linearSampler);
-    setBloom(e.blurV0, t.bloomPing0, t.bloom0.size, [0, 1], recipe, 2, this.linearSampler);
-    setBloom(e.blurH1, t.bloom1, t.bloom1.size, [1, 0], recipe, 2, this.linearSampler);
-    setBloom(e.blurV1, t.bloomPing1, t.bloom1.size, [0, 1], recipe, 2, this.linearSampler);
-    setBloom(e.blurH2, t.bloom2, t.bloom2.size, [1, 0], recipe, 2, this.linearSampler);
-    setBloom(e.blurV2, t.bloomPing2, t.bloom2.size, [0, 1], recipe, 2, this.linearSampler);
-    setBloom(e.blurH3, t.bloom3, t.bloom3.size, [1, 0], recipe, 2, this.linearSampler);
-    setBloom(e.blurV3, t.bloomPing3, t.bloom3.size, [0, 1], recipe, 2, this.linearSampler);
-    setBloom(e.blurH4, t.bloom4, t.bloom4.size, [1, 0], recipe, 2, this.linearSampler);
-    setBloom(e.blurV4, t.bloomPing4, t.bloom4.size, [0, 1], recipe, 2, this.linearSampler);
-    e.composite.set({
-      scene: t.scene,
-      bloomNear: t.bloom0,
-      bloomMedium: t.bloom1,
-      bloomFar: t.bloom2,
-      bloomWide: t.bloom3,
-      bloomAtmosphere: t.bloom4,
+    const targets = this.targets;
+    const effects = this.effects;
+    const levelCount = recipe.scatterLevels.length;
+    effects.linearize.set({ source: this.input, linearSampler: this.linearSampler });
+    setBloom(effects.extract, targets.scene, recipe, 0, this.linearSampler);
+    for (let index = 1; index < levelCount; index += 1) {
+      setBloom(
+        effects.downsample[index - 1],
+        targets.levels[index - 1],
+        recipe,
+        1,
+        this.linearSampler
+      );
+    }
+
+    let lowAccumulation = targets.levels[levelCount - 1];
+    for (let index = levelCount - 2; index >= 0; index -= 1) {
+      const firstMerge = index === levelCount - 2;
+      effects.upsample[index].set({
+        highLevel: targets.levels[index],
+        lowAccumulation,
+        linearSampler: this.linearSampler,
+        accumulate: {
+          highWeight: [...recipe.scatterLevels[index].weight, 0],
+          lowWeight: [
+            ...(firstMerge ? recipe.scatterLevels[index + 1].weight : UNIT_RGB),
+            0,
+          ],
+        },
+      });
+      lowAccumulation = targets.accumulations[index];
+    }
+
+    effects.composite.set({
+      scene: targets.scene,
+      bloomPyramid: targets.accumulations[0],
       linearSampler: this.linearSampler,
       composite: {
         params: [recipe.intensity, recipe.bloomExposure, recipe.bloomGamma, recipe.whiteHeat],
-        weights: recipe.levelWeights.slice(0, 4),
-        tail: [recipe.levelWeights[4], recipe.coreGain, 0, 0],
         tint: [...recipe.tintLinear, recipe.tintEnabled ? 1 : 0],
         optics: [
-          1 / Math.max(t.scene.size[0], 1),
-          1 / Math.max(t.scene.size[1], 1),
+          1 / Math.max(targets.scene.size[0], 1),
+          1 / Math.max(targets.scene.size[1], 1),
           recipe.chromaticOffsetPx,
           recipe.chromaticAberration,
         ],
         source: [recipe.threshold, recipe.knee, recipe.hdrBoost, 0],
+        core: [recipe.coreGain, recipe.coreRadiusPx, recipe.ditherAmount, 0],
       },
     });
   }
 
-  private async compile(): Promise<void> {
-    const t = this.targets;
-    const e = this.effects;
-    await Promise.all([
-      e.linearize.compile(t.scene),
-      e.extract.compile(t.bloom0),
-      e.blurH0.compile(t.bloomPing0),
-      e.blurV0.compile(t.bloom0),
-      e.down1.compile(t.bloom1),
-      e.blurH1.compile(t.bloomPing1),
-      e.blurV1.compile(t.bloom1),
-      e.down2.compile(t.bloom2),
-      e.blurH2.compile(t.bloomPing2),
-      e.blurV2.compile(t.bloom2),
-      e.down3.compile(t.bloom3),
-      e.blurH3.compile(t.bloomPing3),
-      e.blurV3.compile(t.bloom3),
-      e.down4.compile(t.bloom4),
-      e.blurH4.compile(t.bloomPing4),
-      e.blurV4.compile(t.bloom4),
-      e.composite.compile(t.output),
-    ]);
+  private async compile(levelCount: number): Promise<void> {
+    const jobs: Array<Promise<Effect>> = [];
+    if (!this.compiledBase) {
+      jobs.push(
+        this.effects.linearize.compile(this.targets.scene),
+        this.effects.extract.compile(this.targets.levels[0]),
+        this.effects.composite.compile(this.targets.output)
+      );
+    }
+    const firstUncompiledEdge = Math.max(0, this.compiledLevelCount - 1);
+    for (let index = firstUncompiledEdge; index < levelCount - 1; index += 1) {
+      jobs.push(
+        this.effects.downsample[index].compile(this.targets.levels[index + 1]),
+        this.effects.upsample[index].compile(this.targets.accumulations[index])
+      );
+    }
+    if (jobs.length > 0) await Promise.all(jobs);
+    this.compiledBase = true;
+    this.compiledLevelCount = Math.max(this.compiledLevelCount, levelCount);
   }
 }
 
@@ -234,16 +217,8 @@ function createTargets(gpu: Gpu): GlowTargets {
   const make = (): Target => target(gpu, { size: [1, 1], format: 'rgba16float' });
   return {
     scene: make(),
-    bloom0: make(),
-    bloomPing0: make(),
-    bloom1: make(),
-    bloomPing1: make(),
-    bloom2: make(),
-    bloomPing2: make(),
-    bloom3: make(),
-    bloomPing3: make(),
-    bloom4: make(),
-    bloomPing4: make(),
+    levels: Array.from({ length: MAX_SCATTER_LEVELS }, make),
+    accumulations: Array.from({ length: MAX_SCATTER_LEVELS }, make),
     output: make(),
   };
 }
@@ -251,44 +226,45 @@ function createTargets(gpu: Gpu): GlowTargets {
 function createEffects(gpu: Gpu): GlowEffects {
   return {
     linearize: effect(gpu, linearizeShaderSource, { label: '辉光 Pro 线性化' }),
-    extract: effect(gpu, bloomShaderSource, { label: '辉光 Pro 亮源重建' }),
-    blurH0: effect(gpu, bloomShaderSource, { label: '辉光 Pro 近场水平' }),
-    blurV0: effect(gpu, bloomShaderSource, { label: '辉光 Pro 近场垂直' }),
-    down1: effect(gpu, bloomShaderSource, { label: '辉光 Pro 中场降采样' }),
-    blurH1: effect(gpu, bloomShaderSource, { label: '辉光 Pro 中场水平' }),
-    blurV1: effect(gpu, bloomShaderSource, { label: '辉光 Pro 中场垂直' }),
-    down2: effect(gpu, bloomShaderSource, { label: '辉光 Pro 远场降采样' }),
-    blurH2: effect(gpu, bloomShaderSource, { label: '辉光 Pro 远场水平' }),
-    blurV2: effect(gpu, bloomShaderSource, { label: '辉光 Pro 远场垂直' }),
-    down3: effect(gpu, bloomShaderSource, { label: '辉光 Pro 宽场降采样' }),
-    blurH3: effect(gpu, bloomShaderSource, { label: '辉光 Pro 宽场水平' }),
-    blurV3: effect(gpu, bloomShaderSource, { label: '辉光 Pro 宽场垂直' }),
-    down4: effect(gpu, bloomShaderSource, { label: '辉光 Pro 空气层降采样' }),
-    blurH4: effect(gpu, bloomShaderSource, { label: '辉光 Pro 空气层水平' }),
-    blurV4: effect(gpu, bloomShaderSource, { label: '辉光 Pro 空气层垂直' }),
-    composite: effect(gpu, compositeShaderSource, { label: '辉光 Pro 合成' }),
+    extract: effect(gpu, bloomShaderSource, { label: '辉光 Pro 亮源提取' }),
+    downsample: Array.from({ length: MAX_SCATTER_LEVELS - 1 }, (_, index) =>
+      effect(gpu, bloomShaderSource, { label: `辉光 Pro 散射降采样 ${index + 1}` })
+    ),
+    upsample: Array.from({ length: MAX_SCATTER_LEVELS - 1 }, (_, index) =>
+      effect(gpu, upsampleShaderSource, { label: `辉光 Pro 散射重建 ${index + 1}` })
+    ),
+    composite: effect(gpu, compositeShaderSource, { label: '辉光 Pro 光学合成' }),
   };
 }
 
 function setBloom(
   pass: Effect,
   source: Target,
-  sourceSize: readonly [number, number],
-  direction: readonly [number, number],
   recipe: VgpuGlowRecipe,
-  mode: 0 | 1 | 2,
+  mode: 0 | 1,
   linearSampler: ReturnType<typeof sampler>
 ): void {
   pass.set({
     source,
     linearSampler,
     bloom: {
-      sourceSize,
-      direction,
-      params: [recipe.threshold, recipe.knee, recipe.sigma, mode],
-      glow: [recipe.hdrBoost, 0, 0, 0],
+      params: [recipe.threshold, recipe.knee, recipe.hdrBoost, mode],
     },
   });
+}
+
+function assertScatterLevels(recipe: VgpuGlowRecipe): number {
+  const count = recipe.scatterLevels.length;
+  if (count < 2 || count > MAX_SCATTER_LEVELS) {
+    throw new Error(`VGPU 辉光散射层数无效：${count}`);
+  }
+  for (let index = 0; index < count; index += 1) {
+    const expectedDivisor = 2 ** (index + 1);
+    if (recipe.scatterLevels[index].divisor !== expectedDivisor) {
+      throw new Error(`VGPU 辉光散射层 ${index} 必须使用连续 2× mip`);
+    }
+  }
+  return count;
 }
 
 function normalizeSize(width: number, height: number): readonly [number, number] {
