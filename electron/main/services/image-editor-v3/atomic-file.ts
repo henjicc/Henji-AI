@@ -63,12 +63,14 @@ export async function replaceFileAtomically(
   await operations.rename(targetPath, backupPath)
   try {
     await operations.rename(stagedPath, targetPath)
-    await operations.remove(backupPath)
-    await operations.syncDirectory?.(path.dirname(targetPath))
   } catch (error) {
     await operations.rename(backupPath, targetPath).catch(() => undefined)
     throw error
   }
+  // 新目标已经发布后，旧备份清理失败不能再被当成发布失败，更不能尝试用旧文件
+  // 覆盖已发布目标。残留 backup 可由后续维护清理，目标文件仍是唯一权威结果。
+  await operations.remove(backupPath).catch(() => undefined)
+  await operations.syncDirectory?.(path.dirname(targetPath))
 }
 
 export async function writeBufferAtomically(
