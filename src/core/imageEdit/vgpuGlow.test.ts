@@ -21,16 +21,16 @@ import {
   resolveSoftChannelPeak,
   type VgpuGlowRecipe,
 } from './index';
-
 const UHD = { width: 3840, height: 2160 } as const;
-
 type Rgba = readonly [number, number, number, number];
 type Rgb = readonly [number, number, number];
-
+const DOWNSAMPLE_13 = [[-2, -2, 1 / 32], [0, -2, 1 / 16], [2, -2, 1 / 32], [-2, 0, 1 / 16], [0, 0, 1 / 8], [2, 0, 1 / 16], [-2, 2, 1 / 32], [0, 2, 1 / 16], [2, 2, 1 / 32], [-1, -1, 1 / 8], [1, -1, 1 / 8], [-1, 1, 1 / 8], [1, 1, 1 / 8]] as const;
+// 13-tap 二维核的精确单轴边缘分布；足以完整追踪质量和一阶矩。
+const DOWNSAMPLE_TAPS = [[-2, 1 / 8], [-1, 1 / 4], [0, 1 / 4], [1, 1 / 4], [2, 1 / 8]] as const;
+const TENT_TAPS = [[-1, 0.25], [0, 0.5], [1, 0.25]] as const;
 function screen(base: number, glow: number): number {
   return base + glow - base * glow;
 }
-
 /** 与 WGSL 相同的 W3C source-over + screen 参考实现，用来钉住透明合成不变量。 */
 function compositeGlowReference(base: Rgba, glowPremultiplied: Rgb): Rgba {
   const baseAlpha = base[3];
@@ -54,14 +54,12 @@ function compositeGlowReference(base: Rgba, glowPremultiplied: Rgb): Rgba {
     outAlpha,
   ];
 }
-
 function weightedMeanFraction(recipe: VgpuGlowRecipe, channel = 1): number {
   return recipe.scatterLevels.reduce(
     (sum, level) => sum + level.weight[channel] * level.effectiveSigmaPx,
     0
   ) / recipe.image.referenceDimension;
 }
-
 /** 单位能量二维 Gaussian 混合的径向质心：E[r] = σ√(π/2)。 */
 function radialCentroidFraction(recipe: VgpuGlowRecipe, channel = 1): number {
   return recipe.scatterLevels.reduce(
@@ -70,7 +68,6 @@ function radialCentroidFraction(recipe: VgpuGlowRecipe, channel = 1): number {
     0
   ) / recipe.image.referenceDimension;
 }
-
 function amplitude(recipe: VgpuGlowRecipe, radiusFraction: number, channel = 1): number {
   const radiusPixels = radiusFraction * recipe.image.referenceDimension;
   return recipe.scatterLevels.reduce((sum, level) => {
@@ -80,17 +77,48 @@ function amplitude(recipe: VgpuGlowRecipe, radiusFraction: number, channel = 1):
       / (2 * Math.PI * sigma * sigma);
   }, 0) * recipe.image.referenceDimension * recipe.image.referenceDimension;
 }
-
+function sampleLine(source: readonly number[], coordinate: number): number {
+  if (coordinate < -0.5 || coordinate > source.length - 0.5) return 0;
+  const left = Math.floor(coordinate), amount = coordinate - left;
+  const start = source[Math.min(source.length - 1, Math.max(0, left))], end = source[Math.min(source.length - 1, Math.max(0, left + 1))];
+  return start * (1 - amount) + end * amount;
+}
+function resampleLine(source: readonly number[], size: number, scale: number, taps: ReadonlyArray<readonly [number, number]>) {
+  return Array.from({ length: size }, (_, index) => taps.reduce((sum, [offset, weight]) =>
+    sum + sampleLine(source, (index + 0.5) / scale - 0.5 + offset) * weight, 0));
+}
+function impulsePyramid(size: number, position: number): number[][] {
+  let current = Array.from({ length: size }, (_, index) => Number(index === position));
+  const levels = Array.from({ length: 5 }, () => (current = resampleLine(current, Math.ceil(current.length / 2), 0.5, DOWNSAMPLE_TAPS)));
+  return levels.map((level, index) => {
+    let reconstructed = level;
+    for (let target = index - 1; target >= 0; target -= 1) reconstructed = resampleLine(reconstructed, levels[target].length, 2, TENT_TAPS);
+    return resampleLine(reconstructed, size, 2, [[0, 1]]);
+  });
+}
+function impulseMetrics(values: readonly number[], position: number, scale = 1) {
+  const mass = values.reduce((sum, value) => sum + value, 0);
+  const centroid = values.reduce((sum, value, index) => sum + ((index + 0.5) * scale - 0.5) * value, 0) / mass;
+  return { energy: mass * scale, offset: centroid - position };
+}
+function downsample13Metrics(size: number, x: number, y: number) {
+  const targetSize = Math.ceil(size / 2), centerX = Math.floor(x / 2), centerY = Math.floor(y / 2);
+  let mass = 0, momentX = 0, momentY = 0;
+  for (let row = Math.max(0, centerY - 3); row <= Math.min(targetSize - 1, centerY + 3); row += 1) for (let column = Math.max(0, centerX - 3); column <= Math.min(targetSize - 1, centerX + 3); column += 1) {
+    const value = DOWNSAMPLE_13.reduce((sum, [offsetX, offsetY, weight]) => sum + Math.max(0, 1 - Math.abs(2 * column + 0.5 + offsetX - x)) * Math.max(0, 1 - Math.abs(2 * row + 0.5 + offsetY - y)) * weight, 0);
+    mass += value; momentX += value * (2 * column + 0.5); momentY += value * (2 * row + 0.5);
+  }
+  return { energy: mass * 4, offsetX: momentX / mass - x, offsetY: momentY / mass - y };
+}
 describe('VGPU 辉光操作契约', () => {
   it('提供三种 core/skirt 光感，并把总能量归一到连续散射金字塔', () => {
     const natural = compileVgpuGlowRecipe(applyVgpuGlowLook('natural'), UHD);
     const dreamy = compileVgpuGlowRecipe(applyVgpuGlowLook('dreamy'), UHD);
     const neon = compileVgpuGlowRecipe(applyVgpuGlowLook('neon'), UHD);
-
     expect(weightedMeanFraction(dreamy)).toBeGreaterThan(weightedMeanFraction(natural));
     expect(neon.sourceGain).toBeGreaterThan(dreamy.sourceGain);
     for (const recipe of [natural, dreamy, neon]) {
-      expect(recipe.schemaVersion).toBe(11);
+      expect(recipe.schemaVersion).toBe(12);
       expect(recipe.scatterLevels.length).toBeGreaterThanOrEqual(4);
       expect(recipe.scatterLevels.length).toBeLessThanOrEqual(12);
       expect(recipe.scatterLevels[0].divisor).toBe(2);
@@ -115,7 +143,6 @@ describe('VGPU 辉光操作契约', () => {
       expect(recipe.chromaticAberration).toBe(0);
     }
   });
-
   it('把发光半径、强度、着色与 RGB 分离编译成彼此独立的光学量', () => {
     const defaults = createDefaultVgpuGlowOperationParams();
     const compact = compileVgpuGlowRecipe({
@@ -134,7 +161,6 @@ describe('VGPU 辉光操作契约', () => {
       tintColor: IMAGE_EDITOR_PRESET_COLORS[1],
       chromaticAberration: 1,
     }, UHD);
-
     expect(weightedMeanFraction(wide)).toBeGreaterThan(weightedMeanFraction(compact));
     expect(wide.intensity).toBe(compact.intensity);
     expect(wide.chromaticOffsetPx).toBeGreaterThan(5);
@@ -145,35 +171,30 @@ describe('VGPU 辉光操作契约', () => {
     expect(compact.tintLinear[1]).toBeGreaterThan(0.1);
     expect(compact.tintLinear[2]).toBe(0);
   });
-
   it('强度高段显著扩展动态范围，同时保留低段细调能力', () => {
     const defaults = createDefaultVgpuGlowOperationParams();
     const low = compileVgpuGlowRecipe({ ...defaults, intensity: 0.1 }, UHD);
     const middle = compileVgpuGlowRecipe({ ...defaults, intensity: 0.5 }, UHD);
     const maximum = compileVgpuGlowRecipe({ ...defaults, intensity: 1 }, UHD);
-
     expect(low.intensity).toBeGreaterThan(0);
     expect(low.intensity).toBeLessThan(middle.intensity);
     expect(middle.intensity).toBeLessThan(maximum.intensity);
     expect(maximum.intensity / middle.intensity).toBeGreaterThan(3);
     expect(maximum.intensity).toBeGreaterThan(2.5);
   });
-
   it('用真实 GPU 核尺度构造连续正值 PSF，中远场没有 octave 肩部', () => {
     const recipe = compileVgpuGlowRecipe({
       ...createDefaultVgpuGlowOperationParams(),
       radius: 1,
     }, UHD);
-    expect(effectiveScatterSigmaPx(2)).toBeCloseTo(Math.sqrt(2.75), 10);
-    expect(effectiveScatterSigmaPx(4)).toBeCloseTo(Math.sqrt(20.75), 10);
+    expect(effectiveScatterSigmaPx(2)).toBeCloseTo(Math.sqrt(2.5), 10);
+    expect(effectiveScatterSigmaPx(4)).toBeCloseTo(Math.sqrt(20.5), 10);
     expect(effectiveScatterSigmaPx(2048) / 2048).toBeCloseTo(Math.sqrt(1.5), 5);
-
     for (const level of recipe.scatterLevels) {
       expect(level.weight.every((weight) => Number.isFinite(weight) && weight >= 0)).toBe(true);
       expect(Number.isFinite(level.whiteCoreWeight)).toBe(true);
       expect(level.whiteCoreWeight).toBeGreaterThanOrEqual(0);
     }
-
     // 正值 Gaussian basis 的混合必须从中心连续单调衰减，不能出现一圈独立亮边。
     const monotonicFractions = Array.from({ length: 257 }, (_, index) => index / 512);
     const radialSamples = monotonicFractions.map((fraction) => amplitude(recipe, fraction));
@@ -182,7 +203,6 @@ describe('VGPU 辉光操作契约', () => {
       expect(Number.isFinite(radialSamples[index])).toBe(true);
       expect(radialSamples[index]).toBeGreaterThan(0);
     }
-
     // 紧致 core 允许有限平顶；离开 core 后，应平滑进入 Moffat 中场与反平方远场。
     const fractions = [8, 16, 32, 64, 128, 256, 512, 1024]
       .map((value) => value / 3840);
@@ -206,7 +226,24 @@ describe('VGPU 辉光操作契约', () => {
       ).toBeLessThan(0.35);
     }
   });
-
+  it('用固定半相位坐标让奇偶尺寸、位置与四种像素相位保持稳定', () => {
+    for (const size of [511, 512, 513]) for (const fraction of [0.25, 0.5, 0.75]) {
+      const anchor = Math.floor(size * fraction);
+      for (const [x, y] of [[anchor, anchor], [anchor + 1, anchor], [anchor, anchor + 1], [anchor + 1, anchor + 1]]) {
+        const single = downsample13Metrics(size, x, y);
+        expect(single.energy, `${size}px ${fraction} single energy`).toBeCloseTo(1, 12);
+        expect(single.offsetX, `${size}px ${fraction} single X`).toBeCloseTo(0, 12);
+        expect(single.offsetY, `${size}px ${fraction} single Y`).toBeCloseTo(0, 12);
+        for (const [axis, position] of [['X', x], ['Y', y]] as const) {
+          const levels = impulsePyramid(size, position).map((values) => impulseMetrics(values, position));
+          for (let level = 0; level < 5; level += 1) {
+            expect(Math.abs(1 - levels[level].energy), `${size}px ${fraction} L${level} ${axis} energy`).toBeLessThan(0.00025);
+            expect(Math.abs(levels[level].offset), `${size}px ${fraction} L${level} ${axis} centroid`).toBeLessThan(0.031);
+          }
+        }
+      }
+    }
+  });
   it('用有限核心目标保留反立方 1/σ 与反平方 octave 等权关系', () => {
     const source = compileVgpuGlowRecipe({
       ...createDefaultVgpuGlowOperationParams(),
@@ -229,7 +266,6 @@ describe('VGPU 辉光操作契约', () => {
     }, UHD.width, UHD.height);
     const inverseCube = isolate(1, 0);
     const inverseSquare = isolate(0, 1);
-
     // 跳过有限核心，且留在远场截止包络明显生效之前。相邻 σ 约翻倍，
     // 所以反立方的每 octave 能量约减半，反平方则约保持不变。
     for (const index of [4, 5, 6]) {
@@ -244,11 +280,9 @@ describe('VGPU 辉光操作契约', () => {
       expect(squareRatio).toBeLessThan(1.02);
     }
   });
-
   it('预览重基准后保持归一化光晕尺寸、径向亮度和逐通道总能量', () => {
     const source = compileVgpuGlowRecipe(createDefaultVgpuGlowOperationParams(), UHD);
     const preview = rebaseVgpuGlowRecipeForScale(source, 1885, 1060);
-
     expect(weightedMeanFraction(preview)).toBeCloseTo(weightedMeanFraction(source), 2);
     expect(radialCentroidFraction(preview)).toBeCloseTo(radialCentroidFraction(source), 2);
     for (const fraction of [0.005, 0.02, 0.08, 0.2]) {
@@ -265,13 +299,11 @@ describe('VGPU 辉光操作契约', () => {
       )).toBeCloseTo(1, 10);
     }
   });
-
   it('RGB 分离只编译为空间位移，不再同时扭曲三通道 PSF', () => {
     const recipe = compileVgpuGlowRecipe({
       ...createDefaultVgpuGlowOperationParams(),
       chromaticAberration: 1,
     }, UHD);
-
     expect(recipe.chromaticOffsetPx).toBeGreaterThan(0);
     for (const level of recipe.scatterLevels) {
       expect(level.weight[0]).toBeCloseTo(level.weight[1], 12);
@@ -284,7 +316,6 @@ describe('VGPU 辉光操作契约', () => {
       )).toBeCloseTo(1, 10);
     }
   });
-
   it('用有限斜率 SDR emissive prior 重建辐射，不再放大 8-bit 顶值量化', () => {
     const threshold = 0.12;
     const knee = 0.07;
@@ -309,6 +340,12 @@ describe('VGPU 辉光操作契约', () => {
       maximumRadiance
     );
     expect(samples.at(-1)! / almostWhite).toBeLessThan(1.015);
+    const strict = compileVgpuGlowRecipe({
+      ...applyVgpuGlowLook('dreamy'), sourceThreshold: 1,
+    }, UHD);
+    const top = (value: number) => reconstructVirtualRadiance(value,
+      strict.sourceThresholdDisplay, strict.sourceKneeDisplay, strict.sourceMaximumRadiance);
+    expect(top(1) / top(254 / 255)).toBeLessThan(1.015);
   });
 
   it('以高亮光谱覆盖率提取亮源，让青色到暖色的真实渐变保持连续能量', () => {
@@ -430,12 +467,21 @@ describe('VGPU 辉光操作契约', () => {
     expect(bloomShaderSource).toContain('return vec4f(coloredEmitter, whiteCore)');
     expect(bloomShaderSource).toContain('extractEmitter(color.rgb) * color.a');
     expect(bloomShaderSource).toContain('insideImage(sampleUv)');
+    expect(bloomShaderSource).toContain('@fragment fn fs_main(@builtin(position) position: vec4f)');
+    expect(bloomShaderSource).toContain('let sourceUv = position.xy * 2.0 / sourceDimensions');
+    expect(bloomShaderSource).toContain('return downsample13(sourceUv, bloom.params.w >= 0.0)');
+    expect(upsampleShaderSource).toContain('let highUv = position.xy / highDimensions');
+    expect(upsampleShaderSource).toContain('let lowUv = position.xy / (2.0 * lowDimensions)');
+    expect(upsampleShaderSource).toContain('let low = tentUpsample(lowUv)');
     expect(upsampleShaderSource).toContain(
       'return high * accumulate.highWeight + low * accumulate.lowWeight'
     );
     expect(compositeShaderSource).not.toContain('softCore');
     expect(compositeShaderSource).not.toContain('toneBloom');
     expect(compositeShaderSource).not.toContain('applyWhiteHeat');
+    expect(compositeShaderSource).toContain('let sceneUv = position.xy / dimensions');
+    expect(compositeShaderSource).toContain('mappedSourceUv * sourceSize / (2.0 * bloomSize)');
+    expect(compositeShaderSource).toContain('all(mappedSourceUv >= vec2f(0.0))');
     expect(compositeShaderSource).toContain('fn sampleDiffuseBloom(uv: vec2f, blurPx: f32)');
     expect(compositeShaderSource).toContain(
       'centered + (separated - softCentered) * composite.optics.w'

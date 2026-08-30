@@ -34,8 +34,12 @@ fn tentUpsample(uv: vec2f) -> vec4f {
     + e * 0.25;
 }
 
-@fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
-  let high = textureSampleLevel(highLevel, linearSampler, uv, 0.0);
-  let low = tentUpsample(uv);
+@fragment fn fs_main(@builtin(position) position: vec4f) -> @location(0) vec4f {
+  let highDimensions = max(vec2f(textureDimensions(highLevel)), vec2f(1.0));
+  let lowDimensions = max(vec2f(textureDimensions(lowAccumulation)), vec2f(1.0));
+  let highUv = position.xy / highDimensions;
+  let lowUv = position.xy / (2.0 * lowDimensions);
+  let high = textureSampleLevel(highLevel, linearSampler, highUv, 0.0);
+  let low = tentUpsample(lowUv);
   return high * accumulate.highWeight + low * accumulate.lowWeight;
 }

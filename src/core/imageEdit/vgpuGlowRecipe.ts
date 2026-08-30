@@ -1,6 +1,6 @@
 import type { VgpuGlowOperationParams } from './vgpuGlowParams';
 
-export const VGPU_GLOW_RECIPE_VERSION = 11 as const;
+export const VGPU_GLOW_RECIPE_VERSION = 12 as const;
 
 /**
  * SDR 发射源估计的公共常量。所有值都与 vgpuGlowBloom.wgsl 保持一致，CPU 参考测试
@@ -10,11 +10,13 @@ export const VGPU_GLOW_SOFT_PEAK_TAU = 0.06;
 export const VGPU_GLOW_SPECTRAL_CHROMA_START = 0.025;
 export const VGPU_GLOW_SPECTRAL_CHROMA_END = 0.1;
 export const VGPU_GLOW_LDR_EMISSION_GAMMA = 1.35;
+/** 至少保留约 46 个 8-bit code value 的肩部，避免最高门槛把 254→255 放大成亮点。 */
+export const VGPU_GLOW_HDR_SHOULDER_MAX_START = 0.82;
 
 export interface VgpuGlowScatterLevel {
   /** 相对全分辨率的连续 2× 降采样倍数。 */
   divisor: number;
-  /** 当前 13-tap + progressive tent 链在全分辨率像素中的实测等效标准差。 */
+  /** 当前 13-tap + 坐标对齐的 progressive tent 链在全分辨率像素中的精确等效标准差。 */
   effectiveSigmaPx: number;
   /** 逐通道归一化能量；色差为零时三个通道严格相同。 */
   weight: readonly [number, number, number];
@@ -217,12 +219,13 @@ export function rebaseVgpuGlowRecipeForScale(
 }
 
 /**
- * 当前 GPU 链的单轴方差：13-tap 连续降采样、逐层 3×3 tent 重建与最终双线性放大
- * 合并后为 1.5d² - 3.25。这个量来自离散脉冲响应测量；d=2 时 σ≈1.658px，随后
+ * 当前 GPU 链的单轴方差：固定 half-phase 的 13-tap 降采样、坐标对齐的 3×3 tent
+ * 重建与最终双线性放大合并后为 1.5d² - 3.5。这个量来自精确离散脉冲响应；d=2 时
+ * σ≈1.581px，随后
  * 渐近于 1.224745d。所有 PSF 计算必须使用它，不能再把 d 当成 σ。
  */
 export function effectiveScatterSigmaPx(divisor: number): number {
-  return Math.sqrt(Math.max(0.25, 1.5 * divisor * divisor - 3.25));
+  return Math.sqrt(Math.max(0.25, 1.5 * divisor * divisor - 3.5));
 }
 
 function compileOpticalScatterLevels(
@@ -351,7 +354,10 @@ export function reconstructVirtualRadiance(
   maximumRadiance: number
 ): number {
   const value = clamp(displayValue, 0, 1);
-  const shoulderStart = clamp(thresholdDisplay + kneeDisplay, 0, 0.9999);
+  const shoulderStart = Math.min(
+    clamp(thresholdDisplay + kneeDisplay, 0, 0.9999),
+    VGPU_GLOW_HDR_SHOULDER_MAX_START
+  );
   const headroom = smootherstep(
     shoulderStart,
     1,

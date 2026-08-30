@@ -74,6 +74,7 @@ export class WorkerWebGpuRuntimeBackend {
   }
 
   getMaxTextureDimension(state: WorkerWebGpuState): number | undefined { return state.adapter.limits?.maxTextureDimension2D }
+  trimVgpuGlowWorkingSet(state: WorkerWebGpuState): void { state.vgpuGlowRenderer?.trimWorkingSet() }
 
   async renderBaselineBitmap(
     state: WorkerWebGpuState, decoded: ImageBitmap, width: number, height: number

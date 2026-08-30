@@ -7,6 +7,8 @@ struct Composite {
   finish: vec4f,
   // global scatter offset XY, scale XY; [0, 0, 1, 1] means local/full-frame scatter
   scatterRegion: vec4f,
+  // scatter 源图尺寸 XY，bloom level-0 尺寸 XY
+  scatterGeometry: vec4f,
 }
 
 @group(0) @binding(0) var<uniform> composite: Composite;
@@ -15,8 +17,16 @@ struct Composite {
 @group(0) @binding(3) var linearSampler: sampler;
 
 fn sampleBloom(uv: vec2f) -> vec4f {
-  let scatterUv = composite.scatterRegion.xy + uv * composite.scatterRegion.zw;
-  return textureSampleLevel(bloomPyramid, linearSampler, scatterUv, 0.0);
+  let mappedSourceUv = composite.scatterRegion.xy + uv * composite.scatterRegion.zw;
+  let sourceSize = max(composite.scatterGeometry.xy, vec2f(1.0));
+  let bloomSize = max(composite.scatterGeometry.zw, vec2f(1.0));
+  let scatterUv = mappedSourceUv * sourceSize / (2.0 * bloomSize);
+  let inside = select(
+    0.0,
+    1.0,
+    all(mappedSourceUv >= vec2f(0.0)) && all(mappedSourceUv <= vec2f(1.0))
+  );
+  return textureSampleLevel(bloomPyramid, linearSampler, scatterUv, 0.0) * inside;
 }
 
 /**
@@ -77,9 +87,11 @@ fn compositeGlow(base: vec4f, glowPremultiplied: vec3f) -> vec4f {
   return vec4f(outPremultiplied / max(outAlpha, 0.000001), outAlpha);
 }
 
-@fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
-  let base = textureSampleLevel(scene, linearSampler, uv, 0.0);
-  let centeredBloom = sampleBloom(uv);
+@fragment fn fs_main(@builtin(position) position: vec4f) -> @location(0) vec4f {
+  let dimensions = max(vec2f(textureDimensions(scene)), vec2f(1.0));
+  let sceneUv = position.xy / dimensions;
+  let base = textureSampleLevel(scene, linearSampler, sceneUv, 0.0);
+  let centeredBloom = sampleBloom(sceneUv);
   let centered = max(centeredBloom.rgb, vec3f(0.0));
   let chromaOffset = vec2f(composite.optics.x * composite.optics.z, 0.0);
   var diffuse = centered;
@@ -88,9 +100,9 @@ fn compositeGlow(base: vec4f, glowPremultiplied: vec3f) -> vec4f {
   // 原位，只有外围光场产生 Glitch RGB 分离，不会出现三份彩色文字/描边。
   if (composite.optics.w > 0.0001) {
     let separationBlurPx = 1.25 + composite.optics.z * 0.55;
-    let softCentered = max(sampleDiffuseBloom(uv, separationBlurPx), vec3f(0.0));
-    let red = max(sampleDiffuseBloom(uv + chromaOffset, separationBlurPx), vec3f(0.0));
-    let blue = max(sampleDiffuseBloom(uv - chromaOffset, separationBlurPx), vec3f(0.0));
+    let softCentered = max(sampleDiffuseBloom(sceneUv, separationBlurPx), vec3f(0.0));
+    let red = max(sampleDiffuseBloom(sceneUv + chromaOffset, separationBlurPx), vec3f(0.0));
+    let blue = max(sampleDiffuseBloom(sceneUv - chromaOffset, separationBlurPx), vec3f(0.0));
     let separated = vec3f(red.r, softCentered.g, blue.b);
     diffuse = max(
       centered + (separated - softCentered) * composite.optics.w,
@@ -116,9 +128,8 @@ fn compositeGlow(base: vec4f, glowPremultiplied: vec3f) -> vec4f {
   var response = 1.0 - exp(-emittedPeak);
 
   // 抖动只作用于标量响应，RGB 方向保持不变；不会给未发光区域或原图纹理增加噪声。
-  let dimensions = max(vec2f(textureDimensions(scene)), vec2f(1.0));
   let presence = smoothstep(0.001, 0.04, response);
-  let dither = (hash12(floor(uv * dimensions)) - 0.5) * composite.finish.x * presence;
+  let dither = (hash12(floor(sceneUv * dimensions)) - 0.5) * composite.finish.x * presence;
   response = clamp(response + dither, 0.0, 1.0);
   let glowLayer = emittedDirection * response;
 

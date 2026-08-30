@@ -34,6 +34,7 @@ interface GlowEffects {
  */
 export interface VgpuGlowGlobalScatter {
   readonly target: Target;
+  readonly sourceSize: readonly [number, number];
   release(): void;
 }
 
@@ -58,6 +59,7 @@ export class VgpuGlowRenderer {
   private compiledBase = false;
   private compiledLevelCount = 0;
   private vgpuError: Error | null = null;
+  private destroyed = false;
 
   private constructor(private readonly gpu: Gpu) {
     this.input = gpu.device.createTexture({
@@ -104,7 +106,8 @@ export class VgpuGlowRenderer {
       this.bindComposite(
         input.recipe,
         input.scatter.global.target,
-        input.scatter.region
+        input.scatter.region,
+        input.scatter.global.sourceSize
       );
     } else {
       this.resize(input.width, input.height, input.recipe);
@@ -177,15 +180,33 @@ export class VgpuGlowRenderer {
     let released = false;
     return {
       target: this.targets.globalBloom,
+      sourceSize: [input.width, input.height],
       release: () => {
         if (released) return;
         released = true;
+        if (this.destroyed) return;
         this.targets.globalBloom.resize(UNUSED_SIZE);
       },
     };
   }
 
+  /**
+   * 释放与上一张图片尺寸相关的工作纹理，但保留 effect、pipeline 与 GPU context。
+   * Target.resize 会按 VGPU 官方契约重建 attachment，因此下次启用时仍可直接复用。
+   */
+  trimWorkingSet(): void {
+    if (this.destroyed) return;
+    this.input.resize(UNUSED_SIZE);
+    this.targets.scene.resize(UNUSED_SIZE);
+    this.targets.globalBloom.resize(UNUSED_SIZE);
+    this.targets.output.resize(UNUSED_SIZE);
+    for (const value of this.targets.levels) value.resize(UNUSED_SIZE);
+    for (const value of this.targets.accumulations) value.resize(UNUSED_SIZE);
+  }
+
   destroy(): void {
+    if (this.destroyed) return;
+    this.destroyed = true;
     this.input.destroy();
     destroyTarget(this.targets.scene);
     destroyTarget(this.targets.globalBloom);
@@ -252,13 +273,19 @@ export class VgpuGlowRenderer {
       lowAccumulation = targets.accumulations[index];
     }
 
-    this.bindComposite(recipe, targets.accumulations[0], [0, 0, 1, 1]);
+    this.bindComposite(
+      recipe,
+      targets.accumulations[0],
+      [0, 0, 1, 1],
+      targets.scene.size
+    );
   }
 
   private bindComposite(
     recipe: VgpuGlowRecipe,
     bloomPyramid: Target,
-    scatterRegion: readonly [number, number, number, number]
+    scatterRegion: readonly [number, number, number, number],
+    scatterSourceSize: readonly [number, number]
   ): void {
     const effects = this.effects;
     const targets = this.targets;
@@ -277,6 +304,12 @@ export class VgpuGlowRenderer {
         ],
         finish: [recipe.ditherAmount, 0, 0, 0],
         scatterRegion: [...scatterRegion],
+        scatterGeometry: [
+          scatterSourceSize[0],
+          scatterSourceSize[1],
+          bloomPyramid.size[0],
+          bloomPyramid.size[1],
+        ],
       },
     });
   }

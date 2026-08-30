@@ -15,6 +15,7 @@ const SOFT_PEAK_TAU: f32 = 0.06;
 const SPECTRAL_CHROMA_START: f32 = 0.025;
 const SPECTRAL_CHROMA_END: f32 = 0.10;
 const LDR_EMISSION_GAMMA: f32 = 1.35;
+const HDR_SHOULDER_MAX_START: f32 = 0.82;
 const WHITE_HEAT_START: f32 = 0.78;
 const WHITE_HEAT_END: f32 = 0.995;
 
@@ -80,7 +81,10 @@ fn emissionConfidence(displayValue: f32) -> f32 {
  * 一阶导数趋近于零，因此 JPEG 量化不会被放大成孤立热点。
  */
 fn virtualRadianceGain(displayValue: f32) -> f32 {
-  let shoulderStart = clamp(bloom.params.x + bloom.params.y, 0.0, 0.9999);
+  let shoulderStart = min(
+    clamp(bloom.params.x + bloom.params.y, 0.0, 0.9999),
+    HDR_SHOULDER_MAX_START
+  );
   let headroom = smootherstep01(
     (displayValue - shoulderStart) / max(1.0 - shoulderStart, 0.0001)
   );
@@ -178,6 +182,8 @@ fn downsample13(uv: vec2f, extract: bool) -> vec4f {
     + (j + k + l + m) * 0.125;
 }
 
-@fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
-  return downsample13(uv, bloom.params.w >= 0.0);
+@fragment fn fs_main(@builtin(position) position: vec4f) -> @location(0) vec4f {
+  let sourceDimensions = max(vec2f(textureDimensions(source)), vec2f(1.0));
+  let sourceUv = position.xy * 2.0 / sourceDimensions;
+  return downsample13(sourceUv, bloom.params.w >= 0.0);
 }

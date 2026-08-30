@@ -67,6 +67,7 @@ export class WorkerWebGpuRuntime {
     isCancelled?: () => boolean
   ): Promise<{ bitmap: ImageBitmap; width: number; height: number }> {
     const state = await this.backend.ensureState()
+    if (!vgpuGlowRecipe) this.backend.trimVgpuGlowWorkingSet(state)
     const decoded = await this.acquireSource(source)
     try {
       // 预览的所有 GPU 输入都必须先落在预算内。仅缩小最终 Canvas 会让超大原图仍被
@@ -139,6 +140,7 @@ export class WorkerWebGpuRuntime {
     options: WebGpuExportOptions
   ): Promise<{ bytes: Uint8Array; width: number; height: number }> {
     const state = await this.backend.ensureState()
+    if (!options.vgpuGlowRecipe) this.backend.trimVgpuGlowWorkingSet(state)
     const decoded = await this.acquireSource(source)
     try {
       const composed = this.applyOrientation(decoded.bitmap, options.composition)
@@ -319,102 +321,114 @@ export class WorkerWebGpuRuntime {
     const canvas = new OffscreenCanvas(width, height)
     const context = canvas.getContext('2d')
     if (!context) throw new Error('OffscreenCanvas 2D context 不可用')
-    const textureLimit = this.backend.getMaxTextureDimension(state)
-    const singlePass = canRenderVgpuGlowInSinglePass(width, height, textureLimit)
-    if (singlePass) {
-      const rendered = await this.backend.renderVgpuGlowBitmap(
-        state,
-        bitmap,
-        width,
-        height,
-        recipe,
-        options.isCancelled
-      )
-      try {
-        context.drawImage(rendered, 0, 0)
-      } finally {
-        rendered.close()
-      }
-      options.onProgress(plan.totalTiles, plan.totalTiles)
-    } else {
-      const globalBitmap = await createImageBitmap(bitmap, {
-        resizeWidth: plan.globalScatterWidth,
-        resizeHeight: plan.globalScatterHeight,
-        resizeQuality: 'high',
-      })
-      let globalScatter: VgpuGlowGlobalScatter | null = null
-      try {
-        globalScatter = await this.backend.buildVgpuGlowGlobalScatter(
+    try {
+      const textureLimit = this.backend.getMaxTextureDimension(state)
+      const singlePass = canRenderVgpuGlowInSinglePass(width, height, textureLimit)
+      if (singlePass) {
+        const rendered = await this.backend.renderVgpuGlowBitmap(
           state,
-          globalBitmap,
-          plan.globalScatterWidth,
-          plan.globalScatterHeight,
-          rebaseVgpuGlowRecipeForScale(
-            recipe,
-            plan.globalScatterWidth,
-            plan.globalScatterHeight
-          ),
+          bitmap,
+          width,
+          height,
+          recipe,
           options.isCancelled
         )
-        for (const tile of plan.tiles) {
-          if (options.isCancelled()) throw new DOMException('图片编辑任务已取消', 'AbortError')
-          const tileBitmap = await createImageBitmap(
-            bitmap,
-            tile.expandedX,
-            tile.expandedY,
-            tile.expandedWidth,
-            tile.expandedHeight
-          )
-          try {
-            const rendered = await this.backend.renderVgpuGlowBitmap(
-              state,
-              tileBitmap,
-              tile.expandedWidth,
-              tile.expandedHeight,
+        try {
+          context.drawImage(rendered, 0, 0)
+        } finally {
+          rendered.close()
+        }
+        options.onProgress(plan.totalTiles, plan.totalTiles)
+      } else {
+        const globalBitmap = await createImageBitmap(bitmap, {
+          resizeWidth: plan.globalScatterWidth,
+          resizeHeight: plan.globalScatterHeight,
+          resizeQuality: 'high',
+        })
+        let globalScatter: VgpuGlowGlobalScatter | null = null
+        try {
+          globalScatter = await this.backend.buildVgpuGlowGlobalScatter(
+            state,
+            globalBitmap,
+            plan.globalScatterWidth,
+            plan.globalScatterHeight,
+            rebaseVgpuGlowRecipeForScale(
               recipe,
-              options.isCancelled,
-              {
-                global: globalScatter,
-                region: [
-                  tile.expandedX / width,
-                  tile.expandedY / height,
-                  tile.expandedWidth / width,
-                  tile.expandedHeight / height,
-                ],
-              }
+              plan.globalScatterWidth,
+              plan.globalScatterHeight
+            ),
+            options.isCancelled
+          )
+          for (const tile of plan.tiles) {
+            assertNotCancelled(options.isCancelled)
+            const tileBitmap = await createImageBitmap(
+              bitmap,
+              tile.expandedX,
+              tile.expandedY,
+              tile.expandedWidth,
+              tile.expandedHeight
             )
             try {
-              context.drawImage(
-                rendered,
-                tile.cropX,
-                tile.cropY,
-                tile.width,
-                tile.height,
-                tile.x,
-                tile.y,
-                tile.width,
-                tile.height
+              const rendered = await this.backend.renderVgpuGlowBitmap(
+                state,
+                tileBitmap,
+                tile.expandedWidth,
+                tile.expandedHeight,
+                recipe,
+                options.isCancelled,
+                {
+                  global: globalScatter,
+                  region: [
+                    tile.expandedX / width,
+                    tile.expandedY / height,
+                    tile.expandedWidth / width,
+                    tile.expandedHeight / height,
+                  ],
+                }
               )
+              try {
+                context.drawImage(
+                  rendered,
+                  tile.cropX,
+                  tile.cropY,
+                  tile.width,
+                  tile.height,
+                  tile.x,
+                  tile.y,
+                  tile.width,
+                  tile.height
+                )
+              } finally {
+                rendered.close()
+              }
             } finally {
-              rendered.close()
+              tileBitmap.close()
             }
-          } finally {
-            tileBitmap.close()
+            options.onProgress(tile.index + 1, plan.totalTiles)
           }
-          options.onProgress(tile.index + 1, plan.totalTiles)
+        } finally {
+          try {
+            globalScatter?.release()
+          } finally {
+            globalBitmap.close()
+          }
         }
-      } finally {
-        globalScatter?.release()
-        globalBitmap.close()
       }
+    } finally {
+      this.backend.trimVgpuGlowWorkingSet(state)
     }
+    assertNotCancelled(options.isCancelled)
     const finalOutput = await this.applyAnnotationsAndCrop(canvas, options.composition)
+    assertNotCancelled(options.isCancelled)
     const blob = await finalOutput.convertToBlob({
       type: options.format,
       quality: options.quality,
     })
+    assertNotCancelled(options.isCancelled)
+    const bytes = new Uint8Array(await blob.arrayBuffer())
+    assertNotCancelled(options.isCancelled)
     return {
-      bytes: new Uint8Array(await blob.arrayBuffer()),
+      bytes,
       width: finalOutput.width,
       height: finalOutput.height,
     }
@@ -424,6 +438,10 @@ export class WorkerWebGpuRuntime {
 function orientationCacheKey(composition: ImageEditWorkerComposition | undefined): string {
   const orientation = composition?.orientation
   return orientation ? `${orientation.rotate}:${orientation.mirrored ? 'm' : 'n'}` : '0:n'
+}
+
+function assertNotCancelled(isCancelled: () => boolean): void {
+  if (isCancelled()) throw new DOMException('图片编辑任务已取消', 'AbortError')
 }
 
 async function createPreviewBitmap(
