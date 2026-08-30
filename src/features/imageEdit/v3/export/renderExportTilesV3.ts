@@ -1,0 +1,303 @@
+import {
+  IMAGE_EDIT_RENDER_PRIORITY,
+  ImageEditRenderScheduler,
+  ImageEditResourceBudget,
+  createFloat32PremultipliedRgbaTile,
+  createTileRegion,
+  executeImageEditCpuRenderPlanV3,
+  planTileExecution,
+  tileGridSize,
+  type Float32PremultipliedRgbaTile,
+  type ImageEditMemoryLease,
+  type ImageEditRenderPlanNode,
+} from '@/core/imageEdit/v3'
+import type { ImageEditorV3RenderedExportTile } from '@/commands/imageEditorV3Export'
+import { createLogger } from '@/core/logging'
+import { rasterizeImageEditorV3ExportAnnotations } from './annotations'
+import { prepareImageEditorV3ExportRender } from './capabilities'
+import {
+  ImageEditorV3ExportCapabilityError,
+  type ImageEditorV3ExportRenderDependencies,
+  type ImageEditorV3ExportRenderRegion,
+  type ImageEditorV3ExportTileStream,
+  type RenderImageEditorV3ExportTilesRequest,
+} from './contracts'
+import {
+  resolveImageEditorV3ExportGeometry,
+  resolveImageEditorV3ExportNeighborhood,
+  resolveImageEditorV3SourceRegion,
+} from './geometry'
+import {
+  encodeImageEditorV3RenderedOutputTile,
+  projectImageEditorV3RenderedRegionToOutput,
+} from './outputTile'
+import {
+  imageEditorV3SourceRegionToMask,
+  loadImageEditorV3SourceRegion,
+} from './sourceRegion'
+
+const logger = createLogger('features.image_edit.v3.export')
+const DEFAULT_TILE_SIZE = 512
+const TOTAL_BUDGET_BYTES = 1_342_177_280
+
+function throwIfAborted(signal: AbortSignal): void {
+  if (!signal.aborted) return
+  const error = signal.reason instanceof Error ? signal.reason : new Error('图片分块导出已取消')
+  if (error.name === 'Error') error.name = 'AbortError'
+  throw error
+}
+
+function validateTileSize(value = DEFAULT_TILE_SIZE): number {
+  if (!Number.isSafeInteger(value) || value < 16 || value > 1024 || value % 16 !== 0) {
+    throw new Error('导出瓦片尺寸必须是 16～1024 之间的 16 倍数')
+  }
+  return value
+}
+
+function createSessionId(requested?: string): string {
+  if (requested?.trim()) return requested
+  const suffix = typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+    ? crypto.randomUUID()
+    : `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
+  return `image-edit-export:${suffix}`
+}
+
+function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function rasterResourceId(node: ImageEditRenderPlanNode): string | null {
+  const source = isRecord(node.parameters.source) ? node.parameters.source : null
+  return source?.kind === 'resource' && typeof source.resourceId === 'string'
+    ? source.resourceId
+    : null
+}
+
+function transparentRegion(
+  region: ImageEditorV3ExportRenderRegion,
+  workingSpace: 'srgb' | 'display-p3' | 'rec2020',
+  transferFunction: 'srgb' | 'linear' | 'pq' | 'hlg',
+): Float32PremultipliedRgbaTile {
+  return createFloat32PremultipliedRgbaTile(
+    region.width,
+    region.height,
+    'linear-light',
+    new Float32Array(region.width * region.height * 4),
+    workingSpace,
+    transferFunction,
+    203,
+  )
+}
+
+function safeWorkingSetBytes(region: ImageEditorV3ExportRenderRegion, nodeCount: number): number {
+  const bytes = region.width * region.height * 4 * 4 * Math.max(3, nodeCount + 2)
+  if (!Number.isSafeInteger(bytes)) {
+    throw new ImageEditorV3ExportCapabilityError(
+      'WORKING_SET_EXCEEDED',
+      '单个导出瓦片的工作集超出安全整数范围',
+    )
+  }
+  return bytes
+}
+
+interface RenderedLeasedTile {
+  tile: ImageEditorV3RenderedExportTile
+  transferLease: ImageEditMemoryLease
+}
+
+function acquireOrThrow(
+  budget: ImageEditResourceBudget,
+  category: 'in-flight' | 'transfer',
+  bytes: number,
+): ImageEditMemoryLease {
+  const lease = budget.acquire(category, bytes)
+  if (lease) return lease
+  const snapshot = budget.snapshot()
+  throw new ImageEditorV3ExportCapabilityError(
+    'WORKING_SET_EXCEEDED',
+    `图片导出资源账本拒绝 ${Math.ceil(bytes / 1024 / 1024)}MiB ${category} 工作集；当前已使用 ${Math.ceil(snapshot.totalBytes / 1024 / 1024)}MiB`,
+  )
+}
+
+export function renderImageEditorV3ExportTiles(
+  request: RenderImageEditorV3ExportTilesRequest,
+  dependencies: ImageEditorV3ExportRenderDependencies = {},
+): ImageEditorV3ExportTileStream {
+  return renderTiles(request, dependencies)
+}
+
+async function* renderTiles(
+  request: RenderImageEditorV3ExportTilesRequest,
+  dependencies: ImageEditorV3ExportRenderDependencies,
+): AsyncGenerator<ImageEditorV3RenderedExportTile> {
+  const { document, plan } = prepareImageEditorV3ExportRender(request.document, request.description)
+  const geometry = resolveImageEditorV3ExportGeometry(document, request.description)
+  const neighborhood = resolveImageEditorV3ExportNeighborhood(plan)
+  const tileSize = validateTileSize(request.tileSize)
+  const scheduler = dependencies.scheduler ?? new ImageEditRenderScheduler({ cpuConcurrency: 2 })
+  const budget = dependencies.resourceBudget ?? new ImageEditResourceBudget()
+  const currentSessionId = createSessionId(request.sessionId)
+  const controller = new AbortController()
+  const onAbort = (): void => {
+    controller.abort(request.signal?.reason)
+    scheduler.cancelSession(currentSessionId)
+  }
+  request.signal?.addEventListener('abort', onAbort, { once: true })
+  if (request.signal?.aborted) onAbort()
+  const outputSize = { width: geometry.outputWidth, height: geometry.outputHeight }
+  const grid = tileGridSize(outputSize, 0, tileSize)
+  const total = grid.width * grid.height
+  let completed = 0
+  logger.info('开始渲染图片编辑 V3 分块导出', {
+    event: 'image_editor_v3.export.render.start',
+    requestId: currentSessionId,
+    context: {
+      documentId: document.id,
+      revision: document.revision,
+      width: geometry.outputWidth,
+      height: geometry.outputHeight,
+      tileSize,
+      tileCount: total,
+      halo: neighborhood.halo,
+    },
+  })
+  try {
+    throwIfAborted(controller.signal)
+    if (tileSize === DEFAULT_TILE_SIZE) {
+      try {
+        planTileExecution(
+          { width: geometry.sourceWidth, height: geometry.sourceHeight },
+          0,
+          {
+            halo: neighborhood.halo,
+            bytesPerPixel: 16,
+            workingSurfaceCount: Math.max(3, plan.nodes.length + 2),
+            maxWorkingSetBytes: TOTAL_BUDGET_BYTES,
+            preferSupertile: false,
+          },
+        )
+      } catch (error) {
+        throw new ImageEditorV3ExportCapabilityError(
+          'WORKING_SET_EXCEEDED',
+          '当前效果 halo 无法在 1.25GiB 资源上限内完成一个 512 瓦片',
+          { cause: error },
+        )
+      }
+    }
+    for (let tileY = 0; tileY < grid.height; tileY += 1) {
+      for (let tileX = 0; tileX < grid.width; tileX += 1) {
+        throwIfAborted(controller.signal)
+        const outputRegion = createTileRegion(outputSize, { mip: 0, x: tileX, y: tileY }, 0, tileSize)
+        const outputRect = outputRegion.outputRect
+        const sourceRegion = resolveImageEditorV3SourceRegion(outputRect, geometry, neighborhood)
+        const taskId = `${currentSessionId}:${tileY}:${tileX}`
+        const rendered = await scheduler.schedule<RenderedLeasedTile>({
+          id: taskId,
+          sessionId: currentSessionId,
+          revision: document.revision,
+          kind: 'export',
+          lane: 'cpu',
+          priority: IMAGE_EDIT_RENDER_PRIORITY.export,
+          run: async (taskContext) => {
+            const workingLease = acquireOrThrow(
+              budget,
+              'in-flight',
+              safeWorkingSetBytes(sourceRegion, plan.nodes.length),
+            )
+            try {
+              const sourceCache = new Map<string, Promise<Float32PremultipliedRgbaTile>>()
+              const loadSource = (resourceId: string): Promise<Float32PremultipliedRgbaTile> => {
+                const cached = sourceCache.get(resourceId)
+                if (cached) return cached
+                const loaded = loadImageEditorV3SourceRegion(
+                  resourceId,
+                  sourceRegion,
+                  { width: geometry.sourceWidth, height: geometry.sourceHeight },
+                  request.description.bitDepth,
+                  document.color.workingSpace,
+                  document.color.transferFunction,
+                  taskContext.signal,
+                  dependencies,
+                )
+                sourceCache.set(resourceId, loaded)
+                return loaded
+              }
+              const renderedRegion = await executeImageEditCpuRenderPlanV3(plan, {
+                signal: taskContext.signal,
+                loadRaster: async (node) => {
+                  const resourceId = rasterResourceId(node)
+                  return resourceId
+                    ? loadSource(resourceId)
+                    : transparentRegion(sourceRegion, document.color.workingSpace, document.color.transferFunction)
+                },
+                rasterizeAnnotations: (node) => (
+                  dependencies.rasterizeAnnotations ?? rasterizeImageEditorV3ExportAnnotations
+                )({ node, document, region: sourceRegion, signal: taskContext.signal }),
+                loadMask: async (reference) => imageEditorV3SourceRegionToMask(
+                  await loadSource(reference.resourceId),
+                ),
+              })
+              throwIfAborted(taskContext.signal)
+              const outputFloat = projectImageEditorV3RenderedRegionToOutput(
+                renderedRegion ?? transparentRegion(
+                  sourceRegion,
+                  document.color.workingSpace,
+                  document.color.transferFunction,
+                ),
+                sourceRegion,
+                outputRect,
+                geometry,
+              )
+              const tile = encodeImageEditorV3RenderedOutputTile(
+                outputFloat,
+                outputRect,
+                request.description,
+              )
+              const transferLease = acquireOrThrow(budget, 'transfer', tile.pixels.byteLength)
+              try {
+                await taskContext.yieldAfterAtomicUnit()
+                throwIfAborted(taskContext.signal)
+                return { tile, transferLease }
+              } catch (error) {
+                transferLease.release()
+                throw error
+              }
+            } finally {
+              workingLease.release()
+            }
+          },
+        })
+        try {
+          completed += 1
+          request.onTileRendered?.(completed, total)
+          yield rendered.tile
+        } finally {
+          rendered.transferLease.release()
+        }
+      }
+    }
+    logger.info('完成图片编辑 V3 分块导出渲染', {
+      event: 'image_editor_v3.export.render.completed',
+      requestId: currentSessionId,
+      context: { documentId: document.id, revision: document.revision, tileCount: completed },
+    })
+  } catch (error) {
+    if (controller.signal.aborted) {
+      logger.info('图片编辑 V3 分块导出渲染已取消', {
+        event: 'image_editor_v3.export.render.cancelled',
+        requestId: currentSessionId,
+        context: { documentId: document.id, revision: document.revision, completed, total },
+      })
+      throwIfAborted(controller.signal)
+    }
+    logger.error('图片编辑 V3 分块导出渲染失败', error, {
+      event: 'image_editor_v3.export.render.failed',
+      requestId: currentSessionId,
+      context: { documentId: document.id, revision: document.revision, completed, total },
+    })
+    throw error
+  } finally {
+    request.signal?.removeEventListener('abort', onAbort)
+    scheduler.cancelSession(currentSessionId)
+  }
+}
