@@ -57,8 +57,10 @@ export async function rasterizeImageEditorV3ExportAnnotations(
       '无法创建标注分块光栅化上下文',
     )
   }
+  const scale = 2 ** (request.mip ?? 0)
   context.save()
   context.translate(-request.region.x, -request.region.y)
+  context.scale(1 / scale, 1 / scale)
   drawMarkItems(
     context,
     annotations,

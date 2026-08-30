@@ -16,6 +16,14 @@ describe('图片编辑 V3 内置渲染节点', () => {
       globalAnalysis: { maxEdge: 1_024, resultVersion: 4 },
       backends: ['webgpu'],
     });
+    const diffusion = registry.get('effect.diffusion');
+    expect(diffusion).toMatchObject({
+      version: 4,
+      category: 'global-analysis',
+      invalidation: 'shared-analysis',
+      globalAnalysis: { maxEdge: 2_048, cacheScope: 'subtree', resultVersion: 4 },
+    });
+    expect(diffusion?.localHalo?.({}, 0)).toBe(3);
   });
 
   it('曝光、曲线、色温色调和 HSL 可融合为点式 pass', () => {

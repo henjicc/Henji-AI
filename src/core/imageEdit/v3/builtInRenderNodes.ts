@@ -53,10 +53,12 @@ const definitions: readonly RenderNodeDefinition[] = [
     estimateBytes: (context) => estimateRgbaTileBytes(context, 3),
   },
   {
-    id: 'effect.diffusion', version: 4, category: 'local', color: LINEAR_PREMULTIPLIED,
+    id: 'effect.diffusion', version: 4, category: 'global-analysis', color: LINEAR_PREMULTIPLIED,
     qualities: ['draft', 'stable', 'export'], backends: ['webgpu', 'cpu-libvips'],
-    fusion: 'never', invalidation: 'tile-with-halo',
-    localHalo: (_parameters, mip) => Math.ceil(768 / (2 ** mip)),
+    fusion: 'never', invalidation: 'shared-analysis',
+    // 宽尺度散射由共享低频分析提供；最终合成只剩 3px 的底图细节十字低通。
+    localHalo: (_parameters, mip) => Math.ceil(3 / (2 ** mip)),
+    globalAnalysis: { maxEdge: 2_048, cacheScope: 'subtree', resultVersion: 4 },
     estimateBytes: (context) => estimateRgbaTileBytes(context, 5),
   },
   {

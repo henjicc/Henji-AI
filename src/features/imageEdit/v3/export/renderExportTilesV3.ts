@@ -1,7 +1,10 @@
 import {
+  DIFFUSION_V4_RECIPE_ADAPTER,
   IMAGE_EDIT_RENDER_PRIORITY,
   ImageEditRenderScheduler,
   ImageEditResourceBudget,
+  applyDiffusionV4,
+  convertFloat32TileColorDomainV3,
   createFloat32PremultipliedRgbaTile,
   createTileRegion,
   executeImageEditCpuRenderPlanV3,
@@ -15,6 +18,9 @@ import type { ImageEditorV3RenderedExportTile } from '@/commands/imageEditorV3Ex
 import { createLogger } from '@/core/logging'
 import { rasterizeImageEditorV3ExportAnnotations } from './annotations'
 import { prepareImageEditorV3ExportRender } from './capabilities'
+import {
+  buildImageEditorV3DiffusionAnalyses,
+} from './diffusionAnalysis'
 import {
   ImageEditorV3ExportCapabilityError,
   type ImageEditorV3ExportRenderDependencies,
@@ -148,6 +154,7 @@ async function* renderTiles(
   const grid = tileGridSize(outputSize, 0, tileSize)
   const total = grid.width * grid.height
   let completed = 0
+  let diffusionAnalysisSet: Awaited<ReturnType<typeof buildImageEditorV3DiffusionAnalyses>> | null = null
   logger.info('开始渲染图片编辑 V3 分块导出', {
     event: 'image_editor_v3.export.render.start',
     requestId: currentSessionId,
@@ -163,6 +170,15 @@ async function* renderTiles(
   })
   try {
     throwIfAborted(controller.signal)
+    diffusionAnalysisSet = await buildImageEditorV3DiffusionAnalyses(
+      document,
+      plan,
+      request.description,
+      controller.signal,
+      dependencies,
+      budget,
+    )
+    const diffusionAnalyses = diffusionAnalysisSet.analyses
     if (tileSize === DEFAULT_TILE_SIZE) {
       try {
         planTileExecution(
@@ -236,6 +252,30 @@ async function* renderTiles(
                 loadMask: async (reference) => imageEditorV3SourceRegionToMask(
                   await loadSource(reference.resourceId),
                 ),
+                executeCustomEffect: async (node, source, mask) => {
+                  if (node.definitionId !== 'effect.diffusion') {
+                    throw new Error(`分块导出不支持自定义效果：${node.definitionId}`)
+                  }
+                  const analysis = diffusionAnalyses.get(node.id)
+                  if (!analysis) throw new Error(`柔光节点缺少共享散射分析：${node.id}`)
+                  const linear = convertFloat32TileColorDomainV3(source, 'linear-light')
+                  const parameters = DIFFUSION_V4_RECIPE_ADAPTER.parseParameters(node.parameters)
+                  const recipe = DIFFUSION_V4_RECIPE_ADAPTER.compileRecipe(parameters, {
+                    width: geometry.sourceWidth,
+                    height: geometry.sourceHeight,
+                    quality: 'high',
+                  })
+                  return applyDiffusionV4(linear, recipe, {
+                    mask,
+                    globalScatter: {
+                      tile: analysis.scatter,
+                      documentWidth: analysis.documentWidth,
+                      documentHeight: analysis.documentHeight,
+                      sourceX: sourceRegion.x,
+                      sourceY: sourceRegion.y,
+                    },
+                  })
+                },
               })
               throwIfAborted(taskContext.signal)
               const outputFloat = projectImageEditorV3RenderedRegionToOutput(
@@ -297,6 +337,7 @@ async function* renderTiles(
     })
     throw error
   } finally {
+    diffusionAnalysisSet?.release()
     request.signal?.removeEventListener('abort', onAbort)
     scheduler.cancelSession(currentSessionId)
   }

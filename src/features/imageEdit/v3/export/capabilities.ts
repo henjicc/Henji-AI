@@ -17,6 +17,7 @@ const SUPPORTED_NODE_IDS = new Set([
   'vector.annotation',
   'effect.blur-v1',
   'effect.gaussian-blur',
+  'effect.diffusion',
   'adjustment.exposure',
   'adjustment.curves',
   'adjustment.temperature-tint',
@@ -124,9 +125,7 @@ export function prepareImageEditorV3ExportRender(
   if (unsupported) {
     const detail = unsupported.definitionId === 'effect.vgpu-glow'
       ? '辉光 Pro 需要尚未接入流式导出的全局 VGPU 分析结果'
-      : unsupported.definitionId === 'effect.diffusion'
-        ? '柔光/发光的连续 mip 散射尚未接入分块导出'
-        : `渲染节点 ${unsupported.definitionId} 没有视觉等价的分块导出实现`
+      : `渲染节点 ${unsupported.definitionId} 没有视觉等价的分块导出实现`
     throw new ImageEditorV3ExportCapabilityError(
       'RENDER_NODE_UNSUPPORTED',
       `${detail}，已阻止静默替换效果`,

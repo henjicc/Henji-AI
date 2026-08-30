@@ -15,13 +15,15 @@ export function createImageEditCanvas(
 ): ImageEditCanvasTarget {
   const safeWidth = Math.max(1, Math.round(width));
   const safeHeight = Math.max(1, Math.round(height));
-  const canvas: ImageEditCanvas = kind === 'offscreen'
-    ? new OffscreenCanvas(safeWidth, safeHeight)
-    : document.createElement('canvas');
-  if (kind === 'dom') {
-    canvas.width = safeWidth;
-    canvas.height = safeHeight;
+  if (kind === 'offscreen') {
+    const canvas = new OffscreenCanvas(safeWidth, safeHeight);
+    const context = canvas.getContext('2d');
+    if (!context) throw new Error('无法初始化画布');
+    return { canvas, context };
   }
+  const canvas = document.createElement('canvas');
+  canvas.width = safeWidth;
+  canvas.height = safeHeight;
   const context = canvas.getContext('2d');
   if (!context) throw new Error('无法初始化画布');
   return { canvas, context };

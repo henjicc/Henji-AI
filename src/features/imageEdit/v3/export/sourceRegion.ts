@@ -107,18 +107,19 @@ export async function loadImageEditorV3SourceRegion(
   targetTransferFunction: ImageEditTransferFunctionV3,
   signal: AbortSignal,
   dependencies: ImageEditorV3ExportRenderDependencies,
+  mip = 0,
 ): Promise<Float32PremultipliedRgbaTile> {
   if (!/^sha256:[a-f0-9]{64}$/.test(resourceRef)) {
     throw new Error(`图片编辑资源引用无效：${resourceRef}`)
   }
   const readTile = dependencies.readSourceTile ?? defaultReadSourceTile
   const output = new Float32Array(region.width * region.height * 4)
-  const coordinates = enumerateTilesForRect(canvasSize, 0, region)
+  const coordinates = enumerateTilesForRect(canvasSize, mip, region)
   for (const coordinate of coordinates) {
     throwIfAborted(signal)
     const request: ImageEditorV3ExportSourceTileRequest = {
       resourceRef: resourceRef as `sha256:${string}`,
-      mip: 0,
+      mip,
       tileX: coordinate.x,
       tileY: coordinate.y,
       halo: 0,

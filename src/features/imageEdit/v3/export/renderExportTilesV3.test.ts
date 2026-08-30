@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import {
+  DIFFUSION_V4_RECIPE_ADAPTER,
   ImageEditResourceBudget,
   createFloat32PremultipliedRgbaTile,
   createImageEditAdjustmentLayerV3,
@@ -8,7 +9,9 @@ import {
   createImageEditEffectLayerV3,
   type Float32PremultipliedRgbaTile,
   type ImageEditDocumentV3,
+  type ImageEditJsonObjectV3,
 } from '@/core/imageEdit/v3'
+import { createDefaultDiffusionOperationParams } from '@/core/imageEdit/diffusionParams'
 import type { ImageEditorV3RasterExportDescription } from '@/platform/contracts/imageEditorV3'
 import {
   type ImageEditorV3ExportAnnotationRasterizeRequest,
@@ -131,6 +134,17 @@ function solidImage(width: number, height: number, value = 0): FakeImage {
   return { width, height, pixel: () => [value, value, value, 255] }
 }
 
+function diffusionParams(
+  patch: Readonly<Record<string, unknown>> = {},
+): ImageEditJsonObjectV3 {
+  const defaults = createDefaultDiffusionOperationParams()
+  return {
+    ...defaults,
+    tint: { ...defaults.tint },
+    ...patch,
+  } as unknown as ImageEditJsonObjectV3
+}
+
 describe('图片编辑 V3 分块导出渲染', () => {
   it('用图层顺序决定模糊是否作用于标注，并保持跨瓦片 halo 无接缝', async () => {
     const base = createImageEditDocumentV3({
@@ -185,6 +199,120 @@ describe('图片编辑 V3 分块导出渲染', () => {
 
     expect(output[(1 * 32 + 14) * 4]).toBeGreaterThan(0)
     expect(output[(1 * 32 + 15) * 4]).toBeLessThan(255)
+  })
+
+  it('柔光共享连续 mip 散射，跨瓦片输出与单瓦片一致并处理下方标注', async () => {
+    const document = createImageEditDocumentV3({
+      width: 32,
+      height: 8,
+      documentId: 'diffusion-export',
+      sourceResourceId: SOURCE,
+    })
+    const annotation = createImageEditAnnotationLayerV3('annotation', '标注')
+    const diffusion = createImageEditEffectLayerV3(
+      'diffusion',
+      '柔光',
+      'image.diffusion',
+      diffusionParams({ mode: 'glow', quality: 'realtime' }),
+    )
+    document.layers.push(annotation, diffusion)
+    const images = new Map([[SOURCE, solidImage(32, 8)]])
+
+    const tiled = await collectPixels(document, 16, images, annotationImpulse(15, 4))
+    const single = await collectPixels(document, 32, images, annotationImpulse(15, 4))
+
+    expect(tiled).toEqual(single)
+    expect(tiled[(4 * 32 + 16) * 4]).toBeGreaterThan(0)
+  })
+
+  it('柔光导出沿用稳定帧 high recipe，透明区域保持透明黑', async () => {
+    const compileRecipe = vi.spyOn(DIFFUSION_V4_RECIPE_ADAPTER, 'compileRecipe')
+    const document = createImageEditDocumentV3({
+      width: 16,
+      height: 4,
+      documentId: 'diffusion-alpha',
+      sourceResourceId: SOURCE,
+    })
+    document.layers.push(createImageEditEffectLayerV3(
+      'diffusion',
+      '柔光',
+      'image.diffusion',
+      diffusionParams({ mode: 'white_mist', quality: 'realtime' }),
+    ))
+    const images = new Map<string, FakeImage>([[SOURCE, {
+      width: 16,
+      height: 4,
+      pixel: (x) => x < 8 ? [0, 0, 0, 0] : [255, 255, 255, 255],
+    }]])
+
+    const output = await collectPixels(document, 16, images)
+    expect(compileRecipe).toHaveBeenCalled()
+    expect(compileRecipe.mock.calls.every(([, options]) => options.quality === 'high')).toBe(true)
+    compileRecipe.mockRestore()
+    for (let x = 0; x < 8; x += 1) {
+      expect(Array.from(output.subarray(x * 4, x * 4 + 4))).toEqual([0, 0, 0, 0])
+    }
+  })
+
+  it('200MP 柔光先读受限源 mip 建共享散射，再按 512 瓦片读取原图', async () => {
+    const document = createImageEditDocumentV3({
+      width: 20_000,
+      height: 10_000,
+      documentId: '200mp-diffusion',
+      sourceResourceId: SOURCE,
+    })
+    document.layers.push(createImageEditEffectLayerV3(
+      'diffusion',
+      '柔光',
+      'image.diffusion',
+      diffusionParams({ mode: 'black_mist', quality: 'realtime' }),
+    ))
+    const requests: ImageEditorV3ExportSourceTileRequest[] = []
+    const budget = new ImageEditResourceBudget()
+    const readSourceTile = async (request: ImageEditorV3ExportSourceTileRequest) => {
+      requests.push(request)
+      const levelWidth = Math.ceil(20_000 / (2 ** request.mip))
+      const levelHeight = Math.ceil(10_000 / (2 ** request.mip))
+      const originX = request.tileX * 512
+      const originY = request.tileY * 512
+      const width = Math.min(512, levelWidth - originX)
+      const height = Math.min(512, levelHeight - originY)
+      const pixels = new Uint8Array(width * height * 4)
+      for (let offset = 0; offset < pixels.length; offset += 4) pixels.set([32, 32, 32, 255], offset)
+      return {
+        resourceRef: request.resourceRef,
+        mip: request.mip,
+        tileX: request.tileX,
+        tileY: request.tileY,
+        halo: request.halo,
+        width,
+        height,
+        channels: 4 as const,
+        bitDepth: 8 as const,
+        sampleFormat: 'uint' as const,
+        numericRange: 'unorm8' as const,
+        byteOrder: 'little-endian' as const,
+        rowStride: width * 4,
+        colorSpace: 'srgb' as const,
+        transferFunction: 'srgb' as const,
+        alphaMode: 'straight' as const,
+        orientationApplied: true as const,
+        originX,
+        originY,
+        pixels: pixels.buffer,
+      }
+    }
+    const iterator = renderImageEditorV3ExportTiles(
+      { document, description: description(20_000, 10_000), tileSize: 512 },
+      { readSourceTile, resourceBudget: budget },
+    )[Symbol.asyncIterator]()
+
+    expect((await iterator.next()).value).toMatchObject({ x: 0, y: 0, width: 512, height: 512 })
+    expect(requests.some((request) => request.mip === 4)).toBe(true)
+    expect(requests.some((request) => request.mip === 0 && request.tileX === 0 && request.tileY === 0)).toBe(true)
+    expect(requests.every((request) => request.halo === 0)).toBe(true)
+    await iterator.return?.()
+    expect(budget.snapshot()).toMatchObject({ totalBytes: 0, leaseCount: 0 })
   })
 
   it('在效果层用灰度蒙版混合原结果和曝光结果', async () => {

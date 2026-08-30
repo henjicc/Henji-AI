@@ -54,6 +54,8 @@ export interface ImageEditorV3ExportAnnotationRasterizeRequest {
   node: ImageEditRenderPlanNode
   document: ImageEditDocumentV3
   region: ImageEditorV3ExportRenderRegion
+  /** 区域坐标所属 mip；0 为文档原始像素。 */
+  mip?: number
   signal: AbortSignal
 }
 
