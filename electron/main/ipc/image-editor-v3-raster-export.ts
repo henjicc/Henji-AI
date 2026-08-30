@@ -6,6 +6,7 @@ import { sanitizeFileStem } from '../services/image/path-utils'
 import { createMainLogger } from '../services/logging'
 import {
   toDocumentRef,
+  type ManagedRasterMaterializer,
   type RasterExportFormat,
   type RasterExportSessionManager,
 } from '../services/image-editor-v3'
@@ -28,6 +29,7 @@ type RunRequest = <T>(
 
 export interface RegisterRasterExportIpcOptions {
   manager: RasterExportSessionManager
+  materializer: ManagedRasterMaterializer
   guard: IpcSenderGuard
   runRequest: RunRequest
 }
@@ -87,6 +89,11 @@ function monitorRendererLifetime(
   manager: RasterExportSessionManager,
   event: IpcMainInvokeEvent,
   sessionId: string,
+  cancel: (ownerId: number, sessionId: string, reason: string) => Promise<boolean> = (
+    ownerId,
+    activeSessionId,
+    reason,
+  ) => manager.cancel(ownerId, activeSessionId, reason),
 ): void {
   const sender = event.sender
   const ownerId = sender.id
@@ -99,7 +106,7 @@ function monitorRendererLifetime(
   }
   const cancelForRenderer = (reason: string): void => {
     clear()
-    void manager.cancel(ownerId, sessionId, reason).catch((error: unknown) => {
+    void cancel(ownerId, sessionId, reason).catch((error: unknown) => {
       logger.error('渲染器生命周期变化后清理栅格导出会话失败', {
         event: 'image_editor_v3.raster_export.renderer_cleanup.failed',
         requestId: sessionId,
@@ -170,6 +177,44 @@ export function registerImageEditorV3RasterExportIpc(
     options.guard,
   )
   registerIpcHandler(
+    'imageEditorV3:rasterExport:startManaged',
+    parseImageEditorV3StartRasterExportPayload,
+    (payload, event) => options.runRequest(
+      'raster_export.start_managed',
+      payload.requestId,
+      event.sender.id,
+      async (signal) => {
+        const started = await options.materializer.start({
+          ownerId: event.sender.id,
+          documentRef: payload.documentRef,
+          revision: payload.revision,
+          sourceFingerprint: payload.sourceFingerprint,
+          format: payload.format,
+          description: payload.description,
+          tileSize: payload.tileSize,
+          compressionLevel: payload.compressionLevel,
+          quality: payload.quality,
+          effort: payload.effort,
+          signal,
+        })
+        monitorRendererLifetime(
+          options.manager,
+          event,
+          started.sessionId,
+          (ownerId, sessionId, reason) => options.materializer.cancel(ownerId, sessionId, reason),
+        )
+        return {
+          sessionId: started.sessionId,
+          documentRef: toDocumentRef(started.documentId),
+          revision: started.revision,
+          sourceFingerprint: started.sourceFingerprint,
+          format: started.format,
+        }
+      },
+    ),
+    options.guard,
+  )
+  registerIpcHandler(
     'imageEditorV3:rasterExport:writeTile',
     parseImageEditorV3WriteRasterExportTilePayload,
     async (payload, event) => {
@@ -182,6 +227,9 @@ export function registerImageEditorV3RasterExportIpc(
     'imageEditorV3:rasterExport:complete',
     parseImageEditorV3RasterExportSessionPayload,
     async (payload, event) => {
+      if (options.materializer.has(payload.sessionId)) {
+        throw new Error('Managed raster session requires managed completion')
+      }
       const completed = await options.manager.complete(event.sender.id, payload.sessionId)
       const { documentId, ...result } = completed
       return {
@@ -192,11 +240,26 @@ export function registerImageEditorV3RasterExportIpc(
     options.guard,
   )
   registerIpcHandler(
+    'imageEditorV3:rasterExport:completeManaged',
+    parseImageEditorV3RasterExportSessionPayload,
+    async (payload, event) => {
+      const completed = await options.materializer.complete(event.sender.id, payload.sessionId)
+      const { documentId, ...result } = completed
+      return {
+        ...result,
+        documentRef: toDocumentRef(documentId),
+        previewRef: completed.previewRef,
+        mediaUrl: completed.mediaUrl,
+      }
+    },
+    options.guard,
+  )
+  registerIpcHandler(
     'imageEditorV3:rasterExport:cancel',
     parseImageEditorV3RasterExportSessionPayload,
-    async (payload, event) => ({
-      cancelled: await options.manager.cancel(event.sender.id, payload.sessionId),
-    }),
+    async (payload, event) => ({ cancelled: options.materializer.has(payload.sessionId)
+      ? await options.materializer.cancel(event.sender.id, payload.sessionId)
+      : await options.manager.cancel(event.sender.id, payload.sessionId) }),
     options.guard,
   )
 }

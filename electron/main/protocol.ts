@@ -5,6 +5,10 @@ import os from 'node:os'
 import path from 'node:path'
 import { Readable } from 'node:stream'
 import { getCustomDataRoot } from './services/dataRoot'
+import {
+  IMAGE_EDITOR_V3_MEDIA_HOST,
+  resolveImageEditorV3ResourceMediaUrl,
+} from './services/image-editor-v3/resource-media-url'
 import { persistMediaRootGrant, restorePersistedMediaRoots } from './services/media/rootGrants'
 
 const MEDIA_SCHEME = 'henji-media'
@@ -15,6 +19,12 @@ const allowedMediaRoots = new Set<string>()
 interface ByteRange {
   start: number
   end: number
+}
+
+interface MediaRequestTarget {
+  targetPath: string
+  mediaType?: string
+  immutable?: boolean
 }
 
 class MediaProtocolError extends Error {
@@ -142,14 +152,28 @@ export function restoreAllowedMediaRoots(): void {
   })
 }
 
-function decodeMediaPath(url: string): string {
+function resolveMediaRequestTarget(url: string): MediaRequestTarget {
   const parsed = new URL(url)
-  if (parsed.protocol !== `${MEDIA_SCHEME}:` || parsed.hostname !== MEDIA_HOST) {
+  if (parsed.protocol !== `${MEDIA_SCHEME}:`) {
     throw new MediaProtocolError(400, 'Unsupported media URL')
   }
 
+  if (parsed.hostname === IMAGE_EDITOR_V3_MEDIA_HOST) {
+    try {
+      const resolved = resolveImageEditorV3ResourceMediaUrl(parsed)
+      return { ...resolved, immutable: true }
+    } catch (error) {
+      throw new MediaProtocolError(
+        400,
+        error instanceof Error ? error.message : 'Invalid image editor media URL',
+      )
+    }
+  }
+
+  if (parsed.hostname !== MEDIA_HOST) throw new MediaProtocolError(400, 'Unsupported media URL')
+
   const encodedPath = parsed.pathname.startsWith('/') ? parsed.pathname.slice(1) : parsed.pathname
-  return decodeURIComponent(encodedPath)
+  return { targetPath: decodeURIComponent(encodedPath) }
 }
 
 function parseRangeHeader(rangeHeader: string | null, size: number): ByteRange | null {
@@ -207,13 +231,22 @@ function isContentAddressedPath(targetPath: string): boolean {
   return segments.some((segment) => CONTENT_ADDRESSED_DIR_NAMES.has(segment))
 }
 
-function createHeaders(targetPath: string, size: number, range: ByteRange | null): Headers {
+function createHeaders(
+  targetPath: string,
+  size: number,
+  range: ByteRange | null,
+  mediaType?: string,
+  immutable = false,
+): Headers {
   const headers = new Headers()
   headers.set('Accept-Ranges', 'bytes')
-  headers.set('Content-Type', inferMimeFromPath(targetPath))
+  headers.set('Content-Type', mediaType ?? inferMimeFromPath(targetPath))
+  headers.set('X-Content-Type-Options', 'nosniff')
   headers.set(
     'Cache-Control',
-    isContentAddressedPath(targetPath) ? 'public, max-age=31536000, immutable' : 'no-store'
+    immutable || isContentAddressedPath(targetPath)
+      ? 'public, max-age=31536000, immutable'
+      : 'no-store'
   )
 
   if (range) {
@@ -228,7 +261,8 @@ function createHeaders(targetPath: string, size: number, range: ByteRange | null
 
 async function handleMediaRequest(request: Request): Promise<Response> {
   try {
-    const targetPath = decodeMediaPath(request.url)
+    const target = resolveMediaRequestTarget(request.url)
+    const { targetPath } = target
     assertAllowedMediaPath(targetPath)
 
     const stat = await fsp.stat(targetPath)
@@ -237,7 +271,7 @@ async function handleMediaRequest(request: Request): Promise<Response> {
     }
 
     const range = parseRangeHeader(request.headers.get('range'), stat.size)
-    const headers = createHeaders(targetPath, stat.size, range)
+    const headers = createHeaders(targetPath, stat.size, range, target.mediaType, target.immutable)
     const status = range ? 206 : 200
 
     if (request.method === 'HEAD') {

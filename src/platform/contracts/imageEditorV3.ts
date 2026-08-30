@@ -216,6 +216,13 @@ export interface ImageEditorV3RasterExportResult {
   height: number
 }
 
+export interface ImageEditorV3ManagedRasterExportResult extends ImageEditorV3RasterExportResult {
+  /** 已原子挂到同 revision 文档上的内容寻址预览资源。 */
+  previewRef: ImageEditorV3ResourceRef
+  /** 不包含本地路径的受管媒体能力 URL，可直接用于展示和后续媒体消费。 */
+  mediaUrl: string
+}
+
 export interface ImageEditorV3Platform {
   loadDocument(request: {
     requestId: string
@@ -298,6 +305,19 @@ export interface ImageEditorV3Platform {
     quality?: number
     effort?: number
   }): Promise<ImageEditorV3DialogResult<ImageEditorV3RasterExportStartResult>>
+  /** 不弹保存框；主进程选择受管暂存目标并在完成后发布内容寻址结果。 */
+  startManagedRasterExport(request: {
+    requestId: string
+    documentRef: ImageEditorV3DocumentRef
+    revision: number
+    sourceFingerprint: `sha256:${string}`
+    format: ImageEditorV3RasterExportFormat
+    description: ImageEditorV3RasterExportDescription
+    tileSize?: number
+    compressionLevel?: number
+    quality?: number
+    effort?: number
+  }): Promise<ImageEditorV3RasterExportStartResult>
   writeRasterExportTile(request: {
     sessionId: string
     tile: {
@@ -312,6 +332,9 @@ export interface ImageEditorV3Platform {
   completeRasterExport(request: {
     sessionId: string
   }): Promise<ImageEditorV3RasterExportResult>
+  completeManagedRasterExport(request: {
+    sessionId: string
+  }): Promise<ImageEditorV3ManagedRasterExportResult>
   cancelRasterExport(request: {
     sessionId: string
   }): Promise<{ cancelled: boolean }>

@@ -5,7 +5,10 @@ import type { ImageEditorV3Platform } from '@/platform/contracts/imageEditorV3'
 const mocks = vi.hoisted(() => ({ getPlatform: vi.fn() }))
 vi.mock('@/platform/runtime', () => ({ getPlatform: mocks.getPlatform }))
 
-import { exportImageEditorV3Raster } from './imageEditorV3Export'
+import {
+  exportImageEditorV3Raster,
+  materializeImageEditorV3Raster,
+} from './imageEditorV3Export'
 
 const DOCUMENT_REF = 'image-edit-v3:export-document' as const
 const FINGERPRINT = `sha256:${'a'.repeat(64)}` as const
@@ -36,6 +39,13 @@ function createPlatform(): ImageEditorV3Platform {
         format: 'png8' as const,
       },
     })),
+    startManagedRasterExport: vi.fn(async () => ({
+      sessionId: SESSION_ID,
+      documentRef: DOCUMENT_REF,
+      revision: 5,
+      sourceFingerprint: FINGERPRINT,
+      format: 'png8' as const,
+    })),
     writeRasterExportTile: vi.fn(async () => ({ written: true as const })),
     completeRasterExport: vi.fn(async () => ({
       outputRef: 'image-export-v3:export-document@5:png8' as const,
@@ -45,6 +55,17 @@ function createPlatform(): ImageEditorV3Platform {
       format: 'png8' as const,
       width: 2,
       height: 1,
+    })),
+    completeManagedRasterExport: vi.fn(async () => ({
+      outputRef: 'image-export-v3:export-document@5:png8' as const,
+      documentRef: DOCUMENT_REF,
+      revision: 5,
+      sourceFingerprint: FINGERPRINT,
+      format: 'png8' as const,
+      width: 2,
+      height: 1,
+      previewRef: `sha256:${'b'.repeat(64)}` as const,
+      mediaUrl: `henji-media://image-editor-v3/${'b'.repeat(64)}?mediaType=image%2Fpng`,
     })),
     cancelRasterExport: vi.fn(async () => ({ cancelled: true })),
     collectGarbage: vi.fn(),
@@ -129,5 +150,32 @@ describe('图片编辑 V3 栅格导出命令', () => {
     })).rejects.toMatchObject({ name: 'AbortError' })
     expect(platform.cancelRasterExport).toHaveBeenCalledWith({ sessionId: SESSION_ID })
     expect(platform.completeRasterExport).not.toHaveBeenCalled()
+  })
+
+  it('受管物化复用逐瓦片传输并返回无路径媒体引用', async () => {
+    const platform = createPlatform()
+    mocks.getPlatform.mockReturnValue({ imageEditorV3: platform })
+    const result = await materializeImageEditorV3Raster({
+      ...baseRequest,
+      tiles: [{
+        x: 0,
+        y: 0,
+        width: 2,
+        height: 1,
+        rowStride: 8,
+        pixels: Uint8Array.from([1, 2, 3, 4, 5, 6, 7, 8]),
+      }],
+    })
+
+    expect(platform.startManagedRasterExport).toHaveBeenCalledWith(expect.objectContaining({
+      documentRef: DOCUMENT_REF,
+      revision: 5,
+      sourceFingerprint: FINGERPRINT,
+    }))
+    expect(vi.mocked(platform.startManagedRasterExport).mock.calls[0]?.[0])
+      .not.toHaveProperty('targetPath')
+    expect(platform.completeManagedRasterExport).toHaveBeenCalledWith({ sessionId: SESSION_ID })
+    expect(result.mediaUrl).toMatch(/^henji-media:\/\/image-editor-v3\//)
+    expect(result).not.toHaveProperty('filePath')
   })
 })

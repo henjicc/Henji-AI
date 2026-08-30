@@ -12,6 +12,7 @@ import {
   ImageEditBrushTileStoreV3,
   ImageEditDocumentRepository,
   ImageEditorV3SourceIngestor,
+  ManagedRasterMaterializer,
   RasterExportSessionManager,
   SharpSourceProvider,
   toDocumentRef,
@@ -65,6 +66,7 @@ interface ImageEditorV3Runtime {
   sourceIngestor: ImageEditorV3SourceIngestor
   brushTiles: ImageEditBrushTileStoreV3
   rasterExports: RasterExportSessionManager
+  managedRaster: ManagedRasterMaterializer
 }
 let runtime: ImageEditorV3Runtime | undefined
 const requestAdmission = new ImageEditorV3RequestAdmission()
@@ -75,6 +77,7 @@ function getRuntime(): ImageEditorV3Runtime {
   const resources = new ContentAddressedResourceStore(path.join(rootDir, 'resources'))
   const documents = new ImageEditDocumentRepository(path.join(rootDir, 'documents'))
   const sources = new SharpSourceProvider(resources)
+  const rasterExports = new RasterExportSessionManager(documents, resources)
   runtime = {
     documents,
     resources,
@@ -82,7 +85,13 @@ function getRuntime(): ImageEditorV3Runtime {
     packages: new HenjiImagePackageCodec(resources),
     sourceIngestor: new ImageEditorV3SourceIngestor(resources, sources),
     brushTiles: new ImageEditBrushTileStoreV3(resources),
-    rasterExports: new RasterExportSessionManager(documents, resources),
+    rasterExports,
+    managedRaster: new ManagedRasterMaterializer(
+      rasterExports,
+      documents,
+      resources,
+      path.join(rootDir, 'materializations'),
+    ),
   }
   return runtime
 }
@@ -327,7 +336,12 @@ function packageFileName(raw: string | undefined, documentId: string): string {
 
 export function registerImageEditorV3Ipc(): void {
   const guard = assertTrustedMainRenderer
-  registerImageEditorV3RasterExportIpc({ manager: getRuntime().rasterExports, guard, runRequest })
+  registerImageEditorV3RasterExportIpc({
+    manager: getRuntime().rasterExports,
+    materializer: getRuntime().managedRaster,
+    guard,
+    runRequest,
+  })
   registerImageEditorV3BrushTileIpc({ store: getRuntime().brushTiles, guard, runRequest })
   registerIpcHandler('imageEditorV3:document:load', parseImageEditorV3LoadPayload, (payload, event) => (
     runRequest('document.load', payload.requestId, event.sender.id, async (signal) => {

@@ -108,6 +108,44 @@ describe('图片编辑 V3 preload 契约', () => {
     expect(request).not.toHaveProperty('targetPath')
   })
 
+  it('受管栅格物化使用独立开始和完成通道且不接收目标路径', async () => {
+    const invoke = vi.fn(async () => undefined)
+    const api = createImageEditorV3Api(
+      invoke as unknown as Parameters<typeof createImageEditorV3Api>[0],
+    )
+    const request = {
+      requestId: 'raster-materialize',
+      documentRef: 'image-edit-v3:document' as const,
+      revision: 3,
+      sourceFingerprint: `sha256:${'b'.repeat(64)}` as const,
+      format: 'png8' as const,
+      description: {
+        width: 1,
+        height: 1,
+        bitDepth: 8 as const,
+        sampleFormat: 'uint' as const,
+        colorSpace: 'srgb' as const,
+        transferFunction: 'srgb' as const,
+        alphaMode: 'straight' as const,
+      },
+    }
+
+    await api.startManagedRasterExport(request)
+    await api.completeManagedRasterExport({ sessionId: 'managed-session' })
+
+    expect(invoke).toHaveBeenNthCalledWith(
+      1,
+      'imageEditorV3:rasterExport:startManaged',
+      request,
+    )
+    expect(invoke).toHaveBeenNthCalledWith(
+      2,
+      'imageEditorV3:rasterExport:completeManaged',
+      { sessionId: 'managed-session' },
+    )
+    expect(request).not.toHaveProperty('targetPath')
+  })
+
   it('画笔瓦片批量持久化与读取使用独立可取消 IPC 通道', async () => {
     const invoke = vi.fn(async () => ({ tiles: [] }))
     const api = createImageEditorV3Api(
