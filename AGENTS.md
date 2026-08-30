@@ -96,7 +96,7 @@ npm run assistant:live:suite -- --only camera --skip-generation
 - 遇到与规则冲突的需求，先说明冲突点，并给出建议，最终由用户决定
 - 不轻易打补丁，发现问题去找根本原因，敢于推倒重写，绝不不盲目叠加判断、复制旧逻辑修改参数等打补丁行为
 - 涉及浏览器操作（调研、抓取网页、自动化）优先主动查找并使用 ego-browser skill；开发环境里没有装 ego-browser 时不强求，改用其他浏览器工具即可
-- VGPU 尚属较新的图形库；涉及 VGPU API、GPU context、target、frame、effect、WGSL、资源生命周期、性能或兼容性时，只要对实现拿不准，必须优先使用官方 VGPU MCP（名称 `vgpu`，地址 `https://vgpu.sh/api/mcp`）的 `docs` / `examples` 工具查证；当前会话未加载 MCP 或连接失败时，立即回退查阅 [VGPU 官方文档](https://vgpu.sh/docs)、官方示例与 API Reference。实现判断一律以这些一手资料为准，不得仅凭记忆或二手文章判断
+- VGPU 尚属较新的图形库；涉及 VGPU API、GPU context、target、frame、effect、WGSL、资源生命周期、性能或兼容性时，只要对实现拿不准，必须优先使用官方 VGPU MCP（名称 `vgpu`）的 `docs` / `examples` 工具查证。支持 Modern MCP `2026-07-28` 自动协商的客户端使用 Hosted HTTP `https://vgpu.sh/api/mcp`；仍使用旧协议的 Codex 客户端改用官方只读 stdio `npx -y vgpu mcp`，不得反复配置已确认无法握手的 HTTP 端点。当前会话未加载 MCP 或连接失败时，立即回退查阅 [VGPU 官方文档](https://vgpu.sh/docs)、官方示例与 API Reference。实现判断一律以这些一手资料为准，不得仅凭记忆或二手文章判断
 
 ### Git 提交规范
 
