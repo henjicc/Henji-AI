@@ -77,7 +77,7 @@ describe('VGPU 辉光操作契约', () => {
     expect(weightedMeanFraction(dreamy)).toBeGreaterThan(weightedMeanFraction(natural));
     expect(neon.sourceGain).toBeGreaterThan(dreamy.sourceGain);
     for (const recipe of [natural, dreamy, neon]) {
-      expect(recipe.schemaVersion).toBe(7);
+      expect(recipe.schemaVersion).toBe(8);
       expect(recipe.scatterLevels.length).toBeGreaterThanOrEqual(4);
       expect(recipe.scatterLevels.length).toBeLessThanOrEqual(12);
       expect(recipe.scatterLevels[0].divisor).toBe(2);
@@ -127,6 +127,19 @@ describe('VGPU 辉光操作契约', () => {
     expect(compact.tintLinear[0]).toBeCloseTo(1, 6);
     expect(compact.tintLinear[1]).toBeGreaterThan(0.1);
     expect(compact.tintLinear[2]).toBe(0);
+  });
+
+  it('强度高段显著扩展动态范围，同时保留低段细调能力', () => {
+    const defaults = createDefaultVgpuGlowOperationParams();
+    const low = compileVgpuGlowRecipe({ ...defaults, intensity: 0.1 }, UHD);
+    const middle = compileVgpuGlowRecipe({ ...defaults, intensity: 0.5 }, UHD);
+    const maximum = compileVgpuGlowRecipe({ ...defaults, intensity: 1 }, UHD);
+
+    expect(low.intensity).toBeGreaterThan(0);
+    expect(low.intensity).toBeLessThan(middle.intensity);
+    expect(middle.intensity).toBeLessThan(maximum.intensity);
+    expect(maximum.intensity / middle.intensity).toBeGreaterThan(3);
+    expect(maximum.intensity).toBeGreaterThan(2.5);
   });
 
   it('用真实 GPU 核尺度构造最大半径，核心到远场没有 octave 肩部', () => {
@@ -280,6 +293,8 @@ describe('VGPU 辉光操作契约', () => {
   });
 
   it('着色器先重建直通辐射再乘覆盖率，且最终只执行一次指数相机响应', () => {
+    expect(bloomShaderSource).toContain('let brightness = max(color.r, max(color.g, color.b))');
+    expect(bloomShaderSource).not.toContain('max(color.r, max(color.g, color.b)) * 0.82');
     expect(bloomShaderSource).toContain('-log(max(1.0 - min(brightness');
     expect(bloomShaderSource).toContain('extractEmitter(color.rgb) * color.a');
     expect(bloomShaderSource).toContain('insideImage(sampleUv)');

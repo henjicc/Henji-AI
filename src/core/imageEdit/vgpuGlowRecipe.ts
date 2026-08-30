@@ -1,6 +1,6 @@
 import type { VgpuGlowOperationParams } from './vgpuGlowParams';
 
-export const VGPU_GLOW_RECIPE_VERSION = 7 as const;
+export const VGPU_GLOW_RECIPE_VERSION = 8 as const;
 
 export interface VgpuGlowScatterLevel {
   /** 相对全分辨率的连续 2× 降采样倍数。 */
@@ -154,7 +154,10 @@ export function compileVgpuGlowRecipe(
     sourceKneeRadiance: kneeRadiance,
     sourceRadianceCeiling: look.radianceCeiling,
     sourceGain: look.sourceGain,
-    intensity: params.intensity * look.intensity,
+    // 低段保留精细调节，高段把创作范围扩展到约 2.5×。这不是线性暴力增亮：
+    // PSF 总能量仍归一，只让用户能把有限虚拟 HDR 辐射真正推入强发光区。
+    intensity: params.intensity * look.intensity
+      * (0.72 + 1.78 * params.intensity * params.intensity),
     responseExposure: look.responseExposure,
     whiteHeat: params.whiteHeat,
     scatterLevels: compileOpticalScatterLevels(

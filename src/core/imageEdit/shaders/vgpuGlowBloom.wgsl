@@ -8,8 +8,9 @@ struct Bloom {
 @group(0) @binding(2) var linearSampler: sampler;
 
 fn extractEmitter(color: vec3f) -> vec3f {
-  let luma = dot(color, vec3f(0.2126, 0.7152, 0.0722));
-  let brightness = max(luma, max(color.r, max(color.g, color.b)) * 0.82);
+  // 发光资格由最亮颜色通道决定，而不是由感知亮度决定。否则饱和红、蓝、青即使通道
+  // 已经触顶，也会在逆 HDR 响应前被压到 82% 以下，最终与白色相差数倍辐射能量。
+  let brightness = max(color.r, max(color.g, color.b));
   if (brightness <= 0.000001) {
     return vec3f(0.0);
   }
