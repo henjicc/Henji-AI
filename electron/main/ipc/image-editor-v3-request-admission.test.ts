@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  estimateImageEditorV3BrushPersistBytes,
+  estimateImageEditorV3BrushReadBytes,
   estimateImageEditorV3TileRequestBytes,
   ImageEditorV3RequestAdmission,
   IMAGE_EDITOR_V3_REQUEST_BUDGET_BYTES,
@@ -33,5 +35,23 @@ describe('图片编辑 V3 请求准入', () => {
   it('按 halo、位深和三份在途缓冲估算瓦片峰值', () => {
     expect(estimateImageEditorV3TileRequestBytes({ halo: 512, bitDepth: 32 }))
       .toBe(1_536 * 1_536 * 4 * 4 * 3)
+  })
+
+  it('画笔批次按输入、解压结果与 IPC 副本计入统一资源账本', () => {
+    expect(estimateImageEditorV3BrushPersistBytes(4 * 1024 * 1024))
+      .toBe(20 * 1024 * 1024)
+    expect(estimateImageEditorV3BrushReadBytes(2 * 1024 * 1024, 8 * 1024 * 1024))
+      .toBe(28 * 1024 * 1024)
+  })
+
+  it('同一渲染器只允许一个画笔持久化批次并支持按 requestId 取消', () => {
+    const admission = new ImageEditorV3RequestAdmission()
+    const active = admission.admit('brush_tiles.persist', 'brush-first', 9, 1024)
+
+    expect(() => admission.admit('brush_tiles.persist', 'brush-second', 9, 1024))
+      .toThrow('concurrency limit')
+    expect(admission.cancel(9, 'brush-first')).toBe(true)
+    expect(active.signal.aborted).toBe(true)
+    active.release()
   })
 })

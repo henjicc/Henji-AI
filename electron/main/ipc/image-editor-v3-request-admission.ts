@@ -7,6 +7,8 @@ const OPERATION_LIMITS_PER_SENDER: Readonly<Record<string, number>> = {
   'source.import': 1,
   'source.ingest': 1,
   'source.tile': 2,
+  'brush_tiles.persist': 1,
+  'brush_tiles.read': 2,
   'package.open': 1,
   'package.save_as': 1,
   'raster_export.start': 1,
@@ -115,4 +117,17 @@ export function estimateImageEditorV3TileRequestBytes(request: {
 export function estimateImageEditorV3ProxyRequestBytes(maxDimension: number): number {
   // 解码工作表面 + 编码代理 + IPC 副本；按 RGBA 上界预留。
   return maxDimension * maxDimension * 4 + 16 * 1024 * 1024
+}
+
+export function estimateImageEditorV3BrushPersistBytes(rawByteLength: number): number {
+  // IPC 输入、codec 小端副本/压缩缓冲与资源库 staging 同时在途。
+  return rawByteLength * 3 + 8 * 1024 * 1024
+}
+
+export function estimateImageEditorV3BrushReadBytes(
+  resourceByteLength: number,
+  maximumDecodedByteLength: number,
+): number {
+  // 批次结果必须保留到 IPC 返回；另预留单瓦片解压副本和 IPC structured clone。
+  return resourceByteLength * 2 + maximumDecodedByteLength * 2 + 8 * 1024 * 1024
 }

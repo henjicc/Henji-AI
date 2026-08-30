@@ -1,5 +1,14 @@
 import { createLogger } from '@/core/logging'
 import type { ImageEditDocumentV3 } from '@/core/imageEdit/v3/documentTypes'
+import type {
+  ImageEditBrushResourceReferenceV3,
+  ImageEditBrushTileV3,
+  PersistedImageEditBrushTileV3,
+} from '@/core/imageEdit/v3/brush/contracts'
+import {
+  createFloat32MaskTile,
+  createFloat32PremultipliedRgbaTile,
+} from '@/core/imageEdit/v3/effects/contracts'
 import { decodeImageEditCommandHistorySnapshotV3 } from '@/core/imageEdit/v3/commandHistoryCodec'
 import { collectImageEditJsonResourceIdsV3 } from '@/core/imageEdit/v3/resourceReferences'
 import type {
@@ -10,6 +19,7 @@ import type {
 } from '@/core/imageEdit/v3/serviceContracts'
 import type {
   ImageEditorV3DocumentRef,
+  ImageEditorV3LoadedBrushTile,
   ImageEditorV3Platform,
   ImageEditorV3ResourceRef,
 } from '@/platform/contracts/imageEditorV3'
@@ -143,6 +153,86 @@ export function readImageEditorV3SourceTile(
   signal?: AbortSignal,
 ): ReturnType<ImageEditorV3Platform['readSourceTile']> {
   return runCancellable(request.requestId, signal, (platform) => platform.readSourceTile(request))
+}
+
+function brushTileDataBuffer(tile: ImageEditBrushTileV3): ArrayBuffer {
+  return new Float32Array(tile.data).buffer
+}
+
+function deserializeBrushTile(value: ImageEditorV3LoadedBrushTile['tile']): ImageEditBrushTileV3 {
+  const channels = value.storage === 'rgba-float32' ? 4 : 1
+  const expectedBytes = value.width * value.height * channels * Float32Array.BYTES_PER_ELEMENT
+  if (!(value.data instanceof ArrayBuffer) || value.data.byteLength !== expectedBytes) {
+    throw new Error('图片编辑画笔瓦片数据长度无效')
+  }
+  const data = new Float32Array(value.data.slice(0))
+  if (value.storage === 'mask-float32') {
+    return createFloat32MaskTile(value.width, value.height, data)
+  }
+  return createFloat32PremultipliedRgbaTile(
+    value.width,
+    value.height,
+    value.colorDomain,
+    data,
+    value.workingSpace,
+    value.transferFunction,
+    value.referenceWhiteNits,
+  )
+}
+
+export function persistImageEditorV3BrushTiles(
+  request: {
+    requestId: string
+    tiles: ReadonlyArray<{ tileKey: string; tile: ImageEditBrushTileV3 }>
+  },
+  signal?: AbortSignal,
+): Promise<{ tiles: PersistedImageEditBrushTileV3[] }> {
+  return runCancellable(request.requestId, signal, async (platform) => {
+    const result = await platform.persistBrushTiles({
+      requestId: request.requestId,
+      tiles: request.tiles.map((item) => ({
+        tileKey: item.tileKey,
+        tile: { ...item.tile, data: brushTileDataBuffer(item.tile) },
+      })),
+    })
+    return {
+      tiles: result.tiles.map((item) => ({
+        tileKey: item.tileKey,
+        resourceId: item.resource.resourceRef,
+        byteSize: item.resource.byteSize,
+      })),
+    }
+  })
+}
+
+export function readImageEditorV3BrushTiles(
+  request: {
+    requestId: string
+    tiles: ReadonlyArray<{
+      tileKey: string
+      resource: ImageEditBrushResourceReferenceV3
+    }>
+  },
+  signal?: AbortSignal,
+): Promise<{ tiles: Array<{ tileKey: string; tile: ImageEditBrushTileV3 }> }> {
+  return runCancellable(request.requestId, signal, async (platform) => {
+    const result = await platform.readBrushTiles({
+      requestId: request.requestId,
+      tiles: request.tiles.map((item) => ({
+        tileKey: item.tileKey,
+        resource: {
+          resourceRef: toResourceRef(item.resource.resourceId),
+          byteSize: item.resource.byteSize,
+        },
+      })),
+    })
+    return {
+      tiles: result.tiles.map((item) => ({
+        tileKey: item.tileKey,
+        tile: deserializeBrushTile(item.tile),
+      })),
+    }
+  })
 }
 
 export function openImageEditorV3Package(

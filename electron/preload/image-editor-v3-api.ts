@@ -16,6 +16,8 @@ export function createImageEditorV3Api(nativeInvoke: NativeInvoke): ImageEditorV
     describeSourcePyramid: (request) => nativeInvoke('imageEditorV3:source:pyramid', request),
     readFastProxy: (request) => nativeInvoke('imageEditorV3:source:fastProxy', request),
     readSourceTile: (request) => nativeInvoke('imageEditorV3:source:tile', request),
+    persistBrushTiles: (request) => nativeInvoke('imageEditorV3:brushTiles:persist', request),
+    readBrushTiles: (request) => nativeInvoke('imageEditorV3:brushTiles:read', request),
     openPackage: (request) => nativeInvoke('imageEditorV3:package:open', request),
     savePackageAs: (request) => nativeInvoke('imageEditorV3:package:saveAs', request),
     startRasterExport: (request) => nativeInvoke('imageEditorV3:rasterExport:start', request),

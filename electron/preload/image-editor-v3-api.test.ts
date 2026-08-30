@@ -87,4 +87,35 @@ describe('图片编辑 V3 preload 契约', () => {
     expect(invoke).toHaveBeenCalledWith('imageEditorV3:rasterExport:start', request)
     expect(request).not.toHaveProperty('targetPath')
   })
+
+  it('画笔瓦片批量持久化与读取使用独立可取消 IPC 通道', async () => {
+    const invoke = vi.fn(async () => ({ tiles: [] }))
+    const api = createImageEditorV3Api(
+      invoke as unknown as Parameters<typeof createImageEditorV3Api>[0],
+    )
+    const persistRequest = {
+      requestId: 'brush-persist',
+      tiles: [{
+        tileKey: '0:0:0',
+        tile: {
+          storage: 'mask-float32' as const,
+          width: 1,
+          height: 1,
+          data: new Float32Array([1]).buffer,
+        },
+      }],
+    }
+    const readRequest = {
+      requestId: 'brush-read',
+      tiles: [{ tileKey: '0:0:0', resource: { resourceRef: RESOURCE_REF, byteSize: 120 } }],
+    }
+
+    await api.persistBrushTiles(persistRequest)
+    await api.readBrushTiles(readRequest)
+    await api.cancelRequest('brush-read')
+
+    expect(invoke).toHaveBeenNthCalledWith(1, 'imageEditorV3:brushTiles:persist', persistRequest)
+    expect(invoke).toHaveBeenNthCalledWith(2, 'imageEditorV3:brushTiles:read', readRequest)
+    expect(invoke).toHaveBeenNthCalledWith(3, 'imageEditorV3:request:cancel', { requestId: 'brush-read' })
+  })
 })

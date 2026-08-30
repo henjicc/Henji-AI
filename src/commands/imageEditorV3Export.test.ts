@@ -21,6 +21,8 @@ function createPlatform(): ImageEditorV3Platform {
     describeSourcePyramid: vi.fn(),
     readFastProxy: vi.fn(),
     readSourceTile: vi.fn(),
+    persistBrushTiles: vi.fn(),
+    readBrushTiles: vi.fn(),
     openPackage: vi.fn(),
     savePackageAs: vi.fn(),
     startRasterExport: vi.fn(async () => ({

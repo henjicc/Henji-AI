@@ -9,6 +9,7 @@ import {
   createImageEditSourceFingerprint,
   DocumentRevisionConflictError,
   HenjiImagePackageCodec,
+  ImageEditBrushTileStoreV3,
   ImageEditDocumentRepository,
   ImageEditorV3SourceIngestor,
   RasterExportSessionManager,
@@ -21,6 +22,7 @@ import {
   collectPersistedImageEditHistoryResourcesV3,
 } from '../services/image-editor-v3'
 import { registerImageEditorV3RasterExportIpc } from './image-editor-v3-raster-export'
+import { registerImageEditorV3BrushTileIpc } from './image-editor-v3-brush-tiles'
 import {
   normalizeImageEditorV3Document,
   parseImageEditorV3BasePayload,
@@ -48,12 +50,17 @@ export {
   parseImageEditorV3SavePayload,
   parseImageEditorV3TilePayload,
 } from './image-editor-v3-payloads'
+export {
+  parseImageEditorV3PersistBrushTilesPayload,
+  parseImageEditorV3ReadBrushTilesPayload,
+} from './image-editor-v3-payloads'
 
 const logger = createMainLogger('main.image_editor_v3.ipc')
 interface ImageEditorV3Runtime {
   documents: ImageEditDocumentRepository; resources: ContentAddressedResourceStore
   sources: SharpSourceProvider; packages: HenjiImagePackageCodec
   sourceIngestor: ImageEditorV3SourceIngestor
+  brushTiles: ImageEditBrushTileStoreV3
   rasterExports: RasterExportSessionManager
 }
 let runtime: ImageEditorV3Runtime | undefined
@@ -71,6 +78,7 @@ function getRuntime(): ImageEditorV3Runtime {
     sources,
     packages: new HenjiImagePackageCodec(resources),
     sourceIngestor: new ImageEditorV3SourceIngestor(resources, sources),
+    brushTiles: new ImageEditBrushTileStoreV3(resources),
     rasterExports: new RasterExportSessionManager(documents, resources),
   }
   return runtime
@@ -317,6 +325,7 @@ function packageFileName(raw: string | undefined, documentId: string): string {
 export function registerImageEditorV3Ipc(): void {
   const guard = assertTrustedMainRenderer
   registerImageEditorV3RasterExportIpc({ manager: getRuntime().rasterExports, guard, runRequest })
+  registerImageEditorV3BrushTileIpc({ store: getRuntime().brushTiles, guard, runRequest })
   registerIpcHandler('imageEditorV3:document:load', parseImageEditorV3LoadPayload, (payload, event) => (
     runRequest('document.load', payload.requestId, event.sender.id, async (signal) => {
       throwIfAborted(signal)

@@ -6,6 +6,7 @@ import {
 } from '@/core/imageEdit/v3/documentFactory'
 import { ImageEditCommandHistoryV3 } from '@/core/imageEdit/v3/commandHistory'
 import type { ImageEditDocumentV3 } from '@/core/imageEdit/v3/documentTypes'
+import { createFloat32MaskTile } from '@/core/imageEdit/v3/effects/contracts'
 import type {
   ImageEditorV3DocumentRef,
   ImageEditorV3Platform,
@@ -22,6 +23,8 @@ import {
   collectImageEditorV3ResourceRefs,
   ImageEditorV3CommandRepository,
   ingestImageEditorV3Source,
+  persistImageEditorV3BrushTiles,
+  readImageEditorV3BrushTiles,
   readImageEditorV3FastProxy,
 } from './imageEditorV3'
 
@@ -43,6 +46,8 @@ function createPlatform(): ImageEditorV3Platform {
     describeSourcePyramid: vi.fn(),
     readFastProxy: vi.fn(),
     readSourceTile: vi.fn(),
+    persistBrushTiles: vi.fn(),
+    readBrushTiles: vi.fn(),
     openPackage: vi.fn(async () => ({ status: 'cancelled' as const })),
     savePackageAs: vi.fn(async () => ({ status: 'cancelled' as const })),
     startRasterExport: vi.fn(async () => ({ status: 'cancelled' as const })),
@@ -243,5 +248,44 @@ describe('图片编辑 V3 commands 契约', () => {
 
     expect(platform.ingestSource).toHaveBeenCalledWith(request)
     expect(result.resource.resourceRef).toBe(SOURCE_REF)
+  })
+
+  it('画笔命令在 PAL 边界复制 Float32 数据并映射内容寻址引用', async () => {
+    const platform = createPlatform()
+    vi.mocked(platform.persistBrushTiles).mockResolvedValue({
+      tiles: [{ tileKey: '0:2:3', resource: { resourceRef: PREVIEW_REF, byteSize: 128 } }],
+    })
+    vi.mocked(platform.readBrushTiles).mockResolvedValue({
+      tiles: [{
+        tileKey: '0:2:3',
+        tile: {
+          storage: 'mask-float32',
+          width: 2,
+          height: 1,
+          data: new Float32Array([0.25, 1]).buffer,
+        },
+      }],
+    })
+    mocks.getPlatform.mockReturnValue({ imageEditorV3: platform })
+    const source = createFloat32MaskTile(2, 1, new Float32Array([0.25, 1]))
+
+    const persisted = await persistImageEditorV3BrushTiles({
+      requestId: 'brush-persist',
+      tiles: [{ tileKey: '0:2:3', tile: source }],
+    })
+    const sent = vi.mocked(platform.persistBrushTiles).mock.calls[0]?.[0].tiles[0]?.tile
+    const loaded = await readImageEditorV3BrushTiles({
+      requestId: 'brush-read',
+      tiles: [{
+        tileKey: '0:2:3',
+        resource: { resourceId: PREVIEW_REF, byteSize: 128 },
+      }],
+    })
+
+    expect(sent?.data).toBeInstanceOf(ArrayBuffer)
+    expect(sent?.data).not.toBe(source.data.buffer)
+    expect(persisted.tiles).toEqual([{ tileKey: '0:2:3', resourceId: PREVIEW_REF, byteSize: 128 }])
+    expect(loaded.tiles[0]?.tile.data).toBeInstanceOf(Float32Array)
+    expect([...loaded.tiles[0]!.tile.data]).toEqual([0.25, 1])
   })
 })

@@ -20,6 +20,8 @@ export function createElectronImageEditorV3(): ImageEditorV3Platform {
     describeSourcePyramid: (request) => getNativeImageEditorV3().describeSourcePyramid(request),
     readFastProxy: (request) => getNativeImageEditorV3().readFastProxy(request),
     readSourceTile: (request) => getNativeImageEditorV3().readSourceTile(request),
+    persistBrushTiles: (request) => getNativeImageEditorV3().persistBrushTiles(request),
+    readBrushTiles: (request) => getNativeImageEditorV3().readBrushTiles(request),
     openPackage: (request) => getNativeImageEditorV3().openPackage(request),
     savePackageAs: (request) => getNativeImageEditorV3().savePackageAs(request),
     startRasterExport: (request) => getNativeImageEditorV3().startRasterExport(request),

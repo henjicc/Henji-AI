@@ -108,6 +108,44 @@ export interface ImageEditorV3SourceTile {
   pixels: ArrayBuffer
 }
 
+export interface ImageEditorV3BrushRgbaTile {
+  storage: 'rgba-float32'
+  width: number
+  height: number
+  /** IPC 只接受精确长度的 ArrayBuffer 或无偏移、无额外 backing bytes 的 Float32Array。 */
+  data: ArrayBuffer | Float32Array
+  colorDomain: 'source-encoded' | 'linear-light' | 'perceptual-working'
+  workingSpace: 'srgb' | 'display-p3' | 'rec2020'
+  transferFunction: 'srgb' | 'linear' | 'pq' | 'hlg'
+  referenceWhiteNits: number
+  alpha: 'premultiplied'
+}
+
+export interface ImageEditorV3BrushMaskTile {
+  storage: 'mask-float32'
+  width: number
+  height: number
+  data: ArrayBuffer | Float32Array
+}
+
+export type ImageEditorV3BrushTile = ImageEditorV3BrushRgbaTile | ImageEditorV3BrushMaskTile
+
+export interface ImageEditorV3BrushTileResource {
+  resourceRef: ImageEditorV3ResourceRef
+  byteSize: number
+}
+
+export interface ImageEditorV3PersistedBrushTile {
+  tileKey: string
+  resource: ImageEditorV3BrushTileResource
+}
+
+export interface ImageEditorV3LoadedBrushTile {
+  tileKey: string
+  /** 主进程返回的数据始终为独占、精确长度的 ArrayBuffer。 */
+  tile: ImageEditorV3BrushTile & { data: ArrayBuffer }
+}
+
 export type ImageEditorV3DialogResult<T> =
   | { status: 'cancelled' }
   | { status: 'completed'; value: T }
@@ -215,6 +253,14 @@ export interface ImageEditorV3Platform {
     halo?: number
     bitDepth?: 8 | 16 | 32
   }): Promise<ImageEditorV3SourceTile>
+  persistBrushTiles(request: {
+    requestId: string
+    tiles: Array<{ tileKey: string; tile: ImageEditorV3BrushTile }>
+  }): Promise<{ tiles: ImageEditorV3PersistedBrushTile[] }>
+  readBrushTiles(request: {
+    requestId: string
+    tiles: Array<{ tileKey: string; resource: ImageEditorV3BrushTileResource }>
+  }): Promise<{ tiles: ImageEditorV3LoadedBrushTile[] }>
   openPackage(request: {
     requestId: string
   }): Promise<ImageEditorV3DialogResult<ImageEditorV3PackageOpenResult>>
