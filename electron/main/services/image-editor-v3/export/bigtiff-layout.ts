@@ -32,6 +32,21 @@ export interface BigTiffRasterDescription {
   colorSpace: TileOutputDescription['colorSpace']
   transferFunction: TileOutputDescription['transferFunction']
   alphaMode?: TileOutputDescription['alphaMode']
+  hdrBigTiffExchange?: TileOutputDescription['hdrBigTiffExchange']
+  documentId: string
+  revision: number
+  sourceFingerprint?: string
+}
+
+export interface BigTiffEmbeddedRasterMetadataV3 {
+  schema: 'henji-image-edit-v3-raster'
+  bitDepth: BigTiffRasterDescription['bitDepth']
+  sampleFormat: BigTiffRasterDescription['sampleFormat']
+  colorSpace: BigTiffRasterDescription['colorSpace']
+  transferFunction: BigTiffRasterDescription['transferFunction']
+  byteOrder: BigTiffRasterDescription['byteOrder']
+  alphaMode?: BigTiffRasterDescription['alphaMode']
+  hdrBigTiffExchange?: BigTiffRasterDescription['hdrBigTiffExchange']
   documentId: string
   revision: number
   sourceFingerprint?: string
@@ -142,20 +157,33 @@ export function planBigTiff(
   }
 }
 
-function createDescriptionTag(description: BigTiffRasterDescription): Buffer {
-  if (description.documentId.length > 4096 || (description.sourceFingerprint?.length ?? 0) > 4096) {
-    throw new Error('BigTIFF document metadata exceeds the bounded limit')
-  }
-  return asciiValue(JSON.stringify({
+export function createBigTiffEmbeddedRasterMetadataV3(
+  description: BigTiffRasterDescription,
+): BigTiffEmbeddedRasterMetadataV3 {
+  return {
     schema: 'henji-image-edit-v3-raster',
+    bitDepth: description.bitDepth,
+    sampleFormat: description.sampleFormat,
     colorSpace: description.colorSpace,
     transferFunction: description.transferFunction,
     byteOrder: description.byteOrder,
     alphaMode: description.channels === 4 ? description.alphaMode : undefined,
+    hdrBigTiffExchange: description.hdrBigTiffExchange,
     documentId: description.documentId,
     revision: description.revision,
     sourceFingerprint: description.sourceFingerprint,
-  }))
+  }
+}
+
+function createDescriptionTag(description: BigTiffRasterDescription): Buffer {
+  if (description.documentId.length > 4096 || (description.sourceFingerprint?.length ?? 0) > 4096) {
+    throw new Error('BigTIFF document metadata exceeds the bounded limit')
+  }
+  const encoded = asciiValue(JSON.stringify(createBigTiffEmbeddedRasterMetadataV3(description)))
+  if (encoded.byteLength > 64 * 1024) {
+    throw new Error('BigTIFF embedded image-edit metadata exceeds 64 KiB')
+  }
+  return encoded
 }
 
 function createTags(

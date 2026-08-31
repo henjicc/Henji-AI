@@ -134,25 +134,32 @@ function validateHdrColorContract(
       'HDR 分块导出只接受 Rec.2020 PQ/HLG 的 16-bit 或浮点权威文档',
     )
   }
-  if (hasUnsupportedHdrMetadata(document) || descriptionHasUnsupportedHdrMetadata(description)) {
-    throw new ImageEditorV3ExportCapabilityError(
-      'HDR_RENDER_UNSUPPORTED',
-      '当前 HDR AVIF 编码器尚不能可靠写入 mastering-display 或 content-light 元数据',
-    )
-  }
-  if (
-    description.bitDepth !== 16
-    || description.sampleFormat !== 'uint'
-    || description.colorSpace !== 'rec2020'
-    || description.transferFunction !== transferFunction
+  const commonMismatch = description.colorSpace !== 'rec2020'
     || description.alphaMode !== 'straight'
     || document.color.iccProfileResourceId !== null
     || description.iccProfileResourceRef != null
-    || !cicpMatchesDocument(document, description)
-  ) {
+  const linearBigTiff = !commonMismatch
+    && description.bitDepth === 32
+    && description.sampleFormat === 'float'
+    && description.transferFunction === 'linear'
+    && description.cicp == null
+    && description.hdrMetadata == null
+  if (linearBigTiff) return
+
+  if (hasUnsupportedHdrMetadata(document) || descriptionHasUnsupportedHdrMetadata(description)) {
+    throw new ImageEditorV3ExportCapabilityError(
+      'HDR_RENDER_UNSUPPORTED',
+      '当前 HDR AVIF 编码器尚不能可靠写入 mastering-display 或 content-light 元数据；请改用 BigTIFF 交换文件',
+    )
+  }
+  if (commonMismatch
+    || description.bitDepth !== 16
+    || description.sampleFormat !== 'uint'
+    || description.transferFunction !== transferFunction
+    || !cicpMatchesDocument(document, description)) {
     throw new ImageEditorV3ExportCapabilityError(
       'COLOR_CONTRACT_MISMATCH',
-      'HDR AVIF 必须输出 straight-alpha Rec.2020 16-bit uint 瓦片，并与文档 PQ/HLG CICP 完全一致',
+      'HDR AVIF 必须输出匹配 CICP 的 16-bit 编码瓦片；HDR BigTIFF 必须输出 scene-linear Rec.2020 Float32 瓦片',
     )
   }
 }

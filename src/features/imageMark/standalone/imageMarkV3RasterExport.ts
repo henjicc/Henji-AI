@@ -77,7 +77,7 @@ function isHdrAvifFormat(format: ImageEditorV3RasterExportFormat): boolean {
   return format === 'avif10' || format === 'avif12'
 }
 
-function hasValidHdrAvifDocumentContract(document: ImageEditDocumentV3): boolean {
+function hasValidHdrDocumentContract(document: ImageEditDocumentV3): boolean {
   const transfer = document.color.transferFunction
   const metadata = document.color.hdrMetadata
   const expectedTransfer = transfer === 'pq' ? 16 : transfer === 'hlg' ? 18 : null
@@ -87,18 +87,33 @@ function hasValidHdrAvifDocumentContract(document: ImageEditDocumentV3): boolean
   return expectedTransfer !== null
     && metadata !== null
     && metadata.standard === transfer
+    && Number.isFinite(metadata.referenceWhiteNits)
+    && metadata.referenceWhiteNits > 0
+    && metadata.referenceWhiteNits <= 10_000
     && document.color.workingSpace === 'rec2020'
     && hasHdrPrecision
     && document.color.iccProfileResourceId === null
-    && metadata.masteringDisplay === undefined
-    && metadata.contentLight === undefined
     && metadata.cicp.colorPrimaries === 9
     && metadata.cicp.transferCharacteristics === expectedTransfer
     && metadata.cicp.matrixCoefficients === 9
     && metadata.cicp.fullRange === false
 }
 
+function hasValidHdrAvifDocumentContract(document: ImageEditDocumentV3): boolean {
+  return hasValidHdrDocumentContract(document)
+    && document.color.hdrMetadata?.masteringDisplay === undefined
+    && document.color.hdrMetadata?.contentLight === undefined
+}
+
+function assertHdrDocumentContract(document: ImageEditDocumentV3): void {
+  if (hasValidHdrDocumentContract(document)) return
+  throw new ImageMarkV3RasterExportContractError(
+    'imageEditor.v3.readiness.reasons.exportHdrMetadata',
+  )
+}
+
 function assertHdrAvifDocumentContract(document: ImageEditDocumentV3): void {
+  assertHdrDocumentContract(document)
   if (hasValidHdrAvifDocumentContract(document)) return
   throw new ImageMarkV3RasterExportContractError(
     'imageEditor.v3.readiness.reasons.exportHdrMetadata',
@@ -125,16 +140,17 @@ function assertHdrAvifOutputWithinLimit(
 
 /**
  * 只暴露当前链路能无损表达的格式。线性整数文档与浮点文档均保留到 BigTIFF，
- * PQ/HLG 仅开放给带严格 Rec.2020 CICP 的 AVIF；浮点权威文档在编码边界
- * 显式量化为 16-bit renderer tiles，SDR 浮点仍只交给 BigTIFF。
+ * PQ/HLG 同时支持带严格 CICP 的 AVIF 和 scene-linear Rec.2020 Float32 BigTIFF；
+ * AVIF 在编码边界显式量化为 16-bit renderer tiles，BigTIFF 不裁剪负值与超白。
  */
 export function listImageMarkV3RasterExportFormats(
   document: ImageEditDocumentV3,
 ): readonly ImageEditorV3RasterExportFormat[] {
   if (documentHasHdrMetadata(document)) {
+    if (!hasValidHdrDocumentContract(document)) return []
     return hasValidHdrAvifDocumentContract(document) && hdrAvifOutputWithinLimit(document)
-      ? HDR_AVIF_FORMATS
-      : []
+      ? [...HDR_AVIF_FORMATS, 'bigtiff']
+      : ['bigtiff']
   }
   if (document.color.bitDepth === 'float16' || document.color.bitDepth === 'float32') {
     return ['bigtiff']
@@ -178,13 +194,18 @@ function optionalResourceRef(value: string | null): `sha256:${string}` | null {
   return value as `sha256:${string}`
 }
 
-function exportPrecision(document: ImageEditDocumentV3): {
+function exportPrecision(
+  document: ImageEditDocumentV3,
+  format: ImageEditorV3RasterExportFormat,
+): {
   bitDepth: 8 | 16 | 32
   sampleFormat: 'uint' | 'float'
 } {
   if (documentHasHdrMetadata(document)) {
-    assertHdrAvifDocumentContract(document)
-    return { bitDepth: 16, sampleFormat: 'uint' }
+    assertHdrDocumentContract(document)
+    return format === 'bigtiff'
+      ? { bitDepth: 32, sampleFormat: 'float' }
+      : { bitDepth: 16, sampleFormat: 'uint' }
   }
   if (document.color.bitDepth === 8) return { bitDepth: 8, sampleFormat: 'uint' }
   if (document.color.bitDepth === 16) return { bitDepth: 16, sampleFormat: 'uint' }
@@ -197,7 +218,11 @@ function exportPrecision(document: ImageEditDocumentV3): {
 }
 
 function defaultPngFormat(document: ImageEditDocumentV3): ImageEditorV3RasterExportFormat {
-  if (documentHasHdrMetadata(document)) return 'avif10'
+  if (documentHasHdrMetadata(document)) {
+    return hasValidHdrAvifDocumentContract(document) && hdrAvifOutputWithinLimit(document)
+      ? 'avif10'
+      : 'bigtiff'
+  }
   return document.color.bitDepth === 16 ? 'png16' : 'png8'
 }
 
@@ -212,23 +237,26 @@ export function createImageMarkV3RasterExportSpec(
   const format = options.format ?? defaultPngFormat(document)
   const geometry = resolveImageEditorV3ExportGeometry(document)
   if (documentHasHdrMetadata(document)) {
-    assertHdrAvifDocumentContract(document)
-    if (!isHdrAvifFormat(format)) {
+    assertHdrDocumentContract(document)
+    if (isHdrAvifFormat(format)) {
+      assertHdrAvifDocumentContract(document)
+      assertHdrAvifOutputWithinLimit(geometry)
+    } else if (format !== 'bigtiff') {
       throw new ImageMarkV3RasterExportContractError(
         'imageEditor.v3.readiness.reasons.exportHdrMetadata',
       )
     }
-    assertHdrAvifOutputWithinLimit(geometry)
   }
   const allowedFormats = listImageMarkV3RasterExportFormats(document)
   if (!allowedFormats.includes(format)) {
-    exportPrecision(document)
+    exportPrecision(document, format)
     throw new ImageMarkV3RasterExportContractError(
       'imageEditor.v3.readiness.reasons.exportBitDepth',
     )
   }
-  const precision = exportPrecision(document)
+  const precision = exportPrecision(document, format)
   const hdrMetadata = documentHasHdrMetadata(document) ? document.color.hdrMetadata : null
+  const hdrBigTiff = hdrMetadata !== null && format === 'bigtiff'
   const iccProfileResourceRef = hdrMetadata
     ? null
     : optionalResourceRef(document.color.iccProfileResourceId)
@@ -242,10 +270,10 @@ export function createImageMarkV3RasterExportSpec(
     height: geometry.outputHeight,
     ...precision,
     colorSpace: document.color.workingSpace,
-    transferFunction: document.color.transferFunction,
+    transferFunction: hdrBigTiff ? 'linear' : document.color.transferFunction,
     alphaMode: 'straight',
     iccProfileResourceRef,
-    cicp: hdrMetadata ? { ...hdrMetadata.cicp } : null,
+    cicp: hdrMetadata && !hdrBigTiff ? { ...hdrMetadata.cicp } : null,
     hdrMetadata: null,
   }
   return {

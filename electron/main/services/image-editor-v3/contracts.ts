@@ -181,6 +181,29 @@ export interface TileOutputDescription {
     maxContentLightLevelNits?: number
     maxFrameAverageLightLevelNits?: number
   }
+  /**
+   * 仅由主进程在校验权威文档快照后附加。BigTIFF 中的实际样本始终是
+   * scene-linear Rec.2020 Float32；这里保留导出前 HDR 文档的显示语义，
+   * 渲染层不能通过 IPC 自行声明或覆盖这些字段。
+   */
+  hdrBigTiffExchange?: {
+    schema: 'henji-hdr-bigtiff-v1'
+    sourceTransferFunction: 'pq' | 'hlg'
+    referenceWhiteNits: number
+    sourceCicp: NonNullable<SourceImageMetadata['cicp']>
+    contentLight?: {
+      maxContentLightLevelNits: number
+      maxFrameAverageLightLevelNits: number
+    }
+    masteringDisplay?: {
+      red: { x: number; y: number }
+      green: { x: number; y: number }
+      blue: { x: number; y: number }
+      whitePoint: { x: number; y: number }
+      maxLuminanceNits: number
+      minLuminanceNits: number
+    }
+  }
   documentId: string
   revision: number
   sourceFingerprint?: string

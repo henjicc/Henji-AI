@@ -197,13 +197,13 @@ describe('工具箱 V3 栅格分块导出', () => {
     expect(mocks.prepare.mock.invocationCallOrder[0]).toBeLessThan(mocks.exportRaster.mock.invocationCallOrder[0])
   })
 
-  it('只为 16-bit 与浮点 Rec.2020 PQ/HLG 文档开放严格 HDR AVIF', async () => {
+  it('为 16-bit 与浮点 Rec.2020 PQ/HLG 文档开放 HDR AVIF 与线性 Float32 BigTIFF', async () => {
     const pq = snapshot(16)
     pq.document.color.workingSpace = 'rec2020'
     pq.document.color.iccProfileResourceId = null
     pq.document.color.transferFunction = 'pq'
     pq.document.color.hdrMetadata = createImageEditHdrMetadataV3('pq')
-    expect(listImageMarkV3RasterExportFormats(pq.document)).toEqual(['avif10', 'avif12'])
+    expect(listImageMarkV3RasterExportFormats(pq.document)).toEqual(['avif10', 'avif12', 'bigtiff'])
     expect(createImageMarkV3RasterExportSpec(pq.document, 'hdr.tiff')).toEqual({
       format: 'avif10',
       suggestedName: 'hdr-edited.avif',
@@ -233,7 +233,7 @@ describe('工具箱 V3 栅格分块导出', () => {
       hlg.document.color.iccProfileResourceId = null
       hlg.document.color.transferFunction = 'hlg'
       hlg.document.color.hdrMetadata = createImageEditHdrMetadataV3('hlg')
-      expect(listImageMarkV3RasterExportFormats(hlg.document)).toEqual(['avif10', 'avif12'])
+      expect(listImageMarkV3RasterExportFormats(hlg.document)).toEqual(['avif10', 'avif12', 'bigtiff'])
       expect(createImageMarkV3RasterExportSpec(hlg.document, 'hlg.tiff', {
         format: 'avif12',
       })).toMatchObject({
@@ -256,8 +256,23 @@ describe('工具箱 V3 栅格分块导出', () => {
       maxContentLightLevelNits: 1_000,
       maxFrameAverageLightLevelNits: 400,
     }
-    expect(listImageMarkV3RasterExportFormats(pq.document)).toEqual([])
-    expect(() => createImageMarkV3RasterExportSpec(pq.document, 'hdr.avif')).toThrow(
+    expect(listImageMarkV3RasterExportFormats(pq.document)).toEqual(['bigtiff'])
+    expect(createImageMarkV3RasterExportSpec(pq.document, 'hdr.avif')).toMatchObject({
+      format: 'bigtiff',
+      suggestedName: 'hdr-edited.tif',
+      description: {
+        bitDepth: 32,
+        sampleFormat: 'float',
+        colorSpace: 'rec2020',
+        transferFunction: 'linear',
+        iccProfileResourceRef: null,
+        cicp: null,
+        hdrMetadata: null,
+      },
+    })
+    expect(() => createImageMarkV3RasterExportSpec(pq.document, 'hdr.avif', {
+      format: 'avif10',
+    })).toThrow(
       'imageEditor.v3.readiness.reasons.exportHdrMetadata',
     )
 
@@ -287,19 +302,30 @@ describe('工具箱 V3 栅格分块导出', () => {
     }
 
     expect(IMAGE_EDITOR_V3_HDR_AVIF_MAX_PIXELS).toBe(9_000_000)
-    expect(listImageMarkV3RasterExportFormats(hdr.document)).toEqual(['avif10', 'avif12'])
+    expect(listImageMarkV3RasterExportFormats(hdr.document)).toEqual(['avif10', 'avif12', 'bigtiff'])
     expect(createImageMarkV3RasterExportSpec(hdr.document, '200mp.tif')).toMatchObject({
       format: 'avif10',
       description: { width: 3_000, height: 3_000 },
     })
 
     hdr.document.geometry.crop = { x: 0, y: 0, width: 3_001, height: 3_000 }
-    expect(listImageMarkV3RasterExportFormats(hdr.document)).toEqual([])
-    expect(resolveImageMarkV3RasterExportReadiness(hdr.document, '200mp.tif')).toEqual({
+    expect(listImageMarkV3RasterExportFormats(hdr.document)).toEqual(['bigtiff'])
+    expect(createImageMarkV3RasterExportSpec(hdr.document, '200mp.tif')).toMatchObject({
+      format: 'bigtiff',
+      description: { width: 3_001, height: 3_000, bitDepth: 32, transferFunction: 'linear' },
+    })
+    expect(resolveImageMarkV3RasterExportReadiness(
+      hdr.document,
+      '200mp.tif',
+      'avif10',
+    )).toEqual({
       state: 'disabled',
       reasonKey: 'imageEditor.v3.readiness.reasons.exportHdrPixelLimit',
     })
-    expect(mocks.prepare).not.toHaveBeenCalled()
+    expect(resolveImageMarkV3RasterExportReadiness(hdr.document, '200mp.tif')).toEqual({
+      state: 'ready',
+    })
+    expect(mocks.prepare).toHaveBeenCalledTimes(1)
     expect(mocks.render).not.toHaveBeenCalled()
     expect(mocks.exportRaster).not.toHaveBeenCalled()
   })
@@ -335,8 +361,15 @@ describe('工具箱 V3 栅格分块导出', () => {
       maxContentLightLevelNits: 1_000,
       maxFrameAverageLightLevelNits: 400,
     }
-    expect(resolveImageMarkV3RasterExportReadiness(hdr.document, 'hdr.avif')).toMatchObject({
+    expect(resolveImageMarkV3RasterExportReadiness(
+      hdr.document,
+      'hdr.avif',
+      'avif10',
+    )).toMatchObject({
       state: 'disabled', reasonKey: 'imageEditor.v3.readiness.reasons.exportHdrMetadata',
+    })
+    expect(resolveImageMarkV3RasterExportReadiness(hdr.document, 'hdr.avif')).toEqual({
+      state: 'ready',
     })
 
     const missingIcc = snapshot(16)

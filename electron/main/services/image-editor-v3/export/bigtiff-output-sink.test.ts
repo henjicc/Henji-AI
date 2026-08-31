@@ -229,6 +229,91 @@ describe('BigTiffTileOutputSink', () => {
     expect(await fsp.readdir(rootDir)).toEqual([])
   })
 
+  it.each(['pq', 'hlg'] as const)(
+    '把 %s HDR 样本写成线性 Rec.2020 Float32，并原样保存参考白、CICP、MDCV 与 CLLI',
+    async (sourceTransferFunction) => {
+      const targetPath = path.join(rootDir, `hdr-${sourceTransferFunction}.tif`)
+      const transferCharacteristics = sourceTransferFunction === 'pq' ? 16 : 18
+      const sink = new BigTiffTileOutputSink(targetPath, {
+        tileSize: 16,
+        inputByteOrder: 'little-endian',
+      })
+      const hdrBigTiffExchange = {
+        schema: 'henji-hdr-bigtiff-v1' as const,
+        sourceTransferFunction,
+        referenceWhiteNits: 250,
+        sourceCicp: {
+          colorPrimaries: 9,
+          transferCharacteristics,
+          matrixCoefficients: 9,
+          fullRange: false,
+        },
+        contentLight: {
+          maxContentLightLevelNits: 1_000,
+          maxFrameAverageLightLevelNits: 400,
+        },
+        masteringDisplay: {
+          red: { x: 0.708, y: 0.292 },
+          green: { x: 0.17, y: 0.797 },
+          blue: { x: 0.131, y: 0.046 },
+          whitePoint: { x: 0.3127, y: 0.329 },
+          maxLuminanceNits: 1_000,
+          minLuminanceNits: 0.005,
+        },
+      }
+      await sink.begin({
+        ...baseDescription,
+        bitDepth: 32,
+        sampleFormat: 'float',
+        colorSpace: 'rec2020',
+        transferFunction: 'linear',
+        hdrBigTiffExchange,
+      })
+      const pixels = Buffer.alloc(2 * 4 * 4)
+      const sampleValues = [-0.25, 2, 0.5, 0.75, 4, 0, 1, 1]
+      sampleValues.forEach((value, index) => {
+        pixels.writeFloatLE(value, index * 4)
+      })
+      await sink.writeTile({
+        x: 0,
+        y: 0,
+        width: 2,
+        height: 1,
+        rowStride: pixels.byteLength,
+        pixels,
+      })
+      await sink.complete()
+
+      const file = await fsp.readFile(targetPath)
+      const tags = parseTags(file)
+      expect(tags.get(258)?.data).toEqual(Buffer.from([32, 0, 32, 0, 32, 0, 32, 0]))
+      expect(tags.get(339)?.data).toEqual(Buffer.from([3, 0, 3, 0, 3, 0, 3, 0]))
+      expect(tags.has(34675)).toBe(false)
+      const metadata = JSON.parse(
+        tags.get(270)!.data.subarray(0, -1).toString('utf8'),
+      ) as Record<string, unknown>
+      expect(metadata).toMatchObject({
+        schema: 'henji-image-edit-v3-raster',
+        bitDepth: 32,
+        sampleFormat: 'float',
+        colorSpace: 'rec2020',
+        transferFunction: 'linear',
+        hdrBigTiffExchange,
+      })
+      const offset = uint64Values(tags.get(324)!)[0]
+      const byteCount = uint64Values(tags.get(325)!)[0]
+      const physicalTile = inflateSync(file.subarray(offset, offset + byteCount))
+      expect(physicalTile.subarray(0, pixels.byteLength)).toEqual(pixels)
+      const sharp = await loadSharp()
+      expect(await sharp(targetPath).metadata()).toMatchObject({
+        format: 'tiff',
+        width: 2,
+        height: 1,
+        depth: 'float',
+      })
+    },
+  )
+
   it('200MP 规划只保留单瓦片工作集，不产生全帧表面', () => {
     const plan = planBigTiff({ width: 20_000, height: 10_000, channels: 4, bitDepth: 32 })
     expect(plan).toMatchObject({ columns: 40, rows: 20, tileCount: 800 })

@@ -74,6 +74,24 @@ function hdrDescription(
   }
 }
 
+function hdrBigTiffDescription(
+  width: number,
+  height: number,
+): ImageEditorV3RasterExportDescription {
+  return {
+    width,
+    height,
+    bitDepth: 32,
+    sampleFormat: 'float',
+    colorSpace: 'rec2020',
+    transferFunction: 'linear',
+    alphaMode: 'straight',
+    iccProfileResourceRef: null,
+    cicp: null,
+    hdrMetadata: null,
+  }
+}
+
 function floatSourceReader(
   requests: ImageEditorV3ExportSourceTileRequest[],
   straightValue = 2,
@@ -793,6 +811,55 @@ describe('图片编辑 V3 分块导出渲染', () => {
     expect(Math.abs(view.getUint16(0, true) - expected)).toBeLessThanOrEqual(2)
     expect(view.getUint16(6, true)).toBe(Math.round(0.5 * 65_535))
   })
+
+  it.each(['pq', 'hlg'] as const)(
+    '将 %s HDR 文档导出为不裁剪超白的 scene-linear Rec.2020 Float32 BigTIFF 瓦片',
+    async (transferFunction) => {
+      const metadata = createImageEditHdrMetadataV3(transferFunction)
+      metadata.referenceWhiteNits = 250
+      metadata.contentLight = {
+        maxContentLightLevelNits: 1_000,
+        maxFrameAverageLightLevelNits: 400,
+      }
+      const hdr = createImageEditDocumentV3({
+        width: 1,
+        height: 1,
+        documentId: `hdr-bigtiff-${transferFunction}`,
+        sourceResourceId: SOURCE,
+        color: {
+          workingSpace: 'rec2020',
+          bitDepth: 'float32',
+          transferFunction,
+          hdrMetadata: metadata,
+          iccProfileResourceId: null,
+        },
+      })
+      const requests: ImageEditorV3ExportSourceTileRequest[] = []
+      const output = []
+      for await (const tile of renderImageEditorV3ExportTiles(
+        {
+          document: hdr,
+          resourceDescriptors: [],
+          description: hdrBigTiffDescription(1, 1),
+          tileSize: 16,
+        },
+        { readSourceTile: floatSourceReader(requests, 2) },
+      )) output.push(tile)
+
+      expect(requests).toHaveLength(1)
+      expect(requests[0]?.bitDepth).toBe(32)
+      expect(output).toHaveLength(1)
+      expect(output[0]).toMatchObject({ width: 1, height: 1, rowStride: 16 })
+      const bytes = output[0]!.pixels instanceof Uint8Array
+        ? output[0]!.pixels
+        : new Uint8Array(output[0]!.pixels)
+      const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength)
+      expect(view.getFloat32(0, true)).toBeCloseTo(2)
+      expect(view.getFloat32(4, true)).toBeCloseTo(2)
+      expect(view.getFloat32(8, true)).toBeCloseTo(2)
+      expect(view.getFloat32(12, true)).toBeCloseTo(0.5)
+    },
+  )
 
   it('在任何瓦片读取前拒绝不匹配 CICP 与尚不能写入的 HDR 元数据', async () => {
     const readSourceTile = vi.fn(floatSourceReader([]))

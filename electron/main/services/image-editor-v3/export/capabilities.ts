@@ -123,6 +123,91 @@ function isHdrDescription(description: TileOutputDescription): boolean {
   return description.transferFunction === 'pq' || description.transferFunction === 'hlg'
 }
 
+function validHdrChromaticity(value: unknown): boolean {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return false
+  const point = value as Record<string, unknown>
+  return typeof point.x === 'number'
+    && Number.isFinite(point.x)
+    && point.x >= 0
+    && point.x <= 1
+    && typeof point.y === 'number'
+    && Number.isFinite(point.y)
+    && point.y >= 0
+    && point.y <= 1
+}
+
+function validHdrBigTiffOptionalMetadata(
+  exchange: NonNullable<TileOutputDescription['hdrBigTiffExchange']>,
+): boolean {
+  const content = exchange.contentLight
+  if (content && (!Number.isSafeInteger(content.maxContentLightLevelNits)
+    || content.maxContentLightLevelNits < 0
+    || content.maxContentLightLevelNits > 65_535
+    || !Number.isSafeInteger(content.maxFrameAverageLightLevelNits)
+    || content.maxFrameAverageLightLevelNits < 0
+    || content.maxFrameAverageLightLevelNits > content.maxContentLightLevelNits)) return false
+  const mastering = exchange.masteringDisplay
+  return !mastering || (
+    validHdrChromaticity(mastering.red)
+    && validHdrChromaticity(mastering.green)
+    && validHdrChromaticity(mastering.blue)
+    && validHdrChromaticity(mastering.whitePoint)
+    && Number.isFinite(mastering.maxLuminanceNits)
+    && mastering.maxLuminanceNits > 0
+    && mastering.maxLuminanceNits <= 10_000
+    && Number.isFinite(mastering.minLuminanceNits)
+    && mastering.minLuminanceNits >= 0
+    && mastering.minLuminanceNits <= mastering.maxLuminanceNits
+  )
+}
+
+export function validateHdrBigTiffExchange(
+  description: Pick<
+    TileOutputDescription,
+    | 'bitDepth'
+    | 'sampleFormat'
+    | 'colorSpace'
+    | 'transferFunction'
+    | 'alphaMode'
+    | 'iccProfileResourceId'
+    | 'cicp'
+    | 'hdrMetadata'
+    | 'hdrBigTiffExchange'
+  >,
+  format: RasterExportFormat,
+): boolean {
+  const exchange = description.hdrBigTiffExchange
+  if (!exchange) return false
+  const expectedTransfer = exchange.sourceTransferFunction === 'pq' ? 16 : 18
+  const cicp = exchange.sourceCicp
+  if (format !== 'bigtiff'
+    || exchange.schema !== 'henji-hdr-bigtiff-v1'
+    || (exchange.sourceTransferFunction !== 'pq' && exchange.sourceTransferFunction !== 'hlg')
+    || description.bitDepth !== 32
+    || description.sampleFormat !== 'float'
+    || description.colorSpace !== 'rec2020'
+    || description.transferFunction !== 'linear'
+    || description.alphaMode !== 'straight'
+    || description.iccProfileResourceId !== undefined
+    || description.cicp !== undefined
+    || description.hdrMetadata !== undefined
+    || !Number.isFinite(exchange.referenceWhiteNits)
+    || exchange.referenceWhiteNits <= 0
+    || exchange.referenceWhiteNits > 10_000
+    || cicp?.colorPrimaries !== 9
+    || cicp?.transferCharacteristics !== expectedTransfer
+    || cicp?.matrixCoefficients !== 9
+    || cicp?.fullRange !== false
+    || !validHdrBigTiffOptionalMetadata(exchange)) {
+    throw capabilityError(
+      'INVALID_COLOR_METADATA',
+      format,
+      'HDR BigTIFF exchange requires trusted scene-linear Rec.2020 Float32 samples and matching source CICP metadata',
+    )
+  }
+  return true
+}
+
 function validateStreamingHdrAvif(
   description: TileOutputDescription,
   format: RasterExportFormat,
@@ -250,6 +335,8 @@ export async function prepareExportMetadata(
   validateHdrMetadataShape(description, options.format)
   validateCicpShape(description, options.format)
   assertSourcePrecision(description, options.format)
+
+  if (validateHdrBigTiffExchange(description, options.format)) return {}
 
   if (isHdrDescription(description)) {
     validateStreamingHdrAvif(description, options.format)

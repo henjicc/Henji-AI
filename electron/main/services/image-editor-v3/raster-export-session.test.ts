@@ -355,6 +355,84 @@ describe('RasterExportSessionManager', () => {
     },
   )
 
+  it.each(['pq', 'hlg'] as const)(
+    '把 %s HDR 快照绑定为可信的线性 Float32 BigTIFF 交换元数据',
+    async (transferFunction) => {
+      const snapshot = await createSnapshot({
+        color: {
+          workingSpace: 'rec2020', bitDepth: 'float32', transferFunction,
+          hdrMetadata: {
+            standard: transferFunction,
+            referenceWhiteNits: 250,
+            cicp: {
+              colorPrimaries: 9,
+              transferCharacteristics: transferFunction === 'pq' ? 16 : 18,
+              matrixCoefficients: 9,
+              fullRange: false,
+            },
+            contentLight: {
+              maxContentLightLevelNits: 1_000,
+              maxFrameAverageLightLevelNits: 400,
+            },
+            masteringDisplay: {
+              red: { x: 0.708, y: 0.292 },
+              green: { x: 0.17, y: 0.797 },
+              blue: { x: 0.131, y: 0.046 },
+              whitePoint: { x: 0.3127, y: 0.329 },
+              maxLuminanceNits: 1_000,
+              minLuminanceNits: 0.005,
+            },
+          },
+          iccProfileResourceId: null,
+        },
+      })
+      const sinks: TestSink[] = []
+      const manager = createManager(sinks)
+      const started = await manager.start({
+        ownerId: 6,
+        targetPath: path.join(rootDir, `hdr-${transferFunction}.tif`),
+        documentRef: 'image-edit-v3:export-document',
+        revision: 4,
+        sourceFingerprint: createImageEditSourceFingerprint(snapshot),
+        format: 'bigtiff',
+        description: {
+          ...description,
+          bitDepth: 32,
+          sampleFormat: 'float',
+          colorSpace: 'rec2020',
+          transferFunction: 'linear',
+        },
+      })
+
+      expect(sinks[0]?.description).toMatchObject({
+        bitDepth: 32,
+        sampleFormat: 'float',
+        colorSpace: 'rec2020',
+        transferFunction: 'linear',
+        hdrBigTiffExchange: {
+          schema: 'henji-hdr-bigtiff-v1',
+          sourceTransferFunction: transferFunction,
+          referenceWhiteNits: 250,
+          sourceCicp: {
+            colorPrimaries: 9,
+            transferCharacteristics: transferFunction === 'pq' ? 16 : 18,
+            matrixCoefficients: 9,
+            fullRange: false,
+          },
+          contentLight: {
+            maxContentLightLevelNits: 1_000,
+            maxFrameAverageLightLevelNits: 400,
+          },
+          masteringDisplay: {
+            maxLuminanceNits: 1_000,
+            minLuminanceNits: 0.005,
+          },
+        },
+      })
+      await manager.cancel(6, started.sessionId)
+    },
+  )
+
   it('继续拒绝 8-bit HDR 权威文档，即使 renderer 伪装成 16-bit AVIF 瓦片', () => {
     const invalidDocument = {
       color: {

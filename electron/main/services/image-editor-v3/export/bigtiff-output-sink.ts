@@ -1,4 +1,5 @@
 import fsp from 'node:fs/promises'
+import { isDeepStrictEqual } from 'node:util'
 
 import type { OutputTile, TileOutputDescription } from '../contracts'
 import { FileTileOutputSinkBase } from '../tile-output-sink'
@@ -8,6 +9,8 @@ import {
   validateTileSize,
 } from './capabilities'
 import { IncrementalBigTiffWriter } from './bigtiff-writer'
+import { createBigTiffEmbeddedRasterMetadataV3 } from './bigtiff-layout'
+import { readBigTiffEmbeddedRasterMetadataV3 } from './bigtiff-metadata-reader'
 
 export type BigTiffOutputSinkOptions = Omit<RasterExportOptions, 'format'>
 
@@ -55,19 +58,20 @@ export class BigTiffTileOutputSink extends FileTileOutputSinkBase {
     await this.writer.complete()
   }
 
-  protected override async verifyStagedFile(stagedPath: string): Promise<void> {
+  protected override async verifyStagedFile(
+    stagedPath: string,
+    description: TileOutputDescription,
+  ): Promise<void> {
     const handle = await fsp.open(stagedPath, 'r')
     try {
-      const header = Buffer.alloc(16)
-      const { bytesRead } = await handle.read(header, 0, header.byteLength, 0)
-      if (
-        bytesRead !== header.byteLength
-        || header.toString('ascii', 0, 2) !== 'II'
-        || header.readUInt16LE(2) !== 43
-        || header.readUInt16LE(4) !== 8
-        || header.readUInt16LE(6) !== 0
-      ) {
-        throw new Error('Encoded BigTIFF header is invalid')
+      const actual = await readBigTiffEmbeddedRasterMetadataV3(handle)
+      const expected = createBigTiffEmbeddedRasterMetadataV3({
+        ...description,
+        channels: 4,
+        byteOrder: this.exportOptions.inputByteOrder,
+      })
+      if (!isDeepStrictEqual(actual, JSON.parse(JSON.stringify(expected)))) {
+        throw new Error('Encoded BigTIFF image-edit metadata does not match the export snapshot')
       }
     } finally {
       await handle.close()

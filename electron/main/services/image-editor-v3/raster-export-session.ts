@@ -36,7 +36,7 @@ const MAX_ICC_PROFILE_BYTES = 16 * 1024 * 1024
 
 export type RasterExportPixelDescription = Omit<
   TileOutputDescription,
-  'documentId' | 'revision' | 'sourceFingerprint'
+  'documentId' | 'revision' | 'sourceFingerprint' | 'hdrBigTiffExchange'
 >
 
 export interface StartRasterExportSessionRequest {
@@ -188,13 +188,18 @@ export class RasterExportSessionManager {
       if (request.description.width !== dimensions.width || request.description.height !== dimensions.height) {
         throw new Error('Raster export dimensions do not match the document output geometry')
       }
-      assertDocumentColorMatchesRasterExport(snapshot.document, request.format, request.description)
+      const trustedColorMetadata = assertDocumentColorMatchesRasterExport(
+        snapshot.document,
+        request.format,
+        request.description,
+      )
 
       const lease = await this.resources.acquireLease(snapshot.resourceRefs)
       const leased = new Set(lease.resourceIds)
       let sink: TileOutputSink | undefined
       const description: TileOutputDescription = {
         ...request.description,
+        ...trustedColorMetadata,
         documentId: snapshot.documentId,
         revision: snapshot.revision,
         sourceFingerprint,

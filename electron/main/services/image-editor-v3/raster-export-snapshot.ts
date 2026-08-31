@@ -1,6 +1,6 @@
 import crypto from 'node:crypto'
 
-import type { ImageEditDocumentEnvelope } from './contracts'
+import type { ImageEditDocumentEnvelope, TileOutputDescription } from './contracts'
 import {
   ImageExportCapabilityError,
   type RasterExportFormat,
@@ -17,6 +17,85 @@ function readPositiveInteger(record: Record<string, unknown>, field: string): nu
     throw new Error(`Invalid image edit document ${field}`)
   }
   return value as number
+}
+
+type HdrBigTiffExchange = NonNullable<TileOutputDescription['hdrBigTiffExchange']>
+
+function invalidHdrExchangeMetadata(format: RasterExportFormat, message: string): never {
+  throw new ImageExportCapabilityError('INVALID_COLOR_METADATA', format, message)
+}
+
+function readHdrContentLight(
+  value: unknown,
+  format: RasterExportFormat,
+): HdrBigTiffExchange['contentLight'] | undefined {
+  if (value === undefined) return undefined
+  if (!isRecord(value)) {
+    return invalidHdrExchangeMetadata(format, 'HDR content-light metadata is invalid')
+  }
+  const maxContentLightLevelNits = value.maxContentLightLevelNits
+  const maxFrameAverageLightLevelNits = value.maxFrameAverageLightLevelNits
+  if (!Number.isSafeInteger(maxContentLightLevelNits)
+    || (maxContentLightLevelNits as number) < 0
+    || (maxContentLightLevelNits as number) > 65_535
+    || !Number.isSafeInteger(maxFrameAverageLightLevelNits)
+    || (maxFrameAverageLightLevelNits as number) < 0
+    || (maxFrameAverageLightLevelNits as number) > (maxContentLightLevelNits as number)) {
+    return invalidHdrExchangeMetadata(format, 'HDR content-light metadata is invalid')
+  }
+  return {
+    maxContentLightLevelNits: maxContentLightLevelNits as number,
+    maxFrameAverageLightLevelNits: maxFrameAverageLightLevelNits as number,
+  }
+}
+
+function readHdrChromaticity(
+  value: unknown,
+  format: RasterExportFormat,
+  label: string,
+): { x: number; y: number } {
+  if (!isRecord(value)
+    || typeof value.x !== 'number'
+    || !Number.isFinite(value.x)
+    || value.x < 0
+    || value.x > 1
+    || typeof value.y !== 'number'
+    || !Number.isFinite(value.y)
+    || value.y < 0
+    || value.y > 1) {
+    return invalidHdrExchangeMetadata(format, `HDR mastering-display ${label} is invalid`)
+  }
+  return { x: value.x, y: value.y }
+}
+
+function readHdrMasteringDisplay(
+  value: unknown,
+  format: RasterExportFormat,
+): HdrBigTiffExchange['masteringDisplay'] | undefined {
+  if (value === undefined) return undefined
+  if (!isRecord(value)) {
+    return invalidHdrExchangeMetadata(format, 'HDR mastering-display metadata is invalid')
+  }
+  const maxLuminanceNits = value.maxLuminanceNits
+  const minLuminanceNits = value.minLuminanceNits
+  if (typeof maxLuminanceNits !== 'number'
+    || !Number.isFinite(maxLuminanceNits)
+    || maxLuminanceNits <= 0
+    || maxLuminanceNits > 10_000
+    || typeof minLuminanceNits !== 'number'
+    || !Number.isFinite(minLuminanceNits)
+    || minLuminanceNits < 0
+    || minLuminanceNits > maxLuminanceNits) {
+    return invalidHdrExchangeMetadata(format, 'HDR mastering-display luminance is invalid')
+  }
+  return {
+    red: readHdrChromaticity(value.red, format, 'red primary'),
+    green: readHdrChromaticity(value.green, format, 'green primary'),
+    blue: readHdrChromaticity(value.blue, format, 'blue primary'),
+    whitePoint: readHdrChromaticity(value.whitePoint, format, 'white point'),
+    maxLuminanceNits,
+    minLuminanceNits,
+  }
 }
 
 export function readRasterExportOutputDimensions(
@@ -53,7 +132,7 @@ export function assertDocumentColorMatchesRasterExport(
   document: unknown,
   format: RasterExportFormat,
   description: RasterExportPixelDescription,
-): void {
+): Pick<TileOutputDescription, 'hdrBigTiffExchange'> {
   if (!isRecord(document) || !isRecord(document.color)) {
     throw new Error('Invalid image edit document color mode')
   }
@@ -75,19 +154,19 @@ export function assertDocumentColorMatchesRasterExport(
     const hasHdrSourcePrecision = bitDepth === 16
       || bitDepth === 'float16'
       || bitDepth === 'float32'
-    if ((format !== 'avif10' && format !== 'avif12')
-      || workingSpace !== 'rec2020'
+    if (workingSpace !== 'rec2020'
       || !hasHdrSourcePrecision
       || !isRecord(hdrMetadata)
       || hdrMetadata.standard !== transferFunction
       || typeof hdrMetadata.referenceWhiteNits !== 'number'
       || !Number.isFinite(hdrMetadata.referenceWhiteNits)
       || hdrMetadata.referenceWhiteNits <= 0
+      || hdrMetadata.referenceWhiteNits > 10_000
       || !isRecord(hdrMetadata.cicp)) {
       throw new ImageExportCapabilityError(
         'HDR_METADATA_UNSUPPORTED',
         format,
-        'HDR AVIF requires a 16-bit or floating-point Rec.2020 document with matching PQ/HLG metadata',
+        'HDR export requires a 16-bit or floating-point Rec.2020 document with matching PQ/HLG metadata',
       )
     }
     const cicp = hdrMetadata.cicp
@@ -95,8 +174,60 @@ export function assertDocumentColorMatchesRasterExport(
     if (cicp.colorPrimaries !== 9
       || cicp.transferCharacteristics !== expectedTransfer
       || cicp.matrixCoefficients !== 9
-      || cicp.fullRange !== false
-      || description.cicp?.colorPrimaries !== cicp.colorPrimaries
+      || cicp.fullRange !== false) {
+      throw new ImageExportCapabilityError(
+        'INVALID_COLOR_METADATA',
+        format,
+        'HDR document CICP metadata is invalid',
+      )
+    }
+    if (iccProfileResourceId !== null || description.iccProfileResourceId !== undefined) {
+      throw new ImageExportCapabilityError(
+        'INVALID_COLOR_METADATA',
+        format,
+        'HDR export cannot mix the document CICP contract with an unrelated ICC profile',
+      )
+    }
+    if (format === 'bigtiff') {
+      if (description.bitDepth !== 32
+        || description.sampleFormat !== 'float'
+        || description.colorSpace !== 'rec2020'
+        || description.transferFunction !== 'linear'
+        || description.alphaMode !== 'straight'
+        || description.cicp !== undefined
+        || description.hdrMetadata !== undefined) {
+        throw new ImageExportCapabilityError(
+          'INVALID_COLOR_METADATA',
+          format,
+          'HDR BigTIFF requires straight-alpha scene-linear Rec.2020 Float32 renderer tiles',
+        )
+      }
+      const contentLight = readHdrContentLight(hdrMetadata.contentLight, format)
+      const masteringDisplay = readHdrMasteringDisplay(hdrMetadata.masteringDisplay, format)
+      return {
+        hdrBigTiffExchange: {
+          schema: 'henji-hdr-bigtiff-v1',
+          sourceTransferFunction: transferFunction,
+          referenceWhiteNits: hdrMetadata.referenceWhiteNits,
+          sourceCicp: {
+            colorPrimaries: 9,
+            transferCharacteristics: expectedTransfer,
+            matrixCoefficients: 9,
+            fullRange: false,
+          },
+          ...(contentLight ? { contentLight } : {}),
+          ...(masteringDisplay ? { masteringDisplay } : {}),
+        },
+      }
+    }
+    if (format !== 'avif10' && format !== 'avif12') {
+      throw new ImageExportCapabilityError(
+        'HDR_METADATA_UNSUPPORTED',
+        format,
+        'PQ/HLG documents can currently be exported only as HDR AVIF or linear Float32 BigTIFF',
+      )
+    }
+    if (description.cicp?.colorPrimaries !== cicp.colorPrimaries
       || description.cicp?.transferCharacteristics !== cicp.transferCharacteristics
       || description.cicp?.matrixCoefficients !== cicp.matrixCoefficients
       || description.cicp?.fullRange !== cicp.fullRange) {
@@ -120,16 +251,14 @@ export function assertDocumentColorMatchesRasterExport(
       || description.sampleFormat !== 'uint'
       || description.colorSpace !== 'rec2020'
       || description.transferFunction !== transferFunction
-      || description.alphaMode !== 'straight'
-      || iccProfileResourceId !== null
-      || description.iccProfileResourceId !== undefined) {
+      || description.alphaMode !== 'straight') {
       throw new ImageExportCapabilityError(
         'INVALID_COLOR_METADATA',
         format,
         'Raster export pixels do not match the HDR document color contract',
       )
     }
-    return
+    return {}
   }
   if (hdrMetadata !== null) {
     throw new ImageExportCapabilityError(
@@ -186,6 +315,7 @@ export function assertDocumentColorMatchesRasterExport(
       `The ${format} encoder cannot preserve the document transfer function (${String(transferFunction)})`,
     )
   }
+  return {}
 }
 
 export function createImageEditSourceFingerprint(envelope: ImageEditDocumentEnvelope): string {

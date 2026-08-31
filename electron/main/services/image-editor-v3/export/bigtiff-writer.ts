@@ -8,6 +8,7 @@ import {
   type BigTiffDirectory,
   type BigTiffRasterDescription,
 } from './bigtiff-layout'
+import { validateHdrBigTiffExchange } from './capabilities'
 
 type WriterState = 'idle' | 'starting' | 'writing' | 'completing' | 'completed' | 'cancelled' | 'failed'
 
@@ -247,7 +248,15 @@ export class IncrementalBigTiffWriter {
     if (description.transferFunction === 'pq' || description.transferFunction === 'hlg') {
       throw new Error('BigTIFF cannot reliably preserve PQ/HLG metadata')
     }
-    if (description.colorSpace !== 'srgb' && !this.options.iccProfile) {
+    if (description.hdrBigTiffExchange) {
+      if (description.channels !== 4 || description.alphaMode === undefined) {
+        throw new Error('HDR BigTIFF exchange requires RGBA samples with an explicit alpha mode')
+      }
+      validateHdrBigTiffExchange({ ...description, alphaMode: description.alphaMode }, 'bigtiff')
+    }
+    if (description.colorSpace !== 'srgb'
+      && !this.options.iccProfile
+      && !description.hdrBigTiffExchange) {
       throw new Error(`${description.colorSpace} BigTIFF output requires an ICC profile`)
     }
     if (description.sampleFormat === 'float' && description.bitDepth !== 32) {
