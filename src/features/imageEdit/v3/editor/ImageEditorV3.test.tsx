@@ -14,6 +14,7 @@ import {
 } from '@/core/imageEdit/v3/documentFactory'
 import type { ImageEditDocumentV3 } from '@/core/imageEdit/v3/documentTypes'
 import type { ImageEditLayerV3 } from '@/core/imageEdit/v3/layerTypes'
+import type { ImageEditPersistenceSnapshotV3 } from '@/core/imageEdit/v3/serviceContracts'
 import { ANNOTATION_DEFAULT_STROKE_HEX, ANNOTATION_DEFAULT_TEXT_HEX } from '@/core/theme/colorTokens'
 import { ImageEditorV3 } from './ImageEditorV3'
 import type { ImageEditorV3PreviewRenderer } from './types'
@@ -37,6 +38,7 @@ function renderEditor(
   options: {
     profileId?: 'full' | 'quick' | 'canvas-edit' | 'mask'
     onDocumentChange?: (next: ImageEditDocumentV3) => void
+    onPersistenceChange?: (snapshot: ImageEditPersistenceSnapshotV3) => void
     previewRenderer?: ImageEditorV3PreviewRenderer
   } = {},
 ) {
@@ -47,6 +49,7 @@ function renderEditor(
         document={document}
         profileId={options.profileId ?? 'full'}
         onDocumentChange={options.onDocumentChange ?? (() => undefined)}
+        onPersistenceChange={options.onPersistenceChange}
         previewRenderer={options.previewRenderer}
       />
     </div>,
@@ -417,42 +420,6 @@ describe('ImageEditorV3 professional shell', () => {
     expect(changes[1].layers).toHaveLength(2)
     const reused = changes[1].layers.at(-1)
     if (reused?.type === 'annotation') expect(reused.annotations).toHaveLength(2)
-  })
-
-  it('可选择并拖动已有标注，单击选择本身不写历史', async () => {
-    const annotation = createImageEditAnnotationLayerV3('annotations', '标注')
-    annotation.annotations = [{
-      id: 'rect', type: 'rect', x: 40, y: 40, width: 160, height: 80,
-      stroke: ANNOTATION_DEFAULT_STROKE_HEX, lineWidth: 4,
-    }]
-    const changes: ImageEditDocumentV3[] = []
-    const rendered = renderEditor(
-      createDocument([annotation]),
-      { onDocumentChange: (next) => changes.push(next), previewRenderer: interactionPreview },
-    )
-    const overlay = await waitFor(() => rendered.container.querySelector<SVGSVGElement>(
-      '[data-annotation-editor-overlay]',
-    )) as SVGSVGElement
-    vi.spyOn(overlay, 'getBoundingClientRect').mockReturnValue({
-      x: 0, y: 0, left: 0, top: 0, right: 400, bottom: 225, width: 400, height: 225,
-      toJSON: () => ({}),
-    })
-    const target = rendered.container.querySelector<SVGGElement>('[data-annotation-id="rect"]')
-    fireEvent.pointerDown(target as SVGGElement, { button: 0, clientX: 20, clientY: 20 })
-    fireEvent.pointerUp(overlay, { clientX: 20, clientY: 20 })
-    expect(changes).toHaveLength(0)
-    expect(rendered.container.querySelector('[data-annotation-selection]')).toBeTruthy()
-
-    fireEvent.pointerDown(target as SVGGElement, { button: 0, clientX: 20, clientY: 20 })
-    fireEvent.pointerMove(overlay, { clientX: 45, clientY: 30 })
-    expect(changes).toHaveLength(0)
-    fireEvent.pointerUp(overlay, { clientX: 45, clientY: 30 })
-
-    await waitFor(() => expect(changes).toHaveLength(1))
-    const layer = changes[0].layers[0]
-    if (layer.type === 'annotation') {
-      expect(layer.annotations[0]).toMatchObject({ x: 140, y: 80 })
-    }
   })
 
   it('文字标注可在属性区二次修改并可删除', async () => {

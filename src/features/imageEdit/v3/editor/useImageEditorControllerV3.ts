@@ -243,6 +243,24 @@ export function useImageEditorControllerV3(
         })
       },
       clearParameterPreview: (previewId) => binding.bus.clearPreview(previewId),
+      setTransformPreview: (previewId, layerId, transform) => {
+        binding.bus.setPreview({
+          id: previewId,
+          kind: 'transform',
+          targetId: layerId,
+          baseRevision: binding.bus.getSnapshot().document.revision,
+          value: [...transform],
+        })
+      },
+      clearTransformPreview: (previewId) => binding.bus.clearPreview(previewId),
+      commitTransformPreview: (previewId, layerId, transform) => {
+        binding.bus.commitPreview(previewId, {
+          ...commandBase(),
+          type: 'layer.update-common',
+          layerId,
+          patch: { transform: [...transform] },
+        })
+      },
       commitLayerCommonPreview: (previewId, layerId, patch) => {
         binding.bus.commitPreview(previewId, {
           ...commandBase(),

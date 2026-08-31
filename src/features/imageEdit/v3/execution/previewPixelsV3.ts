@@ -6,6 +6,9 @@ import {
   encodeSrgbExtended,
   type Float32MaskTile,
   type Float32PremultipliedRgbaTile,
+  resampleImageEditMaskAffineV3,
+  resampleImageEditRgbaAffineV3,
+  scaleImageEditTransformV3,
 } from '@/core/imageEdit/v3'
 import type { ImageEditDocumentV3 } from '@/core/imageEdit/v3/documentTypes'
 import type { ImageEditRenderPlanNode } from '@/core/imageEdit/v3/renderPlan'
@@ -302,52 +305,27 @@ export function transformPreviewTileV3(
   transform: readonly number[],
   dimensions: ImageEditorPreviewDimensionsV3,
 ): Float32PremultipliedRgbaTile {
-  const [a, b, c, d, e, f] = transform
-  const scaled = [
-    a,
-    b * dimensions.scaleY / dimensions.scaleX,
-    c * dimensions.scaleX / dimensions.scaleY,
-    d,
-    e * dimensions.scaleX,
-    f * dimensions.scaleY,
-  ]
-  const determinant = scaled[0] * scaled[3] - scaled[1] * scaled[2]
-  if (!Number.isFinite(determinant) || Math.abs(determinant) < 1e-8) {
-    throw new Error('图层变换矩阵不可逆')
-  }
-  const output = new Float32Array(tile.data.length)
-  for (let y = 0; y < tile.height; y += 1) {
-    for (let x = 0; x < tile.width; x += 1) {
-      const px = x - scaled[4]
-      const py = y - scaled[5]
-      const sourceX = (scaled[3] * px - scaled[2] * py) / determinant
-      const sourceY = (-scaled[1] * px + scaled[0] * py) / determinant
-      sampleNearest(tile, sourceX, sourceY, output, (y * tile.width + x) * 4)
-    }
-  }
-  return createFloat32PremultipliedRgbaTile(
-    tile.width,
-    tile.height,
-    tile.colorDomain,
-    output,
-    tile.workingSpace,
-    tile.transferFunction,
-    tile.referenceWhiteNits,
+  const region = { x: 0, y: 0, width: tile.width, height: tile.height }
+  return resampleImageEditRgbaAffineV3(
+    tile,
+    region,
+    region,
+    scaleImageEditTransformV3(transform, dimensions.scaleX, dimensions.scaleY),
   )
 }
 
-function sampleNearest(
-  tile: Float32PremultipliedRgbaTile,
-  x: number,
-  y: number,
-  output: Float32Array,
-  outputOffset: number,
-): void {
-  const sourceX = Math.round(x)
-  const sourceY = Math.round(y)
-  if (sourceX < 0 || sourceY < 0 || sourceX >= tile.width || sourceY >= tile.height) return
-  const sourceOffset = (sourceY * tile.width + sourceX) * 4
-  output.set(tile.data.subarray(sourceOffset, sourceOffset + 4), outputOffset)
+export function transformPreviewMaskV3(
+  mask: Float32MaskTile,
+  transform: readonly number[],
+  dimensions: ImageEditorPreviewDimensionsV3,
+): Float32MaskTile {
+  const region = { x: 0, y: 0, width: mask.width, height: mask.height }
+  return resampleImageEditMaskAffineV3(
+    mask,
+    region,
+    region,
+    scaleImageEditTransformV3(transform, dimensions.scaleX, dimensions.scaleY),
+  )
 }
 
 async function drawProxy(

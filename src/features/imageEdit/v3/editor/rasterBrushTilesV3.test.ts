@@ -8,6 +8,9 @@ import {
 } from '@/core/imageEdit/v3/documentFactory'
 import { createFloat32PremultipliedRgbaTile } from '@/core/imageEdit/v3/effects/contracts'
 import { decodeSrgbExtended } from '@/core/imageEdit/v3/execution/tileColor'
+import { createImageEditSparseMaskReferenceV3 } from '@/core/imageEdit/v3/layerTypes'
+import { mapAnnotationPointV3 } from './annotationGeometryV3'
+import { resolveImageEditorMaskBrushLayerV3 } from './maskBrushLayerV3'
 import { resolveImageEditorRasterBrushLayerV3 } from './rasterBrushLayerV3'
 import {
   createImageEditorRasterBrushTargetV3,
@@ -126,6 +129,25 @@ describe('图片编辑 V3 栅格画笔瓦片读取', () => {
       ready: false,
       reason: 'select-one',
     })
+  })
+
+  it('蒙版画笔与 owner 内容共用图层和祖先变换坐标', () => {
+    const document = createImageEditDocumentV3({ width: 64, height: 64 })
+    const group = createImageEditGroupLayerV3('group', '组')
+    const layer = createImageEditRasterLayerV3('masked', '蒙版图层')
+    layer.mask = createImageEditSparseMaskReferenceV3('mask', false, 0)
+    layer.transform = [1, 0, 0, 1, 5, 6]
+    group.transform = [2, 0, 0, 2, 0, 0]
+    group.children = [layer]
+    document.layers = [group]
+
+    const resolved = resolveImageEditorMaskBrushLayerV3(document, [layer.id])
+    expect(resolved).toMatchObject({ ready: true })
+    if (!resolved.ready) throw new Error('测试预期蒙版可编辑')
+    expect(resolved.target.matrix).toEqual([2, 0, 0, 2, 10, 12])
+    expect(resolved.target.inverseMatrix.map((value) => Object.is(value, -0) ? 0 : value))
+      .toEqual([0.5, 0, 0, 0.5, -5, -6])
+    expect(mapAnnotationPointV3(resolved.target.inverseMatrix, [14, 18])).toEqual([2, 3])
   })
 
   it('画笔目标固定使用文档颜色契约与不透明黑色', () => {

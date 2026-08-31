@@ -8,6 +8,7 @@ import type {
 } from '@/platform/contracts/imageEditorV3'
 import { ImageEditorViewportTileCacheV3 } from './viewportTileCacheV3'
 import {
+  imageEditorViewportTileCacheKeyV3,
   planImageEditorViewportTilesV3,
   type ImageEditorViewportTileRequestV3,
 } from './viewportTilePlannerV3'
@@ -468,5 +469,59 @@ describe('图片编辑 V3 视口瓦片调度', () => {
     expect(scheduler.cacheSnapshot()).toMatchObject({ disposed: true, usedBytes: 0, entryCount: 0 })
     expect(resourceBudget.snapshot()).toMatchObject({ totalBytes: 0, leaseCount: 0 })
     frame.release()
+  })
+
+  it('自定义逆向源请求参与 admission，并在读取前完整校验几何与字节数', async () => {
+    const documentSize = { width: 1_024, height: 512 }
+    const readSourceTile = vi.fn(async (request) => sourceTile(request, documentSize))
+    const scheduler = new ImageEditorViewportTileSchedulerV3({
+      sessionId: 'inverse-resolver',
+      readSourceTile,
+      describePyramid: async () => pyramid(documentSize.width, documentSize.height),
+    })
+    const resolver = (candidate: { mip: number }) => {
+      const region = createTileRegion(documentSize, { mip: candidate.mip, x: 0, y: 0 }, 0)
+      const request = {
+        resourceRef,
+        mip: candidate.mip,
+        tileX: 0,
+        tileY: 0,
+        halo: 0,
+        bitDepth: 8 as const,
+        width: region.sourceRect.width,
+        height: region.sourceRect.height,
+        originX: region.sourceRect.x,
+        originY: region.sourceRect.y,
+        estimatedBytes: region.sourceRect.width * region.sourceRect.height * 4,
+      }
+      return [{ ...request, key: imageEditorViewportTileCacheKeyV3(request) }]
+    }
+    const frame = await scheduler.render({
+      resourceRef,
+      revision: 1,
+      documentSize,
+      bitDepth: 8,
+      viewport: viewport(512),
+      resolveSourceTileRequests: resolver,
+    })
+    expect(readSourceTile).toHaveBeenCalledWith(
+      expect.objectContaining({ tileX: 0 }),
+      expect.any(AbortSignal),
+    )
+    frame.release()
+
+    await expect(scheduler.render({
+      resourceRef,
+      revision: 2,
+      documentSize,
+      bitDepth: 8,
+      viewport: viewport(512),
+      resolveSourceTileRequests: (candidate) => resolver(candidate).map((request) => ({
+        ...request,
+        estimatedBytes: request.estimatedBytes + 1,
+      })),
+    })).rejects.toThrow('无效源瓦片请求')
+    expect(readSourceTile).toHaveBeenCalledTimes(1)
+    scheduler.dispose()
   })
 })

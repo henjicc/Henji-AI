@@ -8,6 +8,7 @@ import {
   createImageEditAnnotationLayerV3,
   createImageEditDocumentV3,
   createImageEditEffectLayerV3,
+  createImageEditGroupLayerV3,
   createImageEditHdrMetadataV3,
   type Float32PremultipliedRgbaTile,
   type ImageEditDocumentV3,
@@ -156,6 +157,16 @@ function solidImage(width: number, height: number, value = 0): FakeImage {
   return { width, height, pixel: () => [value, value, value, 255] }
 }
 
+function impulseImage(width: number, height: number, x: number, y: number): FakeImage {
+  return {
+    width,
+    height,
+    pixel: (pixelX, pixelY) => pixelX === x && pixelY === y
+      ? [255, 0, 0, 255]
+      : [0, 0, 0, 0],
+  }
+}
+
 function diffusionParams(
   patch: Readonly<Record<string, unknown>> = {},
 ): ImageEditJsonObjectV3 {
@@ -274,6 +285,59 @@ describe('图片编辑 V3 分块导出渲染', () => {
     for (let x = 0; x < 8; x += 1) {
       expect(Array.from(output.subarray(x * 4, x * 4 + 4))).toEqual([0, 0, 0, 0])
     }
+  })
+
+  it('变换内容位于柔光下方时，全局分析与最终瓦片使用同一位置语义', async () => {
+    const create = (translation: number): ImageEditDocumentV3 => {
+      const document = createImageEditDocumentV3({
+        width: 32,
+        height: 1,
+        documentId: `diffusion-transform-${translation}`,
+        sourceResourceId: SOURCE,
+      })
+      document.layers[0].transform = [1, 0, 0, 1, translation, 0]
+      document.layers.push(createImageEditEffectLayerV3(
+        'diffusion',
+        '柔光',
+        'image.diffusion',
+        diffusionParams(),
+      ))
+      return document
+    }
+    const image = impulseImage(32, 1, 8, 0)
+    const baseline = await collectPixels(create(0), 16, new Map([[SOURCE, image]]))
+    const translated = await collectPixels(create(2), 16, new Map([[SOURCE, image]]))
+    const peak = (pixels: Uint8Array): number => {
+      let index = 0
+      for (let x = 1; x < 32; x += 1) {
+        if (pixels[x * 4] > pixels[index * 4]) index = x
+      }
+      return index
+    }
+    expect(peak(translated)).toBe(peak(baseline) + 2)
+  })
+
+  it('Gaussian 半径 17 的金字塔相位不随导出瓦片边界改变', async () => {
+    const document = createImageEditDocumentV3({
+      width: 80,
+      height: 1,
+      documentId: 'gaussian-pyramid-phase',
+      sourceResourceId: SOURCE,
+    })
+    document.layers.push(createImageEditEffectLayerV3(
+      'blur',
+      '高斯模糊',
+      'image.gaussian-blur-v2',
+      { radius: 17 },
+    ))
+    const gradient: FakeImage = {
+      width: 80,
+      height: 1,
+      pixel: (x) => [x * 3, x * 2, x, 255],
+    }
+    const single = await collectPixels(document, 80, new Map([[SOURCE, gradient]]))
+    const tiled = await collectPixels(document, 16, new Map([[SOURCE, gradient]]))
+    expect(tiled).toEqual(single)
   })
 
   it('200MP 柔光先读受限源 mip 建共享散射，再按 512 瓦片读取原图', async () => {
@@ -480,7 +544,68 @@ describe('图片编辑 V3 分块导出渲染', () => {
     await expect(iterator.next()).rejects.toMatchObject({ name: 'AbortError' })
   })
 
-  it('在任何瓦片读取前明确拒绝 HDR、VGPU 辉光和图层变换', async () => {
+  it('分块导出按共享仿射语义平移内容，并让组蒙版随组一起移动', async () => {
+    const translated = createImageEditDocumentV3({
+      width: 4,
+      height: 2,
+      documentId: 'translated-export',
+      sourceResourceId: SOURCE,
+    })
+    translated.layers[0].transform = [1, 0, 0, 1, 1, 0]
+    const translatedPixels = await collectPixels(
+      translated,
+      16,
+      new Map([[SOURCE, impulseImage(4, 2, 0, 0)]]),
+    )
+    expect([...translatedPixels.subarray(0, 8)]).toEqual([
+      0, 0, 0, 0,
+      255, 0, 0, 255,
+    ])
+
+    const rotated = createImageEditDocumentV3({
+      width: 2,
+      height: 2,
+      documentId: 'rotated-export',
+      sourceResourceId: SOURCE,
+    })
+    rotated.layers[0].transform = [0, 1, -1, 0, 2, 0]
+    const rotatedPixels = await collectPixels(rotated, 16, new Map([[SOURCE, {
+      width: 2,
+      height: 2,
+      pixel: (x, y) => {
+        const value = 10 + (y * 2 + x) * 10
+        return [value, 0, 0, 255]
+      },
+    }]]))
+    expect(Array.from({ length: 4 }, (_, pixel) => rotatedPixels[pixel * 4]))
+      .toEqual([30, 10, 40, 20])
+
+    const masked = createImageEditDocumentV3({
+      width: 4,
+      height: 1,
+      documentId: 'translated-group-mask-export',
+      sourceResourceId: SOURCE,
+    })
+    const group = createImageEditGroupLayerV3('group', '组')
+    group.children = masked.layers
+    group.transform = [1, 0, 0, 1, 1, 0]
+    group.mask = { resourceId: MASK, inverted: false }
+    masked.layers = [group]
+    const maskImage: FakeImage = {
+      width: 4,
+      height: 1,
+      pixel: (x) => x === 0 ? [255, 255, 255, 255] : [0, 0, 0, 255],
+    }
+    const maskedPixels = await collectPixels(
+      masked,
+      16,
+      new Map([[SOURCE, solidImage(4, 1, 255)], [MASK, maskImage]]),
+    )
+    expect(Array.from({ length: 4 }, (_, x) => maskedPixels[x * 4 + 3]))
+      .toEqual([0, 255, 0, 0])
+  })
+
+  it('在任何瓦片读取前明确拒绝 HDR 和 VGPU 辉光', async () => {
     const readSourceTile = vi.fn(fakeSourceReader(new Map([[SOURCE, solidImage(16, 16)]])))
     const glowDocument = createImageEditDocumentV3({
       width: 16,
@@ -495,20 +620,6 @@ describe('图片编辑 V3 分块导出渲染', () => {
         { readSourceTile },
       )) void _tile
     }).rejects.toMatchObject({ code: 'RENDER_NODE_UNSUPPORTED' })
-
-    const transformed = createImageEditDocumentV3({
-      width: 16,
-      height: 16,
-      documentId: 'transform',
-      sourceResourceId: SOURCE,
-    })
-    transformed.layers[0].transform = [1, 0, 0, 1, 2, 0]
-    await expect(async () => {
-      for await (const _tile of renderImageEditorV3ExportTiles(
-        { document: transformed, resourceDescriptors: [], description: description(16, 16) },
-        { readSourceTile },
-      )) void _tile
-    }).rejects.toMatchObject({ code: 'LAYER_TRANSFORM_UNSUPPORTED' })
 
     const hdr = createImageEditDocumentV3({
       width: 16,

@@ -206,6 +206,21 @@ describe('图片编辑 V3 命令历史', () => {
     });
   });
 
+  it('历史快照拒绝奇异图层变换命令', () => {
+    const history = new ImageEditCommandHistoryV3();
+    const source = createPaintDocument();
+    const moved = history.execute(source, {
+      commandId: 'move-history', expectedRevision: 0, type: 'layer.update-common',
+      layerId: 'paint', patch: { transform: [1, 0, 0, 1, 4, 5] },
+    });
+    const snapshot = structuredClone(history.createSnapshot());
+    const forward = snapshot.undo[0]?.forward;
+    if (!forward || forward.type !== 'layer.update-common') throw new Error('测试历史命令缺失');
+    forward.patch.transform = [0, 0, 0, 1, 0, 0];
+    expect(() => new ImageEditCommandHistoryV3().restore(moved, snapshot))
+      .toThrow(InvalidImageEditHistorySnapshotV3Error);
+  });
+
   it('拒绝未知字段、篡改大小、危险键、超限和未知版本，失败时不污染现有历史', () => {
     const history = new ImageEditCommandHistoryV3({ maxCommands: 2, maxBytes: 100_000 });
     const document = addTile(history, createPaintDocument(), 0, 128);

@@ -9,6 +9,7 @@ import type {
   ImageEditPersistenceSnapshotV3,
 } from '@/core/imageEdit/v3/serviceContracts';
 import type { ImageEditCommandHistorySnapshotV3 } from '@/core/imageEdit/v3/commandHistoryCodec';
+import { isImageEditTransformInvertibleV3 } from '@/core/imageEdit/v3/execution/affineTransform';
 
 export type ImageEditPreviewOverrideKindV3 =
   | 'parameter'
@@ -92,6 +93,14 @@ export class ImageEditCommandBusV3 {
   setPreview(override: ImageEditPreviewOverrideV3): void {
     if (override.baseRevision !== this.document.revision) {
       throw new Error(`预览覆盖版本过期：${override.baseRevision} !== ${this.document.revision}`);
+    }
+    if (override.kind === 'transform') {
+      const value = override.value && typeof override.value === 'object' && !Array.isArray(override.value)
+        ? (override.value as { transform?: unknown }).transform
+        : override.value;
+      if (!isImageEditTransformInvertibleV3(value)) {
+        throw new Error('图层预览变换必须是可逆的有限仿射矩阵');
+      }
     }
     this.previewOverrides.set(override.id, override);
     this.emit();

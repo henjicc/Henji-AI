@@ -2,6 +2,8 @@ import {
   IMAGE_EDIT_HDR_REFERENCE_WHITE_NITS_V3,
   convertFloat32TileColorDomainV3,
   convertFloat32TileWorkingSpaceV3,
+  createTileRegion,
+  enumerateTilesForRect,
   createFloat32MaskTile,
   createFloat32PremultipliedRgbaTile,
   decodeInterleavedRgbaSourceTileV3,
@@ -54,6 +56,60 @@ export function decodeImageEditorViewportSourceTileV3(
     alphaMode: tile.alphaMode,
     pixels: tile.pixels,
   }, document.color.workingSpace)
+}
+
+/**
+ * 把 RenderPlan 逆向规划得到的任意矩形，从若干 512 源瓦片拼成连续区域。
+ * 坐标始终是当前 mip 的全局像素坐标，缺失瓦片会明确失败而不是填黑。
+ */
+export function loadImageEditorViewportSourceRegionV3(
+  tiles: ReadonlyMap<string, ImageEditorV3SourceTile>,
+  resourceId: string,
+  mip: number,
+  region: ImageEditRect,
+  document: ImageEditDocumentV3,
+): Float32PremultipliedRgbaTile {
+  const output = new Float32Array(region.width * region.height * 4)
+  let template: Float32PremultipliedRgbaTile | null = null
+  for (const coordinate of enumerateTilesForRect(document.geometry, mip, region)) {
+    const source = tiles.get(`${resourceId}:m${mip}:x${coordinate.x}:y${coordinate.y}`)
+    if (!source) throw new Error(`视口合成缺少图片资源瓦片：${resourceId}`)
+    const expected = createTileRegion(document.geometry, {
+      mip,
+      x: coordinate.x,
+      y: coordinate.y,
+    }, source.halo)
+    if (
+      source.originX !== expected.sourceRect.x
+      || source.originY !== expected.sourceRect.y
+      || source.width !== expected.sourceRect.width
+      || source.height !== expected.sourceRect.height
+    ) throw new Error('视口合成源瓦片与计划区域不一致')
+    const decoded = decodeImageEditorViewportSourceTileV3(source, document)
+    template ??= decoded
+    const left = Math.max(region.x, source.originX)
+    const top = Math.max(region.y, source.originY)
+    const right = Math.min(region.x + region.width, source.originX + source.width)
+    const bottom = Math.min(region.y + region.height, source.originY + source.height)
+    for (let y = top; y < bottom; y += 1) {
+      const sourceOffset = ((y - source.originY) * source.width + left - source.originX) * 4
+      const outputOffset = ((y - region.y) * region.width + left - region.x) * 4
+      output.set(
+        decoded.data.subarray(sourceOffset, sourceOffset + (right - left) * 4),
+        outputOffset,
+      )
+    }
+  }
+  if (!template) throw new Error('视口合成源区域为空')
+  return createFloat32PremultipliedRgbaTile(
+    region.width,
+    region.height,
+    template.colorDomain,
+    output,
+    template.workingSpace,
+    template.transferFunction,
+    template.referenceWhiteNits,
+  )
 }
 
 export function createTransparentImageEditorViewportRegionV3(

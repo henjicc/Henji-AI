@@ -16,6 +16,7 @@ import type {
   ImageEditJsonObjectV3,
   ImageEditLayerV3,
   ImageEditMaskReferenceV3,
+  ImageEditTransformV3,
 } from '@/core/imageEdit/v3/layerTypes'
 import type { ImageEditCommandHistorySnapshotV3 } from '@/core/imageEdit/v3/commandHistoryCodec'
 import type { ImageEditPersistenceSnapshotV3 } from '@/core/imageEdit/v3/serviceContracts'
@@ -76,7 +77,7 @@ export interface ImageEditorV3Controller {
   document: ImageEditDocumentV3
   updateLayerCommon: (
     layerId: string,
-    patch: Partial<Pick<ImageEditLayerV3, 'name' | 'visible' | 'locked' | 'opacity' | 'blendMode'>>,
+    patch: Partial<Pick<ImageEditLayerV3, 'name' | 'visible' | 'locked' | 'opacity' | 'blendMode' | 'transform'>>,
   ) => void
   updateLayerParams: (layerId: string, params: ImageEditJsonObjectV3) => void
   addAnnotation: (layerId: string, annotation: MarkItem, index?: number) => void
@@ -103,6 +104,17 @@ export interface ImageEditorV3Controller {
   ) => void
   setParameterPreview: (previewId: string, layerId: string, value: unknown) => void
   clearParameterPreview: (previewId: string) => void
+  setTransformPreview: (
+    previewId: string,
+    layerId: string,
+    transform: ImageEditTransformV3,
+  ) => void
+  clearTransformPreview: (previewId: string) => void
+  commitTransformPreview: (
+    previewId: string,
+    layerId: string,
+    transform: ImageEditTransformV3,
+  ) => void
   commitLayerCommonPreview: (
     previewId: string,
     layerId: string,

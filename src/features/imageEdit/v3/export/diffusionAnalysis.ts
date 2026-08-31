@@ -5,7 +5,7 @@ import {
   convertFloat32TileColorDomainV3,
   createBuiltInImageEditRenderNodeRegistry,
   createFloat32PremultipliedRgbaTile,
-  executeImageEditCpuRenderPlanV3,
+  executeImageEditCpuRenderRegionPlanV3,
   mipSize,
   type Float32PremultipliedRgbaTile,
   type ImageEditDocumentV3,
@@ -152,12 +152,16 @@ export async function buildImageEditorV3DiffusionAnalyses(
       }
       try {
         const sourceCache = new Map<string, Promise<Float32PremultipliedRgbaTile>>()
-        const loadSource = (resourceId: string): Promise<Float32PremultipliedRgbaTile> => {
-          const cached = sourceCache.get(resourceId)
+        const loadSource = (
+          resourceId: string,
+          requestedRegion: ImageEditorV3ExportRenderRegion,
+        ): Promise<Float32PremultipliedRgbaTile> => {
+          const key = `${resourceId}:${requestedRegion.x}:${requestedRegion.y}:${requestedRegion.width}:${requestedRegion.height}`
+          const cached = sourceCache.get(key)
           if (cached) return cached
           const loaded = loadImageEditorV3SourceRegion(
             resourceId,
-            region,
+            requestedRegion,
             { width: document.geometry.width, height: document.geometry.height },
             description.bitDepth,
             document.color.workingSpace,
@@ -166,22 +170,29 @@ export async function buildImageEditorV3DiffusionAnalyses(
             dependencies,
             mip,
           )
-          sourceCache.set(resourceId, loaded)
+          sourceCache.set(key, loaded)
           return loaded
         }
-        const input = await executeImageEditCpuRenderPlanV3(prefix, {
+        const input = await executeImageEditCpuRenderRegionPlanV3(prefix, region, {
+          size,
+          scaleX: 1 / (2 ** mip),
+          scaleY: 1 / (2 ** mip),
+          registry,
           signal,
-          loadRaster: async (node) => {
+          createTransparent: (requestedRegion) => transparentRegion(requestedRegion, document),
+          loadRaster: async (node, requestedRegion) => {
             const resourceId = rasterResourceId(node)
-            return resourceId ? loadSource(resourceId) : transparentRegion(region, document)
+            return resourceId
+              ? loadSource(resourceId, requestedRegion)
+              : transparentRegion(requestedRegion, document)
           },
-          rasterizeAnnotations: (node) => (
+          rasterizeAnnotations: (node, requestedRegion) => (
             dependencies.rasterizeAnnotations ?? rasterizeImageEditorV3ExportAnnotations
-          )({ node, document, region, mip, signal }),
-          loadMask: async (reference) => {
+          )({ node, document, region: requestedRegion, mip, signal }),
+          loadMask: async (reference, _node, requestedRegion) => {
             const sparse = await loadImageEditorV3SparseMaskRegion(
               reference,
-              region,
+              requestedRegion,
               mip,
               sparseMaskPlan,
               signal,
@@ -190,7 +201,9 @@ export async function buildImageEditorV3DiffusionAnalyses(
             )
             if (sparse) return sparse
             if (!('resourceId' in reference)) throw new Error('蒙版引用缺少资源 ID')
-            return imageEditorV3SourceRegionToMask(await loadSource(reference.resourceId))
+            return imageEditorV3SourceRegionToMask(
+              await loadSource(reference.resourceId, requestedRegion),
+            )
           },
           executeCustomEffect: async (node, source, mask) => {
             if (node.definitionId !== 'effect.diffusion') {

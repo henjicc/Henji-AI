@@ -1,10 +1,15 @@
 import { describe, expect, it } from 'vitest'
 
-import { createFloat32PremultipliedRgbaTile } from '@/core/imageEdit/v3/effects/contracts'
+import {
+  createFloat32MaskTile,
+  createFloat32PremultipliedRgbaTile,
+} from '@/core/imageEdit/v3/effects/contracts'
 import type { ImageEditRenderPlanNode } from '@/core/imageEdit/v3/renderPlan'
 import {
   applyPreviewBrushTileReplacementsV3,
   createPreviewBrushTileMapV3,
+  transformPreviewMaskV3,
+  transformPreviewTileV3,
 } from './previewPixelsV3'
 
 const BRUSH = `sha256:${'a'.repeat(64)}`
@@ -98,5 +103,28 @@ describe('ImageEditor V3 managed preview brush tile 合成', () => {
 
     expect(pixel(output.data, output.width, 255)).toEqual([0, 0, 0, 1])
     expect(pixel(output.data, output.width, 256)).toEqual([0, 0.5, 0, 0.5])
+  })
+
+  it('managed preview 对内容和蒙版执行同一仿射逆采样', () => {
+    const content = createFloat32PremultipliedRgbaTile(
+      2,
+      1,
+      'linear-light',
+      new Float32Array([1, 0, 0, 1, 0, 1, 0, 1]),
+    )
+    const mask = createFloat32MaskTile(2, 1, new Float32Array([0.25, 0.75]))
+    const dimensions = { width: 2, height: 1, scaleX: 1, scaleY: 1 }
+    const transformedContent = transformPreviewTileV3(
+      content,
+      [1, 0, 0, 1, 1, 0],
+      dimensions,
+    )
+    const transformedMask = transformPreviewMaskV3(
+      mask,
+      [1, 0, 0, 1, 1, 0],
+      dimensions,
+    )
+    expect([...transformedContent.data]).toEqual([0, 0, 0, 0, 1, 0, 0, 1])
+    expect([...transformedMask.data]).toEqual([0, 0.25])
   })
 })

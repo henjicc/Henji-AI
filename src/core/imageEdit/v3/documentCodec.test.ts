@@ -231,4 +231,20 @@ describe('图片编辑 V3 文档编解码', () => {
       },
     }).document).toBeNull();
   });
+
+  it('拒绝奇异矩阵，并在效果/调整尚无空间语义时拒绝其非单位变换', () => {
+    const singular = createNestedDocument();
+    singular.layers[0].transform = [0, 0, 0, 1, 0, 0];
+    expect(decodeImageEditDocumentV3(singular).document).toBeNull();
+
+    const transformedEffect = createNestedDocument();
+    const group = transformedEffect.layers[0] as ImageEditGroupLayerV3;
+    group.children[0].transform = [1, 0, 0, 1, 2, 0];
+    expect(decodeImageEditDocumentV3(transformedEffect).document).toBeNull();
+
+    const transformedAdjustment = createNestedDocument();
+    const adjustmentGroup = transformedAdjustment.layers[0] as ImageEditGroupLayerV3;
+    adjustmentGroup.children[1].transform = [1, 0, 0, 1, 0, 2];
+    expect(decodeImageEditDocumentV3(transformedAdjustment).document).toBeNull();
+  });
 });

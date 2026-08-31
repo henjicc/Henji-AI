@@ -23,6 +23,7 @@ import {
   rasterizePreviewLayerV3,
   resolveImageEditorPreviewDimensionsV3,
   transformPreviewTileV3,
+  transformPreviewMaskV3,
 } from './previewPixelsV3'
 import type {
   ImageEditorPreviewProxyV3,
@@ -86,6 +87,11 @@ export async function renderImageEditorPreviewTileV3(
       : loadPreviewMaskV3(reference.resourceId, proxies, dimensions),
     transformContent: async (content, transform) => transformPreviewTileV3(
       content,
+      transform,
+      dimensions,
+    ),
+    transformMask: async (mask, transform) => transformPreviewMaskV3(
+      mask,
       transform,
       dimensions,
     ),

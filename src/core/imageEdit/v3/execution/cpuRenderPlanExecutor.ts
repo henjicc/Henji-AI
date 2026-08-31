@@ -44,6 +44,11 @@ export interface ImageEditCpuRenderContextV3 {
     transform: readonly number[],
     node: ImageEditRenderPlanNode,
   ): Promise<Float32PremultipliedRgbaTile>;
+  transformMask?(
+    mask: Float32MaskTile,
+    transform: readonly number[],
+    node: ImageEditRenderPlanNode,
+  ): Promise<Float32MaskTile>;
   executeCustomEffect?(
     node: ImageEditRenderPlanNode,
     source: Float32PremultipliedRgbaTile,
@@ -65,7 +70,9 @@ function numberParameter(node: ImageEditRenderPlanNode, key: string, fallback: n
   return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
 }
 
-function blendMode(node: ImageEditRenderPlanNode): ImageEditBlendModeV3 {
+export function imageEditCpuRenderNodeBlendModeV3(
+  node: ImageEditRenderPlanNode,
+): ImageEditBlendModeV3 {
   const value = node.parameters.blendMode;
   return value === 'multiply' || value === 'screen' || value === 'overlay' || value === 'soft-light'
     ? value
@@ -141,7 +148,7 @@ function requireInput(
   return input;
 }
 
-async function executeAdjustment(
+export async function executeImageEditCpuAdjustmentNodeV3(
   node: ImageEditRenderPlanNode,
   source: Float32PremultipliedRgbaTile,
   mask: Float32MaskTile | undefined,
@@ -174,11 +181,11 @@ async function executeAdjustment(
   }, { mask });
 }
 
-async function executeEffect(
+export async function executeImageEditCpuEffectNodeV3(
   node: ImageEditRenderPlanNode,
   source: Float32PremultipliedRgbaTile,
   mask: Float32MaskTile | undefined,
-  context: ImageEditCpuRenderContextV3,
+  context: Pick<ImageEditCpuRenderContextV3, 'executeCustomEffect'>,
 ): Promise<Float32PremultipliedRgbaTile> {
   if (node.definitionId === 'effect.blur-v1') {
     const perceptual = convertFloat32TileColorDomainV3(source, 'perceptual-working');
@@ -207,11 +214,20 @@ async function executeComposite(
   const contentIndex = node.inputNodeIds.length === 1 ? 0 : 1;
   let content = requireInput(outputs, node, contentIndex);
   const transform = node.parameters.transform;
+  let mask = await loadNodeMask(node, context);
   if (!isIdentityTransform(transform)) {
     if (!Array.isArray(transform) || !context.transformContent) {
       throw new Error(`图层变换没有可用执行器：${node.layerId}`);
     }
     content = await context.transformContent(content, transform.filter((entry): entry is number => typeof entry === 'number'), node);
+    if (mask) {
+      if (!context.transformMask) throw new Error(`图层蒙版变换没有可用执行器：${node.layerId}`);
+      mask = await context.transformMask(
+        mask,
+        transform.filter((entry): entry is number => typeof entry === 'number'),
+        node,
+      );
+    }
   }
   const backdrop = node.inputNodeIds.length > 1 ? requireInput(outputs, node, 0) : null;
   if (backdrop) {
@@ -221,9 +237,9 @@ async function executeComposite(
   const masked = applyContentMaskAndOpacityV3(
     content,
     numberParameter(node, 'opacity', 1),
-    await loadNodeMask(node, context),
+    mask,
   );
-  return compositePremultipliedTilesV3(backdrop, masked, blendMode(node));
+  return compositePremultipliedTilesV3(backdrop, masked, imageEditCpuRenderNodeBlendModeV3(node));
 }
 
 export async function executeImageEditCpuRenderPlanV3(
@@ -243,14 +259,14 @@ export async function executeImageEditCpuRenderPlanV3(
       const source = requireInput(outputs, node);
       const mask = await loadNodeMask(node, context);
       const processed = node.definitionId.startsWith('adjustment.')
-        ? await executeAdjustment(node, source, mask)
-        : await executeEffect(node, source, mask, context);
+        ? await executeImageEditCpuAdjustmentNodeV3(node, source, mask)
+        : await executeImageEditCpuEffectNodeV3(node, source, mask, context);
       const original = convertFloat32TileColorDomainV3(source, processed.colorDomain);
       // 内建 kernel 已混入蒙版；custom effect 可选择返回裸结果，因此在 context 内遵循同一契约。
       output = mixEffectLayerV3(
         original,
         processed,
-        blendMode(node),
+        imageEditCpuRenderNodeBlendModeV3(node),
         numberParameter(node, 'opacity', 1),
       );
     }

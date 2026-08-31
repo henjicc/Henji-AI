@@ -7,8 +7,10 @@ import {
   applyDiffusionV4,
   convertFloat32TileColorDomainV3,
   createFloat32PremultipliedRgbaTile,
+  createBuiltInImageEditRenderNodeRegistry,
   createTileRegion,
-  executeImageEditCpuRenderPlanV3,
+  collectImageEditCpuRegionRequirementsV3,
+  executeImageEditCpuRenderRegionPlanV3,
   planTileExecution,
   tileGridSize,
   type Float32PremultipliedRgbaTile,
@@ -51,6 +53,7 @@ import { createImageEditorSparseMaskPlanV3 } from '../execution/sparseMaskResour
 import { loadImageEditorV3SparseMaskRegion } from './maskRegion'
 
 const logger = createLogger('features.image_edit.v3.export')
+const registry = createBuiltInImageEditRenderNodeRegistry()
 const DEFAULT_TILE_SIZE = 512
 const TOTAL_BUDGET_BYTES = 1_342_177_280
 
@@ -189,7 +192,9 @@ async function* renderTiles(
       height: geometry.outputHeight,
       tileSize,
       tileCount: total,
-      halo: neighborhood.halo,
+      halo: plan.nodes.reduce((total, node) => (
+        total + Math.max(0, Math.ceil(registry.get(node.definitionId)?.localHalo?.(node.parameters, 0) ?? 0))
+      ), 0),
     },
   })
   try {
@@ -230,7 +235,11 @@ async function* renderTiles(
         throwIfAborted(controller.signal)
         const outputRegion = createTileRegion(outputSize, { mip: 0, x: tileX, y: tileY }, 0, tileSize)
         const outputRect = outputRegion.outputRect
-        const sourceRegion = resolveImageEditorV3SourceRegion(outputRect, geometry, neighborhood)
+        const sourceRegion = resolveImageEditorV3SourceRegion(
+          outputRect,
+          geometry,
+          { halo: 0, alignment: 1 },
+        )
         const taskId = `${currentSessionId}:${tileY}:${tileX}`
         const rendered = await scheduler.schedule<RenderedLeasedTile>({
           id: taskId,
@@ -240,19 +249,40 @@ async function* renderTiles(
           lane: 'cpu',
           priority: IMAGE_EDIT_RENDER_PRIORITY.export,
           run: async (taskContext) => {
+            const requirements = collectImageEditCpuRegionRequirementsV3(
+              plan,
+              [sourceRegion],
+              {
+                registry,
+                size: { width: geometry.sourceWidth, height: geometry.sourceHeight },
+              },
+            )
+            const largestRequiredPixels = [
+              sourceRegion.width * sourceRegion.height,
+              ...[...requirements.rasterRegions.values(), ...requirements.maskRegions.values()]
+                .flat()
+                .map((region) => region.width * region.height),
+            ].reduce((largest, pixels) => Math.max(largest, pixels), 0)
             const workingLease = acquireOrThrow(
               budget,
               'in-flight',
-              safeWorkingSetBytes(sourceRegion, plan.nodes.length),
+              safeWorkingSetBytes(
+                { ...sourceRegion, width: largestRequiredPixels, height: 1 },
+                plan.nodes.length,
+              ),
             )
             try {
               const sourceCache = new Map<string, Promise<Float32PremultipliedRgbaTile>>()
-              const loadSource = (resourceId: string): Promise<Float32PremultipliedRgbaTile> => {
-                const cached = sourceCache.get(resourceId)
+              const loadSource = (
+                resourceId: string,
+                region: ImageEditorV3ExportRenderRegion,
+              ): Promise<Float32PremultipliedRgbaTile> => {
+                const key = `${resourceId}:${region.x}:${region.y}:${region.width}:${region.height}`
+                const cached = sourceCache.get(key)
                 if (cached) return cached
                 const loaded = loadImageEditorV3SourceRegion(
                   resourceId,
-                  sourceRegion,
+                  region,
                   { width: geometry.sourceWidth, height: geometry.sourceHeight },
                   request.description.bitDepth,
                   document.color.workingSpace,
@@ -260,20 +290,27 @@ async function* renderTiles(
                   taskContext.signal,
                   dependencies,
                 )
-                sourceCache.set(resourceId, loaded)
+                sourceCache.set(key, loaded)
                 return loaded
               }
-              const renderedRegion = await executeImageEditCpuRenderPlanV3(plan, {
+              const renderedRegion = await executeImageEditCpuRenderRegionPlanV3(plan, sourceRegion, {
+                size: { width: geometry.sourceWidth, height: geometry.sourceHeight },
+                registry,
                 signal: taskContext.signal,
-                loadRaster: async (node) => {
+                createTransparent: (region) => transparentRegion(
+                  region,
+                  document.color.workingSpace,
+                  document.color.transferFunction,
+                ),
+                loadRaster: async (node, region) => {
                   const resourceId = rasterResourceId(node)
                   const base = resourceId
-                    ? loadSource(resourceId)
-                    : transparentRegion(sourceRegion, document.color.workingSpace, document.color.transferFunction)
+                    ? loadSource(resourceId, region)
+                    : transparentRegion(region, document.color.workingSpace, document.color.transferFunction)
                   return applyImageEditorV3SparseRasterRegion(
                     node,
                     await base,
-                    sourceRegion,
+                    region,
                     { width: geometry.sourceWidth, height: geometry.sourceHeight },
                     sparseRasterPlan,
                     {
@@ -287,13 +324,13 @@ async function* renderTiles(
                     budget,
                   )
                 },
-                rasterizeAnnotations: (node) => (
+                rasterizeAnnotations: (node, region) => (
                   dependencies.rasterizeAnnotations ?? rasterizeImageEditorV3ExportAnnotations
-                )({ node, document, region: sourceRegion, signal: taskContext.signal }),
-                loadMask: async (reference) => {
+                )({ node, document, region, signal: taskContext.signal }),
+                loadMask: async (reference, _node, region) => {
                   const sparse = await loadImageEditorV3SparseMaskRegion(
                     reference,
-                    sourceRegion,
+                    region,
                     0,
                     sparseMaskPlan,
                     taskContext.signal,
@@ -302,9 +339,9 @@ async function* renderTiles(
                   )
                   if (sparse) return sparse
                   if (!('resourceId' in reference)) throw new Error('蒙版引用缺少资源 ID')
-                  return imageEditorV3SourceRegionToMask(await loadSource(reference.resourceId))
+                  return imageEditorV3SourceRegionToMask(await loadSource(reference.resourceId, region))
                 },
-                executeCustomEffect: async (node, source, mask) => {
+                executeCustomEffect: async (node, source, mask, region) => {
                   if (node.definitionId !== 'effect.diffusion') {
                     throw new Error(`分块导出不支持自定义效果：${node.definitionId}`)
                   }
@@ -323,8 +360,8 @@ async function* renderTiles(
                       tile: analysis.scatter,
                       documentWidth: analysis.documentWidth,
                       documentHeight: analysis.documentHeight,
-                      sourceX: sourceRegion.x,
-                      sourceY: sourceRegion.y,
+                      sourceX: region.x,
+                      sourceY: region.y,
                     },
                   })
                 },

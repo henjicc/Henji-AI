@@ -1,6 +1,7 @@
 import { ImageEditCommandValidationErrorV3 } from './commandErrors'
 import type { ImageEditLayerCommonPatchV3 } from './commandTypes'
 import { IMAGE_EDIT_BLEND_MODES_V3 } from './layerTypes'
+import { isImageEditTransformInvertibleV3 } from './execution/affineTransform'
 
 export function normalizeImageEditLayerCommonPatchV3(
   patch: ImageEditLayerCommonPatchV3,
@@ -25,8 +26,8 @@ export function normalizeImageEditLayerCommonPatchV3(
   if (patch.blendMode !== undefined && !IMAGE_EDIT_BLEND_MODES_V3.includes(patch.blendMode)) {
     throw new ImageEditCommandValidationErrorV3('图层混合模式无效')
   }
-  if (patch.transform !== undefined && (patch.transform.length !== 6 || !patch.transform.every(Number.isFinite))) {
-    throw new ImageEditCommandValidationErrorV3('图层变换无效')
+  if (patch.transform !== undefined && !isImageEditTransformInvertibleV3(patch.transform)) {
+    throw new ImageEditCommandValidationErrorV3('图层变换必须是可逆的有限仿射矩阵')
   }
   return {
     ...(patch.name === undefined ? {} : { name: patch.name }),

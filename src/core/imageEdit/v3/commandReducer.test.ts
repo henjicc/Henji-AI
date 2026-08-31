@@ -286,6 +286,28 @@ describe('图片编辑 V3 命令归约器', () => {
     })).toThrow(ImageEditCommandValidationErrorV3);
   });
 
+  it('图层变换命令可逆，并明确拒绝奇异矩阵', () => {
+    const source = createDocument([createImageEditRasterLayerV3('raster', '图层')]);
+    const moved = applyImageEditCommandV3(source, {
+      commandId: 'move-raster', expectedRevision: 0, type: 'layer.update-common',
+      layerId: 'raster', patch: { transform: [1, 0, 0, 1, 12, -3] },
+    });
+    expect(moved.document.layers[0].transform).toEqual([1, 0, 0, 1, 12, -3]);
+    expect(applyImageEditCommandV3(moved.document, moved.inverse).document.layers[0].transform)
+      .toEqual([1, 0, 0, 1, 0, 0]);
+    expect(() => applyImageEditCommandV3(source, {
+      commandId: 'singular-raster', expectedRevision: 0, type: 'layer.update-common',
+      layerId: 'raster', patch: { transform: [1, 0, 0, 0, 0, 0] },
+    })).toThrow(ImageEditCommandValidationErrorV3);
+    const effectSource = createDocument([
+      createImageEditEffectLayerV3('effect', '效果', 'image.gaussian-blur-v2', { radius: 1 }),
+    ]);
+    expect(() => applyImageEditCommandV3(effectSource, {
+      commandId: 'move-effect', expectedRevision: 0, type: 'layer.update-common',
+      layerId: 'effect', patch: { transform: [1, 0, 0, 1, 1, 0] },
+    })).toThrow(/不支持空间变换/);
+  });
+
   it('以可逆命令切换图层组的隔离与穿透语义', () => {
     const source = createDocument([createImageEditGroupLayerV3('group', '组')]);
     const isolated = applyImageEditCommandV3(source, {

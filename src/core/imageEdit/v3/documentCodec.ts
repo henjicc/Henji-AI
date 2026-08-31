@@ -34,6 +34,7 @@ import {
   type ImageEditRasterLayerV3,
   type ImageEditTransformV3,
 } from './layerTypes';
+import { isImageEditTransformInvertibleV3 } from './execution/affineTransform';
 
 export type ImageEditDocumentSourceFormatV3 = 'v3' | 'invalid' | 'unknown-version';
 
@@ -273,7 +274,7 @@ function parseGeometry(value: unknown): ImageEditCanvasGeometryV3 | null {
 }
 
 function parseTransform(value: unknown): ImageEditTransformV3 | null {
-  if (!Array.isArray(value) || value.length !== 6 || !value.every(isFiniteNumber)) return null;
+  if (!isImageEditTransformInvertibleV3(value)) return null;
   return [value[0], value[1], value[2], value[3], value[4], value[5]];
 }
 
@@ -360,6 +361,7 @@ function parseLayer(value: unknown, depth: number): ImageEditLayerV3 | null {
     return { ...common, type: 'annotation', annotations } satisfies ImageEditAnnotationLayerV3;
   }
   if (value.type === 'effect') {
+    if (common.transform.some((entry, index) => entry !== [1, 0, 0, 1, 0, 0][index])) return null;
     const params = cloneImageEditJsonObjectV3(value.params);
     if (!isNonEmptyString(value.effectId) || !params || typeof value.renderable !== 'boolean') return null;
     let legacyOperation: ImageEditEffectLayerV3['legacyOperation'];
@@ -380,6 +382,7 @@ function parseLayer(value: unknown, depth: number): ImageEditLayerV3 | null {
     } satisfies ImageEditEffectLayerV3;
   }
   if (value.type === 'adjustment') {
+    if (common.transform.some((entry, index) => entry !== [1, 0, 0, 1, 0, 0][index])) return null;
     const params = cloneImageEditJsonObjectV3(value.params);
     if (!isNonEmptyString(value.adjustmentId) || !params || typeof value.renderable !== 'boolean') return null;
     return {

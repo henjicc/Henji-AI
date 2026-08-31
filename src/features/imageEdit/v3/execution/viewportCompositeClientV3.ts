@@ -10,6 +10,8 @@ import type { ImageEditorV3ResourceDescriptor } from '@/platform/contracts/image
 import { ImageEditorPreviewBrushTileLoaderV3 } from './previewBrushTileLoaderV3'
 import {
   collectImageEditorViewportBrushRequestsV3,
+  createImageEditorViewportSourceTileRequestsV3,
+  estimateImageEditorViewportWorkingRegionPixelsV3,
   ImageEditorViewportCompositeUnsupportedErrorV3,
   prepareImageEditorViewportCompositeV3,
   type PreparedImageEditorViewportCompositeV3,
@@ -218,6 +220,11 @@ export class ImageEditorViewportCompositeClientV3 {
       viewport: job.viewport,
       bitDepth: typeof job.document.color.bitDepth === 'number' ? job.document.color.bitDepth : 32,
       haloDocumentPixels: prepared.haloDocumentPixels,
+      resolveSourceTileRequests: (candidate) => createImageEditorViewportSourceTileRequestsV3(
+        prepared,
+        candidate,
+        typeof job.document.color.bitDepth === 'number' ? job.document.color.bitDepth : 32,
+      ),
     })
     if (this.active !== job || job.controller.signal.aborted || this.disposed) {
       frame.release()
@@ -241,9 +248,9 @@ export class ImageEditorViewportCompositeClientV3 {
       transferBytes,
       'fallback-managed-preview',
     )
-    const maxRegionPixels = frame.plan.tiles.reduce(
-      (largest, tile) => Math.max(largest, tile.width * tile.height),
-      0,
+    const maxRegionPixels = estimateImageEditorViewportWorkingRegionPixelsV3(
+      prepared,
+      frame.plan,
     )
     const workingBytes = maxRegionPixels * 4 * Float32Array.BYTES_PER_ELEMENT
       * Math.max(3, prepared.plan.nodes.length + 2)

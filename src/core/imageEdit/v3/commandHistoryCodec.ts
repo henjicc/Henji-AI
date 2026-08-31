@@ -9,6 +9,7 @@ import { cloneImageEditJsonObjectV3, decodeImageEditDocumentV3 } from './documen
 import { createImageEditDocumentV3 } from './documentFactory';
 import { getImageEditHistoryMaskValidationErrorV3 } from './commandHistoryMaskCodec';
 import { IMAGE_EDIT_BLEND_MODES_V3, type ImageEditLayerV3 } from './layerTypes';
+import { isImageEditTransformInvertibleV3 } from './execution/affineTransform';
 
 export const IMAGE_EDIT_HISTORY_SNAPSHOT_VERSION_V3 = 1 as const;
 export const IMAGE_EDIT_HISTORY_SNAPSHOT_DEFAULT_MAX_JSON_BYTES_V3 = 32 * 1024 * 1024;
@@ -257,9 +258,8 @@ function validateCommand(value: unknown): ImageEditCommandV3 {
       if (command.patch.opacity !== undefined && (typeof command.patch.opacity !== 'number'
         || !Number.isFinite(command.patch.opacity) || command.patch.opacity < 0 || command.patch.opacity > 1)) fail('图层不透明度无效');
       if (command.patch.blendMode !== undefined && !IMAGE_EDIT_BLEND_MODES_V3.includes(command.patch.blendMode as never)) fail('图层混合模式无效');
-      if (command.patch.transform !== undefined && (!Array.isArray(command.patch.transform)
-        || command.patch.transform.length !== 6
-        || !command.patch.transform.every((entry) => typeof entry === 'number' && Number.isFinite(entry)))) fail('图层变换无效');
+      if (command.patch.transform !== undefined
+        && !isImageEditTransformInvertibleV3(command.patch.transform)) fail('图层变换无效');
       break;
     }
     case 'layer.update-params':

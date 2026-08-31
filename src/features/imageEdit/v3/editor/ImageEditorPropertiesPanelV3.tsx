@@ -21,7 +21,9 @@ import { createImageEditIdV3 } from '@/core/imageEdit/v3/documentFactory'
 import { useImageEditorSessionStoreV3 } from '../store'
 import { ImageEditorEffectParametersV3 } from './ImageEditorEffectParametersV3'
 import { ImageEditorAnnotationPropertiesV3 } from './ImageEditorAnnotationPropertiesV3'
+import { ImageEditorLayerTransformPropertiesV3 } from './ImageEditorLayerTransformPropertiesV3'
 import { findImageEditLayerLocationV3 } from './layerTreeV3'
+import { isImageEditLayerTransformableV3 } from './layerTransformV3'
 import { resolveImageEditorReadinessReasonV3 } from './readinessPresentationV3'
 import type { ImageEditorV3Controller, ImageEditorV3Props } from './types'
 
@@ -236,6 +238,14 @@ export function ImageEditorPropertiesPanelV3({
           </UiFormRow>
         ) : null}
       </UiGroup>
+
+      {selected.type === 'raster' || selected.type === 'annotation' || selected.type === 'group' ? (
+        <ImageEditorLayerTransformPropertiesV3
+          controller={controller}
+          layer={selected}
+          disabled={!isImageEditLayerTransformableV3(selectedLocation ?? null)}
+        />
+      ) : null}
 
       {(selected.type === 'effect' || selected.type === 'adjustment') ? (
         <UiGroup

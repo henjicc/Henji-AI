@@ -44,6 +44,22 @@ function sourceTile(value: number): ImageEditorV3SourceTile {
   }
 }
 
+function wideSourceTile(tileX: number, value: number): ImageEditorV3SourceTile {
+  const pixels = new Uint8Array(512 * 4)
+  for (let offset = 0; offset < pixels.length; offset += 4) {
+    pixels.set([value, value, value, 255], offset)
+  }
+  return {
+    ...sourceTile(value),
+    tileX,
+    width: 512,
+    height: 1,
+    rowStride: 512 * 4,
+    originX: tileX * 512,
+    pixels: pixels.buffer,
+  }
+}
+
 function request(
   document: ReturnType<typeof createImageEditDocumentV3>,
   tile: ImageEditorV3SourceTile,
@@ -147,6 +163,7 @@ describe('图片编辑 V3 视口成品分块执行器', () => {
     const maskResource = `sha256:${'b'.repeat(64)}`
     mask.tiles['0/0/0'] = maskResource
     document.layers[0].mask = mask
+    document.layers[0].transform = [1, 0, 0, 1, 1, 0]
     const renderRequest = request(document, sourceTile(255))
     renderRequest.brushTiles = [{
       resourceId: maskResource,
@@ -155,14 +172,60 @@ describe('图片编辑 V3 视口成品分块执行器', () => {
       height: 4,
       bytes: Float32Array.from({ length: 16 }, () => 0.25).buffer,
     }]
-    let resultAlpha = 0
+    let resultAlpha: number[] = []
 
     await renderImageEditorViewportCompositeV3(
       renderRequest,
       new AbortController().signal,
-      ({ tile }) => { resultAlpha = tile.data[3] },
+      ({ tile }) => {
+        resultAlpha = Array.from({ length: 4 }, (_, x) => tile.data[x * 4 + 3])
+      },
     )
 
-    expect(resultAlpha).toBeCloseTo(0.25, 5)
+    expect(resultAlpha[0]).toBe(0)
+    expect(resultAlpha.slice(1)).toEqual([0.25, 0.25, 0.25])
+  })
+
+  it('输出 tile 与源 tile 坐标不同时，按逆变换拼接真正需要的源区域', async () => {
+    const document = createImageEditDocumentV3({
+      width: 1_024,
+      height: 1,
+      documentId: 'viewport-inverse-source',
+      sourceResourceId: RESOURCE,
+      idFactory: () => 'source',
+    })
+    document.layers[0].transform = [1, 0, 0, 1, 512, 0]
+    const renderRequest: ImageEditorViewportCompositeRenderRequestV3 = {
+      type: 'render',
+      requestId: 'inverse-source',
+      sequence: 1,
+      document,
+      quality: 'stable',
+      plan: planImageEditorViewportTilesV3({
+        resourceRef: RESOURCE,
+        documentSize: document.geometry,
+        pyramid: {
+          tileSize: 512,
+          levels: [{ mip: 0, width: 1_024, height: 1, columns: 2, rows: 1 }],
+        },
+        viewport: {
+          documentX: 512, documentY: 0, width: 512, height: 1,
+          zoom: 1, devicePixelRatio: 1,
+        },
+        bitDepth: 8,
+      }),
+      sourceTiles: [wideSourceTile(0, 96)],
+      brushTiles: [],
+    }
+    let first = 0
+    await renderImageEditorViewportCompositeV3(
+      renderRequest,
+      new AbortController().signal,
+      ({ outputRect, tile }) => {
+        expect(outputRect.x).toBe(512)
+        first = tile.data[0]
+      },
+    )
+    expect(first).toBeCloseTo(decodeSrgbExtended(96 / 255), 5)
   })
 })

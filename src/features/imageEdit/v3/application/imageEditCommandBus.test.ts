@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { createImageEditDocumentV3, createImageEditRasterLayerV3 } from '@/core/imageEdit/v3/documentFactory';
 import type { ImageEditDocumentRepositoryV3 } from '@/core/imageEdit/v3/serviceContracts';
 import { ImageEditCommandBusV3 } from './imageEditCommandBus';
+import { projectImageEditorPreviewDocumentV3 } from '../execution/previewDocumentV3';
 
 function createRepository(): ImageEditDocumentRepositoryV3 {
   return {
@@ -48,6 +49,44 @@ describe('图片编辑 V3 命令总线', () => {
     expect(bus.getSnapshot().previewOverrides).toEqual({});
     expect(bus.redo()).toBe(true);
     expect(bus.getSnapshot().document.layers).toHaveLength(1);
+  });
+
+  it('一次移动手势可连续覆盖预览，但只提交一个可撤销变换历史', () => {
+    const repository = createRepository();
+    const initial = createImageEditDocumentV3({ width: 10, height: 10, documentId: 'move' });
+    initial.layers = [createImageEditRasterLayerV3('layer', '图层')];
+    const bus = new ImageEditCommandBusV3(initial, { repository });
+
+    bus.setPreview({
+      id: 'move-gesture', kind: 'transform', targetId: 'layer', baseRevision: 0,
+      value: [1, 0, 0, 1, 2, 3],
+    });
+    bus.setPreview({
+      id: 'move-gesture', kind: 'transform', targetId: 'layer', baseRevision: 0,
+      value: [1, 0, 0, 1, 7, 9],
+    });
+    expect(projectImageEditorPreviewDocumentV3(bus.getSnapshot()).layers[0].transform)
+      .toEqual([1, 0, 0, 1, 7, 9]);
+    expect(bus.getSnapshot()).toMatchObject({ document: { revision: 0 }, history: { undoCount: 0 } });
+    expect(repository.scheduleAutosave).not.toHaveBeenCalled();
+
+    bus.commitPreview('move-gesture', {
+      type: 'layer.update-common', commandId: 'move-layer', expectedRevision: 0,
+      layerId: 'layer', patch: { transform: [1, 0, 0, 1, 7, 9] },
+    });
+    expect(bus.getSnapshot()).toMatchObject({ document: { revision: 1 }, history: { undoCount: 1 } });
+    expect(bus.undo()).toBe(true);
+    expect(bus.getSnapshot().document.layers[0].transform).toEqual([1, 0, 0, 1, 0, 0]);
+  });
+
+  it('预览入口明确拒绝奇异变换', () => {
+    const bus = new ImageEditCommandBusV3(
+      createImageEditDocumentV3({ width: 10, height: 10, documentId: 'singular' }),
+    );
+    expect(() => bus.setPreview({
+      id: 'singular', kind: 'transform', targetId: 'layer', baseRevision: 0,
+      value: [0, 0, 0, 1, 0, 0],
+    })).toThrow(/可逆/);
   });
 
   it('从持久快照恢复后仍可撤销，瞬态预览不触发持久回调', () => {

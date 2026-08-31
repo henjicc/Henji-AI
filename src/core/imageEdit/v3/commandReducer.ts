@@ -326,6 +326,11 @@ function applyLayerContentCommand(
   if (!location) throw new ImageEditCommandValidationErrorV3(`图层不存在：${layerId}`);
   if (command.type === 'layer.update-common') {
     const patch = normalizeImageEditLayerCommonPatchV3(command.patch);
+    if (patch.transform
+      && (location.layer.type === 'effect' || location.layer.type === 'adjustment')
+      && patch.transform.some((value, index) => value !== [1, 0, 0, 1, 0, 0][index])) {
+      throw new ImageEditCommandValidationErrorV3('效果和调整图层不支持空间变换');
+    }
     const keys = Object.keys(patch) as (keyof ImageEditLayerCommonPatchV3)[];
     if (location.layer.locked && keys.some((key) => key !== 'locked')) throw new ImageEditLayerLockedErrorV3(`图层已锁定：${layerId}`);
     if (location.ancestors.some((ancestor) => ancestor.locked)) throw new ImageEditLayerLockedErrorV3(`图层所在组已锁定：${layerId}`);

@@ -27,6 +27,7 @@ import type {
 } from './types'
 import { useImageEditorBusSnapshotV3 } from './useImageEditorControllerV3'
 import { useImageEditorViewportLayoutV3 } from './useImageEditorViewportLayoutV3'
+import { useImageEditorLayerMoveGestureV3 } from './useImageEditorLayerMoveGestureV3'
 import {
   imageEditorViewportTransformV3,
   zoomImageEditorViewportAroundPointV3,
@@ -45,7 +46,7 @@ interface ImageEditorPreviewV3Props extends Pick<
   controller: ImageEditorV3Controller
 }
 
-interface ImageEditorViewportGestureV3 {
+interface ImageEditorNavigationGestureV3 {
   kind: 'pan' | 'zoom'
   pointerId: number
   startClientX: number
@@ -111,7 +112,7 @@ export function ImageEditorPreviewV3({
   const { t } = useTranslation('ui')
   const surfaceRef = useRef<HTMLElement | null>(null)
   const viewportContentRef = useRef<HTMLDivElement | null>(null)
-  const gestureRef = useRef<ImageEditorViewportGestureV3 | null>(null)
+  const gestureRef = useRef<ImageEditorNavigationGestureV3 | null>(null)
   const snapshot = useImageEditorBusSnapshotV3(bus)
   const activeTool = useImageEditorSessionStoreV3(
     (state) => state.sessions[controller.sessionId]?.activeTool ?? 'move',
@@ -135,6 +136,12 @@ export function ImageEditorPreviewV3({
     outputGeometry,
     zoom,
     pan,
+  )
+  const layerMoveHandlers = useImageEditorLayerMoveGestureV3(
+    controller,
+    activeTool,
+    viewportContentRef,
+    outputGeometry,
   )
 
   const managedPreview = useManagedImageEditorPreviewV3(
@@ -245,8 +252,7 @@ export function ImageEditorPreviewV3({
   }, [applyViewportTransform, controller.sessionId, pan, setViewportPan, zoom])
 
   useEffect(() => {
-    const navigationActive = activeTool === 'hand' || activeTool === 'zoom'
-    if (!navigationActive) releaseGesture(false)
+    if (activeTool !== 'hand' && activeTool !== 'zoom') releaseGesture(false)
   }, [activeTool, releaseGesture])
 
   useEffect(() => () => releaseGesture(false), [releaseGesture])
@@ -265,7 +271,7 @@ export function ImageEditorPreviewV3({
     } catch {
       // 失焦边界由 pointercancel/unmount 继续兜底。
     }
-    const gesture: ImageEditorViewportGestureV3 = {
+    const gesture: ImageEditorNavigationGestureV3 = {
       kind: activeTool === 'hand' ? 'pan' : 'zoom',
       pointerId: event.pointerId,
       startClientX: event.clientX,
@@ -338,7 +344,9 @@ export function ImageEditorPreviewV3({
     ? 'cursor-grab active:cursor-grabbing'
     : activeTool === 'zoom'
       ? 'cursor-zoom-in'
-      : ''
+      : activeTool === 'move'
+        ? 'cursor-move'
+        : ''
 
   return (
     <main
@@ -346,7 +354,11 @@ export function ImageEditorPreviewV3({
       data-preview-surface
       data-active-navigation-tool={activeTool === 'hand' || activeTool === 'zoom' ? activeTool : undefined}
       className={`relative min-h-0 min-w-0 flex-1 overflow-hidden bg-bg-dark ${navigationCursor}`}
-      style={{ touchAction: activeTool === 'hand' || activeTool === 'zoom' ? 'none' : undefined }}
+      style={{ touchAction: activeTool === 'hand' || activeTool === 'zoom' || activeTool === 'move' ? 'none' : undefined }}
+      onPointerDownCapture={layerMoveHandlers.onPointerDownCapture}
+      onPointerMoveCapture={layerMoveHandlers.onPointerMoveCapture}
+      onPointerUpCapture={layerMoveHandlers.onPointerUpCapture}
+      onPointerCancelCapture={layerMoveHandlers.onPointerCancelCapture}
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}

@@ -1,5 +1,4 @@
 import {
-  IMAGE_EDIT_IDENTITY_TRANSFORM_V3,
   compileImageEditRenderPlanV3,
   createBuiltInImageEditRenderNodeRegistry,
   parseImageEditDocumentV3,
@@ -28,20 +27,9 @@ const SUPPORTED_NODE_IDS = new Set([
 
 const registry = createBuiltInImageEditRenderNodeRegistry()
 
-function transformIsIdentity(transform: readonly number[]): boolean {
-  return transform.length === IMAGE_EDIT_IDENTITY_TRANSFORM_V3.length
-    && transform.every((value, index) => value === IMAGE_EDIT_IDENTITY_TRANSFORM_V3[index])
-}
-
 function visitLayers(layers: readonly ImageEditLayerV3[]): void {
   for (const layer of layers) {
     if (!layer.visible) continue
-    if (!transformIsIdentity(layer.transform)) {
-      throw new ImageEditorV3ExportCapabilityError(
-        'LAYER_TRANSFORM_UNSUPPORTED',
-        `图层“${layer.name}”使用了仿射变换；当前分块导出只支持文档裁剪、镜像和 90° 方向变换`,
-      )
-    }
     if (layer.type === 'annotation' && layer.annotations.some((item) => item.type === 'mosaic')) {
       throw new ImageEditorV3ExportCapabilityError(
         'MOSAIC_ANNOTATION_UNSUPPORTED',

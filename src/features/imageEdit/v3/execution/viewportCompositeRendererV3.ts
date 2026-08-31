@@ -2,7 +2,7 @@ import {
   compileImageEditRenderPlanV3,
   createBuiltInImageEditRenderNodeRegistry,
   createTileRegion,
-  executeImageEditCpuRenderPlanV3,
+  executeImageEditCpuRenderRegionPlanV3,
   type Float32PremultipliedRgbaTile,
   type ImageEditRect,
   type ImageEditRenderPlanNode,
@@ -14,9 +14,8 @@ import type { ImageEditorViewportCompositeRenderRequestV3 } from './viewportComp
 import {
   applyImageEditorViewportBrushTilesV3,
   createTransparentImageEditorViewportRegionV3,
-  cropImageEditorViewportTileV3,
-  decodeImageEditorViewportSourceTileV3,
   imageEditorViewportTileToMaskV3,
+  loadImageEditorViewportSourceRegionV3,
   loadImageEditorViewportSparseMaskV3,
   rasterizeImageEditorViewportAnnotationsV3,
   viewportCompositeSourceTileKeyV3,
@@ -49,19 +48,6 @@ function rasterResourceId(node: ImageEditRenderPlanNode): string | null {
   return source?.kind === 'resource' && typeof source.resourceId === 'string'
     ? source.resourceId
     : null
-}
-
-function assertSourceTileRegion(
-  tile: ReturnType<typeof createTileRegion>,
-  source: { originX: number; originY: number; width: number; height: number; halo: number },
-): void {
-  if (
-    source.originX !== tile.sourceRect.x
-    || source.originY !== tile.sourceRect.y
-    || source.width !== tile.sourceRect.width
-    || source.height !== tile.sourceRect.height
-    || source.halo !== tile.halo
-  ) throw new Error('视口合成源瓦片与计划区域不一致')
 }
 
 /**
@@ -109,55 +95,69 @@ export async function renderImageEditorViewportCompositeV3(
       || region.sourceRect.height !== tileRequest.height
     ) throw new Error('视口成品瓦片与计划区域不一致')
     const decoded = new Map<string, Float32PremultipliedRgbaTile>()
-    const loadResource = (resourceId: string): Float32PremultipliedRgbaTile => {
-      const cached = decoded.get(resourceId)
+    const loadResource = (
+      resourceId: string,
+      requestedRegion: ImageEditRect,
+    ): Float32PremultipliedRgbaTile => {
+      const key = `${resourceId}:${requestedRegion.x}:${requestedRegion.y}:${requestedRegion.width}:${requestedRegion.height}`
+      const cached = decoded.get(key)
       if (cached) return cached
-      const source = sourceTiles.get(`${resourceId}:m${request.plan.mip}:x${tileRequest.tileX}:y${tileRequest.tileY}`)
-      if (!source) throw new Error(`视口合成缺少图片资源瓦片：${resourceId}`)
-      assertSourceTileRegion(region, source)
-      const result = decodeImageEditorViewportSourceTileV3(source, request.document)
-      decoded.set(resourceId, result)
+      const result = loadImageEditorViewportSourceRegionV3(
+        sourceTiles,
+        resourceId,
+        request.plan.mip,
+        requestedRegion,
+        request.document,
+      )
+      decoded.set(key, result)
       return result
     }
-    const rendered = await executeImageEditCpuRenderPlanV3(plan, {
+    const rendered = await executeImageEditCpuRenderRegionPlanV3(plan, region.outputRect, {
+      size: request.plan.mipSize,
+      scaleX: 1 / (2 ** request.plan.mip),
+      scaleY: 1 / (2 ** request.plan.mip),
+      registry,
       signal,
-      loadRaster: async (node) => {
+      createTransparent: (requestedRegion) => createTransparentImageEditorViewportRegionV3(
+        requestedRegion,
+        request.document,
+      ),
+      loadRaster: async (node, requestedRegion) => {
         const resourceId = rasterResourceId(node)
         const base = resourceId
-          ? loadResource(resourceId)
-          : createTransparentImageEditorViewportRegionV3(region.sourceRect, request.document)
+          ? loadResource(resourceId, requestedRegion)
+          : createTransparentImageEditorViewportRegionV3(requestedRegion, request.document)
         return applyImageEditorViewportBrushTilesV3(
           node,
           base,
-          region.sourceRect,
+          requestedRegion,
           request.plan.mip,
           request.brushTiles,
           signal,
         )
       },
-      rasterizeAnnotations: async (node) => rasterizeAnnotations(
+      rasterizeAnnotations: async (node, requestedRegion) => rasterizeAnnotations(
         node,
         request.document,
-        region.sourceRect,
+        requestedRegion,
         request.plan.mip,
         signal,
       ),
-      loadMask: async (reference) => {
+      loadMask: async (reference, _node, requestedRegion) => {
         if (isImageEditSparseMaskReferenceV3(reference)) {
           return loadImageEditorViewportSparseMaskV3(
             reference,
-            region.sourceRect,
+            requestedRegion,
             request.plan.mip,
             request.brushTiles,
             signal,
           )
         }
-        return imageEditorViewportTileToMaskV3(loadResource(reference.resourceId))
+        return imageEditorViewportTileToMaskV3(loadResource(reference.resourceId, requestedRegion))
       },
     })
-    const composited = rendered
-      ?? createTransparentImageEditorViewportRegionV3(region.sourceRect, request.document)
-    const output = cropImageEditorViewportTileV3(composited, region.sourceRect, region.outputRect)
+    const output = rendered
+      ?? createTransparentImageEditorViewportRegionV3(region.outputRect, request.document)
     await onTile({
       outputRect: region.outputRect,
       tile: convertPreviewWorkingSpaceToSrgbDisplayV3(output, request.document.color),

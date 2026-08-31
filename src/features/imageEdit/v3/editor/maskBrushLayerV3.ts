@@ -35,7 +35,7 @@ function invert(matrix: AnnotationMatrixV3): AnnotationMatrixV3 | null {
   ]
 }
 
-/** 蒙版在图层自身变换之后求值，因此编辑矩阵只继承祖先变换。 */
+/** 蒙版与所属图层内容共用局部坐标，因此屏幕编辑矩阵必须包含 owner transform。 */
 export function resolveImageEditorMaskBrushLayerV3(
   document: ImageEditDocumentV3,
   selectedLayerIds: readonly string[],
@@ -54,7 +54,10 @@ export function resolveImageEditorMaskBrushLayerV3(
   }
   const matrix = resolveAnnotationLayerToOutputMatrixV3(
     document,
-    location.ancestors.slice().reverse().map((ancestor) => ancestor.transform),
+    [
+      location.layer.transform,
+      ...location.ancestors.slice().reverse().map((ancestor) => ancestor.transform),
+    ],
   )
   const inverseMatrix = invert(matrix)
   return inverseMatrix

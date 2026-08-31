@@ -7,6 +7,7 @@ import {
 import { IMAGE_EDITOR_V3_BRUSH_TILE_MEDIA_TYPE } from '../application/imageEditorResourceDescriptorsV3'
 import {
   collectImageEditorViewportBrushRequestsV3,
+  createImageEditorViewportSourceTileRequestsV3,
   ImageEditorViewportCompositeUnsupportedErrorV3,
   prepareImageEditorViewportCompositeV3,
 } from './viewportCompositeDocumentV3'
@@ -70,5 +71,33 @@ describe('图片编辑 V3 视口合成能力边界', () => {
     expect(collectImageEditorViewportBrushRequestsV3(prepared, plan)).toEqual([
       expect.objectContaining({ resourceId: BRUSH_LEFT, tileKey: '0/0/0' }),
     ])
+  })
+
+  it('平移图层按当前 mip 逆向请求真正的源瓦片', () => {
+    const document = createImageEditDocumentV3({
+      width: 1_024,
+      height: 512,
+      documentId: 'translated-source-requests',
+      sourceResourceId: SOURCE,
+      idFactory: () => 'source',
+    })
+    document.layers[0].transform = [1, 0, 0, 1, 512, 0]
+    const prepared = prepareImageEditorViewportCompositeV3(document, 'stable', [])
+    const plan = planImageEditorViewportTilesV3({
+      resourceRef: SOURCE,
+      documentSize: document.geometry,
+      pyramid: {
+        tileSize: 512,
+        levels: [{ mip: 0, width: 1_024, height: 512, columns: 2, rows: 1 }],
+      },
+      viewport: {
+        documentX: 512, documentY: 0, width: 512, height: 512,
+        zoom: 1, devicePixelRatio: 1,
+      },
+      bitDepth: 8,
+    })
+
+    expect(createImageEditorViewportSourceTileRequestsV3(prepared, plan, 8))
+      .toEqual([expect.objectContaining({ tileX: 0, tileY: 0, originX: 0 })])
   })
 })

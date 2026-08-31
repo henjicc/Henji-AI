@@ -3,7 +3,7 @@ import {
   describeImageEditorV3SourcePyramid,
   readImageEditorV3SourceTile,
 } from '@/commands/imageEditorV3'
-import type { ImageEditSize } from '@/core/imageEdit/v3/tileGeometry'
+import { createTileRegion, type ImageEditSize } from '@/core/imageEdit/v3/tileGeometry'
 import type {
   ImageEditorV3PyramidDescriptor,
   ImageEditorV3ResourceRef,
@@ -18,6 +18,7 @@ import {
 import {
   imageEditorViewportTileCacheKeyV3,
   planImageEditorViewportTilesV3,
+  type ImageEditorViewportTileCandidateV3,
   type ImageEditorViewportTileRequestV3,
   type ImageEditorViewportTilePlanV3,
   type ImageEditorViewportTransformV3,
@@ -46,6 +47,10 @@ export interface ImageEditorViewportRenderRequestV3 {
   viewport: ImageEditorViewportTransformV3
   bitDepth: 8 | 16 | 32
   haloDocumentPixels?: number
+  /** 让 RenderPlan 按逆向依赖为当前 mip 补充/替换实际源瓦片。 */
+  resolveSourceTileRequests?: (
+    candidate: ImageEditorViewportTileCandidateV3,
+  ) => readonly ImageEditorViewportTileRequestV3[]
 }
 
 export interface ImageEditorViewportFrameV3 {
@@ -141,6 +146,44 @@ function expandTileRequests(
     resourceRef,
     key: imageEditorViewportTileCacheKeyV3({ ...request, resourceRef }),
   })))
+}
+
+function resolvedTileRequests(
+  request: ImageEditorViewportRenderRequestV3,
+  candidate: Parameters<NonNullable<ImageEditorViewportRenderRequestV3['resolveSourceTileRequests']>>[0],
+  resourceRefs: readonly ImageEditorV3ResourceRef[],
+): ImageEditorViewportTileRequestV3[] {
+  const resolved = request.resolveSourceTileRequests?.(candidate)
+    ?? expandTileRequests(candidate.tiles, resourceRefs)
+  const byKey = new Map<string, ImageEditorViewportTileRequestV3>()
+  for (const tile of resolved) {
+    let expectedRegion
+    try {
+      expectedRegion = createTileRegion(
+        request.documentSize,
+        { mip: tile.mip, x: tile.tileX, y: tile.tileY },
+        tile.halo,
+      )
+    } catch {
+      throw new Error('视口 RenderPlan 返回了越界源瓦片请求')
+    }
+    const expectedBytes = expectedRegion.sourceRect.width * expectedRegion.sourceRect.height
+      * 4 * (tile.bitDepth / 8)
+    if (!resourceRefs.includes(tile.resourceRef)
+      || tile.mip !== candidate.mip
+      || tile.bitDepth !== request.bitDepth
+      || tile.key !== imageEditorViewportTileCacheKeyV3(tile)
+      || tile.originX !== expectedRegion.sourceRect.x
+      || tile.originY !== expectedRegion.sourceRect.y
+      || tile.width !== expectedRegion.sourceRect.width
+      || tile.height !== expectedRegion.sourceRect.height
+      || tile.estimatedBytes !== expectedBytes
+      || !Number.isSafeInteger(expectedBytes)) {
+      throw new Error('视口 RenderPlan 返回了无效源瓦片请求')
+    }
+    byKey.set(tile.key, tile)
+  }
+  return [...byKey.values()]
 }
 
 function abortedJobError(signal: AbortSignal): Error {
@@ -280,10 +323,10 @@ export class ImageEditorViewportTileSchedulerV3 {
       bitDepth: job.request.bitDepth,
       haloDocumentPixels: job.request.haloDocumentPixels,
       admit: (candidate) => this.cache.admission(
-        expandTileRequests(candidate.tiles, resourceRefs),
+        resolvedTileRequests(job.request, candidate, resourceRefs),
       ).admitted,
     })
-    const tileRequests = expandTileRequests(plan.tiles, resourceRefs)
+    const tileRequests = resolvedTileRequests(job.request, plan, resourceRefs)
     try {
       // 先锁住全部命中项，后续 miss 插入触发 LRU 时不会逐出本帧仍需使用的瓦片。
       for (const tileRequest of tileRequests) {
