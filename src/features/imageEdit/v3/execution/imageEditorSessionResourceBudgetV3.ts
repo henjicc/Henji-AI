@@ -4,9 +4,9 @@ import {
   type ImageEditResourceBudgetOptions,
 } from '@/core/imageEdit/v3/resourceBudget'
 
-interface ImageEditorSessionResourceBudgetEntryV3 {
+interface ImageEditorGlobalResourceBudgetEntryV3 {
   budget: ImageEditResourceBudget
-  consumers: Map<string, symbol>
+  sessions: Map<string, Map<string, symbol>>
 }
 
 export interface ImageEditorSessionResourceBudgetLeaseV3 {
@@ -17,10 +17,18 @@ export interface ImageEditorSessionResourceBudgetLeaseV3 {
 export interface ImageEditorSessionResourceBudgetSnapshotV3 {
   readonly sessionId: string
   readonly consumers: number
+  readonly globalConsumers: number
+  readonly activeSessions: number
   readonly memory: ImageEditMemorySnapshot
 }
 
-const sessionBudgets = new Map<string, ImageEditorSessionResourceBudgetEntryV3>()
+export interface ImageEditorGlobalResourceBudgetSnapshotV3 {
+  readonly consumers: number
+  readonly activeSessions: number
+  readonly memory: ImageEditMemorySnapshot
+}
+
+let globalBudgetEntry: ImageEditorGlobalResourceBudgetEntryV3 | null = null
 
 function normalizeSessionId(sessionId: string): string {
   const normalized = sessionId.trim()
@@ -40,8 +48,9 @@ export interface AcquireImageEditorSessionResourceBudgetOptionsV3 {
 }
 
 /**
- * 同一编辑会话内的代理、视口瓦片、Worker 工作集与成品共享唯一硬预算。
- * 调用方必须在自身资源全部释放后归还 lease；最后一个调用方离开时移除 registry 条目。
+ * 当前渲染进程内的所有编辑会话、代理、视口瓦片、Worker 工作集与导出共享唯一硬预算。
+ * 调用方必须在自身资源全部释放后归还 lease；最后一个调用方离开且没有遗留内存 lease
+ * 时重置 registry，避免测试或后续独立编辑会话继承旧的自定义预算。
  */
 export function acquireImageEditorSessionResourceBudgetV3(
   sessionId: string,
@@ -49,40 +58,72 @@ export function acquireImageEditorSessionResourceBudgetV3(
 ): ImageEditorSessionResourceBudgetLeaseV3 {
   const normalized = normalizeSessionId(sessionId)
   const consumerId = normalizeConsumerId(options.consumerId)
-  let entry = sessionBudgets.get(normalized)
+  if (
+    globalBudgetEntry
+    && globalBudgetEntry.sessions.size === 0
+    && globalBudgetEntry.budget.snapshot().leaseCount === 0
+  ) globalBudgetEntry = null
+  let entry = globalBudgetEntry
   if (!entry) {
     entry = {
       budget: new ImageEditResourceBudget(options.budgetOptions),
-      consumers: new Map(),
+      sessions: new Map(),
     }
-    sessionBudgets.set(normalized, entry)
+    globalBudgetEntry = entry
   } else if (options.budgetOptions) {
-    throw new Error('已有图片编辑会话资源账本时不能重新指定预算')
+    throw new Error('已有全局图片编辑资源账本时不能重新指定预算')
   }
+  const consumers = entry.sessions.get(normalized) ?? new Map<string, symbol>()
+  entry.sessions.set(normalized, consumers)
   const token = Symbol(consumerId)
-  entry.consumers.set(consumerId, token)
+  consumers.set(consumerId, token)
   let released = false
   return {
     budget: entry.budget,
     release: () => {
       if (released) return
       released = true
-      const current = sessionBudgets.get(normalized)
+      const current = globalBudgetEntry
       if (!current || current !== entry) return
-      if (current.consumers.get(consumerId) !== token) return
-      current.consumers.delete(consumerId)
-      if (current.consumers.size > 0) return
-      sessionBudgets.delete(normalized)
+      const currentConsumers = current.sessions.get(normalized)
+      if (!currentConsumers || currentConsumers.get(consumerId) !== token) return
+      currentConsumers.delete(consumerId)
+      if (currentConsumers.size === 0) current.sessions.delete(normalized)
+      if (current.sessions.size === 0 && current.budget.snapshot().leaseCount === 0) {
+        globalBudgetEntry = null
+      }
     },
   }
+}
+
+function countGlobalConsumers(entry: ImageEditorGlobalResourceBudgetEntryV3): number {
+  return [...entry.sessions.values()].reduce((total, consumers) => total + consumers.size, 0)
 }
 
 export function inspectImageEditorSessionResourceBudgetV3(
   sessionId: string,
 ): ImageEditorSessionResourceBudgetSnapshotV3 | null {
   const normalized = normalizeSessionId(sessionId)
-  const entry = sessionBudgets.get(normalized)
+  const entry = globalBudgetEntry
+  const consumers = entry?.sessions.get(normalized)
+  return entry && consumers
+    ? {
+        sessionId: normalized,
+        consumers: consumers.size,
+        globalConsumers: countGlobalConsumers(entry),
+        activeSessions: entry.sessions.size,
+        memory: entry.budget.snapshot(),
+      }
+    : null
+}
+
+export function inspectImageEditorGlobalResourceBudgetV3(): ImageEditorGlobalResourceBudgetSnapshotV3 | null {
+  const entry = globalBudgetEntry
   return entry
-    ? { sessionId: normalized, consumers: entry.consumers.size, memory: entry.budget.snapshot() }
+    ? {
+        consumers: countGlobalConsumers(entry),
+        activeSessions: entry.sessions.size,
+        memory: entry.budget.snapshot(),
+      }
     : null
 }

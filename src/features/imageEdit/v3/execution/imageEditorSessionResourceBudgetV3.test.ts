@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import {
   acquireImageEditorSessionResourceBudgetV3,
+  inspectImageEditorGlobalResourceBudgetV3,
   inspectImageEditorSessionResourceBudgetV3,
 } from './imageEditorSessionResourceBudgetV3'
 import { ImageEditorPreviewClientV3 } from './imageEditorPreviewClientV3'
@@ -41,16 +42,32 @@ describe('图片编辑 V3 会话资源账本', () => {
     expect(inspectImageEditorSessionResourceBudgetV3('shared-session')).toBeNull()
   })
 
-  it('不同会话不共享预算', () => {
+  it('不同会话共享同一全局硬预算', () => {
     const left = acquireImageEditorSessionResourceBudgetV3('left-session', {
       consumerId: 'preview',
+      budgetOptions: {
+        totalBytes: 1_000,
+        cpuCacheTargetBytes: 400,
+        gpuTargetBytes: 300,
+      },
     })
     const right = acquireImageEditorSessionResourceBudgetV3('right-session', {
       consumerId: 'preview',
     })
-    expect(left.budget).not.toBe(right.budget)
+    expect(left.budget).toBe(right.budget)
+    const heldLease = left.budget.acquire('gpu', 700)
+    expect(heldLease).not.toBeNull()
+    expect(right.budget.acquire('in-flight', 301)).toBeNull()
+    expect(inspectImageEditorGlobalResourceBudgetV3()).toMatchObject({
+      consumers: 2,
+      activeSessions: 2,
+      memory: { totalBytes: 700, leaseCount: 1 },
+    })
+    expect(left.budget.snapshot().totalBytes).toBe(700)
+    heldLease?.release()
     left.release()
     right.release()
+    expect(inspectImageEditorGlobalResourceBudgetV3()).toBeNull()
   })
 
   it('同一稳定使用者重新登记会替换旧 token，废弃构造结果不能提前释放', () => {

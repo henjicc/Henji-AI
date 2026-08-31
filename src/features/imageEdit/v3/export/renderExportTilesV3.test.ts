@@ -18,6 +18,10 @@ import {
 } from '@/core/imageEdit/v3'
 import { createDefaultDiffusionOperationParams } from '@/core/imageEdit/diffusionParams'
 import type { ImageEditorV3RasterExportDescription } from '@/platform/contracts/imageEditorV3'
+import {
+  acquireImageEditorSessionResourceBudgetV3,
+  inspectImageEditorSessionResourceBudgetV3,
+} from '../execution/imageEditorSessionResourceBudgetV3'
 import { resolveImageEditorV3ExportSourceBitDepth } from './capabilities'
 import {
   type ImageEditorV3ExportAnnotationRasterizeRequest,
@@ -474,6 +478,43 @@ describe('图片编辑 V3 分块导出渲染', () => {
     expect(requests.every((request) => request.halo === 0)).toBe(true)
     await iterator.return?.()
     expect(budget.snapshot()).toMatchObject({ totalBytes: 0, leaseCount: 0 })
+  })
+
+  it('默认导出与其他编辑会话共享全局资源账本，提前结束后归还', async () => {
+    const document = createImageEditDocumentV3({
+      width: 1,
+      height: 1,
+      documentId: 'global-budget-export',
+      sourceResourceId: SOURCE,
+    })
+    const iterator = renderImageEditorV3ExportTiles(
+      {
+        document,
+        resourceDescriptors: [],
+        description: description(1, 1),
+        tileSize: 16,
+        sessionId: 'global-budget-export-session',
+      },
+      { readSourceTile: fakeSourceReader(new Map([[SOURCE, solidImage(1, 1, 32)]])) },
+    )[Symbol.asyncIterator]()
+
+    expect(inspectImageEditorSessionResourceBudgetV3('global-budget-export-session')).toBeNull()
+    expect((await iterator.next()).done).toBe(false)
+    const editor = acquireImageEditorSessionResourceBudgetV3('other-editor-session', {
+      consumerId: 'preview',
+    })
+    expect(inspectImageEditorSessionResourceBudgetV3('global-budget-export-session')).toMatchObject({
+      consumers: 1,
+      globalConsumers: 2,
+      activeSessions: 2,
+    })
+    expect(inspectImageEditorSessionResourceBudgetV3('other-editor-session')?.memory.totalBytes)
+      .toBeGreaterThan(0)
+
+    await iterator.return?.()
+    expect(inspectImageEditorSessionResourceBudgetV3('global-budget-export-session')).toBeNull()
+    editor.release()
+    expect(inspectImageEditorSessionResourceBudgetV3('other-editor-session')).toBeNull()
   })
 
   it('在效果层用灰度蒙版混合原结果和曝光结果', async () => {

@@ -53,6 +53,10 @@ import {
   loadImageEditorV3SourceRegion,
 } from './sourceRegion'
 import { createImageEditorSparseMaskPlanV3 } from '../execution/sparseMaskResourcesV3'
+import {
+  acquireImageEditorSessionResourceBudgetV3,
+  type ImageEditorSessionResourceBudgetLeaseV3,
+} from '../execution/imageEditorSessionResourceBudgetV3'
 import { loadImageEditorV3SparseMaskRegion } from './maskRegion'
 
 const logger = createLogger('features.image_edit.v3.export')
@@ -174,8 +178,14 @@ async function* renderTiles(
   const neighborhood = resolveImageEditorV3ExportNeighborhood(plan)
   const tileSize = validateTileSize(request.tileSize)
   const scheduler = dependencies.scheduler ?? new ImageEditRenderScheduler({ cpuConcurrency: 2 })
-  const budget = dependencies.resourceBudget ?? new ImageEditResourceBudget()
   const currentSessionId = createSessionId(request.sessionId)
+  let globalBudgetLease: ImageEditorSessionResourceBudgetLeaseV3 | null = null
+  const budget = dependencies.resourceBudget ?? (() => {
+    globalBudgetLease = acquireImageEditorSessionResourceBudgetV3(currentSessionId, {
+      consumerId: `${currentSessionId}:export-render`,
+    })
+    return globalBudgetLease.budget
+  })()
   const controller = new AbortController()
   const onAbort = (): void => {
     controller.abort(request.signal?.reason)
@@ -441,5 +451,6 @@ async function* renderTiles(
     diffusionAnalysisSet?.release()
     request.signal?.removeEventListener('abort', onAbort)
     scheduler.cancelSession(currentSessionId)
+    globalBudgetLease?.release()
   }
 }
