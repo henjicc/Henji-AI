@@ -7,6 +7,7 @@ const logger = createLogger('features.canvas.ui.NodeToolDialog')
 import {
   isExportImageNode,
   isImageEditNode,
+  isLayerStackResultNode,
   isUploadNode,
 } from '@/features/canvas/domain/canvasNodes';
 import {
@@ -81,7 +82,12 @@ export function NodeToolDialog() {
       return null;
     }
 
-    if (isUploadNode(sourceNode) || isImageEditNode(sourceNode) || isExportImageNode(sourceNode)) {
+    if (
+      isUploadNode(sourceNode)
+      || isImageEditNode(sourceNode)
+      || isExportImageNode(sourceNode)
+      || isLayerStackResultNode(sourceNode)
+    ) {
       return sourceNode.data.imageUrl;
     }
 

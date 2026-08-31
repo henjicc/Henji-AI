@@ -2,6 +2,7 @@ import {
   NODE_TOOL_TYPES,
   isExportImageNode,
   isImageEditNode,
+  isLayerStackResultNode,
   isUploadNode,
   type CanvasNode,
 } from '../domain/canvasNodes';
@@ -17,6 +18,10 @@ import type { CanvasToolPlugin, ToolOptions } from './types';
 import { ANNOTATION_DEFAULT_STROKE_HEX } from '@/core/theme/colorTokens';
 import { isImageEditorV3Enabled } from '@/platform/runtime';
 import { CANVAS_EDIT_V3_SESSION_OPTION } from '../imageEditV3/canvasEditV3Contracts';
+import {
+  CANVAS_EDIT_V3_LAYER_STACK_OPTION,
+  serializeLayerStackV1ForImageEditor,
+} from '../imageEditV3/layerStackV1Adapter';
 
 function supportsImageSourceNode(node: CanvasNode): boolean {
   return isUploadNode(node) || isImageEditNode(node) || isExportImageNode(node);
@@ -33,8 +38,22 @@ export const imageEditToolPlugin: CanvasToolPlugin = {
     resultNodeTitle: '编辑结果',
   },
   operationIds: Object.values(IMAGE_EDIT_OPERATION_IDS),
-  supportsNode: (node) => supportsImageSourceNode(node) && Boolean(node.data.imageUrl),
+  supportsNode: (node) => (
+    supportsImageSourceNode(node)
+    || (isImageEditorV3Enabled() && isLayerStackResultNode(node))
+  ) && Boolean(node.data.imageUrl),
   createInitialOptions: (node): ToolOptions => {
+    if (
+      isImageEditorV3Enabled()
+      && isLayerStackResultNode(node)
+      && node.data.layerStackDocument
+    ) {
+      return {
+        [CANVAS_EDIT_V3_LAYER_STACK_OPTION]: serializeLayerStackV1ForImageEditor(
+          node.data.layerStackDocument,
+        ),
+      };
+    }
     if (isImageEditorV3Enabled() && node.data.imageEditSession !== undefined) {
       return {
         [CANVAS_EDIT_V3_SESSION_OPTION]: JSON.stringify(node.data.imageEditSession),

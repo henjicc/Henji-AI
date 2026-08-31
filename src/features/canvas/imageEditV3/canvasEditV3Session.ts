@@ -30,6 +30,10 @@ import {
   CANVAS_EDIT_V3_SESSION_OPTION,
   parseCanvasEditV3NodeSession,
 } from './canvasEditV3Contracts'
+import {
+  importLayerStackV1AsImageEditDocumentV3,
+  readLayerStackV1ImageEditorOption,
+} from './layerStackV1Adapter'
 
 export { CANVAS_EDIT_V3_SESSION_OPTION } from './canvasEditV3Contracts'
 
@@ -161,6 +165,34 @@ async function importLegacySession(
 ): Promise<CanvasEditV3PreparedSession> {
   const documentId = options.documentId ?? createImageEditIdV3('canvas-edit-document')
   const ingest = options.ingestSource ?? ingestImageEditorV3Source
+  const layerStack = readLayerStackV1ImageEditorOption(options.toolOptions)
+  if (layerStack) {
+    const imported = await importLayerStackV1AsImageEditDocumentV3({
+      document: layerStack,
+      documentId,
+      signal: options.signal,
+      ingestSource: ingest,
+    })
+    const persistence = createInitialPersistence(imported.document)
+    const reference = await options.repository.save(imported.document, {
+      expectedRevision: 0,
+      previewRef: null,
+      history: persistence.history,
+      signal: options.signal,
+    })
+    return {
+      sourceUrl: options.sourceImageUrl,
+      document: imported.document,
+      history: persistence.history,
+      persistence,
+      reference,
+      resourceByteSizes: Object.fromEntries(imported.resourceDescriptors.map((resource) => [
+        resource.resourceRef,
+        resource.byteLength,
+      ])),
+      resourceDescriptors: imported.resourceDescriptors,
+    }
+  }
   const managed: ImageEditorV3ManagedSource = await ingest({
     requestId: `image-editor-v3:canvas-edit:source:${documentId}`,
     source: resolveImageMarkV3SourceLocator(options.sourceImageUrl),

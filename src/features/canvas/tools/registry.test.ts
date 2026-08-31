@@ -6,6 +6,13 @@ import {
   parseMarkDoc,
 } from '@/core/imageEdit';
 import { CANVAS_NODE_TYPES, NODE_TOOL_TYPES, type CanvasNode } from '../domain/canvasNodes';
+import {
+  createStableLayerId,
+  createStableLayerResourceId,
+  createStableLayerStackId,
+  type LayerStackDocumentV1,
+} from '../domain/layerStack';
+import { CANVAS_EDIT_V3_LAYER_STACK_OPTION } from '../imageEditV3/layerStackV1Adapter';
 import { imageEditToolPlugin } from './builtInTools';
 import {
   CanvasToolRegistrationError,
@@ -18,6 +25,56 @@ const runtimeMocks = vi.hoisted(() => ({ imageEditorV3: false }));
 vi.mock('@/platform/runtime', () => ({
   isImageEditorV3Enabled: () => runtimeMocks.imageEditorV3,
 }));
+
+function layerStackDocument(): LayerStackDocumentV1 {
+  const completionId = 'registry-layer-stack';
+  const stackId = createStableLayerStackId(completionId);
+  const layerId = createStableLayerId(stackId, 0);
+  const resourceId = createStableLayerResourceId(stackId, 0);
+  return {
+    version: 1,
+    stackId,
+    status: 'ready',
+    source: {
+      capabilityId: 'image.layer-separation',
+      sourceNodeId: 'source-node',
+      inputResourceId: 'input-resource',
+      providerId: 'provider',
+      modelId: 'model',
+      completionId,
+    },
+    canvas: {
+      width: 64,
+      height: 64,
+      colorSpace: 'srgb',
+      alphaMode: 'straight',
+      compositeOperation: 'source-over',
+      clipPolicy: 'canvas-bounds',
+    },
+    compositeResourceId: 'composite',
+    thumbnailResourceId: 'thumbnail',
+    layers: [{
+      version: 1,
+      layerId,
+      sourceOutputIndex: 0,
+      providerZIndex: 0,
+      order: 0,
+      role: 'base',
+      name: '背景',
+      resourceId,
+      placement: { x: 0, y: 0, width: 64, height: 64 },
+      opacity: 1,
+      visible: true,
+      blendMode: 'normal',
+      alpha: 'opaque',
+    }],
+    resources: [
+      { version: 1, resourceId, status: 'ready', filePath: '/base.jpg', mimeType: 'image/jpeg', width: 64, height: 64, hasAlpha: false, byteLength: 100, sha256: 'base' },
+      { version: 1, resourceId: 'composite', status: 'ready', filePath: '/composite.png', mimeType: 'image/png', width: 64, height: 64, hasAlpha: true, byteLength: 100, sha256: 'composite' },
+      { version: 1, resourceId: 'thumbnail', status: 'ready', filePath: '/thumbnail.jpg', mimeType: 'image/jpeg', width: 32, height: 32, hasAlpha: false, byteLength: 100, sha256: 'thumbnail' },
+    ],
+  };
+}
 
 describe('画布图片工具注册', () => {
   const imageNode: CanvasNode = {
@@ -85,5 +142,26 @@ describe('画布图片工具注册', () => {
     expect(typeof legacy.document).toBe('string');
     expect(typeof legacy.markDoc).toBe('string');
     expect(legacy).not.toHaveProperty('imageEditSession');
+  });
+
+  it('V3 开关开启时把图层分离结果作为多栅格图层输入，关闭时不暴露通用图片编辑工具', () => {
+    const layerStackNode: CanvasNode = {
+      id: 'layer-stack-node',
+      type: CANVAS_NODE_TYPES.layerStackResult,
+      position: { x: 0, y: 0 },
+      data: {
+        resultKind: 'layer-stack',
+        imageUrl: '/composite.png',
+        layerStackDocument: layerStackDocument(),
+      },
+    };
+
+    runtimeMocks.imageEditorV3 = false;
+    expect(imageEditToolPlugin.supportsNode(layerStackNode)).toBe(false);
+    runtimeMocks.imageEditorV3 = true;
+    expect(imageEditToolPlugin.supportsNode(layerStackNode)).toBe(true);
+    const options = imageEditToolPlugin.createInitialOptions(layerStackNode);
+    expect(JSON.parse(options[CANVAS_EDIT_V3_LAYER_STACK_OPTION] as string))
+      .toEqual(layerStackNode.data.layerStackDocument);
   });
 });
