@@ -14,6 +14,7 @@ import {
 } from '../store'
 import {
   useImageEditorDisplayPipelineV3,
+  useImageEditorThumbnailPrefetchV3,
 } from '../execution'
 import { useImageEditorResultLeaseV3 } from '../execution/useImageEditorResultLeaseV3'
 import { ImageEditorAnnotationOverlayV3 } from './ImageEditorAnnotationOverlayV3'
@@ -148,25 +149,24 @@ export function ImageEditorPreviewV3({
     viewportLayout,
   )
   const { managedPreview, viewportComposite, viewportResult } = displayPipeline
-  useEffect(() => {
-    const thumbnail = managedPreview.result?.thumbnail
-    if (!thumbnail
-      || !onPackageThumbnailChange
-      || managedPreview.resultDocumentId === null
-      || managedPreview.resultRevision === null) return
-    onPackageThumbnailChange({
-      documentId: managedPreview.resultDocumentId,
-      revision: managedPreview.resultRevision,
-      bytes: thumbnail.bytes.slice(0),
-      mediaType: thumbnail.mediaType,
-      extension: thumbnail.mediaType === 'image/webp' ? 'webp' : 'png',
-    })
-  }, [
-    managedPreview.result,
-    managedPreview.resultDocumentId,
-    managedPreview.resultRevision,
+  const thumbnailDisplayReady = Boolean(
+    viewportResult
+      && viewportResult.documentId === snapshot.document.id
+      && viewportResult.revision === snapshot.document.revision,
+  ) || Boolean(
+    managedPreview.result
+      && managedPreview.resultDocumentId === snapshot.document.id
+      && managedPreview.resultRevision === snapshot.document.revision,
+  )
+  useImageEditorThumbnailPrefetchV3(
+    controller.sessionId,
+    snapshot,
+    !previewRenderer
+      && Object.keys(snapshot.previewOverrides).length === 0
+      && thumbnailDisplayReady,
+    resourceDescriptors ?? [],
     onPackageThumbnailChange,
-  ])
+  )
   const customOutput = useMemo<ImageEditorV3PreviewOutput | null>(() => previewRenderer?.({
     sourceImageUrl,
     snapshot,

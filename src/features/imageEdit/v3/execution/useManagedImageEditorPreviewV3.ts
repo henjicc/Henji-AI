@@ -5,6 +5,7 @@ import type { ImageEditorV3ResourceDescriptor } from '@/platform/contracts/image
 import type { ImageEditCommandBusSnapshotV3 } from '../application/imageEditCommandBus'
 import {
   ImageEditorPreviewClientV3,
+  ImageEditorPreviewDisposedErrorV3,
   ImageEditorPreviewSupersededErrorV3,
   type ImageEditorManagedPreviewResultV3,
 } from './imageEditorPreviewClientV3'
@@ -118,7 +119,9 @@ export function useManagedImageEditorPreviewV3(
           }
         })
       }).catch((error: unknown) => {
-        if (!acceptsResult || error instanceof ImageEditorPreviewSupersededErrorV3) return
+        if (!acceptsResult
+          || error instanceof ImageEditorPreviewSupersededErrorV3
+          || error instanceof ImageEditorPreviewDisposedErrorV3) return
         const message = error instanceof Error ? error.message : String(error)
         logger.warn('图片编辑 V3 预览失败，保留上一稳定帧', {
           event: 'image_editor_v3.preview.failed',

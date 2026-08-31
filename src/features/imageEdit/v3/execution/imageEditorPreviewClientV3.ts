@@ -3,7 +3,9 @@ import {
   IMAGE_EDIT_RENDER_PRIORITY,
   ImageEditTaskCancelledError,
   ImageEditTaskSupersededError,
+  type ImageEditRenderPurpose,
   type ImageEditRenderScheduler,
+  type ImageEditRenderTaskKind,
 } from '@/core/imageEdit/v3/renderScheduler'
 import {
   type ImageEditMemoryLease,
@@ -62,6 +64,13 @@ export class ImageEditorPreviewSupersededErrorV3 extends Error {
   }
 }
 
+export class ImageEditorPreviewDisposedErrorV3 extends Error {
+  constructor() {
+    super('图片预览会话已经释放')
+    this.name = 'ImageEditorPreviewDisposedErrorV3'
+  }
+}
+
 export type { ImageEditorManagedPreviewResultV3 } from './imageEditorPreviewResultLeaseV3'
 
 export interface ImageEditorManagedPreviewRequestV3 {
@@ -85,6 +94,13 @@ export interface ImageEditorPreviewClientOptionsV3 {
   resourceBudget?: ImageEditResourceBudget
   resourceBudgetConsumerId?: string
   renderScheduler?: ImageEditRenderScheduler
+  /** 同一编辑会话内相互独立的画面流，例如 display 与 thumbnail。 */
+  coalescingKey?: string
+  taskKind?: ImageEditRenderTaskKind
+  purpose?: ImageEditRenderPurpose
+  priority?: number
+  /** display 负责预热；thumbnail 等派生流应关闭，避免重复占用主进程额度。 */
+  pyramidPrewarmEnabled?: boolean
 }
 
 interface ScheduledJobV3 extends ImageEditorManagedPreviewRequestV3 {
@@ -117,8 +133,8 @@ function createDefaultWorker(): ImageEditorPreviewWorkerPortV3 {
   })
 }
 
-function createRequestId(sessionId: string, sequence: number): string {
-  return `${sessionId}:preview:${sequence}`
+function createRequestId(sessionId: string, flowKey: string, sequence: number): string {
+  return `${sessionId}:${flowKey}:preview:${sequence}`
 }
 
 function toError(value: unknown): Error {
@@ -173,6 +189,8 @@ export class ImageEditorPreviewClientV3 {
         pyramidDescriptorReader: options.describePyramid,
         pyramidPrewarmer: options.prewarmPyramid,
         proxyCacheMaxBytes: options.proxyCacheMaxBytes,
+        requestIdScope: options.coalescingKey ?? 'display',
+        pyramidPrewarmEnabled: options.pyramidPrewarmEnabled,
       })
     } catch (error) {
       this.sessionBudgetLease?.release()
@@ -181,13 +199,18 @@ export class ImageEditorPreviewClientV3 {
   }
 
   render(request: ImageEditorManagedPreviewRequestV3): Promise<ImageEditorManagedPreviewResultV3> {
-    if (this.disposed) return Promise.reject(new Error('图片预览会话已经释放'))
+    if (this.disposed) return Promise.reject(new ImageEditorPreviewDisposedErrorV3())
     const sequence = ++this.sequence
     this.latestSequence = sequence
     return new Promise((resolve, reject) => {
+      const requestId = createRequestId(
+        this.options.sessionId,
+        this.options.coalescingKey ?? 'display',
+        sequence,
+      )
       const job: ScheduledJobV3 = {
         ...request,
-        requestId: createRequestId(this.options.sessionId, sequence),
+        requestId,
         sequence,
         abortController: new AbortController(),
         inputLeases: [],
@@ -195,7 +218,7 @@ export class ImageEditorPreviewClientV3 {
         workingLease: null,
         outputLease: null,
         posted: false,
-        renderTaskId: `${createRequestId(this.options.sessionId, sequence)}:worker-frame`,
+        renderTaskId: `${requestId}:worker-frame`,
         workerCompletion: new ImageEditorWorkerCompletionV3(),
         resolve,
         reject,
@@ -213,7 +236,7 @@ export class ImageEditorPreviewClientV3 {
   dispose(): void {
     if (this.disposed) return
     this.disposed = true
-    const error = new Error('图片预览会话已经释放')
+    const error = new ImageEditorPreviewDisposedErrorV3()
     this.running?.abortController.abort()
     if (this.running) this.renderScheduler.cancelTask(this.running.renderTaskId)
     this.running?.reject(error)
@@ -314,14 +337,14 @@ export class ImageEditorPreviewClientV3 {
     const event = await this.renderScheduler.schedule<ImageEditorPreviewWorkerEventV3>({
       id: job.renderTaskId,
       sessionId: this.options.sessionId,
-      coalescingKey: 'display',
+      coalescingKey: this.options.coalescingKey ?? 'display',
       revision: job.document.revision,
-      kind: 'preview',
-      purpose: 'display',
+      kind: this.options.taskKind ?? 'preview',
+      purpose: this.options.purpose ?? 'display',
       lane: 'gpu',
-      priority: job.quality === 'draft'
+      priority: this.options.priority ?? (job.quality === 'draft'
         ? IMAGE_EDIT_RENDER_PRIORITY.interactionDraft
-        : IMAGE_EDIT_RENDER_PRIORITY.viewportStable,
+        : IMAGE_EDIT_RENDER_PRIORITY.viewportStable),
       run: ({ signal }) => this.postWorkerAndWait(job, {
         type: 'render',
         requestId: job.requestId,

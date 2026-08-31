@@ -67,6 +67,9 @@ export interface ImageEditorPreviewResourceLoaderOptionsV3 {
   pyramidDescriptorReader?: ImageEditorPreviewPyramidDescriptorReaderV3
   pyramidPrewarmer?: ImageEditorPreviewPyramidPrewarmerV3
   proxyCacheMaxBytes?: number
+  /** 同一 session 下区分 display、thumbnail 等资源请求，避免 IPC requestId 冲突。 */
+  requestIdScope?: string
+  pyramidPrewarmEnabled?: boolean
 }
 
 export interface ImageEditorLoadedProxyResourcesV3 {
@@ -133,8 +136,10 @@ export class ImageEditorPreviewResourceLoaderV3 {
     signal: AbortSignal,
   ): Promise<ImageEditorLoadedProxyResourcesV3> {
     if (this.disposed) throw new Error('图片预览资源加载器已经释放')
-    for (const request of requests) {
-      this.startPyramidPrewarm(request.resourceId as ImageEditorV3ResourceRef, bitDepth)
+    if (this.options.pyramidPrewarmEnabled !== false) {
+      for (const request of requests) {
+        this.startPyramidPrewarm(request.resourceId as ImageEditorV3ResourceRef, bitDepth)
+      }
     }
     const transientLeases: ImageEditMemoryLease[] = []
     try {
@@ -216,7 +221,7 @@ export class ImageEditorPreviewResourceLoaderV3 {
     const controller = new AbortController()
     this.startedPyramidPrewarms.add(resourceRef)
     this.pyramidPrewarms.set(resourceRef, controller)
-    const prefix = `${this.options.sessionId}:pyramid:${++this.prewarmSequence}`
+    const prefix = `${this.options.sessionId}:${this.options.requestIdScope ?? 'display'}:pyramid:${++this.prewarmSequence}`
     void this.pyramidDescriptorReader({
       requestId: `${prefix}:pyramid-describe`,
       resourceRef,

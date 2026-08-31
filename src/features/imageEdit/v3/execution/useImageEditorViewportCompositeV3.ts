@@ -6,6 +6,7 @@ import type { ImageEditCommandBusSnapshotV3 } from '../application/imageEditComm
 import { projectImageEditorPreviewDocumentV3 } from './previewDocumentV3'
 import {
   ImageEditorViewportCompositeClientV3,
+  ImageEditorViewportCompositeDisposedErrorV3,
   ImageEditorViewportCompositeSupersededErrorV3,
   type ImageEditorManagedViewportCompositeV3,
 } from './viewportCompositeClientV3'
@@ -81,7 +82,9 @@ export function useImageEditorViewportCompositeV3(
         }
         setState({ result, diagnostic: null, fallbackRequired: false, rendering: false })
       }).catch((error: unknown) => {
-        if (!acceptsResult || error instanceof ImageEditorViewportCompositeSupersededErrorV3) return
+        if (!acceptsResult
+          || error instanceof ImageEditorViewportCompositeSupersededErrorV3
+          || error instanceof ImageEditorViewportCompositeDisposedErrorV3) return
         if (error instanceof ImageEditorViewportCompositeUnsupportedErrorV3) {
           setState((current) => ({
             ...current,

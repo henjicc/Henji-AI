@@ -212,6 +212,7 @@ test('场景覆盖六类界面且规则数固定为十一条', () => {
   assert.equal(sceneIds.has('settings-provider-center'), true)
   assert.equal(sceneIds.has('settings-provider-manager'), true)
   assert.equal(sceneIds.has('toolbox-image-edit'), true)
+  assert.equal(sceneIds.has('image-editor-v3-release'), true)
   assert.equal(sceneIds.has('toolbox-camera-stage'), true)
   assert.equal(sceneIds.has('toolbox-camera-stage-lineart'), true)
   assert.equal(sceneIds.has('assistant-memory'), true)

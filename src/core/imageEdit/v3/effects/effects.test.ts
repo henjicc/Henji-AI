@@ -96,6 +96,12 @@ describe('Gaussian Blur v2 CPU 参考实现', () => {
       inputColorDomain: 'linear-light',
       alpha: 'premultiplied',
     });
+    const continuousMip = resolveGaussianBlurV2Geometry({
+      radius: 160,
+      mip: Math.log2(3.125),
+    });
+    expect(continuousMip.radiusAtMip).toBeCloseTo(51.2, 8);
+    expect(continuousMip.pyramidLevel).toBe(2);
   });
 
   it('图片边缘使用 clamp，常量预乘瓦片在边缘不变暗', () => {

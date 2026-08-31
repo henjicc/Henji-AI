@@ -154,6 +154,183 @@ function createToolboxScenes(context) {
       },
     },
     {
+      id: 'image-editor-v3-release',
+      surface: '工具箱',
+      name: '图片编辑器 V3-发布候选核心路径',
+      writesUserData: true,
+      setup: async (page) => {
+        const startedAt = new Date().toISOString()
+        await setupToolbox(page)
+        await clickNamedButton(page, /^(图片编辑|Image Edit)/i)
+        const host = page.locator('[data-application-surface-id="tool.image_edit"]:visible')
+        await host.waitFor({ state: 'visible', timeout: 12000 })
+        const dropTarget = host.locator('.border-dashed').first()
+        await dropTarget.waitFor({ state: 'visible', timeout: 12000 })
+        await dropTarget.evaluate(async (element) => {
+          const canvas = document.createElement('canvas')
+          canvas.width = 1600
+          canvas.height = 1000
+          const context = canvas.getContext('2d')
+          if (!context) throw new Error('发布候选 JPG 夹具画布不可用')
+          const gradient = context.createLinearGradient(0, 0, canvas.width, canvas.height)
+          gradient.addColorStop(0, 'rgb(22, 48, 92)')
+          gradient.addColorStop(0.55, 'rgb(216, 90, 76)')
+          gradient.addColorStop(1, 'rgb(252, 203, 92)')
+          context.fillStyle = gradient
+          context.fillRect(0, 0, canvas.width, canvas.height)
+          context.fillStyle = 'rgb(245, 248, 255)'
+          context.fillRect(230, 220, 420, 300)
+          context.fillStyle = 'rgb(20, 26, 42)'
+          context.font = '72px sans-serif'
+          context.fillText('V3 JPEG', 780, 620)
+          const blob = await new Promise((resolve, reject) => canvas.toBlob(
+            (value) => value ? resolve(value) : reject(new Error('发布候选 JPG 编码失败')),
+            'image/jpeg',
+            0.9,
+          ))
+          const transfer = new DataTransfer()
+          transfer.items.add(new File([blob], 'image-editor-v3-release.jpg', { type: 'image/jpeg' }))
+          element.dispatchEvent(new DragEvent('drop', {
+            bubbles: true,
+            cancelable: true,
+            dataTransfer: transfer,
+          }))
+        })
+
+        const editor = host.locator('[data-image-editor-v3]')
+        await editor.waitFor({ state: 'visible', timeout: 15000 })
+        const raster = editor.locator('[role="treeitem"][data-layer-type="raster"][aria-selected="true"]')
+        await raster.waitFor({ state: 'visible', timeout: 12000 })
+        const preview = editor.locator('[data-preview-surface]')
+        await preview.waitFor({ state: 'visible', timeout: 12000 })
+        await page.waitForFunction(() => (
+          document.querySelector('[data-preview-surface]')?.getAttribute('data-move-availability') === 'ready'
+        ), undefined, { timeout: 15000 })
+
+        const readRevision = async () => {
+          const label = await editor.getByText(/^(版本|Revision) \d+$/).first().textContent()
+          const revision = Number(label?.match(/\d+/)?.[0])
+          if (!Number.isSafeInteger(revision)) throw new Error('无法读取图片编辑 revision')
+          return revision
+        }
+        const beforeMove = await readRevision()
+        const previewBox = await preview.boundingBox()
+        if (!previewBox) throw new Error('图片编辑预览没有可交互范围')
+        const startX = previewBox.x + previewBox.width * 0.5
+        const startY = previewBox.y + previewBox.height * 0.5
+        await page.mouse.move(startX, startY)
+        await page.mouse.down()
+        await page.mouse.move(startX + 42, startY + 24, { steps: 5 })
+        const transientTransform = await editor.locator('[data-move-feedback-frame]').evaluate(
+          (element) => element.style.transform,
+        )
+        if (!transientTransform.includes('translate')) {
+          throw new Error('移动 JPG 时没有即时位移反馈')
+        }
+        await page.mouse.up()
+        await page.waitForFunction((revision) => {
+          const labels = [...document.querySelectorAll('[data-command-bar] span')]
+          return labels.some((element) => Number(element.textContent?.match(/\d+/)?.[0]) === revision + 1)
+        }, beforeMove, { timeout: 12000 })
+
+        await editor.locator('[data-tool-id="annotation-rect"]').click()
+        await page.mouse.move(startX - 120, startY - 80)
+        await page.mouse.down()
+        await page.mouse.move(startX + 80, startY + 70, { steps: 5 })
+        await page.mouse.up()
+        await editor.locator('[role="treeitem"][data-layer-type="annotation"]').waitFor({
+          state: 'visible', timeout: 10000,
+        })
+
+        const addLayer = editor.getByRole('button', { name: /^(添加图层|Add layer)$/i })
+        await addLayer.click()
+        await page.getByRole('menuitem', { name: /^(高斯模糊|Gaussian Blur)$/i }).click()
+        const blur = editor.locator('[role="treeitem"][data-layer-type="effect"]')
+          .filter({ hasText: /^(高斯模糊|Gaussian Blur)$/i }).first()
+        await blur.waitFor({ state: 'visible', timeout: 10000 })
+        await editor.getByRole('button', { name: /^(下移图层|Move layer down)$/i }).click()
+        await editor.getByRole('button', { name: /^(上移图层|Move layer up)$/i }).click()
+
+        await page.waitForTimeout(700)
+        await addLayer.click()
+        await page.getByRole('menuitem', { name: /^(柔光 \/ 发光|Diffusion \/ Glow)$/i }).click()
+        await editor.getByRole('slider', { name: /^(强度|Strength)$/i }).waitFor({
+          state: 'visible', timeout: 10000,
+        })
+        await blur.locator('[data-layer-select]').click()
+        const blurRadius = editor.getByRole('slider', { name: /^(半径|Radius)$/i })
+        await blurRadius.focus()
+        for (let index = 0; index < 100; index += 1) {
+          await blurRadius.press(index % 2 === 0 ? 'ArrowRight' : 'ArrowLeft')
+        }
+        await settlePage(page, 2200)
+
+        await editor.locator('[data-tool-id="crop"]').click()
+        await editor.getByRole('button', { name: /^(向右旋转 90°|Rotate 90° right)$/i }).click()
+        await editor.getByRole('button', { name: /^(应用裁剪|Apply crop)$/i }).click()
+        await editor.getByRole('button', { name: /^(撤销|Undo)$/i }).click()
+        await editor.getByRole('button', { name: /^(重做|Redo)$/i }).click()
+
+        const formats = await editor.getByRole('button', {
+          name: /^(选择栅格导出格式|Choose raster export format)$/i,
+        }).click().then(() => page.locator('[data-export-format]').evaluateAll(
+          (items) => items.map((item) => item.getAttribute('data-export-format')),
+        ))
+        if (formats.join(',') !== 'png8,jpeg,webp') {
+          throw new Error(`发布候选导出格式不正确：${formats.join(',')}`)
+        }
+        await page.keyboard.press('Escape')
+
+        const ingestedFormats = await page.evaluate(async () => {
+          const canvas = document.createElement('canvas')
+          canvas.width = 48
+          canvas.height = 32
+          const context = canvas.getContext('2d')
+          if (!context) throw new Error('格式验收画布不可用')
+          context.fillStyle = 'rgb(12, 140, 220)'
+          context.fillRect(0, 0, canvas.width, canvas.height)
+          const results = []
+          for (const [index, mediaType] of ['image/png', 'image/webp'].entries()) {
+            const dataUrl = canvas.toDataURL(mediaType, 0.9)
+            const managed = await window.henjiNative.imageEditorV3.ingestSource({
+              requestId: `reality-format-${index}-${crypto.randomUUID()}`,
+              source: { kind: 'data-url', dataUrl },
+            })
+            results.push(managed.metadata.format)
+          }
+          return results
+        })
+        if (ingestedFormats[0] !== 'png' || ingestedFormats[1] !== 'webp') {
+          throw new Error(`PNG/WebP 真实导入失败：${ingestedFormats.join(',')}`)
+        }
+        if (await editor.getByText(/重新载入编辑器|Reload editor/i).count()) {
+          throw new Error('核心路径结束后图片编辑器进入了局部错误恢复状态')
+        }
+        const imageEditorWarnings = await page.evaluate(async (afterTimestamp) => {
+          const result = await window.henjiNative.logging.queryLogEvents({
+            date: new Date().toISOString().slice(0, 10),
+            afterTimestamp,
+            level: 'warn',
+            limit: 200,
+          })
+          return result.events
+            .filter((event) => event.domain.startsWith('image_editor_v3'))
+            .map((event) => ({
+              domain: event.domain,
+              event: event.event,
+              message: event.message,
+              context: event.context,
+            }))
+        }, startedAt)
+        if (imageEditorWarnings.length > 0) {
+          throw new Error(`图片编辑核心路径出现警告：${JSON.stringify(imageEditorWarnings)}`)
+        }
+        await preview.getByRole('img').first().waitFor({ state: 'visible', timeout: 15000 })
+        await preview.locator('.animate-spin').waitFor({ state: 'hidden', timeout: 15000 })
+        await settlePage(page, 500)
+      },
+    },
+    {
       id: 'toolbox-camera-stage',
       surface: '工具箱',
       name: '工具箱-3D 镜头工程',

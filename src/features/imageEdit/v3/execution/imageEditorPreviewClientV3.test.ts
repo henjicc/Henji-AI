@@ -9,6 +9,7 @@ import { ImageEditResourceBudget } from '@/core/imageEdit/v3/resourceBudget'
 import {
   IMAGE_EDIT_RENDER_PRIORITY,
   ImageEditRenderScheduler,
+  type ImageEditRenderTask,
 } from '@/core/imageEdit/v3/renderScheduler'
 import type { ImageEditorV3FastProxy } from '@/platform/contracts/imageEditorV3'
 import {
@@ -47,6 +48,15 @@ class FakePreviewWorker implements ImageEditorPreviewWorkerPortV3 {
         message.type === 'render'
       ),
     )
+  }
+}
+
+class RecordingRenderScheduler extends ImageEditRenderScheduler {
+  readonly tasks: ImageEditRenderTask<unknown>[] = []
+
+  override schedule<T>(task: ImageEditRenderTask<T>): Promise<T> {
+    this.tasks.push(task as ImageEditRenderTask<unknown>)
+    return super.schedule(task)
   }
 }
 
@@ -122,6 +132,58 @@ async function waitForRender(worker: FakePreviewWorker, count = 1): Promise<void
 }
 
 describe('ImageEditorPreviewClientV3 调度与资源所有权', () => {
+  it('允许缩略图使用独立低优先级预取流和唯一任务 ID', async () => {
+    const worker = new FakePreviewWorker()
+    const scheduler = new RecordingRenderScheduler()
+    const resourceId = `sha256:${'9'.repeat(64)}` as const
+    const describePyramid = vi.fn(async () => ({ tileSize: 512 as const, levels: [] }))
+    const client = new ImageEditorPreviewClientV3({
+      sessionId: 'shared-session',
+      workerFactory: () => worker,
+      renderScheduler: scheduler,
+      readFastProxy: async (request) => ({
+        resourceRef: request.resourceRef,
+        width: 512,
+        height: 384,
+        mediaType: 'image/webp',
+        bytes: new ArrayBuffer(8),
+      }),
+      describePyramid,
+      prewarmPyramid: async () => ({ plannedTiles: 0, completedTiles: 0, truncated: false }),
+      coalescingKey: 'thumbnail',
+      taskKind: 'prefetch',
+      purpose: 'thumbnail',
+      priority: IMAGE_EDIT_RENDER_PRIORITY.prefetch,
+      pyramidPrewarmEnabled: false,
+    })
+    const rendered = client.render({
+      document: createResourceDocument(resourceId),
+      quality: 'stable',
+      maxDimension: 512,
+      resourceDescriptors: [],
+    })
+    await waitForRender(worker)
+
+    expect(scheduler.tasks[0]).toMatchObject({
+      sessionId: 'shared-session',
+      coalescingKey: 'thumbnail',
+      kind: 'prefetch',
+      purpose: 'thumbnail',
+      priority: IMAGE_EDIT_RENDER_PRIORITY.prefetch,
+    })
+    expect(scheduler.tasks[0]?.id).toContain(':thumbnail:preview:')
+    expect(describePyramid).not.toHaveBeenCalled()
+
+    const output = bitmap()
+    worker.emit({
+      type: 'rendered-bitmap', requestId: worker.renders()[0].requestId, sequence: 1,
+      width: 512, height: 384, diagnostics: [], bitmap: output,
+    })
+    ;(await rendered).release()
+    client.dispose()
+    expect(output.close).toHaveBeenCalledTimes(1)
+  })
+
   it('把 Worker 帧登记为全局 GPU 原子任务，在导出瓦片边界优先执行', async () => {
     const scheduler = new ImageEditRenderScheduler({ cpuConcurrency: 1 })
     const gate = (() => {

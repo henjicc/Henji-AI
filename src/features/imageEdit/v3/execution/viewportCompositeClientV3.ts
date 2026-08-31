@@ -64,6 +64,13 @@ export class ImageEditorViewportCompositeSupersededErrorV3 extends Error {
   }
 }
 
+export class ImageEditorViewportCompositeDisposedErrorV3 extends Error {
+  constructor() {
+    super('视口合成会话已经释放')
+    this.name = 'ImageEditorViewportCompositeDisposedErrorV3'
+  }
+}
+
 export interface ImageEditorViewportCompositeRequestV3 {
   document: ImageEditDocumentV3
   quality: ImageEditRenderQuality
@@ -178,7 +185,7 @@ export class ImageEditorViewportCompositeClientV3 {
   }
 
   render(request: ImageEditorViewportCompositeRequestV3): Promise<ImageEditorManagedViewportCompositeV3> {
-    if (this.disposed) return Promise.reject(new Error('视口合成会话已经释放'))
+    if (this.disposed) return Promise.reject(new ImageEditorViewportCompositeDisposedErrorV3())
     this.cancelActive(new ImageEditorViewportCompositeSupersededErrorV3())
     const sequence = ++this.sequence
     return new Promise((resolve, reject) => {
@@ -219,7 +226,7 @@ export class ImageEditorViewportCompositeClientV3 {
   dispose(): void {
     if (this.disposed) return
     this.disposed = true
-    this.cancelActive(new Error('视口合成会话已经释放'))
+    this.cancelActive(new ImageEditorViewportCompositeDisposedErrorV3())
     this.scheduler.dispose()
     this.brushLoader.dispose()
     if (this.worker) {
@@ -436,6 +443,7 @@ export class ImageEditorViewportCompositeClientV3 {
     this.releaseJobResources(job)
     if (
       !(error instanceof ImageEditorViewportCompositeSupersededErrorV3)
+      && !(error instanceof ImageEditorViewportCompositeDisposedErrorV3)
       && !(error instanceof ImageEditorViewportCompositeUnsupportedErrorV3)
       && !(error instanceof ImageEditorResourcePressureErrorV3)
     ) {

@@ -289,8 +289,8 @@ function validateGaussianParameters(parameters: GaussianBlurV2Parameters): void 
   if (!Number.isFinite(parameters.radius) || parameters.radius < 0) {
     throw new Error('Gaussian 半径必须是非负有限数');
   }
-  if (!Number.isSafeInteger(parameters.mip) || parameters.mip < 0 || parameters.mip > 30) {
-    throw new Error('Gaussian mip 必须是 0～30 的整数');
+  if (!Number.isFinite(parameters.mip) || parameters.mip < 0 || parameters.mip > 30) {
+    throw new Error('Gaussian mip 必须是 0～30 的有限数');
   }
 }
 
