@@ -1,6 +1,9 @@
 import { sanitizeMarkItem } from '../markCodec';
 import {
+  cloneImageEditMaskReferenceV3,
   collectImageEditLayerIdsV3,
+  isImageEditSparseMaskReferenceV3,
+  isValidImageEditMaskReferenceV3,
   type ImageEditGroupLayerV3,
   type ImageEditJsonObjectV3,
   type ImageEditLayerCommonV3,
@@ -11,7 +14,6 @@ import type {
   ImageEditCommandApplyResultV3,
   ImageEditCommandV3,
   ImageEditLayerCommonPatchV3,
-  ImageEditRasterTileDeltaCommandV3,
 } from './commandTypes';
 import { normalizeImageEditLayerCommonPatchV3 } from './commandCommonPatch';
 import { applyImageEditOutputGeometryCommandV3 } from './commandDocumentReducer';
@@ -22,6 +24,7 @@ import {
 } from './commandErrors';
 import { calculateImageEditCommandHistoryResourcesV3 } from './commandHistoryResources';
 import { cloneImageEditJsonObjectV3 } from './documentCodec';
+import { applyImageEditTileDeltaV3 } from './commandTileDeltaReducer';
 
 export {
   ImageEditCommandValidationErrorV3,
@@ -129,7 +132,7 @@ function cloneLayer(layer: ImageEditLayerV3, idMap?: Readonly<Record<string, str
     opacity: layer.opacity,
     blendMode: layer.blendMode,
     transform: [...layer.transform],
-    mask: layer.mask ? { ...layer.mask } : null,
+    mask: layer.mask ? cloneImageEditMaskReferenceV3(layer.mask) : null,
   };
   if (layer.type === 'raster') {
     return { ...common, type: 'raster', source: { ...layer.source }, tiles: { ...layer.tiles } };
@@ -368,12 +371,20 @@ function applyLayerContentCommand(
     };
   }
   if (command.type === 'layer.set-mask') {
-    if (command.mask && (!command.mask.resourceId || typeof command.mask.inverted !== 'boolean')) {
+    if (command.mask && !isValidImageEditMaskReferenceV3(command.mask)) {
       throw new ImageEditCommandValidationErrorV3('蒙版引用无效');
     }
     return {
-      layers: replaceLayer(document.layers, location, { ...location.layer, mask: command.mask ? { ...command.mask } : null }),
-      inverse: { ...base, type: 'layer.set-mask', layerId, mask: location.layer.mask ? { ...location.layer.mask } : null },
+      layers: replaceLayer(document.layers, location, {
+        ...location.layer,
+        mask: command.mask ? cloneImageEditMaskReferenceV3(command.mask) : null,
+      }),
+      inverse: {
+        ...base,
+        type: 'layer.set-mask',
+        layerId,
+        mask: location.layer.mask ? cloneImageEditMaskReferenceV3(location.layer.mask) : null,
+      },
     };
   }
   if (
@@ -406,47 +417,34 @@ function applyLayerContentCommand(
   }
   if (command.type === 'raster.apply-tile-delta') {
     if (location.layer.type !== 'raster') throw new ImageEditCommandValidationErrorV3('目标不是栅格图层');
-    if (command.changes.length === 0) throw new ImageEditCommandValidationErrorV3('栅格瓦片增量不能为空');
-    const tiles = { ...location.layer.tiles };
-    const inverseChanges: ImageEditRasterTileDeltaCommandV3['changes'] = [];
-    const keys = new Set<string>();
-    for (const change of command.changes) {
-      if (!change.tileKey || ['__proto__', 'constructor', 'prototype'].includes(change.tileKey)
-        || change.tileKey.length > 128 || keys.has(change.tileKey)
-        || !Number.isSafeInteger(change.byteSize) || change.byteSize < 0
-        || !Number.isSafeInteger(change.previousByteSize) || change.previousByteSize < 0
-        || (change.resourceId === null ? change.byteSize !== 0 : !change.resourceId || change.resourceId.length > 512)
-        || (change.previousResourceId === null
-          ? change.previousByteSize !== 0
-          : !change.previousResourceId || change.previousResourceId.length > 512)) {
-        throw new ImageEditCommandValidationErrorV3('栅格瓦片增量无效');
-      }
-      const currentResourceId = tiles[change.tileKey] ?? null;
-      if (currentResourceId !== change.previousResourceId) {
-        throw new ImageEditRevisionConflictErrorV3(
-          `栅格瓦片 CAS 冲突：${change.tileKey} 期望 ${change.previousResourceId ?? 'empty'}，实际 ${currentResourceId ?? 'empty'}`
-        );
-      }
-      if (change.resourceId === change.previousResourceId && change.byteSize === change.previousByteSize) {
-        throw new ImageEditCommandValidationErrorV3('栅格瓦片增量不能是空操作');
-      }
-      if (change.resourceId === change.previousResourceId && change.byteSize !== change.previousByteSize) {
-        throw new ImageEditCommandValidationErrorV3('同一瓦片资源不能声明不同字节数');
-      }
-      keys.add(change.tileKey);
-      inverseChanges.push({
-        tileKey: change.tileKey,
-        previousResourceId: change.resourceId,
-        previousByteSize: change.byteSize,
-        resourceId: change.previousResourceId,
-        byteSize: change.previousByteSize,
-      });
-      if (change.resourceId === null) delete tiles[change.tileKey];
-      else tiles[change.tileKey] = change.resourceId;
-    }
+    const { tiles, inverseChanges } = applyImageEditTileDeltaV3(
+      location.layer.tiles,
+      command.changes,
+      '栅格',
+    );
     return {
       layers: replaceLayer(document.layers, location, { ...location.layer, tiles }),
       inverse: { ...base, type: 'raster.apply-tile-delta', layerId, changes: inverseChanges },
+    };
+  }
+  if (command.type === 'mask.apply-tile-delta') {
+    const mask = location.layer.mask;
+    if (!mask || !isImageEditSparseMaskReferenceV3(mask) || mask.maskId !== command.maskId) {
+      throw new ImageEditRevisionConflictErrorV3('目标稀疏蒙版已被替换或删除');
+    }
+    const { tiles, inverseChanges } = applyImageEditTileDeltaV3(mask.tiles, command.changes, '蒙版');
+    return {
+      layers: replaceLayer(document.layers, location, {
+        ...location.layer,
+        mask: { ...mask, tiles },
+      }),
+      inverse: {
+        ...base,
+        type: 'mask.apply-tile-delta',
+        layerId,
+        maskId: mask.maskId,
+        changes: inverseChanges,
+      },
     };
   }
   throw new ImageEditCommandValidationErrorV3(`不支持的图片编辑命令：${command.type}`);

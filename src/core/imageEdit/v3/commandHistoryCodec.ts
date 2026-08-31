@@ -7,6 +7,7 @@ import {
 } from './commandTypes';
 import { cloneImageEditJsonObjectV3, decodeImageEditDocumentV3 } from './documentCodec';
 import { createImageEditDocumentV3 } from './documentFactory';
+import { getImageEditHistoryMaskValidationErrorV3 } from './commandHistoryMaskCodec';
 import { IMAGE_EDIT_BLEND_MODES_V3, type ImageEditLayerV3 } from './layerTypes';
 
 export const IMAGE_EDIT_HISTORY_SNAPSHOT_VERSION_V3 = 1 as const;
@@ -128,8 +129,7 @@ function validateLayerKeys(value: unknown): void {
             : fail('历史图层类型未知');
   exactKeys(value, [...COMMON_LAYER_KEYS, ...specific], '历史图层');
   if (value.mask !== null) {
-    if (!isRecord(value.mask)) fail('历史图层蒙版无效');
-    exactKeys(value.mask, ['resourceId', 'inverted'], '历史图层蒙版');
+    validateMask(value.mask, '历史图层蒙版');
   }
   if (value.type === 'raster') {
     if (!isRecord(value.source)) fail('历史栅格来源无效');
@@ -150,6 +150,11 @@ function validateLayerKeys(value: unknown): void {
     if (!Array.isArray(value.children)) fail('历史图层组无效');
     value.children.forEach(validateLayerKeys);
   }
+}
+
+function validateMask(value: unknown, label: string): void {
+  const error = getImageEditHistoryMaskValidationErrorV3(value, label);
+  if (error) fail(error);
 }
 
 function validateLayer(value: unknown, expectedType?: ImageEditLayerV3['type']): void {
@@ -265,11 +270,8 @@ function validateCommand(value: unknown): ImageEditCommandV3 {
       if (typeof command.isolated !== 'boolean') fail('图层组隔离值无效'); break;
     case 'layer.set-mask':
       validateBase(command, ['layerId', 'mask']); nonEmptyString(command.layerId, '图层 ID');
-      if (command.mask !== null) {
-        if (!isRecord(command.mask)) fail('蒙版引用无效');
-        exactKeys(command.mask, ['resourceId', 'inverted'], '蒙版引用'); nonEmptyString(command.mask.resourceId, '蒙版资源 ID');
-        if (typeof command.mask.inverted !== 'boolean') fail('蒙版反转值无效');
-      } break;
+      if (command.mask !== null) validateMask(command.mask, '蒙版引用');
+      break;
     case 'annotation.add':
       validateBase(command, ['layerId', 'index', 'annotation']); nonEmptyString(command.layerId, '图层 ID');
       validateIndex(command.index, '标注位置'); validateAnnotation(command.annotation); break;
@@ -281,8 +283,16 @@ function validateCommand(value: unknown): ImageEditCommandV3 {
     case 'annotation.delete':
       validateBase(command, ['layerId', 'annotationId']); nonEmptyString(command.layerId, '图层 ID');
       nonEmptyString(command.annotationId, '标注 ID'); break;
-    case 'raster.apply-tile-delta': {
-      validateBase(command, ['layerId', 'changes']); nonEmptyString(command.layerId, '图层 ID');
+    case 'raster.apply-tile-delta':
+    case 'mask.apply-tile-delta': {
+      validateBase(
+        command,
+        command.type === 'mask.apply-tile-delta'
+          ? ['layerId', 'maskId', 'changes']
+          : ['layerId', 'changes'],
+      );
+      nonEmptyString(command.layerId, '图层 ID');
+      if (command.type === 'mask.apply-tile-delta') nonEmptyString(command.maskId, '蒙版 ID');
       if (!Array.isArray(command.changes) || command.changes.length === 0 || command.changes.length > 100_000) fail('瓦片增量无效');
       const tileKeys = new Set<string>();
       command.changes.forEach((change) => {
@@ -370,6 +380,22 @@ function validateInversePair(forward: ImageEditCommandV3, inverse: ImageEditComm
           || reversed.previousByteSize !== change.byteSize
           || reversed.resourceId !== change.previousResourceId
           || reversed.byteSize !== change.previousByteSize) fail('瓦片增量逆向资源不匹配');
+      }
+      break;
+    }
+    case 'mask.apply-tile-delta': {
+      if (inverse.type !== 'mask.apply-tile-delta'
+        || inverse.layerId !== forward.layerId
+        || inverse.maskId !== forward.maskId
+        || inverse.changes.length !== forward.changes.length) fail('蒙版瓦片增量逆向补丁无效');
+      const inverseByKey = new Map(inverse.changes.map((change) => [change.tileKey, change]));
+      for (const change of forward.changes) {
+        const reversed = inverseByKey.get(change.tileKey);
+        if (!reversed
+          || reversed.previousResourceId !== change.resourceId
+          || reversed.previousByteSize !== change.byteSize
+          || reversed.resourceId !== change.previousResourceId
+          || reversed.byteSize !== change.previousByteSize) fail('蒙版瓦片增量逆向资源不匹配');
       }
       break;
     }

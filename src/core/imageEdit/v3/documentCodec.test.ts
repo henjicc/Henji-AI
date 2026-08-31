@@ -6,7 +6,11 @@ import {
 import { decodeImageEditDocumentV3, stringifyImageEditDocumentV3 } from './documentCodec';
 import { createImageEditCanvasGeometryV3 } from './documentFactory';
 import { IMAGE_EDIT_DOCUMENT_VERSION_V3, type ImageEditDocumentV3 } from './documentTypes';
-import { createImageEditLayerCommonV3, type ImageEditGroupLayerV3 } from './layerTypes';
+import {
+  createImageEditLayerCommonV3,
+  createImageEditSparseMaskReferenceV3,
+  type ImageEditGroupLayerV3,
+} from './layerTypes';
 
 function createNestedDocument(): ImageEditDocumentV3 {
   const legacyOperation = {
@@ -62,6 +66,23 @@ describe('图片编辑 V3 文档编解码', () => {
         ? ((source.layers[0] as ImageEditGroupLayerV3).children[0] as typeof unknown).legacyOperation?.operation
         : null
     );
+  });
+
+  it('往返 512 Float32 稀疏蒙版且拒绝伪造整图或错误 tileSize', () => {
+    const source = createNestedDocument();
+    const group = source.layers[0] as ImageEditGroupLayerV3;
+    group.mask = {
+      ...createImageEditSparseMaskReferenceV3('group-mask', true, 0),
+      tiles: { '0/0/0': 'sha256:mask-tile' },
+    };
+    expect(decodeImageEditDocumentV3(stringifyImageEditDocumentV3(source)).document?.layers[0].mask)
+      .toEqual(group.mask);
+
+    const invalid = structuredClone(source) as ImageEditDocumentV3;
+    const mask = invalid.layers[0].mask;
+    if (!mask || !('kind' in mask)) throw new Error('测试稀疏蒙版缺失');
+    Object.assign(mask, { tileSize: 1024, dataUrl: 'data:image/png;base64,AAAA' });
+    expect(decodeImageEditDocumentV3(invalid).document).toBeNull();
   });
 
   it('拒绝重复图层 ID、非 JSON 参数和不一致的 HDR 契约', () => {

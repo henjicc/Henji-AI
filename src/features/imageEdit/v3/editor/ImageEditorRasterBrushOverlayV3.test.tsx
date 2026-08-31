@@ -162,6 +162,62 @@ describe('ImageEditorRasterBrushOverlayV3', () => {
     }))
   })
 
+  it('蒙版工具把一次 pointer 手势提交为一条稀疏 mask-float32 瓦片历史', async () => {
+    const changes: ImageEditDocumentV3[] = []
+    const persistentChanges = vi.fn()
+    const rendered = render(
+      <ControlledRasterEditor
+        onDocumentChange={(document) => changes.push(document)}
+        onPersistenceChange={persistentChanges}
+      />,
+    )
+    fireEvent.click(await screen.findByRole('button', { name: '添加蒙版' }))
+    await waitFor(() => expect(changes.at(-1)?.layers[0].mask).toMatchObject({
+      kind: 'sparse-mask',
+      storage: 'mask-float32',
+      tileSize: 512,
+      defaultValue: 1,
+      tiles: {},
+    }))
+
+    fireEvent.click(screen.getByRole('button', { name: '编辑蒙版' }))
+    fireEvent.click(screen.getByRole('button', { name: '擦除' }))
+    const overlay = await waitFor(() => (
+      rendered.container.querySelector('[data-raster-brush-overlay]') as SVGSVGElement
+    ))
+    vi.spyOn(overlay, 'getBoundingClientRect').mockReturnValue({
+      x: 0,
+      y: 0,
+      top: 0,
+      left: 0,
+      right: 320,
+      bottom: 320,
+      width: 320,
+      height: 320,
+      toJSON: () => ({}),
+    })
+    installPointerCapture(overlay)
+    fireEvent.pointerDown(overlay, { button: 0, clientX: 72, clientY: 72, pointerId: 21 })
+    await waitFor(() => expect(
+      rendered.container.querySelectorAll('foreignObject'),
+    ).toHaveLength(1))
+    fireEvent.pointerUp(overlay, { clientX: 88, clientY: 72, pointerId: 21 })
+
+    await waitFor(() => expect(bridge.persistBrushTiles).toHaveBeenCalledOnce())
+    await waitFor(() => expect(changes.at(-1)?.revision).toBe(2))
+    expect(changes.at(-1)?.layers[0].mask).toMatchObject({
+      kind: 'sparse-mask',
+      tiles: { '0/0/0': `sha256:${'f'.repeat(64)}` },
+    })
+    expect(persistentChanges).toHaveBeenCalledTimes(2)
+
+    fireEvent.click(screen.getByRole('button', { name: '撤销' }))
+    await waitFor(() => expect(changes.at(-1)?.layers[0].mask).toMatchObject({
+      kind: 'sparse-mask',
+      tiles: {},
+    }))
+  })
+
   it('严格绑定 pointerId，持久化完成前拒绝第二笔，并在 pointercancel 时释放 capture', async () => {
     const gate = deferred<{
       tiles: Array<{ tileKey: string; resourceId: string; byteSize: number }>

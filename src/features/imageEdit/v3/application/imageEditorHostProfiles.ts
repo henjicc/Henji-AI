@@ -106,7 +106,7 @@ const ANNOTATION_TOOLS: readonly ImageEditorCapabilityV3<ImageEditorToolIdV3>[] 
 const RASTER_TOOLS: readonly ImageEditorCapabilityV3<ImageEditorToolIdV3>[] = [
   ready('raster-brush'),
   ready('eraser'),
-  disabled('mask-edit', 'imageEditor.v3.readiness.reasons.maskEdit'),
+  ready('mask-edit'),
 ];
 const CORE_EFFECTS: readonly ImageEditorCapabilityV3<string>[] = [
   ready('image.gaussian-blur-v2'),

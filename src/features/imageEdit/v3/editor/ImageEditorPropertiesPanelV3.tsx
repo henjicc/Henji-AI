@@ -1,4 +1,4 @@
-import { CircleDashed, Plus, X } from 'lucide-react'
+import { Plus, X } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -13,9 +13,11 @@ import {
 } from '@/components/ui'
 import {
   IMAGE_EDIT_BLEND_MODES_V3,
+  cloneImageEditMaskReferenceV3,
+  createImageEditSparseMaskReferenceV3,
   type ImageEditLayerV3,
 } from '@/core/imageEdit/v3/layerTypes'
-import { createLogger } from '@/core/logging'
+import { createImageEditIdV3 } from '@/core/imageEdit/v3/documentFactory'
 import { useImageEditorSessionStoreV3 } from '../store'
 import { ImageEditorEffectParametersV3 } from './ImageEditorEffectParametersV3'
 import { ImageEditorAnnotationPropertiesV3 } from './ImageEditorAnnotationPropertiesV3'
@@ -28,11 +30,6 @@ interface ImageEditorPropertiesPanelV3Props extends Pick<ImageEditorV3Props, 'on
 }
 
 const EMPTY_LAYER_IDS: readonly string[] = []
-const logger = createLogger('features.imageEdit.v3.editor')
-
-function isAbortError(error: unknown): boolean {
-  return error instanceof Error && error.name === 'AbortError'
-}
 
 function LayerNameField({ controller, layer, disabled }: {
   controller: ImageEditorV3Controller
@@ -136,7 +133,6 @@ function OpacityControl({ controller, layer, disabled }: {
 
 export function ImageEditorPropertiesPanelV3({
   controller,
-  onCreateMaskResource,
 }: ImageEditorPropertiesPanelV3Props): JSX.Element {
   const { t } = useTranslation('ui')
   const selectedIds = useImageEditorSessionStoreV3(
@@ -146,29 +142,6 @@ export function ImageEditorPropertiesPanelV3({
     ? findImageEditLayerLocationV3(controller.document.layers, selectedIds[0])
     : undefined
   const selected = selectedLocation?.layer
-  const [maskBusy, setMaskBusy] = useState(false)
-  const [maskError, setMaskError] = useState(false)
-  const maskGenerationRef = useRef(0)
-  const maskRequestRef = useRef<{
-    abortController: AbortController
-    contextKey: string
-    generation: number
-  } | null>(null)
-  const maskContextKey = `${controller.document.id}\u0000${controller.document.revision}\u0000${selected?.id ?? ''}`
-  const latestMaskContextRef = useRef(maskContextKey)
-  latestMaskContextRef.current = maskContextKey
-  useEffect(() => {
-    maskGenerationRef.current += 1
-    maskRequestRef.current?.abortController.abort()
-    maskRequestRef.current = null
-    setMaskBusy(false)
-    setMaskError(false)
-  }, [maskContextKey])
-  useEffect(() => () => {
-    maskGenerationRef.current += 1
-    maskRequestRef.current?.abortController.abort()
-    maskRequestRef.current = null
-  }, [])
   const effectReadiness = selected?.type === 'effect'
     ? controller.profile.effects.find(({ id }) => id === selected.effectId)?.readiness
     : undefined
@@ -192,65 +165,12 @@ export function ImageEditorPropertiesPanelV3({
   )
   const contentLocked = selected.locked || ancestorLocked
 
-  const addMask = async (): Promise<void> => {
-    if (!onCreateMaskResource || contentLocked || maskRequestRef.current) return
-    const generation = maskGenerationRef.current + 1
-    maskGenerationRef.current = generation
-    const abortController = new AbortController()
-    const request = { abortController, contextKey: maskContextKey, generation }
-    maskRequestRef.current = request
-    const startedAt = performance.now()
-    setMaskBusy(true)
-    setMaskError(false)
-    logger.info('图片编辑 V3 蒙版创建开始', {
-      event: 'image_edit.v3.mask.create.start',
-      context: {
-        documentId: controller.document.id,
-        layerId: selected.id,
-        revision: controller.document.revision,
-      },
-    })
-    try {
-      const resourceId = await onCreateMaskResource(selected, abortController.signal)
-      if (
-        maskRequestRef.current !== request
-        || maskGenerationRef.current !== request.generation
-        || abortController.signal.aborted
-        || latestMaskContextRef.current !== request.contextKey
-      ) return
-      if (resourceId) controller.setLayerMask(selected.id, resourceId)
-      logger.info('图片编辑 V3 蒙版创建完成', {
-        event: 'image_edit.v3.mask.create.completed',
-        context: {
-          documentId: controller.document.id,
-          layerId: selected.id,
-          created: Boolean(resourceId),
-          elapsedMs: Math.round(performance.now() - startedAt),
-        },
-      })
-    } catch (error) {
-      if (
-        maskRequestRef.current !== request
-        || maskGenerationRef.current !== request.generation
-        || abortController.signal.aborted
-        || isAbortError(error)
-      ) return
-      logger.error('图片编辑 V3 蒙版创建失败', error, {
-        event: 'image_edit.v3.mask.create.failed',
-        context: {
-          documentId: controller.document.id,
-          layerId: selected.id,
-          revision: controller.document.revision,
-          elapsedMs: Math.round(performance.now() - startedAt),
-        },
-      })
-      setMaskError(true)
-    } finally {
-      if (maskRequestRef.current === request) {
-        maskRequestRef.current = null
-        setMaskBusy(false)
-      }
-    }
+  const addMask = (): void => {
+    if (contentLocked) return
+    controller.setLayerMask(
+      selected.id,
+      createImageEditSparseMaskReferenceV3(createImageEditIdV3('mask')),
+    )
   }
 
   return (
@@ -358,11 +278,11 @@ export function ImageEditorPropertiesPanelV3({
                 disabled={contentLocked}
                 onCheckedChange={(inverted) => {
                   if (!contentLocked) {
-                    controller.setLayerMask(
-                      selected.id,
-                      selected.mask?.resourceId ?? null,
-                      inverted,
-                    )
+                    const currentMask = selected.mask
+                    if (!currentMask) return
+                    const mask = cloneImageEditMaskReferenceV3(currentMask)
+                    mask.inverted = inverted
+                    controller.setLayerMask(selected.id, mask)
                   }
                 }}
               />
@@ -385,22 +305,13 @@ export function ImageEditorPropertiesPanelV3({
             variant="muted"
             size="sm"
             className="justify-start gap-2"
-            disabled={!onCreateMaskResource || maskBusy || contentLocked}
-            title={!onCreateMaskResource ? t('imageEditor.v3.properties.maskUnavailable') : undefined}
-            onClick={() => { void addMask() }}
+            disabled={contentLocked}
+            onClick={addMask}
           >
-            {maskBusy ? <CircleDashed className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+            <Plus className="h-4 w-4" />
             {t('imageEditor.v3.properties.addMask')}
           </UiButton>
         )}
-        {!selected.mask && !onCreateMaskResource ? (
-          <p role="status" className="text-xs text-text-muted">
-            {t('imageEditor.v3.properties.maskUnavailable')}
-          </p>
-        ) : null}
-        {maskError ? (
-          <p role="alert" className="text-xs text-danger">{t('imageEditor.v3.properties.maskError')}</p>
-        ) : null}
       </UiGroup>
     </section>
   )

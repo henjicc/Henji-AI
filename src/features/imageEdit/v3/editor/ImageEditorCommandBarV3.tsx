@@ -1,7 +1,7 @@
 import { Redo2, Undo2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
-import { UiIconButton, UiRangeInput } from '@/components/ui'
+import { UiChipButton, UiIconButton, UiRangeInput } from '@/components/ui'
 import { ICON_TOOL_IMAGE_EDIT } from '@/core/theme/icons'
 import { ImageEditorCropParametersV3 } from './ImageEditorCropParametersV3'
 import type { ImageEditorV3Controller } from './types'
@@ -31,6 +31,28 @@ function ToolParameterBar({ controller }: Pick<ImageEditorCommandBarV3Props, 'co
     >
       {brushLike ? (
         <>
+          {session.activeTool === 'mask-edit' ? (
+            <div
+              role="group"
+              aria-label={t('imageEditor.v3.toolSettings.maskMode')}
+              className="flex shrink-0 items-center gap-1"
+            >
+              <UiChipButton
+                selectionRole="navigation"
+                active={session.toolSettings.maskMode === 'paint'}
+                onClick={() => setToolSetting(controller.sessionId, 'maskMode', 'paint')}
+              >
+                {t('imageEditor.v3.toolSettings.maskPaint')}
+              </UiChipButton>
+              <UiChipButton
+                selectionRole="navigation"
+                active={session.toolSettings.maskMode === 'erase'}
+                onClick={() => setToolSetting(controller.sessionId, 'maskMode', 'erase')}
+              >
+                {t('imageEditor.v3.toolSettings.maskErase')}
+              </UiChipButton>
+            </div>
+          ) : null}
           <label className="flex min-w-44 items-center gap-2 text-xs text-text-muted">
             <span className="shrink-0">{t('imageEditor.v3.toolSettings.size')}</span>
             <UiRangeInput

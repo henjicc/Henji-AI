@@ -138,6 +138,49 @@ describe('V3 CPU RenderPlan 执行器', () => {
     expect(result?.data[3]).toBeCloseTo(1, 6);
   });
 
+  it('内容蒙版乘到内容 alpha，组蒙版作用于整个隔离组结果', async () => {
+    const content = {
+      ...createImageEditRasterLayerV3('content', '内容', 'sha256:content'),
+      mask: { resourceId: 'sha256:content-mask', inverted: false },
+    };
+    const contentPlan = compileImageEditRenderPlanV3(
+      document([content], 2),
+      createBuiltInImageEditRenderNodeRegistry(),
+      'stable',
+    );
+    const white = tile(2, [1, 1, 1, 1, 1, 1, 1, 1]);
+    const halfMask = createFloat32MaskTile(2, 1, Float32Array.from([0, 1]));
+    const contentResult = await executeImageEditCpuRenderPlanV3(contentPlan, {
+      loadRaster: async () => white,
+      rasterizeAnnotations: async () => { throw new Error('unexpected annotation'); },
+      loadMask: async () => halfMask,
+    });
+    expect(contentResult?.data.slice(0, 4)).toEqual(Float32Array.from([0, 0, 0, 0]));
+    expect(contentResult?.data.slice(4, 8)).toEqual(Float32Array.from([1, 1, 1, 1]));
+
+    const backdrop = createImageEditRasterLayerV3('backdrop', '背景', 'sha256:backdrop');
+    const child = createImageEditAnnotationLayerV3('child', '组内内容');
+    const group = {
+      ...createImageEditGroupLayerV3('masked-group', '带蒙版组'),
+      isolated: true,
+      mask: { resourceId: 'sha256:group-mask', inverted: false },
+      children: [child],
+    };
+    const groupPlan = compileImageEditRenderPlanV3(
+      document([backdrop, group], 2),
+      createBuiltInImageEditRenderNodeRegistry(),
+      'stable',
+    );
+    const black = tile(2, [0, 0, 0, 1, 0, 0, 0, 1]);
+    const groupResult = await executeImageEditCpuRenderPlanV3(groupPlan, {
+      loadRaster: async () => black,
+      rasterizeAnnotations: async () => white,
+      loadMask: async () => halfMask,
+    });
+    expect(groupResult?.data[0]).toBeCloseTo(0, 6);
+    expect(groupResult?.data[4]).toBeCloseTo(1, 6);
+  });
+
   it('在节点边界协作取消，不继续执行后续图层', async () => {
     const controller = new AbortController();
     const source = createImageEditRasterLayerV3('source', '原图', 'sha256:source');

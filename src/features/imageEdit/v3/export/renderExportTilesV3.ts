@@ -47,6 +47,8 @@ import {
   imageEditorV3SourceRegionToMask,
   loadImageEditorV3SourceRegion,
 } from './sourceRegion'
+import { createImageEditorSparseMaskPlanV3 } from '../execution/sparseMaskResourcesV3'
+import { loadImageEditorV3SparseMaskRegion } from './maskRegion'
 
 const logger = createLogger('features.image_edit.v3.export')
 const DEFAULT_TILE_SIZE = 512
@@ -143,7 +145,12 @@ export function renderImageEditorV3ExportTiles(
     { width: geometry.sourceWidth, height: geometry.sourceHeight },
     request.resourceDescriptors,
   )
-  return renderTiles(request, dependencies, prepared, geometry, sparseRasterPlan)
+  const sparseMaskPlan = createImageEditorSparseMaskPlanV3(
+    prepared.plan,
+    { width: geometry.sourceWidth, height: geometry.sourceHeight },
+    request.resourceDescriptors,
+  )
+  return renderTiles(request, dependencies, prepared, geometry, sparseRasterPlan, sparseMaskPlan)
 }
 
 async function* renderTiles(
@@ -152,6 +159,7 @@ async function* renderTiles(
   prepared: ReturnType<typeof prepareImageEditorV3ExportRender>,
   geometry: ReturnType<typeof resolveImageEditorV3ExportGeometry>,
   sparseRasterPlan: ImageEditorV3SparseRasterPlan,
+  sparseMaskPlan: ReturnType<typeof createImageEditorSparseMaskPlanV3>,
 ): AsyncGenerator<ImageEditorV3RenderedExportTile> {
   const { document, plan } = prepared
   const neighborhood = resolveImageEditorV3ExportNeighborhood(plan)
@@ -193,6 +201,7 @@ async function* renderTiles(
       controller.signal,
       dependencies,
       budget,
+      sparseMaskPlan,
     )
     const diffusionAnalyses = diffusionAnalysisSet.analyses
     if (tileSize === DEFAULT_TILE_SIZE) {
@@ -281,9 +290,20 @@ async function* renderTiles(
                 rasterizeAnnotations: (node) => (
                   dependencies.rasterizeAnnotations ?? rasterizeImageEditorV3ExportAnnotations
                 )({ node, document, region: sourceRegion, signal: taskContext.signal }),
-                loadMask: async (reference) => imageEditorV3SourceRegionToMask(
-                  await loadSource(reference.resourceId),
-                ),
+                loadMask: async (reference) => {
+                  const sparse = await loadImageEditorV3SparseMaskRegion(
+                    reference,
+                    sourceRegion,
+                    0,
+                    sparseMaskPlan,
+                    taskContext.signal,
+                    dependencies,
+                    budget,
+                  )
+                  if (sparse) return sparse
+                  if (!('resourceId' in reference)) throw new Error('蒙版引用缺少资源 ID')
+                  return imageEditorV3SourceRegionToMask(await loadSource(reference.resourceId))
+                },
                 executeCustomEffect: async (node, source, mask) => {
                   if (node.definitionId !== 'effect.diffusion') {
                     throw new Error(`分块导出不支持自定义效果：${node.definitionId}`)

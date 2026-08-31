@@ -35,7 +35,13 @@ function createBinding(
 export function useImageEditorControllerV3(
   props: Pick<
     ImageEditorV3Props,
-    'document' | 'historySnapshot' | 'profileId' | 'onDocumentChange' | 'onPersistenceChange'
+    | 'document'
+    | 'historySnapshot'
+    | 'profileId'
+    | 'initialSelectedLayerId'
+    | 'initialToolId'
+    | 'onDocumentChange'
+    | 'onPersistenceChange'
   >,
 ): { controller: ImageEditorV3Controller; bus: ImageEditCommandBusV3 } {
   const reactId = useId().replace(/:/g, '')
@@ -92,13 +98,18 @@ export function useImageEditorControllerV3(
   }), [binding.bus])
 
   useEffect(() => {
-    useImageEditorSessionStoreV3.getState().ensureSession(sessionId, readyToolIds)
+    useImageEditorSessionStoreV3.getState().ensureSession(
+      sessionId,
+      readyToolIds,
+      props.initialSelectedLayerId,
+      props.initialToolId,
+    )
     return () => {
       useImageEditorSessionStoreV3.getState().disposeSession(sessionId)
       useImageEditorInteractionStoreV3.getState().endLayerDrag(sessionId)
       useImageEditorInteractionStoreV3.getState().clearViewport(sessionId)
     }
-  }, [readyToolIds, sessionId])
+  }, [props.initialSelectedLayerId, props.initialToolId, readyToolIds, sessionId])
 
   useEffect(() => {
     const session = useImageEditorSessionStoreV3.getState().sessions[sessionId]
@@ -193,12 +204,12 @@ export function useImageEditorControllerV3(
       updateGroupIsolation: (layerId, isolated) => {
         binding.bus.dispatch({ ...commandBase(), type: 'group.update-isolation', layerId, isolated })
       },
-      setLayerMask: (layerId, resourceId, inverted = false) => {
+      setLayerMask: (layerId, mask) => {
         binding.bus.dispatch({
           ...commandBase(),
           type: 'layer.set-mask',
           layerId,
-          mask: resourceId ? { resourceId, inverted } : null,
+          mask,
         })
       },
       setOutputGeometryPreview: (previewId, orientation, crop) => {

@@ -20,12 +20,12 @@ import {
   type CapturedEditorPointerV3,
 } from './pointerCaptureV3'
 import { RasterBrushCommittedOverlayCacheV3 } from './rasterBrushCommittedOverlayV3'
-import { resolveImageEditorRasterBrushLayerV3 } from './rasterBrushLayerV3'
 import { ImageEditorRasterBrushStrokeV3 } from './rasterBrushStrokeV3'
 import {
-  createImageEditorRasterBrushTargetV3,
-  createImageEditorRasterBrushTileLoaderV3,
-} from './rasterBrushTilesV3'
+  resolveImageEditorBrushEditingTargetV3,
+  type ImageEditorBrushToolIdV3,
+} from './brushEditingTargetV3'
+import { maskBrushTileToImageDataV3 } from './maskBrushPreviewPixelsV3'
 import type { ImageEditorV3Controller } from './types'
 
 const EMPTY_IDS: readonly string[] = []
@@ -43,7 +43,7 @@ interface ActiveRasterBrushGestureV3 {
   documentId: string
   documentRevision: number
   selectedLayerIdsKey: string
-  tool: 'raster-brush' | 'eraser'
+  tool: ImageEditorBrushToolIdV3
   phase: 'drawing' | 'finishing'
   committedRevision?: number
 }
@@ -52,10 +52,13 @@ function RasterBrushTileCanvasV3({ change }: { change: ImageEditBrushTileChangeV
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   useEffect(() => {
     const canvas = canvasRef.current
-    if (!canvas || change.tile.storage !== 'rgba-float32') return
+    if (!canvas) return
     canvas.width = change.tile.width
     canvas.height = change.tile.height
-    canvas.getContext('2d')?.putImageData(linearPreviewTileToImageDataV3(change.tile), 0, 0)
+    const imageData = change.tile.storage === 'rgba-float32'
+      ? linearPreviewTileToImageDataV3(change.tile)
+      : maskBrushTileToImageDataV3(change.tile)
+    canvas.getContext('2d')?.putImageData(imageData, 0, 0)
   }, [change])
   return (
     <canvas
@@ -108,7 +111,9 @@ export function ImageEditorRasterBrushOverlayV3({
     () => resolveAnnotationOutputGeometryV3(controller.document),
     [controller.document],
   )
-  const rasterTool = activeTool === 'raster-brush' || activeTool === 'eraser'
+  const brushTool = activeTool === 'raster-brush'
+    || activeTool === 'eraser'
+    || activeTool === 'mask-edit'
   const selectedLayerIdsKey = selectedLayerIds.join('\u0000')
 
   useEffect(() => {
@@ -120,15 +125,22 @@ export function ImageEditorRasterBrushOverlayV3({
   const resolveCommittedOverlay = useCallback((): RasterBrushOverlayStateV3 | null => {
     const document = bus.getSnapshot().document
     committedTilesRef.current.discardOtherDocuments(document.id)
-    const resolved = resolveImageEditorRasterBrushLayerV3(document, selectedLayerIds)
+    if (!brushTool) return null
+    const resolved = resolveImageEditorBrushEditingTargetV3({
+      document,
+      selectedLayerIds,
+      activeTool,
+      maskMode: settings?.maskMode ?? 'paint',
+      resourceByteSizes: resourceSizesRef.current,
+    })
     if (!resolved.ready) return null
     const tiles = committedTilesRef.current.tilesForLayer({
       documentId: document.id,
-      layerId: resolved.target.layer.id,
-      tileResources: resolved.target.layer.tiles,
+      layerId: resolved.target.cacheId,
+      tileResources: resolved.target.tileResources,
     })
     return tiles.size > 0 ? { matrix: resolved.target.matrix, tiles } : null
-  }, [bus, selectedLayerIds])
+  }, [activeTool, brushTool, bus, selectedLayerIds, settings?.maskMode])
 
   const refreshCommittedOverlay = useCallback((): void => {
     setOverlay(resolveCommittedOverlay())
@@ -205,7 +217,7 @@ export function ImageEditorRasterBrushOverlayV3({
   useEffect(() => {
     const current = gestureRef.current
     if (!current) {
-      if (!rasterTool) setFailure(null)
+      if (!brushTool) setFailure(null)
       return
     }
     const document = bus.getSnapshot().document
@@ -215,13 +227,13 @@ export function ImageEditorRasterBrushOverlayV3({
         && document.revision !== current.committedRevision
       )
     if (
-      !rasterTool
+      !brushTool
       || activeTool !== current.tool
       || selectedLayerIdsKey !== current.selectedLayerIdsKey
       || documentChanged
     ) {
       cancelGesture()
-      if (!rasterTool) setFailure(null)
+      if (!brushTool) setFailure(null)
     }
   }, [
     activeTool,
@@ -229,7 +241,7 @@ export function ImageEditorRasterBrushOverlayV3({
     cancelGesture,
     controller.document.id,
     controller.document.revision,
-    rasterTool,
+    brushTool,
     selectedLayerIdsKey,
   ])
 
@@ -294,38 +306,42 @@ export function ImageEditorRasterBrushOverlayV3({
   }
 
   const startGesture = (event: ReactPointerEvent<SVGSVGElement>): void => {
-    if (!rasterTool || event.button !== 0 || gestureRef.current) return
+    if (!brushTool || event.button !== 0 || gestureRef.current) return
     const document = bus.getSnapshot().document
-    const resolved = resolveImageEditorRasterBrushLayerV3(document, selectedLayerIds)
+    const resolved = resolveImageEditorBrushEditingTargetV3({
+      document,
+      selectedLayerIds,
+      activeTool,
+      maskMode: settings?.maskMode ?? 'paint',
+      resourceByteSizes: resourceSizesRef.current,
+    })
     if (!resolved.ready) {
       setFailure(t(`imageEditor.v3.rasterBrush.${resolved.reason}`))
       return
     }
-    const { layer, matrix, inverseMatrix } = resolved.target
+    const target = resolved.target
+    const { matrix, inverseMatrix } = target
     setFailure(null)
     const existingTiles = committedTilesRef.current.tilesForLayer({
       documentId: document.id,
-      layerId: layer.id,
-      tileResources: layer.tiles,
+      layerId: target.cacheId,
+      tileResources: target.tileResources,
     })
     setOverlay({ matrix, tiles: existingTiles })
-    const tool = activeTool === 'eraser' ? 'eraser' : 'raster-brush'
+    const tool = activeTool as ImageEditorBrushToolIdV3
     const stroke = new ImageEditorRasterBrushStrokeV3({
       bus,
       document,
-      layerId: layer.id,
-      tool: tool === 'eraser' ? 'eraser' : 'brush',
+      layerId: target.layerId,
+      destination: target.destination,
+      tool: target.tool,
       shape: {
         size: settings?.brushSize ?? 32,
         opacity: settings?.brushOpacity ?? 1,
         hardness: settings?.brushHardness ?? 0.8,
       },
-      target: createImageEditorRasterBrushTargetV3(document),
-      loadTile: createImageEditorRasterBrushTileLoaderV3({
-        document,
-        layer,
-        resourceByteSizes: resourceSizesRef.current,
-      }),
+      target: target.target,
+      loadTile: target.loadTile,
       resourceByteSizes: resourceSizesRef.current,
       onPreviewTiles: (changes) => setOverlay((current) => {
         const tiles = new Map(current?.tiles ?? [])
@@ -336,7 +352,7 @@ export function ImageEditorRasterBrushOverlayV3({
         const revision = bus.getSnapshot().document.revision
         committedTilesRef.current.commit({
           documentId: document.id,
-          layerId: layer.id,
+          layerId: target.cacheId,
           revision,
           changes,
           persisted,
@@ -364,10 +380,10 @@ export function ImageEditorRasterBrushOverlayV3({
     event.preventDefault()
   }
 
-  if (!rasterTool && !failure && !overlay) return null
+  if (!brushTool && !failure && !overlay) return null
   return (
     <>
-      {rasterTool || overlay ? (
+      {brushTool || overlay ? (
         /* icon-token-allow: 这是按图片像素坐标编辑瓦片的 SVG 画布，不是界面图标。 */
         <svg
           ref={svgRef}
@@ -375,7 +391,7 @@ export function ImageEditorRasterBrushOverlayV3({
           aria-label={t('imageEditor.v3.rasterBrush.overlay')}
           viewBox={`0 0 ${geometry.width} ${geometry.height}`}
           preserveAspectRatio="none"
-          className={`absolute inset-0 h-full w-full touch-none ${rasterTool ? 'pointer-events-auto' : 'pointer-events-none'}`}
+          className={`absolute inset-0 h-full w-full touch-none ${brushTool ? 'pointer-events-auto' : 'pointer-events-none'}`}
           onPointerDown={startGesture}
           onPointerMove={moveGesture}
           onPointerUp={finishGesture}

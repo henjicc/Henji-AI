@@ -21,6 +21,7 @@ import {
 } from './documentTypes';
 import {
   IMAGE_EDIT_BLEND_MODES_V3,
+  IMAGE_EDIT_MASK_TILE_SIZE_V3,
   type ImageEditAdjustmentLayerV3,
   type ImageEditAnnotationLayerV3,
   type ImageEditEffectLayerV3,
@@ -278,7 +279,25 @@ function parseTransform(value: unknown): ImageEditTransformV3 | null {
 
 function parseMask(value: unknown): ImageEditMaskReferenceV3 | null | undefined {
   if (value === null) return null;
-  if (!isRecord(value) || !isNonEmptyString(value.resourceId) || typeof value.inverted !== 'boolean') return undefined;
+  if (!isRecord(value) || typeof value.inverted !== 'boolean') return undefined;
+  if (value.kind === 'sparse-mask') {
+    const tiles = parseTiles(value.tiles);
+    if (value.storage !== 'mask-float32'
+      || !isNonEmptyString(value.maskId)
+      || value.tileSize !== IMAGE_EDIT_MASK_TILE_SIZE_V3
+      || (value.defaultValue !== 0 && value.defaultValue !== 1)
+      || !tiles) return undefined;
+    return {
+      kind: 'sparse-mask',
+      storage: 'mask-float32',
+      maskId: value.maskId,
+      tileSize: IMAGE_EDIT_MASK_TILE_SIZE_V3,
+      defaultValue: value.defaultValue,
+      tiles,
+      inverted: value.inverted,
+    };
+  }
+  if (!isNonEmptyString(value.resourceId)) return undefined;
   return { resourceId: value.resourceId, inverted: value.inverted };
 }
 

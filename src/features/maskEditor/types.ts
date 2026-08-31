@@ -1,3 +1,5 @@
+import type { ImageEditSessionReferenceV3 } from '@/core/imageEdit/v3/sessionReference';
+
 export type MaskStrokeMode = 'paint' | 'erase';
 export type MaskTool = 'brush' | 'rectangle' | 'circle' | 'lasso';
 export type MaskShapeKind = 'rectangle' | 'circle' | 'lasso';
@@ -44,4 +46,10 @@ export interface MaskEditorResult {
   maskDataUrl: string;
   width: number;
   height: number;
+}
+
+export interface MaskEditorV3Result {
+  kind: 'image-edit-v3-mask';
+  sessionReference: ImageEditSessionReferenceV3;
+  targetLayerId: string;
 }

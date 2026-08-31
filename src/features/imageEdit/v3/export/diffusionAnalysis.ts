@@ -25,6 +25,8 @@ import {
   imageEditorV3SourceRegionToMask,
   loadImageEditorV3SourceRegion,
 } from './sourceRegion'
+import type { ImageEditorSparseMaskPlanV3 } from '../execution/sparseMaskResourcesV3'
+import { loadImageEditorV3SparseMaskRegion } from './maskRegion'
 
 export interface ImageEditorV3DiffusionAnalysis {
   readonly scatter: Float32PremultipliedRgbaTile
@@ -124,6 +126,7 @@ export async function buildImageEditorV3DiffusionAnalyses(
   signal: AbortSignal,
   dependencies: ImageEditorV3ExportRenderDependencies,
   budget: ImageEditResourceBudget,
+  sparseMaskPlan: ImageEditorSparseMaskPlanV3,
 ): Promise<ImageEditorV3DiffusionAnalysisSet> {
   const diffusionNodes = plan.nodes.filter((node) => node.definitionId === 'effect.diffusion')
   if (diffusionNodes.length === 0) return { analyses: new Map(), release: () => undefined }
@@ -175,9 +178,20 @@ export async function buildImageEditorV3DiffusionAnalyses(
           rasterizeAnnotations: (node) => (
             dependencies.rasterizeAnnotations ?? rasterizeImageEditorV3ExportAnnotations
           )({ node, document, region, mip, signal }),
-          loadMask: async (reference) => imageEditorV3SourceRegionToMask(
-            await loadSource(reference.resourceId),
-          ),
+          loadMask: async (reference) => {
+            const sparse = await loadImageEditorV3SparseMaskRegion(
+              reference,
+              region,
+              mip,
+              sparseMaskPlan,
+              signal,
+              dependencies,
+              budget,
+            )
+            if (sparse) return sparse
+            if (!('resourceId' in reference)) throw new Error('蒙版引用缺少资源 ID')
+            return imageEditorV3SourceRegionToMask(await loadSource(reference.resourceId))
+          },
           executeCustomEffect: async (node, source, mask) => {
             if (node.definitionId !== 'effect.diffusion') {
               throw new Error(`柔光分析前缀包含不受支持的自定义效果：${node.definitionId}`)

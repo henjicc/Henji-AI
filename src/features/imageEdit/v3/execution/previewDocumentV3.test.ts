@@ -7,6 +7,7 @@ import {
   createImageEditRasterLayerV3,
 } from '@/core/imageEdit/v3/documentFactory'
 import type { ImageEditDocumentV3 } from '@/core/imageEdit/v3/documentTypes'
+import { createImageEditSparseMaskReferenceV3 } from '@/core/imageEdit/v3/layerTypes'
 import type { ImageEditCommandBusSnapshotV3 } from '../application/imageEditCommandBus'
 import {
   collectImageEditorPreviewResourceRequestsV3,
@@ -155,6 +156,7 @@ describe('ImageEditor V3 瞬态预览文档', () => {
       { kind: 'image-proxy', resourceId: MASK, maxDimension: 1_600 },
       {
         kind: 'brush-tile',
+        storage: 'rgba-float32',
         resourceId: BRUSH,
         tileKey: '0/0/0',
         byteLength: 128,
@@ -183,5 +185,33 @@ describe('ImageEditor V3 瞬态预览文档', () => {
       byteLength: 79,
       mediaType: 'application/x-henji-brush-tile-v3',
     }])).toThrow(/字节数无效/)
+  })
+
+  it('稀疏蒙版瓦片走 mask-float32 受管请求而不是图片代理', () => {
+    const document = documentWithLayers()
+    const raster = document.layers[0]
+    if (raster.type !== 'raster') throw new Error('测试图层类型错误')
+    raster.mask = {
+      ...createImageEditSparseMaskReferenceV3('mask-sparse', false, 1),
+      tiles: { '0/0/0': BRUSH },
+    }
+    const requests = collectImageEditorPreviewResourceRequestsV3(document, 1_600, [{
+      resourceRef: BRUSH as `sha256:${string}`,
+      byteLength: 128,
+      mediaType: 'application/x-henji-brush-tile-v3',
+    }])
+
+    expect(requests).toContainEqual({
+      kind: 'brush-tile',
+      storage: 'mask-float32',
+      resourceId: BRUSH,
+      tileKey: '0/0/0',
+      byteLength: 128,
+      width: 512,
+      height: 512,
+    })
+    expect(requests.some((request) => (
+      request.kind === 'image-proxy' && request.resourceId === BRUSH
+    ))).toBe(false)
   })
 })

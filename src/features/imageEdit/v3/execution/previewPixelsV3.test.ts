@@ -33,6 +33,7 @@ describe('ImageEditor V3 managed preview brush tile 合成', () => {
     brushData.set([0.25, 0, 0, 0.5], 10 * 4)
     const brushTiles = createPreviewBrushTileMapV3([{
       resourceId: BRUSH,
+      storage: 'rgba-float32',
       width: 512,
       height: 1,
       bytes: brushData.buffer,
@@ -57,12 +58,14 @@ describe('ImageEditor V3 managed preview brush tile 合成', () => {
   it('Worker 边界再次拒绝超过 512 或非精确 Float32 RGBA 长度的瓦片', () => {
     expect(() => createPreviewBrushTileMapV3([{
       resourceId: BRUSH,
+      storage: 'rgba-float32',
       width: 513,
       height: 1,
       bytes: new ArrayBuffer(513 * 4 * 4),
     }])).toThrow(/像素契约无效/)
     expect(() => createPreviewBrushTileMapV3([{
       resourceId: BRUSH,
+      storage: 'rgba-float32',
       width: 2,
       height: 2,
       bytes: new ArrayBuffer(4),
@@ -85,6 +88,7 @@ describe('ImageEditor V3 managed preview brush tile 合成', () => {
       base,
       createPreviewBrushTileMapV3([{
         resourceId: BRUSH,
+        storage: 'rgba-float32',
         width: 512,
         height: 2,
         bytes: brushData.buffer,

@@ -19,7 +19,7 @@ describe('图片编辑 V3 宿主能力裁剪', () => {
     })
   })
 
-  it('已接通栅格画笔和橡皮擦，其他未接通工具只提供稳定翻译键', () => {
+  it('已接通栅格与蒙版画笔，其他未接通工具只提供稳定翻译键', () => {
     const profile = getImageEditorHostProfileV3('full')
     const readiness = Object.fromEntries(profile.tools.map((tool) => [tool.id, tool.readiness]))
 
@@ -34,12 +34,12 @@ describe('图片编辑 V3 宿主能力裁剪', () => {
       'annotation-pen',
       'raster-brush',
       'eraser',
+      'mask-edit',
     ])
     for (const toolId of [
       'select-rect',
       'select-ellipse',
       'select-lasso',
-      'mask-edit',
     ]) {
       expect(readiness[toolId]).toMatchObject({
         state: 'disabled',
@@ -49,7 +49,7 @@ describe('图片编辑 V3 宿主能力裁剪', () => {
     }
   })
 
-  it('不可可靠导出的辉光效果不允许新建，遮罩宿主也不会宣称工具已可用', () => {
+  it('不可可靠导出的辉光效果不允许新建，遮罩宿主只暴露蒙版所需工具', () => {
     const full = getImageEditorHostProfileV3('full')
     expect(full.effects.find(({ id }) => id === 'image.vgpu-glow')).toMatchObject({
       readiness: {
@@ -62,7 +62,7 @@ describe('图片编辑 V3 宿主能力裁剪', () => {
     expect(mask.effects).toEqual([])
     expect(mask.adjustments).toEqual([])
     expect(getReadyImageEditorToolIdsV3(mask)).toEqual([
-      'move', 'hand', 'zoom', 'raster-brush', 'eraser',
+      'move', 'hand', 'zoom', 'raster-brush', 'eraser', 'mask-edit',
     ])
     expect(mask.saveActions).toEqual(['save-document'])
   })

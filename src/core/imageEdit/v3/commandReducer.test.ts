@@ -15,6 +15,7 @@ import {
 } from './documentFactory';
 import type { ImageEditDocumentV3 } from './documentTypes';
 import type { ImageEditLayerV3 } from './layerTypes';
+import { createImageEditSparseMaskReferenceV3 } from './layerTypes';
 
 function createDocument(layers: ImageEditLayerV3[]): ImageEditDocumentV3 {
   return { ...createImageEditDocumentV3({ width: 100, height: 80, documentId: 'document-1' }), layers };
@@ -182,6 +183,54 @@ describe('图片编辑 V3 命令归约器', () => {
     expect(applied.historyBytes).toBe(applied.historyMetadataBytes + 6_144);
     const restored = applyImageEditCommandV3(applied.document, applied.inverse);
     expect(restored.document.layers[0]).toMatchObject({ tiles: { '0/1/1': 'sha256:old' } });
+  });
+
+  it('任意图层的稀疏蒙版以单条 CAS 命令更新瓦片并可撤销', () => {
+    const effect = createImageEditEffectLayerV3(
+      'effect', '曝光', 'adjustment.exposure', { stops: 1 },
+    );
+    effect.mask = {
+      ...createImageEditSparseMaskReferenceV3('mask-effect'),
+      tiles: { '0/0/0': 'sha256:old-mask' },
+    };
+    const source = createDocument([effect]);
+    const applied = applyImageEditCommandV3(source, {
+      commandId: 'mask-stroke',
+      expectedRevision: 0,
+      type: 'mask.apply-tile-delta',
+      layerId: effect.id,
+      maskId: 'mask-effect',
+      changes: [{
+        tileKey: '0/0/0',
+        previousResourceId: 'sha256:old-mask',
+        previousByteSize: 128,
+        resourceId: 'sha256:new-mask',
+        byteSize: 96,
+      }],
+    });
+    expect(applied.document.layers[0].mask).toMatchObject({
+      maskId: 'mask-effect',
+      tiles: { '0/0/0': 'sha256:new-mask' },
+    });
+    expect(applied.historyResources).toEqual([
+      { resourceId: 'sha256:new-mask', byteSize: 96 },
+      { resourceId: 'sha256:old-mask', byteSize: 128 },
+    ]);
+    const restored = applyImageEditCommandV3(applied.document, applied.inverse);
+    expect(restored.document.layers[0].mask).toMatchObject({
+      tiles: { '0/0/0': 'sha256:old-mask' },
+    });
+    expect(() => applyImageEditCommandV3(source, {
+      commandId: 'wrong-mask',
+      expectedRevision: 0,
+      type: 'mask.apply-tile-delta',
+      layerId: effect.id,
+      maskId: 'replaced-mask',
+      changes: [{
+        tileKey: '0/0/0', previousResourceId: 'sha256:old-mask', previousByteSize: 128,
+        resourceId: 'sha256:new-mask', byteSize: 96,
+      }],
+    })).toThrow(ImageEditRevisionConflictErrorV3);
   });
 
   it('拒绝瓦片旧哈希 CAS 不匹配、空操作和伪造旧字节数', () => {

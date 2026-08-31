@@ -1,4 +1,7 @@
-import type { ImageEditRasterTileDeltaCommandV3 } from '../commandTypes';
+import type {
+  ImageEditMaskTileDeltaCommandV3,
+  ImageEditRasterTileDeltaCommandV3,
+} from '../commandTypes';
 import type {
   ImageEditBrushResourceReferenceV3,
   ImageEditBrushStrokeResultV3,
@@ -24,7 +27,7 @@ export interface ImageEditBrushHistoryRetentionV3 {
 }
 
 export interface MaterializedImageEditBrushDeltaV3 {
-  command: ImageEditRasterTileDeltaCommandV3;
+  command: ImageEditRasterTileDeltaCommandV3 | ImageEditMaskTileDeltaCommandV3;
   history: ImageEditBrushHistoryRetentionV3;
 }
 
@@ -32,6 +35,7 @@ export interface MaterializeImageEditBrushDeltaOptionsV3 {
   commandId: string;
   expectedRevision: number;
   layerId: string;
+  destination?: { kind: 'raster' } | { kind: 'mask'; maskId: string };
   persistedTiles: readonly PersistedImageEditBrushTileV3[];
 }
 
@@ -120,8 +124,19 @@ export function materializeImageEditBrushTileDeltaV3(
   );
   const newResources = uniqueResources(transitions.map((transition) => transition.newResource));
   const retainedResources = uniqueResources([...oldResources, ...newResources]);
+  const destination = options.destination ?? { kind: 'raster' };
+  if (destination.kind === 'mask' && !destination.maskId) {
+    throw new Error('画笔蒙版 ID 不能为空');
+  }
   return {
-    command: {
+    command: destination.kind === 'mask' ? {
+      type: 'mask.apply-tile-delta',
+      commandId: options.commandId,
+      expectedRevision: options.expectedRevision,
+      layerId: options.layerId,
+      maskId: destination.maskId,
+      changes: commandChanges,
+    } : {
       type: 'raster.apply-tile-delta',
       commandId: options.commandId,
       expectedRevision: options.expectedRevision,

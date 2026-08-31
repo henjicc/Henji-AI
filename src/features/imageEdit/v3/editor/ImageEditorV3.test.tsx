@@ -121,7 +121,7 @@ describe('ImageEditorV3 professional shell', () => {
     )).toEqual(['group', 'child-top', 'child-bottom', 'raster'])
   })
 
-  it('严格按宿主 profile 裁剪图层，并把未接通工具明确禁用', async () => {
+  it('严格按宿主 profile 裁剪图层，并允许创建稀疏蒙版后编辑', async () => {
     renderEditor(
       createDocument([createImageEditRasterLayerV3('raster', '蒙版目标')]),
       { profileId: 'mask' },
@@ -130,8 +130,8 @@ describe('ImageEditorV3 professional shell', () => {
     await waitFor(() => expect(screen.getByRole('button', { name: '添加图层' })).toBeTruthy())
     expect(document.querySelector('[data-tool-id="crop"]')).toBeNull()
     const maskTool = document.querySelector<HTMLButtonElement>('[data-tool-id="mask-edit"]')
-    expect(maskTool?.disabled).toBe(true)
-    expect(maskTool?.getAttribute('aria-label')).toContain('蒙版像素编辑尚未接通')
+    expect(maskTool?.disabled).toBe(false)
+    expect(maskTool?.dataset.toolReadiness).toBe('ready')
 
     for (const toolId of [
       'select-rect',
@@ -140,15 +140,16 @@ describe('ImageEditorV3 professional shell', () => {
     ]) {
       expect(document.querySelector<HTMLButtonElement>(`[data-tool-id="${toolId}"]`)?.disabled).toBe(true)
     }
-    for (const toolId of ['hand', 'zoom', 'raster-brush', 'eraser']) {
+    for (const toolId of ['hand', 'zoom', 'raster-brush', 'eraser', 'mask-edit']) {
       const tool = document.querySelector<HTMLButtonElement>(`[data-tool-id="${toolId}"]`)
       expect(tool?.disabled).toBe(false)
       expect(tool?.dataset.toolReadiness).toBe('ready')
     }
 
     const addMask = screen.getByRole('button', { name: '添加蒙版' }) as HTMLButtonElement
-    expect(addMask.disabled).toBe(true)
-    expect(screen.getByText('蒙版像素创建与编辑尚未接通，当前只能保留已有蒙版。')).toBeTruthy()
+    expect(addMask.disabled).toBe(false)
+    fireEvent.click(addMask)
+    expect(screen.getByRole('switch', { name: '反转蒙版' })).toBeTruthy()
 
     fireEvent.click(screen.getByRole('button', { name: '添加图层' }))
     expect(await screen.findByRole('menuitem', { name: '栅格图层' })).toBeTruthy()
@@ -162,7 +163,7 @@ describe('ImageEditorV3 professional shell', () => {
     fireEvent.click(await screen.findByRole('button', { name: '添加图层' }))
     const glow = screen.getByRole('menuitem', { name: /辉光 Pro（暂不可用/ }) as HTMLButtonElement
     expect(glow.disabled).toBe(true)
-    expect(glow.textContent).toContain('当前不能可靠导出 PNG')
+    expect(glow.textContent).toContain('当前不能可靠导出栅格图片')
   })
 
   it('连续拖动参数只提交一次文档命令', async () => {

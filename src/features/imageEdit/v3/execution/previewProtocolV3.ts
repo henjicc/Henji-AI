@@ -11,9 +11,10 @@ export interface ImageEditorPreviewProxyV3 {
 
 export interface ImageEditorPreviewBrushTileV3 {
   resourceId: string
+  storage: 'rgba-float32' | 'mask-float32'
   width: number
   height: number
-  /** 独占且精确长度的 premultiplied linear-light RGBA Float32 字节。 */
+  /** 独占且精确长度的 RGBA（4 通道）或蒙版（1 通道）Float32 字节。 */
   bytes: ArrayBuffer
 }
 

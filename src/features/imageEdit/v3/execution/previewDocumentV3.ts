@@ -7,11 +7,13 @@ import type {
   ImageEditLayerV3,
   ImageEditTransformV3,
 } from '@/core/imageEdit/v3/layerTypes'
+import { isImageEditSparseMaskReferenceV3 } from '@/core/imageEdit/v3/layerTypes'
 import type {
   ImageEditCommandBusSnapshotV3,
   ImageEditPreviewOverrideV3,
 } from '../application/imageEditCommandBus'
 import { IMAGE_EDITOR_V3_BRUSH_TILE_MEDIA_TYPE } from '../application/imageEditorResourceDescriptorsV3'
+import { createImageEditorSparseMaskReferencePlanV3 } from './sparseMaskResourcesV3'
 
 export const IMAGE_EDITOR_PREVIEW_STABLE_MAX_EDGE_V3 = 1_600
 export const IMAGE_EDITOR_PREVIEW_DRAFT_MAX_EDGE_V3 = 960
@@ -141,6 +143,7 @@ export interface ImageEditorPreviewProxyResourceRequestV3 {
 
 export interface ImageEditorPreviewBrushResourceRequestV3 {
   kind: 'brush-tile'
+  storage: 'rgba-float32' | 'mask-float32'
   resourceId: string
   tileKey: string
   byteLength: number
@@ -191,6 +194,7 @@ function addBrushRequest(
   resourceId: string,
   descriptors: ReadonlyMap<string, ImageEditorV3ResourceDescriptor>,
   requests: Map<string, ImageEditorPreviewBrushResourceRequestV3>,
+  storage: ImageEditorPreviewBrushResourceRequestV3['storage'] = 'rgba-float32',
 ): void {
   const match = TILE_KEY_PATTERN.exec(tileKey)
   if (!match) throw new Error(`栅格图层“${layerId}”包含无效画笔瓦片键：${tileKey}`)
@@ -220,6 +224,7 @@ function addBrushRequest(
   }
   const request: ImageEditorPreviewBrushResourceRequestV3 = {
     kind: 'brush-tile',
+    storage,
     resourceId,
     tileKey,
     byteLength: descriptor.byteLength,
@@ -227,7 +232,11 @@ function addBrushRequest(
     height: region.outputRect.height,
   }
   const existing = requests.get(resourceId)
-  if (existing && (existing.width !== request.width || existing.height !== request.height)) {
+  if (existing && (
+    existing.width !== request.width
+    || existing.height !== request.height
+    || existing.storage !== request.storage
+  )) {
     throw new Error(`同一画笔瓦片资源被用于不一致的尺寸：${resourceId}`)
   }
   if (!existing) requests.set(resourceId, request)
@@ -241,8 +250,27 @@ function collectLayerResources(
   proxies: Map<string, number>,
   brushes: Map<string, ImageEditorPreviewBrushResourceRequestV3>,
 ): void {
-  if (layer.mask && RESOURCE_REF_PATTERN.test(layer.mask.resourceId)) {
-    addProxyRequest(layer.mask.resourceId, maxDimension, descriptors, proxies)
+  if (layer.mask) {
+    if (isImageEditSparseMaskReferenceV3(layer.mask)) {
+      const maskPlan = createImageEditorSparseMaskReferencePlanV3(
+        layer.mask,
+        document.geometry,
+        [...descriptors.values()],
+      )
+      for (const reference of maskPlan.tiles.values()) {
+        addBrushRequest(
+          document,
+          layer.id,
+          reference.tileKey,
+          reference.resourceId,
+          descriptors,
+          brushes,
+          'mask-float32',
+        )
+      }
+    } else if (RESOURCE_REF_PATTERN.test(layer.mask.resourceId)) {
+      addProxyRequest(layer.mask.resourceId, maxDimension, descriptors, proxies)
+    }
   }
   if (layer.type === 'raster') {
     if (layer.source.kind === 'resource' && RESOURCE_REF_PATTERN.test(layer.source.resourceId)) {

@@ -139,7 +139,9 @@ export function createPreviewBrushTileMapV3(
 ): ReadonlyMap<string, ImageEditorPreviewBrushTileV3> {
   const result = new Map<string, ImageEditorPreviewBrushTileV3>()
   for (const tile of tiles) {
-    const expectedBytes = tile.width * tile.height * 4 * Float32Array.BYTES_PER_ELEMENT
+    const expectedBytes = tile.width * tile.height
+      * (tile.storage === 'rgba-float32' ? 4 : 1)
+      * Float32Array.BYTES_PER_ELEMENT
     if (typeof tile.resourceId !== 'string'
       || !Number.isSafeInteger(tile.width)
       || !Number.isSafeInteger(tile.height)
@@ -187,6 +189,9 @@ export function applyPreviewBrushTileReplacementsV3(
     }
     const tile = brushTiles.get(resourceId)
     if (!tile) throw new Error(`图片预览缺少栅格画笔瓦片：${resourceId}`)
+    if (tile.storage !== 'rgba-float32') {
+      throw new Error(`栅格图层引用了非 RGBA 画笔瓦片：${resourceId}`)
+    }
     replaceScaledBrushTile(output, base.width, base.height, tile, tileX, tileY, dimensions)
   }
   return createFloat32PremultipliedRgbaTile(

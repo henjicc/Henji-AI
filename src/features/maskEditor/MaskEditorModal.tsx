@@ -16,17 +16,53 @@ import { maxMaskBrushSize, useMaskEditorSession } from './useMaskEditorSession';
 import type {
   MaskEditorDocument,
   MaskEditorResult,
+  MaskEditorV3Result,
 } from './types';
+import type { ImageEditSessionReferenceV3 } from '@/core/imageEdit/v3/sessionReference';
+import { MaskEditorV3Modal } from './v3/MaskEditorV3Modal';
 
-export interface MaskEditorModalProps {
+interface MaskEditorModalBaseProps {
   isOpen: boolean;
   sourceImage: string;
-  initialDocument?: MaskEditorDocument | null;
   onCancel: () => void;
-  onConfirm: (result: MaskEditorResult) => void | Promise<void>;
 }
 
-export function MaskEditorModal({
+export interface LegacyMaskEditorModalProps extends MaskEditorModalBaseProps {
+  initialDocument?: MaskEditorDocument | null;
+  onConfirm: (result: MaskEditorResult) => void | Promise<void>;
+  v3Session?: never;
+  onConfirmV3?: never;
+}
+
+export interface V3MaskEditorModalProps extends MaskEditorModalBaseProps {
+  initialDocument?: never;
+  onConfirm?: never;
+  v3Session: {
+    reference: ImageEditSessionReferenceV3;
+    targetLayerId: string;
+  };
+  onConfirmV3: (result: MaskEditorV3Result) => void | Promise<void>;
+}
+
+export type MaskEditorModalProps = LegacyMaskEditorModalProps | V3MaskEditorModalProps;
+
+export function MaskEditorModal(props: MaskEditorModalProps): JSX.Element {
+  if (props.v3Session) {
+    return (
+      <MaskEditorV3Modal
+        isOpen={props.isOpen}
+        sourceImage={props.sourceImage}
+        sessionReference={props.v3Session.reference}
+        targetLayerId={props.v3Session.targetLayerId}
+        onCancel={props.onCancel}
+        onConfirm={props.onConfirmV3}
+      />
+    );
+  }
+  return <LegacyMaskEditorModal {...props} />;
+}
+
+function LegacyMaskEditorModal({
   isOpen,
   sourceImage,
   initialDocument,

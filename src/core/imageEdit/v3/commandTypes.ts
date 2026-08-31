@@ -12,6 +12,7 @@ import type {
   ImageEditJsonObjectV3,
   ImageEditTransformV3,
 } from './layerTypes';
+import { collectImageEditMaskResourceIdsV3 } from './layerTypes';
 
 export interface ImageEditCommandBaseV3 {
   commandId: string;
@@ -136,6 +137,14 @@ export interface ImageEditRasterTileDeltaCommandV3 extends ImageEditCommandBaseV
   changes: ImageEditRasterTileChangeV3[];
 }
 
+export interface ImageEditMaskTileDeltaCommandV3 extends ImageEditCommandBaseV3 {
+  type: 'mask.apply-tile-delta';
+  layerId: string;
+  /** 必须与命令起始 revision 中的稀疏蒙版一致，防止删除/替换蒙版后误写。 */
+  maskId: string;
+  changes: ImageEditRasterTileChangeV3[];
+}
+
 export type ImageEditCommandV3 =
   | ImageEditDocumentUpdateOutputGeometryCommandV3
   | ImageEditLayerAddCommandV3
@@ -151,7 +160,8 @@ export type ImageEditCommandV3 =
   | ImageEditAnnotationAddCommandV3
   | ImageEditAnnotationUpdateCommandV3
   | ImageEditAnnotationDeleteCommandV3
-  | ImageEditRasterTileDeltaCommandV3;
+  | ImageEditRasterTileDeltaCommandV3
+  | ImageEditMaskTileDeltaCommandV3;
 
 export interface ImageEditCommandApplyResultV3 {
   document: ImageEditDocumentV3;
@@ -171,7 +181,11 @@ function collectLayerResources(
   layer: ImageEditLayerV3,
   output: ImageEditHistoryResourceReferenceV3[],
 ): void {
-  if (layer.mask) output.push({ resourceId: layer.mask.resourceId, byteSize: null });
+  if (layer.mask) {
+    collectImageEditMaskResourceIdsV3(layer.mask).forEach((resourceId) => {
+      output.push({ resourceId, byteSize: null });
+    });
+  }
   if (layer.type === 'raster') {
     if (layer.source.kind === 'resource') {
       output.push({ resourceId: layer.source.resourceId, byteSize: null });
@@ -189,7 +203,7 @@ export function collectImageEditCommandResourceReferencesV3(
   command: ImageEditCommandV3,
 ): ImageEditHistoryResourceReferenceV3[] {
   const resources: ImageEditHistoryResourceReferenceV3[] = [];
-  if (command.type === 'raster.apply-tile-delta') {
+  if (command.type === 'raster.apply-tile-delta' || command.type === 'mask.apply-tile-delta') {
     for (const change of command.changes) {
       if (change.previousResourceId) {
         resources.push({ resourceId: change.previousResourceId, byteSize: change.previousByteSize });
@@ -203,7 +217,9 @@ export function collectImageEditCommandResourceReferencesV3(
   } else if (command.type === 'layer.group') {
     collectLayerResources(command.group, resources);
   } else if (command.type === 'layer.set-mask' && command.mask) {
-    resources.push({ resourceId: command.mask.resourceId, byteSize: null });
+    collectImageEditMaskResourceIdsV3(command.mask).forEach((resourceId) => {
+      resources.push({ resourceId, byteSize: null });
+    });
   }
   return resources;
 }

@@ -1,5 +1,14 @@
 export { MaskEditorModal } from './MaskEditorModal';
-export type { MaskEditorModalProps } from './MaskEditorModal';
+export type {
+  LegacyMaskEditorModalProps,
+  MaskEditorModalProps,
+  V3MaskEditorModalProps,
+} from './MaskEditorModal';
+export { MaskEditorV3Host } from './v3/MaskEditorV3Host';
+export type {
+  MaskEditorV3HostHandle,
+  MaskEditorV3HostProps,
+} from './v3/MaskEditorV3Host';
 export { exportMaskDocumentToPng, renderMaskDocument } from './maskExport';
 export {
   createMaskBrushRenderLayers,
@@ -25,6 +34,7 @@ export {
 export type {
   MaskEditorDocument,
   MaskEditorResult,
+  MaskEditorV3Result,
   MaskPoint,
   MaskMark,
   MaskShape,

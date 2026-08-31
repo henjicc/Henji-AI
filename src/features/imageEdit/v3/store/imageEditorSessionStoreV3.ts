@@ -6,6 +6,7 @@ export interface ImageEditorToolSettingsV3 {
   brushSize: number
   brushOpacity: number
   brushHardness: number
+  maskMode: 'paint' | 'erase'
   annotationStrokeWidth: number
   annotationFontSize: number
 }
@@ -23,6 +24,7 @@ interface ImageEditorSessionStoreV3 {
     sessionId: string,
     allowedTools: readonly ImageEditorToolIdV3[],
     initialLayerId?: string,
+    initialToolId?: ImageEditorToolIdV3,
   ) => void
   disposeSession: (sessionId: string) => void
   setActiveTool: (sessionId: string, tool: ImageEditorToolIdV3) => void
@@ -39,6 +41,7 @@ const DEFAULT_TOOL_SETTINGS: ImageEditorToolSettingsV3 = {
   brushSize: 32,
   brushOpacity: 1,
   brushHardness: 0.8,
+  maskMode: 'paint',
   annotationStrokeWidth: 4,
   annotationFontSize: 32,
 }
@@ -54,7 +57,7 @@ function sameIds(left: readonly string[], right: readonly string[]): boolean {
 export const useImageEditorSessionStoreV3 = create<ImageEditorSessionStoreV3>((set) => ({
   sessions: {},
 
-  ensureSession: (sessionId, allowedTools, initialLayerId) => set((state) => {
+  ensureSession: (sessionId, allowedTools, initialLayerId, initialToolId) => set((state) => {
     const existing = state.sessions[sessionId]
     if (existing) {
       if (allowedTools.includes(existing.activeTool)) return state
@@ -67,7 +70,9 @@ export const useImageEditorSessionStoreV3 = create<ImageEditorSessionStoreV3>((s
         },
       }
     }
-    const activeTool = allowedTools[0]
+    const activeTool = initialToolId && allowedTools.includes(initialToolId)
+      ? initialToolId
+      : allowedTools[0]
     if (!activeTool) throw new Error('图片编辑宿主必须至少允许一个工具')
     return {
       sessions: {

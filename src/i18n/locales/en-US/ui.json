@@ -721,6 +721,9 @@
         "size": "Size",
         "opacity": "Opacity",
         "hardness": "Hardness",
+        "maskMode": "Mask brush mode",
+        "maskPaint": "Paint",
+        "maskErase": "Erase",
         "strokeWidth": "Stroke",
         "fontSize": "Font size"
       },
@@ -744,6 +747,8 @@
         "overlay": "Raster brush editing canvas",
         "select-one": "Select exactly one raster layer to edit.",
         "not-raster": "The current selection is not a raster layer. Select a raster layer first.",
+        "missing-mask": "The selected layer does not have a mask yet. Add one first.",
+        "legacy-mask": "This legacy single-resource mask is preserved read-only. Replace it with an editable sparse mask.",
         "locked": "The selected raster layer or its group is locked.",
         "hidden": "The selected raster layer or its group is hidden.",
         "singular": "The selected raster layer has a non-invertible transform.",

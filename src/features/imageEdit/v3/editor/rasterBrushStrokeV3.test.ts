@@ -11,6 +11,11 @@ import {
   createImageEditorRasterBrushTargetV3,
   createImageEditorRasterBrushTileLoaderV3,
 } from './rasterBrushTilesV3'
+import { createImageEditSparseMaskReferenceV3 } from '@/core/imageEdit/v3/layerTypes'
+import {
+  createImageEditorMaskBrushTargetV3,
+  createImageEditorMaskBrushTileLoaderV3,
+} from './maskBrushTilesV3'
 
 describe('图片编辑 V3 栅格笔画垂直切片', () => {
   it('手势期只走 PreviewOverride，抬笔批量持久化并只提交一个可撤销历史命令', async () => {
@@ -111,6 +116,54 @@ describe('图片编辑 V3 栅格笔画垂直切片', () => {
     await queue.flush()
 
     expect(calls).toEqual([[1], [2, 3]])
+  })
+
+  it('蒙版笔画复用 pointer 合并并以一条 mask delta 历史命令提交', async () => {
+    const document = createImageEditDocumentV3({ width: 64, height: 64, documentId: 'mask-brush' })
+    const layer = createImageEditRasterLayerV3('masked-layer', '蒙版目标')
+    layer.mask = createImageEditSparseMaskReferenceV3('mask-1', false, 0)
+    document.layers = [layer]
+    const bus = new ImageEditCommandBusV3(document)
+    const resourceId = `sha256:${'d'.repeat(64)}`
+    const stroke = new ImageEditorRasterBrushStrokeV3({
+      bus,
+      document,
+      layerId: layer.id,
+      destination: { kind: 'mask', maskId: 'mask-1' },
+      tool: 'brush',
+      shape: { size: 12, hardness: 1, opacity: 1 },
+      target: createImageEditorMaskBrushTargetV3(),
+      loadTile: createImageEditorMaskBrushTileLoaderV3({
+        document,
+        mask: layer.mask,
+        resourceByteSizes: new Map(),
+      }),
+      resourceByteSizes: new Map(),
+      onPreviewTiles: vi.fn(),
+      persistTiles: vi.fn(async (tiles) => tiles.map(({ tileKey }) => ({
+        tileKey,
+        resourceId,
+        byteSize: 96,
+      }))),
+    })
+
+    stroke.begin()
+    await stroke.append([
+      { x: 8, y: 8, screenX: 8, screenY: 8 },
+      { x: 18, y: 8, screenX: 18, screenY: 8 },
+    ])
+    await stroke.finish()
+
+    expect(bus.getSnapshot()).toMatchObject({
+      document: {
+        revision: 1,
+        layers: [{ mask: { maskId: 'mask-1', tiles: { '0/0/0': resourceId } } }],
+      },
+      history: { undoCount: 1 },
+      previewOverrides: {},
+    })
+    expect(bus.undo()).toBe(true)
+    expect(bus.getSnapshot().document.layers[0].mask).toMatchObject({ tiles: {} })
   })
 
   it('持久化期间取消会中止请求且不会提交陈旧 revision', async () => {

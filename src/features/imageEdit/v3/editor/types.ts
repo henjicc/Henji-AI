@@ -12,7 +12,11 @@ import type {
   ImageEditDocumentV3,
   ImageEditOrientationV3,
 } from '@/core/imageEdit/v3/documentTypes'
-import type { ImageEditJsonObjectV3, ImageEditLayerV3 } from '@/core/imageEdit/v3/layerTypes'
+import type {
+  ImageEditJsonObjectV3,
+  ImageEditLayerV3,
+  ImageEditMaskReferenceV3,
+} from '@/core/imageEdit/v3/layerTypes'
 import type { ImageEditCommandHistorySnapshotV3 } from '@/core/imageEdit/v3/commandHistoryCodec'
 import type { ImageEditPersistenceSnapshotV3 } from '@/core/imageEdit/v3/serviceContracts'
 import type { ImageEditorV3ResourceDescriptor } from '@/platform/contracts/imageEditorV3'
@@ -44,6 +48,9 @@ export interface ImageEditorV3Props {
   document: ImageEditDocumentV3
   historySnapshot?: ImageEditCommandHistorySnapshotV3 | null
   profileId: ImageEditorHostProfileIdV3
+  /** 宿主只在首次挂载时指定焦点；后续选择仍属于会话态，不进文档。 */
+  initialSelectedLayerId?: string
+  initialToolId?: ImageEditorToolIdV3
   onDocumentChange: (document: ImageEditDocumentV3) => void
   /** 只在持久命令、撤销/重做或清空历史后触发；pointer preview 不会进入该回调。 */
   onPersistenceChange?: (snapshot: ImageEditPersistenceSnapshotV3) => void
@@ -82,7 +89,7 @@ export interface ImageEditorV3Controller {
   groupLayers: (layerIds: readonly string[], groupName: string) => string
   ungroupLayer: (groupId: string) => void
   updateGroupIsolation: (layerId: string, isolated: boolean) => void
-  setLayerMask: (layerId: string, resourceId: string | null, inverted?: boolean) => void
+  setLayerMask: (layerId: string, mask: ImageEditMaskReferenceV3 | null) => void
   setOutputGeometryPreview: (
     previewId: string,
     orientation: ImageEditOrientationV3,

@@ -3,6 +3,7 @@ import {
   DIFFUSION_V4_RECIPE_ADAPTER,
   ImageEditResourceBudget,
   createFloat32PremultipliedRgbaTile,
+  createFloat32MaskTile,
   createImageEditAdjustmentLayerV3,
   createImageEditAnnotationLayerV3,
   createImageEditDocumentV3,
@@ -11,17 +12,20 @@ import {
   type Float32PremultipliedRgbaTile,
   type ImageEditDocumentV3,
   type ImageEditJsonObjectV3,
+  createImageEditSparseMaskReferenceV3,
 } from '@/core/imageEdit/v3'
 import { createDefaultDiffusionOperationParams } from '@/core/imageEdit/diffusionParams'
 import type { ImageEditorV3RasterExportDescription } from '@/platform/contracts/imageEditorV3'
 import {
   type ImageEditorV3ExportAnnotationRasterizeRequest,
   type ImageEditorV3ExportSourceTileRequest,
+  type ImageEditorV3ExportRenderDependencies,
 } from './contracts'
 import { renderImageEditorV3ExportTiles } from './renderExportTilesV3'
 
 const SOURCE = `sha256:${'1'.repeat(64)}` as const
 const MASK = `sha256:${'2'.repeat(64)}` as const
+const MASK_TILE = `sha256:${'3'.repeat(64)}` as const
 
 interface FakeImage {
   width: number
@@ -105,6 +109,14 @@ async function collectPixels(
   tileSize: number,
   images: ReadonlyMap<string, FakeImage>,
   rasterizeAnnotations?: ReturnType<typeof annotationImpulse>,
+  managed?: {
+    resourceDescriptors: Array<{
+      resourceRef: `sha256:${string}`
+      byteLength: number
+      mediaType: string | null
+    }>
+    dependencies: Pick<ImageEditorV3ExportRenderDependencies, 'readBrushTiles'>
+  },
 ): Promise<Uint8Array> {
   const width = document.geometry.crop?.width ?? (
     document.geometry.orientation.rotate === 90 || document.geometry.orientation.rotate === 270
@@ -118,8 +130,17 @@ async function collectPixels(
   )
   const output = new Uint8Array(width * height * 4)
   for await (const tile of renderImageEditorV3ExportTiles(
-    { document, resourceDescriptors: [], description: description(width, height), tileSize },
-    { readSourceTile: fakeSourceReader(images), rasterizeAnnotations },
+    {
+      document,
+      resourceDescriptors: managed?.resourceDescriptors ?? [],
+      description: description(width, height),
+      tileSize,
+    },
+    {
+      readSourceTile: fakeSourceReader(images),
+      rasterizeAnnotations,
+      ...managed?.dependencies,
+    },
   )) {
     const bytes = tile.pixels instanceof Uint8Array ? tile.pixels : new Uint8Array(tile.pixels)
     for (let row = 0; row < tile.height; row += 1) {
@@ -339,6 +360,59 @@ describe('图片编辑 V3 分块导出渲染', () => {
     const output = await collectPixels(document, 16, images)
     expect(output[0]).toBe(64)
     expect(output[(31 * 4)]).toBeGreaterThanOrEqual(88)
+  })
+
+  it('效果层的稀疏 Float32 蒙版只读取相交瓦片并流式混合', async () => {
+    const document = createImageEditDocumentV3({
+      width: 32,
+      height: 2,
+      documentId: 'sparse-masked-adjustment',
+      sourceResourceId: SOURCE,
+    })
+    const exposure = createImageEditAdjustmentLayerV3(
+      'exposure', '曝光', 'exposure', { stops: 1, offset: 0, gamma: 1 },
+    )
+    exposure.mask = {
+      ...createImageEditSparseMaskReferenceV3('sparse-mask', false, 0),
+      tiles: { '0/0/0': MASK_TILE },
+    }
+    document.layers.push(exposure)
+    const readBrushTiles = vi.fn(async (
+      tiles: ReadonlyArray<{ tileKey: string }>,
+    ) => ({
+      tiles: tiles.map(({ tileKey }) => ({
+        tileKey,
+        tile: createFloat32MaskTile(
+          32,
+          2,
+          Float32Array.from({ length: 64 }, (_, index) => index % 32 < 16 ? 0 : 1),
+        ),
+      })),
+    }))
+
+    const output = await collectPixels(
+      document,
+      16,
+      new Map([[SOURCE, solidImage(32, 2, 64)]]),
+      undefined,
+      {
+        resourceDescriptors: [{
+          resourceRef: MASK_TILE,
+          byteLength: 128,
+          mediaType: 'application/x-henji-brush-tile-v3',
+        }],
+        dependencies: { readBrushTiles },
+      },
+    )
+
+    expect(output[0]).toBe(64)
+    expect(output[31 * 4]).toBeGreaterThanOrEqual(88)
+    expect(readBrushTiles).toHaveBeenCalled()
+    const requestedMaskKeys = readBrushTiles.mock.calls.flatMap(([tiles]) => tiles.map(
+      (tile: { tileKey: string }) => tile.tileKey,
+    ))
+    expect([...new Set(requestedMaskKeys)]).toEqual(['0/0/0'])
+    expect(requestedMaskKeys).toHaveLength(2)
   })
 
   it('按文档方向和裁剪逐像素反向取样，不建立完整输出画布', async () => {

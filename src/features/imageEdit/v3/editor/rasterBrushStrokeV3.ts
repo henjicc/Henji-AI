@@ -25,6 +25,7 @@ export interface ImageEditorRasterBrushStrokeOptionsV3 {
   bus: ImageEditCommandBusV3
   document: ImageEditDocumentV3
   layerId: string
+  destination?: { kind: 'raster' } | { kind: 'mask'; maskId: string }
   tool: ImageEditBrushToolV3
   shape: ImageEditBrushShapeV3
   target: ImageEditBrushTargetV3
@@ -95,7 +96,9 @@ export class ImageEditorRasterBrushStrokeV3 {
     this.options.bus.setPreview({
       id: this.previewId,
       kind: 'brush',
-      targetId: this.options.layerId,
+      targetId: this.options.destination?.kind === 'mask'
+        ? this.options.destination.maskId
+        : this.options.layerId,
       baseRevision,
       value: { dirtyTileKeys: [] },
     })
@@ -106,6 +109,7 @@ export class ImageEditorRasterBrushStrokeV3 {
         commandId: this.commandId,
         documentId: this.options.document.id,
         layerId: this.options.layerId,
+        destination: this.options.destination?.kind ?? 'raster',
         tool: this.options.tool,
       },
     })
@@ -142,6 +146,7 @@ export class ImageEditorRasterBrushStrokeV3 {
         commandId: this.commandId,
         expectedRevision: this.baseRevision,
         layerId: this.options.layerId,
+        destination: this.options.destination,
         persistedTiles: persisted,
       })
       for (const resource of delta.history.newResources) {

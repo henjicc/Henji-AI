@@ -28,6 +28,7 @@ export type ImageEditorPreviewBrushTileReaderV3 = (
 ) => Promise<{ tiles: Array<{ tileKey: string; tile: ImageEditBrushTileV3 }> }>
 
 interface CachedPreviewBrushTileV3 {
+  storage: ImageEditorPreviewBrushResourceRequestV3['storage']
   width: number
   height: number
   data: Float32Array
@@ -66,7 +67,9 @@ async function raceWithAbort<T>(operation: Promise<T>, signal: AbortSignal): Pro
 }
 
 function decodedBytes(request: ImageEditorPreviewBrushResourceRequestV3): number {
-  return request.width * request.height * 4 * Float32Array.BYTES_PER_ELEMENT
+  return request.width * request.height
+    * (request.storage === 'rgba-float32' ? 4 : 1)
+    * Float32Array.BYTES_PER_ELEMENT
 }
 
 function cacheKey(
@@ -77,6 +80,7 @@ function cacheKey(
     request.resourceId,
     request.byteLength,
     `${request.width}x${request.height}`,
+    request.storage,
     document.color.workingSpace,
     document.color.transferFunction,
   ].join(':')
@@ -87,25 +91,37 @@ function validateLoadedTile(
   tile: ImageEditBrushTileV3,
   document: ImageEditDocumentV3,
   signal: AbortSignal,
-): asserts tile is Extract<ImageEditBrushTileV3, { storage: 'rgba-float32' }> {
+): void {
   const exactBuffer = tile.data.buffer instanceof ArrayBuffer
     && tile.data.byteOffset === 0
     && tile.data.byteLength === tile.data.buffer.byteLength
-  if (tile.storage !== 'rgba-float32'
+  if (tile.storage !== request.storage
     || tile.width !== request.width
     || tile.height !== request.height
     || tile.width > 512
     || tile.height > 512
-    || tile.colorDomain !== 'linear-light'
-    || tile.workingSpace !== document.color.workingSpace
-    || tile.transferFunction !== document.color.transferFunction
-    || tile.referenceWhiteNits !== (document.color.hdrMetadata?.referenceWhiteNits
-      ?? IMAGE_EDIT_HDR_REFERENCE_WHITE_NITS_V3)
-    || tile.alpha !== 'premultiplied'
     || !(tile.data instanceof Float32Array)
     || !exactBuffer
     || tile.data.byteLength !== decodedBytes(request)) {
     throw new Error(`图片预览画笔瓦片像素契约与文档不匹配：${request.tileKey}`)
+  }
+  if (tile.storage === 'mask-float32') {
+    for (let offset = 0; offset < tile.data.length; offset += 1) {
+      if ((offset & 0xffff) === 0) throwIfAborted(signal)
+      const value = tile.data[offset]
+      if (!Number.isFinite(value) || value < 0 || value > 1) {
+        throw new Error(`图片预览蒙版瓦片包含无效值：${request.tileKey}`)
+      }
+    }
+    return
+  }
+  if (tile.colorDomain !== 'linear-light'
+    || tile.workingSpace !== document.color.workingSpace
+    || tile.transferFunction !== document.color.transferFunction
+    || tile.referenceWhiteNits !== (document.color.hdrMetadata?.referenceWhiteNits
+      ?? IMAGE_EDIT_HDR_REFERENCE_WHITE_NITS_V3)
+    || tile.alpha !== 'premultiplied') {
+    throw new Error(`图片预览栅格瓦片颜色契约与文档不匹配：${request.tileKey}`)
   }
   for (let offset = 0; offset < tile.data.length; offset += 4) {
     if ((offset & 0xffff) === 0) throwIfAborted(signal)
@@ -210,7 +226,12 @@ export class ImageEditorPreviewBrushTileLoaderV3 {
         const tile = returned.get(request.tileKey)
         if (!tile) throw new Error(`图片预览画笔瓦片读取结果缺失：${request.tileKey}`)
         validateLoadedTile(request, tile, document, signal)
-        const cached = { width: tile.width, height: tile.height, data: tile.data }
+        const cached = {
+          storage: request.storage,
+          width: tile.width,
+          height: tile.height,
+          data: tile.data,
+        }
         const key = cacheKey(request, document)
         resolved.set(key, cached)
         this.insertCache(key, cached)
@@ -221,6 +242,7 @@ export class ImageEditorPreviewBrushTileLoaderV3 {
       if (!cached) throw new Error(`图片预览画笔瓦片未解析：${request.tileKey}`)
       return {
         resourceId: request.resourceId,
+        storage: cached.storage,
         width: cached.width,
         height: cached.height,
         bytes: cached.data.slice().buffer as ArrayBuffer,

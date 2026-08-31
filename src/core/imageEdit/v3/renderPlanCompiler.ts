@@ -2,6 +2,7 @@ import type { ImageEditDocumentV3 } from './documentTypes';
 import type { ImageEditColorModeV3 } from './colorTypes';
 import {
   IMAGE_EDIT_IDENTITY_TRANSFORM_V3,
+  cloneImageEditMaskReferenceV3,
   type ImageEditAdjustmentLayerV3,
   type ImageEditEffectLayerV3,
   type ImageEditGroupLayerV3,
@@ -88,7 +89,9 @@ function appendNode(
     definitionVersion: definition.version,
     inputHashes,
     parameters: hashObject(parameters),
-    mask: mask ? { ...mask } : null,
+    mask: mask
+      ? hashObject(cloneImageEditMaskReferenceV3(mask) as unknown as Record<string, unknown>)
+      : null,
   });
   state.nodes.push({
     id,
@@ -99,7 +102,7 @@ function appendNode(
     category: definition.category,
     inputNodeIds: [...inputNodeIds],
     parameters,
-    mask: mask ? { ...mask } : null,
+    mask: mask ? cloneImageEditMaskReferenceV3(mask) : null,
     subtreeHash,
   });
   return id;
