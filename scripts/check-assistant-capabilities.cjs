@@ -179,8 +179,6 @@ for (const file of walk(path.join(root, 'src', 'core', 'application-control'))) 
  * 能做的事"的量化终点。条目要说清楚拦路的是什么、归到哪一期。
  */
 const ASSISTANT_BLIND_FEATURES = {
-  imageEdit: '期 5：图片编辑会话是不可变快照，已有 image_edit.* 三实体的 writeExclusion 说明；'
-    + '编辑器 UI 态随 imageMark 一起处理。',
   logs: '日志面板是独立窗口里的内存环形缓冲，只有暂停与清空两个动作，且不进任何持久化状态；'
     + '助手读日志走 query_diagnostic_events 直接查持久化事件，比读面板更全也更准。',
   navigation: 'Surface 目录本身就是助手的导航契约，通过 open/close_application_surface 与 '

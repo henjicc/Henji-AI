@@ -13,7 +13,11 @@ import { useProjectStore } from '@/stores/projectStore'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useUiStore } from '@/stores/uiStore'
 import { useCameraStageStore } from '@/features/cameraStage/store/cameraStageStore'
-import { useImageEditSessionStore } from '@/features/imageEdit/store/imageEditSessionStore'
+import { imageMarkRevision } from '@/features/imageMark/application/imageMarkSessionAccess'
+import {
+  getImageEditV3LiveRevision,
+  subscribeImageEditV3LiveSessions,
+} from '@/features/imageEdit/v3/application/imageEditLiveSessionRegistry'
 import { getGenerationModelsRevision } from '@/features/generation/application/generationModelFields'
 import { useGenerationDraftStore } from '@/features/generation/store/generationDraftStore'
 import {
@@ -53,6 +57,7 @@ const scopeRevisions: HostScopeRevisions = {
   generation_draft: 0,
   models: 0,
   image_mark: 0,
+  image_edit: 0,
 }
 
 const listeners = new Set<() => void>()
@@ -75,7 +80,7 @@ function syncAssetDomainRevision(): void {
  * 从**权威计数直接拉取**，而不是订阅后自增镜像。
  *
  * 这些 scope 的真相在各自的领域里（草稿 store 的 `revision`、模型可见性事件计数、
- * 图片编辑会话 store 的 `revision`），
+ * V2 标注会话与 V3 实时命令总线各自的单调领域计数），
  * 执行器返回的 `resultingRevisions` 用的也是同一个数。镜像一份出来就有两个真相源，
  * 而漂移的方向恰恰是基线失真——模型拿着对不上的期望值写入，只会得到无从修复的 CONFLICT。
  * 拉取没有这个问题：读到的永远就是执行器会拿来比对的那个数。
@@ -83,7 +88,8 @@ function syncAssetDomainRevision(): void {
 function syncPulledRevisions(): void {
   scopeRevisions.generation_draft = useGenerationDraftStore.getState().revision
   scopeRevisions.models = getGenerationModelsRevision()
-  scopeRevisions.image_mark = useImageEditSessionStore.getState().revision
+  scopeRevisions.image_mark = imageMarkRevision()
+  scopeRevisions.image_edit = getImageEditV3LiveRevision()
 }
 
 /**
@@ -167,6 +173,10 @@ function startTracking(): () => void {
     subscribeVisibleGenerationTaskChanges(() => bumpScope('generation')),
     subscribeApplicationDomainChanges((scope) => {
       if (scope === 'assets') syncAssetDomainRevision()
+    }),
+    subscribeImageEditV3LiveSessions(() => {
+      revision += 1
+      for (const listener of listeners) listener()
     }),
   ]
   return () => {

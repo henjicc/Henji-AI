@@ -140,7 +140,7 @@ describe('宿主必须发布 provider 需要的全部 revision scope', () => {
      * 第二次写入必然 CONFLICT。这条确认几个已知有真实来源的 scope 至少能读出来。
      */
     const snapshot = createHostContextSnapshot()
-    for (const scope of ['generation_draft', 'models', 'image_mark']) {
+    for (const scope of ['generation_draft', 'models', 'image_mark', 'image_edit']) {
       expect(
         typeof snapshot.scopeRevisions[scope],
         `${scope} 必须发布成数字，缺失说明只加了 schema 没接数据源`,

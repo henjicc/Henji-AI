@@ -8,8 +8,14 @@ import {
 } from '@/features/assistant/applicationCapabilities/applicationControlRegistry'
 import type { ApplicationMutationExecutor } from '@/core/application-control'
 import { createEmptyImageEditDocument, imageEditDocumentToMarkDoc } from '@/core/imageEdit'
+import {
+  createImageEditDocumentV3,
+  createImageEditEffectLayerV3,
+} from '@/core/imageEdit/v3/documentFactory'
 import { createHostContextSnapshot } from '@/features/assistant/hostContext/hostContext'
 import { useCameraStageStore } from '@/features/cameraStage/store/cameraStageStore'
+import { ImageEditCommandBusV3 } from '@/features/imageEdit/v3/application/imageEditCommandBus'
+import { registerImageEditV3LiveSession } from '@/features/imageEdit/v3/application/imageEditLiveSessionRegistry'
 import { useImageEditSessionStore } from '@/features/imageEdit/store/imageEditSessionStore'
 import { getPlatform } from '@/platform/runtime'
 import { useCanvasStore } from '@/stores/canvasStore'
@@ -67,6 +73,8 @@ interface WriteLoop {
 }
 
 const LOOP_NONCE = 'harness-写回环'
+let imageEditV3HarnessBus: ImageEditCommandBusV3 | null = null
+let disposeImageEditV3HarnessSession: (() => void) | null = null
 
 /**
  * 暂时够不到实例的实体。**只许变短**，与其他欠账清单同一性质。
@@ -141,6 +149,43 @@ function loops(): WriteLoop[] {
       assertTruthSource: () => {
         const document = useImageEditSessionStore.getState().sessions['harness-image-mark-session'].document
         expect(imageEditDocumentToMarkDoc(document).orientation.rotate).toBe(90)
+      },
+    },
+    {
+      /*
+       * image_edit.layer 只在 V3 编辑器开着时存在。harness 创建真实命令总线并登记会话，
+       * 反射、revision、通用事务与命令历史仍全部使用生产实现。
+       */
+      domain: 'image_edit', entityType: 'image_edit.layer',
+      prepare: () => {
+        disposeImageEditV3HarnessSession?.()
+        const document = createImageEditDocumentV3({
+          width: 640,
+          height: 480,
+          documentId: 'harness-image-edit-v3-document',
+        })
+        document.layers = [createImageEditEffectLayerV3(
+          'harness-image-edit-v3-effect',
+          '模糊',
+          'image.gaussian-blur-v2',
+          { radius: 8 },
+        )]
+        imageEditV3HarnessBus = new ImageEditCommandBusV3(document)
+        disposeImageEditV3HarnessSession = registerImageEditV3LiveSession(
+          'harness-image-edit-v3-session',
+          imageEditV3HarnessBus,
+        )
+      },
+      seed: [
+        "const listed = await app.entities.list('image_edit.layer');",
+        'app.assert.exists(listed.refs);',
+        'const ref = listed.refs[0];',
+      ].join('\n'),
+      ref: 'ref',
+      property: 'image_edit.layer.opacity',
+      value: '0.42',
+      assertTruthSource: () => {
+        expect(imageEditV3HarnessBus?.getSnapshot().document.layers[0]?.opacity).toBe(0.42)
       },
     },
     {
@@ -261,6 +306,9 @@ describe('读改验回环的全域穷举', () => {
   })
 
   afterEach(() => {
+    disposeImageEditV3HarnessSession?.()
+    disposeImageEditV3HarnessSession = null
+    imageEditV3HarnessBus = null
     useSettingsStore.getState().setThemeTonePreset(originalTone)
   })
 

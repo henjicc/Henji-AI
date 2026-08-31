@@ -33,6 +33,12 @@ import { createAssetReflectionRegistrations } from '@/features/assets/applicatio
 import { AssetLibraryMutationExecutor } from '@/features/assets/application/assetLibraryMutationExecutor'
 import { AssetLibraryCollectionExecutor } from '@/features/assets/application/assetLibraryCollectionExecutor'
 import { createImageEditReflectionRegistrations } from '@/features/imageEdit/application/imageEditReflection'
+import {
+  ImageEditV3GroupMutationExecutor,
+  ImageEditV3LayerMutationExecutor,
+  ImageEditV3MaskMutationExecutor,
+} from '@/features/imageEdit/v3/application/imageEditV3MutationExecutors'
+import { ImageEditV3CollectionExecutor } from '@/features/imageEdit/v3/application/imageEditV3CollectionExecutor'
 import { createImageMarkReflectionRegistrations } from '@/features/imageMark/application/imageMarkReflection'
 import { ImageMarkDocumentMutationExecutor } from '@/features/imageMark/application/imageMarkDocumentMutationExecutor'
 import { ImageMarkAnnotationMutationExecutor } from '@/features/imageMark/application/imageMarkAnnotationMutationExecutor'
@@ -174,6 +180,11 @@ export function getApplicationControlExecutionEngine(): ApplicationControlExecut
   next.registerMutationExecutor(new GenerationModelMutationExecutor())
   // 生成草稿：5.4 注册 generation.draft 实体后闭合它的可写属性声明。
   next.registerMutationExecutor(new GenerationDraftMutationExecutor())
+  next.registerMutationExecutor(new ImageEditV3LayerMutationExecutor())
+  next.registerMutationExecutor(new ImageEditV3GroupMutationExecutor())
+  next.registerMutationExecutor(new ImageEditV3MaskMutationExecutor())
+  next.registerCollectionExecutor(new ImageEditV3CollectionExecutor('image_edit.layer'))
+  next.registerCollectionExecutor(new ImageEditV3CollectionExecutor('image_edit.group'))
   // 标注文档与标注对象：6.2 闭合 image_mark.document/image_mark.annotation 的可写属性声明，
   // 标注的新建/删除走下面的集合执行器。
   next.registerMutationExecutor(new ImageMarkDocumentMutationExecutor())

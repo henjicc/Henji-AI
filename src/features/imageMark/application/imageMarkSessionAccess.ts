@@ -1,6 +1,7 @@
 import type { ApplicationRef } from '@/core/application-control'
 import type { ImageEditDocument, MarkItem } from '@/core/imageEdit'
 import { useImageEditSessionStore } from '@/features/imageEdit/store/imageEditSessionStore'
+import { getImageEditV3LiveRevision } from '@/features/imageEdit/v3/application/imageEditLiveSessionRegistry'
 
 import { IMAGE_MARK_ENTITY_TYPES } from './imageMarkFields'
 
@@ -23,7 +24,7 @@ export function requireSessionDocument(sessionId: string): ImageEditDocument {
  * 执行器和宿主必须共同读取会话 store 里的这一个权威计数，避免形成第二份 revision 镜像。
  */
 export function imageMarkRevision(): number {
-  return useImageEditSessionStore.getState().revision
+  return useImageEditSessionStore.getState().revision + getImageEditV3LiveRevision()
 }
 
 /** 标注稳定引用形如 `sessionId:annotationId`——与 camera_stage 的 `projectId:shotId` 同一惯例。 */

@@ -7,7 +7,13 @@ import { useAssetLibraryStore } from '@/features/assets/store/assetLibraryStore'
 import { useCanvasStore } from '@/stores/canvasStore'
 import { useNavigationStore } from '@/stores/navigationStore'
 import { createEmptyImageEditDocument } from '@/core/imageEdit'
+import {
+  createImageEditDocumentV3,
+  createImageEditEffectLayerV3,
+} from '@/core/imageEdit/v3/documentFactory'
 import { useImageEditSessionStore } from '@/features/imageEdit/store/imageEditSessionStore'
+import { ImageEditCommandBusV3 } from '@/features/imageEdit/v3/application/imageEditCommandBus'
+import { registerImageEditV3LiveSession } from '@/features/imageEdit/v3/application/imageEditLiveSessionRegistry'
 
 import { getHostScopeRevisions, retainHostContextTracking } from './hostContext'
 import { notifyApplicationDomainChanged } from '@/core/application-control/domainChangeSignal'
@@ -93,5 +99,42 @@ describe('宿主作用域 revision', () => {
 
     expect(getHostScopeRevisions().image_mark).toBe(opened + 1)
     expect(getHostScopeRevisions().image_mark).toBe(useImageEditSessionStore.getState().revision)
+  })
+
+  it('V3 命令总线变化同时推进 image_edit 与标注兼容基线', () => {
+    const document = createImageEditDocumentV3({
+      width: 320,
+      height: 200,
+      documentId: 'host-scope-v3-document',
+    })
+    document.layers = [createImageEditEffectLayerV3(
+      'host-scope-v3-blur',
+      '模糊',
+      'image.gaussian-blur-v2',
+      { radius: 4 },
+    )]
+    const bus = new ImageEditCommandBusV3(document)
+    const before = getHostScopeRevisions()
+    const dispose = registerImageEditV3LiveSession('host-scope-v3-session', bus)
+    try {
+      const opened = getHostScopeRevisions()
+      expect(opened.image_edit).toBe(before.image_edit + 1)
+      expect(opened.image_mark).toBe(before.image_mark + 1)
+
+      bus.dispatch({
+        commandId: 'host-scope-v3-update',
+        expectedRevision: bus.getSnapshot().document.revision,
+        type: 'layer.update-common',
+        layerId: 'host-scope-v3-blur',
+        patch: { opacity: 0.5 },
+      })
+
+      const changed = getHostScopeRevisions()
+      expect(changed.image_edit).toBe(opened.image_edit + 1)
+      expect(changed.image_mark).toBe(opened.image_mark + 1)
+    } finally {
+      dispose()
+      bus.dispose()
+    }
   })
 })

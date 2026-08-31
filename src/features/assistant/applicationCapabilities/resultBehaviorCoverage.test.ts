@@ -34,6 +34,10 @@ const RESULT_SCENARIOS: Record<string, Scenario[]> = {
     { file: 'src/features/imageMark/application/imageMarkReflection.test.ts', title: '能新建一条矩形标注、改它的颜色与位置，再删掉它' },
     { file: 'src/features/imageMark/application/imageMarkReflection.test.ts', title: '多会话隔离：往一个会话写标注不影响另一个会话' },
   ],
+  image_edit: [
+    { file: 'src/features/imageEdit/v3/application/imageEditV3ApplicationControl.test.ts', title: '实时 V3 图层属性和蒙版反相经通用事务写回同一命令总线并可撤销' },
+    { file: 'src/features/imageEdit/v3/application/imageEditV3ApplicationControl.test.ts', title: '通用集合创建删除图层并把 V3 标注别名写回所属标注图层' },
+  ],
   camera_stage: [
     { file: 'src/features/cameraStage/application/cameraStageStateKeyframeAnimationResult.test.ts', title: '一次 change 内连续定位播放头并写属性，也会落成多个状态关键帧' },
     { file: 'src/features/cameraStage/application/cameraStageStateKeyframeAnimationResult.test.ts', title: '摄像机位置、旋转与 fov 写入会自动记录完整状态关键帧，同一时间只更新不重复' },
@@ -47,6 +51,7 @@ const RESULT_SCENARIO_BASELINE: Record<keyof typeof RESULT_SCENARIOS, number> = 
   canvas: 2,
   generation: 2,
   image_mark: 3,
+  image_edit: 2,
   camera_stage: 3,
 }
 

@@ -26,11 +26,11 @@
 | 项 | 数 |
 |---|---|
 | 注册域 | 12 |
-| 实体类型 | 29 |
-| 属性 | 281 |
-| 可写实体 | 17 |
-| 写域 | 7：`assets` `camera_stage` `canvas` `generation` `image_mark` `models` `settings` |
-| 只读域 | 5：`artifacts` `assistant_runtime` `image_edit` `storyboard` `toolbox`（每个都有显式 `writeExclusion.reason`，是**有意只读**不是漏做） |
+| 实体类型 | 32 |
+| 属性 | 315 |
+| 可写实体 | 20 |
+| 写域 | 8：`assets` `camera_stage` `canvas` `generation` `image_edit` `image_mark` `models` `settings` |
+| 只读域 | 4：`artifacts` `assistant_runtime` `storyboard` `toolbox`（每个都有显式 `writeExclusion.reason`，是**有意只读**不是漏做） |
 
 取数方式：`getApplicationReflectionRegistry().describe()` 的结果。域清单与可路由性由
 `capability-domain-coverage.test.ts` 穷举守着，跌破会红。
@@ -40,14 +40,14 @@
 对照 [assistant-goal.md](assistant-goal.md) 的四条判据：
 
 - **判据 1（广度）**：`storeActionCoverage.test.ts` 的 `GAP_BASELINE = 0`，且断言是
-  `gaps.length <= GAP_BASELINE`——**当前实际缺口为 0**。26/26 个 store 全部建账，
+  `gaps.length <= GAP_BASELINE`——**当前实际缺口为 0**。28/28 个 store 全部建账，
   人在界面上能做的每一件事助手都能做。三维 11 项、画布 5 项缺口已全部归零。
   （该文件的长注释里有 `0 → 2`、`2 → 8` 这类**中间态**数字，是任务推进过程的记录，不是现值；
   以文件末尾的常量和断言为准。）
 - **判据 2（唯一性）**：旧 `HostCommand` / `HostQuery` 执行入口**已删除**，助手与界面共用正式领域服务。
   `AGENTS.md` 明令禁止新增该类工具。双路径一致性由 `check:assistant-capabilities` 守。
 - **判据 3（走得通）**：四大覆盖门禁 `propertyCoverage` / `storeActionCoverage` / `collectionCoverage` /
-  `resultBehaviorCoverage` **零豁免清单**。7 个写域全部有「经模型链路读改验」的回环覆盖
+  `resultBehaviorCoverage` **零豁免清单**。8 个写域全部有「经模型链路读改验」的回环覆盖
   （`assistantHarness.writeLoop.test.ts`）。
 - **判据 4（可自纠）**：拒绝路径的自我修正由 `assistantHarness.rejectionMatrix.test.ts` 守。
 
@@ -93,6 +93,13 @@ Effect，且允许把预览原样打开或作为下一轮编辑来源，旧文�
 schema、文档构建器与互斥规则，`diffusion` 与 `vgpu_glow` 的全量参数均可发现、可校验、可执行，
 不再只停留在界面控件。
 
+2026-08-31 图片编辑 V3 将 `image_edit` 从预览只读域升级为实时可写域：当前打开的编辑器
+只向 live registry 登记真实 `ImageEditCommandBusV3` 句柄，不复制文档或像素真相。`document` / `layer` /
+`group` / `mask` / `resource` 以包含 document/layer identity 的稳定引用反射；图层、组与蒙版的可表达
+属性及安全增删全部经通用事务写回同一命令总线，V2 preview 继续只读兼容。`image_mark.annotation`
+在 V3 会话中是标注图层子实体，V2 会话仍走原链路。能力发现只水合“请求实体 ∩ 真实反射实体”，
+不回声伪造 ID；第 27、28 份 StoreLedger 分别将视口/拖拽和工具/选中会话定义为不进文档的视图或瞬态状态。
+
 2026-08-31 Henji Script 真机验收登记的四条空转问题已全部注销：脚本回执采用 128KB 内联下限
 （仍受上下文 60% 上限约束），常见的裸 `result`、`return result`、数字转字符串、漏写/多写 `await`、
 把 action ID 当方法名以及变量拼写错误都会给出可直接重写的诊断；外部等待续跑的脚本租约已由
@@ -102,7 +109,7 @@ schema、文档构建器与互斥规则，`diffusion` 与 `vgpu_glow` 的全量�
 
 | 层 | 命令 | 规模（2026-08-31） |
 |---|---|---|
-| L-A 静态不变量 | `npm run check:assistant-capabilities` | 结构检查 + 28 测试文件 / 162 用例 |
+| L-A 静态不变量 | `npm run check:assistant-capabilities` | 结构检查 + 30 测试文件 / 170 用例 |
 | L-B 剧本 harness | `npm run test:assistant-harness` | 9 文件 / 35 用例 / 15 秒（验伪线 60 秒） |
 | 生产回归 | `npm run test:assistant-production` | 53 文件 / 395 用例 + 持久化进程 43/43 |
 | L-C 真机 | `npm run assistant:live:suite` | 分钟级、真实付费 |

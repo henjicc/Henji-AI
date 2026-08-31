@@ -219,6 +219,7 @@ function mutationScope(identifier: string): HostScope | null {
   if (identifier === 'generation.draft') return 'generation_draft'
   if (identifier === 'generation.model') return 'models'
   if (identifier.startsWith('image_mark.')) return 'image_mark'
+  if (identifier.startsWith('image_edit.')) return 'image_edit'
   return null
 }
 

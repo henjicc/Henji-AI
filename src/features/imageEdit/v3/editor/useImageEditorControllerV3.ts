@@ -6,6 +6,7 @@ import type { ImageEditCommandHistorySnapshotV3 } from '@/core/imageEdit/v3/comm
 import type { ImageEditPersistenceSnapshotV3 } from '@/core/imageEdit/v3/serviceContracts'
 import { collectImageEditLayerIdsV3 } from '@/core/imageEdit/v3/layerTypes'
 import { ImageEditCommandBusV3 } from '../application/imageEditCommandBus'
+import { registerImageEditV3LiveSession } from '../application/imageEditLiveSessionRegistry'
 import {
   getImageEditorHostProfileV3,
   getReadyImageEditorToolIdsV3,
@@ -71,6 +72,11 @@ export function useImageEditorControllerV3(
   }, [binding.bus, notifyPersistentChange, props.document, props.historySnapshot])
 
   useEffect(() => () => binding.bus.dispose(), [binding.bus])
+
+  useEffect(
+    () => registerImageEditV3LiveSession(sessionId, binding.bus),
+    [binding.bus, sessionId],
+  )
 
   useEffect(() => binding.bus.subscribe((snapshot) => {
     setHistoryState((current) => (

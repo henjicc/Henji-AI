@@ -1,6 +1,8 @@
 import {
   type ApplicationEntityProvider,
   type ApplicationEntityRegistration,
+  type ApplicationEntitySnapshot,
+  type ApplicationCollectionAvailability,
   type ApplicationPropertyDescriptor,
   type ApplicationRef,
   type JsonValue,
@@ -9,14 +11,32 @@ import {
 import { APPLICATION_CAPABILITY_CATALOG_VERSION } from '@/core/assistant/applicationCapabilities'
 
 import { listImageEditPreviews, readImageEditPreview, type ImageEditPreviewSnapshot } from './imageEditSessionRegistry'
+import {
+  IMAGE_EDIT_V3_ENTITY_TYPES,
+  IMAGE_EDIT_V3_PARAMS_SCHEMA_REF,
+  imageEditV3SchemaRef,
+} from '../v3/application/imageEditV3Fields'
+import {
+  IMAGE_EDIT_V3_PROPERTIES,
+  ImageEditV3ReflectionProvider,
+  type ImageEditV3ReflectedEntityType,
+} from '../v3/application/imageEditV3Reflection'
+import { isImageEditV3Ref } from '../v3/application/imageEditLiveSessionRegistry'
 
 export const IMAGE_EDIT_ENTITY_TYPES = {
   preview: 'image_edit.preview',
   document: 'image_edit.document',
   layer: 'image_edit.layer',
+  group: IMAGE_EDIT_V3_ENTITY_TYPES.group,
+  mask: IMAGE_EDIT_V3_ENTITY_TYPES.mask,
+  resource: IMAGE_EDIT_V3_ENTITY_TYPES.resource,
 } as const
 
 type ImageEditEntityType = typeof IMAGE_EDIT_ENTITY_TYPES[keyof typeof IMAGE_EDIT_ENTITY_TYPES]
+type ImageEditV2EntityType =
+  | typeof IMAGE_EDIT_ENTITY_TYPES.preview
+  | typeof IMAGE_EDIT_ENTITY_TYPES.document
+  | typeof IMAGE_EDIT_ENTITY_TYPES.layer
 
 const IMAGE_EDIT_SOURCE_REF_KINDS = [
   'asset',
@@ -71,8 +91,6 @@ function property(
  */
 const IMMUTABLE_PREVIEW = '图片编辑预览是不可变快照，改动请用完整 operations 列表生成新预览。'
 
-const IMAGE_EDIT_PARAMS_SCHEMA_REF = schemaRef('property', 'image_edit.layer.params.value')
-
 const properties: Record<ImageEditEntityType, ApplicationPropertyDescriptor[]> = {
   [IMAGE_EDIT_ENTITY_TYPES.preview]: [
     property(IMAGE_EDIT_ENTITY_TYPES.preview, 'source_ref', '来源引用', { kind: 'ref', refKinds: [...IMAGE_EDIT_SOURCE_REF_KINDS] }, '来源图片在预览创建时固定。'),
@@ -81,16 +99,19 @@ const properties: Record<ImageEditEntityType, ApplicationPropertyDescriptor[]> =
     property(IMAGE_EDIT_ENTITY_TYPES.preview, 'height', '高度', { kind: 'integer', hardRange: { min: 1 } }, '由来源图片实际尺寸读出。'),
   ],
   [IMAGE_EDIT_ENTITY_TYPES.document]: [
-    property(IMAGE_EDIT_ENTITY_TYPES.document, 'preview_ref', '预览引用', { kind: 'ref', refKinds: [IMAGE_EDIT_ENTITY_TYPES.preview] }, '文档所属预览不可变更。'),
-    property(IMAGE_EDIT_ENTITY_TYPES.document, 'layer_refs', '编辑层引用', { kind: 'ref_list', refKinds: [IMAGE_EDIT_ENTITY_TYPES.layer], maxItems: 128 }, IMMUTABLE_PREVIEW),
+    { ...property(IMAGE_EDIT_ENTITY_TYPES.document, 'preview_ref', '预览引用', { kind: 'ref', refKinds: [IMAGE_EDIT_ENTITY_TYPES.preview] }, '旧版文档所属预览不可变更；V3 实时文档没有旧版预览引用。'), nullable: true },
+    property(IMAGE_EDIT_ENTITY_TYPES.document, 'layer_refs', '编辑层引用', { kind: 'ref_list', refKinds: [IMAGE_EDIT_ENTITY_TYPES.layer, IMAGE_EDIT_ENTITY_TYPES.group], maxItems: 512 }, IMMUTABLE_PREVIEW),
     property(IMAGE_EDIT_ENTITY_TYPES.document, 'version', '文档版本', { kind: 'integer', hardRange: { min: 1 } }, '版本号由预览生成链路递增。'),
+    ...IMAGE_EDIT_V3_PROPERTIES['image_edit.document'],
   ],
   [IMAGE_EDIT_ENTITY_TYPES.layer]: [
-    property(IMAGE_EDIT_ENTITY_TYPES.layer, 'document_ref', '文档引用', { kind: 'ref', refKinds: [IMAGE_EDIT_ENTITY_TYPES.document] }, '图层所属文档不可变更。'),
     property(IMAGE_EDIT_ENTITY_TYPES.layer, 'operation_id', '操作类型', { kind: 'string', maxLength: 120 }, '操作类型在图层生成时确定，改类型等于换一个图层。'),
     property(IMAGE_EDIT_ENTITY_TYPES.layer, 'enabled', '启用状态', { kind: 'boolean' }, IMMUTABLE_PREVIEW),
-    property(IMAGE_EDIT_ENTITY_TYPES.layer, 'params', '受控参数', { kind: 'json', schemaRef: IMAGE_EDIT_PARAMS_SCHEMA_REF }, IMMUTABLE_PREVIEW),
+    ...IMAGE_EDIT_V3_PROPERTIES['image_edit.layer'],
   ],
+  [IMAGE_EDIT_ENTITY_TYPES.group]: IMAGE_EDIT_V3_PROPERTIES['image_edit.group'],
+  [IMAGE_EDIT_ENTITY_TYPES.mask]: IMAGE_EDIT_V3_PROPERTIES['image_edit.mask'],
+  [IMAGE_EDIT_ENTITY_TYPES.resource]: IMAGE_EDIT_V3_PROPERTIES['image_edit.resource'],
 }
 
 function layerRef(previewRef: string, layerId: string): ApplicationRef {
@@ -121,8 +142,8 @@ function sourceRef(value: string): ApplicationRef {
   return { kind, id: value.slice(separator + 1) }
 }
 
-class ImageEditReflectionProvider implements ApplicationEntityProvider {
-  constructor(readonly entityType: ImageEditEntityType) {}
+class ImageEditV2ReflectionProvider implements ApplicationEntityProvider {
+  constructor(readonly entityType: ImageEditV2EntityType) {}
 
   async listEntities(request: { cursor?: string; limit: number }) {
     const previews = listImageEditPreviews()
@@ -194,6 +215,11 @@ class ImageEditReflectionProvider implements ApplicationEntityProvider {
         'image_edit.document.preview_ref': previewRef(IMAGE_EDIT_ENTITY_TYPES.preview, preview),
         'image_edit.document.layer_refs': preview.document.operations.map((operation) => layerRef(preview.previewRef, operation.id)),
         'image_edit.document.version': preview.document.version,
+        'image_edit.document.revision': preview.revision,
+        'image_edit.document.width': preview.width,
+        'image_edit.document.height': preview.height,
+        'image_edit.document.color_mode': null,
+        'image_edit.document.root_refs': preview.document.operations.map((operation) => layerRef(preview.previewRef, operation.id)),
       } }
     }
     const operation = preview.document.operations.find((item) => item.id === layerIdentity?.layerId)
@@ -202,8 +228,116 @@ class ImageEditReflectionProvider implements ApplicationEntityProvider {
       'image_edit.layer.document_ref': previewRef(IMAGE_EDIT_ENTITY_TYPES.document, preview),
       'image_edit.layer.operation_id': operation.operationId,
       'image_edit.layer.enabled': operation.enabled,
+      'image_edit.layer.parent_ref': previewRef(IMAGE_EDIT_ENTITY_TYPES.document, preview),
+      'image_edit.layer.index': preview.document.operations.findIndex((item) => item.id === operation.id),
+      'image_edit.layer.name': operation.operationId,
+      'image_edit.layer.visible': operation.enabled,
+      'image_edit.layer.locked': false,
+      'image_edit.layer.opacity': 1,
+      'image_edit.layer.blend_mode': 'normal',
+      'image_edit.layer.mask_ref': null,
+      'image_edit.layer.type': 'effect',
+      'image_edit.layer.definition_id': operation.operationId,
       'image_edit.layer.params': JSON.parse(JSON.stringify(operation.params)) as JsonValue,
     } }
+  }
+}
+
+function unavailableCollection(
+  entityType: string,
+  parent: ApplicationRef,
+  revisions: Record<string, number>,
+): ApplicationCollectionAvailability {
+  const base = unrestrictedCollectionAvailability(entityType, parent, revisions, ['image_edit:write'])
+  const reason = '旧版图片编辑预览是不可变快照；请先在 V3 编辑器中打开文档。'
+  const block = {
+    kind: 'state' as const,
+    requirementId: 'image_edit.v3.live_session',
+    affectedEntityTypes: ['image_edit.document'],
+    revisionScopes: ['image_edit'],
+  }
+  return {
+    ...base,
+    create: { ...base.create, available: false, reasons: [reason], blocks: [block] },
+    remove: { ...base.remove, available: false, reasons: [reason], blocks: [block] },
+  }
+}
+
+class CombinedImageEditReflectionProvider implements ApplicationEntityProvider {
+  private readonly v2: ImageEditV2ReflectionProvider | null
+  private readonly v3: ImageEditV3ReflectionProvider | null
+
+  constructor(readonly entityType: ImageEditEntityType) {
+    this.v2 = entityType === IMAGE_EDIT_ENTITY_TYPES.preview
+      || entityType === IMAGE_EDIT_ENTITY_TYPES.document
+      || entityType === IMAGE_EDIT_ENTITY_TYPES.layer
+      ? new ImageEditV2ReflectionProvider(entityType)
+      : null
+    this.v3 = entityType === IMAGE_EDIT_ENTITY_TYPES.preview
+      ? null
+      : new ImageEditV3ReflectionProvider(entityType as ImageEditV3ReflectedEntityType)
+  }
+
+  async listEntities(request: { cursor?: string; limit: number }) {
+    const [legacy, live] = await Promise.all([
+      this.v2?.listEntities({ limit: 100_000 }) ?? Promise.resolve({ refs: [], nextCursor: null, revisions: { image_edit: 0 } }),
+      this.v3?.listEntities({ limit: 100_000 }) ?? Promise.resolve({ refs: [], nextCursor: null, revisions: { image_edit: 0 } }),
+    ])
+    const refs = [...legacy.refs, ...live.refs]
+    const offset = Math.max(0, Number.parseInt(request.cursor ?? '0', 10) || 0)
+    const page = refs.slice(offset, offset + request.limit)
+    return {
+      refs: page,
+      nextCursor: offset + page.length < refs.length ? String(offset + page.length) : null,
+      revisions: { image_edit: Math.max(legacy.revisions.image_edit ?? 0, live.revisions.image_edit ?? 0) },
+    }
+  }
+
+  async readEntity(ref: ApplicationRef, request: { propertyIds?: string[] }): Promise<ApplicationEntitySnapshot> {
+    const provider = isImageEditV3Ref(ref) ? this.v3 : this.v2
+    if (!provider) throw new Error('NOT_FOUND')
+    const snapshot = await provider.readEntity(ref, isImageEditV3Ref(ref) ? {} : request)
+    if (!isImageEditV3Ref(ref)) return snapshot
+    const values = { ...snapshot.properties }
+    if (this.entityType === IMAGE_EDIT_ENTITY_TYPES.document) {
+      values['image_edit.document.preview_ref'] = null
+      values['image_edit.document.layer_refs'] = values['image_edit.document.root_refs'] ?? []
+      values['image_edit.document.version'] = 3
+    } else if (this.entityType === IMAGE_EDIT_ENTITY_TYPES.layer) {
+      values['image_edit.layer.operation_id'] = values['image_edit.layer.definition_id']
+        ?? values['image_edit.layer.type']
+        ?? 'layer'
+      values['image_edit.layer.enabled'] = values['image_edit.layer.visible'] ?? true
+    }
+    return { ...snapshot, properties: request.propertyIds
+      ? Object.fromEntries(Object.entries(values).filter(([id]) => request.propertyIds?.includes(id)))
+      : values }
+  }
+
+  async getPropertyAvailability(ref: ApplicationRef, propertyIds: string[]) {
+    const provider = isImageEditV3Ref(ref) ? this.v3 : this.v2
+    if (!provider) throw new Error('NOT_FOUND')
+    if (!isImageEditV3Ref(ref)) return provider.getPropertyAvailability(ref, propertyIds)
+    const v3Ids = new Set(IMAGE_EDIT_V3_PROPERTIES[this.entityType as ImageEditV3ReflectedEntityType]?.map((item) => item.id) ?? [])
+    const nativeIds = propertyIds.filter((id) => v3Ids.has(id))
+    const compatibilityIds = propertyIds.filter((id) => !v3Ids.has(id))
+    const available = nativeIds.length > 0 ? await provider.getPropertyAvailability(ref, nativeIds) : []
+    return [...available, ...compatibilityIds.map((propertyId) => ({
+      propertyId,
+      readable: true,
+      writable: false,
+      reasons: ['这是旧版兼容投影，只能读取。'],
+      requiredPermissions: ['image_edit:read'],
+      revisions: available[0]?.revisions ?? { image_edit: 0 },
+    }))]
+  }
+
+  async getCollectionAvailability(parent: ApplicationRef) {
+    if (isImageEditV3Ref(parent) && this.v3) return this.v3.getCollectionAvailability(parent)
+    const revisions = this.v2
+      ? (await this.v2.readEntity(parent, { propertyIds: [] })).revisions
+      : { image_edit: 0 }
+    return unavailableCollection(this.entityType, parent, revisions)
   }
 }
 
@@ -211,6 +345,9 @@ const META: Record<ImageEditEntityType, { title: string; parents: ImageEditEntit
   [IMAGE_EDIT_ENTITY_TYPES.preview]: { title: '图片编辑预览', parents: [] },
   [IMAGE_EDIT_ENTITY_TYPES.document]: { title: '图片编辑文档', parents: [IMAGE_EDIT_ENTITY_TYPES.preview] },
   [IMAGE_EDIT_ENTITY_TYPES.layer]: { title: '图片编辑层', parents: [IMAGE_EDIT_ENTITY_TYPES.document] },
+  [IMAGE_EDIT_ENTITY_TYPES.group]: { title: '图片编辑图层组', parents: [IMAGE_EDIT_ENTITY_TYPES.document, IMAGE_EDIT_ENTITY_TYPES.group] },
+  [IMAGE_EDIT_ENTITY_TYPES.mask]: { title: '图片编辑蒙版', parents: [IMAGE_EDIT_ENTITY_TYPES.layer, IMAGE_EDIT_ENTITY_TYPES.group] },
+  [IMAGE_EDIT_ENTITY_TYPES.resource]: { title: '图片编辑资源', parents: [IMAGE_EDIT_ENTITY_TYPES.document] },
 }
 
 export function createImageEditReflectionRegistrations(): ApplicationEntityRegistration[] {
@@ -226,15 +363,51 @@ export function createImageEditReflectionRegistrations(): ApplicationEntityRegis
       exposures: ['ui', 'assistant', 'local_adapter'],
       parentTypes: META[entityType].parents,
       revisionScopes: ['image_edit'],
-      queryCapabilityIds: ['create_image_edit_preview'],
+      queryCapabilityIds: [entityType === IMAGE_EDIT_ENTITY_TYPES.preview
+        ? 'create_image_edit_preview'
+        : 'read_application_entity'],
       schemaRef: schemaRef('entity', entityType),
-      writeExclusion: { reason: '图片编辑预览是不可变快照，改动请用完整 operations 列表生成新预览。' },
+      ...(entityType === IMAGE_EDIT_ENTITY_TYPES.preview || entityType === IMAGE_EDIT_ENTITY_TYPES.document
+        || entityType === IMAGE_EDIT_ENTITY_TYPES.resource
+        ? { writeExclusion: { reason: entityType === IMAGE_EDIT_ENTITY_TYPES.preview
+          ? '旧版图片编辑预览是不可变快照，由预览创建能力维护。'
+          : entityType === IMAGE_EDIT_ENTITY_TYPES.document
+            ? '文档元数据由 V3 命令总线维护；图层增删通过子实体集合写入。'
+            : '权威资源由图片资源库、画笔和蒙版工具维护，助手只读取引用关系。' } }
+        : {}),
+      ...(entityType === IMAGE_EDIT_ENTITY_TYPES.layer ? {
+        collectionWrite: {
+          creatable: true,
+          removable: true,
+          requiredPropertyIds: [
+            'image_edit.layer.name',
+            'image_edit.layer.type',
+            'image_edit.layer.definition_id',
+            'image_edit.layer.params',
+          ],
+          maxItemsPerChange: 32,
+        },
+      } : {}),
+      ...(entityType === IMAGE_EDIT_ENTITY_TYPES.group ? {
+        collectionWrite: {
+          creatable: true,
+          removable: true,
+          requiredPropertyIds: ['image_edit.group.name'],
+          maxItemsPerChange: 32,
+        },
+      } : {}),
     },
     properties: properties[entityType],
-    provider: new ImageEditReflectionProvider(entityType),
+    provider: new CombinedImageEditReflectionProvider(entityType),
     schemaDocuments: entityType === IMAGE_EDIT_ENTITY_TYPES.layer ? [{
-      ref: IMAGE_EDIT_PARAMS_SCHEMA_REF,
+      ref: IMAGE_EDIT_V3_PARAMS_SCHEMA_REF,
       value: { type: 'object', description: '参数由图片编辑操作注册表按 operation_id 校验。' },
+    }] : entityType === IMAGE_EDIT_ENTITY_TYPES.document ? [{
+      ref: imageEditV3SchemaRef('property', 'image_edit.document.color_mode.value'),
+      value: { type: 'object', description: 'V3 文档的工作色域、位深、传递函数与 HDR 元数据。' },
+    }] : entityType === IMAGE_EDIT_ENTITY_TYPES.resource ? [{
+      ref: imageEditV3SchemaRef('property', 'image_edit.resource.roles.value'),
+      value: { type: 'array', items: { type: 'string' } },
     }] : [],
   }))
 }

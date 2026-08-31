@@ -25,6 +25,7 @@ export const IMAGE_EDIT_HISTORY_DEFAULT_MAX_BYTES_V3 = 2 * 1024 * 1024 * 1024;
 export type ImageEditHistoryResourceReleaseReasonV3 =
   | 'prune'
   | 'redo-cleared'
+  | 'rollback'
   | 'clear'
   | 'restore';
 
@@ -145,6 +146,60 @@ export class ImageEditCommandHistoryV3 {
     this.redoEntries.push(entry);
     this.track(result.document);
     return { document: result.document, changed: true };
+  }
+
+  /**
+   * 仅当撤销栈顶部仍是调用方刚写入的命令时执行。用户或另一个入口已经继续编辑后会拒绝，
+   * 避免补偿/撤销误伤较新的真实操作。
+   */
+  undoCommands(
+    document: ImageEditDocumentV3,
+    commandIdsNewestFirst: readonly string[]
+  ): ImageEditHistoryTransitionV3 {
+    this.assertHead(document);
+    if (commandIdsNewestFirst.length === 0) return { document, changed: false };
+    const actual = this.undoEntries
+      .slice(-commandIdsNewestFirst.length)
+      .reverse()
+      .map((entry) => entry.forward.commandId);
+    if (
+      actual.length !== commandIdsNewestFirst.length
+      || actual.some((commandId, index) => commandId !== commandIdsNewestFirst[index])
+    ) {
+      throw new ImageEditRevisionConflictErrorV3('待撤销的图片编辑命令已不是历史栈顶部');
+    }
+    let current = document;
+    for (const _commandId of commandIdsNewestFirst) {
+      const transition = this.undo(current);
+      if (!transition.changed) {
+        throw new ImageEditRevisionConflictErrorV3('图片编辑历史不足，无法安全撤销');
+      }
+      current = transition.document;
+    }
+    return { document: current, changed: true };
+  }
+
+  /**
+   * 事务补偿专用：先按同样的栈顶 CAS 撤销，再丢弃由补偿产生的 redo 项。
+   * 失败事务不能留在用户的重做历史里，否则一次普通“重做”会把已回滚的半成品重新写回。
+   */
+  rollbackCommands(
+    document: ImageEditDocumentV3,
+    commandIdsNewestFirst: readonly string[]
+  ): ImageEditHistoryTransitionV3 {
+    const retainedBefore = this.resourceMap();
+    const transition = this.undoCommands(document, commandIdsNewestFirst);
+    if (!transition.changed) return transition;
+    const rolledBack = this.redoEntries.splice(-commandIdsNewestFirst.length);
+    const actual = rolledBack.map((entry) => entry.forward.commandId);
+    if (
+      actual.length !== commandIdsNewestFirst.length
+      || actual.some((commandId, index) => commandId !== commandIdsNewestFirst[index])
+    ) {
+      throw new ImageEditRevisionConflictErrorV3('事务回滚产生了不匹配的重做历史');
+    }
+    this.notifyReleased(retainedBefore, 'rollback');
+    return transition;
   }
 
   redo(document: ImageEditDocumentV3): ImageEditHistoryTransitionV3 {

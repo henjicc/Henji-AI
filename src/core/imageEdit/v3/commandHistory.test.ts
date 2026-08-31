@@ -106,6 +106,28 @@ describe('图片编辑 V3 命令历史', () => {
     expect(history.getState()).toMatchObject({ retainedResourceCount: 2, retainedResourceBytes: 10_000 });
   });
 
+  it('事务回滚丢弃补偿产生的重做项，并释放失败事务独占的资源租约', () => {
+    const released = vi.fn();
+    const history = new ImageEditCommandHistoryV3({ onResourcesReleased: released });
+    const source = createPaintDocument();
+    const first = addTile(history, source, 0, 128);
+    const second = addTile(history, first, 1, 256);
+
+    const rolledBack = history.rollbackCommands(second, ['command-1', 'command-0']);
+
+    expect(rolledBack.changed).toBe(true);
+    expect(rolledBack.document.layers[0]).toMatchObject({ tiles: {} });
+    expect(history.getState()).toMatchObject({ undoCount: 0, redoCount: 0, retainedResourceCount: 0 });
+    expect(history.redo(rolledBack.document)).toEqual({ document: rolledBack.document, changed: false });
+    expect(released).toHaveBeenLastCalledWith({
+      reason: 'rollback',
+      resources: [
+        { resourceId: 'sha256:0', byteSize: 128 },
+        { resourceId: 'sha256:1', byteSize: 256 },
+      ],
+    });
+  });
+
   it('裁剪、清空和清空 redo 时只通知真正失去历史租约的资源', () => {
     const released = vi.fn();
     const history = new ImageEditCommandHistoryV3({

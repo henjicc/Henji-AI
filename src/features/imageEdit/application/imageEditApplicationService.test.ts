@@ -58,6 +58,9 @@ describe('image edit application service', () => {
       IMAGE_EDIT_ENTITY_TYPES.preview,
       IMAGE_EDIT_ENTITY_TYPES.document,
       IMAGE_EDIT_ENTITY_TYPES.layer,
+      IMAGE_EDIT_ENTITY_TYPES.group,
+      IMAGE_EDIT_ENTITY_TYPES.mask,
+      IMAGE_EDIT_ENTITY_TYPES.resource,
     ])
     const previewRegistration = registrations.find((item) => (
       item.entity.id === IMAGE_EDIT_ENTITY_TYPES.preview

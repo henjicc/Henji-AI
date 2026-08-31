@@ -124,6 +124,28 @@ export class ImageEditCommandBusV3 {
     return true;
   }
 
+  undoCommands(commandIdsNewestFirst: readonly string[]): boolean {
+    const previousRevision = this.document.revision;
+    const transition = this.history.undoCommands(this.document, commandIdsNewestFirst);
+    if (!transition.changed) return false;
+    this.document = transition.document;
+    this.previewOverrides.clear();
+    this.persistChange(previousRevision);
+    this.emit();
+    return true;
+  }
+
+  rollbackCommands(commandIdsNewestFirst: readonly string[]): boolean {
+    const previousRevision = this.document.revision;
+    const transition = this.history.rollbackCommands(this.document, commandIdsNewestFirst);
+    if (!transition.changed) return false;
+    this.document = transition.document;
+    this.previewOverrides.clear();
+    this.persistChange(previousRevision);
+    this.emit();
+    return true;
+  }
+
   redo(): boolean {
     const previousRevision = this.document.revision;
     const transition = this.history.redo(this.document);

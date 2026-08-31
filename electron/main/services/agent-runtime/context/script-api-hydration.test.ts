@@ -61,6 +61,32 @@ describe('hydrateHenjiScriptApi', () => {
     expect(hydrated.scriptApi.entities.entityTypes.every((entityType) => reflected.has(entityType))).toBe(true)
   })
 
+  it('把请求中经反射确认的实体加入租约，但不回声伪造实体', () => {
+    const output = {
+      ...baseOutput(),
+      scriptApi: {
+        ...baseOutput().scriptApi,
+        entities: {
+          ...baseOutput().scriptApi.entities,
+          entityTypes: ['image_edit.preview'],
+        },
+      },
+    }
+    const hydrated = hydrateHenjiScriptApi(output, {
+      entities: [
+        { id: 'image_edit.preview', title: '图片编辑预览', description: '不可变预览', parentTypes: [] },
+        { id: 'image_edit.layer', title: '图片图层', description: 'V3 实时图层', parentTypes: ['image_edit.document'] },
+      ],
+      properties: [],
+    }, ['image_edit.layer', 'image_edit.not_real'])
+
+    expect(hydrated.scriptApi.entities.entityTypes).toEqual([
+      'image_edit.layer',
+      'image_edit.preview',
+    ])
+    expect(hydrated.scriptApi.entities.entityTypes).not.toContain('image_edit.not_real')
+  })
+
   it('把反射层枚举约束投影到首次发现结果，不要求模型猜设置值', () => {
     const registry = createBuiltinAgentToolRegistry(async () => {
       throw new Error('测试不执行前端工具')
@@ -205,4 +231,3 @@ describe('hydrateHenjiScriptApi', () => {
     ])
   })
 })
-

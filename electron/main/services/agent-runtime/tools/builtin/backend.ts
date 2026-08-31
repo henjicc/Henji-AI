@@ -67,12 +67,15 @@ export function createBackendBuiltinTools(
             version: 1,
             input: {
               domains: input.domains,
-              entityTypes: discovered.scriptApi.entities.entityTypes,
+              entityTypes: [...new Set([
+                ...input.entityTypes,
+                ...discovered.scriptApi.entities.entityTypes,
+              ])].slice(0, 32),
               refs: [],
             },
           },
         }, context))
-        const hydrated = hydrateHenjiScriptApi(discovered, description)
+        const hydrated = hydrateHenjiScriptApi(discovered, description, input.entityTypes)
         rememberHenjiScriptApiLease(context.runId, hydrated.scriptApi)
         return hydrated
       },

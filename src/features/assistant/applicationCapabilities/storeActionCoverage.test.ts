@@ -37,6 +37,14 @@ import { IMAGE_EDITOR_UI_STORE_LEDGER } from '@/features/imageEdit/application/i
 import { useImageEditorHandoffStore } from '@/features/imageEdit/store/imageEditorHandoffStore'
 import { useImageEditorUiStore } from '@/features/imageEdit/store/imageEditorUiStore'
 import { useImageEditSessionStore } from '@/features/imageEdit/store/imageEditSessionStore'
+import {
+  IMAGE_EDITOR_INTERACTION_STORE_LEDGER_V3,
+} from '@/features/imageEdit/v3/application/imageEditorInteractionStoreLedger'
+import {
+  IMAGE_EDITOR_SESSION_STORE_LEDGER_V3,
+} from '@/features/imageEdit/v3/application/imageEditorSessionStoreLedger'
+import { useImageEditorInteractionStoreV3 } from '@/features/imageEdit/v3/store/imageEditorInteractionStoreV3'
+import { useImageEditorSessionStoreV3 } from '@/features/imageEdit/v3/store/imageEditorSessionStoreV3'
 import { IMAGE_MARK_STORE_LEDGER } from '@/features/imageMark/application/imageMarkStoreLedger'
 import { ALERT_DIALOG_STORE_LEDGER } from '@/features/settings/application-control/alertDialogStoreLedger'
 import { LARGE_UPLOAD_POLICY_STORE_LEDGER } from '@/features/settings/application-control/largeUploadPolicyStoreLedger'
@@ -97,6 +105,8 @@ const LEDGERS: LedgerCase[] = [
   { ledger: SETTINGS_STORE_LEDGER, state: () => useSettingsStore.getState() },
   { ledger: IMAGE_EDITOR_UI_STORE_LEDGER, state: () => useImageEditorUiStore.getState() },
   { ledger: IMAGE_EDITOR_HANDOFF_STORE_LEDGER, state: () => useImageEditorHandoffStore.getState() },
+  { ledger: IMAGE_EDITOR_INTERACTION_STORE_LEDGER_V3, state: () => useImageEditorInteractionStoreV3.getState() },
+  { ledger: IMAGE_EDITOR_SESSION_STORE_LEDGER_V3, state: () => useImageEditorSessionStoreV3.getState() },
   { ledger: ASSISTANT_UI_STORE_LEDGER, state: () => useAssistantUiStore.getState() },
   { ledger: ALERT_DIALOG_STORE_LEDGER, state: () => useAlertDialogStore.getState() },
   { ledger: LARGE_UPLOAD_POLICY_STORE_LEDGER, state: () => useLargeUploadPromptStore.getState() },

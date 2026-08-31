@@ -23,6 +23,7 @@ function records(value: unknown): Record<string, unknown>[] {
 export function hydrateHenjiScriptApi(
   output: ApplicationCapabilityDiscoveryOutput,
   description: Record<string, unknown>,
+  requestedEntityTypes: readonly string[] = [],
 ): ApplicationCapabilityDiscoveryOutput {
   const describedEntities = records(description.entities)
   const describedEntityTypeSet = new Set(describedEntities.flatMap((item) => (
@@ -34,9 +35,10 @@ export function hydrateHenjiScriptApi(
    * 反射 describe 的真相收口，否则模型会照着不存在的类型调用 read，必然撞
    * ENTITY_TYPE_NOT_FOUND。真实业务引用漏注册（如 image_edit.preview）应补反射，而不是留在这里。
    */
-  const entityTypes = output.scriptApi.entities.entityTypes.filter((entityType) => (
-    describedEntityTypeSet.has(entityType)
-  ))
+  const entityTypes = [...new Set([
+    ...requestedEntityTypes,
+    ...output.scriptApi.entities.entityTypes,
+  ])].filter((entityType) => describedEntityTypeSet.has(entityType)).slice(0, 64)
   const entityTypeSet = new Set(entityTypes)
   const entityDefinitions = describedEntities.flatMap((item) => {
     if (typeof item.id !== 'string' || !entityTypeSet.has(item.id)) return []
