@@ -12,15 +12,21 @@ import {
   useImageEditorInteractionStoreV3,
   useImageEditorSessionStoreV3,
 } from '../store'
-import { useManagedImageEditorPreviewV3 } from '../execution'
+import {
+  useImageEditorViewportCompositeV3,
+  useManagedImageEditorPreviewV3,
+} from '../execution'
 import { ImageEditorAnnotationOverlayV3 } from './ImageEditorAnnotationOverlayV3'
 import { ImageEditorRasterBrushOverlayV3 } from './ImageEditorRasterBrushOverlayV3'
+import { ImageEditorViewportTilesV3 } from './ImageEditorViewportTilesV3'
+import { resolveAnnotationOutputGeometryV3 } from './annotationGeometryV3'
 import type {
   ImageEditorV3Controller,
   ImageEditorV3PreviewOutput,
   ImageEditorV3Props,
 } from './types'
 import { useImageEditorBusSnapshotV3 } from './useImageEditorControllerV3'
+import { useImageEditorViewportLayoutV3 } from './useImageEditorViewportLayoutV3'
 import {
   imageEditorViewportTransformV3,
   zoomImageEditorViewportAroundPointV3,
@@ -120,6 +126,16 @@ export function ImageEditorPreviewV3({
   const setViewportTransform = useImageEditorInteractionStoreV3(
     (state) => state.setViewportTransform,
   )
+  const outputGeometry = useMemo(
+    () => resolveAnnotationOutputGeometryV3(snapshot.document),
+    [snapshot.document],
+  )
+  const viewportLayout = useImageEditorViewportLayoutV3(
+    surfaceRef,
+    outputGeometry,
+    zoom,
+    pan,
+  )
 
   const managedPreview = useManagedImageEditorPreviewV3(
     controller.sessionId,
@@ -127,6 +143,20 @@ export function ImageEditorPreviewV3({
     !previewRenderer,
     resourceDescriptors,
   )
+  const viewportComposite = useImageEditorViewportCompositeV3(
+    controller.sessionId,
+    snapshot,
+    !previewRenderer && Object.keys(snapshot.previewOverrides).length === 0,
+    resourceDescriptors,
+    viewportLayout,
+  )
+  const viewportResult = viewportComposite.result
+    && viewportLayout
+    && viewportComposite.result.viewportKey === viewportLayout.viewportKey
+    && viewportComposite.result.documentId === snapshot.document.id
+    && viewportComposite.result.revision === snapshot.document.revision
+    ? viewportComposite.result
+    : null
 
   const customOutput = useMemo<ImageEditorV3PreviewOutput | null>(() => previewRenderer?.({
     sourceImageUrl,
@@ -162,10 +192,10 @@ export function ImageEditorPreviewV3({
   const output = customOutput ?? managedOutput
   const basePreviewDocumentId = previewRenderer
     ? snapshot.document.id
-    : managedPreview.resultDocumentId
+    : viewportResult?.documentId ?? managedPreview.resultDocumentId
   const basePreviewRevision = previewRenderer
     ? snapshot.document.revision
-    : managedPreview.resultRevision
+    : viewportResult?.revision ?? managedPreview.resultRevision
 
   const applyViewportTransform = useCallback((
     nextZoom: number,
@@ -328,15 +358,26 @@ export function ImageEditorPreviewV3({
           ref={viewportContentRef}
           data-viewport-content
           className="relative flex max-h-full max-w-full items-center justify-center origin-center"
-          style={{ transform: imageEditorViewportTransformV3(zoom, pan) }}
+          style={{
+            transform: imageEditorViewportTransformV3(zoom, pan),
+            ...(!previewRenderer && viewportLayout
+              ? { width: viewportLayout.stageWidth, height: viewportLayout.stageHeight }
+              : {}),
+          }}
         >
-          {output.kind === 'url' ? (
+          {viewportResult ? (
+            <ImageEditorViewportTilesV3
+              result={viewportResult}
+              label={t('imageEditor.v3.previewAlt')}
+            />
+          ) : null}
+          {!viewportResult && output.kind === 'url' ? (
             <UrlPreview output={output} label={t('imageEditor.v3.previewAlt')} />
           ) : null}
-          {output.kind === 'frame' ? (
+          {!viewportResult && output.kind === 'frame' ? (
             <FramePreview output={output} label={t('imageEditor.v3.previewAlt')} />
           ) : null}
-          {output.kind === 'content' ? output.content : null}
+          {!viewportResult && output.kind === 'content' ? output.content : null}
           <ImageEditorAnnotationOverlayV3 controller={controller} />
           <ImageEditorRasterBrushOverlayV3
             bus={bus}

@@ -4,9 +4,9 @@ import {
   executeImageEditCpuRenderPlanV3,
   type Float32PremultipliedRgbaTile,
   type ImageEditDocumentV3,
-  type ImageEditLayerV3,
   type ImageEditRenderPlan,
 } from '@/core/imageEdit/v3'
+import { isImageEditSparseMaskReferenceV3 } from '@/core/imageEdit/v3/layerTypes'
 import { applyImageEditorPreviewGeometryV3 } from './previewGeometryV3'
 import {
   convertPreviewWorkingSpaceToSrgbDisplayV3,
@@ -28,49 +28,10 @@ import type {
   ImageEditorPreviewProxyV3,
   ImageEditorPreviewRenderRequestV3,
 } from './previewProtocolV3'
+import { scaleImageEditorPreviewEffectsV3 } from './previewEffectScalingV3'
+import { loadPreviewSparseMaskV3 } from './previewSparseMaskV3'
 
 const registry = createBuiltInImageEditRenderNodeRegistry()
-
-function scalePreviewEffects(
-  layers: readonly ImageEditLayerV3[],
-  scale: number,
-): ImageEditLayerV3[] {
-  return layers.map((layer) => {
-    if (layer.type === 'group') {
-      return { ...layer, children: scalePreviewEffects(layer.children, scale) }
-    }
-    if (
-      layer.type === 'effect'
-      && layer.effectId === 'image.gaussian-blur-v2'
-    ) {
-      return {
-        ...layer,
-        params: {
-          ...layer.params,
-          mip: Math.max(0, Math.log2(1 / Math.max(scale, Number.EPSILON))),
-        },
-      }
-    }
-    if (layer.type === 'effect' && layer.effectId === 'image.blur') {
-      const radiusPixels = Number(layer.params.radiusPixels ?? 0)
-      return {
-        ...layer,
-        params: {
-          ...layer.params,
-          radiusPixels: Number.isFinite(radiusPixels) ? Math.max(0, radiusPixels * scale) : 0,
-        },
-      }
-    }
-    return layer
-  })
-}
-
-function createPreviewRenderDocument(
-  document: ImageEditDocumentV3,
-  scale: number,
-): ImageEditDocumentV3 {
-  return { ...document, layers: scalePreviewEffects(document.layers, scale) }
-}
 
 export function compileImageEditorPreviewPlanV3(
   document: ImageEditDocumentV3,
@@ -79,7 +40,7 @@ export function compileImageEditorPreviewPlanV3(
 ): ImageEditRenderPlan {
   const dimensions = resolveImageEditorPreviewDimensionsV3(document, maxDimension)
   return compileImageEditRenderPlanV3(
-    createPreviewRenderDocument(document, Math.min(dimensions.scaleX, dimensions.scaleY)),
+    scaleImageEditorPreviewEffectsV3(document, Math.min(dimensions.scaleX, dimensions.scaleY)),
     registry,
     quality,
   )
@@ -120,7 +81,9 @@ export async function renderImageEditorPreviewTileV3(
       rasterizePreviewAnnotationsV3(node, request.document, dimensions),
       request.document.color,
     ),
-    loadMask: async (reference) => loadPreviewMaskV3(reference.resourceId, proxies, dimensions),
+    loadMask: async (reference) => isImageEditSparseMaskReferenceV3(reference)
+      ? loadPreviewSparseMaskV3(reference, brushTiles, dimensions)
+      : loadPreviewMaskV3(reference.resourceId, proxies, dimensions),
     transformContent: async (content, transform) => transformPreviewTileV3(
       content,
       transform,

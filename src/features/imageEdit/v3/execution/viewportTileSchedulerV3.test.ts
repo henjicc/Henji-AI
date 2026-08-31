@@ -18,6 +18,7 @@ import {
 } from './viewportTileSchedulerV3'
 
 const resourceRef = `sha256:${'c'.repeat(64)}` as const
+const secondaryResourceRef = `sha256:${'d'.repeat(64)}` as const
 const tileBytes = 512 * 512 * 4
 
 function pyramid(width: number, height: number): ImageEditorV3PyramidDescriptor {
@@ -92,6 +93,40 @@ function smallBudget(totalBytes: number): ImageEditResourceBudget {
 }
 
 describe('图片编辑 V3 视口瓦片调度', () => {
+  it('多图层资源共用一个 mip 与总预算，并按资源持有同一计划的租约', async () => {
+    const documentSize = { width: 512, height: 512 }
+    const resourceBudget = smallBudget(tileBytes)
+    const cache = new ImageEditorViewportTileCacheV3({ maxBytes: tileBytes, resourceBudget })
+    const readSourceTile = vi.fn(async (request) => sourceTile(request, documentSize))
+    const scheduler = new ImageEditorViewportTileSchedulerV3({
+      sessionId: 'source-set',
+      cache,
+      describePyramid: async () => pyramid(documentSize.width, documentSize.height),
+      readSourceTile,
+    })
+
+    const frame = await scheduler.render({
+      resourceRef,
+      resourceRefs: [resourceRef, secondaryResourceRef],
+      revision: 1,
+      documentSize,
+      viewport: viewport(),
+      bitDepth: 8,
+    })
+
+    expect(frame.plan).toMatchObject({ mip: 1, degradedForBudget: true })
+    expect(frame.tiles).toHaveLength(1)
+    expect(frame.resourceTiles.get(resourceRef)).toHaveLength(1)
+    expect(frame.resourceTiles.get(secondaryResourceRef)).toHaveLength(1)
+    expect(readSourceTile).toHaveBeenCalledTimes(2)
+    expect(new Set(readSourceTile.mock.calls.map(([request]) => request.resourceRef))).toEqual(
+      new Set([resourceRef, secondaryResourceRef]),
+    )
+    frame.release()
+    scheduler.dispose()
+    expect(resourceBudget.snapshot().totalBytes).toBe(0)
+  })
+
   it('200MP 高位深只通过命令读取当前视口的 15 个 mip 瓦片', async () => {
     const documentSize = { width: 20_000, height: 10_000 }
     const describePyramid = vi.fn(async () => pyramid(documentSize.width, documentSize.height))

@@ -16,7 +16,9 @@ import {
   type ImageEditorViewportTileReadReservationV3,
 } from './viewportTileCacheV3'
 import {
+  imageEditorViewportTileCacheKeyV3,
   planImageEditorViewportTilesV3,
+  type ImageEditorViewportTileRequestV3,
   type ImageEditorViewportTilePlanV3,
   type ImageEditorViewportTransformV3,
 } from './viewportTilePlannerV3'
@@ -37,6 +39,8 @@ export class ImageEditorViewportCancelledErrorV3 extends Error {
 
 export interface ImageEditorViewportRenderRequestV3 {
   resourceRef: ImageEditorV3ResourceRef
+  /** 同一文档几何下参与合成的全部普通图片资源；首项仍由 resourceRef 决定。 */
+  resourceRefs?: readonly ImageEditorV3ResourceRef[]
   revision: number
   documentSize: ImageEditSize
   viewport: ImageEditorViewportTransformV3
@@ -50,6 +54,8 @@ export interface ImageEditorViewportFrameV3 {
   plan: ImageEditorViewportTilePlanV3
   /** 缓存借出的只读像素；不得修改或 transfer，使用结束必须 release。 */
   tiles: readonly ImageEditorV3SourceTile[]
+  /** 多图层/蒙版按资源分组后的同 mip 瓦片；每组顺序与 plan.tiles 一致。 */
+  resourceTiles: ReadonlyMap<ImageEditorV3ResourceRef, readonly ImageEditorV3SourceTile[]>
   release(): void
 }
 
@@ -96,6 +102,45 @@ function toError(error: unknown): Error {
 
 function validateRevision(revision: number): void {
   if (!Number.isSafeInteger(revision) || revision < 0) throw new Error('视口 revision 必须是非负整数')
+}
+
+function normalizeResourceRefs(request: ImageEditorViewportRenderRequestV3): ImageEditorV3ResourceRef[] {
+  const refs = [request.resourceRef, ...(request.resourceRefs ?? [])]
+  const unique = [...new Set(refs)]
+  if (unique.some((resourceRef) => !/^sha256:[a-f0-9]{64}$/.test(resourceRef))) {
+    throw new Error('视口图片资源引用无效')
+  }
+  return unique
+}
+
+function assertCompatiblePyramid(
+  primary: ImageEditorV3PyramidDescriptor,
+  candidate: ImageEditorV3PyramidDescriptor,
+): void {
+  if (
+    candidate.tileSize !== primary.tileSize
+    || candidate.levels.length !== primary.levels.length
+    || candidate.levels.some((level, index) => {
+      const expected = primary.levels[index]
+      return !expected
+        || level.mip !== expected.mip
+        || level.width !== expected.width
+        || level.height !== expected.height
+        || level.columns !== expected.columns
+        || level.rows !== expected.rows
+    })
+  ) throw new Error('参与视口合成的图片资源金字塔几何不一致')
+}
+
+function expandTileRequests(
+  requests: readonly ImageEditorViewportTileRequestV3[],
+  resourceRefs: readonly ImageEditorV3ResourceRef[],
+): ImageEditorViewportTileRequestV3[] {
+  return resourceRefs.flatMap((resourceRef) => requests.map((request) => ({
+    ...request,
+    resourceRef,
+    key: imageEditorViewportTileCacheKeyV3({ ...request, resourceRef }),
+  })))
 }
 
 function abortedJobError(signal: AbortSignal): Error {
@@ -219,8 +264,14 @@ export class ImageEditorViewportTileSchedulerV3 {
   }
 
   private async renderJob(job: ScheduledViewportJobV3): Promise<ImageEditorViewportFrameV3> {
-    const descriptor = await this.readDescriptor(job)
+    const resourceRefs = normalizeResourceRefs(job.request)
+    const descriptors = await Promise.all(resourceRefs.map((resourceRef) => (
+      this.readDescriptor(resourceRef, job)
+    )))
     this.assertCurrent(job)
+    const descriptor = descriptors[0]
+    if (!descriptor) throw new Error('视口图片资源缺少金字塔描述')
+    for (const candidate of descriptors.slice(1)) assertCompatiblePyramid(descriptor, candidate)
     const plan = planImageEditorViewportTilesV3({
       resourceRef: job.request.resourceRef,
       documentSize: job.request.documentSize,
@@ -228,22 +279,25 @@ export class ImageEditorViewportTileSchedulerV3 {
       viewport: job.request.viewport,
       bitDepth: job.request.bitDepth,
       haloDocumentPixels: job.request.haloDocumentPixels,
-      admit: (candidate) => this.cache.admission(candidate.tiles).admitted,
+      admit: (candidate) => this.cache.admission(
+        expandTileRequests(candidate.tiles, resourceRefs),
+      ).admitted,
     })
+    const tileRequests = expandTileRequests(plan.tiles, resourceRefs)
     try {
       // 先锁住全部命中项，后续 miss 插入触发 LRU 时不会逐出本帧仍需使用的瓦片。
-      for (const tileRequest of plan.tiles) {
+      for (const tileRequest of tileRequests) {
         const lease = this.cache.lease(tileRequest)
         if (lease) job.tileLeases.set(tileRequest.key, lease)
       }
       // 在第一次异步读取前一次性预留全部 miss；随后逐片从 in-flight 同步转换为 cpu-cache。
-      for (const tileRequest of plan.tiles) {
+      for (const tileRequest of tileRequests) {
         if (job.tileLeases.has(tileRequest.key)) continue
         const reservation = this.cache.reserveInFlight(tileRequest)
         if (!reservation) throw new Error('视口瓦片读取前未通过 in-flight 资源预算')
         job.readReservations.set(tileRequest.key, reservation)
       }
-      for (const tileRequest of plan.tiles) {
+      for (const tileRequest of tileRequests) {
         if (job.tileLeases.has(tileRequest.key)) continue
         this.assertCurrent(job)
         const tile = await awaitWithAbort(this.tileReader({
@@ -270,36 +324,46 @@ export class ImageEditorViewportTileSchedulerV3 {
         job.tileLeases.set(tileRequest.key, lease)
       }
       this.assertCurrent(job)
-      return this.createFrame(job, plan)
+      return this.createFrame(job, plan, resourceRefs, tileRequests)
     } catch (error) {
       this.releaseJobResources(job)
       throw error
     }
   }
 
-  private async readDescriptor(job: ScheduledViewportJobV3): Promise<ImageEditorV3PyramidDescriptor> {
-    const cached = this.descriptorCache.get(job.request.resourceRef)
+  private async readDescriptor(
+    resourceRef: ImageEditorV3ResourceRef,
+    job: ScheduledViewportJobV3,
+  ): Promise<ImageEditorV3PyramidDescriptor> {
+    const cached = this.descriptorCache.get(resourceRef)
     if (cached) return cached
     const descriptor = await awaitWithAbort(this.descriptorReader({
       requestId: createImageEditorV3RequestId('viewport-pyramid'),
-      resourceRef: job.request.resourceRef,
+      resourceRef,
     }, job.controller.signal), job.controller.signal)
     this.assertCurrent(job)
-    this.descriptorCache.set(job.request.resourceRef, descriptor)
+    this.descriptorCache.set(resourceRef, descriptor)
     return descriptor
   }
 
   private createFrame(
     job: ScheduledViewportJobV3,
     plan: ImageEditorViewportTilePlanV3,
+    resourceRefs: readonly ImageEditorV3ResourceRef[],
+    tileRequests: readonly ImageEditorViewportTileRequestV3[],
   ): ImageEditorViewportFrameV3 {
     if (job.readReservations.size !== 0) throw new Error('视口帧仍持有未提交的读取预算')
     const leases = new Map(job.tileLeases)
-    const tiles = plan.tiles.map((request) => {
+    const allTiles = tileRequests.map((request) => {
       const lease = leases.get(request.key)
       if (!lease) throw new Error('视口帧缺少已规划瓦片')
       return lease.tile
     })
+    const resourceTiles = new Map<ImageEditorV3ResourceRef, readonly ImageEditorV3SourceTile[]>()
+    for (const resourceRef of resourceRefs) {
+      resourceTiles.set(resourceRef, allTiles.filter((tile) => tile.resourceRef === resourceRef))
+    }
+    const tiles = resourceTiles.get(job.request.resourceRef) ?? []
     job.tileLeases.clear()
     let released = false
     const release = (): void => {
@@ -314,6 +378,7 @@ export class ImageEditorViewportTileSchedulerV3 {
       revision: job.request.revision,
       plan,
       tiles,
+      resourceTiles,
       release,
     }
     job.preparedFrame = frame
