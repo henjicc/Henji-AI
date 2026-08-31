@@ -69,7 +69,7 @@ npm run assistant:live:suite -- --only camera --skip-generation
 4. **禁止跨层导入**：组件 ✗→ 主进程/provider 实现；主进程 ✗→ `components/`；模型 ✗→ `services/`/`components/`。桥梁只用 `core/`、`commands/`、`platform/`。
 5. **前后端职责**：移除当前界面后仍然成立、仍需执行或可能被其他界面复用的逻辑，放后端或独立核心模块。不得因前端实现方便就把业务逻辑堆在前端。
 6. **文件体积**：新文件优先 `<= 400` 行，`400~500` 可接受，`> 500` 禁止继续膨胀且修改即拆分。
-7. **SDK 首发验证宿主**：Henji-AI 是 `@henjicc/ai-sdk` 的主开发仓库与首发验证宿主；官方资料、SDK 实现和完整验证必须先在本项目闭环，再发布版本供其他项目精确锁定。禁止先在消费项目猜协议、写第二套实现，再反向回填 SDK。详细门槛只维护在 [文档采集手册.md](packages/ai-sdk/docs/model-adaptation/文档采集手册.md)。
+7. **SDK 开发与公共消费边界**：Henji-AI 是 `@henjicc/ai-sdk` 的唯一主开发仓库与首发验证宿主，仓内通过 `packages/ai-sdk` workspace 源码开发、构建和验证；Henji-AI 之外的项目一律从公共 npm registry 安装已经发布的精确版本，禁止使用 `workspace:`、`file:`、Git URL、GitHub Packages、源码复制或其他旁路。消费方需要尚未发布的能力时，必须先回到本仓库实现并完成首发验证，经维护者对该次正式发布明确授权后发布，再升级消费项目。合并代码不等于获得发布授权。详细门槛只维护在 [文档采集手册.md](packages/ai-sdk/docs/model-adaptation/文档采集手册.md)。
 
 ## 全局禁止事项
 

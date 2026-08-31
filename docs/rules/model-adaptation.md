@@ -33,6 +33,17 @@ packages/ai-sdk/docs/model-adaptation/
 - **新增或改动请求/响应、轮询、SSE、WebSocket、流式协议 parser 时，必须同步补官方 fixture 与精确契约测试**。事件矩阵、来源标记、负例、资源释放和断牙验证的详细要求只以 [文档采集手册.md](../../packages/ai-sdk/docs/model-adaptation/文档采集手册.md) 第四节及 [fixture README](../../packages/ai-sdk/tests/fixtures/README.md) 为准；不得凭空手写“看起来对”的样本。
 - **SDK 发布后必须读取 [消费项目清单](../../packages/ai-sdk/docs/consumers.md)**，按公共导出、协议与宿主边界的实际影响逐个同步消费者；未使用的新能力不进入宿主。外部消费者必须精确锁定版本与 integrity，并把 commit、验证状态和接入边界回写清单。
 
+## SDK 开发、发布与消费边界
+
+- **开发主源唯一**：SDK 源码只在 Henji-AI 的 `packages/ai-sdk` 中开发。仓内 workspace 解析、源码构建和本地 tarball 回装只用于开发与首发验证，不能作为外部安装成功的证据。
+- **公共分发唯一**：Henji-AI 之外的项目只允许从 `https://registry.npmjs.org/` 安装已发布的 `@henjicc/ai-sdk` 精确版本；禁止 `workspace:`、`file:`、Git URL、GitHub Packages、复制源码、软链接和浮动版本范围。manifest 与 lockfile 必须同时锁定版本，并核对 resolved/integrity。
+- **改动先回主仓**：消费项目需要尚未发布的公共能力或协议修复时，先在 Henji-AI 完成实现、测试、打包和受限环境回装，不得在消费项目复制 SDK 内核、猜协议或长期维护补丁分支。
+- **正式发布需当次授权**：贡献者或 Agent 可以准备版本、变更记录、验证结果和发布建议；`npm publish` 必须得到维护者针对该次正式发布的明确授权。代码合并、测试通过或历史发布授权都不自动授权下一次发布。
+- **鉴权失败不换分发渠道**：npm 2FA、token 或权限失败时，只修复公共 npm 的发布鉴权并重试；不得回退 GitHub Packages、私有 registry 或源码安装。npm 版本不可覆盖；发布状态不确定时先查询 registry，已存在则发布新版本，未存在才重试原版本。
+- **发布后再迁移消费者**：正式包必须先在不带项目 workspace、用户 npm/GitHub 凭据的仓外临时目录完成安装、公开入口与版本验证，再按 [消费项目清单](../../packages/ai-sdk/docs/consumers.md) 升级实际受影响的项目。
+
+完整顺序、状态定义与验证门槛只以 [文档采集手册.md](../../packages/ai-sdk/docs/model-adaptation/文档采集手册.md) 第四节为准。
+
 ## 配置驱动（最重要）
 
 所有模型特定行为必须在配置中定义，而非代码：
