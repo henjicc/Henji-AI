@@ -1,3 +1,4 @@
+import fc from 'fast-check';
 import { describe, expect, it, vi } from 'vitest';
 import {
   IMAGE_EDIT_HISTORY_DEFAULT_MAX_BYTES_V3,
@@ -68,6 +69,35 @@ function createStrictMaskHistoryFixture() {
 }
 
 describe('图片编辑 V3 命令历史', () => {
+  it('随机瓦片命令全部撤销后回到原始文档，清理后资源归零', () => {
+    fc.assert(fc.property(
+      fc.array(fc.integer({ min: 1, max: 1_000_000 }), { minLength: 1, maxLength: 80 }),
+      (byteSizes) => {
+        const history = new ImageEditCommandHistoryV3({
+          maxCommands: 100,
+          maxBytes: 100_000_000,
+        });
+        const initial = createPaintDocument();
+        let current = initial;
+        for (let index = 0; index < byteSizes.length; index += 1) {
+          current = addTile(history, current, index, byteSizes[index]);
+        }
+        for (let index = 0; index < byteSizes.length; index += 1) {
+          current = history.undo(current).document;
+        }
+        expect(current.layers).toEqual(initial.layers);
+        expect(current.geometry).toEqual(initial.geometry);
+        history.clear(current);
+        expect(history.getState()).toMatchObject({
+          undoCount: 0,
+          redoCount: 0,
+          retainedResourceBytes: 0,
+          retainedResourceCount: 0,
+        });
+      },
+    ), { numRuns: 100 });
+  });
+
   it('整次画笔手势只形成一条历史，撤销与重做原子覆盖全部瓦片', () => {
     const history = new ImageEditCommandHistoryV3();
     let document = createPaintDocument();

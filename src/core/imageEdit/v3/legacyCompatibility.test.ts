@@ -32,7 +32,7 @@ describe('isImageEditDocumentLegacyExpressibleV3', () => {
     const document = createImageEditDocumentV3({ width: 100, height: 100 })
     document.layers = [
       createImageEditRasterLayerV3('base', 'base', 'sha256:base'),
-      createImageEditGroupLayerV3('group', 'group', []),
+      createImageEditGroupLayerV3('group', 'group'),
     ]
     expect(isImageEditDocumentLegacyExpressibleV3(document)).toBe(false)
     document.layers = [createImageEditRasterLayerV3('base', 'base', 'sha256:base')]

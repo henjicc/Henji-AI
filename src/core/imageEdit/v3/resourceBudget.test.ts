@@ -1,3 +1,4 @@
+import fc from 'fast-check';
 import { describe, expect, it } from 'vitest';
 import { ImageEditResourceBudget } from './resourceBudget';
 
@@ -44,5 +45,29 @@ describe('图片编辑 V3 资源账本', () => {
     lease?.release();
     lease?.release();
     expect(budget.snapshot()).toMatchObject({ totalBytes: 0, leaseCount: 0, deviceGeneration: 1 });
+  });
+
+  it('随机租约序列始终不为负且最终归零', () => {
+    fc.assert(fc.property(
+      fc.array(fc.integer({ min: 0, max: 1_000 }), { minLength: 1, maxLength: 100 }),
+      fc.shuffledSubarray(Array.from({ length: 100 }, (_, index) => index)),
+      (byteSizes, releaseOrder) => {
+        const budget = new ImageEditResourceBudget({
+          totalBytes: 100_000,
+          cpuCacheTargetBytes: 40_000,
+          gpuTargetBytes: 30_000,
+        });
+        const leases = byteSizes.map((bytes) => budget.acquire('in-flight', bytes));
+        for (const index of releaseOrder) {
+          leases[index]?.release();
+          leases[index]?.release();
+          const snapshot = budget.snapshot();
+          expect(snapshot.totalBytes).toBeGreaterThanOrEqual(0);
+          expect(Object.values(snapshot.byCategory).every((bytes) => bytes >= 0)).toBe(true);
+        }
+        for (const lease of leases) lease?.release();
+        expect(budget.snapshot()).toMatchObject({ totalBytes: 0, leaseCount: 0 });
+      },
+    ), { numRuns: 200 });
   });
 });

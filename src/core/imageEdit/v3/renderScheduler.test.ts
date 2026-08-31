@@ -1,3 +1,4 @@
+import fc from 'fast-check';
 import { describe, expect, it, vi } from 'vitest';
 import {
   ImageEditRenderScheduler,
@@ -12,6 +13,49 @@ function deferred<T>() {
 }
 
 describe('图片编辑 V3 调度器', () => {
+  it('随机连续 revision 只允许最新画面成功并最终清空调度状态', async () => {
+    await fc.assert(fc.asyncProperty(
+      fc.integer({ min: 1, max: 30 }),
+      async (revisionCount) => {
+        const scheduler = new ImageEditRenderScheduler();
+        const gate = deferred<void>();
+        const outcomes: Array<Promise<{ revision: number; result: 'success' | 'superseded' }>> = [];
+        for (let revision = 1; revision <= revisionCount; revision += 1) {
+          const scheduled = scheduler.schedule({
+            id: `property-${revision}`,
+            sessionId: 'property-session',
+            coalescingKey: 'display',
+            revision,
+            kind: 'preview',
+            purpose: 'display',
+            lane: 'gpu',
+            priority: 500,
+            run: async () => {
+              if (revision === 1) await gate.promise;
+              return revision;
+            },
+          });
+          outcomes.push(scheduled.then(
+            () => ({ revision, result: 'success' as const }),
+            (error: unknown) => {
+              expect(error).toBeInstanceOf(ImageEditTaskSupersededError);
+              return { revision, result: 'superseded' as const };
+            },
+          ));
+        }
+        gate.resolve();
+        const settled = await Promise.all(outcomes);
+        expect(settled.filter((outcome) => outcome.result === 'success'))
+          .toEqual([{ revision: revisionCount, result: 'success' }]);
+        expect(scheduler.snapshot()).toMatchObject({
+          runningGpu: 0,
+          pendingPreviewSessions: 0,
+          activePreviewSessions: 0,
+        });
+      },
+    ), { numRuns: 100 });
+  });
+
   it('每会话只保留一个运行中预览和一个最新待处理版本', async () => {
     const scheduler = new ImageEditRenderScheduler();
     const gate = deferred<void>();
