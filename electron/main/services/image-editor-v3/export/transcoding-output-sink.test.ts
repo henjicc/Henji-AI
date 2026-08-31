@@ -89,10 +89,44 @@ describe('TranscodingTileOutputSink', () => {
       if (format === 'tiff16') expect(metadata.depth).toBe('ushort')
       if (format === 'avif10') expect(metadata.bitsPerSample).toBe(10)
       if (format === 'avif12') expect(metadata.bitsPerSample).toBe(12)
+      if (format === 'tiff8' || format === 'tiff16') {
+        const header = await fsp.readFile(targetPath)
+        expect(header.toString('ascii', 0, 2)).toBe('II')
+        expect(header.readUInt16LE(2)).toBe(42)
+      }
       expect(await fsp.readdir(rootDir)).toEqual([`${format}.${extension}`])
     },
     20_000,
   )
+
+  it('JPEG 将透明像素显式合成到白底而不是依赖编码器默认值', async () => {
+    const targetPath = path.join(rootDir, 'transparent.jpg')
+    const sink = new TranscodingTileOutputSink(targetPath, {
+      format: 'jpeg',
+      quality: 100,
+      tileSize: 16,
+      inputByteOrder: 'little-endian',
+    })
+    const pixels = new Uint8Array(16 * 16 * 4)
+    for (let offset = 0; offset < pixels.byteLength; offset += 4) {
+      pixels[offset] = 255
+      pixels[offset + 3] = 0
+    }
+    await sink.begin(baseDescription)
+    await sink.writeTile({
+      x: 0,
+      y: 0,
+      width: 16,
+      height: 16,
+      rowStride: 64,
+      pixels,
+    })
+    await sink.complete()
+
+    const sharp = await loadSharp()
+    const decoded = await sharp(targetPath).removeAlpha().raw().toBuffer()
+    expect(Math.min(...decoded)).toBeGreaterThanOrEqual(250)
+  })
 
   it('取消时删除 staged 与 BigTIFF 中间文件并保留旧目标', async () => {
     const targetPath = path.join(rootDir, 'cancelled.png')

@@ -602,13 +602,13 @@
           "selectEllipse": "像素选区尚未接通，暂时不能使用椭圆选择。",
           "selectLasso": "像素选区尚未接通，暂时不能使用套索选择。",
           "maskEdit": "蒙版像素编辑尚未接通；已有蒙版只会被保留。",
-          "glowExport": "辉光 Pro 当前不能可靠导出 PNG；已有图层会保留，但暂不允许新建。",
-          "hdrExport": "HDR 内容会以 SDR 代理预览并保留到可编辑文件，但当前不能导出 PNG。",
+          "glowExport": "辉光 Pro 当前不能可靠导出栅格图片；已有图层会保留，但暂不允许新建。",
+          "hdrExport": "HDR 内容会以 SDR 代理预览并保留到可编辑文件，但当前不能导出栅格图片。",
           "quickHdr": "快速编辑暂不接收 HDR 文档。",
           "exportDocumentNotReady": "图片编辑文档尚未准备完成。",
           "viewerDocumentNotReady": "快速编辑文档尚未准备完成。",
           "exportHdrMetadata": "当前版本还不能可靠保留 HDR 元数据，已阻止降级导出为 SDR 图片。",
-          "exportBitDepth": "当前 PNG 分块导出仅支持 8 位或 16 位文档；浮点文档不会被静默降位。",
+          "exportBitDepth": "所选格式不能保留当前文档精度，已阻止静默降位导出。",
           "exportInvalidIcc": "图片编辑 ICC 资源引用无效。"
         }
       },
@@ -635,9 +635,10 @@
           "exportProgress": "正在导出 {{completed}}/{{total}}",
           "exportPreparing": "正在准备导出…",
           "cancelExport": "取消导出",
-          "exportUnavailableAria": "导出 PNG 暂不可用：{{reason}}",
-          "exportUnavailable": "暂不能导出 PNG",
-          "exportPng": "导出 PNG…",
+          "exportUnavailableAria": "导出暂不可用：{{reason}}",
+          "exportUnavailable": "暂不能导出",
+          "export": "导出…",
+          "exportMenuAria": "选择栅格导出格式",
           "savePackage": "保存可编辑文件…"
         },
         "notifications": {
@@ -650,14 +651,25 @@
           "exportFailed": "无法导出栅格图片：{{reason}}"
         },
         "export": {
-          "defaultUnavailable": "当前文档暂时不能导出 PNG。",
+          "defaultUnavailable": "当前文档暂时不能导出栅格图片。",
           "unknownError": "发生未知错误",
-          "snapshotUnavailable": "保存后的权威文档快照不可用，请重试"
+          "snapshotUnavailable": "保存后的权威文档快照不可用，请重试",
+          "formats": {
+            "png8": "PNG（8 位）",
+            "png16": "PNG（16 位）",
+            "jpeg": "JPEG（8 位，白色背景）",
+            "webp": "WebP（8 位）",
+            "tiff8": "TIFF（8 位）",
+            "tiff16": "TIFF（16 位）",
+            "avif10": "AVIF（10 位）",
+            "avif12": "AVIF（12 位）",
+            "bigtiff": "BigTIFF（保留文档精度）"
+          }
         },
         "fileNames": {
           "fallbackStem": "图片",
           "editable": "{{stem}}-可编辑.henjiimg",
-          "editedPng": "{{stem}}-已编辑.png"
+          "edited": "{{stem}}-已编辑.{{extension}}"
         }
       },
       "viewer": {

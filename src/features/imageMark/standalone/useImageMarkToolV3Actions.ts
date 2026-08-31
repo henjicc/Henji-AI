@@ -19,11 +19,14 @@ import type { ImageEditorCapabilityReadinessV3 } from '@/features/imageEdit/v3/a
 import { resolveImageEditorReadinessReasonV3 } from '@/features/imageEdit/v3/editor/readinessPresentationV3'
 import type {
   ImageEditorV3DocumentRef,
+  ImageEditorV3RasterExportFormat,
   ImageEditorV3ResourceDescriptor,
 } from '@/platform/contracts/imageEditorV3'
 import {
   exportImageMarkV3Raster,
+  imageMarkV3RasterExportExtension,
   isImageMarkV3RasterExportAbort,
+  listImageMarkV3RasterExportFormats,
   resolveImageMarkV3RasterExportFailureReason,
   resolveImageMarkV3RasterExportReadiness,
   type ImageMarkV3RasterExportProgress,
@@ -33,6 +36,11 @@ const logger = createLogger('features.imageMark.v3_host')
 
 export interface ImageMarkV3RasterExportUiState extends ImageMarkV3RasterExportProgress {
   cancelling: boolean
+}
+
+export interface ImageMarkV3RasterExportOption {
+  format: ImageEditorV3RasterExportFormat
+  readiness: ImageEditorCapabilityReadinessV3
 }
 
 export interface OpenedImageMarkV3Package {
@@ -54,11 +62,12 @@ interface ImageMarkToolV3ActionsOptions {
 export interface ImageMarkToolV3ActionsController {
   isHostBusy: boolean
   rasterExport: ImageMarkV3RasterExportUiState | null
+  rasterExportOptions: readonly ImageMarkV3RasterExportOption[]
   rasterExportReadiness: ImageEditorCapabilityReadinessV3
   runAfterSave: (action: () => void | Promise<void>) => Promise<void>
   handleOpenPackage: () => Promise<void>
   handleSavePackage: () => Promise<void>
-  handleRasterExport: () => Promise<void>
+  handleRasterExport: (format: ImageEditorV3RasterExportFormat) => Promise<void>
   handleCancelRasterExport: () => void
 }
 
@@ -180,20 +189,41 @@ export function useImageMarkToolV3Actions({
     }
   }, [flushPending, isHostBusy, showNotification, sourceName, t])
 
-  const rasterExportReadiness = useMemo<ImageEditorCapabilityReadinessV3>(() => (
+  const rasterExportOptions = useMemo<readonly ImageMarkV3RasterExportOption[]>(() => (
     document
-      ? resolveImageMarkV3RasterExportReadiness(document, sourceName)
-      : {
-          state: 'disabled',
-          reasonKey: 'imageEditor.v3.readiness.reasons.exportDocumentNotReady',
-        }
+      ? listImageMarkV3RasterExportFormats(document).map((format) => ({
+          format,
+          readiness: resolveImageMarkV3RasterExportReadiness(document, sourceName, format),
+        }))
+      : []
   ), [document, sourceName])
 
-  const handleRasterExport = useCallback(async (): Promise<void> => {
+  const rasterExportReadiness = useMemo<ImageEditorCapabilityReadinessV3>(() => {
+    if (!document) {
+      return {
+        state: 'disabled',
+        reasonKey: 'imageEditor.v3.readiness.reasons.exportDocumentNotReady',
+      }
+    }
+    if (rasterExportOptions.some(({ readiness }) => readiness.state === 'ready')) {
+      return { state: 'ready' }
+    }
+    return rasterExportOptions[0]?.readiness
+      ?? resolveImageMarkV3RasterExportReadiness(document, sourceName)
+  }, [document, rasterExportOptions, sourceName])
+
+  const handleRasterExport = useCallback(async (
+    format: ImageEditorV3RasterExportFormat,
+  ): Promise<void> => {
     if (isHostBusy || rasterExportAbortRef.current) return
-    if (rasterExportReadiness.state !== 'ready') {
+    const option = rasterExportOptions.find((candidate) => candidate.format === format)
+    const readiness = option?.readiness ?? {
+      state: 'disabled' as const,
+      reasonKey: 'imageEditor.v3.readiness.reasons.exportBitDepth' as const,
+    }
+    if (readiness.state !== 'ready') {
       showNotification(
-        resolveImageEditorReadinessReasonV3(rasterExportReadiness, t)
+        resolveImageEditorReadinessReasonV3(readiness, t)
           ?? t('imageEditor.v3.host.export.defaultUnavailable'),
         'error',
       )
@@ -224,8 +254,10 @@ export function useImageMarkToolV3Actions({
       const result = await exportImageMarkV3Raster({
         snapshot,
         sourceName,
-        suggestedName: t('imageEditor.v3.host.fileNames.editedPng', {
+        format,
+        suggestedName: t('imageEditor.v3.host.fileNames.edited', {
           stem: sourceStem(sourceName, t('imageEditor.v3.host.fileNames.fallbackStem')),
+          extension: imageMarkV3RasterExportExtension(format),
         }),
         signal: controller.signal,
         onProgress: ({ completed, total }) => {
@@ -246,7 +278,10 @@ export function useImageMarkToolV3Actions({
       } else {
         logger.error('图片编辑 V3 栅格图片导出失败', error, {
           event: 'image_editor_v3.toolbox.raster_export.failed',
-          context: { errorName: error instanceof Error ? error.name : 'UnknownError' },
+          context: {
+            errorName: error instanceof Error ? error.name : 'UnknownError',
+            format,
+          },
         })
         if (mountedRef.current) {
           const failureReason = resolveImageMarkV3RasterExportFailureReason(error)
@@ -265,7 +300,7 @@ export function useImageMarkToolV3Actions({
   }, [
     flushPending,
     isHostBusy,
-    rasterExportReadiness,
+    rasterExportOptions,
     showNotification,
     sourceName,
     t,
@@ -281,6 +316,7 @@ export function useImageMarkToolV3Actions({
   return {
     isHostBusy,
     rasterExport,
+    rasterExportOptions,
     rasterExportReadiness,
     runAfterSave,
     handleOpenPackage,

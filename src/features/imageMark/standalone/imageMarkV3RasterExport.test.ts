@@ -6,6 +6,8 @@ import type { ImageEditorV3DocumentSnapshot } from '@/platform/contracts/imageEd
 import {
   createImageMarkV3RasterExportSpec,
   exportImageMarkV3Raster,
+  imageMarkV3RasterExportExtension,
+  listImageMarkV3RasterExportFormats,
   resolveImageMarkV3RasterExportReadiness,
 } from './imageMarkV3RasterExport'
 
@@ -96,7 +98,7 @@ describe('工具箱 V3 栅格分块导出', () => {
     expect(createImageMarkV3RasterExportSpec(
       snapshot(8).document,
       'photo.jpeg',
-      'photo-edited.png',
+      { suggestedName: 'photo-edited.png' },
     )).toEqual({
       format: 'png8',
       suggestedName: 'photo-edited.png',
@@ -123,6 +125,34 @@ describe('工具箱 V3 栅格分块导出', () => {
     })
   })
 
+  it('按文档精度精确列出 SDR 与浮点导出格式及扩展名', () => {
+    expect(listImageMarkV3RasterExportFormats(snapshot(8).document)).toEqual([
+      'png8', 'jpeg', 'webp', 'tiff8', 'bigtiff',
+    ])
+    expect(listImageMarkV3RasterExportFormats(snapshot(16).document)).toEqual([
+      'png16', 'tiff16', 'avif10', 'avif12', 'bigtiff',
+    ])
+    const float = snapshot(16)
+    float.document.color.bitDepth = 'float16'
+    float.document.color.transferFunction = 'linear'
+    expect(listImageMarkV3RasterExportFormats(float.document)).toEqual(['bigtiff'])
+    expect(createImageMarkV3RasterExportSpec(float.document, 'float.exr', {
+      format: 'bigtiff',
+    })).toMatchObject({
+      format: 'bigtiff',
+      suggestedName: 'float-edited.tif',
+      description: { bitDepth: 32, sampleFormat: 'float', transferFunction: 'linear' },
+    })
+    expect([
+      imageMarkV3RasterExportExtension('jpeg'),
+      imageMarkV3RasterExportExtension('webp'),
+      imageMarkV3RasterExportExtension('png16'),
+      imageMarkV3RasterExportExtension('tiff8'),
+      imageMarkV3RasterExportExtension('avif12'),
+      imageMarkV3RasterExportExtension('bigtiff'),
+    ]).toEqual(['jpg', 'webp', 'png', 'tif', 'avif', 'tif'])
+  })
+
   it('用同一个取消信号串联预检、分块渲染与原子输出命令', async () => {
     const source = snapshot(8)
     const controller = new AbortController()
@@ -131,7 +161,8 @@ describe('工具箱 V3 栅格分块导出', () => {
     await expect(exportImageMarkV3Raster({
       snapshot: source,
       sourceName: 'source.png',
-      suggestedName: 'source-edited.png',
+      format: 'jpeg',
+      suggestedName: 'source-edited.jpg',
       signal: controller.signal,
       onProgress,
     })).resolves.toMatchObject({ status: 'completed' })
@@ -155,25 +186,41 @@ describe('工具箱 V3 栅格分块导出', () => {
       documentRef: source.documentRef,
       revision: source.revision,
       sourceFingerprint: source.sourceFingerprint,
-      format: 'png8',
+      format: 'jpeg',
       tiles,
-      suggestedName: 'source-edited.png',
+      suggestedName: 'source-edited.jpg',
       tileSize: 512,
     }), controller.signal)
     expect(mocks.prepare.mock.invocationCallOrder[0]).toBeLessThan(mocks.exportRaster.mock.invocationCallOrder[0])
   })
 
-  it('HDR 与浮点文档明确阻断且不会启动输出会话', async () => {
+  it('HDR 明确阻断且不因 BigTIFF 支持浮点而伪装可导出', async () => {
     const hdr = snapshot(16)
     hdr.document.color.transferFunction = 'pq'
     hdr.document.color.hdrMetadata = createImageEditHdrMetadataV3('pq')
+    expect(listImageMarkV3RasterExportFormats(hdr.document)).toEqual([])
     expect(() => createImageMarkV3RasterExportSpec(hdr.document, 'hdr.avif')).toThrow(
       'imageEditor.v3.readiness.reasons.exportHdrMetadata',
     )
 
+    expect(() => createImageMarkV3RasterExportSpec(hdr.document, 'hdr.tiff', {
+      format: 'bigtiff',
+    })).toThrow('imageEditor.v3.readiness.reasons.exportHdrMetadata')
+
+    const hlg = snapshot(16)
+    hlg.document.color.transferFunction = 'hlg'
+    hlg.document.color.hdrMetadata = createImageEditHdrMetadataV3('hlg')
+    expect(listImageMarkV3RasterExportFormats(hlg.document)).toEqual([])
+    expect(() => createImageMarkV3RasterExportSpec(hlg.document, 'hlg.tiff', {
+      format: 'bigtiff',
+    })).toThrow('imageEditor.v3.readiness.reasons.exportHdrMetadata')
+
     const float = snapshot(16)
-    float.document.color.bitDepth = 'float16'
-    expect(() => createImageMarkV3RasterExportSpec(float.document, 'float.tiff')).toThrow(
+    float.document.color.bitDepth = 'float32'
+    float.document.color.transferFunction = 'linear'
+    expect(() => createImageMarkV3RasterExportSpec(float.document, 'float.tiff', {
+      format: 'png16',
+    })).toThrow(
       'imageEditor.v3.readiness.reasons.exportBitDepth',
     )
     expect(mocks.render).not.toHaveBeenCalled()
@@ -204,6 +251,17 @@ describe('工具箱 V3 栅格分块导出', () => {
     expect(resolveImageMarkV3RasterExportReadiness(hdr.document, 'hdr.avif')).toMatchObject({
       state: 'disabled',
       reasonKey: 'imageEditor.v3.readiness.reasons.exportHdrMetadata',
+    })
+
+    const missingIcc = snapshot(16)
+    missingIcc.document.color.iccProfileResourceId = null
+    expect(resolveImageMarkV3RasterExportReadiness(
+      missingIcc.document,
+      'wide.tiff',
+      'bigtiff',
+    )).toMatchObject({
+      state: 'disabled',
+      reasonKey: 'imageEditor.v3.readiness.reasons.exportInvalidIcc',
     })
   })
 })

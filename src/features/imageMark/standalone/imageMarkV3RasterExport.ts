@@ -27,6 +27,7 @@ export interface ImageMarkV3RasterExportProgress {
 export interface ExportImageMarkV3RasterOptions {
   snapshot: ImageEditorV3DocumentSnapshot
   sourceName: string
+  format: ImageEditorV3RasterExportFormat
   suggestedName: string
   signal: AbortSignal
   onProgress?: (progress: ImageMarkV3RasterExportProgress) => void
@@ -36,6 +37,46 @@ export interface ImageMarkV3RasterExportSpec {
   format: ImageEditorV3RasterExportFormat
   description: ImageEditorV3RasterExportDescription
   suggestedName: string
+}
+
+const EIGHT_BIT_SDR_FORMATS = [
+  'png8', 'jpeg', 'webp', 'tiff8', 'bigtiff',
+] as const satisfies readonly ImageEditorV3RasterExportFormat[]
+const SIXTEEN_BIT_SDR_FORMATS = [
+  'png16', 'tiff16', 'avif10', 'avif12', 'bigtiff',
+] as const satisfies readonly ImageEditorV3RasterExportFormat[]
+
+export function imageMarkV3RasterExportExtension(
+  format: ImageEditorV3RasterExportFormat,
+): 'avif' | 'jpg' | 'png' | 'tif' | 'webp' {
+  if (format === 'jpeg') return 'jpg'
+  if (format === 'webp') return 'webp'
+  if (format === 'avif10' || format === 'avif12') return 'avif'
+  if (format === 'png8' || format === 'png16') return 'png'
+  return 'tif'
+}
+
+function documentHasHdrMetadata(document: ImageEditDocumentV3): boolean {
+  return document.color.transferFunction === 'pq'
+    || document.color.transferFunction === 'hlg'
+    || document.color.hdrMetadata !== null
+}
+
+/**
+ * 只暴露当前链路能无损表达的格式。线性整数文档与浮点文档均保留到 BigTIFF，
+ * PQ/HLG/HDR 元数据在任何格式下都继续显式阻断。
+ */
+export function listImageMarkV3RasterExportFormats(
+  document: ImageEditDocumentV3,
+): readonly ImageEditorV3RasterExportFormat[] {
+  if (documentHasHdrMetadata(document)) return []
+  if (document.color.bitDepth === 'float16' || document.color.bitDepth === 'float32') {
+    return ['bigtiff']
+  }
+  if (document.color.transferFunction !== 'srgb') return ['bigtiff']
+  if (document.color.bitDepth === 8) return EIGHT_BIT_SDR_FORMATS
+  if (document.color.bitDepth === 16) return SIXTEEN_BIT_SDR_FORMATS
+  return []
 }
 
 export function isImageMarkV3RasterExportAbort(error: unknown): boolean {
@@ -78,57 +119,79 @@ function optionalResourceRef(value: string | null): `sha256:${string}` | null {
   return value as `sha256:${string}`
 }
 
-function assertSdrIntegerDocument(document: ImageEditDocumentV3): 8 | 16 {
-  if (
-    document.color.transferFunction === 'pq'
-    || document.color.transferFunction === 'hlg'
-    || document.color.hdrMetadata !== null
-  ) {
+function exportPrecision(document: ImageEditDocumentV3): {
+  bitDepth: 8 | 16 | 32
+  sampleFormat: 'uint' | 'float'
+} {
+  if (documentHasHdrMetadata(document)) {
     throw new ImageMarkV3RasterExportContractError(
       'imageEditor.v3.readiness.reasons.exportHdrMetadata',
     )
   }
-  if (document.color.bitDepth !== 8 && document.color.bitDepth !== 16) {
-    throw new ImageMarkV3RasterExportContractError(
-      'imageEditor.v3.readiness.reasons.exportBitDepth',
-    )
+  if (document.color.bitDepth === 8) return { bitDepth: 8, sampleFormat: 'uint' }
+  if (document.color.bitDepth === 16) return { bitDepth: 16, sampleFormat: 'uint' }
+  if (document.color.bitDepth === 'float16' || document.color.bitDepth === 'float32') {
+    return { bitDepth: 32, sampleFormat: 'float' }
   }
-  return document.color.bitDepth
+  throw new ImageMarkV3RasterExportContractError(
+    'imageEditor.v3.readiness.reasons.exportBitDepth',
+  )
+}
+
+function defaultPngFormat(document: ImageEditDocumentV3): ImageEditorV3RasterExportFormat {
+  return document.color.bitDepth === 16 ? 'png16' : 'png8'
 }
 
 export function createImageMarkV3RasterExportSpec(
   document: ImageEditDocumentV3,
   sourceName: string,
-  suggestedName = `${imageStem(sourceName)}-edited.png`,
+  options: {
+    format?: ImageEditorV3RasterExportFormat
+    suggestedName?: string
+  } = {},
 ): ImageMarkV3RasterExportSpec {
-  const bitDepth = assertSdrIntegerDocument(document)
+  const format = options.format ?? defaultPngFormat(document)
+  const allowedFormats = listImageMarkV3RasterExportFormats(document)
+  if (!allowedFormats.includes(format)) {
+    exportPrecision(document)
+    throw new ImageMarkV3RasterExportContractError(
+      'imageEditor.v3.readiness.reasons.exportBitDepth',
+    )
+  }
+  const precision = exportPrecision(document)
   const geometry = resolveImageEditorV3ExportGeometry(document)
-  const format = bitDepth === 8 ? 'png8' : 'png16'
+  const iccProfileResourceRef = optionalResourceRef(document.color.iccProfileResourceId)
+  if (document.color.workingSpace !== 'srgb' && !iccProfileResourceRef) {
+    throw new ImageMarkV3RasterExportContractError(
+      'imageEditor.v3.readiness.reasons.exportInvalidIcc',
+    )
+  }
   const description: ImageEditorV3RasterExportDescription = {
     width: geometry.outputWidth,
     height: geometry.outputHeight,
-    bitDepth,
-    sampleFormat: 'uint',
+    ...precision,
     colorSpace: document.color.workingSpace,
     transferFunction: document.color.transferFunction,
     alphaMode: 'straight',
-    iccProfileResourceRef: optionalResourceRef(document.color.iccProfileResourceId),
+    iccProfileResourceRef,
     cicp: null,
     hdrMetadata: null,
   }
   return {
     format,
     description,
-    suggestedName,
+    suggestedName: options.suggestedName
+      ?? `${imageStem(sourceName)}-edited.${imageMarkV3RasterExportExtension(format)}`,
   }
 }
 
 export function resolveImageMarkV3RasterExportReadiness(
   document: ImageEditDocumentV3,
   sourceName: string,
+  format?: ImageEditorV3RasterExportFormat,
 ): ImageEditorCapabilityReadinessV3 {
   try {
-    const spec = createImageMarkV3RasterExportSpec(document, sourceName)
+    const spec = createImageMarkV3RasterExportSpec(document, sourceName, { format })
     prepareImageEditorV3ExportRender(document, spec.description)
     return { state: 'ready' }
   } catch (error) {
@@ -145,6 +208,7 @@ export function resolveImageMarkV3RasterExportReadiness(
 export async function exportImageMarkV3Raster({
   snapshot,
   sourceName,
+  format,
   suggestedName,
   signal,
   onProgress,
@@ -154,7 +218,10 @@ export async function exportImageMarkV3Raster({
     error.name = 'AbortError'
     throw error
   }
-  const spec = createImageMarkV3RasterExportSpec(snapshot.document, sourceName, suggestedName)
+  const spec = createImageMarkV3RasterExportSpec(snapshot.document, sourceName, {
+    format,
+    suggestedName,
+  })
   // AsyncGenerator 在首次 next() 前不会执行函数体，因此这里显式预检，避免先创建输出会话
   // 或弹出保存位置，再发现效果、颜色或几何不可导出。
   prepareImageEditorV3ExportRender(snapshot.document, spec.description)

@@ -602,13 +602,13 @@
           "selectEllipse": "Pixel selections are not connected yet, so elliptical selection is unavailable.",
           "selectLasso": "Pixel selections are not connected yet, so lasso selection is unavailable.",
           "maskEdit": "Mask pixel editing is not connected yet; existing masks are preserved.",
-          "glowExport": "Glow Pro cannot be exported reliably to PNG yet. Existing layers are preserved, but new ones cannot be created.",
-          "hdrExport": "HDR content uses an SDR proxy for preview and remains in editable files, but cannot be exported to PNG yet.",
+          "glowExport": "Glow Pro cannot be exported reliably as a raster image yet. Existing layers are preserved, but new ones cannot be created.",
+          "hdrExport": "HDR content uses an SDR proxy for preview and remains in editable files, but cannot be exported as a raster image yet.",
           "quickHdr": "Quick Edit does not accept HDR documents yet.",
           "exportDocumentNotReady": "The image editing document is not ready yet.",
           "viewerDocumentNotReady": "The Quick Edit document is not ready yet.",
           "exportHdrMetadata": "This version cannot preserve HDR metadata reliably, so export to a downgraded SDR image was blocked.",
-          "exportBitDepth": "Tiled PNG export currently supports only 8-bit or 16-bit documents; floating-point documents will not be silently reduced.",
+          "exportBitDepth": "The selected format cannot preserve this document's precision, so silent precision reduction was blocked.",
           "exportInvalidIcc": "The image editor ICC resource reference is invalid."
         }
       },
@@ -635,9 +635,10 @@
           "exportProgress": "Exporting {{completed}}/{{total}}",
           "exportPreparing": "Preparing export…",
           "cancelExport": "Cancel export",
-          "exportUnavailableAria": "PNG export unavailable: {{reason}}",
-          "exportUnavailable": "PNG export unavailable",
-          "exportPng": "Export PNG…",
+          "exportUnavailableAria": "Export unavailable: {{reason}}",
+          "exportUnavailable": "Export unavailable",
+          "export": "Export…",
+          "exportMenuAria": "Choose raster export format",
           "savePackage": "Save editable file…"
         },
         "notifications": {
@@ -650,14 +651,25 @@
           "exportFailed": "Could not export the raster image: {{reason}}"
         },
         "export": {
-          "defaultUnavailable": "This document cannot be exported to PNG yet.",
+          "defaultUnavailable": "This document cannot be exported as a raster image yet.",
           "unknownError": "Unknown error",
-          "snapshotUnavailable": "The saved authoritative document snapshot is unavailable. Try again."
+          "snapshotUnavailable": "The saved authoritative document snapshot is unavailable. Try again.",
+          "formats": {
+            "png8": "PNG (8-bit)",
+            "png16": "PNG (16-bit)",
+            "jpeg": "JPEG (8-bit, white background)",
+            "webp": "WebP (8-bit)",
+            "tiff8": "TIFF (8-bit)",
+            "tiff16": "TIFF (16-bit)",
+            "avif10": "AVIF (10-bit)",
+            "avif12": "AVIF (12-bit)",
+            "bigtiff": "BigTIFF (document precision)"
+          }
         },
         "fileNames": {
           "fallbackStem": "image",
           "editable": "{{stem}}-editable.henjiimg",
-          "editedPng": "{{stem}}-edited.png"
+          "edited": "{{stem}}-edited.{{extension}}"
         }
       },
       "viewer": {

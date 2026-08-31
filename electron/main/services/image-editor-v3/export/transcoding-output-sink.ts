@@ -89,7 +89,9 @@ function configurePipeline(
   const quality = options.quality ?? 90
   switch (options.format) {
     case 'jpeg':
-      return pipeline.jpeg({ quality, progressive: true })
+      return pipeline
+        .flatten({ background: { r: 255, g: 255, b: 255 } })
+        .jpeg({ quality, progressive: true })
     case 'webp':
       return pipeline.webp({ quality, effort: options.effort ?? 4, exact: true })
     case 'png8':
@@ -100,7 +102,7 @@ function configurePipeline(
       return pipeline.tiff({
         compression: 'deflate',
         predictor: 'horizontal',
-        bigtiff: true,
+        bigtiff: false,
         tile: true,
         tileWidth: tileSize,
         tileHeight: tileSize,

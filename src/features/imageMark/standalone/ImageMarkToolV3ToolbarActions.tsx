@@ -1,8 +1,9 @@
-import { Download, Save } from 'lucide-react'
+import { ChevronDown, Download, Save } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
-import { UI_TEXT_META_CLASS, UiButton } from '@/components/ui'
+import { PanelTrigger, UI_TEXT_META_CLASS, UiButton, UiOptionButton } from '@/components/ui'
 import { resolveImageEditorReadinessReasonV3 } from '@/features/imageEdit/v3/editor/readinessPresentationV3'
+import type { ImageEditorV3RasterExportFormat } from '@/platform/contracts/imageEditorV3'
 import { ImageMarkSourceMenu } from './ImageMarkSourceMenu'
 import type {
   ImageMarkToolV3HostController,
@@ -14,6 +15,23 @@ interface ImageMarkToolV3ToolbarActionsProps extends Pick<
   'onOpenFile' | 'onPasteFromClipboard' | 'onCreateBlank'
 > {
   host: ImageMarkToolV3HostController
+}
+
+function rasterExportFormatLabel(
+  format: ImageEditorV3RasterExportFormat,
+  translate: (key: string) => string,
+): string {
+  switch (format) {
+    case 'png8': return translate('imageEditor.v3.host.export.formats.png8')
+    case 'png16': return translate('imageEditor.v3.host.export.formats.png16')
+    case 'jpeg': return translate('imageEditor.v3.host.export.formats.jpeg')
+    case 'webp': return translate('imageEditor.v3.host.export.formats.webp')
+    case 'tiff8': return translate('imageEditor.v3.host.export.formats.tiff8')
+    case 'tiff16': return translate('imageEditor.v3.host.export.formats.tiff16')
+    case 'avif10': return translate('imageEditor.v3.host.export.formats.avif10')
+    case 'avif12': return translate('imageEditor.v3.host.export.formats.avif12')
+    case 'bigtiff': return translate('imageEditor.v3.host.export.formats.bigtiff')
+  }
 }
 
 export function ImageMarkToolV3ToolbarActions({
@@ -85,22 +103,66 @@ export function ImageMarkToolV3ToolbarActions({
               {exportReason}
             </span>
           ) : null}
-          <UiButton
-            data-export-readiness={host.rasterExportReadiness.state}
-            variant="primary"
-            size="sm"
+          <PanelTrigger
             disabled={host.isHostBusy || exportUnavailable}
-            title={exportReason}
-            aria-label={exportReason
-              ? t('imageEditor.v3.host.toolbar.exportUnavailableAria', { reason: exportReason })
-              : undefined}
-            onClick={() => void host.handleRasterExport()}
+            panelWidth={190}
+            panelClassName="p-1"
+            closeOnPanelClick
+            renderPanel={() => (
+              <div
+                role="menu"
+                aria-label={t('imageEditor.v3.host.toolbar.exportMenuAria')}
+                className="flex flex-col gap-0.5"
+              >
+                {host.rasterExportOptions.map(({ format, readiness }) => {
+                  const disabled = readiness.state !== 'ready'
+                  const reason = disabled
+                    ? resolveImageEditorReadinessReasonV3(readiness, t)
+                    : undefined
+                  return (
+                    <UiOptionButton
+                      key={format}
+                      type="button"
+                      role="menuitem"
+                      variant="menu"
+                      disabled={disabled}
+                      title={reason}
+                      data-export-format={format}
+                      data-export-readiness={readiness.state}
+                      className="w-full gap-2 text-sm disabled:cursor-not-allowed disabled:opacity-50"
+                      onClick={() => void host.handleRasterExport(format)}
+                    >
+                      {rasterExportFormatLabel(format, t)}
+                    </UiOptionButton>
+                  )
+                })}
+              </div>
+            )}
           >
-            <Download size={15} className="mr-1.5" />
-            {exportUnavailable
-              ? t('imageEditor.v3.host.toolbar.exportUnavailable')
-              : t('imageEditor.v3.host.toolbar.exportPng')}
-          </UiButton>
+            {({ open, togglePanel }) => (
+              <UiButton
+                type="button"
+                data-panel-trigger-button
+                data-export-readiness={host.rasterExportReadiness.state}
+                variant="primary"
+                size="sm"
+                disabled={host.isHostBusy || exportUnavailable}
+                title={exportReason}
+                aria-expanded={open}
+                aria-haspopup="menu"
+                aria-label={exportReason
+                  ? t('imageEditor.v3.host.toolbar.exportUnavailableAria', { reason: exportReason })
+                  : t('imageEditor.v3.host.toolbar.exportMenuAria')}
+                onClick={togglePanel}
+              >
+                <Download size={15} className="mr-1.5" />
+                {exportUnavailable
+                  ? t('imageEditor.v3.host.toolbar.exportUnavailable')
+                  : t('imageEditor.v3.host.toolbar.export')}
+                <ChevronDown size={14} className="ml-1.5" />
+              </UiButton>
+            )}
+          </PanelTrigger>
         </>
       )}
       <UiButton

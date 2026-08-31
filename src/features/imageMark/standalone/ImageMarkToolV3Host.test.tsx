@@ -24,9 +24,11 @@ const mocks = vi.hoisted(() => ({
   loadDocument: vi.fn(),
   exportRaster: vi.fn(),
   resolveExportReadiness: vi.fn(),
+  listExportFormats: vi.fn(),
   readFastProxy: vi.fn(),
   describePyramid: vi.fn(),
   prewarmPyramid: vi.fn(),
+  readSourceTile: vi.fn(),
   readBrushTiles: vi.fn(),
 }))
 
@@ -46,14 +48,17 @@ vi.mock('@/commands/imageEditorV3', () => ({
   readImageEditorV3FastProxy: mocks.readFastProxy,
   describeImageEditorV3SourcePyramid: mocks.describePyramid,
   prewarmImageEditorV3SourcePyramid: mocks.prewarmPyramid,
+  readImageEditorV3SourceTile: mocks.readSourceTile,
   readImageEditorV3BrushTiles: mocks.readBrushTiles,
 }))
 
 vi.mock('./imageMarkV3RasterExport', () => ({
   exportImageMarkV3Raster: mocks.exportRaster,
+  imageMarkV3RasterExportExtension: (format: string) => format === 'jpeg' ? 'jpg' : 'png',
   isImageMarkV3RasterExportAbort: (error: unknown) => (
     error instanceof Error && error.name === 'AbortError'
   ),
+  listImageMarkV3RasterExportFormats: mocks.listExportFormats,
   resolveImageMarkV3RasterExportFailureReason: (error: unknown) => (
     error instanceof Error ? { reason: error.message } : {}
   ),
@@ -127,6 +132,11 @@ function renderHost(options: {
   }
 }
 
+async function startRasterExport(formatLabel = 'PNG（8 位）'): Promise<void> {
+  fireEvent.click(screen.getByRole('button', { name: '选择栅格导出格式' }))
+  fireEvent.click(await screen.findByRole('menuitem', { name: formatLabel }))
+}
+
 describe('ImageMarkToolV3Host', () => {
   beforeEach(async () => {
     await i18n.changeLanguage('zh-CN')
@@ -177,6 +187,9 @@ describe('ImageMarkToolV3Host', () => {
       },
     })
     mocks.resolveExportReadiness.mockReset().mockReturnValue({ state: 'ready' })
+    mocks.listExportFormats.mockReset().mockReturnValue([
+      'png8', 'jpeg', 'webp', 'tiff8', 'bigtiff',
+    ])
   })
 
   afterEach(() => {
@@ -326,15 +339,13 @@ describe('ImageMarkToolV3Host', () => {
     expect(await screen.findByText('版本 4')).toBeTruthy()
   })
 
-  it('先落盘待保存命令，再读取权威快照执行栅格分块导出', async () => {
+  it('选定格式后先落盘待保存命令，再读取权威快照执行栅格分块导出', async () => {
     renderHost()
     const opacity = await screen.findByRole('slider', { name: '不透明度' })
     fireEvent.change(opacity, { target: { value: '0.6' } })
     fireEvent.pointerUp(opacity)
 
-    await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: '导出 PNG…' }))
-    })
+    await startRasterExport('JPEG（8 位，白色背景）')
 
     await waitFor(() => expect(mocks.exportRaster).toHaveBeenCalledTimes(1))
     expect(mocks.save).toHaveBeenCalledTimes(2)
@@ -348,6 +359,8 @@ describe('ImageMarkToolV3Host', () => {
       document: { revision: 1 },
     })
     expect(exported.sourceName).toBe('source.png')
+    expect(exported.format).toBe('jpeg')
+    expect(exported.suggestedName).toBe('source-已编辑.jpg')
     expect(exported.signal).toBeInstanceOf(AbortSignal)
     expect(mocks.save.mock.invocationCallOrder[1]).toBeLessThan(mocks.loadDocument.mock.invocationCallOrder[0])
     expect(mocks.loadDocument.mock.invocationCallOrder[0]).toBeLessThan(mocks.exportRaster.mock.invocationCallOrder[0])
@@ -369,21 +382,21 @@ describe('ImageMarkToolV3Host', () => {
     })
     renderHost()
     await screen.findByRole('slider', { name: '不透明度' })
-    fireEvent.click(screen.getByRole('button', { name: '导出 PNG…' }))
+    await startRasterExport()
 
     expect(await screen.findByText('正在导出 2/7')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: '取消导出' }))
 
     await waitFor(() => expect(receivedSignal?.aborted).toBe(true))
     expect(await screen.findByText('已取消导出')).toBeTruthy()
-    await waitFor(() => expect(screen.getByRole('button', { name: '导出 PNG…' })).toBeTruthy())
+    await waitFor(() => expect(screen.getByRole('button', { name: '选择栅格导出格式' })).toBeTruthy())
   })
 
   it('将不可支持的效果原因明确通知用户', async () => {
     mocks.exportRaster.mockRejectedValueOnce(new Error('辉光 Pro 尚未接入流式导出'))
     renderHost()
     await screen.findByRole('slider', { name: '不透明度' })
-    fireEvent.click(screen.getByRole('button', { name: '导出 PNG…' }))
+    await startRasterExport()
 
     expect(await screen.findByText('无法导出栅格图片：辉光 Pro 尚未接入流式导出')).toBeTruthy()
   })
@@ -396,7 +409,7 @@ describe('ImageMarkToolV3Host', () => {
     renderHost()
 
     const exportButton = await screen.findByRole('button', {
-      name: /导出 PNG 暂不可用：当前版本还不能可靠保留 HDR 元数据/,
+      name: /导出暂不可用：当前版本还不能可靠保留 HDR 元数据/,
     }) as HTMLButtonElement
     expect(exportButton.disabled).toBe(true)
     expect(exportButton.title).toBe(
@@ -417,7 +430,7 @@ describe('ImageMarkToolV3Host', () => {
 
     expect(await screen.findByRole('slider', { name: 'Opacity' })).toBeTruthy()
     const exportButton = screen.getByRole('button', {
-      name: /PNG export unavailable: This version cannot preserve HDR metadata reliably/,
+      name: /Export unavailable: This version cannot preserve HDR metadata reliably/,
     }) as HTMLButtonElement
     expect(exportButton.disabled).toBe(true)
     const handButton = screen.getByRole('button', { name: 'Hand' }) as HTMLButtonElement
