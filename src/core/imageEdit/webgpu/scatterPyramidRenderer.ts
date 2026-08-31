@@ -101,7 +101,6 @@ export async function renderScatterPyramid(
       accumulatedWeight = [1, 1, 1];
     }
 
-    await options.device.queue.onSubmittedWorkDone();
     assertNotCancelled(options.isCancelled);
     return { scales: [accumulated], textures };
   } catch (error) {

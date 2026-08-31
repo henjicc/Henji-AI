@@ -53,8 +53,8 @@ export class WorkerWebGpuRuntime {
     this.backend.onDeviceLost(handler)
   }
 
-  async initialize(): Promise<ImageEditWorkerCapabilities> {
-    return await this.backend.initialize()
+  async initialize(recoverDevice = false): Promise<ImageEditWorkerCapabilities> {
+    return await this.backend.initialize(recoverDevice)
   }
 
   async renderPreview(

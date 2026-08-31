@@ -1,13 +1,9 @@
 import {
   compileDiffusionRecipe,
   compileVgpuGlowRecipe,
-  IMAGE_EDIT_OPERATION_IDS,
   imageEditOperationRegistry,
   type DiffusionOperationParams,
-  type VgpuGlowOperationParams,
-  type ImageEditEncodedFormat,
   type ImageEditExecutionCapabilities,
-  type ImageEditExecutionDiagnostics,
   type ImageEditExecutionPort,
   type ImageEditExecutionRequest,
   type ImageEditExecutionResult,
@@ -17,19 +13,37 @@ import { createLogger } from '@/core/logging';
 import { getPlatform } from '@/platform';
 import type {
   ImageEditWorkerCapabilities,
-  ImageEditWorkerInitializationFailureCode,
 } from '@/core/imageEdit/worker/protocol';
-import { fitWithinPixelBudget, IMAGE_EDIT_PREVIEW_MAX_PIXELS } from '@/core/imageEdit/worker/exportPrototype';
+import { PreviewRevisionTracker } from '@/core/imageEdit/worker/previewRevisionTracker';
 import { WorkerImageEditClient } from './workerImageEditClient';
+import {
+  MAX_DEVICE_RECOVERY_RETRIES,
+  assertOutputQuality,
+  assertSharpCompositionSupported,
+  bindAbort,
+  createCapabilities,
+  createFallbackDiagnostics,
+  createLogicalRequestId,
+  createWebGpuFallbackDiagnostic,
+  createWorkerAttemptRequestId,
+  createWorkerComposition,
+  getEnabledDiffusionParams,
+  getEnabledVgpuGlowParams,
+  isAbortError,
+  isRecoverableDeviceError,
+  logPreviewBudget,
+  logWebGpuFallback,
+  mapMimeFormat,
+  mapSharpFormat,
+  resolveOrientedSize,
+  shouldRetryWebGpuDeviceFailure,
+  shouldRetryUnavailableWorkerCapabilities,
+  throwIfAborted,
+  throwVgpuGlowUnavailable,
+  type WebGpuFallbackDiagnostic,
+} from './imageEditExecutionSupport';
 
 const logger = createLogger('features.imageEdit.execution');
-const MAX_DEVICE_RECOVERY_ATTEMPTS = 2;
-
-interface WebGpuFallbackDiagnostic {
-  reason: NonNullable<ImageEditExecutionDiagnostics['fallbackReason']>;
-  deviceRecoveryAttempts: number;
-  initializationFailureCode?: ImageEditWorkerInitializationFailureCode;
-}
 
 type WorkerExecutionOutcome =
   | { kind: 'completed'; result: ImageEditExecutionResult }
@@ -38,11 +52,18 @@ type WorkerExecutionOutcome =
 export class UnifiedImageEditExecution implements ImageEditExecutionPort {
   private workerClient: WorkerImageEditClient | null = null;
   private workerCapabilities: ImageEditWorkerCapabilities | null = null;
-  private readonly activeWorkerRequestIds = new Set<string>();
+  private readonly activeWorkerRequestIds = new Map<string, string>();
+  private readonly previewRevisions = new PreviewRevisionTracker();
 
   async execute(request: ImageEditExecutionRequest): Promise<ImageEditExecutionResult> {
-    const requestId = request.requestId ?? createRequestId();
+    const requestId = request.requestId ?? createLogicalRequestId();
     const purpose = request.purpose ?? 'export';
+    const previewScopeId = purpose === 'preview'
+      ? request.previewScopeId ?? requestId
+      : null;
+    if (previewScopeId) {
+      this.previewRevisions.register(previewScopeId, request.revision ?? 0);
+    }
     let usesVgpuGlow = false;
     logger.info('image_edit.execution.start', { requestId, purpose });
     try {
@@ -85,16 +106,23 @@ export class UnifiedImageEditExecution implements ImageEditExecutionPort {
         vgpuGlowRecipe,
         composition
       );
-      const result = workerResult.kind === 'completed'
-        ? workerResult.result
-        : vgpuGlowParams
+      let result: ImageEditExecutionResult;
+      if (workerResult.kind === 'completed') {
+        result = workerResult.result;
+        this.assertLatestPreviewResult(requestId, request, previewScopeId, result);
+      } else {
+        // Sharp 会创建新的位图，先拒绝已经过期的预览，避免无意义解码和分配。
+        this.assertLatestPreview(requestId, request, previewScopeId);
+        result = vgpuGlowParams
           ? throwVgpuGlowUnavailable(workerResult.diagnostic)
           : await this.executeSharpFallback(
-          normalizedRequest,
-          params as DiffusionOperationParams,
-          composition,
-          workerResult.diagnostic
-        );
+            normalizedRequest,
+            params as DiffusionOperationParams,
+            composition,
+            workerResult.diagnostic
+          );
+        this.assertLatestPreviewResult(requestId, request, previewScopeId, result);
+      }
       logger.info('image_edit.execution.completed', {
         requestId,
         purpose,
@@ -129,13 +157,14 @@ export class UnifiedImageEditExecution implements ImageEditExecutionPort {
         });
       }
       throw error;
+    } finally {
+      if (previewScopeId) this.previewRevisions.complete(previewScopeId);
     }
   }
 
   async cancel(requestId: string): Promise<void> {
-    if (this.activeWorkerRequestIds.has(requestId)) {
-      this.workerClient?.cancel(requestId);
-    }
+    const workerRequestId = this.activeWorkerRequestIds.get(requestId);
+    if (workerRequestId) this.workerClient?.cancel(workerRequestId);
   }
 
   getCapabilities(): ImageEditExecutionCapabilities {
@@ -147,6 +176,7 @@ export class UnifiedImageEditExecution implements ImageEditExecutionPort {
     this.workerClient = null;
     this.workerCapabilities = null;
     this.activeWorkerRequestIds.clear();
+    this.previewRevisions.clear();
   }
 
   private async tryWorkerExecution(
@@ -157,20 +187,38 @@ export class UnifiedImageEditExecution implements ImageEditExecutionPort {
   ): Promise<WorkerExecutionOutcome> {
     const client = this.workerClient ?? new WorkerImageEditClient();
     this.workerClient = client;
-    for (let attempt = 0; attempt <= MAX_DEVICE_RECOVERY_ATTEMPTS; attempt += 1) {
+    for (let attempt = 0; attempt <= MAX_DEVICE_RECOVERY_RETRIES; attempt += 1) {
+      this.assertLatestPreview(
+        request.requestId,
+        request,
+        (request.purpose ?? 'export') === 'preview'
+          ? request.previewScopeId ?? request.requestId
+          : null
+      );
       let capabilities: ImageEditWorkerCapabilities;
       try {
-        capabilities = this.workerCapabilities ?? await client.initialize();
+        capabilities = this.workerCapabilities ?? await client.initialize(attempt > 0);
       } catch (error) {
         this.workerCapabilities = null;
+        if (shouldRetryWebGpuDeviceFailure(error, attempt)) {
+          this.logDeviceRecovery(request.requestId, attempt + 1, 'initialize-rejected');
+          continue;
+        }
         const diagnostic = createWebGpuFallbackDiagnostic(error, attempt);
         logWebGpuFallback(request.requestId, request.purpose ?? 'export', diagnostic);
         return { kind: 'fallback', diagnostic };
       }
       if (!capabilities.available) {
         this.workerCapabilities = null;
+        if (shouldRetryUnavailableWorkerCapabilities(capabilities, attempt)) {
+          this.logDeviceRecovery(request.requestId, attempt + 1, 'initialize-unavailable');
+          continue;
+        }
+        const initializationDetail = capabilities.initializationFailure?.detail
+          ?? capabilities.reason
+          ?? 'Worker WebGPU 初始化未返回可用设备';
         const diagnostic = createWebGpuFallbackDiagnostic(
-          capabilities.reason ?? 'Worker WebGPU 初始化未返回可用设备',
+          initializationDetail,
           attempt,
           capabilities.initializationFailure?.code
         );
@@ -178,13 +226,14 @@ export class UnifiedImageEditExecution implements ImageEditExecutionPort {
         return { kind: 'fallback', diagnostic };
       }
       this.workerCapabilities = capabilities;
+      const workerRequestId = createWorkerAttemptRequestId(request.requestId, attempt);
       try {
-        this.activeWorkerRequestIds.add(request.requestId);
+        this.activeWorkerRequestIds.set(request.requestId, workerRequestId);
         let removeAbortListener = (): void => undefined;
         try {
           removeAbortListener = bindAbort(
             request.signal,
-            () => client.cancel(request.requestId)
+            () => client.cancel(workerRequestId)
           );
           if ((request.purpose ?? 'export') === 'preview') {
             const preview = await client.preview(
@@ -195,8 +244,8 @@ export class UnifiedImageEditExecution implements ImageEditExecutionPort {
               vgpuGlowRecipe,
               composition,
               {
-                requestId: request.requestId,
-                previewScopeId: request.previewScopeId,
+                requestId: workerRequestId,
+                previewScopeId: request.previewScopeId ?? request.requestId,
               }
             );
             return {
@@ -221,7 +270,7 @@ export class UnifiedImageEditExecution implements ImageEditExecutionPort {
           const task = client.export(
             { kind: 'url', url: request.sourceImageUrl },
             {
-              requestId: request.requestId,
+              requestId: workerRequestId,
               revision: request.revision,
               recipe,
               vgpuGlowRecipe,
@@ -260,14 +309,16 @@ export class UnifiedImageEditExecution implements ImageEditExecutionPort {
           return { kind: 'completed', result };
         } finally {
           removeAbortListener();
-          this.activeWorkerRequestIds.delete(request.requestId);
+          if (this.activeWorkerRequestIds.get(request.requestId) === workerRequestId) {
+            this.activeWorkerRequestIds.delete(request.requestId);
+          }
         }
       } catch (error) {
         if (isAbortError(error)) throw error;
         if (!isRecoverableDeviceError(error)) {
           throw error;
         }
-        if (attempt === MAX_DEVICE_RECOVERY_ATTEMPTS) {
+        if (!shouldRetryWebGpuDeviceFailure(error, attempt)) {
           this.workerCapabilities = null;
           const diagnostic: WebGpuFallbackDiagnostic = {
             reason: 'webgpu-device-recovery-exhausted',
@@ -276,11 +327,7 @@ export class UnifiedImageEditExecution implements ImageEditExecutionPort {
           logWebGpuFallback(request.requestId, request.purpose ?? 'export', diagnostic);
           return { kind: 'fallback', diagnostic };
         }
-        logger.warn('WebGPU 设备异常，准备重建后重试', {
-          event: 'image_edit.execution.webgpu.recovery.start',
-          requestId: request.requestId,
-          context: { recoveryAttempt: attempt + 1 },
-        });
+        this.logDeviceRecovery(request.requestId, attempt + 1, 'request-failed');
         this.workerCapabilities = null;
       }
     }
@@ -288,9 +335,58 @@ export class UnifiedImageEditExecution implements ImageEditExecutionPort {
       kind: 'fallback',
       diagnostic: {
         reason: 'webgpu-device-recovery-exhausted',
-        deviceRecoveryAttempts: MAX_DEVICE_RECOVERY_ATTEMPTS,
+        deviceRecoveryAttempts: MAX_DEVICE_RECOVERY_RETRIES,
       },
     };
+  }
+
+  private assertLatestPreview(
+    requestId: string,
+    request: ImageEditExecutionRequest,
+    previewScopeId: string | null
+  ): void {
+    if (this.isStalePreview(request, previewScopeId)) {
+      throw new DOMException(
+        `预览 ${requestId} 的 revision ${request.revision ?? 0} 已过期`,
+        'AbortError'
+      );
+    }
+  }
+
+  private assertLatestPreviewResult(
+    requestId: string,
+    request: ImageEditExecutionRequest,
+    previewScopeId: string | null,
+    result: ImageEditExecutionResult
+  ): void {
+    if (!this.isStalePreview(request, previewScopeId)) return;
+    if (result.kind === 'preview-frame' && typeof result.frame !== 'string') {
+      result.frame.close();
+    }
+    throw new DOMException(
+      `预览 ${requestId} 的 revision ${request.revision ?? 0} 已过期`,
+      'AbortError'
+    );
+  }
+
+  private logDeviceRecovery(
+    requestId: string,
+    recoveryAttempt: number,
+    phase: 'initialize-rejected' | 'initialize-unavailable' | 'request-failed'
+  ): void {
+    logger.warn('WebGPU 设备异常，准备重建后重试', {
+      event: 'image_edit.execution.webgpu.recovery.start',
+      requestId,
+      context: { recoveryAttempt, phase },
+    });
+  }
+
+  private isStalePreview(
+    request: ImageEditExecutionRequest,
+    previewScopeId: string | null
+  ): boolean {
+    return previewScopeId !== null
+      && this.previewRevisions.isStale(previewScopeId, request.revision ?? 0);
   }
 
   private async executeSharpFallback(
@@ -372,235 +468,6 @@ export class UnifiedImageEditExecution implements ImageEditExecutionPort {
   }
 }
 
-function assertSharpCompositionSupported(composition: ImageEditWorkerComposition): void {
-  const hasOrientation = composition.orientation.rotate !== 0 || composition.orientation.mirrored;
-  const hasAnnotations = Boolean(composition.annotations?.items.length);
-  const hasCrop = composition.crop?.rect !== null && composition.crop?.rect !== undefined;
-  if (hasOrientation || hasAnnotations || hasCrop) {
-    throw new Error('Sharp 柔光降级暂不支持与朝向、标注或裁剪合成，已保留原始编辑文档');
-  }
-}
-
 export const imageEditExecutionPort = new UnifiedImageEditExecution();
 
-function getEnabledDiffusionParams(
-  document: ImageEditExecutionRequest['document']
-): DiffusionOperationParams | null {
-  const operation = document.operations.find((entry) =>
-    entry.enabled && entry.operationId === IMAGE_EDIT_OPERATION_IDS.diffusion
-  );
-  return (operation?.params as DiffusionOperationParams | undefined) ?? null;
-}
-
-function getEnabledVgpuGlowParams(
-  document: ImageEditExecutionRequest['document']
-): VgpuGlowOperationParams | null {
-  const operation = document.operations.find((entry) =>
-    entry.enabled && entry.operationId === IMAGE_EDIT_OPERATION_IDS.vgpuGlow
-  );
-  return (operation?.params as VgpuGlowOperationParams | undefined) ?? null;
-}
-
-function createWorkerComposition(
-  document: ImageEditExecutionRequest['document'],
-  includePostEffects: boolean
-): ImageEditWorkerComposition {
-  const getParams = <TParams extends object>(operationId: string, fallback: TParams): TParams => {
-    const operation = document.operations.find((entry) => entry.enabled && entry.operationId === operationId);
-    return (operation?.params as TParams | undefined) ?? fallback;
-  };
-  const orientation = getParams(IMAGE_EDIT_OPERATION_IDS.orientation, { rotate: 0 as const, mirrored: false });
-  if (!includePostEffects) return { orientation };
-  return {
-    orientation,
-    annotations: getParams(IMAGE_EDIT_OPERATION_IDS.annotations, { items: [] }),
-    crop: getParams(IMAGE_EDIT_OPERATION_IDS.crop, { rect: null }),
-  };
-}
-
-function resolveOrientedSize(width: number, height: number, rotate: number): { width: number; height: number } {
-  return rotate === 90 || rotate === 270 ? { width: height, height: width } : { width, height };
-}
-
-function createCapabilities(
-  backend: 'webgpu-worker' | 'sharp',
-  unsupportedParameters: readonly string[] = []
-): ImageEditExecutionCapabilities {
-  const fallbackUnsupported = backend === 'webgpu-worker'
-    ? [...unsupportedParameters, IMAGE_EDIT_OPERATION_IDS.vgpuGlow]
-    : unsupportedParameters;
-  return {
-    executorId: 'image-edit-unified',
-    backends: [backend],
-    supportedOperationIds: [
-      IMAGE_EDIT_OPERATION_IDS.orientation,
-      IMAGE_EDIT_OPERATION_IDS.diffusion,
-      IMAGE_EDIT_OPERATION_IDS.vgpuGlow,
-      IMAGE_EDIT_OPERATION_IDS.annotations,
-      IMAGE_EDIT_OPERATION_IDS.crop,
-    ],
-    purposes: ['preview', 'export'],
-    qualities: ['realtime', 'high'],
-    exportFormats: ['image/png', 'image/jpeg', 'image/webp'],
-    hardCancellationSupported: backend === 'webgpu-worker',
-    fallback: {
-      backend: 'sharp',
-      unsupportedParameters: fallbackUnsupported,
-      hardCancellationSupported: false,
-    },
-  };
-}
-
-function throwVgpuGlowUnavailable(diagnostic: WebGpuFallbackDiagnostic): never {
-  throw new Error(
-    `辉光 Pro 需要可用的 WebGPU，当前无法启动 VGPU（${diagnostic.reason}）`
-  );
-}
-
-function createFallbackDiagnostics(
-  durationMs: number,
-  unsupportedParameters: readonly string[],
-  fallbackDiagnostic: WebGpuFallbackDiagnostic
-): NonNullable<ImageEditExecutionResult['diagnostics']> {
-  return {
-    durationMs,
-    fallbackReason: fallbackDiagnostic.reason,
-    deviceRecoveryAttempts: fallbackDiagnostic.deviceRecoveryAttempts,
-    unsupportedParameters,
-  };
-}
-
-export function classifyWebGpuFallbackReason(
-  error: unknown,
-  deviceRecoveryAttempts: number,
-  initializationFailureCode?: ImageEditWorkerInitializationFailureCode
-): NonNullable<ImageEditExecutionDiagnostics['fallbackReason']> {
-  if (deviceRecoveryAttempts >= MAX_DEVICE_RECOVERY_ATTEMPTS && isRecoverableDeviceError(error)) {
-    return 'webgpu-device-recovery-exhausted';
-  }
-  if (initializationFailureCode === 'webgpu-api-unavailable') {
-    return 'webgpu-api-unavailable';
-  }
-  if (initializationFailureCode === 'webgpu-adapter-unavailable') {
-    return 'webgpu-adapter-unavailable';
-  }
-  const message = getErrorMessage(error).toLowerCase();
-  if (message.includes('navigator.gpu') || message.includes('webgpu api')) {
-    return 'webgpu-api-unavailable';
-  }
-  if (message.includes('gpu adapter') || message.includes('可用 gpu')) {
-    return 'webgpu-adapter-unavailable';
-  }
-  return 'webgpu-initialization-failed';
-}
-
-function createWebGpuFallbackDiagnostic(
-  error: unknown,
-  deviceRecoveryAttempts: number,
-  initializationFailureCode?: ImageEditWorkerInitializationFailureCode
-): WebGpuFallbackDiagnostic {
-  return {
-    reason: classifyWebGpuFallbackReason(
-      error,
-      deviceRecoveryAttempts,
-      initializationFailureCode
-    ),
-    deviceRecoveryAttempts,
-    initializationFailureCode,
-  };
-}
-
-function logWebGpuFallback(
-  requestId: string,
-  purpose: 'preview' | 'export',
-  diagnostic: WebGpuFallbackDiagnostic
-): void {
-  logger.warn('WebGPU 不可用，准备使用兼容执行器', {
-    event: 'image_edit.execution.webgpu.unavailable',
-    requestId,
-    context: {
-      purpose,
-      fallbackReason: diagnostic.reason,
-      deviceRecoveryAttempts: diagnostic.deviceRecoveryAttempts,
-      initializationFailureCode: diagnostic.initializationFailureCode,
-    },
-  });
-}
-
-function logPreviewBudget(
-  requestId: string,
-  purpose: 'preview' | 'export',
-  sourceSize: { width: number; height: number },
-  requestedMaxPixels: number | undefined
-): void {
-  if (purpose !== 'preview') return;
-  const maxPixels = requestedMaxPixels ?? IMAGE_EDIT_PREVIEW_MAX_PIXELS;
-  if (!Number.isInteger(maxPixels) || maxPixels <= 0) return;
-  const previewSize = fitWithinPixelBudget(sourceSize.width, sourceSize.height, maxPixels);
-  logger.debug('预览像素预算已应用', {
-    event: 'image_edit.execution.preview.budget',
-    requestId,
-    context: {
-      sourceWidth: sourceSize.width,
-      sourceHeight: sourceSize.height,
-      previewWidth: previewSize.width,
-      previewHeight: previewSize.height,
-      maxPixels,
-    },
-  });
-}
-
-function mapSharpFormat(format: ImageEditEncodedFormat): 'png' | 'jpeg' | 'webp' {
-  if (format === 'image/jpeg') return 'jpeg';
-  if (format === 'image/webp') return 'webp';
-  return 'png';
-}
-
-function mapMimeFormat(format: 'png' | 'jpeg' | 'webp'): ImageEditEncodedFormat {
-  if (format === 'jpeg') return 'image/jpeg';
-  if (format === 'webp') return 'image/webp';
-  return 'image/png';
-}
-
-function bindAbort(signal: AbortSignal | undefined, cancel: () => void): () => void {
-  if (!signal) return () => undefined;
-  throwIfAborted(signal);
-  signal.addEventListener('abort', cancel, { once: true });
-  return () => signal.removeEventListener('abort', cancel);
-}
-
-function throwIfAborted(signal?: AbortSignal): void {
-  if (signal?.aborted) throw new DOMException('图片编辑任务已取消', 'AbortError');
-}
-
-function isAbortError(error: unknown): boolean {
-  return error instanceof DOMException && error.name === 'AbortError'
-    || error instanceof Error && error.message.includes('已取消');
-}
-
-function isRecoverableDeviceError(error: unknown): boolean {
-  const message = getErrorMessage(error).toLowerCase();
-  return message.includes('device-lost')
-    || message.includes('设备丢失')
-    || message.includes('device-unavailable')
-    || message.includes('device unavailable');
-}
-
-function getErrorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
-}
-
-function createRequestId(): string {
-  return typeof crypto !== 'undefined' && 'randomUUID' in crypto
-    ? `image-edit-${crypto.randomUUID()}`
-    : `image-edit-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-}
-
-function assertOutputQuality(value: number | undefined): void {
-  if (
-    value !== undefined
-    && (!Number.isFinite(value) || value < 0 || value > 1)
-  ) {
-    throw new Error('图片导出质量必须在 0～1 之间');
-  }
-}
+export { classifyWebGpuFallbackReason } from './imageEditExecutionSupport';

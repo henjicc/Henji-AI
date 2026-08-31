@@ -120,7 +120,8 @@ export function createImageEditExecutionPort(
     purposes: ['preview', 'export'],
     qualities: ['realtime', 'high'],
     exportFormats: ['image/png', 'image/jpeg', 'image/webp'],
-    hardCancellationSupported: Boolean(executor.cancel),
+    // cancel 只表示能够发出协作式取消请求；没有证据时不得宣称可中断正在执行的 pass/tile。
+    hardCancellationSupported: false,
   });
   return {
     execute: async (request): Promise<ImageEditExecutionResult> => {

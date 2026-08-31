@@ -1,11 +1,30 @@
 import baselineShaderSource from './baseline.wgsl?raw'
 import type { DiffusionRecipe } from '../diffusionRecipe'
 import type { VgpuGlowRecipe } from '../vgpuGlowRecipe'
-import { createRenderPipelineChecked, createShaderModuleChecked, ImageEditWebGpuDeviceManager } from '../webgpu/deviceManager'
+import {
+  createRenderPipelineChecked,
+  createShaderModuleChecked,
+  ImageEditWebGpuDeviceManager,
+  type ImageEditWebGpuDeviceLoss,
+  type ManagedWebGpuDevice,
+} from '../webgpu/deviceManager'
 import { WebGpuDiffusionRenderer, type DiffusionRenderInput, type DiffusionScatterPyramid } from '../webgpu/diffusionRenderer'
 import { VgpuGlowRenderer, type VgpuGlowGlobalScatter } from '../webgpu/vgpuGlowRenderer'
-import { collectRelevantGpuLimits } from './webgpuCapabilities'
-import type { ImageEditWorkerCapabilities, ImageEditWorkerInitializationFailure, ImageEditWorkerInitializationFailureCode } from './protocol'
+import type { ImageEditWorkerCapabilities } from './protocol'
+import {
+  DeviceGenerationSerialQueue,
+  SingleflightRuntimeState,
+} from './gpuRuntimeLifecycle'
+import {
+  classifyDeviceAcquisitionFailure,
+  createInitializationError,
+  describeInitializationFailure,
+  getErrorDetail,
+} from './webgpuRuntimeErrors'
+import {
+  assertWorkerTextureSize,
+  describeWorkerWebGpuCapabilities,
+} from './webgpuRuntimeCapabilities'
 import {
   createViewportBuffer, getWebGpuContext, renderPass, unavailableCapabilities,
   type GpuAdapter, type GpuCanvasContext, type GpuDevice, type GpuProvider,
@@ -17,6 +36,7 @@ const TEXTURE_BINDING = 0x04
 const TEXTURE_RENDER_ATTACHMENT = 0x10
 
 export interface WorkerWebGpuState {
+  generation: number
   provider: GpuProvider
   adapter: GpuAdapter
   device: GpuDevice
@@ -29,62 +49,83 @@ export interface WorkerWebGpuState {
   canvasFormat: string
 }
 
-class WorkerWebGpuInitializationError extends Error {
-  constructor(readonly failure: ImageEditWorkerInitializationFailure) {
-    super(failure.detail)
-    this.name = 'WorkerWebGpuInitializationError'
-  }
+interface ImageEditWebGpuDeviceManagerLike {
+  onDeviceLost(
+    handler: (reason: string, loss: ImageEditWebGpuDeviceLoss) => void
+  ): void
+  acquire(): Promise<ManagedWebGpuDevice>
+  invalidate(): void
+  destroy(): void
+  isCurrent(generation: number): boolean
 }
 
+export interface WorkerWebGpuRuntimeBackendDependencies {
+  deviceManager?: ImageEditWebGpuDeviceManagerLike
+  stateFactory?: () => Promise<WorkerWebGpuState>
+  stateDestroyer?: (state: WorkerWebGpuState) => void
+}
 export class WorkerWebGpuRuntimeBackend {
-  private state: WorkerWebGpuState | null = null
-  private readonly deviceManager = new ImageEditWebGpuDeviceManager()
+  private readonly deviceManager: ImageEditWebGpuDeviceManagerLike
+  private readonly states: SingleflightRuntimeState<WorkerWebGpuState>
+  private readonly serial = new DeviceGenerationSerialQueue()
+  private readonly stateFactory?: () => Promise<WorkerWebGpuState>
+  private readonly stateDestroyer?: (state: WorkerWebGpuState) => void
   private deviceLostHandler: ((reason: string) => void) | null = null
-
-  constructor() {
+  private destroyed = false
+  constructor(dependencies: WorkerWebGpuRuntimeBackendDependencies = {}) {
+    this.deviceManager = dependencies.deviceManager ?? new ImageEditWebGpuDeviceManager()
+    this.stateFactory = dependencies.stateFactory
+    this.stateDestroyer = dependencies.stateDestroyer
+    this.states = new SingleflightRuntimeState((state) => this.destroyRuntimeState(state))
     this.deviceManager.onDeviceLost((reason) => {
-      if (this.state) this.destroyRuntimeState(this.state)
-      this.state = null
+      // 即使 device 在 createState 中丢失、尚未挂成 current，也必须推进 state epoch。
+      this.states.invalidate()
       this.deviceLostHandler?.(reason)
     })
   }
-
   onDeviceLost(handler: (reason: string) => void): void { this.deviceLostHandler = handler }
-
-  async initialize(): Promise<ImageEditWorkerCapabilities> {
+  async initialize(recoverDevice = false): Promise<ImageEditWorkerCapabilities> {
     try {
-      this.disposeState()
-      const state = await this.createState()
-      this.state = state
-      return this.describeCapabilities(state)
+      if (recoverDevice) {
+        this.deviceManager.invalidate()
+        this.states.invalidate()
+      }
+      const state = await this.ensureState()
+      return describeWorkerWebGpuCapabilities(state)
     } catch (error) {
       return unavailableCapabilities(describeInitializationFailure(error))
     }
   }
-
   async ensureState(): Promise<WorkerWebGpuState> {
-    if (this.state) return this.state
-    this.state = await this.createState()
-    return this.state
+    return await this.states.acquire(
+      this.stateFactory ?? (() => this.createState())
+    )
   }
 
   destroy(): void {
-    this.disposeState()
+    if (this.destroyed) return
+    this.destroyed = true
+    this.states.destroy()
+    this.serial.destroy()
     this.deviceManager.destroy()
   }
 
   getMaxTextureDimension(state: WorkerWebGpuState): number | undefined { return state.adapter.limits?.maxTextureDimension2D }
-  trimVgpuGlowWorkingSet(state: WorkerWebGpuState): void { state.vgpuGlowRenderer?.trimWorkingSet() }
+  trimVgpuGlowWorkingSet(state: WorkerWebGpuState): void {
+    if (this.states.isCurrent(state)) state.vgpuGlowRenderer?.trimWorkingSet()
+  }
 
   async renderBaselineBitmap(
     state: WorkerWebGpuState, decoded: ImageBitmap, width: number, height: number
   ): Promise<ImageBitmap> {
-    const intermediate = await this.createIntermediate(state, decoded, width, height)
-    try {
-      return await this.renderTextureToBitmap(state, intermediate, width, height)
-    } finally {
-      intermediate.destroy()
-    }
+    return await this.runForState(state, async () => {
+      const intermediate = await this.createIntermediate(state, decoded, width, height)
+      try {
+        return await this.renderTextureToBitmap(state, intermediate, width, height)
+      } finally {
+        intermediate.destroy()
+      }
+    }, (bitmap) => bitmap.close())
   }
 
   async renderDiffusionBitmap(
@@ -97,25 +138,27 @@ export class WorkerWebGpuRuntimeBackend {
     isCancelled?: () => boolean,
     scatter?: DiffusionRenderInput['scatter']
   ): Promise<ImageBitmap> {
-    const rendered = await state.diffusionRenderer.render({
-      sourceKey,
-      width,
-      height,
-      recipe,
-      isCancelled,
-      scatter,
-      createLinearBase: async () => await this.createIntermediate(
-        state,
-        decoded,
+    return await this.runForState(state, async () => {
+      const rendered = await state.diffusionRenderer.render({
+        sourceKey,
         width,
-        height
-      ),
-    })
-    try {
-      return await this.renderTextureToBitmap(state, rendered.texture, width, height)
-    } finally {
-      rendered.release()
-    }
+        height,
+        recipe,
+        isCancelled,
+        scatter,
+        createLinearBase: async () => await this.createIntermediate(
+          state,
+          decoded,
+          width,
+          height
+        ),
+      })
+      try {
+        return await this.renderTextureToBitmap(state, rendered.texture, width, height)
+      } finally {
+        rendered.release()
+      }
+    }, (bitmap) => bitmap.close())
   }
 
   async buildDiffusionScatterPyramid(
@@ -126,18 +169,20 @@ export class WorkerWebGpuRuntimeBackend {
     recipe: DiffusionRecipe,
     isCancelled: () => boolean
   ): Promise<DiffusionScatterPyramid> {
-    return await state.diffusionRenderer.buildScatterPyramid({
-      width,
-      height,
-      recipe,
-      isCancelled,
-      createLinearBase: async () => await this.createIntermediate(
-        state,
-        decoded,
+    return await this.runForState(state, async () => (
+      await state.diffusionRenderer.buildScatterPyramid({
         width,
-        height
-      ),
-    })
+        height,
+        recipe,
+        isCancelled,
+        createLinearBase: async () => await this.createIntermediate(
+          state,
+          decoded,
+          width,
+          height
+        ),
+      })
+    ), (pyramid) => pyramid.release())
   }
 
   async renderVgpuGlowBitmap(
@@ -152,17 +197,19 @@ export class WorkerWebGpuRuntimeBackend {
       region: readonly [number, number, number, number]
     }
   ): Promise<ImageBitmap> {
-    this.assertTextureSize(state, width, height)
-    const renderer = await this.ensureVgpuGlowRenderer(state)
-    const rendered = await renderer.render({
-      bitmap: decoded,
-      width,
-      height,
-      recipe,
-      isCancelled,
-      scatter,
-    })
-    return await this.renderTextureToBitmap(state, rendered, width, height)
+    return await this.runForState(state, async () => {
+      assertWorkerTextureSize(state, width, height)
+      const renderer = await this.ensureVgpuGlowRenderer(state)
+      const rendered = await renderer.render({
+        bitmap: decoded,
+        width,
+        height,
+        recipe,
+        isCancelled,
+        scatter,
+      })
+      return await this.renderTextureToBitmap(state, rendered, width, height)
+    }, (bitmap) => bitmap.close())
   }
 
   async buildVgpuGlowGlobalScatter(
@@ -173,14 +220,16 @@ export class WorkerWebGpuRuntimeBackend {
     recipe: VgpuGlowRecipe,
     isCancelled: () => boolean
   ): Promise<VgpuGlowGlobalScatter> {
-    const renderer = await this.ensureVgpuGlowRenderer(state)
-    return await renderer.buildGlobalScatter({
-      bitmap,
-      width,
-      height,
-      recipe,
-      isCancelled,
-    })
+    return await this.runForState(state, async () => {
+      const renderer = await this.ensureVgpuGlowRenderer(state)
+      return await renderer.buildGlobalScatter({
+        bitmap,
+        width,
+        height,
+        recipe,
+        isCancelled,
+      })
+    }, (scatter) => scatter.release())
   }
 
   private async createState(): Promise<WorkerWebGpuState> {
@@ -190,7 +239,7 @@ export class WorkerWebGpuRuntimeBackend {
         'Worker 未提供 OffscreenCanvas 或 ImageBitmap'
       )
     }
-    const { provider, adapter, device } = await this.acquireDevice()
+    const { provider, adapter, device, generation } = await this.acquireDevice()
     const module = await this.createBaselineShaderModule(device)
     const canvasFormat = this.getPreferredCanvasFormat(provider)
     const shared = {
@@ -211,6 +260,7 @@ export class WorkerWebGpuRuntimeBackend {
       addressModeV: 'clamp-to-edge',
     })
     return {
+      generation,
       provider,
       adapter,
       device,
@@ -226,20 +276,12 @@ export class WorkerWebGpuRuntimeBackend {
     }
   }
 
-  private async acquireDevice(): Promise<{
-    provider: GpuProvider
-    adapter: GpuAdapter
-    device: GpuDevice
-  }> {
+  private async acquireDevice(): Promise<ManagedWebGpuDevice> {
     try {
       return await this.deviceManager.acquire()
     } catch (error) {
       const detail = getErrorDetail(error)
-      const code = detail.includes('navigator.gpu')
-        ? 'webgpu-api-unavailable'
-        : detail.includes('GPU adapter')
-          ? 'webgpu-adapter-unavailable'
-          : 'webgpu-device-request-failed'
+      const code = classifyDeviceAcquisitionFailure(error)
       throw createInitializationError(code, detail)
     }
   }
@@ -323,7 +365,7 @@ export class WorkerWebGpuRuntimeBackend {
       const renderer = await initialization
       // 初始化期间设备可能已丢失或 runtime 已销毁。旧 renderer 不能挂回新 state，
       // 也不能遗留它创建的 target / effect 资源。
-      if (this.state !== state) {
+      if (!this.isStateCurrent(state)) {
         renderer.destroy()
         throw new Error('VGPU 辉光初始化期间 GPU 运行时已失效')
       }
@@ -342,7 +384,7 @@ export class WorkerWebGpuRuntimeBackend {
     width: number,
     height: number
   ): Promise<GpuTexture> {
-    this.assertTextureSize(state, width, height)
+    assertWorkerTextureSize(state, width, height)
     const sourceTexture = state.device.createTexture({
       size: [decoded.width, decoded.height],
       format: 'rgba8unorm',
@@ -369,7 +411,6 @@ export class WorkerWebGpuRuntimeBackend {
         uniform,
         intermediate
       )
-      await state.device.queue.onSubmittedWorkDone()
       const renderError = await state.device.popErrorScope()
       if (renderError) {
         throw new Error(
@@ -416,7 +457,6 @@ export class WorkerWebGpuRuntimeBackend {
         uniform,
         context.getCurrentTexture()
       )
-      await state.device.queue.onSubmittedWorkDone()
       const renderError = await state.device.popErrorScope()
       if (renderError) {
         throw new Error(
@@ -428,73 +468,33 @@ export class WorkerWebGpuRuntimeBackend {
     }
   }
 
-  private describeCapabilities(state: WorkerWebGpuState): ImageEditWorkerCapabilities {
-    const info = state.adapter.info ?? {}
-    return {
-      available: true,
-      adapterName: info.description || info.device || info.vendor || null,
-      backend: info.architecture || null,
-      isFallbackAdapter: state.adapter.isFallbackAdapter ?? null,
-      features: state.adapter.features ? [...state.adapter.features] : [],
-      limits: collectRelevantGpuLimits(state.adapter.limits),
-      rgba16Float: { renderable: true, sampleable: true },
-      offscreenCanvas: true,
-      imageBitmap: true,
-      supportedExportFormats: ['image/png', 'image/jpeg', 'image/webp'],
-    }
+  private async runForState<T>(
+    state: WorkerWebGpuState,
+    execute: () => Promise<T>,
+    disposeStale?: (value: T) => void,
+  ): Promise<T> {
+    return await this.serial.run({
+      generation: state.generation,
+      isCurrent: () => this.isStateCurrent(state),
+      execute,
+      disposeStale,
+    })
   }
 
-  private assertTextureSize(state: WorkerWebGpuState, width: number, height: number): void {
-    const limit = this.getMaxTextureDimension(state)
-    if (typeof limit === 'number' && Math.max(width, height) > limit) {
-      throw new Error(`图片尺寸 ${width}x${height} 超过设备纹理上限 ${limit}`)
-    }
-  }
-
-  private disposeState(): void {
-    if (this.state) this.destroyRuntimeState(this.state)
-    this.deviceManager.invalidate()
-    this.state = null
+  private isStateCurrent(state: WorkerWebGpuState): boolean {
+    return this.states.isCurrent(state)
+      && this.deviceManager.isCurrent(state.generation)
   }
 
   private destroyRuntimeState(state: WorkerWebGpuState): void {
+    if (this.stateDestroyer) {
+      this.stateDestroyer(state)
+      return
+    }
     state.diffusionRenderer.destroy()
     state.vgpuGlowRenderer?.destroy()
     state.vgpuGlowRenderer = null
     // 正在进行的初始化由 ensureVgpuGlowRenderer 在发现 state 已失效时负责销毁。
     state.vgpuGlowRendererInitialization = null
   }
-}
-
-function describeInitializationFailure(error: unknown): ImageEditWorkerInitializationFailure {
-  if (error instanceof WorkerWebGpuInitializationError) return error.failure
-  return {
-    code: 'webgpu-initialization-unknown',
-    detail: sanitizeInitializationDetail(getErrorDetail(error)),
-  }
-}
-
-function createInitializationError(
-  code: ImageEditWorkerInitializationFailureCode,
-  error: unknown
-): WorkerWebGpuInitializationError {
-  return new WorkerWebGpuInitializationError({
-    code,
-    detail: sanitizeInitializationDetail(getErrorDetail(error)),
-  })
-}
-
-function getErrorDetail(error: unknown): string {
-  return error instanceof Error ? error.message : String(error)
-}
-
-function sanitizeInitializationDetail(value: string): string {
-  const withoutPaths = value
-    .replace(/[A-Za-z]:[\\/][^\s)\],]+/g, '<path>')
-    .replace(/(?:https?|file):\/\/[^\s)\],]+/g, '<url>')
-    .replace(/\s+/g, ' ')
-    .trim()
-  // 上限放宽到 400：WGSL 编译诊断带行列号和源码片段，180 字会把真正的原因截掉，
-  // 只剩下没有定位价值的前缀。
-  return (withoutPaths || 'unknown-initialization-error').slice(0, 400)
 }

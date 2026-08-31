@@ -10,12 +10,13 @@ import type {
 } from './protocol'
 import { withImageEditWorkerExecutionCapabilities } from './protocol'
 import { PreviewRevisionTracker } from './previewRevisionTracker'
+import { ImageEditWorkerScheduler } from './imageEditWorkerScheduler'
 
 const workerScope = self as DedicatedWorkerGlobalScope
 const runtime = new WorkerWebGpuRuntime()
 const cancelledRequestIds = new Set<string>()
 const previewRevisions = new PreviewRevisionTracker()
-let renderQueue = Promise.resolve()
+const scheduler = new ImageEditWorkerScheduler()
 
 runtime.onDeviceLost((reason) => {
   postEvent({
@@ -23,32 +24,46 @@ runtime.onDeviceLost((reason) => {
     reason,
     recoverable: true,
   })
+  scheduler.invalidatePending()
 })
 
 workerScope.onmessage = (message: MessageEvent<ImageEditWorkerRequest>): void => {
   const request = message.data
   switch (request.type) {
     case 'initialize':
-      enqueue(async () => {
-        const capabilities = await runtime.initialize()
-        postEvent({
-          type: 'capabilities',
-          requestId: request.requestId,
-          capabilities: withImageEditWorkerExecutionCapabilities(capabilities),
-        })
+      scheduler.enqueueControl({
+        run: async () => {
+          const capabilities = await runtime.initialize(request.recoverDevice)
+          postEvent({
+            type: 'capabilities',
+            requestId: request.requestId,
+            capabilities: withImageEditWorkerExecutionCapabilities(capabilities),
+          })
+        },
+        onDropped: () => postCancelled(request.requestId),
       })
       return
     case 'preview':
       previewRevisions.register(request.previewScopeId, request.revision)
-      enqueue(() => handlePreview(request))
+      scheduler.enqueuePreview(request.previewScopeId, {
+        run: () => handlePreview(request),
+        onDropped: () => {
+          postCancelled(request.requestId)
+          previewRevisions.complete(request.previewScopeId)
+        },
+      })
       return
     case 'export':
-      enqueue(() => handleExport(request))
+      scheduler.enqueueExport({
+        run: () => handleExport(request),
+        onDropped: () => postCancelled(request.requestId),
+      })
       return
     case 'cancel':
       cancelledRequestIds.add(request.requestId)
       return
     case 'destroy':
+      scheduler.destroy()
       runtime.destroy()
       cancelledRequestIds.clear()
       previewRevisions.clear()
@@ -62,10 +77,6 @@ workerScope.onmessage = (message: MessageEvent<ImageEditWorkerRequest>): void =>
         recoverable: true,
       })
   }
-}
-
-function enqueue(task: () => Promise<void>): void {
-  renderQueue = renderQueue.then(task, task)
 }
 
 async function handlePreview(request: ImageEditWorkerPreviewRequest): Promise<void> {

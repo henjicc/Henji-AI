@@ -38,6 +38,19 @@ function fakeBitmap(): ImageBitmap {
 }
 
 describe('WorkerImageEditClient', () => {
+  it('显式恢复初始化会通知 Worker 重建设备', async () => {
+    const worker = new MockWorker()
+    const client = new WorkerImageEditClient(() => worker)
+    const pending = client.initialize(true)
+
+    expect(worker.requests[0]).toMatchObject({
+      type: 'initialize',
+      recoverDevice: true,
+    })
+    client.destroy()
+    await expect(pending).rejects.toThrow('已销毁')
+  })
+
   it('保留 Worker 初始化失败的可观测原因，交由统一执行器决定是否降级', async () => {
     const worker = new MockWorker()
     const client = new WorkerImageEditClient(() => worker)

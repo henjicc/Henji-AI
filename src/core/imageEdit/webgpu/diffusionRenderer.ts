@@ -159,7 +159,6 @@ export class WebGpuDiffusionRenderer {
         ],
         source
       );
-      await this.device.queue.onSubmittedWorkDone();
       const built = await this.buildPyramidTextures(input, source);
       return {
         scales: built.scales,
@@ -205,7 +204,6 @@ export class WebGpuDiffusionRenderer {
         ],
         output
       );
-      await this.device.queue.onSubmittedWorkDone();
       return {
         texture: output,
         release: () => this.texturePool.release(output),
@@ -241,7 +239,6 @@ export class WebGpuDiffusionRenderer {
         ],
         source
       );
-      await this.device.queue.onSubmittedWorkDone();
       assertNotCancelled(input.isCancelled);
       this.cache = {
         sourceKey: input.sourceKey,

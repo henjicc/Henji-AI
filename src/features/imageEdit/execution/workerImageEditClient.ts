@@ -91,12 +91,12 @@ export class WorkerImageEditClient {
     this.worker.addEventListener('message', this.handleMessage)
   }
 
-  initialize(): Promise<ImageEditWorkerCapabilities> {
+  initialize(recoverDevice = false): Promise<ImageEditWorkerCapabilities> {
     this.assertActive()
     const requestId = createRequestId('initialize')
     logger.debug('image_edit.worker.initialize.start', { requestId })
     const promise = createPendingPromise(this.pendingCapabilities, requestId)
-    this.worker.postMessage({ type: 'initialize', requestId })
+    this.worker.postMessage({ type: 'initialize', requestId, recoverDevice })
     return promise
   }
 

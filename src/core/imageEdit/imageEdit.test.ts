@@ -216,6 +216,7 @@ describe('图片操作注册与执行端口', () => {
     const executor = {
       id: 'test-executor',
       execute: vi.fn(async () => 'rendered-image'),
+      cancel: vi.fn(async () => undefined),
     };
     const port = createImageEditExecutionPort(registry, executor);
 

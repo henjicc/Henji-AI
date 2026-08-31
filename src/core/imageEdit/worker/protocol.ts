@@ -18,6 +18,7 @@ export type ImageEditWorkerInitializationFailureCode =
   | 'webgpu-api-unavailable'
   | 'webgpu-adapter-unavailable'
   | 'webgpu-device-request-failed'
+  | 'webgpu-device-recovery-cooldown'
   | 'webgpu-canvas-format-unavailable'
   | 'webgpu-baseline-pipeline-failed'
   | 'webgpu-diffusion-pipeline-failed'
@@ -39,6 +40,7 @@ export interface ImageEditWorkerComposition {
 export interface ImageEditWorkerInitRequest {
   type: 'initialize'
   requestId: string
+  recoverDevice?: boolean
 }
 
 export interface ImageEditWorkerPreviewRequest {
@@ -103,7 +105,7 @@ export interface ImageEditWorkerCapabilities {
   executionBackend?: 'webgpu-worker'
   supportedOperationIds?: readonly string[]
   supportedQualities?: readonly ImageEditRenderQuality[]
-  hardCancellationSupported?: true
+  hardCancellationSupported?: false
   fallback?: {
     backend: 'sharp'
     hardCancellationSupported: false
@@ -152,7 +154,7 @@ export function withImageEditWorkerExecutionCapabilities(
       IMAGE_EDIT_OPERATION_IDS.crop,
     ],
     supportedQualities: ['realtime', 'high'],
-    hardCancellationSupported: true,
+    hardCancellationSupported: false,
     fallback: {
       backend: 'sharp',
       hardCancellationSupported: false,
