@@ -157,7 +157,7 @@ describe('图片编辑 V3 commands 契约', () => {
       expectedRevision: 0,
       layerId: 'paint',
       changes: [{
-        tileKey: '0:0:0',
+        tileKey: '0/0/0',
         previousResourceId: null,
         previousByteSize: 0,
         resourceId: PREVIEW_REF,
@@ -173,6 +173,7 @@ describe('图片编辑 V3 commands 契约', () => {
       document,
       history: snapshot,
       resourceRefs: [PREVIEW_REF],
+      resources: [{ resourceRef: PREVIEW_REF, byteLength: 4, mediaType: null }],
       sourceFingerprint: `sha256:${'d'.repeat(64)}`,
     })
     mocks.getPlatform.mockReturnValue({ imageEditorV3: platform })
@@ -280,11 +281,11 @@ describe('图片编辑 V3 commands 契约', () => {
   it('画笔命令在 PAL 边界复制 Float32 数据并映射内容寻址引用', async () => {
     const platform = createPlatform()
     vi.mocked(platform.persistBrushTiles).mockResolvedValue({
-      tiles: [{ tileKey: '0:2:3', resource: { resourceRef: PREVIEW_REF, byteSize: 128 } }],
+      tiles: [{ tileKey: '0/2/3', resource: { resourceRef: PREVIEW_REF, byteSize: 128 } }],
     })
     vi.mocked(platform.readBrushTiles).mockResolvedValue({
       tiles: [{
-        tileKey: '0:2:3',
+        tileKey: '0/2/3',
         tile: {
           storage: 'mask-float32',
           width: 2,
@@ -298,20 +299,20 @@ describe('图片编辑 V3 commands 契约', () => {
 
     const persisted = await persistImageEditorV3BrushTiles({
       requestId: 'brush-persist',
-      tiles: [{ tileKey: '0:2:3', tile: source }],
+      tiles: [{ tileKey: '0/2/3', tile: source }],
     })
     const sent = vi.mocked(platform.persistBrushTiles).mock.calls[0]?.[0].tiles[0]?.tile
     const loaded = await readImageEditorV3BrushTiles({
       requestId: 'brush-read',
       tiles: [{
-        tileKey: '0:2:3',
+        tileKey: '0/2/3',
         resource: { resourceId: PREVIEW_REF, byteSize: 128 },
       }],
     })
 
     expect(sent?.data).toBeInstanceOf(ArrayBuffer)
     expect(sent?.data).not.toBe(source.data.buffer)
-    expect(persisted.tiles).toEqual([{ tileKey: '0:2:3', resourceId: PREVIEW_REF, byteSize: 128 }])
+    expect(persisted.tiles).toEqual([{ tileKey: '0/2/3', resourceId: PREVIEW_REF, byteSize: 128 }])
     expect(loaded.tiles[0]?.tile.data).toBeInstanceOf(Float32Array)
     expect([...loaded.tiles[0]!.tile.data]).toEqual([0.25, 1])
   })

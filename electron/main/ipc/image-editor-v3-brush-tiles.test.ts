@@ -44,7 +44,7 @@ describe('图片编辑 V3 画笔瓦片 IPC 批处理', () => {
         requestId: 'brush-roundtrip-persist',
         tiles: [
           {
-            tileKey: '0:0:0',
+            tileKey: '0/0/0',
             tile: {
               storage: 'rgba-float32',
               width: 1,
@@ -58,7 +58,7 @@ describe('图片编辑 V3 画笔瓦片 IPC 批处理', () => {
             },
           },
           {
-            tileKey: '0:1:0',
+            tileKey: '0/1/0',
             tile: {
               storage: 'mask-float32',
               width: 2,
@@ -81,7 +81,7 @@ describe('图片编辑 V3 画笔瓦片 IPC 批处理', () => {
 
     expect(persisted.tiles).toHaveLength(2)
     expect(persisted.tiles[0]?.resource.resourceRef).toMatch(/^sha256:[a-f0-9]{64}$/)
-    expect(loaded.tiles.map((item) => item.tileKey)).toEqual(['0:0:0', '0:1:0'])
+    expect(loaded.tiles.map((item) => item.tileKey)).toEqual(['0/0/0', '0/1/0'])
     expect(loaded.tiles[0]?.tile.storage).toBe('rgba-float32')
     expect(loaded.tiles[0]?.tile.data).toBeInstanceOf(ArrayBuffer)
     expect([...new Float32Array(loaded.tiles[0]!.tile.data)])
@@ -93,7 +93,7 @@ describe('图片编辑 V3 画笔瓦片 IPC 批处理', () => {
     const payload = parseImageEditorV3PersistBrushTilesPayload({
       requestId: 'brush-cancelled',
       tiles: [{
-        tileKey: '0:0:0',
+        tileKey: '0/0/0',
         tile: { storage: 'mask-float32', width: 1, height: 1, data: new Float32Array([1]) },
       }],
     })
@@ -108,7 +108,7 @@ describe('图片编辑 V3 画笔瓦片 IPC 批处理', () => {
     const payload = parseImageEditorV3PersistBrushTilesPayload({
       requestId: 'brush-invalid-mask',
       tiles: [{
-        tileKey: '0:0:0',
+        tileKey: '0/0/0',
         tile: { storage: 'mask-float32', width: 1, height: 1, data: new Float32Array([2]) },
       }],
     })
@@ -141,7 +141,7 @@ describe('图片编辑 V3 画笔瓦片 IPC 批处理', () => {
     const response = await registration[1]({ sender: { id: 17 } } as never, {
       requestId: 'brush-admission',
       tiles: [{
-        tileKey: '0:0:0',
+        tileKey: '0/0/0',
         tile: { storage: 'mask-float32', width: 1, height: 1, data: new Float32Array([1]) },
       }],
     })

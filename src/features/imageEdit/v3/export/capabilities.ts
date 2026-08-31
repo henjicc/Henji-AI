@@ -42,12 +42,6 @@ function visitLayers(layers: readonly ImageEditLayerV3[]): void {
         `图层“${layer.name}”使用了仿射变换；当前分块导出只支持文档裁剪、镜像和 90° 方向变换`,
       )
     }
-    if (layer.type === 'raster' && Object.keys(layer.tiles).length > 0) {
-      throw new ImageEditorV3ExportCapabilityError(
-        'SPARSE_RASTER_UNSUPPORTED',
-        `栅格图层“${layer.name}”包含画笔瓦片；画笔瓦片读取桥接完成前不能导出，避免静默漏掉笔画`,
-      )
-    }
     if (layer.type === 'annotation' && layer.annotations.some((item) => item.type === 'mosaic')) {
       throw new ImageEditorV3ExportCapabilityError(
         'MOSAIC_ANNOTATION_UNSUPPORTED',

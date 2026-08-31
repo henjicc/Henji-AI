@@ -16,6 +16,8 @@ export interface ImageEditorV3DocumentSnapshot extends ImageEditorV3DocumentRefe
   document: ImageEditDocumentV3
   history: ImageEditCommandHistorySnapshotV3 | null
   resourceRefs: ImageEditorV3ResourceRef[]
+  /** 当前快照引用资源的权威大小；稀疏瓦片读取不得依赖渲染层猜测。 */
+  resources: ImageEditorV3ResourceDescriptor[]
   /** 主进程对 documentId/revision/document/resourceRefs 计算的不可变导出快照指纹。 */
   sourceFingerprint: `sha256:${string}`
 }

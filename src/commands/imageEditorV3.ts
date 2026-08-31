@@ -167,6 +167,9 @@ function brushTileDataBuffer(tile: ImageEditBrushTileV3): ArrayBuffer {
 }
 
 function deserializeBrushTile(value: ImageEditorV3LoadedBrushTile['tile']): ImageEditBrushTileV3 {
+  if (value.storage !== 'rgba-float32' && value.storage !== 'mask-float32') {
+    throw new Error('图片编辑画笔瓦片存储格式无效')
+  }
   const channels = value.storage === 'rgba-float32' ? 4 : 1
   const expectedBytes = value.width * value.height * channels * Float32Array.BYTES_PER_ELEMENT
   if (!(value.data instanceof ArrayBuffer) || value.data.byteLength !== expectedBytes) {
@@ -175,6 +178,9 @@ function deserializeBrushTile(value: ImageEditorV3LoadedBrushTile['tile']): Imag
   const data = new Float32Array(value.data.slice(0))
   if (value.storage === 'mask-float32') {
     return createFloat32MaskTile(value.width, value.height, data)
+  }
+  if (value.alpha !== 'premultiplied') {
+    throw new Error('图片编辑 RGBA 画笔瓦片必须使用预乘 Alpha')
   }
   return createFloat32PremultipliedRgbaTile(
     value.width,

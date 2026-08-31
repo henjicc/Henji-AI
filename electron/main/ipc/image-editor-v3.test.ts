@@ -16,6 +16,7 @@ vi.mock('electron', () => ({
 vi.mock('../window', () => ({ getMainWindow: vi.fn() }))
 
 import {
+  describeImageEditorV3SnapshotResources,
   parseImageEditorV3LoadPayload,
   parseImageEditorV3FastProxyPayload,
   parseImageEditorV3IngestSourcePayload,
@@ -24,8 +25,12 @@ import {
   parseImageEditorV3TilePayload,
 } from './image-editor-v3'
 
-const RESOURCE_A = `sha256:${'a'.repeat(64)}`
-const RESOURCE_B = `sha256:${'b'.repeat(64)}`
+const RESOURCE_A = `sha256:${'a'.repeat(64)}` as const
+const RESOURCE_B = `sha256:${'b'.repeat(64)}` as const
+
+function resourceRef(index: number): `sha256:${string}` {
+  return `sha256:${index.toString(16).padStart(64, '0')}`
+}
 
 function document(revision: number): Record<string, unknown> {
   return {
@@ -39,6 +44,67 @@ function document(revision: number): Record<string, unknown> {
 }
 
 describe('图片编辑 V3 IPC 边界', () => {
+  it('为 load/package 共享快照按原顺序受控并发生成权威资源描述', async () => {
+    const resourceRefs = Array.from({ length: 12 }, (_, index) => resourceRef(index + 1))
+    const releases = new Map<string, () => void>()
+    let active = 0
+    let maximumActive = 0
+    const describeResource = vi.fn(async (resourceId: `sha256:${string}`) => {
+      active += 1
+      maximumActive = Math.max(maximumActive, active)
+      await new Promise<void>((resolve) => releases.set(resourceId, resolve))
+      active -= 1
+      return {
+        id: resourceId,
+        sha256: resourceId.slice('sha256:'.length),
+        byteLength: Number.parseInt(resourceId.slice(-2), 16) + 80,
+        mediaType: 'application/x-henji-brush-tile-v3',
+      }
+    })
+    const controller = new AbortController()
+    const pending = describeImageEditorV3SnapshotResources(
+      resourceRefs,
+      describeResource,
+      controller.signal,
+    )
+    await vi.waitFor(() => expect(describeResource).toHaveBeenCalledTimes(8))
+    for (const release of [...releases.values()]) release()
+    await vi.waitFor(() => expect(describeResource).toHaveBeenCalledTimes(12))
+    for (const release of [...releases.values()]) release()
+
+    await expect(pending).resolves.toEqual(resourceRefs.map((resourceRef) => ({
+      resourceRef,
+      byteLength: Number.parseInt(resourceRef.slice(-2), 16) + 80,
+      mediaType: 'application/x-henji-brush-tile-v3',
+    })))
+    expect(maximumActive).toBe(8)
+  })
+
+  it('快照资源 describe 不合作时仍可明确取消', async () => {
+    const controller = new AbortController()
+    const pending = describeImageEditorV3SnapshotResources(
+      [RESOURCE_A],
+      () => new Promise<never>(() => undefined),
+      controller.signal,
+    )
+    controller.abort()
+    await expect(pending).rejects.toMatchObject({ name: 'AbortError' })
+  })
+
+  it('快照拒绝重复引用或与哈希不一致的资源描述', async () => {
+    const controller = new AbortController()
+    await expect(describeImageEditorV3SnapshotResources(
+      [RESOURCE_A, RESOURCE_A],
+      () => new Promise<never>(() => undefined),
+      controller.signal,
+    )).rejects.toThrow('duplicate resource references')
+    await expect(describeImageEditorV3SnapshotResources(
+      [RESOURCE_A],
+      async () => ({ id: RESOURCE_A, sha256: 'b'.repeat(64), byteLength: 80 }),
+      controller.signal,
+    )).rejects.toThrow('does not match snapshot reference')
+  })
+
   it('接受 revision 0 初始文档并去重、排序内容寻址引用', () => {
     expect(parseImageEditorV3SavePayload({
       requestId: 'image-editor-v3:save:initial',

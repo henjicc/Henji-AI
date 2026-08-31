@@ -28,16 +28,16 @@ describe('图片编辑 V3 画笔瓦片 IPC payload', () => {
     const parsed = parseImageEditorV3PersistBrushTilesPayload({
       requestId: 'brush-persist',
       tiles: [
-        { tileKey: '0:0:0', tile: rgbaTile(rgba.buffer) },
+        { tileKey: '0/0/0', tile: rgbaTile(rgba.buffer) },
         {
-          tileKey: '0:1:0',
+          tileKey: '0/1/0',
           tile: { storage: 'mask-float32', width: 2, height: 2, data: mask },
         },
       ],
     })
 
     expect(parsed.rawByteLength).toBe(32)
-    expect(parsed.tiles.map((item) => item.tileKey)).toEqual(['0:0:0', '0:1:0'])
+    expect(parsed.tiles.map((item) => item.tileKey)).toEqual(['0/0/0', '0/1/0'])
     expect(parsed.tiles[0]?.tile.data).toBeInstanceOf(Float32Array)
     expect(parsed.tiles[0]?.tile.data.byteOffset).toBe(0)
     expect(parsed.tiles[0]?.tile.data.byteLength).toBe(parsed.tiles[0]?.tile.data.buffer.byteLength)
@@ -49,29 +49,29 @@ describe('图片编辑 V3 画笔瓦片 IPC payload', () => {
     const offsetView = new Float32Array(oversizedBacking.buffer, 4, 4)
     expect(() => parseImageEditorV3PersistBrushTilesPayload({
       requestId: 'brush-offset',
-      tiles: [{ tileKey: '0:0:0', tile: rgbaTile(offsetView) }],
+      tiles: [{ tileKey: '0/0/0', tile: rgbaTile(offsetView) }],
     })).toThrow('exact, unshared backing buffer')
     expect(() => parseImageEditorV3PersistBrushTilesPayload({
       requestId: 'brush-shared',
       tiles: [{
-        tileKey: '0:0:0',
+        tileKey: '0/0/0',
         tile: rgbaTile(new Float32Array(new SharedArrayBuffer(16))),
       }],
     })).toThrow('exact, unshared backing buffer')
     expect(() => parseImageEditorV3PersistBrushTilesPayload({
       requestId: 'brush-length',
       tiles: [{
-        tileKey: '0:0:0',
+        tileKey: '0/0/0',
         tile: { storage: 'mask-float32', width: 2, height: 1, data: new ArrayBuffer(4) },
       }],
     })).toThrow('length mismatch')
     expect(() => parseImageEditorV3PersistBrushTilesPayload({
       requestId: 'brush-alpha',
-      tiles: [{ tileKey: '0:0:0', tile: { ...rgbaTile(), alpha: 'straight' } }],
+      tiles: [{ tileKey: '0/0/0', tile: { ...rgbaTile(), alpha: 'straight' } }],
     })).toThrow('premultiplied alpha')
     expect(() => parseImageEditorV3PersistBrushTilesPayload({
       requestId: 'brush-color',
-      tiles: [{ tileKey: '0:0:0', tile: { ...rgbaTile(), workingSpace: 'unknown' } }],
+      tiles: [{ tileKey: '0/0/0', tile: { ...rgbaTile(), workingSpace: 'unknown' } }],
     })).toThrow('workingSpace')
   })
 
@@ -79,13 +79,13 @@ describe('图片编辑 V3 画笔瓦片 IPC payload', () => {
     expect(() => parseImageEditorV3PersistBrushTilesPayload({
       requestId: 'brush-duplicate',
       tiles: [
-        { tileKey: '0:0:0', tile: rgbaTile() },
-        { tileKey: '0:0:0', tile: rgbaTile() },
+        { tileKey: '0/0/0', tile: rgbaTile() },
+        { tileKey: '0/0/0', tile: rgbaTile() },
       ],
     })).toThrow('duplicate tileKey')
     expect(() => parseImageEditorV3PersistBrushTilesPayload({
       requestId: 'brush-field',
-      tiles: [{ tileKey: '0:0:0', tile: rgbaTile(), extra: true }],
+      tiles: [{ tileKey: '0/0/0', tile: rgbaTile(), extra: true }],
     })).toThrow('unknown field')
     expect(() => parseImageEditorV3ReadBrushTilesPayload({
       requestId: 'brush-read-invalid-key',
@@ -94,7 +94,7 @@ describe('图片编辑 V3 画笔瓦片 IPC payload', () => {
     expect(() => parseImageEditorV3ReadBrushTilesPayload({
       requestId: 'brush-read-budget',
       tiles: Array.from({ length: 13 }, (_, index) => ({
-        tileKey: `0:${index}:0`,
+        tileKey: `0/${index}/0`,
         resource: { resourceRef: RESOURCE_REF, byteSize: 5 * 1024 * 1024 },
       })),
     })).toThrow('resource byte budget')
@@ -103,14 +103,14 @@ describe('图片编辑 V3 画笔瓦片 IPC payload', () => {
   it('读取请求保留资源引用顺序并计算最坏解压预算', () => {
     const parsed = parseImageEditorV3ReadBrushTilesPayload({
       requestId: 'brush-read',
-      tiles: [{ tileKey: '2:3:4', resource: { resourceRef: RESOURCE_REF, byteSize: 120 } }],
+      tiles: [{ tileKey: '2/3/4', resource: { resourceRef: RESOURCE_REF, byteSize: 120 } }],
     })
 
     expect(parsed).toMatchObject({
       requestId: 'brush-read',
       resourceByteLength: 120,
       maximumDecodedByteLength: 512 * 512 * 4 * 4,
-      tiles: [{ tileKey: '2:3:4', resource: { resourceId: RESOURCE_REF, byteSize: 120 } }],
+      tiles: [{ tileKey: '2/3/4', resource: { resourceId: RESOURCE_REF, byteSize: 120 } }],
     })
   })
 })

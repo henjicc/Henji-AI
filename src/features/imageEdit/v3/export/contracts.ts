@@ -1,4 +1,6 @@
 import type {
+  ImageEditBrushResourceReferenceV3,
+  ImageEditBrushTileV3,
   Float32PremultipliedRgbaTile,
   ImageEditDocumentV3,
   ImageEditRenderPlanNode,
@@ -8,6 +10,7 @@ import type {
 import type { ImageEditorV3RenderedExportTile } from '@/commands/imageEditorV3Export'
 import type {
   ImageEditorV3RasterExportDescription,
+  ImageEditorV3ResourceDescriptor,
   ImageEditorV3SourceTile,
 } from '@/platform/contracts/imageEditorV3'
 
@@ -18,7 +21,6 @@ export type ImageEditorV3ExportCapabilityCode =
   | 'MOSAIC_ANNOTATION_UNSUPPORTED'
   | 'OUTPUT_GEOMETRY_MISMATCH'
   | 'RENDER_NODE_UNSUPPORTED'
-  | 'SPARSE_RASTER_UNSUPPORTED'
   | 'WORKING_SET_EXCEEDED'
   | 'ANNOTATION_RASTERIZER_UNAVAILABLE'
 
@@ -67,6 +69,15 @@ export interface ImageEditorV3ExportRenderDependencies {
   rasterizeAnnotations?: (
     request: ImageEditorV3ExportAnnotationRasterizeRequest,
   ) => Promise<Float32PremultipliedRgbaTile>
+  readBrushTiles?: (
+    tiles: ReadonlyArray<{
+      tileKey: string
+      resource: ImageEditBrushResourceReferenceV3
+    }>,
+    signal: AbortSignal,
+  ) => Promise<{
+    tiles: Array<{ tileKey: string; tile: ImageEditBrushTileV3 }>
+  }>
   scheduler?: ImageEditRenderScheduler
   resourceBudget?: ImageEditResourceBudget
 }
@@ -74,6 +85,8 @@ export interface ImageEditorV3ExportRenderDependencies {
 export interface RenderImageEditorV3ExportTilesRequest {
   /** 调用方传入持久化快照；入口会再次经过 V3 codec，避免渲染期间被外部修改。 */
   document: ImageEditDocumentV3
+  /** 与 document 同一权威快照中的资源描述；画笔瓦片字节数不得由渲染层猜测。 */
+  resourceDescriptors: readonly ImageEditorV3ResourceDescriptor[]
   description: ImageEditorV3RasterExportDescription
   tileSize?: number
   sessionId?: string

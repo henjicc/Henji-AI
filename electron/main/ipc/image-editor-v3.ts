@@ -1,5 +1,10 @@
 import path from 'node:path'
 import { BrowserWindow, dialog, type IpcMainInvokeEvent, type WebContents } from 'electron'
+import type { ImageEditDocumentV3 } from '../../../src/core/imageEdit/v3/documentTypes'
+import type {
+  ImageEditorV3DocumentSnapshot,
+  ImageEditorV3ResourceDescriptor,
+} from '../../../src/platform/contracts/imageEditorV3'
 import { getMainWindow } from '../window'
 import { isTrustedMainRendererUrl } from '../security/main-renderer-url'
 import { getDataRootDir, sanitizeFileStem } from '../services/image/path-utils'
@@ -130,19 +135,73 @@ function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
   return copy.buffer
 }
 
-function toSnapshot(envelope: ImageEditDocumentEnvelope): Record<string, unknown> {
+function validateSnapshotDocument(envelope: ImageEditDocumentEnvelope): ImageEditDocumentV3 {
   const normalized = normalizeImageEditorV3Document(envelope.document)
   if (normalized.documentId !== envelope.documentId || normalized.revision !== envelope.revision) {
     throw new Error('Image editor V3 document body and envelope revisions differ')
   }
+  return normalized.document as ImageEditDocumentV3
+}
+
+export async function describeImageEditorV3SnapshotResources(
+  resourceRefs: readonly ResourceId[],
+  describeResource: (resourceId: ResourceId) => Promise<ResourceDescriptor>,
+  signal: AbortSignal,
+): Promise<ImageEditorV3ResourceDescriptor[]> {
+  if (new Set(resourceRefs).size !== resourceRefs.length) {
+    throw new Error('Image editor snapshot contains duplicate resource references')
+  }
+  const results = new Array<ImageEditorV3ResourceDescriptor>(resourceRefs.length)
+  let cursor = 0
+  let stopped = false
+  const worker = async (): Promise<void> => {
+    while (!stopped && cursor < resourceRefs.length) {
+      throwIfAborted(signal)
+      const index = cursor
+      cursor += 1
+      const resourceRef = resourceRefs[index]
+      try {
+        const descriptor = await raceWithAbort(describeResource(resourceRef), signal)
+        if (descriptor.id !== resourceRef
+          || descriptor.sha256 !== resourceRef.slice('sha256:'.length)
+          || !Number.isSafeInteger(descriptor.byteLength)
+          || descriptor.byteLength < 0
+          || (descriptor.mediaType !== undefined && typeof descriptor.mediaType !== 'string')) {
+          throw new Error(`Image editor resource descriptor does not match snapshot reference: ${resourceRef}`)
+        }
+        results[index] = toResource(descriptor)
+      } catch (error) {
+        stopped = true
+        throw error
+      }
+    }
+  }
+  await Promise.all(Array.from(
+    { length: Math.min(8, resourceRefs.length) },
+    () => worker(),
+  ))
+  throwIfAborted(signal)
+  return results
+}
+
+async function toSnapshot(
+  envelope: ImageEditDocumentEnvelope,
+  signal: AbortSignal,
+): Promise<ImageEditorV3DocumentSnapshot> {
+  const document = validateSnapshotDocument(envelope)
   return {
-    documentRef: toDocumentRef(envelope.documentId),
+    documentRef: toDocumentRef(envelope.documentId) as ImageEditorV3DocumentSnapshot['documentRef'],
     revision: envelope.revision,
-    sourceFingerprint: createImageEditSourceFingerprint(envelope),
+    sourceFingerprint: createImageEditSourceFingerprint(envelope) as ImageEditorV3DocumentSnapshot['sourceFingerprint'],
     previewRef: envelope.previewRef ?? null,
     resourceRefs: envelope.resourceRefs,
+    resources: await describeImageEditorV3SnapshotResources(
+      envelope.resourceRefs,
+      (resourceRef) => getRuntime().resources.describe(resourceRef),
+      signal,
+    ),
     history: envelope.history ?? null,
-    document: normalized.document,
+    document,
   }
 }
 
@@ -158,7 +217,7 @@ function toReference(envelope: ImageEditDocumentEnvelope): Record<string, unknow
   }
 }
 
-function toResource(descriptor: ResourceDescriptor): Record<string, unknown> {
+function toResource(descriptor: ResourceDescriptor): ImageEditorV3ResourceDescriptor {
   return { resourceRef: descriptor.id, byteLength: descriptor.byteLength, mediaType: descriptor.mediaType ?? null }
 }
 
@@ -199,6 +258,24 @@ function throwIfAborted(signal: AbortSignal): void {
   const error = new Error('Image editor request cancelled')
   error.name = 'AbortError'
   throw error
+}
+
+async function raceWithAbort<T>(operation: Promise<T>, signal: AbortSignal): Promise<T> {
+  throwIfAborted(signal)
+  let onAbort: (() => void) | undefined
+  const cancelled = new Promise<never>((_, reject) => {
+    onAbort = () => {
+      const error = new Error('Image editor request cancelled')
+      error.name = 'AbortError'
+      reject(error)
+    }
+    signal.addEventListener('abort', onAbort, { once: true })
+  })
+  try {
+    return await Promise.race([operation, cancelled])
+  } finally {
+    if (onAbort) signal.removeEventListener('abort', onAbort)
+  }
 }
 
 async function assertHistoryResourceSizes(
@@ -295,7 +372,7 @@ async function saveDocument(payload: SaveDocumentPayload): Promise<Record<string
 }
 
 async function persistImportedDocument(imported: ImageEditDocumentEnvelope): Promise<ImageEditDocumentEnvelope> {
-  toSnapshot(imported)
+  validateSnapshotDocument(imported)
   const documents = getRuntime().documents
   let current: ImageEditDocumentEnvelope | null
   try {
@@ -349,7 +426,7 @@ export function registerImageEditorV3Ipc(): void {
       try {
         const document = await getRuntime().documents.load(payload.documentRef)
         await assertHistoryResourceSizes(document.history)
-        return toSnapshot(document)
+        return await toSnapshot(document, signal)
       }
       catch (error) { if (isNotFound(error)) return null; throw error }
     })
@@ -436,14 +513,16 @@ export function registerImageEditorV3Ipc(): void {
       }
       const imported = await getRuntime().packages.import(selection.filePaths[0], { signal })
       let document: ImageEditDocumentEnvelope
+      let snapshot: ImageEditorV3DocumentSnapshot
       try {
         document = await persistImportedDocument(imported.manifest.document)
+        snapshot = await toSnapshot(document, signal)
       } finally {
         await imported.resourceLease.release()
       }
       return { status: 'completed' as const, value: {
-        snapshot: toSnapshot(document),
-        resources: imported.resources.map(toResource),
+        snapshot,
+        resources: snapshot.resources,
         thumbnail: imported.thumbnail && imported.manifest.thumbnail
           ? { bytes: toArrayBuffer(imported.thumbnail), mediaType: imported.manifest.thumbnail.mediaType }
           : null,

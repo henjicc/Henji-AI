@@ -38,6 +38,11 @@ import {
   projectImageEditorV3RenderedRegionToOutput,
 } from './outputTile'
 import {
+  applyImageEditorV3SparseRasterRegion,
+  createImageEditorV3SparseRasterPlan,
+  type ImageEditorV3SparseRasterPlan,
+} from './brushRegion'
+import {
   imageEditorV3SourceRegionToMask,
   loadImageEditorV3SourceRegion,
 } from './sourceRegion'
@@ -129,15 +134,25 @@ export function renderImageEditorV3ExportTiles(
   request: RenderImageEditorV3ExportTilesRequest,
   dependencies: ImageEditorV3ExportRenderDependencies = {},
 ): ImageEditorV3ExportTileStream {
-  return renderTiles(request, dependencies)
+  if (request.signal?.aborted) throwIfAborted(request.signal)
+  const prepared = prepareImageEditorV3ExportRender(request.document, request.description)
+  const geometry = resolveImageEditorV3ExportGeometry(prepared.document, request.description)
+  const sparseRasterPlan = createImageEditorV3SparseRasterPlan(
+    prepared.plan,
+    { width: geometry.sourceWidth, height: geometry.sourceHeight },
+    request.resourceDescriptors,
+  )
+  return renderTiles(request, dependencies, prepared, geometry, sparseRasterPlan)
 }
 
 async function* renderTiles(
   request: RenderImageEditorV3ExportTilesRequest,
   dependencies: ImageEditorV3ExportRenderDependencies,
+  prepared: ReturnType<typeof prepareImageEditorV3ExportRender>,
+  geometry: ReturnType<typeof resolveImageEditorV3ExportGeometry>,
+  sparseRasterPlan: ImageEditorV3SparseRasterPlan,
 ): AsyncGenerator<ImageEditorV3RenderedExportTile> {
-  const { document, plan } = prepareImageEditorV3ExportRender(request.document, request.description)
-  const geometry = resolveImageEditorV3ExportGeometry(document, request.description)
+  const { document, plan } = prepared
   const neighborhood = resolveImageEditorV3ExportNeighborhood(plan)
   const tileSize = validateTileSize(request.tileSize)
   const scheduler = dependencies.scheduler ?? new ImageEditRenderScheduler({ cpuConcurrency: 2 })
@@ -242,9 +257,23 @@ async function* renderTiles(
                 signal: taskContext.signal,
                 loadRaster: async (node) => {
                   const resourceId = rasterResourceId(node)
-                  return resourceId
+                  const base = resourceId
                     ? loadSource(resourceId)
                     : transparentRegion(sourceRegion, document.color.workingSpace, document.color.transferFunction)
+                  return applyImageEditorV3SparseRasterRegion(
+                    node,
+                    await base,
+                    sourceRegion,
+                    { width: geometry.sourceWidth, height: geometry.sourceHeight },
+                    sparseRasterPlan,
+                    {
+                      workingSpace: document.color.workingSpace,
+                      transferFunction: document.color.transferFunction,
+                    },
+                    taskContext.signal,
+                    dependencies,
+                    budget,
+                  )
                 },
                 rasterizeAnnotations: (node) => (
                   dependencies.rasterizeAnnotations ?? rasterizeImageEditorV3ExportAnnotations

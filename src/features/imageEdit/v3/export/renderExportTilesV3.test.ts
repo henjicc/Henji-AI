@@ -117,7 +117,7 @@ async function collectPixels(
   )
   const output = new Uint8Array(width * height * 4)
   for await (const tile of renderImageEditorV3ExportTiles(
-    { document, description: description(width, height), tileSize },
+    { document, resourceDescriptors: [], description: description(width, height), tileSize },
     { readSourceTile: fakeSourceReader(images), rasterizeAnnotations },
   )) {
     const bytes = tile.pixels instanceof Uint8Array ? tile.pixels : new Uint8Array(tile.pixels)
@@ -303,7 +303,7 @@ describe('图片编辑 V3 分块导出渲染', () => {
       }
     }
     const iterator = renderImageEditorV3ExportTiles(
-      { document, description: description(20_000, 10_000), tileSize: 512 },
+      { document, resourceDescriptors: [], description: description(20_000, 10_000), tileSize: 512 },
       { readSourceTile, resourceBudget: budget },
     )[Symbol.asyncIterator]()
 
@@ -369,7 +369,7 @@ describe('图片编辑 V3 分块导出渲染', () => {
     const requests: ImageEditorV3ExportSourceTileRequest[] = []
     const budget = new ImageEditResourceBudget()
     const iterator = renderImageEditorV3ExportTiles(
-      { document, description: description(20_000, 10_000), tileSize: 512 },
+      { document, resourceDescriptors: [], description: description(20_000, 10_000), tileSize: 512 },
       {
         resourceBudget: budget,
         readSourceTile: async (request, signal) => {
@@ -397,7 +397,7 @@ describe('图片编辑 V3 分块导出渲染', () => {
     })
     const controller = new AbortController()
     const iterator = renderImageEditorV3ExportTiles(
-      { document, description: description(64, 2), tileSize: 16, signal: controller.signal },
+      { document, resourceDescriptors: [], description: description(64, 2), tileSize: 16, signal: controller.signal },
       { readSourceTile: fakeSourceReader(new Map([[SOURCE, solidImage(64, 2)]])) },
     )[Symbol.asyncIterator]()
     expect((await iterator.next()).done).toBe(false)
@@ -416,7 +416,7 @@ describe('图片编辑 V3 分块导出渲染', () => {
     glowDocument.layers.push(createImageEditEffectLayerV3('glow', '辉光 Pro', 'image.vgpu-glow', {}))
     await expect(async () => {
       for await (const _tile of renderImageEditorV3ExportTiles(
-        { document: glowDocument, description: description(16, 16) },
+        { document: glowDocument, resourceDescriptors: [], description: description(16, 16) },
         { readSourceTile },
       )) void _tile
     }).rejects.toMatchObject({ code: 'RENDER_NODE_UNSUPPORTED' })
@@ -430,7 +430,7 @@ describe('图片编辑 V3 分块导出渲染', () => {
     transformed.layers[0].transform = [1, 0, 0, 1, 2, 0]
     await expect(async () => {
       for await (const _tile of renderImageEditorV3ExportTiles(
-        { document: transformed, description: description(16, 16) },
+        { document: transformed, resourceDescriptors: [], description: description(16, 16) },
         { readSourceTile },
       )) void _tile
     }).rejects.toMatchObject({ code: 'LAYER_TRANSFORM_UNSUPPORTED' })
@@ -447,7 +447,7 @@ describe('图片编辑 V3 分块导出渲染', () => {
     })
     await expect(async () => {
       for await (const _tile of renderImageEditorV3ExportTiles(
-        { document: hdr, description: {
+        { document: hdr, resourceDescriptors: [], description: {
           ...description(16, 16), bitDepth: 16, colorSpace: 'rec2020', transferFunction: 'pq',
         } },
         { readSourceTile },

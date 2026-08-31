@@ -33,7 +33,7 @@ const MAX_HTTP_URL_CHARACTERS = 8_192
 const MAX_BRUSH_TILES_PER_REQUEST = 16
 const MAX_BRUSH_REQUEST_RAW_BYTES = 64 * 1024 * 1024
 const MAX_BRUSH_REQUEST_RESOURCE_BYTES = 64 * 1024 * 1024
-const BRUSH_TILE_KEY_PATTERN = /^(0|[1-9]\d*):(0|[1-9]\d*):(0|[1-9]\d*)$/
+const BRUSH_TILE_KEY_PATTERN = /^(0|[1-9]\d*)\/(0|[1-9]\d*)\/(0|[1-9]\d*)$/
 
 export interface BasePayload { requestId: string }
 export interface LoadDocumentPayload extends BasePayload { documentRef: string }
@@ -111,7 +111,7 @@ function readBrushTileKey(value: unknown): string {
   if (typeof value !== 'string' || value.length > 96 || !BRUSH_TILE_KEY_PATTERN.test(value)) {
     throw new Error('Invalid brush tileKey')
   }
-  const [mip, tileX, tileY] = value.split(':').map(Number)
+  const [mip, tileX, tileY] = value.split('/').map(Number)
   if (!Number.isSafeInteger(mip) || mip > 30
     || !Number.isSafeInteger(tileX) || !Number.isSafeInteger(tileY)) {
     throw new Error('Invalid brush tileKey')
