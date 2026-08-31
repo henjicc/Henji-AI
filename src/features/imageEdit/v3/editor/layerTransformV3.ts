@@ -23,18 +23,30 @@ export interface ImageEditTransformFieldsV3 {
   shear: number
 }
 
+export type ImageEditLayerMoveUnavailableReasonV3 =
+  | 'select-one'
+  | 'unsupported'
+  | 'hidden'
+  | 'locked'
+
+export function resolveImageEditLayerMoveUnavailableReasonV3(
+  location: ImageEditLayerLocationV3 | null,
+): ImageEditLayerMoveUnavailableReasonV3 | null {
+  if (!location) return 'select-one'
+  if (
+    location.layer.type !== 'raster'
+    && location.layer.type !== 'annotation'
+    && location.layer.type !== 'group'
+  ) return 'unsupported'
+  if (!location.layer.visible || location.ancestors.some((ancestor) => !ancestor.visible)) return 'hidden'
+  if (location.layer.locked || location.ancestors.some((ancestor) => ancestor.locked)) return 'locked'
+  return null
+}
+
 export function isImageEditLayerTransformableV3(
   location: ImageEditLayerLocationV3 | null,
 ): location is ImageEditLayerLocationV3 {
-  return Boolean(
-    location
-    && (location.layer.type === 'raster'
-      || location.layer.type === 'annotation'
-      || location.layer.type === 'group')
-    && location.layer.visible
-    && !location.layer.locked
-    && location.ancestors.every((ancestor) => ancestor.visible && !ancestor.locked),
-  )
+  return Boolean(location && resolveImageEditLayerMoveUnavailableReasonV3(location) === null)
 }
 
 export function decomposeImageEditTransformV3(

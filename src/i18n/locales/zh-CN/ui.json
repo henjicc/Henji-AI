@@ -720,6 +720,12 @@
         "eraser": "橡皮擦",
         "mask-edit": "编辑蒙版"
       },
+      "moveTool": {
+        "select-one": "请先选择一个要移动的图层。",
+        "unsupported": "效果层和调整层不能直接移动，请选择栅格、标注或图层组。",
+        "hidden": "所选图层或其所在组已隐藏，暂时不能移动。",
+        "locked": "所选图层或其所在组已锁定，暂时不能移动。"
+      },
       "toolSettings": {
         "size": "大小",
         "opacity": "不透明度",

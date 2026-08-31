@@ -204,4 +204,65 @@ describe('ImageEditorPreviewV3 managed frame ownership', () => {
     })
     expect(document.revision).toBe(0)
   })
+
+  it('单底图移动在渲染任务完成前提供合成层即时反馈，取消时不写 revision', async () => {
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({
+      clearRect: vi.fn(),
+      drawImage: vi.fn(),
+    } as unknown as CanvasRenderingContext2D)
+    managedPreview.state = {
+      result: {
+        kind: 'bitmap',
+        bitmap: {} as ImageBitmap,
+        width: 320,
+        height: 180,
+        diagnostics: [],
+        release: vi.fn(),
+      },
+      resultDocumentId: 'move-feedback-document',
+      resultRevision: 0,
+      diagnostic: null,
+      rendering: false,
+    }
+    const document = createImageEditDocumentV3({
+      width: 320,
+      height: 180,
+      documentId: 'move-feedback-document',
+      sourceResourceId: 'sha256:source',
+    })
+    const changes = vi.fn()
+    const rendered = render(
+      <div style={{ width: 900, height: 600 }}>
+        <ImageEditorV3
+          sourceImageUrl="preview.jpg"
+          document={document}
+          profileId="full"
+          onDocumentChange={changes}
+        />
+      </div>,
+    )
+    const surface = rendered.container.querySelector<HTMLElement>('[data-preview-surface]')
+    const content = rendered.container.querySelector<HTMLElement>('[data-viewport-content]')
+    const feedback = rendered.container.querySelector<HTMLElement>('[data-move-feedback-frame]')
+    if (!surface || !content || !feedback) throw new Error('移动反馈测试节点不存在')
+    vi.spyOn(content, 'getBoundingClientRect').mockReturnValue({
+      x: 0, y: 0, left: 0, top: 0, right: 320, bottom: 180,
+      width: 320, height: 180, toJSON: () => undefined,
+    })
+
+    await waitFor(() => expect(
+      Object.values(useImageEditorSessionStoreV3.getState().sessions)[0]?.selectedLayerIds,
+    ).toEqual([document.layers[0].id]))
+    fireEvent.pointerDown(surface, {
+      pointerId: 41, isPrimary: true, button: 0, clientX: 10, clientY: 10,
+    })
+    fireEvent.pointerMove(surface, { pointerId: 41, clientX: 35, clientY: 20 })
+    expect(feedback.style.transform).toBe('translate3d(25px, 10px, 0)')
+    expect(changes).not.toHaveBeenCalled()
+
+    fireEvent.pointerCancel(surface, { pointerId: 41 })
+    expect(feedback.style.transform).toBe('')
+    expect(changes).not.toHaveBeenCalled()
+    expect(document.revision).toBe(0)
+  })
 })

@@ -140,4 +140,23 @@ describe('图片编辑 V2 → V3 迁移', () => {
     expect(migrated.geometry.orientation).toEqual({ rotate: 0, mirrored: false });
     expect(migrated.geometry.crop).toBeNull();
   });
+
+  it('旧文档没有真实标注时不创建空标注层', () => {
+    const source = createV2Document();
+    const annotations = source.operations.find(
+      (operation) => operation.operationId === IMAGE_EDIT_OPERATION_IDS.annotations,
+    );
+    if (!annotations) throw new Error('测试文档缺少标注操作');
+    annotations.params = { items: [] };
+
+    const migrated = migrateImageEditDocumentV2ToV3(source, {
+      width: 100,
+      height: 120,
+      sourceResourceId: 'sha256:source',
+      documentId: 'document-without-annotations',
+    });
+
+    expect(migrated.layers.some((layer) => layer.type === 'annotation')).toBe(false);
+    expect(migrated.layers[0]).toMatchObject({ type: 'raster', id: 'layer-base-raster' });
+  });
 });

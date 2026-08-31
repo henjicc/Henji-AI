@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   createImageEditAnnotationLayerV3,
   createImageEditDocumentV3,
+  createImageEditEffectLayerV3,
   createImageEditRasterLayerV3,
 } from '@/core/imageEdit/v3/documentFactory'
 import type { ImageEditDocumentV3 } from '@/core/imageEdit/v3/documentTypes'
@@ -159,6 +160,40 @@ describe('图片编辑 V3 图层变换交互', () => {
     if (layer.type !== 'annotation') throw new Error('测试预期标注图层')
     expect(layer.annotations[0]).toMatchObject({ x: 40, y: 40 })
     expect(layer.transform).toEqual([1, 0, 0, 1, 100, 40])
+  })
+
+  it('新导入图片默认选择原始栅格层，不会选中最上方效果层', async () => {
+    const raster = createImageEditRasterLayerV3('raster', '原图', 'sha256:source')
+    const effect = createImageEditEffectLayerV3(
+      'blur',
+      '高斯模糊',
+      'image.gaussian-blur-v2',
+      { radiusPixels: 8 },
+    )
+    const changes: ImageEditDocumentV3[] = []
+    const rendered = renderEditor(createDocument([raster, effect]), {
+      onDocumentChange: (next) => changes.push(next),
+    })
+    const surface = rendered.container.querySelector<HTMLElement>('[data-preview-surface]')
+    const viewportContent = rendered.container.querySelector<HTMLElement>('[data-viewport-content]')
+    if (!surface || !viewportContent) throw new Error('测试缺少视口')
+    mockViewportRect(viewportContent)
+    await waitFor(() => {
+      const session = Object.values(useImageEditorSessionStoreV3.getState().sessions)[0]
+      expect(session?.selectedLayerIds).toEqual(['raster'])
+    })
+
+    fireEvent.pointerDown(surface, {
+      pointerId: 31, isPrimary: true, button: 0, clientX: 20, clientY: 20,
+    })
+    fireEvent.pointerMove(surface, { pointerId: 31, clientX: 45, clientY: 30 })
+    expect(changes).toHaveLength(0)
+    fireEvent.pointerUp(surface, { pointerId: 31, clientX: 45, clientY: 30 })
+
+    await waitFor(() => expect(changes).toHaveLength(1))
+    expect(changes[0].layers[0].transform).toEqual([1, 0, 0, 1, 100, 40])
+    expect(changes[0].layers[1].transform).toEqual([1, 0, 0, 1, 0, 0])
+    expect(changes[0].revision).toBe(1)
   })
 
   it('move 点击、拖回原点和 pointercancel 都不写历史，锁定层也不可变', async () => {

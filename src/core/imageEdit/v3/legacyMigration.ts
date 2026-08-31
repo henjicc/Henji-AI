@@ -176,21 +176,18 @@ export function migrateImageEditDocumentV2ToV3(
   const annotationOperation = source.operations.find(
     (operation) => operation.operationId === IMAGE_EDIT_OPERATION_IDS.annotations
   );
-  const annotationLayer = createImageEditAnnotationLayerV3(
-    uniqueLayerId(
-      annotationOperation ? `layer-${annotationOperation.id}` : 'layer-annotations',
-      seenLayerIds,
-      idFactory
-    ),
-    '标注'
-  );
-  if (annotationOperation) {
-    annotationLayer.visible = annotationOperation.enabled;
-    annotationLayer.annotations = (annotationOperation.params as AnnotationOperationParams).items.map(
-      (item) => ({ ...item })
+  const annotationItems = annotationOperation
+    ? (annotationOperation.params as AnnotationOperationParams).items
+    : [];
+  if (annotationOperation && annotationItems.length > 0) {
+    const annotationLayer = createImageEditAnnotationLayerV3(
+      uniqueLayerId(`layer-${annotationOperation.id}`, seenLayerIds, idFactory),
+      '标注'
     );
+    annotationLayer.visible = annotationOperation.enabled;
+    annotationLayer.annotations = annotationItems.map((item) => ({ ...item }));
+    layers.push(annotationLayer);
   }
-  layers.push(annotationLayer);
 
   return {
     version: IMAGE_EDIT_DOCUMENT_VERSION_V3,

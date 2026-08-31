@@ -720,6 +720,12 @@
         "eraser": "Eraser",
         "mask-edit": "Edit mask"
       },
+      "moveTool": {
+        "select-one": "Select one layer to move.",
+        "unsupported": "Effect and adjustment layers cannot be moved directly. Select a raster, annotation, or group layer.",
+        "hidden": "The selected layer or one of its groups is hidden and cannot be moved.",
+        "locked": "The selected layer or one of its groups is locked and cannot be moved."
+      },
       "toolSettings": {
         "size": "Size",
         "opacity": "Opacity",

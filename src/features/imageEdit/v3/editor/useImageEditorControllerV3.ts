@@ -4,7 +4,10 @@ import { createImageEditGroupLayerV3, createImageEditIdV3 } from '@/core/imageEd
 import type { ImageEditDocumentV3 } from '@/core/imageEdit/v3/documentTypes'
 import type { ImageEditCommandHistorySnapshotV3 } from '@/core/imageEdit/v3/commandHistoryCodec'
 import type { ImageEditPersistenceSnapshotV3 } from '@/core/imageEdit/v3/serviceContracts'
-import { collectImageEditLayerIdsV3 } from '@/core/imageEdit/v3/layerTypes'
+import {
+  collectImageEditLayerIdsV3,
+  type ImageEditLayerV3,
+} from '@/core/imageEdit/v3/layerTypes'
 import { ImageEditCommandBusV3 } from '../application/imageEditCommandBus'
 import { registerImageEditV3LiveSession } from '../application/imageEditLiveSessionRegistry'
 import {
@@ -20,6 +23,36 @@ import type { ImageEditorV3Controller, ImageEditorV3Props } from './types'
 
 interface BusBinding {
   bus: ImageEditCommandBusV3
+}
+
+interface DefaultLayerCandidateV3 {
+  layer: ImageEditLayerV3
+  interactive: boolean
+}
+
+/** 新会话优先选中可见、未锁定的原始栅格层，而不是最上面的效果或空容器。 */
+export function resolveImageEditorDefaultLayerIdV3(
+  layers: readonly ImageEditLayerV3[],
+): string | null {
+  const candidates: DefaultLayerCandidateV3[] = []
+  const visit = (entries: readonly ImageEditLayerV3[], ancestorsInteractive: boolean): void => {
+    for (const layer of entries) {
+      const interactive = ancestorsInteractive && layer.visible && !layer.locked
+      candidates.push({ layer, interactive })
+      if (layer.type === 'group') visit(layer.children, interactive)
+    }
+  }
+  visit(layers, true)
+  return candidates.find(({ layer, interactive }) => (
+    interactive && layer.type === 'raster' && layer.source.kind === 'resource'
+  ))?.layer.id
+    ?? candidates.find(({ layer, interactive }) => interactive && layer.type === 'raster')?.layer.id
+    ?? candidates.find(({ layer, interactive }) => (
+      interactive && (layer.type === 'annotation' || layer.type === 'group')
+    ))?.layer.id
+    ?? [...candidates].reverse().find(({ interactive }) => interactive)?.layer.id
+    ?? candidates.at(-1)?.layer.id
+    ?? null
 }
 
 function createBinding(
@@ -136,9 +169,8 @@ export function useImageEditorControllerV3(
     if (!session) return
     const validIds = new Set(collectImageEditLayerIdsV3(document.layers))
     const selected = session.selectedLayerIds.filter((id) => validIds.has(id))
-    if (selected.length === 0 && document.layers.length > 0) {
-      selected.push(document.layers[document.layers.length - 1].id)
-    }
+    const fallbackId = resolveImageEditorDefaultLayerIdV3(document.layers)
+    if (selected.length === 0 && fallbackId) selected.push(fallbackId)
     useImageEditorSessionStoreV3.getState().setSelectedLayerIds(sessionId, selected)
   }, [document.layers, sessionId])
 

@@ -105,6 +105,7 @@ export function ImageEditorPreviewV3({
   const { t } = useTranslation('ui')
   const surfaceRef = useRef<HTMLElement | null>(null)
   const viewportContentRef = useRef<HTMLDivElement | null>(null)
+  const moveFeedbackRef = useRef<HTMLDivElement | null>(null)
   const gestureRef = useRef<ImageEditorNavigationGestureV3 | null>(null)
   const snapshot = useImageEditorBusSnapshotV3(bus)
   const activeTool = useImageEditorSessionStoreV3(
@@ -134,7 +135,9 @@ export function ImageEditorPreviewV3({
     controller,
     activeTool,
     viewportContentRef,
+    moveFeedbackRef,
     outputGeometry,
+    zoom,
   )
 
   const displayPipeline = useImageEditorDisplayPipelineV3(
@@ -207,6 +210,18 @@ export function ImageEditorPreviewV3({
   const basePreviewRevision = previewRenderer
     ? snapshot.document.revision
     : viewportResult?.revision ?? managedPreview.resultRevision
+
+  useEffect(() => {
+    if (
+      Object.keys(snapshot.previewOverrides).length > 0
+      || basePreviewDocumentId !== snapshot.document.id
+      || basePreviewRevision !== snapshot.document.revision
+    ) return
+    const feedback = moveFeedbackRef.current
+    if (!feedback) return
+    feedback.style.transform = ''
+    feedback.style.willChange = ''
+  }, [basePreviewDocumentId, basePreviewRevision, snapshot.document.id, snapshot.document.revision, snapshot.previewOverrides])
 
   const applyViewportTransform = useCallback((
     nextZoom: number,
@@ -349,7 +364,7 @@ export function ImageEditorPreviewV3({
     : activeTool === 'zoom'
       ? 'cursor-zoom-in'
       : activeTool === 'move'
-        ? 'cursor-move'
+        ? layerMoveHandlers.unavailableReason ? 'cursor-not-allowed' : 'cursor-move'
         : ''
 
   return (
@@ -357,6 +372,9 @@ export function ImageEditorPreviewV3({
       ref={surfaceRef}
       data-preview-surface
       data-active-navigation-tool={activeTool === 'hand' || activeTool === 'zoom' ? activeTool : undefined}
+      data-move-availability={activeTool === 'move'
+        ? layerMoveHandlers.unavailableReason ?? 'ready'
+        : undefined}
       className={`relative min-h-0 min-w-0 flex-1 overflow-hidden bg-bg-dark ${navigationCursor}`}
       style={{ touchAction: activeTool === 'hand' || activeTool === 'zoom' || activeTool === 'move' ? 'none' : undefined }}
       onPointerDownCapture={layerMoveHandlers.onPointerDownCapture}
@@ -381,19 +399,31 @@ export function ImageEditorPreviewV3({
               : {}),
           }}
         >
-          {viewportResult ? (
-            <ImageEditorViewportTilesV3
-              result={viewportResult}
-              label={t('imageEditor.v3.previewAlt')}
-            />
-          ) : null}
-          {!viewportResult && output.kind === 'url' ? (
+          {!previewRenderer ? (
+            <div
+              ref={moveFeedbackRef}
+              data-move-feedback-frame
+              className="absolute inset-0 flex items-center justify-center"
+            >
+              {viewportResult ? (
+                <ImageEditorViewportTilesV3
+                  result={viewportResult}
+                  label={t('imageEditor.v3.previewAlt')}
+                />
+              ) : null}
+              {!viewportResult && output.kind === 'url' ? (
+                <UrlPreview output={output} label={t('imageEditor.v3.previewAlt')} />
+              ) : null}
+              {!viewportResult && output.kind === 'frame' ? (
+                <FramePreview output={output} label={t('imageEditor.v3.previewAlt')} />
+              ) : null}
+              {!viewportResult && output.kind === 'content' ? output.content : null}
+            </div>
+          ) : output.kind === 'url' ? (
             <UrlPreview output={output} label={t('imageEditor.v3.previewAlt')} />
-          ) : null}
-          {!viewportResult && output.kind === 'frame' ? (
+          ) : output.kind === 'frame' ? (
             <FramePreview output={output} label={t('imageEditor.v3.previewAlt')} />
-          ) : null}
-          {!viewportResult && output.kind === 'content' ? output.content : null}
+          ) : output.content}
           <ImageEditorAnnotationOverlayV3 controller={controller} />
           <ImageEditorRasterBrushOverlayV3
             bus={bus}
@@ -429,6 +459,15 @@ export function ImageEditorPreviewV3({
         >
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warning" aria-hidden="true" />
           <span className="whitespace-pre-line">{managedPreview.diagnostic}</span>
+        </div>
+      ) : null}
+      {activeTool === 'move' && layerMoveHandlers.unavailableReason ? (
+        <div
+          role="status"
+          className="ui-glass pointer-events-none absolute left-1/2 top-3 flex max-w-[min(34rem,calc(100%-1.5rem))] -translate-x-1/2 items-start gap-2 rounded-lg px-3 py-2 text-xs text-text-dark"
+        >
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warning" aria-hidden="true" />
+          <span>{t(`imageEditor.v3.moveTool.${layerMoveHandlers.unavailableReason}`)}</span>
         </div>
       ) : null}
       <div
