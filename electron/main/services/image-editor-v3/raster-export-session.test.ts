@@ -89,7 +89,17 @@ async function createSnapshot(options: {
   const color = options.color ?? (options.hdr
     ? {
         workingSpace: 'rec2020', bitDepth: 16, transferFunction: 'pq',
-        hdrMetadata: { standard: 'pq' }, iccProfileResourceId: null,
+        hdrMetadata: {
+          standard: 'pq',
+          referenceWhiteNits: 203,
+          cicp: {
+            colorPrimaries: 9,
+            transferCharacteristics: 16,
+            matrixCoefficients: 9,
+            fullRange: false,
+          },
+        },
+        iccProfileResourceId: null,
       }
     : {
         workingSpace: 'srgb', bitDepth: 8, transferFunction: 'srgb',
@@ -287,8 +297,41 @@ describe('RasterExportSessionManager', () => {
       failure = error
     }
     expect(failure).toBeInstanceOf(ImageExportCapabilityError)
-    expect(failure).toMatchObject({ code: 'HDR_METADATA_UNSUPPORTED', format: 'avif10' })
+    expect(failure).toMatchObject({ code: 'INVALID_COLOR_METADATA', format: 'avif10' })
     expect(sinkFactory).not.toHaveBeenCalled()
+  })
+
+  it('严格匹配的 16-bit Rec.2020 PQ 快照可创建 HDR AVIF 会话', async () => {
+    const snapshot = await createSnapshot({ hdr: true })
+    const sinks: TestSink[] = []
+    const manager = createManager(sinks)
+    const hdrDescription = {
+      ...description,
+      bitDepth: 16 as const,
+      colorSpace: 'rec2020' as const,
+      transferFunction: 'pq' as const,
+      cicp: {
+        colorPrimaries: 9,
+        transferCharacteristics: 16,
+        matrixCoefficients: 9,
+        fullRange: false,
+      },
+      hdrMetadata: {},
+    }
+
+    const started = await manager.start({
+      ownerId: 5,
+      targetPath: path.join(rootDir, 'hdr.avif'),
+      documentRef: 'image-edit-v3:export-document',
+      revision: 4,
+      sourceFingerprint: createImageEditSourceFingerprint(snapshot),
+      format: 'avif10',
+      description: hdrDescription,
+    })
+
+    expect(started.format).toBe('avif10')
+    expect(sinks[0]?.description).toMatchObject(hdrDescription)
+    await expect(manager.cancel(5, started.sessionId)).resolves.toBe(true)
   })
 
   it('会话只允许创建它的渲染器写入和取消', async () => {

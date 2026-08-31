@@ -6,6 +6,7 @@ import type SharpType from 'sharp'
 
 import { loadSharp } from '../../image/sharp-loader'
 import type { OutputTile, TileOutputDescription } from '../contracts'
+import { readAssociatedNclxCicp } from '../isobmff-cicp'
 import { FileTileOutputSinkBase } from '../tile-output-sink'
 import {
   ImageExportCapabilityError,
@@ -15,12 +16,20 @@ import {
   validateTileSize,
 } from './capabilities'
 import { IncrementalBigTiffWriter } from './bigtiff-writer'
+import {
+  requiresStreamingHdrAvifEncoder,
+  StreamingHdrAvifEncoder,
+} from './hdr-avif-encoder'
 
 type TranscodeFormat = Exclude<RasterExportFormat, 'bigtiff'>
 type SharpInstance = ReturnType<typeof SharpType>
 type SharpFormatKey = 'jpeg' | 'webp' | 'png' | 'tiff' | 'heif'
 
 export type TranscodingExportOptions = RasterExportOptions & { format: TranscodeFormat }
+
+export interface TranscodingTileOutputSinkDependencies {
+  loadFfmpegPath?: () => Promise<string>
+}
 
 function createAbortError(): Error {
   const error = new Error('Raster transcoding was cancelled')
@@ -122,10 +131,15 @@ export class TranscodingTileOutputSink extends FileTileOutputSinkBase {
   private writer: IncrementalBigTiffWriter | undefined
   private intermediatePath: string | undefined
   private pipeline: SharpInstance | undefined
+  private hdrEncoder: StreamingHdrAvifEncoder | undefined
   private readonly tileSize: number
   private cancelRequested = false
 
-  constructor(targetPath: string, private readonly exportOptions: TranscodingExportOptions) {
+  constructor(
+    targetPath: string,
+    private readonly exportOptions: TranscodingExportOptions,
+    private readonly dependencies: TranscodingTileOutputSinkDependencies = {},
+  ) {
     super(targetPath, exportOptions)
     validateEncoderOptions(exportOptions)
     this.tileSize = validateTileSize(exportOptions.tileSize)
@@ -137,6 +151,15 @@ export class TranscodingTileOutputSink extends FileTileOutputSinkBase {
   ): Promise<void> {
     this.cancelRequested = false
     const metadata = await prepareExportMetadata(description, this.exportOptions)
+    if (requiresStreamingHdrAvifEncoder(description, this.exportOptions.format)) {
+      const encoder = new StreamingHdrAvifEncoder(stagedPath, description, {
+        ...this.exportOptions,
+        format: this.exportOptions.format,
+      }, this.dependencies.loadFfmpegPath)
+      this.hdrEncoder = encoder
+      await encoder.begin()
+      return
+    }
     await loadRequiredSharp(this.exportOptions.format)
     const intermediatePath = path.join(
       path.dirname(stagedPath),
@@ -161,6 +184,10 @@ export class TranscodingTileOutputSink extends FileTileOutputSinkBase {
     tile: OutputTile,
     _description: TileOutputDescription,
   ): Promise<void> {
+    if (this.hdrEncoder) {
+      await this.hdrEncoder.writeTile(tile)
+      return
+    }
     if (!this.writer) throw new Error('Transcode source writer has not started')
     await this.writer.writeTile(tile)
   }
@@ -169,6 +196,10 @@ export class TranscodingTileOutputSink extends FileTileOutputSinkBase {
     stagedPath: string,
     _description: TileOutputDescription,
   ): Promise<void> {
+    if (this.hdrEncoder) {
+      await this.hdrEncoder.complete()
+      return
+    }
     const writer = this.writer
     const intermediatePath = this.intermediatePath
     if (!writer || !intermediatePath) throw new Error('Transcode source writer has not started')
@@ -224,10 +255,23 @@ export class TranscodingTileOutputSink extends FileTileOutputSinkBase {
     ) {
       throw new Error(`AVIF encoder silently reduced the requested bit depth to ${metadata.bitsPerSample ?? metadata.depth}`)
     }
+    if (requiresStreamingHdrAvifEncoder(description, this.exportOptions.format)) {
+      if (!metadata.hasAlpha) throw new Error('HDR AVIF encoder dropped the alpha auxiliary image')
+      const actualCicp = await readAssociatedNclxCicp(stagedPath, 'avif')
+      const expectedCicp = description.cicp
+      if (!actualCicp || !expectedCicp
+        || actualCicp.colorPrimaries !== expectedCicp.colorPrimaries
+        || actualCicp.transferCharacteristics !== expectedCicp.transferCharacteristics
+        || actualCicp.matrixCoefficients !== expectedCicp.matrixCoefficients
+        || actualCicp.fullRange !== expectedCicp.fullRange) {
+        throw new Error('HDR AVIF encoder produced a mismatched nclx color contract')
+      }
+    }
   }
 
   protected override async onCancel(): Promise<void> {
     this.cancelRequested = true
+    await this.hdrEncoder?.cancel()
     this.pipeline?.destroy()
     await this.writer?.cancel()
     await this.cleanupIntermediate()

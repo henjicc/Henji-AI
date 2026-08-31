@@ -12,7 +12,7 @@ export type RasterExportFormat =
   | 'png16'
   | 'tiff8'
   | 'tiff16'
-  /** High-bit-depth SDR only; PQ/HLG output stays unavailable until CICP is preserved reliably. */
+  /** High-bit-depth SDR, or the bounded pre-encode Rec.2020 PQ/HLG path. */
   | 'avif10'
   | 'avif12'
 
@@ -26,6 +26,7 @@ export type ImageExportCapabilityErrorCode =
   | 'TRANSFER_FUNCTION_UNSUPPORTED'
   | 'BYTE_ORDER_UNSUPPORTED'
   | 'SOURCE_PRECISION_UNSUPPORTED'
+  | 'ENCODER_RESOURCE_LIMIT'
   | 'ENCODER_UNAVAILABLE'
 
 export class ImageExportCapabilityError extends Error {
@@ -58,6 +59,8 @@ export interface PreparedExportMetadata {
 }
 
 const MAX_ICC_BYTES = 16 * 1024 * 1024
+/** 9MP real encode peaks at ~600MiB; 16MP peaks at ~1.0GiB before editor memory. */
+export const MAX_STREAMING_HDR_AVIF_PIXELS = 9_000_000
 
 function capabilityError(
   code: ImageExportCapabilityErrorCode,
@@ -73,7 +76,7 @@ function capabilityError(
   )
 }
 
-function validateCicp(description: TileOutputDescription, format: RasterExportFormat): void {
+function validateCicpShape(description: TileOutputDescription, format: RasterExportFormat): void {
   if (!description.cicp) return
   const values = [
     description.cicp.colorPrimaries,
@@ -86,6 +89,13 @@ function validateCicp(description: TileOutputDescription, format: RasterExportFo
   ) {
     throw capabilityError('INVALID_COLOR_METADATA', format, 'CICP metadata is invalid')
   }
+}
+
+function rejectUnsupportedCicp(
+  description: TileOutputDescription,
+  format: RasterExportFormat,
+): void {
+  if (!description.cicp) return
   throw capabilityError(
     'CICP_METADATA_UNSUPPORTED',
     format,
@@ -93,7 +103,7 @@ function validateCicp(description: TileOutputDescription, format: RasterExportFo
   )
 }
 
-function validateHdrMetadata(description: TileOutputDescription, format: RasterExportFormat): void {
+function validateHdrMetadataShape(description: TileOutputDescription, format: RasterExportFormat): void {
   const metadata = description.hdrMetadata
   if (metadata) {
     const values = Object.values(metadata)
@@ -108,15 +118,62 @@ function validateHdrMetadata(description: TileOutputDescription, format: RasterE
       throw capabilityError('INVALID_COLOR_METADATA', format, 'HDR luminance bounds are invalid')
     }
   }
-  if (
-    description.transferFunction === 'pq'
-    || description.transferFunction === 'hlg'
-    || metadata
-  ) {
+}
+
+function isHdrDescription(description: TileOutputDescription): boolean {
+  return description.transferFunction === 'pq' || description.transferFunction === 'hlg'
+}
+
+function validateStreamingHdrAvif(
+  description: TileOutputDescription,
+  format: RasterExportFormat,
+): void {
+  if (format !== 'avif10' && format !== 'avif12') {
     throw capabilityError(
       'HDR_METADATA_UNSUPPORTED',
       format,
-      `The ${format} export path cannot reliably preserve PQ/HLG mastering metadata`,
+      `The ${format} export path cannot encode PQ/HLG before writing color metadata`,
+    )
+  }
+  const expectedTransfer = description.transferFunction === 'pq' ? 16 : 18
+  const cicp = description.cicp
+  if (!cicp
+    || cicp.colorPrimaries !== 9
+    || cicp.transferCharacteristics !== expectedTransfer
+    || cicp.matrixCoefficients !== 9
+    || cicp.fullRange) {
+    throw capabilityError(
+      'INVALID_COLOR_METADATA',
+      format,
+      'HDR AVIF requires Rec.2020 PQ/HLG, BT.2020 non-constant luminance and limited-range CICP',
+    )
+  }
+  if (description.colorSpace !== 'rec2020' || description.alphaMode !== 'straight') {
+    throw capabilityError(
+      'INVALID_COLOR_METADATA',
+      format,
+      'HDR AVIF requires straight-alpha Rec.2020 renderer tiles',
+    )
+  }
+  if (description.iccProfileResourceId) {
+    throw capabilityError(
+      'HDR_METADATA_UNSUPPORTED',
+      format,
+      'HDR AVIF cannot yet write an ICC profile alongside the encoder-owned nclx profile',
+    )
+  }
+  if (description.hdrMetadata && Object.values(description.hdrMetadata).some((value) => value !== undefined)) {
+    throw capabilityError(
+      'HDR_METADATA_UNSUPPORTED',
+      format,
+      'HDR AVIF mastering-display and content-light metadata are not implemented',
+    )
+  }
+  if (description.width > Math.floor(MAX_STREAMING_HDR_AVIF_PIXELS / description.height)) {
+    throw capabilityError(
+      'ENCODER_RESOURCE_LIMIT',
+      format,
+      `HDR AVIF is limited to ${MAX_STREAMING_HDR_AVIF_PIXELS} pixels until tiled AVIF grid encoding is available`,
     )
   }
 }
@@ -191,10 +248,24 @@ export async function prepareExportMetadata(
       'V3 raster export currently requires explicitly-declared little-endian samples',
     )
   }
-  validateHdrMetadata(description, options.format)
-  validateCicp(description, options.format)
-  validateTransferFunction(description, options.format)
+  validateHdrMetadataShape(description, options.format)
+  validateCicpShape(description, options.format)
   assertSourcePrecision(description, options.format)
+
+  if (isHdrDescription(description)) {
+    validateStreamingHdrAvif(description, options.format)
+    return {}
+  }
+
+  if (description.hdrMetadata) {
+    throw capabilityError(
+      'HDR_METADATA_UNSUPPORTED',
+      options.format,
+      `The ${options.format} export path cannot preserve HDR metadata on an SDR transfer`,
+    )
+  }
+  rejectUnsupportedCicp(description, options.format)
+  validateTransferFunction(description, options.format)
 
   if (description.colorSpace !== 'srgb' && !description.iccProfileResourceId) {
     throw capabilityError(

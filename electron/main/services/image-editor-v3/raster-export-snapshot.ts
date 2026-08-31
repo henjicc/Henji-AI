@@ -58,13 +58,6 @@ export function assertDocumentColorMatchesRasterExport(
     throw new Error('Invalid image edit document color mode')
   }
   const { workingSpace, bitDepth, transferFunction, hdrMetadata, iccProfileResourceId } = document.color
-  if (transferFunction === 'pq' || transferFunction === 'hlg' || hdrMetadata !== null) {
-    throw new ImageExportCapabilityError(
-      'HDR_METADATA_UNSUPPORTED',
-      format,
-      'HDR raster export is unavailable because the encoder cannot reliably preserve PQ/HLG metadata',
-    )
-  }
   if (workingSpace !== 'srgb' && workingSpace !== 'display-p3' && workingSpace !== 'rec2020') {
     throw new Error('Invalid image edit document working space')
   }
@@ -74,8 +67,74 @@ export function assertDocumentColorMatchesRasterExport(
       ? { bitDepth: 16 as const, sampleFormat: 'uint' as const }
       : bitDepth === 'float16' || bitDepth === 'float32'
         ? { bitDepth: 32 as const, sampleFormat: 'float' as const }
-        : null
+      : null
   if (!expectedPrecision) throw new Error('Invalid image edit document bit depth')
+
+  const isHdr = transferFunction === 'pq' || transferFunction === 'hlg'
+  if (isHdr) {
+    if ((format !== 'avif10' && format !== 'avif12')
+      || workingSpace !== 'rec2020'
+      || bitDepth !== 16
+      || !isRecord(hdrMetadata)
+      || hdrMetadata.standard !== transferFunction
+      || typeof hdrMetadata.referenceWhiteNits !== 'number'
+      || !Number.isFinite(hdrMetadata.referenceWhiteNits)
+      || hdrMetadata.referenceWhiteNits <= 0
+      || !isRecord(hdrMetadata.cicp)) {
+      throw new ImageExportCapabilityError(
+        'HDR_METADATA_UNSUPPORTED',
+        format,
+        'HDR AVIF requires a 16-bit Rec.2020 document with matching PQ/HLG metadata',
+      )
+    }
+    const cicp = hdrMetadata.cicp
+    const expectedTransfer = transferFunction === 'pq' ? 16 : 18
+    if (cicp.colorPrimaries !== 9
+      || cicp.transferCharacteristics !== expectedTransfer
+      || cicp.matrixCoefficients !== 9
+      || cicp.fullRange !== false
+      || description.cicp?.colorPrimaries !== cicp.colorPrimaries
+      || description.cicp?.transferCharacteristics !== cicp.transferCharacteristics
+      || description.cicp?.matrixCoefficients !== cicp.matrixCoefficients
+      || description.cicp?.fullRange !== cicp.fullRange) {
+      throw new ImageExportCapabilityError(
+        'INVALID_COLOR_METADATA',
+        format,
+        'Raster export CICP metadata does not match the HDR document snapshot',
+      )
+    }
+    if (hdrMetadata.masteringDisplay !== undefined
+      || hdrMetadata.contentLight !== undefined
+      || (description.hdrMetadata
+        && Object.values(description.hdrMetadata).some((value) => value !== undefined))) {
+      throw new ImageExportCapabilityError(
+        'HDR_METADATA_UNSUPPORTED',
+        format,
+        'HDR mastering-display and content-light metadata cannot yet be encoded reliably',
+      )
+    }
+    if (description.bitDepth !== 16
+      || description.sampleFormat !== 'uint'
+      || description.colorSpace !== 'rec2020'
+      || description.transferFunction !== transferFunction
+      || description.alphaMode !== 'straight'
+      || iccProfileResourceId !== null
+      || description.iccProfileResourceId !== undefined) {
+      throw new ImageExportCapabilityError(
+        'INVALID_COLOR_METADATA',
+        format,
+        'Raster export pixels do not match the HDR document color contract',
+      )
+    }
+    return
+  }
+  if (hdrMetadata !== null) {
+    throw new ImageExportCapabilityError(
+      'INVALID_COLOR_METADATA',
+      format,
+      'SDR document cannot carry HDR metadata',
+    )
+  }
   if (description.bitDepth !== expectedPrecision.bitDepth
     || description.sampleFormat !== expectedPrecision.sampleFormat) {
     throw new ImageExportCapabilityError(
