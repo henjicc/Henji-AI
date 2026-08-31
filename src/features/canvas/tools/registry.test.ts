@@ -13,6 +13,12 @@ import {
   getToolPlugin,
 } from './registry';
 
+const runtimeMocks = vi.hoisted(() => ({ imageEditorV3: false }));
+
+vi.mock('@/platform/runtime', () => ({
+  isImageEditorV3Enabled: () => runtimeMocks.imageEditorV3,
+}));
+
 describe('画布图片工具注册', () => {
   const imageNode: CanvasNode = {
     id: 'image-node',
@@ -50,5 +56,34 @@ describe('画布图片工具注册', () => {
     await expect(imageEditToolPlugin.execute('source-image', options, { processTool }))
       .resolves.toEqual({ outputImageUrl: 'rendered-image' });
     expect(processTool).toHaveBeenCalledWith(NODE_TOOL_TYPES.edit, 'source-image', options);
+  });
+
+  it('开关开启后从派生节点恢复稳定 V3 会话，关闭时仍生成原 V2 初始值', () => {
+    const session = {
+      kind: 'image-edit-v3' as const,
+      sourceUrl: 'henji-media://image-editor-v3/result',
+      documentRef: 'image-edit-v3:canvas-document' as const,
+      revision: 3,
+      previewRef: `sha256:${'a'.repeat(64)}` as const,
+    };
+    const resultNode: CanvasNode = {
+      ...imageNode,
+      data: {
+        ...imageNode.data,
+        imageUrl: session.sourceUrl,
+        imageEditSession: session,
+      },
+    };
+
+    runtimeMocks.imageEditorV3 = true;
+    expect(imageEditToolPlugin.createInitialOptions(resultNode)).toEqual({
+      imageEditSession: JSON.stringify(session),
+    });
+
+    runtimeMocks.imageEditorV3 = false;
+    const legacy = imageEditToolPlugin.createInitialOptions(resultNode);
+    expect(typeof legacy.document).toBe('string');
+    expect(typeof legacy.markDoc).toBe('string');
+    expect(legacy).not.toHaveProperty('imageEditSession');
   });
 });

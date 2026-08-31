@@ -11,7 +11,7 @@ import {
   persistImageLocally,
 } from './imageData';
 import { readStoryboardImageMetadata } from '@/commands/image';
-import { isDesktopRuntime } from '@/platform/runtime';
+import { isDesktopRuntime, isImageEditorV3Enabled } from '@/platform/runtime';
 import { parseImageEditDocument } from '@/core/imageEdit';
 import { exportImageEditDocument } from '@/features/imageEdit/execution/browserImageEditExecution';
 import type {
@@ -44,14 +44,17 @@ export class CanvasToolProcessor implements ToolProcessor {
   async process(
     toolType: NodeToolType,
     sourceImageUrl: string,
-    options: DynamicValueMap
+    options: DynamicValueMap,
+    signal?: AbortSignal,
   ): Promise<ToolProcessorResult> {
     const handler = this.handlers.get(toolType);
     if (!handler) throw new Error(`不支持的工具类型：${toolType}`);
 
     logger.debug('canvas.tool.execute.start', { toolId: toolType });
     try {
-      const result = await handler(sourceImageUrl, options);
+      const result = toolType === NODE_TOOL_TYPES.edit && isImageEditorV3Enabled()
+        ? await this.processImageEditV3(sourceImageUrl, options, signal)
+        : await handler(sourceImageUrl, options);
       logger.info('canvas.tool.execute.completed', { toolId: toolType });
       return result;
     } catch (error) {
@@ -71,6 +74,53 @@ export class CanvasToolProcessor implements ToolProcessor {
     const document = parseImageEditDocument(options.document ?? options.markDoc);
     return {
       outputImageUrl: await exportImageEditDocument(localSource, document),
+    };
+  }
+
+  private async processImageEditV3(
+    sourceImageUrl: string,
+    options: DynamicValueMap,
+    signal?: AbortSignal,
+  ): Promise<ToolProcessorResult> {
+    const [commands, sessionAdapter, materializationAdapter] = await Promise.all([
+      import('@/commands/imageEditorV3'),
+      import('../imageEditV3/canvasEditV3Session'),
+      import('../imageEditV3/canvasEditV3Materialization'),
+    ]);
+    const { createImageEditorV3RequestId, loadImageEditorV3Document } = commands;
+    const { readCanvasEditV3SessionOption } = sessionAdapter;
+    const { materializeCanvasEditV3Snapshot } = materializationAdapter;
+    const session = readCanvasEditV3SessionOption(options, sourceImageUrl);
+    if (!session) {
+      throw new Error('画布图片编辑 V3 缺少已保存的权威会话引用');
+    }
+    const snapshot = await loadImageEditorV3Document({
+      requestId: createImageEditorV3RequestId('canvas-edit-execute'),
+      documentRef: session.documentRef,
+    }, signal);
+    const documentId = session.documentRef.slice('image-edit-v3:'.length);
+    if (!snapshot) throw new Error('画布图片编辑 V3 权威文档不存在');
+    if (
+      snapshot.documentRef !== session.documentRef
+      || snapshot.document.id !== documentId
+      || snapshot.revision !== session.revision
+      || snapshot.document.revision !== session.revision
+      || snapshot.previewRef !== session.previewRef
+    ) {
+      throw new Error('画布图片编辑 V3 会话版本与权威快照不一致');
+    }
+    const materialized = await materializeCanvasEditV3Snapshot(
+      snapshot,
+      sourceImageUrl,
+      signal,
+    );
+    return {
+      outputImageUrl: materialized.raster.mediaUrl,
+      outputImageSize: {
+        width: materialized.raster.width,
+        height: materialized.raster.height,
+      },
+      imageEditSession: materialized.session,
     };
   }
 

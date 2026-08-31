@@ -11,7 +11,11 @@ import {
 const ImageEditor = lazy(() => import('@/features/imageEdit/editor/ImageEditor')
   .then((m) => ({ default: m.ImageEditor })));
 import type { MarkEditorStyleState } from '@/features/imageMark';
+import { isImageEditorV3Enabled } from '@/platform/runtime';
 import type { VisualToolEditorProps } from './types';
+
+const CanvasEditToolEditorV3Host = lazy(() => import('../../imageEditV3/CanvasEditToolEditorV3Host')
+  .then((module) => ({ default: module.CanvasEditToolEditorV3Host })));
 
 function toNumber(value: DynamicValue): number | undefined {
   return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
@@ -20,7 +24,23 @@ function toNumber(value: DynamicValue): number | undefined {
 /**
  * 画布图片编辑宿主：复用共享 ImageEditor，并兼容双写旧 markDoc。
  */
-export function EditToolEditor({ options, onOptionsChange, sourceImageUrl }: VisualToolEditorProps): JSX.Element {
+export function EditToolEditor(props: VisualToolEditorProps): JSX.Element {
+  if (isImageEditorV3Enabled()) {
+    return (
+      <Suspense fallback={<div className="h-[min(76vh,900px)]" />}>
+        <CanvasEditToolEditorV3Host {...props} />
+      </Suspense>
+    );
+  }
+
+  return <LegacyEditToolEditor {...props} />;
+}
+
+function LegacyEditToolEditor({
+  options,
+  onOptionsChange,
+  sourceImageUrl,
+}: VisualToolEditorProps): JSX.Element {
   const optionsRef = useRef(options);
   optionsRef.current = options;
 

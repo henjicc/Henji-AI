@@ -20,6 +20,7 @@ import type {
   StoryboardFrameItem,
   UploadPlaceholderResolution,
 } from '@/features/canvas/domain/canvasNodes';
+import type { ImageEditSessionReferenceV3 } from '@/core/imageEdit/v3/sessionReference';
 import type { AssetGroupGraph } from '@/features/canvas/application/assetGroupGraph';
 import { createCanvasConnectionActions } from './canvasStoreConnectionActions';
 import { createCanvasNodeCreationActions } from './canvasStoreNodeCreationActions';
@@ -115,6 +116,7 @@ export interface CanvasState {
       aspectRatioStrategy?: 'provided' | 'derivedFromSource';
       sizeStrategy?: 'generated' | 'autoMinEdge' | 'matchSource';
       matchSourceNodeSize?: boolean;
+      imageEditSession?: ImageEditSessionReferenceV3;
     }
   ) => string | null;
   addStoryboardSplitNode: (

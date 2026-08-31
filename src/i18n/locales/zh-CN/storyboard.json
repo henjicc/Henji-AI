@@ -118,7 +118,14 @@
     "processFailed": "处理失败",
     "processing": "处理中...",
     "apply": "应用",
-    "editResultTitle": "编辑结果"
+    "editResultTitle": "编辑结果",
+    "imageEditorV3": {
+      "loading": "正在准备新版图片编辑器...",
+      "openFailed": "无法打开新版图片编辑器",
+      "openFailedDescription": "图片与已保存的编辑版本不匹配，或相关资源暂时不可用。请重试。",
+      "saving": "正在保存编辑...",
+      "retrySave": "重试保存"
+    }
   },
   "nodeToolbar": {
     "more": "更多",

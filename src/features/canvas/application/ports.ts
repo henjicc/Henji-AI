@@ -8,6 +8,7 @@ import type {
   StoryboardFrameItem,
 } from '../domain/canvasNodes';
 import type { CanvasNodeDefinition } from '../domain/nodeRegistry';
+import type { ImageEditSessionReferenceV3 } from '@/core/imageEdit/v3/sessionReference';
 
 export interface IdGenerator {
   next: () => string;
@@ -37,6 +38,9 @@ export interface ImageSplitGateway {
 
 export interface ToolProcessorResult {
   outputImageUrl?: string;
+  outputImageSize?: { width: number; height: number };
+  /** 图片编辑 V3 的可恢复权威会话；只在受管输出完成后发布。 */
+  imageEditSession?: ImageEditSessionReferenceV3;
   storyboardFrames?: StoryboardFrameItem[];
   rows?: number;
   cols?: number;
@@ -47,7 +51,8 @@ export interface ToolProcessor {
   process: (
     toolType: NodeToolType,
     sourceImageUrl: string,
-    options: DynamicValueMap
+    options: DynamicValueMap,
+    signal?: AbortSignal,
   ) => Promise<ToolProcessorResult>;
 }
 

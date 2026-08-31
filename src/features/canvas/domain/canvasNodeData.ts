@@ -1,4 +1,5 @@
 import type { PromptDocumentV1, PromptMediaBinding } from '@/core/inputs/promptDocument';
+import type { ImageEditSessionReferenceV3 } from '@/core/imageEdit/v3/sessionReference';
 import type { MaskEditorDocument } from '@/features/maskEditor';
 import type { LocalRedrawSettings } from '@/platform/contracts/image';
 
@@ -107,6 +108,8 @@ export function resolveCanvasImageViewerMode(value: unknown): CanvasImageViewerM
 
 export interface ExportImageNodeData extends NodeImageData {
   resultKind?: ExportImageNodeResultKind;
+  /** 图片编辑 V3 派生结果的可恢复权威会话，不保存文档 JSON 或像素。 */
+  imageEditSession?: ImageEditSessionReferenceV3;
 }
 
 export interface GroupNodeData extends NodeDisplayData {

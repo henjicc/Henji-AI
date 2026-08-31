@@ -8,6 +8,8 @@ export interface ToolEditorBaseProps {
 
 export interface VisualToolEditorProps extends ToolEditorBaseProps {
   sourceImageUrl: string;
+  /** 重型编辑宿主仅在权威版本已保存后允许外层执行。 */
+  onExecutionReadyChange?: (ready: boolean) => void;
 }
 
 export interface FormToolEditorProps extends ToolEditorBaseProps {

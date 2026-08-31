@@ -13,13 +13,18 @@ import {
   canvasEventBus,
   canvasToolProcessor,
 } from '@/features/canvas/application/canvasServices';
-import { prepareNodeImage, resolveImageDisplayUrl } from '@/features/canvas/application/imageData';
+import {
+  prepareNodeImage,
+  reduceAspectRatio,
+  resolveImageDisplayUrl,
+} from '@/features/canvas/application/imageData';
 import { commitGridSplitResult } from '@/features/canvas/application/gridSplitApplicationService';
 import { readStoryboardImageMetadata } from '@/commands/image';
 import { getToolPlugin, type ToolOptions } from '@/features/canvas/tools';
 import { useCanvasStore } from '@/stores/canvasStore';
 import { UiButton, UiModal } from '@/components/ui';
 import { UI_DIALOG_TRANSITION_MS } from '@/components/ui/motion';
+import { isImageEditorV3Enabled } from '@/platform/runtime';
 import { FormToolEditor } from './tool-editors/FormToolEditor';
 import { EditToolEditor } from './tool-editors/EditToolEditor';
 import { SplitStoryboardToolEditor } from './tool-editors/SplitStoryboardToolEditor';
@@ -34,11 +39,13 @@ export function NodeToolDialog() {
   const [error, setError] = useState<string | null>(null);
   const [options, setOptions] = useState<ToolOptions>({});
   const [isSplitImageReady, setIsSplitImageReady] = useState(true);
+  const [readyEditorKey, setReadyEditorKey] = useState<string | null>(null);
   const [displayToolDialog, setDisplayToolDialog] = useState(activeToolDialog);
   // 每次打开自增,作为编辑器 key 的一部分,强制每次打开都重建编辑器实例
   // (避免取消后快速重开时复用旧内部状态,导致未保存的标注仍然出现)
   const [openSeq, setOpenSeq] = useState(0);
   const wasOpenRef = useRef(false);
+  const processingAbortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     const isOpen = Boolean(activeToolDialog);
@@ -179,9 +186,11 @@ export function NodeToolDialog() {
   }, [activePlugin?.dialog.preloadStoryboardMetadata, sourceImageUrl]);
 
   const closeDialog = useCallback(() => {
+    processingAbortRef.current?.abort();
     // 立即清空本地编辑选项,避免取消后未保存的标注在重开时被重新读取
     setOptions({});
     setError(null);
+    setReadyEditorKey(null);
     canvasEventBus.publish('tool-dialog/close', undefined);
   }, []);
 
@@ -193,6 +202,8 @@ export function NodeToolDialog() {
 
     setIsProcessing(true);
     setError(null);
+    const processingController = new AbortController();
+    processingAbortRef.current = processingController;
     logger.debug('canvas.tool.dialog.apply.start', {
       toolId: activePlugin.type,
       nodeId: sourceNode.id,
@@ -201,7 +212,12 @@ export function NodeToolDialog() {
     try {
       const result = await activePlugin.execute(sourceImageUrl, options, {
         processTool: (toolType, imageUrl, toolOptions) =>
-          canvasToolProcessor.process(toolType, imageUrl, toolOptions),
+          canvasToolProcessor.process(
+            toolType,
+            imageUrl,
+            toolOptions,
+            processingController.signal,
+          ),
       });
 
       if (result.storyboardFrames && result.rows && result.cols) {
@@ -216,7 +232,23 @@ export function NodeToolDialog() {
           frames: result.storyboardFrames,
         });
       } else if (result.outputImageUrl) {
-        const prepared = await prepareNodeImage(result.outputImageUrl);
+        if (result.imageEditSession && (!result.outputImageSize
+          || !Number.isSafeInteger(result.outputImageSize.width)
+          || !Number.isSafeInteger(result.outputImageSize.height)
+          || result.outputImageSize.width <= 0
+          || result.outputImageSize.height <= 0)) {
+          throw new Error('画布图片编辑受管输出缺少有效尺寸');
+        }
+        const prepared = result.imageEditSession && result.outputImageSize
+          ? {
+              imageUrl: result.outputImageUrl,
+              previewImageUrl: result.outputImageUrl,
+              aspectRatio: reduceAspectRatio(
+                result.outputImageSize.width,
+                result.outputImageSize.height,
+              ),
+            }
+          : await prepareNodeImage(result.outputImageUrl);
         const createdNodeId = addDerivedExportNode(
           sourceNode.id,
           prepared.imageUrl,
@@ -227,6 +259,7 @@ export function NodeToolDialog() {
             resultKind: 'generic',
             aspectRatioStrategy: 'provided',
             sizeStrategy: 'autoMinEdge',
+            imageEditSession: result.imageEditSession,
           }
         );
         if (createdNodeId) {
@@ -240,6 +273,13 @@ export function NodeToolDialog() {
       });
       closeDialog();
     } catch (processError) {
+      if (processingController.signal.aborted) {
+        logger.info('canvas.tool.dialog.apply.cancelled', {
+          toolId: activePlugin.type,
+          nodeId: sourceNode.id,
+        });
+        return;
+      }
       logger.error('canvas.tool.dialog.apply.failed', {
         toolId: activePlugin.type,
         nodeId: sourceNode.id,
@@ -247,6 +287,9 @@ export function NodeToolDialog() {
       });
       setError(processError instanceof Error ? processError.message : t('toolDialog.processFailed'));
     } finally {
+      if (processingAbortRef.current === processingController) {
+        processingAbortRef.current = null;
+      }
       setIsProcessing(false);
     }
   }, [
@@ -274,6 +317,9 @@ export function NodeToolDialog() {
           sourceImageUrl={sourceImageUrl}
           options={options}
           onOptionsChange={setOptions}
+          onExecutionReadyChange={(ready) => {
+            setReadyEditorKey(ready ? editorKey : null);
+          }}
         />
       );
     }
@@ -313,7 +359,16 @@ export function NodeToolDialog() {
           <UiButton variant="ghost" size="sm" onClick={closeDialog}>
             {t('common.cancel')}
           </UiButton>
-          <UiButton size="sm" variant="primary" onClick={handleApply} disabled={isProcessing || !sourceImageUrl}>
+          <UiButton
+            size="sm"
+            variant="primary"
+            onClick={handleApply}
+            disabled={isProcessing || !sourceImageUrl || (
+              activePlugin?.editor === 'edit'
+              && isImageEditorV3Enabled()
+              && readyEditorKey !== editorKey
+            )}
+          >
             {isProcessing ? t('toolDialog.processing') : t('toolDialog.apply')}
           </UiButton>
         </>

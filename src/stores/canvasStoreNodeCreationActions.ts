@@ -10,6 +10,7 @@ import {
   type CanvasNodeData,
   type ExportImageNodeResultKind,
 } from '@/features/canvas/domain/canvasNodes';
+import { parseCanvasEditV3NodeSession } from '@/features/canvas/imageEditV3/canvasEditV3Contracts';
 import {
   getCanvasNodeDefinition,
   nodeHasSourceHandle,
@@ -365,6 +366,11 @@ export function createCanvasNodeCreationActions(
         (exportNodeData as { displayName?: string }).displayName =
           EXPORT_RESULT_DISPLAY_NAME[options.resultKind];
       }
+    }
+    if (options?.imageEditSession) {
+      const session = parseCanvasEditV3NodeSession(options.imageEditSession, imageUrl);
+      if (!session) throw new Error('画布图片编辑派生结果缺少有效会话引用');
+      (exportNodeData as { imageEditSession?: typeof session }).imageEditSession = session;
     }
     const node = canvasNodeFactory.createNode(CANVAS_NODE_TYPES.exportImage, position, {
       ...exportNodeData,

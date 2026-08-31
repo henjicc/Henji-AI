@@ -118,7 +118,14 @@
     "processFailed": "Processing failed",
     "processing": "Processing...",
     "apply": "Apply",
-    "editResultTitle": "Edit Result"
+    "editResultTitle": "Edit Result",
+    "imageEditorV3": {
+      "loading": "Preparing the new image editor...",
+      "openFailed": "Could not open the new image editor",
+      "openFailedDescription": "The image does not match its saved edit version, or a required resource is unavailable. Try again.",
+      "saving": "Saving edits...",
+      "retrySave": "Retry save"
+    }
   },
   "nodeToolbar": {
     "more": "More",

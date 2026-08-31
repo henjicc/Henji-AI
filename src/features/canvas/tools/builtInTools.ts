@@ -13,8 +13,10 @@ import {
   stringifyMarkDoc,
 } from '@/core/imageEdit';
 import { EXPORT_RESULT_DISPLAY_NAME } from '../domain/nodeDisplay';
-import type { CanvasToolPlugin } from './types';
+import type { CanvasToolPlugin, ToolOptions } from './types';
 import { ANNOTATION_DEFAULT_STROKE_HEX } from '@/core/theme/colorTokens';
+import { isImageEditorV3Enabled } from '@/platform/runtime';
+import { CANVAS_EDIT_V3_SESSION_OPTION } from '../imageEditV3/canvasEditV3Contracts';
 
 function supportsImageSourceNode(node: CanvasNode): boolean {
   return isUploadNode(node) || isImageEditNode(node) || isExportImageNode(node);
@@ -32,7 +34,12 @@ export const imageEditToolPlugin: CanvasToolPlugin = {
   },
   operationIds: Object.values(IMAGE_EDIT_OPERATION_IDS),
   supportsNode: (node) => supportsImageSourceNode(node) && Boolean(node.data.imageUrl),
-  createInitialOptions: () => {
+  createInitialOptions: (node): ToolOptions => {
+    if (isImageEditorV3Enabled() && node.data.imageEditSession !== undefined) {
+      return {
+        [CANVAS_EDIT_V3_SESSION_OPTION]: JSON.stringify(node.data.imageEditSession),
+      };
+    }
     const document = createEmptyImageEditDocument();
     return {
       color: ANNOTATION_DEFAULT_STROKE_HEX,
