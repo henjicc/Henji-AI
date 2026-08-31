@@ -69,6 +69,7 @@ export class ImageEditRenderScheduler {
   private sequence = 0;
   private runningGpu = 0;
   private runningCpu = 0;
+  private runningCpuExports = 0;
 
   constructor(options: ImageEditRenderSchedulerOptions = {}) {
     const cpuConcurrency = options.cpuConcurrency ?? 2;
@@ -133,6 +134,25 @@ export class ImageEditRenderScheduler {
     }
   }
 
+  cancelTask(taskId: string): void {
+    const pendingPreview = [...this.pendingPreviews.entries()].find(([, candidate]) => (
+      candidate.task.id === taskId
+    ));
+    if (pendingPreview) {
+      this.pendingPreviews.delete(pendingPreview[0]);
+      this.cancelPending(pendingPreview[1]);
+      return;
+    }
+    const pendingIndex = this.pendingTasks.findIndex((candidate) => candidate.task.id === taskId);
+    if (pendingIndex >= 0) {
+      const [pending] = this.pendingTasks.splice(pendingIndex, 1);
+      if (pending) this.cancelPending(pending);
+      return;
+    }
+    const active = this.activeTasks.get(taskId);
+    if (active) active.controller.abort(new ImageEditTaskCancelledError(taskId));
+  }
+
   snapshot(): ImageEditRenderSchedulerSnapshot {
     return {
       runningGpu: this.runningGpu,
@@ -187,15 +207,18 @@ export class ImageEditRenderScheduler {
       ...[...this.pendingPreviews.values()].filter((candidate) => (
         !this.activePreviewSessions.has(candidate.task.sessionId)
       )),
-    ].filter((candidate) => this.hasLaneCapacity(candidate.task.lane));
+    ].filter((candidate) => this.hasLaneCapacity(candidate.task));
     candidates.sort((left, right) => (
       right.task.priority - left.task.priority || left.sequence - right.sequence
     ));
     return candidates[0] ?? null;
   }
 
-  private hasLaneCapacity(lane: ImageEditRenderLane): boolean {
-    return lane === 'gpu' ? this.runningGpu < 1 : this.runningCpu < this.cpuConcurrency;
+  private hasLaneCapacity(task: ImageEditRenderTask<unknown>): boolean {
+    if (task.lane === 'gpu') return this.runningGpu < 1;
+    if (this.runningCpu >= this.cpuConcurrency) return false;
+    // 两条同时导出的像素流水线不能吃光解码池；始终给交互读取/分析留一个 CPU 槽。
+    return task.kind !== 'export' || this.runningCpuExports < 1;
   }
 
   private removePending(scheduled: ScheduledTask): void {
@@ -212,7 +235,10 @@ export class ImageEditRenderScheduler {
   private start(scheduled: ScheduledTask): void {
     this.activeTasks.set(scheduled.task.id, scheduled);
     if (scheduled.task.lane === 'gpu') this.runningGpu += 1;
-    else this.runningCpu += 1;
+    else {
+      this.runningCpu += 1;
+      if (scheduled.task.kind === 'export') this.runningCpuExports += 1;
+    }
     if (scheduled.task.kind === 'preview') {
       this.activePreviewSessions.add(scheduled.task.sessionId);
     }
@@ -237,7 +263,10 @@ export class ImageEditRenderScheduler {
       this.activeTasks.delete(scheduled.task.id);
       this.taskIds.delete(scheduled.task.id);
       if (scheduled.task.lane === 'gpu') this.runningGpu -= 1;
-      else this.runningCpu -= 1;
+      else {
+        this.runningCpu -= 1;
+        if (scheduled.task.kind === 'export') this.runningCpuExports -= 1;
+      }
       if (scheduled.task.kind === 'preview') {
         this.activePreviewSessions.delete(scheduled.task.sessionId);
       }
@@ -248,5 +277,12 @@ export class ImageEditRenderScheduler {
   private abortReason(scheduled: ScheduledTask): unknown {
     return scheduled.controller.signal.reason
       ?? new ImageEditTaskCancelledError(scheduled.task.id);
+  }
+
+  private cancelPending(scheduled: ScheduledTask): void {
+    const error = new ImageEditTaskCancelledError(scheduled.task.id);
+    scheduled.controller.abort(error);
+    this.taskIds.delete(scheduled.task.id);
+    scheduled.reject(error);
   }
 }

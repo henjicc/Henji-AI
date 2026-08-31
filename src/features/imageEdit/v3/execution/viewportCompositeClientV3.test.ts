@@ -3,6 +3,8 @@ import { describe, expect, it, vi } from 'vitest'
 import {
   createImageEditDocumentV3,
   createTileRegion,
+  IMAGE_EDIT_RENDER_PRIORITY,
+  ImageEditRenderScheduler,
   ImageEditResourceBudget,
 } from '@/core/imageEdit/v3'
 import type { ImageEditorV3SourceTile } from '@/platform/contracts/imageEditorV3'
@@ -113,6 +115,76 @@ async function flushUntil(predicate: () => boolean): Promise<void> {
 }
 
 describe('图片编辑 V3 视口成品客户端', () => {
+  it('把高分辨率视口帧登记为全局 GPU 原子任务', async () => {
+    const frame = createFrame()
+    const sourceScheduler = {
+      render: vi.fn(async () => frame),
+      cancel: vi.fn(),
+      dispose: vi.fn(),
+    }
+    const renderScheduler = new ImageEditRenderScheduler({ cpuConcurrency: 1 })
+    let releaseFirst!: () => void
+    const firstGate = new Promise<void>((resolve) => { releaseFirst = resolve })
+    const order: string[] = []
+    const firstExport = renderScheduler.schedule({
+      id: 'viewport-gate-export-1', sessionId: 'export', revision: 1,
+      kind: 'export', lane: 'gpu', priority: IMAGE_EDIT_RENDER_PRIORITY.export,
+      run: async () => { order.push('export-1'); await firstGate },
+    })
+    const secondExport = renderScheduler.schedule({
+      id: 'viewport-gate-export-2', sessionId: 'export', revision: 1,
+      kind: 'export', lane: 'gpu', priority: IMAGE_EDIT_RENDER_PRIORITY.export,
+      run: async () => { order.push('export-2') },
+    })
+    const worker = new FakeViewportWorker()
+    const document = createImageEditDocumentV3({
+      width: 20_000,
+      height: 10_000,
+      documentId: 'viewport-global-scheduler',
+      sourceResourceId: RESOURCE,
+      idFactory: () => 'source',
+    })
+    const client = new ImageEditorViewportCompositeClientV3({
+      sessionId: 'viewport-global-scheduler',
+      scheduler: sourceScheduler,
+      renderScheduler,
+      workerFactory: () => worker,
+    })
+    const rendered = client.render({
+      document,
+      quality: 'draft',
+      resourceDescriptors: [],
+      viewport: { documentX: 0, documentY: 0, width: 1_440, height: 900, zoom: 0.072, devicePixelRatio: 1 },
+      viewportKey: 'scheduled',
+    })
+    await flushUntil(() => sourceScheduler.render.mock.calls.length === 1)
+    expect(worker.messages.some((message) => message.type === 'render')).toBe(false)
+
+    releaseFirst()
+    await firstExport
+    await flushUntil(() => worker.messages.some((message) => message.type === 'render'))
+    expect(order).toEqual(['export-1'])
+    const request = worker.messages.find(
+      (message): message is Extract<ImageEditorViewportCompositeWorkerRequestV3, { type: 'render' }> => message.type === 'render',
+    )
+    if (!request) throw new Error('缺少视口 Worker 请求')
+    const tiles = frame.plan.tiles.map((tile) => {
+      const outputRect = createTileRegion(document.geometry, {
+        mip: frame.plan.mip, x: tile.tileX, y: tile.tileY,
+      }, tile.halo).outputRect
+      return { outputRect, bitmap: bitmap(outputRect.width, outputRect.height) }
+    })
+    worker.emit({
+      type: 'rendered', requestId: request.requestId, sequence: request.sequence,
+      revision: 0, mip: frame.plan.mip, documentWidth: 20_000, documentHeight: 10_000,
+      diagnostics: [], tiles,
+    })
+    ;(await rendered).release()
+    await secondExport
+    expect(order).toEqual(['export-1', 'export-2'])
+    client.dispose()
+  })
+
   it('200MP 只把当前 mip 的小瓦片 transferable 给完整合成 Worker', async () => {
     const frame = createFrame()
     const scheduler = {

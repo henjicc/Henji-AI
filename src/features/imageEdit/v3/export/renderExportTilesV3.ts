@@ -1,7 +1,6 @@
 import {
   DIFFUSION_V4_RECIPE_ADAPTER,
   IMAGE_EDIT_RENDER_PRIORITY,
-  ImageEditRenderScheduler,
   ImageEditResourceBudget,
   applyDiffusionV4,
   convertFloat32TileColorDomainV3,
@@ -57,6 +56,7 @@ import {
   acquireImageEditorSessionResourceBudgetV3,
   type ImageEditorSessionResourceBudgetLeaseV3,
 } from '../execution/imageEditorSessionResourceBudgetV3'
+import { getImageEditorGlobalRenderSchedulerV3 } from '../execution/imageEditorGlobalRenderSchedulerV3'
 import { loadImageEditorV3SparseMaskRegion } from './maskRegion'
 
 const logger = createLogger('features.image_edit.v3.export')
@@ -177,7 +177,7 @@ async function* renderTiles(
   const referenceWhiteNits = resolveImageEditorV3ExportReferenceWhiteNits(document)
   const neighborhood = resolveImageEditorV3ExportNeighborhood(plan)
   const tileSize = validateTileSize(request.tileSize)
-  const scheduler = dependencies.scheduler ?? new ImageEditRenderScheduler({ cpuConcurrency: 2 })
+  const scheduler = dependencies.scheduler ?? getImageEditorGlobalRenderSchedulerV3()
   const currentSessionId = createSessionId(request.sessionId)
   let globalBudgetLease: ImageEditorSessionResourceBudgetLeaseV3 | null = null
   const budget = dependencies.resourceBudget ?? (() => {

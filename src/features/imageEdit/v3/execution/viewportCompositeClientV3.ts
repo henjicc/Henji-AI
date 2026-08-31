@@ -5,6 +5,10 @@ import {
 } from '@/core/imageEdit/v3'
 import { createLogger } from '@/core/logging'
 import type { ImageEditDocumentV3 } from '@/core/imageEdit/v3/documentTypes'
+import {
+  IMAGE_EDIT_RENDER_PRIORITY,
+  type ImageEditRenderScheduler,
+} from '@/core/imageEdit/v3/renderScheduler'
 import type { ImageEditRenderQuality } from '@/core/imageEdit/v3/renderNodeDefinition'
 import type { ImageEditorV3ResourceDescriptor } from '@/platform/contracts/imageEditorV3'
 import { ImageEditorPreviewBrushTileLoaderV3 } from './previewBrushTileLoaderV3'
@@ -43,6 +47,12 @@ import {
   acquireImageEditorSessionResourceBudgetV3,
   type ImageEditorSessionResourceBudgetLeaseV3,
 } from './imageEditorSessionResourceBudgetV3'
+import { getImageEditorGlobalRenderSchedulerV3 } from './imageEditorGlobalRenderSchedulerV3'
+import { ImageEditorWorkerCompletionV3 } from './imageEditorWorkerCompletionV3'
+import {
+  ImageEditorViewportCompositeResultOwnerV3,
+  validateImageEditorViewportCompositeEventV3,
+} from './viewportCompositeResultOwnerV3'
 const logger = createLogger('image_editor_v3.viewport_composite')
 const MAX_TRANSFER_BYTES = 256 * 1024 * 1024
 export class ImageEditorViewportCompositeSupersededErrorV3 extends Error {
@@ -86,6 +96,7 @@ export interface ImageEditorViewportCompositeClientOptionsV3 {
   brushTileLoader?: ImageEditorPreviewBrushTileLoaderV3
   transferMaxBytes?: number
   resourceBudgetConsumerId?: string
+  renderScheduler?: ImageEditRenderScheduler
 }
 
 interface ActiveViewportJobV3 extends ImageEditorViewportCompositeRequestV3 {
@@ -99,6 +110,8 @@ interface ActiveViewportJobV3 extends ImageEditorViewportCompositeRequestV3 {
   workingLease: ImageEditMemoryLease | null
   outputLease: ImageEditMemoryLease | null
   posted: boolean
+  renderTaskId: string
+  workerCompletion: ImageEditorWorkerCompletionV3<ImageEditorViewportCompositeWorkerEventV3>
   settled: boolean
   resolve: (result: ImageEditorManagedViewportCompositeV3) => void
   reject: (error: Error) => void
@@ -123,9 +136,10 @@ export class ImageEditorViewportCompositeClientV3 {
   private readonly scheduler: ViewportSchedulerV3
   private readonly brushLoader: ImageEditorPreviewBrushTileLoaderV3
   private readonly workerFactory: ImageEditorViewportCompositeWorkerFactoryV3
+  private readonly renderScheduler: ImageEditRenderScheduler
   private readonly transferMaxBytes: number
   private readonly sessionBudgetLease: ImageEditorSessionResourceBudgetLeaseV3 | null
-  private readonly resultReleases = new Set<() => void>()
+  private readonly resultOwner = new ImageEditorViewportCompositeResultOwnerV3()
   private worker: ImageEditorViewportCompositeWorkerPortV3 | null = null
   private active: ActiveViewportJobV3 | null = null
   private readonly retiredJobs = new Map<string, ActiveViewportJobV3>()
@@ -135,6 +149,7 @@ export class ImageEditorViewportCompositeClientV3 {
   constructor(private readonly options: ImageEditorViewportCompositeClientOptionsV3) {
     if (!options.sessionId.trim()) throw new Error('视口合成会话 ID 不能为空')
     this.transferMaxBytes = options.transferMaxBytes ?? MAX_TRANSFER_BYTES
+    this.renderScheduler = options.renderScheduler ?? getImageEditorGlobalRenderSchedulerV3()
     if (!Number.isSafeInteger(this.transferMaxBytes) || this.transferMaxBytes < 0) {
       throw new Error('视口合成传输上限必须是非负整数')
     }
@@ -170,6 +185,8 @@ export class ImageEditorViewportCompositeClientV3 {
         workingLease: null,
         outputLease: null,
         posted: false,
+        renderTaskId: `${this.options.sessionId}:viewport-worker:${sequence}`,
+        workerCompletion: new ImageEditorWorkerCompletionV3(),
         settled: false,
         resolve,
         reject,
@@ -201,7 +218,7 @@ export class ImageEditorViewportCompositeClientV3 {
     }
     for (const job of this.retiredJobs.values()) this.releaseJobResources(job)
     this.retiredJobs.clear()
-    for (const release of [...this.resultReleases]) release()
+    this.resultOwner.dispose()
     this.sessionBudgetLease?.release()
   }
 
@@ -287,23 +304,44 @@ export class ImageEditorViewportCompositeClientV3 {
     )
     this.assertActive(job)
     const sourceTiles = cloneImageEditorViewportSourceTilesV3(frame)
-    const worker = this.ensureWorker()
-    job.posted = true
-    worker.postMessage({
-      type: 'render',
-      requestId: job.requestId,
-      sequence: job.sequence,
-      document: job.document,
-      quality: job.quality,
-      plan: frame.plan,
-      sourceTiles,
-      brushTiles,
-    }, [
-      ...sourceTiles.map((tile) => tile.pixels),
-      ...brushTiles.map((tile) => tile.bytes),
-    ])
     frame.release()
     job.frame = null
+    const event = await this.renderScheduler.schedule<ImageEditorViewportCompositeWorkerEventV3>({
+      id: job.renderTaskId,
+      sessionId: this.options.sessionId,
+      revision: job.document.revision,
+      kind: 'preview',
+      lane: 'gpu',
+      priority: job.quality === 'draft'
+        ? IMAGE_EDIT_RENDER_PRIORITY.interactionDraft
+        : IMAGE_EDIT_RENDER_PRIORITY.viewportStable,
+      run: ({ signal }) => job.workerCompletion.wait({
+        signals: [signal, job.controller.signal],
+        onAbort: () => {
+          if (job.posted) this.worker?.postMessage({ type: 'cancel', requestId: job.requestId })
+        },
+        fallbackAbortError: () => new ImageEditorViewportCompositeSupersededErrorV3(),
+        start: () => {
+          const worker = this.ensureWorker()
+          job.posted = true
+          worker.postMessage({
+            type: 'render',
+            requestId: job.requestId,
+            sequence: job.sequence,
+            document: job.document,
+            quality: job.quality,
+            plan: frame.plan,
+            sourceTiles,
+            brushTiles,
+          }, [
+            ...sourceTiles.map((tile) => tile.pixels),
+            ...brushTiles.map((tile) => tile.bytes),
+          ])
+        },
+      }),
+    })
+    this.assertActive(job)
+    this.completeWorkerEvent(job, event)
   }
 
   private ensureWorker(): ImageEditorViewportCompositeWorkerPortV3 {
@@ -326,14 +364,18 @@ export class ImageEditorViewportCompositeClientV3 {
       }
       return
     }
+    if (!job.workerCompletion.resolve(event)) this.releaseEvent(event)
+  }
+
+  private completeWorkerEvent(job: ActiveViewportJobV3, event: ImageEditorViewportCompositeWorkerEventV3): void {
     if (event.type === 'failed') {
-      this.failJob(job, event.code === 'aborted'
+      throw event.code === 'aborted'
         ? new ImageEditorViewportCompositeSupersededErrorV3()
-        : new Error(event.message))
-      return
+        : new Error(event.message)
     }
     try {
-      this.validateEvent(job, event)
+      if (!job.prepared || !job.tilePlan) throw new Error('视口 Worker 返回前缺少渲染计划')
+      validateImageEditorViewportCompositeEventV3(event, job.document, job.tilePlan)
       const gpuBytes = event.tiles.reduce(
         (total, tile) => total + tile.outputRect.width * tile.outputRect.height * 4,
         0,
@@ -344,7 +386,7 @@ export class ImageEditorViewportCompositeClientV3 {
       }
       job.outputLease = null
       this.releaseJobResources(job)
-      const release = this.createResultRelease(event, gpuLease)
+      const release = this.resultOwner.lease(event, gpuLease)
       this.settle(job, () => job.resolve({
         documentId: job.document.id,
         revision: event.revision,
@@ -363,37 +405,7 @@ export class ImageEditorViewportCompositeClientV3 {
       })
     } catch (error) {
       this.releaseEvent(event)
-      this.failJob(job, toError(error))
-    }
-  }
-
-  private validateEvent(job: ActiveViewportJobV3, event: ImageEditorViewportCompositeRenderedEventV3): void {
-    const plan = job.tilePlan
-    if (
-      event.revision !== job.document.revision
-      || event.documentWidth !== job.document.geometry.width
-      || event.documentHeight !== job.document.geometry.height
-      || !job.prepared
-      || !plan
-      || event.mip !== plan.mip
-      || event.tiles.length !== plan.tiles.length
-    ) throw new Error('视口 Worker 返回了陈旧或无效成品帧')
-    for (const [index, tile] of event.tiles.entries()) {
-      const request = plan.tiles[index]
-      if (!request) throw new Error('视口 Worker 返回了额外成品瓦片')
-      const expected = createTileRegion(
-        job.document.geometry,
-        { mip: plan.mip, x: request.tileX, y: request.tileY },
-        request.halo,
-      ).outputRect
-      if (
-        tile.outputRect.x !== expected.x
-        || tile.outputRect.y !== expected.y
-        || tile.outputRect.width !== expected.width
-        || tile.outputRect.height !== expected.height
-        || tile.bitmap.width !== tile.outputRect.width
-        || tile.bitmap.height !== tile.outputRect.height
-      ) throw new Error('视口 Worker 返回了错误尺寸的成品瓦片')
+      throw error
     }
   }
 
@@ -403,7 +415,7 @@ export class ImageEditorViewportCompositeClientV3 {
     this.worker = null
     for (const retired of this.retiredJobs.values()) this.releaseJobResources(retired)
     this.retiredJobs.clear()
-    if (job) this.failJob(job, new Error(message))
+    if (job) job.workerCompletion.reject(new Error(message))
   }
 
   private failJob(job: ActiveViewportJobV3, error: Error): void {
@@ -427,8 +439,8 @@ export class ImageEditorViewportCompositeClientV3 {
     const job = this.active
     if (!job) return
     job.controller.abort(error)
+    this.renderScheduler.cancelTask(job.renderTaskId)
     this.scheduler.cancel()
-    if (job.posted) this.worker?.postMessage({ type: 'cancel', requestId: job.requestId })
     if (job.posted) this.retiredJobs.set(job.requestId, job)
     else this.releaseJobResources(job)
     this.settle(job, () => job.reject(error))
@@ -458,20 +470,7 @@ export class ImageEditorViewportCompositeClientV3 {
     complete()
   }
 
-  private createResultRelease(event: ImageEditorViewportCompositeRenderedEventV3, gpuLease: ImageEditMemoryLease): () => void {
-    let released = false
-    const release = (): void => {
-      if (released) return
-      released = true
-      this.resultReleases.delete(release)
-      for (const tile of event.tiles) tile.bitmap.close()
-      gpuLease.release()
-    }
-    this.resultReleases.add(release)
-    return release
-  }
-
   private releaseEvent(event: ImageEditorViewportCompositeWorkerEventV3): void {
-    if (event.type === 'rendered') for (const tile of event.tiles) tile.bitmap.close()
+    this.resultOwner.releaseEvent(event)
   }
 }

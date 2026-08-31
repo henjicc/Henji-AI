@@ -56,6 +56,31 @@ describe('图片编辑 V3 调度器', () => {
     expect(order).toEqual(['a', 'c', 'b']);
   });
 
+  it('多个导出只占一个 CPU 槽，保留一个交互解码槽', async () => {
+    const scheduler = new ImageEditRenderScheduler({ cpuConcurrency: 2 });
+    const gate = deferred<void>();
+    const order: string[] = [];
+    const firstExport = scheduler.schedule({
+      id: 'cpu-export-1', sessionId: 'export-1', revision: 1, kind: 'export', lane: 'cpu', priority: 200,
+      run: async () => { order.push('export-1'); await gate.promise; },
+    });
+    const secondExport = scheduler.schedule({
+      id: 'cpu-export-2', sessionId: 'export-2', revision: 1, kind: 'export', lane: 'cpu', priority: 200,
+      run: async () => { order.push('export-2'); },
+    });
+    const interactiveDecode = scheduler.schedule({
+      id: 'cpu-preview-decode', sessionId: 'preview', revision: 1, kind: 'preview', lane: 'cpu', priority: 500,
+      run: async () => { order.push('preview-decode'); },
+    });
+    await interactiveDecode;
+    await Promise.resolve();
+    expect(order).toEqual(['export-1', 'preview-decode']);
+    expect(scheduler.snapshot()).toMatchObject({ runningCpu: 1, pendingOtherTasks: 1 });
+    gate.resolve();
+    await Promise.all([firstExport, secondExport]);
+    expect(order).toEqual(['export-1', 'preview-decode', 'export-2']);
+  });
+
   it('取消立即清空待处理任务，并以协作式 signal 通知运行任务', async () => {
     const scheduler = new ImageEditRenderScheduler();
     const aborted = vi.fn();
@@ -94,6 +119,29 @@ describe('图片编辑 V3 调度器', () => {
 
     await expect(oldFrame).rejects.toBeInstanceOf(ImageEditTaskSupersededError);
     await expect(newFrame).resolves.toBe('new');
+  });
+
+  it('可按任务 ID 取消待处理或运行中的原子任务', async () => {
+    const scheduler = new ImageEditRenderScheduler({ cpuConcurrency: 1 });
+    const gate = deferred<void>();
+    const active = scheduler.schedule({
+      id: 'active-id', sessionId: 'active-session', revision: 1, kind: 'export', lane: 'cpu', priority: 200,
+      run: async ({ signal }) => {
+        await gate.promise;
+        if (signal.aborted) throw signal.reason;
+        return 'active';
+      },
+    });
+    const pending = scheduler.schedule({
+      id: 'pending-id', sessionId: 'pending-session', revision: 1, kind: 'export', lane: 'cpu', priority: 200,
+      run: async () => 'pending',
+    });
+    scheduler.cancelTask('pending-id');
+    await expect(pending).rejects.toBeInstanceOf(ImageEditTaskCancelledError);
+    scheduler.cancelTask('active-id');
+    gate.resolve();
+    await expect(active).rejects.toBeInstanceOf(ImageEditTaskCancelledError);
+    expect(scheduler.snapshot()).toMatchObject({ runningCpu: 0, pendingOtherTasks: 0 });
   });
 
   it('拒绝倒退 revision 和未结束的重复任务 ID', async () => {
