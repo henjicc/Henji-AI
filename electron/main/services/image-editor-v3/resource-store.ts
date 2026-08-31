@@ -381,6 +381,27 @@ export class ContentAddressedResourceStore {
     }
   }
 
+  /**
+   * 事务补偿只允许删除本事务确认新建、且当前没有 lease 的对象。共享哈希若已被
+   * 其他并发消费者租用则保留，由正常 GC 在引用消失后处理。
+   */
+  async discardCreated(resourceIds: readonly ResourceId[]): Promise<ResourceId[]> {
+    const unique = [...new Set(resourceIds)]
+    return this.executor.run('resource-leases', async () => {
+      const deleted: ResourceId[] = []
+      for (const resourceId of unique) {
+        parseResourceId(resourceId)
+        if ((this.leaseCounts.get(resourceId) ?? 0) > 0) continue
+        const resourcePath = this.getFilesystemPath(resourceId)
+        const existed = await fsp.access(resourcePath).then(() => true).catch(() => false)
+        if (!existed) continue
+        await fsp.rm(resourcePath, { force: true })
+        deleted.push(resourceId)
+      }
+      return deleted
+    })
+  }
+
   async garbageCollect(
     referencedResourceIds: ReadonlySet<ResourceId>,
     options: ResourceGarbageCollectionOptions = {},

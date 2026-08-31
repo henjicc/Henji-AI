@@ -128,6 +128,10 @@ export interface HenjiPackageMediaFile {
 export interface HenjiImportedProjectPackage {
   manifestJson: string
   pathMap: Record<string, string>
+  imageEditReferences: Array<{
+    source: { documentRef: string; revision: number; previewRef: string | null }
+    imported: { documentRef: string; revision: number; previewRef: string | null }
+  }>
 }
 
 export interface HenjiProjectPackageApi {

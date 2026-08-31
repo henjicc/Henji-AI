@@ -1,4 +1,3 @@
-import path from 'node:path'
 import { BrowserWindow, dialog, type IpcMainInvokeEvent, type WebContents } from 'electron'
 import type { ImageEditDocumentV3 } from '../../../src/core/imageEdit/v3/documentTypes'
 import type {
@@ -9,7 +8,7 @@ import type {
 } from '../../../src/platform/contracts/imageEditorV3'
 import { getMainWindow } from '../window'
 import { isTrustedMainRendererUrl } from '../security/main-renderer-url'
-import { getDataRootDir, sanitizeFileStem } from '../services/image/path-utils'
+import { sanitizeFileStem } from '../services/image/path-utils'
 import { createMainLogger } from '../services/logging'
 import {
   ContentAddressedResourceStore,
@@ -29,6 +28,7 @@ import {
   type SourceImageMetadata,
   collectPersistedImageEditHistoryResourcesV3,
   createImageEditorV3ResourceMediaUrl,
+  getImageEditorV3StoragePaths,
 } from '../services/image-editor-v3'
 import { registerImageEditorV3RasterExportIpc } from './image-editor-v3-raster-export'
 import { registerImageEditorV3BrushTileIpc } from './image-editor-v3-brush-tiles'
@@ -81,9 +81,9 @@ const requestAdmission = new ImageEditorV3RequestAdmission()
 const trackedSenders = new WeakMap<WebContents, () => void>()
 function getRuntime(): ImageEditorV3Runtime {
   if (runtime) return runtime
-  const rootDir = path.join(getDataRootDir(), 'ImageEditorV3')
-  const resources = new ContentAddressedResourceStore(path.join(rootDir, 'resources'))
-  const documents = new ImageEditDocumentRepository(path.join(rootDir, 'documents'))
+  const paths = getImageEditorV3StoragePaths()
+  const resources = new ContentAddressedResourceStore(paths.resourcesDir)
+  const documents = new ImageEditDocumentRepository(paths.documentsDir)
   const sources = new SharpSourceProvider(resources)
   const rasterExports = new RasterExportSessionManager(documents, resources)
   runtime = {
@@ -98,7 +98,7 @@ function getRuntime(): ImageEditorV3Runtime {
       rasterExports,
       documents,
       resources,
-      path.join(rootDir, 'materializations'),
+      paths.materializationsDir,
     ),
   }
   return runtime

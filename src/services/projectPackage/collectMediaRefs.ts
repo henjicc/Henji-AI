@@ -7,6 +7,7 @@ import {
   validateLayerStackDocument,
   type LayerStackDocumentV1,
 } from '@/features/canvas/domain/layerStack';
+import { mapProjectImageEditorV3SessionSource } from './imageEditorV3ProjectAdapter';
 
 const PACKAGE_MEDIA_PREFIX = 'media/';
 
@@ -45,10 +46,13 @@ export function collectAndRewriteMedia(nodes: CanvasNode[]): CollectMediaResult 
     return packagePath;
   };
 
-  const rewrittenNodes = nodes.map((node) => ({
-    ...node,
-    data: mapCanvasNodeMediaReferences(node.data as DynamicValueMap, mapValue),
-  })) as CanvasNode[];
+  const rewrittenNodes = nodes.map((node) => {
+    const data = mapCanvasNodeMediaReferences(node.data as DynamicValueMap, mapValue);
+    return {
+      ...node,
+      data: mapProjectImageEditorV3SessionSource(data, mapValue),
+    };
+  }) as CanvasNode[];
 
   return { nodes: rewrittenNodes, mediaFiles };
 }
@@ -67,7 +71,10 @@ export function rewritePackagePathsToLocal(
 
   const existingPaths = new Set(Object.values(pathMap));
   return nodes.map((node) => {
-    const data = mapCanvasNodeMediaReferences(node.data as DynamicValueMap, mapValue);
+    const data = mapProjectImageEditorV3SessionSource(
+      mapCanvasNodeMediaReferences(node.data as DynamicValueMap, mapValue),
+      mapValue,
+    );
     if (!data.layerStackDocument || typeof data.layerStackDocument !== 'object' || Array.isArray(data.layerStackDocument)) {
       return { ...node, data } as CanvasNode;
     }

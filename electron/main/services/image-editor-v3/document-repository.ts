@@ -308,6 +308,31 @@ export class ImageEditDocumentRepository {
     return envelopes.sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))
   }
 
+  /**
+   * 仅供跨文件事务补偿：只有文档仍处于调用方刚写入的 revision 时才删除，
+   * 避免回滚覆盖随后发生的用户编辑。
+   */
+  async deleteIfRevision(documentIdOrRef: string, expectedRevision: number): Promise<boolean> {
+    const documentId = documentIdOrRef.startsWith(IMAGE_EDIT_DOCUMENT_REF_PREFIX)
+      ? parseDocumentRef(documentIdOrRef)
+      : validateDocumentId(documentIdOrRef)
+    if (!Number.isSafeInteger(expectedRevision) || expectedRevision < 0) {
+      throw new Error(`Invalid expected document revision: ${expectedRevision}`)
+    }
+    return this.executor.run(documentId, () => this.withDocumentLock(documentId, async () => {
+      let current: ImageEditDocumentEnvelope
+      try {
+        current = await this.load(documentId)
+      } catch (error) {
+        if (error instanceof Error && 'code' in error && error.code === 'ENOENT') return false
+        throw error
+      }
+      if (current.revision !== expectedRevision) return false
+      await fsp.rm(this.documentPath(documentId), { force: true })
+      return true
+    }))
+  }
+
   createAutosaveScheduler(delayMs = 500): DocumentAutosaveScheduler {
     return new DocumentAutosaveScheduler(this, delayMs)
   }

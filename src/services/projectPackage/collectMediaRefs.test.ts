@@ -99,6 +99,40 @@ describe('结构化提示词项目包媒体收集', () => {
     })
   })
 
+  it('图片编辑 V3 会话来源随普通媒体一起打包和恢复', () => {
+    const sourcePath = '/managed/edited.png'
+    const node = {
+      id: 'v3-edited-result',
+      type: CANVAS_NODE_TYPES.exportImage,
+      position: { x: 0, y: 0 },
+      data: {
+        imageUrl: sourcePath,
+        previewImageUrl: sourcePath,
+        aspectRatio: '1:1',
+        imageEditSession: {
+          kind: 'image-edit-v3',
+          sourceUrl: sourcePath,
+          documentRef: 'image-edit-v3:portable-document',
+          revision: 2,
+          previewRef: null,
+        },
+      },
+    } as CanvasNode
+
+    const collected = collectAndRewriteMedia([node])
+    expect(collected.nodes[0].data).toMatchObject({
+      imageUrl: 'media/1-edited.png',
+      imageEditSession: { sourceUrl: 'media/1-edited.png' },
+    })
+    const restored = rewritePackagePathsToLocal(collected.nodes, {
+      'media/1-edited.png': '/other-machine/edited.png',
+    })
+    expect(restored[0].data).toMatchObject({
+      imageUrl: '/other-machine/edited.png',
+      imageEditSession: { sourceUrl: '/other-machine/edited.png' },
+    })
+  })
+
   it('收集局部重绘节点的受管遮罩并同步改写编辑文档来源', () => {
     const sourcePath = '/managed/source.png'
     const maskPath = '/managed/inpainting-mask.png'

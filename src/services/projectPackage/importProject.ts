@@ -8,6 +8,7 @@ import { upsertProjectRecord } from '@/commands/projectState';
 import { encodeProjectAsRecord, type Project } from '@/stores/projectStore';
 import type { CanvasEdge, CanvasNode } from '@/features/canvas/domain/canvasNodes';
 import { rewritePackagePathsToLocal } from './collectMediaRefs';
+import { rewriteProjectImageEditorV3References } from './imageEditorV3ProjectAdapter';
 import { PROJECT_PACKAGE_EXTENSION, PROJECT_PACKAGE_FORMAT_VERSION } from './exportProject';
 
 const logger = createLogger('services.projectPackage.importProject');
@@ -40,7 +41,7 @@ export async function importProjectFromPackage(): Promise<string | null> {
     return null;
   }
 
-  const { manifestJson, pathMap } = await importProjectPackage(zipPath);
+  const { manifestJson, pathMap, imageEditReferences = [] } = await importProjectPackage(zipPath);
   const manifest = JSON.parse(manifestJson) as ProjectPackageManifest;
 
   const formatVersion = manifest.formatVersion ?? 0;
@@ -49,7 +50,8 @@ export async function importProjectFromPackage(): Promise<string | null> {
   }
 
   const rawNodes = Array.isArray(manifest.nodes) ? manifest.nodes : [];
-  const nodes = rewritePackagePathsToLocal(rawNodes, pathMap);
+  const restoredMediaNodes = rewritePackagePathsToLocal(rawNodes, pathMap);
+  const nodes = rewriteProjectImageEditorV3References(restoredMediaNodes, imageEditReferences);
   const edges = Array.isArray(manifest.edges) ? manifest.edges : [];
   const baseName = manifest.project?.name?.trim() || '导入项目';
 

@@ -1,4 +1,5 @@
 import * as yauzl from 'yauzl'
+import type { Readable } from 'node:stream'
 
 /**
  * yauzl 的最小封装：懒读条目、逐条读取字节。项目包导入与技能安装共用这一份，
@@ -82,6 +83,26 @@ export function readEntryBytes(
       stream.on('end', () => {
         resolve(Buffer.concat(chunks))
       })
+    })
+  })
+}
+
+export function openEntryReadStream(
+  archive: yauzl.ZipFile,
+  entry: yauzl.Entry,
+  entryName: string,
+): Promise<Readable> {
+  return new Promise((resolve, reject) => {
+    archive.openReadStream(entry, (error, stream) => {
+      if (error) {
+        reject(new Error(`Failed to extract ${entryName}: ${error.message}`))
+        return
+      }
+      if (!stream) {
+        reject(new Error(`Failed to extract ${entryName}`))
+        return
+      }
+      resolve(stream)
     })
   })
 }
