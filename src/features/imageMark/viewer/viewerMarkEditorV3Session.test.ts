@@ -42,6 +42,7 @@ function sourceMetadata(overrides: Partial<ImageEditorV3SourceMetadata> = {}): I
 
 function managedSource(metadata = sourceMetadata()): ImageEditorV3ManagedSource {
   return {
+    mediaUrl: `henji-media://image-editor-v3/${'a'.repeat(64)}?mediaType=image%2Fpng`,
     resource: { resourceRef: RESOURCE_REF, byteLength: 4096, mediaType: 'image/png' },
     metadata,
   }

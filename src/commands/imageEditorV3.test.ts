@@ -220,6 +220,7 @@ describe('图片编辑 V3 commands 契约', () => {
   it('宿主来源导入只透传来源描述并返回受管引用', async () => {
     const platform = createPlatform()
     vi.mocked(platform.ingestSource).mockResolvedValue({
+      mediaUrl: `henji-media://image-editor-v3/${'a'.repeat(64)}?mediaType=image%2Fpng`,
       resource: { resourceRef: SOURCE_REF, byteLength: 3, mediaType: 'image/png' },
       metadata: {
         resourceRef: SOURCE_REF,
@@ -253,6 +254,7 @@ describe('图片编辑 V3 commands 契约', () => {
 
     expect(platform.ingestSource).toHaveBeenCalledWith(request)
     expect(result.resource.resourceRef).toBe(SOURCE_REF)
+    expect(result.mediaUrl).toContain('henji-media://image-editor-v3/')
   })
 
   it('金字塔预热通过可取消 PAL 命令透传有界范围', async () => {

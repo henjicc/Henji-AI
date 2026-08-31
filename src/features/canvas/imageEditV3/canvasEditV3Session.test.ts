@@ -34,6 +34,7 @@ function repository() {
 
 function managedSource(): ImageEditorV3ManagedSource {
   return {
+    mediaUrl: `henji-media://image-editor-v3/${'a'.repeat(64)}?mediaType=image%2Fpng`,
     resource: { resourceRef: SOURCE_REF, byteLength: 4_096, mediaType: 'image/png' },
     metadata: {
       resourceRef: SOURCE_REF,

@@ -3,7 +3,9 @@ import { BrowserWindow, dialog, type IpcMainInvokeEvent, type WebContents } from
 import type { ImageEditDocumentV3 } from '../../../src/core/imageEdit/v3/documentTypes'
 import type {
   ImageEditorV3DocumentSnapshot,
+  ImageEditorV3ManagedSource,
   ImageEditorV3ResourceDescriptor,
+  ImageEditorV3SourceMetadata,
 } from '../../../src/platform/contracts/imageEditorV3'
 import { getMainWindow } from '../window'
 import { isTrustedMainRendererUrl } from '../security/main-renderer-url'
@@ -26,6 +28,7 @@ import {
   type ResourceId,
   type SourceImageMetadata,
   collectPersistedImageEditHistoryResourcesV3,
+  createImageEditorV3ResourceMediaUrl,
 } from '../services/image-editor-v3'
 import { registerImageEditorV3RasterExportIpc } from './image-editor-v3-raster-export'
 import { registerImageEditorV3BrushTileIpc } from './image-editor-v3-brush-tiles'
@@ -221,7 +224,7 @@ function toResource(descriptor: ResourceDescriptor): ImageEditorV3ResourceDescri
   return { resourceRef: descriptor.id, byteLength: descriptor.byteLength, mediaType: descriptor.mediaType ?? null }
 }
 
-function toMetadata(metadata: SourceImageMetadata): Record<string, unknown> {
+function toMetadata(metadata: SourceImageMetadata): ImageEditorV3SourceMetadata {
   return {
     resourceRef: metadata.resourceId,
     width: metadata.width,
@@ -242,6 +245,19 @@ function toMetadata(metadata: SourceImageMetadata): Record<string, unknown> {
     iccProfileResourceRef: metadata.iccProfileResourceId ?? null,
     cicp: metadata.cicp,
     hdr: metadata.hdr,
+  }
+}
+
+function toManagedSource(imported: {
+  resource: ResourceDescriptor
+  metadata: SourceImageMetadata
+}): ImageEditorV3ManagedSource {
+  const resource = toResource(imported.resource)
+  if (!resource.mediaType) throw new Error('Image editor source resource has no media type')
+  return {
+    resource,
+    metadata: toMetadata(imported.metadata),
+    mediaUrl: createImageEditorV3ResourceMediaUrl(imported.resource.id, resource.mediaType),
   }
 }
 
@@ -453,16 +469,13 @@ export function registerImageEditorV3Ipc(): void {
         kind: 'local-path',
         filePath: selection.filePaths[0],
       }, signal)
-      return { status: 'completed' as const, value: {
-        resource: toResource(imported.resource),
-        metadata: toMetadata(imported.metadata),
-      } }
+      return { status: 'completed' as const, value: toManagedSource(imported) }
     })
   ), guard)
   registerIpcHandler('imageEditorV3:source:ingest', parseImageEditorV3IngestSourcePayload, (payload, event) => (
     runRequest('source.ingest', payload.requestId, event.sender.id, async (signal) => {
       const imported = await getRuntime().sourceIngestor.ingest(payload.source, signal)
-      return { resource: toResource(imported.resource), metadata: toMetadata(imported.metadata) }
+      return toManagedSource(imported)
     })
   ), guard)
   registerIpcHandler('imageEditorV3:source:metadata', parseImageEditorV3ResourcePayload, (payload, event) => (

@@ -29,6 +29,12 @@ import { useImageEditorHandoffStore } from '@/features/imageEdit/store/imageEdit
 import { BlankImageDialog } from './BlankImageDialog';
 import { applyPngDpi, createBlankImageDataUrl, type BlankImageSpec } from './blankImage';
 import { ImageMarkSourceMenu } from './ImageMarkSourceMenu';
+import {
+  readImageMarkToolWorkspaceSourceV3,
+  rememberImageMarkToolWorkspaceSessionV3,
+  rememberImageMarkToolWorkspaceSourceV3,
+  type ImageMarkToolWorkspaceSourceV3,
+} from './imageMarkToolWorkspaceV3';
 
 const ImageMarkToolV3Host = lazy(async () => {
   const module = await import('./ImageMarkToolV3Host');
@@ -39,16 +45,7 @@ const logger = createLogger('features.imageMark');
 
 const IMAGE_EXTENSIONS = ['png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp', 'avif'];
 
-interface ImageMarkSource {
-  url: string;
-  /** 用于另存为默认文件名 */
-  name: string;
-  sessionKey: number;
-  /** 本次打开会话的初始编辑文档；助手创建的预览必须随图片一起交给编辑器。 */
-  initialDocument: ImageEditDocument;
-  /** 新建空白图片的导出密度；普通导入图暂不改写其原始元数据。 */
-  dpi?: number;
-}
+type ImageMarkSource = ImageMarkToolWorkspaceSourceV3;
 
 export interface ImageMarkToolProps {
   /** 返回工具箱。本工具自带命令带,返回按钮由它自己渲染,外层不再画标题带。 */
@@ -64,7 +61,9 @@ export interface ImageMarkToolProps {
 export function ImageMarkTool({ onBack }: ImageMarkToolProps = {}): JSX.Element {
   const { showNotification } = useNotification();
   const { addMedia, collecting } = useAddToAssetLibrary();
-  const [source, setSource] = useState<ImageMarkSource | null>(null);
+  const [source, setSource] = useState<ImageMarkSource | null>(() => (
+    isImageEditorV3Enabled() ? readImageMarkToolWorkspaceSourceV3() : null
+  ));
   const [isBusy, setIsBusy] = useState(false);
   const [isDragOver, setIsDragOver] = useState(false);
   const [isBlankDialogOpen, setIsBlankDialogOpen] = useState(false);
@@ -72,7 +71,7 @@ export function ImageMarkTool({ onBack }: ImageMarkToolProps = {}): JSX.Element 
   const pendingHandoff = useImageEditorHandoffStore((state) => state.pending);
   const consumeHandoff = useImageEditorHandoffStore((state) => state.consume);
   const documentRef = useRef<ImageEditDocument>(createEmptyImageEditDocument());
-  const sourceSequenceRef = useRef(0);
+  const sourceSequenceRef = useRef(source?.sessionKey ?? 0);
   const acceptingHandoffRef = useRef<string | null>(null);
 
   const acceptSource = useCallback(async (
@@ -94,14 +93,23 @@ export function ImageMarkTool({ onBack }: ImageMarkToolProps = {}): JSX.Element 
       }
     }
     sourceSequenceRef.current += 1;
-    setSource({
+    const nextSource: ImageMarkSource = {
       url,
       name,
       sessionKey: sourceSequenceRef.current,
       initialDocument: document,
       ...(dpi ? { dpi } : {}),
-    });
+    };
+    setSource(nextSource);
+    if (isImageEditorV3Enabled()) rememberImageMarkToolWorkspaceSourceV3(nextSource);
     logger.info('image_mark.standalone.open.completed', { name });
+  }, []);
+
+  const rememberV3Session = useCallback((
+    sessionKey: number,
+    session: NonNullable<ImageMarkSource['session']>,
+  ): void => {
+    rememberImageMarkToolWorkspaceSessionV3(sessionKey, session);
   }, []);
 
   useEffect(() => {
@@ -369,6 +377,10 @@ export function ImageMarkTool({ onBack }: ImageMarkToolProps = {}): JSX.Element 
               sourceName={source.name}
               sourceSessionKey={source.sessionKey}
               initialDocument={source.initialDocument}
+              initialSession={source.session}
+              onSessionReferenceChange={(session) => {
+                rememberV3Session(source.sessionKey, session);
+              }}
               onBack={onBack}
               onOpenFile={handleOpenFile}
               onPasteFromClipboard={handlePasteFromClipboard}

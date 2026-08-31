@@ -6,6 +6,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { NotificationProvider } from '@/contexts/NotificationContext'
 import { createEmptyImageEditDocument } from '@/core/imageEdit'
 import type { ImageEditDocumentV3 } from '@/core/imageEdit/v3/documentTypes'
+import { migrateImageEditDocumentV2ToV3 } from '@/core/imageEdit/v3/legacyMigration'
+import type { ImageEditSessionReferenceV3 } from '@/core/imageEdit/v3/sessionReference'
 import type { ImageEditDocumentReferenceV3 } from '@/core/imageEdit/v3/serviceContracts'
 import i18n from '@/i18n/config'
 import type {
@@ -70,6 +72,7 @@ let persistedDocument: ImageEditDocumentV3 | null = null
 
 function managedSource(): ImageEditorV3ManagedSource {
   return {
+    mediaUrl: `henji-media://image-editor-v3/${'a'.repeat(64)}?mediaType=image%2Fpng`,
     resource: { resourceRef: RESOURCE_REF, byteLength: 4_096, mediaType: 'image/png' },
     metadata: {
       resourceRef: RESOURCE_REF,
@@ -95,7 +98,12 @@ function managedSource(): ImageEditorV3ManagedSource {
   }
 }
 
-function renderHost(onFallback = vi.fn()) {
+function renderHost(options: {
+  onFallback?: () => void
+  initialSession?: ImageEditSessionReferenceV3
+  onSessionReferenceChange?: (session: ImageEditSessionReferenceV3) => void
+} = {}) {
+  const onFallback = options.onFallback ?? vi.fn()
   return {
     onFallback,
     ...render(
@@ -106,6 +114,8 @@ function renderHost(onFallback = vi.fn()) {
             sourceName="source.png"
             sourceSessionKey={1}
             initialDocument={createEmptyImageEditDocument()}
+            initialSession={options.initialSession}
+            onSessionReferenceChange={options.onSessionReferenceChange}
             onOpenFile={() => undefined}
             onPasteFromClipboard={() => undefined}
             onCreateBlank={() => undefined}
@@ -229,7 +239,7 @@ describe('ImageMarkToolV3Host', () => {
   it('导入失败时提供重试和显式兼容回退，不伪造旧文档结果', async () => {
     mocks.ingest.mockRejectedValueOnce(new Error('unsupported source'))
     const onFallback = vi.fn()
-    renderHost(onFallback)
+    renderHost({ onFallback })
 
     expect((await screen.findByRole('alert')).textContent).toContain('无法打开新版图片编辑器')
     expect(screen.queryByText('unsupported source')).toBeNull()
@@ -277,6 +287,43 @@ describe('ImageMarkToolV3Host', () => {
     await waitFor(() => expect(mocks.openPackage).toHaveBeenCalledTimes(1))
     expect(await screen.findByText('版本 4')).toBeTruthy()
     expect(rendered.container.querySelector('[data-image-editor-v3]')).toBeTruthy()
+  })
+
+  it('按稳定引用恢复权威快照，不重新导入或创建文档', async () => {
+    const restoredDocument = {
+      ...createEmptyImageEditDocument(),
+    }
+    const bootstrap = managedSource()
+    const migrated = migrateImageEditDocumentV2ToV3(
+      restoredDocument,
+      {
+        width: bootstrap.metadata.width,
+        height: bootstrap.metadata.height,
+        sourceResourceId: bootstrap.resource.resourceRef,
+        documentId: 'restored-toolbox-document',
+      },
+    )
+    persistedDocument = { ...migrated, revision: 4 }
+    const onSessionReferenceChange = vi.fn()
+    const initialSession = {
+      kind: 'image-edit-v3' as const,
+      sourceUrl: bootstrap.mediaUrl,
+      documentRef: 'image-edit-v3:restored-toolbox-document' as const,
+      revision: 4,
+      previewRef: null,
+    }
+
+    const rendered = renderHost({ initialSession, onSessionReferenceChange })
+
+    await waitFor(() => expect(rendered.container.querySelector('[data-image-editor-v3]')).toBeTruthy())
+    expect(mocks.loadDocument).toHaveBeenCalledWith({
+      requestId: expect.stringContaining('session-restore'),
+      documentRef: initialSession.documentRef,
+    }, expect.any(AbortSignal))
+    expect(mocks.ingest).not.toHaveBeenCalled()
+    expect(mocks.save).not.toHaveBeenCalled()
+    expect(onSessionReferenceChange).toHaveBeenCalledWith(initialSession)
+    expect(await screen.findByText('版本 4')).toBeTruthy()
   })
 
   it('先落盘待保存命令，再读取权威快照执行栅格分块导出', async () => {

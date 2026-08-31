@@ -65,6 +65,8 @@ export type ImageEditorV3SourceLocator =
 export interface ImageEditorV3ManagedSource {
   resource: ImageEditorV3ResourceDescriptor
   metadata: ImageEditorV3SourceMetadata
+  /** 受管源的能力 URL；宿主可在导入完成后释放原始 Data URL/远程 URL。 */
+  mediaUrl: string
 }
 
 export interface ImageEditorV3PyramidDescriptor {

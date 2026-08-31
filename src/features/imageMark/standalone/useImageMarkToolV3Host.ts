@@ -4,12 +4,14 @@ import { useTranslation } from 'react-i18next'
 import {
   ImageEditorV3CommandRepository,
   ingestImageEditorV3Source,
+  loadImageEditorV3Document,
 } from '@/commands/imageEditorV3'
 import type { ImageEditDocument } from '@/core/imageEdit'
 import { ImageEditCommandHistoryV3 } from '@/core/imageEdit/v3/commandHistory'
 import type { ImageEditCommandHistorySnapshotV3 } from '@/core/imageEdit/v3/commandHistoryCodec'
 import { createImageEditIdV3 } from '@/core/imageEdit/v3/documentFactory'
 import type { ImageEditDocumentV3 } from '@/core/imageEdit/v3/documentTypes'
+import type { ImageEditSessionReferenceV3 } from '@/core/imageEdit/v3/sessionReference'
 import { migrateImageEditDocumentV2ToV3 } from '@/core/imageEdit/v3/legacyMigration'
 import type {
   ImageEditDocumentReferenceV3,
@@ -45,6 +47,9 @@ export interface ImageMarkToolV3HostProps {
   sourceName: string
   sourceSessionKey: number
   initialDocument: ImageEditDocument
+  /** 工具箱切走再返回时只凭稳定引用恢复，不重新导入来源。 */
+  initialSession?: ImageEditSessionReferenceV3
+  onSessionReferenceChange?: (session: ImageEditSessionReferenceV3) => void
   onBack?: () => void
   onOpenFile: () => void | Promise<void>
   onPasteFromClipboard: () => void | Promise<void>
@@ -82,6 +87,7 @@ export function useImageMarkToolV3Host(
     sourceName,
     sourceSessionKey,
     initialDocument,
+    initialSession,
   } = props
   const { t } = useTranslation('ui')
   const { showNotification } = useNotification()
@@ -90,6 +96,9 @@ export function useImageMarkToolV3Host(
   const [bootstrapAttempt, setBootstrapAttempt] = useState(0)
   const [persistenceStatus, setPersistenceStatus] = useState<ImageMarkV3PersistenceStatus | null>(null)
   const mountedRef = useRef(true)
+  const onSessionReferenceChangeRef = useRef(props.onSessionReferenceChange)
+  onSessionReferenceChangeRef.current = props.onSessionReferenceChange
+  const sessionSourceUrlRef = useRef(initialSession?.sourceUrl ?? sourceImageUrl)
   const documentIdRef = useRef(createImageEditIdV3('document'))
   const persistenceSnapshotRef = useRef<ImageEditPersistenceSnapshotV3 | null>(null)
   const persistenceRef = useRef<ImageMarkV3PersistenceQueue | null>(null)
@@ -103,7 +112,17 @@ export function useImageMarkToolV3Host(
   }, [])
 
   const reportPersistenceStatus = useCallback((status: ImageMarkV3PersistenceStatus): void => {
-    if (mountedRef.current) setPersistenceStatus(status)
+    if (!mountedRef.current) return
+    setPersistenceStatus(status)
+    if (status.kind === 'idle') {
+      onSessionReferenceChangeRef.current?.({
+        kind: 'image-edit-v3',
+        sourceUrl: sessionSourceUrlRef.current,
+        documentRef: `image-edit-v3:${status.reference.documentId}`,
+        revision: status.reference.revision,
+        previewRef: status.reference.previewRef as ImageEditSessionReferenceV3['previewRef'],
+      })
+    }
   }, [])
 
   useEffect(() => {
@@ -117,41 +136,81 @@ export function useImageMarkToolV3Host(
     void (async () => {
       let sourceKind = 'unsupported'
       try {
-        const source = resolveImageMarkV3SourceLocator(sourceImageUrl)
-        sourceKind = source.kind
+        sourceKind = initialSession ? 'managed-session' : 'unsupported'
         logger.info('图片编辑 V3 工具箱宿主开始导入图片', {
           event: 'image_editor_v3.toolbox.bootstrap.start',
           context: { sourceKind, sourceSessionKey },
         })
-        const managed = await ingestImageEditorV3Source({
-          requestId: createImageMarkToolV3RequestId('source-ingest'),
-          source,
-        }, controller.signal)
-        let generatedLayerIndex = 0
-        const migrated = migrateImageEditDocumentV2ToV3(initialDocument, {
-          width: managed.metadata.width,
-          height: managed.metadata.height,
-          sourceResourceId: managed.resource.resourceRef,
-          documentId: documentIdRef.current,
-          idFactory: (prefix) => `${prefix}-${documentIdRef.current}-${generatedLayerIndex += 1}`,
-        })
-        const document: ImageEditDocumentV3 = {
-          ...migrated,
-          color: createImageMarkV3ColorMode(managed.metadata),
+        let document: ImageEditDocumentV3
+        let initialPersistence: ImageEditPersistenceSnapshotV3
+        let initialReference: ImageEditDocumentReferenceV3
+        let resourceDescriptors: ImageEditorV3ResourceDescriptor[]
+        if (initialSession) {
+          const snapshot = await loadImageEditorV3Document({
+            requestId: createImageMarkToolV3RequestId('session-restore'),
+            documentRef: initialSession.documentRef,
+          }, controller.signal)
+          const documentId = initialSession.documentRef.slice('image-edit-v3:'.length)
+          if (!snapshot
+            || snapshot.documentRef !== initialSession.documentRef
+            || snapshot.document.id !== documentId
+            || snapshot.revision !== initialSession.revision
+            || snapshot.document.revision !== initialSession.revision
+            || snapshot.previewRef !== initialSession.previewRef) {
+            throw new Error('图片编辑 V3 工具箱会话与权威快照不一致')
+          }
+          document = snapshot.document
+          documentIdRef.current = document.id
+          const history = new ImageEditCommandHistoryV3()
+          if (snapshot.history) history.restore(document, snapshot.history)
+          else history.clear(document)
+          initialPersistence = {
+            document,
+            history: history.createSnapshot(),
+            retainedResources: history.getRetainedResources(),
+          }
+          initialReference = {
+            documentId: document.id,
+            revision: snapshot.revision,
+            previewRef: snapshot.previewRef,
+          }
+          resourceDescriptors = snapshot.resources
+          sessionSourceUrlRef.current = initialSession.sourceUrl
+        } else {
+          const source = resolveImageMarkV3SourceLocator(sourceImageUrl)
+          sourceKind = source.kind
+          const managed = await ingestImageEditorV3Source({
+            requestId: createImageMarkToolV3RequestId('source-ingest'),
+            source,
+          }, controller.signal)
+          let generatedLayerIndex = 0
+          const migrated = migrateImageEditDocumentV2ToV3(initialDocument, {
+            width: managed.metadata.width,
+            height: managed.metadata.height,
+            sourceResourceId: managed.resource.resourceRef,
+            documentId: documentIdRef.current,
+            idFactory: (prefix) => `${prefix}-${documentIdRef.current}-${generatedLayerIndex += 1}`,
+          })
+          document = {
+            ...migrated,
+            color: createImageMarkV3ColorMode(managed.metadata),
+          }
+          const history = new ImageEditCommandHistoryV3()
+          history.clear(document)
+          initialPersistence = {
+            document,
+            history: history.createSnapshot(),
+            retainedResources: [],
+          }
+          initialReference = await repository.save(document, {
+            expectedRevision: 0,
+            previewRef: null,
+            history: initialPersistence.history,
+            signal: controller.signal,
+          })
+          resourceDescriptors = [managed.resource]
+          sessionSourceUrlRef.current = managed.mediaUrl
         }
-        const initialHistory = new ImageEditCommandHistoryV3()
-        initialHistory.clear(document)
-        const initialPersistence: ImageEditPersistenceSnapshotV3 = {
-          document,
-          history: initialHistory.createSnapshot(),
-          retainedResources: [],
-        }
-        const initialReference = await repository.save(document, {
-          expectedRevision: 0,
-          previewRef: null,
-          history: initialPersistence.history,
-          signal: controller.signal,
-        })
         if (!active) return
         const queue = new ImageMarkV3PersistenceQueue({
           repository,
@@ -166,9 +225,10 @@ export function useImageMarkToolV3Host(
           kind: 'ready',
           document,
           history: initialPersistence.history,
-          resourceByteSizes: { [managed.resource.resourceRef]: managed.resource.byteLength },
-          resourceDescriptors: [managed.resource],
+          resourceByteSizes: createImageEditorV3ResourceByteSizes(resourceDescriptors),
+          resourceDescriptors,
         })
+        reportPersistenceStatus({ kind: 'idle', reference: initialReference })
         logger.info('图片编辑 V3 工具箱宿主准备完成', {
           event: 'image_editor_v3.toolbox.bootstrap.completed',
           context: { documentId: document.id, revision: initialReference.revision },
@@ -194,6 +254,7 @@ export function useImageMarkToolV3Host(
   }, [
     bootstrapAttempt,
     initialDocument,
+    initialSession,
     reportPersistenceStatus,
     repository,
     sourceImageUrl,
@@ -289,6 +350,7 @@ export function useImageMarkToolV3Host(
       resourceByteSizes: opened.resourceByteSizes,
       resourceDescriptors: opened.resourceDescriptors,
     })
+    reportPersistenceStatus({ kind: 'idle', reference: opened.reference })
   }, [reportPersistenceStatus, repository])
 
   const actions = useImageMarkToolV3Actions({

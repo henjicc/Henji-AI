@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { NotificationProvider } from '@/contexts/NotificationContext'
 import { ImageMarkTool } from './ImageMarkTool'
+import { clearImageMarkToolWorkspaceSourceV3 } from './imageMarkToolWorkspaceV3'
 
 const mocks = vi.hoisted(() => ({
   featureEnabled: vi.fn(),
@@ -41,15 +42,39 @@ vi.mock('@/features/imageEdit/editor/ImageEditor', () => ({
   ImageEditor: () => <div data-testid="legacy-image-editor" />,
 }))
 vi.mock('./ImageMarkToolV3Host', () => ({
-  ImageMarkToolV3Host: ({ onFallback }: { onFallback: () => void }) => (
-    <div data-testid="v3-image-editor">
+  ImageMarkToolV3Host: ({
+    initialSession,
+    onFallback,
+    onSessionReferenceChange,
+  }: {
+    initialSession?: { revision: number }
+    onFallback: () => void
+    onSessionReferenceChange: (session: {
+      kind: 'image-edit-v3'
+      sourceUrl: string
+      documentRef: 'image-edit-v3:test-document'
+      revision: number
+      previewRef: null
+    }) => void
+  }) => (
+    <div
+      data-testid="v3-image-editor"
+      data-session-revision={initialSession?.revision ?? 'none'}
+    >
       <button type="button" onClick={onFallback}>fallback</button>
+      <button type="button" onClick={() => onSessionReferenceChange({
+        kind: 'image-edit-v3',
+        sourceUrl: `henji-media://image-editor-v3/${'a'.repeat(64)}?mediaType=image%2Fpng`,
+        documentRef: 'image-edit-v3:test-document',
+        revision: 2,
+        previewRef: null,
+      })}>remember</button>
     </div>
   ),
 }))
 
-function renderTool(): void {
-  render(
+function renderTool() {
+  return render(
     <NotificationProvider>
       <ImageMarkTool />
     </NotificationProvider>,
@@ -66,6 +91,7 @@ describe('ImageMarkTool host selection', () => {
     mocks.featureEnabled.mockReset().mockReturnValue(false)
     mocks.openDialog.mockReset().mockResolvedValue('/private/tmp/source.png')
     mocks.allowMediaRoot.mockReset().mockResolvedValue(undefined)
+    clearImageMarkToolWorkspaceSourceV3()
   })
 
   afterEach(() => {
@@ -88,5 +114,18 @@ describe('ImageMarkTool host selection', () => {
     fireEvent.click(screen.getByRole('button', { name: 'fallback' }))
     expect(await screen.findByTestId('legacy-image-editor')).toBeTruthy()
     expect(screen.queryByTestId('v3-image-editor')).toBeNull()
+  })
+
+  it('切回工具箱再进入时恢复稳定 V3 会话，不要求用户重新打开图片', async () => {
+    mocks.featureEnabled.mockReturnValue(true)
+    renderTool()
+    await openSource()
+    fireEvent.click(await screen.findByRole('button', { name: 'remember' }))
+    cleanup()
+
+    renderTool()
+    const restored = await screen.findByTestId('v3-image-editor')
+    expect(restored.getAttribute('data-session-revision')).toBe('2')
+    expect(mocks.openDialog).toHaveBeenCalledTimes(1)
   })
 })
