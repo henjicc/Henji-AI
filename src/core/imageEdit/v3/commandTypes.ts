@@ -85,6 +85,17 @@ export interface ImageEditLayerSetMaskCommandV3 extends ImageEditCommandBaseV3 {
   type: 'layer.set-mask';
   layerId: string;
   mask: ImageEditMaskReferenceV3 | null;
+  /**
+   * 新写入路径可为目标与被替换蒙版声明完整资源大小。两项必须同时出现，
+   * 这样单条 set-mask 命令也能精确保留撤销资源；旧历史省略两项时仍可读取。
+   */
+  maskResources?: ImageEditMaskResourceDescriptorV3[];
+  previousMaskResources?: ImageEditMaskResourceDescriptorV3[];
+}
+
+export interface ImageEditMaskResourceDescriptorV3 {
+  resourceId: string;
+  byteSize: number;
 }
 
 export interface ImageEditLayerUpdateParamsCommandV3 extends ImageEditCommandBaseV3 {
@@ -217,9 +228,12 @@ export function collectImageEditCommandResourceReferencesV3(
   } else if (command.type === 'layer.group') {
     collectLayerResources(command.group, resources);
   } else if (command.type === 'layer.set-mask' && command.mask) {
-    collectImageEditMaskResourceIdsV3(command.mask).forEach((resourceId) => {
-      resources.push({ resourceId, byteSize: null });
-    });
+    if (command.maskResources) resources.push(...command.maskResources);
+    else {
+      collectImageEditMaskResourceIdsV3(command.mask).forEach((resourceId) => {
+        resources.push({ resourceId, byteSize: null });
+      });
+    }
   }
   return resources;
 }

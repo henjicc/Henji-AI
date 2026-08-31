@@ -118,6 +118,34 @@ describe('图片编辑 V3 选择转稀疏蒙版', () => {
     })]);
   });
 
+  it.each(['replace', 'intersect'] as const)(
+    '%s 会直接删除选区边界外旧瓦片且不读取像素',
+    async (combineMode) => {
+      const loader = vi.fn();
+      const plan = planImageEditSelectionMaskV3({
+        canvas: { width: 1024, height: 8 },
+        shape: { type: 'rectangle', x: 0, y: 0, width: 8, height: 8 },
+        combineMode,
+        existingTiles: [{ tileKey: '0/1/0', resource: oldResource }],
+      });
+      const changes: ImageEditSelectionMaskTileChangeV3[] = [];
+      for await (const change of rasterizeImageEditSelectionMaskTilesV3({
+        plan,
+        loadExistingTile: loader,
+      })) changes.push(change);
+
+      expect(loader).not.toHaveBeenCalled();
+      expect(changes).toContainEqual(expect.objectContaining({
+        tileKey: '0/1/0',
+        oldResource,
+        newTile: null,
+      }));
+      if (combineMode === 'replace') {
+        expect(changes).toContainEqual(expect.objectContaining({ tileKey: '0/0/0' }));
+      }
+    },
+  );
+
   it('极端长宽比只规划末端一个瓦片，不枚举整幅图片像素', async () => {
     const loader = vi.fn();
     const plan = planImageEditSelectionMaskV3({
@@ -185,6 +213,15 @@ describe('图片编辑 V3 选择转稀疏蒙版', () => {
       shape: { type: 'rectangle', x: 0, y: 0, width: 1_000_000, height: 2_048 },
       combineMode: 'replace',
     })).toThrow('安全上限');
+    expect(() => planImageEditSelectionMaskV3({
+      canvas: { width: 10, height: 10 },
+      shape: { type: 'rectangle', x: 0, y: 0, width: 1, height: 1 },
+      combineMode: 'replace',
+      existingTiles: [{
+        tileKey: '0/0/0',
+        resource: { resourceId: oldResource.resourceId, byteSize: 0 },
+      }],
+    })).toThrow('资源无效');
   });
 
   it('持久化后可直接生成 mask.apply-tile-delta 的替换与删除 payload', () => {

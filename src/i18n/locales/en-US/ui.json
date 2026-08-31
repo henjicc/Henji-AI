@@ -754,6 +754,22 @@
         "singular": "The selected raster layer has a non-invertible transform.",
         "failed": "The raster stroke was not saved: {{reason}}"
       },
+      "selection": {
+        "overlay": "Selection-to-mask canvas",
+        "combineMode": "Selection combine mode",
+        "replace": "Replace",
+        "add": "Add",
+        "subtract": "Subtract",
+        "intersect": "Intersect",
+        "replaceOnly": "The selected layer does not have a zero-default sparse mask, so only Replace is available.",
+        "select-one": "Select exactly one layer to receive the mask.",
+        "locked": "The selected layer or its group is locked, so a selection mask cannot be created.",
+        "hidden": "The selected layer or its group is hidden, so a selection mask cannot be created.",
+        "singular": "The selected layer has a non-invertible transform, so a selection mask cannot be created.",
+        "unsupported-combine": "This mask supports Replace only. Add, Subtract, and Intersect require a zero-default sparse mask.",
+        "missing-resource-size": "The editable file is missing complete metadata for the old mask, so it cannot be safely replaced or undone.",
+        "failed": "The selection was not written to the mask: {{reason}}"
+      },
       "crop": {
         "rotateLeft": "Rotate 90° left",
         "rotateRight": "Rotate 90° right",

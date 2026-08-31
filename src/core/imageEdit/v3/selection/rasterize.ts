@@ -267,6 +267,17 @@ function validateExistingTile(
   }
 }
 
+function regionIntersectsSelectionBounds(
+  region: { x: number; y: number; width: number; height: number },
+  shape: ImageEditSelectionShapeV3,
+): boolean {
+  const bounds = imageEditSelectionBoundsV3(shape);
+  return bounds.right > region.x
+    && bounds.bottom > region.y
+    && bounds.left < region.x + region.width
+    && bounds.top < region.y + region.height;
+}
+
 /**
  * 每次只分配一个 512×512 Float32 瓦片。调用方应在继续迭代前持久化并释放 newTile，
  * 因此 200MP 选区不会在 JS 中形成完整蒙版表面。
@@ -286,8 +297,23 @@ export async function* rasterizeImageEditSelectionMaskTilesV3(
       IMAGE_EDIT_SELECTION_TILE_SIZE_V3,
     );
 
+    const intersectsBounds = regionIntersectsSelectionBounds(region.outputRect, plan.shape);
+    if (existing
+      && !intersectsBounds
+      && (plan.combineMode === 'replace' || plan.combineMode === 'intersect')) {
+      yield {
+        tileKey,
+        coordinate: { ...coordinate },
+        oldResource: { ...existing.resource },
+        newTile: null,
+        newRawByteSize: 0,
+      };
+      continue;
+    }
+
     let oldTile: Float32MaskTile | null = null;
-    if (existing) {
+    const needsExistingPixels = Boolean(existing) && plan.combineMode !== 'replace';
+    if (existing && needsExistingPixels) {
       oldTile = await options.loadExistingTile(coordinate, existing, signal);
       throwIfAborted(signal);
       validateExistingTile(oldTile, region.outputRect.width, region.outputRect.height);
@@ -304,7 +330,7 @@ export async function* rasterizeImageEditSelectionMaskTilesV3(
       plan.combineMode,
       signal,
     );
-    if (equalData(oldData, newData)) continue;
+    if ((needsExistingPixels || !existing) && equalData(oldData, newData)) continue;
 
     const newTile = isAllZero(newData)
       ? null

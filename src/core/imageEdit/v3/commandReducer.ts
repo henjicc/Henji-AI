@@ -25,36 +25,21 @@ import {
 import { calculateImageEditCommandHistoryResourcesV3 } from './commandHistoryResources';
 import { cloneImageEditJsonObjectV3 } from './documentCodec';
 import { applyImageEditTileDeltaV3 } from './commandTileDeltaReducer';
+import {
+  decodeImageEditLayerSetMaskResourceMetadataV3,
+  ImageEditMaskResourceMetadataErrorV3,
+  invertImageEditSetMaskResourceMetadataV3,
+} from './commandMaskResourceMetadata';
+import {
+  findImageEditCommandLayerLocationV3 as findLayerLocation,
+  type ImageEditCommandLayerLocationV3 as LayerLocation,
+} from './commandLayerLocation';
 
 export {
   ImageEditCommandValidationErrorV3,
   ImageEditLayerLockedErrorV3,
   ImageEditRevisionConflictErrorV3,
 } from './commandErrors';
-
-interface LayerLocation {
-  layer: ImageEditLayerV3;
-  parentId: string | null;
-  index: number;
-  ancestors: ImageEditGroupLayerV3[];
-}
-
-function findLayerLocation(
-  layers: readonly ImageEditLayerV3[],
-  layerId: string,
-  parentId: string | null = null,
-  ancestors: ImageEditGroupLayerV3[] = []
-): LayerLocation | null {
-  for (let index = 0; index < layers.length; index += 1) {
-    const layer = layers[index];
-    if (layer.id === layerId) return { layer, parentId, index, ancestors };
-    if (layer.type === 'group') {
-      const nested = findLayerLocation(layer.children, layerId, layer.id, [...ancestors, layer]);
-      if (nested) return nested;
-    }
-  }
-  return null;
-}
 
 function getContainer(
   layers: readonly ImageEditLayerV3[],
@@ -379,6 +364,18 @@ function applyLayerContentCommand(
     if (command.mask && !isValidImageEditMaskReferenceV3(command.mask)) {
       throw new ImageEditCommandValidationErrorV3('蒙版引用无效');
     }
+    let resourceMetadata: ReturnType<typeof decodeImageEditLayerSetMaskResourceMetadataV3>;
+    try {
+      resourceMetadata = decodeImageEditLayerSetMaskResourceMetadataV3(
+        command,
+        location.layer.mask,
+      );
+    } catch (error) {
+      if (error instanceof ImageEditMaskResourceMetadataErrorV3) {
+        throw new ImageEditCommandValidationErrorV3(error.message);
+      }
+      throw error;
+    }
     return {
       layers: replaceLayer(document.layers, location, {
         ...location.layer,
@@ -389,6 +386,7 @@ function applyLayerContentCommand(
         type: 'layer.set-mask',
         layerId,
         mask: location.layer.mask ? cloneImageEditMaskReferenceV3(location.layer.mask) : null,
+        ...invertImageEditSetMaskResourceMetadataV3(resourceMetadata),
       },
     };
   }

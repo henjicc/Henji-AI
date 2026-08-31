@@ -18,6 +18,7 @@ import {
 } from '../execution'
 import { ImageEditorAnnotationOverlayV3 } from './ImageEditorAnnotationOverlayV3'
 import { ImageEditorRasterBrushOverlayV3 } from './ImageEditorRasterBrushOverlayV3'
+import { ImageEditorSelectionMaskOverlayV3 } from './ImageEditorSelectionMaskOverlayV3'
 import { ImageEditorViewportTilesV3 } from './ImageEditorViewportTilesV3'
 import { resolveAnnotationOutputGeometryV3 } from './annotationGeometryV3'
 import type {
@@ -397,6 +398,11 @@ export function ImageEditorPreviewV3({
             resourceByteSizes={resourceByteSizes}
             basePreviewDocumentId={basePreviewDocumentId}
             basePreviewRevision={basePreviewRevision}
+          />
+          <ImageEditorSelectionMaskOverlayV3
+            bus={bus}
+            controller={controller}
+            resourceByteSizes={resourceByteSizes}
           />
           {annotationOverlay ? (
             <div data-annotation-overlay className="pointer-events-none absolute inset-0">

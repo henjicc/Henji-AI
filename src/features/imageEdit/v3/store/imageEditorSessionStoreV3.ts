@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 
+import type { ImageEditSelectionCombineModeV3 } from '@/core/imageEdit/v3/selection'
 import type { ImageEditorToolIdV3 } from '../application/imageEditorHostProfiles'
 
 export interface ImageEditorToolSettingsV3 {
@@ -7,6 +8,7 @@ export interface ImageEditorToolSettingsV3 {
   brushOpacity: number
   brushHardness: number
   maskMode: 'paint' | 'erase'
+  selectionCombineMode: ImageEditSelectionCombineModeV3
   annotationStrokeWidth: number
   annotationFontSize: number
 }
@@ -42,6 +44,7 @@ const DEFAULT_TOOL_SETTINGS: ImageEditorToolSettingsV3 = {
   brushOpacity: 1,
   brushHardness: 0.8,
   maskMode: 'paint',
+  selectionCombineMode: 'replace',
   annotationStrokeWidth: 4,
   annotationFontSize: 32,
 }

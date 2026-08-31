@@ -754,6 +754,22 @@
         "singular": "所选栅格图层的变换不可逆，暂时不能绘制。",
         "failed": "栅格笔画未写入：{{reason}}"
       },
+      "selection": {
+        "overlay": "选区转蒙版画布",
+        "combineMode": "选区组合方式",
+        "replace": "替换",
+        "add": "添加",
+        "subtract": "减去",
+        "intersect": "相交",
+        "replaceOnly": "所选图层没有零值稀疏蒙版，只能使用“替换”。",
+        "select-one": "请先只选择一个要添加蒙版的图层。",
+        "locked": "所选图层或其所在组已锁定，暂时不能创建选区蒙版。",
+        "hidden": "所选图层或其所在组已隐藏，暂时不能创建选区蒙版。",
+        "singular": "所选图层的变换不可逆，暂时不能创建选区蒙版。",
+        "unsupported-combine": "当前蒙版只支持替换；添加、减去和相交需要零值稀疏蒙版。",
+        "missing-resource-size": "可编辑文件缺少旧蒙版的完整资源信息，无法安全替换或撤销。",
+        "failed": "选区没有写入蒙版：{{reason}}"
+      },
       "crop": {
         "rotateLeft": "向左旋转 90°",
         "rotateRight": "向右旋转 90°",

@@ -141,7 +141,9 @@ describe('ImageEditorV3 professional shell', () => {
       'select-ellipse',
       'select-lasso',
     ]) {
-      expect(document.querySelector<HTMLButtonElement>(`[data-tool-id="${toolId}"]`)?.disabled).toBe(true)
+      const tool = document.querySelector<HTMLButtonElement>(`[data-tool-id="${toolId}"]`)
+      expect(tool?.disabled).toBe(false)
+      expect(tool?.dataset.toolReadiness).toBe('ready')
     }
     for (const toolId of ['hand', 'zoom', 'raster-brush', 'eraser', 'mask-edit']) {
       const tool = document.querySelector<HTMLButtonElement>(`[data-tool-id="${toolId}"]`)

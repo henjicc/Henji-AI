@@ -1,9 +1,12 @@
 import { Redo2, Undo2 } from 'lucide-react'
+import { useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { UiChipButton, UiIconButton, UiRangeInput } from '@/components/ui'
 import { ICON_TOOL_IMAGE_EDIT } from '@/core/theme/icons'
 import { ImageEditorCropParametersV3 } from './ImageEditorCropParametersV3'
+import { findImageEditLayerLocationV3 } from './layerTreeV3'
+import { imageEditorSelectionAllowedCombineModesV3 } from './selectionMaskLayerV3'
 import type { ImageEditorV3Controller } from './types'
 import { useImageEditorInteractionStoreV3, useImageEditorSessionStoreV3 } from '../store'
 
@@ -13,16 +16,37 @@ interface ImageEditorCommandBarV3Props {
   toolbarActions?: React.ReactNode
 }
 
+const EMPTY_LAYER_IDS: readonly string[] = []
+
 function ToolParameterBar({ controller }: Pick<ImageEditorCommandBarV3Props, 'controller'>): JSX.Element | null {
   const { t } = useTranslation('ui')
   const session = useImageEditorSessionStoreV3((state) => state.sessions[controller.sessionId])
   const setToolSetting = useImageEditorSessionStoreV3((state) => state.setToolSetting)
+  const selectedLayerIds = useImageEditorSessionStoreV3(
+    (state) => state.sessions[controller.sessionId]?.selectedLayerIds ?? EMPTY_LAYER_IDS,
+  )
+  const selectedLayer = selectedLayerIds.length === 1
+    ? findImageEditLayerLocationV3(controller.document.layers, selectedLayerIds[0])?.layer ?? null
+    : null
+  const allowedSelectionModes = imageEditorSelectionAllowedCombineModesV3(selectedLayer)
+  const selectionLike = session?.activeTool.startsWith('select-') ?? false
+  useEffect(() => {
+    if (!session || !selectionLike
+      || allowedSelectionModes.includes(session.toolSettings.selectionCombineMode)) return
+    setToolSetting(controller.sessionId, 'selectionCombineMode', 'replace')
+  }, [
+    allowedSelectionModes,
+    controller.sessionId,
+    selectionLike,
+    session,
+    setToolSetting,
+  ])
   if (!session) return null
 
   const brushLike = ['raster-brush', 'eraser', 'mask-edit'].includes(session.activeTool)
   const annotationLike = session.activeTool.startsWith('annotation-')
   if (session.activeTool === 'crop') return <ImageEditorCropParametersV3 controller={controller} />
-  if (!brushLike && !annotationLike) return null
+  if (!brushLike && !annotationLike && !selectionLike) return null
 
   return (
     <div
@@ -147,6 +171,36 @@ function ToolParameterBar({ controller }: Pick<ImageEditorCommandBarV3Props, 'co
             </label>
           ) : null}
         </>
+      ) : null}
+      {selectionLike ? (
+        <div
+          role="group"
+          aria-label={t('imageEditor.v3.selection.combineMode')}
+          className="flex shrink-0 items-center gap-1"
+        >
+          {(['replace', 'add', 'subtract', 'intersect'] as const).map((mode) => {
+            const disabled = !allowedSelectionModes.includes(mode)
+            const unavailable = disabled
+              ? t('imageEditor.v3.selection.replaceOnly')
+              : undefined
+            return (
+              <UiChipButton
+                key={mode}
+                selectionRole="navigation"
+                active={session.toolSettings.selectionCombineMode === mode}
+                disabled={disabled}
+                title={unavailable}
+                onClick={() => setToolSetting(
+                  controller.sessionId,
+                  'selectionCombineMode',
+                  mode,
+                )}
+              >
+                {t(`imageEditor.v3.selection.${mode}`)}
+              </UiChipButton>
+            )
+          })}
+        </div>
       ) : null}
     </div>
   )

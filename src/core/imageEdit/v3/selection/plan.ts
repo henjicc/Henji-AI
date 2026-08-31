@@ -36,7 +36,7 @@ function parseExistingTiles(
     }
     if (output.has(entry.tileKey)) throw new Error(`选区蒙版瓦片键重复：${entry.tileKey}`);
     if (!RESOURCE_ID_PATTERN.test(entry.resource.resourceId)
-      || !Number.isSafeInteger(entry.resource.byteSize) || entry.resource.byteSize < 0) {
+      || !Number.isSafeInteger(entry.resource.byteSize) || entry.resource.byteSize <= 0) {
       throw new Error(`选区蒙版瓦片资源无效：${entry.tileKey}`);
     }
     output.set(entry.tileKey, {

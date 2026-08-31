@@ -93,9 +93,9 @@ const NAVIGATION_TOOLS: readonly ImageEditorCapabilityV3<ImageEditorToolIdV3>[] 
   ZOOM_TOOL,
 ];
 const SELECTION_TOOLS: readonly ImageEditorCapabilityV3<ImageEditorToolIdV3>[] = [
-  disabled('select-rect', 'imageEditor.v3.readiness.reasons.selectRect'),
-  disabled('select-ellipse', 'imageEditor.v3.readiness.reasons.selectEllipse'),
-  disabled('select-lasso', 'imageEditor.v3.readiness.reasons.selectLasso'),
+  ready('select-rect'),
+  ready('select-ellipse'),
+  ready('select-lasso'),
 ];
 const ANNOTATION_TOOLS: readonly ImageEditorCapabilityV3<ImageEditorToolIdV3>[] = [
   ready('annotation-text'),
@@ -155,7 +155,10 @@ export const IMAGE_EDITOR_HOST_PROFILES_V3: Readonly<
   },
   'canvas-edit': {
     id: 'canvas-edit',
-    tools: [...NAVIGATION_TOOLS, ready('crop'), ...ANNOTATION_TOOLS, ...RASTER_TOOLS],
+    tools: [
+      ...NAVIGATION_TOOLS, ready('crop'), ...SELECTION_TOOLS, ...ANNOTATION_TOOLS,
+      ...RASTER_TOOLS,
+    ],
     layerKinds: ['raster', 'annotation', 'effect', 'adjustment', 'group'],
     effects: CORE_EFFECTS,
     adjustments: CORE_ADJUSTMENTS,

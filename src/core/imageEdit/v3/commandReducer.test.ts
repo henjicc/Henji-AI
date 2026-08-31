@@ -233,6 +233,88 @@ describe('图片编辑 V3 命令归约器', () => {
     })).toThrow(ImageEditRevisionConflictErrorV3);
   });
 
+  it('set-mask 以严格资源描述保留新旧蒙版，并生成精确可逆补丁', () => {
+    const raster = createImageEditRasterLayerV3('paint', '画笔');
+    raster.mask = {
+      ...createImageEditSparseMaskReferenceV3('old-mask'),
+      tiles: { '0/0/0': 'sha256:old-mask' },
+    };
+    const source = createDocument([raster]);
+    const nextMask = {
+      ...createImageEditSparseMaskReferenceV3('next-mask', false, 0),
+      tiles: {
+        '0/0/0': 'sha256:next-a',
+        '0/1/0': 'sha256:next-b',
+      },
+    };
+    const applied = applyImageEditCommandV3(source, {
+      commandId: 'strict-set-mask',
+      expectedRevision: 0,
+      type: 'layer.set-mask',
+      layerId: raster.id,
+      mask: nextMask,
+      maskResources: [
+        { resourceId: 'sha256:next-a', byteSize: 128 },
+        { resourceId: 'sha256:next-b', byteSize: 256 },
+      ],
+      previousMaskResources: [{ resourceId: 'sha256:old-mask', byteSize: 64 }],
+    });
+
+    expect(applied.historyResources).toEqual([
+      { resourceId: 'sha256:next-a', byteSize: 128 },
+      { resourceId: 'sha256:next-b', byteSize: 256 },
+      { resourceId: 'sha256:old-mask', byteSize: 64 },
+    ]);
+    expect(applied.inverse).toMatchObject({
+      type: 'layer.set-mask',
+      maskResources: [{ resourceId: 'sha256:old-mask', byteSize: 64 }],
+      previousMaskResources: [
+        { resourceId: 'sha256:next-a', byteSize: 128 },
+        { resourceId: 'sha256:next-b', byteSize: 256 },
+      ],
+    });
+    expect(applyImageEditCommandV3(applied.document, applied.inverse).document.layers[0].mask)
+      .toEqual(raster.mask);
+  });
+
+  it('set-mask 拒绝缺侧、零负字节、错误 ID 与未排序资源描述', () => {
+    const raster = createImageEditRasterLayerV3('paint', '画笔');
+    raster.mask = {
+      ...createImageEditSparseMaskReferenceV3('old-mask'),
+      tiles: { '0/0/0': 'sha256:old-mask' },
+    };
+    const source = createDocument([raster]);
+    const nextMask = {
+      ...createImageEditSparseMaskReferenceV3('next-mask', false, 0),
+      tiles: { '0/0/0': 'sha256:next-a', '0/1/0': 'sha256:next-b' },
+    };
+    const valid = {
+      commandId: 'invalid-strict-set-mask',
+      expectedRevision: 0,
+      type: 'layer.set-mask' as const,
+      layerId: raster.id,
+      mask: nextMask,
+      maskResources: [
+        { resourceId: 'sha256:next-a', byteSize: 128 },
+        { resourceId: 'sha256:next-b', byteSize: 256 },
+      ],
+      previousMaskResources: [{ resourceId: 'sha256:old-mask', byteSize: 64 }],
+    };
+    const invalidCommands = [
+      { ...valid, previousMaskResources: undefined },
+      { ...valid, maskResources: undefined },
+      { ...valid, maskResources: [{ resourceId: 'sha256:next-a', byteSize: 0 }, { resourceId: 'sha256:next-b', byteSize: 256 }] },
+      { ...valid, previousMaskResources: [{ resourceId: 'sha256:old-mask', byteSize: -1 }] },
+      { ...valid, maskResources: [{ resourceId: 'sha256:next-a', byteSize: 128 }, { resourceId: 'sha256:wrong', byteSize: 256 }] },
+      { ...valid, maskResources: [...valid.maskResources].reverse() },
+    ];
+
+    invalidCommands.forEach((command) => {
+      expect(() => applyImageEditCommandV3(source, command))
+        .toThrow(ImageEditCommandValidationErrorV3);
+    });
+  });
+
   it('拒绝瓦片旧哈希 CAS 不匹配、空操作和伪造旧字节数', () => {
     const raster = {
       ...createImageEditRasterLayerV3('paint', '画笔'),

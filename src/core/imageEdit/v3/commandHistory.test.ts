@@ -8,6 +8,7 @@ import { InvalidImageEditHistorySnapshotV3Error } from './commandHistoryCodec';
 import { ImageEditRevisionConflictErrorV3 } from './commandReducer';
 import { createImageEditDocumentV3, createImageEditRasterLayerV3 } from './documentFactory';
 import type { ImageEditDocumentV3 } from './documentTypes';
+import { createImageEditSparseMaskReferenceV3 } from './layerTypes';
 
 function createPaintDocument(): ImageEditDocumentV3 {
   return {
@@ -35,6 +36,35 @@ function addTile(
       byteSize,
     }],
   });
+}
+
+function createStrictMaskHistoryFixture() {
+  const paint = createImageEditRasterLayerV3('paint', '画笔');
+  paint.mask = {
+    ...createImageEditSparseMaskReferenceV3('old-mask'),
+    tiles: { '0/0/0': 'sha256:old-mask' },
+  };
+  const source: ImageEditDocumentV3 = {
+    ...createImageEditDocumentV3({ width: 100, height: 80, documentId: 'document-history-mask' }),
+    layers: [paint],
+  };
+  const history = new ImageEditCommandHistoryV3();
+  const changed = history.execute(source, {
+    commandId: 'strict-mask-history',
+    expectedRevision: 0,
+    type: 'layer.set-mask',
+    layerId: paint.id,
+    mask: {
+      ...createImageEditSparseMaskReferenceV3('next-mask', false, 0),
+      tiles: { '0/0/0': 'sha256:next-a', '0/1/0': 'sha256:next-b' },
+    },
+    maskResources: [
+      { resourceId: 'sha256:next-a', byteSize: 128 },
+      { resourceId: 'sha256:next-b', byteSize: 256 },
+    ],
+    previousMaskResources: [{ resourceId: 'sha256:old-mask', byteSize: 64 }],
+  });
+  return { changed, history };
 }
 
 describe('图片编辑 V3 命令历史', () => {
@@ -203,6 +233,78 @@ describe('图片编辑 V3 命令历史', () => {
     expect(restored.redo(undone).document.geometry).toMatchObject({
       orientation: { rotate: 90, mirrored: false },
       crop: { x: 4, y: 5, width: 60, height: 90 },
+    });
+  });
+
+  it('严格 set-mask 历史按真实资源大小恢复，并兼容无元数据的旧历史', () => {
+    const { changed, history } = createStrictMaskHistoryFixture();
+    const restored = new ImageEditCommandHistoryV3();
+    restored.restore(changed, history.stringifySnapshot());
+    expect(restored.getState()).toMatchObject({
+      undoCount: 1,
+      retainedResourceCount: 3,
+      retainedResourceBytes: 448,
+    });
+
+    const legacyHistory = new ImageEditCommandHistoryV3();
+    const source = createPaintDocument();
+    const masked = legacyHistory.execute(source, {
+      commandId: 'legacy-mask-history', expectedRevision: 0, type: 'layer.set-mask',
+      layerId: 'paint', mask: { resourceId: 'sha256:legacy-mask', inverted: false },
+    });
+    const legacyRestored = new ImageEditCommandHistoryV3();
+    legacyRestored.restore(masked, legacyHistory.stringifySnapshot());
+    expect(legacyRestored.getState()).toMatchObject({ undoCount: 1, retainedResourceBytes: 0 });
+  });
+
+  it('历史 codec 拒绝 set-mask 的缺侧、零负字节、错误 ID 与未排序描述', () => {
+    const corruptions: Array<(snapshot: ReturnType<ImageEditCommandHistoryV3['createSnapshot']>) => void> = [
+      (snapshot) => {
+        const forward = snapshot.undo[0]?.forward;
+        if (forward?.type !== 'layer.set-mask') throw new Error('测试 set-mask 命令缺失');
+        delete forward.previousMaskResources;
+      },
+      (snapshot) => {
+        const forward = snapshot.undo[0]?.forward;
+        if (forward?.type !== 'layer.set-mask') throw new Error('测试 set-mask 命令缺失');
+        delete forward.maskResources;
+      },
+      (snapshot) => {
+        const forward = snapshot.undo[0]?.forward;
+        if (forward?.type !== 'layer.set-mask' || !forward.maskResources?.[0]) {
+          throw new Error('测试 set-mask 元数据缺失');
+        }
+        forward.maskResources[0].byteSize = 0;
+      },
+      (snapshot) => {
+        const inverse = snapshot.undo[0]?.inverse;
+        if (inverse?.type !== 'layer.set-mask' || !inverse.maskResources?.[0]) {
+          throw new Error('测试 set-mask 元数据缺失');
+        }
+        inverse.maskResources[0].byteSize = -1;
+      },
+      (snapshot) => {
+        const forward = snapshot.undo[0]?.forward;
+        if (forward?.type !== 'layer.set-mask' || !forward.maskResources?.[0]) {
+          throw new Error('测试 set-mask 元数据缺失');
+        }
+        forward.maskResources[0].resourceId = 'sha256:wrong';
+      },
+      (snapshot) => {
+        const forward = snapshot.undo[0]?.forward;
+        if (forward?.type !== 'layer.set-mask' || !forward.maskResources) {
+          throw new Error('测试 set-mask 元数据缺失');
+        }
+        forward.maskResources.reverse();
+      },
+    ];
+
+    corruptions.forEach((corrupt) => {
+      const { changed, history } = createStrictMaskHistoryFixture();
+      const snapshot = structuredClone(history.createSnapshot());
+      corrupt(snapshot);
+      expect(() => new ImageEditCommandHistoryV3().restore(changed, snapshot))
+        .toThrow(InvalidImageEditHistorySnapshotV3Error);
     });
   });
 

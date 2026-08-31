@@ -19,15 +19,17 @@ describe('图片编辑 V3 宿主能力裁剪', () => {
     })
   })
 
-  it('已接通栅格与蒙版画笔，其他未接通工具只提供稳定翻译键', () => {
+  it('完整宿主接通选择、栅格与蒙版画笔，quick 不暴露选择工具', () => {
     const profile = getImageEditorHostProfileV3('full')
-    const readiness = Object.fromEntries(profile.tools.map((tool) => [tool.id, tool.readiness]))
 
     expect(getReadyImageEditorToolIdsV3(profile)).toEqual([
       'move',
       'hand',
       'zoom',
       'crop',
+      'select-rect',
+      'select-ellipse',
+      'select-lasso',
       'annotation-text',
       'annotation-arrow',
       'annotation-rect',
@@ -36,17 +38,10 @@ describe('图片编辑 V3 宿主能力裁剪', () => {
       'eraser',
       'mask-edit',
     ])
-    for (const toolId of [
-      'select-rect',
-      'select-ellipse',
-      'select-lasso',
-    ]) {
-      expect(readiness[toolId]).toMatchObject({
-        state: 'disabled',
-        reasonKey: expect.stringMatching(/^imageEditor\.v3\.readiness\.reasons\./),
-      })
-      expect(readiness[toolId]).not.toHaveProperty('reason')
-    }
+    expect(getReadyImageEditorToolIdsV3(getImageEditorHostProfileV3('quick')))
+      .not.toEqual(expect.arrayContaining(['select-rect', 'select-ellipse', 'select-lasso']))
+    expect(getReadyImageEditorToolIdsV3(getImageEditorHostProfileV3('canvas-edit')))
+      .toEqual(expect.arrayContaining(['select-rect', 'select-ellipse', 'select-lasso']))
   })
 
   it('不可可靠导出的辉光效果不允许新建，遮罩宿主只暴露蒙版所需工具', () => {
@@ -62,7 +57,8 @@ describe('图片编辑 V3 宿主能力裁剪', () => {
     expect(mask.effects).toEqual([])
     expect(mask.adjustments).toEqual([])
     expect(getReadyImageEditorToolIdsV3(mask)).toEqual([
-      'move', 'hand', 'zoom', 'raster-brush', 'eraser', 'mask-edit',
+      'move', 'hand', 'zoom', 'select-rect', 'select-ellipse', 'select-lasso',
+      'raster-brush', 'eraser', 'mask-edit',
     ])
     expect(mask.saveActions).toEqual(['save-document'])
   })
