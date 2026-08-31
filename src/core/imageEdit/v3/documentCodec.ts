@@ -9,6 +9,10 @@ import type {
   ImageEditWorkingSpaceV3,
 } from './colorTypes';
 import {
+  IMAGE_EDIT_HDR_REFERENCE_WHITE_NITS_V3,
+  createImageEditHdrMetadataV3,
+} from './colorTypes';
+import {
   IMAGE_EDIT_DOCUMENT_VERSION_V3,
   type ImageEditCanvasGeometryV3,
   type ImageEditCropRectV3,
@@ -122,28 +126,98 @@ function readOptionalNonNegative(value: unknown): number | undefined | null {
   return isFiniteNumber(value) && value >= 0 ? value : null;
 }
 
+function readChromaticity(value: unknown): { x: number; y: number } | null {
+  if (!isRecord(value) || !isFiniteNumber(value.x) || !isFiniteNumber(value.y)) return null;
+  if (value.x < 0 || value.x > 1 || value.y < 0 || value.y > 1) return null;
+  return { x: value.x, y: value.y };
+}
+
+function readContentLight(value: unknown): ImageEditHdrMetadataV3['contentLight'] | null {
+  if (!isRecord(value)) return null;
+  const maxContent = value.maxContentLightLevelNits;
+  const maxFrameAverage = value.maxFrameAverageLightLevelNits;
+  if (!isSafeInteger(maxContent) || maxContent < 0 || maxContent > 65_535
+    || !isSafeInteger(maxFrameAverage) || maxFrameAverage < 0 || maxFrameAverage > 65_535
+    || maxFrameAverage > maxContent) return null;
+  return {
+    maxContentLightLevelNits: maxContent,
+    maxFrameAverageLightLevelNits: maxFrameAverage,
+  };
+}
+
+function readMasteringDisplay(value: unknown): ImageEditHdrMetadataV3['masteringDisplay'] | null {
+  if (!isRecord(value)) return null;
+  const red = readChromaticity(value.red);
+  const green = readChromaticity(value.green);
+  const blue = readChromaticity(value.blue);
+  const whitePoint = readChromaticity(value.whitePoint);
+  if (!red || !green || !blue || !whitePoint
+    || !isFiniteNumber(value.maxLuminanceNits) || value.maxLuminanceNits <= 0
+    || value.maxLuminanceNits > 10_000
+    || !isFiniteNumber(value.minLuminanceNits) || value.minLuminanceNits < 0
+    || value.minLuminanceNits > value.maxLuminanceNits) return null;
+  return {
+    red,
+    green,
+    blue,
+    whitePoint,
+    maxLuminanceNits: value.maxLuminanceNits,
+    minLuminanceNits: value.minLuminanceNits,
+  };
+}
+
 function parseHdrMetadata(value: unknown): ImageEditHdrMetadataV3 | null | undefined {
   if (value === null) return null;
   if (!isRecord(value) || (value.standard !== 'pq' && value.standard !== 'hlg')) return undefined;
-  const maxLuminanceNits = readOptionalNonNegative(value.maxLuminanceNits);
-  const minLuminanceNits = readOptionalNonNegative(value.minLuminanceNits);
-  const maxContentLightLevelNits = readOptionalNonNegative(value.maxContentLightLevelNits);
-  const maxFrameAverageLightLevelNits = readOptionalNonNegative(value.maxFrameAverageLightLevelNits);
-  if (
-    maxLuminanceNits === null
-    || minLuminanceNits === null
-    || maxContentLightLevelNits === null
-    || maxFrameAverageLightLevelNits === null
-  ) return undefined;
-  const cicp = value.cicp === undefined ? undefined : parseCicp(value.cicp);
-  if (value.cicp !== undefined && !cicp) return undefined;
+  const base = createImageEditHdrMetadataV3(value.standard);
+  const referenceWhiteNits = value.referenceWhiteNits === undefined
+    ? IMAGE_EDIT_HDR_REFERENCE_WHITE_NITS_V3
+    : value.referenceWhiteNits;
+  if (!isFiniteNumber(referenceWhiteNits) || referenceWhiteNits <= 0 || referenceWhiteNits > 10_000) {
+    return undefined;
+  }
+  const cicp = value.cicp === undefined ? base.cicp : parseCicp(value.cicp);
+  if (!cicp
+    || cicp.colorPrimaries !== 9
+    || cicp.transferCharacteristics !== base.cicp.transferCharacteristics
+    || cicp.matrixCoefficients !== 9) return undefined;
+
+  let contentLight: ImageEditHdrMetadataV3['contentLight'];
+  if (value.contentLight !== undefined) {
+    const parsed = readContentLight(value.contentLight);
+    if (!parsed) return undefined;
+    contentLight = parsed;
+  } else {
+    const legacyMaxContent = readOptionalNonNegative(value.maxContentLightLevelNits);
+    const legacyMaxFrameAverage = readOptionalNonNegative(value.maxFrameAverageLightLevelNits);
+    if (legacyMaxContent === null || legacyMaxFrameAverage === null) return undefined;
+    if (legacyMaxContent !== undefined && legacyMaxFrameAverage !== undefined) {
+      const parsed = readContentLight({
+        maxContentLightLevelNits: legacyMaxContent,
+        maxFrameAverageLightLevelNits: legacyMaxFrameAverage,
+      });
+      if (!parsed) return undefined;
+      contentLight = parsed;
+    }
+  }
+
+  let masteringDisplay: ImageEditHdrMetadataV3['masteringDisplay'];
+  if (value.masteringDisplay !== undefined) {
+    const parsed = readMasteringDisplay(value.masteringDisplay);
+    if (!parsed) return undefined;
+    masteringDisplay = parsed;
+  } else {
+    // 早期 V3 只有亮度范围而没有色度坐标；允许读取，但绝不伪造 MDCV。
+    const legacyMax = readOptionalNonNegative(value.maxLuminanceNits);
+    const legacyMin = readOptionalNonNegative(value.minLuminanceNits);
+    if (legacyMax === null || legacyMin === null) return undefined;
+  }
   return {
     standard: value.standard,
-    ...(maxLuminanceNits === undefined ? {} : { maxLuminanceNits }),
-    ...(minLuminanceNits === undefined ? {} : { minLuminanceNits }),
-    ...(maxContentLightLevelNits === undefined ? {} : { maxContentLightLevelNits }),
-    ...(maxFrameAverageLightLevelNits === undefined ? {} : { maxFrameAverageLightLevelNits }),
-    ...(cicp ? { cicp } : {}),
+    referenceWhiteNits,
+    cicp,
+    ...(contentLight ? { contentLight } : {}),
+    ...(masteringDisplay ? { masteringDisplay } : {}),
   };
 }
 

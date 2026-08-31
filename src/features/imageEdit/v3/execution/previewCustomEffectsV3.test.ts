@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest'
 
-import { createDefaultImageEditColorModeV3 } from '@/core/imageEdit/v3/colorTypes'
+import {
+  createDefaultImageEditColorModeV3,
+  createImageEditHdrMetadataV3,
+} from '@/core/imageEdit/v3/colorTypes'
 import { createFloat32PremultipliedRgbaTile } from '@/core/imageEdit/v3/effects'
 import type { ImageEditRenderPlanNode } from '@/core/imageEdit/v3/renderPlan'
 import {
@@ -42,7 +45,7 @@ describe('ImageEditor V3 现有效果 Worker 边界', () => {
         workingSpace: 'rec2020' as const,
         transferFunction: 'pq' as const,
         bitDepth: 'float16' as const,
-        hdrMetadata: { standard: 'pq' as const },
+        hdrMetadata: createImageEditHdrMetadataV3('pq'),
       }
       const promise = effects.execute(node(definitionId), source, 'stable', color)
       await expect(promise).rejects.toBeInstanceOf(ImageEditorPreviewUnsupportedEffectErrorV3)

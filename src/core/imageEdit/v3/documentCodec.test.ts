@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { createDefaultImageEditColorModeV3 } from './colorTypes';
+import {
+  createDefaultImageEditColorModeV3,
+  createImageEditHdrMetadataV3,
+} from './colorTypes';
 import { decodeImageEditDocumentV3, stringifyImageEditDocumentV3 } from './documentCodec';
 import { createImageEditCanvasGeometryV3 } from './documentFactory';
 import { IMAGE_EDIT_DOCUMENT_VERSION_V3, type ImageEditDocumentV3 } from './documentTypes';
@@ -86,6 +89,115 @@ describe('图片编辑 V3 文档编解码', () => {
         iccProfileResourceId: null,
       },
     }).document).toBeNull();
+  });
+
+  it('完整往返参考白、CICP、内容亮度和母版显示元数据', () => {
+    const source = createNestedDocument();
+    const hdrMetadata = {
+      ...createImageEditHdrMetadataV3('pq', {
+        colorPrimaries: 9,
+        transferCharacteristics: 16,
+        matrixCoefficients: 9,
+        fullRange: true,
+      }),
+      referenceWhiteNits: 203,
+      contentLight: {
+        maxContentLightLevelNits: 1_000,
+        maxFrameAverageLightLevelNits: 400,
+      },
+      masteringDisplay: {
+        red: { x: 0.708, y: 0.292 },
+        green: { x: 0.17, y: 0.797 },
+        blue: { x: 0.131, y: 0.046 },
+        whitePoint: { x: 0.3127, y: 0.329 },
+        maxLuminanceNits: 1_000,
+        minLuminanceNits: 0.005,
+      },
+    };
+    const document: ImageEditDocumentV3 = {
+      ...source,
+      color: {
+        workingSpace: 'rec2020',
+        bitDepth: 16,
+        transferFunction: 'pq',
+        hdrMetadata,
+        iccProfileResourceId: null,
+      },
+    };
+
+    expect(decodeImageEditDocumentV3(stringifyImageEditDocumentV3(document)).document?.color)
+      .toEqual(document.color);
+  });
+
+  it('读取早期 HDR 字段后规范化，且不把无色度亮度范围伪装成 MDCV', () => {
+    const source = createNestedDocument();
+    const decoded = decodeImageEditDocumentV3({
+      ...source,
+      color: {
+        workingSpace: 'rec2020',
+        bitDepth: 16,
+        transferFunction: 'pq',
+        hdrMetadata: {
+          standard: 'pq',
+          maxLuminanceNits: 1_000,
+          minLuminanceNits: 0.005,
+          maxContentLightLevelNits: 800,
+          maxFrameAverageLightLevelNits: 300,
+        },
+        iccProfileResourceId: null,
+      },
+    });
+
+    expect(decoded.document?.color.hdrMetadata).toEqual({
+      ...createImageEditHdrMetadataV3('pq'),
+      contentLight: {
+        maxContentLightLevelNits: 800,
+        maxFrameAverageLightLevelNits: 300,
+      },
+    });
+    expect(decoded.document?.color.hdrMetadata).not.toHaveProperty('masteringDisplay');
+  });
+
+  it('拒绝 HDR 传递函数不一致的 CICP 和越界的标准化元数据', () => {
+    const source = createNestedDocument();
+    const hdrDocument = (hdrMetadata: unknown) => ({
+      ...source,
+      color: {
+        workingSpace: 'rec2020',
+        bitDepth: 16,
+        transferFunction: 'pq',
+        hdrMetadata,
+        iccProfileResourceId: null,
+      },
+    });
+
+    expect(decodeImageEditDocumentV3(hdrDocument({
+      ...createImageEditHdrMetadataV3('pq'),
+      cicp: {
+        colorPrimaries: 9,
+        transferCharacteristics: 18,
+        matrixCoefficients: 9,
+        fullRange: false,
+      },
+    })).document).toBeNull();
+    expect(decodeImageEditDocumentV3(hdrDocument({
+      ...createImageEditHdrMetadataV3('pq'),
+      contentLight: {
+        maxContentLightLevelNits: 300,
+        maxFrameAverageLightLevelNits: 400,
+      },
+    })).document).toBeNull();
+    expect(decodeImageEditDocumentV3(hdrDocument({
+      ...createImageEditHdrMetadataV3('pq'),
+      masteringDisplay: {
+        red: { x: 1.2, y: 0.292 },
+        green: { x: 0.17, y: 0.797 },
+        blue: { x: 0.131, y: 0.046 },
+        whitePoint: { x: 0.3127, y: 0.329 },
+        maxLuminanceNits: 1_000,
+        minLuminanceNits: 0.005,
+      },
+    })).document).toBeNull();
   });
 
   it('只持久化整数像素裁剪，避免合法文档在导出阶段才失败', () => {

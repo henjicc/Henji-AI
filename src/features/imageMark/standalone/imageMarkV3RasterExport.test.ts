@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { createImageEditDocumentV3 } from '@/core/imageEdit/v3/documentFactory'
+import { createImageEditHdrMetadataV3 } from '@/core/imageEdit/v3/colorTypes'
 import type { ImageEditorV3DocumentSnapshot } from '@/platform/contracts/imageEditorV3'
 import {
   createImageMarkV3RasterExportSpec,
@@ -165,7 +166,7 @@ describe('工具箱 V3 栅格分块导出', () => {
   it('HDR 与浮点文档明确阻断且不会启动输出会话', async () => {
     const hdr = snapshot(16)
     hdr.document.color.transferFunction = 'pq'
-    hdr.document.color.hdrMetadata = { standard: 'pq' }
+    hdr.document.color.hdrMetadata = createImageEditHdrMetadataV3('pq')
     expect(() => createImageMarkV3RasterExportSpec(hdr.document, 'hdr.avif')).toThrow(
       'imageEditor.v3.readiness.reasons.exportHdrMetadata',
     )
@@ -199,7 +200,7 @@ describe('工具箱 V3 栅格分块导出', () => {
 
     const hdr = snapshot(16)
     hdr.document.color.transferFunction = 'pq'
-    hdr.document.color.hdrMetadata = { standard: 'pq' }
+    hdr.document.color.hdrMetadata = createImageEditHdrMetadataV3('pq')
     expect(resolveImageMarkV3RasterExportReadiness(hdr.document, 'hdr.avif')).toMatchObject({
       state: 'disabled',
       reasonKey: 'imageEditor.v3.readiness.reasons.exportHdrMetadata',

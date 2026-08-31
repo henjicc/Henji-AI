@@ -1,4 +1,7 @@
-import type { ImageEditColorModeV3 } from '@/core/imageEdit/v3/colorTypes'
+import {
+  createImageEditHdrMetadataV3,
+  type ImageEditColorModeV3,
+} from '@/core/imageEdit/v3/colorTypes'
 import type {
   ImageEditorV3SourceLocator,
   ImageEditorV3SourceMetadata,
@@ -27,7 +30,8 @@ export function createImageMarkV3ColorMode(
     : cicp?.transferCharacteristics === 18
       ? 'hlg'
       : 'srgb'
-  const hdr = transfer === 'pq' || transfer === 'hlg'
+  const hdrStandard = transfer === 'pq' || transfer === 'hlg' ? transfer : null
+  const hdr = hdrStandard !== null
   const colorSpace = metadata.colorSpace?.toLowerCase() ?? ''
   const workingSpace = hdr
     ? 'rec2020'
@@ -43,7 +47,9 @@ export function createImageMarkV3ColorMode(
     workingSpace,
     bitDepth,
     transferFunction: transfer,
-    hdrMetadata: hdr ? { standard: transfer, ...(cicp ? { cicp } : {}) } : null,
+    hdrMetadata: hdrStandard
+      ? createImageEditHdrMetadataV3(hdrStandard, cicp ?? undefined)
+      : null,
     iccProfileResourceId: metadata.iccProfileResourceRef,
   }
 }

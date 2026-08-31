@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest'
 
-import { createDefaultImageEditColorModeV3 } from '@/core/imageEdit/v3/colorTypes'
+import {
+  createDefaultImageEditColorModeV3,
+  createImageEditHdrMetadataV3,
+} from '@/core/imageEdit/v3/colorTypes'
 import { createFloat32PremultipliedRgbaTile } from '@/core/imageEdit/v3/effects'
 import {
   convertPreviewWorkingSpaceToSrgbDisplayV3,
@@ -47,7 +50,7 @@ describe('ImageEditor V3 受控预览颜色链路', () => {
       workingSpace: 'rec2020' as const,
       transferFunction: 'pq' as const,
       bitDepth: 'float16' as const,
-      hdrMetadata: { standard: 'pq' as const, maxLuminanceNits: 1_000 },
+      hdrMetadata: createImageEditHdrMetadataV3('pq'),
     }
     const display = convertPreviewWorkingSpaceToSrgbDisplayV3(hdr, color)
     const displayLuminance = display.data[0] * 0.2126

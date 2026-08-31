@@ -5,9 +5,10 @@ import {
   toneMapFloat32TileToSdrV3,
   type Float32PremultipliedRgbaTile,
 } from '@/core/imageEdit/v3'
-import type { ImageEditColorModeV3 } from '@/core/imageEdit/v3/colorTypes'
-
-const PREVIEW_REFERENCE_WHITE_NITS = 203
+import {
+  IMAGE_EDIT_HDR_REFERENCE_WHITE_NITS_V3,
+  type ImageEditColorModeV3,
+} from '@/core/imageEdit/v3/colorTypes'
 
 /** FastProxy 的边界契约是 sRGB；进入效果图前显式转入文档工作原色与传递函数契约。 */
 export function convertSrgbProxyToPreviewWorkingSpaceV3(
@@ -22,7 +23,7 @@ export function convertSrgbProxyToPreviewWorkingSpaceV3(
     new Float32Array(converted.data),
     color.workingSpace,
     color.transferFunction,
-    PREVIEW_REFERENCE_WHITE_NITS,
+    color.hdrMetadata?.referenceWhiteNits ?? IMAGE_EDIT_HDR_REFERENCE_WHITE_NITS_V3,
   )
 }
 
@@ -44,7 +45,7 @@ export function convertPreviewWorkingSpaceToSrgbDisplayV3(
     new Float32Array(converted.data),
     'srgb',
     'srgb',
-    PREVIEW_REFERENCE_WHITE_NITS,
+    color.hdrMetadata?.referenceWhiteNits ?? IMAGE_EDIT_HDR_REFERENCE_WHITE_NITS_V3,
   )
 }
 

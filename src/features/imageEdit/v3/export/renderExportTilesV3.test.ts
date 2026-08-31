@@ -7,6 +7,7 @@ import {
   createImageEditAnnotationLayerV3,
   createImageEditDocumentV3,
   createImageEditEffectLayerV3,
+  createImageEditHdrMetadataV3,
   type Float32PremultipliedRgbaTile,
   type ImageEditDocumentV3,
   type ImageEditJsonObjectV3,
@@ -442,7 +443,7 @@ describe('图片编辑 V3 分块导出渲染', () => {
       sourceResourceId: SOURCE,
       color: {
         workingSpace: 'rec2020', bitDepth: 16, transferFunction: 'pq',
-        hdrMetadata: { standard: 'pq' }, iccProfileResourceId: null,
+        hdrMetadata: createImageEditHdrMetadataV3('pq'), iccProfileResourceId: null,
       },
     })
     await expect(async () => {
