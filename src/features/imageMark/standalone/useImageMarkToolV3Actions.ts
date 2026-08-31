@@ -17,7 +17,10 @@ import { createLogger } from '@/core/logging'
 import { useNotification } from '@/contexts/NotificationContext'
 import type { ImageEditorCapabilityReadinessV3 } from '@/features/imageEdit/v3/application/imageEditorHostProfiles'
 import { resolveImageEditorReadinessReasonV3 } from '@/features/imageEdit/v3/editor/readinessPresentationV3'
-import type { ImageEditorV3DocumentRef } from '@/platform/contracts/imageEditorV3'
+import type {
+  ImageEditorV3DocumentRef,
+  ImageEditorV3ResourceDescriptor,
+} from '@/platform/contracts/imageEditorV3'
 import {
   exportImageMarkV3Raster,
   isImageMarkV3RasterExportAbort,
@@ -38,6 +41,7 @@ export interface OpenedImageMarkV3Package {
   persistence: ImageEditPersistenceSnapshotV3
   reference: ImageEditDocumentReferenceV3
   resourceByteSizes: Record<string, number>
+  resourceDescriptors: ImageEditorV3ResourceDescriptor[]
 }
 
 interface ImageMarkToolV3ActionsOptions {
@@ -140,6 +144,7 @@ export function useImageMarkToolV3Actions({
         resourceByteSizes: Object.fromEntries(
           resources.map((resource) => [resource.resourceRef, resource.byteLength]),
         ),
+        resourceDescriptors: snapshot.resources,
       })
       logger.info('图片编辑 V3 可编辑文件已打开', {
         event: 'image_editor_v3.toolbox.package_open.completed',

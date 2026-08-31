@@ -4,6 +4,7 @@ import { createEmptyImageEditDocument } from '@/core/imageEdit'
 import { createImageEditDocumentV3 } from '@/core/imageEdit/v3/documentFactory'
 import type { ImageEditDocumentRepositoryV3 } from '@/core/imageEdit/v3/serviceContracts'
 import type {
+  ImageEditorV3DocumentSnapshot,
   ImageEditorV3ManagedSource,
   ImageEditorV3SourceMetadata,
 } from '@/platform/contracts/imageEditorV3'
@@ -92,22 +93,26 @@ describe('查看器快速编辑 V3 会话准备', () => {
       revision: 0,
       previewRef: null,
     })
+    expect(prepared.resourceDescriptors).toEqual([managedSource().resource])
   })
 
-  it('已有 V3 会话只从仓库加载最新文档，不重新导入源图或创建第二份文档', async () => {
+  it('已有 V3 会话从权威快照恢复文档和 resource descriptors，不重新导入源图', async () => {
     const document = createImageEditDocumentV3({
       width: 640,
       height: 480,
       documentId: 'viewer-existing',
     })
     const repo = repository()
-    repo.load.mockResolvedValue({
-      documentId: document.id,
+    const loadSnapshot = vi.fn(async () => ({
+      documentRef: 'image-edit-v3:viewer-existing',
       revision: 4,
       previewRef: RESOURCE_REF,
       document: { ...document, revision: 4 },
       history: null,
-    })
+      resourceRefs: [RESOURCE_REF],
+      resources: [managedSource().resource],
+      sourceFingerprint: `sha256:${'b'.repeat(64)}`,
+    } as ImageEditorV3DocumentSnapshot))
     const ingestSource = vi.fn(async () => managedSource())
 
     const prepared = await prepareViewerMarkEditorV3Session({
@@ -122,9 +127,12 @@ describe('查看器快速编辑 V3 会话准备', () => {
       documentId: 'unused-document',
       repository: repo,
       ingestSource,
+      loadSnapshot,
     })
 
-    expect(repo.load).toHaveBeenCalledWith('viewer-existing', undefined)
+    expect(loadSnapshot).toHaveBeenCalledWith(expect.objectContaining({
+      documentRef: 'image-edit-v3:viewer-existing',
+    }), undefined)
     expect(repo.save).not.toHaveBeenCalled()
     expect(ingestSource).not.toHaveBeenCalled()
     expect(prepared.reference).toEqual({
@@ -132,6 +140,7 @@ describe('查看器快速编辑 V3 会话准备', () => {
       revision: 4,
       previewRef: RESOURCE_REF,
     })
+    expect(prepared.resourceDescriptors).toEqual([managedSource().resource])
     expect(createViewerMarkEditorV3SessionReference(
       prepared.sourceUrl,
       prepared.reference,

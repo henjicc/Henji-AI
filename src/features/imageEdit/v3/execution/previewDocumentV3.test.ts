@@ -16,6 +16,7 @@ import { compileImageEditorPreviewPlanV3 } from './previewWorkerRendererV3'
 
 const RESOURCE = `sha256:${'a'.repeat(64)}`
 const MASK = `sha256:${'b'.repeat(64)}`
+const BRUSH = `sha256:${'c'.repeat(64)}`
 
 function documentWithLayers(): ImageEditDocumentV3 {
   const raster = {
@@ -136,14 +137,51 @@ describe('ImageEditor V3 瞬态预览文档', () => {
     const document = documentWithLayers()
     const raster = document.layers[0]
     if (raster.type !== 'raster') throw new Error('测试图层类型错误')
-    raster.tiles['0/0/0'] = `sha256:${'c'.repeat(64)}`
+    raster.tiles['0/0/0'] = BRUSH
     raster.tiles['0/1/0'] = 'file:///private/source.png'
-    const requests = collectImageEditorPreviewResourceRequestsV3(document, 1_600)
+    expect(() => collectImageEditorPreviewResourceRequestsV3(document, 1_600, [{
+      resourceRef: BRUSH as `sha256:${string}`,
+      byteLength: 128,
+      mediaType: 'application/x-henji-brush-tile-v3',
+    }])).toThrow(/无效画笔瓦片资源/)
+    delete raster.tiles['0/1/0']
+    const requests = collectImageEditorPreviewResourceRequestsV3(document, 1_600, [{
+      resourceRef: BRUSH as `sha256:${string}`,
+      byteLength: 128,
+      mediaType: 'application/x-henji-brush-tile-v3',
+    }])
     expect(requests).toEqual(expect.arrayContaining([
-      { resourceId: RESOURCE, maxDimension: 1_600 },
-      { resourceId: MASK, maxDimension: 1_600 },
-      { resourceId: `sha256:${'c'.repeat(64)}`, maxDimension: 512 },
+      { kind: 'image-proxy', resourceId: RESOURCE, maxDimension: 1_600 },
+      { kind: 'image-proxy', resourceId: MASK, maxDimension: 1_600 },
+      {
+        kind: 'brush-tile',
+        resourceId: BRUSH,
+        tileKey: '0/0/0',
+        byteLength: 128,
+        width: 512,
+        height: 512,
+      },
     ]))
     expect(requests.some((request) => request.resourceId.startsWith('file:'))).toBe(false)
+  })
+
+  it('brush descriptor 缺失、媒体类型错误或字节数越界时拒绝交给图片代理', () => {
+    const document = documentWithLayers()
+    const raster = document.layers[0]
+    if (raster.type !== 'raster') throw new Error('测试图层类型错误')
+    raster.tiles['0/0/0'] = BRUSH
+
+    expect(() => collectImageEditorPreviewResourceRequestsV3(document, 1_600, []))
+      .toThrow(/缺少画笔瓦片资源描述/)
+    expect(() => collectImageEditorPreviewResourceRequestsV3(document, 1_600, [{
+      resourceRef: BRUSH as `sha256:${string}`,
+      byteLength: 128,
+      mediaType: 'image/png',
+    }])).toThrow(/媒体类型不匹配/)
+    expect(() => collectImageEditorPreviewResourceRequestsV3(document, 1_600, [{
+      resourceRef: BRUSH as `sha256:${string}`,
+      byteLength: 79,
+      mediaType: 'application/x-henji-brush-tile-v3',
+    }])).toThrow(/字节数无效/)
   })
 })

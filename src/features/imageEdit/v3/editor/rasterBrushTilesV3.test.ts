@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 
+import { createImageEditHdrMetadataV3 } from '@/core/imageEdit/v3/colorTypes'
 import {
   createImageEditDocumentV3,
   createImageEditGroupLayerV3,
@@ -135,5 +136,17 @@ describe('图片编辑 V3 栅格画笔瓦片读取', () => {
       workingSpace: 'display-p3',
       premultipliedColor: [0, 0, 0, 1],
     })
+
+    document.color = {
+      workingSpace: 'rec2020',
+      bitDepth: 16,
+      transferFunction: 'pq',
+      hdrMetadata: {
+        ...createImageEditHdrMetadataV3('pq'),
+        referenceWhiteNits: 250,
+      },
+      iccProfileResourceId: null,
+    }
+    expect(createImageEditorRasterBrushTargetV3(document).referenceWhiteNits).toBe(250)
   })
 })

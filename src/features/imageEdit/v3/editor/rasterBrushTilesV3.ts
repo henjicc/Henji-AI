@@ -13,11 +13,11 @@ import { createFloat32PremultipliedRgbaTile } from '@/core/imageEdit/v3/effects/
 import { decodeInterleavedRgbaSourceTileV3 } from '@/core/imageEdit/v3/execution/sourceTileDecode'
 import type { ImageEditDocumentV3 } from '@/core/imageEdit/v3/documentTypes'
 import type { ImageEditRasterLayerV3 } from '@/core/imageEdit/v3/layerTypes'
+import { IMAGE_EDIT_HDR_REFERENCE_WHITE_NITS_V3 } from '@/core/imageEdit/v3/colorTypes'
 import { createTileRegion, type ImageEditTileCoordinate } from '@/core/imageEdit/v3/tileGeometry'
 import type { ImageEditorV3SourceTile } from '@/platform/contracts/imageEditorV3'
 
 const TILE_SIZE = 512
-const REFERENCE_WHITE_NITS = 203
 
 type BrushTileReaderV3 = (
   tileKey: string,
@@ -70,7 +70,8 @@ export function createImageEditorRasterBrushTargetV3(
     colorDomain: 'linear-light',
     workingSpace: document.color.workingSpace,
     transferFunction: document.color.transferFunction,
-    referenceWhiteNits: REFERENCE_WHITE_NITS,
+    referenceWhiteNits: document.color.hdrMetadata?.referenceWhiteNits
+      ?? IMAGE_EDIT_HDR_REFERENCE_WHITE_NITS_V3,
     premultipliedColor: [0, 0, 0, 1],
   }
 }

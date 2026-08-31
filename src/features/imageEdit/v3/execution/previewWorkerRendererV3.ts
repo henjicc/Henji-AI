@@ -15,6 +15,8 @@ import {
 } from './previewColorV3'
 import { ImageEditorPreviewCustomEffectsV3 } from './previewCustomEffectsV3'
 import {
+  applyPreviewBrushTileReplacementsV3,
+  createPreviewBrushTileMapV3,
   createTransparentPreviewTileV3,
   loadPreviewMaskV3,
   rasterizePreviewAnnotationsV3,
@@ -102,11 +104,17 @@ export async function renderImageEditorPreviewTileV3(
   const proxies = new Map<string, ImageEditorPreviewProxyV3>(
     request.proxies.map((proxy) => [proxy.resourceId, proxy]),
   )
+  const brushTiles = createPreviewBrushTileMapV3(request.brushTiles)
   const rendered = await executeImageEditCpuRenderPlanV3(plan, {
     signal,
-    loadRaster: async (node) => convertSrgbProxyToPreviewWorkingSpaceV3(
-      await rasterizePreviewLayerV3(node, proxies, dimensions),
-      request.document.color,
+    loadRaster: async (node) => applyPreviewBrushTileReplacementsV3(
+      node,
+      convertSrgbProxyToPreviewWorkingSpaceV3(
+        await rasterizePreviewLayerV3(node, proxies, dimensions),
+        request.document.color,
+      ),
+      brushTiles,
+      dimensions,
     ),
     rasterizeAnnotations: async (node) => convertSrgbProxyToPreviewWorkingSpaceV3(
       rasterizePreviewAnnotationsV3(node, request.document, dimensions),

@@ -84,6 +84,7 @@ export function ImageMarkToolV3Host(props: ImageMarkToolV3HostProps): JSX.Elemen
       document={host.bootstrap.document}
       historySnapshot={host.bootstrap.history}
       resourceByteSizes={host.bootstrap.resourceByteSizes}
+      resourceDescriptors={host.bootstrap.resourceDescriptors}
       profileId="full"
       onDocumentChange={host.handleDocumentChange}
       onPersistenceChange={host.handlePersistenceChange}

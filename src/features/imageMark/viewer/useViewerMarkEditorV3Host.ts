@@ -23,6 +23,7 @@ import {
   ImageEditorReadinessErrorV3,
   type ImageEditorCapabilityReadinessV3,
 } from '@/features/imageEdit/v3/application/imageEditorHostProfiles'
+import { reconcileImageEditorV3ResourceDescriptors } from '@/features/imageEdit/v3/application/imageEditorResourceDescriptorsV3'
 import { resolveImageEditorReadinessReasonV3 } from '@/features/imageEdit/v3/editor/readinessPresentationV3'
 import type { ImageEditorV3DocumentRef } from '@/platform/contracts/imageEditorV3'
 import {
@@ -73,6 +74,7 @@ export type ViewerMarkEditorV3BootstrapState =
       sourceUrl: string
       document: ImageEditDocumentV3
       history: ViewerMarkEditorV3PreparedSession['history']
+      resourceDescriptors: ViewerMarkEditorV3PreparedSession['resourceDescriptors']
     }
 
 export interface ViewerMarkEditorV3HostController {
@@ -196,6 +198,7 @@ export function useViewerMarkEditorV3Host(
         sourceUrl: prepared.sourceUrl,
         document: prepared.document,
         history: prepared.history,
+        resourceDescriptors: prepared.resourceDescriptors,
       })
       publishReference(prepared.reference)
       logger.info('查看器快速编辑 V3 会话准备完成', {
@@ -263,7 +266,16 @@ export function useViewerMarkEditorV3Host(
   const handlePersistenceChange = useCallback((snapshot: ImageEditPersistenceSnapshotV3): void => {
     persistenceSnapshotRef.current = snapshot
     setBootstrap((current) => current.kind === 'ready'
-      ? { ...current, document: snapshot.document, history: snapshot.history }
+      ? {
+          ...current,
+          document: snapshot.document,
+          history: snapshot.history,
+          resourceDescriptors: reconcileImageEditorV3ResourceDescriptors(
+            snapshot.document,
+            current.resourceDescriptors,
+            snapshot.retainedResources,
+          ),
+        }
       : current)
     persistenceRef.current?.enqueue(snapshot)
     if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current)

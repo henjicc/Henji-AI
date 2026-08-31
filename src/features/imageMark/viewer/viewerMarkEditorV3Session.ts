@@ -1,6 +1,8 @@
 import {
+  createImageEditorV3RequestId,
   ImageEditorV3CommandRepository,
   ingestImageEditorV3Source,
+  loadImageEditorV3Document,
 } from '@/commands/imageEditorV3'
 import {
   coerceImageEditSession,
@@ -22,7 +24,10 @@ import {
   getImageEditorHostProfileV3,
   ImageEditorReadinessErrorV3,
 } from '@/features/imageEdit/v3/application/imageEditorHostProfiles'
-import type { ImageEditorV3ManagedSource } from '@/platform/contracts/imageEditorV3'
+import type {
+  ImageEditorV3ManagedSource,
+  ImageEditorV3ResourceDescriptor,
+} from '@/platform/contracts/imageEditorV3'
 import {
   createImageMarkV3ColorMode,
   resolveImageMarkV3SourceLocator,
@@ -34,6 +39,7 @@ export interface ViewerMarkEditorV3PreparedSession {
   history: ImageEditCommandHistorySnapshotV3
   persistence: ImageEditPersistenceSnapshotV3
   reference: ImageEditDocumentReferenceV3
+  resourceDescriptors: readonly ImageEditorV3ResourceDescriptor[]
 }
 
 export type ViewerMarkEditorV3SessionErrorKey =
@@ -52,9 +58,10 @@ interface PrepareViewerMarkEditorV3SessionOptions {
   imageUrl: string
   session?: ImageEditSessionData | ImageMarkSession
   documentId: string
-  repository: Pick<ImageEditDocumentRepositoryV3, 'load' | 'save'>
+  repository: Pick<ImageEditDocumentRepositoryV3, 'save'>
   signal?: AbortSignal
   ingestSource?: typeof ingestImageEditorV3Source
+  loadSnapshot?: typeof loadImageEditorV3Document
 }
 
 function documentIdFromRef(documentRef: ImageEditSessionReferenceV3['documentRef']): string {
@@ -102,17 +109,20 @@ function assertQuickProfileAccepts(document: ImageEditDocumentV3): void {
 
 async function loadReferencedSession(
   session: ImageEditSessionReferenceV3,
-  repository: PrepareViewerMarkEditorV3SessionOptions['repository'],
+  loadSnapshot: typeof loadImageEditorV3Document,
   signal: AbortSignal | undefined,
 ): Promise<ViewerMarkEditorV3PreparedSession> {
   const documentId = documentIdFromRef(session.documentRef)
-  const loaded = await repository.load(documentId, signal)
-  if (!loaded || loaded.documentId !== documentId) {
+  const loaded = await loadSnapshot({
+    requestId: createImageEditorV3RequestId('viewer-document-load'),
+    documentRef: session.documentRef,
+  }, signal)
+  if (!loaded || loaded.document.id !== documentId || loaded.documentRef !== session.documentRef) {
     throw new ViewerMarkEditorV3SessionError(
       'imageEditor.v3.viewer.errors.savedDocumentNotFound',
     )
   }
-  if (loaded.revision < session.revision) {
+  if (loaded.revision < session.revision || loaded.document.revision !== loaded.revision) {
     throw new ViewerMarkEditorV3SessionError(
       'imageEditor.v3.viewer.errors.staleSessionReference',
     )
@@ -125,10 +135,11 @@ async function loadReferencedSession(
     history: persistence.history,
     persistence,
     reference: {
-      documentId: loaded.documentId,
+      documentId: loaded.document.id,
       revision: loaded.revision,
       previewRef: loaded.previewRef,
     },
+    resourceDescriptors: loaded.resources,
   }
 }
 
@@ -167,6 +178,7 @@ async function importLegacySession(
     history: persistence.history,
     persistence,
     reference,
+    resourceDescriptors: [managed.resource],
   }
 }
 
@@ -174,7 +186,11 @@ export async function prepareViewerMarkEditorV3Session(
   options: PrepareViewerMarkEditorV3SessionOptions,
 ): Promise<ViewerMarkEditorV3PreparedSession> {
   if (isImageEditSessionReferenceV3(options.session)) {
-    return loadReferencedSession(options.session, options.repository, options.signal)
+    return loadReferencedSession(
+      options.session,
+      options.loadSnapshot ?? loadImageEditorV3Document,
+      options.signal,
+    )
   }
   return importLegacySession(options)
 }

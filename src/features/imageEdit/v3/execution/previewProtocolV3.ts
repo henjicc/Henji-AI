@@ -9,6 +9,14 @@ export interface ImageEditorPreviewProxyV3 {
   bytes: ArrayBuffer
 }
 
+export interface ImageEditorPreviewBrushTileV3 {
+  resourceId: string
+  width: number
+  height: number
+  /** 独占且精确长度的 premultiplied linear-light RGBA Float32 字节。 */
+  bytes: ArrayBuffer
+}
+
 export interface ImageEditorPreviewRenderRequestV3 {
   type: 'render'
   requestId: string
@@ -18,6 +26,7 @@ export interface ImageEditorPreviewRenderRequestV3 {
   quality: ImageEditRenderQuality
   maxDimension: number
   proxies: ImageEditorPreviewProxyV3[]
+  brushTiles: ImageEditorPreviewBrushTileV3[]
 }
 
 export interface ImageEditorPreviewCancelRequestV3 {

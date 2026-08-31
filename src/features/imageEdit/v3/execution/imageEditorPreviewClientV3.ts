@@ -10,9 +10,18 @@ import type {
   ImageEditorV3FastProxy,
   ImageEditorV3PyramidDescriptor,
   ImageEditorV3PyramidPrewarmResult,
+  ImageEditorV3ResourceDescriptor,
   ImageEditorV3ResourceRef,
 } from '@/platform/contracts/imageEditorV3'
-import { collectImageEditorPreviewResourceRequestsV3 } from './previewDocumentV3'
+import {
+  ImageEditorPreviewBrushTileLoaderV3,
+  type ImageEditorPreviewBrushTileReaderV3,
+} from './previewBrushTileLoaderV3'
+import {
+  collectImageEditorPreviewResourceRequestsV3,
+  type ImageEditorPreviewBrushResourceRequestV3,
+  type ImageEditorPreviewProxyResourceRequestV3,
+} from './previewDocumentV3'
 import type {
   ImageEditorPreviewBlobEventV3,
   ImageEditorPreviewWorkerEventV3,
@@ -49,6 +58,7 @@ export interface ImageEditorManagedPreviewRequestV3 {
   document: ImageEditDocumentV3
   quality: ImageEditRenderQuality
   maxDimension: number
+  resourceDescriptors: readonly ImageEditorV3ResourceDescriptor[]
 }
 
 type ProxyReaderV3 = (
@@ -84,8 +94,11 @@ export interface ImageEditorPreviewClientOptionsV3 {
   readFastProxy?: ProxyReaderV3
   describePyramid?: PyramidDescriptorReaderV3
   prewarmPyramid?: PyramidPrewarmerV3
+  readBrushTiles?: ImageEditorPreviewBrushTileReaderV3
   urlFactory?: PreviewUrlFactoryV3
   proxyCacheMaxBytes?: number
+  brushCacheMaxBytes?: number
+  brushTransferMaxBytes?: number
 }
 
 interface ScheduledJobV3 extends ImageEditorManagedPreviewRequestV3 {
@@ -122,6 +135,32 @@ function toError(value: unknown): Error {
   return value instanceof Error ? value : new Error(String(value))
 }
 
+function abortError(signal: AbortSignal): Error {
+  const error = signal.reason instanceof Error
+    ? signal.reason
+    : new Error('图片预览资源读取已取消')
+  if (error.name === 'Error') error.name = 'AbortError'
+  return error
+}
+
+function throwIfAborted(signal: AbortSignal): void {
+  if (signal.aborted) throw abortError(signal)
+}
+
+async function raceWithAbort<T>(operation: Promise<T>, signal: AbortSignal): Promise<T> {
+  throwIfAborted(signal)
+  let onAbort: (() => void) | undefined
+  const cancelled = new Promise<never>((_, reject) => {
+    onAbort = () => reject(abortError(signal))
+    signal.addEventListener('abort', onAbort, { once: true })
+  })
+  try {
+    return await Promise.race([operation, cancelled])
+  } finally {
+    if (onAbort) signal.removeEventListener('abort', onAbort)
+  }
+}
+
 /** 每个编辑会话独占一个实例：一个 running、一个 latest-pending，绝不形成 FIFO。 */
 export class ImageEditorPreviewClientV3 {
   private worker: ImageEditorPreviewWorkerPortV3 | null = null
@@ -134,6 +173,7 @@ export class ImageEditorPreviewClientV3 {
   private readonly proxyCache = new Map<string, ImageEditorV3FastProxy>()
   private proxyCacheBytes = 0
   private readonly proxyCacheMaxBytes: number
+  private readonly brushTileLoader: ImageEditorPreviewBrushTileLoaderV3
   private readonly resultLeases = new Set<() => void>()
   private readonly workerFactory: ImageEditorPreviewWorkerFactoryV3
   private readonly proxyReader: ProxyReaderV3
@@ -148,6 +188,11 @@ export class ImageEditorPreviewClientV3 {
     this.proxyReader = options.readFastProxy ?? readImageEditorV3FastProxy
     this.pyramidDescriptorReader = options.describePyramid ?? describeImageEditorV3SourcePyramid
     this.pyramidPrewarmer = options.prewarmPyramid ?? prewarmImageEditorV3SourcePyramid
+    this.brushTileLoader = new ImageEditorPreviewBrushTileLoaderV3({
+      reader: options.readBrushTiles,
+      cacheMaxBytes: options.brushCacheMaxBytes,
+      transferMaxBytes: options.brushTransferMaxBytes,
+    })
     this.urlFactory = options.urlFactory ?? defaultUrlFactory
     this.proxyCacheMaxBytes = options.proxyCacheMaxBytes
       ?? IMAGE_EDITOR_PREVIEW_PROXY_CACHE_MAX_BYTES_V3
@@ -201,6 +246,7 @@ export class ImageEditorPreviewClientV3 {
     this.pyramidPrewarms.clear()
     this.startedPyramidPrewarms.clear()
     this.clearProxyCache()
+    this.brushTileLoader.dispose()
   }
 
   private replacePending(job: ScheduledJobV3): void {
@@ -212,6 +258,7 @@ export class ImageEditorPreviewClientV3 {
     this.running = job
     void this.prepareAndPost(job).catch((error: unknown) => {
       if (this.running !== job) return
+      job.abortController.abort(error)
       const normalized = job.sequence === this.latestSequence
         ? toError(error)
         : new ImageEditorPreviewSupersededErrorV3()
@@ -222,36 +269,27 @@ export class ImageEditorPreviewClientV3 {
 
   private async prepareAndPost(job: ScheduledJobV3): Promise<void> {
     const worker = this.ensureWorker()
-    const requests = collectImageEditorPreviewResourceRequestsV3(job.document, job.maxDimension)
-    for (const request of requests) {
+    const requests = collectImageEditorPreviewResourceRequestsV3(
+      job.document,
+      job.maxDimension,
+      job.resourceDescriptors,
+    )
+    const proxyRequests = requests.filter(
+      (request): request is ImageEditorPreviewProxyResourceRequestV3 => request.kind === 'image-proxy',
+    )
+    const brushRequests = requests.filter(
+      (request): request is ImageEditorPreviewBrushResourceRequestV3 => request.kind === 'brush-tile',
+    )
+    for (const request of proxyRequests) {
       this.startPyramidPrewarm(
         request.resourceId as ImageEditorV3ResourceRef,
         typeof job.document.color.bitDepth === 'number' ? job.document.color.bitDepth : 32,
       )
     }
-    const proxies = await Promise.all(requests.map(async (request) => {
-      const key = `${request.resourceId}:${request.maxDimension}`
-      let proxy = this.proxyCache.get(key)
-      if (proxy) {
-        this.proxyCache.delete(key)
-        this.proxyCache.set(key, proxy)
-      }
-      if (!proxy) {
-        proxy = await this.proxyReader({
-          requestId: `${job.requestId}:resource:${request.resourceId.slice(7, 19)}`,
-          resourceRef: request.resourceId as ImageEditorV3ResourceRef,
-          maxDimension: request.maxDimension,
-        }, job.abortController.signal)
-        this.insertProxyCache(key, proxy)
-      }
-      return {
-        resourceId: request.resourceId,
-        width: proxy.width,
-        height: proxy.height,
-        mediaType: proxy.mediaType,
-        bytes: proxy.bytes.slice(0),
-      }
-    }))
+    const [proxies, brushTiles] = await Promise.all([
+      this.loadProxyResources(proxyRequests, job),
+      this.brushTileLoader.load(brushRequests, job.document, job.abortController.signal),
+    ])
     if (job.abortController.signal.aborted || job.sequence !== this.latestSequence) {
       throw new ImageEditorPreviewSupersededErrorV3()
     }
@@ -265,7 +303,46 @@ export class ImageEditorPreviewClientV3 {
       quality: job.quality,
       maxDimension: job.maxDimension,
       proxies,
-    }, proxies.map((proxy) => proxy.bytes))
+      brushTiles,
+    }, [
+      ...proxies.map((proxy) => proxy.bytes),
+      ...brushTiles.map((tile) => tile.bytes),
+    ])
+  }
+
+  private async loadProxyResources(
+    requests: readonly ImageEditorPreviewProxyResourceRequestV3[],
+    job: ScheduledJobV3,
+  ): Promise<Array<{
+      resourceId: string
+      width: number
+      height: number
+      mediaType: 'image/webp'
+      bytes: ArrayBuffer
+    }>> {
+    return Promise.all(requests.map(async (request) => {
+      const key = `${request.resourceId}:${request.maxDimension}`
+      let proxy = this.proxyCache.get(key)
+      if (proxy) {
+        this.proxyCache.delete(key)
+        this.proxyCache.set(key, proxy)
+      }
+      if (!proxy) {
+        proxy = await raceWithAbort(this.proxyReader({
+          requestId: `${job.requestId}:resource:${request.resourceId.slice(7, 19)}`,
+          resourceRef: request.resourceId as ImageEditorV3ResourceRef,
+          maxDimension: request.maxDimension,
+        }, job.abortController.signal), job.abortController.signal)
+        this.insertProxyCache(key, proxy)
+      }
+      return {
+        resourceId: request.resourceId,
+        width: proxy.width,
+        height: proxy.height,
+        mediaType: proxy.mediaType,
+        bytes: proxy.bytes.slice(0),
+      }
+    }))
   }
 
   private ensureWorker(): ImageEditorPreviewWorkerPortV3 {

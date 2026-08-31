@@ -98,6 +98,7 @@ export function ViewerMarkEditorV3Host(props: ViewerMarkEditorV3HostProps): JSX.
       sourceImageUrl={host.bootstrap.sourceUrl}
       document={host.bootstrap.document}
       historySnapshot={host.bootstrap.history}
+      resourceDescriptors={host.bootstrap.resourceDescriptors}
       profileId="quick"
       onDocumentChange={host.handleDocumentChange}
       onPersistenceChange={host.handlePersistenceChange}

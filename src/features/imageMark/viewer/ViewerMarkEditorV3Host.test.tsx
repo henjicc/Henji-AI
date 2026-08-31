@@ -19,11 +19,16 @@ const mocks = vi.hoisted(() => ({
 }))
 
 vi.mock('@/features/imageEdit/v3/editor', () => ({
-  ImageEditorV3: ({ profileId, toolbarActions }: {
+  ImageEditorV3: ({ profileId, resourceDescriptors, toolbarActions }: {
     profileId: string
+    resourceDescriptors?: readonly unknown[]
     toolbarActions?: ReactNode
   }) => (
-    <div data-testid="shared-v3-editor" data-profile={profileId}>
+    <div
+      data-testid="shared-v3-editor"
+      data-profile={profileId}
+      data-resource-descriptor-count={resourceDescriptors?.length ?? 0}
+    >
       {toolbarActions}
     </div>
   ),
@@ -60,6 +65,11 @@ vi.mock('./useViewerMarkEditorV3Host', () => ({
         layers: [],
       },
       history: null,
+      resourceDescriptors: [{
+        resourceRef: `sha256:${'a'.repeat(64)}`,
+        byteLength: 128,
+        mediaType: 'image/png',
+      }],
     },
     persistenceStatus: null,
     materialization: null,
@@ -103,6 +113,7 @@ describe('ViewerMarkEditorV3Host', () => {
     )
 
     expect(screen.getByTestId('shared-v3-editor').getAttribute('data-profile')).toBe('quick')
+    expect(screen.getByTestId('shared-v3-editor').getAttribute('data-resource-descriptor-count')).toBe('1')
     const replace = screen.getByRole('button', { name: '替换图片' }) as HTMLButtonElement
     expect(replace.disabled).toBe(false)
     expect(replace.title).toContain('替换到查看器')

@@ -11,7 +11,10 @@ import type { ImageEditDocumentV3 } from '@/core/imageEdit/v3/documentTypes'
 import type { ImageEditRenderPlanNode } from '@/core/imageEdit/v3/renderPlan'
 import type { MarkItem } from '@/core/imageEdit/types'
 import { drawMarkItems } from '@/features/imageMark/render/drawMarks'
-import type { ImageEditorPreviewProxyV3 } from './previewProtocolV3'
+import type {
+  ImageEditorPreviewBrushTileV3,
+  ImageEditorPreviewProxyV3,
+} from './previewProtocolV3'
 
 export class ImageEditorPreviewUnsupportedContentErrorV3 extends Error {
   constructor(message: string) {
@@ -126,31 +129,117 @@ export async function rasterizePreviewLayerV3(
   if (source?.kind === 'resource' && typeof source.resourceId === 'string') {
     await drawProxy(context, proxies, source.resourceId, 0, 0, dimensions.width, dimensions.height)
   }
-  const tiles = isRecord(node.parameters.tiles) ? node.parameters.tiles : {}
-  for (const [tileKey, resourceId] of Object.entries(tiles)) {
-    if (typeof resourceId !== 'string') continue
-    const [mipValue, tileXValue, tileYValue] = tileKey.split('/')
-    const mip = Number(mipValue)
-    const tileX = Number(tileXValue)
-    const tileY = Number(tileYValue)
-    if (mip !== 0 || !Number.isSafeInteger(tileX) || !Number.isSafeInteger(tileY)) continue
-    const proxy = proxies.get(resourceId)
-    if (!proxy) throw new Error(`预览缺少栅格瓦片资源：${resourceId}`)
-    const width = proxy.width * dimensions.scaleX
-    const height = proxy.height * dimensions.scaleY
-    await drawProxy(
-      context,
-      proxies,
-      resourceId,
-      tileX * 512 * dimensions.scaleX,
-      tileY * 512 * dimensions.scaleY,
-      width,
-      height,
-    )
-  }
   return imageDataToLinearPreviewTileV3(
     context.getImageData(0, 0, canvas.width, canvas.height),
   )
+}
+
+export function createPreviewBrushTileMapV3(
+  tiles: readonly ImageEditorPreviewBrushTileV3[],
+): ReadonlyMap<string, ImageEditorPreviewBrushTileV3> {
+  const result = new Map<string, ImageEditorPreviewBrushTileV3>()
+  for (const tile of tiles) {
+    const expectedBytes = tile.width * tile.height * 4 * Float32Array.BYTES_PER_ELEMENT
+    if (typeof tile.resourceId !== 'string'
+      || !Number.isSafeInteger(tile.width)
+      || !Number.isSafeInteger(tile.height)
+      || tile.width < 1
+      || tile.height < 1
+      || tile.width > 512
+      || tile.height > 512
+      || !(tile.bytes instanceof ArrayBuffer)
+      || tile.bytes.byteLength !== expectedBytes) {
+      throw new Error(`图片预览画笔瓦片像素契约无效：${String(tile.resourceId)}`)
+    }
+    if (result.has(tile.resourceId)) {
+      throw new Error(`图片预览收到重复画笔瓦片资源：${tile.resourceId}`)
+    }
+    result.set(tile.resourceId, tile)
+  }
+  return result
+}
+
+/** 画笔瓦片是栅格源对应区域的完整替换；透明像素会清空本图层并露出下层。 */
+export function applyPreviewBrushTileReplacementsV3(
+  node: ImageEditRenderPlanNode,
+  base: Float32PremultipliedRgbaTile,
+  brushTiles: ReadonlyMap<string, ImageEditorPreviewBrushTileV3>,
+  dimensions: ImageEditorPreviewDimensionsV3,
+): Float32PremultipliedRgbaTile {
+  const tileReferences = isRecord(node.parameters.tiles) ? node.parameters.tiles : {}
+  if (Object.keys(tileReferences).length === 0) return base
+  const output = new Float32Array(base.data)
+  for (const [tileKey, resourceId] of Object.entries(tileReferences)) {
+    if (typeof resourceId !== 'string') {
+      throw new Error(`图片预览栅格瓦片资源无效：${tileKey}`)
+    }
+    const [mipValue, tileXValue, tileYValue, extra] = tileKey.split('/')
+    const mip = Number(mipValue)
+    const tileX = Number(tileXValue)
+    const tileY = Number(tileYValue)
+    if (extra !== undefined
+      || mip !== 0
+      || !Number.isSafeInteger(tileX)
+      || !Number.isSafeInteger(tileY)
+      || tileX < 0
+      || tileY < 0) {
+      throw new Error(`图片预览栅格瓦片键无效：${tileKey}`)
+    }
+    const tile = brushTiles.get(resourceId)
+    if (!tile) throw new Error(`图片预览缺少栅格画笔瓦片：${resourceId}`)
+    replaceScaledBrushTile(output, base.width, base.height, tile, tileX, tileY, dimensions)
+  }
+  return createFloat32PremultipliedRgbaTile(
+    base.width,
+    base.height,
+    base.colorDomain,
+    output,
+    base.workingSpace,
+    base.transferFunction,
+    base.referenceWhiteNits,
+  )
+}
+
+function replaceScaledBrushTile(
+  output: Float32Array,
+  outputWidth: number,
+  outputHeight: number,
+  tile: ImageEditorPreviewBrushTileV3,
+  tileX: number,
+  tileY: number,
+  dimensions: ImageEditorPreviewDimensionsV3,
+): void {
+  const source = new Float32Array(tile.bytes)
+  const originX = tileX * 512
+  const originY = tileY * 512
+  const left = Math.max(0, Math.floor(originX * dimensions.scaleX))
+  const top = Math.max(0, Math.floor(originY * dimensions.scaleY))
+  const right = Math.min(outputWidth, Math.ceil((originX + tile.width) * dimensions.scaleX))
+  const bottom = Math.min(outputHeight, Math.ceil((originY + tile.height) * dimensions.scaleY))
+  for (let y = top; y < bottom; y += 1) {
+    const sourceY = (y + 0.5) / dimensions.scaleY - originY - 0.5
+    const y0 = Math.max(0, Math.min(tile.height - 1, Math.floor(sourceY)))
+    const y1 = Math.min(tile.height - 1, y0 + 1)
+    const ty = Math.max(0, Math.min(1, sourceY - Math.floor(sourceY)))
+    for (let x = left; x < right; x += 1) {
+      const sourceX = (x + 0.5) / dimensions.scaleX - originX - 0.5
+      const x0 = Math.max(0, Math.min(tile.width - 1, Math.floor(sourceX)))
+      const x1 = Math.min(tile.width - 1, x0 + 1)
+      const tx = Math.max(0, Math.min(1, sourceX - Math.floor(sourceX)))
+      const outputOffset = (y * outputWidth + x) * 4
+      const topLeft = (y0 * tile.width + x0) * 4
+      const topRight = (y0 * tile.width + x1) * 4
+      const bottomLeft = (y1 * tile.width + x0) * 4
+      const bottomRight = (y1 * tile.width + x1) * 4
+      for (let channel = 0; channel < 4; channel += 1) {
+        const topValue = source[topLeft + channel]
+          + (source[topRight + channel] - source[topLeft + channel]) * tx
+        const bottomValue = source[bottomLeft + channel]
+          + (source[bottomRight + channel] - source[bottomLeft + channel]) * tx
+        output[outputOffset + channel] = topValue + (bottomValue - topValue) * ty
+      }
+    }
+  }
 }
 
 export function rasterizePreviewAnnotationsV3(

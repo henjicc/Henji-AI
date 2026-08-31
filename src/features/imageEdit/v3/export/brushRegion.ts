@@ -201,6 +201,7 @@ function validateBrushTile(
   expected: {
     workingSpace: 'srgb' | 'display-p3' | 'rec2020'
     transferFunction: 'srgb' | 'linear' | 'pq' | 'hlg'
+    referenceWhiteNits: number
   },
   signal: AbortSignal,
 ): asserts tile is Extract<ImageEditBrushTileV3, { storage: 'rgba-float32' }> {
@@ -210,7 +211,7 @@ function validateBrushTile(
     || tile.colorDomain !== 'linear-light'
     || tile.workingSpace !== expected.workingSpace
     || tile.transferFunction !== expected.transferFunction
-    || tile.referenceWhiteNits !== 203
+    || tile.referenceWhiteNits !== expected.referenceWhiteNits
     || tile.alpha !== 'premultiplied'
     || !(tile.data instanceof Float32Array)
     || tile.data.length !== reference.width * reference.height * 4) {
@@ -262,6 +263,7 @@ export async function applyImageEditorV3SparseRasterRegion(
   expected: {
     workingSpace: 'srgb' | 'display-p3' | 'rec2020'
     transferFunction: 'srgb' | 'linear' | 'pq' | 'hlg'
+    referenceWhiteNits: number
   },
   signal: AbortSignal,
   dependencies: ImageEditorV3ExportRenderDependencies,

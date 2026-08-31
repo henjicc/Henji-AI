@@ -1,5 +1,6 @@
 import {
   DIFFUSION_V4_RECIPE_ADAPTER,
+  IMAGE_EDIT_HDR_REFERENCE_WHITE_NITS_V3,
   IMAGE_EDIT_RENDER_PRIORITY,
   ImageEditRenderScheduler,
   ImageEditResourceBudget,
@@ -269,6 +270,8 @@ async function* renderTiles(
                     {
                       workingSpace: document.color.workingSpace,
                       transferFunction: document.color.transferFunction,
+                      referenceWhiteNits: document.color.hdrMetadata?.referenceWhiteNits
+                        ?? IMAGE_EDIT_HDR_REFERENCE_WHITE_NITS_V3,
                     },
                     taskContext.signal,
                     dependencies,

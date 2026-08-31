@@ -29,7 +29,11 @@ import {
 
 interface ImageEditorPreviewV3Props extends Pick<
   ImageEditorV3Props,
-  'sourceImageUrl' | 'previewRenderer' | 'annotationOverlay' | 'resourceByteSizes'
+  | 'sourceImageUrl'
+  | 'previewRenderer'
+  | 'annotationOverlay'
+  | 'resourceByteSizes'
+  | 'resourceDescriptors'
 > {
   bus: ImageEditCommandBusV3
   controller: ImageEditorV3Controller
@@ -94,6 +98,7 @@ export function ImageEditorPreviewV3({
   previewRenderer,
   annotationOverlay,
   resourceByteSizes,
+  resourceDescriptors,
   bus,
   controller,
 }: ImageEditorPreviewV3Props): JSX.Element {
@@ -120,6 +125,7 @@ export function ImageEditorPreviewV3({
     controller.sessionId,
     snapshot,
     !previewRenderer,
+    resourceDescriptors,
   )
 
   const customOutput = useMemo<ImageEditorV3PreviewOutput | null>(() => previewRenderer?.({

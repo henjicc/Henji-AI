@@ -25,6 +25,7 @@ const mocks = vi.hoisted(() => ({
   readFastProxy: vi.fn(),
   describePyramid: vi.fn(),
   prewarmPyramid: vi.fn(),
+  readBrushTiles: vi.fn(),
 }))
 
 vi.mock('@/commands/imageEditorV3', () => ({
@@ -43,6 +44,7 @@ vi.mock('@/commands/imageEditorV3', () => ({
   readImageEditorV3FastProxy: mocks.readFastProxy,
   describeImageEditorV3SourcePyramid: mocks.describePyramid,
   prewarmImageEditorV3SourcePyramid: mocks.prewarmPyramid,
+  readImageEditorV3BrushTiles: mocks.readBrushTiles,
 }))
 
 vi.mock('./imageMarkV3RasterExport', () => ({
@@ -261,9 +263,10 @@ describe('ImageMarkToolV3Host', () => {
             redo: [],
           },
           resourceRefs: [RESOURCE_REF],
+          resources: [{ resourceRef: RESOURCE_REF, byteLength: 4_096, mediaType: 'image/png' }],
           sourceFingerprint: SOURCE_FINGERPRINT,
         },
-        resources: [],
+        resources: [{ resourceRef: RESOURCE_REF, byteLength: 4_096, mediaType: 'image/png' }],
         thumbnail: null,
       },
     })
@@ -370,10 +373,8 @@ describe('ImageMarkToolV3Host', () => {
       name: /PNG export unavailable: This version cannot preserve HDR metadata reliably/,
     }) as HTMLButtonElement
     expect(exportButton.disabled).toBe(true)
-    const handButton = screen.getByRole('button', {
-      name: /Hand \(unavailable: Canvas panning is not connected yet/,
-    }) as HTMLButtonElement
-    expect(handButton.disabled).toBe(true)
+    const handButton = screen.getByRole('button', { name: 'Hand' }) as HTMLButtonElement
+    expect(handButton.disabled).toBe(false)
 
     fireEvent.click(screen.getByRole('button', { name: 'Open' }))
     expect(await screen.findByRole('button', { name: 'Open from file' })).toBeTruthy()

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 
 import { createLogger } from '@/core/logging'
+import type { ImageEditorV3ResourceDescriptor } from '@/platform/contracts/imageEditorV3'
 import type { ImageEditCommandBusSnapshotV3 } from '../application/imageEditCommandBus'
 import {
   ImageEditorPreviewClientV3,
@@ -14,6 +15,7 @@ import {
 } from './previewDocumentV3'
 
 const logger = createLogger('image_editor_v3.preview')
+const EMPTY_RESOURCE_DESCRIPTORS: readonly ImageEditorV3ResourceDescriptor[] = []
 
 export interface ManagedImageEditorPreviewStateV3 {
   result: ImageEditorManagedPreviewResultV3 | null
@@ -27,6 +29,7 @@ export function useManagedImageEditorPreviewV3(
   sessionId: string,
   snapshot: ImageEditCommandBusSnapshotV3,
   enabled: boolean,
+  resourceDescriptors: readonly ImageEditorV3ResourceDescriptor[] = EMPTY_RESOURCE_DESCRIPTORS,
 ): ManagedImageEditorPreviewStateV3 {
   const client = useMemo(() => new ImageEditorPreviewClientV3({ sessionId }), [sessionId])
   const [state, setState] = useState<ManagedImageEditorPreviewStateV3>({
@@ -75,7 +78,7 @@ export function useManagedImageEditorPreviewV3(
       ? IMAGE_EDITOR_PREVIEW_DRAFT_MAX_EDGE_V3
       : IMAGE_EDITOR_PREVIEW_STABLE_MAX_EDGE_V3
     setState((current) => ({ ...current, rendering: true }))
-    void client.render({ document, quality, maxDimension }).then((result) => {
+    void client.render({ document, quality, maxDimension, resourceDescriptors }).then((result) => {
       if (!acceptsResult) {
         result.release()
         return
@@ -103,7 +106,7 @@ export function useManagedImageEditorPreviewV3(
     return () => {
       acceptsResult = false
     }
-  }, [client, enabled, snapshot])
+  }, [client, enabled, resourceDescriptors, snapshot])
 
   return state
 }

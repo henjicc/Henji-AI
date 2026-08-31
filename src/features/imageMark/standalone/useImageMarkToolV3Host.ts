@@ -18,6 +18,11 @@ import type {
 import { createLogger } from '@/core/logging'
 import { useNotification } from '@/contexts/NotificationContext'
 import {
+  createImageEditorV3ResourceByteSizes,
+  reconcileImageEditorV3ResourceDescriptors,
+} from '@/features/imageEdit/v3/application/imageEditorResourceDescriptorsV3'
+import type { ImageEditorV3ResourceDescriptor } from '@/platform/contracts/imageEditorV3'
+import {
   ImageMarkV3PersistenceQueue,
   type ImageMarkV3PersistenceStatus,
 } from './imageMarkV3Persistence'
@@ -55,6 +60,7 @@ export type ImageMarkV3BootstrapState =
       document: ImageEditDocumentV3
       history: ImageEditCommandHistorySnapshotV3
       resourceByteSizes: Record<string, number>
+      resourceDescriptors: ImageEditorV3ResourceDescriptor[]
     }
 
 export type { ImageMarkV3RasterExportUiState } from './useImageMarkToolV3Actions'
@@ -161,6 +167,7 @@ export function useImageMarkToolV3Host(
           document,
           history: initialPersistence.history,
           resourceByteSizes: { [managed.resource.resourceRef]: managed.resource.byteLength },
+          resourceDescriptors: [managed.resource],
         })
         logger.info('图片编辑 V3 工具箱宿主准备完成', {
           event: 'image_editor_v3.toolbox.bootstrap.completed',
@@ -232,15 +239,17 @@ export function useImageMarkToolV3Host(
   const handlePersistenceChange = useCallback((snapshot: ImageEditPersistenceSnapshotV3): void => {
     persistenceSnapshotRef.current = snapshot
     setBootstrap((current) => {
-      const resourceByteSizes = current.kind === 'ready' ? { ...current.resourceByteSizes } : {}
-      for (const resource of snapshot.retainedResources) {
-        if (resource.byteSize !== null) resourceByteSizes[resource.resourceId] = resource.byteSize
-      }
+      const resourceDescriptors = reconcileImageEditorV3ResourceDescriptors(
+        snapshot.document,
+        current.kind === 'ready' ? current.resourceDescriptors : [],
+        snapshot.retainedResources,
+      )
       return {
         kind: 'ready',
         document: snapshot.document,
         history: snapshot.history,
-        resourceByteSizes,
+        resourceByteSizes: createImageEditorV3ResourceByteSizes(resourceDescriptors),
+        resourceDescriptors,
       }
     })
     persistenceRef.current?.enqueue(snapshot)
@@ -278,6 +287,7 @@ export function useImageMarkToolV3Host(
       document: opened.document,
       history: opened.history,
       resourceByteSizes: opened.resourceByteSizes,
+      resourceDescriptors: opened.resourceDescriptors,
     })
   }, [reportPersistenceStatus, repository])
 

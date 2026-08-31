@@ -30,6 +30,7 @@ export function ImageEditorV3(props: ImageEditorV3Props): JSX.Element {
           previewRenderer={props.previewRenderer}
           annotationOverlay={props.annotationOverlay}
           resourceByteSizes={props.resourceByteSizes}
+          resourceDescriptors={props.resourceDescriptors}
           bus={bus}
           controller={controller}
         />
