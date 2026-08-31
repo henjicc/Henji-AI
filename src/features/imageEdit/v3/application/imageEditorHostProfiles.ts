@@ -85,8 +85,8 @@ const disabled = <TId extends string>(
 });
 
 const MOVE_TOOL = ready('move');
-const HAND_TOOL = disabled('hand', 'imageEditor.v3.readiness.reasons.hand');
-const ZOOM_TOOL = disabled('zoom', 'imageEditor.v3.readiness.reasons.zoom');
+const HAND_TOOL = ready('hand');
+const ZOOM_TOOL = ready('zoom');
 const NAVIGATION_TOOLS: readonly ImageEditorCapabilityV3<ImageEditorToolIdV3>[] = [
   MOVE_TOOL,
   HAND_TOOL,

@@ -89,6 +89,7 @@ describe('ImageEditorV3 professional shell', () => {
     useImageEditorInteractionStoreV3.setState({
       layerDragBySession: {},
       viewportZoomBySession: {},
+      viewportPanBySession: {},
       annotationSelectionBySession: {},
     })
   })
@@ -139,7 +140,7 @@ describe('ImageEditorV3 professional shell', () => {
     ]) {
       expect(document.querySelector<HTMLButtonElement>(`[data-tool-id="${toolId}"]`)?.disabled).toBe(true)
     }
-    for (const toolId of ['raster-brush', 'eraser']) {
+    for (const toolId of ['hand', 'zoom', 'raster-brush', 'eraser']) {
       const tool = document.querySelector<HTMLButtonElement>(`[data-tool-id="${toolId}"]`)
       expect(tool?.disabled).toBe(false)
       expect(tool?.dataset.toolReadiness).toBe('ready')

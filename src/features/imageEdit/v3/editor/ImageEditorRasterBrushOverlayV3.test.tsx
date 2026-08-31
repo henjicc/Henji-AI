@@ -84,6 +84,7 @@ describe('ImageEditorRasterBrushOverlayV3', () => {
     useImageEditorInteractionStoreV3.setState({
       layerDragBySession: {},
       viewportZoomBySession: {},
+      viewportPanBySession: {},
       annotationSelectionBySession: {},
     })
     vi.stubGlobal('ImageData', ImageDataStub)

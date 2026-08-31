@@ -84,6 +84,7 @@ describe('ImageEditorV3 lifecycle guards', () => {
     useImageEditorInteractionStoreV3.setState({
       layerDragBySession: {},
       viewportZoomBySession: {},
+      viewportPanBySession: {},
       annotationSelectionBySession: {},
     })
   })

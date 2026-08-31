@@ -1,5 +1,9 @@
 import { AlertTriangle, LoaderCircle, Minus, Plus } from 'lucide-react'
-import { useEffect, useMemo, useRef } from 'react'
+import { useCallback, useEffect, useMemo, useRef } from 'react'
+import type {
+  PointerEvent as ReactPointerEvent,
+  WheelEvent as ReactWheelEvent,
+} from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { UiIconButton } from '@/components/ui'
@@ -17,6 +21,11 @@ import type {
   ImageEditorV3Props,
 } from './types'
 import { useImageEditorBusSnapshotV3 } from './useImageEditorControllerV3'
+import {
+  imageEditorViewportTransformV3,
+  zoomImageEditorViewportAroundPointV3,
+  type ImageEditorViewportPanV3,
+} from './viewportNavigationV3'
 
 interface ImageEditorPreviewV3Props extends Pick<
   ImageEditorV3Props,
@@ -25,6 +34,19 @@ interface ImageEditorPreviewV3Props extends Pick<
   bus: ImageEditCommandBusV3
   controller: ImageEditorV3Controller
 }
+
+interface ImageEditorViewportGestureV3 {
+  kind: 'pan' | 'zoom'
+  pointerId: number
+  startClientX: number
+  startClientY: number
+  startPan: ImageEditorViewportPanV3
+  pendingPan: ImageEditorViewportPanV3
+  altKey: boolean
+  moved: boolean
+}
+
+const ZERO_VIEWPORT_PAN_V3: ImageEditorViewportPanV3 = { x: 0, y: 0 }
 
 function FramePreview({ output, label }: { output: Extract<ImageEditorV3PreviewOutput, { kind: 'frame' }>; label: string }): JSX.Element {
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
@@ -76,6 +98,9 @@ export function ImageEditorPreviewV3({
   controller,
 }: ImageEditorPreviewV3Props): JSX.Element {
   const { t } = useTranslation('ui')
+  const surfaceRef = useRef<HTMLElement | null>(null)
+  const viewportContentRef = useRef<HTMLDivElement | null>(null)
+  const gestureRef = useRef<ImageEditorViewportGestureV3 | null>(null)
   const snapshot = useImageEditorBusSnapshotV3(bus)
   const activeTool = useImageEditorSessionStoreV3(
     (state) => state.sessions[controller.sessionId]?.activeTool ?? 'move',
@@ -83,7 +108,13 @@ export function ImageEditorPreviewV3({
   const zoom = useImageEditorInteractionStoreV3(
     (state) => state.viewportZoomBySession[controller.sessionId] ?? 1,
   )
-  const setViewportZoom = useImageEditorInteractionStoreV3((state) => state.setViewportZoom)
+  const pan = useImageEditorInteractionStoreV3(
+    (state) => state.viewportPanBySession[controller.sessionId] ?? ZERO_VIEWPORT_PAN_V3,
+  )
+  const setViewportPan = useImageEditorInteractionStoreV3((state) => state.setViewportPan)
+  const setViewportTransform = useImageEditorInteractionStoreV3(
+    (state) => state.setViewportTransform,
+  )
 
   const managedPreview = useManagedImageEditorPreviewV3(
     controller.sessionId,
@@ -130,15 +161,168 @@ export function ImageEditorPreviewV3({
     ? snapshot.document.revision
     : managedPreview.resultRevision
 
+  const applyViewportTransform = useCallback((
+    nextZoom: number,
+    nextPan: ImageEditorViewportPanV3,
+  ): void => {
+    const content = viewportContentRef.current
+    if (content) content.style.transform = imageEditorViewportTransformV3(nextZoom, nextPan)
+  }, [])
+
+  useEffect(() => {
+    if (!gestureRef.current) applyViewportTransform(zoom, pan)
+  }, [applyViewportTransform, pan, zoom])
+
+  const zoomAroundClientPoint = useCallback((
+    clientX: number,
+    clientY: number,
+    requestedZoom: number,
+  ): void => {
+    const rect = surfaceRef.current?.getBoundingClientRect()
+    if (!rect || rect.width <= 0 || rect.height <= 0) return
+    const next = zoomImageEditorViewportAroundPointV3(zoom, pan, requestedZoom, {
+      x: clientX - (rect.left + rect.width / 2),
+      y: clientY - (rect.top + rect.height / 2),
+    })
+    setViewportTransform(controller.sessionId, next)
+  }, [controller.sessionId, pan, setViewportTransform, zoom])
+
+  const releaseGesture = useCallback((commit: boolean): void => {
+    const gesture = gestureRef.current
+    if (!gesture) return
+    gestureRef.current = null
+    const surface = surfaceRef.current
+    if (
+      surface
+      && typeof surface.hasPointerCapture === 'function'
+      && surface.hasPointerCapture(gesture.pointerId)
+      && typeof surface.releasePointerCapture === 'function'
+    ) {
+      surface.releasePointerCapture(gesture.pointerId)
+    }
+    if (viewportContentRef.current) viewportContentRef.current.style.willChange = ''
+    if (commit && gesture.kind === 'pan') {
+      setViewportPan(controller.sessionId, gesture.pendingPan)
+      return
+    }
+    applyViewportTransform(zoom, pan)
+  }, [applyViewportTransform, controller.sessionId, pan, setViewportPan, zoom])
+
+  useEffect(() => {
+    const navigationActive = activeTool === 'hand' || activeTool === 'zoom'
+    if (!navigationActive) releaseGesture(false)
+  }, [activeTool, releaseGesture])
+
+  useEffect(() => () => releaseGesture(false), [releaseGesture])
+
+  const handlePointerDown = (event: ReactPointerEvent<HTMLElement>): void => {
+    if (
+      event.button !== 0
+      || !event.isPrimary
+      || (activeTool !== 'hand' && activeTool !== 'zoom')
+      || (event.target instanceof Element && event.target.closest('[data-viewport-control]'))
+    ) return
+    event.preventDefault()
+    releaseGesture(false)
+    try {
+      event.currentTarget.setPointerCapture(event.pointerId)
+    } catch {
+      // 失焦边界由 pointercancel/unmount 继续兜底。
+    }
+    const gesture: ImageEditorViewportGestureV3 = {
+      kind: activeTool === 'hand' ? 'pan' : 'zoom',
+      pointerId: event.pointerId,
+      startClientX: event.clientX,
+      startClientY: event.clientY,
+      startPan: { ...pan },
+      pendingPan: { ...pan },
+      altKey: event.altKey,
+      moved: false,
+    }
+    gestureRef.current = gesture
+    if (viewportContentRef.current) viewportContentRef.current.style.willChange = 'transform'
+  }
+
+  const handlePointerMove = (event: ReactPointerEvent<HTMLElement>): void => {
+    const gesture = gestureRef.current
+    if (!gesture || gesture.pointerId !== event.pointerId) return
+    const deltaX = event.clientX - gesture.startClientX
+    const deltaY = event.clientY - gesture.startClientY
+    if (deltaX * deltaX + deltaY * deltaY > 9) gesture.moved = true
+    if (gesture.kind !== 'pan') return
+    event.preventDefault()
+    gesture.pendingPan = {
+      x: gesture.startPan.x + deltaX,
+      y: gesture.startPan.y + deltaY,
+    }
+    // 高频拖动只写合成层；结束时才向 Zustand 提交一次。
+    applyViewportTransform(zoom, gesture.pendingPan)
+  }
+
+  const handlePointerUp = (event: ReactPointerEvent<HTMLElement>): void => {
+    const gesture = gestureRef.current
+    if (!gesture || gesture.pointerId !== event.pointerId) return
+    event.preventDefault()
+    if (gesture.kind === 'zoom' && !gesture.moved) {
+      const requestedZoom = gesture.altKey ? zoom / 1.25 : zoom * 1.25
+      gestureRef.current = null
+      if (
+        typeof event.currentTarget.hasPointerCapture === 'function'
+        && event.currentTarget.hasPointerCapture(event.pointerId)
+        && typeof event.currentTarget.releasePointerCapture === 'function'
+      ) {
+        event.currentTarget.releasePointerCapture(event.pointerId)
+      }
+      if (viewportContentRef.current) viewportContentRef.current.style.willChange = ''
+      zoomAroundClientPoint(event.clientX, event.clientY, requestedZoom)
+      return
+    }
+    releaseGesture(true)
+  }
+
+  const handleWheel = (event: ReactWheelEvent<HTMLElement>): void => {
+    if (activeTool !== 'zoom' && !event.ctrlKey && !event.metaKey) return
+    if (event.deltaY === 0) return
+    event.preventDefault()
+    const factor = event.deltaY < 0 ? 1.15 : 1 / 1.15
+    zoomAroundClientPoint(event.clientX, event.clientY, zoom * factor)
+  }
+
+  const zoomFromCenter = (requestedZoom: number): void => {
+    const rect = surfaceRef.current?.getBoundingClientRect()
+    if (!rect) return
+    zoomAroundClientPoint(
+      rect.left + rect.width / 2,
+      rect.top + rect.height / 2,
+      requestedZoom,
+    )
+  }
+
+  const navigationCursor = activeTool === 'hand'
+    ? 'cursor-grab active:cursor-grabbing'
+    : activeTool === 'zoom'
+      ? 'cursor-zoom-in'
+      : ''
+
   return (
     <main
+      ref={surfaceRef}
       data-preview-surface
-      className="relative min-h-0 min-w-0 flex-1 overflow-hidden bg-bg-dark"
+      data-active-navigation-tool={activeTool === 'hand' || activeTool === 'zoom' ? activeTool : undefined}
+      className={`relative min-h-0 min-w-0 flex-1 overflow-hidden bg-bg-dark ${navigationCursor}`}
+      style={{ touchAction: activeTool === 'hand' || activeTool === 'zoom' ? 'none' : undefined }}
+      onPointerDown={handlePointerDown}
+      onPointerMove={handlePointerMove}
+      onPointerUp={handlePointerUp}
+      onPointerCancel={() => releaseGesture(false)}
+      onWheel={handleWheel}
     >
-      <div className="absolute inset-0 flex items-center justify-center overflow-auto p-6">
+      <div className="absolute inset-0 flex items-center justify-center overflow-hidden p-6">
         <div
+          ref={viewportContentRef}
+          data-viewport-content
           className="relative flex max-h-full max-w-full items-center justify-center origin-center"
-          style={{ transform: `scale(${zoom})` }}
+          style={{ transform: imageEditorViewportTransformV3(zoom, pan) }}
         >
           {output.kind === 'url' ? (
             <UrlPreview output={output} label={t('imageEditor.v3.previewAlt')} />
@@ -176,7 +360,10 @@ export function ImageEditorPreviewV3({
           <span className="whitespace-pre-line">{managedPreview.diagnostic}</span>
         </div>
       ) : null}
-      <div className="ui-glass absolute bottom-3 left-1/2 flex -translate-x-1/2 items-center gap-1 rounded-lg p-1">
+      <div
+        data-viewport-control
+        className="ui-glass absolute bottom-3 left-1/2 flex -translate-x-1/2 items-center gap-1 rounded-lg p-1"
+      >
         <UiIconButton
           className="h-8 w-8 text-white hover:text-white"
           showBorder={false}
@@ -184,7 +371,7 @@ export function ImageEditorPreviewV3({
           aria-label={t('imageEditor.v3.zoomOut')}
           title={t('imageEditor.v3.zoomOut')}
           disabled={zoom <= 0.05}
-          onClick={() => setViewportZoom(controller.sessionId, zoom / 1.25)}
+          onClick={() => zoomFromCenter(zoom / 1.25)}
         >
           <Minus className="h-4 w-4" />
         </UiIconButton>
@@ -198,7 +385,7 @@ export function ImageEditorPreviewV3({
           aria-label={t('imageEditor.v3.zoomIn')}
           title={t('imageEditor.v3.zoomIn')}
           disabled={zoom >= 8}
-          onClick={() => setViewportZoom(controller.sessionId, zoom * 1.25)}
+          onClick={() => zoomFromCenter(zoom * 1.25)}
         >
           <Plus className="h-4 w-4" />
         </UiIconButton>

@@ -11,6 +11,7 @@ describe('ImageEditor V3 session stores', () => {
     useImageEditorInteractionStoreV3.setState({
       layerDragBySession: {},
       viewportZoomBySession: {},
+      viewportPanBySession: {},
       annotationSelectionBySession: {},
     })
   })
@@ -37,6 +38,7 @@ describe('ImageEditor V3 session stores', () => {
     interaction.beginLayerDrag('editor', 'layer-a')
     interaction.setLayerDragTarget('editor', 'layer-b')
     interaction.setViewportZoom('editor', 20)
+    interaction.setViewportPan('editor', { x: 36, y: -24 })
     interaction.selectAnnotation('editor', { layerId: 'layer-a', annotationId: 'mark-a' })
 
     expect(useImageEditorInteractionStoreV3.getState().layerDragBySession.editor).toEqual({
@@ -44,6 +46,10 @@ describe('ImageEditor V3 session stores', () => {
       overLayerId: 'layer-b',
     })
     expect(useImageEditorInteractionStoreV3.getState().viewportZoomBySession.editor).toBe(8)
+    expect(useImageEditorInteractionStoreV3.getState().viewportPanBySession.editor).toEqual({
+      x: 36,
+      y: -24,
+    })
     expect(useImageEditorSessionStoreV3.getState().sessions.editor).not.toHaveProperty('zoom')
     expect(useImageEditorSessionStoreV3.getState().sessions.editor).not.toHaveProperty('layerDrag')
     expect(useImageEditorInteractionStoreV3.getState().annotationSelectionBySession.editor).toEqual({
@@ -52,6 +58,7 @@ describe('ImageEditor V3 session stores', () => {
     })
 
     interaction.clearViewport('editor')
+    expect(useImageEditorInteractionStoreV3.getState().viewportPanBySession.editor).toBeUndefined()
     expect(useImageEditorInteractionStoreV3.getState().annotationSelectionBySession.editor).toBeUndefined()
   })
 })

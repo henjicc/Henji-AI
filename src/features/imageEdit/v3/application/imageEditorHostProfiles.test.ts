@@ -25,6 +25,8 @@ describe('图片编辑 V3 宿主能力裁剪', () => {
 
     expect(getReadyImageEditorToolIdsV3(profile)).toEqual([
       'move',
+      'hand',
+      'zoom',
       'crop',
       'annotation-text',
       'annotation-arrow',
@@ -34,8 +36,6 @@ describe('图片编辑 V3 宿主能力裁剪', () => {
       'eraser',
     ])
     for (const toolId of [
-      'hand',
-      'zoom',
       'select-rect',
       'select-ellipse',
       'select-lasso',
@@ -61,7 +61,9 @@ describe('图片编辑 V3 宿主能力裁剪', () => {
     const mask = getImageEditorHostProfileV3('mask')
     expect(mask.effects).toEqual([])
     expect(mask.adjustments).toEqual([])
-    expect(getReadyImageEditorToolIdsV3(mask)).toEqual(['move', 'raster-brush', 'eraser'])
+    expect(getReadyImageEditorToolIdsV3(mask)).toEqual([
+      'move', 'hand', 'zoom', 'raster-brush', 'eraser',
+    ])
     expect(mask.saveActions).toEqual(['save-document'])
   })
 })
