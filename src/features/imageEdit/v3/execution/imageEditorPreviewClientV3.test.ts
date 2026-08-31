@@ -5,6 +5,7 @@ import {
   createImageEditRasterLayerV3,
 } from '@/core/imageEdit/v3/documentFactory'
 import { createFloat32PremultipliedRgbaTile } from '@/core/imageEdit/v3/effects/contracts'
+import { ImageEditResourceBudget } from '@/core/imageEdit/v3/resourceBudget'
 import type { ImageEditorV3FastProxy } from '@/platform/contracts/imageEditorV3'
 import {
   IMAGE_EDITOR_PREVIEW_PROXY_CACHE_MAX_BYTES_V3,
@@ -13,6 +14,7 @@ import {
   ImageEditorPreviewSupersededErrorV3,
   type ImageEditorPreviewClientOptionsV3,
 } from './imageEditorPreviewClientV3'
+import { ImageEditorResourcePressureErrorV3 } from './imageEditorResourcePressureV3'
 import type {
   ImageEditorPreviewWorkerEventV3,
   ImageEditorPreviewWorkerPortV3,
@@ -306,6 +308,95 @@ describe('ImageEditorPreviewClientV3 调度与资源所有权', () => {
     expect(revoke).toHaveBeenCalledWith('blob:managed-preview')
     expect(worker.terminate).toHaveBeenCalledTimes(1)
     expect(worker.messages.at(-1)).toEqual({ type: 'dispose' })
+  })
+
+  it('代理缓存、Worker 传输/工作集与成品都进入同一资源账本并按生命周期释放', async () => {
+    const worker = new FakePreviewWorker()
+    const budget = new ImageEditResourceBudget({
+      totalBytes: 64 * 1024 * 1024,
+      cpuCacheTargetBytes: 32 * 1024 * 1024,
+      gpuTargetBytes: 16 * 1024 * 1024,
+    })
+    const resourceId = `sha256:${'a'.repeat(64)}`
+    const client = new ImageEditorPreviewClientV3({
+      sessionId: 'budgeted-preview',
+      resourceBudget: budget,
+      workerFactory: () => worker,
+      readFastProxy: async (request) => ({
+        resourceRef: request.resourceRef,
+        width: 800,
+        height: 600,
+        mediaType: 'image/webp',
+        bytes: new ArrayBuffer(8),
+      }),
+      describePyramid: async () => ({ tileSize: 512, levels: [] }),
+      prewarmPyramid: async () => ({ plannedTiles: 0, completedTiles: 0, truncated: false }),
+    })
+
+    const rendered = client.render({
+      document: createResourceDocument(resourceId),
+      quality: 'stable',
+      maxDimension: 1_600,
+      resourceDescriptors: [],
+    })
+    await waitForRender(worker)
+    expect(budget.snapshot()).toMatchObject({
+      byCategory: {
+        'cpu-cache': 8,
+        gpu: 800 * 600 * 4,
+        transfer: 8,
+      },
+    })
+    expect(budget.snapshot().byCategory['in-flight']).toBeGreaterThan(0)
+
+    const output = bitmap()
+    worker.emit({
+      type: 'rendered-bitmap', requestId: worker.renders()[0].requestId, sequence: 1,
+      width: 800, height: 600, diagnostics: [], bitmap: output,
+    })
+    const result = await rendered
+    expect(budget.snapshot()).toMatchObject({
+      byCategory: {
+        'cpu-cache': 8,
+        gpu: 800 * 600 * 4,
+        transfer: 0,
+        'in-flight': 0,
+      },
+    })
+    result.release()
+    expect(budget.snapshot().totalBytes).toBe(8)
+    client.dispose()
+    expect(budget.snapshot()).toMatchObject({ totalBytes: 0, leaseCount: 0 })
+  })
+
+  it('预算不足时在启动 Worker 前返回降低预览尺寸信号并归还预留', async () => {
+    const worker = new FakePreviewWorker()
+    const budget = new ImageEditResourceBudget({
+      totalBytes: 2_000_000,
+      cpuCacheTargetBytes: 0,
+      gpuTargetBytes: 2_000_000,
+    })
+    const client = new ImageEditorPreviewClientV3({
+      sessionId: 'preview-pressure',
+      resourceBudget: budget,
+      workerFactory: () => worker,
+    })
+
+    const error = await client.render({
+      document: createDocument(1),
+      quality: 'stable',
+      maxDimension: 1_600,
+      resourceDescriptors: [],
+    }).catch((caught: unknown) => caught)
+    expect(error).toBeInstanceOf(ImageEditorResourcePressureErrorV3)
+    expect(error).toMatchObject({
+      scope: 'managed-preview',
+      category: 'in-flight',
+      recovery: 'lower-mip',
+    })
+    expect(worker.renders()).toHaveLength(0)
+    expect(budget.snapshot()).toMatchObject({ totalBytes: 0, leaseCount: 0 })
+    client.dispose()
   })
 
   it('代理 LRU 有明确字节上限，超限条目不会在会话内无限滞留', async () => {

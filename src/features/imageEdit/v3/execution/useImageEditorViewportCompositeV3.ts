@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useId, useMemo, useState } from 'react'
 
 import { createLogger } from '@/core/logging'
 import type { ImageEditorV3ResourceDescriptor } from '@/platform/contracts/imageEditorV3'
@@ -28,7 +28,11 @@ export function useImageEditorViewportCompositeV3(
   resourceDescriptors: readonly ImageEditorV3ResourceDescriptor[] = EMPTY_RESOURCE_DESCRIPTORS,
   layout: { viewport: ImageEditorViewportTransformV3; viewportKey: string } | null,
 ): ImageEditorViewportCompositeStateV3 {
-  const client = useMemo(() => new ImageEditorViewportCompositeClientV3({ sessionId }), [sessionId])
+  const resourceBudgetConsumerId = useId()
+  const client = useMemo(() => new ImageEditorViewportCompositeClientV3({
+    sessionId,
+    resourceBudgetConsumerId: `viewport-composite:${resourceBudgetConsumerId}`,
+  }), [resourceBudgetConsumerId, sessionId])
   const [state, setState] = useState<ImageEditorViewportCompositeStateV3>({
     result: null,
     diagnostic: null,

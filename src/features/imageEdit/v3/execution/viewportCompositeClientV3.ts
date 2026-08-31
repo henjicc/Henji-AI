@@ -1,4 +1,8 @@
-import { createTileRegion, ImageEditResourceBudget, type ImageEditMemoryLease } from '@/core/imageEdit/v3'
+import {
+  createTileRegion,
+  type ImageEditMemoryLease,
+  type ImageEditResourceBudget,
+} from '@/core/imageEdit/v3'
 import { createLogger } from '@/core/logging'
 import type { ImageEditDocumentV3 } from '@/core/imageEdit/v3/documentTypes'
 import type { ImageEditRenderQuality } from '@/core/imageEdit/v3/renderNodeDefinition'
@@ -29,6 +33,14 @@ import {
   imageEditorViewportBrushTransferBytesV3,
   imageEditorViewportSourceTransferBytesV3,
 } from './viewportCompositeTransferV3'
+import {
+  acquireImageEditorResourceLeaseV3,
+  ImageEditorResourcePressureErrorV3,
+} from './imageEditorResourcePressureV3'
+import {
+  acquireImageEditorSessionResourceBudgetV3,
+  type ImageEditorSessionResourceBudgetLeaseV3,
+} from './imageEditorSessionResourceBudgetV3'
 const logger = createLogger('image_editor_v3.viewport_composite')
 const MAX_TRANSFER_BYTES = 256 * 1024 * 1024
 export class ImageEditorViewportCompositeSupersededErrorV3 extends Error {
@@ -71,6 +83,7 @@ export interface ImageEditorViewportCompositeClientOptionsV3 {
   resourceBudget?: ImageEditResourceBudget
   brushTileLoader?: ImageEditorPreviewBrushTileLoaderV3
   transferMaxBytes?: number
+  resourceBudgetConsumerId?: string
 }
 
 interface ActiveViewportJobV3 extends ImageEditorViewportCompositeRequestV3 {
@@ -82,6 +95,7 @@ interface ActiveViewportJobV3 extends ImageEditorViewportCompositeRequestV3 {
   tilePlan: ImageEditorViewportTilePlanV3 | null
   transferLease: ImageEditMemoryLease | null
   workingLease: ImageEditMemoryLease | null
+  outputLease: ImageEditMemoryLease | null
   posted: boolean
   settled: boolean
   resolve: (result: ImageEditorManagedViewportCompositeV3) => void
@@ -99,6 +113,7 @@ function createDefaultWorker(): ImageEditorViewportCompositeWorkerPortV3 {
 function toError(error: unknown): Error {
   return error instanceof Error ? error : new Error(String(error))
 }
+let viewportCompositeClientSequence = 0
 
 /** 一个会话同时最多只有一个 source load / Worker composite；新请求立即取消旧请求。 */
 export class ImageEditorViewportCompositeClientV3 {
@@ -107,25 +122,33 @@ export class ImageEditorViewportCompositeClientV3 {
   private readonly brushLoader: ImageEditorPreviewBrushTileLoaderV3
   private readonly workerFactory: ImageEditorViewportCompositeWorkerFactoryV3
   private readonly transferMaxBytes: number
+  private readonly sessionBudgetLease: ImageEditorSessionResourceBudgetLeaseV3 | null
   private readonly resultReleases = new Set<() => void>()
   private worker: ImageEditorViewportCompositeWorkerPortV3 | null = null
   private active: ActiveViewportJobV3 | null = null
+  private readonly retiredJobs = new Map<string, ActiveViewportJobV3>()
   private sequence = 0
   private disposed = false
 
   constructor(private readonly options: ImageEditorViewportCompositeClientOptionsV3) {
     if (!options.sessionId.trim()) throw new Error('视口合成会话 ID 不能为空')
-    this.budget = options.resourceBudget ?? new ImageEditResourceBudget()
+    this.transferMaxBytes = options.transferMaxBytes ?? MAX_TRANSFER_BYTES
+    if (!Number.isSafeInteger(this.transferMaxBytes) || this.transferMaxBytes < 0) {
+      throw new Error('视口合成传输上限必须是非负整数')
+    }
+    this.sessionBudgetLease = options.resourceBudget
+      ? null
+      : acquireImageEditorSessionResourceBudgetV3(options.sessionId, {
+          consumerId: options.resourceBudgetConsumerId
+            ?? `viewport-composite:${++viewportCompositeClientSequence}`,
+        })
+    this.budget = options.resourceBudget ?? this.sessionBudgetLease!.budget
     this.scheduler = options.scheduler ?? new ImageEditorViewportTileSchedulerV3({
       sessionId: `${options.sessionId}:composite-source`,
       cacheOptions: { resourceBudget: this.budget },
     })
     this.brushLoader = options.brushTileLoader ?? new ImageEditorPreviewBrushTileLoaderV3()
     this.workerFactory = options.workerFactory ?? createDefaultWorker
-    this.transferMaxBytes = options.transferMaxBytes ?? MAX_TRANSFER_BYTES
-    if (!Number.isSafeInteger(this.transferMaxBytes) || this.transferMaxBytes < 0) {
-      throw new Error('视口合成传输上限必须是非负整数')
-    }
   }
 
   render(request: ImageEditorViewportCompositeRequestV3): Promise<ImageEditorManagedViewportCompositeV3> {
@@ -143,6 +166,7 @@ export class ImageEditorViewportCompositeClientV3 {
         tilePlan: null,
         transferLease: null,
         workingLease: null,
+        outputLease: null,
         posted: false,
         settled: false,
         resolve,
@@ -173,7 +197,10 @@ export class ImageEditorViewportCompositeClientV3 {
       this.worker.terminate()
       this.worker = null
     }
+    for (const job of this.retiredJobs.values()) this.releaseJobResources(job)
+    this.retiredJobs.clear()
     for (const release of [...this.resultReleases]) release()
+    this.sessionBudgetLease?.release()
   }
 
   private async prepareAndPost(job: ActiveViewportJobV3): Promise<void> {
@@ -207,8 +234,13 @@ export class ImageEditorViewportCompositeClientV3 {
     if (!Number.isSafeInteger(transferBytes) || transferBytes > this.transferMaxBytes) {
       throw new Error('视口合成超过单帧受控传输上限')
     }
-    job.transferLease = this.budget.acquire('transfer', transferBytes)
-    if (!job.transferLease) throw new Error('视口合成传输未通过资源预算')
+    job.transferLease = acquireImageEditorResourceLeaseV3(
+      this.budget,
+      'viewport-composite',
+      'transfer',
+      transferBytes,
+      'fallback-managed-preview',
+    )
     const maxRegionPixels = frame.plan.tiles.reduce(
       (largest, tile) => Math.max(largest, tile.width * tile.height),
       0,
@@ -216,8 +248,31 @@ export class ImageEditorViewportCompositeClientV3 {
     const workingBytes = maxRegionPixels * 4 * Float32Array.BYTES_PER_ELEMENT
       * Math.max(3, prepared.plan.nodes.length + 2)
     if (!Number.isSafeInteger(workingBytes)) throw new Error('视口合成工作集超出安全范围')
-    job.workingLease = this.budget.acquire('in-flight', workingBytes)
-    if (!job.workingLease) throw new Error('视口合成工作集未通过资源预算')
+    job.workingLease = acquireImageEditorResourceLeaseV3(
+      this.budget,
+      'viewport-composite',
+      'in-flight',
+      workingBytes,
+      'fallback-managed-preview',
+    )
+    const outputBytes = frame.plan.tiles.reduce((total, tile) => {
+      const output = createTileRegion(
+        job.document.geometry,
+        { mip: frame.plan.mip, x: tile.tileX, y: tile.tileY },
+        tile.halo,
+      ).outputRect
+      const next = total + output.width * output.height * 4
+      if (!Number.isSafeInteger(next)) throw new Error('视口成品瓦片字节数超出安全范围')
+      return next
+    }, 0)
+    // Worker 创建 ImageBitmap 前先占住成品额度，避免先分配后 admission 失败。
+    job.outputLease = acquireImageEditorResourceLeaseV3(
+      this.budget,
+      'viewport-composite',
+      'gpu',
+      outputBytes,
+      'fallback-managed-preview',
+    )
     const brushTiles = await this.brushLoader.load(
       brushRequests,
       job.document,
@@ -257,6 +312,11 @@ export class ImageEditorViewportCompositeClientV3 {
     const job = this.active
     if (!job || event.requestId !== job.requestId || event.sequence !== job.sequence) {
       this.releaseEvent(event)
+      const retired = this.retiredJobs.get(event.requestId)
+      if (retired && retired.sequence === event.sequence) {
+        this.retiredJobs.delete(event.requestId)
+        this.releaseJobResources(retired)
+      }
       return
     }
     if (event.type === 'failed') {
@@ -267,13 +327,16 @@ export class ImageEditorViewportCompositeClientV3 {
     }
     try {
       this.validateEvent(job, event)
-      this.releaseJobResources(job)
       const gpuBytes = event.tiles.reduce(
         (total, tile) => total + tile.outputRect.width * tile.outputRect.height * 4,
         0,
       )
-      const gpuLease = this.budget.acquire('gpu', gpuBytes)
-      if (!gpuLease) throw new Error('视口成品瓦片未通过 GPU 资源预算')
+      const gpuLease = job.outputLease
+      if (!gpuLease || gpuBytes > gpuLease.bytes) {
+        throw new Error('视口 Worker 返回的成品超过预留 GPU 资源')
+      }
+      job.outputLease = null
+      this.releaseJobResources(job)
       const release = this.createResultRelease(event, gpuLease)
       this.settle(job, () => job.resolve({
         documentId: job.document.id,
@@ -331,6 +394,8 @@ export class ImageEditorViewportCompositeClientV3 {
     const job = this.active
     this.worker?.terminate()
     this.worker = null
+    for (const retired of this.retiredJobs.values()) this.releaseJobResources(retired)
+    this.retiredJobs.clear()
     if (job) this.failJob(job, new Error(message))
   }
 
@@ -340,6 +405,7 @@ export class ImageEditorViewportCompositeClientV3 {
     if (
       !(error instanceof ImageEditorViewportCompositeSupersededErrorV3)
       && !(error instanceof ImageEditorViewportCompositeUnsupportedErrorV3)
+      && !(error instanceof ImageEditorResourcePressureErrorV3)
     ) {
       logger.error('图片编辑 V3 视口分块合成失败', error, {
         event: 'image_editor_v3.viewport_composite.failed',
@@ -356,7 +422,8 @@ export class ImageEditorViewportCompositeClientV3 {
     job.controller.abort(error)
     this.scheduler.cancel()
     if (job.posted) this.worker?.postMessage({ type: 'cancel', requestId: job.requestId })
-    this.releaseJobResources(job)
+    if (job.posted) this.retiredJobs.set(job.requestId, job)
+    else this.releaseJobResources(job)
     this.settle(job, () => job.reject(error))
   }
 
@@ -373,6 +440,8 @@ export class ImageEditorViewportCompositeClientV3 {
     job.transferLease = null
     job.workingLease?.release()
     job.workingLease = null
+    job.outputLease?.release()
+    job.outputLease = null
   }
 
   private settle(job: ActiveViewportJobV3, complete: () => void): void {
@@ -394,6 +463,7 @@ export class ImageEditorViewportCompositeClientV3 {
     this.resultReleases.add(release)
     return release
   }
+
   private releaseEvent(event: ImageEditorViewportCompositeWorkerEventV3): void {
     if (event.type === 'rendered') for (const tile of event.tiles) tile.bitmap.close()
   }

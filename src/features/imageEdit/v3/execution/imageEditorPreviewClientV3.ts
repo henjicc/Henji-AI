@@ -1,18 +1,10 @@
-import {
-  describeImageEditorV3SourcePyramid,
-  prewarmImageEditorV3SourcePyramid,
-  readImageEditorV3FastProxy,
-} from '@/commands/imageEditorV3'
-import { createLogger } from '@/core/logging'
 import type { ImageEditDocumentV3 } from '@/core/imageEdit/v3/documentTypes'
+import {
+  type ImageEditMemoryLease,
+  type ImageEditResourceBudget,
+} from '@/core/imageEdit/v3/resourceBudget'
 import type { ImageEditRenderQuality } from '@/core/imageEdit/v3/renderNodeDefinition'
-import type {
-  ImageEditorV3FastProxy,
-  ImageEditorV3PyramidDescriptor,
-  ImageEditorV3PyramidPrewarmResult,
-  ImageEditorV3ResourceDescriptor,
-  ImageEditorV3ResourceRef,
-} from '@/platform/contracts/imageEditorV3'
+import type { ImageEditorV3ResourceDescriptor } from '@/platform/contracts/imageEditorV3'
 import {
   ImageEditorPreviewBrushTileLoaderV3,
   type ImageEditorPreviewBrushTileReaderV3,
@@ -22,6 +14,24 @@ import {
   type ImageEditorPreviewBrushResourceRequestV3,
   type ImageEditorPreviewProxyResourceRequestV3,
 } from './previewDocumentV3'
+import {
+  acquireImageEditorResourceLeaseV3,
+} from './imageEditorResourcePressureV3'
+import {
+  acquireImageEditorSessionResourceBudgetV3,
+  type ImageEditorSessionResourceBudgetLeaseV3,
+} from './imageEditorSessionResourceBudgetV3'
+import {
+  estimateImageEditorPreviewMemoryV3,
+  imageEditorPreviewBrushTransferBytesV3,
+  imageEditorPreviewOutputBytesV3,
+} from './imageEditorPreviewMemoryV3'
+import {
+  ImageEditorPreviewResourceLoaderV3,
+  type ImageEditorPreviewProxyReaderV3,
+  type ImageEditorPreviewPyramidDescriptorReaderV3,
+  type ImageEditorPreviewPyramidPrewarmerV3,
+} from './imageEditorPreviewResourcesV3'
 import type {
   ImageEditorPreviewBlobEventV3,
   ImageEditorPreviewWorkerEventV3,
@@ -61,28 +71,6 @@ export interface ImageEditorManagedPreviewRequestV3 {
   resourceDescriptors: readonly ImageEditorV3ResourceDescriptor[]
 }
 
-type ProxyReaderV3 = (
-  request: { requestId: string; resourceRef: ImageEditorV3ResourceRef; maxDimension: number },
-  signal?: AbortSignal,
-) => Promise<ImageEditorV3FastProxy>
-
-type PyramidDescriptorReaderV3 = (
-  request: { requestId: string; resourceRef: ImageEditorV3ResourceRef },
-  signal?: AbortSignal,
-) => Promise<ImageEditorV3PyramidDescriptor>
-
-type PyramidPrewarmerV3 = (
-  request: {
-    requestId: string
-    resourceRef: ImageEditorV3ResourceRef
-    minimumMip?: number
-    maximumMip?: number
-    tileBudget?: number
-    bitDepth?: 8 | 16 | 32
-  },
-  signal?: AbortSignal,
-) => Promise<ImageEditorV3PyramidPrewarmResult>
-
 interface PreviewUrlFactoryV3 {
   create(bytes: ArrayBuffer, mediaType: string): string
   revoke(url: string): void
@@ -91,20 +79,26 @@ interface PreviewUrlFactoryV3 {
 export interface ImageEditorPreviewClientOptionsV3 {
   sessionId: string
   workerFactory?: ImageEditorPreviewWorkerFactoryV3
-  readFastProxy?: ProxyReaderV3
-  describePyramid?: PyramidDescriptorReaderV3
-  prewarmPyramid?: PyramidPrewarmerV3
+  readFastProxy?: ImageEditorPreviewProxyReaderV3
+  describePyramid?: ImageEditorPreviewPyramidDescriptorReaderV3
+  prewarmPyramid?: ImageEditorPreviewPyramidPrewarmerV3
   readBrushTiles?: ImageEditorPreviewBrushTileReaderV3
   urlFactory?: PreviewUrlFactoryV3
   proxyCacheMaxBytes?: number
   brushCacheMaxBytes?: number
   brushTransferMaxBytes?: number
+  resourceBudget?: ImageEditResourceBudget
+  resourceBudgetConsumerId?: string
 }
 
 interface ScheduledJobV3 extends ImageEditorManagedPreviewRequestV3 {
   requestId: string
   sequence: number
   abortController: AbortController
+  inputLeases: ImageEditMemoryLease[]
+  transferLease: ImageEditMemoryLease | null
+  workingLease: ImageEditMemoryLease | null
+  outputLease: ImageEditMemoryLease | null
   posted: boolean
   resolve: (result: ImageEditorManagedPreviewResultV3) => void
   reject: (error: Error) => void
@@ -114,10 +108,12 @@ const defaultUrlFactory: PreviewUrlFactoryV3 = {
   create: (bytes, mediaType) => URL.createObjectURL(new Blob([bytes], { type: mediaType })),
   revoke: (url) => URL.revokeObjectURL(url),
 }
+let previewClientSequence = 0
 
-export const IMAGE_EDITOR_PREVIEW_PROXY_CACHE_MAX_BYTES_V3 = 128 * 1024 * 1024
-export const IMAGE_EDITOR_PREVIEW_PYRAMID_PREWARM_TILE_BUDGET_V3 = 64
-const logger = createLogger('image_editor_v3.preview_client')
+export {
+  IMAGE_EDITOR_PREVIEW_PROXY_CACHE_MAX_BYTES_V3,
+  IMAGE_EDITOR_PREVIEW_PYRAMID_PREWARM_TILE_BUDGET_V3,
+} from './imageEditorPreviewResourcesV3'
 
 function createDefaultWorker(): ImageEditorPreviewWorkerPortV3 {
   if (typeof Worker === 'undefined') throw new Error('当前环境不支持图片预览 Worker')
@@ -135,69 +131,50 @@ function toError(value: unknown): Error {
   return value instanceof Error ? value : new Error(String(value))
 }
 
-function abortError(signal: AbortSignal): Error {
-  const error = signal.reason instanceof Error
-    ? signal.reason
-    : new Error('图片预览资源读取已取消')
-  if (error.name === 'Error') error.name = 'AbortError'
-  return error
-}
-
-function throwIfAborted(signal: AbortSignal): void {
-  if (signal.aborted) throw abortError(signal)
-}
-
-async function raceWithAbort<T>(operation: Promise<T>, signal: AbortSignal): Promise<T> {
-  throwIfAborted(signal)
-  let onAbort: (() => void) | undefined
-  const cancelled = new Promise<never>((_, reject) => {
-    onAbort = () => reject(abortError(signal))
-    signal.addEventListener('abort', onAbort, { once: true })
-  })
-  try {
-    return await Promise.race([operation, cancelled])
-  } finally {
-    if (onAbort) signal.removeEventListener('abort', onAbort)
-  }
-}
-
 /** 每个编辑会话独占一个实例：一个 running、一个 latest-pending，绝不形成 FIFO。 */
 export class ImageEditorPreviewClientV3 {
   private worker: ImageEditorPreviewWorkerPortV3 | null = null
   private running: ScheduledJobV3 | null = null
   private pending: ScheduledJobV3 | null = null
   private sequence = 0
-  private prewarmSequence = 0
   private latestSequence = 0
   private disposed = false
-  private readonly proxyCache = new Map<string, ImageEditorV3FastProxy>()
-  private proxyCacheBytes = 0
-  private readonly proxyCacheMaxBytes: number
   private readonly brushTileLoader: ImageEditorPreviewBrushTileLoaderV3
+  private readonly resourceLoader: ImageEditorPreviewResourceLoaderV3
   private readonly resultLeases = new Set<() => void>()
   private readonly workerFactory: ImageEditorPreviewWorkerFactoryV3
-  private readonly proxyReader: ProxyReaderV3
-  private readonly pyramidDescriptorReader: PyramidDescriptorReaderV3
-  private readonly pyramidPrewarmer: PyramidPrewarmerV3
   private readonly urlFactory: PreviewUrlFactoryV3
-  private readonly pyramidPrewarms = new Map<string, AbortController>()
-  private readonly startedPyramidPrewarms = new Set<string>()
+  private readonly budget: ImageEditResourceBudget
+  private readonly sessionBudgetLease: ImageEditorSessionResourceBudgetLeaseV3 | null
 
   constructor(private readonly options: ImageEditorPreviewClientOptionsV3) {
+    if (!options.sessionId.trim()) throw new Error('图片预览会话 ID 不能为空')
     this.workerFactory = options.workerFactory ?? createDefaultWorker
-    this.proxyReader = options.readFastProxy ?? readImageEditorV3FastProxy
-    this.pyramidDescriptorReader = options.describePyramid ?? describeImageEditorV3SourcePyramid
-    this.pyramidPrewarmer = options.prewarmPyramid ?? prewarmImageEditorV3SourcePyramid
     this.brushTileLoader = new ImageEditorPreviewBrushTileLoaderV3({
       reader: options.readBrushTiles,
       cacheMaxBytes: options.brushCacheMaxBytes,
       transferMaxBytes: options.brushTransferMaxBytes,
     })
     this.urlFactory = options.urlFactory ?? defaultUrlFactory
-    this.proxyCacheMaxBytes = options.proxyCacheMaxBytes
-      ?? IMAGE_EDITOR_PREVIEW_PROXY_CACHE_MAX_BYTES_V3
-    if (!Number.isSafeInteger(this.proxyCacheMaxBytes) || this.proxyCacheMaxBytes < 0) {
-      throw new Error('图片预览代理缓存上限必须是非负整数')
+    this.sessionBudgetLease = options.resourceBudget
+      ? null
+      : acquireImageEditorSessionResourceBudgetV3(options.sessionId, {
+          consumerId: options.resourceBudgetConsumerId
+            ?? `managed-preview:${++previewClientSequence}`,
+        })
+    this.budget = options.resourceBudget ?? this.sessionBudgetLease!.budget
+    try {
+      this.resourceLoader = new ImageEditorPreviewResourceLoaderV3({
+        sessionId: options.sessionId,
+        budget: this.budget,
+        proxyReader: options.readFastProxy,
+        pyramidDescriptorReader: options.describePyramid,
+        pyramidPrewarmer: options.prewarmPyramid,
+        proxyCacheMaxBytes: options.proxyCacheMaxBytes,
+      })
+    } catch (error) {
+      this.sessionBudgetLease?.release()
+      throw error
     }
   }
 
@@ -211,6 +188,10 @@ export class ImageEditorPreviewClientV3 {
         requestId: createRequestId(this.options.sessionId, sequence),
         sequence,
         abortController: new AbortController(),
+        inputLeases: [],
+        transferLease: null,
+        workingLease: null,
+        outputLease: null,
         posted: false,
         resolve,
         reject,
@@ -233,6 +214,7 @@ export class ImageEditorPreviewClientV3 {
     const error = new Error('图片预览会话已经释放')
     this.running?.abortController.abort()
     this.running?.reject(error)
+    if (this.running) this.releaseJobResources(this.running)
     this.pending?.reject(error)
     this.running = null
     this.pending = null
@@ -242,11 +224,9 @@ export class ImageEditorPreviewClientV3 {
       this.worker = null
     }
     for (const release of [...this.resultLeases]) release()
-    for (const controller of this.pyramidPrewarms.values()) controller.abort()
-    this.pyramidPrewarms.clear()
-    this.startedPyramidPrewarms.clear()
-    this.clearProxyCache()
+    this.resourceLoader.dispose()
     this.brushTileLoader.dispose()
+    this.sessionBudgetLease?.release()
   }
 
   private replacePending(job: ScheduledJobV3): void {
@@ -268,7 +248,21 @@ export class ImageEditorPreviewClientV3 {
   }
 
   private async prepareAndPost(job: ScheduledJobV3): Promise<void> {
-    const worker = this.ensureWorker()
+    const memory = estimateImageEditorPreviewMemoryV3(job.document, job.maxDimension)
+    job.outputLease = acquireImageEditorResourceLeaseV3(
+      this.budget,
+      'managed-preview',
+      'gpu',
+      memory.outputBytes,
+      'lower-mip',
+    )
+    job.workingLease = acquireImageEditorResourceLeaseV3(
+      this.budget,
+      'managed-preview',
+      'in-flight',
+      memory.workingBytes,
+      'lower-mip',
+    )
     const requests = collectImageEditorPreviewResourceRequestsV3(
       job.document,
       job.maxDimension,
@@ -280,19 +274,41 @@ export class ImageEditorPreviewClientV3 {
     const brushRequests = requests.filter(
       (request): request is ImageEditorPreviewBrushResourceRequestV3 => request.kind === 'brush-tile',
     )
-    for (const request of proxyRequests) {
-      this.startPyramidPrewarm(
-        request.resourceId as ImageEditorV3ResourceRef,
-        typeof job.document.color.bitDepth === 'number' ? job.document.color.bitDepth : 32,
-      )
+    const loaded = await this.resourceLoader.load(
+      proxyRequests,
+      job.requestId,
+      typeof job.document.color.bitDepth === 'number' ? job.document.color.bitDepth : 32,
+      job.abortController.signal,
+    )
+    job.inputLeases.push(...loaded.transientLeases)
+    const sourceProxies = loaded.proxies
+    this.assertActive(job)
+    const transferBytes = sourceProxies.reduce(
+      (total, proxy) => total + proxy.bytes.byteLength,
+      imageEditorPreviewBrushTransferBytesV3(brushRequests),
+    )
+    if (!Number.isSafeInteger(transferBytes)) {
+      throw new Error('图片预览 Worker 传输字节数超出安全整数范围')
     }
+    job.transferLease = acquireImageEditorResourceLeaseV3(
+      this.budget,
+      'managed-preview',
+      'transfer',
+      transferBytes,
+      'lower-mip',
+    )
     const [proxies, brushTiles] = await Promise.all([
-      this.loadProxyResources(proxyRequests, job),
+      Promise.resolve(sourceProxies.map((proxy) => ({
+        resourceId: proxy.resourceRef,
+        width: proxy.width,
+        height: proxy.height,
+        mediaType: proxy.mediaType,
+        bytes: proxy.bytes.slice(0),
+      }))),
       this.brushTileLoader.load(brushRequests, job.document, job.abortController.signal),
     ])
-    if (job.abortController.signal.aborted || job.sequence !== this.latestSequence) {
-      throw new ImageEditorPreviewSupersededErrorV3()
-    }
+    this.assertActive(job)
+    const worker = this.ensureWorker()
     job.posted = true
     worker.postMessage({
       type: 'render',
@@ -310,41 +326,6 @@ export class ImageEditorPreviewClientV3 {
     ])
   }
 
-  private async loadProxyResources(
-    requests: readonly ImageEditorPreviewProxyResourceRequestV3[],
-    job: ScheduledJobV3,
-  ): Promise<Array<{
-      resourceId: string
-      width: number
-      height: number
-      mediaType: 'image/webp'
-      bytes: ArrayBuffer
-    }>> {
-    return Promise.all(requests.map(async (request) => {
-      const key = `${request.resourceId}:${request.maxDimension}`
-      let proxy = this.proxyCache.get(key)
-      if (proxy) {
-        this.proxyCache.delete(key)
-        this.proxyCache.set(key, proxy)
-      }
-      if (!proxy) {
-        proxy = await raceWithAbort(this.proxyReader({
-          requestId: `${job.requestId}:resource:${request.resourceId.slice(7, 19)}`,
-          resourceRef: request.resourceId as ImageEditorV3ResourceRef,
-          maxDimension: request.maxDimension,
-        }, job.abortController.signal), job.abortController.signal)
-        this.insertProxyCache(key, proxy)
-      }
-      return {
-        resourceId: request.resourceId,
-        width: proxy.width,
-        height: proxy.height,
-        mediaType: proxy.mediaType,
-        bytes: proxy.bytes.slice(0),
-      }
-    }))
-  }
-
   private ensureWorker(): ImageEditorPreviewWorkerPortV3 {
     if (this.worker) return this.worker
     const worker = this.workerFactory()
@@ -352,6 +333,15 @@ export class ImageEditorPreviewClientV3 {
     worker.onerror = (event) => this.handleWorkerFailure(event.message || '图片预览 Worker 异常')
     this.worker = worker
     return worker
+  }
+
+  private assertActive(job: ScheduledJobV3): void {
+    if (
+      this.disposed
+      || this.running !== job
+      || job.abortController.signal.aborted
+      || job.sequence !== this.latestSequence
+    ) throw new ImageEditorPreviewSupersededErrorV3()
   }
 
   private handleWorkerEvent(event: ImageEditorPreviewWorkerEventV3): void {
@@ -381,9 +371,16 @@ export class ImageEditorPreviewClientV3 {
       return
     }
     try {
+      const reservedOutput = job.outputLease
+      if (!reservedOutput) throw new Error('图片预览成品缺少预留资源')
+      const actualOutputBytes = imageEditorPreviewOutputBytesV3(event.width, event.height)
+      if (actualOutputBytes > reservedOutput.bytes) {
+        throw new Error('图片预览 Worker 返回的成品超过预留资源')
+      }
+      job.outputLease = null
       job.resolve(event.type === 'rendered-bitmap'
-        ? this.leaseBitmap(event.bitmap, event.width, event.height, event.diagnostics)
-        : this.leaseBlob(event))
+        ? this.leaseBitmap(event.bitmap, event.width, event.height, event.diagnostics, reservedOutput)
+        : this.leaseBlob(event, reservedOutput))
     } catch (error) {
       this.releaseEventPayload(event)
       job.reject(toError(error))
@@ -402,6 +399,7 @@ export class ImageEditorPreviewClientV3 {
 
   private finish(job: ScheduledJobV3): void {
     if (this.running !== job) return
+    this.releaseJobResources(job)
     this.running = null
     const next = this.pending
     this.pending = null
@@ -413,14 +411,40 @@ export class ImageEditorPreviewClientV3 {
     width: number,
     height: number,
     diagnostics: string[],
+    outputLease: ImageEditMemoryLease,
   ): ImageEditorManagedPreviewResultV3 {
-    const release = this.createLease(() => bitmap.close())
+    const release = this.createLease(() => {
+      bitmap.close()
+      outputLease.release()
+    })
     return { kind: 'bitmap', bitmap, width, height, diagnostics, release }
   }
 
-  private leaseBlob(event: ImageEditorPreviewBlobEventV3): ImageEditorManagedPreviewResultV3 {
-    const url = this.urlFactory.create(event.bytes, event.mediaType)
-    const release = this.createLease(() => this.urlFactory.revoke(url))
+  private leaseBlob(
+    event: ImageEditorPreviewBlobEventV3,
+    outputLease: ImageEditMemoryLease,
+  ): ImageEditorManagedPreviewResultV3 {
+    let blobLease: ImageEditMemoryLease | null = null
+    let url: string
+    try {
+      blobLease = acquireImageEditorResourceLeaseV3(
+        this.budget,
+        'managed-preview',
+        'cpu-cache',
+        event.bytes.byteLength,
+        'lower-mip',
+      )
+      url = this.urlFactory.create(event.bytes, event.mediaType)
+    } catch (error) {
+      blobLease?.release()
+      outputLease.release()
+      throw error
+    }
+    const release = this.createLease(() => {
+      this.urlFactory.revoke(url)
+      blobLease.release()
+      outputLease.release()
+    })
     return { kind: 'url', url, width: event.width, height: event.height, diagnostics: event.diagnostics, release }
   }
 
@@ -440,61 +464,14 @@ export class ImageEditorPreviewClientV3 {
     if (event.type === 'rendered-bitmap') event.bitmap.close()
   }
 
-  private insertProxyCache(key: string, proxy: ImageEditorV3FastProxy): void {
-    this.proxyCache.set(key, proxy)
-    this.proxyCacheBytes += proxy.bytes.byteLength
-    while (this.proxyCacheBytes > this.proxyCacheMaxBytes && this.proxyCache.size > 0) {
-      const oldestKey = this.proxyCache.keys().next().value as string | undefined
-      if (!oldestKey) break
-      const oldest = this.proxyCache.get(oldestKey)
-      this.proxyCache.delete(oldestKey)
-      this.proxyCacheBytes -= oldest?.bytes.byteLength ?? 0
-    }
+  private releaseJobResources(job: ScheduledJobV3): void {
+    for (const lease of job.inputLeases.splice(0)) lease.release()
+    job.transferLease?.release()
+    job.transferLease = null
+    job.workingLease?.release()
+    job.workingLease = null
+    job.outputLease?.release()
+    job.outputLease = null
   }
 
-  private clearProxyCache(): void {
-    this.proxyCache.clear()
-    this.proxyCacheBytes = 0
-  }
-
-  private startPyramidPrewarm(
-    resourceRef: ImageEditorV3ResourceRef,
-    bitDepth: 8 | 16 | 32,
-  ): void {
-    if (this.startedPyramidPrewarms.has(resourceRef)) return
-    const controller = new AbortController()
-    this.startedPyramidPrewarms.add(resourceRef)
-    this.pyramidPrewarms.set(resourceRef, controller)
-    const requestPrefix = `${this.options.sessionId}:pyramid:${++this.prewarmSequence}`
-    void this.pyramidDescriptorReader({
-      requestId: `${requestPrefix}:pyramid-describe`,
-      resourceRef,
-    }, controller.signal).then((descriptor) => {
-      const firstCoarse = descriptor.levels.find((level) => Math.max(level.width, level.height) <= 2_048)
-        ?? descriptor.levels.at(-1)
-      const last = descriptor.levels.at(-1)
-      if (!firstCoarse || !last || controller.signal.aborted) return undefined
-      return this.pyramidPrewarmer({
-        requestId: `${requestPrefix}:pyramid-prewarm`,
-        resourceRef,
-        minimumMip: firstCoarse.mip,
-        maximumMip: last.mip,
-        tileBudget: IMAGE_EDITOR_PREVIEW_PYRAMID_PREWARM_TILE_BUDGET_V3,
-        bitDepth,
-      }, controller.signal)
-    }).catch((error: unknown) => {
-      if (controller.signal.aborted) return
-      logger.warn('图片源金字塔后台预热失败，继续按需读取', {
-        event: 'image_editor_v3.preview.pyramid_prewarm.failed',
-        context: {
-          resourceRef,
-          message: error instanceof Error ? error.message : String(error),
-        },
-      })
-    }).finally(() => {
-      if (this.pyramidPrewarms.get(resourceRef) === controller) {
-        this.pyramidPrewarms.delete(resourceRef)
-      }
-    })
-  }
 }

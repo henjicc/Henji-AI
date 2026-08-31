@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useId, useMemo, useState } from 'react'
 
 import { createLogger } from '@/core/logging'
 import type { ImageEditorV3ResourceDescriptor } from '@/platform/contracts/imageEditorV3'
@@ -8,6 +8,7 @@ import {
   ImageEditorPreviewSupersededErrorV3,
   type ImageEditorManagedPreviewResultV3,
 } from './imageEditorPreviewClientV3'
+import { ImageEditorResourcePressureErrorV3 } from './imageEditorResourcePressureV3'
 import {
   IMAGE_EDITOR_PREVIEW_DRAFT_MAX_EDGE_V3,
   IMAGE_EDITOR_PREVIEW_STABLE_MAX_EDGE_V3,
@@ -31,7 +32,11 @@ export function useManagedImageEditorPreviewV3(
   enabled: boolean,
   resourceDescriptors: readonly ImageEditorV3ResourceDescriptor[] = EMPTY_RESOURCE_DESCRIPTORS,
 ): ManagedImageEditorPreviewStateV3 {
-  const client = useMemo(() => new ImageEditorPreviewClientV3({ sessionId }), [sessionId])
+  const resourceBudgetConsumerId = useId()
+  const client = useMemo(() => new ImageEditorPreviewClientV3({
+    sessionId,
+    resourceBudgetConsumerId: `managed-preview:${resourceBudgetConsumerId}`,
+  }), [resourceBudgetConsumerId, sessionId])
   const [state, setState] = useState<ManagedImageEditorPreviewStateV3>({
     result: null,
     resultDocumentId: null,
@@ -43,23 +48,29 @@ export function useManagedImageEditorPreviewV3(
   useEffect(() => () => client.dispose(), [client])
 
   useEffect(() => {
-    setState({
-      result: null,
-      resultDocumentId: null,
-      resultRevision: null,
-      diagnostic: null,
-      rendering: enabled,
+    setState((current) => {
+      current.result?.release()
+      return {
+        result: null,
+        resultDocumentId: null,
+        resultRevision: null,
+        diagnostic: null,
+        rendering: enabled,
+      }
     })
   }, [client, enabled])
 
   useEffect(() => {
     if (!enabled) {
-      setState({
-        result: null,
-        resultDocumentId: null,
-        resultRevision: null,
-        diagnostic: null,
-        rendering: false,
+      setState((current) => {
+        current.result?.release()
+        return {
+          result: null,
+          resultDocumentId: null,
+          resultRevision: null,
+          diagnostic: null,
+          rendering: false,
+        }
       })
       return
     }
@@ -78,17 +89,40 @@ export function useManagedImageEditorPreviewV3(
       ? IMAGE_EDITOR_PREVIEW_DRAFT_MAX_EDGE_V3
       : IMAGE_EDITOR_PREVIEW_STABLE_MAX_EDGE_V3
     setState((current) => ({ ...current, rendering: true }))
-    void client.render({ document, quality, maxDimension, resourceDescriptors }).then((result) => {
+    let pressureDiagnostic: string | null = null
+    void client.render({ document, quality, maxDimension, resourceDescriptors }).catch((error: unknown) => {
+      if (
+        error instanceof ImageEditorResourcePressureErrorV3
+        && error.recovery === 'lower-mip'
+        && maxDimension > IMAGE_EDITOR_PREVIEW_DRAFT_MAX_EDGE_V3
+      ) {
+        pressureDiagnostic = error.message
+        return client.render({
+          document,
+          quality: 'draft',
+          maxDimension: IMAGE_EDITOR_PREVIEW_DRAFT_MAX_EDGE_V3,
+          resourceDescriptors,
+        })
+      }
+      throw error
+    }).then((result) => {
       if (!acceptsResult) {
         result.release()
         return
       }
-      setState({
-        result,
-        resultDocumentId: snapshot.document.id,
-        resultRevision: snapshot.document.revision,
-        diagnostic: result.diagnostics.length > 0 ? result.diagnostics.join('\n') : null,
-        rendering: false,
+      setState((current) => {
+        if (current.result !== result) current.result?.release()
+        const diagnostics = [
+          ...(pressureDiagnostic ? [pressureDiagnostic] : []),
+          ...result.diagnostics,
+        ]
+        return {
+          result,
+          resultDocumentId: snapshot.document.id,
+          resultRevision: snapshot.document.revision,
+          diagnostic: diagnostics.length > 0 ? diagnostics.join('\n') : null,
+          rendering: false,
+        }
       })
     }).catch((error: unknown) => {
       if (!acceptsResult || error instanceof ImageEditorPreviewSupersededErrorV3) return
