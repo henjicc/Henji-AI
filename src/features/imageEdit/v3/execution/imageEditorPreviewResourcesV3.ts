@@ -44,6 +44,22 @@ interface CachedPreviewProxyV3 {
   lease: ImageEditMemoryLease
 }
 
+function assertValidPreviewProxyV3(
+  proxy: ImageEditorV3FastProxy,
+  resourceId: string,
+): void {
+  if (!proxy || typeof proxy !== 'object') {
+    throw new Error(`图片预览代理返回值无效：${resourceId}`)
+  }
+  if (!(proxy.bytes instanceof ArrayBuffer)) {
+    const fields = Object.keys(proxy as unknown as Record<string, unknown>).sort().join(',')
+    throw new Error(`图片预览代理缺少 ArrayBuffer 字节：${resourceId}（字段：${fields || '无'}）`)
+  }
+  if (proxy.bytes.byteLength < 1) {
+    throw new Error(`图片预览代理字节为空：${resourceId}`)
+  }
+}
+
 export interface ImageEditorPreviewResourceLoaderOptionsV3 {
   sessionId: string
   budget: ImageEditResourceBudget
@@ -136,6 +152,7 @@ export class ImageEditorPreviewResourceLoaderV3 {
           maxDimension: request.maxDimension,
         }, signal), signal)
         if (this.disposed || signal.aborted) throw abortError(signal)
+        assertValidPreviewProxyV3(proxy, request.resourceId)
         if (!this.insertProxyCache(key, proxy)) {
           transientLeases.push(acquireImageEditorResourceLeaseV3(
             this.options.budget,

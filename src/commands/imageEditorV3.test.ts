@@ -51,6 +51,7 @@ function createPlatform(): ImageEditorV3Platform {
     persistBrushTiles: vi.fn(),
     readBrushTiles: vi.fn(),
     openPackage: vi.fn(async () => ({ status: 'cancelled' as const })),
+    relinkPackageExternalSource: vi.fn(async () => ({ status: 'cancelled' as const })),
     savePackageAs: vi.fn(async () => ({ status: 'cancelled' as const })),
     startRasterExport: vi.fn(async () => ({ status: 'cancelled' as const })),
     startManagedRasterExport: vi.fn(),
@@ -141,6 +142,26 @@ describe('图片编辑 V3 commands 契约', () => {
       document: expect.objectContaining({ revision: 2 }),
       expectedRevision: 0,
     }))
+  })
+
+  it('历史释放后的 GC 必须等最新自动保存成功落盘', async () => {
+    vi.useFakeTimers()
+    const platform = createPlatform()
+    mocks.getPlatform.mockReturnValue({ imageEditorV3: platform })
+    const repository = new ImageEditorV3CommandRepository()
+
+    repository.scheduleAutosave(createDocument(1), { expectedRevision: 0 })
+    repository.scheduleGarbageCollection('document-contract', [SOURCE_REF, ICC_REF])
+    expect(platform.collectGarbage).not.toHaveBeenCalled()
+
+    await vi.advanceTimersByTimeAsync(500)
+
+    expect(platform.saveDocument).toHaveBeenCalledOnce()
+    expect(platform.collectGarbage).toHaveBeenCalledWith(expect.objectContaining({
+      retainedResourceRefs: [ICC_REF, SOURCE_REF].sort(),
+    }))
+    expect(vi.mocked(platform.saveDocument).mock.invocationCallOrder[0])
+      .toBeLessThan(vi.mocked(platform.collectGarbage).mock.invocationCallOrder[0])
   })
 
   it('保存和加载结构化历史，并把撤销栈独占资源并入 live refs', async () => {

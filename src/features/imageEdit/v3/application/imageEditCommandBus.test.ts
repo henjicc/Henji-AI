@@ -9,6 +9,7 @@ function createRepository(): ImageEditDocumentRepositoryV3 {
     load: vi.fn(),
     save: vi.fn(),
     scheduleAutosave: vi.fn(),
+    scheduleGarbageCollection: vi.fn(),
     cancelAutosave: vi.fn(),
     collectGarbage: vi.fn(),
   };
@@ -93,7 +94,9 @@ describe('图片编辑 V3 命令总线', () => {
     const retained = `sha256:${'a'.repeat(64)}`;
     const persistentChanges = vi.fn();
     const initial = createImageEditDocumentV3({ width: 100, height: 100, documentId: 'restart' });
-    const first = new ImageEditCommandBusV3(initial);
+    const first = new ImageEditCommandBusV3(initial, {
+      resourceByteSizes: { [retained]: 4_096 },
+    });
     first.dispatch({
       type: 'layer.add', commandId: 'add-before-restart', expectedRevision: 0,
       parentId: null, index: 0,
@@ -114,7 +117,97 @@ describe('图片编辑 V3 命令总线', () => {
     expect(restored.getSnapshot().document.layers).toHaveLength(0);
     expect(persistentChanges).toHaveBeenCalledWith(expect.objectContaining({
       history: expect.objectContaining({ documentId: 'restart', headRevision: 2 }),
-      retainedResources: [{ resourceId: retained, byteSize: null }],
+      retainedResources: [{ resourceId: retained, byteSize: 4_096 }],
     }));
+  });
+
+  it('为新增、删除、复制、分组和解组统一生成完整且稳定排序的资源描述', () => {
+    const source = `sha256:${'1'.repeat(64)}`;
+    const tile = `sha256:${'2'.repeat(64)}`;
+    const mask = `sha256:${'3'.repeat(64)}`;
+    const layer = createImageEditRasterLayerV3('layer', '图层', source);
+    layer.tiles = { '0/0/0': tile };
+    layer.mask = { resourceId: mask, inverted: false };
+    const bus = new ImageEditCommandBusV3(
+      createImageEditDocumentV3({ width: 10, height: 10, documentId: 'structural-resources' }),
+      { resourceByteSizes: { [source]: 8_192, [tile]: 2_048, [mask]: 512 } },
+    );
+    const expected = [
+      { resourceId: source, byteSize: 8_192 },
+      { resourceId: tile, byteSize: 2_048 },
+      { resourceId: mask, byteSize: 512 },
+    ];
+    const expectLatestResources = (): void => {
+      const entry = bus.getPersistenceSnapshot().history.undo.at(-1);
+      expect(entry?.resources).toEqual(expected);
+      const forward = entry?.forward;
+      const inverse = entry?.inverse;
+      expect(forward && 'resources' in forward ? forward.resources : undefined).toEqual(expected);
+      expect(inverse && 'resources' in inverse ? inverse.resources : undefined).toEqual(expected);
+    };
+
+    bus.dispatch({
+      type: 'layer.add', commandId: 'add-rich-layer', expectedRevision: 0,
+      parentId: null, index: 0, layer,
+    });
+    expectLatestResources();
+    bus.dispatch({
+      type: 'layer.duplicate', commandId: 'duplicate-rich-layer', expectedRevision: 1,
+      layerId: layer.id, parentId: null, index: 1, idMap: { layer: 'layer-copy' },
+    });
+    expectLatestResources();
+    bus.dispatch({
+      type: 'layer.group', commandId: 'group-rich-layers', expectedRevision: 2,
+      layerIds: ['layer', 'layer-copy'],
+      group: {
+        id: 'group', name: '组', type: 'group', visible: true, locked: false,
+        opacity: 1, blendMode: 'normal', transform: [1, 0, 0, 1, 0, 0],
+        mask: null, isolated: false, children: [],
+      },
+    });
+    expectLatestResources();
+    bus.dispatch({
+      type: 'layer.ungroup', commandId: 'ungroup-rich-layers', expectedRevision: 3,
+      groupId: 'group',
+    });
+    expectLatestResources();
+    bus.dispatch({
+      type: 'layer.delete', commandId: 'delete-rich-layer', expectedRevision: 4,
+      layerId: 'layer-copy',
+    });
+    expectLatestResources();
+  });
+
+  it('把历史淘汰释放事件从总线公开给 GC 编排层', () => {
+    const resource = `sha256:${'4'.repeat(64)}`;
+    const repository = createRepository();
+    const released = vi.fn();
+    const bus = new ImageEditCommandBusV3(
+      createImageEditDocumentV3({ width: 10, height: 10, documentId: 'release-events' }),
+      {
+        repository,
+        resourceByteSizes: { [resource]: 1_024 },
+        history: { maxCommands: 1, onResourcesReleased: released },
+      },
+    );
+    bus.dispatch({
+      type: 'layer.add', commandId: 'resource-layer', expectedRevision: 0,
+      parentId: null, index: 0,
+      layer: createImageEditRasterLayerV3('resource', '资源', resource),
+    });
+    bus.dispatch({
+      type: 'layer.add', commandId: 'empty-layer', expectedRevision: 1,
+      parentId: null, index: 1,
+      layer: createImageEditRasterLayerV3('empty', '空图层'),
+    });
+
+    expect(released).toHaveBeenCalledWith({
+      reason: 'prune',
+      resources: [{ resourceId: resource, byteSize: 1_024 }],
+    });
+    expect(repository.scheduleGarbageCollection).toHaveBeenCalledWith(
+      'release-events',
+      [resource],
+    );
   });
 });

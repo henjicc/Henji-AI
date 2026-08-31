@@ -6,6 +6,18 @@ function fail(message: string): never {
   throw new ImageEditHistoryInversePairErrorV3(message);
 }
 
+function assertStructuralResourcesMatch(
+  forward: { resources?: readonly unknown[] },
+  inverse: { resources?: readonly unknown[] },
+): void {
+  const forwardStrict = forward.resources !== undefined
+  const inverseStrict = inverse.resources !== undefined
+  if (forwardStrict !== inverseStrict) fail('图层命令资源逆向补丁缺失')
+  if (forwardStrict && JSON.stringify(forward.resources) !== JSON.stringify(inverse.resources)) {
+    fail('图层命令资源逆向补丁无效')
+  }
+}
+
 /** 校验历史 forward/inverse 的结构对应关系；资源内容本身由命令 codec 单独校验。 */
 export function assertImageEditHistoryInversePairV3(
   forward: ImageEditCommandV3,
@@ -17,20 +29,25 @@ export function assertImageEditHistoryInversePairV3(
     case 'document.update-output-geometry':
       if (inverse.type !== 'document.update-output-geometry') fail('图片输出几何逆向补丁无效'); break;
     case 'layer.add':
-      if (inverse.type !== 'layer.delete' || inverse.layerId !== forward.layer.id) fail('新增图层逆向补丁无效'); break;
+      if (inverse.type !== 'layer.delete' || inverse.layerId !== forward.layer.id) fail('新增图层逆向补丁无效');
+      assertStructuralResourcesMatch(forward, inverse); break;
     case 'layer.delete':
-      if (inverse.type !== 'layer.add' || inverse.layer.id !== forward.layerId) fail('删除图层逆向补丁无效'); break;
+      if (inverse.type !== 'layer.add' || inverse.layer.id !== forward.layerId) fail('删除图层逆向补丁无效');
+      assertStructuralResourcesMatch(forward, inverse); break;
     case 'layer.move':
       if (inverse.type !== 'layer.move' || inverse.layerId !== forward.layerId) fail('移动图层逆向补丁无效'); break;
     case 'layer.duplicate': {
       const duplicateId = forward.idMap[forward.layerId];
       if (!duplicateId || inverse.type !== 'layer.delete' || inverse.layerId !== duplicateId) fail('复制图层逆向补丁无效');
+      assertStructuralResourcesMatch(forward, inverse);
       break;
     }
     case 'layer.group':
-      if (inverse.type !== 'layer.ungroup' || inverse.groupId !== forward.group.id) fail('图层分组逆向补丁无效'); break;
+      if (inverse.type !== 'layer.ungroup' || inverse.groupId !== forward.group.id) fail('图层分组逆向补丁无效');
+      assertStructuralResourcesMatch(forward, inverse); break;
     case 'layer.ungroup':
-      if (inverse.type !== 'layer.group' || inverse.group.id !== forward.groupId) fail('图层解组逆向补丁无效'); break;
+      if (inverse.type !== 'layer.group' || inverse.group.id !== forward.groupId) fail('图层解组逆向补丁无效');
+      assertStructuralResourcesMatch(forward, inverse); break;
     case 'layer.update-common':
       if (inverse.type !== 'layer.update-common' || inverse.layerId !== forward.layerId) fail('图层属性逆向补丁无效'); break;
     case 'layer.update-params':

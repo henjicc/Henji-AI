@@ -645,6 +645,8 @@
         "notifications": {
           "autosaveFailed": "自动保存失败，请重试",
           "saveBeforeReplaceFailed": "保存当前编辑失败，已保留在当前页面",
+          "packageRelinkRequired": "可编辑文件引用了外部原图，请按提示重新选择对应文件",
+          "packageOpenFailed": "无法打开可编辑文件；外链文件必须匹配原始指纹、大小和格式",
           "packageSaved": "可编辑文件已保存",
           "packageSaveFailed": "保存可编辑文件失败",
           "exportCompleted": "栅格图片已导出",

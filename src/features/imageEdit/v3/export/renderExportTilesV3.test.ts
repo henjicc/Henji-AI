@@ -27,6 +27,7 @@ import {
   type ImageEditorV3ExportAnnotationRasterizeRequest,
   type ImageEditorV3ExportSourceTileRequest,
   type ImageEditorV3ExportRenderDependencies,
+  type ImageEditorV3VgpuGlowRuntime,
 } from './contracts'
 import { renderImageEditorV3ExportTiles } from './renderExportTilesV3'
 
@@ -739,8 +740,12 @@ describe('图片编辑 V3 分块导出渲染', () => {
       .toEqual([0, 255, 0, 0])
   })
 
-  it('在任何瓦片读取前明确拒绝 VGPU 辉光', async () => {
+  it('每个辉光 Pro 实例各复用一次全局分析并按图层顺序分块导出', async () => {
     const readSourceTile = vi.fn(fakeSourceReader(new Map([[SOURCE, solidImage(16, 16)]])))
+    const release = vi.fn()
+    const buildAnalysis = vi.fn(async () => ({ release }))
+    const render = vi.fn(async ({ source }: Parameters<ImageEditorV3VgpuGlowRuntime['render']>[0]) => source)
+    const dispose = vi.fn()
     const glowDocument = createImageEditDocumentV3({
       width: 16,
       height: 16,
@@ -748,14 +753,22 @@ describe('图片编辑 V3 分块导出渲染', () => {
       sourceResourceId: SOURCE,
     })
     glowDocument.layers.push(createImageEditEffectLayerV3('glow', '辉光 Pro', 'image.vgpu-glow', {}))
-    await expect(async () => {
-      for await (const _tile of renderImageEditorV3ExportTiles(
-        { document: glowDocument, resourceDescriptors: [], description: description(16, 16) },
-        { readSourceTile },
-      )) void _tile
-    }).rejects.toMatchObject({ code: 'RENDER_NODE_UNSUPPORTED' })
+    glowDocument.layers.push(createImageEditEffectLayerV3('glow-2', '辉光 Pro 2', 'image.vgpu-glow', {}))
+    const output = []
+    for await (const tile of renderImageEditorV3ExportTiles(
+      { document: glowDocument, resourceDescriptors: [], description: description(16, 16) },
+      {
+        readSourceTile,
+        createVgpuGlowRuntime: () => ({ buildAnalysis, render, dispose }),
+      },
+    )) output.push(tile)
 
-    expect(readSourceTile).not.toHaveBeenCalled()
+    expect(output).toHaveLength(1)
+    expect(buildAnalysis).toHaveBeenCalledTimes(2)
+    expect(render).toHaveBeenCalledTimes(3)
+    expect(release).toHaveBeenCalledTimes(2)
+    expect(dispose).toHaveBeenCalledTimes(1)
+    expect(readSourceTile).toHaveBeenCalled()
   })
 
   it.each([

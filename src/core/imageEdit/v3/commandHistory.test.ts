@@ -5,7 +5,7 @@ import {
   ImageEditCommandHistoryV3,
 } from './commandHistory';
 import { InvalidImageEditHistorySnapshotV3Error } from './commandHistoryCodec';
-import { ImageEditRevisionConflictErrorV3 } from './commandReducer';
+import { applyImageEditCommandV3, ImageEditRevisionConflictErrorV3 } from './commandReducer';
 import { createImageEditDocumentV3, createImageEditRasterLayerV3 } from './documentFactory';
 import type { ImageEditDocumentV3 } from './documentTypes';
 import { createImageEditSparseMaskReferenceV3 } from './layerTypes';
@@ -116,6 +116,29 @@ describe('图片编辑 V3 命令历史', () => {
     const byteDocument = addTile(byteLimited, createPaintDocument(), 0, 5_000);
     addTile(byteLimited, byteDocument, 1, 5_000);
     expect(byteLimited.getState()).toMatchObject({ undoCount: 1, retainedResourceBytes: 5_000 });
+  });
+
+  it('单个多 GiB 资源不能通过整数或未知字节绕过 2GiB 门槛', () => {
+    const history = new ImageEditCommandHistoryV3();
+    const changed = addTile(
+      history,
+      createPaintDocument(),
+      0,
+      IMAGE_EDIT_HISTORY_DEFAULT_MAX_BYTES_V3,
+    );
+    expect(changed.layers[0]).toMatchObject({ tiles: { '0/0/0': 'sha256:0' } });
+    expect(history.getState()).toMatchObject({
+      undoCount: 0,
+      retainedBytes: 0,
+      retainedResourceBytes: 0,
+    });
+    expect(history.takeReleasedResourceEvents()).toEqual([{
+      reason: 'prune',
+      resources: [{
+        resourceId: 'sha256:0',
+        byteSize: IMAGE_EDIT_HISTORY_DEFAULT_MAX_BYTES_V3,
+      }],
+    }]);
   });
 
   it('跨相邻笔画去重资源预算，同时保留旧、新瓦片的真实大小', () => {
@@ -246,15 +269,37 @@ describe('图片编辑 V3 命令历史', () => {
       retainedResourceBytes: 448,
     });
 
-    const legacyHistory = new ImageEditCommandHistoryV3();
     const source = createPaintDocument();
-    const masked = legacyHistory.execute(source, {
+    const legacyCommand = {
       commandId: 'legacy-mask-history', expectedRevision: 0, type: 'layer.set-mask',
       layerId: 'paint', mask: { resourceId: 'sha256:legacy-mask', inverted: false },
+    } as const;
+    const legacyApplied = applyImageEditCommandV3(source, legacyCommand, {
+      allowLegacyResourceMetadata: true,
     });
+    const legacySnapshot = {
+      version: 1 as const,
+      documentId: source.id,
+      headRevision: legacyApplied.document.revision,
+      undo: [{
+        forward: legacyCommand,
+        inverse: legacyApplied.inverse,
+        metadataBytes: new TextEncoder().encode(JSON.stringify([
+          legacyCommand,
+          legacyApplied.inverse,
+        ])).byteLength,
+        resources: [{ resourceId: 'sha256:legacy-mask', byteSize: null }],
+      }],
+      redo: [],
+    };
     const legacyRestored = new ImageEditCommandHistoryV3();
-    legacyRestored.restore(masked, legacyHistory.stringifySnapshot());
-    expect(legacyRestored.getState()).toMatchObject({ undoCount: 1, retainedResourceBytes: 0 });
+    legacyRestored.restore(legacyApplied.document, legacySnapshot);
+    expect(legacyRestored.getState()).toMatchObject({
+      undoCount: 1,
+      retainedBytes: null,
+      retainedResourceBytes: null,
+      unknownResourceCount: 1,
+    });
   });
 
   it('历史 codec 拒绝 set-mask 的缺侧、零负字节、错误 ID 与未排序描述', () => {
@@ -343,5 +388,60 @@ describe('图片编辑 V3 命令历史', () => {
     expect(() => new ImageEditCommandHistoryV3({ maxCommands: 0 }).restore(document, baseline))
       .toThrow(InvalidImageEditHistorySnapshotV3Error);
     expect(history.stringifySnapshot()).toBe(baseline);
+  });
+
+  it('V2 快照拒绝删除命令资源描述和 null 字节，V1 则显式报告未知而不计作 0', () => {
+    const resource = `sha256:${'5'.repeat(64)}`;
+    const document = {
+      ...createImageEditDocumentV3({ width: 10, height: 10, documentId: 'strict-structure' }),
+      layers: [createImageEditRasterLayerV3('source', '源', resource)],
+    };
+    const history = new ImageEditCommandHistoryV3();
+    const deleted = history.execute(document, {
+      type: 'layer.delete', commandId: 'delete-source', expectedRevision: 0,
+      layerId: 'source', resources: [{ resourceId: resource, byteSize: 4_096 }],
+    });
+    const missing = structuredClone(history.createSnapshot());
+    const missingForward = missing.undo[0]?.forward;
+    if (missingForward?.type !== 'layer.delete') throw new Error('测试删除命令缺失');
+    delete missingForward.resources;
+    expect(() => new ImageEditCommandHistoryV3().restore(deleted, missing))
+      .toThrow(InvalidImageEditHistorySnapshotV3Error);
+
+    const unknown = structuredClone(history.createSnapshot());
+    unknown.version = 1;
+    unknown.undo[0].resources[0].byteSize = null;
+    const unknownForward = unknown.undo[0]?.forward;
+    const unknownInverse = unknown.undo[0]?.inverse;
+    if (unknownForward && 'resources' in unknownForward) delete unknownForward.resources;
+    if (unknownInverse && 'resources' in unknownInverse) delete unknownInverse.resources;
+    unknown.undo[0].metadataBytes = new TextEncoder().encode(JSON.stringify([
+      unknown.undo[0].forward,
+      unknown.undo[0].inverse,
+    ])).byteLength;
+    const legacy = new ImageEditCommandHistoryV3();
+    legacy.restore(deleted, unknown);
+    expect(legacy.getState()).toMatchObject({
+      retainedBytes: null,
+      retainedResourceBytes: null,
+      unknownResourceCount: 1,
+    });
+    const continued = legacy.execute(deleted, {
+      type: 'document.update-output-geometry',
+      commandId: 'continue-after-legacy',
+      expectedRevision: deleted.revision,
+      orientation: { rotate: 0, mirrored: false },
+      crop: { x: 0, y: 0, width: 5, height: 5 },
+    });
+    expect(continued.revision).toBe(deleted.revision + 1);
+    expect(legacy.getState()).toMatchObject({
+      undoCount: 1,
+      unknownResourceCount: 0,
+    });
+    expect(legacy.createSnapshot().version).toBe(2);
+    expect(legacy.takeReleasedResourceEvents()).toContainEqual({
+      reason: 'prune',
+      resources: [{ resourceId: resource, byteSize: null }],
+    });
   });
 });

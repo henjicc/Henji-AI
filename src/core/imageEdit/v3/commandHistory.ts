@@ -11,6 +11,7 @@ import {
 } from './commandReducer';
 import {
   decodeImageEditCommandHistorySnapshotV3,
+  IMAGE_EDIT_HISTORY_LEGACY_SNAPSHOT_VERSION_V3,
   IMAGE_EDIT_HISTORY_SNAPSHOT_VERSION_V3,
   stringifyImageEditCommandHistorySnapshotV3,
   type DecodeImageEditHistorySnapshotOptionsV3,
@@ -44,9 +45,10 @@ export interface ImageEditCommandHistoryOptionsV3 {
 export interface ImageEditCommandHistoryStateV3 {
   undoCount: number;
   redoCount: number;
-  retainedBytes: number;
+  retainedBytes: number | null;
   retainedResourceCount: number;
-  retainedResourceBytes: number;
+  retainedResourceBytes: number | null;
+  unknownResourceCount: number;
   maxCommands: number;
   maxBytes: number;
 }
@@ -74,13 +76,30 @@ function sumMetadata(entries: readonly ImageEditHistoryEntrySnapshotV3[]): numbe
   return total;
 }
 
-function sumKnownResources(resources: readonly ImageEditHistoryResourceReferenceV3[]): number {
+function sumKnownResources(resources: readonly ImageEditHistoryResourceReferenceV3[]): {
+  bytes: number;
+  unknownResourceCount: number;
+} {
   let total = 0;
+  let unknownResourceCount = 0;
   for (const resource of resources) {
     if (resource.byteSize !== null) total += resource.byteSize;
+    else unknownResourceCount += 1;
     if (!Number.isSafeInteger(total)) throw new RangeError('历史资源字节数溢出');
   }
-  return total;
+  return { bytes: total, unknownResourceCount };
+}
+
+function hasStrictResourceMetadata(command: ImageEditCommandV3): boolean {
+  if (command.type === 'layer.add'
+    || command.type === 'layer.delete'
+    || command.type === 'layer.duplicate'
+    || command.type === 'layer.group'
+    || command.type === 'layer.ungroup') return command.resources !== undefined;
+  if (command.type === 'layer.set-mask') {
+    return command.maskResources !== undefined && command.previousMaskResources !== undefined;
+  }
+  return true;
 }
 
 /**
@@ -142,7 +161,7 @@ export class ImageEditCommandHistoryV3 {
     const entry = this.undoEntries.pop();
     if (!entry) return { document, changed: false };
     const command = withImageEditCommandRevisionV3(entry.inverse, document.revision);
-    const result = applyImageEditCommandV3(document, command);
+    const result = applyImageEditCommandV3(document, command, { allowLegacyResourceMetadata: true });
     this.redoEntries.push(entry);
     this.track(result.document);
     return { document: result.document, changed: true };
@@ -207,7 +226,7 @@ export class ImageEditCommandHistoryV3 {
     const entry = this.redoEntries.pop();
     if (!entry) return { document, changed: false };
     const command = withImageEditCommandRevisionV3(entry.forward, document.revision);
-    const result = applyImageEditCommandV3(document, command);
+    const result = applyImageEditCommandV3(document, command, { allowLegacyResourceMetadata: true });
     this.undoEntries.push(entry);
     this.track(result.document);
     return { document: result.document, changed: true };
@@ -226,8 +245,16 @@ export class ImageEditCommandHistoryV3 {
     if (this.documentId === null || this.headRevision === null) {
       throw new ImageEditRevisionConflictErrorV3('历史尚未绑定图片文档');
     }
+    const entries = this.allEntries();
+    const strict = entries.every((entry) => (
+      entry.resources.every((resource) => resource.byteSize !== null)
+      && hasStrictResourceMetadata(entry.forward)
+      && hasStrictResourceMetadata(entry.inverse)
+    ));
     return {
-      version: IMAGE_EDIT_HISTORY_SNAPSHOT_VERSION_V3,
+      version: strict
+        ? IMAGE_EDIT_HISTORY_SNAPSHOT_VERSION_V3
+        : IMAGE_EDIT_HISTORY_LEGACY_SNAPSHOT_VERSION_V3,
       documentId: this.documentId,
       headRevision: this.headRevision,
       undo: this.undoEntries.map(cloneEntry),
@@ -268,13 +295,20 @@ export class ImageEditCommandHistoryV3 {
   getState(): ImageEditCommandHistoryStateV3 {
     const entries = this.allEntries();
     const resources = this.getRetainedResources();
-    const retainedResourceBytes = sumKnownResources(resources);
+    const resourceTotals = sumKnownResources(resources);
+    const retainedMetadataBytes = sumMetadata(entries);
+    const retainedBytes = resourceTotals.unknownResourceCount > 0
+      ? null
+      : retainedMetadataBytes + resourceTotals.bytes;
     return {
       undoCount: this.undoEntries.length,
       redoCount: this.redoEntries.length,
-      retainedBytes: sumMetadata(entries) + retainedResourceBytes,
+      retainedBytes,
       retainedResourceCount: resources.length,
-      retainedResourceBytes,
+      retainedResourceBytes: resourceTotals.unknownResourceCount > 0
+        ? null
+        : resourceTotals.bytes,
+      unknownResourceCount: resourceTotals.unknownResourceCount,
       maxCommands: this.maxCommands,
       maxBytes: this.maxBytes,
     };
@@ -303,7 +337,8 @@ export class ImageEditCommandHistoryV3 {
     let pruned = false;
     while (
       this.undoEntries.length + this.redoEntries.length > this.maxCommands
-      || this.getState().retainedBytes > this.maxBytes
+      || this.getState().retainedBytes === null
+      || (this.getState().retainedBytes ?? 0) > this.maxBytes
     ) {
       const removed = this.undoEntries.shift();
       if (!removed) break;
@@ -355,6 +390,7 @@ export class ImageEditCommandHistoryV3 {
       undoDocument = applyImageEditCommandV3(
         undoDocument,
         withImageEditCommandRevisionV3(entry.inverse, undoDocument.revision),
+        { allowLegacyResourceMetadata: true },
       ).document;
     }
     let redoDocument = document;
@@ -364,6 +400,7 @@ export class ImageEditCommandHistoryV3 {
       redoDocument = applyImageEditCommandV3(
         redoDocument,
         withImageEditCommandRevisionV3(entry.forward, redoDocument.revision),
+        { allowLegacyResourceMetadata: true },
       ).document;
     }
   }

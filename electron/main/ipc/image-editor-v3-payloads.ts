@@ -8,6 +8,7 @@ import {
   type ImageEditorV3SourceLocator,
   type ResourceId,
 } from '../services/image-editor-v3'
+import { IMAGE_EDITOR_V3_PACKAGE_THUMBNAIL_MAX_BYTES } from '../../../src/platform/contracts/imageEditorV3'
 import {
   createFloat32PremultipliedRgbaTile,
 } from '../../../src/core/imageEdit/v3/effects/contracts'
@@ -34,6 +35,7 @@ const MAX_BRUSH_TILES_PER_REQUEST = 16
 const MAX_BRUSH_REQUEST_RAW_BYTES = 64 * 1024 * 1024
 const MAX_BRUSH_REQUEST_RESOURCE_BYTES = 64 * 1024 * 1024
 const BRUSH_TILE_KEY_PATTERN = /^(0|[1-9]\d*)\/(0|[1-9]\d*)\/(0|[1-9]\d*)$/
+const PENDING_PACKAGE_REF_PATTERN = /^image-edit-package-open:[a-f0-9-]{36}$/
 
 export interface BasePayload { requestId: string }
 export interface LoadDocumentPayload extends BasePayload { documentRef: string }
@@ -61,7 +63,15 @@ export interface TilePayload extends ResourcePayload {
   halo: number
   bitDepth?: 8 | 16 | 32
 }
-export interface SavePackagePayload extends LoadDocumentPayload { revision: number; suggestedName?: string }
+export interface SavePackagePayload extends LoadDocumentPayload {
+  revision: number
+  suggestedName?: string
+  thumbnail?: { bytes: Uint8Array; extension: 'png' | 'webp'; mediaType: 'image/png' | 'image/webp' }
+}
+export interface RelinkPackageExternalSourcePayload extends BasePayload {
+  pendingPackageRef: `image-edit-package-open:${string}`
+  resourceRef: ResourceId
+}
 export interface GarbageCollectPayload extends BasePayload { retainedResourceRefs: ResourceId[] }
 export interface IngestSourcePayload extends BasePayload { source: ImageEditorV3SourceLocator }
 export interface PersistBrushTilesPayload extends BasePayload {
@@ -341,14 +351,57 @@ export function parseImageEditorV3TilePayload(input: unknown): TilePayload {
 
 export function parseImageEditorV3SavePackagePayload(input: unknown): SavePackagePayload {
   const record = parseRecord(input)
+  assertExactKeys(record, [
+    'requestId', 'documentRef', 'revision', 'suggestedName', 'thumbnail',
+  ], 'save package payload')
   const suggestedName = record.suggestedName
   if (suggestedName !== undefined && (typeof suggestedName !== 'string' || suggestedName.length > 160)) {
     throw new Error('Invalid suggestedName')
   }
+  const thumbnail: SavePackagePayload['thumbnail'] = record.thumbnail === undefined
+    ? undefined
+    : (() => {
+      const value = parseRecord(record.thumbnail)
+      assertExactKeys(value, ['bytes', 'extension', 'mediaType'], 'package thumbnail')
+      if (!(value.bytes instanceof ArrayBuffer)
+        || value.bytes.byteLength < 1
+        || value.bytes.byteLength > IMAGE_EDITOR_V3_PACKAGE_THUMBNAIL_MAX_BYTES) {
+        throw new Error('Invalid or oversized package thumbnail bytes')
+      }
+      const extension = value.extension
+      if ((extension !== 'png' && extension !== 'webp')
+        || value.mediaType !== `image/${extension}`) {
+        throw new Error('Invalid package thumbnail media type')
+      }
+      return {
+        bytes: new Uint8Array(value.bytes.slice(0)),
+        extension,
+        mediaType: extension === 'png' ? 'image/png' as const : 'image/webp' as const,
+      }
+    })()
   return {
     ...parseImageEditorV3LoadPayload(input),
     revision: readSafeInteger(record, 'revision', 0, Number.MAX_SAFE_INTEGER),
     suggestedName,
+    thumbnail,
+  }
+}
+
+export function parseImageEditorV3RelinkPackageExternalSourcePayload(
+  input: unknown,
+): RelinkPackageExternalSourcePayload {
+  const record = parseRecord(input)
+  assertExactKeys(record, [
+    'requestId', 'pendingPackageRef', 'resourceRef',
+  ], 'relink package external source payload')
+  if (typeof record.pendingPackageRef !== 'string'
+    || !PENDING_PACKAGE_REF_PATTERN.test(record.pendingPackageRef)) {
+    throw new Error('Invalid pendingPackageRef')
+  }
+  return {
+    requestId: readRequestId(record),
+    pendingPackageRef: record.pendingPackageRef as `image-edit-package-open:${string}`,
+    resourceRef: readResourceRef(record.resourceRef, 'resourceRef'),
   }
 }
 

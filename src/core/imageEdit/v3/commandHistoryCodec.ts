@@ -23,8 +23,10 @@ import {
   type ImageEditMaskReferenceV3,
 } from './layerTypes';
 import { isImageEditTransformInvertibleV3 } from './execution/affineTransform';
+import { calculateImageEditHistorySnapshotResourceTotalsV3 } from './commandHistoryResources';
 
-export const IMAGE_EDIT_HISTORY_SNAPSHOT_VERSION_V3 = 1 as const;
+export const IMAGE_EDIT_HISTORY_LEGACY_SNAPSHOT_VERSION_V3 = 1 as const;
+export const IMAGE_EDIT_HISTORY_SNAPSHOT_VERSION_V3 = 2 as const;
 export const IMAGE_EDIT_HISTORY_SNAPSHOT_DEFAULT_MAX_JSON_BYTES_V3 = 32 * 1024 * 1024;
 
 export interface ImageEditHistoryEntrySnapshotV3 {
@@ -35,7 +37,9 @@ export interface ImageEditHistoryEntrySnapshotV3 {
 }
 
 export interface ImageEditCommandHistorySnapshotV3 {
-  version: typeof IMAGE_EDIT_HISTORY_SNAPSHOT_VERSION_V3;
+  version:
+    | typeof IMAGE_EDIT_HISTORY_LEGACY_SNAPSHOT_VERSION_V3
+    | typeof IMAGE_EDIT_HISTORY_SNAPSHOT_VERSION_V3;
   documentId: string;
   headRevision: number;
   undo: ImageEditHistoryEntrySnapshotV3[];
@@ -50,11 +54,13 @@ export interface DecodeImageEditHistorySnapshotOptionsV3 {
 
 export interface DecodedImageEditHistorySnapshotV3 {
   snapshot: ImageEditCommandHistorySnapshotV3;
-  retainedBytes: number;
+  /** V1 的未知资源大小不会伪装成 0；null 表示只能兼容读取，下一次新写会淘汰它。 */
+  retainedBytes: number | null;
+  knownRetainedBytes: number;
+  unknownResourceCount: number;
 }
 
 export class InvalidImageEditHistorySnapshotV3Error extends Error {}
-
 const DEFAULT_MAX_COMMANDS = 200;
 const DEFAULT_MAX_BYTES = 2 * 1024 * 1024 * 1024;
 const FORBIDDEN_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
@@ -63,7 +69,6 @@ const COMMON_LAYER_KEYS = ['id', 'name', 'visible', 'locked', 'opacity', 'blendM
 function fail(message: string): never {
   throw new InvalidImageEditHistorySnapshotV3Error(message);
 }
-
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 }
@@ -201,10 +206,26 @@ function validateBase(command: Record<string, unknown>, keys: readonly string[])
   safeInteger(command.expectedRevision, '历史命令 revision');
 }
 
+function validateCommandResourceDescriptors(value: unknown, label: string): void {
+  if (!Array.isArray(value) || value.length > 100_000) fail(`${label}无效`);
+  value.forEach((resource, index) => {
+    if (!isRecord(resource)) fail(`${label}无效`);
+    exactKeys(resource, ['resourceId', 'byteSize'], label);
+    nonEmptyString(resource.resourceId, `${label}资源 ID`);
+    const byteSize = safeInteger(resource.byteSize, `${label}字节数`);
+    if (byteSize <= 0) fail(`${label}字节数必须为正数`);
+    if (index > 0) {
+      const previous = value[index - 1];
+      if (!isRecord(previous) || String(previous.resourceId) >= String(resource.resourceId)) {
+        fail(`${label}必须按资源 ID 唯一排序`);
+      }
+    }
+  });
+}
+
 function validateNullableId(value: unknown, label: string): void {
   if (value !== null) nonEmptyString(value, label);
 }
-
 function validateIndex(value: unknown, label: string): void {
   safeInteger(value, label);
 }
@@ -226,41 +247,51 @@ function validateOutputGeometryCommand(command: Record<string, unknown>): void {
   }
 }
 
-function validateCommand(value: unknown): ImageEditCommandV3 {
+function validateCommand(value: unknown, strictResources: boolean): ImageEditCommandV3 {
   if (!isRecord(value) || typeof value.type !== 'string') fail('历史命令无效');
   const command = value;
   switch (command.type) {
     case 'document.update-output-geometry':
       validateOutputGeometryCommand(command); break;
     case 'layer.add':
-      validateBase(command, ['parentId', 'index', 'layer']); validateNullableId(command.parentId, '父图层 ID');
-      validateIndex(command.index, '图层位置'); validateLayer(command.layer); break;
+      validateBase(command, ['parentId', 'index', 'layer', ...(command.resources === undefined ? [] : ['resources'])]);
+      validateNullableId(command.parentId, '父图层 ID'); validateIndex(command.index, '图层位置'); validateLayer(command.layer);
+      if (strictResources && command.resources === undefined) fail('新增图层命令缺少资源元数据');
+      if (command.resources !== undefined) validateCommandResourceDescriptors(command.resources, '图层命令资源元数据'); break;
     case 'layer.delete':
-      validateBase(command, ['layerId']); nonEmptyString(command.layerId, '图层 ID'); break;
+      validateBase(command, ['layerId', ...(command.resources === undefined ? [] : ['resources'])]); nonEmptyString(command.layerId, '图层 ID');
+      if (strictResources && command.resources === undefined) fail('删除图层命令缺少资源元数据');
+      if (command.resources !== undefined) validateCommandResourceDescriptors(command.resources, '图层命令资源元数据'); break;
     case 'layer.move':
       validateBase(command, ['layerId', 'parentId', 'index']); nonEmptyString(command.layerId, '图层 ID');
       validateNullableId(command.parentId, '父图层 ID'); validateIndex(command.index, '图层位置'); break;
     case 'layer.duplicate': {
-      validateBase(command, ['layerId', 'parentId', 'index', 'idMap']); nonEmptyString(command.layerId, '图层 ID');
+      validateBase(command, ['layerId', 'parentId', 'index', 'idMap', ...(command.resources === undefined ? [] : ['resources'])]); nonEmptyString(command.layerId, '图层 ID');
       validateNullableId(command.parentId, '父图层 ID'); validateIndex(command.index, '图层位置');
       if (!isRecord(command.idMap) || Object.keys(command.idMap).length > 10_000) fail('图层副本 ID 映射无效');
       Object.entries(command.idMap).forEach(([key, entry]) => {
         nonEmptyString(key, '原图层 ID'); nonEmptyString(entry, '副本图层 ID');
       });
       if (new Set(Object.values(command.idMap)).size !== Object.keys(command.idMap).length) fail('副本图层 ID 重复');
+      if (strictResources && command.resources === undefined) fail('复制图层命令缺少资源元数据');
+      if (command.resources !== undefined) validateCommandResourceDescriptors(command.resources, '图层命令资源元数据');
       break;
     }
     case 'layer.group':
-      validateBase(command, ['layerIds', 'group']);
+      validateBase(command, ['layerIds', 'group', ...(command.resources === undefined ? [] : ['resources'])]);
       if (!Array.isArray(command.layerIds) || command.layerIds.length === 0 || command.layerIds.length > 10_000) fail('待分组图层无效');
       command.layerIds.forEach((id) => nonEmptyString(id, '待分组图层 ID'));
       if (new Set(command.layerIds).size !== command.layerIds.length) fail('待分组图层 ID 重复');
       validateLayer(command.group, 'group');
       if (isRecord(command.group) && (command.group.locked === true
         || !Array.isArray(command.group.children) || command.group.children.length > 0)) fail('待创建图层组无效');
+      if (strictResources && command.resources === undefined) fail('图层分组命令缺少资源元数据');
+      if (command.resources !== undefined) validateCommandResourceDescriptors(command.resources, '图层命令资源元数据');
       break;
     case 'layer.ungroup':
-      validateBase(command, ['groupId']); nonEmptyString(command.groupId, '图层组 ID'); break;
+      validateBase(command, ['groupId', ...(command.resources === undefined ? [] : ['resources'])]); nonEmptyString(command.groupId, '图层组 ID');
+      if (strictResources && command.resources === undefined) fail('图层解组命令缺少资源元数据');
+      if (command.resources !== undefined) validateCommandResourceDescriptors(command.resources, '图层命令资源元数据'); break;
     case 'layer.update-common': {
       validateBase(command, ['layerId', 'patch']); nonEmptyString(command.layerId, '图层 ID');
       if (!isRecord(command.patch) || Object.keys(command.patch).length === 0) fail('公共属性补丁无效');
@@ -282,16 +313,17 @@ function validateCommand(value: unknown): ImageEditCommandV3 {
       validateBase(command, ['layerId', 'isolated']); nonEmptyString(command.layerId, '图层 ID');
       if (typeof command.isolated !== 'boolean') fail('图层组隔离值无效'); break;
     case 'layer.set-mask': {
-      const strictResources = 'maskResources' in command || 'previousMaskResources' in command;
+      const hasMaskResources = 'maskResources' in command || 'previousMaskResources' in command;
       validateBase(
         command,
-        strictResources
+        hasMaskResources
           ? ['layerId', 'mask', 'maskResources', 'previousMaskResources']
           : ['layerId', 'mask'],
       );
       nonEmptyString(command.layerId, '图层 ID');
       if (command.mask !== null) validateMask(command.mask, '蒙版引用');
-      if (strictResources) {
+      if (strictResources && !hasMaskResources) fail('新历史的蒙版命令缺少资源元数据');
+      if (hasMaskResources) {
         try {
           decodeImageEditMaskResourceDescriptorsForMaskV3(
             command.maskResources,
@@ -344,6 +376,8 @@ function validateCommand(value: unknown): ImageEditCommandV3 {
         const bytes = safeInteger(change.byteSize, '新瓦片字节数');
         if ((change.previousResourceId === null) !== (previousBytes === 0)
           || (change.resourceId === null) !== (bytes === 0)) fail('瓦片资源与字节数不一致');
+        if ((change.previousResourceId !== null && previousBytes <= 0)
+          || (change.resourceId !== null && bytes <= 0)) fail('瓦片资源字节数必须为正数');
         if (change.resourceId === change.previousResourceId) fail('瓦片增量不能是空操作');
       }); break;
     }
@@ -356,7 +390,6 @@ function validateCommand(value: unknown): ImageEditCommandV3 {
 function metadataBytes(forward: ImageEditCommandV3, inverse: ImageEditCommandV3): number {
   return new TextEncoder().encode(JSON.stringify([forward, inverse])).byteLength;
 }
-
 function resourcesFor(forward: ImageEditCommandV3, inverse: ImageEditCommandV3): ImageEditHistoryResourceReferenceV3[] {
   try {
     return mergeImageEditHistoryResourceReferencesV3([
@@ -368,11 +401,11 @@ function resourcesFor(forward: ImageEditCommandV3, inverse: ImageEditCommandV3):
   }
 }
 
-function parseEntry(value: unknown): ImageEditHistoryEntrySnapshotV3 {
+function parseEntry(value: unknown, strictResources: boolean): ImageEditHistoryEntrySnapshotV3 {
   if (!isRecord(value)) fail('历史条目无效');
   exactKeys(value, ['forward', 'inverse', 'metadataBytes', 'resources'], '历史条目');
-  const forward = validateCommand(value.forward);
-  const inverse = validateCommand(value.inverse);
+  const forward = validateCommand(value.forward, strictResources);
+  const inverse = validateCommand(value.inverse, strictResources);
   try {
     assertImageEditHistoryInversePairV3(forward, inverse);
   } catch (error) {
@@ -386,7 +419,9 @@ function parseEntry(value: unknown): ImageEditHistoryEntrySnapshotV3 {
     if (!isRecord(resource)) return fail('历史资源引用无效');
     exactKeys(resource, ['resourceId', 'byteSize'], '历史资源引用');
     const resourceId = nonEmptyString(resource.resourceId, '历史资源 ID');
+    if (strictResources && resource.byteSize === null) fail('新历史不能包含未知资源字节数');
     const byteSize = resource.byteSize === null ? null : safeInteger(resource.byteSize, '历史资源字节数');
+    if (byteSize !== null && byteSize <= 0) fail('历史资源字节数必须为正数');
     return { resourceId, byteSize };
   });
   let normalizedDeclared: ImageEditHistoryResourceReferenceV3[];
@@ -401,21 +436,6 @@ function parseEntry(value: unknown): ImageEditHistoryEntrySnapshotV3 {
   }
   return { forward, inverse, metadataBytes: expectedMetadataBytes, resources: normalizedDeclared };
 }
-
-function calculateRetainedBytes(entries: readonly ImageEditHistoryEntrySnapshotV3[]): number {
-  let total = 0;
-  for (const entry of entries) {
-    total += entry.metadataBytes;
-    if (!Number.isSafeInteger(total)) fail('历史保留字节数溢出');
-  }
-  const resources = mergeImageEditHistoryResourceReferencesV3(entries.flatMap((entry) => entry.resources));
-  for (const resource of resources) {
-    if (resource.byteSize !== null) total += resource.byteSize;
-    if (!Number.isSafeInteger(total)) fail('历史保留字节数溢出');
-  }
-  return total;
-}
-
 export function decodeImageEditCommandHistorySnapshotV3(
   value: unknown,
   options: DecodeImageEditHistorySnapshotOptionsV3 = {},
@@ -429,13 +449,16 @@ export function decodeImageEditCommandHistorySnapshotV3(
   const parsed = parseSafeJson(value, maxJsonBytes);
   if (!isRecord(parsed)) fail('历史快照无效');
   exactKeys(parsed, ['version', 'documentId', 'headRevision', 'undo', 'redo'], '历史快照');
-  if (parsed.version !== IMAGE_EDIT_HISTORY_SNAPSHOT_VERSION_V3) fail('历史快照版本未知');
+  if (parsed.version !== IMAGE_EDIT_HISTORY_SNAPSHOT_VERSION_V3
+    && parsed.version !== IMAGE_EDIT_HISTORY_LEGACY_SNAPSHOT_VERSION_V3) fail('历史快照版本未知');
+  const version = parsed.version;
+  const strictResources = version === IMAGE_EDIT_HISTORY_SNAPSHOT_VERSION_V3;
   const documentId = nonEmptyString(parsed.documentId, '历史文档 ID', 256);
   const headRevision = safeInteger(parsed.headRevision, '历史头 revision');
   if (!Array.isArray(parsed.undo) || !Array.isArray(parsed.redo)) fail('历史栈无效');
   if (parsed.undo.length + parsed.redo.length > maxCommands) fail('历史命令数量超过上限');
-  const undo = parsed.undo.map(parseEntry);
-  const redo = parsed.redo.map(parseEntry);
+  const undo = parsed.undo.map((entry) => parseEntry(entry, strictResources));
+  const redo = parsed.redo.map((entry) => parseEntry(entry, strictResources));
   const forwardIds = new Set<string>();
   for (const entry of [...undo, ...redo]) {
     if (forwardIds.has(entry.forward.commandId)) fail('历史命令 ID 重复');
@@ -452,11 +475,18 @@ export function decodeImageEditCommandHistorySnapshotV3(
     && undo[undo.length - 1].forward.expectedRevision >= redo[redo.length - 1].forward.expectedRevision) {
     fail('撤销与重做栈边界无效');
   }
-  const retainedBytes = calculateRetainedBytes([...undo, ...redo]);
-  if (retainedBytes > maxBytes) fail('历史字节数超过上限');
+  let retained: ReturnType<typeof calculateImageEditHistorySnapshotResourceTotalsV3>;
+  try {
+    retained = calculateImageEditHistorySnapshotResourceTotalsV3([...undo, ...redo]);
+  } catch {
+    return fail('历史保留字节数溢出');
+  }
+  if (retained.knownBytes > maxBytes) fail('历史字节数超过上限');
   return {
-    snapshot: { version: IMAGE_EDIT_HISTORY_SNAPSHOT_VERSION_V3, documentId, headRevision, undo, redo },
-    retainedBytes,
+    snapshot: { version, documentId, headRevision, undo, redo },
+    retainedBytes: retained.unknownResourceCount > 0 ? null : retained.knownBytes,
+    knownRetainedBytes: retained.knownBytes,
+    unknownResourceCount: retained.unknownResourceCount,
   };
 }
 

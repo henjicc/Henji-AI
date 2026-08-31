@@ -39,11 +39,14 @@ export interface ImageEditLayerAddCommandV3 extends ImageEditCommandBaseV3 {
   parentId: string | null;
   index: number;
   layer: ImageEditLayerV3;
+  /** 新写入必须携带该命令涉及的全部权威资源；省略仅用于读取 V1 历史。 */
+  resources?: ImageEditCommandResourceDescriptorV3[];
 }
 
 export interface ImageEditLayerDeleteCommandV3 extends ImageEditCommandBaseV3 {
   type: 'layer.delete';
   layerId: string;
+  resources?: ImageEditCommandResourceDescriptorV3[];
 }
 
 export interface ImageEditLayerMoveCommandV3 extends ImageEditCommandBaseV3 {
@@ -61,6 +64,7 @@ export interface ImageEditLayerDuplicateCommandV3 extends ImageEditCommandBaseV3
   index: number;
   /** 原图层 ID → 副本 ID，组内每个后代都必须有映射。 */
   idMap: Record<string, string>;
+  resources?: ImageEditCommandResourceDescriptorV3[];
 }
 
 export interface ImageEditLayerGroupCommandV3 extends ImageEditCommandBaseV3 {
@@ -68,11 +72,13 @@ export interface ImageEditLayerGroupCommandV3 extends ImageEditCommandBaseV3 {
   /** 必须是同一容器中连续的图层；按原有顺序进入组。 */
   layerIds: string[];
   group: ImageEditGroupLayerV3;
+  resources?: ImageEditCommandResourceDescriptorV3[];
 }
 
 export interface ImageEditLayerUngroupCommandV3 extends ImageEditCommandBaseV3 {
   type: 'layer.ungroup';
   groupId: string;
+  resources?: ImageEditCommandResourceDescriptorV3[];
 }
 
 export interface ImageEditLayerUpdateCommonCommandV3 extends ImageEditCommandBaseV3 {
@@ -93,10 +99,12 @@ export interface ImageEditLayerSetMaskCommandV3 extends ImageEditCommandBaseV3 {
   previousMaskResources?: ImageEditMaskResourceDescriptorV3[];
 }
 
-export interface ImageEditMaskResourceDescriptorV3 {
+export interface ImageEditCommandResourceDescriptorV3 {
   resourceId: string;
   byteSize: number;
 }
+
+export type ImageEditMaskResourceDescriptorV3 = ImageEditCommandResourceDescriptorV3;
 
 export interface ImageEditLayerUpdateParamsCommandV3 extends ImageEditCommandBaseV3 {
   type: 'layer.update-params';
@@ -188,7 +196,25 @@ export interface ImageEditHistoryResourceReferenceV3 {
   byteSize: number | null;
 }
 
-function collectLayerResources(
+export function collectImageEditLayerResourceIdsForCommandV3(
+  layer: ImageEditLayerV3,
+): string[] {
+  const output: string[] = [];
+  collectLayerResourceIds(layer, output);
+  return [...new Set(output)].sort();
+}
+
+function collectLayerResourceIds(layer: ImageEditLayerV3, output: string[]): void {
+  if (layer.mask) output.push(...collectImageEditMaskResourceIdsV3(layer.mask));
+  if (layer.type === 'raster') {
+    if (layer.source.kind === 'resource') output.push(layer.source.resourceId);
+    output.push(...Object.values(layer.tiles));
+  } else if (layer.type === 'group') {
+    layer.children.forEach((child) => collectLayerResourceIds(child, output));
+  }
+}
+
+function collectLegacyLayerResources(
   layer: ImageEditLayerV3,
   output: ImageEditHistoryResourceReferenceV3[],
 ): void {
@@ -205,7 +231,7 @@ function collectLayerResources(
       output.push({ resourceId, byteSize: null });
     }
   } else if (layer.type === 'group') {
-    layer.children.forEach((child) => collectLayerResources(child, output));
+    layer.children.forEach((child) => collectLegacyLayerResources(child, output));
   }
 }
 
@@ -223,10 +249,16 @@ export function collectImageEditCommandResourceReferencesV3(
         resources.push({ resourceId: change.resourceId, byteSize: change.byteSize });
       }
     }
-  } else if (command.type === 'layer.add') {
-    collectLayerResources(command.layer, resources);
-  } else if (command.type === 'layer.group') {
-    collectLayerResources(command.group, resources);
+  } else if (
+    command.type === 'layer.add'
+    || command.type === 'layer.delete'
+    || command.type === 'layer.duplicate'
+    || command.type === 'layer.group'
+    || command.type === 'layer.ungroup'
+  ) {
+    if (command.resources) resources.push(...command.resources);
+    else if (command.type === 'layer.add') collectLegacyLayerResources(command.layer, resources);
+    else if (command.type === 'layer.group') collectLegacyLayerResources(command.group, resources);
   } else if (command.type === 'layer.set-mask' && command.mask) {
     if (command.maskResources) resources.push(...command.maskResources);
     else {
@@ -245,7 +277,7 @@ export function mergeImageEditHistoryResourceReferencesV3(
   for (const resource of resources) {
     if (!resource.resourceId || resource.resourceId.length > 512
       || (resource.byteSize !== null
-        && (!Number.isSafeInteger(resource.byteSize) || resource.byteSize < 0))) {
+        && (!Number.isSafeInteger(resource.byteSize) || resource.byteSize <= 0))) {
       throw new Error('图片编辑历史资源引用无效');
     }
     const existing = byId.get(resource.resourceId);

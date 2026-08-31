@@ -459,7 +459,7 @@ const api: HenjiNativeApi = {
   runtimeInfo: {
     uiInspectionReadOnly: process.env['HENJI_UI_INSPECTION_READ_ONLY'] === '1',
     featureFlags: {
-      imageEditorV3: process.env['HENJI_IMAGE_EDITOR_V3'] === '1',
+      imageEditorV3: process.env['HENJI_IMAGE_EDITOR_V3'] !== '0',
     },
   },
   assistant: assistantApi,

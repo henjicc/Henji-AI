@@ -6,6 +6,10 @@ import {
 } from '@/core/imageEdit/v3/documentFactory'
 import { createFloat32PremultipliedRgbaTile } from '@/core/imageEdit/v3/effects/contracts'
 import { ImageEditResourceBudget } from '@/core/imageEdit/v3/resourceBudget'
+import {
+  IMAGE_EDIT_RENDER_PRIORITY,
+  ImageEditRenderScheduler,
+} from '@/core/imageEdit/v3/renderScheduler'
 import type { ImageEditorV3FastProxy } from '@/platform/contracts/imageEditorV3'
 import {
   IMAGE_EDITOR_PREVIEW_PROXY_CACHE_MAX_BYTES_V3,
@@ -118,6 +122,48 @@ async function waitForRender(worker: FakePreviewWorker, count = 1): Promise<void
 }
 
 describe('ImageEditorPreviewClientV3 调度与资源所有权', () => {
+  it('把 Worker 帧登记为全局 GPU 原子任务，在导出瓦片边界优先执行', async () => {
+    const scheduler = new ImageEditRenderScheduler({ cpuConcurrency: 1 })
+    const gate = (() => {
+      let resolve!: () => void
+      return { promise: new Promise<void>((next) => { resolve = next }), resolve }
+    })()
+    const worker = new FakePreviewWorker()
+    const order: string[] = []
+    const runningExport = scheduler.schedule({
+      id: 'preview-gate-export-1', sessionId: 'export', revision: 1,
+      kind: 'export', lane: 'gpu', priority: IMAGE_EDIT_RENDER_PRIORITY.export,
+      run: async () => { order.push('export-1'); await gate.promise },
+    })
+    const queuedExport = scheduler.schedule({
+      id: 'preview-gate-export-2', sessionId: 'export', revision: 1,
+      kind: 'export', lane: 'gpu', priority: IMAGE_EDIT_RENDER_PRIORITY.export,
+      run: async () => { order.push('export-2') },
+    })
+    const client = new ImageEditorPreviewClientV3({
+      sessionId: 'scheduled-preview', workerFactory: () => worker, renderScheduler: scheduler,
+    })
+    const rendered = client.render({
+      document: createDocument(1), quality: 'draft', maxDimension: 960, resourceDescriptors: [],
+    })
+    await flush()
+    expect(worker.renders()).toHaveLength(0)
+
+    gate.resolve()
+    await runningExport
+    await waitForRender(worker)
+    expect(order).toEqual(['export-1'])
+    const output = bitmap()
+    worker.emit({
+      type: 'rendered-bitmap', requestId: worker.renders()[0].requestId, sequence: 1,
+      width: 800, height: 600, diagnostics: [], bitmap: output,
+    })
+    ;(await rendered).release()
+    await queuedExport
+    expect(order).toEqual(['export-1', 'export-2'])
+    client.dispose()
+  })
+
   it('每个会话只保留 running 与 latest-pending，中间 revision 被合并', async () => {
     const worker = new FakePreviewWorker()
     const client = new ImageEditorPreviewClientV3({

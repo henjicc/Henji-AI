@@ -6,7 +6,13 @@ import type * as yauzl from 'yauzl'
 
 import { createMainLogger } from '../logging'
 import { isSymbolicLinkEntry, iterateEntries, openZip } from '../zip-archive'
-import type { ResourceDescriptor, ResourceLease } from './contracts'
+import type {
+  ResourceDescriptor,
+  ResourceId,
+  ResourceLease,
+  SourceImageMetadata,
+  SourceProvider,
+} from './contracts'
 import type { ContentAddressedResourceStore } from './resource-store'
 import {
   DEFAULT_HENJI_IMAGE_PACKAGE_LIMITS,
@@ -15,6 +21,7 @@ import {
   validatePackageEntryPath,
   type HenjiImagePackageLimits,
   type HenjiImagePackageManifest,
+  type HenjiImageExternalSource,
 } from './package-types'
 
 const logger = createMainLogger('main.image_editor_v3.package')
@@ -29,6 +36,8 @@ interface StagedEntry {
 export interface ImportHenjiImagePackageRequest {
   sourcePath: string
   resourceStore: ContentAddressedResourceStore
+  /** 提供时同时验证外链命中资源确实是声明的可解码栅格图片。 */
+  sourceProvider?: SourceProvider
   limits?: Partial<HenjiImagePackageLimits>
   signal?: AbortSignal
 }
@@ -36,10 +45,30 @@ export interface ImportHenjiImagePackageRequest {
 export interface ImportedHenjiImagePackage {
   manifest: HenjiImagePackageManifest
   resources: ResourceDescriptor[]
+  missingExternalSources: HenjiImageMissingExternalSource[]
   thumbnail?: Buffer
   /** 导入完成前即取得；调用方必须在文档引用原子落盘后释放。 */
   resourceLease: ResourceLease
 }
+
+export interface HenjiImageMissingExternalSource extends HenjiImageExternalSource {
+  resourceId: ResourceId
+}
+
+export interface RelinkHenjiImageExternalSourceRequest {
+  sourcePath: string
+  externalSource: HenjiImageMissingExternalSource
+  resourceStore: ContentAddressedResourceStore
+  sourceProvider: SourceProvider
+  signal?: AbortSignal
+}
+
+export interface RelinkedHenjiImageExternalSource {
+  resource: ResourceDescriptor
+  resourceLease: ResourceLease
+}
+
+const MAX_RELINK_SOURCE_BYTES = 8 * 1024 * 1024 * 1024
 
 function abortError(): Error {
   const error = new Error('.henjiimg import was cancelled')
@@ -57,6 +86,44 @@ function resolveLimits(overrides?: Partial<HenjiImagePackageLimits>): HenjiImage
     if (!Number.isFinite(value) || value <= 0) throw new Error(`Invalid .henjiimg limit: ${name}`)
   }
   return limits
+}
+
+function mediaTypeForMetadata(metadata: SourceImageMetadata): string | null {
+  switch (metadata.format?.toLowerCase()) {
+    case 'png': return 'image/png'
+    case 'jpeg':
+    case 'jpg': return 'image/jpeg'
+    case 'webp': return 'image/webp'
+    case 'tiff': return 'image/tiff'
+    case 'avif': return 'image/avif'
+    case 'heif': return 'image/heif'
+    case 'gif': return 'image/gif'
+    default: return null
+  }
+}
+
+function mediaTypesMatch(expected: string, actual: string): boolean {
+  if (expected === actual) return true
+  return (expected === 'image/avif' || expected === 'image/heif')
+    && (actual === 'image/avif' || actual === 'image/heif')
+}
+
+async function assertExternalSourceMedia(
+  resourceId: ResourceId,
+  externalSource: HenjiImageExternalSource,
+  sourceProvider: SourceProvider | undefined,
+  signal?: AbortSignal,
+): Promise<string | undefined> {
+  if (!sourceProvider) return externalSource.mediaType
+  const metadata = await sourceProvider.readMetadata(resourceId, signal)
+  const actualMediaType = mediaTypeForMetadata(metadata)
+  if (!actualMediaType) throw new Error(`Unsupported external image media: ${metadata.format ?? 'unknown'}`)
+  if (externalSource.mediaType && !mediaTypesMatch(externalSource.mediaType, actualMediaType)) {
+    throw new Error(
+      `External source media type mismatch: expected ${externalSource.mediaType}, received ${actualMediaType}`,
+    )
+  }
+  return externalSource.mediaType ?? actualMediaType
 }
 
 function openEntryStream(archive: yauzl.ZipFile, entry: yauzl.Entry): Promise<Readable> {
@@ -230,6 +297,26 @@ export async function importHenjiImagePackage(
       })
       resources.push(stored)
     }
+    const missingExternalSources: HenjiImageMissingExternalSource[] = []
+    for (const source of manifest.externalSources ?? []) {
+      throwIfAborted(request.signal)
+      const resourceId = `sha256:${source.sha256}` as ResourceId
+      if (!(await request.resourceStore.has(resourceId))) {
+        missingExternalSources.push({ ...source, resourceId })
+        continue
+      }
+      const verified = await request.resourceStore.verify(resourceId, request.signal)
+      if (source.byteLength !== undefined && verified.byteLength !== source.byteLength) {
+        throw new Error(`External source byte length mismatch: ${resourceId}`)
+      }
+      const mediaType = await assertExternalSourceMedia(
+        resourceId,
+        source,
+        request.sourceProvider,
+        request.signal,
+      )
+      resources.push({ ...verified, mediaType })
+    }
     const thumbnail = manifest.thumbnail
       ? await fsp.readFile(staged.get(manifest.thumbnail.path)?.filePath ?? '')
       : undefined
@@ -244,7 +331,7 @@ export async function importHenjiImagePackage(
         resourceCount: resources.length,
       },
     })
-    return { manifest, resources, thumbnail, resourceLease }
+    return { manifest, resources, missingExternalSources, thumbnail, resourceLease }
   } catch (error) {
     logger.error('可编辑图片包导入失败', {
       event: 'image_editor_v3.package.import.failed',
@@ -253,5 +340,55 @@ export async function importHenjiImagePackage(
     throw error
   } finally {
     await fsp.rm(stagingDir, { recursive: true, force: true }).catch(() => undefined)
+  }
+}
+
+/**
+ * 原生文件选择器给出的单个候选只会在哈希、精确字节数和可解码图片媒体类型全部匹配后入库。
+ * 返回 lease 让调用方把资源一直保护到文档引用完成原子落盘。
+ */
+export async function relinkHenjiImageExternalSource(
+  request: RelinkHenjiImageExternalSourceRequest,
+): Promise<RelinkedHenjiImageExternalSource> {
+  const sourcePath = request.sourcePath.trim()
+  if (!sourcePath || !path.isAbsolute(sourcePath) || sourcePath.includes('\0')) {
+    throw new Error('External source relink path must be an absolute local path')
+  }
+  const expectedBytes = request.externalSource.byteLength
+  if (expectedBytes !== undefined && expectedBytes < 1) {
+    throw new Error('External image source byte length must be positive')
+  }
+  let createdResource: ResourceId | null = null
+  let resourceLease: ResourceLease | null = null
+  try {
+    const stored = await request.resourceStore.putFile(sourcePath, {
+      expectedSha256: request.externalSource.sha256,
+      mediaType: request.externalSource.mediaType,
+      maxBytes: expectedBytes ?? MAX_RELINK_SOURCE_BYTES,
+      signal: request.signal,
+    })
+    if (expectedBytes !== undefined && stored.byteLength !== expectedBytes) {
+      throw new Error(
+        `External source byte length mismatch: expected ${expectedBytes}, received ${stored.byteLength}`,
+      )
+    }
+    if (stored.created) createdResource = stored.id
+    resourceLease = await request.resourceStore.acquireLease([stored.id])
+    const mediaType = await assertExternalSourceMedia(
+      stored.id,
+      request.externalSource,
+      request.sourceProvider,
+      request.signal,
+    )
+    return {
+      resource: { ...stored, mediaType },
+      resourceLease,
+    }
+  } catch (error) {
+    await resourceLease?.release().catch(() => undefined)
+    if (createdResource) {
+      await request.resourceStore.discardCreated([createdResource]).catch(() => undefined)
+    }
+    throw error
   }
 }

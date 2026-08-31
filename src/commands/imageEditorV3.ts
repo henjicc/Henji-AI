@@ -255,6 +255,17 @@ export function openImageEditorV3Package(
   return runCancellable(request.requestId, signal, (platform) => platform.openPackage(request))
 }
 
+export function relinkImageEditorV3PackageExternalSource(
+  request: Parameters<ImageEditorV3Platform['relinkPackageExternalSource']>[0],
+  signal?: AbortSignal,
+): ReturnType<ImageEditorV3Platform['relinkPackageExternalSource']> {
+  return runCancellable(
+    request.requestId,
+    signal,
+    (platform) => platform.relinkPackageExternalSource(request),
+  )
+}
+
 export function saveImageEditorV3PackageAs(
   request: Parameters<ImageEditorV3Platform['savePackageAs']>[0],
   signal?: AbortSignal,
@@ -279,6 +290,7 @@ interface AutosaveState {
   activeRequestId?: string
   inFlight?: Promise<void>
   retryCount?: number
+  pendingGarbageCollection?: readonly string[]
 }
 
 /** PAL-backed repository used by the command bus; no local path crosses this boundary. */
@@ -359,6 +371,15 @@ export class ImageEditorV3CommandRepository implements ImageEditDocumentReposito
     if (!state.inFlight) this.autosaves.delete(documentId)
   }
 
+  scheduleGarbageCollection(documentId: string, retainedResourceIds: readonly string[]): void {
+    const state = this.autosaves.get(documentId) ?? {}
+    state.pendingGarbageCollection = [...new Set(retainedResourceIds)].sort()
+    this.autosaves.set(documentId, state)
+    if (!state.timer && !state.inFlight && !state.pending) {
+      void this.flushScheduledGarbageCollection(documentId, state)
+    }
+  }
+
   async collectGarbage(_documentId: string, retainedResourceIds: readonly string[]): Promise<void> {
     const requestId = createImageEditorV3RequestId('resource-gc')
     await runCancellable(requestId, undefined, (platform) => platform.collectGarbage({
@@ -404,7 +425,11 @@ export class ImageEditorV3CommandRepository implements ImageEditDocumentReposito
       state.activeRequestId = undefined
       state.inFlight = undefined
       if (!state.pending) {
-        this.autosaves.delete(documentId)
+        if (state.pendingGarbageCollection) {
+          void this.flushScheduledGarbageCollection(documentId, state)
+        } else {
+          this.autosaves.delete(documentId)
+        }
       } else if (failed) {
         const delay = Math.min(30_000, 500 * 2 ** Math.min(6, (state.retryCount ?? 1) - 1))
         state.timer = setTimeout(() => {
@@ -416,5 +441,29 @@ export class ImageEditorV3CommandRepository implements ImageEditDocumentReposito
       }
     })
     await state.inFlight
+  }
+
+  private async flushScheduledGarbageCollection(
+    documentId: string,
+    state: AutosaveState,
+  ): Promise<void> {
+    const retained = state.pendingGarbageCollection
+    if (!retained || state.pending || state.inFlight) return
+    state.pendingGarbageCollection = undefined
+    try {
+      await this.collectGarbage(documentId, retained)
+    } catch (error) {
+      logger.warn('图片编辑历史资源回收调度失败', {
+        event: 'image_editor_v3.history_resource_gc.failed',
+        context: { documentId },
+        error,
+      })
+    } finally {
+      if (!state.pending && !state.inFlight && !state.pendingGarbageCollection) {
+        this.autosaves.delete(documentId)
+      } else if (state.pendingGarbageCollection) {
+        void this.flushScheduledGarbageCollection(documentId, state)
+      }
+    }
   }
 }

@@ -71,6 +71,7 @@ describe('图片编辑 V3 命令归约器', () => {
       type: 'layer.group',
       layerIds: ['marks', 'paint'],
       group,
+      resources: [],
     });
     expect(grouped.document.revision).toBe(1);
     expect(grouped.document.layers.map((layer) => layer.id)).toEqual(['raster', 'group']);
@@ -92,6 +93,7 @@ describe('图片编辑 V3 命令归约器', () => {
 
     expect(() => applyImageEditCommandV3(source, {
       commandId: 'delete-locked', expectedRevision: 0, type: 'layer.delete', layerId: 'locked',
+      resources: [],
     })).toThrow(ImageEditLayerLockedErrorV3);
     expect(() => applyImageEditCommandV3(source, {
       commandId: 'cycle', expectedRevision: 0, type: 'layer.move', layerId: 'parent', parentId: 'nested', index: 0,
@@ -113,6 +115,7 @@ describe('图片编辑 V3 命令归约器', () => {
       parentId: null,
       index: 1,
       idMap: { group: 'group-copy', marks: 'marks-copy' },
+      resources: [],
     });
     expect(duplicated.document.layers[1]).toMatchObject({
       id: 'group-copy', children: [{ id: 'marks-copy' }],
@@ -123,6 +126,8 @@ describe('图片编辑 V3 命令归约器', () => {
     }).document;
     document = applyImageEditCommandV3(document, {
       commandId: 'mask', expectedRevision: 2, type: 'layer.set-mask', layerId: 'marks-copy', mask: { resourceId: 'sha256:mask', inverted: true },
+      maskResources: [{ resourceId: 'sha256:mask', byteSize: 64 }],
+      previousMaskResources: [],
     }).document;
     const added = applyImageEditCommandV3(document, {
       commandId: 'annotation',

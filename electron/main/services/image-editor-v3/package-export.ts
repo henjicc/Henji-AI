@@ -39,9 +39,11 @@ function abortError(): Error {
   return error
 }
 
-function normalizeThumbnailExtension(extension: string): string {
+function normalizeThumbnailExtension(extension: string): 'png' | 'webp' {
   const normalized = extension.trim().replace(/^\./, '').toLowerCase()
-  if (!/^[a-z0-9]{1,8}$/.test(normalized)) throw new Error('Invalid .henjiimg thumbnail extension')
+  if (normalized !== 'png' && normalized !== 'webp') {
+    throw new Error('Invalid .henjiimg thumbnail extension')
+  }
   return normalized
 }
 
@@ -80,11 +82,16 @@ async function buildManifest(
         request.thumbnail.bytes.byteOffset,
         request.thumbnail.bytes.byteLength,
       )
+      const extension = normalizeThumbnailExtension(request.thumbnail.extension)
+      const mediaType = `image/${extension}`
+      if (request.thumbnail.mediaType !== mediaType) {
+        throw new Error('Package thumbnail extension and media type differ')
+      }
       return {
-        path: `thumbnail/preview.${normalizeThumbnailExtension(request.thumbnail.extension)}`,
+        path: `thumbnail/preview.${extension}`,
         sha256: crypto.createHash('sha256').update(bytes).digest('hex'),
         byteLength: bytes.byteLength,
-        mediaType: request.thumbnail.mediaType,
+        mediaType,
       }
     })()
     : undefined

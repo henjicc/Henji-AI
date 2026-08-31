@@ -645,6 +645,8 @@
         "notifications": {
           "autosaveFailed": "Autosave failed. Try again.",
           "saveBeforeReplaceFailed": "Could not save the current edit. You remain on this page.",
+          "packageRelinkRequired": "This editable file references external originals. Choose each matching file when prompted.",
+          "packageOpenFailed": "Could not open the editable file. Relinked files must match the original fingerprint, size, and format.",
           "packageSaved": "Editable file saved",
           "packageSaveFailed": "Could not save the editable file",
           "exportCompleted": "Raster image exported",

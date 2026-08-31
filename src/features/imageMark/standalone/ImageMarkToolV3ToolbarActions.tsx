@@ -1,4 +1,4 @@
-import { ChevronDown, Download, Save } from 'lucide-react'
+import { ChevronDown, Download } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
 import { PanelTrigger, UI_TEXT_META_CLASS, UiButton, UiOptionButton } from '@/components/ui'
@@ -9,6 +9,12 @@ import type {
   ImageMarkToolV3HostController,
   ImageMarkToolV3HostProps,
 } from './useImageMarkToolV3Host'
+
+const RELEASE_EXPORT_FORMATS = new Set<ImageEditorV3RasterExportFormat>([
+  'png8',
+  'jpeg',
+  'webp',
+])
 
 interface ImageMarkToolV3ToolbarActionsProps extends Pick<
   ImageMarkToolV3HostProps,
@@ -54,7 +60,6 @@ export function ImageMarkToolV3ToolbarActions({
       <ImageMarkSourceMenu
         disabled={host.isHostBusy}
         onOpenFile={() => void host.runAfterSave(onOpenFile)}
-        onOpenPackage={() => void host.handleOpenPackage()}
         onPasteFromClipboard={() => void host.runAfterSave(onPasteFromClipboard)}
         onCreateBlank={() => void host.runAfterSave(onCreateBlank)}
       />
@@ -114,7 +119,9 @@ export function ImageMarkToolV3ToolbarActions({
                 aria-label={t('imageEditor.v3.host.toolbar.exportMenuAria')}
                 className="flex flex-col gap-0.5"
               >
-                {host.rasterExportOptions.map(({ format, readiness }) => {
+                {host.rasterExportOptions
+                  .filter(({ format }) => RELEASE_EXPORT_FORMATS.has(format))
+                  .map(({ format, readiness }) => {
                   const disabled = readiness.state !== 'ready'
                   const reason = disabled
                     ? resolveImageEditorReadinessReasonV3(readiness, t)
@@ -135,7 +142,7 @@ export function ImageMarkToolV3ToolbarActions({
                       {rasterExportFormatLabel(format, t)}
                     </UiOptionButton>
                   )
-                })}
+                  })}
               </div>
             )}
           >
@@ -165,17 +172,6 @@ export function ImageMarkToolV3ToolbarActions({
           </PanelTrigger>
         </>
       )}
-      <UiButton
-        variant="muted"
-        size="sm"
-        disabled={host.isHostBusy}
-        onClick={() => void host.handleSavePackage()}
-      >
-        <Save size={15} className="mr-1.5" />
-        {host.isHostBusy && !host.rasterExport
-          ? t('imageEditor.v3.host.toolbar.saving')
-          : t('imageEditor.v3.host.toolbar.savePackage')}
-      </UiButton>
     </>
   )
 }

@@ -31,6 +31,7 @@ export function ImageEditorV3(props: ImageEditorV3Props): JSX.Element {
           annotationOverlay={props.annotationOverlay}
           resourceByteSizes={props.resourceByteSizes}
           resourceDescriptors={props.resourceDescriptors}
+          onPackageThumbnailChange={props.onPackageThumbnailChange}
           bus={bus}
           controller={controller}
         />

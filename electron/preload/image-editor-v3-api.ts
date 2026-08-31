@@ -20,6 +20,10 @@ export function createImageEditorV3Api(nativeInvoke: NativeInvoke): ImageEditorV
     persistBrushTiles: (request) => nativeInvoke('imageEditorV3:brushTiles:persist', request),
     readBrushTiles: (request) => nativeInvoke('imageEditorV3:brushTiles:read', request),
     openPackage: (request) => nativeInvoke('imageEditorV3:package:open', request),
+    relinkPackageExternalSource: (request) => nativeInvoke(
+      'imageEditorV3:package:relinkExternalSource',
+      request,
+    ),
     savePackageAs: (request) => nativeInvoke('imageEditorV3:package:saveAs', request),
     startRasterExport: (request) => nativeInvoke('imageEditorV3:rasterExport:start', request),
     startManagedRasterExport: (request) => nativeInvoke('imageEditorV3:rasterExport:startManaged', request),

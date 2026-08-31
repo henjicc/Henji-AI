@@ -13,10 +13,10 @@ function validateTileChange(change: ImageEditRasterTileChangeV3, label: string):
     || !Number.isSafeInteger(change.previousByteSize) || change.previousByteSize < 0
     || (change.resourceId === null
       ? change.byteSize !== 0
-      : !change.resourceId || change.resourceId.length > 512)
+      : !change.resourceId || change.resourceId.length > 512 || change.byteSize <= 0)
     || (change.previousResourceId === null
       ? change.previousByteSize !== 0
-      : !change.previousResourceId || change.previousResourceId.length > 512)) {
+      : !change.previousResourceId || change.previousResourceId.length > 512 || change.previousByteSize <= 0)) {
     throw new ImageEditCommandValidationErrorV3(`${label}瓦片增量无效`)
   }
   if (change.resourceId === change.previousResourceId) {

@@ -3,6 +3,10 @@ import {
   type ImageEditCommandHistoryOptionsV3,
 } from '@/core/imageEdit/v3/commandHistory';
 import type { ImageEditCommandV3 } from '@/core/imageEdit/v3/commandTypes';
+import {
+  collectPositiveImageEditCommandResourceBytesV3,
+  prepareImageEditCommandResourceMetadataV3,
+} from '@/core/imageEdit/v3/commandLayerResourceMetadata';
 import type { ImageEditDocumentV3 } from '@/core/imageEdit/v3/documentTypes';
 import type {
   ImageEditDocumentRepositoryV3,
@@ -10,6 +14,7 @@ import type {
 } from '@/core/imageEdit/v3/serviceContracts';
 import type { ImageEditCommandHistorySnapshotV3 } from '@/core/imageEdit/v3/commandHistoryCodec';
 import { isImageEditTransformInvertibleV3 } from '@/core/imageEdit/v3/execution/affineTransform';
+import { collectImageEditJsonResourceIdsV3 } from '@/core/imageEdit/v3/resourceReferences';
 
 export type ImageEditPreviewOverrideKindV3 =
   | 'parameter'
@@ -36,6 +41,8 @@ export interface ImageEditCommandBusOptionsV3 {
   history?: ImageEditCommandHistoryOptionsV3;
   historySnapshot?: ImageEditCommandHistorySnapshotV3 | null;
   onPersistentChange?: (snapshot: ImageEditPersistenceSnapshotV3) => void;
+  /** 载入快照时由主进程返回的权威资源大小；结构命令据此生成严格历史元数据。 */
+  resourceByteSizes?: Readonly<Record<string, number>>;
 }
 
 type ImageEditCommandBusListenerV3 = (snapshot: ImageEditCommandBusSnapshotV3) => void;
@@ -51,6 +58,7 @@ export class ImageEditCommandBusV3 {
   private readonly onPersistentChange?: (snapshot: ImageEditPersistenceSnapshotV3) => void;
   private readonly previewOverrides = new Map<string, ImageEditPreviewOverrideV3>();
   private readonly listeners = new Set<ImageEditCommandBusListenerV3>();
+  private readonly resourceByteSizes = new Map<string, number>();
 
   constructor(document: ImageEditDocumentV3, options: ImageEditCommandBusOptionsV3 = {}) {
     this.document = document;
@@ -59,6 +67,15 @@ export class ImageEditCommandBusV3 {
     else this.history.clear(document);
     this.repository = options.repository;
     this.onPersistentChange = options.onPersistentChange;
+    for (const [resourceId, byteSize] of Object.entries(options.resourceByteSizes ?? {})) {
+      if (!Number.isSafeInteger(byteSize) || byteSize <= 0) {
+        throw new Error(`图片编辑资源字节数无效：${resourceId}`);
+      }
+      this.resourceByteSizes.set(resourceId, byteSize);
+    }
+    for (const resource of this.history.getRetainedResources()) {
+      if (resource.byteSize !== null) this.resourceByteSizes.set(resource.resourceId, resource.byteSize);
+    }
   }
 
   getSnapshot(): ImageEditCommandBusSnapshotV3 {
@@ -84,8 +101,24 @@ export class ImageEditCommandBusV3 {
 
   dispatch(command: ImageEditCommandV3): ImageEditDocumentV3 {
     const previousRevision = this.document.revision;
-    this.document = this.history.execute(this.document, command);
+    const nextByteSizes = new Map(this.resourceByteSizes);
+    const prepared = prepareImageEditCommandResourceMetadataV3(
+      this.document,
+      command,
+      nextByteSizes,
+    );
+    for (const resource of collectPositiveImageEditCommandResourceBytesV3(prepared)) {
+      const existing = nextByteSizes.get(resource.resourceId);
+      if (existing !== undefined && existing !== resource.byteSize) {
+        throw new Error(`图片编辑资源字节数冲突：${resource.resourceId}`);
+      }
+      nextByteSizes.set(resource.resourceId, resource.byteSize);
+    }
+    this.document = this.history.execute(this.document, prepared);
+    this.resourceByteSizes.clear();
+    nextByteSizes.forEach((byteSize, resourceId) => this.resourceByteSizes.set(resourceId, byteSize));
     this.persistChange(previousRevision);
+    this.flushReleasedResources();
     this.emit();
     return this.document;
   }
@@ -129,6 +162,7 @@ export class ImageEditCommandBusV3 {
     this.document = transition.document;
     this.previewOverrides.clear();
     this.persistChange(previousRevision);
+    this.flushReleasedResources();
     this.emit();
     return true;
   }
@@ -140,6 +174,7 @@ export class ImageEditCommandBusV3 {
     this.document = transition.document;
     this.previewOverrides.clear();
     this.persistChange(previousRevision);
+    this.flushReleasedResources();
     this.emit();
     return true;
   }
@@ -151,6 +186,7 @@ export class ImageEditCommandBusV3 {
     this.document = transition.document;
     this.previewOverrides.clear();
     this.persistChange(previousRevision);
+    this.flushReleasedResources();
     this.emit();
     return true;
   }
@@ -162,6 +198,7 @@ export class ImageEditCommandBusV3 {
     this.document = transition.document;
     this.previewOverrides.clear();
     this.persistChange(previousRevision);
+    this.flushReleasedResources();
     this.emit();
     return true;
   }
@@ -170,6 +207,7 @@ export class ImageEditCommandBusV3 {
     this.history.clear(this.document);
     this.previewOverrides.clear();
     this.persistChange(this.document.revision);
+    this.flushReleasedResources();
     this.emit();
   }
 
@@ -192,5 +230,14 @@ export class ImageEditCommandBusV3 {
   private emit(): void {
     const snapshot = this.getSnapshot();
     for (const listener of this.listeners) listener(snapshot);
+  }
+
+  private flushReleasedResources(): void {
+    if (this.history.takeReleasedResourceEvents().length === 0) return;
+    const retained = collectImageEditJsonResourceIdsV3(
+      this.document,
+      this.history.getRetainedResources().map((resource) => resource.resourceId),
+    );
+    this.repository?.scheduleGarbageCollection?.(this.document.id, retained);
   }
 }

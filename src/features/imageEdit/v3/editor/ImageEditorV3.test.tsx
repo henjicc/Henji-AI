@@ -162,13 +162,17 @@ describe('ImageEditorV3 professional shell', () => {
     expect(screen.queryByRole('menuitem', { name: '标注图层' })).toBeNull()
   })
 
-  it('不允许从图层菜单新建当前不能可靠导出的效果', async () => {
+  it('图层菜单只提供发布范围内的扁平图层和三种效果', async () => {
     renderEditor(createDocument([createImageEditRasterLayerV3('raster', '底图')]))
 
     fireEvent.click(await screen.findByRole('button', { name: '添加图层' }))
-    const glow = screen.getByRole('menuitem', { name: /辉光 Pro（暂不可用/ }) as HTMLButtonElement
-    expect(glow.disabled).toBe(true)
-    expect(glow.textContent).toContain('当前不能可靠导出栅格图片')
+    expect(screen.getByRole('menuitem', { name: '辉光 Pro' })).toBeTruthy()
+    expect(screen.getByRole('menuitem', { name: '高斯模糊' })).toBeTruthy()
+    expect(screen.getByRole('menuitem', { name: '柔光 / 发光' })).toBeTruthy()
+    expect(screen.queryByRole('menuitem', { name: '图层组' })).toBeNull()
+    expect(screen.queryByRole('menuitem', { name: '曝光' })).toBeNull()
+    expect(screen.queryByRole('combobox', { name: '混合模式' })).toBeNull()
+    expect(screen.queryByRole('button', { name: '添加蒙版' })).toBeNull()
   })
 
   it('连续拖动参数只提交一次文档命令', async () => {
@@ -244,20 +248,13 @@ describe('ImageEditorV3 professional shell', () => {
     if (layer.type === 'effect') expect(layer.params.radius).toBe(48)
   })
 
-  it('组隔离开关只提交一次持久命令', async () => {
-    const changes: ImageEditDocumentV3[] = []
+  it('发布宿主可以读取旧组但不再暴露组隔离编辑入口', async () => {
     renderEditor(
       createDocument([createImageEditGroupLayerV3('group', '图层组')]),
-      { onDocumentChange: (next) => changes.push(next) },
     )
 
-    const isolation = await screen.findByRole('switch', { name: '隔离合成' })
-    fireEvent.click(isolation)
-    await waitFor(() => expect(changes).toHaveLength(1))
-    const group = changes[0].layers[0]
-    expect(group.type).toBe('group')
-    if (group.type === 'group') expect(group.isolated).toBe(true)
-    expect(changes[0].revision).toBe(1)
+    await waitFor(() => expect(screen.getByText('图层组')).toBeTruthy())
+    expect(screen.queryByRole('switch', { name: '隔离合成' })).toBeNull()
   })
 
   it('受控宿主可以同步接收文档更新而不会在渲染阶段重入', async () => {
@@ -265,12 +262,12 @@ describe('ImageEditorV3 professional shell', () => {
     const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined)
     render(
       <ControlledEditor
-        initialDocument={createDocument([createImageEditGroupLayerV3('group', '图层组')])}
+        initialDocument={createDocument([createImageEditRasterLayerV3('raster', '底图')])}
         onDocumentChange={(next) => changes.push(next)}
       />,
     )
 
-    fireEvent.click(await screen.findByRole('switch', { name: '隔离合成' }))
+    fireEvent.click(await screen.findByRole('switch', { name: '可见' }))
     await waitFor(() => expect(changes).toHaveLength(1))
 
     expect(consoleError.mock.calls.flat().join(' ')).not.toContain(

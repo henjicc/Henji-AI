@@ -17,6 +17,7 @@ export type ImageEditorToolIdV3 =
   | 'mask-edit';
 
 export type ImageEditorPanelIdV3 = 'layers' | 'properties' | 'histogram' | 'color' | 'history';
+export type ImageEditorLayerControlV3 = 'blend-mode' | 'mask';
 export type ImageEditorSaveActionV3 = 'save-document' | 'save-package' | 'export-raster';
 export type ImageEditorLayerKindV3 = 'raster' | 'annotation' | 'effect' | 'adjustment' | 'group';
 
@@ -67,6 +68,7 @@ export interface ImageEditorHostProfileV3 {
   effects: readonly ImageEditorCapabilityV3<string>[];
   adjustments: readonly string[];
   panels: readonly ImageEditorPanelIdV3[];
+  layerControls: readonly ImageEditorLayerControlV3[];
   saveActions: readonly ImageEditorSaveActionV3[];
   hdrReadiness: ImageEditorCapabilityReadinessV3;
   allowPackageExternalSources: boolean;
@@ -75,14 +77,6 @@ export interface ImageEditorHostProfileV3 {
 const ready = <TId extends string>(id: TId): ImageEditorCapabilityV3<TId> => ({
   id,
   readiness: { state: 'ready' },
-});
-
-const disabled = <TId extends string>(
-  id: TId,
-  reasonKey: ImageEditorReadinessReasonKeyV3,
-): ImageEditorCapabilityV3<TId> => ({
-  id,
-  readiness: { state: 'disabled', reasonKey },
 });
 
 const MOVE_TOOL = ready('move');
@@ -112,12 +106,8 @@ const RASTER_TOOLS: readonly ImageEditorCapabilityV3<ImageEditorToolIdV3>[] = [
 const CORE_EFFECTS: readonly ImageEditorCapabilityV3<string>[] = [
   ready('image.gaussian-blur-v2'),
   ready('image.diffusion'),
-  disabled(
-    'image.vgpu-glow',
-    'imageEditor.v3.readiness.reasons.glowExport',
-  ),
+  ready('image.vgpu-glow'),
 ];
-const CORE_ADJUSTMENTS = ['exposure', 'curves', 'temperature-tint', 'hsl'] as const;
 const HDR_LIMITATION: ImageEditorCapabilityReadinessV3 = {
   state: 'limited',
   reasonKey: 'imageEditor.v3.readiness.reasons.hdrExport',
@@ -128,17 +118,18 @@ export const IMAGE_EDITOR_HOST_PROFILES_V3: Readonly<
 > = {
   full: {
     id: 'full',
-    tools: [
-      ...NAVIGATION_TOOLS, ready('crop'), ...SELECTION_TOOLS, ...ANNOTATION_TOOLS,
-      ...RASTER_TOOLS,
-    ],
-    layerKinds: ['raster', 'annotation', 'effect', 'adjustment', 'group'],
+    tools: [...NAVIGATION_TOOLS, ready('crop'), ...ANNOTATION_TOOLS],
+    layerKinds: ['raster', 'annotation', 'effect'],
     effects: CORE_EFFECTS,
-    adjustments: CORE_ADJUSTMENTS,
+    adjustments: [],
     panels: ['layers', 'properties'],
-    saveActions: ['save-document', 'save-package', 'export-raster'],
-    hdrReadiness: HDR_LIMITATION,
-    allowPackageExternalSources: true,
+    layerControls: [],
+    saveActions: ['save-document', 'export-raster'],
+    hdrReadiness: {
+      state: 'disabled',
+      reasonKey: 'imageEditor.v3.readiness.reasons.hdrExport',
+    },
+    allowPackageExternalSources: false,
   },
   quick: {
     id: 'quick',
@@ -147,6 +138,7 @@ export const IMAGE_EDITOR_HOST_PROFILES_V3: Readonly<
     effects: CORE_EFFECTS.filter(({ id }) => id !== 'image.vgpu-glow'),
     adjustments: ['exposure', 'hsl'],
     panels: ['layers', 'properties'],
+    layerControls: ['blend-mode'],
     saveActions: ['save-document', 'export-raster'],
     hdrReadiness: {
       state: 'disabled',
@@ -156,16 +148,17 @@ export const IMAGE_EDITOR_HOST_PROFILES_V3: Readonly<
   },
   'canvas-edit': {
     id: 'canvas-edit',
-    tools: [
-      ...NAVIGATION_TOOLS, ready('crop'), ...SELECTION_TOOLS, ...ANNOTATION_TOOLS,
-      ...RASTER_TOOLS,
-    ],
-    layerKinds: ['raster', 'annotation', 'effect', 'adjustment', 'group'],
+    tools: [...NAVIGATION_TOOLS, ready('crop'), ...ANNOTATION_TOOLS],
+    layerKinds: ['raster', 'annotation', 'effect'],
     effects: CORE_EFFECTS,
-    adjustments: CORE_ADJUSTMENTS,
+    adjustments: [],
     panels: ['layers', 'properties'],
+    layerControls: [],
     saveActions: ['save-document'],
-    hdrReadiness: HDR_LIMITATION,
+    hdrReadiness: {
+      state: 'disabled',
+      reasonKey: 'imageEditor.v3.readiness.reasons.hdrExport',
+    },
     allowPackageExternalSources: false,
   },
   mask: {
@@ -175,6 +168,7 @@ export const IMAGE_EDITOR_HOST_PROFILES_V3: Readonly<
     effects: [],
     adjustments: [],
     panels: ['layers', 'properties'],
+    layerControls: ['mask'],
     saveActions: ['save-document'],
     hdrReadiness: HDR_LIMITATION,
     allowPackageExternalSources: false,

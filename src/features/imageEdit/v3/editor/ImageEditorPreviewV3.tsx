@@ -42,6 +42,7 @@ interface ImageEditorPreviewV3Props extends Pick<
   | 'annotationOverlay'
   | 'resourceByteSizes'
   | 'resourceDescriptors'
+  | 'onPackageThumbnailChange'
 > {
   bus: ImageEditCommandBusV3
   controller: ImageEditorV3Controller
@@ -107,6 +108,7 @@ export function ImageEditorPreviewV3({
   annotationOverlay,
   resourceByteSizes,
   resourceDescriptors,
+  onPackageThumbnailChange,
   bus,
   controller,
 }: ImageEditorPreviewV3Props): JSX.Element {
@@ -151,6 +153,25 @@ export function ImageEditorPreviewV3({
     !previewRenderer,
     resourceDescriptors,
   )
+  useEffect(() => {
+    const thumbnail = managedPreview.result?.thumbnail
+    if (!thumbnail
+      || !onPackageThumbnailChange
+      || managedPreview.resultDocumentId === null
+      || managedPreview.resultRevision === null) return
+    onPackageThumbnailChange({
+      documentId: managedPreview.resultDocumentId,
+      revision: managedPreview.resultRevision,
+      bytes: thumbnail.bytes.slice(0),
+      mediaType: thumbnail.mediaType,
+      extension: thumbnail.mediaType === 'image/webp' ? 'webp' : 'png',
+    })
+  }, [
+    managedPreview.result,
+    managedPreview.resultDocumentId,
+    managedPreview.resultRevision,
+    onPackageThumbnailChange,
+  ])
   const viewportComposite = useImageEditorViewportCompositeV3(
     controller.sessionId,
     snapshot,

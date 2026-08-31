@@ -24,6 +24,7 @@ import {
   reconcileImageEditorV3ResourceDescriptors,
 } from '@/features/imageEdit/v3/application/imageEditorResourceDescriptorsV3'
 import type { ImageEditorV3ResourceDescriptor } from '@/platform/contracts/imageEditorV3'
+import type { ImageEditorV3PackageThumbnailSnapshot } from '@/features/imageEdit/v3/editor/types'
 import {
   ImageMarkV3PersistenceQueue,
   type ImageMarkV3PersistenceStatus,
@@ -77,6 +78,7 @@ export interface ImageMarkToolV3HostController extends ImageMarkToolV3ActionsCon
   flushPending: () => Promise<ImageEditDocumentReferenceV3>
   handleDocumentChange: (document: ImageEditDocumentV3) => void
   handlePersistenceChange: (snapshot: ImageEditPersistenceSnapshotV3) => void
+  handlePackageThumbnailChange: (thumbnail: ImageEditorV3PackageThumbnailSnapshot) => void
 }
 
 export function useImageMarkToolV3Host(
@@ -103,6 +105,7 @@ export function useImageMarkToolV3Host(
   const persistenceSnapshotRef = useRef<ImageEditPersistenceSnapshotV3 | null>(null)
   const persistenceRef = useRef<ImageMarkV3PersistenceQueue | null>(null)
   const autosaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const packageThumbnailRef = useRef<ImageEditorV3PackageThumbnailSnapshot | null>(null)
 
   useEffect(() => {
     mountedRef.current = true
@@ -132,6 +135,7 @@ export function useImageMarkToolV3Host(
     setPersistenceStatus(null)
     persistenceRef.current = null
     persistenceSnapshotRef.current = null
+    packageThumbnailRef.current = null
 
     void (async () => {
       let sourceKind = 'unsupported'
@@ -334,6 +338,7 @@ export function useImageMarkToolV3Host(
   }, [flushPending, showNotification, t])
 
   const handlePackageOpened = useCallback((opened: OpenedImageMarkV3Package): void => {
+    packageThumbnailRef.current = null
     documentIdRef.current = opened.document.id
     persistenceSnapshotRef.current = opened.persistence
     persistenceRef.current = new ImageMarkV3PersistenceQueue({
@@ -353,11 +358,32 @@ export function useImageMarkToolV3Host(
     reportPersistenceStatus({ kind: 'idle', reference: opened.reference })
   }, [reportPersistenceStatus, repository])
 
+  const handlePackageThumbnailChange = useCallback((
+    thumbnail: ImageEditorV3PackageThumbnailSnapshot,
+  ): void => {
+    packageThumbnailRef.current = thumbnail
+  }, [])
+
+  const getPackageThumbnail = useCallback(() => {
+    const thumbnail = packageThumbnailRef.current
+    const current = persistenceSnapshotRef.current?.document
+    if (!thumbnail
+      || !current
+      || thumbnail.documentId !== current.id
+      || thumbnail.revision !== current.revision) return null
+    return {
+      bytes: thumbnail.bytes.slice(0),
+      mediaType: thumbnail.mediaType,
+      extension: thumbnail.extension,
+    }
+  }, [])
+
   const actions = useImageMarkToolV3Actions({
     document: bootstrap.kind === 'ready' ? bootstrap.document : null,
     sourceName,
     flushPending,
     onPackageOpened: handlePackageOpened,
+    getPackageThumbnail,
   })
 
   return {
@@ -368,5 +394,6 @@ export function useImageMarkToolV3Host(
     flushPending,
     handleDocumentChange,
     handlePersistenceChange,
+    handlePackageThumbnailChange,
   }
 }

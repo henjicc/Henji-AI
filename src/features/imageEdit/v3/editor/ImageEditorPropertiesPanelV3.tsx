@@ -203,7 +203,8 @@ export function ImageEditorPropertiesPanelV3({
           />
         </UiFormRow>
         <OpacityControl controller={controller} layer={selected} disabled={contentLocked} />
-        <UiFormRow label={t('imageEditor.v3.properties.blendMode')}>
+        {controller.profile.layerControls.includes('blend-mode') ? (
+          <UiFormRow label={t('imageEditor.v3.properties.blendMode')}>
           <UiSelect
             aria-label={t('imageEditor.v3.properties.blendMode')}
             value={selected.blendMode}
@@ -220,8 +221,9 @@ export function ImageEditorPropertiesPanelV3({
               <option key={mode} value={mode}>{t(`imageEditor.v3.blendMode.${mode}`)}</option>
             ))}
           </UiSelect>
-        </UiFormRow>
-        {selected.type === 'group' ? (
+          </UiFormRow>
+        ) : null}
+        {selected.type === 'group' && controller.profile.layerKinds.includes('group') ? (
           <UiFormRow
             label={t('imageEditor.v3.properties.groupIsolation')}
             info={t('imageEditor.v3.properties.groupIsolationInfo')}
@@ -278,7 +280,8 @@ export function ImageEditorPropertiesPanelV3({
         />
       ) : null}
 
-      <UiGroup divided className="mt-5" title={t('imageEditor.v3.properties.mask')} gap="stack">
+      {controller.profile.layerControls.includes('mask') ? (
+        <UiGroup divided className="mt-5" title={t('imageEditor.v3.properties.mask')} gap="stack">
         {selected.mask ? (
           <>
             <UiFormRow label={t('imageEditor.v3.properties.maskInverted')} inline>
@@ -322,7 +325,8 @@ export function ImageEditorPropertiesPanelV3({
             {t('imageEditor.v3.properties.addMask')}
           </UiButton>
         )}
-      </UiGroup>
+        </UiGroup>
+      ) : null}
     </section>
   )
 }

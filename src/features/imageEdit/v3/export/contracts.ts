@@ -1,6 +1,7 @@
 import type {
   ImageEditBrushResourceReferenceV3,
   ImageEditBrushTileV3,
+  Float32MaskTile,
   Float32PremultipliedRgbaTile,
   ImageEditDocumentV3,
   ImageEditRenderPlanNode,
@@ -61,6 +62,29 @@ export interface ImageEditorV3ExportAnnotationRasterizeRequest {
   signal: AbortSignal
 }
 
+export interface ImageEditorV3VgpuGlowAnalysisHandle {
+  release(): void
+}
+
+export interface ImageEditorV3VgpuGlowRuntime {
+  buildAnalysis(request: {
+    node: ImageEditRenderPlanNode
+    source: Float32PremultipliedRgbaTile
+    document: ImageEditDocumentV3
+    signal: AbortSignal
+  }): Promise<ImageEditorV3VgpuGlowAnalysisHandle>
+  render(request: {
+    node: ImageEditRenderPlanNode
+    source: Float32PremultipliedRgbaTile
+    mask?: Float32MaskTile
+    region: ImageEditorV3ExportRenderRegion
+    document: ImageEditDocumentV3
+    analysis: ImageEditorV3VgpuGlowAnalysisHandle
+    signal: AbortSignal
+  }): Promise<Float32PremultipliedRgbaTile>
+  dispose(): void
+}
+
 export interface ImageEditorV3ExportRenderDependencies {
   readSourceTile?: (
     request: ImageEditorV3ExportSourceTileRequest,
@@ -80,6 +104,7 @@ export interface ImageEditorV3ExportRenderDependencies {
   }>
   scheduler?: ImageEditRenderScheduler
   resourceBudget?: ImageEditResourceBudget
+  createVgpuGlowRuntime?: () => ImageEditorV3VgpuGlowRuntime
 }
 
 export interface RenderImageEditorV3ExportTilesRequest {

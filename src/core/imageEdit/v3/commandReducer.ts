@@ -34,6 +34,7 @@ import {
   findImageEditCommandLayerLocationV3 as findLayerLocation,
   type ImageEditCommandLayerLocationV3 as LayerLocation,
 } from './commandLayerLocation';
+import { assertImageEditStructuralCommandResourcesV3 } from './commandLayerResourceMetadata';
 
 export {
   ImageEditCommandValidationErrorV3,
@@ -202,9 +203,18 @@ function inverseBase(command: ImageEditCommandV3, revision: number): Pick<ImageE
 function applyLayerCommand(
   document: ImageEditDocumentV3,
   command: ImageEditCommandV3,
-  nextRevision: number
+  nextRevision: number,
+  allowLegacyResourceMetadata: boolean,
 ): { layers: ImageEditLayerV3[]; inverse: ImageEditCommandV3 } {
   const base = inverseBase(command, nextRevision);
+  assertImageEditStructuralCommandResourcesV3(
+    document,
+    command,
+    allowLegacyResourceMetadata,
+  );
+  const structuralResources = 'resources' in command && command.resources
+    ? command.resources.map((resource) => ({ ...resource }))
+    : undefined;
   if (command.type === 'layer.add') {
     assertContainerEditable(document.layers, command.parentId);
     const layer = cloneLayer(command.layer);
@@ -212,7 +222,12 @@ function applyLayerCommand(
     assertTreeIdsAvailable(document.layers, layer);
     return {
       layers: insertLayer(document.layers, command.parentId, command.index, layer),
-      inverse: { ...base, type: 'layer.delete', layerId: layer.id },
+      inverse: {
+        ...base,
+        type: 'layer.delete',
+        layerId: layer.id,
+        ...(structuralResources ? { resources: structuralResources } : {}),
+      },
     };
   }
   if (command.type === 'layer.delete') {
@@ -227,6 +242,7 @@ function applyLayerCommand(
         parentId: location.parentId,
         index: location.index,
         layer: cloneLayer(location.layer),
+        ...(structuralResources ? { resources: structuralResources } : {}),
       },
     };
   }
@@ -254,7 +270,12 @@ function applyLayerCommand(
     assertTreeIdsAvailable(document.layers, duplicate);
     return {
       layers: insertLayer(document.layers, command.parentId, command.index, duplicate),
-      inverse: { ...base, type: 'layer.delete', layerId: duplicate.id },
+      inverse: {
+        ...base,
+        type: 'layer.delete',
+        layerId: duplicate.id,
+        ...(structuralResources ? { resources: structuralResources } : {}),
+      },
     };
   }
   if (command.type === 'layer.group') {
@@ -277,7 +298,12 @@ function applyLayerCommand(
     container.splice(ordered[0].index, ordered.length, group);
     return {
       layers: replaceContainer(document.layers, parentId, container),
-      inverse: { ...base, type: 'layer.ungroup', groupId: group.id },
+      inverse: {
+        ...base,
+        type: 'layer.ungroup',
+        groupId: group.id,
+        ...(structuralResources ? { resources: structuralResources } : {}),
+      },
     };
   }
   if (command.type === 'layer.ungroup') {
@@ -294,16 +320,23 @@ function applyLayerCommand(
         type: 'layer.group',
         layerIds: location.layer.children.map((child) => child.id),
         group: { ...cloneLayer(location.layer), children: [] } as ImageEditGroupLayerV3,
+        ...(structuralResources ? { resources: structuralResources } : {}),
       },
     };
   }
-  return applyLayerContentCommand(document, command, nextRevision);
+  return applyLayerContentCommand(
+    document,
+    command,
+    nextRevision,
+    allowLegacyResourceMetadata,
+  );
 }
 
 function applyLayerContentCommand(
   document: ImageEditDocumentV3,
   command: ImageEditCommandV3,
-  nextRevision: number
+  nextRevision: number,
+  allowLegacyResourceMetadata = false,
 ): { layers: ImageEditLayerV3[]; inverse: ImageEditCommandV3 } {
   const base = inverseBase(command, nextRevision);
   const layerId = 'layerId' in command ? command.layerId : '';
@@ -370,6 +403,9 @@ function applyLayerContentCommand(
         command,
         location.layer.mask,
       );
+      if (!resourceMetadata && !allowLegacyResourceMetadata) {
+        throw new ImageEditMaskResourceMetadataErrorV3('蒙版资源元数据必须成对提供');
+      }
     } catch (error) {
       if (error instanceof ImageEditMaskResourceMetadataErrorV3) {
         throw new ImageEditCommandValidationErrorV3(error.message);
@@ -455,7 +491,8 @@ function applyLayerContentCommand(
 
 export function applyImageEditCommandV3(
   document: ImageEditDocumentV3,
-  command: ImageEditCommandV3
+  command: ImageEditCommandV3,
+  options: { allowLegacyResourceMetadata?: boolean } = {},
 ): ImageEditCommandApplyResultV3 {
   if (!command.commandId || command.commandId.length > 256) {
     throw new ImageEditCommandValidationErrorV3('图片编辑命令 ID 无效');
@@ -472,7 +509,12 @@ export function applyImageEditCommandV3(
   const documentResult = command.type === 'document.update-output-geometry'
     ? applyImageEditOutputGeometryCommandV3(document, command, nextRevision)
     : null;
-  const layerResult = documentResult ? null : applyLayerCommand(document, command, nextRevision);
+  const layerResult = documentResult ? null : applyLayerCommand(
+    document,
+    command,
+    nextRevision,
+    options.allowLegacyResourceMetadata === true,
+  );
   const inverse = documentResult?.inverse ?? layerResult?.inverse;
   if (!inverse) throw new ImageEditCommandValidationErrorV3('图片编辑命令没有生成逆向补丁');
   const historyMetadataBytes = new TextEncoder().encode(JSON.stringify([command, inverse])).byteLength;

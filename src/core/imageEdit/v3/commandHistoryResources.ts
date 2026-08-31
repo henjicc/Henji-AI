@@ -8,6 +8,34 @@ import {
   mergeImageEditHistoryResourceReferencesV3,
 } from './commandTypes'
 
+export interface ImageEditHistoryResourceTotalsV3 {
+  knownBytes: number
+  unknownResourceCount: number
+}
+
+export function calculateImageEditHistorySnapshotResourceTotalsV3(
+  entries: readonly {
+    metadataBytes: number
+    resources: readonly ImageEditHistoryResourceReferenceV3[]
+  }[],
+): ImageEditHistoryResourceTotalsV3 {
+  let knownBytes = 0
+  for (const entry of entries) {
+    knownBytes += entry.metadataBytes
+    if (!Number.isSafeInteger(knownBytes)) throw new RangeError('历史保留字节数溢出')
+  }
+  const resources = mergeImageEditHistoryResourceReferencesV3(
+    entries.flatMap((entry) => entry.resources),
+  )
+  let unknownResourceCount = 0
+  for (const resource of resources) {
+    if (resource.byteSize === null) unknownResourceCount += 1
+    else knownBytes += resource.byteSize
+    if (!Number.isSafeInteger(knownBytes)) throw new RangeError('历史保留字节数溢出')
+  }
+  return { knownBytes, unknownResourceCount }
+}
+
 function sumKnownResourceBytes(
   resources: readonly ImageEditHistoryResourceReferenceV3[],
 ): number {

@@ -50,6 +50,12 @@ interface ImageEditorPreviewCompletedBaseV3 {
   width: number
   height: number
   diagnostics: string[]
+  thumbnail?: {
+    width: number
+    height: number
+    mediaType: 'image/png' | 'image/webp'
+    bytes: ArrayBuffer
+  }
 }
 
 export interface ImageEditorPreviewBitmapEventV3 extends ImageEditorPreviewCompletedBaseV3 {

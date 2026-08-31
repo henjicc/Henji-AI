@@ -1,6 +1,6 @@
 /** @vitest-environment jsdom */
 
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { NotificationProvider } from '@/contexts/NotificationContext'
@@ -239,14 +239,8 @@ describe('ImageMarkToolV3Host', () => {
       }),
     )
 
-    await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: '保存可编辑文件…' }))
-    })
-    await waitFor(() => expect(mocks.savePackage).toHaveBeenCalledWith(expect.objectContaining({
-      documentRef: expect.stringMatching(/^image-edit-v3:/),
-      revision: 1,
-      suggestedName: 'source-可编辑.henjiimg',
-    })))
+    expect(screen.queryByRole('button', { name: '保存可编辑文件…' })).toBeNull()
+    expect(mocks.savePackage).not.toHaveBeenCalled()
   })
 
   it('导入失败时提供重试和显式兼容回退，不伪造旧文档结果', async () => {
@@ -261,45 +255,21 @@ describe('ImageMarkToolV3Host', () => {
     expect(mocks.save).not.toHaveBeenCalled()
   })
 
-  it('从唯一来源菜单打开可编辑包并切换到包内权威文档', async () => {
+  it('发布入口不展示暂缓的可编辑交换包', async () => {
     const rendered = renderHost()
     await waitFor(() => expect(rendered.container.querySelector('[data-image-editor-v3]')).toBeTruthy())
-    if (!persistedDocument) throw new Error('missing bootstrapped document')
-    const packagedDocument = {
-      ...structuredClone(persistedDocument),
-      id: 'package-document',
-      revision: 4,
-    }
-    mocks.openPackage.mockResolvedValueOnce({
-      status: 'completed',
-      value: {
-        snapshot: {
-          documentRef: 'image-edit-v3:package-document',
-          revision: 4,
-          previewRef: null,
-          document: packagedDocument,
-          history: {
-            version: 1,
-            documentId: 'package-document',
-            headRevision: 4,
-            undo: [],
-            redo: [],
-          },
-          resourceRefs: [RESOURCE_REF],
-          resources: [{ resourceRef: RESOURCE_REF, byteLength: 4_096, mediaType: 'image/png' }],
-          sourceFingerprint: SOURCE_FINGERPRINT,
-        },
-        resources: [{ resourceRef: RESOURCE_REF, byteLength: 4_096, mediaType: 'image/png' }],
-        thumbnail: null,
-      },
-    })
 
     fireEvent.click(screen.getByRole('button', { name: '打开' }))
-    fireEvent.click(await screen.findByRole('button', { name: '打开可编辑文件' }))
+    expect(screen.queryByRole('button', { name: '打开可编辑文件' })).toBeNull()
+    expect(mocks.openPackage).not.toHaveBeenCalled()
 
-    await waitFor(() => expect(mocks.openPackage).toHaveBeenCalledTimes(1))
-    expect(await screen.findByText('版本 4')).toBeTruthy()
-    expect(rendered.container.querySelector('[data-image-editor-v3]')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: '选择栅格导出格式' }))
+    expect(document.querySelectorAll('[data-export-format]')).toHaveLength(3)
+    expect(document.querySelector('[data-export-format="png8"]')).toBeTruthy()
+    expect(document.querySelector('[data-export-format="jpeg"]')).toBeTruthy()
+    expect(document.querySelector('[data-export-format="webp"]')).toBeTruthy()
+    expect(document.querySelector('[data-export-format="tiff8"]')).toBeNull()
+    expect(document.querySelector('[data-export-format="bigtiff"]')).toBeNull()
   })
 
   it('按稳定引用恢复权威快照，不重新导入或创建文档', async () => {
@@ -392,13 +362,13 @@ describe('ImageMarkToolV3Host', () => {
     await waitFor(() => expect(screen.getByRole('button', { name: '选择栅格导出格式' })).toBeTruthy())
   })
 
-  it('将不可支持的效果原因明确通知用户', async () => {
-    mocks.exportRaster.mockRejectedValueOnce(new Error('辉光 Pro 尚未接入流式导出'))
+  it('将导出失败原因明确通知用户', async () => {
+    mocks.exportRaster.mockRejectedValueOnce(new Error('图像编码器暂时不可用'))
     renderHost()
     await screen.findByRole('slider', { name: '不透明度' })
     await startRasterExport()
 
-    expect(await screen.findByText('无法导出栅格图片：辉光 Pro 尚未接入流式导出')).toBeTruthy()
+    expect(await screen.findByText('无法导出栅格图片：图像编码器暂时不可用')).toBeTruthy()
   })
 
   it('导出预检不通过时直接禁用入口并展示中文原因', async () => {
@@ -438,7 +408,7 @@ describe('ImageMarkToolV3Host', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Open' }))
     expect(await screen.findByRole('button', { name: 'Open from file' })).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Open editable file' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Open editable file' })).toBeNull()
     expect(screen.getByRole('button', { name: 'Paste image from clipboard' })).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Create blank image' })).toBeTruthy()
   })

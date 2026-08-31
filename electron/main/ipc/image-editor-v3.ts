@@ -19,12 +19,15 @@ import {
   ImageEditDocumentRepository,
   ImageEditorV3SourceIngestor,
   ManagedRasterMaterializer,
+  PendingHenjiImagePackageImportRegistry,
   RasterExportSessionManager,
   SharpSourceProvider,
   toDocumentRef,
   type ImageEditDocumentEnvelope,
   type ResourceDescriptor,
   type ResourceId,
+  type PendingHenjiImagePackageImport,
+  type PendingHenjiImagePackageRef,
   type SourceImageMetadata,
   collectPersistedImageEditHistoryResourcesV3,
   createImageEditorV3ResourceMediaUrl,
@@ -40,6 +43,7 @@ import {
   parseImageEditorV3IngestSourcePayload,
   parseImageEditorV3LoadPayload,
   parseImageEditorV3PyramidPrewarmPayload,
+  parseImageEditorV3RelinkPackageExternalSourcePayload,
   parseImageEditorV3ResourcePayload,
   parseImageEditorV3SavePackagePayload,
   parseImageEditorV3SavePayload,
@@ -59,6 +63,7 @@ export {
   parseImageEditorV3IngestSourcePayload,
   parseImageEditorV3LoadPayload,
   parseImageEditorV3PyramidPrewarmPayload,
+  parseImageEditorV3RelinkPackageExternalSourcePayload,
   parseImageEditorV3SavePayload,
   parseImageEditorV3TilePayload,
 } from './image-editor-v3-payloads'
@@ -78,6 +83,7 @@ interface ImageEditorV3Runtime {
 }
 let runtime: ImageEditorV3Runtime | undefined
 const requestAdmission = new ImageEditorV3RequestAdmission()
+const pendingPackageImports = new PendingHenjiImagePackageImportRegistry()
 const trackedSenders = new WeakMap<WebContents, () => void>()
 function getRuntime(): ImageEditorV3Runtime {
   if (runtime) return runtime
@@ -90,7 +96,7 @@ function getRuntime(): ImageEditorV3Runtime {
     documents,
     resources,
     sources,
-    packages: new HenjiImagePackageCodec(resources),
+    packages: new HenjiImagePackageCodec(resources, sources),
     sourceIngestor: new ImageEditorV3SourceIngestor(resources, sources),
     brushTiles: new ImageEditBrushTileStoreV3(resources),
     rasterExports,
@@ -114,6 +120,7 @@ function trackRendererLifetime(sender: WebContents): void {
   const abortRequests = (): void => {
     cleanup()
     requestAdmission.abortSender(sender.id)
+    void pendingPackageImports.abandonOwner(sender.id)
   }
   sender.once('destroyed', abortRequests)
   sender.once('render-process-gone', abortRequests)
@@ -427,6 +434,48 @@ function packageFileName(raw: string | undefined, documentId: string): string {
   return stem.toLowerCase().endsWith('.henjiimg') ? stem : `${stem}.henjiimg`
 }
 
+function packageThumbnail(imported: PendingHenjiImagePackageImport['imported']): {
+  bytes: ArrayBuffer
+  mediaType: 'image/png' | 'image/webp'
+} | null {
+  if (!imported.thumbnail || !imported.manifest.thumbnail) return null
+  const mediaType = imported.manifest.thumbnail.mediaType
+  if (mediaType !== 'image/png' && mediaType !== 'image/webp') {
+    throw new Error(`Unsupported package thumbnail media type: ${mediaType}`)
+  }
+  return { bytes: toArrayBuffer(imported.thumbnail), mediaType }
+}
+
+function pendingPackageValue(record: PendingHenjiImagePackageImport): Record<string, unknown> {
+  return {
+    kind: 'relink-required',
+    pendingPackageRef: record.ref,
+    missingExternalSources: [...record.missingExternalSources.values()].map((source) => ({
+      resourceRef: source.resourceId,
+      fingerprint: { algorithm: 'sha256', value: source.sha256 },
+      byteLength: source.byteLength ?? null,
+      mediaType: source.mediaType ?? null,
+      pathHint: source.pathHint ?? null,
+      relinkHint: source.relinkHint ?? null,
+    })),
+    thumbnail: packageThumbnail(record.imported),
+  }
+}
+
+async function completePackageOpen(
+  imported: PendingHenjiImagePackageImport['imported'],
+  signal: AbortSignal,
+): Promise<Record<string, unknown>> {
+  const document = await persistImportedDocument(imported.manifest.document)
+  const snapshot = await toSnapshot(document, signal)
+  return {
+    kind: 'ready',
+    snapshot,
+    resources: snapshot.resources,
+    thumbnail: packageThumbnail(imported),
+  }
+}
+
 export function registerImageEditorV3Ipc(): void {
   const guard = assertTrustedMainRenderer
   registerImageEditorV3RasterExportIpc({
@@ -501,7 +550,7 @@ export function registerImageEditorV3Ipc(): void {
     runRequest('source.fast_proxy', payload.requestId, event.sender.id, async (signal) => {
       const proxy = await getRuntime().sources.readFastProxy(payload.resourceRef, payload.maxDimension, signal)
       return { resourceRef: proxy.resourceId, width: proxy.width, height: proxy.height, mediaType: 'image/webp', bytes: toArrayBuffer(proxy.bytes) }
-    }), estimateImageEditorV3ProxyRequestBytes(payload.maxDimension)
+    }, estimateImageEditorV3ProxyRequestBytes(payload.maxDimension))
   ), guard)
   registerIpcHandler('imageEditorV3:source:tile', parseImageEditorV3TilePayload, (payload, event) => (
     runRequest('source.tile', payload.requestId, event.sender.id, async (signal) => {
@@ -511,7 +560,7 @@ export function registerImageEditorV3Ipc(): void {
       })
       const { resourceId, pixels, ...metadata } = tile
       return { ...metadata, resourceRef: resourceId, pixels: toArrayBuffer(pixels) }
-    }), estimateImageEditorV3TileRequestBytes(payload)
+    }, estimateImageEditorV3TileRequestBytes(payload))
   ), guard)
   registerIpcHandler('imageEditorV3:package:open', parseImageEditorV3BasePayload, (payload, event) => (
     runRequest('package.open', payload.requestId, event.sender.id, async (signal) => {
@@ -525,23 +574,82 @@ export function registerImageEditorV3Ipc(): void {
         return { status: 'cancelled' as const }
       }
       const imported = await getRuntime().packages.import(selection.filePaths[0], { signal })
-      let document: ImageEditDocumentEnvelope
-      let snapshot: ImageEditorV3DocumentSnapshot
+      if (imported.missingExternalSources.length > 0) {
+        const pending = await pendingPackageImports.create(event.sender.id, imported)
+        return { status: 'completed' as const, value: pendingPackageValue(pending) }
+      }
       try {
-        document = await persistImportedDocument(imported.manifest.document)
-        snapshot = await toSnapshot(document, signal)
+        return {
+          status: 'completed' as const,
+          value: await completePackageOpen(imported, signal),
+        }
       } finally {
         await imported.resourceLease.release()
       }
-      return { status: 'completed' as const, value: {
-        snapshot,
-        resources: snapshot.resources,
-        thumbnail: imported.thumbnail && imported.manifest.thumbnail
-          ? { bytes: toArrayBuffer(imported.thumbnail), mediaType: imported.manifest.thumbnail.mediaType }
-          : null,
-      } }
     })
   ), guard)
+  registerIpcHandler(
+    'imageEditorV3:package:relinkExternalSource',
+    parseImageEditorV3RelinkPackageExternalSourcePayload,
+    (payload, event) => runRequest(
+      'package.relink_external_source',
+      payload.requestId,
+      event.sender.id,
+      async (signal) => {
+        const pendingRef = payload.pendingPackageRef as PendingHenjiImagePackageRef
+        const pending = pendingPackageImports.get(event.sender.id, pendingRef)
+        const externalSource = pending.missingExternalSources.get(payload.resourceRef)
+        if (!externalSource) throw new Error('Requested external package resource is not missing')
+        const selection = await dialog.showOpenDialog(ownerFor(event), {
+          properties: ['openFile'],
+          title: externalSource.relinkHint
+            ? `重新链接 ${externalSource.relinkHint}`
+            : '重新链接外部图片',
+          filters: [{
+            name: '图片',
+            extensions: ['png', 'jpg', 'jpeg', 'webp', 'tif', 'tiff', 'avif', 'heif', 'heic'],
+          }],
+        })
+        if (selection.canceled || !selection.filePaths[0]) {
+          await pendingPackageImports.abandon(event.sender.id, pendingRef)
+          return { status: 'cancelled' as const }
+        }
+        try {
+          const relinked = await getRuntime().packages.relinkExternalSource(
+            selection.filePaths[0],
+            externalSource,
+            signal,
+          )
+          try {
+            pendingPackageImports.addRelinkedResource(
+              pending,
+              relinked.resource,
+              relinked.resourceLease,
+            )
+          } catch (error) {
+            await relinked.resourceLease.release()
+            throw error
+          }
+          if (pending.missingExternalSources.size > 0) {
+            return { status: 'completed' as const, value: pendingPackageValue(pending) }
+          }
+          const ready = pendingPackageImports.takeReady(event.sender.id, pendingRef)
+          try {
+            return {
+              status: 'completed' as const,
+              value: await completePackageOpen(ready.imported, signal),
+            }
+          } finally {
+            await pendingPackageImports.release(ready)
+          }
+        } catch (error) {
+          await pendingPackageImports.abandon(event.sender.id, pendingRef)
+          throw error
+        }
+      },
+    ),
+    guard,
+  )
   registerIpcHandler('imageEditorV3:package:saveAs', parseImageEditorV3SavePackagePayload, (payload, event) => (
     runRequest('package.save_as', payload.requestId, event.sender.id, async (signal) => {
       const document = await getRuntime().documents.load(payload.documentRef)
@@ -562,7 +670,12 @@ export function registerImageEditorV3Ipc(): void {
       const targetPath = selection.filePath.toLowerCase().endsWith('.henjiimg')
         ? selection.filePath
         : `${selection.filePath}.henjiimg`
-      await getRuntime().packages.export({ targetPath, document, signal })
+      await getRuntime().packages.export({
+        targetPath,
+        document,
+        signal,
+        thumbnail: payload.thumbnail,
+      })
       return { status: 'completed' as const, value: {
         outputRef: `henjiimg:${document.documentId}@${document.revision}`,
         documentRef: toDocumentRef(document.documentId), revision: document.revision,
@@ -587,6 +700,7 @@ export function registerImageEditorV3Ipc(): void {
 
 export async function disposeImageEditorV3Ipc(): Promise<void> {
   requestAdmission.abortAll()
+  await pendingPackageImports.dispose()
   const current = runtime
   runtime = undefined
   await current?.rasterExports.dispose()

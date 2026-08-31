@@ -40,7 +40,7 @@ interface HenjiRuntimeInfoShape {
   featureFlags?: { imageEditorV3?: boolean }
 }
 
-/** V3 默认关闭，只允许宿主入口在明确运行时开关下切换。 */
+/** 发布版默认由 preload 开启；保留运行时开关用于快速回退。 */
 export function isImageEditorV3Enabled(runtimeInfo?: HenjiRuntimeInfoShape): boolean {
   if (runtimeInfo) return runtimeInfo.featureFlags?.imageEditorV3 === true
   if (typeof window === 'undefined') return false

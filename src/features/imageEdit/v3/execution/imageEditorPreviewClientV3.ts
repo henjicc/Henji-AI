@@ -1,10 +1,17 @@
 import type { ImageEditDocumentV3 } from '@/core/imageEdit/v3/documentTypes'
 import {
+  IMAGE_EDIT_RENDER_PRIORITY,
+  type ImageEditRenderScheduler,
+} from '@/core/imageEdit/v3/renderScheduler'
+import {
   type ImageEditMemoryLease,
   type ImageEditResourceBudget,
 } from '@/core/imageEdit/v3/resourceBudget'
 import type { ImageEditRenderQuality } from '@/core/imageEdit/v3/renderNodeDefinition'
-import type { ImageEditorV3ResourceDescriptor } from '@/platform/contracts/imageEditorV3'
+import {
+  IMAGE_EDITOR_V3_PACKAGE_THUMBNAIL_MAX_BYTES,
+  type ImageEditorV3ResourceDescriptor,
+} from '@/platform/contracts/imageEditorV3'
 import {
   ImageEditorPreviewBrushTileLoaderV3,
   type ImageEditorPreviewBrushTileReaderV3,
@@ -18,9 +25,16 @@ import {
   acquireImageEditorResourceLeaseV3,
 } from './imageEditorResourcePressureV3'
 import {
+  ImageEditorPreviewResultOwnerV3,
+  type ImageEditorManagedPreviewResultV3,
+  type ImageEditorPreviewUrlFactoryV3,
+} from './imageEditorPreviewResultLeaseV3'
+import {
   acquireImageEditorSessionResourceBudgetV3,
   type ImageEditorSessionResourceBudgetLeaseV3,
 } from './imageEditorSessionResourceBudgetV3'
+import { getImageEditorGlobalRenderSchedulerV3 } from './imageEditorGlobalRenderSchedulerV3'
+import { ImageEditorWorkerCompletionV3 } from './imageEditorWorkerCompletionV3'
 import {
   estimateImageEditorPreviewMemoryV3,
   imageEditorPreviewBrushTransferBytesV3,
@@ -33,10 +47,10 @@ import {
   type ImageEditorPreviewPyramidPrewarmerV3,
 } from './imageEditorPreviewResourcesV3'
 import type {
-  ImageEditorPreviewBlobEventV3,
   ImageEditorPreviewWorkerEventV3,
   ImageEditorPreviewWorkerFactoryV3,
   ImageEditorPreviewWorkerPortV3,
+  ImageEditorPreviewWorkerRequestV3,
 } from './previewProtocolV3'
 
 export class ImageEditorPreviewSupersededErrorV3 extends Error {
@@ -46,34 +60,13 @@ export class ImageEditorPreviewSupersededErrorV3 extends Error {
   }
 }
 
-export type ImageEditorManagedPreviewResultV3 =
-  | {
-      kind: 'bitmap'
-      bitmap: ImageBitmap
-      width: number
-      height: number
-      diagnostics: string[]
-      release: () => void
-    }
-  | {
-      kind: 'url'
-      url: string
-      width: number
-      height: number
-      diagnostics: string[]
-      release: () => void
-    }
+export type { ImageEditorManagedPreviewResultV3 } from './imageEditorPreviewResultLeaseV3'
 
 export interface ImageEditorManagedPreviewRequestV3 {
   document: ImageEditDocumentV3
   quality: ImageEditRenderQuality
   maxDimension: number
   resourceDescriptors: readonly ImageEditorV3ResourceDescriptor[]
-}
-
-interface PreviewUrlFactoryV3 {
-  create(bytes: ArrayBuffer, mediaType: string): string
-  revoke(url: string): void
 }
 
 export interface ImageEditorPreviewClientOptionsV3 {
@@ -83,12 +76,13 @@ export interface ImageEditorPreviewClientOptionsV3 {
   describePyramid?: ImageEditorPreviewPyramidDescriptorReaderV3
   prewarmPyramid?: ImageEditorPreviewPyramidPrewarmerV3
   readBrushTiles?: ImageEditorPreviewBrushTileReaderV3
-  urlFactory?: PreviewUrlFactoryV3
+  urlFactory?: ImageEditorPreviewUrlFactoryV3
   proxyCacheMaxBytes?: number
   brushCacheMaxBytes?: number
   brushTransferMaxBytes?: number
   resourceBudget?: ImageEditResourceBudget
   resourceBudgetConsumerId?: string
+  renderScheduler?: ImageEditRenderScheduler
 }
 
 interface ScheduledJobV3 extends ImageEditorManagedPreviewRequestV3 {
@@ -100,14 +94,12 @@ interface ScheduledJobV3 extends ImageEditorManagedPreviewRequestV3 {
   workingLease: ImageEditMemoryLease | null
   outputLease: ImageEditMemoryLease | null
   posted: boolean
+  renderTaskId: string
+  workerCompletion: ImageEditorWorkerCompletionV3<ImageEditorPreviewWorkerEventV3>
   resolve: (result: ImageEditorManagedPreviewResultV3) => void
   reject: (error: Error) => void
 }
 
-const defaultUrlFactory: PreviewUrlFactoryV3 = {
-  create: (bytes, mediaType) => URL.createObjectURL(new Blob([bytes], { type: mediaType })),
-  revoke: (url) => URL.revokeObjectURL(url),
-}
 let previewClientSequence = 0
 
 export {
@@ -141,21 +133,21 @@ export class ImageEditorPreviewClientV3 {
   private disposed = false
   private readonly brushTileLoader: ImageEditorPreviewBrushTileLoaderV3
   private readonly resourceLoader: ImageEditorPreviewResourceLoaderV3
-  private readonly resultLeases = new Set<() => void>()
   private readonly workerFactory: ImageEditorPreviewWorkerFactoryV3
-  private readonly urlFactory: PreviewUrlFactoryV3
+  private readonly resultOwner: ImageEditorPreviewResultOwnerV3
   private readonly budget: ImageEditResourceBudget
+  private readonly renderScheduler: ImageEditRenderScheduler
   private readonly sessionBudgetLease: ImageEditorSessionResourceBudgetLeaseV3 | null
 
   constructor(private readonly options: ImageEditorPreviewClientOptionsV3) {
     if (!options.sessionId.trim()) throw new Error('图片预览会话 ID 不能为空')
     this.workerFactory = options.workerFactory ?? createDefaultWorker
+    this.renderScheduler = options.renderScheduler ?? getImageEditorGlobalRenderSchedulerV3()
     this.brushTileLoader = new ImageEditorPreviewBrushTileLoaderV3({
       reader: options.readBrushTiles,
       cacheMaxBytes: options.brushCacheMaxBytes,
       transferMaxBytes: options.brushTransferMaxBytes,
     })
-    this.urlFactory = options.urlFactory ?? defaultUrlFactory
     this.sessionBudgetLease = options.resourceBudget
       ? null
       : acquireImageEditorSessionResourceBudgetV3(options.sessionId, {
@@ -163,6 +155,7 @@ export class ImageEditorPreviewClientV3 {
             ?? `managed-preview:${++previewClientSequence}`,
         })
     this.budget = options.resourceBudget ?? this.sessionBudgetLease!.budget
+    this.resultOwner = new ImageEditorPreviewResultOwnerV3(this.budget, options.urlFactory)
     try {
       this.resourceLoader = new ImageEditorPreviewResourceLoaderV3({
         sessionId: options.sessionId,
@@ -193,6 +186,8 @@ export class ImageEditorPreviewClientV3 {
         workingLease: null,
         outputLease: null,
         posted: false,
+        renderTaskId: `${createRequestId(this.options.sessionId, sequence)}:worker-frame`,
+        workerCompletion: new ImageEditorWorkerCompletionV3(),
         resolve,
         reject,
       }
@@ -202,9 +197,7 @@ export class ImageEditorPreviewClientV3 {
       }
       this.replacePending(job)
       this.running.abortController.abort()
-      if (this.running.posted) {
-        this.worker?.postMessage({ type: 'cancel', requestId: this.running.requestId })
-      }
+      this.renderScheduler.cancelTask(this.running.renderTaskId)
     })
   }
 
@@ -213,6 +206,7 @@ export class ImageEditorPreviewClientV3 {
     this.disposed = true
     const error = new Error('图片预览会话已经释放')
     this.running?.abortController.abort()
+    if (this.running) this.renderScheduler.cancelTask(this.running.renderTaskId)
     this.running?.reject(error)
     if (this.running) this.releaseJobResources(this.running)
     this.pending?.reject(error)
@@ -223,7 +217,7 @@ export class ImageEditorPreviewClientV3 {
       this.worker.terminate()
       this.worker = null
     }
-    for (const release of [...this.resultLeases]) release()
+    this.resultOwner.dispose()
     this.resourceLoader.dispose()
     this.brushTileLoader.dispose()
     this.sessionBudgetLease?.release()
@@ -308,22 +302,52 @@ export class ImageEditorPreviewClientV3 {
       this.brushTileLoader.load(brushRequests, job.document, job.abortController.signal),
     ])
     this.assertActive(job)
-    const worker = this.ensureWorker()
-    job.posted = true
-    worker.postMessage({
-      type: 'render',
-      requestId: job.requestId,
-      sequence: job.sequence,
+    const event = await this.renderScheduler.schedule<ImageEditorPreviewWorkerEventV3>({
+      id: job.renderTaskId,
       sessionId: this.options.sessionId,
-      document: job.document,
-      quality: job.quality,
-      maxDimension: job.maxDimension,
-      proxies,
-      brushTiles,
-    }, [
-      ...proxies.map((proxy) => proxy.bytes),
-      ...brushTiles.map((tile) => tile.bytes),
-    ])
+      revision: job.document.revision,
+      kind: 'preview',
+      lane: 'gpu',
+      priority: job.quality === 'draft'
+        ? IMAGE_EDIT_RENDER_PRIORITY.interactionDraft
+        : IMAGE_EDIT_RENDER_PRIORITY.viewportStable,
+      run: ({ signal }) => this.postWorkerAndWait(job, {
+        type: 'render',
+        requestId: job.requestId,
+        sequence: job.sequence,
+        sessionId: this.options.sessionId,
+        document: job.document,
+        quality: job.quality,
+        maxDimension: job.maxDimension,
+        proxies,
+        brushTiles,
+      }, [
+        ...proxies.map((proxy) => proxy.bytes),
+        ...brushTiles.map((tile) => tile.bytes),
+      ], signal),
+    })
+    this.assertActive(job)
+    this.completeWorkerEvent(job, event)
+  }
+
+  private postWorkerAndWait(
+    job: ScheduledJobV3,
+    request: Extract<ImageEditorPreviewWorkerRequestV3, { type: 'render' }>,
+    transfer: Transferable[],
+    schedulerSignal: AbortSignal,
+  ): Promise<ImageEditorPreviewWorkerEventV3> {
+    return job.workerCompletion.wait({
+      signals: [schedulerSignal, job.abortController.signal],
+      onAbort: () => {
+        if (job.posted) this.worker?.postMessage({ type: 'cancel', requestId: job.requestId })
+      },
+      fallbackAbortError: () => new ImageEditorPreviewSupersededErrorV3(),
+      start: () => {
+        const worker = this.ensureWorker()
+        job.posted = true
+        worker.postMessage(request, transfer)
+      },
+    })
   }
 
   private ensureWorker(): ImageEditorPreviewWorkerPortV3 {
@@ -350,27 +374,38 @@ export class ImageEditorPreviewClientV3 {
       this.releaseEventPayload(event)
       return
     }
+    if (!job.workerCompletion.resolve(event)) {
+      this.releaseEventPayload(event)
+    }
+  }
+
+  private completeWorkerEvent(job: ScheduledJobV3, event: ImageEditorPreviewWorkerEventV3): void {
     if (event.sequence !== job.sequence) {
       this.releaseEventPayload(event)
-      job.reject(new ImageEditorPreviewSupersededErrorV3())
-      this.finish(job)
-      return
+      throw new ImageEditorPreviewSupersededErrorV3()
     }
     if (event.type === 'failed') {
-      const error = event.code === 'aborted' || job.sequence !== this.latestSequence
+      throw event.code === 'aborted' || job.sequence !== this.latestSequence
         ? new ImageEditorPreviewSupersededErrorV3()
         : new Error(event.message)
-      job.reject(error)
-      this.finish(job)
-      return
     }
     if (job.sequence !== this.latestSequence) {
       this.releaseEventPayload(event)
-      job.reject(new ImageEditorPreviewSupersededErrorV3())
-      this.finish(job)
-      return
+      throw new ImageEditorPreviewSupersededErrorV3()
     }
     try {
+      if (event.thumbnail && (!(event.thumbnail.bytes instanceof ArrayBuffer)
+        || event.thumbnail.mediaType !== 'image/png'
+        || !Number.isSafeInteger(event.thumbnail.width)
+        || !Number.isSafeInteger(event.thumbnail.height)
+        || event.thumbnail.width < 1
+        || event.thumbnail.height < 1
+        || event.thumbnail.width > 512
+        || event.thumbnail.height > 512
+        || event.thumbnail.bytes.byteLength < 1
+        || event.thumbnail.bytes.byteLength > IMAGE_EDITOR_V3_PACKAGE_THUMBNAIL_MAX_BYTES)) {
+        throw new Error('图片预览 Worker 返回了无效或过大的包缩略图')
+      }
       const reservedOutput = job.outputLease
       if (!reservedOutput) throw new Error('图片预览成品缺少预留资源')
       const actualOutputBytes = imageEditorPreviewOutputBytesV3(event.width, event.height)
@@ -379,11 +414,18 @@ export class ImageEditorPreviewClientV3 {
       }
       job.outputLease = null
       job.resolve(event.type === 'rendered-bitmap'
-        ? this.leaseBitmap(event.bitmap, event.width, event.height, event.diagnostics, reservedOutput)
-        : this.leaseBlob(event, reservedOutput))
+        ? this.resultOwner.leaseBitmap(
+            event.bitmap,
+            event.width,
+            event.height,
+            event.diagnostics,
+            event.thumbnail,
+            reservedOutput,
+          )
+        : this.resultOwner.leaseBlob(event, reservedOutput))
     } catch (error) {
       this.releaseEventPayload(event)
-      job.reject(toError(error))
+      throw error
     }
     this.finish(job)
   }
@@ -393,8 +435,7 @@ export class ImageEditorPreviewClientV3 {
     this.worker?.terminate()
     this.worker = null
     if (!job) return
-    job.reject(new Error(message))
-    this.finish(job)
+    job.workerCompletion.reject(new Error(message))
   }
 
   private finish(job: ScheduledJobV3): void {
@@ -404,60 +445,6 @@ export class ImageEditorPreviewClientV3 {
     const next = this.pending
     this.pending = null
     if (next && !this.disposed) this.start(next)
-  }
-
-  private leaseBitmap(
-    bitmap: ImageBitmap,
-    width: number,
-    height: number,
-    diagnostics: string[],
-    outputLease: ImageEditMemoryLease,
-  ): ImageEditorManagedPreviewResultV3 {
-    const release = this.createLease(() => {
-      bitmap.close()
-      outputLease.release()
-    })
-    return { kind: 'bitmap', bitmap, width, height, diagnostics, release }
-  }
-
-  private leaseBlob(
-    event: ImageEditorPreviewBlobEventV3,
-    outputLease: ImageEditMemoryLease,
-  ): ImageEditorManagedPreviewResultV3 {
-    let blobLease: ImageEditMemoryLease | null = null
-    let url: string
-    try {
-      blobLease = acquireImageEditorResourceLeaseV3(
-        this.budget,
-        'managed-preview',
-        'cpu-cache',
-        event.bytes.byteLength,
-        'lower-mip',
-      )
-      url = this.urlFactory.create(event.bytes, event.mediaType)
-    } catch (error) {
-      blobLease?.release()
-      outputLease.release()
-      throw error
-    }
-    const release = this.createLease(() => {
-      this.urlFactory.revoke(url)
-      blobLease.release()
-      outputLease.release()
-    })
-    return { kind: 'url', url, width: event.width, height: event.height, diagnostics: event.diagnostics, release }
-  }
-
-  private createLease(dispose: () => void): () => void {
-    let released = false
-    const release = (): void => {
-      if (released) return
-      released = true
-      this.resultLeases.delete(release)
-      dispose()
-    }
-    this.resultLeases.add(release)
-    return release
   }
 
   private releaseEventPayload(event: ImageEditorPreviewWorkerEventV3): void {

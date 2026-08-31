@@ -58,6 +58,9 @@ import {
 } from '../execution/imageEditorSessionResourceBudgetV3'
 import { getImageEditorGlobalRenderSchedulerV3 } from '../execution/imageEditorGlobalRenderSchedulerV3'
 import { loadImageEditorV3SparseMaskRegion } from './maskRegion'
+import {
+  buildImageEditorV3VgpuGlowAnalyses,
+} from './vgpuGlowAnalysis'
 
 const logger = createLogger('features.image_edit.v3.export')
 const registry = createBuiltInImageEditRenderNodeRegistry()
@@ -198,6 +201,7 @@ async function* renderTiles(
   const total = grid.width * grid.height
   let completed = 0
   let diffusionAnalysisSet: Awaited<ReturnType<typeof buildImageEditorV3DiffusionAnalyses>> | null = null
+  let glowAnalysisSet: Awaited<ReturnType<typeof buildImageEditorV3VgpuGlowAnalyses>> | null = null
   logger.info('开始渲染图片编辑 V3 分块导出', {
     event: 'image_editor_v3.export.render.start',
     requestId: currentSessionId,
@@ -224,6 +228,15 @@ async function* renderTiles(
       sparseMaskPlan,
     )
     const diffusionAnalyses = diffusionAnalysisSet.analyses
+    glowAnalysisSet = await buildImageEditorV3VgpuGlowAnalyses(
+      document,
+      plan,
+      controller.signal,
+      dependencies,
+      budget,
+      sparseMaskPlan,
+      diffusionAnalyses,
+    )
     if (tileSize === DEFAULT_TILE_SIZE) {
       try {
         planTileExecution(
@@ -261,7 +274,9 @@ async function* renderTiles(
           sessionId: currentSessionId,
           revision: document.revision,
           kind: 'export',
-          lane: 'cpu',
+          lane: plan.nodes.some((node) => node.definitionId === 'effect.vgpu-glow')
+            ? 'gpu'
+            : 'cpu',
           priority: IMAGE_EDIT_RENDER_PRIORITY.export,
           run: async (taskContext) => {
             const requirements = collectImageEditCpuRegionRequirementsV3(
@@ -363,6 +378,21 @@ async function* renderTiles(
                   return imageEditorV3SourceRegionToMask(await loadSource(reference.resourceId, region))
                 },
                 executeCustomEffect: async (node, source, mask, region) => {
+                  if (node.definitionId === 'effect.vgpu-glow') {
+                    const analysis = glowAnalysisSet?.analyses.get(node.id)
+                    if (!analysis || !glowAnalysisSet) {
+                      throw new Error(`辉光 Pro 节点缺少共享散射分析：${node.id}`)
+                    }
+                    return glowAnalysisSet.runtime.render({
+                      node,
+                      source,
+                      mask,
+                      region,
+                      document,
+                      analysis,
+                      signal: taskContext.signal,
+                    })
+                  }
                   if (node.definitionId !== 'effect.diffusion') {
                     throw new Error(`分块导出不支持自定义效果：${node.definitionId}`)
                   }
@@ -448,6 +478,7 @@ async function* renderTiles(
     })
     throw error
   } finally {
+    glowAnalysisSet?.release()
     diffusionAnalysisSet?.release()
     request.signal?.removeEventListener('abort', onAbort)
     scheduler.cancelSession(currentSessionId)

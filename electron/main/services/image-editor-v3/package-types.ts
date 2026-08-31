@@ -34,6 +34,8 @@ export interface HenjiImagePackageThumbnail {
 export interface HenjiImageExternalSource {
   sha256: string
   byteLength?: number
+  /** 新写入包必须声明；旧 v1 包可缺省并在重链时由解码器识别。 */
+  mediaType?: string
   pathHint?: string
   relinkHint?: string
 }
@@ -97,6 +99,15 @@ function optionalShortString(value: unknown, label: string): string | undefined 
   return value
 }
 
+function optionalImageMediaType(value: unknown, label: string): string | undefined {
+  const mediaType = optionalShortString(value, label)?.trim().toLowerCase()
+  if (mediaType === undefined) return undefined
+  if (!/^image\/[a-z0-9][a-z0-9.+-]{0,63}$/.test(mediaType) || mediaType === 'image/svg+xml') {
+    throw new Error(`Invalid ${label}`)
+  }
+  return mediaType
+}
+
 export function packageResourcePath(resourceId: ResourceId): string {
   return `resources/${parseResourceId(resourceId)}`
 }
@@ -152,14 +163,20 @@ function parseThumbnail(value: unknown): HenjiImagePackageThumbnail | undefined 
   if (typeof value.path !== 'string' || !THUMBNAIL_PATH_PATTERN.test(value.path)) {
     throw new Error('Invalid .henjiimg thumbnail path')
   }
-  if (typeof value.mediaType !== 'string' || !value.mediaType || value.mediaType.length > 256) {
+  const extension = value.path.slice(value.path.lastIndexOf('.') + 1)
+  const expectedMediaType = extension === 'png'
+    ? 'image/png'
+    : extension === 'webp'
+      ? 'image/webp'
+      : null
+  if (!expectedMediaType || value.mediaType !== expectedMediaType) {
     throw new Error('Invalid .henjiimg thumbnail media type')
   }
   return {
     path: value.path,
     sha256: validateHash(value.sha256, 'thumbnail'),
     byteLength: validateByteLength(value.byteLength, 'thumbnail'),
-    mediaType: value.mediaType,
+    mediaType: expectedMediaType,
   }
 }
 
@@ -173,6 +190,7 @@ function parseExternalSources(value: unknown): HenjiImageExternalSource[] | unde
       byteLength: entry.byteLength === undefined
         ? undefined
         : validateByteLength(entry.byteLength, 'external source'),
+      mediaType: optionalImageMediaType(entry.mediaType, 'external source media type'),
       pathHint: optionalShortString(entry.pathHint, 'external source path hint'),
       relinkHint: optionalShortString(entry.relinkHint, 'external source relink hint'),
     }

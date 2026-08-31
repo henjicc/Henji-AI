@@ -2,8 +2,6 @@ import {
   ArrowDown,
   ArrowUp,
   Copy,
-  FolderInput,
-  FolderOutput,
   Plus,
   Trash2,
 } from 'lucide-react'
@@ -20,8 +18,6 @@ import { useImageEditorSessionStoreV3 } from '../store'
 import {
   canDragImageEditLayerRowV3,
   canDeleteImageEditLayersV3,
-  canGroupImageEditLayersV3,
-  canUngroupImageEditLayerV3,
   createImageEditLayerFromChoiceV3,
   findImageEditLayerLocationV3,
   flattenImageEditLayerTreeV3,
@@ -117,17 +113,13 @@ export function ImageEditorLayersPanelV3({
   const primaryLocation = effectiveSelectedIds.length === 1
     ? findImageEditLayerLocationV3(controller.document.layers, effectiveSelectedIds[0])
     : null
-  const canGroup = canGroupImageEditLayersV3(controller.document.layers, effectiveSelectedIds)
   const primaryEditable = Boolean(
     primaryLocation && isImageEditLayerLocationEditableV3(primaryLocation),
   )
-  const canUngroup = canUngroupImageEditLayerV3(primaryLocation)
   const canDelete = canDeleteImageEditLayersV3(
     controller.document.layers,
     effectiveSelectedIds,
   )
-  const canAddAtSelection = !primaryLocation
-    || primaryLocation.ancestors.every((ancestor) => !ancestor.locked)
   const creationChoices = getCreationChoices(controller, t)
   const reorderRows = useCallback((fromIndex: number, toIndex: number): void => {
     const destination = resolveImageEditLayerDropV3(rows, fromIndex, toIndex)
@@ -143,15 +135,9 @@ export function ImageEditorLayersPanelV3({
   })
 
   const addChoice = (choice: ImageEditLayerCreationChoiceV3): void => {
-    if (!canAddAtSelection) return
-    const location = primaryLocation
-    const parentId = location?.parentId ?? null
-    const containerLength = location?.container.length ?? controller.document.layers.length
-    const index = location ? location.index + 1 : containerLength
     const layer = createImageEditLayerFromChoiceV3(choice, controller.document.color.workingSpace)
-    controller.addLayer(layer, parentId, index)
+    controller.addLayer(layer, null, controller.document.layers.length)
     setSelectedLayerIds(controller.sessionId, [layer.id])
-    if (layer.type === 'group') toggleGroupExpanded(controller.sessionId, layer.id)
   }
 
   const handleSelect = (row: ImageEditLayerTreeRowV3, event: MouseEvent<HTMLButtonElement>): void => {
@@ -213,11 +199,8 @@ export function ImageEditorLayersPanelV3({
             <div className="p-1.5" role="menu" aria-label={t('imageEditor.v3.layers.addLayer')}>
               {creationChoices.map(({ choice, readiness }) => {
                 const key = `${choice.kind}:${choice.subtype ?? ''}`
-                const lockedReason = canAddAtSelection
-                  ? null
-                  : t('imageEditor.v3.layers.lockedContainer')
-                const disabled = readiness.state !== 'ready' || Boolean(lockedReason)
-                const reason = resolveImageEditorReadinessReasonV3(readiness, t) ?? lockedReason
+                const disabled = readiness.state !== 'ready'
+                const reason = resolveImageEditorReadinessReasonV3(readiness, t)
                 const unavailableLabel = reason
                   ? t('imageEditor.v3.readiness.unavailableWithReason', {
                       label: choice.name,
@@ -317,40 +300,6 @@ export function ImageEditorLayersPanelV3({
           }}
         >
           <Copy className="h-3.5 w-3.5" />
-        </UiIconButton>
-        <UiIconButton
-          className="h-7 w-7"
-          showBorder={false}
-          appearance="hover-only"
-          disabled={!canGroup}
-          aria-label={t('imageEditor.v3.layers.group')}
-          title={t('imageEditor.v3.layers.group')}
-          onClick={() => {
-            if (!canGroup) return
-            const groupId = controller.groupLayers(
-              effectiveSelectedIds,
-              t('imageEditor.v3.layerType.group'),
-            )
-            setSelectedLayerIds(controller.sessionId, [groupId])
-            toggleGroupExpanded(controller.sessionId, groupId)
-          }}
-        >
-          <FolderInput className="h-3.5 w-3.5" />
-        </UiIconButton>
-        <UiIconButton
-          className="h-7 w-7"
-          showBorder={false}
-          appearance="hover-only"
-          disabled={!canUngroup}
-          aria-label={t('imageEditor.v3.layers.ungroup')}
-          title={t('imageEditor.v3.layers.ungroup')}
-          onClick={() => {
-            if (canUngroup && primaryLocation?.layer.type === 'group') {
-              controller.ungroupLayer(primaryLocation.layer.id)
-            }
-          }}
-        >
-          <FolderOutput className="h-3.5 w-3.5" />
         </UiIconButton>
         <UiIconButton
           className="h-7 w-7"

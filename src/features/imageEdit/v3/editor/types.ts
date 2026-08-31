@@ -22,6 +22,14 @@ import type { ImageEditCommandHistorySnapshotV3 } from '@/core/imageEdit/v3/comm
 import type { ImageEditPersistenceSnapshotV3 } from '@/core/imageEdit/v3/serviceContracts'
 import type { ImageEditorV3ResourceDescriptor } from '@/platform/contracts/imageEditorV3'
 
+export interface ImageEditorV3PackageThumbnailSnapshot {
+  documentId: string
+  revision: number
+  bytes: ArrayBuffer
+  mediaType: 'image/png' | 'image/webp'
+  extension: 'png' | 'webp'
+}
+
 export type ImageEditorV3PreviewOutput =
   | { kind: 'url'; url: string; release?: () => void }
   | {
@@ -63,6 +71,8 @@ export interface ImageEditorV3Props {
   resourceByteSizes?: Readonly<Record<string, number>>
   /** 权威快照或受管写入返回的资源元数据；managed preview 据此分流图片与画笔瓦片。 */
   resourceDescriptors?: readonly ImageEditorV3ResourceDescriptor[]
+  /** 稳定合成帧生成的 512px 有界缩略图；宿主可在另存包时带给主进程。 */
+  onPackageThumbnailChange?: (thumbnail: ImageEditorV3PackageThumbnailSnapshot) => void
   /** 蒙版像素由资源层创建，界面只负责把返回的引用写入文档。 */
   onCreateMaskResource?: (
     layer: ImageEditLayerV3,

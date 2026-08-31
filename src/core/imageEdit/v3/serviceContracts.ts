@@ -38,6 +38,8 @@ export interface ImageEditDocumentRepositoryV3 {
     document: ImageEditDocumentV3,
     options: ImageEditSaveDocumentOptionsV3,
   ): void;
+  /** 等最近一次自动保存落盘后再以完整 live set 触发资源回收。 */
+  scheduleGarbageCollection?(documentId: string, retainedResourceIds: readonly string[]): void;
   cancelAutosave(documentId: string): void;
   collectGarbage(documentId: string, retainedResourceIds: readonly string[]): Promise<void>;
 }

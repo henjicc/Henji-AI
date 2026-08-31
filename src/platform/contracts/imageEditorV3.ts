@@ -11,6 +11,7 @@ export type ImageEditorV3RasterOutputRef = `image-export-v3:${string}@${number}:
  * 必须共用此值，直到有界 AVIF grid 编码替代整帧编码器。
  */
 export const IMAGE_EDITOR_V3_HDR_AVIF_MAX_PIXELS = 9_000_000
+export const IMAGE_EDITOR_V3_PACKAGE_THUMBNAIL_MAX_BYTES = 2 * 1024 * 1024
 
 export interface ImageEditorV3DocumentReference {
   documentRef: ImageEditorV3DocumentRef
@@ -166,11 +167,38 @@ export type ImageEditorV3DialogResult<T> =
   | { status: 'cancelled' }
   | { status: 'completed'; value: T }
 
-export interface ImageEditorV3PackageOpenResult {
+export interface ImageEditorV3PackageThumbnail {
+  bytes: ArrayBuffer
+  mediaType: 'image/png' | 'image/webp'
+}
+
+export interface ImageEditorV3PackageReadyResult {
+  kind: 'ready'
   snapshot: ImageEditorV3DocumentSnapshot
   resources: ImageEditorV3ResourceDescriptor[]
-  thumbnail: { bytes: ArrayBuffer; mediaType: string } | null
+  thumbnail: ImageEditorV3PackageThumbnail | null
 }
+
+export interface ImageEditorV3MissingExternalSource {
+  resourceRef: ImageEditorV3ResourceRef
+  fingerprint: { algorithm: 'sha256'; value: string }
+  byteLength: number | null
+  mediaType: string | null
+  pathHint: string | null
+  relinkHint: string | null
+}
+
+export interface ImageEditorV3PackageRelinkRequiredResult {
+  kind: 'relink-required'
+  /** 仅当前主渲染进程短期有效；不包含包路径或文件系统路径。 */
+  pendingPackageRef: `image-edit-package-open:${string}`
+  missingExternalSources: ImageEditorV3MissingExternalSource[]
+  thumbnail: ImageEditorV3PackageThumbnail | null
+}
+
+export type ImageEditorV3PackageOpenResult =
+  | ImageEditorV3PackageReadyResult
+  | ImageEditorV3PackageRelinkRequiredResult
 
 export interface ImageEditorV3PackageSaveResult {
   outputRef: ImageEditorV3OutputRef
@@ -295,11 +323,18 @@ export interface ImageEditorV3Platform {
   openPackage(request: {
     requestId: string
   }): Promise<ImageEditorV3DialogResult<ImageEditorV3PackageOpenResult>>
+  relinkPackageExternalSource(request: {
+    requestId: string
+    pendingPackageRef: `image-edit-package-open:${string}`
+    resourceRef: ImageEditorV3ResourceRef
+  }): Promise<ImageEditorV3DialogResult<ImageEditorV3PackageOpenResult>>
   savePackageAs(request: {
     requestId: string
     documentRef: ImageEditorV3DocumentRef
     revision: number
     suggestedName?: string
+    /** 当前已合成预览的有界副本；不接收 Data URL 或完整文档像素。 */
+    thumbnail?: ImageEditorV3PackageThumbnail & { extension: 'png' | 'webp' }
   }): Promise<ImageEditorV3DialogResult<ImageEditorV3PackageSaveResult>>
   /** 保存位置只由主进程原生对话框产生，渲染层不能注入输出路径。 */
   startRasterExport(request: {

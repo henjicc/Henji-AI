@@ -6,20 +6,23 @@ import {
 } from './imageEditorHostProfiles'
 
 describe('图片编辑 V3 宿主能力裁剪', () => {
-  it('完整工具箱只声明已经渲染的侧栏，并明确 HDR 是受限能力', () => {
+  it('发布版完整工具箱只开放扁平图层、内部保存和 8 位栅格导出入口', () => {
     const profile = getImageEditorHostProfileV3('full')
     expect(profile).toMatchObject({
-      layerKinds: ['raster', 'annotation', 'effect', 'adjustment', 'group'],
+      layerKinds: ['raster', 'annotation', 'effect'],
+      adjustments: [],
       panels: ['layers', 'properties'],
-      saveActions: ['save-document', 'save-package', 'export-raster'],
+      layerControls: [],
+      saveActions: ['save-document', 'export-raster'],
       hdrReadiness: {
-        state: 'limited',
+        state: 'disabled',
         reasonKey: 'imageEditor.v3.readiness.reasons.hdrExport',
       },
+      allowPackageExternalSources: false,
     })
   })
 
-  it('完整宿主接通选择、栅格与蒙版画笔，quick 不暴露选择工具', () => {
+  it('工具箱和画布宿主只开放导航、裁剪与可编辑标注工具', () => {
     const profile = getImageEditorHostProfileV3('full')
 
     expect(getReadyImageEditorToolIdsV3(profile)).toEqual([
@@ -27,30 +30,19 @@ describe('图片编辑 V3 宿主能力裁剪', () => {
       'hand',
       'zoom',
       'crop',
-      'select-rect',
-      'select-ellipse',
-      'select-lasso',
       'annotation-text',
       'annotation-arrow',
       'annotation-rect',
       'annotation-pen',
-      'raster-brush',
-      'eraser',
-      'mask-edit',
     ])
-    expect(getReadyImageEditorToolIdsV3(getImageEditorHostProfileV3('quick')))
-      .not.toEqual(expect.arrayContaining(['select-rect', 'select-ellipse', 'select-lasso']))
     expect(getReadyImageEditorToolIdsV3(getImageEditorHostProfileV3('canvas-edit')))
-      .toEqual(expect.arrayContaining(['select-rect', 'select-ellipse', 'select-lasso']))
+      .toEqual(getReadyImageEditorToolIdsV3(profile))
   })
 
-  it('不可可靠导出的辉光效果不允许新建，遮罩宿主只暴露蒙版所需工具', () => {
+  it('三种发布效果都可新建，遮罩兼容宿主只暴露蒙版所需工具', () => {
     const full = getImageEditorHostProfileV3('full')
     expect(full.effects.find(({ id }) => id === 'image.vgpu-glow')).toMatchObject({
-      readiness: {
-        state: 'disabled',
-        reasonKey: 'imageEditor.v3.readiness.reasons.glowExport',
-      },
+      readiness: { state: 'ready' },
     })
 
     const mask = getImageEditorHostProfileV3('mask')

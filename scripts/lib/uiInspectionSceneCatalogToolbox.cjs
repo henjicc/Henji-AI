@@ -41,15 +41,23 @@ function createToolboxScenes(context) {
           await clickNamedButton(page, /^(图片编辑|Image Edit)/i)
           const surface = page.locator('[data-application-surface-id="tool.image_edit"]:visible')
           await surface.waitFor({ state: 'visible', timeout: 12000 })
+          const addLayerButton = page.getByRole('button', { name: /^(添加图层|Add layer)$/i })
           const dropTarget = surface.locator('.border-dashed').first()
-          await dropTarget.waitFor({ state: 'visible', timeout: 8000 })
-          const fixturePath = process.env.HENJI_VGPU_GLOW_FIXTURE_IMAGE
-          const externalFixture = fixturePath ? {
-            bytes: Array.from(await require('node:fs/promises').readFile(fixturePath)),
-            name: require('node:path').basename(fixturePath),
-            type: fixturePath.toLowerCase().endsWith('.png') ? 'image/png' : 'image/jpeg',
-          } : null
-          await dropTarget.evaluate(async (element, fixture) => {
+          await Promise.race([
+            addLayerButton.waitFor({ state: 'visible', timeout: 12000 }),
+            dropTarget.waitFor({ state: 'visible', timeout: 12000 }),
+          ])
+          if (await dropTarget.isVisible()) {
+            const fixturePath = process.env.HENJI_VGPU_GLOW_FIXTURE_IMAGE
+            const [{ readFile }, { basename }] = fixturePath
+              ? await Promise.all([import('node:fs/promises'), import('node:path')])
+              : [{ readFile: null }, { basename: null }]
+            const externalFixture = fixturePath ? {
+              bytes: Array.from(await readFile(fixturePath)),
+              name: basename(fixturePath),
+              type: fixturePath.toLowerCase().endsWith('.png') ? 'image/png' : 'image/jpeg',
+            } : null
+            await dropTarget.evaluate(async (element, fixture) => {
             if (fixture) {
               const transfer = new DataTransfer()
               transfer.items.add(new File(
@@ -110,33 +118,35 @@ function createToolboxScenes(context) {
               cancelable: true,
               dataTransfer: transfer,
             }))
-          }, externalFixture)
-          await page.getByRole('button', { name: '辉光 Pro' }).waitFor({ state: 'visible', timeout: 12000 })
-          await page.getByRole('button', { name: '辉光 Pro' }).click()
-          await page.getByRole('heading', { name: '辉光 Pro' }).waitFor({ state: 'visible', timeout: 8000 })
-          await page.getByRole('switch', { name: '启用辉光 Pro' }).click()
+            }, externalFixture)
+          }
+          await addLayerButton.waitFor({ state: 'visible', timeout: 12000 })
+          const existingGlow = surface.locator('[role="treeitem"][data-layer-type="effect"]')
+            .filter({ hasText: '辉光 Pro' }).first()
+          if (await existingGlow.count()) {
+            await existingGlow.locator('[data-layer-select]').click()
+          } else {
+            await addLayerButton.click()
+            await page.getByRole('menuitem', { name: '辉光 Pro' }).click()
+          }
+          await page.getByRole('slider', { name: '辉光强度' }).waitFor({ state: 'visible', timeout: 8000 })
           await settlePage(page, 1200)
         }
 
         // 第一轮主动推进多次 revision，再重新打开编辑器。旧实现的 Worker 记住了全局最大值，
         // 第二轮从 revision 1 起步会被永久判旧；这个场景必须在同一 Electron 进程里复现它。
         await openGlowEditor()
-        const intensity = page.getByRole('slider', { name: '发光强度' })
+        const intensity = page.getByRole('slider', { name: '辉光强度' })
         await intensity.focus()
         for (let index = 0; index < 6; index += 1) await intensity.press('ArrowRight')
         await settlePage(page, 1200)
         await page.getByRole('button', { name: '返回工具箱' }).click()
         await openGlowEditor()
-        await page.getByRole('switch', { name: '启用辉光着色' }).click()
-        const tint = page.getByLabel('辉光颜色')
-        await tint.fill('#ff4bd8')
-        await page.getByRole('switch', { name: '启用辉光着色' }).click()
-        const radius = page.getByRole('slider', { name: '发光半径' })
-        await radius.fill('1')
-        const chromaticAberration = page.getByRole('slider', { name: '色差' })
-        await chromaticAberration.fill(process.env.HENJI_VGPU_GLOW_CHROMA ?? '0.78')
-        await page.getByRole('button', { name: '左侧色光绿' }).click()
-        await page.getByRole('button', { name: '右侧色光红' }).click()
+        const radius = page.getByRole('slider', { name: '半径' })
+        await radius.fill('0.78')
+        await radius.press('ArrowLeft')
+        await page.getByRole('button', { name: '下移图层' }).click()
+        await page.getByRole('button', { name: '上移图层' }).click()
         if (await page.getByText('辉光预览失败').count()) {
           throw new Error('重新打开图片编辑器后，辉光预览仍被旧会话 revision 取消')
         }

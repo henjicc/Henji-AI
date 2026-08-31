@@ -24,6 +24,9 @@ export function createElectronImageEditorV3(): ImageEditorV3Platform {
     persistBrushTiles: (request) => getNativeImageEditorV3().persistBrushTiles(request),
     readBrushTiles: (request) => getNativeImageEditorV3().readBrushTiles(request),
     openPackage: (request) => getNativeImageEditorV3().openPackage(request),
+    relinkPackageExternalSource: (request) => (
+      getNativeImageEditorV3().relinkPackageExternalSource(request)
+    ),
     savePackageAs: (request) => getNativeImageEditorV3().savePackageAs(request),
     startRasterExport: (request) => getNativeImageEditorV3().startRasterExport(request),
     startManagedRasterExport: (request) => getNativeImageEditorV3().startManagedRasterExport(request),

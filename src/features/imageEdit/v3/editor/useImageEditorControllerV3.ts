@@ -26,9 +26,14 @@ function createBinding(
   document: ImageEditDocumentV3,
   historySnapshot: ImageEditCommandHistorySnapshotV3 | null | undefined,
   onPersistentChange: (snapshot: ImageEditPersistenceSnapshotV3) => void,
+  resourceByteSizes: Readonly<Record<string, number>>,
 ): BusBinding {
   return {
-    bus: new ImageEditCommandBusV3(document, { historySnapshot, onPersistentChange }),
+    bus: new ImageEditCommandBusV3(document, {
+      historySnapshot,
+      onPersistentChange,
+      resourceByteSizes,
+    }),
   }
 }
 
@@ -42,6 +47,8 @@ export function useImageEditorControllerV3(
     | 'initialToolId'
     | 'onDocumentChange'
     | 'onPersistenceChange'
+    | 'resourceByteSizes'
+    | 'resourceDescriptors'
   >,
 ): { controller: ImageEditorV3Controller; bus: ImageEditCommandBusV3 } {
   const reactId = useId().replace(/:/g, '')
@@ -56,10 +63,18 @@ export function useImageEditorControllerV3(
   const notifyPersistentChange = useRef((snapshot: ImageEditPersistenceSnapshotV3): void => {
     onPersistentChangeRef.current?.(snapshot)
   }).current
+  const initialResourceByteSizes = useMemo<Readonly<Record<string, number>>>(() => ({
+    ...Object.fromEntries((props.resourceDescriptors ?? []).map((resource) => [
+      resource.resourceRef,
+      resource.byteLength,
+    ])),
+    ...(props.resourceByteSizes ?? {}),
+  }), [props.resourceByteSizes, props.resourceDescriptors])
   const [binding, setBinding] = useState<BusBinding>(() => createBinding(
     props.document,
     props.historySnapshot,
     notifyPersistentChange,
+    initialResourceByteSizes,
   ))
   const [document, setDocument] = useState(props.document)
   const [historyState, setHistoryState] = useState(binding.bus.getSnapshot().history)
@@ -70,12 +85,17 @@ export function useImageEditorControllerV3(
   useEffect(() => {
     const current = binding.bus.getSnapshot().document
     if (current.id === props.document.id && current.revision === props.document.revision) return
-    const next = createBinding(props.document, props.historySnapshot, notifyPersistentChange)
+    const next = createBinding(
+      props.document,
+      props.historySnapshot,
+      notifyPersistentChange,
+      initialResourceByteSizes,
+    )
     documentRef.current = props.document
     setBinding(next)
     setDocument(props.document)
     setHistoryState(next.bus.getSnapshot().history)
-  }, [binding.bus, notifyPersistentChange, props.document, props.historySnapshot])
+  }, [binding.bus, initialResourceByteSizes, notifyPersistentChange, props.document, props.historySnapshot])
 
   useEffect(() => () => binding.bus.dispose(), [binding.bus])
 

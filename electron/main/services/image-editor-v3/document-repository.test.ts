@@ -188,6 +188,7 @@ describe('ImageEditDocumentRepository', () => {
       parentId: null,
       index: 0,
       layer: createImageEditRasterLayerV3('persisted-layer', '图层'),
+      resources: [],
     })
     const snapshot = history.createSnapshot()
     await repository.create({

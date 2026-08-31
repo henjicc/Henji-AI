@@ -84,7 +84,12 @@ describe('图片编辑 V3 实时 Application Control', () => {
     )
     effect.mask = { resourceId: 'sha256:legacy-mask-a', inverted: false }
     document.layers = [raster, effect]
-    const bus = new ImageEditCommandBusV3(document)
+    const bus = new ImageEditCommandBusV3(document, {
+      resourceByteSizes: {
+        'sha256:mask-tile-a': 512,
+        'sha256:mask-tile-b': 256,
+      },
+    })
     disposers.push(registerImageEditV3LiveSession('assistant-v3-session-a', bus))
 
     const registry = getApplicationReflectionRegistry()

@@ -88,6 +88,7 @@ export function ImageMarkToolV3Host(props: ImageMarkToolV3HostProps): JSX.Elemen
       profileId="full"
       onDocumentChange={host.handleDocumentChange}
       onPersistenceChange={host.handlePersistenceChange}
+      onPackageThumbnailChange={host.handlePackageThumbnailChange}
       toolbarLeading={backButton}
       toolbarActions={(
         <ImageMarkToolV3ToolbarActions

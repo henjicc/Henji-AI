@@ -1,4 +1,4 @@
-import { lazy, Suspense, useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import { createLogger } from '@/core/logging';
 import {
   coerceImageEditSession,
@@ -8,14 +8,9 @@ import {
   type ImageEditSessionReferenceV3,
   type ImageMarkSession,
 } from '@/core/imageEdit';
-import { UiButton, UiLoading } from '@/components/ui';
+import { UiButton } from '@/components/ui';
 import { exportImageEditDocument } from '@/features/imageEdit/execution/browserImageEditExecution';
 import { ImageEditor } from '@/features/imageEdit/editor/ImageEditor';
-import { isImageEditorV3Enabled } from '@/platform/runtime';
-
-const ViewerMarkEditorV3Host = lazy(() => import('./ViewerMarkEditorV3Host').then((module) => ({
-  default: module.ViewerMarkEditorV3Host,
-})));
 
 const logger = createLogger('features.imageMark');
 
@@ -96,23 +91,5 @@ function LegacyViewerMarkEditor({
 }
 
 export function ViewerMarkEditor(props: ViewerMarkEditorProps): JSX.Element {
-  if (!isImageEditorV3Enabled()) {
-    return <LegacyViewerMarkEditor {...props} />;
-  }
-
-  const sessionKey = isImageEditSessionReferenceV3(props.session)
-    ? props.session.documentRef
-    : props.imageUrl;
-  return (
-    <Suspense fallback={<UiLoading message="正在打开快速编辑…" className="h-full" />}>
-      <ViewerMarkEditorV3Host
-        key={sessionKey}
-        imageUrl={props.imageUrl}
-        session={props.session}
-        onClose={props.onClose}
-        onSave={props.onSave}
-        onSessionChange={props.onSessionChange}
-      />
-    </Suspense>
-  );
+  return <LegacyViewerMarkEditor {...props} />;
 }
