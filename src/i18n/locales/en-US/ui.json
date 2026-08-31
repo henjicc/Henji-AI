@@ -592,6 +592,15 @@
       "previewAlt": "Image editor preview",
       "zoomIn": "Zoom in",
       "zoomOut": "Zoom out",
+      "recovery": {
+        "title": "The image editor encountered a problem",
+        "message": "This editing workspace has stopped, but the rest of the app is unaffected. Reload the latest saved revision to continue.",
+        "reload": "Reload editor",
+        "exportDiagnostics": "Export diagnostics",
+        "exporting": "Exporting…",
+        "diagnosticFailed": "The diagnostic bundle could not be exported. You can still reload the editor and continue.",
+        "openLegacy": "Open in legacy editor"
+      },
       "readiness": {
         "unavailable": "{{label}} (unavailable)",
         "unavailableWithReason": "{{label}} (unavailable: {{reason}})",

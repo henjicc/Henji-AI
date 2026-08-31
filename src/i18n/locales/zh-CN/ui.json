@@ -592,6 +592,15 @@
       "previewAlt": "图片编辑预览",
       "zoomIn": "放大",
       "zoomOut": "缩小",
+      "recovery": {
+        "title": "图片编辑器遇到问题",
+        "message": "当前编辑工作区已停止运行，其他页面不受影响。你可以从最近保存的版本重新载入。",
+        "reload": "重新载入编辑器",
+        "exportDiagnostics": "导出诊断包",
+        "exporting": "正在导出…",
+        "diagnosticFailed": "诊断包导出失败。你仍可重新载入编辑器继续使用。",
+        "openLegacy": "用旧版打开"
+      },
       "readiness": {
         "unavailable": "{{label}}（暂不可用）",
         "unavailableWithReason": "{{label}}（暂不可用：{{reason}}）",

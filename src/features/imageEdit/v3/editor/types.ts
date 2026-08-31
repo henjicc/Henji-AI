@@ -73,6 +73,11 @@ export interface ImageEditorV3Props {
   resourceDescriptors?: readonly ImageEditorV3ResourceDescriptor[]
   /** 稳定合成帧生成的 512px 有界缩略图；宿主可在另存包时带给主进程。 */
   onPackageThumbnailChange?: (thumbnail: ImageEditorV3PackageThumbnailSnapshot) => void
+  /** 局部错误恢复时从宿主的最新权威 revision 重新挂载。 */
+  onReloadEditor?: () => void
+  /** 仅当当前 V3 文档可无损回退时提供。 */
+  onOpenLegacyEditor?: () => void
+  recoveryKey?: string | number
   /** 蒙版像素由资源层创建，界面只负责把返回的引用写入文档。 */
   onCreateMaskResource?: (
     layer: ImageEditLayerV3,

@@ -104,10 +104,6 @@ export const MaskEditorV3Host = forwardRef<MaskEditorV3HostHandle, MaskEditorV3H
     repository: repositoryOverride,
     loadSnapshot = loadImageEditorV3Document,
   }, ref): JSX.Element {
-    const referenceDocumentRef = sessionReference.documentRef
-    const referencePreviewRef = sessionReference.previewRef
-    const referenceRevision = sessionReference.revision
-    const referenceSourceUrl = sessionReference.sourceUrl
     const repository = useMemo(
       () => repositoryOverride ?? new ImageEditorV3CommandRepository(),
       [repositoryOverride],
@@ -120,6 +116,11 @@ export const MaskEditorV3Host = forwardRef<MaskEditorV3HostHandle, MaskEditorV3H
     const snapshotRef = useRef<ImageEditPersistenceSnapshotV3 | null>(null)
     const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
     const persistedSessionRef = useRef(sessionReference)
+    const effectiveSession = attempt > 0 ? persistedSessionRef.current : sessionReference
+    const referenceDocumentRef = effectiveSession.documentRef
+    const referencePreviewRef = effectiveSession.previewRef
+    const referenceRevision = effectiveSession.revision
+    const referenceSourceUrl = effectiveSession.sourceUrl
     const onSessionChangeRef = useRef(onSessionChange)
     onSessionChangeRef.current = onSessionChange
 
@@ -286,6 +287,7 @@ export const MaskEditorV3Host = forwardRef<MaskEditorV3HostHandle, MaskEditorV3H
           ? { ...current, value: { ...current.value, document } }
           : current)}
         onPersistenceChange={handlePersistenceChange}
+        onReloadEditor={() => setAttempt((value) => value + 1)}
         toolbarActions={(
           <>
             {saving ? <span role="status" className="text-xs text-text-muted">正在保存…</span> : null}

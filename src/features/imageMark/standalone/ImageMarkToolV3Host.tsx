@@ -10,6 +10,7 @@ import {
   UiRegion,
 } from '@/components/ui'
 import { ImageEditorV3 } from '@/features/imageEdit/v3/editor'
+import { isImageEditDocumentLegacyExpressibleV3 } from '@/core/imageEdit/v3/legacyCompatibility'
 import { ImageMarkToolV3ToolbarActions } from './ImageMarkToolV3ToolbarActions'
 import {
   useImageMarkToolV3Host,
@@ -89,6 +90,11 @@ export function ImageMarkToolV3Host(props: ImageMarkToolV3HostProps): JSX.Elemen
       onDocumentChange={host.handleDocumentChange}
       onPersistenceChange={host.handlePersistenceChange}
       onPackageThumbnailChange={host.handlePackageThumbnailChange}
+      onReloadEditor={host.retryBootstrap}
+      onOpenLegacyEditor={isImageEditDocumentLegacyExpressibleV3(host.bootstrap.document)
+        ? onFallback
+        : undefined}
+      recoveryKey={props.sourceSessionKey}
       toolbarLeading={backButton}
       toolbarActions={(
         <ImageMarkToolV3ToolbarActions

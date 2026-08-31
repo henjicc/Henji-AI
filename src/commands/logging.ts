@@ -1,5 +1,9 @@
 import type { LogEventBridgeDto } from '@/core/logging/types'
 import type {
+  ImageEditorDiagnosticBundleRequest,
+  ImageEditorDiagnosticBundleResult,
+} from '@/core/logging/diagnosticBundle'
+import type {
   AgentTraceCaptureMode,
   AgentTraceDetailResult,
   AgentTraceQuery,
@@ -91,6 +95,13 @@ export async function queryLogEvents(params: LogQueryParams): Promise<LogQueryRe
   }
 
   return await getPlatform().logging.queryLogEvents(params)
+}
+
+export async function exportDiagnosticBundle(
+  request: ImageEditorDiagnosticBundleRequest,
+): Promise<ImageEditorDiagnosticBundleResult> {
+  if (!isDesktopRuntime()) return { status: 'cancelled' }
+  return await getPlatform().logging.exportDiagnosticBundle(request)
 }
 
 export async function getAgentTraceCaptureMode(): Promise<AgentTraceCaptureMode> {

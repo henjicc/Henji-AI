@@ -33,6 +33,9 @@ export function createElectronLogging(): LoggingPlatform {
     queryLogEvents: async (params) => {
       return await getNativeLogging().queryLogEvents(params)
     },
+    exportDiagnosticBundle: async (request) => {
+      return await getNativeLogging().exportDiagnosticBundle(request)
+    },
     getAgentTraceCaptureMode: async () => {
       return await getNativeLogging().getAgentTraceCaptureMode()
     },

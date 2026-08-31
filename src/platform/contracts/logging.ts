@@ -1,5 +1,9 @@
 import type { LogEventBridgeDto } from '@/core/logging/types'
 import type {
+  ImageEditorDiagnosticBundleRequest,
+  ImageEditorDiagnosticBundleResult,
+} from '@/core/logging/diagnosticBundle'
+import type {
   AgentTraceCaptureMode,
   AgentTraceDetailResult,
   AgentTraceQuery,
@@ -53,6 +57,9 @@ export interface LoggingPlatform {
   listLogDates(): Promise<string[]>
   /** 按日期流式查询历史日志事件，过滤/分页均在主进程完成。 */
   queryLogEvents(params: LogQueryParams): Promise<LogQueryResult>
+  exportDiagnosticBundle(
+    request: ImageEditorDiagnosticBundleRequest,
+  ): Promise<ImageEditorDiagnosticBundleResult>
   getAgentTraceCaptureMode(): Promise<AgentTraceCaptureMode>
   setAgentTraceCaptureMode(mode: AgentTraceCaptureMode): Promise<void>
   queryAgentTraces(params: AgentTraceQuery): Promise<AgentTraceQueryResult>

@@ -13,6 +13,7 @@ export type { LogCaptureMode } from './capture-config'
 export { getAgentTraceCaptureMode, setAgentTraceCaptureMode } from './agent-trace-config'
 export { listLogDates, queryLogEvents } from './query'
 export type { LogQueryParams, LogQueryResult } from './query'
+export { exportImageEditorDiagnosticBundle } from './diagnostic-bundle'
 export { AgentTraceStore, createAgentTraceStore }
 export type {
   AgentTraceCompleteInput,

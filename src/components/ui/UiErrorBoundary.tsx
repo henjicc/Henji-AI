@@ -15,6 +15,11 @@ import { UiButton } from './primitives'
  * `main.tsx` 里的 window.onerror 只负责记日志，它接不住 React 的卸载，也变不出界面。
  */
 
+export interface UiErrorBoundaryFallbackContext {
+  error: Error
+  retry: () => void
+}
+
 interface UiErrorBoundaryProps {
   children: React.ReactNode
   /** 日志域，用于把崩溃归到具体子系统 */
@@ -23,6 +28,12 @@ interface UiErrorBoundaryProps {
   event: string
   /** 展示给用户的一句话 */
   title: string
+  /** 任一值变化后清除已捕获错误，用于切换文档或重新载入权威快照。 */
+  resetKeys?: readonly unknown[]
+  /** 用户主动重试时调用；错误状态会先被清除。 */
+  onReset?: () => void
+  /** 子系统可提供局部恢复界面，但不得再实现另一套 ErrorBoundary。 */
+  fallback?: React.ReactNode | ((context: UiErrorBoundaryFallbackContext) => React.ReactNode)
 }
 
 interface UiErrorBoundaryState {
@@ -45,8 +56,27 @@ export class UiErrorBoundary extends React.Component<UiErrorBoundaryProps, UiErr
     })
   }
 
+  componentDidUpdate(previousProps: UiErrorBoundaryProps): void {
+    if (!this.state.error || !this.props.resetKeys) return
+    const previous = previousProps.resetKeys ?? []
+    const current = this.props.resetKeys
+    const changed = previous.length !== current.length
+      || current.some((value, index) => !Object.is(value, previous[index]))
+    if (changed) this.setState({ error: null })
+  }
+
+  private readonly retry = (): void => {
+    this.props.onReset?.()
+    this.setState({ error: null })
+  }
+
   render(): React.ReactNode {
     if (!this.state.error) return this.props.children
+    if (this.props.fallback) {
+      return typeof this.props.fallback === 'function'
+        ? this.props.fallback({ error: this.state.error, retry: this.retry })
+        : this.props.fallback
+    }
     return (
       <div className="flex h-full w-full flex-col items-center justify-center gap-3 bg-app p-6 text-center">
         <div className="text-sm text-text-muted">{this.props.title}，错误详情已写入日志</div>
@@ -54,7 +84,7 @@ export class UiErrorBoundary extends React.Component<UiErrorBoundaryProps, UiErr
         <div className="max-w-xl break-words text-xs text-text-muted opacity-70">
           {this.state.error.message}
         </div>
-        <UiButton onClick={() => this.setState({ error: null })}>重新加载界面</UiButton>
+        <UiButton onClick={this.retry}>重新加载界面</UiButton>
       </div>
     )
   }

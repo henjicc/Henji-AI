@@ -64,10 +64,15 @@ export function CanvasEditToolEditorV3Host({
   const autosaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const publishReference = useCallback((reference: ImageEditDocumentReferenceV3): void => {
+    const serialized = serializeCanvasEditV3SessionReference(
+      createCanvasEditV3SessionReference(sourceImageUrl, reference),
+    )
+    initialOptionsRef.current = {
+      ...initialOptionsRef.current,
+      [CANVAS_EDIT_V3_SESSION_OPTION]: serialized,
+    }
     onOptionsChangeRef.current({
-      [CANVAS_EDIT_V3_SESSION_OPTION]: serializeCanvasEditV3SessionReference(
-        createCanvasEditV3SessionReference(sourceImageUrl, reference),
-      ),
+      [CANVAS_EDIT_V3_SESSION_OPTION]: serialized,
     })
   }, [sourceImageUrl])
 
@@ -263,6 +268,7 @@ export function CanvasEditToolEditorV3Host({
       profileId="canvas-edit"
       onDocumentChange={handleDocumentChange}
       onPersistenceChange={handlePersistenceChange}
+      onReloadEditor={() => setBootstrapAttempt((value) => value + 1)}
       toolbarActions={saving || saveFailed ? (
         saveFailed ? (
           <UiButton

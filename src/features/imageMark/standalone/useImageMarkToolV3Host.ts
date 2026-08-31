@@ -97,6 +97,12 @@ export function useImageMarkToolV3Host(
   const [bootstrap, setBootstrap] = useState<ImageMarkV3BootstrapState>({ kind: 'loading' })
   const [bootstrapAttempt, setBootstrapAttempt] = useState(0)
   const [persistenceStatus, setPersistenceStatus] = useState<ImageMarkV3PersistenceStatus | null>(null)
+  const latestSessionRef = useRef<ImageEditSessionReferenceV3 | null>(initialSession ?? null)
+  const latestSessionSourceKeyRef = useRef(sourceSessionKey)
+  if (latestSessionSourceKeyRef.current !== sourceSessionKey) {
+    latestSessionSourceKeyRef.current = sourceSessionKey
+    latestSessionRef.current = initialSession ?? null
+  }
   const mountedRef = useRef(true)
   const onSessionReferenceChangeRef = useRef(props.onSessionReferenceChange)
   onSessionReferenceChangeRef.current = props.onSessionReferenceChange
@@ -118,13 +124,15 @@ export function useImageMarkToolV3Host(
     if (!mountedRef.current) return
     setPersistenceStatus(status)
     if (status.kind === 'idle') {
-      onSessionReferenceChangeRef.current?.({
+      const session: ImageEditSessionReferenceV3 = {
         kind: 'image-edit-v3',
         sourceUrl: sessionSourceUrlRef.current,
         documentRef: `image-edit-v3:${status.reference.documentId}`,
         revision: status.reference.revision,
         previewRef: status.reference.previewRef as ImageEditSessionReferenceV3['previewRef'],
-      })
+      }
+      latestSessionRef.current = session
+      onSessionReferenceChangeRef.current?.(session)
     }
   }, [])
 
@@ -145,7 +153,8 @@ export function useImageMarkToolV3Host(
       if (!active) return
       let sourceKind = 'unsupported'
       try {
-        sourceKind = initialSession ? 'managed-session' : 'unsupported'
+        const sessionToRestore = bootstrapAttempt > 0 ? latestSessionRef.current : initialSession
+        sourceKind = sessionToRestore ? 'managed-session' : 'unsupported'
         logger.info('图片编辑 V3 工具箱宿主开始导入图片', {
           event: 'image_editor_v3.toolbox.bootstrap.start',
           context: { sourceKind, sourceSessionKey },
@@ -154,18 +163,18 @@ export function useImageMarkToolV3Host(
         let initialPersistence: ImageEditPersistenceSnapshotV3
         let initialReference: ImageEditDocumentReferenceV3
         let resourceDescriptors: ImageEditorV3ResourceDescriptor[]
-        if (initialSession) {
+        if (sessionToRestore) {
           const snapshot = await loadImageEditorV3Document({
             requestId: createImageMarkToolV3RequestId('session-restore'),
-            documentRef: initialSession.documentRef,
+            documentRef: sessionToRestore.documentRef,
           }, controller.signal)
-          const documentId = initialSession.documentRef.slice('image-edit-v3:'.length)
+          const documentId = sessionToRestore.documentRef.slice('image-edit-v3:'.length)
           if (!snapshot
-            || snapshot.documentRef !== initialSession.documentRef
+            || snapshot.documentRef !== sessionToRestore.documentRef
             || snapshot.document.id !== documentId
-            || snapshot.revision !== initialSession.revision
-            || snapshot.document.revision !== initialSession.revision
-            || snapshot.previewRef !== initialSession.previewRef) {
+            || snapshot.revision !== sessionToRestore.revision
+            || snapshot.document.revision !== sessionToRestore.revision
+            || snapshot.previewRef !== sessionToRestore.previewRef) {
             throw new Error('图片编辑 V3 工具箱会话与权威快照不一致')
           }
           document = snapshot.document
@@ -184,7 +193,7 @@ export function useImageMarkToolV3Host(
             previewRef: snapshot.previewRef,
           }
           resourceDescriptors = snapshot.resources
-          sessionSourceUrlRef.current = initialSession.sourceUrl
+          sessionSourceUrlRef.current = sessionToRestore.sourceUrl
         } else {
           const source = resolveImageMarkV3SourceLocator(sourceImageUrl)
           sourceKind = source.kind

@@ -1,3 +1,8 @@
+import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
+
+import { exportDiagnosticBundle } from '@/commands/logging'
+import { UiButton, UiError, UiErrorBoundary } from '@/components/ui'
 import { ImageEditorCommandBarV3 } from './ImageEditorCommandBarV3'
 import { ImageEditorLayersPanelV3 } from './ImageEditorLayersPanelV3'
 import { ImageEditorPreviewV3 } from './ImageEditorPreviewV3'
@@ -5,8 +10,9 @@ import { ImageEditorPropertiesPanelV3 } from './ImageEditorPropertiesPanelV3'
 import { ImageEditorToolRailV3 } from './ImageEditorToolRailV3'
 import type { ImageEditorV3Props } from './types'
 import { useImageEditorControllerV3 } from './useImageEditorControllerV3'
+import { createImageEditorDiagnosticSummaryV3 } from './imageEditorDiagnosticSummaryV3'
 
-export function ImageEditorV3(props: ImageEditorV3Props): JSX.Element {
+function ImageEditorWorkspaceV3(props: ImageEditorV3Props): JSX.Element {
   const { controller, bus } = useImageEditorControllerV3(props)
   const showLayers = controller.profile.panels.includes('layers')
   const showProperties = controller.profile.panels.includes('properties')
@@ -56,5 +62,78 @@ export function ImageEditorV3(props: ImageEditorV3Props): JSX.Element {
         ) : null}
       </div>
     </div>
+  )
+}
+
+function ImageEditorRecoveryFallbackV3({
+  props,
+  retry,
+}: {
+  props: ImageEditorV3Props
+  retry: () => void
+}): JSX.Element {
+  const { t } = useTranslation('ui')
+  const [exporting, setExporting] = useState(false)
+  const [exportFailed, setExportFailed] = useState(false)
+  const exportDiagnostics = async (): Promise<void> => {
+    setExporting(true)
+    setExportFailed(false)
+    try {
+      await exportDiagnosticBundle(createImageEditorDiagnosticSummaryV3(
+        props.document,
+        props.profileId,
+        props.resourceDescriptors ?? [],
+      ))
+    } catch {
+      setExportFailed(true)
+    } finally {
+      setExporting(false)
+    }
+  }
+  return (
+    <UiError
+      className={props.className ?? 'h-full'}
+      title={t('imageEditor.v3.recovery.title')}
+      message={exportFailed
+        ? t('imageEditor.v3.recovery.diagnosticFailed')
+        : t('imageEditor.v3.recovery.message')}
+      retryLabel={t('imageEditor.v3.recovery.reload')}
+      onRetry={retry}
+      actions={(
+        <>
+          <UiButton
+            variant="ghost"
+            size="sm"
+            disabled={exporting}
+            onClick={() => { void exportDiagnostics() }}
+          >
+            {exporting
+              ? t('imageEditor.v3.recovery.exporting')
+              : t('imageEditor.v3.recovery.exportDiagnostics')}
+          </UiButton>
+          {props.onOpenLegacyEditor ? (
+            <UiButton variant="ghost" size="sm" onClick={props.onOpenLegacyEditor}>
+              {t('imageEditor.v3.recovery.openLegacy')}
+            </UiButton>
+          ) : null}
+        </>
+      )}
+    />
+  )
+}
+
+export function ImageEditorV3(props: ImageEditorV3Props): JSX.Element {
+  const { t } = useTranslation('ui')
+  return (
+    <UiErrorBoundary
+      loggerDomain="features.imageEdit.v3.workspace"
+      event="image_editor_v3.workspace.crashed"
+      title={t('imageEditor.v3.recovery.title')}
+      resetKeys={[props.document.id, props.document.revision, props.recoveryKey]}
+      onReset={props.onReloadEditor}
+      fallback={({ retry }) => <ImageEditorRecoveryFallbackV3 props={props} retry={retry} />}
+    >
+      <ImageEditorWorkspaceV3 {...props} />
+    </UiErrorBoundary>
   )
 }

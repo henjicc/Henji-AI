@@ -432,6 +432,7 @@ const loggingApi: HenjiLoggingApi = {
   openLogWindow: () => nativeInvoke('logging:openWindow'),
   listLogDates: () => nativeInvoke('logging:listDates'),
   queryLogEvents: (params) => nativeInvoke('logging:query', params),
+  exportDiagnosticBundle: (request) => nativeInvoke('logging:exportDiagnosticBundle', request),
   getAgentTraceCaptureMode: () => nativeInvoke('logging:agentTrace:getCaptureMode'),
   setAgentTraceCaptureMode: (mode) => nativeInvoke('logging:agentTrace:setCaptureMode', { mode }),
   queryAgentTraces: (params) => nativeInvoke('logging:agentTrace:query', params),

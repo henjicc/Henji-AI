@@ -206,6 +206,9 @@ export interface HenjiLoggingApi {
   listLogDates(): Promise<string[]>
   /** 按日期流式查询历史日志事件，过滤/分页均在主进程完成。 */
   queryLogEvents(params: HenjiLogQueryParams): Promise<HenjiLogQueryResult>
+  exportDiagnosticBundle(
+    request: import('../../src/core/logging/diagnosticBundle').ImageEditorDiagnosticBundleRequest,
+  ): Promise<import('../../src/core/logging/diagnosticBundle').ImageEditorDiagnosticBundleResult>
   getAgentTraceCaptureMode(): Promise<AgentTraceCaptureMode>
   setAgentTraceCaptureMode(mode: AgentTraceCaptureMode): Promise<void>
   queryAgentTraces(params: AgentTraceQuery): Promise<AgentTraceQueryResult>

@@ -1,5 +1,6 @@
 import {
   appendLogEvents,
+  exportImageEditorDiagnosticBundle,
   getAgentTraceCaptureMode,
   getAgentTraceStore,
   getLogCaptureMode,
@@ -12,6 +13,11 @@ import {
   type LogQueryParams,
   type LogQueryResult,
 } from '../services/logging'
+import type {
+  ImageEditorDiagnosticBundleRequest,
+  ImageEditorDiagnosticBundleResult,
+  ImageEditorDiagnosticHostV3,
+} from '../../../src/core/logging/diagnosticBundle'
 import {
   agentTraceCaptureModeSchema,
   agentTraceQuerySchema,
@@ -46,6 +52,77 @@ interface ClearAgentTracePayload {
 const LOG_LEVELS = new Set(['trace', 'debug', 'info', 'warn', 'error'])
 const LOG_SOURCES = new Set(['frontend', 'backend'])
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/
+const IMAGE_EDITOR_HOSTS = new Set<ImageEditorDiagnosticHostV3>([
+  'full',
+  'quick',
+  'canvas-edit',
+  'mask',
+])
+
+function parseFiniteNonNegative(value: unknown, field: string): number {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) {
+    throw new Error(`Expected ${field} to be a non-negative finite number`)
+  }
+  return value
+}
+
+function parseImageEditorDiagnosticBundleRequest(input: unknown): ImageEditorDiagnosticBundleRequest {
+  const record = parseRecord(input)
+  const host = record.host
+  const documentId = record.documentId
+  const sessionId = record.sessionId
+  if (typeof host !== 'string' || !IMAGE_EDITOR_HOSTS.has(host as ImageEditorDiagnosticHostV3)) {
+    throw new Error('Expected a valid image editor host')
+  }
+  if (typeof documentId !== 'string' || !documentId.trim() || documentId.length > 256) {
+    throw new Error('Expected a valid image editor documentId')
+  }
+  if (sessionId !== undefined && (typeof sessionId !== 'string' || sessionId.length > 512)) {
+    throw new Error('Expected a valid image editor sessionId')
+  }
+  const source = parseRecord(record.source)
+  if (!Array.isArray(source.mediaTypes)
+    || !source.mediaTypes.every((value) => (
+      typeof value === 'string'
+      && ['image/jpeg', 'image/png', 'image/webp'].includes(value)
+    ))) {
+    throw new Error('Expected safe image editor media types')
+  }
+  const layers = parseRecord(record.layers)
+  const effectIds = layers.effectIds
+  if (!Array.isArray(effectIds)
+    || !effectIds.every((value) => (
+      typeof value === 'string'
+      && value.length <= 256
+      && /^[a-zA-Z0-9._:-]+$/.test(value)
+    ))) {
+    throw new Error('Expected safe image editor effect ids')
+  }
+  return {
+    host: host as ImageEditorDiagnosticHostV3,
+    documentId,
+    revision: parseFiniteNonNegative(record.revision, 'revision'),
+    ...(sessionId ? { sessionId } : {}),
+    source: {
+      mediaTypes: [...new Set(source.mediaTypes)],
+      width: parseFiniteNonNegative(source.width, 'source.width'),
+      height: parseFiniteNonNegative(source.height, 'source.height'),
+      byteLength: parseFiniteNonNegative(source.byteLength, 'source.byteLength'),
+    },
+    layers: {
+      raster: parseFiniteNonNegative(layers.raster, 'layers.raster'),
+      annotation: parseFiniteNonNegative(layers.annotation, 'layers.annotation'),
+      effect: parseFiniteNonNegative(layers.effect, 'layers.effect'),
+      adjustment: parseFiniteNonNegative(layers.adjustment, 'layers.adjustment'),
+      group: parseFiniteNonNegative(layers.group, 'layers.group'),
+      masked: parseFiniteNonNegative(layers.masked, 'layers.masked'),
+      hidden: parseFiniteNonNegative(layers.hidden, 'layers.hidden'),
+      locked: parseFiniteNonNegative(layers.locked, 'layers.locked'),
+      annotationObjects: parseFiniteNonNegative(layers.annotationObjects, 'layers.annotationObjects'),
+      effectIds,
+    },
+  }
+}
 
 function isLogEvent(value: unknown): value is LogEventBridgeDto {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) {
@@ -191,6 +268,11 @@ export function registerLoggingIpc(): void {
   // 历史日志回读（2.3）：日期列表 + 按日期流式查询，过滤下沉在 query.ts 内完成。
   registerIpcHandler<void, string[]>('logging:listDates', parseVoid, () => listLogDates())
   registerIpcHandler<LogQueryParams, LogQueryResult>('logging:query', parseLogQueryPayload, (params) => queryLogEvents(params))
+  registerIpcHandler<ImageEditorDiagnosticBundleRequest, ImageEditorDiagnosticBundleResult>(
+    'logging:exportDiagnosticBundle',
+    parseImageEditorDiagnosticBundleRequest,
+    (request) => exportImageEditorDiagnosticBundle(request),
+  )
   registerIpcHandler<void, AgentTraceCaptureMode>(
     'logging:agentTrace:getCaptureMode',
     parseVoid,

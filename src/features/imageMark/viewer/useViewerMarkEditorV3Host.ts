@@ -121,10 +121,12 @@ export function useViewerMarkEditorV3Host(
   const materializationAbortRef = useRef<AbortController | null>(null)
 
   const publishReference = useCallback((reference: ImageEditDocumentReferenceV3): void => {
-    onSessionChangeRef.current?.(createViewerMarkEditorV3SessionReference(
+    const session = createViewerMarkEditorV3SessionReference(
       sourceUrlRef.current,
       reference,
-    ))
+    )
+    initialSessionRef.current = session
+    onSessionChangeRef.current?.(session)
   }, [])
 
   const reportPersistenceStatus = useCallback((status: ImageMarkV3PersistenceStatus): void => {
