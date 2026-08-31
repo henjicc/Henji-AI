@@ -8,7 +8,7 @@
     "start": "npm run build && node dist/index.js --live"
   },
   "dependencies": {
-    "@henjicc/ai-sdk": "0.2.7"
+    "@henjicc/ai-sdk": "0.2.8"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",

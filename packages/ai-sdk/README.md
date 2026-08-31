@@ -6,17 +6,10 @@
 
 ## 5 分钟快速开始
 
-SDK `0.2.7` 私有发布在 GitHub Packages。先在**消费项目**的 `.npmrc` 配置：
-
-```ini
-@henjicc:registry=https://npm.pkg.github.com
-//npm.pkg.github.com/:_authToken=${GITHUB_PACKAGES_TOKEN}
-```
-
-Token 至少需要 `read:packages` 和私有仓库读取权限。不要把 token 本身写入 `.npmrc` 或提交到 Git。
+SDK `0.2.8` 公开发布在 npm，无需配置 registry 或访问令牌：
 
 ```bash
-npm install @henjicc/ai-sdk@0.2.7
+npm install @henjicc/ai-sdk@0.2.8
 ```
 
 然后提供 4 个宿主能力（`Transport` / `CredentialStore` / `MediaReader` / `Logger`），创建客户端：
@@ -462,7 +455,7 @@ module 只发送 Token/ReasoningToken 增量并返回最终结果。`createGroqL
 
 ## 已知限制与验证边界
 
-- 私有 GitHub Packages 消费方必须配置 `read:packages` 与对应私有仓库读权限；SDK 不提供无认证的公开 npm 镜像。
+- SDK 从 `0.2.8` 起以公共 npm 为唯一正式分发渠道，可匿名安装；旧 GitHub Packages 版本仅保留作历史与回滚依据。
 - Electron 宿主已经完整构建、桌面冒烟与真实 KIE/LLM 请求验证；`0.1.2` 已在真实 macOS Tauri 2.11.0 WebView + Rust `tauri-plugin-http` 中以 loopback fixture 跑通 create/poll、multi-chunk SSE 与 AbortSignal。`0.2.0` 的 generation-only、单工具、Fal erase tool pack、ASR、翻译、Groq 与 UXP LLM streaming 入口已通过静态依赖、受限 VM 和零网络生命周期门禁；窄 LLM 入口在完全没有 `TextEncoder` / `TextDecoder` 的 VM 中覆盖 UTF-8 跨 chunk、reasoning、text、usage、stop、`[DONE]` 与取消。`0.2.7` 新增的火山文件/实时、硅基流动和 Groq ASR 四个按需入口也已纳入独立 bundle 与受限宿主门禁；百炼、火山、硅基流动、Groq 的 ASR/翻译验证均使用官方来源或明确分类的构造 fixture，没有发起真实或付费网络请求。Photoshop UXP 真机网络稳定性仍由插件集成任务验证，Grayscale/LAB/CMYK 图层字节读取也未真机复验。
 - Fal 官方存储上传已在 Electron/Node real profile 中用无隐私合成 PNG 跑通真实端到端：119 字节上传与 Range 回读 SHA-256 一致，未触发模型请求或费用。`0.1.4` 将同一 initiate + signed PUT 协议收口到 `RuntimeContext.transport`，不再依赖 `@fal-ai/client` 或构造 `File`，并补齐成功、失败与取消 fixture；真实证据仍来自迁移前已核对的同一官方协议。CDN URL 公开，生产代码未显式设置 lifecycle，保留期依赖 Fal 账户设置。
 - 四个历史 override 模型均已完成真实供应商 create/poll/result URL 验证。KIE Seedream 4.0/4.5 首轮各一次完成；Fal Seedream 4.0 首轮 create 后暴露 `0.1.2` status route 重建 405 并按首败停止，后在新的独立费用授权下，修复后 4.0 completed 才继续 4.5，两者均 completed 且无 create 重试。优先保存供应商完整 `status_url` 的修复已在私有 `0.1.3` 发布，并通过远程干净安装与标准 Vite 五入口回归。

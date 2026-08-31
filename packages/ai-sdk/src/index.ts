@@ -11,7 +11,7 @@
  * 供支持 `exports` 条件解析的消费方（Vite/Rollup、`moduleResolution: "bundler"`/
  * `"node16"`/`"nodenext"`）按需只导入需要的子集。
  *
- * 包名与分发渠道已在任务 6.2 确认为私有 GitHub Packages：`@henjicc/ai-sdk`。
+ * 包名为 `@henjicc/ai-sdk`，从 0.2.8 起通过公共 npm registry 分发。
  */
 export * from './client'
 export * from './generation'

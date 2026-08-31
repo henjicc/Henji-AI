@@ -1,6 +1,6 @@
 # llm-chat
 
-用 `@henjicc/ai-sdk@0.2.7` 的 `llm/streaming` 按需入口走 OpenAI-compatible SSE 流式对话，
+用 `@henjicc/ai-sdk@0.2.8` 的 `llm/streaming` 按需入口走 OpenAI-compatible SSE 流式对话，
 不会把 generation、BigModel preset/models/pricing、Groq 或 LLM modules 打进示例 bundle；
 通用端点身份解析所需的 BigModel profiles 仍会保留。默认目标是
 DeepSeek `deepseek-v4-flash`，提示词要求只回复 `SDK OK`，并限制最多 16 tokens。示例显式传入

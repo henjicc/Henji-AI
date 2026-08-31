@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 0.2.8 - 2026-08-31
+
+- 正式分发渠道从需要读包凭据的私有 GitHub Packages 迁移到公共 npm；消费项目现在可以直接安装 `@henjicc/ai-sdk`，无需 `.npmrc` 或访问令牌。
+- 发布前门禁固定校验 npm 公共 registry 与 `access=public`，避免后续版本误发回私有源；正式发布仍只由 npm 包维护者手动执行。
+- 本次只调整分发与安装契约，不改变 0.2.7 的运行时 API、模型目录、请求协议或宿主能力边界。
+
 ## 0.2.7 - 2026-08-31
 
 - ASR 按需能力从百炼 9 个模型扩展到 15 个：新增火山引擎 SeedASR 2.0 文件 submit/query 与二进制实时 WebSocket、硅基流动 SenseVoiceSmall/TeleSpeechASR，以及 Groq Whisper Large v3/Turbo。

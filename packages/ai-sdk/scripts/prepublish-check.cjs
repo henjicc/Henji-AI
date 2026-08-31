@@ -105,11 +105,14 @@ for (const entry of patternEntries) {
   }
 }
 
-if (manifest.name !== '@henjicc/ai-sdk' || manifest.version !== '0.2.7') {
+if (manifest.name !== '@henjicc/ai-sdk' || manifest.version !== '0.2.8') {
   fail(`发布坐标不匹配：${manifest.name}@${manifest.version}`)
 }
-if (manifest.publishConfig?.registry !== 'https://npm.pkg.github.com') {
-  fail('publishConfig.registry 不是 https://npm.pkg.github.com')
+if (manifest.publishConfig?.registry !== 'https://registry.npmjs.org/') {
+  fail('publishConfig.registry 不是 https://registry.npmjs.org/')
+}
+if (manifest.publishConfig?.access !== 'public') {
+  fail('publishConfig.access 必须为 public')
 }
 if (manifest.sideEffects !== false) fail('sideEffects 必须明确为 false')
 if (!readme.includes(`SDK \`${manifest.version}\``)) {
