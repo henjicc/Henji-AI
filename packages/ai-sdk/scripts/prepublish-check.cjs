@@ -8,6 +8,7 @@ const packageRoot = path.resolve(__dirname, '..')
 const repositoryRoot = path.resolve(packageRoot, '..', '..')
 const manifest = JSON.parse(fs.readFileSync(path.join(packageRoot, 'package.json'), 'utf8'))
 const readme = fs.readFileSync(path.join(packageRoot, 'README.md'), 'utf8')
+const repositoryNpmrc = fs.readFileSync(path.join(repositoryRoot, '.npmrc'), 'utf8')
 
 function run(label, command, args, cwd = repositoryRoot) {
   console.log(`\n[prepublish] ${label}`)
@@ -113,6 +114,12 @@ if (manifest.publishConfig?.registry !== 'https://registry.npmjs.org/') {
 }
 if (manifest.publishConfig?.access !== 'public') {
   fail('publishConfig.access 必须为 public')
+}
+if (!repositoryNpmrc.split(/\r?\n/).includes('@henjicc:registry=https://registry.npmjs.org/')) {
+  fail('仓库 .npmrc 未将 @henjicc scope 固定到公共 npm')
+}
+if (/_authToken\s*=/.test(repositoryNpmrc)) {
+  fail('仓库 .npmrc 禁止保存发布令牌')
 }
 if (manifest.sideEffects !== false) fail('sideEffects 必须明确为 false')
 if (!readme.includes(`SDK \`${manifest.version}\``)) {

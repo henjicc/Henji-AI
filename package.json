@@ -69,6 +69,7 @@
     "electron:updater-e2e": "node scripts/electron-phase4-updater-e2e.cjs",
     "electron:rebuild": "electron-rebuild -f -w better-sqlite3",
     "release": "node scripts/release.cjs",
+    "publish:sdk": "npm publish -w packages/ai-sdk --registry=https://registry.npmjs.org/ --access public",
     "gen:camera-stage-poses": "node scripts/generate-camera-stage-poses.cjs",
     "ui:tour": "node scripts/ui-tour.cjs",
     "check:ui-visual": "node scripts/ui-visual-audit.cjs",
