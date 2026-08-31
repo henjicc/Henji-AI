@@ -37,6 +37,10 @@ describe('图片编辑 V3 宿主能力裁剪', () => {
     ])
     expect(getReadyImageEditorToolIdsV3(getImageEditorHostProfileV3('canvas-edit')))
       .toEqual(getReadyImageEditorToolIdsV3(profile))
+    expect(getImageEditorHostProfileV3('quick')).toMatchObject({
+      layerKinds: ['annotation', 'effect'],
+      adjustments: [],
+    })
   })
 
   it('三种发布效果都可新建，遮罩兼容宿主只暴露蒙版所需工具', () => {

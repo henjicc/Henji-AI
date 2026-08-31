@@ -4,6 +4,7 @@ import {
   createDefaultImageEditColorModeV3,
   createImageEditHdrMetadataV3,
 } from '@/core/imageEdit/v3/colorTypes'
+import { createDefaultDiffusionOperationParams } from '@/core/imageEdit/diffusionParams'
 import { createFloat32PremultipliedRgbaTile } from '@/core/imageEdit/v3/effects'
 import type { ImageEditRenderPlanNode } from '@/core/imageEdit/v3/renderPlan'
 import {
@@ -20,13 +21,37 @@ function node(definitionId: 'effect.diffusion' | 'effect.vgpu-glow'): ImageEditR
     definitionVersion: 4,
     category: definitionId === 'effect.diffusion' ? 'local' : 'global-analysis',
     inputNodeIds: ['source'],
-    parameters: {},
+    parameters: definitionId === 'effect.diffusion'
+      ? { ...createDefaultDiffusionOperationParams() }
+      : {},
     mask: null,
     subtreeHash: 'effect-hash',
   }
 }
 
 describe('ImageEditor V3 现有效果 Worker 边界', () => {
+  it('WebGPU 不可用时柔光使用同参数的 Float32 CPU 参考实现', async () => {
+    const effects = new ImageEditorPreviewCustomEffectsV3()
+    const source = createFloat32PremultipliedRgbaTile(
+      2,
+      1,
+      'linear-light',
+      new Float32Array([0.9, 0.8, 0.7, 1, 0.1, 0.1, 0.1, 1]),
+    )
+
+    const rendered = await effects.execute(
+      node('effect.diffusion'),
+      source,
+      'draft',
+      createDefaultImageEditColorModeV3(),
+    )
+
+    expect(rendered).not.toBe(source)
+    expect(rendered.data).toHaveLength(source.data.length)
+    expect([...rendered.data].every(Number.isFinite)).toBe(true)
+    effects.dispose()
+  })
+
   it.each(['effect.diffusion', 'effect.vgpu-glow'] as const)(
     '%s 在 HDR 文档中明确拒绝 8-bit 位图往返',
     async (definitionId) => {

@@ -21,12 +21,14 @@ import {
   streamRemoteResponseChunks,
   throwIfSourceIngestAborted,
 } from './remote-timeouts'
+import { assertImageEditorV3ReleaseSource } from './release-source-capabilities'
 
 const logger = createMainLogger('main.image_editor_v3.source_ingest')
 const MAX_SOURCE_URL_CHARACTERS = 8_192
 const REDIRECT_STATUS = new Set([301, 302, 303, 307, 308])
 const IMAGE_MEDIA_TYPE_PATTERN = /^image\/[a-z0-9][a-z0-9.+-]{0,63}$/
 const BASE64_PATTERN = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/
+const RELEASE_IMAGE_MEDIA_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp'])
 
 export const IMAGE_EDITOR_V3_SOURCE_INGEST_LIMITS: ImageEditorV3SourceIngestLimits = {
   localMaxBytes: 8 * 1024 * 1024 * 1024,
@@ -170,13 +172,6 @@ function mediaTypeFromPathname(pathname: string): string | undefined {
     case '.jpg':
     case '.jpeg': return 'image/jpeg'
     case '.webp': return 'image/webp'
-    case '.gif': return 'image/gif'
-    case '.bmp': return 'image/bmp'
-    case '.tif':
-    case '.tiff': return 'image/tiff'
-    case '.avif': return 'image/avif'
-    case '.heif':
-    case '.heic': return 'image/heif'
     default: return undefined
   }
 }
@@ -186,6 +181,9 @@ function normalizeImageMediaType(raw: string | null, fallback?: string): string 
   if (!normalized || normalized === 'application/octet-stream') return fallback
   if (!IMAGE_MEDIA_TYPE_PATTERN.test(normalized) || normalized === 'image/svg+xml') {
     throw new Error(`Remote source is not a supported raster image: ${normalized}`)
+  }
+  if (!RELEASE_IMAGE_MEDIA_TYPES.has(normalized)) {
+    throw new Error(`当前新版编辑器仅支持 JPEG、PNG 和 WebP：${normalized}`)
   }
   return normalized
 }
@@ -228,7 +226,11 @@ function parseDataUrl(raw: string, maxBytes: number): { bytes: Buffer; mediaType
   const header = raw.slice(5, separator)
   const payload = raw.slice(separator + 1)
   const match = /^([^;,]+);base64$/i.exec(header)
-  if (!match || !IMAGE_MEDIA_TYPE_PATTERN.test(match[1].toLowerCase()) || match[1].toLowerCase() === 'image/svg+xml') {
+  if (
+    !match
+    || !IMAGE_MEDIA_TYPE_PATTERN.test(match[1].toLowerCase())
+    || !RELEASE_IMAGE_MEDIA_TYPES.has(match[1].toLowerCase())
+  ) {
     throw new Error('Image data URL must contain a supported raster MIME type and canonical base64')
   }
   if (!payload || payload.length > Math.ceil(maxBytes / 3) * 4 + 4 || !BASE64_PATTERN.test(payload)) {
@@ -286,6 +288,7 @@ export class ImageEditorV3SourceIngestor {
           await lease.release()
         }
       })()
+      assertImageEditorV3ReleaseSource(metadata)
       logger.info('图片编辑 V3 图片源导入完成', {
         event: 'image_editor_v3.source_ingest.completed',
         context: {
@@ -343,7 +346,7 @@ export class ImageEditorV3SourceIngestor {
         method: 'GET',
         redirect: 'manual',
         signal,
-        headers: { Accept: 'image/avif,image/webp,image/png,image/jpeg,image/tiff,image/*;q=0.8' },
+        headers: { Accept: 'image/webp,image/png,image/jpeg' },
       }, {
         resolvedAddresses: addresses,
         connectTimeoutMs: this.limits.remoteConnectTimeoutMs,

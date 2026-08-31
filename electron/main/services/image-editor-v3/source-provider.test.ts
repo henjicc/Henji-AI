@@ -41,6 +41,110 @@ afterEach(async () => {
 })
 
 describe('SharpSourceProvider', () => {
+  it.each([
+    {
+      label: 'baseline JPEG',
+      mediaType: 'image/jpeg',
+      expectedFormat: 'jpeg',
+      encode: () => sharp({
+        create: { width: 32, height: 20, channels: 3, background: { r: 220, g: 80, b: 40 } },
+      }).jpeg({ progressive: false }).toBuffer(),
+    },
+    {
+      label: 'progressive JPEG',
+      mediaType: 'image/jpeg',
+      expectedFormat: 'jpeg',
+      encode: () => sharp({
+        create: { width: 32, height: 20, channels: 3, background: { r: 40, g: 120, b: 220 } },
+      }).jpeg({ progressive: true }).toBuffer(),
+    },
+    {
+      label: 'CMYK JPEG',
+      mediaType: 'image/jpeg',
+      expectedFormat: 'jpeg',
+      encode: () => sharp({
+        create: { width: 32, height: 20, channels: 3, background: { r: 80, g: 160, b: 40 } },
+      }).toColourspace('cmyk').jpeg().toBuffer(),
+    },
+    {
+      label: 'RGBA PNG',
+      mediaType: 'image/png',
+      expectedFormat: 'png',
+      encode: () => sharp({
+        create: { width: 32, height: 20, channels: 4, background: { r: 80, g: 160, b: 40, alpha: 0.5 } },
+      }).png().toBuffer(),
+    },
+    {
+      label: 'palette PNG',
+      mediaType: 'image/png',
+      expectedFormat: 'png',
+      encode: () => sharp({
+        create: { width: 32, height: 20, channels: 3, background: { r: 80, g: 160, b: 40 } },
+      }).png({ palette: true }).toBuffer(),
+    },
+    {
+      label: 'grayscale PNG',
+      mediaType: 'image/png',
+      expectedFormat: 'png',
+      encode: () => sharp({
+        create: { width: 32, height: 20, channels: 3, background: { r: 80, g: 160, b: 40 } },
+      }).greyscale().png().toBuffer(),
+    },
+    {
+      label: 'transparent WebP',
+      mediaType: 'image/webp',
+      expectedFormat: 'webp',
+      encode: () => sharp({
+        create: { width: 32, height: 20, channels: 4, background: { r: 80, g: 160, b: 40, alpha: 0.5 } },
+      }).webp().toBuffer(),
+    },
+  ])('候选版真实解码 $label 的 metadata、代理和像素瓦片', async ({
+    mediaType,
+    expectedFormat,
+    encode,
+  }) => {
+    const resource = await store.putBuffer(await encode(), { mediaType })
+    const provider = new SharpSourceProvider(store)
+
+    await expect(provider.readMetadata(resource.id)).resolves.toMatchObject({
+      width: 32,
+      height: 20,
+      format: expectedFormat,
+      bitsPerSample: 8,
+      hdr: false,
+    })
+    await expect(provider.readFastProxy(resource.id, 64)).resolves.toMatchObject({
+      width: 32,
+      height: 20,
+      format: 'webp',
+    })
+    await expect(provider.readTile({ resourceId: resource.id, mip: 0, tileX: 0, tileY: 0 }))
+      .resolves.toMatchObject({ width: 32, height: 20, bitDepth: 8, rowStride: 32 * 4 })
+  })
+
+  it('JPEG EXIF 方向在 metadata、代理与瓦片中只应用一次', async () => {
+    const encoded = await sharp({
+      create: { width: 40, height: 24, channels: 3, background: { r: 220, g: 80, b: 40 } },
+    }).jpeg().withMetadata({ orientation: 6 }).toBuffer()
+    const resource = await store.putBuffer(encoded, { mediaType: 'image/jpeg' })
+    const provider = new SharpSourceProvider(store)
+
+    await expect(provider.readMetadata(resource.id)).resolves.toMatchObject({
+      width: 24,
+      height: 40,
+      encodedWidth: 40,
+      encodedHeight: 24,
+      orientation: 6,
+      orientationApplied: true,
+    })
+    await expect(provider.readFastProxy(resource.id, 64)).resolves.toMatchObject({
+      width: 24,
+      height: 40,
+    })
+    await expect(provider.readTile({ resourceId: resource.id, mip: 0, tileX: 0, tileY: 0 }))
+      .resolves.toMatchObject({ width: 24, height: 40, orientationApplied: true })
+  })
+
   it('从受管文件读取 metadata、代理与 512 区域瓦片', async () => {
     const width = 1024
     const height = 512

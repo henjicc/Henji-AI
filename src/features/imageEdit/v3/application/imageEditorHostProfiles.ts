@@ -30,6 +30,7 @@ export type ImageEditorReadinessReasonKeyV3 =
   | 'imageEditor.v3.readiness.reasons.selectEllipse'
   | 'imageEditor.v3.readiness.reasons.selectLasso'
   | 'imageEditor.v3.readiness.reasons.maskEdit'
+  | 'imageEditor.v3.readiness.reasons.glowUnavailable'
   | 'imageEditor.v3.readiness.reasons.glowExport'
   | 'imageEditor.v3.readiness.reasons.hdrExport'
   | 'imageEditor.v3.readiness.reasons.quickHdr'
@@ -134,9 +135,9 @@ export const IMAGE_EDITOR_HOST_PROFILES_V3: Readonly<
   quick: {
     id: 'quick',
     tools: [...NAVIGATION_TOOLS, ready('crop'), ...ANNOTATION_TOOLS],
-    layerKinds: ['annotation', 'effect', 'adjustment'],
+    layerKinds: ['annotation', 'effect'],
     effects: CORE_EFFECTS.filter(({ id }) => id !== 'image.vgpu-glow'),
-    adjustments: ['exposure', 'hsl'],
+    adjustments: [],
     panels: ['layers', 'properties'],
     layerControls: ['blend-mode'],
     saveActions: ['save-document', 'export-raster'],

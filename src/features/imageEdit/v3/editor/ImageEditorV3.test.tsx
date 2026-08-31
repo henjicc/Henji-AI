@@ -162,11 +162,12 @@ describe('ImageEditorV3 professional shell', () => {
     expect(screen.queryByRole('menuitem', { name: '标注图层' })).toBeNull()
   })
 
-  it('图层菜单只提供发布范围内的扁平图层和三种效果', async () => {
+  it('图层菜单只提供发布范围内的扁平图层，并在 WebGPU 不可用时禁用辉光 Pro', async () => {
     renderEditor(createDocument([createImageEditRasterLayerV3('raster', '底图')]))
 
     fireEvent.click(await screen.findByRole('button', { name: '添加图层' }))
-    expect(screen.getByRole('menuitem', { name: '辉光 Pro' })).toBeTruthy()
+    const glow = screen.getByRole('menuitem', { name: /辉光 Pro.*WebGPU/ }) as HTMLButtonElement
+    expect(glow.disabled).toBe(true)
     expect(screen.getByRole('menuitem', { name: '高斯模糊' })).toBeTruthy()
     expect(screen.getByRole('menuitem', { name: '柔光 / 发光' })).toBeTruthy()
     expect(screen.queryByRole('menuitem', { name: '图层组' })).toBeNull()
@@ -275,7 +276,7 @@ describe('ImageEditorV3 professional shell', () => {
     )
   })
 
-  it('渲染帧绘制后立即释放所有权', async () => {
+  it('渲染帧绘制后保持所有权，真实卸载后才释放', async () => {
     const release = vi.fn()
     const drawImage = vi.fn()
     const context = { clearRect: vi.fn(), drawImage } as unknown as CanvasRenderingContext2D
@@ -287,12 +288,15 @@ describe('ImageEditorV3 professional shell', () => {
       height: 180,
       release,
     }
-    renderEditor(
+    const rendered = renderEditor(
       createDocument([createImageEditRasterLayerV3('raster', '底图')]),
       { previewRenderer: () => output },
     )
 
     await waitFor(() => expect(drawImage).toHaveBeenCalledTimes(1))
+    expect(release).not.toHaveBeenCalled()
+    rendered.unmount()
+    await Promise.resolve()
     expect(release).toHaveBeenCalledTimes(1)
   })
 
@@ -308,6 +312,7 @@ describe('ImageEditorV3 professional shell', () => {
     )
     expect(release).not.toHaveBeenCalled()
     rendered.unmount()
+    await Promise.resolve()
     expect(release).toHaveBeenCalledTimes(1)
   })
 

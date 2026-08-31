@@ -35,6 +35,11 @@ import {
 } from './imageMarkV3RasterExport'
 
 const logger = createLogger('features.imageMark.v3_host')
+const RELEASE_RASTER_EXPORT_FORMATS = new Set<ImageEditorV3RasterExportFormat>([
+  'png8',
+  'jpeg',
+  'webp',
+])
 
 export interface ImageMarkV3RasterExportUiState extends ImageMarkV3RasterExportProgress {
   cancelling: boolean
@@ -223,10 +228,12 @@ export function useImageMarkToolV3Actions({
 
   const rasterExportOptions = useMemo<readonly ImageMarkV3RasterExportOption[]>(() => (
     document
-      ? listImageMarkV3RasterExportFormats(document).map((format) => ({
-          format,
-          readiness: resolveImageMarkV3RasterExportReadiness(document, sourceName, format),
-        }))
+      ? listImageMarkV3RasterExportFormats(document)
+        .filter((format) => RELEASE_RASTER_EXPORT_FORMATS.has(format))
+        .map((format) => ({
+            format,
+            readiness: resolveImageMarkV3RasterExportReadiness(document, sourceName, format),
+          }))
       : []
   ), [document, sourceName])
 

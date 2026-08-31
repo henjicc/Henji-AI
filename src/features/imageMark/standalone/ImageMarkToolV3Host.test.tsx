@@ -216,10 +216,12 @@ describe('ImageMarkToolV3Host', () => {
       expect.objectContaining({
         revision: 0,
         geometry: expect.objectContaining({ width: 1_600, height: 900 }),
-        layers: expect.arrayContaining([
-          expect.objectContaining({ type: 'raster', source: { kind: 'resource', resourceId: RESOURCE_REF } }),
-          expect.objectContaining({ type: 'annotation' }),
-        ]),
+        layers: [
+          expect.objectContaining({
+            type: 'raster',
+            source: { kind: 'resource', resourceId: RESOURCE_REF },
+          }),
+        ],
       }),
       expect.objectContaining({
         expectedRevision: 0,

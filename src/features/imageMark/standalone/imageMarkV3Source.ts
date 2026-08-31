@@ -1,5 +1,5 @@
 import {
-  createImageEditHdrMetadataV3,
+  createDefaultImageEditColorModeV3,
   type ImageEditColorModeV3,
 } from '@/core/imageEdit/v3/colorTypes'
 import type {
@@ -24,32 +24,13 @@ export function resolveImageMarkV3SourceLocator(sourceImageUrl: string): ImageEd
 export function createImageMarkV3ColorMode(
   metadata: ImageEditorV3SourceMetadata,
 ): ImageEditColorModeV3 {
-  const cicp = metadata.cicp ? { ...metadata.cicp } : null
-  const transfer = cicp?.transferCharacteristics === 16
-    ? 'pq'
-    : cicp?.transferCharacteristics === 18
-      ? 'hlg'
-      : 'srgb'
-  const hdrStandard = transfer === 'pq' || transfer === 'hlg' ? transfer : null
-  const hdr = hdrStandard !== null
-  const colorSpace = metadata.colorSpace?.toLowerCase() ?? ''
-  const workingSpace = hdr
-    ? 'rec2020'
-    : cicp?.colorPrimaries === 12 || colorSpace.includes('p3')
-      ? 'display-p3'
-      : 'srgb'
-  const bitDepth = metadata.depth === 'float' || metadata.bitsPerSample > 16
-    ? 'float32'
-    : metadata.bitsPerSample > 8 || hdr
-      ? 16
-      : 8
-  return {
-    workingSpace,
-    bitDepth,
-    transferFunction: transfer,
-    hdrMetadata: hdrStandard
-      ? createImageEditHdrMetadataV3(hdrStandard, cicp ?? undefined)
-      : null,
-    iccProfileResourceId: metadata.iccProfileResourceRef,
+  const format = metadata.format?.toLowerCase()
+  if (!format || !['jpeg', 'png', 'webp'].includes(format)) {
+    throw new Error(`当前新版编辑器仅支持 JPEG、PNG 和 WebP：${format ?? '未知格式'}`)
   }
+  if (metadata.hdr || metadata.bitsPerSample > 8 || metadata.depth === 'float') {
+    throw new Error('当前新版编辑器仅支持 8-bit SDR 图片')
+  }
+  // 候选版统一在导入边界转换到 sRGB；ICC/P3/HDR 文档模式留待后续版本重新开放。
+  return createDefaultImageEditColorModeV3()
 }

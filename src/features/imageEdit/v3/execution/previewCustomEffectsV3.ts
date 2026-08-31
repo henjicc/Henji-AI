@@ -1,6 +1,7 @@
 import {
   DIFFUSION_V4_RECIPE_ADAPTER,
   VGPU_GLOW_V4_RECIPE_ADAPTER,
+  applyDiffusionV4,
   type Float32MaskTile,
   type Float32PremultipliedRgbaTile,
 } from '@/core/imageEdit/v3/effects'
@@ -48,6 +49,19 @@ export class ImageEditorPreviewCustomEffectsV3 {
         `${node.definitionId} 的 HDR Worker 执行链尚未提供无损浮点互操作，已保留上一预览帧`,
       )
     }
+    const diffusionRecipe = node.definitionId === 'effect.diffusion'
+      ? DIFFUSION_V4_RECIPE_ADAPTER.compileRecipe(
+          DIFFUSION_V4_RECIPE_ADAPTER.parseParameters(node.parameters),
+          {
+            width: source.width,
+            height: source.height,
+            quality: quality === 'draft' ? 'realtime' : 'high',
+          },
+        )
+      : null
+    if (diffusionRecipe && (typeof navigator === 'undefined' || !('gpu' in navigator))) {
+      return applyDiffusionV4(source, diffusionRecipe, { mask })
+    }
     const sourceBitmap = await linearPreviewTileToBitmapV3(
       convertPreviewWorkingSpaceToSrgbDisplayV3(source, { ...color, hdrMetadata: null, transferFunction: 'srgb' }),
     )
@@ -55,18 +69,13 @@ export class ImageEditorPreviewCustomEffectsV3 {
     try {
       const state = await this.backend.ensureState()
       if (node.definitionId === 'effect.diffusion') {
-        const parameters = DIFFUSION_V4_RECIPE_ADAPTER.parseParameters(node.parameters)
-        const recipe = DIFFUSION_V4_RECIPE_ADAPTER.compileRecipe(parameters, {
-          width: source.width,
-          height: source.height,
-          quality: quality === 'draft' ? 'realtime' : 'high',
-        })
+        if (!diffusionRecipe) throw new Error('柔光效果缺少已编译 recipe')
         rendered = await this.backend.renderDiffusionBitmap(
           state,
           sourceBitmap,
           source.width,
           source.height,
-          recipe,
+          diffusionRecipe,
           node.subtreeHash,
         )
       } else {
@@ -89,6 +98,7 @@ export class ImageEditorPreviewCustomEffectsV3 {
       )
       return mixCustomEffectMaskV3(source, processed, mask)
     } catch (error) {
+      if (diffusionRecipe) return applyDiffusionV4(source, diffusionRecipe, { mask })
       if (error instanceof ImageEditorPreviewUnsupportedEffectErrorV3) throw error
       const detail = error instanceof Error ? error.message : String(error)
       throw new ImageEditorPreviewUnsupportedEffectErrorV3(

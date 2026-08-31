@@ -57,6 +57,7 @@ function getEffectiveSelectedIds(
 function getCreationChoices(
   controller: ImageEditorV3Controller,
   translate: (key: string) => string,
+  webGpuAvailable: boolean,
 ): ImageEditorLayerCreationCapabilityV3[] {
   const choices: ImageEditorLayerCreationCapabilityV3[] = []
   for (const kind of controller.profile.layerKinds) {
@@ -66,7 +67,12 @@ function getCreationChoices(
         if (capability) {
           choices.push({
             choice: { kind, subtype, name: translate(`imageEditor.v3.effect.${subtype}`) },
-            readiness: capability.readiness,
+            readiness: subtype === 'image.vgpu-glow' && !webGpuAvailable
+              ? {
+                  state: 'disabled',
+                  reasonKey: 'imageEditor.v3.readiness.reasons.glowUnavailable',
+                }
+              : capability.readiness,
           })
         }
       }
@@ -120,7 +126,11 @@ export function ImageEditorLayersPanelV3({
     controller.document.layers,
     effectiveSelectedIds,
   )
-  const creationChoices = getCreationChoices(controller, t)
+  const creationChoices = getCreationChoices(
+    controller,
+    t,
+    typeof navigator !== 'undefined' && 'gpu' in navigator,
+  )
   const reorderRows = useCallback((fromIndex: number, toIndex: number): void => {
     const destination = resolveImageEditLayerDropV3(rows, fromIndex, toIndex)
     if (!destination) return

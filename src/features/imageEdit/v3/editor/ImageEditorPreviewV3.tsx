@@ -179,11 +179,21 @@ export function ImageEditorPreviewV3({
     snapshot,
     sourceImageUrl,
   ])
-  const customReleasableOutput = customOutput
+  const customResourceIdentity = customOutput?.kind === 'frame'
+    ? customOutput.frame
+    : customOutput?.kind === 'url'
+      ? customOutput.url
+      : null
+  const customResourceRelease = customOutput
     && 'release' in customOutput
     && typeof customOutput.release === 'function'
-    ? customOutput as ImageEditorV3PreviewOutput & { release: () => void }
-    : null
+    ? customOutput.release
+    : undefined
+  const customReleasableOutput = useMemo(() => (
+    customResourceIdentity && customResourceRelease
+      ? { release: customResourceRelease }
+      : null
+  ), [customResourceIdentity, customResourceRelease])
   useImageEditorResultLeaseV3(customReleasableOutput)
   // 受管帧的 output 身份只能随受管 result 改变，资源租约由受管 Hook 持有。
   const managedOutput = useMemo<ImageEditorV3PreviewOutput>(() => (

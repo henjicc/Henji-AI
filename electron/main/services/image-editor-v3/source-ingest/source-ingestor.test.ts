@@ -11,7 +11,10 @@ import { ImageEditorV3SourceIngestor } from './source-ingestor'
 let rootDir = ''
 let resources: ContentAddressedResourceStore
 
-function metadata(resourceId: ResourceId): SourceImageMetadata {
+function metadata(
+  resourceId: ResourceId,
+  patch: Partial<SourceImageMetadata> = {},
+): SourceImageMetadata {
   return {
     resourceId,
     width: 20_000,
@@ -26,6 +29,7 @@ function metadata(resourceId: ResourceId): SourceImageMetadata {
     hasIccProfile: false,
     cicp: null,
     hdr: false,
+    ...patch,
   }
 }
 
@@ -60,6 +64,31 @@ describe('ImageEditorV3SourceIngestor', () => {
     expect(result).not.toHaveProperty('filePath')
     await expect(fsp.readFile(resources.getFilesystemPath(result.resource.id), 'utf8'))
       .resolves.toBe('local-image')
+  })
+
+  it('元数据确认后拒绝非首发格式、16 位和 HDR，不静默降精度', async () => {
+    const filePath = path.join(rootDir, 'source.avif')
+    await fsp.writeFile(filePath, Buffer.from('unsupported-image'))
+    const ingestor = new ImageEditorV3SourceIngestor(resources, sourceProvider())
+
+    readMetadata.mockImplementationOnce(async (resourceId) => metadata(resourceId, {
+      format: 'avif',
+    }))
+    await expect(ingestor.ingest({ kind: 'local-path', filePath }))
+      .rejects.toThrow('仅支持 JPEG、PNG 和 WebP')
+
+    readMetadata.mockImplementationOnce(async (resourceId) => metadata(resourceId, {
+      depth: 'ushort',
+      bitsPerSample: 16,
+    }))
+    await expect(ingestor.ingest({ kind: 'local-path', filePath }))
+      .rejects.toThrow('暂不支持 16 位或浮点图片')
+
+    readMetadata.mockImplementationOnce(async (resourceId) => metadata(resourceId, {
+      hdr: true,
+    }))
+    await expect(ingestor.ingest({ kind: 'local-path', filePath }))
+      .rejects.toThrow('暂不支持 HDR 图片')
   })
 
   it('HTTP(S) 手动校验每次重定向并把响应 body 增量写入资源库', async () => {

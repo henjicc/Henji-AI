@@ -505,7 +505,7 @@ export function registerImageEditorV3Ipc(): void {
   registerIpcHandler('imageEditorV3:source:import', parseImageEditorV3BasePayload, (payload, event) => (
     runRequest('source.import', payload.requestId, event.sender.id, async (signal) => {
       const selection = await dialog.showOpenDialog(ownerFor(event), {
-        properties: ['openFile'], filters: [{ name: '图片', extensions: ['png', 'jpg', 'jpeg', 'webp', 'tif', 'tiff', 'avif'] }],
+        properties: ['openFile'], filters: [{ name: '图片', extensions: ['png', 'jpg', 'jpeg', 'webp'] }],
       })
       if (selection.canceled || !selection.filePaths[0]) {
         logger.info('用户取消导入图片源', {

@@ -602,6 +602,7 @@
           "selectEllipse": "像素选区尚未接通，暂时不能使用椭圆选择。",
           "selectLasso": "像素选区尚未接通，暂时不能使用套索选择。",
           "maskEdit": "蒙版像素编辑尚未接通；已有蒙版只会被保留。",
+          "glowUnavailable": "当前设备没有可用的 WebGPU，辉光 Pro 图层会保留但不能新建或渲染。",
           "glowExport": "辉光 Pro 当前不能可靠导出栅格图片；已有图层会保留，但暂不允许新建。",
           "hdrExport": "HDR 内容会以 SDR 代理预览并保留到可编辑文件，但当前不能导出栅格图片。",
           "quickHdr": "快速编辑暂不接收 HDR 文档。",

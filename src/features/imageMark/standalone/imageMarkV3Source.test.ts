@@ -54,25 +54,27 @@ describe('imageMarkV3Source', () => {
     )
   })
 
-  it('保留 SDR 位深、P3 与 ICC 引用', () => {
+  it('候选版把支持的 8-bit SDR 来源统一为 sRGB 文档，不开放 ICC 模式', () => {
     const icc = `sha256:${'b'.repeat(64)}` as const
     expect(createImageMarkV3ColorMode(metadata({
-      bitsPerSample: 16,
-      depth: 'ushort',
       colorSpace: 'display-p3',
       hasIccProfile: true,
       iccProfileResourceRef: icc,
     }))).toEqual({
-      workingSpace: 'display-p3',
-      bitDepth: 16,
+      workingSpace: 'srgb',
+      bitDepth: 8,
       transferFunction: 'srgb',
       hdrMetadata: null,
-      iccProfileResourceId: icc,
+      iccProfileResourceId: null,
     })
   })
 
-  it('按 CICP 显式建立 PQ 与 HLG 文档而不降成 8 位', () => {
-    const pq = createImageMarkV3ColorMode(metadata({
+  it('拒绝把 16 位、HDR 和非首发格式静默降成 8 位', () => {
+    expect(() => createImageMarkV3ColorMode(metadata({
+      bitsPerSample: 16,
+      depth: 'ushort',
+    }))).toThrow('仅支持 8-bit SDR')
+    expect(() => createImageMarkV3ColorMode(metadata({
       format: 'avif',
       bitsPerSample: 10,
       cicp: {
@@ -82,28 +84,8 @@ describe('imageMarkV3Source', () => {
         fullRange: true,
       },
       hdr: true,
-    }))
-    expect(pq).toMatchObject({
-      workingSpace: 'rec2020',
-      bitDepth: 16,
-      transferFunction: 'pq',
-      hdrMetadata: { standard: 'pq' },
-    })
-
-    const hlg = createImageMarkV3ColorMode(metadata({
-      bitsPerSample: 10,
-      cicp: {
-        colorPrimaries: 9,
-        transferCharacteristics: 18,
-        matrixCoefficients: 9,
-        fullRange: false,
-      },
-    }))
-    expect(hlg).toMatchObject({
-      workingSpace: 'rec2020',
-      bitDepth: 16,
-      transferFunction: 'hlg',
-      hdrMetadata: { standard: 'hlg' },
-    })
+    }))).toThrow('仅支持 JPEG、PNG 和 WebP')
+    expect(() => createImageMarkV3ColorMode(metadata({ hdr: true })))
+      .toThrow('仅支持 8-bit SDR')
   })
 })
