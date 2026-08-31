@@ -23,11 +23,14 @@ interface ImageEditorLayerMoveGestureV3 {
   layerId: string
   startParentPoint: readonly [number, number]
   startClientPoint: readonly [number, number]
+  viewportRect: Pick<DOMRect, 'left' | 'top' | 'width' | 'height'>
   startTransform: ImageEditTransformV3
   pendingTransform: ImageEditTransformV3
+  previewFrameId: number | null
   previewSet: boolean
+  interacted: boolean
   changed: boolean
-  wholeFrameFeedback: boolean
+  compositorFeedback: boolean
 }
 
 const EMPTY_LAYER_IDS_V3: readonly string[] = []
@@ -62,13 +65,19 @@ export function useImageEditorLayerMoveGestureV3(
     const feedback = moveFeedbackRef.current
     if (!feedback) return
     feedback.style.transform = ''
-    feedback.style.willChange = ''
   }, [moveFeedbackRef])
+
+  const cancelScheduledPreview = useCallback((gesture: ImageEditorLayerMoveGestureV3): void => {
+    if (gesture.previewFrameId === null) return
+    if (typeof cancelAnimationFrame === 'function') cancelAnimationFrame(gesture.previewFrameId)
+    gesture.previewFrameId = null
+  }, [])
 
   const release = useCallback((commit: boolean): void => {
     const gesture = gestureRef.current
     if (!gesture) return
     gestureRef.current = null
+    cancelScheduledPreview(gesture)
     if (
       typeof gesture.captureTarget.hasPointerCapture === 'function'
       && gesture.captureTarget.hasPointerCapture(gesture.pointerId)
@@ -76,11 +85,22 @@ export function useImageEditorLayerMoveGestureV3(
     ) gesture.captureTarget.releasePointerCapture(gesture.pointerId)
     if (commit && gesture.changed) {
       try {
-        controller.commitTransformPreview(
-          gesture.previewId,
-          gesture.layerId,
-          gesture.pendingTransform,
-        )
+        if (gesture.compositorFeedback) {
+          controller.updateLayerCommon(gesture.layerId, { transform: gesture.pendingTransform })
+        } else {
+          if (!gesture.previewSet) {
+            controller.setTransformPreview(
+              gesture.previewId,
+              gesture.layerId,
+              gesture.pendingTransform,
+            )
+          }
+          controller.commitTransformPreview(
+            gesture.previewId,
+            gesture.layerId,
+            gesture.pendingTransform,
+          )
+        }
       } catch (error) {
         clearWholeFrameFeedback()
         throw error
@@ -91,7 +111,7 @@ export function useImageEditorLayerMoveGestureV3(
     } else {
       clearWholeFrameFeedback()
     }
-  }, [clearWholeFrameFeedback, controller])
+  }, [cancelScheduledPreview, clearWholeFrameFeedback, controller])
 
   useEffect(() => {
     if (activeTool !== 'move') release(false)
@@ -105,16 +125,16 @@ export function useImageEditorLayerMoveGestureV3(
   }, [controller.document.id, controller.document.revision, controller.document.layers, release])
 
   const clientToOutput = useCallback((
+    rect: Pick<DOMRect, 'left' | 'top' | 'width' | 'height'>,
     clientX: number,
     clientY: number,
   ): readonly [number, number] | null => {
-    const rect = viewportContentRef.current?.getBoundingClientRect()
-    if (!rect || rect.width <= 0 || rect.height <= 0) return null
+    if (rect.width <= 0 || rect.height <= 0) return null
     return [
       (clientX - rect.left) / rect.width * outputGeometry.width,
       (clientY - rect.top) / rect.height * outputGeometry.height,
     ]
-  }, [outputGeometry.height, outputGeometry.width, viewportContentRef])
+  }, [outputGeometry.height, outputGeometry.width])
 
   const onPointerDownCapture = (event: ReactPointerEvent<HTMLElement>): void => {
     if (
@@ -130,7 +150,9 @@ export function useImageEditorLayerMoveGestureV3(
     const layerId = selectedLayerIds.length === 1 ? selectedLayerIds[0] : null
     if (!layerId) return
     const location = findImageEditLayerLocationV3(controller.document.layers, layerId)
-    const outputPoint = clientToOutput(event.clientX, event.clientY)
+    const viewportRect = viewportContentRef.current?.getBoundingClientRect()
+    if (!viewportRect) return
+    const outputPoint = clientToOutput(viewportRect, event.clientX, event.clientY)
     if (!isImageEditLayerTransformableV3(location) || !outputPoint) return
     event.preventDefault()
     event.stopPropagation()
@@ -150,12 +172,24 @@ export function useImageEditorLayerMoveGestureV3(
         outputPoint,
       ),
       startClientPoint: [event.clientX, event.clientY],
+      viewportRect: {
+        left: viewportRect.left,
+        top: viewportRect.top,
+        width: viewportRect.width,
+        height: viewportRect.height,
+      },
       startTransform: [...location.layer.transform],
       pendingTransform: [...location.layer.transform],
+      previewFrameId: null,
       previewSet: false,
+      interacted: false,
       changed: false,
-      wholeFrameFeedback: location.parentId === null
+      compositorFeedback: moveFeedbackRef.current !== null
+        && location.parentId === null
         && location.layer.type === 'raster'
+        && controller.document.geometry.crop === null
+        && controller.document.geometry.orientation.rotate === 0
+        && !controller.document.geometry.orientation.mirrored
         && controller.document.layers.every((layer) => (
           layer.id === layerId
           || !layer.visible
@@ -169,7 +203,7 @@ export function useImageEditorLayerMoveGestureV3(
     const gesture = gestureRef.current
     if (!gesture || gesture.pointerId !== event.pointerId) return
     const location = findImageEditLayerLocationV3(controller.document.layers, gesture.layerId)
-    const outputPoint = clientToOutput(event.clientX, event.clientY)
+    const outputPoint = clientToOutput(gesture.viewportRect, event.clientX, event.clientY)
     if (!isImageEditLayerTransformableV3(location) || !outputPoint) {
       release(false)
       return
@@ -178,22 +212,34 @@ export function useImageEditorLayerMoveGestureV3(
     const deltaX = point[0] - gesture.startParentPoint[0]
     const deltaY = point[1] - gesture.startParentPoint[1]
     const changed = Math.hypot(deltaX, deltaY) >= 0.01
-    if (!changed && !gesture.previewSet) return
+    if (!changed && !gesture.interacted) return
     event.preventDefault()
     event.stopPropagation()
-    gesture.previewSet = true
+    gesture.interacted = true
     gesture.changed = changed
     gesture.pendingTransform = changed
       ? translateImageEditLayerTransformV3(gesture.startTransform, deltaX, deltaY)
       : [...gesture.startTransform]
-    if (gesture.wholeFrameFeedback && moveFeedbackRef.current) {
+    if (gesture.compositorFeedback && moveFeedbackRef.current) {
       const scale = Math.max(0.05, viewportZoom)
-      moveFeedbackRef.current.style.willChange = 'transform'
       moveFeedbackRef.current.style.transform = changed
         ? `translate3d(${(event.clientX - gesture.startClientPoint[0]) / scale}px, ${(event.clientY - gesture.startClientPoint[1]) / scale}px, 0)`
         : ''
+      return
     }
-    controller.setTransformPreview(gesture.previewId, gesture.layerId, gesture.pendingTransform)
+    if (gesture.previewFrameId !== null) return
+    const publishPreview = (): void => {
+      const current = gestureRef.current
+      if (current !== gesture) return
+      gesture.previewFrameId = null
+      controller.setTransformPreview(gesture.previewId, gesture.layerId, gesture.pendingTransform)
+      gesture.previewSet = true
+    }
+    if (typeof requestAnimationFrame === 'function') {
+      gesture.previewFrameId = requestAnimationFrame(publishPreview)
+    } else {
+      publishPreview()
+    }
   }
 
   const onPointerUpCapture = (event: ReactPointerEvent<HTMLElement>): void => {

@@ -1,5 +1,5 @@
 import { AlertTriangle, LoaderCircle, Minus, Plus } from 'lucide-react'
-import { useCallback, useEffect, useMemo, useRef } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef } from 'react'
 import type {
   PointerEvent as ReactPointerEvent,
   WheelEvent as ReactWheelEvent,
@@ -18,6 +18,10 @@ import {
 } from '../execution'
 import { useImageEditorResultLeaseV3 } from '../execution/useImageEditorResultLeaseV3'
 import { ImageEditorAnnotationOverlayV3 } from './ImageEditorAnnotationOverlayV3'
+import {
+  ImageEditorFramePreviewV3,
+  ImageEditorUrlPreviewV3,
+} from './ImageEditorPreviewOutputV3'
 import { ImageEditorRasterBrushOverlayV3 } from './ImageEditorRasterBrushOverlayV3'
 import { ImageEditorSelectionMaskOverlayV3 } from './ImageEditorSelectionMaskOverlayV3'
 import { ImageEditorViewportTilesV3 } from './ImageEditorViewportTilesV3'
@@ -61,37 +65,6 @@ interface ImageEditorNavigationGestureV3 {
 }
 
 const ZERO_VIEWPORT_PAN_V3: ImageEditorViewportPanV3 = { x: 0, y: 0 }
-
-function FramePreview({ output, label }: { output: Extract<ImageEditorV3PreviewOutput, { kind: 'frame' }>; label: string }): JSX.Element {
-  const canvasRef = useRef<HTMLCanvasElement | null>(null)
-
-  useEffect(() => {
-    const canvas = canvasRef.current
-    if (canvas) {
-      canvas.width = output.width
-      canvas.height = output.height
-      const context = canvas.getContext('2d')
-      context?.clearRect(0, 0, output.width, output.height)
-      context?.drawImage(output.frame, 0, 0, output.width, output.height)
-    }
-  }, [output])
-
-  return <canvas ref={canvasRef} role="img" aria-label={label} className="block max-h-full max-w-full" />
-}
-
-function UrlPreview({ output, label }: {
-  output: Extract<ImageEditorV3PreviewOutput, { kind: 'url' }>
-  label: string
-}): JSX.Element {
-  return (
-    <img
-      src={output.url}
-      alt={label}
-      className="block max-h-full max-w-full select-none object-contain"
-      draggable={false}
-    />
-  )
-}
 
 export function ImageEditorPreviewV3({
   sourceImageUrl,
@@ -221,7 +194,7 @@ export function ImageEditorPreviewV3({
     ? snapshot.document.revision
     : viewportResult?.revision ?? managedPreview.resultRevision
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (
       Object.keys(snapshot.previewOverrides).length > 0
       || basePreviewDocumentId !== snapshot.document.id
@@ -230,7 +203,6 @@ export function ImageEditorPreviewV3({
     const feedback = moveFeedbackRef.current
     if (!feedback) return
     feedback.style.transform = ''
-    feedback.style.willChange = ''
   }, [basePreviewDocumentId, basePreviewRevision, snapshot.document.id, snapshot.document.revision, snapshot.previewOverrides])
 
   const applyViewportTransform = useCallback((
@@ -381,6 +353,7 @@ export function ImageEditorPreviewV3({
     <main
       ref={surfaceRef}
       data-preview-surface
+      data-preview-display-source={previewRenderer ? 'custom' : displayPipeline.displaySource}
       data-active-navigation-tool={activeTool === 'hand' || activeTool === 'zoom' ? activeTool : undefined}
       data-move-availability={activeTool === 'move'
         ? layerMoveHandlers.unavailableReason ?? 'ready'
@@ -411,28 +384,33 @@ export function ImageEditorPreviewV3({
         >
           {!previewRenderer ? (
             <div
-              ref={moveFeedbackRef}
-              data-move-feedback-frame
-              className="absolute inset-0 flex items-center justify-center"
+              data-raster-display-frame
+              className="pointer-events-none absolute inset-0 overflow-hidden"
             >
-              {viewportResult ? (
-                <ImageEditorViewportTilesV3
-                  result={viewportResult}
-                  label={t('imageEditor.v3.previewAlt')}
-                />
-              ) : null}
-              {!viewportResult && output.kind === 'url' ? (
-                <UrlPreview output={output} label={t('imageEditor.v3.previewAlt')} />
-              ) : null}
-              {!viewportResult && output.kind === 'frame' ? (
-                <FramePreview output={output} label={t('imageEditor.v3.previewAlt')} />
-              ) : null}
-              {!viewportResult && output.kind === 'content' ? output.content : null}
+              <div
+                ref={moveFeedbackRef}
+                data-move-feedback-frame
+                className="absolute inset-0 flex items-center justify-center"
+              >
+                {viewportResult ? (
+                  <ImageEditorViewportTilesV3
+                    result={viewportResult}
+                    label={t('imageEditor.v3.previewAlt')}
+                  />
+                ) : null}
+                {!viewportResult && output.kind === 'url' ? (
+                  <ImageEditorUrlPreviewV3 output={output} label={t('imageEditor.v3.previewAlt')} />
+                ) : null}
+                {!viewportResult && output.kind === 'frame' ? (
+                  <ImageEditorFramePreviewV3 output={output} label={t('imageEditor.v3.previewAlt')} />
+                ) : null}
+                {!viewportResult && output.kind === 'content' ? output.content : null}
+              </div>
             </div>
           ) : output.kind === 'url' ? (
-            <UrlPreview output={output} label={t('imageEditor.v3.previewAlt')} />
+            <ImageEditorUrlPreviewV3 output={output} label={t('imageEditor.v3.previewAlt')} />
           ) : output.kind === 'frame' ? (
-            <FramePreview output={output} label={t('imageEditor.v3.previewAlt')} />
+            <ImageEditorFramePreviewV3 output={output} label={t('imageEditor.v3.previewAlt')} />
           ) : output.content}
           <ImageEditorAnnotationOverlayV3 controller={controller} />
           <ImageEditorRasterBrushOverlayV3

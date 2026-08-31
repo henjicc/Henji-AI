@@ -25,6 +25,7 @@ export interface ManagedImageEditorPreviewStateV3 {
   result: ImageEditorManagedPreviewResultV3 | null
   resultDocumentId: string | null
   resultRevision: number | null
+  resultPreviewOverrides: ImageEditCommandBusSnapshotV3['previewOverrides'] | null
   diagnostic: string | null
   rendering: boolean
 }
@@ -44,6 +45,7 @@ export function useManagedImageEditorPreviewV3(
     result: null,
     resultDocumentId: null,
     resultRevision: null,
+    resultPreviewOverrides: null,
     diagnostic: null,
     rendering: enabled,
   })
@@ -56,6 +58,7 @@ export function useManagedImageEditorPreviewV3(
       result: null,
       resultDocumentId: null,
       resultRevision: null,
+      resultPreviewOverrides: null,
       diagnostic: null,
       rendering: false,
     })
@@ -114,6 +117,7 @@ export function useManagedImageEditorPreviewV3(
             result,
             resultDocumentId: snapshot.document.id,
             resultRevision: snapshot.document.revision,
+            resultPreviewOverrides: snapshot.previewOverrides,
             diagnostic: diagnostics.length > 0 ? diagnostics.join('\n') : null,
             rendering: false,
           }

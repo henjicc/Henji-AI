@@ -4,8 +4,12 @@ import { StrictMode } from 'react'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { createImageEditDocumentV3 } from '@/core/imageEdit/v3/documentFactory'
+import {
+  createImageEditAnnotationLayerV3,
+  createImageEditDocumentV3,
+} from '@/core/imageEdit/v3/documentFactory'
 import i18n from '@/i18n/config'
+import { requireImageEditV3LiveSession } from '../application/imageEditLiveSessionRegistry'
 import type { ImageEditorManagedPreviewResultV3 } from '../execution/imageEditorPreviewClientV3'
 import { useImageEditorInteractionStoreV3, useImageEditorSessionStoreV3 } from '../store'
 
@@ -13,6 +17,7 @@ interface ManagedPreviewTestStateV3 {
   result: ImageEditorManagedPreviewResultV3 | null
   resultDocumentId: string | null
   resultRevision: number | null
+  resultPreviewOverrides: Readonly<Record<string, unknown>> | null
   diagnostic: string | null
   rendering: boolean
 }
@@ -22,6 +27,7 @@ const managedPreview = vi.hoisted(() => ({
     result: null,
     resultDocumentId: null,
     resultRevision: null,
+    resultPreviewOverrides: null,
     diagnostic: null,
     rendering: false,
   } as ManagedPreviewTestStateV3,
@@ -33,6 +39,7 @@ vi.mock('../execution', async (importOriginal) => {
     ...original,
     useImageEditorDisplayPipelineV3: () => ({
       hasPreviewOverrides: false,
+      displaySource: 'managed',
       managedPreview: managedPreview.state,
       viewportComposite: {
         result: null,
@@ -68,6 +75,7 @@ describe('ImageEditorPreviewV3 managed frame ownership', () => {
       result: null,
       resultDocumentId: null,
       resultRevision: null,
+      resultPreviewOverrides: null,
       diagnostic: null,
       rendering: false,
     }
@@ -97,6 +105,7 @@ describe('ImageEditorPreviewV3 managed frame ownership', () => {
       },
       resultDocumentId: 'managed-frame-document',
       resultRevision: 0,
+      resultPreviewOverrides: {},
       diagnostic: null,
       rendering: true,
     }
@@ -205,7 +214,7 @@ describe('ImageEditorPreviewV3 managed frame ownership', () => {
     expect(document.revision).toBe(0)
   })
 
-  it('单底图移动在渲染任务完成前提供合成层即时反馈，取消时不写 revision', async () => {
+  it('单底图移动只更新合成层，缓存布局且松手仅提交一个 revision', async () => {
     vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({
       clearRect: vi.fn(),
       drawImage: vi.fn(),
@@ -221,6 +230,7 @@ describe('ImageEditorPreviewV3 managed frame ownership', () => {
       },
       resultDocumentId: 'move-feedback-document',
       resultRevision: 0,
+      resultPreviewOverrides: {},
       diagnostic: null,
       rendering: false,
     }
@@ -245,7 +255,7 @@ describe('ImageEditorPreviewV3 managed frame ownership', () => {
     const content = rendered.container.querySelector<HTMLElement>('[data-viewport-content]')
     const feedback = rendered.container.querySelector<HTMLElement>('[data-move-feedback-frame]')
     if (!surface || !content || !feedback) throw new Error('移动反馈测试节点不存在')
-    vi.spyOn(content, 'getBoundingClientRect').mockReturnValue({
+    const readViewportRect = vi.spyOn(content, 'getBoundingClientRect').mockReturnValue({
       x: 0, y: 0, left: 0, top: 0, right: 320, bottom: 180,
       width: 320, height: 180, toJSON: () => undefined,
     })
@@ -253,9 +263,17 @@ describe('ImageEditorPreviewV3 managed frame ownership', () => {
     await waitFor(() => expect(
       Object.values(useImageEditorSessionStoreV3.getState().sessions)[0]?.selectedLayerIds,
     ).toEqual([document.layers[0].id]))
+    const liveSession = requireImageEditV3LiveSession(document.id)
+    readViewportRect.mockClear()
     fireEvent.pointerDown(surface, {
       pointerId: 41, isPrimary: true, button: 0, clientX: 10, clientY: 10,
     })
+    fireEvent.pointerMove(surface, { pointerId: 41, clientX: 35, clientY: 20 })
+    fireEvent.pointerMove(surface, { pointerId: 41, clientX: 45, clientY: 30 })
+    expect(readViewportRect).toHaveBeenCalledTimes(1)
+    expect(liveSession.bus.getSnapshot().previewOverrides).toEqual({})
+    expect(feedback.style.transform).toBe('translate3d(35px, 20px, 0)')
+
     fireEvent.pointerMove(surface, { pointerId: 41, clientX: 35, clientY: 20 })
     expect(feedback.style.transform).toBe('translate3d(25px, 10px, 0)')
     expect(changes).not.toHaveBeenCalled()
@@ -264,5 +282,92 @@ describe('ImageEditorPreviewV3 managed frame ownership', () => {
     expect(feedback.style.transform).toBe('')
     expect(changes).not.toHaveBeenCalled()
     expect(document.revision).toBe(0)
+
+    readViewportRect.mockClear()
+    fireEvent.pointerDown(surface, {
+      pointerId: 42, isPrimary: true, button: 0, clientX: 10, clientY: 10,
+    })
+    fireEvent.pointerMove(surface, { pointerId: 42, clientX: 35, clientY: 20 })
+    fireEvent.pointerUp(surface, { pointerId: 42, clientX: 35, clientY: 20 })
+
+    await waitFor(() => expect(changes).toHaveBeenCalledTimes(1))
+    expect(readViewportRect).toHaveBeenCalledTimes(1)
+    expect(liveSession.bus.getSnapshot().previewOverrides).toEqual({})
+    expect(liveSession.bus.getSnapshot().document.revision).toBe(1)
+    expect(liveSession.bus.getSnapshot().document.layers[0].transform).toEqual([
+      1, 0, 0, 1, 25, 10,
+    ])
+    // 新 revision 的稳定画面尚未到达时保留瞬态位移，避免松手闪回旧位置。
+    expect(feedback.style.transform).toBe('translate3d(25px, 10px, 0)')
+  })
+
+  it('多内容图层移动按动画帧合并草稿更新且不叠加 CSS 位移', async () => {
+    const scheduledFrame = { current: null as FrameRequestCallback | null }
+    const requestFrame = vi.fn((callback: FrameRequestCallback) => {
+      scheduledFrame.current = callback
+      return 17
+    })
+    const cancelFrame = vi.fn(() => { scheduledFrame.current = null })
+    vi.stubGlobal('requestAnimationFrame', requestFrame)
+    vi.stubGlobal('cancelAnimationFrame', cancelFrame)
+    const document = createImageEditDocumentV3({
+      width: 320,
+      height: 180,
+      documentId: 'draft-move-document',
+      sourceResourceId: 'sha256:source',
+    })
+    document.layers.push(createImageEditAnnotationLayerV3('annotation-layer', '标注'))
+    const changes = vi.fn()
+    const rendered = render(
+      <div style={{ width: 900, height: 600 }}>
+        <ImageEditorV3
+          sourceImageUrl="preview.jpg"
+          document={document}
+          profileId="full"
+          initialSelectedLayerId={document.layers[0].id}
+          onDocumentChange={changes}
+        />
+      </div>,
+    )
+    const surface = rendered.container.querySelector<HTMLElement>('[data-preview-surface]')
+    const content = rendered.container.querySelector<HTMLElement>('[data-viewport-content]')
+    const feedback = rendered.container.querySelector<HTMLElement>('[data-move-feedback-frame]')
+    if (!surface || !content || !feedback) throw new Error('多图层移动测试节点不存在')
+    vi.spyOn(content, 'getBoundingClientRect').mockReturnValue({
+      x: 0, y: 0, left: 0, top: 0, right: 320, bottom: 180,
+      width: 320, height: 180, toJSON: () => undefined,
+    })
+    await waitFor(() => expect(
+      Object.values(useImageEditorSessionStoreV3.getState().sessions)[0]?.selectedLayerIds,
+    ).toEqual([document.layers[0].id]))
+    const liveSession = requireImageEditV3LiveSession(document.id)
+
+    fireEvent.pointerDown(surface, {
+      pointerId: 51, isPrimary: true, button: 0, clientX: 10, clientY: 10,
+    })
+    fireEvent.pointerMove(surface, { pointerId: 51, clientX: 20, clientY: 15 })
+    fireEvent.pointerMove(surface, { pointerId: 51, clientX: 35, clientY: 20 })
+    fireEvent.pointerMove(surface, { pointerId: 51, clientX: 45, clientY: 30 })
+
+    expect(requestFrame).toHaveBeenCalledTimes(1)
+    expect(feedback.style.transform).toBe('')
+    expect(liveSession.bus.getSnapshot().previewOverrides).toEqual({})
+    const publishDraft = scheduledFrame.current
+    if (!publishDraft) throw new Error('多图层移动没有安排草稿帧')
+    publishDraft(16)
+    expect(Object.keys(liveSession.bus.getSnapshot().previewOverrides)).toEqual([
+      `${liveSession.sessionId}:${document.layers[0].id}:move`,
+    ])
+
+    fireEvent.pointerMove(surface, { pointerId: 51, clientX: 55, clientY: 35 })
+    expect(requestFrame).toHaveBeenCalledTimes(2)
+    fireEvent.pointerUp(surface, { pointerId: 51, clientX: 55, clientY: 35 })
+
+    await waitFor(() => expect(changes).toHaveBeenCalledTimes(1))
+    expect(cancelFrame).toHaveBeenCalledWith(17)
+    expect(liveSession.bus.getSnapshot().previewOverrides).toEqual({})
+    expect(liveSession.bus.getSnapshot().document.layers[0].transform).toEqual([
+      1, 0, 0, 1, 45, 25,
+    ])
   })
 })

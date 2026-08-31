@@ -44,6 +44,11 @@ interface CachedPreviewProxyV3 {
   lease: ImageEditMemoryLease
 }
 
+interface InFlightPreviewProxyV3 {
+  controller: AbortController
+  promise: Promise<{ proxy: ImageEditorV3FastProxy; cached: boolean }>
+}
+
 function assertValidPreviewProxyV3(
   proxy: ImageEditorV3FastProxy,
   resourceId: string,
@@ -107,6 +112,7 @@ async function raceWithAbort<T>(operation: Promise<T>, signal: AbortSignal): Pro
 /** 会话内代理 LRU 与后台金字塔预热；代理字节始终持有全局 cpu-cache lease。 */
 export class ImageEditorPreviewResourceLoaderV3 {
   private readonly proxyCache = new Map<string, CachedPreviewProxyV3>()
+  private readonly proxyLoads = new Map<string, InFlightPreviewProxyV3>()
   private readonly proxyReader: ImageEditorPreviewProxyReaderV3
   private readonly pyramidDescriptorReader: ImageEditorPreviewPyramidDescriptorReaderV3
   private readonly pyramidPrewarmer: ImageEditorPreviewPyramidPrewarmerV3
@@ -151,14 +157,14 @@ export class ImageEditorPreviewResourceLoaderV3 {
           this.proxyCache.set(key, cached)
           return cached.proxy
         }
-        const proxy = await raceWithAbort(this.proxyReader({
-          requestId: `${requestId}:resource:${request.resourceId.slice(7, 19)}`,
-          resourceRef: request.resourceId as ImageEditorV3ResourceRef,
-          maxDimension: request.maxDimension,
-        }, signal), signal)
+        const loaded = await raceWithAbort(this.loadProxy(
+          key,
+          request,
+          `${requestId}:resource:${request.resourceId.slice(7, 19)}`,
+        ), signal)
+        const proxy = loaded.proxy
         if (this.disposed || signal.aborted) throw abortError(signal)
-        assertValidPreviewProxyV3(proxy, request.resourceId)
-        if (!this.insertProxyCache(key, proxy)) {
+        if (!loaded.cached) {
           transientLeases.push(acquireImageEditorResourceLeaseV3(
             this.options.budget,
             'managed-preview',
@@ -179,6 +185,8 @@ export class ImageEditorPreviewResourceLoaderV3 {
   dispose(): void {
     if (this.disposed) return
     this.disposed = true
+    for (const load of this.proxyLoads.values()) load.controller.abort()
+    this.proxyLoads.clear()
     for (const controller of this.pyramidPrewarms.values()) controller.abort()
     this.pyramidPrewarms.clear()
     this.startedPyramidPrewarms.clear()
@@ -203,6 +211,30 @@ export class ImageEditorPreviewResourceLoaderV3 {
     this.proxyCache.set(key, { proxy, lease })
     this.proxyCacheBytes += bytes
     return true
+  }
+
+  private loadProxy(
+    key: string,
+    request: ImageEditorPreviewProxyResourceRequestV3,
+    requestId: string,
+  ): Promise<{ proxy: ImageEditorV3FastProxy; cached: boolean }> {
+    const existing = this.proxyLoads.get(key)
+    if (existing) return existing.promise
+    const controller = new AbortController()
+    const promise = this.proxyReader({
+      requestId,
+      resourceRef: request.resourceId as ImageEditorV3ResourceRef,
+      maxDimension: request.maxDimension,
+    }, controller.signal).then((proxy) => {
+      if (this.disposed || controller.signal.aborted) throw abortError(controller.signal)
+      assertValidPreviewProxyV3(proxy, request.resourceId)
+      return { proxy, cached: this.insertProxyCache(key, proxy) }
+    }).finally(() => {
+      if (this.proxyLoads.get(key)?.promise === promise) this.proxyLoads.delete(key)
+    })
+    const record: InFlightPreviewProxyV3 = { controller, promise }
+    this.proxyLoads.set(key, record)
+    return promise
   }
 
   private removeProxyCacheEntry(key: string): void {

@@ -206,6 +206,10 @@ function createToolboxScenes(context) {
         await page.waitForFunction(() => (
           document.querySelector('[data-preview-surface]')?.getAttribute('data-move-availability') === 'ready'
         ), undefined, { timeout: 15000 })
+        await page.waitForFunction(() => (
+          document.querySelector('[data-preview-surface]')?.getAttribute('data-preview-display-source') === 'viewport'
+            && document.querySelectorAll('[data-viewport-tile]').length > 0
+        ), undefined, { timeout: 15000 })
 
         const readRevision = async () => {
           const label = await editor.getByText(/^(版本|Revision) \d+$/).first().textContent()
@@ -218,10 +222,49 @@ function createToolboxScenes(context) {
         if (!previewBox) throw new Error('图片编辑预览没有可交互范围')
         const startX = previewBox.x + previewBox.width * 0.5
         const startY = previewBox.y + previewBox.height * 0.5
+        const feedback = editor.locator('[data-move-feedback-frame]')
+        const rasterFrame = editor.locator('[data-raster-display-frame]')
+        const initialFeedbackBox = await feedback.boundingBox()
+        const initialRasterFrameBox = await rasterFrame.boundingBox()
+        if (!initialFeedbackBox || !initialRasterFrameBox) {
+          throw new Error('移动 JPG 前无法读取稳定画面边界')
+        }
         await page.mouse.move(startX, startY)
         await page.mouse.down()
-        await page.mouse.move(startX + 42, startY + 24, { steps: 5 })
-        const transientTransform = await editor.locator('[data-move-feedback-frame]').evaluate(
+        const pressedSource = await preview.getAttribute('data-preview-display-source')
+        const pressedFeedbackBox = await feedback.boundingBox()
+        if (pressedSource !== 'viewport'
+          || !pressedFeedbackBox
+          || Math.abs(pressedFeedbackBox.x - initialFeedbackBox.x) > 0.5
+          || Math.abs(pressedFeedbackBox.y - initialFeedbackBox.y) > 0.5) {
+          throw new Error('按下移动工具时稳定画面发生了闪跳或显示源切换')
+        }
+        for (let step = 1; step <= 6; step += 1) {
+          const expectedX = 42 * step / 6
+          const expectedY = 24 * step / 6
+          await page.mouse.move(startX + expectedX, startY + expectedY)
+          await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => resolve())))
+          const [source, currentFeedbackBox, currentRasterFrameBox, revision] = await Promise.all([
+            preview.getAttribute('data-preview-display-source'),
+            feedback.boundingBox(),
+            rasterFrame.boundingBox(),
+            readRevision(),
+          ])
+          if (source !== 'viewport') throw new Error('移动 JPG 期间稳定分块画面被草稿替换')
+          if (revision !== beforeMove) throw new Error('移动 JPG 期间提前提交了文档 revision')
+          if (!currentFeedbackBox || !currentRasterFrameBox) throw new Error('移动 JPG 期间画面边界丢失')
+          if (Math.abs(currentFeedbackBox.x - initialFeedbackBox.x - expectedX) > 1.5
+            || Math.abs(currentFeedbackBox.y - initialFeedbackBox.y - expectedY) > 1.5) {
+            throw new Error('移动 JPG 的实际画面位置没有跟随指针')
+          }
+          if (Math.abs(currentRasterFrameBox.x - initialRasterFrameBox.x) > 0.5
+            || Math.abs(currentRasterFrameBox.y - initialRasterFrameBox.y) > 0.5
+            || Math.abs(currentRasterFrameBox.width - initialRasterFrameBox.width) > 0.5
+            || Math.abs(currentRasterFrameBox.height - initialRasterFrameBox.height) > 0.5) {
+            throw new Error('移动 JPG 期间文档裁切边界跟随内容发生了偏移')
+          }
+        }
+        const transientTransform = await feedback.evaluate(
           (element) => element.style.transform,
         )
         if (!transientTransform.includes('translate')) {
@@ -232,6 +275,12 @@ function createToolboxScenes(context) {
           const labels = [...document.querySelectorAll('[data-command-bar] span')]
           return labels.some((element) => Number(element.textContent?.match(/\d+/)?.[0]) === revision + 1)
         }, beforeMove, { timeout: 12000 })
+        await page.waitForFunction(() => {
+          const previewSurface = document.querySelector('[data-preview-surface]')
+          const feedbackFrame = document.querySelector('[data-move-feedback-frame]')
+          return previewSurface?.getAttribute('data-preview-display-source') === 'viewport'
+            && feedbackFrame?.style.transform === ''
+        }, undefined, { timeout: 12000 })
 
         await editor.locator('[data-tool-id="annotation-rect"]').click()
         await page.mouse.move(startX - 120, startY - 80)
