@@ -105,6 +105,37 @@ describe('ImageEditBrushStrokeSessionV3', () => {
     }
   });
 
+  it('手势增量刷新只返回本次受影响瓦片，并沿用同一工作瓦片到最终结果', async () => {
+    const canvas = { width: 1024, height: 32 };
+    const calls: string[] = [];
+    const session = new ImageEditBrushStrokeSessionV3({
+      canvas,
+      tool: 'brush',
+      shape: { size: 6, hardness: 1, opacity: 1 },
+      target: rasterTarget,
+      loadTile: rgbaLoader(canvas, calls),
+      minScreenDistance: 1,
+    });
+
+    session.appendCoalescedPoints([
+      { x: 20, y: 16, screenX: 20, screenY: 16 },
+      { x: 20.25, y: 16, screenX: 20.25, screenY: 16 },
+    ]);
+    const first = await session.renderPending();
+    session.appendCoalescedPoints([
+      { x: 24, y: 16, screenX: 24, screenY: 16 },
+      { x: 515, y: 16, screenX: 515, screenY: 16 },
+    ]);
+    const second = await session.renderPending();
+    const result = await session.finish();
+
+    expect(first.map((change) => change.tileKey)).toEqual(['0/0/0']);
+    expect(second.map((change) => change.tileKey)).toEqual(['0/0/0', '0/1/0']);
+    expect(calls).toEqual(['0/0/0', '0/1/0']);
+    expect(result?.changes.map((change) => change.tileKey)).toEqual(['0/0/0', '0/1/0']);
+    expect(result?.metrics).toMatchObject({ inputPointCount: 4, retainedPointCount: 3 });
+  });
+
   it('正确处理画布右下角的 1×1 边缘瓦片', async () => {
     const canvas = { width: 513, height: 513 };
     const calls: string[] = [];

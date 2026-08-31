@@ -1,14 +1,13 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import { ArrowLeft, ClipboardCopy, ClipboardPaste, FilePlus2, FolderOpen, ImagePlus, Save } from 'lucide-react';
 import { createLogger } from '@/core/logging';
 import { createEmptyImageEditDocument, type ImageEditDocument } from '@/core/imageEdit';
 import {
-  PanelTrigger,
   UI_TEXT_BODY_CLASS,
   UI_TEXT_META_CLASS,
   UiButton,
   UiIconButton,
-  UiOptionButton,
+  UiLoading,
   UiPageHeader,
   UiRegion,
 } from '@/components/ui';
@@ -23,11 +22,18 @@ import {
   saveImageSourceToPath,
 } from '@/commands/image';
 import { isLikelyLocalImagePath, readFileAsDataUrl } from '@/services/imageSource';
+import { isImageEditorV3Enabled } from '@/platform/runtime';
 import { exportImageEditDocument } from '@/features/imageEdit/execution/browserImageEditExecution';
 import { ImageEditor } from '@/features/imageEdit/editor/ImageEditor';
 import { useImageEditorHandoffStore } from '@/features/imageEdit/store/imageEditorHandoffStore';
 import { BlankImageDialog } from './BlankImageDialog';
 import { applyPngDpi, createBlankImageDataUrl, type BlankImageSpec } from './blankImage';
+import { ImageMarkSourceMenu } from './ImageMarkSourceMenu';
+
+const ImageMarkToolV3Host = lazy(async () => {
+  const module = await import('./ImageMarkToolV3Host');
+  return { default: module.ImageMarkToolV3Host };
+});
 
 const logger = createLogger('features.imageMark');
 
@@ -62,6 +68,7 @@ export function ImageMarkTool({ onBack }: ImageMarkToolProps = {}): JSX.Element 
   const [isBusy, setIsBusy] = useState(false);
   const [isDragOver, setIsDragOver] = useState(false);
   const [isBlankDialogOpen, setIsBlankDialogOpen] = useState(false);
+  const [legacyFallbackSessionKey, setLegacyFallbackSessionKey] = useState<number | null>(null);
   const pendingHandoff = useImageEditorHandoffStore((state) => state.pending);
   const consumeHandoff = useImageEditorHandoffStore((state) => state.consume);
   const documentRef = useRef<ImageEditDocument>(createEmptyImageEditDocument());
@@ -347,6 +354,38 @@ export function ImageMarkTool({ onBack }: ImageMarkToolProps = {}): JSX.Element 
     );
   }
 
+  if (isImageEditorV3Enabled() && legacyFallbackSessionKey !== source.sessionKey) {
+    return (
+      <>
+        <div
+          className="flex h-full flex-col"
+          onDragOver={(event) => event.preventDefault()}
+          onDrop={handleDrop}
+        >
+          <Suspense fallback={<UiLoading message="正在打开图片编辑器…" className="h-full" />}>
+            <ImageMarkToolV3Host
+              key={source.sessionKey}
+              sourceImageUrl={source.url}
+              sourceName={source.name}
+              sourceSessionKey={source.sessionKey}
+              initialDocument={source.initialDocument}
+              onBack={onBack}
+              onOpenFile={handleOpenFile}
+              onPasteFromClipboard={handlePasteFromClipboard}
+              onCreateBlank={() => setIsBlankDialogOpen(true)}
+              onFallback={() => setLegacyFallbackSessionKey(source.sessionKey)}
+            />
+          </Suspense>
+        </div>
+        <BlankImageDialog
+          isOpen={isBlankDialogOpen}
+          onClose={() => setIsBlankDialogOpen(false)}
+          onCreate={handleCreateBlank}
+        />
+      </>
+    );
+  }
+
   return (
     <>
       <div
@@ -365,51 +404,12 @@ export function ImageMarkTool({ onBack }: ImageMarkToolProps = {}): JSX.Element 
         toolbarActions={
           <>
             {/* 打开动作与导出动作同侧,左侧只留返回,工具组才能真正居中 */}
-            <PanelTrigger
-              panelWidth={172}
-              panelClassName="p-1"
-              closeOnPanelClick
-              renderPanel={() => (
-                <div className="flex flex-col gap-0.5">
-                  <UiOptionButton
-                    type="button"
-                    variant="menu"
-                    className="gap-2 text-sm"
-                    onClick={() => void handleOpenFile()}
-                  >
-                    <FolderOpen size={15} />
-                    从文件打开
-                  </UiOptionButton>
-                  <UiOptionButton
-                    type="button"
-                    variant="menu"
-                    className="gap-2 text-sm"
-                    onClick={() => void handlePasteFromClipboard()}
-                  >
-                    <ClipboardPaste size={15} />
-                    粘贴剪贴板图片
-                  </UiOptionButton>
-                  <UiOptionButton
-                    type="button"
-                    variant="menu"
-                    className="gap-2 text-sm"
-                    onClick={() => setIsBlankDialogOpen(true)}
-                  >
-                    <FilePlus2 size={15} />
-                    新建空白图片
-                  </UiOptionButton>
-                </div>
-              )}
-            >
-              {({ togglePanel }) => (
-                // 与「复制 / 加入资产库」同属次级动作，必须同档描边。
-                // 不要为了省宽度把它降成无边框图标——那是拿视觉语言解决布局问题。
-                <UiButton variant="ghost" size="sm" onClick={togglePanel} title="打开图片">
-                  <FolderOpen size={15} className="mr-1.5" />
-                  打开
-                </UiButton>
-              )}
-            </PanelTrigger>
+            <ImageMarkSourceMenu
+              disabled={isBusy}
+              onOpenFile={() => void handleOpenFile()}
+              onPasteFromClipboard={() => void handlePasteFromClipboard()}
+              onCreateBlank={() => setIsBlankDialogOpen(true)}
+            />
             {/* 「打开」与右侧三个导出动作都是动作，只是方向相反，用间距分组即可。
                 分隔线留给交互语义根本不同的两侧（如工具 vs 动作），一条带上最多一条。 */}
             <UiButton variant="ghost" size="sm" className="ml-2" disabled={isBusy} onClick={() => void runExport('copy')}>

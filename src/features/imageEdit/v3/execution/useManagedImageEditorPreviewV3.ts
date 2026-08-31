@@ -17,6 +17,8 @@ const logger = createLogger('image_editor_v3.preview')
 
 export interface ManagedImageEditorPreviewStateV3 {
   result: ImageEditorManagedPreviewResultV3 | null
+  resultDocumentId: string | null
+  resultRevision: number | null
   diagnostic: string | null
   rendering: boolean
 }
@@ -29,6 +31,8 @@ export function useManagedImageEditorPreviewV3(
   const client = useMemo(() => new ImageEditorPreviewClientV3({ sessionId }), [sessionId])
   const [state, setState] = useState<ManagedImageEditorPreviewStateV3>({
     result: null,
+    resultDocumentId: null,
+    resultRevision: null,
     diagnostic: null,
     rendering: enabled,
   })
@@ -36,12 +40,24 @@ export function useManagedImageEditorPreviewV3(
   useEffect(() => () => client.dispose(), [client])
 
   useEffect(() => {
-    setState({ result: null, diagnostic: null, rendering: enabled })
+    setState({
+      result: null,
+      resultDocumentId: null,
+      resultRevision: null,
+      diagnostic: null,
+      rendering: enabled,
+    })
   }, [client, enabled])
 
   useEffect(() => {
     if (!enabled) {
-      setState({ result: null, diagnostic: null, rendering: false })
+      setState({
+        result: null,
+        resultDocumentId: null,
+        resultRevision: null,
+        diagnostic: null,
+        rendering: false,
+      })
       return
     }
     if (typeof Worker === 'undefined') {
@@ -66,6 +82,8 @@ export function useManagedImageEditorPreviewV3(
       }
       setState({
         result,
+        resultDocumentId: snapshot.document.id,
+        resultRevision: snapshot.document.revision,
         diagnostic: result.diagnostics.length > 0 ? result.diagnostics.join('\n') : null,
         rendering: false,
       })

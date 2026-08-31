@@ -47,16 +47,17 @@ export class ImageEditBrushPointBufferV3 {
     this.values = new Float32Array(initialCapacity * POINT_STRIDE);
   }
 
-  append(point: ImageEditBrushPointV3): void {
+  append(point: ImageEditBrushPointV3): boolean {
     const normalized = normalizePoint(point);
     this.inputPointCount += 1;
     if (this.count > 0 && this.isWithinScreenThreshold(normalized)) {
       this.write(this.count - 1, normalized);
-      return;
+      return false;
     }
     this.ensureCapacity(this.count + 1);
     this.write(this.count, normalized);
     this.count += 1;
+    return true;
   }
 
   appendCoalesced(points: readonly ImageEditBrushPointV3[]): void {
@@ -67,6 +68,10 @@ export class ImageEditBrushPointBufferV3 {
     const points = new Array<BufferedImageEditBrushPointV3>(this.count);
     for (let index = 0; index < this.count; index += 1) points[index] = this.read(index);
     return points;
+  }
+
+  getLast(): BufferedImageEditBrushPointV3 | null {
+    return this.count > 0 ? this.read(this.count - 1) : null;
   }
 
   getStats(): ImageEditBrushPointBufferStatsV3 {

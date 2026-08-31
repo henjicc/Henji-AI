@@ -184,6 +184,11 @@ function summarizeHistory(changes: readonly ImageEditBrushTileChangeV3[]): {
 export class ImageEditBrushStrokeSessionV3 {
   private readonly pointBuffer: ImageEditBrushPointBufferV3;
   private readonly abortController = new AbortController();
+  private readonly working = new Map<string, WorkingTile>();
+  private pendingPoints: BufferedImageEditBrushPointV3[] = [];
+  private lastRenderedPoint: BufferedImageEditBrushPointV3 | null = null;
+  private renderedIncrementally = false;
+  private rendering = false;
   private state: StrokeState = 'active';
 
   constructor(private readonly options: ImageEditBrushStrokeOptionsV3) {
@@ -193,12 +198,12 @@ export class ImageEditBrushStrokeSessionV3 {
 
   appendPoint(point: ImageEditBrushPointV3): void {
     this.assertActive();
-    this.pointBuffer.append(point);
+    this.appendBufferedPoint(point);
   }
 
   appendCoalescedPoints(points: readonly ImageEditBrushPointV3[]): void {
     this.assertActive();
-    this.pointBuffer.appendCoalesced(points);
+    for (const point of points) this.appendBufferedPoint(point);
   }
 
   getPointBufferStats(): ImageEditBrushPointBufferStatsV3 {
@@ -210,11 +215,29 @@ export class ImageEditBrushStrokeSessionV3 {
     this.state = 'cancelled';
     this.abortController.abort();
     this.pointBuffer.clear();
+    this.pendingPoints = [];
+  }
+
+  /**
+   * 将上次刷新后保留的屏幕抽稀点增量栅格化。返回值只包含本次触及的 dirty tiles，
+   * 供手势 overlay 局部更新；持久化仍必须等 finish() 返回完整笔画结果。
+   */
+  async renderPending(): Promise<readonly ImageEditBrushTileChangeV3[]> {
+    this.assertActive();
+    if (this.rendering) throw new Error('画笔增量栅格化不能并发执行');
+    this.rendering = true;
+    this.renderedIncrementally = true;
+    try {
+      return await this.renderPendingPoints(false);
+    } finally {
+      this.rendering = false;
+    }
   }
 
   async finish(): Promise<ImageEditBrushStrokeResultV3 | null> {
     if (this.state === 'cancelled') return null;
     this.assertActive();
+    if (this.rendering) throw new Error('画笔增量栅格化完成前不能结束手势');
     this.state = 'finishing';
     const bufferStats = this.pointBuffer.getStats();
     const points = simplifyImageEditBrushPointsV3(
@@ -227,7 +250,13 @@ export class ImageEditBrushStrokeSessionV3 {
       return null;
     }
     try {
-      return await this.render(points, bufferStats);
+      if (!this.renderedIncrementally) {
+        this.pendingPoints = [];
+        await this.renderSegments(points);
+      } else {
+        await this.renderPendingPoints(true);
+      }
+      return this.createResult(points.length, bufferStats);
     } catch (error) {
       if (this.isCancelled()) return null;
       this.state = 'failed';
@@ -235,16 +264,19 @@ export class ImageEditBrushStrokeSessionV3 {
     }
   }
 
-  private async render(
+  private async renderSegments(
     points: readonly BufferedImageEditBrushPointV3[],
-    bufferStats: ImageEditBrushPointBufferStatsV3,
-  ): Promise<ImageEditBrushStrokeResultV3 | null> {
-    const working = new Map<string, WorkingTile>();
-    const segmentCount = Math.max(1, points.length - 1);
+    dirtyKeys?: Set<string>,
+    startPoint?: BufferedImageEditBrushPointV3 | null,
+  ): Promise<void> {
+    if (points.length === 0) return;
+    const sequence = startPoint ? [startPoint, ...points] : points;
+    const working = this.working;
+    const segmentCount = Math.max(1, sequence.length - 1);
     for (let index = 0; index < segmentCount; index += 1) {
-      if (this.state === 'cancelled') return null;
-      const start = points.length === 1 ? points[0] : points[index];
-      const end = points.length === 1 ? points[0] : points[index + 1];
+      if (this.state === 'cancelled') return;
+      const start = sequence.length === 1 ? sequence[0] : sequence[index];
+      const end = sequence.length === 1 ? sequence[0] : sequence[index + 1];
       const bounds = imageEditBrushSegmentBoundsV3(start, end, this.options.shape.size);
       if (!bounds) continue;
       const coordinates = enumerateTilesForRect(
@@ -255,25 +287,33 @@ export class ImageEditBrushStrokeSessionV3 {
       );
       for (const coordinate of coordinates) {
         const tile = await this.getWorkingTile(working, coordinate);
-        if (this.isCancelled()) return null;
+        if (this.isCancelled()) return;
         const region = createTileRegion(
           this.options.canvas,
           coordinate,
           0,
           IMAGE_EDIT_BRUSH_TILE_SIZE_V3,
         );
-        tile.changed = rasterizeImageEditBrushSegmentV3(
+        const changed = rasterizeImageEditBrushSegmentV3(
           { tile: tile.tile, originX: region.outputRect.x, originY: region.outputRect.y },
           start,
           end,
           this.options.shape,
           this.options.target,
           this.options.tool,
-        ) || tile.changed;
+        );
+        tile.changed = changed || tile.changed;
+        if (changed) dirtyKeys?.add(imageEditBrushTileKeyV3(coordinate));
       }
     }
+  }
+
+  private createResult(
+    simplifiedPointCount: number,
+    bufferStats: ImageEditBrushPointBufferStatsV3,
+  ): ImageEditBrushStrokeResultV3 | null {
     if (this.isCancelled()) return null;
-    const changes = [...working.values()]
+    const changes = [...this.working.values()]
       .filter((entry) => entry.changed)
       .sort((left, right) => left.coordinate.y - right.coordinate.y
         || left.coordinate.x - right.coordinate.x)
@@ -292,10 +332,58 @@ export class ImageEditBrushStrokeSessionV3 {
       history: summarizeHistory(changes),
       metrics: {
         ...bufferStats,
-        simplifiedPointCount: points.length,
-        loadedTileCount: working.size,
+        simplifiedPointCount,
+        loadedTileCount: this.working.size,
         changedTileCount: changes.length,
       },
+    };
+  }
+
+  private async renderPendingPoints(includeTrailingPoint: boolean): Promise<ImageEditBrushTileChangeV3[]> {
+    if (includeTrailingPoint) {
+      const latest = this.pointBuffer.getLast();
+      if (latest && this.lastRenderedPoint && !this.samePoint(latest, this.lastRenderedPoint)) {
+        const pendingLast = this.pendingPoints[this.pendingPoints.length - 1];
+        if (!pendingLast || !this.samePoint(pendingLast, latest)) this.pendingPoints.push(latest);
+      }
+    }
+    const points = this.pendingPoints;
+    this.pendingPoints = [];
+    if (points.length === 0) return [];
+    const dirtyKeys = new Set<string>();
+    await this.renderSegments(points, dirtyKeys, this.lastRenderedPoint);
+    if (this.isCancelled()) return [];
+    this.lastRenderedPoint = points[points.length - 1];
+    return [...dirtyKeys]
+      .map((key) => this.working.get(key))
+      .filter((entry): entry is WorkingTile => Boolean(entry?.changed))
+      .map((entry) => this.toChange(entry));
+  }
+
+  private appendBufferedPoint(point: ImageEditBrushPointV3): void {
+    const retained = this.pointBuffer.append(point);
+    const latest = this.pointBuffer.getLast();
+    if (!latest) return;
+    if (retained) this.pendingPoints.push(latest);
+    else if (this.pendingPoints.length > 0) this.pendingPoints[this.pendingPoints.length - 1] = latest;
+  }
+
+  private samePoint(
+    left: BufferedImageEditBrushPointV3,
+    right: BufferedImageEditBrushPointV3,
+  ): boolean {
+    return left.x === right.x && left.y === right.y
+      && left.screenX === right.screenX && left.screenY === right.screenY
+      && left.pressure === right.pressure;
+  }
+
+  private toChange(entry: WorkingTile): ImageEditBrushTileChangeV3 {
+    return {
+      tileKey: imageEditBrushTileKeyV3(entry.coordinate),
+      coordinate: { ...entry.coordinate },
+      tile: entry.tile,
+      oldResource: entry.oldResource ? { ...entry.oldResource } : null,
+      newRawByteSize: entry.tile.data.byteLength,
     };
   }
 

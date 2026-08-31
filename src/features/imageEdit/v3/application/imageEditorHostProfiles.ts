@@ -20,27 +20,107 @@ export type ImageEditorPanelIdV3 = 'layers' | 'properties' | 'histogram' | 'colo
 export type ImageEditorSaveActionV3 = 'save-document' | 'save-package' | 'export-raster';
 export type ImageEditorLayerKindV3 = 'raster' | 'annotation' | 'effect' | 'adjustment' | 'group';
 
+export type ImageEditorCapabilityReadinessStateV3 = 'ready' | 'disabled' | 'limited';
+
+export type ImageEditorReadinessReasonKeyV3 =
+  | 'imageEditor.v3.readiness.reasons.hand'
+  | 'imageEditor.v3.readiness.reasons.zoom'
+  | 'imageEditor.v3.readiness.reasons.selectRect'
+  | 'imageEditor.v3.readiness.reasons.selectEllipse'
+  | 'imageEditor.v3.readiness.reasons.selectLasso'
+  | 'imageEditor.v3.readiness.reasons.maskEdit'
+  | 'imageEditor.v3.readiness.reasons.glowExport'
+  | 'imageEditor.v3.readiness.reasons.hdrExport'
+  | 'imageEditor.v3.readiness.reasons.quickHdr'
+  | 'imageEditor.v3.readiness.reasons.exportDocumentNotReady'
+  | 'imageEditor.v3.readiness.reasons.viewerDocumentNotReady'
+  | 'imageEditor.v3.readiness.reasons.exportHdrMetadata'
+  | 'imageEditor.v3.readiness.reasons.exportBitDepth'
+  | 'imageEditor.v3.readiness.reasons.exportInvalidIcc';
+
+export interface ImageEditorCapabilityReadinessV3 {
+  state: ImageEditorCapabilityReadinessStateV3;
+  /** Stable UI key for known product limitations. Resolved only by presentation consumers. */
+  reasonKey?: ImageEditorReadinessReasonKeyV3;
+  /** Opaque lower-layer detail when no stable product reason exists. */
+  reason?: string;
+}
+
+/** Carries a structured host limitation across non-React preparation code. */
+export class ImageEditorReadinessErrorV3 extends Error {
+  constructor(readonly readiness: ImageEditorCapabilityReadinessV3) {
+    super(readiness.reason ?? readiness.reasonKey ?? readiness.state);
+    this.name = 'ImageEditorReadinessErrorV3';
+  }
+}
+
+export interface ImageEditorCapabilityV3<TId extends string> {
+  id: TId;
+  readiness: ImageEditorCapabilityReadinessV3;
+}
+
 export interface ImageEditorHostProfileV3 {
   id: ImageEditorHostProfileIdV3;
-  tools: readonly ImageEditorToolIdV3[];
+  tools: readonly ImageEditorCapabilityV3<ImageEditorToolIdV3>[];
   layerKinds: readonly ImageEditorLayerKindV3[];
-  effects: readonly string[];
+  effects: readonly ImageEditorCapabilityV3<string>[];
   adjustments: readonly string[];
   panels: readonly ImageEditorPanelIdV3[];
   saveActions: readonly ImageEditorSaveActionV3[];
-  allowHdr: boolean;
+  hdrReadiness: ImageEditorCapabilityReadinessV3;
   allowPackageExternalSources: boolean;
 }
 
-const NAVIGATION_TOOLS: readonly ImageEditorToolIdV3[] = ['move', 'hand', 'zoom'];
-const SELECTION_TOOLS: readonly ImageEditorToolIdV3[] = [
-  'select-rect', 'select-ellipse', 'select-lasso',
+const ready = <TId extends string>(id: TId): ImageEditorCapabilityV3<TId> => ({
+  id,
+  readiness: { state: 'ready' },
+});
+
+const disabled = <TId extends string>(
+  id: TId,
+  reasonKey: ImageEditorReadinessReasonKeyV3,
+): ImageEditorCapabilityV3<TId> => ({
+  id,
+  readiness: { state: 'disabled', reasonKey },
+});
+
+const MOVE_TOOL = ready('move');
+const HAND_TOOL = disabled('hand', 'imageEditor.v3.readiness.reasons.hand');
+const ZOOM_TOOL = disabled('zoom', 'imageEditor.v3.readiness.reasons.zoom');
+const NAVIGATION_TOOLS: readonly ImageEditorCapabilityV3<ImageEditorToolIdV3>[] = [
+  MOVE_TOOL,
+  HAND_TOOL,
+  ZOOM_TOOL,
 ];
-const ANNOTATION_TOOLS: readonly ImageEditorToolIdV3[] = [
-  'annotation-text', 'annotation-arrow', 'annotation-rect', 'annotation-pen',
+const SELECTION_TOOLS: readonly ImageEditorCapabilityV3<ImageEditorToolIdV3>[] = [
+  disabled('select-rect', 'imageEditor.v3.readiness.reasons.selectRect'),
+  disabled('select-ellipse', 'imageEditor.v3.readiness.reasons.selectEllipse'),
+  disabled('select-lasso', 'imageEditor.v3.readiness.reasons.selectLasso'),
 ];
-const CORE_EFFECTS = ['image.gaussian-blur-v2', 'image.diffusion', 'image.vgpu-glow'] as const;
+const ANNOTATION_TOOLS: readonly ImageEditorCapabilityV3<ImageEditorToolIdV3>[] = [
+  ready('annotation-text'),
+  ready('annotation-arrow'),
+  ready('annotation-rect'),
+  ready('annotation-pen'),
+];
+const RASTER_TOOLS: readonly ImageEditorCapabilityV3<ImageEditorToolIdV3>[] = [
+  ready('raster-brush'),
+  ready('eraser'),
+  disabled('mask-edit', 'imageEditor.v3.readiness.reasons.maskEdit'),
+];
+const CORE_EFFECTS: readonly ImageEditorCapabilityV3<string>[] = [
+  ready('image.gaussian-blur-v2'),
+  ready('image.diffusion'),
+  disabled(
+    'image.vgpu-glow',
+    'imageEditor.v3.readiness.reasons.glowExport',
+  ),
+];
 const CORE_ADJUSTMENTS = ['exposure', 'curves', 'temperature-tint', 'hsl'] as const;
+const HDR_LIMITATION: ImageEditorCapabilityReadinessV3 = {
+  state: 'limited',
+  reasonKey: 'imageEditor.v3.readiness.reasons.hdrExport',
+};
 
 export const IMAGE_EDITOR_HOST_PROFILES_V3: Readonly<
   Record<ImageEditorHostProfileIdV3, ImageEditorHostProfileV3>
@@ -48,52 +128,63 @@ export const IMAGE_EDITOR_HOST_PROFILES_V3: Readonly<
   full: {
     id: 'full',
     tools: [
-      ...NAVIGATION_TOOLS, 'crop', ...SELECTION_TOOLS, ...ANNOTATION_TOOLS,
-      'raster-brush', 'eraser', 'mask-edit',
+      ...NAVIGATION_TOOLS, ready('crop'), ...SELECTION_TOOLS, ...ANNOTATION_TOOLS,
+      ...RASTER_TOOLS,
     ],
     layerKinds: ['raster', 'annotation', 'effect', 'adjustment', 'group'],
     effects: CORE_EFFECTS,
     adjustments: CORE_ADJUSTMENTS,
-    panels: ['layers', 'properties', 'histogram', 'color', 'history'],
+    panels: ['layers', 'properties'],
     saveActions: ['save-document', 'save-package', 'export-raster'],
-    allowHdr: true,
+    hdrReadiness: HDR_LIMITATION,
     allowPackageExternalSources: true,
   },
   quick: {
     id: 'quick',
-    tools: [...NAVIGATION_TOOLS, 'crop', ...ANNOTATION_TOOLS],
+    tools: [...NAVIGATION_TOOLS, ready('crop'), ...ANNOTATION_TOOLS],
     layerKinds: ['annotation', 'effect', 'adjustment'],
-    effects: ['image.gaussian-blur-v2', 'image.diffusion'],
+    effects: CORE_EFFECTS.filter(({ id }) => id !== 'image.vgpu-glow'),
     adjustments: ['exposure', 'hsl'],
     panels: ['layers', 'properties'],
     saveActions: ['save-document', 'export-raster'],
-    allowHdr: false,
+    hdrReadiness: {
+      state: 'disabled',
+      reasonKey: 'imageEditor.v3.readiness.reasons.quickHdr',
+    },
     allowPackageExternalSources: false,
   },
   'canvas-edit': {
     id: 'canvas-edit',
-    tools: [...NAVIGATION_TOOLS, 'crop', ...ANNOTATION_TOOLS, 'raster-brush', 'eraser', 'mask-edit'],
+    tools: [...NAVIGATION_TOOLS, ready('crop'), ...ANNOTATION_TOOLS, ...RASTER_TOOLS],
     layerKinds: ['raster', 'annotation', 'effect', 'adjustment', 'group'],
     effects: CORE_EFFECTS,
     adjustments: CORE_ADJUSTMENTS,
-    panels: ['layers', 'properties', 'history'],
+    panels: ['layers', 'properties'],
     saveActions: ['save-document'],
-    allowHdr: true,
+    hdrReadiness: HDR_LIMITATION,
     allowPackageExternalSources: false,
   },
   mask: {
     id: 'mask',
-    tools: [...NAVIGATION_TOOLS, ...SELECTION_TOOLS, 'raster-brush', 'eraser', 'mask-edit'],
+    tools: [...NAVIGATION_TOOLS, ...SELECTION_TOOLS, ...RASTER_TOOLS],
     layerKinds: ['raster'],
     effects: [],
     adjustments: [],
-    panels: ['layers', 'properties', 'history'],
+    panels: ['layers', 'properties'],
     saveActions: ['save-document'],
-    allowHdr: true,
+    hdrReadiness: HDR_LIMITATION,
     allowPackageExternalSources: false,
   },
 };
 
 export function getImageEditorHostProfileV3(id: ImageEditorHostProfileIdV3): ImageEditorHostProfileV3 {
   return IMAGE_EDITOR_HOST_PROFILES_V3[id];
+}
+
+export function getReadyImageEditorToolIdsV3(
+  profile: ImageEditorHostProfileV3,
+): ImageEditorToolIdV3[] {
+  return profile.tools
+    .filter(({ readiness }) => readiness.state === 'ready')
+    .map(({ id }) => id);
 }

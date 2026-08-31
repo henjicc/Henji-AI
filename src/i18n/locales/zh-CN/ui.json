@@ -585,6 +585,262 @@
         "custom": "自定义",
         "sourceNotice": "预设仅参考公开方法，不对应任何品牌滤镜或镜头档位。"
       }
+    },
+    "v3": {
+      "title": "图片编辑",
+      "revision": "版本 {{revision}}",
+      "previewAlt": "图片编辑预览",
+      "zoomIn": "放大",
+      "zoomOut": "缩小",
+      "readiness": {
+        "unavailable": "{{label}}（暂不可用）",
+        "unavailableWithReason": "{{label}}（暂不可用：{{reason}}）",
+        "reasons": {
+          "hand": "画布拖拽浏览尚未接通，请先使用底部缩放控制。",
+          "zoom": "画布点击缩放尚未接通，请使用底部缩放按钮。",
+          "selectRect": "像素选区尚未接通，暂时不能使用矩形选择。",
+          "selectEllipse": "像素选区尚未接通，暂时不能使用椭圆选择。",
+          "selectLasso": "像素选区尚未接通，暂时不能使用套索选择。",
+          "maskEdit": "蒙版像素编辑尚未接通；已有蒙版只会被保留。",
+          "glowExport": "辉光 Pro 当前不能可靠导出 PNG；已有图层会保留，但暂不允许新建。",
+          "hdrExport": "HDR 内容会以 SDR 代理预览并保留到可编辑文件，但当前不能导出 PNG。",
+          "quickHdr": "快速编辑暂不接收 HDR 文档。",
+          "exportDocumentNotReady": "图片编辑文档尚未准备完成。",
+          "viewerDocumentNotReady": "快速编辑文档尚未准备完成。",
+          "exportHdrMetadata": "当前版本还不能可靠保留 HDR 元数据，已阻止降级导出为 SDR 图片。",
+          "exportBitDepth": "当前 PNG 分块导出仅支持 8 位或 16 位文档；浮点文档不会被静默降位。",
+          "exportInvalidIcc": "图片编辑 ICC 资源引用无效。"
+        }
+      },
+      "host": {
+        "backToToolbox": "返回工具箱",
+        "loading": "正在准备可编辑图片…",
+        "bootstrapError": {
+          "title": "无法打开新版图片编辑器",
+          "message": "这张图片暂时无法导入。你可以重试，或继续使用兼容编辑器。",
+          "fallback": "使用兼容编辑器"
+        },
+        "sourceMenu": {
+          "openFile": "从文件打开",
+          "openPackage": "打开可编辑文件",
+          "paste": "粘贴剪贴板图片",
+          "createBlank": "新建空白图片",
+          "title": "打开图片",
+          "trigger": "打开"
+        },
+        "toolbar": {
+          "saving": "正在保存…",
+          "retrySave": "重试保存",
+          "exportCancelling": "正在取消导出…",
+          "exportProgress": "正在导出 {{completed}}/{{total}}",
+          "exportPreparing": "正在准备导出…",
+          "cancelExport": "取消导出",
+          "exportUnavailableAria": "导出 PNG 暂不可用：{{reason}}",
+          "exportUnavailable": "暂不能导出 PNG",
+          "exportPng": "导出 PNG…",
+          "savePackage": "保存可编辑文件…"
+        },
+        "notifications": {
+          "autosaveFailed": "自动保存失败，请重试",
+          "saveBeforeReplaceFailed": "保存当前编辑失败，已保留在当前页面",
+          "packageSaved": "可编辑文件已保存",
+          "packageSaveFailed": "保存可编辑文件失败",
+          "exportCompleted": "栅格图片已导出",
+          "exportCancelled": "已取消导出",
+          "exportFailed": "无法导出栅格图片：{{reason}}"
+        },
+        "export": {
+          "defaultUnavailable": "当前文档暂时不能导出 PNG。",
+          "unknownError": "发生未知错误",
+          "snapshotUnavailable": "保存后的权威文档快照不可用，请重试"
+        },
+        "fileNames": {
+          "fallbackStem": "图片",
+          "editable": "{{stem}}-可编辑.henjiimg",
+          "editedPng": "{{stem}}-已编辑.png"
+        }
+      },
+      "viewer": {
+        "title": "快速编辑",
+        "close": "关闭",
+        "loading": "正在准备快速编辑…",
+        "bootstrapErrorTitle": "无法打开快速编辑",
+        "bootstrapUnknown": "无法准备快速编辑文档",
+        "replaceTitle": "将当前编辑结果替换到查看器",
+        "replaceUnavailable": "当前文档还不能安全替换查看器图片。",
+        "replaceUnavailableWithReason": "当前文档还不能安全替换查看器图片：{{reason}}",
+        "cancelling": "正在取消…",
+        "cancelProgress": "取消替换 {{completed}}/{{total}}",
+        "cancel": "取消替换",
+        "replace": "替换图片",
+        "replacing": "替换中…",
+        "preserving": "保留中…",
+        "finish": "完成",
+        "errors": {
+          "saveUnavailable": "快速编辑宿主未开放受管文档保存。",
+          "savedDocumentNotFound": "找不到已保存的快速编辑文档。",
+          "staleSessionReference": "已保存的快速编辑文档版本早于当前会话引用。"
+        },
+        "notifications": {
+          "autosaveFailed": "快速编辑自动保存失败，请重试",
+          "replaceCancelled": "已取消替换图片",
+          "replaceFailed": "替换查看器图片失败，请重试",
+          "finishSaveFailed": "保留快速编辑内容失败，请重试"
+        }
+      },
+      "tools": {
+        "label": "图片编辑工具",
+        "move": "移动",
+        "hand": "抓手",
+        "zoom": "缩放",
+        "crop": "裁剪",
+        "select-rect": "矩形选择",
+        "select-ellipse": "椭圆选择",
+        "select-lasso": "套索选择",
+        "annotation-text": "文字标注",
+        "annotation-arrow": "箭头标注",
+        "annotation-rect": "矩形标注",
+        "annotation-pen": "标注画笔",
+        "raster-brush": "栅格画笔",
+        "eraser": "橡皮擦",
+        "mask-edit": "编辑蒙版"
+      },
+      "toolSettings": {
+        "size": "大小",
+        "opacity": "不透明度",
+        "hardness": "硬度",
+        "strokeWidth": "描边",
+        "fontSize": "字号"
+      },
+      "annotation": {
+        "overlay": "标注编辑画布",
+        "defaultText": "文字",
+        "properties": "所选标注",
+        "text": "文字内容",
+        "delete": "删除标注",
+        "type": {
+          "rect": "矩形",
+          "ellipse": "椭圆",
+          "arrow": "箭头",
+          "pen": "画笔",
+          "text": "文字",
+          "number": "编号",
+          "mosaic": "马赛克"
+        }
+      },
+      "rasterBrush": {
+        "overlay": "栅格笔画编辑画布",
+        "select-one": "请先只选择一个要编辑的栅格图层。",
+        "not-raster": "当前选择不是栅格图层，请先选择一个栅格图层。",
+        "locked": "所选栅格图层或其所在组已锁定，暂时不能绘制。",
+        "hidden": "所选栅格图层或其所在组已隐藏，暂时不能绘制。",
+        "singular": "所选栅格图层的变换不可逆，暂时不能绘制。",
+        "failed": "栅格笔画未写入：{{reason}}"
+      },
+      "crop": {
+        "rotateLeft": "向左旋转 90°",
+        "rotateRight": "向右旋转 90°",
+        "mirror": "水平镜像",
+        "x": "X",
+        "y": "Y",
+        "width": "宽",
+        "height": "高",
+        "fullImage": "完整画面",
+        "cancel": "取消",
+        "apply": "应用裁剪"
+      },
+      "layers": {
+        "title": "图层",
+        "empty": "暂无图层",
+        "addLayer": "添加图层",
+        "duplicate": "复制图层",
+        "moveUp": "上移图层",
+        "moveDown": "下移图层",
+        "dragHint": "拖拽调整图层顺序或移动到图层组",
+        "delete": "删除所选图层",
+        "group": "将所选图层编组",
+        "ungroup": "取消编组",
+        "expandGroup": "展开图层组",
+        "collapseGroup": "折叠图层组",
+        "lockedContainer": "当前图层所在的组已锁定，不能在其中新建图层。",
+        "showLayer": "显示“{{name}}”",
+        "hideLayer": "隐藏“{{name}}”",
+        "lockLayer": "锁定“{{name}}”",
+        "unlockLayer": "解锁“{{name}}”",
+        "hasMask": "已有蒙版"
+      },
+      "layerType": {
+        "raster": "栅格图层",
+        "annotation": "标注图层",
+        "effect": "效果图层",
+        "adjustment": "调整图层",
+        "group": "图层组"
+      },
+      "effect": {
+        "image": {
+          "gaussian-blur-v2": "高斯模糊",
+          "diffusion": "柔光 / 发光",
+          "vgpu-glow": "辉光 Pro"
+        }
+      },
+      "adjustment": {
+        "exposure": "曝光",
+        "curves": "曲线",
+        "temperature-tint": "色温 / 色调",
+        "hsl": "色相 / 饱和度 / 明度"
+      },
+      "properties": {
+        "title": "属性",
+        "selectOne": "请选择一个图层来编辑属性",
+        "name": "名称",
+        "visible": "可见",
+        "locked": "锁定",
+        "opacity": "不透明度",
+        "blendMode": "混合模式",
+        "groupIsolation": "隔离合成",
+        "groupIsolationInfo": "关闭时，普通、全不透明且无蒙版的组可穿透合成；开启后先在组内独立合成。",
+        "mask": "蒙版",
+        "maskInverted": "反转蒙版",
+        "addMask": "添加蒙版",
+        "removeMask": "移除蒙版",
+        "maskUnavailable": "蒙版像素创建与编辑尚未接通，当前只能保留已有蒙版。",
+        "maskError": "创建蒙版失败，请重试",
+        "unrenderable": "该旧效果当前不可渲染，但会原样保留。"
+      },
+      "blendMode": {
+        "normal": "正常",
+        "multiply": "正片叠底",
+        "screen": "滤色",
+        "overlay": "叠加",
+        "soft-light": "柔光"
+      },
+      "parameters": {
+        "radius": "半径",
+        "strength": "强度",
+        "glowRange": "辉光范围",
+        "highlightResponse": "高光响应",
+        "softness": "柔和度",
+        "intensity": "辉光强度",
+        "sourceThreshold": "亮源门槛",
+        "whiteHeat": "核心白热",
+        "stops": "曝光档位",
+        "offset": "偏移",
+        "gamma": "伽马",
+        "temperature": "色温",
+        "tint": "色调",
+        "hueDegrees": "色相",
+        "saturation": "饱和度",
+        "lightness": "明度",
+        "curveChannel": "曲线通道",
+        "curveBlack": "黑场输出",
+        "curveWhite": "白场输出",
+        "curveChannels": {
+          "master": "主通道",
+          "red": "红色",
+          "green": "绿色",
+          "blue": "蓝色"
+        }
+      }
     }
   },
   "modelscopeCustomModel": {

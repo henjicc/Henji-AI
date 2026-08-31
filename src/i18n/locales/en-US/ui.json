@@ -585,6 +585,262 @@
         "custom": "Custom",
         "sourceNotice": "These presets reference public methods only; they do not represent any branded filter or lens grade."
       }
+    },
+    "v3": {
+      "title": "Image Editor",
+      "revision": "Revision {{revision}}",
+      "previewAlt": "Image editor preview",
+      "zoomIn": "Zoom in",
+      "zoomOut": "Zoom out",
+      "readiness": {
+        "unavailable": "{{label}} (unavailable)",
+        "unavailableWithReason": "{{label}} (unavailable: {{reason}})",
+        "reasons": {
+          "hand": "Canvas panning is not connected yet. Use the zoom controls at the bottom.",
+          "zoom": "Click-to-zoom is not connected yet. Use the zoom buttons at the bottom.",
+          "selectRect": "Pixel selections are not connected yet, so rectangular selection is unavailable.",
+          "selectEllipse": "Pixel selections are not connected yet, so elliptical selection is unavailable.",
+          "selectLasso": "Pixel selections are not connected yet, so lasso selection is unavailable.",
+          "maskEdit": "Mask pixel editing is not connected yet; existing masks are preserved.",
+          "glowExport": "Glow Pro cannot be exported reliably to PNG yet. Existing layers are preserved, but new ones cannot be created.",
+          "hdrExport": "HDR content uses an SDR proxy for preview and remains in editable files, but cannot be exported to PNG yet.",
+          "quickHdr": "Quick Edit does not accept HDR documents yet.",
+          "exportDocumentNotReady": "The image editing document is not ready yet.",
+          "viewerDocumentNotReady": "The Quick Edit document is not ready yet.",
+          "exportHdrMetadata": "This version cannot preserve HDR metadata reliably, so export to a downgraded SDR image was blocked.",
+          "exportBitDepth": "Tiled PNG export currently supports only 8-bit or 16-bit documents; floating-point documents will not be silently reduced.",
+          "exportInvalidIcc": "The image editor ICC resource reference is invalid."
+        }
+      },
+      "host": {
+        "backToToolbox": "Back to Toolbox",
+        "loading": "Preparing the editable image…",
+        "bootstrapError": {
+          "title": "Could not open the new image editor",
+          "message": "This image could not be imported. Try again or continue with the compatible editor.",
+          "fallback": "Use compatible editor"
+        },
+        "sourceMenu": {
+          "openFile": "Open from file",
+          "openPackage": "Open editable file",
+          "paste": "Paste image from clipboard",
+          "createBlank": "Create blank image",
+          "title": "Open image",
+          "trigger": "Open"
+        },
+        "toolbar": {
+          "saving": "Saving…",
+          "retrySave": "Retry save",
+          "exportCancelling": "Cancelling export…",
+          "exportProgress": "Exporting {{completed}}/{{total}}",
+          "exportPreparing": "Preparing export…",
+          "cancelExport": "Cancel export",
+          "exportUnavailableAria": "PNG export unavailable: {{reason}}",
+          "exportUnavailable": "PNG export unavailable",
+          "exportPng": "Export PNG…",
+          "savePackage": "Save editable file…"
+        },
+        "notifications": {
+          "autosaveFailed": "Autosave failed. Try again.",
+          "saveBeforeReplaceFailed": "Could not save the current edit. You remain on this page.",
+          "packageSaved": "Editable file saved",
+          "packageSaveFailed": "Could not save the editable file",
+          "exportCompleted": "Raster image exported",
+          "exportCancelled": "Export cancelled",
+          "exportFailed": "Could not export the raster image: {{reason}}"
+        },
+        "export": {
+          "defaultUnavailable": "This document cannot be exported to PNG yet.",
+          "unknownError": "Unknown error",
+          "snapshotUnavailable": "The saved authoritative document snapshot is unavailable. Try again."
+        },
+        "fileNames": {
+          "fallbackStem": "image",
+          "editable": "{{stem}}-editable.henjiimg",
+          "editedPng": "{{stem}}-edited.png"
+        }
+      },
+      "viewer": {
+        "title": "Quick Edit",
+        "close": "Close",
+        "loading": "Preparing Quick Edit…",
+        "bootstrapErrorTitle": "Could not open Quick Edit",
+        "bootstrapUnknown": "Could not prepare the Quick Edit document",
+        "replaceTitle": "Replace the image in the viewer with the current edit",
+        "replaceUnavailable": "This document cannot safely replace the image in the viewer yet.",
+        "replaceUnavailableWithReason": "This document cannot safely replace the image in the viewer: {{reason}}",
+        "cancelling": "Cancelling…",
+        "cancelProgress": "Cancel replacement {{completed}}/{{total}}",
+        "cancel": "Cancel replacement",
+        "replace": "Replace image",
+        "replacing": "Replacing…",
+        "preserving": "Saving…",
+        "finish": "Done",
+        "errors": {
+          "saveUnavailable": "The Quick Edit host does not allow managed document saving.",
+          "savedDocumentNotFound": "The saved Quick Edit document could not be found.",
+          "staleSessionReference": "The saved Quick Edit document is older than the current session reference."
+        },
+        "notifications": {
+          "autosaveFailed": "Quick Edit autosave failed. Try again.",
+          "replaceCancelled": "Image replacement cancelled",
+          "replaceFailed": "Could not replace the image in the viewer. Try again.",
+          "finishSaveFailed": "Could not preserve the Quick Edit changes. Try again."
+        }
+      },
+      "tools": {
+        "label": "Image editing tools",
+        "move": "Move",
+        "hand": "Hand",
+        "zoom": "Zoom",
+        "crop": "Crop",
+        "select-rect": "Rectangular selection",
+        "select-ellipse": "Elliptical selection",
+        "select-lasso": "Lasso selection",
+        "annotation-text": "Text annotation",
+        "annotation-arrow": "Arrow annotation",
+        "annotation-rect": "Rectangle annotation",
+        "annotation-pen": "Annotation pen",
+        "raster-brush": "Raster brush",
+        "eraser": "Eraser",
+        "mask-edit": "Edit mask"
+      },
+      "toolSettings": {
+        "size": "Size",
+        "opacity": "Opacity",
+        "hardness": "Hardness",
+        "strokeWidth": "Stroke",
+        "fontSize": "Font size"
+      },
+      "annotation": {
+        "overlay": "Annotation editing canvas",
+        "defaultText": "Text",
+        "properties": "Selected annotation",
+        "text": "Text",
+        "delete": "Delete annotation",
+        "type": {
+          "rect": "Rectangle",
+          "ellipse": "Ellipse",
+          "arrow": "Arrow",
+          "pen": "Pen",
+          "text": "Text",
+          "number": "Number",
+          "mosaic": "Mosaic"
+        }
+      },
+      "rasterBrush": {
+        "overlay": "Raster brush editing canvas",
+        "select-one": "Select exactly one raster layer to edit.",
+        "not-raster": "The current selection is not a raster layer. Select a raster layer first.",
+        "locked": "The selected raster layer or its group is locked.",
+        "hidden": "The selected raster layer or its group is hidden.",
+        "singular": "The selected raster layer has a non-invertible transform.",
+        "failed": "The raster stroke was not saved: {{reason}}"
+      },
+      "crop": {
+        "rotateLeft": "Rotate 90° left",
+        "rotateRight": "Rotate 90° right",
+        "mirror": "Mirror horizontally",
+        "x": "X",
+        "y": "Y",
+        "width": "W",
+        "height": "H",
+        "fullImage": "Full image",
+        "cancel": "Cancel",
+        "apply": "Apply crop"
+      },
+      "layers": {
+        "title": "Layers",
+        "empty": "No layers",
+        "addLayer": "Add layer",
+        "duplicate": "Duplicate layer",
+        "moveUp": "Move layer up",
+        "moveDown": "Move layer down",
+        "dragHint": "Drag to reorder layers or move into a group",
+        "delete": "Delete selected layers",
+        "group": "Group selected layers",
+        "ungroup": "Ungroup",
+        "expandGroup": "Expand layer group",
+        "collapseGroup": "Collapse layer group",
+        "lockedContainer": "The current layer is inside a locked group, so a new layer cannot be added there.",
+        "showLayer": "Show “{{name}}”",
+        "hideLayer": "Hide “{{name}}”",
+        "lockLayer": "Lock “{{name}}”",
+        "unlockLayer": "Unlock “{{name}}”",
+        "hasMask": "Has mask"
+      },
+      "layerType": {
+        "raster": "Raster layer",
+        "annotation": "Annotation layer",
+        "effect": "Effect layer",
+        "adjustment": "Adjustment layer",
+        "group": "Layer group"
+      },
+      "effect": {
+        "image": {
+          "gaussian-blur-v2": "Gaussian Blur",
+          "diffusion": "Diffusion / Glow",
+          "vgpu-glow": "Glow Pro"
+        }
+      },
+      "adjustment": {
+        "exposure": "Exposure",
+        "curves": "Curves",
+        "temperature-tint": "Temperature / Tint",
+        "hsl": "Hue / Saturation / Lightness"
+      },
+      "properties": {
+        "title": "Properties",
+        "selectOne": "Select one layer to edit its properties",
+        "name": "Name",
+        "visible": "Visible",
+        "locked": "Locked",
+        "opacity": "Opacity",
+        "blendMode": "Blend mode",
+        "groupIsolation": "Isolated compositing",
+        "groupIsolationInfo": "When off, a normal fully opaque unmasked group may pass through; when on, its children composite in isolation first.",
+        "mask": "Mask",
+        "maskInverted": "Invert mask",
+        "addMask": "Add mask",
+        "removeMask": "Remove mask",
+        "maskUnavailable": "Mask pixel creation and editing are not connected yet; existing masks are preserved.",
+        "maskError": "Could not create the mask. Try again.",
+        "unrenderable": "This legacy effect cannot render here, but remains preserved."
+      },
+      "blendMode": {
+        "normal": "Normal",
+        "multiply": "Multiply",
+        "screen": "Screen",
+        "overlay": "Overlay",
+        "soft-light": "Soft Light"
+      },
+      "parameters": {
+        "radius": "Radius",
+        "strength": "Strength",
+        "glowRange": "Glow range",
+        "highlightResponse": "Highlight response",
+        "softness": "Softness",
+        "intensity": "Glow intensity",
+        "sourceThreshold": "Source threshold",
+        "whiteHeat": "Core white heat",
+        "stops": "Exposure stops",
+        "offset": "Offset",
+        "gamma": "Gamma",
+        "temperature": "Temperature",
+        "tint": "Tint",
+        "hueDegrees": "Hue",
+        "saturation": "Saturation",
+        "lightness": "Lightness",
+        "curveChannel": "Curve channel",
+        "curveBlack": "Black output",
+        "curveWhite": "White output",
+        "curveChannels": {
+          "master": "Master",
+          "red": "Red",
+          "green": "Green",
+          "blue": "Blue"
+        }
+      }
     }
   },
   "modelscopeCustomModel": {
