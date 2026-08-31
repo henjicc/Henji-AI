@@ -3,6 +3,7 @@ import { AbortableSingleflight, throwIfImageSourceAborted } from './abortable-si
 import {
   IMAGE_EDIT_TILE_SIZE,
   type SourcePyramidDescriptor,
+  type SourcePyramidLevel,
   type SourcePyramidPrewarmRequest,
   type SourcePyramidPrewarmResult,
   type SourceTile,
@@ -13,7 +14,7 @@ import {
   type DerivedDiskCache,
 } from './derived-disk-cache'
 
-const SOURCE_PYRAMID_CACHE_VERSION = 2
+const SOURCE_PYRAMID_CACHE_VERSION = 3
 const DEFAULT_PREWARM_TILE_BUDGET = 4_096
 const MAX_PREWARM_TILE_BUDGET = 100_000
 const logger = createMainLogger('main.image_editor_v3.source_pyramid')
@@ -30,6 +31,23 @@ export type SourcePyramidTileDecoder = (
   request: SourceTileRequest,
   signal: AbortSignal,
 ) => Promise<SourceTile>
+
+export interface SourcePyramidRawLevelSeed {
+  resourceId: SourceTileRequest['resourceId']
+  level: SourcePyramidLevel
+  bitDepth: 8 | 16 | 32
+  rowStride: number
+  pixels: Uint8Array
+  signal?: AbortSignal
+}
+
+export interface SourcePyramidRawLevelRead {
+  resourceId: SourceTileRequest['resourceId']
+  level: SourcePyramidLevel
+  bitDepth: 8 | 16 | 32
+  maximumBytes: number
+  signal?: AbortSignal
+}
 
 function bytesPerSample(bitDepth: 8 | 16 | 32): number {
   return bitDepth / 8
@@ -174,6 +192,121 @@ export class ManagedSourcePyramid {
     return this.flights.run(address.key, (signal) => (
       this.loadOrCreateTile({ ...request, halo: 0, bitDepth: layout.bitDepth }, layout, address, signal)
     ), request.signal)
+  }
+
+  async hasCompleteLevel(
+    resourceId: SourceTileRequest['resourceId'],
+    level: SourcePyramidLevel,
+    bitDepth: 8 | 16 | 32,
+  ): Promise<boolean> {
+    for (let tileY = 0; tileY < level.rows; tileY += 1) {
+      for (let tileX = 0; tileX < level.columns; tileX += 1) {
+        const layout = tileLayout(level, tileX, tileY, bitDepth)
+        const address = sourcePyramidCacheAddress({ resourceId, mip: level.mip, tileX, tileY }, layout)
+        const lease = await this.cache.acquireFileLease(address)
+        if (!lease) return false
+        const valid = lease.byteLength === expectedPixelBytes(layout)
+        await lease.release()
+        if (!valid) {
+          await this.cache.invalidate(address)
+          return false
+        }
+      }
+    }
+    return true
+  }
+
+  /**
+   * 逐个源瓦片拼出一个有严格字节上限的代理 mip。这样极端长宽比图片不会因一次
+   * 全宽 libvips resize 保留接近完整源图的中间扫描线，同时每个已解码瓦片仍会发布到缓存。
+   */
+  async readBoundedRawLevel(read: SourcePyramidRawLevelRead): Promise<Buffer> {
+    const { level, bitDepth } = read
+    const rowStride = level.width * 4 * bytesPerSample(bitDepth)
+    const byteLength = rowStride * level.height
+    if (
+      !Number.isSafeInteger(read.maximumBytes)
+      || read.maximumBytes < 1
+      || !Number.isSafeInteger(byteLength)
+      || byteLength > read.maximumBytes
+      || level.columns !== Math.ceil(level.width / IMAGE_EDIT_TILE_SIZE)
+      || level.rows !== Math.ceil(level.height / IMAGE_EDIT_TILE_SIZE)
+    ) throw new Error('Source pyramid raw level exceeds its bounded allocation')
+    const pixels = Buffer.allocUnsafe(byteLength)
+    for (let tileY = 0; tileY < level.rows; tileY += 1) {
+      for (let tileX = 0; tileX < level.columns; tileX += 1) {
+        throwIfImageSourceAborted(read.signal)
+        const layout = tileLayout(level, tileX, tileY, bitDepth)
+        const tile = await this.readTile({
+          resourceId: read.resourceId,
+          mip: level.mip,
+          tileX,
+          tileY,
+          bitDepth,
+          signal: read.signal,
+        }, layout)
+        for (let row = 0; row < layout.height; row += 1) {
+          const sourceStart = row * tile.rowStride
+          const targetStart = (layout.originY + row) * rowStride
+            + layout.originX * 4 * bytesPerSample(bitDepth)
+          pixels.set(
+            tile.pixels.subarray(sourceStart, sourceStart + tile.rowStride),
+            targetStart,
+          )
+        }
+        await yieldToEventLoop()
+      }
+    }
+    return pixels
+  }
+
+  /** 将一次有界下采样得到的完整 mip 拆成权威 512 缓存瓦片，后续视口不再重解原图。 */
+  async seedRawLevel(seed: SourcePyramidRawLevelSeed): Promise<number> {
+    const { level, bitDepth } = seed
+    const channelBytes = bytesPerSample(bitDepth)
+    const packedRowBytes = level.width * 4 * channelBytes
+    if (
+      seed.rowStride < packedRowBytes
+      || seed.pixels.byteLength < seed.rowStride * level.height
+      || level.columns !== Math.ceil(level.width / IMAGE_EDIT_TILE_SIZE)
+      || level.rows !== Math.ceil(level.height / IMAGE_EDIT_TILE_SIZE)
+    ) throw new Error('Invalid source pyramid raw level seed')
+    let publishedTiles = 0
+    for (let tileY = 0; tileY < level.rows; tileY += 1) {
+      for (let tileX = 0; tileX < level.columns; tileX += 1) {
+        throwIfImageSourceAborted(seed.signal)
+        const layout = tileLayout(level, tileX, tileY, bitDepth)
+        const request = { resourceId: seed.resourceId, mip: level.mip, tileX, tileY }
+        const address = sourcePyramidCacheAddress(request, layout)
+        const cached = await this.cache.acquireFileLease(address)
+        if (cached?.byteLength === expectedPixelBytes(layout)) {
+          await cached.release()
+          publishedTiles += 1
+          continue
+        }
+        await cached?.release()
+        if (cached) await this.cache.invalidate(address)
+        const tileRowBytes = layout.width * 4 * channelBytes
+        const pixels = Buffer.allocUnsafe(tileRowBytes * layout.height)
+        for (let row = 0; row < layout.height; row += 1) {
+          const sourceStart = (layout.originY + row) * seed.rowStride
+            + layout.originX * 4 * channelBytes
+          pixels.set(seed.pixels.subarray(sourceStart, sourceStart + tileRowBytes), row * tileRowBytes)
+        }
+        try {
+          await this.cache.put(address, pixels)
+          publishedTiles += 1
+        } catch (error) {
+          throwIfImageSourceAborted(seed.signal)
+          logger.warn('发布图片源金字塔种子瓦片失败，保留按需解码降级', {
+            event: 'image_editor_v3.source_pyramid.seed_write.failed',
+            context: { resourceId: seed.resourceId, mip: level.mip, tileX, tileY },
+            error,
+          })
+        }
+      }
+    }
+    return publishedTiles
   }
 
   async prewarm(

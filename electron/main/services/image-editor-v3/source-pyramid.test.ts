@@ -225,6 +225,73 @@ describe('ManagedSourcePyramid', () => {
     expect(decodeCount).toBe(1)
   })
 
+  it('将完整 raw mip 按紧密行跨度种为 512 瓦片且不调用源解码器', async () => {
+    const level = { mip: 3, width: 600, height: 2, columns: 2, rows: 1 }
+    const pixels = Buffer.alloc(level.width * level.height * 4)
+    for (let y = 0; y < level.height; y += 1) {
+      for (let x = 0; x < level.width; x += 1) pixels[(y * level.width + x) * 4] = x % 251
+    }
+    const decode: SourcePyramidTileDecoder = async () => { throw new Error('unexpected decode') }
+    const decoder = vi.fn(decode)
+    const pyramid = new ManagedSourcePyramid(
+      new DerivedDiskCache(rootDir, 4 * 1024 * 1024),
+      decoder,
+    )
+
+    expect(await pyramid.hasCompleteLevel(RESOURCE_A, level, 8)).toBe(false)
+    expect(await pyramid.seedRawLevel({
+      resourceId: RESOURCE_A,
+      level,
+      bitDepth: 8,
+      rowStride: level.width * 4,
+      pixels,
+    })).toBe(2)
+    expect(await pyramid.hasCompleteLevel(RESOURCE_A, level, 8)).toBe(true)
+    const left = await pyramid.readTile({ resourceId: RESOURCE_A, mip: 3, tileX: 0, tileY: 0 }, {
+      width: 512, height: 2, originX: 0, originY: 0, bitDepth: 8,
+    })
+    const right = await pyramid.readTile({ resourceId: RESOURCE_A, mip: 3, tileX: 1, tileY: 0 }, {
+      width: 88, height: 2, originX: 512, originY: 0, bitDepth: 8,
+    })
+    expect(left.pixels[0]).toBe(0)
+    expect(left.pixels[511 * 4]).toBe(511 % 251)
+    expect(right.pixels[0]).toBe(512 % 251)
+    expect(right.pixels[88 * 4]).toBe(512 % 251)
+    expect(decoder).not.toHaveBeenCalled()
+  })
+
+  it('逐瓦片拼接有界 raw mip，复用缓存且在分配前拒绝超预算', async () => {
+    const level = { mip: 3, width: 600, height: 2, columns: 2, rows: 1 }
+    const decode: SourcePyramidTileDecoder = async (sourceRequest) => {
+      const sourceLayout = sourceRequest.tileX === 0
+        ? layout(512, 2)
+        : { ...layout(88, 2), originX: 512 }
+      return decodedTile(sourceRequest, sourceLayout, sourceRequest.tileX === 0 ? 11 : 22)
+    }
+    const decoder = vi.fn(decode)
+    const pyramid = new ManagedSourcePyramid(
+      new DerivedDiskCache(rootDir, 4 * 1024 * 1024),
+      decoder,
+    )
+    const read = {
+      resourceId: RESOURCE_A,
+      level,
+      bitDepth: 8 as const,
+      maximumBytes: 600 * 2 * 4,
+    }
+
+    const pixels = await pyramid.readBoundedRawLevel(read)
+    expect(pixels.subarray(0, 512 * 4).every((value) => value === 11)).toBe(true)
+    expect(pixels.subarray(512 * 4, 600 * 4).every((value) => value === 22)).toBe(true)
+    expect(decoder).toHaveBeenCalledTimes(2)
+    await pyramid.readBoundedRawLevel(read)
+    expect(decoder).toHaveBeenCalledTimes(2)
+    await expect(pyramid.readBoundedRawLevel({
+      ...read,
+      maximumBytes: read.maximumBytes - 1,
+    })).rejects.toThrow('exceeds its bounded allocation')
+  })
+
   it('200MP 描述符受 tileBudget 约束，只创建单瓦片缓冲而非全帧 RGBA', async () => {
     const decodedByteLengths: number[] = []
     const decoder: SourcePyramidTileDecoder = async (sourceRequest) => {

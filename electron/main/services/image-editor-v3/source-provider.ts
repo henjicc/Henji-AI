@@ -3,11 +3,7 @@ import os from 'node:os'
 import path from 'node:path'
 
 import { loadSharp } from '../image/sharp-loader'
-import {
-  AbortableSingleflight,
-  imageSourceAbortError,
-  throwIfImageSourceAborted,
-} from './abortable-singleflight'
+import { AbortableSingleflight, throwIfImageSourceAborted } from './abortable-singleflight'
 import {
   IMAGE_EDIT_TILE_SIZE,
   type FastSourceProxy,
@@ -20,8 +16,9 @@ import {
   type SourceTile,
   type SourceTileRequest,
 } from './contracts'
-import { DerivedDiskCache, type DerivedCacheAddress } from './derived-disk-cache'
+import { DerivedDiskCache } from './derived-disk-cache'
 import type { ContentAddressedResourceStore } from './resource-store'
+import { readFastSourceProxy } from './source-fast-proxy'
 import {
   cloneSourceMetadata,
   readNclxCicp,
@@ -34,6 +31,7 @@ import {
   orientedSourceDimensions,
 } from './source-orientation'
 import { ManagedSourcePyramid, type SourcePyramidTileLayout } from './source-pyramid'
+import { runSharpOperation } from './sharp-operation'
 
 const MAX_MIP_LEVEL = 30
 const MAX_TILE_HALO = 2048
@@ -41,17 +39,12 @@ const MAX_SOURCE_ICC_PROFILE_BYTES = 16 * 1024 * 1024
 /** 覆盖 200MP 目标并给极端长宽比留余量，同时拒绝无界解压。 */
 export const IMAGE_EDIT_MAX_SOURCE_PIXELS = 1_000_000_000
 export const IMAGE_EDIT_METADATA_CACHE_LIMIT = 256
-const SOURCE_PROXY_CACHE_VERSION = 2
 
 export interface SharpSourceProviderOptions {
   metadataCacheLimit?: number
   sharpLoader?: typeof loadSharp
   /** null 仅供故障隔离和精确测试；默认使用资源库同级的 8GiB 派生缓存。 */
   derivedCache?: DerivedDiskCache | null
-}
-
-interface DestroyableSharpPipeline {
-  destroy(error?: Error): unknown
 }
 
 function positiveInteger(value: number, name: string): number {
@@ -62,29 +55,6 @@ function positiveInteger(value: number, name: string): number {
 function normalizeRawLittleEndian(data: Buffer, bitDepth: 8 | 16 | 32): Buffer {
   if (os.endianness() === 'LE' || bitDepth === 8) return data
   return bitDepth === 16 ? data.swap16() : data.swap32()
-}
-
-async function runSharpOperation<T>(
-  pipeline: DestroyableSharpPipeline,
-  signal: AbortSignal | undefined,
-  operation: () => Promise<T>,
-): Promise<T> {
-  if (signal?.aborted) {
-    pipeline.destroy()
-    throw imageSourceAbortError()
-  }
-  const onAbort = (): void => {
-    pipeline.destroy(imageSourceAbortError())
-  }
-  signal?.addEventListener('abort', onAbort, { once: true })
-  try {
-    return await operation()
-  } catch (error) {
-    if (signal?.aborted) throw imageSourceAbortError()
-    throw error
-  } finally {
-    signal?.removeEventListener('abort', onAbort)
-  }
 }
 
 function describeMetadataPyramid(metadata: SourceImageMetadata): SourcePyramidDescriptor {
@@ -209,53 +179,17 @@ export class SharpSourceProvider implements SourceProvider {
     maxDimension: number,
     signal: AbortSignal,
   ): Promise<FastSourceProxy> {
-    const sharp = await this.sharpLoader()
-    const address: DerivedCacheAddress = {
-      kind: 'proxy',
-      key: `v${SOURCE_PROXY_CACHE_VERSION}:${resourceId}:${maxDimension}:webp82-sdr`,
-    }
-    if (this.derivedCache) {
-      try {
-        const cached = await this.derivedCache.get(address)
-        throwIfImageSourceAborted(signal)
-        if (cached) {
-          const metadataPipeline = sharp(cached, { failOn: 'warning' })
-          const metadata = await runSharpOperation(metadataPipeline, signal, () => metadataPipeline.metadata())
-          if (metadata.width && metadata.height) {
-            return { resourceId, width: metadata.width, height: metadata.height, format: 'webp', bytes: cached }
-          }
-          await this.derivedCache.invalidate(address)
-        }
-      } catch {
-        throwIfImageSourceAborted(signal)
-        await this.derivedCache.invalidate(address).catch(() => undefined)
-      }
-    }
-    const pipeline = sharp(this.resources.getFilesystemPath(resourceId), {
-      limitInputPixels: IMAGE_EDIT_MAX_SOURCE_PIXELS,
-      sequentialRead: true,
-      failOn: 'warning',
-    })
-      .autoOrient()
-      .resize({
-        width: maxDimension,
-        height: maxDimension,
-        fit: 'inside',
-        withoutEnlargement: true,
-        fastShrinkOnLoad: true,
-      })
-      .toColourspace('srgb')
-      .webp({ quality: 82, effort: 2 })
-    const { data, info } = await runSharpOperation(
-      pipeline,
+    return readFastSourceProxy({
+      resourceId,
+      sourcePath: this.resources.getFilesystemPath(resourceId),
+      metadata: await this.readMetadataWithinLease(resourceId, signal),
+      maxDimension,
+      maximumInputPixels: IMAGE_EDIT_MAX_SOURCE_PIXELS,
+      sharpLoader: this.sharpLoader,
+      cache: this.derivedCache,
+      pyramid: this.pyramid,
       signal,
-      () => pipeline.toBuffer({ resolveWithObject: true }),
-    )
-    throwIfImageSourceAborted(signal)
-    if (this.derivedCache && data.byteLength <= this.derivedCache.maxEntryBytes) {
-      await this.derivedCache.put(address, data).catch(() => undefined)
-    }
-    return { resourceId, width: info.width, height: info.height, format: 'webp', bytes: data }
+    })
   }
 
   async readTile(request: SourceTileRequest): Promise<SourceTile> {

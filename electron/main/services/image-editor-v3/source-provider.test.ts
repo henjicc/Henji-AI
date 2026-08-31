@@ -89,22 +89,51 @@ describe('SharpSourceProvider', () => {
     expect(proxy.bytes.byteLength).toBeGreaterThan(0)
   })
 
-  it('快速代理按内容哈希和尺寸写入共享派生缓存，热请求不重复编码', async () => {
+  it('快速代理同步种下粗 mip 链，热代理和后续瓦片不重复解码原图', async () => {
     const encoded = await sharp({
-      create: { width: 128, height: 64, channels: 3, background: { r: 20, g: 60, b: 120 } },
+      create: { width: 1200, height: 600, channels: 3, background: { r: 20, g: 60, b: 120 } },
     }).png().toBuffer()
     const resource = await store.putBuffer(encoded, { mediaType: 'image/png' })
     const cache = new DerivedDiskCache(path.join(rootDir, 'derived-cache'), 16 * 1024 * 1024)
     const put = vi.spyOn(cache, 'put')
     const get = vi.spyOn(cache, 'get')
-    const provider = new SharpSourceProvider(store, { derivedCache: cache })
+    type LoadedSharp = Awaited<ReturnType<typeof loadSharp>>
+    const realSharp = await loadSharp()
+    const sourceInputs: string[] = []
+    const invoke = realSharp as unknown as (
+      input: unknown,
+      options?: unknown,
+    ) => ReturnType<LoadedSharp>
+    const sharpFactory = ((input: unknown, options?: unknown) => {
+      if (typeof input === 'string') sourceInputs.push(input)
+      return invoke(input, options)
+    }) as unknown as LoadedSharp
+    const sharpLoader = vi.fn(async () => sharpFactory)
+    const provider = new SharpSourceProvider(store, { derivedCache: cache, sharpLoader })
 
-    const cold = await provider.readFastProxy(resource.id, 64)
-    const hot = await provider.readFastProxy(resource.id, 64)
+    const cold = await provider.readFastProxy(resource.id, 512)
+    const writesAfterCold = put.mock.calls.length
+    expect(sourceInputs).toHaveLength(3)
+    const hot = await provider.readFastProxy(resource.id, 512)
 
     expect(hot.bytes.equals(cold.bytes)).toBe(true)
-    expect(get).toHaveBeenCalledTimes(2)
-    expect(put).toHaveBeenCalledOnce()
+    expect(get.mock.calls.filter(([address]) => address.kind === 'proxy')).toHaveLength(2)
+    expect(put.mock.calls.filter(([address]) => address.kind === 'proxy')).toHaveLength(1)
+    expect(put.mock.calls.filter(([address]) => address.kind === 'pyramid').length).toBeGreaterThan(0)
+    expect(put).toHaveBeenCalledTimes(writesAfterCold)
+    const proxyAddress = put.mock.calls.find(([address]) => address.kind === 'proxy')?.[0]
+    expect(proxyAddress).toBeDefined()
+    await cache.invalidate(proxyAddress!)
+    const sourceReadsBeforeProxyRebuild = sourceInputs.length
+    const rebuilt = await provider.readFastProxy(resource.id, 512)
+    expect(rebuilt.bytes.equals(cold.bytes)).toBe(true)
+    expect(sourceInputs).toHaveLength(sourceReadsBeforeProxyRebuild)
+    const sharpLoadsBeforeTile = sharpLoader.mock.calls.length
+    const coarse = await provider.readTile({
+      resourceId: resource.id, mip: 2, tileX: 0, tileY: 0,
+    })
+    expect(coarse).toMatchObject({ width: 300, height: 150, bitDepth: 8 })
+    expect(sharpLoader).toHaveBeenCalledTimes(sharpLoadsBeforeTile)
   })
 
   it('16 位权威源默认返回 ushort 瓦片，不静默量化到 8 位', async () => {
