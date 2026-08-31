@@ -14,6 +14,7 @@ import {
   IMAGE_EDITOR_PREVIEW_STABLE_MAX_EDGE_V3,
   projectImageEditorPreviewDocumentV3,
 } from './previewDocumentV3'
+import { useImageEditorDisposableV3 } from './useImageEditorDisposableV3'
 
 const logger = createLogger('image_editor_v3.preview')
 const EMPTY_RESOURCE_DESCRIPTORS: readonly ImageEditorV3ResourceDescriptor[] = []
@@ -45,7 +46,7 @@ export function useManagedImageEditorPreviewV3(
     rendering: enabled,
   })
 
-  useEffect(() => () => client.dispose(), [client])
+  useImageEditorDisposableV3(client)
 
   useEffect(() => {
     setState((current) => {
@@ -90,52 +91,55 @@ export function useManagedImageEditorPreviewV3(
       : IMAGE_EDITOR_PREVIEW_STABLE_MAX_EDGE_V3
     setState((current) => ({ ...current, rendering: true }))
     let pressureDiagnostic: string | null = null
-    void client.render({ document, quality, maxDimension, resourceDescriptors }).catch((error: unknown) => {
-      if (
-        error instanceof ImageEditorResourcePressureErrorV3
-        && error.recovery === 'lower-mip'
-        && maxDimension > IMAGE_EDITOR_PREVIEW_DRAFT_MAX_EDGE_V3
-      ) {
-        pressureDiagnostic = error.message
-        return client.render({
-          document,
-          quality: 'draft',
-          maxDimension: IMAGE_EDITOR_PREVIEW_DRAFT_MAX_EDGE_V3,
-          resourceDescriptors,
-        })
-      }
-      throw error
-    }).then((result) => {
-      if (!acceptsResult) {
-        result.release()
-        return
-      }
-      setState((current) => {
-        if (current.result !== result) current.result?.release()
-        const diagnostics = [
-          ...(pressureDiagnostic ? [pressureDiagnostic] : []),
-          ...result.diagnostics,
-        ]
-        return {
-          result,
-          resultDocumentId: snapshot.document.id,
-          resultRevision: snapshot.document.revision,
-          diagnostic: diagnostics.length > 0 ? diagnostics.join('\n') : null,
-          rendering: false,
+    queueMicrotask(() => {
+      if (!acceptsResult) return
+      void client.render({ document, quality, maxDimension, resourceDescriptors }).catch((error: unknown) => {
+        if (
+          error instanceof ImageEditorResourcePressureErrorV3
+          && error.recovery === 'lower-mip'
+          && maxDimension > IMAGE_EDITOR_PREVIEW_DRAFT_MAX_EDGE_V3
+        ) {
+          pressureDiagnostic = error.message
+          return client.render({
+            document,
+            quality: 'draft',
+            maxDimension: IMAGE_EDITOR_PREVIEW_DRAFT_MAX_EDGE_V3,
+            resourceDescriptors,
+          })
         }
+        throw error
+      }).then((result) => {
+        if (!acceptsResult) {
+          result.release()
+          return
+        }
+        setState((current) => {
+          if (current.result !== result) current.result?.release()
+          const diagnostics = [
+            ...(pressureDiagnostic ? [pressureDiagnostic] : []),
+            ...result.diagnostics,
+          ]
+          return {
+            result,
+            resultDocumentId: snapshot.document.id,
+            resultRevision: snapshot.document.revision,
+            diagnostic: diagnostics.length > 0 ? diagnostics.join('\n') : null,
+            rendering: false,
+          }
+        })
+      }).catch((error: unknown) => {
+        if (!acceptsResult || error instanceof ImageEditorPreviewSupersededErrorV3) return
+        const message = error instanceof Error ? error.message : String(error)
+        logger.warn('图片编辑 V3 预览失败，保留上一稳定帧', {
+          event: 'image_editor_v3.preview.failed',
+          context: {
+            documentId: snapshot.document.id,
+            revision: snapshot.document.revision,
+            message,
+          },
+        })
+        setState((current) => ({ ...current, diagnostic: message, rendering: false }))
       })
-    }).catch((error: unknown) => {
-      if (!acceptsResult || error instanceof ImageEditorPreviewSupersededErrorV3) return
-      const message = error instanceof Error ? error.message : String(error)
-      logger.warn('图片编辑 V3 预览失败，保留上一稳定帧', {
-        event: 'image_editor_v3.preview.failed',
-        context: {
-          documentId: snapshot.document.id,
-          revision: snapshot.document.revision,
-          message,
-        },
-      })
-      setState((current) => ({ ...current, diagnostic: message, rendering: false }))
     })
     return () => {
       acceptsResult = false

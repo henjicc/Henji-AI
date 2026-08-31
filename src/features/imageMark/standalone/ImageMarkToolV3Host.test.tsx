@@ -1,6 +1,7 @@
 /** @vitest-environment jsdom */
 
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { StrictMode } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { NotificationProvider } from '@/contexts/NotificationContext'
@@ -107,28 +108,30 @@ function renderHost(options: {
   onFallback?: () => void
   initialSession?: ImageEditSessionReferenceV3
   onSessionReferenceChange?: (session: ImageEditSessionReferenceV3) => void
+  strictMode?: boolean
 } = {}) {
   const onFallback = options.onFallback ?? vi.fn()
+  const host = (
+    <NotificationProvider>
+      <div style={{ width: 1_200, height: 800 }}>
+        <ImageMarkToolV3Host
+          sourceImageUrl="/private/tmp/source.png"
+          sourceName="source.png"
+          sourceSessionKey={1}
+          initialDocument={createEmptyImageEditDocument()}
+          initialSession={options.initialSession}
+          onSessionReferenceChange={options.onSessionReferenceChange}
+          onOpenFile={() => undefined}
+          onPasteFromClipboard={() => undefined}
+          onCreateBlank={() => undefined}
+          onFallback={onFallback}
+        />
+      </div>
+    </NotificationProvider>
+  )
   return {
     onFallback,
-    ...render(
-      <NotificationProvider>
-        <div style={{ width: 1_200, height: 800 }}>
-          <ImageMarkToolV3Host
-            sourceImageUrl="/private/tmp/source.png"
-            sourceName="source.png"
-            sourceSessionKey={1}
-            initialDocument={createEmptyImageEditDocument()}
-            initialSession={options.initialSession}
-            onSessionReferenceChange={options.onSessionReferenceChange}
-            onOpenFile={() => undefined}
-            onPasteFromClipboard={() => undefined}
-            onCreateBlank={() => undefined}
-            onFallback={onFallback}
-          />
-        </div>
-      </NotificationProvider>,
-    ),
+    ...render(options.strictMode ? <StrictMode>{host}</StrictMode> : host),
   }
 }
 
@@ -241,6 +244,15 @@ describe('ImageMarkToolV3Host', () => {
 
     expect(screen.queryByRole('button', { name: '保存可编辑文件…' })).toBeNull()
     expect(mocks.savePackage).not.toHaveBeenCalled()
+  })
+
+  it('StrictMode 生命周期重放只发起一次 PNG 导入和初始保存', async () => {
+    const rendered = renderHost({ strictMode: true })
+
+    await waitFor(() => expect(rendered.container.querySelector('[data-image-editor-v3]')).toBeTruthy())
+    expect(mocks.ingest).toHaveBeenCalledTimes(1)
+    expect(mocks.save).toHaveBeenCalledTimes(1)
+    expect(rendered.container.querySelector('[data-image-editor-v3-host-state="failed"]')).toBeNull()
   })
 
   it('导入失败时提供重试和显式兼容回退，不伪造旧文档结果', async () => {

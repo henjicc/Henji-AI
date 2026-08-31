@@ -138,6 +138,11 @@ export function useImageMarkToolV3Host(
     packageThumbnailRef.current = null
 
     void (async () => {
+      // StrictMode 会同步执行一次 setup → cleanup → setup。把真正的文件导入推迟到
+      // 微任务，第一轮 cleanup 就能在 IPC 发出前将其标记为失效，避免两个导入请求
+      // 撞上主进程的单并发门禁并把正常 PNG 误判为打开失败。
+      await Promise.resolve()
+      if (!active) return
       let sourceKind = 'unsupported'
       try {
         sourceKind = initialSession ? 'managed-session' : 'unsupported'
@@ -239,7 +244,7 @@ export function useImageMarkToolV3Host(
         })
       } catch (error) {
         if (!active || (error instanceof Error && error.name === 'AbortError')) return
-        logger.error('图片编辑 V3 工具箱宿主初始化失败', {
+        logger.error('图片编辑 V3 工具箱宿主初始化失败', error, {
           event: 'image_editor_v3.toolbox.bootstrap.failed',
           context: {
             sourceKind,
@@ -284,7 +289,7 @@ export function useImageMarkToolV3Host(
     if (!queue || !snapshot) return
     queue.enqueue(snapshot)
     void queue.flush().catch((error: unknown) => {
-      logger.error('图片编辑 V3 工具箱宿主离开前保存失败', {
+      logger.error('图片编辑 V3 工具箱宿主离开前保存失败', error, {
         event: 'image_editor_v3.toolbox.unmount_save.failed',
         context: {
           documentId: snapshot.document.id,
@@ -322,7 +327,7 @@ export function useImageMarkToolV3Host(
     autosaveTimerRef.current = setTimeout(() => {
       autosaveTimerRef.current = null
       void flushPending().catch((error: unknown) => {
-        logger.error('图片编辑 V3 工具箱宿主自动保存失败', {
+        logger.error('图片编辑 V3 工具箱宿主自动保存失败', error, {
           event: 'image_editor_v3.toolbox.autosave.failed',
           context: {
             documentId: snapshot.document.id,
