@@ -8,7 +8,10 @@ import type { OutputTile, TileOutputDescription, TileOutputSink } from './contra
 import { ImageEditDocumentRepository } from './document-repository'
 import { ImageExportCapabilityError, type RasterExportOptions } from './export'
 import { RasterExportSessionManager } from './raster-export-session'
-import { createImageEditSourceFingerprint } from './raster-export-snapshot'
+import {
+  assertDocumentColorMatchesRasterExport,
+  createImageEditSourceFingerprint,
+} from './raster-export-snapshot'
 import { ContentAddressedResourceStore } from './resource-store'
 
 class TestSink implements TileOutputSink {
@@ -301,37 +304,92 @@ describe('RasterExportSessionManager', () => {
     expect(sinkFactory).not.toHaveBeenCalled()
   })
 
-  it('严格匹配的 16-bit Rec.2020 PQ 快照可创建 HDR AVIF 会话', async () => {
-    const snapshot = await createSnapshot({ hdr: true })
-    const sinks: TestSink[] = []
-    const manager = createManager(sinks)
-    const hdrDescription = {
-      ...description,
-      bitDepth: 16 as const,
-      colorSpace: 'rec2020' as const,
-      transferFunction: 'pq' as const,
-      cicp: {
-        colorPrimaries: 9,
-        transferCharacteristics: 16,
-        matrixCoefficients: 9,
-        fullRange: false,
+  it.each([16, 'float16', 'float32'] as const)(
+    '严格匹配的 %s Rec.2020 PQ 快照可量化为 16-bit HDR AVIF 会话',
+    async (bitDepth) => {
+      const snapshot = await createSnapshot({
+        color: {
+          workingSpace: 'rec2020', bitDepth, transferFunction: 'pq',
+          hdrMetadata: {
+            standard: 'pq',
+            referenceWhiteNits: 250,
+            cicp: {
+              colorPrimaries: 9,
+              transferCharacteristics: 16,
+              matrixCoefficients: 9,
+              fullRange: false,
+            },
+          },
+          iccProfileResourceId: null,
+        },
+      })
+      const sinks: TestSink[] = []
+      const manager = createManager(sinks)
+      const hdrDescription = {
+        ...description,
+        bitDepth: 16 as const,
+        colorSpace: 'rec2020' as const,
+        transferFunction: 'pq' as const,
+        cicp: {
+          colorPrimaries: 9,
+          transferCharacteristics: 16,
+          matrixCoefficients: 9,
+          fullRange: false,
+        },
+        hdrMetadata: {},
+      }
+
+      const started = await manager.start({
+        ownerId: 5,
+        targetPath: path.join(rootDir, 'hdr.avif'),
+        documentRef: 'image-edit-v3:export-document',
+        revision: 4,
+        sourceFingerprint: createImageEditSourceFingerprint(snapshot),
+        format: 'avif10',
+        description: hdrDescription,
+      })
+
+      expect(started.format).toBe('avif10')
+      expect(sinks[0]?.description).toMatchObject(hdrDescription)
+      await expect(manager.cancel(5, started.sessionId)).resolves.toBe(true)
+    },
+  )
+
+  it('继续拒绝 8-bit HDR 权威文档，即使 renderer 伪装成 16-bit AVIF 瓦片', () => {
+    const invalidDocument = {
+      color: {
+        workingSpace: 'rec2020', bitDepth: 8, transferFunction: 'pq',
+        hdrMetadata: {
+          standard: 'pq',
+          referenceWhiteNits: 203,
+          cicp: {
+            colorPrimaries: 9,
+            transferCharacteristics: 16,
+            matrixCoefficients: 9,
+            fullRange: false,
+          },
+        },
+        iccProfileResourceId: null,
       },
-      hdrMetadata: {},
     }
 
-    const started = await manager.start({
-      ownerId: 5,
-      targetPath: path.join(rootDir, 'hdr.avif'),
-      documentRef: 'image-edit-v3:export-document',
-      revision: 4,
-      sourceFingerprint: createImageEditSourceFingerprint(snapshot),
-      format: 'avif10',
-      description: hdrDescription,
-    })
-
-    expect(started.format).toBe('avif10')
-    expect(sinks[0]?.description).toMatchObject(hdrDescription)
-    await expect(manager.cancel(5, started.sessionId)).resolves.toBe(true)
+    expect(() => assertDocumentColorMatchesRasterExport(
+      invalidDocument,
+      'avif10',
+      {
+        ...description,
+        bitDepth: 16,
+        colorSpace: 'rec2020',
+        transferFunction: 'pq',
+        cicp: {
+          colorPrimaries: 9,
+          transferCharacteristics: 16,
+          matrixCoefficients: 9,
+          fullRange: false,
+        },
+        hdrMetadata: {},
+      },
+    )).toThrow(expect.objectContaining({ code: 'HDR_METADATA_UNSUPPORTED' }))
   })
 
   it('会话只允许创建它的渲染器写入和取消', async () => {

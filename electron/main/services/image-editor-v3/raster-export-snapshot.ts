@@ -72,9 +72,12 @@ export function assertDocumentColorMatchesRasterExport(
 
   const isHdr = transferFunction === 'pq' || transferFunction === 'hlg'
   if (isHdr) {
+    const hasHdrSourcePrecision = bitDepth === 16
+      || bitDepth === 'float16'
+      || bitDepth === 'float32'
     if ((format !== 'avif10' && format !== 'avif12')
       || workingSpace !== 'rec2020'
-      || bitDepth !== 16
+      || !hasHdrSourcePrecision
       || !isRecord(hdrMetadata)
       || hdrMetadata.standard !== transferFunction
       || typeof hdrMetadata.referenceWhiteNits !== 'number'
@@ -84,7 +87,7 @@ export function assertDocumentColorMatchesRasterExport(
       throw new ImageExportCapabilityError(
         'HDR_METADATA_UNSUPPORTED',
         format,
-        'HDR AVIF requires a 16-bit Rec.2020 document with matching PQ/HLG metadata',
+        'HDR AVIF requires a 16-bit or floating-point Rec.2020 document with matching PQ/HLG metadata',
       )
     }
     const cicp = hdrMetadata.cicp

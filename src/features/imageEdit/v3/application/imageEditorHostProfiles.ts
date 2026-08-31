@@ -35,6 +35,7 @@ export type ImageEditorReadinessReasonKeyV3 =
   | 'imageEditor.v3.readiness.reasons.exportDocumentNotReady'
   | 'imageEditor.v3.readiness.reasons.viewerDocumentNotReady'
   | 'imageEditor.v3.readiness.reasons.exportHdrMetadata'
+  | 'imageEditor.v3.readiness.reasons.exportHdrPixelLimit'
   | 'imageEditor.v3.readiness.reasons.exportBitDepth'
   | 'imageEditor.v3.readiness.reasons.exportInvalidIcc';
 

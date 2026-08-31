@@ -14,8 +14,11 @@ import {
   type ImageEditRenderPlanNode,
   type ImageEditResourceBudget,
 } from '@/core/imageEdit/v3'
-import type { ImageEditorV3RasterExportDescription } from '@/platform/contracts/imageEditorV3'
 import { rasterizeImageEditorV3ExportAnnotations } from './annotations'
+import {
+  resolveImageEditorV3ExportReferenceWhiteNits,
+  resolveImageEditorV3ExportSourceBitDepth,
+} from './capabilities'
 import type {
   ImageEditorV3ExportRenderDependencies,
   ImageEditorV3ExportRenderRegion,
@@ -63,7 +66,7 @@ function transparentRegion(
     new Float32Array(region.width * region.height * 4),
     document.color.workingSpace,
     document.color.transferFunction,
-    203,
+    resolveImageEditorV3ExportReferenceWhiteNits(document),
   )
 }
 
@@ -122,7 +125,6 @@ function dependencyPlan(
 export async function buildImageEditorV3DiffusionAnalyses(
   document: ImageEditDocumentV3,
   plan: ImageEditRenderPlan,
-  description: ImageEditorV3RasterExportDescription,
   signal: AbortSignal,
   dependencies: ImageEditorV3ExportRenderDependencies,
   budget: ImageEditResourceBudget,
@@ -131,6 +133,8 @@ export async function buildImageEditorV3DiffusionAnalyses(
   const diffusionNodes = plan.nodes.filter((node) => node.definitionId === 'effect.diffusion')
   if (diffusionNodes.length === 0) return { analyses: new Map(), release: () => undefined }
   const mip = analysisMip(document)
+  const sourceBitDepth = resolveImageEditorV3ExportSourceBitDepth(document)
+  const referenceWhiteNits = resolveImageEditorV3ExportReferenceWhiteNits(document)
   const size = mipSize(document.geometry, mip)
   const region: ImageEditorV3ExportRenderRegion = { x: 0, y: 0, ...size }
   const analyses = new Map<string, ImageEditorV3DiffusionAnalysis>()
@@ -163,9 +167,10 @@ export async function buildImageEditorV3DiffusionAnalyses(
             resourceId,
             requestedRegion,
             { width: document.geometry.width, height: document.geometry.height },
-            description.bitDepth,
+            sourceBitDepth,
             document.color.workingSpace,
             document.color.transferFunction,
+            referenceWhiteNits,
             signal,
             dependencies,
             mip,

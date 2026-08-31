@@ -45,6 +45,7 @@ function sourceWorkingSpace(): 'srgb' {
 function decodeSourceTile(
   tile: ImageEditorV3SourceTile,
   targetWorkingSpace: ImageEditWorkingSpaceV3,
+  referenceWhiteNits: number,
 ): Float32PremultipliedRgbaTile {
   return decodeInterleavedRgbaSourceTileV3({
     width: tile.width,
@@ -56,6 +57,7 @@ function decodeSourceTile(
     byteOrder: tile.byteOrder,
     colorSpace: sourceWorkingSpace(),
     transferFunction: tile.transferFunction,
+    referenceWhiteNits,
     alphaMode: tile.alphaMode,
     pixels: tile.pixels,
   }, targetWorkingSpace)
@@ -85,6 +87,28 @@ function validateReturnedTile(
   requested: ImageEditorV3ExportSourceTileRequest,
   tile: ImageEditorV3SourceTile,
 ): void {
+  const expected = requested.bitDepth === 32
+    ? {
+        sampleFormat: 'float' as const,
+        numericRange: 'scene-linear' as const,
+        colorSpace: 'scrgb' as const,
+        transferFunction: 'linear' as const,
+      }
+    : requested.bitDepth === 16
+      ? {
+          sampleFormat: 'uint' as const,
+          numericRange: 'unorm16' as const,
+          colorSpace: 'srgb' as const,
+          transferFunction: 'srgb' as const,
+        }
+      : {
+          sampleFormat: 'uint' as const,
+          numericRange: 'unorm8' as const,
+          colorSpace: 'srgb' as const,
+          transferFunction: 'srgb' as const,
+        }
+  const rowStride = tile.width * 4 * (requested.bitDepth / 8)
+  const byteLength = rowStride * tile.height
   if (
     tile.resourceRef !== requested.resourceRef
     || tile.mip !== requested.mip
@@ -92,9 +116,27 @@ function validateReturnedTile(
     || tile.tileY !== requested.tileY
     || tile.halo !== requested.halo
     || tile.bitDepth !== requested.bitDepth
+    || tile.sampleFormat !== expected.sampleFormat
+    || tile.numericRange !== expected.numericRange
+    || tile.colorSpace !== expected.colorSpace
+    || tile.transferFunction !== expected.transferFunction
     || tile.channels !== 4
     || tile.alphaMode !== 'straight'
-    || tile.pixels.byteLength < tile.rowStride * tile.height
+    || tile.byteOrder !== 'little-endian'
+    || tile.orientationApplied !== true
+    || !Number.isSafeInteger(tile.width)
+    || tile.width < 1
+    || !Number.isSafeInteger(tile.height)
+    || tile.height < 1
+    || !Number.isSafeInteger(tile.originX)
+    || tile.originX < 0
+    || !Number.isSafeInteger(tile.originY)
+    || tile.originY < 0
+    || !Number.isSafeInteger(rowStride)
+    || !Number.isSafeInteger(byteLength)
+    || tile.rowStride !== rowStride
+    || !(tile.pixels instanceof ArrayBuffer)
+    || tile.pixels.byteLength !== byteLength
   ) throw new Error(`图片源瓦片返回了不兼容的像素契约：${requested.resourceRef}`)
 }
 
@@ -105,6 +147,7 @@ export async function loadImageEditorV3SourceRegion(
   bitDepth: 8 | 16 | 32,
   targetWorkingSpace: ImageEditWorkingSpaceV3,
   targetTransferFunction: ImageEditTransferFunctionV3,
+  referenceWhiteNits: number,
   signal: AbortSignal,
   dependencies: ImageEditorV3ExportRenderDependencies,
   mip = 0,
@@ -128,7 +171,7 @@ export async function loadImageEditorV3SourceRegion(
     const tile = await readTile(request, signal)
     validateReturnedTile(request, tile)
     copyIntersection(
-      decodeSourceTile(tile, targetWorkingSpace),
+      decodeSourceTile(tile, targetWorkingSpace, referenceWhiteNits),
       tile.originX,
       tile.originY,
       output,
@@ -142,7 +185,7 @@ export async function loadImageEditorV3SourceRegion(
     output,
     targetWorkingSpace,
     targetTransferFunction,
-    203,
+    referenceWhiteNits,
   )
 }
 

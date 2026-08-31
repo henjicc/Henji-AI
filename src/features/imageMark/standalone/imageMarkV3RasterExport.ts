@@ -9,12 +9,13 @@ import type {
   ImageEditorCapabilityReadinessV3,
   ImageEditorReadinessReasonKeyV3,
 } from '@/features/imageEdit/v3/application/imageEditorHostProfiles'
-import type {
-  ImageEditorV3DialogResult,
-  ImageEditorV3DocumentSnapshot,
-  ImageEditorV3RasterExportDescription,
-  ImageEditorV3RasterExportFormat,
-  ImageEditorV3RasterExportResult,
+import {
+  IMAGE_EDITOR_V3_HDR_AVIF_MAX_PIXELS,
+  type ImageEditorV3DialogResult,
+  type ImageEditorV3DocumentSnapshot,
+  type ImageEditorV3RasterExportDescription,
+  type ImageEditorV3RasterExportFormat,
+  type ImageEditorV3RasterExportResult,
 } from '@/platform/contracts/imageEditorV3'
 
 const EXPORT_TILE_SIZE = 512
@@ -39,11 +40,21 @@ export interface ImageMarkV3RasterExportSpec {
   suggestedName: string
 }
 
+class ImageMarkV3RasterExportContractError extends Error {
+  constructor(readonly reasonKey: ImageEditorReadinessReasonKeyV3) {
+    super(reasonKey)
+    this.name = 'ImageMarkV3RasterExportContractError'
+  }
+}
+
 const EIGHT_BIT_SDR_FORMATS = [
   'png8', 'jpeg', 'webp', 'tiff8', 'bigtiff',
 ] as const satisfies readonly ImageEditorV3RasterExportFormat[]
 const SIXTEEN_BIT_SDR_FORMATS = [
   'png16', 'tiff16', 'avif10', 'avif12', 'bigtiff',
+] as const satisfies readonly ImageEditorV3RasterExportFormat[]
+const HDR_AVIF_FORMATS = [
+  'avif10', 'avif12',
 ] as const satisfies readonly ImageEditorV3RasterExportFormat[]
 
 export function imageMarkV3RasterExportExtension(
@@ -62,14 +73,69 @@ function documentHasHdrMetadata(document: ImageEditDocumentV3): boolean {
     || document.color.hdrMetadata !== null
 }
 
+function isHdrAvifFormat(format: ImageEditorV3RasterExportFormat): boolean {
+  return format === 'avif10' || format === 'avif12'
+}
+
+function hasValidHdrAvifDocumentContract(document: ImageEditDocumentV3): boolean {
+  const transfer = document.color.transferFunction
+  const metadata = document.color.hdrMetadata
+  const expectedTransfer = transfer === 'pq' ? 16 : transfer === 'hlg' ? 18 : null
+  const hasHdrPrecision = document.color.bitDepth === 16
+    || document.color.bitDepth === 'float16'
+    || document.color.bitDepth === 'float32'
+  return expectedTransfer !== null
+    && metadata !== null
+    && metadata.standard === transfer
+    && document.color.workingSpace === 'rec2020'
+    && hasHdrPrecision
+    && document.color.iccProfileResourceId === null
+    && metadata.masteringDisplay === undefined
+    && metadata.contentLight === undefined
+    && metadata.cicp.colorPrimaries === 9
+    && metadata.cicp.transferCharacteristics === expectedTransfer
+    && metadata.cicp.matrixCoefficients === 9
+    && metadata.cicp.fullRange === false
+}
+
+function assertHdrAvifDocumentContract(document: ImageEditDocumentV3): void {
+  if (hasValidHdrAvifDocumentContract(document)) return
+  throw new ImageMarkV3RasterExportContractError(
+    'imageEditor.v3.readiness.reasons.exportHdrMetadata',
+  )
+}
+
+function hdrAvifOutputWithinLimit(document: ImageEditDocumentV3): boolean {
+  const geometry = resolveImageEditorV3ExportGeometry(document)
+  return geometry.outputWidth <= Math.floor(
+    IMAGE_EDITOR_V3_HDR_AVIF_MAX_PIXELS / geometry.outputHeight,
+  )
+}
+
+function assertHdrAvifOutputWithinLimit(
+  geometry: { outputWidth: number; outputHeight: number },
+): void {
+  if (geometry.outputWidth <= Math.floor(
+    IMAGE_EDITOR_V3_HDR_AVIF_MAX_PIXELS / geometry.outputHeight,
+  )) return
+  throw new ImageMarkV3RasterExportContractError(
+    'imageEditor.v3.readiness.reasons.exportHdrPixelLimit',
+  )
+}
+
 /**
  * 只暴露当前链路能无损表达的格式。线性整数文档与浮点文档均保留到 BigTIFF，
- * PQ/HLG/HDR 元数据在任何格式下都继续显式阻断。
+ * PQ/HLG 仅开放给带严格 Rec.2020 CICP 的 AVIF；浮点权威文档在编码边界
+ * 显式量化为 16-bit renderer tiles，SDR 浮点仍只交给 BigTIFF。
  */
 export function listImageMarkV3RasterExportFormats(
   document: ImageEditDocumentV3,
 ): readonly ImageEditorV3RasterExportFormat[] {
-  if (documentHasHdrMetadata(document)) return []
+  if (documentHasHdrMetadata(document)) {
+    return hasValidHdrAvifDocumentContract(document) && hdrAvifOutputWithinLimit(document)
+      ? HDR_AVIF_FORMATS
+      : []
+  }
   if (document.color.bitDepth === 'float16' || document.color.bitDepth === 'float32') {
     return ['bigtiff']
   }
@@ -86,13 +152,6 @@ export function isImageMarkV3RasterExportAbort(error: unknown): boolean {
 export interface ImageMarkV3RasterExportFailureReason {
   reasonKey?: ImageEditorReadinessReasonKeyV3
   reason?: string
-}
-
-class ImageMarkV3RasterExportContractError extends Error {
-  constructor(readonly reasonKey: ImageEditorReadinessReasonKeyV3) {
-    super(reasonKey)
-    this.name = 'ImageMarkV3RasterExportContractError'
-  }
 }
 
 export function resolveImageMarkV3RasterExportFailureReason(
@@ -124,9 +183,8 @@ function exportPrecision(document: ImageEditDocumentV3): {
   sampleFormat: 'uint' | 'float'
 } {
   if (documentHasHdrMetadata(document)) {
-    throw new ImageMarkV3RasterExportContractError(
-      'imageEditor.v3.readiness.reasons.exportHdrMetadata',
-    )
+    assertHdrAvifDocumentContract(document)
+    return { bitDepth: 16, sampleFormat: 'uint' }
   }
   if (document.color.bitDepth === 8) return { bitDepth: 8, sampleFormat: 'uint' }
   if (document.color.bitDepth === 16) return { bitDepth: 16, sampleFormat: 'uint' }
@@ -139,6 +197,7 @@ function exportPrecision(document: ImageEditDocumentV3): {
 }
 
 function defaultPngFormat(document: ImageEditDocumentV3): ImageEditorV3RasterExportFormat {
+  if (documentHasHdrMetadata(document)) return 'avif10'
   return document.color.bitDepth === 16 ? 'png16' : 'png8'
 }
 
@@ -151,6 +210,16 @@ export function createImageMarkV3RasterExportSpec(
   } = {},
 ): ImageMarkV3RasterExportSpec {
   const format = options.format ?? defaultPngFormat(document)
+  const geometry = resolveImageEditorV3ExportGeometry(document)
+  if (documentHasHdrMetadata(document)) {
+    assertHdrAvifDocumentContract(document)
+    if (!isHdrAvifFormat(format)) {
+      throw new ImageMarkV3RasterExportContractError(
+        'imageEditor.v3.readiness.reasons.exportHdrMetadata',
+      )
+    }
+    assertHdrAvifOutputWithinLimit(geometry)
+  }
   const allowedFormats = listImageMarkV3RasterExportFormats(document)
   if (!allowedFormats.includes(format)) {
     exportPrecision(document)
@@ -159,9 +228,11 @@ export function createImageMarkV3RasterExportSpec(
     )
   }
   const precision = exportPrecision(document)
-  const geometry = resolveImageEditorV3ExportGeometry(document)
-  const iccProfileResourceRef = optionalResourceRef(document.color.iccProfileResourceId)
-  if (document.color.workingSpace !== 'srgb' && !iccProfileResourceRef) {
+  const hdrMetadata = documentHasHdrMetadata(document) ? document.color.hdrMetadata : null
+  const iccProfileResourceRef = hdrMetadata
+    ? null
+    : optionalResourceRef(document.color.iccProfileResourceId)
+  if (!hdrMetadata && document.color.workingSpace !== 'srgb' && !iccProfileResourceRef) {
     throw new ImageMarkV3RasterExportContractError(
       'imageEditor.v3.readiness.reasons.exportInvalidIcc',
     )
@@ -174,7 +245,7 @@ export function createImageMarkV3RasterExportSpec(
     transferFunction: document.color.transferFunction,
     alphaMode: 'straight',
     iccProfileResourceRef,
-    cicp: null,
+    cicp: hdrMetadata ? { ...hdrMetadata.cicp } : null,
     hdrMetadata: null,
   }
   return {

@@ -6,6 +6,12 @@ export type ImageEditorV3ResourceRef = `sha256:${string}`
 export type ImageEditorV3OutputRef = `henjiimg:${string}@${number}`
 export type ImageEditorV3RasterOutputRef = `image-export-v3:${string}@${number}:${ImageEditorV3RasterExportFormat}`
 
+/**
+ * 当前 FFmpeg HDR AVIF 编码器的真实内存门槛；渲染层 readiness 与主进程 admission
+ * 必须共用此值，直到有界 AVIF grid 编码替代整帧编码器。
+ */
+export const IMAGE_EDITOR_V3_HDR_AVIF_MAX_PIXELS = 9_000_000
+
 export interface ImageEditorV3DocumentReference {
   documentRef: ImageEditorV3DocumentRef
   revision: number
@@ -180,7 +186,7 @@ export type ImageEditorV3RasterExportFormat =
   | 'png16'
   | 'tiff8'
   | 'tiff16'
-  /** 当前仅支持高位深 SDR；PQ/HLG 会在主进程明确拒绝。 */
+  /** SDR 高位深，或严格 Rec.2020 CICP 的 PQ/HLG HDR AVIF。 */
   | 'avif10'
   | 'avif12'
 

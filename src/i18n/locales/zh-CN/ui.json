@@ -608,6 +608,7 @@
           "exportDocumentNotReady": "图片编辑文档尚未准备完成。",
           "viewerDocumentNotReady": "快速编辑文档尚未准备完成。",
           "exportHdrMetadata": "当前版本还不能可靠保留 HDR 元数据，已阻止降级导出为 SDR 图片。",
+          "exportHdrPixelLimit": "HDR AVIF 当前最多支持 900 万输出像素；请先裁剪图片，或等待后续的分块 AVIF 编码支持。",
           "exportBitDepth": "所选格式不能保留当前文档精度，已阻止静默降位导出。",
           "exportInvalidIcc": "图片编辑 ICC 资源引用无效。"
         }

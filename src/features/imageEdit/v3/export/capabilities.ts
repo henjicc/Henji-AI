@@ -1,4 +1,5 @@
 import {
+  IMAGE_EDIT_HDR_REFERENCE_WHITE_NITS_V3,
   compileImageEditRenderPlanV3,
   createBuiltInImageEditRenderNodeRegistry,
   parseImageEditDocumentV3,
@@ -55,19 +56,114 @@ function expectedPrecision(document: ImageEditDocumentV3): {
   return { bitDepth: 32, sampleFormat: 'float' }
 }
 
+function isHdrDocument(document: ImageEditDocumentV3): boolean {
+  return document.color.transferFunction === 'pq'
+    || document.color.transferFunction === 'hlg'
+    || document.color.hdrMetadata !== null
+}
+
+function hasUnsupportedHdrMetadata(document: ImageEditDocumentV3): boolean {
+  return document.color.hdrMetadata?.masteringDisplay !== undefined
+    || document.color.hdrMetadata?.contentLight !== undefined
+}
+
+function descriptionHasUnsupportedHdrMetadata(
+  description: ImageEditorV3RasterExportDescription,
+): boolean {
+  return description.hdrMetadata != null
+    && Object.values(description.hdrMetadata).some((value) => value !== undefined)
+}
+
+function cicpMatchesDocument(
+  document: ImageEditDocumentV3,
+  description: ImageEditorV3RasterExportDescription,
+): boolean {
+  const expected = document.color.hdrMetadata?.cicp
+  const actual = description.cicp
+  return expected !== undefined
+    && actual !== undefined
+    && actual !== null
+    && expected.colorPrimaries === 9
+    && expected.transferCharacteristics === (document.color.transferFunction === 'pq' ? 16 : 18)
+    && expected.matrixCoefficients === 9
+    && expected.fullRange === false
+    && actual.colorPrimaries === expected.colorPrimaries
+    && actual.transferCharacteristics === expected.transferCharacteristics
+    && actual.matrixCoefficients === expected.matrixCoefficients
+    && actual.fullRange === expected.fullRange
+}
+
+/**
+ * 源解码精度与输出编码精度是两条独立契约：HDR 一律先解为 scene-linear Float32，
+ * SDR 才按文档权威位深读取，避免 AVIF 的 10/12-bit 容器选择反向污染内部渲染。
+ */
+export function resolveImageEditorV3ExportSourceBitDepth(
+  document: ImageEditDocumentV3,
+): 8 | 16 | 32 {
+  if (isHdrDocument(document)) return 32
+  if (document.color.bitDepth === 8) return 8
+  if (document.color.bitDepth === 16) return 16
+  return 32
+}
+
+export function resolveImageEditorV3ExportReferenceWhiteNits(
+  document: ImageEditDocumentV3,
+): number {
+  return document.color.hdrMetadata?.referenceWhiteNits
+    ?? IMAGE_EDIT_HDR_REFERENCE_WHITE_NITS_V3
+}
+
+function validateHdrColorContract(
+  document: ImageEditDocumentV3,
+  description: ImageEditorV3RasterExportDescription,
+): void {
+  const metadata = document.color.hdrMetadata
+  const transferFunction = document.color.transferFunction
+  const hasHdrPrecision = document.color.bitDepth === 16
+    || document.color.bitDepth === 'float16'
+    || document.color.bitDepth === 'float32'
+  if (
+    (transferFunction !== 'pq' && transferFunction !== 'hlg')
+    || metadata === null
+    || metadata.standard !== transferFunction
+    || document.color.workingSpace !== 'rec2020'
+    || !hasHdrPrecision
+  ) {
+    throw new ImageEditorV3ExportCapabilityError(
+      'HDR_RENDER_UNSUPPORTED',
+      'HDR 分块导出只接受 Rec.2020 PQ/HLG 的 16-bit 或浮点权威文档',
+    )
+  }
+  if (hasUnsupportedHdrMetadata(document) || descriptionHasUnsupportedHdrMetadata(description)) {
+    throw new ImageEditorV3ExportCapabilityError(
+      'HDR_RENDER_UNSUPPORTED',
+      '当前 HDR AVIF 编码器尚不能可靠写入 mastering-display 或 content-light 元数据',
+    )
+  }
+  if (
+    description.bitDepth !== 16
+    || description.sampleFormat !== 'uint'
+    || description.colorSpace !== 'rec2020'
+    || description.transferFunction !== transferFunction
+    || description.alphaMode !== 'straight'
+    || document.color.iccProfileResourceId !== null
+    || description.iccProfileResourceRef != null
+    || !cicpMatchesDocument(document, description)
+  ) {
+    throw new ImageEditorV3ExportCapabilityError(
+      'COLOR_CONTRACT_MISMATCH',
+      'HDR AVIF 必须输出 straight-alpha Rec.2020 16-bit uint 瓦片，并与文档 PQ/HLG CICP 完全一致',
+    )
+  }
+}
+
 function validateColorContract(
   document: ImageEditDocumentV3,
   description: ImageEditorV3RasterExportDescription,
 ): void {
-  if (
-    document.color.transferFunction === 'pq'
-    || document.color.transferFunction === 'hlg'
-    || document.color.hdrMetadata !== null
-  ) {
-    throw new ImageEditorV3ExportCapabilityError(
-      'HDR_RENDER_UNSUPPORTED',
-      '当前分块导出不能可靠保留 PQ/HLG 与 HDR 元数据，已阻止降级为 SDR',
-    )
+  if (isHdrDocument(document)) {
+    validateHdrColorContract(document, description)
+    return
   }
   const precision = expectedPrecision(document)
   const expectedIcc = document.color.iccProfileResourceId ?? undefined

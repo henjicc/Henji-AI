@@ -1,6 +1,5 @@
 import {
   DIFFUSION_V4_RECIPE_ADAPTER,
-  IMAGE_EDIT_HDR_REFERENCE_WHITE_NITS_V3,
   IMAGE_EDIT_RENDER_PRIORITY,
   ImageEditRenderScheduler,
   ImageEditResourceBudget,
@@ -20,7 +19,11 @@ import {
 import type { ImageEditorV3RenderedExportTile } from '@/commands/imageEditorV3Export'
 import { createLogger } from '@/core/logging'
 import { rasterizeImageEditorV3ExportAnnotations } from './annotations'
-import { prepareImageEditorV3ExportRender } from './capabilities'
+import {
+  prepareImageEditorV3ExportRender,
+  resolveImageEditorV3ExportReferenceWhiteNits,
+  resolveImageEditorV3ExportSourceBitDepth,
+} from './capabilities'
 import {
   buildImageEditorV3DiffusionAnalyses,
 } from './diffusionAnalysis'
@@ -94,6 +97,7 @@ function transparentRegion(
   region: ImageEditorV3ExportRenderRegion,
   workingSpace: 'srgb' | 'display-p3' | 'rec2020',
   transferFunction: 'srgb' | 'linear' | 'pq' | 'hlg',
+  referenceWhiteNits: number,
 ): Float32PremultipliedRgbaTile {
   return createFloat32PremultipliedRgbaTile(
     region.width,
@@ -102,7 +106,7 @@ function transparentRegion(
     new Float32Array(region.width * region.height * 4),
     workingSpace,
     transferFunction,
-    203,
+    referenceWhiteNits,
   )
 }
 
@@ -165,6 +169,8 @@ async function* renderTiles(
   sparseMaskPlan: ReturnType<typeof createImageEditorSparseMaskPlanV3>,
 ): AsyncGenerator<ImageEditorV3RenderedExportTile> {
   const { document, plan } = prepared
+  const sourceBitDepth = resolveImageEditorV3ExportSourceBitDepth(document)
+  const referenceWhiteNits = resolveImageEditorV3ExportReferenceWhiteNits(document)
   const neighborhood = resolveImageEditorV3ExportNeighborhood(plan)
   const tileSize = validateTileSize(request.tileSize)
   const scheduler = dependencies.scheduler ?? new ImageEditRenderScheduler({ cpuConcurrency: 2 })
@@ -202,7 +208,6 @@ async function* renderTiles(
     diffusionAnalysisSet = await buildImageEditorV3DiffusionAnalyses(
       document,
       plan,
-      request.description,
       controller.signal,
       dependencies,
       budget,
@@ -284,9 +289,10 @@ async function* renderTiles(
                   resourceId,
                   region,
                   { width: geometry.sourceWidth, height: geometry.sourceHeight },
-                  request.description.bitDepth,
+                  sourceBitDepth,
                   document.color.workingSpace,
                   document.color.transferFunction,
+                  referenceWhiteNits,
                   taskContext.signal,
                   dependencies,
                 )
@@ -301,12 +307,18 @@ async function* renderTiles(
                   region,
                   document.color.workingSpace,
                   document.color.transferFunction,
+                  referenceWhiteNits,
                 ),
                 loadRaster: async (node, region) => {
                   const resourceId = rasterResourceId(node)
                   const base = resourceId
                     ? loadSource(resourceId, region)
-                    : transparentRegion(region, document.color.workingSpace, document.color.transferFunction)
+                    : transparentRegion(
+                        region,
+                        document.color.workingSpace,
+                        document.color.transferFunction,
+                        referenceWhiteNits,
+                      )
                   return applyImageEditorV3SparseRasterRegion(
                     node,
                     await base,
@@ -316,8 +328,7 @@ async function* renderTiles(
                     {
                       workingSpace: document.color.workingSpace,
                       transferFunction: document.color.transferFunction,
-                      referenceWhiteNits: document.color.hdrMetadata?.referenceWhiteNits
-                        ?? IMAGE_EDIT_HDR_REFERENCE_WHITE_NITS_V3,
+                      referenceWhiteNits,
                     },
                     taskContext.signal,
                     dependencies,
@@ -372,6 +383,7 @@ async function* renderTiles(
                   sourceRegion,
                   document.color.workingSpace,
                   document.color.transferFunction,
+                  referenceWhiteNits,
                 ),
                 sourceRegion,
                 outputRect,

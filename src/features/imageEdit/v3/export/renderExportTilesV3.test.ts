@@ -14,9 +14,11 @@ import {
   type ImageEditDocumentV3,
   type ImageEditJsonObjectV3,
   createImageEditSparseMaskReferenceV3,
+  encodeTransferFunctionV3,
 } from '@/core/imageEdit/v3'
 import { createDefaultDiffusionOperationParams } from '@/core/imageEdit/diffusionParams'
 import type { ImageEditorV3RasterExportDescription } from '@/platform/contracts/imageEditorV3'
+import { resolveImageEditorV3ExportSourceBitDepth } from './capabilities'
 import {
   type ImageEditorV3ExportAnnotationRasterizeRequest,
   type ImageEditorV3ExportSourceTileRequest,
@@ -43,6 +45,62 @@ const description = (width: number, height: number): ImageEditorV3RasterExportDe
   transferFunction: 'srgb',
   alphaMode: 'straight',
 })
+
+function hdrDescription(
+  width: number,
+  height: number,
+  transferFunction: 'pq' | 'hlg',
+): ImageEditorV3RasterExportDescription {
+  return {
+    width,
+    height,
+    bitDepth: 16,
+    sampleFormat: 'uint',
+    colorSpace: 'rec2020',
+    transferFunction,
+    alphaMode: 'straight',
+    iccProfileResourceRef: null,
+    cicp: {
+      colorPrimaries: 9,
+      transferCharacteristics: transferFunction === 'pq' ? 16 : 18,
+      matrixCoefficients: 9,
+      fullRange: false,
+    },
+    hdrMetadata: null,
+  }
+}
+
+function floatSourceReader(
+  requests: ImageEditorV3ExportSourceTileRequest[],
+  straightValue = 2,
+) {
+  return async (request: ImageEditorV3ExportSourceTileRequest) => {
+    requests.push(request)
+    const pixels = new Float32Array([straightValue, straightValue, straightValue, 0.5])
+    return {
+      resourceRef: request.resourceRef,
+      mip: request.mip,
+      tileX: request.tileX,
+      tileY: request.tileY,
+      halo: request.halo,
+      width: 1,
+      height: 1,
+      channels: 4 as const,
+      bitDepth: 32 as const,
+      sampleFormat: 'float' as const,
+      numericRange: 'scene-linear' as const,
+      byteOrder: 'little-endian' as const,
+      rowStride: 16,
+      colorSpace: 'scrgb' as const,
+      transferFunction: 'linear' as const,
+      alphaMode: 'straight' as const,
+      orientationApplied: true as const,
+      originX: 0,
+      originY: 0,
+      pixels: pixels.buffer,
+    }
+  }
+}
 
 function fakeSourceReader(images: ReadonlyMap<string, FakeImage>) {
   return async (request: ImageEditorV3ExportSourceTileRequest) => {
@@ -179,6 +237,23 @@ function diffusionParams(
 }
 
 describe('图片编辑 V3 分块导出渲染', () => {
+  it('把 SDR 权威位深与源读取精度一一映射，浮点文档保持 Float32', () => {
+    const document = createImageEditDocumentV3({
+      width: 1,
+      height: 1,
+      documentId: 'source-read-precision',
+      sourceResourceId: SOURCE,
+    })
+    expect(resolveImageEditorV3ExportSourceBitDepth(document)).toBe(8)
+    document.color.bitDepth = 16
+    expect(resolveImageEditorV3ExportSourceBitDepth(document)).toBe(16)
+    document.color.bitDepth = 'float16'
+    document.color.transferFunction = 'linear'
+    expect(resolveImageEditorV3ExportSourceBitDepth(document)).toBe(32)
+    document.color.bitDepth = 'float32'
+    expect(resolveImageEditorV3ExportSourceBitDepth(document)).toBe(32)
+  })
+
   it('用图层顺序决定模糊是否作用于标注，并保持跨瓦片 halo 无接缝', async () => {
     const base = createImageEditDocumentV3({
       width: 32,
@@ -605,7 +680,7 @@ describe('图片编辑 V3 分块导出渲染', () => {
       .toEqual([0, 255, 0, 0])
   })
 
-  it('在任何瓦片读取前明确拒绝 HDR 和 VGPU 辉光', async () => {
+  it('在任何瓦片读取前明确拒绝 VGPU 辉光', async () => {
     const readSourceTile = vi.fn(fakeSourceReader(new Map([[SOURCE, solidImage(16, 16)]])))
     const glowDocument = createImageEditDocumentV3({
       width: 16,
@@ -621,9 +696,69 @@ describe('图片编辑 V3 分块导出渲染', () => {
       )) void _tile
     }).rejects.toMatchObject({ code: 'RENDER_NODE_UNSUPPORTED' })
 
+    expect(readSourceTile).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    { transferFunction: 'pq' as const, bitDepth: 16 as const },
+    { transferFunction: 'pq' as const, bitDepth: 'float16' as const },
+    { transferFunction: 'pq' as const, bitDepth: 'float32' as const },
+    { transferFunction: 'hlg' as const, bitDepth: 16 as const },
+    { transferFunction: 'hlg' as const, bitDepth: 'float16' as const },
+    { transferFunction: 'hlg' as const, bitDepth: 'float32' as const },
+  ])('将 $bitDepth $transferFunction 权威文档以 Float32 线性瓦片渲染为 16-bit HDR 输出', async ({
+    transferFunction,
+    bitDepth,
+  }) => {
+    const metadata = createImageEditHdrMetadataV3(transferFunction)
+    metadata.referenceWhiteNits = 250
     const hdr = createImageEditDocumentV3({
-      width: 16,
-      height: 16,
+      width: 1,
+      height: 1,
+      documentId: `hdr-${transferFunction}-${String(bitDepth)}`,
+      sourceResourceId: SOURCE,
+      color: {
+        workingSpace: 'rec2020',
+        bitDepth,
+        transferFunction,
+        hdrMetadata: metadata,
+        iccProfileResourceId: null,
+      },
+    })
+    const requests: ImageEditorV3ExportSourceTileRequest[] = []
+    const output = []
+    for await (const tile of renderImageEditorV3ExportTiles(
+      {
+        document: hdr,
+        resourceDescriptors: [],
+        description: hdrDescription(1, 1, transferFunction),
+        tileSize: 16,
+      },
+      { readSourceTile: floatSourceReader(requests) },
+    )) output.push(tile)
+
+    expect(requests).toHaveLength(1)
+    expect(requests[0]?.bitDepth).toBe(32)
+    expect(output).toHaveLength(1)
+    expect(output[0]).toMatchObject({ width: 1, height: 1, rowStride: 8 })
+    const bytes = output[0]!.pixels instanceof Uint8Array
+      ? output[0]!.pixels
+      : new Uint8Array(output[0]!.pixels)
+    const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength)
+    const expected = Math.round(Math.min(
+      1,
+      encodeTransferFunctionV3(2, transferFunction, 250),
+    ) * 65_535)
+    expect(Math.abs(view.getUint16(0, true) - expected)).toBeLessThanOrEqual(2)
+    expect(view.getUint16(6, true)).toBe(Math.round(0.5 * 65_535))
+  })
+
+  it('在任何瓦片读取前拒绝不匹配 CICP 与尚不能写入的 HDR 元数据', async () => {
+    const readSourceTile = vi.fn(floatSourceReader([]))
+
+    const hdr = createImageEditDocumentV3({
+      width: 1,
+      height: 1,
       documentId: 'hdr',
       sourceResourceId: SOURCE,
       color: {
@@ -633,9 +768,34 @@ describe('图片编辑 V3 分块导出渲染', () => {
     })
     await expect(async () => {
       for await (const _tile of renderImageEditorV3ExportTiles(
-        { document: hdr, resourceDescriptors: [], description: {
-          ...description(16, 16), bitDepth: 16, colorSpace: 'rec2020', transferFunction: 'pq',
-        } },
+        {
+          document: hdr,
+          resourceDescriptors: [],
+          description: {
+            ...hdrDescription(1, 1, 'pq'),
+            cicp: {
+              colorPrimaries: 9,
+              transferCharacteristics: 18,
+              matrixCoefficients: 9,
+              fullRange: false,
+            },
+          },
+        },
+        { readSourceTile },
+      )) void _tile
+    }).rejects.toMatchObject({ code: 'COLOR_CONTRACT_MISMATCH' })
+
+    hdr.color.hdrMetadata!.contentLight = {
+      maxContentLightLevelNits: 1_000,
+      maxFrameAverageLightLevelNits: 400,
+    }
+    await expect(async () => {
+      for await (const _tile of renderImageEditorV3ExportTiles(
+        {
+          document: hdr,
+          resourceDescriptors: [],
+          description: hdrDescription(1, 1, 'pq'),
+        },
         { readSourceTile },
       )) void _tile
     }).rejects.toMatchObject({ code: 'HDR_RENDER_UNSUPPORTED' })

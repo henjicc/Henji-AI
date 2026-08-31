@@ -608,6 +608,7 @@
           "exportDocumentNotReady": "The image editing document is not ready yet.",
           "viewerDocumentNotReady": "The Quick Edit document is not ready yet.",
           "exportHdrMetadata": "This version cannot preserve HDR metadata reliably, so export to a downgraded SDR image was blocked.",
+          "exportHdrPixelLimit": "HDR AVIF currently supports up to 9 megapixels of output. Crop the image first, or wait for tiled AVIF encoding support.",
           "exportBitDepth": "The selected format cannot preserve this document's precision, so silent precision reduction was blocked.",
           "exportInvalidIcc": "The image editor ICC resource reference is invalid."
         }

@@ -1,4 +1,5 @@
 import {
+  IMAGE_EDIT_HDR_REFERENCE_WHITE_NITS_V3,
   convertFloat32TileWorkingSpaceV3,
   createFloat32PremultipliedRgbaTile,
   decodeSrgbExtended,
@@ -18,7 +19,10 @@ function throwIfAborted(signal: AbortSignal): void {
   throw error
 }
 
-function imageDataToLinearTile(imageData: ImageData): Float32PremultipliedRgbaTile {
+function imageDataToLinearTile(
+  imageData: ImageData,
+  referenceWhiteNits: number,
+): Float32PremultipliedRgbaTile {
   const data = new Float32Array(imageData.width * imageData.height * 4)
   for (let offset = 0; offset < data.length; offset += 4) {
     const alpha = imageData.data[offset + 3] / 255
@@ -32,6 +36,9 @@ function imageDataToLinearTile(imageData: ImageData): Float32PremultipliedRgbaTi
     imageData.height,
     'linear-light',
     data,
+    'srgb',
+    'srgb',
+    referenceWhiteNits,
   )
 }
 
@@ -70,8 +77,11 @@ export async function rasterizeImageEditorV3ExportAnnotations(
   )
   context.restore()
   throwIfAborted(request.signal)
+  const referenceWhiteNits = request.document.color.hdrMetadata?.referenceWhiteNits
+    ?? IMAGE_EDIT_HDR_REFERENCE_WHITE_NITS_V3
   const tile = imageDataToLinearTile(
     context.getImageData(0, 0, request.region.width, request.region.height),
+    referenceWhiteNits,
   )
   const converted = convertFloat32TileWorkingSpaceV3(tile, request.document.color.workingSpace)
   return createFloat32PremultipliedRgbaTile(
@@ -81,6 +91,6 @@ export async function rasterizeImageEditorV3ExportAnnotations(
     new Float32Array(converted.data),
     converted.workingSpace,
     request.document.color.transferFunction,
-    converted.referenceWhiteNits,
+    referenceWhiteNits,
   )
 }

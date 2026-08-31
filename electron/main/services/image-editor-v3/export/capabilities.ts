@@ -3,6 +3,7 @@ import type {
   TileOutputDescription,
 } from '../contracts'
 import type { FileTileOutputSinkOptions } from '../tile-output-sink'
+import { IMAGE_EDITOR_V3_HDR_AVIF_MAX_PIXELS } from '../../../../../src/platform/contracts/imageEditorV3'
 
 export type RasterExportFormat =
   | 'bigtiff'
@@ -59,8 +60,6 @@ export interface PreparedExportMetadata {
 }
 
 const MAX_ICC_BYTES = 16 * 1024 * 1024
-/** 9MP real encode peaks at ~600MiB; 16MP peaks at ~1.0GiB before editor memory. */
-export const MAX_STREAMING_HDR_AVIF_PIXELS = 9_000_000
 
 function capabilityError(
   code: ImageExportCapabilityErrorCode,
@@ -169,11 +168,11 @@ function validateStreamingHdrAvif(
       'HDR AVIF mastering-display and content-light metadata are not implemented',
     )
   }
-  if (description.width > Math.floor(MAX_STREAMING_HDR_AVIF_PIXELS / description.height)) {
+  if (description.width > Math.floor(IMAGE_EDITOR_V3_HDR_AVIF_MAX_PIXELS / description.height)) {
     throw capabilityError(
       'ENCODER_RESOURCE_LIMIT',
       format,
-      `HDR AVIF is limited to ${MAX_STREAMING_HDR_AVIF_PIXELS} pixels until tiled AVIF grid encoding is available`,
+      `HDR AVIF is limited to ${IMAGE_EDITOR_V3_HDR_AVIF_MAX_PIXELS} pixels until tiled AVIF grid encoding is available`,
     )
   }
 }
