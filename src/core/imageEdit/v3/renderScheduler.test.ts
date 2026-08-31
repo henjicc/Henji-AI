@@ -121,6 +121,30 @@ describe('图片编辑 V3 调度器', () => {
     await expect(newFrame).resolves.toBe('new');
   });
 
+  it('同一会话的不同合并流互不取消，取消会话仍会一起停止', async () => {
+    const scheduler = new ImageEditRenderScheduler({ cpuConcurrency: 2 });
+    const gate = deferred<void>();
+    const display = scheduler.schedule({
+      id: 'display', sessionId: 'shared', coalescingKey: 'display', revision: 1,
+      kind: 'preview', purpose: 'display', lane: 'cpu', priority: 500,
+      run: async () => { await gate.promise; return 'display'; },
+    });
+    const auxiliary = scheduler.schedule({
+      id: 'auxiliary', sessionId: 'shared', coalescingKey: 'auxiliary', revision: 1,
+      kind: 'preview', purpose: 'display', lane: 'cpu', priority: 400,
+      run: async () => { await gate.promise; return 'auxiliary'; },
+    });
+
+    expect(scheduler.snapshot()).toMatchObject({
+      runningCpu: 2,
+      activePreviewSessions: 2,
+    });
+    scheduler.cancelSession('shared');
+    gate.resolve();
+    await expect(display).rejects.toBeInstanceOf(ImageEditTaskCancelledError);
+    await expect(auxiliary).rejects.toBeInstanceOf(ImageEditTaskCancelledError);
+  });
+
   it('可按任务 ID 取消待处理或运行中的原子任务', async () => {
     const scheduler = new ImageEditRenderScheduler({ cpuConcurrency: 1 });
     const gate = deferred<void>();

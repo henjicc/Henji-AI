@@ -1,6 +1,8 @@
 import type { ImageEditDocumentV3 } from '@/core/imageEdit/v3/documentTypes'
 import {
   IMAGE_EDIT_RENDER_PRIORITY,
+  ImageEditTaskCancelledError,
+  ImageEditTaskSupersededError,
   type ImageEditRenderScheduler,
 } from '@/core/imageEdit/v3/renderScheduler'
 import {
@@ -123,6 +125,13 @@ function toError(value: unknown): Error {
   return value instanceof Error ? value : new Error(String(value))
 }
 
+function normalizePreviewError(error: unknown): Error {
+  return error instanceof ImageEditTaskSupersededError
+    || error instanceof ImageEditTaskCancelledError
+    ? new ImageEditorPreviewSupersededErrorV3()
+    : toError(error)
+}
+
 /** 每个编辑会话独占一个实例：一个 running、一个 latest-pending，绝不形成 FIFO。 */
 export class ImageEditorPreviewClientV3 {
   private worker: ImageEditorPreviewWorkerPortV3 | null = null
@@ -234,7 +243,7 @@ export class ImageEditorPreviewClientV3 {
       if (this.running !== job) return
       job.abortController.abort(error)
       const normalized = job.sequence === this.latestSequence
-        ? toError(error)
+        ? normalizePreviewError(error)
         : new ImageEditorPreviewSupersededErrorV3()
       job.reject(normalized)
       this.finish(job)
@@ -305,8 +314,10 @@ export class ImageEditorPreviewClientV3 {
     const event = await this.renderScheduler.schedule<ImageEditorPreviewWorkerEventV3>({
       id: job.renderTaskId,
       sessionId: this.options.sessionId,
+      coalescingKey: 'display',
       revision: job.document.revision,
       kind: 'preview',
+      purpose: 'display',
       lane: 'gpu',
       priority: job.quality === 'draft'
         ? IMAGE_EDIT_RENDER_PRIORITY.interactionDraft

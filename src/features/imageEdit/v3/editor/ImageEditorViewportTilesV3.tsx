@@ -32,7 +32,7 @@ function tileStyle(
   }
 }
 
-/** Bitmap 在首次绘制后立即关闭；各小 canvas 自己保留已提交像素。 */
+/** 显示层只绘制；成品 Bitmap 的生命周期由上游渲染 Hook 持有。 */
 export function ImageEditorViewportTilesV3({
   result,
   label,
@@ -41,24 +41,17 @@ export function ImageEditorViewportTilesV3({
   label: string
 }): JSX.Element {
   const canvasesRef = useRef(new Map<string, HTMLCanvasElement>())
-  const releasedResultRef = useRef<ImageEditorManagedViewportCompositeV3 | null>(null)
 
   useEffect(() => {
-    if (releasedResultRef.current === result) return
-    try {
-      for (const tile of result.tiles) {
-        const canvas = canvasesRef.current.get(tileKey(tile))
-        if (!canvas) throw new Error('视口成品瓦片缺少显示画布')
-        canvas.width = tile.outputRect.width
-        canvas.height = tile.outputRect.height
-        const context = canvas.getContext('2d')
-        if (!context) throw new Error('无法创建视口成品瓦片显示上下文')
-        context.clearRect(0, 0, canvas.width, canvas.height)
-        context.drawImage(tile.bitmap, 0, 0, canvas.width, canvas.height)
-      }
-    } finally {
-      result.release()
-      releasedResultRef.current = result
+    for (const tile of result.tiles) {
+      const canvas = canvasesRef.current.get(tileKey(tile))
+      if (!canvas) throw new Error('视口成品瓦片缺少显示画布')
+      canvas.width = tile.outputRect.width
+      canvas.height = tile.outputRect.height
+      const context = canvas.getContext('2d')
+      if (!context) throw new Error('无法创建视口成品瓦片显示上下文')
+      context.clearRect(0, 0, canvas.width, canvas.height)
+      context.drawImage(tile.bitmap, 0, 0, canvas.width, canvas.height)
     }
   }, [result])
 

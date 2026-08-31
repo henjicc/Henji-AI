@@ -16,7 +16,7 @@ describe('图片编辑 V3 视口成品瓦片表面', () => {
     vi.restoreAllMocks()
   })
 
-  it('按文档坐标摆放小画布，绘制后只释放一次 Bitmap 租约', async () => {
+  it('按文档坐标摆放小画布，显示层不接管 Bitmap 租约', async () => {
     const drawImage = vi.fn()
     vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({
       clearRect: vi.fn(),
@@ -44,10 +44,13 @@ describe('图片编辑 V3 视口成品瓦片表面', () => {
     expect(canvas?.style.left).toBe('51.2%')
     expect(canvas?.style.width).toBe('48.8%')
     expect(canvas?.style.backgroundColor).toBe('')
-    expect(release).toHaveBeenCalledTimes(1)
+    expect(release).not.toHaveBeenCalled()
 
     rendered.rerender(<ImageEditorViewportTilesV3 result={result} label="预览" />)
     expect(drawImage).toHaveBeenCalledTimes(1)
-    expect(release).toHaveBeenCalledTimes(1)
+    expect(release).not.toHaveBeenCalled()
+    rendered.unmount()
+    await Promise.resolve()
+    expect(release).not.toHaveBeenCalled()
   })
 })

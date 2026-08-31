@@ -13,9 +13,9 @@ import {
   useImageEditorSessionStoreV3,
 } from '../store'
 import {
-  useImageEditorViewportCompositeV3,
-  useManagedImageEditorPreviewV3,
+  useImageEditorDisplayPipelineV3,
 } from '../execution'
+import { useImageEditorResultLeaseV3 } from '../execution/useImageEditorResultLeaseV3'
 import { ImageEditorAnnotationOverlayV3 } from './ImageEditorAnnotationOverlayV3'
 import { ImageEditorRasterBrushOverlayV3 } from './ImageEditorRasterBrushOverlayV3'
 import { ImageEditorSelectionMaskOverlayV3 } from './ImageEditorSelectionMaskOverlayV3'
@@ -63,23 +63,15 @@ const ZERO_VIEWPORT_PAN_V3: ImageEditorViewportPanV3 = { x: 0, y: 0 }
 
 function FramePreview({ output, label }: { output: Extract<ImageEditorV3PreviewOutput, { kind: 'frame' }>; label: string }): JSX.Element {
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
-  const releasedOutputRef = useRef<typeof output | null>(null)
 
   useEffect(() => {
-    try {
-      const canvas = canvasRef.current
-      if (canvas) {
-        canvas.width = output.width
-        canvas.height = output.height
-        const context = canvas.getContext('2d')
-        context?.clearRect(0, 0, output.width, output.height)
-        context?.drawImage(output.frame, 0, 0, output.width, output.height)
-      }
-    } finally {
-      if (releasedOutputRef.current !== output) {
-        output.release?.()
-        releasedOutputRef.current = output
-      }
+    const canvas = canvasRef.current
+    if (canvas) {
+      canvas.width = output.width
+      canvas.height = output.height
+      const context = canvas.getContext('2d')
+      context?.clearRect(0, 0, output.width, output.height)
+      context?.drawImage(output.frame, 0, 0, output.width, output.height)
     }
   }, [output])
 
@@ -90,11 +82,9 @@ function UrlPreview({ output, label }: {
   output: Extract<ImageEditorV3PreviewOutput, { kind: 'url' }>
   label: string
 }): JSX.Element {
-  const { release, url } = output
-  useEffect(() => () => release?.(), [release, url])
   return (
     <img
-      src={url}
+      src={output.url}
       alt={label}
       className="block max-h-full max-w-full select-none object-contain"
       draggable={false}
@@ -147,12 +137,14 @@ export function ImageEditorPreviewV3({
     outputGeometry,
   )
 
-  const managedPreview = useManagedImageEditorPreviewV3(
+  const displayPipeline = useImageEditorDisplayPipelineV3(
     controller.sessionId,
     snapshot,
     !previewRenderer,
     resourceDescriptors,
+    viewportLayout,
   )
+  const { managedPreview, viewportComposite, viewportResult } = displayPipeline
   useEffect(() => {
     const thumbnail = managedPreview.result?.thumbnail
     if (!thumbnail
@@ -172,21 +164,6 @@ export function ImageEditorPreviewV3({
     managedPreview.resultRevision,
     onPackageThumbnailChange,
   ])
-  const viewportComposite = useImageEditorViewportCompositeV3(
-    controller.sessionId,
-    snapshot,
-    !previewRenderer && Object.keys(snapshot.previewOverrides).length === 0,
-    resourceDescriptors,
-    viewportLayout,
-  )
-  const viewportResult = viewportComposite.result
-    && viewportLayout
-    && viewportComposite.result.viewportKey === viewportLayout.viewportKey
-    && viewportComposite.result.documentId === snapshot.document.id
-    && viewportComposite.result.revision === snapshot.document.revision
-    ? viewportComposite.result
-    : null
-
   const customOutput = useMemo<ImageEditorV3PreviewOutput | null>(() => previewRenderer?.({
     sourceImageUrl,
     snapshot,
@@ -199,8 +176,13 @@ export function ImageEditorPreviewV3({
     snapshot,
     sourceImageUrl,
   ])
-  // 受管帧的 output 身份只能随受管 result 改变；文档或工具重渲染期间仍保留的
-  // 同一 result 已在首次 draw 后释放，不能再包一层新对象后重复 draw/release。
+  const customReleasableOutput = customOutput
+    && 'release' in customOutput
+    && typeof customOutput.release === 'function'
+    ? customOutput as ImageEditorV3PreviewOutput & { release: () => void }
+    : null
+  useImageEditorResultLeaseV3(customReleasableOutput)
+  // 受管帧的 output 身份只能随受管 result 改变，资源租约由受管 Hook 持有。
   const managedOutput = useMemo<ImageEditorV3PreviewOutput>(() => (
     managedPreview.result?.kind === 'bitmap'
       ? {
@@ -432,7 +414,10 @@ export function ImageEditorPreviewV3({
           ) : null}
         </div>
       </div>
-      {!previewRenderer && managedPreview.rendering && !managedPreview.result ? (
+      {!previewRenderer
+        && (managedPreview.rendering || viewportComposite.rendering)
+        && !viewportResult
+        && !managedPreview.result ? (
         <div className="pointer-events-none absolute inset-0 flex items-center justify-center" aria-hidden="true">
           <LoaderCircle className="h-6 w-6 animate-spin text-text-dark-muted" />
         </div>

@@ -1,5 +1,6 @@
 export type ImageEditRenderLane = 'gpu' | 'cpu';
 export type ImageEditRenderTaskKind = 'preview' | 'export' | 'prefetch';
+export type ImageEditRenderPurpose = 'display' | 'thumbnail' | 'export' | 'prefetch';
 
 export const IMAGE_EDIT_RENDER_PRIORITY = {
   interactionDraft: 500,
@@ -18,8 +19,11 @@ export interface ImageEditRenderTaskContext {
 export interface ImageEditRenderTask<T> {
   id: string;
   sessionId: string;
+  /** 同一会话内可以互相替代的画面流；未提供时默认为 display。 */
+  coalescingKey?: string;
   revision: number;
   kind: ImageEditRenderTaskKind;
+  purpose?: ImageEditRenderPurpose;
   lane: ImageEditRenderLane;
   priority: number;
   run(context: ImageEditRenderTaskContext): Promise<T>;
@@ -110,9 +114,9 @@ export class ImageEditRenderScheduler {
   }
 
   cancelSession(sessionId: string): void {
-    const pendingPreview = this.pendingPreviews.get(sessionId);
-    if (pendingPreview) {
-      this.pendingPreviews.delete(sessionId);
+    for (const [key, pendingPreview] of this.pendingPreviews) {
+      if (pendingPreview.task.sessionId !== sessionId) continue;
+      this.pendingPreviews.delete(key);
       const error = new ImageEditTaskCancelledError(pendingPreview.task.id);
       pendingPreview.controller.abort(error);
       this.taskIds.delete(pendingPreview.task.id);
@@ -164,10 +168,11 @@ export class ImageEditRenderScheduler {
   }
 
   private enqueuePreview<T>(scheduled: ScheduledTask<T>): void {
-    const sessionId = scheduled.task.sessionId;
-    const pending = this.pendingPreviews.get(sessionId);
+    const flowKey = this.previewFlowKey(scheduled.task);
+    const pending = this.pendingPreviews.get(flowKey);
     const active = [...this.activeTasks.values()].find((candidate) => (
-      candidate.task.kind === 'preview' && candidate.task.sessionId === sessionId
+      candidate.task.kind === 'preview'
+      && this.previewFlowKey(candidate.task) === flowKey
     ));
     const newestRevision = Math.max(
       pending?.task.revision ?? -1,
@@ -189,7 +194,7 @@ export class ImageEditRenderScheduler {
     // 同 revision 的 PreviewOverride 也代表更新帧；协作取消旧任务，并在其返回时
     // 再检查 signal，保证旧帧绝不覆盖已经排队的新帧。
     if (active) active.controller.abort(new ImageEditTaskSupersededError(active.task.id));
-    this.pendingPreviews.set(sessionId, scheduled as ScheduledTask);
+    this.pendingPreviews.set(flowKey, scheduled as ScheduledTask);
   }
 
   private pump(): void {
@@ -205,7 +210,7 @@ export class ImageEditRenderScheduler {
     const candidates = [
       ...this.pendingTasks,
       ...[...this.pendingPreviews.values()].filter((candidate) => (
-        !this.activePreviewSessions.has(candidate.task.sessionId)
+        !this.activePreviewSessions.has(this.previewFlowKey(candidate.task))
       )),
     ].filter((candidate) => this.hasLaneCapacity(candidate.task));
     candidates.sort((left, right) => (
@@ -223,8 +228,9 @@ export class ImageEditRenderScheduler {
 
   private removePending(scheduled: ScheduledTask): void {
     if (scheduled.task.kind === 'preview') {
-      if (this.pendingPreviews.get(scheduled.task.sessionId) === scheduled) {
-        this.pendingPreviews.delete(scheduled.task.sessionId);
+      const flowKey = this.previewFlowKey(scheduled.task);
+      if (this.pendingPreviews.get(flowKey) === scheduled) {
+        this.pendingPreviews.delete(flowKey);
       }
       return;
     }
@@ -240,7 +246,7 @@ export class ImageEditRenderScheduler {
       if (scheduled.task.kind === 'export') this.runningCpuExports += 1;
     }
     if (scheduled.task.kind === 'preview') {
-      this.activePreviewSessions.add(scheduled.task.sessionId);
+      this.activePreviewSessions.add(this.previewFlowKey(scheduled.task));
     }
     const context: ImageEditRenderTaskContext = {
       signal: scheduled.controller.signal,
@@ -268,7 +274,7 @@ export class ImageEditRenderScheduler {
         if (scheduled.task.kind === 'export') this.runningCpuExports -= 1;
       }
       if (scheduled.task.kind === 'preview') {
-        this.activePreviewSessions.delete(scheduled.task.sessionId);
+        this.activePreviewSessions.delete(this.previewFlowKey(scheduled.task));
       }
       this.pump();
     });
@@ -284,5 +290,9 @@ export class ImageEditRenderScheduler {
     scheduled.controller.abort(error);
     this.taskIds.delete(scheduled.task.id);
     scheduled.reject(error);
+  }
+
+  private previewFlowKey(task: ImageEditRenderTask<unknown>): string {
+    return `${task.sessionId}:${task.coalescingKey?.trim() || 'display'}`;
   }
 }

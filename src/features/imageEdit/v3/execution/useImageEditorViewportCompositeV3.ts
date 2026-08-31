@@ -12,6 +12,7 @@ import {
 import { ImageEditorViewportCompositeUnsupportedErrorV3 } from './viewportCompositeDocumentV3'
 import type { ImageEditorViewportTransformV3 } from './viewportTilePlannerV3'
 import { useImageEditorDisposableV3 } from './useImageEditorDisposableV3'
+import { useImageEditorResultLeaseV3 } from './useImageEditorResultLeaseV3'
 
 const logger = createLogger('image_editor_v3.viewport_composite_hook')
 const EMPTY_RESOURCE_DESCRIPTORS: readonly ImageEditorV3ResourceDescriptor[] = []
@@ -19,6 +20,7 @@ const EMPTY_RESOURCE_DESCRIPTORS: readonly ImageEditorV3ResourceDescriptor[] = [
 export interface ImageEditorViewportCompositeStateV3 {
   result: ImageEditorManagedViewportCompositeV3 | null
   diagnostic: string | null
+  fallbackRequired: boolean
   rendering: boolean
 }
 
@@ -37,27 +39,33 @@ export function useImageEditorViewportCompositeV3(
   const [state, setState] = useState<ImageEditorViewportCompositeStateV3>({
     result: null,
     diagnostic: null,
+    fallbackRequired: false,
     rendering: false,
   })
 
   useImageEditorDisposableV3(client)
+  useImageEditorResultLeaseV3(state.result)
 
   useEffect(() => {
     if (!enabled || !layout || typeof Worker === 'undefined') {
       client.cancel()
-      setState((current) => {
-        current.result?.release()
-        return { result: null, diagnostic: null, rendering: false }
-      })
+      setState((current) => ({
+        ...current,
+        diagnostic: null,
+        fallbackRequired: enabled && typeof Worker === 'undefined',
+        rendering: false,
+      }))
       return
     }
     let acceptsResult = true
     const document = projectImageEditorPreviewDocumentV3(snapshot)
     const quality = Object.keys(snapshot.previewOverrides).length > 0 ? 'draft' : 'stable'
-    setState((current) => {
-      current.result?.release()
-      return { result: null, rendering: true, diagnostic: null }
-    })
+    setState((current) => ({
+      ...current,
+      rendering: true,
+      diagnostic: null,
+      fallbackRequired: false,
+    }))
     queueMicrotask(() => {
       if (!acceptsResult) return
       void client.render({
@@ -71,17 +79,16 @@ export function useImageEditorViewportCompositeV3(
           result.release()
           return
         }
-        setState((current) => {
-          if (current.result !== result) current.result?.release()
-          return { result, diagnostic: null, rendering: false }
-        })
+        setState({ result, diagnostic: null, fallbackRequired: false, rendering: false })
       }).catch((error: unknown) => {
         if (!acceptsResult || error instanceof ImageEditorViewportCompositeSupersededErrorV3) return
         if (error instanceof ImageEditorViewportCompositeUnsupportedErrorV3) {
-          setState((current) => {
-            current.result?.release()
-            return { result: null, diagnostic: null, rendering: false }
-          })
+          setState((current) => ({
+            ...current,
+            diagnostic: null,
+            fallbackRequired: true,
+            rendering: false,
+          }))
           return
         }
         const message = error instanceof Error ? error.message : String(error)
@@ -89,10 +96,12 @@ export function useImageEditorViewportCompositeV3(
           event: 'image_editor_v3.viewport_composite.fallback',
           context: { documentId: document.id, revision: document.revision, message },
         })
-        setState((current) => {
-          current.result?.release()
-          return { result: null, diagnostic: message, rendering: false }
-        })
+        setState((current) => ({
+          ...current,
+          diagnostic: message,
+          fallbackRequired: true,
+          rendering: false,
+        }))
       })
     })
     return () => { acceptsResult = false }

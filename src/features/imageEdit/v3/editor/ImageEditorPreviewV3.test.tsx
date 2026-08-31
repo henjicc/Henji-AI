@@ -1,5 +1,6 @@
 /** @vitest-environment jsdom */
 
+import { StrictMode } from 'react'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -30,7 +31,17 @@ vi.mock('../execution', async (importOriginal) => {
   const original = await importOriginal<typeof import('../execution')>()
   return {
     ...original,
-    useManagedImageEditorPreviewV3: () => managedPreview.state,
+    useImageEditorDisplayPipelineV3: () => ({
+      hasPreviewOverrides: false,
+      managedPreview: managedPreview.state,
+      viewportComposite: {
+        result: null,
+        diagnostic: null,
+        fallbackRequired: true,
+        rendering: false,
+      },
+      viewportResult: null,
+    }),
   }
 })
 
@@ -68,7 +79,7 @@ describe('ImageEditorPreviewV3 managed frame ownership', () => {
     vi.unstubAllGlobals()
   })
 
-  it('文档重渲染期间复用同一 managed result 时只绘制并释放一次', async () => {
+  it('StrictMode 重挂载与文档重渲染期间只读取 managed result，不提前释放', async () => {
     const release = vi.fn()
     const drawImage = vi.fn()
     vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({
@@ -96,34 +107,38 @@ describe('ImageEditorPreviewV3 managed frame ownership', () => {
     })
     const onDocumentChange = vi.fn()
     const rendered = render(
-      <div style={{ width: 900, height: 600 }}>
-        <ImageEditorV3
-          sourceImageUrl="preview.png"
-          document={first}
-          profileId="full"
-          onDocumentChange={onDocumentChange}
-        />
-      </div>,
+      <StrictMode>
+        <div style={{ width: 900, height: 600 }}>
+          <ImageEditorV3
+            sourceImageUrl="preview.png"
+            document={first}
+            profileId="full"
+            onDocumentChange={onDocumentChange}
+          />
+        </div>
+      </StrictMode>,
     )
 
-    await waitFor(() => expect(drawImage).toHaveBeenCalledTimes(1))
-    expect(release).toHaveBeenCalledTimes(1)
+    await waitFor(() => expect(drawImage).toHaveBeenCalledTimes(2))
+    expect(release).not.toHaveBeenCalled()
 
     rendered.rerender(
-      <div style={{ width: 900, height: 600 }}>
-        <ImageEditorV3
-          sourceImageUrl="preview.png"
-          document={{ ...first, revision: 1 }}
-          profileId="full"
-          onDocumentChange={onDocumentChange}
-        />
-      </div>,
+      <StrictMode>
+        <div style={{ width: 900, height: 600 }}>
+          <ImageEditorV3
+            sourceImageUrl="preview.png"
+            document={{ ...first, revision: 1 }}
+            profileId="full"
+            onDocumentChange={onDocumentChange}
+          />
+        </div>
+      </StrictMode>,
     )
     await waitFor(() => expect(
       rendered.container.querySelector('canvas[role="img"]'),
     ).toBeTruthy())
-    expect(drawImage).toHaveBeenCalledTimes(1)
-    expect(release).toHaveBeenCalledTimes(1)
+    expect(drawImage).toHaveBeenCalledTimes(2)
+    expect(release).not.toHaveBeenCalled()
   })
 
   it('手形拖动只在结束时提交一次视口状态，缩放工具以指针为锚点', async () => {

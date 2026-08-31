@@ -15,6 +15,7 @@ import {
   projectImageEditorPreviewDocumentV3,
 } from './previewDocumentV3'
 import { useImageEditorDisposableV3 } from './useImageEditorDisposableV3'
+import { useImageEditorResultLeaseV3 } from './useImageEditorResultLeaseV3'
 
 const logger = createLogger('image_editor_v3.preview')
 const EMPTY_RESOURCE_DESCRIPTORS: readonly ImageEditorV3ResourceDescriptor[] = []
@@ -47,32 +48,22 @@ export function useManagedImageEditorPreviewV3(
   })
 
   useImageEditorDisposableV3(client)
+  useImageEditorResultLeaseV3(state.result)
 
   useEffect(() => {
-    setState((current) => {
-      current.result?.release()
-      return {
-        result: null,
-        resultDocumentId: null,
-        resultRevision: null,
-        diagnostic: null,
-        rendering: enabled,
-      }
+    setState({
+      result: null,
+      resultDocumentId: null,
+      resultRevision: null,
+      diagnostic: null,
+      rendering: false,
     })
-  }, [client, enabled])
+  }, [client])
 
   useEffect(() => {
     if (!enabled) {
-      setState((current) => {
-        current.result?.release()
-        return {
-          result: null,
-          resultDocumentId: null,
-          resultRevision: null,
-          diagnostic: null,
-          rendering: false,
-        }
-      })
+      // 保留上一帧直到另一条显示路径完成，避免 draft → stable 切换时闪黑。
+      setState((current) => ({ ...current, diagnostic: null, rendering: false }))
       return
     }
     if (typeof Worker === 'undefined') {
@@ -113,8 +104,7 @@ export function useManagedImageEditorPreviewV3(
           result.release()
           return
         }
-        setState((current) => {
-          if (current.result !== result) current.result?.release()
+        setState(() => {
           const diagnostics = [
             ...(pressureDiagnostic ? [pressureDiagnostic] : []),
             ...result.diagnostics,

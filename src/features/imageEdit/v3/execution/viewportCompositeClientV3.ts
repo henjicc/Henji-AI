@@ -7,6 +7,8 @@ import { createLogger } from '@/core/logging'
 import type { ImageEditDocumentV3 } from '@/core/imageEdit/v3/documentTypes'
 import {
   IMAGE_EDIT_RENDER_PRIORITY,
+  ImageEditTaskCancelledError,
+  ImageEditTaskSupersededError,
   type ImageEditRenderScheduler,
 } from '@/core/imageEdit/v3/renderScheduler'
 import type { ImageEditRenderQuality } from '@/core/imageEdit/v3/renderNodeDefinition'
@@ -128,6 +130,13 @@ function createDefaultWorker(): ImageEditorViewportCompositeWorkerPortV3 {
 function toError(error: unknown): Error {
   return error instanceof Error ? error : new Error(String(error))
 }
+
+function normalizeViewportError(error: unknown): Error {
+  return error instanceof ImageEditTaskSupersededError
+    || error instanceof ImageEditTaskCancelledError
+    ? new ImageEditorViewportCompositeSupersededErrorV3()
+    : toError(error)
+}
 let viewportCompositeClientSequence = 0
 
 /** 一个会话同时最多只有一个 source load / Worker composite；新请求立即取消旧请求。 */
@@ -197,7 +206,9 @@ export class ImageEditorViewportCompositeClientV3 {
         requestId: job.requestId,
         context: { documentId: request.document.id, revision: request.document.revision },
       })
-      void this.prepareAndPost(job).catch((error: unknown) => this.failJob(job, toError(error)))
+      void this.prepareAndPost(job).catch((error: unknown) => (
+        this.failJob(job, normalizeViewportError(error))
+      ))
     })
   }
 
@@ -309,8 +320,10 @@ export class ImageEditorViewportCompositeClientV3 {
     const event = await this.renderScheduler.schedule<ImageEditorViewportCompositeWorkerEventV3>({
       id: job.renderTaskId,
       sessionId: this.options.sessionId,
+      coalescingKey: 'display',
       revision: job.document.revision,
       kind: 'preview',
+      purpose: 'display',
       lane: 'gpu',
       priority: job.quality === 'draft'
         ? IMAGE_EDIT_RENDER_PRIORITY.interactionDraft
