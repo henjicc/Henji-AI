@@ -25,9 +25,9 @@ import { ImageEditorLayerTransformPropertiesV3 } from './ImageEditorLayerTransfo
 import { findImageEditLayerLocationV3 } from './layerTreeV3'
 import { isImageEditLayerTransformableV3 } from './layerTransformV3'
 import { resolveImageEditorReadinessReasonV3 } from './readinessPresentationV3'
-import type { ImageEditorV3Controller, ImageEditorV3Props } from './types'
+import type { ImageEditorV3Controller } from './types'
 
-interface ImageEditorPropertiesPanelV3Props extends Pick<ImageEditorV3Props, 'onCreateMaskResource'> {
+interface ImageEditorPropertiesPanelV3Props {
   controller: ImageEditorV3Controller
 }
 

@@ -78,11 +78,6 @@ export interface ImageEditorV3Props {
   /** 仅当当前 V3 文档可无损回退时提供。 */
   onOpenLegacyEditor?: () => void
   recoveryKey?: string | number
-  /** 蒙版像素由资源层创建，界面只负责把返回的引用写入文档。 */
-  onCreateMaskResource?: (
-    layer: ImageEditLayerV3,
-    signal?: AbortSignal,
-  ) => Promise<string | null>
   className?: string
 }
 

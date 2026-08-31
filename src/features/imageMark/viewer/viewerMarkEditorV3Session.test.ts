@@ -87,7 +87,7 @@ describe('查看器快速编辑 V3 会话准备', () => {
       id: 'viewer-document',
       geometry: { width: 1200, height: 800 },
     })
-    expect(prepared.document.layers.map((layer) => layer.type)).toEqual(['raster', 'annotation'])
+    expect(prepared.document.layers.map((layer) => layer.type)).toEqual(['raster'])
     expect(repo.save).toHaveBeenCalledOnce()
     expect(prepared.reference).toEqual({
       documentId: 'viewer-document',

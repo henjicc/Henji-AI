@@ -52,10 +52,8 @@ function installPointerCapture(overlay: SVGSVGElement) {
 }
 
 function ControlledEditor({
-  onCreateMaskResource,
   onDocumentChange,
 }: {
-  onCreateMaskResource: (layerId: string, signal?: AbortSignal) => Promise<string | null>
   onDocumentChange: (document: ImageEditDocumentV3) => void
 }): JSX.Element {
   const [document, setDocument] = useState(documentWithLayers)
@@ -64,9 +62,8 @@ function ControlledEditor({
       <ImageEditorV3
         sourceImageUrl="preview.png"
         document={document}
-        profileId="full"
+        profileId="mask"
         previewRenderer={previewRenderer}
-        onCreateMaskResource={(layer, signal) => onCreateMaskResource(layer.id, signal)}
         onDocumentChange={(next) => {
           onDocumentChange(next)
           setDocument(next)
@@ -143,30 +140,26 @@ describe('ImageEditorV3 lifecycle guards', () => {
     expect(changes).not.toHaveBeenCalled()
   })
 
-  it('切换图层会中止异步 mask，完成的旧请求不会写回新选择', async () => {
-    let resolveMask!: (resourceId: string | null) => void
-    const gate = new Promise<string | null>((resolve) => { resolveMask = resolve })
-    let signal: AbortSignal | undefined
-    const createMask = vi.fn((_layerId: string, nextSignal?: AbortSignal) => {
-      signal = nextSignal
-      return gate
-    })
-    const changes = vi.fn()
+  it('添加空蒙版只提交一次，切换图层不会把蒙版写到新选择', async () => {
+    const changes: ImageEditDocumentV3[] = []
     const rendered = render(
-      <ControlledEditor onCreateMaskResource={createMask} onDocumentChange={changes} />,
+      <ControlledEditor onDocumentChange={(document) => changes.push(document)} />,
     )
 
     fireEvent.click(await rendered.findByRole('button', { name: '添加蒙版' }))
-    await waitFor(() => expect(createMask).toHaveBeenCalledOnce())
-    const bottomSelect = Array.from(
+    await waitFor(() => expect(changes).toHaveLength(1))
+    const topSelect = Array.from(
       rendered.container.querySelectorAll<HTMLButtonElement>('[data-layer-select]'),
-    ).find((button) => button.textContent?.includes('底层'))
-    fireEvent.click(bottomSelect as HTMLButtonElement)
-    await waitFor(() => expect(signal?.aborted).toBe(true))
-    resolveMask(`sha256:${'d'.repeat(64)}`)
-    await Promise.resolve()
+    ).find((button) => button.textContent?.includes('顶层'))
+    fireEvent.click(topSelect as HTMLButtonElement)
 
-    expect(changes).not.toHaveBeenCalled()
+    expect(changes[0].layers[0].mask).toMatchObject({
+      kind: 'sparse-mask',
+      defaultValue: 1,
+      tiles: {},
+    })
+    expect(changes[0].layers[1].mask).toBeNull()
+    expect(changes[0].revision).toBe(1)
     expect((screen.getByRole('button', { name: '添加蒙版' }) as HTMLButtonElement).disabled).toBe(false)
   })
 
@@ -174,7 +167,6 @@ describe('ImageEditorV3 lifecycle guards', () => {
     const changes = vi.fn()
     render(
       <ControlledEditor
-        onCreateMaskResource={async () => null}
         onDocumentChange={changes}
       />,
     )
@@ -214,7 +206,7 @@ describe('ImageEditorV3 lifecycle guards', () => {
     expect((screen.getByRole('switch', { name: '可见' }) as HTMLButtonElement).disabled).toBe(true)
     expect((screen.getByRole('switch', { name: '锁定' }) as HTMLButtonElement).disabled).toBe(true)
     expect((screen.getByRole('slider', { name: '不透明度' }) as HTMLInputElement).disabled).toBe(true)
-    expect((screen.getByRole('combobox', { name: '混合模式' }) as HTMLSelectElement).disabled).toBe(true)
+    expect(screen.queryByRole('combobox', { name: '混合模式' })).toBeNull()
     expect((screen.getByRole('button', { name: '删除所选图层' }) as HTMLButtonElement).disabled).toBe(true)
     expect((screen.getByRole('button', { name: '复制图层' }) as HTMLButtonElement).disabled).toBe(true)
 

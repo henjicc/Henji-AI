@@ -106,7 +106,7 @@ describe('画布图片编辑 V3 会话', () => {
       revision: 0,
       geometry: { width: 2_000, height: 1_000 },
     })
-    expect(prepared.document.layers.map((layer) => layer.type)).toEqual(['raster', 'annotation'])
+    expect(prepared.document.layers.map((layer) => layer.type)).toEqual(['raster'])
     expect(repo.save).toHaveBeenCalledOnce()
     expect(prepared.resourceByteSizes).toEqual({ [SOURCE_REF]: 4_096 })
     expect(prepared.resourceDescriptors).toEqual([managedSource().resource])

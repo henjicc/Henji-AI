@@ -53,10 +53,7 @@ function ImageEditorWorkspaceV3(props: ImageEditorV3Props): JSX.Element {
               <div className="h-px shrink-0 bg-border-dark" aria-hidden="true" />
             ) : null}
             {showProperties ? (
-              <ImageEditorPropertiesPanelV3
-                controller={controller}
-                onCreateMaskResource={props.onCreateMaskResource}
-              />
+              <ImageEditorPropertiesPanelV3 controller={controller} />
             ) : null}
           </aside>
         ) : null}

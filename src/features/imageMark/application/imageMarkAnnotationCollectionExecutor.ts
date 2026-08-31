@@ -105,7 +105,6 @@ export class ImageMarkAnnotationCollectionExecutor implements ApplicationCollect
       if (!bus.rollbackCommands(payload.commandIdsNewestFirst)) {
         throw new Error('IMAGE_MARK_V3_ANNOTATION_COLLECTION_ROLLBACK_EMPTY')
       }
-      const revision = imageMarkRevision()
       return [{
         kind: 'entity_state',
         fact: 'V3 标注集合写入已回滚，失败命令未进入重做历史。',

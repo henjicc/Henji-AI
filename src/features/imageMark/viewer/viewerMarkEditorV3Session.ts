@@ -27,6 +27,7 @@ import {
 import type {
   ImageEditorV3ManagedSource,
   ImageEditorV3ResourceDescriptor,
+  ImageEditorV3SourceMetadata,
 } from '@/platform/contracts/imageEditorV3'
 import {
   createImageMarkV3ColorMode,
@@ -107,6 +108,13 @@ function assertQuickProfileAccepts(document: ImageEditDocumentV3): void {
   }
 }
 
+function assertQuickProfileAcceptsSource(metadata: ImageEditorV3SourceMetadata): void {
+  const profile = getImageEditorHostProfileV3('quick')
+  if ((metadata.hdr || metadata.cicp !== null) && profile.hdrReadiness.state !== 'ready') {
+    throw new ImageEditorReadinessErrorV3(profile.hdrReadiness)
+  }
+}
+
 async function loadReferencedSession(
   session: ImageEditSessionReferenceV3,
   loadSnapshot: typeof loadImageEditorV3Document,
@@ -152,6 +160,7 @@ async function importLegacySession(
     requestId: `image-editor-v3:viewer:source:${options.documentId}`,
     source: resolveImageMarkV3SourceLocator(legacy.sourceUrl),
   }, options.signal)
+  assertQuickProfileAcceptsSource(managed.metadata)
   let generatedLayerIndex = 0
   const migrated = migrateImageEditDocumentV2ToV3(legacy.document, {
     width: managed.metadata.width,

@@ -46,10 +46,10 @@ function installPointerCapture(overlay: SVGSVGElement) {
 
 function ControlledSelectionEditor({
   onDocumentChange,
-  profileId = 'full',
+  profileId = 'mask',
 }: {
   onDocumentChange: (document: ImageEditDocumentV3) => void
-  profileId?: 'full' | 'quick'
+  profileId?: 'full' | 'quick' | 'mask'
 }): JSX.Element {
   const initial = createImageEditDocumentV3({ width: 64, height: 64, documentId: 'selection-ui' })
   initial.layers = [createImageEditRasterLayerV3('raster', '选区目标')]
@@ -134,15 +134,19 @@ describe('ImageEditorSelectionMaskOverlayV3', () => {
     ).toBe(false))
   })
 
-  it('quick 宿主不渲染选择工具，full 同时提供矩形、椭圆与套索', async () => {
+  it('quick 与 full 宿主不渲染选择工具，mask 同时提供矩形、椭圆与套索', async () => {
     const quick = render(<ControlledSelectionEditor profileId="quick" onDocumentChange={() => undefined} />)
     await screen.findByRole('button', { name: '裁剪' })
     expect(quick.container.querySelector('[data-tool-id="select-rect"]')).toBeNull()
     quick.unmount()
 
-    const full = render(<ControlledSelectionEditor onDocumentChange={() => undefined} />)
+    const full = render(<ControlledSelectionEditor profileId="full" onDocumentChange={() => undefined} />)
+    expect(full.container.querySelector('[data-tool-id="select-rect"]')).toBeNull()
+    full.unmount()
+
+    const mask = render(<ControlledSelectionEditor onDocumentChange={() => undefined} />)
     for (const toolId of ['select-rect', 'select-ellipse', 'select-lasso']) {
-      expect(full.container.querySelector<HTMLButtonElement>(`[data-tool-id="${toolId}"]`)?.disabled)
+      expect(mask.container.querySelector<HTMLButtonElement>(`[data-tool-id="${toolId}"]`)?.disabled)
         .toBe(false)
     }
   })
