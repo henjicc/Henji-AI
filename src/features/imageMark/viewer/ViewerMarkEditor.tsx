@@ -1,37 +1,48 @@
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { lazy, Suspense, useCallback, useMemo, useRef, useState } from 'react';
 import { createLogger } from '@/core/logging';
 import {
   coerceImageEditSession,
+  isImageEditSessionReferenceV3,
   type ImageEditDocument,
-  type ImageEditSession,
+  type ImageEditSessionData,
+  type ImageEditSessionReferenceV3,
   type ImageMarkSession,
 } from '@/core/imageEdit';
-import { UiButton } from '@/components/ui';
+import { UiButton, UiLoading } from '@/components/ui';
 import { exportImageEditDocument } from '@/features/imageEdit/execution/browserImageEditExecution';
 import { ImageEditor } from '@/features/imageEdit/editor/ImageEditor';
+import { isImageEditorV3Enabled } from '@/platform/runtime';
+
+const ViewerMarkEditorV3Host = lazy(() => import('./ViewerMarkEditorV3Host').then((module) => ({
+  default: module.ViewerMarkEditorV3Host,
+})));
 
 const logger = createLogger('features.imageMark');
 
-interface ViewerMarkEditorProps {
+export interface ViewerMarkEditorProps {
   /** 当前查看的图片(可能是已合成的编辑结果) */
   imageUrl: string;
   /** 已有编辑会话:基于原图 + 标记文档做非破坏性再编辑 */
-  session?: ImageEditSession | ImageMarkSession;
+  session?: ImageEditSessionData | ImageMarkSession;
   onClose: () => void;
-  onSave: (dataUrl: string, session: ImageEditSession) => void;
+  onSave: (mediaUrl: string, session: ImageEditSessionData) => void;
+  onSessionChange?: (session: ImageEditSessionReferenceV3) => void;
 }
 
 /**
  * 查看器编辑模式兼容宿主：全屏挂载共享 ImageEditor，保留原公开组件名。
  */
-export function ViewerMarkEditor({
+function LegacyViewerMarkEditor({
   imageUrl,
   session,
   onClose,
   onSave,
-}: ViewerMarkEditorProps): JSX.Element {
+}: Omit<ViewerMarkEditorProps, 'onSessionChange'>): JSX.Element {
   const initialSession = useMemo(
-    () => coerceImageEditSession(session, imageUrl),
+    () => coerceImageEditSession(
+      isImageEditSessionReferenceV3(session) ? undefined : session,
+      imageUrl,
+    ),
     [imageUrl, session]
   );
   const sourceUrl = initialSession.sourceUrl;
@@ -81,5 +92,27 @@ export function ViewerMarkEditor({
         className="h-full"
       />
     </div>
+  );
+}
+
+export function ViewerMarkEditor(props: ViewerMarkEditorProps): JSX.Element {
+  if (!isImageEditorV3Enabled()) {
+    return <LegacyViewerMarkEditor {...props} />;
+  }
+
+  const sessionKey = isImageEditSessionReferenceV3(props.session)
+    ? props.session.documentRef
+    : props.imageUrl;
+  return (
+    <Suspense fallback={<UiLoading message="正在打开快速编辑…" className="h-full" />}>
+      <ViewerMarkEditorV3Host
+        key={sessionKey}
+        imageUrl={props.imageUrl}
+        session={props.session}
+        onClose={props.onClose}
+        onSave={props.onSave}
+        onSessionChange={props.onSessionChange}
+      />
+    </Suspense>
   );
 }

@@ -1,7 +1,7 @@
 import { createLogger } from '@/core/logging'
 import { useCallback } from 'react'
 import { toDisplaySrc } from '@/platform/desktopApi'
-import { coerceImageEditSession, type ImageEditSession } from '@/core/imageEdit'
+import { coerceImageEditSessionData, type ImageEditSessionData } from '@/core/imageEdit'
 import { loadEditState } from '@/utils/editStatePersistence'
 import type { GenerationTask, GeneratorOptions, MediaType } from '../types'
 import { isRecord, isStringArray } from '../utils/typeGuards'
@@ -10,7 +10,7 @@ const logger = createLogger('workspaces.GenerationWorkspace.hooks.useTaskReplay'
 
 export interface UseTaskReplayParams {
   handleGenerate: (input: string, model: string, type: MediaType, options?: DynamicValue) => Promise<void>
-  imageEditStatesRef: React.MutableRefObject<Map<string, ImageEditSession>>
+  imageEditStatesRef: React.MutableRefObject<Map<string, ImageEditSessionData>>
 }
 
 export interface UseTaskReplayReturn {
@@ -26,17 +26,17 @@ function cloneOptions(options?: GeneratorOptions): GeneratorOptions {
 function restoreEditStates(
   states: DynamicValue,
   images: string[],
-  imageEditStatesRef: React.MutableRefObject<Map<string, ImageEditSession>>
+  imageEditStatesRef: React.MutableRefObject<Map<string, ImageEditSessionData>>
 ): void {
   if (!isRecord(states)) return
   for (const [key, value] of Object.entries(states)) {
     const index = Number.parseInt(key, 10)
     if (Number.isFinite(index) && images[index]) {
-      imageEditStatesRef.current.set(images[index], coerceImageEditSession(value, images[index]))
+      imageEditStatesRef.current.set(images[index], coerceImageEditSessionData(value, images[index]))
       continue
     }
     if (typeof key === 'string' && images.includes(key)) {
-      imageEditStatesRef.current.set(key, coerceImageEditSession(value, key))
+      imageEditStatesRef.current.set(key, coerceImageEditSessionData(value, key))
     }
   }
 }
@@ -44,7 +44,7 @@ function restoreEditStates(
 async function restoreEditStatesFromFile(
   editStateFile: string,
   images: string[],
-  imageEditStatesRef: React.MutableRefObject<Map<string, ImageEditSession>>
+  imageEditStatesRef: React.MutableRefObject<Map<string, ImageEditSessionData>>
 ): Promise<void> {
   try {
     const statesUnknown = await loadEditState(editStateFile)

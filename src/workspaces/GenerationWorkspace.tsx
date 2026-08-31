@@ -10,7 +10,7 @@ import { useContextMenu } from '@/hooks/useContextMenu'
 import { useI18n } from '@/hooks/useI18n'
 import { useOnboardingState } from '@/features/onboarding/application/useOnboardingState'
 import { getModelDisplayName } from '@/utils/modelHelpers'
-import type { ImageEditSession } from '@/core/imageEdit'
+import type { ImageEditSessionData } from '@/core/imageEdit'
 import { FloatingInputPanel } from './GenerationWorkspace/components/FloatingInputPanel'
 import { NotificationToast } from './GenerationWorkspace/components/NotificationToast'
 import { ClearHistoryDialog } from './GenerationWorkspace/components/ClearHistoryDialog'
@@ -33,6 +33,7 @@ import { useToast } from './GenerationWorkspace/hooks/useToast'
 import { useUpdateCheck } from './GenerationWorkspace/hooks/useUpdateCheck'
 import { useGenerationHistoryFiltering } from './GenerationWorkspace/hooks/useGenerationHistoryFiltering'
 import { useGenerationAutoScroll } from './GenerationWorkspace/hooks/useGenerationAutoScroll'
+import { useGenerationImageViewer } from './GenerationWorkspace/hooks/useGenerationImageViewer'
 import { splitMulti } from './GenerationWorkspace/utils/multiFile'
 import { Copy, Download } from 'lucide-react'
 
@@ -100,7 +101,7 @@ const GenerationWorkspace: React.FC = () => {
     setTasks,
     clearTaskProgress: clearGenerationTaskProgress,
   })
-  const imageEditStatesRef = useRef<Map<string, ImageEditSession>>(new Map())
+  const imageEditStatesRef = useRef<Map<string, ImageEditSessionData>>(new Map())
   const setUploadedImagesRef = useRef<React.Dispatch<React.SetStateAction<string[]>> | null>(null)
   const setUploadedFilePathsRef = useRef<React.Dispatch<React.SetStateAction<string[]>> | null>(null)
   const generationMessages = useMemo(() => {
@@ -161,64 +162,26 @@ const GenerationWorkspace: React.FC = () => {
     window.dispatchEvent(new CustomEvent('reedit-content', { detail: { prompt } }))
     expandPanelSmooth()
   }, [expandPanelSmooth])
-  const [isImageViewerOpen, setIsImageViewerOpen] = useState(false)
-  const [currentImage, setCurrentImage] = useState('')
-  const [currentImageList, setCurrentImageList] = useState<string[]>([])
-  const [currentFilePathList, setCurrentFilePathList] = useState<string[]>([])
-  const [currentImageIndex, setCurrentImageIndex] = useState(0)
-  const [isEditorMode, setIsEditorMode] = useState(false)
-  const [isFromUploadArea, setIsFromUploadArea] = useState(false)
-  const openImageViewer = (url: string, list: string[], filePaths?: string[], fromUpload: boolean = false) => {
-    setCurrentImage(url)
-    setCurrentImageList(list)
-    setCurrentImageIndex(Math.max(0, list.indexOf(url)))
-    setCurrentFilePathList(filePaths ?? [])
-    setIsFromUploadArea(fromUpload)
-    setIsEditorMode(false)
-    setIsImageViewerOpen(true)
-  }
-  const closeImageViewer = () => {
-    setIsImageViewerOpen(false)
-    setIsEditorMode(false)
-  }
-  const navigateImage = (direction: 'prev' | 'next') => {
-    if (currentImageList.length === 0) return
-    const nextIndex =
-      direction === 'prev'
-        ? (currentImageIndex > 0 ? currentImageIndex - 1 : currentImageList.length - 1)
-        : (currentImageIndex < currentImageList.length - 1 ? currentImageIndex + 1 : 0)
-    setCurrentImageIndex(nextIndex)
-    setCurrentImage(currentImageList[nextIndex])
-    setIsEditorMode(false)
-  }
-  const handleSaveImageEdit = (dataUrl: string, session: ImageEditSession) => {
-    imageEditStatesRef.current.set(dataUrl, session)
-    setCurrentImageList((prev) => {
-      const next = [...prev]
-      next[currentImageIndex] = dataUrl
-      return next
-    })
-    setCurrentFilePathList((prev) => {
-      if (!prev.length) return prev
-      const next = [...prev]
-      next[currentImageIndex] = ''
-      return next
-    })
-    setCurrentImage(dataUrl)
-    if (isFromUploadArea) {
-      setUploadedImagesRef.current?.((prev) => {
-        const next = [...prev]
-        if (currentImageIndex < next.length) next[currentImageIndex] = dataUrl
-        return next
-      })
-      setUploadedFilePathsRef.current?.((prev) => {
-        const next = [...prev]
-        while (next.length <= currentImageIndex) next.push('')
-        next[currentImageIndex] = ''
-        return next
-      })
-    }
-  }
+  const {
+    isImageViewerOpen,
+    currentImage,
+    currentImageList,
+    currentFilePathList,
+    currentImageIndex,
+    isEditorMode,
+    isFromUploadArea,
+    openImageViewer,
+    closeImageViewer,
+    navigateImage,
+    enterImageEditor,
+    exitImageEditor,
+    handleSaveImageEdit,
+    handleImageEditSessionChange,
+  } = useGenerationImageViewer({
+    imageEditStatesRef,
+    setUploadedImagesRef,
+    setUploadedFilePathsRef,
+  })
   const handleImageViewerContextMenu = (e: React.MouseEvent, filePath?: string) => {
     showMenu(e, [
       {
@@ -488,9 +451,10 @@ const GenerationWorkspace: React.FC = () => {
         initialEditSession={imageEditStatesRef.current.get(currentImage)}
         onClose={closeImageViewer}
         onNavigate={navigateImage}
-        onEnterEditor={() => setIsEditorMode(true)}
-        onExitEditor={() => setIsEditorMode(false)}
+        onEnterEditor={enterImageEditor}
+        onExitEditor={exitImageEditor}
         onSaveEdit={handleSaveImageEdit}
+        onEditSessionChange={handleImageEditSessionChange}
         onContextMenu={handleImageViewerContextMenu}
       />
       <VideoViewerModal

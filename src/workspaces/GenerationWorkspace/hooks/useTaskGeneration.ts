@@ -4,7 +4,7 @@ import { GenerationService } from '@/core/services/GenerationService'
 import { showAlertDialog } from '@/stores/alertDialogStore'
 import { toAudioDisplayUrl } from '@/utils/audioPreview'
 import { getMediaDimensions, getMediaDurationFormatted } from '@/utils/mediaDimensions'
-import type { ImageEditSession } from '@/core/imageEdit'
+import type { ImageEditSessionData } from '@/core/imageEdit'
 import type { MediaType, GenerationTask, GeneratorOptions, ToastNotification } from '../types'
 import { splitMulti } from '../utils/multiFile'
 import { resolveProgressSettleDelayMs } from '../utils/progressAnimation'
@@ -51,7 +51,7 @@ export interface UseTaskGenerationParams {
   updateProgress: (taskId: string, progress: number) => void
   notify: (message: string, type?: ToastNotification['type']) => void
   messages: UseTaskGenerationMessages
-  imageEditStatesRef: React.MutableRefObject<Map<string, ImageEditSession>>
+  imageEditStatesRef: React.MutableRefObject<Map<string, ImageEditSessionData>>
   setUploadedImagesRef: React.MutableRefObject<React.Dispatch<React.SetStateAction<string[]>> | null>
   setUploadedFilePathsRef: React.MutableRefObject<React.Dispatch<React.SetStateAction<string[]>> | null>
 }

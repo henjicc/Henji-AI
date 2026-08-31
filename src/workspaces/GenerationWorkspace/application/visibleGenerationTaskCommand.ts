@@ -1,7 +1,7 @@
 import { createLogger } from '@/core/logging'
 import type { GenerationTaskStatusSnapshot } from '@/features/generation/application/generationTaskStatusRegistry'
 import { registry } from '@/core/ModelRegistry'
-import type { ImageEditSession } from '@/core/imageEdit'
+import type { ImageEditSessionData } from '@/core/imageEdit'
 import { taskQueueManager } from '@/services/taskQueue'
 import { saveEditState } from '@/utils/editStatePersistence'
 import {
@@ -58,7 +58,7 @@ export interface VisibleGenerationTaskDependencies {
   validateProviderKey: (providerId: string) => Promise<boolean>
   onProviderKeyMissing: () => void
   messages: VisibleGenerationTaskMessages
-  imageEditStates: Map<string, ImageEditSession>
+  imageEditStates: Map<string, ImageEditSessionData>
   setUploadedImages?: (images: string[]) => void
   setUploadedFilePaths?: (paths: string[]) => void
 }
@@ -365,7 +365,7 @@ export async function createVisibleGenerationTask(
   }
 
   const taskId = createTaskId()
-  const imageEditStates = (isStringArray(options.images) ? options.images : []).reduce<Record<string, ImageEditSession>>((acc, url, index) => {
+  const imageEditStates = (isStringArray(options.images) ? options.images : []).reduce<Record<string, ImageEditSessionData>>((acc, url, index) => {
     const state = dependencies.imageEditStates.get(url)
     if (state) acc[String(index)] = state
     return acc

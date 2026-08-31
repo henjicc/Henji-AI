@@ -20,6 +20,7 @@ export * from './leasedLruCache';
 export * from './renderCaches';
 export * from './renderScheduler';
 export * from './serviceContracts';
+export * from './sessionReference';
 export * from './performanceMetrics';
 export * from './resourceReferences';
 export * from './effects';
