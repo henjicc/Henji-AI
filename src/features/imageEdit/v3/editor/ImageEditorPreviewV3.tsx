@@ -23,9 +23,11 @@ import {
   ImageEditorUrlPreviewV3,
 } from './ImageEditorPreviewOutputV3'
 import { ImageEditorRasterBrushOverlayV3 } from './ImageEditorRasterBrushOverlayV3'
+import { ImageEditorRasterPasteboardV3 } from './ImageEditorRasterPasteboardV3'
 import { ImageEditorSelectionMaskOverlayV3 } from './ImageEditorSelectionMaskOverlayV3'
 import { ImageEditorViewportTilesV3 } from './ImageEditorViewportTilesV3'
 import { resolveAnnotationOutputGeometryV3 } from './annotationGeometryV3'
+import { resolveImageEditorRasterPasteboardLayerV3 } from './rasterPasteboardV3'
 import type {
   ImageEditorV3Controller,
   ImageEditorV3PreviewOutput,
@@ -105,6 +107,11 @@ export function ImageEditorPreviewV3({
     zoom,
     pan,
   )
+  const rasterPasteboardLayer = useMemo(
+    () => previewRenderer ? null : resolveImageEditorRasterPasteboardLayerV3(snapshot.document),
+    [previewRenderer, snapshot.document],
+  )
+  const hasRasterPasteboard = Boolean(rasterPasteboardLayer && viewportLayout)
   const layerMoveHandlers = useImageEditorLayerMoveGestureV3(
     controller,
     activeTool,
@@ -195,15 +202,20 @@ export function ImageEditorPreviewV3({
     : viewportResult?.revision ?? managedPreview.resultRevision
 
   useLayoutEffect(() => {
+    const feedback = moveFeedbackRef.current
+    if (!feedback) return
+    if (hasRasterPasteboard) {
+      // 源图层随文档 transform 同步重绘，提交后无需继续保留旧合成帧位移。
+      feedback.style.transform = ''
+      return
+    }
     if (
       Object.keys(snapshot.previewOverrides).length > 0
       || basePreviewDocumentId !== snapshot.document.id
       || basePreviewRevision !== snapshot.document.revision
     ) return
-    const feedback = moveFeedbackRef.current
-    if (!feedback) return
     feedback.style.transform = ''
-  }, [basePreviewDocumentId, basePreviewRevision, snapshot.document.id, snapshot.document.revision, snapshot.previewOverrides])
+  }, [basePreviewDocumentId, basePreviewRevision, hasRasterPasteboard, snapshot.document.id, snapshot.document.revision, snapshot.previewOverrides])
 
   const applyViewportTransform = useCallback((
     nextZoom: number,
@@ -388,8 +400,8 @@ export function ImageEditorPreviewV3({
               className="pointer-events-none absolute inset-0 overflow-hidden"
             >
               <div
-                ref={moveFeedbackRef}
-                data-move-feedback-frame
+                ref={hasRasterPasteboard ? undefined : moveFeedbackRef}
+                data-move-feedback-frame={hasRasterPasteboard ? undefined : ''}
                 className="absolute inset-0 flex items-center justify-center"
               >
                 {viewportResult ? (
@@ -412,6 +424,20 @@ export function ImageEditorPreviewV3({
           ) : output.kind === 'frame' ? (
             <ImageEditorFramePreviewV3 output={output} label={t('imageEditor.v3.previewAlt')} />
           ) : output.content}
+          {rasterPasteboardLayer && viewportLayout ? (
+            <ImageEditorRasterPasteboardV3
+              feedbackRef={moveFeedbackRef}
+              layer={rasterPasteboardLayer}
+              sourceImageUrl={sourceImageUrl}
+              documentWidth={outputGeometry.width}
+              stageWidth={viewportLayout.stageWidth}
+            />
+          ) : null}
+          <div
+            data-document-boundary
+            className="pointer-events-none absolute inset-0 border border-veil-subtle"
+            aria-hidden="true"
+          />
           <ImageEditorAnnotationOverlayV3 controller={controller} />
           <ImageEditorRasterBrushOverlayV3
             bus={bus}

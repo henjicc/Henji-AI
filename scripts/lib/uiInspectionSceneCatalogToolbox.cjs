@@ -241,7 +241,7 @@ function createToolboxScenes(context) {
         }
         for (let step = 1; step <= 6; step += 1) {
           const expectedX = 42 * step / 6
-          const expectedY = 24 * step / 6
+          const expectedY = -180 * step / 6
           await page.mouse.move(startX + expectedX, startY + expectedY)
           await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => resolve())))
           const [source, currentFeedbackBox, currentRasterFrameBox, revision] = await Promise.all([
@@ -281,6 +281,16 @@ function createToolboxScenes(context) {
           return previewSurface?.getAttribute('data-preview-display-source') === 'viewport'
             && feedbackFrame?.style.transform === ''
         }, undefined, { timeout: 12000 })
+        const pasteboardImage = editor.locator('[data-raster-pasteboard-layer] img')
+        const documentBoundary = editor.locator('[data-document-boundary]')
+        const [pasteboardImageBox, documentBoundaryBox] = await Promise.all([
+          pasteboardImage.boundingBox(),
+          documentBoundary.boundingBox(),
+        ])
+        if (!pasteboardImageBox || !documentBoundaryBox
+          || pasteboardImageBox.y >= documentBoundaryBox.y - 100) {
+          throw new Error('移出文档的原图没有继续显示在编辑工作区')
+        }
 
         await editor.locator('[data-tool-id="annotation-rect"]').click()
         await page.mouse.move(startX - 120, startY - 80)

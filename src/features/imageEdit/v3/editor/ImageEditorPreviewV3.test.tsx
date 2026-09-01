@@ -214,6 +214,41 @@ describe('ImageEditorPreviewV3 managed frame ownership', () => {
     expect(document.revision).toBe(0)
   })
 
+  it('单一原图移出文档后仍显示在整块编辑工作区，文档边界保持独立', async () => {
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({
+      x: 0, y: 0, left: 0, top: 0, right: 1_000, bottom: 600,
+      width: 1_000, height: 600, toJSON: () => undefined,
+    })
+    const document = createImageEditDocumentV3({
+      width: 1_600,
+      height: 1_000,
+      documentId: 'pasteboard-document',
+      sourceResourceId: 'sha256:source',
+    })
+    document.layers[0].transform = [1, 0, 0, 1, 100, -240]
+    const rendered = render(
+      <div style={{ width: 1_000, height: 600 }}>
+        <ImageEditorV3
+          sourceImageUrl="preview.jpg"
+          document={document}
+          profileId="full"
+          onDocumentChange={() => undefined}
+        />
+      </div>,
+    )
+
+    const pasteboard = await waitFor(() => {
+      const element = rendered.container.querySelector<HTMLElement>('[data-raster-pasteboard-layer]')
+      if (!element) throw new Error('文档外原图图层尚未挂载')
+      return element
+    })
+    const image = pasteboard.querySelector('img')
+    const rasterFrame = rendered.container.querySelector('[data-raster-display-frame]')
+    expect(image?.style.transform).toBe('matrix(1, 0, 0, 1, 55.2, -132.48)')
+    expect(rasterFrame?.contains(pasteboard)).toBe(false)
+    expect(rendered.container.querySelector('[data-document-boundary]')).toBeTruthy()
+  })
+
   it('单底图移动只更新合成层，缓存布局且松手仅提交一个 revision', async () => {
     vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({
       clearRect: vi.fn(),
