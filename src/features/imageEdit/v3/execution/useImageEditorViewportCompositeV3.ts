@@ -1,4 +1,4 @@
-import { useEffect, useId, useMemo, useState } from 'react'
+import { useEffect, useId, useMemo, useRef, useState } from 'react'
 
 import { createLogger } from '@/core/logging'
 import type { ImageEditorV3ResourceDescriptor } from '@/platform/contracts/imageEditorV3'
@@ -17,6 +17,7 @@ import { useImageEditorResultLeaseV3 } from './useImageEditorResultLeaseV3'
 
 const logger = createLogger('image_editor_v3.viewport_composite_hook')
 const EMPTY_RESOURCE_DESCRIPTORS: readonly ImageEditorV3ResourceDescriptor[] = []
+const VIEWPORT_LAYOUT_SETTLE_MS = 80
 
 export interface ImageEditorViewportCompositeStateV3 {
   result: ImageEditorManagedViewportCompositeV3 | null
@@ -43,12 +44,29 @@ export function useImageEditorViewportCompositeV3(
     fallbackRequired: false,
     rendering: false,
   })
+  const latestLayoutRef = useRef(layout)
+  latestLayoutRef.current = layout
+  const [renderLayout, setRenderLayout] = useState(layout)
+  const layoutKey = layout?.viewportKey ?? null
+
+  useEffect(() => {
+    if (!layoutKey) {
+      setRenderLayout(null)
+      return
+    }
+    if (renderLayout?.viewportKey === layoutKey) return
+    const timeout = setTimeout(() => {
+      const latest = latestLayoutRef.current
+      if (latest?.viewportKey === layoutKey) setRenderLayout(latest)
+    }, VIEWPORT_LAYOUT_SETTLE_MS)
+    return () => clearTimeout(timeout)
+  }, [layoutKey, renderLayout?.viewportKey])
 
   useImageEditorDisposableV3(client)
   useImageEditorResultLeaseV3(state.result)
 
   useEffect(() => {
-    if (!enabled || !layout || typeof Worker === 'undefined') {
+    if (!enabled || !renderLayout || typeof Worker === 'undefined') {
       client.cancel()
       setState((current) => ({
         ...current,
@@ -73,8 +91,8 @@ export function useImageEditorViewportCompositeV3(
         document,
         quality,
         resourceDescriptors,
-        viewport: layout.viewport,
-        viewportKey: layout.viewportKey,
+        viewport: renderLayout.viewport,
+        viewportKey: renderLayout.viewportKey,
       }).then((result) => {
         if (!acceptsResult) {
           result.release()
@@ -108,7 +126,7 @@ export function useImageEditorViewportCompositeV3(
       })
     })
     return () => { acceptsResult = false }
-  }, [client, enabled, layout, resourceDescriptors, snapshot])
+  }, [client, enabled, renderLayout, resourceDescriptors, snapshot])
 
   return state
 }

@@ -211,6 +211,17 @@ describe('ImageEditorPreviewV3 managed frame ownership', () => {
       x: 25,
       y: 25,
     })
+
+    const wheel = new WheelEvent('wheel', {
+      bubbles: true,
+      cancelable: true,
+      clientX: 600,
+      clientY: 300,
+      deltaY: -1,
+    })
+    fireEvent(surface, wheel)
+    expect(wheel.defaultPrevented).toBe(true)
+    expect(useImageEditorInteractionStoreV3.getState().viewportZoomBySession[sessionId]).toBe(1.4375)
     expect(document.revision).toBe(0)
   })
 

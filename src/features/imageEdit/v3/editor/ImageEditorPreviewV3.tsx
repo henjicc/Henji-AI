@@ -1,9 +1,6 @@
 import { AlertTriangle, LoaderCircle, Minus, Plus } from 'lucide-react'
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef } from 'react'
-import type {
-  PointerEvent as ReactPointerEvent,
-  WheelEvent as ReactWheelEvent,
-} from 'react'
+import type { PointerEvent as ReactPointerEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { UiIconButton } from '@/components/ui'
@@ -36,9 +33,11 @@ import type {
 import { useImageEditorBusSnapshotV3 } from './useImageEditorControllerV3'
 import { useImageEditorViewportLayoutV3 } from './useImageEditorViewportLayoutV3'
 import { useImageEditorLayerMoveGestureV3 } from './useImageEditorLayerMoveGestureV3'
+import { useImageEditorViewportWheelV3 } from './useImageEditorViewportWheelV3'
 import {
   imageEditorViewportTransformV3,
   zoomImageEditorViewportAroundPointV3,
+  type ImageEditorNavigationGestureV3,
   type ImageEditorViewportPanV3,
 } from './viewportNavigationV3'
 
@@ -53,17 +52,6 @@ interface ImageEditorPreviewV3Props extends Pick<
 > {
   bus: ImageEditCommandBusV3
   controller: ImageEditorV3Controller
-}
-
-interface ImageEditorNavigationGestureV3 {
-  kind: 'pan' | 'zoom'
-  pointerId: number
-  startClientX: number
-  startClientY: number
-  startPan: ImageEditorViewportPanV3
-  pendingPan: ImageEditorViewportPanV3
-  altKey: boolean
-  moved: boolean
 }
 
 const ZERO_VIEWPORT_PAN_V3: ImageEditorViewportPanV3 = { x: 0, y: 0 }
@@ -335,13 +323,7 @@ export function ImageEditorPreviewV3({
     releaseGesture(true)
   }
 
-  const handleWheel = (event: ReactWheelEvent<HTMLElement>): void => {
-    if (activeTool !== 'zoom' && !event.ctrlKey && !event.metaKey) return
-    if (event.deltaY === 0) return
-    event.preventDefault()
-    const factor = event.deltaY < 0 ? 1.15 : 1 / 1.15
-    zoomAroundClientPoint(event.clientX, event.clientY, zoom * factor)
-  }
+  useImageEditorViewportWheelV3(surfaceRef, activeTool, zoom, zoomAroundClientPoint)
 
   const zoomFromCenter = (requestedZoom: number): void => {
     const rect = surfaceRef.current?.getBoundingClientRect()
@@ -380,7 +362,6 @@ export function ImageEditorPreviewV3({
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
       onPointerCancel={() => releaseGesture(false)}
-      onWheel={handleWheel}
     >
       <div className="absolute inset-0 flex items-center justify-center overflow-hidden p-6">
         <div
@@ -394,36 +375,38 @@ export function ImageEditorPreviewV3({
               : {}),
           }}
         >
-          {!previewRenderer && !hasRasterPasteboard ? (
-            <div
-              data-raster-display-frame
-              className="pointer-events-none absolute inset-0 overflow-hidden"
-            >
+          {!previewRenderer ? (
+            hasRasterPasteboard ? null : (
               <div
-                ref={moveFeedbackRef}
-                data-move-feedback-frame
-                className="absolute inset-0 flex items-center justify-center"
+                data-raster-display-frame
+                className="pointer-events-none absolute inset-0 overflow-hidden"
               >
-                {viewportResult ? (
-                  <ImageEditorViewportTilesV3
-                    result={viewportResult}
-                    label={t('imageEditor.v3.previewAlt')}
-                  />
-                ) : null}
-                {!viewportResult && output.kind === 'url' ? (
-                  <ImageEditorUrlPreviewV3 output={output} label={t('imageEditor.v3.previewAlt')} />
-                ) : null}
-                {!viewportResult && output.kind === 'frame' ? (
-                  <ImageEditorFramePreviewV3 output={output} label={t('imageEditor.v3.previewAlt')} />
-                ) : null}
-                {!viewportResult && output.kind === 'content' ? output.content : null}
+                <div
+                  ref={moveFeedbackRef}
+                  data-move-feedback-frame
+                  className="absolute inset-0 flex items-center justify-center"
+                >
+                  {viewportResult ? (
+                    <ImageEditorViewportTilesV3
+                      result={viewportResult}
+                      label={t('imageEditor.v3.previewAlt')}
+                    />
+                  ) : null}
+                  {!viewportResult && output.kind === 'url' ? (
+                    <ImageEditorUrlPreviewV3 output={output} label={t('imageEditor.v3.previewAlt')} />
+                  ) : null}
+                  {!viewportResult && output.kind === 'frame' ? (
+                    <ImageEditorFramePreviewV3 output={output} label={t('imageEditor.v3.previewAlt')} />
+                  ) : null}
+                  {!viewportResult && output.kind === 'content' ? output.content : null}
+                </div>
               </div>
-            </div>
-          ) : previewRenderer && output.kind === 'url' ? (
+            )
+          ) : output.kind === 'url' ? (
             <ImageEditorUrlPreviewV3 output={output} label={t('imageEditor.v3.previewAlt')} />
-          ) : previewRenderer && output.kind === 'frame' ? (
+          ) : output.kind === 'frame' ? (
             <ImageEditorFramePreviewV3 output={output} label={t('imageEditor.v3.previewAlt')} />
-          ) : previewRenderer ? output.content : null}
+          ) : output.content}
           {rasterPasteboardLayer && viewportLayout ? (
             <ImageEditorRasterPasteboardV3
               feedbackRef={moveFeedbackRef}

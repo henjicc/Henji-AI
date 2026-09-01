@@ -359,7 +359,7 @@ describe('图片编辑 V3 视口成品客户端', () => {
     client.dispose()
   })
 
-  it('Worker 已接管帧后取消会保留预算，直到取消回执或终止才归还', async () => {
+  it('Worker 已接管帧后取消会终止专用 Worker 并立即归还预算', async () => {
     const frame = createFrame()
     const scheduler = {
       render: vi.fn(async () => frame),
@@ -403,14 +403,96 @@ describe('图片编辑 V3 视口成品客户端', () => {
 
     client.cancel()
     await settled
-    expect(budget.snapshot().totalBytes).toBe(reservedBeforeCancel)
-    worker.emit({
-      type: 'failed',
-      requestId: request.requestId,
-      sequence: request.sequence,
-      code: 'aborted',
-      message: '已取消',
+    expect(worker.terminate).toHaveBeenCalledTimes(1)
+    expect(budget.snapshot()).toMatchObject({ totalBytes: 0, leaseCount: 0 })
+    client.dispose()
+  })
+
+  it('连续更新视口时已取消 Worker 不得堆积占满全局预算', async () => {
+    const frames: ImageEditorViewportFrameV3[] = []
+    const sourceScheduler = {
+      render: vi.fn(async () => {
+        const frame = createFrame()
+        frames.push(frame)
+        return frame
+      }),
+      cancel: vi.fn(),
+      dispose: vi.fn(),
+    }
+    const workers: FakeViewportWorker[] = []
+    const budget = new ImageEditResourceBudget({
+      totalBytes: 64 * 1024 * 1024,
+      cpuCacheTargetBytes: 0,
+      gpuTargetBytes: 0,
     })
+    const client = new ImageEditorViewportCompositeClientV3({
+      sessionId: 'viewport-rapid-update',
+      scheduler: sourceScheduler,
+      workerFactory: () => {
+        const worker = new FakeViewportWorker()
+        workers.push(worker)
+        return worker
+      },
+      resourceBudget: budget,
+    })
+    const document = createImageEditDocumentV3({
+      width: 20_000,
+      height: 10_000,
+      documentId: 'viewport-rapid-update',
+      sourceResourceId: RESOURCE,
+      idFactory: () => 'source',
+    })
+    const request = (viewportKey: string) => ({
+      document,
+      quality: 'stable' as const,
+      resourceDescriptors: [],
+      viewport: {
+        documentX: 0, documentY: 0, width: 1_440, height: 900,
+        zoom: 0.072, devicePixelRatio: 1,
+      },
+      viewportKey,
+    })
+
+    const first = client.render(request('rapid-1'))
+    const firstSettled = expect(first).rejects.toBeInstanceOf(
+      ImageEditorViewportCompositeSupersededErrorV3,
+    )
+    await flushUntil(() => workers[0]?.messages.some((message) => message.type === 'render') ?? false)
+    const singleJobBytes = budget.snapshot().totalBytes
+    expect(singleJobBytes).toBeGreaterThan(0)
+
+    const second = client.render(request('rapid-2'))
+    await firstSettled
+    await flushUntil(() => workers[1]?.messages.some((message) => message.type === 'render') ?? false)
+    expect(budget.snapshot().totalBytes).toBeLessThanOrEqual(singleJobBytes)
+
+    const secondRequest = workers[1]?.messages.find(
+      (message): message is Extract<ImageEditorViewportCompositeWorkerRequestV3, { type: 'render' }> => (
+        message.type === 'render'
+      ),
+    )
+    const secondFrame = frames[1]
+    if (!secondRequest || !secondFrame) throw new Error('缺少第二次视口 Worker 请求')
+    const tiles = secondFrame.plan.tiles.map((tile) => {
+      const outputRect = createTileRegion(document.geometry, {
+        mip: secondFrame.plan.mip,
+        x: tile.tileX,
+        y: tile.tileY,
+      }, tile.halo).outputRect
+      return { outputRect, bitmap: bitmap(outputRect.width, outputRect.height) }
+    })
+    workers[1].emit({
+      type: 'rendered',
+      requestId: secondRequest.requestId,
+      sequence: secondRequest.sequence,
+      revision: document.revision,
+      mip: secondFrame.plan.mip,
+      documentWidth: document.geometry.width,
+      documentHeight: document.geometry.height,
+      diagnostics: [],
+      tiles,
+    })
+    ;(await second).release()
     expect(budget.snapshot()).toMatchObject({ totalBytes: 0, leaseCount: 0 })
     client.dispose()
   })

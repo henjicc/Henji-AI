@@ -221,6 +221,38 @@ function createToolboxScenes(context) {
           throw new Error('单一原图模式出现重复画面或多余文档边框')
         }
 
+        const zoomStartedAt = new Date().toISOString()
+        await editor.locator('[data-tool-id="zoom"]').click()
+        const zoomPreviewBox = await preview.boundingBox()
+        if (!zoomPreviewBox) throw new Error('连续缩放前无法读取图片编辑预览范围')
+        await page.mouse.move(
+          zoomPreviewBox.x + zoomPreviewBox.width * 0.5,
+          zoomPreviewBox.y + zoomPreviewBox.height * 0.5,
+        )
+        for (let index = 0; index < 40; index += 1) {
+          await page.mouse.wheel(0, index % 2 === 0 ? -1 : 1)
+          await page.waitForTimeout(5)
+        }
+        await settlePage(page, 400)
+        const zoomCompositeStarts = await page.evaluate(async (afterTimestamp) => {
+          const result = await window.henjiNative.logging.queryLogEvents({
+            date: new Date().toISOString().slice(0, 10),
+            afterTimestamp,
+            level: 'info',
+            limit: 200,
+          })
+          return result.events.filter((event) => (
+            event.event === 'image_editor_v3.viewport_composite.start'
+          )).length
+        }, zoomStartedAt)
+        if (zoomCompositeStarts > 2) {
+          throw new Error(`连续缩放创建了 ${zoomCompositeStarts} 个视口任务，未合并为最新请求`)
+        }
+        await editor.locator('[data-tool-id="move"]').click()
+        await page.waitForFunction(() => (
+          document.querySelector('[data-preview-surface]')?.getAttribute('data-move-availability') === 'ready'
+        ), undefined, { timeout: 10000 })
+
         const readRevision = async () => {
           const label = await editor.getByText(/^(版本|Revision) \d+$/).first().textContent()
           const revision = Number(label?.match(/\d+/)?.[0])

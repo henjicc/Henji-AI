@@ -146,7 +146,11 @@ function normalizeViewportError(error: unknown): Error {
 }
 let viewportCompositeClientSequence = 0
 
-/** 一个会话同时最多只有一个 source load / Worker composite；新请求立即取消旧请求。 */
+/**
+ * 一个会话同时最多只有一个 source load / Worker composite。
+ * 已发布任务被更新视口取代时终止专用 Worker，再释放预算并启动最新请求；不能在等待
+ * 取消回执期间继续向同一 Worker 堆任务，否则高频缩放会把每一帧的预留留在账本里。
+ */
 export class ImageEditorViewportCompositeClientV3 {
   private readonly budget: ImageEditResourceBudget
   private readonly scheduler: ViewportSchedulerV3
@@ -158,7 +162,6 @@ export class ImageEditorViewportCompositeClientV3 {
   private readonly resultOwner = new ImageEditorViewportCompositeResultOwnerV3()
   private worker: ImageEditorViewportCompositeWorkerPortV3 | null = null
   private active: ActiveViewportJobV3 | null = null
-  private readonly retiredJobs = new Map<string, ActiveViewportJobV3>()
   private sequence = 0
   private disposed = false
 
@@ -234,8 +237,6 @@ export class ImageEditorViewportCompositeClientV3 {
       this.worker.terminate()
       this.worker = null
     }
-    for (const job of this.retiredJobs.values()) this.releaseJobResources(job)
-    this.retiredJobs.clear()
     this.resultOwner.dispose()
     this.sessionBudgetLease?.release()
   }
@@ -377,11 +378,6 @@ export class ImageEditorViewportCompositeClientV3 {
     const job = this.active
     if (!job || event.requestId !== job.requestId || event.sequence !== job.sequence) {
       this.releaseEvent(event)
-      const retired = this.retiredJobs.get(event.requestId)
-      if (retired && retired.sequence === event.sequence) {
-        this.retiredJobs.delete(event.requestId)
-        this.releaseJobResources(retired)
-      }
       return
     }
     if (!job.workerCompletion.resolve(event)) this.releaseEvent(event)
@@ -433,8 +429,6 @@ export class ImageEditorViewportCompositeClientV3 {
     const job = this.active
     this.worker?.terminate()
     this.worker = null
-    for (const retired of this.retiredJobs.values()) this.releaseJobResources(retired)
-    this.retiredJobs.clear()
     if (job) job.workerCompletion.reject(new Error(message))
   }
 
@@ -462,8 +456,13 @@ export class ImageEditorViewportCompositeClientV3 {
     job.controller.abort(error)
     this.renderScheduler.cancelTask(job.renderTaskId)
     this.scheduler.cancel()
-    if (job.posted) this.retiredJobs.set(job.requestId, job)
-    else this.releaseJobResources(job)
+    if (job.posted) {
+      // Transferable 已交给 Worker 后，只有终止这个专用 Worker 才能同步证明旧任务不再
+      // 持有像素资源。先终止再归还预算，下一次缩放就不会和旧帧重叠记账。
+      this.worker?.terminate()
+      this.worker = null
+    }
+    this.releaseJobResources(job)
     this.settle(job, () => job.reject(error))
   }
 

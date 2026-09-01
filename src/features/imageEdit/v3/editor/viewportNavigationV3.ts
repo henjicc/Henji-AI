@@ -3,6 +3,17 @@ export interface ImageEditorViewportPanV3 {
   y: number
 }
 
+export interface ImageEditorNavigationGestureV3 {
+  kind: 'pan' | 'zoom'
+  pointerId: number
+  startClientX: number
+  startClientY: number
+  startPan: ImageEditorViewportPanV3
+  pendingPan: ImageEditorViewportPanV3
+  altKey: boolean
+  moved: boolean
+}
+
 export const IMAGE_EDITOR_VIEWPORT_MIN_ZOOM_V3 = 0.05
 export const IMAGE_EDITOR_VIEWPORT_MAX_ZOOM_V3 = 8
 
