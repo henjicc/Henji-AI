@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { exportDiagnosticBundle } from '@/commands/logging'
@@ -16,7 +16,6 @@ function ImageEditorWorkspaceV3(props: ImageEditorV3Props): JSX.Element {
   const showLayers = controller.profile.panels.includes('layers')
   const showProperties = controller.profile.panels.includes('properties')
   const showSidebar = showLayers || showProperties
-  const workspaceRef = useRef<HTMLDivElement | null>(null)
 
   return (
     <div
@@ -30,26 +29,37 @@ function ImageEditorWorkspaceV3(props: ImageEditorV3Props): JSX.Element {
         toolbarLeading={props.toolbarLeading}
         toolbarActions={props.toolbarActions}
       />
-      <div ref={workspaceRef} className="relative flex min-h-0 min-w-0 flex-1">
+      <div className="relative flex min-h-0 min-w-0 flex-1">
         <ImageEditorToolRailV3 controller={controller} />
-        <ImageEditorPreviewV3
-          sourceImageUrl={props.sourceImageUrl}
-          previewRenderer={props.previewRenderer}
-          annotationOverlay={props.annotationOverlay}
-          resourceByteSizes={props.resourceByteSizes}
-          resourceDescriptors={props.resourceDescriptors}
-          onPackageThumbnailChange={props.onPackageThumbnailChange}
-          bus={bus}
-          controller={controller}
-        />
         {showSidebar ? (
           <ImageEditorFloatingPanelsV3
             controller={controller}
-            workspaceRef={workspaceRef}
             showLayers={showLayers}
             showProperties={showProperties}
+          >
+            <ImageEditorPreviewV3
+              sourceImageUrl={props.sourceImageUrl}
+              previewRenderer={props.previewRenderer}
+              annotationOverlay={props.annotationOverlay}
+              resourceByteSizes={props.resourceByteSizes}
+              resourceDescriptors={props.resourceDescriptors}
+              onPackageThumbnailChange={props.onPackageThumbnailChange}
+              bus={bus}
+              controller={controller}
+            />
+          </ImageEditorFloatingPanelsV3>
+        ) : (
+          <ImageEditorPreviewV3
+            sourceImageUrl={props.sourceImageUrl}
+            previewRenderer={props.previewRenderer}
+            annotationOverlay={props.annotationOverlay}
+            resourceByteSizes={props.resourceByteSizes}
+            resourceDescriptors={props.resourceDescriptors}
+            onPackageThumbnailChange={props.onPackageThumbnailChange}
+            bus={bus}
+            controller={controller}
           />
-        ) : null}
+        )}
       </div>
     </div>
   )

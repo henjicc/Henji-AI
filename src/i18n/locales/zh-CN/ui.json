@@ -594,7 +594,11 @@
       "zoomOut": "缩小",
       "panels": {
         "expand": "展开{{title}}",
-        "collapse": "收起{{title}}"
+        "collapse": "收起{{title}}",
+        "leftDock": "左侧停靠面板",
+        "rightDock": "右侧停靠面板",
+        "leftDockPreview": "释放以停靠到左侧",
+        "rightDockPreview": "释放以停靠到右侧"
       },
       "recovery": {
         "title": "图片编辑器遇到问题",

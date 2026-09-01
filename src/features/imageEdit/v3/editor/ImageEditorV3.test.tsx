@@ -1,7 +1,7 @@
 /** @vitest-environment jsdom */
 
 import { useState } from 'react'
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import i18n from '@/i18n/config'
@@ -15,7 +15,11 @@ import {
 import type { ImageEditDocumentV3 } from '@/core/imageEdit/v3/documentTypes'
 import type { ImageEditLayerV3 } from '@/core/imageEdit/v3/layerTypes'
 import type { ImageEditPersistenceSnapshotV3 } from '@/core/imageEdit/v3/serviceContracts'
-import { ANNOTATION_DEFAULT_STROKE_HEX, ANNOTATION_DEFAULT_TEXT_HEX } from '@/core/theme/colorTokens'
+import {
+  ANNOTATION_DEFAULT_STROKE_HEX,
+  ANNOTATION_DEFAULT_TEXT_HEX,
+  BLACK_HEX,
+} from '@/core/theme/colorTokens'
 import { ImageEditorV3 } from './ImageEditorV3'
 import type { ImageEditorV3PreviewRenderer } from './types'
 import { useImageEditorInteractionStoreV3, useImageEditorSessionStoreV3 } from '../store'
@@ -64,9 +68,11 @@ const interactionPreview: ImageEditorV3PreviewRenderer = () => ({
 function ControlledEditor({
   initialDocument,
   onDocumentChange,
+  previewRenderer,
 }: {
   initialDocument: ImageEditDocumentV3
   onDocumentChange: (next: ImageEditDocumentV3) => void
+  previewRenderer?: ImageEditorV3PreviewRenderer
 }) {
   const [document, setDocument] = useState(initialDocument)
   return (
@@ -75,6 +81,7 @@ function ControlledEditor({
         sourceImageUrl="preview.png"
         document={document}
         profileId="full"
+        previewRenderer={previewRenderer}
         onDocumentChange={(next) => {
           onDocumentChange(next)
           setDocument(next)
@@ -337,7 +344,7 @@ describe('ImageEditorV3 professional shell', () => {
     expect(screen.getAllByRole('treeitem')).toHaveLength(2)
   })
 
-  it('保持单命令带、从属参数带和独立悬浮属性窗结构', async () => {
+  it('保持单命令带、从属参数带和右侧上下组合的停靠属性窗结构', async () => {
     const rendered = renderEditor(
       createDocument([createImageEditRasterLayerV3('raster', '底图')]),
     )
@@ -352,12 +359,69 @@ describe('ImageEditorV3 professional shell', () => {
     expect(rendered.container.querySelectorAll('[data-context-bar]')).toHaveLength(1)
 
     const preview = rendered.container.querySelector('[data-preview-surface]')
-    const floatingPanels = rendered.container.querySelectorAll('[data-floating-editor-panel]')
+    const dockedPanels = rendered.container.querySelectorAll('[data-docked-editor-panel]')
     expect(preview?.className).not.toContain('rounded')
     expect(preview?.className).not.toContain('shadow')
-    expect(floatingPanels).toHaveLength(2)
-    expect([...floatingPanels].every((panel) => panel.className.includes('ui-glass'))).toBe(true)
+    expect(rendered.container.querySelector('[data-editor-panel-dock="right"]')).toBeTruthy()
+    expect(dockedPanels).toHaveLength(2)
+    expect([...dockedPanels].map((panel) => panel.getAttribute('data-editor-panel-id'))).toEqual([
+      'layers',
+      'properties',
+    ])
+    expect(rendered.container.querySelectorAll('[data-floating-editor-panel]')).toHaveLength(0)
     expect(rendered.container.querySelector('img[src="preview.png"]')).toBeNull()
+  })
+
+  it('停靠面板可拖出为浮窗，并在右边缘按上下顺序重新组合', async () => {
+    const rendered = renderEditor(
+      createDocument([createImageEditRasterLayerV3('raster', '底图')]),
+    )
+    const workspace = rendered.container.querySelector<HTMLElement>('[data-editor-panel-workspace]')
+    const properties = rendered.container.querySelector<HTMLElement>(
+      '[data-editor-panel-id="properties"]',
+    )
+    const handle = properties?.querySelector<HTMLElement>('[data-editor-panel-handle]')
+    expect(workspace && properties && handle).toBeTruthy()
+    vi.spyOn(workspace as HTMLElement, 'getBoundingClientRect').mockReturnValue({
+      x: 0, y: 0, left: 0, top: 0, right: 1200, bottom: 800, width: 1200, height: 800,
+      toJSON: () => ({}),
+    })
+    vi.spyOn(properties as HTMLElement, 'getBoundingClientRect').mockReturnValue({
+      x: 800, y: 400, left: 800, top: 400, right: 1200, bottom: 800, width: 400, height: 400,
+      toJSON: () => ({}),
+    })
+
+    fireEvent.pointerDown(handle as HTMLElement, {
+      pointerId: 11, button: 0, isPrimary: true, clientX: 900, clientY: 420,
+    })
+    fireEvent.pointerMove(window, { pointerId: 11, clientX: 500, clientY: 120 })
+    fireEvent.pointerUp(window, { pointerId: 11, clientX: 500, clientY: 120 })
+    const floating = await waitFor(() => rendered.container.querySelector<HTMLElement>(
+      '[data-editor-panel-id="properties"][data-panel-mode="floating"]',
+    ))
+    expect(floating).toBeTruthy()
+
+    vi.spyOn(floating as HTMLElement, 'getBoundingClientRect').mockReturnValue({
+      x: 400, y: 100, left: 400, top: 100, right: 800, bottom: 700, width: 400, height: 600,
+      toJSON: () => ({}),
+    })
+    const layerPanel = rendered.container.querySelector<HTMLElement>('[data-editor-panel-id="layers"]')
+    vi.spyOn(layerPanel as HTMLElement, 'getBoundingClientRect').mockReturnValue({
+      x: 800, y: 0, left: 800, top: 0, right: 1200, bottom: 800, width: 400, height: 800,
+      toJSON: () => ({}),
+    })
+    const floatingHandle = floating?.querySelector<HTMLElement>('[data-editor-panel-handle]')
+    fireEvent.pointerDown(floatingHandle as HTMLElement, {
+      pointerId: 12, button: 0, isPrimary: true, clientX: 500, clientY: 120,
+    })
+    fireEvent.pointerMove(window, { pointerId: 12, clientX: 1190, clientY: 700 })
+    expect(rendered.container.querySelector('[data-editor-panel-dock-preview="right"]')).toBeTruthy()
+    fireEvent.pointerUp(window, { pointerId: 12, clientX: 1190, clientY: 700 })
+
+    await waitFor(() => expect(rendered.container.querySelectorAll('[data-docked-editor-panel]')).toHaveLength(2))
+    expect([...rendered.container.querySelectorAll('[data-docked-editor-panel]')].map(
+      (panel) => panel.getAttribute('data-editor-panel-id'),
+    )).toEqual(['layers', 'properties'])
   })
 
   it('标注位于模糊下方时静止 overlay 只保留透明命中区，不清晰重画标注', async () => {
@@ -411,6 +475,9 @@ describe('ImageEditorV3 professional shell', () => {
     expect(layer?.type).toBe('annotation')
     if (layer?.type === 'annotation') {
       expect(layer.annotations[0]).toMatchObject({ type: 'rect', x: 40, y: 80 })
+      expect(Object.values(
+        useImageEditorInteractionStoreV3.getState().annotationSelectionBySession,
+      )).toContainEqual({ layerId: layer.id, annotationId: layer.annotations[0].id })
       if (layer.annotations[0].type === 'rect') {
         expect(layer.annotations[0].width).toBeCloseTo(400)
         expect(layer.annotations[0].height).toBeCloseTo(200)
@@ -457,5 +524,51 @@ describe('ImageEditorV3 professional shell', () => {
     await waitFor(() => expect(changes).toHaveLength(2))
     const removed = changes[1].layers[0]
     if (removed.type === 'annotation') expect(removed.annotations).toHaveLength(0)
+  })
+
+  it('工具栏会读取当前选中标注，并把颜色与描边直接写回该对象', async () => {
+    const annotation = createImageEditAnnotationLayerV3('annotations', '标注')
+    annotation.annotations = [{
+      id: 'selected-rect', type: 'rect', x: 20, y: 20, width: 100, height: 60,
+      stroke: ANNOTATION_DEFAULT_STROKE_HEX, lineWidth: 4,
+    }]
+    const changes: ImageEditDocumentV3[] = []
+    const rendered = render(
+      <ControlledEditor
+        initialDocument={createDocument([annotation])}
+        previewRenderer={interactionPreview}
+        onDocumentChange={(next) => changes.push(next)}
+      />,
+    )
+    const target = await waitFor(() => rendered.container.querySelector<SVGGElement>(
+      '[data-annotation-id="selected-rect"]',
+    ))
+    fireEvent.pointerDown(target as SVGGElement, { button: 0, clientX: 25, clientY: 25 })
+
+    const contextBar = await waitFor(() => rendered.container.querySelector<HTMLElement>(
+      '[data-context-bar]',
+    ))
+    expect(contextBar).toBeTruthy()
+    expect((within(contextBar as HTMLElement).getByLabelText('颜色') as HTMLInputElement).value).toBe(
+      ANNOTATION_DEFAULT_STROKE_HEX,
+    )
+    fireEvent.change(within(contextBar as HTMLElement).getByLabelText('颜色'), {
+      target: { value: BLACK_HEX },
+    })
+    await waitFor(() => expect(changes).toHaveLength(1))
+    const recolored = changes.at(-1)?.layers[0]
+    if (recolored?.type === 'annotation') {
+      expect(recolored.annotations[0]).toMatchObject({ stroke: BLACK_HEX, lineWidth: 4 })
+    }
+
+    const latestContextBar = rendered.container.querySelector<HTMLElement>('[data-context-bar]')
+    fireEvent.change(within(latestContextBar as HTMLElement).getByLabelText('描边'), {
+      target: { value: '12' },
+    })
+    await waitFor(() => expect(changes).toHaveLength(2))
+    const restyled = changes.at(-1)?.layers[0]
+    if (restyled?.type === 'annotation') {
+      expect(restyled.annotations[0]).toMatchObject({ stroke: BLACK_HEX, lineWidth: 12 })
+    }
   })
 })

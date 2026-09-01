@@ -147,10 +147,12 @@ export function ImageEditorAnnotationOverlayV3({
 
   useEffect(() => {
     if (!selection) return
-    if (!selected || !selectedLayerIds.includes(selection.layerId)) {
+    const selectionLayer = layers.find(({ layer }) => layer.id === selection.layerId)
+    if (!selectedLayerIds.includes(selection.layerId)
+      || (selectionLayer && !selected)) {
       selectAnnotation(controller.sessionId, null)
     }
-  }, [controller.sessionId, selectAnnotation, selected, selectedLayerIds, selection])
+  }, [controller.sessionId, layers, selectAnnotation, selected, selectedLayerIds, selection])
 
   const clientToOutput = useCallback((clientX: number, clientY: number): readonly [number, number] => {
     const rect = svgRef.current?.getBoundingClientRect()

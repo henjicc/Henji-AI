@@ -594,7 +594,11 @@
       "zoomOut": "Zoom out",
       "panels": {
         "expand": "Expand {{title}}",
-        "collapse": "Collapse {{title}}"
+        "collapse": "Collapse {{title}}",
+        "leftDock": "Left docked panels",
+        "rightDock": "Right docked panels",
+        "leftDockPreview": "Release to dock on the left",
+        "rightDockPreview": "Release to dock on the right"
       },
       "recovery": {
         "title": "The image editor encountered a problem",

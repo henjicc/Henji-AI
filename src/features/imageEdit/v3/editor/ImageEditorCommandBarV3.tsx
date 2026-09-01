@@ -6,6 +6,14 @@ import { UiChipButton, UiIconButton, UiInput, UiRangeInput, UiSelect } from '@/c
 import { ICON_TOOL_IMAGE_EDIT } from '@/core/theme/icons'
 import { ImageEditorCropParametersV3 } from './ImageEditorCropParametersV3'
 import type { ImageEditCommandBusV3 } from '../application/imageEditCommandBus'
+import {
+  annotationHasFontSizeV3,
+  annotationHasStrokeV3,
+  isAnnotationCalloutV3,
+  patchAnnotationStyleV3,
+  readAnnotationStyleV3,
+  type AnnotationStylePatchV3,
+} from './annotationStyleV3'
 import { findImageEditLayerLocationV3 } from './layerTreeV3'
 import { imageEditorSelectionAllowedCombineModesV3 } from './selectionMaskLayerV3'
 import type { ImageEditorV3Controller } from './types'
@@ -33,6 +41,18 @@ function ToolParameterBar({
   const selectedLayer = selectedLayerIds.length === 1
     ? findImageEditLayerLocationV3(controller.document.layers, selectedLayerIds[0])?.layer ?? null
     : null
+  const annotationSelection = useImageEditorInteractionStoreV3(
+    (state) => state.annotationSelectionBySession[controller.sessionId] ?? null,
+  )
+  const annotationLayer = annotationSelection
+    ? findImageEditLayerLocationV3(controller.document.layers, annotationSelection.layerId)?.layer
+    : null
+  const selectedAnnotation = annotationLayer?.type === 'annotation'
+    ? annotationLayer.annotations.find(({ id }) => id === annotationSelection?.annotationId) ?? null
+    : null
+  const selectedAnnotationStyle = selectedAnnotation
+    ? readAnnotationStyleV3(selectedAnnotation)
+    : null
   const allowedSelectionModes = imageEditorSelectionAllowedCombineModesV3(selectedLayer)
   const selectionLike = session?.activeTool.startsWith('select-') ?? false
   useEffect(() => {
@@ -46,14 +66,78 @@ function ToolParameterBar({
     session,
     setToolSetting,
   ])
+  useEffect(() => {
+    if (!session || !selectedAnnotationStyle) return
+    if (selectedAnnotationStyle.color !== null
+      && selectedAnnotationStyle.color !== session.toolSettings.annotationColor) {
+      setToolSetting(controller.sessionId, 'annotationColor', selectedAnnotationStyle.color)
+    }
+    if (selectedAnnotationStyle.lineWidth !== null
+      && selectedAnnotationStyle.lineWidth !== session.toolSettings.annotationStrokeWidth) {
+      setToolSetting(controller.sessionId, 'annotationStrokeWidth', selectedAnnotationStyle.lineWidth)
+    }
+    if (selectedAnnotationStyle.fontSize !== null
+      && selectedAnnotationStyle.fontSize !== session.toolSettings.annotationFontSize) {
+      setToolSetting(controller.sessionId, 'annotationFontSize', selectedAnnotationStyle.fontSize)
+    }
+    if (selectedAnnotationStyle.calloutShape !== null
+      && selectedAnnotationStyle.calloutShape !== session.toolSettings.annotationCalloutShape) {
+      setToolSetting(controller.sessionId, 'annotationCalloutShape', selectedAnnotationStyle.calloutShape)
+    }
+  }, [
+    controller.sessionId,
+    selectedAnnotationStyle,
+    session,
+    setToolSetting,
+  ])
   if (!session) return null
 
   const brushLike = ['raster-brush', 'eraser', 'mask-edit'].includes(session.activeTool)
-  const annotationLike = session.activeTool.startsWith('annotation-')
+  const activeAnnotationTool = session.activeTool.startsWith('annotation-')
+  const annotationLike = activeAnnotationTool || (session.activeTool === 'move' && Boolean(selectedAnnotation))
   if (session.activeTool === 'crop') {
     return <ImageEditorCropParametersV3 controller={controller} bus={bus} />
   }
   if (!brushLike && !annotationLike && !selectionLike) return null
+
+  const annotationColor = selectedAnnotationStyle?.color
+    ?? session.toolSettings.annotationColor
+  const annotationStrokeWidth = selectedAnnotationStyle?.lineWidth
+    ?? session.toolSettings.annotationStrokeWidth
+  const annotationFontSize = selectedAnnotationStyle?.fontSize
+    ?? session.toolSettings.annotationFontSize
+  const annotationCalloutShape = selectedAnnotationStyle?.calloutShape
+    ?? session.toolSettings.annotationCalloutShape
+  const showAnnotationStroke = selectedAnnotation
+    ? annotationHasStrokeV3(selectedAnnotation)
+    : !['annotation-text', 'annotation-number'].includes(session.activeTool)
+  const showAnnotationFontSize = selectedAnnotation
+    ? annotationHasFontSizeV3(selectedAnnotation)
+    : ['annotation-text', 'annotation-number', 'annotation-callout'].includes(session.activeTool)
+  const showAnnotationCalloutShape = selectedAnnotation
+    ? isAnnotationCalloutV3(selectedAnnotation)
+    : session.activeTool === 'annotation-callout'
+  const applyAnnotationStyle = (patch: AnnotationStylePatchV3): void => {
+    if (patch.color !== undefined) {
+      setToolSetting(controller.sessionId, 'annotationColor', patch.color)
+    }
+    if (patch.lineWidth !== undefined) {
+      setToolSetting(controller.sessionId, 'annotationStrokeWidth', patch.lineWidth)
+    }
+    if (patch.fontSize !== undefined) {
+      setToolSetting(controller.sessionId, 'annotationFontSize', patch.fontSize)
+    }
+    if (patch.calloutShape !== undefined) {
+      setToolSetting(controller.sessionId, 'annotationCalloutShape', patch.calloutShape)
+    }
+    if (selectedAnnotation && annotationSelection) {
+      controller.updateAnnotation(
+        annotationSelection.layerId,
+        annotationSelection.annotationId,
+        patchAnnotationStyleV3(selectedAnnotation, patch),
+      )
+    }
+  }
 
   return (
     <div
@@ -147,64 +231,54 @@ function ToolParameterBar({
               className="!h-8 !w-10 !p-1"
               type="color"
               aria-label={t('imageEditor.v3.toolSettings.color')}
-              value={session.toolSettings.annotationColor}
-              onChange={(event) => setToolSetting(
-                controller.sessionId,
-                'annotationColor',
-                event.currentTarget.value,
-              )}
+              value={annotationColor}
+              onChange={(event) => applyAnnotationStyle({ color: event.currentTarget.value })}
             />
           </label>
-          {!['annotation-text', 'annotation-number'].includes(session.activeTool) ? (
+          {showAnnotationStroke ? (
             <label className="flex min-w-40 items-center gap-2 text-xs text-text-muted">
               <span className="shrink-0">{t('imageEditor.v3.toolSettings.strokeWidth')}</span>
               <UiRangeInput
                 aria-label={t('imageEditor.v3.toolSettings.strokeWidth')}
                 min={1}
                 max={64}
-                value={session.toolSettings.annotationStrokeWidth}
-                onChange={(event) => setToolSetting(
-                  controller.sessionId,
-                  'annotationStrokeWidth',
-                  Number(event.currentTarget.value),
-                )}
+                value={annotationStrokeWidth}
+                onChange={(event) => applyAnnotationStyle({
+                  lineWidth: Number(event.currentTarget.value),
+                })}
               />
               <span className="w-8 text-right tabular-nums text-text-dark">
-                {Math.round(session.toolSettings.annotationStrokeWidth)}
+                {Math.round(annotationStrokeWidth)}
               </span>
             </label>
           ) : null}
-          {['annotation-text', 'annotation-number', 'annotation-callout'].includes(session.activeTool) ? (
+          {showAnnotationFontSize ? (
             <label className="flex min-w-40 items-center gap-2 text-xs text-text-muted">
               <span className="shrink-0">{t('imageEditor.v3.toolSettings.fontSize')}</span>
               <UiRangeInput
                 aria-label={t('imageEditor.v3.toolSettings.fontSize')}
                 min={8}
                 max={256}
-                value={session.toolSettings.annotationFontSize}
-                onChange={(event) => setToolSetting(
-                  controller.sessionId,
-                  'annotationFontSize',
-                  Number(event.currentTarget.value),
-                )}
+                value={annotationFontSize}
+                onChange={(event) => applyAnnotationStyle({
+                  fontSize: Number(event.currentTarget.value),
+                })}
               />
               <span className="w-8 text-right tabular-nums text-text-dark">
-                {Math.round(session.toolSettings.annotationFontSize)}
+                {Math.round(annotationFontSize)}
               </span>
             </label>
           ) : null}
-          {session.activeTool === 'annotation-callout' ? (
+          {showAnnotationCalloutShape ? (
             <label className="flex shrink-0 items-center gap-2 text-xs text-text-muted">
               <span>{t('imageEditor.v3.toolSettings.calloutShape')}</span>
               <UiSelect
                 className="!h-8 w-24"
                 aria-label={t('imageEditor.v3.toolSettings.calloutShape')}
-                value={session.toolSettings.annotationCalloutShape}
-                onChange={(event) => setToolSetting(
-                  controller.sessionId,
-                  'annotationCalloutShape',
-                  event.currentTarget.value as 'rect' | 'ellipse',
-                )}
+                value={annotationCalloutShape}
+                onChange={(event) => applyAnnotationStyle({
+                  calloutShape: event.currentTarget.value as 'rect' | 'ellipse',
+                })}
               >
                 <option value="rect">{t('imageEditor.v3.toolSettings.rect')}</option>
                 <option value="ellipse">{t('imageEditor.v3.toolSettings.ellipse')}</option>

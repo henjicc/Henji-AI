@@ -1,171 +1,413 @@
 import { ChevronDown, ChevronUp, GripHorizontal } from 'lucide-react'
-import { useRef, useState } from 'react'
-import type { PointerEvent as ReactPointerEvent, ReactNode, RefObject } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import type { PointerEvent as ReactPointerEvent, ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 
-import { UiIconButton } from '@/components/ui'
+import { UiIconButton, UiPanel } from '@/components/ui'
 
 import { ImageEditorLayersPanelV3 } from './ImageEditorLayersPanelV3'
+import {
+  clampImageEditorFloatingPanelPositionV3,
+  resolveImageEditorPanelDockEdgeV3,
+  resolveImageEditorPanelDockIndexV3,
+  type ImageEditorFloatingPanelPositionV3,
+  type ImageEditorPanelDockEdgeV3,
+  type ImageEditorPanelIdV3,
+} from './imageEditorPanelLayoutV3'
 import { ImageEditorPropertiesPanelV3 } from './ImageEditorPropertiesPanelV3'
 import type { ImageEditorV3Controller } from './types'
 
-interface PanelPositionV3 { left: number; top: number }
+interface PanelLayoutV3 {
+  mode: 'floating' | 'docked'
+  edge: ImageEditorPanelDockEdgeV3 | null
+  position: ImageEditorFloatingPanelPositionV3
+}
 
-interface DragStateV3 {
+interface PanelDragStateV3 {
+  panelId: ImageEditorPanelIdV3
   pointerId: number
   startClientX: number
   startClientY: number
-  startLeft: number
-  startTop: number
+  startPosition: ImageEditorFloatingPanelPositionV3
+  currentPosition: ImageEditorFloatingPanelPositionV3
+  size: { width: number; height: number }
 }
 
-function FloatingPanelV3({
-  workspaceRef,
-  title,
-  expandLabel,
-  collapseLabel,
-  initialRight,
-  widthClass,
-  heightClass,
-  children,
+interface PanelDockPreviewV3 {
+  edge: ImageEditorPanelDockEdgeV3
+  index: number
+  siblingCount: number
+}
+
+type PanelLayoutsV3 = Record<ImageEditorPanelIdV3, PanelLayoutV3>
+type PanelDockOrdersV3 = Record<ImageEditorPanelDockEdgeV3, ImageEditorPanelIdV3[]>
+
+const FLOATING_PANEL_WIDTH: Record<ImageEditorPanelIdV3, number> = {
+  layers: 240,
+  properties: 400,
+}
+
+const INITIAL_PANEL_LAYOUTS: PanelLayoutsV3 = {
+  layers: { mode: 'docked', edge: 'right', position: { left: 24, top: 24 } },
+  properties: { mode: 'docked', edge: 'right', position: { left: 280, top: 24 } },
+}
+
+const INITIAL_DOCK_ORDERS: PanelDockOrdersV3 = {
+  left: [],
+  right: ['layers', 'properties'],
+}
+
+function removePanelFromDockOrdersV3(
+  orders: PanelDockOrdersV3,
+  panelId: ImageEditorPanelIdV3,
+): PanelDockOrdersV3 {
+  return {
+    left: orders.left.filter((id) => id !== panelId),
+    right: orders.right.filter((id) => id !== panelId),
+  }
+}
+
+function insertPanelIntoDockOrdersV3(
+  orders: PanelDockOrdersV3,
+  edge: ImageEditorPanelDockEdgeV3,
+  panelId: ImageEditorPanelIdV3,
+  index: number,
+): PanelDockOrdersV3 {
+  const withoutPanel = removePanelFromDockOrdersV3(orders, panelId)
+  const next = [...withoutPanel[edge]]
+  next.splice(Math.max(0, Math.min(index, next.length)), 0, panelId)
+  return { ...withoutPanel, [edge]: next }
+}
+
+function PanelContentV3({
+  panelId,
+  controller,
 }: {
-  workspaceRef: RefObject<HTMLDivElement>
-  title: string
-  expandLabel: string
-  collapseLabel: string
-  initialRight: number
-  widthClass: string
-  heightClass: string
-  children: ReactNode
+  panelId: ImageEditorPanelIdV3
+  controller: ImageEditorV3Controller
 }): JSX.Element {
-  const panelRef = useRef<HTMLElement | null>(null)
-  const dragRef = useRef<DragStateV3 | null>(null)
-  const [position, setPosition] = useState<PanelPositionV3 | null>(null)
-  const [collapsed, setCollapsed] = useState(false)
-
-  const handlePointerDown = (event: ReactPointerEvent<HTMLElement>): void => {
-    if (event.button !== 0 || !event.isPrimary) return
-    const panel = panelRef.current
-    const workspace = workspaceRef.current
-    if (!panel || !workspace) return
-    const panelRect = panel.getBoundingClientRect()
-    const workspaceRect = workspace.getBoundingClientRect()
-    dragRef.current = {
-      pointerId: event.pointerId,
-      startClientX: event.clientX,
-      startClientY: event.clientY,
-      startLeft: panelRect.left - workspaceRect.left,
-      startTop: panelRect.top - workspaceRect.top,
-    }
-    event.currentTarget.setPointerCapture(event.pointerId)
-    event.preventDefault()
-  }
-
-  const handlePointerMove = (event: ReactPointerEvent<HTMLElement>): void => {
-    const drag = dragRef.current
-    const panel = panelRef.current
-    const workspace = workspaceRef.current
-    if (!drag || drag.pointerId !== event.pointerId || !panel || !workspace) return
-    const workspaceRect = workspace.getBoundingClientRect()
-    const panelRect = panel.getBoundingClientRect()
-    const next = {
-      left: Math.min(
-        Math.max(8, workspaceRect.width - panelRect.width - 8),
-        Math.max(8, drag.startLeft + event.clientX - drag.startClientX),
-      ),
-      top: Math.min(
-        Math.max(8, workspaceRect.height - 32),
-        Math.max(8, drag.startTop + event.clientY - drag.startClientY),
-      ),
-    }
-    setPosition(next)
-  }
-
-  const finishDrag = (event: ReactPointerEvent<HTMLElement>): void => {
-    if (dragRef.current?.pointerId !== event.pointerId) return
-    dragRef.current = null
-    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
-      event.currentTarget.releasePointerCapture(event.pointerId)
-    }
-  }
-
-  return (
-    <section
-      ref={panelRef}
-      data-floating-editor-panel
-      className={`ui-glass ui-glass-elevated pointer-events-auto absolute z-panel ${widthClass} overflow-hidden rounded-xl ${collapsed ? '' : heightClass}`}
-      style={position
-        ? { left: position.left, top: position.top }
-        : { right: initialRight, top: 12 }}
-    >
-      <header
-        data-floating-panel-handle
-        className="relative z-raised flex h-8 cursor-grab items-center gap-2 border-b border-border-dark/60 px-2 active:cursor-grabbing"
-        onPointerDown={handlePointerDown}
-        onPointerMove={handlePointerMove}
-        onPointerUp={finishDrag}
-        onPointerCancel={finishDrag}
-      >
-        <GripHorizontal className="h-3.5 w-3.5 text-text-muted" aria-hidden="true" />
-        <span className="min-w-0 flex-1 truncate text-xs font-medium text-text-dark">{title}</span>
-        <UiIconButton
-          className="h-6 w-6"
-          showBorder={false}
-          appearance="hover-only"
-          aria-label={collapsed ? expandLabel : collapseLabel}
-          aria-expanded={!collapsed}
-          onPointerDown={(event) => event.stopPropagation()}
-          onClick={() => setCollapsed((current) => !current)}
-        >
-          {collapsed
-            ? <ChevronDown className="h-3.5 w-3.5" />
-            : <ChevronUp className="h-3.5 w-3.5" />}
-        </UiIconButton>
-      </header>
-      {!collapsed ? <div className="flex min-h-0 h-[calc(100%-2rem)]">{children}</div> : null}
-    </section>
-  )
+  return panelId === 'layers'
+    ? <ImageEditorLayersPanelV3 controller={controller} embedded />
+    : <ImageEditorPropertiesPanelV3 controller={controller} embedded />
 }
 
 export function ImageEditorFloatingPanelsV3({
   controller,
-  workspaceRef,
   showLayers,
   showProperties,
+  children,
 }: {
   controller: ImageEditorV3Controller
-  workspaceRef: RefObject<HTMLDivElement>
   showLayers: boolean
   showProperties: boolean
+  children: ReactNode
 }): JSX.Element {
   const { t } = useTranslation('ui')
+  const rootRef = useRef<HTMLDivElement | null>(null)
+  const panelRefs = useRef<Record<ImageEditorPanelIdV3, HTMLDivElement | null>>({
+    layers: null,
+    properties: null,
+  })
+  const dragRef = useRef<PanelDragStateV3 | null>(null)
+  const layoutsRef = useRef<PanelLayoutsV3>(INITIAL_PANEL_LAYOUTS)
+  const dockOrdersRef = useRef<PanelDockOrdersV3>(INITIAL_DOCK_ORDERS)
+  const dockPreviewRef = useRef<PanelDockPreviewV3 | null>(null)
+  const [layouts, setLayouts] = useState<PanelLayoutsV3>(INITIAL_PANEL_LAYOUTS)
+  const [dockOrders, setDockOrders] = useState<PanelDockOrdersV3>(INITIAL_DOCK_ORDERS)
+  const [collapsed, setCollapsed] = useState<Record<ImageEditorPanelIdV3, boolean>>({
+    layers: false,
+    properties: false,
+  })
+  const [dockPreview, setDockPreview] = useState<PanelDockPreviewV3 | null>(null)
+
+  const visiblePanelIds = useMemo(() => [
+    ...(showLayers ? ['layers'] as const : []),
+    ...(showProperties ? ['properties'] as const : []),
+  ], [showLayers, showProperties])
+
+  const commitLayouts = (next: PanelLayoutsV3): void => {
+    layoutsRef.current = next
+    setLayouts(next)
+  }
+  const commitDockOrders = (next: PanelDockOrdersV3): void => {
+    dockOrdersRef.current = next
+    setDockOrders(next)
+  }
+  const updateDockPreview = (next: PanelDockPreviewV3 | null): void => {
+    const current = dockPreviewRef.current
+    if (current?.edge === next?.edge
+      && current?.index === next?.index
+      && current?.siblingCount === next?.siblingCount) return
+    dockPreviewRef.current = next
+    setDockPreview(next)
+  }
+
+  useEffect(() => {
+    const finishDrag = (event: PointerEvent, cancelled: boolean): void => {
+      const drag = dragRef.current
+      if (!drag || drag.pointerId !== event.pointerId) return
+      const preview = cancelled ? null : dockPreviewRef.current
+      if (preview) {
+        commitLayouts({
+          ...layoutsRef.current,
+          [drag.panelId]: {
+            ...layoutsRef.current[drag.panelId],
+            mode: 'docked',
+            edge: preview.edge,
+          },
+        })
+        commitDockOrders(insertPanelIntoDockOrdersV3(
+          dockOrdersRef.current,
+          preview.edge,
+          drag.panelId,
+          preview.index,
+        ))
+      } else {
+        commitLayouts({
+          ...layoutsRef.current,
+          [drag.panelId]: {
+            mode: 'floating',
+            edge: null,
+            position: drag.currentPosition,
+          },
+        })
+      }
+      dragRef.current = null
+      updateDockPreview(null)
+      document.body.style.cursor = ''
+      document.body.style.userSelect = ''
+    }
+
+    const handlePointerMove = (event: PointerEvent): void => {
+      const drag = dragRef.current
+      const root = rootRef.current
+      if (!drag || drag.pointerId !== event.pointerId || !root) return
+      const rootRect = root.getBoundingClientRect()
+      const panel = panelRefs.current[drag.panelId]
+      const measured = panel?.getBoundingClientRect()
+      const size = measured
+        ? { width: measured.width, height: measured.height }
+        : drag.size
+      const position = clampImageEditorFloatingPanelPositionV3({
+        left: drag.startPosition.left + event.clientX - drag.startClientX,
+        top: drag.startPosition.top + event.clientY - drag.startClientY,
+      }, size, rootRect)
+      drag.currentPosition = position
+      if (panel) {
+        panel.style.left = `${position.left}px`
+        panel.style.top = `${position.top}px`
+      }
+      const edge = resolveImageEditorPanelDockEdgeV3(position, size, rootRect)
+      if (!edge) {
+        updateDockPreview(null)
+        return
+      }
+      const siblingIds = dockOrdersRef.current[edge].filter((id) => (
+        id !== drag.panelId && visiblePanelIds.includes(id)
+      ))
+      const siblingCenters = siblingIds.map((id) => {
+        const rect = panelRefs.current[id]?.getBoundingClientRect()
+        return rect ? rect.top + rect.height / 2 : rootRect.top + rootRect.height / 2
+      })
+      updateDockPreview({
+        edge,
+        index: resolveImageEditorPanelDockIndexV3(event.clientY, siblingCenters),
+        siblingCount: siblingIds.length,
+      })
+    }
+
+    const handlePointerUp = (event: PointerEvent): void => finishDrag(event, false)
+    const handlePointerCancel = (event: PointerEvent): void => finishDrag(event, true)
+    window.addEventListener('pointermove', handlePointerMove)
+    window.addEventListener('pointerup', handlePointerUp)
+    window.addEventListener('pointercancel', handlePointerCancel)
+    return () => {
+      window.removeEventListener('pointermove', handlePointerMove)
+      window.removeEventListener('pointerup', handlePointerUp)
+      window.removeEventListener('pointercancel', handlePointerCancel)
+      document.body.style.cursor = ''
+      document.body.style.userSelect = ''
+    }
+  }, [visiblePanelIds])
+
+  const startPanelDrag = (
+    panelId: ImageEditorPanelIdV3,
+    event: ReactPointerEvent<HTMLElement>,
+  ): void => {
+    if (event.button !== 0 || !event.isPrimary || dragRef.current) return
+    const root = rootRef.current
+    const panel = panelRefs.current[panelId]
+    if (!root || !panel) return
+    const rootRect = root.getBoundingClientRect()
+    const panelRect = panel.getBoundingClientRect()
+    const current = layoutsRef.current[panelId]
+    const targetWidth = current.mode === 'docked'
+      ? FLOATING_PANEL_WIDTH[panelId]
+      : panelRect.width
+    const grabRatio = Math.max(0, Math.min(1, (event.clientX - panelRect.left) / panelRect.width))
+    const startPosition = clampImageEditorFloatingPanelPositionV3({
+      left: current.mode === 'docked'
+        ? event.clientX - rootRect.left - grabRatio * targetWidth
+        : panelRect.left - rootRect.left,
+      top: panelRect.top - rootRect.top,
+    }, { width: targetWidth, height: panelRect.height }, rootRect)
+    commitLayouts({
+      ...layoutsRef.current,
+      [panelId]: { mode: 'floating', edge: null, position: startPosition },
+    })
+    commitDockOrders(removePanelFromDockOrdersV3(dockOrdersRef.current, panelId))
+    dragRef.current = {
+      panelId,
+      pointerId: event.pointerId,
+      startClientX: event.clientX,
+      startClientY: event.clientY,
+      startPosition,
+      currentPosition: startPosition,
+      size: { width: targetWidth, height: panelRect.height },
+    }
+    document.body.style.cursor = 'grabbing'
+    document.body.style.userSelect = 'none'
+    event.preventDefault()
+  }
+
+  const titleForPanel = (panelId: ImageEditorPanelIdV3): string => (
+    panelId === 'layers'
+      ? t('imageEditor.v3.layers.title')
+      : t('imageEditor.v3.properties.title')
+  )
+
+  const panelBody = (panelId: ImageEditorPanelIdV3): ReactNode => {
+    const title = titleForPanel(panelId)
+    return (
+      <>
+        <header
+          data-editor-panel-handle
+          data-floating-panel-handle
+          className="relative z-raised flex h-8 shrink-0 cursor-grab items-center gap-2 border-b border-border-dark/60 px-2 active:cursor-grabbing"
+          onPointerDown={(event) => startPanelDrag(panelId, event)}
+        >
+          <GripHorizontal className="h-3.5 w-3.5 text-text-muted" aria-hidden="true" />
+          <span className="min-w-0 flex-1 truncate text-xs font-medium text-text-dark">{title}</span>
+          <UiIconButton
+            className="h-6 w-6"
+            showBorder={false}
+            appearance="hover-only"
+            aria-label={collapsed[panelId]
+              ? t('imageEditor.v3.panels.expand', { title })
+              : t('imageEditor.v3.panels.collapse', { title })}
+            aria-expanded={!collapsed[panelId]}
+            onPointerDown={(event) => event.stopPropagation()}
+            onClick={() => setCollapsed((current) => ({
+              ...current,
+              [panelId]: !current[panelId],
+            }))}
+          >
+            {collapsed[panelId]
+              ? <ChevronDown className="h-3.5 w-3.5" />
+              : <ChevronUp className="h-3.5 w-3.5" />}
+          </UiIconButton>
+        </header>
+        {!collapsed[panelId] ? (
+          <div className="flex min-h-0 flex-1">
+            <PanelContentV3 panelId={panelId} controller={controller} />
+          </div>
+        ) : null}
+      </>
+    )
+  }
+
+  const renderPanel = (panelId: ImageEditorPanelIdV3): JSX.Element => {
+    const layout = layouts[panelId]
+    const commonProps = {
+      'data-editor-panel': true,
+      'data-editor-panel-id': panelId,
+      'data-panel-mode': layout.mode,
+      'data-panel-dock-edge': layout.edge ?? undefined,
+    }
+    if (layout.mode === 'floating') {
+      return (
+        <UiPanel
+          key={panelId}
+          ref={(node) => { panelRefs.current[panelId] = node }}
+          variant="glass"
+          {...commonProps}
+          data-floating-editor-panel
+          className={`pointer-events-auto absolute z-panel flex flex-col overflow-hidden ${
+            panelId === 'layers' ? 'w-60' : 'w-[25rem]'
+          } ${collapsed[panelId] ? 'h-8' : panelId === 'layers' ? 'h-[min(52vh,34rem)]' : 'h-[min(72vh,42rem)]'}`}
+          style={{ left: layout.position.left, top: layout.position.top }}
+        >
+          {panelBody(panelId)}
+        </UiPanel>
+      )
+    }
+    return (
+      <div
+        key={panelId}
+        ref={(node) => { panelRefs.current[panelId] = node }}
+        {...commonProps}
+        data-docked-editor-panel
+        className={`relative flex min-h-0 w-full flex-col overflow-hidden ${
+          collapsed[panelId] ? 'h-8 shrink-0' : 'flex-1'
+        }`}
+      >
+        {panelBody(panelId)}
+      </div>
+    )
+  }
+
+  const renderDock = (edge: ImageEditorPanelDockEdgeV3): JSX.Element | null => {
+    const panelIds = dockOrders[edge].filter((id) => (
+      visiblePanelIds.includes(id)
+      && layouts[id].mode === 'docked'
+      && layouts[id].edge === edge
+    ))
+    if (panelIds.length === 0) return null
+    return (
+      <aside
+        data-editor-panel-dock={edge}
+        aria-label={t(`imageEditor.v3.panels.${edge}Dock`)}
+        className={`relative z-raised flex w-[25rem] max-w-[42%] shrink-0 flex-col overflow-hidden bg-panel ${
+          edge === 'left' ? 'border-r border-border-dark' : 'border-l border-border-dark'
+        }`}
+      >
+        {panelIds.map((panelId, index) => (
+          <div
+            key={panelId}
+            className={`flex min-h-0 ${collapsed[panelId] ? 'h-8 shrink-0' : 'flex-1'} ${
+              index > 0 ? 'border-t border-border-dark' : ''
+            }`}
+          >
+            {renderPanel(panelId)}
+          </div>
+        ))}
+      </aside>
+    )
+  }
+
+  const floatingPanelIds = visiblePanelIds.filter((id) => layouts[id].mode === 'floating')
+  const dockPreviewVerticalClass = dockPreview?.siblingCount === 1
+    ? dockPreview.index === 0 ? 'top-2 bottom-1/2' : 'top-1/2 bottom-2'
+    : 'inset-y-2'
+
   return (
-    <div className="pointer-events-none absolute inset-0 z-panel">
-      {showLayers ? (
-        <FloatingPanelV3
-          workspaceRef={workspaceRef}
-          title={t('imageEditor.v3.layers.title')}
-          expandLabel={t('imageEditor.v3.panels.expand', { title: t('imageEditor.v3.layers.title') })}
-          collapseLabel={t('imageEditor.v3.panels.collapse', { title: t('imageEditor.v3.layers.title') })}
-          initialRight={showProperties ? 420 : 12}
-          widthClass="w-60"
-          heightClass="h-[min(52vh,34rem)]"
-        >
-          <ImageEditorLayersPanelV3 controller={controller} embedded />
-        </FloatingPanelV3>
-      ) : null}
-      {showProperties ? (
-        <FloatingPanelV3
-          workspaceRef={workspaceRef}
-          title={t('imageEditor.v3.properties.title')}
-          expandLabel={t('imageEditor.v3.panels.expand', { title: t('imageEditor.v3.properties.title') })}
-          collapseLabel={t('imageEditor.v3.panels.collapse', { title: t('imageEditor.v3.properties.title') })}
-          initialRight={12}
-          widthClass="w-[25rem]"
-          heightClass="h-[min(72vh,42rem)]"
-        >
-          <ImageEditorPropertiesPanelV3 controller={controller} embedded />
-        </FloatingPanelV3>
+    <div ref={rootRef} data-editor-panel-workspace className="relative flex min-h-0 min-w-0 flex-1 overflow-hidden">
+      {renderDock('left')}
+      <div className="flex min-h-0 min-w-0 flex-1 overflow-hidden">
+        {children}
+      </div>
+      {renderDock('right')}
+      <div className="pointer-events-none absolute inset-0 z-panel">
+        {floatingPanelIds.map(renderPanel)}
+      </div>
+      {dockPreview ? (
+        <div
+          data-editor-panel-dock-preview={dockPreview.edge}
+          aria-label={t(`imageEditor.v3.panels.${dockPreview.edge}DockPreview`)}
+          className={`pointer-events-none absolute z-drag w-[25rem] max-w-[42%] border border-veil-strong bg-veil-faint ${
+            dockPreview.edge === 'left' ? 'left-0' : 'right-0'
+          } ${dockPreviewVerticalClass}`}
+        />
       ) : null}
     </div>
   )

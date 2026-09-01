@@ -222,30 +222,75 @@ function createToolboxScenes(context) {
           throw new Error('原图没有收口到唯一且裁切严格的文档画框')
         }
 
-        const floatingPanels = editor.locator('[data-floating-editor-panel]')
-        if (await floatingPanels.count() !== 2) {
-          throw new Error('图层与属性没有拆成两个独立悬浮面板')
+        const rightDock = editor.locator('[data-editor-panel-dock="right"]')
+        const dockedPanels = rightDock.locator('[data-docked-editor-panel]')
+        if (await dockedPanels.count() !== 2) {
+          throw new Error('图层与属性没有在右侧停靠区上下组合')
         }
-        const propertiesPanel = floatingPanels.nth(1)
-        const propertiesHandle = propertiesPanel.locator('[data-floating-panel-handle]')
+        const initialDockOrder = await dockedPanels.evaluateAll((panels) => (
+          panels.map((panel) => panel.getAttribute('data-editor-panel-id'))
+        ))
+        if (initialDockOrder.join(',') !== 'layers,properties') {
+          throw new Error(`右侧停靠顺序错误：${initialDockOrder.join(',')}`)
+        }
+        const propertiesPanel = editor.locator('[data-editor-panel-id="properties"]')
+        let propertiesHandle = propertiesPanel.locator('[data-editor-panel-handle]')
         const [panelBefore, handleBox] = await Promise.all([
           propertiesPanel.boundingBox(),
           propertiesHandle.boundingBox(),
         ])
-        if (!panelBefore || !handleBox) throw new Error('无法读取悬浮属性面板位置')
+        if (!panelBefore || !handleBox) throw new Error('无法读取停靠属性面板位置')
         await page.mouse.move(handleBox.x + 30, handleBox.y + handleBox.height / 2)
         await page.mouse.down()
         await page.mouse.move(
-          handleBox.x - 42,
-          handleBox.y + handleBox.height / 2 + 28,
+          handleBox.x - 240,
+          handleBox.y + handleBox.height / 2 - 80,
           { steps: 5 },
         )
         await page.mouse.up()
+        await propertiesPanel.evaluate((panel) => {
+          if (panel.getAttribute('data-panel-mode') !== 'floating') {
+            throw new Error('属性面板拖离停靠区后没有切换为浮窗')
+          }
+          if (!panel.classList.contains('ui-glass')) {
+            throw new Error('浮动属性面板没有使用画布玻璃表面')
+          }
+        })
         const panelAfter = await propertiesPanel.boundingBox()
         if (!panelAfter
-          || Math.abs(panelAfter.x - panelBefore.x + 72) > 2
-          || Math.abs(panelAfter.y - panelBefore.y - 28) > 2) {
-          throw new Error('悬浮属性面板没有跟随标题栏拖动')
+          || panelAfter.x >= panelBefore.x - 120
+          || panelAfter.y >= panelBefore.y - 30) {
+          throw new Error('属性面板没有从停靠区跟随标题栏拖出')
+        }
+
+        const workspaceBox = await editor.locator('[data-editor-panel-workspace]').boundingBox()
+        propertiesHandle = propertiesPanel.locator('[data-editor-panel-handle]')
+        const floatingHandleBox = await propertiesHandle.boundingBox()
+        if (!workspaceBox || !floatingHandleBox) throw new Error('无法读取面板重新停靠范围')
+        await page.mouse.move(
+          floatingHandleBox.x + 30,
+          floatingHandleBox.y + floatingHandleBox.height / 2,
+        )
+        await page.mouse.down()
+        await page.mouse.move(
+          workspaceBox.x + workspaceBox.width - 8,
+          workspaceBox.y + workspaceBox.height - 48,
+          { steps: 8 },
+        )
+        await editor.locator('[data-editor-panel-dock-preview="right"]')
+          .waitFor({ state: 'visible', timeout: 3000 })
+        await page.mouse.up()
+        await propertiesPanel.evaluate((panel) => {
+          if (panel.getAttribute('data-panel-mode') !== 'docked'
+            || panel.getAttribute('data-panel-dock-edge') !== 'right') {
+            throw new Error('属性面板拖到右边缘后没有自动吸附')
+          }
+        })
+        const recombinedOrder = await rightDock.locator('[data-docked-editor-panel]').evaluateAll((panels) => (
+          panels.map((panel) => panel.getAttribute('data-editor-panel-id'))
+        ))
+        if (recombinedOrder.join(',') !== 'layers,properties') {
+          throw new Error(`属性面板没有组合到图层面板下方：${recombinedOrder.join(',')}`)
         }
 
         await editor.locator('[data-tool-id="move"]').hover()
@@ -327,7 +372,9 @@ function createToolboxScenes(context) {
         await editor.locator('[data-tool-id="move"]').click()
         await page.waitForFunction(() => (
           document.querySelector('[data-preview-surface]')?.getAttribute('data-move-availability') === 'ready'
-        ), undefined, { timeout: 10000 })
+        ), undefined, { timeout: 10000 }).catch(() => {
+          throw new Error('切回移动工具后，图层移动能力没有恢复为可用')
+        })
 
         const beforeMove = await readRevision()
         const feedback = editor.locator('[data-move-feedback-frame]')
@@ -411,6 +458,50 @@ function createToolboxScenes(context) {
         await editor.locator('[role="treeitem"][data-layer-type="annotation"]').waitFor({
           state: 'visible', timeout: 10000,
         })
+        const annotationContextBar = editor.locator('[data-context-bar]')
+        const annotationColor = annotationContextBar.locator('input[type="color"]')
+        await annotationColor.waitFor({ state: 'visible', timeout: 5000 })
+        const beforeAnnotationColorRevision = await readRevision()
+        await annotationColor.evaluate((input) => {
+          const valueSetter = Object.getOwnPropertyDescriptor(
+            HTMLInputElement.prototype,
+            'value',
+          )?.set
+          valueSetter?.call(input, '#000000')
+          input.dispatchEvent(new Event('input', { bubbles: true }))
+          input.dispatchEvent(new Event('change', { bubbles: true }))
+        })
+        await page.waitForFunction((revision) => {
+          const label = [...document.querySelectorAll('[data-command-bar] span')]
+            .find((element) => /^(版本|Revision) \d+$/.test(element.textContent ?? ''))
+          return Number(label?.textContent?.match(/\d+/)?.[0]) === revision + 1
+        }, beforeAnnotationColorRevision, { timeout: 10000 }).catch(() => {
+          throw new Error('修改选中标注颜色后没有提交文档 revision')
+        })
+        const annotationStroke = annotationContextBar.getByRole('slider', {
+          name: /^(描边|Stroke)$/i,
+        })
+        const beforeAnnotationStrokeRevision = await readRevision()
+        await annotationStroke.evaluate((input) => {
+          const valueSetter = Object.getOwnPropertyDescriptor(
+            HTMLInputElement.prototype,
+            'value',
+          )?.set
+          valueSetter?.call(input, '14')
+          input.dispatchEvent(new Event('input', { bubbles: true }))
+          input.dispatchEvent(new Event('change', { bubbles: true }))
+        })
+        await page.waitForFunction((revision) => {
+          const label = [...document.querySelectorAll('[data-command-bar] span')]
+            .find((element) => /^(版本|Revision) \d+$/.test(element.textContent ?? ''))
+          return Number(label?.textContent?.match(/\d+/)?.[0]) === revision + 1
+        }, beforeAnnotationStrokeRevision, { timeout: 10000 }).catch(() => {
+          throw new Error('修改选中标注描边后没有提交文档 revision')
+        })
+        if (await annotationColor.inputValue() !== '#000000'
+          || Number(await annotationStroke.inputValue()) !== 14) {
+          throw new Error('选中标注的颜色或描边没有同步回工具栏')
+        }
 
         const addLayer = editor.getByRole('button', { name: /^(添加图层|Add layer)$/i })
         await addLayer.click()
