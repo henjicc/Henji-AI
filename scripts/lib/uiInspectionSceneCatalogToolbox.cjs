@@ -209,22 +209,61 @@ function createToolboxScenes(context) {
         await page.waitForFunction(() => (
           document.querySelector('[data-preview-surface]')?.getAttribute('data-preview-display-source') === 'viewport'
             && (() => {
-              const image = document.querySelector('[data-raster-pasteboard-layer] img')
-              return image instanceof HTMLImageElement && image.complete && image.naturalWidth > 0
+              const frame = document.querySelector('[data-raster-display-frame]')
+              return frame instanceof HTMLElement
+                && frame.querySelector('[data-viewport-tile-frame] canvas') instanceof HTMLCanvasElement
             })()
         ), undefined, { timeout: 15000 })
 
-        const pasteboardImages = editor.locator('[data-raster-pasteboard-layer] img')
-        if (await pasteboardImages.count() !== 1
-          || await editor.locator('[data-raster-display-frame]').count() !== 0
+        const displayFrame = editor.locator('[data-raster-display-frame]')
+        if (await editor.locator('[data-raster-pasteboard-layer]').count() !== 0
+          || await displayFrame.count() !== 1
           || await editor.locator('[data-document-boundary]').count() !== 0) {
-          throw new Error('单一原图模式出现重复画面或多余文档边框')
+          throw new Error('原图没有收口到唯一且裁切严格的文档画框')
         }
 
+        const floatingPanels = editor.locator('[data-floating-editor-panel]')
+        if (await floatingPanels.count() !== 2) {
+          throw new Error('图层与属性没有拆成两个独立悬浮面板')
+        }
+        const propertiesPanel = floatingPanels.nth(1)
+        const propertiesHandle = propertiesPanel.locator('[data-floating-panel-handle]')
+        const [panelBefore, handleBox] = await Promise.all([
+          propertiesPanel.boundingBox(),
+          propertiesHandle.boundingBox(),
+        ])
+        if (!panelBefore || !handleBox) throw new Error('无法读取悬浮属性面板位置')
+        await page.mouse.move(handleBox.x + 30, handleBox.y + handleBox.height / 2)
+        await page.mouse.down()
+        await page.mouse.move(
+          handleBox.x - 42,
+          handleBox.y + handleBox.height / 2 + 28,
+          { steps: 5 },
+        )
+        await page.mouse.up()
+        const panelAfter = await propertiesPanel.boundingBox()
+        if (!panelAfter
+          || Math.abs(panelAfter.x - panelBefore.x + 72) > 2
+          || Math.abs(panelAfter.y - panelBefore.y - 28) > 2) {
+          throw new Error('悬浮属性面板没有跟随标题栏拖动')
+        }
+
+        await editor.locator('[data-tool-id="move"]').hover()
+        await page.getByRole('tooltip', { name: /^(移动图像或图层|Move image or layer)$/i })
+          .waitFor({ state: 'visible', timeout: 3000 })
+
+        const readRevision = async () => {
+          const label = await editor.getByText(/^(版本|Revision) \d+$/).first().textContent()
+          const revision = Number(label?.match(/\d+/)?.[0])
+          if (!Number.isSafeInteger(revision)) throw new Error('无法读取图片编辑 revision')
+          return revision
+        }
         const zoomStartedAt = new Date().toISOString()
         await editor.locator('[data-tool-id="zoom"]').click()
         const zoomPreviewBox = await preview.boundingBox()
         if (!zoomPreviewBox) throw new Error('连续缩放前无法读取图片编辑预览范围')
+        const startX = zoomPreviewBox.x + zoomPreviewBox.width * 0.5
+        const startY = zoomPreviewBox.y + zoomPreviewBox.height * 0.5
         await page.mouse.move(
           zoomPreviewBox.x + zoomPreviewBox.width * 0.5,
           zoomPreviewBox.y + zoomPreviewBox.height * 0.5,
@@ -248,22 +287,49 @@ function createToolboxScenes(context) {
         if (zoomCompositeStarts > 2) {
           throw new Error(`连续缩放创建了 ${zoomCompositeStarts} 个视口任务，未合并为最新请求`)
         }
+
+        const readZoomPercent = async () => Number((
+          await editor.locator('[data-viewport-control] span').textContent()
+        )?.match(/\d+/)?.[0])
+        const beforeDragZoom = await readZoomPercent()
+        await page.mouse.move(
+          zoomPreviewBox.x + zoomPreviewBox.width * 0.45,
+          zoomPreviewBox.y + zoomPreviewBox.height * 0.55,
+        )
+        await page.mouse.down()
+        await page.mouse.move(
+          zoomPreviewBox.x + zoomPreviewBox.width * 0.62,
+          zoomPreviewBox.y + zoomPreviewBox.height * 0.55,
+          { steps: 8 },
+        )
+        await page.mouse.up()
+        const afterDragZoom = await readZoomPercent()
+        if (!(afterDragZoom > beforeDragZoom)) {
+          throw new Error('缩放工具向右拖动没有放大画布')
+        }
+
+        const beforePanRevision = await readRevision()
+        await editor.locator('[data-tool-id="hand"]').click()
+        const beforePanBox = await editor.locator('[data-viewport-content]').boundingBox()
+        if (!beforePanBox) throw new Error('抓手移动前无法读取画布位置')
+        await page.mouse.move(startX, startY)
+        await page.mouse.down()
+        await page.mouse.move(startX + 34, startY + 28, { steps: 5 })
+        await page.mouse.up()
+        const afterPanBox = await editor.locator('[data-viewport-content]').boundingBox()
+        const afterPanRevision = await readRevision()
+        if (!afterPanBox
+          || Math.abs(afterPanBox.x - beforePanBox.x - 34) > 2
+          || Math.abs(afterPanBox.y - beforePanBox.y - 28) > 2
+          || afterPanRevision !== beforePanRevision) {
+          throw new Error('抓手没有独立移动画布，或错误修改了图层 revision')
+        }
         await editor.locator('[data-tool-id="move"]').click()
         await page.waitForFunction(() => (
           document.querySelector('[data-preview-surface]')?.getAttribute('data-move-availability') === 'ready'
         ), undefined, { timeout: 10000 })
 
-        const readRevision = async () => {
-          const label = await editor.getByText(/^(版本|Revision) \d+$/).first().textContent()
-          const revision = Number(label?.match(/\d+/)?.[0])
-          if (!Number.isSafeInteger(revision)) throw new Error('无法读取图片编辑 revision')
-          return revision
-        }
         const beforeMove = await readRevision()
-        const previewBox = await preview.boundingBox()
-        if (!previewBox) throw new Error('图片编辑预览没有可交互范围')
-        const startX = previewBox.x + previewBox.width * 0.5
-        const startY = previewBox.y + previewBox.height * 0.5
         const feedback = editor.locator('[data-move-feedback-frame]')
         const viewportContent = editor.locator('[data-viewport-content]')
         const initialFeedbackBox = await feedback.boundingBox()
@@ -323,14 +389,18 @@ function createToolboxScenes(context) {
           return previewSurface?.getAttribute('data-preview-display-source') === 'viewport'
             && feedbackFrame?.style.transform === ''
         }, undefined, { timeout: 12000 })
-        const pasteboardImage = pasteboardImages.first()
-        const [pasteboardImageBox, viewportContentBox] = await Promise.all([
-          pasteboardImage.boundingBox(),
+        const [displayFrameBox, viewportContentBox, displayOverflow] = await Promise.all([
+          displayFrame.boundingBox(),
           viewportContent.boundingBox(),
+          displayFrame.evaluate((element) => getComputedStyle(element).overflow),
         ])
-        if (!pasteboardImageBox || !viewportContentBox
-          || pasteboardImageBox.y >= viewportContentBox.y - 100) {
-          throw new Error('移出文档的原图没有继续显示在编辑工作区')
+        if (!displayFrameBox || !viewportContentBox
+          || Math.abs(displayFrameBox.x - viewportContentBox.x) > 0.5
+          || Math.abs(displayFrameBox.y - viewportContentBox.y) > 0.5
+          || Math.abs(displayFrameBox.width - viewportContentBox.width) > 0.5
+          || Math.abs(displayFrameBox.height - viewportContentBox.height) > 0.5
+          || displayOverflow !== 'hidden') {
+          throw new Error('移动后的图像没有严格裁切在文档画布内')
         }
 
         await editor.locator('[data-tool-id="annotation-rect"]').click()
@@ -359,15 +429,54 @@ function createToolboxScenes(context) {
         })
         await blur.locator('[data-layer-select]').click()
         const blurRadius = editor.getByRole('slider', { name: /^(半径|Radius)$/i })
-        await blurRadius.focus()
-        for (let index = 0; index < 100; index += 1) {
-          await blurRadius.press(index % 2 === 0 ? 'ArrowRight' : 'ArrowLeft')
+        const beforeBlurRevision = await readRevision()
+        const blurStartedAt = new Date().toISOString()
+        const blurBox = await blurRadius.boundingBox()
+        if (!blurBox) throw new Error('无法读取模糊半径滑杆范围')
+        await page.mouse.move(blurBox.x + blurBox.width * 0.2, blurBox.y + blurBox.height / 2)
+        await page.mouse.down()
+        await page.mouse.move(
+          blurBox.x + blurBox.width * 0.68,
+          blurBox.y + blurBox.height / 2,
+          { steps: 30 },
+        )
+        await page.mouse.up()
+        await page.waitForFunction((revision) => {
+          const labels = [...document.querySelectorAll('[data-command-bar] span')]
+          return labels.some((element) => Number(element.textContent?.match(/\d+/)?.[0]) === revision + 1)
+        }, beforeBlurRevision, { timeout: 5000 })
+        await page.waitForFunction(async (afterTimestamp) => {
+          const result = await window.henjiNative.logging.queryLogEvents({
+            date: new Date().toISOString().slice(0, 10),
+            afterTimestamp,
+            level: 'debug',
+            limit: 200,
+          })
+          return result.events.some((event) => event.event === 'image_editor_v3.preview.completed')
+        }, blurStartedAt, { timeout: 5000 })
+        if (await readRevision() !== beforeBlurRevision + 1) {
+          throw new Error('一次模糊滑杆拖动产生了多条历史 revision')
         }
-        await settlePage(page, 2200)
 
+        const beforeCropRevision = await readRevision()
         await editor.locator('[data-tool-id="crop"]').click()
+        await editor.locator('[data-crop-overlay]').waitFor({ state: 'visible', timeout: 5000 })
         await editor.getByRole('button', { name: /^(向右旋转 90°|Rotate 90° right)$/i }).click()
+        await editor.getByRole('button', { name: '1:1', exact: true }).click()
+        await page.waitForFunction(() => {
+          const values = [...document.querySelectorAll('[data-crop-parameters] input')]
+            .filter((element) => element instanceof HTMLInputElement)
+            .map((element) => Number(element.value))
+          return values.length >= 4 && values[2] === values[3]
+        }, undefined, { timeout: 5000 })
+        if (await readRevision() !== beforeCropRevision) {
+          throw new Error('裁剪框或比例预览在应用前提前写入了历史')
+        }
         await editor.getByRole('button', { name: /^(应用裁剪|Apply crop)$/i }).click()
+        await page.waitForFunction((revision) => {
+          const labels = [...document.querySelectorAll('[data-command-bar] span')]
+          return labels.some((element) => Number(element.textContent?.match(/\d+/)?.[0]) === revision + 1)
+        }, beforeCropRevision, { timeout: 5000 })
         await editor.getByRole('button', { name: /^(撤销|Undo)$/i }).click()
         await editor.getByRole('button', { name: /^(重做|Redo)$/i }).click()
 

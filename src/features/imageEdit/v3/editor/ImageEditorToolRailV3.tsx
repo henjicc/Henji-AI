@@ -1,12 +1,15 @@
 import {
   ArrowUpRight,
   Brush,
+  Circle,
   CircleDashed,
   Crop,
   Eraser,
   Hand,
   LassoSelect,
   Paintbrush,
+  ListOrdered,
+  MessageSquareText,
   Move,
   Scan,
   Square,
@@ -18,6 +21,7 @@ import {
 import { useTranslation } from 'react-i18next'
 
 import { UiIconButton } from '@/components/ui'
+import Tooltip from '@/components/ui/Tooltip'
 import type { ImageEditorToolIdV3 } from '../application/imageEditorHostProfiles'
 import { useImageEditorSessionStoreV3 } from '../store'
 import { resolveImageEditorReadinessReasonV3 } from './readinessPresentationV3'
@@ -32,8 +36,11 @@ const TOOL_ICONS: Record<ImageEditorToolIdV3, LucideIcon> = {
   'select-ellipse': Scan,
   'select-lasso': LassoSelect,
   'annotation-text': Type,
+  'annotation-callout': MessageSquareText,
   'annotation-arrow': ArrowUpRight,
   'annotation-rect': Square,
+  'annotation-ellipse': Circle,
+  'annotation-number': ListOrdered,
   'annotation-pen': Brush,
   'raster-brush': Paintbrush,
   eraser: Eraser,
@@ -43,7 +50,15 @@ const TOOL_ICONS: Record<ImageEditorToolIdV3, LucideIcon> = {
 const TOOL_GROUPS: readonly (readonly ImageEditorToolIdV3[])[] = [
   ['move', 'hand', 'zoom'],
   ['crop', 'select-rect', 'select-ellipse', 'select-lasso'],
-  ['annotation-text', 'annotation-arrow', 'annotation-rect', 'annotation-pen'],
+  [
+    'annotation-text',
+    'annotation-callout',
+    'annotation-arrow',
+    'annotation-rect',
+    'annotation-ellipse',
+    'annotation-number',
+    'annotation-pen',
+  ],
   ['raster-brush', 'eraser', 'mask-edit'],
 ]
 
@@ -85,22 +100,22 @@ export function ImageEditorToolRailV3({ controller }: { controller: ImageEditorV
                 ? t('imageEditor.v3.readiness.unavailableWithReason', { label, reason })
                 : t('imageEditor.v3.readiness.unavailable', { label })
               return (
-                <UiIconButton
-                  key={id}
-                  data-tool-id={id}
-                  data-tool-readiness={readiness.state}
-                  className="h-8 w-8"
-                  showBorder={false}
-                  appearance="hover-only"
-                  active={activeTool === id}
-                  disabled={disabled}
-                  aria-label={disabled ? unavailableLabel : label}
-                  aria-pressed={activeTool === id}
-                  title={disabled ? unavailableLabel : label}
-                  onClick={() => setActiveTool(controller.sessionId, id)}
-                >
+                <Tooltip key={id} content={disabled ? unavailableLabel : label} delay={180}>
+                  <UiIconButton
+                    data-tool-id={id}
+                    data-tool-readiness={readiness.state}
+                    className="h-8 w-8"
+                    showBorder={false}
+                    appearance="hover-only"
+                    active={activeTool === id}
+                    disabled={disabled}
+                    aria-label={disabled ? unavailableLabel : label}
+                    aria-pressed={activeTool === id}
+                    onClick={() => setActiveTool(controller.sessionId, id)}
+                  >
                   <Icon className="h-4 w-4" />
-                </UiIconButton>
+                  </UiIconButton>
+                </Tooltip>
               )
             })}
           </div>

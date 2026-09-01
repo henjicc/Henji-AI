@@ -240,6 +240,7 @@ describe('ImageEditorPreviewClientV3 调度与资源所有权', () => {
     const third = client.render({ document: createDocument(3), quality: 'draft', maxDimension: 960, resourceDescriptors: [] })
 
     expect(worker.renders().map((request) => request.sequence)).toEqual([1])
+    expect(worker.terminate).toHaveBeenCalledTimes(1)
     const staleBitmap = bitmap()
     worker.emit({
       type: 'rendered-bitmap', requestId: worker.renders()[0].requestId, sequence: 1,

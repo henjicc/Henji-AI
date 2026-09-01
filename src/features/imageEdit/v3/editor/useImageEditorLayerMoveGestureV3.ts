@@ -128,11 +128,21 @@ export function useImageEditorLayerMoveGestureV3(
     rect: Pick<DOMRect, 'left' | 'top' | 'width' | 'height'>,
     clientX: number,
     clientY: number,
+    clampOutside = false,
   ): readonly [number, number] | null => {
     if (rect.width <= 0 || rect.height <= 0) return null
+    const outside = (
+      clientX < rect.left
+      || clientX > rect.left + rect.width
+      || clientY < rect.top
+      || clientY > rect.top + rect.height
+    )
+    if (outside && !clampOutside) return null
+    const x = Math.min(rect.left + rect.width, Math.max(rect.left, clientX))
+    const y = Math.min(rect.top + rect.height, Math.max(rect.top, clientY))
     return [
-      (clientX - rect.left) / rect.width * outputGeometry.width,
-      (clientY - rect.top) / rect.height * outputGeometry.height,
+      (x - rect.left) / rect.width * outputGeometry.width,
+      (y - rect.top) / rect.height * outputGeometry.height,
     ]
   }, [outputGeometry.height, outputGeometry.width])
 
@@ -203,7 +213,12 @@ export function useImageEditorLayerMoveGestureV3(
     const gesture = gestureRef.current
     if (!gesture || gesture.pointerId !== event.pointerId) return
     const location = findImageEditLayerLocationV3(controller.document.layers, gesture.layerId)
-    const outputPoint = clientToOutput(gesture.viewportRect, event.clientX, event.clientY)
+    const outputPoint = clientToOutput(
+      gesture.viewportRect,
+      event.clientX,
+      event.clientY,
+      true,
+    )
     if (!isImageEditLayerTransformableV3(location) || !outputPoint) {
       release(false)
       return
@@ -222,8 +237,12 @@ export function useImageEditorLayerMoveGestureV3(
       : [...gesture.startTransform]
     if (gesture.compositorFeedback && moveFeedbackRef.current) {
       const scale = Math.max(0.05, viewportZoom)
+      const previewClientX = gesture.viewportRect.left
+        + outputPoint[0] / outputGeometry.width * gesture.viewportRect.width
+      const previewClientY = gesture.viewportRect.top
+        + outputPoint[1] / outputGeometry.height * gesture.viewportRect.height
       moveFeedbackRef.current.style.transform = changed
-        ? `translate3d(${(event.clientX - gesture.startClientPoint[0]) / scale}px, ${(event.clientY - gesture.startClientPoint[1]) / scale}px, 0)`
+        ? `translate3d(${(previewClientX - gesture.startClientPoint[0]) / scale}px, ${(previewClientY - gesture.startClientPoint[1]) / scale}px, 0)`
         : ''
       return
     }

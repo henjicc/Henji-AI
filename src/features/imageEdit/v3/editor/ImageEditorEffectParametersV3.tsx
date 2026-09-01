@@ -35,6 +35,7 @@ function ParameterSlider({
   const [draft, setDraft] = useState(value)
   const activeRef = useRef(false)
   const draftRef = useRef(value)
+  const previewFrameRef = useRef<number | null>(null)
 
   useEffect(() => {
     if (!activeRef.current) {
@@ -43,7 +44,12 @@ function ParameterSlider({
     }
   }, [value])
 
-  useEffect(() => () => controller.clearParameterPreview(previewId), [controller, previewId])
+  useEffect(() => () => {
+    if (previewFrameRef.current !== null && typeof cancelAnimationFrame === 'function') {
+      cancelAnimationFrame(previewFrameRef.current)
+    }
+    controller.clearParameterPreview(previewId)
+  }, [controller, previewId])
   useEffect(() => {
     if (!disabled || !activeRef.current) return
     activeRef.current = false
@@ -63,12 +69,26 @@ function ParameterSlider({
     activeRef.current = true
     draftRef.current = next
     setDraft(next)
-    controller.setParameterPreview(previewId, layer.id, paramsFor(next))
+    if (previewFrameRef.current !== null) return
+    const publish = (): void => {
+      previewFrameRef.current = null
+      controller.setParameterPreview(previewId, layer.id, paramsFor(draftRef.current))
+    }
+    if (typeof requestAnimationFrame === 'function') {
+      previewFrameRef.current = requestAnimationFrame(publish)
+    } else {
+      publish()
+    }
   }
 
   const commit = (): void => {
     if (disabled || !activeRef.current) return
     activeRef.current = false
+    if (previewFrameRef.current !== null && typeof cancelAnimationFrame === 'function') {
+      cancelAnimationFrame(previewFrameRef.current)
+      previewFrameRef.current = null
+      controller.setParameterPreview(previewId, layer.id, paramsFor(draftRef.current))
+    }
     controller.commitLayerParamsPreview(previewId, layer.id, paramsFor(draftRef.current))
   }
 
@@ -86,6 +106,10 @@ function ParameterSlider({
           onPointerUp={commit}
           onPointerCancel={() => {
             activeRef.current = false
+            if (previewFrameRef.current !== null && typeof cancelAnimationFrame === 'function') {
+              cancelAnimationFrame(previewFrameRef.current)
+              previewFrameRef.current = null
+            }
             controller.clearParameterPreview(previewId)
             setDraft(value)
           }}

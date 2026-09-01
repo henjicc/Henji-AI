@@ -186,7 +186,7 @@ describe('ImageEditorPreviewV3 managed frame ownership', () => {
       },
     })
 
-    fireEvent.click(screen.getByRole('button', { name: '抓手' }))
+    fireEvent.click(screen.getByRole('button', { name: '移动画布（抓手）' }))
     fireEvent.pointerDown(surface, {
       pointerId: 7, isPrimary: true, button: 0, clientX: 100, clientY: 100,
     })
@@ -201,7 +201,7 @@ describe('ImageEditorPreviewV3 managed frame ownership', () => {
       y: 20,
     })
 
-    fireEvent.click(screen.getByRole('button', { name: '缩放' }))
+    fireEvent.click(screen.getByRole('button', { name: '缩放画布' }))
     fireEvent.pointerDown(surface, {
       pointerId: 8, isPrimary: true, button: 0, clientX: 600, clientY: 300,
     })
@@ -222,10 +222,27 @@ describe('ImageEditorPreviewV3 managed frame ownership', () => {
     fireEvent(surface, wheel)
     expect(wheel.defaultPrevented).toBe(true)
     expect(useImageEditorInteractionStoreV3.getState().viewportZoomBySession[sessionId]).toBe(1.4375)
+
+    fireEvent.pointerDown(surface, {
+      pointerId: 9, isPrimary: true, button: 0, clientX: 500, clientY: 300,
+    })
+    fireEvent.pointerMove(surface, { pointerId: 9, clientX: 680, clientY: 300 })
+    expect(content.style.transform).toContain('scale(2.875)')
+    expect(useImageEditorInteractionStoreV3.getState().viewportZoomBySession[sessionId]).toBe(1.4375)
+    fireEvent.pointerUp(surface, { pointerId: 9, clientX: 680, clientY: 300 })
+    expect(useImageEditorInteractionStoreV3.getState().viewportZoomBySession[sessionId]).toBe(2.875)
+
+    fireEvent.pointerDown(surface, {
+      pointerId: 10, isPrimary: true, button: 0, clientX: 500, clientY: 300, altKey: true,
+    })
+    fireEvent.pointerUp(surface, {
+      pointerId: 10, clientX: 500, clientY: 300, altKey: true,
+    })
+    expect(useImageEditorInteractionStoreV3.getState().viewportZoomBySession[sessionId]).toBe(2.3)
     expect(document.revision).toBe(0)
   })
 
-  it('单一原图移出文档后只显示一份画面且不额外绘制边框', async () => {
+  it('图层移动始终裁切在文档画布内且不再绘制文档外副本', async () => {
     vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({
       x: 0, y: 0, left: 0, top: 0, right: 1_000, bottom: 600,
       width: 1_000, height: 600, toJSON: () => undefined,
@@ -248,15 +265,13 @@ describe('ImageEditorPreviewV3 managed frame ownership', () => {
       </div>,
     )
 
-    const pasteboard = await waitFor(() => {
-      const element = rendered.container.querySelector<HTMLElement>('[data-raster-pasteboard-layer]')
-      if (!element) throw new Error('文档外原图图层尚未挂载')
+    const rasterFrame = await waitFor(() => {
+      const element = rendered.container.querySelector('[data-raster-display-frame]')
+      if (!element) throw new Error('文档内栅格显示框尚未挂载')
       return element
     })
-    const image = pasteboard.querySelector('img')
-    const rasterFrame = rendered.container.querySelector('[data-raster-display-frame]')
-    expect(image?.style.transform).toBe('matrix(1, 0, 0, 1, 55.2, -132.48)')
-    expect(rasterFrame).toBeNull()
+    expect(rasterFrame.className).toContain('overflow-hidden')
+    expect(rendered.container.querySelector('[data-raster-pasteboard-layer]')).toBeNull()
     expect(rendered.container.querySelector('[data-document-boundary]')).toBeNull()
   })
 

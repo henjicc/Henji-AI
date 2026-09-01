@@ -27,7 +27,7 @@ export class ImageEditorPreviewUnsupportedEffectErrorV3 extends Error {
 }
 
 export class ImageEditorPreviewCustomEffectsV3 {
-  private readonly backend = new WorkerWebGpuRuntimeBackend()
+  private backend = new WorkerWebGpuRuntimeBackend()
 
   async execute(
     node: ImageEditRenderPlanNode,
@@ -96,6 +96,15 @@ export class ImageEditorPreviewCustomEffectsV3 {
         await previewBitmapToLinearTileV3(rendered),
         color,
       )
+      if (node.definitionId === 'effect.vgpu-glow'
+        && !isPlausibleVgpuGlowPreviewV3(source, processed)) {
+        this.backend.destroy()
+        this.backend = new WorkerWebGpuRuntimeBackend()
+        throw new ImageEditorPreviewUnsupportedEffectErrorV3(
+          node.definitionId,
+          '辉光 Pro 返回了无效暗帧，已保留上一预览并重置 GPU 工作集',
+        )
+      }
       return mixCustomEffectMaskV3(source, processed, mask)
     } catch (error) {
       if (diffusionRecipe) return applyDiffusionV4(source, diffusionRecipe, { mask })
@@ -114,4 +123,35 @@ export class ImageEditorPreviewCustomEffectsV3 {
   dispose(): void {
     this.backend.destroy()
   }
+}
+
+/** 辉光合成必须保留原始 scene；非黑源变成近零或出现非有限值一定是 GPU 暗帧。 */
+export function isPlausibleVgpuGlowPreviewV3(
+  source: Float32PremultipliedRgbaTile,
+  processed: Float32PremultipliedRgbaTile,
+): boolean {
+  if (source.width !== processed.width || source.height !== processed.height) return false
+  const pixelCount = source.width * source.height
+  const stride = Math.max(1, Math.floor(pixelCount / 4_096))
+  let sourceSignal = 0
+  let processedSignal = 0
+  for (let pixel = 0; pixel < pixelCount; pixel += stride) {
+    const offset = pixel * 4
+    const sourceSample = Math.max(
+      source.data[offset],
+      source.data[offset + 1],
+      source.data[offset + 2],
+    )
+    const processedSample = Math.max(
+      processed.data[offset],
+      processed.data[offset + 1],
+      processed.data[offset + 2],
+    )
+    if (!Number.isFinite(processedSample) || !Number.isFinite(processed.data[offset + 3])) {
+      return false
+    }
+    sourceSignal = Math.max(sourceSignal, sourceSample)
+    processedSignal = Math.max(processedSignal, processedSample)
+  }
+  return sourceSignal <= 1e-5 || processedSignal >= sourceSignal * 0.05
 }

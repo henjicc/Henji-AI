@@ -2,9 +2,10 @@ import { Redo2, Undo2 } from 'lucide-react'
 import { useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 
-import { UiChipButton, UiIconButton, UiRangeInput } from '@/components/ui'
+import { UiChipButton, UiIconButton, UiInput, UiRangeInput, UiSelect } from '@/components/ui'
 import { ICON_TOOL_IMAGE_EDIT } from '@/core/theme/icons'
 import { ImageEditorCropParametersV3 } from './ImageEditorCropParametersV3'
+import type { ImageEditCommandBusV3 } from '../application/imageEditCommandBus'
 import { findImageEditLayerLocationV3 } from './layerTreeV3'
 import { imageEditorSelectionAllowedCombineModesV3 } from './selectionMaskLayerV3'
 import type { ImageEditorV3Controller } from './types'
@@ -12,13 +13,17 @@ import { useImageEditorInteractionStoreV3, useImageEditorSessionStoreV3 } from '
 
 interface ImageEditorCommandBarV3Props {
   controller: ImageEditorV3Controller
+  bus: ImageEditCommandBusV3
   toolbarLeading?: React.ReactNode
   toolbarActions?: React.ReactNode
 }
 
 const EMPTY_LAYER_IDS: readonly string[] = []
 
-function ToolParameterBar({ controller }: Pick<ImageEditorCommandBarV3Props, 'controller'>): JSX.Element | null {
+function ToolParameterBar({
+  controller,
+  bus,
+}: Pick<ImageEditorCommandBarV3Props, 'controller' | 'bus'>): JSX.Element | null {
   const { t } = useTranslation('ui')
   const session = useImageEditorSessionStoreV3((state) => state.sessions[controller.sessionId])
   const setToolSetting = useImageEditorSessionStoreV3((state) => state.setToolSetting)
@@ -45,7 +50,9 @@ function ToolParameterBar({ controller }: Pick<ImageEditorCommandBarV3Props, 'co
 
   const brushLike = ['raster-brush', 'eraser', 'mask-edit'].includes(session.activeTool)
   const annotationLike = session.activeTool.startsWith('annotation-')
-  if (session.activeTool === 'crop') return <ImageEditorCropParametersV3 controller={controller} />
+  if (session.activeTool === 'crop') {
+    return <ImageEditorCropParametersV3 controller={controller} bus={bus} />
+  }
   if (!brushLike && !annotationLike && !selectionLike) return null
 
   return (
@@ -134,24 +141,40 @@ function ToolParameterBar({ controller }: Pick<ImageEditorCommandBarV3Props, 'co
       ) : null}
       {annotationLike ? (
         <>
-          <label className="flex min-w-40 items-center gap-2 text-xs text-text-muted">
-            <span className="shrink-0">{t('imageEditor.v3.toolSettings.strokeWidth')}</span>
-            <UiRangeInput
-              aria-label={t('imageEditor.v3.toolSettings.strokeWidth')}
-              min={1}
-              max={64}
-              value={session.toolSettings.annotationStrokeWidth}
+          <label className="flex shrink-0 items-center gap-2 text-xs text-text-muted">
+            <span>{t('imageEditor.v3.toolSettings.color')}</span>
+            <UiInput
+              className="!h-8 !w-10 !p-1"
+              type="color"
+              aria-label={t('imageEditor.v3.toolSettings.color')}
+              value={session.toolSettings.annotationColor}
               onChange={(event) => setToolSetting(
                 controller.sessionId,
-                'annotationStrokeWidth',
-                Number(event.currentTarget.value),
+                'annotationColor',
+                event.currentTarget.value,
               )}
             />
-            <span className="w-8 text-right tabular-nums text-text-dark">
-              {Math.round(session.toolSettings.annotationStrokeWidth)}
-            </span>
           </label>
-          {session.activeTool === 'annotation-text' ? (
+          {!['annotation-text', 'annotation-number'].includes(session.activeTool) ? (
+            <label className="flex min-w-40 items-center gap-2 text-xs text-text-muted">
+              <span className="shrink-0">{t('imageEditor.v3.toolSettings.strokeWidth')}</span>
+              <UiRangeInput
+                aria-label={t('imageEditor.v3.toolSettings.strokeWidth')}
+                min={1}
+                max={64}
+                value={session.toolSettings.annotationStrokeWidth}
+                onChange={(event) => setToolSetting(
+                  controller.sessionId,
+                  'annotationStrokeWidth',
+                  Number(event.currentTarget.value),
+                )}
+              />
+              <span className="w-8 text-right tabular-nums text-text-dark">
+                {Math.round(session.toolSettings.annotationStrokeWidth)}
+              </span>
+            </label>
+          ) : null}
+          {['annotation-text', 'annotation-number', 'annotation-callout'].includes(session.activeTool) ? (
             <label className="flex min-w-40 items-center gap-2 text-xs text-text-muted">
               <span className="shrink-0">{t('imageEditor.v3.toolSettings.fontSize')}</span>
               <UiRangeInput
@@ -168,6 +191,24 @@ function ToolParameterBar({ controller }: Pick<ImageEditorCommandBarV3Props, 'co
               <span className="w-8 text-right tabular-nums text-text-dark">
                 {Math.round(session.toolSettings.annotationFontSize)}
               </span>
+            </label>
+          ) : null}
+          {session.activeTool === 'annotation-callout' ? (
+            <label className="flex shrink-0 items-center gap-2 text-xs text-text-muted">
+              <span>{t('imageEditor.v3.toolSettings.calloutShape')}</span>
+              <UiSelect
+                className="!h-8 w-24"
+                aria-label={t('imageEditor.v3.toolSettings.calloutShape')}
+                value={session.toolSettings.annotationCalloutShape}
+                onChange={(event) => setToolSetting(
+                  controller.sessionId,
+                  'annotationCalloutShape',
+                  event.currentTarget.value as 'rect' | 'ellipse',
+                )}
+              >
+                <option value="rect">{t('imageEditor.v3.toolSettings.rect')}</option>
+                <option value="ellipse">{t('imageEditor.v3.toolSettings.ellipse')}</option>
+              </UiSelect>
             </label>
           ) : null}
         </>
@@ -208,6 +249,7 @@ function ToolParameterBar({ controller }: Pick<ImageEditorCommandBarV3Props, 'co
 
 export function ImageEditorCommandBarV3({
   controller,
+  bus,
   toolbarLeading,
   toolbarActions,
 }: ImageEditorCommandBarV3Props): JSX.Element {
@@ -263,7 +305,7 @@ export function ImageEditorCommandBarV3({
           {toolbarActions}
         </div>
       </div>
-      <ToolParameterBar controller={controller} />
+      <ToolParameterBar controller={controller} bus={bus} />
     </header>
   )
 }

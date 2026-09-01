@@ -16,7 +16,7 @@ import { IMAGE_EDITOR_V3_BRUSH_TILE_MEDIA_TYPE } from '../application/imageEdito
 import { createImageEditorSparseMaskReferencePlanV3 } from './sparseMaskResourcesV3'
 
 export const IMAGE_EDITOR_PREVIEW_STABLE_MAX_EDGE_V3 = 1_600
-export const IMAGE_EDITOR_PREVIEW_DRAFT_MAX_EDGE_V3 = 960
+export const IMAGE_EDITOR_PREVIEW_DRAFT_MAX_EDGE_V3 = 720
 
 const RESOURCE_REF_PATTERN = /^sha256:[a-f0-9]{64}$/
 const TILE_KEY_PATTERN = /^(0|[1-9]\d*)\/(0|[1-9]\d*)\/(0|[1-9]\d*)$/

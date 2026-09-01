@@ -1,6 +1,5 @@
 import { AlertTriangle, LoaderCircle, Minus, Plus } from 'lucide-react'
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef } from 'react'
-import type { PointerEvent as ReactPointerEvent } from 'react'
+import { useLayoutEffect, useMemo, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { UiIconButton } from '@/components/ui'
@@ -13,6 +12,7 @@ import {
   useImageEditorDisplayPipelineV3,
   useImageEditorThumbnailPrefetchV3,
 } from '../execution'
+import { projectImageEditorPreviewDocumentV3 } from '../execution/previewDocumentV3'
 import { useImageEditorResultLeaseV3 } from '../execution/useImageEditorResultLeaseV3'
 import { ImageEditorAnnotationOverlayV3 } from './ImageEditorAnnotationOverlayV3'
 import {
@@ -20,11 +20,10 @@ import {
   ImageEditorUrlPreviewV3,
 } from './ImageEditorPreviewOutputV3'
 import { ImageEditorRasterBrushOverlayV3 } from './ImageEditorRasterBrushOverlayV3'
-import { ImageEditorRasterPasteboardV3 } from './ImageEditorRasterPasteboardV3'
 import { ImageEditorSelectionMaskOverlayV3 } from './ImageEditorSelectionMaskOverlayV3'
 import { ImageEditorViewportTilesV3 } from './ImageEditorViewportTilesV3'
 import { resolveAnnotationOutputGeometryV3 } from './annotationGeometryV3'
-import { resolveImageEditorRasterPasteboardLayerV3 } from './rasterPasteboardV3'
+import { ImageEditorCropOverlayV3 } from './ImageEditorCropOverlayV3'
 import type {
   ImageEditorV3Controller,
   ImageEditorV3PreviewOutput,
@@ -33,13 +32,8 @@ import type {
 import { useImageEditorBusSnapshotV3 } from './useImageEditorControllerV3'
 import { useImageEditorViewportLayoutV3 } from './useImageEditorViewportLayoutV3'
 import { useImageEditorLayerMoveGestureV3 } from './useImageEditorLayerMoveGestureV3'
-import { useImageEditorViewportWheelV3 } from './useImageEditorViewportWheelV3'
-import {
-  imageEditorViewportTransformV3,
-  zoomImageEditorViewportAroundPointV3,
-  type ImageEditorNavigationGestureV3,
-  type ImageEditorViewportPanV3,
-} from './viewportNavigationV3'
+import { imageEditorViewportTransformV3, type ImageEditorViewportPanV3 } from './viewportNavigationV3'
+import { useImageEditorViewportNavigationGestureV3 } from './useImageEditorViewportNavigationGestureV3'
 
 interface ImageEditorPreviewV3Props extends Pick<
   ImageEditorV3Props,
@@ -70,7 +64,6 @@ export function ImageEditorPreviewV3({
   const surfaceRef = useRef<HTMLElement | null>(null)
   const viewportContentRef = useRef<HTMLDivElement | null>(null)
   const moveFeedbackRef = useRef<HTMLDivElement | null>(null)
-  const gestureRef = useRef<ImageEditorNavigationGestureV3 | null>(null)
   const snapshot = useImageEditorBusSnapshotV3(bus)
   const activeTool = useImageEditorSessionStoreV3(
     (state) => state.sessions[controller.sessionId]?.activeTool ?? 'move',
@@ -81,13 +74,26 @@ export function ImageEditorPreviewV3({
   const pan = useImageEditorInteractionStoreV3(
     (state) => state.viewportPanBySession[controller.sessionId] ?? ZERO_VIEWPORT_PAN_V3,
   )
-  const setViewportPan = useImageEditorInteractionStoreV3((state) => state.setViewportPan)
-  const setViewportTransform = useImageEditorInteractionStoreV3(
-    (state) => state.setViewportTransform,
+  const projectedDocument = useMemo(
+    () => projectImageEditorPreviewDocumentV3(snapshot),
+    [snapshot],
   )
+  const cropDisplayDocument = useMemo(() => activeTool === 'crop'
+    ? {
+        ...snapshot.document,
+        geometry: {
+          ...snapshot.document.geometry,
+          orientation: projectedDocument.geometry.orientation,
+          crop: null,
+        },
+      }
+    : snapshot.document, [activeTool, projectedDocument.geometry.orientation, snapshot.document])
+  const displaySnapshot = useMemo(() => activeTool === 'crop'
+    ? { document: cropDisplayDocument, previewOverrides: {}, history: snapshot.history }
+    : snapshot, [activeTool, cropDisplayDocument, snapshot])
   const outputGeometry = useMemo(
-    () => resolveAnnotationOutputGeometryV3(snapshot.document),
-    [snapshot.document],
+    () => resolveAnnotationOutputGeometryV3(cropDisplayDocument),
+    [cropDisplayDocument],
   )
   const viewportLayout = useImageEditorViewportLayoutV3(
     surfaceRef,
@@ -95,11 +101,6 @@ export function ImageEditorPreviewV3({
     zoom,
     pan,
   )
-  const rasterPasteboardLayer = useMemo(
-    () => previewRenderer ? null : resolveImageEditorRasterPasteboardLayerV3(snapshot.document),
-    [previewRenderer, snapshot.document],
-  )
-  const hasRasterPasteboard = Boolean(rasterPasteboardLayer && viewportLayout)
   const layerMoveHandlers = useImageEditorLayerMoveGestureV3(
     controller,
     activeTool,
@@ -111,7 +112,7 @@ export function ImageEditorPreviewV3({
 
   const displayPipeline = useImageEditorDisplayPipelineV3(
     controller.sessionId,
-    snapshot,
+    displaySnapshot,
     !previewRenderer,
     resourceDescriptors,
     viewportLayout,
@@ -130,6 +131,7 @@ export function ImageEditorPreviewV3({
     controller.sessionId,
     snapshot,
     !previewRenderer
+      && activeTool !== 'crop'
       && Object.keys(snapshot.previewOverrides).length === 0
       && thumbnailDisplayReady,
     resourceDescriptors ?? [],
@@ -192,148 +194,22 @@ export function ImageEditorPreviewV3({
   useLayoutEffect(() => {
     const feedback = moveFeedbackRef.current
     if (!feedback) return
-    if (hasRasterPasteboard) {
-      // 源图层随文档 transform 同步重绘，提交后无需继续保留旧合成帧位移。
-      feedback.style.transform = ''
-      return
-    }
     if (
       Object.keys(snapshot.previewOverrides).length > 0
       || basePreviewDocumentId !== snapshot.document.id
       || basePreviewRevision !== snapshot.document.revision
     ) return
     feedback.style.transform = ''
-  }, [basePreviewDocumentId, basePreviewRevision, hasRasterPasteboard, snapshot.document.id, snapshot.document.revision, snapshot.previewOverrides])
+  }, [basePreviewDocumentId, basePreviewRevision, snapshot.document.id, snapshot.document.revision, snapshot.previewOverrides])
 
-  const applyViewportTransform = useCallback((
-    nextZoom: number,
-    nextPan: ImageEditorViewportPanV3,
-  ): void => {
-    const content = viewportContentRef.current
-    if (content) content.style.transform = imageEditorViewportTransformV3(nextZoom, nextPan)
-  }, [])
-
-  useEffect(() => {
-    if (!gestureRef.current) applyViewportTransform(zoom, pan)
-  }, [applyViewportTransform, pan, zoom])
-
-  const zoomAroundClientPoint = useCallback((
-    clientX: number,
-    clientY: number,
-    requestedZoom: number,
-  ): void => {
-    const rect = surfaceRef.current?.getBoundingClientRect()
-    if (!rect || rect.width <= 0 || rect.height <= 0) return
-    const next = zoomImageEditorViewportAroundPointV3(zoom, pan, requestedZoom, {
-      x: clientX - (rect.left + rect.width / 2),
-      y: clientY - (rect.top + rect.height / 2),
-    })
-    setViewportTransform(controller.sessionId, next)
-  }, [controller.sessionId, pan, setViewportTransform, zoom])
-
-  const releaseGesture = useCallback((commit: boolean): void => {
-    const gesture = gestureRef.current
-    if (!gesture) return
-    gestureRef.current = null
-    const surface = surfaceRef.current
-    if (
-      surface
-      && typeof surface.hasPointerCapture === 'function'
-      && surface.hasPointerCapture(gesture.pointerId)
-      && typeof surface.releasePointerCapture === 'function'
-    ) {
-      surface.releasePointerCapture(gesture.pointerId)
-    }
-    if (viewportContentRef.current) viewportContentRef.current.style.willChange = ''
-    if (commit && gesture.kind === 'pan') {
-      setViewportPan(controller.sessionId, gesture.pendingPan)
-      return
-    }
-    applyViewportTransform(zoom, pan)
-  }, [applyViewportTransform, controller.sessionId, pan, setViewportPan, zoom])
-
-  useEffect(() => {
-    if (activeTool !== 'hand' && activeTool !== 'zoom') releaseGesture(false)
-  }, [activeTool, releaseGesture])
-
-  useEffect(() => () => releaseGesture(false), [releaseGesture])
-
-  const handlePointerDown = (event: ReactPointerEvent<HTMLElement>): void => {
-    if (
-      event.button !== 0
-      || !event.isPrimary
-      || (activeTool !== 'hand' && activeTool !== 'zoom')
-      || (event.target instanceof Element && event.target.closest('[data-viewport-control]'))
-    ) return
-    event.preventDefault()
-    releaseGesture(false)
-    try {
-      event.currentTarget.setPointerCapture(event.pointerId)
-    } catch {
-      // 失焦边界由 pointercancel/unmount 继续兜底。
-    }
-    const gesture: ImageEditorNavigationGestureV3 = {
-      kind: activeTool === 'hand' ? 'pan' : 'zoom',
-      pointerId: event.pointerId,
-      startClientX: event.clientX,
-      startClientY: event.clientY,
-      startPan: { ...pan },
-      pendingPan: { ...pan },
-      altKey: event.altKey,
-      moved: false,
-    }
-    gestureRef.current = gesture
-    if (viewportContentRef.current) viewportContentRef.current.style.willChange = 'transform'
-  }
-
-  const handlePointerMove = (event: ReactPointerEvent<HTMLElement>): void => {
-    const gesture = gestureRef.current
-    if (!gesture || gesture.pointerId !== event.pointerId) return
-    const deltaX = event.clientX - gesture.startClientX
-    const deltaY = event.clientY - gesture.startClientY
-    if (deltaX * deltaX + deltaY * deltaY > 9) gesture.moved = true
-    if (gesture.kind !== 'pan') return
-    event.preventDefault()
-    gesture.pendingPan = {
-      x: gesture.startPan.x + deltaX,
-      y: gesture.startPan.y + deltaY,
-    }
-    // 高频拖动只写合成层；结束时才向 Zustand 提交一次。
-    applyViewportTransform(zoom, gesture.pendingPan)
-  }
-
-  const handlePointerUp = (event: ReactPointerEvent<HTMLElement>): void => {
-    const gesture = gestureRef.current
-    if (!gesture || gesture.pointerId !== event.pointerId) return
-    event.preventDefault()
-    if (gesture.kind === 'zoom' && !gesture.moved) {
-      const requestedZoom = gesture.altKey ? zoom / 1.25 : zoom * 1.25
-      gestureRef.current = null
-      if (
-        typeof event.currentTarget.hasPointerCapture === 'function'
-        && event.currentTarget.hasPointerCapture(event.pointerId)
-        && typeof event.currentTarget.releasePointerCapture === 'function'
-      ) {
-        event.currentTarget.releasePointerCapture(event.pointerId)
-      }
-      if (viewportContentRef.current) viewportContentRef.current.style.willChange = ''
-      zoomAroundClientPoint(event.clientX, event.clientY, requestedZoom)
-      return
-    }
-    releaseGesture(true)
-  }
-
-  useImageEditorViewportWheelV3(surfaceRef, activeTool, zoom, zoomAroundClientPoint)
-
-  const zoomFromCenter = (requestedZoom: number): void => {
-    const rect = surfaceRef.current?.getBoundingClientRect()
-    if (!rect) return
-    zoomAroundClientPoint(
-      rect.left + rect.width / 2,
-      rect.top + rect.height / 2,
-      requestedZoom,
-    )
-  }
+  const navigation = useImageEditorViewportNavigationGestureV3(
+    controller.sessionId,
+    activeTool,
+    surfaceRef,
+    viewportContentRef,
+    zoom,
+    pan,
+  )
 
   const navigationCursor = activeTool === 'hand'
     ? 'cursor-grab active:cursor-grabbing'
@@ -358,10 +234,10 @@ export function ImageEditorPreviewV3({
       onPointerMoveCapture={layerMoveHandlers.onPointerMoveCapture}
       onPointerUpCapture={layerMoveHandlers.onPointerUpCapture}
       onPointerCancelCapture={layerMoveHandlers.onPointerCancelCapture}
-      onPointerDown={handlePointerDown}
-      onPointerMove={handlePointerMove}
-      onPointerUp={handlePointerUp}
-      onPointerCancel={() => releaseGesture(false)}
+      onPointerDown={navigation.onPointerDown}
+      onPointerMove={navigation.onPointerMove}
+      onPointerUp={navigation.onPointerUp}
+      onPointerCancel={navigation.onPointerCancel}
     >
       <div className="absolute inset-0 flex items-center justify-center overflow-hidden p-6">
         <div
@@ -376,44 +252,42 @@ export function ImageEditorPreviewV3({
           }}
         >
           {!previewRenderer ? (
-            hasRasterPasteboard ? null : (
+            <div
+              data-raster-display-frame
+              className="pointer-events-none absolute inset-0 overflow-hidden"
+            >
               <div
-                data-raster-display-frame
-                className="pointer-events-none absolute inset-0 overflow-hidden"
+                ref={moveFeedbackRef}
+                data-move-feedback-frame
+                className="absolute inset-0 flex items-center justify-center"
               >
-                <div
-                  ref={moveFeedbackRef}
-                  data-move-feedback-frame
-                  className="absolute inset-0 flex items-center justify-center"
-                >
-                  {viewportResult ? (
-                    <ImageEditorViewportTilesV3
-                      result={viewportResult}
-                      label={t('imageEditor.v3.previewAlt')}
-                    />
-                  ) : null}
-                  {!viewportResult && output.kind === 'url' ? (
-                    <ImageEditorUrlPreviewV3 output={output} label={t('imageEditor.v3.previewAlt')} />
-                  ) : null}
-                  {!viewportResult && output.kind === 'frame' ? (
-                    <ImageEditorFramePreviewV3 output={output} label={t('imageEditor.v3.previewAlt')} />
-                  ) : null}
-                  {!viewportResult && output.kind === 'content' ? output.content : null}
-                </div>
+                {viewportResult ? (
+                  <ImageEditorViewportTilesV3
+                    result={viewportResult}
+                    label={t('imageEditor.v3.previewAlt')}
+                  />
+                ) : null}
+                {!viewportResult && output.kind === 'url' ? (
+                  <ImageEditorUrlPreviewV3 output={output} label={t('imageEditor.v3.previewAlt')} />
+                ) : null}
+                {!viewportResult && output.kind === 'frame' ? (
+                  <ImageEditorFramePreviewV3 output={output} label={t('imageEditor.v3.previewAlt')} />
+                ) : null}
+                {!viewportResult && output.kind === 'content' ? output.content : null}
               </div>
-            )
+            </div>
           ) : output.kind === 'url' ? (
             <ImageEditorUrlPreviewV3 output={output} label={t('imageEditor.v3.previewAlt')} />
           ) : output.kind === 'frame' ? (
             <ImageEditorFramePreviewV3 output={output} label={t('imageEditor.v3.previewAlt')} />
           ) : output.content}
-          {rasterPasteboardLayer && viewportLayout ? (
-            <ImageEditorRasterPasteboardV3
-              feedbackRef={moveFeedbackRef}
-              layer={rasterPasteboardLayer}
-              sourceImageUrl={sourceImageUrl}
-              documentWidth={outputGeometry.width}
+          {activeTool === 'crop' && viewportLayout ? (
+            <ImageEditorCropOverlayV3
+              controller={controller}
+              projectedDocument={projectedDocument}
+              geometry={outputGeometry}
               stageWidth={viewportLayout.stageWidth}
+              stageHeight={viewportLayout.stageHeight}
             />
           ) : null}
           <ImageEditorAnnotationOverlayV3 controller={controller} />
@@ -473,7 +347,7 @@ export function ImageEditorPreviewV3({
           aria-label={t('imageEditor.v3.zoomOut')}
           title={t('imageEditor.v3.zoomOut')}
           disabled={zoom <= 0.05}
-          onClick={() => zoomFromCenter(zoom / 1.25)}
+          onClick={() => navigation.zoomFromCenter(zoom / 1.25)}
         >
           <Minus className="h-4 w-4" />
         </UiIconButton>
@@ -487,7 +361,7 @@ export function ImageEditorPreviewV3({
           aria-label={t('imageEditor.v3.zoomIn')}
           title={t('imageEditor.v3.zoomIn')}
           disabled={zoom >= 8}
-          onClick={() => zoomFromCenter(zoom * 1.25)}
+          onClick={() => navigation.zoomFromCenter(zoom * 1.25)}
         >
           <Plus className="h-4 w-4" />
         </UiIconButton>

@@ -373,7 +373,7 @@ export class ImageEditorPreviewClientV3 {
     return job.workerCompletion.wait({
       signals: [schedulerSignal, job.abortController.signal],
       onAbort: () => {
-        if (job.posted) this.worker?.postMessage({ type: 'cancel', requestId: job.requestId })
+        if (job.posted) this.terminateWorkerForSupersededJob(job)
       },
       fallbackAbortError: () => new ImageEditorPreviewSupersededErrorV3(),
       start: () => {
@@ -391,6 +391,17 @@ export class ImageEditorPreviewClientV3 {
     worker.onerror = (event) => this.handleWorkerFailure(event.message || '图片预览 Worker 异常')
     this.worker = worker
     return worker
+  }
+
+  /**
+   * CPU 模糊等同步内核无法在 Worker 消息循环里处理中途 cancel。继续复用该 Worker
+   * 会让最新滑杆值排在旧帧后面；终止专属 Worker 才是真正的抢占。
+   */
+  private terminateWorkerForSupersededJob(job: ScheduledJobV3): void {
+    if (this.running !== job || !job.posted || !this.worker) return
+    this.worker.terminate()
+    this.worker = null
+    job.posted = false
   }
 
   private assertActive(job: ScheduledJobV3): void {

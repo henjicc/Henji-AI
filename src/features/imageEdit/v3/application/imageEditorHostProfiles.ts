@@ -9,8 +9,11 @@ export type ImageEditorToolIdV3 =
   | 'select-ellipse'
   | 'select-lasso'
   | 'annotation-text'
+  | 'annotation-callout'
   | 'annotation-arrow'
   | 'annotation-rect'
+  | 'annotation-ellipse'
+  | 'annotation-number'
   | 'annotation-pen'
   | 'raster-brush'
   | 'eraser'
@@ -95,8 +98,11 @@ const SELECTION_TOOLS: readonly ImageEditorCapabilityV3<ImageEditorToolIdV3>[] =
 ];
 const ANNOTATION_TOOLS: readonly ImageEditorCapabilityV3<ImageEditorToolIdV3>[] = [
   ready('annotation-text'),
+  ready('annotation-callout'),
   ready('annotation-arrow'),
   ready('annotation-rect'),
+  ready('annotation-ellipse'),
+  ready('annotation-number'),
   ready('annotation-pen'),
 ];
 const RASTER_TOOLS: readonly ImageEditorCapabilityV3<ImageEditorToolIdV3>[] = [
@@ -120,7 +126,7 @@ export const IMAGE_EDITOR_HOST_PROFILES_V3: Readonly<
   full: {
     id: 'full',
     tools: [...NAVIGATION_TOOLS, ready('crop'), ...ANNOTATION_TOOLS],
-    layerKinds: ['raster', 'annotation', 'effect'],
+    layerKinds: ['raster', 'effect'],
     effects: CORE_EFFECTS,
     adjustments: [],
     panels: ['layers', 'properties'],
@@ -135,7 +141,7 @@ export const IMAGE_EDITOR_HOST_PROFILES_V3: Readonly<
   quick: {
     id: 'quick',
     tools: [...NAVIGATION_TOOLS, ready('crop'), ...ANNOTATION_TOOLS],
-    layerKinds: ['annotation', 'effect'],
+    layerKinds: ['effect'],
     effects: CORE_EFFECTS.filter(({ id }) => id !== 'image.vgpu-glow'),
     adjustments: [],
     panels: ['layers', 'properties'],
@@ -150,7 +156,7 @@ export const IMAGE_EDITOR_HOST_PROFILES_V3: Readonly<
   'canvas-edit': {
     id: 'canvas-edit',
     tools: [...NAVIGATION_TOOLS, ready('crop'), ...ANNOTATION_TOOLS],
-    layerKinds: ['raster', 'annotation', 'effect'],
+    layerKinds: ['raster', 'effect'],
     effects: CORE_EFFECTS,
     adjustments: [],
     panels: ['layers', 'properties'],

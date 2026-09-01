@@ -10,7 +10,10 @@ export interface ImageEditorNavigationGestureV3 {
   startClientY: number
   startPan: ImageEditorViewportPanV3
   pendingPan: ImageEditorViewportPanV3
-  altKey: boolean
+  startZoom: number
+  pendingZoom: number
+  anchorPoint: ImageEditorViewportPanV3
+  zoomOutModifier: boolean
   moved: boolean
 }
 

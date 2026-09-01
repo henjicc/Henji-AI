@@ -3,12 +3,18 @@ import type { PointerEvent as ReactPointerEvent } from 'react'
 import type { MarkItem } from '@/core/imageEdit/types'
 import { ANNOTATION_TRANSFORMER_HEX } from '@/core/theme/colorTokens'
 import { getAnnotationBoundsV3 } from './annotationModelV3'
+import type { AnnotationResizeHandleV3 } from './annotationModelV3'
 
 interface AnnotationSvgShapeV3Props {
   annotation: MarkItem
   selected?: boolean
   draft?: boolean
   onPointerDown?: (event: ReactPointerEvent<SVGGElement>) => void
+  onResizePointerDown?: (
+    event: ReactPointerEvent<SVGCircleElement>,
+    handle: AnnotationResizeHandleV3,
+  ) => void
+  handleRadius?: number
 }
 
 function annotationPath(annotation: Extract<MarkItem, { type: 'arrow' | 'pen' }>): string {
@@ -166,6 +172,8 @@ export function AnnotationSvgShapeV3({
   selected = false,
   draft = false,
   onPointerDown,
+  onResizePointerDown,
+  handleRadius = 5,
 }: AnnotationSvgShapeV3Props): JSX.Element {
   const bounds = getAnnotationBoundsV3(annotation)
   const padding = Math.max(4, 'lineWidth' in annotation ? annotation.lineWidth : 2)
@@ -179,19 +187,45 @@ export function AnnotationSvgShapeV3({
       {draft ? <DraftShape annotation={annotation} /> : null}
       {onPointerDown ? <HitTarget annotation={annotation} /> : null}
       {selected ? (
-        <rect
-          data-annotation-selection
-          x={bounds.x - padding}
-          y={bounds.y - padding}
-          width={Math.max(1, bounds.width + padding * 2)}
-          height={Math.max(1, bounds.height + padding * 2)}
-          fill="none"
-          stroke={ANNOTATION_TRANSFORMER_HEX}
-          strokeWidth={1.5}
-          strokeDasharray="5 4"
-          vectorEffect="non-scaling-stroke"
-          pointerEvents="none"
-        />
+        <>
+          <rect
+            data-annotation-selection
+            x={bounds.x - padding}
+            y={bounds.y - padding}
+            width={Math.max(1, bounds.width + padding * 2)}
+            height={Math.max(1, bounds.height + padding * 2)}
+            fill="none"
+            stroke={ANNOTATION_TRANSFORMER_HEX}
+            strokeWidth={1.5}
+            strokeDasharray="5 4"
+            vectorEffect="non-scaling-stroke"
+            pointerEvents="none"
+          />
+          {onResizePointerDown ? ([
+            ['nw', bounds.x - padding, bounds.y - padding],
+            ['n', bounds.x + bounds.width / 2, bounds.y - padding],
+            ['ne', bounds.x + bounds.width + padding, bounds.y - padding],
+            ['e', bounds.x + bounds.width + padding, bounds.y + bounds.height / 2],
+            ['se', bounds.x + bounds.width + padding, bounds.y + bounds.height + padding],
+            ['s', bounds.x + bounds.width / 2, bounds.y + bounds.height + padding],
+            ['sw', bounds.x - padding, bounds.y + bounds.height + padding],
+            ['w', bounds.x - padding, bounds.y + bounds.height / 2],
+          ] as const).map(([handle, cx, cy]) => (
+            <circle
+              key={handle}
+              data-annotation-resize-handle={handle}
+              cx={cx}
+              cy={cy}
+              r={handleRadius}
+              fill="currentColor"
+              stroke={ANNOTATION_TRANSFORMER_HEX}
+              strokeWidth={1.5}
+              vectorEffect="non-scaling-stroke"
+              className="text-text-dark"
+              onPointerDown={(event) => onResizePointerDown(event, handle)}
+            />
+          )) : null}
+        </>
       ) : null}
     </g>
   )

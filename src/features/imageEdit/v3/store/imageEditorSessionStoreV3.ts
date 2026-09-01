@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 
 import type { ImageEditSelectionCombineModeV3 } from '@/core/imageEdit/v3/selection'
+import { ANNOTATION_DEFAULT_STROKE_HEX } from '@/core/theme/colorTokens'
 import type { ImageEditorToolIdV3 } from '../application/imageEditorHostProfiles'
 
 export interface ImageEditorToolSettingsV3 {
@@ -11,7 +12,21 @@ export interface ImageEditorToolSettingsV3 {
   selectionCombineMode: ImageEditSelectionCombineModeV3
   annotationStrokeWidth: number
   annotationFontSize: number
+  annotationColor: string
+  annotationCalloutShape: 'rect' | 'ellipse'
+  cropAspectRatio: ImageEditorCropAspectRatioV3
 }
+
+export type ImageEditorCropAspectRatioV3 =
+  | 'free'
+  | 'original'
+  | '1:1'
+  | '4:3'
+  | '3:4'
+  | '16:9'
+  | '9:16'
+  | '2:1'
+  | '21:9'
 
 export interface ImageEditorSessionStateV3 {
   activeTool: ImageEditorToolIdV3
@@ -47,6 +62,9 @@ const DEFAULT_TOOL_SETTINGS: ImageEditorToolSettingsV3 = {
   selectionCombineMode: 'replace',
   annotationStrokeWidth: 4,
   annotationFontSize: 32,
+  annotationColor: ANNOTATION_DEFAULT_STROKE_HEX,
+  annotationCalloutShape: 'rect',
+  cropAspectRatio: 'free',
 }
 
 function uniqueIds(layerIds: readonly string[]): string[] {

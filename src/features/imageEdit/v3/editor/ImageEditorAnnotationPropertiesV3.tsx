@@ -2,7 +2,7 @@ import { Trash2 } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
-import { UiButton, UiFormRow, UiGroup, UiTextArea } from '@/components/ui'
+import { UiButton, UiFormRow, UiGroup, UiInput, UiRangeInput, UiTextArea } from '@/components/ui'
 import type { ImageEditAnnotationLayerV3 } from '@/core/imageEdit/v3/layerTypes'
 import { useImageEditorInteractionStoreV3 } from '../store'
 import type { ImageEditorV3Controller } from './types'
@@ -28,7 +28,11 @@ export function ImageEditorAnnotationPropertiesV3({
   const cancelBlurRef = useRef(false)
 
   useEffect(() => {
-    setText(annotation?.type === 'text' ? annotation.text : '')
+    setText(annotation?.type === 'text'
+      ? annotation.text
+      : annotation && 'label' in annotation
+        ? annotation.label ?? ''
+        : '')
   }, [annotation])
 
   if (!selection || !annotation) return null
@@ -38,9 +42,17 @@ export function ImageEditorAnnotationPropertiesV3({
       cancelBlurRef.current = false
       return
     }
-    if (annotation.type !== 'text' || locked) return
-    if (text !== annotation.text) {
+    if (locked) return
+    const current = annotation.type === 'text'
+      ? annotation.text
+      : 'label' in annotation
+        ? annotation.label ?? ''
+        : null
+    if (current === null || text === current) return
+    if (annotation.type === 'text') {
       controller.updateAnnotation(layer.id, annotation.id, { ...annotation, text })
+    } else if ('label' in annotation) {
+      controller.updateAnnotation(layer.id, annotation.id, { ...annotation, label: text })
     }
   }
 
@@ -60,7 +72,7 @@ export function ImageEditorAnnotationPropertiesV3({
       <p className="text-xs text-text-muted">
         {t(`imageEditor.v3.annotation.type.${annotation.type}`)}
       </p>
-      {annotation.type === 'text' ? (
+      {annotation.type === 'text' || 'label' in annotation ? (
         <UiFormRow label={t('imageEditor.v3.annotation.text')}>
           <UiTextArea
             aria-label={t('imageEditor.v3.annotation.text')}
@@ -74,10 +86,60 @@ export function ImageEditorAnnotationPropertiesV3({
                 event.currentTarget.blur()
               } else if (event.key === 'Escape') {
                 cancelBlurRef.current = true
-                setText(annotation.text)
+                setText(annotation.type === 'text' ? annotation.text : annotation.label ?? '')
                 event.currentTarget.blur()
               }
             }}
+          />
+        </UiFormRow>
+      ) : null}
+      {'stroke' in annotation || 'color' in annotation ? (
+        <UiFormRow label={t('imageEditor.v3.toolSettings.color')} inline>
+          <UiInput
+            className="!h-8 !w-10 !p-1"
+            type="color"
+            aria-label={t('imageEditor.v3.toolSettings.color')}
+            disabled={locked}
+            value={'stroke' in annotation ? annotation.stroke : annotation.color}
+            onChange={(event) => controller.updateAnnotation(
+              layer.id,
+              annotation.id,
+              'stroke' in annotation
+                ? { ...annotation, stroke: event.currentTarget.value }
+                : { ...annotation, color: event.currentTarget.value },
+            )}
+          />
+        </UiFormRow>
+      ) : null}
+      {'lineWidth' in annotation ? (
+        <UiFormRow label={t('imageEditor.v3.toolSettings.strokeWidth')}>
+          <UiRangeInput
+            aria-label={t('imageEditor.v3.toolSettings.strokeWidth')}
+            min={1}
+            max={64}
+            disabled={locked}
+            value={annotation.lineWidth}
+            onChange={(event) => controller.updateAnnotation(
+              layer.id,
+              annotation.id,
+              { ...annotation, lineWidth: Number(event.currentTarget.value) },
+            )}
+          />
+        </UiFormRow>
+      ) : null}
+      {'fontSize' in annotation ? (
+        <UiFormRow label={t('imageEditor.v3.toolSettings.fontSize')}>
+          <UiRangeInput
+            aria-label={t('imageEditor.v3.toolSettings.fontSize')}
+            min={8}
+            max={256}
+            disabled={locked}
+            value={annotation.fontSize}
+            onChange={(event) => controller.updateAnnotation(
+              layer.id,
+              annotation.id,
+              { ...annotation, fontSize: Number(event.currentTarget.value) },
+            )}
           />
         </UiFormRow>
       ) : null}

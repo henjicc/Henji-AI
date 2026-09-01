@@ -85,6 +85,16 @@ export function useManagedImageEditorPreviewV3(
       ? IMAGE_EDITOR_PREVIEW_DRAFT_MAX_EDGE_V3
       : IMAGE_EDITOR_PREVIEW_STABLE_MAX_EDGE_V3
     setState((current) => ({ ...current, rendering: true }))
+    const startedAt = typeof performance !== 'undefined' ? performance.now() : Date.now()
+    logger.debug('图片编辑 V3 预览开始', {
+      event: 'image_editor_v3.preview.started',
+      context: {
+        documentId: snapshot.document.id,
+        revision: snapshot.document.revision,
+        quality,
+        maxDimension,
+      },
+    })
     let pressureDiagnostic: string | null = null
     queueMicrotask(() => {
       if (!acceptsResult) return
@@ -121,6 +131,17 @@ export function useManagedImageEditorPreviewV3(
             diagnostic: diagnostics.length > 0 ? diagnostics.join('\n') : null,
             rendering: false,
           }
+        })
+        const endedAt = typeof performance !== 'undefined' ? performance.now() : Date.now()
+        logger.debug('图片编辑 V3 预览完成', {
+          event: 'image_editor_v3.preview.completed',
+          context: {
+            documentId: snapshot.document.id,
+            revision: snapshot.document.revision,
+            quality,
+            maxDimension,
+            durationMs: Math.max(0, Math.round(endedAt - startedAt)),
+          },
         })
       }).catch((error: unknown) => {
         if (!acceptsResult

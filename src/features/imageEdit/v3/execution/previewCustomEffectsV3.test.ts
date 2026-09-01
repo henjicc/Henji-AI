@@ -10,6 +10,7 @@ import type { ImageEditRenderPlanNode } from '@/core/imageEdit/v3/renderPlan'
 import {
   ImageEditorPreviewCustomEffectsV3,
   ImageEditorPreviewUnsupportedEffectErrorV3,
+  isPlausibleVgpuGlowPreviewV3,
 } from './previewCustomEffectsV3'
 
 function node(definitionId: 'effect.diffusion' | 'effect.vgpu-glow'): ImageEditRenderPlanNode {
@@ -30,6 +31,17 @@ function node(definitionId: 'effect.diffusion' | 'effect.vgpu-glow'): ImageEditR
 }
 
 describe('ImageEditor V3 现有效果 Worker 边界', () => {
+  it('拒绝把非黑源的辉光结果替换成 GPU 暗帧', () => {
+    const source = createFloat32PremultipliedRgbaTile(
+      2, 1, 'linear-light', new Float32Array([0.8, 0.6, 0.4, 1, 0.2, 0.1, 0.05, 1]),
+    )
+    const darkFrame = createFloat32PremultipliedRgbaTile(
+      2, 1, 'linear-light', new Float32Array(8),
+    )
+    expect(isPlausibleVgpuGlowPreviewV3(source, darkFrame)).toBe(false)
+    expect(isPlausibleVgpuGlowPreviewV3(source, source)).toBe(true)
+  })
+
   it('WebGPU 不可用时柔光使用同参数的 Float32 CPU 参考实现', async () => {
     const effects = new ImageEditorPreviewCustomEffectsV3()
     const source = createFloat32PremultipliedRgbaTile(

@@ -32,6 +32,7 @@ import type { ImageEditorV3Controller } from './types'
 
 interface ImageEditorLayersPanelV3Props {
   controller: ImageEditorV3Controller
+  embedded?: boolean
 }
 
 const EFFECT_SUBTYPES = ['image.gaussian-blur-v2', 'image.diffusion', 'image.vgpu-glow'] as const
@@ -99,6 +100,7 @@ function getCreationChoices(
 
 export function ImageEditorLayersPanelV3({
   controller,
+  embedded = false,
 }: ImageEditorLayersPanelV3Props): JSX.Element {
   const { t } = useTranslation('ui')
   const selectedLayerIds = useImageEditorSessionStoreV3(
@@ -199,9 +201,11 @@ export function ImageEditorLayersPanelV3({
   return (
     <section data-layers-panel className="flex min-h-0 flex-1 flex-col">
       <div className="flex h-10 shrink-0 items-center gap-1 px-3">
-        <h2 className="min-w-0 flex-1 truncate text-xs font-medium uppercase tracking-wider text-text-muted">
-          {t('imageEditor.v3.layers.title')}
-        </h2>
+        {embedded ? <div className="min-w-0 flex-1" /> : (
+          <h2 className="min-w-0 flex-1 truncate text-xs font-medium uppercase tracking-wider text-text-muted">
+            {t('imageEditor.v3.layers.title')}
+          </h2>
+        )}
         <PanelTrigger
           panelWidth={240}
           closeOnPanelClick

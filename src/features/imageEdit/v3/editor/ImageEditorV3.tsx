@@ -1,12 +1,11 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { exportDiagnosticBundle } from '@/commands/logging'
 import { UiButton, UiError, UiErrorBoundary } from '@/components/ui'
 import { ImageEditorCommandBarV3 } from './ImageEditorCommandBarV3'
-import { ImageEditorLayersPanelV3 } from './ImageEditorLayersPanelV3'
+import { ImageEditorFloatingPanelsV3 } from './ImageEditorFloatingPanelsV3'
 import { ImageEditorPreviewV3 } from './ImageEditorPreviewV3'
-import { ImageEditorPropertiesPanelV3 } from './ImageEditorPropertiesPanelV3'
 import { ImageEditorToolRailV3 } from './ImageEditorToolRailV3'
 import type { ImageEditorV3Props } from './types'
 import { useImageEditorControllerV3 } from './useImageEditorControllerV3'
@@ -17,6 +16,7 @@ function ImageEditorWorkspaceV3(props: ImageEditorV3Props): JSX.Element {
   const showLayers = controller.profile.panels.includes('layers')
   const showProperties = controller.profile.panels.includes('properties')
   const showSidebar = showLayers || showProperties
+  const workspaceRef = useRef<HTMLDivElement | null>(null)
 
   return (
     <div
@@ -26,10 +26,11 @@ function ImageEditorWorkspaceV3(props: ImageEditorV3Props): JSX.Element {
     >
       <ImageEditorCommandBarV3
         controller={controller}
+        bus={bus}
         toolbarLeading={props.toolbarLeading}
         toolbarActions={props.toolbarActions}
       />
-      <div className="flex min-h-0 min-w-0 flex-1">
+      <div ref={workspaceRef} className="relative flex min-h-0 min-w-0 flex-1">
         <ImageEditorToolRailV3 controller={controller} />
         <ImageEditorPreviewV3
           sourceImageUrl={props.sourceImageUrl}
@@ -42,20 +43,12 @@ function ImageEditorWorkspaceV3(props: ImageEditorV3Props): JSX.Element {
           controller={controller}
         />
         {showSidebar ? (
-          <aside
-            data-surface-level="sidebar"
-            className="flex w-80 shrink-0 flex-col border-l border-border-dark bg-panel"
-          >
-            {showLayers ? (
-              <ImageEditorLayersPanelV3 controller={controller} />
-            ) : null}
-            {showLayers && showProperties ? (
-              <div className="h-px shrink-0 bg-border-dark" aria-hidden="true" />
-            ) : null}
-            {showProperties ? (
-              <ImageEditorPropertiesPanelV3 controller={controller} />
-            ) : null}
-          </aside>
+          <ImageEditorFloatingPanelsV3
+            controller={controller}
+            workspaceRef={workspaceRef}
+            showLayers={showLayers}
+            showProperties={showProperties}
+          />
         ) : null}
       </div>
     </div>

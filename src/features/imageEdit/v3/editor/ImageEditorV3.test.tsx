@@ -337,7 +337,7 @@ describe('ImageEditorV3 professional shell', () => {
     expect(screen.getAllByRole('treeitem')).toHaveLength(2)
   })
 
-  it('保持单命令带、从属参数带和无卡片化工作面结构', async () => {
+  it('保持单命令带、从属参数带和独立悬浮属性窗结构', async () => {
     const rendered = renderEditor(
       createDocument([createImageEditRasterLayerV3('raster', '底图')]),
     )
@@ -352,11 +352,11 @@ describe('ImageEditorV3 professional shell', () => {
     expect(rendered.container.querySelectorAll('[data-context-bar]')).toHaveLength(1)
 
     const preview = rendered.container.querySelector('[data-preview-surface]')
-    const sidebar = rendered.container.querySelector('[data-surface-level="sidebar"]')
+    const floatingPanels = rendered.container.querySelectorAll('[data-floating-editor-panel]')
     expect(preview?.className).not.toContain('rounded')
     expect(preview?.className).not.toContain('shadow')
-    expect(sidebar?.className).not.toContain('rounded')
-    expect(sidebar?.className).not.toContain('shadow')
+    expect(floatingPanels).toHaveLength(2)
+    expect([...floatingPanels].every((panel) => panel.className.includes('ui-glass'))).toBe(true)
     expect(rendered.container.querySelector('img[src="preview.png"]')).toBeNull()
   })
 

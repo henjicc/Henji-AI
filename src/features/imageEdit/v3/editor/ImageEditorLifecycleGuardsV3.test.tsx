@@ -127,7 +127,7 @@ describe('ImageEditorV3 lifecycle guards', () => {
     expect(rendered.container.querySelector('[data-annotation-draft]')).toBeNull()
 
     fireEvent.pointerDown(overlay, { button: 0, clientX: 30, clientY: 30, pointerId: 23 })
-    fireEvent.click(screen.getByRole('button', { name: '移动' }))
+    fireEvent.click(screen.getByRole('button', { name: '移动图像或图层' }))
     await waitFor(() => expect(capture.release).toHaveBeenCalledWith(23))
     fireEvent.click(screen.getByRole('button', { name: '矩形标注' }))
     fireEvent.pointerDown(overlay, { button: 0, clientX: 40, clientY: 40, pointerId: 24 })

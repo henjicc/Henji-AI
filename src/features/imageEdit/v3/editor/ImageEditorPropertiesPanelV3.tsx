@@ -29,6 +29,7 @@ import type { ImageEditorV3Controller } from './types'
 
 interface ImageEditorPropertiesPanelV3Props {
   controller: ImageEditorV3Controller
+  embedded?: boolean
 }
 
 const EMPTY_LAYER_IDS: readonly string[] = []
@@ -135,6 +136,7 @@ function OpacityControl({ controller, layer, disabled }: {
 
 export function ImageEditorPropertiesPanelV3({
   controller,
+  embedded = false,
 }: ImageEditorPropertiesPanelV3Props): JSX.Element {
   const { t } = useTranslation('ui')
   const selectedIds = useImageEditorSessionStoreV3(
@@ -154,9 +156,11 @@ export function ImageEditorPropertiesPanelV3({
   if (!selected) {
     return (
       <section data-properties-panel className="min-h-0 flex-1 px-4 py-8">
-        <h2 className="text-xs font-medium uppercase tracking-wider text-text-muted">
-          {t('imageEditor.v3.properties.title')}
-        </h2>
+        {!embedded ? (
+          <h2 className="text-xs font-medium uppercase tracking-wider text-text-muted">
+            {t('imageEditor.v3.properties.title')}
+          </h2>
+        ) : null}
         <p className="mt-4 text-xs text-text-muted">{t('imageEditor.v3.properties.selectOne')}</p>
       </section>
     )
@@ -176,10 +180,20 @@ export function ImageEditorPropertiesPanelV3({
   }
 
   return (
-    <section data-properties-panel className="ui-scrollbar min-h-0 flex-1 overflow-y-auto px-4 py-3">
-      <h2 className="mb-4 text-xs font-medium uppercase tracking-wider text-text-muted">
-        {t('imageEditor.v3.properties.title')}
-      </h2>
+    <section
+      data-properties-panel
+      className={`min-h-0 flex-1 ${embedded ? 'overflow-hidden' : 'ui-scrollbar overflow-y-auto px-4 py-3'}`}
+    >
+      {!embedded ? (
+        <h2 className="mb-4 text-xs font-medium uppercase tracking-wider text-text-muted">
+          {t('imageEditor.v3.properties.title')}
+        </h2>
+      ) : null}
+      <div className={embedded ? 'grid h-full min-h-0 grid-cols-[11rem_minmax(0,1fr)]' : ''}>
+        <div className={embedded
+          ? 'ui-scrollbar min-h-0 overflow-y-auto border-r border-border-dark/60 px-3 py-3'
+          : ''}
+        >
       <UiGroup gap="stack">
         <LayerNameField controller={controller} layer={selected} disabled={contentLocked} />
         <UiFormRow label={t('imageEditor.v3.properties.visible')} inline>
@@ -240,6 +254,9 @@ export function ImageEditorPropertiesPanelV3({
           </UiFormRow>
         ) : null}
       </UiGroup>
+
+        </div>
+        <div className={embedded ? 'ui-scrollbar min-h-0 overflow-y-auto px-3 py-3' : ''}>
 
       {selected.type === 'raster' || selected.type === 'annotation' || selected.type === 'group' ? (
         <ImageEditorLayerTransformPropertiesV3
@@ -327,6 +344,8 @@ export function ImageEditorPropertiesPanelV3({
         )}
         </UiGroup>
       ) : null}
+        </div>
+      </div>
     </section>
   )
 }

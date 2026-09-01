@@ -2,9 +2,16 @@ import { FlipHorizontal, RotateCcw, RotateCw } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
-import { UiButton, UiIconButton, UiInput } from '@/components/ui'
+import { UiButton, UiIconButton, UiInput, UiOptionButton } from '@/components/ui'
 import type { ImageEditCropRectV3, ImageEditOrientationV3 } from '@/core/imageEdit/v3/documentTypes'
+import type { ImageEditCommandBusV3 } from '../application/imageEditCommandBus'
+import { projectImageEditorPreviewDocumentV3 } from '../execution/previewDocumentV3'
+import {
+  useImageEditorSessionStoreV3,
+  type ImageEditorCropAspectRatioV3,
+} from '../store/imageEditorSessionStoreV3'
 import type { ImageEditorV3Controller } from './types'
+import { useImageEditorBusSnapshotV3 } from './useImageEditorControllerV3'
 
 interface CropDraftV3 {
   x: string
@@ -12,6 +19,10 @@ interface CropDraftV3 {
   width: string
   height: string
 }
+
+const CROP_ASPECT_RATIOS_V3: readonly ImageEditorCropAspectRatioV3[] = [
+  'free', 'original', '1:1', '4:3', '3:4', '16:9', '9:16', '2:1', '21:9',
+]
 
 function orientedSize(
   controller: ImageEditorV3Controller,
@@ -55,34 +66,48 @@ function sameCrop(left: ImageEditCropRectV3 | null, right: ImageEditCropRectV3 |
 
 export function ImageEditorCropParametersV3({
   controller,
-}: { controller: ImageEditorV3Controller }): JSX.Element {
+  bus,
+}: {
+  controller: ImageEditorV3Controller
+  bus: ImageEditCommandBusV3
+}): JSX.Element {
   const { t } = useTranslation('ui')
   const previewId = `${controller.sessionId}:output-geometry`
-  const documentOrientation = controller.document.geometry.orientation
-  const [orientation, setOrientation] = useState<ImageEditOrientationV3>(documentOrientation)
-  const initialSize = orientedSize(controller, documentOrientation)
-  const [cropEnabled, setCropEnabled] = useState(controller.document.geometry.crop !== null)
+  const snapshot = useImageEditorBusSnapshotV3(bus)
+  const projectedDocument = useMemo(
+    () => projectImageEditorPreviewDocumentV3(snapshot),
+    [snapshot],
+  )
+  const projectedOrientation = projectedDocument.geometry.orientation
+  const [orientation, setOrientation] = useState<ImageEditOrientationV3>(projectedOrientation)
+  const initialSize = orientedSize(controller, projectedOrientation)
+  const [cropEnabled, setCropEnabled] = useState(projectedDocument.geometry.crop !== null)
   const [draft, setDraft] = useState<CropDraftV3>(() => (
-    draftFromCrop(controller.document.geometry.crop, initialSize)
+    draftFromCrop(projectedDocument.geometry.crop, initialSize)
   ))
+  const cropAspectRatio = useImageEditorSessionStoreV3(
+    (state) => state.sessions[controller.sessionId]?.toolSettings.cropAspectRatio ?? 'free',
+  )
+  const setToolSetting = useImageEditorSessionStoreV3((state) => state.setToolSetting)
   const size = useMemo(
     () => orientedSize(controller, orientation),
     [controller, orientation],
   )
   const parsedCrop = cropEnabled ? parseDraft(draft, size) : null
   const valid = !cropEnabled || parsedCrop !== null
+  const documentOrientation = controller.document.geometry.orientation
   const committedCrop = controller.document.geometry.crop
   const dirty = orientation.rotate !== documentOrientation.rotate
     || orientation.mirrored !== documentOrientation.mirrored
     || !sameCrop(cropEnabled ? parsedCrop : null, committedCrop)
 
   useEffect(() => {
-    const nextOrientation = controller.document.geometry.orientation
+    const nextOrientation = projectedDocument.geometry.orientation
     const nextSize = orientedSize(controller, nextOrientation)
     setOrientation(nextOrientation)
-    setCropEnabled(controller.document.geometry.crop !== null)
-    setDraft(draftFromCrop(controller.document.geometry.crop, nextSize))
-  }, [controller])
+    setCropEnabled(projectedDocument.geometry.crop !== null)
+    setDraft(draftFromCrop(projectedDocument.geometry.crop, nextSize))
+  }, [controller, projectedDocument.geometry.crop, projectedDocument.geometry.orientation])
 
   useEffect(() => () => controller.clearOutputGeometryPreview(previewId), [controller, previewId])
 
@@ -175,6 +200,23 @@ export function ImageEditorCropParametersV3({
       >
         <FlipHorizontal className="h-4 w-4" />
       </UiIconButton>
+      <div className="mx-1 h-5 w-px shrink-0 bg-border-dark" aria-hidden="true" />
+      <div
+        role="group"
+        aria-label={t('imageEditor.v3.crop.aspectRatio')}
+        className="flex shrink-0 items-center gap-1"
+      >
+        {CROP_ASPECT_RATIOS_V3.map((ratio) => (
+          <UiOptionButton
+            key={ratio}
+            className="h-8 px-2 text-xs"
+            active={cropAspectRatio === ratio}
+            onClick={() => setToolSetting(controller.sessionId, 'cropAspectRatio', ratio)}
+          >
+            {t(`imageEditor.v3.crop.ratios.${ratio.replace(':', '-')}`)}
+          </UiOptionButton>
+        ))}
+      </div>
       <div className="mx-1 h-5 w-px shrink-0 bg-border-dark" aria-hidden="true" />
       {(['x', 'y', 'width', 'height'] as const).map((key) => (
         <label key={key} className="flex shrink-0 items-center gap-1.5 text-xs text-text-muted">

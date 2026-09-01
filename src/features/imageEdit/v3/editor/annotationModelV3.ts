@@ -89,6 +89,8 @@ export interface AnnotationBoundsV3 {
   height: number
 }
 
+export type AnnotationResizeHandleV3 = 'nw' | 'n' | 'ne' | 'e' | 'se' | 's' | 'sw' | 'w'
+
 export function getAnnotationBoundsV3(annotation: MarkItem): AnnotationBoundsV3 {
   if (annotation.type === 'rect' || annotation.type === 'ellipse' || annotation.type === 'mosaic') {
     return {
@@ -121,6 +123,86 @@ export function getAnnotationBoundsV3(annotation: MarkItem): AnnotationBoundsV3 
     ? Math.max(size, annotation.text.length * size * 0.62)
     : size
   return { x: annotation.x, y: annotation.y - size, width, height: size * 1.25 }
+}
+
+function mapResizePoint(
+  x: number,
+  y: number,
+  source: AnnotationBoundsV3,
+  target: AnnotationBoundsV3,
+): readonly [number, number] {
+  const scaleX = source.width > 0 ? target.width / source.width : 1
+  const scaleY = source.height > 0 ? target.height / source.height : 1
+  return [
+    target.x + (x - source.x) * scaleX,
+    target.y + (y - source.y) * scaleY,
+  ]
+}
+
+export function resizeAnnotationFromBoundsV3(
+  annotation: MarkItem,
+  source: AnnotationBoundsV3,
+  target: AnnotationBoundsV3,
+): MarkItem {
+  if (annotation.type === 'rect' || annotation.type === 'ellipse' || annotation.type === 'mosaic') {
+    return { ...annotation, x: target.x, y: target.y, width: target.width, height: target.height }
+  }
+  if (annotation.type === 'arrow') {
+    const start = mapResizePoint(annotation.points[0], annotation.points[1], source, target)
+    const end = mapResizePoint(annotation.points[2], annotation.points[3], source, target)
+    const curve = annotation.curveControl
+      ? mapResizePoint(annotation.curveControl[0], annotation.curveControl[1], source, target)
+      : null
+    return {
+      ...annotation,
+      points: [start[0], start[1], end[0], end[1]],
+      curveControl: curve ? [curve[0], curve[1]] : undefined,
+    }
+  }
+  if (annotation.type === 'pen') {
+    return {
+      ...annotation,
+      points: annotation.points.map((value, index) => {
+        const pairIndex = index - index % 2
+        const point = mapResizePoint(
+          annotation.points[pairIndex],
+          annotation.points[pairIndex + 1],
+          source,
+          target,
+        )
+        return point[index % 2]
+      }),
+    }
+  }
+  const scale = Math.max(
+    source.width > 0 ? target.width / source.width : 1,
+    source.height > 0 ? target.height / source.height : 1,
+  )
+  const fontSize = Math.max(8, annotation.fontSize * scale)
+  return {
+    ...annotation,
+    x: target.x,
+    y: target.y + fontSize,
+    fontSize,
+  }
+}
+
+export function resizeAnnotationBoundsV3(
+  bounds: AnnotationBoundsV3,
+  handle: AnnotationResizeHandleV3,
+  deltaX: number,
+  deltaY: number,
+  minimumSize = 4,
+): AnnotationBoundsV3 {
+  let left = bounds.x
+  let top = bounds.y
+  let right = bounds.x + bounds.width
+  let bottom = bounds.y + bounds.height
+  if (handle.includes('w')) left = Math.min(right - minimumSize, left + deltaX)
+  if (handle.includes('e')) right = Math.max(left + minimumSize, right + deltaX)
+  if (handle.includes('n')) top = Math.min(bottom - minimumSize, top + deltaY)
+  if (handle.includes('s')) bottom = Math.max(top + minimumSize, bottom + deltaY)
+  return { x: left, y: top, width: right - left, height: bottom - top }
 }
 
 function pointSegmentDistance(

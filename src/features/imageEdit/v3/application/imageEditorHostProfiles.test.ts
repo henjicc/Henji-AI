@@ -9,7 +9,7 @@ describe('图片编辑 V3 宿主能力裁剪', () => {
   it('发布版完整工具箱只开放扁平图层、内部保存和 8 位栅格导出入口', () => {
     const profile = getImageEditorHostProfileV3('full')
     expect(profile).toMatchObject({
-      layerKinds: ['raster', 'annotation', 'effect'],
+      layerKinds: ['raster', 'effect'],
       adjustments: [],
       panels: ['layers', 'properties'],
       layerControls: [],
@@ -31,14 +31,17 @@ describe('图片编辑 V3 宿主能力裁剪', () => {
       'zoom',
       'crop',
       'annotation-text',
+      'annotation-callout',
       'annotation-arrow',
       'annotation-rect',
+      'annotation-ellipse',
+      'annotation-number',
       'annotation-pen',
     ])
     expect(getReadyImageEditorToolIdsV3(getImageEditorHostProfileV3('canvas-edit')))
       .toEqual(getReadyImageEditorToolIdsV3(profile))
     expect(getImageEditorHostProfileV3('quick')).toMatchObject({
-      layerKinds: ['annotation', 'effect'],
+      layerKinds: ['effect'],
       adjustments: [],
     })
   })
