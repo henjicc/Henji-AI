@@ -214,7 +214,7 @@ describe('ImageEditorPreviewV3 managed frame ownership', () => {
     expect(document.revision).toBe(0)
   })
 
-  it('单一原图移出文档后仍显示在整块编辑工作区，文档边界保持独立', async () => {
+  it('单一原图移出文档后只显示一份画面且不额外绘制边框', async () => {
     vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({
       x: 0, y: 0, left: 0, top: 0, right: 1_000, bottom: 600,
       width: 1_000, height: 600, toJSON: () => undefined,
@@ -245,8 +245,8 @@ describe('ImageEditorPreviewV3 managed frame ownership', () => {
     const image = pasteboard.querySelector('img')
     const rasterFrame = rendered.container.querySelector('[data-raster-display-frame]')
     expect(image?.style.transform).toBe('matrix(1, 0, 0, 1, 55.2, -132.48)')
-    expect(rasterFrame?.contains(pasteboard)).toBe(false)
-    expect(rendered.container.querySelector('[data-document-boundary]')).toBeTruthy()
+    expect(rasterFrame).toBeNull()
+    expect(rendered.container.querySelector('[data-document-boundary]')).toBeNull()
   })
 
   it('单底图移动只更新合成层，缓存布局且松手仅提交一个 revision', async () => {

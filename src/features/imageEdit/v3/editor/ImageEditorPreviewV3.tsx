@@ -394,14 +394,14 @@ export function ImageEditorPreviewV3({
               : {}),
           }}
         >
-          {!previewRenderer ? (
+          {!previewRenderer && !hasRasterPasteboard ? (
             <div
               data-raster-display-frame
               className="pointer-events-none absolute inset-0 overflow-hidden"
             >
               <div
-                ref={hasRasterPasteboard ? undefined : moveFeedbackRef}
-                data-move-feedback-frame={hasRasterPasteboard ? undefined : ''}
+                ref={moveFeedbackRef}
+                data-move-feedback-frame
                 className="absolute inset-0 flex items-center justify-center"
               >
                 {viewportResult ? (
@@ -419,11 +419,11 @@ export function ImageEditorPreviewV3({
                 {!viewportResult && output.kind === 'content' ? output.content : null}
               </div>
             </div>
-          ) : output.kind === 'url' ? (
+          ) : previewRenderer && output.kind === 'url' ? (
             <ImageEditorUrlPreviewV3 output={output} label={t('imageEditor.v3.previewAlt')} />
-          ) : output.kind === 'frame' ? (
+          ) : previewRenderer && output.kind === 'frame' ? (
             <ImageEditorFramePreviewV3 output={output} label={t('imageEditor.v3.previewAlt')} />
-          ) : output.content}
+          ) : previewRenderer ? output.content : null}
           {rasterPasteboardLayer && viewportLayout ? (
             <ImageEditorRasterPasteboardV3
               feedbackRef={moveFeedbackRef}
@@ -433,11 +433,6 @@ export function ImageEditorPreviewV3({
               stageWidth={viewportLayout.stageWidth}
             />
           ) : null}
-          <div
-            data-document-boundary
-            className="pointer-events-none absolute inset-0 border border-veil-subtle"
-            aria-hidden="true"
-          />
           <ImageEditorAnnotationOverlayV3 controller={controller} />
           <ImageEditorRasterBrushOverlayV3
             bus={bus}

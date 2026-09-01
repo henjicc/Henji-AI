@@ -208,8 +208,18 @@ function createToolboxScenes(context) {
         ), undefined, { timeout: 15000 })
         await page.waitForFunction(() => (
           document.querySelector('[data-preview-surface]')?.getAttribute('data-preview-display-source') === 'viewport'
-            && document.querySelectorAll('[data-viewport-tile]').length > 0
+            && (() => {
+              const image = document.querySelector('[data-raster-pasteboard-layer] img')
+              return image instanceof HTMLImageElement && image.complete && image.naturalWidth > 0
+            })()
         ), undefined, { timeout: 15000 })
+
+        const pasteboardImages = editor.locator('[data-raster-pasteboard-layer] img')
+        if (await pasteboardImages.count() !== 1
+          || await editor.locator('[data-raster-display-frame]').count() !== 0
+          || await editor.locator('[data-document-boundary]').count() !== 0) {
+          throw new Error('单一原图模式出现重复画面或多余文档边框')
+        }
 
         const readRevision = async () => {
           const label = await editor.getByText(/^(版本|Revision) \d+$/).first().textContent()
@@ -223,10 +233,10 @@ function createToolboxScenes(context) {
         const startX = previewBox.x + previewBox.width * 0.5
         const startY = previewBox.y + previewBox.height * 0.5
         const feedback = editor.locator('[data-move-feedback-frame]')
-        const rasterFrame = editor.locator('[data-raster-display-frame]')
+        const viewportContent = editor.locator('[data-viewport-content]')
         const initialFeedbackBox = await feedback.boundingBox()
-        const initialRasterFrameBox = await rasterFrame.boundingBox()
-        if (!initialFeedbackBox || !initialRasterFrameBox) {
+        const initialViewportContentBox = await viewportContent.boundingBox()
+        if (!initialFeedbackBox || !initialViewportContentBox) {
           throw new Error('移动 JPG 前无法读取稳定画面边界')
         }
         await page.mouse.move(startX, startY)
@@ -244,24 +254,24 @@ function createToolboxScenes(context) {
           const expectedY = -180 * step / 6
           await page.mouse.move(startX + expectedX, startY + expectedY)
           await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => resolve())))
-          const [source, currentFeedbackBox, currentRasterFrameBox, revision] = await Promise.all([
+          const [source, currentFeedbackBox, currentViewportContentBox, revision] = await Promise.all([
             preview.getAttribute('data-preview-display-source'),
             feedback.boundingBox(),
-            rasterFrame.boundingBox(),
+            viewportContent.boundingBox(),
             readRevision(),
           ])
           if (source !== 'viewport') throw new Error('移动 JPG 期间稳定分块画面被草稿替换')
           if (revision !== beforeMove) throw new Error('移动 JPG 期间提前提交了文档 revision')
-          if (!currentFeedbackBox || !currentRasterFrameBox) throw new Error('移动 JPG 期间画面边界丢失')
+          if (!currentFeedbackBox || !currentViewportContentBox) throw new Error('移动 JPG 期间画面边界丢失')
           if (Math.abs(currentFeedbackBox.x - initialFeedbackBox.x - expectedX) > 1.5
             || Math.abs(currentFeedbackBox.y - initialFeedbackBox.y - expectedY) > 1.5) {
             throw new Error('移动 JPG 的实际画面位置没有跟随指针')
           }
-          if (Math.abs(currentRasterFrameBox.x - initialRasterFrameBox.x) > 0.5
-            || Math.abs(currentRasterFrameBox.y - initialRasterFrameBox.y) > 0.5
-            || Math.abs(currentRasterFrameBox.width - initialRasterFrameBox.width) > 0.5
-            || Math.abs(currentRasterFrameBox.height - initialRasterFrameBox.height) > 0.5) {
-            throw new Error('移动 JPG 期间文档裁切边界跟随内容发生了偏移')
+          if (Math.abs(currentViewportContentBox.x - initialViewportContentBox.x) > 0.5
+            || Math.abs(currentViewportContentBox.y - initialViewportContentBox.y) > 0.5
+            || Math.abs(currentViewportContentBox.width - initialViewportContentBox.width) > 0.5
+            || Math.abs(currentViewportContentBox.height - initialViewportContentBox.height) > 0.5) {
+            throw new Error('移动 JPG 期间工作区参考范围跟随内容发生了偏移')
           }
         }
         const transientTransform = await feedback.evaluate(
@@ -281,14 +291,13 @@ function createToolboxScenes(context) {
           return previewSurface?.getAttribute('data-preview-display-source') === 'viewport'
             && feedbackFrame?.style.transform === ''
         }, undefined, { timeout: 12000 })
-        const pasteboardImage = editor.locator('[data-raster-pasteboard-layer] img')
-        const documentBoundary = editor.locator('[data-document-boundary]')
-        const [pasteboardImageBox, documentBoundaryBox] = await Promise.all([
+        const pasteboardImage = pasteboardImages.first()
+        const [pasteboardImageBox, viewportContentBox] = await Promise.all([
           pasteboardImage.boundingBox(),
-          documentBoundary.boundingBox(),
+          viewportContent.boundingBox(),
         ])
-        if (!pasteboardImageBox || !documentBoundaryBox
-          || pasteboardImageBox.y >= documentBoundaryBox.y - 100) {
+        if (!pasteboardImageBox || !viewportContentBox
+          || pasteboardImageBox.y >= viewportContentBox.y - 100) {
           throw new Error('移出文档的原图没有继续显示在编辑工作区')
         }
 
