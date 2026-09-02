@@ -3,6 +3,7 @@ import {
   IMAGE_EDIT_RENDER_PRIORITY,
   ImageEditResourceBudget,
   applyDiffusionV4,
+  applyFastBlurV3,
   convertFloat32TileColorDomainV3,
   createFloat32PremultipliedRgbaTile,
   createBuiltInImageEditRenderNodeRegistry,
@@ -26,6 +27,10 @@ import {
 import {
   buildImageEditorV3DiffusionAnalyses,
 } from './diffusionAnalysis'
+import {
+  buildImageEditorV3FastBlurAnalyses,
+  renderImageEditorV3FastBlurAnalysisRegion,
+} from './fastBlurAnalysis'
 import {
   ImageEditorV3ExportCapabilityError,
   type ImageEditorV3ExportRenderDependencies,
@@ -202,6 +207,7 @@ async function* renderTiles(
   let completed = 0
   let diffusionAnalysisSet: Awaited<ReturnType<typeof buildImageEditorV3DiffusionAnalyses>> | null = null
   let glowAnalysisSet: Awaited<ReturnType<typeof buildImageEditorV3VgpuGlowAnalyses>> | null = null
+  let fastBlurAnalysisSet: Awaited<ReturnType<typeof buildImageEditorV3FastBlurAnalyses>> | null = null
   logger.info('开始渲染图片编辑 V3 分块导出', {
     event: 'image_editor_v3.export.render.start',
     requestId: currentSessionId,
@@ -236,6 +242,16 @@ async function* renderTiles(
       budget,
       sparseMaskPlan,
       diffusionAnalyses,
+    )
+    fastBlurAnalysisSet = await buildImageEditorV3FastBlurAnalyses(
+      document,
+      plan,
+      controller.signal,
+      dependencies,
+      budget,
+      sparseMaskPlan,
+      diffusionAnalyses,
+      glowAnalysisSet,
     )
     if (tileSize === DEFAULT_TILE_SIZE) {
       try {
@@ -378,6 +394,27 @@ async function* renderTiles(
                   return imageEditorV3SourceRegionToMask(await loadSource(reference.resourceId, region))
                 },
                 executeCustomEffect: async (node, source, mask, region) => {
+                  if (node.definitionId === 'effect.fast-blur') {
+                    const analysis = fastBlurAnalysisSet?.analyses.get(node.id)
+                    if (analysis) {
+                      return renderImageEditorV3FastBlurAnalysisRegion(
+                        analysis,
+                        region,
+                        source,
+                        mask,
+                      )
+                    }
+                    const radius = node.parameters.radius
+                    const mip = node.parameters.mip
+                    return applyFastBlurV3(
+                      convertFloat32TileColorDomainV3(source, 'linear-light'),
+                      {
+                        radius: typeof radius === 'number' ? radius : 0,
+                        mip: typeof mip === 'number' ? mip : 0,
+                      },
+                      { mask },
+                    )
+                  }
                   if (node.definitionId === 'effect.vgpu-glow') {
                     const analysis = glowAnalysisSet?.analyses.get(node.id)
                     if (!analysis || !glowAnalysisSet) {
@@ -478,6 +515,7 @@ async function* renderTiles(
     })
     throw error
   } finally {
+    fastBlurAnalysisSet?.release()
     glowAnalysisSet?.release()
     diffusionAnalysisSet?.release()
     request.signal?.removeEventListener('abort', onAbort)

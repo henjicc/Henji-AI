@@ -1,4 +1,5 @@
 import type { ImageEditDocumentV3 } from '@/core/imageEdit/v3/documentTypes'
+import { createLogger } from '@/core/logging'
 import {
   IMAGE_EDIT_RENDER_PRIORITY,
   ImageEditTaskCancelledError,
@@ -56,6 +57,8 @@ import type {
   ImageEditorPreviewWorkerPortV3,
   ImageEditorPreviewWorkerRequestV3,
 } from './previewProtocolV3'
+
+const logger = createLogger('image_editor_v3.preview_effect')
 
 export class ImageEditorPreviewSupersededErrorV3 extends Error {
   constructor() {
@@ -437,6 +440,19 @@ export class ImageEditorPreviewClientV3 {
     if (job.sequence !== this.latestSequence) {
       this.releaseEventPayload(event)
       throw new ImageEditorPreviewSupersededErrorV3()
+    }
+    if (event.execution
+      && event.execution.fastBlurVgpuPasses + event.execution.fastBlurCpuPasses > 0) {
+      logger.debug('图片编辑模糊预览完成', {
+        event: 'image_editor_v3.fast_blur.preview.completed',
+        requestId: event.requestId,
+        context: {
+          backend: event.execution.fastBlurVgpuPasses > 0 ? 'vgpu' : 'cpu',
+          vgpuPasses: event.execution.fastBlurVgpuPasses,
+          cpuPasses: event.execution.fastBlurCpuPasses,
+          fallbackReasons: event.execution.fastBlurFallbackReasons,
+        },
+      })
     }
     try {
       if (event.thumbnail && (!(event.thumbnail.bytes instanceof ArrayBuffer)

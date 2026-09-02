@@ -26,6 +26,7 @@ import {
   transformPreviewMaskV3,
 } from './previewPixelsV3'
 import type {
+  ImageEditorPreviewExecutionStatsV3,
   ImageEditorPreviewProxyV3,
   ImageEditorPreviewRenderRequestV3,
 } from './previewProtocolV3'
@@ -50,6 +51,7 @@ export function compileImageEditorPreviewPlanV3(
 export interface ImageEditorPreviewRenderedTileV3 {
   tile: Float32PremultipliedRgbaTile
   diagnostics: string[]
+  execution: ImageEditorPreviewExecutionStatsV3
 }
 
 export async function renderImageEditorPreviewTileV3(
@@ -66,6 +68,12 @@ export async function renderImageEditorPreviewTileV3(
   const proxies = new Map<string, ImageEditorPreviewProxyV3>(
     request.proxies.map((proxy) => [proxy.resourceId, proxy]),
   )
+  const fastBlurFallbackReasons = new Set<string>()
+  const execution: ImageEditorPreviewExecutionStatsV3 = {
+    fastBlurVgpuPasses: 0,
+    fastBlurCpuPasses: 0,
+    fastBlurFallbackReasons: [],
+  }
   const brushTiles = createPreviewBrushTileMapV3(request.brushTiles)
   const rendered = await executeImageEditCpuRenderPlanV3(plan, {
     signal,
@@ -101,12 +109,21 @@ export async function renderImageEditorPreviewTileV3(
       request.quality,
       request.document.color,
       mask,
+      (backend, fallbackReason) => {
+        if (backend === 'vgpu') execution.fastBlurVgpuPasses += 1
+        else execution.fastBlurCpuPasses += 1
+        if (fallbackReason) fastBlurFallbackReasons.add(fallbackReason)
+      },
     ),
   })
   const base = rendered ?? createTransparentPreviewTileV3(dimensions.width, dimensions.height)
   const output = applyImageEditorPreviewGeometryV3(base, request.document, dimensions)
   return {
     tile: convertPreviewWorkingSpaceToSrgbDisplayV3(output, request.document.color),
+    execution: {
+      ...execution,
+      fastBlurFallbackReasons: [...fastBlurFallbackReasons],
+    },
     diagnostics: [
       ...plan.diagnostics.map((diagnostic) => diagnostic.message),
       ...describeImageEditorPreviewColorDiagnosticsV3(request.document.color),

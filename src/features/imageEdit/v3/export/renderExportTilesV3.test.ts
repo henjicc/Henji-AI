@@ -438,6 +438,28 @@ describe('图片编辑 V3 分块导出渲染', () => {
     expect(tiled).toEqual(single)
   })
 
+  it('快速模糊的大半径共享整图分析，跨瓦片输出与单瓦片完全一致', async () => {
+    const document = createImageEditDocumentV3({
+      width: 96,
+      height: 16,
+      documentId: 'fast-blur-global-analysis',
+      sourceResourceId: SOURCE,
+    })
+    document.layers.push(createImageEditEffectLayerV3(
+      'fast-blur',
+      '模糊',
+      'image.fast-blur-v3',
+      { radius: 20 },
+    ))
+    const images = new Map([[SOURCE, impulseImage(96, 16, 47, 8)]])
+
+    const single = await collectPixels(document, 96, images)
+    const tiled = await collectPixels(document, 16, images)
+
+    expect(tiled).toEqual(single)
+    expect(tiled[(8 * 96 + 48) * 4]).toBeGreaterThan(0)
+  })
+
   it('200MP 柔光先读受限源 mip 建共享散射，再按 512 瓦片读取原图', async () => {
     const document = createImageEditDocumentV3({
       width: 20_000,

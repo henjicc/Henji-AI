@@ -180,7 +180,7 @@ describe('ImageEditorV3 professional shell', () => {
 
     fireEvent.click(screen.getByRole('button', { name: '添加图层' }))
     expect(await screen.findByRole('menuitem', { name: '栅格图层' })).toBeTruthy()
-    expect(screen.queryByRole('menuitem', { name: '高斯模糊' })).toBeNull()
+    expect(screen.queryByRole('menuitem', { name: '模糊' })).toBeNull()
     expect(screen.queryByRole('menuitem', { name: '标注图层' })).toBeNull()
   })
 
@@ -190,7 +190,7 @@ describe('ImageEditorV3 professional shell', () => {
     fireEvent.click(await screen.findByRole('button', { name: '添加图层' }))
     const glow = screen.getByRole('menuitem', { name: /辉光 Pro.*WebGPU/ }) as HTMLButtonElement
     expect(glow.disabled).toBe(true)
-    expect(screen.getByRole('menuitem', { name: '高斯模糊' })).toBeTruthy()
+    expect(screen.getByRole('menuitem', { name: '模糊' })).toBeTruthy()
     expect(screen.getByRole('menuitem', { name: '柔光 / 发光' })).toBeTruthy()
     expect(screen.queryByRole('menuitem', { name: '图层组' })).toBeNull()
     expect(screen.queryByRole('menuitem', { name: '曝光' })).toBeNull()
@@ -203,8 +203,8 @@ describe('ImageEditorV3 professional shell', () => {
     renderEditor(
       createDocument([createImageEditEffectLayerV3(
         'blur',
-        '高斯模糊',
-        'image.gaussian-blur-v2',
+        '模糊',
+        'image.fast-blur-v3',
         { radius: 12 },
       )]),
       { onDocumentChange: (next) => changes.push(next) },
@@ -253,8 +253,8 @@ describe('ImageEditorV3 professional shell', () => {
     renderEditor(
       createDocument([createImageEditEffectLayerV3(
         'blur',
-        '高斯模糊',
-        'image.gaussian-blur-v2',
+        '模糊',
+        'image.fast-blur-v3',
         { radius: 12 },
       )]),
       { onDocumentChange: (next) => changes.push(next) },
@@ -406,7 +406,7 @@ describe('ImageEditorV3 professional shell', () => {
 
   it('属性默认打开参数 Tab，基础 Tab 单独承载名称与通用开关', async () => {
     renderEditor(createDocument([createImageEditEffectLayerV3(
-      'blur', '高斯模糊', 'image.gaussian-blur-v2', { radius: 12 },
+      'blur', '模糊', 'image.fast-blur-v3', { radius: 12 },
     )]))
     const parametersTab = await screen.findByRole('tab', { name: '参数' })
     expect(parametersTab.getAttribute('aria-selected')).toBe('true')
@@ -532,8 +532,8 @@ describe('ImageEditorV3 professional shell', () => {
     }]
     const blur = createImageEditEffectLayerV3(
       'blur',
-      '高斯模糊',
-      'image.gaussian-blur-v2',
+      '模糊',
+      'image.fast-blur-v3',
       { radius: 24 },
     )
     const rendered = renderEditor(createDocument([annotation, blur]))

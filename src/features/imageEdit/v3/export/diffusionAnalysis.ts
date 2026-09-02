@@ -1,6 +1,7 @@
 import {
   DIFFUSION_V4_RECIPE_ADAPTER,
   applyDiffusionV4,
+  applyFastBlurV3,
   buildDiffusionScatterV4,
   convertFloat32TileColorDomainV3,
   createBuiltInImageEditRenderNodeRegistry,
@@ -94,7 +95,8 @@ function dependencyPlan(
   const nodes = plan.nodes
     .filter((node) => needed.has(node.id))
     .map((node): ImageEditRenderPlanNode => {
-      if (node.definitionId === 'effect.gaussian-blur') {
+      if (node.definitionId === 'effect.gaussian-blur'
+        || node.definitionId === 'effect.fast-blur') {
         return { ...node, parameters: { ...node.parameters, mip } }
       }
       if (node.definitionId === 'effect.blur-v1') {
@@ -211,6 +213,14 @@ export async function buildImageEditorV3DiffusionAnalyses(
             )
           },
           executeCustomEffect: async (node, source, mask) => {
+            if (node.definitionId === 'effect.fast-blur') {
+              const radius = node.parameters.radius
+              const nodeMip = node.parameters.mip
+              return applyFastBlurV3(convertFloat32TileColorDomainV3(source, 'linear-light'), {
+                radius: typeof radius === 'number' ? radius : 0,
+                mip: typeof nodeMip === 'number' ? nodeMip : mip,
+              }, { mask })
+            }
             if (node.definitionId !== 'effect.diffusion') {
               throw new Error(`柔光分析前缀包含不受支持的自定义效果：${node.definitionId}`)
             }

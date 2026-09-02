@@ -111,6 +111,8 @@ const RASTER_TOOLS: readonly ImageEditorCapabilityV3<ImageEditorToolIdV3>[] = [
   ready('mask-edit'),
 ];
 const CORE_EFFECTS: readonly ImageEditorCapabilityV3<string>[] = [
+  ready('image.fast-blur-v3'),
+  // 旧文档仍可编辑，但新建菜单只暴露 fast-blur-v3。
   ready('image.gaussian-blur-v2'),
   ready('image.diffusion'),
   ready('image.vgpu-glow'),

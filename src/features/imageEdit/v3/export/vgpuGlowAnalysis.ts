@@ -2,6 +2,7 @@ import {
   DIFFUSION_V4_RECIPE_ADAPTER,
   VGPU_GLOW_V4_RECIPE_ADAPTER,
   applyDiffusionV4,
+  applyFastBlurV3,
   convertFloat32TileColorDomainV3,
   createBuiltInImageEditRenderNodeRegistry,
   createFloat32PremultipliedRgbaTile,
@@ -97,6 +98,7 @@ function dependencyPlan(
     nodes: plan.nodes
       .filter((node) => needed.has(node.id))
       .map((node) => node.definitionId === 'effect.gaussian-blur'
+        || node.definitionId === 'effect.fast-blur'
         ? { ...node, parameters: { ...node.parameters, mip } }
         : node),
     passes: [],
@@ -304,6 +306,14 @@ export async function buildImageEditorV3VgpuGlowAnalyses(
             return imageEditorV3SourceRegionToMask(await loadSource(reference.resourceId, requestedRegion))
           },
           executeCustomEffect: async (effectNode, source, mask, effectRegion) => {
+            if (effectNode.definitionId === 'effect.fast-blur') {
+              const radius = effectNode.parameters.radius
+              const nodeMip = effectNode.parameters.mip
+              return applyFastBlurV3(convertFloat32TileColorDomainV3(source, 'linear-light'), {
+                radius: typeof radius === 'number' ? radius : 0,
+                mip: typeof nodeMip === 'number' ? nodeMip : mip,
+              }, { mask })
+            }
             if (effectNode.definitionId === 'effect.diffusion') {
               const analysis = diffusionAnalyses.get(effectNode.id)
               if (!analysis) throw new Error(`辉光分析前缀缺少柔光共享分析：${effectNode.id}`)

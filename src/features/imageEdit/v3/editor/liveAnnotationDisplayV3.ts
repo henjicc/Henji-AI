@@ -42,11 +42,12 @@ export function splitLiveAnnotationDisplayV3(
   }
 }
 
-export function resolveLiveGaussianBlurRadiusV3(
+export function resolveLiveBlurRadiusV3(
   document: ImageEditDocumentV3,
 ): number | null {
   const top = [...document.layers].reverse().find((layer) => layer.visible)
-  if (top?.type !== 'effect' || top.effectId !== 'image.gaussian-blur-v2') return null
+  if (top?.type !== 'effect'
+    || (top.effectId !== 'image.fast-blur-v3' && top.effectId !== 'image.gaussian-blur-v2')) return null
   const radius = top.params.radius
   return typeof radius === 'number' && Number.isFinite(radius) && radius > 0 ? radius : null
 }

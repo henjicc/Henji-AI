@@ -8,6 +8,7 @@ export * from './execution';
 export * from './v3/sessionReference';
 export * from './diffusionRecipe';
 export * from './diffusionPresets';
+export * from './fastBlurRecipe';
 export {
   InvalidVgpuGlowOperationParamsError,
   applyVgpuGlowLook,

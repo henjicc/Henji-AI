@@ -30,6 +30,12 @@ export interface ImageEditorPreviewRenderRequestV3 {
   brushTiles: ImageEditorPreviewBrushTileV3[]
 }
 
+export interface ImageEditorPreviewExecutionStatsV3 {
+  fastBlurVgpuPasses: number
+  fastBlurCpuPasses: number
+  fastBlurFallbackReasons: string[]
+}
+
 export interface ImageEditorPreviewCancelRequestV3 {
   type: 'cancel'
   requestId: string
@@ -50,6 +56,7 @@ interface ImageEditorPreviewCompletedBaseV3 {
   width: number
   height: number
   diagnostics: string[]
+  execution?: ImageEditorPreviewExecutionStatsV3
   thumbnail?: {
     width: number
     height: number

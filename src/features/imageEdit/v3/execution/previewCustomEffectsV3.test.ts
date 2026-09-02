@@ -13,16 +13,20 @@ import {
   isPlausibleVgpuGlowPreviewV3,
 } from './previewCustomEffectsV3'
 
-function node(definitionId: 'effect.diffusion' | 'effect.vgpu-glow'): ImageEditRenderPlanNode {
+function node(
+  definitionId: 'effect.fast-blur' | 'effect.diffusion' | 'effect.vgpu-glow',
+): ImageEditRenderPlanNode {
   return {
     id: 'node',
     layerId: 'effect',
     layerPath: ['effect'],
     definitionId,
-    definitionVersion: 4,
+    definitionVersion: definitionId === 'effect.fast-blur' ? 3 : 4,
     category: definitionId === 'effect.diffusion' ? 'local' : 'global-analysis',
     inputNodeIds: ['source'],
-    parameters: definitionId === 'effect.diffusion'
+    parameters: definitionId === 'effect.fast-blur'
+      ? { radius: 8, mip: 0 }
+      : definitionId === 'effect.diffusion'
       ? { ...createDefaultDiffusionOperationParams() }
       : {},
     mask: null,
@@ -64,6 +68,35 @@ describe('ImageEditor V3 现有效果 Worker 边界', () => {
     effects.dispose()
   })
 
+  it('WebGPU 不可用时模糊使用固定成本的三方框 CPU 后备', async () => {
+    const effects = new ImageEditorPreviewCustomEffectsV3()
+    const executions: Array<readonly [string, string | undefined]> = []
+    const source = createFloat32PremultipliedRgbaTile(
+      5,
+      1,
+      'linear-light',
+      new Float32Array([
+        0, 0, 0, 1,
+        0, 0, 0, 1,
+        1, 1, 1, 1,
+        0, 0, 0, 1,
+        0, 0, 0, 1,
+      ]),
+    )
+    const rendered = await effects.execute(
+      node('effect.fast-blur'),
+      source,
+      'draft',
+      createDefaultImageEditColorModeV3(),
+      undefined,
+      (backend, reason) => executions.push([backend, reason]),
+    )
+    expect(rendered.data[8]).toBeLessThan(1)
+    expect(rendered.data[0]).toBeGreaterThan(0)
+    expect(executions).toEqual([['cpu', 'webgpu-unavailable']])
+    effects.dispose()
+  })
+
   it.each(['effect.diffusion', 'effect.vgpu-glow'] as const)(
     '%s 在 HDR 文档中明确拒绝 8-bit 位图往返',
     async (definitionId) => {
@@ -90,4 +123,33 @@ describe('ImageEditor V3 现有效果 Worker 边界', () => {
       effects.dispose()
     },
   )
+
+  it('HDR 文档中的模糊直接使用 Float32 CPU 后备，不进行 8-bit 位图往返', async () => {
+    const effects = new ImageEditorPreviewCustomEffectsV3()
+    const executions: Array<readonly [string, string | undefined]> = []
+    const source = createFloat32PremultipliedRgbaTile(
+      2, 1, 'linear-light', new Float32Array([2, 1, 0.5, 1, 0, 0, 0, 1]),
+      'rec2020', 'pq', 203,
+    )
+    const color = {
+      ...createDefaultImageEditColorModeV3(),
+      workingSpace: 'rec2020' as const,
+      transferFunction: 'pq' as const,
+      bitDepth: 'float16' as const,
+      hdrMetadata: createImageEditHdrMetadataV3('pq'),
+    }
+    await expect(effects.execute(
+      node('effect.fast-blur'),
+      source,
+      'stable',
+      color,
+      undefined,
+      (backend, reason) => executions.push([backend, reason]),
+    )).resolves.toMatchObject({
+      workingSpace: 'rec2020',
+      transferFunction: 'pq',
+    })
+    expect(executions).toEqual([['cpu', 'hdr-float-interoperability']])
+    effects.dispose()
+  })
 })

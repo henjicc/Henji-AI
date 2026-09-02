@@ -197,6 +197,7 @@ function toJsonObject(value: object): ImageEditJsonObjectV3 {
 }
 
 function effectParameters(effectId: string): ImageEditJsonObjectV3 {
+  if (effectId === 'image.fast-blur-v3') return { radius: 12 }
   if (effectId === 'image.gaussian-blur-v2') return { radius: 12 }
   if (effectId === 'image.diffusion') return toJsonObject(createDefaultDiffusionOperationParams())
   if (effectId === 'image.vgpu-glow') return toJsonObject(createDefaultVgpuGlowOperationParams())
@@ -226,7 +227,7 @@ export function createImageEditLayerFromChoiceV3(
   if (choice.kind === 'annotation') return createImageEditAnnotationLayerV3(id, choice.name)
   if (choice.kind === 'group') return createImageEditGroupLayerV3(id, choice.name)
   if (choice.kind === 'effect') {
-    const effectId = choice.subtype ?? 'image.gaussian-blur-v2'
+    const effectId = choice.subtype ?? 'image.fast-blur-v3'
     return createImageEditEffectLayerV3(id, choice.name, effectId, effectParameters(effectId))
   }
   const adjustmentId = choice.subtype ?? 'exposure'

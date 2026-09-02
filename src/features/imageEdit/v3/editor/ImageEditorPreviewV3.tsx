@@ -35,7 +35,7 @@ import { useImageEditorLayerMoveGestureV3 } from './useImageEditorLayerMoveGestu
 import { imageEditorViewportTransformV3, type ImageEditorViewportPanV3 } from './viewportNavigationV3'
 import { useImageEditorViewportNavigationGestureV3 } from './useImageEditorViewportNavigationGestureV3'
 import {
-  resolveLiveGaussianBlurRadiusV3,
+  resolveLiveBlurRadiusV3,
   resolveLiveVgpuGlowFeedbackV3,
   splitLiveAnnotationDisplayV3,
 } from './liveAnnotationDisplayV3'
@@ -236,7 +236,7 @@ export function ImageEditorPreviewV3({
     [displaySnapshot],
   )
   const pendingBlurRadius = !basePreviewExact && activeTool !== 'crop'
-    ? resolveLiveGaussianBlurRadiusV3(projectedBaseDocument)
+    ? resolveLiveBlurRadiusV3(projectedBaseDocument)
     : null
   const blurCssPixels = pendingBlurRadius && viewportLayout
     ? Math.min(48, pendingBlurRadius * viewportLayout.stageWidth / Math.max(1, outputGeometry.width))

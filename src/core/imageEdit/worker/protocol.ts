@@ -22,6 +22,7 @@ export type ImageEditWorkerInitializationFailureCode =
   | 'webgpu-canvas-format-unavailable'
   | 'webgpu-baseline-pipeline-failed'
   | 'webgpu-diffusion-pipeline-failed'
+  | 'webgpu-vgpu-blur-pipeline-failed'
   | 'webgpu-vgpu-glow-pipeline-failed'
   | 'webgpu-initialization-unknown'
 

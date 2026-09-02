@@ -34,7 +34,12 @@ type CollectionEntityType = 'image_edit.layer' | 'image_edit.group'
 
 const logger = createLogger('features.imageEdit.v3.application_collection')
 const UNDO_PREFIX = 'image-edit-v3-collection-undo:'
-const EFFECT_IDS = new Set(['image.gaussian-blur-v2', 'image.diffusion', 'image.vgpu-glow'])
+const EFFECT_IDS = new Set([
+  'image.fast-blur-v3',
+  'image.gaussian-blur-v2',
+  'image.diffusion',
+  'image.vgpu-glow',
+])
 const ADJUSTMENT_IDS = new Set(['exposure', 'curves', 'temperature-tint', 'hsl'])
 
 interface UndoPayload {

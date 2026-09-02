@@ -17,6 +17,7 @@ const SUPPORTED_NODE_IDS = new Set([
   'vector.annotation',
   'effect.blur-v1',
   'effect.gaussian-blur',
+  'effect.fast-blur',
   'effect.diffusion',
   'effect.vgpu-glow',
   'adjustment.exposure',

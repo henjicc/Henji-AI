@@ -56,7 +56,8 @@ class FakeDeviceManager {
 function createState(
   generation: number,
   destroyDiffusion = vi.fn(),
-  destroyGlow = vi.fn()
+  destroyGlow = vi.fn(),
+  destroyBlur = vi.fn(),
 ): WorkerWebGpuState {
   return {
     generation,
@@ -67,6 +68,8 @@ function createState(
     linearizePipeline: { getBindGroupLayout: () => ({}) },
     encodePipeline: { getBindGroupLayout: () => ({}) },
     diffusionRenderer: { destroy: destroyDiffusion },
+    vgpuFastBlurRenderer: { destroy: destroyBlur },
+    vgpuFastBlurRendererInitialization: null,
     vgpuGlowRenderer: { destroy: destroyGlow },
     vgpuGlowRendererInitialization: null,
     canvasFormat: 'bgra8unorm',
@@ -126,7 +129,8 @@ describe('WorkerWebGpuRuntimeBackend lifecycle', () => {
   it('destroy 会释放 diffusion 与 VGPU target/effect 所属 renderer', async () => {
     const destroyDiffusion = vi.fn()
     const destroyGlow = vi.fn()
-    const state = createState(1, destroyDiffusion, destroyGlow)
+    const destroyBlur = vi.fn()
+    const state = createState(1, destroyDiffusion, destroyGlow, destroyBlur)
     const manager = new FakeDeviceManager()
     const backend = new WorkerWebGpuRuntimeBackend({
       deviceManager: manager,
@@ -138,6 +142,7 @@ describe('WorkerWebGpuRuntimeBackend lifecycle', () => {
     backend.destroy()
 
     expect(destroyDiffusion).toHaveBeenCalledOnce()
+    expect(destroyBlur).toHaveBeenCalledOnce()
     expect(destroyGlow).toHaveBeenCalledOnce()
     expect(manager.destroy).toHaveBeenCalledOnce()
   })

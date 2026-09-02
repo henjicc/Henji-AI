@@ -60,6 +60,7 @@ async function renderRequest(
         width: result.tile.width,
         height: result.tile.height,
         diagnostics: result.diagnostics,
+        execution: result.execution,
         bitmap,
       }, [bitmap])
       return
@@ -73,6 +74,7 @@ async function renderRequest(
       width: result.tile.width,
       height: result.tile.height,
       diagnostics: result.diagnostics,
+      execution: result.execution,
       mediaType: 'image/png',
       bytes,
     }, [bytes])

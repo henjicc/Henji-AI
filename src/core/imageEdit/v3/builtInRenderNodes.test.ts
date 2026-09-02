@@ -11,6 +11,15 @@ describe('图片编辑 V3 内置渲染节点', () => {
       backends: ['webgpu', 'cpu-libvips'],
       invalidation: 'tile-with-halo',
     });
+    const fastBlur = registry.get('effect.fast-blur');
+    expect(fastBlur).toMatchObject({
+      version: 3,
+      category: 'global-analysis',
+      invalidation: 'shared-analysis',
+      globalAnalysis: { maxEdge: 2_048, cacheScope: 'subtree', resultVersion: 3 },
+      backends: ['webgpu', 'cpu-libvips'],
+    });
+    expect(fastBlur?.localHalo?.({ radius: 40 }, 0)).toBe(48);
     expect(registry.get('effect.vgpu-glow')).toMatchObject({
       category: 'global-analysis',
       globalAnalysis: { maxEdge: 1_024, resultVersion: 4 },

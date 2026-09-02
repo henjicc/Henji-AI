@@ -1,5 +1,6 @@
 import baselineShaderSource from './baseline.wgsl?raw'
 import type { DiffusionRecipe } from '../diffusionRecipe'
+import type { FastBlurRecipe } from '../fastBlurRecipe'
 import type { VgpuGlowRecipe } from '../vgpuGlowRecipe'
 import {
   createRenderPipelineChecked,
@@ -9,6 +10,7 @@ import {
   type ManagedWebGpuDevice,
 } from '../webgpu/deviceManager'
 import { WebGpuDiffusionRenderer, type DiffusionRenderInput, type DiffusionScatterPyramid } from '../webgpu/diffusionRenderer'
+import { VgpuFastBlurRenderer } from '../webgpu/vgpuFastBlurRenderer'
 import { VgpuGlowRenderer, type VgpuGlowGlobalScatter } from '../webgpu/vgpuGlowRenderer'
 import type { ImageEditWorkerCapabilities } from './protocol'
 import {
@@ -26,14 +28,13 @@ import {
   describeWorkerWebGpuCapabilities,
 } from './webgpuRuntimeCapabilities'
 import {
-  createViewportBuffer, getWebGpuContext, renderPass, unavailableCapabilities,
-  type GpuAdapter, type GpuCanvasContext, type GpuDevice, type GpuProvider,
-  type GpuRenderPipeline, type GpuTexture,
+  createWorkerWebGpuIntermediate,
+  renderWorkerWebGpuTextureToBitmap,
+} from './webgpuRuntimeBitmap'
+import {
+  unavailableCapabilities,
+  type GpuAdapter, type GpuDevice, type GpuProvider, type GpuRenderPipeline,
 } from './webgpuRuntimeSupport'
-
-const TEXTURE_COPY_DST = 0x02
-const TEXTURE_BINDING = 0x04
-const TEXTURE_RENDER_ATTACHMENT = 0x10
 
 export interface WorkerWebGpuState {
   generation: number
@@ -44,6 +45,8 @@ export interface WorkerWebGpuState {
   linearizePipeline: GpuRenderPipeline
   encodePipeline: GpuRenderPipeline
   diffusionRenderer: WebGpuDiffusionRenderer
+  vgpuFastBlurRenderer: VgpuFastBlurRenderer | null
+  vgpuFastBlurRendererInitialization: Promise<VgpuFastBlurRenderer> | null
   vgpuGlowRenderer: VgpuGlowRenderer | null
   vgpuGlowRendererInitialization: Promise<VgpuGlowRenderer> | null
   canvasFormat: string
@@ -114,14 +117,17 @@ export class WorkerWebGpuRuntimeBackend {
   trimVgpuGlowWorkingSet(state: WorkerWebGpuState): void {
     if (this.states.isCurrent(state)) state.vgpuGlowRenderer?.trimWorkingSet()
   }
+  trimVgpuFastBlurWorkingSet(state: WorkerWebGpuState): void {
+    if (this.states.isCurrent(state)) state.vgpuFastBlurRenderer?.trimWorkingSet()
+  }
 
   async renderBaselineBitmap(
     state: WorkerWebGpuState, decoded: ImageBitmap, width: number, height: number
   ): Promise<ImageBitmap> {
     return await this.runForState(state, async () => {
-      const intermediate = await this.createIntermediate(state, decoded, width, height)
+      const intermediate = await createWorkerWebGpuIntermediate(state, decoded, width, height)
       try {
-        return await this.renderTextureToBitmap(state, intermediate, width, height)
+        return await renderWorkerWebGpuTextureToBitmap(state, intermediate, width, height)
       } finally {
         intermediate.destroy()
       }
@@ -146,7 +152,7 @@ export class WorkerWebGpuRuntimeBackend {
         recipe,
         isCancelled,
         scatter,
-        createLinearBase: async () => await this.createIntermediate(
+        createLinearBase: async () => await createWorkerWebGpuIntermediate(
           state,
           decoded,
           width,
@@ -154,7 +160,7 @@ export class WorkerWebGpuRuntimeBackend {
         ),
       })
       try {
-        return await this.renderTextureToBitmap(state, rendered.texture, width, height)
+        return await renderWorkerWebGpuTextureToBitmap(state, rendered.texture, width, height)
       } finally {
         rendered.release()
       }
@@ -175,7 +181,7 @@ export class WorkerWebGpuRuntimeBackend {
         height,
         recipe,
         isCancelled,
-        createLinearBase: async () => await this.createIntermediate(
+        createLinearBase: async () => await createWorkerWebGpuIntermediate(
           state,
           decoded,
           width,
@@ -208,7 +214,29 @@ export class WorkerWebGpuRuntimeBackend {
         isCancelled,
         scatter,
       })
-      return await this.renderTextureToBitmap(state, rendered, width, height)
+      return await renderWorkerWebGpuTextureToBitmap(state, rendered, width, height)
+    }, (bitmap) => bitmap.close())
+  }
+
+  async renderVgpuFastBlurBitmap(
+    state: WorkerWebGpuState,
+    decoded: ImageBitmap,
+    width: number,
+    height: number,
+    recipe: FastBlurRecipe,
+    isCancelled?: () => boolean,
+  ): Promise<ImageBitmap> {
+    return await this.runForState(state, async () => {
+      assertWorkerTextureSize(state, width, height)
+      const renderer = await this.ensureVgpuFastBlurRenderer(state)
+      const rendered = await renderer.render({
+        bitmap: decoded,
+        width,
+        height,
+        recipe,
+        isCancelled,
+      })
+      return await renderWorkerWebGpuTextureToBitmap(state, rendered, width, height)
     }, (bitmap) => bitmap.close())
   }
 
@@ -268,6 +296,9 @@ export class WorkerWebGpuRuntimeBackend {
       linearizePipeline,
       encodePipeline,
       diffusionRenderer: await this.createDiffusionRenderer(device, sampler),
+      // 模糊与辉光一样按需初始化，普通编辑不会常驻额外 FP16 金字塔。
+      vgpuFastBlurRenderer: null,
+      vgpuFastBlurRendererInitialization: null,
       // VGPU 只在用户真正启用辉光 Pro 时初始化。普通图片编辑不会创建它的 target、
       // effect 和 uniform 资源，也不会承担新图形库初始化失败的风险。
       vgpuGlowRenderer: null,
@@ -354,6 +385,36 @@ export class WorkerWebGpuRuntimeBackend {
     }
   }
 
+  private async createVgpuFastBlurRenderer(device: GpuDevice): Promise<VgpuFastBlurRenderer> {
+    try {
+      return await VgpuFastBlurRenderer.create(device)
+    } catch (error) {
+      throw createInitializationError('webgpu-vgpu-blur-pipeline-failed', error)
+    }
+  }
+
+  private async ensureVgpuFastBlurRenderer(
+    state: WorkerWebGpuState,
+  ): Promise<VgpuFastBlurRenderer> {
+    if (state.vgpuFastBlurRenderer) return state.vgpuFastBlurRenderer
+    const initialization = state.vgpuFastBlurRendererInitialization
+      ?? this.createVgpuFastBlurRenderer(state.device)
+    state.vgpuFastBlurRendererInitialization = initialization
+    try {
+      const renderer = await initialization
+      if (!this.isStateCurrent(state)) {
+        renderer.destroy()
+        throw new Error('VGPU 模糊初始化期间 GPU 运行时已失效')
+      }
+      state.vgpuFastBlurRenderer = renderer
+      return renderer
+    } finally {
+      if (state.vgpuFastBlurRendererInitialization === initialization) {
+        state.vgpuFastBlurRendererInitialization = null
+      }
+    }
+  }
+
   private async ensureVgpuGlowRenderer(
     state: WorkerWebGpuState
   ): Promise<VgpuGlowRenderer> {
@@ -375,96 +436,6 @@ export class WorkerWebGpuRuntimeBackend {
       if (state.vgpuGlowRendererInitialization === initialization) {
         state.vgpuGlowRendererInitialization = null
       }
-    }
-  }
-
-  private async createIntermediate(
-    state: WorkerWebGpuState,
-    decoded: ImageBitmap,
-    width: number,
-    height: number
-  ): Promise<GpuTexture> {
-    assertWorkerTextureSize(state, width, height)
-    const sourceTexture = state.device.createTexture({
-      size: [decoded.width, decoded.height],
-      format: 'rgba8unorm',
-      usage: TEXTURE_COPY_DST | TEXTURE_BINDING | TEXTURE_RENDER_ATTACHMENT,
-    })
-    const intermediate = state.device.createTexture({
-      size: [width, height],
-      format: 'rgba16float',
-      usage: TEXTURE_RENDER_ATTACHMENT | TEXTURE_BINDING,
-    })
-    const uniform = createViewportBuffer(state.device, 1, 1, 0, 0)
-    try {
-      state.device.pushErrorScope('validation')
-      state.device.queue.copyExternalImageToTexture(
-        { source: decoded },
-        { texture: sourceTexture, premultipliedAlpha: false },
-        [decoded.width, decoded.height]
-      )
-      renderPass(
-        state.device,
-        state.linearizePipeline,
-        sourceTexture,
-        state.sampler,
-        uniform,
-        intermediate
-      )
-      const renderError = await state.device.popErrorScope()
-      if (renderError) {
-        throw new Error(
-          `Worker WebGPU FP16 Pass 校验失败：${renderError.message ?? '未知错误'}`
-        )
-      }
-      return intermediate
-    } finally {
-      uniform.destroy()
-      sourceTexture.destroy()
-    }
-  }
-
-  private async renderTextureToBitmap(
-    state: WorkerWebGpuState,
-    texture: GpuTexture,
-    width: number,
-    height: number
-  ): Promise<ImageBitmap> {
-    const canvas = new OffscreenCanvas(width, height)
-    const context = getWebGpuContext(canvas)
-    await this.renderToCanvas(state, texture, context)
-    return canvas.transferToImageBitmap()
-  }
-
-  private async renderToCanvas(
-    state: WorkerWebGpuState,
-    intermediate: GpuTexture,
-    context: GpuCanvasContext
-  ): Promise<void> {
-    context.configure({
-      device: state.device,
-      format: state.canvasFormat,
-      alphaMode: 'premultiplied',
-    })
-    const uniform = createViewportBuffer(state.device, 1, 1, 0, 0)
-    try {
-      state.device.pushErrorScope('validation')
-      renderPass(
-        state.device,
-        state.encodePipeline,
-        intermediate,
-        state.sampler,
-        uniform,
-        context.getCurrentTexture()
-      )
-      const renderError = await state.device.popErrorScope()
-      if (renderError) {
-        throw new Error(
-          `Worker WebGPU Canvas Pass 校验失败：${renderError.message ?? '未知错误'}`
-        )
-      }
-    } finally {
-      uniform.destroy()
     }
   }
 
@@ -492,6 +463,9 @@ export class WorkerWebGpuRuntimeBackend {
       return
     }
     state.diffusionRenderer.destroy()
+    state.vgpuFastBlurRenderer?.destroy()
+    state.vgpuFastBlurRenderer = null
+    state.vgpuFastBlurRendererInitialization = null
     state.vgpuGlowRenderer?.destroy()
     state.vgpuGlowRenderer = null
     // 正在进行的初始化由 ensureVgpuGlowRenderer 在发现 state 已失效时负责销毁。

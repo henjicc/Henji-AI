@@ -38,6 +38,7 @@ const EXPENSIVE_EFFECT_PREVIEW_INTERVAL_MS = 80
 
 function isExpensiveEffect(layer: ImageEditLayerV3): boolean {
   return layer.type === 'effect' && [
+    'image.fast-blur-v3',
     'image.gaussian-blur-v2',
     'image.diffusion',
     'image.vgpu-glow',
@@ -236,7 +237,8 @@ export function ImageEditorEffectParametersV3({
   if (!params) return null
   const sliders: Array<[string, number, number, number, number]> = []
 
-  if (layer.type === 'effect' && layer.effectId === 'image.gaussian-blur-v2') {
+  if (layer.type === 'effect'
+    && (layer.effectId === 'image.fast-blur-v3' || layer.effectId === 'image.gaussian-blur-v2')) {
     sliders.push(['radius', readNumber(params, 'radius', 12), 0, 1000, 0.5])
   } else if (layer.type === 'effect' && layer.effectId === 'image.diffusion') {
     for (const key of ['strength', 'glowRange', 'highlightResponse', 'softness'] as const) {

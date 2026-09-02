@@ -25,6 +25,7 @@ import {
 
 const EFFECT_DEFINITION_IDS: Readonly<Record<string, string>> = {
   'image.blur': 'effect.blur-v1',
+  'image.fast-blur-v3': 'effect.fast-blur',
   'image.diffusion': 'effect.diffusion',
   'image.vgpu-glow': 'effect.vgpu-glow',
   'image.gaussian-blur-v2': 'effect.gaussian-blur',

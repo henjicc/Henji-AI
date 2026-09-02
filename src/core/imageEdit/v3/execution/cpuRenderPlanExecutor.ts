@@ -1,6 +1,7 @@
 import {
   applyCurvesAdjustment,
   applyExposureAdjustment,
+  applyFastBlurV3,
   applyGaussianBlurV2,
   applyLegacyGaussianBlurV1,
   applyHslAdjustment,
@@ -198,6 +199,14 @@ export async function executeImageEditCpuEffectNodeV3(
   if (node.definitionId === 'effect.gaussian-blur') {
     const linear = convertFloat32TileColorDomainV3(source, 'linear-light');
     return applyGaussianBlurV2(linear, {
+      radius: numberParameter(node, 'radius', 0),
+      mip: numberParameter(node, 'mip', 0),
+    }, { mask });
+  }
+  if (node.definitionId === 'effect.fast-blur') {
+    if (context.executeCustomEffect) return context.executeCustomEffect(node, source, mask);
+    const linear = convertFloat32TileColorDomainV3(source, 'linear-light');
+    return applyFastBlurV3(linear, {
       radius: numberParameter(node, 'radius', 0),
       mip: numberParameter(node, 'mip', 0),
     }, { mask });

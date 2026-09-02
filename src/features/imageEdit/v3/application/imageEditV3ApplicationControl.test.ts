@@ -205,6 +205,47 @@ describe('图片编辑 V3 实时 Application Control', () => {
     ])
   })
 
+  it('通用集合通过正式命令总线创建新版模糊图层', async () => {
+    const document = createImageEditDocumentV3({
+      width: 640,
+      height: 480,
+      documentId: 'assistant-v3-fast-blur',
+    })
+    const bus = new ImageEditCommandBusV3(document)
+    disposers.push(registerImageEditV3LiveSession('assistant-v3-fast-blur-session', bus))
+    const documentRef = imageEditV3DocumentRef(document.id)
+    const initial = await getApplicationReflectionRegistry().readEntity(
+      documentRef,
+      undefined,
+      accessContext,
+    )
+
+    const created = await commitStep('添加模糊', initial.revisions, {
+      kind: 'collection',
+      parent: documentRef,
+      entityType: 'image_edit.layer',
+      expectedRevisions: initial.revisions,
+      operation: {
+        kind: 'create',
+        items: [{ properties: {
+          'image_edit.layer.name': '模糊',
+          'image_edit.layer.type': 'effect',
+          'image_edit.layer.definition_id': 'image.fast-blur-v3',
+          'image_edit.layer.params': { radius: 12 },
+        } }],
+      },
+    }, 'create-fast-blur')
+
+    expect(created.status, JSON.stringify(created)).toBe('completed')
+    expect(bus.getSnapshot().document.layers).toEqual([
+      expect.objectContaining({
+        type: 'effect',
+        effectId: 'image.fast-blur-v3',
+        params: { radius: 12 },
+      }),
+    ])
+  })
+
   it('通用集合创建删除图层并把 V3 标注别名写回所属标注图层', async () => {
     const document = createImageEditDocumentV3({ width: 640, height: 480, documentId: 'assistant-v3-doc-b' })
     document.layers = [createImageEditAnnotationLayerV3('annotations-b', '标注')]

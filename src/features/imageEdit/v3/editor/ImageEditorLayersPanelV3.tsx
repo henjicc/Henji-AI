@@ -35,7 +35,7 @@ interface ImageEditorLayersPanelV3Props {
   embedded?: boolean
 }
 
-const EFFECT_SUBTYPES = ['image.gaussian-blur-v2', 'image.diffusion', 'image.vgpu-glow'] as const
+const EFFECT_SUBTYPES = ['image.fast-blur-v3', 'image.diffusion', 'image.vgpu-glow'] as const
 const ADJUSTMENT_SUBTYPES = ['exposure', 'curves', 'temperature-tint', 'hsl'] as const
 const EMPTY_LAYER_IDS: readonly string[] = []
 

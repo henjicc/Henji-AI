@@ -7,7 +7,8 @@ function scaleLayers(
 ): ImageEditLayerV3[] {
   return layers.map((layer) => {
     if (layer.type === 'group') return { ...layer, children: scaleLayers(layer.children, scale) }
-    if (layer.type === 'effect' && layer.effectId === 'image.gaussian-blur-v2') {
+    if (layer.type === 'effect'
+      && (layer.effectId === 'image.gaussian-blur-v2' || layer.effectId === 'image.fast-blur-v3')) {
       return {
         ...layer,
         params: {

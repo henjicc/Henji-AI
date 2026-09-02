@@ -46,8 +46,11 @@ describe('图片编辑 V3 宿主能力裁剪', () => {
     })
   })
 
-  it('三种发布效果都可新建，遮罩兼容宿主只暴露蒙版所需工具', () => {
+  it('新版模糊与其他发布效果都可新建，遮罩兼容宿主只暴露蒙版所需工具', () => {
     const full = getImageEditorHostProfileV3('full')
+    expect(full.effects.find(({ id }) => id === 'image.fast-blur-v3')).toMatchObject({
+      readiness: { state: 'ready' },
+    })
     expect(full.effects.find(({ id }) => id === 'image.vgpu-glow')).toMatchObject({
       readiness: { state: 'ready' },
     })

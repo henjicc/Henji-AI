@@ -9,7 +9,7 @@ import {
 import type { ImageEditDocumentV3 } from '@/core/imageEdit/v3/documentTypes'
 import { WHITE_HEX } from '@/core/theme/colorTokens'
 import {
-  resolveLiveGaussianBlurRadiusV3,
+  resolveLiveBlurRadiusV3,
   resolveLiveVgpuGlowFeedbackV3,
   splitLiveAnnotationDisplayV3,
 } from './liveAnnotationDisplayV3'
@@ -68,13 +68,17 @@ describe('图片编辑 V3 即时标注显示分层', () => {
     expect(result.liveLayers.map(({ id }) => id)).toEqual(['top'])
   })
 
-  it('只对底图栈最上方的高斯模糊提供即时近似', () => {
-    const blur = createImageEditEffectLayerV3('blur', '高斯模糊', 'image.gaussian-blur-v2', { radius: 36 })
-    expect(resolveLiveGaussianBlurRadiusV3(document([blur]))).toBe(36)
-    expect(resolveLiveGaussianBlurRadiusV3(document([
+  it('只对底图栈最上方的模糊提供即时近似，并兼容旧高斯图层', () => {
+    const blur = createImageEditEffectLayerV3('blur', '模糊', 'image.fast-blur-v3', { radius: 36 })
+    expect(resolveLiveBlurRadiusV3(document([blur]))).toBe(36)
+    expect(resolveLiveBlurRadiusV3(document([
       blur,
       createImageEditAnnotationLayerV3('annotation', '标注'),
     ]))).toBeNull()
+    const legacy = createImageEditEffectLayerV3(
+      'legacy-blur', '高斯模糊', 'image.gaussian-blur-v2', { radius: 12 },
+    )
+    expect(resolveLiveBlurRadiusV3(document([legacy]))).toBe(12)
   })
 
   it('只对最上方辉光提供保持画布几何不变的即时反馈参数', () => {

@@ -862,6 +862,7 @@
       },
       "effect": {
         "image": {
+          "fast-blur-v3": "Blur",
           "gaussian-blur-v2": "Gaussian Blur",
           "diffusion": "Diffusion / Glow",
           "vgpu-glow": "Glow Pro"

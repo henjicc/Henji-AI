@@ -1,4 +1,5 @@
 import { gaussianBlurHalo } from './tileGeometry';
+import { resolveFastBlurV3Geometry } from './effects/fastBlur';
 import {
   ImageEditRenderNodeRegistry,
   estimateRgbaTileBytes,
@@ -51,6 +52,20 @@ const definitions: readonly RenderNodeDefinition[] = [
       return gaussianBlurHalo(Number.isFinite(radius) ? Math.max(0, radius) : 0, mip);
     },
     estimateBytes: (context) => estimateRgbaTileBytes(context, 3),
+  },
+  {
+    id: 'effect.fast-blur', version: 3, category: 'global-analysis', color: LINEAR_PREMULTIPLIED,
+    qualities: ['draft', 'stable', 'export'], backends: ['webgpu', 'cpu-libvips'],
+    fusion: 'never', invalidation: 'shared-analysis',
+    localHalo: (parameters, mip) => {
+      const radius = Number((parameters as { radius?: unknown }).radius ?? 0);
+      return resolveFastBlurV3Geometry({
+        radius: Number.isFinite(radius) ? Math.max(0, radius) : 0,
+        mip,
+      }).localHaloAtMip;
+    },
+    globalAnalysis: { maxEdge: 2_048, cacheScope: 'subtree', resultVersion: 3 },
+    estimateBytes: (context) => estimateRgbaTileBytes(context, 4),
   },
   {
     id: 'effect.diffusion', version: 4, category: 'global-analysis', color: LINEAR_PREMULTIPLIED,

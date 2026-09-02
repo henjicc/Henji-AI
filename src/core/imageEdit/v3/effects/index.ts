@@ -4,5 +4,6 @@ export * from './diffusion';
 export * from './existingEffectAdapters';
 export * from './exposure';
 export * from './gaussianBlur';
+export * from './fastBlur';
 export * from './hsl';
 export * from './temperatureTint';

@@ -685,9 +685,9 @@ function createToolboxScenes(context) {
 
         const addLayer = editor.getByRole('button', { name: /^(添加图层|Add layer)$/i })
         await addLayer.click()
-        await page.getByRole('menuitem', { name: /^(高斯模糊|Gaussian Blur)$/i }).click()
+        await page.getByRole('menuitem', { name: /^(模糊|Blur)$/i }).click()
         const blur = editor.locator('[role="treeitem"][data-layer-type="effect"]')
-          .filter({ hasText: /^(高斯模糊|Gaussian Blur)$/i }).first()
+          .filter({ hasText: /^(模糊|Blur)$/i }).first()
         await blur.waitFor({ state: 'visible', timeout: 10000 })
         await editor.getByRole('button', { name: /^(下移图层|Move layer down)$/i }).click()
         await editor.getByRole('button', { name: /^(上移图层|Move layer up)$/i }).click()
@@ -723,8 +723,24 @@ function createToolboxScenes(context) {
             level: 'debug',
             limit: 200,
           })
-          return result.events.some((event) => event.event === 'image_editor_v3.preview.completed')
-        }, blurStartedAt, { timeout: 5000 })
+          const previewCompleted = result.events.some(
+            (event) => event.event === 'image_editor_v3.preview.completed',
+          )
+          const vgpuCompleted = result.events.some((event) => (
+            event.event === 'image_editor_v3.fast_blur.preview.completed'
+              && event.context?.backend === 'vgpu'
+          ))
+          const durations = result.events
+            .filter((event) => event.event === 'image_editor_v3.preview.completed')
+            .map((event) => Number(event.context?.durationMs))
+            .filter((duration) => Number.isFinite(duration))
+          return previewCompleted
+            && vgpuCompleted
+            && durations.length > 0
+            && Math.max(...durations) <= 1000
+        }, blurStartedAt, { timeout: 5000 }).catch(() => {
+          throw new Error('模糊拖动未在 1 秒内产出 vGPU 完成帧')
+        })
         if (await readRevision() !== beforeBlurRevision + 1) {
           throw new Error('一次模糊滑杆拖动产生了多条历史 revision')
         }

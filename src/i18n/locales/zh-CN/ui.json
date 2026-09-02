@@ -862,6 +862,7 @@
       },
       "effect": {
         "image": {
+          "fast-blur-v3": "模糊",
           "gaussian-blur-v2": "高斯模糊",
           "diffusion": "柔光 / 发光",
           "vgpu-glow": "辉光 Pro"

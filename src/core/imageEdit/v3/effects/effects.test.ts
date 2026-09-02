@@ -1,14 +1,17 @@
 import { describe, expect, it } from 'vitest';
 import {
   applyExposureAdjustment,
+  applyFastBlurV3,
   applyGaussianBlurV2,
   applyLegacyGaussianBlurV1,
   createFloat32MaskTile,
   createFloat32PremultipliedRgbaTile,
   EXPOSURE_ADJUSTMENT_CONTRACT,
+  FAST_BLUR_V3_CONTRACT,
   GAUSSIAN_BLUR_V2_CONTRACT,
   LEGACY_GAUSSIAN_BLUR_V1_CONTRACT,
   resolveGaussianBlurV2Geometry,
+  resolveFastBlurV3Geometry,
 } from './index';
 
 describe('图片编辑 V3 Float32 效果契约', () => {
@@ -141,6 +144,58 @@ describe('Gaussian Blur v2 CPU 参考实现', () => {
     expect(result.data[0] / result.data[3]).toBeCloseTo(2, 5);
     expect(result.data[1] / result.data[3]).toBeCloseTo(0.5, 5);
     expect(result.data[2]).toBe(0);
+  });
+});
+
+describe('Blur v3 快速 CPU 后备', () => {
+  it('小半径保留连续反馈，大半径把局部 halo 封顶并切换共享分析', () => {
+    expect(resolveFastBlurV3Geometry({ radius: 0.5, mip: 0 })).toMatchObject({
+      radiusAtMip: 0.5,
+      supportAtMip: 2,
+      requiresGlobalAnalysis: false,
+    });
+    expect(resolveFastBlurV3Geometry({ radius: 40, mip: 0 })).toMatchObject({
+      radiusAtMip: 40,
+      localHaloAtMip: 48,
+      requiresGlobalAnalysis: true,
+    });
+    expect(FAST_BLUR_V3_CONTRACT).toMatchObject({
+      version: 3,
+      inputColorDomain: 'linear-light',
+      alpha: 'premultiplied',
+    });
+  });
+
+  it('三方框移动和保持常量预乘 RGBA，不在透明边缘引入脏色', () => {
+    const pixel = [0.4, 0.2, 0.1, 0.5];
+    const constant = createFloat32PremultipliedRgbaTile(
+      7,
+      5,
+      'linear-light',
+      new Float32Array(Array.from({ length: 35 }, () => pixel).flat()),
+    );
+    const result = applyFastBlurV3(constant, { radius: 12, mip: 0 });
+    for (let offset = 0; offset < result.data.length; offset += 4) {
+      expect(result.data[offset]).toBeCloseTo(0.4, 6);
+      expect(result.data[offset + 1]).toBeCloseTo(0.2, 6);
+      expect(result.data[offset + 2]).toBeCloseTo(0.1, 6);
+      expect(result.data[offset + 3]).toBeCloseTo(0.5, 6);
+    }
+
+    const impulse = createFloat32PremultipliedRgbaTile(
+      9,
+      1,
+      'linear-light',
+      new Float32Array([
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        1, 0.25, 0, 0.5,
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+      ]),
+    );
+    const blurred = applyFastBlurV3(impulse, { radius: 1.5, mip: 0 });
+    expect(blurred.data[11]).toBeGreaterThan(0);
+    expect(blurred.data[8] / blurred.data[11]).toBeCloseTo(2, 5);
+    expect(blurred.data[9] / blurred.data[11]).toBeCloseTo(0.5, 5);
   });
 });
 
