@@ -67,6 +67,8 @@ export interface ImageEditorViewportRenderRequestV3 {
   resolveSourceTileRequests?: (
     candidate: ImageEditorViewportTileCandidateV3,
   ) => readonly ImageEditorViewportTileRequestV3[]
+  /** 在读取任何源瓦片前，把合成工作集与成品预算一并纳入 mip 选择。 */
+  admitCandidate?: (candidate: ImageEditorViewportTileCandidateV3) => boolean
 }
 
 export interface ImageEditorViewportFrameV3 {
@@ -278,9 +280,12 @@ export class ImageEditorViewportTileSchedulerV3 {
       previousMip: job.request.previousMip,
       preferredMip: job.request.preferredMip,
       coverage: job.request.coverage,
-      admit: (candidate) => this.cache.admission(
-        resolveImageEditorViewportTileRequestsV3(job.request, candidate, resourceRefs),
-      ).admitted,
+      admit: (candidate) => (
+        this.cache.admission(
+          resolveImageEditorViewportTileRequestsV3(job.request, candidate, resourceRefs),
+        ).admitted
+        && (job.request.admitCandidate?.(candidate) ?? true)
+      ),
     })
     const tileRequests = resolveImageEditorViewportTileRequestsV3(job.request, plan, resourceRefs)
     try {

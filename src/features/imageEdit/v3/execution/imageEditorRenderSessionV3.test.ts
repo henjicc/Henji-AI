@@ -302,7 +302,7 @@ describe('ImageEditorRenderSessionV3', () => {
     session.dispose()
   })
 
-  it('同一动画帧内的连续相机事件只合成最新快照', async () => {
+  it('同一动画帧内 1000 次连续相机事件只合成最新快照', async () => {
     const session = new DefaultImageEditorRenderSessionV3(
       { sessionId: 'camera-coalescing-test' },
       { client: { render: vi.fn(), cancel: vi.fn(), dispose: vi.fn() } },
@@ -314,16 +314,13 @@ describe('ImageEditorRenderSessionV3', () => {
     session.updateViewport(layout)
     expect(cameraSequence).toBe(1)
 
-    session.updateViewport({
-      ...layout,
-      viewportKey: 'viewport-2',
-      viewport: { ...layout.viewport, documentX: 100 },
-    })
-    session.updateViewport({
-      ...layout,
-      viewportKey: 'viewport-3',
-      viewport: { ...layout.viewport, documentX: 200 },
-    })
+    for (let index = 1; index <= 1_000; index += 1) {
+      session.updateViewport({
+        ...layout,
+        viewportKey: `viewport-${index + 1}`,
+        viewport: { ...layout.viewport, documentX: index },
+      })
+    }
     expect(cameraSequence).toBe(1)
 
     await vi.advanceTimersByTimeAsync(16)

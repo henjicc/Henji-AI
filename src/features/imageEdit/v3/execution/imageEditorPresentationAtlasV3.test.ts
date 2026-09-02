@@ -43,9 +43,9 @@ describe('ImageEditorPresentationAtlasV3', () => {
     expect(first.source.height).toBe(1)
   })
 
-  it('达到固定页数后按 LRU 复用槽位，不扩容或 resize 页面', () => {
+  it('1000 次瓦片更新达到固定页数后按 LRU 复用槽位，不扩容或 resize 页面', () => {
     const atlas = new ImageEditorPresentationAtlasV3()
-    for (let index = 0; index < 210; index += 1) atlas.store(`tile-${index}`, bitmap(32, 32))
+    for (let index = 0; index < 1_000; index += 1) atlas.store(`tile-${index}`, bitmap(32, 32))
 
     expect(atlas.snapshot()).toMatchObject({
       pageCount: IMAGE_EDITOR_PRESENTATION_ATLAS_MAX_PAGES_V3,

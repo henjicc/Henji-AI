@@ -63,6 +63,7 @@ import {
   IMAGE_EDITOR_VIEWPORT_MAX_TRANSFER_BYTES_V3,
   imageEditorViewportErrorV3,
 } from './viewportCompositeClientSupportV3'
+import { imageEditorViewportCompositeCandidateFitsBudgetV3 } from './viewportCompositeAdmissionV3'
 export {
   ImageEditorViewportCompositeDisposedErrorV3,
   ImageEditorViewportCompositeSupersededErrorV3,
@@ -211,6 +212,7 @@ export class ImageEditorViewportCompositeClientV3 {
       job.document, job.quality, job.resourceDescriptors,
     )
     const wholeSource = job.analysisRequested === true
+    const bitDepth = typeof job.document.color.bitDepth === 'number' ? job.document.color.bitDepth : 32
     job.prepared = prepared
     const frame = await this.scheduler.render({
       resourceRef: prepared.primaryResourceRef,
@@ -219,7 +221,7 @@ export class ImageEditorViewportCompositeClientV3 {
       documentSize: imageEditOutputSizeV3(job.document.geometry),
       sourceSize: job.document.geometry,
       viewport: job.viewport,
-      bitDepth: typeof job.document.color.bitDepth === 'number' ? job.document.color.bitDepth : 32,
+      bitDepth,
       haloDocumentPixels: prepared.haloDocumentPixels,
       overscanViewports: job.overscanViewports ?? 0.5,
       forwardPrefetchViewports: job.forwardPrefetchViewports ?? 1,
@@ -227,11 +229,11 @@ export class ImageEditorViewportCompositeClientV3 {
       preferredMip: job.preferredMip,
       coverage: job.coverage,
       resolveSourceTileRequests: (candidate) => createImageEditorViewportSourceTileRequestsV3(
-        prepared,
-        candidate,
-        typeof job.document.color.bitDepth === 'number' ? job.document.color.bitDepth : 32,
-        wholeSource,
+        prepared, candidate, bitDepth, wholeSource,
       ),
+      admitCandidate: (candidate) => imageEditorViewportCompositeCandidateFitsBudgetV3({
+        budget: this.budget, prepared, document: job.document, candidate, bitDepth, wholeSource,
+      }),
     })
     if (this.active !== job || job.controller.signal.aborted || this.disposed) {
       frame.release()
