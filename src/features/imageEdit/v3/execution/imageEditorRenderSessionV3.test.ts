@@ -26,6 +26,9 @@ function result(
   request: ImageEditorViewportCompositeRequestV3,
   release = vi.fn(),
 ): ImageEditorManagedViewportCompositeV3 {
+  const mip = request.coverage === 'document' ? 8 : 0
+  const tileWidth = Math.ceil(request.document.geometry.width / (2 ** mip))
+  const tileHeight = Math.ceil(request.document.geometry.height / (2 ** mip))
   return {
     documentId: request.document.id,
     revision: request.document.revision,
@@ -39,11 +42,18 @@ function result(
     },
     viewportKey: request.viewportKey,
     coverage: request.coverage ?? 'viewport',
-    mip: request.coverage === 'document' ? 8 : 0,
+    mip,
     documentWidth: request.document.geometry.width,
     documentHeight: request.document.geometry.height,
     diagnostics: [],
-    tiles: [],
+    tiles: [{
+      bitmap: {
+        width: tileWidth,
+        height: tileHeight,
+        close: vi.fn(),
+      } as unknown as ImageBitmap,
+      outputRect: { x: 0, y: 0, width: tileWidth, height: tileHeight },
+    }],
     release,
   }
 }
@@ -103,9 +113,10 @@ describe('ImageEditorRenderSessionV3', () => {
     const unsubscribe = session.subscribeState((state) => {
       targetMipCoverage = state.targetMipCoverage
     })
+    const front = document.createElement('canvas')
     session.attachSurface({
       surfaceId: 'surface-a',
-      front: document.createElement('canvas'),
+      front,
       safety: document.createElement('canvas'),
     })
     session.updateViewport(layout)
@@ -124,6 +135,8 @@ describe('ImageEditorRenderSessionV3', () => {
     await vi.advanceTimersByTimeAsync(16)
     expect(requests).toHaveLength(2)
     expect(requests[1]).toMatchObject({ coverage: 'viewport', viewportKey: 'viewport-1' })
+    const drawImage = vi.mocked(front.getContext('2d')!.drawImage)
+    const drawsBeforeTile = drawImage.mock.calls.length
     requests[1]?.onTileReady?.({
       renderGeneration: 1,
       cameraSequence: 1,
@@ -138,6 +151,7 @@ describe('ImageEditorRenderSessionV3', () => {
       },
     })
     expect(targetMipCoverage).toBeGreaterThan(0)
+    expect(drawImage).toHaveBeenCalledTimes(drawsBeforeTile)
     unsubscribe()
     session.dispose()
   })
@@ -239,7 +253,7 @@ describe('ImageEditorRenderSessionV3', () => {
     await vi.advanceTimersByTimeAsync(16)
     expect(requests).toHaveLength(3)
     expect(requests[2]).toMatchObject({
-      coverage: 'viewport', viewportKey: 'viewport-1',
+      coverage: 'viewport', viewportKey: 'viewport-1', preferredMip: 2,
     })
     expect(requests[2]?.analysisRequested).not.toBe(true)
     session.dispose()

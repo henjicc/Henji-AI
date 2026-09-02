@@ -22,6 +22,11 @@ interface SurfacePixelsV3 {
   height: number
 }
 
+interface ImageEditorPresentationFrameV3 {
+  canvas: HTMLCanvasElement
+  bounds: ImageEditRect
+}
+
 function surfacePixels(layout: ImageEditorViewportLayoutV3): SurfacePixelsV3 {
   const dpr = layout.viewport.devicePixelRatio
   return {
@@ -95,12 +100,13 @@ export function imageEditorViewportResultCoverageV3(
 
 function drawResult(
   context: CanvasRenderingContext2D,
-  atlas: ImageEditorPresentationAtlasV3,
+  frame: ImageEditorPresentationFrameV3 | null,
   result: ImageEditorManagedViewportCompositeV3,
   layout: ImageEditorViewportLayoutV3,
   currentGeometry: ImageEditCanvasGeometryV3,
   replace = false,
 ): void {
+  if (!frame) return
   const viewport = layout.viewport
   const mipScale = 2 ** result.mip
   const screenScale = viewport.zoom * viewport.devicePixelRatio
@@ -141,75 +147,36 @@ function drawResult(
     (affine.e - viewport.documentX) * screenScale,
     (affine.f - viewport.documentY) * screenScale,
   )
-  for (const tile of result.tiles) {
-    const atlasRegion = atlas.store([
-      result.renderGeneration,
-      result.geometryHash,
-      result.mip,
-      tile.outputRect.x,
-      tile.outputRect.y,
-      tile.outputRect.width,
-      tile.outputRect.height,
-    ].join(':'), tile.bitmap)
-    const documentX = tile.outputRect.x * mipScale
-    const documentY = tile.outputRect.y * mipScale
-    const documentRight = Math.min(
-      result.documentWidth,
-      (tile.outputRect.x + tile.outputRect.width) * mipScale,
-    )
-    const documentBottom = Math.min(
-      result.documentHeight,
-      (tile.outputRect.y + tile.outputRect.height) * mipScale,
-    )
-    if (replace) {
-      context.save()
-      context.beginPath()
-      context.rect(documentX, documentY, documentRight - documentX, documentBottom - documentY)
-      context.clip()
-      context.globalCompositeOperation = 'copy'
-    }
-    context.drawImage(
-      atlasRegion.source,
-      atlasRegion.sourceX,
-      atlasRegion.sourceY,
-      atlasRegion.width,
-      atlasRegion.height,
-      documentX,
-      documentY,
-      documentRight - documentX,
-      documentBottom - documentY,
-    )
-    if (replace) context.restore()
+  const documentX = frame.bounds.x * mipScale
+  const documentY = frame.bounds.y * mipScale
+  const documentRight = Math.min(
+    result.documentWidth,
+    (frame.bounds.x + frame.bounds.width) * mipScale,
+  )
+  const documentBottom = Math.min(
+    result.documentHeight,
+    (frame.bounds.y + frame.bounds.height) * mipScale,
+  )
+  if (replace) {
+    context.save()
+    context.beginPath()
+    context.rect(documentX, documentY, documentRight - documentX, documentBottom - documentY)
+    context.clip()
+    context.globalCompositeOperation = 'copy'
   }
+  context.drawImage(
+    frame.canvas,
+    0,
+    0,
+    frame.canvas.width,
+    frame.canvas.height,
+    documentX,
+    documentY,
+    documentRight - documentX,
+    documentBottom - documentY,
+  )
+  if (replace) context.restore()
   context.restore()
-}
-
-function drawProgressTile(
-  context: CanvasRenderingContext2D,
-  atlas: ImageEditorPresentationAtlasV3,
-  tile: ImageEditorViewportCompositeBitmapTileV3,
-  mip: number,
-  documentSize: { width: number; height: number },
-  geometry: ImageEditCanvasGeometryV3,
-  layout: ImageEditorViewportLayoutV3,
-  identity: { renderGeneration: number; geometryHash: string },
-): void {
-  drawResult(context, atlas, {
-    documentId: '',
-    revision: 0,
-    renderGeneration: identity.renderGeneration,
-    cameraSequence: 0,
-    geometryHash: identity.geometryHash,
-    geometry,
-    viewportKey: '',
-    coverage: 'viewport',
-    mip,
-    documentWidth: documentSize.width,
-    documentHeight: documentSize.height,
-    diagnostics: [],
-    tiles: [tile],
-    release: () => undefined,
-  }, layout, geometry, true)
 }
 
 export function imageEditorViewportTileCoverageContributionV3(
@@ -236,6 +203,10 @@ export function imageEditorViewportTileCoverageContributionV3(
 /** 固定双表面的 Canvas2D 合成器；前表面只接收完整 staging 帧。 */
 export class ImageEditorPresentationSurfaceV3 {
   private readonly atlas = new ImageEditorPresentationAtlasV3()
+  private readonly frames = new Map<
+    ImageEditorManagedViewportCompositeV3,
+    ImageEditorPresentationFrameV3
+  >()
   private elements: ImageEditorPresentationSurfaceElementsV3 | null = null
   private staging: HTMLCanvasElement | null = null
   private resizeBuffer: HTMLCanvasElement | null = null
@@ -275,10 +246,21 @@ export class ImageEditorPresentationSurfaceV3 {
     if (!stagingContext || !frontContext || !safetyContext) {
       throw new Error('无法创建图片编辑器常驻显示表面')
     }
+    const targetMipCoverage = imageEditorViewportResultCoverageV3(target, layout)
+    const presentableTarget = target
+      && target.renderGeneration === fallback.renderGeneration
+      && target.viewportKey === layout.viewportKey
+      && target.cameraSequence === cameraSequence
+      && targetMipCoverage >= 0.999_999
+        ? target
+        : null
+    this.retainFrames(presentableTarget ? [fallback, presentableTarget] : [fallback])
+    const fallbackFrame = this.frameFor(fallback)
+    const targetFrame = presentableTarget ? this.frameFor(presentableTarget) : null
     stagingContext.clearRect(0, 0, pixels.width, pixels.height)
-    drawResult(stagingContext, this.atlas, fallback, layout, currentGeometry)
-    if (target && target.renderGeneration === fallback.renderGeneration) {
-      drawResult(stagingContext, this.atlas, target, layout, currentGeometry, true)
+    drawResult(stagingContext, fallbackFrame, fallback, layout, currentGeometry)
+    if (presentableTarget) {
+      drawResult(stagingContext, targetFrame, presentableTarget, layout, currentGeometry, true)
     }
     frontContext.globalCompositeOperation = 'copy'
     frontContext.drawImage(staging, 0, 0)
@@ -289,39 +271,73 @@ export class ImageEditorPresentationSurfaceV3 {
     elements.front.dataset.renderGeneration = String(fallback.renderGeneration)
     elements.front.dataset.cameraSequence = String(cameraSequence)
     elements.front.dataset.geometryHash = currentGeometryHash
-    const targetMipCoverage = imageEditorViewportResultCoverageV3(target, layout)
     return { coverage: 1, targetMipCoverage }
-  }
-
-  presentTile(
-    tile: ImageEditorViewportCompositeBitmapTileV3,
-    mip: number,
-    documentSize: { width: number; height: number },
-    geometry: ImageEditCanvasGeometryV3,
-    layout: ImageEditorViewportLayoutV3,
-    identity: { renderGeneration: number; cameraSequence: number; geometryHash: string },
-  ): number | null {
-    const elements = this.elements
-    const resizeBuffer = this.resizeBuffer
-    if (!elements || !resizeBuffer) return null
-    const pixels = surfacePixels(layout)
-    resizePreservingLastFrame(elements.front, resizeBuffer, pixels.width, pixels.height)
-    resizePreservingLastFrame(elements.safety, resizeBuffer, pixels.width, pixels.height)
-    const frontContext = elements.front.getContext('2d')
-    const safetyContext = elements.safety.getContext('2d')
-    if (!frontContext || !safetyContext) throw new Error('无法创建图片编辑器常驻显示表面')
-    drawProgressTile(frontContext, this.atlas, tile, mip, documentSize, geometry, layout, identity)
-    drawProgressTile(safetyContext, this.atlas, tile, mip, documentSize, geometry, layout, identity)
-    elements.front.dataset.renderGeneration = String(identity.renderGeneration)
-    elements.front.dataset.cameraSequence = String(identity.cameraSequence)
-    elements.front.dataset.geometryHash = identity.geometryHash
-    return imageEditorViewportTileCoverageContributionV3(tile, mip, documentSize, layout)
   }
 
   dispose(): void {
     this.elements = null
     this.staging = null
     this.resizeBuffer = null
+    this.retainFrames([])
     this.atlas.dispose()
+  }
+
+  private frameFor(
+    result: ImageEditorManagedViewportCompositeV3,
+  ): ImageEditorPresentationFrameV3 | null {
+    const cached = this.frames.get(result)
+    if (cached) return cached
+    if (result.tiles.length === 0) return null
+    const left = Math.min(...result.tiles.map((tile) => tile.outputRect.x))
+    const top = Math.min(...result.tiles.map((tile) => tile.outputRect.y))
+    const right = Math.max(...result.tiles.map((tile) => tile.outputRect.x + tile.outputRect.width))
+    const bottom = Math.max(...result.tiles.map((tile) => tile.outputRect.y + tile.outputRect.height))
+    const bounds = { x: left, y: top, width: right - left, height: bottom - top }
+    if (![bounds.x, bounds.y, bounds.width, bounds.height].every(Number.isSafeInteger)
+      || bounds.width <= 0 || bounds.height <= 0) {
+      throw new Error('图片编辑 Presentation 连续帧范围无效')
+    }
+    const canvas = document.createElement('canvas')
+    canvas.width = bounds.width
+    canvas.height = bounds.height
+    const context = canvas.getContext('2d')
+    if (!context) throw new Error('无法创建图片编辑 Presentation 连续帧')
+    context.imageSmoothingEnabled = false
+    context.clearRect(0, 0, canvas.width, canvas.height)
+    for (const tile of result.tiles) {
+      const atlasRegion = this.atlas.store([
+        result.renderGeneration,
+        result.geometryHash,
+        result.mip,
+        tile.outputRect.x,
+        tile.outputRect.y,
+        tile.outputRect.width,
+        tile.outputRect.height,
+      ].join(':'), tile.bitmap)
+      context.drawImage(
+        atlasRegion.source,
+        atlasRegion.sourceX,
+        atlasRegion.sourceY,
+        atlasRegion.width,
+        atlasRegion.height,
+        tile.outputRect.x - bounds.x,
+        tile.outputRect.y - bounds.y,
+        tile.outputRect.width,
+        tile.outputRect.height,
+      )
+    }
+    const frame = { canvas, bounds }
+    this.frames.set(result, frame)
+    return frame
+  }
+
+  private retainFrames(results: readonly ImageEditorManagedViewportCompositeV3[]): void {
+    const retained = new Set(results)
+    for (const [result, frame] of this.frames) {
+      if (retained.has(result)) continue
+      frame.canvas.width = 1
+      frame.canvas.height = 1
+      this.frames.delete(result)
+    }
   }
 }

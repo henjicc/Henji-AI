@@ -7,7 +7,12 @@ import type { ImageEditDocumentV3 } from '@/core/imageEdit/v3/documentTypes'
 import type { ImageEditRenderQuality } from '@/core/imageEdit/v3/renderNodeDefinition'
 import type { ImageEditorV3ResourceDescriptor } from '@/platform/contracts/imageEditorV3'
 import type { ImageEditorViewportLayoutV3 } from '../editor/useImageEditorViewportLayoutV3'
-import { ImageEditorPresentationSurfaceV3, type ImageEditorPresentationSurfaceElementsV3 } from './imageEditorPresentationSurfaceV3'
+import {
+  ImageEditorPresentationSurfaceV3,
+  imageEditorViewportTileCoverageContributionV3,
+  type ImageEditorPresentationSurfaceElementsV3,
+} from './imageEditorPresentationSurfaceV3'
+import { resolveImageEditorBlurPreviewMipV3 } from './previewEffectScalingV3'
 import {
   ImageEditorViewportCompositeClientV3,
   ImageEditorViewportCompositeDisposedErrorV3,
@@ -349,30 +354,21 @@ export class DefaultImageEditorRenderSessionV3 implements ImageEditorRenderSessi
         cameraSequence: layout.cameraSequence,
         coverage: 'viewport',
         previousMip: this.target?.mip,
+        preferredMip: resolveImageEditorBlurPreviewMipV3(snapshot.document, layout.viewport),
         onTileReady: (progress) => {
           if (!this.accepts(epoch, snapshot)
             || this.layout?.cameraSequence !== layout.cameraSequence) return
-          const contribution = this.compositor.presentTile(
+          const contribution = imageEditorViewportTileCoverageContributionV3(
             progress.tile,
             progress.mip,
             imageEditOutputSizeV3(snapshot.document.geometry),
-            snapshot.document.geometry,
             layout,
-            {
-              renderGeneration: progress.renderGeneration,
-              cameraSequence: progress.cameraSequence,
-              geometryHash: progress.geometryHash,
-            },
           )
-          if (contribution === null) return
           progressiveCoverage = Math.min(1, progressiveCoverage + contribution)
           this.publish({
             coverage: 1,
             targetMipCoverage: progressiveCoverage,
             targetMip: progress.mip,
-            eventToPresentMs: snapshot.eventTimestamp === undefined
-              ? null
-              : Math.max(0, now() - snapshot.eventTimestamp),
           })
         },
       })
