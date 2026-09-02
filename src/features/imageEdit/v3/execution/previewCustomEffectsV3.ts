@@ -47,6 +47,10 @@ export class ImageEditorPreviewCustomEffectsV3 {
     }
     const fastBlurRadius = numberParameter(node, 'radius', 0)
       / (2 ** numberParameter(node, 'mip', 0))
+    if (node.definitionId === 'effect.fast-blur' && fastBlurRadius <= 0) {
+      observeFastBlur?.('cpu', 'radius-zero-bypass')
+      return source
+    }
     if (
       color.hdrMetadata
       || color.transferFunction === 'pq'
@@ -138,6 +142,12 @@ export class ImageEditorPreviewCustomEffectsV3 {
           '辉光 Pro 返回了无效暗帧，已保留上一预览并重置 GPU 工作集',
         )
       }
+      if (node.definitionId === 'effect.fast-blur'
+        && !isPlausibleVgpuFastBlurPreviewV3(source, processed)) {
+        this.backend.destroy()
+        this.backend = new WorkerWebGpuRuntimeBackend()
+        throw new Error('模糊返回了无效暗帧，已重置 GPU 工作集')
+      }
       if (node.definitionId === 'effect.fast-blur') observeFastBlur?.('vgpu')
       return mixCustomEffectMaskV3(source, processed, mask)
     } catch (error) {
@@ -208,4 +218,45 @@ export function isPlausibleVgpuGlowPreviewV3(
     processedSignal = Math.max(processedSignal, processedSample)
   }
   return sourceSignal <= 1e-5 || processedSignal >= sourceSignal * 0.05
+}
+
+/** 模糊会保留覆盖率与整体信号；非空源变成透明或纯黑暗帧一定是失效的 GPU 结果。 */
+export function isPlausibleVgpuFastBlurPreviewV3(
+  source: Float32PremultipliedRgbaTile,
+  processed: Float32PremultipliedRgbaTile,
+): boolean {
+  if (source.width !== processed.width || source.height !== processed.height) return false
+  const pixelCount = source.width * source.height
+  const stride = Math.max(1, Math.floor(pixelCount / 4_096))
+  let sourceAlpha = 0
+  let processedAlpha = 0
+  let sourceSignal = 0
+  let processedSignal = 0
+  for (let pixel = 0; pixel < pixelCount; pixel += stride) {
+    const alphaOffset = pixel * 4 + 3
+    const processedSample = processed.data[alphaOffset]
+    if (!Number.isFinite(processedSample)
+      || !Number.isFinite(processed.data[alphaOffset - 1])
+      || !Number.isFinite(processed.data[alphaOffset - 2])
+      || !Number.isFinite(processed.data[alphaOffset - 3])) {
+      return false
+    }
+    sourceAlpha = Math.max(sourceAlpha, source.data[alphaOffset])
+    processedAlpha = Math.max(processedAlpha, processedSample)
+    sourceSignal = Math.max(
+      sourceSignal,
+      source.data[alphaOffset - 1],
+      source.data[alphaOffset - 2],
+      source.data[alphaOffset - 3],
+    )
+    processedSignal = Math.max(
+      processedSignal,
+      processed.data[alphaOffset - 1],
+      processed.data[alphaOffset - 2],
+      processed.data[alphaOffset - 3],
+    )
+  }
+  const preservesCoverage = sourceAlpha <= 1e-5 || processedAlpha >= sourceAlpha * 0.05
+  const preservesSignal = sourceSignal <= 1e-5 || processedSignal >= sourceSignal * 0.001
+  return preservesCoverage && preservesSignal
 }

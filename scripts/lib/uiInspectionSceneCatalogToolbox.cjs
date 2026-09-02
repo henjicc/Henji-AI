@@ -249,6 +249,70 @@ function createToolboxScenes(context) {
           || await editor.locator('[data-document-boundary]').count() !== 0) {
           throw new Error('原图没有收口到唯一且裁切严格的文档画框')
         }
+        const waitForVisibleRasterPixels = async (stage) => {
+          await page.waitForFunction(() => {
+            const frame = document.querySelector('[data-raster-display-frame]')
+            const canvases = frame ? [...frame.querySelectorAll('canvas')] : []
+            return canvases.some((canvas) => {
+              if (!(canvas instanceof HTMLCanvasElement) || canvas.width < 1 || canvas.height < 1) {
+                return false
+              }
+              const sample = document.createElement('canvas')
+              sample.width = 24
+              sample.height = 24
+              const context = sample.getContext('2d', { willReadFrequently: true })
+              if (!context) return false
+              context.drawImage(canvas, 0, 0, sample.width, sample.height)
+              const pixels = context.getImageData(0, 0, sample.width, sample.height).data
+              for (let offset = 0; offset < pixels.length; offset += 4) {
+                if (pixels[offset + 3] > 16
+                  && Math.max(pixels[offset], pixels[offset + 1], pixels[offset + 2]) > 16) {
+                  return true
+                }
+              }
+              return false
+            })
+          }, undefined, { timeout: 5000 }).catch(() => {
+            return displayFrame.evaluate((frame) => {
+              const tileFrame = frame.querySelector('[data-viewport-tile-frame]')
+              const canvases = [...frame.querySelectorAll('canvas')]
+              let maxAlpha = 0
+              let maxSignal = 0
+              for (const canvas of canvases) {
+                if (!(canvas instanceof HTMLCanvasElement) || canvas.width < 1 || canvas.height < 1) {
+                  continue
+                }
+                const sample = document.createElement('canvas')
+                sample.width = 24
+                sample.height = 24
+                const context = sample.getContext('2d', { willReadFrequently: true })
+                if (!context) continue
+                context.drawImage(canvas, 0, 0, sample.width, sample.height)
+                const pixels = context.getImageData(0, 0, sample.width, sample.height).data
+                for (let offset = 0; offset < pixels.length; offset += 4) {
+                  maxAlpha = Math.max(maxAlpha, pixels[offset + 3])
+                  maxSignal = Math.max(
+                    maxSignal,
+                    pixels[offset],
+                    pixels[offset + 1],
+                    pixels[offset + 2],
+                  )
+                }
+              }
+              return {
+                revision: tileFrame?.getAttribute('data-viewport-revision') ?? null,
+                canvasCount: canvases.length,
+                maxAlpha,
+                maxSignal,
+              }
+            }).then((diagnostics) => {
+              throw new Error(
+                `${stage}后图片预览未产出有效画面：${JSON.stringify(diagnostics)}`,
+              )
+            })
+          })
+        }
+        await waitForVisibleRasterPixels('打开原图')
 
         const rightDock = editor.locator('[data-editor-panel-dock="right"]')
         const dockedPanels = rightDock.locator('[data-docked-editor-panel]')
@@ -716,16 +780,18 @@ function createToolboxScenes(context) {
           const labels = [...document.querySelectorAll('[data-command-bar] span')]
           return labels.some((element) => Number(element.textContent?.match(/\d+/)?.[0]) === revision + 1)
         }, beforeBlurRevision, { timeout: 5000 })
-        await page.waitForFunction(async (afterTimestamp) => {
+        await page.waitForFunction(async ({ afterTimestamp, revision }) => {
           const result = await window.henjiNative.logging.queryLogEvents({
             date: new Date().toISOString().slice(0, 10),
             afterTimestamp,
             level: 'debug',
             limit: 200,
           })
-          const previewCompleted = result.events.some(
-            (event) => event.event === 'image_editor_v3.preview.completed',
-          )
+          const previewCompleted = result.events.some((event) => (
+            event.event === 'image_editor_v3.preview.completed'
+              && Number(event.context?.revision) === revision
+              && event.context?.quality === 'stable'
+          ))
           const vgpuCompleted = result.events.some((event) => (
             event.event === 'image_editor_v3.fast_blur.preview.completed'
               && event.context?.backend === 'vgpu'
@@ -738,15 +804,22 @@ function createToolboxScenes(context) {
             && vgpuCompleted
             && durations.length > 0
             && Math.max(...durations) <= 1000
-        }, blurStartedAt, { timeout: 5000 }).catch(() => {
+        }, {
+          afterTimestamp: blurStartedAt,
+          revision: beforeBlurRevision + 1,
+        }, { timeout: 5000 }).catch(() => {
           throw new Error('模糊拖动未在 1 秒内产出 vGPU 完成帧')
         })
+        await page.waitForTimeout(160)
+        await waitForVisibleRasterPixels('调整模糊半径')
         if (await readRevision() !== beforeBlurRevision + 1) {
           throw new Error('一次模糊滑杆拖动产生了多条历史 revision')
         }
         const frameBeforeZeroBlur = await displayFrame.boundingBox()
         const zeroBlurSliderBox = await blurRadius.boundingBox()
         if (!frameBeforeZeroBlur || !zeroBlurSliderBox) throw new Error('模糊归零前无法读取画面范围')
+        const beforeZeroBlurRevision = await readRevision()
+        const zeroBlurStartedAt = new Date().toISOString()
         await page.mouse.move(
           zeroBlurSliderBox.x + zeroBlurSliderBox.width * 0.68,
           zeroBlurSliderBox.y + zeroBlurSliderBox.height / 2,
@@ -772,6 +845,39 @@ function createToolboxScenes(context) {
           || /scale/i.test(liveBlurTransform)) {
           throw new Error('模糊归零期间错误缩放了图片画布')
         }
+        await page.waitForFunction((revision) => {
+          const labels = [...document.querySelectorAll('[data-command-bar] span')]
+          return labels.some((element) => Number(element.textContent?.match(/\d+/)?.[0]) === revision + 1)
+        }, beforeZeroBlurRevision, { timeout: 5000 }).catch(() => {
+          throw new Error('模糊归零没有提交最终参数')
+        })
+        await page.waitForFunction(async ({ afterTimestamp, revision }) => {
+          const result = await window.henjiNative.logging.queryLogEvents({
+            date: new Date().toISOString().slice(0, 10),
+            afterTimestamp,
+            level: 'debug',
+            limit: 200,
+          })
+          const previewCompleted = result.events.some((event) => (
+            event.event === 'image_editor_v3.preview.completed'
+              && Number(event.context?.revision) === revision
+              && event.context?.quality === 'stable'
+          ))
+          const zeroBypassCompleted = result.events.some((event) => (
+            event.event === 'image_editor_v3.fast_blur.preview.completed'
+              && event.context?.backend === 'cpu'
+              && Array.isArray(event.context?.fallbackReasons)
+              && event.context.fallbackReasons.includes('radius-zero-bypass')
+          ))
+          return previewCompleted && zeroBypassCompleted
+        }, {
+          afterTimestamp: zeroBlurStartedAt,
+          revision: beforeZeroBlurRevision + 1,
+        }, { timeout: 5000 }).catch(() => {
+          throw new Error('模糊归零没有产出即时原图帧')
+        })
+        await page.waitForTimeout(160)
+        await waitForVisibleRasterPixels('模糊归零')
 
         const postEffectAnnotationStartedAt = new Date().toISOString()
         const beforePostEffectStroke = await readRevision()

@@ -1,5 +1,5 @@
 import { effect, frame, initFromDevice, sampler, target } from 'vgpu';
-import type { Effect, Gpu, Target, Texture } from 'vgpu';
+import type { Effect, Gpu, Target } from 'vgpu';
 import bloomShaderSource from '../shaders/vgpuGlowBloom.wgsl?raw';
 import compositeShaderSource from '../shaders/vgpuGlowComposite.wgsl?raw';
 import copyShaderSource from '../shaders/vgpuGlowCopy.wgsl?raw';
@@ -11,6 +11,7 @@ import {
   type VgpuGlowRecipe,
 } from '../vgpuGlowRecipe';
 import type { GpuDevice, GpuTexture } from '../worker/webgpuRuntimeSupport';
+import { VgpuUploadTexture } from './vgpuUploadTexture';
 
 interface GlowTargets {
   scene: Target;
@@ -52,7 +53,7 @@ const UNUSED_SIZE = [1, 1] as const;
  * 只有一次队列提交。
  */
 export class VgpuGlowRenderer {
-  private readonly input: Texture;
+  private readonly input: VgpuUploadTexture;
   private readonly targets: GlowTargets;
   private readonly effects: GlowEffects;
   private readonly linearSampler: ReturnType<typeof sampler>;
@@ -62,12 +63,7 @@ export class VgpuGlowRenderer {
   private destroyed = false;
 
   private constructor(private readonly gpu: Gpu) {
-    this.input = gpu.device.createTexture({
-      size: [1, 1],
-      format: 'rgba8unorm',
-      usage: ['copy_dst', 'texture_binding', 'render_attachment'],
-      label: 'image-edit-vgpu-glow-input',
-    });
+    this.input = new VgpuUploadTexture(gpu, 'image-edit-vgpu-glow-input');
     this.targets = createTargets(gpu);
     this.linearSampler = sampler(gpu, {
       minFilter: 'linear',
@@ -117,7 +113,7 @@ export class VgpuGlowRenderer {
     this.vgpuError = null;
     this.gpu.gpu.queue.copyExternalImageToTexture(
       { source: input.bitmap },
-      { texture: this.input.gpu, premultipliedAlpha: false },
+      { texture: this.input.texture.gpu, premultipliedAlpha: false },
       [input.width, input.height]
     );
     const submitted = frame(this.gpu, (currentFrame) => {
@@ -160,7 +156,7 @@ export class VgpuGlowRenderer {
     this.vgpuError = null;
     this.gpu.gpu.queue.copyExternalImageToTexture(
       { source: input.bitmap },
-      { texture: this.input.gpu, premultipliedAlpha: false },
+      { texture: this.input.texture.gpu, premultipliedAlpha: false },
       [input.width, input.height]
     );
     const submitted = frame(this.gpu, (currentFrame) => {
@@ -196,7 +192,7 @@ export class VgpuGlowRenderer {
    */
   trimWorkingSet(): void {
     if (this.destroyed) return;
-    this.input.resize(UNUSED_SIZE);
+    this.input.ensureSize(UNUSED_SIZE);
     this.targets.scene.resize(UNUSED_SIZE);
     this.targets.globalBloom.resize(UNUSED_SIZE);
     this.targets.output.resize(UNUSED_SIZE);
@@ -231,7 +227,7 @@ export class VgpuGlowRenderer {
 
   private resizeComposite(width: number, height: number): void {
     const full = normalizeSize(width, height);
-    this.input.resize(full);
+    this.input.ensureSize(full);
     this.targets.scene.resize(full);
     this.targets.output.resize(full);
   }
@@ -240,7 +236,7 @@ export class VgpuGlowRenderer {
     const targets = this.targets;
     const effects = this.effects;
     const levelCount = recipe.scatterLevels.length;
-    effects.linearize.set({ source: this.input, linearSampler: this.linearSampler });
+    effects.linearize.set({ source: this.input.texture, linearSampler: this.linearSampler });
     setBloom(effects.extract, targets.scene, recipe, 0, this.linearSampler);
     for (let index = 1; index < levelCount; index += 1) {
       setBloom(
@@ -289,7 +285,7 @@ export class VgpuGlowRenderer {
   ): void {
     const effects = this.effects;
     const targets = this.targets;
-    effects.linearize.set({ source: this.input, linearSampler: this.linearSampler });
+    effects.linearize.set({ source: this.input.texture, linearSampler: this.linearSampler });
     effects.composite.set({
       scene: targets.scene,
       bloomPyramid,

@@ -10,6 +10,7 @@ import type { ImageEditRenderPlanNode } from '@/core/imageEdit/v3/renderPlan'
 import {
   ImageEditorPreviewCustomEffectsV3,
   ImageEditorPreviewUnsupportedEffectErrorV3,
+  isPlausibleVgpuFastBlurPreviewV3,
   isPlausibleVgpuGlowPreviewV3,
 } from './previewCustomEffectsV3'
 
@@ -44,6 +45,46 @@ describe('ImageEditor V3 现有效果 Worker 边界', () => {
     )
     expect(isPlausibleVgpuGlowPreviewV3(source, darkFrame)).toBe(false)
     expect(isPlausibleVgpuGlowPreviewV3(source, source)).toBe(true)
+  })
+
+  it('拒绝把有内容的模糊结果替换成透明或纯黑暗帧', () => {
+    const source = createFloat32PremultipliedRgbaTile(
+      2, 1, 'linear-light', new Float32Array([0.8, 0.6, 0.4, 1, 0.2, 0.1, 0.05, 1]),
+    )
+    const transparentDarkFrame = createFloat32PremultipliedRgbaTile(
+      2, 1, 'linear-light', new Float32Array(8),
+    )
+    const opaqueDarkFrame = createFloat32PremultipliedRgbaTile(
+      2, 1, 'linear-light', new Float32Array([0, 0, 0, 1, 0, 0, 0, 1]),
+    )
+    expect(isPlausibleVgpuFastBlurPreviewV3(source, transparentDarkFrame)).toBe(false)
+    expect(isPlausibleVgpuFastBlurPreviewV3(source, opaqueDarkFrame)).toBe(false)
+    expect(isPlausibleVgpuFastBlurPreviewV3(source, source)).toBe(true)
+  })
+
+  it('模糊半径为零时直接保留原图，不启动 GPU 或 CPU 卷积', async () => {
+    const effects = new ImageEditorPreviewCustomEffectsV3()
+    const executions: Array<readonly [string, string | undefined]> = []
+    const source = createFloat32PremultipliedRgbaTile(
+      2, 1, 'linear-light', new Float32Array([0.8, 0.6, 0.4, 1, 0.2, 0.1, 0.05, 1]),
+    )
+    const zeroNode = {
+      ...node('effect.fast-blur'),
+      parameters: { radius: 0, mip: 0 },
+    }
+
+    const rendered = await effects.execute(
+      zeroNode,
+      source,
+      'draft',
+      createDefaultImageEditColorModeV3(),
+      undefined,
+      (backend, reason) => executions.push([backend, reason]),
+    )
+
+    expect(rendered).toBe(source)
+    expect(executions).toEqual([['cpu', 'radius-zero-bypass']])
+    effects.dispose()
   })
 
   it('WebGPU 不可用时柔光使用同参数的 Float32 CPU 参考实现', async () => {

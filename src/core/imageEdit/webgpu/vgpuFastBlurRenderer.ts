@@ -1,5 +1,5 @@
 import { effect, frame, initFromDevice, sampler, target } from 'vgpu';
-import type { Effect, Gpu, Target, Texture } from 'vgpu';
+import type { Effect, Gpu, Target } from 'vgpu';
 import {
   FAST_BLUR_MAX_PAIRED_TAPS,
   FAST_BLUR_MAX_PYRAMID_LEVELS,
@@ -11,6 +11,7 @@ import downsampleShaderSource from '../shaders/vgpuFastBlurDownsample.wgsl?raw';
 import linearizeShaderSource from '../shaders/vgpuGlowLinearize.wgsl?raw';
 import upsampleShaderSource from '../shaders/vgpuFastBlurUpsample.wgsl?raw';
 import type { GpuDevice, GpuTexture } from '../worker/webgpuRuntimeSupport';
+import { VgpuUploadTexture } from './vgpuUploadTexture';
 
 interface FastBlurTargets {
   scene: Target;
@@ -33,7 +34,7 @@ const UNUSED_SIZE = [1, 1] as const;
 
 /** vGPU 驱动的固定 tap 分离模糊；大半径通过连续 2× 金字塔产生。 */
 export class VgpuFastBlurRenderer {
-  private readonly input: Texture;
+  private readonly input: VgpuUploadTexture;
   private readonly targets: FastBlurTargets;
   private readonly effects: FastBlurEffects;
   private readonly linearSampler: ReturnType<typeof sampler>;
@@ -42,12 +43,7 @@ export class VgpuFastBlurRenderer {
   private destroyed = false;
 
   private constructor(private readonly gpu: Gpu) {
-    this.input = gpu.device.createTexture({
-      size: [1, 1],
-      format: 'rgba8unorm',
-      usage: ['copy_dst', 'texture_binding', 'render_attachment'],
-      label: 'image-edit-vgpu-fast-blur-input',
-    });
+    this.input = new VgpuUploadTexture(gpu, 'image-edit-vgpu-fast-blur-input');
     this.targets = createTargets(gpu);
     this.effects = createEffects(gpu);
     this.linearSampler = sampler(gpu, {
@@ -81,7 +77,7 @@ export class VgpuFastBlurRenderer {
     this.vgpuError = null;
     this.gpu.gpu.queue.copyExternalImageToTexture(
       { source: input.bitmap },
-      { texture: this.input.gpu, premultipliedAlpha: false },
+      { texture: this.input.texture.gpu, premultipliedAlpha: false },
       [input.width, input.height],
     );
     let output = this.targets.scene;
@@ -100,7 +96,7 @@ export class VgpuFastBlurRenderer {
 
   trimWorkingSet(): void {
     if (this.destroyed) return;
-    this.input.resize(UNUSED_SIZE);
+    this.input.ensureSize(UNUSED_SIZE);
     this.targets.scene.resize(UNUSED_SIZE);
     this.targets.horizontal.resize(UNUSED_SIZE);
     this.targets.vertical.resize(UNUSED_SIZE);
@@ -122,7 +118,7 @@ export class VgpuFastBlurRenderer {
 
   private resize(width: number, height: number, levelCount: number): void {
     const full = normalizeSize(width, height);
-    this.input.resize(full);
+    this.input.ensureSize(full);
     this.targets.scene.resize(full);
     for (let index = 0; index < FAST_BLUR_MAX_PYRAMID_LEVELS; index += 1) {
       const active = index < levelCount;
@@ -138,7 +134,7 @@ export class VgpuFastBlurRenderer {
 
   private bind(recipe: FastBlurRecipe): void {
     const targets = this.targets;
-    this.effects.linearize.set({ source: this.input, linearSampler: this.linearSampler });
+    this.effects.linearize.set({ source: this.input.texture, linearSampler: this.linearSampler });
     let previous = targets.scene;
     for (let index = 0; index < recipe.pyramidLevel; index += 1) {
       this.effects.downsample[index].set({ source: previous, linearSampler: this.linearSampler });
