@@ -176,7 +176,8 @@ export async function exportHenjiImagePackage(
     await fsp.mkdir(path.dirname(targetPath), { recursive: true })
     const manifest = await buildManifest(request, resourceInputs)
     await writeArchive(stagedPath, manifest, request)
-    const staged = await fsp.open(stagedPath, 'r')
+    // Windows 不允许通过只读句柄执行 FlushFileBuffers。
+    const staged = await fsp.open(stagedPath, 'r+')
     try {
       await staged.sync()
     } finally {

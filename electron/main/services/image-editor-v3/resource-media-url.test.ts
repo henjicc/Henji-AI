@@ -1,3 +1,5 @@
+import path from 'node:path'
+
 import { describe, expect, it, vi } from 'vitest'
 
 vi.mock('../image/path-utils', () => ({
@@ -16,7 +18,7 @@ describe('图片编辑 V3 内容资源媒体 URL', () => {
     const mediaUrl = createImageEditorV3ResourceMediaUrl(RESOURCE, 'image/png')
     expect(mediaUrl).not.toContain('/managed-data')
     expect(resolveImageEditorV3ResourceMediaUrl(new URL(mediaUrl))).toEqual({
-      targetPath: `/managed-data/ImageEditorV3/resources/objects/ab/${'ab'.repeat(32)}`,
+      targetPath: path.join('/managed-data', 'ImageEditorV3', 'resources', 'objects', 'ab', 'ab'.repeat(32)),
       mediaType: 'image/png',
     })
   })

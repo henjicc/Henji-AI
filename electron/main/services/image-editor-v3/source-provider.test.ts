@@ -421,7 +421,8 @@ describe('SharpSourceProvider', () => {
     controller.abort()
 
     await expect(pending).rejects.toMatchObject({ name: 'AbortError' })
-    expect(destroy).toHaveBeenCalledOnce()
+    // metadata pass 正常完成后释放一次，随后被取消的 proxy pass 再释放一次。
+    expect(destroy).toHaveBeenCalledTimes(2)
     expect((await store.garbageCollect(new Set(), { minimumAgeMs: 0 })).deleted)
       .toEqual([resource.id])
   })

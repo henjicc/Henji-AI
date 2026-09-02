@@ -204,9 +204,10 @@ export class TranscodingTileOutputSink extends FileTileOutputSinkBase {
     const intermediatePath = this.intermediatePath
     if (!writer || !intermediatePath) throw new Error('Transcode source writer has not started')
     await writer.complete()
+    let pipeline: SharpInstance | undefined
     try {
       const sharp = await loadRequiredSharp(this.exportOptions.format)
-      let pipeline = sharp(intermediatePath, {
+      pipeline = sharp(intermediatePath, {
         failOn: 'error',
         limitInputPixels: false,
         sequentialRead: true,
@@ -218,6 +219,8 @@ export class TranscodingTileOutputSink extends FileTileOutputSinkBase {
       if (this.cancelRequested) throw createAbortError()
       throw error
     } finally {
+      // toFile 已结束后仍需显式释放 libvips 输入，Windows 才能立即删除 BigTIFF 中间文件。
+      pipeline?.destroy()
       this.pipeline = undefined
       await this.cleanupIntermediate()
     }
@@ -228,7 +231,13 @@ export class TranscodingTileOutputSink extends FileTileOutputSinkBase {
     description: TileOutputDescription,
   ): Promise<void> {
     const sharp = await loadRequiredSharp(this.exportOptions.format)
-    const metadata = await sharp(stagedPath, { limitInputPixels: false }).metadata()
+    const pipeline = sharp(stagedPath, { limitInputPixels: false })
+    let metadata: Awaited<ReturnType<SharpInstance['metadata']>>
+    try {
+      metadata = await pipeline.metadata()
+    } finally {
+      pipeline.destroy()
+    }
     const expectedFormat = encoderKey(this.exportOptions.format)
     if (
       metadata.format !== expectedFormat

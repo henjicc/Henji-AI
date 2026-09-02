@@ -131,7 +131,9 @@ export abstract class FileTileOutputSinkBase implements TileOutputSink {
         throw new Error('Output snapshot is no longer current')
       }
       this.assertActive(generation, 'completing')
-      const handle = await fsp.open(stagedPath, 'r')
+      // Windows 的 FlushFileBuffers 需要可写句柄；只读句柄调用 fsync 会返回 EPERM。
+      // staged 文件由当前事务独占创建，因此用 r+ 不会扩大目标文件的写权限边界。
+      const handle = await fsp.open(stagedPath, 'r+')
       try {
         await handle.sync()
       } finally {

@@ -38,4 +38,17 @@ describe('runSharpOperation', () => {
     expect(destroy).toHaveBeenCalledWith()
     expect(execute).not.toHaveBeenCalled()
   })
+
+  it('成功完成后立即销毁管线并释放原生文件句柄', async () => {
+    const destroy = vi.fn()
+
+    await expect(runSharpOperation(
+      { destroy },
+      undefined,
+      async () => 'done',
+    )).resolves.toBe('done')
+
+    expect(destroy).toHaveBeenCalledOnce()
+    expect(destroy).toHaveBeenCalledWith()
+  })
 })

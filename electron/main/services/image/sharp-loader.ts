@@ -9,7 +9,15 @@ let sharpModulePromise: Promise<typeof SharpType> | null = null
 export function loadSharp(): Promise<typeof SharpType> {
   if (!sharpModulePromise) {
     sharpModulePromise = import('sharp')
-      .then((mod) => mod.default)
+      .then((mod) => {
+        const sharp = mod.default
+        if (process.platform === 'win32') {
+          // libvips 的文件缓存会在管线 Promise 完成后继续持有源句柄，阻止资源回收与
+          // 原子替换。编辑器已有源金字塔和派生缓存，Windows 下关闭该层文件句柄缓存。
+          sharp.cache({ files: 0 })
+        }
+        return sharp
+      })
       .catch((error) => {
         sharpModulePromise = null
         throw error
