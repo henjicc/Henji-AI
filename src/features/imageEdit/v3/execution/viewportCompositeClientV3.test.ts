@@ -7,117 +7,23 @@ import {
   ImageEditRenderScheduler,
   ImageEditResourceBudget,
 } from '@/core/imageEdit/v3'
-import type { ImageEditorV3SourceTile } from '@/platform/contracts/imageEditorV3'
 import {
   ImageEditorViewportCompositeClientV3,
   ImageEditorViewportCompositeSupersededErrorV3,
 } from './viewportCompositeClientV3'
 import { ImageEditorResourcePressureErrorV3 } from './imageEditorResourcePressureV3'
 import { prepareImageEditorViewportCompositeV3 } from './viewportCompositeDocumentV3'
-import type {
-  ImageEditorViewportCompositeWorkerEventV3,
-  ImageEditorViewportCompositeWorkerPortV3,
-  ImageEditorViewportCompositeWorkerRequestV3,
-} from './viewportCompositeProtocolV3'
-import { planImageEditorViewportTilesV3 } from './viewportTilePlannerV3'
+import type { ImageEditorViewportCompositeWorkerRequestV3 } from './viewportCompositeProtocolV3'
 import type { ImageEditorViewportFrameV3 } from './viewportTileSchedulerV3'
-
-const RESOURCE = `sha256:${'e'.repeat(64)}` as const
-const RENDER_IDENTITY = {
-  renderGeneration: 1,
-  cameraSequence: 1,
-  geometryHash: '20000:10000:0:0:0:0:20000:10000',
-}
-
-class FakeViewportWorker implements ImageEditorViewportCompositeWorkerPortV3 {
-  onmessage: ((event: MessageEvent<ImageEditorViewportCompositeWorkerEventV3>) => void) | null = null
-  onerror: ((event: ErrorEvent) => void) | null = null
-  readonly messages: ImageEditorViewportCompositeWorkerRequestV3[] = []
-  readonly transfers: Transferable[][] = []
-  readonly terminate = vi.fn()
-
-  postMessage(message: ImageEditorViewportCompositeWorkerRequestV3, transfer: Transferable[] = []): void {
-    this.messages.push(message)
-    this.transfers.push(transfer)
-  }
-
-  emit(event: ImageEditorViewportCompositeWorkerEventV3): void {
-    this.onmessage?.({ data: event } as MessageEvent<ImageEditorViewportCompositeWorkerEventV3>)
-  }
-}
-
-function pyramid(width: number, height: number) {
-  const levels = []
-  for (let mip = 0; mip <= 30; mip += 1) {
-    const levelWidth = Math.max(1, Math.ceil(width / (2 ** mip)))
-    const levelHeight = Math.max(1, Math.ceil(height / (2 ** mip)))
-    levels.push({
-      mip,
-      width: levelWidth,
-      height: levelHeight,
-      columns: Math.ceil(levelWidth / 512),
-      rows: Math.ceil(levelHeight / 512),
-    })
-    if (levelWidth === 1 && levelHeight === 1) break
-  }
-  return { tileSize: 512 as const, levels }
-}
-
-function createFrame(width = 20_000, height = 10_000): ImageEditorViewportFrameV3 {
-  const plan = planImageEditorViewportTilesV3({
-    resourceRef: RESOURCE,
-    documentSize: { width, height },
-    pyramid: pyramid(width, height),
-    viewport: {
-      documentX: 0,
-      documentY: 0,
-      width: 1_440,
-      height: 900,
-      zoom: 1_440 / width,
-      devicePixelRatio: 1,
-    },
-    bitDepth: 8,
-  })
-  const tiles = plan.tiles.map((request): ImageEditorV3SourceTile => ({
-    resourceRef: RESOURCE,
-    mip: request.mip,
-    tileX: request.tileX,
-    tileY: request.tileY,
-    halo: request.halo,
-    width: request.width,
-    height: request.height,
-    channels: 4,
-    bitDepth: 8,
-    sampleFormat: 'uint',
-    numericRange: 'unorm8',
-    byteOrder: 'little-endian',
-    rowStride: request.width * 4,
-    colorSpace: 'srgb',
-    transferFunction: 'srgb',
-    alphaMode: 'straight',
-    orientationApplied: true,
-    originX: request.originX,
-    originY: request.originY,
-    pixels: new ArrayBuffer(request.width * request.height * 4),
-  }))
-  return {
-    sequence: 1,
-    revision: 0,
-    plan,
-    tiles,
-    resourceTiles: new Map([[RESOURCE, tiles]]),
-    release: vi.fn(),
-  }
-}
-
-function bitmap(width: number, height: number): ImageBitmap {
-  return { width, height, close: vi.fn() } as unknown as ImageBitmap
-}
-
-async function flushUntil(predicate: () => boolean): Promise<void> {
-  for (let attempt = 0; attempt < 20 && !predicate(); attempt += 1) await Promise.resolve()
-  expect(predicate()).toBe(true)
-}
+import {
+  bitmap,
+  createFrame,
+  emitCompletedFrame,
+  FakeViewportWorker,
+  flushUntil,
+  RENDER_IDENTITY,
+  RESOURCE,
+} from './viewportCompositeClientV3.testSupport'
 
 describe('图片编辑 V3 视口成品客户端', () => {
   it('把高分辨率视口帧登记为全局 GPU 原子任务', async () => {
@@ -180,14 +86,9 @@ describe('图片编辑 V3 视口成品客户端', () => {
       }, tile.halo).outputRect
       return { outputRect, bitmap: bitmap(outputRect.width, outputRect.height) }
     })
-    worker.emit({
-      type: 'rendered', requestId: request.requestId, sequence: request.sequence,
-      renderGeneration: request.renderGeneration,
-      cameraSequence: request.cameraSequence,
-      geometryHash: request.geometryHash,
-      revision: 0, mip: frame.plan.mip, documentWidth: 20_000, documentHeight: 10_000,
-      diagnostics: [], tiles,
-    })
+    emitCompletedFrame(worker, request, {
+      revision: 0, mip: frame.plan.mip, width: 20_000, height: 10_000,
+    }, tiles)
     ;(await rendered).release()
     await secondExport
     expect(order).toEqual(['export-1', 'export-2'])
@@ -217,6 +118,7 @@ describe('图片编辑 V3 视口成品客户端', () => {
       resourceBudget: budget,
     })
 
+    const onTileReady = vi.fn()
     const rendered = client.render({
       document,
       ...RENDER_IDENTITY,
@@ -224,6 +126,7 @@ describe('图片编辑 V3 视口成品客户端', () => {
       resourceDescriptors: [],
       viewport: { documentX: 0, documentY: 0, width: 1_440, height: 900, zoom: 1_440 / 20_000, devicePixelRatio: 1 },
       viewportKey: 'fit',
+      onTileReady,
     })
     await flushUntil(() => worker.messages.some((message) => message.type === 'render'))
     const request = worker.messages.find(
@@ -248,19 +151,30 @@ describe('图片编辑 V3 视口成品客户端', () => {
       ).outputRect
       return { outputRect, bitmap: bitmap(outputRect.width, outputRect.height) }
     })
+    let settled = false
+    void rendered.then(() => { settled = true })
     worker.emit({
-      type: 'rendered',
-      requestId: request.requestId,
-      sequence: request.sequence,
-      renderGeneration: request.renderGeneration,
-      cameraSequence: request.cameraSequence,
-      geometryHash: request.geometryHash,
-      revision: document.revision,
-      mip: frame.plan.mip,
-      documentWidth: document.geometry.width,
-      documentHeight: document.geometry.height,
-      diagnostics: [],
-      tiles,
+      type: 'tile-rendered', requestId: request.requestId, sequence: request.sequence,
+      renderGeneration: request.renderGeneration, cameraSequence: request.cameraSequence,
+      geometryHash: request.geometryHash, revision: document.revision, mip: frame.plan.mip,
+      tileIndex: 0, tile: tiles[0]!,
+    })
+    expect(onTileReady).toHaveBeenCalledTimes(1)
+    expect(settled).toBe(false)
+    for (let tileIndex = 1; tileIndex < tiles.length; tileIndex += 1) {
+      worker.emit({
+        type: 'tile-rendered', requestId: request.requestId, sequence: request.sequence,
+        renderGeneration: request.renderGeneration, cameraSequence: request.cameraSequence,
+        geometryHash: request.geometryHash, revision: document.revision, mip: frame.plan.mip,
+        tileIndex, tile: tiles[tileIndex]!,
+      })
+    }
+    worker.emit({
+      type: 'rendered', requestId: request.requestId, sequence: request.sequence,
+      renderGeneration: request.renderGeneration, cameraSequence: request.cameraSequence,
+      geometryHash: request.geometryHash, revision: document.revision, mip: frame.plan.mip,
+      documentWidth: document.geometry.width, documentHeight: document.geometry.height,
+      diagnostics: [], completedTiles: tiles.length,
     })
     const result = await rendered
     expect(result.tiles).toHaveLength(15)
@@ -396,6 +310,7 @@ describe('图片编辑 V3 视口成品客户端', () => {
       sourceResourceId: RESOURCE,
       idFactory: () => 'source',
     })
+    const onTileReady = vi.fn()
     const pending = client.render({
       document,
       ...RENDER_IDENTITY,
@@ -403,6 +318,7 @@ describe('图片编辑 V3 视口成品客户端', () => {
       resourceDescriptors: [],
       viewport: { documentX: 0, documentY: 0, width: 1_440, height: 900, zoom: 0.072, devicePixelRatio: 1 },
       viewportKey: 'cancel-after-post',
+      onTileReady,
     })
     const settled = expect(pending).rejects.toBeInstanceOf(
       ImageEditorViewportCompositeSupersededErrorV3,
@@ -414,6 +330,20 @@ describe('图片编辑 V3 视口成品客户端', () => {
       ),
     )
     if (!request) throw new Error('缺少视口 Worker 请求')
+    const firstPlanTile = frame.plan.tiles[0]
+    if (!firstPlanTile) throw new Error('缺少视口计划瓦片')
+    const firstOutputRect = createTileRegion(document.geometry, {
+      mip: frame.plan.mip, x: firstPlanTile.tileX, y: firstPlanTile.tileY,
+    }, firstPlanTile.halo).outputRect
+    const partialBitmap = bitmap(firstOutputRect.width, firstOutputRect.height)
+    worker.emit({
+      type: 'tile-rendered', requestId: request.requestId, sequence: request.sequence,
+      renderGeneration: request.renderGeneration, cameraSequence: request.cameraSequence,
+      geometryHash: request.geometryHash, revision: document.revision, mip: frame.plan.mip,
+      tileIndex: 0, tile: { outputRect: firstOutputRect, bitmap: partialBitmap },
+    })
+    expect(onTileReady).toHaveBeenCalledTimes(1)
+    expect(partialBitmap.close).not.toHaveBeenCalled()
     const reservedBeforeCancel = budget.snapshot().totalBytes
     expect(reservedBeforeCancel).toBeGreaterThan(0)
 
@@ -429,6 +359,7 @@ describe('图片编辑 V3 视口成品客户端', () => {
       code: 'aborted',
       message: 'cancelled',
     })
+    expect(partialBitmap.close).toHaveBeenCalledOnce()
     expect(budget.snapshot()).toMatchObject({ totalBytes: 0, leaseCount: 0 })
     client.dispose()
   })
@@ -522,20 +453,12 @@ describe('图片编辑 V3 视口成品客户端', () => {
       }, tile.halo).outputRect
       return { outputRect, bitmap: bitmap(outputRect.width, outputRect.height) }
     })
-    workers[0].emit({
-      type: 'rendered',
-      requestId: secondRequest.requestId,
-      sequence: secondRequest.sequence,
-      renderGeneration: secondRequest.renderGeneration,
-      cameraSequence: secondRequest.cameraSequence,
-      geometryHash: secondRequest.geometryHash,
+    emitCompletedFrame(workers[0], secondRequest, {
       revision: document.revision,
       mip: secondFrame.plan.mip,
-      documentWidth: document.geometry.width,
-      documentHeight: document.geometry.height,
-      diagnostics: [],
-      tiles,
-    })
+      width: document.geometry.width,
+      height: document.geometry.height,
+    }, tiles)
     ;(await second).release()
     expect(budget.snapshot()).toMatchObject({ totalBytes: 0, leaseCount: 0 })
     client.dispose()

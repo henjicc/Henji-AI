@@ -7,6 +7,7 @@ import {
 } from '@/core/imageEdit/v3'
 import type { ImageEditCanvasGeometryV3 } from '@/core/imageEdit/v3/documentTypes'
 import type { ImageEditorViewportLayoutV3 } from '../editor/useImageEditorViewportLayoutV3'
+import type { ImageEditorViewportCompositeBitmapTileV3 } from './viewportCompositeProtocolV3'
 import type { ImageEditorManagedViewportCompositeV3 } from './viewportCompositeTypesV3'
 
 export interface ImageEditorPresentationSurfaceElementsV3 {
@@ -61,7 +62,7 @@ function intersectionArea(left: ImageEditRect, right: ImageEditRect): number {
 }
 
 function visibleDocumentRect(
-  result: ImageEditorManagedViewportCompositeV3,
+  result: Pick<ImageEditorManagedViewportCompositeV3, 'documentWidth' | 'documentHeight'>,
   layout: ImageEditorViewportLayoutV3,
 ): ImageEditRect {
   const viewport = layout.viewport
@@ -96,6 +97,7 @@ function drawResult(
   result: ImageEditorManagedViewportCompositeV3,
   layout: ImageEditorViewportLayoutV3,
   currentGeometry: ImageEditCanvasGeometryV3,
+  replace = false,
 ): void {
   const viewport = layout.viewport
   const mipScale = 2 ** result.mip
@@ -148,6 +150,13 @@ function drawResult(
       result.documentHeight,
       (tile.outputRect.y + tile.outputRect.height) * mipScale,
     )
+    if (replace) {
+      context.save()
+      context.beginPath()
+      context.rect(documentX, documentY, documentRight - documentX, documentBottom - documentY)
+      context.clip()
+      context.globalCompositeOperation = 'copy'
+    }
     context.drawImage(
       tile.bitmap,
       documentX,
@@ -155,8 +164,56 @@ function drawResult(
       documentRight - documentX,
       documentBottom - documentY,
     )
+    if (replace) context.restore()
   }
   context.restore()
+}
+
+function drawProgressTile(
+  context: CanvasRenderingContext2D,
+  tile: ImageEditorViewportCompositeBitmapTileV3,
+  mip: number,
+  documentSize: { width: number; height: number },
+  geometry: ImageEditCanvasGeometryV3,
+  layout: ImageEditorViewportLayoutV3,
+): void {
+  drawResult(context, {
+    documentId: '',
+    revision: 0,
+    renderGeneration: 0,
+    cameraSequence: 0,
+    geometryHash: '',
+    geometry,
+    viewportKey: '',
+    coverage: 'viewport',
+    mip,
+    documentWidth: documentSize.width,
+    documentHeight: documentSize.height,
+    diagnostics: [],
+    tiles: [tile],
+    release: () => undefined,
+  }, layout, geometry, true)
+}
+
+export function imageEditorViewportTileCoverageContributionV3(
+  tile: ImageEditorViewportCompositeBitmapTileV3,
+  mip: number,
+  documentSize: { width: number; height: number },
+  layout: ImageEditorViewportLayoutV3,
+): number {
+  const visible = visibleDocumentRect({
+    documentWidth: documentSize.width,
+    documentHeight: documentSize.height,
+  }, layout)
+  const visibleArea = visible.width * visible.height
+  if (visibleArea === 0) return 1
+  const scale = 2 ** mip
+  return intersectionArea(visible, {
+    x: tile.outputRect.x * scale,
+    y: tile.outputRect.y * scale,
+    width: tile.outputRect.width * scale,
+    height: tile.outputRect.height * scale,
+  }) / visibleArea
 }
 
 /** 固定双表面的 Canvas2D 合成器；前表面只接收完整 staging 帧。 */
@@ -200,7 +257,7 @@ export class ImageEditorPresentationSurfaceV3 {
     stagingContext.clearRect(0, 0, pixels.width, pixels.height)
     drawResult(stagingContext, fallback, layout, currentGeometry)
     if (target && target.renderGeneration === fallback.renderGeneration) {
-      drawResult(stagingContext, target, layout, currentGeometry)
+      drawResult(stagingContext, target, layout, currentGeometry, true)
     }
     frontContext.globalCompositeOperation = 'copy'
     frontContext.drawImage(staging, 0, 0)
@@ -213,5 +270,29 @@ export class ImageEditorPresentationSurfaceV3 {
     elements.front.dataset.geometryHash = currentGeometryHash
     const targetMipCoverage = imageEditorViewportResultCoverageV3(target, layout)
     return { coverage: 1, targetMipCoverage }
+  }
+
+  presentTile(
+    tile: ImageEditorViewportCompositeBitmapTileV3,
+    mip: number,
+    documentSize: { width: number; height: number },
+    geometry: ImageEditCanvasGeometryV3,
+    layout: ImageEditorViewportLayoutV3,
+    identity: { renderGeneration: number; cameraSequence: number; geometryHash: string },
+  ): number | null {
+    const elements = this.elements
+    if (!elements) return null
+    const pixels = surfacePixels(layout)
+    resizePreservingLastFrame(elements.front, pixels.width, pixels.height)
+    resizePreservingLastFrame(elements.safety, pixels.width, pixels.height)
+    const frontContext = elements.front.getContext('2d')
+    const safetyContext = elements.safety.getContext('2d')
+    if (!frontContext || !safetyContext) throw new Error('无法创建图片编辑器常驻显示表面')
+    drawProgressTile(frontContext, tile, mip, documentSize, geometry, layout)
+    drawProgressTile(safetyContext, tile, mip, documentSize, geometry, layout)
+    elements.front.dataset.renderGeneration = String(identity.renderGeneration)
+    elements.front.dataset.cameraSequence = String(identity.cameraSequence)
+    elements.front.dataset.geometryHash = identity.geometryHash
+    return imageEditorViewportTileCoverageContributionV3(tile, mip, documentSize, layout)
   }
 }

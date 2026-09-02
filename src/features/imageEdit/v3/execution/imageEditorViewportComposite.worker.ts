@@ -38,7 +38,7 @@ async function renderRequest(
   request: Extract<ImageEditorViewportCompositeWorkerRequestV3, { type: 'render' }>,
   signal: AbortSignal,
 ): Promise<void> {
-  const tiles: ImageEditorViewportCompositeBitmapTileV3[] = []
+  let completedTiles = 0
   try {
     const diagnostics = await renderImageEditorViewportCompositeV3(
       request,
@@ -56,7 +56,20 @@ async function renderRequest(
           bitmap.close()
           throw abortError()
         }
-        tiles.push({ bitmap, outputRect })
+        const bitmapTile: ImageEditorViewportCompositeBitmapTileV3 = { bitmap, outputRect }
+        postEvent({
+          type: 'tile-rendered',
+          requestId: request.requestId,
+          sequence: request.sequence,
+          renderGeneration: request.renderGeneration,
+          cameraSequence: request.cameraSequence,
+          geometryHash: request.geometryHash,
+          revision: request.document.revision,
+          mip: request.plan.mip,
+          tileIndex: completedTiles,
+          tile: bitmapTile,
+        }, [bitmap])
+        completedTiles += 1
       },
       { customEffects },
     )
@@ -73,10 +86,9 @@ async function renderRequest(
       documentWidth: imageEditOutputSizeV3(request.document.geometry).width,
       documentHeight: imageEditOutputSizeV3(request.document.geometry).height,
       diagnostics,
-      tiles,
-    }, tiles.map((tile) => tile.bitmap))
+      completedTiles,
+    })
   } catch (error) {
-    for (const tile of tiles) tile.bitmap.close()
     postEvent({
       type: 'failed',
       requestId: request.requestId,

@@ -39,6 +39,19 @@ export interface ImageEditorViewportCompositeBitmapTileV3 {
   outputRect: ImageEditRect
 }
 
+export interface ImageEditorViewportCompositeTileRenderedEventV3 {
+  type: 'tile-rendered'
+  requestId: string
+  sequence: number
+  renderGeneration: number
+  cameraSequence: number
+  geometryHash: string
+  revision: number
+  mip: number
+  tileIndex: number
+  tile: ImageEditorViewportCompositeBitmapTileV3
+}
+
 export interface ImageEditorViewportCompositeRenderedEventV3 {
   type: 'rendered'
   requestId: string
@@ -51,7 +64,7 @@ export interface ImageEditorViewportCompositeRenderedEventV3 {
   documentWidth: number
   documentHeight: number
   diagnostics: string[]
-  tiles: ImageEditorViewportCompositeBitmapTileV3[]
+  completedTiles: number
 }
 
 export interface ImageEditorViewportCompositeFailedEventV3 {
@@ -64,6 +77,7 @@ export interface ImageEditorViewportCompositeFailedEventV3 {
 }
 
 export type ImageEditorViewportCompositeWorkerEventV3 =
+  | ImageEditorViewportCompositeTileRenderedEventV3
   | ImageEditorViewportCompositeRenderedEventV3
   | ImageEditorViewportCompositeFailedEventV3
 

@@ -6,8 +6,10 @@ import type { ImageEditRenderQuality } from '@/core/imageEdit/v3/renderNodeDefin
 import type { ImageEditResourceBudget } from '@/core/imageEdit/v3/resourceBudget'
 import type { ImageEditRenderScheduler } from '@/core/imageEdit/v3/renderScheduler'
 import type { ImageEditorV3ResourceDescriptor } from '@/platform/contracts/imageEditorV3'
-import type { ImageEditorViewportCompositeRenderedEventV3 } from './viewportCompositeProtocolV3'
-import type { ImageEditorViewportCompositeWorkerFactoryV3 } from './viewportCompositeProtocolV3'
+import type {
+  ImageEditorViewportCompositeBitmapTileV3,
+  ImageEditorViewportCompositeWorkerFactoryV3,
+} from './viewportCompositeProtocolV3'
 import type { ImageEditorPreviewBrushTileLoaderV3 } from './previewBrushTileLoaderV3'
 import type { ImageEditorViewportTileSchedulerV3 } from './viewportTileSchedulerV3'
 import type { ImageEditorViewportTransformV3 } from './viewportTilePlannerV3'
@@ -42,6 +44,19 @@ export interface ImageEditorViewportCompositeRequestV3 {
   previousMip?: number
   overscanViewports?: number
   forwardPrefetchViewports?: number
+  /** 借用 Worker 成品位图完成同步呈现；回调方不得持有或关闭 bitmap。 */
+  onTileReady?(progress: ImageEditorViewportCompositeTileProgressV3): void
+}
+
+export interface ImageEditorViewportCompositeTileProgressV3 {
+  renderGeneration: number
+  cameraSequence: number
+  geometryHash: string
+  mip: number
+  tileIndex: number
+  completedTiles: number
+  totalTiles: number
+  tile: ImageEditorViewportCompositeBitmapTileV3
 }
 
 export interface ImageEditorManagedViewportCompositeV3 {
@@ -57,7 +72,7 @@ export interface ImageEditorManagedViewportCompositeV3 {
   documentWidth: number
   documentHeight: number
   diagnostics: string[]
-  tiles: ImageEditorViewportCompositeRenderedEventV3['tiles']
+  tiles: ImageEditorViewportCompositeBitmapTileV3[]
   release(): void
 }
 

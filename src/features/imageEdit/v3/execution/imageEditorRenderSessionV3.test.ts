@@ -92,6 +92,10 @@ describe('ImageEditorRenderSessionV3', () => {
       { sessionId: 'render-session-test' },
       { client },
     )
+    let targetMipCoverage = 0
+    const unsubscribe = session.subscribeState((state) => {
+      targetMipCoverage = state.targetMipCoverage
+    })
     session.attachSurface({
       surfaceId: 'surface-a',
       front: document.createElement('canvas'),
@@ -113,6 +117,21 @@ describe('ImageEditorRenderSessionV3', () => {
     await vi.advanceTimersByTimeAsync(16)
     expect(requests).toHaveLength(2)
     expect(requests[1]).toMatchObject({ coverage: 'viewport', viewportKey: 'viewport-1' })
+    requests[1]?.onTileReady?.({
+      renderGeneration: 1,
+      cameraSequence: 1,
+      geometryHash: 'geometry-a',
+      mip: 0,
+      tileIndex: 0,
+      completedTiles: 1,
+      totalTiles: 2,
+      tile: {
+        bitmap: { width: 100, height: 100, close: vi.fn() } as unknown as ImageBitmap,
+        outputRect: { x: 0, y: 0, width: 100, height: 100 },
+      },
+    })
+    expect(targetMipCoverage).toBeGreaterThan(0)
+    unsubscribe()
     session.dispose()
   })
 

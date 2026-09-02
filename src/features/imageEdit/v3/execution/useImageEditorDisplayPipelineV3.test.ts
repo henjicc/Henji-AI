@@ -8,7 +8,7 @@ import type { ImageEditCommandBusSnapshotV3 } from '../application/imageEditComm
 import type { ImageEditorManagedPreviewResultV3 } from './imageEditorPreviewClientV3'
 import type { ManagedImageEditorPreviewStateV3 } from './useManagedImageEditorPreviewV3'
 import type { ImageEditorViewportCompositeStateV3 } from './useImageEditorViewportCompositeV3'
-import type { ImageEditorManagedViewportCompositeV3 } from './viewportCompositeClientV3'
+import type { ImageEditorManagedViewportCompositeV3 } from './viewportCompositeTypesV3'
 
 const mocked = vi.hoisted(() => ({
   managed: {

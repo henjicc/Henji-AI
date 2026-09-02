@@ -45,9 +45,10 @@ import {
 } from './imageEditorSessionResourceBudgetV3'
 import { getImageEditorGlobalRenderSchedulerV3 } from './imageEditorGlobalRenderSchedulerV3'
 import { ImageEditorWorkerCompletionV3 } from './imageEditorWorkerCompletionV3'
+import { completeImageEditorViewportCompositeV3 } from './viewportCompositeCompletionV3'
 import {
+  ImageEditorViewportCompositeProgressV3,
   ImageEditorViewportCompositeResultOwnerV3,
-  validateImageEditorViewportCompositeEventV3,
 } from './viewportCompositeResultOwnerV3'
 import { ImageEditorViewportWorkerRetirementV3 } from './viewportWorkerRetirementV3'
 import {
@@ -61,11 +62,6 @@ export {
   ImageEditorViewportCompositeDisposedErrorV3,
   ImageEditorViewportCompositeSupersededErrorV3,
 } from './viewportCompositeTypesV3'
-export type {
-  ImageEditorManagedViewportCompositeV3,
-  ImageEditorViewportCompositeClientOptionsV3,
-  ImageEditorViewportCompositeRequestV3,
-} from './viewportCompositeTypesV3'
 const logger = createLogger('image_editor_v3.viewport_composite')
 const MAX_TRANSFER_BYTES = 256 * 1024 * 1024
 const WORKER_CANCEL_ACK_TIMEOUT_MS = 50
@@ -76,6 +72,7 @@ interface ActiveViewportJobV3 extends ImageEditorViewportCompositeRequestV3 {
   prepared: PreparedImageEditorViewportCompositeV3 | null
   frame: ImageEditorViewportFrameV3 | null
   tilePlan: ImageEditorViewportTilePlanV3 | null
+  progress: ImageEditorViewportCompositeProgressV3 | null
   transferLease: ImageEditMemoryLease | null
   workingLease: ImageEditMemoryLease | null
   outputLease: ImageEditMemoryLease | null
@@ -169,6 +166,7 @@ export class ImageEditorViewportCompositeClientV3 {
         prepared: null,
         frame: null,
         tilePlan: null,
+        progress: null,
         transferLease: null,
         workingLease: null,
         outputLease: null,
@@ -249,6 +247,14 @@ export class ImageEditorViewportCompositeClientV3 {
     }
     job.frame = frame
     job.tilePlan = frame.plan
+    job.progress = new ImageEditorViewportCompositeProgressV3({
+      document: job.document,
+      plan: frame.plan,
+      renderGeneration: job.renderGeneration,
+      cameraSequence: job.cameraSequence,
+      geometryHash: job.geometryHash,
+      onTileReady: job.onTileReady,
+    })
     if (frame.plan.tiles.length === 0) {
       throw new ImageEditorViewportCompositeUnsupportedErrorV3('视口未与文档相交')
     }
@@ -368,6 +374,17 @@ export class ImageEditorViewportCompositeClientV3 {
       this.releaseEvent(event)
       return
     }
+    if (event.type === 'tile-rendered') {
+      try {
+        if (!job.progress) throw new Error('视口 Worker 返回瓦片前缺少接收计划')
+        job.progress.accept(event)
+      } catch (error) {
+        job.controller.abort(error)
+        this.worker?.postMessage({ type: 'cancel', requestId: job.requestId })
+        job.workerCompletion.reject(toError(error))
+      }
+      return
+    }
     if (!job.workerCompletion.resolve(event)) this.releaseEvent(event)
   }
 
@@ -377,49 +394,30 @@ export class ImageEditorViewportCompositeClientV3 {
         ? new ImageEditorViewportCompositeSupersededErrorV3()
         : new Error(event.message)
     }
+    if (event.type !== 'rendered') throw new Error('视口 Worker 完成事件类型错误')
     try {
-      if (!job.prepared || !job.tilePlan) throw new Error('视口 Worker 返回前缺少渲染计划')
-      validateImageEditorViewportCompositeEventV3(event, job.document, job.tilePlan)
-      if (
-        event.renderGeneration !== job.renderGeneration
-        || event.cameraSequence !== job.cameraSequence
-        || event.geometryHash !== job.geometryHash
-      ) throw new Error('视口 Worker 返回了陈旧的像素代、相机或输出几何')
-      const gpuBytes = event.tiles.reduce(
-        (total, tile) => total + tile.outputRect.width * tile.outputRect.height * 4,
-        0,
-      )
-      const gpuLease = job.outputLease
-      if (!gpuLease || gpuBytes > gpuLease.bytes) {
-        throw new Error('视口 Worker 返回的成品超过预留 GPU 资源')
+      if (!job.prepared || !job.tilePlan || !job.progress) {
+        throw new Error('视口 Worker 返回前缺少渲染计划')
       }
-      job.outputLease = null
-      this.releaseJobResources(job)
-      const release = this.resultOwner.lease(event, gpuLease)
-      this.settle(job, () => job.resolve({
-        documentId: job.document.id,
-        revision: event.revision,
-        renderGeneration: event.renderGeneration,
-        cameraSequence: event.cameraSequence,
-        geometryHash: event.geometryHash,
-        geometry: {
-          ...job.document.geometry,
-          orientation: { ...job.document.geometry.orientation },
-          crop: job.document.geometry.crop ? { ...job.document.geometry.crop } : null,
-        },
+      const gpuLease = job.outputLease
+      if (!gpuLease) throw new Error('视口 Worker 返回前缺少成品资源额度')
+      const result = completeImageEditorViewportCompositeV3({
+        event,
+        document: job.document,
         viewportKey: job.viewportKey,
         coverage: job.coverage ?? 'viewport',
-        mip: event.mip,
-        documentWidth: event.documentWidth,
-        documentHeight: event.documentHeight,
-        diagnostics: event.diagnostics,
-        tiles: event.tiles,
-        release,
-      }))
+        progress: job.progress,
+        outputLease: gpuLease,
+        resultOwner: this.resultOwner,
+      })
+      job.progress = null
+      job.outputLease = null
+      this.releaseJobResources(job)
+      this.settle(job, () => job.resolve(result))
       logger.info('完成图片编辑 V3 视口分块合成', {
         event: 'image_editor_v3.viewport_composite.completed',
         requestId: job.requestId,
-        context: { documentId: job.document.id, revision: event.revision, mip: event.mip, tileCount: event.tiles.length },
+        context: { documentId: job.document.id, revision: event.revision, mip: event.mip, tileCount: result.tiles.length },
       })
     } catch (error) {
       this.releaseEvent(event)
@@ -483,6 +481,8 @@ export class ImageEditorViewportCompositeClientV3 {
     job.workingLease = null
     job.outputLease?.release()
     job.outputLease = null
+    job.progress?.release()
+    job.progress = null
   }
 
   private settle(job: ActiveViewportJobV3, complete: () => void): void {
