@@ -62,6 +62,10 @@ function numberParameter(node: ImageEditRenderPlanNode, key: string, fallback: n
   return typeof value === 'number' && Number.isFinite(value) ? value : fallback
 }
 
+function yieldToAnalysisEventLoop(): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, 0))
+}
+
 function isSharedAnalysisNode(node: ImageEditRenderPlanNode): boolean {
   if (node.definitionId === 'effect.fast-blur') {
     return resolveFastBlurV3Geometry({
@@ -197,6 +201,7 @@ export class ImageEditorViewportGlobalAnalysisCacheV3 {
       height: Math.max(1, Math.ceil(options.document.geometry.height / (2 ** options.mip))),
     }
     for (const node of options.scaledPlan.nodes.filter(isSharedAnalysisNode)) {
+      await yieldToAnalysisEventLoop()
       if (options.signal.aborted) throw options.signal.reason
       const originalNode = originalById.get(node.id)
       if (!originalNode) throw new Error(`全局分析找不到原始节点：${node.id}`)
@@ -212,8 +217,12 @@ export class ImageEditorViewportGlobalAnalysisCacheV3 {
       if (!inputNodeId) throw new Error(`全局效果缺少输入节点：${node.id}`)
       const input = await options.renderInput(dependencyPlan(options.scaledPlan, inputNodeId), region)
       if (!input) throw new Error(`全局效果输入无法求值：${node.id}`)
+      await yieldToAnalysisEventLoop()
+      if (options.signal.aborted) throw options.signal.reason
       const linear = convertFloat32TileColorDomainV3(input, 'linear-light')
       const entry = this.buildEntry(node, linear, options)
+      await yieldToAnalysisEventLoop()
+      if (options.signal.aborted) throw options.signal.reason
       if (!this.caches.set('global-analysis', key, {
         value: entry,
         bytes: entry.tile.data.byteLength,

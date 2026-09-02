@@ -51,6 +51,7 @@ import {
   ImageEditorViewportCompositeResultOwnerV3,
 } from './viewportCompositeResultOwnerV3'
 import { ImageEditorViewportWorkerRetirementV3 } from './viewportWorkerRetirementV3'
+import { acquireSharedImageEditorViewportCompositeWorkerV3 } from './viewportCompositeWorkerBrokerV3'
 import {
   ImageEditorViewportCompositeDisposedErrorV3,
   ImageEditorViewportCompositeSupersededErrorV3,
@@ -85,11 +86,7 @@ interface ActiveViewportJobV3 extends ImageEditorViewportCompositeRequestV3 {
 }
 
 function createDefaultWorker(): ImageEditorViewportCompositeWorkerPortV3 {
-  if (typeof Worker === 'undefined') throw new Error('当前环境不支持视口分块 Worker')
-  return new Worker(new URL('./imageEditorViewportComposite.worker.ts', import.meta.url), {
-    type: 'module',
-    name: 'image-editor-v3-viewport-composite',
-  })
+  return acquireSharedImageEditorViewportCompositeWorkerV3()
 }
 
 function toError(error: unknown): Error {

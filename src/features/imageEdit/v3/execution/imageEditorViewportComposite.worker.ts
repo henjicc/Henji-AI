@@ -12,18 +12,33 @@ import { renderImageEditorViewportCompositeV3 } from './viewportCompositeRendere
 import { ImageEditorViewportGlobalAnalysisCacheV3 } from './viewportGlobalAnalysisV3'
 
 const workerScope = self as DedicatedWorkerGlobalScope
-const activeControllers = new Map<string, AbortController>()
+const activeControllers = new Map<string, {
+  controller: AbortController
+  sequence: number
+  renderGeneration: number
+}>()
 const customEffects = new ImageEditorPreviewCustomEffectsV3()
 const globalAnalyses = new ImageEditorViewportGlobalAnalysisCacheV3()
 
 workerScope.onmessage = (event: MessageEvent<ImageEditorViewportCompositeWorkerRequestV3>): void => {
   const request = event.data
   if (request.type === 'cancel') {
-    activeControllers.get(request.requestId)?.abort()
+    const active = activeControllers.get(request.requestId)
+    if (active && !active.controller.signal.aborted) {
+      active.controller.abort()
+      postEvent({
+        type: 'failed',
+        requestId: request.requestId,
+        sequence: active.sequence,
+        renderGeneration: active.renderGeneration,
+        code: 'aborted',
+        message: '视口分块渲染已确认取消',
+      })
+    }
     return
   }
   if (request.type === 'dispose') {
-    for (const controller of activeControllers.values()) controller.abort()
+    for (const active of activeControllers.values()) active.controller.abort()
     activeControllers.clear()
     customEffects.dispose()
     globalAnalyses.dispose()
@@ -31,7 +46,11 @@ workerScope.onmessage = (event: MessageEvent<ImageEditorViewportCompositeWorkerR
     return
   }
   const controller = new AbortController()
-  activeControllers.set(request.requestId, controller)
+  activeControllers.set(request.requestId, {
+    controller,
+    sequence: request.sequence,
+    renderGeneration: request.renderGeneration,
+  })
   void renderRequest(request, controller.signal).finally(() => {
     activeControllers.delete(request.requestId)
   })
@@ -73,6 +92,8 @@ async function renderRequest(
           tile: bitmapTile,
         }, [bitmap])
         completedTiles += 1
+        await yieldToWorkerEventLoop()
+        if (signal.aborted) throw abortError()
       },
       { customEffects, globalAnalyses },
     )
@@ -101,6 +122,10 @@ async function renderRequest(
       message: error instanceof Error ? error.message : String(error),
     })
   }
+}
+
+function yieldToWorkerEventLoop(): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, 0))
 }
 
 function abortError(): Error {
