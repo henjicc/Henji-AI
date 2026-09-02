@@ -99,6 +99,7 @@ describe('ImageEditorV3 lifecycle guards', () => {
       </div>
     )
     const rendered = render(editor(initial))
+    fireEvent.click(await screen.findByRole('button', { name: '标注工具' }))
     fireEvent.click(await screen.findByRole('button', { name: '矩形标注' }))
     await waitFor(() => expect(
       rendered.container.querySelector('[data-annotation-editor-overlay]'),
@@ -119,6 +120,7 @@ describe('ImageEditorV3 lifecycle guards', () => {
     ).toBeNull())
     expect(changes).not.toHaveBeenCalled()
 
+    fireEvent.click(screen.getByRole('button', { name: '标注工具' }))
     fireEvent.click(screen.getByRole('button', { name: '矩形标注' }))
     await waitFor(() => expect(
       rendered.container.querySelector('[data-annotation-editor-overlay]'),
@@ -167,6 +169,7 @@ describe('ImageEditorV3 lifecycle guards', () => {
         onDocumentChange={changes}
       />,
     )
+    fireEvent.click(await screen.findByRole('tab', { name: '基础' }))
     const opacity = await screen.findByRole('slider', { name: '不透明度' }) as HTMLInputElement
     fireEvent.change(opacity, { target: { value: '0.35' } })
     expect(opacity.value).toBe('0.35')
@@ -199,6 +202,7 @@ describe('ImageEditorV3 lifecycle guards', () => {
     fireEvent.click(await screen.findByRole('button', { name: '展开图层组' }))
     const selects = rendered.container.querySelectorAll<HTMLButtonElement>('[data-layer-select]')
     fireEvent.click(Array.from(selects).find((button) => button.textContent?.includes('锁定组子层')) as HTMLButtonElement)
+    fireEvent.click(screen.getByRole('tab', { name: '基础' }))
 
     expect((screen.getByRole('switch', { name: '可见' }) as HTMLButtonElement).disabled).toBe(true)
     expect((screen.getByRole('switch', { name: '锁定' }) as HTMLButtonElement).disabled).toBe(true)

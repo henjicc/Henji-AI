@@ -5,6 +5,10 @@ import { useTranslation } from 'react-i18next'
 import { UiChipButton, UiIconButton, UiInput, UiRangeInput, UiSelect } from '@/components/ui'
 import { ICON_TOOL_IMAGE_EDIT } from '@/core/theme/icons'
 import { ImageEditorCropParametersV3 } from './ImageEditorCropParametersV3'
+import {
+  IMAGE_EDITOR_ANNOTATION_TOOL_IDS_V3,
+  isImageEditorAnnotationToolV3,
+} from './annotationToolsV3'
 import type { ImageEditCommandBusV3 } from '../application/imageEditCommandBus'
 import {
   annotationHasFontSizeV3,
@@ -36,6 +40,7 @@ function ToolParameterBar({
   const { t } = useTranslation('ui')
   const session = useImageEditorSessionStoreV3((state) => state.sessions[controller.sessionId])
   const setToolSetting = useImageEditorSessionStoreV3((state) => state.setToolSetting)
+  const setActiveTool = useImageEditorSessionStoreV3((state) => state.setActiveTool)
   const selectedLayerIds = useImageEditorSessionStoreV3(
     (state) => state.sessions[controller.sessionId]?.selectedLayerIds ?? EMPTY_LAYER_IDS,
   )
@@ -73,6 +78,11 @@ function ToolParameterBar({
     session,
     setToolSetting,
   ])
+  useEffect(() => {
+    if (!session || !isImageEditorAnnotationToolV3(session.activeTool)
+      || session.toolSettings.annotationTool === session.activeTool) return
+    setToolSetting(controller.sessionId, 'annotationTool', session.activeTool)
+  }, [controller.sessionId, session, setToolSetting])
   useEffect(() => {
     if (!session || !selectedAnnotationStyle) return
     if (selectedAnnotationStyle.color !== null
@@ -230,6 +240,31 @@ function ToolParameterBar({
       ) : null}
       {annotationLike ? (
         <>
+          {activeAnnotationTool ? (
+            <div
+              role="group"
+              aria-label={t('imageEditor.v3.toolSettings.annotationType')}
+              className="flex shrink-0 items-center gap-1"
+            >
+              {IMAGE_EDITOR_ANNOTATION_TOOL_IDS_V3.flatMap((toolId) => (
+                controller.profile.tools.some(({ id, readiness }) => (
+                  id === toolId && readiness.state === 'ready'
+                )) ? [(
+                  <UiChipButton
+                    key={toolId}
+                    selectionRole="navigation"
+                    active={session.activeTool === toolId}
+                    onClick={() => {
+                      setToolSetting(controller.sessionId, 'annotationTool', toolId)
+                      setActiveTool(controller.sessionId, toolId)
+                    }}
+                  >
+                    {t(`imageEditor.v3.tools.${toolId}`)}
+                  </UiChipButton>
+                )] : []
+              ))}
+            </div>
+          ) : null}
           <label className="flex shrink-0 items-center gap-2 text-xs text-text-muted">
             <span>{t('imageEditor.v3.toolSettings.color')}</span>
             <UiInput

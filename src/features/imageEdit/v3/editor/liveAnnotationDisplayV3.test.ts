@@ -8,7 +8,11 @@ import {
 } from '@/core/imageEdit/v3/documentFactory'
 import type { ImageEditDocumentV3 } from '@/core/imageEdit/v3/documentTypes'
 import { WHITE_HEX } from '@/core/theme/colorTokens'
-import { resolveLiveGaussianBlurRadiusV3, splitLiveAnnotationDisplayV3 } from './liveAnnotationDisplayV3'
+import {
+  resolveLiveGaussianBlurRadiusV3,
+  resolveLiveVgpuGlowFeedbackV3,
+  splitLiveAnnotationDisplayV3,
+} from './liveAnnotationDisplayV3'
 
 function document(layers: ImageEditDocumentV3['layers'], revision = 1): ImageEditDocumentV3 {
   return {
@@ -71,5 +75,21 @@ describe('图片编辑 V3 即时标注显示分层', () => {
       blur,
       createImageEditAnnotationLayerV3('annotation', '标注'),
     ]))).toBeNull()
+  })
+
+  it('只对最上方辉光提供保持画布几何不变的即时反馈参数', () => {
+    const glow = createImageEditEffectLayerV3('glow', '辉光 Pro', 'image.vgpu-glow', {
+      intensity: 0.7,
+      radius: 0.4,
+      sourceThreshold: 0.3,
+      whiteHeat: 0.6,
+    })
+    glow.opacity = 0.5
+    expect(resolveLiveVgpuGlowFeedbackV3(document([glow]))).toEqual({
+      intensity: 0.35,
+      radius: 0.4,
+      sourceThreshold: 0.3,
+      whiteHeat: 0.6,
+    })
   })
 })

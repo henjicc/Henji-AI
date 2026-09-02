@@ -16,6 +16,7 @@ import {
 } from './imageEditorPanelLayoutV3'
 import { ImageEditorPropertiesPanelV3 } from './ImageEditorPropertiesPanelV3'
 import type { ImageEditorV3Controller } from './types'
+import { useImageEditorDockResizeV3 } from './useImageEditorDockResizeV3'
 
 interface PanelLayoutV3 {
   mode: 'floating' | 'docked'
@@ -119,6 +120,14 @@ export function ImageEditorFloatingPanelsV3({
     properties: false,
   })
   const [dockPreview, setDockPreview] = useState<PanelDockPreviewV3 | null>(null)
+  const {
+    dockRefs,
+    dockWidths,
+    dockSplits,
+    startResize,
+    adjustWidth,
+    adjustSplit,
+  } = useImageEditorDockResizeV3(rootRef)
 
   const visiblePanelIds = useMemo(() => [
     ...(showLayers ? ['layers'] as const : []),
@@ -332,7 +341,7 @@ export function ImageEditorFloatingPanelsV3({
           variant="glass"
           {...commonProps}
           data-floating-editor-panel
-          className={`pointer-events-auto absolute z-panel flex flex-col overflow-hidden ${
+          className={`pointer-events-auto absolute z-panel flex min-h-32 min-w-60 max-h-[calc(100%-1rem)] max-w-[calc(100%-1rem)] resize flex-col overflow-hidden ${
             panelId === 'layers' ? 'w-60' : 'w-[25rem]'
           } ${collapsed[panelId] ? 'h-8' : panelId === 'layers' ? 'h-[min(52vh,34rem)]' : 'h-[min(72vh,42rem)]'}`}
           style={{ left: layout.position.left, top: layout.position.top }}
@@ -363,24 +372,71 @@ export function ImageEditorFloatingPanelsV3({
       && layouts[id].edge === edge
     ))
     if (panelIds.length === 0) return null
+    const expandedPanelIds = panelIds.filter((panelId) => !collapsed[panelId])
+    const splitActive = expandedPanelIds.length === 2
     return (
       <aside
+        ref={(node) => { dockRefs.current[edge] = node }}
         data-editor-panel-dock={edge}
         aria-label={t(`imageEditor.v3.panels.${edge}Dock`)}
-        className={`relative z-raised flex w-[25rem] max-w-[42%] shrink-0 flex-col overflow-hidden bg-panel ${
+        className={`relative z-raised flex shrink-0 flex-col overflow-hidden bg-panel ${
           edge === 'left' ? 'border-r border-border-dark' : 'border-l border-border-dark'
         }`}
+        style={{ width: dockWidths[edge], maxWidth: '55%' }}
       >
-        {panelIds.map((panelId, index) => (
-          <div
-            key={panelId}
-            className={`flex min-h-0 ${collapsed[panelId] ? 'h-8 shrink-0' : 'flex-1'} ${
-              index > 0 ? 'border-t border-border-dark' : ''
-            }`}
-          >
-            {renderPanel(panelId)}
-          </div>
-        ))}
+        {panelIds.flatMap((panelId) => {
+          const expandedIndex = expandedPanelIds.indexOf(panelId)
+          const section = (
+            <div
+              key={panelId}
+              className={`flex min-h-0 ${collapsed[panelId] ? 'h-8 shrink-0' : ''}`}
+              style={!collapsed[panelId] && splitActive ? {
+                flex: `0 0 calc(${(expandedIndex === 0 ? dockSplits[edge] : 1 - dockSplits[edge]) * 100}% - 4px)`,
+              } : !collapsed[panelId] ? { flex: '1 1 0%' } : undefined}
+            >
+              {renderPanel(panelId)}
+            </div>
+          )
+          if (!splitActive || expandedIndex !== 0) return [section]
+          return [section, (
+            <div
+              key={`${edge}-split-resize`}
+              role="separator"
+              aria-orientation="horizontal"
+              aria-label={t('imageEditor.v3.panels.resizeSections')}
+              aria-valuenow={Math.round(dockSplits[edge] * 100)}
+              tabIndex={0}
+              data-panel-resize-axis="vertical"
+              className="group relative z-drag h-2 shrink-0 cursor-row-resize"
+              style={{ touchAction: 'none' }}
+              onPointerDown={(event) => startResize('dock-split', edge, event)}
+              onKeyDown={(event) => {
+                if (event.key !== 'ArrowUp' && event.key !== 'ArrowDown') return
+                event.preventDefault()
+                adjustSplit(edge, event.key === 'ArrowDown' ? 0.05 : -0.05)
+              }}
+            >
+              <span className="absolute inset-x-0 top-1/2 h-px bg-border-dark group-hover:bg-accent group-focus-visible:bg-accent" />
+            </div>
+          )]
+        })}
+        <div
+          role="separator"
+          aria-orientation="vertical"
+          aria-label={t('imageEditor.v3.panels.resizeWidth')}
+          tabIndex={0}
+          data-panel-resize-axis="horizontal"
+          className={`absolute inset-y-0 z-drag w-2 cursor-col-resize ${edge === 'left' ? 'right-0' : 'left-0'}`}
+          style={{ touchAction: 'none' }}
+          onPointerDown={(event) => startResize('dock-width', edge, event)}
+          onKeyDown={(event) => {
+            if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return
+            event.preventDefault()
+            const direction = event.key === 'ArrowRight' ? 1 : -1
+            const delta = edge === 'left' ? direction * 16 : direction * -16
+            adjustWidth(edge, delta)
+          }}
+        />
       </aside>
     )
   }
@@ -407,6 +463,7 @@ export function ImageEditorFloatingPanelsV3({
           className={`pointer-events-none absolute z-drag w-[25rem] max-w-[42%] border border-veil-strong bg-veil-faint ${
             dockPreview.edge === 'left' ? 'left-0' : 'right-0'
           } ${dockPreviewVerticalClass}`}
+          style={{ width: dockWidths[dockPreview.edge] }}
         />
       ) : null}
     </div>

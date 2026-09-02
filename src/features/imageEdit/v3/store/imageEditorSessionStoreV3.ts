@@ -14,6 +14,7 @@ export interface ImageEditorToolSettingsV3 {
   annotationFontSize: number
   annotationColor: string
   annotationCalloutShape: 'rect' | 'ellipse'
+  annotationTool: ImageEditorToolIdV3
   cropAspectRatio: ImageEditorCropAspectRatioV3
 }
 
@@ -64,6 +65,7 @@ const DEFAULT_TOOL_SETTINGS: ImageEditorToolSettingsV3 = {
   annotationFontSize: 32,
   annotationColor: ANNOTATION_DEFAULT_STROKE_HEX,
   annotationCalloutShape: 'rect',
+  annotationTool: 'annotation-arrow',
   cropAspectRatio: 'free',
 }
 

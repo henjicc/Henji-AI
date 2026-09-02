@@ -19,6 +19,24 @@ export interface ImageEditorPanelViewportV3 {
 
 export const IMAGE_EDITOR_PANEL_GAP_V3 = 8
 export const IMAGE_EDITOR_PANEL_DOCK_THRESHOLD_V3 = 48
+export const IMAGE_EDITOR_PANEL_DOCK_MIN_WIDTH_V3 = 240
+export const IMAGE_EDITOR_PANEL_DOCK_MAX_WIDTH_V3 = 560
+export const IMAGE_EDITOR_PANEL_DOCK_MAX_RATIO_V3 = 0.55
+export const IMAGE_EDITOR_PANEL_DOCK_MIN_SECTION_HEIGHT_V3 = 112
+
+export function clampImageEditorDockWidthV3(width: number, viewportWidth: number): number {
+  const maximum = Math.max(
+    IMAGE_EDITOR_PANEL_DOCK_MIN_WIDTH_V3,
+    Math.min(IMAGE_EDITOR_PANEL_DOCK_MAX_WIDTH_V3, viewportWidth * IMAGE_EDITOR_PANEL_DOCK_MAX_RATIO_V3),
+  )
+  return Math.min(maximum, Math.max(IMAGE_EDITOR_PANEL_DOCK_MIN_WIDTH_V3, width))
+}
+
+export function resolveImageEditorDockSplitV3(pointerY: number, top: number, height: number): number {
+  if (height <= 0) return 0.5
+  const minimum = Math.min(0.45, IMAGE_EDITOR_PANEL_DOCK_MIN_SECTION_HEIGHT_V3 / height)
+  return Math.max(minimum, Math.min(1 - minimum, (pointerY - top) / height))
+}
 
 export function clampImageEditorFloatingPanelPositionV3(
   position: ImageEditorFloatingPanelPositionV3,

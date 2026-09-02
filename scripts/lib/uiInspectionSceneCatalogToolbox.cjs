@@ -130,6 +130,20 @@ function createToolboxScenes(context) {
             await page.getByRole('menuitem', { name: '辉光 Pro' }).click()
           }
           await page.getByRole('slider', { name: '辉光强度' }).waitFor({ state: 'visible', timeout: 8000 })
+          const parameterPanel = surface.locator('[data-properties-tab-panel="parameters"]')
+          await parameterPanel.waitFor({ state: 'visible', timeout: 8000 })
+          const glowControls = await parameterPanel.evaluate((panel) => ({
+            sliders: [...panel.querySelectorAll('input[type="range"]')]
+              .map((input) => input.getAttribute('aria-label')),
+            scrollable: panel.scrollHeight > panel.clientHeight,
+            repeatsLayerTitle: [...panel.querySelectorAll('*')]
+              .some((element) => element.children.length === 0 && element.textContent?.trim() === '辉光 Pro'),
+          }))
+          for (const label of ['辉光强度', '半径', '色差', '亮源门槛', '核心白热']) {
+            if (!glowControls.sliders.includes(label)) throw new Error(`辉光参数缺失：${label}`)
+          }
+          if (!glowControls.scrollable) throw new Error('辉光完整参数没有形成可滚动区域')
+          if (glowControls.repeatsLayerTitle) throw new Error('参数 Tab 重复显示了图层名称')
           await settlePage(page, 1200)
         }
 
@@ -247,6 +261,47 @@ function createToolboxScenes(context) {
         if (initialDockOrder.join(',') !== 'layers,properties') {
           throw new Error(`右侧停靠顺序错误：${initialDockOrder.join(',')}`)
         }
+        const parametersTab = editor.getByRole('tab', { name: /^(参数|Parameters)$/i })
+        const basicsTab = editor.getByRole('tab', { name: /^(基础|Basics)$/i })
+        if (await parametersTab.getAttribute('aria-selected') !== 'true') {
+          throw new Error('新选择图层后没有默认打开参数 Tab')
+        }
+        await basicsTab.click()
+        await editor.getByRole('textbox', { name: /^(名称|Name)$/i }).waitFor({ state: 'visible' })
+        await parametersTab.click()
+
+        const dockWidthSeparator = rightDock.locator('[data-panel-resize-axis="horizontal"]')
+        const [dockBeforeResize, dockWidthHandleBox] = await Promise.all([
+          rightDock.boundingBox(),
+          dockWidthSeparator.boundingBox(),
+        ])
+        if (!dockBeforeResize || !dockWidthHandleBox) throw new Error('无法读取面板宽度拖动边缘')
+        await page.mouse.move(
+          dockWidthHandleBox.x + dockWidthHandleBox.width / 2,
+          dockWidthHandleBox.y + dockWidthHandleBox.height / 2,
+        )
+        await page.mouse.down()
+        await page.mouse.move(dockWidthHandleBox.x - 48, dockWidthHandleBox.y + 40, { steps: 5 })
+        await page.mouse.up()
+        const dockAfterResize = await rightDock.boundingBox()
+        if (!dockAfterResize || dockAfterResize.width < dockBeforeResize.width + 40) {
+          throw new Error('拖动右侧面板内边缘没有调整面板宽度')
+        }
+
+        const dockSplitSeparator = rightDock.locator('[data-panel-resize-axis="vertical"]')
+        const [layerPanelBeforeSplit, splitHandleBox] = await Promise.all([
+          rightDock.locator('[data-editor-panel-id="layers"]').boundingBox(),
+          dockSplitSeparator.boundingBox(),
+        ])
+        if (!layerPanelBeforeSplit || !splitHandleBox) throw new Error('无法读取面板上下分隔条')
+        await page.mouse.move(splitHandleBox.x + splitHandleBox.width / 2, splitHandleBox.y + 4)
+        await page.mouse.down()
+        await page.mouse.move(splitHandleBox.x + splitHandleBox.width / 2, splitHandleBox.y + 64, { steps: 5 })
+        await page.mouse.up()
+        const layerPanelAfterSplit = await rightDock.locator('[data-editor-panel-id="layers"]').boundingBox()
+        if (!layerPanelAfterSplit || layerPanelAfterSplit.height < layerPanelBeforeSplit.height + 48) {
+          throw new Error('拖动上下分隔条没有调整图层与属性面板高度')
+        }
         const propertiesPanel = editor.locator('[data-editor-panel-id="properties"]')
         let propertiesHandle = propertiesPanel.locator('[data-editor-panel-handle]')
         const [panelBefore, handleBox] = await Promise.all([
@@ -307,9 +362,18 @@ function createToolboxScenes(context) {
           throw new Error(`属性面板没有组合到图层面板下方：${recombinedOrder.join(',')}`)
         }
 
-        await editor.locator('[data-tool-id="move"]').hover()
-        await page.getByRole('tooltip', { name: /^(移动图像或图层|Move image or layer)$/i })
-          .waitFor({ state: 'visible', timeout: 3000 })
+        const annotationTool = editor.locator('[data-tool-id="annotation"]')
+        const annotationToolBox = await annotationTool.boundingBox()
+        if (!annotationToolBox) throw new Error('无法读取标注工具位置')
+        await annotationTool.hover()
+        const annotationTooltip = page.getByRole('tooltip', { name: /^(标注工具|Annotation tools)$/i })
+        await annotationTooltip.waitFor({ state: 'visible', timeout: 3000 })
+        const annotationTooltipBox = await annotationTooltip.boundingBox()
+        if (!annotationTooltipBox
+          || Math.abs(annotationTooltipBox.x - (annotationToolBox.x + annotationToolBox.width / 2 + 8)) > 5
+          || Math.abs(annotationTooltipBox.y - (annotationToolBox.y + annotationToolBox.height / 2 + 8)) > 5) {
+          throw new Error('工具提示没有以鼠标位置为左上角对齐')
+        }
 
         const readRevision = async () => {
           const label = await editor.getByText(/^(版本|Revision) \d+$/).first().textContent()
@@ -466,7 +530,8 @@ function createToolboxScenes(context) {
 
         const annotationStartedAt = new Date().toISOString()
         const beforeFirstAnnotation = await readRevision()
-        await editor.locator('[data-tool-id="annotation-rect"]').click()
+        await annotationTool.click()
+        await editor.getByRole('button', { name: /^(矩形标注|Rectangle annotation)$/i }).click()
         const annotationOverlay = editor.locator('[data-annotation-editor-overlay]')
         await annotationOverlay.waitFor({ state: 'visible', timeout: 5000 })
         const [annotationBox, currentPreviewBox] = await Promise.all([
@@ -579,7 +644,7 @@ function createToolboxScenes(context) {
         })
 
         const beforeArrow = await readRevision()
-        await editor.locator('[data-tool-id="annotation-arrow"]').click()
+        await editor.getByRole('button', { name: /^(箭头标注|Arrow annotation)$/i }).click()
         await page.mouse.move(
           visibleAnnotationBox.x + visibleAnnotationBox.width * 0.24,
           visibleAnnotationBox.y + visibleAnnotationBox.height * 0.76,
@@ -662,6 +727,34 @@ function createToolboxScenes(context) {
         }, blurStartedAt, { timeout: 5000 })
         if (await readRevision() !== beforeBlurRevision + 1) {
           throw new Error('一次模糊滑杆拖动产生了多条历史 revision')
+        }
+        const frameBeforeZeroBlur = await displayFrame.boundingBox()
+        const zeroBlurSliderBox = await blurRadius.boundingBox()
+        if (!frameBeforeZeroBlur || !zeroBlurSliderBox) throw new Error('模糊归零前无法读取画面范围')
+        await page.mouse.move(
+          zeroBlurSliderBox.x + zeroBlurSliderBox.width * 0.68,
+          zeroBlurSliderBox.y + zeroBlurSliderBox.height / 2,
+        )
+        await page.mouse.down()
+        await page.mouse.move(
+          zeroBlurSliderBox.x + 1,
+          zeroBlurSliderBox.y + zeroBlurSliderBox.height / 2,
+          { steps: 5 },
+        )
+        const [frameDuringZeroBlur, liveBlurTransform] = await Promise.all([
+          displayFrame.boundingBox(),
+          editor.locator('[data-live-blur-feedback]').count().then(async (count) => (
+            count > 0
+              ? editor.locator('[data-live-blur-feedback]').evaluate((element) => element.style.transform)
+              : ''
+          )),
+        ])
+        await page.mouse.up()
+        if (!frameDuringZeroBlur
+          || Math.abs(frameDuringZeroBlur.width - frameBeforeZeroBlur.width) > 0.5
+          || Math.abs(frameDuringZeroBlur.height - frameBeforeZeroBlur.height) > 0.5
+          || /scale/i.test(liveBlurTransform)) {
+          throw new Error('模糊归零期间错误缩放了图片画布')
         }
 
         const postEffectAnnotationStartedAt = new Date().toISOString()

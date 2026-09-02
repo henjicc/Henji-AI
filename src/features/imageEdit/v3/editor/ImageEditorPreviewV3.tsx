@@ -36,6 +36,7 @@ import { imageEditorViewportTransformV3, type ImageEditorViewportPanV3 } from '.
 import { useImageEditorViewportNavigationGestureV3 } from './useImageEditorViewportNavigationGestureV3'
 import {
   resolveLiveGaussianBlurRadiusV3,
+  resolveLiveVgpuGlowFeedbackV3,
   splitLiveAnnotationDisplayV3,
 } from './liveAnnotationDisplayV3'
 
@@ -240,12 +241,28 @@ export function ImageEditorPreviewV3({
   const blurCssPixels = pendingBlurRadius && viewportLayout
     ? Math.min(48, pendingBlurRadius * viewportLayout.stageWidth / Math.max(1, outputGeometry.width))
     : 0
-  const blurFeedbackScale = blurCssPixels > 0 && viewportLayout
-    ? 1 + Math.min(0.12, blurCssPixels * 4 / Math.max(1, Math.min(
+  const pendingGlow = !basePreviewExact && activeTool !== 'crop'
+    ? resolveLiveVgpuGlowFeedbackV3(projectedBaseDocument)
+    : null
+  const glowCssPixels = pendingGlow && viewportLayout
+    ? 2 + pendingGlow.radius * Math.min(32, Math.max(8, Math.min(
         viewportLayout.stageWidth,
         viewportLayout.stageHeight,
-      )))
-    : 1
+      ) * 0.045))
+    : 0
+
+  const renderRasterOutput = (): JSX.Element | null => {
+    if (viewportResult) {
+      return <ImageEditorViewportTilesV3 result={viewportResult} label={t('imageEditor.v3.previewAlt')} />
+    }
+    if (output.kind === 'url') {
+      return <ImageEditorUrlPreviewV3 output={output} label={t('imageEditor.v3.previewAlt')} />
+    }
+    if (output.kind === 'frame') {
+      return <ImageEditorFramePreviewV3 output={output} label={t('imageEditor.v3.previewAlt')} />
+    }
+    return output.kind === 'content' ? <>{output.content}</> : null
+  }
 
   useLayoutEffect(() => {
     const feedback = moveFeedbackRef.current
@@ -322,23 +339,24 @@ export function ImageEditorPreviewV3({
                   className="absolute inset-0 flex items-center justify-center"
                   style={blurCssPixels > 0 ? {
                     filter: `blur(${blurCssPixels}px)`,
-                    transform: `scale(${blurFeedbackScale})`,
                   } : undefined}
                 >
-                  {viewportResult ? (
-                    <ImageEditorViewportTilesV3
-                      result={viewportResult}
-                      label={t('imageEditor.v3.previewAlt')}
-                    />
-                  ) : null}
-                  {!viewportResult && output.kind === 'url' ? (
-                    <ImageEditorUrlPreviewV3 output={output} label={t('imageEditor.v3.previewAlt')} />
-                  ) : null}
-                  {!viewportResult && output.kind === 'frame' ? (
-                    <ImageEditorFramePreviewV3 output={output} label={t('imageEditor.v3.previewAlt')} />
-                  ) : null}
-                  {!viewportResult && output.kind === 'content' ? output.content : null}
+                  {renderRasterOutput()}
                 </div>
+                {pendingGlow ? (
+                  <div
+                    data-live-glow-feedback
+                    aria-hidden="true"
+                    className="absolute inset-0 flex items-center justify-center"
+                    style={{
+                      filter: `blur(${glowCssPixels}px) brightness(${1.08 + pendingGlow.whiteHeat * 0.35}) contrast(${1 + pendingGlow.sourceThreshold * 0.25}) saturate(1.12)`,
+                      mixBlendMode: 'screen',
+                      opacity: Math.min(0.48, 0.12 + pendingGlow.intensity * 0.42),
+                    }}
+                  >
+                    {renderRasterOutput()}
+                  </div>
+                ) : null}
               </div>
             </div>
           ) : output.kind === 'url' ? (

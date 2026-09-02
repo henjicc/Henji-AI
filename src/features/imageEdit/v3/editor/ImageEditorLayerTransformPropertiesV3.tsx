@@ -98,7 +98,7 @@ export function ImageEditorLayerTransformPropertiesV3({
   }
 
   return (
-    <UiGroup divided className="mt-5" title={t('imageEditor.v3.properties.transform')} gap="stack">
+    <UiGroup divided title={t('imageEditor.v3.properties.transform')} gap="stack">
       <div className="grid grid-cols-2 gap-x-3 gap-y-2">
         {FIELD_KEYS.map((field) => (
           <UiFormRow key={field} label={labels[field]}>

@@ -598,7 +598,9 @@
         "leftDock": "左侧停靠面板",
         "rightDock": "右侧停靠面板",
         "leftDockPreview": "释放以停靠到左侧",
-        "rightDockPreview": "释放以停靠到右侧"
+        "rightDockPreview": "释放以停靠到右侧",
+        "resizeWidth": "调整停靠面板宽度",
+        "resizeSections": "调整上下停靠面板高度"
       },
       "recovery": {
         "title": "图片编辑器遇到问题",
@@ -730,6 +732,7 @@
         "select-rect": "矩形选择",
         "select-ellipse": "椭圆选择",
         "select-lasso": "套索选择",
+        "annotation": "标注工具",
         "annotation-text": "文字标注",
         "annotation-callout": "带文字标注",
         "annotation-arrow": "箭头标注",
@@ -758,6 +761,7 @@
         "fontSize": "字号",
         "color": "颜色",
         "calloutShape": "标注形状",
+        "annotationType": "标注类型",
         "rect": "矩形",
         "ellipse": "圆形"
       },
@@ -871,6 +875,9 @@
       },
       "properties": {
         "title": "属性",
+        "tabsLabel": "属性分类",
+        "parametersTab": "参数",
+        "basicsTab": "基础",
         "selectOne": "请选择一个图层来编辑属性",
         "name": "名称",
         "visible": "可见",
@@ -908,8 +915,26 @@
         "highlightResponse": "高光响应",
         "softness": "柔和度",
         "intensity": "辉光强度",
+        "chromaticAberration": "色差",
         "sourceThreshold": "亮源门槛",
         "whiteHeat": "核心白热",
+        "glowLook": "光感",
+        "glowHalo": "光晕",
+        "glowSource": "光源",
+        "tintEnabled": "着色",
+        "tintColor": "辉光颜色",
+        "chromaticSideLeft": "左侧色光",
+        "chromaticSideRight": "右侧色光",
+        "glowLooks": {
+          "natural": "自然",
+          "dreamy": "梦幻",
+          "neon": "霓虹"
+        },
+        "channels": {
+          "red": "红",
+          "green": "绿",
+          "blue": "蓝"
+        },
         "stops": "曝光档位",
         "offset": "偏移",
         "gamma": "伽马",

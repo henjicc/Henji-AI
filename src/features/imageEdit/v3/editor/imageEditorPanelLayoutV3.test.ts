@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  clampImageEditorDockWidthV3,
   clampImageEditorFloatingPanelPositionV3,
+  resolveImageEditorDockSplitV3,
   resolveImageEditorPanelDockEdgeV3,
   resolveImageEditorPanelDockIndexV3,
 } from './imageEditorPanelLayoutV3'
@@ -27,5 +29,13 @@ describe('图片编辑器面板停靠布局', () => {
     expect(resolveImageEditorPanelDockIndexV3(100, [300])).toBe(0)
     expect(resolveImageEditorPanelDockIndexV3(500, [300])).toBe(1)
     expect(resolveImageEditorPanelDockIndexV3(500, [])).toBe(0)
+  })
+
+  it('拖动停靠边缘时限制面板宽度，并为上下区域保留可用高度', () => {
+    expect(clampImageEditorDockWidthV3(120, 1200)).toBe(240)
+    expect(clampImageEditorDockWidthV3(480, 1200)).toBe(480)
+    expect(clampImageEditorDockWidthV3(900, 1200)).toBe(560)
+    expect(resolveImageEditorDockSplitV3(120, 0, 800)).toBe(0.15)
+    expect(resolveImageEditorDockSplitV3(760, 0, 800)).toBe(0.86)
   })
 })

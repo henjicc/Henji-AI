@@ -15,6 +15,7 @@ import {
 import type { ImageEditDocumentV3 } from '@/core/imageEdit/v3/documentTypes'
 import type { ImageEditLayerV3 } from '@/core/imageEdit/v3/layerTypes'
 import type { ImageEditPersistenceSnapshotV3 } from '@/core/imageEdit/v3/serviceContracts'
+import { createDefaultVgpuGlowOperationParams } from '@/core/imageEdit'
 import {
   ANNOTATION_DEFAULT_STROKE_HEX,
   ANNOTATION_DEFAULT_TEXT_HEX,
@@ -209,6 +210,7 @@ describe('ImageEditorV3 professional shell', () => {
       { onDocumentChange: (next) => changes.push(next) },
     )
 
+    fireEvent.click(await screen.findByRole('tab', { name: '基础' }))
     const opacity = await screen.findByRole('slider', { name: '不透明度' })
     fireEvent.change(opacity, { target: { value: '0.8' } })
     fireEvent.change(opacity, { target: { value: '0.55' } })
@@ -289,6 +291,7 @@ describe('ImageEditorV3 professional shell', () => {
       />,
     )
 
+    fireEvent.click(await screen.findByRole('tab', { name: '基础' }))
     fireEvent.click(await screen.findByRole('switch', { name: '可见' }))
     await waitFor(() => expect(changes).toHaveLength(1))
 
@@ -367,7 +370,7 @@ describe('ImageEditorV3 professional shell', () => {
     expect(rendered.container.querySelectorAll('[data-command-bar]')).toHaveLength(1)
     expect(rendered.container.querySelector('[data-context-bar]')).toBeNull()
 
-    fireEvent.click(screen.getByRole('button', { name: '标注画笔' }))
+    fireEvent.click(screen.getByRole('button', { name: '标注工具' }))
     const contextBar = rendered.container.querySelector('[data-context-bar]')
     expect(contextBar?.parentElement?.hasAttribute('data-command-stack')).toBe(true)
     expect(rendered.container.querySelectorAll('[data-context-bar]')).toHaveLength(1)
@@ -384,6 +387,89 @@ describe('ImageEditorV3 professional shell', () => {
     ])
     expect(rendered.container.querySelectorAll('[data-floating-editor-panel]')).toHaveLength(0)
     expect(rendered.container.querySelector('img[src="preview.png"]')).toBeNull()
+  })
+
+  it('把标注收进单一入口，并在从属参数带切换具体标注工具', async () => {
+    const rendered = renderEditor(
+      createDocument([createImageEditRasterLayerV3('raster', '底图')]),
+    )
+    expect(rendered.container.querySelector('[data-tool-id="annotation"]')).toBeTruthy()
+    expect(rendered.container.querySelector('[data-tool-id="annotation-arrow"]')).toBeNull()
+
+    fireEvent.click(screen.getByRole('button', { name: '标注工具' }))
+    expect(screen.getByRole('group', { name: '标注类型' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: '矩形标注' }))
+    const session = Object.values(useImageEditorSessionStoreV3.getState().sessions)[0]
+    expect(session.activeTool).toBe('annotation-rect')
+    expect(session.toolSettings.annotationTool).toBe('annotation-rect')
+  })
+
+  it('属性默认打开参数 Tab，基础 Tab 单独承载名称与通用开关', async () => {
+    renderEditor(createDocument([createImageEditEffectLayerV3(
+      'blur', '高斯模糊', 'image.gaussian-blur-v2', { radius: 12 },
+    )]))
+    const parametersTab = await screen.findByRole('tab', { name: '参数' })
+    expect(parametersTab.getAttribute('aria-selected')).toBe('true')
+    expect(screen.getByRole('slider', { name: '半径' })).toBeTruthy()
+    expect(screen.queryByRole('textbox', { name: '名称' })).toBeNull()
+
+    fireEvent.click(screen.getByRole('tab', { name: '基础' }))
+    expect(screen.getByRole('textbox', { name: '名称' })).toBeTruthy()
+    expect(screen.getByRole('switch', { name: '可见' })).toBeTruthy()
+    expect(screen.queryByRole('slider', { name: '半径' })).toBeNull()
+  })
+
+  it('辉光 Pro 参数 Tab 恢复旧版完整参数并保持单一滚动区', async () => {
+    const rendered = renderEditor(createDocument([createImageEditEffectLayerV3(
+      'glow', '辉光 Pro', 'image.vgpu-glow',
+      JSON.parse(JSON.stringify(createDefaultVgpuGlowOperationParams())),
+    )]))
+    const parameterPanel = await waitFor(() => rendered.container.querySelector<HTMLElement>(
+      '[data-properties-tab-panel="parameters"]',
+    ))
+    if (!parameterPanel) throw new Error('辉光参数 Tab 未挂载')
+    expect(parameterPanel.className).toContain('overflow-y-auto')
+    const controls = within(parameterPanel)
+    expect(controls.getByRole('button', { name: '自然' })).toBeTruthy()
+    expect(controls.getByRole('switch', { name: '着色' })).toBeTruthy()
+    expect(controls.getByRole('slider', { name: '辉光强度' })).toBeTruthy()
+    expect(controls.getByRole('slider', { name: '半径' })).toBeTruthy()
+    expect(controls.getByRole('slider', { name: '色差' })).toBeTruthy()
+    expect(controls.getByRole('slider', { name: '亮源门槛' })).toBeTruthy()
+    expect(controls.getByRole('slider', { name: '核心白热' })).toBeTruthy()
+  })
+
+  it('停靠区支持拖动宽度边缘和上下分隔线调整尺寸', async () => {
+    const rendered = renderEditor(
+      createDocument([createImageEditRasterLayerV3('raster', '底图')]),
+    )
+    const workspace = rendered.container.querySelector<HTMLElement>('[data-editor-panel-workspace]')
+    const dock = rendered.container.querySelector<HTMLElement>('[data-editor-panel-dock="right"]')
+    if (!workspace || !dock) throw new Error('停靠区未挂载')
+    vi.spyOn(workspace, 'getBoundingClientRect').mockReturnValue({
+      x: 0, y: 0, left: 0, top: 0, right: 1200, bottom: 800, width: 1200, height: 800,
+      toJSON: () => ({}),
+    })
+    vi.spyOn(dock, 'getBoundingClientRect').mockReturnValue({
+      x: 800, y: 0, left: 800, top: 0, right: 1200, bottom: 800, width: 400, height: 800,
+      toJSON: () => ({}),
+    })
+    const widthHandle = screen.getByRole('separator', { name: '调整停靠面板宽度' })
+    fireEvent.pointerDown(widthHandle, {
+      pointerId: 21, button: 0, isPrimary: true, clientX: 800, clientY: 200,
+    })
+    fireEvent.pointerMove(window, { pointerId: 21, clientX: 700, clientY: 200 })
+    fireEvent.pointerUp(window, { pointerId: 21, clientX: 700, clientY: 200 })
+    expect(dock.style.width).toBe('500px')
+
+    const splitHandle = screen.getByRole('separator', { name: '调整上下停靠面板高度' })
+    fireEvent.pointerDown(splitHandle, {
+      pointerId: 22, button: 0, isPrimary: true, clientX: 900, clientY: 400,
+    })
+    fireEvent.pointerMove(window, { pointerId: 22, clientX: 900, clientY: 560 })
+    fireEvent.pointerUp(window, { pointerId: 22, clientX: 900, clientY: 560 })
+    const firstSection = dock.querySelector<HTMLElement>('[data-editor-panel-id="layers"]')?.parentElement
+    expect(firstSection?.style.flex).toContain('70%')
   })
 
   it('停靠面板可拖出为浮窗，并在右边缘按上下顺序重新组合', async () => {
@@ -464,6 +550,7 @@ describe('ImageEditorV3 professional shell', () => {
       createDocument([createImageEditRasterLayerV3('raster', '底图')]),
       { onDocumentChange: (next) => changes.push(next), previewRenderer: interactionPreview },
     )
+    fireEvent.click(screen.getByRole('button', { name: '标注工具' }))
     fireEvent.click(screen.getByRole('button', { name: '矩形标注' }))
     const overlay = await waitFor(() => rendered.container.querySelector<HTMLDivElement>(
       '[data-annotation-editor-overlay]',
@@ -503,6 +590,7 @@ describe('ImageEditorV3 professional shell', () => {
       }
     }
 
+    fireEvent.click(screen.getByRole('button', { name: '标注工具' }))
     fireEvent.click(screen.getByRole('button', { name: '箭头标注' }))
     fireEvent.mouseDown(stageContent, { button: 0, clientX: 20, clientY: 30 })
     fireEvent.mouseMove(stageContent, { buttons: 1, clientX: 80, clientY: 90 })

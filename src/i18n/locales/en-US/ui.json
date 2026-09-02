@@ -598,7 +598,9 @@
         "leftDock": "Left docked panels",
         "rightDock": "Right docked panels",
         "leftDockPreview": "Release to dock on the left",
-        "rightDockPreview": "Release to dock on the right"
+        "rightDockPreview": "Release to dock on the right",
+        "resizeWidth": "Resize docked panel width",
+        "resizeSections": "Resize stacked panel heights"
       },
       "recovery": {
         "title": "The image editor encountered a problem",
@@ -730,6 +732,7 @@
         "select-rect": "Rectangular selection",
         "select-ellipse": "Elliptical selection",
         "select-lasso": "Lasso selection",
+        "annotation": "Annotation tools",
         "annotation-text": "Text annotation",
         "annotation-callout": "Callout annotation",
         "annotation-arrow": "Arrow annotation",
@@ -758,6 +761,7 @@
         "fontSize": "Font size",
         "color": "Color",
         "calloutShape": "Callout shape",
+        "annotationType": "Annotation type",
         "rect": "Rectangle",
         "ellipse": "Ellipse"
       },
@@ -871,6 +875,9 @@
       },
       "properties": {
         "title": "Properties",
+        "tabsLabel": "Property categories",
+        "parametersTab": "Parameters",
+        "basicsTab": "Basics",
         "selectOne": "Select one layer to edit its properties",
         "name": "Name",
         "visible": "Visible",
@@ -908,8 +915,26 @@
         "highlightResponse": "Highlight response",
         "softness": "Softness",
         "intensity": "Glow intensity",
+        "chromaticAberration": "Chromatic aberration",
         "sourceThreshold": "Source threshold",
         "whiteHeat": "Core white heat",
+        "glowLook": "Look",
+        "glowHalo": "Glow",
+        "glowSource": "Light source",
+        "tintEnabled": "Tint",
+        "tintColor": "Glow color",
+        "chromaticSideLeft": "Left chromatic light",
+        "chromaticSideRight": "Right chromatic light",
+        "glowLooks": {
+          "natural": "Natural",
+          "dreamy": "Dreamy",
+          "neon": "Neon"
+        },
+        "channels": {
+          "red": "Red",
+          "green": "Green",
+          "blue": "Blue"
+        },
         "stops": "Exposure stops",
         "offset": "Offset",
         "gamma": "Gamma",

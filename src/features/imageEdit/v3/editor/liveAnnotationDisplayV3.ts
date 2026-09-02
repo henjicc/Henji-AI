@@ -50,3 +50,30 @@ export function resolveLiveGaussianBlurRadiusV3(
   const radius = top.params.radius
   return typeof radius === 'number' && Number.isFinite(radius) && radius > 0 ? radius : null
 }
+
+export interface LiveVgpuGlowFeedbackV3 {
+  intensity: number
+  radius: number
+  sourceThreshold: number
+  whiteHeat: number
+}
+
+export function resolveLiveVgpuGlowFeedbackV3(
+  document: ImageEditDocumentV3,
+): LiveVgpuGlowFeedbackV3 | null {
+  const top = [...document.layers].reverse().find((layer) => layer.visible)
+  if (top?.type !== 'effect' || top.effectId !== 'image.vgpu-glow') return null
+  const unit = (key: string, fallback: number): number => {
+    const value = top.params[key]
+    return typeof value === 'number' && Number.isFinite(value)
+      ? Math.max(0, Math.min(1, value))
+      : fallback
+  }
+  const intensity = unit('intensity', 0.68) * top.opacity
+  return intensity > 0 ? {
+    intensity,
+    radius: unit('radius', 0.68),
+    sourceThreshold: unit('sourceThreshold', 0.3),
+    whiteHeat: unit('whiteHeat', 0.62),
+  } : null
+}

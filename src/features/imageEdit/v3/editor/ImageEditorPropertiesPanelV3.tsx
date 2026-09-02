@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next'
 
 import {
   UiButton,
+  UiChipButton,
   UiFormRow,
   UiGroup,
   UiInput,
@@ -33,6 +34,7 @@ interface ImageEditorPropertiesPanelV3Props {
 }
 
 const EMPTY_LAYER_IDS: readonly string[] = []
+type ImageEditorPropertiesTabV3 = 'parameters' | 'basics'
 
 function LayerNameField({ controller, layer, disabled }: {
   controller: ImageEditorV3Controller
@@ -146,6 +148,10 @@ export function ImageEditorPropertiesPanelV3({
     ? findImageEditLayerLocationV3(controller.document.layers, selectedIds[0])
     : undefined
   const selected = selectedLocation?.layer
+  const [activeTab, setActiveTab] = useState<ImageEditorPropertiesTabV3>('parameters')
+  useEffect(() => {
+    if (selected?.id) setActiveTab('parameters')
+  }, [selected?.id])
   const effectReadiness = selected?.type === 'effect'
     ? controller.profile.effects.find(({ id }) => id === selected.effectId)?.readiness
     : undefined
@@ -182,18 +188,42 @@ export function ImageEditorPropertiesPanelV3({
   return (
     <section
       data-properties-panel
-      className={`min-h-0 flex-1 ${embedded ? 'overflow-hidden' : 'ui-scrollbar overflow-y-auto px-4 py-3'}`}
+      className="flex min-h-0 flex-1 flex-col overflow-hidden"
     >
       {!embedded ? (
         <h2 className="mb-4 text-xs font-medium uppercase tracking-wider text-text-muted">
           {t('imageEditor.v3.properties.title')}
         </h2>
       ) : null}
-      <div className={embedded ? 'grid h-full min-h-0 grid-cols-[11rem_minmax(0,1fr)]' : ''}>
-        <div className={embedded
-          ? 'ui-scrollbar min-h-0 overflow-y-auto border-r border-border-dark/60 px-3 py-3'
-          : ''}
-        >
+      <div
+        role="tablist"
+        aria-label={t('imageEditor.v3.properties.tabsLabel')}
+        className="grid shrink-0 grid-cols-2 border-b border-border-dark/60 px-2"
+      >
+        {(['parameters', 'basics'] as const).map((tab) => (
+          <UiChipButton
+            key={tab}
+            role="tab"
+            selectionRole="navigation"
+            data-properties-tab={tab}
+            className="!h-9 justify-center rounded-none text-xs"
+            active={activeTab === tab}
+            aria-selected={activeTab === tab}
+            aria-controls={`image-editor-properties-${tab}`}
+            onClick={() => setActiveTab(tab)}
+          >
+            {t(`imageEditor.v3.properties.${tab}Tab`)}
+          </UiChipButton>
+        ))}
+      </div>
+
+      <div
+        id={`image-editor-properties-${activeTab}`}
+        role="tabpanel"
+        data-properties-tab-panel={activeTab}
+        className={`ui-scrollbar min-h-0 flex-1 overflow-y-auto ${embedded ? 'px-3 py-3' : 'px-4 py-3'}`}
+      >
+      {activeTab === 'basics' ? (
       <UiGroup gap="stack">
         <LayerNameField controller={controller} layer={selected} disabled={contentLocked} />
         <UiFormRow label={t('imageEditor.v3.properties.visible')} inline>
@@ -219,22 +249,22 @@ export function ImageEditorPropertiesPanelV3({
         <OpacityControl controller={controller} layer={selected} disabled={contentLocked} />
         {controller.profile.layerControls.includes('blend-mode') ? (
           <UiFormRow label={t('imageEditor.v3.properties.blendMode')}>
-          <UiSelect
-            aria-label={t('imageEditor.v3.properties.blendMode')}
-            value={selected.blendMode}
-            disabled={contentLocked}
-            onChange={(event) => {
-              if (!contentLocked) {
-                controller.updateLayerCommon(selected.id, {
-                  blendMode: event.currentTarget.value as ImageEditLayerV3['blendMode'],
-                })
-              }
-            }}
-          >
-            {IMAGE_EDIT_BLEND_MODES_V3.map((mode) => (
-              <option key={mode} value={mode}>{t(`imageEditor.v3.blendMode.${mode}`)}</option>
-            ))}
-          </UiSelect>
+            <UiSelect
+              aria-label={t('imageEditor.v3.properties.blendMode')}
+              value={selected.blendMode}
+              disabled={contentLocked}
+              onChange={(event) => {
+                if (!contentLocked) {
+                  controller.updateLayerCommon(selected.id, {
+                    blendMode: event.currentTarget.value as ImageEditLayerV3['blendMode'],
+                  })
+                }
+              }}
+            >
+              {IMAGE_EDIT_BLEND_MODES_V3.map((mode) => (
+                <option key={mode} value={mode}>{t(`imageEditor.v3.blendMode.${mode}`)}</option>
+              ))}
+            </UiSelect>
           </UiFormRow>
         ) : null}
         {selected.type === 'group' && controller.profile.layerKinds.includes('group') ? (
@@ -254,97 +284,89 @@ export function ImageEditorPropertiesPanelV3({
           </UiFormRow>
         ) : null}
       </UiGroup>
-
-        </div>
-        <div className={embedded ? 'ui-scrollbar min-h-0 overflow-y-auto px-3 py-3' : ''}>
-
-      {selected.type === 'raster' || selected.type === 'annotation' || selected.type === 'group' ? (
-        <ImageEditorLayerTransformPropertiesV3
-          controller={controller}
-          layer={selected}
-          disabled={!isImageEditLayerTransformableV3(selectedLocation ?? null)}
-        />
-      ) : null}
-
-      {(selected.type === 'effect' || selected.type === 'adjustment') ? (
-        <UiGroup
-          divided
-          className="mt-5"
-          title={selected.type === 'effect'
-            ? t(`imageEditor.v3.effect.${selected.effectId}`, { defaultValue: selected.name })
-            : t(`imageEditor.v3.adjustment.${selected.adjustmentId}`, { defaultValue: selected.name })}
-          gap="stack"
-        >
-          {!selected.renderable ? (
-            <p className="text-xs text-warning">{t('imageEditor.v3.properties.unrenderable')}</p>
-          ) : null}
-          {effectReadiness?.state !== 'ready' && effectReadinessReason ? (
-            <p role="status" className="text-xs text-warning">{effectReadinessReason}</p>
-          ) : null}
-          <ImageEditorEffectParametersV3
+      ) : (
+      <>
+        {selected.type === 'raster' || selected.type === 'annotation' || selected.type === 'group' ? (
+          <ImageEditorLayerTransformPropertiesV3
             controller={controller}
             layer={selected}
-            disabled={contentLocked || !selected.renderable}
+            disabled={!isImageEditLayerTransformableV3(selectedLocation ?? null)}
           />
-        </UiGroup>
-      ) : null}
+        ) : null}
 
-      {selected.type === 'annotation' ? (
-        <ImageEditorAnnotationPropertiesV3
-          controller={controller}
-          layer={selected}
-          locked={contentLocked}
-        />
-      ) : null}
+        {(selected.type === 'effect' || selected.type === 'adjustment') ? (
+          <div>
+            {!selected.renderable ? (
+              <p className="mb-3 text-xs text-warning">{t('imageEditor.v3.properties.unrenderable')}</p>
+            ) : null}
+            {effectReadiness?.state !== 'ready' && effectReadinessReason ? (
+              <p role="status" className="mb-3 text-xs text-warning">{effectReadinessReason}</p>
+            ) : null}
+            <ImageEditorEffectParametersV3
+              controller={controller}
+              layer={selected}
+              disabled={contentLocked || !selected.renderable}
+            />
+          </div>
+        ) : null}
 
-      {controller.profile.layerControls.includes('mask') ? (
-        <UiGroup divided className="mt-5" title={t('imageEditor.v3.properties.mask')} gap="stack">
-        {selected.mask ? (
-          <>
-            <UiFormRow label={t('imageEditor.v3.properties.maskInverted')} inline>
-              <UiSwitch
-                aria-label={t('imageEditor.v3.properties.maskInverted')}
-                checked={selected.mask.inverted}
+        {selected.type === 'annotation' ? (
+          <ImageEditorAnnotationPropertiesV3
+            controller={controller}
+            layer={selected}
+            locked={contentLocked}
+          />
+        ) : null}
+
+        {controller.profile.layerControls.includes('mask') ? (
+          <UiGroup divided className="mt-5" title={t('imageEditor.v3.properties.mask')} gap="stack">
+          {selected.mask ? (
+            <>
+              <UiFormRow label={t('imageEditor.v3.properties.maskInverted')} inline>
+                <UiSwitch
+                  aria-label={t('imageEditor.v3.properties.maskInverted')}
+                  checked={selected.mask.inverted}
+                  disabled={contentLocked}
+                  onCheckedChange={(inverted) => {
+                    if (!contentLocked) {
+                      const currentMask = selected.mask
+                      if (!currentMask) return
+                      const mask = cloneImageEditMaskReferenceV3(currentMask)
+                      mask.inverted = inverted
+                      controller.setLayerMask(selected.id, mask)
+                    }
+                  }}
+                />
+              </UiFormRow>
+              <UiButton
+                variant="plain"
+                size="sm"
+                className="justify-start gap-2"
                 disabled={contentLocked}
-                onCheckedChange={(inverted) => {
-                  if (!contentLocked) {
-                    const currentMask = selected.mask
-                    if (!currentMask) return
-                    const mask = cloneImageEditMaskReferenceV3(currentMask)
-                    mask.inverted = inverted
-                    controller.setLayerMask(selected.id, mask)
-                  }
+                onClick={() => {
+                  if (!contentLocked) controller.setLayerMask(selected.id, null)
                 }}
-              />
-            </UiFormRow>
+              >
+                <X className="h-4 w-4" />
+                {t('imageEditor.v3.properties.removeMask')}
+              </UiButton>
+            </>
+          ) : (
             <UiButton
-              variant="plain"
+              variant="muted"
               size="sm"
               className="justify-start gap-2"
               disabled={contentLocked}
-              onClick={() => {
-                if (!contentLocked) controller.setLayerMask(selected.id, null)
-              }}
+              onClick={addMask}
             >
-              <X className="h-4 w-4" />
-              {t('imageEditor.v3.properties.removeMask')}
+              <Plus className="h-4 w-4" />
+              {t('imageEditor.v3.properties.addMask')}
             </UiButton>
-          </>
-        ) : (
-          <UiButton
-            variant="muted"
-            size="sm"
-            className="justify-start gap-2"
-            disabled={contentLocked}
-            onClick={addMask}
-          >
-            <Plus className="h-4 w-4" />
-            {t('imageEditor.v3.properties.addMask')}
-          </UiButton>
-        )}
-        </UiGroup>
-      ) : null}
-        </div>
+          )}
+          </UiGroup>
+        ) : null}
+      </>
+      )}
       </div>
     </section>
   )

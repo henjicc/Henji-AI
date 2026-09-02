@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   createImageEditAnnotationLayerV3,
   createImageEditDocumentV3,
+  createImageEditEffectLayerV3,
 } from '@/core/imageEdit/v3/documentFactory'
 import i18n from '@/i18n/config'
 import { requireImageEditV3LiveSession } from '../application/imageEditLiveSessionRegistry'
@@ -431,5 +432,99 @@ describe('ImageEditorPreviewV3 managed frame ownership', () => {
     expect(liveSession.bus.getSnapshot().document.layers[0].transform).toEqual([
       1, 0, 0, 1, 45, 25,
     ])
+  })
+
+  it('模糊即时反馈不再缩放画布几何，归零时不会产生尺寸跳变', async () => {
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({
+      x: 0, y: 0, left: 0, top: 0, right: 900, bottom: 600,
+      width: 900, height: 600, toJSON: () => undefined,
+    })
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({
+      clearRect: vi.fn(),
+      drawImage: vi.fn(),
+    } as unknown as CanvasRenderingContext2D)
+    managedPreview.state = {
+      result: {
+        kind: 'bitmap', bitmap: {} as ImageBitmap, width: 320, height: 180,
+        diagnostics: [], release: vi.fn(),
+      },
+      resultDocumentId: 'blur-feedback-document',
+      resultRevision: 0,
+      resultPreviewOverrides: {},
+      diagnostic: null,
+      rendering: true,
+    }
+    const document = createImageEditDocumentV3({
+      width: 320,
+      height: 180,
+      documentId: 'blur-feedback-document',
+    })
+    document.revision = 1
+    document.layers.push(createImageEditEffectLayerV3(
+      'blur', '高斯模糊', 'image.gaussian-blur-v2', { radius: 40 },
+    ))
+    const rendered = render(
+      <div style={{ width: 900, height: 600 }}>
+        <ImageEditorV3
+          sourceImageUrl="preview.jpg"
+          document={document}
+          profileId="full"
+          onDocumentChange={() => undefined}
+        />
+      </div>,
+    )
+    const feedback = await waitFor(() => rendered.container.querySelector<HTMLElement>(
+      '[data-live-effect-feedback]',
+    ))
+    expect(feedback?.style.filter).toContain('blur(')
+    expect(feedback?.style.transform).toBe('')
+  })
+
+  it('辉光精确帧到达前先显示即时光晕反馈', async () => {
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({
+      x: 0, y: 0, left: 0, top: 0, right: 900, bottom: 600,
+      width: 900, height: 600, toJSON: () => undefined,
+    })
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({
+      clearRect: vi.fn(),
+      drawImage: vi.fn(),
+    } as unknown as CanvasRenderingContext2D)
+    managedPreview.state = {
+      result: {
+        kind: 'bitmap', bitmap: {} as ImageBitmap, width: 320, height: 180,
+        diagnostics: [], release: vi.fn(),
+      },
+      resultDocumentId: 'glow-feedback-document',
+      resultRevision: 0,
+      resultPreviewOverrides: {},
+      diagnostic: null,
+      rendering: true,
+    }
+    const document = createImageEditDocumentV3({
+      width: 320,
+      height: 180,
+      documentId: 'glow-feedback-document',
+    })
+    document.revision = 1
+    document.layers.push(createImageEditEffectLayerV3(
+      'glow', '辉光 Pro', 'image.vgpu-glow', {
+        intensity: 0.68, radius: 0.68, sourceThreshold: 0.3, whiteHeat: 0.62,
+      },
+    ))
+    const rendered = render(
+      <div style={{ width: 900, height: 600 }}>
+        <ImageEditorV3
+          sourceImageUrl="preview.jpg"
+          document={document}
+          profileId="full"
+          onDocumentChange={() => undefined}
+        />
+      </div>,
+    )
+    const glow = await waitFor(() => rendered.container.querySelector<HTMLElement>(
+      '[data-live-glow-feedback]',
+    ))
+    expect(glow?.style.mixBlendMode).toBe('screen')
+    expect(glow?.style.filter).toContain('blur(')
   })
 })

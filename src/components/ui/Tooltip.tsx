@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react'
+import React, { useState, useRef, useEffect, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 
 type TooltipProps = {
@@ -7,16 +7,32 @@ type TooltipProps = {
     delay?: number // Hover delay in milliseconds
     className?: string
     contentId?: string
+    anchor?: 'trigger-center' | 'pointer-start'
 }
 
-export default function Tooltip({ children, content, delay = 500, className, contentId }: TooltipProps): JSX.Element {
+export default function Tooltip({
+    children,
+    content,
+    delay = 500,
+    className,
+    contentId,
+    anchor = 'trigger-center',
+}: TooltipProps): JSX.Element {
     const [visible, setVisible] = useState(false)
     const [closing, setClosing] = useState(false)
     const [coords, setCoords] = useState({ top: 0, left: 0 })
     const timerRef = useRef<number | null>(null)
     const triggerRef = useRef<HTMLElement>(null)
+    const pointerRef = useRef<{ clientX: number; clientY: number } | null>(null)
 
-    const updatePosition = () => {
+    const updatePosition = useCallback(() => {
+        if (anchor === 'pointer-start' && pointerRef.current) {
+            setCoords({
+                top: pointerRef.current.clientY + 8,
+                left: pointerRef.current.clientX + 8,
+            })
+            return
+        }
         if (triggerRef.current) {
             const rect = triggerRef.current.getBoundingClientRect()
             setCoords({
@@ -24,9 +40,10 @@ export default function Tooltip({ children, content, delay = 500, className, con
                 left: rect.left + rect.width / 2
             })
         }
-    }
+    }, [anchor])
 
-    const handleMouseEnter = () => {
+    const handleMouseEnter = (event: React.MouseEvent) => {
+        pointerRef.current = { clientX: event.clientX, clientY: event.clientY }
         if (timerRef.current) {
             window.clearTimeout(timerRef.current)
         }
@@ -35,6 +52,12 @@ export default function Tooltip({ children, content, delay = 500, className, con
             setVisible(true)
             setClosing(false)
         }, delay)
+    }
+
+    const handleMouseMove = (event: React.MouseEvent) => {
+        if (anchor !== 'pointer-start') return
+        pointerRef.current = { clientX: event.clientX, clientY: event.clientY }
+        if (visible && !closing) updatePosition()
     }
 
     const handleMouseLeave = () => {
@@ -85,14 +108,14 @@ export default function Tooltip({ children, content, delay = 500, className, con
                 window.clearTimeout(timerRef.current)
             }
         }
-    }, [visible, closing])
+    }, [visible, closing, updatePosition])
 
     const tooltipContent = (
         <span
             id={contentId}
             role="tooltip"
             aria-hidden={!visible}
-            className={`fixed z-tooltip -translate-x-1/2 -translate-y-full w-max max-w-[min(320px,calc(100vw-32px))] whitespace-normal text-left leading-5 bg-surface-dark/90 border border-border-dark/50 rounded-lg shadow-panel text-xs text-white p-3 pointer-events-none ${visible ? (closing ? 'animate-fade-out' : 'animate-fade-in') : 'hidden'
+            className={`fixed z-tooltip w-max max-w-[min(320px,calc(100vw-32px))] whitespace-normal text-left leading-5 bg-surface-dark/90 border border-border-dark/50 rounded-lg shadow-panel text-xs text-white p-3 pointer-events-none ${anchor === 'trigger-center' ? '-translate-x-1/2 -translate-y-full' : ''} ${visible ? (closing ? 'animate-fade-out' : 'animate-fade-in') : 'hidden'
                 } ${className || ''}`}
             style={{
                 top: coords.top,
@@ -113,6 +136,7 @@ export default function Tooltip({ children, content, delay = 500, className, con
                 ref={triggerRef}
                 className={`relative ${shouldFlex ? 'flex' : 'inline-block'} ${shouldFlex ? childClassName.match(/flex-\d+|flex-grow/)?.[0] || '' : ''}`}
                 onMouseEnter={handleMouseEnter}
+                onMouseMove={handleMouseMove}
                 onMouseLeave={handleMouseLeave}
                 onFocus={handleFocus}
                 onBlur={handleMouseLeave}
