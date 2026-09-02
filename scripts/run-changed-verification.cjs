@@ -28,11 +28,18 @@ function renderCommand(item) {
 
 function runStep(item) {
   return new Promise((resolve, reject) => {
-    const child = spawn(item.command, item.args, {
+    const npmExecPath = process.env.npm_execpath?.trim()
+    const shouldUseCurrentNpm = process.platform === 'win32'
+      && item.command.toLowerCase() === 'npm.cmd'
+      && npmExecPath
+    const command = shouldUseCurrentNpm ? process.execPath : item.command
+    const args = shouldUseCurrentNpm ? [npmExecPath, ...item.args] : item.args
+    const child = spawn(command, args, {
       cwd: root,
       env: { ...process.env },
       stdio: 'inherit',
       windowsHide: true,
+      shell: process.platform === 'win32' && /\.(?:cmd|bat)$/i.test(command),
     })
     child.on('error', reject)
     child.on('exit', (code, signal) => resolve(signal ? 1 : (code ?? 1)))

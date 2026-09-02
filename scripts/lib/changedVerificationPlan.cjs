@@ -71,9 +71,10 @@ function step(label, command, args) {
   return { label, command, args }
 }
 
-function localBin(root, name) {
-  const executable = process.platform === 'win32' ? `${name}.cmd` : name
-  return path.join(root, 'node_modules', '.bin', executable)
+function localNodeBin(root, name) {
+  if (name === 'eslint') return path.join(root, 'node_modules', 'eslint', 'bin', 'eslint.js')
+  if (name === 'tsc') return path.join(root, 'node_modules', 'typescript', 'bin', 'tsc')
+  throw new Error(`未知 Node CLI：${name}`)
 }
 
 function buildChangedVerificationPlan(options, root, exists = fs.existsSync) {
@@ -121,7 +122,7 @@ function buildChangedVerificationPlan(options, root, exists = fs.existsSync) {
   const electronLint = options.files.filter((file) => file.startsWith('electron/') && /\.ts$/.test(file))
   const lintFiles = [...rendererLint, ...electronLint]
   if (lintFiles.length > 0) {
-    plans.push(step('改动文件 ESLint', localBin(root, 'eslint'), [
+    plans.push(step('改动文件 ESLint', process.execPath, [localNodeBin(root, 'eslint'),
       ...lintFiles,
       '--cache', '--cache-location', 'node_modules/.eslintcache',
       '--report-unused-disable-directives', '--max-warnings', '0',
@@ -130,10 +131,14 @@ function buildChangedVerificationPlan(options, root, exists = fs.existsSync) {
 
   if (options.level === 'L2') {
     if (options.files.some((file) => file.startsWith('src/'))) {
-      plans.push(step('渲染层增量类型检查', localBin(root, 'tsc'), ['-p', 'tsconfig.json', '--noEmit']))
+      plans.push(step('渲染层增量类型检查', process.execPath, [
+        localNodeBin(root, 'tsc'), '-p', 'tsconfig.json', '--noEmit',
+      ]))
     }
     if (options.files.some((file) => file.startsWith('electron/'))) {
-      plans.push(step('Electron 增量类型检查', localBin(root, 'tsc'), ['-p', 'tsconfig.electron.json', '--noEmit']))
+      plans.push(step('Electron 增量类型检查', process.execPath, [
+        localNodeBin(root, 'tsc'), '-p', 'tsconfig.electron.json', '--noEmit',
+      ]))
     }
     if (options.files.some((file) => file.startsWith('packages/ai-sdk/'))) {
       const npmCommand = process.platform === 'win32' ? 'npm.cmd' : 'npm'

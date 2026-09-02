@@ -1,4 +1,5 @@
 const assert = require('node:assert/strict')
+const path = require('node:path')
 const test = require('node:test')
 const {
   buildChangedVerificationPlan,
@@ -23,7 +24,7 @@ test('构建与 CI 基础设施不能伪装成 L1/L2 局部验证', () => {
 
 test('L1 优先跑同名精确测试并只 lint 改动文件', () => {
   const options = parseChangedVerificationArgs(['src/example.ts'], '/workspace')
-  const exists = (file) => file === '/workspace/src/example.test.ts'
+  const exists = (file) => file === path.join('/workspace', 'src/example.test.ts')
   const plan = buildChangedVerificationPlan(options, '/workspace', exists)
   assert.deepEqual(plan.map((item) => item.label), ['精确 Vitest', '改动文件 ESLint'])
   assert.equal(plan[0].args.includes('src/example.test.ts'), true)
