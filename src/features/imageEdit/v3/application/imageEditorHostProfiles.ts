@@ -1,3 +1,5 @@
+import { listCreatableImageEditOperationIdsV3 } from '@/core/imageEdit/v3/operationCatalog';
+
 export type ImageEditorHostProfileIdV3 = 'full' | 'quick' | 'canvas-edit' | 'mask';
 
 export type ImageEditorToolIdV3 =
@@ -110,13 +112,8 @@ const RASTER_TOOLS: readonly ImageEditorCapabilityV3<ImageEditorToolIdV3>[] = [
   ready('eraser'),
   ready('mask-edit'),
 ];
-const CORE_EFFECTS: readonly ImageEditorCapabilityV3<string>[] = [
-  ready('image.fast-blur-v3'),
-  // 旧文档仍可编辑，但新建菜单只暴露 fast-blur-v3。
-  ready('image.gaussian-blur-v2'),
-  ready('image.diffusion'),
-  ready('image.vgpu-glow'),
-];
+const CORE_EFFECTS: readonly ImageEditorCapabilityV3<string>[] =
+  listCreatableImageEditOperationIdsV3('effect').map(ready);
 const HDR_LIMITATION: ImageEditorCapabilityReadinessV3 = {
   state: 'limited',
   reasonKey: 'imageEditor.v3.readiness.reasons.hdrExport',

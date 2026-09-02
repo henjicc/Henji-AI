@@ -13,6 +13,7 @@ export * from './renderNodeDefinition';
 export * from './builtInRenderNodes';
 export * from './renderPlan';
 export * from './renderPlanCompiler';
+export * from './operationCatalog';
 export * from './renderHash';
 export * from './invalidation';
 export * from './tileGeometry';

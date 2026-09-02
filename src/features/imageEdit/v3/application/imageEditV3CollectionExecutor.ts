@@ -15,6 +15,7 @@ import {
   createImageEditIdV3,
   createImageEditRasterLayerV3,
 } from '@/core/imageEdit/v3/documentFactory'
+import { listCreatableImageEditOperationIdsV3 } from '@/core/imageEdit/v3/operationCatalog'
 import type { ImageEditCommandV3 } from '@/core/imageEdit/v3/commandTypes'
 import type { ImageEditJsonObjectV3, ImageEditLayerV3 } from '@/core/imageEdit/v3/layerTypes'
 import { createLogger } from '@/core/logging'
@@ -34,13 +35,8 @@ type CollectionEntityType = 'image_edit.layer' | 'image_edit.group'
 
 const logger = createLogger('features.imageEdit.v3.application_collection')
 const UNDO_PREFIX = 'image-edit-v3-collection-undo:'
-const EFFECT_IDS = new Set([
-  'image.fast-blur-v3',
-  'image.gaussian-blur-v2',
-  'image.diffusion',
-  'image.vgpu-glow',
-])
-const ADJUSTMENT_IDS = new Set(['exposure', 'curves', 'temperature-tint', 'hsl'])
+const EFFECT_IDS = new Set(listCreatableImageEditOperationIdsV3('effect'))
+const ADJUSTMENT_IDS = new Set(listCreatableImageEditOperationIdsV3('adjustment'))
 
 interface UndoPayload {
   entityType: CollectionEntityType

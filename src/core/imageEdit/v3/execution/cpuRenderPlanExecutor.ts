@@ -1,11 +1,15 @@
 import {
+  DIFFUSION_V4_RECIPE_ADAPTER,
+  VGPU_GLOW_V4_RECIPE_ADAPTER,
   applyCurvesAdjustment,
+  applyDiffusionV4,
   applyExposureAdjustment,
   applyFastBlurV3,
   applyGaussianBlurV2,
   applyLegacyGaussianBlurV1,
   applyHslAdjustment,
   applyTemperatureTintAdjustment,
+  applyVgpuGlowV4,
   compileCurvesAdjustment,
   createFloat32MaskTile,
   mixProcessedWithMask,
@@ -28,6 +32,23 @@ import {
 
 const MAX_COMPILED_CURVE_CACHE_ENTRIES = 64;
 const compiledCurveCache = new Map<string, CompiledCurvesAdjustment>();
+
+/** 生产 CPU/ROI 执行器真实覆盖的节点；新增注册节点但漏接执行器时由动态测试阻断。 */
+export const IMAGE_EDIT_TILED_CPU_NODE_IDS_V3: ReadonlySet<string> = new Set([
+  'source.raster',
+  'vector.annotation',
+  'effect.blur-v1',
+  'effect.gaussian-blur',
+  'effect.fast-blur',
+  'effect.diffusion',
+  'effect.vgpu-glow',
+  'adjustment.exposure',
+  'adjustment.curves',
+  'adjustment.temperature-tint',
+  'adjustment.hsl',
+  'composite.layer',
+  'group.isolated',
+]);
 
 export class ImageEditRenderNodeUnsupportedErrorV3 extends Error {
   constructor(readonly definitionId: string) {
@@ -210,6 +231,22 @@ export async function executeImageEditCpuEffectNodeV3(
       radius: numberParameter(node, 'radius', 0),
       mip: numberParameter(node, 'mip', 0),
     }, { mask });
+  }
+  if (node.definitionId === 'effect.diffusion') {
+    if (context.executeCustomEffect) return context.executeCustomEffect(node, source, mask);
+    const linear = convertFloat32TileColorDomainV3(source, 'linear-light');
+    return applyDiffusionV4(linear, DIFFUSION_V4_RECIPE_ADAPTER.compileRecipe(
+      DIFFUSION_V4_RECIPE_ADAPTER.parseParameters(node.parameters),
+      { width: source.width, height: source.height, quality: 'high' },
+    ), { mask });
+  }
+  if (node.definitionId === 'effect.vgpu-glow') {
+    if (context.executeCustomEffect) return context.executeCustomEffect(node, source, mask);
+    const linear = convertFloat32TileColorDomainV3(source, 'linear-light');
+    return applyVgpuGlowV4(linear, VGPU_GLOW_V4_RECIPE_ADAPTER.compileRecipe(
+      VGPU_GLOW_V4_RECIPE_ADAPTER.parseParameters(node.parameters),
+      { width: source.width, height: source.height },
+    ), { mask });
   }
   if (context.executeCustomEffect) return context.executeCustomEffect(node, source, mask);
   throw new ImageEditRenderNodeUnsupportedErrorV3(node.definitionId);

@@ -5,11 +5,11 @@ import {
   createImageEditHdrMetadataV3,
 } from '@/core/imageEdit/v3/colorTypes'
 import { createDefaultDiffusionOperationParams } from '@/core/imageEdit/diffusionParams'
+import { createDefaultVgpuGlowOperationParams } from '@/core/imageEdit/vgpuGlowParams'
 import { createFloat32PremultipliedRgbaTile } from '@/core/imageEdit/v3/effects'
 import type { ImageEditRenderPlanNode } from '@/core/imageEdit/v3/renderPlan'
 import {
   ImageEditorPreviewCustomEffectsV3,
-  ImageEditorPreviewUnsupportedEffectErrorV3,
   isPlausibleVgpuFastBlurPreviewV3,
   isPlausibleVgpuGlowPreviewV3,
 } from './previewCustomEffectsV3'
@@ -29,7 +29,7 @@ function node(
       ? { radius: 8, mip: 0 }
       : definitionId === 'effect.diffusion'
       ? { ...createDefaultDiffusionOperationParams() }
-      : {},
+      : { ...createDefaultVgpuGlowOperationParams() },
     mask: null,
     subtreeHash: 'effect-hash',
   }
@@ -139,7 +139,7 @@ describe('ImageEditor V3 现有效果 Worker 边界', () => {
   })
 
   it.each(['effect.diffusion', 'effect.vgpu-glow'] as const)(
-    '%s 在 HDR 文档中明确拒绝 8-bit 位图往返',
+    '%s 在 HDR 文档中使用 Float32 CPU 后备且不经过 8-bit 位图',
     async (definitionId) => {
       const effects = new ImageEditorPreviewCustomEffectsV3()
       const source = createFloat32PremultipliedRgbaTile(
@@ -158,9 +158,9 @@ describe('ImageEditor V3 现有效果 Worker 边界', () => {
         bitDepth: 'float16' as const,
         hdrMetadata: createImageEditHdrMetadataV3('pq'),
       }
-      const promise = effects.execute(node(definitionId), source, 'stable', color)
-      await expect(promise).rejects.toBeInstanceOf(ImageEditorPreviewUnsupportedEffectErrorV3)
-      await expect(promise).rejects.toThrow('HDR Worker 执行链')
+      const rendered = await effects.execute(node(definitionId), source, 'stable', color)
+      expect(rendered).toMatchObject({ workingSpace: 'rec2020', transferFunction: 'pq' })
+      expect([...rendered.data].every(Number.isFinite)).toBe(true)
       effects.dispose()
     },
   )

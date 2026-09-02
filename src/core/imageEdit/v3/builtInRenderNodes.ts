@@ -78,7 +78,7 @@ const definitions: readonly RenderNodeDefinition[] = [
   },
   {
     id: 'effect.vgpu-glow', version: 4, category: 'global-analysis', color: LINEAR_PREMULTIPLIED,
-    qualities: ['draft', 'stable', 'export'], backends: ['webgpu'], fusion: 'never',
+    qualities: ['draft', 'stable', 'export'], backends: ['webgpu', 'cpu-libvips'], fusion: 'never',
     invalidation: 'shared-analysis',
     globalAnalysis: { maxEdge: 1_024, cacheScope: 'subtree', resultVersion: 4 },
     estimateBytes: (context) => estimateRgbaTileBytes(context, 6),

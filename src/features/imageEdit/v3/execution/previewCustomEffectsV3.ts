@@ -3,6 +3,7 @@ import {
   VGPU_GLOW_V4_RECIPE_ADAPTER,
   applyDiffusionV4,
   applyFastBlurV3,
+  applyVgpuGlowV4,
   type Float32MaskTile,
   type Float32PremultipliedRgbaTile,
 } from '@/core/imageEdit/v3/effects'
@@ -51,6 +52,22 @@ export class ImageEditorPreviewCustomEffectsV3 {
       observeFastBlur?.('cpu', 'radius-zero-bypass')
       return source
     }
+    const diffusionRecipe = node.definitionId === 'effect.diffusion'
+      ? DIFFUSION_V4_RECIPE_ADAPTER.compileRecipe(
+          DIFFUSION_V4_RECIPE_ADAPTER.parseParameters(node.parameters),
+          {
+            width: source.width,
+            height: source.height,
+            quality: quality === 'draft' ? 'realtime' : 'high',
+          },
+        )
+      : null
+    const glowRecipe = node.definitionId === 'effect.vgpu-glow'
+      ? VGPU_GLOW_V4_RECIPE_ADAPTER.compileRecipe(
+          VGPU_GLOW_V4_RECIPE_ADAPTER.parseParameters(node.parameters),
+          { width: source.width, height: source.height },
+        )
+      : null
     if (
       color.hdrMetadata
       || color.transferFunction === 'pq'
@@ -64,21 +81,11 @@ export class ImageEditorPreviewCustomEffectsV3 {
           { mask },
         )
       }
-      throw new ImageEditorPreviewUnsupportedEffectErrorV3(
-        node.definitionId,
-        `${node.definitionId} 的 HDR Worker 执行链尚未提供无损浮点互操作，已保留上一预览帧`,
+      if (diffusionRecipe) return applyDiffusionV4(source, diffusionRecipe, { mask })
+      if (glowRecipe) return applyVgpuGlowV4(
+        convertFloat32TileColorDomainV3(source, 'linear-light'), glowRecipe, { mask },
       )
     }
-    const diffusionRecipe = node.definitionId === 'effect.diffusion'
-      ? DIFFUSION_V4_RECIPE_ADAPTER.compileRecipe(
-          DIFFUSION_V4_RECIPE_ADAPTER.parseParameters(node.parameters),
-          {
-            width: source.width,
-            height: source.height,
-            quality: quality === 'draft' ? 'realtime' : 'high',
-          },
-        )
-      : null
     if (node.definitionId === 'effect.fast-blur'
       && (typeof navigator === 'undefined' || !('gpu' in navigator))) {
       observeFastBlur?.('cpu', 'webgpu-unavailable')
@@ -90,6 +97,11 @@ export class ImageEditorPreviewCustomEffectsV3 {
     }
     if (diffusionRecipe && (typeof navigator === 'undefined' || !('gpu' in navigator))) {
       return applyDiffusionV4(source, diffusionRecipe, { mask })
+    }
+    if (glowRecipe && (typeof navigator === 'undefined' || !('gpu' in navigator))) {
+      return applyVgpuGlowV4(
+        convertFloat32TileColorDomainV3(source, 'linear-light'), glowRecipe, { mask },
+      )
     }
     const sourceBitmap = await linearPreviewTileToBitmapV3(
       convertPreviewWorkingSpaceToSrgbDisplayV3(source, { ...color, hdrMetadata: null, transferFunction: 'srgb' }),
@@ -116,17 +128,13 @@ export class ImageEditorPreviewCustomEffectsV3 {
           node.subtreeHash,
         )
       } else {
-        const parameters = VGPU_GLOW_V4_RECIPE_ADAPTER.parseParameters(node.parameters)
-        const recipe = VGPU_GLOW_V4_RECIPE_ADAPTER.compileRecipe(parameters, {
-          width: source.width,
-          height: source.height,
-        })
+        if (!glowRecipe) throw new Error('辉光 Pro 缺少已编译 recipe')
         rendered = await this.backend.renderVgpuGlowBitmap(
           state,
           sourceBitmap,
           source.width,
           source.height,
-          recipe,
+          glowRecipe,
         )
       }
       const processed = convertSrgbProxyToPreviewWorkingSpaceV3(
@@ -163,6 +171,9 @@ export class ImageEditorPreviewCustomEffectsV3 {
         )
       }
       if (diffusionRecipe) return applyDiffusionV4(source, diffusionRecipe, { mask })
+      if (glowRecipe) return applyVgpuGlowV4(
+        convertFloat32TileColorDomainV3(source, 'linear-light'), glowRecipe, { mask },
+      )
       if (error instanceof ImageEditorPreviewUnsupportedEffectErrorV3) throw error
       const detail = error instanceof Error ? error.message : String(error)
       throw new ImageEditorPreviewUnsupportedEffectErrorV3(

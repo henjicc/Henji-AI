@@ -22,21 +22,7 @@ import {
   type ImageEditRenderQuality,
   type RenderNodeDefinition,
 } from './renderNodeDefinition';
-
-const EFFECT_DEFINITION_IDS: Readonly<Record<string, string>> = {
-  'image.blur': 'effect.blur-v1',
-  'image.fast-blur-v3': 'effect.fast-blur',
-  'image.diffusion': 'effect.diffusion',
-  'image.vgpu-glow': 'effect.vgpu-glow',
-  'image.gaussian-blur-v2': 'effect.gaussian-blur',
-};
-
-const ADJUSTMENT_DEFINITION_IDS: Readonly<Record<string, string>> = {
-  exposure: 'adjustment.exposure',
-  curves: 'adjustment.curves',
-  'temperature-tint': 'adjustment.temperature-tint',
-  hsl: 'adjustment.hsl',
-};
+import { imageEditRenderDefinitionIdForOperationV3 } from './operationCatalog';
 
 interface CompileState {
   registry: ImageEditRenderNodeRegistry;
@@ -165,8 +151,8 @@ function compileEffectLayer(
     return belowNodeId;
   }
   const definitionId = layer.type === 'effect'
-    ? EFFECT_DEFINITION_IDS[layer.effectId] ?? layer.effectId
-    : ADJUSTMENT_DEFINITION_IDS[layer.adjustmentId] ?? `adjustment.${layer.adjustmentId}`;
+    ? imageEditRenderDefinitionIdForOperationV3(layer.effectId, 'effect')
+    : imageEditRenderDefinitionIdForOperationV3(layer.adjustmentId, 'adjustment');
   return appendNode(
     state,
     layer,

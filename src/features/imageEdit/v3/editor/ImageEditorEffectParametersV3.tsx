@@ -34,17 +34,6 @@ interface ParameterSliderProps {
   createParams?: (value: number) => ImageEditJsonObjectV3
 }
 
-const EXPENSIVE_EFFECT_PREVIEW_INTERVAL_MS = 80
-
-function isExpensiveEffect(layer: ImageEditLayerV3): boolean {
-  return layer.type === 'effect' && [
-    'image.fast-blur-v3',
-    'image.gaussian-blur-v2',
-    'image.diffusion',
-    'image.vgpu-glow',
-  ].includes(layer.effectId)
-}
-
 function ParameterSlider({
   controller,
   layer,
@@ -63,8 +52,6 @@ function ParameterSlider({
   const activeRef = useRef(false)
   const draftRef = useRef(value)
   const previewFrameRef = useRef<number | null>(null)
-  const previewTimeoutRef = useRef<number | null>(null)
-  const lastPreviewAtRef = useRef<number | null>(null)
 
   useEffect(() => {
     if (!activeRef.current) {
@@ -77,7 +64,6 @@ function ParameterSlider({
     if (previewFrameRef.current !== null && typeof cancelAnimationFrame === 'function') {
       cancelAnimationFrame(previewFrameRef.current)
     }
-    if (previewTimeoutRef.current !== null) window.clearTimeout(previewTimeoutRef.current)
     controller.clearParameterPreview(previewId)
   }, [controller, previewId])
   useEffect(() => {
@@ -101,24 +87,7 @@ function ParameterSlider({
     setDraft(next)
     const publish = (): void => {
       previewFrameRef.current = null
-      previewTimeoutRef.current = null
-      lastPreviewAtRef.current = typeof performance === 'undefined' ? Date.now() : performance.now()
       controller.setParameterPreview(previewId, layer.id, paramsFor(draftRef.current))
-    }
-    if (isExpensiveEffect(layer)) {
-      if (previewTimeoutRef.current !== null) return
-      const now = typeof performance === 'undefined' ? Date.now() : performance.now()
-      const elapsed = lastPreviewAtRef.current === null
-        ? EXPENSIVE_EFFECT_PREVIEW_INTERVAL_MS
-        : now - lastPreviewAtRef.current
-      if (elapsed >= EXPENSIVE_EFFECT_PREVIEW_INTERVAL_MS) publish()
-      else {
-        previewTimeoutRef.current = window.setTimeout(
-          publish,
-          EXPENSIVE_EFFECT_PREVIEW_INTERVAL_MS - elapsed,
-        )
-      }
-      return
     }
     if (previewFrameRef.current !== null) return
     if (typeof requestAnimationFrame === 'function') {
@@ -134,10 +103,6 @@ function ParameterSlider({
     if (previewFrameRef.current !== null && typeof cancelAnimationFrame === 'function') {
       cancelAnimationFrame(previewFrameRef.current)
       previewFrameRef.current = null
-    }
-    if (previewTimeoutRef.current !== null) {
-      window.clearTimeout(previewTimeoutRef.current)
-      previewTimeoutRef.current = null
     }
     controller.setParameterPreview(previewId, layer.id, paramsFor(draftRef.current))
     controller.commitLayerParamsPreview(previewId, layer.id, paramsFor(draftRef.current))
@@ -160,10 +125,6 @@ function ParameterSlider({
             if (previewFrameRef.current !== null && typeof cancelAnimationFrame === 'function') {
               cancelAnimationFrame(previewFrameRef.current)
               previewFrameRef.current = null
-            }
-            if (previewTimeoutRef.current !== null) {
-              window.clearTimeout(previewTimeoutRef.current)
-              previewTimeoutRef.current = null
             }
             controller.clearParameterPreview(previewId)
             setDraft(value)

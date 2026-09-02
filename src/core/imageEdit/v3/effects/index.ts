@@ -7,3 +7,4 @@ export * from './gaussianBlur';
 export * from './fastBlur';
 export * from './hsl';
 export * from './temperatureTint';
+export * from './vgpuGlow';

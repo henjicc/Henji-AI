@@ -1,5 +1,6 @@
 import {
   IMAGE_EDIT_HDR_REFERENCE_WHITE_NITS_V3,
+  IMAGE_EDIT_TILED_CPU_NODE_IDS_V3,
   compileImageEditRenderPlanV3,
   createBuiltInImageEditRenderNodeRegistry,
   parseImageEditDocumentV3,
@@ -11,22 +12,6 @@ import {
 import type { ImageEditorV3RasterExportDescription } from '@/platform/contracts/imageEditorV3'
 import { ImageEditorV3ExportCapabilityError } from './contracts'
 import { resolveImageEditorV3ExportGeometry } from './geometry'
-
-const SUPPORTED_NODE_IDS = new Set([
-  'source.raster',
-  'vector.annotation',
-  'effect.blur-v1',
-  'effect.gaussian-blur',
-  'effect.fast-blur',
-  'effect.diffusion',
-  'effect.vgpu-glow',
-  'adjustment.exposure',
-  'adjustment.curves',
-  'adjustment.temperature-tint',
-  'adjustment.hsl',
-  'composite.layer',
-  'group.isolated',
-])
 
 const registry = createBuiltInImageEditRenderNodeRegistry()
 
@@ -208,7 +193,10 @@ export function prepareImageEditorV3ExportRender(
   validateColorContract(document, description)
   visitLayers(document.layers)
   const plan = compileImageEditRenderPlanV3(document, registry, 'export')
-  const unsupported = plan.nodes.find((node) => !SUPPORTED_NODE_IDS.has(node.definitionId))
+  const unsupported = plan.nodes.find((node) => (
+    !IMAGE_EDIT_TILED_CPU_NODE_IDS_V3.has(node.definitionId)
+    || !registry.get(node.definitionId)?.qualities.includes('export')
+  ))
   if (unsupported) {
     const detail = `渲染节点 ${unsupported.definitionId} 没有视觉等价的分块导出实现`
     throw new ImageEditorV3ExportCapabilityError(
