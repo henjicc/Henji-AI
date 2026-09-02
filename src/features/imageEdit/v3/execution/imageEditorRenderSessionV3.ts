@@ -13,6 +13,7 @@ import {
   type ImageEditorPresentationSurfaceElementsV3,
 } from './imageEditorPresentationSurfaceV3'
 import { resolveImageEditorBlurPreviewMipV3 } from './previewEffectScalingV3'
+import { resolveImageEditorCoarsePreviewMipV3 } from './previewFallbackMipV3'
 import {
   ImageEditorViewportCompositeClientV3,
   ImageEditorViewportCompositeDisposedErrorV3,
@@ -160,7 +161,6 @@ export class DefaultImageEditorRenderSessionV3 implements ImageEditorRenderSessi
     if (this.targetFrame !== null) cancelAnimationFrame(this.targetFrame)
     this.targetFrame = null
     this.client.cancel()
-    this.releaseTarget()
     this.publish({
       renderGeneration: snapshot.renderGeneration,
       geometryHash: snapshot.geometryHash,
@@ -285,7 +285,9 @@ export class DefaultImageEditorRenderSessionV3 implements ImageEditorRenderSessi
         viewportKey: `coarse:${snapshot.renderGeneration}`,
         phase: 'coarse',
         cameraSequence: layout.cameraSequence,
-        preferredMip: 30,
+        preferredMip: resolveImageEditorCoarsePreviewMipV3(
+          imageEditOutputSizeV3(snapshot.document.geometry),
+        ),
         coverage: 'document',
         overscanViewports: 0,
         forwardPrefetchViewports: 0,
@@ -297,7 +299,6 @@ export class DefaultImageEditorRenderSessionV3 implements ImageEditorRenderSessi
       }
       const previousCoarse = this.coarse
       this.coarse = result
-      this.releaseTarget()
       this.present()
       previousCoarse?.release()
       this.publish({ rendering: false, fallbackRequired: false, diagnostic: null, result })

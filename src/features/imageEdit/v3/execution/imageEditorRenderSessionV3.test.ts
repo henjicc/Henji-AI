@@ -26,9 +26,24 @@ function result(
   request: ImageEditorViewportCompositeRequestV3,
   release = vi.fn(),
 ): ImageEditorManagedViewportCompositeV3 {
-  const mip = request.coverage === 'document' ? 8 : 0
-  const tileWidth = Math.ceil(request.document.geometry.width / (2 ** mip))
-  const tileHeight = Math.ceil(request.document.geometry.height / (2 ** mip))
+  const mip = request.preferredMip ?? 0
+  const outputWidth = Math.ceil(request.document.geometry.width / (2 ** mip))
+  const outputHeight = Math.ceil(request.document.geometry.height / (2 ** mip))
+  const tiles = []
+  for (let y = 0; y < outputHeight; y += 512) {
+    for (let x = 0; x < outputWidth; x += 512) {
+      const width = Math.min(512, outputWidth - x)
+      const height = Math.min(512, outputHeight - y)
+      tiles.push({
+        bitmap: {
+          width,
+          height,
+          close: vi.fn(),
+        } as unknown as ImageBitmap,
+        outputRect: { x, y, width, height },
+      })
+    }
+  }
   return {
     documentId: request.document.id,
     revision: request.document.revision,
@@ -46,14 +61,7 @@ function result(
     documentWidth: request.document.geometry.width,
     documentHeight: request.document.geometry.height,
     diagnostics: [],
-    tiles: [{
-      bitmap: {
-        width: tileWidth,
-        height: tileHeight,
-        close: vi.fn(),
-      } as unknown as ImageBitmap,
-      outputRect: { x: 0, y: 0, width: tileWidth, height: tileHeight },
-    }],
+    tiles,
     release,
   }
 }
@@ -129,7 +137,7 @@ describe('ImageEditorRenderSessionV3', () => {
     })
 
     expect(requests).toHaveLength(1)
-    expect(requests[0]).toMatchObject({ coverage: 'document', preferredMip: 30, quality: 'draft' })
+    expect(requests[0]).toMatchObject({ coverage: 'document', preferredMip: 1, quality: 'draft' })
     completions[0]?.resolve(result(requests[0]))
     await Promise.resolve()
     await vi.advanceTimersByTimeAsync(16)
@@ -196,6 +204,53 @@ describe('ImageEditorRenderSessionV3', () => {
     await Promise.resolve()
     expect(front.dataset.renderGeneration).toBe('2')
     expect(releaseFirst).toHaveBeenCalledOnce()
+    session.dispose()
+  })
+
+  it('新 generation 的粗略帧不覆盖上一张已经完整的稳定帧', async () => {
+    const requests: ImageEditorViewportCompositeRequestV3[] = []
+    const completions: Array<ReturnType<typeof deferred<ImageEditorManagedViewportCompositeV3>>> = []
+    const client = {
+      render: (request: ImageEditorViewportCompositeRequestV3) => {
+        requests.push(request)
+        const completion = deferred<ImageEditorManagedViewportCompositeV3>()
+        completions.push(completion)
+        return completion.promise
+      },
+      cancel: vi.fn(),
+      dispose: vi.fn(),
+    }
+    const front = document.createElement('canvas')
+    const session = new DefaultImageEditorRenderSessionV3(
+      { sessionId: 'retain-stable-frame-test' },
+      { client },
+    )
+    session.attachSurface({ surfaceId: 'surface-stable', front, safety: document.createElement('canvas') })
+    session.updateViewport(layout)
+    const original = createImageEditDocumentV3({ width: 1_600, height: 1_000 })
+    session.updateSnapshot({
+      document: original, renderGeneration: 1, geometryHash: 'geometry-a',
+      quality: 'stable', resourceDescriptors: [],
+    })
+    completions[0]?.resolve(result(requests[0]))
+    await Promise.resolve()
+    await vi.advanceTimersByTimeAsync(16)
+    completions[1]?.resolve(result(requests[1]))
+    await Promise.resolve()
+    expect(front.dataset.renderGeneration).toBe('1')
+
+    session.updateSnapshot({
+      document: { ...original, revision: 1 }, renderGeneration: 2, geometryHash: 'geometry-a',
+      quality: 'draft', resourceDescriptors: [],
+    })
+    completions[2]?.resolve(result(requests[2]))
+    await Promise.resolve()
+    expect(front.dataset.renderGeneration).toBe('1')
+
+    await vi.advanceTimersByTimeAsync(16)
+    completions[3]?.resolve(result(requests[3]))
+    await Promise.resolve()
+    expect(front.dataset.renderGeneration).toBe('2')
     session.dispose()
   })
 

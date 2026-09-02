@@ -131,7 +131,7 @@ describe('useImageEditorViewportCompositeV3', () => {
     )
     await act(async () => { await vi.advanceTimersByTimeAsync(16) })
     expect(mocked.requests).toHaveLength(2)
-    expect(mocked.requests[0]).toMatchObject({ coverage: 'document', preferredMip: 30 })
+    expect(mocked.requests[0]).toMatchObject({ coverage: 'document', preferredMip: 1 })
 
     for (let index = 1; index <= 40; index += 1) {
       rendered.rerender({ currentLayout: layout(index) })

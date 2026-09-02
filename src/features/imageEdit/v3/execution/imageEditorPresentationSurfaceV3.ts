@@ -248,7 +248,6 @@ export class ImageEditorPresentationSurfaceV3 {
     }
     const targetMipCoverage = imageEditorViewportResultCoverageV3(target, layout)
     const presentableTarget = target
-      && target.renderGeneration === fallback.renderGeneration
       && target.viewportKey === layout.viewportKey
       && target.cameraSequence === cameraSequence
       && targetMipCoverage >= 0.999_999
@@ -268,7 +267,9 @@ export class ImageEditorPresentationSurfaceV3 {
     safetyContext.globalCompositeOperation = 'copy'
     safetyContext.drawImage(staging, 0, 0)
     safetyContext.globalCompositeOperation = 'source-over'
-    elements.front.dataset.renderGeneration = String(fallback.renderGeneration)
+    elements.front.dataset.renderGeneration = String(
+      presentableTarget?.renderGeneration ?? fallback.renderGeneration,
+    )
     elements.front.dataset.cameraSequence = String(cameraSequence)
     elements.front.dataset.geometryHash = currentGeometryHash
     return { coverage: 1, targetMipCoverage }
