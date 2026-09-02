@@ -47,6 +47,9 @@ vi.mock('../execution', async (importOriginal) => {
         diagnostic: null,
         fallbackRequired: true,
         rendering: false,
+        renderGeneration: 1,
+        cameraSequence: 1,
+        geometryHash: 'test-geometry',
       },
       viewportResult: null,
     }),
@@ -89,7 +92,7 @@ describe('ImageEditorPreviewV3 managed frame ownership', () => {
     vi.unstubAllGlobals()
   })
 
-  it('StrictMode 重挂载与文档重渲染期间只读取 managed result，不提前释放', async () => {
+  it('StrictMode 重挂载也不把旧 managed 整图结果接回交互显示', async () => {
     const release = vi.fn()
     const drawImage = vi.fn()
     vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({
@@ -130,7 +133,10 @@ describe('ImageEditorPreviewV3 managed frame ownership', () => {
       </StrictMode>,
     )
 
-    await waitFor(() => expect(drawImage).toHaveBeenCalledTimes(2))
+    await waitFor(() => expect(
+      rendered.container.querySelector('[data-presentation-front-surface]'),
+    ).toBeTruthy())
+    expect(drawImage).not.toHaveBeenCalled()
     expect(release).not.toHaveBeenCalled()
 
     rendered.rerender(
@@ -146,9 +152,9 @@ describe('ImageEditorPreviewV3 managed frame ownership', () => {
       </StrictMode>,
     )
     await waitFor(() => expect(
-      rendered.container.querySelector('canvas[role="img"]'),
+      rendered.container.querySelector('[data-presentation-front-surface]'),
     ).toBeTruthy())
-    expect(drawImage).toHaveBeenCalledTimes(2)
+    expect(drawImage).not.toHaveBeenCalled()
     expect(release).not.toHaveBeenCalled()
   })
 
@@ -434,7 +440,7 @@ describe('ImageEditorPreviewV3 managed frame ownership', () => {
     ])
   })
 
-  it('模糊即时反馈不再缩放画布几何，归零时不会产生尺寸跳变', async () => {
+  it('模糊不再通过 CSS 近似重复渲染整张画面', async () => {
     vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({
       x: 0, y: 0, left: 0, top: 0, right: 900, bottom: 600,
       width: 900, height: 600, toJSON: () => undefined,
@@ -473,14 +479,13 @@ describe('ImageEditorPreviewV3 managed frame ownership', () => {
         />
       </div>,
     )
-    const feedback = await waitFor(() => rendered.container.querySelector<HTMLElement>(
+    await waitFor(() => expect(rendered.container.querySelector(
       '[data-live-effect-feedback]',
-    ))
-    expect(feedback?.style.filter).toContain('blur(')
-    expect(feedback?.style.transform).toBe('')
+    )).toBeNull())
+    expect(rendered.container.querySelector('[data-move-feedback-frame]')).not.toBeNull()
   })
 
-  it('辉光精确帧到达前先显示即时光晕反馈', async () => {
+  it('辉光不再通过 screen 混合的 CSS 副本伪造中间帧', async () => {
     vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({
       x: 0, y: 0, left: 0, top: 0, right: 900, bottom: 600,
       width: 900, height: 600, toJSON: () => undefined,
@@ -521,10 +526,9 @@ describe('ImageEditorPreviewV3 managed frame ownership', () => {
         />
       </div>,
     )
-    const glow = await waitFor(() => rendered.container.querySelector<HTMLElement>(
+    await waitFor(() => expect(rendered.container.querySelector(
       '[data-live-glow-feedback]',
-    ))
-    expect(glow?.style.mixBlendMode).toBe('screen')
-    expect(glow?.style.filter).toContain('blur(')
+    )).toBeNull())
+    expect(rendered.container.querySelectorAll('[data-raster-display-frame]')).toHaveLength(1)
   })
 })

@@ -8,7 +8,6 @@ import { IMAGE_EDITOR_V3_BRUSH_TILE_MEDIA_TYPE } from '../application/imageEdito
 import {
   collectImageEditorViewportBrushRequestsV3,
   createImageEditorViewportSourceTileRequestsV3,
-  ImageEditorViewportCompositeUnsupportedErrorV3,
   prepareImageEditorViewportCompositeV3,
 } from './viewportCompositeDocumentV3'
 import { planImageEditorViewportTilesV3 } from './viewportTilePlannerV3'
@@ -18,7 +17,7 @@ const BRUSH_LEFT = `sha256:${'2'.repeat(64)}` as const
 const BRUSH_RIGHT = `sha256:${'3'.repeat(64)}` as const
 
 describe('图片编辑 V3 视口合成能力边界', () => {
-  it('全局分析效果与输出裁剪明确保留给全局受管预览', () => {
+  it('全局效果、方向与裁剪都进入同一个分块执行计划', () => {
     const document = createImageEditDocumentV3({
       width: 512,
       height: 512,
@@ -31,13 +30,19 @@ describe('图片编辑 V3 视口合成能力边界', () => {
       'image.vgpu-glow',
       { strength: 1 },
     ))
-    expect(() => prepareImageEditorViewportCompositeV3(document, 'stable', []))
-      .toThrow(ImageEditorViewportCompositeUnsupportedErrorV3)
+    const withGlow = prepareImageEditorViewportCompositeV3(document, 'stable', [])
+    expect(withGlow.plan.nodes.some((node) => node.definitionId === 'effect.vgpu-glow')).toBe(true)
 
     document.layers.pop()
     document.geometry.crop = { x: 0, y: 0, width: 256, height: 256 }
-    expect(() => prepareImageEditorViewportCompositeV3(document, 'stable', []))
-      .toThrow('全局受管预览')
+    document.geometry.orientation = { rotate: 90, mirrored: true }
+    const cropped = prepareImageEditorViewportCompositeV3(document, 'stable', [])
+    expect(cropped.outputGeometry).toMatchObject({
+      outputWidth: 256,
+      outputHeight: 256,
+      rotate: 90,
+      mirrored: true,
+    })
   })
 
   it('只把当前含 halo 区域相交的稀疏画笔瓦片送入 Worker', () => {

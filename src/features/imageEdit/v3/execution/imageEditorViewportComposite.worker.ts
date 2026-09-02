@@ -1,6 +1,8 @@
 /// <reference lib="webworker" />
 
 import { linearPreviewTileToImageDataV3 } from './previewPixelsV3'
+import { imageEditOutputSizeV3 } from '@/core/imageEdit/v3'
+import { ImageEditorPreviewCustomEffectsV3 } from './previewCustomEffectsV3'
 import type {
   ImageEditorViewportCompositeBitmapTileV3,
   ImageEditorViewportCompositeWorkerEventV3,
@@ -10,6 +12,7 @@ import { renderImageEditorViewportCompositeV3 } from './viewportCompositeRendere
 
 const workerScope = self as DedicatedWorkerGlobalScope
 const activeControllers = new Map<string, AbortController>()
+const customEffects = new ImageEditorPreviewCustomEffectsV3()
 
 workerScope.onmessage = (event: MessageEvent<ImageEditorViewportCompositeWorkerRequestV3>): void => {
   const request = event.data
@@ -20,6 +23,7 @@ workerScope.onmessage = (event: MessageEvent<ImageEditorViewportCompositeWorkerR
   if (request.type === 'dispose') {
     for (const controller of activeControllers.values()) controller.abort()
     activeControllers.clear()
+    customEffects.dispose()
     workerScope.close()
     return
   }
@@ -54,16 +58,20 @@ async function renderRequest(
         }
         tiles.push({ bitmap, outputRect })
       },
+      { customEffects },
     )
     if (signal.aborted) throw abortError()
     postEvent({
       type: 'rendered',
       requestId: request.requestId,
       sequence: request.sequence,
+      renderGeneration: request.renderGeneration,
+      cameraSequence: request.cameraSequence,
+      geometryHash: request.geometryHash,
       revision: request.document.revision,
       mip: request.plan.mip,
-      documentWidth: request.document.geometry.width,
-      documentHeight: request.document.geometry.height,
+      documentWidth: imageEditOutputSizeV3(request.document.geometry).width,
+      documentHeight: imageEditOutputSizeV3(request.document.geometry).height,
       diagnostics,
       tiles,
     }, tiles.map((tile) => tile.bitmap))
@@ -73,6 +81,7 @@ async function renderRequest(
       type: 'failed',
       requestId: request.requestId,
       sequence: request.sequence,
+      renderGeneration: request.renderGeneration,
       code: signal.aborted ? 'aborted' : 'render-failed',
       message: error instanceof Error ? error.message : String(error),
     })

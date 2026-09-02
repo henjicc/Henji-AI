@@ -1,6 +1,7 @@
 import type { ImageEditMemoryLease } from '@/core/imageEdit/v3/resourceBudget'
 import type { ImageEditDocumentV3 } from '@/core/imageEdit/v3/documentTypes'
 import { createTileRegion } from '@/core/imageEdit/v3/tileGeometry'
+import { imageEditOutputSizeV3 } from '@/core/imageEdit/v3/outputGeometry'
 import type { ImageEditorViewportCompositeWorkerEventV3 } from './viewportCompositeProtocolV3'
 import type { ImageEditorViewportTilePlanV3 } from './viewportTilePlannerV3'
 
@@ -14,10 +15,11 @@ export function validateImageEditorViewportCompositeEventV3(
   document: ImageEditDocumentV3,
   plan: ImageEditorViewportTilePlanV3,
 ): void {
+  const outputSize = imageEditOutputSizeV3(document.geometry)
   if (
     event.revision !== document.revision
-    || event.documentWidth !== document.geometry.width
-    || event.documentHeight !== document.geometry.height
+    || event.documentWidth !== outputSize.width
+    || event.documentHeight !== outputSize.height
     || event.mip !== plan.mip
     || event.tiles.length !== plan.tiles.length
   ) throw new Error('视口 Worker 返回了陈旧或无效成品帧')
@@ -25,7 +27,7 @@ export function validateImageEditorViewportCompositeEventV3(
     const request = plan.tiles[index]
     if (!request) throw new Error('视口 Worker 返回了额外成品瓦片')
     const expected = createTileRegion(
-      document.geometry,
+      outputSize,
       { mip: plan.mip, x: request.tileX, y: request.tileY },
       request.halo,
     ).outputRect

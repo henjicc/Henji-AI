@@ -92,7 +92,7 @@ describe('useImageEditorViewportCompositeV3', () => {
     vi.unstubAllGlobals()
   })
 
-  it('连续缩放只提交静止后的最新视口，不为每个滚轮事件创建任务', async () => {
+  it('同一动画帧内的连续相机变化只提交最新视口，不再等待 80ms', async () => {
     const stableSnapshot = snapshot()
     const rendered = renderHook(
       ({ currentLayout }) => useImageEditorViewportCompositeV3(
@@ -104,18 +104,14 @@ describe('useImageEditorViewportCompositeV3', () => {
       ),
       { initialProps: { currentLayout: layout(0) } },
     )
-    await act(async () => { await Promise.resolve() })
+    await act(async () => { await vi.advanceTimersByTimeAsync(16) })
     expect(mocked.requests).toHaveLength(1)
 
     for (let index = 1; index <= 40; index += 1) {
       rendered.rerender({ currentLayout: layout(index) })
-      await act(async () => { await vi.advanceTimersByTimeAsync(10) })
     }
     expect(mocked.requests).toHaveLength(1)
-
-    await act(async () => { await vi.advanceTimersByTimeAsync(69) })
-    expect(mocked.requests).toHaveLength(1)
-    await act(async () => { await vi.advanceTimersByTimeAsync(1) })
+    await act(async () => { await vi.advanceTimersByTimeAsync(16) })
     expect(mocked.requests).toHaveLength(2)
     expect(mocked.requests[1]).toMatchObject({ viewportKey: 'viewport-40' })
 

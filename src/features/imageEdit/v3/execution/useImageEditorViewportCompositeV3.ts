@@ -1,5 +1,6 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react'
 
+import { createImageEditGeometryHashV3 } from '@/core/imageEdit/v3'
 import { createLogger } from '@/core/logging'
 import type { ImageEditorV3ResourceDescriptor } from '@/platform/contracts/imageEditorV3'
 import type { ImageEditCommandBusSnapshotV3 } from '../application/imageEditCommandBus'
@@ -17,13 +18,15 @@ import { useImageEditorResultLeaseV3 } from './useImageEditorResultLeaseV3'
 
 const logger = createLogger('image_editor_v3.viewport_composite_hook')
 const EMPTY_RESOURCE_DESCRIPTORS: readonly ImageEditorV3ResourceDescriptor[] = []
-const VIEWPORT_LAYOUT_SETTLE_MS = 80
 
 export interface ImageEditorViewportCompositeStateV3 {
   result: ImageEditorManagedViewportCompositeV3 | null
   diagnostic: string | null
   fallbackRequired: boolean
   rendering: boolean
+  renderGeneration: number
+  cameraSequence: number
+  geometryHash: string
 }
 
 export function useImageEditorViewportCompositeV3(
@@ -38,67 +41,96 @@ export function useImageEditorViewportCompositeV3(
     sessionId,
     resourceBudgetConsumerId: `viewport-composite:${resourceBudgetConsumerId}`,
   }), [resourceBudgetConsumerId, sessionId])
+  const document = useMemo(() => projectImageEditorPreviewDocumentV3(snapshot), [snapshot])
+  const identityRef = useRef<{
+    document: typeof document
+    previewOverrides: typeof snapshot.previewOverrides
+    renderGeneration: number
+    viewportKey: string | null
+    cameraSequence: number
+  } | null>(null)
+  const previousIdentity = identityRef.current
+  const renderChanged = !previousIdentity
+    || previousIdentity.document !== document
+    || previousIdentity.previewOverrides !== snapshot.previewOverrides
+  const cameraChanged = !previousIdentity || previousIdentity.viewportKey !== (layout?.viewportKey ?? null)
+  const renderGeneration = renderChanged
+    ? (previousIdentity?.renderGeneration ?? 0) + 1
+    : previousIdentity.renderGeneration
+  const cameraSequence = cameraChanged
+    ? (previousIdentity?.cameraSequence ?? 0) + 1
+    : previousIdentity.cameraSequence
+  identityRef.current = {
+    document,
+    previewOverrides: snapshot.previewOverrides,
+    renderGeneration,
+    viewportKey: layout?.viewportKey ?? null,
+    cameraSequence,
+  }
+  const geometryHash = createImageEditGeometryHashV3(document.geometry)
   const [state, setState] = useState<ImageEditorViewportCompositeStateV3>({
     result: null,
     diagnostic: null,
     fallbackRequired: false,
     rendering: false,
+    renderGeneration,
+    cameraSequence,
+    geometryHash,
   })
-  const latestLayoutRef = useRef(layout)
-  latestLayoutRef.current = layout
-  const [renderLayout, setRenderLayout] = useState(layout)
-  const layoutKey = layout?.viewportKey ?? null
-
-  useEffect(() => {
-    if (!layoutKey) {
-      setRenderLayout(null)
-      return
-    }
-    if (renderLayout?.viewportKey === layoutKey) return
-    const timeout = setTimeout(() => {
-      const latest = latestLayoutRef.current
-      if (latest?.viewportKey === layoutKey) setRenderLayout(latest)
-    }, VIEWPORT_LAYOUT_SETTLE_MS)
-    return () => clearTimeout(timeout)
-  }, [layoutKey, renderLayout?.viewportKey])
 
   useImageEditorDisposableV3(client)
   useImageEditorResultLeaseV3(state.result)
 
   useEffect(() => {
-    if (!enabled || !renderLayout || typeof Worker === 'undefined') {
+    if (!enabled || !layout || typeof Worker === 'undefined') {
       client.cancel()
       setState((current) => ({
         ...current,
         diagnostic: null,
         fallbackRequired: enabled && typeof Worker === 'undefined',
         rendering: false,
+        renderGeneration,
+        cameraSequence,
+        geometryHash,
       }))
       return
     }
     let acceptsResult = true
-    const document = projectImageEditorPreviewDocumentV3(snapshot)
     const quality = Object.keys(snapshot.previewOverrides).length > 0 ? 'draft' : 'stable'
     setState((current) => ({
       ...current,
       rendering: true,
       diagnostic: null,
       fallbackRequired: false,
+      renderGeneration,
+      cameraSequence,
+      geometryHash,
     }))
-    queueMicrotask(() => {
+    const animationFrame = requestAnimationFrame(() => {
       if (!acceptsResult) return
       void client.render({
         document,
+        renderGeneration,
+        cameraSequence,
+        geometryHash,
         quality,
         resourceDescriptors,
-        viewport: renderLayout.viewport,
-        viewportKey: renderLayout.viewportKey,
+        viewport: layout.viewport,
+        viewportKey: layout.viewportKey,
       }).then((result) => {
         if (!acceptsResult) {
           result.release()
           return
         }
-        setState({ result, diagnostic: null, fallbackRequired: false, rendering: false })
+        setState({
+          result,
+          diagnostic: null,
+          fallbackRequired: false,
+          rendering: false,
+          renderGeneration,
+          cameraSequence,
+          geometryHash,
+        })
       }).catch((error: unknown) => {
         if (!acceptsResult
           || error instanceof ImageEditorViewportCompositeSupersededErrorV3
@@ -109,6 +141,9 @@ export function useImageEditorViewportCompositeV3(
             diagnostic: null,
             fallbackRequired: true,
             rendering: false,
+            renderGeneration,
+            cameraSequence,
+            geometryHash,
           }))
           return
         }
@@ -122,11 +157,27 @@ export function useImageEditorViewportCompositeV3(
           diagnostic: message,
           fallbackRequired: true,
           rendering: false,
+          renderGeneration,
+          cameraSequence,
+          geometryHash,
         }))
       })
     })
-    return () => { acceptsResult = false }
-  }, [client, enabled, renderLayout, resourceDescriptors, snapshot])
+    return () => {
+      acceptsResult = false
+      cancelAnimationFrame(animationFrame)
+    }
+  }, [
+    cameraSequence,
+    client,
+    document,
+    enabled,
+    geometryHash,
+    layout,
+    renderGeneration,
+    resourceDescriptors,
+    snapshot.previewOverrides,
+  ])
 
   return state
 }

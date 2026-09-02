@@ -1,18 +1,16 @@
 import {
   createTileRegion,
+  imageEditOutputSizeV3,
   type ImageEditMemoryLease,
   type ImageEditResourceBudget,
 } from '@/core/imageEdit/v3'
 import { createLogger } from '@/core/logging'
-import type { ImageEditDocumentV3 } from '@/core/imageEdit/v3/documentTypes'
 import {
   IMAGE_EDIT_RENDER_PRIORITY,
   ImageEditTaskCancelledError,
   ImageEditTaskSupersededError,
   type ImageEditRenderScheduler,
 } from '@/core/imageEdit/v3/renderScheduler'
-import type { ImageEditRenderQuality } from '@/core/imageEdit/v3/renderNodeDefinition'
-import type { ImageEditorV3ResourceDescriptor } from '@/platform/contracts/imageEditorV3'
 import { ImageEditorPreviewBrushTileLoaderV3 } from './previewBrushTileLoaderV3'
 import {
   collectImageEditorViewportBrushRequestsV3,
@@ -23,7 +21,6 @@ import {
   type PreparedImageEditorViewportCompositeV3,
 } from './viewportCompositeDocumentV3'
 import type {
-  ImageEditorViewportCompositeRenderedEventV3,
   ImageEditorViewportCompositeWorkerEventV3,
   ImageEditorViewportCompositeWorkerFactoryV3,
   ImageEditorViewportCompositeWorkerPortV3,
@@ -32,10 +29,7 @@ import {
   ImageEditorViewportTileSchedulerV3,
   type ImageEditorViewportFrameV3,
 } from './viewportTileSchedulerV3'
-import type {
-  ImageEditorViewportTilePlanV3,
-  ImageEditorViewportTransformV3,
-} from './viewportTilePlannerV3'
+import type { ImageEditorViewportTilePlanV3 } from './viewportTilePlannerV3'
 import {
   cloneImageEditorViewportSourceTilesV3,
   imageEditorViewportBrushTransferBytesV3,
@@ -55,59 +49,26 @@ import {
   ImageEditorViewportCompositeResultOwnerV3,
   validateImageEditorViewportCompositeEventV3,
 } from './viewportCompositeResultOwnerV3'
+import { ImageEditorViewportWorkerRetirementV3 } from './viewportWorkerRetirementV3'
+import {
+  ImageEditorViewportCompositeDisposedErrorV3,
+  ImageEditorViewportCompositeSupersededErrorV3,
+  type ImageEditorManagedViewportCompositeV3,
+  type ImageEditorViewportCompositeClientOptionsV3,
+  type ImageEditorViewportCompositeRequestV3,
+} from './viewportCompositeTypesV3'
+export {
+  ImageEditorViewportCompositeDisposedErrorV3,
+  ImageEditorViewportCompositeSupersededErrorV3,
+} from './viewportCompositeTypesV3'
+export type {
+  ImageEditorManagedViewportCompositeV3,
+  ImageEditorViewportCompositeClientOptionsV3,
+  ImageEditorViewportCompositeRequestV3,
+} from './viewportCompositeTypesV3'
 const logger = createLogger('image_editor_v3.viewport_composite')
 const MAX_TRANSFER_BYTES = 256 * 1024 * 1024
-export class ImageEditorViewportCompositeSupersededErrorV3 extends Error {
-  constructor() {
-    super('视口合成请求已被更新版本取代')
-    this.name = 'ImageEditorViewportCompositeSupersededErrorV3'
-  }
-}
-
-export class ImageEditorViewportCompositeDisposedErrorV3 extends Error {
-  constructor() {
-    super('视口合成会话已经释放')
-    this.name = 'ImageEditorViewportCompositeDisposedErrorV3'
-  }
-}
-
-export interface ImageEditorViewportCompositeRequestV3 {
-  document: ImageEditDocumentV3
-  quality: ImageEditRenderQuality
-  resourceDescriptors: readonly ImageEditorV3ResourceDescriptor[]
-  viewport: ImageEditorViewportTransformV3
-  viewportKey: string
-}
-
-export interface ImageEditorManagedViewportCompositeV3 {
-  documentId: string
-  revision: number
-  viewportKey: string
-  mip: number
-  documentWidth: number
-  documentHeight: number
-  diagnostics: string[]
-  tiles: ImageEditorViewportCompositeRenderedEventV3['tiles']
-  release(): void
-}
-
-interface ViewportSchedulerV3 {
-  render: ImageEditorViewportTileSchedulerV3['render']
-  cancel(): void
-  dispose(): void
-}
-
-export interface ImageEditorViewportCompositeClientOptionsV3 {
-  sessionId: string
-  workerFactory?: ImageEditorViewportCompositeWorkerFactoryV3
-  scheduler?: ViewportSchedulerV3
-  resourceBudget?: ImageEditResourceBudget
-  brushTileLoader?: ImageEditorPreviewBrushTileLoaderV3
-  transferMaxBytes?: number
-  resourceBudgetConsumerId?: string
-  renderScheduler?: ImageEditRenderScheduler
-}
-
+const WORKER_CANCEL_ACK_TIMEOUT_MS = 50
 interface ActiveViewportJobV3 extends ImageEditorViewportCompositeRequestV3 {
   sequence: number
   requestId: string
@@ -153,7 +114,7 @@ let viewportCompositeClientSequence = 0
  */
 export class ImageEditorViewportCompositeClientV3 {
   private readonly budget: ImageEditResourceBudget
-  private readonly scheduler: ViewportSchedulerV3
+  private readonly scheduler: Pick<ImageEditorViewportTileSchedulerV3, 'render' | 'cancel' | 'dispose'>
   private readonly brushLoader: ImageEditorPreviewBrushTileLoaderV3
   private readonly workerFactory: ImageEditorViewportCompositeWorkerFactoryV3
   private readonly renderScheduler: ImageEditRenderScheduler
@@ -162,6 +123,14 @@ export class ImageEditorViewportCompositeClientV3 {
   private readonly resultOwner = new ImageEditorViewportCompositeResultOwnerV3()
   private worker: ImageEditorViewportCompositeWorkerPortV3 | null = null
   private active: ActiveViewportJobV3 | null = null
+  private readonly retirement = new ImageEditorViewportWorkerRetirementV3<ActiveViewportJobV3>({
+    timeoutMs: WORKER_CANCEL_ACK_TIMEOUT_MS,
+    release: (job) => this.releaseJobResources(job),
+    onTimeout: () => {
+      this.worker?.terminate()
+      this.worker = null
+    },
+  })
   private sequence = 0
   private disposed = false
 
@@ -237,11 +206,17 @@ export class ImageEditorViewportCompositeClientV3 {
       this.worker.terminate()
       this.worker = null
     }
+    this.retirement.releaseAll()
     this.resultOwner.dispose()
     this.sessionBudgetLease?.release()
   }
 
   private async prepareAndPost(job: ActiveViewportJobV3): Promise<void> {
+    await this.retirement.wait(
+      job.controller.signal,
+      () => new ImageEditorViewportCompositeSupersededErrorV3(),
+    )
+    this.assertActive(job)
     const prepared = prepareImageEditorViewportCompositeV3(
       job.document,
       job.quality,
@@ -252,10 +227,13 @@ export class ImageEditorViewportCompositeClientV3 {
       resourceRef: prepared.primaryResourceRef,
       resourceRefs: prepared.resourceRefs,
       revision: job.document.revision,
-      documentSize: job.document.geometry,
+      documentSize: imageEditOutputSizeV3(job.document.geometry),
+      sourceSize: job.document.geometry,
       viewport: job.viewport,
       bitDepth: typeof job.document.color.bitDepth === 'number' ? job.document.color.bitDepth : 32,
       haloDocumentPixels: prepared.haloDocumentPixels,
+      overscanViewports: 0.5,
+      forwardPrefetchViewports: 1,
       resolveSourceTileRequests: (candidate) => createImageEditorViewportSourceTileRequestsV3(
         prepared,
         candidate,
@@ -300,7 +278,7 @@ export class ImageEditorViewportCompositeClientV3 {
     )
     const outputBytes = frame.plan.tiles.reduce((total, tile) => {
       const output = createTileRegion(
-        job.document.geometry,
+        imageEditOutputSizeV3(job.document.geometry),
         { mip: frame.plan.mip, x: tile.tileX, y: tile.tileY },
         tile.halo,
       ).outputRect
@@ -349,6 +327,9 @@ export class ImageEditorViewportCompositeClientV3 {
             type: 'render',
             requestId: job.requestId,
             sequence: job.sequence,
+            renderGeneration: job.renderGeneration,
+            cameraSequence: job.cameraSequence,
+            geometryHash: job.geometryHash,
             document: job.document,
             quality: job.quality,
             plan: frame.plan,
@@ -375,6 +356,10 @@ export class ImageEditorViewportCompositeClientV3 {
   }
 
   private handleWorkerEvent(event: ImageEditorViewportCompositeWorkerEventV3): void {
+    if (this.retirement.acknowledge(event.requestId)) {
+      this.releaseEvent(event)
+      return
+    }
     const job = this.active
     if (!job || event.requestId !== job.requestId || event.sequence !== job.sequence) {
       this.releaseEvent(event)
@@ -392,6 +377,11 @@ export class ImageEditorViewportCompositeClientV3 {
     try {
       if (!job.prepared || !job.tilePlan) throw new Error('视口 Worker 返回前缺少渲染计划')
       validateImageEditorViewportCompositeEventV3(event, job.document, job.tilePlan)
+      if (
+        event.renderGeneration !== job.renderGeneration
+        || event.cameraSequence !== job.cameraSequence
+        || event.geometryHash !== job.geometryHash
+      ) throw new Error('视口 Worker 返回了陈旧的像素代、相机或输出几何')
       const gpuBytes = event.tiles.reduce(
         (total, tile) => total + tile.outputRect.width * tile.outputRect.height * 4,
         0,
@@ -406,6 +396,9 @@ export class ImageEditorViewportCompositeClientV3 {
       this.settle(job, () => job.resolve({
         documentId: job.document.id,
         revision: event.revision,
+        renderGeneration: event.renderGeneration,
+        cameraSequence: event.cameraSequence,
+        geometryHash: event.geometryHash,
         viewportKey: job.viewportKey,
         mip: event.mip,
         documentWidth: event.documentWidth,
@@ -429,6 +422,7 @@ export class ImageEditorViewportCompositeClientV3 {
     const job = this.active
     this.worker?.terminate()
     this.worker = null
+    this.retirement.releaseAll()
     if (job) job.workerCompletion.reject(new Error(message))
   }
 
@@ -457,12 +451,11 @@ export class ImageEditorViewportCompositeClientV3 {
     this.renderScheduler.cancelTask(job.renderTaskId)
     this.scheduler.cancel()
     if (job.posted) {
-      // Transferable 已交给 Worker 后，只有终止这个专用 Worker 才能同步证明旧任务不再
-      // 持有像素资源。先终止再归还预算，下一次缩放就不会和旧帧重叠记账。
-      this.worker?.terminate()
-      this.worker = null
+      this.worker?.postMessage({ type: 'cancel', requestId: job.requestId })
+      this.retirement.retire(job.requestId, job)
+    } else {
+      this.releaseJobResources(job)
     }
-    this.releaseJobResources(job)
     this.settle(job, () => job.reject(error))
   }
 
@@ -493,4 +486,5 @@ export class ImageEditorViewportCompositeClientV3 {
   private releaseEvent(event: ImageEditorViewportCompositeWorkerEventV3): void {
     this.resultOwner.releaseEvent(event)
   }
+
 }

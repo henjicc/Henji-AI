@@ -267,4 +267,103 @@ describe('图片编辑 V3 视口瓦片规划', () => {
       },
     })).toThrow('与文档尺寸不一致')
   })
+
+  it('静止预取半个视口，运动时再沿前进方向预取一个视口', () => {
+    const base = {
+      resourceRef,
+      documentSize: { width: 4_096, height: 2_048 },
+      pyramid: pyramid(4_096, 2_048),
+      bitDepth: 8 as const,
+      overscanViewports: 0.5,
+      forwardPrefetchViewports: 1,
+    }
+    const still = planImageEditorViewportTilesV3({
+      ...base,
+      viewport: {
+        documentX: 1_024,
+        documentY: 512,
+        width: 512,
+        height: 512,
+        zoom: 1,
+        devicePixelRatio: 1,
+      },
+    })
+    expect(still.demandDocumentRect).toEqual({ x: 768, y: 256, width: 1_024, height: 1_024 })
+
+    const moving = planImageEditorViewportTilesV3({
+      ...base,
+      viewport: {
+        documentX: 1_024,
+        documentY: 512,
+        width: 512,
+        height: 512,
+        zoom: 1,
+        devicePixelRatio: 1,
+        velocityX: 1_000,
+        velocityY: 0,
+        interacting: true,
+      },
+    })
+    expect(moving.demandDocumentRect).toEqual({ x: 768, y: 256, width: 1_536, height: 1_024 })
+  })
+
+  it('在 25% 滞回带内保持 mip，并能规划完整文档最粗兜底', () => {
+    const descriptor = pyramid(8_192, 4_096)
+    const held = planImageEditorViewportTilesV3({
+      resourceRef,
+      documentSize: { width: 8_192, height: 4_096 },
+      pyramid: descriptor,
+      bitDepth: 8,
+      viewport: {
+        documentX: 0,
+        documentY: 0,
+        width: 1_024,
+        height: 512,
+        zoom: 0.14,
+        devicePixelRatio: 1,
+      },
+      previousMip: 3,
+    })
+    expect(held.mip).toBe(3)
+
+    const coarsest = descriptor.levels.at(-1)?.mip ?? 0
+    const fallback = planImageEditorViewportTilesV3({
+      resourceRef,
+      documentSize: { width: 8_192, height: 4_096 },
+      pyramid: descriptor,
+      bitDepth: 8,
+      viewport: {
+        documentX: 2_000,
+        documentY: 1_000,
+        width: 1_024,
+        height: 512,
+        zoom: 1,
+        devicePixelRatio: 1,
+      },
+      preferredMip: coarsest,
+      coverage: 'document',
+    })
+    expect(fallback.mip).toBe(coarsest)
+    expect(fallback.demandDocumentRect).toEqual({ x: 0, y: 0, width: 8_192, height: 4_096 })
+    expect(fallback.tiles).toHaveLength(1)
+  })
+
+  it('输出几何与源金字塔尺寸独立校验', () => {
+    const plan = planImageEditorViewportTilesV3({
+      resourceRef,
+      documentSize: { width: 1_000, height: 800 },
+      sourceSize: { width: 4_000, height: 3_000 },
+      pyramid: pyramid(4_000, 3_000),
+      bitDepth: 8,
+      viewport: {
+        documentX: 0,
+        documentY: 0,
+        width: 500,
+        height: 400,
+        zoom: 1,
+        devicePixelRatio: 1,
+      },
+    })
+    expect(plan.mipSize).toEqual({ width: 1_000, height: 800 })
+  })
 })

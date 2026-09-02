@@ -35,8 +35,6 @@ import { useImageEditorLayerMoveGestureV3 } from './useImageEditorLayerMoveGestu
 import { imageEditorViewportTransformV3, type ImageEditorViewportPanV3 } from './viewportNavigationV3'
 import { useImageEditorViewportNavigationGestureV3 } from './useImageEditorViewportNavigationGestureV3'
 import {
-  resolveLiveBlurRadiusV3,
-  resolveLiveVgpuGlowFeedbackV3,
   splitLiveAnnotationDisplayV3,
 } from './liveAnnotationDisplayV3'
 
@@ -54,7 +52,6 @@ interface ImageEditorPreviewV3Props extends Pick<
 }
 
 const ZERO_VIEWPORT_PAN_V3: ImageEditorViewportPanV3 = { x: 0, y: 0 }
-const EMPTY_PREVIEW_OVERRIDES_V3 = {}
 
 export function ImageEditorPreviewV3({
   sourceImageUrl,
@@ -84,16 +81,7 @@ export function ImageEditorPreviewV3({
     () => projectImageEditorPreviewDocumentV3(snapshot),
     [snapshot],
   )
-  const cropDisplayDocument = useMemo(() => activeTool === 'crop'
-    ? {
-        ...snapshot.document,
-        geometry: {
-          ...snapshot.document.geometry,
-          orientation: projectedDocument.geometry.orientation,
-          crop: null,
-        },
-      }
-    : snapshot.document, [activeTool, projectedDocument.geometry.orientation, snapshot.document])
+  const cropDisplayDocument = snapshot.document
   const liveDisplay = useMemo(
     () => splitLiveAnnotationDisplayV3(cropDisplayDocument),
     [cropDisplayDocument],
@@ -118,19 +106,15 @@ export function ImageEditorPreviewV3({
   }
   const baseDisplayDocument = stableBaseDocumentRef.current.document
   const baseDisplayHistory = stableBaseDocumentRef.current.history
-  const basePreviewOverrides = activeTool === 'crop'
-    ? EMPTY_PREVIEW_OVERRIDES_V3
-    : Object.keys(snapshot.previewOverrides).length === 0
-      ? EMPTY_PREVIEW_OVERRIDES_V3
-      : snapshot.previewOverrides
+  const basePreviewOverrides = snapshot.previewOverrides
   const displaySnapshot = useMemo(() => ({
     document: baseDisplayDocument,
     previewOverrides: basePreviewOverrides,
     history: baseDisplayHistory,
   }), [baseDisplayDocument, baseDisplayHistory, basePreviewOverrides])
   const outputGeometry = useMemo(
-    () => resolveAnnotationOutputGeometryV3(cropDisplayDocument),
-    [cropDisplayDocument],
+    () => resolveAnnotationOutputGeometryV3(projectedDocument),
+    [projectedDocument],
   )
   const viewportLayout = useImageEditorViewportLayoutV3(
     surfaceRef,
@@ -227,43 +211,6 @@ export function ImageEditorPreviewV3({
   const basePreviewRevision = previewRenderer
     ? snapshot.document.revision
     : viewportResult?.revision ?? managedPreview.resultRevision
-  const basePreviewExact = basePreviewDocumentId === displaySnapshot.document.id
-    && basePreviewRevision === displaySnapshot.document.revision
-    && (Object.keys(displaySnapshot.previewOverrides).length === 0
-      || managedPreview.resultPreviewOverrides === displaySnapshot.previewOverrides)
-  const projectedBaseDocument = useMemo(
-    () => projectImageEditorPreviewDocumentV3(displaySnapshot),
-    [displaySnapshot],
-  )
-  const pendingBlurRadius = !basePreviewExact && activeTool !== 'crop'
-    ? resolveLiveBlurRadiusV3(projectedBaseDocument)
-    : null
-  const blurCssPixels = pendingBlurRadius && viewportLayout
-    ? Math.min(48, pendingBlurRadius * viewportLayout.stageWidth / Math.max(1, outputGeometry.width))
-    : 0
-  const pendingGlow = !basePreviewExact && activeTool !== 'crop'
-    ? resolveLiveVgpuGlowFeedbackV3(projectedBaseDocument)
-    : null
-  const glowCssPixels = pendingGlow && viewportLayout
-    ? 2 + pendingGlow.radius * Math.min(32, Math.max(8, Math.min(
-        viewportLayout.stageWidth,
-        viewportLayout.stageHeight,
-      ) * 0.045))
-    : 0
-
-  const renderRasterOutput = (): JSX.Element | null => {
-    if (viewportResult) {
-      return <ImageEditorViewportTilesV3 result={viewportResult} label={t('imageEditor.v3.previewAlt')} />
-    }
-    if (output.kind === 'url') {
-      return <ImageEditorUrlPreviewV3 output={output} label={t('imageEditor.v3.previewAlt')} />
-    }
-    if (output.kind === 'frame') {
-      return <ImageEditorFramePreviewV3 output={output} label={t('imageEditor.v3.previewAlt')} />
-    }
-    return output.kind === 'content' ? <>{output.content}</> : null
-  }
-
   useLayoutEffect(() => {
     const feedback = moveFeedbackRef.current
     if (!feedback) return
@@ -312,6 +259,21 @@ export function ImageEditorPreviewV3({
       onPointerUp={navigation.onPointerUp}
       onPointerCancel={navigation.onPointerCancel}
     >
+      {!previewRenderer ? (
+        <div
+          ref={moveFeedbackRef}
+          data-raster-display-frame
+          data-move-feedback-frame
+          className="pointer-events-none absolute inset-0 overflow-hidden"
+        >
+          <ImageEditorViewportTilesV3
+            result={viewportResult}
+            layout={viewportLayout}
+            expectedGeometryHash={viewportComposite.geometryHash}
+            label={t('imageEditor.v3.previewAlt')}
+          />
+        </div>
+      ) : null}
       <div className="absolute inset-0 flex items-center justify-center overflow-hidden p-6">
         <div
           ref={viewportContentRef}
@@ -324,46 +286,11 @@ export function ImageEditorPreviewV3({
               : {}),
           }}
         >
-          {!previewRenderer ? (
-            <div
-              data-raster-display-frame
-              className="pointer-events-none absolute inset-0 overflow-hidden"
-            >
-              <div
-                ref={moveFeedbackRef}
-                data-move-feedback-frame
-                className="absolute inset-0 flex items-center justify-center"
-              >
-                <div
-                  data-live-effect-feedback
-                  className="absolute inset-0 flex items-center justify-center"
-                  style={blurCssPixels > 0 ? {
-                    filter: `blur(${blurCssPixels}px)`,
-                  } : undefined}
-                >
-                  {renderRasterOutput()}
-                </div>
-                {pendingGlow ? (
-                  <div
-                    data-live-glow-feedback
-                    aria-hidden="true"
-                    className="absolute inset-0 flex items-center justify-center"
-                    style={{
-                      filter: `blur(${glowCssPixels}px) brightness(${1.08 + pendingGlow.whiteHeat * 0.35}) contrast(${1 + pendingGlow.sourceThreshold * 0.25}) saturate(1.12)`,
-                      mixBlendMode: 'screen',
-                      opacity: Math.min(0.48, 0.12 + pendingGlow.intensity * 0.42),
-                    }}
-                  >
-                    {renderRasterOutput()}
-                  </div>
-                ) : null}
-              </div>
-            </div>
-          ) : output.kind === 'url' ? (
+          {previewRenderer && output.kind === 'url' ? (
             <ImageEditorUrlPreviewV3 output={output} label={t('imageEditor.v3.previewAlt')} />
-          ) : output.kind === 'frame' ? (
+          ) : previewRenderer && output.kind === 'frame' ? (
             <ImageEditorFramePreviewV3 output={output} label={t('imageEditor.v3.previewAlt')} />
-          ) : output.content}
+          ) : previewRenderer && output.kind === 'content' ? output.content : null}
           {activeTool === 'crop' && viewportLayout ? (
             <ImageEditorCropOverlayV3
               controller={controller}
@@ -401,13 +328,15 @@ export function ImageEditorPreviewV3({
           <LoaderCircle className="h-6 w-6 animate-spin text-text-dark-muted" />
         </div>
       ) : null}
-      {!previewRenderer && managedPreview.diagnostic ? (
+      {!previewRenderer && (viewportComposite.diagnostic || managedPreview.diagnostic) ? (
         <div
           role="status"
           className="ui-glass absolute left-1/2 top-3 flex max-w-[min(34rem,calc(100%-1.5rem))] -translate-x-1/2 items-start gap-2 rounded-lg px-3 py-2 text-xs text-text-dark"
         >
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warning" aria-hidden="true" />
-          <span className="whitespace-pre-line">{managedPreview.diagnostic}</span>
+          <span className="whitespace-pre-line">
+            {viewportComposite.diagnostic ?? managedPreview.diagnostic}
+          </span>
         </div>
       ) : null}
       {activeTool === 'move' && layerMoveHandlers.unavailableReason ? (

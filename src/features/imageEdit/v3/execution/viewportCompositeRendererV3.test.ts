@@ -7,6 +7,7 @@ import {
   createImageEditDocumentV3,
   createImageEditSparseMaskReferenceV3,
   decodeSrgbExtended,
+  imageEditOutputSizeV3,
 } from '@/core/imageEdit/v3'
 import type { ImageEditorV3SourceTile } from '@/platform/contracts/imageEditorV3'
 import type { ImageEditorViewportCompositeRenderRequestV3 } from './viewportCompositeProtocolV3'
@@ -68,11 +69,15 @@ function request(
     type: 'render',
     requestId: 'renderer-test',
     sequence: 1,
+    renderGeneration: 1,
+    cameraSequence: 1,
+    geometryHash: 'geometry-test',
     document,
     quality: 'stable',
     plan: planImageEditorViewportTilesV3({
       resourceRef: RESOURCE,
-      documentSize: document.geometry,
+      documentSize: imageEditOutputSizeV3(document.geometry),
+      sourceSize: document.geometry,
       pyramid: {
         tileSize: 512,
         levels: [{ mip: 0, width: 4, height: 4, columns: 1, rows: 1 }],
@@ -199,6 +204,9 @@ describe('图片编辑 V3 视口成品分块执行器', () => {
       type: 'render',
       requestId: 'inverse-source',
       sequence: 1,
+      renderGeneration: 1,
+      cameraSequence: 1,
+      geometryHash: 'geometry-test',
       document,
       quality: 'stable',
       plan: planImageEditorViewportTilesV3({
@@ -227,5 +235,37 @@ describe('图片编辑 V3 视口成品分块执行器', () => {
       },
     )
     expect(first).toBeCloseTo(decodeSrgbExtended(96 / 255), 5)
+  })
+
+  it('裁剪与方向在输出边界原子投影，不先发布未裁剪整图', async () => {
+    const document = createImageEditDocumentV3({
+      width: 4,
+      height: 4,
+      documentId: 'viewport-output-geometry',
+      sourceResourceId: RESOURCE,
+      idFactory: () => 'source',
+    })
+    document.geometry.orientation = { rotate: 90, mirrored: false }
+    document.geometry.crop = { x: 1, y: 1, width: 2, height: 2 }
+    const pixels = new Uint8Array(4 * 4 * 4)
+    for (let y = 0; y < 4; y += 1) {
+      for (let x = 0; x < 4; x += 1) {
+        pixels.set([y * 4 + x, 0, 0, 255], (y * 4 + x) * 4)
+      }
+    }
+    const tile = { ...sourceTile(0), pixels: pixels.buffer }
+    let outputRect
+    let red: number[] = []
+    await renderImageEditorViewportCompositeV3(
+      request(document, tile),
+      new AbortController().signal,
+      ({ outputRect: rect, tile: rendered }) => {
+        outputRect = rect
+        red = Array.from({ length: 4 }, (_, index) => rendered.data[index * 4])
+      },
+    )
+    expect(outputRect).toEqual({ x: 0, y: 0, width: 2, height: 2 })
+    const expected = [9, 5, 10, 6].map((value) => decodeSrgbExtended(value / 255))
+    red.forEach((value, index) => expect(value).toBeCloseTo(expected[index], 7))
   })
 })

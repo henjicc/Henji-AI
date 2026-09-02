@@ -4,11 +4,15 @@ import {
   createBuiltInImageEditRenderNodeRegistry,
   createTileRegion,
   enumerateTilesForRect,
+  imageEditOutputSizeV3,
   isImageEditSparseMaskReferenceV3,
   mipSize,
+  resolveImageEditOutputGeometryV3,
+  resolveImageEditOutputSourceRectAtMipV3,
   type ImageEditDocumentV3,
   type ImageEditRect,
   type ImageEditRenderPlan,
+  type ImageEditOutputGeometryV3,
 } from '@/core/imageEdit/v3'
 import type { ImageEditRenderQuality } from '@/core/imageEdit/v3/renderNodeDefinition'
 import type {
@@ -30,18 +34,6 @@ import {
 
 const registry = createBuiltInImageEditRenderNodeRegistry()
 const RESOURCE_REF_PATTERN = /^sha256:[a-f0-9]{64}$/
-const REGION_SAFE_NODES = new Set([
-  'source.raster',
-  'vector.annotation',
-  'effect.blur-v1',
-  'effect.gaussian-blur',
-  'adjustment.exposure',
-  'adjustment.curves',
-  'adjustment.temperature-tint',
-  'adjustment.hsl',
-  'composite.layer',
-  'group.isolated',
-])
 
 export class ImageEditorViewportCompositeUnsupportedErrorV3 extends Error {
   constructor(message: string) {
@@ -54,6 +46,7 @@ export interface PreparedImageEditorViewportCompositeV3 {
   document: ImageEditDocumentV3
   quality: ImageEditRenderQuality
   plan: ImageEditRenderPlan
+  outputGeometry: ImageEditOutputGeometryV3
   resourceRefs: readonly ImageEditorV3ResourceRef[]
   primaryResourceRef: ImageEditorV3ResourceRef
   /** 局部 halo 由区域 RenderPlan 递归规划，不再绑在屏幕瓦片上。 */
@@ -109,31 +102,15 @@ export function prepareImageEditorViewportCompositeV3(
   quality: ImageEditRenderQuality,
   resourceDescriptors: readonly ImageEditorV3ResourceDescriptor[],
 ): PreparedImageEditorViewportCompositeV3 {
-  if (
-    document.geometry.crop
-    || document.geometry.orientation.rotate !== 0
-    || document.geometry.orientation.mirrored
-  ) {
-    throw new ImageEditorViewportCompositeUnsupportedErrorV3(
-      '当前输出方向或裁剪仍由全局受管预览显示',
-    )
-  }
   const plan = compileImageEditRenderPlanV3(document, registry, quality)
   if (plan.diagnostics.length > 0) {
     throw new ImageEditorViewportCompositeUnsupportedErrorV3('当前文档包含不可分块渲染的图层')
   }
   for (const node of plan.nodes) {
-    if (!REGION_SAFE_NODES.has(node.definitionId) || node.category === 'global-analysis') {
+    if (!registry.get(node.definitionId)) {
       throw new ImageEditorViewportCompositeUnsupportedErrorV3(
-        `效果 ${node.definitionId} 需要全局受管预览`,
+        `效果 ${node.definitionId} 没有注册分块执行器`,
       )
-    }
-    if (
-      node.definitionId === 'vector.annotation'
-      && Array.isArray(node.parameters.annotations)
-      && node.parameters.annotations.some((item) => isRecord(item) && item.type === 'mosaic')
-    ) {
-      throw new ImageEditorViewportCompositeUnsupportedErrorV3('旧马赛克标注仍由全局受管预览显示')
     }
   }
   const resourceRefs = nodeResourceRefs(plan)
@@ -165,6 +142,7 @@ export function prepareImageEditorViewportCompositeV3(
     document,
     quality,
     plan,
+    outputGeometry: resolveImageEditOutputGeometryV3(document.geometry),
     resourceRefs,
     primaryResourceRef: resourceRefs[0],
     haloDocumentPixels: 0,
@@ -184,11 +162,19 @@ function renderPlanForMip(
 }
 
 function outputRegionsForCandidate(
-  document: ImageEditDocumentV3,
+  prepared: PreparedImageEditorViewportCompositeV3,
   candidate: ImageEditorViewportTileCandidateV3,
 ): ImageEditRect[] {
   return candidate.tiles.map(({ tileX, tileY }) => (
-    createTileRegion(document.geometry, { mip: candidate.mip, x: tileX, y: tileY }, 0).outputRect
+    resolveImageEditOutputSourceRectAtMipV3(
+      createTileRegion(
+        imageEditOutputSizeV3(prepared.document.geometry),
+        { mip: candidate.mip, x: tileX, y: tileY },
+        0,
+      ).outputRect,
+      prepared.outputGeometry,
+      candidate.mip,
+    )
   ))
 }
 
@@ -205,7 +191,7 @@ function requirementsForCandidate(
     plan,
     ...collectImageEditCpuRegionRequirementsV3(
       plan,
-      outputRegionsForCandidate(prepared.document, candidate),
+      outputRegionsForCandidate(prepared, candidate),
       {
         registry,
         size: mipSize(prepared.document.geometry, candidate.mip),
@@ -288,7 +274,7 @@ export function estimateImageEditorViewportWorkingRegionPixelsV3(
 ): number {
   const requirements = requirementsForCandidate(prepared, candidate)
   return [
-    ...outputRegionsForCandidate(prepared.document, candidate),
+    ...outputRegionsForCandidate(prepared, candidate),
     ...[...requirements.rasterRegions.values(), ...requirements.maskRegions.values()].flat(),
   ].reduce((largest, region) => Math.max(largest, region.width * region.height), 0)
 }

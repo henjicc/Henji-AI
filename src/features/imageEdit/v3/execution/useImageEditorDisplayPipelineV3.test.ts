@@ -24,6 +24,9 @@ const mocked = vi.hoisted(() => ({
     diagnostic: null,
     fallbackRequired: false,
     rendering: false,
+    renderGeneration: 1,
+    cameraSequence: 1,
+    geometryHash: 'geometry-a',
   } as ImageEditorViewportCompositeStateV3,
 }))
 
@@ -49,11 +52,14 @@ const layout = {
   },
 }
 
-function viewportResult(revision: number): ImageEditorManagedViewportCompositeV3 {
+function viewportResult(revision: number, renderGeneration = 1): ImageEditorManagedViewportCompositeV3 {
   return {
     documentId: 'display-document',
     revision,
     viewportKey: layout.viewportKey,
+    renderGeneration,
+    cameraSequence: 1,
+    geometryHash: 'geometry-a',
   } as ImageEditorManagedViewportCompositeV3
 }
 
@@ -101,10 +107,13 @@ describe('useImageEditorDisplayPipelineV3', () => {
     mocked.managed.resultDocumentId = null
     mocked.managed.resultRevision = null
     mocked.managed.resultPreviewOverrides = null
+    mocked.viewport.renderGeneration = 1
+    mocked.viewport.cameraSequence = 1
+    mocked.viewport.geometryHash = 'geometry-a'
     mocked.viewport.result = viewportResult(0)
   })
 
-  it('拖动开始保留稳定画面，草稿就绪后持续显示草稿直到新 revision 稳定画面完成', () => {
+  it('瞬态、提交与稳定帧始终保持同一个视口内核，整图预览永不抢占显示', () => {
     const firstOverride = {
       move: {
         id: 'move',
@@ -122,25 +131,31 @@ describe('useImageEditorDisplayPipelineV3', () => {
     expect(rendered.result.current.displaySource).toBe('viewport')
     expect(rendered.result.current.viewportResult).toBe(mocked.viewport.result)
 
+    mocked.viewport.renderGeneration = 2
     mocked.managed.result = managedResult()
     mocked.managed.resultDocumentId = currentSnapshot.document.id
     mocked.managed.resultRevision = 0
     mocked.managed.resultPreviewOverrides = firstOverride
     rendered.rerender()
-    expect(rendered.result.current.displaySource).toBe('managed')
-    expect(rendered.result.current.viewportResult).toBeNull()
+    expect(rendered.result.current.displaySource).toBe('viewport')
+    expect(rendered.result.current.viewportResult?.renderGeneration).toBe(1)
+
+    mocked.viewport.result = viewportResult(0, 2)
+    rendered.rerender()
+    expect(rendered.result.current.viewportResult?.renderGeneration).toBe(2)
 
     currentSnapshot = snapshot(0, {
       move: { ...firstOverride.move, value: [1, 0, 0, 1, 30, 15] },
     })
     rendered.rerender()
-    expect(rendered.result.current.displaySource).toBe('managed')
+    expect(rendered.result.current.displaySource).toBe('viewport')
 
     currentSnapshot = snapshot(1, {})
+    mocked.viewport.renderGeneration = 3
     rendered.rerender()
-    expect(rendered.result.current.displaySource).toBe('managed')
+    expect(rendered.result.current.displaySource).toBe('viewport')
 
-    mocked.viewport.result = viewportResult(1)
+    mocked.viewport.result = viewportResult(1, 3)
     rendered.rerender()
     expect(rendered.result.current.displaySource).toBe('viewport')
     expect(rendered.result.current.viewportResult?.revision).toBe(1)

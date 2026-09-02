@@ -16,6 +16,7 @@ export * from './renderPlanCompiler';
 export * from './renderHash';
 export * from './invalidation';
 export * from './tileGeometry';
+export * from './outputGeometry';
 export * from './resourceBudget';
 export * from './leasedLruCache';
 export * from './renderCaches';

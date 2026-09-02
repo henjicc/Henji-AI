@@ -259,7 +259,7 @@ describe('图片编辑 V3 视口瓦片调度', () => {
     scheduler.dispose()
   })
 
-  it('在首个异步读取前预留全部 miss，并逐片同步转换为 CPU 缓存账本', async () => {
+  it('在首个异步读取前预留全部 miss，并行解码后同步转换为 CPU 缓存账本', async () => {
     const documentSize = { width: 1_024, height: 512 }
     const resourceBudget = smallBudget(tileBytes * 2)
     const cache = new ImageEditorViewportTileCacheV3({
@@ -283,7 +283,7 @@ describe('图片编辑 V3 视口瓦片调度', () => {
       bitDepth: 8,
       viewport: viewport(0, 0, 1_024, 512),
     })
-    expect(observedInFlight).toEqual([tileBytes * 2, tileBytes])
+    expect(observedInFlight).toEqual([tileBytes * 2, tileBytes * 2])
     expect(resourceBudget.snapshot()).toMatchObject({
       totalBytes: tileBytes * 2,
       byCategory: { 'cpu-cache': tileBytes * 2, 'in-flight': 0 },
@@ -291,6 +291,39 @@ describe('图片编辑 V3 视口瓦片调度', () => {
     frame.release()
     scheduler.dispose()
     expect(resourceBudget.snapshot().totalBytes).toBe(0)
+  })
+
+  it('单个 session 最多并行四个瓦片读取', async () => {
+    const documentSize = { width: 3_072, height: 512 }
+    let active = 0
+    let peak = 0
+    const releases: Array<() => void> = []
+    const readSourceTile = vi.fn(async (request) => {
+      active += 1
+      peak = Math.max(peak, active)
+      await new Promise<void>((resolve) => releases.push(resolve))
+      active -= 1
+      return sourceTile(request, documentSize)
+    })
+    const scheduler = new ImageEditorViewportTileSchedulerV3({
+      sessionId: 'decode-concurrency', readSourceTile,
+      describePyramid: async () => pyramid(documentSize.width, documentSize.height),
+    })
+    const pending = scheduler.render({
+      resourceRef,
+      revision: 1,
+      documentSize,
+      bitDepth: 8,
+      viewport: viewport(0, 0, 3_072, 512),
+    })
+    await flushUntil(() => readSourceTile.mock.calls.length === 4)
+    expect(peak).toBe(4)
+    while (releases.length > 0) releases.shift()?.()
+    await flushUntil(() => readSourceTile.mock.calls.length === 6)
+    while (releases.length > 0) releases.shift()?.()
+    const frame = await pending
+    frame.release()
+    scheduler.dispose()
   })
 
   it('严格拒绝错误几何的返回瓦片，并释放所有尚未提交的预留', async () => {

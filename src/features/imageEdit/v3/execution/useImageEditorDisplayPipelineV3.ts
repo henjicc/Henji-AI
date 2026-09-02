@@ -12,8 +12,8 @@ interface ImageEditorDisplayViewportLayoutV3 {
 }
 
 /**
- * 图片编辑器唯一显示管线：瞬态操作走 draft，稳定状态走视口瓦片，只有视口链路
- * 明确不可用时才启用整图 fallback。两条显示路径不会同时主动发起新任务。
+ * 图片编辑器唯一显示管线：瞬态和稳定状态始终走同一个 ROI 分块内核。
+ * 受管整图预览不再是交互显示 fallback，只保留给非交互消费者。
  */
 export function useImageEditorDisplayPipelineV3(
   sessionId: string,
@@ -26,53 +26,30 @@ export function useImageEditorDisplayPipelineV3(
   const viewportComposite = useImageEditorViewportCompositeV3(
     sessionId,
     snapshot,
-    enabled && !hasPreviewOverrides,
+    enabled,
     resourceDescriptors,
     layout,
   )
   const managedPreview = useManagedImageEditorPreviewV3(
     sessionId,
     snapshot,
-    enabled && (hasPreviewOverrides || viewportComposite.fallbackRequired),
+    false,
     resourceDescriptors,
   )
   const exactViewportResult = viewportComposite.result
     && layout
     && viewportComposite.result.viewportKey === layout.viewportKey
-    && viewportComposite.result.documentId === snapshot.document.id
-    && viewportComposite.result.revision === snapshot.document.revision
+      && viewportComposite.result.documentId === snapshot.document.id
+      && viewportComposite.result.revision === snapshot.document.revision
+      && viewportComposite.result.renderGeneration === viewportComposite.renderGeneration
+      && viewportComposite.result.geometryHash === viewportComposite.geometryHash
     ? viewportComposite.result
     : null
-  const managedResultMatchesSnapshot = Boolean(
-    managedPreview.result
-      && managedPreview.resultDocumentId === snapshot.document.id
-      && managedPreview.resultRevision === snapshot.document.revision
-      && managedPreview.resultPreviewOverrides === snapshot.previewOverrides,
-  )
-  const showManagedDraft = hasPreviewOverrides
-    && managedPreview.result !== null
-    && managedPreview.resultDocumentId === snapshot.document.id
-    && managedPreview.resultRevision === snapshot.document.revision
-    && managedPreview.resultPreviewOverrides !== null
-    && Object.keys(managedPreview.resultPreviewOverrides).length > 0
-  const showCommittedDraft = !hasPreviewOverrides
-    && !exactViewportResult
-    && managedPreview.result !== null
-    && managedPreview.resultDocumentId === snapshot.document.id
-    && managedPreview.resultRevision === snapshot.document.revision - 1
-    && managedPreview.resultPreviewOverrides !== null
-    && Object.keys(managedPreview.resultPreviewOverrides).length > 0
-  const showManagedFallback = !hasPreviewOverrides
-    && !exactViewportResult
-    && managedResultMatchesSnapshot
-  const displayManagedResult = showManagedDraft || showCommittedDraft || showManagedFallback
-  const viewportResult = displayManagedResult
-    ? null
-    : exactViewportResult ?? viewportComposite.result
+  const viewportResult = exactViewportResult ?? viewportComposite.result
 
   return {
     hasPreviewOverrides,
-    displaySource: viewportResult ? 'viewport' : managedPreview.result ? 'managed' : 'empty',
+    displaySource: viewportResult ? 'viewport' : 'empty',
     managedPreview,
     viewportComposite,
     viewportResult,

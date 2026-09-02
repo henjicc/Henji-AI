@@ -9,6 +9,9 @@ export interface ImageEditorViewportCompositeRenderRequestV3 {
   type: 'render'
   requestId: string
   sequence: number
+  renderGeneration: number
+  cameraSequence: number
+  geometryHash: string
   document: ImageEditDocumentV3
   quality: ImageEditRenderQuality
   plan: ImageEditorViewportTilePlanV3
@@ -40,6 +43,9 @@ export interface ImageEditorViewportCompositeRenderedEventV3 {
   type: 'rendered'
   requestId: string
   sequence: number
+  renderGeneration: number
+  cameraSequence: number
+  geometryHash: string
   revision: number
   mip: number
   documentWidth: number
@@ -52,6 +58,7 @@ export interface ImageEditorViewportCompositeFailedEventV3 {
   type: 'failed'
   requestId: string
   sequence: number
+  renderGeneration: number
   code: 'aborted' | 'render-failed'
   message: string
 }

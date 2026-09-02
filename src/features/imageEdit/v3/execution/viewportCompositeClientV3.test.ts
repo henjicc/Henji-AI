@@ -23,6 +23,11 @@ import { planImageEditorViewportTilesV3 } from './viewportTilePlannerV3'
 import type { ImageEditorViewportFrameV3 } from './viewportTileSchedulerV3'
 
 const RESOURCE = `sha256:${'e'.repeat(64)}` as const
+const RENDER_IDENTITY = {
+  renderGeneration: 1,
+  cameraSequence: 1,
+  geometryHash: '20000:10000:0:0:0:0:20000:10000',
+}
 
 class FakeViewportWorker implements ImageEditorViewportCompositeWorkerPortV3 {
   onmessage: ((event: MessageEvent<ImageEditorViewportCompositeWorkerEventV3>) => void) | null = null
@@ -152,6 +157,7 @@ describe('图片编辑 V3 视口成品客户端', () => {
     })
     const rendered = client.render({
       document,
+      ...RENDER_IDENTITY,
       quality: 'draft',
       resourceDescriptors: [],
       viewport: { documentX: 0, documentY: 0, width: 1_440, height: 900, zoom: 0.072, devicePixelRatio: 1 },
@@ -176,6 +182,9 @@ describe('图片编辑 V3 视口成品客户端', () => {
     })
     worker.emit({
       type: 'rendered', requestId: request.requestId, sequence: request.sequence,
+      renderGeneration: request.renderGeneration,
+      cameraSequence: request.cameraSequence,
+      geometryHash: request.geometryHash,
       revision: 0, mip: frame.plan.mip, documentWidth: 20_000, documentHeight: 10_000,
       diagnostics: [], tiles,
     })
@@ -210,6 +219,7 @@ describe('图片编辑 V3 视口成品客户端', () => {
 
     const rendered = client.render({
       document,
+      ...RENDER_IDENTITY,
       quality: 'stable',
       resourceDescriptors: [],
       viewport: { documentX: 0, documentY: 0, width: 1_440, height: 900, zoom: 1_440 / 20_000, devicePixelRatio: 1 },
@@ -242,6 +252,9 @@ describe('图片编辑 V3 视口成品客户端', () => {
       type: 'rendered',
       requestId: request.requestId,
       sequence: request.sequence,
+      renderGeneration: request.renderGeneration,
+      cameraSequence: request.cameraSequence,
+      geometryHash: request.geometryHash,
       revision: document.revision,
       mip: frame.plan.mip,
       documentWidth: document.geometry.width,
@@ -302,6 +315,7 @@ describe('图片编辑 V3 视口成品客户端', () => {
 
     const error = await client.render({
       document,
+      ...RENDER_IDENTITY,
       quality: 'stable',
       resourceDescriptors: [],
       viewport: { documentX: 0, documentY: 0, width: 1_440, height: 900, zoom: 1_440 / 20_000, devicePixelRatio: 1 },
@@ -341,6 +355,7 @@ describe('图片编辑 V3 视口成品客户端', () => {
     })
     const pending = client.render({
       document,
+      ...RENDER_IDENTITY,
       quality: 'stable',
       resourceDescriptors: [],
       viewport: { documentX: 0, documentY: 0, width: 1_440, height: 900, zoom: 0.072, devicePixelRatio: 1 },
@@ -359,7 +374,7 @@ describe('图片编辑 V3 视口成品客户端', () => {
     client.dispose()
   })
 
-  it('Worker 已接管帧后取消会终止专用 Worker 并立即归还预算', async () => {
+  it('Worker 已接管帧后取消通过协议确认回收，不销毁常驻 Worker', async () => {
     const frame = createFrame()
     const scheduler = {
       render: vi.fn(async () => frame),
@@ -383,6 +398,7 @@ describe('图片编辑 V3 视口成品客户端', () => {
     })
     const pending = client.render({
       document,
+      ...RENDER_IDENTITY,
       quality: 'stable',
       resourceDescriptors: [],
       viewport: { documentX: 0, documentY: 0, width: 1_440, height: 900, zoom: 0.072, devicePixelRatio: 1 },
@@ -403,7 +419,16 @@ describe('图片编辑 V3 视口成品客户端', () => {
 
     client.cancel()
     await settled
-    expect(worker.terminate).toHaveBeenCalledTimes(1)
+    expect(worker.terminate).not.toHaveBeenCalled()
+    expect(worker.messages).toContainEqual({ type: 'cancel', requestId: request.requestId })
+    worker.emit({
+      type: 'failed',
+      requestId: request.requestId,
+      sequence: request.sequence,
+      renderGeneration: request.renderGeneration,
+      code: 'aborted',
+      message: 'cancelled',
+    })
     expect(budget.snapshot()).toMatchObject({ totalBytes: 0, leaseCount: 0 })
     client.dispose()
   })
@@ -444,6 +469,7 @@ describe('图片编辑 V3 视口成品客户端', () => {
     })
     const request = (viewportKey: string) => ({
       document,
+      ...RENDER_IDENTITY,
       quality: 'stable' as const,
       resourceDescriptors: [],
       viewport: {
@@ -463,14 +489,29 @@ describe('图片编辑 V3 视口成品客户端', () => {
 
     const second = client.render(request('rapid-2'))
     await firstSettled
-    await flushUntil(() => workers[1]?.messages.some((message) => message.type === 'render') ?? false)
-    expect(budget.snapshot().totalBytes).toBeLessThanOrEqual(singleJobBytes)
-
-    const secondRequest = workers[1]?.messages.find(
+    const firstRequest = workers[0]?.messages.find(
       (message): message is Extract<ImageEditorViewportCompositeWorkerRequestV3, { type: 'render' }> => (
         message.type === 'render'
       ),
     )
+    if (!firstRequest) throw new Error('缺少第一次视口 Worker 请求')
+    workers[0].emit({
+      type: 'failed',
+      requestId: firstRequest.requestId,
+      sequence: firstRequest.sequence,
+      renderGeneration: firstRequest.renderGeneration,
+      code: 'aborted',
+      message: 'cancelled',
+    })
+    await flushUntil(() => workers[0]?.messages.filter((message) => message.type === 'render').length === 2)
+    expect(workers).toHaveLength(1)
+    expect(budget.snapshot().totalBytes).toBeLessThanOrEqual(singleJobBytes)
+
+    const secondRequest = workers[0]?.messages.filter(
+      (message): message is Extract<ImageEditorViewportCompositeWorkerRequestV3, { type: 'render' }> => (
+        message.type === 'render'
+      ),
+    )[1]
     const secondFrame = frames[1]
     if (!secondRequest || !secondFrame) throw new Error('缺少第二次视口 Worker 请求')
     const tiles = secondFrame.plan.tiles.map((tile) => {
@@ -481,10 +522,13 @@ describe('图片编辑 V3 视口成品客户端', () => {
       }, tile.halo).outputRect
       return { outputRect, bitmap: bitmap(outputRect.width, outputRect.height) }
     })
-    workers[1].emit({
+    workers[0].emit({
       type: 'rendered',
       requestId: secondRequest.requestId,
       sequence: secondRequest.sequence,
+      renderGeneration: secondRequest.renderGeneration,
+      cameraSequence: secondRequest.cameraSequence,
+      geometryHash: secondRequest.geometryHash,
       revision: document.revision,
       mip: secondFrame.plan.mip,
       documentWidth: document.geometry.width,
