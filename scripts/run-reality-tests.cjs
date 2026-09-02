@@ -37,11 +37,18 @@ function printHelp() {
 
 function runStep(step) {
   return new Promise((resolve, reject) => {
-    const child = spawn(step.command, step.args, {
+    const npmExecPath = process.env.npm_execpath?.trim()
+    const shouldUseCurrentNpm = process.platform === 'win32'
+      && step.command.toLowerCase() === 'npm.cmd'
+      && npmExecPath
+    const command = shouldUseCurrentNpm ? process.execPath : step.command
+    const args = shouldUseCurrentNpm ? [npmExecPath, ...step.args] : step.args
+    const child = spawn(command, args, {
       cwd: ROOT,
       env: { ...process.env },
       stdio: 'inherit',
       windowsHide: true,
+      shell: process.platform === 'win32' && /\.(?:cmd|bat)$/i.test(command),
     })
     child.on('error', reject)
     child.on('exit', (code, signal) => resolve(signal ? 1 : (code ?? 1)))

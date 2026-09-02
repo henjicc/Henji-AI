@@ -19,10 +19,21 @@ if (!force && isSdkBuildCurrent(root, before)) {
 
 console.log(force ? '构建 SDK（显式强制）' : 'SDK 输入已变化，重新构建')
 const npmCommand = process.platform === 'win32' ? 'npm.cmd' : 'npm'
-const result = spawnSync(npmCommand, ['run', 'build', '-w', 'packages/ai-sdk'], {
-  cwd: root,
-  stdio: 'inherit',
-})
+const npmArgs = ['run', 'build', '-w', 'packages/ai-sdk']
+const npmExecPath = process.env.npm_execpath?.trim()
+const result = npmExecPath
+  ? spawnSync(process.execPath, [npmExecPath, ...npmArgs], {
+      cwd: root,
+      stdio: 'inherit',
+    })
+  : spawnSync(npmCommand, npmArgs, {
+      cwd: root,
+      stdio: 'inherit',
+      shell: process.platform === 'win32',
+    })
+if (result.error) {
+  console.error(`SDK 构建进程启动失败：${result.error.message}`)
+}
 if (result.status !== 0) process.exit(result.status ?? 1)
 
 const after = calculateSdkInputDigest(root)
