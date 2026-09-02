@@ -32,8 +32,23 @@ export class ImageEditorPreviewUnsupportedEffectErrorV3 extends Error {
   }
 }
 
+export interface ImageEditorPreviewRuntimeStateV3 {
+  status: 'device-lost' | 'gpu-ready' | 'cpu-fallback'
+  reason: string | null
+  deviceGeneration: number | null
+}
+
+export interface ImageEditorPreviewCustomEffectsOptionsV3 {
+  onRuntimeState?(state: ImageEditorPreviewRuntimeStateV3): void
+}
+
 export class ImageEditorPreviewCustomEffectsV3 {
-  private backend = new WorkerWebGpuRuntimeBackend()
+  private backend: WorkerWebGpuRuntimeBackend
+  private runtimeState: ImageEditorPreviewRuntimeStateV3 | null = null
+
+  constructor(private readonly options: ImageEditorPreviewCustomEffectsOptionsV3 = {}) {
+    this.backend = this.createBackend()
+  }
 
   async execute(
     node: ImageEditRenderPlanNode,
@@ -73,6 +88,7 @@ export class ImageEditorPreviewCustomEffectsV3 {
       || color.transferFunction === 'pq'
       || color.transferFunction === 'hlg'
     ) {
+      this.publishCpuFallback('hdr-linear-reference')
       if (node.definitionId === 'effect.fast-blur') {
         observeFastBlur?.('cpu', 'hdr-float-interoperability')
         return applyFastBlurV3(
@@ -88,6 +104,7 @@ export class ImageEditorPreviewCustomEffectsV3 {
     }
     if (node.definitionId === 'effect.fast-blur'
       && (typeof navigator === 'undefined' || !('gpu' in navigator))) {
+      this.publishCpuFallback('webgpu-unavailable')
       observeFastBlur?.('cpu', 'webgpu-unavailable')
       return applyFastBlurV3(
         convertFloat32TileColorDomainV3(source, 'linear-light'),
@@ -96,9 +113,11 @@ export class ImageEditorPreviewCustomEffectsV3 {
       )
     }
     if (diffusionRecipe && (typeof navigator === 'undefined' || !('gpu' in navigator))) {
+      this.publishCpuFallback('webgpu-unavailable')
       return applyDiffusionV4(source, diffusionRecipe, { mask })
     }
     if (glowRecipe && (typeof navigator === 'undefined' || !('gpu' in navigator))) {
+      this.publishCpuFallback('webgpu-unavailable')
       return applyVgpuGlowV4(
         convertFloat32TileColorDomainV3(source, 'linear-light'), glowRecipe, { mask },
       )
@@ -109,6 +128,11 @@ export class ImageEditorPreviewCustomEffectsV3 {
     let rendered: ImageBitmap | null = null
     try {
       const state = await this.backend.ensureState()
+      this.publishRuntime({
+        status: 'gpu-ready',
+        reason: null,
+        deviceGeneration: state.generation,
+      })
       if (node.definitionId === 'effect.fast-blur') {
         rendered = await this.backend.renderVgpuFastBlurBitmap(
           state,
@@ -143,8 +167,7 @@ export class ImageEditorPreviewCustomEffectsV3 {
       )
       if (node.definitionId === 'effect.vgpu-glow'
         && !isPlausibleVgpuGlowPreviewV3(source, processed)) {
-        this.backend.destroy()
-        this.backend = new WorkerWebGpuRuntimeBackend()
+        this.resetBackend()
         throw new ImageEditorPreviewUnsupportedEffectErrorV3(
           node.definitionId,
           '辉光 Pro 返回了无效暗帧，已保留上一预览并重置 GPU 工作集',
@@ -152,13 +175,13 @@ export class ImageEditorPreviewCustomEffectsV3 {
       }
       if (node.definitionId === 'effect.fast-blur'
         && !isPlausibleVgpuFastBlurPreviewV3(source, processed)) {
-        this.backend.destroy()
-        this.backend = new WorkerWebGpuRuntimeBackend()
+        this.resetBackend()
         throw new Error('模糊返回了无效暗帧，已重置 GPU 工作集')
       }
       if (node.definitionId === 'effect.fast-blur') observeFastBlur?.('vgpu')
       return mixCustomEffectMaskV3(source, processed, mask)
     } catch (error) {
+      this.publishCpuFallback(error instanceof Error ? error.message : String(error))
       if (node.definitionId === 'effect.fast-blur') {
         observeFastBlur?.(
           'cpu',
@@ -188,6 +211,33 @@ export class ImageEditorPreviewCustomEffectsV3 {
 
   dispose(): void {
     this.backend.destroy()
+  }
+
+  private publishCpuFallback(reason: string): void {
+    this.publishRuntime({ status: 'cpu-fallback', reason, deviceGeneration: null })
+  }
+
+  private publishRuntime(state: ImageEditorPreviewRuntimeStateV3): void {
+    if (this.runtimeState?.status === state.status
+      && this.runtimeState.deviceGeneration === state.deviceGeneration
+      && this.runtimeState.reason === state.reason) return
+    this.runtimeState = state
+    this.options.onRuntimeState?.(state)
+  }
+
+  private createBackend(): WorkerWebGpuRuntimeBackend {
+    const backend = new WorkerWebGpuRuntimeBackend()
+    backend.onDeviceLost((reason) => this.publishRuntime({
+      status: 'device-lost',
+      reason,
+      deviceGeneration: null,
+    }))
+    return backend
+  }
+
+  private resetBackend(): void {
+    this.backend.destroy()
+    this.backend = this.createBackend()
   }
 }
 

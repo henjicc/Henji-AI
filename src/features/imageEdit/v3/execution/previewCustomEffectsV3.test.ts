@@ -88,7 +88,10 @@ describe('ImageEditor V3 现有效果 Worker 边界', () => {
   })
 
   it('WebGPU 不可用时柔光使用同参数的 Float32 CPU 参考实现', async () => {
-    const effects = new ImageEditorPreviewCustomEffectsV3()
+    const runtimeStates: string[] = []
+    const effects = new ImageEditorPreviewCustomEffectsV3({
+      onRuntimeState: (state) => runtimeStates.push(state.status),
+    })
     const source = createFloat32PremultipliedRgbaTile(
       2,
       1,
@@ -102,6 +105,8 @@ describe('ImageEditor V3 现有效果 Worker 边界', () => {
       'draft',
       createDefaultImageEditColorModeV3(),
     )
+
+    expect(runtimeStates).toEqual(['cpu-fallback'])
 
     expect(rendered).not.toBe(source)
     expect(rendered.data).toHaveLength(source.data.length)

@@ -17,7 +17,19 @@ const activeControllers = new Map<string, {
   sequence: number
   renderGeneration: number
 }>()
-const customEffects = new ImageEditorPreviewCustomEffectsV3()
+const customEffects = new ImageEditorPreviewCustomEffectsV3({
+  onRuntimeState: (state) => {
+    for (const [requestId, active] of activeControllers) {
+      postEvent({
+        type: 'runtime',
+        requestId,
+        sequence: active.sequence,
+        renderGeneration: active.renderGeneration,
+        ...state,
+      })
+    }
+  },
+})
 const globalAnalyses = new ImageEditorViewportGlobalAnalysisCacheV3()
 
 workerScope.onmessage = (event: MessageEvent<ImageEditorViewportCompositeWorkerRequestV3>): void => {

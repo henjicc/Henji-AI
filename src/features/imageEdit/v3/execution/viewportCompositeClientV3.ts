@@ -7,8 +7,6 @@ import {
 import { createLogger } from '@/core/logging'
 import {
   IMAGE_EDIT_RENDER_PRIORITY,
-  ImageEditTaskCancelledError,
-  ImageEditTaskSupersededError,
   type ImageEditRenderScheduler,
 } from '@/core/imageEdit/v3/renderScheduler'
 import { ImageEditorPreviewBrushTileLoaderV3 } from './previewBrushTileLoaderV3'
@@ -58,14 +56,18 @@ import {
   type ImageEditorManagedViewportCompositeV3,
   type ImageEditorViewportCompositeClientOptionsV3,
   type ImageEditorViewportCompositeRequestV3,
+  type ImageEditorViewportRuntimeListenerV3,
 } from './viewportCompositeTypesV3'
+import {
+  IMAGE_EDITOR_VIEWPORT_CANCEL_ACK_TIMEOUT_MS_V3,
+  IMAGE_EDITOR_VIEWPORT_MAX_TRANSFER_BYTES_V3,
+  imageEditorViewportErrorV3,
+} from './viewportCompositeClientSupportV3'
 export {
   ImageEditorViewportCompositeDisposedErrorV3,
   ImageEditorViewportCompositeSupersededErrorV3,
 } from './viewportCompositeTypesV3'
 const logger = createLogger('image_editor_v3.viewport_composite')
-const MAX_TRANSFER_BYTES = 256 * 1024 * 1024
-const WORKER_CANCEL_ACK_TIMEOUT_MS = 50
 interface ActiveViewportJobV3 extends ImageEditorViewportCompositeRequestV3 {
   sequence: number
   requestId: string
@@ -89,23 +91,9 @@ function createDefaultWorker(): ImageEditorViewportCompositeWorkerPortV3 {
   return acquireSharedImageEditorViewportCompositeWorkerV3()
 }
 
-function toError(error: unknown): Error {
-  return error instanceof Error ? error : new Error(String(error))
-}
-
-function normalizeViewportError(error: unknown): Error {
-  return error instanceof ImageEditTaskSupersededError
-    || error instanceof ImageEditTaskCancelledError
-    ? new ImageEditorViewportCompositeSupersededErrorV3()
-    : toError(error)
-}
 let viewportCompositeClientSequence = 0
 
-/**
- * 一个会话同时最多只有一个 source load / Worker composite。
- * 已发布任务被更新视口取代时终止专用 Worker，再释放预算并启动最新请求；不能在等待
- * 取消回执期间继续向同一 Worker 堆任务，否则高频缩放会把每一帧的预留留在账本里。
- */
+/** 每个会话只保留一个 source load / Worker composite，取消确认前不堆积新任务。 */
 export class ImageEditorViewportCompositeClientV3 {
   private readonly budget: ImageEditResourceBudget
   private readonly scheduler: Pick<ImageEditorViewportTileSchedulerV3, 'render' | 'cancel' | 'dispose'>
@@ -115,10 +103,11 @@ export class ImageEditorViewportCompositeClientV3 {
   private readonly transferMaxBytes: number
   private readonly sessionBudgetLease: ImageEditorSessionResourceBudgetLeaseV3 | null
   private readonly resultOwner = new ImageEditorViewportCompositeResultOwnerV3()
+  private readonly runtimeListeners = new Set<ImageEditorViewportRuntimeListenerV3>()
   private worker: ImageEditorViewportCompositeWorkerPortV3 | null = null
   private active: ActiveViewportJobV3 | null = null
   private readonly retirement = new ImageEditorViewportWorkerRetirementV3<ActiveViewportJobV3>({
-    timeoutMs: WORKER_CANCEL_ACK_TIMEOUT_MS,
+    timeoutMs: IMAGE_EDITOR_VIEWPORT_CANCEL_ACK_TIMEOUT_MS_V3,
     release: (job) => this.releaseJobResources(job),
     onTimeout: () => {
       this.worker?.terminate()
@@ -130,7 +119,7 @@ export class ImageEditorViewportCompositeClientV3 {
 
   constructor(private readonly options: ImageEditorViewportCompositeClientOptionsV3) {
     if (!options.sessionId.trim()) throw new Error('视口合成会话 ID 不能为空')
-    this.transferMaxBytes = options.transferMaxBytes ?? MAX_TRANSFER_BYTES
+    this.transferMaxBytes = options.transferMaxBytes ?? IMAGE_EDITOR_VIEWPORT_MAX_TRANSFER_BYTES_V3
     this.renderScheduler = options.renderScheduler ?? getImageEditorGlobalRenderSchedulerV3()
     if (!Number.isSafeInteger(this.transferMaxBytes) || this.transferMaxBytes < 0) {
       throw new Error('视口合成传输上限必须是非负整数')
@@ -181,9 +170,14 @@ export class ImageEditorViewportCompositeClientV3 {
         context: { documentId: request.document.id, revision: request.document.revision },
       })
       void this.prepareAndPost(job).catch((error: unknown) => (
-        this.failJob(job, normalizeViewportError(error))
+        this.failJob(job, imageEditorViewportErrorV3(error))
       ))
     })
+  }
+
+  subscribeRuntime(listener: ImageEditorViewportRuntimeListenerV3): () => void {
+    this.runtimeListeners.add(listener)
+    return () => this.runtimeListeners.delete(listener)
   }
 
   cancel(): void {
@@ -203,6 +197,7 @@ export class ImageEditorViewportCompositeClientV3 {
     }
     this.retirement.releaseAll()
     this.resultOwner.dispose()
+    this.runtimeListeners.clear()
     this.sessionBudgetLease?.release()
   }
 
@@ -266,7 +261,7 @@ export class ImageEditorViewportCompositeClientV3 {
       'viewport-composite',
       'transfer',
       transferBytes,
-      'fallback-managed-preview',
+      'lower-mip',
     )
     const maxRegionPixels = estimateImageEditorViewportWorkingRegionPixelsV3(
       prepared, frame.plan, wholeSource,
@@ -279,7 +274,7 @@ export class ImageEditorViewportCompositeClientV3 {
       'viewport-composite',
       'in-flight',
       workingBytes,
-      'fallback-managed-preview',
+      'lower-mip',
     )
     const outputBytes = frame.plan.tiles.reduce((total, tile) => {
       const output = createTileRegion(
@@ -297,7 +292,7 @@ export class ImageEditorViewportCompositeClientV3 {
       'viewport-composite',
       'gpu',
       outputBytes,
-      'fallback-managed-preview',
+      'lower-mip',
     )
     const brushTiles = await this.brushLoader.load(
       brushRequests,
@@ -363,6 +358,12 @@ export class ImageEditorViewportCompositeClientV3 {
   }
 
   private handleWorkerEvent(event: ImageEditorViewportCompositeWorkerEventV3): void {
+    if (event.type === 'runtime') {
+      if (this.active?.requestId === event.requestId) {
+        for (const listener of this.runtimeListeners) listener(event)
+      }
+      return
+    }
     if (this.retirement.acknowledge(event.requestId)) {
       this.releaseEvent(event)
       return
@@ -379,7 +380,7 @@ export class ImageEditorViewportCompositeClientV3 {
       } catch (error) {
         job.controller.abort(error)
         this.worker?.postMessage({ type: 'cancel', requestId: job.requestId })
-        job.workerCompletion.reject(toError(error))
+        job.workerCompletion.reject(imageEditorViewportErrorV3(error))
       }
       return
     }

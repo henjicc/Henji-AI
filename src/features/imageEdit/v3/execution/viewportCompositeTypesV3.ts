@@ -8,6 +8,7 @@ import type { ImageEditRenderScheduler } from '@/core/imageEdit/v3/renderSchedul
 import type { ImageEditorV3ResourceDescriptor } from '@/platform/contracts/imageEditorV3'
 import type {
   ImageEditorViewportCompositeBitmapTileV3,
+  ImageEditorViewportCompositeRuntimeEventV3,
   ImageEditorViewportCompositeWorkerFactoryV3,
 } from './viewportCompositeProtocolV3'
 import type { ImageEditorPreviewBrushTileLoaderV3 } from './previewBrushTileLoaderV3'
@@ -89,3 +90,7 @@ export interface ImageEditorViewportCompositeClientOptionsV3 {
   resourceBudgetConsumerId?: string
   renderScheduler?: ImageEditRenderScheduler
 }
+
+export type ImageEditorViewportRuntimeListenerV3 = (
+  event: ImageEditorViewportCompositeRuntimeEventV3,
+) => void

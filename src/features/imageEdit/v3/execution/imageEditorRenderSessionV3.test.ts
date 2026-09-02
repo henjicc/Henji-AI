@@ -8,7 +8,11 @@ import {
 } from '@/core/imageEdit/v3/documentFactory'
 import type { ImageEditorManagedViewportCompositeV3 } from './viewportCompositeTypesV3'
 import type { ImageEditorViewportCompositeRequestV3 } from './viewportCompositeTypesV3'
-import { DefaultImageEditorRenderSessionV3 } from './imageEditorRenderSessionV3'
+import type { ImageEditorViewportCompositeRuntimeEventV3 } from './viewportCompositeProtocolV3'
+import {
+  DefaultImageEditorRenderSessionV3,
+  type ImageEditorRenderSessionDiagnosticsV3,
+} from './imageEditorRenderSessionV3'
 
 function deferred<T>(): { promise: Promise<T>; resolve(value: T): void } {
   let complete: ((value: T) => void) | undefined
@@ -325,5 +329,63 @@ describe('ImageEditorRenderSessionV3', () => {
     await vi.advanceTimersByTimeAsync(16)
     expect(cameraSequence).toBe(2)
     session.dispose()
+  })
+
+  it('GPU 丢失和 CPU 后备只更新会话状态，不卸载最后显示表面', () => {
+    const runtime = {
+      listener: null as ((event: ImageEditorViewportCompositeRuntimeEventV3) => void) | null,
+    }
+    const unsubscribeRuntime = vi.fn()
+    const client = {
+      render: vi.fn(() => new Promise<ImageEditorManagedViewportCompositeV3>(() => undefined)),
+      cancel: vi.fn(),
+      dispose: vi.fn(),
+      subscribeRuntime: vi.fn((listener: typeof runtime.listener) => {
+        runtime.listener = listener
+        return unsubscribeRuntime
+      }),
+    }
+    const session = new DefaultImageEditorRenderSessionV3(
+      { sessionId: 'runtime-recovery-test' },
+      { client },
+    )
+    const front = document.createElement('canvas')
+    session.attachSurface({
+      surfaceId: 'persistent-surface',
+      front,
+      safety: document.createElement('canvas'),
+    })
+    session.updateViewport(layout)
+    session.updateSnapshot({
+      document: createImageEditDocumentV3({ width: 1_600, height: 1_000 }),
+      renderGeneration: 1,
+      geometryHash: 'geometry-runtime',
+      quality: 'stable',
+      resourceDescriptors: [],
+    })
+    let latest: ImageEditorRenderSessionDiagnosticsV3 | null = null
+    const unsubscribeDiagnostics = session.subscribeDiagnostics((value) => { latest = value })
+
+    if (!runtime.listener) throw new Error('缺少运行时状态订阅')
+    runtime.listener({
+      type: 'runtime', requestId: 'request', sequence: 1, renderGeneration: 1,
+      status: 'device-lost', reason: 'adapter reset', deviceGeneration: null,
+    })
+    expect(latest).toMatchObject({
+      surfaceId: 'persistent-surface', renderBackend: 'cpu', deviceStatus: 'lost',
+      diagnostic: 'adapter reset',
+    })
+    runtime.listener({
+      type: 'runtime', requestId: 'request', sequence: 1, renderGeneration: 1,
+      status: 'gpu-ready', reason: null, deviceGeneration: 4,
+    })
+    expect(latest).toMatchObject({
+      surfaceId: 'persistent-surface', renderBackend: 'gpu', deviceStatus: 'ready',
+      deviceGeneration: 4,
+    })
+    expect(front.isConnected).toBe(false)
+    unsubscribeDiagnostics()
+    session.dispose()
+    expect(unsubscribeRuntime).toHaveBeenCalledOnce()
   })
 })

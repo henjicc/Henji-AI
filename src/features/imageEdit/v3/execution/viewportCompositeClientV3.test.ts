@@ -117,6 +117,8 @@ describe('图片编辑 V3 视口成品客户端', () => {
       workerFactory: () => worker,
       resourceBudget: budget,
     })
+    const runtimeEvents = vi.fn()
+    client.subscribeRuntime(runtimeEvents)
 
     const onTileReady = vi.fn()
     const rendered = client.render({
@@ -133,6 +135,15 @@ describe('图片编辑 V3 视口成品客户端', () => {
       (message): message is Extract<ImageEditorViewportCompositeWorkerRequestV3, { type: 'render' }> => message.type === 'render',
     )
     if (!request) throw new Error('缺少视口 Worker 请求')
+
+    worker.emit({
+      type: 'runtime', requestId: request.requestId, sequence: request.sequence,
+      renderGeneration: request.renderGeneration, status: 'gpu-ready', reason: null,
+      deviceGeneration: 2,
+    })
+    expect(runtimeEvents).toHaveBeenCalledWith(expect.objectContaining({
+      status: 'gpu-ready', deviceGeneration: 2,
+    }))
 
     expect(request.plan.mip).toBe(3)
     expect(request.sourceTiles).toHaveLength(15)
@@ -184,7 +195,7 @@ describe('图片编辑 V3 视口成品客户端', () => {
     client.dispose()
   })
 
-  it('成品 GPU 预算不足时不调用 Worker，并给出全局预览回退信号', async () => {
+  it('成品 GPU 预算不足时不调用 Worker，并要求降低 mip 而不是切换整图预览', async () => {
     const frame = createFrame()
     const scheduler = {
       render: vi.fn(async () => frame),
@@ -240,7 +251,7 @@ describe('图片编辑 V3 视口成品客户端', () => {
       scope: 'viewport-composite',
       category: 'gpu',
       requestedBytes: outputBytes,
-      recovery: 'fallback-managed-preview',
+      recovery: 'lower-mip',
     })
     expect(worker.messages.some((message) => message.type === 'render')).toBe(false)
     expect(frame.release).toHaveBeenCalledTimes(1)

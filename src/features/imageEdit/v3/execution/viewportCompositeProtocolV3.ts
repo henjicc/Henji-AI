@@ -78,10 +78,21 @@ export interface ImageEditorViewportCompositeFailedEventV3 {
   message: string
 }
 
+export interface ImageEditorViewportCompositeRuntimeEventV3 {
+  type: 'runtime'
+  requestId: string
+  sequence: number
+  renderGeneration: number
+  status: 'device-lost' | 'gpu-ready' | 'cpu-fallback'
+  reason: string | null
+  deviceGeneration: number | null
+}
+
 export type ImageEditorViewportCompositeWorkerEventV3 =
   | ImageEditorViewportCompositeTileRenderedEventV3
   | ImageEditorViewportCompositeRenderedEventV3
   | ImageEditorViewportCompositeFailedEventV3
+  | ImageEditorViewportCompositeRuntimeEventV3
 
 export interface ImageEditorViewportCompositeWorkerPortV3 {
   onmessage: ((event: MessageEvent<ImageEditorViewportCompositeWorkerEventV3>) => void) | null

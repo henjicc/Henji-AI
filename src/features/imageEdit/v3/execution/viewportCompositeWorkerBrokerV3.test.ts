@@ -37,6 +37,13 @@ function failed(requestId: string): ImageEditorViewportCompositeWorkerEventV3 {
   }
 }
 
+function runtime(requestId: string): ImageEditorViewportCompositeWorkerEventV3 {
+  return {
+    type: 'runtime', requestId, sequence: 1, renderGeneration: 1,
+    status: 'device-lost', reason: 'adapter reset', deviceGeneration: null,
+  }
+}
+
 describe('视口合成共享 Worker 代理', () => {
   it('多个 session 复用同一 Worker，事件严格返回所属 port', () => {
     const workers: FakeWorker[] = []
@@ -59,10 +66,13 @@ describe('视口合成共享 Worker 代理', () => {
     expect(secondEvents).toHaveBeenCalledOnce()
     expect(firstEvents).not.toHaveBeenCalled()
 
+    workers[0]?.emit(runtime('first'))
+    expect(firstEvents).toHaveBeenCalledOnce()
+    workers[0]?.emit(failed('first'))
+    expect(firstEvents).toHaveBeenCalledTimes(2)
+
     first.postMessage({ type: 'dispose' })
     expect(workers[0]?.terminate).not.toHaveBeenCalled()
-    workers[0]?.emit(failed('first'))
-    expect(firstEvents).not.toHaveBeenCalled()
     second.postMessage({ type: 'dispose' })
     expect(workers[0]?.messages.at(-1)).toEqual({ type: 'dispose' })
     expect(workers[0]?.terminate).toHaveBeenCalledOnce()

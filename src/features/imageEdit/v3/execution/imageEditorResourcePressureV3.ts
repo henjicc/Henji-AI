@@ -5,9 +5,7 @@ import type {
   ImageEditResourceBudget,
 } from '@/core/imageEdit/v3/resourceBudget'
 
-export type ImageEditorResourcePressureRecoveryV3 =
-  | 'lower-mip'
-  | 'fallback-managed-preview'
+export type ImageEditorResourcePressureRecoveryV3 = 'lower-mip'
 
 export class ImageEditorResourcePressureErrorV3 extends Error {
   readonly code = 'image-editor-v3-resource-pressure'
@@ -19,10 +17,7 @@ export class ImageEditorResourcePressureErrorV3 extends Error {
     readonly availableBytes: number,
     readonly recovery: ImageEditorResourcePressureRecoveryV3,
   ) {
-    const action = recovery === 'lower-mip'
-      ? '请降低预览 mip/尺寸后重试'
-      : '请回退到全局受管预览'
-    super(`图片编辑资源预算不足（需要 ${requestedBytes} 字节，可用 ${availableBytes} 字节），${action}`)
+    super(`图片编辑资源预算不足（需要 ${requestedBytes} 字节，可用 ${availableBytes} 字节），请降低预览 mip/尺寸后重试`)
     this.name = 'ImageEditorResourcePressureErrorV3'
   }
 }

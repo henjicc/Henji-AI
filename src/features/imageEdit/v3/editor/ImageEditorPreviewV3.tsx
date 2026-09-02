@@ -270,6 +270,9 @@ export function ImageEditorPreviewV3({
       data-preview-display-source={previewRenderer ? 'custom' : displayPipeline.displaySource}
       data-preview-coverage={previewRenderer ? undefined : viewportComposite.coverage.toFixed(4)}
       data-preview-target-mip-coverage={previewRenderer ? undefined : viewportComposite.targetMipCoverage.toFixed(4)}
+      data-preview-render-backend={previewRenderer ? undefined : viewportComposite.renderBackend}
+      data-preview-device-status={previewRenderer ? undefined : viewportComposite.deviceStatus}
+      data-preview-device-generation={previewRenderer ? undefined : viewportComposite.deviceGeneration}
       data-active-navigation-tool={activeTool === 'hand' || activeTool === 'zoom' ? activeTool : undefined}
       data-move-availability={activeTool === 'move'
         ? layerMoveHandlers.unavailableReason ?? 'ready'

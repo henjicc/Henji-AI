@@ -17,11 +17,12 @@ import type {
   ImageEditorManagedViewportCompositeV3,
   ImageEditorViewportCompositeClientOptionsV3,
   ImageEditorViewportCompositeRequestV3,
+  ImageEditorViewportRuntimeListenerV3,
 } from './viewportCompositeTypesV3'
 import { resolveImageEditorViewportAnalysisMipV3 } from './viewportGlobalAnalysisV3'
+import { imageEditorRenderRuntimePatchV3 } from './imageEditorRenderRuntimeV3'
 
 const registry = createBuiltInImageEditRenderNodeRegistry()
-
 export interface ImageEditorRenderSnapshotV3 {
   document: ImageEditDocumentV3
   renderGeneration: number
@@ -41,6 +42,9 @@ export interface ImageEditorRenderSessionDiagnosticsV3 {
   targetMip: number | null
   eventToPresentMs: number | null
   rendering: boolean
+  renderBackend: 'gpu' | 'cpu'
+  deviceStatus: 'idle' | 'ready' | 'lost' | 'fallback'
+  deviceGeneration: number
   fallbackRequired: boolean
   diagnostic: string | null
 }
@@ -68,6 +72,7 @@ export interface ImageEditorRenderSessionDependenciesV3 {
     render(request: ImageEditorViewportCompositeRequestV3): Promise<ImageEditorManagedViewportCompositeV3>
     cancel(): void
     dispose(): void
+    subscribeRuntime?(listener: ImageEditorViewportRuntimeListenerV3): () => void
   }
 }
 
@@ -106,6 +111,7 @@ export class DefaultImageEditorRenderSessionV3 implements ImageEditorRenderSessi
   private targetFrame: number | null = null
   private cameraFrame: number | null = null
   private pendingLayout: ImageEditorViewportLayoutV3 | null = null
+  private readonly unsubscribeRuntime: () => void
   private visible = true
   private disposed = false
 
@@ -117,8 +123,13 @@ export class DefaultImageEditorRenderSessionV3 implements ImageEditorRenderSessi
     this.state = {
       surfaceId: null, renderGeneration: 0, geometryHash: '', cameraSequence: 0,
       coverage: 0, targetMipCoverage: 0, targetMip: null, eventToPresentMs: null,
+      renderBackend: 'cpu', deviceStatus: 'idle', deviceGeneration: 0,
       rendering: false, fallbackRequired: false, diagnostic: null, result: null,
     }
+    this.unsubscribeRuntime = this.client.subscribeRuntime?.((event) => {
+      if (event.renderGeneration !== this.snapshot?.renderGeneration) return
+      this.publish(imageEditorRenderRuntimePatchV3(event, this.state.diagnostic))
+    }) ?? (() => undefined)
   }
 
   attachSurface(elements: ImageEditorPresentationSurfaceElementsV3): () => void {
@@ -250,6 +261,7 @@ export class DefaultImageEditorRenderSessionV3 implements ImageEditorRenderSessi
     if (this.cameraFrame !== null) cancelAnimationFrame(this.cameraFrame)
     this.cameraFrame = null
     this.pendingLayout = null
+    this.unsubscribeRuntime()
     this.client.dispose()
     this.releaseTarget()
     this.coarse?.release()

@@ -28,6 +28,9 @@ const EMPTY_STATE: ImageEditorRenderSessionStateV3 = {
   targetMip: null,
   eventToPresentMs: null,
   rendering: false,
+  renderBackend: 'cpu',
+  deviceStatus: 'idle',
+  deviceGeneration: 0,
   fallbackRequired: false,
   diagnostic: null,
 }
