@@ -14,6 +14,8 @@ export interface ImageEditorViewportCompositeRenderRequestV3 {
   geometryHash: string
   document: ImageEditDocumentV3
   quality: ImageEditRenderQuality
+  phase?: 'coarse' | 'analysis' | 'target'
+  analysisRequested?: boolean
   plan: ImageEditorViewportTilePlanV3
   sourceTiles: ImageEditorV3SourceTile[]
   brushTiles: ImageEditorPreviewBrushTileV3[]

@@ -2,7 +2,10 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { createImageEditDocumentV3 } from '@/core/imageEdit/v3/documentFactory'
+import {
+  createImageEditDocumentV3,
+  createImageEditEffectLayerV3,
+} from '@/core/imageEdit/v3/documentFactory'
 import type { ImageEditorManagedViewportCompositeV3 } from './viewportCompositeTypesV3'
 import type { ImageEditorViewportCompositeRequestV3 } from './viewportCompositeTypesV3'
 import { DefaultImageEditorRenderSessionV3 } from './imageEditorRenderSessionV3'
@@ -175,6 +178,66 @@ describe('ImageEditorRenderSessionV3', () => {
     await Promise.resolve()
     expect(front.dataset.renderGeneration).toBe('2')
     expect(releaseFirst).toHaveBeenCalledOnce()
+    session.dispose()
+  })
+
+  it('全局效果严格按粗略覆盖、共享分析、目标视口的顺序调度', async () => {
+    const requests: ImageEditorViewportCompositeRequestV3[] = []
+    const completions: Array<ReturnType<typeof deferred<ImageEditorManagedViewportCompositeV3>>> = []
+    const client = {
+      render: (request: ImageEditorViewportCompositeRequestV3) => {
+        requests.push(request)
+        const completion = deferred<ImageEditorManagedViewportCompositeV3>()
+        completions.push(completion)
+        return completion.promise
+      },
+      cancel: vi.fn(),
+      dispose: vi.fn(),
+    }
+    const session = new DefaultImageEditorRenderSessionV3(
+      { sessionId: 'global-analysis-order-test' },
+      { client },
+    )
+    session.attachSurface({
+      surfaceId: 'surface-analysis',
+      front: document.createElement('canvas'),
+      safety: document.createElement('canvas'),
+    })
+    session.updateViewport(layout)
+    const imageDocument = createImageEditDocumentV3({
+      width: 6_000,
+      height: 4_000,
+      sourceResourceId: `sha256:${'a'.repeat(64)}`,
+      idFactory: () => 'source',
+    })
+    imageDocument.layers.push(createImageEditEffectLayerV3(
+      'blur', '模糊', 'image.fast-blur-v3', { radius: 64, quality: 'high', mip: 0 },
+    ))
+    session.updateSnapshot({
+      document: imageDocument,
+      renderGeneration: 1,
+      geometryHash: 'geometry-analysis',
+      quality: 'stable',
+      resourceDescriptors: [],
+    })
+
+    completions[0]?.resolve(result(requests[0]))
+    await Promise.resolve()
+    expect(requests).toHaveLength(2)
+    expect(requests[1]).toMatchObject({
+      coverage: 'document', preferredMip: 2, analysisRequested: true,
+    })
+    await vi.advanceTimersByTimeAsync(32)
+    expect(requests).toHaveLength(2)
+
+    completions[1]?.resolve(result(requests[1]))
+    await Promise.resolve()
+    await vi.advanceTimersByTimeAsync(16)
+    expect(requests).toHaveLength(3)
+    expect(requests[2]).toMatchObject({
+      coverage: 'viewport', viewportKey: 'viewport-1',
+    })
+    expect(requests[2]?.analysisRequested).not.toBe(true)
     session.dispose()
   })
 

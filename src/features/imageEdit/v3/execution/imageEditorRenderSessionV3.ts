@@ -1,4 +1,8 @@
-import { imageEditOutputSizeV3 } from '@/core/imageEdit/v3/outputGeometry'
+import {
+  compileImageEditRenderPlanV3,
+  createBuiltInImageEditRenderNodeRegistry,
+  imageEditOutputSizeV3,
+} from '@/core/imageEdit/v3'
 import type { ImageEditDocumentV3 } from '@/core/imageEdit/v3/documentTypes'
 import type { ImageEditRenderQuality } from '@/core/imageEdit/v3/renderNodeDefinition'
 import type { ImageEditorV3ResourceDescriptor } from '@/platform/contracts/imageEditorV3'
@@ -14,6 +18,9 @@ import type {
   ImageEditorViewportCompositeClientOptionsV3,
   ImageEditorViewportCompositeRequestV3,
 } from './viewportCompositeTypesV3'
+import { resolveImageEditorViewportAnalysisMipV3 } from './viewportGlobalAnalysisV3'
+
+const registry = createBuiltInImageEditRenderNodeRegistry()
 
 export interface ImageEditorRenderSnapshotV3 {
   document: ImageEditDocumentV3
@@ -93,6 +100,9 @@ export class DefaultImageEditorRenderSessionV3 implements ImageEditorRenderSessi
   private epoch = 0
   private cameraSequence = 0
   private coarseInFlightEpoch: number | null = null
+  private analysisInFlightEpoch: number | null = null
+  private analysisMip: number | null = null
+  private analysisReadyGeneration: number | null = null
   private targetFrame: number | null = null
   private visible = true
   private disposed = false
@@ -124,6 +134,11 @@ export class DefaultImageEditorRenderSessionV3 implements ImageEditorRenderSessi
     this.assertUsable()
     if (sameSnapshot(this.snapshot, snapshot)) return
     this.snapshot = snapshot
+    this.analysisMip = resolveImageEditorViewportAnalysisMipV3(
+      snapshot.document,
+      compileImageEditRenderPlanV3(snapshot.document, registry, snapshot.quality),
+    )
+    this.analysisReadyGeneration = this.analysisMip === null ? snapshot.renderGeneration : null
     const epoch = ++this.epoch
     if (this.targetFrame !== null) cancelAnimationFrame(this.targetFrame)
     this.targetFrame = null
@@ -169,7 +184,7 @@ export class DefaultImageEditorRenderSessionV3 implements ImageEditorRenderSessi
     this.publish({ cameraSequence: this.cameraSequence })
     this.present()
     if (this.coarse?.renderGeneration === this.snapshot?.renderGeneration) {
-      this.scheduleTarget()
+      this.scheduleAnalysisOrTarget()
     } else if (this.snapshot) {
       this.scheduleCoarse(this.epoch, this.snapshot)
     }
@@ -198,7 +213,9 @@ export class DefaultImageEditorRenderSessionV3 implements ImageEditorRenderSessi
     }
     if (visible) {
       this.present()
-      if (this.coarse?.renderGeneration === this.snapshot?.renderGeneration) this.scheduleTarget()
+      if (this.coarse?.renderGeneration === this.snapshot?.renderGeneration) {
+        this.scheduleAnalysisOrTarget()
+      }
     }
   }
 
@@ -224,6 +241,7 @@ export class DefaultImageEditorRenderSessionV3 implements ImageEditorRenderSessi
         ...snapshot,
         viewport: layout.viewport,
         viewportKey: `coarse:${snapshot.renderGeneration}`,
+        phase: 'coarse',
         cameraSequence: layout.cameraSequence,
         preferredMip: 30,
         coverage: 'document',
@@ -241,7 +259,7 @@ export class DefaultImageEditorRenderSessionV3 implements ImageEditorRenderSessi
       this.present()
       previousCoarse?.release()
       this.publish({ rendering: false, fallbackRequired: false, diagnostic: null, result })
-      this.scheduleTarget()
+      this.scheduleAnalysisOrTarget()
     } catch (error) {
       this.handleFailure(epoch, error)
     }
@@ -256,7 +274,11 @@ export class DefaultImageEditorRenderSessionV3 implements ImageEditorRenderSessi
   }
 
   private scheduleTarget(): void {
-    if (!this.visible || this.targetFrame !== null || !this.snapshot || !this.layout) return
+    if (!this.visible
+      || this.targetFrame !== null
+      || !this.snapshot
+      || !this.layout
+      || this.analysisReadyGeneration !== this.snapshot.renderGeneration) return
     this.targetFrame = requestAnimationFrame(() => {
       this.targetFrame = null
       void this.renderTarget(this.epoch, this.snapshot!, this.layout!)
@@ -268,7 +290,9 @@ export class DefaultImageEditorRenderSessionV3 implements ImageEditorRenderSessi
     snapshot: ImageEditorRenderSnapshotV3,
     layout: ImageEditorRenderSessionLayoutV3,
   ): Promise<void> {
-    if (!this.visible || this.coarse?.renderGeneration !== snapshot.renderGeneration) return
+    if (!this.visible
+      || this.coarse?.renderGeneration !== snapshot.renderGeneration
+      || this.analysisReadyGeneration !== snapshot.renderGeneration) return
     this.publish({ rendering: true })
     let progressiveCoverage = 0
     try {
@@ -276,6 +300,7 @@ export class DefaultImageEditorRenderSessionV3 implements ImageEditorRenderSessi
         ...snapshot,
         viewport: layout.viewport,
         viewportKey: layout.viewportKey,
+        phase: 'target',
         cameraSequence: layout.cameraSequence,
         coverage: 'viewport',
         previousMip: this.target?.mip,
@@ -338,6 +363,64 @@ export class DefaultImageEditorRenderSessionV3 implements ImageEditorRenderSessi
         ? null
         : Math.max(0, now() - this.snapshot.eventTimestamp),
     })
+  }
+
+  private scheduleAnalysisOrTarget(): void {
+    if (!this.snapshot || !this.layout || !this.visible) return
+    if (this.analysisReadyGeneration === this.snapshot.renderGeneration) {
+      this.scheduleTarget()
+      return
+    }
+    if (this.analysisInFlightEpoch === this.epoch) return
+    const epoch = this.epoch
+    this.analysisInFlightEpoch = epoch
+    void this.renderAnalysis(epoch, this.snapshot, this.layout).finally(() => {
+      if (this.analysisInFlightEpoch === epoch) this.analysisInFlightEpoch = null
+      if (this.visible
+        && this.epoch === epoch
+        && this.analysisReadyGeneration !== this.snapshot?.renderGeneration
+        && this.state.diagnostic === null) this.scheduleAnalysisOrTarget()
+    })
+  }
+
+  private async renderAnalysis(
+    epoch: number,
+    snapshot: ImageEditorRenderSnapshotV3,
+    layout: ImageEditorRenderSessionLayoutV3,
+  ): Promise<void> {
+    if (this.analysisMip === null) {
+      this.analysisReadyGeneration = snapshot.renderGeneration
+      this.scheduleTarget()
+      return
+    }
+    this.publish({ rendering: true })
+    try {
+      const result = await this.client.render({
+        ...snapshot,
+        viewport: layout.viewport,
+        viewportKey: `analysis:${snapshot.renderGeneration}:${this.analysisMip}`,
+        phase: 'analysis',
+        cameraSequence: layout.cameraSequence,
+        preferredMip: this.analysisMip,
+        coverage: 'document',
+        overscanViewports: 0,
+        forwardPrefetchViewports: 0,
+        analysisRequested: true,
+      })
+      if (!this.accepts(epoch, snapshot)) {
+        result.release()
+        return
+      }
+      const previousCoarse = this.coarse
+      this.coarse = result
+      this.analysisReadyGeneration = snapshot.renderGeneration
+      this.present()
+      previousCoarse?.release()
+      this.publish({ rendering: false, fallbackRequired: false, diagnostic: null, result })
+      this.scheduleTarget()
+    } catch (error) {
+      this.handleFailure(epoch, error)
+    }
   }
 
   private handleFailure(epoch: number, error: unknown): void {

@@ -216,10 +216,9 @@ export class ImageEditorViewportCompositeClientV3 {
     )
     this.assertActive(job)
     const prepared = prepareImageEditorViewportCompositeV3(
-      job.document,
-      job.quality,
-      job.resourceDescriptors,
+      job.document, job.quality, job.resourceDescriptors,
     )
+    const wholeSource = job.analysisRequested === true
     job.prepared = prepared
     const frame = await this.scheduler.render({
       resourceRef: prepared.primaryResourceRef,
@@ -239,6 +238,7 @@ export class ImageEditorViewportCompositeClientV3 {
         prepared,
         candidate,
         typeof job.document.color.bitDepth === 'number' ? job.document.color.bitDepth : 32,
+        wholeSource,
       ),
     })
     if (this.active !== job || job.controller.signal.aborted || this.disposed) {
@@ -258,7 +258,7 @@ export class ImageEditorViewportCompositeClientV3 {
     if (frame.plan.tiles.length === 0) {
       throw new ImageEditorViewportCompositeUnsupportedErrorV3('视口未与文档相交')
     }
-    const brushRequests = collectImageEditorViewportBrushRequestsV3(prepared, frame.plan)
+    const brushRequests = collectImageEditorViewportBrushRequestsV3(prepared, frame.plan, wholeSource)
     const transferBytes = imageEditorViewportSourceTransferBytesV3(frame)
       + imageEditorViewportBrushTransferBytesV3(brushRequests)
     if (!Number.isSafeInteger(transferBytes) || transferBytes > this.transferMaxBytes) {
@@ -272,8 +272,7 @@ export class ImageEditorViewportCompositeClientV3 {
       'fallback-managed-preview',
     )
     const maxRegionPixels = estimateImageEditorViewportWorkingRegionPixelsV3(
-      prepared,
-      frame.plan,
+      prepared, frame.plan, wholeSource,
     )
     const workingBytes = maxRegionPixels * 4 * Float32Array.BYTES_PER_ELEMENT
       * Math.max(3, prepared.plan.nodes.length + 2)
@@ -341,6 +340,8 @@ export class ImageEditorViewportCompositeClientV3 {
             geometryHash: job.geometryHash,
             document: job.document,
             quality: job.quality,
+            phase: job.phase,
+            analysisRequested: wholeSource,
             plan: frame.plan,
             sourceTiles,
             brushTiles,

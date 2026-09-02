@@ -105,4 +105,42 @@ describe('图片编辑 V3 视口合成能力边界', () => {
     expect(createImageEditorViewportSourceTileRequestsV3(prepared, plan, 8))
       .toEqual([expect.objectContaining({ tileX: 0, tileY: 0, originX: 0 })])
   })
+
+  it('全局分析即使在裁剪状态也请求完整源图与全部画笔瓦片', () => {
+    const document = createImageEditDocumentV3({
+      width: 1_024,
+      height: 512,
+      sourceResourceId: SOURCE,
+      idFactory: () => 'source',
+    })
+    document.geometry.crop = { x: 0, y: 0, width: 256, height: 256 }
+    const raster = document.layers[0]
+    if (!raster || raster.type !== 'raster') throw new Error('测试缺少栅格图层')
+    raster.tiles = { '0/0/0': BRUSH_LEFT, '0/1/0': BRUSH_RIGHT }
+    const descriptors = [BRUSH_LEFT, BRUSH_RIGHT].map((resourceRef) => ({
+      resourceRef,
+      byteLength: 128,
+      mediaType: IMAGE_EDITOR_V3_BRUSH_TILE_MEDIA_TYPE,
+    }))
+    const prepared = prepareImageEditorViewportCompositeV3(document, 'stable', descriptors)
+    const plan = planImageEditorViewportTilesV3({
+      resourceRef: SOURCE,
+      documentSize: { width: 256, height: 256 },
+      sourceSize: document.geometry,
+      pyramid: {
+        tileSize: 512,
+        levels: [{ mip: 0, width: 1_024, height: 512, columns: 2, rows: 1 }],
+      },
+      viewport: { documentX: 0, documentY: 0, width: 256, height: 256, zoom: 1, devicePixelRatio: 1 },
+      bitDepth: 8,
+      coverage: 'document',
+    })
+
+    expect(createImageEditorViewportSourceTileRequestsV3(prepared, plan, 8, true))
+      .toEqual(expect.arrayContaining([
+        expect.objectContaining({ tileX: 0, tileY: 0 }),
+        expect.objectContaining({ tileX: 1, tileY: 0 }),
+      ]))
+    expect(collectImageEditorViewportBrushRequestsV3(prepared, plan, true)).toHaveLength(2)
+  })
 })

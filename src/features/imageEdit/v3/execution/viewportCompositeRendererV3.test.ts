@@ -5,6 +5,7 @@ import {
   createImageEditAdjustmentLayerV3,
   createImageEditAnnotationLayerV3,
   createImageEditDocumentV3,
+  createImageEditEffectLayerV3,
   createImageEditSparseMaskReferenceV3,
   decodeSrgbExtended,
   imageEditOutputSizeV3,
@@ -12,6 +13,7 @@ import {
 import type { ImageEditorV3SourceTile } from '@/platform/contracts/imageEditorV3'
 import type { ImageEditorViewportCompositeRenderRequestV3 } from './viewportCompositeProtocolV3'
 import { renderImageEditorViewportCompositeV3 } from './viewportCompositeRendererV3'
+import { ImageEditorViewportGlobalAnalysisCacheV3 } from './viewportGlobalAnalysisV3'
 import { planImageEditorViewportTilesV3 } from './viewportTilePlannerV3'
 
 const RESOURCE = `sha256:${'a'.repeat(64)}` as const
@@ -267,5 +269,47 @@ describe('图片编辑 V3 视口成品分块执行器', () => {
     expect(outputRect).toEqual({ x: 0, y: 0, width: 2, height: 2 })
     const expected = [9, 5, 10, 6].map((value) => decodeSrgbExtended(value / 255))
     red.forEach((value, index) => expect(value).toBeCloseTo(expected[index], 7))
+  })
+
+  it('分析阶段建立共享结果，目标视口缺失分析时拒绝回退到分块近似', async () => {
+    const document = createImageEditDocumentV3({
+      width: 4,
+      height: 4,
+      documentId: 'viewport-global-analysis',
+      sourceResourceId: RESOURCE,
+      idFactory: () => 'source',
+    })
+    document.layers.push(createImageEditEffectLayerV3(
+      'blur', '模糊', 'image.fast-blur-v3', { radius: 40, quality: 'high', mip: 0 },
+    ))
+    const globalAnalyses = new ImageEditorViewportGlobalAnalysisCacheV3()
+    const analysisRequest = request(document, sourceTile(192))
+    analysisRequest.phase = 'analysis'
+    analysisRequest.analysisRequested = true
+    await renderImageEditorViewportCompositeV3(
+      analysisRequest,
+      new AbortController().signal,
+      () => undefined,
+      { globalAnalyses },
+    )
+
+    const targetRequest = request(document, sourceTile(192))
+    targetRequest.phase = 'target'
+    let rendered = 0
+    await renderImageEditorViewportCompositeV3(
+      targetRequest,
+      new AbortController().signal,
+      () => { rendered += 1 },
+      { globalAnalyses },
+    )
+    expect(rendered).toBe(1)
+
+    globalAnalyses.dispose()
+    await expect(renderImageEditorViewportCompositeV3(
+      targetRequest,
+      new AbortController().signal,
+      () => undefined,
+      { globalAnalyses },
+    )).rejects.toThrow('缺少共享全局分析')
   })
 })

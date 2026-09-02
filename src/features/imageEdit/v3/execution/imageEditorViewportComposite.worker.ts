@@ -9,10 +9,12 @@ import type {
   ImageEditorViewportCompositeWorkerRequestV3,
 } from './viewportCompositeProtocolV3'
 import { renderImageEditorViewportCompositeV3 } from './viewportCompositeRendererV3'
+import { ImageEditorViewportGlobalAnalysisCacheV3 } from './viewportGlobalAnalysisV3'
 
 const workerScope = self as DedicatedWorkerGlobalScope
 const activeControllers = new Map<string, AbortController>()
 const customEffects = new ImageEditorPreviewCustomEffectsV3()
+const globalAnalyses = new ImageEditorViewportGlobalAnalysisCacheV3()
 
 workerScope.onmessage = (event: MessageEvent<ImageEditorViewportCompositeWorkerRequestV3>): void => {
   const request = event.data
@@ -24,6 +26,7 @@ workerScope.onmessage = (event: MessageEvent<ImageEditorViewportCompositeWorkerR
     for (const controller of activeControllers.values()) controller.abort()
     activeControllers.clear()
     customEffects.dispose()
+    globalAnalyses.dispose()
     workerScope.close()
     return
   }
@@ -71,7 +74,7 @@ async function renderRequest(
         }, [bitmap])
         completedTiles += 1
       },
-      { customEffects },
+      { customEffects, globalAnalyses },
     )
     if (signal.aborted) throw abortError()
     postEvent({

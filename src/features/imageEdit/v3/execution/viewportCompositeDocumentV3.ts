@@ -234,8 +234,8 @@ export function createImageEditorViewportSourceTileRequestsV3(
   prepared: PreparedImageEditorViewportCompositeV3,
   candidate: ImageEditorViewportTileCandidateV3,
   bitDepth: 8 | 16 | 32,
+  wholeSource = false,
 ): ImageEditorViewportTileRequestV3[] {
-  const requirements = requirementsForCandidate(prepared, candidate)
   const requests = new Map<string, ImageEditorViewportTileRequestV3>()
   const addRegions = (resourceRef: ImageEditorV3ResourceRef, regions: readonly ImageEditRect[]): void => {
     for (const region of regions) {
@@ -252,6 +252,14 @@ export function createImageEditorViewportSourceTileRequestsV3(
       }
     }
   }
+  if (wholeSource) {
+    const size = mipSize(prepared.document.geometry, candidate.mip)
+    for (const resourceRef of prepared.resourceRefs) {
+      addRegions(resourceRef, [{ x: 0, y: 0, ...size }])
+    }
+    return [...requests.values()]
+  }
+  const requirements = requirementsForCandidate(prepared, candidate)
   for (const node of requirements.plan.nodes) {
     if (node.definitionId === 'source.raster') {
       const resourceRef = rasterResourceId(node)
@@ -271,7 +279,12 @@ export function createImageEditorViewportSourceTileRequestsV3(
 export function estimateImageEditorViewportWorkingRegionPixelsV3(
   prepared: PreparedImageEditorViewportCompositeV3,
   candidate: ImageEditorViewportTileCandidateV3,
+  wholeSource = false,
 ): number {
+  if (wholeSource) {
+    const size = mipSize(prepared.document.geometry, candidate.mip)
+    return size.width * size.height
+  }
   const requirements = requirementsForCandidate(prepared, candidate)
   return [
     ...outputRegionsForCandidate(prepared, candidate),
@@ -299,7 +312,9 @@ function brushIntersectsRegion(
 export function collectImageEditorViewportBrushRequestsV3(
   prepared: PreparedImageEditorViewportCompositeV3,
   candidate: ImageEditorViewportTilePlanV3,
+  wholeSource = false,
 ): ImageEditorPreviewBrushResourceRequestV3[] {
+  if (wholeSource) return [...prepared.brushRequests]
   const requirements = requirementsForCandidate(prepared, candidate)
   const regionsByResource = new Map<string, ImageEditRect[]>()
   const append = (resourceId: string, regions: readonly ImageEditRect[]): void => {

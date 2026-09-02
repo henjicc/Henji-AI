@@ -37,10 +37,13 @@ export interface ImageEditorViewportCompositeRequestV3 {
   resourceDescriptors: readonly ImageEditorV3ResourceDescriptor[]
   viewport: ImageEditorViewportTransformV3
   viewportKey: string
+  phase?: 'coarse' | 'analysis' | 'target'
   /** 完整文档粗略兜底使用最粗 mip；普通视口渲染省略。 */
   preferredMip?: number
   /** document 只用于 generation 原子晋升前的全图粗略覆盖。 */
   coverage?: 'viewport' | 'document'
+  /** 在受限 mip 上准备全局效果共享分析，完成前不启动目标视口。 */
+  analysisRequested?: boolean
   previousMip?: number
   overscanViewports?: number
   forwardPrefetchViewports?: number
