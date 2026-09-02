@@ -128,4 +128,64 @@ describe('ImageEditorPresentationSurfaceV3', () => {
     expect(assembly?.drawImage.mock.calls.map((call) => call[5])).toEqual([0, 512])
     surface.dispose()
   })
+
+  it('每一帧都从空 staging 重建，不把旧安全画面再次烘焙进新帧', () => {
+    const surface = new ImageEditorPresentationSurfaceV3()
+    const front = document.createElement('canvas')
+    const safety = document.createElement('canvas')
+    const rendered = result()
+    const currentLayout = {
+      stageWidth: 1_024,
+      stageHeight: 512,
+      viewportKey: 'viewport',
+      viewport: {
+        documentX: 0,
+        documentY: 0,
+        width: 1_024,
+        height: 512,
+        zoom: 1,
+        devicePixelRatio: 1,
+      },
+    }
+    surface.attach({ surfaceId: 'surface', front, safety })
+    surface.present(rendered, null, currentLayout, 1, rendered.geometry, rendered.geometryHash)
+    for (const value of contexts.values()) value.drawImage.mockClear()
+
+    surface.present(rendered, null, currentLayout, 1, rendered.geometry, rendered.geometryHash)
+
+    const allCalls = [...contexts.values()].flatMap((value) => value.drawImage.mock.calls)
+    expect(allCalls.some((call) => call[0] === safety)).toBe(false)
+    surface.dispose()
+  })
+
+  it('同代同坐标的新结果仍上传自己的像素，清晰帧不会复用草稿 atlas 内容', () => {
+    const surface = new ImageEditorPresentationSurfaceV3()
+    const front = document.createElement('canvas')
+    const safety = document.createElement('canvas')
+    const first = result()
+    const second = result()
+    const secondBitmap = second.tiles[0]?.bitmap
+    const currentLayout = {
+      stageWidth: 1_024,
+      stageHeight: 512,
+      viewportKey: 'viewport',
+      viewport: {
+        documentX: 0,
+        documentY: 0,
+        width: 1_024,
+        height: 512,
+        zoom: 1,
+        devicePixelRatio: 1,
+      },
+    }
+    surface.attach({ surfaceId: 'surface', front, safety })
+    surface.present(first, null, currentLayout, 1, first.geometry, first.geometryHash)
+    for (const value of contexts.values()) value.drawImage.mockClear()
+
+    surface.present(second, null, currentLayout, 1, second.geometry, second.geometryHash)
+
+    const allCalls = [...contexts.values()].flatMap((value) => value.drawImage.mock.calls)
+    expect(allCalls.some((call) => call[0] === secondBitmap)).toBe(true)
+    surface.dispose()
+  })
 })

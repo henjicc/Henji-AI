@@ -210,11 +210,10 @@ export class ImageEditorPresentationSurfaceV3 {
   private elements: ImageEditorPresentationSurfaceElementsV3 | null = null
   private staging: HTMLCanvasElement | null = null
   private resizeBuffer: HTMLCanvasElement | null = null
-  private hasSafetyFrame = false
+  private nextResultId = 0
 
   attach(elements: ImageEditorPresentationSurfaceElementsV3): void {
     this.elements = elements
-    this.hasSafetyFrame = false
     this.staging ??= document.createElement('canvas')
     this.resizeBuffer ??= document.createElement('canvas')
   }
@@ -262,8 +261,7 @@ export class ImageEditorPresentationSurfaceV3 {
     const baseFrame = this.frameFor(base)
     const targetFrame = overlay ? this.frameFor(overlay) : null
     stagingContext.clearRect(0, 0, pixels.width, pixels.height)
-    if (this.hasSafetyFrame) stagingContext.drawImage(elements.safety, 0, 0)
-    drawResult(stagingContext, baseFrame, base, layout, currentGeometry)
+    drawResult(stagingContext, baseFrame, base, layout, currentGeometry, true)
     if (overlay) {
       drawResult(stagingContext, targetFrame, overlay, layout, currentGeometry, true)
     }
@@ -273,7 +271,6 @@ export class ImageEditorPresentationSurfaceV3 {
     safetyContext.globalCompositeOperation = 'copy'
     safetyContext.drawImage(staging, 0, 0)
     safetyContext.globalCompositeOperation = 'source-over'
-    this.hasSafetyFrame = true
     elements.front.dataset.renderGeneration = String(
       overlay?.renderGeneration ?? base.renderGeneration,
     )
@@ -287,7 +284,6 @@ export class ImageEditorPresentationSurfaceV3 {
 
   dispose(): void {
     this.elements = null
-    this.hasSafetyFrame = false
     this.staging = null
     this.resizeBuffer = null
     this.retainFrames([])
@@ -314,10 +310,12 @@ export class ImageEditorPresentationSurfaceV3 {
     canvas.height = bounds.height
     const context = canvas.getContext('2d')
     if (!context) throw new Error('无法创建图片编辑 Presentation 连续帧')
+    const resultId = this.nextResultId += 1
     context.imageSmoothingEnabled = false
     context.clearRect(0, 0, canvas.width, canvas.height)
     for (const tile of result.tiles) {
       const atlasRegion = this.atlas.store([
+        resultId,
         result.renderGeneration,
         result.geometryHash,
         result.mip,
