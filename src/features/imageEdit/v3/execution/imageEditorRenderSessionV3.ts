@@ -21,7 +21,6 @@ import type {
 } from './viewportCompositeTypesV3'
 import { resolveImageEditorViewportAnalysisMipV3 } from './viewportGlobalAnalysisV3'
 import { imageEditorRenderRuntimePatchV3 } from './imageEditorRenderRuntimeV3'
-
 const registry = createBuiltInImageEditRenderNodeRegistry()
 export interface ImageEditorRenderSnapshotV3 {
   document: ImageEditDocumentV3
@@ -263,6 +262,7 @@ export class DefaultImageEditorRenderSessionV3 implements ImageEditorRenderSessi
     this.pendingLayout = null
     this.unsubscribeRuntime()
     this.client.dispose()
+    this.compositor.dispose()
     this.releaseTarget()
     this.coarse?.release()
     this.coarse = null

@@ -9,6 +9,7 @@ import type { ImageEditCanvasGeometryV3 } from '@/core/imageEdit/v3/documentType
 import type { ImageEditorViewportLayoutV3 } from '../editor/useImageEditorViewportLayoutV3'
 import type { ImageEditorViewportCompositeBitmapTileV3 } from './viewportCompositeProtocolV3'
 import type { ImageEditorManagedViewportCompositeV3 } from './viewportCompositeTypesV3'
+import { ImageEditorPresentationAtlasV3 } from './imageEditorPresentationAtlasV3'
 
 export interface ImageEditorPresentationSurfaceElementsV3 {
   surfaceId: string
@@ -94,6 +95,7 @@ export function imageEditorViewportResultCoverageV3(
 
 function drawResult(
   context: CanvasRenderingContext2D,
+  atlas: ImageEditorPresentationAtlasV3,
   result: ImageEditorManagedViewportCompositeV3,
   layout: ImageEditorViewportLayoutV3,
   currentGeometry: ImageEditCanvasGeometryV3,
@@ -140,6 +142,15 @@ function drawResult(
     (affine.f - viewport.documentY) * screenScale,
   )
   for (const tile of result.tiles) {
+    const atlasRegion = atlas.store([
+      result.renderGeneration,
+      result.geometryHash,
+      result.mip,
+      tile.outputRect.x,
+      tile.outputRect.y,
+      tile.outputRect.width,
+      tile.outputRect.height,
+    ].join(':'), tile.bitmap)
     const documentX = tile.outputRect.x * mipScale
     const documentY = tile.outputRect.y * mipScale
     const documentRight = Math.min(
@@ -158,7 +169,11 @@ function drawResult(
       context.globalCompositeOperation = 'copy'
     }
     context.drawImage(
-      tile.bitmap,
+      atlasRegion.source,
+      atlasRegion.sourceX,
+      atlasRegion.sourceY,
+      atlasRegion.width,
+      atlasRegion.height,
       documentX,
       documentY,
       documentRight - documentX,
@@ -171,18 +186,20 @@ function drawResult(
 
 function drawProgressTile(
   context: CanvasRenderingContext2D,
+  atlas: ImageEditorPresentationAtlasV3,
   tile: ImageEditorViewportCompositeBitmapTileV3,
   mip: number,
   documentSize: { width: number; height: number },
   geometry: ImageEditCanvasGeometryV3,
   layout: ImageEditorViewportLayoutV3,
+  identity: { renderGeneration: number; geometryHash: string },
 ): void {
-  drawResult(context, {
+  drawResult(context, atlas, {
     documentId: '',
     revision: 0,
-    renderGeneration: 0,
+    renderGeneration: identity.renderGeneration,
     cameraSequence: 0,
-    geometryHash: '',
+    geometryHash: identity.geometryHash,
     geometry,
     viewportKey: '',
     coverage: 'viewport',
@@ -218,6 +235,7 @@ export function imageEditorViewportTileCoverageContributionV3(
 
 /** 固定双表面的 Canvas2D 合成器；前表面只接收完整 staging 帧。 */
 export class ImageEditorPresentationSurfaceV3 {
+  private readonly atlas = new ImageEditorPresentationAtlasV3()
   private elements: ImageEditorPresentationSurfaceElementsV3 | null = null
   private staging: HTMLCanvasElement | null = null
   private resizeBuffer: HTMLCanvasElement | null = null
@@ -258,9 +276,9 @@ export class ImageEditorPresentationSurfaceV3 {
       throw new Error('无法创建图片编辑器常驻显示表面')
     }
     stagingContext.clearRect(0, 0, pixels.width, pixels.height)
-    drawResult(stagingContext, fallback, layout, currentGeometry)
+    drawResult(stagingContext, this.atlas, fallback, layout, currentGeometry)
     if (target && target.renderGeneration === fallback.renderGeneration) {
-      drawResult(stagingContext, target, layout, currentGeometry, true)
+      drawResult(stagingContext, this.atlas, target, layout, currentGeometry, true)
     }
     frontContext.globalCompositeOperation = 'copy'
     frontContext.drawImage(staging, 0, 0)
@@ -292,11 +310,18 @@ export class ImageEditorPresentationSurfaceV3 {
     const frontContext = elements.front.getContext('2d')
     const safetyContext = elements.safety.getContext('2d')
     if (!frontContext || !safetyContext) throw new Error('无法创建图片编辑器常驻显示表面')
-    drawProgressTile(frontContext, tile, mip, documentSize, geometry, layout)
-    drawProgressTile(safetyContext, tile, mip, documentSize, geometry, layout)
+    drawProgressTile(frontContext, this.atlas, tile, mip, documentSize, geometry, layout, identity)
+    drawProgressTile(safetyContext, this.atlas, tile, mip, documentSize, geometry, layout, identity)
     elements.front.dataset.renderGeneration = String(identity.renderGeneration)
     elements.front.dataset.cameraSequence = String(identity.cameraSequence)
     elements.front.dataset.geometryHash = identity.geometryHash
     return imageEditorViewportTileCoverageContributionV3(tile, mip, documentSize, layout)
+  }
+
+  dispose(): void {
+    this.elements = null
+    this.staging = null
+    this.resizeBuffer = null
+    this.atlas.dispose()
   }
 }
