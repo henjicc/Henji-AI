@@ -131,7 +131,6 @@ export function ImageEditorPreviewV3({
     viewportContentRef,
     moveFeedbackRef,
     outputGeometry,
-    zoom,
   )
 
   const displayPipeline = useImageEditorDisplayPipelineV3(

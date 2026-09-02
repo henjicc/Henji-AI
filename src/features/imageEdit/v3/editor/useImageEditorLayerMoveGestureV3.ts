@@ -50,7 +50,6 @@ export function useImageEditorLayerMoveGestureV3(
   viewportContentRef: RefObject<HTMLDivElement>,
   moveFeedbackRef: RefObject<HTMLDivElement>,
   outputGeometry: AnnotationOutputGeometryV3,
-  viewportZoom: number,
 ): ImageEditorLayerMoveGestureHandlersV3 {
   const gestureRef = useRef<ImageEditorLayerMoveGestureV3 | null>(null)
   const selectedLayerIds = useImageEditorSessionStoreV3(
@@ -241,13 +240,14 @@ export function useImageEditorLayerMoveGestureV3(
       ? translateImageEditLayerTransformV3(gesture.startTransform, deltaX, deltaY)
       : [...gesture.startTransform]
     if (gesture.compositorFeedback && moveFeedbackRef.current) {
-      const scale = Math.max(0.05, viewportZoom)
       const previewClientX = gesture.viewportRect.left
         + outputPoint[0] / outputGeometry.width * gesture.viewportRect.width
       const previewClientY = gesture.viewportRect.top
         + outputPoint[1] / outputGeometry.height * gesture.viewportRect.height
+      // 常驻合成表面位于缩放容器之外，反馈位移必须保持屏幕像素；
+      // 文档坐标缩放已经由 clientToOutput 负责，不能在这里再除一次 zoom。
       moveFeedbackRef.current.style.transform = changed
-        ? `translate3d(${(previewClientX - gesture.startClientPoint[0]) / scale}px, ${(previewClientY - gesture.startClientPoint[1]) / scale}px, 0)`
+        ? `translate3d(${previewClientX - gesture.startClientPoint[0]}px, ${previewClientY - gesture.startClientPoint[1]}px, 0)`
         : ''
       return
     }

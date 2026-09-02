@@ -296,7 +296,7 @@ describe('ImageEditorPreviewV3 managed frame ownership', () => {
     expect(rendered.container.querySelector('[data-document-boundary]')).toBeNull()
   })
 
-  it('单底图移动只更新合成层，缓存布局且松手仅提交一个 revision', async () => {
+  it('放大后的单底图移动仍按屏幕像素跟手且松手仅提交一个 revision', async () => {
     vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({
       clearRect: vi.fn(),
       drawImage: vi.fn(),
@@ -338,13 +338,17 @@ describe('ImageEditorPreviewV3 managed frame ownership', () => {
     const feedback = rendered.container.querySelector<HTMLElement>('[data-move-feedback-frame]')
     if (!surface || !content || !feedback) throw new Error('移动反馈测试节点不存在')
     const readViewportRect = vi.spyOn(content, 'getBoundingClientRect').mockReturnValue({
-      x: 0, y: 0, left: 0, top: 0, right: 320, bottom: 180,
-      width: 320, height: 180, toJSON: () => undefined,
+      x: 0, y: 0, left: 0, top: 0, right: 640, bottom: 360,
+      width: 640, height: 360, toJSON: () => undefined,
     })
 
     await waitFor(() => expect(
       Object.values(useImageEditorSessionStoreV3.getState().sessions)[0]?.selectedLayerIds,
     ).toEqual([document.layers[0].id]))
+    const zoomIn = rendered.container.querySelector<HTMLButtonElement>('[data-viewport-control] button:last-of-type')
+    if (!zoomIn) throw new Error('移动反馈测试缺少放大按钮')
+    fireEvent.click(zoomIn)
+    fireEvent.click(zoomIn)
     const liveSession = requireImageEditV3LiveSession(document.id)
     readViewportRect.mockClear()
     fireEvent.pointerDown(surface, {
@@ -377,7 +381,7 @@ describe('ImageEditorPreviewV3 managed frame ownership', () => {
     expect(liveSession.bus.getSnapshot().previewOverrides).toEqual({})
     expect(liveSession.bus.getSnapshot().document.revision).toBe(1)
     expect(liveSession.bus.getSnapshot().document.layers[0].transform).toEqual([
-      1, 0, 0, 1, 25, 10,
+      1, 0, 0, 1, 12.5, 5,
     ])
     // 新 revision 的稳定画面尚未到达时保留瞬态位移，避免松手闪回旧位置。
     expect(feedback.style.transform).toBe('translate3d(25px, 10px, 0)')
