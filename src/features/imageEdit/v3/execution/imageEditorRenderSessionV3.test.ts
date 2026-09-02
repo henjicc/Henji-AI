@@ -173,10 +173,7 @@ describe('ImageEditorRenderSessionV3', () => {
     expect(front.dataset.renderGeneration).toBe('1')
     expect(requests.find((request) => (
       request.phase === 'coarse' && request.coverage === 'document'
-    ))).toMatchObject({
-      viewportKey: 'backdrop:1', preferredMip: 1, quality: 'draft',
-      overscanViewports: 0, forwardPrefetchViewports: 0,
-    })
+    ))).toBeUndefined()
     completions[draftIndex]?.resolve(result(draftRequest, releaseLateDraft))
     await vi.advanceTimersByTimeAsync(0)
     expect(releaseLateDraft).toHaveBeenCalledOnce()
@@ -233,7 +230,7 @@ describe('ImageEditorRenderSessionV3', () => {
     session.dispose()
   })
 
-  it('新 generation 草稿整帧替换旧画面，清晰目标随后原子接管', async () => {
+  it('交互草稿只计算有界反馈，提交后清晰目标再原子接管', async () => {
     const requests: ImageEditorViewportCompositeRequestV3[] = []
     const completions: Array<ReturnType<typeof deferred<ImageEditorManagedViewportCompositeV3>>> = []
     const client = {
@@ -274,14 +271,82 @@ describe('ImageEditorRenderSessionV3', () => {
     const secondTarget = requests.find((request) => (
       request.renderGeneration === 2 && request.phase === 'target'
     ))
-    if (!secondDraft || !secondTarget) throw new Error('缺少第二代并行请求')
+    if (!secondDraft) throw new Error('缺少第二代草稿请求')
+    expect(secondTarget).toBeUndefined()
     completions[requests.indexOf(secondDraft)]?.resolve(result(secondDraft))
     await Promise.resolve()
     expect(front.dataset.renderGeneration).toBe('2')
 
-    completions[requests.indexOf(secondTarget)]?.resolve(result(secondTarget))
+    session.updateSnapshot({
+      document: { ...original, revision: 2 }, renderGeneration: 3, geometryHash: 'geometry-a',
+      quality: 'stable', resourceDescriptors: [],
+    })
+    const thirdTarget = requests.find((request) => (
+      request.renderGeneration === 3 && request.phase === 'target'
+    ))
+    if (!thirdTarget) throw new Error('缺少提交后的清晰目标请求')
+    completions[requests.indexOf(thirdTarget)]?.resolve(result(thirdTarget))
     await Promise.resolve()
-    expect(front.dataset.renderGeneration).toBe('2')
+    expect(front.dataset.renderGeneration).toBe('3')
+    session.dispose()
+  })
+
+  it('连续全局效果调参不取消当前有界分析，完成后只追赶最新一代', async () => {
+    const requests: ImageEditorViewportCompositeRequestV3[] = []
+    const completions: Array<ReturnType<typeof deferred<ImageEditorManagedViewportCompositeV3>>> = []
+    const client = {
+      render: vi.fn((request: ImageEditorViewportCompositeRequestV3) => {
+        requests.push(request)
+        const completion = deferred<ImageEditorManagedViewportCompositeV3>()
+        completions.push(completion)
+        return completion.promise
+      }),
+      cancel: vi.fn(),
+      dispose: vi.fn(),
+    }
+    const front = document.createElement('canvas')
+    const session = new DefaultImageEditorRenderSessionV3(
+      { sessionId: 'global-draft-coalescing-test' },
+      { client },
+    )
+    session.attachSurface({ surfaceId: 'surface-coalesced', front, safety: document.createElement('canvas') })
+    session.updateViewport(layout)
+    const base = createImageEditDocumentV3({
+      width: 6_000,
+      height: 4_000,
+      sourceResourceId: `sha256:${'b'.repeat(64)}`,
+      idFactory: () => 'source-coalesced',
+    })
+    base.layers.push(createImageEditEffectLayerV3(
+      'blur', '模糊', 'image.fast-blur-v3', { radius: 96, quality: 'high', mip: 0 },
+    ))
+    session.updateSnapshot({
+      document: base, renderGeneration: 1, geometryHash: 'geometry-global',
+      quality: 'draft', resourceDescriptors: [],
+    })
+    expect(requests).toHaveLength(1)
+    expect(requests[0]).toMatchObject({ phase: 'analysis', preferredMip: 5, quality: 'draft' })
+    const cancelsAfterFirst = client.cancel.mock.calls.length
+
+    for (let generation = 2; generation <= 20; generation += 1) {
+      session.updateSnapshot({
+        document: { ...base, revision: generation },
+        renderGeneration: generation,
+        geometryHash: 'geometry-global',
+        quality: 'draft',
+        resourceDescriptors: [],
+      })
+    }
+    expect(requests).toHaveLength(1)
+    expect(client.cancel).toHaveBeenCalledTimes(cancelsAfterFirst)
+
+    completions[0]?.resolve(result(requests[0]!))
+    await vi.advanceTimersByTimeAsync(0)
+    expect(front.dataset.renderGeneration).toBe('1')
+    expect(requests).toHaveLength(2)
+    expect(requests[1]).toMatchObject({
+      phase: 'analysis', renderGeneration: 20, preferredMip: 5, quality: 'draft',
+    })
     session.dispose()
   })
 
@@ -343,6 +408,13 @@ describe('ImageEditorRenderSessionV3', () => {
       coverage: 'viewport', viewportKey: 'viewport-1', preferredMip: 2,
     })
     expect(targetRequest?.analysisRequested).not.toBe(true)
+    if (!targetRequest) throw new Error('缺少全局效果目标请求')
+    completions[requests.indexOf(targetRequest)]?.resolve(result(targetRequest))
+    await vi.advanceTimersByTimeAsync(0)
+    expect(requests).toHaveLength(3)
+    expect(requests[2]).toMatchObject({
+      phase: 'target', coverage: 'viewport', preferredMip: 1,
+    })
     session.dispose()
   })
 
@@ -401,7 +473,7 @@ describe('ImageEditorRenderSessionV3', () => {
     expect(front.dataset.renderGeneration).toBe('1')
     expect(front.dataset.geometryHash).toBe('geometry-cropped')
     expect(setTransform).toHaveBeenCalledWith(0.5, 0, 0, 0.5, -100, -50)
-    expect(completions).toHaveLength(5)
+    expect(completions).toHaveLength(4)
     expect(requests.filter((request) => request.renderGeneration === 2)).toEqual([
       expect.objectContaining({ phase: 'coarse', coverage: 'viewport' }),
       expect.objectContaining({ phase: 'target', coverage: 'viewport' }),
@@ -432,6 +504,54 @@ describe('ImageEditorRenderSessionV3', () => {
 
     await vi.advanceTimersByTimeAsync(16)
     expect(cameraSequence).toBe(2)
+    session.dispose()
+  })
+
+  it('放大后的可见区仍被 mip0 成品覆盖时在当前绘制帧直接复用', async () => {
+    const requests: ImageEditorViewportCompositeRequestV3[] = []
+    const client = {
+      render: vi.fn(async (request: ImageEditorViewportCompositeRequestV3) => {
+        requests.push(request)
+        return result(request)
+      }),
+      cancel: vi.fn(),
+      dispose: vi.fn(),
+    }
+    const session = new DefaultImageEditorRenderSessionV3(
+      { sessionId: 'clear-zoom-reuse-test' },
+      { client },
+    )
+    session.attachSurface({
+      surfaceId: 'surface-clear-zoom',
+      front: document.createElement('canvas'),
+      safety: document.createElement('canvas'),
+    })
+    session.updateViewport(layout)
+    session.updateSnapshot({
+      document: createImageEditDocumentV3({ width: 1_600, height: 1_000 }),
+      renderGeneration: 1,
+      geometryHash: 'geometry-clear-zoom',
+      quality: 'stable',
+      resourceDescriptors: [],
+    })
+    await vi.advanceTimersByTimeAsync(0)
+    expect(requests.some((request) => request.phase === 'target')).toBe(true)
+    requests.length = 0
+    let targetMipCoverage = 0
+    const unsubscribe = session.subscribeDiagnostics((value) => {
+      targetMipCoverage = value.targetMipCoverage
+    })
+
+    session.updateViewport({
+      ...layout,
+      viewportKey: 'viewport-zoomed',
+      viewport: { ...layout.viewport, documentX: 400, documentY: 250, zoom: 1 },
+    })
+    await vi.advanceTimersByTimeAsync(16)
+
+    expect(requests).toHaveLength(0)
+    expect(targetMipCoverage).toBe(1)
+    unsubscribe()
     session.dispose()
   })
 

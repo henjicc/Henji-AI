@@ -38,6 +38,7 @@ import { useImageEditorLayerMoveGestureV3 } from './useImageEditorLayerMoveGestu
 import { imageEditorViewportTransformV3, type ImageEditorViewportPanV3 } from './viewportNavigationV3'
 import { useImageEditorViewportNavigationGestureV3 } from './useImageEditorViewportNavigationGestureV3'
 import {
+  resolveLiveBlurRadiusV3,
   splitLiveAnnotationDisplayV3,
 } from './liveAnnotationDisplayV3'
 
@@ -125,6 +126,15 @@ export function ImageEditorPreviewV3({
     zoom,
     pan,
   )
+  const liveBlurFeedback = useMemo(() => {
+    if (Object.keys(snapshot.previewOverrides).length === 0) return null
+    const nextRadius = resolveLiveBlurRadiusV3(projectedDocument)
+    const baseRadius = resolveLiveBlurRadiusV3(baseDisplayDocument) ?? 0
+    if (nextRadius === null || nextRadius <= baseRadius) return null
+    const documentToCss = viewportLayout?.viewport.zoom ?? 0
+    const incrementalRadius = Math.sqrt(Math.max(0, nextRadius ** 2 - baseRadius ** 2))
+    return Math.min(48, incrementalRadius * documentToCss)
+  }, [baseDisplayDocument, projectedDocument, snapshot.previewOverrides, viewportLayout?.viewport.zoom])
   const layerMoveHandlers = useImageEditorLayerMoveGestureV3(
     controller,
     activeTool,
@@ -272,6 +282,10 @@ export function ImageEditorPreviewV3({
       data-preview-render-backend={previewRenderer ? undefined : viewportComposite.renderBackend}
       data-preview-device-status={previewRenderer ? undefined : viewportComposite.deviceStatus}
       data-preview-device-generation={previewRenderer ? undefined : viewportComposite.deviceGeneration}
+      data-preview-target-mip={previewRenderer ? undefined : viewportComposite.targetMip ?? undefined}
+      data-preview-event-to-present-ms={previewRenderer
+        ? undefined
+        : viewportComposite.eventToPresentMs ?? undefined}
       data-active-navigation-tool={activeTool === 'hand' || activeTool === 'zoom' ? activeTool : undefined}
       data-move-availability={activeTool === 'move'
         ? layerMoveHandlers.unavailableReason ?? 'ready'
@@ -292,7 +306,12 @@ export function ImageEditorPreviewV3({
           ref={moveFeedbackRef}
           data-raster-display-frame
           data-move-feedback-frame
+          data-live-blur-feedback={liveBlurFeedback === null ? undefined : 'active'}
           className="pointer-events-none absolute inset-0 overflow-hidden"
+          style={liveBlurFeedback === null ? undefined : {
+            filter: `blur(${liveBlurFeedback}px)`,
+            willChange: 'filter',
+          }}
         >
           <ImageEditorViewportTilesV3
             session={viewportComposite.session}

@@ -1,5 +1,8 @@
 import type { ImageEditorViewportLayoutV3 } from '../editor/useImageEditorViewportLayoutV3'
-import { ImageEditorPresentationSurfaceV3 } from './imageEditorPresentationSurfaceV3'
+import {
+  ImageEditorPresentationSurfaceV3,
+  imageEditorViewportResultCoverageV3,
+} from './imageEditorPresentationSurfaceV3'
 import type { ImageEditorRenderSnapshotV3 } from './imageEditorRenderSessionContractsV3'
 import { imageEditorRenderResultMatchesViewV3 } from './imageEditorRenderSessionIdentityV3'
 import type { ImageEditorManagedViewportCompositeV3 } from './viewportCompositeTypesV3'
@@ -23,8 +26,24 @@ export function presentImageEditorRenderSessionFrameV3(options: {
     && backdrop.geometryHash === snapshot.geometryHash
     ? backdrop
     : null
-  const fallback = currentStable ?? currentBackdrop ?? stable ?? backdrop ?? draft
-  const target = currentDraft && currentDraft !== fallback ? currentDraft : null
+  const compatibleDraft = draft?.geometryHash === snapshot.geometryHash
+    && draft.viewportKey === layout.viewportKey
+    && draft.cameraSequence === layout.cameraSequence
+    ? draft
+    : null
+  const compatibleBackdrop = backdrop?.geometryHash === snapshot.geometryHash ? backdrop : null
+  const reusableClearStable = stable?.renderGeneration === snapshot.renderGeneration
+    && stable.geometryHash === snapshot.geometryHash
+    && stable.mip <= 1
+    && imageEditorViewportResultCoverageV3(stable, layout) >= 0.999_999
+    ? stable
+    : null
+  const fallback = snapshot.quality === 'draft'
+    ? currentDraft ?? currentBackdrop ?? compatibleDraft ?? compatibleBackdrop ?? stable ?? backdrop
+    : currentStable ?? currentBackdrop ?? stable ?? backdrop ?? draft
+  const target = currentDraft && currentDraft !== fallback
+    ? currentDraft
+    : reusableClearStable
   if (!fallback && !target) return null
   return compositor.present(
     fallback,

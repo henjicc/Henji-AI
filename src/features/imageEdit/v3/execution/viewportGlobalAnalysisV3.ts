@@ -24,6 +24,7 @@ import {
 
 const MEBIBYTE = 1024 * 1024
 const ANALYSIS_CACHE_BYTES = 160 * MEBIBYTE
+const INTERACTIVE_ANALYSIS_MAX_EDGE = 320
 const registry = createBuiltInImageEditRenderNodeRegistry()
 
 interface ViewportGlobalAnalysisEntryV3 {
@@ -42,6 +43,10 @@ export interface PrepareViewportGlobalAnalysesV3 {
   quality: ImageEditRenderQuality
   signal: AbortSignal
   renderInput(plan: ImageEditRenderPlan, region: ImageEditRect): Promise<Float32PremultipliedRgbaTile | null>
+  executeCustomEffect?(
+    node: ImageEditRenderPlanNode,
+    source: Float32PremultipliedRgbaTile,
+  ): Promise<Float32PremultipliedRgbaTile>
 }
 
 export interface ExecuteViewportGlobalAnalysisV3 {
@@ -125,25 +130,42 @@ function sampleAnalysisRegion(
 ): Float32PremultipliedRgbaTile {
   const data = new Float32Array(source.data.length)
   const tile = analysis.tile
+  const xOffsets0 = new Uint32Array(source.width)
+  const xOffsets1 = new Uint32Array(source.width)
+  const xFractions = new Float32Array(source.width)
+  for (let x = 0; x < source.width; x += 1) {
+    const sourceX = region.x + (x + 0.5) * region.width / source.width
+    const sampleX = sourceX * tile.width / analysis.documentWidth - 0.5
+    const floorX = Math.floor(sampleX)
+    const x0 = Math.max(0, Math.min(tile.width - 1, floorX))
+    xOffsets0[x] = x0 * 4
+    xOffsets1[x] = Math.min(tile.width - 1, x0 + 1) * 4
+    xFractions[x] = sampleX - floorX
+  }
   for (let y = 0; y < source.height; y += 1) {
     const sourceY = region.y + (y + 0.5) * region.height / source.height
     const sampleY = sourceY * tile.height / analysis.documentHeight - 0.5
-    const y0 = Math.max(0, Math.min(tile.height - 1, Math.floor(sampleY)))
+    const floorY = Math.floor(sampleY)
+    const y0 = Math.max(0, Math.min(tile.height - 1, floorY))
     const y1 = Math.min(tile.height - 1, y0 + 1)
-    const fy = sampleY - Math.floor(sampleY)
+    const fy = sampleY - floorY
+    const inverseY = 1 - fy
+    const row0 = y0 * tile.width * 4
+    const row1 = y1 * tile.width * 4
     for (let x = 0; x < source.width; x += 1) {
-      const sourceX = region.x + (x + 0.5) * region.width / source.width
-      const sampleX = sourceX * tile.width / analysis.documentWidth - 0.5
-      const x0 = Math.max(0, Math.min(tile.width - 1, Math.floor(sampleX)))
-      const x1 = Math.min(tile.width - 1, x0 + 1)
-      const fx = sampleX - Math.floor(sampleX)
+      const fx = xFractions[x]
+      const inverseX = 1 - fx
       const target = (y * source.width + x) * 4
+      const topLeft = row0 + xOffsets0[x]
+      const topRight = row0 + xOffsets1[x]
+      const bottomLeft = row1 + xOffsets0[x]
+      const bottomRight = row1 + xOffsets1[x]
       for (let channel = 0; channel < 4; channel += 1) {
-        const top = tile.data[(y0 * tile.width + x0) * 4 + channel] * (1 - fx)
-          + tile.data[(y0 * tile.width + x1) * 4 + channel] * fx
-        const bottom = tile.data[(y1 * tile.width + x0) * 4 + channel] * (1 - fx)
-          + tile.data[(y1 * tile.width + x1) * 4 + channel] * fx
-        data[target + channel] = top * (1 - fy) + bottom * fy
+        const top = tile.data[topLeft + channel] * inverseX
+          + tile.data[topRight + channel] * fx
+        const bottom = tile.data[bottomLeft + channel] * inverseX
+          + tile.data[bottomRight + channel] * fx
+        data[target + channel] = top * inverseY + bottom * fy
       }
     }
   }
@@ -163,13 +185,18 @@ function sampleAnalysisRegion(
 export function resolveImageEditorViewportAnalysisMipV3(
   document: ImageEditDocumentV3,
   plan: ImageEditRenderPlan,
+  quality: ImageEditRenderQuality = 'stable',
 ): number | null {
   const maxEdges = plan.nodes
     .filter(isSharedAnalysisNode)
     .map((node) => registry.get(node.definitionId)?.globalAnalysis?.maxEdge)
     .filter((value): value is number => typeof value === 'number')
   if (maxEdges.length === 0) return null
-  const maxEdge = Math.min(...maxEdges)
+  // 连续调参只需要一张可信、无接缝的整图反馈。把工作集限制在 320px
+  // 最长边可确保每一代都有机会在交互预算内完成，稳定态再恢复节点精度。
+  const maxEdge = quality === 'draft'
+    ? Math.min(INTERACTIVE_ANALYSIS_MAX_EDGE, ...maxEdges)
+    : Math.min(...maxEdges)
   return Math.max(0, Math.ceil(
     Math.log2(Math.max(document.geometry.width, document.geometry.height) / maxEdge),
   ))
@@ -200,7 +227,13 @@ export class ImageEditorViewportGlobalAnalysisCacheV3 {
       width: Math.max(1, Math.ceil(options.document.geometry.width / (2 ** options.mip))),
       height: Math.max(1, Math.ceil(options.document.geometry.height / (2 ** options.mip))),
     }
-    for (const node of options.scaledPlan.nodes.filter(isSharedAnalysisNode)) {
+    // 是否需要共享分析由原始节点契约决定。大半径模糊缩放到高 mip 后会落入
+    // 局部 halo 范围，但目标合成仍按原始节点要求共享缓存，不能因此漏建。
+    const sharedNodes = options.scaledPlan.nodes.filter((node) => {
+      const originalNode = originalById.get(node.id)
+      return originalNode ? isSharedAnalysisNode(originalNode) : false
+    })
+    for (const node of sharedNodes) {
       await yieldToAnalysisEventLoop()
       if (options.signal.aborted) throw options.signal.reason
       const originalNode = originalById.get(node.id)
@@ -220,7 +253,7 @@ export class ImageEditorViewportGlobalAnalysisCacheV3 {
       await yieldToAnalysisEventLoop()
       if (options.signal.aborted) throw options.signal.reason
       const linear = convertFloat32TileColorDomainV3(input, 'linear-light')
-      const entry = this.buildEntry(node, linear, options)
+      const entry = await this.buildEntry(node, linear, options)
       await yieldToAnalysisEventLoop()
       if (options.signal.aborted) throw options.signal.reason
       if (!this.caches.set('global-analysis', key, {
@@ -306,21 +339,24 @@ export class ImageEditorViewportGlobalAnalysisCacheV3 {
     this.caches.clearTier('global-analysis')
   }
 
-  private buildEntry(
+  private async buildEntry(
     node: ImageEditRenderPlanNode,
     source: Float32PremultipliedRgbaTile,
     options: PrepareViewportGlobalAnalysesV3,
-  ): ViewportGlobalAnalysisEntryV3 {
+  ): Promise<ViewportGlobalAnalysisEntryV3> {
     const shared = {
       documentWidth: options.document.geometry.width,
       documentHeight: options.document.geometry.height,
       mip: options.mip,
     }
     if (node.definitionId === 'effect.fast-blur') {
-      return { ...shared, kind: 'fast-blur', tile: applyFastBlurV3(source, {
-        radius: numberParameter(node, 'radius', 0),
-        mip: numberParameter(node, 'mip', options.mip),
-      }) }
+      const tile = options.executeCustomEffect
+        ? await options.executeCustomEffect(node, source)
+        : applyFastBlurV3(source, {
+            radius: numberParameter(node, 'radius', 0),
+            mip: numberParameter(node, 'mip', options.mip),
+          })
+      return { ...shared, kind: 'fast-blur', tile }
     }
     if (node.definitionId === 'effect.diffusion') {
       const recipe = DIFFUSION_V4_RECIPE_ADAPTER.compileRecipe(

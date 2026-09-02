@@ -6,6 +6,8 @@ import {
   createFloat32PremultipliedRgbaTile,
   createImageEditDocumentV3,
   createImageEditEffectLayerV3,
+  type Float32PremultipliedRgbaTile,
+  type ImageEditRenderPlanNode,
 } from '@/core/imageEdit/v3'
 import { createDefaultVgpuGlowOperationParams } from '@/core/imageEdit'
 import { scaleImageEditorPreviewEffectsV3 } from './previewEffectScalingV3'
@@ -41,6 +43,7 @@ describe('视口全局效果分析缓存', () => {
     const plan = compileImageEditRenderPlanV3(document, registry, 'stable')
 
     expect(resolveImageEditorViewportAnalysisMipV3(document, plan)).toBe(5)
+    expect(resolveImageEditorViewportAnalysisMipV3(document, plan, 'draft')).toBe(6)
     expect(resolveImageEditorViewportAnalysisMipV3(
       createImageEditDocumentV3({ width: 20_000, height: 10_000 }),
       compileImageEditRenderPlanV3(
@@ -49,6 +52,39 @@ describe('视口全局效果分析缓存', () => {
         'stable',
       ),
     )).toBeNull()
+  })
+
+  it('全局模糊分析复用预览 GPU 执行入口', async () => {
+    const document = fastBlurDocument()
+    const originalPlan = compileImageEditRenderPlanV3(document, registry, 'draft')
+    const scaledPlan = compileImageEditRenderPlanV3(
+      scaleImageEditorPreviewEffectsV3(document, 1 / 32),
+      registry,
+      'draft',
+    )
+    const source = createFloat32PremultipliedRgbaTile(
+      4, 1, 'linear-light', new Float32Array(4 * 4).fill(0.5),
+    )
+    const executeCustomEffect = vi.fn(async (
+      _node: ImageEditRenderPlanNode,
+      _source: Float32PremultipliedRgbaTile,
+    ) => source)
+    const cache = new ImageEditorViewportGlobalAnalysisCacheV3()
+
+    await cache.prepare({
+      document,
+      originalPlan,
+      scaledPlan,
+      mip: 5,
+      quality: 'draft',
+      signal: new AbortController().signal,
+      renderInput: async () => source,
+      executeCustomEffect,
+    })
+
+    expect(executeCustomEffect).toHaveBeenCalledOnce()
+    expect(executeCustomEffect.mock.calls[0]?.[0]).toMatchObject({ definitionId: 'effect.fast-blur' })
+    cache.dispose()
   })
 
   it('全局模糊只分析一次，相邻 ROI 合成共用同一张分析图', async () => {

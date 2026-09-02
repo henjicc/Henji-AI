@@ -235,6 +235,9 @@ export async function renderImageEditorViewportCompositeV3(
         quality: request.quality,
         signal,
         renderInput: renderRegion,
+        executeCustomEffect: (node, source) => customEffects.execute(
+          node, source, request.quality, request.document.color,
+        ),
       })
     }
     for (const tileRequest of request.plan.tiles) {

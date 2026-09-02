@@ -249,8 +249,6 @@ export class ImageEditorPresentationSurfaceV3 {
     }
     const targetMipCoverage = imageEditorViewportResultCoverageV3(target, layout)
     const presentableTarget = target
-      && target.viewportKey === layout.viewportKey
-      && target.cameraSequence === cameraSequence
       && targetMipCoverage >= 0.999_999
         ? target
         : null

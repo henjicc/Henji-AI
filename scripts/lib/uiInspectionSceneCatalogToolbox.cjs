@@ -169,9 +169,41 @@ function createToolboxScenes(context) {
         }
         await settlePage(page, 2200)
         if (process.env.HENJI_VGPU_GLOW_FIXTURE_IMAGE) {
+          const benchmarkStartedAt = new Date().toISOString()
           const surface = page.locator('[data-application-surface-id="tool.image_edit"]:visible')
           const preview = surface.locator('[data-preview-surface]')
           const presentation = surface.locator('[data-presentation-surface]')
+          const frontSurface = presentation.locator('[data-presentation-front-surface]')
+          const measureEffectFeedback = async (slider, label, from, to) => {
+            const generationBeforeDrag = await frontSurface.getAttribute('data-render-generation')
+            const sliderBox = await slider.boundingBox()
+            if (!sliderBox) throw new Error(`test01 ${label}交互基准无法读取滑杆`)
+            await page.mouse.move(
+              sliderBox.x + sliderBox.width * from,
+              sliderBox.y + sliderBox.height / 2,
+            )
+            await page.mouse.down()
+            const feedbackStartedAt = Date.now()
+            try {
+              await page.mouse.move(
+                sliderBox.x + sliderBox.width * to,
+                sliderBox.y + sliderBox.height / 2,
+                { steps: 24 },
+              )
+              await page.waitForFunction((previousGeneration) => {
+                const front = document.querySelector('[data-presentation-front-surface]')
+                return front?.getAttribute('data-render-generation') !== previousGeneration
+              }, generationBeforeDrag, { timeout: 500 })
+            } catch (error) {
+              throw new Error(`test01 ${label}连续调参未在 500ms 内产出反馈帧：${error.message}`)
+            } finally {
+              await page.mouse.up()
+            }
+            const durationMs = Date.now() - feedbackStartedAt
+            process.stdout.write(`  test01 ${label}连续调参反馈帧：${durationMs}ms\n`)
+          }
+          await measureEffectFeedback(radius, '辉光', 0.75, 0.3)
+          await settlePage(page, 2500)
           const cameraBefore = await presentation.locator('[data-presentation-front-surface]')
             .getAttribute('data-camera-sequence').then(Number)
           await surface.locator('[data-tool-id="zoom"]').click()
@@ -200,8 +232,63 @@ function createToolboxScenes(context) {
             throw new Error(`test01 连续放大后，清晰目标帧未在 1.5 秒内完整接管：${JSON.stringify(state)}`)
           })
           const clearDurationMs = Date.now() - clearStartedAt
-          console.log(`  test01 连续放大后的清晰目标帧：${clearDurationMs}ms`)
+          process.stdout.write(`  test01 连续放大后的清晰目标帧：${clearDurationMs}ms\n`)
+          if (clearDurationMs > 100) {
+            throw new Error(`test01 普通缩放清晰目标帧超过 100ms：${clearDurationMs}ms`)
+          }
           await settlePage(page, 300)
+
+          const addLayer = surface.getByRole('button', { name: /^(添加图层|Add layer)$/i })
+          await addLayer.click()
+          await page.getByRole('menuitem', { name: /^(柔光 \/ 发光|Diffusion \/ Glow)$/i }).click()
+          const diffusionStrength = surface.getByRole('slider', { name: /^(强度|Strength)$/i })
+          await diffusionStrength.waitFor({ state: 'visible', timeout: 10000 })
+          await settlePage(page, 2500)
+          await measureEffectFeedback(diffusionStrength, '柔光/发光', 0.2, 0.75)
+
+          await addLayer.click()
+          await page.getByRole('menuitem', { name: /^(模糊|Blur)$/i }).click()
+          const blurRadius = surface.getByRole('slider', { name: /^(半径|Radius)$/i })
+          await blurRadius.waitFor({ state: 'visible', timeout: 10000 })
+          await settlePage(page, 2500)
+          const blurBox = await blurRadius.boundingBox()
+          if (!blurBox) throw new Error('test01 模糊交互基准无法读取滑杆')
+          await page.mouse.move(blurBox.x + blurBox.width * 0.05, blurBox.y + blurBox.height / 2)
+          await page.mouse.down()
+          const blurFeedbackStartedAt = Date.now()
+          try {
+            await page.mouse.move(
+              blurBox.x + blurBox.width * 0.2,
+              blurBox.y + blurBox.height / 2,
+              { steps: 24 },
+            )
+            await surface.locator('[data-live-blur-feedback="active"]')
+              .waitFor({ state: 'visible', timeout: 100 })
+          } catch (error) {
+            throw new Error(`test01 模糊实时反馈未在 500ms 内出现：${error.message}`)
+          } finally {
+            await page.mouse.up()
+          }
+          const blurFeedbackDurationMs = Date.now() - blurFeedbackStartedAt
+          if (blurFeedbackDurationMs > 500) {
+            throw new Error(`test01 模糊实时反馈超过 500ms：${blurFeedbackDurationMs}ms`)
+          }
+          process.stdout.write(`  test01 模糊连续调参反馈帧：${blurFeedbackDurationMs}ms\n`)
+          await settlePage(page, 1200)
+          const compositeFailures = await page.evaluate(async (afterTimestamp) => {
+            const result = await window.henjiNative.logging.queryLogEvents({
+              date: new Date().toISOString().slice(0, 10),
+              afterTimestamp,
+              level: 'error',
+              limit: 100,
+            })
+            return result.events.filter((event) => (
+              event.event === 'image_editor_v3.viewport_composite.failed'
+            ))
+          }, benchmarkStartedAt)
+          if (compositeFailures.length > 0) {
+            throw new Error(`test01 效果交互产生渲染错误：${JSON.stringify(compositeFailures)}`)
+          }
         }
       },
     },
@@ -934,12 +1021,12 @@ function createToolboxScenes(context) {
           return previewCompleted
             && vgpuCompleted
             && durations.length > 0
-            && Math.max(...durations) <= 1000
+            && Math.max(...durations) <= 500
         }, {
           afterTimestamp: blurStartedAt,
           revision: beforeBlurRevision + 1,
         }, { timeout: 5000 }).catch(() => {
-          throw new Error('模糊拖动未在 1 秒内产出 vGPU 完成帧')
+          throw new Error('模糊拖动未在 500ms 内产出 vGPU 完成帧')
         })
         await page.waitForTimeout(160)
         await waitForVisibleRasterPixels('调整模糊半径')
