@@ -1,3 +1,6 @@
+import path from 'node:path'
+import { pathToFileURL } from 'node:url'
+
 import { describe, expect, it } from 'vitest'
 
 import { isTrustedMainRendererUrl } from './main-renderer-url'
@@ -11,9 +14,13 @@ describe('主窗口 renderer URL 策略', () => {
   })
 
   it('生产环境只接受唯一入口文件，但允许自身的查询与 hash', () => {
-    const policy = { developmentUrl: '', packagedEntryPath: '/Applications/Henji/renderer/index.html' }
+    const packagedEntryPath = path.resolve('fixture', 'renderer', 'index.html')
+    const candidate = pathToFileURL(packagedEntryPath)
+    candidate.search = '?view=main'
+    candidate.hash = '#editor'
+    const policy = { developmentUrl: '', packagedEntryPath }
     expect(isTrustedMainRendererUrl(
-      'file:///Applications/Henji/renderer/index.html?view=main#editor',
+      candidate.href,
       policy,
     )).toBe(true)
     expect(isTrustedMainRendererUrl('file:///tmp/attacker.html', policy)).toBe(false)

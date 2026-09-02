@@ -140,6 +140,14 @@ async function startRasterExport(formatLabel = 'PNG（8 位）'): Promise<void> 
   fireEvent.click(await screen.findByRole('menuitem', { name: formatLabel }))
 }
 
+async function findLayerOpacity(
+  opacityLabel = '不透明度',
+  basicsLabel = '基础',
+): Promise<HTMLElement> {
+  fireEvent.click(await screen.findByRole('tab', { name: basicsLabel }))
+  return screen.findByRole('slider', { name: opacityLabel })
+}
+
 describe('ImageMarkToolV3Host', () => {
   beforeEach(async () => {
     await i18n.changeLanguage('zh-CN')
@@ -230,7 +238,7 @@ describe('ImageMarkToolV3Host', () => {
       }),
     )
 
-    const opacity = await screen.findByRole('slider', { name: '不透明度' })
+    const opacity = await findLayerOpacity()
     fireEvent.change(opacity, { target: { value: '0.75' } })
     fireEvent.pointerUp(opacity)
     await waitFor(() => expect(mocks.save).toHaveBeenCalledTimes(2), { timeout: 1_500 })
@@ -325,7 +333,7 @@ describe('ImageMarkToolV3Host', () => {
 
   it('选定格式后先落盘待保存命令，再读取权威快照执行栅格分块导出', async () => {
     renderHost()
-    const opacity = await screen.findByRole('slider', { name: '不透明度' })
+    const opacity = await findLayerOpacity()
     fireEvent.change(opacity, { target: { value: '0.6' } })
     fireEvent.pointerUp(opacity)
 
@@ -365,7 +373,7 @@ describe('ImageMarkToolV3Host', () => {
       })
     })
     renderHost()
-    await screen.findByRole('slider', { name: '不透明度' })
+    await findLayerOpacity()
     await startRasterExport()
 
     expect(await screen.findByText('正在导出 2/7')).toBeTruthy()
@@ -379,7 +387,7 @@ describe('ImageMarkToolV3Host', () => {
   it('将导出失败原因明确通知用户', async () => {
     mocks.exportRaster.mockRejectedValueOnce(new Error('图像编码器暂时不可用'))
     renderHost()
-    await screen.findByRole('slider', { name: '不透明度' })
+    await findLayerOpacity()
     await startRasterExport()
 
     expect(await screen.findByText('无法导出栅格图片：图像编码器暂时不可用')).toBeTruthy()
@@ -412,12 +420,12 @@ describe('ImageMarkToolV3Host', () => {
     })
     renderHost()
 
-    expect(await screen.findByRole('slider', { name: 'Opacity' })).toBeTruthy()
+    expect(await findLayerOpacity('Opacity', 'Basics')).toBeTruthy()
     const exportButton = screen.getByRole('button', {
       name: /Export unavailable: This version cannot preserve HDR metadata reliably/,
     }) as HTMLButtonElement
     expect(exportButton.disabled).toBe(true)
-    const handButton = screen.getByRole('button', { name: 'Hand' }) as HTMLButtonElement
+    const handButton = screen.getByRole('button', { name: 'Pan canvas (Hand)' }) as HTMLButtonElement
     expect(handButton.disabled).toBe(false)
 
     fireEvent.click(screen.getByRole('button', { name: 'Open' }))

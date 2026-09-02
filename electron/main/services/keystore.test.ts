@@ -58,11 +58,13 @@ function writeRawKeystore(keys: Record<string, string>): void {
 describe('keystore', () => {
   beforeEach(() => {
     mocks.appDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'henji-keystore-'))
+    vi.stubEnv('LOCALAPPDATA', mocks.appDataDir)
     mocks.isEncryptionAvailable.mockReturnValue(true)
   })
 
   afterEach(() => {
     fs.rmSync(mocks.appDataDir, { recursive: true, force: true })
+    vi.unstubAllEnvs()
   })
 
   it('存进去的密钥能原样读回来', () => {
