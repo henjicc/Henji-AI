@@ -359,7 +359,10 @@ const projectPackageApi: HenjiProjectPackageApi = {
 }
 
 const { imageApi, videoApi } = createImageVideoApis(nativeInvoke)
-const imageEditorV3Api = createImageEditorV3Api(nativeInvoke)
+const imageEditorV3Api = createImageEditorV3Api(
+  nativeInvoke,
+  (channel, message, transfer) => ipcRenderer.postMessage(channel, message, transfer),
+)
 
 const assetLibraryApi: HenjiAssetLibraryApi = {
   createAsset: (input) => nativeInvoke('assetLibrary:createAsset', input),

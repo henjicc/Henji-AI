@@ -1,4 +1,4 @@
-import { BrowserWindow, type IpcMainInvokeEvent, type WebContents } from 'electron'
+import { BrowserWindow, type IpcMainEvent, type IpcMainInvokeEvent, type WebContents } from 'electron'
 import type { ImageEditDocumentV3 } from '../../../src/core/imageEdit/v3/documentTypes'
 import type {
   ImageEditorV3DocumentSnapshot,
@@ -116,7 +116,7 @@ function trackRendererLifetime(sender: WebContents): void {
   trackedSenders.set(sender, cleanup)
 }
 
-function assertTrustedMainRenderer(event: IpcMainInvokeEvent): void {
+function assertTrustedMainRenderer(event: IpcMainEvent | IpcMainInvokeEvent): void {
   const owner = BrowserWindow.fromWebContents(event.sender)
   const mainWindow = getMainWindow()
   if (!owner || owner !== mainWindow || owner.isDestroyed() || event.senderFrame !== event.sender.mainFrame) {
@@ -370,6 +370,7 @@ export function registerImageEditorV3Ipc(): void {
     sourceIngestor: getRuntime().sourceIngestor,
     guard,
     runRequest,
+    cancelRequest: (senderId, requestId) => requestAdmission.cancel(senderId, requestId),
   })
   registerImageEditorV3PackageIpc({
     documents: getRuntime().documents,

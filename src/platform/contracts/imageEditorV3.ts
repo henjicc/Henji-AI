@@ -136,6 +136,16 @@ export interface ImageEditorV3SourceTileBatchItem {
   priority: number
 }
 
+export type ImageEditorV3SourceTileStreamEvent =
+  | { type: 'tile'; index: number; tile: ImageEditorV3SourceTile }
+  | { type: 'complete'; tileCount: number }
+  | { type: 'error'; name: string; message: string }
+
+export interface ImageEditorV3SourceTileStreamCredit {
+  type: 'credit'
+  count: number
+}
+
 export interface ImageEditorV3BrushRgbaTile {
   storage: 'rgba-float32'
   width: number

@@ -5,6 +5,66 @@ import { createImageEditorV3Api } from './image-editor-v3-api'
 const RESOURCE_REF = `sha256:${'a'.repeat(64)}` as const
 
 describe('图片编辑 V3 preload 契约', () => {
+  it('批量瓦片优先使用带 credit 的 MessagePort 流并接收 transferable', async () => {
+    class TestPort {
+      onmessage: ((event: { data: unknown }) => void) | null = null
+      onmessageerror: (() => void) | null = null
+      peer: TestPort | null = null
+      postMessage(message: unknown): void {
+        const peer = this.peer
+        queueMicrotask(() => peer?.onmessage?.({ data: message }))
+      }
+      start(): void {}
+      close(): void { this.peer = null }
+    }
+    class TestMessageChannel {
+      port1 = new TestPort()
+      port2 = new TestPort()
+      constructor() {
+        this.port1.peer = this.port2
+        this.port2.peer = this.port1
+      }
+    }
+    vi.stubGlobal('MessageChannel', TestMessageChannel)
+    const invoke = vi.fn()
+    const pixels = new Uint8Array([1, 2, 3, 4]).buffer
+    const postMessage = vi.fn((_channel: string, _request: unknown, ports: MessagePort[] = []) => {
+      const port = ports[0]
+      if (!port) throw new Error('缺少瓦片流端口')
+      let sent = false
+      port.onmessage = (event) => {
+        if (sent || event.data?.type !== 'credit') return
+        sent = true
+        port.postMessage({
+          type: 'tile',
+          index: 0,
+          tile: { resourceRef: RESOURCE_REF, mip: 0, tileX: 0, tileY: 0, pixels },
+        }, [pixels])
+        port.postMessage({ type: 'complete', tileCount: 1 })
+        port.close()
+      }
+      port.start()
+    })
+    const api = createImageEditorV3Api(
+      invoke as unknown as Parameters<typeof createImageEditorV3Api>[0],
+      postMessage,
+    )
+    const result = await api.readSourceTiles!({
+      requestId: 'stream',
+      tiles: [{ resourceRef: RESOURCE_REF, mip: 0, tileX: 0, tileY: 0, priority: 0 }],
+    })
+
+    expect(result.tiles).toHaveLength(1)
+    expect(result.tiles[0]?.pixels.byteLength).toBe(4)
+    expect(postMessage).toHaveBeenCalledWith(
+      'imageEditorV3:source:tilesStream',
+      expect.objectContaining({ requestId: 'stream' }),
+      expect.arrayContaining([expect.any(TestPort)]),
+    )
+    expect(invoke).not.toHaveBeenCalled()
+    vi.unstubAllGlobals()
+  })
+
   it('源导入与包打开不接收渲染层本地路径', async () => {
     const invoke = vi.fn(async () => undefined)
     const api = createImageEditorV3Api(

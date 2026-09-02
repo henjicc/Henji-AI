@@ -1,4 +1,4 @@
-import { BrowserWindow, dialog, type IpcMainInvokeEvent } from 'electron'
+import { BrowserWindow, dialog, type IpcMainEvent, type IpcMainInvokeEvent } from 'electron'
 import type {
   ImageEditorV3ManagedSource,
   ImageEditorV3SourceMetadata,
@@ -28,6 +28,7 @@ import {
   estimateImageEditorV3TileRequestBytes,
 } from './image-editor-v3-request-admission'
 import { registerIpcHandler } from './registry'
+import { registerImageEditorV3TileStreamIpc } from './image-editor-v3-tile-stream'
 
 const logger = createMainLogger('main.image_editor_v3.source_ipc')
 
@@ -42,8 +43,9 @@ type RunRequestV3 = <T>(
 export interface ImageEditorV3SourceIpcDependencies {
   sources: SharpSourceProvider
   sourceIngestor: ImageEditorV3SourceIngestor
-  guard(event: IpcMainInvokeEvent): void
+  guard(event: IpcMainEvent | IpcMainInvokeEvent): void
   runRequest: RunRequestV3
+  cancelRequest(senderId: number, requestId: string): boolean
 }
 
 function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
@@ -140,6 +142,12 @@ async function readTileBatch(
 
 export function registerImageEditorV3SourceIpc(dependencies: ImageEditorV3SourceIpcDependencies): void {
   const { guard, runRequest, sources, sourceIngestor } = dependencies
+  registerImageEditorV3TileStreamIpc({
+    sources,
+    guard,
+    runRequest,
+    cancelRequest: dependencies.cancelRequest,
+  })
   registerIpcHandler('imageEditorV3:source:import', parseImageEditorV3BasePayload, (payload, event) => (
     runRequest('source.import', payload.requestId, event.sender.id, async (signal) => {
       const selection = await dialog.showOpenDialog(ownerFor(event), {

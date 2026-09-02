@@ -1,12 +1,74 @@
-import type { ImageEditorV3Platform } from '../../src/platform/contracts/imageEditorV3'
+import type {
+  ImageEditorV3Platform,
+  ImageEditorV3SourceTile,
+  ImageEditorV3SourceTileStreamEvent,
+} from '../../src/platform/contracts/imageEditorV3'
 
 type NativeInvoke = <T>(channel: string, payload?: unknown) => Promise<T>
+type NativePostMessage = (channel: string, message: unknown, transfer?: MessagePort[]) => void
+
+const TILE_STREAM_CHANNEL = 'imageEditorV3:source:tilesStream'
+const TILE_STREAM_CREDITS = 4
+
+function readSourceTilesStream(
+  request: Parameters<NonNullable<ImageEditorV3Platform['readSourceTiles']>>[0],
+  postMessage: NativePostMessage,
+): Promise<{ tiles: ImageEditorV3SourceTile[] }> {
+  return new Promise((resolve, reject) => {
+    const channel = new MessageChannel()
+    const tiles = new Array<ImageEditorV3SourceTile>(request.tiles.length)
+    let settled = false
+    const finish = (complete: () => void): void => {
+      if (settled) return
+      settled = true
+      channel.port1.close()
+      complete()
+    }
+    channel.port1.onmessage = (event: MessageEvent<ImageEditorV3SourceTileStreamEvent>) => {
+      const message = event.data
+      if (message.type === 'tile') {
+        if (!Number.isSafeInteger(message.index)
+          || message.index < 0
+          || message.index >= tiles.length
+          || tiles[message.index]) {
+          finish(() => reject(new Error('图片编辑瓦片流返回了非法序号')))
+          return
+        }
+        tiles[message.index] = message.tile
+        channel.port1.postMessage({ type: 'credit', count: 1 })
+        return
+      }
+      if (message.type === 'error') {
+        const error = new Error(message.message)
+        error.name = message.name
+        finish(() => reject(error))
+        return
+      }
+      if (message.tileCount !== tiles.length || tiles.some((tile) => !tile)) {
+        finish(() => reject(new Error('图片编辑瓦片流未完整返回请求结果')))
+        return
+      }
+      finish(() => resolve({ tiles }))
+    }
+    channel.port1.onmessageerror = () => finish(() => reject(new Error('图片编辑瓦片流消息损坏')))
+    channel.port1.start()
+    try {
+      postMessage(TILE_STREAM_CHANNEL, request, [channel.port2])
+      channel.port1.postMessage({ type: 'credit', count: TILE_STREAM_CREDITS })
+    } catch (error) {
+      finish(() => reject(error instanceof Error ? error : new Error(String(error))))
+    }
+  })
+}
 
 /**
  * 图片编辑 V3 使用独立命名空间，避免继续膨胀旧 image IPC。所有本地路径都留在主进程；
  * 这里仅往返文档、内容寻址资源和输出引用，以及有明确尺寸上限的 ArrayBuffer。
  */
-export function createImageEditorV3Api(nativeInvoke: NativeInvoke): ImageEditorV3Platform {
+export function createImageEditorV3Api(
+  nativeInvoke: NativeInvoke,
+  nativePostMessage?: NativePostMessage,
+): ImageEditorV3Platform {
   return {
     loadDocument: (request) => nativeInvoke('imageEditorV3:document:load', request),
     saveDocument: (request) => nativeInvoke('imageEditorV3:document:save', request),
@@ -17,7 +79,9 @@ export function createImageEditorV3Api(nativeInvoke: NativeInvoke): ImageEditorV
     prewarmSourcePyramid: (request) => nativeInvoke('imageEditorV3:source:pyramidPrewarm', request),
     readFastProxy: (request) => nativeInvoke('imageEditorV3:source:fastProxy', request),
     readSourceTile: (request) => nativeInvoke('imageEditorV3:source:tile', request),
-    readSourceTiles: (request) => nativeInvoke('imageEditorV3:source:tiles', request),
+    readSourceTiles: (request) => nativePostMessage
+      ? readSourceTilesStream(request, nativePostMessage)
+      : nativeInvoke('imageEditorV3:source:tiles', request),
     persistBrushTiles: (request) => nativeInvoke('imageEditorV3:brushTiles:persist', request),
     readBrushTiles: (request) => nativeInvoke('imageEditorV3:brushTiles:read', request),
     openPackage: (request) => nativeInvoke('imageEditorV3:package:open', request),
