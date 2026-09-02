@@ -223,25 +223,41 @@ function createToolboxScenes(context) {
             (element) => !element.isConnected,
             previousEditorElement,
             { timeout: 15000 },
-          )
+          ).catch(() => {
+            throw new Error('导入新图片后，旧编辑器实例在 15 秒内没有卸载')
+          })
         }
 
-        await editor.waitFor({ state: 'visible', timeout: 15000 })
+        await editor.waitFor({ state: 'visible', timeout: 15000 }).catch(() => {
+          throw new Error('导入图片后，编辑器在 15 秒内没有进入可见状态')
+        })
         const raster = editor.locator('[role="treeitem"][data-layer-type="raster"][aria-selected="true"]')
         await raster.waitFor({ state: 'visible', timeout: 12000 })
         const preview = editor.locator('[data-preview-surface]')
         await preview.waitFor({ state: 'visible', timeout: 12000 })
         await page.waitForFunction(() => (
           document.querySelector('[data-preview-surface]')?.getAttribute('data-move-availability') === 'ready'
-        ), undefined, { timeout: 15000 })
+        ), undefined, { timeout: 15000 }).catch(() => {
+          throw new Error('图片编辑器打开后，移动能力在 15 秒内没有就绪')
+        })
         await page.waitForFunction(() => (
           document.querySelector('[data-preview-surface]')?.getAttribute('data-preview-display-source') === 'viewport'
             && (() => {
               const frame = document.querySelector('[data-raster-display-frame]')
               return frame instanceof HTMLElement
-                && frame.querySelector('[data-viewport-tile-frame] canvas') instanceof HTMLCanvasElement
+                && frame.querySelector('[data-presentation-front-surface]') instanceof HTMLCanvasElement
+                && frame.querySelector('[data-presentation-safety-surface]') instanceof HTMLCanvasElement
             })()
-        ), undefined, { timeout: 15000 })
+        ), undefined, { timeout: 15000 }).catch(async () => {
+          const state = await editor.evaluate((root) => ({
+            displaySource: root.querySelector('[data-preview-surface]')?.getAttribute('data-preview-display-source') ?? null,
+            hasDisplayFrame: Boolean(root.querySelector('[data-raster-display-frame]')),
+            presentationSurfaceCount: root.querySelectorAll('[data-presentation-surface]').length,
+            frontSurfaceCount: root.querySelectorAll('[data-presentation-front-surface]').length,
+            safetySurfaceCount: root.querySelectorAll('[data-presentation-safety-surface]').length,
+          }))
+          throw new Error(`图片编辑器打开后，常驻显示表面在 15 秒内没有就绪：${JSON.stringify(state)}`)
+        })
 
         const displayFrame = editor.locator('[data-raster-display-frame]')
         if (await editor.locator('[data-raster-pasteboard-layer]').count() !== 0
@@ -274,7 +290,7 @@ function createToolboxScenes(context) {
             })
           }, undefined, { timeout: 5000 }).catch(() => {
             return displayFrame.evaluate((frame) => {
-              const tileFrame = frame.querySelector('[data-viewport-tile-frame]')
+              const presentation = frame.querySelector('[data-presentation-surface]')
               const canvases = [...frame.querySelectorAll('canvas')]
               let maxAlpha = 0
               let maxSignal = 0
@@ -300,7 +316,7 @@ function createToolboxScenes(context) {
                 }
               }
               return {
-                revision: tileFrame?.getAttribute('data-viewport-revision') ?? null,
+                surfaceId: presentation?.getAttribute('data-presentation-surface') ?? null,
                 canvasCount: canvases.length,
                 maxAlpha,
                 maxSignal,
@@ -446,6 +462,17 @@ function createToolboxScenes(context) {
           return revision
         }
         const zoomStartedAt = new Date().toISOString()
+        const presentationSurface = editor.locator('[data-presentation-surface]')
+        const persistentPresentation = await presentationSurface.elementHandle()
+        if (!persistentPresentation) throw new Error('连续缩放前无法取得常驻显示表面')
+        const zoomIdentityBefore = await presentationSurface.evaluate((surface) => {
+          const front = surface.querySelector('[data-presentation-front-surface]')
+          return {
+            surfaceId: surface.getAttribute('data-presentation-surface'),
+            renderGeneration: front?.getAttribute('data-render-generation'),
+            cameraSequence: Number(front?.getAttribute('data-camera-sequence')),
+          }
+        })
         await editor.locator('[data-tool-id="zoom"]').click()
         const zoomPreviewBox = await preview.boundingBox()
         if (!zoomPreviewBox) throw new Error('连续缩放前无法读取图片编辑预览范围')
@@ -460,19 +487,40 @@ function createToolboxScenes(context) {
           await page.waitForTimeout(5)
         }
         await settlePage(page, 400)
-        const zoomCompositeStarts = await page.evaluate(async (afterTimestamp) => {
+        const zoomIdentityAfter = await presentationSurface.evaluate((surface, previous) => {
+          const front = surface.querySelector('[data-presentation-front-surface]')
+          const previewSurface = surface.closest('[data-preview-surface]')
+          return {
+            sameSurface: surface === previous,
+            surfaceId: surface.getAttribute('data-presentation-surface'),
+            renderGeneration: front?.getAttribute('data-render-generation'),
+            cameraSequence: Number(front?.getAttribute('data-camera-sequence')),
+            coverage: Number(previewSurface?.getAttribute('data-preview-coverage')),
+          }
+        }, persistentPresentation)
+        if (!zoomIdentityAfter.sameSurface
+          || zoomIdentityAfter.surfaceId !== zoomIdentityBefore.surfaceId
+          || zoomIdentityAfter.renderGeneration !== zoomIdentityBefore.renderGeneration
+          || !(zoomIdentityAfter.cameraSequence > zoomIdentityBefore.cameraSequence)
+          || zoomIdentityAfter.coverage !== 1) {
+          throw new Error(`连续缩放破坏了常驻显示表面或像素 generation：${JSON.stringify({
+            before: zoomIdentityBefore,
+            after: zoomIdentityAfter,
+          })}`)
+        }
+        const legacyPreviewStarts = await page.evaluate(async (afterTimestamp) => {
           const result = await window.henjiNative.logging.queryLogEvents({
             date: new Date().toISOString().slice(0, 10),
             afterTimestamp,
-            level: 'info',
+            level: 'debug',
             limit: 200,
           })
           return result.events.filter((event) => (
-            event.event === 'image_editor_v3.viewport_composite.start'
+            event.event === 'image_editor_v3.preview.started'
           )).length
         }, zoomStartedAt)
-        if (zoomCompositeStarts > 2) {
-          throw new Error(`连续缩放创建了 ${zoomCompositeStarts} 个视口任务，未合并为最新请求`)
+        if (legacyPreviewStarts !== 0) {
+          throw new Error(`连续缩放错误启动了 ${legacyPreviewStarts} 个旧式整图预览任务`)
         }
 
         const readZoomPercent = async () => Number((
@@ -578,18 +626,63 @@ function createToolboxScenes(context) {
           return previewSurface?.getAttribute('data-preview-display-source') === 'viewport'
             && feedbackFrame?.style.transform === ''
         }, undefined, { timeout: 12000 })
-        const [displayFrameBox, viewportContentBox, displayOverflow] = await Promise.all([
-          displayFrame.boundingBox(),
-          viewportContent.boundingBox(),
-          displayFrame.evaluate((element) => getComputedStyle(element).overflow),
-        ])
-        if (!displayFrameBox || !viewportContentBox
-          || Math.abs(displayFrameBox.x - viewportContentBox.x) > 0.5
-          || Math.abs(displayFrameBox.y - viewportContentBox.y) > 0.5
-          || Math.abs(displayFrameBox.width - viewportContentBox.width) > 0.5
-          || Math.abs(displayFrameBox.height - viewportContentBox.height) > 0.5
-          || displayOverflow !== 'hidden') {
-          throw new Error('移动后的图像没有严格裁切在文档画布内')
+        const clippingState = await displayFrame.evaluate((frame) => {
+          const frameRect = frame.getBoundingClientRect()
+          const documentFrame = document.querySelector('[data-viewport-content]')
+          const documentRect = documentFrame?.getBoundingClientRect()
+          const presentation = frame.querySelector('[data-presentation-surface]')
+          const presentationRect = presentation?.getBoundingClientRect()
+          const canvases = [...frame.querySelectorAll('canvas')]
+          let outsideSamples = 0
+          let maxOutsideAlpha = 0
+          if (documentRect) {
+            for (const canvas of canvases) {
+              if (!(canvas instanceof HTMLCanvasElement) || canvas.width < 1 || canvas.height < 1) continue
+              const context = canvas.getContext('2d', { willReadFrequently: true })
+              if (!context) continue
+              for (let row = 0; row < 12; row += 1) {
+                for (let column = 0; column < 18; column += 1) {
+                  const clientX = frameRect.left + (column + 0.5) / 18 * frameRect.width
+                  const clientY = frameRect.top + (row + 0.5) / 12 * frameRect.height
+                  const outsideDocument = clientX < documentRect.left
+                    || clientX > documentRect.right
+                    || clientY < documentRect.top
+                    || clientY > documentRect.bottom
+                  if (!outsideDocument) continue
+                  outsideSamples += 1
+                  const pixelX = Math.min(canvas.width - 1, Math.max(0, Math.floor(
+                    (clientX - frameRect.left) / frameRect.width * canvas.width,
+                  )))
+                  const pixelY = Math.min(canvas.height - 1, Math.max(0, Math.floor(
+                    (clientY - frameRect.top) / frameRect.height * canvas.height,
+                  )))
+                  maxOutsideAlpha = Math.max(
+                    maxOutsideAlpha,
+                    context.getImageData(pixelX, pixelY, 1, 1).data[3],
+                  )
+                }
+              }
+            }
+          }
+          return {
+            overflow: getComputedStyle(frame).overflow,
+            canvasCount: canvases.length,
+            hasSinglePresentation: frame.querySelectorAll('[data-presentation-surface]').length === 1,
+            surfaceMatchesFrame: Boolean(presentationRect)
+              && Math.abs(presentationRect.left - frameRect.left) <= 0.5
+              && Math.abs(presentationRect.top - frameRect.top) <= 0.5
+              && Math.abs(presentationRect.width - frameRect.width) <= 0.5
+              && Math.abs(presentationRect.height - frameRect.height) <= 0.5,
+            outsideSamples,
+            maxOutsideAlpha,
+          }
+        })
+        if (clippingState.overflow !== 'hidden'
+          || clippingState.canvasCount !== 2
+          || !clippingState.hasSinglePresentation
+          || !clippingState.surfaceMatchesFrame
+          || (clippingState.outsideSamples > 0 && clippingState.maxOutsideAlpha !== 0)) {
+          throw new Error(`移动后的常驻表面没有严格裁切：${JSON.stringify(clippingState)}`)
         }
 
         const annotationStartedAt = new Date().toISOString()
