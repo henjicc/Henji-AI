@@ -31,23 +31,23 @@ function surfacePixels(layout: ImageEditorViewportLayoutV3): SurfacePixelsV3 {
 
 function resizePreservingLastFrame(
   canvas: HTMLCanvasElement,
+  buffer: HTMLCanvasElement,
   width: number,
   height: number,
 ): void {
   if (canvas.width === width && canvas.height === height) return
-  const previous = document.createElement('canvas')
-  previous.width = canvas.width
-  previous.height = canvas.height
-  previous.getContext('2d')?.drawImage(canvas, 0, 0)
+  buffer.width = canvas.width
+  buffer.height = canvas.height
+  buffer.getContext('2d')?.drawImage(canvas, 0, 0)
   canvas.width = width
   canvas.height = height
-  if (previous.width <= 0 || previous.height <= 0) return
+  if (buffer.width <= 0 || buffer.height <= 0) return
   canvas.getContext('2d')?.drawImage(
-    previous,
+    buffer,
     0,
     0,
-    previous.width,
-    previous.height,
+    buffer.width,
+    buffer.height,
     0,
     0,
     width,
@@ -220,10 +220,12 @@ export function imageEditorViewportTileCoverageContributionV3(
 export class ImageEditorPresentationSurfaceV3 {
   private elements: ImageEditorPresentationSurfaceElementsV3 | null = null
   private staging: HTMLCanvasElement | null = null
+  private resizeBuffer: HTMLCanvasElement | null = null
 
   attach(elements: ImageEditorPresentationSurfaceElementsV3): void {
     this.elements = elements
     this.staging ??= document.createElement('canvas')
+    this.resizeBuffer ??= document.createElement('canvas')
   }
 
   detach(elements: ImageEditorPresentationSurfaceElementsV3): void {
@@ -242,10 +244,11 @@ export class ImageEditorPresentationSurfaceV3 {
   ): { coverage: number; targetMipCoverage: number } | null {
     const elements = this.elements
     const staging = this.staging
-    if (!elements || !staging) return null
+    const resizeBuffer = this.resizeBuffer
+    if (!elements || !staging || !resizeBuffer) return null
     const pixels = surfacePixels(layout)
-    resizePreservingLastFrame(elements.front, pixels.width, pixels.height)
-    resizePreservingLastFrame(elements.safety, pixels.width, pixels.height)
+    resizePreservingLastFrame(elements.front, resizeBuffer, pixels.width, pixels.height)
+    resizePreservingLastFrame(elements.safety, resizeBuffer, pixels.width, pixels.height)
     if (staging.width !== pixels.width) staging.width = pixels.width
     if (staging.height !== pixels.height) staging.height = pixels.height
     const stagingContext = staging.getContext('2d')
@@ -281,10 +284,11 @@ export class ImageEditorPresentationSurfaceV3 {
     identity: { renderGeneration: number; cameraSequence: number; geometryHash: string },
   ): number | null {
     const elements = this.elements
-    if (!elements) return null
+    const resizeBuffer = this.resizeBuffer
+    if (!elements || !resizeBuffer) return null
     const pixels = surfacePixels(layout)
-    resizePreservingLastFrame(elements.front, pixels.width, pixels.height)
-    resizePreservingLastFrame(elements.safety, pixels.width, pixels.height)
+    resizePreservingLastFrame(elements.front, resizeBuffer, pixels.width, pixels.height)
+    resizePreservingLastFrame(elements.safety, resizeBuffer, pixels.width, pixels.height)
     const frontContext = elements.front.getContext('2d')
     const safetyContext = elements.safety.getContext('2d')
     if (!frontContext || !safetyContext) throw new Error('无法创建图片编辑器常驻显示表面')

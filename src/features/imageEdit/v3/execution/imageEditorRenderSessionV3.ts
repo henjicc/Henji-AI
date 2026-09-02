@@ -104,6 +104,8 @@ export class DefaultImageEditorRenderSessionV3 implements ImageEditorRenderSessi
   private analysisMip: number | null = null
   private analysisReadyGeneration: number | null = null
   private targetFrame: number | null = null
+  private cameraFrame: number | null = null
+  private pendingLayout: ImageEditorViewportLayoutV3 | null = null
   private visible = true
   private disposed = false
 
@@ -160,6 +162,26 @@ export class DefaultImageEditorRenderSessionV3 implements ImageEditorRenderSessi
 
   updateViewport(layout: ImageEditorViewportLayoutV3): void {
     this.assertUsable()
+    if (!this.layout) {
+      this.applyViewport(layout)
+      return
+    }
+    if (this.pendingLayout?.viewportKey === layout.viewportKey
+      && this.pendingLayout.viewport.interacting === layout.viewport.interacting) return
+    this.pendingLayout = layout
+    if (this.cameraFrame !== null) return
+    this.cameraFrame = requestAnimationFrame(() => {
+      this.cameraFrame = null
+      const pending = this.pendingLayout
+      this.pendingLayout = null
+      if (pending && !this.disposed) this.applyViewport(pending, true)
+    })
+  }
+
+  private applyViewport(
+    layout: ImageEditorViewportLayoutV3,
+    presentTargetImmediately = false,
+  ): void {
     const previous = this.layout
     if (previous?.viewportKey === layout.viewportKey
       && previous.viewport.interacting === layout.viewport.interacting) return
@@ -184,7 +206,7 @@ export class DefaultImageEditorRenderSessionV3 implements ImageEditorRenderSessi
     this.publish({ cameraSequence: this.cameraSequence })
     this.present()
     if (this.coarse?.renderGeneration === this.snapshot?.renderGeneration) {
-      this.scheduleAnalysisOrTarget()
+      this.scheduleAnalysisOrTarget(presentTargetImmediately)
     } else if (this.snapshot) {
       this.scheduleCoarse(this.epoch, this.snapshot)
     }
@@ -225,6 +247,9 @@ export class DefaultImageEditorRenderSessionV3 implements ImageEditorRenderSessi
     this.epoch += 1
     if (this.targetFrame !== null) cancelAnimationFrame(this.targetFrame)
     this.targetFrame = null
+    if (this.cameraFrame !== null) cancelAnimationFrame(this.cameraFrame)
+    this.cameraFrame = null
+    this.pendingLayout = null
     this.client.dispose()
     this.releaseTarget()
     this.coarse?.release()
@@ -273,12 +298,20 @@ export class DefaultImageEditorRenderSessionV3 implements ImageEditorRenderSessi
     })
   }
 
-  private scheduleTarget(): void {
+  private scheduleTarget(immediate = false): void {
+    if (immediate && this.targetFrame !== null) {
+      cancelAnimationFrame(this.targetFrame)
+      this.targetFrame = null
+    }
     if (!this.visible
       || this.targetFrame !== null
       || !this.snapshot
       || !this.layout
       || this.analysisReadyGeneration !== this.snapshot.renderGeneration) return
+    if (immediate) {
+      void this.renderTarget(this.epoch, this.snapshot, this.layout)
+      return
+    }
     this.targetFrame = requestAnimationFrame(() => {
       this.targetFrame = null
       void this.renderTarget(this.epoch, this.snapshot!, this.layout!)
@@ -365,10 +398,10 @@ export class DefaultImageEditorRenderSessionV3 implements ImageEditorRenderSessi
     })
   }
 
-  private scheduleAnalysisOrTarget(): void {
+  private scheduleAnalysisOrTarget(presentTargetImmediately = false): void {
     if (!this.snapshot || !this.layout || !this.visible) return
     if (this.analysisReadyGeneration === this.snapshot.renderGeneration) {
-      this.scheduleTarget()
+      this.scheduleTarget(presentTargetImmediately)
       return
     }
     if (this.analysisInFlightEpoch === this.epoch) return
