@@ -256,6 +256,8 @@ export async function buildImageEditorV3FastBlurAnalyses(
                   documentHeight: document.geometry.height,
                   sourceX: effectRegion.x * (2 ** mip),
                   sourceY: effectRegion.y * (2 ** mip),
+                  sourceWidth: effectRegion.width * (2 ** mip),
+                  sourceHeight: effectRegion.height * (2 ** mip),
                 },
               })
             }

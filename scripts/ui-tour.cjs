@@ -113,7 +113,7 @@ async function main() {
         let sceneFailed = false
         let sceneError = null
         try {
-          await scene.setup(app.page)
+          await scene.setup(app.page, app.app)
           const fileName = `${sizeLabel}-${scene.id}.png`
           await app.page.screenshot({
             path: path.join(outDir, fileName),

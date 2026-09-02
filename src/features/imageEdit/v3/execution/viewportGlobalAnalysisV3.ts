@@ -126,13 +126,13 @@ function sampleAnalysisRegion(
   const data = new Float32Array(source.data.length)
   const tile = analysis.tile
   for (let y = 0; y < source.height; y += 1) {
-    const sourceY = region.y + y + 0.5
+    const sourceY = region.y + (y + 0.5) * region.height / source.height
     const sampleY = sourceY * tile.height / analysis.documentHeight - 0.5
     const y0 = Math.max(0, Math.min(tile.height - 1, Math.floor(sampleY)))
     const y1 = Math.min(tile.height - 1, y0 + 1)
     const fy = sampleY - Math.floor(sampleY)
     for (let x = 0; x < source.width; x += 1) {
-      const sourceX = region.x + x + 0.5
+      const sourceX = region.x + (x + 0.5) * region.width / source.width
       const sampleX = sourceX * tile.width / analysis.documentWidth - 0.5
       const x0 = Math.max(0, Math.min(tile.width - 1, Math.floor(sampleX)))
       const x1 = Math.min(tile.width - 1, x0 + 1)
@@ -238,8 +238,9 @@ export class ImageEditorViewportGlobalAnalysisCacheV3 {
     const key = this.keyByIdentity.get(identity)
     const lease = key ? this.caches.lease('global-analysis', key) : null
     if (!lease) {
-      if (options.required && isSharedAnalysisNode(options.originalNode)) {
-        throw new Error(`目标视口缺少共享全局分析：${options.originalNode.id}`)
+      if (isSharedAnalysisNode(options.originalNode)) {
+        const phase = options.required ? '目标视口' : '全局效果预览'
+        throw new Error(`${phase}缺少共享全局分析：${options.originalNode.id}`)
       }
       return options.fallback()
     }
@@ -273,6 +274,8 @@ export class ImageEditorViewportGlobalAnalysisCacheV3 {
             documentHeight: analysis.documentHeight,
             sourceX: sourceRegion.x,
             sourceY: sourceRegion.y,
+            sourceWidth: sourceRegion.width,
+            sourceHeight: sourceRegion.height,
           } },
         )
       }
@@ -289,6 +292,8 @@ export class ImageEditorViewportGlobalAnalysisCacheV3 {
           documentHeight: analysis.documentHeight,
           sourceX: sourceRegion.x,
           sourceY: sourceRegion.y,
+          sourceWidth: sourceRegion.width,
+          sourceHeight: sourceRegion.height,
         } },
       )
     } finally {

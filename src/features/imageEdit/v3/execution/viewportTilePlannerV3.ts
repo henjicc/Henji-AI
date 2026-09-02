@@ -11,6 +11,9 @@ import type {
   ImageEditorV3ResourceRef,
 } from '@/platform/contracts/imageEditorV3'
 
+const PREVIOUS_MIP_MIN_PHYSICAL_PIXELS_V3 = 0.7
+const PREVIOUS_MIP_MAX_PHYSICAL_PIXELS_V3 = 1.6
+
 export interface ImageEditorViewportTransformV3 {
   /** 视口左上角对应的文档像素坐标。 */
   documentX: number
@@ -76,7 +79,7 @@ export interface ImageEditorViewportTilePlanOptionsV3 {
   overscanViewports?: number
   /** 运动方向额外预取的视口倍数。 */
   forwardPrefetchViewports?: number
-  /** 上一次选中的 mip；在 25% 滞回带内保持不变。 */
+  /** 上一次选中的 mip；在 0.7～1.6 个设备像素范围内保持，避免缩放临界点反复重算。 */
   previousMip?: number
   /** 强制从指定 mip 开始，供完整文档最粗兜底使用。 */
   preferredMip?: number
@@ -210,7 +213,10 @@ function targetMipForViewport(
     throw new Error('上一次 mip 必须是 0～30 的整数')
   }
   const physicalPixels = viewport.zoom * viewport.devicePixelRatio * (2 ** previousMip)
-  return physicalPixels >= 0.75 && physicalPixels <= 1.25 ? previousMip : ideal
+  return physicalPixels >= PREVIOUS_MIP_MIN_PHYSICAL_PIXELS_V3
+    && physicalPixels <= PREVIOUS_MIP_MAX_PHYSICAL_PIXELS_V3
+    ? previousMip
+    : ideal
 }
 
 function firstMipIndexAtOrBelowTarget(

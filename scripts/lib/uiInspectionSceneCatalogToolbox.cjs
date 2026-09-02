@@ -35,7 +35,7 @@ function createToolboxScenes(context) {
       id: 'toolbox-image-edit-vgpu-glow',
       surface: '工具箱',
       name: '工具箱-图片编辑辉光 Pro',
-      setup: async (page) => {
+      setup: async (page, electronApp) => {
         const openGlowEditor = async () => {
           await setupToolbox(page)
           await clickNamedButton(page, /^(图片编辑|Image Edit)/i)
@@ -49,76 +49,79 @@ function createToolboxScenes(context) {
           ])
           if (await dropTarget.isVisible()) {
             const fixturePath = process.env.HENJI_VGPU_GLOW_FIXTURE_IMAGE
-            const [{ readFile }, { basename }] = fixturePath
-              ? await Promise.all([import('node:fs/promises'), import('node:path')])
-              : [{ readFile: null }, { basename: null }]
-            const externalFixture = fixturePath ? {
-              bytes: Array.from(await readFile(fixturePath)),
-              name: basename(fixturePath),
-              type: fixturePath.toLowerCase().endsWith('.png') ? 'image/png' : 'image/jpeg',
-            } : null
-            await dropTarget.evaluate(async (element, fixture) => {
-            if (fixture) {
-              const transfer = new DataTransfer()
-              transfer.items.add(new File(
-                [Uint8Array.from(fixture.bytes)],
-                fixture.name,
-                { type: fixture.type }
-              ))
-              element.dispatchEvent(new DragEvent('drop', {
-                bubbles: true,
-                cancelable: true,
-                dataTransfer: transfer,
-              }))
-              return
+            if (fixturePath) {
+              if (!electronApp) throw new Error('本地图片基准验收缺少 Electron 主进程句柄')
+              await electronApp.evaluate(({ dialog }, selectedPath) => {
+                const key = '__henjiUiInspectionOriginalOpenDialog'
+                if (globalThis[key]) throw new Error('UI 巡检文件对话框替身重复安装')
+                globalThis[key] = dialog.showOpenDialog
+                dialog.showOpenDialog = async () => ({
+                  canceled: false,
+                  filePaths: [selectedPath],
+                })
+              }, fixturePath)
+              try {
+                await surface.getByRole('button', {
+                  name: /^(从文件打开|Open from file)$/i,
+                }).click()
+              } finally {
+                await electronApp.evaluate(({ dialog }) => {
+                  const key = '__henjiUiInspectionOriginalOpenDialog'
+                  const original = globalThis[key]
+                  if (typeof original === 'function') dialog.showOpenDialog = original
+                  delete globalThis[key]
+                })
+              }
+            } else {
+              await dropTarget.evaluate(async (element) => {
+                const canvas = document.createElement('canvas')
+                canvas.width = 1200
+                canvas.height = 760
+                const context = canvas.getContext('2d')
+                if (!context) throw new Error('辉光夹具画布不可用')
+                const background = context.createRadialGradient(600, 360, 40, 600, 360, 760)
+                background.addColorStop(0, 'rgb(24, 34, 62)')
+                background.addColorStop(1, 'rgb(5, 7, 13)')
+                context.fillStyle = background
+                context.fillRect(0, 0, canvas.width, canvas.height)
+                for (const [x, y, radius, color, width] of [
+                  [310, 330, 70, 'rgb(57, 216, 255)', 14],
+                  [610, 235, 54, 'rgb(255, 62, 201)', 11],
+                  [870, 420, 82, 'rgb(255, 156, 50)', 16],
+                ]) {
+                  context.strokeStyle = color
+                  context.lineWidth = width
+                  context.beginPath()
+                  context.arc(x, y, radius, 0, Math.PI * 2)
+                  context.stroke()
+                }
+                context.fillStyle = 'rgb(37, 232, 198)'
+                context.beginPath()
+                context.arc(145, 590, 58, 0, Math.PI * 2)
+                context.fill()
+                context.strokeStyle = 'rgb(235, 241, 255)'
+                context.lineWidth = 8
+                context.beginPath()
+                context.moveTo(260, 530)
+                context.lineTo(940, 530)
+                context.stroke()
+                context.fillStyle = 'rgb(220, 233, 255)'
+                context.font = '48px sans-serif'
+                context.textAlign = 'center'
+                context.fillText('VGPU GLOW', 600, 650)
+                const blob = await new Promise((resolve, reject) => canvas.toBlob(
+                  (value) => value ? resolve(value) : reject(new Error('辉光夹具编码失败')),
+                  'image/png'
+                ))
+                const transfer = new DataTransfer()
+                transfer.items.add(new File([blob], 'vgpu-glow-fixture.png', { type: 'image/png' }))
+                element.dispatchEvent(new DragEvent('drop', {
+                  bubbles: true,
+                  cancelable: true,
+                  dataTransfer: transfer,
+                }))
+              })
             }
-            const canvas = document.createElement('canvas')
-            canvas.width = 1200
-            canvas.height = 760
-            const context = canvas.getContext('2d')
-            if (!context) throw new Error('辉光夹具画布不可用')
-            const background = context.createRadialGradient(600, 360, 40, 600, 360, 760)
-            background.addColorStop(0, 'rgb(24, 34, 62)')
-            background.addColorStop(1, 'rgb(5, 7, 13)')
-            context.fillStyle = background
-            context.fillRect(0, 0, canvas.width, canvas.height)
-            for (const [x, y, radius, color, width] of [
-              [310, 330, 70, 'rgb(57, 216, 255)', 14],
-              [610, 235, 54, 'rgb(255, 62, 201)', 11],
-              [870, 420, 82, 'rgb(255, 156, 50)', 16],
-            ]) {
-              context.strokeStyle = color
-              context.lineWidth = width
-              context.beginPath()
-              context.arc(x, y, radius, 0, Math.PI * 2)
-              context.stroke()
-            }
-            context.fillStyle = 'rgb(37, 232, 198)'
-            context.beginPath()
-            context.arc(145, 590, 58, 0, Math.PI * 2)
-            context.fill()
-            context.strokeStyle = 'rgb(235, 241, 255)'
-            context.lineWidth = 8
-            context.beginPath()
-            context.moveTo(260, 530)
-            context.lineTo(940, 530)
-            context.stroke()
-            context.fillStyle = 'rgb(220, 233, 255)'
-            context.font = '48px sans-serif'
-            context.textAlign = 'center'
-            context.fillText('VGPU GLOW', 600, 650)
-            const blob = await new Promise((resolve, reject) => canvas.toBlob(
-              (value) => value ? resolve(value) : reject(new Error('辉光夹具编码失败')),
-              'image/png'
-            ))
-            const transfer = new DataTransfer()
-            transfer.items.add(new File([blob], 'vgpu-glow-fixture.png', { type: 'image/png' }))
-            element.dispatchEvent(new DragEvent('drop', {
-              bubbles: true,
-              cancelable: true,
-              dataTransfer: transfer,
-            }))
-            }, externalFixture)
           }
           await addLayerButton.waitFor({ state: 'visible', timeout: 12000 })
           const existingGlow = surface.locator('[role="treeitem"][data-layer-type="effect"]')
@@ -165,6 +168,41 @@ function createToolboxScenes(context) {
           throw new Error('重新打开图片编辑器后，辉光预览仍被旧会话 revision 取消')
         }
         await settlePage(page, 2200)
+        if (process.env.HENJI_VGPU_GLOW_FIXTURE_IMAGE) {
+          const surface = page.locator('[data-application-surface-id="tool.image_edit"]:visible')
+          const preview = surface.locator('[data-preview-surface]')
+          const presentation = surface.locator('[data-presentation-surface]')
+          const cameraBefore = await presentation.locator('[data-presentation-front-surface]')
+            .getAttribute('data-camera-sequence').then(Number)
+          await surface.locator('[data-tool-id="zoom"]').click()
+          const box = await preview.boundingBox()
+          if (!box) throw new Error('test01 缩放基准无法读取预览范围')
+          await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2)
+          for (let index = 0; index < 3; index += 1) {
+            await page.mouse.wheel(0, -1)
+            await page.waitForTimeout(5)
+          }
+          const clearStartedAt = Date.now()
+          await page.waitForFunction((previousCamera) => {
+            const previewSurface = document.querySelector('[data-preview-surface]')
+            const front = document.querySelector('[data-presentation-front-surface]')
+            return Number(front?.getAttribute('data-camera-sequence')) > previousCamera
+              && Number(previewSurface?.getAttribute('data-preview-target-mip-coverage')) === 1
+          }, cameraBefore, { timeout: 1500 }).catch(async () => {
+            const state = await preview.evaluate((element) => {
+              const front = element.querySelector('[data-presentation-front-surface]')
+              return {
+                cameraSequence: front?.getAttribute('data-camera-sequence'),
+                coverage: element.getAttribute('data-preview-coverage'),
+                targetMipCoverage: element.getAttribute('data-preview-target-mip-coverage'),
+              }
+            })
+            throw new Error(`test01 连续放大后，清晰目标帧未在 1.5 秒内完整接管：${JSON.stringify(state)}`)
+          })
+          const clearDurationMs = Date.now() - clearStartedAt
+          console.log(`  test01 连续放大后的清晰目标帧：${clearDurationMs}ms`)
+          await settlePage(page, 300)
+        }
       },
     },
     {

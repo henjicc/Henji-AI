@@ -1,7 +1,10 @@
 import { imageEditOutputSizeV3 } from '@/core/imageEdit/v3'
 import type { ImageEditorViewportLayoutV3 } from '../editor/useImageEditorViewportLayoutV3'
 import type { ImageEditorRenderSnapshotV3 } from './imageEditorRenderSessionContractsV3'
-import { resolveImageEditorBlurPreviewMipV3 } from './previewEffectScalingV3'
+import {
+  resolveImageEditorBlurPreviewMipV3,
+  resolveImageEditorWideAreaEffectPreviewMipV3,
+} from './previewEffectScalingV3'
 import {
   resolveImageEditorCoarsePreviewMipV3,
   resolveImageEditorInteractiveDraftMipV3,
@@ -88,11 +91,15 @@ export function createImageEditorTargetRequestV3(
   layout: RenderSessionLayoutV3,
   previousMip: number | undefined,
 ): ImageEditorViewportCompositeRequestV3 {
+  const preferredMips = [
+    resolveImageEditorBlurPreviewMipV3(snapshot.document, layout.viewport),
+    resolveImageEditorWideAreaEffectPreviewMipV3(snapshot.document, layout.viewport),
+  ].filter((value): value is number => value !== undefined)
   return {
     ...snapshot,
     ...visibleRequest(snapshot, layout),
     phase: 'target',
     previousMip,
-    preferredMip: resolveImageEditorBlurPreviewMipV3(snapshot.document, layout.viewport),
+    preferredMip: preferredMips.length > 0 ? Math.max(...preferredMips) : undefined,
   }
 }

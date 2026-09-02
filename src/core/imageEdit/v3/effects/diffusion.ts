@@ -16,6 +16,8 @@ export interface DiffusionGlobalScatterV4 {
   readonly documentHeight: number;
   readonly sourceX: number;
   readonly sourceY: number;
+  readonly sourceWidth: number;
+  readonly sourceHeight: number;
 }
 
 export interface ApplyDiffusionV4Options {
@@ -227,10 +229,10 @@ function sampleGlobalScatter(
   global?: DiffusionGlobalScatterV4,
 ): Rgb {
   const normalizedX = global
-    ? (global.sourceX + x + 0.5) / global.documentWidth
+    ? (global.sourceX + (x + 0.5) * global.sourceWidth / source.width) / global.documentWidth
     : (x + 0.5) / source.width;
   const normalizedY = global
-    ? (global.sourceY + y + 0.5) / global.documentHeight
+    ? (global.sourceY + (y + 0.5) * global.sourceHeight / source.height) / global.documentHeight
     : (y + 0.5) / source.height;
   const sx = normalizedX * scatter.width - 0.5;
   const sy = normalizedY * scatter.height - 0.5;

@@ -240,7 +240,10 @@ export class DefaultImageEditorRenderSessionV3 implements ImageEditorRenderSessi
   private scheduleCurrentWork(): void {
     if (!this.visible || !this.snapshot || !this.layout) return
     const viewKey = `${this.epoch}:${this.layout.cameraSequence}:${this.layout.viewportKey}`
-    if (this.draftScheduledKey !== viewKey
+    // 大半径模糊、扩散和辉光必须先建立整图共享分析。分析未完成时按视口瓦片
+    // 计算草稿会让每个 512px 分区得到不同结果，形成肉眼可见的接缝和色块。
+    if (this.analysisMip === null
+      && this.draftScheduledKey !== viewKey
       && !imageEditorRenderResultMatchesViewV3(this.stable, this.snapshot, this.layout)) {
       this.draftScheduledKey = viewKey
       this.startTask(`draft:${viewKey}`, () => this.renderDraft(

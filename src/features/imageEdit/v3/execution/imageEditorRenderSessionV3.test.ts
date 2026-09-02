@@ -285,7 +285,7 @@ describe('ImageEditorRenderSessionV3', () => {
     session.dispose()
   })
 
-  it('全局效果并行准备可见草稿与共享分析，分析完成后再启动目标', async () => {
+  it('全局效果先完成共享分析，不发布会产生分块的视口草稿', async () => {
     const requests: ImageEditorViewportCompositeRequestV3[] = []
     const completions: Array<ReturnType<typeof deferred<ImageEditorManagedViewportCompositeV3>>> = []
     const client = {
@@ -325,25 +325,19 @@ describe('ImageEditorRenderSessionV3', () => {
       resourceDescriptors: [],
     })
 
-    expect(requests).toHaveLength(2)
-    const draftRequest = requests.find((request) => request.phase === 'coarse')
+    expect(requests).toHaveLength(1)
     const analysisRequest = requests.find((request) => request.phase === 'analysis')
-    expect(draftRequest).toMatchObject({
-      coverage: 'viewport', preferredMip: 2, quality: 'draft',
-    })
     expect(analysisRequest).toMatchObject({
       coverage: 'document', preferredMip: 2, analysisRequested: true,
     })
+    expect(requests.some((request) => request.phase === 'coarse')).toBe(false)
     await vi.advanceTimersByTimeAsync(32)
-    expect(requests).toHaveLength(2)
+    expect(requests).toHaveLength(1)
 
-    if (!draftRequest || !analysisRequest) throw new Error('缺少全局效果并行请求')
-    completions[requests.indexOf(draftRequest)]?.resolve(result(draftRequest))
-    await Promise.resolve()
-    expect(requests).toHaveLength(2)
+    if (!analysisRequest) throw new Error('缺少全局效果分析请求')
     completions[requests.indexOf(analysisRequest)]?.resolve(result(analysisRequest))
     await Promise.resolve()
-    expect(requests).toHaveLength(3)
+    expect(requests).toHaveLength(2)
     const targetRequest = requests.find((request) => request.phase === 'target')
     expect(targetRequest).toMatchObject({
       coverage: 'viewport', viewportKey: 'viewport-1', preferredMip: 2,

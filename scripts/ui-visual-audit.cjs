@@ -142,7 +142,7 @@ async function main() {
         let sceneFailed = false
         let sceneError = null
         try {
-          await scene.setup(app.page)
+          await scene.setup(app.page, app.app)
           const result = await app.page.evaluate(auditUiDom, {
             scene: scene.name,
             surface: scene.surface,

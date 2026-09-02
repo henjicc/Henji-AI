@@ -28,6 +28,33 @@ function maximumVisibleBlurRadius(layers: readonly ImageEditLayerV3[]): number {
   return maximum
 }
 
+function hasVisibleWideAreaEffect(layers: readonly ImageEditLayerV3[]): boolean {
+  return layers.some((layer) => {
+    if (!layer.visible || layer.opacity <= 0) return false
+    if (layer.type === 'group') return hasVisibleWideAreaEffect(layer.children)
+    return layer.type === 'effect'
+      && layer.renderable
+      && (layer.effectId === 'image.diffusion' || layer.effectId === 'image.vgpu-glow')
+  })
+}
+
+/**
+ * 宽域散射效果的交互目标以 CSS 像素为清晰边界。Retina 的额外设备像素交给
+ * Canvas 高质量插值，避免为了肉眼不可辨的超采样把 JS 效果工作量放大四倍。
+ */
+export function resolveImageEditorWideAreaEffectPreviewMipV3(
+  document: ImageEditDocumentV3,
+  viewport: { zoom: number },
+): number | undefined {
+  if (!hasVisibleWideAreaEffect(document.layers)) return undefined
+  if (!Number.isFinite(viewport.zoom) || viewport.zoom <= 0) {
+    throw new Error('宽域效果预览显示倍率必须是正数')
+  }
+  return viewport.zoom >= 1
+    ? 0
+    : Math.max(0, Math.floor(Math.log2(1 / viewport.zoom)))
+}
+
 /**
  * 模糊预览允许在保证单个 mip 像素不会被放大成明显方块的前提下降采样。
  * 导出不经过此策略；放大检查细节时自动回到更细 mip。

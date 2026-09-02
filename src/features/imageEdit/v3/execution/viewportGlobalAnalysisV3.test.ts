@@ -132,4 +132,35 @@ describe('视口全局效果分析缓存', () => {
     })).rejects.toThrow('缺少共享全局分析')
     expect(fallback).not.toHaveBeenCalled()
   })
+
+  it('共享分析未完成时拒绝按单个瓦片计算全局效果', async () => {
+    const document = fastBlurDocument()
+    const originalPlan = compileImageEditRenderPlanV3(document, registry, 'stable')
+    const scaledPlan = compileImageEditRenderPlanV3(
+      scaleImageEditorPreviewEffectsV3(document, 1),
+      registry,
+      'draft',
+    )
+    const node = scaledPlan.nodes.find((candidate) => candidate.definitionId === 'effect.fast-blur')
+    const originalNode = originalPlan.nodes.find((candidate) => candidate.id === node?.id)
+    if (!node || !originalNode) throw new Error('测试缺少全局模糊节点')
+    const source = createFloat32PremultipliedRgbaTile(
+      4, 1, 'linear-light', new Float32Array(4 * 4),
+    )
+    const fallback = vi.fn(async () => source)
+    const cache = new ImageEditorViewportGlobalAnalysisCacheV3()
+
+    await expect(cache.execute({
+      node,
+      originalNode,
+      source,
+      region: { x: 0, y: 0, width: 4, height: 1 },
+      mip: 0,
+      document,
+      quality: 'draft',
+      fallback,
+    })).rejects.toThrow('全局效果预览缺少共享全局分析')
+    expect(fallback).not.toHaveBeenCalled()
+    cache.dispose()
+  })
 })

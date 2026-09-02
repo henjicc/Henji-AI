@@ -450,6 +450,8 @@ async function* renderTiles(
                       documentHeight: analysis.documentHeight,
                       sourceX: region.x,
                       sourceY: region.y,
+                      sourceWidth: region.width,
+                      sourceHeight: region.height,
                     },
                   })
                 },

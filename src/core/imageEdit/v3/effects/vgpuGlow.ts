@@ -27,6 +27,8 @@ export interface VgpuGlowGlobalScatterV4 {
   readonly documentHeight: number
   readonly sourceX: number
   readonly sourceY: number
+  readonly sourceWidth: number
+  readonly sourceHeight: number
 }
 
 export interface ApplyVgpuGlowV4Options {
@@ -232,8 +234,12 @@ function sampleScatter(
 ): number {
   const documentWidth = global?.documentWidth ?? source.width
   const documentHeight = global?.documentHeight ?? source.height
-  const documentX = (global?.sourceX ?? 0) + x + 0.5 + shiftX
-  const documentY = (global?.sourceY ?? 0) + y + 0.5 + shiftY
+  const documentX = global
+    ? global.sourceX + (x + 0.5) * global.sourceWidth / source.width + shiftX
+    : x + 0.5 + shiftX
+  const documentY = global
+    ? global.sourceY + (y + 0.5) * global.sourceHeight / source.height + shiftY
+    : y + 0.5 + shiftY
   return sampleBilinear(
     scatter,
     documentX * scatter.width / documentWidth - 0.5,
@@ -255,6 +261,37 @@ function hash12(x: number, y: number): number {
   return fract((px + py) * pz)
 }
 
+function sampleChromaticScatter(
+  scatter: FloatRgbaSurface,
+  source: Float32PremultipliedRgbaTile,
+  x: number,
+  y: number,
+  channel: number,
+  global: VgpuGlowGlobalScatterV4 | undefined,
+  shift: number,
+  softness: number,
+): number {
+  return (
+    sampleScatter(scatter, source, x, y, channel, global, shift - softness, -softness)
+    + sampleScatter(scatter, source, x, y, channel, global, shift + softness, -softness)
+    + sampleScatter(scatter, source, x, y, channel, global, shift - softness, softness)
+    + sampleScatter(scatter, source, x, y, channel, global, shift + softness, softness)
+  ) * 0.25
+}
+
+function composeGlowChannel(
+  base: number,
+  glow: number,
+  glowAlpha: number,
+  baseAlpha: number,
+): number {
+  const glowStraight = clamp(glow / Math.max(glowAlpha, 0.000001))
+  const screened = base + glowStraight - base * glowStraight
+  return glowStraight * glowAlpha * (1 - baseAlpha)
+    + screened * glowAlpha * baseAlpha
+    + base * baseAlpha * (1 - glowAlpha)
+}
+
 export function applyVgpuGlowV4(
   source: Float32PremultipliedRgbaTile,
   recipe: VgpuGlowRecipe,
@@ -265,56 +302,76 @@ export function applyVgpuGlowV4(
   const scatter: FloatRgbaSurface = scatterTile
   const output = new Float32Array(source.data.length)
   const [leftChannel, rightChannel] = recipe.chromaticChannelIndices
+  const responseScale = recipe.intensity * recipe.responseExposure
   for (let y = 0; y < source.height; y += 1) {
     for (let x = 0; x < source.width; x += 1) {
       const offset = (y * source.width + x) * 4
-      const centered = [0, 1, 2].map((channel) => Math.max(
-        0, sampleScatter(scatter, source, x, y, channel, options.globalScatter),
+      const centered0 = Math.max(0, sampleScatter(
+        scatter, source, x, y, 0, options.globalScatter,
       ))
-      const diffuse = [...centered]
+      const centered1 = Math.max(0, sampleScatter(
+        scatter, source, x, y, 1, options.globalScatter,
+      ))
+      const centered2 = Math.max(0, sampleScatter(
+        scatter, source, x, y, 2, options.globalScatter,
+      ))
+      let diffuse0 = centered0
+      let diffuse1 = centered1
+      let diffuse2 = centered2
       if (recipe.chromaticAberration > 0.0001) {
         const softness = 0.75 * recipe.chromaticAberration
-        for (const [channel, shift] of [[leftChannel, recipe.chromaticOffsetPx], [rightChannel, -recipe.chromaticOffsetPx]] as const) {
-          let shifted = 0
-          for (const dy of [-softness, softness]) for (const dx of [-softness, softness]) {
-            shifted += sampleScatter(
-              scatter, source, x, y, channel, options.globalScatter, shift + dx, dy,
-            ) * 0.25
-          }
-          diffuse[channel] = Math.max(0, shifted)
-        }
+        const left = Math.max(0, sampleChromaticScatter(
+          scatter, source, x, y, leftChannel, options.globalScatter,
+          recipe.chromaticOffsetPx, softness,
+        ))
+        const right = Math.max(0, sampleChromaticScatter(
+          scatter, source, x, y, rightChannel, options.globalScatter,
+          -recipe.chromaticOffsetPx, softness,
+        ))
+        if (leftChannel === 0) diffuse0 = left
+        else if (leftChannel === 1) diffuse1 = left
+        else diffuse2 = left
+        if (rightChannel === 0) diffuse0 = right
+        else if (rightChannel === 1) diffuse1 = right
+        else diffuse2 = right
       }
-      const centeredPeak = Math.max(...centered)
+      const centeredPeak = Math.max(centered0, centered1, centered2)
       const white = Math.max(0, sampleScatter(scatter, source, x, y, 3, options.globalScatter))
       const whiteBlend = clamp(white / Math.max(centeredPeak, 0.000001))
-      const energy = diffuse.map((value, channel) => Math.max(
-        0, value + (centeredPeak - centered[channel]) * whiteBlend,
-      ))
-      const emitted = energy.map((value) => value * recipe.intensity * recipe.responseExposure)
-      const peak = Math.max(...emitted)
+      const energy0 = Math.max(0, diffuse0 + (centeredPeak - centered0) * whiteBlend)
+      const energy1 = Math.max(0, diffuse1 + (centeredPeak - centered1) * whiteBlend)
+      const energy2 = Math.max(0, diffuse2 + (centeredPeak - centered2) * whiteBlend)
+      const emitted0 = energy0 * responseScale
+      const emitted1 = energy1 * responseScale
+      const emitted2 = energy2 * responseScale
+      const peak = Math.max(emitted0, emitted1, emitted2)
       let response = 1 - Math.exp(-peak)
       if (options.dither !== false) {
         const presence = smootherstep(0.001, 0.04, response)
-        response = clamp(response + (hash12(x, y) - 0.5) * recipe.ditherAmount * presence)
+        const ditherX = options.globalScatter
+          ? options.globalScatter.sourceX
+            + (x + 0.5) * options.globalScatter.sourceWidth / source.width
+          : x
+        const ditherY = options.globalScatter
+          ? options.globalScatter.sourceY
+            + (y + 0.5) * options.globalScatter.sourceHeight / source.height
+          : y
+        response = clamp(response + (hash12(ditherX, ditherY) - 0.5) * recipe.ditherAmount * presence)
       }
-      const glow = emitted.map((value) => value / Math.max(peak, 0.000001) * response)
+      const inversePeak = response / Math.max(peak, 0.000001)
+      const glow0 = emitted0 * inversePeak
+      const glow1 = emitted1 * inversePeak
+      const glow2 = emitted2 * inversePeak
       const baseAlpha = clamp(source.data[offset + 3])
-      const base = baseAlpha > 0.000001
-        ? [
-            clamp(source.data[offset] / baseAlpha),
-            clamp(source.data[offset + 1] / baseAlpha),
-            clamp(source.data[offset + 2] / baseAlpha),
-          ]
-        : [0, 0, 0]
-      const glowAlpha = clamp(Math.max(...glow))
+      const inverseBaseAlpha = baseAlpha > 0.000001 ? 1 / baseAlpha : 0
+      const base0 = clamp(source.data[offset] * inverseBaseAlpha)
+      const base1 = clamp(source.data[offset + 1] * inverseBaseAlpha)
+      const base2 = clamp(source.data[offset + 2] * inverseBaseAlpha)
+      const glowAlpha = clamp(Math.max(glow0, glow1, glow2))
       const outAlpha = glowAlpha + baseAlpha * (1 - glowAlpha)
-      for (let channel = 0; channel < 3; channel += 1) {
-        const glowStraight = clamp(glow[channel] / Math.max(glowAlpha, 0.000001))
-        const screened = base[channel] + glowStraight - base[channel] * glowStraight
-        output[offset + channel] = glowStraight * glowAlpha * (1 - baseAlpha)
-          + screened * glowAlpha * baseAlpha
-          + base[channel] * baseAlpha * (1 - glowAlpha)
-      }
+      output[offset] = composeGlowChannel(base0, glow0, glowAlpha, baseAlpha)
+      output[offset + 1] = composeGlowChannel(base1, glow1, glowAlpha, baseAlpha)
+      output[offset + 2] = composeGlowChannel(base2, glow2, glowAlpha, baseAlpha)
       output[offset + 3] = outAlpha
     }
   }

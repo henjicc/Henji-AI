@@ -307,7 +307,7 @@ describe('图片编辑 V3 视口瓦片规划', () => {
     expect(moving.demandDocumentRect).toEqual({ x: 768, y: 256, width: 1_536, height: 1_024 })
   })
 
-  it('在 25% 滞回带内保持 mip，并能规划完整文档最粗兜底', () => {
+  it('在清晰度滞回带内保持 mip，并能规划完整文档最粗兜底', () => {
     const descriptor = pyramid(8_192, 4_096)
     const held = planImageEditorViewportTilesV3({
       resourceRef,
@@ -325,6 +325,40 @@ describe('图片编辑 V3 视口瓦片规划', () => {
       previousMip: 3,
     })
     expect(held.mip).toBe(3)
+
+    const baselinePyramid = pyramid(5_802, 3_655)
+    const commonZoom = planImageEditorViewportTilesV3({
+      resourceRef,
+      documentSize: { width: 5_802, height: 3_655 },
+      pyramid: baselinePyramid,
+      bitDepth: 8,
+      viewport: {
+        documentX: 800,
+        documentY: 500,
+        width: 1_440,
+        height: 900,
+        zoom: 0.36,
+        devicePixelRatio: 2,
+      },
+      previousMip: 1,
+    })
+    expect(commonZoom).toMatchObject({ mip: 1, idealMip: 0 })
+    const highZoom = planImageEditorViewportTilesV3({
+      resourceRef,
+      documentSize: { width: 5_802, height: 3_655 },
+      pyramid: baselinePyramid,
+      bitDepth: 8,
+      viewport: {
+        documentX: 1_200,
+        documentY: 700,
+        width: 1_440,
+        height: 900,
+        zoom: 0.45,
+        devicePixelRatio: 2,
+      },
+      previousMip: 1,
+    })
+    expect(highZoom).toMatchObject({ mip: 0, idealMip: 0 })
 
     const coarsest = descriptor.levels.at(-1)?.mip ?? 0
     const fallback = planImageEditorViewportTilesV3({

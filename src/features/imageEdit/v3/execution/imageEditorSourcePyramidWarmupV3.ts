@@ -11,7 +11,9 @@ import type {
 import { collectImageEditorPreviewResourceRequestsV3 } from './previewDocumentV3'
 
 const logger = createLogger('image_editor_v3.source_warmup')
-const SOURCE_WARMUP_MAX_DIMENSION_V3 = 1_024
+// 2K 让常见高分辨率照片在放大时直接命中 mip 1；以 5802×3655 的基准图计，
+// 预热约占 21 MiB，仍低于主进程快速代理 48 MiB 的硬预算。
+export const IMAGE_EDITOR_SOURCE_WARMUP_MAX_DIMENSION_V3 = 2_048
 
 /**
  * 按 source identity 常驻，而不是按 generation 重启。快速代理在主进程同步种下粗 mip 链，
@@ -31,7 +33,7 @@ export class ImageEditorSourcePyramidWarmupV3 {
     try {
       requests = collectImageEditorPreviewResourceRequestsV3(
         document,
-        SOURCE_WARMUP_MAX_DIMENSION_V3,
+        IMAGE_EDITOR_SOURCE_WARMUP_MAX_DIMENSION_V3,
         descriptors,
       )
     } catch (error) {
@@ -51,7 +53,7 @@ export class ImageEditorSourcePyramidWarmupV3 {
       void readImageEditorV3FastProxy({
         requestId: createImageEditorV3RequestId('source-warmup'),
         resourceRef,
-        maxDimension: SOURCE_WARMUP_MAX_DIMENSION_V3,
+        maxDimension: IMAGE_EDITOR_SOURCE_WARMUP_MAX_DIMENSION_V3,
       }, controller.signal).then(() => {
         if (!controller.signal.aborted && !this.disposed) this.completed.add(resourceRef)
         logger.debug('图片源粗粒度金字塔预热完成', {

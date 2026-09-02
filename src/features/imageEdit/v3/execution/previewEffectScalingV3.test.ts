@@ -4,7 +4,10 @@ import {
   createImageEditDocumentV3,
   createImageEditEffectLayerV3,
 } from '@/core/imageEdit/v3/documentFactory'
-import { resolveImageEditorBlurPreviewMipV3 } from './previewEffectScalingV3'
+import {
+  resolveImageEditorBlurPreviewMipV3,
+  resolveImageEditorWideAreaEffectPreviewMipV3,
+} from './previewEffectScalingV3'
 
 function blurDocument(radius: number) {
   const document = createImageEditDocumentV3({ width: 6_000, height: 4_000 })
@@ -39,5 +42,23 @@ describe('resolveImageEditorBlurPreviewMipV3', () => {
       document,
       { zoom: 0.5, devicePixelRatio: 1 },
     )).toBeUndefined()
+  })
+})
+
+describe('resolveImageEditorWideAreaEffectPreviewMipV3', () => {
+  it('辉光在 Retina 视口按 CSS 清晰度选择层级，避免四倍无感超采样', () => {
+    const document = createImageEditDocumentV3({ width: 5_802, height: 3_655 })
+    document.layers.push(createImageEditEffectLayerV3(
+      'glow', '辉光 Pro', 'image.vgpu-glow', {},
+    ))
+
+    expect(resolveImageEditorWideAreaEffectPreviewMipV3(
+      document,
+      { zoom: 0.24 },
+    )).toBe(2)
+    expect(resolveImageEditorWideAreaEffectPreviewMipV3(
+      document,
+      { zoom: 0.36 },
+    )).toBe(1)
   })
 })
