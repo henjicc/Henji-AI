@@ -138,6 +138,7 @@ export class DefaultImageEditorRenderSessionV3 implements ImageEditorRenderSessi
       targetMip: null,
       result: this.coarse,
     })
+    this.present()
     this.scheduleCoarse(epoch, snapshot)
   }
 
@@ -293,12 +294,14 @@ export class DefaultImageEditorRenderSessionV3 implements ImageEditorRenderSessi
   }
 
   private present(): void {
-    if (!this.layout || !this.coarse || this.coarse.geometryHash !== this.snapshot?.geometryHash) return
+    if (!this.layout || !this.coarse || !this.snapshot) return
     const presented = this.compositor.present(
       this.coarse,
       this.target,
       this.layout,
       this.layout.cameraSequence,
+      this.snapshot.document.geometry,
+      this.snapshot.geometryHash,
     )
     if (!presented) return
     this.publish({

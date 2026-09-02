@@ -1,4 +1,7 @@
-import type { ImageEditDocumentV3 } from '@/core/imageEdit/v3/documentTypes'
+import type {
+  ImageEditCanvasGeometryV3,
+  ImageEditDocumentV3,
+} from '@/core/imageEdit/v3/documentTypes'
 import type { ImageEditRenderQuality } from '@/core/imageEdit/v3/renderNodeDefinition'
 import type { ImageEditResourceBudget } from '@/core/imageEdit/v3/resourceBudget'
 import type { ImageEditRenderScheduler } from '@/core/imageEdit/v3/renderScheduler'
@@ -47,6 +50,7 @@ export interface ImageEditorManagedViewportCompositeV3 {
   renderGeneration: number
   cameraSequence: number
   geometryHash: string
+  geometry: ImageEditCanvasGeometryV3
   viewportKey: string
   coverage: 'viewport' | 'document'
   mip: number

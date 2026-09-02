@@ -402,6 +402,11 @@ export class ImageEditorViewportCompositeClientV3 {
         renderGeneration: event.renderGeneration,
         cameraSequence: event.cameraSequence,
         geometryHash: event.geometryHash,
+        geometry: {
+          ...job.document.geometry,
+          orientation: { ...job.document.geometry.orientation },
+          crop: job.document.geometry.crop ? { ...job.document.geometry.crop } : null,
+        },
         viewportKey: job.viewportKey,
         coverage: job.coverage ?? 'viewport',
         mip: event.mip,

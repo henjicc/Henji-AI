@@ -118,6 +118,32 @@ export function mapImageEditOutputPixelToSourceV3(
   return [sourceX, sourceY]
 }
 
+export function mapImageEditSourcePixelToOutputV3(
+  sourceX: number,
+  sourceY: number,
+  geometry: ImageEditOutputGeometryV3,
+): readonly [number, number] {
+  const mirroredX = geometry.mirrored
+    ? geometry.sourceWidth - 1 - sourceX
+    : sourceX
+  let orientedX: number
+  let orientedY: number
+  if (geometry.rotate === 90) {
+    orientedX = geometry.sourceHeight - 1 - sourceY
+    orientedY = mirroredX
+  } else if (geometry.rotate === 180) {
+    orientedX = geometry.sourceWidth - 1 - mirroredX
+    orientedY = geometry.sourceHeight - 1 - sourceY
+  } else if (geometry.rotate === 270) {
+    orientedX = sourceY
+    orientedY = geometry.sourceWidth - 1 - mirroredX
+  } else {
+    orientedX = mirroredX
+    orientedY = sourceY
+  }
+  return [orientedX - geometry.cropX, orientedY - geometry.cropY]
+}
+
 export function mapImageEditOutputMipPixelToSourceMipV3(
   outputX: number,
   outputY: number,

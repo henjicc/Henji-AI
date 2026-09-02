@@ -1,4 +1,11 @@
-import type { ImageEditRect } from '@/core/imageEdit/v3'
+import {
+  imageEditOutputSizeV3,
+  mapImageEditOutputPixelToSourceV3,
+  mapImageEditSourcePixelToOutputV3,
+  resolveImageEditOutputGeometryV3,
+  type ImageEditRect,
+} from '@/core/imageEdit/v3'
+import type { ImageEditCanvasGeometryV3 } from '@/core/imageEdit/v3/documentTypes'
 import type { ImageEditorViewportLayoutV3 } from '../editor/useImageEditorViewportLayoutV3'
 import type { ImageEditorManagedViewportCompositeV3 } from './viewportCompositeTypesV3'
 
@@ -88,12 +95,48 @@ function drawResult(
   context: CanvasRenderingContext2D,
   result: ImageEditorManagedViewportCompositeV3,
   layout: ImageEditorViewportLayoutV3,
+  currentGeometry: ImageEditCanvasGeometryV3,
 ): void {
   const viewport = layout.viewport
   const mipScale = 2 ** result.mip
   const screenScale = viewport.zoom * viewport.devicePixelRatio
+  const from = resolveImageEditOutputGeometryV3(result.geometry)
+  const to = resolveImageEditOutputGeometryV3(currentGeometry)
+  const map = (x: number, y: number): readonly [number, number] => {
+    const [sourceX, sourceY] = mapImageEditOutputPixelToSourceV3(x, y, from)
+    return mapImageEditSourcePixelToOutputV3(sourceX, sourceY, to)
+  }
+  const origin = map(0, 0)
+  const unitX = map(1, 0)
+  const unitY = map(0, 1)
+  const affine = {
+    a: unitX[0] - origin[0],
+    b: unitX[1] - origin[1],
+    c: unitY[0] - origin[0],
+    d: unitY[1] - origin[1],
+    e: origin[0],
+    f: origin[1],
+  }
+  const outputSize = imageEditOutputSizeV3(currentGeometry)
   context.imageSmoothingEnabled = true
   context.imageSmoothingQuality = result.mip <= 1 ? 'high' : 'medium'
+  context.save()
+  context.beginPath()
+  context.rect(
+    -viewport.documentX * screenScale,
+    -viewport.documentY * screenScale,
+    outputSize.width * screenScale,
+    outputSize.height * screenScale,
+  )
+  context.clip()
+  context.setTransform(
+    affine.a * screenScale,
+    affine.b * screenScale,
+    affine.c * screenScale,
+    affine.d * screenScale,
+    (affine.e - viewport.documentX) * screenScale,
+    (affine.f - viewport.documentY) * screenScale,
+  )
   for (const tile of result.tiles) {
     const documentX = tile.outputRect.x * mipScale
     const documentY = tile.outputRect.y * mipScale
@@ -107,12 +150,13 @@ function drawResult(
     )
     context.drawImage(
       tile.bitmap,
-      (documentX - viewport.documentX) * screenScale,
-      (documentY - viewport.documentY) * screenScale,
-      (documentRight - documentX) * screenScale,
-      (documentBottom - documentY) * screenScale,
+      documentX,
+      documentY,
+      documentRight - documentX,
+      documentBottom - documentY,
     )
   }
+  context.restore()
 }
 
 /** 固定双表面的 Canvas2D 合成器；前表面只接收完整 staging 帧。 */
@@ -136,6 +180,8 @@ export class ImageEditorPresentationSurfaceV3 {
     target: ImageEditorManagedViewportCompositeV3 | null,
     layout: ImageEditorViewportLayoutV3,
     cameraSequence: number,
+    currentGeometry: ImageEditCanvasGeometryV3,
+    currentGeometryHash: string,
   ): { coverage: number; targetMipCoverage: number } | null {
     const elements = this.elements
     const staging = this.staging
@@ -152,9 +198,9 @@ export class ImageEditorPresentationSurfaceV3 {
       throw new Error('无法创建图片编辑器常驻显示表面')
     }
     stagingContext.clearRect(0, 0, pixels.width, pixels.height)
-    drawResult(stagingContext, fallback, layout)
+    drawResult(stagingContext, fallback, layout, currentGeometry)
     if (target && target.renderGeneration === fallback.renderGeneration) {
-      drawResult(stagingContext, target, layout)
+      drawResult(stagingContext, target, layout, currentGeometry)
     }
     frontContext.globalCompositeOperation = 'copy'
     frontContext.drawImage(staging, 0, 0)
@@ -164,7 +210,7 @@ export class ImageEditorPresentationSurfaceV3 {
     safetyContext.globalCompositeOperation = 'source-over'
     elements.front.dataset.renderGeneration = String(fallback.renderGeneration)
     elements.front.dataset.cameraSequence = String(cameraSequence)
-    elements.front.dataset.geometryHash = fallback.geometryHash
+    elements.front.dataset.geometryHash = currentGeometryHash
     const targetMipCoverage = imageEditorViewportResultCoverageV3(target, layout)
     return { coverage: 1, targetMipCoverage }
   }

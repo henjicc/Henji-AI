@@ -25,6 +25,11 @@ function result(
     renderGeneration: request.renderGeneration,
     cameraSequence: request.cameraSequence,
     geometryHash: request.geometryHash,
+    geometry: {
+      ...request.document.geometry,
+      orientation: { ...request.document.geometry.orientation },
+      crop: request.document.geometry.crop ? { ...request.document.geometry.crop } : null,
+    },
     viewportKey: request.viewportKey,
     coverage: request.coverage ?? 'viewport',
     mip: request.coverage === 'document' ? 8 : 0,
@@ -56,6 +61,12 @@ describe('ImageEditorRenderSessionV3', () => {
     vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({
       clearRect: vi.fn(),
       drawImage: vi.fn(),
+      save: vi.fn(),
+      beginPath: vi.fn(),
+      rect: vi.fn(),
+      clip: vi.fn(),
+      setTransform: vi.fn(),
+      restore: vi.fn(),
     } as unknown as CanvasRenderingContext2D)
   })
 
@@ -145,6 +156,63 @@ describe('ImageEditorRenderSessionV3', () => {
     await Promise.resolve()
     expect(front.dataset.renderGeneration).toBe('2')
     expect(releaseFirst).toHaveBeenCalledOnce()
+    session.dispose()
+  })
+
+  it('裁剪提交后立即把旧稳定帧重投影到新几何且不等待新像素', async () => {
+    const requests: ImageEditorViewportCompositeRequestV3[] = []
+    const completions: Array<ReturnType<typeof deferred<ImageEditorManagedViewportCompositeV3>>> = []
+    const setTransform = vi.fn()
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({
+      clearRect: vi.fn(),
+      drawImage: vi.fn(),
+      save: vi.fn(),
+      beginPath: vi.fn(),
+      rect: vi.fn(),
+      clip: vi.fn(),
+      setTransform,
+      restore: vi.fn(),
+    } as unknown as CanvasRenderingContext2D)
+    const client = {
+      render: (request: ImageEditorViewportCompositeRequestV3) => {
+        requests.push(request)
+        const completion = deferred<ImageEditorManagedViewportCompositeV3>()
+        completions.push(completion)
+        return completion.promise
+      },
+      cancel: vi.fn(),
+      dispose: vi.fn(),
+    }
+    const front = document.createElement('canvas')
+    const session = new DefaultImageEditorRenderSessionV3(
+      { sessionId: 'crop-reprojection-test' },
+      { client },
+    )
+    session.attachSurface({ surfaceId: 'surface-c', front, safety: document.createElement('canvas') })
+    session.updateViewport(layout)
+    const original = createImageEditDocumentV3({ width: 1_600, height: 1_000 })
+    session.updateSnapshot({
+      document: original, renderGeneration: 1, geometryHash: 'geometry-original',
+      quality: 'stable', resourceDescriptors: [],
+    })
+    completions[0]?.resolve(result(requests[0]))
+    await Promise.resolve()
+    setTransform.mockClear()
+
+    const cropped = {
+      ...original,
+      revision: 1,
+      geometry: { ...original.geometry, crop: { x: 200, y: 100, width: 800, height: 500 } },
+    }
+    session.updateSnapshot({
+      document: cropped, renderGeneration: 2, geometryHash: 'geometry-cropped',
+      quality: 'stable', resourceDescriptors: [],
+    })
+
+    expect(front.dataset.renderGeneration).toBe('1')
+    expect(front.dataset.geometryHash).toBe('geometry-cropped')
+    expect(setTransform).toHaveBeenCalledWith(0.5, 0, 0, 0.5, -100, -50)
+    expect(completions).toHaveLength(2)
     session.dispose()
   })
 })
