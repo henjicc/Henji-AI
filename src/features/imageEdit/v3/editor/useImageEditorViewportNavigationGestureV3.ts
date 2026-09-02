@@ -20,6 +20,11 @@ export function useImageEditorViewportNavigationGestureV3(
   viewportContentRef: RefObject<HTMLDivElement>,
   zoom: number,
   pan: ImageEditorViewportPanV3,
+  onViewportTransform?: (
+    zoom: number,
+    pan: ImageEditorViewportPanV3,
+    interacting: boolean,
+  ) => void,
 ) {
   const gestureRef = useRef<ImageEditorNavigationGestureV3 | null>(null)
   const setViewportPan = useImageEditorInteractionStoreV3((state) => state.setViewportPan)
@@ -28,10 +33,12 @@ export function useImageEditorViewportNavigationGestureV3(
   const applyViewportTransform = useCallback((
     nextZoom: number,
     nextPan: ImageEditorViewportPanV3,
+    interacting = false,
   ): void => {
     const content = viewportContentRef.current
     if (content) content.style.transform = imageEditorViewportTransformV3(nextZoom, nextPan)
-  }, [viewportContentRef])
+    onViewportTransform?.(nextZoom, nextPan, interacting)
+  }, [onViewportTransform, viewportContentRef])
 
   useEffect(() => {
     if (!gestureRef.current) applyViewportTransform(zoom, pan)
@@ -122,7 +129,7 @@ export function useImageEditorViewportNavigationGestureV3(
     event.preventDefault()
     if (gesture.kind === 'pan') {
       gesture.pendingPan = { x: gesture.startPan.x + deltaX, y: gesture.startPan.y + deltaY }
-      applyViewportTransform(gesture.startZoom, gesture.pendingPan)
+      applyViewportTransform(gesture.startZoom, gesture.pendingPan, true)
       return
     }
     const next = zoomImageEditorViewportAroundPointV3(
@@ -133,7 +140,7 @@ export function useImageEditorViewportNavigationGestureV3(
     )
     gesture.pendingZoom = next.zoom
     gesture.pendingPan = next.pan
-    applyViewportTransform(next.zoom, next.pan)
+    applyViewportTransform(next.zoom, next.pan, true)
   }
 
   const onPointerUp = (event: ReactPointerEvent<HTMLElement>): void => {

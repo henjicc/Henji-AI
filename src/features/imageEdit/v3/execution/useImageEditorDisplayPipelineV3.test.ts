@@ -41,6 +41,8 @@ vi.mock('./useImageEditorViewportCompositeV3', () => ({
 import { useImageEditorDisplayPipelineV3 } from './useImageEditorDisplayPipelineV3'
 
 const layout = {
+  stageWidth: 800,
+  stageHeight: 600,
   viewportKey: 'viewport-a',
   viewport: {
     documentX: 0,

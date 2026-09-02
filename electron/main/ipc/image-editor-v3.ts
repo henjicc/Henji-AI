@@ -1,14 +1,11 @@
-import { BrowserWindow, dialog, type IpcMainInvokeEvent, type WebContents } from 'electron'
+import { BrowserWindow, type IpcMainInvokeEvent, type WebContents } from 'electron'
 import type { ImageEditDocumentV3 } from '../../../src/core/imageEdit/v3/documentTypes'
 import type {
   ImageEditorV3DocumentSnapshot,
-  ImageEditorV3ManagedSource,
   ImageEditorV3ResourceDescriptor,
-  ImageEditorV3SourceMetadata,
 } from '../../../src/platform/contracts/imageEditorV3'
 import { getMainWindow } from '../window'
 import { isTrustedMainRendererUrl } from '../security/main-renderer-url'
-import { sanitizeFileStem } from '../services/image/path-utils'
 import { createMainLogger } from '../services/logging'
 import {
   ContentAddressedResourceStore,
@@ -19,18 +16,13 @@ import {
   ImageEditDocumentRepository,
   ImageEditorV3SourceIngestor,
   ManagedRasterMaterializer,
-  PendingHenjiImagePackageImportRegistry,
   RasterExportSessionManager,
   SharpSourceProvider,
   toDocumentRef,
   type ImageEditDocumentEnvelope,
   type ResourceDescriptor,
   type ResourceId,
-  type PendingHenjiImagePackageImport,
-  type PendingHenjiImagePackageRef,
-  type SourceImageMetadata,
   collectPersistedImageEditHistoryResourcesV3,
-  createImageEditorV3ResourceMediaUrl,
   getImageEditorV3StoragePaths,
 } from '../services/image-editor-v3'
 import { registerImageEditorV3RasterExportIpc } from './image-editor-v3-raster-export'
@@ -38,35 +30,32 @@ import { registerImageEditorV3BrushTileIpc } from './image-editor-v3-brush-tiles
 import {
   normalizeImageEditorV3Document,
   parseImageEditorV3BasePayload,
-  parseImageEditorV3FastProxyPayload,
   parseImageEditorV3GarbageCollectPayload,
-  parseImageEditorV3IngestSourcePayload,
   parseImageEditorV3LoadPayload,
-  parseImageEditorV3PyramidPrewarmPayload,
-  parseImageEditorV3RelinkPackageExternalSourcePayload,
-  parseImageEditorV3ResourcePayload,
-  parseImageEditorV3SavePackagePayload,
   parseImageEditorV3SavePayload,
-  parseImageEditorV3TilePayload,
   type SaveDocumentPayload,
 } from './image-editor-v3-payloads'
 import { registerIpcHandler } from './registry'
+import { ImageEditorV3RequestAdmission } from './image-editor-v3-request-admission'
+import { registerImageEditorV3SourceIpc } from './image-editor-v3-source'
 import {
-  estimateImageEditorV3ProxyRequestBytes,
-  estimateImageEditorV3PyramidPrewarmBytes,
-  estimateImageEditorV3TileRequestBytes,
-  ImageEditorV3RequestAdmission,
-} from './image-editor-v3-request-admission'
+  abandonImageEditorV3PendingPackageImports,
+  disposeImageEditorV3PendingPackageImports,
+  registerImageEditorV3PackageIpc,
+} from './image-editor-v3-package'
 
 export {
   parseImageEditorV3FastProxyPayload,
   parseImageEditorV3IngestSourcePayload,
   parseImageEditorV3LoadPayload,
-  parseImageEditorV3PyramidPrewarmPayload,
   parseImageEditorV3RelinkPackageExternalSourcePayload,
   parseImageEditorV3SavePayload,
   parseImageEditorV3TilePayload,
 } from './image-editor-v3-payloads'
+export {
+  parseImageEditorV3PyramidPrewarmPayload,
+  parseImageEditorV3TileBatchPayload,
+} from './image-editor-v3-tile-payloads'
 export {
   parseImageEditorV3PersistBrushTilesPayload,
   parseImageEditorV3ReadBrushTilesPayload,
@@ -83,7 +72,6 @@ interface ImageEditorV3Runtime {
 }
 let runtime: ImageEditorV3Runtime | undefined
 const requestAdmission = new ImageEditorV3RequestAdmission()
-const pendingPackageImports = new PendingHenjiImagePackageImportRegistry()
 const trackedSenders = new WeakMap<WebContents, () => void>()
 function getRuntime(): ImageEditorV3Runtime {
   if (runtime) return runtime
@@ -120,7 +108,7 @@ function trackRendererLifetime(sender: WebContents): void {
   const abortRequests = (): void => {
     cleanup()
     requestAdmission.abortSender(sender.id)
-    void pendingPackageImports.abandonOwner(sender.id)
+    void abandonImageEditorV3PendingPackageImports(sender.id)
   }
   sender.once('destroyed', abortRequests)
   sender.once('render-process-gone', abortRequests)
@@ -139,12 +127,6 @@ function assertTrustedMainRenderer(event: IpcMainInvokeEvent): void {
   }
   trackRendererLifetime(event.sender)
 }
-function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
-  const copy = new Uint8Array(bytes.byteLength)
-  copy.set(bytes)
-  return copy.buffer
-}
-
 function validateSnapshotDocument(envelope: ImageEditDocumentEnvelope): ImageEditDocumentV3 {
   const normalized = normalizeImageEditorV3Document(envelope.document)
   if (normalized.documentId !== envelope.documentId || normalized.revision !== envelope.revision) {
@@ -229,43 +211,6 @@ function toReference(envelope: ImageEditDocumentEnvelope): Record<string, unknow
 
 function toResource(descriptor: ResourceDescriptor): ImageEditorV3ResourceDescriptor {
   return { resourceRef: descriptor.id, byteLength: descriptor.byteLength, mediaType: descriptor.mediaType ?? null }
-}
-
-function toMetadata(metadata: SourceImageMetadata): ImageEditorV3SourceMetadata {
-  return {
-    resourceRef: metadata.resourceId,
-    width: metadata.width,
-    height: metadata.height,
-    encodedWidth: metadata.encodedWidth,
-    encodedHeight: metadata.encodedHeight,
-    format: metadata.format ?? null,
-    channels: metadata.channels ?? null,
-    depth: metadata.depth ?? null,
-    bitsPerSample: metadata.bitsPerSample,
-    colorSpace: metadata.colorSpace ?? null,
-    orientation: metadata.orientation,
-    orientationApplied: metadata.orientationApplied,
-    density: metadata.density ?? null,
-    pages: metadata.pages ?? null,
-    hasAlpha: metadata.hasAlpha,
-    hasIccProfile: metadata.hasIccProfile,
-    iccProfileResourceRef: metadata.iccProfileResourceId ?? null,
-    cicp: metadata.cicp,
-    hdr: metadata.hdr,
-  }
-}
-
-function toManagedSource(imported: {
-  resource: ResourceDescriptor
-  metadata: SourceImageMetadata
-}): ImageEditorV3ManagedSource {
-  const resource = toResource(imported.resource)
-  if (!resource.mediaType) throw new Error('Image editor source resource has no media type')
-  return {
-    resource,
-    metadata: toMetadata(imported.metadata),
-    mediaUrl: createImageEditorV3ResourceMediaUrl(imported.resource.id, resource.mediaType),
-  }
 }
 
 function isNotFound(error: unknown): boolean {
@@ -394,88 +339,6 @@ async function saveDocument(payload: SaveDocumentPayload): Promise<Record<string
   }
 }
 
-async function persistImportedDocument(imported: ImageEditDocumentEnvelope): Promise<ImageEditDocumentEnvelope> {
-  validateSnapshotDocument(imported)
-  const documents = getRuntime().documents
-  let current: ImageEditDocumentEnvelope | null
-  try {
-    current = await documents.load(imported.documentId)
-  } catch (error) {
-    if (!isNotFound(error)) throw error
-    current = null
-  }
-  if (!current) {
-    return documents.create({
-      documentId: imported.documentId,
-      revision: imported.revision,
-      document: imported.document,
-      history: imported.history,
-      resourceRefs: imported.resourceRefs,
-      previewRef: imported.previewRef,
-    })
-  }
-  const matches = JSON.stringify(current.document) === JSON.stringify(imported.document)
-    && JSON.stringify(current.history) === JSON.stringify(imported.history)
-    && JSON.stringify(current.resourceRefs) === JSON.stringify(imported.resourceRefs)
-    && current.previewRef === imported.previewRef
-    && current.revision === imported.revision
-  if (!matches) throw new Error(`Image edit document already exists with different content: ${imported.documentId}`)
-  return current
-}
-
-function ownerFor(event: IpcMainInvokeEvent): BrowserWindow {
-  const owner = BrowserWindow.fromWebContents(event.sender)
-  if (!owner) throw new Error('Image editor window is unavailable')
-  return owner
-}
-
-function packageFileName(raw: string | undefined, documentId: string): string {
-  const stem = sanitizeFileStem(raw ?? documentId)
-  return stem.toLowerCase().endsWith('.henjiimg') ? stem : `${stem}.henjiimg`
-}
-
-function packageThumbnail(imported: PendingHenjiImagePackageImport['imported']): {
-  bytes: ArrayBuffer
-  mediaType: 'image/png' | 'image/webp'
-} | null {
-  if (!imported.thumbnail || !imported.manifest.thumbnail) return null
-  const mediaType = imported.manifest.thumbnail.mediaType
-  if (mediaType !== 'image/png' && mediaType !== 'image/webp') {
-    throw new Error(`Unsupported package thumbnail media type: ${mediaType}`)
-  }
-  return { bytes: toArrayBuffer(imported.thumbnail), mediaType }
-}
-
-function pendingPackageValue(record: PendingHenjiImagePackageImport): Record<string, unknown> {
-  return {
-    kind: 'relink-required',
-    pendingPackageRef: record.ref,
-    missingExternalSources: [...record.missingExternalSources.values()].map((source) => ({
-      resourceRef: source.resourceId,
-      fingerprint: { algorithm: 'sha256', value: source.sha256 },
-      byteLength: source.byteLength ?? null,
-      mediaType: source.mediaType ?? null,
-      pathHint: source.pathHint ?? null,
-      relinkHint: source.relinkHint ?? null,
-    })),
-    thumbnail: packageThumbnail(record.imported),
-  }
-}
-
-async function completePackageOpen(
-  imported: PendingHenjiImagePackageImport['imported'],
-  signal: AbortSignal,
-): Promise<Record<string, unknown>> {
-  const document = await persistImportedDocument(imported.manifest.document)
-  const snapshot = await toSnapshot(document, signal)
-  return {
-    kind: 'ready',
-    snapshot,
-    resources: snapshot.resources,
-    thumbnail: packageThumbnail(imported),
-  }
-}
-
 export function registerImageEditorV3Ipc(): void {
   const guard = assertTrustedMainRenderer
   registerImageEditorV3RasterExportIpc({
@@ -502,186 +365,21 @@ export function registerImageEditorV3Ipc(): void {
       return saveDocument(payload)
     })
   ), guard)
-  registerIpcHandler('imageEditorV3:source:import', parseImageEditorV3BasePayload, (payload, event) => (
-    runRequest('source.import', payload.requestId, event.sender.id, async (signal) => {
-      const selection = await dialog.showOpenDialog(ownerFor(event), {
-        properties: ['openFile'], filters: [{ name: '图片', extensions: ['png', 'jpg', 'jpeg', 'webp'] }],
-      })
-      if (selection.canceled || !selection.filePaths[0]) {
-        logger.info('用户取消导入图片源', {
-          event: 'image_editor_v3.source.import.dialog_cancelled', requestId: payload.requestId,
-        })
-        return { status: 'cancelled' as const }
-      }
-      throwIfAborted(signal)
-      const imported = await getRuntime().sourceIngestor.ingest({
-        kind: 'local-path',
-        filePath: selection.filePaths[0],
-      }, signal)
-      return { status: 'completed' as const, value: toManagedSource(imported) }
-    })
-  ), guard)
-  registerIpcHandler('imageEditorV3:source:ingest', parseImageEditorV3IngestSourcePayload, (payload, event) => (
-    runRequest('source.ingest', payload.requestId, event.sender.id, async (signal) => {
-      const imported = await getRuntime().sourceIngestor.ingest(payload.source, signal)
-      return toManagedSource(imported)
-    })
-  ), guard)
-  registerIpcHandler('imageEditorV3:source:metadata', parseImageEditorV3ResourcePayload, (payload, event) => (
-    runRequest('source.metadata', payload.requestId, event.sender.id, async (signal) => (
-      toMetadata(await getRuntime().sources.readMetadata(payload.resourceRef, signal))
-    ))
-  ), guard)
-  registerIpcHandler('imageEditorV3:source:pyramid', parseImageEditorV3ResourcePayload, (payload, event) => (
-    runRequest('source.pyramid', payload.requestId, event.sender.id, (signal) => (
-      getRuntime().sources.describePyramid(payload.resourceRef, signal)
-    ))
-  ), guard)
-  registerIpcHandler('imageEditorV3:source:pyramidPrewarm', parseImageEditorV3PyramidPrewarmPayload, (payload, event) => (
-    runRequest('source.pyramid_prewarm', payload.requestId, event.sender.id, (signal) => (
-      getRuntime().sources.prewarmPyramid({
-        resourceId: payload.resourceRef, minimumMip: payload.minimumMip,
-        maximumMip: payload.maximumMip, tileBudget: payload.tileBudget,
-        bitDepth: payload.bitDepth, signal,
-      })
-    ), estimateImageEditorV3PyramidPrewarmBytes(payload.bitDepth))
-  ), guard)
-  registerIpcHandler('imageEditorV3:source:fastProxy', parseImageEditorV3FastProxyPayload, (payload, event) => (
-    runRequest('source.fast_proxy', payload.requestId, event.sender.id, async (signal) => {
-      const proxy = await getRuntime().sources.readFastProxy(payload.resourceRef, payload.maxDimension, signal)
-      return { resourceRef: proxy.resourceId, width: proxy.width, height: proxy.height, mediaType: 'image/webp', bytes: toArrayBuffer(proxy.bytes) }
-    }, estimateImageEditorV3ProxyRequestBytes(payload.maxDimension))
-  ), guard)
-  registerIpcHandler('imageEditorV3:source:tile', parseImageEditorV3TilePayload, (payload, event) => (
-    runRequest('source.tile', payload.requestId, event.sender.id, async (signal) => {
-      const tile = await getRuntime().sources.readTile({
-        resourceId: payload.resourceRef, mip: payload.mip, tileX: payload.tileX, tileY: payload.tileY,
-        halo: payload.halo, bitDepth: payload.bitDepth, signal,
-      })
-      const { resourceId, pixels, ...metadata } = tile
-      return { ...metadata, resourceRef: resourceId, pixels: toArrayBuffer(pixels) }
-    }, estimateImageEditorV3TileRequestBytes(payload))
-  ), guard)
-  registerIpcHandler('imageEditorV3:package:open', parseImageEditorV3BasePayload, (payload, event) => (
-    runRequest('package.open', payload.requestId, event.sender.id, async (signal) => {
-      const selection = await dialog.showOpenDialog(ownerFor(event), {
-        properties: ['openFile'], filters: [{ name: '痕迹可编辑图片', extensions: ['henjiimg'] }],
-      })
-      if (selection.canceled || !selection.filePaths[0]) {
-        logger.info('用户取消打开可编辑图片包', {
-          event: 'image_editor_v3.package.open.dialog_cancelled', requestId: payload.requestId,
-        })
-        return { status: 'cancelled' as const }
-      }
-      const imported = await getRuntime().packages.import(selection.filePaths[0], { signal })
-      if (imported.missingExternalSources.length > 0) {
-        const pending = await pendingPackageImports.create(event.sender.id, imported)
-        return { status: 'completed' as const, value: pendingPackageValue(pending) }
-      }
-      try {
-        return {
-          status: 'completed' as const,
-          value: await completePackageOpen(imported, signal),
-        }
-      } finally {
-        await imported.resourceLease.release()
-      }
-    })
-  ), guard)
-  registerIpcHandler(
-    'imageEditorV3:package:relinkExternalSource',
-    parseImageEditorV3RelinkPackageExternalSourcePayload,
-    (payload, event) => runRequest(
-      'package.relink_external_source',
-      payload.requestId,
-      event.sender.id,
-      async (signal) => {
-        const pendingRef = payload.pendingPackageRef as PendingHenjiImagePackageRef
-        const pending = pendingPackageImports.get(event.sender.id, pendingRef)
-        const externalSource = pending.missingExternalSources.get(payload.resourceRef)
-        if (!externalSource) throw new Error('Requested external package resource is not missing')
-        const selection = await dialog.showOpenDialog(ownerFor(event), {
-          properties: ['openFile'],
-          title: externalSource.relinkHint
-            ? `重新链接 ${externalSource.relinkHint}`
-            : '重新链接外部图片',
-          filters: [{
-            name: '图片',
-            extensions: ['png', 'jpg', 'jpeg', 'webp', 'tif', 'tiff', 'avif', 'heif', 'heic'],
-          }],
-        })
-        if (selection.canceled || !selection.filePaths[0]) {
-          await pendingPackageImports.abandon(event.sender.id, pendingRef)
-          return { status: 'cancelled' as const }
-        }
-        try {
-          const relinked = await getRuntime().packages.relinkExternalSource(
-            selection.filePaths[0],
-            externalSource,
-            signal,
-          )
-          try {
-            pendingPackageImports.addRelinkedResource(
-              pending,
-              relinked.resource,
-              relinked.resourceLease,
-            )
-          } catch (error) {
-            await relinked.resourceLease.release()
-            throw error
-          }
-          if (pending.missingExternalSources.size > 0) {
-            return { status: 'completed' as const, value: pendingPackageValue(pending) }
-          }
-          const ready = pendingPackageImports.takeReady(event.sender.id, pendingRef)
-          try {
-            return {
-              status: 'completed' as const,
-              value: await completePackageOpen(ready.imported, signal),
-            }
-          } finally {
-            await pendingPackageImports.release(ready)
-          }
-        } catch (error) {
-          await pendingPackageImports.abandon(event.sender.id, pendingRef)
-          throw error
-        }
-      },
-    ),
+  registerImageEditorV3SourceIpc({
+    sources: getRuntime().sources,
+    sourceIngestor: getRuntime().sourceIngestor,
     guard,
-  )
-  registerIpcHandler('imageEditorV3:package:saveAs', parseImageEditorV3SavePackagePayload, (payload, event) => (
-    runRequest('package.save_as', payload.requestId, event.sender.id, async (signal) => {
-      const document = await getRuntime().documents.load(payload.documentRef)
-      await assertHistoryResourceSizes(document.history)
-      if (document.revision !== payload.revision) {
-        throw new DocumentRevisionConflictError(document.documentId, payload.revision, document.revision)
-      }
-      const selection = await dialog.showSaveDialog(ownerFor(event), {
-        defaultPath: packageFileName(payload.suggestedName, document.documentId),
-        filters: [{ name: '痕迹可编辑图片', extensions: ['henjiimg'] }],
-      })
-      if (selection.canceled || !selection.filePath) {
-        logger.info('用户取消另存可编辑图片包', {
-          event: 'image_editor_v3.package.save_as.dialog_cancelled', requestId: payload.requestId,
-        })
-        return { status: 'cancelled' as const }
-      }
-      const targetPath = selection.filePath.toLowerCase().endsWith('.henjiimg')
-        ? selection.filePath
-        : `${selection.filePath}.henjiimg`
-      await getRuntime().packages.export({
-        targetPath,
-        document,
-        signal,
-        thumbnail: payload.thumbnail,
-      })
-      return { status: 'completed' as const, value: {
-        outputRef: `henjiimg:${document.documentId}@${document.revision}`,
-        documentRef: toDocumentRef(document.documentId), revision: document.revision,
-      } }
-    })
-  ), guard)
+    runRequest,
+  })
+  registerImageEditorV3PackageIpc({
+    documents: getRuntime().documents,
+    packages: getRuntime().packages,
+    guard,
+    runRequest,
+    toSnapshot,
+    assertHistoryResourceSizes,
+    validateSnapshotDocument: (document) => { validateSnapshotDocument(document) },
+  })
   registerIpcHandler('imageEditorV3:resource:collectGarbage', parseImageEditorV3GarbageCollectPayload, (payload, event) => (
     runRequest('resource.collect_garbage', payload.requestId, event.sender.id, async () => {
       const live = new Set<ResourceId>(payload.retainedResourceRefs)
@@ -700,7 +398,7 @@ export function registerImageEditorV3Ipc(): void {
 
 export async function disposeImageEditorV3Ipc(): Promise<void> {
   requestAdmission.abortAll()
-  await pendingPackageImports.dispose()
+  await disposeImageEditorV3PendingPackageImports()
   const current = runtime
   runtime = undefined
   await current?.rasterExports.dispose()

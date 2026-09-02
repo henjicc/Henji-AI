@@ -1,5 +1,5 @@
 import { AlertTriangle, LoaderCircle, Minus, Plus } from 'lucide-react'
-import { useLayoutEffect, useMemo, useRef } from 'react'
+import { useCallback, useLayoutEffect, useMemo, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { UiIconButton } from '@/components/ui'
@@ -30,7 +30,10 @@ import type {
   ImageEditorV3Props,
 } from './types'
 import { useImageEditorBusSnapshotV3 } from './useImageEditorControllerV3'
-import { useImageEditorViewportLayoutV3 } from './useImageEditorViewportLayoutV3'
+import {
+  calculateImageEditorViewportLayoutV3,
+  useImageEditorViewportLayoutV3,
+} from './useImageEditorViewportLayoutV3'
 import { useImageEditorLayerMoveGestureV3 } from './useImageEditorLayerMoveGestureV3'
 import { imageEditorViewportTransformV3, type ImageEditorViewportPanV3 } from './viewportNavigationV3'
 import { useImageEditorViewportNavigationGestureV3 } from './useImageEditorViewportNavigationGestureV3'
@@ -222,6 +225,26 @@ export function ImageEditorPreviewV3({
     feedback.style.transform = ''
   }, [basePreviewDocumentId, basePreviewRevision, displaySnapshot.document.id, displaySnapshot.document.revision, snapshot.previewOverrides])
 
+  const updatePresentationViewport = useCallback((
+    nextZoom: number,
+    nextPan: ImageEditorViewportPanV3,
+    interacting: boolean,
+  ): void => {
+    const rect = surfaceRef.current?.getBoundingClientRect()
+    if (!rect) return
+    const nextLayout = calculateImageEditorViewportLayoutV3(
+      { width: rect.width, height: rect.height },
+      outputGeometry,
+      nextZoom,
+      nextPan,
+      {
+        devicePixelRatio: typeof window === 'undefined' ? 1 : window.devicePixelRatio || 1,
+        interacting,
+      },
+    )
+    if (nextLayout) viewportComposite.session.updateViewport(nextLayout)
+  }, [outputGeometry, viewportComposite.session])
+
   const navigation = useImageEditorViewportNavigationGestureV3(
     controller.sessionId,
     activeTool,
@@ -229,6 +252,7 @@ export function ImageEditorPreviewV3({
     viewportContentRef,
     zoom,
     pan,
+    updatePresentationViewport,
   )
 
   const navigationCursor = activeTool === 'hand'
@@ -244,6 +268,8 @@ export function ImageEditorPreviewV3({
       ref={surfaceRef}
       data-preview-surface
       data-preview-display-source={previewRenderer ? 'custom' : displayPipeline.displaySource}
+      data-preview-coverage={previewRenderer ? undefined : viewportComposite.coverage.toFixed(4)}
+      data-preview-target-mip-coverage={previewRenderer ? undefined : viewportComposite.targetMipCoverage.toFixed(4)}
       data-active-navigation-tool={activeTool === 'hand' || activeTool === 'zoom' ? activeTool : undefined}
       data-move-availability={activeTool === 'move'
         ? layerMoveHandlers.unavailableReason ?? 'ready'
@@ -267,9 +293,8 @@ export function ImageEditorPreviewV3({
           className="pointer-events-none absolute inset-0 overflow-hidden"
         >
           <ImageEditorViewportTilesV3
-            result={viewportResult}
+            session={viewportComposite.session}
             layout={viewportLayout}
-            expectedGeometryHash={viewportComposite.geometryHash}
             label={t('imageEditor.v3.previewAlt')}
           />
         </div>

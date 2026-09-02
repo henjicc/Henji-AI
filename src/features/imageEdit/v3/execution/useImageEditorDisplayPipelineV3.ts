@@ -9,6 +9,8 @@ const EMPTY_RESOURCE_DESCRIPTORS: readonly ImageEditorV3ResourceDescriptor[] = [
 interface ImageEditorDisplayViewportLayoutV3 {
   viewport: ImageEditorViewportTransformV3
   viewportKey: string
+  stageWidth: number
+  stageHeight: number
 }
 
 /**

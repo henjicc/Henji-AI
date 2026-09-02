@@ -17,9 +17,30 @@ const mocked = vi.hoisted(() => ({
 
 vi.mock('./viewportCompositeClientV3', () => {
   class MockViewportCompositeClientV3 {
-    render(request: unknown): Promise<never> {
+    render(request: {
+      document: { id: string; revision: number; geometry: { width: number; height: number } }
+      renderGeneration: number
+      cameraSequence: number
+      geometryHash: string
+      viewportKey: string
+      coverage?: 'viewport' | 'document'
+    }): Promise<unknown> {
       mocked.requests.push(request)
-      return new Promise<never>(() => undefined)
+      return Promise.resolve({
+        documentId: request.document.id,
+        revision: request.document.revision,
+        renderGeneration: request.renderGeneration,
+        cameraSequence: request.cameraSequence,
+        geometryHash: request.geometryHash,
+        viewportKey: request.viewportKey,
+        coverage: request.coverage ?? 'viewport',
+        mip: request.coverage === 'document' ? 8 : 0,
+        documentWidth: request.document.geometry.width,
+        documentHeight: request.document.geometry.height,
+        diagnostics: [],
+        tiles: [],
+        release: vi.fn(),
+      })
     }
 
     cancel(): void {
@@ -64,8 +85,12 @@ function snapshot(): ImageEditCommandBusSnapshotV3 {
 function layout(index: number): {
   viewport: ImageEditorViewportTransformV3
   viewportKey: string
+  stageWidth: number
+  stageHeight: number
 } {
   return {
+    stageWidth: 1_600,
+    stageHeight: 1_000,
     viewport: {
       documentX: index,
       documentY: index,
@@ -105,15 +130,16 @@ describe('useImageEditorViewportCompositeV3', () => {
       { initialProps: { currentLayout: layout(0) } },
     )
     await act(async () => { await vi.advanceTimersByTimeAsync(16) })
-    expect(mocked.requests).toHaveLength(1)
+    expect(mocked.requests).toHaveLength(2)
+    expect(mocked.requests[0]).toMatchObject({ coverage: 'document', preferredMip: 30 })
 
     for (let index = 1; index <= 40; index += 1) {
       rendered.rerender({ currentLayout: layout(index) })
     }
-    expect(mocked.requests).toHaveLength(1)
-    await act(async () => { await vi.advanceTimersByTimeAsync(16) })
     expect(mocked.requests).toHaveLength(2)
-    expect(mocked.requests[1]).toMatchObject({ viewportKey: 'viewport-40' })
+    await act(async () => { await vi.advanceTimersByTimeAsync(16) })
+    expect(mocked.requests).toHaveLength(3)
+    expect(mocked.requests[2]).toMatchObject({ viewportKey: 'viewport-40' })
 
     rendered.unmount()
     await act(async () => { await Promise.resolve() })

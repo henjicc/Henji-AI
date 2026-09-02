@@ -21,6 +21,11 @@ export function createElectronImageEditorV3(): ImageEditorV3Platform {
     prewarmSourcePyramid: (request) => getNativeImageEditorV3().prewarmSourcePyramid(request),
     readFastProxy: (request) => getNativeImageEditorV3().readFastProxy(request),
     readSourceTile: (request) => getNativeImageEditorV3().readSourceTile(request),
+    readSourceTiles: (request) => {
+      const read = getNativeImageEditorV3().readSourceTiles
+      if (!read) throw new Error('[platform:imageEditorV3] readSourceTiles is not available')
+      return read(request)
+    },
     persistBrushTiles: (request) => getNativeImageEditorV3().persistBrushTiles(request),
     readBrushTiles: (request) => getNativeImageEditorV3().readBrushTiles(request),
     openPackage: (request) => getNativeImageEditorV3().openPackage(request),

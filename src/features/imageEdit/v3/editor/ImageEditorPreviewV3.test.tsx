@@ -7,7 +7,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   createImageEditAnnotationLayerV3,
   createImageEditDocumentV3,
-  createImageEditEffectLayerV3,
 } from '@/core/imageEdit/v3/documentFactory'
 import i18n from '@/i18n/config'
 import { requireImageEditV3LiveSession } from '../application/imageEditLiveSessionRegistry'
@@ -33,6 +32,14 @@ const managedPreview = vi.hoisted(() => ({
     rendering: false,
   } as ManagedPreviewTestStateV3,
 }))
+const renderSession = vi.hoisted(() => ({
+  attachSurface: vi.fn(() => vi.fn()),
+  updateSnapshot: vi.fn(),
+  updateViewport: vi.fn(),
+  subscribeDiagnostics: vi.fn(() => vi.fn()),
+  setVisibility: vi.fn(),
+  dispose: vi.fn(),
+}))
 
 vi.mock('../execution', async (importOriginal) => {
   const original = await importOriginal<typeof import('../execution')>()
@@ -50,6 +57,12 @@ vi.mock('../execution', async (importOriginal) => {
         renderGeneration: 1,
         cameraSequence: 1,
         geometryHash: 'test-geometry',
+        coverage: 0,
+        targetMipCoverage: 0,
+        targetMip: null,
+        eventToPresentMs: null,
+        surfaceId: null,
+        session: renderSession,
       },
       viewportResult: null,
     }),
@@ -440,95 +453,4 @@ describe('ImageEditorPreviewV3 managed frame ownership', () => {
     ])
   })
 
-  it('模糊不再通过 CSS 近似重复渲染整张画面', async () => {
-    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({
-      x: 0, y: 0, left: 0, top: 0, right: 900, bottom: 600,
-      width: 900, height: 600, toJSON: () => undefined,
-    })
-    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({
-      clearRect: vi.fn(),
-      drawImage: vi.fn(),
-    } as unknown as CanvasRenderingContext2D)
-    managedPreview.state = {
-      result: {
-        kind: 'bitmap', bitmap: {} as ImageBitmap, width: 320, height: 180,
-        diagnostics: [], release: vi.fn(),
-      },
-      resultDocumentId: 'blur-feedback-document',
-      resultRevision: 0,
-      resultPreviewOverrides: {},
-      diagnostic: null,
-      rendering: true,
-    }
-    const document = createImageEditDocumentV3({
-      width: 320,
-      height: 180,
-      documentId: 'blur-feedback-document',
-    })
-    document.revision = 1
-    document.layers.push(createImageEditEffectLayerV3(
-      'blur', '高斯模糊', 'image.gaussian-blur-v2', { radius: 40 },
-    ))
-    const rendered = render(
-      <div style={{ width: 900, height: 600 }}>
-        <ImageEditorV3
-          sourceImageUrl="preview.jpg"
-          document={document}
-          profileId="full"
-          onDocumentChange={() => undefined}
-        />
-      </div>,
-    )
-    await waitFor(() => expect(rendered.container.querySelector(
-      '[data-live-effect-feedback]',
-    )).toBeNull())
-    expect(rendered.container.querySelector('[data-move-feedback-frame]')).not.toBeNull()
-  })
-
-  it('辉光不再通过 screen 混合的 CSS 副本伪造中间帧', async () => {
-    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({
-      x: 0, y: 0, left: 0, top: 0, right: 900, bottom: 600,
-      width: 900, height: 600, toJSON: () => undefined,
-    })
-    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({
-      clearRect: vi.fn(),
-      drawImage: vi.fn(),
-    } as unknown as CanvasRenderingContext2D)
-    managedPreview.state = {
-      result: {
-        kind: 'bitmap', bitmap: {} as ImageBitmap, width: 320, height: 180,
-        diagnostics: [], release: vi.fn(),
-      },
-      resultDocumentId: 'glow-feedback-document',
-      resultRevision: 0,
-      resultPreviewOverrides: {},
-      diagnostic: null,
-      rendering: true,
-    }
-    const document = createImageEditDocumentV3({
-      width: 320,
-      height: 180,
-      documentId: 'glow-feedback-document',
-    })
-    document.revision = 1
-    document.layers.push(createImageEditEffectLayerV3(
-      'glow', '辉光 Pro', 'image.vgpu-glow', {
-        intensity: 0.68, radius: 0.68, sourceThreshold: 0.3, whiteHeat: 0.62,
-      },
-    ))
-    const rendered = render(
-      <div style={{ width: 900, height: 600 }}>
-        <ImageEditorV3
-          sourceImageUrl="preview.jpg"
-          document={document}
-          profileId="full"
-          onDocumentChange={() => undefined}
-        />
-      </div>,
-    )
-    await waitFor(() => expect(rendered.container.querySelector(
-      '[data-live-glow-feedback]',
-    )).toBeNull())
-    expect(rendered.container.querySelectorAll('[data-raster-display-frame]')).toHaveLength(1)
-  })
 })

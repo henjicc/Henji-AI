@@ -32,12 +32,21 @@ describe('图片编辑 V3 preload 契约', () => {
       halo: 96,
       bitDepth: 16 as const,
     }
+    const { requestId: _requestId, ...tileItem } = tileRequest
 
     await api.readSourceTile(tileRequest)
+    await api.readSourceTiles!({
+      requestId: 'tile-batch',
+      tiles: [{ ...tileItem, priority: 0 }],
+    })
     await api.cancelRequest('tile-16')
 
     expect(invoke).toHaveBeenNthCalledWith(1, 'imageEditorV3:source:tile', tileRequest)
-    expect(invoke).toHaveBeenNthCalledWith(2, 'imageEditorV3:request:cancel', { requestId: 'tile-16' })
+    expect(invoke).toHaveBeenNthCalledWith(2, 'imageEditorV3:source:tiles', {
+      requestId: 'tile-batch',
+      tiles: [{ ...tileItem, priority: 0 }],
+    })
+    expect(invoke).toHaveBeenNthCalledWith(3, 'imageEditorV3:request:cancel', { requestId: 'tile-16' })
   })
 
   it('粗 mip 金字塔预热使用独立可取消 IPC，不暴露路径', async () => {

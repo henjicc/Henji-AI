@@ -32,6 +32,13 @@ export interface ImageEditorViewportCompositeRequestV3 {
   resourceDescriptors: readonly ImageEditorV3ResourceDescriptor[]
   viewport: ImageEditorViewportTransformV3
   viewportKey: string
+  /** 完整文档粗略兜底使用最粗 mip；普通视口渲染省略。 */
+  preferredMip?: number
+  /** document 只用于 generation 原子晋升前的全图粗略覆盖。 */
+  coverage?: 'viewport' | 'document'
+  previousMip?: number
+  overscanViewports?: number
+  forwardPrefetchViewports?: number
 }
 
 export interface ImageEditorManagedViewportCompositeV3 {
@@ -41,6 +48,7 @@ export interface ImageEditorManagedViewportCompositeV3 {
   cameraSequence: number
   geometryHash: string
   viewportKey: string
+  coverage: 'viewport' | 'document'
   mip: number
   documentWidth: number
   documentHeight: number

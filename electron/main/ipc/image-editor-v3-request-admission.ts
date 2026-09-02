@@ -8,6 +8,7 @@ const OPERATION_LIMITS_PER_SENDER: Readonly<Record<string, number>> = {
   'source.ingest': 1,
   'source.pyramid_prewarm': 1,
   'source.tile': 2,
+  'source.tile_batch': 2,
   'brush_tiles.persist': 1,
   'brush_tiles.read': 2,
   'package.open': 1,
@@ -113,6 +114,17 @@ export function estimateImageEditorV3TileRequestBytes(request: {
   const bytesPerSample = (request.bitDepth ?? 8) / 8
   // libvips 输出、主进程精确 ArrayBuffer 与 IPC structured clone 同时在途。
   return side * side * 4 * bytesPerSample * 3
+}
+
+export function estimateImageEditorV3TileBatchRequestBytes(
+  tiles: readonly { halo: number; bitDepth?: 8 | 16 | 32 }[],
+): number {
+  const total = tiles.reduce(
+    (bytes, tile) => bytes + estimateImageEditorV3TileRequestBytes(tile),
+    0,
+  )
+  if (!Number.isSafeInteger(total)) throw new Error('Invalid image editor tile batch estimate')
+  return total
 }
 
 export function estimateImageEditorV3ProxyRequestBytes(maxDimension: number): number {

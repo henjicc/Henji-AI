@@ -22,6 +22,7 @@ import {
   parseImageEditorV3IngestSourcePayload,
   parseImageEditorV3PyramidPrewarmPayload,
   parseImageEditorV3SavePayload,
+  parseImageEditorV3TileBatchPayload,
   parseImageEditorV3TilePayload,
 } from './image-editor-v3'
 
@@ -225,6 +226,28 @@ describe('图片编辑 V3 IPC 边界', () => {
       resourceRef: RESOURCE_A,
       maxDimension: 4_097,
     })).toThrow('Invalid maxDimension')
+  })
+
+  it('批量瓦片限制数量、去重并保留优先级', () => {
+    const tile = {
+      resourceRef: RESOURCE_A,
+      mip: 2,
+      tileX: 3,
+      tileY: 4,
+      halo: 24,
+      bitDepth: 16 as const,
+      priority: 7,
+    }
+    expect(parseImageEditorV3TileBatchPayload({ requestId: 'tile-batch', tiles: [tile] }))
+      .toEqual({ requestId: 'tile-batch', tiles: [tile] })
+    expect(() => parseImageEditorV3TileBatchPayload({
+      requestId: 'tile-batch-duplicate', tiles: [tile, tile],
+    })).toThrow('duplicates')
+    expect(() => parseImageEditorV3TileBatchPayload({
+      requestId: 'tile-batch-large', tiles: Array.from({ length: 17 }, (_, tileX) => ({
+        ...tile, tileX,
+      })),
+    })).toThrow('batch size')
   })
 
   it('限制源金字塔预热范围、精度和瓦片预算', () => {

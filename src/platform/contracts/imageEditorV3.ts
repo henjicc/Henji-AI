@@ -125,6 +125,17 @@ export interface ImageEditorV3SourceTile {
   pixels: ArrayBuffer
 }
 
+export interface ImageEditorV3SourceTileBatchItem {
+  resourceRef: ImageEditorV3ResourceRef
+  mip: number
+  tileX: number
+  tileY: number
+  halo?: number
+  bitDepth?: 8 | 16 | 32
+  /** 数值越小越优先；同优先级保持输入顺序。 */
+  priority: number
+}
+
 export interface ImageEditorV3BrushRgbaTile {
   storage: 'rgba-float32'
   width: number
@@ -312,6 +323,11 @@ export interface ImageEditorV3Platform {
     halo?: number
     bitDepth?: 8 | 16 | 32
   }): Promise<ImageEditorV3SourceTile>
+  /** 交互显示专用有界批次；宿主按 priority 调度，结果仍按输入顺序返回。 */
+  readSourceTiles?(request: {
+    requestId: string
+    tiles: ImageEditorV3SourceTileBatchItem[]
+  }): Promise<{ tiles: ImageEditorV3SourceTile[] }>
   persistBrushTiles(request: {
     requestId: string
     tiles: Array<{ tileKey: string; tile: ImageEditorV3BrushTile }>
