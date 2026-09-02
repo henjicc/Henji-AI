@@ -34,6 +34,10 @@ import { useImageEditorViewportLayoutV3 } from './useImageEditorViewportLayoutV3
 import { useImageEditorLayerMoveGestureV3 } from './useImageEditorLayerMoveGestureV3'
 import { imageEditorViewportTransformV3, type ImageEditorViewportPanV3 } from './viewportNavigationV3'
 import { useImageEditorViewportNavigationGestureV3 } from './useImageEditorViewportNavigationGestureV3'
+import {
+  resolveLiveGaussianBlurRadiusV3,
+  splitLiveAnnotationDisplayV3,
+} from './liveAnnotationDisplayV3'
 
 interface ImageEditorPreviewV3Props extends Pick<
   ImageEditorV3Props,
@@ -49,6 +53,7 @@ interface ImageEditorPreviewV3Props extends Pick<
 }
 
 const ZERO_VIEWPORT_PAN_V3: ImageEditorViewportPanV3 = { x: 0, y: 0 }
+const EMPTY_PREVIEW_OVERRIDES_V3 = {}
 
 export function ImageEditorPreviewV3({
   sourceImageUrl,
@@ -88,9 +93,40 @@ export function ImageEditorPreviewV3({
         },
       }
     : snapshot.document, [activeTool, projectedDocument.geometry.orientation, snapshot.document])
-  const displaySnapshot = useMemo(() => activeTool === 'crop'
-    ? { document: cropDisplayDocument, previewOverrides: {}, history: snapshot.history }
-    : snapshot, [activeTool, cropDisplayDocument, snapshot])
+  const liveDisplay = useMemo(
+    () => splitLiveAnnotationDisplayV3(cropDisplayDocument),
+    [cropDisplayDocument],
+  )
+  const baseDocumentCandidate = activeTool === 'crop' || previewRenderer
+    ? cropDisplayDocument
+    : liveDisplay.baseDocument
+  const baseIdentity = activeTool === 'crop' || previewRenderer
+    ? `${baseDocumentCandidate.id}:${baseDocumentCandidate.revision}`
+    : liveDisplay.baseIdentity
+  const stableBaseDocumentRef = useRef<{
+    identity: string
+    document: typeof baseDocumentCandidate
+    history: typeof snapshot.history
+  } | null>(null)
+  if (stableBaseDocumentRef.current?.identity !== baseIdentity) {
+    stableBaseDocumentRef.current = {
+      identity: baseIdentity,
+      document: baseDocumentCandidate,
+      history: snapshot.history,
+    }
+  }
+  const baseDisplayDocument = stableBaseDocumentRef.current.document
+  const baseDisplayHistory = stableBaseDocumentRef.current.history
+  const basePreviewOverrides = activeTool === 'crop'
+    ? EMPTY_PREVIEW_OVERRIDES_V3
+    : Object.keys(snapshot.previewOverrides).length === 0
+      ? EMPTY_PREVIEW_OVERRIDES_V3
+      : snapshot.previewOverrides
+  const displaySnapshot = useMemo(() => ({
+    document: baseDisplayDocument,
+    previewOverrides: basePreviewOverrides,
+    history: baseDisplayHistory,
+  }), [baseDisplayDocument, baseDisplayHistory, basePreviewOverrides])
   const outputGeometry = useMemo(
     () => resolveAnnotationOutputGeometryV3(cropDisplayDocument),
     [cropDisplayDocument],
@@ -120,12 +156,12 @@ export function ImageEditorPreviewV3({
   const { managedPreview, viewportComposite, viewportResult } = displayPipeline
   const thumbnailDisplayReady = Boolean(
     viewportResult
-      && viewportResult.documentId === snapshot.document.id
-      && viewportResult.revision === snapshot.document.revision,
+      && viewportResult.documentId === displaySnapshot.document.id
+      && viewportResult.revision === displaySnapshot.document.revision,
   ) || Boolean(
     managedPreview.result
-      && managedPreview.resultDocumentId === snapshot.document.id
-      && managedPreview.resultRevision === snapshot.document.revision,
+      && managedPreview.resultDocumentId === displaySnapshot.document.id
+      && managedPreview.resultRevision === displaySnapshot.document.revision,
   )
   useImageEditorThumbnailPrefetchV3(
     controller.sessionId,
@@ -190,17 +226,37 @@ export function ImageEditorPreviewV3({
   const basePreviewRevision = previewRenderer
     ? snapshot.document.revision
     : viewportResult?.revision ?? managedPreview.resultRevision
+  const basePreviewExact = basePreviewDocumentId === displaySnapshot.document.id
+    && basePreviewRevision === displaySnapshot.document.revision
+    && (Object.keys(displaySnapshot.previewOverrides).length === 0
+      || managedPreview.resultPreviewOverrides === displaySnapshot.previewOverrides)
+  const projectedBaseDocument = useMemo(
+    () => projectImageEditorPreviewDocumentV3(displaySnapshot),
+    [displaySnapshot],
+  )
+  const pendingBlurRadius = !basePreviewExact && activeTool !== 'crop'
+    ? resolveLiveGaussianBlurRadiusV3(projectedBaseDocument)
+    : null
+  const blurCssPixels = pendingBlurRadius && viewportLayout
+    ? Math.min(48, pendingBlurRadius * viewportLayout.stageWidth / Math.max(1, outputGeometry.width))
+    : 0
+  const blurFeedbackScale = blurCssPixels > 0 && viewportLayout
+    ? 1 + Math.min(0.12, blurCssPixels * 4 / Math.max(1, Math.min(
+        viewportLayout.stageWidth,
+        viewportLayout.stageHeight,
+      )))
+    : 1
 
   useLayoutEffect(() => {
     const feedback = moveFeedbackRef.current
     if (!feedback) return
     if (
       Object.keys(snapshot.previewOverrides).length > 0
-      || basePreviewDocumentId !== snapshot.document.id
-      || basePreviewRevision !== snapshot.document.revision
+      || basePreviewDocumentId !== displaySnapshot.document.id
+      || basePreviewRevision !== displaySnapshot.document.revision
     ) return
     feedback.style.transform = ''
-  }, [basePreviewDocumentId, basePreviewRevision, snapshot.document.id, snapshot.document.revision, snapshot.previewOverrides])
+  }, [basePreviewDocumentId, basePreviewRevision, displaySnapshot.document.id, displaySnapshot.document.revision, snapshot.previewOverrides])
 
   const navigation = useImageEditorViewportNavigationGestureV3(
     controller.sessionId,
@@ -261,19 +317,28 @@ export function ImageEditorPreviewV3({
                 data-move-feedback-frame
                 className="absolute inset-0 flex items-center justify-center"
               >
-                {viewportResult ? (
-                  <ImageEditorViewportTilesV3
-                    result={viewportResult}
-                    label={t('imageEditor.v3.previewAlt')}
-                  />
-                ) : null}
-                {!viewportResult && output.kind === 'url' ? (
-                  <ImageEditorUrlPreviewV3 output={output} label={t('imageEditor.v3.previewAlt')} />
-                ) : null}
-                {!viewportResult && output.kind === 'frame' ? (
-                  <ImageEditorFramePreviewV3 output={output} label={t('imageEditor.v3.previewAlt')} />
-                ) : null}
-                {!viewportResult && output.kind === 'content' ? output.content : null}
+                <div
+                  data-live-effect-feedback
+                  className="absolute inset-0 flex items-center justify-center"
+                  style={blurCssPixels > 0 ? {
+                    filter: `blur(${blurCssPixels}px)`,
+                    transform: `scale(${blurFeedbackScale})`,
+                  } : undefined}
+                >
+                  {viewportResult ? (
+                    <ImageEditorViewportTilesV3
+                      result={viewportResult}
+                      label={t('imageEditor.v3.previewAlt')}
+                    />
+                  ) : null}
+                  {!viewportResult && output.kind === 'url' ? (
+                    <ImageEditorUrlPreviewV3 output={output} label={t('imageEditor.v3.previewAlt')} />
+                  ) : null}
+                  {!viewportResult && output.kind === 'frame' ? (
+                    <ImageEditorFramePreviewV3 output={output} label={t('imageEditor.v3.previewAlt')} />
+                  ) : null}
+                  {!viewportResult && output.kind === 'content' ? output.content : null}
+                </div>
               </div>
             </div>
           ) : output.kind === 'url' ? (

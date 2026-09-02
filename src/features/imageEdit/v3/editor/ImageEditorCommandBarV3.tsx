@@ -17,6 +17,7 @@ import {
 import { findImageEditLayerLocationV3 } from './layerTreeV3'
 import { imageEditorSelectionAllowedCombineModesV3 } from './selectionMaskLayerV3'
 import type { ImageEditorV3Controller } from './types'
+import { useImageEditorAnnotationPreviewV3 } from './useImageEditorAnnotationPreviewV3'
 import { useImageEditorInteractionStoreV3, useImageEditorSessionStoreV3 } from '../store'
 
 interface ImageEditorCommandBarV3Props {
@@ -47,9 +48,15 @@ function ToolParameterBar({
   const annotationLayer = annotationSelection
     ? findImageEditLayerLocationV3(controller.document.layers, annotationSelection.layerId)?.layer
     : null
-  const selectedAnnotation = annotationLayer?.type === 'annotation'
+  const committedAnnotation = annotationLayer?.type === 'annotation'
     ? annotationLayer.annotations.find(({ id }) => id === annotationSelection?.annotationId) ?? null
     : null
+  const annotationPreview = useImageEditorAnnotationPreviewV3(
+    controller,
+    annotationSelection?.layerId ?? null,
+    committedAnnotation,
+  )
+  const selectedAnnotation = annotationPreview.annotation
   const selectedAnnotationStyle = selectedAnnotation
     ? readAnnotationStyleV3(selectedAnnotation)
     : null
@@ -131,13 +138,11 @@ function ToolParameterBar({
       setToolSetting(controller.sessionId, 'annotationCalloutShape', patch.calloutShape)
     }
     if (selectedAnnotation && annotationSelection) {
-      controller.updateAnnotation(
-        annotationSelection.layerId,
-        annotationSelection.annotationId,
-        patchAnnotationStyleV3(selectedAnnotation, patch),
-      )
+      annotationPreview.update(patchAnnotationStyleV3(selectedAnnotation, patch))
     }
   }
+
+  const commitAnnotationStyle = (): void => annotationPreview.commit()
 
   return (
     <div
@@ -232,7 +237,10 @@ function ToolParameterBar({
               type="color"
               aria-label={t('imageEditor.v3.toolSettings.color')}
               value={annotationColor}
-              onChange={(event) => applyAnnotationStyle({ color: event.currentTarget.value })}
+              onChange={(event) => {
+                applyAnnotationStyle({ color: event.currentTarget.value })
+                queueMicrotask(commitAnnotationStyle)
+              }}
             />
           </label>
           {showAnnotationStroke ? (
@@ -246,6 +254,14 @@ function ToolParameterBar({
                 onChange={(event) => applyAnnotationStyle({
                   lineWidth: Number(event.currentTarget.value),
                 })}
+                onPointerUp={commitAnnotationStyle}
+                onPointerCancel={annotationPreview.cancel}
+                onBlur={commitAnnotationStyle}
+                onKeyUp={(event) => {
+                  if (event.key.startsWith('Arrow') || event.key === 'Home' || event.key === 'End') {
+                    commitAnnotationStyle()
+                  }
+                }}
               />
               <span className="w-8 text-right tabular-nums text-text-dark">
                 {Math.round(annotationStrokeWidth)}
@@ -263,6 +279,14 @@ function ToolParameterBar({
                 onChange={(event) => applyAnnotationStyle({
                   fontSize: Number(event.currentTarget.value),
                 })}
+                onPointerUp={commitAnnotationStyle}
+                onPointerCancel={annotationPreview.cancel}
+                onBlur={commitAnnotationStyle}
+                onKeyUp={(event) => {
+                  if (event.key.startsWith('Arrow') || event.key === 'Home' || event.key === 'End') {
+                    commitAnnotationStyle()
+                  }
+                }}
               />
               <span className="w-8 text-right tabular-nums text-text-dark">
                 {Math.round(annotationFontSize)}
@@ -276,9 +300,12 @@ function ToolParameterBar({
                 className="!h-8 w-24"
                 aria-label={t('imageEditor.v3.toolSettings.calloutShape')}
                 value={annotationCalloutShape}
-                onChange={(event) => applyAnnotationStyle({
-                  calloutShape: event.currentTarget.value as 'rect' | 'ellipse',
-                })}
+                onChange={(event) => {
+                  applyAnnotationStyle({
+                    calloutShape: event.currentTarget.value as 'rect' | 'ellipse',
+                  })
+                  queueMicrotask(commitAnnotationStyle)
+                }}
               >
                 <option value="rect">{t('imageEditor.v3.toolSettings.rect')}</option>
                 <option value="ellipse">{t('imageEditor.v3.toolSettings.ellipse')}</option>

@@ -13,6 +13,7 @@ describe('ImageEditor V3 session stores', () => {
       viewportZoomBySession: {},
       viewportPanBySession: {},
       annotationSelectionBySession: {},
+      annotationPreviewBySession: {},
     })
   })
 

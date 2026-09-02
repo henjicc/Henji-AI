@@ -12,6 +12,7 @@ import {
 import type { ImageEditDocumentV3 } from '@/core/imageEdit/v3/documentTypes'
 import i18n from '@/i18n/config'
 import { useImageEditorInteractionStoreV3, useImageEditorSessionStoreV3 } from '../store'
+import { installKonvaCanvasTestContext, mockKonvaViewportRect } from './imageEditorKonvaTestUtils'
 import { ImageEditorV3 } from './ImageEditorV3'
 import type { ImageEditorV3PreviewRenderer } from './types'
 
@@ -37,18 +38,6 @@ function documentWithLayers(): ImageEditDocumentV3 {
     createImageEditRasterLayerV3('top', '顶层'),
   ]
   return document
-}
-
-function installPointerCapture(overlay: SVGSVGElement) {
-  const captured = new Set<number>()
-  const set = vi.fn((pointerId: number) => { captured.add(pointerId) })
-  const release = vi.fn((pointerId: number) => { captured.delete(pointerId) })
-  Object.defineProperties(overlay, {
-    hasPointerCapture: { configurable: true, value: (pointerId: number) => captured.has(pointerId) },
-    releasePointerCapture: { configurable: true, value: release },
-    setPointerCapture: { configurable: true, value: set },
-  })
-  return { release, set }
 }
 
 function ControlledEditor({
@@ -83,6 +72,7 @@ describe('ImageEditorV3 lifecycle guards', () => {
       viewportZoomBySession: {},
       viewportPanBySession: {},
       annotationSelectionBySession: {},
+      annotationPreviewBySession: {},
     })
   })
 
@@ -92,7 +82,9 @@ describe('ImageEditorV3 lifecycle guards', () => {
     vi.unstubAllGlobals()
   })
 
-  it('标注手势同步 capture，严格匹配 pointerId，并在 cancel、lost 与工具切换时取消', async () => {
+  it('标注手势在工具切换和外部文档变更时立即取消且不提交', async () => {
+    installKonvaCanvasTestContext()
+    mockKonvaViewportRect()
     const changes = vi.fn()
     const initial = documentWithLayers()
     const editor = (document: ImageEditDocumentV3) => (
@@ -108,35 +100,40 @@ describe('ImageEditorV3 lifecycle guards', () => {
     )
     const rendered = render(editor(initial))
     fireEvent.click(await screen.findByRole('button', { name: '矩形标注' }))
-    const overlay = await waitFor(() => rendered.container.querySelector(
+    await waitFor(() => expect(
+      rendered.container.querySelector('[data-annotation-editor-overlay]'),
+    ).toBeTruthy())
+    const overlay = rendered.container.querySelector<HTMLDivElement>(
       '[data-annotation-editor-overlay]',
-    ) as SVGSVGElement)
-    vi.spyOn(overlay, 'getBoundingClientRect').mockReturnValue({
-      x: 0, y: 0, left: 0, top: 0, right: 400, bottom: 225, width: 400, height: 225,
-      toJSON: () => ({}),
-    })
-    const capture = installPointerCapture(overlay)
+    )
+    await waitFor(() => expect(overlay?.querySelector('canvas')).toBeTruthy())
+    const stageContent = overlay?.querySelector('canvas')?.parentElement
+    if (!overlay || !stageContent) throw new Error('测试缺少 Konva 标注画布')
 
-    fireEvent.pointerDown(overlay, { button: 0, clientX: 20, clientY: 20, pointerId: 21 })
-    expect(capture.set).toHaveBeenCalledWith(21)
-    fireEvent.pointerUp(overlay, { clientX: 100, clientY: 80, pointerId: 22 })
-    expect(changes).not.toHaveBeenCalled()
-    expect(rendered.container.querySelector('[data-annotation-draft]')).toBeTruthy()
-    fireEvent.pointerCancel(overlay, { pointerId: 21 })
-    expect(capture.release).toHaveBeenCalledWith(21)
-    expect(rendered.container.querySelector('[data-annotation-draft]')).toBeNull()
-
-    fireEvent.pointerDown(overlay, { button: 0, clientX: 30, clientY: 30, pointerId: 23 })
+    fireEvent.mouseDown(stageContent, { button: 0, clientX: 20, clientY: 20 })
+    fireEvent.mouseMove(stageContent, { buttons: 1, clientX: 100, clientY: 80 })
+    expect(overlay.dataset.annotationDrawing).toBe('true')
     fireEvent.click(screen.getByRole('button', { name: '移动图像或图层' }))
-    await waitFor(() => expect(capture.release).toHaveBeenCalledWith(23))
-    fireEvent.click(screen.getByRole('button', { name: '矩形标注' }))
-    fireEvent.pointerDown(overlay, { button: 0, clientX: 40, clientY: 40, pointerId: 24 })
-    fireEvent.lostPointerCapture(overlay, { pointerId: 24 })
-    expect(capture.release).toHaveBeenCalledWith(24)
+    await waitFor(() => expect(
+      rendered.container.querySelector('[data-annotation-editor-overlay]'),
+    ).toBeNull())
+    expect(changes).not.toHaveBeenCalled()
 
-    fireEvent.pointerDown(overlay, { button: 0, clientX: 50, clientY: 50, pointerId: 25 })
+    fireEvent.click(screen.getByRole('button', { name: '矩形标注' }))
+    await waitFor(() => expect(
+      rendered.container.querySelector('[data-annotation-editor-overlay]'),
+    ).toBeTruthy())
+    const remounted = rendered.container.querySelector<HTMLDivElement>(
+      '[data-annotation-editor-overlay]',
+    )
+    await waitFor(() => expect(remounted?.querySelector('canvas')).toBeTruthy())
+    const remountedStage = remounted?.querySelector('canvas')?.parentElement
+    if (!remounted || !remountedStage) throw new Error('测试缺少重新挂载的标注画布')
+    fireEvent.mouseDown(remountedStage, { button: 0, clientX: 50, clientY: 50 })
+    fireEvent.mouseMove(remountedStage, { buttons: 1, clientX: 120, clientY: 100 })
+    expect(remounted.dataset.annotationDrawing).toBe('true')
     rendered.rerender(editor({ ...initial, revision: 1 }))
-    await waitFor(() => expect(capture.release).toHaveBeenCalledWith(25))
+    await waitFor(() => expect(remounted.dataset.annotationDrawing).toBe('false'))
     expect(changes).not.toHaveBeenCalled()
   })
 

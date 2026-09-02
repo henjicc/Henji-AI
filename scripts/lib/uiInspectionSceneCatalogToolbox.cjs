@@ -165,8 +165,15 @@ function createToolboxScenes(context) {
         const host = page.locator('[data-application-surface-id="tool.image_edit"]:visible')
         await host.waitFor({ state: 'visible', timeout: 12000 })
         const dropTarget = host.locator('.border-dashed').first()
-        await dropTarget.waitFor({ state: 'visible', timeout: 12000 })
-        await dropTarget.evaluate(async (element) => {
+        const editor = host.locator('[data-image-editor-v3]')
+        await Promise.race([
+          dropTarget.waitFor({ state: 'visible', timeout: 12000 }),
+          editor.waitFor({ state: 'visible', timeout: 12000 }),
+        ])
+        const replacingExistingEditor = await editor.isVisible()
+        const previousEditorElement = replacingExistingEditor ? await editor.elementHandle() : null
+        const importTarget = replacingExistingEditor ? editor : dropTarget
+        await importTarget.evaluate(async (element) => {
           const canvas = document.createElement('canvas')
           canvas.width = 1600
           canvas.height = 1000
@@ -197,7 +204,14 @@ function createToolboxScenes(context) {
           }))
         })
 
-        const editor = host.locator('[data-image-editor-v3]')
+        if (previousEditorElement) {
+          await page.waitForFunction(
+            (element) => !element.isConnected,
+            previousEditorElement,
+            { timeout: 15000 },
+          )
+        }
+
         await editor.waitFor({ state: 'visible', timeout: 15000 })
         const raster = editor.locator('[role="treeitem"][data-layer-type="raster"][aria-selected="true"]')
         await raster.waitFor({ state: 'visible', timeout: 12000 })
@@ -450,27 +464,65 @@ function createToolboxScenes(context) {
           throw new Error('移动后的图像没有严格裁切在文档画布内')
         }
 
+        const annotationStartedAt = new Date().toISOString()
+        const beforeFirstAnnotation = await readRevision()
         await editor.locator('[data-tool-id="annotation-rect"]').click()
-        await page.mouse.move(startX - 120, startY - 80)
+        const annotationOverlay = editor.locator('[data-annotation-editor-overlay]')
+        await annotationOverlay.waitFor({ state: 'visible', timeout: 5000 })
+        const [annotationBox, currentPreviewBox] = await Promise.all([
+          annotationOverlay.boundingBox(),
+          preview.boundingBox(),
+        ])
+        if (!annotationBox || !currentPreviewBox) throw new Error('无法读取标注画布范围')
+        const visibleAnnotationBox = {
+          x: Math.max(annotationBox.x, currentPreviewBox.x),
+          y: Math.max(annotationBox.y, currentPreviewBox.y),
+          width: Math.min(
+            annotationBox.x + annotationBox.width,
+            currentPreviewBox.x + currentPreviewBox.width,
+          ) - Math.max(annotationBox.x, currentPreviewBox.x),
+          height: Math.min(
+            annotationBox.y + annotationBox.height,
+            currentPreviewBox.y + currentPreviewBox.height,
+          ) - Math.max(annotationBox.y, currentPreviewBox.y),
+        }
+        if (visibleAnnotationBox.width < 120 || visibleAnnotationBox.height < 120) {
+          throw new Error(`标注画布可见范围过小：${JSON.stringify(visibleAnnotationBox)}`)
+        }
+        const annotationStartX = visibleAnnotationBox.x + visibleAnnotationBox.width * 0.22
+        const annotationStartY = visibleAnnotationBox.y + visibleAnnotationBox.height * 0.28
+        const annotationEndX = visibleAnnotationBox.x + visibleAnnotationBox.width * 0.54
+        const annotationEndY = visibleAnnotationBox.y + visibleAnnotationBox.height * 0.58
+        await page.mouse.move(annotationStartX, annotationStartY)
         await page.mouse.down()
-        await page.mouse.move(startX + 80, startY + 70, { steps: 5 })
+        await page.mouse.move(annotationEndX, annotationEndY, { steps: 5 })
+        if (await annotationOverlay.getAttribute('data-annotation-drawing') !== 'true') {
+          const canvasBox = await annotationOverlay.locator('canvas').first().boundingBox()
+          throw new Error(`标注画布没有接住首笔手势：overlay=${JSON.stringify(annotationBox)}, canvas=${JSON.stringify(canvasBox)}`)
+        }
         await page.mouse.up()
         await editor.locator('[role="treeitem"][data-layer-type="annotation"]').waitFor({
           state: 'visible', timeout: 10000,
         })
+        await editor.locator('[data-annotation-editor-overlay][data-live-annotation-layer-count="1"]')
+          .waitFor({ state: 'visible', timeout: 5000 })
+        if (await readRevision() !== beforeFirstAnnotation + 1) {
+          throw new Error('第一次绘制标注没有一次完成，或产生了多余 revision')
+        }
         const annotationContextBar = editor.locator('[data-context-bar]')
         const annotationColor = annotationContextBar.locator('input[type="color"]')
         await annotationColor.waitFor({ state: 'visible', timeout: 5000 })
+        const testedAnnotationColor = `#${'0'.repeat(6)}`
         const beforeAnnotationColorRevision = await readRevision()
-        await annotationColor.evaluate((input) => {
+        await annotationColor.evaluate((input, nextColor) => {
           const valueSetter = Object.getOwnPropertyDescriptor(
             HTMLInputElement.prototype,
             'value',
           )?.set
-          valueSetter?.call(input, '#000000')
+          valueSetter?.call(input, nextColor)
           input.dispatchEvent(new Event('input', { bubbles: true }))
           input.dispatchEvent(new Event('change', { bubbles: true }))
-        })
+        }, testedAnnotationColor)
         await page.waitForFunction((revision) => {
           const label = [...document.querySelectorAll('[data-command-bar] span')]
             .find((element) => /^(版本|Revision) \d+$/.test(element.textContent ?? ''))
@@ -498,9 +550,72 @@ function createToolboxScenes(context) {
         }, beforeAnnotationStrokeRevision, { timeout: 10000 }).catch(() => {
           throw new Error('修改选中标注描边后没有提交文档 revision')
         })
-        if (await annotationColor.inputValue() !== '#000000'
+        if (await annotationColor.inputValue() !== testedAnnotationColor
           || Number(await annotationStroke.inputValue()) !== 14) {
           throw new Error('选中标注的颜色或描边没有同步回工具栏')
+        }
+
+        const beforeAnnotationMove = await readRevision()
+        await page.mouse.move(
+          (annotationStartX + annotationEndX) / 2,
+          (annotationStartY + annotationEndY) / 2,
+        )
+        await page.mouse.down()
+        await page.mouse.move(
+          (annotationStartX + annotationEndX) / 2 + 44,
+          (annotationStartY + annotationEndY) / 2 + 28,
+          { steps: 8 },
+        )
+        if (await readRevision() !== beforeAnnotationMove) {
+          throw new Error('标注拖动过程中提前提交了 revision')
+        }
+        await page.mouse.up()
+        await page.waitForFunction((revision) => {
+          const label = [...document.querySelectorAll('[data-command-bar] span')]
+            .find((element) => /^(版本|Revision) \d+$/.test(element.textContent ?? ''))
+          return Number(label?.textContent?.match(/\d+/)?.[0]) === revision + 1
+        }, beforeAnnotationMove, { timeout: 3000 }).catch(() => {
+          throw new Error('标注无法直接拖动，或松手后没有提交唯一 revision')
+        })
+
+        const beforeArrow = await readRevision()
+        await editor.locator('[data-tool-id="annotation-arrow"]').click()
+        await page.mouse.move(
+          visibleAnnotationBox.x + visibleAnnotationBox.width * 0.24,
+          visibleAnnotationBox.y + visibleAnnotationBox.height * 0.76,
+        )
+        await page.mouse.down()
+        await page.mouse.move(
+          visibleAnnotationBox.x + visibleAnnotationBox.width * 0.76,
+          visibleAnnotationBox.y + visibleAnnotationBox.height * 0.24,
+          { steps: 8 },
+        )
+        await page.mouse.up()
+        await page.waitForFunction((revision) => {
+          const label = [...document.querySelectorAll('[data-command-bar] span')]
+            .find((element) => /^(版本|Revision) \d+$/.test(element.textContent ?? ''))
+          return Number(label?.textContent?.match(/\d+/)?.[0]) === revision + 1
+            && document.querySelector('[data-annotation-editor-overlay]')
+              ?.getAttribute('data-selected-annotation-type') === 'arrow'
+        }, beforeArrow, { timeout: 3000 }).catch(() => {
+          throw new Error('箭头第一次绘制没有立即创建并选中')
+        })
+
+        await page.waitForTimeout(260)
+        const annotationRenderStarts = await page.evaluate(async (afterTimestamp) => {
+          const result = await window.henjiNative.logging.queryLogEvents({
+            date: new Date().toISOString().slice(0, 10),
+            afterTimestamp,
+            level: 'debug',
+            limit: 300,
+          })
+          return result.events.filter((event) => (
+            event.event === 'image_editor_v3.preview.started'
+            || event.event === 'image_editor_v3.viewport_composite.start'
+          )).length
+        }, annotationStartedAt)
+        if (annotationRenderStarts !== 0) {
+          throw new Error(`标注编辑错误触发了 ${annotationRenderStarts} 次底图/模糊重算`)
         }
 
         const addLayer = editor.getByRole('button', { name: /^(添加图层|Add layer)$/i })
@@ -547,6 +662,41 @@ function createToolboxScenes(context) {
         }, blurStartedAt, { timeout: 5000 })
         if (await readRevision() !== beforeBlurRevision + 1) {
           throw new Error('一次模糊滑杆拖动产生了多条历史 revision')
+        }
+
+        const postEffectAnnotationStartedAt = new Date().toISOString()
+        const beforePostEffectStroke = await readRevision()
+        await annotationStroke.evaluate((input) => {
+          const valueSetter = Object.getOwnPropertyDescriptor(
+            HTMLInputElement.prototype,
+            'value',
+          )?.set
+          valueSetter?.call(input, '39')
+          input.dispatchEvent(new Event('input', { bubbles: true }))
+          input.dispatchEvent(new Event('change', { bubbles: true }))
+        })
+        await page.waitForFunction((revision) => {
+          const label = [...document.querySelectorAll('[data-command-bar] span')]
+            .find((element) => /^(版本|Revision) \d+$/.test(element.textContent ?? ''))
+          return Number(label?.textContent?.match(/\d+/)?.[0]) === revision + 1
+        }, beforePostEffectStroke, { timeout: 2000 }).catch(() => {
+          throw new Error('底图有效果时修改箭头描边没有即时提交')
+        })
+        await page.waitForTimeout(260)
+        const postEffectAnnotationRenders = await page.evaluate(async (afterTimestamp) => {
+          const result = await window.henjiNative.logging.queryLogEvents({
+            date: new Date().toISOString().slice(0, 10),
+            afterTimestamp,
+            level: 'debug',
+            limit: 200,
+          })
+          return result.events.filter((event) => (
+            event.event === 'image_editor_v3.preview.started'
+            || event.event === 'image_editor_v3.viewport_composite.start'
+          )).length
+        }, postEffectAnnotationStartedAt)
+        if (postEffectAnnotationRenders !== 0) {
+          throw new Error(`改变箭头描边错误重算了 ${postEffectAnnotationRenders} 次底图效果`)
         }
 
         const beforeCropRevision = await readRevision()

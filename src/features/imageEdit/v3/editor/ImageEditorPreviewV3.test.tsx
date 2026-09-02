@@ -70,6 +70,7 @@ describe('ImageEditorPreviewV3 managed frame ownership', () => {
       viewportZoomBySession: {},
       viewportPanBySession: {},
       annotationSelectionBySession: {},
+      annotationPreviewBySession: {},
     })
     managedPreview.state = {
       result: null,

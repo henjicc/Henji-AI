@@ -1,7 +1,8 @@
 /** @vitest-environment jsdom */
 
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import Konva from 'konva'
 
 import {
   createImageEditAnnotationLayerV3,
@@ -17,6 +18,7 @@ import i18n from '@/i18n/config'
 
 import { useImageEditorInteractionStoreV3, useImageEditorSessionStoreV3 } from '../store'
 import { ImageEditorV3 } from './ImageEditorV3'
+import { installKonvaCanvasTestContext, mockKonvaViewportRect } from './imageEditorKonvaTestUtils'
 import type { ImageEditorV3PreviewRenderer } from './types'
 
 class ResizeObserverStub {
@@ -82,6 +84,7 @@ describe('图片编辑 V3 图层变换交互', () => {
       viewportZoomBySession: {},
       viewportPanBySession: {},
       annotationSelectionBySession: {},
+      annotationPreviewBySession: {},
     })
   })
 
@@ -92,6 +95,8 @@ describe('图片编辑 V3 图层变换交互', () => {
   })
 
   it('move 命中具体标注时保留单对象二次编辑，并只写一条对象历史', async () => {
+    installKonvaCanvasTestContext()
+    mockKonvaViewportRect()
     const annotation = createImageEditAnnotationLayerV3('annotations', '标注')
     annotation.annotations = [{
       id: 'rect', type: 'rect', x: 40, y: 40, width: 160, height: 80,
@@ -103,26 +108,27 @@ describe('图片编辑 V3 图层变换交互', () => {
       onDocumentChange: (next) => changes.push(next),
       onPersistenceChange: (snapshot) => persistence.push(snapshot),
     })
-    const overlay = await waitFor(() => rendered.container.querySelector<SVGSVGElement>(
-      '[data-annotation-editor-overlay]',
-    )) as SVGSVGElement
-    mockViewportRect(overlay)
-    const target = rendered.container.querySelector<SVGGElement>('[data-annotation-id="rect"]')
+    const stage = await waitFor(() => {
+      const current = Konva.stages.find((candidate) => (
+        rendered.container.contains(candidate.container())
+      ))
+      expect(current).toBeTruthy()
+      return current
+    })
+    const target = stage?.find('Rect').find((node) => node.draggable())
     if (!target) throw new Error('测试缺少标注对象')
 
-    fireEvent.pointerDown(target, {
-      pointerId: 1, isPrimary: true, button: 0, clientX: 20, clientY: 20,
-    })
-    fireEvent.pointerUp(overlay, { pointerId: 1, clientX: 20, clientY: 20 })
+    act(() => target.fire('click', { evt: new MouseEvent('click') }, true))
     expect(changes).toHaveLength(0)
-    expect(rendered.container.querySelector('[data-annotation-selection]')).toBeTruthy()
+    expect(rendered.container.querySelector('[data-selected-annotation-type="rect"]')).toBeTruthy()
 
-    fireEvent.pointerDown(target, {
-      pointerId: 2, isPrimary: true, button: 0, clientX: 20, clientY: 20,
+    act(() => {
+      target.position({ x: 140, y: 80 })
+      target.fire('dragend', {
+        target,
+        evt: new MouseEvent('mouseup'),
+      }, true)
     })
-    fireEvent.pointerMove(overlay, { pointerId: 2, clientX: 45, clientY: 30 })
-    expect(changes).toHaveLength(0)
-    fireEvent.pointerUp(overlay, { pointerId: 2, clientX: 45, clientY: 30 })
 
     await waitFor(() => expect(changes).toHaveLength(1))
     const layer = changes[0].layers[0]

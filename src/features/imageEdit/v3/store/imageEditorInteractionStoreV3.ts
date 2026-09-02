@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import type { MarkItem } from '@/core/imageEdit/types'
 
 import {
   clampImageEditorViewportZoomV3,
@@ -16,11 +17,16 @@ export interface ImageEditorAnnotationSelectionV3 {
   annotationId: string
 }
 
+export interface ImageEditorAnnotationPreviewV3 extends ImageEditorAnnotationSelectionV3 {
+  annotation: MarkItem
+}
+
 interface ImageEditorInteractionStoreV3 {
   layerDragBySession: Record<string, ImageEditorLayerDragStateV3 | undefined>
   viewportZoomBySession: Record<string, number | undefined>
   viewportPanBySession: Record<string, ImageEditorViewportPanV3 | undefined>
   annotationSelectionBySession: Record<string, ImageEditorAnnotationSelectionV3 | undefined>
+  annotationPreviewBySession: Record<string, ImageEditorAnnotationPreviewV3 | undefined>
   beginLayerDrag: (sessionId: string, layerId: string) => void
   setLayerDragTarget: (sessionId: string, overLayerId: string | null) => void
   endLayerDrag: (sessionId: string) => void
@@ -34,6 +40,8 @@ interface ImageEditorInteractionStoreV3 {
     sessionId: string,
     selection: ImageEditorAnnotationSelectionV3 | null,
   ) => void
+  previewAnnotation: (sessionId: string, preview: ImageEditorAnnotationPreviewV3) => void
+  clearAnnotationPreview: (sessionId: string) => void
   clearViewport: (sessionId: string) => void
 }
 
@@ -43,6 +51,7 @@ export const useImageEditorInteractionStoreV3 = create<ImageEditorInteractionSto
   viewportZoomBySession: {},
   viewportPanBySession: {},
   annotationSelectionBySession: {},
+  annotationPreviewBySession: {},
 
   beginLayerDrag: (sessionId, layerId) => set((state) => ({
     layerDragBySession: {
@@ -115,31 +124,58 @@ export const useImageEditorInteractionStoreV3 = create<ImageEditorInteractionSto
   selectAnnotation: (sessionId, selection) => set((state) => {
     const current = state.annotationSelectionBySession[sessionId]
     if (!selection) {
-      if (!current) return state
+      const preview = state.annotationPreviewBySession[sessionId]
+      if (!current && !preview) return state
       const { [sessionId]: _removed, ...annotationSelectionBySession } = state.annotationSelectionBySession
-      return { annotationSelectionBySession }
+      const { [sessionId]: _removedPreview, ...annotationPreviewBySession } = state.annotationPreviewBySession
+      return { annotationSelectionBySession, annotationPreviewBySession }
     }
     if (current?.layerId === selection.layerId
       && current.annotationId === selection.annotationId) return state
+    const { [sessionId]: _removedPreview, ...annotationPreviewBySession } = state.annotationPreviewBySession
     return {
       annotationSelectionBySession: {
         ...state.annotationSelectionBySession,
         [sessionId]: selection,
       },
+      annotationPreviewBySession,
     }
+  }),
+
+  previewAnnotation: (sessionId, preview) => set((state) => ({
+    annotationPreviewBySession: {
+      ...state.annotationPreviewBySession,
+      [sessionId]: preview,
+    },
+  })),
+
+  clearAnnotationPreview: (sessionId) => set((state) => {
+    if (!state.annotationPreviewBySession[sessionId]) return state
+    const { [sessionId]: _removed, ...annotationPreviewBySession } = state.annotationPreviewBySession
+    return { annotationPreviewBySession }
   }),
 
   clearViewport: (sessionId) => set((state) => {
     const hasViewport = sessionId in state.viewportZoomBySession
       || sessionId in state.viewportPanBySession
     const hasAnnotation = sessionId in state.annotationSelectionBySession
-    if (!hasViewport && !hasAnnotation) return state
+    const hasAnnotationPreview = sessionId in state.annotationPreviewBySession
+    if (!hasViewport && !hasAnnotation && !hasAnnotationPreview) return state
     const { [sessionId]: _removed, ...viewportZoomBySession } = state.viewportZoomBySession
     const { [sessionId]: _removedPan, ...viewportPanBySession } = state.viewportPanBySession
     const {
       [sessionId]: _removedAnnotation,
       ...annotationSelectionBySession
     } = state.annotationSelectionBySession
-    return { viewportZoomBySession, viewportPanBySession, annotationSelectionBySession }
+    const {
+      [sessionId]: _removedAnnotationPreview,
+      ...annotationPreviewBySession
+    } = state.annotationPreviewBySession
+    return {
+      viewportZoomBySession,
+      viewportPanBySession,
+      annotationSelectionBySession,
+      annotationPreviewBySession,
+    }
   }),
 }))

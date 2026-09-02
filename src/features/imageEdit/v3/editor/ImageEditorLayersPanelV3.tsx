@@ -55,6 +55,17 @@ function getEffectiveSelectedIds(
   })
 }
 
+/** 新效果默认作用于图片内容，不吞掉最上方的标注交互层。 */
+function resolveCreationIndex(
+  layers: readonly ImageEditLayerV3[],
+  choice: ImageEditLayerCreationChoiceV3,
+): number {
+  if (choice.kind !== 'effect' && choice.kind !== 'adjustment') return layers.length
+  let index = layers.length
+  while (index > 0 && layers[index - 1].type === 'annotation') index -= 1
+  return index
+}
+
 function getCreationChoices(
   controller: ImageEditorV3Controller,
   translate: (key: string) => string,
@@ -148,7 +159,7 @@ export function ImageEditorLayersPanelV3({
 
   const addChoice = (choice: ImageEditLayerCreationChoiceV3): void => {
     const layer = createImageEditLayerFromChoiceV3(choice, controller.document.color.workingSpace)
-    controller.addLayer(layer, null, controller.document.layers.length)
+    controller.addLayer(layer, null, resolveCreationIndex(controller.document.layers, choice))
     setSelectedLayerIds(controller.sessionId, [layer.id])
   }
 

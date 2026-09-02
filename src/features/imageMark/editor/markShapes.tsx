@@ -49,6 +49,8 @@ interface MarkShapeNodeProps {
   blurSource?: HTMLCanvasElement | null;
   draggable: boolean;
   listening: boolean;
+  /** 默认沿用旧编辑器的屏幕恒定描边；嵌入 V3 时按文档比例缩放。 */
+  strokeScaleEnabled?: boolean;
   opacity?: number;
   /** 标签正在原位编辑时隐藏已渲染的标签文字 */
   hideLabel?: boolean;
@@ -76,6 +78,7 @@ export function MarkShapeNode({
   blurSource = null,
   draggable,
   listening,
+  strokeScaleEnabled = false,
   opacity = 1,
   hideLabel = false,
   bindRef,
@@ -110,6 +113,7 @@ export function MarkShapeNode({
       imageHeight={imageHeight}
       opacity={opacity}
       listening={listening}
+      strokeScaleEnabled={strokeScaleEnabled}
       bindRef={bindLabelRef}
       onSelect={onSelect}
       onSelectLabel={onSelectLabel}
@@ -133,7 +137,7 @@ export function MarkShapeNode({
           // 透明填充让空心内部可命中,支持从中间拖动整体
           fill="transparent"
           opacity={opacity}
-          strokeScaleEnabled={false}
+          strokeScaleEnabled={strokeScaleEnabled}
           hitStrokeWidth={Math.max(item.lineWidth, 12)}
           {...commonHandlers}
         />
@@ -155,7 +159,7 @@ export function MarkShapeNode({
           strokeWidth={item.lineWidth}
           fill="transparent"
           opacity={opacity}
-          strokeScaleEnabled={false}
+          strokeScaleEnabled={strokeScaleEnabled}
           hitStrokeWidth={Math.max(item.lineWidth, 12)}
           {...commonHandlers}
         />
@@ -211,7 +215,7 @@ export function MarkShapeNode({
             bezier={curved}
             stroke={item.stroke}
             strokeWidth={item.lineWidth}
-            strokeScaleEnabled={false}
+            strokeScaleEnabled={strokeScaleEnabled}
             lineCap="round"
             lineJoin="round"
             listening={false}
@@ -224,7 +228,7 @@ export function MarkShapeNode({
           fill={item.stroke}
           stroke={item.stroke}
           strokeWidth={item.lineWidth}
-          strokeScaleEnabled={false}
+          strokeScaleEnabled={strokeScaleEnabled}
           opacity={opacity}
           listening={false}
         />
@@ -244,7 +248,7 @@ export function MarkShapeNode({
         lineJoin="round"
         lineCap="round"
         opacity={opacity}
-        strokeScaleEnabled={false}
+        strokeScaleEnabled={strokeScaleEnabled}
         hitStrokeWidth={Math.max(item.lineWidth, 12)}
         {...commonHandlers}
       />

@@ -157,6 +157,11 @@ export function useImageEditorLayerMoveGestureV3(
     // 具体标注对象仍由 annotation overlay 选中和二次编辑；
     // 只在画布/非对象区域拖动当前单选图层。
     if (event.target instanceof Element && event.target.closest('[data-annotation-id]')) return
+    if (
+      selectedLocation?.layer.type === 'annotation'
+      && event.target instanceof Element
+      && event.target.closest('[data-annotation-editor-overlay]')
+    ) return
     const layerId = selectedLayerIds.length === 1 ? selectedLayerIds[0] : null
     if (!layerId) return
     const location = findImageEditLayerLocationV3(controller.document.layers, layerId)

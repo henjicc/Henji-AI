@@ -13,6 +13,8 @@ const VIEWPORT_REASON = '视口缩放与平移只决定当前窗口如何查看�
   + '命令历史或导出结果；助手读写实体不依赖视口坐标。'
 const SELECTION_REASON = '活动标注是控制点与选框的瞬态选中态，不是文档内容；助手使用'
   + ' image_mark.annotation 稳定引用直接读写标注，不需要先选中。'
+const PREVIEW_REASON = '标注滑杆拖动时的前台矢量预览只服务当前手势；松手后由单条 annotation.update'
+  + ' 命令写入文档和历史，助手不操作这份短生命周期副本。'
 
 export const IMAGE_EDITOR_INTERACTION_STORE_LEDGER_V3: ApplicationStoreActionLedger<ActionName> = {
   storeId: 'imageEditorInteractionStoreV3',
@@ -25,6 +27,8 @@ export const IMAGE_EDITOR_INTERACTION_STORE_LEDGER_V3: ApplicationStoreActionLed
     setViewportPan: { kind: 'excluded', category: 'view_state', reason: VIEWPORT_REASON },
     setViewportTransform: { kind: 'excluded', category: 'view_state', reason: VIEWPORT_REASON },
     selectAnnotation: { kind: 'excluded', category: 'transient_selection', reason: SELECTION_REASON },
+    previewAnnotation: { kind: 'excluded', category: 'transient_selection', reason: PREVIEW_REASON },
+    clearAnnotationPreview: { kind: 'excluded', category: 'transient_selection', reason: PREVIEW_REASON },
     clearViewport: { kind: 'excluded', category: 'view_state', reason: VIEWPORT_REASON },
   },
 }

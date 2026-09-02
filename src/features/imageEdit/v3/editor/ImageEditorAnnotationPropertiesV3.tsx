@@ -6,6 +6,7 @@ import { UiButton, UiFormRow, UiGroup, UiInput, UiRangeInput, UiTextArea } from 
 import type { ImageEditAnnotationLayerV3 } from '@/core/imageEdit/v3/layerTypes'
 import { useImageEditorInteractionStoreV3 } from '../store'
 import type { ImageEditorV3Controller } from './types'
+import { useImageEditorAnnotationPreviewV3 } from './useImageEditorAnnotationPreviewV3'
 
 export function ImageEditorAnnotationPropertiesV3({
   controller,
@@ -21,9 +22,15 @@ export function ImageEditorAnnotationPropertiesV3({
     (state) => state.annotationSelectionBySession[controller.sessionId],
   )
   const selectAnnotation = useImageEditorInteractionStoreV3((state) => state.selectAnnotation)
-  const annotation = selection?.layerId === layer.id
+  const committedAnnotation = selection?.layerId === layer.id
     ? layer.annotations.find(({ id }) => id === selection.annotationId)
     : undefined
+  const annotationPreview = useImageEditorAnnotationPreviewV3(
+    controller,
+    selection?.layerId ?? null,
+    committedAnnotation ?? null,
+  )
+  const annotation = annotationPreview.annotation ?? undefined
   const [text, setText] = useState('')
   const cancelBlurRef = useRef(false)
 
@@ -101,13 +108,14 @@ export function ImageEditorAnnotationPropertiesV3({
             aria-label={t('imageEditor.v3.toolSettings.color')}
             disabled={locked}
             value={'stroke' in annotation ? annotation.stroke : annotation.color}
-            onChange={(event) => controller.updateAnnotation(
-              layer.id,
-              annotation.id,
-              'stroke' in annotation
-                ? { ...annotation, stroke: event.currentTarget.value }
-                : { ...annotation, color: event.currentTarget.value },
-            )}
+            onChange={(event) => {
+              annotationPreview.update(
+                'stroke' in annotation
+                  ? { ...annotation, stroke: event.currentTarget.value }
+                  : { ...annotation, color: event.currentTarget.value },
+              )
+              queueMicrotask(annotationPreview.commit)
+            }}
           />
         </UiFormRow>
       ) : null}
@@ -119,11 +127,18 @@ export function ImageEditorAnnotationPropertiesV3({
             max={64}
             disabled={locked}
             value={annotation.lineWidth}
-            onChange={(event) => controller.updateAnnotation(
-              layer.id,
-              annotation.id,
-              { ...annotation, lineWidth: Number(event.currentTarget.value) },
-            )}
+            onChange={(event) => annotationPreview.update({
+              ...annotation,
+              lineWidth: Number(event.currentTarget.value),
+            })}
+            onPointerUp={annotationPreview.commit}
+            onPointerCancel={annotationPreview.cancel}
+            onBlur={annotationPreview.commit}
+            onKeyUp={(event) => {
+              if (event.key.startsWith('Arrow') || event.key === 'Home' || event.key === 'End') {
+                annotationPreview.commit()
+              }
+            }}
           />
         </UiFormRow>
       ) : null}
@@ -135,11 +150,18 @@ export function ImageEditorAnnotationPropertiesV3({
             max={256}
             disabled={locked}
             value={annotation.fontSize}
-            onChange={(event) => controller.updateAnnotation(
-              layer.id,
-              annotation.id,
-              { ...annotation, fontSize: Number(event.currentTarget.value) },
-            )}
+            onChange={(event) => annotationPreview.update({
+              ...annotation,
+              fontSize: Number(event.currentTarget.value),
+            })}
+            onPointerUp={annotationPreview.commit}
+            onPointerCancel={annotationPreview.cancel}
+            onBlur={annotationPreview.commit}
+            onKeyUp={(event) => {
+              if (event.key.startsWith('Arrow') || event.key === 'Home' || event.key === 'End') {
+                annotationPreview.commit()
+              }
+            }}
           />
         </UiFormRow>
       ) : null}

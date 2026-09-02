@@ -86,6 +86,7 @@ describe('ImageEditorRasterBrushOverlayV3', () => {
       viewportZoomBySession: {},
       viewportPanBySession: {},
       annotationSelectionBySession: {},
+      annotationPreviewBySession: {},
     })
     vi.stubGlobal('ImageData', ImageDataStub)
     vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({

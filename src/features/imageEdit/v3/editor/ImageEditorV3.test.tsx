@@ -1,7 +1,7 @@
 /** @vitest-environment jsdom */
 
 import { useState } from 'react'
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import i18n from '@/i18n/config'
@@ -21,6 +21,7 @@ import {
   BLACK_HEX,
 } from '@/core/theme/colorTokens'
 import { ImageEditorV3 } from './ImageEditorV3'
+import { installKonvaCanvasTestContext, mockKonvaViewportRect } from './imageEditorKonvaTestUtils'
 import type { ImageEditorV3PreviewRenderer } from './types'
 import { useImageEditorInteractionStoreV3, useImageEditorSessionStoreV3 } from '../store'
 
@@ -58,6 +59,18 @@ function renderEditor(
       />
     </div>,
   )
+}
+
+function selectAnnotationInEditor(layerId: string, annotationId: string): void {
+  const sessionId = Object.keys(useImageEditorSessionStoreV3.getState().sessions)[0]
+  if (!sessionId) throw new Error('测试缺少图片编辑会话')
+  act(() => {
+    useImageEditorSessionStoreV3.getState().setSelectedLayerIds(sessionId, [layerId])
+    useImageEditorInteractionStoreV3.getState().selectAnnotation(sessionId, {
+      layerId,
+      annotationId,
+    })
+  })
 }
 
 const interactionPreview: ImageEditorV3PreviewRenderer = () => ({
@@ -101,6 +114,7 @@ describe('ImageEditorV3 professional shell', () => {
       viewportZoomBySession: {},
       viewportPanBySession: {},
       annotationSelectionBySession: {},
+      annotationPreviewBySession: {},
     })
   })
 
@@ -424,7 +438,7 @@ describe('ImageEditorV3 professional shell', () => {
     )).toEqual(['layers', 'properties'])
   })
 
-  it('标注位于模糊下方时静止 overlay 只保留透明命中区，不清晰重画标注', async () => {
+  it('标注位于模糊下方时不进入清晰实时层，交由基础预览统一合成', async () => {
     const annotation = createImageEditAnnotationLayerV3('annotations', '标注')
     annotation.annotations = [{
       id: 'under-blur', type: 'rect', x: 20, y: 20, width: 100, height: 60,
@@ -438,36 +452,41 @@ describe('ImageEditorV3 professional shell', () => {
     )
     const rendered = renderEditor(createDocument([annotation, blur]))
 
-    await waitFor(() => expect(
-      rendered.container.querySelector('[data-annotation-id="under-blur"]'),
-    ).toBeTruthy())
-    expect(rendered.container.querySelector('[data-annotation-draft]')).toBeNull()
-    expect(rendered.container.querySelector('[data-annotation-selection]')).toBeNull()
-    const hit = rendered.container.querySelector('[data-annotation-id="under-blur"] rect')
-    expect(hit?.getAttribute('stroke')).toBe('transparent')
+    await waitFor(() => expect(rendered.container.querySelector('[data-image-editor-v3]')).toBeTruthy())
+    expect(rendered.container.querySelector('[data-annotation-editor-overlay]')).toBeNull()
   })
 
   it('标注绘制过程保持瞬态并在抬笔时用单条命令创建标注图层', async () => {
+    installKonvaCanvasTestContext()
+    mockKonvaViewportRect()
     const changes: ImageEditDocumentV3[] = []
     const rendered = renderEditor(
       createDocument([createImageEditRasterLayerV3('raster', '底图')]),
       { onDocumentChange: (next) => changes.push(next), previewRenderer: interactionPreview },
     )
     fireEvent.click(screen.getByRole('button', { name: '矩形标注' }))
-    const overlay = await waitFor(() => rendered.container.querySelector<SVGSVGElement>(
+    const overlay = await waitFor(() => rendered.container.querySelector<HTMLDivElement>(
       '[data-annotation-editor-overlay]',
     ))
     expect(overlay).toBeTruthy()
-    vi.spyOn(overlay as SVGSVGElement, 'getBoundingClientRect').mockReturnValue({
-      x: 0, y: 0, left: 0, top: 0, right: 400, bottom: 225, width: 400, height: 225,
-      toJSON: () => ({}),
-    })
+    expect(overlay?.getBoundingClientRect().width).toBe(400)
+    await waitFor(() => expect(overlay?.querySelector('canvas')).toBeTruthy())
+    const canvas = overlay?.querySelector<HTMLCanvasElement>('canvas')
+    if (!canvas) throw new Error('测试缺少 Konva 标注画布')
+    const stageContent = canvas.parentElement
+    if (!stageContent) throw new Error('测试缺少 Konva 事件容器')
 
-    fireEvent.pointerDown(overlay as SVGSVGElement, { button: 0, clientX: 10, clientY: 20 })
-    fireEvent.pointerMove(overlay as SVGSVGElement, { clientX: 110, clientY: 70 })
+    fireEvent.pointerDown(overlay as HTMLDivElement, {
+      button: 0, buttons: 1, pointerId: 7, clientX: 10, clientY: 20,
+    })
+    fireEvent.pointerMove(overlay as HTMLDivElement, {
+      buttons: 1, pointerId: 7, clientX: 110, clientY: 70,
+    })
     expect(changes).toHaveLength(0)
-    expect(rendered.container.querySelector('[data-annotation-id]')).toBeTruthy()
-    fireEvent.pointerUp(overlay as SVGSVGElement, { clientX: 110, clientY: 70 })
+    expect(overlay?.getAttribute('data-annotation-drawing')).toBe('true')
+    fireEvent.pointerUp(overlay as HTMLDivElement, {
+      button: 0, pointerId: 7, clientX: 110, clientY: 70,
+    })
 
     await waitFor(() => expect(changes).toHaveLength(1))
     expect(changes[0].revision).toBe(1)
@@ -485,8 +504,9 @@ describe('ImageEditorV3 professional shell', () => {
     }
 
     fireEvent.click(screen.getByRole('button', { name: '箭头标注' }))
-    fireEvent.pointerDown(overlay as SVGSVGElement, { button: 0, clientX: 20, clientY: 30 })
-    fireEvent.pointerUp(overlay as SVGSVGElement, { clientX: 80, clientY: 90 })
+    fireEvent.mouseDown(stageContent, { button: 0, clientX: 20, clientY: 30 })
+    fireEvent.mouseMove(stageContent, { buttons: 1, clientX: 80, clientY: 90 })
+    fireEvent.mouseUp(stageContent, { button: 0, clientX: 80, clientY: 90 })
     await waitFor(() => expect(changes).toHaveLength(2))
     expect(changes[1].layers).toHaveLength(2)
     const reused = changes[1].layers.at(-1)
@@ -500,18 +520,12 @@ describe('ImageEditorV3 professional shell', () => {
       color: ANNOTATION_DEFAULT_TEXT_HEX, fontSize: 32,
     }]
     const changes: ImageEditDocumentV3[] = []
-    const rendered = renderEditor(
+    renderEditor(
       createDocument([annotation]),
       { onDocumentChange: (next) => changes.push(next), previewRenderer: interactionPreview },
     )
-    const target = await waitFor(() => rendered.container.querySelector<SVGGElement>(
-      '[data-annotation-id="text"]',
-    ))
-    const overlay = rendered.container.querySelector<SVGSVGElement>(
-      '[data-annotation-editor-overlay]',
-    ) as SVGSVGElement
-    fireEvent.pointerDown(target as SVGGElement, { button: 0, clientX: 25, clientY: 25 })
-    fireEvent.pointerUp(overlay, { clientX: 25, clientY: 25 })
+    await waitFor(() => expect(Object.keys(useImageEditorSessionStoreV3.getState().sessions)).toHaveLength(1))
+    selectAnnotationInEditor('annotations', 'text')
 
     const field = await screen.findByRole('textbox', { name: '文字内容' })
     fireEvent.change(field, { target: { value: '修改后的文字' } })
@@ -540,10 +554,8 @@ describe('ImageEditorV3 professional shell', () => {
         onDocumentChange={(next) => changes.push(next)}
       />,
     )
-    const target = await waitFor(() => rendered.container.querySelector<SVGGElement>(
-      '[data-annotation-id="selected-rect"]',
-    ))
-    fireEvent.pointerDown(target as SVGGElement, { button: 0, clientX: 25, clientY: 25 })
+    await waitFor(() => expect(Object.keys(useImageEditorSessionStoreV3.getState().sessions)).toHaveLength(1))
+    selectAnnotationInEditor('annotations', 'selected-rect')
 
     const contextBar = await waitFor(() => rendered.container.querySelector<HTMLElement>(
       '[data-context-bar]',

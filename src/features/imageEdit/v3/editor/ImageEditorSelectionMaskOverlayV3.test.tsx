@@ -83,6 +83,7 @@ describe('ImageEditorSelectionMaskOverlayV3', () => {
       viewportZoomBySession: {},
       viewportPanBySession: {},
       annotationSelectionBySession: {},
+      annotationPreviewBySession: {},
     })
     bridge.persistBrushTiles.mockReset().mockImplementation(async ({ tiles }) => ({
       tiles: tiles.map((tile: { tileKey: string }) => ({
