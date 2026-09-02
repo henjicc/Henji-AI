@@ -125,22 +125,56 @@ async function resizeRawLevel(
   return runSharpOperation(pipeline, signal, () => pipeline.toBuffer())
 }
 
+async function decodeRawBaseLevelFromSource(
+  options: ReadFastSourceProxyOptions,
+  sharp: Awaited<ReturnType<typeof loadSharp>>,
+  level: SourcePyramidLevel,
+): Promise<Buffer> {
+  const pipeline = sharp(options.sourcePath, {
+    limitInputPixels: options.maximumInputPixels,
+    sequentialRead: true,
+    failOn: 'warning',
+  }).autoOrient().resize({
+    width: level.width,
+    height: level.height,
+    fit: 'fill',
+    kernel: 'lanczos3',
+    fastShrinkOnLoad: true,
+  }).toColourspace('srgb').ensureAlpha().raw({ depth: 'uchar' })
+  const { data, info } = await runSharpOperation(
+    pipeline,
+    options.signal,
+    () => pipeline.toBuffer({ resolveWithObject: true }),
+  )
+  if (info.width !== level.width
+    || info.height !== level.height
+    || info.channels !== 4
+    || data.byteLength !== level.width * level.height * 4) {
+    throw new Error('Sharp returned an incompatible proxy pyramid base level')
+  }
+  return data
+}
+
 async function generateSeedChain(
   options: ReadFastSourceProxyOptions,
   sharp: Awaited<ReturnType<typeof loadSharp>>,
   plan: FastProxyPyramidSeedPlan,
+  seedComplete: boolean,
 ): Promise<Buffer> {
   const base = plan.levels[0]
-  const basePixels = await options.pyramid!.readBoundedRawLevel({
-    resourceId: options.resourceId,
-    level: base,
-    bitDepth: 8,
-    maximumBytes: MAX_FAST_PROXY_BASE_LEVEL_BYTES,
-    signal: options.signal,
-  })
+  const basePixels = seedComplete
+    ? await options.pyramid!.readBoundedRawLevel({
+        resourceId: options.resourceId,
+        level: base,
+        bitDepth: 8,
+        maximumBytes: MAX_FAST_PROXY_BASE_LEVEL_BYTES,
+        signal: options.signal,
+      })
+    : await decodeRawBaseLevelFromSource(options, sharp, base)
   if (basePixels.byteLength !== plan.baseByteLength) {
     throw new Error('Sharp returned an incompatible proxy pyramid base level')
   }
+  if (seedComplete) return basePixels
   let currentPixels = basePixels
   let publishedTiles = 0
   for (let index = 0; index < plan.levels.length; index += 1) {
@@ -236,7 +270,7 @@ export async function readFastSourceProxy(
   }
   if (seedPlan && (!seedComplete || !cached)) {
     try {
-      basePixels = await generateSeedChain(options, sharp, seedPlan)
+      basePixels = await generateSeedChain(options, sharp, seedPlan, seedComplete)
     } catch (error) {
       throwIfImageSourceAborted(options.signal)
       logger.warn('快速代理建立粗粒度瓦片失败，回退为按需源解码', {

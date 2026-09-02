@@ -100,7 +100,7 @@ describe('ImageEditorRenderSessionV3', () => {
     vi.restoreAllMocks()
   })
 
-  it('先建立当前 generation 的完整粗 mip，再调度目标 mip', async () => {
+  it('并行调度当前可见区草稿与目标，不再等待整图粗 mip', async () => {
     const requests: ImageEditorViewportCompositeRequestV3[] = []
     const completions: Array<ReturnType<typeof deferred<ImageEditorManagedViewportCompositeV3>>> = []
     const client = {
@@ -136,16 +136,20 @@ describe('ImageEditorRenderSessionV3', () => {
       resourceDescriptors: [],
     })
 
-    expect(requests).toHaveLength(1)
-    expect(requests[0]).toMatchObject({ coverage: 'document', preferredMip: 1, quality: 'draft' })
-    completions[0]?.resolve(result(requests[0]))
-    await Promise.resolve()
-    await vi.advanceTimersByTimeAsync(16)
     expect(requests).toHaveLength(2)
-    expect(requests[1]).toMatchObject({ coverage: 'viewport', viewportKey: 'viewport-1' })
+    const draftRequest = requests.find((request) => request.phase === 'coarse')
+    const targetRequest = requests.find((request) => request.phase === 'target')
+    expect(draftRequest).toMatchObject({
+      coverage: 'viewport', preferredMip: 2, quality: 'draft',
+      overscanViewports: 0, forwardPrefetchViewports: 0,
+    })
+    expect(targetRequest).toMatchObject({
+      coverage: 'viewport', viewportKey: 'viewport-1',
+      overscanViewports: 0, forwardPrefetchViewports: 0,
+    })
     const drawImage = vi.mocked(front.getContext('2d')!.drawImage)
     const drawsBeforeTile = drawImage.mock.calls.length
-    requests[1]?.onTileReady?.({
+    targetRequest?.onTileReady?.({
       renderGeneration: 1,
       cameraSequence: 1,
       geometryHash: 'geometry-a',
@@ -160,11 +164,27 @@ describe('ImageEditorRenderSessionV3', () => {
     })
     expect(targetMipCoverage).toBeGreaterThan(0)
     expect(drawImage).toHaveBeenCalledTimes(drawsBeforeTile)
+    if (!targetRequest || !draftRequest) throw new Error('缺少并行显示请求')
+    const targetIndex = requests.indexOf(targetRequest)
+    const draftIndex = requests.indexOf(draftRequest)
+    const releaseLateDraft = vi.fn()
+    completions[targetIndex]?.resolve(result(targetRequest))
+    await vi.advanceTimersByTimeAsync(0)
+    expect(front.dataset.renderGeneration).toBe('1')
+    expect(requests.find((request) => (
+      request.phase === 'coarse' && request.coverage === 'document'
+    ))).toMatchObject({
+      viewportKey: 'backdrop:1', preferredMip: 1, quality: 'draft',
+      overscanViewports: 0, forwardPrefetchViewports: 0,
+    })
+    completions[draftIndex]?.resolve(result(draftRequest, releaseLateDraft))
+    await vi.advanceTimersByTimeAsync(0)
+    expect(releaseLateDraft).toHaveBeenCalledOnce()
     unsubscribe()
     session.dispose()
   })
 
-  it('新 generation 粗略覆盖完成前保留旧帧，完成后才原子晋升', async () => {
+  it('新 generation 的可见草稿完成前保留旧帧，完成后才整帧晋升', async () => {
     const requests: ImageEditorViewportCompositeRequestV3[] = []
     const completions: Array<ReturnType<typeof deferred<ImageEditorManagedViewportCompositeV3>>> = []
     const client = {
@@ -189,8 +209,10 @@ describe('ImageEditorRenderSessionV3', () => {
       document: documentV3, renderGeneration: 1, geometryHash: 'geometry-a',
       quality: 'stable', resourceDescriptors: [],
     })
+    const firstTarget = requests.find((request) => request.phase === 'target')
+    if (!firstTarget) throw new Error('缺少第一代目标请求')
     const releaseFirst = vi.fn()
-    completions[0]?.resolve(result(requests[0], releaseFirst))
+    completions[requests.indexOf(firstTarget)]?.resolve(result(firstTarget, releaseFirst))
     await Promise.resolve()
     expect(front.dataset.renderGeneration).toBe('1')
 
@@ -200,14 +222,18 @@ describe('ImageEditorRenderSessionV3', () => {
     })
     expect(front.dataset.renderGeneration).toBe('1')
     expect(releaseFirst).not.toHaveBeenCalled()
-    completions[1]?.resolve(result(requests[1]))
+    const secondDraft = requests.find((request) => (
+      request.renderGeneration === 2 && request.phase === 'coarse'
+    ))
+    if (!secondDraft) throw new Error('缺少第二代草稿请求')
+    completions[requests.indexOf(secondDraft)]?.resolve(result(secondDraft))
     await Promise.resolve()
     expect(front.dataset.renderGeneration).toBe('2')
-    expect(releaseFirst).toHaveBeenCalledOnce()
+    expect(releaseFirst).not.toHaveBeenCalled()
     session.dispose()
   })
 
-  it('新 generation 的粗略帧不覆盖上一张已经完整的稳定帧', async () => {
+  it('新 generation 草稿整帧替换旧画面，清晰目标随后原子接管', async () => {
     const requests: ImageEditorViewportCompositeRequestV3[] = []
     const completions: Array<ReturnType<typeof deferred<ImageEditorManagedViewportCompositeV3>>> = []
     const client = {
@@ -232,10 +258,9 @@ describe('ImageEditorRenderSessionV3', () => {
       document: original, renderGeneration: 1, geometryHash: 'geometry-a',
       quality: 'stable', resourceDescriptors: [],
     })
-    completions[0]?.resolve(result(requests[0]))
-    await Promise.resolve()
-    await vi.advanceTimersByTimeAsync(16)
-    completions[1]?.resolve(result(requests[1]))
+    const firstTarget = requests.find((request) => request.phase === 'target')
+    if (!firstTarget) throw new Error('缺少第一代目标请求')
+    completions[requests.indexOf(firstTarget)]?.resolve(result(firstTarget))
     await Promise.resolve()
     expect(front.dataset.renderGeneration).toBe('1')
 
@@ -243,18 +268,24 @@ describe('ImageEditorRenderSessionV3', () => {
       document: { ...original, revision: 1 }, renderGeneration: 2, geometryHash: 'geometry-a',
       quality: 'draft', resourceDescriptors: [],
     })
-    completions[2]?.resolve(result(requests[2]))
+    const secondDraft = requests.find((request) => (
+      request.renderGeneration === 2 && request.phase === 'coarse'
+    ))
+    const secondTarget = requests.find((request) => (
+      request.renderGeneration === 2 && request.phase === 'target'
+    ))
+    if (!secondDraft || !secondTarget) throw new Error('缺少第二代并行请求')
+    completions[requests.indexOf(secondDraft)]?.resolve(result(secondDraft))
     await Promise.resolve()
-    expect(front.dataset.renderGeneration).toBe('1')
+    expect(front.dataset.renderGeneration).toBe('2')
 
-    await vi.advanceTimersByTimeAsync(16)
-    completions[3]?.resolve(result(requests[3]))
+    completions[requests.indexOf(secondTarget)]?.resolve(result(secondTarget))
     await Promise.resolve()
     expect(front.dataset.renderGeneration).toBe('2')
     session.dispose()
   })
 
-  it('全局效果严格按粗略覆盖、共享分析、目标视口的顺序调度', async () => {
+  it('全局效果并行准备可见草稿与共享分析，分析完成后再启动目标', async () => {
     const requests: ImageEditorViewportCompositeRequestV3[] = []
     const completions: Array<ReturnType<typeof deferred<ImageEditorManagedViewportCompositeV3>>> = []
     const client = {
@@ -294,23 +325,30 @@ describe('ImageEditorRenderSessionV3', () => {
       resourceDescriptors: [],
     })
 
-    completions[0]?.resolve(result(requests[0]))
-    await Promise.resolve()
     expect(requests).toHaveLength(2)
-    expect(requests[1]).toMatchObject({
+    const draftRequest = requests.find((request) => request.phase === 'coarse')
+    const analysisRequest = requests.find((request) => request.phase === 'analysis')
+    expect(draftRequest).toMatchObject({
+      coverage: 'viewport', preferredMip: 2, quality: 'draft',
+    })
+    expect(analysisRequest).toMatchObject({
       coverage: 'document', preferredMip: 2, analysisRequested: true,
     })
     await vi.advanceTimersByTimeAsync(32)
     expect(requests).toHaveLength(2)
 
-    completions[1]?.resolve(result(requests[1]))
+    if (!draftRequest || !analysisRequest) throw new Error('缺少全局效果并行请求')
+    completions[requests.indexOf(draftRequest)]?.resolve(result(draftRequest))
     await Promise.resolve()
-    await vi.advanceTimersByTimeAsync(16)
+    expect(requests).toHaveLength(2)
+    completions[requests.indexOf(analysisRequest)]?.resolve(result(analysisRequest))
+    await Promise.resolve()
     expect(requests).toHaveLength(3)
-    expect(requests[2]).toMatchObject({
+    const targetRequest = requests.find((request) => request.phase === 'target')
+    expect(targetRequest).toMatchObject({
       coverage: 'viewport', viewportKey: 'viewport-1', preferredMip: 2,
     })
-    expect(requests[2]?.analysisRequested).not.toBe(true)
+    expect(targetRequest?.analysisRequested).not.toBe(true)
     session.dispose()
   })
 
@@ -350,7 +388,9 @@ describe('ImageEditorRenderSessionV3', () => {
       document: original, renderGeneration: 1, geometryHash: 'geometry-original',
       quality: 'stable', resourceDescriptors: [],
     })
-    completions[0]?.resolve(result(requests[0]))
+    const firstTarget = requests.find((request) => request.phase === 'target')
+    if (!firstTarget) throw new Error('缺少裁剪前目标请求')
+    completions[requests.indexOf(firstTarget)]?.resolve(result(firstTarget))
     await Promise.resolve()
     setTransform.mockClear()
 
@@ -367,7 +407,11 @@ describe('ImageEditorRenderSessionV3', () => {
     expect(front.dataset.renderGeneration).toBe('1')
     expect(front.dataset.geometryHash).toBe('geometry-cropped')
     expect(setTransform).toHaveBeenCalledWith(0.5, 0, 0, 0.5, -100, -50)
-    expect(completions).toHaveLength(2)
+    expect(completions).toHaveLength(5)
+    expect(requests.filter((request) => request.renderGeneration === 2)).toEqual([
+      expect.objectContaining({ phase: 'coarse', coverage: 'viewport' }),
+      expect.objectContaining({ phase: 'target', coverage: 'viewport' }),
+    ])
     session.dispose()
   })
 

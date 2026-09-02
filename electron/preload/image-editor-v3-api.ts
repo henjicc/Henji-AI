@@ -27,6 +27,7 @@ function readSourceTilesStream(
   request: Parameters<NonNullable<ImageEditorV3Platform['readSourceTiles']>>[0],
   postMessage: NativePostMessage,
 ): Promise<{ tiles: ImageEditorV3SourceTile[] }> {
+  const { onTile, ...payload } = request
   return new Promise((resolve, reject) => {
     const MessageChannelConstructor = (globalThis as unknown as {
       MessageChannel: new () => PreloadMessageChannelV3
@@ -51,6 +52,12 @@ function readSourceTilesStream(
           return
         }
         tiles[message.index] = message.tile
+        try {
+          onTile?.({ index: message.index, tile: message.tile })
+        } catch (error) {
+          finish(() => reject(error instanceof Error ? error : new Error(String(error))))
+          return
+        }
         channel.port1.postMessage({ type: 'credit', count: 1 })
         return
       }
@@ -69,7 +76,7 @@ function readSourceTilesStream(
     channel.port1.onmessageerror = () => finish(() => reject(new Error('图片编辑瓦片流消息损坏')))
     channel.port1.start()
     try {
-      postMessage(TILE_STREAM_CHANNEL, request, [channel.port2])
+      postMessage(TILE_STREAM_CHANNEL, payload, [channel.port2])
       channel.port1.postMessage({ type: 'credit', count: TILE_STREAM_CREDITS })
     } catch (error) {
       finish(() => reject(error instanceof Error ? error : new Error(String(error))))
@@ -95,9 +102,18 @@ export function createImageEditorV3Api(
     prewarmSourcePyramid: (request) => nativeInvoke('imageEditorV3:source:pyramidPrewarm', request),
     readFastProxy: (request) => nativeInvoke('imageEditorV3:source:fastProxy', request),
     readSourceTile: (request) => nativeInvoke('imageEditorV3:source:tile', request),
-    readSourceTiles: (request) => nativePostMessage
-      ? readSourceTilesStream(request, nativePostMessage)
-      : nativeInvoke('imageEditorV3:source:tiles', request),
+    readSourceTiles: (request) => {
+      if (nativePostMessage) return readSourceTilesStream(request, nativePostMessage)
+      const { onTile, ...payload } = request
+      const result = nativeInvoke<{ tiles: ImageEditorV3SourceTile[] }>(
+        'imageEditorV3:source:tiles', payload,
+      )
+      if (!onTile) return result
+      return result.then((completed) => {
+        completed.tiles.forEach((tile, index) => onTile({ index, tile }))
+        return completed
+      })
+    },
     persistBrushTiles: (request) => nativeInvoke('imageEditorV3:brushTiles:persist', request),
     readBrushTiles: (request) => nativeInvoke('imageEditorV3:brushTiles:read', request),
     openPackage: (request) => nativeInvoke('imageEditorV3:package:open', request),

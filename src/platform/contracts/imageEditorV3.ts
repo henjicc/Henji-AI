@@ -136,6 +136,11 @@ export interface ImageEditorV3SourceTileBatchItem {
   priority: number
 }
 
+export interface ImageEditorV3SourceTileBatchProgress {
+  index: number
+  tile: ImageEditorV3SourceTile
+}
+
 export type ImageEditorV3SourceTileStreamEvent =
   | { type: 'tile'; index: number; tile: ImageEditorV3SourceTile }
   | { type: 'complete'; tileCount: number }
@@ -337,6 +342,8 @@ export interface ImageEditorV3Platform {
   readSourceTiles?(request: {
     requestId: string
     tiles: ImageEditorV3SourceTileBatchItem[]
+    /** 仅存在于渲染层 PAL；preload 不会把函数发送到主进程。 */
+    onTile?(progress: ImageEditorV3SourceTileBatchProgress): void
   }): Promise<{ tiles: ImageEditorV3SourceTile[] }>
   persistBrushTiles(request: {
     requestId: string

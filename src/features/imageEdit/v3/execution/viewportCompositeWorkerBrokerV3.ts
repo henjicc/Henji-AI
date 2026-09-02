@@ -86,13 +86,10 @@ export class ImageEditorViewportCompositeWorkerBrokerV3 {
 
   retire(port: VirtualViewportCompositeWorkerPortV3): void {
     if (!this.ports.delete(port)) return
-    const hadActiveRequest = [...this.ownerByRequestId.values()].includes(port)
     this.cancelOwnedRequests(port)
-    if (hadActiveRequest) {
-      this.resetWorker('共享视口 Worker 取消超时，已重建合成宿主')
-    } else if (this.ports.size === 0) {
-      this.closeWorker()
-    }
+    // 逻辑取消已从 owner 表移除该 port，迟到瓦片会被关闭且绝不会呈现。
+    // 一个虚拟通道的 50ms 超时不能终止其他 session 共用的物理 Worker。
+    if (this.ports.size === 0) this.closeWorker()
   }
 
   private ensureWorker(): ImageEditorViewportCompositeWorkerPortV3 {

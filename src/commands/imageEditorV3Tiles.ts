@@ -9,6 +9,7 @@ export function readImageEditorV3SourceTiles(
   request: {
     requestId: string
     tiles: Parameters<NonNullable<ImageEditorV3Platform['readSourceTiles']>>[0]['tiles']
+    onTile?: Parameters<NonNullable<ImageEditorV3Platform['readSourceTiles']>>[0]['onTile']
   },
   signal?: AbortSignal,
 ): Promise<{ tiles: Awaited<ReturnType<ImageEditorV3Platform['readSourceTile']>>[] }> {
@@ -46,6 +47,7 @@ export function readImageEditorV3SourceTiles(
         halo: tile.halo,
         bitDepth: tile.bitDepth,
       }, signal)
+      request.onTile?.({ index, tile: tiles[index] })
     }
   }
   return Promise.all(Array.from(

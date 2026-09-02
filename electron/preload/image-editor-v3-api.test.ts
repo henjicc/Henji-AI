@@ -49,18 +49,22 @@ describe('图片编辑 V3 preload 契约', () => {
       invoke as unknown as Parameters<typeof createImageEditorV3Api>[0],
       postMessage,
     )
+    const onTile = vi.fn()
     const result = await api.readSourceTiles!({
       requestId: 'stream',
       tiles: [{ resourceRef: RESOURCE_REF, mip: 0, tileX: 0, tileY: 0, priority: 0 }],
+      onTile,
     })
 
     expect(result.tiles).toHaveLength(1)
     expect(result.tiles[0]?.pixels.byteLength).toBe(4)
+    expect(onTile).toHaveBeenCalledWith({ index: 0, tile: result.tiles[0] })
     expect(postMessage).toHaveBeenCalledWith(
       'imageEditorV3:source:tilesStream',
       expect.objectContaining({ requestId: 'stream' }),
       expect.arrayContaining([expect.any(TestPort)]),
     )
+    expect(postMessage.mock.calls[0]?.[1]).not.toHaveProperty('onTile')
     expect(invoke).not.toHaveBeenCalled()
     vi.unstubAllGlobals()
   })

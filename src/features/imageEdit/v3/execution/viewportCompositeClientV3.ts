@@ -4,11 +4,7 @@ import {
   type ImageEditMemoryLease,
   type ImageEditResourceBudget,
 } from '@/core/imageEdit/v3'
-import { createLogger } from '@/core/logging'
-import {
-  IMAGE_EDIT_RENDER_PRIORITY,
-  type ImageEditRenderScheduler,
-} from '@/core/imageEdit/v3/renderScheduler'
+import type { ImageEditRenderScheduler } from '@/core/imageEdit/v3/renderScheduler'
 import { ImageEditorPreviewBrushTileLoaderV3 } from './previewBrushTileLoaderV3'
 import {
   collectImageEditorViewportBrushRequestsV3,
@@ -64,11 +60,17 @@ import {
   imageEditorViewportErrorV3,
 } from './viewportCompositeClientSupportV3'
 import { imageEditorViewportCompositeCandidateFitsBudgetV3 } from './viewportCompositeAdmissionV3'
+import { resolveImageEditorViewportCompositePriorityV3 } from './viewportCompositePriorityV3'
+import {
+  imageEditorViewportCompositeTimingV3,
+  logImageEditorViewportCompositeCompletedV3,
+  logImageEditorViewportCompositeFailedV3,
+  logImageEditorViewportCompositeStartV3,
+} from './viewportCompositeLoggingV3'
 export {
   ImageEditorViewportCompositeDisposedErrorV3,
   ImageEditorViewportCompositeSupersededErrorV3,
 } from './viewportCompositeTypesV3'
-const logger = createLogger('image_editor_v3.viewport_composite')
 interface ActiveViewportJobV3 extends ImageEditorViewportCompositeRequestV3 {
   sequence: number
   requestId: string
@@ -84,12 +86,19 @@ interface ActiveViewportJobV3 extends ImageEditorViewportCompositeRequestV3 {
   renderTaskId: string
   workerCompletion: ImageEditorWorkerCompletionV3<ImageEditorViewportCompositeWorkerEventV3>
   settled: boolean
+  startedAt: number
+  sourceReadyAt: number | null
+  workerStartedAt: number | null
   resolve: (result: ImageEditorManagedViewportCompositeV3) => void
   reject: (error: Error) => void
 }
 
 function createDefaultWorker(): ImageEditorViewportCompositeWorkerPortV3 {
   return acquireSharedImageEditorViewportCompositeWorkerV3()
+}
+
+function now(): number {
+  return typeof performance === 'undefined' ? Date.now() : performance.now()
 }
 
 let viewportCompositeClientSequence = 0
@@ -161,15 +170,14 @@ export class ImageEditorViewportCompositeClientV3 {
         renderTaskId: `${this.options.sessionId}:viewport-worker:${sequence}`,
         workerCompletion: new ImageEditorWorkerCompletionV3(),
         settled: false,
+        startedAt: now(),
+        sourceReadyAt: null,
+        workerStartedAt: null,
         resolve,
         reject,
       }
       this.active = job
-      logger.info('开始图片编辑 V3 视口分块合成', {
-        event: 'image_editor_v3.viewport_composite.start',
-        requestId: job.requestId,
-        context: { documentId: request.document.id, revision: request.document.revision },
-      })
+      logImageEditorViewportCompositeStartV3(imageEditorViewportCompositeTimingV3(job))
       void this.prepareAndPost(job).catch((error: unknown) => (
         this.failJob(job, imageEditorViewportErrorV3(error))
       ))
@@ -305,6 +313,7 @@ export class ImageEditorViewportCompositeClientV3 {
     const sourceTiles = cloneImageEditorViewportSourceTilesV3(frame)
     frame.release()
     job.frame = null
+    job.sourceReadyAt = now()
     const event = await this.renderScheduler.schedule<ImageEditorViewportCompositeWorkerEventV3>({
       id: job.renderTaskId,
       sessionId: this.options.sessionId,
@@ -313,9 +322,7 @@ export class ImageEditorViewportCompositeClientV3 {
       kind: 'preview',
       purpose: 'display',
       lane: 'gpu',
-      priority: job.quality === 'draft'
-        ? IMAGE_EDIT_RENDER_PRIORITY.interactionDraft
-        : IMAGE_EDIT_RENDER_PRIORITY.viewportStable,
+      priority: resolveImageEditorViewportCompositePriorityV3(job),
       run: ({ signal }) => job.workerCompletion.wait({
         signals: [signal, job.controller.signal],
         onAbort: () => {
@@ -325,6 +332,7 @@ export class ImageEditorViewportCompositeClientV3 {
         start: () => {
           const worker = this.ensureWorker()
           job.posted = true
+          job.workerStartedAt = now()
           worker.postMessage({
             type: 'render',
             requestId: job.requestId,
@@ -415,11 +423,7 @@ export class ImageEditorViewportCompositeClientV3 {
       job.outputLease = null
       this.releaseJobResources(job)
       this.settle(job, () => job.resolve(result))
-      logger.info('完成图片编辑 V3 视口分块合成', {
-        event: 'image_editor_v3.viewport_composite.completed',
-        requestId: job.requestId,
-        context: { documentId: job.document.id, revision: event.revision, mip: event.mip, tileCount: result.tiles.length },
-      })
+      logImageEditorViewportCompositeCompletedV3(imageEditorViewportCompositeTimingV3(job), result)
     } catch (error) {
       this.releaseEvent(event)
       throw error
@@ -443,11 +447,7 @@ export class ImageEditorViewportCompositeClientV3 {
       && !(error instanceof ImageEditorViewportCompositeUnsupportedErrorV3)
       && !(error instanceof ImageEditorResourcePressureErrorV3)
     ) {
-      logger.error('图片编辑 V3 视口分块合成失败', error, {
-        event: 'image_editor_v3.viewport_composite.failed',
-        requestId: job.requestId,
-        context: { documentId: job.document.id, revision: job.document.revision },
-      })
+      logImageEditorViewportCompositeFailedV3(imageEditorViewportCompositeTimingV3(job), error)
     }
     this.settle(job, () => job.reject(error))
   }

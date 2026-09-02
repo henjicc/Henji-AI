@@ -130,16 +130,29 @@ describe('useImageEditorViewportCompositeV3', () => {
       { initialProps: { currentLayout: layout(0) } },
     )
     await act(async () => { await vi.advanceTimersByTimeAsync(16) })
-    expect(mocked.requests).toHaveLength(2)
-    expect(mocked.requests[0]).toMatchObject({ coverage: 'document', preferredMip: 1 })
+    expect(mocked.requests).toHaveLength(3)
+    expect(mocked.requests.slice(0, 2)).toEqual([
+      expect.objectContaining({ coverage: 'viewport', phase: 'coarse' }),
+      expect.objectContaining({ coverage: 'viewport', phase: 'target' }),
+    ])
+    expect(mocked.requests[2]).toMatchObject({
+      coverage: 'document', phase: 'coarse', preferredMip: 1,
+    })
 
     for (let index = 1; index <= 40; index += 1) {
       rendered.rerender({ currentLayout: layout(index) })
     }
-    expect(mocked.requests).toHaveLength(2)
-    await act(async () => { await vi.advanceTimersByTimeAsync(16) })
     expect(mocked.requests).toHaveLength(3)
-    expect(mocked.requests[2]).toMatchObject({ viewportKey: 'viewport-40' })
+    await act(async () => { await vi.advanceTimersByTimeAsync(16) })
+    expect(mocked.requests).toHaveLength(5)
+    expect(mocked.requests.slice(3)).toEqual([
+      expect.objectContaining({
+        coverage: 'viewport', phase: 'coarse', viewportKey: 'viewport-40',
+      }),
+      expect.objectContaining({
+        coverage: 'viewport', phase: 'target', viewportKey: 'viewport-40',
+      }),
+    ])
 
     rendered.unmount()
     await act(async () => { await Promise.resolve() })

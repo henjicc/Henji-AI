@@ -217,7 +217,8 @@ describe('SharpSourceProvider', () => {
 
     const cold = await provider.readFastProxy(resource.id, 512)
     const writesAfterCold = put.mock.calls.length
-    expect(sourceInputs).toHaveLength(3)
+    // 元数据读取一次、整层下采样一次；不再为每个粗瓦片重复解码原图。
+    expect(sourceInputs).toHaveLength(2)
     const hot = await provider.readFastProxy(resource.id, 512)
 
     expect(hot.bytes.equals(cold.bytes)).toBe(true)

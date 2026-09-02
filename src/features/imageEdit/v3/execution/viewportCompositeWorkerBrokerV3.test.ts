@@ -78,7 +78,7 @@ describe('视口合成共享 Worker 代理', () => {
     expect(workers[0]?.terminate).toHaveBeenCalledOnce()
   })
 
-  it('任一活动请求取消超时时重建物理 Worker，并通知其他 session', () => {
+  it('任一活动请求取消超时只退休所属 port，不中断其他 session', () => {
     const workers: FakeWorker[] = []
     const broker = new ImageEditorViewportCompositeWorkerBrokerV3(() => {
       const worker = new FakeWorker()
@@ -93,13 +93,24 @@ describe('视口合成共享 Worker 代理', () => {
     second.postMessage(renderRequest('also-active'))
 
     first.terminate()
-    expect(workers[0]?.terminate).toHaveBeenCalledOnce()
-    expect(secondFailure).toHaveBeenCalledWith(expect.objectContaining({
-      message: expect.stringContaining('取消超时'),
-    }))
+    expect(workers[0]?.terminate).not.toHaveBeenCalled()
+    expect(workers[0]?.messages.at(-1)).toEqual({ type: 'cancel', requestId: 'blocked' })
+    expect(secondFailure).not.toHaveBeenCalled()
 
+    const closeLateBitmap = vi.fn()
+    workers[0]?.emit({
+      type: 'tile-rendered', requestId: 'blocked', sequence: 1, renderGeneration: 1,
+      cameraSequence: 1, geometryHash: 'geometry', revision: 0, mip: 0, tileIndex: 0,
+      tile: {
+        bitmap: { close: closeLateBitmap } as unknown as ImageBitmap,
+        outputRect: { x: 0, y: 0, width: 1, height: 1 },
+      },
+    })
+    expect(closeLateBitmap).toHaveBeenCalledOnce()
+    workers[0]?.emit(failed('also-active'))
     second.postMessage(renderRequest('after-recovery'))
-    expect(workers).toHaveLength(2)
+    expect(workers).toHaveLength(1)
     second.postMessage({ type: 'dispose' })
+    expect(workers[0]?.terminate).toHaveBeenCalledOnce()
   })
 })

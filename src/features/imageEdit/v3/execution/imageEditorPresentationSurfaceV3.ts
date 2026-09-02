@@ -210,9 +210,11 @@ export class ImageEditorPresentationSurfaceV3 {
   private elements: ImageEditorPresentationSurfaceElementsV3 | null = null
   private staging: HTMLCanvasElement | null = null
   private resizeBuffer: HTMLCanvasElement | null = null
+  private hasSafetyFrame = false
 
   attach(elements: ImageEditorPresentationSurfaceElementsV3): void {
     this.elements = elements
+    this.hasSafetyFrame = false
     this.staging ??= document.createElement('canvas')
     this.resizeBuffer ??= document.createElement('canvas')
   }
@@ -224,7 +226,7 @@ export class ImageEditorPresentationSurfaceV3 {
   }
 
   present(
-    fallback: ImageEditorManagedViewportCompositeV3,
+    fallback: ImageEditorManagedViewportCompositeV3 | null,
     target: ImageEditorManagedViewportCompositeV3 | null,
     layout: ImageEditorViewportLayoutV3,
     cameraSequence: number,
@@ -253,13 +255,17 @@ export class ImageEditorPresentationSurfaceV3 {
       && targetMipCoverage >= 0.999_999
         ? target
         : null
-    this.retainFrames(presentableTarget ? [fallback, presentableTarget] : [fallback])
-    const fallbackFrame = this.frameFor(fallback)
-    const targetFrame = presentableTarget ? this.frameFor(presentableTarget) : null
+    const base = fallback ?? presentableTarget
+    if (!base) return null
+    const overlay = presentableTarget && presentableTarget !== base ? presentableTarget : null
+    this.retainFrames(overlay ? [base, overlay] : [base])
+    const baseFrame = this.frameFor(base)
+    const targetFrame = overlay ? this.frameFor(overlay) : null
     stagingContext.clearRect(0, 0, pixels.width, pixels.height)
-    drawResult(stagingContext, fallbackFrame, fallback, layout, currentGeometry)
-    if (presentableTarget) {
-      drawResult(stagingContext, targetFrame, presentableTarget, layout, currentGeometry, true)
+    if (this.hasSafetyFrame) stagingContext.drawImage(elements.safety, 0, 0)
+    drawResult(stagingContext, baseFrame, base, layout, currentGeometry)
+    if (overlay) {
+      drawResult(stagingContext, targetFrame, overlay, layout, currentGeometry, true)
     }
     frontContext.globalCompositeOperation = 'copy'
     frontContext.drawImage(staging, 0, 0)
@@ -267,16 +273,21 @@ export class ImageEditorPresentationSurfaceV3 {
     safetyContext.globalCompositeOperation = 'copy'
     safetyContext.drawImage(staging, 0, 0)
     safetyContext.globalCompositeOperation = 'source-over'
+    this.hasSafetyFrame = true
     elements.front.dataset.renderGeneration = String(
-      presentableTarget?.renderGeneration ?? fallback.renderGeneration,
+      overlay?.renderGeneration ?? base.renderGeneration,
     )
     elements.front.dataset.cameraSequence = String(cameraSequence)
     elements.front.dataset.geometryHash = currentGeometryHash
-    return { coverage: 1, targetMipCoverage }
+    return {
+      coverage: 1,
+      targetMipCoverage,
+    }
   }
 
   dispose(): void {
     this.elements = null
+    this.hasSafetyFrame = false
     this.staging = null
     this.resizeBuffer = null
     this.retainFrames([])

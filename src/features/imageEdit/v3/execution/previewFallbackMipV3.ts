@@ -17,3 +17,20 @@ export function resolveImageEditorCoarsePreviewMipV3(
     longestEdge / IMAGE_EDITOR_COARSE_PREVIEW_MAX_EDGE,
   )))
 }
+
+/**
+ * 交互首帧只覆盖当前可见区，并允许每个 mip 像素对应至多两个设备像素。
+ * 相比目标 mip 线性减半、工作量约为四分之一，同时仍保留可辨认的图片结构。
+ */
+export function resolveImageEditorInteractiveDraftMipV3(
+  viewport: { zoom: number; devicePixelRatio: number },
+): number {
+  const physicalPixelsPerDocumentPixel = viewport.zoom * viewport.devicePixelRatio
+  if (!Number.isFinite(physicalPixelsPerDocumentPixel) || physicalPixelsPerDocumentPixel <= 0) {
+    throw new Error('图片编辑交互草稿显示倍率必须是正数')
+  }
+  const idealMip = physicalPixelsPerDocumentPixel >= 1
+    ? 0
+    : Math.max(0, Math.floor(Math.log2(1 / physicalPixelsPerDocumentPixel)))
+  return Math.min(30, idealMip + 1)
+}
