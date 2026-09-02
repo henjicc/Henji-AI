@@ -79,6 +79,7 @@ function toMetadata(metadata: SourceImageMetadata): ImageEditorV3SourceMetadata 
 }
 
 function toManagedSource(imported: Awaited<ReturnType<ImageEditorV3SourceIngestor['ingest']>>): ImageEditorV3ManagedSource {
+  if (!imported.resource.mediaType) throw new Error('Image editor source media type is unavailable')
   return {
     resource: {
       resourceRef: imported.resource.id,
@@ -86,7 +87,7 @@ function toManagedSource(imported: Awaited<ReturnType<ImageEditorV3SourceIngesto
       mediaType: imported.resource.mediaType ?? null,
     },
     metadata: toMetadata(imported.metadata),
-    mediaUrl: createImageEditorV3ResourceMediaUrl(imported.resource.id),
+    mediaUrl: createImageEditorV3ResourceMediaUrl(imported.resource.id, imported.resource.mediaType),
   }
 }
 

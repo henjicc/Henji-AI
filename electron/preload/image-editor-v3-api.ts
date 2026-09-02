@@ -5,7 +5,20 @@ import type {
 } from '../../src/platform/contracts/imageEditorV3'
 
 type NativeInvoke = <T>(channel: string, payload?: unknown) => Promise<T>
-type NativePostMessage = (channel: string, message: unknown, transfer?: MessagePort[]) => void
+type NativePostMessage = (channel: string, message: unknown, transfer?: unknown[]) => void
+
+interface PreloadMessagePortV3 {
+  onmessage: ((event: { data: ImageEditorV3SourceTileStreamEvent }) => void) | null
+  onmessageerror: (() => void) | null
+  postMessage(message: unknown): void
+  start(): void
+  close(): void
+}
+
+interface PreloadMessageChannelV3 {
+  port1: PreloadMessagePortV3
+  port2: unknown
+}
 
 const TILE_STREAM_CHANNEL = 'imageEditorV3:source:tilesStream'
 const TILE_STREAM_CREDITS = 4
@@ -15,7 +28,10 @@ function readSourceTilesStream(
   postMessage: NativePostMessage,
 ): Promise<{ tiles: ImageEditorV3SourceTile[] }> {
   return new Promise((resolve, reject) => {
-    const channel = new MessageChannel()
+    const MessageChannelConstructor = (globalThis as unknown as {
+      MessageChannel: new () => PreloadMessageChannelV3
+    }).MessageChannel
+    const channel = new MessageChannelConstructor()
     const tiles = new Array<ImageEditorV3SourceTile>(request.tiles.length)
     let settled = false
     const finish = (complete: () => void): void => {
@@ -24,7 +40,7 @@ function readSourceTilesStream(
       channel.port1.close()
       complete()
     }
-    channel.port1.onmessage = (event: MessageEvent<ImageEditorV3SourceTileStreamEvent>) => {
+    channel.port1.onmessage = (event) => {
       const message = event.data
       if (message.type === 'tile') {
         if (!Number.isSafeInteger(message.index)

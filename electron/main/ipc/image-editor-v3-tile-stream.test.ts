@@ -5,7 +5,7 @@ import { streamImageEditorV3TilesWithCredits } from './image-editor-v3-tile-stre
 
 class FakePort {
   readonly posted: unknown[] = []
-  readonly transfers: Transferable[][] = []
+  readonly transfers: unknown[][] = []
   private readonly messageListeners = new Set<(event: { data: unknown }) => void>()
 
   on(event: string, listener: (event: { data: unknown }) => void): this {
@@ -20,7 +20,7 @@ class FakePort {
 
   start(): void {}
 
-  postMessage(message: unknown, transfer: Transferable[] = []): void {
+  postMessage(message: unknown, transfer: unknown[] = []): void {
     this.posted.push(message)
     this.transfers.push(transfer)
   }
@@ -75,7 +75,7 @@ describe('图片编辑主进程瓦片 credit 流', () => {
     await vi.waitFor(() => expect(port.posted).toHaveLength(4))
     expect(readTile).toHaveBeenCalledTimes(4)
     expect(readTile.mock.calls.map(([request]) => request.tileX)).toEqual([5, 4, 3, 2])
-    expect(port.transfers.every((transfer) => transfer.length === 1)).toBe(true)
+    expect(port.transfers.every((transfer) => transfer.length === 0)).toBe(true)
 
     port.credit(2)
     await operation
@@ -85,9 +85,11 @@ describe('图片编辑主进程瓦片 credit 流', () => {
   })
 
   it('取消后停止发布迟到瓦片', async () => {
-    let finish: ((value: ReturnType<typeof sourceTile>) => void) | null = null
+    const pending = {
+      finish: null as ((value: ReturnType<typeof sourceTile>) => void) | null,
+    }
     const readTile = vi.fn(() => new Promise<ReturnType<typeof sourceTile>>((resolve) => {
-      finish = resolve
+      pending.finish = resolve
     }))
     const port = new FakePort()
     const controller = new AbortController()
@@ -99,7 +101,7 @@ describe('图片编辑主进程瓦片 credit 流', () => {
     )
     port.credit(1)
     controller.abort(new Error('cancelled'))
-    finish?.(sourceTile(5))
+    pending.finish?.(sourceTile(5))
 
     await expect(operation).rejects.toThrow('cancelled')
     await Promise.resolve()

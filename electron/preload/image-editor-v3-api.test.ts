@@ -10,7 +10,7 @@ describe('图片编辑 V3 preload 契约', () => {
       onmessage: ((event: { data: unknown }) => void) | null = null
       onmessageerror: (() => void) | null = null
       peer: TestPort | null = null
-      postMessage(message: unknown): void {
+      postMessage(message: unknown, _transfer?: unknown[]): void {
         const peer = this.peer
         queueMicrotask(() => peer?.onmessage?.({ data: message }))
       }
@@ -28,12 +28,12 @@ describe('图片编辑 V3 preload 契约', () => {
     vi.stubGlobal('MessageChannel', TestMessageChannel)
     const invoke = vi.fn()
     const pixels = new Uint8Array([1, 2, 3, 4]).buffer
-    const postMessage = vi.fn((_channel: string, _request: unknown, ports: MessagePort[] = []) => {
-      const port = ports[0]
+    const postMessage = vi.fn((_channel: string, _request: unknown, ports: unknown[] = []) => {
+      const port = ports[0] as TestPort | undefined
       if (!port) throw new Error('缺少瓦片流端口')
       let sent = false
       port.onmessage = (event) => {
-        if (sent || event.data?.type !== 'credit') return
+        if (sent || (event.data as { type?: string } | null)?.type !== 'credit') return
         sent = true
         port.postMessage({
           type: 'tile',

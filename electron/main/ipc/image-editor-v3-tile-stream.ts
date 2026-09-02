@@ -116,7 +116,9 @@ export function streamImageEditorV3TilesWithCredits(
             tile: { ...metadata, resourceRef: resourceId, pixels: transferred },
           }
           unacknowledged += 1
-          port.postMessage(event, [transferred])
+          // Electron MessagePortMain 只允许转移 MessagePortMain；ArrayBuffer 使用受 credit
+          // 约束的 structured clone，不能把零拷贝当成正确性前提。
+          port.postMessage(event)
           completed += 1
         }).catch((error: unknown) => {
           settle(() => reject(error instanceof Error ? error : new Error(String(error))))
