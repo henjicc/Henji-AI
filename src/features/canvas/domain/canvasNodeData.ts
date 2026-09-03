@@ -262,7 +262,9 @@ export interface LayerSeparationGenerationNodeData extends ImageEditNodeData {
 
 export interface LayerStackResultNodeData extends NodeImageData {
   resultKind: 'layer-stack';
-  /** 生成占位期间为空；成功提交后必须是已验证的 V1 文档。 */
+  /** V3 完成态的唯一可编辑文档引用；sourceUrl 必须与 imageUrl 一致。 */
+  imageEditSession?: ImageEditSessionReferenceV3;
+  /** @deprecated 仅供旧 V1 节点读取与迁移，新完成态不得将其当作权威文档。 */
   layerStackDocument?: LayerStackDocumentV1;
 }
 

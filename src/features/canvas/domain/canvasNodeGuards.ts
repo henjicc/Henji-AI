@@ -29,6 +29,7 @@ import type {
   VideoMediaNodeData,
 } from './canvasNodeData';
 import type { CanvasNode } from './canvasNodes';
+import { isEditableMultiLayerDocumentNode } from './multiLayerDocumentNode';
 
 export function isUploadNode(
   node: CanvasNode | null | undefined
@@ -82,6 +83,12 @@ export function isLayerStackResultNode(
   node: CanvasNode | null | undefined
 ): node is Node<LayerStackResultNodeData, typeof CANVAS_NODE_TYPES.layerStackResult> {
   return node?.type === CANVAS_NODE_TYPES.layerStackResult;
+}
+
+export function isEditableLayerStackResultNode(
+  node: CanvasNode | null | undefined
+): node is Node<LayerStackResultNodeData, typeof CANVAS_NODE_TYPES.layerStackResult> {
+  return isLayerStackResultNode(node) && isEditableMultiLayerDocumentNode(node.data);
 }
 
 export function isMultiAngleGenerationNode(
