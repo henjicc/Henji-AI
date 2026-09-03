@@ -12,6 +12,7 @@ import {
   createCanvasEditV3SessionReference,
 } from '../imageEditV3/canvasEditV3Session'
 import { importLayerStackV1AsImageEditDocumentV3 } from '../imageEditV3/layerStackV1Adapter'
+import { createMultiLayerDocumentExportPort } from '../imageEditV3/multiLayerDocumentExportAdapter'
 import type {
   MultiLayerDocumentNodeCanvasPort,
   MultiLayerDocumentNodePort,
@@ -107,8 +108,7 @@ const generationDocumentPort: MultiLayerDocumentNodePort = {
   saveAndMaterialize: async () => unavailable('saveAndMaterialize'),
   forkDocument: async () => unavailable('forkDocument'),
   markReleaseCandidate: async () => unavailable('markReleaseCandidate'),
-  materializeExportTarget: async () => unavailable('materializeExportTarget'),
-  releaseExportRaster: async () => unavailable('releaseExportRaster'),
+  ...createMultiLayerDocumentExportPort(),
 }
 
 const generationCanvasPort: MultiLayerDocumentNodeCanvasPort = {

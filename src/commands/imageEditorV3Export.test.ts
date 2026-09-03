@@ -67,6 +67,7 @@ function createPlatform(): ImageEditorV3Platform {
       format: 'png8' as const,
       width: 2,
       height: 1,
+      publication: 'document-preview' as const,
       previewRef: `sha256:${'b'.repeat(64)}` as const,
       mediaUrl: `henji-media://image-editor-v3/${'b'.repeat(64)}?mediaType=image%2Fpng`,
     })),
@@ -178,6 +179,7 @@ describe('图片编辑 V3 栅格导出命令', () => {
     expect(vi.mocked(platform.startManagedRasterExport).mock.calls[0]?.[0])
       .not.toHaveProperty('targetPath')
     expect(platform.completeManagedRasterExport).toHaveBeenCalledWith({ sessionId: SESSION_ID })
+    expect(result.publication).toBe('document-preview')
     expect(result.mediaUrl).toMatch(/^henji-media:\/\/image-editor-v3\//)
     expect(result).not.toHaveProperty('filePath')
   })
@@ -192,6 +194,7 @@ describe('图片编辑 V3 栅格导出命令', () => {
       format: 'png8' as const,
       width: 2,
       height: 1,
+      publication: 'standalone-image' as const,
       imagePath: '/managed/standalone.png',
       createdFilePaths: ['/managed/standalone.png'],
     }))
@@ -212,6 +215,7 @@ describe('图片编辑 V3 栅格导出命令', () => {
       publication: 'standalone-image',
     }))
     expect(result).toMatchObject({
+      publication: 'standalone-image',
       imagePath: '/managed/standalone.png',
       createdFilePaths: ['/managed/standalone.png'],
     })

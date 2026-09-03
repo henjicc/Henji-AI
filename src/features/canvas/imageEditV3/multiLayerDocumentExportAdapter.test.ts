@@ -69,6 +69,7 @@ function materialized(): ImageEditorV3StandaloneRasterExportResult {
     format: 'png8',
     width: 4,
     height: 2,
+    publication: 'standalone-image',
     imagePath: '/managed/person.png',
     createdFilePaths: ['/managed/person.png'],
   }

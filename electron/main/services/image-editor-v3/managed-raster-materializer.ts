@@ -39,11 +39,13 @@ interface ManagedSession {
 }
 
 export interface ManagedRasterMaterializationResult extends RasterExportSessionResult {
+  publication: 'document-preview'
   previewRef: ResourceId
   mediaUrl: string
 }
 
 export interface StandaloneRasterMaterializationResult extends RasterExportSessionResult {
+  publication: 'standalone-image'
   imagePath: string
   createdFilePaths: string[]
 }
@@ -117,7 +119,7 @@ export class ManagedRasterMaterializer {
             created: persisted.createdFilePaths.length > 0,
           },
         })
-        return { ...completed, ...persisted }
+        return { ...completed, publication: 'standalone-image', ...persisted }
       }
       const presentation = outputPresentation(completed.format)
       const stored = await this.resources.putFile(session.targetPath, {
@@ -145,6 +147,7 @@ export class ManagedRasterMaterializer {
       }
       const result = {
         ...completed,
+        publication: 'document-preview' as const,
         previewRef: stored.id,
         mediaUrl: createImageEditorV3ResourceMediaUrl(stored.id, presentation.mediaType),
       }

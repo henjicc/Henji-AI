@@ -281,6 +281,7 @@ export interface ImageEditorV3RasterExportResult {
 }
 
 export interface ImageEditorV3ManagedRasterExportResult extends ImageEditorV3RasterExportResult {
+  publication: 'document-preview'
   /** 已原子挂到同 revision 文档上的内容寻址预览资源。 */
   previewRef: ImageEditorV3ResourceRef
   /** 不包含本地路径的受管媒体能力 URL，可直接用于展示和后续媒体消费。 */
@@ -288,6 +289,7 @@ export interface ImageEditorV3ManagedRasterExportResult extends ImageEditorV3Ras
 }
 
 export interface ImageEditorV3StandaloneRasterExportResult extends ImageEditorV3RasterExportResult {
+  publication: 'standalone-image'
   /** 已转存到普通画布图片使用的受管路径，不会改写 V3 文档预览。 */
   imagePath: string
   /** 画布事务未接管时可补偿释放的本次新建资源。 */

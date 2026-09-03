@@ -144,7 +144,7 @@ export async function materializeImageEditorV3Raster(
     'document-preview',
     signal,
   )
-  if (!('previewRef' in completed)) {
+  if (completed.publication !== 'document-preview') {
     throw new Error('文档预览物化收到了独立图片结果')
   }
   return completed
@@ -239,7 +239,7 @@ export async function materializeImageEditorV3StandaloneRaster(
     'standalone-image',
     signal,
   )
-  if (!('imagePath' in completed)) {
+  if (completed.publication !== 'standalone-image') {
     throw new Error('独立图片物化收到了文档预览结果')
   }
   return completed

@@ -126,8 +126,9 @@ describe('图片编辑 V3 受管栅格物化', () => {
     const started = await service.start(startRequest(snapshot))
     const result = await service.complete(7, started.sessionId)
 
-    if (!('previewRef' in result)) throw new Error('期望文档预览物化结果')
+    if (result.publication !== 'document-preview') throw new Error('期望文档预览物化结果')
 
+    expect(result.publication).toBe('document-preview')
     expect(result.previewRef).toMatch(/^sha256:[a-f0-9]{64}$/)
     expect(result.mediaUrl).toMatch(/^henji-media:\/\/image-editor-v3\/[a-f0-9]{64}\?mediaType=image%2Fpng$/)
     expect(result.mediaUrl).not.toContain(root)
@@ -182,6 +183,7 @@ describe('图片编辑 V3 受管栅格物化', () => {
     const result = await service.complete(7, started.sessionId)
 
     expect(result).toMatchObject({
+      publication: 'standalone-image',
       imagePath: '/managed/standalone.png',
       createdFilePaths: ['/managed/standalone.png'],
     })
