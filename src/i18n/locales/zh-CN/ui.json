@@ -739,6 +739,7 @@
         "annotation-ellipse": "圆形标注",
         "annotation-number": "序号标注",
         "annotation-pen": "标注画笔",
+        "annotation-mosaic": "打码",
         "raster-brush": "栅格画笔",
         "eraser": "橡皮擦",
         "mask-edit": "编辑蒙版"
@@ -762,6 +763,12 @@
         "color": "颜色",
         "calloutShape": "标注形状",
         "annotationType": "标注类型",
+        "textBackground": "文字背景",
+        "backgroundColor": "背景色",
+        "mosaicMode": "打码方式",
+        "mosaicPixel": "马赛克",
+        "mosaicBlur": "高斯模糊",
+        "strength": "强度",
         "rect": "矩形",
         "ellipse": "圆形"
       },

@@ -739,6 +739,7 @@
         "annotation-ellipse": "Ellipse annotation",
         "annotation-number": "Number annotation",
         "annotation-pen": "Annotation pen",
+        "annotation-mosaic": "Redact",
         "raster-brush": "Raster brush",
         "eraser": "Eraser",
         "mask-edit": "Edit mask"
@@ -762,6 +763,12 @@
         "color": "Color",
         "calloutShape": "Callout shape",
         "annotationType": "Annotation type",
+        "textBackground": "Text background",
+        "backgroundColor": "Background color",
+        "mosaicMode": "Redaction mode",
+        "mosaicPixel": "Mosaic",
+        "mosaicBlur": "Gaussian blur",
+        "strength": "Strength",
         "rect": "Rectangle",
         "ellipse": "Ellipse"
       },

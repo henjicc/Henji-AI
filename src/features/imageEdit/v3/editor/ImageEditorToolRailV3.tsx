@@ -41,6 +41,7 @@ const TOOL_ICONS: Record<ImageEditorToolIdV3, LucideIcon> = {
   'annotation-ellipse': MessageSquareText,
   'annotation-number': MessageSquareText,
   'annotation-pen': MessageSquareText,
+  'annotation-mosaic': MessageSquareText,
   'raster-brush': Paintbrush,
   eraser: Eraser,
   'mask-edit': CircleDashed,

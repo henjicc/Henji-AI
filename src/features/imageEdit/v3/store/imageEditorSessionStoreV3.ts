@@ -1,7 +1,8 @@
 import { create } from 'zustand'
 
 import type { ImageEditSelectionCombineModeV3 } from '@/core/imageEdit/v3/selection'
-import { ANNOTATION_DEFAULT_STROKE_HEX } from '@/core/theme/colorTokens'
+import { ANNOTATION_DEFAULT_STROKE_HEX, WHITE_HEX } from '@/core/theme/colorTokens'
+import { DEFAULT_MOSAIC_STRENGTH_PERCENT } from '@/core/imageEdit/constraints'
 import type { ImageEditorToolIdV3 } from '../application/imageEditorHostProfiles'
 
 export interface ImageEditorToolSettingsV3 {
@@ -14,7 +15,11 @@ export interface ImageEditorToolSettingsV3 {
   annotationStrokeWidth: number
   annotationFontSize: number
   annotationColor: string
+  annotationTextBackgroundEnabled: boolean
+  annotationTextBackgroundColor: string
   annotationCalloutShape: 'rect' | 'ellipse'
+  annotationMosaicMode: 'pixel' | 'blur'
+  annotationMosaicStrength: number
   annotationTool: ImageEditorToolIdV3
   cropAspectRatio: ImageEditorCropAspectRatioV3
 }
@@ -66,7 +71,11 @@ const DEFAULT_TOOL_SETTINGS: ImageEditorToolSettingsV3 = {
   annotationStrokeWidth: 4,
   annotationFontSize: 32,
   annotationColor: ANNOTATION_DEFAULT_STROKE_HEX,
+  annotationTextBackgroundEnabled: false,
+  annotationTextBackgroundColor: WHITE_HEX,
   annotationCalloutShape: 'rect',
+  annotationMosaicMode: 'pixel',
+  annotationMosaicStrength: DEFAULT_MOSAIC_STRENGTH_PERCENT,
   annotationTool: 'annotation-arrow',
   cropAspectRatio: 'free',
 }

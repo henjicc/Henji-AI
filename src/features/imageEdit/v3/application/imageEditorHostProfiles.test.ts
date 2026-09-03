@@ -37,6 +37,7 @@ describe('图片编辑 V3 宿主能力裁剪', () => {
       'annotation-ellipse',
       'annotation-number',
       'annotation-pen',
+      'annotation-mosaic',
     ])
     expect(getReadyImageEditorToolIdsV3(getImageEditorHostProfileV3('canvas-edit')))
       .toEqual(getReadyImageEditorToolIdsV3(profile))

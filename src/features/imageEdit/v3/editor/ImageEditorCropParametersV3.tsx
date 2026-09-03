@@ -161,7 +161,7 @@ export function ImageEditorCropParametersV3({
   }
 
   return (
-    <div data-crop-parameters className="flex min-h-10 items-center gap-2 overflow-x-auto px-3 py-1.5">
+    <div data-crop-parameters className="flex h-full min-w-max items-center gap-1.5">
       <UiIconButton
         className="h-8 w-8 shrink-0"
         showBorder={false}
@@ -200,16 +200,16 @@ export function ImageEditorCropParametersV3({
       >
         <FlipHorizontal className="h-4 w-4" />
       </UiIconButton>
-      <div className="mx-1 h-5 w-px shrink-0 bg-border-dark" aria-hidden="true" />
+      <div className="mx-0.5 h-5 w-px shrink-0 bg-border-dark" aria-hidden="true" />
       <div
         role="group"
         aria-label={t('imageEditor.v3.crop.aspectRatio')}
-        className="flex shrink-0 items-center gap-1"
+        className="flex shrink-0 items-center gap-0.5"
       >
         {CROP_ASPECT_RATIOS_V3.map((ratio) => (
           <UiOptionButton
             key={ratio}
-            className="h-8 px-2 text-xs"
+            className="h-8 px-1.5 text-xs"
             active={cropAspectRatio === ratio}
             onClick={() => setToolSetting(controller.sessionId, 'cropAspectRatio', ratio)}
           >
@@ -217,12 +217,12 @@ export function ImageEditorCropParametersV3({
           </UiOptionButton>
         ))}
       </div>
-      <div className="mx-1 h-5 w-px shrink-0 bg-border-dark" aria-hidden="true" />
+      <div className="mx-0.5 h-5 w-px shrink-0 bg-border-dark" aria-hidden="true" />
       {(['x', 'y', 'width', 'height'] as const).map((key) => (
         <label key={key} className="flex shrink-0 items-center gap-1.5 text-xs text-text-muted">
           <span>{t(`imageEditor.v3.crop.${key}`)}</span>
           <UiInput
-            className="!h-8 w-20 !px-2 tabular-nums"
+            className="!h-8 !w-16 !px-2 tabular-nums"
             type="number"
             min={0}
             step={1}
@@ -232,10 +232,7 @@ export function ImageEditorCropParametersV3({
           />
         </label>
       ))}
-      <span className="shrink-0 text-xs tabular-nums text-text-muted">
-        {size.width} × {size.height}
-      </span>
-      <div className="ml-auto flex shrink-0 items-center gap-2">
+      <div className="flex shrink-0 items-center gap-1.5">
         <UiButton size="sm" variant="plain" onClick={clearCrop}>
           {t('imageEditor.v3.crop.fullImage')}
         </UiButton>

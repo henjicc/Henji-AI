@@ -63,6 +63,9 @@ export function useImageEditorAnnotationTextV3({
     const matrix = entry?.matrix ?? sourceToOutput
     const fontSize = toolSettings?.annotationFontSize ?? 32
     const color = toolSettings?.annotationColor ?? ANNOTATION_DEFAULT_STROKE_HEX
+    const backgroundColor = toolSettings?.annotationTextBackgroundEnabled
+      ? toolSettings.annotationTextBackgroundColor
+      : undefined
     if (item?.type === 'text') {
       setTextEditor({
         layerId: entry?.layer.id ?? null,
@@ -92,7 +95,7 @@ export function useImageEditorAnnotationTextV3({
         matrix,
         state: {
           kind: 'text', itemId: null, x: point?.[0] ?? 0, y: point?.[1] ?? 0,
-          value: '', fontSize, color,
+          value: '', fontSize, color, backgroundColor,
         },
       })
     }
@@ -119,6 +122,9 @@ export function useImageEditorAnnotationTextV3({
         id: createImageEditIdV3('annotation'), type: 'text',
         x: textEditor.state.x, y: textEditor.state.y,
         text: value, color: textEditor.state.color, fontSize: textEditor.state.fontSize,
+        ...(textEditor.state.backgroundColor
+          ? { backgroundColor: textEditor.state.backgroundColor }
+          : {}),
       })
     }
     setTextEditor(null)

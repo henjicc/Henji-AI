@@ -5,6 +5,7 @@ import type { KonvaEventObject } from 'konva/lib/Node'
 import { useTranslation } from 'react-i18next'
 
 import type { MarkItem } from '@/core/imageEdit/types'
+import { DEFAULT_MOSAIC_STRENGTH_PERCENT } from '@/core/imageEdit/constraints'
 import { createImageEditAnnotationLayerV3, createImageEditIdV3 } from '@/core/imageEdit/v3/documentFactory'
 import { ANNOTATION_DEFAULT_STROKE_HEX } from '@/core/theme/colorTokens'
 import { isLabeledMark } from '@/features/imageMark/domain/types'
@@ -260,12 +261,19 @@ export function ImageEditorAnnotationOverlayV3({
     const annotation = createAnnotationDraftV3(
       activeTool,
       point,
-      toolSettings?.annotationStrokeWidth ?? 4,
-      toolSettings?.annotationFontSize ?? 32,
-      '',
-      '',
-      toolSettings?.annotationColor ?? ANNOTATION_DEFAULT_STROKE_HEX,
-      toolSettings?.annotationCalloutShape ?? 'rect',
+      {
+        strokeWidth: toolSettings?.annotationStrokeWidth ?? 4,
+        fontSize: toolSettings?.annotationFontSize ?? 32,
+        text: '',
+        calloutText: '',
+        color: toolSettings?.annotationColor ?? ANNOTATION_DEFAULT_STROKE_HEX,
+        calloutShape: toolSettings?.annotationCalloutShape ?? 'rect',
+        textBackgroundColor: toolSettings?.annotationTextBackgroundEnabled
+          ? toolSettings.annotationTextBackgroundColor
+          : undefined,
+        mosaicMode: toolSettings?.annotationMosaicMode ?? 'pixel',
+        mosaicStrength: toolSettings?.annotationMosaicStrength ?? DEFAULT_MOSAIC_STRENGTH_PERCENT,
+      },
     )
     if (activeTool === 'annotation-number') {
       addItem(entry, annotation)

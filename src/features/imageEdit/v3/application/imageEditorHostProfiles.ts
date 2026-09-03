@@ -17,6 +17,7 @@ export type ImageEditorToolIdV3 =
   | 'annotation-ellipse'
   | 'annotation-number'
   | 'annotation-pen'
+  | 'annotation-mosaic'
   | 'raster-brush'
   | 'eraser'
   | 'mask-edit';
@@ -106,6 +107,7 @@ const ANNOTATION_TOOLS: readonly ImageEditorCapabilityV3<ImageEditorToolIdV3>[] 
   ready('annotation-ellipse'),
   ready('annotation-number'),
   ready('annotation-pen'),
+  ready('annotation-mosaic'),
 ];
 const RASTER_TOOLS: readonly ImageEditorCapabilityV3<ImageEditorToolIdV3>[] = [
   ready('raster-brush'),

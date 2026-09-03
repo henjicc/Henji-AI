@@ -8,6 +8,7 @@ export const IMAGE_EDITOR_ANNOTATION_TOOL_IDS_V3 = [
   'annotation-ellipse',
   'annotation-number',
   'annotation-pen',
+  'annotation-mosaic',
 ] as const satisfies readonly ImageEditorToolIdV3[]
 
 export type ImageEditorAnnotationToolIdV3 = typeof IMAGE_EDITOR_ANNOTATION_TOOL_IDS_V3[number]

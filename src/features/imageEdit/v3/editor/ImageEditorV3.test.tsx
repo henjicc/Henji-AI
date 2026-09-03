@@ -349,7 +349,7 @@ describe('ImageEditorV3 professional shell', () => {
     expect(screen.getAllByRole('treeitem')).toHaveLength(2)
   })
 
-  it('保持单命令带、从属参数带和右侧上下组合的停靠属性窗结构', async () => {
+  it('所有工具参数都留在单命令带内，并保持右侧上下组合的停靠属性窗结构', async () => {
     const rendered = renderEditor(
       createDocument([createImageEditRasterLayerV3('raster', '底图')]),
     )
@@ -359,8 +359,9 @@ describe('ImageEditorV3 professional shell', () => {
     expect(rendered.container.querySelectorAll('[data-command-bar]')).toHaveLength(1)
     expect(commandBar?.getAttribute('data-document-revision')).toBe('0')
     expect(commandBar?.textContent).not.toMatch(/版本\s*\d+/)
-    const moveContextBar = rendered.container.querySelector('[data-context-bar]')
-    expect(moveContextBar?.parentElement?.hasAttribute('data-command-stack')).toBe(true)
+    const moveParameters = rendered.container.querySelector('[data-tool-parameters]')
+    expect(moveParameters?.closest('[data-command-bar]')).toBe(commandBar)
+    expect(rendered.container.querySelector('[data-context-bar]')).toBeNull()
     const snappingSwitch = screen.getByRole('switch', { name: '吸附' })
     expect(snappingSwitch.getAttribute('aria-checked')).toBe('true')
     fireEvent.click(snappingSwitch)
@@ -368,9 +369,9 @@ describe('ImageEditorV3 professional shell', () => {
       ?.toolSettings.snappingEnabled).toBe(false)
 
     fireEvent.click(screen.getByRole('button', { name: '标注工具' }))
-    const contextBar = rendered.container.querySelector('[data-context-bar]')
-    expect(contextBar?.parentElement?.hasAttribute('data-command-stack')).toBe(true)
-    expect(rendered.container.querySelectorAll('[data-context-bar]')).toHaveLength(1)
+    const annotationParameters = rendered.container.querySelector('[data-tool-parameters]')
+    expect(annotationParameters?.closest('[data-command-bar]')).toBe(commandBar)
+    expect(rendered.container.querySelectorAll('[data-tool-parameters]')).toHaveLength(1)
 
     const preview = rendered.container.querySelector('[data-preview-surface]')
     const dockedPanels = rendered.container.querySelectorAll('[data-docked-editor-panel]')
@@ -395,6 +396,10 @@ describe('ImageEditorV3 professional shell', () => {
 
     fireEvent.click(screen.getByRole('button', { name: '标注工具' }))
     expect(screen.getByRole('group', { name: '标注类型' })).toBeTruthy()
+    const annotationToolGroup = screen.getByRole('group', { name: '标注类型' })
+    expect(annotationToolGroup.querySelectorAll('[data-annotation-tool-id]')).toHaveLength(8)
+    expect(annotationToolGroup.textContent).toBe('')
+    expect(screen.getByRole('button', { name: '打码' })).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: '矩形标注' }))
     const session = Object.values(useImageEditorSessionStoreV3.getState().sessions)[0]
     expect(session.activeTool).toBe('annotation-rect')

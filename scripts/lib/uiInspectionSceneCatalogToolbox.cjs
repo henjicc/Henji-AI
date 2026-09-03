@@ -1040,6 +1040,24 @@ function createToolboxScenes(context) {
         const annotationStartedAt = new Date().toISOString()
         const beforeFirstAnnotation = await readRevision()
         await annotationTool.click()
+        const commandBarStructure = await editor.locator('[data-command-bar]').evaluate((commandBar) => {
+          const parameters = commandBar.querySelector('[data-tool-parameters]')
+          const toolGroup = commandBar.querySelector('[role="group"][aria-label="标注类型"], [role="group"][aria-label="Annotation type"]')
+          return {
+            commandBarCount: document.querySelectorAll('[data-command-bar]').length,
+            contextBarCount: document.querySelectorAll('[data-context-bar]').length,
+            parametersInside: Boolean(parameters),
+            annotationToolCount: toolGroup?.querySelectorAll('[data-annotation-tool-id]').length ?? 0,
+            annotationToolText: toolGroup?.textContent?.trim() ?? '',
+          }
+        })
+        if (commandBarStructure.commandBarCount !== 1
+          || commandBarStructure.contextBarCount !== 0
+          || !commandBarStructure.parametersInside
+          || commandBarStructure.annotationToolCount !== 8
+          || commandBarStructure.annotationToolText !== '') {
+          throw new Error(`标注参数没有正确收进单行命令带：${JSON.stringify(commandBarStructure)}`)
+        }
         await editor.getByRole('button', { name: /^(矩形标注|Rectangle annotation)$/i }).click()
         const annotationOverlay = editor.locator('[data-annotation-editor-overlay]')
         await annotationOverlay.waitFor({ state: 'visible', timeout: 5000 })
@@ -1083,8 +1101,8 @@ function createToolboxScenes(context) {
         if (await readRevision() !== beforeFirstAnnotation + 1) {
           throw new Error('第一次绘制标注没有一次完成，或产生了多余 revision')
         }
-        const annotationContextBar = editor.locator('[data-context-bar]')
-        const annotationColor = annotationContextBar.locator('input[type="color"]')
+        const annotationParameters = editor.locator('[data-tool-parameters]')
+        const annotationColor = annotationParameters.locator('input[type="color"]')
         await annotationColor.waitFor({ state: 'visible', timeout: 5000 })
         const testedAnnotationColor = `#${'0'.repeat(6)}`
         const beforeAnnotationColorRevision = await readRevision()
@@ -1103,7 +1121,7 @@ function createToolboxScenes(context) {
         }, beforeAnnotationColorRevision, { timeout: 10000 }).catch(() => {
           throw new Error('修改选中标注颜色后没有提交文档 revision')
         })
-        const annotationStroke = annotationContextBar.getByRole('slider', {
+        const annotationStroke = annotationParameters.getByRole('slider', {
           name: /^(描边|Stroke)$/i,
         })
         const beforeAnnotationStrokeRevision = await readRevision()
@@ -1359,6 +1377,27 @@ function createToolboxScenes(context) {
         await editor.locator('[data-crop-overlay]').waitFor({ state: 'visible', timeout: 5000 })
         await editor.getByRole('button', { name: /^(向右旋转 90°|Rotate 90° right)$/i }).click()
         await editor.getByRole('button', { name: '1:1', exact: true }).click()
+        const cropLayout = await editor.locator('[data-crop-parameters]').evaluate((parameters) => {
+          const commandBar = parameters.closest('[data-command-bar]')
+          const viewport = parameters.closest('[data-tool-parameter-viewport]')
+          const inputWidths = [...parameters.querySelectorAll('input')]
+            .filter((element) => element instanceof HTMLInputElement)
+            .map((element) => element.getBoundingClientRect().width)
+          return {
+            insideCommandBar: Boolean(commandBar),
+            inputWidths,
+            viewportScrollLeft: viewport?.scrollLeft ?? -1,
+            viewportWidth: viewport?.clientWidth ?? 0,
+            contentWidth: parameters.scrollWidth,
+          }
+        })
+        if (!cropLayout.insideCommandBar
+          || cropLayout.inputWidths.length < 4
+          || cropLayout.inputWidths.some((width) => width > 72)
+          || cropLayout.viewportScrollLeft !== 0
+          || cropLayout.contentWidth > cropLayout.viewportWidth + 1) {
+          throw new Error(`裁剪参数布局仍然过宽或另起一行：${JSON.stringify(cropLayout)}`)
+        }
         await page.waitForFunction(() => {
           const values = [...document.querySelectorAll('[data-crop-parameters] input')]
             .filter((element) => element instanceof HTMLInputElement)
@@ -1430,6 +1469,11 @@ function createToolboxScenes(context) {
         if (imageEditorWarnings.length > 0) {
           throw new Error(`图片编辑核心路径出现警告：${JSON.stringify(imageEditorWarnings)}`)
         }
+        await annotationTool.click()
+        await editor.getByRole('button', { name: /^(打码|Redact)$/i }).click()
+        await editor.getByRole('group', {
+          name: /^(打码方式|Redaction mode)$/i,
+        }).waitFor({ state: 'visible', timeout: 5000 })
         await preview.getByRole('img').first().waitFor({ state: 'visible', timeout: 15000 })
         await preview.locator('.animate-spin').waitFor({ state: 'hidden', timeout: 15000 })
         await settlePage(page, 500)

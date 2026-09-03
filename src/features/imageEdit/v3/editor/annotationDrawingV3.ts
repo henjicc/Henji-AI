@@ -12,6 +12,7 @@ export type AnnotationToolV3 = Extract<
   | 'annotation-ellipse'
   | 'annotation-number'
   | 'annotation-pen'
+  | 'annotation-mosaic'
 >
 
 export function isAnnotationToolV3(tool: ImageEditorToolIdV3): tool is AnnotationToolV3 {
@@ -22,21 +23,43 @@ export function isAnnotationToolV3(tool: ImageEditorToolIdV3): tool is Annotatio
     || tool === 'annotation-ellipse'
     || tool === 'annotation-number'
     || tool === 'annotation-pen'
+    || tool === 'annotation-mosaic'
+}
+
+interface AnnotationDraftStyleV3 {
+  strokeWidth: number
+  fontSize: number
+  text: string
+  calloutText: string
+  color: string
+  calloutShape: 'rect' | 'ellipse'
+  textBackgroundColor?: string
+  mosaicMode: 'pixel' | 'blur'
+  mosaicStrength: number
 }
 
 export function createAnnotationDraftV3(
   tool: AnnotationToolV3,
   point: readonly [number, number],
-  strokeWidth: number,
-  fontSize: number,
-  text: string,
-  calloutText: string,
-  color: string,
-  calloutShape: 'rect' | 'ellipse',
+  style: AnnotationDraftStyleV3,
 ): MarkItem {
+  const {
+    strokeWidth,
+    fontSize,
+    text,
+    calloutText,
+    color,
+    calloutShape,
+    textBackgroundColor,
+    mosaicMode,
+    mosaicStrength,
+  } = style
   const id = createImageEditIdV3('annotation')
   if (tool === 'annotation-text') {
-    return { id, type: 'text', x: point[0], y: point[1], text, color, fontSize }
+    return {
+      id, type: 'text', x: point[0], y: point[1], text, color, fontSize,
+      ...(textBackgroundColor ? { backgroundColor: textBackgroundColor } : {}),
+    }
   }
   if (tool === 'annotation-number') {
     return { id, type: 'number', x: point[0], y: point[1], color, fontSize }
@@ -61,7 +84,11 @@ export function createAnnotationDraftV3(
       height: 0,
       stroke: color,
       lineWidth: strokeWidth,
-      ...(tool === 'annotation-callout' ? { label: calloutText, labelFontSize: fontSize } : {}),
+      ...(tool === 'annotation-callout' ? {
+        label: calloutText,
+        labelFontSize: fontSize,
+        ...(textBackgroundColor ? { labelBackgroundColor: textBackgroundColor } : {}),
+      } : {}),
     }
   }
   if (tool === 'annotation-ellipse') {
@@ -74,6 +101,18 @@ export function createAnnotationDraftV3(
       height: 0,
       stroke: color,
       lineWidth: strokeWidth,
+    }
+  }
+  if (tool === 'annotation-mosaic') {
+    return {
+      id,
+      type: 'mosaic',
+      x: point[0],
+      y: point[1],
+      width: 0,
+      height: 0,
+      mode: mosaicMode,
+      strengthPercent: mosaicStrength,
     }
   }
   return {
@@ -103,7 +142,7 @@ export function updateAnnotationDrawV3(
       : point
     return { ...annotation, points: [start[0], start[1], end[0], end[1]] }
   }
-  if (annotation.type === 'rect' || annotation.type === 'ellipse') {
+  if (annotation.type === 'rect' || annotation.type === 'ellipse' || annotation.type === 'mosaic') {
     const dx = point[0] - start[0]
     const dy = point[1] - start[1]
     const size = Math.max(Math.abs(dx), Math.abs(dy))
@@ -126,7 +165,7 @@ export function updateAnnotationDrawV3(
 }
 
 export function isDrawableAnnotationV3(annotation: MarkItem): boolean {
-  if (annotation.type === 'rect' || annotation.type === 'ellipse') {
+  if (annotation.type === 'rect' || annotation.type === 'ellipse' || annotation.type === 'mosaic') {
     return annotation.width >= 1 && annotation.height >= 1
   }
   if (annotation.type === 'arrow') {

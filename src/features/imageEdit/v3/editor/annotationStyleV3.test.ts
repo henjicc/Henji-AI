@@ -61,6 +61,32 @@ describe('V3 标注样式双向同步', () => {
       lineWidth: null,
       fontSize: 36,
       calloutShape: null,
+      textBackgroundEnabled: false,
+      textBackgroundColor: null,
+      mosaicMode: null,
+      mosaicStrength: null,
+    })
+  })
+
+  it('恢复文字背景与打码模式的双向样式修改', () => {
+    const text: MarkItem = {
+      id: 'text-background', type: 'text', x: 2, y: 3,
+      text: '说明', color: BLACK_HEX, fontSize: 18,
+    }
+    const withBackground = patchAnnotationStyleV3(text, {
+      textBackgroundEnabled: true,
+      textBackgroundColor: ANNOTATION_DEFAULT_TEXT_HEX,
+    })
+    expect(withBackground).toMatchObject({ backgroundColor: ANNOTATION_DEFAULT_TEXT_HEX })
+
+    const mosaic: MarkItem = {
+      id: 'mosaic-a', type: 'mosaic', x: 0, y: 0, width: 40, height: 30,
+      mode: 'pixel', strengthPercent: 2,
+    }
+    const blurred = patchAnnotationStyleV3(mosaic, { mosaicMode: 'blur', mosaicStrength: 5 })
+    expect(blurred).toMatchObject({ mode: 'blur', strengthPercent: 5 })
+    expect(readAnnotationStyleV3(blurred)).toMatchObject({
+      mosaicMode: 'blur', mosaicStrength: 5,
     })
   })
 })

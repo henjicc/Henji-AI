@@ -235,6 +235,23 @@ describe('ImageEditorV3 floating panels and annotations', () => {
     expect(changes[1].layers).toHaveLength(2)
     const reused = changes[1].layers.at(-1)
     if (reused?.type === 'annotation') expect(reused.annotations).toHaveLength(2)
+
+    fireEvent.click(screen.getByRole('button', { name: '标注工具' }))
+    fireEvent.click(screen.getByRole('button', { name: '打码' }))
+    fireEvent.click(screen.getByRole('button', { name: '高斯模糊' }))
+    const mosaicParameters = rendered.container.querySelector<HTMLElement>('[data-tool-parameters]')
+    expect(mosaicParameters).toBeTruthy()
+    expect(within(mosaicParameters as HTMLElement).queryByLabelText('颜色')).toBeNull()
+    expect(within(mosaicParameters as HTMLElement).queryByRole('slider', { name: '描边' })).toBeNull()
+    expect(within(mosaicParameters as HTMLElement).getByRole('slider', { name: '强度' })).toBeTruthy()
+    fireEvent.mouseDown(stageContent, { button: 0, clientX: 40, clientY: 40 })
+    fireEvent.mouseMove(stageContent, { buttons: 1, clientX: 120, clientY: 100 })
+    fireEvent.mouseUp(stageContent, { button: 0, clientX: 120, clientY: 100 })
+    await waitFor(() => expect(changes).toHaveLength(3))
+    const withMosaic = changes[2].layers.at(-1)
+    if (withMosaic?.type === 'annotation') {
+      expect(withMosaic.annotations.at(-1)).toMatchObject({ type: 'mosaic', mode: 'blur' })
+    }
   })
 
   it('文字标注可在属性区二次修改并可删除', async () => {
@@ -282,12 +299,12 @@ describe('ImageEditorV3 floating panels and annotations', () => {
     await waitFor(() => expect(Object.keys(useImageEditorSessionStoreV3.getState().sessions)).toHaveLength(1))
     selectAnnotationInEditor('annotations', 'selected-rect')
 
-    const contextBar = await waitFor(() => rendered.container.querySelector<HTMLElement>('[data-context-bar]'))
-    expect(contextBar).toBeTruthy()
-    expect((within(contextBar as HTMLElement).getByLabelText('颜色') as HTMLInputElement).value).toBe(
+    const toolParameters = await waitFor(() => rendered.container.querySelector<HTMLElement>('[data-tool-parameters]'))
+    expect(toolParameters).toBeTruthy()
+    expect((within(toolParameters as HTMLElement).getByLabelText('颜色') as HTMLInputElement).value).toBe(
       ANNOTATION_DEFAULT_STROKE_HEX,
     )
-    fireEvent.change(within(contextBar as HTMLElement).getByLabelText('颜色'), {
+    fireEvent.change(within(toolParameters as HTMLElement).getByLabelText('颜色'), {
       target: { value: BLACK_HEX },
     })
     await waitFor(() => expect(changes).toHaveLength(1))
@@ -296,8 +313,8 @@ describe('ImageEditorV3 floating panels and annotations', () => {
       expect(recolored.annotations[0]).toMatchObject({ stroke: BLACK_HEX, lineWidth: 4 })
     }
 
-    const latestContextBar = rendered.container.querySelector<HTMLElement>('[data-context-bar]')
-    fireEvent.change(within(latestContextBar as HTMLElement).getByLabelText('描边'), {
+    const latestToolParameters = rendered.container.querySelector<HTMLElement>('[data-tool-parameters]')
+    fireEvent.change(within(latestToolParameters as HTMLElement).getByLabelText('描边'), {
       target: { value: '12' },
     })
     await waitFor(() => expect(changes).toHaveLength(2))
