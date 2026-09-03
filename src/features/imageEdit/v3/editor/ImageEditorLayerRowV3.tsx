@@ -170,7 +170,7 @@ export function ImageEditorLayerRowV3({
         >
           {expanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
         </UiIconButton>
-      ) : <span className="w-7 shrink-0" aria-hidden="true" />}
+      ) : null}
 
       <div className="relative min-w-0 flex-1">
         <UiOptionButton
