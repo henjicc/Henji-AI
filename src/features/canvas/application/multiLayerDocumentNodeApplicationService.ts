@@ -292,6 +292,65 @@ export function createMultiLayerDocumentNodeApplicationService(
       })
     },
 
+    async migrateLegacyDocument(input): Promise<MultiLayerDocumentNodeProjection> {
+      return runOperation({
+        operation: 'migrate_legacy_v1',
+        nodeId: requiredId(input.nodeId, 'nodeId'),
+        signal: input.signal,
+        execute: async () => {
+          requiredId(input.projectId, 'projectId')
+          const state = parseMultiLayerDocumentNodeState(input.data)
+          if (state.kind === 'editable-v3') {
+            return validateProjection({
+              imageEditSession: state.session,
+              imageUrl: state.imageUrl,
+              previewImageUrl: state.previewImageUrl,
+              aspectRatio: input.data.aspectRatio ?? '1:1',
+            })
+          }
+          if (state.kind !== 'legacy-v1-pending-migration') {
+            throw new MultiLayerDocumentNodeApplicationError(
+              'MIGRATION_REQUIRED',
+              '当前节点没有可迁移的旧版图层文档',
+              true,
+            )
+          }
+          const projection = validateProjection(await dependencies.documentPort.createFromLayerStack({
+            nodeId: input.nodeId,
+            document: state.document,
+            signal: input.signal,
+          }))
+          try {
+            await dependencies.canvasPort.commitLegacyMigration({
+              projectId: input.projectId,
+              nodeId: input.nodeId,
+              expectedDocument: state.document,
+              projection,
+              historyPolicy: MULTI_LAYER_NODE_PROJECTION_HISTORY_POLICY,
+            })
+            return projection
+          } catch (error) {
+            await dependencies.documentPort.markReleaseCandidate({
+              nodeId: input.nodeId,
+              session: projection.imageEditSession,
+              signal: input.signal,
+            }).catch((cleanupError) => {
+              logger.error('旧版图层文档迁移失败后的候选登记失败', cleanupError, {
+                event: 'canvas.multi_layer_document.migrate_legacy_v1.cleanup_candidate.failed',
+                nodeId: input.nodeId,
+                context: {
+                  documentRef: projection.imageEditSession.documentRef,
+                  revision: projection.imageEditSession.revision,
+                  cleanupCandidate: true,
+                },
+              })
+            })
+            throw error
+          }
+        },
+      })
+    },
+
     async saveMaterializedProjection(input): Promise<MultiLayerDocumentNodeProjection> {
       return runOperation({
         operation: 'save_materialized_projection',

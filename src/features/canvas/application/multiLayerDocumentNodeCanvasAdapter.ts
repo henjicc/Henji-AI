@@ -34,7 +34,7 @@ function sameSession(
 
 export type MultiLayerDocumentProjectionCanvasPort = Pick<
   MultiLayerDocumentNodeCanvasPort,
-  'commitMaterializedProjection'
+  'commitMaterializedProjection' | 'commitLegacyMigration'
 >
 
 export type MultiLayerDocumentExportCanvasPort = Pick<
@@ -113,6 +113,65 @@ export function createMultiLayerDocumentProjectionCanvasPort(
     ?? ((filePaths) => getPlatform().image.releaseLayerStackResources(filePaths))
 
   return {
+    async commitLegacyMigration(input): Promise<'committed' | 'already-committed'> {
+      if (input.historyPolicy !== MULTI_LAYER_NODE_PROJECTION_HISTORY_POLICY) {
+        throw new MultiLayerDocumentNodeApplicationError(
+          'INVALID_INPUT',
+          '旧版迁移投影必须跳过画布历史',
+          false,
+        )
+      }
+      const project = useProjectStore.getState()
+      if (project.currentProjectId !== input.projectId || project.currentProject?.id !== input.projectId) {
+        throw new MultiLayerDocumentNodeApplicationError(
+          'DOCUMENT_CONFLICT',
+          '当前画布项目已经切换，请返回原项目后重试',
+          true,
+        )
+      }
+      let status: 'committed' | 'already-committed' | null = null
+      useCanvasStore.setState((state) => {
+        const index = state.nodes.findIndex((node) => node.id === input.nodeId)
+        if (index < 0) return {}
+        const node = state.nodes[index]
+        if (!isLayerStackResultNode(node)) return {}
+        const parsed = parseMultiLayerDocumentNodeState(node.data)
+        if (parsed.kind === 'editable-v3') {
+          if (sameSession(parsed.session, input.projection.imageEditSession)) {
+            status = 'already-committed'
+          }
+          return {}
+        }
+        if (
+          parsed.kind !== 'legacy-v1-pending-migration'
+          || JSON.stringify(parsed.document) !== JSON.stringify(input.expectedDocument)
+        ) return {}
+        const nodes = [...state.nodes]
+        nodes[index] = {
+          ...node,
+          data: {
+            ...node.data,
+            resultKind: 'layer-stack',
+            imageEditSession: input.projection.imageEditSession,
+            imageUrl: input.projection.imageUrl,
+            previewImageUrl: input.projection.previewImageUrl,
+            aspectRatio: input.projection.aspectRatio,
+          },
+        }
+        status = 'committed'
+        return { nodes }
+      })
+      if (!status) {
+        throw new MultiLayerDocumentNodeApplicationError(
+          'DOCUMENT_CONFLICT',
+          '旧版图层节点已被删除或修改，请重试',
+          true,
+        )
+      }
+      if (status === 'committed') persistCanvasState()
+      return status
+    },
+
     async commitMaterializedProjection(input): Promise<void> {
       if (input.historyPolicy !== MULTI_LAYER_NODE_PROJECTION_HISTORY_POLICY) {
         throw new MultiLayerDocumentNodeApplicationError(

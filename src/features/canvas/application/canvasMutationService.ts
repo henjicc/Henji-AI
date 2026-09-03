@@ -1,12 +1,15 @@
 import { useCanvasStore } from '@/stores/canvasStore'
+import { createLogger } from '@/core/logging'
 
 import type { CanvasNodePlacement } from '@/core/assistant/capabilities/canvasMutationApplicationCapabilities'
 import {
   isAssetGroupNode,
   isStoryboardSplitNode,
+  type CanvasNode,
   type CanvasNodeData,
   type StoryboardFrameItem,
 } from '../domain/canvasNodes'
+import { isEditableLayerStackResultNode } from '../domain/canvasNodeGuards'
 import {
   extractCanvasNodeData,
   extractCanvasNodeDataForDuplication,
@@ -27,6 +30,13 @@ import {
   dissolveAssetGroup,
   updateAssetGroup,
 } from './assetGroupApplicationService'
+import {
+  forkMultiLayerDocumentNode,
+  markMultiLayerDocumentReleaseCandidate,
+  rollbackCreatedMultiLayerDocument,
+} from './multiLayerDocumentNodeGenerationAdapter'
+
+const logger = createLogger('features.canvas.canvas_mutation')
 
 interface CanvasNodePatch {
   nodeId: string
@@ -49,11 +59,11 @@ export interface CanvasNodePropertyPatch {
   assetGroupCoverMemberId?: string | null
 }
 
-function requireNode(projectId: string, nodeId: string): { id: string; type: string; data: CanvasNodeData } {
+function requireNode(projectId: string, nodeId: string): CanvasNode {
   requireCurrentCanvasProject(projectId)
   const node = useCanvasStore.getState().nodes.find((item) => item.id === nodeId)
   if (!node) throw new CanvasApplicationError('NOT_FOUND', '画布节点不存在', true, { nodeId })
-  return { id: node.id, type: node.type, data: node.data }
+  return node
 }
 
 /** 画布节点数据/位置写入的共享内核；专用能力与通用属性动词都必须委托这里。 */
@@ -135,21 +145,93 @@ export function applyStoryboardFramePatches(
   persistCanvasState()
 }
 
-export function duplicateCanvasNode(input: {
+export async function commitCanvasNodeDuplication<T>(input: {
+  projectId: string
+  sourceNodeId: string
+  data: Record<string, unknown>
+  createNode: (data: Record<string, unknown>) => T | Promise<T>
+}): Promise<T> {
+  const source = requireNode(input.projectId, input.sourceNodeId)
+  if (!isEditableLayerStackResultNode(source)) return input.createNode(input.data)
+
+  const projection = await forkMultiLayerDocumentNode({
+    sourceNodeId: source.id,
+    targetNodeId: crypto.randomUUID(),
+    data: source.data,
+  })
+  try {
+    return await input.createNode({
+      ...input.data,
+      resultKind: 'layer-stack',
+      imageEditSession: projection.imageEditSession,
+      imageUrl: projection.imageUrl,
+      previewImageUrl: projection.previewImageUrl,
+      aspectRatio: projection.aspectRatio,
+    })
+  } catch (error) {
+    await rollbackCreatedMultiLayerDocument(projection).catch((rollbackError) => {
+      logger.error('复制节点失败后的文档补偿失败', rollbackError, {
+        event: 'canvas.multi_layer_document.fork.rollback.failed',
+        nodeId: source.id,
+        context: {
+          documentRef: projection.imageEditSession.documentRef,
+          revision: projection.imageEditSession.revision,
+          cleanupCandidate: true,
+        },
+      })
+    })
+    throw error
+  }
+}
+
+export async function duplicateCanvasNode(input: {
   projectId: string
   nodeId: string
   placement: CanvasNodePlacement
-}): Record<string, unknown> {
+}): Promise<Record<string, unknown>> {
   const node = requireNode(input.projectId, input.nodeId)
-  const data = extractCanvasNodeDataForDuplication(
-    node.type,
-    node.data as Record<string, unknown>,
-  )
-  const result = addControlledCanvasNode({
+  const editableDocument = isEditableLayerStackResultNode(node)
+  const data = editableDocument
+    ? structuredClone(node.data as Record<string, unknown>)
+    : extractCanvasNodeDataForDuplication(
+        node.type,
+        node.data as Record<string, unknown>,
+      )
+  const result = await commitCanvasNodeDuplication({
     projectId: input.projectId,
-    nodeType: node.type,
-    placement: input.placement,
+    sourceNodeId: node.id,
     data,
+    createNode: (forkedData) => {
+      if (!editableDocument) {
+        return addControlledCanvasNode({
+          projectId: input.projectId,
+          nodeType: node.type,
+          placement: input.placement,
+          data: forkedData,
+        })
+      }
+      const canvas = useCanvasStore.getState()
+      const before = {
+        nodes: canvas.nodes,
+        edges: canvas.edges,
+        history: canvas.history,
+      }
+      try {
+        const created = addControlledCanvasNode({
+          projectId: input.projectId,
+          nodeType: node.type,
+          placement: input.placement,
+        }, { deferCommit: true })
+        const nodeId = String(created.nodeId)
+        useCanvasStore.getState().updateNodeData(nodeId, forkedData, { skipHistory: true })
+        const undoRef = rememberCanvasUndo(input.projectId, 'duplicate_node')
+        persistCanvasState()
+        return { ...created, undoRef }
+      } catch (error) {
+        useCanvasStore.getState().setCanvasData(before.nodes, before.edges, before.history)
+        throw error
+      }
+    },
   })
   return { ...result, duplicatedFromNodeId: node.id }
 }
@@ -231,12 +313,26 @@ export function updateCanvasNodeFromSpecialEditor(input: {
 
 export function deleteCanvasNodes(projectId: string, nodeIds: string[]): Record<string, unknown> {
   requireCurrentCanvasProject(projectId)
-  const existing = new Set(useCanvasStore.getState().nodes.map((node) => node.id))
+  const beforeNodes = useCanvasStore.getState().nodes
+  const existing = new Set(beforeNodes.map((node) => node.id))
   const unique = [...new Set(nodeIds)].filter((nodeId) => existing.has(nodeId))
   if (unique.length === 0) throw new CanvasApplicationError('NOT_FOUND', '没有可删除的画布节点', true)
   useCanvasStore.getState().deleteNodes(unique)
+  const remainingIds = new Set(useCanvasStore.getState().nodes.map((node) => node.id))
+  const removedDocumentNodes = beforeNodes
+    .filter(isEditableLayerStackResultNode)
+    .filter((node) => !remainingIds.has(node.id))
   const undoRef = rememberCanvasUndo(projectId, 'delete_nodes')
   persistCanvasState()
+  void Promise.all(removedDocumentNodes.map((node) => (
+    markMultiLayerDocumentReleaseCandidate({ nodeId: node.id, data: node.data })
+  ))).catch((error) => {
+    logger.error('删除节点后的文档候选登记失败', error, {
+      event: 'canvas.multi_layer_document.release_candidate.mark.failed',
+      projectId,
+      context: { nodeCount: removedDocumentNodes.length },
+    })
+  })
   return { projectId, deletedNodeIds: unique, undoRef }
 }
 
@@ -258,6 +354,16 @@ export function clearCanvasProject(projectId: string): Record<string, unknown> {
   useCanvasStore.getState().clearCanvas()
   const undoRef = rememberCanvasUndo(projectId, 'clear_canvas')
   persistCanvasState()
+  const documentNodes = before.nodes.filter(isEditableLayerStackResultNode)
+  void Promise.all(documentNodes.map((node) => (
+    markMultiLayerDocumentReleaseCandidate({ nodeId: node.id, data: node.data })
+  ))).catch((error) => {
+    logger.error('清空画布后的文档候选登记失败', error, {
+      event: 'canvas.multi_layer_document.release_candidate.mark.failed',
+      projectId,
+      context: { nodeCount: documentNodes.length },
+    })
+  })
   return { projectId, clearedNodeCount, clearedEdgeCount, undoRef }
 }
 

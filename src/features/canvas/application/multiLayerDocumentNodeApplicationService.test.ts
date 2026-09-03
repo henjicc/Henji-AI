@@ -123,6 +123,7 @@ function setup() {
   }
   const canvasPort: MultiLayerDocumentNodeCanvasPort = {
     commitMaterializedProjection: vi.fn(async () => undefined),
+    commitLegacyMigration: vi.fn(async () => 'committed'),
     createExportedImageNode: vi.fn(async () => ({
       nodeId: 'export-node', edgeId: 'export-edge', undoRef: 'undo-export',
     })),
@@ -316,5 +317,56 @@ describe('多图层文档节点 application 服务', () => {
         layerStackDocument: legacyDocument(),
       },
     })).rejects.toMatchObject({ code: 'MIGRATION_REQUIRED', recoverable: true })
+  })
+
+  it('旧 V1 首次迁移创建 V3 并通过无画布历史 CAS 接管', async () => {
+    const { service, documentPort, canvasPort } = setup()
+    const document = legacyDocument()
+    const data: LayerStackResultNodeData = {
+      resultKind: 'layer-stack',
+      imageUrl: '/composite.png',
+      previewImageUrl: '/thumb.webp',
+      aspectRatio: '4:3',
+      layerStackDocument: document,
+    }
+    await expect(service.migrateLegacyDocument({
+      projectId: 'project-a', nodeId: 'node-a', data,
+    })).resolves.toMatchObject({ imageEditSession: { documentRef: 'image-edit-v3:document-a' } })
+    expect(documentPort.createFromLayerStack).toHaveBeenCalledWith({ nodeId: 'node-a', document, signal: undefined })
+    expect(canvasPort.commitLegacyMigration).toHaveBeenCalledWith(expect.objectContaining({
+      projectId: 'project-a',
+      nodeId: 'node-a',
+      expectedDocument: document,
+      historyPolicy: MULTI_LAYER_NODE_PROJECTION_HISTORY_POLICY,
+    }))
+  })
+
+  it('旧 V1 迁移成功后再次打开直接复用同一会话，不重复摄取', async () => {
+    const { service, documentPort, canvasPort } = setup()
+    await expect(service.migrateLegacyDocument({
+      projectId: 'project-a', nodeId: 'node-a', data: nodeData(),
+    })).resolves.toMatchObject({ imageEditSession: sourceSession })
+    expect(documentPort.createFromLayerStack).not.toHaveBeenCalled()
+    expect(canvasPort.commitLegacyMigration).not.toHaveBeenCalled()
+  })
+
+  it('旧 V1 迁移 CAS 失败保留可重试错误并登记新文档候选', async () => {
+    const { service, documentPort, canvasPort } = setup()
+    vi.mocked(canvasPort.commitLegacyMigration).mockRejectedValueOnce(new Error('node changed'))
+    await expect(service.migrateLegacyDocument({
+      projectId: 'project-a',
+      nodeId: 'node-a',
+      data: {
+        resultKind: 'layer-stack',
+        imageUrl: '/composite.png',
+        previewImageUrl: '/thumb.webp',
+        aspectRatio: '4:3',
+        layerStackDocument: legacyDocument(),
+      },
+    })).rejects.toMatchObject({ code: 'OPERATION_FAILED', recoverable: true })
+    expect(documentPort.markReleaseCandidate).toHaveBeenCalledWith(expect.objectContaining({
+      nodeId: 'node-a',
+      session: expect.objectContaining({ documentRef: 'image-edit-v3:document-a' }),
+    }))
   })
 })

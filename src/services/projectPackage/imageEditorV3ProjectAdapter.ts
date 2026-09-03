@@ -29,6 +29,7 @@ export function createProjectImageEditorV3Extension(
   nodes: readonly CanvasNode[],
 ): ImageEditProjectPackageExtensionV3 | undefined {
   const documents = new Map<string, ReturnType<typeof toImageEditProjectPackageDocumentReferenceV3>>()
+  const ownerByDocument = new Map<string, string>()
   for (const node of nodes) {
     const session = readNodeSession(node)
     if (!session) continue
@@ -40,7 +41,12 @@ export function createProjectImageEditorV3Extension(
     )) {
       throw new TypeError(`同一图片编辑文档存在冲突版本：${reference.documentRef}`)
     }
+    const previousOwner = ownerByDocument.get(reference.documentRef)
+    if (previousOwner) {
+      throw new TypeError(`图片编辑文档不能被多个节点共享：${previousOwner}、${node.id}`)
+    }
     documents.set(reference.documentRef, reference)
+    ownerByDocument.set(reference.documentRef, node.id)
   }
   if (documents.size === 0) return undefined
   return {
@@ -74,7 +80,17 @@ export function rewriteProjectImageEditorV3References(
 ): CanvasNode[] {
   const mappings = parseImageEditProjectPackageReferenceMappingsV3(rawMappings)
   const bySource = new Map<string, ImageEditProjectPackageReferenceMappingV3>()
-  for (const mapping of mappings) bySource.set(mapping.source.documentRef, mapping)
+  const importedRefs = new Set<string>()
+  for (const mapping of mappings) {
+    if (bySource.has(mapping.source.documentRef)) {
+      throw new Error(`项目包包含重复的图片编辑文档映射：${mapping.source.documentRef}`)
+    }
+    if (importedRefs.has(mapping.imported.documentRef)) {
+      throw new Error(`项目包导入后文档引用发生冲突：${mapping.imported.documentRef}`)
+    }
+    bySource.set(mapping.source.documentRef, mapping)
+    importedRefs.add(mapping.imported.documentRef)
+  }
 
   const used = new Set<string>()
   const rewritten = nodes.map((node) => {
@@ -87,6 +103,9 @@ export function rewriteProjectImageEditorV3References(
       || mapping.source.previewRef !== session.previewRef
     ) {
       throw new Error(`项目包图片编辑文档映射版本不匹配：${session.documentRef}`)
+    }
+    if (used.has(session.documentRef)) {
+      throw new Error(`项目包中的图片编辑文档被多个节点共享：${session.documentRef}`)
     }
     used.add(session.documentRef)
     return {
@@ -108,5 +127,6 @@ export function rewriteProjectImageEditorV3References(
       throw new Error(`项目包包含未被节点引用的图片编辑文档映射：${mapping.source.documentRef}`)
     }
   }
+  for (const node of rewritten) readNodeSession(node)
   return rewritten
 }

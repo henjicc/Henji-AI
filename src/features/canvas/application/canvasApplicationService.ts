@@ -2,6 +2,7 @@ import { v4 as uuidv4 } from 'uuid'
 
 import { useCanvasStore } from '@/stores/canvasStore'
 import { useProjectStore } from '@/stores/projectStore'
+import { maintainMultiLayerDocumentReleaseCandidates } from './multiLayerDocumentLifecycleService'
 import { createLogger } from '@/core/logging'
 
 import type { CanvasNodePlacement } from '@/core/assistant/capabilities/canvasMutationApplicationCapabilities'
@@ -392,6 +393,7 @@ export function undoCanvasChange(projectId: string, undoRef: string): Record<str
   if (!canvas.undo()) throw new CanvasApplicationError('CONFLICT', '当前画布没有可撤销操作')
   undoRecords.delete(undoRef)
   persistCanvasState()
+  void maintainMultiLayerDocumentReleaseCandidates(projectId)
   return { projectId, undoRef, operation: record.operation, status: 'undone' }
 }
 
@@ -407,6 +409,7 @@ export function redoCanvasChange(projectId: string): Record<string, unknown> {
     throw new CanvasApplicationError('CONFLICT', '当前画布没有可重做操作')
   }
   persistCanvasState()
+  void maintainMultiLayerDocumentReleaseCandidates(projectId)
   return { projectId, status: 'redone' }
 }
 

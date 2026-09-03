@@ -39,6 +39,11 @@ const PENDING_PACKAGE_REF_PATTERN = /^image-edit-package-open:[a-f0-9-]{36}$/
 export interface BasePayload { requestId: string }
 export interface LoadDocumentPayload extends BasePayload { documentRef: string }
 export interface DeleteDocumentIfRevisionPayload extends LoadDocumentPayload { expectedRevision: number }
+export interface ForkDocumentPayload extends BasePayload {
+  sourceDocumentRef: string
+  expectedRevision: number
+  targetDocumentRef: string
+}
 export interface SaveDocumentPayload extends BasePayload {
   documentId: string
   revision: number
@@ -251,6 +256,26 @@ export function parseImageEditorV3DeleteIfRevisionPayload(
   return {
     requestId: readRequestId(record),
     documentRef,
+    expectedRevision: readSafeInteger(record, 'expectedRevision', 0, Number.MAX_SAFE_INTEGER),
+  }
+}
+
+export function parseImageEditorV3ForkPayload(input: unknown): ForkDocumentPayload {
+  const record = parseRecord(input)
+  const sourceDocumentRef = record.sourceDocumentRef
+  const targetDocumentRef = record.targetDocumentRef
+  if (typeof sourceDocumentRef !== 'string' || typeof targetDocumentRef !== 'string') {
+    throw new Error('Invalid documentRef')
+  }
+  parseDocumentRef(sourceDocumentRef)
+  parseDocumentRef(targetDocumentRef)
+  if (sourceDocumentRef === targetDocumentRef) {
+    throw new Error('Fork target must differ from source')
+  }
+  return {
+    requestId: readRequestId(record),
+    sourceDocumentRef,
+    targetDocumentRef,
     expectedRevision: readSafeInteger(record, 'expectedRevision', 0, Number.MAX_SAFE_INTEGER),
   }
 }

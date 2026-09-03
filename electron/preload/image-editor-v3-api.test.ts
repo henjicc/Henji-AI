@@ -97,6 +97,29 @@ describe('图片编辑 V3 preload 契约', () => {
     expect(invoke).toHaveBeenCalledWith('imageEditorV3:document:deleteIfRevision', request)
   })
 
+  it('文档 fork 只透传源精确 revision 与目标稳定引用', async () => {
+    const invoke = vi.fn(async () => ({
+      documentRef: 'image-edit-v3:target',
+      revision: 3,
+      previewRef: RESOURCE_REF,
+    }))
+    const api = createImageEditorV3Api(
+      invoke as unknown as Parameters<typeof createImageEditorV3Api>[0],
+    )
+    const request = {
+      requestId: 'document-fork',
+      sourceDocumentRef: 'image-edit-v3:source' as const,
+      expectedRevision: 3,
+      targetDocumentRef: 'image-edit-v3:target' as const,
+    }
+
+    await expect(api.forkDocument(request)).resolves.toMatchObject({
+      documentRef: 'image-edit-v3:target',
+      revision: 3,
+    })
+    expect(invoke).toHaveBeenCalledWith('imageEditorV3:document:fork', request)
+  })
+
   it('瓦片精度、坐标与取消 requestId 原样进入独立 IPC', async () => {
     const invoke = vi.fn(async () => undefined)
     const api = createImageEditorV3Api(

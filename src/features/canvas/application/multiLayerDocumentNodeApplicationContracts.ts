@@ -131,6 +131,13 @@ export interface MultiLayerDocumentNodeCanvasPort {
      */
     historyPolicy: typeof MULTI_LAYER_NODE_PROJECTION_HISTORY_POLICY
   }): Promise<void>
+  commitLegacyMigration(input: {
+    projectId: string
+    nodeId: string
+    expectedDocument: LayerStackDocumentV1
+    projection: MultiLayerDocumentNodeProjection
+    historyPolicy: typeof MULTI_LAYER_NODE_PROJECTION_HISTORY_POLICY
+  }): Promise<'committed' | 'already-committed'>
   createExportedImageNode(input: {
     projectId: string
     sourceNodeId: string
@@ -150,6 +157,12 @@ export interface MultiLayerDocumentNodeApplicationService {
     data: LayerStackResultNodeData
     signal?: AbortSignal
   }): Promise<ImageEditSessionReferenceV3>
+  migrateLegacyDocument(input: {
+    projectId: string
+    nodeId: string
+    data: LayerStackResultNodeData
+    signal?: AbortSignal
+  }): Promise<MultiLayerDocumentNodeProjection>
   saveMaterializedProjection(input: {
     projectId: string
     nodeId: string

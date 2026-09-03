@@ -39,6 +39,38 @@ function documentAt(documentId: string, revision: number, marker = ''): ImageEdi
 }
 
 describe('ImageEditDocumentRepository', () => {
+  it('从精确 revision fork 独立文档，后续编辑互不影响', async () => {
+    const repository = new ImageEditDocumentRepository(rootDir)
+    await repository.create({
+      documentId: 'fork-source',
+      revision: 2,
+      document: documentAt('fork-source', 2, 'source'),
+    })
+
+    const forked = await repository.fork({
+      sourceDocumentRef: 'image-edit-v3:fork-source',
+      expectedRevision: 2,
+      targetDocumentId: 'fork-target',
+    })
+    expect(forked).toMatchObject({ documentId: 'fork-target', revision: 2 })
+    expect((forked.document as ImageEditDocumentV3).id).toBe('fork-target')
+
+    await repository.save({
+      documentId: 'fork-target',
+      expectedRevision: 2,
+      document: documentAt('fork-target', 3, 'target-edited'),
+      resourceRefs: [],
+    })
+    expect((await repository.load('fork-source')).revision).toBe(2)
+    expect(((await repository.load('fork-source')).document as ImageEditDocumentV3).layers[0]?.name)
+      .toBe('source')
+    await expect(repository.fork({
+      sourceDocumentRef: 'image-edit-v3:fork-source',
+      expectedRevision: 1,
+      targetDocumentId: 'fork-conflict',
+    })).rejects.toBeInstanceOf(DocumentRevisionConflictError)
+  })
+
   it('以 revision CAS 保存并生成稳定的项目引用', async () => {
     const repository = new ImageEditDocumentRepository(rootDir)
     const created = await repository.create({

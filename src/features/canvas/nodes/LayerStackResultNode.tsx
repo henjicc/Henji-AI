@@ -5,7 +5,7 @@ import { Maximize2 } from 'lucide-react';
 import { UiButton } from '@/components/ui';
 import { ICON_NODE_ASSET_GROUP } from '@/core/theme/icons';
 import { canvasEventBus } from '@/features/canvas/application/canvasServices';
-import { openCanvasSpecialEditor } from '@/features/canvas/application/specialEditorApplicationService';
+import { migrateLegacyMultiLayerDocumentNode } from '@/features/canvas/application/multiLayerDocumentNodeGenerationAdapter';
 import { resolveImageDisplayUrl } from '@/features/canvas/application/imageData';
 import { NODE_TOOL_TYPES, type LayerStackResultNodeData } from '@/features/canvas/domain/canvasNodes';
 import { isEditableMultiLayerDocumentNode } from '@/features/canvas/domain/multiLayerDocumentNode';
@@ -51,7 +51,7 @@ export const LayerStackResultNode = memo(({ id, data, selected, width, height }:
   const resolvedWidth = Math.max(240, typeof width === 'number' ? width : 300);
   const resolvedHeight = Math.max(180, typeof height === 'number' ? height : 220);
 
-  const openEditor = (): void => {
+  const openEditor = async (): Promise<void> => {
     if (isEditableV3) {
       canvasEventBus.publish('tool-dialog/open', {
         nodeId: id,
@@ -60,12 +60,18 @@ export const LayerStackResultNode = memo(({ id, data, selected, width, height }:
       return;
     }
     if (!projectId || !document) return;
-    openCanvasSpecialEditor({
-      projectId,
-      nodeId: id,
-      editorKey: 'layers',
-      initialState: { ...data, layerStackDocument: document },
-    });
+    try {
+      await migrateLegacyMultiLayerDocumentNode({ projectId, nodeId: id, data });
+      canvasEventBus.publish('tool-dialog/open', {
+        nodeId: id,
+        toolType: NODE_TOOL_TYPES.edit,
+      });
+    } catch (error) {
+      canvasEventBus.publish('canvas/toast', {
+        message: error instanceof Error ? error.message : '旧版图层文档迁移失败，请重试',
+        type: 'error',
+      });
+    }
   };
 
   return (
@@ -75,7 +81,7 @@ export const LayerStackResultNode = memo(({ id, data, selected, width, height }:
       className={`group relative overflow-visible rounded-[var(--node-radius)] border bg-surface-dark/90 ${selected ? NODE_SELECTED_BORDER_CLASS : NODE_IDLE_BORDER_CLASS}`}
       style={{ width: resolvedWidth, height: resolvedHeight }}
       onClick={() => setSelectedNode(id)}
-      onDoubleClick={(event) => { event.stopPropagation(); openEditor(); }}
+      onDoubleClick={(event) => { event.stopPropagation(); void openEditor(); }}
     >
       <NodeHeader
         className={NODE_HEADER_FLOATING_POSITION_CLASS}
@@ -105,7 +111,7 @@ export const LayerStackResultNode = memo(({ id, data, selected, width, height }:
             size="sm"
             variant="glass"
             className="nodrag absolute bottom-3 right-3 gap-1.5"
-            onClick={(event) => { event.stopPropagation(); openEditor(); }}
+            onClick={(event) => { event.stopPropagation(); void openEditor(); }}
           >
             <Maximize2 className="h-3.5 w-3.5" />
             编辑

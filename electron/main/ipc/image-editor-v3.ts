@@ -16,6 +16,7 @@ import {
   ImageEditDocumentRepository,
   ImageEditorV3SourceIngestor,
   ManagedRasterMaterializer,
+  parseDocumentRef,
   RasterExportSessionManager,
   SharpSourceProvider,
   toDocumentRef,
@@ -32,6 +33,7 @@ import {
   parseImageEditorV3BasePayload,
   parseImageEditorV3GarbageCollectPayload,
   parseImageEditorV3DeleteIfRevisionPayload,
+  parseImageEditorV3ForkPayload,
   parseImageEditorV3LoadPayload,
   parseImageEditorV3SavePayload,
   type SaveDocumentPayload,
@@ -50,6 +52,7 @@ export {
   parseImageEditorV3IngestSourcePayload,
   parseImageEditorV3LoadPayload,
   parseImageEditorV3DeleteIfRevisionPayload,
+  parseImageEditorV3ForkPayload,
   parseImageEditorV3RelinkPackageExternalSourcePayload,
   parseImageEditorV3SavePayload,
   parseImageEditorV3TilePayload,
@@ -382,6 +385,27 @@ export function registerImageEditorV3Ipc(): void {
         )
         throwIfAborted(signal)
         return { deleted }
+      },
+    ),
+    guard,
+  )
+  registerIpcHandler(
+    'imageEditorV3:document:fork',
+    parseImageEditorV3ForkPayload,
+    (payload, event) => runRequest(
+      'document.fork',
+      payload.requestId,
+      event.sender.id,
+      async (signal) => {
+        throwIfAborted(signal)
+        const targetDocumentId = parseDocumentRef(payload.targetDocumentRef)
+        const forked = await getRuntime().documents.fork({
+          sourceDocumentRef: payload.sourceDocumentRef,
+          expectedRevision: payload.expectedRevision,
+          targetDocumentId,
+        })
+        throwIfAborted(signal)
+        return toReference(forked)
       },
     ),
     guard,
