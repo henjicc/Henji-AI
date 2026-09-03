@@ -136,7 +136,7 @@ export interface MultiLayerDocumentNodeCanvasPort {
     sourceNodeId: string
     target: MultiLayerDocumentExportTarget
     raster: MultiLayerDocumentExportRaster
-  }): Promise<{ nodeId: string; edgeId: string }>
+  }): Promise<{ nodeId: string; edgeId: string; undoRef: string }>
 }
 
 export interface MultiLayerDocumentNodeApplicationService {
@@ -173,7 +173,9 @@ export interface MultiLayerDocumentNodeApplicationService {
     projectId: string
     sourceNodeId: string
     data: LayerStackResultNodeData
+    /** 编辑器实时保存后返回的精确会话；未打开编辑器时沿用节点投影。 */
+    session?: ImageEditSessionReferenceV3
     target: unknown
     signal?: AbortSignal
-  }): Promise<{ nodeId: string; edgeId: string; raster: MultiLayerDocumentExportRaster }>
+  }): Promise<{ nodeId: string; edgeId: string; undoRef: string; raster: MultiLayerDocumentExportRaster }>
 }

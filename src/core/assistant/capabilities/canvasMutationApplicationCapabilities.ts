@@ -1,7 +1,10 @@
 import { z } from 'zod'
 
 import { ASSISTANT_CANVAS_IMAGE_CAPABILITY_IDS } from '../../canvas/imageCapabilityIds'
-import type { ApplicationCapabilityDefinition } from '../applicationCapabilities'
+import {
+  applicationRefSchema,
+  type ApplicationCapabilityDefinition,
+} from '../applicationCapabilities'
 import {
   capabilityControl,
   capabilityOutputSchema,
@@ -848,6 +851,101 @@ const disconnectCanvasEdge = defineApplicationCapability({
   }] },
 })
 
+export const EXPORT_IMAGE_EDIT_TARGET_TO_CANVAS_CAPABILITY_ID = 'export_image_edit_target_to_canvas'
+
+const canvasProjectRefSchema = applicationRefSchema.extend({
+  kind: z.literal('canvas.project'),
+}).strict()
+const canvasNodeRefSchema = applicationRefSchema.extend({
+  kind: z.literal('canvas.node'),
+}).strict()
+const canvasEdgeRefSchema = applicationRefSchema.extend({
+  kind: z.literal('canvas.edge'),
+}).strict()
+const imageEditExportTargetRefSchema = applicationRefSchema.extend({
+  kind: z.enum(['image_edit.layer', 'image_edit.group', 'image_mark.annotation']),
+}).strict()
+
+const exportImageEditTargetToCanvas = defineApplicationCapability({
+  id: EXPORT_IMAGE_EDIT_TARGET_TO_CANVAS_CAPABILITY_ID,
+  version: 1,
+  title: '导出图片编辑目标到画布',
+  description: '把当前多图层图片文档中的单个栅格图层、图层组或标注元素原子导出为普通图片节点并连接来源。',
+  domain: 'image_edit',
+  aliases: ['导出图层到画布', '导出元素到画布', 'export layer to canvas', 'export element to canvas'],
+  readOnly: false,
+  risk: 'R1',
+  dataClasses: ['C1'],
+  permission: 'canvas:write',
+  idempotent: false,
+  destructive: false,
+  timeoutMs: 120_000,
+  supportsPreview: false,
+  supportsUndo: true,
+  requiredScopes: ['image_edit', 'canvas'],
+  parallelSafe: false,
+  availability: ['当前画布项目已打开', '来源节点是可编辑的多图层图片文档', '目标是受支持的稳定图片编辑引用'],
+  prerequisites: [
+    '目标必须是当前文档内唯一明确的 image_edit.layer、image_edit.group 或 image_mark.annotation 稳定引用。',
+    '效果层、调整层、浮点精度或 HDR 文档不支持本操作。',
+  ],
+  acceptsRefs: ['canvas.project', 'canvas.node', 'image_edit.layer', 'image_edit.group', 'image_mark.annotation'],
+  producesRefs: ['canvas.node', 'canvas.edge'],
+  inputSchema: z.object({
+    projectRef: canvasProjectRefSchema,
+    sourceNodeRef: canvasNodeRefSchema,
+    targetRef: imageEditExportTargetRefSchema,
+  }).strict(),
+  outputSchema: capabilityOutputSchema({
+    projectRef: canvasProjectRefSchema,
+    sourceNodeRef: canvasNodeRefSchema,
+    targetRef: imageEditExportTargetRefSchema,
+    nodeRef: canvasNodeRefSchema,
+    edgeRef: canvasEdgeRefSchema,
+    undoRef: z.string().min(1),
+    width: z.number().int().positive(),
+    height: z.number().int().positive(),
+    mediaType: z.literal('image/png'),
+  }),
+  concurrencyKey: 'image_edit_export',
+  resolveConcurrencyKey: (input) => [
+    'image_edit_export',
+    input.sourceNodeRef.id,
+    input.targetRef.kind,
+    input.targetRef.id,
+  ].join(':'),
+  resolveTargetIds: (input) => ({
+    projectId: input.projectRef.id,
+    sourceNodeId: input.sourceNodeRef.id,
+    targetKind: input.targetRef.kind,
+    targetId: input.targetRef.id,
+  }),
+  summarize: (output) => `已把所选图片编辑目标导出为 ${output.width}×${output.height} 的普通图片节点。`,
+  createUndo: (output) => ({ kind: 'canvas_history', token: output.undoRef }),
+  control: capabilityControl('create', ['canvas.node'], {
+    revisionScopes: ['canvas'],
+    verificationRequired: true,
+    cancelable: true,
+    alsoImpacts: [{ effect: 'create', entityTypes: ['canvas.edge'] }],
+  }),
+  successEvidence: ['返回实际创建的 canvas.node、canvas.edge 稳定引用和单次事务撤销引用。'],
+  failureRecovery: [
+    '物化或画布事务失败时不会修改原文档；新建节点、连线与受管 PNG 会被补偿，可重新读取当前选择后重试。',
+  ],
+  resolveObservedEffects: (_input, output) => [
+    {
+      effect: 'create', entityTypes: ['canvas.node'], propertyIds: [],
+      targetRefs: [output.nodeRef], count: 1, verified: false,
+      evidence: [`node:${output.nodeRef.id}`, `png:${output.width}x${output.height}`],
+    },
+    {
+      effect: 'create', entityTypes: ['canvas.edge'], propertyIds: [],
+      targetRefs: [output.edgeRef], count: 1, verified: false,
+      evidence: [`edge:${output.edgeRef.id}`],
+    },
+  ],
+})
+
 export const CANVAS_MUTATION_APPLICATION_CAPABILITIES: ApplicationCapabilityDefinition[] = [
   addCanvasNode,
   applyCanvasImageCapability,
@@ -867,4 +965,5 @@ export const CANVAS_MUTATION_APPLICATION_CAPABILITIES: ApplicationCapabilityDefi
   ungroupCanvasNode,
   clearCanvas,
   disconnectCanvasEdge,
+  exportImageEditTargetToCanvas,
 ]

@@ -342,6 +342,65 @@ function attachUiInspectionCanvasEditing(context) {
       throw new Error(`多图层文档编辑器界面结构不符合约束：${JSON.stringify(structure)}`)
     }
 
+    const exportButton = dialog.getByRole('button', { name: /导出到画布|Export to canvas/i })
+    await exportButton.waitFor({ state: 'visible', timeout: 8000 })
+    await page.waitForFunction(() => [...document.querySelectorAll('button')].some((button) => (
+      /导出到画布|Export to canvas/i.test(button.textContent ?? '') && !button.disabled
+    )), undefined, { timeout: 8000 })
+    await exportButton.click()
+    await page.waitForFunction(() => [...document.querySelectorAll('button')].some((button) => (
+      /^(导出到画布|Export to canvas)$/i.test(button.textContent?.trim() ?? '') && !button.disabled
+    )), undefined, { timeout: 60000 })
+    if (!(await dialog.isVisible())) throw new Error('导出图层后多图层图片编辑器被意外关闭')
+    await settlePage(page, 900)
+    const exportEvidence = await page.evaluate(async ({ targetProjectId, sourceNodeId, documentRef }) => {
+      const rows = await window.henjiNative.db.select(
+        'SELECT nodes_json, edges_json FROM storyboard_projects WHERE id = ? LIMIT 1',
+        [targetProjectId]
+      )
+      const nodes = JSON.parse(rows[0]?.nodes_json ?? '[]')
+      const edges = JSON.parse(rows[0]?.edges_json ?? '[]')
+      const sourceNode = nodes.find((candidate) => candidate.id === sourceNodeId)
+      const exportedNodes = nodes.filter((candidate) => (
+        candidate.type === 'exportImageNode'
+        && candidate.data?.resultKind === 'image'
+        && edges.some((edge) => edge.source === sourceNodeId && edge.target === candidate.id)
+      ))
+      const loaded = await window.henjiNative.imageEditorV3.loadDocument({
+        requestId: `reality-multi-layer-export-check-${crypto.randomUUID()}`,
+        documentRef,
+      })
+      return {
+        nodeCount: nodes.length,
+        exportedCount: exportedNodes.length,
+        ordinary: exportedNodes.every((candidate) => (
+          typeof candidate.data?.imageUrl === 'string'
+          && candidate.data.imageUrl.length > 0
+          && typeof candidate.data?.previewImageUrl === 'string'
+          && candidate.data.previewImageUrl.length > 0
+          && typeof candidate.data?.aspectRatio === 'string'
+          && typeof candidate.data?.displayName === 'string'
+          && !candidate.data.imageEditSession
+          && !candidate.data.layerStackDocument
+        )),
+        sourceRevision: sourceNode?.data?.imageEditSession?.revision,
+        documentRevision: loaded?.revision,
+        layerVisibility: loaded?.document?.layers?.map((layer) => layer.visible),
+      }
+    }, {
+      targetProjectId: projectId,
+      sourceNodeId: fixture.nodeId,
+      documentRef: fixture.documentRef,
+    })
+    if (exportEvidence.nodeCount !== fixture.expectedNodeCount + 1
+      || exportEvidence.exportedCount !== 1
+      || !exportEvidence.ordinary
+      || exportEvidence.sourceRevision !== fixture.initialRevision
+      || exportEvidence.documentRevision !== fixture.initialRevision
+      || exportEvidence.layerVisibility?.some((visible) => visible !== true)) {
+      throw new Error(`多图层目标没有原子导出为普通图片节点：${JSON.stringify(exportEvidence)}`)
+    }
+
     await dialog.getByRole('button', { name: /关闭编辑器|Close editor/i }).click()
     await dialog.waitFor({ state: 'hidden', timeout: 12000 })
     await result.getByRole('button', { name: /^(编辑|Edit)$/i }).click()
@@ -411,7 +470,7 @@ function attachUiInspectionCanvasEditing(context) {
       }
     }, { targetProjectId: projectId, targetNodeId: fixture.nodeId })
     if (persistedProjection.matchingNodeCount !== 1
-      || persistedProjection.nodeCount !== fixture.expectedNodeCount
+      || persistedProjection.nodeCount !== fixture.expectedNodeCount + 1
       || persistedProjection.position?.x !== 720
       || persistedProjection.position?.y !== 80
       || persistedProjection.revision !== fixture.initialRevision + 1

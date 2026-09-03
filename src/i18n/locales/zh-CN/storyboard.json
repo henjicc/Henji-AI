@@ -129,7 +129,10 @@
       "close": "关闭编辑器",
       "closing": "正在保存并关闭...",
       "stillOpening": "编辑器仍在打开，请稍候再试",
-      "closeFailedRetry": "保存失败，重试关闭"
+      "closeFailedRetry": "保存失败，重试关闭",
+      "exportToCanvas": "导出到画布",
+      "exportingToCanvas": "正在导出",
+      "exportToCanvasFailed": "导出失败，重试"
     }
   },
   "nodeToolbar": {

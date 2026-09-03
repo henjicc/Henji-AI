@@ -123,7 +123,9 @@ function setup() {
   }
   const canvasPort: MultiLayerDocumentNodeCanvasPort = {
     commitMaterializedProjection: vi.fn(async () => undefined),
-    createExportedImageNode: vi.fn(async () => ({ nodeId: 'export-node', edgeId: 'export-edge' })),
+    createExportedImageNode: vi.fn(async () => ({
+      nodeId: 'export-node', edgeId: 'export-edge', undoRef: 'undo-export',
+    })),
   }
   return {
     documentPort,
@@ -230,7 +232,9 @@ describe('多图层文档节点 application 服务', () => {
     const target = { kind: 'raster-layer', ref: imageEditV3LayerRef('document-a', 'layer-a') }
     await expect(service.exportTarget({
       projectId: 'project-a', sourceNodeId: 'node-a', data: nodeData(), target,
-    })).resolves.toMatchObject({ nodeId: 'export-node', edgeId: 'export-edge' })
+    })).resolves.toMatchObject({
+      nodeId: 'export-node', edgeId: 'export-edge', undoRef: 'undo-export',
+    })
     expect(documentPort.materializeExportTarget).toHaveBeenCalledWith({
       session: sourceSession,
       target,
@@ -245,6 +249,27 @@ describe('多图层文档节点 application 服务', () => {
       target: { kind: 'layer-group', ref: imageEditV3GroupRef('other-document', 'group-a') },
     })).rejects.toMatchObject({ code: 'INVALID_INPUT' })
     expect(documentPort.materializeExportTarget).toHaveBeenCalledTimes(1)
+  })
+
+  it('实时保存会话可高于节点投影，但不能切换文档或倒退版本', async () => {
+    const { service, documentPort } = setup()
+    const target = { kind: 'raster-layer', ref: imageEditV3LayerRef('document-a', 'layer-a') }
+    await service.exportTarget({
+      projectId: 'project-a', sourceNodeId: 'node-a', data: nodeData(), target,
+      session: flushedSession,
+    })
+    expect(documentPort.materializeExportTarget).toHaveBeenCalledWith(expect.objectContaining({
+      session: flushedSession,
+    }))
+
+    await expect(service.exportTarget({
+      projectId: 'project-a', sourceNodeId: 'node-a', data: nodeData(), target,
+      session: { ...sourceSession, revision: 1 },
+    })).rejects.toMatchObject({ code: 'DOCUMENT_CONFLICT' })
+    await expect(service.exportTarget({
+      projectId: 'project-a', sourceNodeId: 'node-a', data: nodeData(), target,
+      session: { ...sourceSession, documentRef: 'image-edit-v3:other-document' },
+    })).rejects.toMatchObject({ code: 'DOCUMENT_CONFLICT' })
   })
 
   it('画布事务未接管独立导出资源时执行补偿释放', async () => {

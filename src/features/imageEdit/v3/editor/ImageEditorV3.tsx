@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { exportDiagnosticBundle } from '@/commands/logging'
@@ -13,9 +13,18 @@ import { createImageEditorDiagnosticSummaryV3 } from './imageEditorDiagnosticSum
 
 function ImageEditorWorkspaceV3(props: ImageEditorV3Props): JSX.Element {
   const { controller, bus } = useImageEditorControllerV3(props)
+  const { onEditorContextChange } = props
   const showLayers = controller.profile.panels.includes('layers')
   const showProperties = controller.profile.panels.includes('properties')
   const showSidebar = showLayers || showProperties
+
+  useEffect(() => {
+    onEditorContextChange?.({
+      sessionId: controller.sessionId,
+      document: controller.document,
+    })
+    return () => onEditorContextChange?.(null)
+  }, [controller.document, controller.sessionId, onEditorContextChange])
 
   return (
     <div

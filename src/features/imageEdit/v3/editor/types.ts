@@ -63,6 +63,11 @@ export interface ImageEditorV3Props {
   onDocumentChange: (document: ImageEditDocumentV3) => void
   /** 只在持久命令、撤销/重做或清空历史后触发；pointer preview 不会进入该回调。 */
   onPersistenceChange?: (snapshot: ImageEditPersistenceSnapshotV3) => void
+  /** 宿主工具条只读取当前会话与文档，不获得命令总线或 Store 写权限。 */
+  onEditorContextChange?: (context: {
+    sessionId: string
+    document: ImageEditDocumentV3
+  } | null) => void
   toolbarLeading?: ReactNode
   toolbarActions?: ReactNode
   previewRenderer?: ImageEditorV3PreviewRenderer
