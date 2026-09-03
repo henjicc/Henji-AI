@@ -14,6 +14,7 @@ import {
   type WindowPresentationMode,
 } from './window-presentation'
 import { isTrustedMainRendererUrl } from './security/main-renderer-url'
+import { resolveDevelopmentLaunchQuery } from './development-launch'
 
 const logger = createMainLogger('main.window')
 let mainWindow: BrowserWindow | null = null
@@ -106,10 +107,20 @@ export function createWindow(options: CreateWindowOptions = {}): BrowserWindow {
   }
 
   if (!win.isDestroyed()) {
+    const developmentLaunch = resolveDevelopmentLaunchQuery()
+    developmentLaunch.warnings.forEach((message) => {
+      logger.warn(message, { event: 'window.development_launch.invalid' })
+    })
     if (!process.env['ELECTRON_RENDERER_URL']) {
-      void win.loadFile(path.join(__dirname, '../renderer/index.html'))
+      void win.loadFile(path.join(__dirname, '../renderer/index.html'), {
+        query: developmentLaunch.query,
+      })
     } else {
-      void win.loadURL(process.env['ELECTRON_RENDERER_URL'])
+      const rendererUrl = new URL(process.env['ELECTRON_RENDERER_URL'])
+      Object.entries(developmentLaunch.query).forEach(([key, value]) => {
+        rendererUrl.searchParams.set(key, value)
+      })
+      void win.loadURL(rendererUrl.toString())
     }
   }
 

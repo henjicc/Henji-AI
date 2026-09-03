@@ -37,6 +37,8 @@ import { OnboardingModal } from '@/features/onboarding/components/OnboardingModa
 import { OnboardingHints } from '@/features/onboarding/components/OnboardingHints'
 import { getPlatform } from '@/platform/runtime'
 import { useProjectStore } from '@/stores/projectStore'
+import { readDevelopmentLaunchOptions } from '@/core/development/developmentLaunch'
+import { openApplicationSurface } from '@/features/navigation/application/surfaceNavigationService'
 
 const logger = createLogger('App')
 
@@ -74,6 +76,7 @@ const overlayPrefetchOrder = [loadSettingsModal, loadAssetLibraryFloatingPanel, 
  * 生产态是现成的 chunk，没有这个问题，直接等第一个空闲帧。
  */
 const OVERLAY_PREFETCH_DEV_DELAY_MS = 20000
+const developmentLaunch = readDevelopmentLaunchOptions()
 
 /**
  * 悬停即预取。空闲预取解决不了「刚启动就点」这一下（dev 下预取要让开转译队列，
@@ -118,6 +121,18 @@ const App: React.FC = () => {
   // 懒加载浮层的「装载闩」：打开过一次就一直挂着，避免每次开关都重新触发 Suspense
   const [assistantMounted, setAssistantMounted] = useState(false)
   const [assetPanelMounted, setAssetPanelMounted] = useState(false)
+
+  useEffect(() => {
+    if (!developmentLaunch.surfaceId) return
+    try {
+      openApplicationSurface(developmentLaunch.surfaceId, { requestId: 'development-launch' })
+    } catch (error) {
+      logger.warn('开发启动自动定位失败', error, {
+        event: 'app.development_launch.surface.failed',
+        context: { surfaceId: developmentLaunch.surfaceId },
+      })
+    }
+  }, [])
 
   const openAssetFloating = React.useCallback((): void => {
     openAssetLibrary('floating')

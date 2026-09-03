@@ -29,6 +29,7 @@ import { useImageEditorHandoffStore } from '@/features/imageEdit/store/imageEdit
 import { BlankImageDialog } from './BlankImageDialog';
 import { applyPngDpi, createBlankImageDataUrl, type BlankImageSpec } from './blankImage';
 import { ImageMarkSourceMenu } from './ImageMarkSourceMenu';
+import { readDevelopmentLaunchOptions } from '@/core/development/developmentLaunch';
 import {
   readImageMarkToolWorkspaceSourceV3,
   rememberImageMarkToolWorkspaceSessionV3,
@@ -59,6 +60,7 @@ export interface ImageMarkToolProps {
  * 返回/打开图片/文件名注入编辑器命令带左侧,不为它们单开一行。
  */
 export function ImageMarkTool({ onBack }: ImageMarkToolProps = {}): JSX.Element {
+  const developmentLaunch = readDevelopmentLaunchOptions();
   const { showNotification } = useNotification();
   const { addMedia, collecting } = useAddToAssetLibrary();
   const [source, setSource] = useState<ImageMarkSource | null>(() => (
@@ -73,6 +75,7 @@ export function ImageMarkTool({ onBack }: ImageMarkToolProps = {}): JSX.Element 
   const documentRef = useRef<ImageEditDocument>(createEmptyImageEditDocument());
   const sourceSequenceRef = useRef(source?.sessionKey ?? 0);
   const acceptingHandoffRef = useRef<string | null>(null);
+  const acceptedDevelopmentMediaRef = useRef(false);
 
   const acceptSource = useCallback(async (
     url: string,
@@ -111,6 +114,19 @@ export function ImageMarkTool({ onBack }: ImageMarkToolProps = {}): JSX.Element 
   ): void => {
     rememberImageMarkToolWorkspaceSessionV3(sessionKey, session);
   }, []);
+
+  useEffect(() => {
+    if (!developmentLaunch.mediaPath || acceptedDevelopmentMediaRef.current) return;
+    acceptedDevelopmentMediaRef.current = true;
+    void acceptSource(
+      developmentLaunch.mediaPath,
+      basename(developmentLaunch.mediaPath)
+    ).catch((error) => {
+      logger.error('image_mark.development_launch.media.failed', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    });
+  }, [acceptSource, developmentLaunch.mediaPath]);
 
   useEffect(() => {
     if (!pendingHandoff || acceptingHandoffRef.current === pendingHandoff.sessionRef) return;

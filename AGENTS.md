@@ -132,4 +132,6 @@ npm run assistant:live:suite -- --only camera --skip-generation
    - 已运行且无需重启：保持现状，不得重复启动第二个实例
    - 启动或重启失败：不得声称已完成，保留错误输出并如实报告
    - 只有触发本条时，最终回复才写实际状态：`🟢 开发环境已启动` / `🔄 开发环境已重启` / `✔️无需重启（开发环境保持运行）` / `🔴 开发环境启动失败`
+   - 开发重启默认带 `--dev-skip-onboarding`，仅临时隐藏本次启动的首次引导，不得改写用户真实引导状态；验证首次安装/引导本身时必须去掉该参数。
+   - 改动有明确界面时，重启后必须通过 `--dev-surface=<ApplicationSurfaceId>` 自动打开本次修改的页面；需要固定测试素材时再加 `--dev-media=<文件路径>`，由对应页面消费。图片编辑器使用 `--dev-surface=tool.image_edit --dev-media=docs/ref/test01.jpg`。这些参数只服务开发验收，禁止出现在正式用户界面。
 4. 助手改动还要多一步：对照 [assistant-status.md](docs/rules/assistant-status.md) 第零节，判断本次是否改变了「通/不通」、增减了欠账，或**推翻了以前已确定做好的内容**——命中任一条就更新那份台账。普通缺陷修复不用动它。

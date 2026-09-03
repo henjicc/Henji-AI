@@ -54,6 +54,25 @@ describe('OnboardingManager', () => {
     })
   })
 
+  it('开发启动可临时隐藏引导，但不会伪造完成状态', () => {
+    const storage = new MemoryStorage()
+    const manager = new OnboardingManager(
+      storage,
+      new ModelDefaultsManager(storage),
+      { suppressInitialOpen: true },
+    )
+
+    expect(manager.getSnapshot()).toMatchObject({
+      status: 'not_started',
+      entryReason: 'fresh_install',
+      isOpen: false,
+    })
+    expect(createManager(storage).getSnapshot()).toMatchObject({
+      status: 'not_started',
+      isOpen: true,
+    })
+  })
+
   it('支持继续、返回、稍后和手动重新运行', () => {
     const manager = createManager()
     manager.open()

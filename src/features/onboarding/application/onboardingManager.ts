@@ -8,6 +8,7 @@ import {
   modelDefaultsManager,
   type DefaultModelMediaType,
 } from '@/features/settings/modelDefaultsManager'
+import { readDevelopmentLaunchOptions } from '@/core/development/developmentLaunch'
 
 export const ONBOARDING_STORAGE_KEY = 'henji-onboarding-state'
 export const ONBOARDING_STATE_VERSION = 2
@@ -47,6 +48,10 @@ export interface OnboardingSnapshot extends OnboardingStateV2 {
 export interface OnboardingStorage {
   getItem(key: string): string | null
   setItem(key: string, value: string): void
+}
+
+export interface OnboardingManagerOptions {
+  suppressInitialOpen?: boolean
 }
 
 const LEGACY_INSTALLATION_KEYS = [
@@ -162,9 +167,11 @@ export class OnboardingManager {
   constructor(
     private readonly storage: OnboardingStorage,
     private readonly defaultsManager: ModelDefaultsManager = modelDefaultsManager,
+    options: OnboardingManagerOptions = {},
   ) {
     this.state = loadState(storage)
-    this.isOpen = this.state.status === 'not_started' || this.state.status === 'in_progress'
+    this.isOpen = options.suppressInitialOpen !== true
+      && (this.state.status === 'not_started' || this.state.status === 'in_progress')
     this.snapshot = this.createSnapshot()
     this.defaultsManager.subscribe(() => this.publish())
     this.persist()
@@ -337,7 +344,11 @@ export class OnboardingManager {
   }
 }
 
-export const onboardingManager = new OnboardingManager(browserStorage())
+export const onboardingManager = new OnboardingManager(
+  browserStorage(),
+  modelDefaultsManager,
+  { suppressInitialOpen: readDevelopmentLaunchOptions().skipOnboarding },
+)
 
 subscribeApplicationEvent('provider-key-configured', ({ providerId }) => {
   onboardingManager.markProviderConfigured(providerId)

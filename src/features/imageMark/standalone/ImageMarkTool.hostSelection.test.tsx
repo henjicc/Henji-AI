@@ -15,6 +15,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('@/platform/runtime', () => ({
   isImageEditorV3Enabled: mocks.featureEnabled,
+  isDesktopRuntime: () => false,
 }))
 
 vi.mock('@/platform/desktopApi', () => ({
@@ -88,6 +89,7 @@ async function openSource(): Promise<void> {
 
 describe('ImageMarkTool host selection', () => {
   beforeEach(() => {
+    window.history.replaceState({}, '', '/')
     mocks.featureEnabled.mockReset().mockReturnValue(false)
     mocks.openDialog.mockReset().mockResolvedValue('/private/tmp/source.png')
     mocks.allowMediaRoot.mockReset().mockResolvedValue(undefined)
@@ -103,6 +105,17 @@ describe('ImageMarkTool host selection', () => {
     await openSource()
     expect(await screen.findByTestId('legacy-image-editor')).toBeTruthy()
     expect(screen.queryByTestId('v3-image-editor')).toBeNull()
+  })
+
+  it('开发启动素材自动进入图片编辑器', async () => {
+    window.history.replaceState({}, '', '/?henjiDevMedia=%2Fprivate%2Ftmp%2Ftest01.jpg')
+    mocks.featureEnabled.mockReturnValue(true)
+
+    renderTool()
+
+    expect(await screen.findByTestId('v3-image-editor')).toBeTruthy()
+    expect(mocks.openDialog).not.toHaveBeenCalled()
+    expect(mocks.allowMediaRoot).toHaveBeenCalledWith('/private/tmp')
   })
 
   it('功能开关开启时进入 V3，显式回退只影响当前图片会话', async () => {
