@@ -37,11 +37,11 @@ export const UI_NAV_ITEM_ACTIVE_CLASS =
   `${UI_COLOR_ACCENT_SOFT_BG_WEAK_CLASS} ${UI_COLOR_ACCENT_TEXT_CLASS}`;
 
 /**
- * 紧凑横向 Tab 的克制选中态：比默认导航底更暗，避免在标题栏或属性栏里
- * 形成大块高亮。仅由明确选择 subtle 外观的 UiChipButton 消费。
+ * 紧凑横向 Tab 的线性选中态：背景保持透明，只用强调文字和底部指示线表达当前页。
+ * 仅由明确选择 subtle 外观的 UiChipButton 消费。
  */
 export const UI_NAV_ITEM_ACTIVE_SUBTLE_CLASS =
-  `bg-surface-dark ${UI_COLOR_ACCENT_TEXT_CLASS}`;
+  UI_COLOR_ACCENT_TEXT_CLASS;
 
 /** 纵向导航的末端指示条。 */
 export const UI_NAV_INDICATOR_END_CLASS =

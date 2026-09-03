@@ -73,7 +73,7 @@ describe('Ui primitives 选中态词汇表', () => {
     expect(defaultNavigation.classList.contains('bg-surface-dark')).toBe(false);
     expectClasses(subtleNavigation, UI_NAV_ITEM_ACTIVE_SUBTLE_CLASS);
     expectClasses(subtleNavigation, UI_NAV_INDICATOR_BOTTOM_SUBTLE_CLASS);
-    expect(subtleNavigation.classList.contains('bg-layer')).toBe(false);
+    expect(subtleNavigation.className).not.toMatch(/(?:^|\s)bg-/);
   });
 
   it('单选项使用强实底，多选标签使用描边与中性底', () => {
