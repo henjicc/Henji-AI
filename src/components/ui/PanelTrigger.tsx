@@ -9,6 +9,7 @@ import {
   type FloatingPanelPosition,
 } from './floatingPanelPosition'
 import { UI_FIELD_CONTROL_HEIGHT_SM_CLASS, UI_FIELD_LABEL_CLASS, UI_TRIGGER_BUTTON_CLASS, UI_TRIGGER_PANEL_CLASS } from './styleTokens'
+import { measureElementTextWidth } from './textMeasurement'
 import { UiButton } from './primitives'
 import { ChevronDown } from 'lucide-react'
 
@@ -21,7 +22,9 @@ type PanelTriggerProps = {
   buttonLabelClassName?: string
   panelClassName?: string
   zIndex?: number
-  panelWidth?: number | 'content'
+  panelWidth?: number
+  /** 纯文字菜单可传入全部项目文案，在打开前按最长项计算稳定宽度。 */
+  panelWidthLabels?: readonly string[]
   alignment?: 'bottomLeft' | 'aboveCenter'
   /** aboveCenter 对齐时面板底部与触发按钮顶部的间距（默认 45，与画布节点行内紧凑触发器保持一致时可调小） */
   gap?: number
@@ -47,6 +50,8 @@ type PanelTriggerControls = {
 
 const PANEL_VIEWPORT_GUTTER_PX = 8
 const PANEL_VIEWPORT_TOP_INSET_PX = 48
+// 标准文字菜单：外层 p-1（8）+ 菜单项 px-2.5（20）+ 玻璃边框（2）。
+const PANEL_TEXT_MENU_HORIZONTAL_CHROME_PX = 30
 
 export default function PanelTrigger(props: PanelTriggerProps): React.ReactElement {
   const {
@@ -59,6 +64,7 @@ export default function PanelTrigger(props: PanelTriggerProps): React.ReactEleme
     panelClassName,
     zIndex = 1000,
     panelWidth,
+    panelWidthLabels,
     alignment = 'bottomLeft',
     gap: gapProp = 45,
     panelHeight: _panelHeight,
@@ -77,6 +83,31 @@ export default function PanelTrigger(props: PanelTriggerProps): React.ReactEleme
   const [ready, setReady] = useState(false)
   const anchorRectRef = useRef<DOMRect | null>(null)
   const maxHeightRef = useRef<number>(0)
+  const lastMeasuredPanelWidthRef = useRef<number | null>(null)
+  const [measuredPanelWidth, setMeasuredPanelWidth] = useState<number | null>(null)
+
+  useLayoutEffect(() => {
+    if (!panelWidthLabels || panelWidthLabels.length === 0 || !ref.current) {
+      if (lastMeasuredPanelWidthRef.current !== null) {
+        lastMeasuredPanelWidthRef.current = null
+        setMeasuredPanelWidth(null)
+      }
+      return
+    }
+    const button = ref.current.querySelector('[data-panel-trigger-button]') as HTMLElement | null
+    if (!button) return
+    const nextWidth = measureElementTextWidth(
+      button,
+      panelWidthLabels,
+      PANEL_TEXT_MENU_HORIZONTAL_CHROME_PX,
+    )
+    if (nextWidth !== null && lastMeasuredPanelWidthRef.current !== nextWidth) {
+      lastMeasuredPanelWidthRef.current = nextWidth
+      setMeasuredPanelWidth(nextWidth)
+    }
+  }, [panelWidthLabels])
+
+  const resolvedPanelWidth = panelWidth ?? measuredPanelWidth
 
   useEffect(() => {
     maxHeightRef.current = 0
@@ -84,15 +115,6 @@ export default function PanelTrigger(props: PanelTriggerProps): React.ReactEleme
 
   const updatePanelPosition = useCallback((rect: DOMRect, reveal: boolean): void => {
     anchorRectRef.current = rect
-    const scrollRegion = panelRef.current?.querySelector<HTMLElement>('[data-panel-scroll-region]')
-    const measuredPanelWidth = panelWidth === 'content'
-      ? Math.max(
-          rect.width,
-          panelRef.current?.scrollWidth ?? 0,
-          panelRef.current?.getBoundingClientRect().width ?? 0,
-          scrollRegion?.scrollWidth ?? 0,
-        )
-      : panelWidth ?? rect.width
     const measuredPanelHeight = Math.max(
       _panelHeight ?? 0,
       panelRef.current?.scrollHeight ?? 0,
@@ -100,7 +122,7 @@ export default function PanelTrigger(props: PanelTriggerProps): React.ReactEleme
     )
     const position = resolveFloatingPanelPosition({
       anchor: rect,
-      panelWidth: measuredPanelWidth,
+      panelWidth: resolvedPanelWidth ?? rect.width,
       panelHeight: measuredPanelHeight,
       viewportWidth: window.innerWidth,
       viewportHeight: window.innerHeight,
@@ -118,7 +140,7 @@ export default function PanelTrigger(props: PanelTriggerProps): React.ReactEleme
 
     setPos(position)
     if (reveal) setReady(true)
-  }, [_panelHeight, alignment, gapProp, panelWidth, stableHeight])
+  }, [_panelHeight, alignment, gapProp, resolvedPanelWidth, stableHeight])
 
   const computePanelPosition = useCallback((): void => {
     if (!ref.current) return
@@ -257,10 +279,7 @@ export default function PanelTrigger(props: PanelTriggerProps): React.ReactEleme
             position: 'fixed',
             top: pos.top,
             left: pos.left,
-            width: panelWidth === 'content' && !ready ? 'max-content' : pos.width,
-            maxWidth: panelWidth === 'content'
-              ? `calc(100vw - ${PANEL_VIEWPORT_GUTTER_PX * 2}px)`
-              : undefined,
+            width: pos.width,
             maxHeight: pos.maxHeight,
             minHeight: stableHeight && maxHeightRef.current ? Math.min(maxHeightRef.current, pos.maxHeight) : undefined,
             zIndex,

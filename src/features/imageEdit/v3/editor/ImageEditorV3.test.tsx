@@ -86,6 +86,10 @@ describe('ImageEditorV3 professional shell', () => {
   beforeEach(async () => {
     await i18n.changeLanguage('zh-CN')
     vi.stubGlobal('ResizeObserver', ResizeObserverStub)
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({
+      font: '',
+      measureText: (text: string) => ({ width: text.length * 12 }),
+    } as unknown as CanvasRenderingContext2D)
     useImageEditorSessionStoreV3.setState({ sessions: {} })
     useImageEditorInteractionStoreV3.setState({
       layerDragBySession: {},

@@ -11,6 +11,7 @@ import { createPortal } from 'react-dom'
 import { UI_DROPDOWN_OPTION_ACTIVE_CLASS, UI_FIELD_CONTROL_HEIGHT_SM_CLASS, UI_FIELD_LABEL_CLASS, UI_TRIGGER_BUTTON_CLASS, UI_TRIGGER_PANEL_CLASS } from './styleTokens'
 import { UiButton, UiOptionButton } from './primitives'
 import { resolveDropdownDisplay } from './dropdownUtils'
+import { measureElementTextWidth } from './textMeasurement'
 import { ChevronDown } from 'lucide-react'
 
 const DROPDOWN_PANEL_GAP_PX = 8
@@ -19,16 +20,6 @@ export type DropdownOption<T extends string | number | boolean> = {
   label: string
   value: T
   disabled?: boolean
-}
-
-// 测宽用的离屏 canvas 只需要一张：每个 Dropdown 挂载时都新建一张，
-// 启动瞬间几十个下拉一起挂载就是几十次 canvas 创建 + 上下文申请。
-let measureContext: CanvasRenderingContext2D | null | undefined
-function getMeasureContext(): CanvasRenderingContext2D | null {
-  if (measureContext === undefined) {
-    measureContext = document.createElement('canvas').getContext('2d')
-  }
-  return measureContext
 }
 
 type DropdownProps<T extends string | number | boolean> = {
@@ -178,17 +169,16 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
     return (source || []).map((option) => String(option.label))
   }, [])
   const measureTextMinWidth = (targetButton: HTMLElement, labels: string[]): number | null => {
-    const ctx = getMeasureContext()
-    if (!ctx) return null
     const computedStyle = window.getComputedStyle(targetButton)
-    const font = `${computedStyle.fontStyle} ${computedStyle.fontVariant} ${computedStyle.fontWeight} ${computedStyle.fontSize} / ${computedStyle.lineHeight} ${computedStyle.fontFamily}`
-    ctx.font = font
-    const textWidth = Math.max(...labels.map((item) => ctx.measureText(item).width))
     const paddingLeft = parseFloat(computedStyle.paddingLeft || '12')
     const paddingRight = parseFloat(computedStyle.paddingRight || '12')
     const arrowSpace = 24
     const borderWidth = (parseFloat(computedStyle.borderLeftWidth || '1') + parseFloat(computedStyle.borderRightWidth || '1')) || 2
-    return Math.ceil(textWidth + paddingLeft + paddingRight + arrowSpace + borderWidth)
+    return measureElementTextWidth(
+      targetButton,
+      labels,
+      paddingLeft + paddingRight + arrowSpace + borderWidth,
+    )
   }
 
   useEffect(() => {

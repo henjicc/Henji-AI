@@ -110,18 +110,19 @@ describe('PanelTrigger 面板内部点击关闭策略', () => {
     expect(document.querySelector('[data-panel-placement="below"]')).not.toBeNull()
   })
 
-  it('内容宽度模式按最长选项收敛面板', () => {
+  it('打开前按最长选项预计算菜单宽度并保留左右留白', () => {
     vi.stubGlobal('ResizeObserver', class {
       observe(): void {}
       disconnect(): void {}
     })
-    vi.spyOn(HTMLElement.prototype, 'scrollWidth', 'get').mockImplementation(function (this: HTMLElement) {
-      return this.hasAttribute('data-panel-scroll-region') ? 112 : 0
-    })
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({
+      font: '',
+      measureText: () => ({ width: 82 }),
+    } as unknown as CanvasRenderingContext2D)
 
     const view = render(React.createElement(PanelTrigger, {
       display: '添加',
-      panelWidth: 'content',
+      panelWidthLabels: ['栅格图层', '模糊', '柔光 / 发光', '辉光 Pro'],
       renderPanel: () => React.createElement('div', null, '柔光 / 发光'),
     }))
     const trigger = view.getByRole('button')

@@ -133,7 +133,14 @@ export function ImageEditorLayersPanelV3({
     controller.document.layers,
     effectiveSelectedIds,
   )
-  const creationChoices = getCreationChoices(controller, t)
+  const creationChoices = useMemo(
+    () => getCreationChoices(controller, t),
+    [controller, t],
+  )
+  const creationChoiceLabels = useMemo(
+    () => creationChoices.map(({ choice }) => choice.name),
+    [creationChoices],
+  )
   const reorderRows = useCallback((fromIndex: number, toIndex: number): void => {
     const destination = resolveImageEditLayerDropV3(rows, fromIndex, toIndex)
     if (!destination) return
@@ -209,7 +216,7 @@ export function ImageEditorLayersPanelV3({
           </h2>
         )}
         <PanelTrigger
-          panelWidth="content"
+          panelWidthLabels={creationChoiceLabels}
           closeOnPanelClick
           renderPanel={() => (
             <div
@@ -250,7 +257,7 @@ export function ImageEditorLayersPanelV3({
           {({ togglePanel, open }) => (
             <UiIconButton
               data-panel-trigger-button
-              className="h-7 w-7"
+              className="h-7 w-7 text-xs"
               showBorder={false}
               appearance="hover-only"
               active={open}
