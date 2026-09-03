@@ -230,6 +230,32 @@ describe('ImageEditorV3 professional shell', () => {
     })
   })
 
+  it('裁剪比例收进单一特殊面板并在选择后自动收起', async () => {
+    const changes: ImageEditDocumentV3[] = []
+    const rendered = renderEditor(
+      createDocument([createImageEditRasterLayerV3('raster', '底图')]),
+      { onDocumentChange: (next) => changes.push(next) },
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: '裁剪' }))
+    const cropParameters = rendered.container.querySelector<HTMLElement>('[data-crop-parameters]')
+    expect(cropParameters).toBeTruthy()
+    expect(within(cropParameters as HTMLElement).queryByRole('button', { name: '1:1' })).toBeNull()
+
+    fireEvent.click(screen.getByRole('button', { name: '裁剪比例: 自由' }))
+    const ratioMenu = await screen.findByRole('menu', { name: '裁剪比例' })
+    expect(within(ratioMenu).getAllByRole('menuitemradio')).toHaveLength(9)
+    const squareRatio = within(ratioMenu).getByRole('menuitemradio', { name: '1:1' })
+    fireEvent.mouseDown(squareRatio)
+    fireEvent.click(squareRatio)
+
+    await waitFor(() => expect(screen.queryByRole('menu', { name: '裁剪比例' })).toBeNull())
+    expect(screen.getByRole('button', { name: '裁剪比例: 1:1' })).toBeTruthy()
+    expect(Object.values(useImageEditorSessionStoreV3.getState().sessions)[0]
+      ?.toolSettings.cropAspectRatio).toBe('1:1')
+    expect(changes).toHaveLength(0)
+  })
+
   it('效果参数预览合并为一次参数更新命令', async () => {
     const changes: ImageEditDocumentV3[] = []
     renderEditor(

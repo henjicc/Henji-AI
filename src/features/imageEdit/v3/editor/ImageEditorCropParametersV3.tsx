@@ -1,8 +1,8 @@
-import { FlipHorizontal, RotateCcw, RotateCw } from 'lucide-react'
+import { ChevronDown, Crop, FlipHorizontal, RotateCcw, RotateCw } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
-import { UiButton, UiIconButton, UiInput, UiOptionButton } from '@/components/ui'
+import { PanelTrigger, UiButton, UiIconButton, UiInput, UiOptionButton } from '@/components/ui'
 import type { ImageEditCropRectV3, ImageEditOrientationV3 } from '@/core/imageEdit/v3/documentTypes'
 import type { ImageEditCommandBusV3 } from '../application/imageEditCommandBus'
 import { projectImageEditorPreviewDocumentV3 } from '../execution/previewDocumentV3'
@@ -23,6 +23,22 @@ interface CropDraftV3 {
 const CROP_ASPECT_RATIOS_V3: readonly ImageEditorCropAspectRatioV3[] = [
   'free', 'original', '1:1', '4:3', '3:4', '16:9', '9:16', '2:1', '21:9',
 ]
+
+function cropRatioPreviewSize(
+  ratio: ImageEditorCropAspectRatioV3,
+  size: { width: number; height: number },
+): { width: number; height: number } | null {
+  if (ratio === 'free') return null
+  const [width, height] = ratio === 'original'
+    ? [size.width, size.height]
+    : ratio.split(':').map(Number)
+  if (!width || !height) return null
+  const scale = Math.min(28 / width, 22 / height)
+  return {
+    width: Math.max(4, Math.round(width * scale)),
+    height: Math.max(4, Math.round(height * scale)),
+  }
+}
 
 function orientedSize(
   controller: ImageEditorV3Controller,
@@ -100,6 +116,9 @@ export function ImageEditorCropParametersV3({
   const dirty = orientation.rotate !== documentOrientation.rotate
     || orientation.mirrored !== documentOrientation.mirrored
     || !sameCrop(cropEnabled ? parsedCrop : null, committedCrop)
+  const cropAspectRatioLabel = t(
+    `imageEditor.v3.crop.ratios.${cropAspectRatio.replace(':', '-')}`,
+  )
 
   useEffect(() => {
     const nextOrientation = projectedDocument.geometry.orientation
@@ -201,23 +220,69 @@ export function ImageEditorCropParametersV3({
         <FlipHorizontal className="h-4 w-4" />
       </UiIconButton>
       <div className="mx-0.5 h-5 w-px shrink-0 bg-border-dark" aria-hidden="true" />
-      <div
-        role="group"
-        aria-label={t('imageEditor.v3.crop.aspectRatio')}
-        className="flex shrink-0 items-center gap-0.5"
-      >
-        {CROP_ASPECT_RATIOS_V3.map((ratio) => (
-          <UiOptionButton
-            key={ratio}
-            className="h-8 px-1.5 text-xs"
-            active={cropAspectRatio === ratio}
-            onClick={() => setToolSetting(controller.sessionId, 'cropAspectRatio', ratio)}
+      <PanelTrigger
+        className="shrink-0"
+        panelWidth={278}
+        closeOnPanelClick
+        renderPanel={() => (
+          <div
+            data-crop-ratio-menu
+            role="menu"
+            aria-label={t('imageEditor.v3.crop.aspectRatio')}
+            className="grid grid-cols-3 gap-1 p-2"
           >
-            {t(`imageEditor.v3.crop.ratios.${ratio.replace(':', '-')}`)}
-          </UiOptionButton>
-        ))}
-      </div>
-      <div className="mx-0.5 h-5 w-px shrink-0 bg-border-dark" aria-hidden="true" />
+            {CROP_ASPECT_RATIOS_V3.map((ratio) => {
+              const previewSize = cropRatioPreviewSize(ratio, size)
+              const label = t(`imageEditor.v3.crop.ratios.${ratio.replace(':', '-')}`)
+              return (
+                <UiOptionButton
+                  key={ratio}
+                  type="button"
+                  role="menuitemradio"
+                  aria-checked={cropAspectRatio === ratio}
+                  active={cropAspectRatio === ratio}
+                  variant="menu"
+                  className="h-14 min-w-0 flex-col justify-center gap-1 text-xs"
+                  onClick={() => setToolSetting(controller.sessionId, 'cropAspectRatio', ratio)}
+                >
+                  <span className="flex h-6 items-center justify-center" aria-hidden="true">
+                    {ratio === 'free' ? (
+                      <Crop className="h-4 w-4" />
+                    ) : (
+                      <span
+                        className="block border-2 border-current"
+                        style={previewSize ?? undefined}
+                      />
+                    )}
+                  </span>
+                  <span className="truncate font-medium leading-none">{label}</span>
+                </UiOptionButton>
+              )
+            })}
+          </div>
+        )}
+      >
+        {({ open, togglePanel }) => (
+          <UiButton
+            type="button"
+            data-panel-trigger-button
+            size="sm"
+            variant="muted"
+            className="h-8 w-24 justify-between !px-2"
+            aria-label={`${t('imageEditor.v3.crop.aspectRatio')}: ${cropAspectRatioLabel}`}
+            title={`${t('imageEditor.v3.crop.aspectRatio')}: ${cropAspectRatioLabel}`}
+            aria-haspopup="menu"
+            aria-expanded={open}
+            onClick={togglePanel}
+          >
+            <span className="truncate">{cropAspectRatioLabel}</span>
+            <ChevronDown
+              className={`h-3.5 w-3.5 shrink-0 transition-transform duration-200 ${open ? 'rotate-180' : ''}`}
+              aria-hidden="true"
+            />
+          </UiButton>
+        )}
+      </PanelTrigger>
       {(['x', 'y', 'width', 'height'] as const).map((key) => (
         <label key={key} className="flex shrink-0 items-center gap-1.5 text-xs text-text-muted">
           <span>{t(`imageEditor.v3.crop.${key}`)}</span>

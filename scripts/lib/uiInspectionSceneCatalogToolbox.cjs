@@ -1412,7 +1412,18 @@ function createToolboxScenes(context) {
         await editor.locator('[data-tool-id="crop"]').click()
         await editor.locator('[data-crop-overlay]').waitFor({ state: 'visible', timeout: 5000 })
         await editor.getByRole('button', { name: /^(向右旋转 90°|Rotate 90° right)$/i }).click()
-        await editor.getByRole('button', { name: '1:1', exact: true }).click()
+        await editor.getByRole('button', {
+          name: /^(裁剪比例: 自由|Crop ratio: Free)$/i,
+        }).click()
+        const cropRatioMenu = page.getByRole('menu', {
+          name: /^(裁剪比例|Crop ratio)$/i,
+        })
+        await cropRatioMenu.waitFor({ state: 'visible', timeout: 3000 })
+        if (await cropRatioMenu.getByRole('menuitemradio').count() !== 9) {
+          throw new Error('裁剪比例特殊面板没有完整展示 9 个比例选项')
+        }
+        await cropRatioMenu.getByRole('menuitemradio', { name: '1:1', exact: true }).click()
+        await cropRatioMenu.waitFor({ state: 'hidden', timeout: 3000 })
         const cropLayout = await editor.locator('[data-crop-parameters]').evaluate((parameters) => {
           const commandBar = parameters.closest('[data-command-bar]')
           const viewport = parameters.closest('[data-tool-parameter-viewport]')
@@ -1548,6 +1559,13 @@ function createToolboxScenes(context) {
         })
         await preview.getByRole('img').first().waitFor({ state: 'visible', timeout: 15000 })
         await preview.locator('.animate-spin').waitFor({ state: 'hidden', timeout: 15000 })
+        await editor.locator('[data-tool-id="crop"]').click()
+        await editor.getByRole('button', {
+          name: /^(裁剪比例: 1:1|Crop ratio: 1:1)$/i,
+        }).click()
+        await page.getByRole('menu', {
+          name: /^(裁剪比例|Crop ratio)$/i,
+        }).waitFor({ state: 'visible', timeout: 3000 })
         await settlePage(page, 500)
       },
     },
