@@ -43,6 +43,8 @@ export interface UiChipButtonProps extends ButtonHTMLAttributes<HTMLButtonElemen
   active?: boolean
   /** `navigation` 表示“正在看哪里”；默认 `toggle` 表示多选/标签开态。 */
   selectionRole?: 'toggle' | 'navigation'
+  /** 仅收敛导航型 Tab 的视觉重量；其他选中语义不受影响。 */
+  selectionAppearance?: 'default' | 'subtle'
 }
 
 export interface UiNavButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {

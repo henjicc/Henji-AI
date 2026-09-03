@@ -131,6 +131,7 @@ const WindowControls: React.FC<WindowControlsProps> = ({ activeTab = 'generation
           onClick={() => tab.id === 'assets' ? onAssetClick?.() : onTabChange?.(tab.id)}
           active={tab.id === 'assets' ? assetView !== 'closed' : activeTab === tab.id}
           selectionRole="navigation"
+          selectionAppearance="subtle"
           className="!h-7 gap-1.5 rounded-md border-0 px-3 py-1 text-xs font-medium"
         >
           <tab.icon className="h-3.5 w-3.5" />

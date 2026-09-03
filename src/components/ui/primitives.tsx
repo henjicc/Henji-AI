@@ -17,8 +17,10 @@ import {
   UI_GLASS_ADAPTIVE_OPTION_CLASS,
   UI_MULTISELECT_ITEM_ACTIVE_CLASS,
   UI_NAV_INDICATOR_BOTTOM_CLASS,
+  UI_NAV_INDICATOR_BOTTOM_SUBTLE_CLASS,
   UI_NAV_INDICATOR_END_CLASS,
   UI_NAV_ITEM_ACTIVE_CLASS,
+  UI_NAV_ITEM_ACTIVE_SUBTLE_CLASS,
   UI_OPTION_ITEM_ACTIVE_CLASS,
   UI_OPTION_ITEM_CLASS,
   UI_OPTION_ITEM_HOVER_CLASS,
@@ -118,10 +120,19 @@ export function UiIconButton({
 }
 
 export const UiChipButton = forwardRef<HTMLButtonElement, UiChipButtonProps>(
-  ({ className = '', active = false, selectionRole = 'toggle', ...props }, ref) => {
+  ({
+    className = '',
+    active = false,
+    selectionRole = 'toggle',
+    selectionAppearance = 'default',
+    ...props
+  }, ref) => {
+    const navigationActiveClass = selectionAppearance === 'subtle'
+      ? `${UI_NAV_ITEM_ACTIVE_SUBTLE_CLASS} ${UI_NAV_INDICATOR_BOTTOM_SUBTLE_CLASS}`
+      : `${UI_NAV_ITEM_ACTIVE_CLASS} ${UI_NAV_INDICATOR_BOTTOM_CLASS}`;
     const stateClass = selectionRole === 'navigation'
       ? active
-        ? `border-transparent ${UI_NAV_ITEM_ACTIVE_CLASS} ${UI_NAV_INDICATOR_BOTTOM_CLASS}`
+        ? `border-transparent ${navigationActiveClass}`
         : 'border-transparent text-text-muted hover:bg-surface-dark hover:text-text-dark'
       : active
         ? UI_MULTISELECT_ITEM_ACTIVE_CLASS

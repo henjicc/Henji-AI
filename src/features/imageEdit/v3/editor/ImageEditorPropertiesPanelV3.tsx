@@ -205,6 +205,7 @@ export function ImageEditorPropertiesPanelV3({
             key={tab}
             role="tab"
             selectionRole="navigation"
+            selectionAppearance="subtle"
             data-properties-tab={tab}
             className="!h-9 justify-center rounded-none text-xs"
             active={activeTab === tab}

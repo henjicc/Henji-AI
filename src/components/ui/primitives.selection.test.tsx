@@ -10,8 +10,10 @@ import {
   UI_GLASS_ADAPTIVE_OPTION_CLASS,
   UI_MULTISELECT_ITEM_ACTIVE_CLASS,
   UI_NAV_INDICATOR_BOTTOM_CLASS,
+  UI_NAV_INDICATOR_BOTTOM_SUBTLE_CLASS,
   UI_NAV_INDICATOR_END_CLASS,
   UI_NAV_ITEM_ACTIVE_CLASS,
+  UI_NAV_ITEM_ACTIVE_SUBTLE_CLASS,
   UI_OPTION_ITEM_ACTIVE_CLASS,
 } from './styleTokens';
 import {
@@ -51,6 +53,27 @@ describe('Ui primitives 选中态词汇表', () => {
     expectClasses(horizontal, UI_NAV_INDICATOR_BOTTOM_CLASS);
     expect(vertical.classList.contains('bg-surface-dark')).toBe(false);
     expect(horizontal.classList.contains('bg-surface-dark')).toBe(false);
+  });
+
+  it('克制型横向导航只收紧自身底色与指示条', () => {
+    const view = render(
+      <>
+        <UiChipButton active selectionRole="navigation">默认导航</UiChipButton>
+        <UiChipButton active selectionRole="navigation" selectionAppearance="subtle">
+          克制导航
+        </UiChipButton>
+      </>,
+    );
+
+    const defaultNavigation = view.getByRole('button', { name: '默认导航' });
+    const subtleNavigation = view.getByRole('button', { name: '克制导航' });
+
+    expectClasses(defaultNavigation, UI_NAV_ITEM_ACTIVE_CLASS);
+    expectClasses(defaultNavigation, UI_NAV_INDICATOR_BOTTOM_CLASS);
+    expect(defaultNavigation.classList.contains('bg-surface-dark')).toBe(false);
+    expectClasses(subtleNavigation, UI_NAV_ITEM_ACTIVE_SUBTLE_CLASS);
+    expectClasses(subtleNavigation, UI_NAV_INDICATOR_BOTTOM_SUBTLE_CLASS);
+    expect(subtleNavigation.classList.contains('bg-layer')).toBe(false);
   });
 
   it('单选项使用强实底，多选标签使用描边与中性底', () => {
