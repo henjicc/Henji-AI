@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import { UI_DIALOG_TRANSITION_MS } from '@/components/ui/motion'
 import { saveMultiLayerDocumentAfterEditing } from '@/features/canvas/application/multiLayerDocumentNodeGenerationAdapter'
+import { retainMultiLayerDocumentReferences } from '@/features/canvas/application/multiLayerDocumentLifecycleService'
 import { isEditableLayerStackResultNode } from '@/features/canvas/domain/canvasNodeGuards'
 import type { CanvasNode } from '@/features/canvas/domain/canvasNodes'
 import type { LayerStackResultNodeData } from '@/features/canvas/domain/canvasNodeData'
@@ -52,6 +53,13 @@ export function NodeToolDialogRouter(): JSX.Element {
   useEffect(() => () => {
     if (clearTimerRef.current) clearTimeout(clearTimerRef.current)
   }, [])
+
+  useEffect(() => {
+    if (!displayDocumentContext?.data.imageEditSession) return undefined
+    return retainMultiLayerDocumentReferences([
+      displayDocumentContext.data.imageEditSession.documentRef,
+    ])
+  }, [displayDocumentContext])
 
   const handleDocumentDialogClosed = useCallback((): void => {
     if (clearTimerRef.current) clearTimeout(clearTimerRef.current)

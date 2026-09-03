@@ -18,6 +18,7 @@ vi.mock('../window', () => ({ getMainWindow: vi.fn() }))
 import {
   describeImageEditorV3SnapshotResources,
   parseImageEditorV3DeleteIfRevisionPayload,
+  parseImageEditorV3ForkPayload,
   parseImageEditorV3LoadPayload,
   parseImageEditorV3FastProxyPayload,
   parseImageEditorV3IngestSourcePayload,
@@ -162,6 +163,27 @@ describe('图片编辑 V3 IPC 边界', () => {
       documentRef: 'image-edit-v3:document-contract',
       expectedRevision: -1,
     })).toThrow('Invalid expectedRevision')
+  })
+
+  it('文档 fork 拒绝同一目标、路径引用与负 revision', () => {
+    expect(parseImageEditorV3ForkPayload({
+      requestId: 'image-editor-v3:fork',
+      sourceDocumentRef: 'image-edit-v3:source',
+      expectedRevision: 2,
+      targetDocumentRef: 'image-edit-v3:target',
+    })).toMatchObject({ expectedRevision: 2, targetDocumentRef: 'image-edit-v3:target' })
+    expect(() => parseImageEditorV3ForkPayload({
+      requestId: 'image-editor-v3:fork:same',
+      sourceDocumentRef: 'image-edit-v3:source',
+      expectedRevision: 2,
+      targetDocumentRef: 'image-edit-v3:source',
+    })).toThrow('must differ')
+    expect(() => parseImageEditorV3ForkPayload({
+      requestId: 'image-editor-v3:fork:path',
+      sourceDocumentRef: '/tmp/source.json',
+      expectedRevision: -1,
+      targetDocumentRef: 'image-edit-v3:target',
+    })).toThrow()
   })
 
   it('严格校验历史头与字段，并要求 resourceRefs 保留撤销所需资源', () => {

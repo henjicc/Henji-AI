@@ -121,7 +121,7 @@ describe('画布清空与解散分组', () => {
       expect(message).toContain('canvas.node.position')
     })
 
-    it('固定图片工具复制后保留模型锁定，通用更新不能换成别的模型', () => {
+    it('固定图片工具复制后保留模型锁定，通用更新不能换成别的模型', async () => {
       const created = addControlledCanvasNode({
         projectId,
         nodeType: CANVAS_NODE_TYPES.imageEdit,
@@ -137,7 +137,7 @@ describe('画布清空与解散分组', () => {
           },
         },
       })
-      const duplicated = duplicateCanvasNode({
+      const duplicated = await duplicateCanvasNode({
         projectId,
         nodeId: String(created.nodeId),
         placement: { mode: 'right_of_node', anchorNodeId: String(created.nodeId) },

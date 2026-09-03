@@ -5,6 +5,9 @@ import type { Viewport } from '@xyflow/react';
 import { createLogger } from '@/core/logging';
 import { importProjectPackage } from '@/commands/projectPackage';
 import { upsertProjectRecord } from '@/commands/projectState';
+import { deleteImageEditorV3DocumentIfRevision } from '@/commands/imageEditorV3';
+import { parseImageEditProjectPackageReferenceMappingsV3 } from '@/core/imageEdit/v3/projectPackageContracts';
+import { getPlatform } from '@/platform/runtime';
 import { encodeProjectAsRecord, type Project } from '@/stores/projectStore';
 import type { CanvasEdge, CanvasNode } from '@/features/canvas/domain/canvasNodes';
 import { rewritePackagePathsToLocal } from './collectMediaRefs';
@@ -42,39 +45,62 @@ export async function importProjectFromPackage(): Promise<string | null> {
   }
 
   const { manifestJson, pathMap, imageEditReferences = [] } = await importProjectPackage(zipPath);
-  const manifest = JSON.parse(manifestJson) as ProjectPackageManifest;
+  const importedDocumentMappings = parseImageEditProjectPackageReferenceMappingsV3(imageEditReferences);
+  try {
+    const manifest = JSON.parse(manifestJson) as ProjectPackageManifest;
 
-  const formatVersion = manifest.formatVersion ?? 0;
-  if (formatVersion < 1 || formatVersion > PROJECT_PACKAGE_FORMAT_VERSION) {
-    throw new Error(`不支持的项目包版本：${formatVersion}`);
+    const formatVersion = manifest.formatVersion ?? 0;
+    if (formatVersion < 1 || formatVersion > PROJECT_PACKAGE_FORMAT_VERSION) {
+      throw new Error(`不支持的项目包版本：${formatVersion}`);
+    }
+
+    const rawNodes = Array.isArray(manifest.nodes) ? manifest.nodes : [];
+    const restoredMediaNodes = rewritePackagePathsToLocal(rawNodes, pathMap);
+    const nodes = rewriteProjectImageEditorV3References(restoredMediaNodes, imageEditReferences);
+    const edges = Array.isArray(manifest.edges) ? manifest.edges : [];
+    const baseName = manifest.project?.name?.trim() || '导入项目';
+
+    const now = Date.now();
+    const project: Project = {
+      id: uuidv4(),
+      name: `${baseName}（导入）`,
+      createdAt: now,
+      updatedAt: now,
+      nodeCount: nodes.length,
+      coverPath: null,
+      nodes,
+      edges,
+      viewport: manifest.viewport ?? DEFAULT_VIEWPORT,
+      history: { past: [], future: [] },
+    };
+
+    await upsertProjectRecord(encodeProjectAsRecord(project));
+    logger.info('[projectPackage] 项目导入完成', {
+      zipPath,
+      projectId: project.id,
+      nodeCount: nodes.length,
+      mediaCount: Object.keys(pathMap).length,
+    });
+    return project.id;
+  } catch (error) {
+    await Promise.all(importedDocumentMappings.map(async (mapping) => {
+      const result = await deleteImageEditorV3DocumentIfRevision({
+        requestId: `project-package-import-rollback:${crypto.randomUUID()}`,
+        documentRef: mapping.imported.documentRef,
+        expectedRevision: mapping.imported.revision,
+      });
+      if (!result.deleted) throw new Error(`无法精确回滚导入文档：${mapping.imported.documentRef}`);
+    })).then(async () => {
+      await getPlatform().imageEditorV3.collectGarbage({
+        requestId: `project-package-import-rollback-gc:${crypto.randomUUID()}`,
+        retainedResourceRefs: [],
+      });
+    }).catch((rollbackError) => {
+      logger.error('项目包导入失败后的图片编辑文档补偿失败', rollbackError, {
+        event: 'project_package.image_editor_v3.rollback.failed',
+        context: { documentCount: importedDocumentMappings.length },
+      });
+    });
+    throw error;
   }
-
-  const rawNodes = Array.isArray(manifest.nodes) ? manifest.nodes : [];
-  const restoredMediaNodes = rewritePackagePathsToLocal(rawNodes, pathMap);
-  const nodes = rewriteProjectImageEditorV3References(restoredMediaNodes, imageEditReferences);
-  const edges = Array.isArray(manifest.edges) ? manifest.edges : [];
-  const baseName = manifest.project?.name?.trim() || '导入项目';
-
-  const now = Date.now();
-  const project: Project = {
-    id: uuidv4(),
-    name: `${baseName}（导入）`,
-    createdAt: now,
-    updatedAt: now,
-    nodeCount: nodes.length,
-    coverPath: null,
-    nodes,
-    edges,
-    viewport: manifest.viewport ?? DEFAULT_VIEWPORT,
-    history: { past: [], future: [] },
-  };
-
-  await upsertProjectRecord(encodeProjectAsRecord(project));
-  logger.info('[projectPackage] 项目导入完成', {
-    zipPath,
-    projectId: project.id,
-    nodeCount: nodes.length,
-    mediaCount: Object.keys(pathMap).length,
-  });
-  return project.id;
 }

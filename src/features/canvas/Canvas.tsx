@@ -51,6 +51,8 @@ import { disconnectAssetGroup } from './application/assetGroupApplicationService
 import { useCanvasConnectionActions } from './hooks/useCanvasConnectionActions';
 import { useCanvasAssetGroups } from './hooks/useCanvasAssetGroups';
 import { useCanvasPersistence } from './hooks/useCanvasPersistence';
+import { deleteCanvasNodes } from './application/canvasMutationService';
+import { maintainMultiLayerDocumentReleaseCandidates } from './application/multiLayerDocumentLifecycleService';
 
 interface CanvasToastState {
   message: string;
@@ -103,8 +105,6 @@ export function Canvas() {
   const setSelectedNode = useCanvasStore((state) => state.setSelectedNode);
   const selectedNodeId = useCanvasStore((state) => state.selectedNodeId);
   const deleteEdge = useCanvasStore((state) => state.deleteEdge);
-  const deleteNode = useCanvasStore((state) => state.deleteNode);
-  const deleteNodes = useCanvasStore((state) => state.deleteNodes);
   const groupNodes = useCanvasStore((state) => state.groupNodes);
   const undo = useCanvasStore((state) => state.undo);
   const redo = useCanvasStore((state) => state.redo);
@@ -115,6 +115,7 @@ export function Canvas() {
   const closeImageViewer = useCanvasStore((state) => state.closeImageViewer);
   const navigateImageViewer = useCanvasStore((state) => state.navigateImageViewer);
   const getCurrentProject = useProjectStore((state) => state.getCurrentProject);
+  const currentProjectId = useProjectStore((state) => state.currentProjectId);
   const saveCurrentProjectViewport = useProjectStore((state) => state.saveCurrentProjectViewport);
   const cancelPendingViewportPersist = useProjectStore((state) => state.cancelPendingViewportPersist);
   const {
@@ -359,12 +360,22 @@ export function Canvas() {
     focusedNodeId,
     nodes,
     edges,
-    deleteNode,
-    deleteNodes,
+    deleteNodes: async (nodeIds) => {
+      if (!currentProjectId) return;
+      await deleteCanvasNodes(currentProjectId, nodeIds);
+    },
     groupNodes,
     createAssetGroup: handleCreateAssetGroup,
-    undo,
-    redo,
+    undo: () => {
+      const changed = undo();
+      if (changed && currentProjectId) void maintainMultiLayerDocumentReleaseCandidates(currentProjectId);
+      return changed;
+    },
+    redo: () => {
+      const changed = redo();
+      if (changed && currentProjectId) void maintainMultiLayerDocumentReleaseCandidates(currentProjectId);
+      return changed;
+    },
     scheduleCanvasPersist,
     duplicateNodes: (sourceNodeIds) => duplicateNodes(sourceNodeIds),
     addNode,

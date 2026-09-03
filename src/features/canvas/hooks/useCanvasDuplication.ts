@@ -1,6 +1,7 @@
 import { useCallback, useRef, type MouseEvent as ReactMouseEvent } from 'react'
 import type { Connection, NodeChange } from '@xyflow/react'
 import { useCanvasStore } from '@/stores/canvasStore'
+import { useProjectStore } from '@/stores/projectStore'
 import {
   CANVAS_NODE_TYPES,
   isAssetGroupNode,
@@ -11,7 +12,6 @@ import {
 import { cloneCameraStageProject } from '@/features/cameraStage/projects/cameraStageProjectService'
 import { rebaseCanvasLocalPromptData } from '@/features/canvas/application/generationPromptDocument'
 import {
-  ALT_DRAG_COPY_Z_INDEX,
   cloneNodeData,
   getNodeSize,
   hasRectCollision,
@@ -20,6 +20,7 @@ import {
 } from '@/features/canvas/canvasUtils'
 import { reconcileAssetGroupGraph } from '@/features/canvas/application/assetGroupGraph'
 import { resetDuplicatedCanvasExecutionData } from '@/features/canvas/application/canvasDuplicationExecutionState'
+import { commitCanvasNodeDuplication } from '@/features/canvas/application/canvasMutationService'
 
 interface UseCanvasDuplicationParams {
   nodes: CanvasNode[]
@@ -48,12 +49,10 @@ export function useCanvasDuplication(params: UseCanvasDuplicationParams) {
   const altDragCopyRef = useRef<{
     sourceNodeIds: string[]
     startPositions: Map<string, { x: number; y: number }>
-    copiedNodeIds: string[]
-    sourceToCopyIdMap: Map<string, string>
   } | null>(null)
 
   const duplicateNodes = useCallback(
-    (sourceNodeIds: string[], options: DuplicateOptions = {}): DuplicateResult | null => {
+    async (sourceNodeIds: string[], options: DuplicateOptions = {}): Promise<DuplicateResult | null> => {
       const dedupedIds = Array.from(new Set(sourceNodeIds))
       if (dedupedIds.length === 0) return null
 
@@ -118,14 +117,21 @@ export function useCanvasDuplication(params: UseCanvasDuplicationParams) {
         const data = cloneNodeData(sourceNode.data)
         resetDuplicatedCanvasExecutionData(sourceNode.type, data as DynamicValueMap)
 
-        const nextNodeId = addNode(
-          sourceNode.type as CanvasNodeType,
-          {
-            x: sourceNode.position.x + chosenOffset.x + offsetStep * 8,
-            y: sourceNode.position.y + chosenOffset.y + offsetStep * 6,
-          },
-          { ...(data as DynamicValueMap) }
-        )
+        const projectId = useProjectStore.getState().currentProjectId
+        if (!projectId) throw new Error('当前没有可复制节点的项目')
+        const nextNodeId = await commitCanvasNodeDuplication({
+          projectId,
+          sourceNodeId: sourceNode.id,
+          data: { ...(data as DynamicValueMap) },
+          createNode: (forkedData) => addNode(
+            sourceNode.type as CanvasNodeType,
+            {
+              x: sourceNode.position.x + chosenOffset.x + offsetStep * 8,
+              y: sourceNode.position.y + chosenOffset.y + offsetStep * 6,
+            },
+            forkedData,
+          ),
+        })
         idMap.set(sourceNode.id, nextNodeId)
         sizeMap.set(nextNodeId, getNodeSize(sourceNode))
         const promptPatch = rebaseCanvasLocalPromptData(
@@ -250,105 +256,19 @@ export function useCanvasDuplication(params: UseCanvasDuplicationParams) {
         return
       }
 
-      const duplicateResult = duplicateNodes(sourceNodeIds, {
-        explicitOffset: { x: 0, y: 0 },
-        disableOffsetIteration: true,
-        suppressPersist: true,
-        suppressSelect: true,
-      })
-      if (!duplicateResult) {
-        altDragCopyRef.current = null
-        return
-      }
-
-      const copiedNodeIds = sourceNodeIds
-        .map((sourceId) => duplicateResult.idMap.get(sourceId))
-        .filter((id): id is string => Boolean(id))
-      if (copiedNodeIds.length === 0) {
-        altDragCopyRef.current = null
-        return
-      }
-
-      useCanvasStore.setState((state) => ({
-        nodes: state.nodes.map((currentNode) => {
-          if (!copiedNodeIds.includes(currentNode.id)) {
-            return currentNode
-          }
-          return {
-            ...currentNode,
-            zIndex: ALT_DRAG_COPY_Z_INDEX,
-            style: {
-              ...(currentNode.style ?? {}),
-              zIndex: ALT_DRAG_COPY_Z_INDEX,
-            },
-          }
-        }),
-      }))
-
       altDragCopyRef.current = {
         sourceNodeIds,
         startPositions,
-        copiedNodeIds,
-        sourceToCopyIdMap: duplicateResult.idMap,
       }
     },
-    [duplicateNodes, nodes, selectedNodeIds]
+    [nodes, selectedNodeIds]
   )
 
   const handleNodeDrag = useCallback(
-    (_event: ReactMouseEvent, node: CanvasNode) => {
-      const altCopyState = altDragCopyRef.current
-      if (!altCopyState) return
-
-      const startPosition = altCopyState.startPositions.get(node.id)
-      if (!startPosition) return
-
-      const deltaX = node.position.x - startPosition.x
-      const deltaY = node.position.y - startPosition.y
-
-      const restoreSourceChanges = altCopyState.sourceNodeIds
-        .map((sourceId) => {
-          const sourceStart = altCopyState.startPositions.get(sourceId)
-          if (!sourceStart) return null
-          return {
-            id: sourceId,
-            type: 'position' as const,
-            position: sourceStart,
-            dragging: true,
-          }
-        })
-        .filter((change): change is {
-          id: string
-          type: 'position'
-          position: { x: number; y: number }
-          dragging: true
-        } => Boolean(change))
-
-      const moveCopyChanges = altCopyState.sourceNodeIds
-        .map((sourceId) => {
-          const sourceStart = altCopyState.startPositions.get(sourceId)
-          const copyId = altCopyState.sourceToCopyIdMap.get(sourceId)
-          if (!sourceStart || !copyId) return null
-          return {
-            id: copyId,
-            type: 'position' as const,
-            position: { x: sourceStart.x + deltaX, y: sourceStart.y + deltaY },
-            dragging: true,
-          }
-        })
-        .filter((change): change is {
-          id: string
-          type: 'position'
-          position: { x: number; y: number }
-          dragging: true
-        } => Boolean(change))
-
-      const allChanges = [...restoreSourceChanges, ...moveCopyChanges]
-      if (allChanges.length > 0) {
-        applyNodesChange(allChanges)
-      }
+    (_event: ReactMouseEvent, _node: CanvasNode) => {
+      // 异步 fork 在拖拽释放后提交；拖动阶段保留 ReactFlow 的原节点预览。
     },
-    [applyNodesChange]
+    []
   )
 
   const handleNodeDragStop = useCallback(
@@ -383,35 +303,13 @@ export function useCanvasDuplication(params: UseCanvasDuplicationParams) {
           dragging: false
         } => Boolean(change))
 
-      const finalizeCopyChanges = altCopyState.sourceNodeIds
-        .map((sourceId) => {
-          const sourceStart = altCopyState.startPositions.get(sourceId)
-          const copyId = altCopyState.sourceToCopyIdMap.get(sourceId)
-          if (!sourceStart || !copyId) return null
-          return {
-            id: copyId,
-            type: 'position' as const,
-            position: { x: sourceStart.x + offset.x, y: sourceStart.y + offset.y },
-            dragging: false,
-          }
-        })
-        .filter((change): change is {
-          id: string
-          type: 'position'
-          position: { x: number; y: number }
-          dragging: false
-        } => Boolean(change))
-
-      const allChanges = [...restoreSourceChanges, ...finalizeCopyChanges]
-      if (allChanges.length > 0) {
-        applyNodesChange(allChanges)
-      }
-      if (altCopyState.copiedNodeIds.length > 0) {
-        setSelectedNode(altCopyState.copiedNodeIds[0])
-      }
-      scheduleCanvasPersist(0)
+      if (restoreSourceChanges.length > 0) applyNodesChange(restoreSourceChanges)
+      void duplicateNodes(altCopyState.sourceNodeIds, {
+        explicitOffset: offset,
+        disableOffsetIteration: true,
+      })
     },
-    [applyNodesChange, scheduleCanvasPersist, setSelectedNode]
+    [applyNodesChange, duplicateNodes]
   )
 
   return {

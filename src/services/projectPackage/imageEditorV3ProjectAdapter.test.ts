@@ -34,10 +34,10 @@ function node(documentRef = 'image-edit-v3:source-document'): CanvasNode {
 }
 
 describe('项目包图片编辑 V3 适配器', () => {
-  it('按文档引用去重收集扩展，并同步改写会话来源', () => {
+  it('按一节点一文档收集扩展，并同步改写会话来源', () => {
     const first = node()
     const duplicate = { ...node(), id: 'duplicate' }
-    expect(createProjectImageEditorV3Extension([first, duplicate])).toEqual({
+    expect(createProjectImageEditorV3Extension([first])).toEqual({
       version: IMAGE_EDIT_PROJECT_PACKAGE_EXTENSION_VERSION_V3,
       bundlePath: IMAGE_EDIT_PROJECT_PACKAGE_BUNDLE_PATH_V3,
       documents: [{
@@ -46,6 +46,8 @@ describe('项目包图片编辑 V3 适配器', () => {
         previewRef: PREVIEW_REF,
       }],
     })
+    expect(() => createProjectImageEditorV3Extension([first, duplicate]))
+      .toThrow('不能被多个节点共享')
 
     expect(mapProjectImageEditorV3SessionSource(
       first.data as DynamicValueMap,

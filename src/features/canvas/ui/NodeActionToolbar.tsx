@@ -37,6 +37,8 @@ import {
 import { copyImageSourceToClipboard } from '@/commands/image';
 import { useSettingsStore } from '@/stores/settingsStore';
 import { useCanvasStore } from '@/stores/canvasStore';
+import { useProjectStore } from '@/stores/projectStore';
+import { deleteCanvasNodes } from '@/features/canvas/application/canvasMutationService';
 import { sanitizeStoryboardText } from '@/features/canvas/application/storyboardText';
 import {
   NODE_TOOLBAR_ALIGN,
@@ -90,7 +92,7 @@ export const NodeActionToolbar = memo(({ node }: NodeActionToolbarProps) => {
     ),
     [imageCapabilityActions, node],
   );
-  const deleteNode = useCanvasStore((state) => state.deleteNode);
+  const projectId = useProjectStore((state) => state.currentProjectId);
   const ungroupNode = useCanvasStore((state) => state.ungroupNode);
   const canReupload = nodeDefinition.media?.role === 'source'
     && Boolean(nodeDefinition.getOutputs?.(node.data).length);
@@ -432,7 +434,7 @@ export const NodeActionToolbar = memo(({ node }: NodeActionToolbarProps) => {
           onClick={(event) => {
             event.stopPropagation();
             closeDownloadMenu();
-            deleteNode(node.id);
+            if (projectId) void deleteCanvasNodes(projectId, [node.id]);
           }}
         >
           <Trash2 className="h-3.5 w-3.5" />

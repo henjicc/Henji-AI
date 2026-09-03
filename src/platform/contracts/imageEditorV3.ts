@@ -317,6 +317,13 @@ export interface ImageEditorV3Platform {
     documentRef: ImageEditorV3DocumentRef
     expectedRevision: number
   }): Promise<{ deleted: boolean }>
+  /** 精确版本 fork；新文档拥有独立历史头，内容寻址资源可安全复用。 */
+  forkDocument(request: {
+    requestId: string
+    sourceDocumentRef: ImageEditorV3DocumentRef
+    expectedRevision: number
+    targetDocumentRef: ImageEditorV3DocumentRef
+  }): Promise<ImageEditorV3DocumentReference>
   importSource(request: {
     requestId: string
   }): Promise<ImageEditorV3DialogResult<ImageEditorV3ManagedSource>>

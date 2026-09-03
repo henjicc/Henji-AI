@@ -60,6 +60,13 @@ export interface SaveDocumentRequest {
   now?: Date
 }
 
+export interface ForkDocumentRequest {
+  sourceDocumentRef: string
+  expectedRevision: number
+  targetDocumentId: string
+  now?: Date
+}
+
 export interface DocumentRepositoryDependencies {
   writeAtomically?: (targetPath: string, content: Uint8Array) => Promise<void>
   maxDocumentBytes?: number
@@ -287,6 +294,36 @@ export class ImageEditDocumentRepository {
       await this.persist(envelope, 'save')
       return envelope
     }))
+  }
+
+  /**
+   * 从调用方已确认的精确 revision 建立独立文档与历史头。
+   * 像素与历史资源均为内容寻址不可变对象，因此这里只复制引用，不复制字节。
+   */
+  async fork(request: ForkDocumentRequest): Promise<ImageEditDocumentEnvelope> {
+    const targetDocumentId = validateDocumentId(request.targetDocumentId)
+    const source = await this.load(request.sourceDocumentRef)
+    if (source.revision !== request.expectedRevision) {
+      throw new DocumentRevisionConflictError(
+        source.documentId,
+        request.expectedRevision,
+        source.revision,
+      )
+    }
+    if (!isRecord(source.document)) {
+      throw new Error(`Invalid image edit document body for fork: ${source.documentId}`)
+    }
+    return this.create({
+      documentId: targetDocumentId,
+      revision: source.revision,
+      document: { ...source.document, id: targetDocumentId },
+      history: source.history
+        ? { ...source.history, documentId: targetDocumentId }
+        : undefined,
+      resourceRefs: source.resourceRefs,
+      previewRef: source.previewRef,
+      now: request.now,
+    })
   }
 
   async list(): Promise<ImageEditDocumentEnvelope[]> {

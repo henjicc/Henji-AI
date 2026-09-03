@@ -6,6 +6,7 @@ import { getProjectRecord } from '@/commands/projectState';
 import { decodeProjectRecord } from '@/stores/projectStore';
 import { collectAndRewriteMedia } from './collectMediaRefs';
 import { createProjectImageEditorV3Extension } from './imageEditorV3ProjectAdapter';
+import { retainMultiLayerDocumentReferences } from '@/features/canvas/application/multiLayerDocumentLifecycleService';
 
 const logger = createLogger('services.projectPackage.exportProject');
 
@@ -30,35 +31,40 @@ export async function exportProjectToPackage(projectId: string): Promise<string 
   const project = decodeProjectRecord(record);
   const { nodes, mediaFiles } = collectAndRewriteMedia(project.nodes);
   const imageEditorV3 = createProjectImageEditorV3Extension(nodes);
+  const releaseDocumentLease = retainMultiLayerDocumentReferences(
+    imageEditorV3?.documents.map((document) => document.documentRef) ?? [],
+  );
 
-  const targetPath = await saveDialog({
-    defaultPath: `${sanitizeFileName(project.name)}.${PROJECT_PACKAGE_EXTENSION}`,
-    filters: [{ name: 'Henji Project', extensions: [PROJECT_PACKAGE_EXTENSION] }],
-  });
-  if (!targetPath) {
-    return null;
+  try {
+    const targetPath = await saveDialog({
+      defaultPath: `${sanitizeFileName(project.name)}.${PROJECT_PACKAGE_EXTENSION}`,
+      filters: [{ name: 'Henji Project', extensions: [PROJECT_PACKAGE_EXTENSION] }],
+    });
+    if (!targetPath) return null;
+
+    const manifest = {
+      // 没有 V3 文档时继续产出 V1，避免普通项目无谓失去旧版本兼容性。
+      formatVersion: imageEditorV3 ? PROJECT_PACKAGE_FORMAT_VERSION : 1,
+      app: 'henji-ai',
+      exportedAt: Date.now(),
+      project: {
+        name: project.name,
+        createdAt: project.createdAt,
+      },
+      nodes,
+      edges: project.edges,
+      viewport: project.viewport,
+      ...(imageEditorV3 ? { imageEditorV3 } : {}),
+    };
+
+    await exportProjectPackage(JSON.stringify(manifest), mediaFiles, targetPath);
+    logger.info('[projectPackage] 项目导出完成', {
+      projectId,
+      targetPath,
+      mediaCount: mediaFiles.length,
+    });
+    return targetPath;
+  } finally {
+    releaseDocumentLease();
   }
-
-  const manifest = {
-    // 没有 V3 文档时继续产出 V1，避免普通项目无谓失去旧版本兼容性。
-    formatVersion: imageEditorV3 ? PROJECT_PACKAGE_FORMAT_VERSION : 1,
-    app: 'henji-ai',
-    exportedAt: Date.now(),
-    project: {
-      name: project.name,
-      createdAt: project.createdAt,
-    },
-    nodes,
-    edges: project.edges,
-    viewport: project.viewport,
-    ...(imageEditorV3 ? { imageEditorV3 } : {}),
-  };
-
-  await exportProjectPackage(JSON.stringify(manifest), mediaFiles, targetPath);
-  logger.info('[projectPackage] 项目导出完成', {
-    projectId,
-    targetPath,
-    mediaCount: mediaFiles.length,
-  });
-  return targetPath;
 }

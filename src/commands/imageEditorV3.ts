@@ -288,6 +288,13 @@ export function cancelImageEditorV3Request(requestId: string): Promise<{ cancell
   return getPlatform().imageEditorV3.cancelRequest(requestId)
 }
 
+export function forkImageEditorV3Document(
+  request: Parameters<ImageEditorV3Platform['forkDocument']>[0],
+  signal?: AbortSignal,
+): ReturnType<ImageEditorV3Platform['forkDocument']> {
+  return runCancellable(request.requestId, signal, (platform) => platform.forkDocument(request))
+}
+
 interface PendingAutosave {
   document: ImageEditDocumentV3
   expectedRevision: number

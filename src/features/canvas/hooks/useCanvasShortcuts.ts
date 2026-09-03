@@ -25,14 +25,13 @@ interface UseCanvasShortcutsParams {
   focusedNodeId: string | null
   nodes: CanvasNode[]
   edges: CanvasEdge[]
-  deleteNode: (nodeId: string) => void
-  deleteNodes: (nodeIds: string[]) => void
+  deleteNodes: (nodeIds: string[]) => Promise<void>
   groupNodes: (nodeIds: string[]) => string | null
   createAssetGroup: (nodeIds: string[]) => void
   undo: () => boolean
   redo: () => boolean
   scheduleCanvasPersist: (delayMs?: number) => void
-  duplicateNodes: (sourceNodeIds: string[]) => { firstNodeId: string | null } | null
+  duplicateNodes: (sourceNodeIds: string[]) => Promise<{ firstNodeId: string | null } | null>
   addNode: (type: CanvasNodeType, position: { x: number; y: number }, data?: Partial<CanvasNodeData>) => string
   setSelectedNode: (nodeId: string | null) => void
 }
@@ -48,7 +47,6 @@ export function useCanvasShortcuts(params: UseCanvasShortcutsParams): void {
     focusedNodeId,
     nodes,
     edges,
-    deleteNode,
     deleteNodes,
     groupNodes,
     createAssetGroup,
@@ -229,12 +227,7 @@ export function useCanvasShortcuts(params: UseCanvasShortcutsParams): void {
       if (idsToDelete.length === 0) return
 
       event.preventDefault()
-      if (idsToDelete.length === 1) {
-        deleteNode(idsToDelete[0])
-      } else {
-        deleteNodes(idsToDelete)
-      }
-      scheduleCanvasPersist(0)
+      void deleteNodes(idsToDelete)
     }
 
     document.addEventListener('keydown', handleKeyDown)
@@ -242,7 +235,6 @@ export function useCanvasShortcuts(params: UseCanvasShortcutsParams): void {
       document.removeEventListener('keydown', handleKeyDown)
     }
   }, [
-    deleteNode,
     deleteNodes,
     createAssetGroup,
     duplicateNodes,

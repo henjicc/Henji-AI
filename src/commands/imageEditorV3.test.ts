@@ -42,6 +42,7 @@ function createPlatform(): ImageEditorV3Platform {
       revision: request.document.revision,
       previewRef: request.previewRef ?? null,
     })),
+    forkDocument: vi.fn(),
     deleteDocumentIfRevision: vi.fn(async () => ({ deleted: true })),
     importSource: vi.fn(async () => ({ status: 'cancelled' as const })),
     ingestSource: vi.fn(),

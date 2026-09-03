@@ -1,5 +1,6 @@
 import {
   deleteImageEditorV3DocumentIfRevision,
+  forkImageEditorV3Document,
   ImageEditorV3CommandRepository,
   loadImageEditorV3Document,
 } from '@/commands/imageEditorV3'
@@ -24,6 +25,7 @@ import type {
 } from './multiLayerDocumentNodeApplicationContracts'
 import { createMultiLayerDocumentNodeApplicationService } from './multiLayerDocumentNodeApplicationService'
 import { createMultiLayerDocumentProjectionCanvasPort } from './multiLayerDocumentNodeCanvasAdapter'
+import { createMultiLayerDocumentLifecyclePort } from './multiLayerDocumentLifecycleService'
 
 const logger = createLogger('features.canvas.multi_layer_document_generation')
 
@@ -136,11 +138,51 @@ function unavailable(operation: string): never {
   throw new Error(`多图层文档端口 ${operation} 尚未接入当前阶段`)
 }
 
+export function createForkedMultiLayerDocumentProjection(input: {
+  sourceNodeId: string
+  targetNodeId: string
+  session: ImageEditSessionReferenceV3
+  signal?: AbortSignal
+}): Promise<MultiLayerDocumentNodeProjection> {
+  return (async () => {
+    const source = await loadImageEditorV3Document({
+      requestId: `image-editor-v3:fork-source:${crypto.randomUUID()}`,
+      documentRef: input.session.documentRef,
+    }, input.signal)
+    if (!source || source.revision !== input.session.revision || source.previewRef !== input.session.previewRef) {
+      throw new Error('多图层文档 fork 的源版本已经变化')
+    }
+    const targetDocumentId = `layer-stack-fork-${createImageEditRenderHash({
+      sourceNodeId: input.sourceNodeId,
+      targetNodeId: input.targetNodeId,
+      sourceDocumentRef: input.session.documentRef,
+      revision: input.session.revision,
+    })}`
+    const targetDocumentRef = `image-edit-v3:${targetDocumentId}` as const
+    const reference = await forkImageEditorV3Document({
+      requestId: `image-editor-v3:fork:${crypto.randomUUID()}`,
+      sourceDocumentRef: input.session.documentRef,
+      expectedRevision: input.session.revision,
+      targetDocumentRef,
+    }, input.signal)
+    return {
+      imageEditSession: createCanvasEditV3SessionReference(input.session.sourceUrl, {
+        documentId: targetDocumentId,
+        revision: reference.revision,
+        previewRef: reference.previewRef,
+      }),
+      imageUrl: input.session.sourceUrl,
+      previewImageUrl: input.session.sourceUrl,
+      aspectRatio: `${source.document.geometry.width}:${source.document.geometry.height}`,
+    }
+  })()
+}
+
 const generationDocumentPort: MultiLayerDocumentNodePort = {
   createFromLayerStack: createLayerStackV3Projection,
   inspectDocument: inspectMultiLayerDocumentSession,
-  forkDocument: async () => unavailable('forkDocument'),
-  markReleaseCandidate: async () => unavailable('markReleaseCandidate'),
+  forkDocument: createForkedMultiLayerDocumentProjection,
+  ...createMultiLayerDocumentLifecyclePort(),
   ...createMultiLayerDocumentProjectionPort(),
   ...createMultiLayerDocumentExportPort(),
 }
@@ -171,6 +213,32 @@ export function openMultiLayerDocumentForEditing(input: {
   signal?: AbortSignal
 }): Promise<ImageEditSessionReferenceV3> {
   return generationApplicationService.openAndValidate(input)
+}
+
+export function migrateLegacyMultiLayerDocumentNode(input: {
+  projectId: string
+  nodeId: string
+  data: LayerStackResultNodeData
+  signal?: AbortSignal
+}): Promise<MultiLayerDocumentNodeProjection> {
+  return generationApplicationService.migrateLegacyDocument(input)
+}
+
+export function forkMultiLayerDocumentNode(input: {
+  sourceNodeId: string
+  targetNodeId: string
+  data: LayerStackResultNodeData
+  signal?: AbortSignal
+}): Promise<MultiLayerDocumentNodeProjection> {
+  return generationApplicationService.forkDocument(input)
+}
+
+export function markMultiLayerDocumentReleaseCandidate(input: {
+  nodeId: string
+  data: LayerStackResultNodeData
+  signal?: AbortSignal
+}): Promise<void> {
+  return generationApplicationService.markReleaseCandidate(input)
 }
 
 /** 编辑器 flush 后只通过 1.1 唯一 application 服务完成整图物化与原节点 CAS。 */

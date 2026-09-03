@@ -99,6 +99,7 @@ export function createImageEditorV3Api(
       'imageEditorV3:document:deleteIfRevision',
       request,
     ),
+    forkDocument: (request) => nativeInvoke('imageEditorV3:document:fork', request),
     importSource: (request) => nativeInvoke('imageEditorV3:source:import', request),
     ingestSource: (request) => nativeInvoke('imageEditorV3:source:ingest', request),
     readSourceMetadata: (request) => nativeInvoke('imageEditorV3:source:metadata', request),
