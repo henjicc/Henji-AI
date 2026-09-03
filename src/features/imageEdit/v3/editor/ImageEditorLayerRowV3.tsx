@@ -4,7 +4,6 @@ import {
   CircleDashed,
   Eye,
   EyeOff,
-  GripVertical,
   Image,
   Layers3,
   Lock,
@@ -13,10 +12,11 @@ import {
   SquarePen,
   Unlock,
 } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
 import type { KeyboardEvent, MouseEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 
-import { UiIconButton, UiOptionButton } from '@/components/ui'
+import { UiIconButton, UiInput, UiOptionButton } from '@/components/ui'
 import { UI_DURATION, uiTransition } from '@/components/ui/motion'
 import type { ImageEditLayerTreeRowV3 } from './layerTreeV3'
 import type { ImageEditorV3Controller } from './types'
@@ -32,7 +32,7 @@ interface ImageEditorLayerRowV3Props {
   dragging: boolean
   dropTarget: boolean
   dragOffset: { x: number; y: number }
-  onDragHandleMouseDown: (event: MouseEvent<HTMLSpanElement>) => void
+  onDragMouseDown: (event: MouseEvent<HTMLDivElement>) => void
   dragDisabled: boolean
 }
 
@@ -63,13 +63,43 @@ export function ImageEditorLayerRowV3({
   dragging,
   dropTarget,
   dragOffset,
-  onDragHandleMouseDown,
+  onDragMouseDown,
   dragDisabled,
 }: ImageEditorLayerRowV3Props): JSX.Element {
   const { t } = useTranslation('ui')
   const LayerIcon = TYPE_ICON[row.layer.type]
   const ancestorLocked = row.ancestors.some((ancestor) => ancestor.locked)
   const editable = !row.layer.locked && !ancestorLocked
+  const [renaming, setRenaming] = useState(false)
+  const [draftName, setDraftName] = useState(row.layer.name)
+  const renameInputRef = useRef<HTMLInputElement>(null)
+  const cancelRenameRef = useRef(false)
+
+  useEffect(() => {
+    if (!renaming) setDraftName(row.layer.name)
+  }, [renaming, row.layer.id, row.layer.name])
+
+  useEffect(() => {
+    if (!renaming) return
+    renameInputRef.current?.focus()
+    renameInputRef.current?.select()
+  }, [renaming])
+
+  const finishRename = (): void => {
+    if (cancelRenameRef.current) {
+      cancelRenameRef.current = false
+      setDraftName(row.layer.name)
+      setRenaming(false)
+      return
+    }
+    const trimmed = draftName.trim()
+    if (editable && trimmed && trimmed !== row.layer.name) {
+      controller.updateLayerCommon(row.layer.id, { name: trimmed })
+    } else {
+      setDraftName(row.layer.name)
+    }
+    setRenaming(false)
+  }
 
   const handleKeyDown = (event: KeyboardEvent<HTMLButtonElement>): void => {
     if (event.key === 'ArrowLeft' && row.layer.type === 'group' && expanded) {
@@ -114,6 +144,10 @@ export function ImageEditorLayerRowV3({
       data-layer-id={row.layer.id}
       data-layer-type={row.layer.type}
       className={`relative flex h-11 min-w-0 items-center gap-1 px-1.5 ${dropTarget ? 'ring-1 ring-inset ring-accent' : ''}`}
+      onMouseDown={(event) => {
+        if (renaming || !(event.target as HTMLElement).closest('[data-layer-select]')) return
+        onDragMouseDown(event)
+      }}
       style={{
         paddingInlineStart: `${row.depth * 16 + 6}px`,
         opacity: dragging ? 0.78 : 1,
@@ -124,15 +158,6 @@ export function ImageEditorLayerRowV3({
         zIndex: dragging ? 2 : undefined,
       }}
     >
-      <span
-        data-layer-drag-handle
-        className={`flex h-7 w-4 shrink-0 items-center justify-center text-text-faint ${dragDisabled ? 'cursor-not-allowed' : 'cursor-grab active:cursor-grabbing'}`}
-        title={t('imageEditor.v3.layers.dragHint')}
-        aria-hidden="true"
-        onMouseDown={onDragHandleMouseDown}
-      >
-        <GripVertical className="h-3.5 w-3.5" />
-      </span>
       {row.layer.type === 'group' ? (
         <UiIconButton
           className="h-7 w-7 shrink-0"
@@ -146,6 +171,64 @@ export function ImageEditorLayerRowV3({
           {expanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
         </UiIconButton>
       ) : <span className="w-7 shrink-0" aria-hidden="true" />}
+
+      <div className="relative min-w-0 flex-1">
+        <UiOptionButton
+          type="button"
+          data-layer-select
+          variant="menu"
+          active={selected}
+          className={`h-10 w-full min-w-0 gap-2 py-1 ${dragDisabled ? '' : 'cursor-grab active:cursor-grabbing'}`}
+          onClick={(event) => onSelect(row, event)}
+          onKeyDown={handleKeyDown}
+        >
+          <span className="flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded bg-surface-dark text-text-muted">
+            <LayerIcon className="h-3.5 w-3.5" />
+          </span>
+          <span
+            data-layer-name
+            className="min-w-0 flex-1 truncate text-xs text-text-dark"
+            onDoubleClick={(event) => {
+              event.stopPropagation()
+              if (!editable) return
+              setDraftName(row.layer.name)
+              setRenaming(true)
+            }}
+          >
+            {row.layer.name}
+          </span>
+          {row.layer.mask ? (
+            <CircleDashed
+              className="h-3.5 w-3.5 shrink-0 text-text-muted"
+              aria-label={t('imageEditor.v3.layers.hasMask')}
+            />
+          ) : null}
+        </UiOptionButton>
+        {renaming ? (
+          <div className={`absolute left-12 top-1/2 -translate-y-1/2 ${row.layer.mask ? 'right-8' : 'right-2'}`}>
+            <UiInput
+              ref={renameInputRef}
+              data-layer-name-input
+              className="h-7 px-2 py-0 text-xs"
+              aria-label={t('imageEditor.v3.properties.name')}
+              value={draftName}
+              onChange={(event) => setDraftName(event.currentTarget.value)}
+              onBlur={finishRename}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') {
+                  event.preventDefault()
+                  event.currentTarget.blur()
+                }
+                if (event.key === 'Escape') {
+                  event.preventDefault()
+                  cancelRenameRef.current = true
+                  event.currentTarget.blur()
+                }
+              }}
+            />
+          </div>
+        ) : null}
+      </div>
 
       <UiIconButton
         className="h-7 w-7 shrink-0"
@@ -162,27 +245,6 @@ export function ImageEditorLayerRowV3({
       >
         {row.layer.visible ? <Eye className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5" />}
       </UiIconButton>
-
-      <UiOptionButton
-        type="button"
-        data-layer-select
-        variant="menu"
-        active={selected}
-        className="min-w-0 flex-1 gap-2 py-1"
-        onClick={(event) => onSelect(row, event)}
-        onKeyDown={handleKeyDown}
-      >
-        <span className="flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded bg-surface-dark text-text-muted">
-          <LayerIcon className="h-3.5 w-3.5" />
-        </span>
-        <span className="min-w-0 flex-1 truncate text-xs text-text-dark">{row.layer.name}</span>
-        {row.layer.mask ? (
-          <CircleDashed
-            className="h-3.5 w-3.5 shrink-0 text-text-muted"
-            aria-label={t('imageEditor.v3.layers.hasMask')}
-          />
-        ) : null}
-      </UiOptionButton>
 
       <UiIconButton
         className="h-7 w-7 shrink-0"

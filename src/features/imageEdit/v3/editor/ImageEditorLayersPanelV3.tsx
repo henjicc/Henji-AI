@@ -144,6 +144,7 @@ export function ImageEditorLayersPanelV3({
     isCustomDragging: false,
     files: rows.map((row) => row.layer.id),
     layout: 'grid',
+    allowButtonTarget: true,
     onReorder: reorderRows,
   })
 
@@ -192,7 +193,7 @@ export function ImageEditorLayersPanelV3({
         x: dragState.currentX - dragState.startX,
         y: dragState.currentY - dragState.startY,
       }}
-      onDragHandleMouseDown={(event) => {
+      onDragMouseDown={(event) => {
         if (canDragImageEditLayerRowV3(row)) handleMouseDown(index, event)
       }}
       dragDisabled={!canDragImageEditLayerRowV3(row)}

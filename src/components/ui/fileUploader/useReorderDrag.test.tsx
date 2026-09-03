@@ -1,6 +1,6 @@
 /** @vitest-environment jsdom */
 
-import { act, fireEvent, render } from '@testing-library/react';
+import { act, cleanup, fireEvent, render } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { useReorderDrag } from './useReorderDrag';
@@ -19,12 +19,19 @@ function rect(left: number, top: number): DOMRect {
   } as DOMRect;
 }
 
-function Harness({ onReorder }: { onReorder: (from: number, to: number) => void }) {
+function Harness({
+  onReorder,
+  allowButtonTarget = false,
+}: {
+  onReorder: (from: number, to: number) => void
+  allowButtonTarget?: boolean
+}) {
   const { itemRefs, handleMouseDown } = useReorderDrag({
     disabled: false,
     isCustomDragging: false,
     files: ['first', 'second'],
     layout: 'grid',
+    allowButtonTarget,
     onReorder,
   });
   return (
@@ -38,7 +45,9 @@ function Harness({ onReorder }: { onReorder: (from: number, to: number) => void 
             if (element) element.getBoundingClientRect = () => rect(0, index * 120);
           }}
           onMouseDown={(event) => handleMouseDown(index, event)}
-        />
+        >
+          <button type="button">{id}</button>
+        </div>
       ))}
     </div>
   );
@@ -46,6 +55,7 @@ function Harness({ onReorder }: { onReorder: (from: number, to: number) => void 
 
 describe('useReorderDrag grid layout', () => {
   afterEach(() => {
+    cleanup();
     vi.useRealTimers();
   });
 
@@ -55,6 +65,24 @@ describe('useReorderDrag grid layout', () => {
     const rendered = render(<Harness onReorder={onReorder} />);
 
     fireEvent.mouseDown(rendered.getByTestId('first'), { button: 0, clientX: 50, clientY: 50 });
+    fireEvent.mouseMove(window, { clientX: 50, clientY: 80 });
+    fireEvent.mouseMove(window, { clientX: 50, clientY: 170 });
+    fireEvent.mouseUp(window);
+    act(() => vi.advanceTimersByTime(150));
+
+    expect(onReorder).toHaveBeenCalledWith(0, 1);
+  });
+
+  it('调用方显式允许时可从按钮内容开始拖拽', () => {
+    vi.useFakeTimers();
+    const onReorder = vi.fn();
+    const rendered = render(<Harness onReorder={onReorder} allowButtonTarget />);
+
+    fireEvent.mouseDown(rendered.getByRole('button', { name: 'first' }), {
+      button: 0,
+      clientX: 50,
+      clientY: 50,
+    });
     fireEvent.mouseMove(window, { clientX: 50, clientY: 80 });
     fireEvent.mouseMove(window, { clientX: 50, clientY: 170 });
     fireEvent.mouseUp(window);

@@ -16,6 +16,7 @@ interface UseReorderDragParams {
   isCustomDragging: boolean
   files: string[]
   layout?: 'horizontal' | 'grid'
+  allowButtonTarget?: boolean
   onReorder?: (from: number, to: number) => void
   onDragStateChange?: (isDragging: boolean) => void
   onImageClick?: (imageUrl: string, imageList: string[]) => void
@@ -38,6 +39,7 @@ export function useReorderDrag(params: UseReorderDragParams) {
     isCustomDragging,
     files,
     layout = 'horizontal',
+    allowButtonTarget = false,
     onReorder,
     onDragStateChange,
     onImageClick
@@ -62,7 +64,7 @@ export function useReorderDrag(params: UseReorderDragParams) {
 
   const handleMouseDown = useCallback((index: number, e: React.MouseEvent) => {
     const target = e.target as HTMLElement
-    if (target.tagName === 'BUTTON' || target.closest('button')) {
+    if (!allowButtonTarget && (target.tagName === 'BUTTON' || target.closest('button'))) {
       e.preventDefault()
       return
     }
@@ -79,7 +81,7 @@ export function useReorderDrag(params: UseReorderDragParams) {
       currentX: e.clientX,
       currentY: e.clientY
     })
-  }, [disabled, isCustomDragging])
+  }, [allowButtonTarget, disabled, isCustomDragging])
 
   useEffect(() => {
     if (!dragState.isDragging) return

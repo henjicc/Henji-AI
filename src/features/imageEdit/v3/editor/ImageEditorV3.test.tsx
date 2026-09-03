@@ -387,6 +387,68 @@ describe('ImageEditorV3 professional shell', () => {
     expect(screen.getAllByRole('treeitem')).toHaveLength(2)
   })
 
+  it('图层名称双击进入重命名，双击行内其他区域不触发', async () => {
+    const changes: ImageEditDocumentV3[] = []
+    const rendered = renderEditor(
+      createDocument([createImageEditRasterLayerV3('raster', '原图')]),
+      { onDocumentChange: (next) => changes.push(next) },
+    )
+    const layerSelect = await waitFor(() => rendered.container.querySelector<HTMLButtonElement>(
+      '[data-layer-select]',
+    ))
+    if (!layerSelect) throw new Error('图层行未挂载')
+    fireEvent.doubleClick(layerSelect)
+    expect(rendered.container.querySelector('[data-layer-name-input]')).toBeNull()
+
+    const layerName = rendered.container.querySelector<HTMLElement>('[data-layer-name]')
+    if (!layerName) throw new Error('图层名称未挂载')
+    fireEvent.doubleClick(layerName)
+    const input = await screen.findByRole('textbox', { name: '名称' })
+    fireEvent.change(input, { target: { value: '背景照片' } })
+    fireEvent.keyDown(input, { key: 'Enter' })
+
+    await waitFor(() => expect(changes).toHaveLength(1))
+    expect(changes[0].layers[0].name).toBe('背景照片')
+  })
+
+  it('图层项本身承担拖拽且不再显示独立拖拽图标', async () => {
+    const changes: ImageEditDocumentV3[] = []
+    const rendered = renderEditor(
+      createDocument([
+        createImageEditAnnotationLayerV3('bottom', '下层'),
+        createImageEditAnnotationLayerV3('top', '上层'),
+      ]),
+      { onDocumentChange: (next) => changes.push(next) },
+    )
+    const rows = await waitFor(() => Array.from(
+      rendered.container.querySelectorAll<HTMLElement>('[data-layer-id]'),
+    ))
+    expect(rows).toHaveLength(2)
+    expect(rendered.container.querySelector('[data-layer-drag-handle]')).toBeNull()
+    rows.forEach((row, index) => {
+      row.getBoundingClientRect = () => ({
+        x: 0,
+        y: index * 44,
+        left: 0,
+        top: index * 44,
+        right: 400,
+        bottom: index * 44 + 44,
+        width: 400,
+        height: 44,
+        toJSON: () => ({}),
+      }) as DOMRect
+    })
+    const firstLayer = rows[0].querySelector<HTMLButtonElement>('[data-layer-select]')
+    if (!firstLayer) throw new Error('首个图层项未挂载')
+    fireEvent.mouseDown(firstLayer, { button: 0, clientX: 200, clientY: 22 })
+    fireEvent.mouseMove(window, { clientX: 200, clientY: 52 })
+    fireEvent.mouseMove(window, { clientX: 200, clientY: 66 })
+    fireEvent.mouseUp(window)
+
+    await waitFor(() => expect(changes).toHaveLength(1))
+    expect(changes[0].layers.map((layer) => layer.id)).toEqual(['top', 'bottom'])
+  })
+
   it('所有工具参数都留在单命令带内，并保持右侧上下组合的停靠属性窗结构', async () => {
     const rendered = renderEditor(
       createDocument([createImageEditRasterLayerV3('raster', '底图')]),
