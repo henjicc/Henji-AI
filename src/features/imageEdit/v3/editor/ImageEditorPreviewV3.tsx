@@ -1,8 +1,7 @@
-import { AlertTriangle, LoaderCircle, Minus, Plus } from 'lucide-react'
+import { AlertTriangle, LoaderCircle } from 'lucide-react'
 import { useCallback, useLayoutEffect, useMemo, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 
-import { UiIconButton } from '@/components/ui'
 import type { ImageEditCommandBusV3 } from '../application/imageEditCommandBus'
 import {
   useImageEditorInteractionStoreV3,
@@ -23,6 +22,7 @@ import { ImageEditorRasterBrushOverlayV3 } from './ImageEditorRasterBrushOverlay
 import { ImageEditorRasterPasteboardV3 } from './ImageEditorRasterPasteboardV3'
 import { ImageEditorSelectionMaskOverlayV3 } from './ImageEditorSelectionMaskOverlayV3'
 import { ImageEditorViewportTilesV3 } from './ImageEditorViewportTilesV3'
+import { ImageEditorViewportChromeV3 } from './ImageEditorViewportChromeV3'
 import { resolveAnnotationOutputGeometryV3 } from './annotationGeometryV3'
 import { ImageEditorCropOverlayV3 } from './ImageEditorCropOverlayV3'
 import type {
@@ -75,9 +75,14 @@ export function ImageEditorPreviewV3({
   const viewportContentRef = useRef<HTMLDivElement | null>(null)
   const documentBackgroundRef = useRef<HTMLDivElement | null>(null)
   const documentClipRef = useRef<HTMLDivElement | null>(null)
+  const horizontalSnapGuideRef = useRef<HTMLDivElement | null>(null)
+  const verticalSnapGuideRef = useRef<HTMLDivElement | null>(null)
   const snapshot = useImageEditorBusSnapshotV3(bus)
   const activeTool = useImageEditorSessionStoreV3(
     (state) => state.sessions[controller.sessionId]?.activeTool ?? 'move',
+  )
+  const snappingEnabled = useImageEditorSessionStoreV3(
+    (state) => state.sessions[controller.sessionId]?.toolSettings.snappingEnabled ?? true,
   )
   const zoom = useImageEditorInteractionStoreV3(
     (state) => state.viewportZoomBySession[controller.sessionId] ?? 1,
@@ -300,6 +305,11 @@ export function ImageEditorPreviewV3({
     moveFeedbackRef,
     outputGeometry,
     rasterSourceReady,
+    snappingEnabled,
+    {
+      horizontal: horizontalSnapGuideRef,
+      vertical: verticalSnapGuideRef,
+    },
   )
 
   const navigationCursor = navigation.effectiveTool === 'hand'
@@ -465,36 +475,12 @@ export function ImageEditorPreviewV3({
           <span>{t(`imageEditor.v3.moveTool.${layerMoveHandlers.unavailableReason}`)}</span>
         </div>
       ) : null}
-      <div
-        data-viewport-control
-        className="ui-glass absolute bottom-3 left-1/2 flex -translate-x-1/2 items-center gap-1 rounded-lg p-1"
-      >
-        <UiIconButton
-          className="h-8 w-8 text-white hover:text-white"
-          showBorder={false}
-          appearance="hover-only"
-          aria-label={t('imageEditor.v3.zoomOut')}
-          title={t('imageEditor.v3.zoomOut')}
-          disabled={zoom <= 0.05}
-          onClick={() => navigation.zoomFromCenter(zoom / 1.25)}
-        >
-          <Minus className="h-4 w-4" />
-        </UiIconButton>
-        <span className="w-14 text-center text-xs tabular-nums text-white">
-          {Math.round(zoom * 100)}%
-        </span>
-        <UiIconButton
-          className="h-8 w-8 text-white hover:text-white"
-          showBorder={false}
-          appearance="hover-only"
-          aria-label={t('imageEditor.v3.zoomIn')}
-          title={t('imageEditor.v3.zoomIn')}
-          disabled={zoom >= 8}
-          onClick={() => navigation.zoomFromCenter(zoom * 1.25)}
-        >
-          <Plus className="h-4 w-4" />
-        </UiIconButton>
-      </div>
+      <ImageEditorViewportChromeV3
+        horizontalSnapGuideRef={horizontalSnapGuideRef}
+        verticalSnapGuideRef={verticalSnapGuideRef}
+        zoom={zoom}
+        onZoomChange={navigation.zoomFromCenter}
+      />
     </main>
   )
 }

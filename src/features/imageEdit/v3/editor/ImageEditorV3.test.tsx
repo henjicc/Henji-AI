@@ -359,7 +359,13 @@ describe('ImageEditorV3 professional shell', () => {
     expect(rendered.container.querySelectorAll('[data-command-bar]')).toHaveLength(1)
     expect(commandBar?.getAttribute('data-document-revision')).toBe('0')
     expect(commandBar?.textContent).not.toMatch(/版本\s*\d+/)
-    expect(rendered.container.querySelector('[data-context-bar]')).toBeNull()
+    const moveContextBar = rendered.container.querySelector('[data-context-bar]')
+    expect(moveContextBar?.parentElement?.hasAttribute('data-command-stack')).toBe(true)
+    const snappingSwitch = screen.getByRole('switch', { name: '吸附' })
+    expect(snappingSwitch.getAttribute('aria-checked')).toBe('true')
+    fireEvent.click(snappingSwitch)
+    expect(Object.values(useImageEditorSessionStoreV3.getState().sessions)[0]
+      ?.toolSettings.snappingEnabled).toBe(false)
 
     fireEvent.click(screen.getByRole('button', { name: '标注工具' }))
     const contextBar = rendered.container.querySelector('[data-context-bar]')

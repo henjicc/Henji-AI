@@ -7,7 +7,12 @@ import {
   type ImageEditTransformV3,
 } from '@/core/imageEdit/v3'
 
-import { resolveAnnotationOutputGeometryV3 } from './annotationGeometryV3'
+import {
+  mapAnnotationPointV3,
+  resolveAnnotationLayerToOutputMatrixV3,
+  resolveAnnotationOutputGeometryV3,
+} from './annotationGeometryV3'
+import type { ImageEditorSnapBoundsV3 } from './imageEditorMoveSnappingV3'
 import type { ImageEditLayerLocationV3 } from './layerTreeV3'
 
 const RADIANS_TO_DEGREES = 180 / Math.PI
@@ -108,6 +113,33 @@ export function mapImageEditOutputPointToLayerParentV3(
     point[0],
     point[1],
   )
+}
+
+/** 返回栅格图层完整源矩形在输出画布中的轴对齐边界。 */
+export function resolveImageEditRasterLayerOutputBoundsV3(
+  document: Pick<ImageEditDocumentV3, 'geometry'>,
+  location: Pick<ImageEditLayerLocationV3, 'layer' | 'ancestors'>,
+  layerTransform: ImageEditTransformV3 = location.layer.transform,
+): ImageEditorSnapBoundsV3 | null {
+  if (location.layer.type !== 'raster') return null
+  const matrix = resolveAnnotationLayerToOutputMatrixV3(document, [
+    layerTransform,
+    ...location.ancestors.slice().reverse().map((ancestor) => ancestor.transform),
+  ])
+  const corners = [
+    mapAnnotationPointV3(matrix, [0, 0]),
+    mapAnnotationPointV3(matrix, [document.geometry.width, 0]),
+    mapAnnotationPointV3(matrix, [0, document.geometry.height]),
+    mapAnnotationPointV3(matrix, [document.geometry.width, document.geometry.height]),
+  ]
+  const xs = corners.map(([x]) => x)
+  const ys = corners.map(([, y]) => y)
+  return {
+    left: Math.min(...xs),
+    top: Math.min(...ys),
+    right: Math.max(...xs),
+    bottom: Math.max(...ys),
+  }
 }
 
 export function translateImageEditLayerTransformV3(

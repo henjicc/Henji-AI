@@ -750,6 +750,7 @@
         "locked": "The selected layer or one of its groups is locked and cannot be moved."
       },
       "toolSettings": {
+        "snapping": "Snap",
         "size": "Size",
         "opacity": "Opacity",
         "hardness": "Hardness",

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from 'react'
+import { useCallback, useEffect, useMemo, useRef } from 'react'
 import type { PointerEvent as ReactPointerEvent, RefObject } from 'react'
 
 import type { ImageEditTransformV3 } from '@/core/imageEdit/v3/layerTypes'
@@ -9,10 +9,16 @@ import { findImageEditLayerLocationV3 } from './layerTreeV3'
 import {
   isImageEditLayerTransformableV3,
   mapImageEditOutputPointToLayerParentV3,
+  resolveImageEditRasterLayerOutputBoundsV3,
   resolveImageEditLayerMoveUnavailableReasonV3,
   translateImageEditLayerTransformV3,
   type ImageEditLayerMoveUnavailableReasonV3,
 } from './layerTransformV3'
+import {
+  createImageEditorDocumentSnapCandidatesV3,
+  resolveImageEditorMoveSnapV3,
+  type ImageEditorSnapGuideV3,
+} from './imageEditorMoveSnappingV3'
 import type { ImageEditorToolIdV3 } from '../application/imageEditorHostProfiles'
 import type { ImageEditorV3Controller } from './types'
 
@@ -24,6 +30,7 @@ interface ImageEditorLayerMoveGestureV3 {
   startParentPoint: readonly [number, number]
   startClientPoint: readonly [number, number]
   viewportRect: Pick<DOMRect, 'left' | 'top' | 'width' | 'height'>
+  surfaceRect: Pick<DOMRect, 'left' | 'top'>
   startTransform: ImageEditTransformV3
   pendingTransform: ImageEditTransformV3
   previewFrameId: number | null
@@ -43,6 +50,11 @@ export interface ImageEditorLayerMoveGestureHandlersV3 {
   onPointerCancelCapture(event: ReactPointerEvent<HTMLElement>): void
 }
 
+export interface ImageEditorMoveSnapGuideRefsV3 {
+  horizontal: RefObject<HTMLDivElement>
+  vertical: RefObject<HTMLDivElement>
+}
+
 /** move 只变换当前单选图层；annotation overlay 仍负责对象选择和二次编辑。 */
 export function useImageEditorLayerMoveGestureV3(
   controller: ImageEditorV3Controller,
@@ -51,6 +63,8 @@ export function useImageEditorLayerMoveGestureV3(
   moveFeedbackRef: RefObject<HTMLDivElement>,
   outputGeometry: AnnotationOutputGeometryV3,
   directLayerFeedbackAvailable: boolean,
+  snappingEnabled: boolean,
+  snapGuideRefs: ImageEditorMoveSnapGuideRefsV3,
 ): ImageEditorLayerMoveGestureHandlersV3 {
   const gestureRef = useRef<ImageEditorLayerMoveGestureV3 | null>(null)
   const selectedLayerIds = useImageEditorSessionStoreV3(
@@ -60,12 +74,58 @@ export function useImageEditorLayerMoveGestureV3(
     ? findImageEditLayerLocationV3(controller.document.layers, selectedLayerIds[0])
     : null
   const unavailableReason = resolveImageEditLayerMoveUnavailableReasonV3(selectedLocation)
+  const snapCandidates = useMemo(() => createImageEditorDocumentSnapCandidatesV3(
+    outputGeometry.width,
+    outputGeometry.height,
+  ), [outputGeometry.height, outputGeometry.width])
 
   const clearWholeFrameFeedback = useCallback((): void => {
     const feedback = moveFeedbackRef.current
     if (!feedback) return
     feedback.style.transform = ''
   }, [moveFeedbackRef])
+
+  const clearSnapGuides = useCallback((): void => {
+    const horizontal = snapGuideRefs.horizontal.current
+    const vertical = snapGuideRefs.vertical.current
+    if (horizontal) horizontal.style.visibility = 'hidden'
+    if (vertical) vertical.style.visibility = 'hidden'
+  }, [snapGuideRefs.horizontal, snapGuideRefs.vertical])
+
+  const updateSnapGuides = useCallback((
+    gesture: ImageEditorLayerMoveGestureV3,
+    guides: readonly ImageEditorSnapGuideV3[],
+  ): void => {
+    const horizontal = snapGuideRefs.horizontal.current
+    const vertical = snapGuideRefs.vertical.current
+    const frameLeft = gesture.viewportRect.left - gesture.surfaceRect.left
+    const frameTop = gesture.viewportRect.top - gesture.surfaceRect.top
+    const horizontalGuide = guides.find(({ axis }) => axis === 'y')
+    const verticalGuide = guides.find(({ axis }) => axis === 'x')
+
+    if (vertical) {
+      if (verticalGuide) {
+        vertical.style.left = `${frameLeft
+          + verticalGuide.position / outputGeometry.width * gesture.viewportRect.width}px`
+        vertical.style.top = `${frameTop}px`
+        vertical.style.height = `${gesture.viewportRect.height}px`
+        vertical.style.visibility = 'visible'
+      } else {
+        vertical.style.visibility = 'hidden'
+      }
+    }
+    if (horizontal) {
+      if (horizontalGuide) {
+        horizontal.style.left = `${frameLeft}px`
+        horizontal.style.top = `${frameTop
+          + horizontalGuide.position / outputGeometry.height * gesture.viewportRect.height}px`
+        horizontal.style.width = `${gesture.viewportRect.width}px`
+        horizontal.style.visibility = 'visible'
+      } else {
+        horizontal.style.visibility = 'hidden'
+      }
+    }
+  }, [outputGeometry.height, outputGeometry.width, snapGuideRefs.horizontal, snapGuideRefs.vertical])
 
   const cancelScheduledPreview = useCallback((gesture: ImageEditorLayerMoveGestureV3): void => {
     if (gesture.previewFrameId === null) return
@@ -78,6 +138,7 @@ export function useImageEditorLayerMoveGestureV3(
     if (!gesture) return
     gestureRef.current = null
     cancelScheduledPreview(gesture)
+    clearSnapGuides()
     if (
       typeof gesture.captureTarget.hasPointerCapture === 'function'
       && gesture.captureTarget.hasPointerCapture(gesture.pointerId)
@@ -111,7 +172,7 @@ export function useImageEditorLayerMoveGestureV3(
     } else {
       clearWholeFrameFeedback()
     }
-  }, [cancelScheduledPreview, clearWholeFrameFeedback, controller])
+  }, [cancelScheduledPreview, clearSnapGuides, clearWholeFrameFeedback, controller])
 
   useEffect(() => {
     if (activeTool !== 'move') release(false)
@@ -128,7 +189,7 @@ export function useImageEditorLayerMoveGestureV3(
     rect: Pick<DOMRect, 'left' | 'top' | 'width' | 'height'>,
     clientX: number,
     clientY: number,
-    clampOutside = false,
+    allowOutside = false,
   ): readonly [number, number] | null => {
     if (rect.width <= 0 || rect.height <= 0) return null
     const outside = (
@@ -137,12 +198,10 @@ export function useImageEditorLayerMoveGestureV3(
       || clientY < rect.top
       || clientY > rect.top + rect.height
     )
-    if (outside && !clampOutside) return null
-    const x = Math.min(rect.left + rect.width, Math.max(rect.left, clientX))
-    const y = Math.min(rect.top + rect.height, Math.max(rect.top, clientY))
+    if (outside && !allowOutside) return null
     return [
-      (x - rect.left) / rect.width * outputGeometry.width,
-      (y - rect.top) / rect.height * outputGeometry.height,
+      (clientX - rect.left) / rect.width * outputGeometry.width,
+      (clientY - rect.top) / rect.height * outputGeometry.height,
     ]
   }, [outputGeometry.height, outputGeometry.width])
 
@@ -166,6 +225,7 @@ export function useImageEditorLayerMoveGestureV3(
     if (!layerId) return
     const location = findImageEditLayerLocationV3(controller.document.layers, layerId)
     const viewportRect = viewportContentRef.current?.getBoundingClientRect()
+    const surfaceRect = event.currentTarget.getBoundingClientRect()
     if (!viewportRect) return
     const outputPoint = clientToOutput(viewportRect, event.clientX, event.clientY)
     if (!isImageEditLayerTransformableV3(location) || !outputPoint) return
@@ -193,6 +253,7 @@ export function useImageEditorLayerMoveGestureV3(
         width: viewportRect.width,
         height: viewportRect.height,
       },
+      surfaceRect: { left: surfaceRect.left, top: surfaceRect.top },
       startTransform: [...location.layer.transform],
       pendingTransform: [...location.layer.transform],
       previewFrameId: null,
@@ -229,23 +290,54 @@ export function useImageEditorLayerMoveGestureV3(
       release(false)
       return
     }
-    const point = mapImageEditOutputPointToLayerParentV3(controller.document, location, outputPoint)
+    const rawPoint = mapImageEditOutputPointToLayerParentV3(controller.document, location, outputPoint)
+    const rawDeltaX = rawPoint[0] - gesture.startParentPoint[0]
+    const rawDeltaY = rawPoint[1] - gesture.startParentPoint[1]
+    const rawChanged = Math.hypot(rawDeltaX, rawDeltaY) >= 0.01
+    const rawTransform = translateImageEditLayerTransformV3(
+      gesture.startTransform,
+      rawDeltaX,
+      rawDeltaY,
+    )
+    const movingBounds = snappingEnabled && !event.ctrlKey
+      ? resolveImageEditRasterLayerOutputBoundsV3(controller.document, location, rawTransform)
+      : null
+    const snap = movingBounds
+      ? resolveImageEditorMoveSnapV3(
+          movingBounds,
+          snapCandidates,
+          {
+            x: 8 / gesture.viewportRect.width * outputGeometry.width,
+            y: 8 / gesture.viewportRect.height * outputGeometry.height,
+          },
+        )
+      : { deltaX: 0, deltaY: 0, guides: [] }
+    const snappedOutputPoint: readonly [number, number] = [
+      outputPoint[0] + snap.deltaX,
+      outputPoint[1] + snap.deltaY,
+    ]
+    const point = mapImageEditOutputPointToLayerParentV3(
+      controller.document,
+      location,
+      snappedOutputPoint,
+    )
     const deltaX = point[0] - gesture.startParentPoint[0]
     const deltaY = point[1] - gesture.startParentPoint[1]
     const changed = Math.hypot(deltaX, deltaY) >= 0.01
-    if (!changed && !gesture.interacted) return
+    if (!rawChanged && !gesture.interacted) return
     event.preventDefault()
     event.stopPropagation()
     gesture.interacted = true
     gesture.changed = changed
+    updateSnapGuides(gesture, snap.guides)
     gesture.pendingTransform = changed
       ? translateImageEditLayerTransformV3(gesture.startTransform, deltaX, deltaY)
       : [...gesture.startTransform]
     if (gesture.directLayerFeedback && moveFeedbackRef.current) {
       const previewClientX = gesture.viewportRect.left
-        + outputPoint[0] / outputGeometry.width * gesture.viewportRect.width
+        + snappedOutputPoint[0] / outputGeometry.width * gesture.viewportRect.width
       const previewClientY = gesture.viewportRect.top
-        + outputPoint[1] / outputGeometry.height * gesture.viewportRect.height
+        + snappedOutputPoint[1] / outputGeometry.height * gesture.viewportRect.height
       // 常驻合成表面位于缩放容器之外，反馈位移必须保持屏幕像素；
       // 文档坐标缩放已经由 clientToOutput 负责，不能在这里再除一次 zoom。
       moveFeedbackRef.current.style.transform = changed

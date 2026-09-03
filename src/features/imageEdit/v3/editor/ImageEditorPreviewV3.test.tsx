@@ -380,17 +380,49 @@ describe('ImageEditorPreviewV3 managed frame ownership', () => {
     fireEvent.click(zoomIn)
     fireEvent.click(zoomIn)
     const liveSession = requireImageEditV3LiveSession(document.id)
+    const verticalSnapGuide = rendered.container.querySelector<HTMLElement>(
+      '[data-snap-guide-axis="x"]',
+    )
+    const horizontalSnapGuide = rendered.container.querySelector<HTMLElement>(
+      '[data-snap-guide-axis="y"]',
+    )
+    if (!verticalSnapGuide || !horizontalSnapGuide) throw new Error('移动吸附参考线不存在')
+
+    fireEvent.pointerDown(surface, {
+      pointerId: 40, isPrimary: true, button: 0, clientX: 10, clientY: 10,
+    })
+    fireEvent.pointerMove(surface, { pointerId: 40, clientX: 16, clientY: 10 })
+    expect(feedback.style.transform).toBe('')
+    expect(verticalSnapGuide.style.visibility).toBe('visible')
+    expect(horizontalSnapGuide.style.visibility).toBe('visible')
+    fireEvent.pointerUp(surface, { pointerId: 40, clientX: 16, clientY: 10 })
+    expect(verticalSnapGuide.style.visibility).toBe('hidden')
+    expect(horizontalSnapGuide.style.visibility).toBe('hidden')
+    expect(changes).not.toHaveBeenCalled()
+
+    const snappingSwitch = screen.getByRole('switch', { name: '吸附' })
+    fireEvent.click(snappingSwitch)
+    fireEvent.pointerDown(surface, {
+      pointerId: 39, isPrimary: true, button: 0, clientX: 10, clientY: 10,
+    })
+    fireEvent.pointerMove(surface, { pointerId: 39, clientX: 16, clientY: 10 })
+    expect(feedback.style.transform).toBe('translate3d(6px, 0px, 0)')
+    expect(verticalSnapGuide.style.visibility).toBe('hidden')
+    expect(horizontalSnapGuide.style.visibility).toBe('hidden')
+    fireEvent.pointerCancel(surface, { pointerId: 39 })
+    fireEvent.click(snappingSwitch)
+
     readViewportRect.mockClear()
     fireEvent.pointerDown(surface, {
       pointerId: 41, isPrimary: true, button: 0, clientX: 10, clientY: 10,
     })
-    fireEvent.pointerMove(surface, { pointerId: 41, clientX: 35, clientY: 20 })
-    fireEvent.pointerMove(surface, { pointerId: 41, clientX: 45, clientY: 30 })
+    fireEvent.pointerMove(surface, { pointerId: 41, clientX: 35, clientY: 20, ctrlKey: true })
+    fireEvent.pointerMove(surface, { pointerId: 41, clientX: 45, clientY: 30, ctrlKey: true })
     expect(readViewportRect).toHaveBeenCalledTimes(1)
     expect(liveSession.bus.getSnapshot().previewOverrides).toEqual({})
     expect(feedback.style.transform).toBe('translate3d(35px, 20px, 0)')
 
-    fireEvent.pointerMove(surface, { pointerId: 41, clientX: 35, clientY: 20 })
+    fireEvent.pointerMove(surface, { pointerId: 41, clientX: 35, clientY: 20, ctrlKey: true })
     expect(feedback.style.transform).toBe('translate3d(25px, 10px, 0)')
     expect(changes).not.toHaveBeenCalled()
 
@@ -403,7 +435,7 @@ describe('ImageEditorPreviewV3 managed frame ownership', () => {
     fireEvent.pointerDown(surface, {
       pointerId: 42, isPrimary: true, button: 0, clientX: 10, clientY: 10,
     })
-    fireEvent.pointerMove(surface, { pointerId: 42, clientX: 35, clientY: 20 })
+    fireEvent.pointerMove(surface, { pointerId: 42, clientX: 35, clientY: 20, ctrlKey: true })
     fireEvent.pointerUp(surface, { pointerId: 42, clientX: 35, clientY: 20 })
 
     await waitFor(() => expect(changes).toHaveBeenCalledTimes(1))
@@ -420,8 +452,8 @@ describe('ImageEditorPreviewV3 managed frame ownership', () => {
     fireEvent.pointerDown(surface, {
       pointerId: 43, isPrimary: true, button: 0, clientX: 35, clientY: 20,
     })
-    fireEvent.pointerMove(surface, { pointerId: 43, clientX: 15, clientY: 20 })
-    expect(feedback.style.transform).toBe('translate3d(-20px, 0px, 0)')
+    fireEvent.pointerMove(surface, { pointerId: 43, clientX: -15, clientY: 20, ctrlKey: true })
+    expect(feedback.style.transform).toBe('translate3d(-50px, 0px, 0)')
     expect(rasterImage.style.transform).toBe('matrix(1, 0, 0, 1, 19.53125, 7.8125)')
     fireEvent.pointerCancel(surface, { pointerId: 43 })
     expect(feedback.style.transform).toBe('')

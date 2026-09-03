@@ -2,7 +2,7 @@ import { Redo2, Undo2 } from 'lucide-react'
 import { useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 
-import { UiChipButton, UiIconButton, UiInput, UiRangeInput, UiSelect } from '@/components/ui'
+import { UiChipButton, UiIconButton, UiInput, UiRangeInput, UiSelect, UiSwitch } from '@/components/ui'
 import { ICON_TOOL_IMAGE_EDIT } from '@/core/theme/icons'
 import { ImageEditorCropParametersV3 } from './ImageEditorCropParametersV3'
 import {
@@ -110,12 +110,13 @@ function ToolParameterBar({
   if (!session) return null
 
   const brushLike = ['raster-brush', 'eraser', 'mask-edit'].includes(session.activeTool)
+  const moveLike = session.activeTool === 'move'
   const activeAnnotationTool = session.activeTool.startsWith('annotation-')
   const annotationLike = activeAnnotationTool || (session.activeTool === 'move' && Boolean(selectedAnnotation))
   if (session.activeTool === 'crop') {
     return <ImageEditorCropParametersV3 controller={controller} bus={bus} />
   }
-  if (!brushLike && !annotationLike && !selectionLike) return null
+  if (!moveLike && !brushLike && !annotationLike && !selectionLike) return null
 
   const annotationColor = selectedAnnotationStyle?.color
     ?? session.toolSettings.annotationColor
@@ -159,6 +160,20 @@ function ToolParameterBar({
       data-context-bar
       className="flex min-h-10 items-center gap-5 overflow-x-auto px-3 py-1.5"
     >
+      {moveLike ? (
+        <label className="flex shrink-0 items-center gap-2 text-xs text-text-muted">
+          <span>{t('imageEditor.v3.toolSettings.snapping')}</span>
+          <UiSwitch
+            aria-label={t('imageEditor.v3.toolSettings.snapping')}
+            checked={session.toolSettings.snappingEnabled}
+            onCheckedChange={(enabled) => setToolSetting(
+              controller.sessionId,
+              'snappingEnabled',
+              enabled,
+            )}
+          />
+        </label>
+      ) : null}
       {brushLike ? (
         <>
           {session.activeTool === 'mask-edit' ? (

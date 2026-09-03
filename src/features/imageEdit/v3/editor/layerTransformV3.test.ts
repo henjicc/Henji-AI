@@ -10,6 +10,7 @@ import {
   decomposeImageEditTransformV3,
   isImageEditLayerTransformableV3,
   mapImageEditOutputPointToLayerParentV3,
+  resolveImageEditRasterLayerOutputBoundsV3,
 } from './layerTransformV3'
 import { findImageEditLayerLocationV3 } from './layerTreeV3'
 
@@ -51,6 +52,25 @@ describe('图片编辑 V3 图层变换交互坐标', () => {
     group.visible = true
     group.locked = true
     expect(allowed()).toBe(false)
+  })
+
+  it('按图层到祖先的顺序计算嵌套栅格输出边界', () => {
+    const child = createImageEditRasterLayerV3('child', '子图层')
+    child.transform = [1, 0, 0, 1, 3, 4]
+    const group = createImageEditGroupLayerV3('group', '组')
+    group.transform = [2, 0, 0, 2, 10, 5]
+    group.children = [child]
+    const document = createImageEditDocumentV3({ width: 100, height: 50, documentId: 'bounds' })
+    document.layers = [group]
+    const location = findImageEditLayerLocationV3(document.layers, child.id)
+    if (!location) throw new Error('测试图层不存在')
+
+    expect(resolveImageEditRasterLayerOutputBoundsV3(document, location)).toEqual({
+      left: 16,
+      top: 13,
+      right: 216,
+      bottom: 113,
+    })
   })
 
   it('数值字段往返保留未暴露的 shear，并拒绝零缩放', () => {

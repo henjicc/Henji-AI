@@ -750,6 +750,7 @@
         "locked": "所选图层或其所在组已锁定，暂时不能移动。"
       },
       "toolSettings": {
+        "snapping": "吸附",
         "size": "大小",
         "opacity": "不透明度",
         "hardness": "硬度",

@@ -503,6 +503,11 @@ function createToolboxScenes(context) {
         if (await defaultMoveTool.getAttribute('aria-pressed') !== 'true') {
           throw new Error('图片编辑器默认工具不是移动工具')
         }
+        const snappingSwitch = editor.getByRole('switch', { name: /^(吸附|Snap)$/i })
+        await snappingSwitch.waitFor({ state: 'visible', timeout: 3000 })
+        if (await snappingSwitch.getAttribute('aria-checked') !== 'true') {
+          throw new Error('移动工具没有默认开启吸附')
+        }
 
         const layerAddTrigger = editor.getByRole('button', { name: /^(添加图层|Add layer)$/i })
         await layerAddTrigger.click()
@@ -794,7 +799,43 @@ function createToolboxScenes(context) {
         if (!initialFeedbackBox || !initialViewportContentBox || !initialTransparencyBox) {
           throw new Error('移动 JPG 前无法读取稳定画面边界')
         }
+        const beforeSnap = await readRevision()
         await page.mouse.move(startX, startY)
+        await page.mouse.down()
+        await page.mouse.move(startX + 6, startY, { steps: 3 })
+        await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => resolve())))
+        const snapFeedback = await feedback.evaluate((element) => element.style.transform)
+        const snapGuides = await editor.evaluate(() => ([...document.querySelectorAll('[data-snap-guide-axis]')]
+          .map((element) => {
+            const rect = element.getBoundingClientRect()
+            return {
+              axis: element.getAttribute('data-snap-guide-axis'),
+              visibility: getComputedStyle(element).visibility,
+              width: rect.width,
+              height: rect.height,
+            }
+          })))
+        if (snapFeedback !== ''
+          || snapGuides.length !== 2
+          || snapGuides.some(({ visibility, width, height }) => (
+            visibility !== 'visible' || width <= 0 || height <= 0
+          ))) {
+          throw new Error(`图片靠近原位时没有吸附并显示中心参考线：${JSON.stringify({
+            snapFeedback,
+            snapGuides,
+          })}`)
+        }
+        await page.mouse.up()
+        if (await readRevision() !== beforeSnap) {
+          throw new Error('吸附回原位仍错误产生了编辑记录')
+        }
+        const hiddenSnapGuides = await editor.locator('[data-snap-guide-axis]').evaluateAll((guides) => (
+          guides.every((guide) => getComputedStyle(guide).visibility === 'hidden')
+        ))
+        if (!hiddenSnapGuides) throw new Error('移动结束后吸附参考线没有隐藏')
+
+        await page.mouse.move(startX, startY)
+        await page.keyboard.down('Control')
         await page.mouse.down()
         const pressedSource = await preview.getAttribute('data-preview-display-source')
         const pressedFeedbackBox = await feedback.boundingBox()
@@ -851,6 +892,7 @@ function createToolboxScenes(context) {
           throw new Error('移动 JPG 时没有即时位移反馈')
         }
         await page.mouse.up()
+        await page.keyboard.up('Control')
         await page.waitForFunction((revision) => {
           return Number(document.querySelector('[data-command-bar]')
             ?.getAttribute('data-document-revision')) === revision + 1
@@ -863,8 +905,28 @@ function createToolboxScenes(context) {
         }, undefined, { timeout: 12000 })
 
         const beforeReverseMove = await readRevision()
-        const reverseStartX = startX + 42
-        const reverseStartY = startY - 180
+        const [movedImageBox, currentDocumentBox] = await Promise.all([
+          feedback.locator('img').boundingBox(),
+          viewportContent.boundingBox(),
+        ])
+        if (!movedImageBox || !currentDocumentBox) {
+          throw new Error('反向拖回前无法读取图片与图片区域的可见交集')
+        }
+        const visibleLeft = Math.max(movedImageBox.x, currentDocumentBox.x)
+        const visibleTop = Math.max(movedImageBox.y, currentDocumentBox.y)
+        const visibleRight = Math.min(
+          movedImageBox.x + movedImageBox.width,
+          currentDocumentBox.x + currentDocumentBox.width,
+        )
+        const visibleBottom = Math.min(
+          movedImageBox.y + movedImageBox.height,
+          currentDocumentBox.y + currentDocumentBox.height,
+        )
+        if (visibleRight <= visibleLeft || visibleBottom <= visibleTop) {
+          throw new Error('第一次移动后图片在图片区域内没有可拖动部分')
+        }
+        const reverseStartX = (visibleLeft + visibleRight) / 2
+        const reverseStartY = (visibleTop + visibleBottom) / 2
         await page.mouse.move(reverseStartX, reverseStartY)
         await page.mouse.down()
         await page.mouse.move(reverseStartX - 30, reverseStartY, { steps: 6 })

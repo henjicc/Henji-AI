@@ -5,6 +5,7 @@ import { ANNOTATION_DEFAULT_STROKE_HEX } from '@/core/theme/colorTokens'
 import type { ImageEditorToolIdV3 } from '../application/imageEditorHostProfiles'
 
 export interface ImageEditorToolSettingsV3 {
+  snappingEnabled: boolean
   brushSize: number
   brushOpacity: number
   brushHardness: number
@@ -56,6 +57,7 @@ interface ImageEditorSessionStoreV3 {
 }
 
 const DEFAULT_TOOL_SETTINGS: ImageEditorToolSettingsV3 = {
+  snappingEnabled: true,
   brushSize: 32,
   brushOpacity: 1,
   brushHardness: 0.8,
