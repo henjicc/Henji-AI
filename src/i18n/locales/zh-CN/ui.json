@@ -588,7 +588,6 @@
     },
     "v3": {
       "title": "图片编辑",
-      "revision": "版本 {{revision}}",
       "previewAlt": "图片编辑预览",
       "zoomIn": "放大",
       "zoomOut": "缩小",

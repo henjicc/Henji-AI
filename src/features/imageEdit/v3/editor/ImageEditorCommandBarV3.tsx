@@ -400,7 +400,11 @@ export function ImageEditorCommandBarV3({
       data-command-stack
       className="shrink-0 border-b border-border-dark bg-panel"
     >
-      <div data-command-bar className="flex h-12 min-w-0 items-center gap-2 px-3">
+      <div
+        data-command-bar
+        data-document-revision={controller.document.revision}
+        className="flex h-12 min-w-0 items-center gap-2 px-3"
+      >
         <div className="flex min-w-0 items-center gap-2">
           {toolbarLeading}
           <EditorIcon className="h-4 w-4 shrink-0 text-text-muted" aria-hidden="true" />
@@ -432,9 +436,6 @@ export function ImageEditorCommandBarV3({
           <Redo2 className="h-4 w-4" />
         </UiIconButton>
         <div className="ml-auto flex min-w-0 items-center gap-3">
-          <span className="hidden text-xs tabular-nums text-text-muted sm:inline">
-            {t('imageEditor.v3.revision', { revision: controller.document.revision })}
-          </span>
           <span className="w-12 text-right text-xs tabular-nums text-text-muted">
             {Math.round(zoom * 100)}%
           </span>

@@ -77,6 +77,7 @@ npm run assistant:live:suite -- --only camera --skip-generation
 - 禁止在业务组件中直接调模型生成 API（`fetch()` / `axios`）
 - 禁止在 UI 组件中写 `if (modelId === 'specific-model')` 这类模型特定分支
 - 禁止在参数面板中提供图片、视频、音频、PDF 等媒体/文件 URL 的手动输入框；即使供应商字段名是 `*_url`，也必须呈现为上传按钮或对应上传组件，由主进程调用当前供应商的官方文件上传服务并自动回填请求 URL
+- 禁止把内部实现状态直接展示在正式界面，包括但不限于 `revision`、schema/协议版本、请求/任务/资源 ID、哈希、缓存/Worker/渲染管线状态、调试计数与风险分级。可观察性进入日志、诊断页或开发模式；正式界面只呈现用户当前需要据此行动、决策、理解结果或恢复失败的信息，并使用用户任务语言表达
 - 禁止在 `src/components/ui/primitives.tsx` 以外的地方写原生 `<button>/<input>/<select>/<textarea>`
 - 禁止硬编码颜色（`#hex` / `rgba(数字…)` / `*-zinc-*`），只能改 `src/index.css`、`tailwind.config.js`、`src/components/ui/styleTokens.ts`
 - 禁止新增裸 `any`（存量可留，增量为零）

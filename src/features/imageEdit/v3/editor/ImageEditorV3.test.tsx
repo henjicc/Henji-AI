@@ -354,8 +354,11 @@ describe('ImageEditorV3 professional shell', () => {
       createDocument([createImageEditRasterLayerV3('raster', '底图')]),
     )
     await waitFor(() => expect(rendered.container.querySelector('[data-command-bar]')).toBeTruthy())
+    const commandBar = rendered.container.querySelector<HTMLElement>('[data-command-bar]')
     expect(rendered.container.querySelectorAll('[data-command-stack]')).toHaveLength(1)
     expect(rendered.container.querySelectorAll('[data-command-bar]')).toHaveLength(1)
+    expect(commandBar?.getAttribute('data-document-revision')).toBe('0')
+    expect(commandBar?.textContent).not.toMatch(/版本\s*\d+/)
     expect(rendered.container.querySelector('[data-context-bar]')).toBeNull()
 
     fireEvent.click(screen.getByRole('button', { name: '标注工具' }))

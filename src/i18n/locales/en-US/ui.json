@@ -588,7 +588,6 @@
     },
     "v3": {
       "title": "Image Editor",
-      "revision": "Revision {{revision}}",
       "previewAlt": "Image editor preview",
       "zoomIn": "Zoom in",
       "zoomOut": "Zoom out",

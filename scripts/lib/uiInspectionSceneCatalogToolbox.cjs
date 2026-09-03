@@ -656,8 +656,8 @@ function createToolboxScenes(context) {
         }
 
         const readRevision = async () => {
-          const label = await editor.getByText(/^(版本|Revision) \d+$/).first().textContent()
-          const revision = Number(label?.match(/\d+/)?.[0])
+          const revision = Number(await editor.locator('[data-command-bar]')
+            .getAttribute('data-document-revision'))
           if (!Number.isSafeInteger(revision)) throw new Error('无法读取图片编辑 revision')
           return revision
         }
@@ -852,8 +852,8 @@ function createToolboxScenes(context) {
         }
         await page.mouse.up()
         await page.waitForFunction((revision) => {
-          const labels = [...document.querySelectorAll('[data-command-bar] span')]
-          return labels.some((element) => Number(element.textContent?.match(/\d+/)?.[0]) === revision + 1)
+          return Number(document.querySelector('[data-command-bar]')
+            ?.getAttribute('data-document-revision')) === revision + 1
         }, beforeMove, { timeout: 12000 })
         await page.waitForFunction(() => {
           const previewSurface = document.querySelector('[data-preview-surface]')
@@ -881,9 +881,9 @@ function createToolboxScenes(context) {
         if (!clipBox || !documentBox) throw new Error('反向拖回时无法读取图片右边缘')
         await page.mouse.up()
         await page.waitForFunction((revision) => {
-          const labels = [...document.querySelectorAll('[data-command-bar] span')]
           const feedbackFrame = document.querySelector('[data-move-feedback-frame]')
-          return labels.some((element) => Number(element.textContent?.match(/\d+/)?.[0]) === revision + 1)
+          return Number(document.querySelector('[data-command-bar]')
+            ?.getAttribute('data-document-revision')) === revision + 1
             && feedbackFrame?.style.transform === ''
         }, beforeReverseMove, { timeout: 12000 })
         const afterReverse = await documentClip.screenshot({ animations: 'disabled' })
@@ -1036,9 +1036,8 @@ function createToolboxScenes(context) {
           input.dispatchEvent(new Event('change', { bubbles: true }))
         }, testedAnnotationColor)
         await page.waitForFunction((revision) => {
-          const label = [...document.querySelectorAll('[data-command-bar] span')]
-            .find((element) => /^(版本|Revision) \d+$/.test(element.textContent ?? ''))
-          return Number(label?.textContent?.match(/\d+/)?.[0]) === revision + 1
+          return Number(document.querySelector('[data-command-bar]')
+            ?.getAttribute('data-document-revision')) === revision + 1
         }, beforeAnnotationColorRevision, { timeout: 10000 }).catch(() => {
           throw new Error('修改选中标注颜色后没有提交文档 revision')
         })
@@ -1056,9 +1055,8 @@ function createToolboxScenes(context) {
           input.dispatchEvent(new Event('change', { bubbles: true }))
         })
         await page.waitForFunction((revision) => {
-          const label = [...document.querySelectorAll('[data-command-bar] span')]
-            .find((element) => /^(版本|Revision) \d+$/.test(element.textContent ?? ''))
-          return Number(label?.textContent?.match(/\d+/)?.[0]) === revision + 1
+          return Number(document.querySelector('[data-command-bar]')
+            ?.getAttribute('data-document-revision')) === revision + 1
         }, beforeAnnotationStrokeRevision, { timeout: 10000 }).catch(() => {
           throw new Error('修改选中标注描边后没有提交文档 revision')
         })
@@ -1083,9 +1081,8 @@ function createToolboxScenes(context) {
         }
         await page.mouse.up()
         await page.waitForFunction((revision) => {
-          const label = [...document.querySelectorAll('[data-command-bar] span')]
-            .find((element) => /^(版本|Revision) \d+$/.test(element.textContent ?? ''))
-          return Number(label?.textContent?.match(/\d+/)?.[0]) === revision + 1
+          return Number(document.querySelector('[data-command-bar]')
+            ?.getAttribute('data-document-revision')) === revision + 1
         }, beforeAnnotationMove, { timeout: 3000 }).catch(() => {
           throw new Error('标注无法直接拖动，或松手后没有提交唯一 revision')
         })
@@ -1104,9 +1101,8 @@ function createToolboxScenes(context) {
         )
         await page.mouse.up()
         await page.waitForFunction((revision) => {
-          const label = [...document.querySelectorAll('[data-command-bar] span')]
-            .find((element) => /^(版本|Revision) \d+$/.test(element.textContent ?? ''))
-          return Number(label?.textContent?.match(/\d+/)?.[0]) === revision + 1
+          return Number(document.querySelector('[data-command-bar]')
+            ?.getAttribute('data-document-revision')) === revision + 1
             && document.querySelector('[data-annotation-editor-overlay]')
               ?.getAttribute('data-selected-annotation-type') === 'arrow'
         }, beforeArrow, { timeout: 3000 }).catch(() => {
@@ -1160,8 +1156,8 @@ function createToolboxScenes(context) {
         )
         await page.mouse.up()
         await page.waitForFunction((revision) => {
-          const labels = [...document.querySelectorAll('[data-command-bar] span')]
-          return labels.some((element) => Number(element.textContent?.match(/\d+/)?.[0]) === revision + 1)
+          return Number(document.querySelector('[data-command-bar]')
+            ?.getAttribute('data-document-revision')) === revision + 1
         }, beforeBlurRevision, { timeout: 5000 })
         await page.waitForFunction(async ({ afterTimestamp, revision }) => {
           const result = await window.henjiNative.logging.queryLogEvents({
@@ -1229,8 +1225,8 @@ function createToolboxScenes(context) {
           throw new Error('模糊归零期间错误缩放了图片画布')
         }
         await page.waitForFunction((revision) => {
-          const labels = [...document.querySelectorAll('[data-command-bar] span')]
-          return labels.some((element) => Number(element.textContent?.match(/\d+/)?.[0]) === revision + 1)
+          return Number(document.querySelector('[data-command-bar]')
+            ?.getAttribute('data-document-revision')) === revision + 1
         }, beforeZeroBlurRevision, { timeout: 5000 }).catch(() => {
           throw new Error('模糊归零没有提交最终参数')
         })
@@ -1274,9 +1270,8 @@ function createToolboxScenes(context) {
           input.dispatchEvent(new Event('change', { bubbles: true }))
         })
         await page.waitForFunction((revision) => {
-          const label = [...document.querySelectorAll('[data-command-bar] span')]
-            .find((element) => /^(版本|Revision) \d+$/.test(element.textContent ?? ''))
-          return Number(label?.textContent?.match(/\d+/)?.[0]) === revision + 1
+          return Number(document.querySelector('[data-command-bar]')
+            ?.getAttribute('data-document-revision')) === revision + 1
         }, beforePostEffectStroke, { timeout: 2000 }).catch(() => {
           throw new Error('底图有效果时修改箭头描边没有即时提交')
         })
@@ -1313,8 +1308,8 @@ function createToolboxScenes(context) {
         }
         await editor.getByRole('button', { name: /^(应用裁剪|Apply crop)$/i }).click()
         await page.waitForFunction((revision) => {
-          const labels = [...document.querySelectorAll('[data-command-bar] span')]
-          return labels.some((element) => Number(element.textContent?.match(/\d+/)?.[0]) === revision + 1)
+          return Number(document.querySelector('[data-command-bar]')
+            ?.getAttribute('data-document-revision')) === revision + 1
         }, beforeCropRevision, { timeout: 5000 })
         await editor.getByRole('button', { name: /^(撤销|Undo)$/i }).click()
         await editor.getByRole('button', { name: /^(重做|Redo)$/i }).click()
