@@ -27,6 +27,7 @@ export interface CommitLayerSeparationGenerationInput {
   prepareDocument?: (input: PrepareLayerStackDocumentInput) => Promise<LayerStackDocumentV1>;
   commitOutputs?: typeof commitCanvasGenerationOutputs;
   releaseResources?: (filePaths: string[]) => Promise<void>;
+  signal?: AbortSignal;
 }
 
 export function createLayerStackGenerationContract(
@@ -77,6 +78,11 @@ export function createLayerStackGenerationContract(
 export async function commitLayerSeparationGeneration(
   input: CommitLayerSeparationGenerationInput,
 ): Promise<CommitCanvasGenerationOutputsResult> {
+  if (input.signal?.aborted) {
+    const error = new Error('图层拆分提交已取消');
+    error.name = 'AbortError';
+    throw error;
+  }
   const structuredOutput = input.result.structuredOutput;
   if (!structuredOutput || structuredOutput.kind !== 'layer-stack') {
     throw new Error('图层拆分响应缺少结构化图层数据，已拒绝按普通多图提交');
@@ -105,6 +111,7 @@ export async function commitLayerSeparationGeneration(
       contract: createLayerStackGenerationContract(structuredOutput),
       completionId: input.completionId,
       preparedLayerStack: document,
+      signal: input.signal,
     });
   } catch (error) {
     if (createdFilePaths.length > 0) {

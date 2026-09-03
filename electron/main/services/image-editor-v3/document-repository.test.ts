@@ -64,6 +64,23 @@ describe('ImageEditDocumentRepository', () => {
     expect((await repository.load('image-edit-v3:document-a')).revision).toBe(4)
   })
 
+  it('跨存储补偿只删除仍处于调用方精确 revision 的文档', async () => {
+    const repository = new ImageEditDocumentRepository(rootDir)
+    await repository.create({
+      documentId: 'rollback-document',
+      document: documentAt('rollback-document', 0),
+    })
+
+    await expect(repository.deleteIfRevision('image-edit-v3:rollback-document', 1))
+      .resolves.toBe(false)
+    await expect(repository.load('rollback-document')).resolves.toMatchObject({ revision: 0 })
+    await expect(repository.deleteIfRevision('image-edit-v3:rollback-document', 0))
+      .resolves.toBe(true)
+    await expect(repository.load('rollback-document')).rejects.toMatchObject({ code: 'ENOENT' })
+    await expect(repository.deleteIfRevision('image-edit-v3:rollback-document', 0))
+      .resolves.toBe(false)
+  })
+
   it('原子写失败时保留旧 revision 和旧文档', async () => {
     let failWrites = false
     const repository = new ImageEditDocumentRepository(rootDir, {

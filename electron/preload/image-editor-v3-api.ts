@@ -95,6 +95,10 @@ export function createImageEditorV3Api(
   return {
     loadDocument: (request) => nativeInvoke('imageEditorV3:document:load', request),
     saveDocument: (request) => nativeInvoke('imageEditorV3:document:save', request),
+    deleteDocumentIfRevision: (request) => nativeInvoke(
+      'imageEditorV3:document:deleteIfRevision',
+      request,
+    ),
     importSource: (request) => nativeInvoke('imageEditorV3:source:import', request),
     ingestSource: (request) => nativeInvoke('imageEditorV3:source:ingest', request),
     readSourceMetadata: (request) => nativeInvoke('imageEditorV3:source:metadata', request),

@@ -38,6 +38,7 @@ const PENDING_PACKAGE_REF_PATTERN = /^image-edit-package-open:[a-f0-9-]{36}$/
 
 export interface BasePayload { requestId: string }
 export interface LoadDocumentPayload extends BasePayload { documentRef: string }
+export interface DeleteDocumentIfRevisionPayload extends LoadDocumentPayload { expectedRevision: number }
 export interface SaveDocumentPayload extends BasePayload {
   documentId: string
   revision: number
@@ -238,6 +239,20 @@ export function parseImageEditorV3LoadPayload(input: unknown): LoadDocumentPaylo
   if (typeof documentRef !== 'string') throw new Error('Invalid documentRef')
   parseDocumentRef(documentRef)
   return { requestId: readRequestId(record), documentRef }
+}
+
+export function parseImageEditorV3DeleteIfRevisionPayload(
+  input: unknown,
+): DeleteDocumentIfRevisionPayload {
+  const record = parseRecord(input)
+  const documentRef = record.documentRef
+  if (typeof documentRef !== 'string') throw new Error('Invalid documentRef')
+  parseDocumentRef(documentRef)
+  return {
+    requestId: readRequestId(record),
+    documentRef,
+    expectedRevision: readSafeInteger(record, 'expectedRevision', 0, Number.MAX_SAFE_INTEGER),
+  }
 }
 
 export function parseImageEditorV3SavePayload(input: unknown): SaveDocumentPayload {

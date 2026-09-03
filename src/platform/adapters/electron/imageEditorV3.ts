@@ -14,6 +14,9 @@ export function createElectronImageEditorV3(): ImageEditorV3Platform {
   return {
     loadDocument: (request) => getNativeImageEditorV3().loadDocument(request),
     saveDocument: (request) => getNativeImageEditorV3().saveDocument(request),
+    deleteDocumentIfRevision: (request) => (
+      getNativeImageEditorV3().deleteDocumentIfRevision(request)
+    ),
     importSource: (request) => getNativeImageEditorV3().importSource(request),
     ingestSource: (request) => getNativeImageEditorV3().ingestSource(request),
     readSourceMetadata: (request) => getNativeImageEditorV3().readSourceMetadata(request),

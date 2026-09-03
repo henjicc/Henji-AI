@@ -17,6 +17,7 @@ vi.mock('../window', () => ({ getMainWindow: vi.fn() }))
 
 import {
   describeImageEditorV3SnapshotResources,
+  parseImageEditorV3DeleteIfRevisionPayload,
   parseImageEditorV3LoadPayload,
   parseImageEditorV3FastProxyPayload,
   parseImageEditorV3IngestSourcePayload,
@@ -139,6 +140,28 @@ describe('图片编辑 V3 IPC 边界', () => {
       expectedRevision: 0,
       resourceRefs: ['sha256:not-a-hash'],
     })).toThrow('Invalid resourceRefs')
+  })
+
+  it('条件删除只接受文档引用和非负精确 revision', () => {
+    expect(parseImageEditorV3DeleteIfRevisionPayload({
+      requestId: 'image-editor-v3:delete:rollback',
+      documentRef: 'image-edit-v3:document-contract',
+      expectedRevision: 0,
+    })).toEqual({
+      requestId: 'image-editor-v3:delete:rollback',
+      documentRef: 'image-edit-v3:document-contract',
+      expectedRevision: 0,
+    })
+    expect(() => parseImageEditorV3DeleteIfRevisionPayload({
+      requestId: 'image-editor-v3:delete:invalid',
+      documentRef: '/tmp/document.json',
+      expectedRevision: 0,
+    })).toThrow('Invalid image edit document reference')
+    expect(() => parseImageEditorV3DeleteIfRevisionPayload({
+      requestId: 'image-editor-v3:delete:invalid',
+      documentRef: 'image-edit-v3:document-contract',
+      expectedRevision: -1,
+    })).toThrow('Invalid expectedRevision')
   })
 
   it('严格校验历史头与字段，并要求 resourceRefs 保留撤销所需资源', () => {

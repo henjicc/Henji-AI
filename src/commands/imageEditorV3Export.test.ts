@@ -18,6 +18,7 @@ function createPlatform(): ImageEditorV3Platform {
   return {
     loadDocument: vi.fn(async () => null),
     saveDocument: vi.fn(),
+    deleteDocumentIfRevision: vi.fn(async () => ({ deleted: true })),
     importSource: vi.fn(),
     ingestSource: vi.fn(),
     readSourceMetadata: vi.fn(),

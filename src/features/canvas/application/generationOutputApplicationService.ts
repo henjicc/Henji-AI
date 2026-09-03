@@ -10,15 +10,12 @@ import {
   type CanvasNodeType,
 } from '../domain/canvasNodes';
 import {
-  createLayerStackCompositeOutputDescriptor,
   type CanvasGenerationOutputDescriptorV1,
-  type CanvasGenerationOutputItem,
 } from '../domain/generationOutputs';
 import { getResultNodeMediaType } from '../domain/nodeRegistry';
 import type { RowMediaKind } from '../domain/socketTypes';
 import { persistGenerationResult } from '../generation/mediaResultPersist';
 import { createAssetGroupGraph, updateAssetGroupDataGraph } from './assetGroupGraph';
-import { validateLayerStackDocument, type LayerStackDocumentV1 } from '../domain/layerStack';
 import { runCanvasTransaction } from './canvasBatchService';
 import { requireCurrentCanvasProject } from './canvasApplicationService';
 import { canvasNodeFactory } from './canvasServices';
@@ -28,6 +25,7 @@ import {
   type CommitCanvasGenerationOutputsResult,
 } from './generationOutputApplicationContracts';
 import { validateGenerationOutputBatchContract } from './generationOutputContract';
+import { commitPreparedLayerStack } from './generationOutputLayerStackCommit';
 
 const logger = createLogger('features.canvas.generation-output');
 
@@ -363,101 +361,4 @@ export async function commitCanvasGenerationOutputs(
       });
     }
   }
-}
-
-async function commitPreparedLayerStack(input: CommitCanvasGenerationOutputsInput & {
-  completionId: string;
-  ordered: CanvasGenerationOutputItem[];
-  projectId: string;
-}): Promise<CommitCanvasGenerationOutputsResult> {
-  if (!input.preparedLayerStack) {
-    throw new GenerationOutputApplicationError('INVALID_INPUT', '图层栈必须先完成下载、像素验证与合成');
-  }
-  let document: LayerStackDocumentV1;
-  try {
-    document = validateLayerStackDocument(input.preparedLayerStack);
-  } catch (error) {
-    throw new GenerationOutputApplicationError(
-      'INVALID_INPUT',
-      error instanceof Error ? error.message : '图层栈数据无效',
-    );
-  }
-  if (document.status !== 'ready' || document.source.completionId !== input.completionId) {
-    throw new GenerationOutputApplicationError('INVALID_INPUT', '初次图层栈提交必须完整且 completionId 一致');
-  }
-  if (document.layers.length !== input.ordered.length) {
-    throw new GenerationOutputApplicationError('INVALID_INPUT', '图层栈文档与输出描述符数量不一致');
-  }
-  const placeholderNodeId = input.placeholderNodeId;
-  if (!placeholderNodeId) {
-    throw new GenerationOutputApplicationError('INVALID_INPUT', '图层栈提交必须提供结果占位节点');
-  }
-  const canvas = useCanvasStore.getState();
-  const placeholder = canvas.nodes.find((node) => node.id === placeholderNodeId);
-  if (!placeholder || placeholder.type !== input.resultNodeType) {
-    throw new GenerationOutputApplicationError('NOT_FOUND', '图层栈结果占位节点已不存在');
-  }
-  if (input.sourceNodeId && !canvas.nodes.some((node) => node.id === input.sourceNodeId)) {
-    throw new GenerationOutputApplicationError('NOT_FOUND', '图层栈来源节点已不存在');
-  }
-  const composite = document.resources.find((resource) => resource.resourceId === document.compositeResourceId);
-  const thumbnail = document.resources.find((resource) => resource.resourceId === document.thumbnailResourceId);
-  if (!composite?.filePath || !thumbnail?.filePath) {
-    throw new GenerationOutputApplicationError('INVALID_INPUT', '图层栈缺少合成图或缩略图');
-  }
-
-  logger.info('图层栈原子落图开始', {
-    event: 'canvas.generation_output.layer_stack.commit.start',
-    projectId: input.projectId,
-    sourceNodeId: input.sourceNodeId,
-    placeholderNodeId,
-    context: { completionId: input.completionId, layerCount: document.layers.length },
-  });
-  const transaction = await runCanvasTransaction(input.projectId, 1, async () => {
-    const latest = useCanvasStore.getState();
-    if (!latest.nodes.some((node) => node.id === placeholderNodeId)) {
-      throw new GenerationOutputApplicationError('CONFLICT', '提交前结果占位节点已被删除');
-    }
-    latest.updateNodeData(placeholderNodeId, {
-      ...placeholder.data,
-      imageUrl: composite.filePath,
-      previewImageUrl: thumbnail.filePath,
-      aspectRatio: `${document.canvas.width}:${document.canvas.height}`,
-      resultKind: 'layer-stack',
-      layerStackDocument: document,
-      isGenerating: false,
-      generationStartedAt: null,
-      generationError: null,
-      serverTaskId: null,
-      serverTaskModelId: null,
-      generationOutputCommitId: input.completionId,
-      generationOutputDescriptor: createLayerStackCompositeOutputDescriptor(),
-      generationOutputStrategy: 'layer-stack',
-      generationOutputDescriptors: input.ordered.map((item) => item.descriptor),
-    });
-    if (input.sourceNodeId) latest.addEdge(input.sourceNodeId, placeholderNodeId);
-    latest.setSelectedNode(placeholderNodeId);
-    return [{
-      operation: 'generation-output',
-      completionId: input.completionId,
-      resultNodeIds: [placeholderNodeId],
-      groupNodeId: null,
-    }];
-  }, { completionId: input.completionId, strategy: 'layer-stack' });
-  if (transaction.appliedOperations.length !== 1) {
-    throw new GenerationOutputApplicationError('CONFLICT', '图层栈事务未完整应用');
-  }
-  logger.info('图层栈原子落图完成', {
-    event: 'canvas.generation_output.layer_stack.commit.completed',
-    projectId: input.projectId,
-    context: { completionId: input.completionId, layerCount: document.layers.length },
-  });
-  return {
-    projectId: input.projectId,
-    completionId: input.completionId,
-    strategy: 'layer-stack',
-    resultNodeIds: [placeholderNodeId],
-    groupNodeId: null,
-    idempotent: false,
-  };
 }

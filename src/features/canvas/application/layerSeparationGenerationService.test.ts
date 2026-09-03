@@ -1,4 +1,7 @@
+import fs from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it, vi } from 'vitest';
+import { parseSeedreamLayerStack } from '@henjicc/ai-sdk';
 
 import { createStableLayerId, createStableLayerResourceId, createStableLayerStackId, type LayerStackDocumentV1 } from '../domain/layerStack';
 import {
@@ -17,6 +20,14 @@ const structuredOutput = {
   ],
   metadata: { colorSpace: 'srgb' as const, alphaMode: 'straight' as const, compositeOperation: 'source-over' as const, order: 'bottom-to-top' as const },
 };
+
+function providerFixture(name: string): Parameters<typeof parseSeedreamLayerStack>[1] {
+  const filePath = fileURLToPath(new URL(
+    `../../../../packages/ai-sdk/tests/fixtures/structured-output/${name}`,
+    import.meta.url,
+  ));
+  return JSON.parse(fs.readFileSync(filePath, 'utf8')) as Parameters<typeof parseSeedreamLayerStack>[1];
+}
 
 function preparedDocument(): LayerStackDocumentV1 {
   const completionId = 'generation-output:placeholder';
@@ -43,6 +54,63 @@ function preparedDocument(): LayerStackDocumentV1 {
 }
 
 describe('layerSeparationGenerationService', () => {
+  it.each([
+    ['volcengine', 'seedream-volcengine-layers.json'],
+    ['apimart', 'seedream-apimart-layers.json'],
+    ['kie', 'seedream-kie-layers.json'],
+  ] as const)('%s 结构化 fixture 可被应用生成链消费为同一 V3 准备输入', async (providerId, fixtureName) => {
+    const parsed = parseSeedreamLayerStack(providerId, providerFixture(fixtureName));
+    const materialized = {
+      ...parsed,
+      primary: { ...parsed.primary, filePath: `/media/${providerId}-0.jpg` },
+      outputs: parsed.outputs.map((layer) => ({
+        ...layer,
+        filePath: `/media/${providerId}-${layer.sourceOutputIndex}.${layer.format === 'jpeg' ? 'jpg' : layer.format}`,
+      })),
+    };
+    materialized.primary = materialized.outputs[0];
+    const prepareDocument = vi.fn(async () => preparedDocument());
+    const commitOutputs = vi.fn(async (input) => ({
+      projectId: 'project',
+      completionId: input.completionId ?? '',
+      strategy: input.contract.strategy,
+      resultNodeIds: ['placeholder'],
+      groupNodeId: null,
+      idempotent: false,
+    }));
+
+    await commitLayerSeparationGeneration({
+      sourceNodeId: 'source',
+      placeholderNodeId: 'placeholder',
+      resultNodeType: 'layerStackResultNode',
+      completionId: 'generation-output:placeholder',
+      sourceImage: '/media/input.png',
+      providerId,
+      modelId: `${providerId}-seedream-5.0-pro`,
+      result: {
+        primary: materialized.outputs[0].filePath!,
+        outputs: materialized.outputs.map((layer) => layer.filePath!),
+        structuredOutput: materialized,
+      },
+      prepareDocument,
+      commitOutputs,
+    });
+
+    expect(prepareDocument).toHaveBeenCalledWith(expect.objectContaining({
+      structuredOutput: expect.objectContaining({
+        kind: 'layer-stack',
+        outputs: expect.arrayContaining([
+          expect.objectContaining({ role: 'base', filePath: expect.any(String) }),
+          expect.objectContaining({ role: 'content', filePath: expect.any(String) }),
+        ]),
+      }),
+      providerId,
+    }));
+    expect(commitOutputs).toHaveBeenCalledWith(expect.objectContaining({
+      preparedLayerStack: expect.objectContaining({ status: 'ready' }),
+    }));
+  });
+
   it('按 bottom-to-top 顺序生成图层描述符且不伪造动态输出数量', () => {
     const contract = createLayerStackGenerationContract(structuredOutput);
     expect(contract).toMatchObject({ strategy: 'layer-stack', resultKind: 'layer-stack' });
