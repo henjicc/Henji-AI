@@ -51,6 +51,10 @@ interface CanvasEditToolEditorV3HostProps extends VisualToolEditorProps {
   onLifecycleChange?: (lifecycle: CanvasEditToolEditorV3Lifecycle | null) => void
   onBootstrapKindChange?: (kind: BootstrapState['kind']) => void
   onReferenceChange?: (session: ImageEditSessionReferenceV3) => void
+  onEditorContextChange?: (context: {
+    sessionId: string
+    document: ImageEditDocumentV3
+  } | null) => void
   toolbarLeading?: ReactNode
   toolbarActions?: ReactNode
   interactionDisabled?: boolean
@@ -65,6 +69,7 @@ export function CanvasEditToolEditorV3Host({
   onLifecycleChange,
   onBootstrapKindChange,
   onReferenceChange,
+  onEditorContextChange,
   toolbarLeading,
   toolbarActions,
   interactionDisabled = false,
@@ -355,6 +360,7 @@ export function CanvasEditToolEditorV3Host({
       profileId="canvas-edit"
       onDocumentChange={handleDocumentChange}
       onPersistenceChange={handlePersistenceChange}
+      onEditorContextChange={onEditorContextChange}
       onReloadEditor={() => setBootstrapAttempt((value) => value + 1)}
       toolbarLeading={toolbarLeading}
       toolbarActions={(

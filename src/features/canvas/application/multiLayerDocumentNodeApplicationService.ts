@@ -165,6 +165,28 @@ function documentId(session: ImageEditSessionReferenceV3): string {
   return session.documentRef.slice('image-edit-v3:'.length)
 }
 
+function resolveExportSession(
+  saved: ImageEditSessionReferenceV3,
+  current: ImageEditSessionReferenceV3 | undefined,
+): ImageEditSessionReferenceV3 {
+  if (!current) return saved
+  if (current.kind !== saved.kind || current.documentRef !== saved.documentRef) {
+    throw new MultiLayerDocumentNodeApplicationError(
+      'DOCUMENT_CONFLICT',
+      '当前编辑会话不属于这个多图层文档节点',
+      true,
+    )
+  }
+  if (current.revision < saved.revision) {
+    throw new MultiLayerDocumentNodeApplicationError(
+      'DOCUMENT_CONFLICT',
+      '当前编辑会话版本早于画布节点，请重新打开后再试',
+      true,
+    )
+  }
+  return current
+}
+
 async function runOperation<T>(input: {
   operation: string
   nodeId: string
@@ -417,6 +439,7 @@ export function createMultiLayerDocumentNodeApplicationService(
     async exportTarget(input): Promise<{
       nodeId: string
       edgeId: string
+      undoRef: string
       raster: MultiLayerDocumentExportRaster
     }> {
       return runOperation({
@@ -425,7 +448,7 @@ export function createMultiLayerDocumentNodeApplicationService(
         signal: input.signal,
         execute: async () => {
           requiredId(input.projectId, 'projectId')
-          const session = editableSession(input.data)
+          const session = resolveExportSession(editableSession(input.data), input.session)
           const target = parseMultiLayerDocumentExportTarget(input.target)
           let targetDocument: string
           try {
@@ -457,7 +480,7 @@ export function createMultiLayerDocumentNodeApplicationService(
               target,
               raster,
             })
-            if (!created.nodeId.trim() || !created.edgeId.trim()) {
+            if (!created.nodeId.trim() || !created.edgeId.trim() || !created.undoRef.trim()) {
               throw new MultiLayerDocumentNodeApplicationError(
                 'OPERATION_FAILED',
                 '独立导出未创建完整的图片节点和连线',

@@ -13,6 +13,7 @@ const mocks = vi.hoisted(() => ({
   connectAssetGroupToTarget: vi.fn(),
   disconnectAssetGroupFromTarget: vi.fn(),
   executeCanvasImageCapabilityForProject: vi.fn(),
+  exportMultiLayerDocumentTargetToCanvas: vi.fn(),
 }))
 
 vi.mock('@/features/canvas/domain/nodeControlRegistry', () => ({
@@ -67,6 +68,9 @@ vi.mock('@/features/canvas/application/canvasDownloadService', () => ({
 }))
 vi.mock('@/features/canvas/application/canvasImageCapabilityApplicationService', () => ({
   executeCanvasImageCapabilityForProject: mocks.executeCanvasImageCapabilityForProject,
+}))
+vi.mock('@/features/canvas/application/multiLayerDocumentNodeGenerationAdapter', () => ({
+  exportMultiLayerDocumentTargetToCanvas: mocks.exportMultiLayerDocumentTargetToCanvas,
 }))
 vi.mock('../hostContext/hostContext', () => ({
   createHostContextSnapshot: vi.fn(() => ({ scopeRevisions: { canvas: 0 } })),
@@ -256,5 +260,30 @@ describe('canvas capability handlers', () => {
 
     expect(mocks.clearCanvasProjectFromAgent).toHaveBeenCalledWith('project-1')
     expect(result).toMatchObject({ clearedNodeCount: 3, clearedEdgeCount: 1 })
+  })
+
+  it('多图层目标导出处理器只委托 UI 共用的领域事务入口', async () => {
+    const input = {
+      projectRef: { kind: 'canvas.project', id: 'project-1' },
+      sourceNodeRef: { kind: 'canvas.node', id: 'document-node' },
+      targetRef: { kind: 'image_edit.layer', id: 'v3:document:raster' },
+    }
+    mocks.exportMultiLayerDocumentTargetToCanvas.mockResolvedValue({
+      ...input,
+      nodeRef: { kind: 'canvas.node', id: 'export-node' },
+      edgeRef: { kind: 'canvas.edge', id: 'export-edge' },
+      undoRef: 'undo-export', width: 400, height: 300, mediaType: 'image/png',
+    })
+    const handler = registeredHandlers().get('export_image_edit_target_to_canvas')
+
+    const result = await handler?.(input, context)
+
+    expect(mocks.exportMultiLayerDocumentTargetToCanvas).toHaveBeenCalledWith({
+      ...input, signal: context.signal,
+    })
+    expect(result).toMatchObject({
+      nodeRef: { kind: 'canvas.node', id: 'export-node' },
+      edgeRef: { kind: 'canvas.edge', id: 'export-edge' },
+    })
   })
 })

@@ -150,6 +150,13 @@ export function createMultiLayerDocumentExportPort(
           true,
         )
       }
+      if (snapshot.document.color.hdrMetadata) {
+        throw new MultiLayerDocumentNodeApplicationError(
+          'UNSUPPORTED_EXPORT_TARGET',
+          'HDR 文档暂不支持独立导出到画布',
+          false,
+        )
+      }
 
       let view: ImageEditExportTargetViewV3
       try {

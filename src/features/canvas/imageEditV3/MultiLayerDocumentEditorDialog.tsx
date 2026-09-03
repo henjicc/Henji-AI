@@ -1,23 +1,33 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
-import { X } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Download, X } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
 import { UiButton, UiIconButton, UiModal } from '@/components/ui'
 import { registerApplicationCloseGuard } from '@/core/applicationLifecycle/applicationCloseGuards'
 import type { ImageEditSessionReferenceV3 } from '@/core/imageEdit/v3/sessionReference'
+import type { ImageEditDocumentV3 } from '@/core/imageEdit/v3/documentTypes'
 import { createLogger } from '@/core/logging'
-import { openMultiLayerDocumentForEditing } from '@/features/canvas/application/multiLayerDocumentNodeGenerationAdapter'
+import {
+  exportMultiLayerDocumentTargetToCanvas,
+  openMultiLayerDocumentForEditing,
+  registerMultiLayerDocumentExportSession,
+} from '@/features/canvas/application/multiLayerDocumentNodeGenerationAdapter'
 import { canvasEventBus } from '@/features/canvas/application/canvasServices'
 import type { CanvasNode } from '@/features/canvas/domain/canvasNodes'
 import { isEditableLayerStackResultNode } from '@/features/canvas/domain/canvasNodeGuards'
 import { parseMultiLayerDocumentNodeState } from '@/features/canvas/domain/multiLayerDocumentNode'
 import { imageEditToolPlugin } from '@/features/canvas/tools/builtInTools'
+import { useImageEditorInteractionStoreV3 } from '@/features/imageEdit/v3/store/imageEditorInteractionStoreV3'
+import { useImageEditorSessionStoreV3 } from '@/features/imageEdit/v3/store/imageEditorSessionStoreV3'
+import { useProjectStore } from '@/stores/projectStore'
 import {
   CanvasEditToolEditorV3Host,
   type CanvasEditToolEditorV3Lifecycle,
 } from './CanvasEditToolEditorV3Host'
+import { resolveMultiLayerDocumentExportSelection } from './multiLayerDocumentExportSelection'
 
 const logger = createLogger('features.canvas.multi_layer_document_editor')
+const EMPTY_LAYER_IDS: readonly string[] = []
 
 export interface MultiLayerDocumentEditorCloseResult {
   nodeId: string
@@ -49,6 +59,26 @@ export function MultiLayerDocumentEditorDialog({
   const [closing, setClosing] = useState(false)
   const [closeFailed, setCloseFailed] = useState(false)
   const [closeApproved, setCloseApproved] = useState(false)
+  const [editorContext, setEditorContext] = useState<{
+    sessionId: string
+    document: ImageEditDocumentV3
+  } | null>(null)
+  const [exporting, setExporting] = useState(false)
+  const [exportFailed, setExportFailed] = useState(false)
+  const currentProjectId = useProjectStore((state) => state.currentProjectId)
+  const selectedLayerIds = useImageEditorSessionStoreV3((state) => (
+    editorContext ? state.sessions[editorContext.sessionId]?.selectedLayerIds ?? EMPTY_LAYER_IDS : EMPTY_LAYER_IDS
+  ))
+  const annotationSelection = useImageEditorInteractionStoreV3((state) => (
+    editorContext ? state.annotationSelectionBySession[editorContext.sessionId] ?? null : null
+  ))
+  const exportSelection = useMemo(() => editorContext
+    ? resolveMultiLayerDocumentExportSelection({
+        document: editorContext.document,
+        selectedLayerIds,
+        annotationSelection,
+      })
+    : { ready: false as const, reason: '编辑器仍在准备，请稍候' }, [annotationSelection, editorContext, selectedLayerIds])
 
   const requestClose = useCallback((): Promise<void> => {
     if (closePromiseRef.current) return closePromiseRef.current
@@ -106,6 +136,12 @@ export function MultiLayerDocumentEditorDialog({
 
   useEffect(() => registerApplicationCloseGuard(requestClose), [requestClose])
 
+  useEffect(() => registerMultiLayerDocumentExportSession(node.id, async () => {
+    const lifecycle = lifecycleRef.current
+    if (!lifecycle) throw new Error(t('toolDialog.imageEditorV3.stillOpening'))
+    return await lifecycle.flushPending()
+  }), [node.id, t])
+
   useEffect(() => {
     if (isOpen) {
       setCloseApproved(false)
@@ -121,6 +157,43 @@ export function MultiLayerDocumentEditorDialog({
   const requestCloseFromUi = (): void => {
     void requestClose().catch(() => undefined)
   }
+
+  const exportToCanvas = (): void => {
+    if (exporting || !exportSelection.ready || !currentProjectId) return
+    setExporting(true)
+    setExportFailed(false)
+    void exportMultiLayerDocumentTargetToCanvas({
+      projectRef: { kind: 'canvas.project', id: currentProjectId },
+      sourceNodeRef: { kind: 'canvas.node', id: node.id },
+      targetRef: exportSelection.targetRef,
+    }).catch((error) => {
+      setExportFailed(true)
+      logger.error('多图层图片文档目标导出失败', error, {
+        event: 'canvas.multi_layer_document_editor.export_target.failed',
+        context: { nodeId: node.id, targetKind: exportSelection.targetRef.kind },
+      })
+    }).finally(() => setExporting(false))
+  }
+
+  const exportUnavailableReason = !currentProjectId
+    ? '当前没有打开的画布项目'
+    : exportSelection.ready ? undefined : exportSelection.reason
+  const exportButton = (
+    <UiButton
+      variant="plain"
+      size="sm"
+      disabled={exporting || Boolean(exportUnavailableReason)}
+      title={exportUnavailableReason ?? t('toolDialog.imageEditorV3.exportToCanvas')}
+      onClick={exportToCanvas}
+    >
+      <Download className="h-4 w-4" />
+      {exporting
+        ? t('toolDialog.imageEditorV3.exportingToCanvas')
+        : exportFailed
+          ? t('toolDialog.imageEditorV3.exportToCanvasFailed')
+          : t('toolDialog.imageEditorV3.exportToCanvas')}
+    </UiButton>
+  )
 
   return (
     <UiModal
@@ -147,6 +220,7 @@ export function MultiLayerDocumentEditorDialog({
           lifecycleRef.current = lifecycle
         }}
         onBootstrapKindChange={setBootstrapKind}
+        onEditorContextChange={setEditorContext}
         interactionDisabled={closing}
         toolbarLeading={(
           <UiIconButton
@@ -165,11 +239,16 @@ export function MultiLayerDocumentEditorDialog({
           <span role="status" className="text-xs text-text-muted">
             {t('toolDialog.imageEditorV3.closing')}
           </span>
-        ) : closeFailed ? (
-          <UiButton variant="plain" size="sm" onClick={requestCloseFromUi}>
-            {t('toolDialog.imageEditorV3.closeFailedRetry')}
-          </UiButton>
-        ) : null}
+        ) : (
+          <>
+            {exportButton}
+            {closeFailed ? (
+              <UiButton variant="plain" size="sm" onClick={requestCloseFromUi}>
+                {t('toolDialog.imageEditorV3.closeFailedRetry')}
+              </UiButton>
+            ) : null}
+          </>
+        )}
       />
     </UiModal>
   )

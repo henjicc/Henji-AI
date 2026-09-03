@@ -8,6 +8,7 @@ import { useProjectStore } from '@/stores/projectStore'
 import { isLayerStackResultNode } from '../domain/canvasNodeGuards'
 import { parseMultiLayerDocumentNodeState } from '../domain/multiLayerDocumentNode'
 import { persistCanvasState } from './canvasApplicationService'
+import { runCanvasTransaction } from './canvasBatchService'
 import {
   MULTI_LAYER_NODE_PROJECTION_HISTORY_POLICY,
   MultiLayerDocumentNodeApplicationError,
@@ -35,6 +36,71 @@ export type MultiLayerDocumentProjectionCanvasPort = Pick<
   MultiLayerDocumentNodeCanvasPort,
   'commitMaterializedProjection'
 >
+
+export type MultiLayerDocumentExportCanvasPort = Pick<
+  MultiLayerDocumentNodeCanvasPort,
+  'createExportedImageNode'
+>
+
+/**
+ * 独立导出的唯一画布事务：沿用派生节点布局，原子创建普通图片节点和源连线。
+ * 编辑器是当前工作表面，成功或失败都恢复原选择与弹窗，不把导出误当成关闭操作。
+ */
+export function createMultiLayerDocumentExportCanvasPort(): MultiLayerDocumentExportCanvasPort {
+  return {
+    async createExportedImageNode(input) {
+      const project = useProjectStore.getState()
+      if (project.currentProjectId !== input.projectId || project.currentProject?.id !== input.projectId) {
+        throw new MultiLayerDocumentNodeApplicationError(
+          'DOCUMENT_CONFLICT',
+          '当前画布项目已经切换，请返回原项目后重试',
+          true,
+        )
+      }
+      const before = useCanvasStore.getState()
+      const activeToolDialog = before.activeToolDialog
+      const selectedNodeId = before.selectedNodeId
+      try {
+        let nodeId = ''
+        let edgeId = ''
+        const transaction = await runCanvasTransaction(input.projectId, 2, async () => {
+          const canvas = useCanvasStore.getState()
+          if (!canvas.nodes.some((node) => node.id === input.sourceNodeId)) {
+            throw new MultiLayerDocumentNodeApplicationError(
+              'DOCUMENT_CONFLICT',
+              '多图层文档节点已被删除',
+              true,
+            )
+          }
+          const createdNodeId = canvas.addDerivedExportNode(
+            input.sourceNodeId,
+            input.raster.imageUrl,
+            input.raster.aspectRatio,
+            input.raster.previewImageUrl,
+            {
+              defaultTitle: input.raster.displayName,
+              resultKind: 'image',
+            },
+          )
+          if (!createdNodeId) throw new Error('无法创建多图层文档导出节点')
+          nodeId = createdNodeId
+          const createdEdgeId = useCanvasStore.getState().addEdge(input.sourceNodeId, nodeId)
+          if (!createdEdgeId) throw new Error('无法创建多图层文档导出连线')
+          edgeId = createdEdgeId
+          useCanvasStore.setState({ selectedNodeId, activeToolDialog })
+          return [{ nodeId }, { edgeId }]
+        }, {
+          operation: 'multi_layer_document.export_target',
+          sourceNodeId: input.sourceNodeId,
+          targetKind: input.target.kind,
+        })
+        return { nodeId, edgeId, undoRef: transaction.undoRef }
+      } finally {
+        useCanvasStore.setState({ selectedNodeId, activeToolDialog })
+      }
+    },
+  }
+}
 
 /**
  * 同一节点投影的唯一 CAS：同步比较项目、节点和旧会话，再一次替换节点 data。

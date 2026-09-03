@@ -129,7 +129,10 @@
       "close": "Close editor",
       "closing": "Saving and closing...",
       "stillOpening": "The editor is still opening. Try again in a moment.",
-      "closeFailedRetry": "Save failed. Retry close"
+      "closeFailedRetry": "Save failed. Retry close",
+      "exportToCanvas": "Export to canvas",
+      "exportingToCanvas": "Exporting",
+      "exportToCanvasFailed": "Export failed. Retry"
     }
   },
   "nodeToolbar": {

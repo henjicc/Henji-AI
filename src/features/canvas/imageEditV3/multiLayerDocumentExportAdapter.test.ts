@@ -186,4 +186,22 @@ describe('多图层文档独立导出窄适配器', () => {
     })
     expect(releaseManagedImages).toHaveBeenCalledWith(['/managed/person.png'])
   })
+
+  it('HDR 文档在创建任何受管图片前被明确拒绝', async () => {
+    const source = snapshot()
+    source.document.color.hdrMetadata = {
+      standard: 'pq', referenceWhiteNits: 203,
+      cicp: { colorPrimaries: 9, transferCharacteristics: 16, matrixCoefficients: 9, fullRange: false },
+    }
+    const materialize = vi.fn(async () => materialized())
+    const port = createMultiLayerDocumentExportPort({
+      loadDocument: vi.fn(async () => source), materialize,
+    })
+
+    await expect(port.materializeExportTarget({ session, target })).rejects.toMatchObject({
+      code: 'UNSUPPORTED_EXPORT_TARGET',
+      message: expect.stringContaining('HDR'),
+    })
+    expect(materialize).not.toHaveBeenCalled()
+  })
 })

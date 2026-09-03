@@ -4,13 +4,18 @@ import {
   loadImageEditorV3Document,
 } from '@/commands/imageEditorV3'
 import { createLogger } from '@/core/logging'
+import type { ApplicationRef } from '@/core/application-control'
 import { ImageEditCommandHistoryV3 } from '@/core/imageEdit/v3/commandHistory'
 import { createImageEditRenderHash } from '@/core/imageEdit/v3/renderHash'
 import { getPlatform } from '@/platform/runtime'
+import { useCanvasStore } from '@/stores/canvasStore'
+import { useProjectStore } from '@/stores/projectStore'
 
 import type { LayerStackDocumentV1 } from '../domain/layerStack'
 import type { ImageEditSessionReferenceV3 } from '@/core/imageEdit/v3/sessionReference'
 import type { LayerStackResultNodeData } from '../domain/canvasNodeData'
+import { isEditableLayerStackResultNode } from '../domain/canvasNodeGuards'
+import type { MultiLayerDocumentExportTarget } from '../domain/multiLayerDocumentNode'
 import {
   createCanvasEditV3SessionReference,
 } from '../imageEditV3/canvasEditV3Session'
@@ -23,7 +28,10 @@ import type {
   MultiLayerDocumentNodeProjection,
 } from './multiLayerDocumentNodeApplicationContracts'
 import { createMultiLayerDocumentNodeApplicationService } from './multiLayerDocumentNodeApplicationService'
-import { createMultiLayerDocumentProjectionCanvasPort } from './multiLayerDocumentNodeCanvasAdapter'
+import {
+  createMultiLayerDocumentExportCanvasPort,
+  createMultiLayerDocumentProjectionCanvasPort,
+} from './multiLayerDocumentNodeCanvasAdapter'
 
 const logger = createLogger('features.canvas.multi_layer_document_generation')
 
@@ -147,7 +155,7 @@ const generationDocumentPort: MultiLayerDocumentNodePort = {
 
 const generationCanvasPort: MultiLayerDocumentNodeCanvasPort = {
   ...createMultiLayerDocumentProjectionCanvasPort(),
-  createExportedImageNode: async () => unavailable('createExportedImageNode'),
+  ...createMultiLayerDocumentExportCanvasPort(),
 }
 
 const generationApplicationService = createMultiLayerDocumentNodeApplicationService({
@@ -182,6 +190,114 @@ export function saveMultiLayerDocumentAfterEditing(input: {
   signal?: AbortSignal
 }): Promise<MultiLayerDocumentNodeProjection> {
   return generationApplicationService.saveMaterializedProjection(input)
+}
+
+type ExportSessionPreparer = () => Promise<ImageEditSessionReferenceV3>
+
+interface ExportSessionRegistration {
+  token: symbol
+  prepare: ExportSessionPreparer
+}
+
+const exportSessionPreparers = new Map<string, ExportSessionRegistration>()
+const pendingExports = new Map<string, Promise<MultiLayerDocumentTargetExportResult>>()
+
+export interface MultiLayerDocumentTargetExportInput {
+  projectRef: ApplicationRef & { kind: 'canvas.project' }
+  sourceNodeRef: ApplicationRef & { kind: 'canvas.node' }
+  targetRef: ApplicationRef & {
+    kind: 'image_edit.layer' | 'image_edit.group' | 'image_mark.annotation'
+  }
+  signal?: AbortSignal
+}
+
+export interface MultiLayerDocumentTargetExportResult {
+  projectRef: ApplicationRef & { kind: 'canvas.project' }
+  sourceNodeRef: ApplicationRef & { kind: 'canvas.node' }
+  targetRef: MultiLayerDocumentTargetExportInput['targetRef']
+  nodeRef: ApplicationRef & { kind: 'canvas.node' }
+  edgeRef: ApplicationRef & { kind: 'canvas.edge' }
+  undoRef: string
+  width: number
+  height: number
+  mediaType: 'image/png'
+}
+
+/** 编辑器登记实时保存入口；助手和 UI 随后都走同一导出函数。 */
+export function registerMultiLayerDocumentExportSession(
+  sourceNodeId: string,
+  prepare: ExportSessionPreparer,
+): () => void {
+  const token = Symbol(sourceNodeId)
+  exportSessionPreparers.set(sourceNodeId, { token, prepare })
+  return () => {
+    if (exportSessionPreparers.get(sourceNodeId)?.token === token) {
+      exportSessionPreparers.delete(sourceNodeId)
+    }
+  }
+}
+
+function exportTargetFromRef(
+  ref: MultiLayerDocumentTargetExportInput['targetRef'],
+): MultiLayerDocumentExportTarget {
+  if (ref.kind === 'image_edit.group') {
+    return { kind: 'layer-group', ref: { ...ref, kind: 'image_edit.group' } }
+  }
+  if (ref.kind === 'image_mark.annotation') {
+    return { kind: 'annotation-element', ref: { ...ref, kind: 'image_mark.annotation' } }
+  }
+  return { kind: 'raster-layer', ref: { ...ref, kind: 'image_edit.layer' } }
+}
+
+/** UI 与助手共享的唯一导出入口；同一 pending 目标复用 Promise，完成后再次调用仍会新建节点。 */
+export function exportMultiLayerDocumentTargetToCanvas(
+  input: MultiLayerDocumentTargetExportInput,
+): Promise<MultiLayerDocumentTargetExportResult> {
+  const key = `${input.projectRef.id}\u0000${input.sourceNodeRef.id}\u0000${input.targetRef.kind}\u0000${input.targetRef.id}`
+  const pending = pendingExports.get(key)
+  if (pending) return pending
+  const operation: Promise<MultiLayerDocumentTargetExportResult> = (async (): Promise<MultiLayerDocumentTargetExportResult> => {
+    if (input.projectRef.kind !== 'canvas.project' || input.sourceNodeRef.kind !== 'canvas.node') {
+      throw new Error('多图层文档导出的项目或节点引用无效')
+    }
+    const project = useProjectStore.getState()
+    if (
+      project.currentProjectId !== input.projectRef.id
+      || project.currentProject?.id !== input.projectRef.id
+    ) {
+      throw new Error('当前画布项目已经切换，请返回原项目后重试')
+    }
+    const node = useCanvasStore.getState().nodes.find((candidate) => candidate.id === input.sourceNodeRef.id)
+    if (!isEditableLayerStackResultNode(node)) {
+      throw new Error('目标节点不是可编辑的多图层图片文档')
+    }
+    const prepare = exportSessionPreparers.get(node.id)?.prepare
+    const session = prepare ? await prepare() : undefined
+    const exported = await generationApplicationService.exportTarget({
+      projectId: input.projectRef.id,
+      sourceNodeId: node.id,
+      data: node.data,
+      session,
+      target: exportTargetFromRef(input.targetRef),
+      signal: input.signal,
+    })
+    return {
+      projectRef: input.projectRef,
+      sourceNodeRef: input.sourceNodeRef,
+      targetRef: input.targetRef,
+      nodeRef: { kind: 'canvas.node' as const, id: exported.nodeId },
+      edgeRef: { kind: 'canvas.edge' as const, id: exported.edgeId },
+      undoRef: exported.undoRef,
+      width: exported.raster.width,
+      height: exported.raster.height,
+      mediaType: exported.raster.mediaType,
+    }
+  })()
+  pendingExports.set(key, operation)
+  void operation.finally(() => {
+    if (pendingExports.get(key) === operation) pendingExports.delete(key)
+  }).catch(() => undefined)
+  return operation
 }
 
 export async function rollbackCreatedMultiLayerDocument(

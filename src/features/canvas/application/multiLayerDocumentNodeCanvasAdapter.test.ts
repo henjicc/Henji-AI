@@ -5,11 +5,18 @@ import { getNodeMediaOutputs } from '../domain/nodeRegistry'
 import { useCanvasStore } from '@/stores/canvasStore'
 import { useProjectStore, type Project } from '@/stores/projectStore'
 import { MULTI_LAYER_NODE_PROJECTION_HISTORY_POLICY } from './multiLayerDocumentNodeApplicationContracts'
-import { createMultiLayerDocumentProjectionCanvasPort } from './multiLayerDocumentNodeCanvasAdapter'
+import { imageEditV3LayerRef } from '@/features/imageEdit/v3/application/imageEditLiveSessionRegistry'
+import {
+  createMultiLayerDocumentExportCanvasPort,
+  createMultiLayerDocumentProjectionCanvasPort,
+} from './multiLayerDocumentNodeCanvasAdapter'
 
 const mocks = vi.hoisted(() => ({ persist: vi.fn() }))
 
-vi.mock('./canvasApplicationService', () => ({ persistCanvasState: mocks.persist }))
+vi.mock('./canvasApplicationService', () => ({
+  persistCanvasState: mocks.persist,
+  requireCurrentCanvasProject: vi.fn(),
+}))
 
 const oldSession = {
   kind: 'image-edit-v3' as const,
@@ -164,5 +171,100 @@ describe('多图层文档节点投影 CAS', () => {
     })
     expect(useCanvasStore.getState().nodes).toBe(before)
     expect(mocks.persist).not.toHaveBeenCalled()
+  })
+})
+
+describe('多图层文档目标导出画布事务', () => {
+  beforeEach(() => {
+    mocks.persist.mockReset()
+    const source = node()
+    useCanvasStore.setState({
+      nodes: [source],
+      edges: [],
+      history: { past: [], future: [] },
+      selectedNodeId: source.id,
+      activeToolDialog: { nodeId: source.id, toolType: 'edit' },
+    })
+    useProjectStore.setState({
+      currentProjectId: 'project-a',
+      currentProject: project([source]),
+    })
+  })
+
+  function exportInput() {
+    return {
+      projectId: 'project-a',
+      sourceNodeId: 'document-node',
+      target: {
+        kind: 'raster-layer' as const,
+        ref: { ...imageEditV3LayerRef('canvas-document', 'raster'), kind: 'image_edit.layer' as const },
+      },
+      raster: {
+        imageUrl: '/managed/export.png',
+        previewImageUrl: '/managed/export.png',
+        aspectRatio: '4:3',
+        width: 400,
+        height: 300,
+        mediaType: 'image/png' as const,
+        hasAlpha: true as const,
+        displayName: '像素图层',
+        ownedFilePaths: ['/managed/export.png'],
+        diagnostics: {
+          documentId: 'canvas-document', revision: 2,
+          targetKind: 'raster-layer' as const, targetId: 'raster',
+          layerPath: ['raster'], canvasScope: 'document' as const,
+          contentState: 'rendered' as const,
+        },
+      },
+    }
+  }
+
+  it('原子创建普通图片节点和稳定连线，并保持编辑器、选择与原文档不变', async () => {
+    const sourceBefore = useCanvasStore.getState().nodes[0]
+    const dialogBefore = useCanvasStore.getState().activeToolDialog
+    const result = await createMultiLayerDocumentExportCanvasPort().createExportedImageNode(exportInput())
+    const state = useCanvasStore.getState()
+    const exported = state.nodes.find((candidate) => candidate.id === result.nodeId)
+
+    expect(result).toMatchObject({ edgeId: `e-document-node-${result.nodeId}` })
+    expect(result.undoRef).toMatch(/^canvas-batch-undo:/)
+    expect(state.nodes).toHaveLength(2)
+    expect(state.edges).toEqual([expect.objectContaining({
+      id: result.edgeId, source: 'document-node', target: result.nodeId,
+    })])
+    expect(exported).toMatchObject({
+      type: CANVAS_NODE_TYPES.exportImage,
+      data: {
+        imageUrl: '/managed/export.png', previewImageUrl: '/managed/export.png',
+        aspectRatio: '4:3', displayName: '像素图层', resultKind: 'image',
+      },
+    })
+    expect(exported?.data).not.toHaveProperty('imageEditSession')
+    expect(exported?.data).not.toHaveProperty('layerStackDocument')
+    expect(state.nodes[0]).toBe(sourceBefore)
+    expect(state.selectedNodeId).toBe('document-node')
+    expect(state.activeToolDialog).toBe(dialogBefore)
+    expect(state.history.past).toHaveLength(1)
+  })
+
+  it('连线失败时回滚新节点，且项目切换时不开始事务', async () => {
+    const originalAddEdge = useCanvasStore.getState().addEdge
+    useCanvasStore.setState({ addEdge: vi.fn(() => null) })
+    try {
+      await expect(
+        createMultiLayerDocumentExportCanvasPort().createExportedImageNode(exportInput()),
+      ).rejects.toThrow('无法创建多图层文档导出连线')
+      expect(useCanvasStore.getState().nodes).toHaveLength(1)
+      expect(useCanvasStore.getState().edges).toHaveLength(0)
+      expect(useCanvasStore.getState().activeToolDialog).toMatchObject({ nodeId: 'document-node' })
+    } finally {
+      useCanvasStore.setState({ addEdge: originalAddEdge })
+    }
+
+    useProjectStore.setState({ currentProjectId: 'project-b' })
+    await expect(
+      createMultiLayerDocumentExportCanvasPort().createExportedImageNode(exportInput()),
+    ).rejects.toMatchObject({ code: 'DOCUMENT_CONFLICT' })
+    expect(useCanvasStore.getState().nodes).toHaveLength(1)
   })
 })

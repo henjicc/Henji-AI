@@ -62,6 +62,10 @@ import { downloadCanvasMedia } from '@/features/canvas/application/canvasDownloa
 import {
   executeCanvasImageCapabilityForProject,
 } from '@/features/canvas/application/canvasImageCapabilityApplicationService'
+import {
+  exportMultiLayerDocumentTargetToCanvas,
+  type MultiLayerDocumentTargetExportInput,
+} from '@/features/canvas/application/multiLayerDocumentNodeGenerationAdapter'
 import { createHostContextSnapshot } from '../hostContext/hostContext'
 import type { ApplicationCapabilityHandlerRegistrar } from './handlerTypes'
 import { parseCapabilityInput, throwIfCapabilityAborted } from './handlerUtils'
@@ -167,6 +171,15 @@ export function registerCanvasCapabilityHandlers(
       capabilityId: AssistantCanvasImageCapabilityId
     }>('apply_canvas_image_capability', input)
     return await executeCanvasImageCapabilityForProject(parsed)
+  })
+
+  registrar.registerHandler('export_image_edit_target_to_canvas', async (input, context) => {
+    throwIfCapabilityAborted(context.signal)
+    const parsed = parseCapabilityInput<Omit<MultiLayerDocumentTargetExportInput, 'signal'>>(
+      'export_image_edit_target_to_canvas',
+      input,
+    )
+    return { ...await exportMultiLayerDocumentTargetToCanvas({ ...parsed, signal: context.signal }) }
   })
 
   registrar.registerHandler('add_asset_to_canvas', async (input, context) => {

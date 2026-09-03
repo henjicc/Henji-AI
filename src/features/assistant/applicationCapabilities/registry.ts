@@ -24,6 +24,7 @@ import type { ApplicationCapabilityResult } from '@/core/assistant/hostContracts
 import { GenerationPreparationError } from '@/features/generation/application/generationPreparationService'
 import { createLogger } from '@/core/logging'
 import { CanvasApplicationError } from '@/features/canvas/application/canvasApplicationService'
+import { MultiLayerDocumentNodeApplicationError } from '@/features/canvas/application/multiLayerDocumentNodeApplicationService'
 import { ZodError } from 'zod'
 
 import { APPLICATION_REFLECTION_APPLICATION_CAPABILITIES } from '@/core/assistant/capabilities/applicationReflectionApplicationCapabilities'
@@ -227,6 +228,27 @@ function toFailure(error: unknown): ApplicationCapabilityResult {
         message: error.message,
         recoverable: error.recoverable,
         details: error.details,
+      },
+    }
+  }
+  if (error instanceof MultiLayerDocumentNodeApplicationError) {
+    const code = error.code === 'INVALID_INPUT' || error.code === 'UNSUPPORTED_EXPORT_TARGET'
+      ? 'INVALID_INPUT'
+      : error.code === 'DOCUMENT_NOT_FOUND'
+        ? 'NOT_FOUND'
+        : error.code === 'DOCUMENT_CONFLICT'
+          ? 'CONFLICT'
+          : error.code === 'CANCELLED'
+            ? 'ABORTED'
+            : error.code === 'MIGRATION_REQUIRED' || error.code === 'INVALID_NODE_STATE'
+              ? 'CAPABILITY_NOT_READY'
+              : 'CAPABILITY_REJECTED'
+    return {
+      ok: false,
+      error: {
+        code,
+        message: error.message,
+        recoverable: error.recoverable,
       },
     }
   }
