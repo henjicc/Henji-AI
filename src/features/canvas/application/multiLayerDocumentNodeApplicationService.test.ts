@@ -29,6 +29,7 @@ const sourceSession = {
   revision: 2,
   previewRef: `sha256:${'a'.repeat(64)}` as const,
 }
+const flushedSession = { ...sourceSession, revision: 3 }
 
 function nodeData(): LayerStackResultNodeData {
   return {
@@ -84,7 +85,18 @@ function setup() {
   const documentPort: MultiLayerDocumentNodePort = {
     createFromLayerStack: vi.fn(async () => projection()),
     inspectDocument: vi.fn(async () => sourceSession),
-    saveAndMaterialize: vi.fn(async () => projection()),
+    saveAndMaterialize: vi.fn(async () => ({
+      projection: projection(),
+      rollback: {
+        documentRef: sourceSession.documentRef,
+        revision: 3,
+        sourceFingerprint: `sha256:${'c'.repeat(64)}` as const,
+        previousPreviewRef: sourceSession.previewRef,
+        installedPreviewRef: `sha256:${'b'.repeat(64)}` as const,
+      },
+    })),
+    rollbackMaterialization: vi.fn(async () => true),
+    finalizeMaterialization: vi.fn(async () => true),
     forkDocument: vi.fn(async () => projection('image-edit-v3:document-b', 1)),
     markReleaseCandidate: vi.fn(async () => undefined),
     materializeExportTarget: vi.fn(async () => ({
@@ -140,19 +152,60 @@ describe('多图层文档节点 application 服务', () => {
   })
 
   it('保存物化后以跳过画布历史策略原位回写', async () => {
-    const { service, canvasPort } = setup()
+    const { service, documentPort, canvasPort } = setup()
     const result = await service.saveMaterializedProjection({
       projectId: 'project-a',
       nodeId: 'node-a',
       data: nodeData(),
+      session: flushedSession,
     })
     expect(result.imageEditSession.revision).toBe(3)
     expect(canvasPort.commitMaterializedProjection).toHaveBeenCalledWith({
       projectId: 'project-a',
       nodeId: 'node-a',
+      expectedSession: sourceSession,
       projection: result,
       historyPolicy: MULTI_LAYER_NODE_PROJECTION_HISTORY_POLICY,
     })
+    expect(documentPort.finalizeMaterialization).toHaveBeenCalledOnce()
+  })
+
+  it('画布 CAS 未接管新物化结果时精确回滚文档 previewRef', async () => {
+    const { service, documentPort, canvasPort } = setup()
+    vi.mocked(canvasPort.commitMaterializedProjection).mockRejectedValueOnce(new Error('节点已删除'))
+    await expect(service.saveMaterializedProjection({
+      projectId: 'project-a',
+      nodeId: 'node-a',
+      data: nodeData(),
+      session: flushedSession,
+    })).rejects.toMatchObject({ code: 'OPERATION_FAILED', recoverable: true })
+    expect(documentPort.rollbackMaterialization).toHaveBeenCalledOnce()
+    expect(documentPort.finalizeMaterialization).not.toHaveBeenCalled()
+  })
+
+  it('节点已接管投影后旧预览释放失败只登记清理候选，不回滚成功状态', async () => {
+    const { service, documentPort, canvasPort } = setup()
+    vi.mocked(documentPort.finalizeMaterialization).mockRejectedValueOnce(new Error('resource busy'))
+
+    await expect(service.saveMaterializedProjection({
+      projectId: 'project-a',
+      nodeId: 'node-a',
+      data: nodeData(),
+      session: flushedSession,
+    })).resolves.toMatchObject({ imageEditSession: { revision: 3 } })
+    expect(canvasPort.commitMaterializedProjection).toHaveBeenCalledOnce()
+    expect(documentPort.rollbackMaterialization).not.toHaveBeenCalled()
+  })
+
+  it('关闭 flush 结果切换文档或倒退 revision 时不进入物化端口', async () => {
+    const { service, documentPort } = setup()
+    await expect(service.saveMaterializedProjection({
+      projectId: 'project-a',
+      nodeId: 'node-a',
+      data: nodeData(),
+      session: { ...flushedSession, documentRef: 'image-edit-v3:other-document' },
+    })).rejects.toMatchObject({ code: 'DOCUMENT_CONFLICT', recoverable: true })
+    expect(documentPort.saveAndMaterialize).not.toHaveBeenCalled()
   })
 
   it('复制必须产生独立文档，释放只登记候选而不硬删除', async () => {

@@ -254,7 +254,10 @@ function attachUiInspectionCanvasEditing(context) {
         },
         layers: [
           common('ui-background-layer', '背景图层'),
-          common('ui-foreground-layer', '前景元素'),
+          {
+            ...common('ui-foreground-layer', '前景元素'),
+            transform: [0.55, 0, 0, 0.55, 180, 100],
+          },
         ],
       }
       const saved = await window.henjiNative.imageEditorV3.saveDocument({
@@ -305,6 +308,7 @@ function attachUiInspectionCanvasEditing(context) {
         documentRef: saved.documentRef,
         initialRevision: saved.revision,
         nodeId,
+        expectedNodeCount: nodes.length,
       }
     }, { targetProjectId: projectId, source: panoramaSource })
 
@@ -313,6 +317,7 @@ function attachUiInspectionCanvasEditing(context) {
       `[data-layer-stack-node-id="${fixture.nodeId}"][data-layer-stack-status="editable-v3"]`
     )
     await result.waitFor({ state: 'visible', timeout: 12000 })
+    const initialPreviewSource = await result.locator('img[alt="图层合成预览"]').getAttribute('src')
     await result.click()
     await page.waitForTimeout(250)
     if (await page.getByRole('dialog', { name: /多图层图片编辑器|Multi-layer image editor/i }).count()) {
@@ -348,7 +353,7 @@ function attachUiInspectionCanvasEditing(context) {
     if (await dialog.locator('[data-command-bar]').count() !== 1) {
       throw new Error('多图层图片文档重开后不是唯一命令带')
     }
-    await editor.getByRole('button', { name: /隐藏.*前景元素|Hide.*Foreground/i }).click()
+    await editor.getByRole('button', { name: /隐藏.*背景图层|Hide.*Background/i }).click()
     await page.waitForFunction((revision) => (
       Number(document.querySelector('[data-command-bar]')?.getAttribute('data-document-revision'))
         === revision + 1
@@ -364,6 +369,80 @@ function attachUiInspectionCanvasEditing(context) {
     if (persistedRevision !== fixture.initialRevision + 1) {
       throw new Error(`多图层文档编辑没有实时保存：${persistedRevision}`)
     }
+    await dialog.getByRole('button', { name: /关闭编辑器|Close editor/i }).click()
+    await dialog.waitFor({ state: 'hidden', timeout: 60000 })
+    await page.waitForFunction(({ selector, previous }) => {
+      const image = document.querySelector(`${selector} img[alt="图层合成预览"]`)
+      return image instanceof HTMLImageElement && image.getAttribute('src') !== previous
+    }, {
+      selector: `[data-layer-stack-node-id="${fixture.nodeId}"]`,
+      previous: initialPreviewSource,
+    }, { timeout: 30000 })
+    const materializedPreviewSource = await result.locator('img[alt="图层合成预览"]').getAttribute('src')
+    if (!materializedPreviewSource || materializedPreviewSource === initialPreviewSource) {
+      throw new Error('关闭编辑器后同一节点没有切换到最新合成图预览')
+    }
+
+    await settlePage(page, 900)
+    const persistedProjection = await page.evaluate(async ({ targetProjectId, targetNodeId }) => {
+      const rows = await window.henjiNative.db.select(
+        'SELECT nodes_json, edges_json, history_json FROM storyboard_projects WHERE id = ? LIMIT 1',
+        [targetProjectId]
+      )
+      const nodes = JSON.parse(rows[0]?.nodes_json ?? '[]')
+      const edges = JSON.parse(rows[0]?.edges_json ?? '[]')
+      const history = JSON.parse(rows[0]?.history_json ?? '{}')
+      const node = nodes.find((candidate) => candidate.id === targetNodeId)
+      const imageRef = String(node?.data?.imageUrl ?? '')
+      const imageIndex = imageRef.startsWith('__img_ref__:')
+        ? Number.parseInt(imageRef.slice('__img_ref__:'.length), 10)
+        : -1
+      return {
+        nodeCount: nodes.length,
+        matchingNodeCount: nodes.filter((candidate) => candidate.id === targetNodeId).length,
+        position: node?.position,
+        revision: node?.data?.imageEditSession?.revision,
+        previewRef: node?.data?.imageEditSession?.previewRef,
+        sourceUrl: node?.data?.imageEditSession?.sourceUrl,
+        imageRef,
+        persistedImageUrl: history.imagePool?.[imageIndex] ?? null,
+        previewImageRef: node?.data?.previewImageUrl,
+        sourceEdges: edges.filter((edge) => edge.source === '__ui_panorama_source' && edge.target === targetNodeId).length,
+      }
+    }, { targetProjectId: projectId, targetNodeId: fixture.nodeId })
+    if (persistedProjection.matchingNodeCount !== 1
+      || persistedProjection.nodeCount !== fixture.expectedNodeCount
+      || persistedProjection.position?.x !== 720
+      || persistedProjection.position?.y !== 80
+      || persistedProjection.revision !== fixture.initialRevision + 1
+      || typeof persistedProjection.previewRef !== 'string'
+      || persistedProjection.sourceUrl !== persistedProjection.persistedImageUrl
+      || persistedProjection.previewImageRef !== persistedProjection.imageRef
+      || persistedProjection.sourceEdges !== 1) {
+      throw new Error(`多图层文档节点投影没有原位、原子持久化：${JSON.stringify(persistedProjection)}`)
+    }
+
+    await page.getByRole('button', { name: /返回项目|Back to Projects/ }).click()
+    await settlePage(page, 600)
+    await page.locator(`[data-project-id="${projectId}"]:visible`).click()
+    const reopenedResult = page.locator(
+      `[data-layer-stack-node-id="${fixture.nodeId}"][data-layer-stack-status="editable-v3"]`
+    )
+    await reopenedResult.waitFor({ state: 'visible', timeout: 12000 })
+    if (await reopenedResult.locator('img[alt="图层合成预览"]').getAttribute('src') !== materializedPreviewSource) {
+      throw new Error('项目保存重开后节点预览没有恢复最新合成图')
+    }
+    await reopenedResult.getByRole('button', { name: /^(编辑|Edit)$/i }).click()
+    dialog = page.getByRole('dialog', { name: /多图层图片编辑器|Multi-layer image editor/i })
+    await dialog.waitFor({ state: 'visible', timeout: 15000 })
+    editor = dialog.locator('[data-image-editor-v3]')
+    await editor.waitFor({ state: 'visible', timeout: 15000 })
+    await editor.getByRole('button', { name: /显示.*背景图层|Show.*Background/i }).waitFor({
+      state: 'visible',
+      timeout: 8000,
+    })
+    await dialog.getByRole('button', { name: /关闭编辑器|Close editor/i }).click()
+    await dialog.waitFor({ state: 'hidden', timeout: 60000 })
     await settlePage(page, 900)
   }
 

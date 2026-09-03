@@ -184,6 +184,9 @@ test('多图层图片文档有完整编辑、实时保存与关闭重开的真�
     'commandBars !== 1',
     'persistedRevision',
     '关闭编辑器',
+    'materializedPreviewSource',
+    'persistedProjection',
+    '显示.*背景图层',
   ]) {
     assert.equal(source.includes(marker), true, `多图层图片文档 Reality 场景缺少关键验收：${marker}`)
   }

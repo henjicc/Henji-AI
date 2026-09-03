@@ -1,4 +1,5 @@
 import type { ImageEditSessionReferenceV3 } from '@/core/imageEdit/v3/sessionReference'
+import type { ImageEditorV3ResourceRef } from '@/platform/contracts/imageEditorV3'
 
 import type { LayerStackResultNodeData } from '../domain/canvasNodeData'
 import type { LayerStackDocumentV1 } from '../domain/layerStack'
@@ -33,6 +34,21 @@ export interface MultiLayerDocumentNodeProjection {
   imageUrl: string
   previewImageUrl: string
   aspectRatio: string
+}
+
+/**
+ * 整图物化已经把新 previewRef 原子挂到 V3 文档，但画布节点尚未完成 CAS 接管。
+ * rollback 仅供 application 服务在画布提交失败时精确恢复旧 previewRef。
+ */
+export interface MultiLayerDocumentNodeMaterialization {
+  projection: MultiLayerDocumentNodeProjection
+  rollback: {
+    documentRef: ImageEditSessionReferenceV3['documentRef']
+    revision: number
+    sourceFingerprint: `sha256:${string}`
+    previousPreviewRef: ImageEditorV3ResourceRef | null
+    installedPreviewRef: ImageEditorV3ResourceRef
+  }
 }
 
 export interface MultiLayerDocumentExportRaster {
@@ -71,7 +87,15 @@ export interface MultiLayerDocumentNodePort {
   saveAndMaterialize(input: {
     session: ImageEditSessionReferenceV3
     signal?: AbortSignal
-  }): Promise<MultiLayerDocumentNodeProjection>
+  }): Promise<MultiLayerDocumentNodeMaterialization>
+  /** 画布 CAS 未接管新投影时，只有文档仍精确指向本次 previewRef 才允许恢复。 */
+  rollbackMaterialization(input: {
+    materialization: MultiLayerDocumentNodeMaterialization
+  }): Promise<boolean>
+  /** CAS 已接管新投影后，从文档资源集合移除被替换的旧 previewRef；失败不得回滚提交。 */
+  finalizeMaterialization(input: {
+    materialization: MultiLayerDocumentNodeMaterialization
+  }): Promise<boolean>
   forkDocument(input: {
     sourceNodeId: string
     targetNodeId: string
@@ -99,6 +123,7 @@ export interface MultiLayerDocumentNodeCanvasPort {
   commitMaterializedProjection(input: {
     projectId: string
     nodeId: string
+    expectedSession: ImageEditSessionReferenceV3
     projection: MultiLayerDocumentNodeProjection
     /**
      * V3 命令已进入文档历史；这次写回只是同一编辑语义的节点投影同步，
@@ -129,6 +154,8 @@ export interface MultiLayerDocumentNodeApplicationService {
     projectId: string
     nodeId: string
     data: LayerStackResultNodeData
+    /** 2.1 保存队列 flush 后返回的精确权威 revision。 */
+    session: ImageEditSessionReferenceV3
     signal?: AbortSignal
   }): Promise<MultiLayerDocumentNodeProjection>
   forkDocument(input: {

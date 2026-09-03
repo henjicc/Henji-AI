@@ -19,6 +19,16 @@ export interface CanvasEditV3MaterializationResult {
   session: ImageEditSessionReferenceV3
 }
 
+export class CanvasEditV3MaterializationContractError extends Error {
+  constructor(
+    message: string,
+    readonly result: CanvasEditV3MaterializationResult,
+  ) {
+    super(message)
+    this.name = 'CanvasEditV3MaterializationContractError'
+  }
+}
+
 export async function materializeCanvasEditV3Snapshot(
   snapshot: ImageEditorV3DocumentSnapshot,
   sourceName: string,
@@ -47,14 +57,7 @@ export async function materializeCanvasEditV3Snapshot(
     tiles,
     tileSize: CANVAS_EDIT_MATERIALIZATION_TILE_SIZE,
   }, signal)
-  if (
-    raster.documentRef !== snapshot.documentRef
-    || raster.revision !== snapshot.revision
-    || raster.sourceFingerprint !== snapshot.sourceFingerprint
-  ) {
-    throw new Error('画布图片编辑输出与权威文档版本不一致')
-  }
-  return {
+  const result: CanvasEditV3MaterializationResult = {
     raster,
     session: {
       kind: 'image-edit-v3',
@@ -64,4 +67,26 @@ export async function materializeCanvasEditV3Snapshot(
       previewRef: raster.previewRef,
     },
   }
+  if (
+    raster.documentRef !== snapshot.documentRef
+    || raster.revision !== snapshot.revision
+    || raster.sourceFingerprint !== snapshot.sourceFingerprint
+  ) {
+    throw new CanvasEditV3MaterializationContractError(
+      '画布图片编辑输出与权威文档版本不一致',
+      result,
+    )
+  }
+  if (
+    raster.format !== spec.format
+    || raster.width !== spec.description.width
+    || raster.height !== spec.description.height
+    || !raster.mediaUrl.trim()
+  ) {
+    throw new CanvasEditV3MaterializationContractError(
+      '画布图片编辑输出尺寸或格式与权威渲染计划不一致',
+      result,
+    )
+  }
+  return result
 }

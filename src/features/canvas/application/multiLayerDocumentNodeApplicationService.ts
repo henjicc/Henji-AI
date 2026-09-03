@@ -32,6 +32,7 @@ export type {
   MultiLayerDocumentNodeApplicationErrorCode,
   MultiLayerDocumentNodeApplicationService,
   MultiLayerDocumentNodeCanvasPort,
+  MultiLayerDocumentNodeMaterialization,
   MultiLayerDocumentNodePort,
   MultiLayerDocumentNodeProjection,
 } from './multiLayerDocumentNodeApplicationContracts'
@@ -277,25 +278,94 @@ export function createMultiLayerDocumentNodeApplicationService(
         execute: async () => {
           requiredId(input.projectId, 'projectId')
           const previous = editableSession(input.data)
-          const projection = validateProjection(await dependencies.documentPort.saveAndMaterialize({
-            session: previous,
-            signal: input.signal,
-          }))
           if (
-            projection.imageEditSession.documentRef !== previous.documentRef
-            || projection.imageEditSession.revision < previous.revision
+            input.session.documentRef !== previous.documentRef
+            || input.session.revision < previous.revision
           ) {
             throw new MultiLayerDocumentNodeApplicationError(
               'DOCUMENT_CONFLICT',
-              '保存物化结果切换了文档或倒退了版本',
+              '关闭保存结果切换了文档或倒退了版本',
               true,
             )
           }
-          await dependencies.canvasPort.commitMaterializedProjection({
-            projectId: input.projectId,
-            nodeId: input.nodeId,
-            projection,
-            historyPolicy: MULTI_LAYER_NODE_PROJECTION_HISTORY_POLICY,
+          const materialization = await dependencies.documentPort.saveAndMaterialize({
+            session: input.session,
+            signal: input.signal,
+          })
+          let projection: MultiLayerDocumentNodeProjection
+          try {
+            projection = validateProjection(materialization.projection)
+            if (
+              projection.imageEditSession.documentRef !== input.session.documentRef
+              || projection.imageEditSession.revision !== input.session.revision
+            ) {
+              throw new MultiLayerDocumentNodeApplicationError(
+                'DOCUMENT_CONFLICT',
+                '保存物化结果与关闭时的权威文档版本不一致',
+                true,
+              )
+            }
+            await dependencies.canvasPort.commitMaterializedProjection({
+              projectId: input.projectId,
+              nodeId: input.nodeId,
+              expectedSession: previous,
+              projection,
+              historyPolicy: MULTI_LAYER_NODE_PROJECTION_HISTORY_POLICY,
+            })
+          } catch (error) {
+            await dependencies.documentPort.rollbackMaterialization({ materialization }).then((rolledBack) => {
+              if (rolledBack) return
+              logger.error(
+                '文档节点投影未接管且预览资源无法精确回滚',
+                new Error('文档版本或 previewRef 已变化，已登记为清理候选'),
+                {
+                  event: 'canvas.multi_layer_document.save_materialized_projection.rollback.failed',
+                  nodeId: input.nodeId,
+                  context: {
+                    documentRef: materialization.rollback.documentRef,
+                    revision: materialization.rollback.revision,
+                    cleanupCandidate: true,
+                  },
+                },
+              )
+            }).catch((rollbackError) => {
+              logger.error('文档节点投影未接管后的预览资源回滚失败', rollbackError, {
+                event: 'canvas.multi_layer_document.save_materialized_projection.rollback.failed',
+                nodeId: input.nodeId,
+                context: {
+                  documentRef: materialization.rollback.documentRef,
+                  revision: materialization.rollback.revision,
+                  cleanupCandidate: true,
+                },
+              })
+            })
+            throw error
+          }
+          await dependencies.documentPort.finalizeMaterialization({ materialization }).then((finalized) => {
+            if (finalized) return
+            logger.error(
+              '节点投影已提交但旧预览资源无法精确释放',
+              new Error('文档版本或 previewRef 已变化，已登记为清理候选'),
+              {
+                event: 'canvas.multi_layer_document.save_materialized_projection.finalize.failed',
+                nodeId: input.nodeId,
+                context: {
+                  documentRef: materialization.rollback.documentRef,
+                  revision: materialization.rollback.revision,
+                  cleanupCandidate: true,
+                },
+              },
+            )
+          }).catch((finalizeError) => {
+            logger.error('节点投影已提交但旧预览资源释放失败', finalizeError, {
+              event: 'canvas.multi_layer_document.save_materialized_projection.finalize.failed',
+              nodeId: input.nodeId,
+              context: {
+                documentRef: materialization.rollback.documentRef,
+                revision: materialization.rollback.revision,
+                cleanupCandidate: true,
+              },
+            })
           })
           return projection
         },

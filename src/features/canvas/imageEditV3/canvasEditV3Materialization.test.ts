@@ -138,4 +138,23 @@ describe('画布图片编辑 V3 受管物化', () => {
       'source.png',
     )).rejects.toThrow('版本不一致')
   })
+
+  it('拒绝主进程返回与权威渲染计划不一致的尺寸或格式', async () => {
+    mocks.materialize.mockResolvedValueOnce({
+      outputRef: 'image-export-v3:canvas-document@3:png8',
+      documentRef: 'image-edit-v3:canvas-document',
+      revision: 3,
+      sourceFingerprint: FINGERPRINT,
+      format: 'png8',
+      width: 95,
+      height: 64,
+      previewRef: PREVIEW_REF,
+      mediaUrl: 'henji-media://image-editor-v3/invalid-size',
+    })
+
+    await expect(materializeCanvasEditV3Snapshot(
+      snapshot(),
+      'source.png',
+    )).rejects.toThrow('尺寸或格式')
+  })
 })

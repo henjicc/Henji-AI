@@ -16,12 +16,14 @@ import {
 } from '../imageEditV3/canvasEditV3Session'
 import { importLayerStackV1AsImageEditDocumentV3 } from '../imageEditV3/layerStackV1Adapter'
 import { createMultiLayerDocumentExportPort } from '../imageEditV3/multiLayerDocumentExportAdapter'
+import { createMultiLayerDocumentProjectionPort } from '../imageEditV3/multiLayerDocumentProjectionAdapter'
 import type {
   MultiLayerDocumentNodeCanvasPort,
   MultiLayerDocumentNodePort,
   MultiLayerDocumentNodeProjection,
 } from './multiLayerDocumentNodeApplicationContracts'
 import { createMultiLayerDocumentNodeApplicationService } from './multiLayerDocumentNodeApplicationService'
+import { createMultiLayerDocumentProjectionCanvasPort } from './multiLayerDocumentNodeCanvasAdapter'
 
 const logger = createLogger('features.canvas.multi_layer_document_generation')
 
@@ -137,14 +139,14 @@ function unavailable(operation: string): never {
 const generationDocumentPort: MultiLayerDocumentNodePort = {
   createFromLayerStack: createLayerStackV3Projection,
   inspectDocument: inspectMultiLayerDocumentSession,
-  saveAndMaterialize: async () => unavailable('saveAndMaterialize'),
   forkDocument: async () => unavailable('forkDocument'),
   markReleaseCandidate: async () => unavailable('markReleaseCandidate'),
+  ...createMultiLayerDocumentProjectionPort(),
   ...createMultiLayerDocumentExportPort(),
 }
 
 const generationCanvasPort: MultiLayerDocumentNodeCanvasPort = {
-  commitMaterializedProjection: async () => unavailable('commitMaterializedProjection'),
+  ...createMultiLayerDocumentProjectionCanvasPort(),
   createExportedImageNode: async () => unavailable('createExportedImageNode'),
 }
 
@@ -169,6 +171,17 @@ export function openMultiLayerDocumentForEditing(input: {
   signal?: AbortSignal
 }): Promise<ImageEditSessionReferenceV3> {
   return generationApplicationService.openAndValidate(input)
+}
+
+/** 编辑器 flush 后只通过 1.1 唯一 application 服务完成整图物化与原节点 CAS。 */
+export function saveMultiLayerDocumentAfterEditing(input: {
+  projectId: string
+  nodeId: string
+  data: LayerStackResultNodeData
+  session: ImageEditSessionReferenceV3
+  signal?: AbortSignal
+}): Promise<MultiLayerDocumentNodeProjection> {
+  return generationApplicationService.saveMaterializedProjection(input)
 }
 
 export async function rollbackCreatedMultiLayerDocument(
