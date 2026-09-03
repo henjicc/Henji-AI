@@ -3,6 +3,10 @@ import { create } from 'zustand'
 import type { ImageEditSelectionCombineModeV3 } from '@/core/imageEdit/v3/selection'
 import { ANNOTATION_DEFAULT_STROKE_HEX, WHITE_HEX } from '@/core/theme/colorTokens'
 import { DEFAULT_MOSAIC_STRENGTH_PERCENT } from '@/core/imageEdit/constraints'
+import {
+  DEFAULT_LINE_WIDTH_PERCENT,
+  DEFAULT_TEXT_SIZE_PERCENT,
+} from '@/features/imageMark/domain/metrics'
 import type { ImageEditorToolIdV3 } from '../application/imageEditorHostProfiles'
 
 export interface ImageEditorToolSettingsV3 {
@@ -12,8 +16,8 @@ export interface ImageEditorToolSettingsV3 {
   brushHardness: number
   maskMode: 'paint' | 'erase'
   selectionCombineMode: ImageEditSelectionCombineModeV3
-  annotationStrokeWidth: number
-  annotationFontSize: number
+  annotationLineWidthPercent: number
+  annotationTextSizePercent: number
   annotationColor: string
   annotationTextBackgroundEnabled: boolean
   annotationTextBackgroundColor: string
@@ -68,8 +72,8 @@ const DEFAULT_TOOL_SETTINGS: ImageEditorToolSettingsV3 = {
   brushHardness: 0.8,
   maskMode: 'paint',
   selectionCombineMode: 'replace',
-  annotationStrokeWidth: 4,
-  annotationFontSize: 32,
+  annotationLineWidthPercent: DEFAULT_LINE_WIDTH_PERCENT,
+  annotationTextSizePercent: DEFAULT_TEXT_SIZE_PERCENT,
   annotationColor: ANNOTATION_DEFAULT_STROKE_HEX,
   annotationTextBackgroundEnabled: false,
   annotationTextBackgroundColor: WHITE_HEX,

@@ -10,6 +10,12 @@ import { createImageEditAnnotationLayerV3, createImageEditIdV3 } from '@/core/im
 import { ANNOTATION_DEFAULT_STROKE_HEX } from '@/core/theme/colorTokens'
 import { isLabeledMark } from '@/features/imageMark/domain/types'
 import { updateMarkPosition } from '@/features/imageMark/domain/geometry'
+import {
+  DEFAULT_LINE_WIDTH_PERCENT,
+  DEFAULT_TEXT_SIZE_PERCENT,
+  percentToFontSize,
+  percentToLineWidth,
+} from '@/features/imageMark/domain/metrics'
 import { resolveNumberValues } from '@/features/imageMark/render/drawMarks'
 import { TextEditOverlay } from '@/features/imageMark/editor/TextEditOverlay'
 
@@ -18,6 +24,7 @@ import {
   invertAnnotationMatrixV3,
   mapAnnotationPointV3,
   resolveAnnotationOutputGeometryV3,
+  resolveAnnotationRelativeSizeBaseV3,
   type AnnotationMatrixV3,
 } from './annotationGeometryV3'
 import { collectEditableAnnotationLayersV3, type EditableAnnotationLayerV3 } from './annotationModelV3'
@@ -114,6 +121,7 @@ export function ImageEditorAnnotationOverlayV3({
   const stageScale = Math.min(widthScale, heightScale)
   const sourceWidth = controller.document.geometry.width
   const sourceHeight = controller.document.geometry.height
+  const annotationBaseSize = resolveAnnotationRelativeSizeBaseV3(controller.document)
   const numberValues = useMemo(
     () => resolveNumberValues(entries.flatMap(({ layer }) => layer.annotations)),
     [entries],
@@ -240,6 +248,7 @@ export function ImageEditorAnnotationOverlayV3({
     sourceToOutput: geometry.sourceToOutput,
     sourceWidth,
     sourceHeight,
+    annotationBaseSize,
     widthScale,
     heightScale,
     toolSettings,
@@ -262,8 +271,14 @@ export function ImageEditorAnnotationOverlayV3({
       activeTool,
       point,
       {
-        strokeWidth: toolSettings?.annotationStrokeWidth ?? 4,
-        fontSize: toolSettings?.annotationFontSize ?? 32,
+        strokeWidth: percentToLineWidth(
+          toolSettings?.annotationLineWidthPercent ?? DEFAULT_LINE_WIDTH_PERCENT,
+          annotationBaseSize,
+        ),
+        fontSize: percentToFontSize(
+          toolSettings?.annotationTextSizePercent ?? DEFAULT_TEXT_SIZE_PERCENT,
+          annotationBaseSize,
+        ),
         text: '',
         calloutText: '',
         color: toolSettings?.annotationColor ?? ANNOTATION_DEFAULT_STROKE_HEX,

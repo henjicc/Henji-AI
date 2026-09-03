@@ -29,9 +29,12 @@ class ResizeObserverStub {
   disconnect(): void {}
 }
 
-function createDocument(layers: ImageEditLayerV3[]): ImageEditDocumentV3 {
+function createDocument(
+  layers: ImageEditLayerV3[],
+  geometry: { width: number; height: number } = { width: 1600, height: 900 },
+): ImageEditDocumentV3 {
   return {
-    ...createImageEditDocumentV3({ width: 1600, height: 900, documentId: 'document-ui-annotations-test' }),
+    ...createImageEditDocumentV3({ ...geometry, documentId: 'document-ui-annotations-test' }),
     layers,
   }
 }
@@ -216,7 +219,7 @@ describe('ImageEditorV3 floating panels and annotations', () => {
     const layer = changes[0].layers.at(-1)
     expect(layer?.type).toBe('annotation')
     if (layer?.type === 'annotation') {
-      expect(layer.annotations[0]).toMatchObject({ type: 'rect', x: 40, y: 80 })
+      expect(layer.annotations[0]).toMatchObject({ type: 'rect', x: 40, y: 80, lineWidth: 4 })
       expect(Object.values(
         useImageEditorInteractionStoreV3.getState().annotationSelectionBySession,
       )).toContainEqual({ layerId: layer.id, annotationId: layer.annotations[0].id })
@@ -251,6 +254,57 @@ describe('ImageEditorV3 floating panels and annotations', () => {
     const withMosaic = changes[2].layers.at(-1)
     if (withMosaic?.type === 'annotation') {
       expect(withMosaic.annotations.at(-1)).toMatchObject({ type: 'mosaic', mode: 'blur' })
+    }
+  })
+
+  it('新标注的粗细与字号按图片短边百分比换算', async () => {
+    installKonvaCanvasTestContext()
+    mockKonvaViewportRect()
+    const changes: ImageEditDocumentV3[] = []
+    const document = createDocument(
+      [createImageEditRasterLayerV3('raster', '底图')],
+      { width: 6400, height: 3600 },
+    )
+    const rendered = render(
+      <ControlledEditor
+        initialDocument={document}
+        onDocumentChange={(next) => changes.push(next)}
+      />,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: '标注工具' }))
+    fireEvent.click(screen.getByRole('button', { name: '矩形标注' }))
+    const overlay = await waitFor(() => rendered.container.querySelector<HTMLDivElement>(
+      '[data-annotation-editor-overlay]',
+    ))
+    await waitFor(() => expect(overlay?.querySelector('canvas')).toBeTruthy())
+    fireEvent.pointerDown(overlay as HTMLDivElement, {
+      button: 0, buttons: 1, pointerId: 17, clientX: 20, clientY: 30,
+    })
+    fireEvent.pointerMove(overlay as HTMLDivElement, {
+      buttons: 1, pointerId: 17, clientX: 120, clientY: 90,
+    })
+    fireEvent.pointerUp(overlay as HTMLDivElement, {
+      button: 0, pointerId: 17, clientX: 120, clientY: 90,
+    })
+    await waitFor(() => expect(changes).toHaveLength(1))
+    const rectangleLayer = changes[0].layers.at(-1)
+    if (rectangleLayer?.type === 'annotation') {
+      expect(rectangleLayer.annotations.at(-1)).toMatchObject({ type: 'rect', lineWidth: 14 })
+    }
+
+    fireEvent.click(screen.getByRole('button', { name: '标注工具' }))
+    fireEvent.click(screen.getByRole('button', { name: '序号标注' }))
+    fireEvent.pointerDown(overlay as HTMLDivElement, {
+      button: 0, buttons: 1, pointerId: 18, clientX: 180, clientY: 120,
+    })
+    fireEvent.pointerUp(overlay as HTMLDivElement, {
+      button: 0, pointerId: 18, clientX: 180, clientY: 120,
+    })
+    await waitFor(() => expect(changes).toHaveLength(2))
+    const numberLayer = changes[1].layers.at(-1)
+    if (numberLayer?.type === 'annotation') {
+      expect(numberLayer.annotations.at(-1)).toMatchObject({ type: 'number', fontSize: 360 })
     }
   })
 
@@ -314,13 +368,23 @@ describe('ImageEditorV3 floating panels and annotations', () => {
     }
 
     const latestToolParameters = rendered.container.querySelector<HTMLElement>('[data-tool-parameters]')
-    fireEvent.change(within(latestToolParameters as HTMLElement).getByLabelText('描边'), {
-      target: { value: '12' },
+    const strokeSlider = within(latestToolParameters as HTMLElement).getByLabelText('描边')
+    expect((strokeSlider as HTMLInputElement).value).toBe('0.4')
+    expect(within(latestToolParameters as HTMLElement).getByText('0.4%')).toBeTruthy()
+    const propertiesPanel = rendered.container.querySelector<HTMLElement>(
+      '[data-editor-panel-id="properties"]',
+    )
+    expect(propertiesPanel && within(propertiesPanel).getByText('0.4%')).toBeTruthy()
+    fireEvent.change(strokeSlider, {
+      target: { value: '1.2' },
     })
     await waitFor(() => expect(changes).toHaveLength(2))
     const restyled = changes.at(-1)?.layers[0]
     if (restyled?.type === 'annotation') {
-      expect(restyled.annotations[0]).toMatchObject({ stroke: BLACK_HEX, lineWidth: 12 })
+      expect(restyled.annotations[0]).toMatchObject({ stroke: BLACK_HEX, lineWidth: 11 })
     }
+    await waitFor(() => expect(
+      within(latestToolParameters as HTMLElement).getByText('1.2%'),
+    ).toBeTruthy())
   })
 })

@@ -91,6 +91,14 @@ export function resolveAnnotationOutputGeometryV3(
   }
 }
 
+/** 标注尺寸百分比以当前图片输出区域的短边为基准，不受无限画布或窗口缩放影响。 */
+export function resolveAnnotationRelativeSizeBaseV3(
+  document: Pick<ImageEditDocumentV3, 'geometry'>,
+): number {
+  const geometry = resolveAnnotationOutputGeometryV3(document)
+  return Math.max(1, Math.min(geometry.width, geometry.height))
+}
+
 export function resolveAnnotationLayerToOutputMatrixV3(
   document: Pick<ImageEditDocumentV3, 'geometry'>,
   transforms: readonly ImageEditTransformV3[],

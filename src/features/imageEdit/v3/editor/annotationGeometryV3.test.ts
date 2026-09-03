@@ -6,6 +6,7 @@ import {
   mapAnnotationPointV3,
   resolveAnnotationLayerToOutputMatrixV3,
   resolveAnnotationOutputGeometryV3,
+  resolveAnnotationRelativeSizeBaseV3,
 } from './annotationGeometryV3'
 import { simplifyAnnotationPenPointsV3 } from './annotationModelV3'
 
@@ -22,6 +23,7 @@ describe('V3 标注输出坐标', () => {
       invertAnnotationMatrixV3(geometry.sourceToOutput),
       [200, 320],
     )).toEqual([50, 80])
+    expect(resolveAnnotationRelativeSizeBaseV3(document)).toBe(180)
   })
 
   it('把图层与祖先变换先于输出几何执行', () => {

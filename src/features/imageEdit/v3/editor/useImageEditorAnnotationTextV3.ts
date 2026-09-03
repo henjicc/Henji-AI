@@ -4,7 +4,13 @@ import type { MarkItem } from '@/core/imageEdit/types'
 import { createImageEditIdV3 } from '@/core/imageEdit/v3/documentFactory'
 import { ANNOTATION_DEFAULT_STROKE_HEX } from '@/core/theme/colorTokens'
 import { isLabeledMark } from '@/features/imageMark/domain/types'
-import { resolveLabelPlacement } from '@/features/imageMark/domain/metrics'
+import {
+  DEFAULT_TEXT_SIZE_PERCENT,
+  percentToFontSize,
+  resolveLabelFontSize,
+  resolveLabelPlacement,
+  resolveTextBaseSize,
+} from '@/features/imageMark/domain/metrics'
 import type { TextEditorState } from '@/features/imageMark/editor/shared'
 
 import type { ImageEditorToolSettingsV3 } from '../store/imageEditorSessionStoreV3'
@@ -24,6 +30,7 @@ interface UseImageEditorAnnotationTextOptionsV3 {
   sourceToOutput: AnnotationMatrixV3
   sourceWidth: number
   sourceHeight: number
+  annotationBaseSize: number
   widthScale: number
   heightScale: number
   toolSettings: ImageEditorToolSettingsV3 | undefined
@@ -38,6 +45,7 @@ export function useImageEditorAnnotationTextV3({
   sourceToOutput,
   sourceWidth,
   sourceHeight,
+  annotationBaseSize,
   widthScale,
   heightScale,
   toolSettings,
@@ -61,7 +69,10 @@ export function useImageEditorAnnotationTextV3({
     point?: readonly [number, number],
   ) => {
     const matrix = entry?.matrix ?? sourceToOutput
-    const fontSize = toolSettings?.annotationFontSize ?? 32
+    const fontSize = percentToFontSize(
+      toolSettings?.annotationTextSizePercent ?? DEFAULT_TEXT_SIZE_PERCENT,
+      annotationBaseSize,
+    )
     const color = toolSettings?.annotationColor ?? ANNOTATION_DEFAULT_STROKE_HEX
     const backgroundColor = toolSettings?.annotationTextBackgroundEnabled
       ? toolSettings.annotationTextBackgroundColor
@@ -84,7 +95,9 @@ export function useImageEditorAnnotationTextV3({
         state: {
           kind: 'label', itemId: item.id, x: placement.x, y: placement.y,
           value: item.label ?? '',
-          fontSize: item.labelFontSize ?? Math.max(12, Math.round(fontSize * 0.55)),
+          fontSize: item.label === undefined
+            ? fontSize
+            : resolveLabelFontSize(item, resolveTextBaseSize(sourceWidth, sourceHeight)),
           color: item.stroke,
           backgroundColor: item.labelBackgroundColor,
         },
@@ -100,7 +113,7 @@ export function useImageEditorAnnotationTextV3({
       })
     }
     focusTextEditor()
-  }, [focusTextEditor, sourceHeight, sourceToOutput, sourceWidth, toolSettings])
+  }, [annotationBaseSize, focusTextEditor, sourceHeight, sourceToOutput, sourceWidth, toolSettings])
 
   const commitTextEditor = useCallback(() => {
     if (!textEditor) return

@@ -4,7 +4,27 @@ import { useTranslation } from 'react-i18next'
 
 import { UiButton, UiFormRow, UiGroup, UiInput, UiRangeInput, UiTextArea } from '@/components/ui'
 import type { ImageEditAnnotationLayerV3 } from '@/core/imageEdit/v3/layerTypes'
+import { clamp } from '@/features/imageMark/domain/geometry'
+import { isLabeledMark } from '@/features/imageMark/domain/types'
+import {
+  fontSizeToPercent,
+  lineWidthToPercent,
+  MAX_LINE_WIDTH_PERCENT,
+  MAX_TEXT_SIZE_PERCENT,
+  MIN_LINE_WIDTH_PERCENT,
+  MIN_TEXT_SIZE_PERCENT,
+  percentToFontSize,
+  percentToLineWidth,
+  resolveLabelFontSize,
+} from '@/features/imageMark/domain/metrics'
 import { useImageEditorInteractionStoreV3 } from '../store'
+import { resolveAnnotationRelativeSizeBaseV3 } from './annotationGeometryV3'
+import {
+  annotationHasFontSizeV3,
+  annotationHasStrokeV3,
+  patchAnnotationStyleV3,
+  readAnnotationStyleV3,
+} from './annotationStyleV3'
 import type { ImageEditorV3Controller } from './types'
 import { useImageEditorAnnotationPreviewV3 } from './useImageEditorAnnotationPreviewV3'
 
@@ -43,6 +63,27 @@ export function ImageEditorAnnotationPropertiesV3({
   }, [annotation])
 
   if (!selection || !annotation) return null
+
+  const annotationBaseSize = resolveAnnotationRelativeSizeBaseV3(controller.document)
+  const style = readAnnotationStyleV3(annotation)
+  const lineWidthPercent = style.lineWidth === null
+    ? null
+    : clamp(
+      lineWidthToPercent(style.lineWidth, annotationBaseSize),
+      MIN_LINE_WIDTH_PERCENT,
+      MAX_LINE_WIDTH_PERCENT,
+    )
+  const fontSize = style.fontSize
+    ?? (isLabeledMark(annotation) && annotation.label !== undefined
+      ? resolveLabelFontSize(annotation, annotationBaseSize)
+      : null)
+  const textSizePercent = fontSize === null
+    ? null
+    : clamp(
+      fontSizeToPercent(fontSize, annotationBaseSize),
+      MIN_TEXT_SIZE_PERCENT,
+      MAX_TEXT_SIZE_PERCENT,
+    )
 
   const commitText = (): void => {
     if (cancelBlurRef.current) {
@@ -119,50 +160,66 @@ export function ImageEditorAnnotationPropertiesV3({
           />
         </UiFormRow>
       ) : null}
-      {'lineWidth' in annotation ? (
+      {annotationHasStrokeV3(annotation) && lineWidthPercent !== null ? (
         <UiFormRow label={t('imageEditor.v3.toolSettings.strokeWidth')}>
-          <UiRangeInput
-            aria-label={t('imageEditor.v3.toolSettings.strokeWidth')}
-            min={1}
-            max={64}
-            disabled={locked}
-            value={annotation.lineWidth}
-            onChange={(event) => annotationPreview.update({
-              ...annotation,
-              lineWidth: Number(event.currentTarget.value),
-            })}
-            onPointerUp={annotationPreview.commit}
-            onPointerCancel={annotationPreview.cancel}
-            onBlur={annotationPreview.commit}
-            onKeyUp={(event) => {
-              if (event.key.startsWith('Arrow') || event.key === 'Home' || event.key === 'End') {
-                annotationPreview.commit()
-              }
-            }}
-          />
+          <div className="flex items-center gap-2">
+            <UiRangeInput
+              aria-label={t('imageEditor.v3.toolSettings.strokeWidth')}
+              min={MIN_LINE_WIDTH_PERCENT}
+              max={MAX_LINE_WIDTH_PERCENT}
+              step={0.1}
+              disabled={locked}
+              value={Number(lineWidthPercent.toFixed(1))}
+              onChange={(event) => annotationPreview.update(patchAnnotationStyleV3(annotation, {
+                lineWidth: percentToLineWidth(
+                  Number(event.currentTarget.value),
+                  annotationBaseSize,
+                ),
+              }))}
+              onPointerUp={annotationPreview.commit}
+              onPointerCancel={annotationPreview.cancel}
+              onBlur={annotationPreview.commit}
+              onKeyUp={(event) => {
+                if (event.key.startsWith('Arrow') || event.key === 'Home' || event.key === 'End') {
+                  annotationPreview.commit()
+                }
+              }}
+            />
+            <span className="w-10 shrink-0 text-right text-xs tabular-nums text-text-muted">
+              {lineWidthPercent.toFixed(1)}%
+            </span>
+          </div>
         </UiFormRow>
       ) : null}
-      {'fontSize' in annotation ? (
+      {annotationHasFontSizeV3(annotation) && textSizePercent !== null ? (
         <UiFormRow label={t('imageEditor.v3.toolSettings.fontSize')}>
-          <UiRangeInput
-            aria-label={t('imageEditor.v3.toolSettings.fontSize')}
-            min={8}
-            max={256}
-            disabled={locked}
-            value={annotation.fontSize}
-            onChange={(event) => annotationPreview.update({
-              ...annotation,
-              fontSize: Number(event.currentTarget.value),
-            })}
-            onPointerUp={annotationPreview.commit}
-            onPointerCancel={annotationPreview.cancel}
-            onBlur={annotationPreview.commit}
-            onKeyUp={(event) => {
-              if (event.key.startsWith('Arrow') || event.key === 'Home' || event.key === 'End') {
-                annotationPreview.commit()
-              }
-            }}
-          />
+          <div className="flex items-center gap-2">
+            <UiRangeInput
+              aria-label={t('imageEditor.v3.toolSettings.fontSize')}
+              min={MIN_TEXT_SIZE_PERCENT}
+              max={MAX_TEXT_SIZE_PERCENT}
+              step={0.5}
+              disabled={locked}
+              value={Number(textSizePercent.toFixed(1))}
+              onChange={(event) => annotationPreview.update(patchAnnotationStyleV3(annotation, {
+                fontSize: percentToFontSize(
+                  Number(event.currentTarget.value),
+                  annotationBaseSize,
+                ),
+              }))}
+              onPointerUp={annotationPreview.commit}
+              onPointerCancel={annotationPreview.cancel}
+              onBlur={annotationPreview.commit}
+              onKeyUp={(event) => {
+                if (event.key.startsWith('Arrow') || event.key === 'Home' || event.key === 'End') {
+                  annotationPreview.commit()
+                }
+              }}
+            />
+            <span className="w-10 shrink-0 text-right text-xs tabular-nums text-text-muted">
+              {textSizePercent.toFixed(1)}%
+            </span>
+          </div>
         </UiFormRow>
       ) : null}
       <UiButton

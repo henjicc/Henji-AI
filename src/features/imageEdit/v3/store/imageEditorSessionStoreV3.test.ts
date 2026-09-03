@@ -1,6 +1,10 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 
 import {
+  DEFAULT_LINE_WIDTH_PERCENT,
+  DEFAULT_TEXT_SIZE_PERCENT,
+} from '@/features/imageMark/domain/metrics'
+import {
   useImageEditorInteractionStoreV3,
   useImageEditorSessionStoreV3,
 } from './index'
@@ -31,6 +35,14 @@ describe('ImageEditor V3 session stores', () => {
     useImageEditorSessionStoreV3.getState().disposeSession('full-session')
     expect(useImageEditorSessionStoreV3.getState().sessions['full-session']).toBeUndefined()
     expect(useImageEditorSessionStoreV3.getState().sessions['mask-session']).toBeTruthy()
+  })
+
+  it('标注样式预设以图片短边百分比保存', () => {
+    useImageEditorSessionStoreV3.getState().ensureSession('editor', ['annotation-text'])
+
+    const settings = useImageEditorSessionStoreV3.getState().sessions.editor.toolSettings
+    expect(settings.annotationLineWidthPercent).toBe(DEFAULT_LINE_WIDTH_PERCENT)
+    expect(settings.annotationTextSizePercent).toBe(DEFAULT_TEXT_SIZE_PERCENT)
   })
 
   it('高频拖拽和视口缩放不进入持久会话', () => {

@@ -18,6 +18,19 @@ import {
 } from '@/core/imageEdit/constraints'
 import type { MarkItem } from '@/core/imageEdit/types'
 import { IMAGE_EDITOR_PRESET_COLORS } from '@/core/theme/colorTokens'
+import { clamp } from '@/features/imageMark/domain/geometry'
+import { isLabeledMark } from '@/features/imageMark/domain/types'
+import {
+  fontSizeToPercent,
+  lineWidthToPercent,
+  MAX_LINE_WIDTH_PERCENT,
+  MAX_TEXT_SIZE_PERCENT,
+  MIN_LINE_WIDTH_PERCENT,
+  MIN_TEXT_SIZE_PERCENT,
+  percentToFontSize,
+  percentToLineWidth,
+  resolveLabelFontSize,
+} from '@/features/imageMark/domain/metrics'
 import type { ImageEditorToolIdV3 } from '../application/imageEditorHostProfiles'
 import { useImageEditorInteractionStoreV3, useImageEditorSessionStoreV3 } from '../store'
 import {
@@ -29,6 +42,7 @@ import {
   readAnnotationStyleV3,
   type AnnotationStylePatchV3,
 } from './annotationStyleV3'
+import { resolveAnnotationRelativeSizeBaseV3 } from './annotationGeometryV3'
 import {
   IMAGE_EDITOR_ANNOTATION_TOOL_IDS_V3,
   isImageEditorAnnotationToolV3,
@@ -179,6 +193,26 @@ export function ImageEditorAnnotationParametersV3({
     activeAnnotationTool === null || annotationMatchesTool(selected, activeAnnotationTool)
   ) ? selected : null
   const selectedStyle = editingSelected ? readAnnotationStyleV3(editingSelected) : null
+  const annotationBaseSize = resolveAnnotationRelativeSizeBaseV3(controller.document)
+  const selectedLineWidthPercent = selectedStyle?.lineWidth === null
+    || selectedStyle?.lineWidth === undefined
+    ? null
+    : clamp(
+      lineWidthToPercent(selectedStyle.lineWidth, annotationBaseSize),
+      MIN_LINE_WIDTH_PERCENT,
+      MAX_LINE_WIDTH_PERCENT,
+    )
+  const selectedFontSize = selectedStyle?.fontSize
+    ?? (editingSelected && isLabeledMark(editingSelected) && editingSelected.label !== undefined
+      ? resolveLabelFontSize(editingSelected, annotationBaseSize)
+      : null)
+  const selectedTextSizePercent = selectedFontSize === null
+    ? null
+    : clamp(
+      fontSizeToPercent(selectedFontSize, annotationBaseSize),
+      MIN_TEXT_SIZE_PERCENT,
+      MAX_TEXT_SIZE_PERCENT,
+    )
 
   useEffect(() => {
     if (!session || !activeAnnotationTool
@@ -191,13 +225,13 @@ export function ImageEditorAnnotationParametersV3({
     if (selectedStyle.color !== null && selectedStyle.color !== session.toolSettings.annotationColor) {
       setToolSetting(controller.sessionId, 'annotationColor', selectedStyle.color)
     }
-    if (selectedStyle.lineWidth !== null
-      && selectedStyle.lineWidth !== session.toolSettings.annotationStrokeWidth) {
-      setToolSetting(controller.sessionId, 'annotationStrokeWidth', selectedStyle.lineWidth)
+    if (selectedLineWidthPercent !== null
+      && selectedLineWidthPercent !== session.toolSettings.annotationLineWidthPercent) {
+      setToolSetting(controller.sessionId, 'annotationLineWidthPercent', selectedLineWidthPercent)
     }
-    if (selectedStyle.fontSize !== null
-      && selectedStyle.fontSize !== session.toolSettings.annotationFontSize) {
-      setToolSetting(controller.sessionId, 'annotationFontSize', selectedStyle.fontSize)
+    if (selectedTextSizePercent !== null
+      && selectedTextSizePercent !== session.toolSettings.annotationTextSizePercent) {
+      setToolSetting(controller.sessionId, 'annotationTextSizePercent', selectedTextSizePercent)
     }
     if (selectedStyle.calloutShape !== null
       && selectedStyle.calloutShape !== session.toolSettings.annotationCalloutShape) {
@@ -219,14 +253,21 @@ export function ImageEditorAnnotationParametersV3({
       && selectedStyle.mosaicStrength !== session.toolSettings.annotationMosaicStrength) {
       setToolSetting(controller.sessionId, 'annotationMosaicStrength', selectedStyle.mosaicStrength)
     }
-  }, [controller.sessionId, selectedStyle, session, setToolSetting])
+  }, [
+    controller.sessionId,
+    selectedLineWidthPercent,
+    selectedStyle,
+    selectedTextSizePercent,
+    session,
+    setToolSetting,
+  ])
 
   if (!session || (!activeAnnotationTool && !editingSelected)) return null
 
   const settings = session.toolSettings
   const color = selectedStyle?.color ?? settings.annotationColor
-  const strokeWidth = selectedStyle?.lineWidth ?? settings.annotationStrokeWidth
-  const fontSize = selectedStyle?.fontSize ?? settings.annotationFontSize
+  const lineWidthPercent = selectedLineWidthPercent ?? settings.annotationLineWidthPercent
+  const textSizePercent = selectedTextSizePercent ?? settings.annotationTextSizePercent
   const calloutShape = selectedStyle?.calloutShape ?? settings.annotationCalloutShape
   const backgroundEnabled = selectedStyle?.textBackgroundEnabled
     ?? settings.annotationTextBackgroundEnabled
@@ -251,10 +292,6 @@ export function ImageEditorAnnotationParametersV3({
 
   const apply = (patch: AnnotationStylePatchV3): void => {
     if (patch.color !== undefined) setToolSetting(controller.sessionId, 'annotationColor', patch.color)
-    if (patch.lineWidth !== undefined) {
-      setToolSetting(controller.sessionId, 'annotationStrokeWidth', patch.lineWidth)
-    }
-    if (patch.fontSize !== undefined) setToolSetting(controller.sessionId, 'annotationFontSize', patch.fontSize)
     if (patch.calloutShape !== undefined) {
       setToolSetting(controller.sessionId, 'annotationCalloutShape', patch.calloutShape)
     }
@@ -277,6 +314,24 @@ export function ImageEditorAnnotationParametersV3({
   const applyAndCommit = (patch: AnnotationStylePatchV3): void => {
     apply(patch)
     queueMicrotask(preview.commit)
+  }
+  const applyLineWidthPercent = (nextPercent: number): void => {
+    const percent = clamp(nextPercent, MIN_LINE_WIDTH_PERCENT, MAX_LINE_WIDTH_PERCENT)
+    setToolSetting(controller.sessionId, 'annotationLineWidthPercent', percent)
+    if (editingSelected && selection) {
+      preview.update(patchAnnotationStyleV3(editingSelected, {
+        lineWidth: percentToLineWidth(percent, annotationBaseSize),
+      }))
+    }
+  }
+  const applyTextSizePercent = (nextPercent: number): void => {
+    const percent = clamp(nextPercent, MIN_TEXT_SIZE_PERCENT, MAX_TEXT_SIZE_PERCENT)
+    setToolSetting(controller.sessionId, 'annotationTextSizePercent', percent)
+    if (editingSelected && selection) {
+      preview.update(patchAnnotationStyleV3(editingSelected, {
+        fontSize: percentToFontSize(percent, annotationBaseSize),
+      }))
+    }
   }
 
   return (
@@ -382,15 +437,18 @@ export function ImageEditorAnnotationParametersV3({
           <UiRangeInput
             className="!w-24"
             aria-label={t('imageEditor.v3.toolSettings.strokeWidth')}
-            min={1}
-            max={64}
-            value={strokeWidth}
-            onChange={(event) => apply({ lineWidth: Number(event.currentTarget.value) })}
+            min={MIN_LINE_WIDTH_PERCENT}
+            max={MAX_LINE_WIDTH_PERCENT}
+            step={0.1}
+            value={Number(lineWidthPercent.toFixed(1))}
+            onChange={(event) => applyLineWidthPercent(Number(event.currentTarget.value))}
             onPointerUp={preview.commit}
             onPointerCancel={preview.cancel}
             onBlur={preview.commit}
           />
-          <span className="w-8 text-right tabular-nums text-text-dark">{Math.round(strokeWidth)}</span>
+          <span className="w-10 text-right tabular-nums text-text-dark">
+            {lineWidthPercent.toFixed(1)}%
+          </span>
         </label>
       ) : null}
       {showFontSize ? (
@@ -399,15 +457,18 @@ export function ImageEditorAnnotationParametersV3({
           <UiRangeInput
             className="!w-24"
             aria-label={t('imageEditor.v3.toolSettings.fontSize')}
-            min={8}
-            max={256}
-            value={fontSize}
-            onChange={(event) => apply({ fontSize: Number(event.currentTarget.value) })}
+            min={MIN_TEXT_SIZE_PERCENT}
+            max={MAX_TEXT_SIZE_PERCENT}
+            step={0.5}
+            value={Number(textSizePercent.toFixed(1))}
+            onChange={(event) => applyTextSizePercent(Number(event.currentTarget.value))}
             onPointerUp={preview.commit}
             onPointerCancel={preview.cancel}
             onBlur={preview.commit}
           />
-          <span className="w-8 text-right tabular-nums text-text-dark">{Math.round(fontSize)}</span>
+          <span className="w-10 text-right tabular-nums text-text-dark">
+            {textSizePercent.toFixed(1)}%
+          </span>
         </label>
       ) : null}
     </>

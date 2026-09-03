@@ -1130,7 +1130,7 @@ function createToolboxScenes(context) {
             HTMLInputElement.prototype,
             'value',
           )?.set
-          valueSetter?.call(input, '14')
+          valueSetter?.call(input, '1.4')
           input.dispatchEvent(new Event('input', { bubbles: true }))
           input.dispatchEvent(new Event('change', { bubbles: true }))
         })
@@ -1141,8 +1141,11 @@ function createToolboxScenes(context) {
           throw new Error('修改选中标注描边后没有提交文档 revision')
         })
         if (await annotationColor.inputValue() !== testedAnnotationColor
-          || Number(await annotationStroke.inputValue()) !== 14) {
+          || Number(await annotationStroke.inputValue()) !== 1.4) {
           throw new Error('选中标注的颜色或描边没有同步回工具栏')
+        }
+        if (!(await annotationParameters.textContent())?.includes('1.4%')) {
+          throw new Error('标注描边没有以百分比显示')
         }
 
         const beforeAnnotationMove = await readRevision()
@@ -1345,7 +1348,7 @@ function createToolboxScenes(context) {
             HTMLInputElement.prototype,
             'value',
           )?.set
-          valueSetter?.call(input, '39')
+          valueSetter?.call(input, '2.4')
           input.dispatchEvent(new Event('input', { bubbles: true }))
           input.dispatchEvent(new Event('change', { bubbles: true }))
         })
