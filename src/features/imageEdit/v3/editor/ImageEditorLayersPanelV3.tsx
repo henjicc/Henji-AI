@@ -208,10 +208,15 @@ export function ImageEditorLayersPanelV3({
           </h2>
         )}
         <PanelTrigger
-          panelWidth={240}
+          panelWidth={184}
           closeOnPanelClick
           renderPanel={() => (
-            <div className="p-1.5" role="menu" aria-label={t('imageEditor.v3.layers.addLayer')}>
+            <div
+              data-layer-add-menu
+              className="p-1.5"
+              role="menu"
+              aria-label={t('imageEditor.v3.layers.addLayer')}
+            >
               {creationChoices.map(({ choice, readiness }) => {
                 const key = `${choice.kind}:${choice.subtype ?? ''}`
                 const disabled = readiness.state !== 'ready'
@@ -228,7 +233,7 @@ export function ImageEditorLayersPanelV3({
                     type="button"
                     role="menuitem"
                     variant="menu"
-                    className="w-full flex-col items-start gap-0.5 text-xs"
+                    className="w-full flex-col items-start justify-start gap-0.5 text-left text-xs"
                     disabled={disabled}
                     aria-label={disabled ? unavailableLabel : choice.name}
                     title={disabled ? unavailableLabel : choice.name}

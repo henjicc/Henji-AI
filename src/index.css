@@ -362,6 +362,17 @@
     background-color: var(--ui-glass-hover);
   }
 
+  /* 图片区域内的透明像素网格；工作区本身仍保持无限且使用画布底色。 */
+  .image-editor-transparency-grid {
+    background-color: rgb(var(--surface-rgb));
+    background-image: repeating-conic-gradient(
+      rgb(var(--layer-rgb) / 0.72) 0 25%,
+      transparent 0 50%
+    );
+    background-position: 0 0;
+    background-size: 16px 16px;
+  }
+
   /* 弹窗遮罩：整屏覆盖，用更浅的模糊档位 */
   .ui-glass-scrim {
     background-color: var(--ui-scrim-tint);

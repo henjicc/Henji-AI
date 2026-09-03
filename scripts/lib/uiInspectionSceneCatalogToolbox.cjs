@@ -262,8 +262,21 @@ function createToolboxScenes(context) {
               blurBox.y + blurBox.height / 2,
               { steps: 24 },
             )
-            await surface.locator('[data-live-blur-feedback="active"]')
-              .waitFor({ state: 'visible', timeout: 100 })
+            const liveBlur = surface.locator('[data-live-blur-feedback="active"]')
+            await liveBlur.waitFor({ state: 'visible', timeout: 100 })
+            const liveBlurClipState = await liveBlur.evaluate((element) => {
+              const clip = element.closest('[data-document-clip]')
+              return {
+                insideDocumentClip: Boolean(clip),
+                clipPath: clip instanceof HTMLElement ? getComputedStyle(clip).clipPath : 'none',
+                filter: getComputedStyle(element).filter,
+              }
+            })
+            if (!liveBlurClipState.insideDocumentClip
+              || liveBlurClipState.clipPath === 'none'
+              || liveBlurClipState.filter === 'none') {
+              throw new Error(`test01 模糊即时反馈没有使用图片矩形裁切：${JSON.stringify(liveBlurClipState)}`)
+            }
           } catch (error) {
             throw new Error(`test01 模糊实时反馈未在 500ms 内出现：${error.message}`)
           } finally {
@@ -385,10 +398,29 @@ function createToolboxScenes(context) {
         })
 
         const displayFrame = editor.locator('[data-raster-display-frame]')
+        const documentClip = editor.locator('[data-document-clip]')
+        const transparencyGrid = editor.locator('[data-document-transparency-grid]')
         if (await editor.locator('[data-raster-pasteboard-layer]').count() !== 0
           || await displayFrame.count() !== 1
+          || await documentClip.count() !== 1
+          || await transparencyGrid.count() !== 1
           || await editor.locator('[data-document-boundary]').count() !== 0) {
-          throw new Error('原图没有收口到唯一且裁切严格的文档画框')
+          throw new Error('原图没有收口到唯一图片裁切层与透明底层')
+        }
+        const initialDocumentSurface = await editor.evaluate(() => {
+          const clip = document.querySelector('[data-document-clip]')
+          const frame = document.querySelector('[data-raster-display-frame]')
+          const grid = document.querySelector('[data-document-transparency-grid]')
+          return {
+            frameInsideClip: Boolean(clip && frame && clip.contains(frame)),
+            clipPath: clip instanceof HTMLElement ? getComputedStyle(clip).clipPath : 'none',
+            gridBackground: grid instanceof HTMLElement ? getComputedStyle(grid).backgroundImage : 'none',
+          }
+        })
+        if (!initialDocumentSurface.frameInsideClip
+          || initialDocumentSurface.clipPath === 'none'
+          || !initialDocumentSurface.gridBackground.includes('conic-gradient')) {
+          throw new Error(`图片裁切层或透明网格没有生效：${JSON.stringify(initialDocumentSurface)}`)
         }
         const waitForVisibleRasterPixels = async (stage) => {
           await page.waitForFunction(() => {
@@ -454,6 +486,37 @@ function createToolboxScenes(context) {
           })
         }
         await waitForVisibleRasterPixels('打开原图')
+
+        const defaultMoveTool = editor.locator('[data-tool-id="move"]')
+        if (await defaultMoveTool.getAttribute('aria-pressed') !== 'true') {
+          throw new Error('图片编辑器默认工具不是移动工具')
+        }
+
+        const layerAddTrigger = editor.getByRole('button', { name: /^(添加图层|Add layer)$/i })
+        await layerAddTrigger.click()
+        const layerAddMenu = page.locator('[data-layer-add-menu]')
+        await layerAddMenu.waitFor({ state: 'visible', timeout: 3000 })
+        const layerMenuLayout = await layerAddMenu.evaluate((menu) => {
+          const panel = menu.parentElement?.parentElement
+          const items = [...menu.querySelectorAll('[role="menuitem"]')]
+          return {
+            panelWidth: panel?.getBoundingClientRect().width ?? 0,
+            items: items.map((item) => {
+              const style = getComputedStyle(item)
+              return { textAlign: style.textAlign, justifyContent: style.justifyContent }
+            }),
+          }
+        })
+        if (layerMenuLayout.panelWidth < 160
+          || layerMenuLayout.panelWidth > 192
+          || layerMenuLayout.items.length === 0
+          || layerMenuLayout.items.some(({ textAlign, justifyContent }) => (
+            textAlign !== 'left' || justifyContent !== 'flex-start'
+          ))) {
+          throw new Error(`图层添加菜单没有收窄并左对齐：${JSON.stringify(layerMenuLayout)}`)
+        }
+        await page.keyboard.press('Escape')
+        await layerAddMenu.waitFor({ state: 'hidden', timeout: 1000 })
 
         const rightDock = editor.locator('[data-editor-panel-dock="right"]')
         const dockedPanels = rightDock.locator('[data-docked-editor-panel]')
@@ -668,23 +731,39 @@ function createToolboxScenes(context) {
           throw new Error('缩放工具向右拖动没有放大画布')
         }
 
+        await page.mouse.click(startX, startY)
+        await page.waitForFunction(() => {
+          const label = document.querySelector('[data-viewport-control] span')?.textContent ?? ''
+          return Number(label.match(/\d+/)?.[0]) === 100
+        }, undefined, { timeout: 1000 }).catch(() => {
+          throw new Error('缩放工具单击没有恢复为适应窗口的 100% 状态')
+        })
+
         const beforePanRevision = await readRevision()
-        await editor.locator('[data-tool-id="hand"]').click()
+        await defaultMoveTool.click()
+        await page.keyboard.down('Space')
+        await page.waitForFunction(() => (
+          document.querySelector('[data-preview-surface]')?.getAttribute('data-temporary-hand') === 'active'
+        ), undefined, { timeout: 1000 }).catch(() => {
+          throw new Error('按住空格后没有进入临时抓手状态')
+        })
         const beforePanBox = await editor.locator('[data-viewport-content]').boundingBox()
         if (!beforePanBox) throw new Error('抓手移动前无法读取画布位置')
         await page.mouse.move(startX, startY)
         await page.mouse.down()
         await page.mouse.move(startX + 34, startY + 28, { steps: 5 })
         await page.mouse.up()
+        await page.keyboard.up('Space')
         const afterPanBox = await editor.locator('[data-viewport-content]').boundingBox()
         const afterPanRevision = await readRevision()
         if (!afterPanBox
           || Math.abs(afterPanBox.x - beforePanBox.x - 34) > 2
           || Math.abs(afterPanBox.y - beforePanBox.y - 28) > 2
-          || afterPanRevision !== beforePanRevision) {
-          throw new Error('抓手没有独立移动画布，或错误修改了图层 revision')
+          || afterPanRevision !== beforePanRevision
+          || await defaultMoveTool.getAttribute('aria-pressed') !== 'true'
+          || await preview.getAttribute('data-temporary-hand') !== null) {
+          throw new Error('空格临时抓手没有独立移动工作区，或错误切换了默认工具')
         }
-        await editor.locator('[data-tool-id="move"]').click()
         await page.waitForFunction(() => (
           document.querySelector('[data-preview-surface]')?.getAttribute('data-move-availability') === 'ready'
         ), undefined, { timeout: 10000 }).catch(() => {
@@ -696,7 +775,11 @@ function createToolboxScenes(context) {
         const viewportContent = editor.locator('[data-viewport-content]')
         const initialFeedbackBox = await feedback.boundingBox()
         const initialViewportContentBox = await viewportContent.boundingBox()
-        if (!initialFeedbackBox || !initialViewportContentBox) {
+        const initialTransparencyBox = await transparencyGrid.boundingBox()
+        const initialDocumentClipPath = await documentClip.evaluate((element) => (
+          getComputedStyle(element).clipPath
+        ))
+        if (!initialFeedbackBox || !initialViewportContentBox || !initialTransparencyBox) {
           throw new Error('移动 JPG 前无法读取稳定画面边界')
         }
         await page.mouse.move(startX, startY)
@@ -714,10 +797,19 @@ function createToolboxScenes(context) {
           const expectedY = -180 * step / 6
           await page.mouse.move(startX + expectedX, startY + expectedY)
           await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => resolve())))
-          const [source, currentFeedbackBox, currentViewportContentBox, revision] = await Promise.all([
+          const [
+            source,
+            currentFeedbackBox,
+            currentViewportContentBox,
+            currentTransparencyBox,
+            currentDocumentClipPath,
+            revision,
+          ] = await Promise.all([
             preview.getAttribute('data-preview-display-source'),
             feedback.boundingBox(),
             viewportContent.boundingBox(),
+            transparencyGrid.boundingBox(),
+            documentClip.evaluate((element) => getComputedStyle(element).clipPath),
             readRevision(),
           ])
           if (source !== 'viewport') throw new Error('移动 JPG 期间稳定分块画面被草稿替换')
@@ -732,6 +824,12 @@ function createToolboxScenes(context) {
             || Math.abs(currentViewportContentBox.width - initialViewportContentBox.width) > 0.5
             || Math.abs(currentViewportContentBox.height - initialViewportContentBox.height) > 0.5) {
             throw new Error('移动 JPG 期间工作区参考范围跟随内容发生了偏移')
+          }
+          if (!currentTransparencyBox
+            || Math.abs(currentTransparencyBox.x - initialTransparencyBox.x) > 0.5
+            || Math.abs(currentTransparencyBox.y - initialTransparencyBox.y) > 0.5
+            || currentDocumentClipPath !== initialDocumentClipPath) {
+            throw new Error('移动 JPG 期间图片边界或透明底层错误跟随图层移动')
           }
         }
         const transientTransform = await feedback.evaluate(

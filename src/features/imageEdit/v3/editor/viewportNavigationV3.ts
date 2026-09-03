@@ -13,7 +13,6 @@ export interface ImageEditorNavigationGestureV3 {
   startZoom: number
   pendingZoom: number
   anchorPoint: ImageEditorViewportPanV3
-  zoomOutModifier: boolean
   moved: boolean
 }
 

@@ -164,8 +164,13 @@ describe('ImageEditorV3 professional shell', () => {
   it('图层菜单只提供发布范围内的扁平图层且 CPU 后备可用时允许辉光 Pro', async () => {
     renderEditor(createDocument([createImageEditRasterLayerV3('raster', '底图')]))
 
+    expect(document.querySelector('[data-tool-id="move"]')?.getAttribute('aria-pressed')).toBe('true')
     fireEvent.click(await screen.findByRole('button', { name: '添加图层' }))
+    const menu = screen.getByRole('menu', { name: '添加图层' })
     const glow = screen.getByRole('menuitem', { name: '辉光 Pro' }) as HTMLButtonElement
+    expect(menu.parentElement?.parentElement?.style.width).toBe('184px')
+    expect(glow.className).toContain('justify-start')
+    expect(glow.className).toContain('text-left')
     expect(glow.disabled).toBe(false)
     expect(screen.getByRole('menuitem', { name: '模糊' })).toBeTruthy()
     expect(screen.getByRole('menuitem', { name: '柔光 / 发光' })).toBeTruthy()
@@ -241,6 +246,12 @@ describe('ImageEditorV3 professional shell', () => {
     fireEvent.change(radius, { target: { value: '24' } })
     fireEvent.change(radius, { target: { value: '48' } })
     expect(changes).toHaveLength(0)
+    const liveFeedback = await waitFor(() => {
+      const element = document.querySelector('[data-live-blur-feedback="active"]')
+      if (!element) throw new Error('模糊拖动没有进入即时反馈状态')
+      return element
+    })
+    expect(document.querySelector('[data-document-clip]')?.contains(liveFeedback)).toBe(true)
     fireEvent.pointerUp(radius)
 
     await waitFor(() => expect(changes).toHaveLength(1))

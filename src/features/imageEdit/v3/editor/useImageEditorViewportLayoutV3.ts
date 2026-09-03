@@ -17,6 +17,37 @@ export interface ImageEditorViewportLayoutV3 {
   viewportKey: string
 }
 
+export interface ImageEditorViewportDocumentFrameV3 {
+  left: number
+  top: number
+  width: number
+  height: number
+  clipPath: string
+}
+
+/** 将有限图片区域投影到无限工作区视口；裁切只约束显示，不改变图层内容。 */
+export function imageEditorViewportDocumentFrameV3(
+  layout: ImageEditorViewportLayoutV3,
+  documentSize: { width: number; height: number },
+): ImageEditorViewportDocumentFrameV3 {
+  const { viewport } = layout
+  const left = -viewport.documentX * viewport.zoom
+  const top = -viewport.documentY * viewport.zoom
+  const width = documentSize.width * viewport.zoom
+  const height = documentSize.height * viewport.zoom
+  const clipLeft = Math.max(0, Math.min(viewport.width, left))
+  const clipTop = Math.max(0, Math.min(viewport.height, top))
+  const clipRight = Math.max(0, Math.min(viewport.width, left + width))
+  const clipBottom = Math.max(0, Math.min(viewport.height, top + height))
+  return {
+    left,
+    top,
+    width,
+    height,
+    clipPath: `polygon(${clipLeft}px ${clipTop}px, ${clipRight}px ${clipTop}px, ${clipRight}px ${clipBottom}px, ${clipLeft}px ${clipBottom}px)`,
+  }
+}
+
 function normalizedSurfaceSize(element: HTMLElement): ImageEditorViewportSurfaceSizeV3 | null {
   const rect = element.getBoundingClientRect()
   if (!Number.isFinite(rect.width) || !Number.isFinite(rect.height) || rect.width <= 0 || rect.height <= 0) {

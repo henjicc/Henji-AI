@@ -32,6 +32,7 @@ import type {
 import { useImageEditorBusSnapshotV3 } from './useImageEditorControllerV3'
 import {
   calculateImageEditorViewportLayoutV3,
+  imageEditorViewportDocumentFrameV3,
   useImageEditorViewportLayoutV3,
 } from './useImageEditorViewportLayoutV3'
 import { useImageEditorLayerMoveGestureV3 } from './useImageEditorLayerMoveGestureV3'
@@ -70,6 +71,8 @@ export function ImageEditorPreviewV3({
   const { t } = useTranslation('ui')
   const surfaceRef = useRef<HTMLElement | null>(null)
   const viewportContentRef = useRef<HTMLDivElement | null>(null)
+  const documentBackgroundRef = useRef<HTMLDivElement | null>(null)
+  const documentClipRef = useRef<HTMLDivElement | null>(null)
   const moveFeedbackRef = useRef<HTMLDivElement | null>(null)
   const snapshot = useImageEditorBusSnapshotV3(bus)
   const activeTool = useImageEditorSessionStoreV3(
@@ -135,14 +138,6 @@ export function ImageEditorPreviewV3({
     const incrementalRadius = Math.sqrt(Math.max(0, nextRadius ** 2 - baseRadius ** 2))
     return Math.min(48, incrementalRadius * documentToCss)
   }, [baseDisplayDocument, projectedDocument, snapshot.previewOverrides, viewportLayout?.viewport.zoom])
-  const layerMoveHandlers = useImageEditorLayerMoveGestureV3(
-    controller,
-    activeTool,
-    viewportContentRef,
-    moveFeedbackRef,
-    outputGeometry,
-  )
-
   const displayPipeline = useImageEditorDisplayPipelineV3(
     controller.sessionId,
     displaySnapshot,
@@ -251,7 +246,17 @@ export function ImageEditorPreviewV3({
         interacting,
       },
     )
-    if (nextLayout) viewportComposite.session.updateViewport(nextLayout)
+    if (!nextLayout) return
+    const frame = imageEditorViewportDocumentFrameV3(nextLayout, outputGeometry)
+    const background = documentBackgroundRef.current
+    if (background) {
+      background.style.left = `${frame.left}px`
+      background.style.top = `${frame.top}px`
+      background.style.width = `${frame.width}px`
+      background.style.height = `${frame.height}px`
+    }
+    if (documentClipRef.current) documentClipRef.current.style.clipPath = frame.clipPath
+    viewportComposite.session.updateViewport(nextLayout)
   }, [outputGeometry, viewportComposite.session])
 
   const navigation = useImageEditorViewportNavigationGestureV3(
@@ -263,12 +268,22 @@ export function ImageEditorPreviewV3({
     pan,
     updatePresentationViewport,
   )
+  const layerMoveHandlers = useImageEditorLayerMoveGestureV3(
+    controller,
+    navigation.effectiveTool,
+    viewportContentRef,
+    moveFeedbackRef,
+    outputGeometry,
+  )
+  const documentFrame = useMemo(() => (
+    viewportLayout ? imageEditorViewportDocumentFrameV3(viewportLayout, outputGeometry) : null
+  ), [outputGeometry, viewportLayout])
 
-  const navigationCursor = activeTool === 'hand'
+  const navigationCursor = navigation.effectiveTool === 'hand'
     ? 'cursor-grab active:cursor-grabbing'
-    : activeTool === 'zoom'
+    : navigation.effectiveTool === 'zoom'
       ? 'cursor-zoom-in'
-      : activeTool === 'move'
+      : navigation.effectiveTool === 'move'
         ? layerMoveHandlers.unavailableReason ? 'cursor-not-allowed' : 'cursor-move'
         : ''
 
@@ -286,12 +301,15 @@ export function ImageEditorPreviewV3({
       data-preview-event-to-present-ms={previewRenderer
         ? undefined
         : viewportComposite.eventToPresentMs ?? undefined}
-      data-active-navigation-tool={activeTool === 'hand' || activeTool === 'zoom' ? activeTool : undefined}
-      data-move-availability={activeTool === 'move'
+      data-active-navigation-tool={navigation.effectiveTool === 'hand' || navigation.effectiveTool === 'zoom'
+        ? navigation.effectiveTool
+        : undefined}
+      data-temporary-hand={navigation.temporaryHandActive ? 'active' : undefined}
+      data-move-availability={navigation.effectiveTool === 'move'
         ? layerMoveHandlers.unavailableReason ?? 'ready'
         : undefined}
       className={`relative min-h-0 min-w-0 flex-1 overflow-hidden bg-bg-dark ${navigationCursor}`}
-      style={{ touchAction: activeTool === 'hand' || activeTool === 'zoom' || activeTool === 'move' ? 'none' : undefined }}
+      style={{ touchAction: ['hand', 'zoom', 'move'].includes(navigation.effectiveTool) ? 'none' : undefined }}
       onPointerDownCapture={layerMoveHandlers.onPointerDownCapture}
       onPointerMoveCapture={layerMoveHandlers.onPointerMoveCapture}
       onPointerUpCapture={layerMoveHandlers.onPointerUpCapture}
@@ -301,23 +319,43 @@ export function ImageEditorPreviewV3({
       onPointerUp={navigation.onPointerUp}
       onPointerCancel={navigation.onPointerCancel}
     >
+      {!previewRenderer && documentFrame ? (
+        <div
+          ref={documentBackgroundRef}
+          data-document-transparency-grid
+          className="image-editor-transparency-grid pointer-events-none absolute"
+          style={{
+            left: documentFrame.left,
+            top: documentFrame.top,
+            width: documentFrame.width,
+            height: documentFrame.height,
+          }}
+        />
+      ) : null}
       {!previewRenderer ? (
         <div
-          ref={moveFeedbackRef}
-          data-raster-display-frame
-          data-move-feedback-frame
-          data-live-blur-feedback={liveBlurFeedback === null ? undefined : 'active'}
+          ref={documentClipRef}
+          data-document-clip
           className="pointer-events-none absolute inset-0 overflow-hidden"
-          style={liveBlurFeedback === null ? undefined : {
-            filter: `blur(${liveBlurFeedback}px)`,
-            willChange: 'filter',
-          }}
+          style={{ clipPath: documentFrame?.clipPath ?? 'polygon(0 0, 0 0, 0 0, 0 0)' }}
         >
-          <ImageEditorViewportTilesV3
-            session={viewportComposite.session}
-            layout={viewportLayout}
-            label={t('imageEditor.v3.previewAlt')}
-          />
+          <div
+            ref={moveFeedbackRef}
+            data-raster-display-frame
+            data-move-feedback-frame
+            data-live-blur-feedback={liveBlurFeedback === null ? undefined : 'active'}
+            className="pointer-events-none absolute inset-0 overflow-hidden"
+            style={liveBlurFeedback === null ? undefined : {
+              filter: `blur(${liveBlurFeedback}px)`,
+              willChange: 'filter',
+            }}
+          >
+            <ImageEditorViewportTilesV3
+              session={viewportComposite.session}
+              layout={viewportLayout}
+              label={t('imageEditor.v3.previewAlt')}
+            />
+          </div>
         </div>
       ) : null}
       <div className="absolute inset-0 flex items-center justify-center overflow-hidden p-6">
@@ -385,7 +423,7 @@ export function ImageEditorPreviewV3({
           </span>
         </div>
       ) : null}
-      {activeTool === 'move' && layerMoveHandlers.unavailableReason ? (
+      {navigation.effectiveTool === 'move' && layerMoveHandlers.unavailableReason ? (
         <div
           role="status"
           className="ui-glass pointer-events-none absolute left-1/2 top-3 flex max-w-[min(34rem,calc(100%-1.5rem))] -translate-x-1/2 items-start gap-2 rounded-lg px-3 py-2 text-xs text-text-dark"

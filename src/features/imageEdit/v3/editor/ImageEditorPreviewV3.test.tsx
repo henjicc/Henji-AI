@@ -171,7 +171,7 @@ describe('ImageEditorPreviewV3 managed frame ownership', () => {
     expect(release).not.toHaveBeenCalled()
   })
 
-  it('手形拖动只在结束时提交一次视口状态，缩放工具以指针为锚点', async () => {
+  it('空格临时抓手只移动工作区，缩放单击适应窗口且横向拖动连续缩放', async () => {
     const document = createImageEditDocumentV3({
       width: 320,
       height: 180,
@@ -207,12 +207,16 @@ describe('ImageEditorPreviewV3 managed frame ownership', () => {
       },
     })
 
-    fireEvent.click(screen.getByRole('button', { name: '移动画布（抓手）' }))
+    const sessionId = Object.keys(useImageEditorSessionStoreV3.getState().sessions)[0]
+    expect(useImageEditorSessionStoreV3.getState().sessions[sessionId].activeTool).toBe('move')
+    screen.getByRole('button', { name: '移动图像或图层' }).focus()
+    fireEvent.keyDown(window, { code: 'Space', key: ' ' })
+    expect(surface.dataset.temporaryHand).toBe('active')
+    expect(surface.dataset.activeNavigationTool).toBe('hand')
     fireEvent.pointerDown(surface, {
       pointerId: 7, isPrimary: true, button: 0, clientX: 100, clientY: 100,
     })
     fireEvent.pointerMove(surface, { pointerId: 7, clientX: 140, clientY: 120 })
-    const sessionId = Object.keys(useImageEditorSessionStoreV3.getState().sessions)[0]
     expect(content.style.transform).toContain('translate3d(40px, 20px, 0)')
     expect(useImageEditorInteractionStoreV3.getState().viewportPanBySession[sessionId]).toBeUndefined()
 
@@ -221,17 +225,22 @@ describe('ImageEditorPreviewV3 managed frame ownership', () => {
       x: 40,
       y: 20,
     })
+    fireEvent.keyUp(window, { code: 'Space', key: ' ' })
+    expect(surface.dataset.temporaryHand).toBeUndefined()
+    expect(useImageEditorSessionStoreV3.getState().sessions[sessionId].activeTool).toBe('move')
 
+    const zoomIn = rendered.container.querySelector<HTMLButtonElement>(
+      '[data-viewport-control] button:last-of-type',
+    )
+    if (!zoomIn) throw new Error('视口测试缺少底部放大按钮')
+    fireEvent.click(zoomIn)
     fireEvent.click(screen.getByRole('button', { name: '缩放画布' }))
     fireEvent.pointerDown(surface, {
       pointerId: 8, isPrimary: true, button: 0, clientX: 600, clientY: 300,
     })
     fireEvent.pointerUp(surface, { pointerId: 8, clientX: 600, clientY: 300 })
-    expect(useImageEditorInteractionStoreV3.getState().viewportZoomBySession[sessionId]).toBe(1.25)
-    expect(useImageEditorInteractionStoreV3.getState().viewportPanBySession[sessionId]).toEqual({
-      x: 25,
-      y: 25,
-    })
+    expect(useImageEditorInteractionStoreV3.getState().viewportZoomBySession[sessionId]).toBe(1)
+    expect(useImageEditorInteractionStoreV3.getState().viewportPanBySession[sessionId]).toEqual({ x: 0, y: 0 })
 
     const wheel = new WheelEvent('wheel', {
       bubbles: true,
@@ -242,16 +251,16 @@ describe('ImageEditorPreviewV3 managed frame ownership', () => {
     })
     fireEvent(surface, wheel)
     expect(wheel.defaultPrevented).toBe(true)
-    expect(useImageEditorInteractionStoreV3.getState().viewportZoomBySession[sessionId]).toBe(1.4375)
+    expect(useImageEditorInteractionStoreV3.getState().viewportZoomBySession[sessionId]).toBe(1.15)
 
     fireEvent.pointerDown(surface, {
       pointerId: 9, isPrimary: true, button: 0, clientX: 500, clientY: 300,
     })
     fireEvent.pointerMove(surface, { pointerId: 9, clientX: 680, clientY: 300 })
-    expect(content.style.transform).toContain('scale(2.875)')
-    expect(useImageEditorInteractionStoreV3.getState().viewportZoomBySession[sessionId]).toBe(1.4375)
+    expect(content.style.transform).toContain('scale(2.3)')
+    expect(useImageEditorInteractionStoreV3.getState().viewportZoomBySession[sessionId]).toBe(1.15)
     fireEvent.pointerUp(surface, { pointerId: 9, clientX: 680, clientY: 300 })
-    expect(useImageEditorInteractionStoreV3.getState().viewportZoomBySession[sessionId]).toBe(2.875)
+    expect(useImageEditorInteractionStoreV3.getState().viewportZoomBySession[sessionId]).toBe(2.3)
 
     fireEvent.pointerDown(surface, {
       pointerId: 10, isPrimary: true, button: 0, clientX: 500, clientY: 300, altKey: true,
@@ -259,7 +268,7 @@ describe('ImageEditorPreviewV3 managed frame ownership', () => {
     fireEvent.pointerUp(surface, {
       pointerId: 10, clientX: 500, clientY: 300, altKey: true,
     })
-    expect(useImageEditorInteractionStoreV3.getState().viewportZoomBySession[sessionId]).toBe(2.3)
+    expect(useImageEditorInteractionStoreV3.getState().viewportZoomBySession[sessionId]).toBe(1)
     expect(document.revision).toBe(0)
   })
 
@@ -292,6 +301,13 @@ describe('ImageEditorPreviewV3 managed frame ownership', () => {
       return element
     })
     expect(rasterFrame.className).toContain('overflow-hidden')
+    const documentClip = rendered.container.querySelector<HTMLElement>('[data-document-clip]')
+    const transparencyGrid = rendered.container.querySelector<HTMLElement>(
+      '[data-document-transparency-grid]',
+    )
+    expect(documentClip?.contains(rasterFrame)).toBe(true)
+    expect(documentClip?.style.clipPath).toContain('polygon(')
+    expect(transparencyGrid?.className).toContain('image-editor-transparency-grid')
     expect(rendered.container.querySelector('[data-raster-pasteboard-layer]')).toBeNull()
     expect(rendered.container.querySelector('[data-document-boundary]')).toBeNull()
   })
