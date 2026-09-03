@@ -82,6 +82,21 @@ describe('图片编辑 V3 preload 契约', () => {
     expect(invoke).toHaveBeenNthCalledWith(2, 'imageEditorV3:package:open', { requestId: 'package-open' })
   })
 
+  it('文档补偿只透传稳定引用和精确 revision', async () => {
+    const invoke = vi.fn(async () => ({ deleted: true }))
+    const api = createImageEditorV3Api(
+      invoke as unknown as Parameters<typeof createImageEditorV3Api>[0],
+    )
+    const request = {
+      requestId: 'document-rollback',
+      documentRef: 'image-edit-v3:layer-stack-document' as const,
+      expectedRevision: 0,
+    }
+
+    await expect(api.deleteDocumentIfRevision(request)).resolves.toEqual({ deleted: true })
+    expect(invoke).toHaveBeenCalledWith('imageEditorV3:document:deleteIfRevision', request)
+  })
+
   it('瓦片精度、坐标与取消 requestId 原样进入独立 IPC', async () => {
     const invoke = vi.fn(async () => undefined)
     const api = createImageEditorV3Api(

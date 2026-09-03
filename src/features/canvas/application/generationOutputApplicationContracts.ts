@@ -6,6 +6,7 @@ import type {
 } from '../domain/generationOutputs'
 import type { LayerStackDocumentV1 } from '../domain/layerStack'
 import type { RowMediaKind } from '../domain/socketTypes'
+import type { MultiLayerDocumentNodeProjection } from './multiLayerDocumentNodeApplicationContracts'
 
 export class GenerationOutputApplicationError extends Error {
   constructor(
@@ -37,6 +38,14 @@ export interface CommitCanvasGenerationOutputsInput {
   releaseCreatedFiles?: (filePaths: string[]) => Promise<void>
   /** layer-stack 必须由主进程全量验证/合成后注入，通用落图器不会自行猜图层语义。 */
   preparedLayerStack?: LayerStackDocumentV1
+  /** 测试可注入；生产必须经过 1.1 的多图层文档 application 服务。 */
+  createLayerStackDocument?: (input: {
+    nodeId: string
+    document: LayerStackDocumentV1
+  }) => Promise<MultiLayerDocumentNodeProjection>
+  /** 节点事务未接管新文档时，按精确 revision 补偿。 */
+  rollbackLayerStackDocument?: (projection: MultiLayerDocumentNodeProjection) => Promise<boolean>
+  signal?: AbortSignal
 }
 
 export interface CommitCanvasGenerationOutputsResult {

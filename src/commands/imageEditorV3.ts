@@ -113,6 +113,17 @@ export function saveImageEditorV3Document(
   return runCancellable(request.requestId, signal, (platform) => platform.saveDocument(request))
 }
 
+export function deleteImageEditorV3DocumentIfRevision(
+  request: Parameters<ImageEditorV3Platform['deleteDocumentIfRevision']>[0],
+  signal?: AbortSignal,
+): ReturnType<ImageEditorV3Platform['deleteDocumentIfRevision']> {
+  return runCancellable(
+    request.requestId,
+    signal,
+    (platform) => platform.deleteDocumentIfRevision(request),
+  )
+}
+
 export function importImageEditorV3Source(
   request: Parameters<ImageEditorV3Platform['importSource']>[0],
   signal?: AbortSignal,

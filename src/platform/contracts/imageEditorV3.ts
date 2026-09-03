@@ -300,6 +300,12 @@ export interface ImageEditorV3Platform {
     resourceRefs: ImageEditorV3ResourceRef[]
     previewRef?: ImageEditorV3ResourceRef | null
   }): Promise<ImageEditorV3DocumentReference>
+  /** 仅用于跨存储事务补偿；revision 已变化时拒绝删除。 */
+  deleteDocumentIfRevision(request: {
+    requestId: string
+    documentRef: ImageEditorV3DocumentRef
+    expectedRevision: number
+  }): Promise<{ deleted: boolean }>
   importSource(request: {
     requestId: string
   }): Promise<ImageEditorV3DialogResult<ImageEditorV3ManagedSource>>

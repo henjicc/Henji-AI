@@ -27,6 +27,7 @@ import {
   commitCanvasGenerationOutputs,
   validateGenerationOutputBatchContract,
 } from './generationOutputApplicationService';
+import type { MultiLayerDocumentNodeProjection } from './multiLayerDocumentNodeApplicationContracts';
 
 const projectId = 'generation-output-project';
 
@@ -132,6 +133,21 @@ function layerStackDocument(completionId: string): LayerStackDocumentV1 {
   };
 }
 
+function layerStackProjection(revision = 0): MultiLayerDocumentNodeProjection {
+  return {
+    imageEditSession: {
+      kind: 'image-edit-v3',
+      sourceUrl: '/managed/composite.png',
+      documentRef: 'image-edit-v3:layer-stack-document',
+      revision,
+      previewRef: null,
+    },
+    imageUrl: '/managed/composite.png',
+    previewImageUrl: '/managed/thumb.webp',
+    aspectRatio: '512:512',
+  };
+}
+
 async function commit(
   value: CanvasGenerationOutputBatchContractV1,
   completionId = 'completion-1',
@@ -193,6 +209,7 @@ describe('generationOutputApplicationService 图层栈', () => {
       contract: layerContract,
       completionId,
       preparedLayerStack: layerStackDocument(completionId),
+      createLayerStackDocument: vi.fn(async () => layerStackProjection()),
       persistOutput: vi.fn(),
     });
     expect(layerResult).toMatchObject({ resultNodeIds: ['placeholder-node'], groupNodeId: null, strategy: 'layer-stack' });
@@ -202,7 +219,10 @@ describe('generationOutputApplicationService 图层栈', () => {
       resultKind: 'layer-stack',
       generationOutputCommitId: completionId,
       generationOutputDescriptor: createLayerStackCompositeOutputDescriptor(),
+      imageEditSession: layerStackProjection().imageEditSession,
     });
+    expect(useCanvasStore.getState().nodes.find((node) => node.id === 'placeholder-node')?.data.layerStackDocument)
+      .toBeUndefined();
   });
 
   it('图层栈合成结果以稳定单节点身份发布并被下游消费', async () => {
@@ -224,6 +244,7 @@ describe('generationOutputApplicationService 图层栈', () => {
       contract: layerContract,
       completionId,
       preparedLayerStack: layerStackDocument(completionId),
+      createLayerStackDocument: vi.fn(async () => layerStackProjection()),
     });
 
     publishCanvasSuccessfulExecution({
@@ -248,5 +269,99 @@ describe('generationOutputApplicationService 图层栈', () => {
     const latest = useCanvasStore.getState();
     expect(collectInputMedia(targetNodeId, latest.nodes, latest.edges).map((output) => output.url))
       .toEqual(['/managed/composite.png']);
+  });
+
+  it('重复 completion 直接复用同一节点且不会创建第二份 V3 文档', async () => {
+    setupCanvas('image', CANVAS_NODE_TYPES.layerStackResult);
+    const layerContract = contract(2, 'layer-stack');
+    layerContract.resultKind = 'layer-stack';
+    layerContract.outputs.forEach((item, index) => {
+      item.descriptor.semantic = { kind: 'layer', resultKind: 'image', label: `图层 ${index + 1}` };
+      item.descriptor.layer = { index, opacity: 1, blendMode: 'normal' };
+    });
+    const completionId = 'layer-idempotent-completion';
+    const createLayerStackDocument = vi.fn(async () => layerStackProjection());
+    const input = {
+      sourceNodeId: 'source-node',
+      placeholderNodeId: 'placeholder-node',
+      resultNodeType: CANVAS_NODE_TYPES.layerStackResult,
+      contract: layerContract,
+      completionId,
+      preparedLayerStack: layerStackDocument(completionId),
+      createLayerStackDocument,
+    };
+
+    const first = await commitCanvasGenerationOutputs(input);
+    const second = await commitCanvasGenerationOutputs(input);
+
+    expect(first.idempotent).toBe(false);
+    expect(second).toMatchObject({ idempotent: true, resultNodeIds: ['placeholder-node'] });
+    expect(createLayerStackDocument).toHaveBeenCalledOnce();
+    expect(useCanvasStore.getState().nodes.filter((node) => (
+      node.data.generationOutputCommitId === completionId
+    ))).toHaveLength(1);
+  });
+
+  it('V3 保存失败时不提交完成态，节点删除或取消后按精确 projection 补偿', async () => {
+    setupCanvas('image', CANVAS_NODE_TYPES.layerStackResult);
+    const layerContract = contract(2, 'layer-stack');
+    layerContract.resultKind = 'layer-stack';
+    layerContract.outputs.forEach((item, index) => {
+      item.descriptor.semantic = { kind: 'layer', resultKind: 'image', label: `图层 ${index + 1}` };
+      item.descriptor.layer = { index, opacity: 1, blendMode: 'normal' };
+    });
+    const completionId = 'layer-failure-completion';
+    const base = {
+      sourceNodeId: 'source-node',
+      placeholderNodeId: 'placeholder-node',
+      resultNodeType: CANVAS_NODE_TYPES.layerStackResult,
+      contract: layerContract,
+      completionId,
+      preparedLayerStack: layerStackDocument(completionId),
+    };
+    const rollbackAfterSaveFailure = vi.fn(async () => true);
+    await expect(commitCanvasGenerationOutputs({
+      ...base,
+      createLayerStackDocument: vi.fn(async () => { throw new Error('V3 初始保存失败'); }),
+      rollbackLayerStackDocument: rollbackAfterSaveFailure,
+    })).rejects.toThrow('V3 初始保存失败');
+    expect(rollbackAfterSaveFailure).not.toHaveBeenCalled();
+    expect(useCanvasStore.getState().nodes.find((node) => node.id === 'placeholder-node')?.data)
+      .toMatchObject({ imageUrl: null });
+    expect(useCanvasStore.getState().nodes.find((node) => node.id === 'placeholder-node')?.data)
+      .not.toHaveProperty('generationOutputCommitId');
+
+    const projection = layerStackProjection();
+    const rollbackDeleted = vi.fn(async () => true);
+    await expect(commitCanvasGenerationOutputs({
+      ...base,
+      createLayerStackDocument: vi.fn(async () => {
+        useCanvasStore.getState().deleteNode('placeholder-node');
+        return projection;
+      }),
+      rollbackLayerStackDocument: rollbackDeleted,
+    })).rejects.toThrow(/占位节点已被删除/);
+    expect(rollbackDeleted).toHaveBeenCalledWith(projection);
+    expect(useCanvasStore.getState().nodes.some((node) => (
+      node.data.generationOutputCommitId === completionId
+    ))).toBe(false);
+
+    setupCanvas('image', CANVAS_NODE_TYPES.layerStackResult);
+    const controller = new AbortController();
+    const rollbackCancelled = vi.fn(async () => false);
+    await expect(commitCanvasGenerationOutputs({
+      ...base,
+      signal: controller.signal,
+      createLayerStackDocument: vi.fn(async () => {
+        controller.abort();
+        return projection;
+      }),
+      rollbackLayerStackDocument: rollbackCancelled,
+    })).rejects.toThrow(/已取消/);
+    expect(rollbackCancelled).toHaveBeenCalledWith(projection);
+    expect(useCanvasStore.getState().nodes.find((node) => node.id === 'placeholder-node')?.data)
+      .toMatchObject({ imageUrl: null });
+    expect(useCanvasStore.getState().nodes.find((node) => node.id === 'placeholder-node')?.data)
+      .not.toHaveProperty('imageEditSession');
   });
 });

@@ -21,6 +21,7 @@ vi.mock('@/platform/runtime', () => ({
 
 import {
   collectImageEditorV3ResourceRefs,
+  deleteImageEditorV3DocumentIfRevision,
   ImageEditorV3CommandRepository,
   ingestImageEditorV3Source,
   persistImageEditorV3BrushTiles,
@@ -41,6 +42,7 @@ function createPlatform(): ImageEditorV3Platform {
       revision: request.document.revision,
       previewRef: request.previewRef ?? null,
     })),
+    deleteDocumentIfRevision: vi.fn(async () => ({ deleted: true })),
     importSource: vi.fn(async () => ({ status: 'cancelled' as const })),
     ingestSource: vi.fn(),
     readSourceMetadata: vi.fn(),
@@ -93,6 +95,19 @@ afterEach(() => {
 })
 
 describe('图片编辑 V3 commands 契约', () => {
+  it('条件删除通过 PAL 发送可取消的精确 revision 请求', async () => {
+    const platform = createPlatform()
+    mocks.getPlatform.mockReturnValue({ imageEditorV3: platform })
+    const request = {
+      requestId: 'document-delete-if-revision',
+      documentRef: 'image-edit-v3:document-contract' as const,
+      expectedRevision: 0,
+    }
+
+    await expect(deleteImageEditorV3DocumentIfRevision(request)).resolves.toEqual({ deleted: true })
+    expect(platform.deleteDocumentIfRevision).toHaveBeenCalledWith(request)
+  })
+
   it('只从文档内容收集内容寻址引用并包含预览资源', () => {
     expect(collectImageEditorV3ResourceRefs(createDocument(0), PREVIEW_REF)).toEqual([
       SOURCE_REF,

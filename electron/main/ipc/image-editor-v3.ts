@@ -31,6 +31,7 @@ import {
   normalizeImageEditorV3Document,
   parseImageEditorV3BasePayload,
   parseImageEditorV3GarbageCollectPayload,
+  parseImageEditorV3DeleteIfRevisionPayload,
   parseImageEditorV3LoadPayload,
   parseImageEditorV3SavePayload,
   type SaveDocumentPayload,
@@ -48,6 +49,7 @@ export {
   parseImageEditorV3FastProxyPayload,
   parseImageEditorV3IngestSourcePayload,
   parseImageEditorV3LoadPayload,
+  parseImageEditorV3DeleteIfRevisionPayload,
   parseImageEditorV3RelinkPackageExternalSourcePayload,
   parseImageEditorV3SavePayload,
   parseImageEditorV3TilePayload,
@@ -365,6 +367,25 @@ export function registerImageEditorV3Ipc(): void {
       return saveDocument(payload)
     })
   ), guard)
+  registerIpcHandler(
+    'imageEditorV3:document:deleteIfRevision',
+    parseImageEditorV3DeleteIfRevisionPayload,
+    (payload, event) => runRequest(
+      'document.delete_if_revision',
+      payload.requestId,
+      event.sender.id,
+      async (signal) => {
+        throwIfAborted(signal)
+        const deleted = await getRuntime().documents.deleteIfRevision(
+          payload.documentRef,
+          payload.expectedRevision,
+        )
+        throwIfAborted(signal)
+        return { deleted }
+      },
+    ),
+    guard,
+  )
   registerImageEditorV3SourceIpc({
     sources: getRuntime().sources,
     sourceIngestor: getRuntime().sourceIngestor,

@@ -399,6 +399,13 @@ describe('useCanvasResumePolling 结构化结果恢复', () => {
         imageUrl: '/managed/composite.png',
         previewImageUrl: '/managed/composite-preview.webp',
         aspectRatio: '1:1',
+        imageEditSession: {
+          kind: 'image-edit-v3',
+          sourceUrl: '/managed/composite.png',
+          documentRef: 'image-edit-v3:resumed-layer-stack',
+          revision: 0,
+          previewRef: null,
+        },
         resultKind: 'layer-stack',
         isGenerating: false,
         generationStartedAt: null,
@@ -420,6 +427,14 @@ describe('useCanvasResumePolling 结构化结果恢复', () => {
       providerId: 'volcengine',
     })));
     expect(generationMocks.persistGenerationResult).not.toHaveBeenCalled();
+    expect(useCanvasStore.getState().nodes.find((node) => node.id === result.id)?.data)
+      .toMatchObject({
+        imageUrl: '/managed/composite.png',
+        imageEditSession: {
+          documentRef: 'image-edit-v3:resumed-layer-stack',
+          revision: 0,
+        },
+      });
     await waitFor(() => expect(
       useCanvasStore.getState().nodes.find((node) => node.id === source.id)?.data.latestExecution,
     ).toMatchObject({
