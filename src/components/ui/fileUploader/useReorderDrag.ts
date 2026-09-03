@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import type { RefObject } from 'react'
 
 export interface FilePreviewDragState {
   isDragging: boolean
@@ -16,6 +17,7 @@ interface UseReorderDragParams {
   isCustomDragging: boolean
   files: string[]
   layout?: 'horizontal' | 'vertical' | 'grid'
+  dragBoundaryRef?: RefObject<HTMLElement | null>
   allowButtonTarget?: boolean
   onReorder?: (from: number, to: number) => void
   onDragStateChange?: (isDragging: boolean) => void
@@ -39,6 +41,7 @@ export function useReorderDrag(params: UseReorderDragParams) {
     isCustomDragging,
     files,
     layout = 'horizontal',
+    dragBoundaryRef,
     allowButtonTarget = false,
     onReorder,
     onDragStateChange,
@@ -56,9 +59,18 @@ export function useReorderDrag(params: UseReorderDragParams) {
     width: number
     height: number
   } | null>>([])
+  const dragBoundaryRectRef = useRef<{
+    left: number
+    top: number
+    right: number
+    bottom: number
+    width: number
+    height: number
+  } | null>(null)
   dragStateRef.current = dragState
 
   const resetDragState = useCallback(() => {
+    dragBoundaryRectRef.current = null
     setDragState(INITIAL_DRAG_STATE)
   }, [])
 
@@ -95,10 +107,25 @@ export function useReorderDrag(params: UseReorderDragParams) {
       if (!draggingOriginal) return
       // 用"原始位置 + 鼠标位移"算出拖拽项当前应在的中心点，不读它自己的实时 rect
       // （实时 rect 还要受调用方为视觉跟手施加的 transform、画布缩放等影响，换算麻烦还容易兜圈子）
-      const draggingCenterX =
-        draggingOriginal.left + draggingOriginal.width / 2 + (e.clientX - dragStateRef.current.startX)
-      const draggingCenterY =
-        draggingOriginal.top + draggingOriginal.height / 2 + (e.clientY - dragStateRef.current.startY)
+      let currentX = e.clientX
+      let currentY = e.clientY
+      if (layout === 'vertical') {
+        currentX = dragStateRef.current.startX
+        const boundary = dragBoundaryRectRef.current
+        if (boundary && boundary.height >= draggingOriginal.height) {
+          const minCurrentY = dragStateRef.current.startY + boundary.top - draggingOriginal.top
+          const maxCurrentY = dragStateRef.current.startY + boundary.bottom
+            - (draggingOriginal.top + draggingOriginal.height)
+          currentY = Math.min(Math.max(e.clientY, minCurrentY), maxCurrentY)
+        }
+      }
+
+      const draggingCenterX = draggingOriginal.left
+        + draggingOriginal.width / 2
+        + (currentX - dragStateRef.current.startX)
+      const draggingCenterY = draggingOriginal.top
+        + draggingOriginal.height / 2
+        + (currentY - dragStateRef.current.startY)
 
       let newToIndex = from
       let minDist = Infinity
@@ -129,15 +156,15 @@ export function useReorderDrag(params: UseReorderDragParams) {
       if (minDist < threshold && newToIndex !== oldTo) {
         setDragState({
           ...dragStateRef.current,
-          currentX: e.clientX,
-          currentY: e.clientY,
+          currentX,
+          currentY,
           toIndex: newToIndex
         })
       } else {
         setDragState({
           ...dragStateRef.current,
-          currentX: e.clientX,
-          currentY: e.clientY
+          currentX,
+          currentY
         })
       }
     }
@@ -177,7 +204,12 @@ export function useReorderDrag(params: UseReorderDragParams) {
     const handleMouseMove = (e: MouseEvent) => {
       const deltaX = Math.abs(e.clientX - startX)
       const deltaY = Math.abs(e.clientY - startY)
-      if (deltaX > 25 || deltaY > 25) {
+      const crossedDragThreshold = layout === 'vertical'
+        ? deltaY > 25
+        : layout === 'horizontal'
+          ? deltaX > 25
+          : deltaX > 25 || deltaY > 25
+      if (crossedDragThreshold) {
         // 此刻还没有任何让位位移发生，是缓存"原始槛位"几何的唯一安全时机
         originalRectsRef.current = itemRefs.current.map((el) =>
           el ? (() => {
@@ -185,6 +217,19 @@ export function useReorderDrag(params: UseReorderDragParams) {
             return { left: rect.left, top: rect.top, width: rect.width, height: rect.height }
           })() : null
         )
+        if (dragBoundaryRef?.current) {
+          const rect = dragBoundaryRef.current.getBoundingClientRect()
+          dragBoundaryRectRef.current = {
+            left: rect.left,
+            top: rect.top,
+            right: rect.right,
+            bottom: rect.bottom,
+            width: rect.width,
+            height: rect.height
+          }
+        } else {
+          dragBoundaryRectRef.current = null
+        }
         setDragState((prev) => ({ ...prev, isDragging: true }))
         moved = true
       }
@@ -215,7 +260,9 @@ export function useReorderDrag(params: UseReorderDragParams) {
     dragState.isDropping,
     dragState.startX,
     dragState.startY,
+    dragBoundaryRef,
     files,
+    layout,
     onImageClick,
     resetDragState
   ])

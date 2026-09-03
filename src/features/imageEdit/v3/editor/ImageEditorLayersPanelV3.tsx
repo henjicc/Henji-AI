@@ -6,7 +6,7 @@ import {
   Trash2,
 } from 'lucide-react'
 import type { MouseEvent } from 'react'
-import { useCallback, useMemo } from 'react'
+import { useCallback, useMemo, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Virtuoso } from 'react-virtuoso'
 
@@ -108,6 +108,7 @@ export function ImageEditorLayersPanelV3({
   embedded = false,
 }: ImageEditorLayersPanelV3Props): JSX.Element {
   const { t } = useTranslation('ui')
+  const layerViewportRef = useRef<HTMLDivElement>(null)
   const selectedLayerIds = useImageEditorSessionStoreV3(
     (state) => state.sessions[controller.sessionId]?.selectedLayerIds ?? EMPTY_LAYER_IDS,
   )
@@ -151,6 +152,7 @@ export function ImageEditorLayersPanelV3({
     isCustomDragging: false,
     files: rows.map((row) => row.layer.id),
     layout: 'vertical',
+    dragBoundaryRef: layerViewportRef,
     allowButtonTarget: true,
     onReorder: reorderRows,
   })
@@ -216,10 +218,7 @@ export function ImageEditorLayersPanelV3({
       dropping={dragState.isDropping && dragState.fromIndex === index}
       avoidanceDirection={avoidanceDirection}
       dropIndicator={dropIndicator}
-      dragOffset={{
-        x: dragState.currentX - dragState.startX,
-        y: dragState.currentY - dragState.startY,
-      }}
+      dragOffsetY={dragState.currentY - dragState.startY}
       dropOffsetRows={fromIndex !== null && toIndex !== null ? toIndex - fromIndex : 0}
       onDragMouseDown={(event) => {
         if (canDragImageEditLayerRowV3(row)) handleMouseDown(index, event)
@@ -366,6 +365,7 @@ export function ImageEditorLayersPanelV3({
       </div>
 
       <div
+        ref={layerViewportRef}
         role="tree"
         aria-label={t('imageEditor.v3.layers.title')}
         aria-multiselectable="true"

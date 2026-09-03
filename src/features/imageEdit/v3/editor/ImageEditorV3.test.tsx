@@ -428,6 +428,19 @@ describe('ImageEditorV3 professional shell', () => {
     ))
     expect(rows).toHaveLength(2)
     expect(rendered.container.querySelector('[data-layer-drag-handle]')).toBeNull()
+    const layerViewport = rendered.container.querySelector<HTMLElement>('[role="tree"]')
+    if (!layerViewport) throw new Error('图层列表视口未挂载')
+    layerViewport.getBoundingClientRect = () => ({
+      x: 0,
+      y: 0,
+      left: 0,
+      top: 0,
+      right: 400,
+      bottom: 88,
+      width: 400,
+      height: 88,
+      toJSON: () => ({}),
+    }) as DOMRect
     rows.forEach((row, index) => {
       row.getBoundingClientRect = () => ({
         x: 0,
@@ -445,10 +458,11 @@ describe('ImageEditorV3 professional shell', () => {
     if (!firstLayer) throw new Error('首个图层项未挂载')
     fireEvent.mouseDown(firstLayer, { button: 0, clientX: 200, clientY: 22 })
     fireEvent.mouseMove(window, { clientX: 200, clientY: 52 })
-    fireEvent.mouseMove(window, { clientX: 200, clientY: 66 })
+    fireEvent.mouseMove(window, { clientX: 900, clientY: 200 })
 
     await waitFor(() => {
       expect(rows[0].getAttribute('data-layer-drag-state')).toBe('dragging')
+      expect(rows[0].style.transform).toBe('translateY(44px)')
       expect(rows[1].getAttribute('data-layer-drag-state')).toBe('avoiding')
       expect(rows[1].style.transform).toBe('translateY(-100%)')
       const indicator = rows[1].querySelector('[data-layer-drop-indicator]')

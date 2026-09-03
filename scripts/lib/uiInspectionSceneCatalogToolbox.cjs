@@ -1414,11 +1414,14 @@ function createToolboxScenes(context) {
 
         const annotationLayer = editor.locator('[role="treeitem"][data-layer-type="annotation"]')
         await annotationLayer.locator('[data-layer-select]').click()
-        const [annotationLayerBox, blurLayerBox] = await Promise.all([
+        const [annotationLayerBox, blurLayerBox, layerViewportBox] = await Promise.all([
           annotationLayer.boundingBox(),
           blur.boundingBox(),
+          editor.locator('[role="tree"]').boundingBox(),
         ])
-        if (!annotationLayerBox || !blurLayerBox) throw new Error('无法读取图层拖拽位置')
+        if (!annotationLayerBox || !blurLayerBox || !layerViewportBox) {
+          throw new Error('无法读取图层拖拽位置或列表视口')
+        }
         const layerDragX = annotationLayerBox.x + annotationLayerBox.width / 2
         const layerDragStartY = annotationLayerBox.y + annotationLayerBox.height / 2
         await page.mouse.move(layerDragX, layerDragStartY)
@@ -1428,6 +1431,27 @@ function createToolboxScenes(context) {
           document.querySelector('[data-layer-type="annotation"]')
             ?.getAttribute('data-layer-drag-state') === 'dragging'
         ), undefined, { timeout: 2000 })
+        await page.mouse.move(layerViewportBox.x + 2, layerDragStartY + 30)
+        const horizontalLockedBox = await annotationLayer.boundingBox()
+        if (!horizontalLockedBox
+          || Math.abs(horizontalLockedBox.x - annotationLayerBox.x) > 1) {
+          throw new Error('图层拖拽仍会跟随鼠标产生横向位移')
+        }
+        await page.mouse.move(layerDragX, Math.max(1, layerViewportBox.y - 80))
+        const topLimitedBox = await annotationLayer.boundingBox()
+        if (!topLimitedBox || topLimitedBox.y < layerViewportBox.y - 1) {
+          throw new Error('图层拖拽可以超出列表视口顶部')
+        }
+        await page.mouse.move(
+          layerDragX,
+          layerViewportBox.y + layerViewportBox.height + 80,
+        )
+        const bottomLimitedBox = await annotationLayer.boundingBox()
+        if (!bottomLimitedBox
+          || bottomLimitedBox.y + bottomLimitedBox.height
+            > layerViewportBox.y + layerViewportBox.height + 1) {
+          throw new Error('图层拖拽可以超出列表视口底部')
+        }
         await page.mouse.move(
           layerDragX,
           blurLayerBox.y + blurLayerBox.height / 2,

@@ -34,7 +34,7 @@ interface ImageEditorLayerRowV3Props {
   dropping: boolean
   avoidanceDirection: -1 | 0 | 1
   dropIndicator: 'before' | 'after' | null
-  dragOffset: { x: number; y: number }
+  dragOffsetY: number
   dropOffsetRows: number
   onDragMouseDown: (event: MouseEvent<HTMLDivElement>) => void
   dragDisabled: boolean
@@ -68,7 +68,7 @@ export function ImageEditorLayerRowV3({
   dropping,
   avoidanceDirection,
   dropIndicator,
-  dragOffset,
+  dragOffsetY,
   dropOffsetRows,
   onDragMouseDown,
   dragDisabled,
@@ -82,9 +82,9 @@ export function ImageEditorLayerRowV3({
   const renameInputRef = useRef<HTMLInputElement>(null)
   const cancelRenameRef = useRef(false)
   const transform = dragging
-    ? `translate(${dragOffset.x}px, ${dragOffset.y}px) scale(1.01)`
+    ? `translateY(${dragOffsetY}px)`
     : dropping
-      ? `translate(0, ${dropOffsetRows * 100}%) scale(1.01)`
+      ? `translateY(${dropOffsetRows * 100}%)`
       : avoidanceDirection !== 0
         ? `translateY(${avoidanceDirection * 100}%)`
         : undefined
