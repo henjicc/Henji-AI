@@ -43,7 +43,7 @@ describe('视口全局效果分析缓存', () => {
     const plan = compileImageEditRenderPlanV3(document, registry, 'stable')
 
     expect(resolveImageEditorViewportAnalysisMipV3(document, plan)).toBe(5)
-    expect(resolveImageEditorViewportAnalysisMipV3(document, plan, 'draft')).toBe(6)
+    expect(resolveImageEditorViewportAnalysisMipV3(document, plan, 'draft')).toBe(5)
     expect(resolveImageEditorViewportAnalysisMipV3(
       createImageEditDocumentV3({ width: 20_000, height: 10_000 }),
       compileImageEditRenderPlanV3(
@@ -52,6 +52,25 @@ describe('视口全局效果分析缓存', () => {
         'stable',
       ),
     )).toBeNull()
+  })
+
+  it('为 5K～6K 图片保留高一级的辉光交互分析', () => {
+    const document = createImageEditDocumentV3({
+      width: 5_802,
+      height: 3_655,
+      sourceResourceId: `sha256:${'b'.repeat(64)}`,
+    })
+    document.layers.push(createImageEditEffectLayerV3(
+      'glow',
+      '辉光',
+      'image.vgpu-glow',
+      JSON.parse(JSON.stringify(createDefaultVgpuGlowOperationParams())),
+    ))
+    const plan = compileImageEditRenderPlanV3(document, registry, 'draft')
+
+    expect(resolveImageEditorViewportAnalysisMipV3(document, plan, 'draft')).toBe(4)
+    expect(Math.ceil(document.geometry.width / (2 ** 4))).toBe(363)
+    expect(Math.ceil(document.geometry.height / (2 ** 4))).toBe(229)
   })
 
   it('全局模糊分析复用预览 GPU 执行入口', async () => {

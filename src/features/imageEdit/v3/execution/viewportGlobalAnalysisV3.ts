@@ -24,7 +24,7 @@ import {
 
 const MEBIBYTE = 1024 * 1024
 const ANALYSIS_CACHE_BYTES = 160 * MEBIBYTE
-const INTERACTIVE_ANALYSIS_MAX_EDGE = 320
+const INTERACTIVE_ANALYSIS_MAX_EDGE = 640
 const registry = createBuiltInImageEditRenderNodeRegistry()
 
 interface ViewportGlobalAnalysisEntryV3 {
@@ -192,8 +192,9 @@ export function resolveImageEditorViewportAnalysisMipV3(
     .map((node) => registry.get(node.definitionId)?.globalAnalysis?.maxEdge)
     .filter((value): value is number => typeof value === 'number')
   if (maxEdges.length === 0) return null
-  // 连续调参只需要一张可信、无接缝的整图反馈。把工作集限制在 320px
-  // 最长边可确保每一代都有机会在交互预算内完成，稳定态再恢复节点精度。
+  // 连续调参仍需保留足够的散射结构，否则辉光金字塔再次二分后会被放大成
+  // 明显的低清光幕。640px 让常见 5K～6K 图片的交互分析比旧档高一级 mip，
+  // 像素量约为稳定态的四分之一，同时保留快速连续反馈。
   const maxEdge = quality === 'draft'
     ? Math.min(INTERACTIVE_ANALYSIS_MAX_EDGE, ...maxEdges)
     : Math.min(...maxEdges)
