@@ -219,7 +219,7 @@ describe('ImageEditorV3 floating panels and annotations', () => {
     const layer = changes[0].layers.at(-1)
     expect(layer?.type).toBe('annotation')
     if (layer?.type === 'annotation') {
-      expect(layer.annotations[0]).toMatchObject({ type: 'rect', x: 40, y: 80, lineWidth: 4 })
+      expect(layer.annotations[0]).toMatchObject({ type: 'rect', x: 40, y: 80, lineWidth: 14 })
       expect(Object.values(
         useImageEditorInteractionStoreV3.getState().annotationSelectionBySession,
       )).toContainEqual({ layerId: layer.id, annotationId: layer.annotations[0].id })
@@ -290,7 +290,7 @@ describe('ImageEditorV3 floating panels and annotations', () => {
     await waitFor(() => expect(changes).toHaveLength(1))
     const rectangleLayer = changes[0].layers.at(-1)
     if (rectangleLayer?.type === 'annotation') {
-      expect(rectangleLayer.annotations.at(-1)).toMatchObject({ type: 'rect', lineWidth: 14 })
+      expect(rectangleLayer.annotations.at(-1)).toMatchObject({ type: 'rect', lineWidth: 54 })
     }
 
     fireEvent.click(screen.getByRole('button', { name: '标注工具' }))

@@ -48,7 +48,6 @@ export function ImageMarkToolV3ToolbarActions({
 }: ImageMarkToolV3ToolbarActionsProps): JSX.Element {
   const { t } = useTranslation('ui')
   const saveFailed = host.persistenceStatus?.kind === 'failed'
-  const saving = host.persistenceStatus?.kind === 'saving'
   const exportUnavailable = host.rasterExportReadiness.state !== 'ready'
   const exportReason = exportUnavailable
     ? resolveImageEditorReadinessReasonV3(host.rasterExportReadiness, t)
@@ -63,9 +62,6 @@ export function ImageMarkToolV3ToolbarActions({
         onPasteFromClipboard={() => void host.runAfterSave(onPasteFromClipboard)}
         onCreateBlank={() => void host.runAfterSave(onCreateBlank)}
       />
-      {saving ? (
-        <span className={UI_TEXT_META_CLASS}>{t('imageEditor.v3.host.toolbar.saving')}</span>
-      ) : null}
       {saveFailed ? (
         <UiButton
           variant="ghost"

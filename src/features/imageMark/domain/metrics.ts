@@ -21,7 +21,7 @@ export {
 export const DEFAULT_TEXT_SIZE_PERCENT = 10;
 export const MIN_TEXT_SIZE_PERCENT = 1;
 export const MAX_TEXT_SIZE_PERCENT = 30;
-export const DEFAULT_LINE_WIDTH_PERCENT = 0.4;
+export const DEFAULT_LINE_WIDTH_PERCENT = 1.5;
 export const MIN_LINE_WIDTH_PERCENT = 0.1;
 export const MAX_LINE_WIDTH_PERCENT = 3;
 export const TEXT_LINE_HEIGHT = 1.2;

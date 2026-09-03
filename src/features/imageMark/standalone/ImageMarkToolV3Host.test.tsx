@@ -328,7 +328,39 @@ describe('ImageMarkToolV3Host', () => {
     expect(mocks.ingest).not.toHaveBeenCalled()
     expect(mocks.save).not.toHaveBeenCalled()
     expect(onSessionReferenceChange).toHaveBeenCalledWith(initialSession)
-    expect(await screen.findByText('版本 4')).toBeTruthy()
+    expect(screen.queryByText('版本 4')).toBeNull()
+    expect(rendered.container.querySelector('[data-command-bar]')?.textContent)
+      .not.toMatch(/版本\s*\d+/)
+  })
+
+  it('自动保存期间不在右上角插入瞬时状态或推动操作按钮', async () => {
+    const rendered = renderHost()
+    await waitFor(() => expect(rendered.container.querySelector('[data-image-editor-v3]')).toBeTruthy())
+    const actions = rendered.container.querySelector<HTMLElement>('[data-command-bar-actions]')
+    expect(actions).toBeTruthy()
+    const stableActionsText = actions?.textContent
+
+    let finishSave: ((reference: ImageEditDocumentReferenceV3) => void) | undefined
+    mocks.save.mockImplementationOnce((document: ImageEditDocumentV3) => {
+      persistedDocument = document
+      return new Promise<ImageEditDocumentReferenceV3>((resolve) => {
+        finishSave = resolve
+      })
+    })
+
+    const opacity = await findLayerOpacity()
+    fireEvent.change(opacity, { target: { value: '0.7' } })
+    fireEvent.pointerUp(opacity)
+    await waitFor(() => expect(mocks.save).toHaveBeenCalledTimes(2), { timeout: 1_500 })
+
+    expect(screen.queryByText('正在保存…')).toBeNull()
+    expect(actions?.textContent).toBe(stableActionsText)
+    finishSave?.({
+      documentId: persistedDocument?.id ?? 'toolbox-document',
+      revision: persistedDocument?.revision ?? 1,
+      previewRef: null,
+    })
+    await Promise.resolve()
   })
 
   it('选定格式后先落盘待保存命令，再读取权威快照执行栅格分块导出', async () => {

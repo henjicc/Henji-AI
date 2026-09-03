@@ -83,7 +83,10 @@ export function ImageEditorCommandBarV3({
         >
           <ImageEditorToolParametersV3 controller={controller} bus={bus} />
         </div>
-        <div className="flex min-w-0 shrink-0 items-center gap-3">
+        <div
+          data-command-bar-actions
+          className="flex min-w-0 shrink-0 items-center gap-3"
+        >
           <span className="w-12 text-right text-xs tabular-nums text-text-muted">
             {Math.round(zoom * 100)}%
           </span>

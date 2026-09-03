@@ -1124,6 +1124,24 @@ function createToolboxScenes(context) {
         const annotationStroke = annotationParameters.getByRole('slider', {
           name: /^(描边|Stroke)$/i,
         })
+        if (Number(await annotationStroke.inputValue()) !== 1.5) {
+          throw new Error(`新标注默认描边不是 1.5%：${await annotationStroke.inputValue()}`)
+        }
+        const commandBarActions = editor.locator('[data-command-bar-actions]')
+        await commandBarActions.evaluate((actions) => {
+          const records = [{
+            text: actions.textContent ?? '',
+            width: actions.getBoundingClientRect().width,
+          }]
+          const observer = new MutationObserver(() => {
+            records.push({
+              text: actions.textContent ?? '',
+              width: actions.getBoundingClientRect().width,
+            })
+          })
+          observer.observe(actions, { childList: true, characterData: true, subtree: true })
+          window.__imageEditorCommandBarActionsObservation = { observer, records }
+        })
         const beforeAnnotationStrokeRevision = await readRevision()
         await annotationStroke.evaluate((input) => {
           const valueSetter = Object.getOwnPropertyDescriptor(
@@ -1146,6 +1164,21 @@ function createToolboxScenes(context) {
         }
         if (!(await annotationParameters.textContent())?.includes('1.4%')) {
           throw new Error('标注描边没有以百分比显示')
+        }
+        await page.waitForTimeout(700)
+        const actionObservation = await commandBarActions.evaluate(() => {
+          const observation = window.__imageEditorCommandBarActionsObservation
+          observation?.observer.disconnect()
+          delete window.__imageEditorCommandBarActionsObservation
+          return observation?.records ?? []
+        })
+        const transientInternalStatus = actionObservation.find(({ text }) => (
+          /版本\s*\d+|正在保存|Saving/i.test(text)
+        ))
+        const actionWidths = actionObservation.map(({ width }) => width)
+        if (transientInternalStatus
+          || Math.max(...actionWidths) - Math.min(...actionWidths) > 0.5) {
+          throw new Error(`参数提交时右上角出现瞬时状态或位移：${JSON.stringify(actionObservation)}`)
         }
 
         const beforeAnnotationMove = await readRevision()
