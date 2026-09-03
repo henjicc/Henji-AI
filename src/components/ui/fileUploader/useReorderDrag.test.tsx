@@ -22,15 +22,17 @@ function rect(left: number, top: number): DOMRect {
 function Harness({
   onReorder,
   allowButtonTarget = false,
+  layout = 'grid',
 }: {
   onReorder: (from: number, to: number) => void
   allowButtonTarget?: boolean
+  layout?: 'grid' | 'vertical'
 }) {
   const { itemRefs, handleMouseDown } = useReorderDrag({
     disabled: false,
     isCustomDragging: false,
     files: ['first', 'second'],
-    layout: 'grid',
+    layout,
     allowButtonTarget,
     onReorder,
   });
@@ -85,6 +87,20 @@ describe('useReorderDrag grid layout', () => {
     });
     fireEvent.mouseMove(window, { clientX: 50, clientY: 80 });
     fireEvent.mouseMove(window, { clientX: 50, clientY: 170 });
+    fireEvent.mouseUp(window);
+    act(() => vi.advanceTimersByTime(150));
+
+    expect(onReorder).toHaveBeenCalledWith(0, 1);
+  });
+
+  it('纵向列表只按垂直中心判定插入位置', () => {
+    vi.useFakeTimers();
+    const onReorder = vi.fn();
+    const rendered = render(<Harness onReorder={onReorder} layout="vertical" />);
+
+    fireEvent.mouseDown(rendered.getByTestId('first'), { button: 0, clientX: 50, clientY: 50 });
+    fireEvent.mouseMove(window, { clientX: 350, clientY: 80 });
+    fireEvent.mouseMove(window, { clientX: 350, clientY: 170 });
     fireEvent.mouseUp(window);
     act(() => vi.advanceTimersByTime(150));
 

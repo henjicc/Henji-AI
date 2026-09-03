@@ -150,7 +150,7 @@ export function ImageEditorLayersPanelV3({
     disabled: rows.length < 2,
     isCustomDragging: false,
     files: rows.map((row) => row.layer.id),
-    layout: 'grid',
+    layout: 'vertical',
     allowButtonTarget: true,
     onReorder: reorderRows,
   })
@@ -182,8 +182,28 @@ export function ImageEditorLayersPanelV3({
     setSelectedLayerIds(controller.sessionId, [row.layer.id])
   }
 
-  const renderRow = (row: ImageEditLayerTreeRowV3, index: number): JSX.Element => (
-    <ImageEditorLayerRowV3
+  const renderRow = (row: ImageEditLayerTreeRowV3, index: number): JSX.Element => {
+    const fromIndex = dragState.fromIndex
+    const toIndex = dragState.toIndex
+    const reordering = (dragState.isDragging || dragState.isDropping)
+      && fromIndex !== null
+      && toIndex !== null
+    let avoidanceDirection: -1 | 0 | 1 = 0
+    if (reordering && fromIndex < toIndex && index > fromIndex && index <= toIndex) {
+      avoidanceDirection = -1
+    } else if (reordering && fromIndex > toIndex && index < fromIndex && index >= toIndex) {
+      avoidanceDirection = 1
+    }
+    const dropIndicator = dragState.isDragging
+      && fromIndex !== null
+      && toIndex !== null
+      && fromIndex !== toIndex
+      && toIndex === index
+      ? (fromIndex < toIndex ? 'after' : 'before')
+      : null
+
+    return (
+      <ImageEditorLayerRowV3
       key={row.layer.id}
       controller={controller}
       row={row}
@@ -193,19 +213,21 @@ export function ImageEditorLayersPanelV3({
       onToggleExpanded={(groupId) => toggleGroupExpanded(controller.sessionId, groupId)}
       itemRef={(element) => { itemRefs.current[index] = element }}
       dragging={dragState.isDragging && dragState.fromIndex === index}
-      dropTarget={dragState.isDragging
-        && dragState.toIndex === index
-        && dragState.fromIndex !== index}
+      dropping={dragState.isDropping && dragState.fromIndex === index}
+      avoidanceDirection={avoidanceDirection}
+      dropIndicator={dropIndicator}
       dragOffset={{
         x: dragState.currentX - dragState.startX,
         y: dragState.currentY - dragState.startY,
       }}
+      dropOffsetRows={fromIndex !== null && toIndex !== null ? toIndex - fromIndex : 0}
       onDragMouseDown={(event) => {
         if (canDragImageEditLayerRowV3(row)) handleMouseDown(index, event)
       }}
       dragDisabled={!canDragImageEditLayerRowV3(row)}
     />
-  )
+    )
+  }
 
   return (
     <section data-layers-panel className="flex min-h-0 flex-1 flex-col">

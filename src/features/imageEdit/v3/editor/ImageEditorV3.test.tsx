@@ -446,6 +446,16 @@ describe('ImageEditorV3 professional shell', () => {
     fireEvent.mouseDown(firstLayer, { button: 0, clientX: 200, clientY: 22 })
     fireEvent.mouseMove(window, { clientX: 200, clientY: 52 })
     fireEvent.mouseMove(window, { clientX: 200, clientY: 66 })
+
+    await waitFor(() => {
+      expect(rows[0].getAttribute('data-layer-drag-state')).toBe('dragging')
+      expect(rows[1].getAttribute('data-layer-drag-state')).toBe('avoiding')
+      expect(rows[1].style.transform).toBe('translateY(-100%)')
+      const indicator = rows[1].querySelector('[data-layer-drop-indicator]')
+      expect(indicator?.getAttribute('data-position')).toBe('after')
+      expect(rows[1].className).not.toContain('ring-inset')
+    })
+
     fireEvent.mouseUp(window)
 
     await waitFor(() => expect(changes).toHaveLength(1))

@@ -518,18 +518,22 @@ function createToolboxScenes(context) {
           const items = [...menu.querySelectorAll('[role="menuitem"]')]
           return {
             panelWidth: panel?.getBoundingClientRect().width ?? 0,
+            maxLabelWidth: Math.max(0, ...items.map((item) => (
+              item.querySelector('span')?.getBoundingClientRect().width ?? 0
+            ))),
             items: items.map((item) => {
               const style = getComputedStyle(item)
-              return { textAlign: style.textAlign, justifyContent: style.justifyContent }
+              return { textAlign: style.textAlign }
             }),
           }
         })
-        if (layerMenuLayout.panelWidth < 160
-          || layerMenuLayout.panelWidth > 192
+        const layerMenuHorizontalSpace = layerMenuLayout.panelWidth - layerMenuLayout.maxLabelWidth
+        if (layerMenuLayout.panelWidth < 72
+          || layerMenuLayout.panelWidth > 128
+          || layerMenuHorizontalSpace < 16
+          || layerMenuHorizontalSpace > 40
           || layerMenuLayout.items.length === 0
-          || layerMenuLayout.items.some(({ textAlign, justifyContent }) => (
-            textAlign !== 'left' || justifyContent !== 'flex-start'
-          ))) {
+          || layerMenuLayout.items.some(({ textAlign }) => textAlign !== 'left')) {
           throw new Error(`图层添加菜单没有收窄并左对齐：${JSON.stringify(layerMenuLayout)}`)
         }
         await page.keyboard.press('Escape')
@@ -1407,6 +1411,60 @@ function createToolboxScenes(context) {
         if (postEffectAnnotationRenders !== 0) {
           throw new Error(`改变箭头描边错误重算了 ${postEffectAnnotationRenders} 次底图效果`)
         }
+
+        const annotationLayer = editor.locator('[role="treeitem"][data-layer-type="annotation"]')
+        await annotationLayer.locator('[data-layer-select]').click()
+        const [annotationLayerBox, blurLayerBox] = await Promise.all([
+          annotationLayer.boundingBox(),
+          blur.boundingBox(),
+        ])
+        if (!annotationLayerBox || !blurLayerBox) throw new Error('无法读取图层拖拽位置')
+        const layerDragX = annotationLayerBox.x + annotationLayerBox.width / 2
+        const layerDragStartY = annotationLayerBox.y + annotationLayerBox.height / 2
+        await page.mouse.move(layerDragX, layerDragStartY)
+        await page.mouse.down()
+        await page.mouse.move(layerDragX, layerDragStartY + 30)
+        await page.waitForFunction(() => (
+          document.querySelector('[data-layer-type="annotation"]')
+            ?.getAttribute('data-layer-drag-state') === 'dragging'
+        ), undefined, { timeout: 2000 })
+        await page.mouse.move(
+          layerDragX,
+          blurLayerBox.y + blurLayerBox.height / 2,
+          { steps: 5 },
+        )
+        await page.waitForFunction(() => {
+          const targets = [...document.querySelectorAll('[data-layer-type="effect"]')]
+          const target = targets.find((row) => row.textContent?.match(/^(模糊|Blur)/))
+          const indicator = target?.querySelector('[data-layer-drop-indicator]')
+          return target?.getAttribute('data-layer-drag-state') === 'avoiding'
+            && target instanceof HTMLElement
+            && target.style.transform === 'translateY(-100%)'
+            && indicator?.getAttribute('data-position') === 'after'
+            && !target.className.includes('ring-inset')
+        }, undefined, { timeout: 2000 }).catch(() => {
+          throw new Error('图层拖拽没有显示行间插入位置，或目标图层没有实时向上避让')
+        })
+        await page.mouse.up()
+        await page.waitForFunction(() => (
+          [...document.querySelectorAll('[role="treeitem"][data-layer-type]')]
+            .map((row) => row.getAttribute('data-layer-type'))
+            .slice(0, 4)
+            .join(',') === 'effect,effect,annotation,raster'
+        ), undefined, { timeout: 3000 }).catch(() => {
+          throw new Error('图层拖拽松手后没有提交预览中的顺序')
+        })
+        const moveLayerUp = editor.getByRole('button', { name: /^(上移图层|Move layer up)$/i })
+        await moveLayerUp.click()
+        await moveLayerUp.click()
+        await page.waitForFunction(() => (
+          [...document.querySelectorAll('[role="treeitem"][data-layer-type]')]
+            .map((row) => row.getAttribute('data-layer-type'))
+            .slice(0, 4)
+            .join(',') === 'annotation,effect,effect,raster'
+        ), undefined, { timeout: 3000 }).catch(() => {
+          throw new Error('图层拖拽验证后没有恢复标注层顺序')
+        })
 
         const beforeCropRevision = await readRevision()
         await editor.locator('[data-tool-id="crop"]').click()

@@ -18,6 +18,7 @@ import { useTranslation } from 'react-i18next'
 
 import { UiIconButton, UiInput, UiOptionButton } from '@/components/ui'
 import { UI_DURATION, uiTransition } from '@/components/ui/motion'
+import { Z_LAYERS } from '@/core/theme/zLayers'
 import type { ImageEditLayerTreeRowV3 } from './layerTreeV3'
 import type { ImageEditorV3Controller } from './types'
 
@@ -30,8 +31,11 @@ interface ImageEditorLayerRowV3Props {
   onToggleExpanded: (groupId: string) => void
   itemRef: (element: HTMLDivElement | null) => void
   dragging: boolean
-  dropTarget: boolean
+  dropping: boolean
+  avoidanceDirection: -1 | 0 | 1
+  dropIndicator: 'before' | 'after' | null
   dragOffset: { x: number; y: number }
+  dropOffsetRows: number
   onDragMouseDown: (event: MouseEvent<HTMLDivElement>) => void
   dragDisabled: boolean
 }
@@ -61,8 +65,11 @@ export function ImageEditorLayerRowV3({
   onToggleExpanded,
   itemRef,
   dragging,
-  dropTarget,
+  dropping,
+  avoidanceDirection,
+  dropIndicator,
   dragOffset,
+  dropOffsetRows,
   onDragMouseDown,
   dragDisabled,
 }: ImageEditorLayerRowV3Props): JSX.Element {
@@ -74,6 +81,13 @@ export function ImageEditorLayerRowV3({
   const [draftName, setDraftName] = useState(row.layer.name)
   const renameInputRef = useRef<HTMLInputElement>(null)
   const cancelRenameRef = useRef(false)
+  const transform = dragging
+    ? `translate(${dragOffset.x}px, ${dragOffset.y}px) scale(1.01)`
+    : dropping
+      ? `translate(0, ${dropOffsetRows * 100}%) scale(1.01)`
+      : avoidanceDirection !== 0
+        ? `translateY(${avoidanceDirection * 100}%)`
+        : undefined
 
   useEffect(() => {
     if (!renaming) setDraftName(row.layer.name)
@@ -143,7 +157,14 @@ export function ImageEditorLayerRowV3({
       aria-expanded={row.layer.type === 'group' ? expanded : undefined}
       data-layer-id={row.layer.id}
       data-layer-type={row.layer.type}
-      className={`relative flex h-11 min-w-0 items-center gap-1 px-1.5 ${dropTarget ? 'ring-1 ring-inset ring-accent' : ''}`}
+      data-layer-drag-state={dragging
+        ? 'dragging'
+        : dropping
+          ? 'dropping'
+          : avoidanceDirection !== 0
+            ? 'avoiding'
+            : undefined}
+      className="relative flex h-11 min-w-0 items-center gap-1 px-1.5"
       onMouseDown={(event) => {
         if (renaming || !(event.target as HTMLElement).closest('[data-layer-select]')) return
         onDragMouseDown(event)
@@ -151,13 +172,21 @@ export function ImageEditorLayerRowV3({
       style={{
         paddingInlineStart: `${row.depth * 16 + 6}px`,
         opacity: dragging ? 0.78 : 1,
-        transform: dragging
-          ? `translate(${dragOffset.x}px, ${dragOffset.y}px) scale(1.01)`
-          : undefined,
+        pointerEvents: dragging || dropping ? 'none' : undefined,
+        transform,
         transition: dragging ? 'none' : uiTransition(['opacity', 'transform'], UI_DURATION.fast),
-        zIndex: dragging ? 2 : undefined,
+        zIndex: dragging || dropping ? Z_LAYERS.drag : undefined,
       }}
     >
+      {dropIndicator ? (
+        <span
+          data-layer-drop-indicator
+          data-position={dropIndicator}
+          className={`pointer-events-none absolute left-1.5 right-1.5 z-raised h-px bg-accent ${
+            dropIndicator === 'before' ? 'top-0' : 'bottom-0'
+          }`}
+        />
+      ) : null}
       {row.layer.type === 'group' ? (
         <UiIconButton
           className="h-7 w-7 shrink-0"

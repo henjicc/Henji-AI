@@ -15,7 +15,7 @@ interface UseReorderDragParams {
   disabled: boolean
   isCustomDragging: boolean
   files: string[]
-  layout?: 'horizontal' | 'grid'
+  layout?: 'horizontal' | 'vertical' | 'grid'
   allowButtonTarget?: boolean
   onReorder?: (from: number, to: number) => void
   onDragStateChange?: (isDragging: boolean) => void
@@ -112,7 +112,9 @@ export function useReorderDrag(params: UseReorderDragParams) {
         const targetCenterY = rect.top + rect.height / 2
         const dist = layout === 'grid'
           ? Math.hypot(draggingCenterX - targetCenterX, draggingCenterY - targetCenterY)
-          : Math.abs(draggingCenterX - targetCenterX)
+          : layout === 'vertical'
+            ? Math.abs(draggingCenterY - targetCenterY)
+            : Math.abs(draggingCenterX - targetCenterX)
         if (dist < minDist) {
           minDist = dist
           newToIndex = i
@@ -121,7 +123,9 @@ export function useReorderDrag(params: UseReorderDragParams) {
 
       const threshold = layout === 'grid'
         ? Math.max(draggingOriginal.width, draggingOriginal.height)
-        : 28
+        : layout === 'vertical'
+          ? draggingOriginal.height
+          : 28
       if (minDist < threshold && newToIndex !== oldTo) {
         setDragState({
           ...dragStateRef.current,
