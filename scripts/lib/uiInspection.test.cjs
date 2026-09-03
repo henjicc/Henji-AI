@@ -171,6 +171,24 @@ test('图层拆分有独立的结果节点与节点外图层界面场景', () =>
   assert.equal(scene.writesUserData, true)
 })
 
+test('多图层图片文档有完整编辑、实时保存与关闭重开的真实场景', () => {
+  const scene = UI_INSPECTION_SCENES.find(
+    (candidate) => candidate.id === 'canvas-multi-layer-document-editor'
+  )
+  assert.ok(scene)
+  assert.equal(scene.writesUserData, true)
+  const source = String(scene.setup)
+  for (const marker of [
+    'data-layer-stack-status="editable-v3"',
+    "result.dblclick()",
+    'commandBars !== 1',
+    'persistedRevision',
+    '关闭编辑器',
+  ]) {
+    assert.equal(source.includes(marker), true, `多图层图片文档 Reality 场景缺少关键验收：${marker}`)
+  }
+})
+
 test('九宫格生成与本地宫格切分共用一条真实 Electron 场景', () => {
   const scene = UI_INSPECTION_SCENES.find((candidate) => candidate.id === 'canvas-nine-grid')
   assert.ok(scene)

@@ -1,4 +1,5 @@
 import { createPlainTextPromptDocument } from '@/core/inputs/promptDocument';
+import { parseImageEditSessionReferenceV3 } from '@/core/imageEdit/v3/sessionReference';
 import { registry } from '@/core/ModelRegistry';
 
 import {
@@ -298,6 +299,17 @@ export function migrateLayerSeparationGenerationData(data: DynamicValueMap): voi
 
 /** 未知/损坏文档不猜测迁移，保留合成图并降级为普通可连接图片。 */
 export function migrateLayerStackResultData(data: DynamicValueMap): void {
+  const imageUrl = typeof data.imageUrl === 'string' ? data.imageUrl.trim() : '';
+  try {
+    const session = parseImageEditSessionReferenceV3(data.imageEditSession, imageUrl);
+    if (session && imageUrl && session.sourceUrl === imageUrl) {
+      data.resultKind = 'layer-stack';
+      return;
+    }
+  } catch {
+    // 损坏引用不进入 V3 编辑器；下方仍可尝试保留合法 V1 文档。
+  }
+  delete data.imageEditSession;
   try {
     validateLayerStackDocument(data.layerStackDocument as unknown as LayerStackDocumentV1);
     data.resultKind = 'layer-stack';

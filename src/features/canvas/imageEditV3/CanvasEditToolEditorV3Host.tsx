@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { UiButton, UiError, UiLoading } from '@/components/ui'
@@ -7,6 +7,7 @@ import type {
   ImageEditDocumentReferenceV3,
   ImageEditPersistenceSnapshotV3,
 } from '@/core/imageEdit/v3/serviceContracts'
+import type { ImageEditSessionReferenceV3 } from '@/core/imageEdit/v3/sessionReference'
 import { createLogger } from '@/core/logging'
 import {
   createImageEditorV3ResourceByteSizes,
@@ -41,19 +42,48 @@ type BootstrapState =
       resourceDescriptors: CanvasEditV3PreparedSession['resourceDescriptors']
     }
 
+export interface CanvasEditToolEditorV3Lifecycle {
+  flushPending: () => Promise<ImageEditSessionReferenceV3>
+}
+
+interface CanvasEditToolEditorV3HostProps extends VisualToolEditorProps {
+  beforePrepare?: (signal: AbortSignal) => Promise<ImageEditSessionReferenceV3>
+  onLifecycleChange?: (lifecycle: CanvasEditToolEditorV3Lifecycle | null) => void
+  onBootstrapKindChange?: (kind: BootstrapState['kind']) => void
+  onReferenceChange?: (session: ImageEditSessionReferenceV3) => void
+  toolbarLeading?: ReactNode
+  toolbarActions?: ReactNode
+  interactionDisabled?: boolean
+}
+
 export function CanvasEditToolEditorV3Host({
   options,
   onOptionsChange,
   onExecutionReadyChange,
   sourceImageUrl,
-}: VisualToolEditorProps): JSX.Element {
+  beforePrepare,
+  onLifecycleChange,
+  onBootstrapKindChange,
+  onReferenceChange,
+  toolbarLeading,
+  toolbarActions,
+  interactionDisabled = false,
+}: CanvasEditToolEditorV3HostProps): JSX.Element {
   const { t } = useTranslation()
   const repository = useMemo(createCanvasEditV3Repository, [])
   const initialOptionsRef = useRef<DynamicValueMap>(options)
   const onOptionsChangeRef = useRef(onOptionsChange)
   const onExecutionReadyChangeRef = useRef(onExecutionReadyChange)
+  const beforePrepareRef = useRef(beforePrepare)
+  const onLifecycleChangeRef = useRef(onLifecycleChange)
+  const onBootstrapKindChangeRef = useRef(onBootstrapKindChange)
+  const onReferenceChangeRef = useRef(onReferenceChange)
   onOptionsChangeRef.current = onOptionsChange
   onExecutionReadyChangeRef.current = onExecutionReadyChange
+  beforePrepareRef.current = beforePrepare
+  onLifecycleChangeRef.current = onLifecycleChange
+  onBootstrapKindChangeRef.current = onBootstrapKindChange
+  onReferenceChangeRef.current = onReferenceChange
   const [bootstrap, setBootstrap] = useState<BootstrapState>({ kind: 'loading' })
   const [bootstrapAttempt, setBootstrapAttempt] = useState(0)
   const [saving, setSaving] = useState(false)
@@ -62,6 +92,7 @@ export function CanvasEditToolEditorV3Host({
   const persistenceRef = useRef<ImageMarkV3PersistenceQueue | null>(null)
   const persistenceSnapshotRef = useRef<ImageEditPersistenceSnapshotV3 | null>(null)
   const autosaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const interactionRootRef = useRef<HTMLDivElement | null>(null)
 
   const publishReference = useCallback((reference: ImageEditDocumentReferenceV3): void => {
     const serialized = serializeCanvasEditV3SessionReference(
@@ -74,7 +105,30 @@ export function CanvasEditToolEditorV3Host({
     onOptionsChangeRef.current({
       [CANVAS_EDIT_V3_SESSION_OPTION]: serialized,
     })
+    onReferenceChangeRef.current?.(
+      createCanvasEditV3SessionReference(sourceImageUrl, reference),
+    )
   }, [sourceImageUrl])
+
+  const flushPending = useCallback(async (): Promise<ImageEditDocumentReferenceV3> => {
+    if (autosaveTimerRef.current) {
+      clearTimeout(autosaveTimerRef.current)
+      autosaveTimerRef.current = null
+    }
+    const queue = persistenceRef.current
+    const snapshot = persistenceSnapshotRef.current
+    if (!queue || !snapshot) throw new Error('画布图片编辑文档尚未准备完成')
+    queue.enqueue(snapshot)
+    return queue.flush()
+  }, [])
+
+  const flushSession = useCallback(async (): Promise<ImageEditSessionReferenceV3> => (
+    createCanvasEditV3SessionReference(sourceImageUrl, await flushPending())
+  ), [flushPending, sourceImageUrl])
+
+  const lifecycle = useMemo<CanvasEditToolEditorV3Lifecycle>(() => ({
+    flushPending: flushSession,
+  }), [flushSession])
 
   const isCurrentReference = useCallback((reference: ImageEditDocumentReferenceV3): boolean => {
     const current = persistenceSnapshotRef.current
@@ -146,12 +200,20 @@ export function CanvasEditToolEditorV3Host({
     logger.info('画布图片编辑 V3 会话开始准备', {
       event: 'canvas.image_edit_v3.bootstrap.start',
     })
-    void prepareCanvasEditV3Session({
-      sourceImageUrl,
-      toolOptions: initialOptionsRef.current,
-      repository,
-      signal: controller.signal,
-    }).then((prepared) => {
+    void (async () => {
+      const validatedSession = await beforePrepareRef.current?.(controller.signal)
+      return prepareCanvasEditV3Session({
+        sourceImageUrl,
+        toolOptions: validatedSession
+          ? {
+              ...initialOptionsRef.current,
+              [CANVAS_EDIT_V3_SESSION_OPTION]: serializeCanvasEditV3SessionReference(validatedSession),
+            }
+          : initialOptionsRef.current,
+        repository,
+        signal: controller.signal,
+      })
+    })().then((prepared) => {
       if (!active) return
       persistenceSnapshotRef.current = prepared.persistence
       persistenceRef.current = new ImageMarkV3PersistenceQueue({
@@ -191,17 +253,21 @@ export function CanvasEditToolEditorV3Host({
     }
   }, [bootstrapAttempt, publishReference, reportPersistenceStatus, repository, sourceImageUrl])
 
-  const flushPending = useCallback(async (): Promise<ImageEditDocumentReferenceV3> => {
-    if (autosaveTimerRef.current) {
-      clearTimeout(autosaveTimerRef.current)
-      autosaveTimerRef.current = null
+  useEffect(() => {
+    onBootstrapKindChangeRef.current?.(bootstrap.kind)
+    onLifecycleChangeRef.current?.(bootstrap.kind === 'ready' ? lifecycle : null)
+    return () => onLifecycleChangeRef.current?.(null)
+  }, [bootstrap.kind, lifecycle])
+
+  useEffect(() => {
+    const root = interactionRootRef.current
+    if (!root) return
+    const inertRoot = root as HTMLElement & { inert: boolean }
+    inertRoot.inert = interactionDisabled
+    return () => {
+      inertRoot.inert = false
     }
-    const queue = persistenceRef.current
-    const snapshot = persistenceSnapshotRef.current
-    if (!queue || !snapshot) throw new Error('画布图片编辑文档尚未准备完成')
-    queue.enqueue(snapshot)
-    return queue.flush()
-  }, [])
+  }, [interactionDisabled])
 
   useEffect(() => () => {
     if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current)
@@ -258,8 +324,29 @@ export function CanvasEditToolEditorV3Host({
     )
   }
 
+  const persistenceAction = saving || saveFailed ? (
+    saveFailed ? (
+      <UiButton
+        variant="plain"
+        size="sm"
+        onClick={() => { void flushPending().catch(() => undefined) }}
+      >
+        {t('toolDialog.imageEditorV3.retrySave')}
+      </UiButton>
+    ) : (
+      <span role="status" className="text-xs text-text-muted">
+        {t('toolDialog.imageEditorV3.saving')}
+      </span>
+    )
+  ) : null
+
   return (
-    <ImageEditorV3
+    <div
+      ref={interactionRootRef}
+      aria-busy={interactionDisabled || saving}
+      className="h-[min(76vh,900px)]"
+    >
+      <ImageEditorV3
       sourceImageUrl={sourceImageUrl}
       document={bootstrap.document}
       historySnapshot={bootstrap.history}
@@ -269,22 +356,15 @@ export function CanvasEditToolEditorV3Host({
       onDocumentChange={handleDocumentChange}
       onPersistenceChange={handlePersistenceChange}
       onReloadEditor={() => setBootstrapAttempt((value) => value + 1)}
-      toolbarActions={saving || saveFailed ? (
-        saveFailed ? (
-          <UiButton
-            variant="plain"
-            size="sm"
-            onClick={() => { void flushPending().catch(() => undefined) }}
-          >
-            {t('toolDialog.imageEditorV3.retrySave')}
-          </UiButton>
-        ) : (
-          <span role="status" className="text-xs text-text-muted">
-            {t('toolDialog.imageEditorV3.saving')}
-          </span>
-        )
-      ) : null}
-      className="h-[min(76vh,900px)]"
-    />
+      toolbarLeading={toolbarLeading}
+      toolbarActions={(
+        <>
+          {persistenceAction}
+          {toolbarActions}
+        </>
+      )}
+      className="h-full"
+      />
+    </div>
   )
 }

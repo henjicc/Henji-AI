@@ -4,9 +4,11 @@ import { Maximize2 } from 'lucide-react';
 
 import { UiButton } from '@/components/ui';
 import { ICON_NODE_ASSET_GROUP } from '@/core/theme/icons';
+import { canvasEventBus } from '@/features/canvas/application/canvasServices';
 import { openCanvasSpecialEditor } from '@/features/canvas/application/specialEditorApplicationService';
 import { resolveImageDisplayUrl } from '@/features/canvas/application/imageData';
-import type { LayerStackResultNodeData } from '@/features/canvas/domain/canvasNodes';
+import { NODE_TOOL_TYPES, type LayerStackResultNodeData } from '@/features/canvas/domain/canvasNodes';
+import { isEditableMultiLayerDocumentNode } from '@/features/canvas/domain/multiLayerDocumentNode';
 import { getMainPortConnectionFlags } from '@/features/canvas/domain/connectionIndex';
 import { getSocketColor } from '@/features/canvas/domain/socketTypes';
 import { validateLayerStackDocument, type LayerStackDocumentV1 } from '@/features/canvas/domain/layerStack';
@@ -42,6 +44,7 @@ export const LayerStackResultNode = memo(({ id, data, selected, width, height }:
   const hasTargetConnections = useCanvasStore((state) => getMainPortConnectionFlags(state.edges).get(id)?.hasMainTarget ?? false);
   const hasSourceConnections = useCanvasStore((state) => getMainPortConnectionFlags(state.edges).get(id)?.hasMainSource ?? false);
   const document = useMemo(() => readDocument(data), [data]);
+  const isEditableV3 = useMemo(() => isEditableMultiLayerDocumentNode(data), [data]);
   const composite = document?.resources.find((item) => item.resourceId === document.compositeResourceId);
   const thumbnail = document?.resources.find((item) => item.resourceId === document.thumbnailResourceId);
   const preview = thumbnail?.filePath ?? composite?.filePath ?? data.previewImageUrl ?? data.imageUrl ?? null;
@@ -49,6 +52,13 @@ export const LayerStackResultNode = memo(({ id, data, selected, width, height }:
   const resolvedHeight = Math.max(180, typeof height === 'number' ? height : 220);
 
   const openEditor = (): void => {
+    if (isEditableV3) {
+      canvasEventBus.publish('tool-dialog/open', {
+        nodeId: id,
+        toolType: NODE_TOOL_TYPES.edit,
+      });
+      return;
+    }
     if (!projectId || !document) return;
     openCanvasSpecialEditor({
       projectId,
@@ -61,7 +71,7 @@ export const LayerStackResultNode = memo(({ id, data, selected, width, height }:
   return (
     <div
       data-layer-stack-node-id={id}
-      data-layer-stack-status={document?.status ?? 'invalid'}
+      data-layer-stack-status={isEditableV3 ? 'editable-v3' : document?.status ?? 'invalid'}
       className={`group relative overflow-visible rounded-[var(--node-radius)] border bg-surface-dark/90 ${selected ? NODE_SELECTED_BORDER_CLASS : NODE_IDLE_BORDER_CLASS}`}
       style={{ width: resolvedWidth, height: resolvedHeight }}
       onClick={() => setSelectedNode(id)}
@@ -83,11 +93,13 @@ export const LayerStackResultNode = memo(({ id, data, selected, width, height }:
             <span className="text-xs">图层资源不可用</span>
           </div>
         )}
-        <div className="absolute bottom-3 left-3 flex items-center gap-2 rounded-lg bg-overlay px-2.5 py-1.5 text-2xs text-text-soft">
-          <span>{document?.layers.length ?? 0} 层</span>
-          <span>{document?.status === 'degraded' ? '资源缺失' : '由底到顶'}</span>
-        </div>
         {document && (
+          <div className="absolute bottom-3 left-3 flex items-center gap-2 rounded-lg bg-overlay px-2.5 py-1.5 text-2xs text-text-soft">
+            <span>{document.layers.length} 层</span>
+            <span>{document.status === 'degraded' ? '资源缺失' : '由底到顶'}</span>
+          </div>
+        )}
+        {(isEditableV3 || document) && (
           <UiButton
             type="button"
             size="sm"
@@ -96,7 +108,7 @@ export const LayerStackResultNode = memo(({ id, data, selected, width, height }:
             onClick={(event) => { event.stopPropagation(); openEditor(); }}
           >
             <Maximize2 className="h-3.5 w-3.5" />
-            图层
+            编辑
           </UiButton>
         )}
       </div>

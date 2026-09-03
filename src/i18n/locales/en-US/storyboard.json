@@ -124,7 +124,12 @@
       "openFailed": "Could not open the new image editor",
       "openFailedDescription": "The image does not match its saved edit version, or a required resource is unavailable. Try again.",
       "saving": "Saving edits...",
-      "retrySave": "Retry save"
+      "retrySave": "Retry save",
+      "documentTitle": "Multi-layer image editor",
+      "close": "Close editor",
+      "closing": "Saving and closing...",
+      "stillOpening": "The editor is still opening. Try again in a moment.",
+      "closeFailedRetry": "Save failed. Retry close"
     }
   },
   "nodeToolbar": {

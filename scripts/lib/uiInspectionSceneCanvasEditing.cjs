@@ -206,6 +206,167 @@ function attachUiInspectionCanvasEditing(context) {
     await settlePage(page, 900)
   }
 
+  async function setupCanvasMultiLayerDocumentEditor(page) {
+    const { panoramaSource, projectId } = await seedAndOpenCanvasPanoramaProject(page)
+    await page.getByRole('button', { name: /返回项目|Back to Projects/ }).click()
+    await settlePage(page, 700)
+    const fixture = await page.evaluate(async ({ targetProjectId, source }) => {
+      const rows = await window.henjiNative.db.select(
+        'SELECT nodes_json, edges_json FROM storyboard_projects WHERE id = ? LIMIT 1',
+        [targetProjectId]
+      )
+      const nodes = JSON.parse(rows[0]?.nodes_json ?? '[]')
+      const edges = JSON.parse(rows[0]?.edges_json ?? '[]')
+      const documentId = `ui-multi-layer-${crypto.randomUUID()}`
+      const managed = await window.henjiNative.imageEditorV3.ingestSource({
+        requestId: `reality-multi-layer-ingest-${crypto.randomUUID()}`,
+        source: { kind: 'local-path', filePath: source },
+      })
+      const common = (id, name) => ({
+        id,
+        name,
+        visible: true,
+        locked: false,
+        opacity: 1,
+        blendMode: 'normal',
+        transform: [1, 0, 0, 1, 0, 0],
+        mask: null,
+        type: 'raster',
+        source: { kind: 'resource', resourceId: managed.resource.resourceRef },
+        tiles: {},
+      })
+      const document = {
+        version: 3,
+        id: documentId,
+        revision: 0,
+        geometry: {
+          width: managed.metadata.width,
+          height: managed.metadata.height,
+          orientation: { rotate: 0, mirrored: false },
+          crop: null,
+        },
+        color: {
+          workingSpace: 'srgb',
+          bitDepth: 8,
+          transferFunction: 'srgb',
+          hdrMetadata: null,
+          iccProfileResourceId: null,
+        },
+        layers: [
+          common('ui-background-layer', '背景图层'),
+          common('ui-foreground-layer', '前景元素'),
+        ],
+      }
+      const saved = await window.henjiNative.imageEditorV3.saveDocument({
+        requestId: `reality-multi-layer-save-${crypto.randomUUID()}`,
+        document,
+        expectedRevision: 0,
+        history: null,
+        resourceRefs: [managed.resource.resourceRef],
+        previewRef: null,
+      })
+      const nodeId = '__ui_multi_layer_document_result'
+      nodes.push({
+        id: nodeId,
+        type: 'layerStackResultNode',
+        position: { x: 720, y: 80 },
+        width: 520,
+        height: 300,
+        measured: { width: 520, height: 300 },
+        style: { width: 520, height: 300 },
+        data: {
+          displayName: '多图层图片文档（本地模拟）',
+          imageUrl: managed.mediaUrl,
+          previewImageUrl: managed.mediaUrl,
+          aspectRatio: `${managed.metadata.width}:${managed.metadata.height}`,
+          resultKind: 'layer-stack',
+          imageEditSession: {
+            kind: 'image-edit-v3',
+            sourceUrl: managed.mediaUrl,
+            documentRef: saved.documentRef,
+            revision: saved.revision,
+            previewRef: saved.previewRef,
+          },
+          isGenerating: false,
+        },
+      })
+      edges.push({
+        id: '__ui_multi_layer_document_edge',
+        source: '__ui_panorama_source',
+        target: nodeId,
+        sourceHandle: 'source',
+        targetHandle: 'target',
+      })
+      await window.henjiNative.db.execute(
+        'UPDATE storyboard_projects SET node_count = ?, nodes_json = ?, edges_json = ?, viewport_json = ? WHERE id = ?',
+        [nodes.length, JSON.stringify(nodes), JSON.stringify(edges), JSON.stringify({ x: 50, y: 120, zoom: 0.7 }), targetProjectId]
+      )
+      return {
+        documentRef: saved.documentRef,
+        initialRevision: saved.revision,
+        nodeId,
+      }
+    }, { targetProjectId: projectId, source: panoramaSource })
+
+    await page.locator(`[data-project-id="${projectId}"]:visible`).click()
+    const result = page.locator(
+      `[data-layer-stack-node-id="${fixture.nodeId}"][data-layer-stack-status="editable-v3"]`
+    )
+    await result.waitFor({ state: 'visible', timeout: 12000 })
+    await result.click()
+    await page.waitForTimeout(250)
+    if (await page.getByRole('dialog', { name: /多图层图片编辑器|Multi-layer image editor/i }).count()) {
+      throw new Error('多图层图片文档节点单击不应打开编辑器')
+    }
+
+    await result.dblclick()
+    let dialog = page.getByRole('dialog', { name: /多图层图片编辑器|Multi-layer image editor/i })
+    await dialog.waitFor({ state: 'visible', timeout: 15000 })
+    let editor = dialog.locator('[data-image-editor-v3]')
+    await editor.waitFor({ state: 'visible', timeout: 15000 })
+    const structure = await dialog.evaluate((root) => ({
+      commandBars: root.querySelectorAll('[data-command-bar]').length,
+      contextBars: root.querySelectorAll('[data-context-bar]').length,
+      internalText: /revision|documentRef|资源 ID|队列|版本\s*\d+/i.test(root.textContent ?? ''),
+      saveOrApply: [...root.querySelectorAll('button')].some((button) => /^(保存|应用|Save|Apply)$/i.test(button.textContent?.trim() ?? '')),
+    }))
+    if (structure.commandBars !== 1
+      || structure.contextBars !== 0
+      || structure.internalText
+      || structure.saveOrApply) {
+      throw new Error(`多图层文档编辑器界面结构不符合约束：${JSON.stringify(structure)}`)
+    }
+
+    await dialog.getByRole('button', { name: /关闭编辑器|Close editor/i }).click()
+    await dialog.waitFor({ state: 'hidden', timeout: 12000 })
+    await result.getByRole('button', { name: /^(编辑|Edit)$/i }).click()
+    dialog = page.getByRole('dialog', { name: /多图层图片编辑器|Multi-layer image editor/i })
+    await dialog.waitFor({ state: 'visible', timeout: 15000 })
+    editor = dialog.locator('[data-image-editor-v3]')
+    await editor.waitFor({ state: 'visible', timeout: 15000 })
+    await editor.getByText('前景元素').waitFor({ state: 'visible', timeout: 8000 })
+    if (await dialog.locator('[data-command-bar]').count() !== 1) {
+      throw new Error('多图层图片文档重开后不是唯一命令带')
+    }
+    await editor.getByRole('button', { name: /隐藏.*前景元素|Hide.*Foreground/i }).click()
+    await page.waitForFunction((revision) => (
+      Number(document.querySelector('[data-command-bar]')?.getAttribute('data-document-revision'))
+        === revision + 1
+    ), fixture.initialRevision, { timeout: 10000 })
+    await page.waitForTimeout(700)
+    const persistedRevision = await page.evaluate(async (documentRef) => {
+      const loaded = await window.henjiNative.imageEditorV3.loadDocument({
+        requestId: `reality-multi-layer-load-${crypto.randomUUID()}`,
+        documentRef,
+      })
+      return loaded?.revision ?? -1
+    }, fixture.documentRef)
+    if (persistedRevision !== fixture.initialRevision + 1) {
+      throw new Error(`多图层文档编辑没有实时保存：${persistedRevision}`)
+    }
+    await settlePage(page, 900)
+  }
+
   async function setupCanvasNineGrid(page) {
     const { projectId } = await seedAndOpenCanvasPanoramaProject(page)
     const sourceNode = page.locator('.react-flow__node[data-id="__ui_panorama_source"]')
@@ -306,6 +467,7 @@ function attachUiInspectionCanvasEditing(context) {
   Object.assign(context, {
     setupCanvasElementEditNode,
     setupCanvasLayerStack,
+    setupCanvasMultiLayerDocumentEditor,
     setupCanvasNineGrid,
   })
 }

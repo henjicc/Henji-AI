@@ -124,7 +124,12 @@
       "openFailed": "无法打开新版图片编辑器",
       "openFailedDescription": "图片与已保存的编辑版本不匹配，或相关资源暂时不可用。请重试。",
       "saving": "正在保存编辑...",
-      "retrySave": "重试保存"
+      "retrySave": "重试保存",
+      "documentTitle": "多图层图片编辑器",
+      "close": "关闭编辑器",
+      "closing": "正在保存并关闭...",
+      "stillOpening": "编辑器仍在打开，请稍候再试",
+      "closeFailedRetry": "保存失败，重试关闭"
     }
   },
   "nodeToolbar": {

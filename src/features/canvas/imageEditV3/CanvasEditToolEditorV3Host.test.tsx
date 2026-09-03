@@ -8,7 +8,10 @@ import { createImageEditDocumentV3 } from '@/core/imageEdit/v3/documentFactory'
 import type { ImageEditDocumentV3 } from '@/core/imageEdit/v3/documentTypes'
 import type { ImageEditPersistenceSnapshotV3 } from '@/core/imageEdit/v3/serviceContracts'
 import i18n from '@/i18n/config'
-import { CanvasEditToolEditorV3Host } from './CanvasEditToolEditorV3Host'
+import {
+  CanvasEditToolEditorV3Host,
+  type CanvasEditToolEditorV3Lifecycle,
+} from './CanvasEditToolEditorV3Host'
 
 const mocks = vi.hoisted(() => ({
   prepare: vi.fn(),
@@ -165,6 +168,46 @@ describe('CanvasEditToolEditorV3Host', () => {
       revision: 2,
     })
     expect(onExecutionReadyChange).toHaveBeenLastCalledWith(true)
+  })
+
+  it('允许文档节点先校验权威引用，并由关闭协议立即 flush 未到期防抖', async () => {
+    const validatedSession = {
+      kind: 'image-edit-v3' as const,
+      sourceUrl: 'source.png',
+      documentRef: 'image-edit-v3:canvas-host' as const,
+      revision: 0,
+      previewRef: null,
+    }
+    const beforePrepare = vi.fn(async () => validatedSession)
+    let lifecycle: CanvasEditToolEditorV3Lifecycle | null = null
+    render(
+      <CanvasEditToolEditorV3Host
+        plugin={{} as never}
+        options={{ legacy: true }}
+        sourceImageUrl="source.png"
+        onOptionsChange={vi.fn()}
+        beforePrepare={beforePrepare}
+        onLifecycleChange={(next) => { lifecycle = next }}
+      />,
+    )
+    await act(async () => { await Promise.resolve() })
+    expect(beforePrepare).toHaveBeenCalledOnce()
+    expect(mocks.prepare).toHaveBeenCalledWith(expect.objectContaining({
+      toolOptions: expect.objectContaining({
+        imageEditSession: JSON.stringify(validatedSession),
+      }),
+    }))
+
+    fireEvent.click(screen.getByRole('button', { name: 'persist-one' }))
+    await act(async () => {
+      await lifecycle?.flushPending()
+    })
+
+    expect(mocks.save).toHaveBeenCalledOnce()
+    expect(mocks.save).toHaveBeenCalledWith(
+      expect.objectContaining({ revision: 1 }),
+      expect.objectContaining({ expectedRevision: 0 }),
+    )
   })
 
   it('保存期间出现新 revision 时不发布过期引用，并从最新命令重新计时', async () => {

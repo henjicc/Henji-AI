@@ -1,6 +1,7 @@
 import {
   deleteImageEditorV3DocumentIfRevision,
   ImageEditorV3CommandRepository,
+  loadImageEditorV3Document,
 } from '@/commands/imageEditorV3'
 import { createLogger } from '@/core/logging'
 import { ImageEditCommandHistoryV3 } from '@/core/imageEdit/v3/commandHistory'
@@ -8,6 +9,8 @@ import { createImageEditRenderHash } from '@/core/imageEdit/v3/renderHash'
 import { getPlatform } from '@/platform/runtime'
 
 import type { LayerStackDocumentV1 } from '../domain/layerStack'
+import type { ImageEditSessionReferenceV3 } from '@/core/imageEdit/v3/sessionReference'
+import type { LayerStackResultNodeData } from '../domain/canvasNodeData'
 import {
   createCanvasEditV3SessionReference,
 } from '../imageEditV3/canvasEditV3Session'
@@ -26,6 +29,35 @@ interface GenerationDocumentPortDependencies {
   repository?: Pick<ImageEditorV3CommandRepository, 'save'>
   importDocument?: typeof importLayerStackV1AsImageEditDocumentV3
   collectGarbage?: () => Promise<void>
+}
+
+function documentIdFromRef(documentRef: ImageEditSessionReferenceV3['documentRef']): string {
+  return documentRef.slice('image-edit-v3:'.length)
+}
+
+export async function inspectMultiLayerDocumentSession(input: {
+  session: ImageEditSessionReferenceV3
+  signal?: AbortSignal
+}, dependencies: {
+  loadSnapshot?: typeof loadImageEditorV3Document
+} = {}): Promise<ImageEditSessionReferenceV3> {
+  const loadSnapshot = dependencies.loadSnapshot ?? loadImageEditorV3Document
+  const snapshot = await loadSnapshot({
+    requestId: `image-editor-v3:multi-layer-document-open:${crypto.randomUUID()}`,
+    documentRef: input.session.documentRef,
+  }, input.signal)
+  const expectedDocumentId = documentIdFromRef(input.session.documentRef)
+  if (!snapshot) throw new Error('多图层图片文档不存在')
+  if (
+    snapshot.documentRef !== input.session.documentRef
+    || snapshot.document.id !== expectedDocumentId
+    || snapshot.revision !== input.session.revision
+    || snapshot.document.revision !== input.session.revision
+    || snapshot.previewRef !== input.session.previewRef
+  ) {
+    throw new Error('多图层图片文档版本与节点记录不一致')
+  }
+  return input.session
 }
 
 function requireReadyPath(document: LayerStackDocumentV1, resourceId: string | null, label: string): string {
@@ -104,7 +136,7 @@ function unavailable(operation: string): never {
 
 const generationDocumentPort: MultiLayerDocumentNodePort = {
   createFromLayerStack: createLayerStackV3Projection,
-  inspectDocument: async () => unavailable('inspectDocument'),
+  inspectDocument: inspectMultiLayerDocumentSession,
   saveAndMaterialize: async () => unavailable('saveAndMaterialize'),
   forkDocument: async () => unavailable('forkDocument'),
   markReleaseCandidate: async () => unavailable('markReleaseCandidate'),
@@ -128,6 +160,15 @@ export function createMultiLayerDocumentFromLayerStack(input: {
   signal?: AbortSignal
 }): Promise<MultiLayerDocumentNodeProjection> {
   return generationApplicationService.createFromLayerStack(input)
+}
+
+/** 完整编辑器只从节点权威 V3 投影打开，并先经过 1.1 的统一状态与版本校验。 */
+export function openMultiLayerDocumentForEditing(input: {
+  nodeId: string
+  data: LayerStackResultNodeData
+  signal?: AbortSignal
+}): Promise<ImageEditSessionReferenceV3> {
+  return generationApplicationService.openAndValidate(input)
 }
 
 export async function rollbackCreatedMultiLayerDocument(

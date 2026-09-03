@@ -40,7 +40,7 @@ import { nodeTypes } from './nodes';
 import { edgeTypes } from './edges';
 import { CANVAS_GRID_ALT_HEX } from '@/core/theme/colorTokens';
 import { SelectedNodeOverlay } from './ui/SelectedNodeOverlay';
-import { NodeToolDialog } from './ui/NodeToolDialog';
+import { NodeToolDialogRouter } from './ui/NodeToolDialogRouter';
 import { CameraStageNodeDialog } from './nodes/cameraStage/CameraStageNodeDialog';
 import { CanvasOverlays } from './ui/CanvasOverlays';
 import { CanvasMiniMap } from './ui/CanvasMiniMap';
@@ -451,7 +451,7 @@ export function Canvas() {
         />
       </ReactFlow>
 
-      <NodeToolDialog />
+      <NodeToolDialogRouter />
       <CameraStageNodeDialog />
       <CanvasConnectionToast toast={connectionToast} />
       {activeGroupId && (

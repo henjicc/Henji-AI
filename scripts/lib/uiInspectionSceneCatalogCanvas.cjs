@@ -9,6 +9,7 @@ function createCanvasScenes(context) {
     setupCanvasPortraitTextureNode,
     setupCanvasElementEditNode,
     setupCanvasLayerStack,
+    setupCanvasMultiLayerDocumentEditor,
     setupCanvasNineGrid,
     setupCanvasPanoramaViewer,
     setupCanvasMidjourneyNode,
@@ -83,6 +84,13 @@ function createCanvasScenes(context) {
       writesUserData: true,
       name: '画布-图层结果节点与图层界面',
       setup: setupCanvasLayerStack,
+    },
+    {
+      id: 'canvas-multi-layer-document-editor',
+      surface: '画布',
+      writesUserData: true,
+      name: '画布-多图层图片文档编辑器',
+      setup: setupCanvasMultiLayerDocumentEditor,
     },
     {
       id: 'canvas-nine-grid',

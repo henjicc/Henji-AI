@@ -304,6 +304,26 @@ describe('图层拆分迁移', () => {
     migrateLayerStackResultData(data);
     expect(data).toEqual({ resultKind: 'image', imageUrl: '/managed/composite.png' });
   });
+
+  it('保存重开时保留来源一致的 V3 多图层文档节点', () => {
+    const data: DynamicValueMap = {
+      resultKind: 'image',
+      imageUrl: 'henjiimg:fixture@0',
+      previewImageUrl: 'henjiimg:fixture@0',
+      imageEditSession: {
+        kind: 'image-edit-v3',
+        sourceUrl: 'henjiimg:fixture@0',
+        documentRef: 'image-edit-v3:multi-layer-document',
+        revision: 2,
+        previewRef: null,
+      },
+    };
+    migrateLayerStackResultData(data);
+    expect(data).toMatchObject({
+      resultKind: 'layer-stack',
+      imageEditSession: { documentRef: 'image-edit-v3:multi-layer-document', revision: 2 },
+    });
+  });
 });
 
 describe('migrateStoryboardGenerationData', () => {

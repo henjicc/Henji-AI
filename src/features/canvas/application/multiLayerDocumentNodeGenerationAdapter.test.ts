@@ -14,6 +14,7 @@ import {
 import {
   createLayerStackV3DocumentId,
   createLayerStackV3Projection,
+  inspectMultiLayerDocumentSession,
 } from './multiLayerDocumentNodeGenerationAdapter'
 
 const completionId = 'generation-output:adapter-placeholder'
@@ -114,6 +115,60 @@ function importedDocument(documentId: string) {
 }
 
 describe('多图层文档生成适配器', () => {
+  it('打开前按节点引用校验权威文档 revision 与 preview', async () => {
+    const document = createImageEditDocumentV3({ width: 640, height: 320, documentId: 'authoritative' })
+    const session = {
+      kind: 'image-edit-v3' as const,
+      sourceUrl: '/managed/composite.png',
+      documentRef: 'image-edit-v3:authoritative' as const,
+      revision: 0,
+      previewRef: null,
+    }
+    const loadSnapshot = vi.fn(async () => ({
+      documentRef: session.documentRef,
+      revision: 0,
+      previewRef: null,
+      document,
+      history: null,
+      resourceRefs: [],
+      resources: [],
+      sourceFingerprint: `sha256:${'b'.repeat(64)}` as const,
+    }))
+
+    await expect(inspectMultiLayerDocumentSession(
+      { session },
+      { loadSnapshot },
+    )).resolves.toBe(session)
+    expect(loadSnapshot).toHaveBeenCalledOnce()
+  })
+
+  it('拒绝节点引用与权威文档版本不一致', async () => {
+    const document = {
+      ...createImageEditDocumentV3({ width: 640, height: 320, documentId: 'authoritative' }),
+      revision: 2,
+    }
+    const session = {
+      kind: 'image-edit-v3' as const,
+      sourceUrl: '/managed/composite.png',
+      documentRef: 'image-edit-v3:authoritative' as const,
+      revision: 1,
+      previewRef: null,
+    }
+
+    await expect(inspectMultiLayerDocumentSession({ session }, {
+      loadSnapshot: vi.fn(async () => ({
+        documentRef: session.documentRef,
+        revision: 2,
+        previewRef: null,
+        document,
+        history: null,
+        resourceRefs: [],
+        resources: [],
+        sourceFingerprint: `sha256:${'c'.repeat(64)}` as const,
+      })),
+    })).rejects.toThrow('版本与节点记录不一致')
+  })
+
   it('使用节点与图层栈稳定身份初始保存 V3，并返回同源节点投影', async () => {
     const expectedDocumentId = createLayerStackV3DocumentId('placeholder', stackId)
     const importDocument = vi.fn(async (input: { documentId: string }) => (

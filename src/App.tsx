@@ -39,6 +39,7 @@ import { getPlatform } from '@/platform/runtime'
 import { useProjectStore } from '@/stores/projectStore'
 import { readDevelopmentLaunchOptions } from '@/core/development/developmentLaunch'
 import { openApplicationSurface } from '@/features/navigation/application/surfaceNavigationService'
+import { runApplicationCloseGuards } from '@/core/applicationLifecycle/applicationCloseGuards'
 
 const logger = createLogger('App')
 
@@ -184,6 +185,7 @@ const App: React.FC = () => {
       closing = true
       void (async () => {
         try {
+          await runApplicationCloseGuards()
           const projectStore = useProjectStore.getState()
           if (projectStore.currentProjectId) await projectStore.closeProject()
           await getPlatform().window.confirmClose()
