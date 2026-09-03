@@ -166,11 +166,10 @@ describe('ImageEditorV3 professional shell', () => {
 
     expect(document.querySelector('[data-tool-id="move"]')?.getAttribute('aria-pressed')).toBe('true')
     fireEvent.click(await screen.findByRole('button', { name: '添加图层' }))
-    const menu = screen.getByRole('menu', { name: '添加图层' })
+    const raster = screen.getByRole('menuitem', { name: '栅格图层' }) as HTMLButtonElement
     const glow = screen.getByRole('menuitem', { name: '辉光 Pro' }) as HTMLButtonElement
-    expect(menu.parentElement?.parentElement?.style.width).toBe('156px')
     expect(glow.className).toContain('text-left')
-    expect(glow.firstElementChild?.className).toContain('text-left')
+    expect(raster.title).toBe('')
     expect(glow.disabled).toBe(false)
     expect(screen.getByRole('menuitem', { name: '模糊' })).toBeTruthy()
     expect(screen.getByRole('menuitem', { name: '柔光 / 发光' })).toBeTruthy()

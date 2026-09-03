@@ -209,7 +209,7 @@ export function ImageEditorLayersPanelV3({
           </h2>
         )}
         <PanelTrigger
-          panelWidth={156}
+          panelWidth="content"
           closeOnPanelClick
           renderPanel={() => (
             <div
@@ -237,15 +237,10 @@ export function ImageEditorLayersPanelV3({
                     className="w-full text-left text-xs"
                     disabled={disabled}
                     aria-label={disabled ? unavailableLabel : choice.name}
-                    title={disabled ? unavailableLabel : choice.name}
+                    title={disabled ? unavailableLabel : undefined}
                     onClick={() => addChoice(choice)}
                   >
-                    <span className="min-w-0 flex-1 text-left">
-                      <span className="block">{choice.name}</span>
-                      {disabled && reason ? (
-                        <span className="mt-0.5 block text-2xs text-text-muted">{reason}</span>
-                      ) : null}
-                    </span>
+                    <span className="whitespace-nowrap">{choice.name}</span>
                   </UiOptionButton>
                 )
               })}

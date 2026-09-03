@@ -109,4 +109,37 @@ describe('PanelTrigger 面板内部点击关闭策略', () => {
 
     expect(document.querySelector('[data-panel-placement="below"]')).not.toBeNull()
   })
+
+  it('内容宽度模式按最长选项收敛面板', () => {
+    vi.stubGlobal('ResizeObserver', class {
+      observe(): void {}
+      disconnect(): void {}
+    })
+    vi.spyOn(HTMLElement.prototype, 'scrollWidth', 'get').mockImplementation(function (this: HTMLElement) {
+      return this.hasAttribute('data-panel-scroll-region') ? 112 : 0
+    })
+
+    const view = render(React.createElement(PanelTrigger, {
+      display: '添加',
+      panelWidth: 'content',
+      renderPanel: () => React.createElement('div', null, '柔光 / 发光'),
+    }))
+    const trigger = view.getByRole('button')
+    vi.spyOn(trigger, 'getBoundingClientRect').mockReturnValue({
+      bottom: 80,
+      height: 28,
+      left: 800,
+      right: 828,
+      top: 52,
+      width: 28,
+      x: 800,
+      y: 52,
+      toJSON: () => ({}),
+    })
+
+    fireEvent.click(trigger)
+
+    const panel = document.querySelector<HTMLElement>('[data-panel-placement]')
+    expect(panel?.style.width).toBe('112px')
+  })
 })

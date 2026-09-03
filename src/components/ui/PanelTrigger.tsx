@@ -21,7 +21,7 @@ type PanelTriggerProps = {
   buttonLabelClassName?: string
   panelClassName?: string
   zIndex?: number
-  panelWidth?: number
+  panelWidth?: number | 'content'
   alignment?: 'bottomLeft' | 'aboveCenter'
   /** aboveCenter 对齐时面板底部与触发按钮顶部的间距（默认 45，与画布节点行内紧凑触发器保持一致时可调小） */
   gap?: number
@@ -84,6 +84,15 @@ export default function PanelTrigger(props: PanelTriggerProps): React.ReactEleme
 
   const updatePanelPosition = useCallback((rect: DOMRect, reveal: boolean): void => {
     anchorRectRef.current = rect
+    const scrollRegion = panelRef.current?.querySelector<HTMLElement>('[data-panel-scroll-region]')
+    const measuredPanelWidth = panelWidth === 'content'
+      ? Math.max(
+          rect.width,
+          panelRef.current?.scrollWidth ?? 0,
+          panelRef.current?.getBoundingClientRect().width ?? 0,
+          scrollRegion?.scrollWidth ?? 0,
+        )
+      : panelWidth ?? rect.width
     const measuredPanelHeight = Math.max(
       _panelHeight ?? 0,
       panelRef.current?.scrollHeight ?? 0,
@@ -91,7 +100,7 @@ export default function PanelTrigger(props: PanelTriggerProps): React.ReactEleme
     )
     const position = resolveFloatingPanelPosition({
       anchor: rect,
-      panelWidth: panelWidth || rect.width,
+      panelWidth: measuredPanelWidth,
       panelHeight: measuredPanelHeight,
       viewportWidth: window.innerWidth,
       viewportHeight: window.innerHeight,
@@ -248,7 +257,10 @@ export default function PanelTrigger(props: PanelTriggerProps): React.ReactEleme
             position: 'fixed',
             top: pos.top,
             left: pos.left,
-            width: pos.width,
+            width: panelWidth === 'content' && !ready ? 'max-content' : pos.width,
+            maxWidth: panelWidth === 'content'
+              ? `calc(100vw - ${PANEL_VIEWPORT_GUTTER_PX * 2}px)`
+              : undefined,
             maxHeight: pos.maxHeight,
             minHeight: stableHeight && maxHeightRef.current ? Math.min(maxHeightRef.current, pos.maxHeight) : undefined,
             zIndex,
