@@ -172,7 +172,6 @@ export function ImageEditorLayerRowV3({
       style={{
         paddingInlineStart: `${row.depth * 16 + 6}px`,
         opacity: dragging ? 0.78 : 1,
-        pointerEvents: dragging || dropping ? 'none' : undefined,
         transform,
         transition: dragging ? 'none' : uiTransition(['opacity', 'transform'], UI_DURATION.fast),
         zIndex: dragging || dropping ? Z_LAYERS.drag : undefined,
