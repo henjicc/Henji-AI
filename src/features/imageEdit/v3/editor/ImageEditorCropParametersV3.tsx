@@ -105,6 +105,7 @@ export function ImageEditorCropParametersV3({
     (state) => state.sessions[controller.sessionId]?.toolSettings.cropAspectRatio ?? 'free',
   )
   const setToolSetting = useImageEditorSessionStoreV3((state) => state.setToolSetting)
+  const setActiveTool = useImageEditorSessionStoreV3((state) => state.setActiveTool)
   const size = useMemo(
     () => orientedSize(controller, orientation),
     [controller, orientation],
@@ -177,6 +178,7 @@ export function ImageEditorCropParametersV3({
     const crop = cropEnabled ? parsedCrop : null
     controller.setOutputGeometryPreview(previewId, orientation, crop)
     controller.commitOutputGeometryPreview(previewId, orientation, crop)
+    setActiveTool(controller.sessionId, 'move')
   }
 
   return (

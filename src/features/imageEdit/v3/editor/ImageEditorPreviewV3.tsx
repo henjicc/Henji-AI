@@ -2,7 +2,10 @@ import { AlertTriangle, LoaderCircle } from 'lucide-react'
 import { useCallback, useLayoutEffect, useMemo, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 
-import type { ImageEditCommandBusV3 } from '../application/imageEditCommandBus'
+import type {
+  ImageEditCommandBusSnapshotV3,
+  ImageEditCommandBusV3,
+} from '../application/imageEditCommandBus'
 import {
   useImageEditorInteractionStoreV3,
   useImageEditorSessionStoreV3,
@@ -59,6 +62,16 @@ interface ImageEditorPreviewV3Props extends Pick<
 }
 
 const ZERO_VIEWPORT_PAN_V3: ImageEditorViewportPanV3 = { x: 0, y: 0 }
+const EMPTY_PREVIEW_OVERRIDES_V3: ImageEditCommandBusSnapshotV3['previewOverrides'] = Object.freeze({})
+
+function withoutCropPreviewV3(
+  previewOverrides: ImageEditCommandBusSnapshotV3['previewOverrides'],
+): ImageEditCommandBusSnapshotV3['previewOverrides'] {
+  const entries = Object.entries(previewOverrides).filter(([, override]) => override.kind !== 'crop')
+  if (entries.length === 0) return EMPTY_PREVIEW_OVERRIDES_V3
+  if (entries.length === Object.keys(previewOverrides).length) return previewOverrides
+  return Object.fromEntries(entries)
+}
 
 export function ImageEditorPreviewV3({
   sourceImageUrl,
@@ -94,7 +107,28 @@ export function ImageEditorPreviewV3({
     () => projectImageEditorPreviewDocumentV3(snapshot),
     [snapshot],
   )
-  const cropDisplayDocument = snapshot.document
+  const projectedOrientation = projectedDocument.geometry.orientation
+  const cropEditingDocument = useMemo(() => ({
+    ...snapshot.document,
+    geometry: {
+      ...snapshot.document.geometry,
+      orientation: {
+        rotate: projectedOrientation.rotate,
+        mirrored: projectedOrientation.mirrored,
+      },
+      crop: null,
+    },
+  }), [
+    projectedOrientation.mirrored,
+    projectedOrientation.rotate,
+    snapshot.document,
+  ])
+  const cropPresentationDocument = activeTool === 'crop'
+    ? cropEditingDocument
+    : projectedDocument
+  const cropDisplayDocument = activeTool === 'crop'
+    ? cropPresentationDocument
+    : snapshot.document
   const liveDisplay = useMemo(
     () => splitLiveAnnotationDisplayV3(cropDisplayDocument),
     [cropDisplayDocument],
@@ -103,7 +137,7 @@ export function ImageEditorPreviewV3({
     ? cropDisplayDocument
     : liveDisplay.baseDocument
   const baseIdentity = activeTool === 'crop' || previewRenderer
-    ? `${baseDocumentCandidate.id}:${baseDocumentCandidate.revision}`
+    ? `${baseDocumentCandidate.id}:${baseDocumentCandidate.revision}:${baseDocumentCandidate.geometry.orientation.rotate}:${baseDocumentCandidate.geometry.orientation.mirrored}`
     : liveDisplay.baseIdentity
   const stableBaseDocumentRef = useRef<{
     identity: string
@@ -119,15 +153,20 @@ export function ImageEditorPreviewV3({
   }
   const baseDisplayDocument = stableBaseDocumentRef.current.document
   const baseDisplayHistory = stableBaseDocumentRef.current.history
-  const basePreviewOverrides = snapshot.previewOverrides
+  const basePreviewOverrides = useMemo(
+    () => activeTool === 'crop'
+      ? withoutCropPreviewV3(snapshot.previewOverrides)
+      : snapshot.previewOverrides,
+    [activeTool, snapshot.previewOverrides],
+  )
   const displaySnapshot = useMemo(() => ({
     document: baseDisplayDocument,
     previewOverrides: basePreviewOverrides,
     history: baseDisplayHistory,
   }), [baseDisplayDocument, baseDisplayHistory, basePreviewOverrides])
   const outputGeometry = useMemo(
-    () => resolveAnnotationOutputGeometryV3(projectedDocument),
-    [projectedDocument],
+    () => resolveAnnotationOutputGeometryV3(cropPresentationDocument),
+    [cropPresentationDocument],
   )
   const viewportLayout = useImageEditorViewportLayoutV3(
     surfaceRef,
@@ -145,7 +184,7 @@ export function ImageEditorPreviewV3({
     return Math.min(48, incrementalRadius * documentToCss)
   }, [baseDisplayDocument, projectedDocument, snapshot.previewOverrides, viewportLayout?.viewport.zoom])
   const rasterPasteboard = useImageEditorRasterPasteboardV3(
-    projectedDocument,
+    cropPresentationDocument,
     sourceImageUrl,
     outputGeometry.width,
     !previewRenderer,
@@ -334,6 +373,8 @@ export function ImageEditorPreviewV3({
       data-preview-event-to-present-ms={previewRenderer
         ? undefined
         : viewportComposite.eventToPresentMs ?? undefined}
+      data-preview-output-width={outputGeometry.width}
+      data-preview-output-height={outputGeometry.height}
       data-active-navigation-tool={navigation.effectiveTool === 'hand' || navigation.effectiveTool === 'zoom'
         ? navigation.effectiveTool
         : undefined}

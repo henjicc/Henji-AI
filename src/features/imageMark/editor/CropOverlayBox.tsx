@@ -166,6 +166,7 @@ export function CropOverlayBox({
 
       {/* 裁剪框 */}
       <div
+        data-crop-frame
         className="absolute border-2 border-white/90"
         style={{ left, top, width, height, cursor: 'move' }}
         onMouseDown={(event) => beginGesture(event, 'move')}
@@ -179,6 +180,7 @@ export function CropOverlayBox({
         {HANDLE_DEFS.map((handle) => (
           <div
             key={handle.type}
+            data-crop-handle={handle.type}
             className={`absolute h-2.5 w-2.5 rounded-sm border border-black/40 bg-white ${handle.className}`}
             style={{ cursor: handle.cursor }}
             onMouseDown={(event) => beginGesture(event, handle.type)}

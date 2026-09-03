@@ -1412,6 +1412,13 @@ function createToolboxScenes(context) {
         await editor.locator('[data-tool-id="crop"]').click()
         await editor.locator('[data-crop-overlay]').waitFor({ state: 'visible', timeout: 5000 })
         await editor.getByRole('button', { name: /^(向右旋转 90°|Rotate 90° right)$/i }).click()
+        const cropDisplayFrame = editor.locator('[data-document-transparency-grid]')
+        const cropDisplayBefore = await cropDisplayFrame.boundingBox()
+        if (!cropDisplayBefore) throw new Error('裁剪交互无法读取底图显示范围')
+        const cropOutputBefore = await editor.locator('[data-preview-surface]').evaluate((surface) => ({
+          width: Number(surface.getAttribute('data-preview-output-width')),
+          height: Number(surface.getAttribute('data-preview-output-height')),
+        }))
         await editor.getByRole('button', {
           name: /^(裁剪比例: 自由|Crop ratio: Free)$/i,
         }).click()
@@ -1451,6 +1458,49 @@ function createToolboxScenes(context) {
             .map((element) => Number(element.value))
           return values.length >= 4 && values[2] === values[3]
         }, undefined, { timeout: 5000 })
+        const cropValuesBeforeDrag = await editor.locator('[data-crop-parameters] input')
+          .evaluateAll((inputs) => inputs.map((input) => Number(input.value)))
+        const cropHandle = editor.locator('[data-crop-handle="se"]')
+        const cropHandleBox = await cropHandle.boundingBox()
+        if (!cropHandleBox) throw new Error('裁剪交互无法读取右下控制点')
+        await page.mouse.move(
+          cropHandleBox.x + cropHandleBox.width / 2,
+          cropHandleBox.y + cropHandleBox.height / 2,
+        )
+        await page.mouse.down()
+        await page.mouse.move(
+          cropHandleBox.x + cropHandleBox.width / 2 - 72,
+          cropHandleBox.y + cropHandleBox.height / 2 - 72,
+          { steps: 8 },
+        )
+        await page.mouse.up()
+        await page.waitForFunction((before) => {
+          const values = [...document.querySelectorAll('[data-crop-parameters] input')]
+            .filter((element) => element instanceof HTMLInputElement)
+            .map((element) => Number(element.value))
+          return values[2] !== before[2] || values[3] !== before[3]
+        }, cropValuesBeforeDrag, { timeout: 3000 })
+        const [cropDisplayDuring, cropOutputDuring] = await Promise.all([
+          cropDisplayFrame.boundingBox(),
+          editor.locator('[data-preview-surface]').evaluate((surface) => ({
+            width: Number(surface.getAttribute('data-preview-output-width')),
+            height: Number(surface.getAttribute('data-preview-output-height')),
+          })),
+        ])
+        if (!cropDisplayDuring
+          || Math.abs(cropDisplayDuring.x - cropDisplayBefore.x) > 0.5
+          || Math.abs(cropDisplayDuring.y - cropDisplayBefore.y) > 0.5
+          || Math.abs(cropDisplayDuring.width - cropDisplayBefore.width) > 0.5
+          || Math.abs(cropDisplayDuring.height - cropDisplayBefore.height) > 0.5
+          || cropOutputDuring.width !== cropOutputBefore.width
+          || cropOutputDuring.height !== cropOutputBefore.height) {
+          throw new Error(`拖动裁剪框时底图发生变化：${JSON.stringify({
+            cropDisplayBefore,
+            cropDisplayDuring,
+            cropOutputBefore,
+            cropOutputDuring,
+          })}`)
+        }
         if (await readRevision() !== beforeCropRevision) {
           throw new Error('裁剪框或比例预览在应用前提前写入了历史')
         }
@@ -1459,6 +1509,10 @@ function createToolboxScenes(context) {
           return Number(document.querySelector('[data-command-bar]')
             ?.getAttribute('data-document-revision')) === revision + 1
         }, beforeCropRevision, { timeout: 5000 })
+        await editor.locator('[data-crop-overlay]').waitFor({ state: 'hidden', timeout: 3000 })
+        if (await editor.locator('[data-tool-id="move"]').getAttribute('aria-pressed') !== 'true') {
+          throw new Error('应用裁剪后没有回到移动工具展示最终裁剪结果')
+        }
         await editor.getByRole('button', { name: /^(撤销|Undo)$/i }).click()
         await editor.getByRole('button', { name: /^(重做|Redo)$/i }).click()
 
@@ -1523,6 +1577,13 @@ function createToolboxScenes(context) {
         }).waitFor({ state: 'visible', timeout: 5000 })
         await editor.getByRole('button', { name: /^(圆形标注|Ellipse annotation)$/i }).click()
         const finalAnnotationOverlay = editor.locator('[data-annotation-editor-overlay]')
+        if (await finalAnnotationOverlay.getAttribute('data-selected-annotation-type')) {
+          await page.keyboard.press('Delete')
+          await page.waitForFunction(() => (
+            !document.querySelector('[data-annotation-editor-overlay]')
+              ?.getAttribute('data-selected-annotation-type')
+          ), undefined, { timeout: 3000 })
+        }
         const finalAnnotationBox = await finalAnnotationOverlay.boundingBox()
         if (!finalAnnotationBox) throw new Error('控制点视觉验收无法读取标注画布')
         const beforeFinalAnnotation = await readRevision()

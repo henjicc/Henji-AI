@@ -212,10 +212,17 @@ describe('ImageEditorV3 professional shell', () => {
     )
 
     fireEvent.click(screen.getByRole('button', { name: '裁剪' }))
+    const preview = document.querySelector<HTMLElement>('[data-preview-surface]')
+    expect(preview?.dataset.previewOutputWidth).toBe('1600')
+    expect(preview?.dataset.previewOutputHeight).toBe('900')
     fireEvent.click(screen.getByRole('button', { name: '向右旋转 90°' }))
+    expect(preview?.dataset.previewOutputWidth).toBe('900')
+    expect(preview?.dataset.previewOutputHeight).toBe('1600')
     const width = screen.getByRole('spinbutton', { name: '宽' })
     fireEvent.change(width, { target: { value: '450' } })
     expect(changes).toHaveLength(0)
+    expect(preview?.dataset.previewOutputWidth).toBe('900')
+    expect(preview?.dataset.previewOutputHeight).toBe('1600')
     fireEvent.click(screen.getByRole('button', { name: '应用裁剪' }))
 
     await waitFor(() => expect(changes).toHaveLength(1))
@@ -228,6 +235,11 @@ describe('ImageEditorV3 professional shell', () => {
         crop: { x: 0, y: 0, width: 450, height: 1600 },
       },
     })
+    expect(useImageEditorSessionStoreV3.getState().sessions[Object.keys(
+      useImageEditorSessionStoreV3.getState().sessions,
+    )[0]]?.activeTool).toBe('move')
+    expect(preview?.dataset.previewOutputWidth).toBe('450')
+    expect(preview?.dataset.previewOutputHeight).toBe('1600')
   })
 
   it('裁剪比例收进单一特殊面板并在选择后自动收起', async () => {
