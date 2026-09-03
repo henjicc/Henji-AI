@@ -168,9 +168,9 @@ describe('ImageEditorV3 professional shell', () => {
     fireEvent.click(await screen.findByRole('button', { name: '添加图层' }))
     const menu = screen.getByRole('menu', { name: '添加图层' })
     const glow = screen.getByRole('menuitem', { name: '辉光 Pro' }) as HTMLButtonElement
-    expect(menu.parentElement?.parentElement?.style.width).toBe('184px')
-    expect(glow.className).toContain('justify-start')
+    expect(menu.parentElement?.parentElement?.style.width).toBe('156px')
     expect(glow.className).toContain('text-left')
+    expect(glow.firstElementChild?.className).toContain('text-left')
     expect(glow.disabled).toBe(false)
     expect(screen.getByRole('menuitem', { name: '模糊' })).toBeTruthy()
     expect(screen.getByRole('menuitem', { name: '柔光 / 发光' })).toBeTruthy()

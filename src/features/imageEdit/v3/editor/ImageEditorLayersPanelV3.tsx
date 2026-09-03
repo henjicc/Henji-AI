@@ -209,12 +209,12 @@ export function ImageEditorLayersPanelV3({
           </h2>
         )}
         <PanelTrigger
-          panelWidth={184}
+          panelWidth={156}
           closeOnPanelClick
           renderPanel={() => (
             <div
               data-layer-add-menu
-              className="p-1.5"
+              className="flex flex-col gap-0.5 p-1"
               role="menu"
               aria-label={t('imageEditor.v3.layers.addLayer')}
             >
@@ -234,16 +234,18 @@ export function ImageEditorLayersPanelV3({
                     type="button"
                     role="menuitem"
                     variant="menu"
-                    className="w-full flex-col items-start justify-start gap-0.5 text-left text-xs"
+                    className="w-full text-left text-xs"
                     disabled={disabled}
                     aria-label={disabled ? unavailableLabel : choice.name}
                     title={disabled ? unavailableLabel : choice.name}
                     onClick={() => addChoice(choice)}
                   >
-                    <span>{choice.name}</span>
-                    {disabled && reason ? (
-                      <span className="text-2xs text-text-muted">{reason}</span>
-                    ) : null}
+                    <span className="min-w-0 flex-1 text-left">
+                      <span className="block">{choice.name}</span>
+                      {disabled && reason ? (
+                        <span className="mt-0.5 block text-2xs text-text-muted">{reason}</span>
+                      ) : null}
+                    </span>
                   </UiOptionButton>
                 )
               })}
