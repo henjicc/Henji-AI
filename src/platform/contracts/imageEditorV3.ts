@@ -287,6 +287,15 @@ export interface ImageEditorV3ManagedRasterExportResult extends ImageEditorV3Ras
   mediaUrl: string
 }
 
+export interface ImageEditorV3StandaloneRasterExportResult extends ImageEditorV3RasterExportResult {
+  /** 已转存到普通画布图片使用的受管路径，不会改写 V3 文档预览。 */
+  imagePath: string
+  /** 画布事务未接管时可补偿释放的本次新建资源。 */
+  createdFilePaths: string[]
+}
+
+export type ImageEditorV3RasterPublication = 'document-preview' | 'standalone-image'
+
 export interface ImageEditorV3Platform {
   loadDocument(request: {
     requestId: string
@@ -401,6 +410,8 @@ export interface ImageEditorV3Platform {
     compressionLevel?: number
     quality?: number
     effort?: number
+    /** 默认挂到当前文档预览；独立导出必须显式使用 standalone-image。 */
+    publication?: ImageEditorV3RasterPublication
   }): Promise<ImageEditorV3RasterExportStartResult>
   writeRasterExportTile(request: {
     sessionId: string
@@ -418,7 +429,7 @@ export interface ImageEditorV3Platform {
   }): Promise<ImageEditorV3RasterExportResult>
   completeManagedRasterExport(request: {
     sessionId: string
-  }): Promise<ImageEditorV3ManagedRasterExportResult>
+  }): Promise<ImageEditorV3ManagedRasterExportResult | ImageEditorV3StandaloneRasterExportResult>
   cancelRasterExport(request: {
     sessionId: string
   }): Promise<{ cancelled: boolean }>

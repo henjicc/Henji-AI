@@ -41,6 +41,7 @@ export interface StartRasterExportPayload {
   compressionLevel?: number
   quality?: number
   effort?: number
+  publication?: 'document-preview' | 'standalone-image'
 }
 
 export interface RasterExportSessionPayload { sessionId: string }
@@ -177,7 +178,7 @@ export function parseImageEditorV3StartRasterExportPayload(input: unknown): Star
   const record = parseRecord(input)
   assertAllowedKeys(record, [
     'requestId', 'documentRef', 'revision', 'sourceFingerprint', 'format', 'description',
-    'suggestedName', 'tileSize', 'compressionLevel', 'quality', 'effort',
+    'suggestedName', 'tileSize', 'compressionLevel', 'quality', 'effort', 'publication',
   ], 'raster export request')
   const requestId = readString(record, 'requestId')
   const documentRef = readString(record, 'documentRef')
@@ -205,6 +206,9 @@ export function parseImageEditorV3StartRasterExportPayload(input: unknown): Star
     compressionLevel: readOptionalInteger(record, 'compressionLevel', 0, 9),
     quality: readOptionalInteger(record, 'quality', 1, 100),
     effort: readOptionalInteger(record, 'effort', 0, 9),
+    publication: record.publication === undefined
+      ? undefined
+      : readEnum(record, 'publication', ['document-preview', 'standalone-image'] as const),
   }
 }
 

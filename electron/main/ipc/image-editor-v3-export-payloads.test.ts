@@ -73,6 +73,17 @@ describe('图片编辑 V3 栅格导出 IPC 输入', () => {
       ...startPayload(),
       description: { ...(startPayload().description as object), channels: 3 },
     })).toThrow('unsupported fields: channels')
+    expect(() => parseImageEditorV3StartRasterExportPayload({
+      ...startPayload(),
+      publication: 'temporary-file',
+    })).toThrow('Invalid publication')
+  })
+
+  it('只接受文档预览或独立图片发布语义', () => {
+    expect(parseImageEditorV3StartRasterExportPayload({
+      ...startPayload(),
+      publication: 'standalone-image',
+    }).publication).toBe('standalone-image')
   })
 
   it('只接受 UUID 会话和不超过 16MiB 的精确瓦片缓冲', () => {

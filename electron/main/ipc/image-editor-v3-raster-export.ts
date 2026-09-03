@@ -195,6 +195,7 @@ export function registerImageEditorV3RasterExportIpc(
           compressionLevel: payload.compressionLevel,
           quality: payload.quality,
           effort: payload.effort,
+          publication: payload.publication,
           signal,
         })
         monitorRendererLifetime(
@@ -245,12 +246,7 @@ export function registerImageEditorV3RasterExportIpc(
     async (payload, event) => {
       const completed = await options.materializer.complete(event.sender.id, payload.sessionId)
       const { documentId, ...result } = completed
-      return {
-        ...result,
-        documentRef: toDocumentRef(documentId),
-        previewRef: completed.previewRef,
-        mediaUrl: completed.mediaUrl,
-      }
+      return { ...result, documentRef: toDocumentRef(documentId) }
     },
     options.guard,
   )

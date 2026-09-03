@@ -8,6 +8,7 @@ vi.mock('@/platform/runtime', () => ({ getPlatform: mocks.getPlatform }))
 import {
   exportImageEditorV3Raster,
   materializeImageEditorV3Raster,
+  materializeImageEditorV3StandaloneRaster,
 } from './imageEditorV3Export'
 
 const DOCUMENT_REF = 'image-edit-v3:export-document' as const
@@ -179,5 +180,40 @@ describe('图片编辑 V3 栅格导出命令', () => {
     expect(platform.completeManagedRasterExport).toHaveBeenCalledWith({ sessionId: SESSION_ID })
     expect(result.mediaUrl).toMatch(/^henji-media:\/\/image-editor-v3\//)
     expect(result).not.toHaveProperty('filePath')
+  })
+
+  it('独立物化显式声明 standalone-image 且返回可补偿图片', async () => {
+    const platform = createPlatform()
+    platform.completeManagedRasterExport = vi.fn(async () => ({
+      outputRef: 'image-export-v3:export-document@5:png8' as const,
+      documentRef: DOCUMENT_REF,
+      revision: 5,
+      sourceFingerprint: FINGERPRINT,
+      format: 'png8' as const,
+      width: 2,
+      height: 1,
+      imagePath: '/managed/standalone.png',
+      createdFilePaths: ['/managed/standalone.png'],
+    }))
+    mocks.getPlatform.mockReturnValue({ imageEditorV3: platform })
+    const result = await materializeImageEditorV3StandaloneRaster({
+      ...baseRequest,
+      tiles: [{
+        x: 0,
+        y: 0,
+        width: 2,
+        height: 1,
+        rowStride: 8,
+        pixels: new ArrayBuffer(8),
+      }],
+    })
+
+    expect(platform.startManagedRasterExport).toHaveBeenCalledWith(expect.objectContaining({
+      publication: 'standalone-image',
+    }))
+    expect(result).toMatchObject({
+      imagePath: '/managed/standalone.png',
+      createdFilePaths: ['/managed/standalone.png'],
+    })
   })
 })

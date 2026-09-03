@@ -41,6 +41,20 @@ export interface MultiLayerDocumentExportRaster {
   aspectRatio: string
   width: number
   height: number
+  mediaType: 'image/png'
+  hasAlpha: true
+  displayName: string
+  /** 画布事务失败时由 releaseExportRaster 补偿；禁止写入日志或正式 UI。 */
+  ownedFilePaths: string[]
+  diagnostics: {
+    documentId: string
+    revision: number
+    targetKind: MultiLayerDocumentExportTarget['kind']
+    targetId: string
+    layerPath: readonly string[]
+    canvasScope: 'document'
+    contentState: 'rendered' | 'hidden' | 'empty'
+  }
 }
 
 /** 宿主文档、资源与像素能力的窄端口；不暴露主进程仓库对象。 */

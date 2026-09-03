@@ -2,7 +2,7 @@ import fsp from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { createImageEditDocumentV3 } from '../../../../src/core/imageEdit/v3/documentFactory'
 import { ImageEditDocumentRepository } from './document-repository'
@@ -126,6 +126,8 @@ describe('图片编辑 V3 受管栅格物化', () => {
     const started = await service.start(startRequest(snapshot))
     const result = await service.complete(7, started.sessionId)
 
+    if (!('previewRef' in result)) throw new Error('期望文档预览物化结果')
+
     expect(result.previewRef).toMatch(/^sha256:[a-f0-9]{64}$/)
     expect(result.mediaUrl).toMatch(/^henji-media:\/\/image-editor-v3\/[a-f0-9]{64}\?mediaType=image%2Fpng$/)
     expect(result.mediaUrl).not.toContain(root)
@@ -153,5 +155,38 @@ describe('图片编辑 V3 受管栅格物化', () => {
     expect(await service.cancel(7, started.sessionId)).toBe(true)
     await expect(fsp.access(manager.targetPath!)).rejects.toMatchObject({ code: 'ENOENT' })
     expect((await documents.load(snapshot.documentId)).previewRef).toBeUndefined()
+  })
+
+  it('独立发布转存普通受管图片且不改写文档快照', async () => {
+    const { root, documents, resources, snapshot } = await fixture()
+    const manager = fakeManager()
+    const publishStandalone = vi.fn(async (source: string) => {
+      expect((await fsp.readFile(source)).toString()).toBe('streamed-png')
+      return {
+        imagePath: '/managed/standalone.png',
+        createdFilePaths: ['/managed/standalone.png'],
+      }
+    })
+    const service = new ManagedRasterMaterializer(
+      manager,
+      documents,
+      resources,
+      path.join(root, 'materializations'),
+      { publishStandalone },
+    )
+    const before = await documents.load(snapshot.documentId)
+    const started = await service.start({
+      ...startRequest(snapshot),
+      publication: 'standalone-image',
+    })
+    const result = await service.complete(7, started.sessionId)
+
+    expect(result).toMatchObject({
+      imagePath: '/managed/standalone.png',
+      createdFilePaths: ['/managed/standalone.png'],
+    })
+    expect(publishStandalone).toHaveBeenCalledOnce()
+    expect(await documents.load(snapshot.documentId)).toEqual(before)
+    await expect(fsp.access(manager.targetPath!)).rejects.toMatchObject({ code: 'ENOENT' })
   })
 })

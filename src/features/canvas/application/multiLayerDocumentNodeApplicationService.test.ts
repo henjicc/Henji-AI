@@ -93,6 +93,19 @@ function setup() {
       aspectRatio: '4:3',
       width: 400,
       height: 300,
+      mediaType: 'image/png' as const,
+      hasAlpha: true as const,
+      displayName: '图层 A',
+      ownedFilePaths: ['/managed/export.png'],
+      diagnostics: {
+        documentId: 'document-a',
+        revision: 2,
+        targetKind: 'raster-layer' as const,
+        targetId: 'layer-a',
+        layerPath: ['layer-a'],
+        canvasScope: 'document' as const,
+        contentState: 'rendered' as const,
+      },
     })),
     releaseExportRaster: vi.fn(async () => undefined),
   }
@@ -199,6 +212,9 @@ describe('多图层文档节点 application 服务', () => {
     const { service, documentPort } = setup()
     await expect(service.exportTarget({
       projectId: 'project-a', sourceNodeId: 'node-a', data: nodeData(), target: { kind: 'effect-layer' },
+    })).rejects.toMatchObject({ code: 'UNSUPPORTED_EXPORT_TARGET', recoverable: false })
+    await expect(service.exportTarget({
+      projectId: 'project-a', sourceNodeId: 'node-a', data: nodeData(), target: { kind: 'adjustment-layer' },
     })).rejects.toMatchObject({ code: 'UNSUPPORTED_EXPORT_TARGET', recoverable: false })
     expect(documentPort.materializeExportTarget).not.toHaveBeenCalled()
 
