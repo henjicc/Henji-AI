@@ -14,6 +14,8 @@ import {
 } from '../domain/metrics';
 import { isLabeledMark, type LabeledMark, type MarkItem } from '../domain/types';
 import {
+  ARROW_HEAD_LINE_CAP,
+  ARROW_HEAD_LINE_JOIN,
   arrowToKonvaBezierPoints,
   resolveArrowHeadPoints,
   resolveArrowVisualBounds,
@@ -228,6 +230,8 @@ export function MarkShapeNode({
           fill={item.stroke}
           stroke={item.stroke}
           strokeWidth={item.lineWidth}
+          lineCap={ARROW_HEAD_LINE_CAP}
+          lineJoin={ARROW_HEAD_LINE_JOIN}
           strokeScaleEnabled={strokeScaleEnabled}
           opacity={opacity}
           listening={false}

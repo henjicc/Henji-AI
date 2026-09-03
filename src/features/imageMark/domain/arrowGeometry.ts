@@ -7,6 +7,10 @@ export interface ArrowVisualBounds {
   height: number;
 }
 
+/** 箭头头部的描边契约由矢量编辑层与稳定光栅层共同使用，避免图层重排后外观改变。 */
+export const ARROW_HEAD_LINE_CAP = 'butt' as const;
+export const ARROW_HEAD_LINE_JOIN = 'miter' as const;
+
 export function resolveArrowControl(item: ArrowMark): [number, number] {
   if (item.curveControl) return item.curveControl;
   const [x1, y1, x2, y2] = item.points;

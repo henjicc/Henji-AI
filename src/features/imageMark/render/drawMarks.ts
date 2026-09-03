@@ -14,7 +14,11 @@ import {
   resolveTextBlockSize,
 } from '../domain/metrics';
 import type { LabeledMark, MarkItem } from '../domain/types';
-import { resolveArrowHeadPoints } from '../domain/arrowGeometry';
+import {
+  ARROW_HEAD_LINE_CAP,
+  ARROW_HEAD_LINE_JOIN,
+  resolveArrowHeadPoints,
+} from '../domain/arrowGeometry';
 import { tracePenPath } from './tracePenPath';
 import { buildMosaicSource, drawBlurRegion, drawMosaicRegion } from './orientedImage';
 import type { ImageEditCanvas, ImageEditCanvasContext } from './canvasAdapter';
@@ -23,7 +27,13 @@ function markFont(fontSize: number): string {
   return `${MARK_FONT_STYLE} ${fontSize}px ${MARK_FONT_FAMILY}`;
 }
 
-function drawArrowHead(context: ImageEditCanvasContext, points: number[], color: string): void {
+function drawArrowHead(
+  context: ImageEditCanvasContext,
+  points: number[],
+  color: string,
+  lineWidth: number
+): void {
+  context.save();
   context.beginPath();
   context.moveTo(points[0], points[1]);
   context.lineTo(points[2], points[3]);
@@ -31,6 +41,14 @@ function drawArrowHead(context: ImageEditCanvasContext, points: number[], color:
   context.closePath();
   context.fillStyle = color;
   context.fill();
+  // 实时 Konva 层会同时填充并描边箭头头部。稳定渲染也必须遵循同一契约；
+  // 否则圆头箭身会越过仅填充的三角尖端，图层重排后就会看起来像圆头线。
+  context.strokeStyle = color;
+  context.lineWidth = lineWidth;
+  context.lineCap = ARROW_HEAD_LINE_CAP;
+  context.lineJoin = ARROW_HEAD_LINE_JOIN;
+  context.stroke();
+  context.restore();
 }
 
 function drawTextBlock(
@@ -179,7 +197,12 @@ export function drawMarkItems(
         context.lineTo(x2, y2);
       }
       context.stroke();
-      drawArrowHead(context, resolveArrowHeadPoints(item), item.stroke); context.restore(); drawLabel(context, item, imageWidth, imageHeight); continue;
+      drawArrowHead(
+        context,
+        resolveArrowHeadPoints(item),
+        item.stroke,
+        item.lineWidth
+      ); context.restore(); drawLabel(context, item, imageWidth, imageHeight); continue;
     }
     if (item.type === 'pen') {
       context.save(); context.strokeStyle = item.stroke; context.lineWidth = item.lineWidth; context.lineJoin = 'round'; context.lineCap = 'round';
