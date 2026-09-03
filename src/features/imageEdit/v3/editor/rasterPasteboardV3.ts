@@ -5,14 +5,19 @@ import type {
 } from '@/core/imageEdit/v3/layerTypes'
 
 /**
- * 原始单栅格文档可以直接显示源图层，让文档外像素继续留在编辑工作区中。
- * 复杂图层仍交给受管合成器，避免用源图冒充蒙版、画笔或效果后的成品。
+ * 原始单栅格文档可以保留完整源图层，再由外层图片矩形统一裁切。
+ * 这样反向移动能立即找回先前越界的像素；复杂图层仍交给受管合成器，
+ * 避免用源图冒充蒙版、画笔或效果后的成品。
  */
 export function resolveImageEditorRasterPasteboardLayerV3(
   document: ImageEditDocumentV3,
 ): ImageEditRasterLayerV3 | null {
   const { crop, orientation } = document.geometry
   if (crop || orientation.rotate !== 0 || orientation.mirrored) return null
+  if (document.color.workingSpace !== 'srgb'
+    || document.color.bitDepth !== 8
+    || document.color.transferFunction !== 'srgb'
+    || document.color.hdrMetadata !== null) return null
 
   const visibleLayers = document.layers.filter((layer) => layer.visible)
   if (visibleLayers.length !== 1) return null

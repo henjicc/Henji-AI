@@ -382,7 +382,9 @@ function createToolboxScenes(context) {
           document.querySelector('[data-preview-surface]')?.getAttribute('data-preview-display-source') === 'viewport'
             && (() => {
               const frame = document.querySelector('[data-raster-display-frame]')
+              const source = document.querySelector('[data-raster-pasteboard-layer]')
               return frame instanceof HTMLElement
+                && source?.getAttribute('data-raster-source-ready') === 'true'
                 && frame.querySelector('[data-presentation-front-surface]') instanceof HTMLCanvasElement
                 && frame.querySelector('[data-presentation-safety-surface]') instanceof HTMLCanvasElement
             })()
@@ -398,9 +400,10 @@ function createToolboxScenes(context) {
         })
 
         const displayFrame = editor.locator('[data-raster-display-frame]')
+        const rasterSource = editor.locator('[data-raster-pasteboard-layer]')
         const documentClip = editor.locator('[data-document-clip]')
         const transparencyGrid = editor.locator('[data-document-transparency-grid]')
-        if (await editor.locator('[data-raster-pasteboard-layer]').count() !== 0
+        if (await rasterSource.count() !== 1
           || await displayFrame.count() !== 1
           || await documentClip.count() !== 1
           || await transparencyGrid.count() !== 1
@@ -410,14 +413,23 @@ function createToolboxScenes(context) {
         const initialDocumentSurface = await editor.evaluate(() => {
           const clip = document.querySelector('[data-document-clip]')
           const frame = document.querySelector('[data-raster-display-frame]')
+          const source = document.querySelector('[data-raster-pasteboard-layer]')
           const grid = document.querySelector('[data-document-transparency-grid]')
           return {
             frameInsideClip: Boolean(clip && frame && clip.contains(frame)),
+            sourceInsideClip: Boolean(clip && source && clip.contains(source)),
+            sourceReady: source?.getAttribute('data-raster-source-ready') ?? null,
+            cachedFrameVisibility: frame instanceof HTMLElement
+              ? getComputedStyle(frame).visibility
+              : null,
             clipPath: clip instanceof HTMLElement ? getComputedStyle(clip).clipPath : 'none',
             gridBackground: grid instanceof HTMLElement ? getComputedStyle(grid).backgroundImage : 'none',
           }
         })
         if (!initialDocumentSurface.frameInsideClip
+          || !initialDocumentSurface.sourceInsideClip
+          || initialDocumentSurface.sourceReady !== 'true'
+          || initialDocumentSurface.cachedFrameVisibility !== 'hidden'
           || initialDocumentSurface.clipPath === 'none'
           || !initialDocumentSurface.gridBackground.includes('conic-gradient')) {
           throw new Error(`图片裁切层或透明网格没有生效：${JSON.stringify(initialDocumentSurface)}`)
@@ -849,6 +861,61 @@ function createToolboxScenes(context) {
           return previewSurface?.getAttribute('data-preview-display-source') === 'viewport'
             && feedbackFrame?.style.transform === ''
         }, undefined, { timeout: 12000 })
+
+        const beforeReverseMove = await readRevision()
+        const reverseStartX = startX + 42
+        const reverseStartY = startY - 180
+        await page.mouse.move(reverseStartX, reverseStartY)
+        await page.mouse.down()
+        await page.mouse.move(reverseStartX - 30, reverseStartY, { steps: 6 })
+        await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => resolve())))
+        const reverseTransform = await feedback.evaluate((element) => element.style.transform)
+        if (!reverseTransform.includes('-30px')) {
+          throw new Error(`反向拖回时完整源图没有跟随指针：${reverseTransform}`)
+        }
+        const duringReverse = await documentClip.screenshot({ animations: 'disabled' })
+        const [clipBox, documentBox] = await Promise.all([
+          documentClip.boundingBox(),
+          transparencyGrid.boundingBox(),
+        ])
+        if (!clipBox || !documentBox) throw new Error('反向拖回时无法读取图片右边缘')
+        await page.mouse.up()
+        await page.waitForFunction((revision) => {
+          const labels = [...document.querySelectorAll('[data-command-bar] span')]
+          const feedbackFrame = document.querySelector('[data-move-feedback-frame]')
+          return labels.some((element) => Number(element.textContent?.match(/\d+/)?.[0]) === revision + 1)
+            && feedbackFrame?.style.transform === ''
+        }, beforeReverseMove, { timeout: 12000 })
+        const afterReverse = await documentClip.screenshot({ animations: 'disabled' })
+        await settlePage(page, 700)
+        const settledReverse = await documentClip.screenshot({ animations: 'disabled' })
+        const [sharpModule, visualDiffModule] = await Promise.all([
+          import('sharp'),
+          import('./canvasVisualDiff.cjs'),
+        ])
+        const sharp = sharpModule.default
+        const diffBuffers = visualDiffModule.diffBuffers
+          ?? visualDiffModule.default?.diffBuffers
+        if (typeof diffBuffers !== 'function') throw new Error('无法加载真实界面像素对比工具')
+        const metadata = await sharp(duringReverse).metadata()
+        const scaleX = Number(metadata.width) / clipBox.width
+        const scaleY = Number(metadata.height) / clipBox.height
+        const rightEdgeRect = {
+          left: (documentBox.x - clipBox.x + Math.max(0, documentBox.width - 80)) * scaleX,
+          top: (documentBox.y - clipBox.y) * scaleY,
+          width: Math.min(80, documentBox.width) * scaleX,
+          height: documentBox.height * scaleY,
+        }
+        const [dragToCommitDiff, commitToSettledDiff] = await Promise.all([
+          diffBuffers(duringReverse, afterReverse, rightEdgeRect),
+          diffBuffers(afterReverse, settledReverse, rightEdgeRect),
+        ])
+        if (dragToCommitDiff.changedPct > 2 || commitToSettledDiff.changedPct > 2) {
+          throw new Error(`反向拖回右侧内容在松手后才补齐：${JSON.stringify({
+            dragToCommitDiff,
+            commitToSettledDiff,
+          })}`)
+        }
         const clippingState = await displayFrame.evaluate((frame) => {
           const frameRect = frame.getBoundingClientRect()
           const documentFrame = document.querySelector('[data-viewport-content]')

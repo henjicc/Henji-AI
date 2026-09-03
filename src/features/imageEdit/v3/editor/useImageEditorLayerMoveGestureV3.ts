@@ -30,7 +30,7 @@ interface ImageEditorLayerMoveGestureV3 {
   previewSet: boolean
   interacted: boolean
   changed: boolean
-  compositorFeedback: boolean
+  directLayerFeedback: boolean
 }
 
 const EMPTY_LAYER_IDS_V3: readonly string[] = []
@@ -50,6 +50,7 @@ export function useImageEditorLayerMoveGestureV3(
   viewportContentRef: RefObject<HTMLDivElement>,
   moveFeedbackRef: RefObject<HTMLDivElement>,
   outputGeometry: AnnotationOutputGeometryV3,
+  directLayerFeedbackAvailable: boolean,
 ): ImageEditorLayerMoveGestureHandlersV3 {
   const gestureRef = useRef<ImageEditorLayerMoveGestureV3 | null>(null)
   const selectedLayerIds = useImageEditorSessionStoreV3(
@@ -84,7 +85,7 @@ export function useImageEditorLayerMoveGestureV3(
     ) gesture.captureTarget.releasePointerCapture(gesture.pointerId)
     if (commit && gesture.changed) {
       try {
-        if (gesture.compositorFeedback) {
+        if (gesture.directLayerFeedback) {
           controller.updateLayerCommon(gesture.layerId, { transform: gesture.pendingTransform })
         } else {
           if (!gesture.previewSet) {
@@ -198,7 +199,8 @@ export function useImageEditorLayerMoveGestureV3(
       previewSet: false,
       interacted: false,
       changed: false,
-      compositorFeedback: moveFeedbackRef.current !== null
+      directLayerFeedback: directLayerFeedbackAvailable
+        && moveFeedbackRef.current !== null
         && location.parentId === null
         && location.layer.type === 'raster'
         && controller.document.geometry.crop === null
@@ -239,7 +241,7 @@ export function useImageEditorLayerMoveGestureV3(
     gesture.pendingTransform = changed
       ? translateImageEditLayerTransformV3(gesture.startTransform, deltaX, deltaY)
       : [...gesture.startTransform]
-    if (gesture.compositorFeedback && moveFeedbackRef.current) {
+    if (gesture.directLayerFeedback && moveFeedbackRef.current) {
       const previewClientX = gesture.viewportRect.left
         + outputPoint[0] / outputGeometry.width * gesture.viewportRect.width
       const previewClientY = gesture.viewportRect.top

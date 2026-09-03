@@ -25,6 +25,10 @@ describe('ImageEditorRasterPasteboardV3', () => {
     document.layers[1].visible = false
     document.layers[0].mask = { resourceId: 'sha256:mask', inverted: false }
     expect(resolveImageEditorRasterPasteboardLayerV3(document)).toBeNull()
+
+    document.layers[0].mask = null
+    document.color.workingSpace = 'display-p3'
+    expect(resolveImageEditorRasterPasteboardLayerV3(document)).toBeNull()
   })
 
   it('将文档像素位移换算成适应窗口后的工作区位移', () => {

@@ -272,7 +272,7 @@ describe('ImageEditorPreviewV3 managed frame ownership', () => {
     expect(document.revision).toBe(0)
   })
 
-  it('图层移动始终裁切在文档画布内且不再绘制文档外副本', async () => {
+  it('完整源图层始终位于文档裁切层内，越界部分只显示透明底', async () => {
     vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({
       x: 0, y: 0, left: 0, top: 0, right: 1_000, bottom: 600,
       width: 1_000, height: 600, toJSON: () => undefined,
@@ -300,19 +300,29 @@ describe('ImageEditorPreviewV3 managed frame ownership', () => {
       if (!element) throw new Error('文档内栅格显示框尚未挂载')
       return element
     })
+    const rasterSource = rendered.container.querySelector<HTMLElement>('[data-raster-pasteboard-layer]')
+    const rasterImage = rasterSource?.querySelector('img')
+    if (!rasterSource || !rasterImage) throw new Error('完整源图层尚未挂载')
+    fireEvent.load(rasterImage)
+    await waitFor(() => expect(rasterSource.dataset.rasterSourceReady).toBe('true'))
     expect(rasterFrame.className).toContain('overflow-hidden')
+    expect(rasterFrame.className).toContain('invisible')
     const documentClip = rendered.container.querySelector<HTMLElement>('[data-document-clip]')
     const transparencyGrid = rendered.container.querySelector<HTMLElement>(
       '[data-document-transparency-grid]',
     )
     expect(documentClip?.contains(rasterFrame)).toBe(true)
+    expect(documentClip?.contains(rasterSource)).toBe(true)
     expect(documentClip?.style.clipPath).toContain('polygon(')
     expect(transparencyGrid?.className).toContain('image-editor-transparency-grid')
-    expect(rendered.container.querySelector('[data-raster-pasteboard-layer]')).toBeNull()
     expect(rendered.container.querySelector('[data-document-boundary]')).toBeNull()
   })
 
   it('放大后的单底图移动仍按屏幕像素跟手且松手仅提交一个 revision', async () => {
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({
+      x: 0, y: 0, left: 0, top: 0, right: 900, bottom: 600,
+      width: 900, height: 600, toJSON: () => undefined,
+    })
     vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({
       clearRect: vi.fn(),
       drawImage: vi.fn(),
@@ -353,6 +363,10 @@ describe('ImageEditorPreviewV3 managed frame ownership', () => {
     const content = rendered.container.querySelector<HTMLElement>('[data-viewport-content]')
     const feedback = rendered.container.querySelector<HTMLElement>('[data-move-feedback-frame]')
     if (!surface || !content || !feedback) throw new Error('移动反馈测试节点不存在')
+    const rasterImage = feedback.querySelector('img')
+    if (!rasterImage) throw new Error('移动反馈缺少完整源图')
+    fireEvent.load(rasterImage)
+    await waitFor(() => expect(feedback.dataset.rasterSourceReady).toBe('true'))
     const readViewportRect = vi.spyOn(content, 'getBoundingClientRect').mockReturnValue({
       x: 0, y: 0, left: 0, top: 0, right: 640, bottom: 360,
       width: 640, height: 360, toJSON: () => undefined,
@@ -399,8 +413,18 @@ describe('ImageEditorPreviewV3 managed frame ownership', () => {
     expect(liveSession.bus.getSnapshot().document.layers[0].transform).toEqual([
       1, 0, 0, 1, 12.5, 5,
     ])
-    // 新 revision 的稳定画面尚未到达时保留瞬态位移，避免松手闪回旧位置。
-    expect(feedback.style.transform).toBe('translate3d(25px, 10px, 0)')
+    // 完整源图同步读取新 transform，提交后无需等待合成器补帧。
+    expect(feedback.style.transform).toBe('')
+    expect(rasterImage.style.transform).toBe('matrix(1, 0, 0, 1, 19.53125, 7.8125)')
+
+    fireEvent.pointerDown(surface, {
+      pointerId: 43, isPrimary: true, button: 0, clientX: 35, clientY: 20,
+    })
+    fireEvent.pointerMove(surface, { pointerId: 43, clientX: 15, clientY: 20 })
+    expect(feedback.style.transform).toBe('translate3d(-20px, 0px, 0)')
+    expect(rasterImage.style.transform).toBe('matrix(1, 0, 0, 1, 19.53125, 7.8125)')
+    fireEvent.pointerCancel(surface, { pointerId: 43 })
+    expect(feedback.style.transform).toBe('')
   })
 
   it('多内容图层移动按动画帧合并草稿更新且不叠加 CSS 位移', async () => {
@@ -434,7 +458,8 @@ describe('ImageEditorPreviewV3 managed frame ownership', () => {
     const surface = rendered.container.querySelector<HTMLElement>('[data-preview-surface]')
     const content = rendered.container.querySelector<HTMLElement>('[data-viewport-content]')
     const feedback = rendered.container.querySelector<HTMLElement>('[data-move-feedback-frame]')
-    if (!surface || !content || !feedback) throw new Error('多图层移动测试节点不存在')
+    if (!surface || !content) throw new Error('多图层移动测试节点不存在')
+    expect(feedback).toBeNull()
     vi.spyOn(content, 'getBoundingClientRect').mockReturnValue({
       x: 0, y: 0, left: 0, top: 0, right: 320, bottom: 180,
       width: 320, height: 180, toJSON: () => undefined,
@@ -452,7 +477,6 @@ describe('ImageEditorPreviewV3 managed frame ownership', () => {
     fireEvent.pointerMove(surface, { pointerId: 51, clientX: 45, clientY: 30 })
 
     expect(requestFrame).toHaveBeenCalledTimes(1)
-    expect(feedback.style.transform).toBe('')
     expect(liveSession.bus.getSnapshot().previewOverrides).toEqual({})
     const publishDraft = scheduledFrame.current
     if (!publishDraft) throw new Error('多图层移动没有安排草稿帧')

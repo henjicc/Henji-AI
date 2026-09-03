@@ -20,6 +20,7 @@ import {
   ImageEditorUrlPreviewV3,
 } from './ImageEditorPreviewOutputV3'
 import { ImageEditorRasterBrushOverlayV3 } from './ImageEditorRasterBrushOverlayV3'
+import { ImageEditorRasterPasteboardV3 } from './ImageEditorRasterPasteboardV3'
 import { ImageEditorSelectionMaskOverlayV3 } from './ImageEditorSelectionMaskOverlayV3'
 import { ImageEditorViewportTilesV3 } from './ImageEditorViewportTilesV3'
 import { resolveAnnotationOutputGeometryV3 } from './annotationGeometryV3'
@@ -38,6 +39,7 @@ import {
 import { useImageEditorLayerMoveGestureV3 } from './useImageEditorLayerMoveGestureV3'
 import { imageEditorViewportTransformV3, type ImageEditorViewportPanV3 } from './viewportNavigationV3'
 import { useImageEditorViewportNavigationGestureV3 } from './useImageEditorViewportNavigationGestureV3'
+import { useImageEditorRasterPasteboardV3 } from './useImageEditorRasterPasteboardV3'
 import {
   resolveLiveBlurRadiusV3,
   splitLiveAnnotationDisplayV3,
@@ -73,7 +75,6 @@ export function ImageEditorPreviewV3({
   const viewportContentRef = useRef<HTMLDivElement | null>(null)
   const documentBackgroundRef = useRef<HTMLDivElement | null>(null)
   const documentClipRef = useRef<HTMLDivElement | null>(null)
-  const moveFeedbackRef = useRef<HTMLDivElement | null>(null)
   const snapshot = useImageEditorBusSnapshotV3(bus)
   const activeTool = useImageEditorSessionStoreV3(
     (state) => state.sessions[controller.sessionId]?.activeTool ?? 'move',
@@ -138,6 +139,21 @@ export function ImageEditorPreviewV3({
     const incrementalRadius = Math.sqrt(Math.max(0, nextRadius ** 2 - baseRadius ** 2))
     return Math.min(48, incrementalRadius * documentToCss)
   }, [baseDisplayDocument, projectedDocument, snapshot.previewOverrides, viewportLayout?.viewport.zoom])
+  const rasterPasteboard = useImageEditorRasterPasteboardV3(
+    projectedDocument,
+    sourceImageUrl,
+    outputGeometry.width,
+    !previewRenderer,
+  )
+  const {
+    feedbackRef: moveFeedbackRef,
+    imageRef: rasterSourceImageRef,
+    layer: rasterPasteboardLayer,
+    sourceIdentity: rasterSourceIdentity,
+    ready: rasterSourceReady,
+    markReady: markRasterSourceReady,
+    updateFrame: updateRasterSourceFrame,
+  } = rasterPasteboard
   const displayPipeline = useImageEditorDisplayPipelineV3(
     controller.sessionId,
     displaySnapshot,
@@ -221,13 +237,18 @@ export function ImageEditorPreviewV3({
   useLayoutEffect(() => {
     const feedback = moveFeedbackRef.current
     if (!feedback) return
+    if (rasterSourceReady) {
+      // 完整源图层已经同步吃到新 transform，提交后立刻移除手势残差。
+      feedback.style.transform = ''
+      return
+    }
     if (
       Object.keys(snapshot.previewOverrides).length > 0
       || basePreviewDocumentId !== displaySnapshot.document.id
       || basePreviewRevision !== displaySnapshot.document.revision
     ) return
     feedback.style.transform = ''
-  }, [basePreviewDocumentId, basePreviewRevision, displaySnapshot.document.id, displaySnapshot.document.revision, snapshot.previewOverrides])
+  }, [basePreviewDocumentId, basePreviewRevision, displaySnapshot.document.id, displaySnapshot.document.revision, moveFeedbackRef, rasterSourceReady, snapshot.previewOverrides])
 
   const updatePresentationViewport = useCallback((
     nextZoom: number,
@@ -255,9 +276,10 @@ export function ImageEditorPreviewV3({
       background.style.width = `${frame.width}px`
       background.style.height = `${frame.height}px`
     }
+    updateRasterSourceFrame(frame)
     if (documentClipRef.current) documentClipRef.current.style.clipPath = frame.clipPath
     viewportComposite.session.updateViewport(nextLayout)
-  }, [outputGeometry, viewportComposite.session])
+  }, [outputGeometry, updateRasterSourceFrame, viewportComposite.session])
 
   const navigation = useImageEditorViewportNavigationGestureV3(
     controller.sessionId,
@@ -268,16 +290,17 @@ export function ImageEditorPreviewV3({
     pan,
     updatePresentationViewport,
   )
+  const documentFrame = useMemo(() => (
+    viewportLayout ? imageEditorViewportDocumentFrameV3(viewportLayout, outputGeometry) : null
+  ), [outputGeometry, viewportLayout])
   const layerMoveHandlers = useImageEditorLayerMoveGestureV3(
     controller,
     navigation.effectiveTool,
     viewportContentRef,
     moveFeedbackRef,
     outputGeometry,
+    rasterSourceReady,
   )
-  const documentFrame = useMemo(() => (
-    viewportLayout ? imageEditorViewportDocumentFrameV3(viewportLayout, outputGeometry) : null
-  ), [outputGeometry, viewportLayout])
 
   const navigationCursor = navigation.effectiveTool === 'hand'
     ? 'cursor-grab active:cursor-grabbing'
@@ -340,11 +363,9 @@ export function ImageEditorPreviewV3({
           style={{ clipPath: documentFrame?.clipPath ?? 'polygon(0 0, 0 0, 0 0, 0 0)' }}
         >
           <div
-            ref={moveFeedbackRef}
             data-raster-display-frame
-            data-move-feedback-frame
             data-live-blur-feedback={liveBlurFeedback === null ? undefined : 'active'}
-            className="pointer-events-none absolute inset-0 overflow-hidden"
+            className={`pointer-events-none absolute inset-0 overflow-hidden ${rasterSourceReady ? 'invisible' : ''}`}
             style={liveBlurFeedback === null ? undefined : {
               filter: `blur(${liveBlurFeedback}px)`,
               willChange: 'filter',
@@ -356,6 +377,18 @@ export function ImageEditorPreviewV3({
               label={t('imageEditor.v3.previewAlt')}
             />
           </div>
+          {rasterPasteboardLayer && documentFrame && rasterSourceIdentity ? (
+            <ImageEditorRasterPasteboardV3
+              feedbackRef={moveFeedbackRef}
+              imageRef={rasterSourceImageRef}
+              layer={rasterPasteboardLayer}
+              sourceImageUrl={sourceImageUrl}
+              documentWidth={outputGeometry.width}
+              frame={documentFrame}
+              ready={rasterSourceReady}
+              onReady={markRasterSourceReady}
+            />
+          ) : null}
         </div>
       ) : null}
       <div className="absolute inset-0 flex items-center justify-center overflow-hidden p-6">
