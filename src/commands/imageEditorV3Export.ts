@@ -6,6 +6,8 @@ import type {
   ImageEditorV3RasterExportDescription,
   ImageEditorV3RasterExportFormat,
   ImageEditorV3RasterExportResult,
+  ImageEditorV3RasterPublication,
+  ImageEditorV3StandaloneRasterExportResult,
 } from '@/platform/contracts/imageEditorV3'
 import { getPlatform } from '@/platform/runtime'
 import { createImageEditorV3RequestId } from './imageEditorV3'
@@ -39,6 +41,10 @@ export type MaterializeImageEditorV3RasterRequest = Omit<
   ExportImageEditorV3RasterRequest,
   'suggestedName'
 >
+
+type ImageEditorV3MaterializedRasterResult =
+  | ImageEditorV3ManagedRasterExportResult
+  | ImageEditorV3StandaloneRasterExportResult
 
 function abortError(): Error {
   const error = new Error('图片栅格导出已取消')
@@ -133,20 +139,46 @@ export async function materializeImageEditorV3Raster(
   request: MaterializeImageEditorV3RasterRequest,
   signal?: AbortSignal,
 ): Promise<ImageEditorV3ManagedRasterExportResult> {
+  const completed = await materializeManagedImageEditorV3Raster(
+    request,
+    'document-preview',
+    signal,
+  )
+  if (!('previewRef' in completed)) {
+    throw new Error('文档预览物化收到了独立图片结果')
+  }
+  return completed
+}
+
+async function materializeManagedImageEditorV3Raster(
+  request: MaterializeImageEditorV3RasterRequest,
+  publication: ImageEditorV3RasterPublication,
+  signal?: AbortSignal,
+): Promise<ImageEditorV3MaterializedRasterResult> {
   if (signal?.aborted) throw abortError()
   const platform = getPlatform().imageEditorV3
-  const requestId = createImageEditorV3RequestId('raster-materialize')
+  const standalone = publication === 'standalone-image'
+  const requestId = createImageEditorV3RequestId(
+    standalone ? 'raster-materialize-standalone' : 'raster-materialize',
+  )
   let sessionId: string | undefined
   const cancelActive = (): void => {
     const cancellation = sessionId
       ? platform.cancelRasterExport({ sessionId })
       : platform.cancelRequest(requestId)
     void cancellation.catch((error: unknown) => {
-      logger.warn('图片受管栅格物化取消请求发送失败', {
-        event: 'image_editor_v3.raster_materialize.cancel_failed',
-        requestId: sessionId ?? requestId,
-        context: { error: error instanceof Error ? error.message : String(error) },
-      })
+      logger.warn(
+        standalone
+          ? '图片独立栅格物化取消请求发送失败'
+          : '图片受管栅格物化取消请求发送失败',
+        {
+          event: standalone
+            ? 'image_editor_v3.raster_materialize_standalone.cancel_failed'
+            : 'image_editor_v3.raster_materialize.cancel_failed',
+          requestId: sessionId ?? requestId,
+          context: { error: error instanceof Error ? error.message : String(error) },
+        },
+      )
     })
   }
   signal?.addEventListener('abort', cancelActive, { once: true })
@@ -162,6 +194,7 @@ export async function materializeImageEditorV3Raster(
       compressionLevel: request.compressionLevel,
       quality: request.quality,
       effort: request.effort,
+      publication,
     })
     sessionId = started.sessionId
     if (signal?.aborted) {
@@ -191,4 +224,23 @@ export async function materializeImageEditorV3Raster(
   } finally {
     signal?.removeEventListener('abort', cancelActive)
   }
+}
+
+/**
+ * 与文档预览物化共享同一流式编码会话，但发布为画布可接管的普通受管图片。
+ * 它不改写原 V3 文档的 previewRef、revision 或历史。
+ */
+export async function materializeImageEditorV3StandaloneRaster(
+  request: MaterializeImageEditorV3RasterRequest,
+  signal?: AbortSignal,
+): Promise<ImageEditorV3StandaloneRasterExportResult> {
+  const completed = await materializeManagedImageEditorV3Raster(
+    request,
+    'standalone-image',
+    signal,
+  )
+  if (!('imagePath' in completed)) {
+    throw new Error('独立图片物化收到了文档预览结果')
+  }
+  return completed
 }

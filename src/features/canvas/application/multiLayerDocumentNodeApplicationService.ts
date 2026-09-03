@@ -133,6 +133,17 @@ function validateRaster(raster: MultiLayerDocumentExportRaster): MultiLayerDocum
     || raster.width < 1
     || !Number.isInteger(raster.height)
     || raster.height < 1
+    || raster.mediaType !== 'image/png'
+    || raster.hasAlpha !== true
+    || !raster.displayName.trim()
+    || !Array.isArray(raster.ownedFilePaths)
+    || raster.ownedFilePaths.some((filePath) => typeof filePath !== 'string' || !filePath.trim())
+    || !raster.diagnostics
+    || raster.diagnostics.canvasScope !== 'document'
+    || !raster.diagnostics.documentId.trim()
+    || !Number.isInteger(raster.diagnostics.revision)
+    || !raster.diagnostics.targetId.trim()
+    || !Array.isArray(raster.diagnostics.layerPath)
   ) {
     throw new MultiLayerDocumentNodeApplicationError('OPERATION_FAILED', '独立导出没有产生完整的受管图片', true)
   }

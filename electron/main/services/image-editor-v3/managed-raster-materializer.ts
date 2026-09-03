@@ -3,6 +3,7 @@ import fsp from 'node:fs/promises'
 import path from 'node:path'
 
 import { createMainLogger } from '../logging'
+import { persistImageSourceTracked } from '../image/image-file-ops'
 import { createImageEditSourceFingerprint } from './raster-export-snapshot'
 import { createImageEditorV3ResourceMediaUrl } from './resource-media-url'
 import type { ImageEditDocumentRepository } from './document-repository'
@@ -19,7 +20,11 @@ const logger = createMainLogger('main.image_editor_v3.managed_raster')
 const STALE_OUTPUT_AGE_MS = 24 * 60 * 60 * 1_000
 const MAX_MANAGED_OUTPUT_BYTES = 16 * 1024 * 1024 * 1024
 
-type ManagedStartRequest = Omit<StartRasterExportSessionRequest, 'targetPath'>
+export type ManagedRasterPublication = 'document-preview' | 'standalone-image'
+
+type ManagedStartRequest = Omit<StartRasterExportSessionRequest, 'targetPath'> & {
+  publication?: ManagedRasterPublication
+}
 
 export interface ManagedRasterSessionPort {
   start(request: StartRasterExportSessionRequest): Promise<RasterExportSessionStartResult>
@@ -30,11 +35,21 @@ export interface ManagedRasterSessionPort {
 interface ManagedSession {
   ownerId: number
   targetPath: string
+  publication: ManagedRasterPublication
 }
 
 export interface ManagedRasterMaterializationResult extends RasterExportSessionResult {
   previewRef: ResourceId
   mediaUrl: string
+}
+
+export interface StandaloneRasterMaterializationResult extends RasterExportSessionResult {
+  imagePath: string
+  createdFilePaths: string[]
+}
+
+interface ManagedRasterMaterializerDependencies {
+  publishStandalone?: typeof persistImageSourceTracked
 }
 
 function outputPresentation(format: RasterExportFormat): { extension: string; mediaType: string } {
@@ -60,6 +75,7 @@ export class ManagedRasterMaterializer {
     private readonly documents: ImageEditDocumentRepository,
     private readonly resources: ContentAddressedResourceStore,
     private readonly stagingDir: string,
+    private readonly dependencies: ManagedRasterMaterializerDependencies = {},
   ) {}
 
   async start(request: ManagedStartRequest): Promise<RasterExportSessionStartResult> {
@@ -70,8 +86,9 @@ export class ManagedRasterMaterializer {
       `managed-${crypto.randomUUID()}.${presentation.extension}`,
     )
     try {
-      const started = await this.manager.start({ ...request, targetPath })
-      this.sessions.set(started.sessionId, { ownerId: request.ownerId, targetPath })
+      const { publication = 'document-preview', ...startRequest } = request
+      const started = await this.manager.start({ ...startRequest, targetPath })
+      this.sessions.set(started.sessionId, { ownerId: request.ownerId, targetPath, publication })
       return started
     } catch (error) {
       await fsp.rm(targetPath, { force: true }).catch(() => undefined)
@@ -79,10 +96,29 @@ export class ManagedRasterMaterializer {
     }
   }
 
-  async complete(ownerId: number, sessionId: string): Promise<ManagedRasterMaterializationResult> {
+  async complete(
+    ownerId: number,
+    sessionId: string,
+  ): Promise<ManagedRasterMaterializationResult | StandaloneRasterMaterializationResult> {
     const session = this.getOwned(sessionId, ownerId)
     try {
       const completed = await this.manager.complete(ownerId, sessionId)
+      if (session.publication === 'standalone-image') {
+        const persisted = await (
+          this.dependencies.publishStandalone ?? persistImageSourceTracked
+        )(session.targetPath)
+        logger.info('独立受管栅格结果已发布', {
+          event: 'image_editor_v3.managed_raster.standalone.completed',
+          requestId: sessionId,
+          context: {
+            documentId: completed.documentId,
+            revision: completed.revision,
+            format: completed.format,
+            created: persisted.createdFilePaths.length > 0,
+          },
+        })
+        return { ...completed, ...persisted }
+      }
       const presentation = outputPresentation(completed.format)
       const stored = await this.resources.putFile(session.targetPath, {
         mediaType: presentation.mediaType,

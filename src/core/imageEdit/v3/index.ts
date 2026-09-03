@@ -26,6 +26,7 @@ export * from './serviceContracts';
 export * from './sessionReference';
 export * from './performanceMetrics';
 export * from './resourceReferences';
+export * from './exportTargetView';
 export * from './effects';
 export * from './execution';
 export * from './brush';
