@@ -1474,6 +1474,42 @@ function createToolboxScenes(context) {
         await editor.getByRole('group', {
           name: /^(打码方式|Redaction mode)$/i,
         }).waitFor({ state: 'visible', timeout: 5000 })
+        await editor.getByRole('button', { name: /^(圆形标注|Ellipse annotation)$/i }).click()
+        const finalAnnotationOverlay = editor.locator('[data-annotation-editor-overlay]')
+        const finalAnnotationBox = await finalAnnotationOverlay.boundingBox()
+        if (!finalAnnotationBox) throw new Error('控制点视觉验收无法读取标注画布')
+        const beforeFinalAnnotation = await readRevision()
+        await page.mouse.move(
+          finalAnnotationBox.x + finalAnnotationBox.width * 0.82,
+          finalAnnotationBox.y + finalAnnotationBox.height * 0.72,
+        )
+        await page.mouse.down()
+        await page.mouse.move(
+          finalAnnotationBox.x + finalAnnotationBox.width * 0.95,
+          finalAnnotationBox.y + finalAnnotationBox.height * 0.9,
+          { steps: 6 },
+        )
+        await page.mouse.up()
+        await page.waitForFunction((revision) => (
+          Number(document.querySelector('[data-command-bar]')
+            ?.getAttribute('data-document-revision')) === revision + 1
+            && document.querySelector('[data-annotation-editor-overlay]')
+              ?.getAttribute('data-selected-annotation-type') === 'ellipse'
+        ), beforeFinalAnnotation, { timeout: 5000 }).catch(async () => {
+          const state = await editor.evaluate((root) => ({
+            revision: root.querySelector('[data-command-bar]')
+              ?.getAttribute('data-document-revision'),
+            drawing: root.querySelector('[data-annotation-editor-overlay]')
+              ?.getAttribute('data-annotation-drawing'),
+            selectedType: root.querySelector('[data-annotation-editor-overlay]')
+              ?.getAttribute('data-selected-annotation-type'),
+            liveLayerCount: root.querySelector('[data-annotation-editor-overlay]')
+              ?.getAttribute('data-live-annotation-layer-count'),
+            ellipsePressed: root.querySelector('[data-annotation-tool-id="annotation-ellipse"]')
+              ?.getAttribute('aria-pressed'),
+          }))
+          throw new Error(`控制点视觉验收没有成功创建并选中椭圆标注：${JSON.stringify(state)}`)
+        })
         await preview.getByRole('img').first().waitFor({ state: 'visible', timeout: 15000 })
         await preview.locator('.animate-spin').waitFor({ state: 'hidden', timeout: 15000 })
         await settlePage(page, 500)

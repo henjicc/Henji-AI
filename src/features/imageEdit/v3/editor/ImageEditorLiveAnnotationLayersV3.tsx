@@ -23,6 +23,7 @@ import {
 import type { EditableAnnotationLayerV3 } from './annotationModelV3'
 
 const EMPTY_MOSAIC_SOURCE = (): HTMLCanvasElement | null => null
+const IMAGE_EDITOR_ANNOTATION_ANCHOR_SIZE_PX = 8
 
 function mapTool(tool: ImageEditorToolIdV3): MarkToolType {
   if (tool === 'move') return 'select'
@@ -168,7 +169,7 @@ export function ImageEditorLiveAnnotationLayersV3({
                   borderStroke={ANNOTATION_TRANSFORMER_HEX}
                   anchorStroke={ANNOTATION_TRANSFORMER_HEX}
                   anchorFill={WHITE_HEX}
-                  anchorSize={Math.max(6, 8 / Math.max(stageScale, 0.01))}
+                  anchorSize={IMAGE_EDITOR_ANNOTATION_ANCHOR_SIZE_PX}
                   ignoreStroke
                   keepRatio={keepRatio}
                   enabledAnchors={keepRatio
