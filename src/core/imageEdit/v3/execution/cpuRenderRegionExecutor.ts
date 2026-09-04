@@ -266,7 +266,7 @@ export async function executeImageEditCpuRenderRegionPlanV3(
     node: ImageEditRenderPlanNode,
     region: ImageEditRect,
   ): Promise<Float32PremultipliedRgbaTile> => {
-    validateRegion(region, context.size)
+    validateRegion(region, context.resolveSourceSize?.(node) ?? context.size)
     const key = `${node.id}:${regionKey(region)}`
     const cached = memo.get(key)
     if (cached) return cached

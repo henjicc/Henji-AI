@@ -98,6 +98,10 @@ export function createImageEditorViewportSourceSizeResolverV3(
   const resolve = (node: ImageEditRenderPlanNode, seen: Set<string>): ImageEditSize => {
     if (seen.has(node.id)) return fallback
     seen.add(node.id)
+    // composite 的输入/输出都在文档坐标系；只有它逆变换后的 content 链使用源几何。
+    if (node.definitionId === 'composite.layer' || node.definitionId === 'vector.annotation') {
+      return fallback
+    }
     const resourceRef = rasterResourceId(node)
     if (resourceRef) {
       const size = resourceSizes.get(resourceRef)

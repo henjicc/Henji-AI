@@ -241,7 +241,7 @@ describe('图片编辑 V3 视口成品分块执行器', () => {
     expect(first).toBeCloseTo(decodeSrgbExtended(96 / 255), 5)
   })
 
-  it('使用独立资源几何渲染缩放图层', async () => {
+  it('使用独立资源几何渲染高度超出文档的缩放图层', async () => {
     const document = createImageEditDocumentV3({
       width: 4,
       height: 4,
@@ -249,19 +249,19 @@ describe('图片编辑 V3 视口成品分块执行器', () => {
       sourceResourceId: RESOURCE,
       idFactory: () => 'source',
     })
-    document.layers[0].transform = [2, 0, 0, 2, 0, 0]
-    const pixels = new Uint8Array(2 * 2 * 4)
+    document.layers[0].transform = [2, 0, 0, 0.5, 0, 0]
+    const pixels = new Uint8Array(2 * 8 * 4)
     for (let offset = 0; offset < pixels.length; offset += 4) {
       pixels.set([128, 128, 128, 255], offset)
     }
     const renderRequest = request(document, {
       ...sourceTile(128),
       width: 2,
-      height: 2,
+      height: 8,
       rowStride: 2 * 4,
       pixels: pixels.buffer,
     })
-    renderRequest.resourceSizes = [{ resourceRef: RESOURCE, width: 2, height: 2 }]
+    renderRequest.resourceSizes = [{ resourceRef: RESOURCE, width: 2, height: 8 }]
     let rendered: Float32Array | null = null
 
     await renderImageEditorViewportCompositeV3(
