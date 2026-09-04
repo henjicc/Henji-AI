@@ -17,6 +17,8 @@ export interface ImageEditorGpuSceneTileKeyV3 {
   tileX: number
   tileY: number
   contentVersion: string
+  /** 颜色资源为 RGBA；蒙版统一上传为紧凑 r8unorm。 */
+  format?: 'rgba8unorm' | 'r8unorm'
 }
 
 export interface ImageEditorGpuSceneUploadTileV3 {
@@ -169,5 +171,5 @@ export interface ImageEditorGpuSceneWorkerPortV3 {
 export type ImageEditorGpuSceneWorkerFactoryV3 = () => ImageEditorGpuSceneWorkerPortV3
 
 export function imageEditorGpuSceneTileKeyV3(key: ImageEditorGpuSceneTileKeyV3): string {
-  return [key.resourceRef, key.mip, key.tileX, key.tileY, key.contentVersion].join(':')
+  return [key.format ?? 'rgba8unorm', key.resourceRef, key.mip, key.tileX, key.tileY, key.contentVersion].join(':')
 }

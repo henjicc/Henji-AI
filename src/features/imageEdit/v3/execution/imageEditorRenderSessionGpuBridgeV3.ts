@@ -3,8 +3,11 @@ import type { ImageEditRenderQuality } from '@/core/imageEdit/v3/renderNodeDefin
 import { createLogger } from '@/core/logging'
 import {
   createImageEditorV3RequestId,
+  readImageEditorV3BrushTiles,
   readImageEditorV3SourceTile,
 } from '@/commands/imageEditorV3'
+import type { ImageEditorV3ResourceDescriptor, ImageEditorV3SourceTile } from '@/platform/contracts/imageEditorV3'
+import { IMAGE_EDITOR_V3_BRUSH_TILE_MEDIA_TYPE } from '../application/imageEditorResourceDescriptorsV3'
 import type { ImageEditorViewportLayoutV3 } from '../editor/useImageEditorViewportLayoutV3'
 import {
   createDefaultImageEditorGpuSceneClientV3,
@@ -29,6 +32,7 @@ export class ImageEditorRenderSessionGpuBridgeV3 {
   private quality: ImageEditRenderQuality = 'draft'
   private layout: ImageEditorViewportLayoutV3 | null = null
   private readonly loadingTiles = new Set<string>()
+  private resourceDescriptors = new Map<string, ImageEditorV3ResourceDescriptor>()
   private pendingFrame = false
   private frameInFlight = false
   private deviceReady = false
@@ -53,6 +57,7 @@ export class ImageEditorRenderSessionGpuBridgeV3 {
       eventToPresentMs: number | null,
     ) => boolean,
     private readonly fallbackToStableFrame?: () => void,
+    private readonly readBrushTiles = readImageEditorV3BrushTiles,
   ) {
     this.client = injectedClient === undefined
       ? createDefaultImageEditorGpuSceneClientV3(sessionId)
@@ -70,6 +75,7 @@ export class ImageEditorRenderSessionGpuBridgeV3 {
     this.pendingTransform = null
     this.interactionEventTimestamp = snapshot.eventTimestamp ?? null
     this.quality = snapshot.quality
+    this.resourceDescriptors = new Map(snapshot.resourceDescriptors.map((entry) => [entry.resourceRef, entry]))
     this.client?.syncScene(snapshot)
     if (this.layout) {
       this.client?.updateViewport(this.sceneGeneration, this.cameraSequence, this.layout)
@@ -261,15 +267,7 @@ export class ImageEditorRenderSessionGpuBridgeV3 {
     try {
       const tiles = await Promise.all(keys.map(async (key) => ({
         key,
-        tile: await readImageEditorV3SourceTile({
-          requestId: createImageEditorV3RequestId('gpu-scene-tile'),
-          resourceRef: key.resourceRef,
-          mip: key.mip,
-          tileX: key.tileX,
-          tileY: key.tileY,
-          halo: 0,
-          bitDepth: 8,
-        }),
+        tile: await this.loadTile(key),
       })))
       if (this.disposed || generation !== this.sceneGeneration || tiles.length === 0) return
       this.client?.uploadTiles(generation, tiles.map(({ key, tile }) => ({
@@ -290,5 +288,48 @@ export class ImageEditorRenderSessionGpuBridgeV3 {
     } finally {
       for (const key of keys) this.loadingTiles.delete(imageEditorGpuSceneTileKeyV3(key))
     }
+  }
+
+  private async loadTile(
+    key: Extract<ImageEditorGpuSceneWorkerEventV3, { type: 'tiles-needed' }>['keys'][number],
+  ): Promise<ImageEditorV3SourceTile> {
+    const descriptor = this.resourceDescriptors.get(key.resourceRef)
+    if (key.format === 'r8unorm' && descriptor?.mediaType === IMAGE_EDITOR_V3_BRUSH_TILE_MEDIA_TYPE) {
+      const loaded = await this.readBrushTiles({
+        requestId: createImageEditorV3RequestId('gpu-scene-mask-tile'),
+        tiles: [{
+          tileKey: `${key.mip}/${key.tileX}/${key.tileY}`,
+          resource: { resourceId: key.resourceRef, byteSize: descriptor.byteLength },
+        }],
+      })
+      const mask = loaded.tiles[0]?.tile
+      if (!mask || mask.storage !== 'mask-float32') throw new Error('GPU Scene 蒙版资源不是 Float32 单通道瓦片')
+      const rgba = new Uint8Array(mask.width * mask.height * 4)
+      for (let pixel = 0; pixel < mask.data.length; pixel += 1) {
+        const value = Math.round(Math.max(0, Math.min(1, mask.data[pixel])) * 255)
+        const offset = pixel * 4
+        rgba[offset] = value
+        rgba[offset + 1] = value
+        rgba[offset + 2] = value
+        rgba[offset + 3] = 255
+      }
+      return {
+        resourceRef: key.resourceRef, mip: key.mip, tileX: key.tileX, tileY: key.tileY,
+        halo: 0, width: mask.width, height: mask.height, channels: 4, bitDepth: 8,
+        sampleFormat: 'uint', numericRange: 'unorm8', byteOrder: 'little-endian',
+        rowStride: mask.width * 4, colorSpace: 'srgb', transferFunction: 'srgb',
+        alphaMode: 'straight', orientationApplied: true,
+        originX: key.tileX * 512, originY: key.tileY * 512, pixels: rgba.buffer,
+      }
+    }
+    return await readImageEditorV3SourceTile({
+      requestId: createImageEditorV3RequestId('gpu-scene-tile'),
+      resourceRef: key.resourceRef,
+      mip: key.mip,
+      tileX: key.tileX,
+      tileY: key.tileY,
+      halo: 0,
+      bitDepth: 8,
+    })
   }
 }
