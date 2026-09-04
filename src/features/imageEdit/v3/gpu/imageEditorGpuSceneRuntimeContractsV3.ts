@@ -3,6 +3,13 @@ import type { GpuDevice } from '@/core/imageEdit/worker/webgpuRuntimeSupport'
 
 import type { ImageEditorGpuRasterCompositorV3Like } from './imageEditorGpuRasterCompositorV3'
 
+export interface ImageEditorGpuSceneGpuStateV3 {
+  managed: ManagedWebGpuDevice
+  context: ImageEditorGpuSceneContextV3
+  compositor: ImageEditorGpuRasterCompositorV3Like
+  unsubscribeError: () => void
+}
+
 export interface ImageEditorGpuSceneDeviceManagerV3 {
   onDeviceLost(handler: (reason: string, loss: ImageEditWebGpuDeviceLoss) => void): void
   acquire(): Promise<ManagedWebGpuDevice>

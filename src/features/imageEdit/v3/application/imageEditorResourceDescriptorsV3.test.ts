@@ -43,4 +43,25 @@ describe('ImageEditor V3 受控资源描述符', () => {
       [BRUSH]: 128,
     })
   })
+
+  it('复制图层保留的源图与旧式蒙版不会被误标为 brush tile', () => {
+    const raster = createImageEditRasterLayerV3('raster', '底图', SOURCE)
+    raster.mask = { resourceId: STALE, inverted: false }
+    const document = {
+      ...createImageEditDocumentV3({ width: 512, height: 512, documentId: 'legacy-source' }),
+      layers: [raster],
+    }
+    const descriptors = reconcileImageEditorV3ResourceDescriptors(document, [
+      { resourceRef: SOURCE, byteLength: 4_096, mediaType: 'image/png' },
+      { resourceRef: STALE, byteLength: 1_024, mediaType: 'image/png' },
+    ], [
+      { resourceId: SOURCE, byteSize: 4_096 },
+      { resourceId: STALE, byteSize: 1_024 },
+    ])
+
+    expect(descriptors).toEqual([
+      { resourceRef: SOURCE, byteLength: 4_096, mediaType: 'image/png' },
+      { resourceRef: STALE, byteLength: 1_024, mediaType: 'image/png' },
+    ])
+  })
 })

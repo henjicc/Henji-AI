@@ -30,6 +30,7 @@ import type {
 } from './imageEditorRenderSessionContractsV3'
 import type { ImageEditorPresentationSurfaceTransferV3 } from './imageEditorPresentationSurfaceV3'
 import { rasterizeImageEditorViewportAnnotationsV3 } from './viewportCompositePixelsV3'
+import { floatPremultipliedTileToGpuSource } from './imageEditorGpuTileSourceV3'
 
 const logger = createLogger('features.image_edit.v3.gpu_scene_bridge')
 const GPU_SOURCE_TILE_BATCH_SIZE = 16
@@ -250,8 +251,10 @@ export class ImageEditorRenderSessionGpuBridgeV3 {
       this.frameInFlight = false
       if (event.code === 'composition-not-ready'
         && event.recoverable
-        && (!this.deviceReady || this.loadingTiles.size > 0)) {
+        && (!this.deviceReady || this.loadingTiles.size > 0
+          || event.message === 'GPU Scene 等待源纹理')) {
         this.pendingFrame = true
+        if (this.loadingTiles.size === 0) this.dispatchFrame()
         return
       }
       this.pendingFrame = false
@@ -478,29 +481,4 @@ export class ImageEditorRenderSessionGpuBridgeV3 {
     }, signal)
   }
 
-}
-
-function floatPremultipliedTileToGpuSource(
-  key: Extract<ImageEditorGpuSceneWorkerEventV3, { type: 'tiles-needed' }>['keys'][number],
-  premultiplied: Float32Array,
-  width: number,
-  height: number,
-): ImageEditorV3SourceTile {
-  const straight = new Float32Array(premultiplied.length)
-  for (let offset = 0; offset < premultiplied.length; offset += 4) {
-    const alpha = Math.max(0, premultiplied[offset + 3])
-    const inverseAlpha = alpha > 0 ? 1 / alpha : 0
-    straight[offset] = premultiplied[offset] * inverseAlpha
-    straight[offset + 1] = premultiplied[offset + 1] * inverseAlpha
-    straight[offset + 2] = premultiplied[offset + 2] * inverseAlpha
-    straight[offset + 3] = alpha
-  }
-  return {
-    resourceRef: key.resourceRef, mip: key.mip, tileX: key.tileX, tileY: key.tileY,
-    halo: 0, width, height, channels: 4, bitDepth: 32,
-    sampleFormat: 'float', numericRange: 'scene-linear', byteOrder: 'little-endian',
-    rowStride: width * 16, colorSpace: 'scrgb', transferFunction: 'linear',
-    alphaMode: 'straight', orientationApplied: true,
-    originX: key.tileX * 512, originY: key.tileY * 512, pixels: straight.buffer,
-  }
 }

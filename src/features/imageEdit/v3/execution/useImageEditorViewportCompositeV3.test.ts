@@ -184,6 +184,10 @@ describe('useImageEditorViewportCompositeV3', () => {
     await act(async () => { await vi.advanceTimersByTimeAsync(16) })
     expect(mocked.requests.at(-1)).toMatchObject({ renderGeneration: 1 })
 
+    rendered.rerender({ descriptors: initial.map((descriptor) => ({ ...descriptor })) })
+    await act(async () => { await vi.advanceTimersByTimeAsync(16) })
+    expect(mocked.requests.at(-1)).toMatchObject({ renderGeneration: 1 })
+
     rendered.rerender({ descriptors: refreshed })
     await act(async () => { await vi.advanceTimersByTimeAsync(16) })
     expect(mocked.requests.at(-1)).toMatchObject({ renderGeneration: 2 })

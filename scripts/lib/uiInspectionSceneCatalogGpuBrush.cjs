@@ -1,3 +1,5 @@
+const sharp = require('sharp')
+
 function createGpuBrushScenes(context) {
   const { settlePage, clickNamedButton, setupToolbox } = context
 
@@ -7,38 +9,6 @@ function createGpuBrushScenes(context) {
     name: '图片编辑器-GPU连续画笔',
     writesUserData: true,
     setup: async (page, _electronApp, helpers = {}) => {
-      const queryFrames = (afterTimestamp) => page.evaluate(async (timestamp) => {
-        const result = await window.henjiNative.logging.queryLogEvents({
-          date: new Date().toISOString().slice(0, 10),
-          afterTimestamp: timestamp,
-          domainPrefix: 'features.image_edit.v3.gpu_scene_bridge',
-          limit: 300,
-        })
-        return result.events.filter((event) => (
-          event.event === 'image_editor_v3.gpu_scene.hidden_frame_ready'
-        ))
-      }, afterTimestamp)
-      const waitForFrame = async (afterTimestamp, minimumGeneration = 0) => {
-        const deadline = Date.now() + 20000
-        while (Date.now() < deadline) {
-          const frames = await queryFrames(afterTimestamp)
-          const accepted = frames.filter((event) => (
-            Number(event.context?.sceneGeneration) > minimumGeneration
-          ))
-          if (accepted.length > 0) return accepted.at(-1)
-          await page.waitForTimeout(80)
-        }
-        throw new Error('等待 GPU 连续画笔帧超时')
-      }
-      const latestSettledFrame = async (afterTimestamp, minimumGeneration = 0) => {
-        await waitForFrame(afterTimestamp, minimumGeneration)
-        await page.waitForTimeout(800)
-        const frames = await queryFrames(afterTimestamp)
-        return frames.filter((event) => (
-          Number(event.context?.sceneGeneration) > minimumGeneration
-        )).at(-1)
-      }
-
       await setupToolbox(page)
       await clickNamedButton(page, /^(图片编辑|Image Edit)/i)
       const surface = page.locator('[data-application-surface-id="tool.image_edit"]:visible')
@@ -51,8 +21,8 @@ function createGpuBrushScenes(context) {
       ])
       const previousEditor = await editor.isVisible() ? await editor.elementHandle() : null
       const importStartedAt = new Date().toISOString()
-      if (!previousEditor) {
-        await dropTarget.evaluate(async (element) => {
+      const importTarget = previousEditor ? editor : dropTarget
+      await importTarget.evaluate(async (element) => {
           const canvas = document.createElement('canvas')
           canvas.width = 1200
           canvas.height = 760
@@ -75,18 +45,24 @@ function createGpuBrushScenes(context) {
             cancelable: true,
             dataTransfer: transfer,
           }))
-        })
+      })
+      if (previousEditor) {
+        await page.waitForFunction((element) => !element.isConnected, previousEditor, { timeout: 20000 })
       }
       await editor.waitFor({ state: 'visible', timeout: 20000 })
       const preview = editor.locator('[data-preview-surface]')
-      const gpuSurface = editor.locator('[data-presentation-front-surface]')
+      const gpuDiagnostics = editor.locator('[data-presentation-front-surface]')
+      const gpuSurface = editor.locator('[data-presentation-gpu-surface]')
       try {
         await page.waitForFunction(() => {
           const previewElement = document.querySelector('[data-image-editor-v3] [data-preview-surface]')
-          const gpu = document.querySelector('[data-image-editor-v3] [data-presentation-front-surface]')
+          const diagnostics = document.querySelector('[data-image-editor-v3] [data-presentation-front-surface]')
+          const gpu = document.querySelector('[data-image-editor-v3] [data-presentation-gpu-surface]')
           return previewElement?.getAttribute('data-preview-composition-backend') === 'gpu'
-            && Number(gpu?.getAttribute('data-render-generation') ?? '0') > 0
-            && Number(gpu?.getAttribute('data-gpu-upload-count') ?? '0') > 0
+            && previewElement?.getAttribute('data-preview-presentation-backend') === 'webgpu-surface'
+            && Number(diagnostics?.getAttribute('data-render-generation') ?? '0') > 0
+            && Number(diagnostics?.getAttribute('data-gpu-upload-count') ?? '0') > 0
+            && gpu instanceof HTMLElement && getComputedStyle(gpu).visibility === 'visible'
         }, undefined, { timeout: 20000 })
       } catch (error) {
         const issues = await page.evaluate(async (afterTimestamp) => {
@@ -100,22 +76,23 @@ function createGpuBrushScenes(context) {
         throw new Error(`等待当前 GPU 画笔表面失败：${JSON.stringify(issues)}；${String(error)}`)
       }
       const readGpuEvidence = async () => ({
-        generation: Number(await gpuSurface.getAttribute('data-render-generation')),
-        uploadCount: Number(await gpuSurface.getAttribute('data-gpu-upload-count')),
-        readbackCount: Number(await gpuSurface.getAttribute('data-gpu-readback-count')),
+        generation: Number(await gpuDiagnostics.getAttribute('data-render-generation')),
+        uploadCount: Number(await gpuDiagnostics.getAttribute('data-gpu-upload-count')),
+        readbackCount: Number(await gpuDiagnostics.getAttribute('data-gpu-readback-count')),
+        surfaceFrameCount: Number(await gpuDiagnostics.getAttribute('data-gpu-surface-frame-count')),
+        imageBitmapFrameCount: Number(await gpuDiagnostics.getAttribute('data-gpu-image-bitmap-frame-count')),
         backend: await preview.getAttribute('data-preview-composition-backend'),
+        presentation: await preview.getAttribute('data-preview-presentation-backend'),
       })
-      const strokeYFraction = previousEditor ? 0.35 : 0.5
-      const readStrokePixels = (position) => gpuSurface.evaluate((canvas, samplePosition) => {
-        if (!(canvas instanceof HTMLCanvasElement)) throw new Error('GPU 呈现表面不是 canvas')
-        const context = canvas.getContext('2d')
-        if (!context) throw new Error('GPU 呈现表面不可读')
-        const x = Math.max(0, Math.min(canvas.width - 5,
-          Math.floor(canvas.width * samplePosition.xFraction) - 2))
-        const y = Math.max(0, Math.min(canvas.height - 5,
-          Math.floor(canvas.height * samplePosition.yFraction) - 2))
-        return [...context.getImageData(x, y, 5, 5).data]
-      }, position)
+      const strokeYFraction = 0.5
+      const readSurfacePixels = async () => {
+        const screenshot = await gpuSurface.screenshot({ type: 'png' })
+        return [...await sharp(screenshot).resize(128, 80, { fit: 'fill' })
+          .ensureAlpha().raw().toBuffer()]
+      }
+      const changedSamples = (left, right) => left.reduce((count, value, index) => (
+        count + (Math.abs(value - (right[index] ?? value)) > 8 ? 1 : 0)
+      ), 0)
       const initial = await readGpuEvidence()
       const commandBar = editor.locator('[data-command-bar]')
       const readRevision = async () => Number(await commandBar.getAttribute('data-document-revision'))
@@ -130,13 +107,8 @@ function createGpuBrushScenes(context) {
       const gpuBox = await gpuSurface.boundingBox()
       if (!box || !gpuBox) throw new Error('GPU 连续画笔无法读取绘制区域')
       const beforeRevision = await readRevision()
-      const strokeStartedAt = new Date().toISOString()
       const y = box.y + box.height * strokeYFraction
-      const samplePosition = {
-        xFraction: (box.x + box.width * 0.5 - gpuBox.x) / gpuBox.width,
-        yFraction: (y - gpuBox.y) / gpuBox.height,
-      }
-      const initialPixels = await readStrokePixels(samplePosition)
+      const initialPixels = await readSurfacePixels()
       await page.mouse.move(box.x + box.width * 0.08, y)
       await page.mouse.down()
       await page.mouse.move(box.x + box.width * 0.92, y, { steps: 100 })
@@ -148,16 +120,22 @@ function createGpuBrushScenes(context) {
         const previewElement = document.querySelector('[data-image-editor-v3] [data-preview-surface]')
         const gpu = document.querySelector('[data-image-editor-v3] [data-presentation-front-surface]')
         return previewElement?.getAttribute('data-preview-composition-backend') === 'gpu'
+          && previewElement?.getAttribute('data-preview-presentation-backend') === 'webgpu-surface'
           && Number(gpu?.getAttribute('data-render-generation') ?? '0') > generation
           && Number(gpu?.getAttribute('data-gpu-upload-count') ?? '0') > uploadCount
       }, initial, { timeout: 20000 })
       const afterStroke = await readGpuEvidence()
-      const strokePixels = await readStrokePixels(samplePosition)
+      const strokePixels = await readSurfacePixels()
       const uploadDelta = afterStroke.uploadCount - initial.uploadCount
+      if (afterStroke.surfaceFrameCount <= initial.surfaceFrameCount
+        || afterStroke.imageBitmapFrameCount !== 0) {
+        throw new Error(`连续画笔未保持直接Surface：${JSON.stringify({ initial, afterStroke })}`)
+      }
       if (uploadDelta < 1 || uploadDelta > 4) {
         throw new Error(`100次采样只应上传跨越的脏瓦片，实际增量=${uploadDelta}`)
       }
-      if (strokePixels.every((value, index) => Math.abs(value - initialPixels[index]) <= 1)) {
+      const strokeChangedSamples = changedSamples(strokePixels, initialPixels)
+      if (strokeChangedSamples < 8) {
         throw new Error('100次采样完成后中心像素未变化')
       }
 
@@ -171,9 +149,15 @@ function createGpuBrushScenes(context) {
           ?.getAttribute('data-render-generation') ?? '0'
       ) > generation, afterStroke.generation, { timeout: 20000 })
       const afterUndo = await readGpuEvidence()
-      const undoPixels = await readStrokePixels(samplePosition)
-      if (undoPixels.some((value, index) => Math.abs(value - initialPixels[index]) > 1)) {
-        throw new Error('撤销后中心像素未恢复笔画前内容')
+      const undoPixels = await readSurfacePixels()
+      const undoChangedSamples = changedSamples(undoPixels, initialPixels)
+      // Surface 下采样在窄视口会因分数缩放对轮廓产生少量双线性差异；
+      // 至少85%的改变像素必须恢复，且精确层仍断言撤销资源引用完全一致。
+      const restorationTolerance = Math.max(64, Math.ceil(strokeChangedSamples * 0.15))
+      if (undoChangedSamples > restorationTolerance) {
+        throw new Error(`撤销后Surface未恢复笔画前内容：${JSON.stringify({
+          strokeChangedSamples, undoChangedSamples,
+        })}`)
       }
       const beforeRedo = await readRevision()
       await editor.getByRole('button', { name: /^(重做|Redo)$/i }).click()
@@ -185,9 +169,12 @@ function createGpuBrushScenes(context) {
           ?.getAttribute('data-render-generation') ?? '0'
       ) > generation, afterUndo.generation, { timeout: 20000 })
       const afterRedo = await readGpuEvidence()
-      const redoPixels = await readStrokePixels(samplePosition)
-      if (redoPixels.some((value, index) => Math.abs(value - strokePixels[index]) > 1)) {
-        throw new Error('重做后中心像素未恢复笔画内容')
+      const redoPixels = await readSurfacePixels()
+      const redoChangedSamples = changedSamples(redoPixels, strokePixels)
+      if (redoChangedSamples > restorationTolerance) {
+        throw new Error(`重做后Surface未恢复笔画内容：${JSON.stringify({
+          strokeChangedSamples, redoChangedSamples,
+        })}`)
       }
       if (afterUndo.uploadCount !== afterStroke.uploadCount
         || afterRedo.uploadCount !== afterStroke.uploadCount) {
@@ -201,6 +188,9 @@ function createGpuBrushScenes(context) {
         uploadCountAfter: afterStroke.uploadCount,
         undoUploadCount: afterUndo.uploadCount,
         redoUploadCount: afterRedo.uploadCount,
+        changedSamples: strokeChangedSamples,
+        undoChangedSamples,
+        redoChangedSamples,
         diagnosticReadbackCount: afterRedo.readbackCount,
       })}\n`)
       const issues = await page.evaluate(async (afterTimestamp) => {

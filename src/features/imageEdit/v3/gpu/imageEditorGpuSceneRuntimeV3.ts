@@ -3,7 +3,6 @@ import { initFromDevice, type Gpu } from 'vgpu'
 import {
   ImageEditWebGpuDeviceManager,
   type ImageEditWebGpuDeviceLoss,
-  type ManagedWebGpuDevice,
 } from '@/core/imageEdit/webgpu/deviceManager'
 import { SingleflightRuntimeState } from '@/core/imageEdit/worker/gpuRuntimeLifecycle'
 import type { GpuDevice } from '@/core/imageEdit/worker/webgpuRuntimeSupport'
@@ -34,25 +33,18 @@ import {
   waitForImageEditorGpuSceneTaskV3,
 } from './imageEditorGpuSceneRecoveryV3'
 import { createImageEditorGpuSceneFrameDeliveryV3 } from './imageEditorGpuSceneFrameEventsV3'
+import { createImageEditorGpuSceneFailureEventV3 } from './imageEditorGpuSceneFailureV3'
 import { ImageEditorGpuSceneSequenceGateV3 } from './imageEditorGpuSceneSequenceV3'
 import { ImageEditorGpuTileAtlasBudgetErrorV3 } from './imageEditorGpuTileAtlasV3'
 import type {
   ImageEditorGpuSceneContextV3,
   ImageEditorGpuSceneDeviceManagerV3,
+  ImageEditorGpuSceneGpuStateV3,
   ImageEditorGpuSceneRuntimeDependenciesV3,
   ImageEditorGpuSceneRuntimeStatusV3,
 } from './imageEditorGpuSceneRuntimeContractsV3'
 
-interface ImageEditorGpuSceneGpuStateV3 {
-  managed: ManagedWebGpuDevice
-  context: ImageEditorGpuSceneContextV3
-  compositor: ImageEditorGpuRasterCompositorV3Like
-  unsubscribeError: () => void
-}
-
-export type { ImageEditorGpuSceneRuntimeDependenciesV3 } from './imageEditorGpuSceneRuntimeContractsV3'
-export type { ImageEditorGpuSceneRuntimeStatusV3 } from './imageEditorGpuSceneRuntimeContractsV3'
-
+export type { ImageEditorGpuSceneRuntimeDependenciesV3, ImageEditorGpuSceneRuntimeStatusV3 } from './imageEditorGpuSceneRuntimeContractsV3'
 export class ImageEditorGpuSceneRuntimeV3 {
   private readonly deviceManager: ImageEditorGpuSceneDeviceManagerV3
   private readonly contextFactory: (device: GpuDevice) => Promise<ImageEditorGpuSceneContextV3>
@@ -478,19 +470,12 @@ export class ImageEditorGpuSceneRuntimeV3 {
     message: string,
     recoverable: boolean,
   ): void {
-    this.emit({
-      type: 'failed',
+    this.emit(createImageEditorGpuSceneFailureEventV3({
       sceneGeneration: this.sequence.snapshot().sceneGeneration,
       deviceGeneration: this.deviceManager.getRecoveryStatus().generation,
-      requestId,
-      code,
-      message,
-      recoverable,
-      diagnostic: message.startsWith('Reality 注入'),
-      diagnostics: message === 'Reality 注入 GPU 初始化失败'
-        ? { deviceAcquireCount: this.deviceAcquireCount, surfaceFrameCount: this.surfaceFrameCount }
-        : undefined,
-    })
+      requestId, code, message, recoverable,
+      deviceAcquireCount: this.deviceAcquireCount, surfaceFrameCount: this.surfaceFrameCount,
+    }))
   }
 
   private enterFallback(
@@ -506,7 +491,6 @@ export class ImageEditorGpuSceneRuntimeV3 {
     this.states.invalidate()
     this.emitFailure(code, requestId, message, recoverable)
   }
-
   private destroyGpuState(state: ImageEditorGpuSceneGpuStateV3): void {
     state.unsubscribeError()
     state.compositor.dispose()

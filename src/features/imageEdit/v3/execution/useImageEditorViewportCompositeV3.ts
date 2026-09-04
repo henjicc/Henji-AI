@@ -13,6 +13,14 @@ import { useImageEditorDisposableV3 } from './useImageEditorDisposableV3'
 
 const EMPTY_RESOURCE_DESCRIPTORS: readonly ImageEditorV3ResourceDescriptor[] = []
 
+function resourceDescriptorFingerprint(
+  descriptors: readonly ImageEditorV3ResourceDescriptor[],
+): string {
+  return JSON.stringify(descriptors
+    .map(({ resourceRef, byteLength, mediaType }) => [resourceRef, byteLength, mediaType])
+    .sort(([left], [right]) => String(left).localeCompare(String(right))))
+}
+
 export interface ImageEditorViewportCompositeStateV3 extends ImageEditorRenderSessionStateV3 {
   session: DefaultImageEditorRenderSessionV3
 }
@@ -55,24 +63,33 @@ export function useImageEditorViewportCompositeV3(
     resourceBudgetConsumerId: `render-session:${resourceBudgetConsumerId}`,
   }), [resourceBudgetConsumerId, sessionId])
   const document = useMemo(() => projectImageEditorPreviewDocumentV3(snapshot), [snapshot])
+  const descriptorFingerprint = resourceDescriptorFingerprint(resourceDescriptors)
+  const stableDescriptorsRef = useRef<{
+    fingerprint: string
+    descriptors: readonly ImageEditorV3ResourceDescriptor[]
+  } | null>(null)
+  if (stableDescriptorsRef.current?.fingerprint !== descriptorFingerprint) {
+    stableDescriptorsRef.current = { fingerprint: descriptorFingerprint, descriptors: resourceDescriptors }
+  }
+  const stableResourceDescriptors = stableDescriptorsRef.current.descriptors
   const identityRef = useRef<{
     document: typeof document
     previewOverrides: typeof snapshot.previewOverrides
-    resourceDescriptors: typeof resourceDescriptors
+    descriptorFingerprint: string
     renderGeneration: number
   } | null>(null)
   const previousIdentity = identityRef.current
   const renderChanged = !previousIdentity
     || previousIdentity.document !== document
     || previousIdentity.previewOverrides !== snapshot.previewOverrides
-    || previousIdentity.resourceDescriptors !== resourceDescriptors
+    || previousIdentity.descriptorFingerprint !== descriptorFingerprint
   const renderGeneration = renderChanged
     ? (previousIdentity?.renderGeneration ?? 0) + 1
     : previousIdentity.renderGeneration
   identityRef.current = {
     document,
     previewOverrides: snapshot.previewOverrides,
-    resourceDescriptors,
+    descriptorFingerprint,
     renderGeneration,
   }
   const geometryHash = createImageEditGeometryHashV3(document.geometry)
@@ -95,7 +112,7 @@ export function useImageEditorViewportCompositeV3(
       renderGeneration,
       geometryHash,
       quality: Object.keys(snapshot.previewOverrides).length > 0 ? 'draft' : 'stable',
-      resourceDescriptors,
+      resourceDescriptors: stableResourceDescriptors,
       eventTimestamp: typeof performance === 'undefined' ? Date.now() : performance.now(),
     })
   }, [
@@ -103,7 +120,7 @@ export function useImageEditorViewportCompositeV3(
     enabled,
     geometryHash,
     renderGeneration,
-    resourceDescriptors,
+    stableResourceDescriptors,
     session,
     snapshot.previewOverrides,
   ])

@@ -12,6 +12,8 @@ function createGpuBudgetScenes(context) {
       await clickNamedButton(page, /^(图片编辑|Image Edit)/i)
       const surface = page.locator('[data-application-surface-id="tool.image_edit"]:visible')
       await surface.waitFor({ state: 'visible', timeout: 12000 })
+      const editor = surface.locator('[data-image-editor-v3]')
+      const previousEditor = await editor.isVisible() ? await editor.elementHandle() : null
       const startedAt = new Date().toISOString()
       await electronApp.evaluate(({ dialog }, selectedPath) => {
         const key = '__henjiGpuBudgetOpenDialog'
@@ -19,7 +21,14 @@ function createGpuBudgetScenes(context) {
         dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [selectedPath] })
       }, fixturePath)
       try {
-        await surface.getByRole('button', { name: /^(从文件打开|Open from file)$/i }).click()
+        const openSource = surface.getByRole('button', {
+          name: previousEditor ? /^(打开|Open)$/i : /^(从文件打开|Open from file)$/i,
+        }).first()
+        await openSource.click()
+        if (previousEditor) {
+          await page.getByRole('button', { name: /^(从文件打开|Open from file)$/i })
+            .last().click()
+        }
       } finally {
         await electronApp.evaluate(({ dialog }) => {
           const key = '__henjiGpuBudgetOpenDialog'
@@ -28,6 +37,10 @@ function createGpuBudgetScenes(context) {
           delete globalThis[key]
         })
       }
+      if (previousEditor) {
+        await page.waitForFunction((element) => !element.isConnected, previousEditor, { timeout: 20000 })
+      }
+      await page.keyboard.press('Escape')
       const addLayer = surface.getByRole('button', { name: /^(添加图层|Add layer)$/i })
       await addLayer.waitFor({ state: 'visible', timeout: 20000 })
       process.stdout.write('  GPU预算后备：已导入test01\n')
@@ -36,8 +49,11 @@ function createGpuBudgetScenes(context) {
       const preview = surface.locator('[data-preview-surface]')
       await page.waitForFunction(() => {
         const value = document.querySelector('[data-preview-surface]')
+        const diagnostics = document.querySelector('[data-presentation-front-surface]')
         return value?.getAttribute('data-preview-composition-backend') === 'gpu'
-          && value?.getAttribute('data-preview-presentation-backend') === 'gpu-image-bitmap'
+          && value?.getAttribute('data-preview-presentation-backend') === 'webgpu-surface'
+          && Number(diagnostics?.getAttribute('data-gpu-surface-frame-count') ?? '0') > 0
+          && Number(diagnostics?.getAttribute('data-gpu-image-bitmap-frame-count') ?? '-1') === 0
       }, undefined, { timeout: 20000 }).catch(async (error) => {
         const state = await preview.evaluate((value) => ({
           composition: value.getAttribute('data-preview-composition-backend'),
@@ -47,6 +63,7 @@ function createGpuBudgetScenes(context) {
         }))
         throw new Error(`GPU预算后备等待fit帧失败：${JSON.stringify(state)}；${String(error)}`)
       })
+      await settlePage(page, 500)
       if (typeof helpers.capture === 'function') await helpers.capture('gpu-fit')
 
       await surface.locator('[data-tool-id="zoom"]').click()

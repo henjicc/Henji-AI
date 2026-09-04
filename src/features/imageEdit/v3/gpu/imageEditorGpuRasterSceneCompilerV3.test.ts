@@ -5,6 +5,7 @@ import {
   createImageEditGroupLayerV3,
   createImageEditRasterLayerV3,
 } from '@/core/imageEdit/v3'
+import { WHITE_HEX } from '@/core/theme/colorTokens'
 import { createImageEditorGpuBaselineFixturesV3 } from '../testing/imageEditorGpuBaselineV3'
 import { compileImageEditorGpuRasterSceneV3 } from './imageEditorGpuRasterSceneCompilerV3'
 
@@ -68,7 +69,7 @@ describe('compileImageEditorGpuRasterSceneV3', () => {
     const marks = createImageEditAnnotationLayerV3('marks', '标注')
     marks.annotations = [{
       id: 'mark-1', type: 'rect', x: 10, y: 20, width: 30, height: 40,
-      stroke: '#ffffff', lineWidth: 2,
+      stroke: WHITE_HEX, lineWidth: 2,
     }]
     document.layers = [paint, marks]
     const result = compileImageEditorGpuRasterSceneV3(document, descriptors([brushA, brushB]))
@@ -91,7 +92,7 @@ describe('compileImageEditorGpuRasterSceneV3', () => {
     const raster = createImageEditRasterLayerV3('base', '底图', base)
     const marks = createImageEditAnnotationLayerV3('marks', '标注')
     marks.annotations = [{ id: 'text-1', type: 'text', x: 12, y: 18, text: 'GPU',
-      fontSize: 16, color: '#ffffff' }]
+      fontSize: 16, color: WHITE_HEX }]
     document.layers = [raster, marks]
     const first = compileImageEditorGpuRasterSceneV3(document, descriptors([base]))
     const repeated = compileImageEditorGpuRasterSceneV3(structuredClone(document), descriptors([base]))

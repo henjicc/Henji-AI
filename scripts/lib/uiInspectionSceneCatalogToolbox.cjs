@@ -257,6 +257,7 @@ function createToolboxScenes(context) {
           await settlePage(page, 1200)
           const gpuState = await preview.evaluate((element) => {
             const front = element.querySelector('[data-presentation-front-surface]')
+            const gpu = element.querySelector('[data-presentation-gpu-surface]')
             const clip = element.querySelector('[data-document-clip]')
             return {
               composition: element.getAttribute('data-preview-composition-backend'),
@@ -264,6 +265,10 @@ function createToolboxScenes(context) {
               presentation: element.getAttribute('data-preview-presentation-backend'),
               device: element.getAttribute('data-preview-device-status'),
               readbackCount: Number(front?.getAttribute('data-gpu-readback-count') ?? '-1'),
+              surfaceFrameCount: Number(front?.getAttribute('data-gpu-surface-frame-count') ?? '0'),
+              imageBitmapFrameCount: Number(front?.getAttribute('data-gpu-image-bitmap-frame-count') ?? '-1'),
+              directSurfaceFailureCount: Number(front?.getAttribute('data-gpu-direct-surface-failure-count') ?? '-1'),
+              gpuVisibility: gpu instanceof HTMLElement ? getComputedStyle(gpu).visibility : null,
               renderGeneration: Number(front?.getAttribute('data-render-generation') ?? '0'),
               frontSize: front instanceof HTMLCanvasElement ? [front.width, front.height] : null,
               previewSize: [element.clientWidth, element.clientHeight],
@@ -272,8 +277,10 @@ function createToolboxScenes(context) {
             }
           })
           if (gpuState.composition !== 'gpu' || gpuState.effect !== 'gpu'
-            || gpuState.presentation !== 'gpu-image-bitmap' || gpuState.device !== 'ready'
-            || gpuState.readbackCount !== 0 || gpuState.renderGeneration <= 0) {
+            || gpuState.presentation !== 'webgpu-surface' || gpuState.device !== 'ready'
+            || gpuState.readbackCount !== 0 || gpuState.renderGeneration <= 0
+            || gpuState.surfaceFrameCount < 1 || gpuState.imageBitmapFrameCount !== 0
+            || gpuState.directSurfaceFailureCount !== 0 || gpuState.gpuVisibility !== 'visible') {
             throw new Error(`test01 三效果未保持同一 GPU Surface：${JSON.stringify(gpuState)}`)
           }
           const runtimeEvidence = await page.evaluate(async (afterTimestamp) => {

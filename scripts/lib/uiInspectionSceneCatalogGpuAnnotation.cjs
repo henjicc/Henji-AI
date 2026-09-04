@@ -1,3 +1,5 @@
+const sharp = require('sharp')
+
 function createGpuAnnotationScenes(context) {
   const { settlePage, clickNamedButton, setupToolbox } = context
 
@@ -11,9 +13,15 @@ function createGpuAnnotationScenes(context) {
       await clickNamedButton(page, /^(图片编辑|Image Edit)/i)
       const surface = page.locator('[data-application-surface-id="tool.image_edit"]:visible')
       await surface.waitFor({ state: 'visible', timeout: 12000 })
+      const editor = surface.locator('[data-image-editor-v3]')
       const dropTarget = surface.locator('.border-dashed').first()
-      await dropTarget.waitFor({ state: 'visible', timeout: 12000 })
-      await dropTarget.evaluate(async (element) => {
+      await Promise.race([
+        editor.waitFor({ state: 'visible', timeout: 12000 }),
+        dropTarget.waitFor({ state: 'visible', timeout: 12000 }),
+      ])
+      const previousEditor = await editor.isVisible() ? await editor.elementHandle() : null
+      const importTarget = previousEditor ? editor : dropTarget
+      await importTarget.evaluate(async (element) => {
         const canvas = document.createElement('canvas')
         canvas.width = 1200; canvas.height = 760
         const context2d = canvas.getContext('2d')
@@ -31,23 +39,26 @@ function createGpuAnnotationScenes(context) {
         element.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true,
           dataTransfer: transfer }))
       })
-      const editor = surface.locator('[data-image-editor-v3]')
+      if (previousEditor) {
+        await page.waitForFunction((element) => !element.isConnected, previousEditor, { timeout: 20000 })
+      }
       await editor.waitFor({ state: 'visible', timeout: 20000 })
       const preview = editor.locator('[data-preview-surface]')
       const front = editor.locator('[data-presentation-front-surface]')
-      await page.waitForFunction(() => (
-        document.querySelector('[data-preview-surface]')
-          ?.getAttribute('data-preview-composition-backend') === 'gpu'
-      ), undefined, { timeout: 20000 })
-      const sampleFront = () => front.evaluate((canvas) => {
-        if (!(canvas instanceof HTMLCanvasElement)) return []
-        const sample = document.createElement('canvas')
-        sample.width = 128; sample.height = 80
-        const context2d = sample.getContext('2d', { willReadFrequently: true })
-        if (!context2d) return []
-        context2d.drawImage(canvas, 0, 0, sample.width, sample.height)
-        return [...context2d.getImageData(0, 0, sample.width, sample.height).data]
-      })
+      const gpuSurface = editor.locator('[data-presentation-gpu-surface]')
+      await page.waitForFunction(() => {
+        const gpu = document.querySelector('[data-presentation-gpu-surface]')
+        return document.querySelector('[data-preview-surface]')?.getAttribute('data-preview-composition-backend') === 'gpu'
+          && document.querySelector('[data-preview-surface]')
+            ?.getAttribute('data-preview-presentation-backend') === 'webgpu-surface'
+          && gpu instanceof HTMLElement && getComputedStyle(gpu).visibility === 'visible'
+      }, undefined, { timeout: 20000 })
+      const sampleFront = async () => {
+        const screenshot = await gpuSurface.screenshot({ type: 'png' })
+        const pixels = await sharp(screenshot).resize(128, 80, { fit: 'fill' })
+          .ensureAlpha().raw().toBuffer()
+        return [...pixels]
+      }
       const before = {
         generation: Number(await front.getAttribute('data-render-generation')),
         uploadCount: Number(await front.getAttribute('data-gpu-upload-count')),
@@ -114,21 +125,53 @@ function createGpuAnnotationScenes(context) {
           presentation: value.getAttribute('data-preview-presentation-backend'),
           device: value.getAttribute('data-preview-device-status'),
         }))
-        const liveCount = await editor.locator('[data-annotation-editor-overlay]')
-          .getAttribute('data-live-annotation-layer-count')
+        const missingOverlay = editor.locator('[data-annotation-editor-overlay]')
+        const liveCount = await missingOverlay.count() > 0
+          ? await missingOverlay.getAttribute('data-live-annotation-layer-count') : '0'
         const layerTypes = await editor.locator('[role="treeitem"][data-layer-type]')
           .evaluateAll((items) => items.map((item) => item.getAttribute('data-layer-type')))
         throw new Error(`GPU标注纹理未上传：${JSON.stringify({ state, liveCount, layerTypes })}`)
       }
+      const uploadedGeneration = Math.max(...initialUploads.map((event) => (
+        Number(event.context?.sceneGeneration ?? 0)
+      )))
+      await page.waitForFunction((generation) => Number(
+        document.querySelector('[data-presentation-front-surface]')
+          ?.getAttribute('data-render-generation') ?? '0',
+      ) >= generation, uploadedGeneration, { timeout: 20000 })
       const cacheStartedAt = new Date().toISOString()
       await settlePage(page, 800)
       const after = {
         generation: Number(await front.getAttribute('data-render-generation')),
         uploadCount: Number(await front.getAttribute('data-gpu-upload-count')),
         readbackCount: Number(await front.getAttribute('data-gpu-readback-count')),
+        surfaceFrameCount: Number(await front.getAttribute('data-gpu-surface-frame-count')),
+        imageBitmapFrameCount: Number(await front.getAttribute('data-gpu-image-bitmap-frame-count')),
       }
       await settlePage(page, 800)
       const repeatedUploadCount = Number(await front.getAttribute('data-gpu-upload-count'))
+      await page.waitForFunction(() => {
+        const gpu = document.querySelector('[data-presentation-gpu-surface]')
+        return gpu instanceof HTMLElement && getComputedStyle(gpu).visibility === 'visible'
+      }, undefined, { timeout: 10000 }).catch(async (error) => {
+        const state = await preview.evaluate((element) => {
+          const gpu = element.querySelector('[data-presentation-gpu-surface]')
+          return {
+            composition: element.getAttribute('data-preview-composition-backend'),
+            presentation: element.getAttribute('data-preview-presentation-backend'),
+            device: element.getAttribute('data-preview-device-status'),
+            gpuVisibility: gpu instanceof HTMLElement ? getComputedStyle(gpu).visibility : null,
+          }
+        })
+        const evidence = await page.evaluate(async (afterTimestamp) => {
+          const result = await window.henjiNative.logging.queryLogEvents({
+            date: new Date().toISOString().slice(0, 10), afterTimestamp, limit: 300,
+          })
+          return result.events.filter((event) => event.level === 'error'
+            || event.event?.startsWith('image_editor_v3.gpu_scene'))
+        }, startedAt)
+        throw new Error(`标注效果帧未回到direct Surface：${JSON.stringify({ state, evidence })}；${String(error)}`)
+      })
       const afterPixels = await sampleFront()
       const changedSamples = afterPixels.reduce((count, value, index) => (
         count + (Math.abs(value - (beforePixels[index] ?? value)) > 8 ? 1 : 0)
@@ -147,20 +190,45 @@ function createGpuAnnotationScenes(context) {
           )),
         }
       }, { afterTimestamp: startedAt, cacheTimestamp: cacheStartedAt })
+      const annotationRow = editor.locator('[role="treeitem"][data-layer-type="annotation"]')
+      const visibleGeneration = Number(await front.getAttribute('data-render-generation'))
+      await annotationRow.getByRole('button', {
+        name: /^(隐藏“标注图层”|Hide “Annotation layer”)$/i,
+      }).click()
+      await page.waitForFunction((generation) => Number(
+        document.querySelector('[data-presentation-front-surface]')
+          ?.getAttribute('data-render-generation') ?? '0',
+      ) > generation, visibleGeneration, { timeout: 20000 })
+      await settlePage(page, 500)
+      const hiddenPixels = await sampleFront()
+      const annotationVisibleSamples = afterPixels.reduce((count, value, index) => (
+        count + (Math.abs(value - (hiddenPixels[index] ?? value)) > 8 ? 1 : 0)
+      ), 0)
+      const hiddenGeneration = Number(await front.getAttribute('data-render-generation'))
+      await annotationRow.getByRole('button', {
+        name: /^(显示“标注图层”|Show “Annotation layer”)$/i,
+      }).click()
+      await page.waitForFunction((generation) => Number(
+        document.querySelector('[data-presentation-front-surface]')
+          ?.getAttribute('data-render-generation') ?? '0',
+      ) > generation, hiddenGeneration, { timeout: 20000 })
+      await settlePage(page, 500)
       const versions = new Set(initialUploads.map((event) => event.context?.contentVersion))
       if (initialUploads.length < 1 || versions.size !== 1 || logs.repeatedUploads.length !== 0
         || after.readbackCount !== 0
-        || repeatedUploadCount !== after.uploadCount || changedSamples < 8 || logs.errors.length > 0) {
+        || after.surfaceFrameCount < 1 || after.imageBitmapFrameCount !== 0
+        || repeatedUploadCount !== after.uploadCount || changedSamples < 8
+        || annotationVisibleSamples < 8 || logs.errors.length > 0) {
         throw new Error(`GPU标注缓存证据异常：${JSON.stringify({
           before, after, repeatedUploadCount, initialUploadCount: initialUploads.length,
-          contentVersions: [...versions], changedSamples, logs,
+          contentVersions: [...versions], changedSamples, annotationVisibleSamples, logs,
         })}`)
       }
       process.stdout.write(`  GPU标注缓存：${JSON.stringify({
         uploadDelta: after.uploadCount - before.uploadCount,
         repeatedUploadDelta: repeatedUploadCount - after.uploadCount,
         annotationTileUploads: initialUploads.length, contentVersions: versions.size,
-        changedSamples, readbackCount: after.readbackCount,
+        changedSamples, annotationVisibleSamples, readbackCount: after.readbackCount,
       })}\n`)
     },
   }]

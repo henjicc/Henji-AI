@@ -13,6 +13,7 @@ import {
   decodeInterleavedRgbaSourceTileV3,
   executeImageEditCpuRenderPlanV3,
 } from '@/core/imageEdit/v3'
+import { ANNOTATION_DEFAULT_STROKE_HEX, WHITE_HEX } from '@/core/theme/colorTokens'
 import type { ImageEditorV3SourceTile } from '@/platform/contracts/imageEditorV3'
 import { ImageEditorGpuRasterCompositorV3 } from './imageEditorGpuRasterCompositorV3'
 import { compileImageEditorGpuRasterSceneV3 } from './imageEditorGpuRasterSceneCompilerV3'
@@ -33,7 +34,7 @@ describe('GPU 稀疏资源、标注缓存与 halo（真实 WebGPU）', () => {
     const document = createImageEditDocumentV3({ width, height, documentId: 'annotation-cache' })
     const annotation = createImageEditAnnotationLayerV3('annotation', '标注')
     annotation.annotations = [{ id: 'rect', type: 'rect', x: 4, y: 4, width: 12, height: 8,
-      stroke: '#ffffff', lineWidth: 2 }]
+      stroke: WHITE_HEX, lineWidth: 2 }]
     document.layers = [annotation]
     const compilation = compileImageEditorGpuRasterSceneV3(document, [])
     expect(compilation.supported).toBe(true)
@@ -54,13 +55,102 @@ describe('GPU 稀疏资源、标注缓存与 halo（真实 WebGPU）', () => {
       alphaMode: 'straight', orientationApplied: true, originX: 0, originY: 0,
       pixels: values.buffer,
     })
-    await compositor.readLinearPixelsForTest(() => texture)
+    const pixels = await compositor.readLinearPixelsForTest(() => texture)
     const first = compositor.snapshotStats()
     await compositor.readLinearPixelsForTest(() => texture)
     const second = compositor.snapshotStats()
     expect(first.uploadCount).toBe(1)
+    expect(Math.max(...pixels.filter((_, index) => index % 4 === 3))).toBeGreaterThan(0.45)
     expect(second).toMatchObject({ uploadCount: 1, pipelineCompileCount: first.pipelineCompileCount })
     texture.destroy()
+    compositor.dispose()
+  })
+
+  it('标注位于效果下方时仍进入最终输出，显隐只失效相关子图', async () => {
+    const width = 32; const height = 24; const baseRef = ref(121)
+    const document = createImageEditDocumentV3({ width, height, documentId: 'annotation-visible' })
+    const annotation = createImageEditAnnotationLayerV3('annotation-visible', '标注图层')
+    annotation.annotations = [{ id: 'rect', type: 'rect', x: 4, y: 4, width: 12, height: 8,
+      stroke: WHITE_HEX, lineWidth: 2 }]
+    document.layers = [
+      createImageEditRasterLayerV3('annotation-base', '底图', baseRef),
+      annotation,
+      createImageEditEffectLayerV3('annotation-blur', '模糊', 'image.fast-blur-v3', { radius: 1 }),
+    ]
+    const descriptor = { resourceRef: baseRef, byteLength: width * height * 4, mediaType: 'image/png' }
+    const compositor = new ImageEditorGpuRasterCompositorV3(gpu)
+    const render = async (): Promise<Float32Array> => {
+      const compilation = compileImageEditorGpuRasterSceneV3(document, [descriptor])
+      expect(compilation.supported).toBe(true)
+      if (!compilation.supported) throw new Error(compilation.reason)
+      compositor.syncScene(compilation.scene)
+      compositor.updateViewport({ stageWidth: width, stageHeight: height,
+        viewportKey: `annotation-visible-${document.revision}`, viewport: {
+          documentX: 0, documentY: 0, width, height, zoom: 1, devicePixelRatio: 1,
+        } })
+      const resources = new Map<string, ReturnType<typeof compositor.uploadTile>>()
+      for (const key of compositor.requiredResourceKeys()) {
+        const tile = key.resourceKind === 'generated-annotation'
+          ? floatSourceTile(key, [1, 0, 0, 1], width, height)
+          : constantSourceTile(key, [32, 48, 64, 255], width, height)
+        resources.set(imageEditorGpuSceneTileKeyV3(key), compositor.uploadTile(key, tile))
+      }
+      const pixels = await compositor.readLinearPixelsForTest((key) => (
+        resources.get(imageEditorGpuSceneTileKeyV3(key)) ?? null
+      ))
+      for (const texture of resources.values()) texture.destroy()
+      return pixels
+    }
+    const visible = await render()
+    annotation.visible = false; document.revision += 1
+    const hidden = await render()
+    expect(visible.reduce((sum, value, index) => sum + Math.abs(value - hidden[index]), 0))
+      .toBeGreaterThan(1)
+    compositor.dispose()
+  })
+
+  it('多瓦片稀疏标注在效果链中保留非透明像素', async () => {
+    const width = 1024; const height = 8; const baseRef = ref(122)
+    const document = createImageEditDocumentV3({ width, height, documentId: 'annotation-sparse' })
+    const annotation = createImageEditAnnotationLayerV3('annotation-sparse', '标注图层')
+    annotation.annotations = [{ id: 'line', type: 'arrow', points: [508, 2, 516, 6],
+      stroke: ANNOTATION_DEFAULT_STROKE_HEX, lineWidth: 2 }]
+    document.layers = [
+      createImageEditRasterLayerV3('annotation-sparse-base', '底图', baseRef),
+      annotation,
+      createImageEditEffectLayerV3('annotation-sparse-blur', '模糊', 'image.fast-blur-v3', { radius: 1 }),
+    ]
+    const compositor = new ImageEditorGpuRasterCompositorV3(gpu)
+    const render = async (): Promise<Float32Array> => {
+      const compilation = compileImageEditorGpuRasterSceneV3(document, [{
+        resourceRef: baseRef, byteLength: width * height * 4, mediaType: 'image/png',
+      }])
+      expect(compilation.supported).toBe(true)
+      if (!compilation.supported) throw new Error(compilation.reason)
+      compositor.syncScene(compilation.scene)
+      compositor.updateViewport({ stageWidth: width, stageHeight: height,
+        viewportKey: `annotation-sparse-${document.revision}`, viewport: {
+          documentX: 0, documentY: 0, width, height, zoom: 1, devicePixelRatio: 1,
+        } })
+      const resources = new Map<string, ReturnType<typeof compositor.uploadTile>>()
+      for (const key of compositor.requiredResourceKeys()) {
+        const tileWidth = 512
+        const tile = key.resourceKind === 'generated-annotation'
+          ? sparseFloatSourceTile(key, tileWidth, height)
+          : constantSourceTile(key, [32, 48, 64, 255], tileWidth, height)
+        resources.set(imageEditorGpuSceneTileKeyV3(key), compositor.uploadTile(key, tile))
+      }
+      const pixels = await compositor.readLinearPixelsForTest((key) => (
+        resources.get(imageEditorGpuSceneTileKeyV3(key)) ?? null
+      ))
+      for (const texture of resources.values()) texture.destroy()
+      return pixels
+    }
+    const visible = await render()
+    annotation.visible = false; document.revision += 1
+    const hidden = await render()
+    expect(visible.reduce((sum, value, index) => sum + Math.abs(value - hidden[index]), 0))
+      .toBeGreaterThan(0.1)
     compositor.dispose()
   })
 
@@ -179,6 +269,45 @@ function constantSourceTile(
     halo: 0, width, height, channels: 4, bitDepth: 8, sampleFormat: 'uint',
     numericRange: 'unorm8', byteOrder: 'little-endian', rowStride: width * 4,
     colorSpace: 'srgb', transferFunction: 'srgb', alphaMode: 'straight',
+    orientationApplied: true, originX: key.tileX * 512, originY: key.tileY * 512,
+    pixels: pixels.buffer,
+  }
+}
+
+function floatSourceTile(
+  key: ImageEditorGpuSceneTileKeyV3,
+  color: readonly [number, number, number, number],
+  width: number,
+  height: number,
+): ImageEditorV3SourceTile {
+  const pixels = new Float32Array(width * height * 4)
+  for (let offset = 0; offset < pixels.length; offset += 4) pixels.set(color, offset)
+  return {
+    resourceRef: key.resourceRef, mip: key.mip, tileX: key.tileX, tileY: key.tileY,
+    halo: 0, width, height, channels: 4, bitDepth: 32, sampleFormat: 'float',
+    numericRange: 'scene-linear', byteOrder: 'little-endian', rowStride: width * 16,
+    colorSpace: 'scrgb', transferFunction: 'linear', alphaMode: 'straight',
+    orientationApplied: true, originX: key.tileX * 512, originY: key.tileY * 512,
+    pixels: pixels.buffer,
+  }
+}
+
+function sparseFloatSourceTile(
+  key: ImageEditorGpuSceneTileKeyV3,
+  width: number,
+  height: number,
+): ImageEditorV3SourceTile {
+  const pixels = new Float32Array(width * height * 4)
+  const start = key.tileX === 0 ? width - 4 : 0
+  const end = key.tileX === 0 ? width : 4
+  for (let y = 2; y < 6; y += 1) for (let x = start; x < end; x += 1) {
+    pixels.set([1, 0, 0, 1], (y * width + x) * 4)
+  }
+  return {
+    resourceRef: key.resourceRef, mip: key.mip, tileX: key.tileX, tileY: key.tileY,
+    halo: 0, width, height, channels: 4, bitDepth: 32, sampleFormat: 'float',
+    numericRange: 'scene-linear', byteOrder: 'little-endian', rowStride: width * 16,
+    colorSpace: 'scrgb', transferFunction: 'linear', alphaMode: 'straight',
     orientationApplied: true, originX: key.tileX * 512, originY: key.tileY * 512,
     pixels: pixels.buffer,
   }
