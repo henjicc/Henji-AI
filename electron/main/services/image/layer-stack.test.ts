@@ -61,7 +61,35 @@ describe('composeLayerStack', () => {
     expect(persistImageBytesTracked).toHaveBeenCalledTimes(2)
   })
 
-  it('拒绝无 alpha 内容层、响应尺寸偏差与 bbox 偏差', async () => {
+  it('按 bbox 缩放 KIE 独立分辨率图层后再合成', async () => {
+    const sharp = await loadSharp()
+    const base = await sharp({ create: { width: 1080, height: 1080, channels: 3, background: { r: 0, g: 0, b: 0 } } }).jpeg().toBuffer()
+    // KIE 官方示例中内容层为 1179x245，但画布 bbox 是 670x139；两者是源分辨率与目标放置尺寸，不要求像素相等。
+    const content = await sharp({ create: { width: 1179, height: 245, channels: 4, background: { r: 255, g: 0, b: 0, alpha: 1 } } }).png().toBuffer()
+    const result = await composeLayerStack({
+      requestId: 'compose-kie-scaled-layer',
+      stackId: 'kie-scaled-layer',
+      persistSourceLayers: false,
+      layers: [
+        { sourceOutputIndex: 0, source: dataUrl('image/jpeg', base), zIndex: 0, role: 'base', declaredWidth: 1080, declaredHeight: 1080, declaredFormat: 'jpeg' },
+        { sourceOutputIndex: 1, source: dataUrl('image/png', content), zIndex: 1, role: 'content', declaredWidth: 1179, declaredHeight: 245, declaredFormat: 'png', boundingBox: { absolute: [202, 63, 872, 202] } },
+      ],
+    })
+
+    expect(result.resources[1]).toMatchObject({
+      width: 1179,
+      height: 245,
+      placement: { x: 202, y: 63, width: 670, height: 139 },
+    })
+    const compositeBytes = vi.mocked(persistImageBytesTracked).mock.calls[0]?.[0]
+    expect(compositeBytes).toBeInstanceOf(Buffer)
+    const inside = await sharp(compositeBytes).extract({ left: 202, top: 63, width: 1, height: 1 }).raw().toBuffer()
+    const outside = await sharp(compositeBytes).extract({ left: 201, top: 63, width: 1, height: 1 }).raw().toBuffer()
+    expect([...inside.slice(0, 3)]).toEqual([255, 0, 0])
+    expect([...outside.slice(0, 3)]).toEqual([0, 0, 0])
+  })
+
+  it('拒绝无 alpha 内容层、响应尺寸偏差与无效 bbox', async () => {
     const sharp = await loadSharp()
     const base = await sharp({ create: { width: 8, height: 8, channels: 3, background: { r: 0, g: 0, b: 0 } } }).jpeg().toBuffer()
     const opaquePng = await sharp({ create: { width: 2, height: 2, channels: 3, background: { r: 255, g: 0, b: 0 } } }).png().toBuffer()
@@ -70,7 +98,7 @@ describe('composeLayerStack', () => {
     await expect(composeLayerStack({ requestId: 'compose-alpha', stackId: 'alpha', layers: [baseLayer, content] })).rejects.toThrow(/透明通道/)
     await expect(composeLayerStack({ requestId: 'compose-size', stackId: 'size', layers: [{ ...baseLayer, declaredWidth: 12 }] })).rejects.toThrow(/尺寸/)
     const transparent = await sharp(opaquePng).ensureAlpha(0.5).png().toBuffer()
-    await expect(composeLayerStack({ requestId: 'compose-bbox', stackId: 'bbox', layers: [baseLayer, { ...content, source: dataUrl('image/png', transparent), boundingBox: { absolute: [0, 0, 6, 6] } }] })).rejects.toThrow(/偏差/)
+    await expect(composeLayerStack({ requestId: 'compose-bbox', stackId: 'bbox', layers: [baseLayer, { ...content, source: dataUrl('image/png', transparent), boundingBox: { absolute: [1, 1, 1, 2] } }] })).rejects.toThrow(/bbox 无效/)
   })
 
   it('取消信号在像素工作前终止', async () => {

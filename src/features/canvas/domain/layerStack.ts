@@ -178,15 +178,14 @@ export function validateLayerStackDocument(value: LayerStackDocumentV1): LayerSt
     if (layer.role === 'content' && (!resource.hasAlpha || resource.mimeType !== 'image/png')) {
       throw new LayerStackContractError(`内容层必须是含透明通道的 PNG：${layer.layerId}`);
     }
-    if (resource.width !== layer.placement.width || resource.height !== layer.placement.height) {
-      throw new LayerStackContractError(`图层位置尺寸与资源不一致：${layer.layerId}`);
-    }
     if (layer.role === 'base' && (
       index !== 0
       || layer.placement.x !== 0
       || layer.placement.y !== 0
       || layer.placement.width !== value.canvas.width
       || layer.placement.height !== value.canvas.height
+      || resource.width !== value.canvas.width
+      || resource.height !== value.canvas.height
     )) throw new LayerStackContractError('底图必须覆盖画布并位于最底层');
   }
   if (ordered[0]?.role !== 'base') throw new LayerStackContractError('图层栈缺少底图');

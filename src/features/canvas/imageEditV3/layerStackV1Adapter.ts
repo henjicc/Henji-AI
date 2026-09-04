@@ -79,7 +79,8 @@ export function readLayerStackV1ImageEditorOption(
 
 /**
  * LayerStackDocumentV1 永久保留读取，但编辑时只投影成 V3 栅格图层。
- * V1 像素资源互不共享，placement 尺寸与源尺寸一致，因此这里只需要平移矩阵。
+ * V1 像素资源互不共享。供应商可返回独立输出分辨率，placement 则描述它在底图 bbox 中的目标尺寸，
+ * 因此导入时需要同时恢复缩放和平移矩阵。
  */
 export async function importLayerStackV1AsImageEditDocumentV3(
   options: ImportLayerStackV1Options,
@@ -102,8 +103,8 @@ export async function importLayerStackV1AsImageEditDocumentV3(
       source: { kind: 'local-path', filePath: legacyResource.filePath as string },
     }, options.signal)
     if (
-      managed.metadata.width !== layer.placement.width
-      || managed.metadata.height !== layer.placement.height
+      managed.metadata.width !== legacyResource.width
+      || managed.metadata.height !== legacyResource.height
     ) {
       throw new LayerStackV1ImportError(`图层资源尺寸已变化：${layer.name}`)
     }
@@ -127,7 +128,14 @@ export async function importLayerStackV1AsImageEditDocumentV3(
     raster.visible = layer.visible
     raster.opacity = layer.opacity
     raster.blendMode = layer.blendMode
-    raster.transform = [1, 0, 0, 1, layer.placement.x, layer.placement.y]
+    raster.transform = [
+      layer.placement.width / managed.metadata.width,
+      0,
+      0,
+      layer.placement.height / managed.metadata.height,
+      layer.placement.x,
+      layer.placement.y,
+    ]
     layers.push(raster)
   }
 

@@ -25,7 +25,7 @@ function document(): LayerStackDocumentV1 {
     ],
     resources: [
       { version: 1, resourceId: createStableLayerResourceId(stackId, 0), status: 'ready', filePath: '/media/base.jpg', mimeType: 'image/jpeg', width: 512, height: 512, hasAlpha: false, byteLength: 100, sha256: 'a' },
-      { version: 1, resourceId: createStableLayerResourceId(stackId, 1), status: 'ready', filePath: '/media/title.png', mimeType: 'image/png', width: 100, height: 40, hasAlpha: true, byteLength: 50, sha256: 'b' },
+      { version: 1, resourceId: createStableLayerResourceId(stackId, 1), status: 'ready', filePath: '/media/title.png', mimeType: 'image/png', width: 200, height: 80, hasAlpha: true, byteLength: 50, sha256: 'b' },
       { version: 1, resourceId: 'composite', status: 'ready', filePath: '/media/composite.png', mimeType: 'image/png', width: 512, height: 512, hasAlpha: true, byteLength: 120, sha256: 'c' },
       { version: 1, resourceId: 'thumbnail', status: 'ready', filePath: '/media/thumb.webp', mimeType: 'image/webp', width: 256, height: 256, hasAlpha: false, byteLength: 40, sha256: 'd' },
     ],
@@ -33,7 +33,7 @@ function document(): LayerStackDocumentV1 {
 }
 
 describe('layerStack V1', () => {
-  it('稳定派生 ID 并接受合法的 bottom-to-top 文档', () => {
+  it('稳定派生 ID，并接受内容资源分辨率与 bbox 放置尺寸不同的 bottom-to-top 文档', () => {
     expect(createStableLayerStackId('completion-1')).toBe(createStableLayerStackId('completion-1'));
     expect(validateLayerStackDocument(document()).layers).toHaveLength(2);
   });
@@ -50,7 +50,7 @@ describe('layerStack V1', () => {
     const source = document();
     expect(() => validateLayerStackDocument({ ...source, stackId: 'unstable' })).toThrow(/completionId/);
     expect(() => validateLayerStackDocument({ ...source, compositeResourceId: 'missing' })).toThrow(/合成资源/);
-    expect(() => validateLayerStackDocument({ ...source, layers: source.layers.map((layer) => layer.role === 'base' ? { ...layer, placement: { ...layer.placement, width: 511 } } : layer) })).toThrow(/资源不一致|覆盖画布/);
+    expect(() => validateLayerStackDocument({ ...source, layers: source.layers.map((layer) => layer.role === 'base' ? { ...layer, placement: { ...layer.placement, width: 511 } } : layer) })).toThrow(/覆盖画布/);
     expect(() => validateLayerStackDocument({ ...source, status: 'degraded' })).toThrow(/必须包含缺失资源/);
   });
 

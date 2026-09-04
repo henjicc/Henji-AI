@@ -164,8 +164,15 @@ function resolvePlacement(layer: ComposeLayerStackLayerPayloadDto, width: number
   if (!absolute) throw new Error(`内容层 ${layer.sourceOutputIndex} 缺少 absolute bbox`)
   const [left, top, right, bottom] = absolute
   if (![left, top, right, bottom].every(Number.isFinite) || right <= left || bottom <= top) throw new Error(`内容层 ${layer.sourceOutputIndex} bbox 无效`)
-  if (Math.abs(right - left - width) > 1 || Math.abs(bottom - top - height) > 1) throw new Error(`内容层 ${layer.sourceOutputIndex} bbox 与图片尺寸偏差超过 1px`)
-  return { x: Math.round(left), y: Math.round(top), width, height }
+  const placementWidth = Math.round(right - left)
+  const placementHeight = Math.round(bottom - top)
+  if (placementWidth < 1 || placementHeight < 1) throw new Error(`内容层 ${layer.sourceOutputIndex} bbox 尺寸无效`)
+  return {
+    x: Math.round(left),
+    y: Math.round(top),
+    width: placementWidth,
+    height: placementHeight,
+  }
 }
 
 async function clipOverlay(
@@ -174,14 +181,17 @@ async function clipOverlay(
   canvasHeight: number
 ): Promise<{ bytes: Buffer; left: number; top: number } | null> {
   const { x, y, width, height } = item.resource.placement
+  const sharp = await loadSharp()
+  const placedBytes = item.resource.width === width && item.resource.height === height
+    ? item.bytes
+    : await sharp(item.bytes).resize(width, height, { fit: 'fill' }).png().toBuffer()
   const left = Math.max(0, x)
   const top = Math.max(0, y)
   const right = Math.min(canvasWidth, x + width)
   const bottom = Math.min(canvasHeight, y + height)
   if (right <= left || bottom <= top) return null
-  if (left === x && top === y && right === x + width && bottom === y + height) return { bytes: item.bytes, left, top }
-  const sharp = await loadSharp()
-  const bytes = await sharp(item.bytes).extract({ left: left - x, top: top - y, width: right - left, height: bottom - top }).png().toBuffer()
+  if (left === x && top === y && right === x + width && bottom === y + height) return { bytes: placedBytes, left, top }
+  const bytes = await sharp(placedBytes).extract({ left: left - x, top: top - y, width: right - left, height: bottom - top }).png().toBuffer()
   return { bytes, left, top }
 }
 

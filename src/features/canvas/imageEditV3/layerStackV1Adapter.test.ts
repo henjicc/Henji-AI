@@ -98,7 +98,7 @@ function layerStack(): LayerStackDocumentV1 {
     ],
     resources: [
       resource(baseResourceId, '/layers/base.jpg', 1_000, 800, false),
-      resource(contentResourceId, '/layers/content.png', 400, 300, true),
+      resource(contentResourceId, '/layers/content.png', 800, 600, true),
       resource('composite-resource', '/layers/composite.png', 1_000, 800, true),
       resource('thumbnail-resource', '/layers/thumbnail.jpg', 200, 160, false),
     ],
@@ -135,11 +135,11 @@ function managed(index: number, width: number, height: number, hasAlpha: boolean
 }
 
 describe('LayerStackDocumentV1 → ImageEditDocumentV3 适配器', () => {
-  it('保持由下到上的顺序、透明度、显隐和 placement 平移，并只导入图层权威资源', async () => {
+  it('保持由下到上的顺序、透明度、显隐和 placement 缩放平移，并只导入图层权威资源', async () => {
     const ingestSource = vi.fn(async (request: { source: { filePath: string } }) => (
       request.source.filePath.endsWith('base.jpg')
         ? managed(1, 1_000, 800, false)
-        : managed(2, 400, 300, true)
+        : managed(2, 800, 600, true)
     ))
     const imported = await importLayerStackV1AsImageEditDocumentV3({
       document: layerStack(),
@@ -155,11 +155,11 @@ describe('LayerStackDocumentV1 → ImageEditDocumentV3 适配器', () => {
     })
     expect(imported.document.layers).toMatchObject([
       { type: 'raster', name: '背景', visible: true, opacity: 1, transform: [1, 0, 0, 1, 0, 0] },
-      { type: 'raster', name: '主体', visible: false, opacity: 0.75, transform: [1, 0, 0, 1, 120, 80] },
+      { type: 'raster', name: '主体', visible: false, opacity: 0.75, transform: [0.5, 0, 0, 0.5, 120, 80] },
     ])
     expect(imported.resourceDescriptors.map(({ resourceRef }) => resourceRef)).toEqual([
       managed(1, 1_000, 800, false).resource.resourceRef,
-      managed(2, 400, 300, true).resource.resourceRef,
+      managed(2, 800, 600, true).resource.resourceRef,
     ])
   })
 
