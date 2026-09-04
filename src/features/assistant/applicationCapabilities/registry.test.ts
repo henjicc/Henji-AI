@@ -7,6 +7,7 @@ import { BUILTIN_APPLICATION_CAPABILITY_REGISTRY } from '@/core/assistant/builti
 import { ASSET_APPLICATION_CAPABILITIES } from '@/core/assistant/capabilities/assetApplicationCapabilities'
 import { CAMERA_STAGE_APPLICATION_CAPABILITIES } from '@/core/assistant/capabilities/cameraStageApplicationCapabilities'
 import { CANVAS_BATCH_APPLICATION_CAPABILITIES } from '@/core/assistant/capabilities/canvasBatchApplicationCapabilities'
+import { CANVAS_EDITOR_APPLICATION_CAPABILITIES } from '@/core/assistant/capabilities/canvasEditorApplicationCapabilities'
 import { CANVAS_MUTATION_APPLICATION_CAPABILITIES } from '@/core/assistant/capabilities/canvasMutationApplicationCapabilities'
 import { CANVAS_PROJECT_APPLICATION_CAPABILITIES } from '@/core/assistant/capabilities/canvasProjectApplicationCapabilities'
 import { GENERATION_APPLICATION_CAPABILITIES } from '@/core/assistant/capabilities/generationApplicationCapabilities'
@@ -33,6 +34,7 @@ describe('application capability handler coverage', () => {
       ...GENERATION_APPLICATION_CAPABILITIES,
       ...ASSET_APPLICATION_CAPABILITIES,
       ...CANVAS_PROJECT_APPLICATION_CAPABILITIES,
+      ...CANVAS_EDITOR_APPLICATION_CAPABILITIES,
       ...CANVAS_MUTATION_APPLICATION_CAPABILITIES,
       ...CANVAS_BATCH_APPLICATION_CAPABILITIES,
       ...CAMERA_STAGE_APPLICATION_CAPABILITIES,
@@ -57,7 +59,12 @@ describe('application capability handler coverage', () => {
     expect(createCamera?.inputSchema.safeParse({ name: '旧输入', mode: 'pro' }).success).toBe(false)
     expect(BUILTIN_APPLICATION_CAPABILITY_REGISTRY.get('bake_camera_stage_to_pro')).toBeUndefined()
 
-    for (const id of ['open_camera_stage_project', 'open_canvas_project', 'focus_canvas_node']) {
+    for (const id of [
+      'open_camera_stage_project',
+      'open_canvas_project',
+      'focus_canvas_node',
+      'open_multi_layer_document_node_editor',
+    ]) {
       const definition = BUILTIN_APPLICATION_CAPABILITY_REGISTRY.get(id)
       expect(definition?.requiredScopes).toContain('navigation')
       expect(definition?.producesRefs).toContain('application.surface')

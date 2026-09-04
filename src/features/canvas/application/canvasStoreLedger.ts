@@ -131,7 +131,7 @@ export const CANVAS_STORE_LEDGER: ApplicationStoreActionLedger<ActionName> = {
     openToolDialog: {
       kind: 'excluded',
       category: 'view_state',
-      reason: '工具对话框是参数录入的容器；助手直接写目标属性，开对话框反而多一步且会打断用户。',
+      reason: '工具对话框是多种节点工具共用的视图容器；助手通过各工具的语义 application service/capability 操作，不能把通用容器开关等同于单一工具能力。',
     },
     closeToolDialog: {
       kind: 'excluded',

@@ -4,6 +4,9 @@ import type {
 import type {
   CanvasNodePlacement,
 } from '@/core/assistant/capabilities/canvasMutationApplicationCapabilities'
+import {
+  OPEN_MULTI_LAYER_DOCUMENT_NODE_EDITOR_CAPABILITY_ID,
+} from '@/core/assistant/capabilities/canvasEditorApplicationCapabilities'
 import type { AssistantCanvasImageCapabilityId } from '@/core/canvas/imageCapabilityIds'
 import type { CanvasDownloadDestination } from '@/core/assistant/capabilities/canvasExportApplicationCapabilities'
 import {
@@ -62,6 +65,10 @@ import { downloadCanvasMedia } from '@/features/canvas/application/canvasDownloa
 import {
   executeCanvasImageCapabilityForProject,
 } from '@/features/canvas/application/canvasImageCapabilityApplicationService'
+import {
+  type OpenMultiLayerDocumentNodeEditorInput,
+  openMultiLayerDocumentNodeEditor,
+} from '@/features/canvas/application/multiLayerDocumentNodeEditorApplicationService'
 import {
   exportMultiLayerDocumentTargetToCanvas,
   type MultiLayerDocumentTargetExportInput,
@@ -216,6 +223,19 @@ export function registerCanvasCapabilityHandlers(
     const surface = openApplicationSurface('workspace.canvas', context)
     const focused = await focusCanvasNode(parsed.projectId, parsed.nodeId, context.signal)
     return { ...focused, ...surface }
+  })
+
+  registrar.registerHandler(OPEN_MULTI_LAYER_DOCUMENT_NODE_EDITOR_CAPABILITY_ID, async (input, context) => {
+    throwIfCapabilityAborted(context.signal)
+    const parsed = parseCapabilityInput<Omit<OpenMultiLayerDocumentNodeEditorInput, 'signal' | 'correlation'>>(
+      OPEN_MULTI_LAYER_DOCUMENT_NODE_EDITOR_CAPABILITY_ID,
+      input,
+    )
+    return { ...await openMultiLayerDocumentNodeEditor({
+      ...parsed,
+      signal: context.signal,
+      correlation: context,
+    }) }
   })
 
   registrar.registerHandler('undo_canvas_change', (input, context) => {

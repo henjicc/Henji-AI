@@ -105,6 +105,15 @@ schema、文档构建器与互斥规则，`diffusion` 与 `vgpu_glow` 的全量�
 把 action ID 当方法名以及变量拼写错误都会给出可直接重写的诊断；外部等待续跑的脚本租约已由
 `5bddca16` 恢复。这些修复减少无效重试，不放宽脚本语言的权限边界。
 
+2026-09-04 画布多图层文档节点新增专用 `open_multi_layer_document_node_editor` 导航能力，补齐
+此前缺失的“按语义打开节点文档编辑器”能力。助手与节点 UI 现在共享正式
+application service：按稳定工程/节点引用打开工程、进入既有画布、聚焦节点、校验 editable-v3 权威
+会话后，只打开该节点自己的 `MultiLayerDocumentEditorDialog`；普通节点、引用错配和旧 V1 会给出可自纠
+拒绝，不会误开工具箱独立图片编辑器，也不会在 R0 导航中暗中迁移数据。通用 `openToolDialog` 仍是
+分镜拆分等多种节点工具共用的视图容器，继续以 excluded 明确排除；语义动作由各自 application
+service/capability 建账，不能把容器开关误归给单一能力。本次将原本缺失的语义动作从“不通”改为“通”，
+没有新增旧式工具或平行执行通道。
+
 验证层（详见 [testing.md](testing.md) 第四节）：
 
 | 层 | 命令 | 规模（2026-08-31） |

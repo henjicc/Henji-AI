@@ -2,9 +2,8 @@
 
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { ReactFlowProvider } from '@xyflow/react'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { canvasEventBus } from '@/features/canvas/application/canvasServices'
 import type { LayerStackResultNodeData } from '@/features/canvas/domain/canvasNodes'
 import {
   createStableLayerId,
@@ -13,7 +12,16 @@ import {
   type LayerStackDocumentV1,
 } from '@/features/canvas/domain/layerStack'
 import { useCanvasStore } from '@/stores/canvasStore'
+import { useProjectStore } from '@/stores/projectStore'
 import { LayerStackResultNode } from './LayerStackResultNode'
+
+const nodeMocks = vi.hoisted(() => ({
+  openMultiLayerDocumentNodeEditor: vi.fn(async () => ({ status: 'opened' })),
+}))
+
+vi.mock('@/features/canvas/application/multiLayerDocumentNodeEditorApplicationService', () => ({
+  openMultiLayerDocumentNodeEditor: nodeMocks.openMultiLayerDocumentNodeEditor,
+}))
 
 const imageUrl = 'henji-media://multi-layer/composite.png'
 
@@ -107,36 +115,39 @@ function renderNode(): ReturnType<typeof render> {
 describe('LayerStackResultNode V3 编辑入口', () => {
   beforeEach(() => {
     useCanvasStore.setState({ selectedNodeId: null, edges: [] })
+    useProjectStore.setState({ currentProjectId: 'project-a' })
+    nodeMocks.openMultiLayerDocumentNodeEditor.mockClear()
   })
 
-  afterEach(() => cleanup())
+  afterEach(() => {
+    cleanup()
+    useProjectStore.setState({ currentProjectId: null, currentProject: null })
+  })
 
   it('单击只选择节点，不打开编辑器', () => {
-    const opened: unknown[] = []
-    const unsubscribe = canvasEventBus.subscribe('tool-dialog/open', (payload) => opened.push(payload))
     renderNode()
 
     fireEvent.click(document.querySelector('[data-layer-stack-node-id="multi-layer-node"]') as Element)
 
     expect(useCanvasStore.getState().selectedNodeId).toBe('multi-layer-node')
-    expect(opened).toHaveLength(0)
-    unsubscribe()
+    expect(nodeMocks.openMultiLayerDocumentNodeEditor).not.toHaveBeenCalled()
   })
 
   it('双击和明确编辑动作都打开完整图片编辑工具', () => {
-    const opened: unknown[] = []
-    const unsubscribe = canvasEventBus.subscribe('tool-dialog/open', (payload) => opened.push(payload))
     renderNode()
     const node = document.querySelector('[data-layer-stack-node-id="multi-layer-node"]') as Element
 
     fireEvent.doubleClick(node)
     fireEvent.click(screen.getByRole('button', { name: '编辑' }))
 
-    expect(opened).toEqual([
-      { nodeId: 'multi-layer-node', toolType: 'edit' },
-      { nodeId: 'multi-layer-node', toolType: 'edit' },
-    ])
-    unsubscribe()
+    expect(nodeMocks.openMultiLayerDocumentNodeEditor).toHaveBeenNthCalledWith(1, {
+      projectRef: { kind: 'canvas.project', id: 'project-a' },
+      nodeRef: { kind: 'canvas.node', id: 'project-a:multi-layer-node' },
+    })
+    expect(nodeMocks.openMultiLayerDocumentNodeEditor).toHaveBeenNthCalledWith(2, {
+      projectRef: { kind: 'canvas.project', id: 'project-a' },
+      nodeRef: { kind: 'canvas.node', id: 'project-a:multi-layer-node' },
+    })
   })
 
   it('V1 迁移后的节点始终展示 V3 实时投影而不是旧缩略图', () => {

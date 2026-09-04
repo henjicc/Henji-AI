@@ -6,8 +6,9 @@ import { UiButton } from '@/components/ui';
 import { ICON_NODE_ASSET_GROUP } from '@/core/theme/icons';
 import { canvasEventBus } from '@/features/canvas/application/canvasServices';
 import { migrateLegacyMultiLayerDocumentNode } from '@/features/canvas/application/multiLayerDocumentNodeGenerationAdapter';
+import { openMultiLayerDocumentNodeEditor } from '@/features/canvas/application/multiLayerDocumentNodeEditorApplicationService';
 import { resolveImageDisplayUrl } from '@/features/canvas/application/imageData';
-import { NODE_TOOL_TYPES, type LayerStackResultNodeData } from '@/features/canvas/domain/canvasNodes';
+import type { LayerStackResultNodeData } from '@/features/canvas/domain/canvasNodes';
 import { isEditableMultiLayerDocumentNode } from '@/features/canvas/domain/multiLayerDocumentNode';
 import { getMainPortConnectionFlags } from '@/features/canvas/domain/connectionIndex';
 import { getSocketColor } from '@/features/canvas/domain/socketTypes';
@@ -55,23 +56,19 @@ export const LayerStackResultNode = memo(({ id, data, selected, width, height }:
   const resolvedHeight = Math.max(180, typeof height === 'number' ? height : 220);
 
   const openEditor = async (): Promise<void> => {
-    if (isEditableV3) {
-      canvasEventBus.publish('tool-dialog/open', {
-        nodeId: id,
-        toolType: NODE_TOOL_TYPES.edit,
-      });
-      return;
-    }
-    if (!projectId || !document) return;
+    if (!projectId) return;
     try {
-      await migrateLegacyMultiLayerDocumentNode({ projectId, nodeId: id, data });
-      canvasEventBus.publish('tool-dialog/open', {
-        nodeId: id,
-        toolType: NODE_TOOL_TYPES.edit,
+      if (!isEditableV3) {
+        if (!document) return;
+        await migrateLegacyMultiLayerDocumentNode({ projectId, nodeId: id, data });
+      }
+      await openMultiLayerDocumentNodeEditor({
+        projectRef: { kind: 'canvas.project', id: projectId },
+        nodeRef: { kind: 'canvas.node', id: `${projectId}:${id}` },
       });
     } catch (error) {
       canvasEventBus.publish('canvas/toast', {
-        message: error instanceof Error ? error.message : '旧版图层文档迁移失败，请重试',
+        message: error instanceof Error ? error.message : '多图层图片编辑器打开失败，请重试',
         type: 'error',
       });
     }

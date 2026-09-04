@@ -14,6 +14,7 @@ const mocks = vi.hoisted(() => ({
   disconnectAssetGroupFromTarget: vi.fn(),
   executeCanvasImageCapabilityForProject: vi.fn(),
   exportMultiLayerDocumentTargetToCanvas: vi.fn(),
+  openMultiLayerDocumentNodeEditor: vi.fn(),
 }))
 
 vi.mock('@/features/canvas/domain/nodeControlRegistry', () => ({
@@ -71,6 +72,9 @@ vi.mock('@/features/canvas/application/canvasImageCapabilityApplicationService',
 }))
 vi.mock('@/features/canvas/application/multiLayerDocumentNodeGenerationAdapter', () => ({
   exportMultiLayerDocumentTargetToCanvas: mocks.exportMultiLayerDocumentTargetToCanvas,
+}))
+vi.mock('@/features/canvas/application/multiLayerDocumentNodeEditorApplicationService', () => ({
+  openMultiLayerDocumentNodeEditor: mocks.openMultiLayerDocumentNodeEditor,
 }))
 vi.mock('../hostContext/hostContext', () => ({
   createHostContextSnapshot: vi.fn(() => ({ scopeRevisions: { canvas: 0 } })),
@@ -190,6 +194,41 @@ describe('canvas capability handlers', () => {
     expect(
       mocks.openApplicationSurface.mock.invocationCallOrder[0]
     ).toBeLessThan(mocks.focusCanvasNodeFromAgent.mock.invocationCallOrder[0])
+  })
+
+  it('打开多图层节点编辑器只把稳定引用和执行上下文交给正式应用服务', async () => {
+    const projectRef = { kind: 'canvas.project' as const, id: 'project-2' }
+    const nodeRef = { kind: 'canvas.node' as const, id: 'project-2:node-1' }
+    mocks.openMultiLayerDocumentNodeEditor.mockResolvedValue({
+      projectRef,
+      nodeRef,
+      surfaceId: 'workspace.canvas',
+      editorKind: 'multi_layer_document',
+      status: 'opened',
+      resultRefs: [
+        projectRef,
+        nodeRef,
+        { kind: 'application.surface', id: 'workspace.canvas' },
+      ],
+    })
+    const handler = registeredHandlers().get('open_multi_layer_document_node_editor')
+
+    const result = await handler?.({ projectRef, nodeRef }, context)
+
+    expect(mocks.openMultiLayerDocumentNodeEditor).toHaveBeenCalledWith({
+      projectRef,
+      nodeRef,
+      signal: context.signal,
+      correlation: context,
+    })
+    expect(result).toMatchObject({
+      surfaceId: 'workspace.canvas',
+      editorKind: 'multi_layer_document',
+      nodeRef,
+    })
+    expect(mocks.openCanvasProjectWithSummaryFromAgent).not.toHaveBeenCalled()
+    expect(mocks.openApplicationSurface).not.toHaveBeenCalled()
+    expect(mocks.focusCanvasNodeFromAgent).not.toHaveBeenCalled()
   })
 
   it('批量下载只把稳定节点 ID 和已配置目标模式交给正式服务', async () => {
