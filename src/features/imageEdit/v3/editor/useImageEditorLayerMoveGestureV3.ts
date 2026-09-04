@@ -38,6 +38,7 @@ interface ImageEditorLayerMoveGestureV3 {
   interacted: boolean
   changed: boolean
   directLayerFeedback: boolean
+  feedbackTarget: HTMLDivElement | null
 }
 
 const EMPTY_LAYER_IDS_V3: readonly string[] = []
@@ -60,9 +61,9 @@ export function useImageEditorLayerMoveGestureV3(
   controller: ImageEditorV3Controller,
   activeTool: ImageEditorToolIdV3,
   viewportContentRef: RefObject<HTMLDivElement>,
-  moveFeedbackRef: RefObject<HTMLDivElement>,
+  acquireMoveFeedback: (layerId: string) => HTMLDivElement | null,
+  releaseMoveFeedback: (committed: boolean) => void,
   outputGeometry: AnnotationOutputGeometryV3,
-  directLayerFeedbackAvailable: boolean,
   snappingEnabled: boolean,
   snapGuideRefs: ImageEditorMoveSnapGuideRefsV3,
 ): ImageEditorLayerMoveGestureHandlersV3 {
@@ -78,12 +79,6 @@ export function useImageEditorLayerMoveGestureV3(
     outputGeometry.width,
     outputGeometry.height,
   ), [outputGeometry.height, outputGeometry.width])
-
-  const clearWholeFrameFeedback = useCallback((): void => {
-    const feedback = moveFeedbackRef.current
-    if (!feedback) return
-    feedback.style.transform = ''
-  }, [moveFeedbackRef])
 
   const clearSnapGuides = useCallback((): void => {
     const horizontal = snapGuideRefs.horizontal.current
@@ -148,6 +143,7 @@ export function useImageEditorLayerMoveGestureV3(
       try {
         if (gesture.directLayerFeedback) {
           controller.updateLayerCommon(gesture.layerId, { transform: gesture.pendingTransform })
+          releaseMoveFeedback(true)
         } else {
           if (!gesture.previewSet) {
             controller.setTransformPreview(
@@ -163,16 +159,19 @@ export function useImageEditorLayerMoveGestureV3(
           )
         }
       } catch (error) {
-        clearWholeFrameFeedback()
+        if (gesture.feedbackTarget) gesture.feedbackTarget.style.transform = ''
+        releaseMoveFeedback(false)
         throw error
       }
     } else if (gesture.previewSet) {
       controller.clearTransformPreview(gesture.previewId)
-      clearWholeFrameFeedback()
+      if (gesture.feedbackTarget) gesture.feedbackTarget.style.transform = ''
+      releaseMoveFeedback(false)
     } else {
-      clearWholeFrameFeedback()
+      if (gesture.feedbackTarget) gesture.feedbackTarget.style.transform = ''
+      releaseMoveFeedback(false)
     }
-  }, [cancelScheduledPreview, clearSnapGuides, clearWholeFrameFeedback, controller])
+  }, [cancelScheduledPreview, clearSnapGuides, controller, releaseMoveFeedback])
 
   useEffect(() => {
     if (activeTool !== 'move') release(false)
@@ -229,6 +228,9 @@ export function useImageEditorLayerMoveGestureV3(
     if (!viewportRect) return
     const outputPoint = clientToOutput(viewportRect, event.clientX, event.clientY)
     if (!isImageEditLayerTransformableV3(location) || !outputPoint) return
+    const feedbackTarget = location.parentId === null && location.layer.type === 'raster'
+      ? acquireMoveFeedback(layerId)
+      : null
     event.preventDefault()
     event.stopPropagation()
     try {
@@ -260,19 +262,8 @@ export function useImageEditorLayerMoveGestureV3(
       previewSet: false,
       interacted: false,
       changed: false,
-      directLayerFeedback: directLayerFeedbackAvailable
-        && moveFeedbackRef.current !== null
-        && location.parentId === null
-        && location.layer.type === 'raster'
-        && controller.document.geometry.crop === null
-        && controller.document.geometry.orientation.rotate === 0
-        && !controller.document.geometry.orientation.mirrored
-        && controller.document.layers.every((layer) => (
-          layer.id === layerId
-          || !layer.visible
-          || layer.type === 'effect'
-          || layer.type === 'adjustment'
-        )),
+      directLayerFeedback: feedbackTarget !== null,
+      feedbackTarget,
     }
   }
 
@@ -333,14 +324,14 @@ export function useImageEditorLayerMoveGestureV3(
     gesture.pendingTransform = changed
       ? translateImageEditLayerTransformV3(gesture.startTransform, deltaX, deltaY)
       : [...gesture.startTransform]
-    if (gesture.directLayerFeedback && moveFeedbackRef.current) {
+    if (gesture.directLayerFeedback && gesture.feedbackTarget) {
       const previewClientX = gesture.viewportRect.left
         + snappedOutputPoint[0] / outputGeometry.width * gesture.viewportRect.width
       const previewClientY = gesture.viewportRect.top
         + snappedOutputPoint[1] / outputGeometry.height * gesture.viewportRect.height
       // 常驻合成表面位于缩放容器之外，反馈位移必须保持屏幕像素；
       // 文档坐标缩放已经由 clientToOutput 负责，不能在这里再除一次 zoom。
-      moveFeedbackRef.current.style.transform = changed
+      gesture.feedbackTarget.style.transform = changed
         ? `translate3d(${previewClientX - gesture.startClientPoint[0]}px, ${previewClientY - gesture.startClientPoint[1]}px, 0)`
         : ''
       return

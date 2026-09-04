@@ -1,5 +1,5 @@
 import { AlertTriangle, LoaderCircle } from 'lucide-react'
-import { useCallback, useLayoutEffect, useMemo, useRef } from 'react'
+import { useCallback, useMemo, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import type {
@@ -22,10 +22,9 @@ import {
   ImageEditorUrlPreviewV3,
 } from './ImageEditorPreviewOutputV3'
 import { ImageEditorRasterBrushOverlayV3 } from './ImageEditorRasterBrushOverlayV3'
-import { ImageEditorRasterPasteboardV3 } from './ImageEditorRasterPasteboardV3'
 import { ImageEditorSelectionMaskOverlayV3 } from './ImageEditorSelectionMaskOverlayV3'
-import { ImageEditorViewportTilesV3 } from './ImageEditorViewportTilesV3'
 import { ImageEditorViewportChromeV3 } from './ImageEditorViewportChromeV3'
+import { ImageEditorRasterPresentationV3 } from './ImageEditorRasterPresentationV3'
 import { resolveAnnotationOutputGeometryV3 } from './annotationGeometryV3'
 import { ImageEditorCropOverlayV3 } from './ImageEditorCropOverlayV3'
 import type {
@@ -42,7 +41,7 @@ import {
 import { useImageEditorLayerMoveGestureV3 } from './useImageEditorLayerMoveGestureV3'
 import { imageEditorViewportTransformV3, type ImageEditorViewportPanV3 } from './viewportNavigationV3'
 import { useImageEditorViewportNavigationGestureV3 } from './useImageEditorViewportNavigationGestureV3'
-import { useImageEditorRasterPasteboardV3 } from './useImageEditorRasterPasteboardV3'
+import { useImageEditorRasterPasteboardPresentationV3 } from './useImageEditorRasterPasteboardPresentationV3'
 import {
   resolveLiveBlurRadiusV3,
   splitLiveAnnotationDisplayV3,
@@ -183,21 +182,6 @@ export function ImageEditorPreviewV3({
     const incrementalRadius = Math.sqrt(Math.max(0, nextRadius ** 2 - baseRadius ** 2))
     return Math.min(48, incrementalRadius * documentToCss)
   }, [baseDisplayDocument, projectedDocument, snapshot.previewOverrides, viewportLayout?.viewport.zoom])
-  const rasterPasteboard = useImageEditorRasterPasteboardV3(
-    cropPresentationDocument,
-    sourceImageUrl,
-    outputGeometry.width,
-    !previewRenderer,
-  )
-  const {
-    feedbackRef: moveFeedbackRef,
-    imageRef: rasterSourceImageRef,
-    layer: rasterPasteboardLayer,
-    sourceIdentity: rasterSourceIdentity,
-    ready: rasterSourceReady,
-    markReady: markRasterSourceReady,
-    updateFrame: updateRasterSourceFrame,
-  } = rasterPasteboard
   const displayPipeline = useImageEditorDisplayPipelineV3(
     controller.sessionId,
     displaySnapshot,
@@ -278,21 +262,26 @@ export function ImageEditorPreviewV3({
   const basePreviewRevision = previewRenderer
     ? snapshot.document.revision
     : viewportResult?.revision ?? managedPreview.resultRevision
-  useLayoutEffect(() => {
-    const feedback = moveFeedbackRef.current
-    if (!feedback) return
-    if (rasterSourceReady) {
-      // 完整源图层已经同步吃到新 transform，提交后立刻移除手势残差。
-      feedback.style.transform = ''
-      return
-    }
-    if (
-      Object.keys(snapshot.previewOverrides).length > 0
-      || basePreviewDocumentId !== displaySnapshot.document.id
-      || basePreviewRevision !== displaySnapshot.document.revision
-    ) return
-    feedback.style.transform = ''
-  }, [basePreviewDocumentId, basePreviewRevision, displaySnapshot.document.id, displaySnapshot.document.revision, moveFeedbackRef, rasterSourceReady, snapshot.previewOverrides])
+  const {
+    stableDisplayRef: rasterDisplayFrameRef,
+    pasteboard: rasterPasteboard,
+  } = useImageEditorRasterPasteboardPresentationV3({
+    document: cropPresentationDocument,
+    sourceImageUrl,
+    documentWidth: outputGeometry.width,
+    enabled: !previewRenderer,
+    resourceDescriptors: resourceDescriptors ?? [],
+    previewOverrides: snapshot.previewOverrides,
+    displayDocumentId: displaySnapshot.document.id,
+    displayRevision: displaySnapshot.document.revision,
+    stablePreviewDocumentId: basePreviewDocumentId,
+    stablePreviewRevision: basePreviewRevision,
+  })
+  const {
+    acquireMoveFeedback,
+    releaseMoveFeedback,
+    updateFrame: updateRasterSourceFrame,
+  } = rasterPasteboard
 
   const updatePresentationViewport = useCallback((
     nextZoom: number,
@@ -341,9 +330,9 @@ export function ImageEditorPreviewV3({
     controller,
     navigation.effectiveTool,
     viewportContentRef,
-    moveFeedbackRef,
+    acquireMoveFeedback,
+    releaseMoveFeedback,
     outputGeometry,
-    rasterSourceReady,
     snappingEnabled,
     {
       horizontal: horizontalSnapGuideRef,
@@ -413,33 +402,16 @@ export function ImageEditorPreviewV3({
           className="pointer-events-none absolute inset-0 overflow-hidden"
           style={{ clipPath: documentFrame?.clipPath ?? 'polygon(0 0, 0 0, 0 0, 0 0)' }}
         >
-          <div
-            data-raster-display-frame
-            data-live-blur-feedback={liveBlurFeedback === null ? undefined : 'active'}
-            className={`pointer-events-none absolute inset-0 overflow-hidden ${rasterSourceReady ? 'invisible' : ''}`}
-            style={liveBlurFeedback === null ? undefined : {
-              filter: `blur(${liveBlurFeedback}px)`,
-              willChange: 'filter',
-            }}
-          >
-            <ImageEditorViewportTilesV3
-              session={viewportComposite.session}
-              layout={viewportLayout}
-              label={t('imageEditor.v3.previewAlt')}
-            />
-          </div>
-          {rasterPasteboardLayer && documentFrame && rasterSourceIdentity ? (
-            <ImageEditorRasterPasteboardV3
-              feedbackRef={moveFeedbackRef}
-              imageRef={rasterSourceImageRef}
-              layer={rasterPasteboardLayer}
-              sourceImageUrl={sourceImageUrl}
-              documentWidth={outputGeometry.width}
-              frame={documentFrame}
-              ready={rasterSourceReady}
-              onReady={markRasterSourceReady}
-            />
-          ) : null}
+          <ImageEditorRasterPresentationV3
+            stableDisplayRef={rasterDisplayFrameRef}
+            liveBlurFeedback={liveBlurFeedback}
+            viewportSession={viewportComposite.session}
+            viewportLayout={viewportLayout}
+            label={t('imageEditor.v3.previewAlt')}
+            pasteboard={rasterPasteboard}
+            documentFrame={documentFrame}
+            documentWidth={outputGeometry.width}
+          />
         </div>
       ) : null}
       <div className="absolute inset-0 flex items-center justify-center overflow-hidden p-6">

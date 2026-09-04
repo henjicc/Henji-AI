@@ -1,3 +1,9 @@
+const {
+  selectOverlappingReactFlowNode,
+  verifyHiddenBackgroundRasterStack,
+  verifyMultiLayerDragPerformance,
+} = require('./uiInspectionMultiLayerDragPerformance.cjs')
+
 function attachUiInspectionCanvasEditing(context) {
   const {
     settlePage,
@@ -342,75 +348,17 @@ function attachUiInspectionCanvasEditing(context) {
       }
     }, { targetProjectId: projectId, source: panoramaSource })
 
-    await page.locator(`[data-project-id="${projectId}"]:visible`).click()
-    const result = page.locator(
-      `[data-layer-stack-node-id="${fixture.nodeId}"][data-layer-stack-status="editable-v3"]`
-    )
-    await result.waitFor({ state: 'visible', timeout: 12000 })
-    const initialPreviewSource = await result.locator('img[alt="多图层图片预览"]').getAttribute('src')
-    await result.click()
-    await page.waitForTimeout(250)
-    if (await page.getByRole('dialog', { name: /多图层图片编辑器|Multi-layer image editor/i }).count()) {
-      throw new Error('多图层图片文档节点单击不应打开编辑器')
-    }
-
-    await result.dblclick()
-    let dialog = page.getByRole('dialog', { name: /多图层图片编辑器|Multi-layer image editor/i })
-    await dialog.waitFor({ state: 'visible', timeout: 15000 })
-    let editor = dialog.locator('[data-image-editor-v3]')
-    await editor.waitFor({ state: 'visible', timeout: 15000 })
-    const firstOpenEvidence = await page.evaluate(async ({ targetProjectId, targetNodeId, documentRef }) => {
-      const rows = await window.henjiNative.db.select(
-        'SELECT nodes_json FROM storyboard_projects WHERE id = ? LIMIT 1',
-        [targetProjectId]
-      )
-      const nodes = JSON.parse(rows[0]?.nodes_json ?? '[]')
-      const node = nodes.find((candidate) => candidate.id === targetNodeId)
-      const loaded = await window.henjiNative.imageEditorV3.loadDocument({
-        requestId: `reality-multi-layer-first-open-${crypto.randomUUID()}`,
-        documentRef,
-      })
-      return {
-        nodeDocumentRef: node?.data?.imageEditSession?.documentRef,
-        nodeRevision: node?.data?.imageEditSession?.revision,
-        loadedDocumentRef: loaded?.documentRef,
-        loadedRevision: loaded?.revision,
-      }
-    }, {
-      targetProjectId: projectId,
-      targetNodeId: fixture.nodeId,
-      documentRef: fixture.documentRef,
+    const verifiedDrag = await verifyMultiLayerDragPerformance({
+      page,
+      projectId,
+      fixture,
+      settlePage,
+      inspection,
     })
-    if (firstOpenEvidence.nodeDocumentRef !== fixture.documentRef
-      || firstOpenEvidence.loadedDocumentRef !== fixture.documentRef
-      || firstOpenEvidence.nodeRevision !== fixture.initialRevision
-      || firstOpenEvidence.loadedRevision !== fixture.initialRevision) {
-      throw new Error(`首次打开创建了第二份文档或改写了版本：${JSON.stringify(firstOpenEvidence)}`)
-    }
-    const structure = await dialog.evaluate((root) => ({
-      commandBars: root.querySelectorAll('[data-command-bar]').length,
-      contextBars: root.querySelectorAll('[data-context-bar]').length,
-      internalText: /revision|documentRef|资源 ID|队列|版本\s*\d+/i.test(root.textContent ?? ''),
-      saveOrApply: [...root.querySelectorAll('button')].some((button) => /^(保存|应用|Save|Apply)$/i.test(button.textContent?.trim() ?? '')),
-    }))
-    if (structure.commandBars !== 1
-      || structure.contextBars !== 0
-      || structure.internalText
-      || structure.saveOrApply) {
-      throw new Error(`多图层文档编辑器界面结构不符合约束：${JSON.stringify(structure)}`)
-    }
-    await page.waitForFunction(() => {
-      const editorRoot = document.querySelector('[data-image-editor-v3]')
-      const preview = editorRoot?.querySelector('[data-preview-surface]')
-      const coverage = Number(preview?.getAttribute('data-preview-coverage') ?? '0')
-      return Boolean(editorRoot)
-        && !editorRoot.querySelector('.animate-spin')
-        && Number.isFinite(coverage)
-        && coverage > 0
-    }, undefined, { timeout: 60000 })
-    await settlePage(page, 350)
-    await inspection?.capture?.('editor')
-
+    const initialPreviewSource = verifiedDrag.initialPreviewSource
+    const result = verifiedDrag.result
+    let dialog = verifiedDrag.dialog
+    let editor = verifiedDrag.editor
     const exportButton = dialog.getByRole('button', { name: /导出到画布|Export to canvas/i })
     await exportButton.waitFor({ state: 'visible', timeout: 8000 })
     await page.waitForFunction(() => [...document.querySelectorAll('button')].some((button) => (
@@ -465,7 +413,7 @@ function attachUiInspectionCanvasEditing(context) {
       || exportEvidence.exportedCount !== 1
       || !exportEvidence.ordinary
       || exportEvidence.sourceRevision !== fixture.initialRevision
-      || exportEvidence.documentRevision !== fixture.initialRevision
+      || exportEvidence.documentRevision !== fixture.initialRevision + 1
       || exportEvidence.layerVisibility?.some((visible) => visible !== true)) {
       throw new Error(`多图层目标没有原子导出为普通图片节点：${JSON.stringify(exportEvidence)}`)
     }
@@ -481,11 +429,11 @@ function attachUiInspectionCanvasEditing(context) {
     if (await dialog.locator('[data-command-bar]').count() !== 1) {
       throw new Error('多图层图片文档重开后不是唯一命令带')
     }
-    await editor.getByRole('button', { name: /隐藏.*背景图层|Hide.*Background/i }).click()
-    await page.waitForFunction((revision) => (
-      Number(document.querySelector('[data-command-bar]')?.getAttribute('data-document-revision'))
-        === revision + 1
-    ), fixture.initialRevision, { timeout: 10000 })
+    await verifyHiddenBackgroundRasterStack({
+      page,
+      editor,
+      expectedRevision: fixture.initialRevision + 2,
+    })
     await page.waitForTimeout(700)
     const persistedRevision = await page.evaluate(async (documentRef) => {
       const loaded = await window.henjiNative.imageEditorV3.loadDocument({
@@ -494,7 +442,7 @@ function attachUiInspectionCanvasEditing(context) {
       })
       return loaded?.revision ?? -1
     }, fixture.documentRef)
-    if (persistedRevision !== fixture.initialRevision + 1) {
+    if (persistedRevision !== fixture.initialRevision + 2) {
       throw new Error(`多图层文档编辑没有实时保存：${persistedRevision}`)
     }
     await dialog.getByRole('button', { name: /关闭编辑器|Close editor/i }).click()
@@ -542,7 +490,7 @@ function attachUiInspectionCanvasEditing(context) {
       || persistedProjection.nodeCount !== fixture.expectedNodeCount + 1
       || persistedProjection.position?.x !== 720
       || persistedProjection.position?.y !== 80
-      || persistedProjection.revision !== fixture.initialRevision + 1
+      || persistedProjection.revision !== fixture.initialRevision + 2
       || typeof persistedProjection.previewRef !== 'string'
       || persistedProjection.sourceUrl !== persistedProjection.persistedImageUrl
       || persistedProjection.previewImageRef !== persistedProjection.imageRef
@@ -674,16 +622,12 @@ function attachUiInspectionCanvasEditing(context) {
       `[data-layer-stack-node-id="${duplicateEvidence.duplicateNodeId}"]`
     )
     await duplicateResult.waitFor({ state: 'visible', timeout: 15000 })
-    // 复制节点按固定偏移落在源节点附近；点击右侧露出的真实区域，使其进入 ReactFlow 选中层级。
-    const duplicateBox = await duplicateResult.boundingBox()
-    if (!duplicateBox) throw new Error('复制节点没有可交互区域')
-    await page.mouse.click(
-      duplicateBox.x + duplicateBox.width - 8,
-      duplicateBox.y + duplicateBox.height / 2
-    )
-    await page.waitForFunction((nodeId) => (
-      document.querySelector(`.react-flow__node[data-id="${nodeId}"]`)?.classList.contains('selected')
-    ), duplicateEvidence.duplicateNodeId, { timeout: 8000 })
+    const selectDuplicateResult = () => selectOverlappingReactFlowNode({
+      page,
+      nodeContent: duplicateResult,
+      nodeId: duplicateEvidence.duplicateNodeId,
+    })
+    await selectDuplicateResult()
     await duplicateResult.getByRole('button', { name: /^(编辑|Edit)$/i }).click()
     dialog = page.getByRole('dialog', { name: /多图层图片编辑器|Multi-layer image editor/i })
     await dialog.waitFor({ state: 'visible', timeout: 15000 })
@@ -716,7 +660,7 @@ function attachUiInspectionCanvasEditing(context) {
       throw new Error(`复制文档编辑互相污染：${JSON.stringify(forkIsolation)}`)
     }
 
-    await duplicateResult.click()
+    await selectDuplicateResult()
     await page.keyboard.press('Delete')
     await duplicateResult.waitFor({ state: 'hidden', timeout: 15000 })
     await page.keyboard.press('Meta+z')
@@ -787,8 +731,8 @@ function attachUiInspectionCanvasEditing(context) {
     }, { targetProjectId: projectId, targetNodeId: fixture.nodeId })
     if (!packageRoundTrip.importedDocumentRef
       || packageRoundTrip.importedDocumentRef === packageRoundTrip.sourceDocumentRef
-      || packageRoundTrip.sourceRevision !== fixture.initialRevision + 1
-      || packageRoundTrip.importedRevision !== fixture.initialRevision + 1
+      || packageRoundTrip.sourceRevision !== fixture.initialRevision + 2
+      || packageRoundTrip.importedRevision !== fixture.initialRevision + 2
       || packageRoundTrip.importedLayerCount !== 2) {
       throw new Error(`多图层文档项目包往返失败：${JSON.stringify(packageRoundTrip)}`)
     }

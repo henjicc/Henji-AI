@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   createImageEditAnnotationLayerV3,
   createImageEditDocumentV3,
+  createImageEditRasterLayerV3,
 } from '@/core/imageEdit/v3/documentFactory'
 import i18n from '@/i18n/config'
 import { requireImageEditV3LiveSession } from '../application/imageEditLiveSessionRegistry'
@@ -40,6 +41,19 @@ const renderSession = vi.hoisted(() => ({
   setVisibility: vi.fn(),
   dispose: vi.fn(),
 }))
+const rasterPasteboardResources = vi.hoisted(() => ({
+  readFastProxy: vi.fn(),
+  readSourceMetadata: vi.fn(),
+}))
+
+vi.mock('@/commands/imageEditorV3', async (importOriginal) => {
+  const original = await importOriginal<typeof import('@/commands/imageEditorV3')>()
+  return {
+    ...original,
+    readImageEditorV3FastProxy: rasterPasteboardResources.readFastProxy,
+    readImageEditorV3SourceMetadata: rasterPasteboardResources.readSourceMetadata,
+  }
+})
 
 vi.mock('../execution', async (importOriginal) => {
   const original = await importOriginal<typeof import('../execution')>()
@@ -97,6 +111,48 @@ describe('ImageEditorPreviewV3 managed frame ownership', () => {
       diagnostic: null,
       rendering: false,
     }
+    rasterPasteboardResources.readFastProxy.mockReset()
+    rasterPasteboardResources.readSourceMetadata.mockReset()
+    rasterPasteboardResources.readFastProxy.mockImplementation(async (
+      request: { resourceRef: `sha256:${string}` },
+    ) => ({
+      resourceRef: request.resourceRef,
+      width: 320,
+      height: 180,
+      mediaType: 'image/webp',
+      bytes: new Uint8Array([1, 2, 3]).buffer,
+    }))
+    rasterPasteboardResources.readSourceMetadata.mockImplementation(async (
+      request: { resourceRef: `sha256:${string}` },
+    ) => ({
+      resourceRef: request.resourceRef,
+      width: 320,
+      height: 180,
+      encodedWidth: 320,
+      encodedHeight: 180,
+      format: 'png',
+      channels: 4,
+      depth: 'uchar',
+      bitsPerSample: 8,
+      colorSpace: 'srgb',
+      orientation: 1,
+      orientationApplied: true,
+      density: null,
+      pages: 1,
+      hasAlpha: true,
+      hasIccProfile: false,
+      iccProfileResourceRef: null,
+      cicp: null,
+      hdr: false,
+    }))
+    let objectUrlSequence = 0
+    const NativeUrl = URL
+    class RasterPasteboardUrl extends NativeUrl {}
+    Object.assign(RasterPasteboardUrl, {
+      createObjectURL: vi.fn(() => `blob:raster-pasteboard-${objectUrlSequence += 1}`),
+      revokeObjectURL: vi.fn(),
+    })
+    vi.stubGlobal('URL', RasterPasteboardUrl)
   })
 
   afterEach(() => {
@@ -111,6 +167,7 @@ describe('ImageEditorPreviewV3 managed frame ownership', () => {
     vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({
       clearRect: vi.fn(),
       drawImage,
+      measureText: vi.fn(() => ({ width: 64 })),
     } as unknown as CanvasRenderingContext2D)
     managedPreview.state = {
       result: {
@@ -326,6 +383,7 @@ describe('ImageEditorPreviewV3 managed frame ownership', () => {
     vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({
       clearRect: vi.fn(),
       drawImage: vi.fn(),
+      measureText: vi.fn(() => ({ width: 64 })),
     } as unknown as CanvasRenderingContext2D)
     managedPreview.state = {
       result: {
@@ -459,7 +517,162 @@ describe('ImageEditorPreviewV3 managed frame ownership', () => {
     expect(feedback.style.transform).toBe('')
   })
 
-  it('多内容图层移动按动画帧合并草稿更新且不叠加 CSS 位移', async () => {
+  it('普通多栅格拖动只移动目标叶子且连续 pointermove 不发布草稿', async () => {
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({
+      x: 0, y: 0, left: 0, top: 0, right: 320, bottom: 180,
+      width: 320, height: 180, toJSON: () => undefined,
+    })
+    const resourceA = `sha256:${'a'.repeat(64)}` as const
+    const resourceB = `sha256:${'b'.repeat(64)}` as const
+    const resourceC = `sha256:${'c'.repeat(64)}` as const
+    const document = createImageEditDocumentV3({
+      width: 320,
+      height: 180,
+      documentId: 'direct-multi-raster-move-document',
+      sourceResourceId: resourceA,
+    })
+    document.layers.push(
+      createImageEditRasterLayerV3('foreground-layer', '前景', resourceB),
+      createImageEditRasterLayerV3('top-layer', '顶层', resourceC),
+    )
+    let latestDocument = document
+    const changes = vi.fn((nextDocument: typeof document) => { latestDocument = nextDocument })
+    managedPreview.state = {
+      result: {
+        kind: 'url',
+        url: 'blob:stable-multi-raster-revision-0',
+        width: 320,
+        height: 180,
+        diagnostics: [],
+        release: vi.fn(),
+      },
+      resultDocumentId: document.id,
+      resultRevision: 0,
+      resultPreviewOverrides: {},
+      diagnostic: null,
+      rendering: false,
+    }
+    const editor = () => (
+      <div style={{ width: 900, height: 600 }}>
+        <ImageEditorV3
+          sourceImageUrl="composite-preview.jpg"
+          document={latestDocument}
+          resourceDescriptors={[resourceA, resourceB, resourceC].map((resourceRef) => ({
+            resourceRef,
+            byteLength: 4_096,
+            mediaType: 'image/png',
+          }))}
+          profileId="full"
+          initialSelectedLayerId={document.layers[1].id}
+          onDocumentChange={changes}
+        />
+      </div>
+    )
+    const rendered = render(editor())
+
+    await waitFor(() => expect(rasterPasteboardResources.readFastProxy).toHaveBeenCalledTimes(3))
+    const stack = await waitFor(() => {
+      const element = rendered.container.querySelector<HTMLElement>(
+        '[data-raster-pasteboard-stack="multi"]',
+      )
+      if (!element || element.querySelectorAll('[data-raster-pasteboard-layer]').length !== 3) {
+        throw new Error('多栅格反馈栈尚未准备完成')
+      }
+      return element
+    })
+    const layerFrames = [...stack.querySelectorAll<HTMLElement>('[data-raster-pasteboard-layer]')]
+    expect(layerFrames.map(({ dataset }) => dataset.rasterPasteboardLayer)).toEqual(
+      document.layers.map(({ id }) => id),
+    )
+    for (const image of stack.querySelectorAll('img')) fireEvent.load(image)
+    await waitFor(() => expect(stack.dataset.rasterSourceReady).toBe('true'))
+
+    const surface = rendered.container.querySelector<HTMLElement>('[data-preview-surface]')
+    const content = rendered.container.querySelector<HTMLElement>('[data-viewport-content]')
+    const stableDisplay = rendered.container.querySelector<HTMLElement>('[data-raster-display-frame]')
+    if (!surface || !content || !stableDisplay) throw new Error('多栅格移动测试节点不存在')
+    vi.spyOn(content, 'getBoundingClientRect').mockReturnValue({
+      x: 0, y: 0, left: 0, top: 0, right: 320, bottom: 180,
+      width: 320, height: 180, toJSON: () => undefined,
+    })
+    await waitFor(() => expect(
+      Object.values(useImageEditorSessionStoreV3.getState().sessions)[0]?.selectedLayerIds,
+    ).toEqual([document.layers[1].id]))
+    const liveSession = requireImageEditV3LiveSession(document.id)
+    const targetFeedback = layerFrames[1]
+    const untouchedFeedback = [layerFrames[0], layerFrames[2]]
+
+    fireEvent.pointerDown(surface, {
+      pointerId: 50, isPrimary: true, button: 0, clientX: 10, clientY: 10,
+    })
+    expect(stack.style.visibility).toBe('visible')
+    expect(stableDisplay.style.visibility).toBe('hidden')
+    for (let index = 1; index <= 100; index += 1) {
+      fireEvent.pointerMove(surface, {
+        pointerId: 50,
+        clientX: 10 + index,
+        clientY: 10 + Math.floor(index / 2),
+        ctrlKey: true,
+      })
+      expect(liveSession.bus.getSnapshot().previewOverrides).toEqual({})
+      expect(liveSession.bus.getSnapshot().document.revision).toBe(0)
+    }
+    expect(targetFeedback.style.transform).toBe('translate3d(100px, 50px, 0)')
+    expect(untouchedFeedback.every(({ style }) => style.transform === '')).toBe(true)
+    expect(changes).not.toHaveBeenCalled()
+
+    fireEvent.pointerCancel(surface, { pointerId: 50 })
+    expect(targetFeedback.style.transform).toBe('')
+    expect(stack.style.visibility).toBe('hidden')
+    expect(stableDisplay.style.visibility).toBe('visible')
+    expect(liveSession.bus.getSnapshot().document.revision).toBe(0)
+
+    fireEvent.pointerDown(surface, {
+      pointerId: 52, isPrimary: true, button: 0, clientX: 10, clientY: 10,
+    })
+    fireEvent.pointerMove(surface, {
+      pointerId: 52, clientX: 110, clientY: 60, ctrlKey: true,
+    })
+    fireEvent.pointerUp(surface, { pointerId: 52, clientX: 110, clientY: 60 })
+    await waitFor(() => expect(changes).toHaveBeenCalledTimes(1))
+    expect(liveSession.bus.getSnapshot().previewOverrides).toEqual({})
+    expect(liveSession.bus.getSnapshot().document.revision).toBe(1)
+    expect(liveSession.bus.getSnapshot().document.layers[1].transform).toEqual([
+      1, 0, 0, 1, 100, 50,
+    ])
+    expect(targetFeedback.style.transform).toBe('')
+    expect(targetFeedback.querySelector('img')?.style.transform).toBe(
+      'matrix(0.733333, 0, 0, 0.733333, 73.333333, 36.666667)',
+    )
+    expect(stack.style.visibility).toBe('visible')
+    expect(stableDisplay.style.visibility).toBe('hidden')
+    expect(rasterPasteboardResources.readFastProxy).toHaveBeenCalledTimes(3)
+
+    managedPreview.state = {
+      result: {
+        kind: 'bitmap',
+        bitmap: {} as ImageBitmap,
+        width: 320,
+        height: 180,
+        diagnostics: [],
+        release: vi.fn(),
+      },
+      resultDocumentId: document.id,
+      resultRevision: 1,
+      resultPreviewOverrides: {},
+      diagnostic: null,
+      rendering: false,
+    }
+    rendered.rerender(editor())
+    await waitFor(() => expect(stack.style.visibility).toBe('hidden'))
+    expect(stableDisplay.style.visibility).toBe('visible')
+    expect(targetFeedback.style.transform).toBe('')
+    expect(targetFeedback.querySelector('img')?.style.transform).toBe(
+      'matrix(0.733333, 0, 0, 0.733333, 73.333333, 36.666667)',
+    )
+  })
+
+  it('含标注的复杂图层移动继续按动画帧合并受管草稿', async () => {
     const scheduledFrame = { current: null as FrameRequestCallback | null }
     const requestFrame = vi.fn((callback: FrameRequestCallback) => {
       scheduledFrame.current = callback

@@ -19,24 +19,32 @@ describe('ImageEditorRasterPasteboardV3 component', () => {
     const layer = document.layers[0]
     if (layer.type !== 'raster') throw new Error('测试文档缺少栅格图层')
     layer.transform = [1, 0, 0, 1, 100, -240]
+    const rootRef = createRef<HTMLDivElement>()
 
     const rendered = render(
       <ImageEditorRasterPasteboardV3
-        feedbackRef={createRef<HTMLDivElement>()}
-        imageRef={createRef<HTMLImageElement>()}
-        layer={layer}
-        sourceImageUrl="preview.jpg"
+        rootRef={rootRef}
+        entries={[{
+          layer,
+          sourceUrl: 'preview.jpg',
+          proxy: null,
+          metadata: null,
+        }]}
         documentWidth={1_600}
         frame={{ left: 25, top: 40, width: 800, height: 500 }}
         ready
-        onReady={() => undefined}
+        alwaysVisible
+        bindLayerFeedbackRef={() => () => undefined}
+        onLayerReady={() => undefined}
+        onLayerFailed={() => undefined}
       />,
     )
 
     const pasteboard = rendered.container.querySelector('[data-raster-pasteboard-layer]')
+    const root = rendered.container.querySelector('[data-raster-pasteboard-stack]')
     const image = pasteboard?.querySelector('img')
     expect(pasteboard?.getAttribute('data-move-feedback-frame')).not.toBeNull()
-    expect(pasteboard?.getAttribute('data-raster-source-ready')).toBe('true')
+    expect(root?.getAttribute('data-raster-source-ready')).toBe('true')
     expect(pasteboard?.getAttribute('style')).toContain('left: 25px')
     expect(image?.style.transform).toBe('matrix(1, 0, 0, 1, 50, -120)')
   })
