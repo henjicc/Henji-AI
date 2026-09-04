@@ -682,6 +682,8 @@ describe('ImageEditorRenderSessionV3', () => {
       diagnostics: {
         uploadCount: 1, pipelineCompileCount: 2, frameCount: 1, diagnosticReadbackCount: 0,
         transientUniformUpdateCount: 0,
+        residentTileCount: 1, atlasPageCount: 1, allocatedAtlasBytes: 1_056_784,
+        minimumPlannedMip: 0, maximumPlannedMip: 0,
       },
     })
     expect(closeInitialFrame).toHaveBeenCalledOnce()

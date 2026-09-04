@@ -62,4 +62,25 @@ describe('ImageEditorGpuSceneResourceRegistryV3', () => {
     expect(disposePayload).toHaveBeenCalledWith('duplicate')
     registry.dispose()
   })
+
+  it('预淘汰跳过当前mip、交互层和最后稳定帧，按LRU先清旧revision', () => {
+    const disposePayload = vi.fn()
+    const registry = new ImageEditorGpuSceneResourceRegistryV3<string>({
+      memoryBudgetBytes: 20,
+      disposePayload,
+    })
+    registry.register(key('viewport'), 'viewport', 4, ['viewport'])
+    registry.register(key('interaction'), 'interaction', 4, ['interaction'])
+    registry.register(key('stable'), 'stable', 4, ['stable-frame'])
+    registry.register(key('old-revision'), 'old-revision', 4)
+    registry.register(key('offscreen'), 'offscreen', 4)
+
+    expect(registry.prepareAdmission(4)).toEqual({ admitted: true, evicted: [key('old-revision')] })
+    expect(registry.get(key('viewport'))).toBe('viewport')
+    expect(registry.get(key('interaction'))).toBe('interaction')
+    expect(registry.get(key('stable'))).toBe('stable')
+    expect(registry.get(key('offscreen'))).toBe('offscreen')
+    expect(disposePayload).toHaveBeenCalledWith('old-revision')
+    registry.dispose()
+  })
 })

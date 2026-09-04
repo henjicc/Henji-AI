@@ -19,6 +19,7 @@ import {
   type ImageEditorGpuRasterSceneV3,
 } from './imageEditorGpuRasterSceneCompilerV3'
 import {
+  IMAGE_EDITOR_GPU_SCENE_DEFAULT_BUDGET_BYTES_V3,
   IMAGE_EDITOR_GPU_SCENE_PROTOCOL_VERSION_V3,
   imageEditorGpuSceneTileKeyV3,
   type ImageEditorGpuSceneFailedEventV3,
@@ -28,6 +29,7 @@ import {
 } from './imageEditorGpuSceneProtocolV3'
 import { ImageEditorGpuSceneResourceRegistryV3 } from './imageEditorGpuSceneResourceRegistryV3'
 import { ImageEditorGpuSceneSequenceGateV3 } from './imageEditorGpuSceneSequenceV3'
+import { ImageEditorGpuTileAtlasBudgetErrorV3 } from './imageEditorGpuTileAtlasV3'
 
 interface ImageEditorGpuSceneDeviceManagerV3 {
   onDeviceLost(handler: (reason: string, loss: ImageEditWebGpuDeviceLoss) => void): void
@@ -51,7 +53,10 @@ interface ImageEditorGpuSceneGpuStateV3 {
 export interface ImageEditorGpuSceneRuntimeDependenciesV3 {
   deviceManager?: ImageEditorGpuSceneDeviceManagerV3
   contextFactory?: (device: GpuDevice) => Promise<ImageEditorGpuSceneContextV3>
-  compositorFactory?: (context: ImageEditorGpuSceneContextV3) => ImageEditorGpuRasterCompositorV3Like
+  compositorFactory?: (
+    context: ImageEditorGpuSceneContextV3,
+    options: { memoryBudgetBytes: number },
+  ) => ImageEditorGpuRasterCompositorV3Like
 }
 
 export type ImageEditorGpuSceneRuntimeStatusV3 =
@@ -68,6 +73,7 @@ export class ImageEditorGpuSceneRuntimeV3 {
   private readonly contextFactory: (device: GpuDevice) => Promise<ImageEditorGpuSceneContextV3>
   private readonly compositorFactory: (
     context: ImageEditorGpuSceneContextV3,
+    options: { memoryBudgetBytes: number },
   ) => ImageEditorGpuRasterCompositorV3Like
   private readonly states: SingleflightRuntimeState<ImageEditorGpuSceneGpuStateV3>
   private readonly sequence = new ImageEditorGpuSceneSequenceGateV3()
@@ -91,7 +97,7 @@ export class ImageEditorGpuSceneRuntimeV3 {
       return gpu as Gpu
     })
     this.compositorFactory = dependencies.compositorFactory
-      ?? ((context) => new ImageEditorGpuRasterCompositorV3(context as Gpu))
+      ?? ((context, options) => new ImageEditorGpuRasterCompositorV3(context as Gpu, options))
     this.states = new SingleflightRuntimeState((state) => this.destroyGpuState(state))
     this.deviceManager.onDeviceLost((_reason, loss) => this.handleDeviceLost(loss))
   }
@@ -111,18 +117,15 @@ export class ImageEditorGpuSceneRuntimeV3 {
         this.transientTransforms.clear()
         this.pendingTiles.clear()
         this.resources?.releaseProtection('viewport')
-        this.resources?.releaseProtection('stable-frame')
+        this.resources?.releaseProtection('interaction')
         {
           const compilation = compileImageEditorGpuRasterSceneV3(
             request.document,
             request.resourceDescriptors,
           )
           this.scene = compilation.supported ? compilation.scene : null
-          for (const key of this.scene?.requiredResourceKeys ?? []) {
-            this.resources?.protect(key, 'viewport')
-            this.resources?.protect(key, 'stable-frame')
-          }
           this.states.peek()?.compositor.syncScene(this.scene)
+          this.refreshViewportProtections()
         }
         return
       case 'upload-tiles':
@@ -133,11 +136,23 @@ export class ImageEditorGpuSceneRuntimeV3 {
         if (request.transform) this.transientTransforms.set(request.layerId, [...request.transform])
         else this.transientTransforms.delete(request.layerId)
         this.states.peek()?.compositor.updateTransientTransform(request.layerId, request.transform)
+        this.refreshViewportProtections()
+        this.refreshInteractionProtections(request.transform ? request.layerId : null)
         return
       case 'update-viewport':
         if (!this.sequence.updateCamera(request.sceneGeneration, request.cameraSequence)) return
         this.layout = request.layout
-        this.states.peek()?.compositor.updateViewport(request.layout)
+        {
+          const compositor = this.states.peek()?.compositor
+          compositor?.updateViewport(request.layout)
+          this.refreshViewportProtections()
+          if (compositor && !this.trimMemoryPressure(compositor)) {
+            this.emitFailure(
+              'resource-budget-exceeded', null,
+              'GPU Scene 当前视口与受保护资源超过会话显存预算', true,
+            )
+          }
+        }
         return
       case 'render':
         if (!this.acceptsRenderRequest(request)) return
@@ -197,7 +212,10 @@ export class ImageEditorGpuSceneRuntimeV3 {
       const state = await this.states.acquire(async () => {
         const managed = await this.deviceManager.acquire()
         const context = await this.contextFactory(managed.device)
-        const compositor = this.compositorFactory(context)
+        const compositor = this.compositorFactory(context, {
+          memoryBudgetBytes: this.resources?.snapshot().budgetBytes
+            ?? IMAGE_EDITOR_GPU_SCENE_DEFAULT_BUDGET_BYTES_V3,
+        })
         const unsubscribeError = context.onError((error) => {
           this.emitFailure('initialization-failed', null, errorMessage(error), true)
         })
@@ -208,7 +226,12 @@ export class ImageEditorGpuSceneRuntimeV3 {
       this.initializedOnce = true
       this.status = 'ready'
       state.compositor.syncScene(this.scene)
-      if (this.layout) state.compositor.updateViewport(this.layout)
+      if (this.layout) {
+        state.compositor.updateViewport(this.layout)
+        if (!this.trimMemoryPressure(state.compositor)) {
+          throw new Error('GPU Scene 当前视口与受保护资源超过会话显存预算')
+        }
+      }
       for (const [layerId, transform] of this.transientTransforms) {
         state.compositor.updateTransientTransform(layerId, transform)
       }
@@ -245,11 +268,29 @@ export class ImageEditorGpuSceneRuntimeV3 {
     if (!this.resources || this.resources.get(entry.key)) return true
     let payload: ImageEditorGpuRasterTextureV3 | null = null
     try {
-      payload = compositor.uploadTile(entry.key, entry.tile)
+      const gpuBytes = compositor.estimateTileGpuBytes(entry.tile)
+      const admission = this.resources.prepareAdmission(gpuBytes)
+      if (!admission.admitted) {
+        this.emitFailure(
+          'resource-budget-exceeded',
+          null,
+          'GPU Scene 资源超过 256 MiB 会话预算且没有可淘汰资源',
+          true,
+        )
+        return false
+      }
+      while (!payload) {
+        try {
+          payload = compositor.uploadTile(entry.key, entry.tile)
+        } catch (error) {
+          if (!(error instanceof ImageEditorGpuTileAtlasBudgetErrorV3)
+            || !this.resources.evictOldestUnprotected()) throw error
+        }
+      }
       const registration = this.resources.register(
         entry.key,
         payload,
-        entry.estimatedGpuBytes,
+        gpuBytes,
         entry.protections,
       )
       payload = null
@@ -276,6 +317,14 @@ export class ImageEditorGpuSceneRuntimeV3 {
     }
   }
 
+  private trimMemoryPressure(compositor: ImageEditorGpuRasterCompositorV3Like): boolean {
+    if (!this.resources) return compositor.memoryPressureBytes() === 0
+    while (compositor.memoryPressureBytes() > 0) {
+      if (!this.resources.evictOldestUnprotected()) return false
+    }
+    return true
+  }
+
   private async render(
     request: Extract<ImageEditorGpuSceneWorkerRequestV3, { type: 'render' }>,
   ): Promise<void> {
@@ -286,6 +335,7 @@ export class ImageEditorGpuSceneRuntimeV3 {
     }
     const resolve = (key: Parameters<typeof this.resources.get>[0]) => this.resources?.get(key) ?? null
     const missing = state.compositor.missingResources(resolve)
+    this.refreshViewportProtections()
     if (missing.length > 0) {
       this.emit({
         type: 'tiles-needed',
@@ -302,6 +352,8 @@ export class ImageEditorGpuSceneRuntimeV3 {
         result.bitmap.close()
         return
       }
+      this.resources.releaseProtection('stable-frame')
+      for (const key of result.usedResourceKeys) this.resources.protect(key, 'stable-frame')
       this.emit({
         type: 'frame-ready',
         sceneGeneration: request.sceneGeneration,
@@ -360,6 +412,24 @@ export class ImageEditorGpuSceneRuntimeV3 {
     return request.sceneGeneration === current.sceneGeneration
       && request.cameraSequence === current.cameraSequence
       && request.interactionSequence === current.interactionSequence
+  }
+
+  private refreshViewportProtections(): void {
+    if (!this.resources) return
+    this.resources.releaseProtection('viewport')
+    const compositor = this.states.peek()?.compositor
+    if (!compositor) return
+    for (const key of compositor.requiredResourceKeys()) this.resources.protect(key, 'viewport')
+  }
+
+  private refreshInteractionProtections(layerId: string | null): void {
+    if (!this.resources) return
+    this.resources.releaseProtection('interaction')
+    const compositor = this.states.peek()?.compositor
+    if (!compositor || !layerId) return
+    for (const key of compositor.requiredResourceKeys(layerId)) {
+      this.resources.protect(key, 'interaction')
+    }
   }
 
   private emitFailure(

@@ -2,6 +2,7 @@ import { draw, frame, target, type Draw, type Gpu, type Target, type Texture } f
 
 import { invertImageEditTransformV3 } from '@/core/imageEdit/v3/execution/affineTransform'
 import type { ImageEditBlendModeV3, ImageEditTransformV3 } from '@/core/imageEdit/v3/layerTypes'
+import type { ImageEditorViewportLayoutV3 } from '../editor/useImageEditorViewportLayoutV3'
 import {
   imageEditorGpuCurveDataV3,
   imageEditorGpuExposureParametersV3,
@@ -16,13 +17,20 @@ import type {
   ImageEditorGpuRasterSceneV3,
   ImageEditorGpuRenderGraphNodeV3,
 } from './imageEditorGpuRasterSceneCompilerV3'
+import type { ImageEditorGpuPlannedLayerV3, ImageEditorGpuPlannedTileV3 } from './imageEditorGpuTilePlannerV3'
 import type { ImageEditorGpuSceneTileKeyV3 } from './imageEditorGpuSceneProtocolV3'
+import type { ImageEditorGpuTileAtlasAllocationV3 } from './imageEditorGpuTileAtlasV3'
+import {
+  imageEditorGpuSourceColorUniformV3,
+  packImageEditorGpuColorMatrixRowsV3,
+} from './imageEditorGpuColorPipelineV3'
+import { imageEditorGpuCameraUniformV3, imageEditorGpuOutputPixelSizeV3 } from './imageEditorGpuRasterSupportV3'
 import adjustmentShader from './shaders/imageEditorGpuGraphAdjustmentV3.wgsl?raw'
 import compositeShader from './shaders/imageEditorGpuGraphCompositeV3.wgsl?raw'
 import copyShader from './shaders/imageEditorGpuGraphCopyV3.wgsl?raw'
 import curvesShader from './shaders/imageEditorGpuGraphCurvesV3.wgsl?raw'
 import normalShader from './shaders/imageEditorGpuGraphNormalV3.wgsl?raw'
-import sourceShader from './shaders/imageEditorGpuGraphSourceV3.wgsl?raw'
+import sourceShader from './shaders/imageEditorGpuRasterLayerV3.wgsl?raw'
 
 const BUFFER_COPY_DST = 0x08
 const BUFFER_UNIFORM = 0x40
@@ -33,8 +41,15 @@ type NativeBindingResource = unknown
 
 export interface ImageEditorGpuGraphTextureV3 {
   readonly key: ImageEditorGpuSceneTileKeyV3
-  readonly tile: { originX: number; originY: number; width: number; height: number }
-  readonly texture: Texture
+  readonly tile: ImageEditorGpuTileAtlasAllocationV3['tile']
+  readonly textureView: ImageEditorGpuTileAtlasAllocationV3['textureView']
+  readonly layerTextureView: ImageEditorGpuTileAtlasAllocationV3['layerTextureView']
+  readonly atlasLayer: number
+}
+
+export interface ImageEditorGpuGraphSourcePlanV3 {
+  readonly plan: ImageEditorGpuPlannedLayerV3
+  readonly resources: readonly ImageEditorGpuGraphTextureV3[]
 }
 
 interface RetainedNodeState {
@@ -50,8 +65,14 @@ interface GraphTask {
   target: Target
   backdrop: Target | null
   input: Target | null
-  resource: ImageEditorGpuGraphTextureV3 | null
+  sourcePlan: ImageEditorGpuGraphSourcePlanV3 | null
+  sourceFingerprint: string | null
   mask: ImageEditorGpuGraphTextureV3 | null
+  fingerprint: string
+}
+
+interface VirtualSourceV3 {
+  plan: ImageEditorGpuGraphSourcePlanV3
   fingerprint: string
 }
 
@@ -60,6 +81,8 @@ export interface ImageEditorGpuRenderGraphStatsV3 {
   cacheHitCount: number
   invalidatedNodeCount: number
   fusedAdjustmentCount: number
+  maximumTargetWidth: number
+  maximumTargetHeight: number
 }
 
 /** RenderPlan 投影后的 retained executor；一批失效节点始终编码进同一个 vGPU Frame。 */
@@ -74,9 +97,16 @@ export class ImageEditorGpuRenderGraphExecutorV3 {
   private readonly retained = new Map<string, RetainedNodeState>()
   private readonly transientTransforms = new Map<string, ImageEditTransformV3>()
   private readonly fallbackMask: Texture
+  private readonly cameraBuffer: NativeBuffer
+  private sourceScratch: Target | null = null
+  private sourceScratchFingerprint: string | null = null
+  private sourceScratchDependencies: readonly unknown[] = []
+  private cameraBindGroup: NativeBindGroup | null = null
   private scene: ImageEditorGpuRasterSceneV3 | null = null
+  private layout: ImageEditorViewportLayoutV3 | null = null
   private stats: ImageEditorGpuRenderGraphStatsV3 = {
     renderedNodeCount: 0, cacheHitCount: 0, invalidatedNodeCount: 0, fusedAdjustmentCount: 0,
+    maximumTargetWidth: 0, maximumTargetHeight: 0,
   }
 
   constructor(private readonly gpu: Gpu, private readonly onPipelineCompiled: () => void) {
@@ -92,6 +122,9 @@ export class ImageEditorGpuRenderGraphExecutorV3 {
     })
     gpu.gpu.queue.writeTexture({ texture: this.fallbackMask.gpu }, new Uint8Array([255]),
       { bytesPerRow: 1, rowsPerImage: 1 }, { width: 1, height: 1, depthOrArrayLayers: 1 })
+    this.cameraBuffer = gpu.gpu.createBuffer({
+      size: 48, usage: BUFFER_UNIFORM | BUFFER_COPY_DST, label: 'image-editor-graph-camera',
+    })
   }
 
   syncScene(scene: ImageEditorGpuRasterSceneV3 | null): void {
@@ -109,13 +142,27 @@ export class ImageEditorGpuRenderGraphExecutorV3 {
 
   async execute(
     resolve: (key: ImageEditorGpuSceneTileKeyV3) => ImageEditorGpuGraphTextureV3 | null,
+    sourcePlans: ReadonlyMap<string, ImageEditorGpuGraphSourcePlanV3>,
+    layout: ImageEditorViewportLayoutV3,
   ): Promise<Target | null> {
     if (!this.scene?.outputNodeId) return null
+    this.layout = layout
     const outputs = new Map<string, Target>()
     const fingerprints = new Map<string, string>()
     const tasks: GraphTask[] = []
     const aliases = new Set<string>()
+    const virtualSources = new Map<string, VirtualSourceV3>()
     for (const node of this.scene.graph) {
+      if (node.kind === 'source') {
+        const plan = sourcePlans.get(node.layerId)
+        if (!plan || plan.resources.length === 0) {
+          throw new Error(`GPU RenderGraph 缺少源瓦片：${node.layerId}`)
+        }
+        const fingerprint = `${this.fingerprint(node, fingerprints)}:${viewportFingerprint(layout)}`
+        virtualSources.set(node.nodeId, { plan, fingerprint })
+        fingerprints.set(node.nodeId, fingerprint)
+        continue
+      }
       if (node.kind === 'alias') {
         const input = outputs.get(node.inputNodeId)
         const inputFingerprint = fingerprints.get(node.inputNodeId)
@@ -125,12 +172,17 @@ export class ImageEditorGpuRenderGraphExecutorV3 {
         aliases.add(node.nodeId)
         continue
       }
-      const input = node.kind === 'source' ? null : outputs.get(node.kind === 'composite' ? node.contentNodeId : node.inputNodeId) ?? null
+      const virtualSource = node.kind === 'composite'
+        ? virtualSources.get(node.contentNodeId) ?? null
+        : null
+      const input = virtualSource
+        ? null
+        : outputs.get(node.kind === 'composite' ? node.contentNodeId : node.inputNodeId) ?? null
       const backdrop = node.kind === 'composite' && node.backdropNodeId ? outputs.get(node.backdropNodeId) ?? null : null
-      const resource = node.kind === 'source' ? resolve(node.resourceKey) : null
-      const mask = node.kind === 'source' ? null : this.resolveMask(node.kind === 'composite' ? node.mask : node.adjustments[0]?.mask ?? null, resolve)
-      const fingerprint = this.fingerprint(node, fingerprints)
-      const dependencies = [input, backdrop, resource, mask]
+      const sourcePlan = virtualSource?.plan ?? null
+      const mask = this.resolveMask(node.kind === 'composite' ? node.mask : node.adjustments[0]?.mask ?? null, resolve)
+      const fingerprint = `${this.fingerprint(node, fingerprints)}:${viewportFingerprint(layout)}`
+      const dependencies = [input, backdrop, ...(sourcePlan?.resources ?? []), mask]
       const retained = this.retained.get(node.nodeId)
       if (retained && retained.fingerprint === fingerprint && sameDependencies(retained.dependencies, dependencies)) {
         outputs.set(node.nodeId, retained.target)
@@ -138,20 +190,27 @@ export class ImageEditorGpuRenderGraphExecutorV3 {
         this.stats.cacheHitCount += 1
         continue
       }
-      if (node.kind === 'source' && !resource) throw new Error(`GPU RenderGraph 缺少源纹理：${node.layerId}`)
-      if (node.kind !== 'source' && !input) throw new Error(`GPU RenderGraph 缺少节点输入：${node.nodeId}`)
-      // source decode cache is not a compositing intermediate: keep it f32 so the first
-      // rgba16float attachment blend does not pay an avoidable extra half-float roundtrip.
+      if (!input && !sourcePlan) throw new Error(`GPU RenderGraph 缺少节点输入：${node.nodeId}`)
       const output = target(this.gpu, {
-        size: [this.scene.width, this.scene.height],
-        format: node.kind === 'source' ? 'rgba32float' : 'rgba16float',
+        size: imageEditorGpuOutputPixelSizeV3(layout),
+        format: 'rgba16float',
         clearColor: CLEAR,
         label: `image-editor-graph:${node.nodeId}`,
       })
+      this.stats.maximumTargetWidth = Math.max(this.stats.maximumTargetWidth, output.size[0])
+      this.stats.maximumTargetHeight = Math.max(this.stats.maximumTargetHeight, output.size[1])
       outputs.set(node.nodeId, output)
       fingerprints.set(node.nodeId, fingerprint)
-      tasks.push({ node, target: output, backdrop, input, resource, mask, fingerprint })
+      tasks.push({
+        node, target: output, backdrop, input, sourcePlan,
+        sourceFingerprint: virtualSource?.fingerprint ?? null,
+        mask, fingerprint,
+      })
     }
+    this.gpu.gpu.queue.writeBuffer(
+      this.cameraBuffer, 0, imageEditorGpuCameraUniformV3(layout, this.scene.geometry),
+    )
+    if (tasks.some((task) => task.sourcePlan)) this.ensureSourceScratch(layout)
     await this.compileTasks(tasks)
     const replacements = new Map<string, RetainedNodeState>()
     const submitted = tasks.length > 0 ? frame(this.gpu, (currentFrame) => {
@@ -174,13 +233,22 @@ export class ImageEditorGpuRenderGraphExecutorV3 {
   dispose(): void {
     this.clearRetained()
     this.fallbackMask.destroy()
+    this.cameraBuffer.destroy()
+    this.sourceScratch?.color.destroy()
+    this.sourceScratch = null
+    this.sourceScratchFingerprint = null
+    this.sourceScratchDependencies = []
   }
 
   private fingerprint(node: Exclude<ImageEditorGpuRenderGraphNodeV3, { kind: 'alias' }>, fingerprints: ReadonlyMap<string, string>): string {
-    if (node.kind === 'source') return node.fingerprint
+    if (node.kind === 'source') {
+      return node.fingerprint
+    }
     const input = fingerprints.get(node.kind === 'composite' ? node.contentNodeId : node.inputNodeId) ?? 'missing'
     const backdrop = node.kind === 'composite' && node.backdropNodeId ? fingerprints.get(node.backdropNodeId) ?? 'missing' : 'transparent'
-    const transform = node.kind === 'composite' ? this.transientTransforms.get(node.layerId) ?? node.transform : null
+    const transform = node.kind === 'composite'
+      ? this.transientTransforms.get(node.layerId) ?? node.transform
+      : null
     return `${node.fingerprint}:${input}:${backdrop}:${transform?.join(',') ?? ''}`
   }
 
@@ -191,6 +259,7 @@ export class ImageEditorGpuRenderGraphExecutorV3 {
   private async compileTasks(tasks: readonly GraphTask[]): Promise<void> {
     const draws = new Map<Draw, Target>()
     for (const task of tasks) {
+      if (task.sourcePlan) draws.set(this.sourceDraw, this.sourceScratch!)
       if (task.node.kind === 'source') draws.set(this.sourceDraw, task.target)
       else if (task.node.kind === 'composite' && (task.node.blendMode === 'normal' || !task.backdrop)) {
         draws.set(this.normalDraw, task.target)
@@ -211,24 +280,33 @@ export class ImageEditorGpuRenderGraphExecutorV3 {
     const buffers: NativeBuffer[] = []
     let curveTexture: Texture | null = null
     if (task.node.kind === 'source') {
-      const buffer = this.uniform(new Float32Array([task.resource!.tile.originX, task.resource!.tile.originY, task.resource!.tile.width, task.resource!.tile.height]))
-      buffers.push(buffer)
-      this.sourceDraw.group(0, this.bind(this.sourceDraw, [task.resource!.texture.view, { buffer }]))
-      currentFrame.pass(task.target, this.sourceDraw)
+      this.encodeSource(currentFrame, task.target, task.node.layerId, task.sourcePlan!, buffers)
     } else if (task.node.kind === 'composite') {
-      const values = this.compositeValues(task.node)
+      if (task.sourcePlan) {
+        const dependencies = task.sourcePlan.resources
+        if (this.sourceScratchFingerprint !== task.sourceFingerprint
+          || !sameDependencies(this.sourceScratchDependencies, dependencies)) {
+          this.encodeSource(
+            currentFrame, this.sourceScratch!, task.node.layerId, task.sourcePlan, buffers, true,
+          )
+          this.sourceScratchFingerprint = task.sourceFingerprint
+          this.sourceScratchDependencies = [...dependencies]
+        }
+      }
+      const input = task.sourcePlan ? this.sourceScratch : task.input
+      const values = this.compositeValues(task.node, task.sourcePlan !== null)
       const buffer = this.uniform(values)
       buffers.push(buffer)
-      const maskView = task.mask?.texture.view ?? this.fallbackMask.view
+      const maskView = task.mask?.layerTextureView ?? this.fallbackMask.view
       if (task.node.blendMode === 'normal' || !task.backdrop) {
         if (task.backdrop) {
           this.copyDraw.group(0, this.bind(this.copyDraw, [task.backdrop.color.view]))
           currentFrame.pass(task.target, this.copyDraw)
         }
-        this.normalDraw.group(0, this.bind(this.normalDraw, [task.input!.color.view, maskView, { buffer }]))
+        this.normalDraw.group(0, this.bind(this.normalDraw, [input!.color.view, maskView, { buffer }]))
         currentFrame.pass({ target: task.target, clear: !task.backdrop }, this.normalDraw)
       } else {
-        this.compositeDraw.group(0, this.bind(this.compositeDraw, [task.backdrop.color.view, task.input!.color.view, maskView, { buffer }]))
+        this.compositeDraw.group(0, this.bind(this.compositeDraw, [task.backdrop.color.view, input!.color.view, maskView, { buffer }]))
         currentFrame.pass(task.target, this.compositeDraw)
       }
     } else if (task.node.adjustments[0]?.definitionId === 'adjustment.curves') {
@@ -238,25 +316,112 @@ export class ImageEditorGpuRenderGraphExecutorV3 {
       this.gpu.gpu.queue.writeTexture({ texture: curveTexture.gpu }, curves.values, { bytesPerRow: 4096 * 4, rowsPerImage: 4 }, { width: 4096, height: 4, depthOrArrayLayers: 1 })
       const buffer = this.uniform(this.curveValues(adjustment, curves.slopes))
       buffers.push(buffer)
-      this.curvesDraw.group(0, this.bind(this.curvesDraw, [task.input!.color.view, task.mask?.texture.view ?? this.fallbackMask.view, curveTexture.view, { buffer }]))
+      this.curvesDraw.group(0, this.bind(this.curvesDraw, [task.input!.color.view, task.mask?.layerTextureView ?? this.fallbackMask.view, curveTexture.view, { buffer }]))
       currentFrame.pass(task.target, this.curvesDraw)
     } else {
       const buffer = this.uniform(this.adjustmentValues(task.node))
       buffers.push(buffer)
-      this.adjustmentDraw.group(0, this.bind(this.adjustmentDraw, [task.input!.color.view, task.mask?.texture.view ?? this.fallbackMask.view, { buffer }]))
+      this.adjustmentDraw.group(0, this.bind(this.adjustmentDraw, [task.input!.color.view, task.mask?.layerTextureView ?? this.fallbackMask.view, { buffer }]))
       currentFrame.pass(task.target, this.adjustmentDraw)
       if (task.node.adjustments.length > 1) this.stats.fusedAdjustmentCount += task.node.adjustments.length - 1
     }
-    return { fingerprint: task.fingerprint, target: task.target, dependencies: [task.input, task.backdrop, task.resource, task.mask], buffers, curveTexture }
+    return {
+      fingerprint: task.fingerprint,
+      target: task.target,
+      dependencies: [task.input, task.backdrop, ...(task.sourcePlan?.resources ?? []), task.mask],
+      buffers,
+      curveTexture,
+    }
   }
 
-  private compositeValues(node: ImageEditorGpuGraphCompositeNodeV3): Float32Array {
-    const transform = this.transientTransforms.get(node.layerId) ?? node.transform
+  private encodeSource(
+    currentFrame: ReturnType<typeof frame>,
+    output: Target,
+    layerId: string,
+    sourcePlan: ImageEditorGpuGraphSourcePlanV3,
+    buffers: NativeBuffer[],
+    identityTransform = false,
+  ): void {
+    const layer = this.scene!.layers.find((entry) => entry.layerId === layerId)
+    if (!layer) throw new Error(`GPU RenderGraph 缺少源图层：${layerId}`)
+    this.cameraBindGroup ??= this.gpu.gpu.createBindGroup({
+      layout: this.sourceDraw.layout(1),
+      entries: [{ binding: 0, resource: { buffer: this.cameraBuffer } }],
+    })
+    this.sourceDraw.group(1, this.cameraBindGroup)
+    const draws = sourcePlan.plan.tiles.map((planned, index) => {
+      const resource = sourcePlan.resources[index]
+      if (!resource) throw new Error(`GPU RenderGraph 源图层 ${layerId} 缺少瓦片`)
+      const buffer = this.uniform(this.sourceTileValues(
+        layer, planned, resource,
+        identityTransform ? [1, 0, 0, 1, 0, 0] : undefined,
+      ))
+      buffers.push(buffer)
+      return this.bind(this.sourceDraw, [resource.textureView, { buffer }])
+    })
+    currentFrame.pass({ target: output, clear: CLEAR }, (pass) => {
+      for (const bindGroup of draws) {
+        this.sourceDraw.group(0, bindGroup)
+        pass.draw(this.sourceDraw)
+      }
+    })
+  }
+
+  private ensureSourceScratch(layout: ImageEditorViewportLayoutV3): void {
+    const size = imageEditorGpuOutputPixelSizeV3(layout)
+    if (!this.sourceScratch) {
+      this.sourceScratch = target(this.gpu, {
+        size, format: 'rgba16float', clearColor: CLEAR,
+        label: 'image-editor-graph:source-scratch',
+      })
+    } else if (this.sourceScratch.size[0] !== size[0] || this.sourceScratch.size[1] !== size[1]) {
+      this.sourceScratch.resize(size)
+      this.sourceScratchFingerprint = null
+      this.sourceScratchDependencies = []
+    }
+    this.stats.maximumTargetWidth = Math.max(this.stats.maximumTargetWidth, size[0])
+    this.stats.maximumTargetHeight = Math.max(this.stats.maximumTargetHeight, size[1])
+  }
+
+  private compositeValues(node: ImageEditorGpuGraphCompositeNodeV3, virtualSource: boolean): Float32Array {
+    const transform = virtualSource
+      ? this.transientTransforms.get(node.layerId) ?? node.transform
+      : [1, 0, 0, 1, 0, 0] as ImageEditTransformV3
     const inverse = invertImageEditTransformV3(transform)
+    const viewport = this.layout?.viewport
+    const scale = viewport ? viewport.zoom * viewport.devicePixelRatio : 1
+    const originX = viewport?.documentX ?? 0
+    const originY = viewport?.documentY ?? 0
+    const translationX = scale * (
+      inverse[0] * originX + inverse[2] * originY + inverse[4] - originX
+    )
+    const translationY = scale * (
+      inverse[1] * originX + inverse[3] * originY + inverse[5] - originY
+    )
     return new Float32Array([
-      inverse[0], inverse[1], inverse[2], inverse[3], inverse[4], inverse[5], 0, 0,
+      inverse[0], inverse[1], inverse[2], inverse[3], translationX, translationY, 0, 0,
       node.opacity, blendIndex(node.blendMode), 0, 0,
       node.mask ? 1 : 0, node.mask?.defaultValue ?? 1, node.mask?.inverted ? 1 : 0, 0,
+    ])
+  }
+
+  private sourceTileValues(
+    layer: ImageEditorGpuRasterSceneV3['layers'][number],
+    planned: ImageEditorGpuPlannedTileV3,
+    resource: ImageEditorGpuGraphTextureV3,
+    transformOverride?: ImageEditTransformV3,
+  ): Float32Array {
+    const transform = transformOverride
+      ?? this.transientTransforms.get(layer.layerId)
+      ?? layer.transform
+    const inverse = invertImageEditTransformV3(transform)
+    const color = imageEditorGpuSourceColorUniformV3(resource.tile, this.scene!.color)
+    return new Float32Array([
+      inverse[0], inverse[1], inverse[2], inverse[3], inverse[4], inverse[5], 1, 0,
+      resource.tile.originX, resource.tile.originY, 2 ** planned.key.mip, resource.atlasLayer,
+      resource.tile.width, resource.tile.height, color.transferCode, color.referenceWhiteNits,
+      planned.coreOriginX, planned.coreOriginY, planned.coreWidth, planned.coreHeight,
+      ...packImageEditorGpuColorMatrixRowsV3(color.sourceToWorking),
     ])
   }
 
@@ -317,4 +482,12 @@ function blendIndex(mode: ImageEditBlendModeV3): number {
 
 function sameDependencies(left: readonly unknown[], right: readonly unknown[]): boolean {
   return left.length === right.length && left.every((entry, index) => entry === right[index])
+}
+
+function viewportFingerprint(layout: ImageEditorViewportLayoutV3): string {
+  const viewport = layout.viewport
+  return [
+    viewport.documentX, viewport.documentY, viewport.zoom, viewport.devicePixelRatio,
+    viewport.width, viewport.height,
+  ].join(':')
 }

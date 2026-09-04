@@ -1,9 +1,18 @@
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { createImageEditDocumentV3 } from '@/core/imageEdit/v3/documentFactory'
+import type { ImageEditorV3SourceTileBatchItem } from '@/platform/contracts/imageEditorV3'
 import type { ImageEditorGpuSceneClientV3Like } from '../gpu/imageEditorGpuSceneClientV3'
 import type { ImageEditorGpuSceneWorkerEventV3 } from '../gpu/imageEditorGpuSceneProtocolV3'
 import { ImageEditorRenderSessionGpuBridgeV3 } from './imageEditorRenderSessionGpuBridgeV3'
+
+const readSourceTiles = vi.hoisted(() => vi.fn())
+vi.mock('@/commands/imageEditorV3', () => ({
+  createImageEditorV3RequestId: () => 'gpu-scene-tile:test',
+  readImageEditorV3BrushTiles: vi.fn(),
+  readImageEditorV3SourceTile: vi.fn(),
+}))
+vi.mock('@/commands/imageEditorV3Tiles', () => ({ readImageEditorV3SourceTiles: readSourceTiles }))
 
 function clientHarness(): {
   client: ImageEditorGpuSceneClientV3Like
@@ -41,11 +50,162 @@ function frame(interactionSequence: number, close = vi.fn()): ImageEditorGpuScen
     diagnostics: {
       uploadCount: 1, pipelineCompileCount: 2, frameCount: interactionSequence + 1,
       diagnosticReadbackCount: 0, transientUniformUpdateCount: interactionSequence,
+      residentTileCount: 1, atlasPageCount: 1, allocatedAtlasBytes: 1_056_784,
+      minimumPlannedMip: 0, maximumPlannedMip: 0,
     },
   }
 }
 
 describe('ImageEditorRenderSessionGpuBridgeV3', () => {
+  beforeEach(() => {
+    readSourceTiles.mockReset()
+  })
+
+  it('瓦片请求固定1px halo并按文档位深读取；重复请求 singleflight 去重', async () => {
+    const harness = clientHarness()
+    const resourceRef = `sha256:${'e'.repeat(64)}` as const
+    const deferred: { resolve?: (value: unknown) => void } = {}
+    readSourceTiles.mockImplementationOnce(() => new Promise((resolve) => { deferred.resolve = resolve }))
+    const bridge = new ImageEditorRenderSessionGpuBridgeV3(
+      'gpu-tile-load', harness.client, vi.fn(), false, vi.fn(() => true), vi.fn(),
+    )
+    const document = createImageEditDocumentV3({ width: 320, height: 240 })
+    document.color.bitDepth = 'float16'
+    bridge.syncSnapshot({
+      document,
+      renderGeneration: 1, geometryHash: 'geometry', quality: 'stable',
+      resourceDescriptors: [{ resourceRef, byteLength: 4, mediaType: 'image/png' }],
+    })
+    const event = {
+      type: 'tiles-needed' as const, sceneGeneration: 1, deviceGeneration: 1,
+      keys: [{ resourceRef, mip: 2, tileX: 3, tileY: 4, contentVersion: 'v1' }],
+    }
+    harness.listener(event)
+    harness.listener(event)
+    await vi.waitFor(() => expect(readSourceTiles).toHaveBeenCalledOnce())
+    expect(readSourceTiles).toHaveBeenCalledWith(expect.objectContaining({
+      tiles: [expect.objectContaining({
+        resourceRef, mip: 2, tileX: 3, tileY: 4, halo: 1, bitDepth: 32, priority: 0,
+      })],
+    }), expect.any(AbortSignal))
+    const tile = {
+      resourceRef, mip: 2, tileX: 3, tileY: 4, halo: 1,
+      width: 1, height: 1, channels: 4 as const, bitDepth: 32 as const,
+      sampleFormat: 'float' as const, numericRange: 'scene-linear' as const,
+      byteOrder: 'little-endian' as const, rowStride: 16, colorSpace: 'scrgb' as const,
+      transferFunction: 'linear' as const, alphaMode: 'straight' as const,
+      orientationApplied: true as const, originX: 0, originY: 0,
+      pixels: new Float32Array([1, 0, 0, 1]).buffer,
+    }
+    deferred.resolve?.({ tiles: [tile] })
+    await vi.waitFor(() => expect(harness.client.uploadTiles).toHaveBeenCalledOnce())
+    bridge.dispose()
+  })
+
+  it('源瓦片读取失败时回退CPU并保留最后稳定帧', async () => {
+    const harness = clientHarness()
+    const publish = vi.fn()
+    const fallback = vi.fn()
+    const resourceRef = `sha256:${'f'.repeat(64)}` as const
+    readSourceTiles.mockRejectedValueOnce(new Error('decode failed'))
+    const bridge = new ImageEditorRenderSessionGpuBridgeV3(
+      'gpu-tile-failure', harness.client, publish, false, vi.fn(() => true), fallback,
+    )
+    bridge.syncSnapshot({
+      document: createImageEditDocumentV3({ width: 16, height: 16 }),
+      renderGeneration: 1, geometryHash: 'geometry', quality: 'stable',
+      resourceDescriptors: [{ resourceRef, byteLength: 4, mediaType: 'image/png' }],
+    })
+    harness.listener({
+      type: 'tiles-needed', sceneGeneration: 1, deviceGeneration: 1,
+      keys: [{ resourceRef, mip: 0, tileX: 0, tileY: 0, contentVersion: 'v1' }],
+    })
+
+    await vi.waitFor(() => expect(fallback).toHaveBeenCalledOnce())
+    expect(publish).toHaveBeenLastCalledWith(expect.objectContaining({
+      compositionBackend: 'cpu', presentationBackend: 'canvas2d', deviceStatus: 'fallback',
+    }))
+    bridge.dispose()
+  })
+
+  it('新generation取消旧批次并丢弃晚到瓦片，不上传过期资源', async () => {
+    const harness = clientHarness()
+    const resourceRef = `sha256:${'a'.repeat(64)}` as const
+    const deferred: { resolve?: (value: unknown) => void } = {}
+    let oldSignal: AbortSignal | undefined
+    readSourceTiles.mockImplementationOnce((_request, signal: AbortSignal) => {
+      oldSignal = signal
+      return new Promise((resolve) => { deferred.resolve = resolve })
+    })
+    const bridge = new ImageEditorRenderSessionGpuBridgeV3(
+      'gpu-stale-tiles', harness.client, vi.fn(), false, vi.fn(() => true), vi.fn(),
+    )
+    const snapshot = {
+      document: createImageEditDocumentV3({ width: 16, height: 16 }),
+      geometryHash: 'geometry', quality: 'stable' as const,
+      resourceDescriptors: [{ resourceRef, byteLength: 4, mediaType: 'image/png' }],
+    }
+    bridge.syncSnapshot({ ...snapshot, renderGeneration: 1 })
+    harness.listener({
+      type: 'tiles-needed', sceneGeneration: 1, deviceGeneration: 1,
+      keys: [{ resourceRef, mip: 0, tileX: 0, tileY: 0, contentVersion: 'v1' }],
+    })
+    await vi.waitFor(() => expect(readSourceTiles).toHaveBeenCalledOnce())
+
+    bridge.syncSnapshot({ ...snapshot, renderGeneration: 2 })
+    expect(oldSignal?.aborted).toBe(true)
+    deferred.resolve?.({
+      tiles: [{
+        resourceRef, mip: 0, tileX: 0, tileY: 0, halo: 1,
+        width: 1, height: 1, channels: 4, bitDepth: 8,
+        sampleFormat: 'unsigned-integer', numericRange: 'full',
+        byteOrder: 'little-endian', rowStride: 4, colorSpace: 'srgb',
+        transferFunction: 'srgb', alphaMode: 'straight', orientationApplied: true,
+        originX: 0, originY: 0, pixels: new Uint8Array([255, 0, 0, 255]).buffer,
+      }],
+    })
+    await vi.waitFor(() => expect(oldSignal?.aborted).toBe(true))
+    await Promise.resolve()
+    expect(harness.client.uploadTiles).not.toHaveBeenCalled()
+    bridge.dispose()
+  })
+
+  it('超过宿主上限的瓦片请求按16片串行分批上传', async () => {
+    const harness = clientHarness()
+    const resourceRef = `sha256:${'b'.repeat(64)}` as const
+    readSourceTiles.mockImplementation(async (request: { tiles: ImageEditorV3SourceTileBatchItem[] }) => ({
+      tiles: request.tiles.map((item) => ({
+        resourceRef, mip: item.mip, tileX: item.tileX, tileY: item.tileY, halo: 1,
+        width: 1, height: 1, channels: 4, bitDepth: 8,
+        sampleFormat: 'unsigned-integer', numericRange: 'full',
+        byteOrder: 'little-endian', rowStride: 4, colorSpace: 'srgb',
+        transferFunction: 'srgb', alphaMode: 'straight', orientationApplied: true,
+        originX: item.tileX, originY: 0, pixels: new Uint8Array([255, 0, 0, 255]).buffer,
+      })),
+    }))
+    const bridge = new ImageEditorRenderSessionGpuBridgeV3(
+      'gpu-batched-tiles', harness.client, vi.fn(), false, vi.fn(() => true), vi.fn(),
+    )
+    bridge.syncSnapshot({
+      document: createImageEditDocumentV3({ width: 8192, height: 8192 }),
+      renderGeneration: 1, geometryHash: 'geometry', quality: 'stable',
+      resourceDescriptors: [{ resourceRef, byteLength: 4, mediaType: 'image/png' }],
+    })
+    harness.listener({
+      type: 'tiles-needed', sceneGeneration: 1, deviceGeneration: 1,
+      keys: Array.from({ length: 17 }, (_, tileX) => ({
+        resourceRef, mip: 0, tileX, tileY: 0, contentVersion: 'v1',
+      })),
+    })
+
+    await vi.waitFor(() => expect(harness.client.uploadTiles).toHaveBeenCalledTimes(2))
+    expect(readSourceTiles.mock.calls.map(([request]) => request.tiles.length)).toEqual([16, 1])
+    expect(vi.mocked(harness.client.uploadTiles).mock.calls.map((call) => (
+      call[1].length
+    ))).toEqual([16, 1])
+    bridge.dispose()
+  })
+
   it('销毁会话时只退订并销毁唯一GPU Scene客户端', () => {
     const unsubscribe = vi.fn()
     const client = {

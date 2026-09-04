@@ -24,15 +24,27 @@ function fakeCompositor(
     syncScene: vi.fn(),
     updateTransientTransform: vi.fn(),
     updateViewport: vi.fn(),
+    memoryPressureBytes: vi.fn(() => 0),
+    estimateTileGpuBytes: vi.fn(() => 4),
     uploadTile: vi.fn(() => ({ destroy: vi.fn() }) as never),
+    requiredResourceKeys: vi.fn(() => []),
     missingResources: vi.fn(() => []),
     render: vi.fn(async () => ({
       bitmap: { close: vi.fn() } as unknown as ImageBitmap,
-      stats: { uploadCount: 0, pipelineCompileCount: 1, frameCount: 1, diagnosticReadbackCount: 0, transientUniformUpdateCount: 0 },
+      stats: {
+        uploadCount: 0, pipelineCompileCount: 1, frameCount: 1,
+        diagnosticReadbackCount: 0, transientUniformUpdateCount: 0,
+        residentTileCount: 0, atlasPageCount: 0, allocatedAtlasBytes: 0,
+        minimumPlannedMip: 0, maximumPlannedMip: 0,
+      },
+      usedResourceKeys: [],
     })),
     readLinearPixelsForTest: vi.fn(async () => new Float32Array()),
     snapshotStats: vi.fn(() => ({
-      uploadCount: 0, pipelineCompileCount: 1, frameCount: 0, diagnosticReadbackCount: 0, transientUniformUpdateCount: 0,
+      uploadCount: 0, pipelineCompileCount: 1, frameCount: 0,
+      diagnosticReadbackCount: 0, transientUniformUpdateCount: 0,
+      residentTileCount: 0, atlasPageCount: 0, allocatedAtlasBytes: 0,
+      minimumPlannedMip: 0, maximumPlannedMip: 0,
     })),
     dispose: vi.fn(),
     ...overrides,
@@ -230,5 +242,58 @@ describe('ImageEditorGpuSceneRuntimeV3', () => {
     runtime.dispose()
     expect(destroyTexture).toHaveBeenCalledOnce()
     expect(compositor.dispose).toHaveBeenCalledOnce()
+  })
+
+  it('视口背板扩大后立即按LRU释放未保护atlas页，再继续GPU呈现', async () => {
+    const resourceRef = `sha256:${'b'.repeat(64)}` as const
+    const destroyTexture = vi.fn()
+    const compositor = fakeCompositor({
+      uploadTile: vi.fn(() => ({ destroy: destroyTexture }) as never),
+      memoryPressureBytes: vi.fn(() => destroyTexture.mock.calls.length === 0 ? 8 : 0),
+    })
+    const events: ImageEditorGpuSceneWorkerEventV3[] = []
+    const runtime = new ImageEditorGpuSceneRuntimeV3((event) => events.push(event), {
+      deviceManager: {
+        onDeviceLost: vi.fn(), acquire: async () => managedDevice({} as GpuDevice, 1),
+        getRecoveryStatus: () => ({ generation: 1, retryAfterMs: 0 }), destroy: vi.fn(),
+      },
+      contextFactory: async () => ({ onError: () => vi.fn(), dispose: vi.fn() }),
+      compositorFactory: () => compositor,
+    })
+    const document = createImageEditDocumentV3({ width: 1, height: 1 })
+    document.layers = [createImageEditRasterLayerV3('layer', '图层', resourceRef)]
+    runtime.handle(initializeRequest())
+    runtime.handle({
+      type: 'sync-scene', sceneGeneration: 1, document,
+      resourceDescriptors: [{ resourceRef, byteLength: 4, mediaType: 'image/png' }],
+    })
+    await vi.waitFor(() => expect(runtime.getStatus()).toBe('ready'))
+    runtime.handle({
+      type: 'upload-tiles', sceneGeneration: 1,
+      tiles: [{
+        key: { resourceRef, mip: 0, tileX: 0, tileY: 0, contentVersion: `${resourceRef}:4` },
+        estimatedGpuBytes: 4,
+        protections: ['viewport'],
+        tile: {
+          resourceRef, mip: 0, tileX: 0, tileY: 0, halo: 0,
+          width: 1, height: 1, channels: 4, bitDepth: 8,
+          sampleFormat: 'uint', numericRange: 'unorm8', byteOrder: 'little-endian',
+          rowStride: 4, colorSpace: 'srgb', transferFunction: 'srgb', alphaMode: 'straight',
+          orientationApplied: true, originX: 0, originY: 0,
+          pixels: new Uint8Array([255, 0, 0, 255]).buffer,
+        },
+      }],
+    })
+    runtime.handle({
+      type: 'update-viewport', sceneGeneration: 1, cameraSequence: 1,
+      layout: {
+        stageWidth: 1, stageHeight: 1, viewportKey: 'pressure',
+        viewport: { documentX: 0, documentY: 0, width: 1, height: 1, zoom: 1, devicePixelRatio: 1 },
+      },
+    })
+
+    expect(destroyTexture).toHaveBeenCalledOnce()
+    expect(events.some((event) => event.type === 'failed')).toBe(false)
+    runtime.dispose()
   })
 })

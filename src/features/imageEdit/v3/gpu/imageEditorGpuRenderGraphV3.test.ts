@@ -85,9 +85,10 @@ describe('GPU RenderGraph 完整图层语义（真实 WebGPU）', () => {
     assertBlendTolerance(result)
   })
 
-  it('瞬态变换仅失效受影响节点，源与无关子图继续命中缓存', async () => {
+  it('瞬态变换仅失效融合atlas source的合成节点，无关子图继续命中缓存', async () => {
     const document = baseDocument('local-invalidation')
     const top = raster(8, '移动层')
+    top.blendMode = 'screen'
     document.layers = [raster(1, '底图'), top]
     const result = await compareDocument(document, tiles([1, 8]), (compositor) => {
       compositor.updateTransientTransform(top.id, [1, 0, 0, 1, 3, 2])
@@ -95,7 +96,8 @@ describe('GPU RenderGraph 完整图层语义（真实 WebGPU）', () => {
     expect(result.thirdStats).not.toBeNull()
     expect(result.thirdStats!.renderedGraphNodeCount! - result.secondStats.renderedGraphNodeCount!).toBe(1)
     expect(result.thirdStats!.invalidatedGraphNodeCount! - result.secondStats.invalidatedGraphNodeCount!).toBe(1)
-    expect(result.thirdStats!.graphCacheHitCount! - result.secondStats.graphCacheHitCount!).toBeGreaterThanOrEqual(3)
+    expect(result.thirdStats!.graphCacheHitCount! - result.secondStats.graphCacheHitCount!).toBeGreaterThanOrEqual(1)
+    expect(result.thirdCandidate).not.toEqual(result.candidate)
   })
 
   it('裁剪、90度orientation与镜像的呈现坐标逐像素匹配CPU映射', async () => {
@@ -116,7 +118,7 @@ describe('GPU RenderGraph 完整图层语义（真实 WebGPU）', () => {
       stageWidth: 12, stageHeight: 16, viewportKey: 'geometry-golden',
       viewport: { documentX: 0, documentY: 0, width: 12, height: 16, zoom: 1, devicePixelRatio: 1 },
     })
-    const key = compilation.scene.requiredResourceKeys[0]
+    const key = compositor.requiredResourceKeys()[0]
     const texture = compositor.uploadTile(key, descriptor)
     const candidate = await compositor.readPresentedPixelsForTest(() => texture)
     const source = new Uint8Array(descriptor.pixels)
@@ -238,7 +240,7 @@ async function compareDocument(
     viewport: { documentX: 0, documentY: 0, width: WIDTH, height: HEIGHT, zoom: 1, devicePixelRatio: 1 },
   })
   const uploaded = new Map<string, ReturnType<typeof compositor.uploadTile>>()
-  for (const key of compilation.scene.requiredResourceKeys) {
+  for (const key of compositor.requiredResourceKeys()) {
     uploaded.set(imageEditorGpuSceneTileKeyV3(key), compositor.uploadTile(key, resources.get(key.resourceRef)!))
   }
   const resolve = (key: Parameters<typeof compositor.uploadTile>[0]) => uploaded.get(imageEditorGpuSceneTileKeyV3(key)) ?? null
@@ -247,7 +249,7 @@ async function compareDocument(
   await compositor.readLinearPixelsForTest(resolve)
   const secondStats = compositor.snapshotStats()
   mutate?.(compositor)
-  if (mutate) await compositor.readLinearPixelsForTest(resolve)
+  const thirdCandidate = mutate ? await compositor.readLinearPixelsForTest(resolve) : null
   const thirdStats = mutate ? compositor.snapshotStats() : null
   const plan = compileImageEditRenderPlanV3(document, registry, 'stable')
   const rect = { x: 0, y: 0, width: WIDTH, height: HEIGHT }
@@ -269,7 +271,7 @@ async function compareDocument(
   const comparison = compareImageEditorGoldenV3(reference, candidate, 0.01)
   for (const texture of uploaded.values()) texture.destroy()
   compositor.dispose()
-  return { comparison, firstStats, secondStats, thirdStats }
+  return { comparison, candidate, firstStats, secondStats, thirdStats, thirdCandidate }
 }
 
 function assertBlendTolerance(result: Awaited<ReturnType<typeof compareDocument>>): void {
