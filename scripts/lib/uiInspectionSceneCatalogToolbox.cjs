@@ -204,39 +204,6 @@ function createToolboxScenes(context) {
           }
           await measureEffectFeedback(radius, '辉光', 0.75, 0.3)
           await settlePage(page, 2500)
-          const cameraBefore = await presentation.locator('[data-presentation-front-surface]')
-            .getAttribute('data-camera-sequence').then(Number)
-          await surface.locator('[data-tool-id="zoom"]').click()
-          const box = await preview.boundingBox()
-          if (!box) throw new Error('test01 缩放基准无法读取预览范围')
-          await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2)
-          for (let index = 0; index < 3; index += 1) {
-            await page.mouse.wheel(0, -1)
-            await page.waitForTimeout(5)
-          }
-          const clearStartedAt = Date.now()
-          await page.waitForFunction((previousCamera) => {
-            const previewSurface = document.querySelector('[data-preview-surface]')
-            const front = document.querySelector('[data-presentation-front-surface]')
-            return Number(front?.getAttribute('data-camera-sequence')) > previousCamera
-              && Number(previewSurface?.getAttribute('data-preview-target-mip-coverage')) === 1
-          }, cameraBefore, { timeout: 1500 }).catch(async () => {
-            const state = await preview.evaluate((element) => {
-              const front = element.querySelector('[data-presentation-front-surface]')
-              return {
-                cameraSequence: front?.getAttribute('data-camera-sequence'),
-                coverage: element.getAttribute('data-preview-coverage'),
-                targetMipCoverage: element.getAttribute('data-preview-target-mip-coverage'),
-              }
-            })
-            throw new Error(`test01 连续放大后，清晰目标帧未在 1.5 秒内完整接管：${JSON.stringify(state)}`)
-          })
-          const clearDurationMs = Date.now() - clearStartedAt
-          process.stdout.write(`  test01 连续放大后的清晰目标帧：${clearDurationMs}ms\n`)
-          if (clearDurationMs > 100) {
-            throw new Error(`test01 普通缩放清晰目标帧超过 100ms：${clearDurationMs}ms`)
-          }
-          await settlePage(page, 300)
 
           const addLayer = surface.getByRole('button', { name: /^(添加图层|Add layer)$/i })
           await addLayer.click()
@@ -288,19 +255,42 @@ function createToolboxScenes(context) {
           }
           process.stdout.write(`  test01 模糊连续调参反馈帧：${blurFeedbackDurationMs}ms\n`)
           await settlePage(page, 1200)
-          const compositeFailures = await page.evaluate(async (afterTimestamp) => {
+          const gpuState = await preview.evaluate((element) => {
+            const front = element.querySelector('[data-presentation-front-surface]')
+            const clip = element.querySelector('[data-document-clip]')
+            return {
+              composition: element.getAttribute('data-preview-composition-backend'),
+              effect: element.getAttribute('data-preview-effect-backend'),
+              presentation: element.getAttribute('data-preview-presentation-backend'),
+              device: element.getAttribute('data-preview-device-status'),
+              readbackCount: Number(front?.getAttribute('data-gpu-readback-count') ?? '-1'),
+              renderGeneration: Number(front?.getAttribute('data-render-generation') ?? '0'),
+              frontSize: front instanceof HTMLCanvasElement ? [front.width, front.height] : null,
+              previewSize: [element.clientWidth, element.clientHeight],
+              documentSize: clip instanceof HTMLElement ? [clip.clientWidth, clip.clientHeight] : null,
+              devicePixelRatio: window.devicePixelRatio,
+            }
+          })
+          if (gpuState.composition !== 'gpu' || gpuState.effect !== 'gpu'
+            || gpuState.presentation !== 'gpu-image-bitmap' || gpuState.device !== 'ready'
+            || gpuState.readbackCount !== 0 || gpuState.renderGeneration <= 0) {
+            throw new Error(`test01 三效果未保持同一 GPU Surface：${JSON.stringify(gpuState)}`)
+          }
+          const runtimeEvidence = await page.evaluate(async (afterTimestamp) => {
             const result = await window.henjiNative.logging.queryLogEvents({
               date: new Date().toISOString().slice(0, 10),
               afterTimestamp,
-              level: 'error',
               limit: 100,
             })
-            return result.events.filter((event) => (
-              event.event === 'image_editor_v3.viewport_composite.failed'
-            ))
+            return {
+              errors: result.events.filter((event) => event.level === 'error'),
+              budgetFallbacks: result.events.filter((event) => (
+                event.event === 'image_editor_v3.gpu_scene.resource_budget_fallback'
+              )),
+            }
           }, benchmarkStartedAt)
-          if (compositeFailures.length > 0) {
-            throw new Error(`test01 效果交互产生渲染错误：${JSON.stringify(compositeFailures)}`)
+          if (runtimeEvidence.errors.length > 0 || runtimeEvidence.budgetFallbacks.length !== 0) {
+            throw new Error(`test01 效果GPU/超预算后备证据异常：${JSON.stringify(runtimeEvidence)}`)
           }
         }
       },

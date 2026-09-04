@@ -24,6 +24,7 @@ import type {
 import { useImageEditorSessionStoreV3 } from '../store'
 import { IMAGE_EDITOR_ANNOTATION_TOOL_IDS_V3 } from './annotationToolsV3'
 import { resolveImageEditorReadinessReasonV3 } from './readinessPresentationV3'
+import { resolveImageEditorRasterBrushLayerV3 } from './rasterBrushLayerV3'
 import type { ImageEditorV3Controller } from './types'
 
 const TOOL_ICONS: Record<ImageEditorToolIdV3, LucideIcon> = {
@@ -66,6 +67,10 @@ export function ImageEditorToolRailV3({ controller }: { controller: ImageEditorV
   const { t } = useTranslation('ui')
   const session = useImageEditorSessionStoreV3((state) => state.sessions[controller.sessionId])
   const activeTool = session?.activeTool
+  const rasterBrushTarget = resolveImageEditorRasterBrushLayerV3(
+    controller.document,
+    session?.selectedLayerIds ?? [],
+  )
   const setActiveTool = useImageEditorSessionStoreV3((state) => state.setActiveTool)
   const capabilities = new Map(controller.profile.tools.map((capability) => [
     capability.id,
@@ -109,7 +114,8 @@ export function ImageEditorToolRailV3({ controller }: { controller: ImageEditorV
               const readiness = isAnnotation ? targetTool!.readiness : capabilities.get(id)!.readiness
               const Icon = isAnnotation ? MessageSquareText : TOOL_ICONS[id]
               const label = t(`imageEditor.v3.tools.${id}`)
-              const disabled = readiness.state !== 'ready'
+              const isRasterPaint = id === 'raster-brush' || id === 'eraser'
+              const disabled = readiness.state !== 'ready' || (isRasterPaint && !rasterBrushTarget.ready)
               const reason = resolveImageEditorReadinessReasonV3(readiness, t)
               const unavailableLabel = reason
                 ? t('imageEditor.v3.readiness.unavailableWithReason', { label, reason })
@@ -123,7 +129,7 @@ export function ImageEditorToolRailV3({ controller }: { controller: ImageEditorV
                 >
                   <UiIconButton
                     data-tool-id={id}
-                    data-tool-readiness={readiness.state}
+                    data-tool-readiness={disabled ? 'disabled' : readiness.state}
                     className="h-8 w-8"
                     showBorder={false}
                     appearance="hover-only"

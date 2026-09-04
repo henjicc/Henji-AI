@@ -4,6 +4,7 @@ import { act, renderHook } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { createImageEditDocumentV3 } from '@/core/imageEdit/v3/documentFactory'
+import type { ImageEditorV3ResourceDescriptor } from '@/platform/contracts/imageEditorV3'
 import type { ImageEditCommandBusSnapshotV3 } from '../application/imageEditCommandBus'
 import type { ImageEditorViewportTransformV3 } from './viewportTilePlannerV3'
 
@@ -106,7 +107,12 @@ function layout(index: number): {
 describe('useImageEditorViewportCompositeV3', () => {
   beforeEach(() => {
     vi.useFakeTimers()
-    vi.stubGlobal('Worker', class {})
+    vi.stubGlobal('Worker', class {
+      onmessage: ((event: MessageEvent) => void) | null = null
+      onerror: ((event: ErrorEvent) => void) | null = null
+      postMessage(): void {}
+      terminate(): void {}
+    })
     mocked.requests.length = 0
     mocked.cancel.mockClear()
     mocked.dispose.mockClear()
@@ -153,6 +159,34 @@ describe('useImageEditorViewportCompositeV3', () => {
         coverage: 'viewport', phase: 'target', viewportKey: 'viewport-40',
       }),
     ])
+
+    rendered.unmount()
+    await act(async () => { await Promise.resolve() })
+  })
+
+  it('受管资源描述刷新会推进renderGeneration，隔离旧画笔瓦片请求', async () => {
+    const stableSnapshot = snapshot()
+    const source = `sha256:${'1'.repeat(64)}` as const
+    const brush = `sha256:${'2'.repeat(64)}` as const
+    const initial: readonly ImageEditorV3ResourceDescriptor[] = [{
+      resourceRef: source, byteLength: 128, mediaType: 'image/png',
+    }]
+    const refreshed: readonly ImageEditorV3ResourceDescriptor[] = [
+      ...initial,
+      { resourceRef: brush, byteLength: 256, mediaType: 'application/x-henji-brush-tile-v3' },
+    ]
+    const rendered = renderHook(
+      ({ descriptors }) => useImageEditorViewportCompositeV3(
+        'descriptor-generation-session', stableSnapshot, true, descriptors, layout(0),
+      ),
+      { initialProps: { descriptors: initial } },
+    )
+    await act(async () => { await vi.advanceTimersByTimeAsync(16) })
+    expect(mocked.requests.at(-1)).toMatchObject({ renderGeneration: 1 })
+
+    rendered.rerender({ descriptors: refreshed })
+    await act(async () => { await vi.advanceTimersByTimeAsync(16) })
+    expect(mocked.requests.at(-1)).toMatchObject({ renderGeneration: 2 })
 
     rendered.unmount()
     await act(async () => { await Promise.resolve() })

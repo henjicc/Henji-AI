@@ -9,6 +9,7 @@ import {
   createFloat32MaskTile,
   createImageEditAdjustmentLayerV3,
   createImageEditDocumentV3,
+  createImageEditEffectLayerV3,
   createImageEditGroupLayerV3,
   createImageEditRasterLayerV3,
   createImageEditSparseMaskReferenceV3,
@@ -24,6 +25,8 @@ import {
   type ImageEditRenderPlanNode,
 } from '@/core/imageEdit/v3'
 import type { ImageEditorV3SourceTile } from '@/platform/contracts/imageEditorV3'
+import { createDefaultDiffusionOperationParams } from '@/core/imageEdit/diffusionParams'
+import { createDefaultVgpuGlowOperationParams } from '@/core/imageEdit/vgpuGlowParams'
 import { compareImageEditorGoldenV3 } from '../testing/imageEditorGpuBaselineV3'
 import { ImageEditorGpuRasterCompositorV3 } from './imageEditorGpuRasterCompositorV3'
 import { compileImageEditorGpuRasterSceneV3 } from './imageEditorGpuRasterSceneCompilerV3'
@@ -83,6 +86,83 @@ describe('GPU RenderGraph 完整图层语义（真实 WebGPU）', () => {
     document.layers = [raster(1, '底图'), top]
     const result = await compareDocument(document, tiles([1, 7, 93], new Set([93])))
     assertBlendTolerance(result)
+  })
+
+  it('fast blur在同一RenderGraph Target链内执行且重复帧命中缓存', async () => {
+    const document = baseDocument('fast-blur-target')
+    document.layers = [
+      raster(12, '源'),
+      createImageEditEffectLayerV3('fast-blur', '快速模糊', 'image.fast-blur-v3', { radius: 20 }),
+    ]
+    const result = await compareDocument(document, tiles([12]))
+    expect(globalSsim(result.reference, result.candidate)).toBeGreaterThanOrEqual(0.999)
+    expect(result.secondStats.graphCacheHitCount).toBeGreaterThan(result.firstStats.graphCacheHitCount ?? 0)
+  })
+
+  it.each([
+    ['小图/最小值', 16, 12, 0],
+    ['小图/默认值', 16, 12, 12],
+    ['小图/最大值', 16, 12, 1000],
+    ['常规图/最小值', 128, 96, 0],
+    ['常规图/默认值', 128, 96, 12],
+    ['常规图/最大值', 128, 96, 1000],
+  ] as const)('fast blur合法范围%s保持CPU三方框真值', async (_label, width, height, radius) => {
+    const document = baseDocument(`fast-blur-range-${width}-${height}-${radius}`, width, height)
+    document.layers = [
+      raster(120, '源'),
+      createImageEditEffectLayerV3(`fast-blur-${radius}`, '快速模糊', 'image.fast-blur-v3', { radius }),
+    ]
+    const startedAt = performance.now()
+    const result = await compareDocument(document, tilesSized([120], width, height))
+    const elapsedMs = performance.now() - startedAt
+    const ssim = globalSsim(result.reference, result.candidate)
+    expect(ssim).toBeGreaterThanOrEqual(0.999)
+    expect(elapsedMs).toBeLessThan(30_000)
+  }, 35_000)
+
+  it('fast blur经过generic effect mix保留蒙版、opacity和预乘alpha语义', async () => {
+    const document = baseDocument('fast-blur-mix')
+    const effectLayer = createImageEditEffectLayerV3(
+      'fast-blur-mix', '快速模糊混合', 'image.fast-blur-v3', { radius: 5 },
+    )
+    effectLayer.opacity = 0.64
+    effectLayer.mask = { resourceId: ref(94), inverted: false }
+    document.layers = [raster(13, '源'), effectLayer]
+    const result = await compareDocument(document, tiles([13, 94], new Set([94])))
+    expect(globalSsim(result.reference, result.candidate)).toBeGreaterThanOrEqual(0.999)
+  })
+
+  it('diffusion复用正式WGSL并在同一RenderGraph Frame保持CPU真值', async () => {
+    const document = baseDocument('diffusion-target')
+    document.layers = [raster(14, '源'), createImageEditEffectLayerV3(
+      'diffusion', '柔光', 'image.diffusion', createDefaultDiffusionOperationParams() as unknown as ImageEditJsonObjectV3,
+    )]
+    const result = await compareDocument(document, tiles([14]))
+    expect(globalSsim(result.reference, result.candidate)).toBeGreaterThanOrEqual(0.999)
+  })
+
+  it('vgpu glow复用正式WGSL并在同一RenderGraph Frame保持CPU真值', async () => {
+    const document = baseDocument('glow-target')
+    document.layers = [raster(15, '源'), createImageEditEffectLayerV3(
+      'glow', '辉光', 'image.vgpu-glow',
+      createDefaultVgpuGlowOperationParams() as unknown as ImageEditJsonObjectV3,
+    )]
+    const result = await compareDocument(document, tiles([15]))
+    expect(globalSsim(result.reference, result.candidate)).toBeGreaterThanOrEqual(0.999)
+  })
+
+  it('三效果共用scratch与金字塔后仍在同一Frame保持CPU真值', async () => {
+    const document = baseDocument('shared-effect-targets')
+    document.layers = [
+      raster(16, '源'),
+      createImageEditEffectLayerV3('glow-shared', '辉光', 'image.vgpu-glow',
+        createDefaultVgpuGlowOperationParams() as unknown as ImageEditJsonObjectV3),
+      createImageEditEffectLayerV3('diffusion-shared', '柔光', 'image.diffusion',
+        createDefaultDiffusionOperationParams() as unknown as ImageEditJsonObjectV3),
+      createImageEditEffectLayerV3('blur-shared', '模糊', 'image.fast-blur-v3', { radius: 5 }),
+    ]
+    const result = await compareDocument(document, tiles([16]))
+    expect(globalSsim(result.reference, result.candidate)).toBeGreaterThanOrEqual(0.999)
   })
 
   it('瞬态变换仅失效融合atlas source的合成节点，无关子图继续命中缓存', async () => {
@@ -180,8 +260,8 @@ function ref(seed: number): `sha256:${string}` {
   return `sha256:${seed.toString(16).padStart(64, '0')}`
 }
 
-function baseDocument(id: string): ImageEditDocumentV3 {
-  return createImageEditDocumentV3({ width: WIDTH, height: HEIGHT, documentId: id })
+function baseDocument(id: string, width = WIDTH, height = HEIGHT): ImageEditDocumentV3 {
+  return createImageEditDocumentV3({ width, height, documentId: id })
 }
 
 function raster(seed: number, name: string): ReturnType<typeof createImageEditRasterLayerV3> {
@@ -193,11 +273,20 @@ function adjustment(id: string, params: Record<string, number>): ImageEditAdjust
 }
 
 function tiles(seeds: readonly number[], masks = new Set<number>()): Map<string, ImageEditorV3SourceTile> {
+  return tilesSized(seeds, WIDTH, HEIGHT, masks)
+}
+
+function tilesSized(
+  seeds: readonly number[],
+  width: number,
+  height: number,
+  masks = new Set<number>(),
+): Map<string, ImageEditorV3SourceTile> {
   return new Map(seeds.map((seed) => {
-    const pixels = new Uint8Array(WIDTH * HEIGHT * 4)
-    for (let y = 0; y < HEIGHT; y += 1) {
-      for (let x = 0; x < WIDTH; x += 1) {
-        const offset = (y * WIDTH + x) * 4
+    const pixels = new Uint8Array(width * height * 4)
+    for (let y = 0; y < height; y += 1) {
+      for (let x = 0; x < width; x += 1) {
+        const offset = (y * width + x) * 4
         if (masks.has(seed)) {
           const value = ((x * 19 + y * 13 + seed) % 256)
           pixels.set([value, value, value, 255], offset)
@@ -213,9 +302,9 @@ function tiles(seeds: readonly number[], masks = new Set<number>()): Map<string,
     }
     return [ref(seed), {
       resourceRef: ref(seed), mip: 0, tileX: 0, tileY: 0, halo: 0,
-      width: WIDTH, height: HEIGHT, channels: 4, bitDepth: 8,
+      width, height, channels: 4, bitDepth: 8,
       sampleFormat: 'uint', numericRange: 'unorm8', byteOrder: 'little-endian',
-      rowStride: WIDTH * 4, colorSpace: 'srgb', transferFunction: 'srgb',
+      rowStride: width * 4, colorSpace: 'srgb', transferFunction: 'srgb',
       alphaMode: 'straight', orientationApplied: true, originX: 0, originY: 0,
       pixels: pixels.buffer,
     } satisfies ImageEditorV3SourceTile]
@@ -227,6 +316,8 @@ async function compareDocument(
   resources: ReadonlyMap<string, ImageEditorV3SourceTile>,
   mutate?: (compositor: ImageEditorGpuRasterCompositorV3) => void,
 ) {
+  const width = document.geometry.width
+  const height = document.geometry.height
   const descriptors = [...resources.values()].map((tile) => ({
     resourceRef: tile.resourceRef, byteLength: tile.pixels.byteLength, mediaType: 'image/png',
   }))
@@ -236,8 +327,8 @@ async function compareDocument(
   const compositor = new ImageEditorGpuRasterCompositorV3(gpu)
   compositor.syncScene(compilation.scene)
   compositor.updateViewport({
-    stageWidth: WIDTH, stageHeight: HEIGHT, viewportKey: 'graph-golden',
-    viewport: { documentX: 0, documentY: 0, width: WIDTH, height: HEIGHT, zoom: 1, devicePixelRatio: 1 },
+    stageWidth: width, stageHeight: height, viewportKey: 'graph-golden',
+    viewport: { documentX: 0, documentY: 0, width, height, zoom: 1, devicePixelRatio: 1 },
   })
   const uploaded = new Map<string, ReturnType<typeof compositor.uploadTile>>()
   for (const key of compositor.requiredResourceKeys()) {
@@ -252,7 +343,7 @@ async function compareDocument(
   const thirdCandidate = mutate ? await compositor.readLinearPixelsForTest(resolve) : null
   const thirdStats = mutate ? compositor.snapshotStats() : null
   const plan = compileImageEditRenderPlanV3(document, registry, 'stable')
-  const rect = { x: 0, y: 0, width: WIDTH, height: HEIGHT }
+  const rect = { x: 0, y: 0, width, height }
   const cpu = await executeImageEditCpuRenderPlanV3(plan, {
     loadRaster: async (node) => decodeInterleavedRgbaSourceTileV3({
       ...resources.get(resourceId(node))!, colorSpace: 'srgb',
@@ -261,7 +352,7 @@ async function compareDocument(
     loadMask: async (mask) => {
       const resource = resources.get('resourceId' in mask ? mask.resourceId : Object.values(mask.tiles)[0])!
       const rgba = new Uint8Array(resource.pixels)
-      return createFloat32MaskTile(WIDTH, HEIGHT, Float32Array.from({ length: WIDTH * HEIGHT }, (_, pixel) => rgba[pixel * 4] / 255))
+      return createFloat32MaskTile(width, height, Float32Array.from({ length: width * height }, (_, pixel) => rgba[pixel * 4] / 255))
     },
     transformContent: async (tile, transform) => resampleImageEditRgbaAffineV3(tile, rect, rect, transform),
     transformMask: async (mask, transform) => resampleImageEditMaskAffineV3(mask, rect, rect, transform),
@@ -271,7 +362,23 @@ async function compareDocument(
   const comparison = compareImageEditorGoldenV3(reference, candidate, 0.01)
   for (const texture of uploaded.values()) texture.destroy()
   compositor.dispose()
-  return { comparison, candidate, firstStats, secondStats, thirdStats, thirdCandidate }
+  return { comparison, reference, candidate, firstStats, secondStats, thirdStats, thirdCandidate }
+}
+
+function globalSsim(left: Float32Array, right: Float32Array): number {
+  let meanLeft = 0; let meanRight = 0
+  for (let index = 0; index < left.length; index += 1) { meanLeft += left[index]; meanRight += right[index] }
+  meanLeft /= left.length; meanRight /= right.length
+  let varianceLeft = 0; let varianceRight = 0; let covariance = 0
+  for (let index = 0; index < left.length; index += 1) {
+    const a = left[index] - meanLeft; const b = right[index] - meanRight
+    varianceLeft += a * a; varianceRight += b * b; covariance += a * b
+  }
+  const divisor = Math.max(1, left.length - 1)
+  varianceLeft /= divisor; varianceRight /= divisor; covariance /= divisor
+  const c1 = 0.01 ** 2; const c2 = 0.03 ** 2
+  return ((2 * meanLeft * meanRight + c1) * (2 * covariance + c2))
+    / ((meanLeft ** 2 + meanRight ** 2 + c1) * (varianceLeft + varianceRight + c2))
 }
 
 function assertBlendTolerance(result: Awaited<ReturnType<typeof compareDocument>>): void {

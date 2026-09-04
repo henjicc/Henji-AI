@@ -1,4 +1,11 @@
-import type { ImageEditTransformV3 } from '@/core/imageEdit/v3/layerTypes'
+import {
+  compileImageEditRenderPlanV3,
+  createBuiltInImageEditRenderNodeRegistry,
+  mipSize,
+  type ImageEditDocumentV3,
+  type ImageEditRenderPlanNode,
+  type ImageEditTransformV3,
+} from '@/core/imageEdit/v3'
 import type { ImageEditRenderQuality } from '@/core/imageEdit/v3/renderNodeDefinition'
 import { createLogger } from '@/core/logging'
 import {
@@ -8,7 +15,7 @@ import {
 } from '@/commands/imageEditorV3'
 import { readImageEditorV3SourceTiles } from '@/commands/imageEditorV3Tiles'
 import type { ImageEditorV3ResourceDescriptor, ImageEditorV3SourceTile } from '@/platform/contracts/imageEditorV3'
-import { IMAGE_EDITOR_V3_BRUSH_TILE_MEDIA_TYPE } from '../application/imageEditorResourceDescriptorsV3'
+import { readImageEditorGpuBrushTilesV3 } from './imageEditorGpuBrushTileReaderV3'
 import type { ImageEditorViewportLayoutV3 } from '../editor/useImageEditorViewportLayoutV3'
 import {
   createDefaultImageEditorGpuSceneClientV3,
@@ -16,14 +23,17 @@ import {
 } from '../gpu/imageEditorGpuSceneClientV3'
 import type { ImageEditorGpuSceneWorkerEventV3 } from '../gpu/imageEditorGpuSceneProtocolV3'
 import { imageEditorGpuSceneTileKeyV3 } from '../gpu/imageEditorGpuSceneProtocolV3'
+import { createImageEditorGpuAnnotationResourceRefV3 } from '../gpu/imageEditorGpuRasterSceneCompilerV3'
 import type {
   ImageEditorRenderSessionStateV3,
   ImageEditorRenderSnapshotV3,
 } from './imageEditorRenderSessionContractsV3'
 import type { ImageEditorPresentationSurfaceTransferV3 } from './imageEditorPresentationSurfaceV3'
+import { rasterizeImageEditorViewportAnnotationsV3 } from './viewportCompositePixelsV3'
 
 const logger = createLogger('features.image_edit.v3.gpu_scene_bridge')
 const GPU_SOURCE_TILE_BATCH_SIZE = 16
+const renderNodeRegistry = createBuiltInImageEditRenderNodeRegistry()
 type GpuPresentableFrameV3 = Extract<
   ImageEditorGpuSceneWorkerEventV3,
   { type: 'frame-ready' | 'surface-frame-ready' }
@@ -41,6 +51,8 @@ export class ImageEditorRenderSessionGpuBridgeV3 {
   private layout: ImageEditorViewportLayoutV3 | null = null
   private readonly loadingTiles = new Set<string>()
   private resourceDescriptors = new Map<string, ImageEditorV3ResourceDescriptor>()
+  private document: ImageEditDocumentV3 | null = null
+  private annotationNodes = new Map<string, ImageEditRenderPlanNode>()
   private tileLoadQueue: Promise<void> = Promise.resolve()
   private tileLoadAbortController = new AbortController()
   private pendingFrame = false
@@ -96,6 +108,12 @@ export class ImageEditorRenderSessionGpuBridgeV3 {
       ? 8
       : snapshot.document.color.bitDepth === 16 ? 16 : 32
     this.resourceDescriptors = new Map(snapshot.resourceDescriptors.map((entry) => [entry.resourceRef, entry]))
+    this.document = structuredClone(snapshot.document)
+    this.annotationNodes = new Map(
+      compileImageEditRenderPlanV3(snapshot.document, renderNodeRegistry, snapshot.quality).nodes
+        .filter((node) => node.definitionId === 'vector.annotation')
+        .map((node) => [createImageEditorGpuAnnotationResourceRefV3(node), node]),
+    )
     this.client?.syncScene(snapshot)
     if (this.layout) {
       this.client?.updateViewport(this.sceneGeneration, this.cameraSequence, this.layout)
@@ -185,7 +203,7 @@ export class ImageEditorRenderSessionGpuBridgeV3 {
           ? 'image_editor_v3.gpu_scene.hidden_frame_ready'
           : 'image_editor_v3.gpu_scene.frame_presented',
         requestId: event.requestId,
-        context: { ...event.diagnostics, eventToPresentMs, presented },
+        context: { ...event.diagnostics, sceneGeneration: event.sceneGeneration, eventToPresentMs, presented },
       }
       if (this.diagnosticRenderingEnabled) logger.info('图片编辑 GPU Scene 帧完成', frameLog)
       else logger.debug('图片编辑 GPU Scene 帧完成', frameLog)
@@ -316,6 +334,20 @@ export class ImageEditorRenderSessionGpuBridgeV3 {
           estimatedGpuBytes: tile.width * tile.height * 4 * (tile.bitDepth / 8),
           protections: ['viewport', 'stable-frame'],
         }])
+        if (key.resourceKind === 'generated-annotation') {
+          logger.info('完成图片编辑 GPU 标注纹理上传', {
+            event: 'image_editor_v3.gpu_scene.annotation_texture_uploaded',
+            context: {
+              sceneGeneration: generation,
+              contentVersion: key.contentVersion,
+              mip: key.mip,
+              tileX: key.tileX,
+              tileY: key.tileY,
+              width: tile.width,
+              height: tile.height,
+            },
+          })
+        }
       }
       const dynamicKeys = keys.filter((entry) => entry.format === undefined)
       for (let offset = 0; offset < dynamicKeys.length; offset += GPU_SOURCE_TILE_BATCH_SIZE) {
@@ -350,6 +382,11 @@ export class ImageEditorRenderSessionGpuBridgeV3 {
         context: {
           sceneGeneration: generation,
           error: error instanceof Error ? error.message : String(error),
+          requestedTiles: keys.slice(0, 8).map((key) => ({
+            resourceRef: key.resourceRef,
+            format: key.format ?? 'source',
+            mediaType: this.resourceDescriptors.get(key.resourceRef)?.mediaType ?? null,
+          })),
         },
       })
       if (!this.disposed && generation === this.sceneGeneration) {
@@ -369,12 +406,29 @@ export class ImageEditorRenderSessionGpuBridgeV3 {
     signal: AbortSignal,
   ): Promise<ImageEditorV3SourceTile> {
     const descriptor = this.resourceDescriptors.get(key.resourceRef)
-    if (key.format === 'r8unorm' && descriptor?.mediaType === IMAGE_EDITOR_V3_BRUSH_TILE_MEDIA_TYPE) {
-      const loaded = await this.readBrushTiles({
+    const annotation = this.annotationNodes.get(key.resourceRef)
+    if (key.resourceKind === 'generated-annotation' && annotation) {
+      const document = this.document
+      if (!document) throw new Error('GPU Scene 标注光栅化缺少文档快照')
+      const dimensions = mipSize(document.geometry, key.mip)
+      const x = key.tileX * 512
+      const y = key.tileY * 512
+      const width = Math.min(512, dimensions.width - x)
+      const height = Math.min(512, dimensions.height - y)
+      if (width < 1 || height < 1) throw new Error('GPU Scene 标注瓦片超出文档范围')
+      const tile = rasterizeImageEditorViewportAnnotationsV3(
+        annotation, document, { x, y, width, height }, key.mip, signal,
+      )
+      return floatPremultipliedTileToGpuSource(key, tile.data, width, height)
+    }
+    if (key.resourceKind === 'sparse-mask') {
+      const byteSize = key.resourceByteLength ?? descriptor?.byteLength
+      if (byteSize === undefined) throw new Error('GPU Scene 蒙版瓦片缺少受管字节数')
+      const loaded = await readImageEditorGpuBrushTilesV3(this.readBrushTiles, {
         requestId: createImageEditorV3RequestId('gpu-scene-mask-tile'),
         tiles: [{
           tileKey: `${key.mip}/${key.tileX}/${key.tileY}`,
-          resource: { resourceId: key.resourceRef, byteSize: descriptor.byteLength },
+          resource: { resourceId: key.resourceRef, byteSize },
         }],
       }, signal)
       const mask = loaded.tiles[0]?.tile
@@ -397,6 +451,22 @@ export class ImageEditorRenderSessionGpuBridgeV3 {
         originX: key.tileX * 512, originY: key.tileY * 512, pixels: rgba.buffer,
       }
     }
+    if (key.resourceKind === 'brush-tile') {
+      const byteSize = key.resourceByteLength ?? descriptor?.byteLength
+      if (byteSize === undefined) throw new Error('GPU Scene 画笔瓦片缺少受管字节数')
+      const loaded = await readImageEditorGpuBrushTilesV3(this.readBrushTiles, {
+        requestId: createImageEditorV3RequestId('gpu-scene-brush-tile'),
+        tiles: [{
+          tileKey: `${key.mip}/${key.tileX}/${key.tileY}`,
+          resource: { resourceId: key.resourceRef, byteSize },
+        }],
+      }, signal)
+      const brush = loaded.tiles[0]?.tile
+      if (!brush || brush.storage !== 'rgba-float32') {
+        throw new Error('GPU Scene 画笔资源不是 Float32 RGBA 瓦片')
+      }
+      return floatPremultipliedTileToGpuSource(key, brush.data, brush.width, brush.height)
+    }
     return await readImageEditorV3SourceTile({
       requestId: createImageEditorV3RequestId('gpu-scene-tile'),
       resourceRef: key.resourceRef,
@@ -406,5 +476,31 @@ export class ImageEditorRenderSessionGpuBridgeV3 {
       halo: 0,
       bitDepth: 8,
     }, signal)
+  }
+
+}
+
+function floatPremultipliedTileToGpuSource(
+  key: Extract<ImageEditorGpuSceneWorkerEventV3, { type: 'tiles-needed' }>['keys'][number],
+  premultiplied: Float32Array,
+  width: number,
+  height: number,
+): ImageEditorV3SourceTile {
+  const straight = new Float32Array(premultiplied.length)
+  for (let offset = 0; offset < premultiplied.length; offset += 4) {
+    const alpha = Math.max(0, premultiplied[offset + 3])
+    const inverseAlpha = alpha > 0 ? 1 / alpha : 0
+    straight[offset] = premultiplied[offset] * inverseAlpha
+    straight[offset + 1] = premultiplied[offset + 1] * inverseAlpha
+    straight[offset + 2] = premultiplied[offset + 2] * inverseAlpha
+    straight[offset + 3] = alpha
+  }
+  return {
+    resourceRef: key.resourceRef, mip: key.mip, tileX: key.tileX, tileY: key.tileY,
+    halo: 0, width, height, channels: 4, bitDepth: 32,
+    sampleFormat: 'float', numericRange: 'scene-linear', byteOrder: 'little-endian',
+    rowStride: width * 16, colorSpace: 'scrgb', transferFunction: 'linear',
+    alphaMode: 'straight', orientationApplied: true,
+    originX: key.tileX * 512, originY: key.tileY * 512, pixels: straight.buffer,
   }
 }

@@ -18,9 +18,14 @@ import {
   imageEditorGpuSceneTileKeyV3,
   type ImageEditorGpuSceneTileKeyV3,
 } from './imageEditorGpuSceneProtocolV3'
-import { imageEditorGpuSourceColorUniformV3, packImageEditorGpuColorMatrixRowsV3 } from './imageEditorGpuColorPipelineV3'
+import {
+  imageEditorGpuSourceColorUniformV3,
+  imageEditorGpuWorkingLinearSourceUniformV3,
+  packImageEditorGpuColorMatrixRowsV3,
+} from './imageEditorGpuColorPipelineV3'
 import {
   planImageEditorGpuRasterTilesV3,
+  planImageEditorGpuMaskTilesV3,
   type ImageEditorGpuPlannedLayerV3,
   type ImageEditorGpuPlannedTileV3,
 } from './imageEditorGpuTilePlannerV3'
@@ -41,6 +46,8 @@ import type {
   ImageEditorGpuRasterTextureV3,
 } from './imageEditorGpuRasterPipelineContractsV3'
 import { ImageEditorGpuRasterPresentationV3 } from './imageEditorGpuRasterPresentationV3'
+import { resolveImageEditorGpuEffectViewportV3 } from './imageEditorGpuEffectViewportV3'
+import { estimateImageEditorGpuGraphResidentBytesV3 } from './imageEditorGpuMemoryBudgetV3'
 
 const BUFFER_COPY_DST = 0x08
 const BUFFER_UNIFORM = 0x40
@@ -70,6 +77,7 @@ export class ImageEditorGpuRasterPipelineV3 implements ImageEditorGpuRasterCompo
   private readonly layers = new Map<string, RetainedLayerStateV3>()
   private readonly transientTransforms = new Map<string, ImageEditTransformV3>()
   private readonly plannedLayers = new Map<string, ImageEditorGpuPlannedLayerV3>()
+  private readonly plannedMasks = new Map<string, ImageEditorGpuPlannedLayerV3>()
   private readonly previousMips = new Map<string, number>()
   private scene: ImageEditorGpuRasterSceneV3 | null = null
   private layout: ImageEditorViewportLayoutV3 | null = null
@@ -161,13 +169,17 @@ export class ImageEditorGpuRasterPipelineV3 implements ImageEditorGpuRasterCompo
         this.cameraBuffer, 0, imageEditorGpuCameraUniformV3(layout, this.scene.geometry),
       )
     }
-    const [width, height] = imageEditorGpuOutputPixelSizeV3(layout)
-    const graphTargets = this.scene?.requiresRenderGraph
-      ? Math.max(1, this.scene.graph.filter((node) => (
-        node.kind !== 'alias' && node.kind !== 'source'
-      )).length + 1)
-      : 1
-    this.reservedOutputBytes = width * height * (4 + graphTargets * 8)
+    const effectViewport = this.scene
+      ? resolveImageEditorGpuEffectViewportV3(this.scene, layout)
+      : { layout, expanded: false }
+    const workingLayout = effectViewport.layout
+    const [width, height] = imageEditorGpuOutputPixelSizeV3(workingLayout)
+    const cropBytes = effectViewport.expanded
+      ? imageEditorGpuOutputPixelSizeV3(layout)[0] * imageEditorGpuOutputPixelSizeV3(layout)[1] * 8
+      : 0
+    this.reservedOutputBytes = this.scene?.requiresRenderGraph
+      ? estimateImageEditorGpuGraphResidentBytesV3(this.scene, [width, height]) + cropBytes
+      : width * height * LINEAR_AND_PRESENT_BYTES_PER_PIXEL
     this.atlas.setMemoryBudgetBytes(Math.max(0, this.memoryBudgetBytes - this.reservedOutputBytes))
     this.replanTiles()
   }
@@ -196,10 +208,8 @@ export class ImageEditorGpuRasterPipelineV3 implements ImageEditorGpuRasterCompo
       if (layerId && plan.layerId !== layerId) continue
       for (const tile of plan.tiles) unique.set(imageEditorGpuSceneTileKeyV3(tile.key), tile.key)
     }
-    if (this.scene?.requiresRenderGraph) {
-      for (const key of this.scene.requiredResourceKeys) {
-        if (key.format === 'r8unorm') unique.set(imageEditorGpuSceneTileKeyV3(key), key)
-      }
+    for (const plan of this.plannedMasks.values()) {
+      for (const tile of plan.tiles) unique.set(imageEditorGpuSceneTileKeyV3(tile.key), tile.key)
     }
     return [...unique.values()]
   }
@@ -287,7 +297,8 @@ export class ImageEditorGpuRasterPipelineV3 implements ImageEditorGpuRasterCompo
     if (!this.scene || !this.layout) throw new Error('GPU Scene 缺少场景或视口')
     const missing = this.missingResources(resolve)
     if (missing.length > 0) throw new Error(`GPU Scene 缺少 ${missing.length} 个源纹理`)
-    const [width, height] = imageEditorGpuOutputPixelSizeV3(this.layout)
+    const effectViewport = resolveImageEditorGpuEffectViewportV3(this.scene, this.layout)
+    const [width, height] = imageEditorGpuOutputPixelSizeV3(effectViewport.layout)
     if (width > this.maxTextureDimension2D || height > this.maxTextureDimension2D) {
       throw new Error(`GPU Scene 输出 ${width}×${height} 超过设备 2D 纹理限制`)
     }
@@ -303,8 +314,14 @@ export class ImageEditorGpuRasterPipelineV3 implements ImageEditorGpuRasterCompo
           resources: plan.tiles.map((tile) => resolve(tile.key)!),
         })
       }
+      const maskPlans = new Map<string, ImageEditorGpuGraphSourcePlanV3>()
+      for (const [maskId, plan] of this.plannedMasks) {
+        maskPlans.set(maskId, { plan, resources: plan.tiles.map((tile) => resolve(tile.key)!) })
+      }
       this.reportedError = null
-      const output = await this.graph.execute(resolve, sourcePlans, this.layout)
+      const output = await this.graph.execute(
+        resolve, sourcePlans, maskPlans, effectViewport.layout, this.layout, effectViewport.cropOffset,
+      )
       if (!output) throw new Error('GPU RenderGraph 没有可呈现输出')
       await this.gpu.settled()
       this.throwReportedError()
@@ -401,7 +418,9 @@ export class ImageEditorGpuRasterPipelineV3 implements ImageEditorGpuRasterCompo
     const inverse = invertImageEditTransformV3(this.resolveTransform(layer))
     const scene = this.scene
     if (!scene) return
-    const color = imageEditorGpuSourceColorUniformV3(resource.tile, scene.color)
+    const color = plannedTile.key.format === 'rgba16float'
+      ? imageEditorGpuWorkingLinearSourceUniformV3(scene.color)
+      : imageEditorGpuSourceColorUniformV3(resource.tile, scene.color)
     const matrix = packImageEditorGpuColorMatrixRowsV3(color.sourceToWorking)
     this.gpu.gpu.queue.writeBuffer(buffer, 0, new Float32Array([
       inverse[0], inverse[1], inverse[2], inverse[3],
@@ -417,17 +436,34 @@ export class ImageEditorGpuRasterPipelineV3 implements ImageEditorGpuRasterCompo
   }
   private replanTiles(): void {
     this.plannedLayers.clear()
+    this.plannedMasks.clear()
     if (!this.scene || !this.layout) return
+    const workingLayout = resolveImageEditorGpuEffectViewportV3(this.scene, this.layout).layout
     for (const layer of this.scene.layers) {
       if (!layer.visible || layer.opacity <= 0) continue
       const planned = planImageEditorGpuRasterTilesV3(
         this.scene,
         { ...layer, transform: this.resolveTransform(layer) },
-        this.layout,
+        workingLayout,
         this.previousMips.get(layer.layerId),
       )
       this.plannedLayers.set(layer.layerId, planned)
       this.previousMips.set(layer.layerId, planned.mip)
+    }
+    for (const node of this.scene.graph) {
+      if (node.kind === 'source' || node.kind === 'alias') continue
+      const transform = node.kind === 'composite'
+        ? this.transientTransforms.get(node.layerId) ?? node.transform
+        : [1, 0, 0, 1, 0, 0] as ImageEditTransformV3
+      const masks = node.kind === 'composite'
+        ? [node.mask]
+        : node.kind === 'effect' ? [node.mask] : node.adjustments.map((entry) => entry.mask)
+      for (const mask of masks) {
+        if (!mask || this.plannedMasks.has(mask.maskId)) continue
+        this.plannedMasks.set(mask.maskId, planImageEditorGpuMaskTilesV3(
+          this.scene, mask, transform, workingLayout,
+        ))
+      }
     }
   }
   private plannedTileForStateKey(stateKey: string): ImageEditorGpuPlannedTileV3 | null {

@@ -114,6 +114,7 @@ const RASTER_TOOLS: readonly ImageEditorCapabilityV3<ImageEditorToolIdV3>[] = [
   ready('eraser'),
   ready('mask-edit'),
 ];
+const RASTER_PAINT_TOOLS = RASTER_TOOLS.filter(({ id }) => id !== 'mask-edit');
 const CORE_EFFECTS: readonly ImageEditorCapabilityV3<string>[] =
   listCreatableImageEditOperationIdsV3('effect').map(ready);
 const HDR_LIMITATION: ImageEditorCapabilityReadinessV3 = {
@@ -126,7 +127,7 @@ export const IMAGE_EDITOR_HOST_PROFILES_V3: Readonly<
 > = {
   full: {
     id: 'full',
-    tools: [...NAVIGATION_TOOLS, ready('crop'), ...ANNOTATION_TOOLS],
+    tools: [...NAVIGATION_TOOLS, ready('crop'), ...ANNOTATION_TOOLS, ...RASTER_PAINT_TOOLS],
     layerKinds: ['raster', 'effect'],
     effects: CORE_EFFECTS,
     adjustments: [],

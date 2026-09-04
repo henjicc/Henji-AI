@@ -58,16 +58,23 @@ export function useImageEditorViewportCompositeV3(
   const identityRef = useRef<{
     document: typeof document
     previewOverrides: typeof snapshot.previewOverrides
+    resourceDescriptors: typeof resourceDescriptors
     renderGeneration: number
   } | null>(null)
   const previousIdentity = identityRef.current
   const renderChanged = !previousIdentity
     || previousIdentity.document !== document
     || previousIdentity.previewOverrides !== snapshot.previewOverrides
+    || previousIdentity.resourceDescriptors !== resourceDescriptors
   const renderGeneration = renderChanged
     ? (previousIdentity?.renderGeneration ?? 0) + 1
     : previousIdentity.renderGeneration
-  identityRef.current = { document, previewOverrides: snapshot.previewOverrides, renderGeneration }
+  identityRef.current = {
+    document,
+    previewOverrides: snapshot.previewOverrides,
+    resourceDescriptors,
+    renderGeneration,
+  }
   const geometryHash = createImageEditGeometryHashV3(document.geometry)
   const [state, setState] = useState<ImageEditorRenderSessionStateV3>(EMPTY_STATE)
 

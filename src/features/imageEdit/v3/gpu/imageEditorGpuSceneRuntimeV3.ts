@@ -137,7 +137,7 @@ export class ImageEditorGpuSceneRuntimeV3 {
           compositor?.updateViewport(request.layout)
           this.refreshViewportProtections()
           if (compositor && !this.trimMemoryPressure(compositor)) {
-            this.emitFailure(
+            this.enterFallback(
               'resource-budget-exceeded', null,
               'GPU Scene 当前视口与受保护资源超过会话显存预算', true,
             )
@@ -297,7 +297,7 @@ export class ImageEditorGpuSceneRuntimeV3 {
       const gpuBytes = compositor.estimateTileGpuBytes(entry.tile)
       const admission = this.resources.prepareAdmission(gpuBytes)
       if (!admission.admitted) {
-        this.emitFailure(
+        this.enterFallback(
           'resource-budget-exceeded',
           null,
           'GPU Scene 资源超过 256 MiB 会话预算且没有可淘汰资源',
@@ -321,7 +321,7 @@ export class ImageEditorGpuSceneRuntimeV3 {
       )
       payload = null
       if (registration.admitted) return true
-      this.emitFailure(
+      this.enterFallback(
         'resource-budget-exceeded',
         null,
         'GPU Scene 资源超过 256 MiB 会话预算且没有可淘汰资源',
@@ -330,7 +330,9 @@ export class ImageEditorGpuSceneRuntimeV3 {
       return false
     } catch (error) {
       payload?.destroy()
-      this.emitFailure('composition-not-ready', null, imageEditorGpuSceneErrorMessageV3(error), true)
+      this.enterFallback(
+        'composition-not-ready', null, imageEditorGpuSceneErrorMessageV3(error), true,
+      )
       return false
     }
   }
@@ -396,7 +398,7 @@ export class ImageEditorGpuSceneRuntimeV3 {
       this.emit(delivery.event, delivery.transfer)
     } catch (error) {
       if (this.acceptsRenderRequest(request)) {
-        this.emitFailure(
+        this.enterFallback(
           'composition-not-ready', request.requestId, imageEditorGpuSceneErrorMessageV3(error), true,
         )
       }
@@ -489,6 +491,20 @@ export class ImageEditorGpuSceneRuntimeV3 {
         ? { deviceAcquireCount: this.deviceAcquireCount, surfaceFrameCount: this.surfaceFrameCount }
         : undefined,
     })
+  }
+
+  private enterFallback(
+    code: ImageEditorGpuSceneFailedEventV3['code'],
+    requestId: string | null,
+    message: string,
+    recoverable: boolean,
+  ): void {
+    if (this.status === 'fallback' || this.status === 'disposed') return
+    this.status = 'fallback'
+    this.pendingTiles.clear()
+    this.resources?.clear()
+    this.states.invalidate()
+    this.emitFailure(code, requestId, message, recoverable)
   }
 
   private destroyGpuState(state: ImageEditorGpuSceneGpuStateV3): void {

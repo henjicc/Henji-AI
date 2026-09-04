@@ -36,7 +36,9 @@ export function reconcileImageEditorV3ResourceDescriptors(
     if (reachableIds.has(descriptor.resourceRef)) descriptors.set(descriptor.resourceRef, descriptor)
   }
   for (const resource of retainedResources) {
-    if (resource.byteSize === null || descriptors.has(resource.resourceId)) continue
+    if (resource.byteSize === null) continue
+    // 历史保留集只由受管 brush tile 写入产生；重开会话时它比载入器给出的
+    // 通用媒体探测结果更权威，必须原子恢复 brush 类别，不能保留 null/image/*。
     descriptors.set(resource.resourceId, {
       resourceRef: resource.resourceId as ImageEditorV3ResourceRef,
       byteLength: resource.byteSize,

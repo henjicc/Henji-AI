@@ -10,6 +10,7 @@ import type { ImageEditDocumentV3 } from '@/core/imageEdit/v3/documentTypes'
 import { IMAGE_EDIT_HDR_REFERENCE_WHITE_NITS_V3 } from '@/core/imageEdit/v3/colorTypes'
 import type { ImageEditorPreviewBrushResourceRequestV3 } from './previewDocumentV3'
 import type { ImageEditorPreviewBrushTileV3 } from './previewProtocolV3'
+import { readImageEditorBrushTilesWithAdmissionV3 } from './imageEditorGpuBrushTileReaderV3'
 
 export const IMAGE_EDITOR_PREVIEW_BRUSH_CACHE_MAX_BYTES_V3 = 64 * 1024 * 1024
 export const IMAGE_EDITOR_PREVIEW_BRUSH_TRANSFER_MAX_BYTES_V3 = 128 * 1024 * 1024
@@ -204,7 +205,7 @@ export class ImageEditorPreviewBrushTileLoaderV3 {
     }
     for (const [batchIndex, batch] of createBatches(missing).entries()) {
       throwIfAborted(signal)
-      const result = await raceWithAbort(this.reader({
+      const result = await raceWithAbort(readImageEditorBrushTilesWithAdmissionV3(this.reader, {
         requestId: createImageEditorV3RequestId(`preview-brush-${batchIndex}`),
         tiles: batch.map((request) => ({
           tileKey: request.tileKey,
