@@ -149,4 +149,33 @@ describe('ImageEditorRenderSessionGpuBridgeV3', () => {
     }))
     bridge.dispose()
   })
+
+  it('sparse mask通过正式Float32 brush读取链量化为r8上传内容', async () => {
+    const harness = clientHarness()
+    const readBrushTiles = vi.fn(async () => ({ tiles: [{
+      tileKey: '0/0/0',
+      tile: { storage: 'mask-float32' as const, width: 2, height: 1, data: new Float32Array([0.25, 1]) },
+    }] }))
+    const resourceRef = `sha256:${'a'.repeat(64)}` as const
+    const bridge = new ImageEditorRenderSessionGpuBridgeV3(
+      'gpu-sparse-mask', harness.client, vi.fn(), false, undefined, undefined, readBrushTiles,
+    )
+    bridge.syncSnapshot({
+      document: createImageEditDocumentV3({ width: 2, height: 1 }),
+      renderGeneration: 1, geometryHash: 'geometry', quality: 'stable',
+      resourceDescriptors: [{
+        resourceRef, byteLength: 8, mediaType: 'application/x-henji-brush-tile-v3',
+      }],
+    })
+    harness.listener({
+      type: 'tiles-needed', sceneGeneration: 1, deviceGeneration: 1,
+      keys: [{ resourceRef, mip: 0, tileX: 0, tileY: 0, contentVersion: 'mask-v1', format: 'r8unorm' }],
+    })
+    await vi.waitFor(() => expect(harness.client.uploadTiles).toHaveBeenCalledOnce())
+    const upload = vi.mocked(harness.client.uploadTiles).mock.calls[0][1][0]
+    expect([...new Uint8Array(upload.tile.pixels)]).toEqual([64, 64, 64, 255, 255, 255, 255, 255])
+    expect(upload.key.format).toBe('r8unorm')
+    expect(readBrushTiles).toHaveBeenCalledOnce()
+    bridge.dispose()
+  })
 })

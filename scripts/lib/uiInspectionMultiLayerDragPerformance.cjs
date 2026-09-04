@@ -126,24 +126,26 @@ async function verifyMultiLayerDragPerformance({
 
   const commandBar = editor.locator('[data-command-bar]')
   const rasterStack = editor.locator('[data-raster-pasteboard-stack="multi"]')
-  try {
-    await waitForEditorState(page, {
-      message: '多图层资源代理栈没有就绪',
-      read: async () => {
-        const attached = await rasterStack.count()
-        return {
-          attached,
-          ready: attached ? await rasterStack.getAttribute('data-raster-source-ready') : null,
-          layers: attached
-            ? await rasterStack.locator('[data-raster-pasteboard-layer]').count()
-            : 0,
-        }
-      },
-      accept: ({ attached, ready, layers }) => attached === 1 && ready === 'true' && layers === 5,
-    })
-  } catch (error) {
-    const diagnostic = await readPasteboardDiagnostic(page, fixture.documentRef)
-    throw new Error(`${error instanceof Error ? error.message : String(error)}；诊断：${JSON.stringify(diagnostic)}`)
+  if (!fixture.complexGraph) {
+    try {
+      await waitForEditorState(page, {
+        message: '多图层资源代理栈没有就绪',
+        read: async () => {
+          const attached = await rasterStack.count()
+          return {
+            attached,
+            ready: attached ? await rasterStack.getAttribute('data-raster-source-ready') : null,
+            layers: attached
+              ? await rasterStack.locator('[data-raster-pasteboard-layer]').count()
+              : 0,
+          }
+        },
+        accept: ({ attached, ready, layers }) => attached === 1 && ready === 'true' && layers === 5,
+      })
+    } catch (error) {
+      const diagnostic = await readPasteboardDiagnostic(page, fixture.documentRef)
+      throw new Error(`${error instanceof Error ? error.message : String(error)}；诊断：${JSON.stringify(diagnostic)}`)
+    }
   }
   await editor.locator('[data-layer-id="ui-foreground-layer"] [data-layer-select]').click()
   await waitForEditorState(page, {
@@ -213,7 +215,9 @@ async function verifyMultiLayerDragPerformance({
       revision: Number(await commandBar.getAttribute('data-document-revision')),
       overrideCount: Number(await previewSurface.getAttribute('data-preview-override-count')),
       renderGeneration: Number(await previewSurface.getAttribute('data-preview-render-generation')),
-      stackVisibility: await rasterStack.evaluate((element) => getComputedStyle(element).visibility),
+      stackVisibility: await rasterStack.count()
+        ? await rasterStack.evaluate((element) => getComputedStyle(element).visibility)
+        : 'absent',
       stableVisibility: await stableRaster.evaluate((element) => getComputedStyle(element).visibility),
       eventToPresentMs: Number(await gpuSurface.getAttribute('data-event-to-present-ms')),
       renderPlanCompileCount: Number(await gpuSurface.getAttribute('data-render-plan-compile-count')),
@@ -226,7 +230,7 @@ async function verifyMultiLayerDragPerformance({
     if (evidence.revision !== beforeLayerMove
       || evidence.overrideCount !== 0
       || evidence.renderGeneration !== beforeHotPath.renderGeneration
-      || evidence.stackVisibility !== 'hidden'
+      || (!fixture.complexGraph && evidence.stackVisibility !== 'hidden')
       || evidence.stableVisibility !== 'visible'
       || evidence.renderPlanCompileCount !== beforeHotPath.renderPlanCompileCount
       || evidence.cpuTaskStartCount !== beforeHotPath.cpuTaskStartCount
@@ -272,10 +276,12 @@ async function verifyMultiLayerDragPerformance({
   await waitForEditorState(page, {
     message: '多图层移动提交后没有清除手势残差并交回稳定合成',
     read: async () => ({
-      stackVisibility: await rasterStack.evaluate((element) => getComputedStyle(element).visibility),
+      stackVisibility: await rasterStack.count()
+        ? await rasterStack.evaluate((element) => getComputedStyle(element).visibility)
+        : 'absent',
       stableVisibility: await stableRaster.evaluate((element) => getComputedStyle(element).visibility),
     }),
-    accept: (evidence) => evidence.stackVisibility === 'hidden'
+    accept: (evidence) => (fixture.complexGraph || evidence.stackVisibility === 'hidden')
       && evidence.stableVisibility === 'visible',
   })
   await waitForEditorState(page, {
@@ -342,7 +348,7 @@ async function verifyMultiLayerDragPerformance({
   }
 }
 
-async function verifyHiddenBackgroundRasterStack({ page, editor, expectedRevision }) {
+async function verifyHiddenBackgroundRasterStack({ page, editor, expectedRevision, allowAbsent = false }) {
   await editor.getByRole('button', { name: /隐藏.*背景图层|Hide.*Background/i }).click()
   const commandBar = editor.locator('[data-command-bar]')
   await waitForEditorState(page, {
@@ -352,16 +358,21 @@ async function verifyHiddenBackgroundRasterStack({ page, editor, expectedRevisio
     timeout: 10000,
   })
   const rasterStack = editor.locator('[data-raster-pasteboard-stack="multi"]')
-  await rasterStack.waitFor({ state: 'attached', timeout: 10000 })
+  if (!allowAbsent) await rasterStack.waitFor({ state: 'attached', timeout: 10000 })
   await waitForEditorState(page, {
     message: '隐藏背景后没有保留前景资源代理栈',
-    read: async () => ({
-      ready: await rasterStack.getAttribute('data-raster-source-ready'),
-      layers: await rasterStack.locator('[data-raster-pasteboard-layer]').count(),
-      foreground: await rasterStack
-        .locator('[data-raster-pasteboard-layer="ui-foreground-layer"]').count(),
-    }),
-    accept: ({ ready, layers, foreground }) => ready === 'true' && layers === 4 && foreground === 1,
+    read: async () => {
+      const attached = await rasterStack.count()
+      return {
+        ready: attached ? await rasterStack.getAttribute('data-raster-source-ready') : null,
+        layers: attached ? await rasterStack.locator('[data-raster-pasteboard-layer]').count() : 0,
+        foreground: attached ? await rasterStack
+          .locator('[data-raster-pasteboard-layer="ui-foreground-layer"]').count() : 0,
+      }
+    },
+    accept: ({ ready, layers, foreground }) => allowAbsent
+      ? (ready === null && layers === 0 && foreground === 0)
+      : (ready === 'true' && layers === 4 && foreground === 1),
     timeout: 10000,
   })
 }

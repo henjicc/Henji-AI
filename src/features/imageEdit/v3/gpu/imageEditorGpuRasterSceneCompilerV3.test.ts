@@ -28,15 +28,25 @@ describe('compileImageEditorGpuRasterSceneV3', () => {
     expect(result.scene.layers[0]).toMatchObject({ visible: true, opacity: 1 })
   })
 
-  it('复杂组、蒙版、混合和HDR不进入基础GPU语义', () => {
+  it('组、蒙版与混合进入RenderGraph，HDR仍交给4.1', () => {
     const fixture = createImageEditorGpuBaselineFixturesV3()[0]
     const resources = descriptors(fixture.resourceSeeds.keys())
     const groupDocument = structuredClone(fixture.document)
     groupDocument.layers = [createImageEditGroupLayerV3('group', '组')]
-    expect(compileImageEditorGpuRasterSceneV3(groupDocument, resources).supported).toBe(false)
+    expect(compileImageEditorGpuRasterSceneV3(groupDocument, resources).supported).toBe(true)
     const blendDocument = structuredClone(fixture.document)
     blendDocument.layers[0].blendMode = 'screen'
-    expect(compileImageEditorGpuRasterSceneV3(blendDocument, resources).supported).toBe(false)
+    expect(compileImageEditorGpuRasterSceneV3(blendDocument, resources).supported).toBe(true)
+    const complex = createImageEditorGpuBaselineFixturesV3().find((entry) => entry.id === 'complex-mask')!
+    const complexResult = compileImageEditorGpuRasterSceneV3(
+      complex.document,
+      descriptors(complex.resourceSeeds.keys()),
+    )
+    expect(complexResult.supported).toBe(true)
+    if (complexResult.supported) {
+      expect(complexResult.scene.requiredResourceKeys.some((key) => key.format === 'r8unorm')).toBe(true)
+      expect(complexResult.scene.graph.some((node) => node.kind === 'adjustment')).toBe(true)
+    }
     const hdr = createImageEditorGpuBaselineFixturesV3().find((entry) => entry.id === 'hdr-rec2020')!
     expect(compileImageEditorGpuRasterSceneV3(
       hdr.document,

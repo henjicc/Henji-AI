@@ -266,6 +266,33 @@ function attachUiInspectionCanvasEditing(context) {
             ...common('ui-foreground-layer', '前景元素'),
             transform: [0.55, 0, 0, 0.55, 180, 100],
           },
+          {
+            id: 'ui-complex-isolated-group', name: '隔离合成组', type: 'group',
+            visible: true, locked: false, opacity: 0.78, blendMode: 'soft-light',
+            transform: [1, 0, 0, 1, 0, 0],
+            mask: { resourceId: managed.resource.resourceRef, inverted: false },
+            isolated: true,
+            children: [
+              {
+                ...common('ui-complex-screen-layer', '滤色蒙版层'),
+                opacity: 0.66, blendMode: 'screen',
+                transform: [0.42, 0, 0, 0.42, 24, 28],
+                mask: { resourceId: managed.resource.resourceRef, inverted: true },
+              },
+              {
+                ...common('ui-complex-multiply-layer', '正片叠底层'),
+                opacity: 0.58, blendMode: 'multiply',
+                transform: [0.36, 0, 0, 0.36, 172, 94],
+              },
+            ],
+          },
+          {
+            id: 'ui-complex-exposure', name: '曝光调整', type: 'adjustment',
+            visible: true, locked: false, opacity: 0.72, blendMode: 'normal',
+            transform: [1, 0, 0, 1, 0, 0], mask: null,
+            adjustmentId: 'exposure', params: { stops: 0.22, offset: 0.008, gamma: 1.03 },
+            renderable: true,
+          },
         ],
       }
       const saved = await window.henjiNative.imageEditorV3.saveDocument({
@@ -402,6 +429,7 @@ function attachUiInspectionCanvasEditing(context) {
         nodeId,
         legacyNodeId,
         expectedNodeCount: nodes.length,
+        complexGraph: true,
       }
     }, { targetProjectId: projectId, source: panoramaSource })
 
@@ -495,6 +523,7 @@ function attachUiInspectionCanvasEditing(context) {
       page,
       editor,
       expectedRevision: fixture.initialRevision + 2,
+      allowAbsent: fixture.complexGraph,
     })
     await page.waitForTimeout(700)
     const persistedRevision = await page.evaluate(async (documentRef) => {
@@ -717,8 +746,8 @@ function attachUiInspectionCanvasEditing(context) {
       sourceDocumentRef: duplicateEvidence.sourceDocumentRef,
       duplicateDocumentRef: duplicateEvidence.duplicateDocumentRef,
     })
-    if (JSON.stringify(forkIsolation.sourceVisibility) !== JSON.stringify([false, true, true, true, true])
-      || JSON.stringify(forkIsolation.duplicateVisibility) !== JSON.stringify([false, true, true, true, false])) {
+    if (JSON.stringify(forkIsolation.sourceVisibility) !== JSON.stringify([false, true, true, true, true, true, true])
+      || JSON.stringify(forkIsolation.duplicateVisibility) !== JSON.stringify([false, true, true, true, false, true, true])) {
       throw new Error(`复制文档编辑互相污染：${JSON.stringify(forkIsolation)}`)
     }
 
@@ -795,7 +824,7 @@ function attachUiInspectionCanvasEditing(context) {
       || packageRoundTrip.importedDocumentRef === packageRoundTrip.sourceDocumentRef
       || packageRoundTrip.sourceRevision !== fixture.initialRevision + 2
       || packageRoundTrip.importedRevision !== fixture.initialRevision + 2
-      || packageRoundTrip.importedLayerCount !== 5) {
+      || packageRoundTrip.importedLayerCount !== 7) {
       throw new Error(`多图层文档项目包往返失败：${JSON.stringify(packageRoundTrip)}`)
     }
     await settlePage(page, 900)
