@@ -26,7 +26,7 @@ function createPort() {
 }
 
 describe('ImageEditorGpuSceneClientV3', () => {
-  it('每客户端只创建一个 Worker，1.2 默认不发送生产 render', () => {
+  it('每客户端只创建一个 Worker，2.1 默认允许请求隐藏GPU帧', () => {
     const worker = createPort()
     const workerFactory = vi.fn(() => worker.port)
     const client = new ImageEditorGpuSceneClientV3({
@@ -53,6 +53,7 @@ describe('ImageEditorGpuSceneClientV3', () => {
     expect(workerFactory).toHaveBeenCalledOnce()
     expect(worker.messages.map((message) => message.type)).toEqual([
       'initialize', 'sync-scene', 'update-viewport', 'update-transform',
+      'render',
     ])
     client.dispose()
     expect(worker.port.terminate).toHaveBeenCalledOnce()

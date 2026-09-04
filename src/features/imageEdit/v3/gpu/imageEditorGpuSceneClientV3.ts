@@ -19,7 +19,7 @@ export interface ImageEditorGpuSceneClientOptionsV3 {
   sessionId: string
   workerFactory?: ImageEditorGpuSceneWorkerFactoryV3
   memoryBudgetBytes?: number
-  /** 1.2 默认为 false；2.1 合成器接入后才允许生产会话发出 render。 */
+  /** 仅测试可显式关闭；2.1 起允许会话请求隐藏 GPU 帧，2.2 才接管正式呈现。 */
   renderingEnabled?: boolean
 }
 
@@ -70,7 +70,7 @@ export class ImageEditorGpuSceneClientV3 implements ImageEditorGpuSceneClientV3L
   constructor(private readonly options: ImageEditorGpuSceneClientOptionsV3) {
     if (!options.sessionId.trim()) throw new Error('GPU Scene 会话 ID 不能为空')
     this.worker = (options.workerFactory ?? createDefaultWorker)()
-    this.renderingEnabled = options.renderingEnabled === true
+    this.renderingEnabled = options.renderingEnabled !== false
     this.worker.onmessage = (message) => this.handleEvent(message.data)
     this.worker.onerror = (event) => this.handleWorkerError(event)
     logger.info('开始初始化图片编辑 GPU Scene', {
@@ -203,15 +203,22 @@ export class ImageEditorGpuSceneClientV3 implements ImageEditorGpuSceneClientV3L
         },
       })
     } else if (event.type === 'failed') {
-      logger.error('图片编辑 GPU Scene 运行失败', new Error(event.message), {
-        event: 'image_editor_v3.gpu_scene.failed',
+      const metadata = {
+        event: event.code === 'composition-not-ready' && event.recoverable
+          ? 'image_editor_v3.gpu_scene.composition_deferred'
+          : 'image_editor_v3.gpu_scene.failed',
         requestId: event.requestId ?? undefined,
         context: {
           sessionId: this.options.sessionId,
           code: event.code,
           recoverable: event.recoverable,
         },
-      })
+      }
+      if (event.code === 'composition-not-ready' && event.recoverable) {
+        logger.debug('图片编辑 GPU Scene 等待场景或源纹理', metadata)
+      } else {
+        logger.error('图片编辑 GPU Scene 运行失败', new Error(event.message), metadata)
+      }
     }
     for (const listener of this.listeners) listener(event)
   }

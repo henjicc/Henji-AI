@@ -5,13 +5,39 @@ import type {
   ManagedWebGpuDevice,
 } from '@/core/imageEdit/webgpu/deviceManager'
 import type { GpuDevice } from '@/core/imageEdit/worker/webgpuRuntimeSupport'
-import { createImageEditDocumentV3 } from '@/core/imageEdit/v3/documentFactory'
+import {
+  createImageEditDocumentV3,
+  createImageEditRasterLayerV3,
+} from '@/core/imageEdit/v3/documentFactory'
 import {
   IMAGE_EDITOR_GPU_SCENE_DEFAULT_BUDGET_BYTES_V3,
   IMAGE_EDITOR_GPU_SCENE_PROTOCOL_VERSION_V3,
   type ImageEditorGpuSceneWorkerEventV3,
 } from './imageEditorGpuSceneProtocolV3'
 import { ImageEditorGpuSceneRuntimeV3 } from './imageEditorGpuSceneRuntimeV3'
+import type { ImageEditorGpuRasterCompositorV3Like } from './imageEditorGpuRasterCompositorV3'
+
+function fakeCompositor(
+  overrides: Partial<ImageEditorGpuRasterCompositorV3Like> = {},
+): ImageEditorGpuRasterCompositorV3Like {
+  return {
+    syncScene: vi.fn(),
+    updateTransientTransform: vi.fn(),
+    updateViewport: vi.fn(),
+    uploadTile: vi.fn(() => ({ destroy: vi.fn() }) as never),
+    missingResources: vi.fn(() => []),
+    render: vi.fn(async () => ({
+      bitmap: { close: vi.fn() } as unknown as ImageBitmap,
+      stats: { uploadCount: 0, pipelineCompileCount: 1, frameCount: 1, diagnosticReadbackCount: 0 },
+    })),
+    readLinearPixelsForTest: vi.fn(async () => new Float32Array()),
+    snapshotStats: vi.fn(() => ({
+      uploadCount: 0, pipelineCompileCount: 1, frameCount: 0, diagnosticReadbackCount: 0,
+    })),
+    dispose: vi.fn(),
+    ...overrides,
+  }
+}
 
 function initializeRequest() {
   return {
@@ -46,6 +72,7 @@ describe('ImageEditorGpuSceneRuntimeV3', () => {
     const runtime = new ImageEditorGpuSceneRuntimeV3((event) => events.push(event), {
       deviceManager: manager,
       contextFactory,
+      compositorFactory: () => fakeCompositor(),
     })
 
     runtime.handle(initializeRequest())
@@ -81,6 +108,7 @@ describe('ImageEditorGpuSceneRuntimeV3', () => {
         contexts.push(state)
         return { onError: () => vi.fn(), dispose: state.dispose }
       },
+      compositorFactory: () => fakeCompositor(),
     })
     runtime.handle(initializeRequest())
     runtime.handle({
@@ -117,6 +145,7 @@ describe('ImageEditorGpuSceneRuntimeV3', () => {
         destroy: vi.fn(),
       },
       contextFactory: async () => ({ onError: () => vi.fn(), dispose: vi.fn() }),
+      compositorFactory: () => fakeCompositor(),
     })
     runtime.handle(initializeRequest())
     runtime.handle({
@@ -145,9 +174,61 @@ describe('ImageEditorGpuSceneRuntimeV3', () => {
       type: 'render', requestId: 'current', sceneGeneration: 2,
       cameraSequence: 3, interactionSequence: 5, quality: 'draft',
     })
-    expect(events.at(-1)).toMatchObject({
-      type: 'failed', requestId: 'current', code: 'composition-not-ready',
-    })
+    await vi.waitFor(() => expect(events.at(-1)).toMatchObject({
+      type: 'frame-ready', requestId: 'current', diagnostics: { pipelineCompileCount: 1 },
+    }))
     runtime.dispose()
+  })
+
+  it('同一资源重复上传只创建一张GPU纹理，dispose完整释放注册表资源', async () => {
+    const resourceRef = `sha256:${'a'.repeat(64)}` as const
+    const destroyTexture = vi.fn()
+    const uploadTile = vi.fn(() => ({
+      key: { resourceRef, mip: 0, tileX: 0, tileY: 0, contentVersion: `${resourceRef}:4` },
+      tile: { originX: 0, originY: 0, width: 1, height: 1 },
+      texture: {},
+      destroy: destroyTexture,
+    }) as never)
+    const compositor = fakeCompositor({ uploadTile })
+    const runtime = new ImageEditorGpuSceneRuntimeV3(() => undefined, {
+      deviceManager: {
+        onDeviceLost: vi.fn(),
+        acquire: async () => managedDevice({} as GpuDevice, 1),
+        getRecoveryStatus: () => ({ generation: 1, retryAfterMs: 0 }),
+        destroy: vi.fn(),
+      },
+      contextFactory: async () => ({ onError: () => vi.fn(), dispose: vi.fn() }),
+      compositorFactory: () => compositor,
+    })
+    const document = createImageEditDocumentV3({ width: 1, height: 1 })
+    document.layers = [createImageEditRasterLayerV3('layer', '图层', resourceRef)]
+    runtime.handle(initializeRequest())
+    runtime.handle({
+      type: 'sync-scene',
+      sceneGeneration: 1,
+      document,
+      resourceDescriptors: [{ resourceRef, byteLength: 4, mediaType: 'image/png' }],
+    })
+    await vi.waitFor(() => expect(runtime.getStatus()).toBe('ready'))
+    const key = { resourceRef, mip: 0, tileX: 0, tileY: 0, contentVersion: `${resourceRef}:4` }
+    const tile = {
+      resourceRef, mip: 0, tileX: 0, tileY: 0, halo: 0,
+      width: 1, height: 1, channels: 4 as const, bitDepth: 8 as const,
+      sampleFormat: 'uint' as const, numericRange: 'unorm8' as const,
+      byteOrder: 'little-endian' as const, rowStride: 4, colorSpace: 'srgb' as const,
+      transferFunction: 'srgb' as const, alphaMode: 'straight' as const,
+      orientationApplied: true as const, originX: 0, originY: 0,
+      pixels: new Uint8Array([255, 0, 0, 255]).buffer,
+    }
+    runtime.handle({ type: 'upload-tiles', sceneGeneration: 1, tiles: [{ key, tile, estimatedGpuBytes: 4 }] })
+    runtime.handle({
+      type: 'upload-tiles', sceneGeneration: 1,
+      tiles: [{ key, tile: { ...tile, pixels: tile.pixels.slice(0) }, estimatedGpuBytes: 4 }],
+    })
+
+    expect(uploadTile).toHaveBeenCalledOnce()
+    runtime.dispose()
+    expect(destroyTexture).toHaveBeenCalledOnce()
+    expect(compositor.dispose).toHaveBeenCalledOnce()
   })
 })

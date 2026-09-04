@@ -12,6 +12,7 @@ const { attachUiInspectionSupport } = require('./uiInspectionSceneSupport.cjs')
 const { createGenerationSettingsScenes } = require('./uiInspectionSceneCatalogGeneration.cjs')
 const { createCanvasScenes } = require('./uiInspectionSceneCatalogCanvas.cjs')
 const { createToolboxScenes } = require('./uiInspectionSceneCatalogToolbox.cjs')
+const { createGpuRasterScenes } = require('./uiInspectionSceneCatalogGpuRaster.cjs')
 const { createSupportScenes } = require('./uiInspectionSceneCatalogSupport.cjs')
 
 const TAB_NAMES = Object.freeze({
@@ -46,6 +47,7 @@ function createUiInspectionScenes({ canvasFixtureProjectId, settlePage }) {
     ...createGenerationSettingsScenes(context),
     ...createCanvasScenes(context),
     ...createToolboxScenes(context),
+    ...createGpuRasterScenes(context),
     ...createSupportScenes(context),
   ])
 }

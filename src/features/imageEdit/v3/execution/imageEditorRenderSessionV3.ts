@@ -4,6 +4,7 @@ import {
 } from '@/core/imageEdit/v3'
 import type { ImageEditTransformV3 } from '@/core/imageEdit/v3/layerTypes'
 import type { ImageEditRenderQuality } from '@/core/imageEdit/v3/renderNodeDefinition'
+import { isUiInspectionReadOnly } from '@/platform/runtime'
 import type { ImageEditorViewportLayoutV3 } from '../editor/useImageEditorViewportLayoutV3'
 import {
   ImageEditorPresentationSurfaceV3,
@@ -99,6 +100,7 @@ export class DefaultImageEditorRenderSessionV3 implements ImageEditorRenderSessi
       options.sessionId,
       dependencies.gpuSceneClient,
       (patch) => this.publish(patch),
+      isUiInspectionReadOnly(),
     )
     this.work = new ImageEditorRenderSessionWorkV3({
       clients: this.clients,

@@ -117,6 +117,12 @@ export interface ImageEditorGpuSceneFrameReadyEventV3 extends ImageEditorGpuScen
   interactionSequence: number
   quality: ImageEditRenderQuality
   bitmap: ImageBitmap
+  diagnostics?: {
+    uploadCount: number
+    pipelineCompileCount: number
+    frameCount: number
+    diagnosticReadbackCount: number
+  }
 }
 
 export interface ImageEditorGpuSceneExportTileEventV3 extends ImageEditorGpuSceneEventBaseV3 {

@@ -678,6 +678,19 @@ describe('ImageEditorRenderSessionV3', () => {
       deviceStatus: 'ready',
       deviceGeneration: 2,
     })
+    const closeGpuFrame = vi.fn()
+    gpuSubscription.listener({
+      type: 'frame-ready', requestId: 'hidden-frame', sceneGeneration: 7,
+      cameraSequence: 1, interactionSequence: 12, deviceGeneration: 2,
+      quality: 'draft', bitmap: { close: closeGpuFrame } as unknown as ImageBitmap,
+      diagnostics: {
+        uploadCount: 1, pipelineCompileCount: 2, frameCount: 1, diagnosticReadbackCount: 0,
+      },
+    })
+    expect(closeGpuFrame).toHaveBeenCalledOnce()
+    expect(diagnostics).toMatchObject({
+      compositionBackend: 'cpu', presentationBackend: 'canvas2d',
+    })
     session.dispose()
     expect(gpuScene.dispose).toHaveBeenCalledOnce()
   })
