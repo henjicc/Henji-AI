@@ -278,7 +278,7 @@
       "portraitTextureGeneration": "Portrait Texture",
       "elementEditGeneration": "Local Redraw",
       "layerSeparationGeneration": "Layer Separation",
-      "layerStackResult": "Layer Stack",
+      "layerStackResult": "Multi-layer Image Document",
       "storyboard": "Storyboard Node",
       "storyboardGen": "Storyboard Generation",
       "textProcessing": "Text Processing",
@@ -541,9 +541,9 @@
     "layerSeparationGeneration": {
       "promptRequired": "Layer separation does not require a prompt",
       "apiKeyRequired": "Configure the selected Seedream 5.0 Pro provider API key first",
-      "resultTitle": "Layer Stack",
+      "resultTitle": "Multi-layer Image Document",
       "promptPlaceholder": "Optional: describe subjects or regions to prioritize",
-      "workbenchSummary": "Adjust layer order and opacity in the generated layer result node"
+      "workbenchSummary": "Continue editing layers and elements in the full image editor"
     },
     "upload": {
       "uploadedAlt": "Uploaded image",

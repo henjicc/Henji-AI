@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
 import {
-  applyLayerStackDraft,
   createStableLayerId,
   createStableLayerResourceId,
   createStableLayerStackId,
@@ -60,13 +59,5 @@ describe('layerStack V1', () => {
     expect(degraded.status).toBe('degraded');
     expect(degraded.layers).toHaveLength(2);
     expect(degraded.resources.find((item) => item.resourceId.endsWith(':1'))).toMatchObject({ status: 'missing', filePath: null });
-  });
-
-  it('草稿确认原子写入顺序、显隐和透明度，非法草稿不污染原文档', () => {
-    const source = document();
-    const next = applyLayerStackDraft(source, source.layers.map((layer) => ({ layerId: layer.layerId, visible: layer.role === 'base', opacity: layer.role === 'base' ? 1 : 0.4 })), source.layers.map((layer) => layer.layerId));
-    expect(next.layers[1]).toMatchObject({ visible: false, opacity: 0.4 });
-    expect(source.layers[1].opacity).toBe(1);
-    expect(() => applyLayerStackDraft(source, [], [])).toThrow(/不完整/);
   });
 });

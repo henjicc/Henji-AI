@@ -1,7 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { applyLayerStackDraft } from '../domain/layerStack';
-import { prepareLayerStackDocument, recomposeLayerStackDocument } from './layerStackApplicationService';
+import { prepareLayerStackDocument } from './layerStackApplicationService';
 
 const structuredOutput = {
   version: 1 as const,
@@ -43,15 +42,5 @@ describe('layerStackApplicationService', () => {
   it('未受管输出与合成数量错位均在文档创建前失败', async () => {
     await expect(prepareLayerStackDocument({ structuredOutput: { ...structuredOutput, outputs: [{ ...structuredOutput.outputs[0], filePath: undefined }] }, completionId: 'x', sourceNodeId: 's', inputResourceId: 'i', providerId: 'v', modelId: 'm', compose: vi.fn() })).rejects.toThrow(/受管落盘/);
     await expect(prepareLayerStackDocument({ structuredOutput, completionId: 'x', sourceNodeId: 's', inputResourceId: 'i', providerId: 'v', modelId: 'm', compose: async (payload) => ({ ...composed(), stackId: payload.stackId, resources: [] }) })).rejects.toThrow(/不一致/);
-  });
-
-  it('编辑草稿只在确认后重新合成并原子替换合成资源', async () => {
-    const first = await prepareLayerStackDocument({ structuredOutput, completionId: 'completion', sourceNodeId: 'source', inputResourceId: 'input', providerId: 'volcengine', modelId: 'seedream', compose: async (payload) => ({ ...composed(), stackId: payload.stackId }) });
-    const draft = applyLayerStackDraft(first, first.layers.map((layer) => ({ layerId: layer.layerId, visible: layer.role === 'base', opacity: layer.role === 'base' ? 1 : 0.4 })), first.layers.map((layer) => layer.layerId));
-    const compose = vi.fn(async (payload) => ({ ...composed('2'), stackId: payload.stackId }));
-    const next = await recomposeLayerStackDocument(draft, compose);
-    expect(compose.mock.calls[0]?.[0]).toMatchObject({ persistSourceLayers: false });
-    expect(next.resources.find((item) => item.resourceId === next.compositeResourceId)?.filePath).toContain('composite-2');
-    expect(first.layers[1]).toMatchObject({ visible: true, opacity: 1 });
   });
 });

@@ -165,12 +165,6 @@ test('人像质感有独立的工具条、节点、诚实文案与保存重开�
   assert.equal(scene.writesUserData, true)
 })
 
-test('图层拆分有独立的结果节点与节点外图层界面场景', () => {
-  const scene = UI_INSPECTION_SCENES.find((candidate) => candidate.id === 'canvas-layer-stack')
-  assert.ok(scene)
-  assert.equal(scene.writesUserData, true)
-})
-
 test('多图层图片文档有完整编辑、实时保存与关闭重开的真实场景', () => {
   const scene = UI_INSPECTION_SCENES.find(
     (candidate) => candidate.id === 'canvas-multi-layer-document-editor'
@@ -181,12 +175,20 @@ test('多图层图片文档有完整编辑、实时保存与关闭重开的真�
   for (const marker of [
     'data-layer-stack-status="editable-v3"',
     "result.dblclick()",
+    'firstOpenEvidence',
     'commandBars !== 1',
+    "capture?.('editor')",
     'persistedRevision',
     '关闭编辑器',
     'materializedPreviewSource',
     'persistedProjection',
     '显示.*背景图层',
+    'firstLegacyMigration',
+    'secondLegacyMigration',
+    'duplicateDocumentRef',
+    'forkIsolation',
+    'redoDocumentStillRecoverable',
+    'packageRoundTrip',
   ]) {
     assert.equal(source.includes(marker), true, `多图层图片文档 Reality 场景缺少关键验收：${marker}`)
   }

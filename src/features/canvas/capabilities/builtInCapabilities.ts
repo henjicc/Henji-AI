@@ -386,7 +386,7 @@ export const builtInCanvasImageCapabilities: readonly CanvasImageCapabilityDefin
     icon: 'layerSeparation',
     order: 80,
     source: IMAGE_SOURCE,
-    node: { kind: 'special-generation', editor: 'layers' },
+    node: { kind: 'special-generation', editor: 'standard' },
     implementation: {
       status: 'implemented',
       execution: { kind: 'canvas-node', nodeType: CANVAS_NODE_TYPES.layerSeparationGen },

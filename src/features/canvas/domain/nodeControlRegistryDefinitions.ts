@@ -81,12 +81,6 @@ const elementEditSpecialEditorDataSchema = z.object({
   localRedrawMaskDocument: z.record(z.string(), z.unknown()).nullable().optional(),
 }).strict()
 
-const layerStackSpecialEditorDataSchema = z.object({
-  layerStackDocument: z.record(z.string(), z.unknown()).optional(),
-  imageUrl: z.string().min(1).max(16 * 1024).nullable().optional(),
-  previewImageUrl: z.string().min(1).max(16 * 1024).nullable().optional(),
-  aspectRatio: z.string().min(1).max(40).optional(),
-}).strict()
 export interface CanvasNodeControlConfig {
   nodeType: CanvasNodeType
   title: string
@@ -331,11 +325,10 @@ export const nodeControlConfigs: CanvasNodeControlConfig[] = [
   },
   {
     nodeType: CANVAS_NODE_TYPES.layerStackResult,
-    title: '图层结果节点',
-    description: '展示并编辑已验证的版本化图层栈；媒体文件始终由受管资源引用。',
-    aliases: ['图层栈节点', '图层结果'],
+    title: '多图层图片文档节点',
+    description: '打开完整图片编辑器持续编辑多图层图片文档，并以最新合成图连接其他节点。',
+    aliases: ['多图层图片', '分层图片文档', '图层结果节点'],
     dataSchema: nodeDataBaseSchema.strict(),
-    specialEditorDataSchema: layerStackSpecialEditorDataSchema,
     aiDataSchema: {
       type: 'object',
       properties: { displayName: { type: 'string', maxLength: 120 } },

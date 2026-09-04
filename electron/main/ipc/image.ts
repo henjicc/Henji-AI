@@ -120,8 +120,6 @@ interface ReleaseLayerStackResourcesPayload {
   filePaths: string[]
 }
 
-const layerStackCompositionControllers = new Map<string, AbortController>()
-
 export function registerImageIpc(): void {
   registerIpcHandler<SplitImagePayload, string[]>('image:splitImage', parseSplitImagePayload, ({ imageBase64, rows, cols, lineThickness }) => {
     return splitImage(imageBase64, rows, cols, lineThickness)
@@ -193,23 +191,7 @@ export function registerImageIpc(): void {
     const bytes = await generateImageThumbnailBytes(source, maxSize)
     return { bytes }
   })
-  registerIpcHandler<ComposeLayerStackPayloadDto, Awaited<ReturnType<typeof composeLayerStack>>>('image:composeLayerStack', parseComposeLayerStackPayload, async (payload) => {
-    if (layerStackCompositionControllers.has(payload.requestId)) {
-      throw new Error(`图层栈合成请求重复：${payload.requestId}`)
-    }
-    const controller = new AbortController()
-    layerStackCompositionControllers.set(payload.requestId, controller)
-    try {
-      return await composeLayerStack(payload, controller.signal)
-    } finally {
-      if (layerStackCompositionControllers.get(payload.requestId) === controller) {
-        layerStackCompositionControllers.delete(payload.requestId)
-      }
-    }
-  })
-  registerIpcHandler<string, void>('image:cancelLayerStackComposition', (input) => parseStringField(input, 'requestId'), (requestId) => {
-    layerStackCompositionControllers.get(requestId)?.abort()
-  })
+  registerIpcHandler<ComposeLayerStackPayloadDto, Awaited<ReturnType<typeof composeLayerStack>>>('image:composeLayerStack', parseComposeLayerStackPayload, (payload) => composeLayerStack(payload))
   registerIpcHandler<ReleaseLayerStackResourcesPayload, void>('image:releaseLayerStackResources', (input) => {
     const record = parseRecord(input)
     return { filePaths: readStringArray(record, 'filePaths') }

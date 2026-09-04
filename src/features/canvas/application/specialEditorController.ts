@@ -38,7 +38,6 @@ const SPECIAL_EDITOR_KEYS = new Set<CanvasImageCapabilityEditorKind>([
   'relight',
   'multiAngle',
   'mask',
-  'layers',
   'gridSplit',
 ]);
 

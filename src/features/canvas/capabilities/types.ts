@@ -35,7 +35,6 @@ export type CanvasImageCapabilityEditorKind =
   | 'relight'
   | 'multiAngle'
   | 'mask'
-  | 'layers'
   | 'gridSplit';
 
 export type CanvasImageCapabilityNodeKind =

@@ -44,7 +44,6 @@ export function createImageVideoApis(nativeInvoke: NativeInvoke): {
     compressImageSource: (payload) => nativeInvoke('image:compressImageSource', payload),
     generateThumbnailBytes: (payload) => nativeInvoke('image:generateThumbnailBytes', payload),
     composeLayerStack: (payload) => nativeInvoke('image:composeLayerStack', payload),
-    cancelLayerStackComposition: (requestId) => nativeInvoke('image:cancelLayerStackComposition', { requestId }),
     releaseLayerStackResources: (filePaths) => nativeInvoke('image:releaseLayerStackResources', { filePaths }),
     releaseManagedGenerationMedia: (filePaths) => nativeInvoke('image:releaseManagedGenerationMedia', { filePaths }),
   }

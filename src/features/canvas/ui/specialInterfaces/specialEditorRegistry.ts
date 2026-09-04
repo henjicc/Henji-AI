@@ -42,11 +42,6 @@ editorDefinitions.set('mask', {
   component: lazy(() => import('./ElementEditSpecialEditor')),
 });
 
-editorDefinitions.set('layers', {
-  key: 'layers',
-  component: lazy(() => import('./layers/LayerStackSpecialEditor')),
-});
-
 /**
  * 专用编辑器只在运行时注册懒加载组件；能力声明始终只保存稳定 key。
  */

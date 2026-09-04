@@ -113,7 +113,16 @@ async function main() {
         let sceneFailed = false
         let sceneError = null
         try {
-          await scene.setup(app.page, app.app)
+          const capture = async (suffix) => {
+            if (!/^[a-z0-9-]+$/.test(suffix)) throw new Error(`截图后缀无效：${suffix}`)
+            const fileName = `${sizeLabel}-${scene.id}-${suffix}.png`
+            await app.page.screenshot({
+              path: path.join(outDir, fileName),
+              animations: 'disabled',
+            })
+            rows.push({ ...scene, name: `${scene.name}-${suffix}`, size: sizeLabel, file: fileName })
+          }
+          await scene.setup(app.page, app.app, { capture })
           const fileName = `${sizeLabel}-${scene.id}.png`
           await app.page.screenshot({
             path: path.join(outDir, fileName),

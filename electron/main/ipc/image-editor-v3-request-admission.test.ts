@@ -33,6 +33,24 @@ describe('图片编辑 V3 请求准入', () => {
     ticket.release()
   })
 
+  it('容纳多图层编辑器的合法组合并发，同时保留每发送方硬上限', () => {
+    const admission = new ImageEditorV3RequestAdmission()
+    const tickets = [
+      admission.admit('document.load', 'load', 5, 1),
+      admission.admit('source.pyramid_prewarm', 'prewarm', 5, 1),
+      admission.admit('raster_export.start', 'preview', 5, 1),
+      admission.admit('source.tile_batch', 'coarse', 5, 1),
+      admission.admit('source.tile_batch', 'target', 5, 1),
+      admission.admit('source.fast_proxy', 'proxy', 5, 1),
+    ]
+
+    expect(admission.getSnapshot()).toEqual({ activeRequests: 6, admittedBytes: 6 })
+    expect(() => admission.admit('document.load', 'seventh', 5, 1))
+      .toThrow('concurrency limit')
+    tickets.forEach((ticket) => ticket.release())
+    expect(admission.getSnapshot()).toEqual({ activeRequests: 0, admittedBytes: 0 })
+  })
+
   it('按 halo、位深和三份在途缓冲估算瓦片峰值', () => {
     expect(estimateImageEditorV3TileRequestBytes({ halo: 512, bitDepth: 32 }))
       .toBe(1_536 * 1_536 * 4 * 4 * 3)

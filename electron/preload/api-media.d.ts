@@ -241,7 +241,6 @@ export interface HenjiImageApi {
   }): Promise<{ fullPath: string; dataUrl: string }>
   generateThumbnailBytes(payload: { source: string; maxSize?: number }): Promise<{ bytes: Uint8Array }>
   composeLayerStack(payload: HenjiImageComposeLayerStackPayload): Promise<HenjiImageComposeLayerStackResult>
-  cancelLayerStackComposition(requestId: string): Promise<void>
   releaseLayerStackResources(filePaths: string[]): Promise<void>
   releaseManagedGenerationMedia(filePaths: string[]): Promise<void>
 }

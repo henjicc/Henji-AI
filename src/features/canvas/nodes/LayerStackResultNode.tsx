@@ -47,7 +47,10 @@ export const LayerStackResultNode = memo(({ id, data, selected, width, height }:
   const isEditableV3 = useMemo(() => isEditableMultiLayerDocumentNode(data), [data]);
   const composite = document?.resources.find((item) => item.resourceId === document.compositeResourceId);
   const thumbnail = document?.resources.find((item) => item.resourceId === document.thumbnailResourceId);
-  const preview = thumbnail?.filePath ?? composite?.filePath ?? data.previewImageUrl ?? data.imageUrl ?? null;
+  const legacyPreview = thumbnail?.filePath ?? composite?.filePath ?? null;
+  const preview = isEditableV3
+    ? data.previewImageUrl ?? data.imageUrl ?? null
+    : legacyPreview ?? data.previewImageUrl ?? data.imageUrl ?? null;
   const resolvedWidth = Math.max(240, typeof width === 'number' ? width : 300);
   const resolvedHeight = Math.max(180, typeof height === 'number' ? height : 220);
 
@@ -86,23 +89,22 @@ export const LayerStackResultNode = memo(({ id, data, selected, width, height }:
       <NodeHeader
         className={NODE_HEADER_FLOATING_POSITION_CLASS}
         icon={<ICON_NODE_ASSET_GROUP className="h-4 w-4" />}
-        titleText={data.displayName ?? '图层结果'}
+        titleText={data.displayName ?? '多图层图片文档'}
         editable
         onTitleChange={(displayName) => updateNodeData(id, { displayName })}
       />
       <div className="relative h-full w-full overflow-hidden rounded-[var(--node-radius)] bg-bg-dark">
         {preview ? (
-          <img src={resolveImageDisplayUrl(preview)} alt="图层合成预览" className="h-full w-full object-contain" />
+          <img src={resolveImageDisplayUrl(preview)} alt="多图层图片预览" className="h-full w-full object-contain" />
         ) : (
           <div className="flex h-full flex-col items-center justify-center gap-2 text-text-muted">
             <ICON_NODE_ASSET_GROUP className="h-8 w-8" />
-            <span className="text-xs">图层资源不可用</span>
+            <span className="text-xs">多图层图片暂不可用</span>
           </div>
         )}
-        {document && (
+        {document?.status === 'degraded' && !isEditableV3 && (
           <div className="absolute bottom-3 left-3 flex items-center gap-2 rounded-lg bg-overlay px-2.5 py-1.5 text-2xs text-text-soft">
-            <span>{document.layers.length} 层</span>
-            <span>{document.status === 'degraded' ? '资源缺失' : '由底到顶'}</span>
+            <span>部分图层资源缺失</span>
           </div>
         )}
         {(isEditableV3 || document) && (

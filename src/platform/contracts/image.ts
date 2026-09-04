@@ -278,7 +278,6 @@ export interface ImagePlatform {
   probeDiffusionFallback(): Promise<ImageDiffusionFallbackCapabilities>
   renderDiffusionFallback(request: ImageDiffusionFallbackRequest): Promise<ImageDiffusionFallbackResult>
   composeLayerStack(payload: ComposeLayerStackPayload): Promise<ComposeLayerStackResult>
-  cancelLayerStackComposition(requestId: string): Promise<void>
   releaseLayerStackResources(filePaths: string[]): Promise<void>
   releaseManagedGenerationMedia(filePaths: string[]): Promise<void>
 }

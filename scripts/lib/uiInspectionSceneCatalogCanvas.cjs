@@ -8,7 +8,6 @@ function createCanvasScenes(context) {
     setupCanvasUpscaleNode,
     setupCanvasPortraitTextureNode,
     setupCanvasElementEditNode,
-    setupCanvasLayerStack,
     setupCanvasMultiLayerDocumentEditor,
     setupCanvasNineGrid,
     setupCanvasPanoramaViewer,
@@ -77,13 +76,6 @@ function createCanvasScenes(context) {
       writesUserData: true,
       name: '画布-局部重绘节点内遮罩工作台',
       setup: setupCanvasElementEditNode,
-    },
-    {
-      id: 'canvas-layer-stack',
-      surface: '画布',
-      writesUserData: true,
-      name: '画布-图层结果节点与图层界面',
-      setup: setupCanvasLayerStack,
     },
     {
       id: 'canvas-multi-layer-document-editor',

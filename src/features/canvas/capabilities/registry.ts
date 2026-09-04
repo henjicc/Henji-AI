@@ -20,7 +20,6 @@ const EDITOR_KINDS: readonly CanvasImageCapabilityEditorKind[] = [
   'relight',
   'multiAngle',
   'mask',
-  'layers',
   'gridSplit',
 ];
 const SOURCE_MEDIA_TYPES = ['image', 'video', 'audio'] as const;

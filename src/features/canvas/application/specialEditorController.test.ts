@@ -58,7 +58,7 @@ describe('specialEditorController', () => {
 
   it('节点删除或项目切换时判定会话失效', () => {
     useCanvasSpecialEditorController.getState().open({
-      projectId: 'project-a', nodeId: 'node-a', editorKey: 'layers', initialState: {},
+      projectId: 'project-a', nodeId: 'node-a', editorKey: 'relight', initialState: {},
     });
     const session = useCanvasSpecialEditorController.getState().session;
     expect(session).not.toBeNull();

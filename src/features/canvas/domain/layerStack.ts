@@ -217,25 +217,6 @@ export function reconcileLayerStackMissingResources(
   return validateLayerStackDocument({ ...document, status: degraded ? 'degraded' : 'ready', resources });
 }
 
-export function applyLayerStackDraft(
-  document: LayerStackDocumentV1,
-  draftLayers: readonly Pick<LayerStackLayerV1, 'layerId' | 'visible' | 'opacity'>[],
-  orderedLayerIds: readonly string[],
-): LayerStackDocumentV1 {
-  const draftById = new Map(draftLayers.map((item) => [item.layerId, item]));
-  if (orderedLayerIds.length !== document.layers.length || new Set(orderedLayerIds).size !== document.layers.length) {
-    throw new LayerStackContractError('草稿层顺序不完整');
-  }
-  const byId = new Map(document.layers.map((layer) => [layer.layerId, layer]));
-  const layers = orderedLayerIds.map((layerId, order) => {
-    const layer = byId.get(layerId);
-    const draft = draftById.get(layerId);
-    if (!layer || !draft) throw new LayerStackContractError(`草稿缺少图层：${layerId}`);
-    return { ...layer, order, visible: draft.visible, opacity: draft.opacity };
-  });
-  return validateLayerStackDocument({ ...document, layers });
-}
-
 function requireString(value: unknown, field: string): string {
   if (typeof value !== 'string' || value.trim().length === 0) throw new LayerStackContractError(`${field} 不能为空`);
   return value.trim();
