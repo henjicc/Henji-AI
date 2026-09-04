@@ -101,10 +101,6 @@ export interface ImageEditorGpuSceneDiagnosticDeviceLossRequestV3 {
   recovery: 'success' | 'failure'
 }
 
-export interface ImageEditorGpuSceneDiagnosticInitializationFailureRequestV3 {
-  type: 'diagnostic-initialization-failure'
-}
-
 export type ImageEditorGpuSceneWorkerRequestV3 =
   | ImageEditorGpuSceneInitializeRequestV3
   | ImageEditorGpuSceneSyncRequestV3
@@ -115,7 +111,6 @@ export type ImageEditorGpuSceneWorkerRequestV3 =
   | ImageEditorGpuSceneRenderRequestV3
   | ImageEditorGpuSceneExportRequestV3
   | ImageEditorGpuSceneDiagnosticDeviceLossRequestV3
-  | ImageEditorGpuSceneDiagnosticInitializationFailureRequestV3
   | ImageEditorGpuSceneDisposeRequestV3
 
 interface ImageEditorGpuSceneEventBaseV3 {
@@ -195,6 +190,7 @@ export interface ImageEditorGpuSceneFailedEventV3 extends ImageEditorGpuSceneEve
   message: string
   recoverable: boolean
   diagnostic?: boolean
+  diagnostics?: { deviceAcquireCount: number; surfaceFrameCount: number }
 }
 
 export type ImageEditorGpuSceneWorkerEventV3 =
