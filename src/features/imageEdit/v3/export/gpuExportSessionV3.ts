@@ -8,19 +8,17 @@ import {
   IMAGE_EDITOR_GPU_SCENE_DIAGNOSTIC_EVENT_V3,
   type ImageEditorGpuSceneClientV3Like,
 } from '../gpu/imageEditorGpuSceneClientV3'
-import type { ImageEditorGpuSceneWorkerEventV3 } from '../gpu/imageEditorGpuSceneProtocolV3'
-import type { ImageEditorRenderSnapshotV3 } from '../execution/imageEditorRenderSessionContractsV3'
 import type {
-  ImageEditorV3ExportRenderDependencies,
-  ImageEditorV3ExportTileStream,
-  RenderImageEditorV3ExportTilesRequest,
-} from './contracts'
+  ImageEditorGpuSceneExportRequestV3,
+  ImageEditorGpuSceneWorkerEventV3,
+} from '../gpu/imageEditorGpuSceneProtocolV3'
+import type { ImageEditorRenderSnapshotV3 } from '../execution/imageEditorRenderSessionContractsV3'
+import type { ImageEditorV3ExportTileStream, RenderImageEditorV3ExportTilesRequest } from './contracts'
 import { createImageEditorGpuExportPlanV3 } from './gpuExportPlanV3'
-import { renderImageEditorV3ExportTiles } from './renderExportTilesV3'
 import { createLogger } from '@/core/logging'
 
 const nodeRegistry = createBuiltInImageEditRenderNodeRegistry()
-const sessions = new Map<string, ImageEditorGpuExportSessionV3>()
+const sessions = new Map<string, Set<ImageEditorGpuExportSessionV3>>()
 const logger = createLogger('features.image_edit.v3.gpu_export')
 
 interface ActiveExportV3 {
@@ -31,6 +29,9 @@ interface ActiveExportV3 {
   completed: boolean
   cancelSent: boolean
   diagnostics: Extract<ImageEditorGpuSceneWorkerEventV3, { type: 'export-tile' }>['diagnostics']
+  request: ImageEditorGpuSceneExportRequestV3
+  started: boolean
+  diagnosticFailureAfterTiles: number | null
 }
 
 /** 将现有 GPU Scene 会话暴露给导出入口；不创建第二个 Worker/device。 */
@@ -39,6 +40,8 @@ export class ImageEditorGpuExportSessionV3 {
   private registryKey: string | null = null
   private active: ActiveExportV3 | null = null
   private readonly diagnosticEventListener: EventListener | null
+  private deviceReady = false
+  private diagnosticFailureAfterTiles: number | null = null
 
   constructor(
     private readonly client: ImageEditorGpuSceneClientV3Like | null,
@@ -46,9 +49,17 @@ export class ImageEditorGpuExportSessionV3 {
   ) {
     this.diagnosticEventListener = diagnosticRenderingEnabled
       ? ((event) => {
-          const detail = (event as CustomEvent<{ exportProbe?: unknown }>).detail
-          if (detail?.exportProbe !== true) return
-          void this.runDiagnosticExportProbe().catch(() => undefined)
+          const detail = (event as CustomEvent<{
+            exportProbe?: unknown
+            failNextExportAfterTiles?: unknown
+          }>).detail
+          const failureTileCount = detail?.failNextExportAfterTiles
+          if (Number.isSafeInteger(failureTileCount) && Number(failureTileCount) > 0) {
+            this.diagnosticFailureAfterTiles = Number(failureTileCount)
+          }
+          if (detail?.exportProbe === true) {
+            void this.runDiagnosticExportProbe().catch(() => undefined)
+          }
         })
       : null
     if (this.diagnosticEventListener) {
@@ -61,7 +72,19 @@ export class ImageEditorGpuExportSessionV3 {
     this.failActive(new Error('GPU Scene 文档版本已变化'))
     this.snapshot = snapshot
     this.registryKey = key(snapshot.document.id, snapshot.document.revision)
-    sessions.set(this.registryKey, this)
+    const registered = sessions.get(this.registryKey) ?? new Set<ImageEditorGpuExportSessionV3>()
+    registered.add(this)
+    sessions.set(this.registryKey, registered)
+  }
+
+  notifyDeviceReady(): void {
+    this.deviceReady = true
+    if (this.active) this.startActive(this.active)
+  }
+
+  notifyDeviceUnavailable(error: Error): void {
+    this.deviceReady = false
+    this.failActive(error)
   }
 
   handleEvent(event: ImageEditorGpuSceneWorkerEventV3): boolean {
@@ -113,22 +136,22 @@ export class ImageEditorGpuExportSessionV3 {
       completed: false,
       cancelSent: false,
       diagnostics: undefined,
+      started: false,
+      diagnosticFailureAfterTiles: this.diagnosticFailureAfterTiles,
+      request: {
+        type: 'export', requestId, sceneGeneration: snapshot.renderGeneration,
+        quality: 'export', description: request.description, outputTiles: output.tiles,
+        multiscaleAnalysis: output.multiscaleAnalysis,
+      },
     }
+    this.diagnosticFailureAfterTiles = null
     this.active = active
     logger.info('开始图片编辑 GPU 分块导出', {
       event: 'image_editor_v3.gpu_export.started', requestId,
       context: { documentId: request.document.id, revision: request.document.revision,
         tileCount: output.tiles.length, multiscale: Boolean(output.multiscaleAnalysis) },
     })
-    this.client.requestExport({
-      type: 'export',
-      requestId,
-      sceneGeneration: snapshot.renderGeneration,
-      quality: 'export',
-      description: request.description,
-      outputTiles: output.tiles,
-      multiscaleAnalysis: output.multiscaleAnalysis,
-    })
+    if (this.deviceReady) this.startActive(active)
     return this.stream(active, request)
   }
 
@@ -175,13 +198,23 @@ export class ImageEditorGpuExportSessionV3 {
           Math.floor(tile.x / (request.tileSize ?? 512)),
           Math.floor(tile.y / (request.tileSize ?? 512)),
         )
+        if (active.diagnosticFailureAfterTiles !== null
+          && completed >= active.diagnosticFailureAfterTiles) {
+          throw new Error('Reality 注入：GPU 导出首批瓦片后失败')
+        }
         if (active.completed && active.events.length === 0) { drained = true; return }
       }
     } catch (error) {
-      logger.error('图片编辑 GPU 分块导出失败', error instanceof Error ? error : new Error(String(error)), {
+      const failure = error instanceof Error ? error : new Error(String(error))
+      const logDetails = {
         event: 'image_editor_v3.gpu_export.failed', requestId: active.requestId,
         context: { completedTiles: completed },
-      })
+      }
+      if (failure.message.startsWith('Reality 注入：')) {
+        logger.warn('图片编辑 GPU 分块导出已执行 Reality 故障注入', logDetails)
+      } else {
+        logger.error('图片编辑 GPU 分块导出失败', failure, logDetails)
+      }
       throw error
     } finally {
       request.signal?.removeEventListener('abort', abort)
@@ -237,6 +270,12 @@ export class ImageEditorGpuExportSessionV3 {
     this.cancelWorker(active)
   }
 
+  private startActive(active: ActiveExportV3): void {
+    if (this.active !== active || active.cancelSent || active.started) return
+    active.started = true
+    this.client?.requestExport?.(active.request)
+  }
+
   private wake(active: ActiveExportV3): void {
     active.wake?.()
     active.wake = null
@@ -249,19 +288,24 @@ export class ImageEditorGpuExportSessionV3 {
   }
 
   private unregister(): void {
-    if (this.registryKey && sessions.get(this.registryKey) === this) sessions.delete(this.registryKey)
+    if (this.registryKey) {
+      const registered = sessions.get(this.registryKey)
+      registered?.delete(this)
+      if (registered?.size === 0) sessions.delete(this.registryKey)
+    }
     this.registryKey = null
   }
 }
 
-/** 生产导出优先复用活动 GPU Scene；无活动会话或测试注入时保持既有 CPU 合同。 */
-export function renderImageEditorV3ExportTilesWithGpu(
+/** 尝试复用已登记且与导出 RenderGraph 完全相同的 GPU Scene。 */
+export function renderImageEditorV3ExportTilesFromActiveGpuScene(
   request: RenderImageEditorV3ExportTilesRequest,
-  dependencies: ImageEditorV3ExportRenderDependencies = {},
-): ImageEditorV3ExportTileStream {
-  const injected = Object.keys(dependencies).length > 0
-  const gpu = injected ? null : sessions.get(key(request.document.id, request.document.revision))?.render(request)
-  return gpu ?? renderImageEditorV3ExportTiles(request, dependencies)
+): ImageEditorV3ExportTileStream | null {
+  for (const session of sessions.get(key(request.document.id, request.document.revision)) ?? []) {
+    const stream = session.render(request)
+    if (stream) return stream
+  }
+  return null
 }
 
 function key(documentId: string, revision: number): string {

@@ -100,6 +100,33 @@ describe('GPU RenderGraph 完整图层语义（真实 WebGPU）', () => {
   })
 
   it.each([
+    ['直接卷积', 4],
+    ['金字塔卷积', 40],
+  ] as const)('gaussian blur %s保持CPU线性真值', async (_label, radius) => {
+    const document = baseDocument(`gaussian-${radius}`)
+    document.layers = [
+      raster(111, '源'),
+      createImageEditEffectLayerV3(
+        `gaussian-${radius}`, '高斯模糊', 'image.gaussian-blur-v2', { radius },
+      ),
+    ]
+    const result = await compareDocument(document, tiles([111]))
+    expect(globalSsim(result.reference, result.candidate)).toBeGreaterThanOrEqual(0.999)
+  })
+
+  it('legacy blur-v1保持CPU感知域与120px封顶真值', async () => {
+    const document = baseDocument('legacy-gaussian')
+    document.layers = [
+      raster(112, '源'),
+      createImageEditEffectLayerV3('legacy-gaussian', '旧版模糊', 'image.blur', {
+        radiusPixels: 160,
+      }),
+    ]
+    const result = await compareDocument(document, tiles([112]))
+    expect(globalSsim(result.reference, result.candidate)).toBeGreaterThanOrEqual(0.999)
+  })
+
+  it.each([
     ['小图/最小值', 16, 12, 0],
     ['小图/默认值', 16, 12, 12],
     ['小图/最大值', 16, 12, 1000],
@@ -178,6 +205,44 @@ describe('GPU RenderGraph 完整图层语义（真实 WebGPU）', () => {
     expect(result.thirdStats!.invalidatedGraphNodeCount! - result.secondStats.invalidatedGraphNodeCount!).toBe(1)
     expect(result.thirdStats!.graphCacheHitCount! - result.secondStats.graphCacheHitCount!).toBeGreaterThanOrEqual(1)
     expect(result.thirdCandidate).not.toEqual(result.candidate)
+  })
+
+  it('完全移出当前导出tile的图层按透明源合成，不把合法空瓦片误判为GPU失败', async () => {
+    const document = baseDocument('offscreen-source-is-transparent')
+    const offscreen = raster(82, '离屏层')
+    offscreen.transform = [1, 0, 0, 1, WIDTH * 3, HEIGHT * 2]
+    document.layers = [
+      raster(81, '底图'),
+      offscreen,
+      adjustment('offscreen-exposure', { stops: 0.1, offset: 0, gamma: 1 }),
+    ]
+    assertBlendTolerance(await compareDocument(document, tiles([81, 82])))
+  })
+
+  it('当前视口内本应可见但尚未上传的源仍进入missingResources', () => {
+    const document = baseDocument('visible-source-still-needs-upload')
+    document.layers = [raster(83, '可见源'), adjustment('visible-adjustment', {
+      stops: 0.1, offset: 0, gamma: 1,
+    })]
+    const descriptor = tiles([83]).get(ref(83))!
+    const compilation = compileImageEditorGpuRasterSceneV3(document, [{
+      resourceRef: descriptor.resourceRef,
+      byteLength: descriptor.pixels.byteLength,
+      mediaType: 'image/png',
+    }])
+    expect(compilation.supported).toBe(true)
+    if (!compilation.supported) throw new Error(compilation.reason)
+    const compositor = new ImageEditorGpuRasterCompositorV3(gpu)
+    compositor.syncScene(compilation.scene)
+    compositor.updateViewport({
+      stageWidth: WIDTH, stageHeight: HEIGHT, viewportKey: 'visible-missing-source',
+      viewport: {
+        documentX: 0, documentY: 0, width: WIDTH, height: HEIGHT,
+        zoom: 1, devicePixelRatio: 1,
+      },
+    })
+    expect(compositor.missingResources(() => null)).toHaveLength(1)
+    compositor.dispose()
   })
 
   it('裁剪、90度orientation与镜像的呈现坐标逐像素匹配CPU映射', async () => {

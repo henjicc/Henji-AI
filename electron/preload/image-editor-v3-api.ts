@@ -130,6 +130,7 @@ export function createImageEditorV3Api(
     startRasterExport: (request) => nativeInvoke('imageEditorV3:rasterExport:start', request),
     startManagedRasterExport: (request) => nativeInvoke('imageEditorV3:rasterExport:startManaged', request),
     writeRasterExportTile: (request) => nativeInvoke('imageEditorV3:rasterExport:writeTile', request),
+    restartRasterExport: (request) => nativeInvoke('imageEditorV3:rasterExport:restart', request),
     completeRasterExport: (request) => nativeInvoke('imageEditorV3:rasterExport:complete', request),
     completeManagedRasterExport: (request) => nativeInvoke('imageEditorV3:rasterExport:completeManaged', request),
     cancelRasterExport: (request) => nativeInvoke('imageEditorV3:rasterExport:cancel', request),

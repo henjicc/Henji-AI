@@ -24,6 +24,8 @@ function compactLogEvent(event) {
     taskId: event.taskId,
     modelId: event.modelId,
     providerId: event.providerId,
+    context: event.context,
+    error: event.error,
     truncatedByLimit: event.truncatedByLimit,
   }
 }

@@ -28,6 +28,7 @@ type ManagedStartRequest = Omit<StartRasterExportSessionRequest, 'targetPath'> &
 
 export interface ManagedRasterSessionPort {
   start(request: StartRasterExportSessionRequest): Promise<RasterExportSessionStartResult>
+  restart(ownerId: number, sessionId: string): Promise<RasterExportSessionStartResult>
   complete(ownerId: number, sessionId: string): Promise<RasterExportSessionResult>
   cancel(ownerId: number, sessionId: string, reason?: string): Promise<boolean>
 }
@@ -70,6 +71,7 @@ function outputPresentation(format: RasterExportFormat): { extension: string; me
 
 export class ManagedRasterMaterializer {
   private readonly sessions = new Map<string, ManagedSession>()
+  private readonly restarts = new Map<string, Promise<RasterExportSessionStartResult>>()
   private initialization: Promise<void> | null = null
 
   constructor(
@@ -169,6 +171,11 @@ export class ManagedRasterMaterializer {
   }
 
   async cancel(ownerId: number, sessionId: string, reason = 'requested'): Promise<boolean> {
+    const restarting = this.restarts.get(sessionId)
+    if (restarting) {
+      const restarted = await restarting
+      return this.cancel(ownerId, restarted.sessionId, reason)
+    }
     const session = this.sessions.get(sessionId)
     if (session && session.ownerId !== ownerId) {
       throw new Error('Managed raster session belongs to another renderer')
@@ -178,6 +185,32 @@ export class ManagedRasterMaterializer {
     } finally {
       this.sessions.delete(sessionId)
       if (session) await fsp.rm(session.targetPath, { force: true }).catch(() => undefined)
+    }
+  }
+
+  async restart(ownerId: number, sessionId: string): Promise<RasterExportSessionStartResult> {
+    const inFlight = this.restarts.get(sessionId)
+    if (inFlight) return inFlight
+    const session = this.getOwned(sessionId, ownerId)
+    const operation = (async () => {
+      try {
+        const restarted = await this.manager.restart(ownerId, sessionId)
+        this.sessions.delete(sessionId)
+        this.sessions.set(restarted.sessionId, session)
+        return restarted
+      } catch (error) {
+        await this.manager.cancel(ownerId, sessionId, 'render_backend_restart_failed')
+          .catch(() => undefined)
+        this.sessions.delete(sessionId)
+        await fsp.rm(session.targetPath, { force: true }).catch(() => undefined)
+        throw error
+      }
+    })()
+    this.restarts.set(sessionId, operation)
+    try {
+      return await operation
+    } finally {
+      this.restarts.delete(sessionId)
     }
   }
 

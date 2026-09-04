@@ -1,12 +1,14 @@
+const { openCanvasImageEditorV3Fixture } = require('./uiInspectionCanvasImageEditorV3.cjs')
+
 function createGpuExportScenes(context) {
-  const { settlePage, clickNamedButton, setupToolbox } = context
+  const { settlePage } = context
 
   return [{
     id: 'image-editor-gpu-export',
-    surface: '工具箱',
-    name: '图片编辑器-GPU分块导出',
+    surface: '画布',
+    name: '画布节点-图片编辑器分块导出',
     writesUserData: true,
-    setup: async (page) => {
+    setup: async (page, _app, inspection) => {
       const startedAt = new Date().toISOString()
       const waitForLogEvent = async (domainPrefix, accept, message, afterTimestamp = startedAt) => {
         const deadline = Date.now() + 60000
@@ -26,61 +28,9 @@ function createGpuExportScenes(context) {
         throw new Error(message)
       }
 
-      await setupToolbox(page)
-      await clickNamedButton(page, /^(图片编辑|Image Edit)/i)
-      const host = page.locator('[data-application-surface-id="tool.image_edit"]:visible')
-      await host.waitFor({ state: 'visible', timeout: 12000 })
-      const dropTarget = host.locator('.border-dashed').first()
-      const editor = host.locator('[data-image-editor-v3]')
-      await Promise.race([
-        dropTarget.waitFor({ state: 'visible', timeout: 12000 }),
-        editor.waitFor({ state: 'visible', timeout: 12000 }),
-      ])
-      const previousEditor = await editor.isVisible() ? await editor.elementHandle() : null
-      const importTarget = previousEditor ? editor : dropTarget
-      await importTarget.evaluate(async (element) => {
-        const canvas = document.createElement('canvas')
-        canvas.width = 1600
-        canvas.height = 1000
-        const drawing = canvas.getContext('2d')
-        if (!drawing) throw new Error('GPU 导出 Reality 夹具画布不可用')
-        const gradient = drawing.createLinearGradient(0, 0, canvas.width, canvas.height)
-        gradient.addColorStop(0, 'rgb(14, 116, 144)')
-        gradient.addColorStop(0.5, 'rgb(124, 58, 237)')
-        gradient.addColorStop(1, 'rgb(244, 63, 94)')
-        drawing.fillStyle = gradient
-        drawing.fillRect(0, 0, canvas.width, canvas.height)
-        drawing.fillStyle = 'rgba(255, 255, 255, 0.72)'
-        drawing.beginPath()
-        drawing.arc(520, 500, 260, 0, Math.PI * 2)
-        drawing.fill()
-        drawing.fillStyle = 'rgba(15, 23, 42, 0.68)'
-        drawing.fillRect(920, 180, 430, 640)
-        const blob = await new Promise((resolve, reject) => canvas.toBlob(
-          (value) => value ? resolve(value) : reject(new Error('GPU 导出 Reality 夹具编码失败')),
-          'image/png',
-        ))
-        const transfer = new DataTransfer()
-        transfer.items.add(new File([blob], 'gpu-export-1600x1000.png', { type: 'image/png' }))
-        element.dispatchEvent(new DragEvent('drop', {
-          bubbles: true,
-          cancelable: true,
-          dataTransfer: transfer,
-        }))
+      const { dialog, editor } = await openCanvasImageEditorV3Fixture({
+        page, context, width: 1600, height: 1000, label: '分块导出文档',
       })
-      if (previousEditor) {
-        await page.waitForFunction((element) => !element.isConnected, previousEditor, { timeout: 60000 })
-      }
-      const bootstrap = await waitForLogEvent(
-        'features.imageMark.v3_host',
-        (event) => event.event === 'image_editor_v3.toolbox.bootstrap.completed'
-          || event.event === 'image_editor_v3.toolbox.bootstrap.failed',
-        '等待 GPU 导出 Reality 源导入日志超时',
-      )
-      if (bootstrap.event === 'image_editor_v3.toolbox.bootstrap.failed') {
-        throw new Error(`GPU 导出 Reality 源导入失败：${JSON.stringify(bootstrap)}`)
-      }
-      await editor.waitFor({ state: 'visible', timeout: 60000 })
       const initialFrame = await waitForLogEvent(
         'features.image_edit.v3.gpu_scene_bridge',
         (event) => event.event === 'image_editor_v3.gpu_scene.hidden_frame_ready'
@@ -162,6 +112,99 @@ function createGpuExportScenes(context) {
         previewBackend: ui.backend,
       })}\n`)
       await settlePage(page, 600)
+      await inspection?.capture?.('editor')
+    },
+  }, {
+    id: 'image-editor-gpu-export-transactional-fallback',
+    surface: '画布',
+    name: '画布节点-图片编辑器导出原子回退',
+    writesUserData: true,
+    setup: async (page, _app, inspection) => {
+      const startedAt = new Date().toISOString()
+      const { dialog, editor, fixture } = await openCanvasImageEditorV3Fixture({
+        page, context, width: 1024, height: 640, label: '导出故障重试文档',
+      })
+      const node = page.locator(`[data-layer-stack-node-id="${fixture.nodeId}"]`)
+      const initialPreview = await node.locator('img[alt="多图层图片预览"]').getAttribute('src')
+      await page.waitForFunction(() => (
+        document.querySelector('[data-preview-surface]')
+          ?.getAttribute('data-preview-presentation-backend') === 'webgpu-surface'
+      ), undefined, { timeout: 30000 })
+
+      await page.evaluate(() => window.dispatchEvent(new CustomEvent(
+        'henji:image-editor-gpu-scene-diagnostic',
+        { detail: { failNextExportAfterTiles: 1 } },
+      )))
+      await editor.getByRole('button', {
+        name: /隐藏.*导出故障重试文档|Hide.*export retry document/i,
+      }).click()
+      await editor.getByRole('button', {
+        name: /显示.*导出故障重试文档|Show.*export retry document/i,
+      }).click()
+      await dialog.getByRole('button', { name: /关闭编辑器|Close editor/i }).click()
+      await dialog.waitFor({ state: 'hidden', timeout: 60000 })
+
+      const deadline = Date.now() + 60000
+      let evidence = null
+      while (!evidence && Date.now() < deadline) {
+        evidence = await page.evaluate(async ({ afterTimestamp }) => {
+          const result = await window.henjiNative.logging.queryLogEvents({
+            date: new Date().toISOString().slice(0, 10),
+            afterTimestamp,
+            limit: 500,
+          })
+          const failures = result.events.filter((event) => (
+            event.event === 'image_editor_v3.gpu_export.failed'
+            && Number(event.context?.completedTiles) === 1
+          ))
+          const retryRequests = result.events.filter((event) => (
+            event.event === 'image_editor_v3.gpu_export.cpu_retry_requested'
+          ))
+          const backendRetries = result.events.filter((event) => (
+            event.event === 'image_editor_v3.raster_export.backend_retry'
+          ))
+          const starts = result.events.filter((event) => (
+            event.event === 'image_editor_v3.raster_export.session.started'
+          ))
+          const discarded = result.events.filter((event) => (
+            event.event === 'image_editor_v3.raster_export.session.cancelled'
+            && event.context?.reason === 'render_backend_retry'
+          ))
+          const published = result.events.filter((event) => (
+            event.event === 'image_editor_v3.managed_raster.completed'
+          ))
+          if (failures.length !== 1 || retryRequests.length !== 1
+            || backendRetries.length !== 1 || starts.length !== 2
+            || discarded.length !== 1 || published.length !== 1) return null
+          return {
+            failedTiles: failures[0]?.context?.completedTiles,
+            retryCount: backendRetries.length,
+            sessionIds: starts.map((event) => event.requestId),
+            discardedSessionId: discarded[0]?.requestId,
+            publishedSessionId: published[0]?.requestId,
+          }
+        }, { afterTimestamp: startedAt })
+        if (!evidence) await page.waitForTimeout(100)
+      }
+      if (!evidence
+        || evidence.sessionIds.length !== 2
+        || evidence.sessionIds[0] === evidence.sessionIds[1]
+        || evidence.discardedSessionId === evidence.publishedSessionId
+        || !evidence.sessionIds.includes(evidence.discardedSessionId)
+        || !evidence.sessionIds.includes(evidence.publishedSessionId)) {
+        throw new Error(`GPU导出失败后没有原子重启完整CPU会话：${JSON.stringify(evidence)}`)
+      }
+
+      await page.waitForFunction(({ selector, previous }) => {
+        const image = document.querySelector(`${selector} img[alt="多图层图片预览"]`)
+        return image instanceof HTMLImageElement && image.getAttribute('src') !== previous
+      }, {
+        selector: `[data-layer-stack-node-id="${fixture.nodeId}"]`,
+        previous: initialPreview,
+      }, { timeout: 30000 })
+      process.stdout.write(`  GPU导出原子CPU重启：${JSON.stringify(evidence)}\n`)
+      await settlePage(page, 600)
+      await inspection?.capture?.('canvas')
     },
   }]
 }

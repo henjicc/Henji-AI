@@ -235,7 +235,7 @@ export class ImageEditorGpuRasterPipelineV3 implements ImageEditorGpuRasterCompo
     acceptsSurfaceSubmit: () => boolean,
   ): Promise<ImageEditorGpuRasterFrameV3> {
     return await this.enqueueFrame(async () => {
-      const output = await this.compose(resolve)
+      const output = await this.compose(resolve, false)
       this.reportedError = null
       const presentation = await this.presentation.render(
         output,
@@ -317,7 +317,7 @@ export class ImageEditorGpuRasterPipelineV3 implements ImageEditorGpuRasterCompo
   }
   private async compose(resolve: (
     key: ImageEditorGpuSceneTileKeyV3,
-  ) => ImageEditorGpuRasterTextureV3 | null): Promise<Target> {
+  ) => ImageEditorGpuRasterTextureV3 | null, awaitCompletion = true): Promise<Target> {
     this.assertUsable()
     if (!this.scene || !this.layout) throw new Error('GPU Scene 缺少场景或视口')
     const missing = this.missingResources(resolve)
@@ -348,11 +348,13 @@ export class ImageEditorGpuRasterPipelineV3 implements ImageEditorGpuRasterCompo
       this.reportedError = null
       const output = await this.graph.execute(
         resolve, sourcePlans, maskPlans, effectViewport.layout, this.layout,
-        effectViewport.cropOffset, this.effectRecipeSize ?? undefined,
+        effectViewport.cropOffset, this.effectRecipeSize ?? undefined, awaitCompletion,
       )
       if (!output) throw new Error('GPU RenderGraph 没有可呈现输出')
-      await this.gpu.settled()
-      this.throwReportedError()
+      if (awaitCompletion) {
+        await this.gpu.settled()
+        this.throwReportedError()
+      }
       this.stats.frameCount += 1
       return output
     }
@@ -384,9 +386,11 @@ export class ImageEditorGpuRasterPipelineV3 implements ImageEditorGpuRasterCompo
         }
       })
     })
-    await submitted.done
-    await this.gpu.settled()
-    this.throwReportedError()
+    if (awaitCompletion) {
+      await submitted.done
+      await this.gpu.settled()
+      this.throwReportedError()
+    }
     this.stats.frameCount += 1
     return this.output
   }

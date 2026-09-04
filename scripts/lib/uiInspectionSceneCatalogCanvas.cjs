@@ -9,6 +9,7 @@ function createCanvasScenes(context) {
     setupCanvasPortraitTextureNode,
     setupCanvasElementEditNode,
     setupCanvasMultiLayerDocumentEditor,
+    setupCanvasGpuFiveLayerPerformance,
     setupCanvasNineGrid,
     setupCanvasPanoramaViewer,
     setupCanvasMidjourneyNode,
@@ -76,6 +77,13 @@ function createCanvasScenes(context) {
       writesUserData: true,
       name: '画布-局部重绘节点内遮罩工作台',
       setup: setupCanvasElementEditNode,
+    },
+    {
+      id: 'canvas-gpu-five-layer-performance',
+      surface: '画布',
+      writesUserData: true,
+      name: '画布-固定KIE五层GPU拖动基准',
+      setup: setupCanvasGpuFiveLayerPerformance,
     },
     {
       id: 'canvas-multi-layer-document-editor',

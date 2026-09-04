@@ -20,6 +20,7 @@ interface ImageEditorRasterPasteboardPresentationV3Options {
   displayRevision: number
   stablePreviewDocumentId: string | null
   stablePreviewRevision: number | null
+  gpuPresentationActive: boolean
 }
 
 interface ImageEditorRasterPasteboardPresentationV3 {
@@ -41,6 +42,7 @@ export function useImageEditorRasterPasteboardPresentationV3({
   displayRevision,
   stablePreviewDocumentId,
   stablePreviewRevision,
+  gpuPresentationActive,
 }: ImageEditorRasterPasteboardPresentationV3Options): ImageEditorRasterPasteboardPresentationV3 {
   const stableDisplayRef = useRef<HTMLDivElement | null>(null)
   const stableDisplayReady = stablePreviewDocumentId === displayDocumentId
@@ -53,6 +55,7 @@ export function useImageEditorRasterPasteboardPresentationV3({
     resourceDescriptors,
     stableDisplayRef,
     stableDisplayReady,
+    gpuPresentationActive,
   )
   const {
     alwaysVisible,

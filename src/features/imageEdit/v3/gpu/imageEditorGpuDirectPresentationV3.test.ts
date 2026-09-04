@@ -107,18 +107,21 @@ describe('ImageEditorGpuRasterPresentationV3', () => {
     const first = await presentation.render(
       output(), createDefaultImageEditColorModeV3(), 1, () => true,
     )
+    await Promise.resolve()
     const second = await presentation.render(
       output(), createDefaultImageEditColorModeV3(), 1, () => true,
     )
 
     expect(first).toMatchObject({
+      kind: 'webgpu-surface', surfaceGeneration: 1,
+    })
+    expect(second).toMatchObject({
       kind: 'gpu-image-bitmap', surfaceGeneration: 1,
       surfaceFailureReason: 'surface submit failed',
     })
-    expect(second).toMatchObject({ kind: 'gpu-image-bitmap', surfaceGeneration: 1 })
     expect(vgpuMocks.surfaces.map((entry) => entry.kind)).toEqual(['direct', 'bitmap'])
     expect(vgpuMocks.surfaces[0].dispose).toHaveBeenCalledOnce()
-    expect(vgpuMocks.transferToImageBitmap).toHaveBeenCalledTimes(2)
+    expect(vgpuMocks.transferToImageBitmap).toHaveBeenCalledOnce()
     expect(vgpuMocks.target).not.toHaveBeenCalled()
     presentation.dispose()
   })

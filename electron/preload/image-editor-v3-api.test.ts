@@ -242,6 +242,7 @@ describe('图片编辑 V3 preload 契约', () => {
     }
 
     await api.startManagedRasterExport(request)
+    await api.restartRasterExport({ sessionId: 'managed-session' })
     await api.completeManagedRasterExport({ sessionId: 'managed-session' })
 
     expect(invoke).toHaveBeenNthCalledWith(
@@ -251,6 +252,11 @@ describe('图片编辑 V3 preload 契约', () => {
     )
     expect(invoke).toHaveBeenNthCalledWith(
       2,
+      'imageEditorV3:rasterExport:restart',
+      { sessionId: 'managed-session' },
+    )
+    expect(invoke).toHaveBeenNthCalledWith(
+      3,
       'imageEditorV3:rasterExport:completeManaged',
       { sessionId: 'managed-session' },
     )

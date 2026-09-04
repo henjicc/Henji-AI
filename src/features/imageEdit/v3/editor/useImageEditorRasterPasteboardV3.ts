@@ -166,6 +166,7 @@ export function useImageEditorRasterPasteboardV3(
   resourceDescriptors: readonly ImageEditorV3ResourceDescriptor[],
   stableDisplayRef: RefObject<HTMLDivElement>,
   resourcePreparationReady = true,
+  gpuPresentationActive = false,
 ): ImageEditorRasterPasteboardV3State {
   const rootRef = useRef<HTMLDivElement | null>(null)
   const feedbackRefs = useRef(new Map<string, HTMLDivElement>())
@@ -361,7 +362,7 @@ export function useImageEditorRasterPasteboardV3(
     && readyState.identity === sourceIdentity
     && entries.length > 0
     && entries.every((entry) => readyState.layerIds.has(entry.layer.id))
-  const alwaysVisible = Boolean(singleLayer)
+  const alwaysVisible = Boolean(singleLayer) && !gpuPresentationActive
 
   const bindLayerFeedbackRef = useCallback((layerId: string) => {
     const existing = feedbackRefBinders.current.get(layerId)

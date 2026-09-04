@@ -81,7 +81,8 @@ export interface ImageEditorGpuGraphAdjustmentNodeV3 extends ImageEditorGpuGraph
 export interface ImageEditorGpuGraphEffectNodeV3 extends ImageEditorGpuGraphNodeBaseV3 {
   kind: 'effect'
   inputNodeId: string
-  definitionId: 'effect.fast-blur' | 'effect.diffusion' | 'effect.vgpu-glow'
+  definitionId: 'effect.blur-v1' | 'effect.gaussian-blur'
+    | 'effect.fast-blur' | 'effect.diffusion' | 'effect.vgpu-glow'
   parameters: ImageEditJsonObjectV3
   opacity: number
   blendMode: ImageEditBlendModeV3
@@ -247,7 +248,9 @@ function compileNode(
       adjustments: [adjustment(node, descriptors, required)],
     }
   }
-  if (node.definitionId === 'effect.fast-blur'
+  if (node.definitionId === 'effect.blur-v1'
+    || node.definitionId === 'effect.gaussian-blur'
+    || node.definitionId === 'effect.fast-blur'
     || node.definitionId === 'effect.diffusion'
     || node.definitionId === 'effect.vgpu-glow') {
     const mask = compileMask(node.mask, descriptors, required)
@@ -259,7 +262,7 @@ function compileNode(
       opacity: numberParameter(node, 'opacity', 1), blendMode: blendParameter(node), mask,
     }
   }
-  return `图层 ${node.layerId} 的 ${node.definitionId} 由 3.2 接入，当前自动回退 CPU`
+  return `图层 ${node.layerId} 的 ${node.definitionId} 未映射到 GPU`
 }
 
 function adjustment(

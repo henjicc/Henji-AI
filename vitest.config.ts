@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs'
 import path from 'path'
 import { defineConfig } from 'vitest/config'
 
@@ -7,6 +8,16 @@ import { defineConfig } from 'vitest/config'
  * alias 对齐 vite.config.ts 的 `@/` -> `src/`，供被测代码间接依赖的模块解析使用。
  */
 export default defineConfig({
+  plugins: [{
+    name: 'vitest-wgsl-raw',
+    enforce: 'pre',
+    load(id) {
+      const queryIndex = id.indexOf('?')
+      const filename = queryIndex < 0 ? id : id.slice(0, queryIndex)
+      if (!filename.endsWith('.wgsl')) return null
+      return `export default ${JSON.stringify(readFileSync(filename, 'utf8'))}`
+    },
+  }],
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),

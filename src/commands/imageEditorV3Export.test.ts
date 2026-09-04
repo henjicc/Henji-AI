@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { ImageEditorV3Platform } from '@/platform/contracts/imageEditorV3'
+import type { ImageEditorV3RestartableExportTileStream } from './imageEditorV3Export'
 
 const mocks = vi.hoisted(() => ({ getPlatform: vi.fn() }))
 vi.mock('@/platform/runtime', () => ({ getPlatform: mocks.getPlatform }))
@@ -51,6 +52,7 @@ function createPlatform(): ImageEditorV3Platform {
       format: 'png8' as const,
     })),
     writeRasterExportTile: vi.fn(async () => ({ written: true as const })),
+    restartRasterExport: vi.fn(),
     completeRasterExport: vi.fn(async () => ({
       outputRef: 'image-export-v3:export-document@5:png8' as const,
       documentRef: DOCUMENT_REF,
@@ -99,6 +101,76 @@ beforeEach(() => {
 })
 
 describe('图片编辑 V3 栅格导出命令', () => {
+  it('GPU中途失败会丢弃旧session并让CPU从tile0完整重跑后单次提交', async () => {
+    const platform = createPlatform()
+    const restartedId = '223e4567-e89b-42d3-a456-426614174000'
+    platform.restartRasterExport = vi.fn(async () => ({
+      sessionId: restartedId,
+      documentRef: DOCUMENT_REF,
+      revision: 5,
+      sourceFingerprint: FINGERPRINT,
+      format: 'png8' as const,
+    }))
+    mocks.getPlatform.mockReturnValue({ imageEditorV3: platform })
+    const source: ImageEditorV3RestartableExportTileStream = {
+      async *[Symbol.asyncIterator]() {
+        yield { x: 0, y: 0, width: 1, height: 1, rowStride: 4, pixels: new ArrayBuffer(4) }
+        throw new Error('device lost')
+      },
+      async *createCpuFallback() {
+        yield { x: 0, y: 0, width: 1, height: 1, rowStride: 4, pixels: new ArrayBuffer(4) }
+        yield { x: 1, y: 0, width: 1, height: 1, rowStride: 4, pixels: new ArrayBuffer(4) }
+      },
+    }
+
+    await exportImageEditorV3Raster({ ...baseRequest, tiles: source })
+
+    expect(platform.restartRasterExport).toHaveBeenCalledWith({ sessionId: SESSION_ID })
+    expect(vi.mocked(platform.writeRasterExportTile).mock.calls.map(([value]) => [
+      value.sessionId, value.tile.x,
+    ])).toEqual([[SESSION_ID, 0], [restartedId, 0], [restartedId, 1]])
+    expect(platform.completeRasterExport).toHaveBeenCalledOnce()
+    expect(platform.completeRasterExport).toHaveBeenCalledWith({ sessionId: restartedId })
+    expect(platform.cancelRasterExport).not.toHaveBeenCalled()
+  })
+
+  it('事务重启后取消只命中新session并清理CPU重跑', async () => {
+    const platform = createPlatform()
+    const restartedId = '323e4567-e89b-42d3-a456-426614174000'
+    platform.restartRasterExport = vi.fn(async () => ({
+      sessionId: restartedId,
+      documentRef: DOCUMENT_REF,
+      revision: 5,
+      sourceFingerprint: FINGERPRINT,
+      format: 'png8' as const,
+    }))
+    mocks.getPlatform.mockReturnValue({ imageEditorV3: platform })
+    const controller = new AbortController()
+    const source: ImageEditorV3RestartableExportTileStream = {
+      async *[Symbol.asyncIterator]() {
+        yield* []
+        throw new Error('device lost')
+      },
+      async *createCpuFallback() {
+        controller.abort()
+        yield { x: 0, y: 0, width: 1, height: 1, rowStride: 4, pixels: new ArrayBuffer(4) }
+      },
+    }
+
+    await expect(exportImageEditorV3Raster(
+      { ...baseRequest, tiles: source },
+      controller.signal,
+    )).rejects.toMatchObject({ name: 'AbortError' })
+
+    expect(platform.restartRasterExport).toHaveBeenCalledWith({ sessionId: SESSION_ID })
+    expect(vi.mocked(platform.cancelRasterExport).mock.calls.length).toBeGreaterThan(0)
+    expect(vi.mocked(platform.cancelRasterExport).mock.calls.every(
+      ([request]) => request.sessionId === restartedId,
+    )).toBe(true)
+    expect(platform.writeRasterExportTile).not.toHaveBeenCalled()
+    expect(platform.completeRasterExport).not.toHaveBeenCalled()
+  })
+
   it('用一次上层调用按顺序流式提交瓦片并完成原子输出', async () => {
     const platform = createPlatform()
     mocks.getPlatform.mockReturnValue({ imageEditorV3: platform })

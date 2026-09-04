@@ -4,7 +4,7 @@ import { createImageEditDocumentV3 } from '@/core/imageEdit/v3/documentFactory'
 import type { ImageEditorV3SourceTileBatchItem } from '@/platform/contracts/imageEditorV3'
 import type { ImageEditorGpuSceneClientV3Like } from '../gpu/imageEditorGpuSceneClientV3'
 import type { ImageEditorGpuSceneWorkerEventV3 } from '../gpu/imageEditorGpuSceneProtocolV3'
-import { renderImageEditorV3ExportTilesWithGpu } from '../export/gpuExportSessionV3'
+import { renderImageEditorV3ExportTilesWithGpu } from '../export/gpuDefaultExportV3'
 import { ImageEditorRenderSessionGpuBridgeV3 } from './imageEditorRenderSessionGpuBridgeV3'
 
 const { readSourceTile, readSourceTiles } = vi.hoisted(() => ({

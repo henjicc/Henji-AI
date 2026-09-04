@@ -225,6 +225,31 @@ export function registerImageEditorV3RasterExportIpc(
     options.guard,
   )
   registerIpcHandler(
+    'imageEditorV3:rasterExport:restart',
+    parseImageEditorV3RasterExportSessionPayload,
+    async (payload, event) => {
+      const started = options.materializer.has(payload.sessionId)
+        ? await options.materializer.restart(event.sender.id, payload.sessionId)
+        : await options.manager.restart(event.sender.id, payload.sessionId)
+      monitorRendererLifetime(
+        options.manager,
+        event,
+        started.sessionId,
+        options.materializer.has(started.sessionId)
+          ? (ownerId, sessionId, reason) => options.materializer.cancel(ownerId, sessionId, reason)
+          : undefined,
+      )
+      return {
+        sessionId: started.sessionId,
+        documentRef: toDocumentRef(started.documentId),
+        revision: started.revision,
+        sourceFingerprint: started.sourceFingerprint,
+        format: started.format,
+      }
+    },
+    options.guard,
+  )
+  registerIpcHandler(
     'imageEditorV3:rasterExport:complete',
     parseImageEditorV3RasterExportSessionPayload,
     async (payload, event) => {

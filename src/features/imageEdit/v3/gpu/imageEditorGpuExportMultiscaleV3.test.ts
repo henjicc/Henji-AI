@@ -37,6 +37,8 @@ afterAll(() => gpu.dispose())
 
 describe('GPU 多尺度分块导出（真实WebGPU）', () => {
   it.each([
+    ['gaussian-blur', 'image.gaussian-blur-v2', { radius: 1000, mip: 0 }],
+    ['legacy-blur', 'image.blur', { radiusPixels: 160 }],
     ['fast-blur', 'image.fast-blur-v3', { radius: 1000, mip: 0 }],
     ['diffusion', 'image.diffusion', { ...createDefaultDiffusionOperationParams(),
       mode: 'glow', strength: 1, glowRange: 1, softness: 1 }],

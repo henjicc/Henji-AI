@@ -40,6 +40,7 @@ export function createElectronImageEditorV3(): ImageEditorV3Platform {
     startRasterExport: (request) => getNativeImageEditorV3().startRasterExport(request),
     startManagedRasterExport: (request) => getNativeImageEditorV3().startManagedRasterExport(request),
     writeRasterExportTile: (request) => getNativeImageEditorV3().writeRasterExportTile(request),
+    restartRasterExport: (request) => getNativeImageEditorV3().restartRasterExport(request),
     completeRasterExport: (request) => getNativeImageEditorV3().completeRasterExport(request),
     completeManagedRasterExport: (request) => getNativeImageEditorV3().completeManagedRasterExport(request),
     cancelRasterExport: (request) => getNativeImageEditorV3().cancelRasterExport(request),

@@ -46,6 +46,8 @@ describe('ImageEditorGpuExportSessionV3', () => {
     })
     const stream = session.render(request(document))
     expect(stream).not.toBeNull()
+    expect(gpu.requestExport).not.toHaveBeenCalled()
+    session.notifyDeviceReady()
     const exportRequest = gpu.requestExport.mock.calls[0]?.[0]
     expect(exportRequest).toMatchObject({ sceneGeneration: 5, quality: 'export' })
     const iterator = stream![Symbol.asyncIterator]()
@@ -70,6 +72,7 @@ describe('ImageEditorGpuExportSessionV3', () => {
     session.syncSnapshot({ document, renderGeneration: 1, geometryHash: 'a', quality: 'stable',
       resourceDescriptors: [] })
     const iterator = session.render(request(document))![Symbol.asyncIterator]()
+    session.notifyDeviceReady()
     const exportRequest = gpu.requestExport.mock.calls[0]![0]
     session.handleEvent({
       type: 'failed', sceneGeneration: 1, deviceGeneration: 1,
@@ -88,6 +91,7 @@ describe('ImageEditorGpuExportSessionV3', () => {
     session.syncSnapshot({ document, renderGeneration: 1, geometryHash: 'a', quality: 'stable',
       resourceDescriptors: [] })
     const stream = session.render(request(document))!
+    session.notifyDeviceReady()
     const exportRequest = gpu.requestExport.mock.calls[0]![0]
     const consume = async () => {
       for await (const _tile of stream) throw new Error('encoder write failed')
@@ -110,6 +114,7 @@ describe('ImageEditorGpuExportSessionV3', () => {
       resourceDescriptors: [] })
     const controller = new AbortController()
     const stream = session.render({ ...request(document), signal: controller.signal })!
+    session.notifyDeviceReady()
     const exportRequest = gpu.requestExport.mock.calls[0]![0]
     const next = stream[Symbol.asyncIterator]().next()
     controller.abort(new Error('user cancelled'))
@@ -130,5 +135,35 @@ describe('ImageEditorGpuExportSessionV3', () => {
       width: 8, height: 8 } })).toBeNull()
     expect(gpu.requestExport).not.toHaveBeenCalled()
     session.dispose()
+  })
+
+  it('Reality故障注入只让下一次导出在首tile被消费后失败', async () => {
+    const diagnosticWindow = new EventTarget()
+    vi.stubGlobal('window', diagnosticWindow)
+    const gpu = client()
+    const session = new ImageEditorGpuExportSessionV3(gpu, true)
+    const document = createImageEditDocumentV3({ width: 32, height: 16 })
+    session.syncSnapshot({ document, renderGeneration: 1, geometryHash: 'a', quality: 'stable',
+      resourceDescriptors: [] })
+    const diagnosticEvent = new Event('henji:image-editor-gpu-scene-diagnostic')
+    Object.defineProperty(diagnosticEvent, 'detail', {
+      value: { failNextExportAfterTiles: 1 },
+    })
+    diagnosticWindow.dispatchEvent(diagnosticEvent)
+    const iterator = session.render(request(document))![Symbol.asyncIterator]()
+    session.notifyDeviceReady()
+    const exportRequest = gpu.requestExport.mock.calls[0]![0]
+    session.handleEvent({ type: 'export-tile', sceneGeneration: 1, deviceGeneration: 1,
+      requestId: exportRequest.requestId, tileX: 0, tileY: 0, x: 0, y: 0,
+      width: 16, height: 16, rowStride: 64, pixels: new ArrayBuffer(1024), completed: false })
+    await expect(iterator.next()).resolves.toMatchObject({ done: false })
+    await expect(iterator.next()).rejects.toThrow('Reality 注入')
+    expect(gpu.acknowledgeExportTile).toHaveBeenCalledOnce()
+    expect(gpu.cancelExport).toHaveBeenCalledWith(exportRequest.requestId)
+
+    const second = session.render(request(document))
+    expect(second).not.toBeNull()
+    session.dispose()
+    vi.unstubAllGlobals()
   })
 })

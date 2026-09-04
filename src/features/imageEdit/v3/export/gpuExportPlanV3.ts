@@ -2,6 +2,7 @@ import {
   DIFFUSION_V4_RECIPE_ADAPTER,
   VGPU_GLOW_V4_RECIPE_ADAPTER,
   resolveFastBlurV3Geometry,
+  resolveGaussianBlurV2Geometry,
   type ImageEditRenderPlan,
 } from '@/core/imageEdit/v3'
 import type { ImageEditorGpuSceneExportTilePlanV3 } from '../gpu/imageEditorGpuSceneProtocolV3'
@@ -38,6 +39,16 @@ export function resolveImageEditorGpuExportHaloV3(
 ): number {
   let halo = 0
   for (const node of plan.nodes) {
+    if (node.definitionId === 'effect.blur-v1' || node.definitionId === 'effect.gaussian-blur') {
+      const legacy = node.definitionId === 'effect.blur-v1'
+      const radius = finite(node.parameters[legacy ? 'radiusPixels' : 'radius'])
+      const mip = legacy ? 0 : finite(node.parameters.mip)
+      halo += resolveGaussianBlurV2Geometry({
+        radius: legacy ? Math.min(120, radius) : radius,
+        mip,
+      }).haloInDocumentPixels
+      continue
+    }
     if (node.definitionId === 'effect.fast-blur') {
       const radius = finite(node.parameters.radius)
       const mip = finite(node.parameters.mip)

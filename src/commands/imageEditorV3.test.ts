@@ -59,6 +59,7 @@ function createPlatform(): ImageEditorV3Platform {
     startRasterExport: vi.fn(async () => ({ status: 'cancelled' as const })),
     startManagedRasterExport: vi.fn(),
     writeRasterExportTile: vi.fn(async () => ({ written: true as const })),
+    restartRasterExport: vi.fn(),
     completeRasterExport: vi.fn(),
     completeManagedRasterExport: vi.fn(),
     cancelRasterExport: vi.fn(async () => ({ cancelled: true })),
