@@ -9,6 +9,11 @@ async function waitForEditorState(page, { message, read, accept, timeout = 30000
   throw new Error(`${message}：${JSON.stringify(lastEvidence)}`)
 }
 
+function percentile(samples, quantile) {
+  const sorted = [...samples].sort((left, right) => left - right)
+  return Number((sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * quantile))] ?? 0).toFixed(3))
+}
+
 async function readPasteboardDiagnostic(page, documentRef) {
   return page.evaluate(async ({ targetDocumentRef }) => {
     const loaded = await window.henjiNative.imageEditorV3.loadDocument({
@@ -134,7 +139,7 @@ async function verifyMultiLayerDragPerformance({
             : 0,
         }
       },
-      accept: ({ attached, ready, layers }) => attached === 1 && ready === 'true' && layers === 2,
+      accept: ({ attached, ready, layers }) => attached === 1 && ready === 'true' && layers === 5,
     })
   } catch (error) {
     const diagnostic = await readPasteboardDiagnostic(page, fixture.documentRef)
@@ -161,12 +166,15 @@ async function verifyMultiLayerDragPerformance({
   const stableRaster = editor.locator('[data-raster-display-frame]')
   const siblingTransform = await siblingFeedback.evaluate((element) => element.style.transform)
   const progressiveTransforms = []
+  const presentSamplesMs = []
   await page.keyboard.down('Control')
   await page.mouse.move(dragStartX, dragStartY)
   await page.mouse.down()
-  for (let step = 1; step <= 6; step += 1) {
-    await page.mouse.move(dragStartX + 8 * step, dragStartY + 5 * step)
+  for (let step = 1; step <= 100; step += 1) {
+    const startedAt = performance.now()
+    await page.mouse.move(dragStartX + 1.5 * step, dragStartY + step)
     await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => resolve())))
+    presentSamplesMs.push(performance.now() - startedAt)
     const evidence = {
       revision: Number(await commandBar.getAttribute('data-document-revision')),
       stackVisibility: await rasterStack.evaluate((element) => getComputedStyle(element).visibility),
@@ -206,7 +214,18 @@ async function verifyMultiLayerDragPerformance({
       && evidence.stableVisibility === 'visible',
   })
 
-  return { dialog, editor, initialPreviewSource, result }
+  return {
+    dialog,
+    editor,
+    initialPreviewSource,
+    result,
+    dragBaseline: {
+      sampleCount: presentSamplesMs.length,
+      p50Ms: percentile(presentSamplesMs, 0.5),
+      p95Ms: percentile(presentSamplesMs, 0.95),
+      p99Ms: percentile(presentSamplesMs, 0.99),
+    },
+  }
 }
 
 async function verifyHiddenBackgroundRasterStack({ page, editor, expectedRevision }) {
@@ -228,7 +247,7 @@ async function verifyHiddenBackgroundRasterStack({ page, editor, expectedRevisio
       foreground: await rasterStack
         .locator('[data-raster-pasteboard-layer="ui-foreground-layer"]').count(),
     }),
-    accept: ({ ready, layers, foreground }) => ready === 'true' && layers === 1 && foreground === 1,
+    accept: ({ ready, layers, foreground }) => ready === 'true' && layers === 4 && foreground === 1,
     timeout: 10000,
   })
 }

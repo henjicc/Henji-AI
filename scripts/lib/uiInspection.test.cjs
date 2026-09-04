@@ -1,4 +1,5 @@
 const assert = require('node:assert/strict')
+const fs = require('node:fs')
 const path = require('node:path')
 const test = require('node:test')
 const { UI_AUDIT_RULES } = require('./uiAuditDom.cjs')
@@ -171,7 +172,10 @@ test('多图层图片文档有完整编辑、实时保存与关闭重开的真�
   )
   assert.ok(scene)
   assert.equal(scene.writesUserData, true)
-  const source = String(scene.setup)
+  const source = `${String(scene.setup)}\n${fs.readFileSync(
+    path.join(__dirname, 'uiInspectionMultiLayerDragPerformance.cjs'),
+    'utf8'
+  )}`
   for (const marker of [
     'data-layer-stack-status="editable-v3"',
     "result.dblclick()",

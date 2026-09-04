@@ -206,6 +206,18 @@ function attachUiInspectionCanvasEditing(context) {
         layers: [
           common('ui-background-layer', '背景图层'),
           {
+            ...common('ui-prop-layer', '道具元素'),
+            transform: [0.35, 0, 0, 0.35, 40, 180],
+          },
+          {
+            ...common('ui-clothing-layer', '服饰元素'),
+            transform: [0.45, 0, 0, 0.45, 260, 80],
+          },
+          {
+            ...common('ui-decoration-layer', '装饰元素'),
+            transform: [0.25, 0, 0, 0.25, 420, 220],
+          },
+          {
             ...common('ui-foreground-layer', '前景元素'),
             transform: [0.55, 0, 0, 0.55, 180, 100],
           },
@@ -355,6 +367,11 @@ function attachUiInspectionCanvasEditing(context) {
       settlePage,
       inspection,
     })
+    console.log(`[image-editor-gpu-baseline] ${JSON.stringify({
+      fixture: 'kie-five-layer',
+      path: 'dom-raster-pasteboard',
+      ...verifiedDrag.dragBaseline,
+    })}`)
     const initialPreviewSource = verifiedDrag.initialPreviewSource
     const result = verifiedDrag.result
     let dialog = verifiedDrag.dialog
@@ -655,8 +672,8 @@ function attachUiInspectionCanvasEditing(context) {
       sourceDocumentRef: duplicateEvidence.sourceDocumentRef,
       duplicateDocumentRef: duplicateEvidence.duplicateDocumentRef,
     })
-    if (JSON.stringify(forkIsolation.sourceVisibility) !== JSON.stringify([false, true])
-      || JSON.stringify(forkIsolation.duplicateVisibility) !== JSON.stringify([false, false])) {
+    if (JSON.stringify(forkIsolation.sourceVisibility) !== JSON.stringify([false, true, true, true, true])
+      || JSON.stringify(forkIsolation.duplicateVisibility) !== JSON.stringify([false, true, true, true, false])) {
       throw new Error(`复制文档编辑互相污染：${JSON.stringify(forkIsolation)}`)
     }
 
@@ -733,7 +750,7 @@ function attachUiInspectionCanvasEditing(context) {
       || packageRoundTrip.importedDocumentRef === packageRoundTrip.sourceDocumentRef
       || packageRoundTrip.sourceRevision !== fixture.initialRevision + 2
       || packageRoundTrip.importedRevision !== fixture.initialRevision + 2
-      || packageRoundTrip.importedLayerCount !== 2) {
+      || packageRoundTrip.importedLayerCount !== 5) {
       throw new Error(`多图层文档项目包往返失败：${JSON.stringify(packageRoundTrip)}`)
     }
     await settlePage(page, 900)
