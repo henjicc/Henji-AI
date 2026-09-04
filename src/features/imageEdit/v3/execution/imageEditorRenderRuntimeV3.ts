@@ -7,14 +7,14 @@ export function imageEditorRenderRuntimePatchV3(
 ): Partial<ImageEditorRenderSessionStateV3> {
   if (event.status === 'gpu-ready') {
     return {
-      renderBackend: 'gpu',
+      effectBackend: 'gpu',
       deviceStatus: 'ready',
       deviceGeneration: event.deviceGeneration ?? 0,
       diagnostic: null,
     }
   }
   return {
-    renderBackend: 'cpu',
+    effectBackend: 'cpu',
     deviceStatus: event.status === 'device-lost' ? 'lost' : 'fallback',
     diagnostic: event.status === 'device-lost' ? event.reason : currentDiagnostic,
   }

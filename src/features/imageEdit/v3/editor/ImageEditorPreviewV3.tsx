@@ -355,7 +355,9 @@ export function ImageEditorPreviewV3({
       data-preview-display-source={previewRenderer ? 'custom' : displayPipeline.displaySource}
       data-preview-coverage={previewRenderer ? undefined : viewportComposite.coverage.toFixed(4)}
       data-preview-target-mip-coverage={previewRenderer ? undefined : viewportComposite.targetMipCoverage.toFixed(4)}
-      data-preview-render-backend={previewRenderer ? undefined : viewportComposite.renderBackend}
+      data-preview-composition-backend={previewRenderer ? undefined : viewportComposite.compositionBackend}
+      data-preview-effect-backend={previewRenderer ? undefined : viewportComposite.effectBackend}
+      data-preview-presentation-backend={previewRenderer ? undefined : viewportComposite.presentationBackend}
       data-preview-device-status={previewRenderer ? undefined : viewportComposite.deviceStatus}
       data-preview-device-generation={previewRenderer ? undefined : viewportComposite.deviceGeneration}
       data-preview-target-mip={previewRenderer ? undefined : viewportComposite.targetMip ?? undefined}

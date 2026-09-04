@@ -9,6 +9,8 @@ import {
 import type { ImageEditorManagedViewportCompositeV3 } from './viewportCompositeTypesV3'
 import type { ImageEditorViewportCompositeRequestV3 } from './viewportCompositeTypesV3'
 import type { ImageEditorViewportCompositeRuntimeEventV3 } from './viewportCompositeProtocolV3'
+import type { ImageEditorGpuSceneClientV3Like } from '../gpu/imageEditorGpuSceneClientV3'
+import type { ImageEditorGpuSceneWorkerEventV3 } from '../gpu/imageEditorGpuSceneProtocolV3'
 import {
   DefaultImageEditorRenderSessionV3,
   type ImageEditorRenderSessionDiagnosticsV3,
@@ -325,7 +327,7 @@ describe('ImageEditorRenderSessionV3', () => {
       quality: 'draft', resourceDescriptors: [],
     })
     expect(requests).toHaveLength(1)
-    expect(requests[0]).toMatchObject({ phase: 'analysis', preferredMip: 5, quality: 'draft' })
+    expect(requests[0]).toMatchObject({ phase: 'analysis', preferredMip: 4, quality: 'draft' })
     const cancelsAfterFirst = client.cancel.mock.calls.length
 
     for (let generation = 2; generation <= 20; generation += 1) {
@@ -345,7 +347,7 @@ describe('ImageEditorRenderSessionV3', () => {
     expect(front.dataset.renderGeneration).toBe('1')
     expect(requests).toHaveLength(2)
     expect(requests[1]).toMatchObject({
-      phase: 'analysis', renderGeneration: 20, preferredMip: 5, quality: 'draft',
+      phase: 'analysis', renderGeneration: 20, preferredMip: 4, quality: 'draft',
     })
     session.dispose()
   })
@@ -596,7 +598,7 @@ describe('ImageEditorRenderSessionV3', () => {
       status: 'device-lost', reason: 'adapter reset', deviceGeneration: null,
     })
     expect(latest).toMatchObject({
-      surfaceId: 'persistent-surface', renderBackend: 'cpu', deviceStatus: 'lost',
+      surfaceId: 'persistent-surface', effectBackend: 'cpu', deviceStatus: 'lost',
       diagnostic: 'adapter reset',
     })
     runtime.listener({
@@ -604,12 +606,79 @@ describe('ImageEditorRenderSessionV3', () => {
       status: 'gpu-ready', reason: null, deviceGeneration: 4,
     })
     expect(latest).toMatchObject({
-      surfaceId: 'persistent-surface', renderBackend: 'gpu', deviceStatus: 'ready',
+      surfaceId: 'persistent-surface', effectBackend: 'gpu', deviceStatus: 'ready',
       deviceGeneration: 4,
     })
     expect(front.isConnected).toBe(false)
     unsubscribeDiagnostics()
     session.dispose()
     expect(unsubscribeRuntime).toHaveBeenCalledOnce()
+  })
+
+  it('权威快照、相机和瞬态变换只转发到会话唯一 GPU Scene，CPU 显示保持主路径', () => {
+    const gpuSubscription: {
+      listener?: (event: ImageEditorGpuSceneWorkerEventV3) => void
+    } = {}
+    const gpuScene = {
+      syncScene: vi.fn(),
+      uploadTiles: vi.fn(),
+      updateTransientLayerTransform: vi.fn(),
+      clearTransientLayerTransform: vi.fn(),
+      updateViewport: vi.fn(),
+      requestFrame: vi.fn(),
+      subscribe: vi.fn((listener) => {
+        gpuSubscription.listener = listener
+        return vi.fn()
+      }),
+      dispose: vi.fn(),
+    } satisfies ImageEditorGpuSceneClientV3Like
+    const client = {
+      render: vi.fn(() => new Promise<ImageEditorManagedViewportCompositeV3>(() => undefined)),
+      cancel: vi.fn(),
+      dispose: vi.fn(),
+    }
+    const session = new DefaultImageEditorRenderSessionV3(
+      { sessionId: 'gpu-scene-contract-test' },
+      { client, gpuSceneClient: gpuScene },
+    )
+    session.updateViewport(layout)
+    const imageDocument = createImageEditDocumentV3({ width: 64, height: 64 })
+    const snapshot = {
+      document: imageDocument,
+      renderGeneration: 7,
+      geometryHash: 'geometry-gpu-scene',
+      quality: 'stable' as const,
+      resourceDescriptors: [],
+    }
+    session.updateSnapshot(snapshot)
+    session.updateTransientLayerTransform('source', [1, 0, 0, 1, 5, 8], 11)
+    session.requestFrame('draft')
+    session.clearTransientLayerTransform('source', 12)
+
+    expect(gpuScene.syncScene).toHaveBeenCalledOnce()
+    expect(gpuScene.syncScene).toHaveBeenCalledWith(snapshot)
+    expect(gpuScene.updateViewport).toHaveBeenCalledWith(7, 1, expect.objectContaining({
+      viewportKey: 'viewport-1',
+    }))
+    expect(gpuScene.updateTransientLayerTransform).toHaveBeenCalledWith(
+      7, 'source', [1, 0, 0, 1, 5, 8], 11,
+    )
+    expect(gpuScene.requestFrame).toHaveBeenCalledWith(7, 1, 11, 'draft')
+    expect(gpuScene.clearTransientLayerTransform).toHaveBeenCalledWith(7, 'source', 12)
+
+    let diagnostics: ImageEditorRenderSessionDiagnosticsV3 | null = null
+    session.subscribeDiagnostics((value) => { diagnostics = value })
+    if (!gpuSubscription.listener) throw new Error('缺少 GPU Scene 事件订阅')
+    gpuSubscription.listener({
+      type: 'ready', sceneGeneration: 7, deviceGeneration: 2, recovered: false,
+    })
+    expect(diagnostics).toMatchObject({
+      compositionBackend: 'cpu',
+      presentationBackend: 'canvas2d',
+      deviceStatus: 'ready',
+      deviceGeneration: 2,
+    })
+    session.dispose()
+    expect(gpuScene.dispose).toHaveBeenCalledOnce()
   })
 })

@@ -5,6 +5,8 @@ import type { ImageEditorViewportLayoutV3 } from '../editor/useImageEditorViewpo
 import type { ImageEditorPresentationSurfaceElementsV3 } from './imageEditorPresentationSurfaceV3'
 import type { ImageEditorRenderSessionClientDependenciesV3 } from './imageEditorRenderSessionClientsV3'
 import type { ImageEditorManagedViewportCompositeV3 } from './viewportCompositeTypesV3'
+import type { ImageEditTransformV3 } from '@/core/imageEdit/v3/layerTypes'
+import type { ImageEditorGpuSceneClientV3Like } from '../gpu/imageEditorGpuSceneClientV3'
 
 export interface ImageEditorRenderSnapshotV3 {
   document: ImageEditDocumentV3
@@ -25,7 +27,9 @@ export interface ImageEditorRenderSessionDiagnosticsV3 {
   targetMip: number | null
   eventToPresentMs: number | null
   rendering: boolean
-  renderBackend: 'gpu' | 'cpu'
+  compositionBackend: 'gpu' | 'cpu'
+  effectBackend: 'gpu' | 'cpu'
+  presentationBackend: 'webgpu-surface' | 'gpu-image-bitmap' | 'canvas2d' | 'dom'
   deviceStatus: 'idle' | 'ready' | 'lost' | 'fallback'
   deviceGeneration: number
   fallbackRequired: boolean
@@ -40,10 +44,20 @@ export interface ImageEditorRenderSessionV3 {
   attachSurface(elements: ImageEditorPresentationSurfaceElementsV3): () => void
   updateSnapshot(snapshot: ImageEditorRenderSnapshotV3): void
   updateViewport(layout: ImageEditorViewportLayoutV3): void
+  updateTransientLayerTransform(
+    layerId: string,
+    transform: ImageEditTransformV3,
+    interactionSequence: number,
+  ): void
+  clearTransientLayerTransform(layerId: string, interactionSequence: number): void
+  requestFrame(quality: ImageEditRenderQuality): void
   subscribeDiagnostics(listener: (value: ImageEditorRenderSessionDiagnosticsV3) => void): () => void
   setVisibility(visible: boolean): void
   dispose(): void
 }
 
 export interface ImageEditorRenderSessionDependenciesV3
-  extends ImageEditorRenderSessionClientDependenciesV3 {}
+  extends ImageEditorRenderSessionClientDependenciesV3 {
+  /** null 显式禁用；undefined 在支持 Worker 的生产环境创建每会话唯一 GPU Scene。 */
+  gpuSceneClient?: ImageEditorGpuSceneClientV3Like | null
+}

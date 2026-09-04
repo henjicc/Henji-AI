@@ -1,13 +1,13 @@
 import {
   compileImageEditRenderPlanV3,
   createBuiltInImageEditRenderNodeRegistry,
-  imageEditOutputSizeV3,
 } from '@/core/imageEdit/v3'
+import type { ImageEditTransformV3 } from '@/core/imageEdit/v3/layerTypes'
+import type { ImageEditRenderQuality } from '@/core/imageEdit/v3/renderNodeDefinition'
 import type { ImageEditorViewportLayoutV3 } from '../editor/useImageEditorViewportLayoutV3'
 import {
   ImageEditorPresentationSurfaceV3,
   imageEditorViewportResultCoverageV3,
-  imageEditorViewportTileCoverageContributionV3,
   type ImageEditorPresentationSurfaceElementsV3,
 } from './imageEditorPresentationSurfaceV3'
 import {
@@ -25,14 +25,7 @@ import {
   imageEditorRenderResultMatchesViewV3,
   sameImageEditorRenderSnapshotV3,
 } from './imageEditorRenderSessionIdentityV3'
-import { logImageEditorRenderSessionPhaseV3 } from './imageEditorRenderSessionLoggingV3'
 import { presentImageEditorRenderSessionFrameV3 } from './imageEditorRenderSessionPresentationV3'
-import {
-  createImageEditorAnalysisRequestV3,
-  createImageEditorBackdropRequestV3,
-  createImageEditorDraftRequestV3,
-  createImageEditorTargetRequestV3,
-} from './imageEditorRenderSessionRequestsV3'
 import {
   ImageEditorViewportCompositeDisposedErrorV3,
   ImageEditorViewportCompositeSupersededErrorV3,
@@ -43,6 +36,9 @@ import type {
 } from './viewportCompositeTypesV3'
 import { resolveImageEditorViewportAnalysisMipV3 } from './viewportGlobalAnalysisV3'
 import { imageEditorRenderRuntimePatchV3 } from './imageEditorRenderRuntimeV3'
+import { ImageEditorRenderSessionGpuBridgeV3 } from './imageEditorRenderSessionGpuBridgeV3'
+import { ImageEditorRenderSessionWorkV3, type ImageEditorRenderSessionWorkLayoutV3 } from './imageEditorRenderSessionWorkV3'
+import { ImageEditorRenderSessionScheduleV3 } from './imageEditorRenderSessionScheduleV3'
 
 const registry = createBuiltInImageEditRenderNodeRegistry()
 
@@ -54,23 +50,21 @@ export type {
   ImageEditorRenderSnapshotV3,
 } from './imageEditorRenderSessionContractsV3'
 
-type ImageEditorRenderSessionLayoutV3 = ImageEditorViewportLayoutV3 & {
-  cameraSequence: number
-  timestamp: number
-}
-
 function now(): number {
   return typeof performance === 'undefined' ? Date.now() : performance.now()
 }
 
 export class DefaultImageEditorRenderSessionV3 implements ImageEditorRenderSessionV3 {
   private readonly clients: ImageEditorRenderSessionClientLanesV3
+  private readonly gpuBridge: ImageEditorRenderSessionGpuBridgeV3
+  private readonly work: ImageEditorRenderSessionWorkV3
+  private readonly schedule = new ImageEditorRenderSessionScheduleV3()
   private readonly compositor = new ImageEditorPresentationSurfaceV3()
   private readonly diagnosticsListeners = new Set<(value: ImageEditorRenderSessionDiagnosticsV3) => void>()
   private readonly stateListeners = new Set<(value: ImageEditorRenderSessionStateV3) => void>()
   private readonly inFlightTasks = new Set<string>()
   private snapshot: ImageEditorRenderSnapshotV3 | null = null
-  private layout: ImageEditorRenderSessionLayoutV3 | null = null
+  private layout: ImageEditorRenderSessionWorkLayoutV3 | null = null
   private stable: ImageEditorManagedViewportCompositeV3 | null = null
   private draft: ImageEditorManagedViewportCompositeV3 | null = null
   private backdrop: ImageEditorManagedViewportCompositeV3 | null = null
@@ -79,11 +73,6 @@ export class DefaultImageEditorRenderSessionV3 implements ImageEditorRenderSessi
   private cameraSequence = 0
   private analysisMip: number | null = null
   private analysisReadyGeneration: number | null = null
-  private analysisScheduledGeneration: number | null = null
-  private backdropScheduledEpoch: number | null = null
-  private draftScheduledKey: string | null = null
-  private targetScheduledKey: string | null = null
-  private refinementScheduledKey: string | null = null
   private cameraFrame: number | null = null
   private pendingLayout: ImageEditorViewportLayoutV3 | null = null
   private readonly unsubscribeRuntime: () => void
@@ -98,12 +87,32 @@ export class DefaultImageEditorRenderSessionV3 implements ImageEditorRenderSessi
     this.state = {
       surfaceId: null, renderGeneration: 0, geometryHash: '', cameraSequence: 0,
       coverage: 0, targetMipCoverage: 0, targetMip: null, eventToPresentMs: null,
-      renderBackend: 'cpu', deviceStatus: 'idle', deviceGeneration: 0,
+      compositionBackend: 'cpu', effectBackend: 'cpu', presentationBackend: 'canvas2d',
+      deviceStatus: 'idle', deviceGeneration: 0,
       rendering: false, fallbackRequired: false, diagnostic: null, result: null,
     }
     this.unsubscribeRuntime = this.clients.subscribeRuntime((event) => {
       if (event.renderGeneration !== this.snapshot?.renderGeneration) return
       this.publish(imageEditorRenderRuntimePatchV3(event, this.state.diagnostic))
+    })
+    this.gpuBridge = new ImageEditorRenderSessionGpuBridgeV3(
+      options.sessionId,
+      dependencies.gpuSceneClient,
+      (patch) => this.publish(patch),
+    )
+    this.work = new ImageEditorRenderSessionWorkV3({
+      clients: this.clients,
+      getStable: () => this.stable,
+      accepts: (epoch, snapshot) => this.accepts(epoch, snapshot),
+      acceptsView: (epoch, snapshot, layout, viewKey) => this.acceptsView(epoch, snapshot, layout, viewKey),
+      acceptsSupersededDraft: (epoch, snapshot) => this.acceptsSupersededDraft(epoch, snapshot),
+      acceptsSupersededDraftView: (epoch, snapshot, layout) => this.acceptsSupersededDraftView(epoch, snapshot, layout),
+      acceptDraft: (result) => this.acceptDraftResult(result),
+      acceptAnalysis: (result, current) => this.acceptAnalysisResult(result, current),
+      acceptBackdrop: (result) => this.acceptBackdropResult(result),
+      acceptTarget: (result) => this.acceptTargetResult(result),
+      publishTargetProgress: (coverage, mip) => this.publish({ targetMipCoverage: coverage, targetMip: mip }),
+      handleFailure: (epoch, error, snapshot) => this.handleFailure(epoch, error, snapshot),
     })
   }
 
@@ -126,16 +135,13 @@ export class DefaultImageEditorRenderSessionV3 implements ImageEditorRenderSessi
       && snapshot.quality === 'draft'
       && previousSnapshot.geometryHash === snapshot.geometryHash
     this.snapshot = snapshot
+    this.gpuBridge.syncSnapshot(snapshot)
     const plan = compileImageEditRenderPlanV3(snapshot.document, registry, snapshot.quality)
     this.analysisMip = resolveImageEditorViewportAnalysisMipV3(
       snapshot.document, plan, snapshot.quality,
     )
     this.analysisReadyGeneration = this.analysisMip === null ? snapshot.renderGeneration : null
-    this.analysisScheduledGeneration = null
-    this.backdropScheduledEpoch = null
-    this.draftScheduledKey = null
-    this.targetScheduledKey = null
-    this.refinementScheduledKey = null
+    this.schedule.reset()
     if (!coalesceDraft) {
       this.epoch += 1
       this.clients.cancelAll()
@@ -196,6 +202,7 @@ export class DefaultImageEditorRenderSessionV3 implements ImageEditorRenderSessi
           : 0,
       },
     }
+    this.gpuBridge.updateViewport(this.cameraSequence, this.layout)
     if (previous) {
       this.clients.cancelInteractive()
       this.removeInteractiveTasks()
@@ -211,6 +218,25 @@ export class DefaultImageEditorRenderSessionV3 implements ImageEditorRenderSessi
     return () => this.diagnosticsListeners.delete(listener)
   }
 
+  updateTransientLayerTransform(
+    layerId: string,
+    transform: ImageEditTransformV3,
+    interactionSequence: number,
+  ): void {
+    this.assertUsable()
+    this.gpuBridge.updateTransientLayerTransform(layerId, transform, interactionSequence)
+  }
+
+  clearTransientLayerTransform(layerId: string, interactionSequence: number): void {
+    this.assertUsable()
+    this.gpuBridge.clearTransientLayerTransform(layerId, interactionSequence)
+  }
+
+  requestFrame(quality: ImageEditRenderQuality): void {
+    this.assertUsable()
+    this.gpuBridge.requestFrame(quality)
+  }
+
   subscribeState(listener: (value: ImageEditorRenderSessionStateV3) => void): () => void {
     this.stateListeners.add(listener)
     listener(this.state)
@@ -224,9 +250,7 @@ export class DefaultImageEditorRenderSessionV3 implements ImageEditorRenderSessi
     if (!visible) {
       this.clients.cancelAll()
       this.inFlightTasks.clear()
-      this.draftScheduledKey = this.targetScheduledKey = null
-      this.refinementScheduledKey = null
-      this.analysisScheduledGeneration = this.backdropScheduledEpoch = null
+      this.schedule.reset()
       this.publish({ rendering: false })
       return
     }
@@ -242,6 +266,7 @@ export class DefaultImageEditorRenderSessionV3 implements ImageEditorRenderSessi
     this.cameraFrame = null
     this.pendingLayout = null
     this.unsubscribeRuntime()
+    this.gpuBridge.dispose()
     this.clients.dispose()
     this.compositor.dispose()
     this.releaseResults()
@@ -251,206 +276,83 @@ export class DefaultImageEditorRenderSessionV3 implements ImageEditorRenderSessi
 
   private scheduleCurrentWork(): void {
     if (!this.visible || !this.snapshot || !this.layout) return
-    if (this.hasReusableClearFrame()) {
-      this.publish({ targetMipCoverage: 1, targetMip: this.stable?.mip ?? null })
-      return
-    }
-    const viewKey = [
-      this.epoch,
-      this.snapshot.renderGeneration,
-      this.layout.cameraSequence,
-      this.layout.viewportKey,
-    ].join(':')
-    // 大半径模糊、扩散和辉光必须先建立整图共享分析。分析未完成时按视口瓦片
-    // 计算草稿会让每个 512px 分区得到不同结果，形成肉眼可见的接缝和色块。
-    if (this.analysisMip === null
-      && this.draftScheduledKey !== viewKey
-      && !this.hasTaskPrefix('draft:')
-      && !imageEditorRenderResultMatchesViewV3(this.stable, this.snapshot, this.layout)) {
-      this.draftScheduledKey = viewKey
-      this.startTask(`draft:${viewKey}`, () => this.renderDraft(
-        this.epoch, this.snapshot!, this.layout!, viewKey,
-      ))
-    }
-    if (this.analysisReadyGeneration !== this.snapshot.renderGeneration
-      && this.analysisScheduledGeneration !== this.snapshot.renderGeneration
-      && !this.hasTaskPrefix('analysis:')) {
-      this.analysisScheduledGeneration = this.snapshot.renderGeneration
-      this.startTask(`analysis:${this.epoch}:${this.snapshot.renderGeneration}`, () => this.renderAnalysis(
-        this.epoch, this.snapshot!, this.layout!,
-      ))
-    }
-    const hasCurrentViewportFrame = imageEditorRenderResultMatchesViewV3(
-      this.draft ?? this.stable, this.snapshot, this.layout,
-    )
-    if (this.snapshot.quality === 'stable'
-      && this.analysisMip === null
-      && hasCurrentViewportFrame
-      && this.backdropScheduledEpoch !== this.epoch) {
-      this.backdropScheduledEpoch = this.epoch
-      this.startTask(`backdrop:${this.epoch}`, () => this.renderBackdrop(
-        this.epoch, this.snapshot!, this.layout!,
-      ))
-    }
-    if (this.snapshot.quality === 'stable'
-      && this.analysisReadyGeneration === this.snapshot.renderGeneration
-      && this.targetScheduledKey !== viewKey
-      && !this.hasTaskPrefix('target:')
-      && !imageEditorRenderResultMatchesViewV3(this.stable, this.snapshot, this.layout)) {
-      this.targetScheduledKey = viewKey
-      this.startTask(`target:${viewKey}`, () => this.renderTarget(
-        this.epoch, this.snapshot!, this.layout!, viewKey,
-      ))
-    }
-    const refinementKey = `${viewKey}:${Math.max(0, (this.stable?.mip ?? 1) - 1)}`
-    if (this.snapshot.quality === 'stable'
-      && this.layout.viewport.interacting !== true
-      && this.analysisReadyGeneration === this.snapshot.renderGeneration
-      && imageEditorRenderResultMatchesViewV3(this.stable, this.snapshot, this.layout)
-      && (this.stable?.mip ?? 0) > 1
-      && this.refinementScheduledKey !== refinementKey
-      && !this.hasTaskPrefix('target:')) {
-      this.refinementScheduledKey = refinementKey
-      const preferredMip = this.stable!.mip - 1
-      this.startTask(`target:refine:${refinementKey}`, () => this.renderTarget(
-        this.epoch, this.snapshot!, this.layout!, viewKey, preferredMip,
-      ))
-    }
-  }
-
-  private async renderDraft(
-    epoch: number,
-    snapshot: ImageEditorRenderSnapshotV3,
-    layout: ImageEditorRenderSessionLayoutV3,
-    viewKey: string,
-  ): Promise<void> {
-    const startedAt = now()
-    try {
-      const result = await this.clients.draft.render(createImageEditorDraftRequestV3(snapshot, layout))
-      const acceptsCurrent = this.acceptsView(epoch, snapshot, layout, viewKey)
-      if (!acceptsCurrent && !this.acceptsSupersededDraftView(epoch, snapshot, layout)) {
-        result.release()
-        return
-      }
-      if (acceptsCurrent && imageEditorRenderResultMatchesViewV3(this.stable, snapshot, layout)) {
-        result.release()
-        return
-      }
-      const previousDraft = this.draft
-      this.draft = result
-      this.present()
-      if (previousDraft && previousDraft !== this.stable) previousDraft.release()
-      this.publish({
-        fallbackRequired: false,
-        diagnostic: null,
-        result,
-        targetMip: result.mip,
-      })
-      logImageEditorRenderSessionPhaseV3('draft', snapshot, layout.cameraSequence, startedAt, now(), result.mip)
-      this.scheduleCurrentWork()
-    } catch (error) {
-      this.handleFailure(epoch, error, snapshot)
-    }
-  }
-
-  private async renderAnalysis(
-    epoch: number,
-    snapshot: ImageEditorRenderSnapshotV3,
-    layout: ImageEditorRenderSessionLayoutV3,
-  ): Promise<void> {
-    if (this.analysisMip === null) return
-    const startedAt = now()
-    try {
-      const result = await this.clients.analysis.render(createImageEditorAnalysisRequestV3(
-        snapshot, layout, this.analysisMip,
-      ))
-      const acceptsCurrent = this.accepts(epoch, snapshot)
-      if (!acceptsCurrent && !this.acceptsSupersededDraft(epoch, snapshot)) {
-        result.release()
-        return
-      }
-      this.replaceBackdrop(result)
-      if (acceptsCurrent) this.analysisReadyGeneration = snapshot.renderGeneration
-      this.present()
-      this.publish({ fallbackRequired: false, result: this.currentResult() })
-      logImageEditorRenderSessionPhaseV3('analysis', snapshot, layout.cameraSequence, startedAt, now(), this.analysisMip)
-      this.scheduleCurrentWork()
-    } catch (error) {
-      this.handleFailure(epoch, error, snapshot)
-    }
-  }
-
-  private async renderBackdrop(
-    epoch: number,
-    snapshot: ImageEditorRenderSnapshotV3,
-    layout: ImageEditorRenderSessionLayoutV3,
-  ): Promise<void> {
-    const startedAt = now()
-    try {
-      const result = await this.clients.analysis.render(createImageEditorBackdropRequestV3(
-        snapshot, layout,
-      ))
-      if (!this.accepts(epoch, snapshot)) {
-        result.release()
-        return
-      }
-      this.replaceBackdrop(result)
-      this.present()
-      this.publish({ fallbackRequired: false, result: this.currentResult() })
-      logImageEditorRenderSessionPhaseV3('backdrop', snapshot, layout.cameraSequence, startedAt, now(), result.mip)
-    } catch (error) {
-      this.handleFailure(epoch, error, snapshot)
-    }
-  }
-
-  private async renderTarget(
-    epoch: number,
-    snapshot: ImageEditorRenderSnapshotV3,
-    layout: ImageEditorRenderSessionLayoutV3,
-    viewKey: string,
-    preferredMip?: number,
-  ): Promise<void> {
-    const startedAt = now()
-    let progressiveCoverage = 0
-    try {
-      const result = await this.clients.target.render({
-        ...createImageEditorTargetRequestV3(snapshot, layout, this.stable?.mip),
-        ...(preferredMip === undefined ? {} : { preferredMip }),
-        onTileReady: (progress) => {
-          if (!this.acceptsView(epoch, snapshot, layout, viewKey)) return
-          progressiveCoverage = Math.min(1, progressiveCoverage
-            + imageEditorViewportTileCoverageContributionV3(
-              progress.tile,
-              progress.mip,
-              imageEditOutputSizeV3(snapshot.document.geometry),
-              layout,
-            ))
-          this.publish({ targetMipCoverage: progressiveCoverage, targetMip: progress.mip })
-        },
-      })
-      if (!this.acceptsView(epoch, snapshot, layout, viewKey)) {
-        result.release()
-        return
-      }
-      const previousStable = this.stable
-      const previousDraft = this.draft
-      this.stable = result
-      this.draft = null
-      this.present()
-      if (previousStable && previousStable !== result) previousStable.release()
-      if (previousDraft && previousDraft !== previousStable) previousDraft.release()
-      this.publish({
-        fallbackRequired: false,
-        diagnostic: null,
-        result,
+    const snapshot = this.snapshot
+    const layout = this.layout
+    this.schedule.schedule({
+      epoch: this.epoch,
+      snapshot,
+      layout,
+      stable: this.stable,
+      draft: this.draft,
+      analysisMip: this.analysisMip,
+      analysisReadyGeneration: this.analysisReadyGeneration,
+      hasReusableClearFrame: this.hasReusableClearFrame(),
+      hasTaskPrefix: (prefix) => this.hasTaskPrefix(prefix),
+      publishClearFrame: () => this.publish({
         targetMipCoverage: 1,
-        targetMip: result.mip,
-      })
-      logImageEditorRenderSessionPhaseV3('target', snapshot, layout.cameraSequence, startedAt, now(), result.mip)
-      this.scheduleCurrentWork()
-    } catch (error) {
-      this.handleFailure(epoch, error, snapshot)
-    }
+        targetMip: this.stable?.mip ?? null,
+      }),
+      startTask: (token, run) => this.startTask(token, run),
+      renderDraft: async (viewKey) => this.work.renderDraft(
+        this.epoch, snapshot, layout, viewKey,
+      ),
+      renderAnalysis: async () => this.work.renderAnalysis(
+        this.epoch, snapshot, layout, this.analysisMip!,
+      ),
+      renderBackdrop: async () => this.work.renderBackdrop(this.epoch, snapshot, layout),
+      renderTarget: async (viewKey, preferredMip) => this.work.renderTarget(
+        this.epoch, snapshot, layout, viewKey, preferredMip,
+      ),
+    })
+  }
+
+  private acceptDraftResult(result: ImageEditorManagedViewportCompositeV3): void {
+    const previousDraft = this.draft
+    this.draft = result
+    this.present()
+    if (previousDraft && previousDraft !== this.stable) previousDraft.release()
+    this.publish({
+      fallbackRequired: false,
+      diagnostic: null,
+      result,
+      targetMip: result.mip,
+    })
+    this.scheduleCurrentWork()
+  }
+
+  private acceptAnalysisResult(
+    result: ImageEditorManagedViewportCompositeV3,
+    current: boolean,
+  ): void {
+    this.replaceBackdrop(result)
+    if (current) this.analysisReadyGeneration = result.renderGeneration
+    this.present()
+    this.publish({ fallbackRequired: false, result: this.currentResult() })
+    this.scheduleCurrentWork()
+  }
+
+  private acceptBackdropResult(result: ImageEditorManagedViewportCompositeV3): void {
+    this.replaceBackdrop(result)
+    this.present()
+    this.publish({ fallbackRequired: false, result: this.currentResult() })
+  }
+
+  private acceptTargetResult(result: ImageEditorManagedViewportCompositeV3): void {
+    const previousStable = this.stable
+    const previousDraft = this.draft
+    this.stable = result
+    this.draft = null
+    this.present()
+    if (previousStable && previousStable !== result) previousStable.release()
+    if (previousDraft && previousDraft !== previousStable) previousDraft.release()
+    this.publish({
+      fallbackRequired: false,
+      diagnostic: null,
+      result,
+      targetMipCoverage: 1,
+      targetMip: result.mip,
+    })
+    this.scheduleCurrentWork()
   }
 
   private present(): void {
@@ -517,7 +419,7 @@ export class DefaultImageEditorRenderSessionV3 implements ImageEditorRenderSessi
   private acceptsView(
     epoch: number,
     snapshot: ImageEditorRenderSnapshotV3,
-    layout: ImageEditorRenderSessionLayoutV3,
+    layout: ImageEditorRenderSessionWorkLayoutV3,
     viewKey: string,
   ): boolean {
     return this.accepts(epoch, snapshot)
@@ -544,7 +446,7 @@ export class DefaultImageEditorRenderSessionV3 implements ImageEditorRenderSessi
   private acceptsSupersededDraftView(
     epoch: number,
     snapshot: ImageEditorRenderSnapshotV3,
-    layout: ImageEditorRenderSessionLayoutV3,
+    layout: ImageEditorRenderSessionWorkLayoutV3,
   ): boolean {
     return this.acceptsSupersededDraft(epoch, snapshot)
       && this.layout === layout
