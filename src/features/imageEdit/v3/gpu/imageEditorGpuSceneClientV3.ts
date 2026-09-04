@@ -1,5 +1,8 @@
 import { createLogger } from '@/core/logging'
-import { isUiInspectionActive } from '@/platform/runtime'
+import {
+  isUiInspectionActive,
+  isUiInspectionGpuInitializationFailure,
+} from '@/platform/runtime'
 import type { ImageEditTransformV3 } from '@/core/imageEdit/v3/layerTypes'
 import type { ImageEditRenderQuality } from '@/core/imageEdit/v3/renderNodeDefinition'
 import type { ImageEditorViewportLayoutV3 } from '../editor/useImageEditorViewportLayoutV3'
@@ -82,13 +85,8 @@ export class ImageEditorGpuSceneClientV3 implements ImageEditorGpuSceneClientV3L
     this.diagnosticEventListener = diagnosticInspection
       ? ((event) => {
           const detail = (event as CustomEvent<{
-            kind?: unknown
             recovery?: unknown
           }>).detail
-          if (detail?.kind === 'initialization-failure') {
-            this.worker.postMessage({ type: 'diagnostic-initialization-failure' })
-            return
-          }
           const recovery = detail?.recovery
           if (recovery !== 'success' && recovery !== 'failure') return
           this.worker.postMessage({ type: 'diagnostic-device-loss', recovery })
@@ -107,6 +105,7 @@ export class ImageEditorGpuSceneClientV3 implements ImageEditorGpuSceneClientV3L
       sessionId: options.sessionId,
       memoryBudgetBytes: options.memoryBudgetBytes
         ?? IMAGE_EDITOR_GPU_SCENE_DEFAULT_BUDGET_BYTES_V3,
+      diagnosticInitializationFailure: isUiInspectionGpuInitializationFailure(),
     })
   }
 
@@ -256,6 +255,8 @@ export class ImageEditorGpuSceneClientV3 implements ImageEditorGpuSceneClientV3L
           sessionId: this.options.sessionId,
           code: event.code,
           recoverable: event.recoverable,
+          diagnosticDeviceAcquireCount: event.diagnostics?.deviceAcquireCount,
+          diagnosticSurfaceFrameCount: event.diagnostics?.surfaceFrameCount,
         },
       }
       if (event.code === 'composition-not-ready' && event.recoverable) {

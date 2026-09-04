@@ -93,6 +93,7 @@ describe('ImageEditorGpuSceneRuntimeV3', () => {
 
     await vi.waitFor(() => expect(events).toContainEqual(expect.objectContaining({
       type: 'failed', code: 'initialization-failed', sceneGeneration: 3, recoverable: true,
+      diagnostics: { deviceAcquireCount: 0, surfaceFrameCount: 0 },
     })))
     expect(acquire).not.toHaveBeenCalled()
     expect(runtime.getStatus()).toBe('fallback')

@@ -40,6 +40,14 @@ export function isUiInspectionActive(): boolean {
   return native?.runtimeInfo?.uiInspectionActive === true
 }
 
+export function isUiInspectionGpuInitializationFailure(): boolean {
+  if (typeof window === 'undefined') return false
+  const native = window.henjiNative as {
+    runtimeInfo?: { uiInspectionGpuInitializationFailure?: boolean }
+  } | undefined
+  return native?.runtimeInfo?.uiInspectionGpuInitializationFailure === true
+}
+
 export interface HenjiRuntimeFeatureFlags {
   imageEditorV3: boolean
 }

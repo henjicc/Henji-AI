@@ -73,6 +73,8 @@ export class ImageEditorGpuSceneRuntimeV3 {
   private initializedOnce = false
   private readonly recovery = new ImageEditorGpuSceneRecoveryV3()
   private failNextRecoveryForDiagnostic = false
+  private deviceAcquireCount = 0
+  private surfaceFrameCount = 0
   private disposed = false
 
   constructor(
@@ -161,14 +163,6 @@ export class ImageEditorGpuSceneRuntimeV3 {
         this.failNextRecoveryForDiagnostic = request.recovery === 'failure'
         this.states.peek()?.managed.device.destroy()
         return
-      case 'diagnostic-initialization-failure':
-        this.resources?.clear()
-        this.states.invalidate()
-        this.status = 'fallback'
-        this.emitFailure(
-          'initialization-failed', null, 'Reality 注入 GPU 初始化失败', true,
-        )
-        return
       case 'export':
         if (request.sceneGeneration !== this.sequence.snapshot().sceneGeneration) return
         this.emitFailure('export-not-ready', request.requestId, 'GPU Scene 导出将在任务 5.1 接入', true)
@@ -235,6 +229,7 @@ export class ImageEditorGpuSceneRuntimeV3 {
     this.status = recovered || this.initializedOnce ? 'recovering' : 'initializing'
     try {
       const state = await this.states.acquire(async () => {
+        this.deviceAcquireCount += 1
         const managed = await this.deviceManager.acquire()
         const context = await this.contextFactory(managed.device)
         const compositor = this.compositorFactory(context, {
@@ -389,6 +384,7 @@ export class ImageEditorGpuSceneRuntimeV3 {
         if (result.presentation.kind === 'gpu-image-bitmap') result.presentation.bitmap.close()
         return
       }
+      if (result.presentation.kind === 'webgpu-surface') this.surfaceFrameCount += 1
       this.resources.releaseProtection('stable-frame')
       for (const key of result.usedResourceKeys) this.resources.protect(key, 'stable-frame')
       this.recovery.validateFrame()
@@ -489,6 +485,9 @@ export class ImageEditorGpuSceneRuntimeV3 {
       message,
       recoverable,
       diagnostic: message.startsWith('Reality 注入'),
+      diagnostics: message === 'Reality 注入 GPU 初始化失败'
+        ? { deviceAcquireCount: this.deviceAcquireCount, surfaceFrameCount: this.surfaceFrameCount }
+        : undefined,
     })
   }
 

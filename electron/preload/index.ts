@@ -466,6 +466,8 @@ const updaterApi: HenjiUpdaterApi = {
 const api: HenjiNativeApi = {
   runtimeInfo: {
     uiInspectionActive: process.env['HENJI_UI_INSPECTION_ALLOW_OVERSIZE'] === '1',
+    uiInspectionGpuInitializationFailure:
+      process.env['HENJI_UI_INSPECTION_GPU_INIT_FAILURE'] === '1',
     uiInspectionReadOnly: process.env['HENJI_UI_INSPECTION_READ_ONLY'] === '1',
     featureFlags: {
       imageEditorV3: process.env['HENJI_IMAGE_EDITOR_V3'] !== '0',

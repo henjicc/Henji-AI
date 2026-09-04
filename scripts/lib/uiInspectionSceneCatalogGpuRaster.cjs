@@ -321,23 +321,53 @@ function createGpuRasterScenes(context) {
         }))
       })
       await editor.waitFor({ state: 'visible', timeout: 60000 })
-      await page.waitForFunction(() => (
-        document.querySelector('[data-image-editor-v3] [data-preview-surface]')
-          ?.getAttribute('data-preview-presentation-backend') === 'webgpu-surface'
-      ), undefined, { timeout: 60000 })
-      await page.evaluate(() => window.dispatchEvent(new CustomEvent(
-        'henji:image-editor-gpu-scene-diagnostic',
-        { detail: { kind: 'initialization-failure' } },
-      )))
-      await page.waitForFunction(async ({ afterTimestamp }) => {
-        const result = await window.henjiNative.logging.queryLogEvents({
-          date: new Date().toISOString().slice(0, 10),
-          afterTimestamp,
-          domainPrefix: 'features.image_edit.v3.gpu_scene',
-          limit: 200,
-        })
-        return result.events.find((event) => event.event === 'image_editor_v3.gpu_scene.failed') ?? null
-      }, { afterTimestamp: startedAt }, { timeout: 30000 })
+      let initialization = null
+      const initializationDeadline = Date.now() + 30000
+      while (!initialization && Date.now() < initializationDeadline) {
+        initialization = await page.evaluate(async ({ afterTimestamp }) => {
+          const result = await window.henjiNative.logging.queryLogEvents({
+            date: new Date().toISOString().slice(0, 10),
+            afterTimestamp,
+            domainPrefix: 'features.image_edit.v3.gpu_scene',
+            limit: 500,
+          })
+          const failure = result.events
+            .filter((event) => event.event === 'image_editor_v3.gpu_scene.failed')
+            .reduce((latest, event) => (
+              !latest || String(event.timestamp) > String(latest.timestamp) ? event : latest
+            ), null)
+          if (!failure) return null
+          const sessionEvents = result.events.filter(
+            (event) => event.context?.sessionId === failure.context?.sessionId,
+          )
+          return {
+            acquireCount: Number(failure?.context?.diagnosticDeviceAcquireCount ?? -1),
+            completedCount: sessionEvents.filter(
+              (event) => event.event === 'image_editor_v3.gpu_scene.initialize.completed',
+            ).length,
+            failedCount: sessionEvents.filter(
+              (event) => event.event === 'image_editor_v3.gpu_scene.failed',
+            ).length,
+            startedCount: sessionEvents.filter(
+              (event) => event.event === 'image_editor_v3.gpu_scene.initialize.start',
+            ).length,
+            surfaceFrameCount: Number(failure?.context?.diagnosticSurfaceFrameCount ?? -1),
+            visibleSurfaceFrameCount: result.events.filter(
+              (event) => event.event === 'image_editor_v3.gpu_scene.hidden_frame_ready',
+            ).length,
+          }
+        }, { afterTimestamp: startedAt })
+        if (!initialization) await page.waitForTimeout(100)
+      }
+      if (!initialization) throw new Error('等待首次 GPU 初始化失败日志超时')
+      if (initialization.startedCount !== 1
+        || initialization.failedCount !== 1
+        || initialization.completedCount !== 0
+        || initialization.acquireCount !== 0
+        || initialization.surfaceFrameCount !== 0
+        || initialization.visibleSurfaceFrameCount !== 0) {
+        throw new Error(`GPU初始化失败没有在首次设备申请与Surface帧前发生：${JSON.stringify(initialization)}`)
+      }
       const preview = editor.locator('[data-preview-surface]')
       await page.waitForFunction(() => {
         const preview = document.querySelector('[data-image-editor-v3] [data-preview-surface]')
@@ -369,6 +399,7 @@ function createGpuRasterScenes(context) {
       if (ui.internalText || ui.gpuVisibility !== 'hidden') {
         throw new Error(`GPU初始化失败泄露内部状态或遮挡CPU稳定帧：${JSON.stringify(ui)}`)
       }
+      process.stdout.write(`  GPU首次初始化失败：${JSON.stringify(initialization)}\n`)
       await settlePage(page, 600)
     },
   }]

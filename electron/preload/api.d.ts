@@ -38,6 +38,7 @@ export type { HenjiImageEditorV3Api } from './image-editor-v3-api'
 export interface HenjiNativeApi {
   runtimeInfo: {
     uiInspectionActive: boolean
+    uiInspectionGpuInitializationFailure: boolean
     uiInspectionReadOnly: boolean
     featureFlags: {
       imageEditorV3: boolean
