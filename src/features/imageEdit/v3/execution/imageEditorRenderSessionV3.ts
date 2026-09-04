@@ -103,7 +103,8 @@ export class DefaultImageEditorRenderSessionV3 implements ImageEditorRenderSessi
 
   attachSurface(elements: ImageEditorPresentationSurfaceElementsV3): () => void {
     this.assertUsable()
-    this.compositor.attach(elements)
+    const gpuSurface = this.compositor.attach(elements)
+    if (gpuSurface) this.gpuBridge.attachPresentationSurface(gpuSurface)
     this.compositor.updateRuntimeDiagnostics(
       this.renderPlanCompileCount, this.cpuTaskStartCount,
     )

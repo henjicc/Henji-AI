@@ -45,13 +45,33 @@ const layout = {
 function frame(interactionSequence: number, close = vi.fn()): ImageEditorGpuSceneWorkerEventV3 {
   return {
     type: 'frame-ready', requestId: `frame-${interactionSequence}`, sceneGeneration: 1,
-    cameraSequence: 1, interactionSequence, deviceGeneration: 1, quality: 'draft',
+    cameraSequence: 1, interactionSequence, surfaceGeneration: 0,
+    deviceGeneration: 1, quality: 'draft',
     bitmap: { width: 320, height: 240, close } as unknown as ImageBitmap,
     diagnostics: {
       uploadCount: 1, pipelineCompileCount: 2, frameCount: interactionSequence + 1,
       diagnosticReadbackCount: 0, transientUniformUpdateCount: interactionSequence,
       residentTileCount: 1, atlasPageCount: 1, allocatedAtlasBytes: 1_056_784,
       minimumPlannedMip: 0, maximumPlannedMip: 0,
+      surfaceFrameCount: 0, imageBitmapFrameCount: interactionSequence + 1,
+      directSurfaceFailureCount: 0,
+    },
+  }
+}
+
+function surfaceFrame(interactionSequence: number): ImageEditorGpuSceneWorkerEventV3 {
+  return {
+    type: 'surface-frame-ready', requestId: `surface-${interactionSequence}`,
+    sceneGeneration: 1, cameraSequence: 1, interactionSequence,
+    surfaceGeneration: 1, deviceGeneration: 1, quality: 'draft',
+    width: 320, height: 240,
+    diagnostics: {
+      uploadCount: 1, pipelineCompileCount: 2, frameCount: interactionSequence + 1,
+      diagnosticReadbackCount: 0, transientUniformUpdateCount: interactionSequence,
+      residentTileCount: 1, atlasPageCount: 1, allocatedAtlasBytes: 1_056_784,
+      minimumPlannedMip: 0, maximumPlannedMip: 0,
+      surfaceFrameCount: interactionSequence + 1, imageBitmapFrameCount: 0,
+      directSurfaceFailureCount: 0,
     },
   }
 }
@@ -260,6 +280,40 @@ describe('ImageEditorRenderSessionGpuBridgeV3', () => {
     expect(harness.client.requestFrame).toHaveBeenCalledTimes(2)
     harness.listener(frame(2))
     expect(present).toHaveBeenCalledTimes(2)
+    bridge.dispose()
+  })
+
+  it('direct-ready不携带ImageBitmap，并原子发布webgpu-surface后端', () => {
+    const harness = clientHarness()
+    const publish = vi.fn()
+    const present = vi.fn(() => true)
+    const bridge = new ImageEditorRenderSessionGpuBridgeV3(
+      'gpu-direct', harness.client, publish, false, present, vi.fn(),
+    )
+    bridge.updateViewport(1, layout)
+    bridge.syncSnapshot({
+      document: createImageEditDocumentV3({ width: 320, height: 240 }),
+      renderGeneration: 1, geometryHash: 'geometry', quality: 'stable', resourceDescriptors: [],
+    })
+    harness.listener({
+      type: 'ready', sceneGeneration: 1, deviceGeneration: 1, recovered: false,
+    })
+    harness.listener(surfaceFrame(0))
+
+    expect(present).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'surface-frame-ready', surfaceGeneration: 1,
+        diagnostics: expect.objectContaining({
+          surfaceFrameCount: 1, imageBitmapFrameCount: 0, diagnosticReadbackCount: 0,
+        }),
+      }),
+      layout,
+      null,
+    )
+    expect(publish).toHaveBeenLastCalledWith(expect.objectContaining({
+      compositionBackend: 'gpu', presentationBackend: 'webgpu-surface',
+      fallbackRequired: false, diagnostic: null,
+    }))
     bridge.dispose()
   })
 

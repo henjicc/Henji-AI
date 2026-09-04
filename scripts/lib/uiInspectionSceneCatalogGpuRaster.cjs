@@ -8,7 +8,7 @@ function createGpuRasterScenes(context) {
     writesUserData: true,
     setup: async (page) => {
       const startedAt = new Date().toISOString()
-      const waitForLogEvent = async (domainPrefix, accept, message) => {
+      const waitForLogEvent = async (domainPrefix, accept, message, afterTimestamp = startedAt) => {
         const deadline = Date.now() + 60000
         while (Date.now() < deadline) {
           const result = await page.evaluate(async ({ afterTimestamp, domain }) => (
@@ -18,7 +18,7 @@ function createGpuRasterScenes(context) {
               domainPrefix: domain,
               limit: 500,
             })
-          ), { afterTimestamp: startedAt, domain: domainPrefix })
+          ), { afterTimestamp, domain: domainPrefix })
           const event = result.events.find(accept)
           if (event) return event
           await page.waitForTimeout(100)
@@ -106,6 +106,9 @@ function createGpuRasterScenes(context) {
           && Number(event.context?.allocatedAtlasBytes) < 8192 * 8192 * 4
           && Number(event.context?.pipelineCompileCount) === 2
           && Number(event.context?.diagnosticReadbackCount) === 0
+          && Number(event.context?.surfaceFrameCount) > 0
+          && Number(event.context?.imageBitmapFrameCount) === 0
+          && Number(event.context?.directSurfaceFailureCount) === 0
           )
         ),
         '等待8192 GPU初帧日志超时',
@@ -182,13 +185,190 @@ function createGpuRasterScenes(context) {
         || Number(latest?.context?.pipelineCompileCount) !== 2
         || Number(latest?.context?.frameCount) <= Number(zoomFrameEvent?.context?.frameCount)
         || Number(latest?.context?.minimumPlannedMip) === Number(initial?.context?.minimumPlannedMip)
-        || Number(latest?.context?.diagnosticReadbackCount) !== 0) {
+        || Number(latest?.context?.diagnosticReadbackCount) !== 0
+        || Number(latest?.context?.imageBitmapFrameCount) !== 0
+        || Number(latest?.context?.directSurfaceFailureCount) !== 0) {
         throw new Error(`GPU 8192 帧没有切换mip、复用Pipeline或保持有界atlas：${JSON.stringify(frames)}`)
+      }
+      const recoveryStartedAt = new Date().toISOString()
+      await page.evaluate(() => window.dispatchEvent(new CustomEvent(
+        'henji:image-editor-gpu-scene-diagnostic',
+        { detail: { recovery: 'success' } },
+      )))
+      await waitForLogEvent(
+        'features.image_edit.v3.gpu_scene',
+        (event) => event.event === 'image_editor_v3.gpu_scene.device_lost',
+        'Reality注入device lost未触发',
+        recoveryStartedAt,
+      )
+      await waitForLogEvent(
+        'features.image_edit.v3.gpu_scene',
+        (event) => event.event === 'image_editor_v3.gpu_scene.initialize.completed'
+          && event.context?.recovered === true,
+        'GPU device lost后未完成单次恢复',
+        recoveryStartedAt,
+      )
+      const recoveredFrame = await waitForLogEvent(
+        'features.image_edit.v3.gpu_scene_bridge',
+        (event) => event.event === 'image_editor_v3.gpu_scene.hidden_frame_ready'
+          && Number(event.context?.surfaceFrameCount) > 0
+          && Number(event.context?.imageBitmapFrameCount) === 0
+          && Number(event.context?.diagnosticReadbackCount) === 0,
+        'GPU恢复后没有重新直接呈现最新Surface帧',
+        recoveryStartedAt,
+      )
+      const recoveredUi = await editor.evaluate((root) => {
+        const preview = root.querySelector('[data-preview-surface]')
+        const gpu = root.querySelector('[data-presentation-gpu-surface]')
+        return {
+          backend: preview?.getAttribute('data-preview-presentation-backend'),
+          gpuVisibility: gpu instanceof HTMLElement ? getComputedStyle(gpu).visibility : null,
+        }
+      })
+      if (recoveredUi.backend !== 'webgpu-surface' || recoveredUi.gpuVisibility !== 'visible') {
+        throw new Error(`GPU恢复后未原子切回直接Surface：${JSON.stringify(recoveredUi)}`)
+      }
+
+      const failedRecoveryStartedAt = new Date().toISOString()
+      await page.evaluate(() => window.dispatchEvent(new CustomEvent(
+        'henji:image-editor-gpu-scene-diagnostic',
+        { detail: { recovery: 'failure' } },
+      )))
+      await waitForLogEvent(
+        'features.image_edit.v3.gpu_scene_bridge',
+        (event) => event.event === 'image_editor_v3.gpu_scene.fallback'
+          && event.context?.deviceStatus === 'lost',
+        '第二次device lost未立即切换稳定CPU后备',
+        failedRecoveryStartedAt,
+      )
+      await waitForLogEvent(
+        'features.image_edit.v3.gpu_scene',
+        (event) => event.event === 'image_editor_v3.gpu_scene.failed',
+        'Reality恢复失败注入未进入有界fallback',
+        failedRecoveryStartedAt,
+      )
+      await page.waitForTimeout(1200)
+      const failedRecoveryUi = await editor.evaluate((root) => {
+        const preview = root.querySelector('[data-preview-surface]')
+        const gpu = root.querySelector('[data-presentation-gpu-surface]')
+        return {
+          backend: preview?.getAttribute('data-preview-presentation-backend'),
+          gpuVisibility: gpu instanceof HTMLElement ? getComputedStyle(gpu).visibility : null,
+          internalText: /device|backend|revision|surface|worker|gpu/i.test(root.textContent ?? ''),
+        }
+      })
+      const repeatedRecovery = await page.evaluate(async ({ afterTimestamp }) => {
+        const result = await window.henjiNative.logging.queryLogEvents({
+          date: new Date().toISOString().slice(0, 10),
+          afterTimestamp,
+          domainPrefix: 'features.image_edit.v3.gpu_scene',
+          limit: 200,
+        })
+        return result.events.filter((event) => (
+          event.event === 'image_editor_v3.gpu_scene.initialize.completed'
+          && event.context?.recovered === true
+        )).length
+      }, { afterTimestamp: failedRecoveryStartedAt })
+      if (failedRecoveryUi.backend !== 'canvas2d'
+        || failedRecoveryUi.gpuVisibility !== 'hidden'
+        || failedRecoveryUi.internalText
+        || repeatedRecovery !== 0) {
+        throw new Error(`GPU恢复失败没有稳定停在CPU或发生重试风暴：${JSON.stringify({ failedRecoveryUi, repeatedRecovery })}`)
       }
       process.stdout.write(`  GPU 8192瓦片隐藏帧：${JSON.stringify({
         initial: initial?.context,
         latest: latest.context,
+        recovered: recoveredFrame.context,
       })}\n`)
+      await settlePage(page, 600)
+    },
+  }, {
+    id: 'image-editor-gpu-initialization-fallback',
+    surface: '工具箱',
+    name: '图片编辑器-GPU初始化失败回退',
+    writesUserData: true,
+    setup: async (page) => {
+      const startedAt = new Date().toISOString()
+      await setupToolbox(page)
+      await clickNamedButton(page, /^(图片编辑|Image Edit)/i)
+      const host = page.locator('[data-application-surface-id="tool.image_edit"]:visible')
+      await host.waitFor({ state: 'visible', timeout: 12000 })
+      const dropTarget = host.locator('.border-dashed').first()
+      const editor = host.locator('[data-image-editor-v3]')
+      await Promise.race([
+        dropTarget.waitFor({ state: 'visible', timeout: 12000 }),
+        editor.waitFor({ state: 'visible', timeout: 12000 }),
+      ])
+      const importTarget = await editor.isVisible() ? editor : dropTarget
+      await importTarget.evaluate(async (element) => {
+        const canvas = document.createElement('canvas')
+        canvas.width = 640
+        canvas.height = 480
+        const context = canvas.getContext('2d')
+        if (!context) throw new Error('初始化失败夹具画布不可用')
+        context.fillStyle = 'rgb(37, 99, 235)'
+        context.fillRect(0, 0, 640, 480)
+        context.fillStyle = 'rgb(244, 114, 182)'
+        context.fillRect(160, 100, 320, 280)
+        const blob = await new Promise((resolve, reject) => canvas.toBlob(
+          (value) => value ? resolve(value) : reject(new Error('初始化失败夹具编码失败')),
+          'image/png',
+        ))
+        const transfer = new DataTransfer()
+        transfer.items.add(new File([blob], 'gpu-init-fallback.png', { type: 'image/png' }))
+        element.dispatchEvent(new DragEvent('drop', {
+          bubbles: true, cancelable: true, dataTransfer: transfer,
+        }))
+      })
+      await editor.waitFor({ state: 'visible', timeout: 60000 })
+      await page.waitForFunction(() => (
+        document.querySelector('[data-image-editor-v3] [data-preview-surface]')
+          ?.getAttribute('data-preview-presentation-backend') === 'webgpu-surface'
+      ), undefined, { timeout: 60000 })
+      await page.evaluate(() => window.dispatchEvent(new CustomEvent(
+        'henji:image-editor-gpu-scene-diagnostic',
+        { detail: { kind: 'initialization-failure' } },
+      )))
+      await page.waitForFunction(async ({ afterTimestamp }) => {
+        const result = await window.henjiNative.logging.queryLogEvents({
+          date: new Date().toISOString().slice(0, 10),
+          afterTimestamp,
+          domainPrefix: 'features.image_edit.v3.gpu_scene',
+          limit: 200,
+        })
+        return result.events.find((event) => event.event === 'image_editor_v3.gpu_scene.failed') ?? null
+      }, { afterTimestamp: startedAt }, { timeout: 30000 })
+      const preview = editor.locator('[data-preview-surface]')
+      await page.waitForFunction(() => {
+        const preview = document.querySelector('[data-image-editor-v3] [data-preview-surface]')
+        return preview?.getAttribute('data-preview-presentation-backend') === 'canvas2d'
+          && Number(preview.getAttribute('data-preview-coverage') ?? '0') > 0
+      }, undefined, { timeout: 60000 })
+      const duplicate = editor.getByRole('button', { name: /^(复制图层|Duplicate layer)$/i })
+      await duplicate.click()
+      await page.waitForFunction(() => (
+        document.querySelectorAll('[data-image-editor-v3] [role="treeitem"][data-layer-type="raster"]').length === 2
+      ), undefined, { timeout: 10000 })
+      await page.waitForFunction(async ({ afterTimestamp }) => {
+        const result = await window.henjiNative.logging.queryLogEvents({
+          date: new Date().toISOString().slice(0, 10), afterTimestamp, level: 'info', limit: 300,
+        })
+        return result.events.some((event) => event.event === 'image_editor_v3.document.save.completed')
+      }, { afterTimestamp: startedAt }, { timeout: 12000 })
+      const previewBox = await preview.boundingBox()
+      if (!previewBox) throw new Error('初始化失败回退无法读取预览区域')
+      await editor.locator('[data-tool-id="hand"]').click()
+      await page.mouse.move(previewBox.x + previewBox.width / 2, previewBox.y + previewBox.height / 2)
+      await page.mouse.down()
+      await page.mouse.move(previewBox.x + previewBox.width / 2 + 80, previewBox.y + previewBox.height / 2 + 40)
+      await page.mouse.up()
+      const ui = await editor.evaluate((root) => ({
+        internalText: /device|backend|revision|surface|worker|gpu/i.test(root.textContent ?? ''),
+        gpuVisibility: getComputedStyle(root.querySelector('[data-presentation-gpu-surface]')).visibility,
+      }))
+      if (ui.internalText || ui.gpuVisibility !== 'hidden') {
+        throw new Error(`GPU初始化失败泄露内部状态或遮挡CPU稳定帧：${JSON.stringify(ui)}`)
+      }
       await settlePage(page, 600)
     },
   }]

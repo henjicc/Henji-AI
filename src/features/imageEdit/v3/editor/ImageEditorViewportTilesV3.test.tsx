@@ -9,7 +9,7 @@ import { ImageEditorViewportTilesV3 } from './ImageEditorViewportTilesV3'
 describe('图片编辑 V3 常驻显示表面', () => {
   afterEach(cleanup)
 
-  it('只挂载固定双表面，并把表面与视口交给同一个 RenderSession', () => {
+  it('只挂载固定稳定双表面与唯一GPU表面，并交给同一个 RenderSession', () => {
     const detach = vi.fn()
     let attached: Parameters<ImageEditorRenderSessionV3['attachSurface']>[0] | null = null
     const attachSurface: ImageEditorRenderSessionV3['attachSurface'] = (elements) => {
@@ -45,10 +45,11 @@ describe('图片编辑 V3 常驻显示表面', () => {
       <ImageEditorViewportTilesV3 session={session} layout={layout} label="预览" />,
     )
 
-    expect(rendered.container.querySelectorAll('canvas')).toHaveLength(2)
+    expect(rendered.container.querySelectorAll('canvas')).toHaveLength(3)
     expect(attached).not.toBeNull()
     expect(attached!.front.dataset.presentationFrontSurface).toBe('true')
     expect(attached!.safety.dataset.presentationSafetySurface).toBe('true')
+    expect(attached!.gpu?.dataset.presentationGpuSurface).toBe('true')
     expect(updateViewport).toHaveBeenCalledWith(layout)
 
     rendered.rerender(

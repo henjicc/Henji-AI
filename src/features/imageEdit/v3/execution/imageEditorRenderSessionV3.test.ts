@@ -678,9 +678,11 @@ describe('ImageEditorRenderSessionV3', () => {
     gpuSubscription.listener({
       type: 'frame-ready', requestId: 'hidden-frame', sceneGeneration: 7,
       cameraSequence: 1, interactionSequence: 0, deviceGeneration: 2,
+      surfaceGeneration: 0,
       quality: 'stable', bitmap: { close: closeInitialFrame } as unknown as ImageBitmap,
       diagnostics: {
         uploadCount: 1, pipelineCompileCount: 2, frameCount: 1, diagnosticReadbackCount: 0,
+        surfaceFrameCount: 0, imageBitmapFrameCount: 1, directSurfaceFailureCount: 0,
         transientUniformUpdateCount: 0,
         residentTileCount: 1, atlasPageCount: 1, allocatedAtlasBytes: 1_056_784,
         minimumPlannedMip: 0, maximumPlannedMip: 0,

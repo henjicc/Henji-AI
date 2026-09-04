@@ -32,6 +32,14 @@ export function isUiInspectionReadOnly(): boolean {
   return native?.runtimeInfo?.uiInspectionReadOnly === true
 }
 
+export function isUiInspectionActive(): boolean {
+  if (typeof window === 'undefined') return false
+  const native = window.henjiNative as {
+    runtimeInfo?: { uiInspectionActive?: boolean }
+  } | undefined
+  return native?.runtimeInfo?.uiInspectionActive === true
+}
+
 export interface HenjiRuntimeFeatureFlags {
   imageEditorV3: boolean
 }

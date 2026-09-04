@@ -86,12 +86,14 @@ describe('ImageEditorGpuSceneClientV3', () => {
     worker.emit({
       type: 'frame-ready', requestId: 'stale', sceneGeneration: 3,
       cameraSequence: 3, interactionSequence: 6, deviceGeneration: 1,
+      surfaceGeneration: 0,
       quality: 'draft', bitmap: { close: closeStale } as unknown as ImageBitmap,
     })
     const closeCurrent = vi.fn()
     worker.emit({
       type: 'frame-ready', requestId: 'current', sceneGeneration: 3,
       cameraSequence: 4, interactionSequence: 6, deviceGeneration: 1,
+      surfaceGeneration: 0,
       quality: 'draft', bitmap: { close: closeCurrent } as unknown as ImageBitmap,
     })
 
@@ -99,6 +101,42 @@ describe('ImageEditorGpuSceneClientV3', () => {
     expect(closeCurrent).not.toHaveBeenCalled()
     expect(listener).toHaveBeenCalledOnce()
     expect(listener).toHaveBeenCalledWith(expect.objectContaining({ requestId: 'current' }))
+    client.dispose()
+  })
+
+  it('只转移递增Surface代次，并拒绝旧Surface的direct-ready事件', () => {
+    const worker = createPort()
+    const client = new ImageEditorGpuSceneClientV3({
+      sessionId: 'gpu-client-surface-test',
+      workerFactory: () => worker.port,
+      renderingEnabled: true,
+    })
+    const first = { width: 16, height: 16 } as OffscreenCanvas
+    const second = { width: 32, height: 32 } as OffscreenCanvas
+    client.attachPresentationSurface(1, first)
+    client.attachPresentationSurface(1, second)
+    client.attachPresentationSurface(2, second)
+    expect(worker.messages.filter((message) => (
+      message.type === 'attach-presentation-surface'
+    ))).toEqual([
+      { type: 'attach-presentation-surface', surfaceGeneration: 1, canvas: first },
+      { type: 'attach-presentation-surface', surfaceGeneration: 2, canvas: second },
+    ])
+
+    const listener = vi.fn()
+    client.subscribe(listener)
+    worker.emit({
+      type: 'surface-frame-ready', requestId: 'old-surface', sceneGeneration: 0,
+      cameraSequence: 0, interactionSequence: 0, deviceGeneration: 1,
+      surfaceGeneration: 1, quality: 'draft', width: 16, height: 16,
+    })
+    worker.emit({
+      type: 'surface-frame-ready', requestId: 'current-surface', sceneGeneration: 0,
+      cameraSequence: 0, interactionSequence: 0, deviceGeneration: 1,
+      surfaceGeneration: 2, quality: 'draft', width: 32, height: 32,
+    })
+    expect(listener).toHaveBeenCalledOnce()
+    expect(listener).toHaveBeenCalledWith(expect.objectContaining({ requestId: 'current-surface' }))
     client.dispose()
   })
 })

@@ -18,6 +18,9 @@ export interface ImageEditorGpuRasterCompositorStatsV3 {
   allocatedAtlasBytes: number
   minimumPlannedMip: number
   maximumPlannedMip: number
+  surfaceFrameCount: number
+  imageBitmapFrameCount: number
+  directSurfaceFailureCount: number
   renderedGraphNodeCount?: number
   graphCacheHitCount?: number
   invalidatedGraphNodeCount?: number
@@ -26,8 +29,24 @@ export interface ImageEditorGpuRasterCompositorStatsV3 {
   maximumGraphTargetHeight?: number
 }
 
-export interface ImageEditorGpuRasterFrameV3 {
-  bitmap: ImageBitmap
+export type ImageEditorGpuRasterFrameV3 = {
+  presentation: {
+    kind: 'webgpu-surface'
+    surfaceGeneration: number
+    width: number
+    height: number
+  }
+  stats: ImageEditorGpuRasterCompositorStatsV3
+  usedResourceKeys: readonly ImageEditorGpuSceneTileKeyV3[]
+} | {
+  presentation: {
+    kind: 'gpu-image-bitmap'
+    surfaceGeneration: number
+    width: number
+    height: number
+    bitmap: ImageBitmap
+    surfaceFailureReason?: string
+  }
   stats: ImageEditorGpuRasterCompositorStatsV3
   usedResourceKeys: readonly ImageEditorGpuSceneTileKeyV3[]
 }
@@ -36,12 +55,17 @@ export interface ImageEditorGpuRasterCompositorV3Like {
   syncScene(scene: ImageEditorGpuRasterSceneV3 | null): void
   updateTransientTransform(layerId: string, transform: ImageEditTransformV3 | null): void
   updateViewport(layout: ImageEditorViewportLayoutV3): void
+  attachPresentationSurface(canvas: OffscreenCanvas, surfaceGeneration: number): void
   memoryPressureBytes(): number
   estimateTileGpuBytes(tile: ImageEditorV3SourceTile): number
   uploadTile(key: ImageEditorGpuSceneTileKeyV3, tile: ImageEditorV3SourceTile): ImageEditorGpuRasterTextureV3
   requiredResourceKeys(layerId?: string): readonly ImageEditorGpuSceneTileKeyV3[]
   missingResources(resolve: (key: ImageEditorGpuSceneTileKeyV3) => ImageEditorGpuRasterTextureV3 | null): ImageEditorGpuSceneTileKeyV3[]
-  render(resolve: (key: ImageEditorGpuSceneTileKeyV3) => ImageEditorGpuRasterTextureV3 | null): Promise<ImageEditorGpuRasterFrameV3>
+  render(
+    resolve: (key: ImageEditorGpuSceneTileKeyV3) => ImageEditorGpuRasterTextureV3 | null,
+    surfaceGeneration: number,
+    acceptsSurfaceSubmit: () => boolean,
+  ): Promise<ImageEditorGpuRasterFrameV3>
   readLinearPixelsForTest(resolve: (key: ImageEditorGpuSceneTileKeyV3) => ImageEditorGpuRasterTextureV3 | null): Promise<Float32Array>
   readPresentedPixelsForTest?(resolve: (key: ImageEditorGpuSceneTileKeyV3) => ImageEditorGpuRasterTextureV3 | null): Promise<Uint8Array>
   snapshotStats(): ImageEditorGpuRasterCompositorStatsV3

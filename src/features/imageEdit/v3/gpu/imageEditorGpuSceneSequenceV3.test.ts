@@ -16,6 +16,7 @@ describe('ImageEditorGpuSceneSequenceGateV3', () => {
       cameraSequence: 8,
       interactionSequence: 12,
       deviceGeneration: 1,
+      surfaceGeneration: 0,
       quality: 'draft',
       bitmap: {} as ImageBitmap,
     })).toBe(true)
@@ -26,6 +27,7 @@ describe('ImageEditorGpuSceneSequenceGateV3', () => {
       cameraSequence: 7,
       interactionSequence: 12,
       deviceGeneration: 1,
+      surfaceGeneration: 0,
       quality: 'draft',
       bitmap: {} as ImageBitmap,
     })).toBe(false)
@@ -36,6 +38,7 @@ describe('ImageEditorGpuSceneSequenceGateV3', () => {
       cameraSequence: 8,
       interactionSequence: 11,
       deviceGeneration: 1,
+      surfaceGeneration: 0,
       quality: 'draft',
       bitmap: {} as ImageBitmap,
     })).toBe(false)

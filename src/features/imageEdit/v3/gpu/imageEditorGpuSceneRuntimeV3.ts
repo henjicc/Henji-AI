@@ -28,20 +28,20 @@ import {
   type ImageEditorGpuSceneWorkerRequestV3,
 } from './imageEditorGpuSceneProtocolV3'
 import { ImageEditorGpuSceneResourceRegistryV3 } from './imageEditorGpuSceneResourceRegistryV3'
+import {
+  imageEditorGpuSceneErrorMessageV3,
+  ImageEditorGpuSceneRecoveryV3,
+  waitForImageEditorGpuSceneTaskV3,
+} from './imageEditorGpuSceneRecoveryV3'
+import { createImageEditorGpuSceneFrameDeliveryV3 } from './imageEditorGpuSceneFrameEventsV3'
 import { ImageEditorGpuSceneSequenceGateV3 } from './imageEditorGpuSceneSequenceV3'
 import { ImageEditorGpuTileAtlasBudgetErrorV3 } from './imageEditorGpuTileAtlasV3'
-
-interface ImageEditorGpuSceneDeviceManagerV3 {
-  onDeviceLost(handler: (reason: string, loss: ImageEditWebGpuDeviceLoss) => void): void
-  acquire(): Promise<ManagedWebGpuDevice>
-  getRecoveryStatus(): { generation: number; retryAfterMs: number }
-  destroy(): void
-}
-
-interface ImageEditorGpuSceneContextV3 {
-  onError(listener: (error: unknown) => void): () => void
-  dispose(): void
-}
+import type {
+  ImageEditorGpuSceneContextV3,
+  ImageEditorGpuSceneDeviceManagerV3,
+  ImageEditorGpuSceneRuntimeDependenciesV3,
+  ImageEditorGpuSceneRuntimeStatusV3,
+} from './imageEditorGpuSceneRuntimeContractsV3'
 
 interface ImageEditorGpuSceneGpuStateV3 {
   managed: ManagedWebGpuDevice
@@ -50,23 +50,8 @@ interface ImageEditorGpuSceneGpuStateV3 {
   unsubscribeError: () => void
 }
 
-export interface ImageEditorGpuSceneRuntimeDependenciesV3 {
-  deviceManager?: ImageEditorGpuSceneDeviceManagerV3
-  contextFactory?: (device: GpuDevice) => Promise<ImageEditorGpuSceneContextV3>
-  compositorFactory?: (
-    context: ImageEditorGpuSceneContextV3,
-    options: { memoryBudgetBytes: number },
-  ) => ImageEditorGpuRasterCompositorV3Like
-}
-
-export type ImageEditorGpuSceneRuntimeStatusV3 =
-  | 'idle'
-  | 'initializing'
-  | 'ready'
-  | 'lost'
-  | 'recovering'
-  | 'fallback'
-  | 'disposed'
+export type { ImageEditorGpuSceneRuntimeDependenciesV3 } from './imageEditorGpuSceneRuntimeContractsV3'
+export type { ImageEditorGpuSceneRuntimeStatusV3 } from './imageEditorGpuSceneRuntimeContractsV3'
 
 export class ImageEditorGpuSceneRuntimeV3 {
   private readonly deviceManager: ImageEditorGpuSceneDeviceManagerV3
@@ -82,9 +67,12 @@ export class ImageEditorGpuSceneRuntimeV3 {
   private readonly pendingTiles = new Map<string, ImageEditorGpuSceneUploadTileV3>()
   private scene: ImageEditorGpuRasterSceneV3 | null = null
   private layout: ImageEditorViewportLayoutV3 | null = null
+  private presentationSurface: { generation: number; canvas: OffscreenCanvas } | null = null
   private sessionId: string | null = null
   private status: ImageEditorGpuSceneRuntimeStatusV3 = 'idle'
   private initializedOnce = false
+  private readonly recovery = new ImageEditorGpuSceneRecoveryV3()
+  private failNextRecoveryForDiagnostic = false
   private disposed = false
 
   constructor(
@@ -154,9 +142,32 @@ export class ImageEditorGpuSceneRuntimeV3 {
           }
         }
         return
+      case 'attach-presentation-surface':
+        if (request.surfaceGeneration <= (this.presentationSurface?.generation ?? 0)) return
+        this.presentationSurface = {
+          generation: request.surfaceGeneration,
+          canvas: request.canvas,
+        }
+        this.states.peek()?.compositor.attachPresentationSurface(
+          request.canvas,
+          request.surfaceGeneration,
+        )
+        return
       case 'render':
         if (!this.acceptsRenderRequest(request)) return
         void this.render(request)
+        return
+      case 'diagnostic-device-loss':
+        this.failNextRecoveryForDiagnostic = request.recovery === 'failure'
+        this.states.peek()?.managed.device.destroy()
+        return
+      case 'diagnostic-initialization-failure':
+        this.resources?.clear()
+        this.states.invalidate()
+        this.status = 'fallback'
+        this.emitFailure(
+          'initialization-failed', null, 'Reality 注入 GPU 初始化失败', true,
+        )
         return
       case 'export':
         if (request.sceneGeneration !== this.sequence.snapshot().sceneGeneration) return
@@ -178,6 +189,7 @@ export class ImageEditorGpuSceneRuntimeV3 {
     this.scene = null
     this.layout = null
     this.transientTransforms.clear()
+    this.recovery.dispose()
     this.states.destroy()
     this.deviceManager.destroy()
   }
@@ -195,6 +207,19 @@ export class ImageEditorGpuSceneRuntimeV3 {
       return
     }
     this.sessionId = request.sessionId
+    if ((!recovered && request.diagnosticInitializationFailure)
+      || (recovered && this.failNextRecoveryForDiagnostic)) {
+      // 让随后已排队的权威 sync-scene 先推进 generation，注入事件与真实异步
+      // requestDevice 失败保持相同次序，不会被客户端旧 scene 门控丢弃。
+      if (!recovered) await waitForImageEditorGpuSceneTaskV3()
+      this.failNextRecoveryForDiagnostic = false
+      this.status = 'fallback'
+      this.emitFailure(
+        'initialization-failed', null,
+        recovered ? 'Reality 注入 GPU 恢复失败' : 'Reality 注入 GPU 初始化失败', true,
+      )
+      return
+    }
     if (!this.resources) {
       try {
         this.resources = new ImageEditorGpuSceneResourceRegistryV3({
@@ -203,7 +228,7 @@ export class ImageEditorGpuSceneRuntimeV3 {
         })
       } catch (error) {
         this.status = 'fallback'
-        this.emitFailure('initialization-failed', null, errorMessage(error), false)
+        this.emitFailure('initialization-failed', null, imageEditorGpuSceneErrorMessageV3(error), false)
         return
       }
     }
@@ -217,7 +242,7 @@ export class ImageEditorGpuSceneRuntimeV3 {
             ?? IMAGE_EDITOR_GPU_SCENE_DEFAULT_BUDGET_BYTES_V3,
         })
         const unsubscribeError = context.onError((error) => {
-          this.emitFailure('initialization-failed', null, errorMessage(error), true)
+          this.emitFailure('initialization-failed', null, imageEditorGpuSceneErrorMessageV3(error), true)
         })
         return { managed, context, compositor, unsubscribeError }
       })
@@ -226,6 +251,12 @@ export class ImageEditorGpuSceneRuntimeV3 {
       this.initializedOnce = true
       this.status = 'ready'
       state.compositor.syncScene(this.scene)
+      if (this.presentationSurface) {
+        state.compositor.attachPresentationSurface(
+          this.presentationSurface.canvas,
+          this.presentationSurface.generation,
+        )
+      }
       if (this.layout) {
         state.compositor.updateViewport(this.layout)
         if (!this.trimMemoryPressure(state.compositor)) {
@@ -245,7 +276,7 @@ export class ImageEditorGpuSceneRuntimeV3 {
     } catch (error) {
       if (this.disposed) return
       this.status = 'fallback'
-      this.emitFailure('initialization-failed', null, errorMessage(error), true)
+      this.emitFailure('initialization-failed', null, imageEditorGpuSceneErrorMessageV3(error), true)
     }
   }
 
@@ -304,7 +335,7 @@ export class ImageEditorGpuSceneRuntimeV3 {
       return false
     } catch (error) {
       payload?.destroy()
-      this.emitFailure('composition-not-ready', null, errorMessage(error), true)
+      this.emitFailure('composition-not-ready', null, imageEditorGpuSceneErrorMessageV3(error), true)
       return false
     }
   }
@@ -347,34 +378,39 @@ export class ImageEditorGpuSceneRuntimeV3 {
       return
     }
     try {
-      const result = await state.compositor.render(resolve)
+      const result = await state.compositor.render(
+        resolve,
+        request.surfaceGeneration,
+        () => this.acceptsRenderRequest(request)
+          && this.states.isCurrent(state)
+          && request.surfaceGeneration === (this.presentationSurface?.generation ?? 0),
+      )
       if (!this.acceptsRenderRequest(request) || !this.states.isCurrent(state)) {
-        result.bitmap.close()
+        if (result.presentation.kind === 'gpu-image-bitmap') result.presentation.bitmap.close()
         return
       }
       this.resources.releaseProtection('stable-frame')
       for (const key of result.usedResourceKeys) this.resources.protect(key, 'stable-frame')
-      this.emit({
-        type: 'frame-ready',
-        sceneGeneration: request.sceneGeneration,
-        deviceGeneration: state.managed.generation,
-        requestId: request.requestId,
-        cameraSequence: request.cameraSequence,
-        interactionSequence: request.interactionSequence,
-        quality: request.quality,
-        bitmap: result.bitmap,
-        diagnostics: result.stats,
-      }, [result.bitmap])
+      this.recovery.validateFrame()
+      const delivery = createImageEditorGpuSceneFrameDeliveryV3(
+        request,
+        state.managed.generation,
+        result,
+      )
+      this.emit(delivery.event, delivery.transfer)
     } catch (error) {
       if (this.acceptsRenderRequest(request)) {
-        this.emitFailure('composition-not-ready', request.requestId, errorMessage(error), true)
+        this.emitFailure(
+          'composition-not-ready', request.requestId, imageEditorGpuSceneErrorMessageV3(error), true,
+        )
       }
     }
   }
 
   private handleDeviceLost(loss: ImageEditWebGpuDeviceLoss): void {
     if (this.disposed) return
-    const missing = this.resources?.clear() ?? []
+    const required = this.states.peek()?.compositor.requiredResourceKeys() ?? []
+    this.resources?.clear()
     this.states.invalidate()
     this.status = 'lost'
     const sceneGeneration = this.sequence.snapshot().sceneGeneration
@@ -385,24 +421,29 @@ export class ImageEditorGpuSceneRuntimeV3 {
       reason: loss.reason,
       retryAfterMs: loss.recovery.retryAfterMs,
     })
-    if (missing.length > 0) {
+    if (required.length > 0) {
       this.emit({
         type: 'tiles-needed',
         sceneGeneration,
         deviceGeneration: loss.generation,
-        keys: missing,
+        keys: required,
       })
     }
-    if (!this.sessionId || loss.recovery.retryAfterMs > 0) {
+    if (!this.sessionId) {
       this.status = 'fallback'
       return
     }
-    void this.initialize({
-      type: 'initialize',
-      protocolVersion: IMAGE_EDITOR_GPU_SCENE_PROTOCOL_VERSION_V3,
-      sessionId: this.sessionId,
-      memoryBudgetBytes: this.resources?.snapshot().budgetBytes ?? 0,
-    }, true)
+    const recover = (): void => {
+      if (this.disposed || !this.sessionId) return
+      void this.initialize({
+        type: 'initialize',
+        protocolVersion: IMAGE_EDITOR_GPU_SCENE_PROTOCOL_VERSION_V3,
+        sessionId: this.sessionId,
+        memoryBudgetBytes: this.resources?.snapshot().budgetBytes
+          ?? IMAGE_EDITOR_GPU_SCENE_DEFAULT_BUDGET_BYTES_V3,
+      }, true)
+    }
+    if (!this.recovery.schedule(loss.recovery.retryAfterMs, recover)) this.status = 'fallback'
   }
 
   private acceptsRenderRequest(
@@ -412,6 +453,7 @@ export class ImageEditorGpuSceneRuntimeV3 {
     return request.sceneGeneration === current.sceneGeneration
       && request.cameraSequence === current.cameraSequence
       && request.interactionSequence === current.interactionSequence
+      && request.surfaceGeneration === (this.presentationSurface?.generation ?? 0)
   }
 
   private refreshViewportProtections(): void {
@@ -446,6 +488,7 @@ export class ImageEditorGpuSceneRuntimeV3 {
       code,
       message,
       recoverable,
+      diagnostic: message.startsWith('Reality 注入'),
     })
   }
 
@@ -454,8 +497,4 @@ export class ImageEditorGpuSceneRuntimeV3 {
     state.compositor.dispose()
     state.context.dispose()
   }
-}
-
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error)
 }

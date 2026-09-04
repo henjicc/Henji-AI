@@ -8,7 +8,7 @@ import type {
 } from '@/platform/contracts/imageEditorV3'
 import type { ImageEditorViewportLayoutV3 } from '../editor/useImageEditorViewportLayoutV3'
 
-export const IMAGE_EDITOR_GPU_SCENE_PROTOCOL_VERSION_V3 = 1 as const
+export const IMAGE_EDITOR_GPU_SCENE_PROTOCOL_VERSION_V3 = 2 as const
 export const IMAGE_EDITOR_GPU_SCENE_DEFAULT_BUDGET_BYTES_V3 = 256 * 1024 * 1024
 
 export interface ImageEditorGpuSceneTileKeyV3 {
@@ -42,6 +42,8 @@ export interface ImageEditorGpuSceneInitializeRequestV3 {
   protocolVersion: typeof IMAGE_EDITOR_GPU_SCENE_PROTOCOL_VERSION_V3
   sessionId: string
   memoryBudgetBytes: number
+  /** 仅 Electron Reality 隔离巡检注入；正式客户端恒为 false/省略。 */
+  diagnosticInitializationFailure?: boolean
 }
 
 export interface ImageEditorGpuSceneSyncRequestV3 extends ImageEditorGpuSceneSequencedRequestV3 {
@@ -68,11 +70,18 @@ export interface ImageEditorGpuSceneViewportRequestV3 extends ImageEditorGpuScen
   layout: ImageEditorViewportLayoutV3
 }
 
+export interface ImageEditorGpuSceneAttachSurfaceRequestV3 {
+  type: 'attach-presentation-surface'
+  surfaceGeneration: number
+  canvas: OffscreenCanvas
+}
+
 export interface ImageEditorGpuSceneRenderRequestV3 extends ImageEditorGpuSceneSequencedRequestV3 {
   type: 'render'
   requestId: string
   cameraSequence: number
   interactionSequence: number
+  surfaceGeneration: number
   quality: ImageEditRenderQuality
 }
 
@@ -87,14 +96,26 @@ export interface ImageEditorGpuSceneDisposeRequestV3 {
   type: 'dispose'
 }
 
+export interface ImageEditorGpuSceneDiagnosticDeviceLossRequestV3 {
+  type: 'diagnostic-device-loss'
+  recovery: 'success' | 'failure'
+}
+
+export interface ImageEditorGpuSceneDiagnosticInitializationFailureRequestV3 {
+  type: 'diagnostic-initialization-failure'
+}
+
 export type ImageEditorGpuSceneWorkerRequestV3 =
   | ImageEditorGpuSceneInitializeRequestV3
   | ImageEditorGpuSceneSyncRequestV3
   | ImageEditorGpuSceneUploadTilesRequestV3
   | ImageEditorGpuSceneTransformRequestV3
   | ImageEditorGpuSceneViewportRequestV3
+  | ImageEditorGpuSceneAttachSurfaceRequestV3
   | ImageEditorGpuSceneRenderRequestV3
   | ImageEditorGpuSceneExportRequestV3
+  | ImageEditorGpuSceneDiagnosticDeviceLossRequestV3
+  | ImageEditorGpuSceneDiagnosticInitializationFailureRequestV3
   | ImageEditorGpuSceneDisposeRequestV3
 
 interface ImageEditorGpuSceneEventBaseV3 {
@@ -117,8 +138,10 @@ export interface ImageEditorGpuSceneFrameReadyEventV3 extends ImageEditorGpuScen
   requestId: string
   cameraSequence: number
   interactionSequence: number
+  surfaceGeneration: number
   quality: ImageEditRenderQuality
   bitmap: ImageBitmap
+  surfaceFailureReason?: string
   diagnostics?: {
     uploadCount: number
     pipelineCompileCount: number
@@ -130,7 +153,22 @@ export interface ImageEditorGpuSceneFrameReadyEventV3 extends ImageEditorGpuScen
     allocatedAtlasBytes: number
     minimumPlannedMip: number
     maximumPlannedMip: number
+    surfaceFrameCount: number
+    imageBitmapFrameCount: number
+    directSurfaceFailureCount: number
   }
+}
+
+export interface ImageEditorGpuSceneSurfaceFrameReadyEventV3 extends ImageEditorGpuSceneEventBaseV3 {
+  type: 'surface-frame-ready'
+  requestId: string
+  cameraSequence: number
+  interactionSequence: number
+  surfaceGeneration: number
+  quality: ImageEditRenderQuality
+  width: number
+  height: number
+  diagnostics?: ImageEditorGpuSceneFrameReadyEventV3['diagnostics']
 }
 
 export interface ImageEditorGpuSceneExportTileEventV3 extends ImageEditorGpuSceneEventBaseV3 {
@@ -156,12 +194,14 @@ export interface ImageEditorGpuSceneFailedEventV3 extends ImageEditorGpuSceneEve
   code: 'initialization-failed' | 'resource-budget-exceeded' | 'composition-not-ready' | 'export-not-ready'
   message: string
   recoverable: boolean
+  diagnostic?: boolean
 }
 
 export type ImageEditorGpuSceneWorkerEventV3 =
   | ImageEditorGpuSceneReadyEventV3
   | ImageEditorGpuSceneTilesNeededEventV3
   | ImageEditorGpuSceneFrameReadyEventV3
+  | ImageEditorGpuSceneSurfaceFrameReadyEventV3
   | ImageEditorGpuSceneExportTileEventV3
   | ImageEditorGpuSceneDeviceLostEventV3
   | ImageEditorGpuSceneFailedEventV3
