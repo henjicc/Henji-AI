@@ -13,6 +13,7 @@ const { createGenerationSettingsScenes } = require('./uiInspectionSceneCatalogGe
 const { createCanvasScenes } = require('./uiInspectionSceneCatalogCanvas.cjs')
 const { createToolboxScenes } = require('./uiInspectionSceneCatalogToolbox.cjs')
 const { createGpuRasterScenes } = require('./uiInspectionSceneCatalogGpuRaster.cjs')
+const { createGpuExportScenes } = require('./uiInspectionSceneCatalogGpuExport.cjs')
 const { createGpuBrushScenes } = require('./uiInspectionSceneCatalogGpuBrush.cjs')
 const { createGpuBudgetScenes } = require('./uiInspectionSceneCatalogGpuBudget.cjs')
 const { createGpuAnnotationScenes } = require('./uiInspectionSceneCatalogGpuAnnotation.cjs')
@@ -51,6 +52,7 @@ function createUiInspectionScenes({ canvasFixtureProjectId, settlePage }) {
     ...createCanvasScenes(context),
     ...createToolboxScenes(context),
     ...createGpuRasterScenes(context),
+    ...createGpuExportScenes(context),
     ...createGpuBrushScenes(context),
     ...createGpuBudgetScenes(context),
     ...createGpuAnnotationScenes(context),

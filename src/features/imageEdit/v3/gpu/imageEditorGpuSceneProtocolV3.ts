@@ -2,6 +2,7 @@ import type { ImageEditDocumentV3 } from '@/core/imageEdit/v3/documentTypes'
 import type { ImageEditTransformV3 } from '@/core/imageEdit/v3/layerTypes'
 import type { ImageEditRenderQuality } from '@/core/imageEdit/v3/renderNodeDefinition'
 import type {
+  ImageEditorV3RasterExportDescription,
   ImageEditorV3ResourceDescriptor,
   ImageEditorV3ResourceRef,
   ImageEditorV3SourceTile,
@@ -58,6 +59,8 @@ export interface ImageEditorGpuSceneSyncRequestV3 extends ImageEditorGpuSceneSeq
 
 export interface ImageEditorGpuSceneUploadTilesRequestV3 extends ImageEditorGpuSceneSequencedRequestV3 {
   type: 'upload-tiles'
+  /** 存在时只写入该导出 job 的有界 residency，不污染预览 atlas。 */
+  exportRequestId?: string
   tiles: readonly ImageEditorGpuSceneUploadTileV3[]
 }
 
@@ -93,7 +96,40 @@ export interface ImageEditorGpuSceneExportRequestV3 extends ImageEditorGpuSceneS
   type: 'export'
   requestId: string
   quality: ImageEditRenderQuality
-  outputTiles: readonly { tileX: number; tileY: number; width: number; height: number }[]
+  description: ImageEditorV3RasterExportDescription
+  outputTiles: readonly ImageEditorGpuSceneExportTilePlanV3[]
+  multiscaleAnalysis?: {
+    width: number
+    height: number
+    localHalo: number
+  }
+}
+
+export interface ImageEditorGpuSceneExportTilePlanV3 {
+  tileX: number
+  tileY: number
+  x: number
+  y: number
+  width: number
+  height: number
+  renderX: number
+  renderY: number
+  renderWidth: number
+  renderHeight: number
+  coreOffsetX: number
+  coreOffsetY: number
+}
+
+export interface ImageEditorGpuSceneCancelExportRequestV3 {
+  type: 'cancel-export'
+  requestId: string
+}
+
+export interface ImageEditorGpuSceneExportTileConsumedRequestV3 {
+  type: 'export-tile-consumed'
+  requestId: string
+  tileX: number
+  tileY: number
 }
 
 export interface ImageEditorGpuSceneDisposeRequestV3 {
@@ -114,6 +150,8 @@ export type ImageEditorGpuSceneWorkerRequestV3 =
   | ImageEditorGpuSceneAttachSurfaceRequestV3
   | ImageEditorGpuSceneRenderRequestV3
   | ImageEditorGpuSceneExportRequestV3
+  | ImageEditorGpuSceneCancelExportRequestV3
+  | ImageEditorGpuSceneExportTileConsumedRequestV3
   | ImageEditorGpuSceneDiagnosticDeviceLossRequestV3
   | ImageEditorGpuSceneDisposeRequestV3
 
@@ -129,6 +167,8 @@ export interface ImageEditorGpuSceneReadyEventV3 extends ImageEditorGpuSceneEven
 
 export interface ImageEditorGpuSceneTilesNeededEventV3 extends ImageEditorGpuSceneEventBaseV3 {
   type: 'tiles-needed'
+  /** 存在时资源必须回到对应导出 job，不能写入预览 residency。 */
+  exportRequestId?: string
   keys: readonly ImageEditorGpuSceneTileKeyV3[]
 }
 
@@ -175,10 +215,22 @@ export interface ImageEditorGpuSceneExportTileEventV3 extends ImageEditorGpuScen
   requestId: string
   tileX: number
   tileY: number
+  x: number
+  y: number
   width: number
   height: number
+  rowStride: number
   pixels: ArrayBuffer
   completed: boolean
+  diagnostics?: {
+    readbackCount: number
+    maximumTargetWidth: number
+    maximumTargetHeight: number
+    residentTileCount: number
+    allocatedAtlasBytes: number
+    previewResidentBytes?: number
+    sharedResidentBytes?: number
+  }
 }
 
 export interface ImageEditorGpuSceneDeviceLostEventV3 extends ImageEditorGpuSceneEventBaseV3 {

@@ -36,7 +36,7 @@ vi.mock('@/features/imageEdit/v3/export', async () => {
   return {
     ...actual,
     prepareImageEditorV3ExportRender: mocks.prepare,
-    renderImageEditorV3ExportTiles: mocks.render,
+    renderImageEditorV3ExportTilesWithGpu: mocks.render,
   }
 })
 

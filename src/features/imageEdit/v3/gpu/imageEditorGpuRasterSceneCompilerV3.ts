@@ -135,6 +135,10 @@ export function compileImageEditorGpuRasterSceneV3(
   const graph: ImageEditorGpuRenderGraphNodeV3[] = []
   const required = new Map<string, ImageEditorGpuSceneTileKeyV3>()
   const planNodeMap = new Map(plan.nodes.map((node) => [node.id, node]))
+  const sourceFormat = document.color.bitDepth === 8
+    && document.color.transferFunction !== 'pq'
+    && document.color.transferFunction !== 'hlg'
+    ? 'rgba8unorm' as const : 'rgba16float' as const
   try {
     for (const pass of plan.passes) {
       const nodes = pass.nodeIds.map((id) => planNodeMap.get(id)).filter(isPlanNode)
@@ -149,7 +153,7 @@ export function compileImageEditorGpuRasterSceneV3(
         continue
       }
       for (const node of nodes) {
-        const compiled = compileNode(node, descriptors, required)
+        const compiled = compileNode(node, descriptors, required, sourceFormat)
         if (typeof compiled === 'string') return { supported: false, reason: compiled }
         graph.push(compiled)
       }
@@ -186,6 +190,7 @@ function compileNode(
   node: ImageEditRenderPlanNode,
   descriptors: ReadonlyMap<string, ImageEditorV3ResourceDescriptor>,
   required: Map<string, ImageEditorGpuSceneTileKeyV3>,
+  sourceFormat: 'rgba8unorm' | 'rgba16float',
 ): ImageEditorGpuRenderGraphNodeV3 | string {
   if (node.definitionId === 'source.raster') {
     const source = node.parameters.source
@@ -202,7 +207,7 @@ function compileNode(
       return `图层 ${node.layerId} 缺少可用栅格资源`
     }
     const key = resourceId
-      ? resourceKey(resourceId, descriptors, 'rgba8unorm', 'source-raster') : null
+      ? resourceKey(resourceId, descriptors, sourceFormat, 'source-raster') : null
     if (resourceId && !key) return `图层 ${node.layerId} 缺少受管资源描述`
     if (key) addRequired(required, key)
     return { kind: 'source', nodeId: node.id, layerId: node.layerId, fingerprint: node.subtreeHash, resourceKey: key }

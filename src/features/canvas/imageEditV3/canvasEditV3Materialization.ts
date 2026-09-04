@@ -2,7 +2,7 @@ import { materializeImageEditorV3Raster } from '@/commands/imageEditorV3Export'
 import type { ImageEditSessionReferenceV3 } from '@/core/imageEdit'
 import {
   prepareImageEditorV3ExportRender,
-  renderImageEditorV3ExportTiles,
+  renderImageEditorV3ExportTilesWithGpu,
 } from '@/features/imageEdit/v3/export'
 import {
   createImageMarkV3RasterExportSpec,
@@ -41,7 +41,7 @@ export async function materializeCanvasEditV3Snapshot(
   }
   const spec = createImageMarkV3RasterExportSpec(snapshot.document, sourceName)
   prepareImageEditorV3ExportRender(snapshot.document, spec.description)
-  const tiles = renderImageEditorV3ExportTiles({
+  const tiles = renderImageEditorV3ExportTilesWithGpu({
     document: snapshot.document,
     resourceDescriptors: snapshot.resources,
     description: spec.description,

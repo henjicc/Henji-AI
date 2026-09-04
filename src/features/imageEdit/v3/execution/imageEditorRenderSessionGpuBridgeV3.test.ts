@@ -4,6 +4,7 @@ import { createImageEditDocumentV3 } from '@/core/imageEdit/v3/documentFactory'
 import type { ImageEditorV3SourceTileBatchItem } from '@/platform/contracts/imageEditorV3'
 import type { ImageEditorGpuSceneClientV3Like } from '../gpu/imageEditorGpuSceneClientV3'
 import type { ImageEditorGpuSceneWorkerEventV3 } from '../gpu/imageEditorGpuSceneProtocolV3'
+import { renderImageEditorV3ExportTilesWithGpu } from '../export/gpuExportSessionV3'
 import { ImageEditorRenderSessionGpuBridgeV3 } from './imageEditorRenderSessionGpuBridgeV3'
 
 const { readSourceTile, readSourceTiles } = vi.hoisted(() => ({
@@ -26,6 +27,7 @@ function clientHarness(): {
     syncScene: vi.fn(), uploadTiles: vi.fn(), updateTransientLayerTransform: vi.fn(),
     clearTransientLayerTransform: vi.fn(), updateViewport: vi.fn(), requestFrame: vi.fn(),
     subscribe: vi.fn((listener) => { subscribed = listener; return vi.fn() }), dispose: vi.fn(),
+    requestExport: vi.fn(), cancelExport: vi.fn(), acknowledgeExportTile: vi.fn(),
   } satisfies ImageEditorGpuSceneClientV3Like
   return {
     client,
@@ -439,6 +441,40 @@ describe('ImageEditorRenderSessionGpuBridgeV3', () => {
     expect(publish).toHaveBeenLastCalledWith(expect.objectContaining({
       compositionBackend: 'cpu', presentationBackend: 'canvas2d', deviceStatus: 'lost',
     }))
+    bridge.dispose()
+  })
+
+  it('导出中交互帧仍走Surface且device lost只取消活动导出job', async () => {
+    const harness = clientHarness()
+    const present = vi.fn(() => true)
+    const bridge = new ImageEditorRenderSessionGpuBridgeV3(
+      'gpu-export-surface', harness.client, vi.fn(), false, present, vi.fn(),
+    )
+    const document = createImageEditDocumentV3({ width: 320, height: 240,
+      documentId: 'gpu-export-surface-document' })
+    bridge.updateViewport(1, layout)
+    bridge.syncSnapshot({ document, renderGeneration: 1, geometryHash: 'geometry',
+      quality: 'stable', resourceDescriptors: [] })
+    harness.listener({ type: 'ready', sceneGeneration: 1, deviceGeneration: 1,
+      recovered: false })
+    harness.listener(surfaceFrame(0))
+    const stream = renderImageEditorV3ExportTilesWithGpu({ document, resourceDescriptors: [],
+      description: { width: 320, height: 240, bitDepth: 8, sampleFormat: 'uint',
+        colorSpace: 'srgb', transferFunction: 'srgb', alphaMode: 'straight' }, tileSize: 512 })
+    const waiting = stream[Symbol.asyncIterator]().next()
+    expect(harness.client.requestExport).toHaveBeenCalledOnce()
+    bridge.updateTransientLayerTransform('source', [1, 0, 0, 1, 4, 0], 1)
+    bridge.requestFrame('draft')
+    harness.listener(surfaceFrame(1))
+    expect(present).toHaveBeenLastCalledWith(expect.objectContaining({
+      type: 'surface-frame-ready', diagnostics: expect.objectContaining({
+        surfaceFrameCount: 2, imageBitmapFrameCount: 0, diagnosticReadbackCount: 0,
+      }),
+    }), layout, null)
+    harness.listener({ type: 'device-lost', sceneGeneration: 1, deviceGeneration: 2,
+      reason: 'destroyed', retryAfterMs: 0 })
+    await expect(waiting).rejects.toThrow('GPU 设备已丢失')
+    expect(harness.client.cancelExport).toHaveBeenCalledOnce()
     bridge.dispose()
   })
 

@@ -59,6 +59,7 @@ export class ImageEditorGpuEffectExecutorV3 {
     mask: Target | null,
     fingerprint: string,
     outputPixelsPerDocumentPixel = 1,
+    effectRecipeSize?: readonly [number, number],
   ): ImageEditorGpuPreparedEffectV3 {
     const dependencies = [input, mask]
     const existing = this.retained.get(node.nodeId)
@@ -90,12 +91,14 @@ export class ImageEditorGpuEffectExecutorV3 {
         ? (renderer as ImageEditorGpuDiffusionRendererV3).prepare(input,
           DIFFUSION_V4_RECIPE_ADAPTER.compileRecipe(
             DIFFUSION_V4_RECIPE_ADAPTER.parseParameters(node.parameters),
-            { width: input.size[0], height: input.size[1], quality: 'high' },
+            { width: effectRecipeSize?.[0] ?? input.size[0],
+              height: effectRecipeSize?.[1] ?? input.size[1], quality: 'high' },
           ), processedOutput)
         : (renderer as ImageEditorGpuGlowRendererV3).prepare(input,
           VGPU_GLOW_V4_RECIPE_ADAPTER.compileRecipe(
             VGPU_GLOW_V4_RECIPE_ADAPTER.parseParameters(node.parameters),
-            { width: input.size[0], height: input.size[1] },
+            { width: effectRecipeSize?.[0] ?? input.size[0],
+              height: effectRecipeSize?.[1] ?? input.size[1] },
           ), processedOutput)
     const finalOutput = direct ? processed : output
     const ownsOutput = finalOutput === output
