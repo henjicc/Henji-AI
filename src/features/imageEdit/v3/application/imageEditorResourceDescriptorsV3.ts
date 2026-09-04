@@ -1,5 +1,9 @@
 import type { ImageEditHistoryResourceReferenceV3 } from '@/core/imageEdit/v3/commandTypes'
 import type { ImageEditDocumentV3 } from '@/core/imageEdit/v3/documentTypes'
+import {
+  isImageEditSparseMaskReferenceV3,
+  type ImageEditLayerV3,
+} from '@/core/imageEdit/v3/layerTypes'
 import { collectImageEditJsonResourceIdsV3 } from '@/core/imageEdit/v3/resourceReferences'
 import type {
   ImageEditorV3ResourceDescriptor,
@@ -7,6 +11,22 @@ import type {
 } from '@/platform/contracts/imageEditorV3'
 
 export const IMAGE_EDITOR_V3_BRUSH_TILE_MEDIA_TYPE = 'application/x-henji-brush-tile-v3'
+
+function collectCurrentBrushResources(layers: readonly ImageEditLayerV3[]): Set<string> {
+  const resources = new Set<string>()
+  const visit = (layer: ImageEditLayerV3): void => {
+    if (layer.mask && isImageEditSparseMaskReferenceV3(layer.mask)) {
+      Object.values(layer.mask.tiles).forEach((resourceId) => resources.add(resourceId))
+    }
+    if (layer.type === 'raster') {
+      Object.values(layer.tiles).forEach((resourceId) => resources.add(resourceId))
+    } else if (layer.type === 'group') {
+      layer.children.forEach(visit)
+    }
+  }
+  layers.forEach(visit)
+  return resources
+}
 
 export function createImageEditorV3ResourceByteSizes(
   descriptors: readonly ImageEditorV3ResourceDescriptor[],
@@ -18,8 +38,8 @@ export function createImageEditorV3ResourceByteSizes(
 }
 
 /**
- * 持久命令返回的已知字节数只来自受管 brush tile 写入；结合当前文档和历史保留集，
- * 可为尚未重新 load snapshot 的本会话补齐受控 descriptor，同时丢弃已不可达项。
+ * 持久历史保留集同时包含源图和 brush tile；只有文档权威结构标记为稀疏瓦片的资源
+ * 才能补为 brush descriptor，不得用媒体格式或“出现在历史”猜测读取类别。
  */
 export function reconcileImageEditorV3ResourceDescriptors(
   document: ImageEditDocumentV3,
@@ -27,6 +47,7 @@ export function reconcileImageEditorV3ResourceDescriptors(
   retainedResources: readonly ImageEditHistoryResourceReferenceV3[],
 ): ImageEditorV3ResourceDescriptor[] {
   const retainedById = new Map(retainedResources.map((resource) => [resource.resourceId, resource]))
+  const currentBrushResources = collectCurrentBrushResources(document.layers)
   const reachableIds = new Set([
     ...collectImageEditJsonResourceIdsV3(document),
     ...retainedById.keys(),
@@ -37,8 +58,9 @@ export function reconcileImageEditorV3ResourceDescriptors(
   }
   for (const resource of retainedResources) {
     if (resource.byteSize === null) continue
-    // 历史保留集只由受管 brush tile 写入产生；重开会话时它比载入器给出的
-    // 通用媒体探测结果更权威，必须原子恢复 brush 类别，不能保留 null/image/*。
+    const existing = descriptors.get(resource.resourceId)
+    if (!currentBrushResources.has(resource.resourceId)
+      && existing?.mediaType !== IMAGE_EDITOR_V3_BRUSH_TILE_MEDIA_TYPE) continue
     descriptors.set(resource.resourceId, {
       resourceRef: resource.resourceId as ImageEditorV3ResourceRef,
       byteLength: resource.byteSize,

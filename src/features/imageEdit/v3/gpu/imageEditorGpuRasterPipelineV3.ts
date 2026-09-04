@@ -24,8 +24,6 @@ import {
   packImageEditorGpuColorMatrixRowsV3,
 } from './imageEditorGpuColorPipelineV3'
 import {
-  planImageEditorGpuRasterTilesV3,
-  planImageEditorGpuMaskTilesV3,
   type ImageEditorGpuPlannedLayerV3,
   type ImageEditorGpuPlannedTileV3,
 } from './imageEditorGpuTilePlannerV3'
@@ -48,6 +46,7 @@ import type {
 import { ImageEditorGpuRasterPresentationV3 } from './imageEditorGpuRasterPresentationV3'
 import { resolveImageEditorGpuEffectViewportV3 } from './imageEditorGpuEffectViewportV3'
 import { estimateImageEditorGpuGraphResidentBytesV3 } from './imageEditorGpuMemoryBudgetV3'
+import { replanImageEditorGpuViewportTilesV3 } from './imageEditorGpuViewportPlansV3'
 
 const BUFFER_COPY_DST = 0x08
 const BUFFER_UNIFORM = 0x40
@@ -435,36 +434,11 @@ export class ImageEditorGpuRasterPipelineV3 implements ImageEditorGpuRasterCompo
     return this.transientTransforms.get(layer.layerId) ?? layer.transform
   }
   private replanTiles(): void {
-    this.plannedLayers.clear()
-    this.plannedMasks.clear()
-    if (!this.scene || !this.layout) return
-    const workingLayout = resolveImageEditorGpuEffectViewportV3(this.scene, this.layout).layout
-    for (const layer of this.scene.layers) {
-      if (!layer.visible || layer.opacity <= 0) continue
-      const planned = planImageEditorGpuRasterTilesV3(
-        this.scene,
-        { ...layer, transform: this.resolveTransform(layer) },
-        workingLayout,
-        this.previousMips.get(layer.layerId),
-      )
-      this.plannedLayers.set(layer.layerId, planned)
-      this.previousMips.set(layer.layerId, planned.mip)
-    }
-    for (const node of this.scene.graph) {
-      if (node.kind === 'source' || node.kind === 'alias') continue
-      const transform = node.kind === 'composite'
-        ? this.transientTransforms.get(node.layerId) ?? node.transform
-        : [1, 0, 0, 1, 0, 0] as ImageEditTransformV3
-      const masks = node.kind === 'composite'
-        ? [node.mask]
-        : node.kind === 'effect' ? [node.mask] : node.adjustments.map((entry) => entry.mask)
-      for (const mask of masks) {
-        if (!mask || this.plannedMasks.has(mask.maskId)) continue
-        this.plannedMasks.set(mask.maskId, planImageEditorGpuMaskTilesV3(
-          this.scene, mask, transform, workingLayout,
-        ))
-      }
-    }
+    replanImageEditorGpuViewportTilesV3({
+      scene: this.scene, layout: this.layout, transientTransforms: this.transientTransforms,
+      previousMips: this.previousMips, plannedLayers: this.plannedLayers,
+      plannedMasks: this.plannedMasks,
+    })
   }
   private plannedTileForStateKey(stateKey: string): ImageEditorGpuPlannedTileV3 | null {
     for (const plan of this.plannedLayers.values()) {

@@ -6,7 +6,7 @@ import type { ImageEditTransformV3 } from '@/core/imageEdit/v3/layerTypes'
 import type { ImageEditorViewportLayoutV3 } from '../editor/useImageEditorViewportLayoutV3'
 import type { ImageEditorGpuGraphMaskV3 } from './imageEditorGpuRasterSceneCompilerV3'
 import { imageEditorGpuCameraUniformV3, imageEditorGpuOutputPixelSizeV3 } from './imageEditorGpuRasterSupportV3'
-import type { ImageEditorGpuGraphSourcePlanV3, ImageEditorGpuGraphTextureV3 } from './imageEditorGpuRenderGraphExecutorV3'
+import type { ImageEditorGpuGraphSourcePlanV3 } from './imageEditorGpuRenderGraphExecutorV3'
 import maskShader from './shaders/imageEditorGpuGraphMaskTileV3.wgsl?raw'
 
 const BUFFER_COPY_DST = 0x08

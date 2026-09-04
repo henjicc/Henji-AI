@@ -281,7 +281,7 @@ function compileMask(
 ): ImageEditorGpuGraphMaskV3 | null | string {
   if (!mask) return null
   let resourceId: string | null
-  let defaultValue: 0 | 1 = 1
+  const defaultValue: 0 | 1 = 1
   if (isImageEditSparseMaskReferenceV3(mask)) {
     const unsupported = Object.keys(mask.tiles).find((key) => !isMipZeroTileKey(key))
     if (unsupported) return `蒙版 ${mask.maskId} 的瓦片键无效：${unsupported}`
