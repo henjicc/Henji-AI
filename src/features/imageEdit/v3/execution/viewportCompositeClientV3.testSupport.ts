@@ -94,6 +94,7 @@ export function createFrame(width = 20_000, height = 10_000): ImageEditorViewpor
     plan,
     tiles,
     resourceTiles: new Map([[RESOURCE, tiles]]),
+    resourceSizes: new Map([[RESOURCE, { width, height }]]),
     release: vi.fn(),
   }
 }

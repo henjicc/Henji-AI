@@ -27,19 +27,22 @@ export function assertCompatibleImageEditorViewportPyramidV3(
   primary: ImageEditorV3PyramidDescriptor,
   candidate: ImageEditorV3PyramidDescriptor,
 ): void {
-  if (
-    candidate.tileSize !== primary.tileSize
-    || candidate.levels.length !== primary.levels.length
-    || candidate.levels.some((level, index) => {
-      const expected = primary.levels[index]
-      return !expected
-        || level.mip !== expected.mip
-        || level.width !== expected.width
-        || level.height !== expected.height
-        || level.columns !== expected.columns
-        || level.rows !== expected.rows
-    })
-  ) throw new Error('参与视口合成的图片资源金字塔几何不一致')
+  if (candidate.tileSize !== primary.tileSize) {
+    throw new Error('参与视口合成的图片资源瓦片规格不一致')
+  }
+}
+
+export function sharedImageEditorViewportPyramidV3(
+  primary: ImageEditorV3PyramidDescriptor,
+  candidates: readonly ImageEditorV3PyramidDescriptor[],
+): ImageEditorV3PyramidDescriptor {
+  const sharedMips = primary.levels.filter((level) => (
+    candidates.every((candidate) => candidate.levels.some(({ mip }) => mip === level.mip))
+  ))
+  if (sharedMips[0]?.mip !== 0) {
+    throw new Error('参与视口合成的图片资源缺少共同金字塔层级')
+  }
+  return { ...primary, levels: sharedMips }
 }
 
 function expandTileRequests(
@@ -57,15 +60,20 @@ export function resolveImageEditorViewportTileRequestsV3(
   request: ImageEditorViewportRenderRequestV3,
   candidate: ImageEditorViewportTileCandidateV3,
   resourceRefs: readonly ImageEditorV3ResourceRef[],
+  descriptors: ReadonlyMap<ImageEditorV3ResourceRef, ImageEditorV3PyramidDescriptor>,
 ): ImageEditorViewportTileRequestV3[] {
-  const resolved = request.resolveSourceTileRequests?.(candidate)
+  const resolved = request.resolveSourceTileRequests?.(candidate, descriptors)
     ?? expandTileRequests(candidate.tiles, resourceRefs)
   const byKey = new Map<string, ImageEditorViewportTileRequestV3>()
   for (const tile of resolved) {
     let expectedRegion
+    const descriptor = descriptors.get(tile.resourceRef)
+    const sourceLevel = descriptor?.levels.find(({ mip }) => mip === tile.mip)
+    const sourceGeometry = descriptor?.levels.find(({ mip }) => mip === 0)
     try {
+      if (!sourceLevel || !sourceGeometry) throw new Error('missing mip')
       expectedRegion = createTileRegion(
-        request.sourceSize ?? request.documentSize,
+        { width: sourceGeometry.width, height: sourceGeometry.height },
         { mip: tile.mip, x: tile.tileX, y: tile.tileY },
         tile.halo,
       )

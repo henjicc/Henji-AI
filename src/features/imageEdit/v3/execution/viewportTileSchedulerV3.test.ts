@@ -128,6 +128,67 @@ describe('图片编辑 V3 视口瓦片调度', () => {
     expect(resourceBudget.snapshot().totalBytes).toBe(0)
   })
 
+  it('允许同一文档的图层资源使用不同金字塔几何', async () => {
+    const documentSize = { width: 512, height: 512 }
+    const sizes = new Map([
+      [resourceRef, documentSize],
+      [secondaryResourceRef, { width: 256, height: 256 }],
+    ])
+    const scheduler = new ImageEditorViewportTileSchedulerV3({
+      sessionId: 'heterogeneous-source-set',
+      describePyramid: async ({ resourceRef: requested }) => {
+        const size = sizes.get(requested)
+        if (!size) throw new Error('测试资源不存在')
+        return pyramid(size.width, size.height)
+      },
+      readSourceTile: async (request) => {
+        const size = sizes.get(request.resourceRef)
+        if (!size) throw new Error('测试资源不存在')
+        return sourceTile(request, size)
+      },
+    })
+
+    const frame = await scheduler.render({
+      resourceRef,
+      resourceRefs: [resourceRef, secondaryResourceRef],
+      revision: 1,
+      documentSize,
+      viewport: viewport(),
+      bitDepth: 8,
+      resolveSourceTileRequests: (candidate, descriptors) => (
+        [...descriptors].map(([requested, descriptor]) => {
+          const level0 = descriptor.levels.find(({ mip }) => mip === 0)
+          if (!level0) throw new Error('测试金字塔缺少 mip 0')
+          const region = createTileRegion(
+            { width: level0.width, height: level0.height },
+            { mip: candidate.mip, x: 0, y: 0 },
+            0,
+          )
+          const request = {
+            resourceRef: requested,
+            mip: candidate.mip,
+            tileX: 0,
+            tileY: 0,
+            halo: 0,
+            bitDepth: 8 as const,
+            width: region.sourceRect.width,
+            height: region.sourceRect.height,
+            originX: region.sourceRect.x,
+            originY: region.sourceRect.y,
+            estimatedBytes: region.sourceRect.width * region.sourceRect.height * 4,
+          }
+          return { ...request, key: imageEditorViewportTileCacheKeyV3(request) }
+        })
+      ),
+    })
+
+    expect(frame.resourceSizes).toEqual(sizes)
+    expect(frame.resourceTiles.get(resourceRef)?.[0]).toMatchObject({ width: 512, height: 512 })
+    expect(frame.resourceTiles.get(secondaryResourceRef)?.[0]).toMatchObject({ width: 256, height: 256 })
+    frame.release()
+    scheduler.dispose()
+  })
+
   it('200MP 高位深只通过命令读取当前视口的 15 个 mip 瓦片', async () => {
     const documentSize = { width: 20_000, height: 10_000 }
     const describePyramid = vi.fn(async () => pyramid(documentSize.width, documentSize.height))

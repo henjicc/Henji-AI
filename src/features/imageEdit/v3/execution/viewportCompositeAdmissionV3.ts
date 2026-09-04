@@ -2,6 +2,7 @@ import {
   createTileRegion,
   imageEditOutputSizeV3,
   type ImageEditResourceBudget,
+  type ImageEditSize,
 } from '@/core/imageEdit/v3'
 import type { ImageEditDocumentV3 } from '@/core/imageEdit/v3/documentTypes'
 import {
@@ -18,12 +19,15 @@ export function imageEditorViewportCompositeCandidateFitsBudgetV3(options: {
   candidate: ImageEditorViewportTileCandidateV3
   bitDepth: 8 | 16 | 32
   wholeSource: boolean
+  resourceSizes?: ReadonlyMap<string, ImageEditSize>
 }): boolean {
+  const resourceSizes = options.resourceSizes ?? new Map<string, ImageEditSize>()
   const sourceRequests = createImageEditorViewportSourceTileRequestsV3(
     options.prepared,
     options.candidate,
     options.bitDepth,
     options.wholeSource,
+    resourceSizes,
   )
   const transferBytes = sourceRequests.reduce((total, request) => {
     const next = total + request.estimatedBytes
@@ -34,6 +38,7 @@ export function imageEditorViewportCompositeCandidateFitsBudgetV3(options: {
     options.prepared,
     options.candidate,
     options.wholeSource,
+    resourceSizes,
   )
   const workingBytes = workingPixels * 4 * Float32Array.BYTES_PER_ELEMENT
     * Math.max(3, options.prepared.plan.nodes.length + 2)

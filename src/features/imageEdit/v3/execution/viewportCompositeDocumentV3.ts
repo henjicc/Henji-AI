@@ -12,7 +12,9 @@ import {
   type ImageEditDocumentV3,
   type ImageEditRect,
   type ImageEditRenderPlan,
+  type ImageEditRenderPlanNode,
   type ImageEditOutputGeometryV3,
+  type ImageEditSize,
 } from '@/core/imageEdit/v3'
 import type { ImageEditRenderQuality } from '@/core/imageEdit/v3/renderNodeDefinition'
 import type {
@@ -83,6 +85,29 @@ function rasterResourceId(node: ImageEditRenderPlan['nodes'][number]): ImageEdit
     && RESOURCE_REF_PATTERN.test(source.resourceId)
     ? source.resourceId as ImageEditorV3ResourceRef
     : null
+}
+
+/** 顺着单输入效果链找到栅格源，使图层仿射以资源自身几何而非文档几何裁剪。 */
+export function createImageEditorViewportSourceSizeResolverV3(
+  plan: ImageEditRenderPlan,
+  resourceSizes: ReadonlyMap<string, ImageEditSize>,
+  fallback: ImageEditSize,
+  mip: number,
+): (node: ImageEditRenderPlanNode) => ImageEditSize {
+  const nodes = new Map(plan.nodes.map((node) => [node.id, node]))
+  const resolve = (node: ImageEditRenderPlanNode, seen: Set<string>): ImageEditSize => {
+    if (seen.has(node.id)) return fallback
+    seen.add(node.id)
+    const resourceRef = rasterResourceId(node)
+    if (resourceRef) {
+      const size = resourceSizes.get(resourceRef)
+      return size ? mipSize(size, mip) : fallback
+    }
+    if (node.inputNodeIds.length !== 1) return fallback
+    const input = nodes.get(node.inputNodeIds[0] ?? '')
+    return input ? resolve(input, seen) : fallback
+  }
+  return (node) => resolve(node, new Set())
 }
 
 function activeBrushResourceIds(plan: ImageEditRenderPlan): ReadonlySet<string> {
@@ -181,6 +206,7 @@ function outputRegionsForCandidate(
 function requirementsForCandidate(
   prepared: PreparedImageEditorViewportCompositeV3,
   candidate: ImageEditorViewportTileCandidateV3,
+  resourceSizes: ReadonlyMap<string, ImageEditSize> = new Map(),
 ): {
   plan: ImageEditRenderPlan
   rasterRegions: ReadonlyMap<string, readonly ImageEditRect[]>
@@ -197,6 +223,12 @@ function requirementsForCandidate(
         size: mipSize(prepared.document.geometry, candidate.mip),
         scaleX: 1 / (2 ** candidate.mip),
         scaleY: 1 / (2 ** candidate.mip),
+        resolveSourceSize: createImageEditorViewportSourceSizeResolverV3(
+          plan,
+          resourceSizes,
+          mipSize(prepared.document.geometry, candidate.mip),
+          candidate.mip,
+        ),
       },
     ),
   }
@@ -208,9 +240,9 @@ function sourceRequest(
   tileX: number,
   tileY: number,
   bitDepth: 8 | 16 | 32,
-  document: ImageEditDocumentV3,
+  sourceSize: ImageEditSize,
 ): ImageEditorViewportTileRequestV3 {
-  const region = createTileRegion(document.geometry, { mip, x: tileX, y: tileY }, 0)
+  const region = createTileRegion(sourceSize, { mip, x: tileX, y: tileY }, 0)
   const estimatedBytes = region.sourceRect.width * region.sourceRect.height * 4 * (bitDepth / 8)
   if (!Number.isSafeInteger(estimatedBytes)) throw new Error('视口仿射源瓦片字节数超出安全范围')
   const request = {
@@ -235,31 +267,33 @@ export function createImageEditorViewportSourceTileRequestsV3(
   candidate: ImageEditorViewportTileCandidateV3,
   bitDepth: 8 | 16 | 32,
   wholeSource = false,
+  resourceSizes: ReadonlyMap<string, ImageEditSize> = new Map(),
 ): ImageEditorViewportTileRequestV3[] {
   const requests = new Map<string, ImageEditorViewportTileRequestV3>()
   const addRegions = (resourceRef: ImageEditorV3ResourceRef, regions: readonly ImageEditRect[]): void => {
+    const sourceSize = resourceSizes.get(resourceRef) ?? prepared.document.geometry
     for (const region of regions) {
-      for (const coordinate of enumerateTilesForRect(prepared.document.geometry, candidate.mip, region)) {
+      for (const coordinate of enumerateTilesForRect(sourceSize, candidate.mip, region)) {
         const request = sourceRequest(
           resourceRef,
           candidate.mip,
           coordinate.x,
           coordinate.y,
           bitDepth,
-          prepared.document,
+          sourceSize,
         )
         requests.set(request.key, request)
       }
     }
   }
   if (wholeSource) {
-    const size = mipSize(prepared.document.geometry, candidate.mip)
     for (const resourceRef of prepared.resourceRefs) {
+      const size = mipSize(resourceSizes.get(resourceRef) ?? prepared.document.geometry, candidate.mip)
       addRegions(resourceRef, [{ x: 0, y: 0, ...size }])
     }
     return [...requests.values()]
   }
-  const requirements = requirementsForCandidate(prepared, candidate)
+  const requirements = requirementsForCandidate(prepared, candidate, resourceSizes)
   for (const node of requirements.plan.nodes) {
     if (node.definitionId === 'source.raster') {
       const resourceRef = rasterResourceId(node)
@@ -280,12 +314,15 @@ export function estimateImageEditorViewportWorkingRegionPixelsV3(
   prepared: PreparedImageEditorViewportCompositeV3,
   candidate: ImageEditorViewportTileCandidateV3,
   wholeSource = false,
+  resourceSizes: ReadonlyMap<string, ImageEditSize> = new Map(),
 ): number {
   if (wholeSource) {
-    const size = mipSize(prepared.document.geometry, candidate.mip)
-    return size.width * size.height
+    return Math.max(...prepared.resourceRefs.map((resourceRef) => {
+      const size = mipSize(resourceSizes.get(resourceRef) ?? prepared.document.geometry, candidate.mip)
+      return size.width * size.height
+    }))
   }
-  const requirements = requirementsForCandidate(prepared, candidate)
+  const requirements = requirementsForCandidate(prepared, candidate, resourceSizes)
   return [
     ...outputRegionsForCandidate(prepared, candidate),
     ...[...requirements.rasterRegions.values(), ...requirements.maskRegions.values()].flat(),

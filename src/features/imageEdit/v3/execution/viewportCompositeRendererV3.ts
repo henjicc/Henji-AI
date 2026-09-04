@@ -16,6 +16,7 @@ import {
 import { isImageEditSparseMaskReferenceV3 } from '@/core/imageEdit/v3/layerTypes'
 import { convertPreviewWorkingSpaceToSrgbDisplayV3 } from './previewColorV3'
 import { scaleImageEditorPreviewEffectsV3 } from './previewEffectScalingV3'
+import { createImageEditorViewportSourceSizeResolverV3 } from './viewportCompositeDocumentV3'
 import { ImageEditorPreviewCustomEffectsV3 } from './previewCustomEffectsV3'
 import { ImageEditorViewportGlobalAnalysisCacheV3 } from './viewportGlobalAnalysisV3'
 import type { ImageEditorViewportCompositeRenderRequestV3 } from './viewportCompositeProtocolV3'
@@ -126,6 +127,13 @@ export async function renderImageEditorViewportCompositeV3(
     tile,
   ]))
   if (sourceTiles.size !== request.sourceTiles.length) throw new Error('视口合成包含重复源瓦片')
+  const resourceSizes = new Map(request.resourceSizes.map(({ resourceRef, width, height }) => [
+    resourceRef,
+    { width, height },
+  ]))
+  if (resourceSizes.size !== request.resourceSizes.length) {
+    throw new Error('视口合成包含重复资源几何')
+  }
   const rasterizeAnnotations = dependencies.rasterizeAnnotations
     ?? rasterizeImageEditorViewportAnnotationsV3
   const customEffects = dependencies.customEffects ?? new ImageEditorPreviewCustomEffectsV3()
@@ -145,6 +153,7 @@ export async function renderImageEditorViewportCompositeV3(
       request.plan.mip,
       requestedRegion,
       request.document,
+      resourceSizes.get(resourceId) ?? request.document.geometry,
     )
     decoded.set(key, result)
     return result
@@ -163,6 +172,15 @@ export async function renderImageEditorViewportCompositeV3(
       scaleX: 1 / (2 ** request.plan.mip),
       scaleY: 1 / (2 ** request.plan.mip),
       registry,
+      resolveSourceSize: createImageEditorViewportSourceSizeResolverV3(
+        plan,
+        resourceSizes,
+        {
+          width: Math.max(1, Math.ceil(request.document.geometry.width / (2 ** request.plan.mip))),
+          height: Math.max(1, Math.ceil(request.document.geometry.height / (2 ** request.plan.mip))),
+        },
+        request.plan.mip,
+      ),
       signal,
       createTransparent: (region) => createTransparentImageEditorViewportRegionV3(
         region,

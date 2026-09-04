@@ -106,6 +106,38 @@ describe('图片编辑 V3 视口合成能力边界', () => {
       .toEqual([expect.objectContaining({ tileX: 0, tileY: 0, originX: 0 })])
   })
 
+  it('缩放图层按资源自身几何请求源瓦片', () => {
+    const document = createImageEditDocumentV3({
+      width: 1_024,
+      height: 512,
+      documentId: 'scaled-source-requests',
+      sourceResourceId: SOURCE,
+      idFactory: () => 'source',
+    })
+    document.layers[0].transform = [2, 0, 0, 2, 0, 0]
+    const prepared = prepareImageEditorViewportCompositeV3(document, 'stable', [])
+    const plan = planImageEditorViewportTilesV3({
+      resourceRef: SOURCE,
+      documentSize: document.geometry,
+      pyramid: {
+        tileSize: 512,
+        levels: [{ mip: 0, width: 1_024, height: 512, columns: 2, rows: 1 }],
+      },
+      viewport: { documentX: 0, documentY: 0, width: 512, height: 512, zoom: 1, devicePixelRatio: 1 },
+      bitDepth: 8,
+    })
+
+    expect(createImageEditorViewportSourceTileRequestsV3(
+      prepared,
+      plan,
+      8,
+      false,
+      new Map([[SOURCE, { width: 256, height: 256 }]]),
+    )).toEqual([
+      expect.objectContaining({ tileX: 0, tileY: 0, width: 256, height: 256 }),
+    ])
+  })
+
   it('全局分析即使在裁剪状态也请求完整源图与全部画笔瓦片', () => {
     const document = createImageEditDocumentV3({
       width: 1_024,

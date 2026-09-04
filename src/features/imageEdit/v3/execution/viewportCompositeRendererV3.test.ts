@@ -87,6 +87,7 @@ function request(
       viewport: { documentX: 0, documentY: 0, width: 4, height: 4, zoom: 1, devicePixelRatio: 1 },
       bitDepth: 8,
     }),
+    resourceSizes: [{ resourceRef: RESOURCE, width: document.geometry.width, height: document.geometry.height }],
     sourceTiles: [tile],
     brushTiles: [],
   }
@@ -224,6 +225,7 @@ describe('图片编辑 V3 视口成品分块执行器', () => {
         },
         bitDepth: 8,
       }),
+      resourceSizes: [{ resourceRef: RESOURCE, width: 1_024, height: 1 }],
       sourceTiles: [wideSourceTile(0, 96)],
       brushTiles: [],
     }
@@ -237,6 +239,41 @@ describe('图片编辑 V3 视口成品分块执行器', () => {
       },
     )
     expect(first).toBeCloseTo(decodeSrgbExtended(96 / 255), 5)
+  })
+
+  it('使用独立资源几何渲染缩放图层', async () => {
+    const document = createImageEditDocumentV3({
+      width: 4,
+      height: 4,
+      documentId: 'viewport-scaled-source',
+      sourceResourceId: RESOURCE,
+      idFactory: () => 'source',
+    })
+    document.layers[0].transform = [2, 0, 0, 2, 0, 0]
+    const pixels = new Uint8Array(2 * 2 * 4)
+    for (let offset = 0; offset < pixels.length; offset += 4) {
+      pixels.set([128, 128, 128, 255], offset)
+    }
+    const renderRequest = request(document, {
+      ...sourceTile(128),
+      width: 2,
+      height: 2,
+      rowStride: 2 * 4,
+      pixels: pixels.buffer,
+    })
+    renderRequest.resourceSizes = [{ resourceRef: RESOURCE, width: 2, height: 2 }]
+    let rendered: Float32Array | null = null
+
+    await renderImageEditorViewportCompositeV3(
+      renderRequest,
+      new AbortController().signal,
+      ({ tile }) => { rendered = tile.data },
+    )
+
+    expect(rendered).not.toBeNull()
+    expect(rendered?.[(1 * 4 + 1) * 4]).toBeCloseTo(decodeSrgbExtended(128 / 255), 5)
+    expect(rendered?.[3]).toBeGreaterThan(0)
+    expect(rendered?.[(4 * 4 - 1) * 4 + 3]).toBeGreaterThan(0)
   })
 
   it('裁剪与方向在输出边界原子投影，不先发布未裁剪整图', async () => {

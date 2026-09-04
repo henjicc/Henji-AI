@@ -5,6 +5,10 @@ import {
   type ImageEditResourceBudget,
 } from '@/core/imageEdit/v3'
 import type { ImageEditRenderScheduler } from '@/core/imageEdit/v3/renderScheduler'
+import type {
+  ImageEditorV3PyramidDescriptor,
+  ImageEditorV3ResourceRef,
+} from '@/platform/contracts/imageEditorV3'
 import { ImageEditorPreviewBrushTileLoaderV3 } from './previewBrushTileLoaderV3'
 import {
   collectImageEditorViewportBrushRequestsV3,
@@ -71,6 +75,17 @@ export {
   ImageEditorViewportCompositeDisposedErrorV3,
   ImageEditorViewportCompositeSupersededErrorV3,
 } from './viewportCompositeTypesV3'
+
+function imageEditorViewportResourceSizesV3(
+  descriptors: ReadonlyMap<ImageEditorV3ResourceRef, ImageEditorV3PyramidDescriptor>,
+): ReadonlyMap<ImageEditorV3ResourceRef, { width: number; height: number }> {
+  return new Map([...descriptors].map(([resourceRef, descriptor]) => {
+    const level = descriptor.levels.find(({ mip }) => mip === 0)
+    if (!level) throw new Error('视口图片资源缺少 mip 0 几何')
+    return [resourceRef, { width: level.width, height: level.height }]
+  }))
+}
+
 interface ActiveViewportJobV3 extends ImageEditorViewportCompositeRequestV3 {
   sequence: number
   requestId: string
@@ -236,11 +251,17 @@ export class ImageEditorViewportCompositeClientV3 {
       previousMip: job.previousMip,
       preferredMip: job.preferredMip,
       coverage: job.coverage,
-      resolveSourceTileRequests: (candidate) => createImageEditorViewportSourceTileRequestsV3(
-        prepared, candidate, bitDepth, wholeSource,
+      resolveSourceTileRequests: (candidate, descriptors) => createImageEditorViewportSourceTileRequestsV3(
+        prepared, candidate, bitDepth, wholeSource, imageEditorViewportResourceSizesV3(descriptors),
       ),
-      admitCandidate: (candidate) => imageEditorViewportCompositeCandidateFitsBudgetV3({
-        budget: this.budget, prepared, document: job.document, candidate, bitDepth, wholeSource,
+      admitCandidate: (candidate, descriptors) => imageEditorViewportCompositeCandidateFitsBudgetV3({
+        budget: this.budget,
+        prepared,
+        document: job.document,
+        candidate,
+        bitDepth,
+        wholeSource,
+        resourceSizes: imageEditorViewportResourceSizesV3(descriptors),
       }),
     })
     if (this.active !== job || job.controller.signal.aborted || this.disposed) {
@@ -274,7 +295,7 @@ export class ImageEditorViewportCompositeClientV3 {
       'lower-mip',
     )
     const maxRegionPixels = estimateImageEditorViewportWorkingRegionPixelsV3(
-      prepared, frame.plan, wholeSource,
+      prepared, frame.plan, wholeSource, frame.resourceSizes,
     )
     const workingBytes = maxRegionPixels * 4 * Float32Array.BYTES_PER_ELEMENT
       * Math.max(3, prepared.plan.nodes.length + 2)
@@ -345,6 +366,10 @@ export class ImageEditorViewportCompositeClientV3 {
             phase: job.phase,
             analysisRequested: wholeSource,
             plan: frame.plan,
+            resourceSizes: [...frame.resourceSizes].map(([resourceRef, size]) => ({
+              resourceRef,
+              ...size,
+            })),
             sourceTiles,
             brushTiles,
           }, [

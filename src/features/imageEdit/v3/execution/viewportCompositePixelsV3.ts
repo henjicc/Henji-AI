@@ -13,6 +13,7 @@ import {
   type ImageEditDocumentV3,
   type ImageEditRect,
   type ImageEditRenderPlanNode,
+  type ImageEditSize,
   type ImageEditSparseMaskReferenceV3,
 } from '@/core/imageEdit/v3'
 import type { MarkItem } from '@/core/imageEdit/types'
@@ -68,13 +69,14 @@ export function loadImageEditorViewportSourceRegionV3(
   mip: number,
   region: ImageEditRect,
   document: ImageEditDocumentV3,
+  resourceSize: ImageEditSize,
 ): Float32PremultipliedRgbaTile {
   const output = new Float32Array(region.width * region.height * 4)
   let template: Float32PremultipliedRgbaTile | null = null
-  for (const coordinate of enumerateTilesForRect(document.geometry, mip, region)) {
+  for (const coordinate of enumerateTilesForRect(resourceSize, mip, region)) {
     const source = tiles.get(`${resourceId}:m${mip}:x${coordinate.x}:y${coordinate.y}`)
     if (!source) throw new Error(`视口合成缺少图片资源瓦片：${resourceId}`)
-    const expected = createTileRegion(document.geometry, {
+    const expected = createTileRegion(resourceSize, {
       mip,
       x: coordinate.x,
       y: coordinate.y,

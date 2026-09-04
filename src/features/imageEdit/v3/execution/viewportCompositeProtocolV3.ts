@@ -17,6 +17,7 @@ export interface ImageEditorViewportCompositeRenderRequestV3 {
   phase?: 'coarse' | 'analysis' | 'target'
   analysisRequested?: boolean
   plan: ImageEditorViewportTilePlanV3
+  resourceSizes: Array<{ resourceRef: string; width: number; height: number }>
   sourceTiles: ImageEditorV3SourceTile[]
   brushTiles: ImageEditorPreviewBrushTileV3[]
 }

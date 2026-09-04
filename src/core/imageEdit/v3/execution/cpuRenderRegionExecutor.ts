@@ -38,6 +38,8 @@ export interface ImageEditCpuRegionRenderContextV3 {
   scaleX?: number
   scaleY?: number
   registry: ImageEditRenderNodeRegistry
+  /** 返回节点实际像素源的独立几何；旧文档省略时回退到文档几何。 */
+  resolveSourceSize?(node: ImageEditRenderPlanNode): ImageEditSize | undefined
   createTransparent(region: ImageEditRect): Float32PremultipliedRgbaTile
   loadRaster(
     node: ImageEditRenderPlanNode,
@@ -180,13 +182,12 @@ function transformedContentRegion(
   node: ImageEditRenderPlanNode,
   outputRegion: ImageEditRect,
   context: Pick<ImageEditCpuRegionRenderContextV3, 'size' | 'scaleX' | 'scaleY'>,
+  sourceSize: ImageEditSize,
 ): { transform: readonly number[]; region: ImageEditRect } {
   const transform = nodeTransform(node, context.scaleX ?? 1, context.scaleY ?? context.scaleX ?? 1)
   return {
     transform,
-    region: isIdentityTransform(transform)
-      ? outputRegion
-      : resolveImageEditInverseSourceRectV3(outputRegion, transform, context.size),
+    region: resolveImageEditInverseSourceRectV3(outputRegion, transform, sourceSize),
   }
 }
 
@@ -207,7 +208,7 @@ export function collectImageEditCpuRegionRequirementsV3(
   outputRegions: readonly ImageEditRect[],
   context: Pick<
     ImageEditCpuRegionRenderContextV3,
-    'registry' | 'size' | 'scaleX' | 'scaleY'
+    'registry' | 'size' | 'scaleX' | 'scaleY' | 'resolveSourceSize'
   >,
 ): ImageEditCpuRegionRequirementsV3 {
   const nodes = nodeMap(plan)
@@ -223,9 +224,15 @@ export function collectImageEditCpuRegionRequirementsV3(
     if (node.definitionId === 'composite.layer') {
       const contentIndex = node.inputNodeIds.length === 1 ? 0 : 1
       if (node.inputNodeIds.length > 1) visit(inputNode(nodes, node, 0), region)
-      const transformed = transformedContentRegion(node, region, context)
+      const content = inputNode(nodes, node, contentIndex)
+      const transformed = transformedContentRegion(
+        node,
+        region,
+        context,
+        context.resolveSourceSize?.(content) ?? context.size,
+      )
       if (node.mask) addRegion(masks, node.id, transformed.region)
-      visit(inputNode(nodes, node, contentIndex), transformed.region)
+      visit(content, transformed.region)
       return
     }
     const inputRegion = node.definitionId === 'group.isolated'
@@ -273,9 +280,15 @@ export async function executeImageEditCpuRenderRegionPlanV3(
           ? await render(inputNode(nodes, node, 0), region)
           : null
         const contentIndex = node.inputNodeIds.length === 1 ? 0 : 1
-        const transformed = transformedContentRegion(node, region, context)
+        const contentNode = inputNode(nodes, node, contentIndex)
+        const transformed = transformedContentRegion(
+          node,
+          region,
+          context,
+          context.resolveSourceSize?.(contentNode) ?? context.size,
+        )
         let content = transformed.region.width > 0 && transformed.region.height > 0
-          ? await render(inputNode(nodes, node, contentIndex), transformed.region)
+          ? await render(contentNode, transformed.region)
           : context.createTransparent(region)
         let mask: Float32MaskTile | undefined
         if (node.mask && transformed.region.width > 0 && transformed.region.height > 0) {
