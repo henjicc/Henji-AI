@@ -28,11 +28,11 @@ function fakeCompositor(
     missingResources: vi.fn(() => []),
     render: vi.fn(async () => ({
       bitmap: { close: vi.fn() } as unknown as ImageBitmap,
-      stats: { uploadCount: 0, pipelineCompileCount: 1, frameCount: 1, diagnosticReadbackCount: 0 },
+      stats: { uploadCount: 0, pipelineCompileCount: 1, frameCount: 1, diagnosticReadbackCount: 0, transientUniformUpdateCount: 0 },
     })),
     readLinearPixelsForTest: vi.fn(async () => new Float32Array()),
     snapshotStats: vi.fn(() => ({
-      uploadCount: 0, pipelineCompileCount: 1, frameCount: 0, diagnosticReadbackCount: 0,
+      uploadCount: 0, pipelineCompileCount: 1, frameCount: 0, diagnosticReadbackCount: 0, transientUniformUpdateCount: 0,
     })),
     dispose: vi.fn(),
     ...overrides,

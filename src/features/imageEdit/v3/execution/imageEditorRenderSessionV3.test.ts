@@ -615,7 +615,7 @@ describe('ImageEditorRenderSessionV3', () => {
     expect(unsubscribeRuntime).toHaveBeenCalledOnce()
   })
 
-  it('权威快照、相机和瞬态变换只转发到会话唯一 GPU Scene，CPU 显示保持主路径', () => {
+  it('权威快照、相机和瞬态变换只转发到会话唯一 GPU Scene，帧间只发送最新矩阵', () => {
     const gpuSubscription: {
       listener?: (event: ImageEditorGpuSceneWorkerEventV3) => void
     } = {}
@@ -651,6 +651,12 @@ describe('ImageEditorRenderSessionV3', () => {
       resourceDescriptors: [],
     }
     session.updateSnapshot(snapshot)
+    let diagnostics: ImageEditorRenderSessionDiagnosticsV3 | null = null
+    session.subscribeDiagnostics((value) => { diagnostics = value })
+    if (!gpuSubscription.listener) throw new Error('缺少 GPU Scene 事件订阅')
+    gpuSubscription.listener({
+      type: 'ready', sceneGeneration: 7, deviceGeneration: 2, recovered: false,
+    })
     session.updateTransientLayerTransform('source', [1, 0, 0, 1, 5, 8], 11)
     session.requestFrame('draft')
     session.clearTransientLayerTransform('source', 12)
@@ -660,34 +666,28 @@ describe('ImageEditorRenderSessionV3', () => {
     expect(gpuScene.updateViewport).toHaveBeenCalledWith(7, 1, expect.objectContaining({
       viewportKey: 'viewport-1',
     }))
-    expect(gpuScene.updateTransientLayerTransform).toHaveBeenCalledWith(
-      7, 'source', [1, 0, 0, 1, 5, 8], 11,
-    )
-    expect(gpuScene.requestFrame).toHaveBeenCalledWith(7, 1, 11, 'draft')
-    expect(gpuScene.clearTransientLayerTransform).toHaveBeenCalledWith(7, 'source', 12)
-
-    let diagnostics: ImageEditorRenderSessionDiagnosticsV3 | null = null
-    session.subscribeDiagnostics((value) => { diagnostics = value })
-    if (!gpuSubscription.listener) throw new Error('缺少 GPU Scene 事件订阅')
-    gpuSubscription.listener({
-      type: 'ready', sceneGeneration: 7, deviceGeneration: 2, recovered: false,
-    })
+    expect(gpuScene.updateTransientLayerTransform).not.toHaveBeenCalled()
+    expect(gpuScene.requestFrame).toHaveBeenCalledWith(7, 1, 0, 'stable')
     expect(diagnostics).toMatchObject({
       compositionBackend: 'cpu',
       presentationBackend: 'canvas2d',
       deviceStatus: 'ready',
       deviceGeneration: 2,
     })
-    const closeGpuFrame = vi.fn()
+    const closeInitialFrame = vi.fn()
     gpuSubscription.listener({
       type: 'frame-ready', requestId: 'hidden-frame', sceneGeneration: 7,
-      cameraSequence: 1, interactionSequence: 12, deviceGeneration: 2,
-      quality: 'draft', bitmap: { close: closeGpuFrame } as unknown as ImageBitmap,
+      cameraSequence: 1, interactionSequence: 0, deviceGeneration: 2,
+      quality: 'stable', bitmap: { close: closeInitialFrame } as unknown as ImageBitmap,
       diagnostics: {
         uploadCount: 1, pipelineCompileCount: 2, frameCount: 1, diagnosticReadbackCount: 0,
+        transientUniformUpdateCount: 0,
       },
     })
-    expect(closeGpuFrame).toHaveBeenCalledOnce()
+    expect(closeInitialFrame).toHaveBeenCalledOnce()
+    expect(gpuScene.updateTransientLayerTransform).not.toHaveBeenCalled()
+    expect(gpuScene.clearTransientLayerTransform).toHaveBeenCalledWith(7, 'source', 12)
+    expect(gpuScene.requestFrame).toHaveBeenLastCalledWith(7, 1, 12, 'draft')
     expect(diagnostics).toMatchObject({
       compositionBackend: 'cpu', presentationBackend: 'canvas2d',
     })

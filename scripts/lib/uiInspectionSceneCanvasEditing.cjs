@@ -169,9 +169,54 @@ function attachUiInspectionCanvasEditing(context) {
       const nodes = JSON.parse(rows[0]?.nodes_json ?? '[]')
       const edges = JSON.parse(rows[0]?.edges_json ?? '[]')
       const documentId = `ui-multi-layer-${crypto.randomUUID()}`
+      const fixtureCanvas = document.createElement('canvas')
+      fixtureCanvas.width = 320
+      fixtureCanvas.height = 240
+      const fixtureContext = fixtureCanvas.getContext('2d')
+      if (!fixtureContext) throw new Error('五层 GPU 拖动夹具画布不可用')
+      const fixtureGradient = fixtureContext.createLinearGradient(0, 0, 320, 240)
+      fixtureGradient.addColorStop(0, 'rgb(28, 92, 218)')
+      fixtureGradient.addColorStop(0.55, 'rgb(226, 78, 130)')
+      fixtureGradient.addColorStop(1, 'rgb(246, 190, 60)')
+      fixtureContext.fillStyle = fixtureGradient
+      fixtureContext.fillRect(0, 0, 320, 240)
+      fixtureContext.fillStyle = 'rgba(255, 255, 255, 0.72)'
+      fixtureContext.fillRect(34, 42, 104, 88)
+      fixtureContext.fillStyle = 'rgba(18, 30, 58, 0.82)'
+      fixtureContext.beginPath()
+      fixtureContext.arc(224, 132, 54, 0, Math.PI * 2)
+      fixtureContext.fill()
       const managed = await window.henjiNative.imageEditorV3.ingestSource({
         requestId: `reality-multi-layer-ingest-${crypto.randomUUID()}`,
+        source: { kind: 'data-url', dataUrl: fixtureCanvas.toDataURL('image/png') },
+      })
+      // 旧 V1 迁移子场景仍依赖原 1600×800 本地资源入库；与 2.2 的单瓦片夹具分开。
+      const legacyManaged = await window.henjiNative.imageEditorV3.ingestSource({
+        requestId: `reality-multi-layer-legacy-ingest-${crypto.randomUUID()}`,
         source: { kind: 'local-path', filePath: source },
+      })
+      await window.henjiNative.imageEditorV3.saveDocument({
+        requestId: `reality-multi-layer-legacy-retain-${crypto.randomUUID()}`,
+        document: {
+          version: 3,
+          id: `ui-multi-layer-legacy-retain-${crypto.randomUUID()}`,
+          revision: 0,
+          geometry: {
+            width: legacyManaged.metadata.width,
+            height: legacyManaged.metadata.height,
+            orientation: { rotate: 0, mirrored: false },
+            crop: null,
+          },
+          color: {
+            workingSpace: 'srgb', bitDepth: 8, transferFunction: 'srgb',
+            hdrMetadata: null, iccProfileResourceId: null,
+          },
+          layers: [],
+        },
+        expectedRevision: 0,
+        history: null,
+        resourceRefs: [legacyManaged.resource.resourceRef],
+        previewRef: null,
       })
       const common = (id, name) => ({
         id,
@@ -186,7 +231,7 @@ function attachUiInspectionCanvasEditing(context) {
         source: { kind: 'resource', resourceId: managed.resource.resourceRef },
         tiles: {},
       })
-      const document = {
+      const editDocument = {
         version: 3,
         id: documentId,
         revision: 0,
@@ -225,7 +270,7 @@ function attachUiInspectionCanvasEditing(context) {
       }
       const saved = await window.henjiNative.imageEditorV3.saveDocument({
         requestId: `reality-multi-layer-save-${crypto.randomUUID()}`,
-        document,
+        document: editDocument,
         expectedRevision: 0,
         history: null,
         resourceRefs: [managed.resource.resourceRef],
@@ -279,8 +324,8 @@ function attachUiInspectionCanvasEditing(context) {
           completionId: legacyCompletionId,
         },
         canvas: {
-          width: managed.metadata.width,
-          height: managed.metadata.height,
+          width: legacyManaged.metadata.width,
+          height: legacyManaged.metadata.height,
           colorSpace: 'srgb',
           alphaMode: 'straight',
           compositeOperation: 'source-over',
@@ -297,16 +342,16 @@ function attachUiInspectionCanvasEditing(context) {
           role: 'base',
           name: '旧版底图',
           resourceId: legacyResourceId,
-          placement: { x: 0, y: 0, width: managed.metadata.width, height: managed.metadata.height },
+          placement: { x: 0, y: 0, width: legacyManaged.metadata.width, height: legacyManaged.metadata.height },
           opacity: 1,
           visible: true,
           blendMode: 'normal',
           alpha: 'opaque',
         }],
         resources: [
-          { version: 1, resourceId: legacyResourceId, status: 'ready', filePath: source, mimeType: 'image/jpeg', width: managed.metadata.width, height: managed.metadata.height, hasAlpha: false, byteLength: null, sha256: 'ui-legacy-base' },
-          { version: 1, resourceId: `${legacyStackId}:composite`, status: 'ready', filePath: source, mimeType: 'image/png', width: managed.metadata.width, height: managed.metadata.height, hasAlpha: true, byteLength: null, sha256: 'ui-legacy-composite' },
-          { version: 1, resourceId: `${legacyStackId}:thumbnail`, status: 'ready', filePath: source, mimeType: 'image/webp', width: managed.metadata.width, height: managed.metadata.height, hasAlpha: false, byteLength: null, sha256: 'ui-legacy-thumbnail' },
+          { version: 1, resourceId: legacyResourceId, status: 'ready', filePath: source, mimeType: 'image/jpeg', width: legacyManaged.metadata.width, height: legacyManaged.metadata.height, hasAlpha: false, byteLength: null, sha256: 'ui-legacy-base' },
+          { version: 1, resourceId: `${legacyStackId}:composite`, status: 'ready', filePath: source, mimeType: 'image/png', width: legacyManaged.metadata.width, height: legacyManaged.metadata.height, hasAlpha: true, byteLength: null, sha256: 'ui-legacy-composite' },
+          { version: 1, resourceId: `${legacyStackId}:thumbnail`, status: 'ready', filePath: source, mimeType: 'image/webp', width: legacyManaged.metadata.width, height: legacyManaged.metadata.height, hasAlpha: false, byteLength: null, sha256: 'ui-legacy-thumbnail' },
         ],
       }
       nodes.push({
@@ -321,7 +366,7 @@ function attachUiInspectionCanvasEditing(context) {
           displayName: '旧版多图层图片文档（迁移夹具）',
           imageUrl: source,
           previewImageUrl: source,
-          aspectRatio: `${managed.metadata.width}:${managed.metadata.height}`,
+          aspectRatio: `${legacyManaged.metadata.width}:${legacyManaged.metadata.height}`,
           resultKind: 'layer-stack',
           layerStackDocument: legacyDocument,
           isGenerating: false,
@@ -369,7 +414,7 @@ function attachUiInspectionCanvasEditing(context) {
     })
     console.log(`[image-editor-gpu-baseline] ${JSON.stringify({
       fixture: 'kie-five-layer',
-      path: 'dom-raster-pasteboard',
+      path: 'gpu-image-bitmap-transient-transform',
       ...verifiedDrag.dragBaseline,
     })}`)
     const initialPreviewSource = verifiedDrag.initialPreviewSource

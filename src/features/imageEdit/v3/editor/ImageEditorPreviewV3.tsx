@@ -2,18 +2,9 @@ import { AlertTriangle, LoaderCircle } from 'lucide-react'
 import { useCallback, useMemo, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 
-import type {
-  ImageEditCommandBusSnapshotV3,
-  ImageEditCommandBusV3,
-} from '../application/imageEditCommandBus'
-import {
-  useImageEditorInteractionStoreV3,
-  useImageEditorSessionStoreV3,
-} from '../store'
-import {
-  useImageEditorDisplayPipelineV3,
-  useImageEditorThumbnailPrefetchV3,
-} from '../execution'
+import type { ImageEditCommandBusSnapshotV3, ImageEditCommandBusV3 } from '../application/imageEditCommandBus'
+import { useImageEditorInteractionStoreV3, useImageEditorSessionStoreV3 } from '../store'
+import { useImageEditorDisplayPipelineV3, useImageEditorThumbnailPrefetchV3 } from '../execution'
 import { projectImageEditorPreviewDocumentV3 } from '../execution/previewDocumentV3'
 import { useImageEditorResultLeaseV3 } from '../execution/useImageEditorResultLeaseV3'
 import { ImageEditorAnnotationOverlayV3 } from './ImageEditorAnnotationOverlayV3'
@@ -338,6 +329,9 @@ export function ImageEditorPreviewV3({
       horizontal: horizontalSnapGuideRef,
       vertical: verticalSnapGuideRef,
     },
+    viewportComposite.session,
+    viewportComposite.compositionBackend === 'gpu'
+      && viewportComposite.presentationBackend === 'gpu-image-bitmap',
   )
 
   const navigationCursor = navigation.effectiveTool === 'hand'
@@ -364,6 +358,10 @@ export function ImageEditorPreviewV3({
       data-preview-event-to-present-ms={previewRenderer
         ? undefined
         : viewportComposite.eventToPresentMs ?? undefined}
+      data-preview-render-generation={previewRenderer ? undefined : viewportComposite.renderGeneration}
+      data-preview-override-count={previewRenderer
+        ? undefined
+        : Object.keys(snapshot.previewOverrides).length}
       data-preview-output-width={outputGeometry.width}
       data-preview-output-height={outputGeometry.height}
       data-active-navigation-tool={navigation.effectiveTool === 'hand' || navigation.effectiveTool === 'zoom'

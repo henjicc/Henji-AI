@@ -21,6 +21,7 @@ import {
 } from './imageEditorMoveSnappingV3'
 import type { ImageEditorToolIdV3 } from '../application/imageEditorHostProfiles'
 import type { ImageEditorV3Controller } from './types'
+import type { ImageEditorRenderSessionV3 } from '../execution/imageEditorRenderSessionV3'
 
 interface ImageEditorLayerMoveGestureV3 {
   pointerId: number
@@ -39,6 +40,9 @@ interface ImageEditorLayerMoveGestureV3 {
   changed: boolean
   directLayerFeedback: boolean
   feedbackTarget: HTMLDivElement | null
+  gpuTransient: boolean
+  interactionSequence: number
+  eventTimestamp: number
 }
 
 const EMPTY_LAYER_IDS_V3: readonly string[] = []
@@ -66,8 +70,11 @@ export function useImageEditorLayerMoveGestureV3(
   outputGeometry: AnnotationOutputGeometryV3,
   snappingEnabled: boolean,
   snapGuideRefs: ImageEditorMoveSnapGuideRefsV3,
+  renderSession: ImageEditorRenderSessionV3,
+  gpuInteractionEnabled: boolean,
 ): ImageEditorLayerMoveGestureHandlersV3 {
   const gestureRef = useRef<ImageEditorLayerMoveGestureV3 | null>(null)
+  const interactionSequenceRef = useRef(0)
   const selectedLayerIds = useImageEditorSessionStoreV3(
     (state) => state.sessions[controller.sessionId]?.selectedLayerIds ?? EMPTY_LAYER_IDS_V3,
   )
@@ -139,6 +146,19 @@ export function useImageEditorLayerMoveGestureV3(
       && gesture.captureTarget.hasPointerCapture(gesture.pointerId)
       && typeof gesture.captureTarget.releasePointerCapture === 'function'
     ) gesture.captureTarget.releasePointerCapture(gesture.pointerId)
+    if (gesture.gpuTransient) {
+      interactionSequenceRef.current += 1
+      renderSession.clearTransientLayerTransform(
+        gesture.layerId,
+        interactionSequenceRef.current,
+      )
+      renderSession.requestFrame('draft')
+      if (commit && gesture.changed) {
+        controller.updateLayerCommon(gesture.layerId, { transform: gesture.pendingTransform })
+      }
+      releaseMoveFeedback(false)
+      return
+    }
     if (commit && gesture.changed) {
       try {
         if (gesture.directLayerFeedback) {
@@ -171,7 +191,13 @@ export function useImageEditorLayerMoveGestureV3(
       if (gesture.feedbackTarget) gesture.feedbackTarget.style.transform = ''
       releaseMoveFeedback(false)
     }
-  }, [cancelScheduledPreview, clearSnapGuides, controller, releaseMoveFeedback])
+  }, [
+    cancelScheduledPreview,
+    clearSnapGuides,
+    controller,
+    releaseMoveFeedback,
+    renderSession,
+  ])
 
   useEffect(() => {
     if (activeTool !== 'move') release(false)
@@ -183,6 +209,13 @@ export function useImageEditorLayerMoveGestureV3(
     const location = findImageEditLayerLocationV3(controller.document.layers, gesture.layerId)
     if (!isImageEditLayerTransformableV3(location)) release(false)
   }, [controller.document.id, controller.document.revision, controller.document.layers, release])
+  useEffect(() => {
+    const gesture = gestureRef.current
+    if (!gesture) return
+    if (selectedLayerIds.length !== 1
+      || selectedLayerIds[0] !== gesture.layerId
+      || (gesture.gpuTransient && !gpuInteractionEnabled)) release(false)
+  }, [gpuInteractionEnabled, release, selectedLayerIds])
 
   const clientToOutput = useCallback((
     rect: Pick<DOMRect, 'left' | 'top' | 'width' | 'height'>,
@@ -228,7 +261,8 @@ export function useImageEditorLayerMoveGestureV3(
     if (!viewportRect) return
     const outputPoint = clientToOutput(viewportRect, event.clientX, event.clientY)
     if (!isImageEditLayerTransformableV3(location) || !outputPoint) return
-    const feedbackTarget = location.parentId === null && location.layer.type === 'raster'
+    const feedbackTarget = !gpuInteractionEnabled
+      && location.parentId === null && location.layer.type === 'raster'
       ? acquireMoveFeedback(layerId)
       : null
     event.preventDefault()
@@ -264,6 +298,9 @@ export function useImageEditorLayerMoveGestureV3(
       changed: false,
       directLayerFeedback: feedbackTarget !== null,
       feedbackTarget,
+      gpuTransient: gpuInteractionEnabled,
+      interactionSequence: interactionSequenceRef.current,
+      eventTimestamp: typeof performance === 'undefined' ? Date.now() : performance.now(),
     }
   }
 
@@ -324,6 +361,30 @@ export function useImageEditorLayerMoveGestureV3(
     gesture.pendingTransform = changed
       ? translateImageEditLayerTransformV3(gesture.startTransform, deltaX, deltaY)
       : [...gesture.startTransform]
+    gesture.eventTimestamp = typeof performance === 'undefined' ? Date.now() : performance.now()
+    if (gesture.gpuTransient) {
+      if (gesture.previewFrameId !== null) return
+      const publishGpuFrame = (): void => {
+        const current = gestureRef.current
+        if (current !== gesture) return
+        gesture.previewFrameId = null
+        interactionSequenceRef.current += 1
+        gesture.interactionSequence = interactionSequenceRef.current
+        renderSession.updateTransientLayerTransform(
+          gesture.layerId,
+          gesture.pendingTransform,
+          gesture.interactionSequence,
+          gesture.eventTimestamp,
+        )
+        renderSession.requestFrame('draft')
+      }
+      if (typeof requestAnimationFrame === 'function') {
+        gesture.previewFrameId = requestAnimationFrame(publishGpuFrame)
+      } else {
+        publishGpuFrame()
+      }
+      return
+    }
     if (gesture.directLayerFeedback && gesture.feedbackTarget) {
       const previewClientX = gesture.viewportRect.left
         + snappedOutputPoint[0] / outputGeometry.width * gesture.viewportRect.width

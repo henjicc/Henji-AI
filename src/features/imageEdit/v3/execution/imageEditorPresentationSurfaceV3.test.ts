@@ -188,4 +188,61 @@ describe('ImageEditorPresentationSurfaceV3', () => {
     expect(allCalls.some((call) => call[0] === secondBitmap)).toBe(true)
     surface.dispose()
   })
+
+  it('GPU ImageBitmap 尺寸匹配时先完整落到 staging，再交换安全表面和前表面', () => {
+    const surface = new ImageEditorPresentationSurfaceV3()
+    const front = document.createElement('canvas')
+    const safety = document.createElement('canvas')
+    surface.attach({ surfaceId: 'surface', front, safety })
+    const gpuFrame = { width: 320, height: 240, close: vi.fn() } as unknown as ImageBitmap
+
+    const presented = surface.presentGpuBitmap(gpuFrame, {
+      stageWidth: 320,
+      stageHeight: 240,
+      viewportKey: 'gpu-viewport',
+      viewport: {
+        documentX: 0,
+        documentY: 0,
+        width: 320,
+        height: 240,
+        zoom: 1,
+        devicePixelRatio: 1,
+      },
+    }, 4, 5, 6)
+
+    expect(presented).toBe(true)
+    const allCalls = [...contexts.values()].flatMap((value) => value.drawImage.mock.calls)
+    expect(allCalls.filter((call) => call[0] === gpuFrame)).toHaveLength(1)
+    expect(contexts.get(safety)!.drawImage.mock.invocationCallOrder.at(-1))
+      .toBeLessThan(contexts.get(front)!.drawImage.mock.invocationCallOrder.at(-1)!)
+    expect(front.dataset).toMatchObject({
+      renderGeneration: '4', cameraSequence: '5', interactionSequence: '6',
+    })
+    surface.dispose()
+  })
+
+  it('GPU ImageBitmap 尺寸不匹配时不改写最后稳定表面', () => {
+    const surface = new ImageEditorPresentationSurfaceV3()
+    const front = document.createElement('canvas')
+    const safety = document.createElement('canvas')
+    surface.attach({ surfaceId: 'surface', front, safety })
+    const presented = surface.presentGpuBitmap(bitmap(), {
+      stageWidth: 320,
+      stageHeight: 240,
+      viewportKey: 'gpu-viewport',
+      viewport: {
+        documentX: 0,
+        documentY: 0,
+        width: 320,
+        height: 240,
+        zoom: 1,
+        devicePixelRatio: 1,
+      },
+    }, 1, 1, 1)
+
+    expect(presented).toBe(false)
+    expect(contexts.has(front)).toBe(false)
+    expect(contexts.has(safety)).toBe(false)
+    surface.dispose()
+  })
 })

@@ -1,43 +1,19 @@
-import {
-  compileImageEditRenderPlanV3,
-  createBuiltInImageEditRenderNodeRegistry,
-} from '@/core/imageEdit/v3'
+import { compileImageEditRenderPlanV3, createBuiltInImageEditRenderNodeRegistry } from '@/core/imageEdit/v3'
 import type { ImageEditTransformV3 } from '@/core/imageEdit/v3/layerTypes'
 import type { ImageEditRenderQuality } from '@/core/imageEdit/v3/renderNodeDefinition'
 import { isUiInspectionReadOnly } from '@/platform/runtime'
 import type { ImageEditorViewportLayoutV3 } from '../editor/useImageEditorViewportLayoutV3'
-import {
-  ImageEditorPresentationSurfaceV3,
-  imageEditorViewportResultCoverageV3,
-  type ImageEditorPresentationSurfaceElementsV3,
-} from './imageEditorPresentationSurfaceV3'
-import {
-  createImageEditorRenderSessionClientLanesV3,
-  type ImageEditorRenderSessionClientLanesV3,
-} from './imageEditorRenderSessionClientsV3'
-import type {
-  ImageEditorRenderSessionDependenciesV3,
-  ImageEditorRenderSessionDiagnosticsV3,
-  ImageEditorRenderSessionStateV3,
-  ImageEditorRenderSessionV3,
-  ImageEditorRenderSnapshotV3,
-} from './imageEditorRenderSessionContractsV3'
-import {
-  imageEditorRenderResultMatchesViewV3,
-  sameImageEditorRenderSnapshotV3,
-} from './imageEditorRenderSessionIdentityV3'
+import { ImageEditorPresentationSurfaceV3, imageEditorViewportResultCoverageV3, type ImageEditorPresentationSurfaceElementsV3 } from './imageEditorPresentationSurfaceV3'
+import { createImageEditorRenderSessionClientLanesV3, type ImageEditorRenderSessionClientLanesV3 } from './imageEditorRenderSessionClientsV3'
+import type { ImageEditorRenderSessionDependenciesV3, ImageEditorRenderSessionDiagnosticsV3, ImageEditorRenderSessionStateV3, ImageEditorRenderSessionV3, ImageEditorRenderSnapshotV3 } from './imageEditorRenderSessionContractsV3'
+import { imageEditorRenderResultMatchesViewV3, sameImageEditorRenderSnapshotV3 } from './imageEditorRenderSessionIdentityV3'
 import { presentImageEditorRenderSessionFrameV3 } from './imageEditorRenderSessionPresentationV3'
-import {
-  ImageEditorViewportCompositeDisposedErrorV3,
-  ImageEditorViewportCompositeSupersededErrorV3,
-} from './viewportCompositeClientV3'
-import type {
-  ImageEditorManagedViewportCompositeV3,
-  ImageEditorViewportCompositeClientOptionsV3,
-} from './viewportCompositeTypesV3'
+import { ImageEditorViewportCompositeDisposedErrorV3, ImageEditorViewportCompositeSupersededErrorV3 } from './viewportCompositeClientV3'
+import type { ImageEditorManagedViewportCompositeV3, ImageEditorViewportCompositeClientOptionsV3 } from './viewportCompositeTypesV3'
 import { resolveImageEditorViewportAnalysisMipV3 } from './viewportGlobalAnalysisV3'
 import { imageEditorRenderRuntimePatchV3 } from './imageEditorRenderRuntimeV3'
 import { ImageEditorRenderSessionGpuBridgeV3 } from './imageEditorRenderSessionGpuBridgeV3'
+import { ImageEditorRenderSessionGpuPresentationV3 } from './imageEditorRenderSessionGpuPresentationV3'
 import { ImageEditorRenderSessionWorkV3, type ImageEditorRenderSessionWorkLayoutV3 } from './imageEditorRenderSessionWorkV3'
 import { ImageEditorRenderSessionScheduleV3 } from './imageEditorRenderSessionScheduleV3'
 
@@ -61,9 +37,12 @@ export class DefaultImageEditorRenderSessionV3 implements ImageEditorRenderSessi
   private readonly work: ImageEditorRenderSessionWorkV3
   private readonly schedule = new ImageEditorRenderSessionScheduleV3()
   private readonly compositor = new ImageEditorPresentationSurfaceV3()
+  private readonly gpuPresentation = new ImageEditorRenderSessionGpuPresentationV3(this.compositor)
   private readonly diagnosticsListeners = new Set<(value: ImageEditorRenderSessionDiagnosticsV3) => void>()
   private readonly stateListeners = new Set<(value: ImageEditorRenderSessionStateV3) => void>()
   private readonly inFlightTasks = new Set<string>()
+  private renderPlanCompileCount = 0
+  private cpuTaskStartCount = 0
   private snapshot: ImageEditorRenderSnapshotV3 | null = null
   private layout: ImageEditorRenderSessionWorkLayoutV3 | null = null
   private stable: ImageEditorManagedViewportCompositeV3 | null = null
@@ -101,6 +80,10 @@ export class DefaultImageEditorRenderSessionV3 implements ImageEditorRenderSessi
       dependencies.gpuSceneClient,
       (patch) => this.publish(patch),
       isUiInspectionReadOnly(),
+      (event, layout, eventToPresentMs) => this.gpuPresentation.present(
+        event, layout, eventToPresentMs,
+      ),
+      () => this.gpuPresentation.fallback(() => this.present()),
     )
     this.work = new ImageEditorRenderSessionWorkV3({
       clients: this.clients,
@@ -121,6 +104,9 @@ export class DefaultImageEditorRenderSessionV3 implements ImageEditorRenderSessi
   attachSurface(elements: ImageEditorPresentationSurfaceElementsV3): () => void {
     this.assertUsable()
     this.compositor.attach(elements)
+    this.compositor.updateRuntimeDiagnostics(
+      this.renderPlanCompileCount, this.cpuTaskStartCount,
+    )
     this.publish({ surfaceId: elements.surfaceId })
     this.present()
     return () => {
@@ -139,6 +125,10 @@ export class DefaultImageEditorRenderSessionV3 implements ImageEditorRenderSessi
     this.snapshot = snapshot
     this.gpuBridge.syncSnapshot(snapshot)
     const plan = compileImageEditRenderPlanV3(snapshot.document, registry, snapshot.quality)
+    this.renderPlanCompileCount += 1
+    this.compositor.updateRuntimeDiagnostics(
+      this.renderPlanCompileCount, this.cpuTaskStartCount,
+    )
     this.analysisMip = resolveImageEditorViewportAnalysisMipV3(
       snapshot.document, plan, snapshot.quality,
     )
@@ -224,9 +214,12 @@ export class DefaultImageEditorRenderSessionV3 implements ImageEditorRenderSessi
     layerId: string,
     transform: ImageEditTransformV3,
     interactionSequence: number,
+    eventTimestamp?: number,
   ): void {
     this.assertUsable()
-    this.gpuBridge.updateTransientLayerTransform(layerId, transform, interactionSequence)
+    this.gpuBridge.updateTransientLayerTransform(
+      layerId, transform, interactionSequence, eventTimestamp,
+    )
   }
 
   clearTransientLayerTransform(layerId: string, interactionSequence: number): void {
@@ -359,6 +352,7 @@ export class DefaultImageEditorRenderSessionV3 implements ImageEditorRenderSessi
 
   private present(): void {
     if (!this.layout || !this.snapshot) return
+    if (this.gpuPresentation.isActive()) return
     const presented = presentImageEditorRenderSessionFrameV3({
       compositor: this.compositor,
       snapshot: this.snapshot,
@@ -378,6 +372,10 @@ export class DefaultImageEditorRenderSessionV3 implements ImageEditorRenderSessi
 
   private startTask(token: string, run: () => Promise<void>): void {
     this.inFlightTasks.add(token)
+    this.cpuTaskStartCount += 1
+    this.compositor.updateRuntimeDiagnostics(
+      this.renderPlanCompileCount, this.cpuTaskStartCount,
+    )
     this.publish({ rendering: true })
     void run().finally(() => {
       this.inFlightTasks.delete(token)

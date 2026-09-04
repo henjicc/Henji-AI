@@ -153,6 +153,19 @@ async function verifyMultiLayerDragPerformance({
     timeout: 10000,
   })
   const previewSurface = editor.locator('[data-preview-surface]')
+  await waitForEditorState(page, {
+    message: '五层场景没有交给 GPU ImageBitmap 稳定呈现',
+    read: async () => ({
+      composition: await previewSurface.getAttribute('data-preview-composition-backend'),
+      presentation: await previewSurface.getAttribute('data-preview-presentation-backend'),
+      frameCount: Number(await editor.locator('[data-presentation-front-surface]')
+        .getAttribute('data-gpu-frame-count') ?? '0'),
+    }),
+    accept: ({ composition, presentation, frameCount }) => composition === 'gpu'
+      && presentation === 'gpu-image-bitmap'
+      && frameCount > 0,
+    timeout: 30000,
+  })
   const previewBox = await previewSurface.boundingBox()
   if (!previewBox) throw new Error('多图层拖动前无法读取预览区域')
   const dragStartX = previewBox.x + previewBox.width / 2
@@ -161,38 +174,92 @@ async function verifyMultiLayerDragPerformance({
   if (beforeLayerMove !== fixture.initialRevision) {
     throw new Error(`多图层拖动前 revision 异常：${beforeLayerMove}`)
   }
-  const feedback = rasterStack.locator('[data-raster-pasteboard-layer="ui-foreground-layer"]')
-  const siblingFeedback = rasterStack.locator('[data-raster-pasteboard-layer="ui-background-layer"]')
   const stableRaster = editor.locator('[data-raster-display-frame]')
-  const siblingTransform = await siblingFeedback.evaluate((element) => element.style.transform)
-  const progressiveTransforms = []
+  const gpuSurface = editor.locator('[data-presentation-front-surface]')
   const presentSamplesMs = []
+  const driverSamplesMs = []
+  const dragStartedAt = new Date().toISOString()
+  const beforeHotPath = await page.evaluate(({ previewSelector, gpuSelector }) => {
+    const preview = document.querySelector(previewSelector)
+    const gpu = document.querySelector(gpuSelector)
+    return {
+      renderGeneration: Number(preview?.getAttribute('data-preview-render-generation') ?? '-1'),
+      overrideCount: Number(preview?.getAttribute('data-preview-override-count') ?? '-1'),
+      renderPlanCompileCount: Number(gpu?.getAttribute('data-render-plan-compile-count') ?? '-1'),
+      cpuTaskStartCount: Number(gpu?.getAttribute('data-cpu-task-start-count') ?? '-1'),
+      uploadCount: Number(gpu?.getAttribute('data-gpu-upload-count') ?? '-1'),
+      readbackCount: Number(gpu?.getAttribute('data-gpu-readback-count') ?? '-1'),
+      frameCount: Number(gpu?.getAttribute('data-gpu-frame-count') ?? '-1'),
+      uniformUpdateCount: Number(gpu?.getAttribute('data-gpu-uniform-update-count') ?? '-1'),
+      interactionSequence: Number(gpu?.getAttribute('data-interaction-sequence') ?? '-1'),
+    }
+  }, {
+    previewSelector: '[data-preview-surface]',
+    gpuSelector: '[data-presentation-front-surface]',
+  })
   await page.keyboard.down('Control')
   await page.mouse.move(dragStartX, dragStartY)
   await page.mouse.down()
   for (let step = 1; step <= 100; step += 1) {
     const startedAt = performance.now()
+    const previousSequence = Number(await gpuSurface.getAttribute('data-interaction-sequence') ?? '-1')
     await page.mouse.move(dragStartX + 1.5 * step, dragStartY + step)
-    await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => resolve())))
-    presentSamplesMs.push(performance.now() - startedAt)
+    await page.waitForFunction(({ previous }) => Number(
+      document.querySelector('[data-presentation-front-surface]')
+        ?.getAttribute('data-interaction-sequence') ?? '-1'
+    ) > previous, { previous: previousSequence }, { timeout: 5000 })
+    driverSamplesMs.push(performance.now() - startedAt)
     const evidence = {
       revision: Number(await commandBar.getAttribute('data-document-revision')),
+      overrideCount: Number(await previewSurface.getAttribute('data-preview-override-count')),
+      renderGeneration: Number(await previewSurface.getAttribute('data-preview-render-generation')),
       stackVisibility: await rasterStack.evaluate((element) => getComputedStyle(element).visibility),
       stableVisibility: await stableRaster.evaluate((element) => getComputedStyle(element).visibility),
-      targetTransform: await feedback.evaluate((element) => element.style.transform),
-      siblingTransform: await siblingFeedback.evaluate((element) => element.style.transform),
+      eventToPresentMs: Number(await gpuSurface.getAttribute('data-event-to-present-ms')),
+      renderPlanCompileCount: Number(await gpuSurface.getAttribute('data-render-plan-compile-count')),
+      cpuTaskStartCount: Number(await gpuSurface.getAttribute('data-cpu-task-start-count')),
+      uploadCount: Number(await gpuSurface.getAttribute('data-gpu-upload-count')),
+      readbackCount: Number(await gpuSurface.getAttribute('data-gpu-readback-count')),
+      frameCount: Number(await gpuSurface.getAttribute('data-gpu-frame-count')),
+      uniformUpdateCount: Number(await gpuSurface.getAttribute('data-gpu-uniform-update-count')),
     }
     if (evidence.revision !== beforeLayerMove
-      || evidence.stackVisibility !== 'visible'
-      || evidence.stableVisibility !== 'hidden'
-      || !evidence.targetTransform.includes('translate')
-      || evidence.siblingTransform !== siblingTransform) {
-      throw new Error(`多图层移动期间触发了合成、提交或移动了非目标层：${JSON.stringify(evidence)}`)
+      || evidence.overrideCount !== 0
+      || evidence.renderGeneration !== beforeHotPath.renderGeneration
+      || evidence.stackVisibility !== 'hidden'
+      || evidence.stableVisibility !== 'visible'
+      || evidence.renderPlanCompileCount !== beforeHotPath.renderPlanCompileCount
+      || evidence.cpuTaskStartCount !== beforeHotPath.cpuTaskStartCount
+      || evidence.uploadCount !== beforeHotPath.uploadCount
+      || evidence.readbackCount !== 0
+      || !Number.isFinite(evidence.eventToPresentMs)
+      || evidence.uniformUpdateCount > evidence.frameCount) {
+      throw new Error(`GPU 移动热路径发生了权威/CPU/上传/回读副作用：${JSON.stringify({ beforeHotPath, evidence })}`)
     }
-    progressiveTransforms.push(evidence.targetTransform)
+    presentSamplesMs.push(evidence.eventToPresentMs)
   }
-  if (new Set(progressiveTransforms).size !== progressiveTransforms.length) {
-    throw new Error(`多图层移动反馈没有逐步推进：${JSON.stringify(progressiveTransforms)}`)
+  const afterHotPath = await page.evaluate((gpuSelector) => {
+    const gpu = document.querySelector(gpuSelector)
+    return {
+      frameCount: Number(gpu?.getAttribute('data-gpu-frame-count') ?? '-1'),
+      uniformUpdateCount: Number(gpu?.getAttribute('data-gpu-uniform-update-count') ?? '-1'),
+      interactionSequence: Number(gpu?.getAttribute('data-interaction-sequence') ?? '-1'),
+    }
+  }, '[data-presentation-front-surface]')
+  const presentedFrameDelta = afterHotPath.frameCount - beforeHotPath.frameCount
+  const uniformUpdateDelta = afterHotPath.uniformUpdateCount - beforeHotPath.uniformUpdateCount
+  const interactionSequenceDelta = afterHotPath.interactionSequence
+    - beforeHotPath.interactionSequence
+  if (presentSamplesMs.length !== 100
+    || interactionSequenceDelta !== 100
+    || presentedFrameDelta < presentSamplesMs.length
+    || uniformUpdateDelta > presentedFrameDelta) {
+    throw new Error(`GPU 移动采样没有逐事件推进实际呈现：${JSON.stringify({
+      sampleCount: presentSamplesMs.length,
+      interactionSequenceDelta,
+      presentedFrameDelta,
+      uniformUpdateDelta,
+    })}`)
   }
   await page.mouse.up()
   await page.keyboard.up('Control')
@@ -205,14 +272,56 @@ async function verifyMultiLayerDragPerformance({
   await waitForEditorState(page, {
     message: '多图层移动提交后没有清除手势残差并交回稳定合成',
     read: async () => ({
-      feedback: await feedback.evaluate((element) => element.style.transform),
       stackVisibility: await rasterStack.evaluate((element) => getComputedStyle(element).visibility),
       stableVisibility: await stableRaster.evaluate((element) => getComputedStyle(element).visibility),
     }),
-    accept: (evidence) => evidence.feedback === ''
-      && evidence.stackVisibility === 'hidden'
+    accept: (evidence) => evidence.stackVisibility === 'hidden'
       && evidence.stableVisibility === 'visible',
   })
+  await waitForEditorState(page, {
+    message: 'GPU 移动松手后没有完成一次保存/一次 revision',
+    read: () => page.evaluate(async ({ afterTimestamp, documentRef }) => {
+      const result = await window.henjiNative.logging.queryLogEvents({
+        date: new Date().toISOString().slice(0, 10),
+        afterTimestamp,
+        level: 'info',
+        limit: 200,
+      })
+      const loaded = await window.henjiNative.imageEditorV3.loadDocument({
+        requestId: `reality-multi-layer-post-drag-${crypto.randomUUID()}`,
+        documentRef,
+      })
+      return {
+        saveCount: result.events.filter((event) => (
+          event.event === 'image_editor_v3.document.save.completed'
+        )).length,
+        persistedRevision: loaded?.revision ?? -1,
+      }
+    }, { afterTimestamp: dragStartedAt, documentRef: fixture.documentRef }),
+    accept: (evidence) => evidence.saveCount === 1
+      && evidence.persistedRevision === beforeLayerMove + 1,
+    timeout: 12000,
+  })
+  const viewportSize = page.viewportSize() ?? { width: 1440, height: 900 }
+  const baseline = viewportSize.width <= 960
+    ? { p95Ms: 24.707, p99Ms: 31.821 }
+    : { p95Ms: 23.947, p99Ms: 30.851 }
+  const dragMetrics = {
+    eventCount: 100,
+    sampleCount: presentSamplesMs.length,
+    interactionSequenceDelta,
+    presentedFrameDelta,
+    uniformUpdateDelta,
+    p50Ms: percentile(presentSamplesMs, 0.5),
+    p95Ms: percentile(presentSamplesMs, 0.95),
+    p99Ms: percentile(presentSamplesMs, 0.99),
+    driverP95Ms: percentile(driverSamplesMs, 0.95),
+    driverP99Ms: percentile(driverSamplesMs, 0.99),
+  }
+  if (dragMetrics.p95Ms > Math.min(16.7, baseline.p95Ms / 3)
+    || dragMetrics.p99Ms > Math.min(33.4, baseline.p99Ms / 3)) {
+    throw new Error(`GPU 拖动性能未同时满足帧预算与 1.1 三倍提升：${JSON.stringify({ viewportSize, baseline, dragMetrics })}`)
+  }
 
   return {
     dialog,
@@ -220,10 +329,15 @@ async function verifyMultiLayerDragPerformance({
     initialPreviewSource,
     result,
     dragBaseline: {
-      sampleCount: presentSamplesMs.length,
-      p50Ms: percentile(presentSamplesMs, 0.5),
-      p95Ms: percentile(presentSamplesMs, 0.95),
-      p99Ms: percentile(presentSamplesMs, 0.99),
+      ...dragMetrics,
+      hotPath: {
+        previewOverrideDelta: 0,
+        revisionDelta: 0,
+        renderPlanDelta: 0,
+        cpuTaskDelta: 0,
+        uploadDelta: 0,
+        readbackDelta: 0,
+      },
     },
   }
 }

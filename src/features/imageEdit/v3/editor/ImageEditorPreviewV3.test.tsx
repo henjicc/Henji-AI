@@ -44,6 +44,10 @@ const renderSession = vi.hoisted(() => ({
   setVisibility: vi.fn(),
   dispose: vi.fn(),
 }))
+const viewportBackend = vi.hoisted(() => ({
+  composition: 'cpu' as 'cpu' | 'gpu',
+  presentation: 'canvas2d' as 'canvas2d' | 'gpu-image-bitmap',
+}))
 const rasterPasteboardResources = vi.hoisted(() => ({
   readFastProxy: vi.fn(),
   readSourceMetadata: vi.fn(),
@@ -79,9 +83,9 @@ vi.mock('../execution', async (importOriginal) => {
         targetMip: null,
         eventToPresentMs: null,
         surfaceId: null,
-        compositionBackend: 'cpu',
+        compositionBackend: viewportBackend.composition,
         effectBackend: 'cpu',
-        presentationBackend: 'canvas2d',
+        presentationBackend: viewportBackend.presentation,
         deviceStatus: 'idle',
         deviceGeneration: 0,
         session: renderSession,
@@ -119,6 +123,9 @@ describe('ImageEditorPreviewV3 managed frame ownership', () => {
       diagnostic: null,
       rendering: false,
     }
+    viewportBackend.composition = 'cpu'
+    viewportBackend.presentation = 'canvas2d'
+    vi.clearAllMocks()
     rasterPasteboardResources.readFastProxy.mockReset()
     rasterPasteboardResources.readSourceMetadata.mockReset()
     rasterPasteboardResources.readFastProxy.mockImplementation(async (
@@ -748,6 +755,72 @@ describe('ImageEditorPreviewV3 managed frame ownership', () => {
     expect(liveSession.bus.getSnapshot().document.layers[0].transform).toEqual([
       1, 0, 0, 1, 45, 25,
     ])
+  })
+
+  it('GPU 已接管时连续 pointermove 只在 rAF 内更新瞬态矩阵且不发布 PreviewOverride', async () => {
+    viewportBackend.composition = 'gpu'
+    viewportBackend.presentation = 'gpu-image-bitmap'
+    const scheduledFrame = { current: null as FrameRequestCallback | null }
+    vi.stubGlobal('requestAnimationFrame', vi.fn((callback: FrameRequestCallback) => {
+      scheduledFrame.current = callback
+      return 23
+    }))
+    vi.stubGlobal('cancelAnimationFrame', vi.fn())
+    const document = createImageEditDocumentV3({
+      width: 320,
+      height: 180,
+      documentId: 'gpu-move-document',
+      sourceResourceId: 'sha256:source',
+    })
+    document.layers.push(createImageEditRasterLayerV3(
+      'gpu-second-layer', '第二层', 'sha256:source',
+    ))
+    const changes = vi.fn()
+    const rendered = render(
+      <div style={{ width: 900, height: 600 }}>
+        <ImageEditorV3
+          sourceImageUrl="preview.jpg"
+          document={document}
+          profileId="full"
+          initialSelectedLayerId={document.layers[0].id}
+          onDocumentChange={changes}
+        />
+      </div>,
+    )
+    const surface = rendered.container.querySelector<HTMLElement>('[data-preview-surface]')
+    const content = rendered.container.querySelector<HTMLElement>('[data-viewport-content]')
+    if (!surface || !content) throw new Error('GPU 拖动测试节点不存在')
+    vi.spyOn(content, 'getBoundingClientRect').mockReturnValue({
+      x: 0, y: 0, left: 0, top: 0, right: 320, bottom: 180,
+      width: 320, height: 180, toJSON: () => undefined,
+    })
+    await waitFor(() => expect(
+      Object.values(useImageEditorSessionStoreV3.getState().sessions)[0]?.selectedLayerIds,
+    ).toEqual([document.layers[0].id]))
+    const liveSession = requireImageEditV3LiveSession(document.id)
+
+    fireEvent.pointerDown(surface, {
+      pointerId: 71, isPrimary: true, button: 0, clientX: 10, clientY: 10,
+    })
+    fireEvent.pointerMove(surface, { pointerId: 71, clientX: 20, clientY: 15 })
+    fireEvent.pointerMove(surface, { pointerId: 71, clientX: 35, clientY: 25 })
+    fireEvent.pointerMove(surface, { pointerId: 71, clientX: 50, clientY: 35 })
+    expect(renderSession.updateTransientLayerTransform).not.toHaveBeenCalled()
+    expect(liveSession.bus.getSnapshot().previewOverrides).toEqual({})
+    const publishGpuFrame = scheduledFrame.current
+    if (!publishGpuFrame) throw new Error('GPU 拖动没有安排合并帧')
+    publishGpuFrame(16)
+    expect(renderSession.updateTransientLayerTransform).toHaveBeenCalledOnce()
+    expect(renderSession.requestFrame).toHaveBeenCalledOnce()
+    expect(liveSession.bus.getSnapshot().previewOverrides).toEqual({})
+    expect(liveSession.bus.getSnapshot().document.revision).toBe(0)
+
+    fireEvent.pointerUp(surface, { pointerId: 71, clientX: 50, clientY: 35 })
+    await waitFor(() => expect(changes).toHaveBeenCalledTimes(1))
+    expect(renderSession.clearTransientLayerTransform).toHaveBeenCalledOnce()
+    expect(renderSession.requestFrame).toHaveBeenCalledTimes(2)
+    expect(liveSession.bus.getSnapshot().previewOverrides).toEqual({})
+    expect(liveSession.bus.getSnapshot().document.revision).toBe(1)
   })
 
 })

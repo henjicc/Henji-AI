@@ -30,6 +30,7 @@ export interface ImageEditorGpuRasterCompositorStatsV3 {
   pipelineCompileCount: number
   frameCount: number
   diagnosticReadbackCount: number
+  transientUniformUpdateCount: number
 }
 
 export interface ImageEditorGpuRasterFrameV3 {
@@ -81,6 +82,7 @@ export class ImageEditorGpuRasterCompositorV3 implements ImageEditorGpuRasterCom
     pipelineCompileCount: 0,
     frameCount: 0,
     diagnosticReadbackCount: 0,
+    transientUniformUpdateCount: 0,
   }
 
   constructor(private readonly gpu: Gpu) {
@@ -132,6 +134,7 @@ export class ImageEditorGpuRasterCompositorV3 implements ImageEditorGpuRasterCom
     const retained = this.layers.get(layerId)
     if (layer && retained) {
       this.writeLayerBuffer(layer, retained.buffer, this.resolveTransform(layer), retained.resource)
+      this.stats.transientUniformUpdateCount += 1
     }
   }
 

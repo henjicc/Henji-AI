@@ -224,6 +224,67 @@ export class ImageEditorPresentationSurfaceV3 {
     }
   }
 
+  updateRuntimeDiagnostics(renderPlanCompileCount: number, cpuTaskStartCount: number): void {
+    if (!this.elements) return
+    this.elements.front.dataset.renderPlanCompileCount = String(renderPlanCompileCount)
+    this.elements.front.dataset.cpuTaskStartCount = String(cpuTaskStartCount)
+  }
+
+  /** GPU ImageBitmap 先在隐藏 staging 表面完整落地，再在同一任务内交换双缓冲表面。 */
+  presentGpuBitmap(
+    bitmap: ImageBitmap,
+    layout: ImageEditorViewportLayoutV3,
+    sceneGeneration: number,
+    cameraSequence: number,
+    interactionSequence: number,
+    eventToPresentMs: number | null = null,
+    diagnostics?: {
+      uploadCount: number
+      pipelineCompileCount: number
+      frameCount: number
+      diagnosticReadbackCount: number
+      transientUniformUpdateCount: number
+    },
+  ): boolean {
+    const elements = this.elements
+    const staging = this.staging
+    const resizeBuffer = this.resizeBuffer
+    if (!elements || !staging || !resizeBuffer) return false
+    const pixels = surfacePixels(layout)
+    if (bitmap.width !== pixels.width || bitmap.height !== pixels.height) return false
+    resizePreservingLastFrame(elements.front, resizeBuffer, pixels.width, pixels.height)
+    resizePreservingLastFrame(elements.safety, resizeBuffer, pixels.width, pixels.height)
+    if (staging.width !== pixels.width) staging.width = pixels.width
+    if (staging.height !== pixels.height) staging.height = pixels.height
+    const stagingContext = staging.getContext('2d')
+    const frontContext = elements.front.getContext('2d')
+    const safetyContext = elements.safety.getContext('2d')
+    if (!stagingContext || !frontContext || !safetyContext) return false
+    stagingContext.globalCompositeOperation = 'copy'
+    stagingContext.drawImage(bitmap, 0, 0)
+    stagingContext.globalCompositeOperation = 'source-over'
+    safetyContext.globalCompositeOperation = 'copy'
+    safetyContext.drawImage(staging, 0, 0)
+    safetyContext.globalCompositeOperation = 'source-over'
+    frontContext.globalCompositeOperation = 'copy'
+    frontContext.drawImage(staging, 0, 0)
+    frontContext.globalCompositeOperation = 'source-over'
+    elements.front.dataset.renderGeneration = String(sceneGeneration)
+    elements.front.dataset.cameraSequence = String(cameraSequence)
+    elements.front.dataset.interactionSequence = String(interactionSequence)
+    elements.front.dataset.eventToPresentMs = eventToPresentMs === null
+      ? ''
+      : eventToPresentMs.toFixed(3)
+    if (diagnostics) {
+      elements.front.dataset.gpuUploadCount = String(diagnostics.uploadCount)
+      elements.front.dataset.gpuPipelineCompileCount = String(diagnostics.pipelineCompileCount)
+      elements.front.dataset.gpuFrameCount = String(diagnostics.frameCount)
+      elements.front.dataset.gpuReadbackCount = String(diagnostics.diagnosticReadbackCount)
+      elements.front.dataset.gpuUniformUpdateCount = String(diagnostics.transientUniformUpdateCount)
+    }
+    return true
+  }
+
   present(
     fallback: ImageEditorManagedViewportCompositeV3 | null,
     target: ImageEditorManagedViewportCompositeV3 | null,

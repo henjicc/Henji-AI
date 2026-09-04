@@ -48,6 +48,7 @@ export interface ImageEditorRenderSessionV3 {
     layerId: string,
     transform: ImageEditTransformV3,
     interactionSequence: number,
+    eventTimestamp?: number,
   ): void
   clearTransientLayerTransform(layerId: string, interactionSequence: number): void
   requestFrame(quality: ImageEditRenderQuality): void

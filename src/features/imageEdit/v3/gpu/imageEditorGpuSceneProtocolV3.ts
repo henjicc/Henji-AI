@@ -122,6 +122,7 @@ export interface ImageEditorGpuSceneFrameReadyEventV3 extends ImageEditorGpuScen
     pipelineCompileCount: number
     frameCount: number
     diagnosticReadbackCount: number
+    transientUniformUpdateCount: number
   }
 }
 
