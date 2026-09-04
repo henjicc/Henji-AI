@@ -38,6 +38,17 @@ describe('图片编辑 V3 内置渲染节点', () => {
       globalAnalysis: { maxEdge: 2_048, cacheScope: 'subtree', resultVersion: 4 },
     });
     expect(diffusion?.localHalo?.({}, 0)).toBe(3);
+    const gpuPlanNodeIds = [
+      'source.raster', 'vector.annotation',
+      'effect.blur-v1', 'effect.gaussian-blur', 'effect.fast-blur',
+      'effect.diffusion', 'effect.vgpu-glow',
+      'adjustment.exposure', 'adjustment.curves',
+      'adjustment.temperature-tint', 'adjustment.hsl',
+      'composite.layer', 'group.isolated',
+    ];
+    for (const id of gpuPlanNodeIds) {
+      expect(registry.get(id)?.backends, id).toContain('webgpu');
+    }
   });
 
   it('曝光、曲线、色温色调和 HSL 可融合为点式 pass', () => {

@@ -4,8 +4,12 @@ import type { ImageEditorGpuGraphEffectNodeV3 } from './imageEditorGpuRasterScen
 import { ImageEditorGpuFastBlurRendererV3 } from './imageEditorGpuFastBlurRendererV3'
 import { ImageEditorGpuDiffusionRendererV3 } from './imageEditorGpuDiffusionRendererV3'
 import { ImageEditorGpuGlowRendererV3 } from './imageEditorGpuGlowRendererV3'
+import { ImageEditorGpuGaussianBlurRendererV3 } from './imageEditorGpuGaussianBlurRendererV3'
 import { ImageEditorGpuEffectTargetPoolV3 } from './imageEditorGpuEffectTargetPoolV3'
 import { DIFFUSION_V4_RECIPE_ADAPTER, VGPU_GLOW_V4_RECIPE_ADAPTER } from '@/core/imageEdit/v3/effects'
+import type { ImageEditColorModeV3 } from '@/core/imageEdit/v3/colorTypes'
+import { IMAGE_EDIT_HDR_REFERENCE_WHITE_NITS_V3 } from '@/core/imageEdit/v3/colorTypes'
+import { IMAGE_EDITOR_GPU_TRANSFER_CODE_V3 } from './imageEditorGpuColorPipelineV3'
 import mixShader from './shaders/imageEditorGpuEffectMixV3.wgsl?raw'
 
 export interface ImageEditorGpuPreparedEffectV3 {
@@ -36,7 +40,7 @@ interface RetainedEffectV3 {
   ownsOutput: boolean
 }
 
-/** 三类正式效果的 Target 调度入口；首个实现复用 fast-blur recipe 与常驻 ping-pong。 */
+/** 全部内置效果的 Target 调度入口；渲染器共享常驻 scratch，不经 CPU 往返。 */
 export class ImageEditorGpuEffectExecutorV3 {
   private readonly mix: Effect
   private readonly renderers = new Map<string, ImageEditorGpuTargetEffectRendererV3>()
@@ -60,13 +64,16 @@ export class ImageEditorGpuEffectExecutorV3 {
     fingerprint: string,
     outputPixelsPerDocumentPixel = 1,
     effectRecipeSize?: readonly [number, number],
+    documentColor?: ImageEditColorModeV3,
   ): ImageEditorGpuPreparedEffectV3 {
     const dependencies = [input, mask]
     const existing = this.retained.get(node.nodeId)
     const direct = node.opacity === 1 && node.blendMode === 'normal' && node.mask === null
     const rendererKey = `${node.nodeId}:${node.definitionId}`
     const renderer = this.renderers.get(rendererKey)
-      ?? (node.definitionId === 'effect.fast-blur'
+      ?? (node.definitionId === 'effect.blur-v1' || node.definitionId === 'effect.gaussian-blur'
+        ? new ImageEditorGpuGaussianBlurRendererV3(this.gpu, this.targets, this.onCompiled)
+        : node.definitionId === 'effect.fast-blur'
         ? new ImageEditorGpuFastBlurRendererV3(this.gpu, this.targets, this.onCompiled)
         : node.definitionId === 'effect.diffusion'
           ? new ImageEditorGpuDiffusionRendererV3(this.gpu, this.targets, this.onCompiled)
@@ -81,7 +88,20 @@ export class ImageEditorGpuEffectExecutorV3 {
       label: `image-editor-graph-effect:${node.nodeId}`,
     })
     const processedOutput = direct ? output : this.targets.full(2, input.size)
-    const processed = node.definitionId === 'effect.fast-blur'
+    const processed = node.definitionId === 'effect.blur-v1'
+      || node.definitionId === 'effect.gaussian-blur'
+      ? (renderer as ImageEditorGpuGaussianBlurRendererV3).prepare(
+        input,
+        numberParameter(node.parameters[
+          node.definitionId === 'effect.blur-v1' ? 'radiusPixels' : 'radius'
+        ], 0) * outputPixelsPerDocumentPixel,
+        node.definitionId === 'effect.blur-v1' ? 0 : numberParameter(node.parameters.mip, 0),
+        processedOutput,
+        node.definitionId === 'effect.blur-v1',
+        IMAGE_EDITOR_GPU_TRANSFER_CODE_V3[documentColor?.transferFunction ?? 'srgb'],
+        documentColor?.hdrMetadata?.referenceWhiteNits ?? IMAGE_EDIT_HDR_REFERENCE_WHITE_NITS_V3,
+      )
+      : node.definitionId === 'effect.fast-blur'
       ? (renderer as ImageEditorGpuFastBlurRendererV3).prepare(
         input, numberParameter(node.parameters.radius, 0) * outputPixelsPerDocumentPixel
           / (2 ** numberParameter(node.parameters.mip, 0)),

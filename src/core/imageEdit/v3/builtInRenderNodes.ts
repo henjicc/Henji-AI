@@ -35,7 +35,7 @@ const definitions: readonly RenderNodeDefinition[] = [
   },
   {
     id: 'effect.blur-v1', version: 1, category: 'local', color: PASSTHROUGH_PREMULTIPLIED,
-    qualities: ['draft', 'stable', 'export'], backends: ['browser-canvas', 'cpu-libvips'],
+    qualities: ['draft', 'stable', 'export'], backends: ['webgpu', 'browser-canvas', 'cpu-libvips'],
     fusion: 'never', invalidation: 'tile-with-halo',
     localHalo: (parameters, mip) => {
       const radius = Number((parameters as { radiusPixels?: unknown }).radiusPixels ?? 0);

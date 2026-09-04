@@ -23,6 +23,12 @@ export interface ImageEditorV3RenderedExportTile {
   pixels: ArrayBuffer | Uint8Array
 }
 
+export interface ImageEditorV3RestartableExportTileStream
+  extends AsyncIterable<ImageEditorV3RenderedExportTile> {
+  /** 仅渲染后端失败时调用；返回从 tile 0 开始的完整 CPU 真值流。 */
+  createCpuFallback(error: Error): AsyncIterable<ImageEditorV3RenderedExportTile>
+}
+
 export interface ExportImageEditorV3RasterRequest {
   documentRef: Parameters<ImageEditorV3Platform['startRasterExport']>[0]['documentRef']
   revision: number
@@ -57,6 +63,92 @@ function exactArrayBuffer(value: ArrayBuffer | Uint8Array): ArrayBuffer {
   if (!(value.buffer instanceof ArrayBuffer)) throw new Error('栅格导出不支持共享像素缓冲区')
   if (value.byteOffset === 0 && value.byteLength === value.buffer.byteLength) return value.buffer
   return value.buffer.slice(value.byteOffset, value.byteOffset + value.byteLength)
+}
+
+class ImageEditorV3TileRenderError extends Error {
+  override readonly name = 'ImageEditorV3TileRenderError'
+
+  constructor(readonly renderCause: Error) {
+    super(renderCause.message, { cause: renderCause })
+  }
+}
+
+function isRestartableTileStream(
+  tiles: ExportImageEditorV3RasterRequest['tiles'],
+): tiles is ImageEditorV3RestartableExportTileStream {
+  return typeof (tiles as Partial<ImageEditorV3RestartableExportTileStream>).createCpuFallback
+    === 'function'
+}
+
+async function writeRenderedTiles(
+  platform: ImageEditorV3Platform,
+  sessionId: string,
+  tiles: AsyncIterable<ImageEditorV3RenderedExportTile> | Iterable<ImageEditorV3RenderedExportTile>,
+  signal?: AbortSignal,
+): Promise<number> {
+  const iterator = (tiles as AsyncIterable<ImageEditorV3RenderedExportTile>)[Symbol.asyncIterator]?.()
+    ?? (tiles as Iterable<ImageEditorV3RenderedExportTile>)[Symbol.iterator]()
+  let written = 0
+  try {
+    for (;;) {
+      let next: IteratorResult<ImageEditorV3RenderedExportTile>
+      try {
+        next = await iterator.next()
+      } catch (error) {
+        throw new ImageEditorV3TileRenderError(
+          error instanceof Error ? error : new Error(String(error)),
+        )
+      }
+      if (next.done) return written
+      if (signal?.aborted) throw abortError()
+      await platform.writeRasterExportTile({
+        sessionId,
+        tile: {
+          x: next.value.x,
+          y: next.value.y,
+          width: next.value.width,
+          height: next.value.height,
+          rowStride: next.value.rowStride,
+          pixels: exactArrayBuffer(next.value.pixels),
+        },
+      })
+      written += 1
+    }
+  } finally {
+    await Promise.resolve(iterator.return?.()).catch(() => undefined)
+  }
+}
+
+async function writeWithRenderBackendRetry(
+  platform: ImageEditorV3Platform,
+  initialSessionId: string,
+  tiles: ExportImageEditorV3RasterRequest['tiles'],
+  signal?: AbortSignal,
+  onSessionChanged?: (sessionId: string) => void,
+): Promise<string> {
+  try {
+    await writeRenderedTiles(platform, initialSessionId, tiles, signal)
+    return initialSessionId
+  } catch (error) {
+    if (!(error instanceof ImageEditorV3TileRenderError)) throw error
+    if (!isRestartableTileStream(tiles) || error.renderCause.name === 'AbortError') {
+      throw error.renderCause
+    }
+    logger.warn('GPU 导出失败，已清理旧暂存并从 tile 0 使用 CPU 重建', {
+      event: 'image_editor_v3.raster_export.backend_retry',
+      requestId: initialSessionId,
+      context: { reason: error.renderCause.message },
+    })
+    const restarted = await platform.restartRasterExport({ sessionId: initialSessionId })
+    onSessionChanged?.(restarted.sessionId)
+    await writeRenderedTiles(
+      platform,
+      restarted.sessionId,
+      tiles.createCpuFallback(error.renderCause),
+      signal,
+    )
+    return restarted.sessionId
+  }
 }
 
 /**
@@ -104,20 +196,13 @@ export async function exportImageEditorV3Raster(
       throw abortError()
     }
     try {
-      for await (const tile of request.tiles) {
-        if (signal?.aborted) throw abortError()
-        await platform.writeRasterExportTile({
-          sessionId,
-          tile: {
-            x: tile.x,
-            y: tile.y,
-            width: tile.width,
-            height: tile.height,
-            rowStride: tile.rowStride,
-            pixels: exactArrayBuffer(tile.pixels),
-          },
-        })
-      }
+      sessionId = await writeWithRenderBackendRetry(
+        platform,
+        sessionId,
+        request.tiles,
+        signal,
+        (nextSessionId) => { sessionId = nextSessionId },
+      )
       return {
         status: 'completed',
         value: await platform.completeRasterExport({ sessionId }),
@@ -202,20 +287,13 @@ async function materializeManagedImageEditorV3Raster(
       throw abortError()
     }
     try {
-      for await (const tile of request.tiles) {
-        if (signal?.aborted) throw abortError()
-        await platform.writeRasterExportTile({
-          sessionId,
-          tile: {
-            x: tile.x,
-            y: tile.y,
-            width: tile.width,
-            height: tile.height,
-            rowStride: tile.rowStride,
-            pixels: exactArrayBuffer(tile.pixels),
-          },
-        })
-      }
+      sessionId = await writeWithRenderBackendRetry(
+        platform,
+        sessionId,
+        request.tiles,
+        signal,
+        (nextSessionId) => { sessionId = nextSessionId },
+      )
       return await platform.completeManagedRasterExport({ sessionId })
     } catch (error) {
       await platform.cancelRasterExport({ sessionId }).catch(() => undefined)

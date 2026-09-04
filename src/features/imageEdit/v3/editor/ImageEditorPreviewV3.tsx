@@ -181,6 +181,7 @@ export function ImageEditorPreviewV3({
     viewportLayout,
   )
   const { managedPreview, viewportComposite, viewportResult } = displayPipeline
+  const gpuPresentationActive = viewportComposite.compositionBackend === 'gpu' && ['webgpu-surface', 'gpu-image-bitmap'].includes(viewportComposite.presentationBackend)
   const thumbnailDisplayReady = Boolean(
     viewportResult
       && viewportResult.documentId === displaySnapshot.document.id
@@ -267,6 +268,7 @@ export function ImageEditorPreviewV3({
     displayRevision: displaySnapshot.document.revision,
     stablePreviewDocumentId: basePreviewDocumentId,
     stablePreviewRevision: basePreviewRevision,
+    gpuPresentationActive,
   })
   const {
     acquireMoveFeedback,
@@ -330,9 +332,7 @@ export function ImageEditorPreviewV3({
       vertical: verticalSnapGuideRef,
     },
     viewportComposite.session,
-    viewportComposite.compositionBackend === 'gpu'
-      && (viewportComposite.presentationBackend === 'webgpu-surface'
-        || viewportComposite.presentationBackend === 'gpu-image-bitmap'),
+    gpuPresentationActive,
   )
 
   const navigationCursor = navigation.effectiveTool === 'hand'

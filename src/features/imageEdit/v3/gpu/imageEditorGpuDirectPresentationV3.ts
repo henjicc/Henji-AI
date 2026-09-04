@@ -111,7 +111,16 @@ export class ImageEditorGpuRasterPresentationV3 {
     let surfaceFailureReason = surfaceGeneration === this.attachedSurfaceGeneration
       ? this.surfaceFailureReason ?? undefined
       : undefined
-    const direct = this.direct
+    let direct = this.direct
+    if (direct && this.reportedError) {
+      surfaceFailureReason = errorMessage(this.reportedError)
+      this.reportedError = null
+      this.surfaceFailureReason = surfaceFailureReason
+      this.failedSurfaceGeneration = direct.generation
+      direct.surface.dispose()
+      if (this.direct === direct) this.direct = null
+      direct = null
+    }
     if (direct
       && direct.generation === surfaceGeneration
       && this.failedSurfaceGeneration !== surfaceGeneration) {
@@ -187,7 +196,7 @@ export class ImageEditorGpuRasterPresentationV3 {
     }
     await this.ensureCompiled(targetSurface.format)
     if (!acceptsSurfaceSubmit()) throw new ImageEditorGpuSurfaceFrameSupersededV3()
-    await this.submit(targetSurface)
+    this.submitDirect(targetSurface)
   }
 
   private async ensureBitmapSurface(size: readonly [number, number]): Promise<Surface> {
@@ -221,13 +230,27 @@ export class ImageEditorGpuRasterPresentationV3 {
     const submitted = frame(this.gpu, (currentFrame) => {
       currentFrame.pass({ target: presentation, clear: CLEAR }, this.presentDraw)
     })
+    // Frame.done 已覆盖这一帧的 GPU 完成与 claimed validation 交付；gpu.settled()
+    // 还会等待 context 内其他异步工作，预览热路径不应被无关任务拖住。
     await submitted.done
-    await this.gpu.settled()
     if (this.reportedError) {
       const error = this.reportedError
       this.reportedError = null
       throw error
     }
+  }
+
+  private submitDirect(presentation: Target): void {
+    this.reportedError = null
+    const submitted = frame(this.gpu, (currentFrame) => {
+      currentFrame.pass({ target: presentation, clear: CLEAR }, this.presentDraw)
+    })
+    // Surface 呈现循环以 frame() 的队列提交为呈现边界。官方 vGPU 明确要求 RAF/帧循环
+    // 不等待 frame.done；否则每次 pointermove 都会人为串行等待 GPU 完成。异步失败在
+    // 下一帧由同一会话降到 ImageBitmap，device lost 仍由 Scene runtime 立即接管。
+    void submitted.done.catch((error: unknown) => {
+      this.reportedError = error instanceof Error ? error : new Error(String(error))
+    })
   }
 
   private writeColor(color: ImageEditColorModeV3): void {

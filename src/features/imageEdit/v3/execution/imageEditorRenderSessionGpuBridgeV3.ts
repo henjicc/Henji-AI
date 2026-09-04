@@ -28,6 +28,7 @@ import type {
   ImageEditorRenderSessionStateV3,
   ImageEditorRenderSnapshotV3,
 } from './imageEditorRenderSessionContractsV3'
+import type { ImageEditorV3ExportTileStream, RenderImageEditorV3ExportTilesRequest } from '../export/contracts'
 import type { ImageEditorPresentationSurfaceTransferV3 } from './imageEditorPresentationSurfaceV3'
 import { rasterizeImageEditorViewportAnnotationsV3 } from './viewportCompositePixelsV3'
 import { floatPremultipliedTileToGpuSource } from './imageEditorGpuTileSourceV3'
@@ -39,7 +40,6 @@ type GpuPresentableFrameV3 = Extract<
   ImageEditorGpuSceneWorkerEventV3,
   { type: 'frame-ready' | 'surface-frame-ready' }
 >
-
 export class ImageEditorRenderSessionGpuBridgeV3 {
   private readonly client: ImageEditorGpuSceneClientV3Like | null
   private unsubscribe: () => void
@@ -69,7 +69,6 @@ export class ImageEditorRenderSessionGpuBridgeV3 {
   } | null = null
   private disposed = false
   private readonly exportSession: ImageEditorGpuExportSessionV3
-
   constructor(
     sessionId: string,
     injectedClient: ImageEditorGpuSceneClientV3Like | null | undefined,
@@ -94,7 +93,6 @@ export class ImageEditorRenderSessionGpuBridgeV3 {
   attachPresentationSurface(transfer: ImageEditorPresentationSurfaceTransferV3): void {
     this.client?.attachPresentationSurface?.(transfer.surfaceGeneration, transfer.canvas)
   }
-
   syncSnapshot(snapshot: ImageEditorRenderSnapshotV3): void {
     this.tileLoadAbortController.abort()
     this.tileLoadAbortController = new AbortController()
@@ -125,6 +123,9 @@ export class ImageEditorRenderSessionGpuBridgeV3 {
     }
   }
 
+  renderExport(request: RenderImageEditorV3ExportTilesRequest): ImageEditorV3ExportTileStream | null {
+    return this.exportSession.render(request)
+  }
   updateViewport(cameraSequence: number, layout: ImageEditorViewportLayoutV3): void {
     this.cameraSequence = cameraSequence
     this.layout = layout
@@ -146,21 +147,18 @@ export class ImageEditorRenderSessionGpuBridgeV3 {
     this.interactionEventTimestamp = eventTimestamp ?? null
     this.pendingTransform = { layerId, transform: [...transform], interactionSequence }
   }
-
   clearTransientLayerTransform(layerId: string, interactionSequence: number): void {
     if (this.sceneGeneration <= 0 || interactionSequence < this.latestInteractionSequence) return
     this.latestInteractionSequence = interactionSequence
     this.interactionEventTimestamp = null
     this.pendingTransform = { layerId, transform: null, interactionSequence }
   }
-
   requestFrame(quality: ImageEditRenderQuality = this.quality): void {
     if (this.sceneGeneration <= 0) return
     this.pendingFrame = true
     this.quality = quality
     this.dispatchFrame()
   }
-
   dispose(): void {
     if (this.disposed) return
     this.disposed = true
@@ -242,11 +240,12 @@ export class ImageEditorRenderSessionGpuBridgeV3 {
         diagnostic: null,
       })
       this.deviceReady = true
+      this.exportSession.notifyDeviceReady()
       if (this.pendingFrame) this.requestFrame(this.quality)
       return
     }
     if (event.type === 'device-lost') {
-      this.exportSession.rejectActive(new Error(`GPU 设备已丢失：${event.reason}`))
+      this.exportSession.notifyDeviceUnavailable(new Error(`GPU 设备已丢失：${event.reason}`))
       this.deviceReady = false
       this.frameInFlight = false
       this.pendingFrame = true
@@ -264,6 +263,7 @@ export class ImageEditorRenderSessionGpuBridgeV3 {
         return
       }
       this.pendingFrame = false
+      this.exportSession.notifyDeviceUnavailable(new Error(event.message))
       this.fallback(event.message)
     }
   }

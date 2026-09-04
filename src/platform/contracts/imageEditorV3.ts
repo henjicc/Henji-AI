@@ -433,6 +433,10 @@ export interface ImageEditorV3Platform {
       pixels: ArrayBuffer
     }
   }): Promise<{ written: true }>
+  /** 原子丢弃当前 staged 输出，并以相同目标和权威快照创建全新编码会话。 */
+  restartRasterExport(request: {
+    sessionId: string
+  }): Promise<ImageEditorV3RasterExportStartResult>
   completeRasterExport(request: {
     sessionId: string
   }): Promise<ImageEditorV3RasterExportResult>

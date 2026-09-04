@@ -51,9 +51,11 @@ async function fixture(): Promise<{
 }
 
 function fakeManager(): ManagedRasterSessionPort & { targetPath: string | null } {
-  const state: { request: StartRasterExportSessionRequest | null; targetPath: string | null } = {
+  const state: { request: StartRasterExportSessionRequest | null; targetPath: string | null;
+    sessionId: string } = {
     request: null,
     targetPath: null,
+    sessionId: '11111111-1111-4111-8111-111111111111',
   }
   return {
     get targetPath() { return state.targetPath },
@@ -61,7 +63,19 @@ function fakeManager(): ManagedRasterSessionPort & { targetPath: string | null }
       state.request = request
       state.targetPath = request.targetPath
       return {
-        sessionId: '11111111-1111-4111-8111-111111111111',
+        sessionId: state.sessionId,
+        documentId: 'managed-raster-document',
+        revision: request.revision,
+        sourceFingerprint: request.sourceFingerprint,
+        format: request.format,
+      }
+    },
+    async restart(_ownerId, _sessionId): Promise<RasterExportSessionStartResult> {
+      const request = state.request
+      if (!request) throw new Error('unexpected fake restart')
+      state.sessionId = '22222222-2222-4222-8222-222222222222'
+      return {
+        sessionId: state.sessionId,
         documentId: 'managed-raster-document',
         revision: request.revision,
         sourceFingerprint: request.sourceFingerprint,
@@ -70,7 +84,7 @@ function fakeManager(): ManagedRasterSessionPort & { targetPath: string | null }
     },
     async complete(ownerId, sessionId): Promise<RasterExportSessionResult> {
       const request = state.request
-      if (!request || ownerId !== request.ownerId || sessionId !== '11111111-1111-4111-8111-111111111111') {
+      if (!request || ownerId !== request.ownerId || sessionId !== state.sessionId) {
         throw new Error('unexpected fake completion')
       }
       await fsp.writeFile(request.targetPath, Buffer.from('streamed-png'))
@@ -113,6 +127,83 @@ function startRequest(
 }
 
 describe('图片编辑 V3 受管栅格物化', () => {
+  it('重启后保留publication映射且旧session不能发布', async () => {
+    const { root, documents, resources, snapshot } = await fixture()
+    const manager = fakeManager()
+    const service = new ManagedRasterMaterializer(
+      manager,
+      documents,
+      resources,
+      path.join(root, 'materializations'),
+      { publishStandalone: vi.fn(async () => ({
+        imagePath: '/managed/restarted.png', createdFilePaths: ['/managed/restarted.png'],
+      })) },
+    )
+    const started = await service.start({ ...startRequest(snapshot), publication: 'standalone-image' })
+    const restarted = await service.restart(7, started.sessionId)
+
+    expect(service.has(started.sessionId)).toBe(false)
+    expect(service.has(restarted.sessionId)).toBe(true)
+    await expect(service.complete(7, started.sessionId)).rejects.toThrow('not found')
+    const result = await service.complete(7, restarted.sessionId)
+    expect(result.publication).toBe('standalone-image')
+  })
+
+  it('并发重启复用同一新session，重启中的取消会落到新session', async () => {
+    const { root, documents, resources, snapshot } = await fixture()
+    const manager = fakeManager()
+    const service = new ManagedRasterMaterializer(
+      manager, documents, resources, path.join(root, 'materializations'),
+    )
+    const started = await service.start(startRequest(snapshot))
+    let resolveRestart: ((value: RasterExportSessionStartResult) => void) | undefined
+    const restart = vi.spyOn(manager, 'restart').mockImplementation(() => new Promise((resolve) => {
+      resolveRestart = resolve
+    }))
+    const cancel = vi.spyOn(manager, 'cancel')
+    const first = service.restart(7, started.sessionId)
+    const second = service.restart(7, started.sessionId)
+    const cancelling = service.cancel(7, started.sessionId, 'abort_during_retry')
+    const replacement = {
+      sessionId: '33333333-3333-4333-8333-333333333333',
+      documentId: 'managed-raster-document',
+      revision: snapshot.revision,
+      sourceFingerprint: createImageEditSourceFingerprint(snapshot),
+      format: 'png8' as const,
+    }
+    resolveRestart?.(replacement)
+
+    await expect(first).resolves.toEqual(replacement)
+    await expect(second).resolves.toEqual(replacement)
+    await expect(cancelling).resolves.toBe(true)
+    expect(restart).toHaveBeenCalledOnce()
+    expect(cancel).toHaveBeenCalledWith(7, replacement.sessionId, 'abort_during_retry')
+    expect(service.has(started.sessionId)).toBe(false)
+    expect(service.has(replacement.sessionId)).toBe(false)
+  })
+
+  it('重启失败会先取消底层会话再清理受管目标与映射', async () => {
+    const { root, documents, resources, snapshot } = await fixture()
+    const manager = fakeManager()
+    const service = new ManagedRasterMaterializer(
+      manager, documents, resources, path.join(root, 'materializations'),
+    )
+    const started = await service.start(startRequest(snapshot))
+    await fsp.writeFile(manager.targetPath!, Buffer.from('partial'))
+    vi.spyOn(manager, 'restart').mockRejectedValue(new Error('restart failed'))
+    const cancel = vi.spyOn(manager, 'cancel')
+
+    await expect(service.restart(7, started.sessionId)).rejects.toThrow('restart failed')
+
+    expect(cancel).toHaveBeenCalledWith(
+      7,
+      started.sessionId,
+      'render_backend_restart_failed',
+    )
+    expect(service.has(started.sessionId)).toBe(false)
+    await expect(fsp.access(manager.targetPath!)).rejects.toMatchObject({ code: 'ENOENT' })
+  })
+
   it('流式完成后写入内容寻址资源并原子挂到同 revision 文档', async () => {
     const { root, documents, resources, snapshot } = await fixture()
     const manager = fakeManager()

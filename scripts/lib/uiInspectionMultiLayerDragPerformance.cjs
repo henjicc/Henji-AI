@@ -188,6 +188,7 @@ async function verifyMultiLayerDragPerformance({
   const gpuSurface = editor.locator('[data-presentation-front-surface]')
   const presentSamplesMs = []
   const driverSamplesMs = []
+  const samples = []
   const dragStartedAt = new Date().toISOString()
   const beforeHotPath = await page.evaluate(({ previewSelector, gpuSelector }) => {
     const preview = document.querySelector(previewSelector)
@@ -221,7 +222,8 @@ async function verifyMultiLayerDragPerformance({
       document.querySelector('[data-presentation-front-surface]')
         ?.getAttribute('data-interaction-sequence') ?? '-1'
     ) > previous, { previous: previousSequence }, { timeout: 5000 })
-    driverSamplesMs.push(performance.now() - startedAt)
+    const driverMs = performance.now() - startedAt
+    driverSamplesMs.push(driverMs)
     const evidence = {
       revision: Number(await commandBar.getAttribute('data-document-revision')),
       overrideCount: Number(await previewSurface.getAttribute('data-preview-override-count')),
@@ -258,6 +260,12 @@ async function verifyMultiLayerDragPerformance({
       throw new Error(`GPU 移动热路径发生了权威/CPU/上传/回读副作用：${JSON.stringify({ beforeHotPath, evidence })}`)
     }
     presentSamplesMs.push(evidence.eventToPresentMs)
+    samples.push({
+      step,
+      frameCount: evidence.frameCount,
+      eventToPresentMs: evidence.eventToPresentMs,
+      driverMs: Number(driverMs.toFixed(3)),
+    })
   }
   const afterHotPath = await page.evaluate((gpuSelector) => {
     const gpu = document.querySelector(gpuSelector)
@@ -323,18 +331,25 @@ async function verifyMultiLayerDragPerformance({
         documentRef,
       })
       return {
-        saveCount: result.events.filter((event) => (
+        repositorySaveCount: result.events.filter((event) => (
           event.event === 'image_editor_v3.document.save.completed'
+        )).length,
+        canvasSaveCount: result.events.filter((event) => (
+          event.event === 'canvas.image_edit_v3.persistence.completed'
         )).length,
         persistedRevision: loaded?.revision ?? -1,
       }
     }, { afterTimestamp: dragStartedAt, documentRef: fixture.documentRef }),
-    accept: (evidence) => evidence.saveCount === 1
+    accept: (evidence) => evidence.canvasSaveCount === 1
       && evidence.persistedRevision === beforeLayerMove + 1,
     timeout: 12000,
   })
-  const viewportSize = page.viewportSize() ?? { width: 1440, height: 900 }
-  const baseline = viewportSize.width <= 960
+  const rendererSize = await page.evaluate(() => ({
+    width: window.innerWidth,
+    height: window.innerHeight,
+  }))
+  const requestedWindowSize = fixture.windowSize ?? rendererSize
+  const baseline = requestedWindowSize.width <= 960
     ? { p95Ms: 24.707, p99Ms: 31.821 }
     : { p95Ms: 23.947, p99Ms: 30.851 }
   const dragMetrics = {
@@ -348,10 +363,21 @@ async function verifyMultiLayerDragPerformance({
     p99Ms: percentile(presentSamplesMs, 0.99),
     driverP95Ms: percentile(driverSamplesMs, 0.95),
     driverP99Ms: percentile(driverSamplesMs, 0.99),
+    slowestSamples: [...samples]
+      .sort((left, right) => right.eventToPresentMs - left.eventToPresentMs)
+      .slice(0, 5),
   }
-  if (dragMetrics.p95Ms > Math.min(16.7, baseline.p95Ms / 3)
-    || dragMetrics.p99Ms > Math.min(33.4, baseline.p99Ms / 3)) {
-    throw new Error(`GPU 拖动性能未同时满足帧预算与 1.1 三倍提升：${JSON.stringify({ viewportSize, baseline, dragMetrics })}`)
+  const p95LimitMs = fixture.complexGraph ? 16.7 : Math.min(16.7, baseline.p95Ms / 3)
+  const p99LimitMs = fixture.complexGraph ? 33.4 : Math.min(33.4, baseline.p99Ms / 3)
+  if (dragMetrics.p95Ms > p95LimitMs || dragMetrics.p99Ms > p99LimitMs) {
+    throw new Error(`GPU 拖动性能未满足当前夹具门槛：${JSON.stringify({
+      requestedWindowSize,
+      rendererSize,
+      baseline,
+      p95LimitMs,
+      p99LimitMs,
+      dragMetrics,
+    })}`)
   }
 
   return {
@@ -361,6 +387,12 @@ async function verifyMultiLayerDragPerformance({
     result,
     dragBaseline: {
       ...dragMetrics,
+      requestedWindowSize,
+      rendererSize,
+      comparison: fixture.complexGraph ? 'complex-absolute-budget' : 'kie-five-layer-1.1-baseline',
+      baseline,
+      p95Speedup: Number((baseline.p95Ms / dragMetrics.p95Ms).toFixed(3)),
+      p99Speedup: Number((baseline.p99Ms / dragMetrics.p99Ms).toFixed(3)),
       hotPath: {
         previewOverrideDelta: 0,
         revisionDelta: 0,

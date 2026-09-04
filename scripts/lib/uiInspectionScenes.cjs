@@ -8,6 +8,7 @@ const { attachUiInspectionCanvasEditing } = require('./uiInspectionSceneCanvasEd
 const { attachUiInspectionCanvasPanorama } = require('./uiInspectionSceneCanvasPanorama.cjs')
 const { attachUiInspectionCanvasMedia } = require('./uiInspectionSceneCanvasMedia.cjs')
 const { attachUiInspectionCanvasConnections } = require('./uiInspectionSceneCanvasConnections.cjs')
+const { attachUiInspectionCanvasGpuFiveLayer } = require('./uiInspectionSceneCanvasGpuFiveLayer.cjs')
 const { attachUiInspectionSupport } = require('./uiInspectionSceneSupport.cjs')
 const { createGenerationSettingsScenes } = require('./uiInspectionSceneCatalogGeneration.cjs')
 const { createCanvasScenes } = require('./uiInspectionSceneCatalogCanvas.cjs')
@@ -45,6 +46,7 @@ function createUiInspectionScenes({ canvasFixtureProjectId, settlePage }) {
   attachUiInspectionCanvasPanorama(context)
   attachUiInspectionCanvasMedia(context)
   attachUiInspectionCanvasConnections(context)
+  attachUiInspectionCanvasGpuFiveLayer(context)
   attachUiInspectionSupport(context)
 
   return Object.freeze([

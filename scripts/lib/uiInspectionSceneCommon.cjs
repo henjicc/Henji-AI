@@ -8,13 +8,20 @@ function attachUiInspectionCommon(context) {
     await page.keyboard.press('Escape')
     await page.waitForTimeout(240)
 
-    const dialog = page.locator('[data-dialog="true"]:visible').last()
-    if (await dialog.count()) {
+    const closeDeadline = Date.now() + 30000
+    while (Date.now() < closeDeadline) {
+      const dialog = page.locator('[data-dialog="true"]:visible').last()
+      if (!(await dialog.count())) break
       const closeButton = dialog.getByRole('button', { name: /关闭|Close/i }).last()
-      if (await closeButton.count()) {
-        await closeButton.click()
+      if (await closeButton.count() && await closeButton.isEnabled({ timeout: 500 })) {
+        await closeButton.click({ timeout: 1000 })
         await page.waitForTimeout(240)
+        continue
       }
+      await page.waitForTimeout(120)
+    }
+    if (await page.locator('[data-dialog="true"]:visible').count()) {
+      throw new Error('上一场景弹窗在 30 秒清理期限内仍不可关闭')
     }
 
     if (await page.locator('[data-asset-floating-panel]:visible').count()) {

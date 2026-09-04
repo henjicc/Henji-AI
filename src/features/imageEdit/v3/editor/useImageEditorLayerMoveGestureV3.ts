@@ -363,26 +363,17 @@ export function useImageEditorLayerMoveGestureV3(
       : [...gesture.startTransform]
     gesture.eventTimestamp = typeof performance === 'undefined' ? Date.now() : performance.now()
     if (gesture.gpuTransient) {
-      if (gesture.previewFrameId !== null) return
-      const publishGpuFrame = (): void => {
-        const current = gestureRef.current
-        if (current !== gesture) return
-        gesture.previewFrameId = null
-        interactionSequenceRef.current += 1
-        gesture.interactionSequence = interactionSequenceRef.current
-        renderSession.updateTransientLayerTransform(
-          gesture.layerId,
-          gesture.pendingTransform,
-          gesture.interactionSequence,
-          gesture.eventTimestamp,
-        )
-        renderSession.requestFrame('draft')
-      }
-      if (typeof requestAnimationFrame === 'function') {
-        gesture.previewFrameId = requestAnimationFrame(publishGpuFrame)
-      } else {
-        publishGpuFrame()
-      }
+      // GPU 会话已经按 in-flight 帧合并 pending transform；这里再等一次 rAF
+      // 会让每次 pointermove 平白多等一个刷新周期，尤其在 60Hz 屏幕上接近 16.7ms。
+      interactionSequenceRef.current += 1
+      gesture.interactionSequence = interactionSequenceRef.current
+      renderSession.updateTransientLayerTransform(
+        gesture.layerId,
+        gesture.pendingTransform,
+        gesture.interactionSequence,
+        gesture.eventTimestamp,
+      )
+      renderSession.requestFrame('draft')
       return
     }
     if (gesture.directLayerFeedback && gesture.feedbackTarget) {

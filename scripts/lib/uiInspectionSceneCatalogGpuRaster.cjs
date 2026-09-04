@@ -1,12 +1,14 @@
+const { openCanvasImageEditorV3Fixture } = require('./uiInspectionCanvasImageEditorV3.cjs')
+
 function createGpuRasterScenes(context) {
-  const { settlePage, clickNamedButton, setupToolbox } = context
+  const { settlePage } = context
 
   return [{
     id: 'image-editor-gpu-raster-diagnostic',
-    surface: '工具箱',
-    name: '图片编辑器-GPU基础栅格诊断',
+    surface: '画布',
+    name: '画布节点-图片编辑器基础栅格诊断',
     writesUserData: true,
-    setup: async (page) => {
+    setup: async (page, _app, inspection) => {
       const startedAt = new Date().toISOString()
       const waitForLogEvent = async (domainPrefix, accept, message, afterTimestamp = startedAt) => {
         const deadline = Date.now() + 60000
@@ -25,66 +27,9 @@ function createGpuRasterScenes(context) {
         }
         throw new Error(message)
       }
-      await setupToolbox(page)
-      await clickNamedButton(page, /^(图片编辑|Image Edit)/i)
-      const host = page.locator('[data-application-surface-id="tool.image_edit"]:visible')
-      await host.waitFor({ state: 'visible', timeout: 12000 })
-      const dropTarget = host.locator('.border-dashed').first()
-      const editor = host.locator('[data-image-editor-v3]')
-      await Promise.race([
-        dropTarget.waitFor({ state: 'visible', timeout: 12000 }),
-        editor.waitFor({ state: 'visible', timeout: 12000 }),
-      ])
-      const previousEditor = await editor.isVisible() ? await editor.elementHandle() : null
-      const importTarget = previousEditor ? editor : dropTarget
-      await importTarget.evaluate(async (element) => {
-        const canvas = document.createElement('canvas')
-        canvas.width = 8192
-        canvas.height = 8192
-        const context = canvas.getContext('2d')
-        if (!context) throw new Error('GPU 基础栅格夹具画布不可用')
-        context.fillStyle = 'rgb(24, 86, 214)'
-        context.fillRect(0, 0, canvas.width, canvas.height)
-        context.fillStyle = 'rgb(231, 76, 122)'
-        context.fillRect(2048, 0, 2048, canvas.height)
-        context.fillStyle = 'rgb(248, 193, 62)'
-        context.fillRect(6144, 0, 2048, canvas.height)
-        context.fillStyle = 'rgba(255, 255, 255, 0.68)'
-        context.beginPath()
-        context.arc(2867, 3959, 1587, 0, Math.PI * 2)
-        context.fill()
-        context.fillStyle = 'rgba(12, 22, 45, 0.82)'
-        context.fillRect(4608, 1382, 2458, 3379)
-        const blob = await new Promise((resolve, reject) => canvas.toBlob(
-          (value) => value ? resolve(value) : reject(new Error('GPU 基础栅格夹具编码失败')),
-          'image/png',
-        ))
-        const transfer = new DataTransfer()
-        transfer.items.add(new File([blob], 'gpu-raster-8192.png', { type: 'image/png' }))
-        element.dispatchEvent(new DragEvent('drop', {
-          bubbles: true,
-          cancelable: true,
-          dataTransfer: transfer,
-        }))
+      const { dialog, editor } = await openCanvasImageEditorV3Fixture({
+        page, context, width: 8192, height: 8192, label: '8192 多图层文档',
       })
-
-      if (previousEditor) {
-        await page.waitForFunction((element) => !element.isConnected, previousEditor, {
-          timeout: 60000,
-        })
-      }
-      const bootstrapEvent = await waitForLogEvent(
-        'features.imageMark.v3_host',
-        (event) => (
-          event.event === 'image_editor_v3.toolbox.bootstrap.completed'
-          || event.event === 'image_editor_v3.toolbox.bootstrap.failed'
-        ),
-        '等待8192源导入日志超时',
-      )
-      if (bootstrapEvent?.event === 'image_editor_v3.toolbox.bootstrap.failed') {
-        throw new Error(`8192源导入失败：${JSON.stringify(bootstrapEvent)}`)
-      }
-      await editor.waitFor({ state: 'visible', timeout: 60000 })
       const duplicate = editor.getByRole('button', { name: /^(复制图层|Duplicate layer)$/i })
       await duplicate.waitFor({ state: 'visible', timeout: 8000 })
       for (let index = 0; index < 4; index += 1) {
@@ -281,46 +226,18 @@ function createGpuRasterScenes(context) {
         recovered: recoveredFrame.context,
       })}\n`)
       await settlePage(page, 600)
+      await inspection?.capture?.('editor')
     },
   }, {
     id: 'image-editor-gpu-initialization-fallback',
-    surface: '工具箱',
-    name: '图片编辑器-GPU初始化失败回退',
+    surface: '画布',
+    name: '画布节点-图片编辑器初始化失败回退',
     writesUserData: true,
-    setup: async (page) => {
+    setup: async (page, _app, inspection) => {
       const startedAt = new Date().toISOString()
-      await setupToolbox(page)
-      await clickNamedButton(page, /^(图片编辑|Image Edit)/i)
-      const host = page.locator('[data-application-surface-id="tool.image_edit"]:visible')
-      await host.waitFor({ state: 'visible', timeout: 12000 })
-      const dropTarget = host.locator('.border-dashed').first()
-      const editor = host.locator('[data-image-editor-v3]')
-      await Promise.race([
-        dropTarget.waitFor({ state: 'visible', timeout: 12000 }),
-        editor.waitFor({ state: 'visible', timeout: 12000 }),
-      ])
-      const importTarget = await editor.isVisible() ? editor : dropTarget
-      await importTarget.evaluate(async (element) => {
-        const canvas = document.createElement('canvas')
-        canvas.width = 640
-        canvas.height = 480
-        const context = canvas.getContext('2d')
-        if (!context) throw new Error('初始化失败夹具画布不可用')
-        context.fillStyle = 'rgb(37, 99, 235)'
-        context.fillRect(0, 0, 640, 480)
-        context.fillStyle = 'rgb(244, 114, 182)'
-        context.fillRect(160, 100, 320, 280)
-        const blob = await new Promise((resolve, reject) => canvas.toBlob(
-          (value) => value ? resolve(value) : reject(new Error('初始化失败夹具编码失败')),
-          'image/png',
-        ))
-        const transfer = new DataTransfer()
-        transfer.items.add(new File([blob], 'gpu-init-fallback.png', { type: 'image/png' }))
-        element.dispatchEvent(new DragEvent('drop', {
-          bubbles: true, cancelable: true, dataTransfer: transfer,
-        }))
+      const { dialog, editor } = await openCanvasImageEditorV3Fixture({
+        page, context, width: 640, height: 480, label: '初始化后备文档',
       })
-      await editor.waitFor({ state: 'visible', timeout: 60000 })
       let initialization = null
       const initializationDeadline = Date.now() + 30000
       while (!initialization && Date.now() < initializationDeadline) {
@@ -401,6 +318,7 @@ function createGpuRasterScenes(context) {
       }
       process.stdout.write(`  GPU首次初始化失败：${JSON.stringify(initialization)}\n`)
       await settlePage(page, 600)
+      await inspection?.capture?.('editor')
     },
   }]
 }

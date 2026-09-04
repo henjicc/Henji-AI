@@ -71,6 +71,13 @@ async function stopElectronChild(child) {
     once(child, 'exit'),
     new Promise((resolve) => setTimeout(resolve, 3000)),
   ])
+  if (child.exitCode === null) {
+    child.kill('SIGKILL')
+    await Promise.race([
+      once(child, 'exit'),
+      new Promise((resolve) => setTimeout(resolve, 1000)),
+    ])
+  }
 }
 
 async function waitForCdp(port) {
@@ -253,7 +260,12 @@ async function launchElectronApp({
               await page.evaluate(async () => { await window.henjiNative?.window.close() }).catch(() => undefined)
               await closed
             }
-            await app.close().catch(() => undefined)
+            const child = app.process()
+            await Promise.race([
+              app.close().catch(() => undefined),
+              new Promise((resolve) => setTimeout(resolve, 5000)),
+            ])
+            await stopElectronChild(child)
           } finally {
             await cleanupIsolatedUserDataDir(userDataDir)
           }

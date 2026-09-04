@@ -57,6 +57,35 @@ afterEach(async () => {
 })
 
 describe('FileTileOutputSinkBase', () => {
+  it('后端重试先清理旧staging，再由新session单独原子替换目标', async () => {
+    const targetPath = path.join(rootDir, 'backend-retry.bin')
+    await fsp.writeFile(targetPath, 'old-target')
+    const gpu = new TestTileSink(targetPath)
+    await gpu.begin(description)
+    await gpu.writeTile({
+      x: 0, y: 0, width: 1, height: 1, rowStride: 4,
+      pixels: Uint8Array.from([9, 9, 9, 9]),
+    })
+    await gpu.cancel('render_backend_retry')
+    expect(await fsp.readFile(targetPath, 'utf8')).toBe('old-target')
+    await expect(fsp.access(gpu.capturedStagedPath)).rejects.toThrow()
+
+    const cpu = new TestTileSink(targetPath)
+    await cpu.begin(description)
+    await cpu.writeTile({
+      x: 0, y: 0, width: 2, height: 1, rowStride: 8,
+      pixels: Uint8Array.from([1, 2, 3, 4, 5, 6, 7, 8]),
+    })
+    await cpu.complete()
+
+    expect(await fsp.readFile(targetPath)).toEqual(Buffer.concat([
+      Buffer.from('header'),
+      Buffer.from([1, 2, 3, 4, 5, 6, 7, 8]),
+      Buffer.from('done'),
+    ]))
+    await expect(fsp.access(cpu.capturedStagedPath)).rejects.toThrow()
+  })
+
   it('只在编码完成后原子替换目标', async () => {
     const targetPath = path.join(rootDir, 'output.bin')
     await fsp.writeFile(targetPath, 'old')

@@ -31,13 +31,13 @@ import copyShader from './shaders/imageEditorGpuGraphCopyV3.wgsl?raw'
 import curvesShader from './shaders/imageEditorGpuGraphCurvesV3.wgsl?raw'
 import normalShader from './shaders/imageEditorGpuGraphNormalV3.wgsl?raw'
 import sourceShader from './shaders/imageEditorGpuRasterLayerV3.wgsl?raw'
-
 const BUFFER_COPY_DST = 0x08
 const BUFFER_UNIFORM = 0x40
 const CLEAR = [0, 0, 0, 0] as const
 type NativeBuffer = ReturnType<Gpu['gpu']['createBuffer']>
 type NativeBindGroup = ReturnType<Gpu['gpu']['createBindGroup']>
 type NativeBindingResource = unknown
+
 export interface ImageEditorGpuGraphTextureV3 {
   readonly key: ImageEditorGpuSceneTileKeyV3
   readonly tile: ImageEditorGpuTileAtlasAllocationV3['tile']
@@ -104,7 +104,6 @@ export class ImageEditorGpuRenderGraphExecutorV3 {
     renderedNodeCount: 0, cacheHitCount: 0, invalidatedNodeCount: 0, fusedAdjustmentCount: 0,
     maximumTargetWidth: 0, maximumTargetHeight: 0,
   }
-
   constructor(private readonly gpu: Gpu, private readonly onPipelineCompiled: () => void) {
     this.sourceDraw = draw(gpu, { shader: sourceShader, vertices: 3, label: 'image-editor-graph-source' })
     this.copyDraw = draw(gpu, { shader: copyShader, vertices: 3, label: 'image-editor-graph-copy' })
@@ -125,7 +124,6 @@ export class ImageEditorGpuRenderGraphExecutorV3 {
     this.effectExecutor = new ImageEditorGpuEffectExecutorV3(gpu, this.fallbackMask, onPipelineCompiled)
     this.effectCropper = new ImageEditorGpuEffectCropperV3(gpu, onPipelineCompiled)
   }
-
   syncScene(scene: ImageEditorGpuRasterSceneV3 | null): void {
     this.scene = scene
     this.transientTransforms.clear()
@@ -147,6 +145,7 @@ export class ImageEditorGpuRenderGraphExecutorV3 {
     outputLayout: ImageEditorViewportLayoutV3 = layout,
     cropOffset: readonly [number, number] = [0, 0],
     effectRecipeSize?: readonly [number, number],
+    awaitCompletion = true,
   ): Promise<Target | null> {
     if (!this.scene?.outputNodeId) return null
     this.layout = layout
@@ -185,7 +184,7 @@ export class ImageEditorGpuRenderGraphExecutorV3 {
     for (const node of this.scene.graph) {
       if (node.kind === 'source') {
         const plan = sourcePlans.get(node.layerId)
-        if (!plan || plan.resources.length === 0) {
+        if (!plan) {
           throw new Error(`GPU RenderGraph 缺少源瓦片：${node.layerId}`)
         }
         const fingerprint = `${this.fingerprint(node, fingerprints)}:${imageEditorGpuGraphViewportFingerprintV3(layout)}`
@@ -210,6 +209,7 @@ export class ImageEditorGpuRenderGraphExecutorV3 {
         const prepared = this.effectExecutor.prepare(
           node, input, mask, fingerprint, layout.viewport.zoom * layout.viewport.devicePixelRatio,
           effectRecipeSize,
+          this.scene.color,
         )
         preparedEffects.push(prepared)
         operations.push({ kind: 'effect', effect: prepared })
@@ -281,7 +281,8 @@ export class ImageEditorGpuRenderGraphExecutorV3 {
           }
           if (cropNeeded) this.effectCropper.encode(currentFrame)
         }) : null
-      if (submitted) await submitted.done
+      // Surface pass 提供预览队列边界；读回、导出与 golden 仍等待完成。
+      if (submitted && awaitCompletion) await submitted.done
     } catch (error) {
       this.maskAssembler.discard(preparedMasks); this.effectExecutor.discard(preparedEffects)
       for (const state of replacements.values()) this.destroyState(state)

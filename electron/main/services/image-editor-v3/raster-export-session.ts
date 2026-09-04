@@ -81,6 +81,7 @@ interface RasterExportSession {
   activeKind?: 'tile' | 'complete'
   activeOperation?: Promise<void>
   cancellation?: Promise<void>
+  restartRequest: Omit<StartRasterExportSessionRequest, 'signal'>
 }
 
 function isSessionCancelled(session: RasterExportSession): boolean {
@@ -236,6 +237,7 @@ export class RasterExportSessionManager {
         request.signal?.removeEventListener('abort', onAbort)
       }
       const sessionId = crypto.randomUUID()
+      const { signal: _signal, ...restartRequest } = request
       this.sessions.set(sessionId, {
         id: sessionId,
         ownerId: request.ownerId,
@@ -246,6 +248,7 @@ export class RasterExportSessionManager {
         lease,
         state: 'writing',
         lastActivity: this.now(),
+        restartRequest: { ...restartRequest, targetPath: resolvedTarget },
       })
       logger.info('栅格导出会话已创建', {
         event: 'image_editor_v3.raster_export.session.started',
@@ -374,6 +377,20 @@ export class RasterExportSessionManager {
       context: { reason },
     })
     return true
+  }
+
+  /**
+   * 丢弃当前 staged 输出并从同一权威快照、同一正式目标创建全新的编码会话。
+   * 返回前旧 sink 已完成 cancel/lease 释放，因此不会混合不同渲染后端的瓦片。
+   */
+  async restart(ownerId: number, sessionId: string): Promise<RasterExportSessionStartResult> {
+    const session = this.getOwnedSession(ownerId, sessionId)
+    if (session.state !== 'writing' || session.activeOperation) {
+      throw new Error('Raster export session is not ready to restart')
+    }
+    const request = session.restartRequest
+    await this.cancel(ownerId, sessionId, 'render_backend_retry')
+    return this.start(request)
   }
 
   onClosed(sessionId: string, listener: () => void): () => void {
