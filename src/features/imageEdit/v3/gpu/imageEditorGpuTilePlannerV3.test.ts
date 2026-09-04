@@ -16,7 +16,8 @@ function scene(): Pick<ImageEditorGpuRasterSceneV3, 'width' | 'height' | 'color'
     },
     color: createDefaultImageEditColorModeV3(),
     layers: [{
-      layerId: 'large', resourceRef: RESOURCE, contentVersion: `${RESOURCE}:1`,
+      layerId: 'large', sourceKind: 'raster', resourceRef: RESOURCE,
+      contentVersion: `${RESOURCE}:1`, sparseTiles: {},
       visible: true, opacity: 1, transform: [1, 0, 0, 1, 0, 0],
     }],
   }
@@ -61,5 +62,58 @@ describe('GPU 大图视口瓦片规划', () => {
     expect(shifted.mip).toBe(first.mip)
     expect(retained.length).toBeGreaterThan(0)
     expect(retained.length).toBeLessThanOrEqual(firstKeys.size)
+  })
+
+  it('多瓦片稀疏画笔固定mip0且只规划视口相交的内容版本', () => {
+    const value = scene()
+    const brushA = `sha256:${'b'.repeat(64)}` as const
+    const brushB = `sha256:${'c'.repeat(64)}` as const
+    const plan = planImageEditorGpuRasterTilesV3(value, {
+      ...value.layers[0], resourceRef: null, contentVersion: 'empty',
+      sparseTiles: {
+        '0/0/0': { resourceRef: brushA, contentVersion: 'brush-a-v1', byteLength: 64 },
+        '0/7/7': { resourceRef: brushB, contentVersion: 'brush-b-v1', byteLength: 64 },
+      },
+    }, {
+      stageWidth: 512, stageHeight: 512, viewportKey: 'brush',
+      viewport: { documentX: 0, documentY: 0, width: 512, height: 512,
+        zoom: 1, devicePixelRatio: 1 },
+    })
+    expect(plan.mip).toBe(0)
+    expect(plan.tiles.map((tile) => tile.key)).toEqual([expect.objectContaining({
+      resourceRef: brushA, tileX: 0, tileY: 0,
+      contentVersion: 'brush-a-v1', format: 'rgba16float',
+    })])
+  })
+
+  it('连续100次笔画采样只更换脏tile key，不重传未变化tile', () => {
+    const value = scene()
+    const active = `sha256:${'d'.repeat(64)}` as const
+    const stable = `sha256:${'e'.repeat(64)}` as const
+    const layout = { stageWidth: 1024, stageHeight: 512, viewportKey: 'stroke-100',
+      viewport: { documentX: 0, documentY: 0, width: 1024, height: 512,
+        zoom: 1, devicePixelRatio: 1 } }
+    let previous = new Map<string, string>()
+    let changedActive = 0
+    let retransmittedStable = 0
+    for (let sample = 0; sample < 100; sample += 1) {
+      const plan = planImageEditorGpuRasterTilesV3(value, {
+        ...value.layers[0], resourceRef: null, contentVersion: 'stroke',
+        sparseTiles: {
+          '0/0/0': { resourceRef: active, contentVersion: `active-${sample}`, byteLength: 64 },
+          '0/1/0': { resourceRef: stable, contentVersion: 'stable-1', byteLength: 64 },
+        },
+      }, layout)
+      const current = new Map(plan.tiles.map((tile) => (
+        [`${tile.key.tileX}/${tile.key.tileY}`, tile.key.contentVersion]
+      )))
+      if (sample > 0) {
+        if (current.get('0/0') !== previous.get('0/0')) changedActive += 1
+        if (current.get('1/0') !== previous.get('1/0')) retransmittedStable += 1
+      }
+      previous = current
+    }
+    expect(changedActive).toBe(99)
+    expect(retransmittedStable).toBe(0)
   })
 })

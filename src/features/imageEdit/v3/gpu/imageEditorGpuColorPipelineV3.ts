@@ -39,6 +39,18 @@ export function imageEditorGpuSourceColorUniformV3(
   }
 }
 
+/** 画笔与标注已由唯一 CPU 光栅入口转换到文档线性工作空间。 */
+export function imageEditorGpuWorkingLinearSourceUniformV3(
+  documentColor: ImageEditColorModeV3,
+): ImageEditorGpuSourceColorUniformV3 {
+  return {
+    transferCode: IMAGE_EDITOR_GPU_TRANSFER_CODE_V3.linear,
+    referenceWhiteNits: documentColor.hdrMetadata?.referenceWhiteNits
+      ?? IMAGE_EDIT_HDR_REFERENCE_WHITE_NITS_V3,
+    sourceToWorking: [1, 0, 0, 0, 1, 0, 0, 0, 1],
+  }
+}
+
 export function imageEditorGpuPresentColorUniformV3(
   documentColor: ImageEditColorModeV3,
 ): ImageEditorGpuPresentColorUniformV3 {

@@ -1,10 +1,15 @@
 import { invertImageEditTransformV3 } from '@/core/imageEdit/v3/execution/affineTransform'
+import type { ImageEditTransformV3 } from '@/core/imageEdit/v3/layerTypes'
 import { resolveImageEditOutputGeometryV3, type ImageEditOutputGeometryV3 } from '@/core/imageEdit/v3/outputGeometry'
 import { IMAGE_EDIT_STORAGE_TILE_SIZE, mipSize } from '@/core/imageEdit/v3/tileGeometry'
 import type { ImageEditorV3PyramidDescriptor } from '@/platform/contracts/imageEditorV3'
 import type { ImageEditorViewportLayoutV3 } from '../editor/useImageEditorViewportLayoutV3'
 import { planImageEditorViewportTilesV3 } from '../execution/viewportTilePlannerV3'
-import type { ImageEditorGpuRasterLayerV3, ImageEditorGpuRasterSceneV3 } from './imageEditorGpuRasterSceneCompilerV3'
+import type {
+  ImageEditorGpuGraphMaskV3,
+  ImageEditorGpuRasterLayerV3,
+  ImageEditorGpuRasterSceneV3,
+} from './imageEditorGpuRasterSceneCompilerV3'
 import type { ImageEditorGpuSceneTileKeyV3 } from './imageEditorGpuSceneProtocolV3'
 
 export interface ImageEditorGpuPlannedTileV3 {
@@ -13,6 +18,35 @@ export interface ImageEditorGpuPlannedTileV3 {
   readonly coreOriginY: number
   readonly coreWidth: number
   readonly coreHeight: number
+}
+
+/** 稀疏蒙版与画笔共用 viewport planner，只请求当前视口相交的 mip0 脏瓦片。 */
+export function planImageEditorGpuMaskTilesV3(
+  scene: Pick<ImageEditorGpuRasterSceneV3, 'width' | 'height' | 'color' | 'geometry'>,
+  mask: ImageEditorGpuGraphMaskV3,
+  transform: ImageEditTransformV3,
+  layout: ImageEditorViewportLayoutV3,
+): ImageEditorGpuPlannedLayerV3 {
+  if (Object.keys(mask.sparseTiles).length === 0) {
+    return {
+      layerId: mask.maskId, mip: 0,
+      tiles: mask.key ? [{
+        key: mask.key, coreOriginX: 0, coreOriginY: 0,
+        coreWidth: scene.width, coreHeight: scene.height,
+      }] : [],
+    }
+  }
+  const planned = planImageEditorGpuRasterTilesV3(scene, {
+    layerId: mask.maskId, sourceKind: 'raster', resourceRef: null,
+    contentVersion: `mask:${mask.maskId}`, sparseTiles: mask.sparseTiles,
+    visible: true, opacity: 1, transform,
+  }, layout, 0)
+  return {
+    ...planned,
+    tiles: planned.tiles.map((tile) => ({
+      ...tile, key: { ...tile.key, resourceKind: 'sparse-mask', format: 'r8unorm' },
+    })),
+  }
 }
 
 export interface ImageEditorGpuPlannedLayerV3 {
@@ -50,8 +84,9 @@ export function planImageEditorGpuRasterTilesV3(
   )
   const sourceZoom = Math.max(Number.EPSILON, viewport.zoom * layerScale)
   const pyramid = createImageEditorGpuPyramidDescriptorV3(scene.width, scene.height)
+  const hasSparseOverrides = Object.keys(layer.sparseTiles).length > 0
   const plan = planImageEditorViewportTilesV3({
-    resourceRef: layer.resourceRef,
+    resourceRef: layer.resourceRef ?? syntheticTransparentResourceRef(layer.layerId),
     documentSize: { width: scene.width, height: scene.height },
     sourceSize: { width: scene.width, height: scene.height },
     pyramid,
@@ -70,32 +105,63 @@ export function planImageEditorGpuRasterTilesV3(
     haloDocumentPixels: 1,
     overscanViewports: viewport.interacting ? 0.25 : 0.125,
     forwardPrefetchViewports: 0.25,
-    previousMip,
+    previousMip: hasSparseOverrides ? 0 : previousMip,
   })
-  const mipDimensions = mipSize({ width: scene.width, height: scene.height }, plan.mip)
-  return {
-    layerId: layer.layerId,
-    mip: plan.mip,
-    tiles: plan.tiles.map((tile) => ({
-      key: {
-        resourceRef: layer.resourceRef,
-        mip: tile.mip,
-        tileX: tile.tileX,
-        tileY: tile.tileY,
-        contentVersion: layer.contentVersion,
-      },
+  // 画笔覆盖的权威数据只存在 mip0；在生成派生金字塔前固定 mip0，避免旧底图
+  // 的低 mip 覆盖新笔画。未带稀疏覆盖的 8192 路径仍按 4.1 正常选 mip。
+  const plannedMip = hasSparseOverrides ? 0 : plan.mip
+  const coordinates = plannedMip === plan.mip ? plan.tiles : planImageEditorViewportTilesV3({
+    resourceRef: layer.resourceRef ?? syntheticTransparentResourceRef(layer.layerId),
+    documentSize: { width: scene.width, height: scene.height },
+    sourceSize: { width: scene.width, height: scene.height },
+    pyramid: { tileSize: IMAGE_EDIT_STORAGE_TILE_SIZE, levels: [pyramid.levels[0]!] },
+    viewport: {
+      documentX: minX, documentY: minY,
+      width: Math.max(Number.EPSILON, (maxX - minX) * sourceZoom),
+      height: Math.max(Number.EPSILON, (maxY - minY) * sourceZoom),
+      zoom: sourceZoom, devicePixelRatio: viewport.devicePixelRatio,
+      interacting: viewport.interacting, velocityX: viewport.velocityX, velocityY: viewport.velocityY,
+    },
+    bitDepth: scene.color.bitDepth === 8 ? 8 : scene.color.bitDepth === 16 ? 16 : 32,
+    haloDocumentPixels: 1, overscanViewports: viewport.interacting ? 0.25 : 0.125,
+    forwardPrefetchViewports: 0.25, previousMip: 0,
+  }).tiles
+  const mipDimensions = mipSize({ width: scene.width, height: scene.height }, plannedMip)
+  const tiles = coordinates.flatMap((tile) => {
+    const override = plannedMip === 0 ? layer.sparseTiles[`0/${tile.tileX}/${tile.tileY}`] : undefined
+    if (!override && !layer.resourceRef && layer.sourceKind !== 'annotation') return []
+    const resourceRef = override?.resourceRef ?? layer.resourceRef
+    if (!resourceRef) return []
+    const key: ImageEditorGpuSceneTileKeyV3 = {
+      resourceRef,
+      resourceKind: override
+        ? 'brush-tile'
+        : layer.sourceKind === 'annotation' ? 'generated-annotation' : 'source-raster',
+      mip: plannedMip,
+      tileX: tile.tileX,
+      tileY: tile.tileY,
+      contentVersion: override?.contentVersion ?? layer.contentVersion,
+      ...(override ? { resourceByteLength: override.byteLength } : {}),
+      ...(override || layer.sourceKind === 'annotation' ? { format: 'rgba16float' as const } : {}),
+    }
+    return [{
+      key,
       coreOriginX: tile.tileX * IMAGE_EDIT_STORAGE_TILE_SIZE,
       coreOriginY: tile.tileY * IMAGE_EDIT_STORAGE_TILE_SIZE,
-      coreWidth: Math.min(
-        IMAGE_EDIT_STORAGE_TILE_SIZE,
-        mipDimensions.width - tile.tileX * IMAGE_EDIT_STORAGE_TILE_SIZE,
-      ),
-      coreHeight: Math.min(
-        IMAGE_EDIT_STORAGE_TILE_SIZE,
-        mipDimensions.height - tile.tileY * IMAGE_EDIT_STORAGE_TILE_SIZE,
-      ),
-    })),
+      coreWidth: Math.min(IMAGE_EDIT_STORAGE_TILE_SIZE, mipDimensions.width - tile.tileX * IMAGE_EDIT_STORAGE_TILE_SIZE),
+      coreHeight: Math.min(IMAGE_EDIT_STORAGE_TILE_SIZE, mipDimensions.height - tile.tileY * IMAGE_EDIT_STORAGE_TILE_SIZE),
+    }]
+  })
+  return {
+    layerId: layer.layerId,
+    mip: plannedMip,
+    tiles,
   }
+}
+
+function syntheticTransparentResourceRef(layerId: string): `sha256:${string}` {
+  const hex = [...layerId].reduce((value, char) => Math.imul(value ^ char.charCodeAt(0), 0x01000193), 0x811c9dc5) >>> 0
+  return `sha256:${hex.toString(16).padStart(8, '0').repeat(8)}`
 }
 
 function outputToLayerSource(

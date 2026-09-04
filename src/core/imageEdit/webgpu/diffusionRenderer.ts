@@ -147,7 +147,7 @@ export class WebGpuDiffusionRenderer {
     assertNotCancelled(input.isCancelled);
     const base = await input.createLinearBase();
     const source = this.acquireTexture(input.width, input.height);
-    const uniform = createUniformBuffer(this.device, createSourceUniform(input.recipe));
+    const uniform = createUniformBuffer(this.device, createDiffusionSourceUniform(input.recipe));
     try {
       renderPipelinePass(
         this.device,
@@ -187,7 +187,7 @@ export class WebGpuDiffusionRenderer {
     const output = this.acquireTexture(input.width, input.height);
     const uniform = createUniformBuffer(
       this.device,
-      createCompositeUniform(input.recipe, input.scatter?.region)
+      createDiffusionCompositeUniform(input.recipe, input.scatter?.region)
     );
     try {
       assertNotCancelled(input.isCancelled);
@@ -227,7 +227,7 @@ export class WebGpuDiffusionRenderer {
     this.disposeCache();
     const base = await input.createLinearBase();
     const source = this.acquireTexture(input.width, input.height);
-    const uniform = createUniformBuffer(this.device, createSourceUniform(input.recipe));
+    const uniform = createUniformBuffer(this.device, createDiffusionSourceUniform(input.recipe));
     try {
       renderPipelinePass(
         this.device,
@@ -351,7 +351,7 @@ function createPyramidSignature(recipe: DiffusionRecipe): string {
   return JSON.stringify([recipe.quality, recipe.scatterLevels]);
 }
 
-function createSourceUniform(recipe: DiffusionRecipe): Float32Array {
+export function createDiffusionSourceUniform(recipe: DiffusionRecipe): Float32Array {
   return new Float32Array([
     1, 1, 0, 0,
     recipe.source.thresholdEV,
@@ -365,7 +365,7 @@ function createSourceUniform(recipe: DiffusionRecipe): Float32Array {
   ]);
 }
 
-function createCompositeUniform(
+export function createDiffusionCompositeUniform(
   recipe: DiffusionRecipe,
   scatterRegion?: readonly [number, number, number, number]
 ): Float32Array {

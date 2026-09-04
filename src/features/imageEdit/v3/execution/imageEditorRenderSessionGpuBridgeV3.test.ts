@@ -1,16 +1,20 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { createImageEditDocumentV3 } from '@/core/imageEdit/v3/documentFactory'
+import { createFloat32PremultipliedRgbaTile } from '@/core/imageEdit/v3'
 import type { ImageEditorV3SourceTileBatchItem } from '@/platform/contracts/imageEditorV3'
 import type { ImageEditorGpuSceneClientV3Like } from '../gpu/imageEditorGpuSceneClientV3'
 import type { ImageEditorGpuSceneWorkerEventV3 } from '../gpu/imageEditorGpuSceneProtocolV3'
 import { ImageEditorRenderSessionGpuBridgeV3 } from './imageEditorRenderSessionGpuBridgeV3'
 
-const readSourceTiles = vi.hoisted(() => vi.fn())
+const { readSourceTile, readSourceTiles } = vi.hoisted(() => ({
+  readSourceTile: vi.fn(),
+  readSourceTiles: vi.fn(),
+}))
 vi.mock('@/commands/imageEditorV3', () => ({
   createImageEditorV3RequestId: () => 'gpu-scene-tile:test',
   readImageEditorV3BrushTiles: vi.fn(),
-  readImageEditorV3SourceTile: vi.fn(),
+  readImageEditorV3SourceTile: readSourceTile,
 }))
 vi.mock('@/commands/imageEditorV3Tiles', () => ({ readImageEditorV3SourceTiles: readSourceTiles }))
 
@@ -78,7 +82,39 @@ function surfaceFrame(interactionSequence: number): ImageEditorGpuSceneWorkerEve
 
 describe('ImageEditorRenderSessionGpuBridgeV3', () => {
   beforeEach(() => {
+    readSourceTile.mockReset()
     readSourceTiles.mockReset()
+  })
+
+  it('legacy r8 mask冻结为source-raster后仍走图片source reader', async () => {
+    const harness = clientHarness()
+    const resourceRef = `sha256:${'9'.repeat(64)}` as const
+    const brushReader = vi.fn()
+    readSourceTile.mockResolvedValue({
+      resourceRef, mip: 0, tileX: 0, tileY: 0, halo: 0,
+      width: 1, height: 1, channels: 4, bitDepth: 8,
+      sampleFormat: 'uint', numericRange: 'unorm8', byteOrder: 'little-endian',
+      rowStride: 4, colorSpace: 'srgb', transferFunction: 'srgb',
+      alphaMode: 'straight', orientationApplied: true,
+      originX: 0, originY: 0, pixels: new Uint8Array([128, 128, 128, 255]).buffer,
+    })
+    const bridge = new ImageEditorRenderSessionGpuBridgeV3(
+      'gpu-legacy-mask', harness.client, vi.fn(), false, undefined, undefined, brushReader,
+    )
+    bridge.syncSnapshot({
+      document: createImageEditDocumentV3({ width: 1, height: 1 }),
+      renderGeneration: 1, geometryHash: 'geometry', quality: 'stable',
+      resourceDescriptors: [{ resourceRef, byteLength: 4, mediaType: 'image/png' }],
+    })
+    harness.listener({
+      type: 'tiles-needed', sceneGeneration: 1, deviceGeneration: 1,
+      keys: [{ resourceRef, resourceKind: 'source-raster', mip: 0, tileX: 0, tileY: 0,
+        contentVersion: 'legacy-mask', format: 'r8unorm' }],
+    })
+    await vi.waitFor(() => expect(harness.client.uploadTiles).toHaveBeenCalledOnce())
+    expect(readSourceTile).toHaveBeenCalledOnce()
+    expect(brushReader).not.toHaveBeenCalled()
+    bridge.dispose()
   })
 
   it('瓦片请求固定1px halo并按文档位深读取；重复请求 singleflight 去重', async () => {
@@ -383,13 +419,80 @@ describe('ImageEditorRenderSessionGpuBridgeV3', () => {
     })
     harness.listener({
       type: 'tiles-needed', sceneGeneration: 1, deviceGeneration: 1,
-      keys: [{ resourceRef, mip: 0, tileX: 0, tileY: 0, contentVersion: 'mask-v1', format: 'r8unorm' }],
+      keys: [{ resourceRef, resourceKind: 'sparse-mask', resourceByteLength: 8,
+        mip: 0, tileX: 0, tileY: 0, contentVersion: 'mask-v1', format: 'r8unorm' }],
     })
     await vi.waitFor(() => expect(harness.client.uploadTiles).toHaveBeenCalledOnce())
     const upload = vi.mocked(harness.client.uploadTiles).mock.calls[0][1][0]
     expect([...new Uint8Array(upload.tile.pixels)]).toEqual([64, 64, 64, 255, 255, 255, 255, 255])
     expect(upload.key.format).toBe('r8unorm')
     expect(readBrushTiles).toHaveBeenCalledOnce()
+    bridge.dispose()
+  })
+
+  it('sparse brush只上传请求的变化瓦片并保持线性straight上传边界', async () => {
+    const harness = clientHarness()
+    const readBrushTiles = vi.fn(async () => ({ tiles: [{
+      tileKey: '0/2/3',
+      tile: createFloat32PremultipliedRgbaTile(
+        1, 1, 'linear-light', new Float32Array([0.25, 0.125, 0, 0.5]),
+      ),
+    }] }))
+    const resourceRef = `sha256:${'d'.repeat(64)}` as const
+    const bridge = new ImageEditorRenderSessionGpuBridgeV3(
+      'gpu-sparse-brush', harness.client, vi.fn(), false, undefined, undefined, readBrushTiles,
+    )
+    bridge.syncSnapshot({
+      document: createImageEditDocumentV3({ width: 2048, height: 2048 }),
+      renderGeneration: 1, geometryHash: 'geometry', quality: 'stable',
+      resourceDescriptors: [{ resourceRef, byteLength: 16,
+        mediaType: 'application/x-henji-brush-tile-v3' }],
+    })
+    harness.listener({
+      type: 'tiles-needed', sceneGeneration: 1, deviceGeneration: 1,
+      keys: [{ resourceRef, resourceKind: 'brush-tile', resourceByteLength: 16,
+        mip: 0, tileX: 2, tileY: 3,
+        contentVersion: 'brush-v2', format: 'rgba16float' }],
+    })
+    await vi.waitFor(() => expect(harness.client.uploadTiles).toHaveBeenCalledOnce())
+    const upload = vi.mocked(harness.client.uploadTiles).mock.calls[0][1][0]
+    expect([...new Float32Array(upload.tile.pixels)]).toEqual([0.5, 0.25, 0, 0.5])
+    expect(upload.tile).toMatchObject({ bitDepth: 32, sampleFormat: 'float',
+      numericRange: 'scene-linear', transferFunction: 'linear', alphaMode: 'straight' })
+    expect(readBrushTiles).toHaveBeenCalledWith(expect.objectContaining({
+      tiles: [expect.objectContaining({ tileKey: '0/2/3' })],
+    }), expect.any(AbortSignal))
+    bridge.dispose()
+  })
+
+  it('画笔持久化占用读取准入时有界重试且不触发CPU fallback', async () => {
+    const harness = clientHarness()
+    const fallback = vi.fn()
+    const resourceRef = `sha256:${'b'.repeat(64)}` as const
+    const tile = createFloat32PremultipliedRgbaTile(
+      1, 1, 'linear-light', new Float32Array([0.2, 0.1, 0, 0.5]),
+    )
+    const readBrushTiles = vi.fn()
+      .mockRejectedValueOnce(new Error('Image editor brush_tiles.read concurrency limit reached'))
+      .mockResolvedValue({ tiles: [{ tileKey: '0/0/0', tile }] })
+    const bridge = new ImageEditorRenderSessionGpuBridgeV3(
+      'gpu-brush-contention', harness.client, vi.fn(), false, undefined, fallback, readBrushTiles,
+    )
+    bridge.syncSnapshot({
+      document: createImageEditDocumentV3({ width: 1, height: 1 }),
+      renderGeneration: 1, geometryHash: 'geometry', quality: 'stable',
+      resourceDescriptors: [{ resourceRef, byteLength: 16,
+        mediaType: 'application/x-henji-brush-tile-v3' }],
+    })
+    harness.listener({
+      type: 'tiles-needed', sceneGeneration: 1, deviceGeneration: 1,
+      keys: [{ resourceRef, resourceKind: 'brush-tile', resourceByteLength: 16,
+        mip: 0, tileX: 0, tileY: 0,
+        contentVersion: 'brush-contention', format: 'rgba16float' }],
+    })
+    await vi.waitFor(() => expect(harness.client.uploadTiles).toHaveBeenCalledOnce())
+    expect(readBrushTiles).toHaveBeenCalledTimes(2)
+    expect(fallback).not.toHaveBeenCalled()
     bridge.dispose()
   })
 })

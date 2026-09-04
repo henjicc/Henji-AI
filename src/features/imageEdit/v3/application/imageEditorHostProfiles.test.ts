@@ -22,7 +22,7 @@ describe('图片编辑 V3 宿主能力裁剪', () => {
     })
   })
 
-  it('工具箱和画布宿主只开放导航、裁剪与可编辑标注工具', () => {
+  it('工具箱开放栅格画笔与橡皮，画布宿主仍只开放导航、裁剪与标注', () => {
     const profile = getImageEditorHostProfileV3('full')
 
     expect(getReadyImageEditorToolIdsV3(profile)).toEqual([
@@ -38,9 +38,11 @@ describe('图片编辑 V3 宿主能力裁剪', () => {
       'annotation-number',
       'annotation-pen',
       'annotation-mosaic',
+      'raster-brush',
+      'eraser',
     ])
     expect(getReadyImageEditorToolIdsV3(getImageEditorHostProfileV3('canvas-edit')))
-      .toEqual(getReadyImageEditorToolIdsV3(profile))
+      .toEqual(getReadyImageEditorToolIdsV3(profile).slice(0, -2))
     expect(getImageEditorHostProfileV3('quick')).toMatchObject({
       layerKinds: ['effect'],
       adjustments: [],

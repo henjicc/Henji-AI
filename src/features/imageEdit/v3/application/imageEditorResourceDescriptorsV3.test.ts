@@ -24,6 +24,7 @@ describe('ImageEditor V3 受控资源描述符', () => {
     }
     const descriptors = reconcileImageEditorV3ResourceDescriptors(document, [
       { resourceRef: SOURCE, byteLength: 4_096, mediaType: 'image/png' },
+      { resourceRef: BRUSH, byteLength: 1, mediaType: null },
       { resourceRef: STALE, byteLength: 1_024, mediaType: 'image/png' },
     ], [
       { resourceId: BRUSH, byteSize: 128 },

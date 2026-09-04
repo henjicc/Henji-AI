@@ -246,10 +246,13 @@ export class ImageEditorGpuSceneClientV3 implements ImageEditorGpuSceneClientV3L
         },
       })
     } else if (event.type === 'failed') {
+      const expectedFallback = event.code === 'resource-budget-exceeded' && event.recoverable
       const metadata = {
-        event: event.code === 'composition-not-ready' && event.recoverable
-          ? 'image_editor_v3.gpu_scene.composition_deferred'
-          : 'image_editor_v3.gpu_scene.failed',
+        event: expectedFallback
+          ? 'image_editor_v3.gpu_scene.resource_budget_fallback'
+          : event.code === 'composition-not-ready' && event.recoverable
+            ? 'image_editor_v3.gpu_scene.composition_deferred'
+            : 'image_editor_v3.gpu_scene.failed',
         requestId: event.requestId ?? undefined,
         context: {
           sessionId: this.options.sessionId,
@@ -263,6 +266,8 @@ export class ImageEditorGpuSceneClientV3 implements ImageEditorGpuSceneClientV3L
         logger.debug('图片编辑 GPU Scene 等待场景或源纹理', metadata)
       } else if (event.diagnostic) {
         logger.warn('Reality 已注入图片编辑 GPU Scene 失败', metadata)
+      } else if (expectedFallback) {
+        logger.warn('图片编辑 GPU Scene 超出显存预算，切换 CPU 后备', metadata)
       } else {
         logger.error('图片编辑 GPU Scene 运行失败', new Error(event.message), metadata)
       }

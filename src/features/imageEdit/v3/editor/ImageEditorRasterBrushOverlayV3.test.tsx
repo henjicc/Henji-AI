@@ -90,6 +90,7 @@ describe('ImageEditorRasterBrushOverlayV3', () => {
     })
     vi.stubGlobal('ImageData', ImageDataStub)
     vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({
+      measureText: vi.fn(() => ({ width: 0 })),
       putImageData: vi.fn(),
     } as unknown as CanvasRenderingContext2D)
     bridge.persistBrushTiles.mockReset().mockImplementation(async ({ tiles }) => ({

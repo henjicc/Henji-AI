@@ -192,7 +192,11 @@ export function useImageMarkToolV3Host(
             revision: snapshot.revision,
             previewRef: snapshot.previewRef,
           }
-          resourceDescriptors = snapshot.resources
+          resourceDescriptors = reconcileImageEditorV3ResourceDescriptors(
+            document,
+            snapshot.resources,
+            initialPersistence.retainedResources,
+          )
           sessionSourceUrlRef.current = sessionToRestore.sourceUrl
         } else {
           const source = resolveImageMarkV3SourceLocator(sourceImageUrl)

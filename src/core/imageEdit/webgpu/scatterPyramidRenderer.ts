@@ -51,7 +51,7 @@ export async function renderScatterPyramid(
       assertNotCancelled(options.isCancelled);
       const dimensions = dimensionsForDivisor(options.width, options.height, level.divisor);
       const target = options.acquireTexture(dimensions.width, dimensions.height);
-      const uniform = createUniformBuffer(options.device, createDownsampleUniform());
+      const uniform = createUniformBuffer(options.device, createDiffusionDownsampleUniform());
       uniforms.push(uniform);
       renderPipelinePass(
         options.device,
@@ -81,7 +81,7 @@ export async function renderScatterPyramid(
       const target = options.acquireTexture(dimensions.width, dimensions.height);
       const uniform = createUniformBuffer(
         options.device,
-        createUpsampleUniform(options.levels[index].weight, accumulatedWeight)
+        createDiffusionUpsampleUniform(options.levels[index].weight, accumulatedWeight)
       );
       uniforms.push(uniform);
       renderPipelinePass(
@@ -112,7 +112,7 @@ export async function renderScatterPyramid(
   }
 }
 
-function createDownsampleUniform(): Float32Array {
+export function createDiffusionDownsampleUniform(): Float32Array {
   return new Float32Array([
     1, 1, 0, 0,
     1, 1, 0, 0,
@@ -121,7 +121,7 @@ function createDownsampleUniform(): Float32Array {
   ]);
 }
 
-function createUpsampleUniform(
+export function createDiffusionUpsampleUniform(
   highWeight: readonly [number, number, number],
   lowWeight: readonly [number, number, number]
 ): Float32Array {

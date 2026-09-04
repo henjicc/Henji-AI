@@ -60,7 +60,7 @@ fn composite(backdrop: vec4f, source: vec4f, mode: u32) -> vec4f {
   let inverse = params.inverseLinear;
   let point = vec2f(inverse.x * position.x + inverse.z * position.y + params.inverseTranslation.x,
                     inverse.y * position.x + inverse.w * position.y + params.inverseTranslation.y) - vec2f(0.5);
-  let amount = params.options.x * bilinearMask(point);
+  let amount = params.options.x * bilinearMask(position.xy - vec2f(0.5));
   let source = bilinearColor(contentTexture, point) * amount;
   let backdrop = textureLoad(backdropTexture, vec2i(position.xy), 0);
   return composite(backdrop, source, u32(params.options.y));

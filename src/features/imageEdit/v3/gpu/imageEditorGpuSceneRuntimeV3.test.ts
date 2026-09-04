@@ -358,6 +358,39 @@ describe('ImageEditorGpuSceneRuntimeV3', () => {
     runtime.dispose()
   })
 
+  it('效果执行失败发布可恢复失败且dispose释放合成资源', async () => {
+    const events: ImageEditorGpuSceneWorkerEventV3[] = []
+    const compositor = fakeCompositor({ render: vi.fn(async () => {
+      throw new Error('effect target failed')
+    }) })
+    const runtime = new ImageEditorGpuSceneRuntimeV3((event) => events.push(event), {
+      deviceManager: {
+        onDeviceLost: vi.fn(), acquire: async () => managedDevice({} as GpuDevice, 1),
+        getRecoveryStatus: () => ({ generation: 1, retryAfterMs: 0 }), destroy: vi.fn(),
+      },
+      contextFactory: async () => ({ onError: () => vi.fn(), dispose: vi.fn() }),
+      compositorFactory: () => compositor,
+    })
+    runtime.handle(initializeRequest())
+    runtime.handle({ type: 'sync-scene', sceneGeneration: 1,
+      document: createImageEditDocumentV3({ width: 16, height: 16 }), resourceDescriptors: [] })
+    runtime.handle({ type: 'update-viewport', sceneGeneration: 1, cameraSequence: 1,
+      layout: { stageWidth: 16, stageHeight: 16, viewportKey: 'effect-failure',
+        viewport: { documentX: 0, documentY: 0, width: 16, height: 16,
+          zoom: 1, devicePixelRatio: 1 } } })
+    await vi.waitFor(() => expect(runtime.getStatus()).toBe('ready'))
+    runtime.handle({ type: 'render', requestId: 'effect-failure', sceneGeneration: 1,
+      cameraSequence: 1, interactionSequence: 0, surfaceGeneration: 0, quality: 'stable' })
+    await vi.waitFor(() => expect(events.at(-1)).toMatchObject({
+      type: 'failed', requestId: 'effect-failure', code: 'composition-not-ready',
+      recoverable: true, message: 'effect target failed',
+    }))
+    expect(runtime.getStatus()).toBe('fallback')
+    expect(compositor.dispose).toHaveBeenCalledOnce()
+    runtime.dispose()
+    expect(compositor.dispose).toHaveBeenCalledOnce()
+  })
+
   it('同一资源重复上传只创建一张GPU纹理，dispose完整释放注册表资源', async () => {
     const resourceRef = `sha256:${'a'.repeat(64)}` as const
     const destroyTexture = vi.fn()
@@ -460,6 +493,40 @@ describe('ImageEditorGpuSceneRuntimeV3', () => {
 
     expect(destroyTexture).toHaveBeenCalledOnce()
     expect(events.some((event) => event.type === 'failed')).toBe(false)
+    runtime.dispose()
+  })
+
+  it('视口真实常驻target超预算时只降级一次并立即释放GPU状态', async () => {
+    const compositor = fakeCompositor({ memoryPressureBytes: vi.fn(() => 8) })
+    const contextDispose = vi.fn()
+    const events: ImageEditorGpuSceneWorkerEventV3[] = []
+    const runtime = new ImageEditorGpuSceneRuntimeV3((event) => events.push(event), {
+      deviceManager: {
+        onDeviceLost: vi.fn(), acquire: async () => managedDevice({} as GpuDevice, 1),
+        getRecoveryStatus: () => ({ generation: 1, retryAfterMs: 0 }), destroy: vi.fn(),
+      },
+      contextFactory: async () => ({ onError: () => vi.fn(), dispose: contextDispose }),
+      compositorFactory: () => compositor,
+    })
+    runtime.handle(initializeRequest())
+    runtime.handle({ type: 'sync-scene', sceneGeneration: 1,
+      document: createImageEditDocumentV3({ width: 16, height: 16 }), resourceDescriptors: [] })
+    await vi.waitFor(() => expect(runtime.getStatus()).toBe('ready'))
+    const updateViewport = (cameraSequence: number) => runtime.handle({
+      type: 'update-viewport', sceneGeneration: 1, cameraSequence,
+      layout: { stageWidth: 16, stageHeight: 16, viewportKey: `pressure-${cameraSequence}`,
+        viewport: { documentX: 0, documentY: 0, width: 16, height: 16,
+          zoom: 1, devicePixelRatio: 1 } },
+    })
+    updateViewport(1)
+    updateViewport(2)
+
+    expect(runtime.getStatus()).toBe('fallback')
+    expect(events.filter((event) => event.type === 'failed')).toEqual([
+      expect.objectContaining({ type: 'failed', code: 'resource-budget-exceeded', recoverable: true }),
+    ])
+    expect(compositor.dispose).toHaveBeenCalledOnce()
+    expect(contextDispose).toHaveBeenCalledOnce()
     runtime.dispose()
   })
 })

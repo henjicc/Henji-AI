@@ -17,15 +17,27 @@ import type { ImageEditorGpuSceneTileKeyV3 } from './imageEditorGpuSceneProtocol
 
 export interface ImageEditorGpuRasterLayerV3 {
   layerId: string
-  resourceRef: `sha256:${string}`
+  sourceKind: 'raster' | 'annotation'
+  resourceRef: `sha256:${string}` | null
   contentVersion: string
+  sparseTiles: Readonly<Record<string, {
+    resourceRef: `sha256:${string}`
+    contentVersion: string
+    byteLength: number
+  }>>
   visible: boolean
   opacity: number
   transform: ImageEditTransformV3
 }
 
 export interface ImageEditorGpuGraphMaskV3 {
+  maskId: string
   key: ImageEditorGpuSceneTileKeyV3 | null
+  sparseTiles: Readonly<Record<string, {
+    resourceRef: `sha256:${string}`
+    contentVersion: string
+    byteLength: number
+  }>>
   defaultValue: 0 | 1
   inverted: boolean
 }
@@ -38,7 +50,7 @@ interface ImageEditorGpuGraphNodeBaseV3 {
 
 export interface ImageEditorGpuGraphSourceNodeV3 extends ImageEditorGpuGraphNodeBaseV3 {
   kind: 'source'
-  resourceKey: ImageEditorGpuSceneTileKeyV3
+  resourceKey: ImageEditorGpuSceneTileKeyV3 | null
 }
 
 export interface ImageEditorGpuGraphCompositeNodeV3 extends ImageEditorGpuGraphNodeBaseV3 {
@@ -66,6 +78,16 @@ export interface ImageEditorGpuGraphAdjustmentNodeV3 extends ImageEditorGpuGraph
   adjustments: readonly ImageEditorGpuGraphAdjustmentV3[]
 }
 
+export interface ImageEditorGpuGraphEffectNodeV3 extends ImageEditorGpuGraphNodeBaseV3 {
+  kind: 'effect'
+  inputNodeId: string
+  definitionId: 'effect.fast-blur' | 'effect.diffusion' | 'effect.vgpu-glow'
+  parameters: ImageEditJsonObjectV3
+  opacity: number
+  blendMode: ImageEditBlendModeV3
+  mask: ImageEditorGpuGraphMaskV3 | null
+}
+
 export interface ImageEditorGpuGraphAliasNodeV3 extends ImageEditorGpuGraphNodeBaseV3 {
   kind: 'alias'
   inputNodeId: string
@@ -75,6 +97,7 @@ export type ImageEditorGpuRenderGraphNodeV3 =
   | ImageEditorGpuGraphSourceNodeV3
   | ImageEditorGpuGraphCompositeNodeV3
   | ImageEditorGpuGraphAdjustmentNodeV3
+  | ImageEditorGpuGraphEffectNodeV3
   | ImageEditorGpuGraphAliasNodeV3
 
 export interface ImageEditorGpuRasterSceneV3 {
@@ -135,9 +158,10 @@ export function compileImageEditorGpuRasterSceneV3(
     return { supported: false, reason: error instanceof Error ? error.message : String(error) }
   }
   const layers: ImageEditorGpuRasterLayerV3[] = []
-  collectRasterLayers(document.layers, descriptors, layers)
+  collectRasterLayers(document.layers, descriptors, plan.nodes, layers)
   const requiresRenderGraph = graph.some((node) => (
     node.kind === 'adjustment'
+    || node.kind === 'effect'
     || node.kind === 'alias'
     || (node.kind === 'composite' && (node.blendMode !== 'normal' || node.mask !== null))
   ))
@@ -166,18 +190,30 @@ function compileNode(
   if (node.definitionId === 'source.raster') {
     const source = node.parameters.source
     const tiles = node.parameters.tiles
-    if (!source || typeof source !== 'object' || !('kind' in source)
-      || source.kind !== 'resource' || !('resourceId' in source)
-      || typeof source.resourceId !== 'string' || !isResourceRef(source.resourceId)) {
+    if (!source || typeof source !== 'object' || !('kind' in source)) {
+      return `图层 ${node.layerId} 缺少栅格源声明`
+    }
+    const resourceId = source.kind === 'resource' && 'resourceId' in source
+      && typeof source.resourceId === 'string' && isResourceRef(source.resourceId)
+      ? source.resourceId : null
+    const sparse = compileSparseTiles(tiles, descriptors)
+    if (typeof sparse === 'string') return sparse
+    if (!resourceId && Object.keys(sparse).length === 0) {
       return `图层 ${node.layerId} 缺少可用栅格资源`
     }
-    if (tiles && typeof tiles === 'object' && Object.keys(tiles).length > 0) {
-      return `图层 ${node.layerId} 的稀疏像素覆盖由 3.2/4.1 接入`
-    }
-    const key = resourceKey(source.resourceId, descriptors, 'rgba8unorm')
-    if (!key) return `图层 ${node.layerId} 缺少受管资源描述`
-    addRequired(required, key)
+    const key = resourceId
+      ? resourceKey(resourceId, descriptors, 'rgba8unorm', 'source-raster') : null
+    if (resourceId && !key) return `图层 ${node.layerId} 缺少受管资源描述`
+    if (key) addRequired(required, key)
     return { kind: 'source', nodeId: node.id, layerId: node.layerId, fingerprint: node.subtreeHash, resourceKey: key }
+  }
+  if (node.definitionId === 'vector.annotation') {
+    const resourceRef = createImageEditorGpuAnnotationResourceRefV3(node)
+    return {
+      kind: 'source', nodeId: node.id, layerId: node.layerId, fingerprint: node.subtreeHash,
+      resourceKey: { resourceRef, resourceKind: 'generated-annotation', mip: 0, tileX: 0, tileY: 0,
+        contentVersion: annotationContentVersion(node), format: 'rgba16float' },
+    }
   }
   if (node.definitionId === 'composite.layer') {
     const transform = transformParameter(node.parameters.transform)
@@ -204,6 +240,18 @@ function compileNode(
       kind: 'adjustment', nodeId: node.id, layerId: node.layerId,
       fingerprint: node.subtreeHash, inputNodeId: node.inputNodeIds[0],
       adjustments: [adjustment(node, descriptors, required)],
+    }
+  }
+  if (node.definitionId === 'effect.fast-blur'
+    || node.definitionId === 'effect.diffusion'
+    || node.definitionId === 'effect.vgpu-glow') {
+    const mask = compileMask(node.mask, descriptors, required)
+    if (typeof mask === 'string') return mask
+    return {
+      kind: 'effect', nodeId: node.id, layerId: node.layerId,
+      fingerprint: node.subtreeHash, inputNodeId: node.inputNodeIds[0],
+      definitionId: node.definitionId, parameters: jsonParameters(node.parameters),
+      opacity: numberParameter(node, 'opacity', 1), blendMode: blendParameter(node), mask,
     }
   }
   return `图层 ${node.layerId} 的 ${node.definitionId} 由 3.2 接入，当前自动回退 CPU`
@@ -235,33 +283,48 @@ function compileMask(
   let resourceId: string | null
   let defaultValue: 0 | 1 = 1
   if (isImageEditSparseMaskReferenceV3(mask)) {
-    const unsupported = Object.keys(mask.tiles).find((key) => key !== '0/0/0')
-    if (unsupported) return `蒙版 ${mask.maskId} 的多瓦片资源由 4.1 接入`
-    resourceId = mask.tiles['0/0/0'] ?? null
-    defaultValue = mask.defaultValue
+    const unsupported = Object.keys(mask.tiles).find((key) => !isMipZeroTileKey(key))
+    if (unsupported) return `蒙版 ${mask.maskId} 的瓦片键无效：${unsupported}`
+    const sparseTiles = compileSparseTiles(mask.tiles, descriptors)
+    if (typeof sparseTiles === 'string') return sparseTiles
+    for (const [tileKey, entry] of Object.entries(sparseTiles)) {
+      const [, tileX, tileY] = tileKey.split('/').map(Number)
+      addRequired(required, {
+        resourceRef: entry.resourceRef, mip: 0, tileX, tileY,
+        resourceKind: 'sparse-mask', resourceByteLength: entry.byteLength,
+        contentVersion: entry.contentVersion, format: 'r8unorm',
+      })
+    }
+    return {
+      maskId: mask.maskId, key: null, sparseTiles,
+      defaultValue: mask.defaultValue, inverted: mask.inverted,
+    }
   } else resourceId = mask.resourceId
-  if (!resourceId) return { key: null, defaultValue, inverted: mask.inverted }
+  if (!resourceId) return {
+    maskId: 'empty-mask', key: null, sparseTiles: {}, defaultValue, inverted: mask.inverted,
+  }
   if (!isResourceRef(resourceId)) return `蒙版资源引用无效：${resourceId}`
-  const key = resourceKey(resourceId, descriptors, 'r8unorm')
+  const key = resourceKey(resourceId, descriptors, 'r8unorm', 'source-raster')
   if (!key) return `蒙版缺少受管资源描述：${resourceId}`
   addRequired(required, key)
-  return { key, defaultValue, inverted: mask.inverted }
+  return { maskId: resourceId, key, sparseTiles: {}, defaultValue, inverted: mask.inverted }
 }
 
 function resourceKey(
   resourceRef: `sha256:${string}`,
   descriptors: ReadonlyMap<string, ImageEditorV3ResourceDescriptor>,
   format: ImageEditorGpuSceneTileKeyV3['format'],
+  resourceKind: ImageEditorGpuSceneTileKeyV3['resourceKind'],
 ): ImageEditorGpuSceneTileKeyV3 | null {
   const descriptor = descriptors.get(resourceRef)
   return descriptor ? {
-    resourceRef, mip: 0, tileX: 0, tileY: 0,
+    resourceRef, resourceKind, mip: 0, tileX: 0, tileY: 0,
     contentVersion: `${resourceRef}:${descriptor.byteLength}`, format,
   } : null
 }
 
 function addRequired(map: Map<string, ImageEditorGpuSceneTileKeyV3>, key: ImageEditorGpuSceneTileKeyV3): void {
-  map.set(`${key.format}:${key.resourceRef}:${key.contentVersion}`, key)
+  map.set(`${key.format}:${key.resourceRef}:${key.mip}:${key.tileX}:${key.tileY}:${key.contentVersion}`, key)
 }
 
 function canFuseExposure(nodes: readonly ImageEditRenderPlanNode[]): boolean {
@@ -272,28 +335,92 @@ function canFuseExposure(nodes: readonly ImageEditRenderPlanNode[]): boolean {
 function collectRasterLayers(
   layers: readonly ImageEditDocumentV3['layers'][number][],
   descriptors: ReadonlyMap<string, ImageEditorV3ResourceDescriptor>,
+  planNodes: readonly ImageEditRenderPlanNode[],
   output: ImageEditorGpuRasterLayerV3[],
 ): void {
   for (const layer of layers) {
     if (layer.type === 'group') {
-      collectRasterLayers(layer.children, descriptors, output)
+      collectRasterLayers(layer.children, descriptors, planNodes, output)
       continue
     }
-    if (layer.type !== 'raster' || layer.source.kind !== 'resource') continue
-    const resourceId = layer.source.resourceId
-    if (!isResourceRef(resourceId)) continue
-    const resourceRef = resourceId
-    const descriptor = descriptors.get(resourceRef)
-    if (!descriptor) continue
+    if (layer.type === 'annotation') {
+      const planNode = planNodes.find((node) => (
+        node.layerId === layer.id && node.definitionId === 'vector.annotation'
+      ))
+      if (!planNode) continue
+      output.push({
+        layerId: layer.id, sourceKind: 'annotation',
+        resourceRef: createImageEditorGpuAnnotationResourceRefV3(planNode),
+        contentVersion: annotationContentVersion(planNode), sparseTiles: {},
+        visible: layer.visible, opacity: layer.opacity, transform: [...layer.transform],
+      })
+      continue
+    }
+    if (layer.type !== 'raster') continue
+    const resourceRef = layer.source.kind === 'resource' && isResourceRef(layer.source.resourceId)
+      ? layer.source.resourceId : null
+    if (resourceRef && !descriptors.has(resourceRef)) continue
+    const sparseTiles = compileSparseTiles(layer.tiles, descriptors)
+    if (typeof sparseTiles === 'string' || (!resourceRef && Object.keys(sparseTiles).length === 0)) continue
     output.push({
       layerId: layer.id,
+      sourceKind: 'raster',
       resourceRef,
-      contentVersion: `${resourceRef}:${descriptor.byteLength}`,
+      contentVersion: resourceRef ? `${resourceRef}:${descriptors.get(resourceRef)!.byteLength}` : 'empty',
+      sparseTiles,
       visible: layer.visible,
       opacity: layer.opacity,
       transform: [...layer.transform],
     })
   }
+}
+
+function compileSparseTiles(
+  value: unknown,
+  descriptors: ReadonlyMap<string, ImageEditorV3ResourceDescriptor>,
+): Record<string, { resourceRef: `sha256:${string}`; contentVersion: string; byteLength: number }> | string {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {}
+  const output: Record<string, {
+    resourceRef: `sha256:${string}`; contentVersion: string; byteLength: number
+  }> = {}
+  for (const [tileKey, candidate] of Object.entries(value)) {
+    if (!isMipZeroTileKey(tileKey) || typeof candidate !== 'string' || !isResourceRef(candidate)) {
+      return `稀疏像素瓦片键或资源引用无效：${tileKey}`
+    }
+    const descriptor = descriptors.get(candidate)
+    if (!descriptor) return `稀疏像素瓦片缺少受管资源描述：${candidate}`
+    output[tileKey] = {
+      resourceRef: candidate,
+      contentVersion: `${candidate}:${descriptor.byteLength}`,
+      byteLength: descriptor.byteLength,
+    }
+  }
+  return output
+}
+
+function isMipZeroTileKey(value: string): boolean {
+  return /^0\/(0|[1-9]\d*)\/(0|[1-9]\d*)$/.test(value)
+}
+
+function annotationContentVersion(node: ImageEditRenderPlanNode): string {
+  return `annotation-raster-v1:${node.subtreeHash}`
+}
+
+/** 标注 GPU 瓦片使用可重复的合成资源身份，内容/字体/布局均由 subtreeHash 失效。 */
+export function createImageEditorGpuAnnotationResourceRefV3(
+  node: Pick<ImageEditRenderPlanNode, 'id' | 'subtreeHash'>,
+): `sha256:${string}` {
+  const seed = `${node.id}:${node.subtreeHash}`
+  let hash = 0x811c9dc5
+  let output = ''
+  for (let block = 0; block < 8; block += 1) {
+    for (let index = 0; index < seed.length; index += 1) {
+      hash ^= seed.charCodeAt(index) + block
+      hash = Math.imul(hash, 0x01000193)
+    }
+    output += (hash >>> 0).toString(16).padStart(8, '0')
+  }
+  return `sha256:${output}`
 }
 
 function transformParameter(value: unknown): ImageEditTransformV3 | null {
