@@ -30,12 +30,6 @@ import {
   dissolveAssetGroup,
   updateAssetGroup,
 } from './assetGroupApplicationService'
-import {
-  forkMultiLayerDocumentNode,
-  markMultiLayerDocumentReleaseCandidate,
-  rollbackCreatedMultiLayerDocument,
-} from './multiLayerDocumentNodeGenerationAdapter'
-
 const logger = createLogger('features.canvas.canvas_mutation')
 
 interface CanvasNodePatch {
@@ -154,7 +148,10 @@ export async function commitCanvasNodeDuplication<T>(input: {
   const source = requireNode(input.projectId, input.sourceNodeId)
   if (!isEditableLayerStackResultNode(source)) return input.createNode(input.data)
 
-  const projection = await forkMultiLayerDocumentNode({
+  // 延迟加载组合根，避免“导出画布事务 -> 批处理服务 -> 节点复制 -> 文档组合根”
+  // 在模块初始化期形成环；UI、批处理和助手仍委托同一个正式服务实例。
+  const documentAdapter = await import('./multiLayerDocumentNodeGenerationAdapter')
+  const projection = await documentAdapter.forkMultiLayerDocumentNode({
     sourceNodeId: source.id,
     targetNodeId: crypto.randomUUID(),
     data: source.data,
@@ -169,7 +166,7 @@ export async function commitCanvasNodeDuplication<T>(input: {
       aspectRatio: projection.aspectRatio,
     })
   } catch (error) {
-    await rollbackCreatedMultiLayerDocument(projection).catch((rollbackError) => {
+    await documentAdapter.rollbackCreatedMultiLayerDocument(projection).catch((rollbackError) => {
       logger.error('复制节点失败后的文档补偿失败', rollbackError, {
         event: 'canvas.multi_layer_document.fork.rollback.failed',
         nodeId: source.id,
@@ -324,9 +321,11 @@ export function deleteCanvasNodes(projectId: string, nodeIds: string[]): Record<
     .filter((node) => !remainingIds.has(node.id))
   const undoRef = rememberCanvasUndo(projectId, 'delete_nodes')
   persistCanvasState()
-  void Promise.all(removedDocumentNodes.map((node) => (
-    markMultiLayerDocumentReleaseCandidate({ nodeId: node.id, data: node.data })
-  ))).catch((error) => {
+  void import('./multiLayerDocumentNodeGenerationAdapter').then(({ markMultiLayerDocumentReleaseCandidate }) => (
+    Promise.all(removedDocumentNodes.map((node) => (
+      markMultiLayerDocumentReleaseCandidate({ nodeId: node.id, data: node.data })
+    )))
+  )).catch((error) => {
     logger.error('删除节点后的文档候选登记失败', error, {
       event: 'canvas.multi_layer_document.release_candidate.mark.failed',
       projectId,
@@ -355,9 +354,11 @@ export function clearCanvasProject(projectId: string): Record<string, unknown> {
   const undoRef = rememberCanvasUndo(projectId, 'clear_canvas')
   persistCanvasState()
   const documentNodes = before.nodes.filter(isEditableLayerStackResultNode)
-  void Promise.all(documentNodes.map((node) => (
-    markMultiLayerDocumentReleaseCandidate({ nodeId: node.id, data: node.data })
-  ))).catch((error) => {
+  void import('./multiLayerDocumentNodeGenerationAdapter').then(({ markMultiLayerDocumentReleaseCandidate }) => (
+    Promise.all(documentNodes.map((node) => (
+      markMultiLayerDocumentReleaseCandidate({ nodeId: node.id, data: node.data })
+    )))
+  )).catch((error) => {
     logger.error('清空画布后的文档候选登记失败', error, {
       event: 'canvas.multi_layer_document.release_candidate.mark.failed',
       projectId,

@@ -142,10 +142,6 @@ export async function createLayerStackV3Projection(
   }
 }
 
-function unavailable(operation: string): never {
-  throw new Error(`多图层文档端口 ${operation} 尚未接入当前阶段`)
-}
-
 export function createForkedMultiLayerDocumentProjection(input: {
   sourceNodeId: string
   targetNodeId: string
