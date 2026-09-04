@@ -125,6 +125,11 @@ export interface ImageEditorGpuSceneFrameReadyEventV3 extends ImageEditorGpuScen
     frameCount: number
     diagnosticReadbackCount: number
     transientUniformUpdateCount: number
+    residentTileCount: number
+    atlasPageCount: number
+    allocatedAtlasBytes: number
+    minimumPlannedMip: number
+    maximumPlannedMip: number
   }
 }
 

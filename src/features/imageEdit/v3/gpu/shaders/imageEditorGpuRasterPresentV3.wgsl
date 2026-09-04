@@ -1,9 +1,60 @@
-struct PresentParams { camera: vec4f, geometry: vec4f, orientation: vec4f }
+struct PresentColorParams {
+  colorRow0: vec4f,
+  colorRow1: vec4f,
+  colorRow2: vec4f,
+  options: vec4f,
+}
+
 @group(0) @binding(0) var sourceTexture: texture_2d<f32>;
-@group(0) @binding(1) var<uniform> params: PresentParams;
-fn encodeSrgb(value:f32)->f32{let clamped=clamp(value,0.0,1.0);return select(clamped*12.92,1.055*pow(clamped,1.0/2.4)-0.055,clamped>0.0031308);}
-fn loadColor(coord:vec2i)->vec4f{let size=vec2i(textureDimensions(sourceTexture));if(any(coord<vec2i(0))||any(coord>=size)){return vec4f(0);}return textureLoad(sourceTexture,coord,0);}
-fn sampleColor(point:vec2f)->vec4f{let p=vec2i(floor(point));let f=fract(point);return mix(mix(loadColor(p),loadColor(p+vec2i(1,0)),f.x),mix(loadColor(p+vec2i(0,1)),loadColor(p+vec2i(1,1)),f.x),f.y);}
-fn outputToSource(outputPoint:vec2f)->vec2f{let oriented=outputPoint+params.geometry.zw;let rotate=u32(params.orientation.x);var mirroredX=oriented.x;var sourceY=oriented.y;if(rotate==1u){mirroredX=oriented.y;sourceY=params.geometry.y-oriented.x;}else if(rotate==2u){mirroredX=params.geometry.x-oriented.x;sourceY=params.geometry.y-oriented.y;}else if(rotate==3u){mirroredX=params.geometry.x-oriented.y;sourceY=oriented.x;}let sourceX=select(mirroredX,params.geometry.x-mirroredX,params.orientation.y>0.5);return vec2f(sourceX,sourceY);}
-@vertex fn vs_main(@builtin(vertex_index)vi:u32)->@builtin(position)vec4f{let p=array<vec2f,3>(vec2f(-1),vec2f(3,-1),vec2f(-1,3));return vec4f(p[vi],0,1);}
-@fragment fn fs_main(@builtin(position)position:vec4f)->@location(0)vec4f{let outputPoint=position.xy/params.camera.z+params.camera.xy;let linear=sampleColor(outputToSource(outputPoint)-vec2f(0.5));if(linear.a<=0.0){return vec4f(0);}let straight=linear.rgb/linear.a;let encoded=vec3f(encodeSrgb(straight.r),encodeSrgb(straight.g),encodeSrgb(straight.b));return vec4f(encoded*linear.a,linear.a);}
+@group(0) @binding(1) var<uniform> color: PresentColorParams;
+
+fn encodeSrgb(value: f32) -> f32 {
+  let clamped = clamp(value, 0.0, 1.0);
+  if (clamped <= 0.0031308) { return clamped * 12.92; }
+  return 1.055 * pow(clamped, 1.0 / 2.4) - 0.055;
+}
+
+fn acesToneMap(value: f32) -> f32 {
+  let positive = max(value, 0.0);
+  return clamp(
+    (positive * (2.51 * positive + 0.03))
+      / (positive * (2.43 * positive + 0.59) + 0.14),
+    0.0,
+    1.0,
+  );
+}
+
+@vertex
+fn vs_main(@builtin(vertex_index) vertexIndex: u32) -> @builtin(position) vec4f {
+  let positions = array<vec2f, 3>(
+    vec2f(-1.0, -1.0),
+    vec2f(3.0, -1.0),
+    vec2f(-1.0, 3.0),
+  );
+  return vec4f(positions[vertexIndex], 0.0, 1.0);
+}
+
+@fragment
+fn fs_main(@builtin(position) position: vec4f) -> @location(0) vec4f {
+  let linear = textureLoad(sourceTexture, vec2i(position.xy), 0);
+  if (linear.a <= 0.0) { return vec4f(0.0); }
+  let straight = linear.rgb / linear.a;
+  var srgbLinear = vec3f(
+    dot(color.colorRow0.xyz, straight),
+    dot(color.colorRow1.xyz, straight),
+    dot(color.colorRow2.xyz, straight),
+  );
+  if (color.options.x > 0.5) {
+    srgbLinear = vec3f(
+      acesToneMap(srgbLinear.r),
+      acesToneMap(srgbLinear.g),
+      acesToneMap(srgbLinear.b),
+    );
+  }
+  let encoded = vec3f(
+    encodeSrgb(srgbLinear.r),
+    encodeSrgb(srgbLinear.g),
+    encodeSrgb(srgbLinear.b),
+  );
+  return vec4f(encoded * linear.a, linear.a);
+}

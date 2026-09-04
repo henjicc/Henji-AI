@@ -5,9 +5,13 @@ import {
   type Float32PremultipliedRgbaTile,
 } from '../effects/contracts';
 
-type Matrix3 = readonly [number, number, number, number, number, number, number, number, number];
+export type ImageEditColorMatrix3V3 = readonly [
+  number, number, number,
+  number, number, number,
+  number, number, number,
+];
 
-const RGB_TO_XYZ: Record<ImageEditWorkingSpaceV3, Matrix3> = {
+const RGB_TO_XYZ: Record<ImageEditWorkingSpaceV3, ImageEditColorMatrix3V3> = {
   srgb: [
     0.4123907993, 0.3575843394, 0.1804807884,
     0.2126390059, 0.7151686788, 0.0721923154,
@@ -25,7 +29,7 @@ const RGB_TO_XYZ: Record<ImageEditWorkingSpaceV3, Matrix3> = {
   ],
 };
 
-const XYZ_TO_RGB: Record<ImageEditWorkingSpaceV3, Matrix3> = {
+const XYZ_TO_RGB: Record<ImageEditWorkingSpaceV3, ImageEditColorMatrix3V3> = {
   srgb: [
     3.2409699419, -1.5373831776, -0.4986107603,
     -0.9692436363, 1.8759675015, 0.0415550574,
@@ -52,12 +56,36 @@ const HLG_A = 0.17883277;
 const HLG_B = 0.28466892;
 const HLG_C = 0.55991073;
 
-function multiply(matrix: Matrix3, red: number, green: number, blue: number): [number, number, number] {
+function multiply(
+  matrix: ImageEditColorMatrix3V3,
+  red: number,
+  green: number,
+  blue: number,
+): [number, number, number] {
   return [
     matrix[0] * red + matrix[1] * green + matrix[2] * blue,
     matrix[3] * red + matrix[4] * green + matrix[5] * blue,
     matrix[6] * red + matrix[7] * green + matrix[8] * blue,
   ];
+}
+
+/** GPU/CPU 共用的 D65 线性 RGB 原色转换矩阵（row-major）。 */
+export function linearWorkingSpaceMatrixV3(
+  source: ImageEditWorkingSpaceV3,
+  target: ImageEditWorkingSpaceV3,
+): ImageEditColorMatrix3V3 {
+  if (source === target) return [1, 0, 0, 0, 1, 0, 0, 0, 1]
+  const left = XYZ_TO_RGB[target]
+  const right = RGB_TO_XYZ[source]
+  const output = new Array<number>(9)
+  for (let row = 0; row < 3; row += 1) {
+    for (let column = 0; column < 3; column += 1) {
+      output[row * 3 + column] = left[row * 3] * right[column]
+        + left[row * 3 + 1] * right[3 + column]
+        + left[row * 3 + 2] * right[6 + column]
+    }
+  }
+  return output as unknown as ImageEditColorMatrix3V3
 }
 
 /** sRGB 扩展传递函数保留负值和 HDR 头部空间，不在转换边界裁切。 */

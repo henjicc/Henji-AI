@@ -28,7 +28,7 @@ describe('compileImageEditorGpuRasterSceneV3', () => {
     expect(result.scene.layers[0]).toMatchObject({ visible: true, opacity: 1 })
   })
 
-  it('组、蒙版与混合进入RenderGraph，HDR仍交给4.1', () => {
+  it('组、蒙版、混合与HDR共同进入RenderGraph/颜色管线', () => {
     const fixture = createImageEditorGpuBaselineFixturesV3()[0]
     const resources = descriptors(fixture.resourceSeeds.keys())
     const groupDocument = structuredClone(fixture.document)
@@ -51,6 +51,6 @@ describe('compileImageEditorGpuRasterSceneV3', () => {
     expect(compileImageEditorGpuRasterSceneV3(
       hdr.document,
       descriptors(hdr.resourceSeeds.keys()),
-    ).supported).toBe(false)
+    ).supported).toBe(true)
   })
 })

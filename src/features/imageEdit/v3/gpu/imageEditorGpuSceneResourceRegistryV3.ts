@@ -28,6 +28,11 @@ export interface ImageEditorGpuSceneResourceRegistrationV3 {
   evicted: readonly ImageEditorGpuSceneTileKeyV3[]
 }
 
+export interface ImageEditorGpuSceneResourceAdmissionV3 {
+  admitted: boolean
+  evicted: readonly ImageEditorGpuSceneTileKeyV3[]
+}
+
 export interface ImageEditorGpuSceneResourceRegistrySnapshotV3 {
   entries: number
   bytes: number
@@ -96,6 +101,28 @@ export class ImageEditorGpuSceneResourceRegistryV3<T> {
       lastUsed: ++this.clock,
     })
     return { admitted: true, reused: false, evicted }
+  }
+
+  /** 在创建真实 GPU 负载前先执行保护型 LRU，避免 atlas 为注定失败的资源先分配。 */
+  prepareAdmission(bytes: number): ImageEditorGpuSceneResourceAdmissionV3 {
+    this.assertUsable()
+    const normalizedBytes = normalizeBytes(bytes)
+    const evicted: ImageEditorGpuSceneTileKeyV3[] = []
+    while (!this.budget.admission('gpu', normalizedBytes).admitted) {
+      const victim = this.oldestEvictable()
+      if (!victim) return { admitted: false, evicted }
+      evicted.push(victim.key)
+      this.remove(victim)
+    }
+    return { admitted: true, evicted }
+  }
+
+  evictOldestUnprotected(): ImageEditorGpuSceneTileKeyV3 | null {
+    this.assertUsable()
+    const victim = this.oldestEvictable()
+    if (!victim) return null
+    this.remove(victim)
+    return victim.key
   }
 
   get(key: ImageEditorGpuSceneTileKeyV3): T | null {

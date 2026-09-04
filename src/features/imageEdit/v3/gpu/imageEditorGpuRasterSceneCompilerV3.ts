@@ -2,6 +2,7 @@ import {
   compileImageEditRenderPlanV3,
   createBuiltInImageEditRenderNodeRegistry,
 } from '@/core/imageEdit/v3'
+import type { ImageEditColorModeV3 } from '@/core/imageEdit/v3/colorTypes'
 import type { ImageEditDocumentV3 } from '@/core/imageEdit/v3/documentTypes'
 import {
   isImageEditSparseMaskReferenceV3,
@@ -16,6 +17,8 @@ import type { ImageEditorGpuSceneTileKeyV3 } from './imageEditorGpuSceneProtocol
 
 export interface ImageEditorGpuRasterLayerV3 {
   layerId: string
+  resourceRef: `sha256:${string}`
+  contentVersion: string
   visible: boolean
   opacity: number
   transform: ImageEditTransformV3
@@ -77,12 +80,14 @@ export type ImageEditorGpuRenderGraphNodeV3 =
 export interface ImageEditorGpuRasterSceneV3 {
   width: number
   height: number
+  color: ImageEditColorModeV3
   geometry: ImageEditDocumentV3['geometry']
   layers: readonly ImageEditorGpuRasterLayerV3[]
   graph: readonly ImageEditorGpuRenderGraphNodeV3[]
   outputNodeId: string | null
   outputFingerprint: string
   requiredResourceKeys: readonly ImageEditorGpuSceneTileKeyV3[]
+  requiresRenderGraph: boolean
 }
 
 export type ImageEditorGpuRasterSceneCompilationV3 =
@@ -92,23 +97,13 @@ export type ImageEditorGpuRasterSceneCompilationV3 =
 const registry = createBuiltInImageEditRenderNodeRegistry()
 
 /**
- * 把 CPU RenderPlan 真值投影为会话 retained GPU RenderGraph。4.1 前仍只接管单瓦片
- * SDR sRGB；标注与空间效果由 3.2 接入，遇到这些节点会完整回退 CPU。
+ * 把 CPU RenderPlan 真值投影为会话 retained GPU RenderGraph。大图 source 仍由
+ * 视口 tile planner/atlas 提供；flat normal 允许走同一 compositor 内的快速路径。
  */
 export function compileImageEditorGpuRasterSceneV3(
   document: ImageEditDocumentV3,
   resourceDescriptors: readonly ImageEditorV3ResourceDescriptor[],
 ): ImageEditorGpuRasterSceneCompilationV3 {
-  if (document.geometry.width > 512 || document.geometry.height > 512) {
-    return { supported: false, reason: 'GPU 图层合成只接管单瓦片文档，大图由 4.1 接入' }
-  }
-  if (document.color.workingSpace !== 'srgb'
-    || document.color.bitDepth !== 8
-    || document.color.transferFunction !== 'srgb'
-    || document.color.hdrMetadata !== null
-    || document.color.iccProfileResourceId !== null) {
-    return { supported: false, reason: 'GPU 图层合成仅支持无 ICC/HDR 的 8-bit sRGB 文档' }
-  }
   const descriptors = new Map(resourceDescriptors.map((entry) => [entry.resourceRef, entry]))
   const plan = compileImageEditRenderPlanV3(document, registry, 'stable')
   if (plan.diagnostics.some((entry) => entry.code !== 'empty-effect-scope')) {
@@ -140,18 +135,25 @@ export function compileImageEditorGpuRasterSceneV3(
     return { supported: false, reason: error instanceof Error ? error.message : String(error) }
   }
   const layers: ImageEditorGpuRasterLayerV3[] = []
-  visitLayers(document.layers, layers)
+  collectRasterLayers(document.layers, descriptors, layers)
+  const requiresRenderGraph = graph.some((node) => (
+    node.kind === 'adjustment'
+    || node.kind === 'alias'
+    || (node.kind === 'composite' && (node.blendMode !== 'normal' || node.mask !== null))
+  ))
   return {
     supported: true,
     scene: {
       width: document.geometry.width,
       height: document.geometry.height,
+      color: structuredClone(document.color),
       geometry: structuredClone(document.geometry),
       layers,
       graph,
       outputNodeId: plan.outputNodeId,
       outputFingerprint: plan.outputHash,
       requiredResourceKeys: [...required.values()],
+      requiresRenderGraph,
     },
   }
 }
@@ -267,10 +269,30 @@ function canFuseExposure(nodes: readonly ImageEditRenderPlanNode[]): boolean {
     && node.mask === null && numberParameter(node, 'opacity', 1) === 1 && blendParameter(node) === 'normal')
 }
 
-function visitLayers(layers: readonly ImageEditDocumentV3['layers'][number][], output: ImageEditorGpuRasterLayerV3[]): void {
+function collectRasterLayers(
+  layers: readonly ImageEditDocumentV3['layers'][number][],
+  descriptors: ReadonlyMap<string, ImageEditorV3ResourceDescriptor>,
+  output: ImageEditorGpuRasterLayerV3[],
+): void {
   for (const layer of layers) {
-    output.push({ layerId: layer.id, visible: layer.visible, opacity: layer.opacity, transform: [...layer.transform] })
-    if (layer.type === 'group') visitLayers(layer.children, output)
+    if (layer.type === 'group') {
+      collectRasterLayers(layer.children, descriptors, output)
+      continue
+    }
+    if (layer.type !== 'raster' || layer.source.kind !== 'resource') continue
+    const resourceId = layer.source.resourceId
+    if (!isResourceRef(resourceId)) continue
+    const resourceRef = resourceId
+    const descriptor = descriptors.get(resourceRef)
+    if (!descriptor) continue
+    output.push({
+      layerId: layer.id,
+      resourceRef,
+      contentVersion: `${resourceRef}:${descriptor.byteLength}`,
+      visible: layer.visible,
+      opacity: layer.opacity,
+      transform: [...layer.transform],
+    })
   }
 }
 
