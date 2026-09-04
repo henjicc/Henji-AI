@@ -14,6 +14,7 @@ const logger = createLogger('image_editor_v3.source_warmup')
 // 2K 让常见高分辨率照片在放大时直接命中 mip 1；以 5802×3655 的基准图计，
 // 预热约占 21 MiB，仍低于主进程快速代理 48 MiB 的硬预算。
 export const IMAGE_EDITOR_SOURCE_WARMUP_MAX_DIMENSION_V3 = 2_048
+export const IMAGE_EDITOR_SOURCE_WARMUP_CONCURRENCY_V3 = 2
 
 /**
  * 按 source identity 常驻，而不是按 generation 重启。快速代理在主进程同步种下粗 mip 链，
@@ -22,6 +23,8 @@ export const IMAGE_EDITOR_SOURCE_WARMUP_MAX_DIMENSION_V3 = 2_048
 export class ImageEditorSourcePyramidWarmupV3 {
   private readonly controllers = new Map<ImageEditorV3ResourceRef, AbortController>()
   private readonly completed = new Set<ImageEditorV3ResourceRef>()
+  private readonly queued = new Set<ImageEditorV3ResourceRef>()
+  private readonly queue: ImageEditorV3ResourceRef[] = []
   private disposed = false
 
   warm(
@@ -46,11 +49,29 @@ export class ImageEditorSourcePyramidWarmupV3 {
     for (const request of requests) {
       if (request.kind !== 'image-proxy') continue
       const resourceRef = request.resourceId as ImageEditorV3ResourceRef
+      if (this.completed.has(resourceRef) || this.controllers.has(resourceRef) || this.queued.has(resourceRef)) continue
+      this.queued.add(resourceRef)
+      this.queue.push(resourceRef)
+    }
+    this.drain()
+  }
+
+  private drain(): void {
+    if (this.disposed) return
+    while (this.controllers.size < IMAGE_EDITOR_SOURCE_WARMUP_CONCURRENCY_V3) {
+      const resourceRef = this.queue.shift()
+      if (!resourceRef) return
+      this.queued.delete(resourceRef)
       if (this.completed.has(resourceRef) || this.controllers.has(resourceRef)) continue
-      const controller = new AbortController()
-      this.controllers.set(resourceRef, controller)
-      const startedAt = typeof performance === 'undefined' ? Date.now() : performance.now()
-      void readImageEditorV3FastProxy({
+      this.start(resourceRef)
+    }
+  }
+
+  private start(resourceRef: ImageEditorV3ResourceRef): void {
+    const controller = new AbortController()
+    this.controllers.set(resourceRef, controller)
+    const startedAt = typeof performance === 'undefined' ? Date.now() : performance.now()
+    void readImageEditorV3FastProxy({
         requestId: createImageEditorV3RequestId('source-warmup'),
         resourceRef,
         maxDimension: IMAGE_EDITOR_SOURCE_WARMUP_MAX_DIMENSION_V3,
@@ -76,8 +97,8 @@ export class ImageEditorSourcePyramidWarmupV3 {
         })
       }).finally(() => {
         if (this.controllers.get(resourceRef) === controller) this.controllers.delete(resourceRef)
+        this.drain()
       })
-    }
   }
 
   dispose(): void {
@@ -85,6 +106,8 @@ export class ImageEditorSourcePyramidWarmupV3 {
     this.disposed = true
     for (const controller of this.controllers.values()) controller.abort()
     this.controllers.clear()
+    this.queued.clear()
+    this.queue.length = 0
     this.completed.clear()
   }
 }

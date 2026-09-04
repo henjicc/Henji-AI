@@ -8,6 +8,8 @@ const MAX_ACTIVE_REQUESTS_PER_SENDER = 6
 const OPERATION_LIMITS_PER_SENDER: Readonly<Record<string, number>> = {
   'source.import': 1,
   'source.ingest': 1,
+  // 后台代理预热必须给金字塔与 coarse/target 视口请求留出准入槽位。
+  'source.fast_proxy': 2,
   'source.pyramid_prewarm': 1,
   'source.tile': 2,
   'source.tile_batch': 2,
