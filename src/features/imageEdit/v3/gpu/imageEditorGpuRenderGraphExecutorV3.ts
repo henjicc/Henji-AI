@@ -146,6 +146,7 @@ export class ImageEditorGpuRenderGraphExecutorV3 {
     layout: ImageEditorViewportLayoutV3,
     outputLayout: ImageEditorViewportLayoutV3 = layout,
     cropOffset: readonly [number, number] = [0, 0],
+    effectRecipeSize?: readonly [number, number],
   ): Promise<Target | null> {
     if (!this.scene?.outputNodeId) return null
     this.layout = layout
@@ -208,6 +209,7 @@ export class ImageEditorGpuRenderGraphExecutorV3 {
         const fingerprint = `${this.fingerprint(node, fingerprints)}:${imageEditorGpuGraphViewportFingerprintV3(layout)}`
         const prepared = this.effectExecutor.prepare(
           node, input, mask, fingerprint, layout.viewport.zoom * layout.viewport.devicePixelRatio,
+          effectRecipeSize,
         )
         preparedEffects.push(prepared)
         operations.push({ kind: 'effect', effect: prepared })

@@ -1,5 +1,4 @@
 import { draw, frame, target, type Draw, type Gpu, type Target } from 'vgpu'
-
 import { invertImageEditTransformV3 } from '@/core/imageEdit/v3/execution/affineTransform'
 import type { ImageEditTransformV3 } from '@/core/imageEdit/v3/layerTypes'
 import type { ImageEditorV3SourceTile } from '@/platform/contracts/imageEditorV3'
@@ -15,7 +14,6 @@ import {
 } from './imageEditorGpuRenderGraphExecutorV3'
 import {
   IMAGE_EDITOR_GPU_SCENE_DEFAULT_BUDGET_BYTES_V3,
-  imageEditorGpuSceneTileKeyV3,
   type ImageEditorGpuSceneTileKeyV3,
 } from './imageEditorGpuSceneProtocolV3'
 import {
@@ -47,20 +45,20 @@ import { ImageEditorGpuRasterPresentationV3 } from './imageEditorGpuRasterPresen
 import { resolveImageEditorGpuEffectViewportV3 } from './imageEditorGpuEffectViewportV3'
 import { estimateImageEditorGpuGraphResidentBytesV3 } from './imageEditorGpuMemoryBudgetV3'
 import { replanImageEditorGpuViewportTilesV3 } from './imageEditorGpuViewportPlansV3'
-
+import { collectImageEditorGpuRequiredResourceKeysV3, findImageEditorGpuPlannedTileV3,
+  pruneImageEditorGpuRetainedStatesV3,
+  refreshImageEditorGpuAtlasStatsV3 } from './imageEditorGpuRasterPipelineStateV3'
 const BUFFER_COPY_DST = 0x08
 const BUFFER_UNIFORM = 0x40
 const CLEAR = [0, 0, 0, 0] as const
 const LINEAR_AND_PRESENT_BYTES_PER_PIXEL = 12
 type NativeGpuBufferV3 = ReturnType<Gpu['gpu']['createBuffer']>
 type NativeGpuBindGroupV3 = ReturnType<Gpu['gpu']['createBindGroup']>
-
 interface RetainedLayerStateV3 {
   buffer: NativeGpuBufferV3
   bindGroup: NativeGpuBindGroupV3
   resource: ImageEditorGpuRasterTextureV3
 }
-
 /** 会话级常驻栅格/RenderGraph合成器；优先直呈Surface，失效时才产出ImageBitmap。 */
 export class ImageEditorGpuRasterPipelineV3 implements ImageEditorGpuRasterCompositorV3Like {
   private readonly output: Target
@@ -80,6 +78,8 @@ export class ImageEditorGpuRasterPipelineV3 implements ImageEditorGpuRasterCompo
   private readonly previousMips = new Map<string, number>()
   private scene: ImageEditorGpuRasterSceneV3 | null = null
   private layout: ImageEditorViewportLayoutV3 | null = null
+  private expandEffects = true
+  private effectRecipeSize: readonly [number, number] | null = null
   private rasterCompilePromise: Promise<void> | null = null
   private frameQueue: Promise<void> = Promise.resolve()
   private rasterCompiled = false
@@ -91,6 +91,7 @@ export class ImageEditorGpuRasterPipelineV3 implements ImageEditorGpuRasterCompo
     pipelineCompileCount: 0,
     frameCount: 0,
     diagnosticReadbackCount: 0,
+    exportReadbackCount: 0,
     transientUniformUpdateCount: 0,
     residentTileCount: 0,
     atlasPageCount: 0,
@@ -136,7 +137,6 @@ export class ImageEditorGpuRasterPipelineV3 implements ImageEditorGpuRasterCompo
       this.reportedError = error instanceof Error ? error : new Error(String(error))
     })
   }
-
   syncScene(scene: ImageEditorGpuRasterSceneV3 | null): void {
     this.assertUsable()
     this.scene = scene
@@ -144,7 +144,7 @@ export class ImageEditorGpuRasterPipelineV3 implements ImageEditorGpuRasterCompo
     this.transientTransforms.clear()
     this.previousMips.clear()
     this.replanTiles()
-    this.pruneLayerStates(new Set())
+    pruneImageEditorGpuRetainedStatesV3(this.layers, new Set())
   }
   updateTransientTransform(layerId: string, transform: ImageEditTransformV3 | null): void {
     this.assertUsable()
@@ -155,20 +155,35 @@ export class ImageEditorGpuRasterPipelineV3 implements ImageEditorGpuRasterCompo
     for (const [stateKey, retained] of this.layers) {
       if (!stateKey.startsWith(`${layerId}:`)) continue
       const layer = this.scene?.layers.find((entry) => entry.layerId === layerId)
-      const planned = this.plannedTileForStateKey(stateKey)
+      const planned = findImageEditorGpuPlannedTileV3(this.plannedLayers, stateKey)
       if (layer && planned) this.writeLayerBuffer(layer, planned, retained.buffer, retained.resource)
     }
     this.stats.transientUniformUpdateCount += 1
   }
   updateViewport(layout: ImageEditorViewportLayoutV3): void {
+    this.setViewport(layout, true, null)
+  }
+  updateExportViewport(
+    layout: ImageEditorViewportLayoutV3,
+    effectRecipeSize?: readonly [number, number],
+  ): void {
+    this.setViewport(layout, false, effectRecipeSize ?? null)
+  }
+  private setViewport(
+    layout: ImageEditorViewportLayoutV3,
+    expandEffects: boolean,
+    effectRecipeSize: readonly [number, number] | null,
+  ): void {
     this.assertUsable()
     this.layout = layout
+    this.expandEffects = expandEffects
+    this.effectRecipeSize = effectRecipeSize
     if (this.scene) {
       this.gpu.gpu.queue.writeBuffer(
         this.cameraBuffer, 0, imageEditorGpuCameraUniformV3(layout, this.scene.geometry),
       )
     }
-    const effectViewport = this.scene
+    const effectViewport = this.scene && expandEffects
       ? resolveImageEditorGpuEffectViewportV3(this.scene, layout)
       : { layout, expanded: false }
     const workingLayout = effectViewport.layout
@@ -190,6 +205,9 @@ export class ImageEditorGpuRasterPipelineV3 implements ImageEditorGpuRasterCompo
     return Math.max(0, this.reservedOutputBytes + this.atlas.snapshot().allocatedBytes
       - this.memoryBudgetBytes)
   }
+  estimatedResidentGpuBytes(): number {
+    return this.reservedOutputBytes + this.atlas.snapshot().allocatedBytes
+  }
   estimateTileGpuBytes(tile: ImageEditorV3SourceTile): number {
     return this.atlas.estimateTileBytes(tile)
   }
@@ -202,15 +220,9 @@ export class ImageEditorGpuRasterPipelineV3 implements ImageEditorGpuRasterCompo
     return allocation
   }
   requiredResourceKeys(layerId?: string): readonly ImageEditorGpuSceneTileKeyV3[] {
-    const unique = new Map<string, ImageEditorGpuSceneTileKeyV3>()
-    for (const plan of this.plannedLayers.values()) {
-      if (layerId && plan.layerId !== layerId) continue
-      for (const tile of plan.tiles) unique.set(imageEditorGpuSceneTileKeyV3(tile.key), tile.key)
-    }
-    for (const plan of this.plannedMasks.values()) {
-      for (const tile of plan.tiles) unique.set(imageEditorGpuSceneTileKeyV3(tile.key), tile.key)
-    }
-    return [...unique.values()]
+    return collectImageEditorGpuRequiredResourceKeysV3(
+      this.plannedLayers, this.plannedMasks, layerId,
+    )
   }
   missingResources(
     resolve: (key: ImageEditorGpuSceneTileKeyV3) => ImageEditorGpuRasterTextureV3 | null,
@@ -255,6 +267,20 @@ export class ImageEditorGpuRasterPipelineV3 implements ImageEditorGpuRasterCompo
       return await output.readFloats()
     })
   }
+  async readExportLinearPixels(resolve: (
+    key: ImageEditorGpuSceneTileKeyV3,
+  ) => ImageEditorGpuRasterTextureV3 | null): Promise<Float32Array> {
+    return await this.enqueueFrame(async () => {
+      const output = await this.compose(resolve)
+      this.stats.exportReadbackCount = (this.stats.exportReadbackCount ?? 0) + 1
+      return await output.readFloats()
+    })
+  }
+  async renderExportTarget(resolve: (
+    key: ImageEditorGpuSceneTileKeyV3,
+  ) => ImageEditorGpuRasterTextureV3 | null): Promise<Target> {
+    return await this.enqueueFrame(async () => await this.compose(resolve))
+  }
   async readPresentedPixelsForTest(resolve: (
     key: ImageEditorGpuSceneTileKeyV3,
   ) => ImageEditorGpuRasterTextureV3 | null): Promise<Uint8Array> {
@@ -296,7 +322,9 @@ export class ImageEditorGpuRasterPipelineV3 implements ImageEditorGpuRasterCompo
     if (!this.scene || !this.layout) throw new Error('GPU Scene 缺少场景或视口')
     const missing = this.missingResources(resolve)
     if (missing.length > 0) throw new Error(`GPU Scene 缺少 ${missing.length} 个源纹理`)
-    const effectViewport = resolveImageEditorGpuEffectViewportV3(this.scene, this.layout)
+    const effectViewport = this.expandEffects
+      ? resolveImageEditorGpuEffectViewportV3(this.scene, this.layout)
+      : { layout: this.layout, cropOffset: [0, 0] as const, expanded: false }
     const [width, height] = imageEditorGpuOutputPixelSizeV3(effectViewport.layout)
     if (width > this.maxTextureDimension2D || height > this.maxTextureDimension2D) {
       throw new Error(`GPU Scene 输出 ${width}×${height} 超过设备 2D 纹理限制`)
@@ -305,7 +333,7 @@ export class ImageEditorGpuRasterPipelineV3 implements ImageEditorGpuRasterCompo
       throw new Error('GPU Scene 合成目标与 atlas 超出会话显存预算')
     }
     if (this.scene.requiresRenderGraph) {
-      this.pruneLayerStates(new Set())
+      pruneImageEditorGpuRetainedStatesV3(this.layers, new Set())
       const sourcePlans = new Map<string, ImageEditorGpuGraphSourcePlanV3>()
       for (const [layerId, plan] of this.plannedLayers) {
         sourcePlans.set(layerId, {
@@ -319,7 +347,8 @@ export class ImageEditorGpuRasterPipelineV3 implements ImageEditorGpuRasterCompo
       }
       this.reportedError = null
       const output = await this.graph.execute(
-        resolve, sourcePlans, maskPlans, effectViewport.layout, this.layout, effectViewport.cropOffset,
+        resolve, sourcePlans, maskPlans, effectViewport.layout, this.layout,
+        effectViewport.cropOffset, this.effectRecipeSize ?? undefined,
       )
       if (!output) throw new Error('GPU RenderGraph 没有可呈现输出')
       await this.gpu.settled()
@@ -345,7 +374,7 @@ export class ImageEditorGpuRasterPipelineV3 implements ImageEditorGpuRasterCompo
         ordered.push({ layer, state: this.ensureLayerState(stateKey, layer, tile, resource) })
       }
     }
-    this.pruneLayerStates(activeStates)
+    pruneImageEditorGpuRetainedStatesV3(this.layers, activeStates)
     this.reportedError = null
     const submitted = frame(this.gpu, (currentFrame) => {
       currentFrame.pass({ target: this.output, clear: CLEAR }, (pass) => {
@@ -438,47 +467,23 @@ export class ImageEditorGpuRasterPipelineV3 implements ImageEditorGpuRasterCompo
       scene: this.scene, layout: this.layout, transientTransforms: this.transientTransforms,
       previousMips: this.previousMips, plannedLayers: this.plannedLayers,
       plannedMasks: this.plannedMasks,
+      expandEffects: this.expandEffects,
     })
   }
-  private plannedTileForStateKey(stateKey: string): ImageEditorGpuPlannedTileV3 | null {
-    for (const plan of this.plannedLayers.values()) {
-      const tile = plan.tiles.find((entry) => imageEditorGpuRetainedStateKeyV3(plan.layerId, entry.key) === stateKey)
-      if (tile) return tile
-    }
-    return null
-  }
-
-  private pruneLayerStates(active: ReadonlySet<string>): void {
-    for (const [stateKey, state] of this.layers) {
-      if (active.has(stateKey)) continue
-      state.buffer.destroy()
-      this.layers.delete(stateKey)
-    }
-  }
-
   private refreshAtlasStats(): void {
-    const snapshot = this.atlas.snapshot()
-    const mips = [...this.plannedLayers.values()].map((plan) => plan.mip)
-    this.stats.residentTileCount = snapshot.allocations
-    this.stats.atlasPageCount = snapshot.pages
-    this.stats.allocatedAtlasBytes = snapshot.allocatedBytes
-    this.stats.minimumPlannedMip = mips.length > 0 ? Math.min(...mips) : 0
-    this.stats.maximumPlannedMip = mips.length > 0 ? Math.max(...mips) : 0
+    refreshImageEditorGpuAtlasStatsV3(this.stats, this.atlas.snapshot(), this.plannedLayers)
   }
-
   private enqueueFrame<T>(operation: () => Promise<T>): Promise<T> {
     const current = this.frameQueue.then(operation, operation)
     this.frameQueue = current.then(() => undefined, () => undefined)
     return current
   }
-
   private throwReportedError(): void {
     if (!this.reportedError) return
     const error = this.reportedError
     this.reportedError = null
     throw error
   }
-
   private assertUsable(): void {
     if (this.disposed) throw new Error('GPU 基础栅格合成器已销毁')
   }

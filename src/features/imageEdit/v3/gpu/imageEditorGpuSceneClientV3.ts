@@ -11,6 +11,7 @@ import {
   IMAGE_EDITOR_GPU_SCENE_DEFAULT_BUDGET_BYTES_V3,
   IMAGE_EDITOR_GPU_SCENE_PROTOCOL_VERSION_V3,
   type ImageEditorGpuSceneUploadTileV3,
+  type ImageEditorGpuSceneExportRequestV3,
   type ImageEditorGpuSceneWorkerEventV3,
   type ImageEditorGpuSceneWorkerFactoryV3,
   type ImageEditorGpuSceneWorkerPortV3,
@@ -18,7 +19,7 @@ import {
 import { ImageEditorGpuSceneSequenceGateV3 } from './imageEditorGpuSceneSequenceV3'
 
 const logger = createLogger('features.image_edit.v3.gpu_scene')
-const GPU_SCENE_DIAGNOSTIC_EVENT = 'henji:image-editor-gpu-scene-diagnostic'
+export const IMAGE_EDITOR_GPU_SCENE_DIAGNOSTIC_EVENT_V3 = 'henji:image-editor-gpu-scene-diagnostic'
 
 export interface ImageEditorGpuSceneClientOptionsV3 {
   sessionId: string
@@ -32,6 +33,14 @@ export interface ImageEditorGpuSceneClientV3Like {
   attachPresentationSurface?(surfaceGeneration: number, canvas: OffscreenCanvas): void
   syncScene(snapshot: ImageEditorRenderSnapshotV3): void
   uploadTiles(sceneGeneration: number, tiles: readonly ImageEditorGpuSceneUploadTileV3[]): void
+  uploadExportTiles?(
+    sceneGeneration: number,
+    exportRequestId: string,
+    tiles: readonly ImageEditorGpuSceneUploadTileV3[],
+  ): void
+  requestExport?(request: ImageEditorGpuSceneExportRequestV3): void
+  cancelExport?(requestId: string): void
+  acknowledgeExportTile?(requestId: string, tileX: number, tileY: number): void
   updateTransientLayerTransform(
     sceneGeneration: number,
     layerId: string,
@@ -93,7 +102,7 @@ export class ImageEditorGpuSceneClientV3 implements ImageEditorGpuSceneClientV3L
         })
       : null
     if (this.diagnosticEventListener) {
-      window.addEventListener(GPU_SCENE_DIAGNOSTIC_EVENT, this.diagnosticEventListener)
+      window.addEventListener(IMAGE_EDITOR_GPU_SCENE_DIAGNOSTIC_EVENT_V3, this.diagnosticEventListener)
     }
     logger.info('开始初始化图片编辑 GPU Scene', {
       event: 'image_editor_v3.gpu_scene.initialize.start',
@@ -138,6 +147,35 @@ export class ImageEditorGpuSceneClientV3 implements ImageEditorGpuSceneClientV3L
       { type: 'upload-tiles', sceneGeneration, tiles },
       tiles.map((entry) => entry.tile.pixels),
     )
+  }
+
+  uploadExportTiles(
+    sceneGeneration: number,
+    exportRequestId: string,
+    tiles: readonly ImageEditorGpuSceneUploadTileV3[],
+  ): void {
+    this.assertUsable()
+    if (sceneGeneration !== this.sequence.snapshot().sceneGeneration || tiles.length === 0) return
+    this.worker.postMessage(
+      { type: 'upload-tiles', sceneGeneration, exportRequestId, tiles },
+      tiles.map((entry) => entry.tile.pixels),
+    )
+  }
+
+  requestExport(request: ImageEditorGpuSceneExportRequestV3): void {
+    this.assertUsable()
+    if (request.sceneGeneration !== this.sequence.snapshot().sceneGeneration) return
+    this.worker.postMessage(request)
+  }
+
+  cancelExport(requestId: string): void {
+    if (this.disposed) return
+    this.worker.postMessage({ type: 'cancel-export', requestId })
+  }
+
+  acknowledgeExportTile(requestId: string, tileX: number, tileY: number): void {
+    if (this.disposed) return
+    this.worker.postMessage({ type: 'export-tile-consumed', requestId, tileX, tileY })
   }
 
   updateTransientLayerTransform(
@@ -211,7 +249,7 @@ export class ImageEditorGpuSceneClientV3 implements ImageEditorGpuSceneClientV3L
     this.worker.onmessage = null
     this.worker.onerror = null
     if (this.diagnosticEventListener) {
-      window.removeEventListener(GPU_SCENE_DIAGNOSTIC_EVENT, this.diagnosticEventListener)
+      window.removeEventListener(IMAGE_EDITOR_GPU_SCENE_DIAGNOSTIC_EVENT_V3, this.diagnosticEventListener)
     }
     this.listeners.clear()
   }

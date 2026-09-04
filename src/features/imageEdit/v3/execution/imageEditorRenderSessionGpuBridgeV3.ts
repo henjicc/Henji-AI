@@ -31,7 +31,7 @@ import type {
 import type { ImageEditorPresentationSurfaceTransferV3 } from './imageEditorPresentationSurfaceV3'
 import { rasterizeImageEditorViewportAnnotationsV3 } from './viewportCompositePixelsV3'
 import { floatPremultipliedTileToGpuSource } from './imageEditorGpuTileSourceV3'
-
+import { ImageEditorGpuExportSessionV3 } from '../export/gpuExportSessionV3'
 const logger = createLogger('features.image_edit.v3.gpu_scene_bridge')
 const GPU_SOURCE_TILE_BATCH_SIZE = 16
 const renderNodeRegistry = createBuiltInImageEditRenderNodeRegistry()
@@ -68,6 +68,7 @@ export class ImageEditorRenderSessionGpuBridgeV3 {
     interactionSequence: number
   } | null = null
   private disposed = false
+  private readonly exportSession: ImageEditorGpuExportSessionV3
 
   constructor(
     sessionId: string,
@@ -85,6 +86,7 @@ export class ImageEditorRenderSessionGpuBridgeV3 {
     this.client = injectedClient === undefined
       ? createDefaultImageEditorGpuSceneClientV3(sessionId)
       : injectedClient
+    this.exportSession = new ImageEditorGpuExportSessionV3(this.client, diagnosticRenderingEnabled)
     this.unsubscribe = this.client?.subscribe((event) => this.handleEvent(event))
       ?? (() => undefined)
   }
@@ -116,6 +118,7 @@ export class ImageEditorRenderSessionGpuBridgeV3 {
         .map((node) => [createImageEditorGpuAnnotationResourceRefV3(node), node]),
     )
     this.client?.syncScene(snapshot)
+    this.exportSession.syncSnapshot(snapshot)
     if (this.layout) {
       this.client?.updateViewport(this.sceneGeneration, this.cameraSequence, this.layout)
       this.requestFrame(snapshot.quality)
@@ -165,6 +168,7 @@ export class ImageEditorRenderSessionGpuBridgeV3 {
     this.loadingTiles.clear()
     this.unsubscribe()
     this.unsubscribe = () => undefined
+    this.exportSession.dispose()
     this.client?.dispose()
   }
 
@@ -173,6 +177,7 @@ export class ImageEditorRenderSessionGpuBridgeV3 {
       if (event.type === 'frame-ready') event.bitmap.close()
       return
     }
+    if (this.exportSession.handleEvent(event)) return
     if (event.type === 'tiles-needed') {
       this.queueTileLoad(event)
       return
@@ -241,6 +246,7 @@ export class ImageEditorRenderSessionGpuBridgeV3 {
       return
     }
     if (event.type === 'device-lost') {
+      this.exportSession.rejectActive(new Error(`GPU 设备已丢失：${event.reason}`))
       this.deviceReady = false
       this.frameInFlight = false
       this.pendingFrame = true
@@ -308,15 +314,16 @@ export class ImageEditorRenderSessionGpuBridgeV3 {
     event: Extract<ImageEditorGpuSceneWorkerEventV3, { type: 'tiles-needed' }>,
   ): void {
     const generation = event.sceneGeneration
+    const owner = event.exportRequestId ?? 'preview'
     const keys = event.keys.filter((key) => {
-      const id = `${generation}:${imageEditorGpuSceneTileKeyV3(key)}`
+      const id = `${generation}:${owner}:${imageEditorGpuSceneTileKeyV3(key)}`
       if (this.loadingTiles.has(id)) return false
       this.loadingTiles.add(id)
       return true
     })
     if (keys.length === 0) return
     const signal = this.tileLoadAbortController.signal
-    const operation = () => this.loadTiles(generation, keys, signal)
+    const operation = () => this.loadTiles(generation, keys, signal, event.exportRequestId)
     const current = this.tileLoadQueue.then(operation, operation)
     this.tileLoadQueue = current.then(() => undefined, () => undefined)
   }
@@ -325,6 +332,7 @@ export class ImageEditorRenderSessionGpuBridgeV3 {
     generation: number,
     keys: Extract<ImageEditorGpuSceneWorkerEventV3, { type: 'tiles-needed' }>['keys'],
     signal: AbortSignal,
+    exportRequestId?: string,
   ): Promise<void> {
     if (signal.aborted || this.disposed || generation !== this.sceneGeneration) return
     try {
@@ -332,11 +340,13 @@ export class ImageEditorRenderSessionGpuBridgeV3 {
         if (signal.aborted || this.disposed || generation !== this.sceneGeneration) return
         const tile = await this.loadTile(key, signal)
         if (signal.aborted || this.disposed || generation !== this.sceneGeneration) return
-        this.client?.uploadTiles(generation, [{
+        const upload = [{
           key, tile,
           estimatedGpuBytes: tile.width * tile.height * 4 * (tile.bitDepth / 8),
           protections: ['viewport', 'stable-frame'],
-        }])
+        }] as const
+        if (exportRequestId) this.client?.uploadExportTiles?.(generation, exportRequestId, upload)
+        else this.client?.uploadTiles(generation, upload)
         if (key.resourceKind === 'generated-annotation') {
           logger.info('完成图片编辑 GPU 标注纹理上传', {
             event: 'image_editor_v3.gpu_scene.annotation_texture_uploaded',
@@ -367,14 +377,16 @@ export class ImageEditorRenderSessionGpuBridgeV3 {
         if (batch.tiles.length !== keyBatch.length) {
           throw new Error('GPU 源瓦片批次响应数量与请求不一致')
         }
-        this.client?.uploadTiles(generation, keyBatch.map((key, index) => {
+        const upload = keyBatch.map((key, index) => {
           const tile = batch.tiles[index]!
           return {
             key, tile,
             estimatedGpuBytes: tile.width * tile.height * 4 * (tile.bitDepth / 8),
             protections: ['viewport'] as const,
           }
-        }))
+        })
+        if (exportRequestId) this.client?.uploadExportTiles?.(generation, exportRequestId, upload)
+        else this.client?.uploadTiles(generation, upload)
       }
       if (this.pendingFrame) this.dispatchFrame()
     } catch (error) {
@@ -393,13 +405,17 @@ export class ImageEditorRenderSessionGpuBridgeV3 {
         },
       })
       if (!this.disposed && generation === this.sceneGeneration) {
+        if (exportRequestId) {
+          this.exportSession.reject(exportRequestId, error instanceof Error ? error : new Error(String(error)))
+          return
+        }
         this.pendingFrame = false
         this.frameInFlight = false
         this.fallback(`GPU 源瓦片读取失败：${error instanceof Error ? error.message : String(error)}`)
       }
     } finally {
       for (const key of keys) {
-        this.loadingTiles.delete(`${generation}:${imageEditorGpuSceneTileKeyV3(key)}`)
+        this.loadingTiles.delete(`${generation}:${exportRequestId ?? 'preview'}:${imageEditorGpuSceneTileKeyV3(key)}`)
       }
     }
   }
@@ -476,8 +492,8 @@ export class ImageEditorRenderSessionGpuBridgeV3 {
       mip: key.mip,
       tileX: key.tileX,
       tileY: key.tileY,
-      halo: 0,
-      bitDepth: 8,
+      halo: 1,
+      bitDepth: this.sourceBitDepth,
     }, signal)
   }
 

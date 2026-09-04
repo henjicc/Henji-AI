@@ -1,5 +1,4 @@
 import { initFromDevice, type Gpu } from 'vgpu'
-
 import {
   ImageEditWebGpuDeviceManager,
   type ImageEditWebGpuDeviceLoss,
@@ -35,7 +34,15 @@ import {
 import { createImageEditorGpuSceneFrameDeliveryV3 } from './imageEditorGpuSceneFrameEventsV3'
 import { createImageEditorGpuSceneFailureEventV3 } from './imageEditorGpuSceneFailureV3'
 import { ImageEditorGpuSceneSequenceGateV3 } from './imageEditorGpuSceneSequenceV3'
-import { ImageEditorGpuTileAtlasBudgetErrorV3 } from './imageEditorGpuTileAtlasV3'
+import { ImageEditorGpuSceneExportRuntimeV3 } from './imageEditorGpuSceneExportRuntimeV3'
+import { ImageEditorGpuExportResidualV3 } from './imageEditorGpuExportResidualV3'
+import { admitImageEditorGpuSceneTileV3,
+  trimImageEditorGpuSceneMemoryV3 } from './imageEditorGpuSceneTileAdmissionV3'
+import {
+  acceptsImageEditorGpuSceneRenderV3,
+  refreshImageEditorGpuSceneInteractionProtectionsV3,
+  refreshImageEditorGpuSceneViewportProtectionsV3,
+} from './imageEditorGpuSceneProtectionV3'
 import type {
   ImageEditorGpuSceneContextV3,
   ImageEditorGpuSceneDeviceManagerV3,
@@ -43,7 +50,6 @@ import type {
   ImageEditorGpuSceneRuntimeDependenciesV3,
   ImageEditorGpuSceneRuntimeStatusV3,
 } from './imageEditorGpuSceneRuntimeContractsV3'
-
 export type { ImageEditorGpuSceneRuntimeDependenciesV3, ImageEditorGpuSceneRuntimeStatusV3 } from './imageEditorGpuSceneRuntimeContractsV3'
 export class ImageEditorGpuSceneRuntimeV3 {
   private readonly deviceManager: ImageEditorGpuSceneDeviceManagerV3
@@ -68,6 +74,7 @@ export class ImageEditorGpuSceneRuntimeV3 {
   private deviceAcquireCount = 0
   private surfaceFrameCount = 0
   private disposed = false
+  private exportRuntime: ImageEditorGpuSceneExportRuntimeV3 | null = null
 
   constructor(
     private readonly emit: (event: ImageEditorGpuSceneWorkerEventV3, transfer?: Transferable[]) => void,
@@ -83,7 +90,6 @@ export class ImageEditorGpuSceneRuntimeV3 {
     this.states = new SingleflightRuntimeState((state) => this.destroyGpuState(state))
     this.deviceManager.onDeviceLost((_reason, loss) => this.handleDeviceLost(loss))
   }
-
   handle(request: ImageEditorGpuSceneWorkerRequestV3): void {
     if (request.type === 'dispose') {
       this.dispose()
@@ -96,6 +102,7 @@ export class ImageEditorGpuSceneRuntimeV3 {
         return
       case 'sync-scene':
         if (!this.sequence.syncScene(request.sceneGeneration)) return
+        this.exportRuntime?.cancelAll()
         this.transientTransforms.clear()
         this.pendingTiles.clear()
         this.resources?.releaseProtection('viewport')
@@ -107,10 +114,18 @@ export class ImageEditorGpuSceneRuntimeV3 {
           )
           this.scene = compilation.supported ? compilation.scene : null
           this.states.peek()?.compositor.syncScene(this.scene)
-          this.refreshViewportProtections()
+          refreshImageEditorGpuSceneViewportProtectionsV3(
+            this.resources, this.states.peek()?.compositor ?? null,
+          )
         }
         return
       case 'upload-tiles':
+        if (request.exportRequestId) {
+          if (request.sceneGeneration === this.sequence.snapshot().sceneGeneration) {
+            this.exportRuntime?.upload(request.exportRequestId, request.tiles)
+          }
+          return
+        }
         this.uploadTiles(request)
         return
       case 'update-transform':
@@ -118,8 +133,13 @@ export class ImageEditorGpuSceneRuntimeV3 {
         if (request.transform) this.transientTransforms.set(request.layerId, [...request.transform])
         else this.transientTransforms.delete(request.layerId)
         this.states.peek()?.compositor.updateTransientTransform(request.layerId, request.transform)
-        this.refreshViewportProtections()
-        this.refreshInteractionProtections(request.transform ? request.layerId : null)
+        refreshImageEditorGpuSceneViewportProtectionsV3(
+          this.resources, this.states.peek()?.compositor ?? null,
+        )
+        refreshImageEditorGpuSceneInteractionProtectionsV3(
+          this.resources, this.states.peek()?.compositor ?? null,
+          request.transform ? request.layerId : null,
+        )
         return
       case 'update-viewport':
         if (!this.sequence.updateCamera(request.sceneGeneration, request.cameraSequence)) return
@@ -127,7 +147,7 @@ export class ImageEditorGpuSceneRuntimeV3 {
         {
           const compositor = this.states.peek()?.compositor
           compositor?.updateViewport(request.layout)
-          this.refreshViewportProtections()
+          refreshImageEditorGpuSceneViewportProtectionsV3(this.resources, compositor ?? null)
           if (compositor && !this.trimMemoryPressure(compositor)) {
             this.enterFallback(
               'resource-budget-exceeded', null,
@@ -157,7 +177,18 @@ export class ImageEditorGpuSceneRuntimeV3 {
         return
       case 'export':
         if (request.sceneGeneration !== this.sequence.snapshot().sceneGeneration) return
-        this.emitFailure('export-not-ready', request.requestId, 'GPU Scene 导出将在任务 5.1 接入', true)
+        if (!this.exportRuntime || !this.scene || this.status !== 'ready') {
+          this.emitFailure('export-not-ready', request.requestId, 'GPU Scene 导出尚未准备完成', true)
+          return
+        }
+        this.exportRuntime.start(request, this.scene)
+        return
+      case 'cancel-export':
+        this.exportRuntime?.cancel(request.requestId)
+        return
+      case 'export-tile-consumed':
+        this.exportRuntime?.acknowledge(request.requestId, request.tileX, request.tileY)
+        return
     }
   }
 
@@ -169,6 +200,8 @@ export class ImageEditorGpuSceneRuntimeV3 {
     if (this.disposed) return
     this.disposed = true
     this.status = 'disposed'
+    this.exportRuntime?.cancelAll()
+    this.exportRuntime = null
     this.resources?.dispose()
     this.resources = null
     this.pendingTiles.clear()
@@ -237,6 +270,21 @@ export class ImageEditorGpuSceneRuntimeV3 {
       const wasRecovery = this.initializedOnce || recovered
       this.initializedOnce = true
       this.status = 'ready'
+      this.exportRuntime?.cancelAll()
+      this.exportRuntime = new ImageEditorGpuSceneExportRuntimeV3({
+        emit: this.emit,
+        createCompositor: (memoryBudgetBytes) => this.compositorFactory(
+          state.context,
+          { memoryBudgetBytes },
+        ),
+        createResidual: () => new ImageEditorGpuExportResidualV3(state.context as Gpu),
+        previewCompositor: () => this.states.peek()?.compositor ?? null,
+        previewResource: (key) => this.resources?.get(key) ?? null,
+        currentSceneGeneration: () => this.sequence.snapshot().sceneGeneration,
+        deviceGeneration: () => this.states.peek()?.managed.generation
+          ?? this.deviceManager.getRecoveryStatus().generation,
+        sessionBudgetBytes: this.resources?.snapshot().budgetBytes,
+      })
       state.compositor.syncScene(this.scene)
       if (this.presentationSurface) {
         state.compositor.attachPresentationSurface(
@@ -284,49 +332,20 @@ export class ImageEditorGpuSceneRuntimeV3 {
     entry: ImageEditorGpuSceneUploadTileV3,
   ): boolean {
     if (!this.resources || this.resources.get(entry.key)) return true
-    let payload: ImageEditorGpuRasterTextureV3 | null = null
-    try {
-      const gpuBytes = compositor.estimateTileGpuBytes(entry.tile)
-      const admission = this.resources.prepareAdmission(gpuBytes)
-      if (!admission.admitted) {
-        this.enterFallback(
-          'resource-budget-exceeded',
-          null,
-          'GPU Scene 资源超过 256 MiB 会话预算且没有可淘汰资源',
-          true,
-        )
-        return false
-      }
-      while (!payload) {
-        try {
-          payload = compositor.uploadTile(entry.key, entry.tile)
-        } catch (error) {
-          if (!(error instanceof ImageEditorGpuTileAtlasBudgetErrorV3)
-            || !this.resources.evictOldestUnprotected()) throw error
-        }
-      }
-      const registration = this.resources.register(
-        entry.key,
-        payload,
-        gpuBytes,
-        entry.protections,
-      )
-      payload = null
-      if (registration.admitted) return true
-      this.enterFallback(
-        'resource-budget-exceeded',
-        null,
-        'GPU Scene 资源超过 256 MiB 会话预算且没有可淘汰资源',
-        true,
-      )
-      return false
-    } catch (error) {
-      payload?.destroy()
-      this.enterFallback(
-        'composition-not-ready', null, imageEditorGpuSceneErrorMessageV3(error), true,
-      )
-      return false
-    }
+    const result = admitImageEditorGpuSceneTileV3({
+      resources: this.resources,
+      compositor,
+      entry,
+      trimCombined: (bytes) => trimImageEditorGpuSceneMemoryV3({
+        resources: this.resources,
+        preview: this.states.peek()?.compositor ?? null,
+        exportResidentBytes: this.exportRuntime?.activeResidentGpuBytes() ?? 0,
+        additionalBytes: bytes,
+      }),
+    })
+    if (result.admitted) return true
+    this.enterFallback(result.code, null, result.message, true)
+    return false
   }
 
   private flushPendingTiles(compositor: ImageEditorGpuRasterCompositorV3Like): void {
@@ -338,11 +357,9 @@ export class ImageEditorGpuSceneRuntimeV3 {
   }
 
   private trimMemoryPressure(compositor: ImageEditorGpuRasterCompositorV3Like): boolean {
-    if (!this.resources) return compositor.memoryPressureBytes() === 0
-    while (compositor.memoryPressureBytes() > 0) {
-      if (!this.resources.evictOldestUnprotected()) return false
-    }
-    return true
+    return trimImageEditorGpuSceneMemoryV3({ resources: this.resources, preview: compositor,
+      exportResidentBytes: this.exportRuntime?.activeResidentGpuBytes() ?? 0,
+      includeCompositorPressure: true })
   }
 
   private async render(
@@ -355,7 +372,7 @@ export class ImageEditorGpuSceneRuntimeV3 {
     }
     const resolve = (key: Parameters<typeof this.resources.get>[0]) => this.resources?.get(key) ?? null
     const missing = state.compositor.missingResources(resolve)
-    this.refreshViewportProtections()
+    refreshImageEditorGpuSceneViewportProtectionsV3(this.resources, state.compositor)
     if (missing.length > 0) {
       this.emit({
         type: 'tiles-needed',
@@ -399,6 +416,8 @@ export class ImageEditorGpuSceneRuntimeV3 {
 
   private handleDeviceLost(loss: ImageEditWebGpuDeviceLoss): void {
     if (this.disposed) return
+    this.exportRuntime?.cancelAll()
+    this.exportRuntime = null
     const required = this.states.peek()?.compositor.requiredResourceKeys() ?? []
     this.resources?.clear()
     this.states.invalidate()
@@ -439,29 +458,9 @@ export class ImageEditorGpuSceneRuntimeV3 {
   private acceptsRenderRequest(
     request: Extract<ImageEditorGpuSceneWorkerRequestV3, { type: 'render' }>,
   ): boolean {
-    const current = this.sequence.snapshot()
-    return request.sceneGeneration === current.sceneGeneration
-      && request.cameraSequence === current.cameraSequence
-      && request.interactionSequence === current.interactionSequence
-      && request.surfaceGeneration === (this.presentationSurface?.generation ?? 0)
-  }
-
-  private refreshViewportProtections(): void {
-    if (!this.resources) return
-    this.resources.releaseProtection('viewport')
-    const compositor = this.states.peek()?.compositor
-    if (!compositor) return
-    for (const key of compositor.requiredResourceKeys()) this.resources.protect(key, 'viewport')
-  }
-
-  private refreshInteractionProtections(layerId: string | null): void {
-    if (!this.resources) return
-    this.resources.releaseProtection('interaction')
-    const compositor = this.states.peek()?.compositor
-    if (!compositor || !layerId) return
-    for (const key of compositor.requiredResourceKeys(layerId)) {
-      this.resources.protect(key, 'interaction')
-    }
+    return acceptsImageEditorGpuSceneRenderV3(
+      request, this.sequence.snapshot(), this.presentationSurface?.generation ?? 0,
+    )
   }
 
   private emitFailure(
@@ -486,6 +485,8 @@ export class ImageEditorGpuSceneRuntimeV3 {
   ): void {
     if (this.status === 'fallback' || this.status === 'disposed') return
     this.status = 'fallback'
+    this.exportRuntime?.cancelAll()
+    this.exportRuntime = null
     this.pendingTiles.clear()
     this.resources?.clear()
     this.states.invalidate()

@@ -21,6 +21,7 @@ export interface ImageEditorGpuRasterCompositorStatsV3 {
   surfaceFrameCount: number
   imageBitmapFrameCount: number
   directSurfaceFailureCount: number
+  exportReadbackCount?: number
   renderedGraphNodeCount?: number
   graphCacheHitCount?: number
   invalidatedGraphNodeCount?: number
@@ -55,8 +56,13 @@ export interface ImageEditorGpuRasterCompositorV3Like {
   syncScene(scene: ImageEditorGpuRasterSceneV3 | null): void
   updateTransientTransform(layerId: string, transform: ImageEditTransformV3 | null): void
   updateViewport(layout: ImageEditorViewportLayoutV3): void
+  updateExportViewport?(
+    layout: ImageEditorViewportLayoutV3,
+    effectRecipeSize?: readonly [number, number],
+  ): void
   attachPresentationSurface(canvas: OffscreenCanvas, surfaceGeneration: number): void
   memoryPressureBytes(): number
+  estimatedResidentGpuBytes?(): number
   estimateTileGpuBytes(tile: ImageEditorV3SourceTile): number
   uploadTile(key: ImageEditorGpuSceneTileKeyV3, tile: ImageEditorV3SourceTile): ImageEditorGpuRasterTextureV3
   requiredResourceKeys(layerId?: string): readonly ImageEditorGpuSceneTileKeyV3[]
@@ -68,6 +74,12 @@ export interface ImageEditorGpuRasterCompositorV3Like {
   ): Promise<ImageEditorGpuRasterFrameV3>
   readLinearPixelsForTest(resolve: (key: ImageEditorGpuSceneTileKeyV3) => ImageEditorGpuRasterTextureV3 | null): Promise<Float32Array>
   readPresentedPixelsForTest?(resolve: (key: ImageEditorGpuSceneTileKeyV3) => ImageEditorGpuRasterTextureV3 | null): Promise<Uint8Array>
+  readExportLinearPixels?(resolve: (
+    key: ImageEditorGpuSceneTileKeyV3,
+  ) => ImageEditorGpuRasterTextureV3 | null): Promise<Float32Array>
+  renderExportTarget?(resolve: (
+    key: ImageEditorGpuSceneTileKeyV3,
+  ) => ImageEditorGpuRasterTextureV3 | null): Promise<unknown>
   snapshotStats(): ImageEditorGpuRasterCompositorStatsV3
   dispose(): void
 }

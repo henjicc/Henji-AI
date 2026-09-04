@@ -16,7 +16,7 @@ import {
 } from '@/features/imageEdit/v3/application/imageEditLiveSessionRegistry'
 import {
   prepareImageEditorV3ExportRender,
-  renderImageEditorV3ExportTiles,
+  renderImageEditorV3ExportTilesWithGpu,
 } from '@/features/imageEdit/v3/export'
 import { createImageMarkV3RasterExportSpec } from '@/features/imageMark/standalone/imageMarkV3RasterExport'
 import { getPlatform } from '@/platform/runtime'
@@ -174,7 +174,7 @@ export function createMultiLayerDocumentExportPort(
         suggestedName: `${view.displayName}.png`,
       })
       prepareImageEditorV3ExportRender(view.document, spec.description)
-      const tiles = renderImageEditorV3ExportTiles({
+      const tiles = renderImageEditorV3ExportTilesWithGpu({
         document: view.document,
         resourceDescriptors: snapshot.resources,
         description: spec.description,

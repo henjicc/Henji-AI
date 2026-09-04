@@ -3,7 +3,7 @@ import type { ImageEditDocumentV3 } from '@/core/imageEdit/v3/documentTypes'
 import type { ImageEditorCapabilityReadinessV3 } from '@/features/imageEdit/v3/application/imageEditorHostProfiles'
 import {
   prepareImageEditorV3ExportRender,
-  renderImageEditorV3ExportTiles,
+  renderImageEditorV3ExportTilesWithGpu,
 } from '@/features/imageEdit/v3/export'
 import type {
   ImageEditorV3DocumentSnapshot,
@@ -63,7 +63,7 @@ export async function materializeViewerMarkV3Raster({
   if (signal.aborted) throw abortError()
   const spec = createImageMarkV3RasterExportSpec(snapshot.document, sourceName)
   prepareImageEditorV3ExportRender(snapshot.document, spec.description)
-  const tiles = renderImageEditorV3ExportTiles({
+  const tiles = renderImageEditorV3ExportTilesWithGpu({
     document: snapshot.document,
     resourceDescriptors: snapshot.resources,
     description: spec.description,
