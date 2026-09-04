@@ -7,20 +7,33 @@ import {
 } from '@/core/imageEdit/v3'
 import type { ImageEditCanvasGeometryV3 } from '@/core/imageEdit/v3/documentTypes'
 import type { ImageEditorViewportLayoutV3 } from '../editor/useImageEditorViewportLayoutV3'
+import type { ImageEditorGpuSceneFrameReadyEventV3 } from '../gpu/imageEditorGpuSceneProtocolV3'
 import type { ImageEditorViewportCompositeBitmapTileV3 } from './viewportCompositeProtocolV3'
 import type { ImageEditorManagedViewportCompositeV3 } from './viewportCompositeTypesV3'
 import { ImageEditorPresentationAtlasV3 } from './imageEditorPresentationAtlasV3'
+import { ImageEditorDirectPresentationSurfaceV3 } from './imageEditorDirectPresentationSurfaceV3'
 
 export interface ImageEditorPresentationSurfaceElementsV3 {
   surfaceId: string
   front: HTMLCanvasElement
   safety: HTMLCanvasElement
+  /** 旧测试/不支持 OffscreenCanvas 的宿主可省略，生产预览固定提供。 */
+  gpu?: HTMLCanvasElement
+}
+
+export interface ImageEditorPresentationSurfaceTransferV3 {
+  surfaceGeneration: number
+  canvas: OffscreenCanvas
 }
 
 interface SurfacePixelsV3 {
   width: number
   height: number
 }
+
+type ImageEditorGpuFrameDiagnosticsV3 = NonNullable<
+  ImageEditorGpuSceneFrameReadyEventV3['diagnostics']
+>
 
 interface ImageEditorPresentationFrameV3 {
   canvas: HTMLCanvasElement
@@ -203,6 +216,7 @@ export function imageEditorViewportTileCoverageContributionV3(
 /** 固定双表面的 Canvas2D 合成器；前表面只接收完整 staging 帧。 */
 export class ImageEditorPresentationSurfaceV3 {
   private readonly atlas = new ImageEditorPresentationAtlasV3()
+  private readonly direct = new ImageEditorDirectPresentationSurfaceV3()
   private readonly frames = new Map<
     ImageEditorManagedViewportCompositeV3,
     ImageEditorPresentationFrameV3
@@ -212,16 +226,52 @@ export class ImageEditorPresentationSurfaceV3 {
   private resizeBuffer: HTMLCanvasElement | null = null
   private nextResultId = 0
 
-  attach(elements: ImageEditorPresentationSurfaceElementsV3): void {
+  attach(
+    elements: ImageEditorPresentationSurfaceElementsV3,
+  ): ImageEditorPresentationSurfaceTransferV3 | null {
     this.elements = elements
     this.staging ??= document.createElement('canvas')
     this.resizeBuffer ??= document.createElement('canvas')
+    return this.direct.attach(elements)
   }
 
   detach(elements: ImageEditorPresentationSurfaceElementsV3): void {
-    if (this.elements?.front === elements.front && this.elements.safety === elements.safety) {
+    if (this.elements?.front === elements.front
+      && this.elements.safety === elements.safety
+      && this.elements.gpu === elements.gpu) {
       this.elements = null
     }
+  }
+
+  presentGpuSurface(
+    layout: ImageEditorViewportLayoutV3,
+    sceneGeneration: number,
+    cameraSequence: number,
+    interactionSequence: number,
+    surfaceGeneration: number,
+    width: number,
+    height: number,
+    eventToPresentMs: number | null,
+    diagnostics?: ImageEditorGpuFrameDiagnosticsV3,
+  ): boolean {
+    const elements = this.elements
+    if (!elements || !this.direct.accepts(elements, surfaceGeneration)) return false
+    const pixels = surfacePixels(layout)
+    if (width !== pixels.width || height !== pixels.height) return false
+    this.writeGpuDiagnostics(
+      elements.front,
+      sceneGeneration,
+      cameraSequence,
+      interactionSequence,
+      eventToPresentMs,
+      diagnostics,
+    )
+    return this.direct.activate(elements, surfaceGeneration)
+  }
+
+  fallbackToStableFrame(resumeCpuPresentation: () => void): void {
+    resumeCpuPresentation()
+    this.deactivateGpuSurface()
   }
 
   updateRuntimeDiagnostics(renderPlanCompileCount: number, cpuTaskStartCount: number): void {
@@ -238,13 +288,7 @@ export class ImageEditorPresentationSurfaceV3 {
     cameraSequence: number,
     interactionSequence: number,
     eventToPresentMs: number | null = null,
-    diagnostics?: {
-      uploadCount: number
-      pipelineCompileCount: number
-      frameCount: number
-      diagnosticReadbackCount: number
-      transientUniformUpdateCount: number
-    },
+    diagnostics?: ImageEditorGpuFrameDiagnosticsV3,
   ): boolean {
     const elements = this.elements
     const staging = this.staging
@@ -269,19 +313,15 @@ export class ImageEditorPresentationSurfaceV3 {
     frontContext.globalCompositeOperation = 'copy'
     frontContext.drawImage(staging, 0, 0)
     frontContext.globalCompositeOperation = 'source-over'
-    elements.front.dataset.renderGeneration = String(sceneGeneration)
-    elements.front.dataset.cameraSequence = String(cameraSequence)
-    elements.front.dataset.interactionSequence = String(interactionSequence)
-    elements.front.dataset.eventToPresentMs = eventToPresentMs === null
-      ? ''
-      : eventToPresentMs.toFixed(3)
-    if (diagnostics) {
-      elements.front.dataset.gpuUploadCount = String(diagnostics.uploadCount)
-      elements.front.dataset.gpuPipelineCompileCount = String(diagnostics.pipelineCompileCount)
-      elements.front.dataset.gpuFrameCount = String(diagnostics.frameCount)
-      elements.front.dataset.gpuReadbackCount = String(diagnostics.diagnosticReadbackCount)
-      elements.front.dataset.gpuUniformUpdateCount = String(diagnostics.transientUniformUpdateCount)
-    }
+    this.writeGpuDiagnostics(
+      elements.front,
+      sceneGeneration,
+      cameraSequence,
+      interactionSequence,
+      eventToPresentMs,
+      diagnostics,
+    )
+    this.deactivateGpuSurface()
     return true
   }
 
@@ -347,6 +387,7 @@ export class ImageEditorPresentationSurfaceV3 {
     this.resizeBuffer = null
     this.retainFrames([])
     this.atlas.dispose()
+    this.direct.dispose()
   }
 
   private frameFor(
@@ -408,5 +449,32 @@ export class ImageEditorPresentationSurfaceV3 {
       frame.canvas.height = 1
       this.frames.delete(result)
     }
+  }
+
+  private deactivateGpuSurface(): void {
+    this.direct.deactivate(this.elements)
+  }
+
+  private writeGpuDiagnostics(
+    canvas: HTMLCanvasElement,
+    sceneGeneration: number,
+    cameraSequence: number,
+    interactionSequence: number,
+    eventToPresentMs: number | null,
+    diagnostics?: ImageEditorGpuFrameDiagnosticsV3,
+  ): void {
+    canvas.dataset.renderGeneration = String(sceneGeneration)
+    canvas.dataset.cameraSequence = String(cameraSequence)
+    canvas.dataset.interactionSequence = String(interactionSequence)
+    canvas.dataset.eventToPresentMs = eventToPresentMs === null ? '' : eventToPresentMs.toFixed(3)
+    if (!diagnostics) return
+    canvas.dataset.gpuUploadCount = String(diagnostics.uploadCount)
+    canvas.dataset.gpuPipelineCompileCount = String(diagnostics.pipelineCompileCount)
+    canvas.dataset.gpuFrameCount = String(diagnostics.frameCount)
+    canvas.dataset.gpuReadbackCount = String(diagnostics.diagnosticReadbackCount)
+    canvas.dataset.gpuUniformUpdateCount = String(diagnostics.transientUniformUpdateCount)
+    canvas.dataset.gpuSurfaceFrameCount = String(diagnostics.surfaceFrameCount)
+    canvas.dataset.gpuImageBitmapFrameCount = String(diagnostics.imageBitmapFrameCount)
+    canvas.dataset.gpuDirectSurfaceFailureCount = String(diagnostics.directSurfaceFailureCount)
   }
 }

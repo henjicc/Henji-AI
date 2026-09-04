@@ -46,7 +46,7 @@ const renderSession = vi.hoisted(() => ({
 }))
 const viewportBackend = vi.hoisted(() => ({
   composition: 'cpu' as 'cpu' | 'gpu',
-  presentation: 'canvas2d' as 'canvas2d' | 'gpu-image-bitmap',
+  presentation: 'canvas2d' as 'canvas2d' | 'webgpu-surface' | 'gpu-image-bitmap',
 }))
 const rasterPasteboardResources = vi.hoisted(() => ({
   readFastProxy: vi.fn(),
@@ -759,7 +759,7 @@ describe('ImageEditorPreviewV3 managed frame ownership', () => {
 
   it('GPU 已接管时连续 pointermove 只在 rAF 内更新瞬态矩阵且不发布 PreviewOverride', async () => {
     viewportBackend.composition = 'gpu'
-    viewportBackend.presentation = 'gpu-image-bitmap'
+    viewportBackend.presentation = 'webgpu-surface'
     const scheduledFrame = { current: null as FrameRequestCallback | null }
     vi.stubGlobal('requestAnimationFrame', vi.fn((callback: FrameRequestCallback) => {
       scheduledFrame.current = callback

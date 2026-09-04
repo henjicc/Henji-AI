@@ -20,9 +20,14 @@ import type {
   ImageEditorRenderSessionStateV3,
   ImageEditorRenderSnapshotV3,
 } from './imageEditorRenderSessionContractsV3'
+import type { ImageEditorPresentationSurfaceTransferV3 } from './imageEditorPresentationSurfaceV3'
 
 const logger = createLogger('features.image_edit.v3.gpu_scene_bridge')
 const GPU_SOURCE_TILE_BATCH_SIZE = 16
+type GpuPresentableFrameV3 = Extract<
+  ImageEditorGpuSceneWorkerEventV3,
+  { type: 'frame-ready' | 'surface-frame-ready' }
+>
 
 export class ImageEditorRenderSessionGpuBridgeV3 {
   private readonly client: ImageEditorGpuSceneClientV3Like | null
@@ -57,7 +62,7 @@ export class ImageEditorRenderSessionGpuBridgeV3 {
     private readonly publish: (patch: Partial<ImageEditorRenderSessionStateV3>) => void,
     private readonly diagnosticRenderingEnabled = false,
     private readonly presentFrame?: (
-      event: Extract<ImageEditorGpuSceneWorkerEventV3, { type: 'frame-ready' }>,
+      event: GpuPresentableFrameV3,
       layout: ImageEditorViewportLayoutV3,
       eventToPresentMs: number | null,
     ) => boolean,
@@ -69,6 +74,10 @@ export class ImageEditorRenderSessionGpuBridgeV3 {
       : injectedClient
     this.unsubscribe = this.client?.subscribe((event) => this.handleEvent(event))
       ?? (() => undefined)
+  }
+
+  attachPresentationSurface(transfer: ImageEditorPresentationSurfaceTransferV3): void {
+    this.client?.attachPresentationSurface?.(transfer.surfaceGeneration, transfer.canvas)
   }
 
   syncSnapshot(snapshot: ImageEditorRenderSnapshotV3): void {
@@ -149,10 +158,10 @@ export class ImageEditorRenderSessionGpuBridgeV3 {
       this.queueTileLoad(event)
       return
     }
-    if (event.type === 'frame-ready') {
+    if (event.type === 'frame-ready' || event.type === 'surface-frame-ready') {
       if (event.cameraSequence !== this.cameraSequence
         || event.interactionSequence !== this.interactionSequence) {
-        event.bitmap.close()
+        if (event.type === 'frame-ready') event.bitmap.close()
         return
       }
       const queuedFrame = this.pendingFrame
@@ -164,10 +173,12 @@ export class ImageEditorRenderSessionGpuBridgeV3 {
         : Math.max(0, performance.now() - this.inFlightEventTimestamp)
       this.inFlightEventTimestamp = null
       let presented = false
-      try {
+      if (event.type === 'frame-ready') try {
         presented = Boolean(layout && this.presentFrame?.(event, layout, eventToPresentMs))
       } finally {
         event.bitmap.close()
+      } else {
+        presented = Boolean(layout && this.presentFrame?.(event, layout, eventToPresentMs))
       }
       const frameLog = {
         event: this.diagnosticRenderingEnabled
@@ -182,7 +193,9 @@ export class ImageEditorRenderSessionGpuBridgeV3 {
         this.gpuPresented = true
         this.publish({
           compositionBackend: 'gpu',
-          presentationBackend: 'gpu-image-bitmap',
+          presentationBackend: event.type === 'surface-frame-ready'
+            ? 'webgpu-surface'
+            : 'gpu-image-bitmap',
           coverage: 1,
           targetMipCoverage: 1,
           targetMip: 0,
@@ -190,7 +203,7 @@ export class ImageEditorRenderSessionGpuBridgeV3 {
           diagnostic: null,
         })
       } else if (!presented) {
-        this.fallback('GPU ImageBitmap 无法交接到当前稳定表面')
+        this.fallback('GPU 帧无法交接到当前稳定表面')
       }
       if (queuedFrame) {
         this.pendingFrame = true
@@ -257,12 +270,16 @@ export class ImageEditorRenderSessionGpuBridgeV3 {
   ): void {
     this.gpuPresented = false
     this.fallbackToStableFrame?.()
+    logger.warn('图片编辑 GPU Scene 已切换稳定 CPU 后备', {
+      event: 'image_editor_v3.gpu_scene.fallback',
+      context: { deviceStatus, reason: diagnostic },
+    })
     this.publish({
       compositionBackend: 'cpu',
       presentationBackend: 'canvas2d',
       deviceStatus,
       ...(deviceGeneration === undefined ? {} : { deviceGeneration }),
-      diagnostic,
+      diagnostic: null,
     })
   }
 

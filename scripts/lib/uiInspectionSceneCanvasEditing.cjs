@@ -442,7 +442,7 @@ function attachUiInspectionCanvasEditing(context) {
     })
     console.log(`[image-editor-gpu-baseline] ${JSON.stringify({
       fixture: 'kie-five-layer',
-      path: 'gpu-image-bitmap-transient-transform',
+      path: 'webgpu-surface-transient-transform',
       ...verifiedDrag.dragBaseline,
     })}`)
     const initialPreviewSource = verifiedDrag.initialPreviewSource

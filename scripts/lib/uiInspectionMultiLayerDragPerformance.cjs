@@ -156,16 +156,24 @@ async function verifyMultiLayerDragPerformance({
   })
   const previewSurface = editor.locator('[data-preview-surface]')
   await waitForEditorState(page, {
-    message: '五层场景没有交给 GPU ImageBitmap 稳定呈现',
+    message: '五层场景没有交给 WebGPU Surface 稳定呈现',
     read: async () => ({
       composition: await previewSurface.getAttribute('data-preview-composition-backend'),
       presentation: await previewSurface.getAttribute('data-preview-presentation-backend'),
       frameCount: Number(await editor.locator('[data-presentation-front-surface]')
         .getAttribute('data-gpu-frame-count') ?? '0'),
+      surfaceFrameCount: Number(await editor.locator('[data-presentation-front-surface]')
+        .getAttribute('data-gpu-surface-frame-count') ?? '0'),
+      imageBitmapFrameCount: Number(await editor.locator('[data-presentation-front-surface]')
+        .getAttribute('data-gpu-image-bitmap-frame-count') ?? '-1'),
     }),
-    accept: ({ composition, presentation, frameCount }) => composition === 'gpu'
-      && presentation === 'gpu-image-bitmap'
-      && frameCount > 0,
+    accept: ({ composition, presentation, frameCount, surfaceFrameCount, imageBitmapFrameCount }) => (
+      composition === 'gpu'
+      && presentation === 'webgpu-surface'
+      && frameCount > 0
+      && surfaceFrameCount > 0
+      && imageBitmapFrameCount === 0
+    ),
     timeout: 30000,
   })
   const previewBox = await previewSurface.boundingBox()
@@ -192,6 +200,9 @@ async function verifyMultiLayerDragPerformance({
       uploadCount: Number(gpu?.getAttribute('data-gpu-upload-count') ?? '-1'),
       readbackCount: Number(gpu?.getAttribute('data-gpu-readback-count') ?? '-1'),
       frameCount: Number(gpu?.getAttribute('data-gpu-frame-count') ?? '-1'),
+      surfaceFrameCount: Number(gpu?.getAttribute('data-gpu-surface-frame-count') ?? '-1'),
+      imageBitmapFrameCount: Number(gpu?.getAttribute('data-gpu-image-bitmap-frame-count') ?? '-1'),
+      directSurfaceFailureCount: Number(gpu?.getAttribute('data-gpu-direct-surface-failure-count') ?? '-1'),
       uniformUpdateCount: Number(gpu?.getAttribute('data-gpu-uniform-update-count') ?? '-1'),
       interactionSequence: Number(gpu?.getAttribute('data-interaction-sequence') ?? '-1'),
     }
@@ -225,6 +236,9 @@ async function verifyMultiLayerDragPerformance({
       uploadCount: Number(await gpuSurface.getAttribute('data-gpu-upload-count')),
       readbackCount: Number(await gpuSurface.getAttribute('data-gpu-readback-count')),
       frameCount: Number(await gpuSurface.getAttribute('data-gpu-frame-count')),
+      surfaceFrameCount: Number(await gpuSurface.getAttribute('data-gpu-surface-frame-count')),
+      imageBitmapFrameCount: Number(await gpuSurface.getAttribute('data-gpu-image-bitmap-frame-count')),
+      directSurfaceFailureCount: Number(await gpuSurface.getAttribute('data-gpu-direct-surface-failure-count')),
       uniformUpdateCount: Number(await gpuSurface.getAttribute('data-gpu-uniform-update-count')),
     }
     if (evidence.revision !== beforeLayerMove
@@ -236,6 +250,9 @@ async function verifyMultiLayerDragPerformance({
       || evidence.cpuTaskStartCount !== beforeHotPath.cpuTaskStartCount
       || evidence.uploadCount !== beforeHotPath.uploadCount
       || evidence.readbackCount !== 0
+      || evidence.imageBitmapFrameCount !== 0
+      || evidence.directSurfaceFailureCount !== 0
+      || evidence.surfaceFrameCount < beforeHotPath.surfaceFrameCount
       || !Number.isFinite(evidence.eventToPresentMs)
       || evidence.uniformUpdateCount > evidence.frameCount) {
       throw new Error(`GPU 移动热路径发生了权威/CPU/上传/回读副作用：${JSON.stringify({ beforeHotPath, evidence })}`)
@@ -246,22 +263,30 @@ async function verifyMultiLayerDragPerformance({
     const gpu = document.querySelector(gpuSelector)
     return {
       frameCount: Number(gpu?.getAttribute('data-gpu-frame-count') ?? '-1'),
+      surfaceFrameCount: Number(gpu?.getAttribute('data-gpu-surface-frame-count') ?? '-1'),
+      imageBitmapFrameCount: Number(gpu?.getAttribute('data-gpu-image-bitmap-frame-count') ?? '-1'),
+      directSurfaceFailureCount: Number(gpu?.getAttribute('data-gpu-direct-surface-failure-count') ?? '-1'),
       uniformUpdateCount: Number(gpu?.getAttribute('data-gpu-uniform-update-count') ?? '-1'),
       interactionSequence: Number(gpu?.getAttribute('data-interaction-sequence') ?? '-1'),
     }
   }, '[data-presentation-front-surface]')
   const presentedFrameDelta = afterHotPath.frameCount - beforeHotPath.frameCount
   const uniformUpdateDelta = afterHotPath.uniformUpdateCount - beforeHotPath.uniformUpdateCount
+  const surfaceFrameDelta = afterHotPath.surfaceFrameCount - beforeHotPath.surfaceFrameCount
   const interactionSequenceDelta = afterHotPath.interactionSequence
     - beforeHotPath.interactionSequence
   if (presentSamplesMs.length !== 100
     || interactionSequenceDelta !== 100
     || presentedFrameDelta < presentSamplesMs.length
+    || surfaceFrameDelta < presentSamplesMs.length
+    || afterHotPath.imageBitmapFrameCount !== 0
+    || afterHotPath.directSurfaceFailureCount !== 0
     || uniformUpdateDelta > presentedFrameDelta) {
     throw new Error(`GPU 移动采样没有逐事件推进实际呈现：${JSON.stringify({
       sampleCount: presentSamplesMs.length,
       interactionSequenceDelta,
       presentedFrameDelta,
+      surfaceFrameDelta,
       uniformUpdateDelta,
     })}`)
   }

@@ -331,7 +331,8 @@ export function ImageEditorPreviewV3({
     },
     viewportComposite.session,
     viewportComposite.compositionBackend === 'gpu'
-      && viewportComposite.presentationBackend === 'gpu-image-bitmap',
+      && (viewportComposite.presentationBackend === 'webgpu-surface'
+        || viewportComposite.presentationBackend === 'gpu-image-bitmap'),
   )
 
   const navigationCursor = navigation.effectiveTool === 'hand'

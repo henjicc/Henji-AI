@@ -55,7 +55,7 @@ interface RetainedLayerStateV3 {
   resource: ImageEditorGpuRasterTextureV3
 }
 
-/** 会话级常驻基础栅格合成器；正式呈现由 2.2 接手，本阶段只产出隐藏 ImageBitmap。 */
+/** 会话级常驻栅格/RenderGraph合成器；优先直呈Surface，失效时才产出ImageBitmap。 */
 export class ImageEditorGpuRasterPipelineV3 implements ImageEditorGpuRasterCompositorV3Like {
   private readonly output: Target
   private readonly graph: ImageEditorGpuRenderGraphExecutorV3
@@ -90,6 +90,9 @@ export class ImageEditorGpuRasterPipelineV3 implements ImageEditorGpuRasterCompo
     allocatedAtlasBytes: 0,
     minimumPlannedMip: 0,
     maximumPlannedMip: 0,
+    surfaceFrameCount: 0,
+    imageBitmapFrameCount: 0,
+    directSurfaceFailureCount: 0,
   }
 
   constructor(private readonly gpu: Gpu, options: ImageEditorGpuRasterCompositorOptionsV3 = {}) {
@@ -168,6 +171,10 @@ export class ImageEditorGpuRasterPipelineV3 implements ImageEditorGpuRasterCompo
     this.atlas.setMemoryBudgetBytes(Math.max(0, this.memoryBudgetBytes - this.reservedOutputBytes))
     this.replanTiles()
   }
+  attachPresentationSurface(canvas: OffscreenCanvas, surfaceGeneration: number): void {
+    this.assertUsable()
+    this.presentation.attachSurface(canvas, surfaceGeneration)
+  }
   memoryPressureBytes(): number {
     return Math.max(0, this.reservedOutputBytes + this.atlas.snapshot().allocatedBytes
       - this.memoryBudgetBytes)
@@ -201,16 +208,33 @@ export class ImageEditorGpuRasterPipelineV3 implements ImageEditorGpuRasterCompo
   ): ImageEditorGpuSceneTileKeyV3[] {
     return this.requiredResourceKeys().filter((key) => !resolve(key))
   }
-  async render(resolve: (
-    key: ImageEditorGpuSceneTileKeyV3,
-  ) => ImageEditorGpuRasterTextureV3 | null): Promise<ImageEditorGpuRasterFrameV3> {
+  async render(
+    resolve: (key: ImageEditorGpuSceneTileKeyV3) => ImageEditorGpuRasterTextureV3 | null,
+    surfaceGeneration: number,
+    acceptsSurfaceSubmit: () => boolean,
+  ): Promise<ImageEditorGpuRasterFrameV3> {
     return await this.enqueueFrame(async () => {
       const output = await this.compose(resolve)
       this.reportedError = null
-      const bitmap = await this.presentation.render(output, this.scene!.color)
-      await this.gpu.settled()
-      this.throwReportedError()
-      return { bitmap, stats: this.snapshotStats(), usedResourceKeys: this.requiredResourceKeys() }
+      const presentation = await this.presentation.render(
+        output,
+        this.scene!.color,
+        surfaceGeneration,
+        acceptsSurfaceSubmit,
+      )
+      // 呈现器已分别等待并收口 direct / bitmap pass 的异步错误；direct 失败后允许
+      // 同一帧进入 ImageBitmap，不能让已处理的 Surface 错误污染成功降级结果。
+      this.reportedError = null
+      if (presentation.kind === 'webgpu-surface') this.stats.surfaceFrameCount += 1
+      else {
+        this.stats.imageBitmapFrameCount += 1
+        if (presentation.surfaceFailureReason) this.stats.directSurfaceFailureCount += 1
+      }
+      const stats = this.snapshotStats()
+      const usedResourceKeys = this.requiredResourceKeys()
+      return presentation.kind === 'webgpu-surface'
+        ? { presentation, stats, usedResourceKeys }
+        : { presentation, stats, usedResourceKeys }
     })
   }
   async readLinearPixelsForTest(resolve: (

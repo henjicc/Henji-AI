@@ -16,12 +16,14 @@ export function ImageEditorViewportTilesV3({
   const surfaceId = useId()
   const frontRef = useRef<HTMLCanvasElement | null>(null)
   const safetyRef = useRef<HTMLCanvasElement | null>(null)
+  const gpuRef = useRef<HTMLCanvasElement | null>(null)
 
   useLayoutEffect(() => {
     const front = frontRef.current
     const safety = safetyRef.current
-    if (!front || !safety) return
-    return session.attachSurface({ surfaceId, front, safety })
+    const gpu = gpuRef.current
+    if (!front || !safety || !gpu) return
+    return session.attachSurface({ surfaceId, front, safety, gpu })
   }, [session, surfaceId])
 
   useLayoutEffect(() => {
@@ -43,6 +45,11 @@ export function ImageEditorViewportTilesV3({
       <canvas
         ref={frontRef}
         data-presentation-front-surface
+        className="absolute inset-0 block h-full w-full"
+      />
+      <canvas
+        ref={gpuRef}
+        data-presentation-gpu-surface
         className="absolute inset-0 block h-full w-full"
       />
     </div>

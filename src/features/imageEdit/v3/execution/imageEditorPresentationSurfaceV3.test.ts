@@ -245,4 +245,80 @@ describe('ImageEditorPresentationSurfaceV3', () => {
     expect(contexts.has(safety)).toBe(false)
     surface.dispose()
   })
+
+  it('可见GPU canvas只转移一次，并在首个匹配Surface帧前保持隐藏', () => {
+    const surface = new ImageEditorPresentationSurfaceV3()
+    const front = document.createElement('canvas')
+    const safety = document.createElement('canvas')
+    const gpu = document.createElement('canvas')
+    const offscreen = { width: 300, height: 150 } as OffscreenCanvas
+    const transfer = vi.fn(() => offscreen)
+    Object.defineProperty(gpu, 'transferControlToOffscreen', { value: transfer })
+
+    expect(surface.attach({ surfaceId: 'direct', front, safety, gpu })).toEqual({
+      surfaceGeneration: 1,
+      canvas: offscreen,
+    })
+    expect(gpu.style.visibility).toBe('hidden')
+    expect(surface.attach({ surfaceId: 'direct', front, safety, gpu })).toBeNull()
+    expect(transfer).toHaveBeenCalledOnce()
+
+    const accepted = surface.presentGpuSurface({
+      stageWidth: 320,
+      stageHeight: 240,
+      viewportKey: 'direct',
+      viewport: {
+        documentX: 0, documentY: 0, width: 320, height: 240,
+        zoom: 1, devicePixelRatio: 2,
+      },
+    }, 8, 9, 10, 1, 640, 480, null, {
+      uploadCount: 1, pipelineCompileCount: 2, frameCount: 3,
+      diagnosticReadbackCount: 0, transientUniformUpdateCount: 4,
+      residentTileCount: 1, atlasPageCount: 1, allocatedAtlasBytes: 1,
+      minimumPlannedMip: 0, maximumPlannedMip: 0,
+      surfaceFrameCount: 1, imageBitmapFrameCount: 0, directSurfaceFailureCount: 0,
+    })
+
+    expect(accepted).toBe(true)
+    expect(contexts.size).toBe(0)
+    expect(gpu.style.visibility).toBe('visible')
+    expect(front.dataset).toMatchObject({
+      renderGeneration: '8', cameraSequence: '9', interactionSequence: '10',
+      gpuReadbackCount: '0', gpuSurfaceFrameCount: '1', gpuImageBitmapFrameCount: '0',
+    })
+    surface.dispose()
+  })
+
+  it('旧Surface代次或旧DPR尺寸不能覆盖稳定表面，回退先恢复CPU帧再隐藏GPU', () => {
+    const surface = new ImageEditorPresentationSurfaceV3()
+    const front = document.createElement('canvas')
+    const safety = document.createElement('canvas')
+    const gpu = document.createElement('canvas')
+    Object.defineProperty(gpu, 'transferControlToOffscreen', {
+      value: vi.fn(() => ({ width: 300, height: 150 } as OffscreenCanvas)),
+    })
+    surface.attach({ surfaceId: 'direct', front, safety, gpu })
+    const directLayout = {
+      stageWidth: 320,
+      stageHeight: 240,
+      viewportKey: 'direct',
+      viewport: {
+        documentX: 0, documentY: 0, width: 320, height: 240,
+        zoom: 1, devicePixelRatio: 1,
+      },
+    }
+    expect(surface.presentGpuSurface(directLayout, 1, 1, 1, 0, 320, 240, null)).toBe(false)
+    expect(surface.presentGpuSurface(directLayout, 1, 1, 1, 1, 640, 480, null)).toBe(false)
+    expect(gpu.style.visibility).toBe('hidden')
+    expect(contexts.size).toBe(0)
+
+    expect(surface.presentGpuSurface(directLayout, 1, 1, 1, 1, 320, 240, null)).toBe(true)
+    const order: string[] = []
+    surface.fallbackToStableFrame(() => {
+      order.push(`cpu:${gpu.style.visibility}`)
+    })
+    order.push(`gpu:${gpu.style.visibility}`)
+    expect(order).toEqual(['cpu:visible', 'gpu:hidden'])
+    surface.dispose()
+  })
 })
