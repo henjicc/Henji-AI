@@ -1,9 +1,10 @@
 const DEFAULT_REQUEST_BYTES = 16 * 1024 * 1024
 export const IMAGE_EDITOR_V3_REQUEST_BUDGET_BYTES = 1_280 * 1024 * 1024
 const MAX_ACTIVE_REQUESTS = 12
-// 完整多图层编辑器会并行持有文档读取、金字塔预热、受管预览以及两批视口瓦片。
-// 组合上限必须容纳这条正式链路；内存硬预算与每类操作上限继续限制实际工作集。
-const MAX_ACTIVE_REQUESTS_PER_SENDER = 6
+// 完整多图层编辑器的 draft/target 调度器会同时描述全部图层金字塔：
+// 5 图层文档在首帧会有 10 个 source.pyramid + 2 个后台代理请求。按发送方与全局
+// 使用同一上限，内存硬预算与每类操作上限继续约束实际工作集。
+const MAX_ACTIVE_REQUESTS_PER_SENDER = MAX_ACTIVE_REQUESTS
 
 const OPERATION_LIMITS_PER_SENDER: Readonly<Record<string, number>> = {
   'source.import': 1,
