@@ -91,13 +91,13 @@ function data(overrides: Partial<LayerStackResultNodeData> = {}): LayerStackResu
   }
 }
 
-function renderNode(): ReturnType<typeof render> {
+function renderNode(nodeData = data()): ReturnType<typeof render> {
   return render(
     <ReactFlowProvider>
       <LayerStackResultNode
         id="multi-layer-node"
         type="layerStackResultNode"
-        data={data()}
+        data={nodeData}
         selected={false}
         draggable
         selectable
@@ -130,6 +130,38 @@ describe('LayerStackResultNode V3 编辑入口', () => {
     fireEvent.click(document.querySelector('[data-layer-stack-node-id="multi-layer-node"]') as Element)
 
     expect(useCanvasStore.getState().selectedNodeId).toBe('multi-layer-node')
+    expect(nodeMocks.openMultiLayerDocumentNodeEditor).not.toHaveBeenCalled()
+  })
+
+  it('未完成的多图层节点显示准备中，不误报不可用', () => {
+    renderNode(data({ imageUrl: null, previewImageUrl: null, imageEditSession: undefined, isGenerating: true }))
+    expect(screen.getByRole('status').textContent).toContain('正在准备多图层图片')
+    expect(screen.queryByText('多图层图片暂不可用')).toBeNull()
+    expect(screen.queryByRole('button', { name: '编辑' })).toBeNull()
+  })
+
+  it('下载失败显示续取入口，只重新激活原任务，不打开编辑器或新建生成', () => {
+    const failed = data({
+      imageUrl: null, previewImageUrl: null, imageEditSession: undefined,
+      isGenerating: false, generationError: '图片已生成，但下载未完成。请重试获取结果。',
+      serverTaskId: 'existing-kie-task', serverTaskModelId: 'kie-seedream-5.0-pro',
+    })
+    useCanvasStore.getState().setCanvasData([
+      { id: 'multi-layer-node', type: 'layerStackResultNode', position: { x: 0, y: 0 }, data: failed },
+    ], [], { past: [], future: [] })
+    useProjectStore.setState({ currentProject: {
+      id: 'project-a', name: '图层测试', createdAt: 1, updatedAt: 1, nodeCount: 1, coverPath: null,
+      nodes: useCanvasStore.getState().nodes, edges: [], viewport: { x: 0, y: 0, zoom: 1 },
+      history: { past: [], future: [] },
+    } })
+    renderNode(failed)
+    expect(screen.getByRole('alert').textContent).toContain('下载未完成')
+    expect(screen.queryByText('多图层图片暂不可用')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: '重新获取结果' }))
+    expect(useCanvasStore.getState().nodes[0]?.data).toMatchObject({
+      isGenerating: true, generationError: null, serverTaskId: 'existing-kie-task',
+      serverTaskModelId: 'kie-seedream-5.0-pro',
+    })
     expect(nodeMocks.openMultiLayerDocumentNodeEditor).not.toHaveBeenCalled()
   })
 

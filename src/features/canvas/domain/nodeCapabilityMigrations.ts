@@ -300,6 +300,11 @@ export function migrateLayerSeparationGenerationData(data: DynamicValueMap): voi
 /** 未知/损坏文档不猜测迁移，保留合成图并降级为普通可连接图片。 */
 export function migrateLayerStackResultData(data: DynamicValueMap): void {
   const imageUrl = typeof data.imageUrl === 'string' ? data.imageUrl.trim() : '';
+  // 生成占位尚无文档，不能视为损坏结果；否则重开项目会丢掉图层续取语义。
+  if (!imageUrl && !data.imageEditSession && !data.layerStackDocument) {
+    data.resultKind = 'layer-stack';
+    return;
+  }
   try {
     const session = parseImageEditSessionReferenceV3(data.imageEditSession, imageUrl);
     if (session && imageUrl && session.sourceUrl === imageUrl) {

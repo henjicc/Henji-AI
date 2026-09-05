@@ -2,14 +2,16 @@ import { memo, useMemo } from 'react';
 import { Handle, Position, type NodeProps } from '@xyflow/react';
 import { Maximize2 } from 'lucide-react';
 
-import { UiButton } from '@/components/ui';
+import { UiButton, UiEmpty, UiError, UiLoading } from '@/components/ui';
 import { ICON_NODE_ASSET_GROUP } from '@/core/theme/icons';
 import { canvasEventBus } from '@/features/canvas/application/canvasServices';
 import { migrateLegacyMultiLayerDocumentNode } from '@/features/canvas/application/multiLayerDocumentNodeGenerationAdapter';
 import { openMultiLayerDocumentNodeEditor } from '@/features/canvas/application/multiLayerDocumentNodeEditorApplicationService';
+import { canRetryLayerStackResult, retryLayerStackResult } from '@/features/canvas/application/layerStackResultRecoveryService';
 import { resolveImageDisplayUrl } from '@/features/canvas/application/imageData';
 import type { LayerStackResultNodeData } from '@/features/canvas/domain/canvasNodes';
 import { isEditableMultiLayerDocumentNode } from '@/features/canvas/domain/multiLayerDocumentNode';
+import { LAYER_STACK_DOWNLOAD_FAILURE_MESSAGE } from '@/features/canvas/domain/generationFailure';
 import { getMainPortConnectionFlags } from '@/features/canvas/domain/connectionIndex';
 import { getSocketColor } from '@/features/canvas/domain/socketTypes';
 import { validateLayerStackDocument, type LayerStackDocumentV1 } from '@/features/canvas/domain/layerStack';
@@ -42,6 +44,7 @@ export const LayerStackResultNode = memo(({ id, data, selected, width, height }:
   const setSelectedNode = useCanvasStore((state) => state.setSelectedNode);
   const updateNodeData = useCanvasStore((state) => state.updateNodeData);
   const projectId = useProjectStore((state) => state.currentProjectId);
+  const historyPast = useCanvasStore((state) => state.history.past);
   const hasTargetConnections = useCanvasStore((state) => getMainPortConnectionFlags(state.edges).get(id)?.hasMainTarget ?? false);
   const hasSourceConnections = useCanvasStore((state) => getMainPortConnectionFlags(state.edges).get(id)?.hasMainSource ?? false);
   const document = useMemo(() => readDocument(data), [data]);
@@ -54,6 +57,20 @@ export const LayerStackResultNode = memo(({ id, data, selected, width, height }:
     : legacyPreview ?? data.previewImageUrl ?? data.imageUrl ?? null;
   const resolvedWidth = Math.max(240, typeof width === 'number' ? width : 300);
   const resolvedHeight = Math.max(180, typeof height === 'number' ? height : 220);
+  const generationError = typeof data.generationError === 'string' ? data.generationError : null;
+  const canRetrieveResult = Boolean(projectId) && Boolean(generationError)
+    && canRetryLayerStackResult({ id, data }, { past: historyPast });
+  const retryResult = (): void => {
+    if (!projectId) return;
+    try {
+      retryLayerStackResult({ projectId, nodeId: id });
+    } catch (error) {
+      canvasEventBus.publish('canvas/toast', {
+        message: error instanceof Error ? error.message : '获取结果失败，请重试',
+        type: 'error',
+      });
+    }
+  };
 
   const openEditor = async (): Promise<void> => {
     if (!projectId) return;
@@ -91,20 +108,28 @@ export const LayerStackResultNode = memo(({ id, data, selected, width, height }:
         onTitleChange={(displayName) => updateNodeData(id, { displayName })}
       />
       <div className="relative h-full w-full overflow-hidden rounded-[var(--node-radius)] bg-bg-dark">
-        {preview ? (
+        {generationError ? (
+          <UiError
+            title="多图层图片未能加载"
+            message={canRetrieveResult ? LAYER_STACK_DOWNLOAD_FAILURE_MESSAGE : '请检查网络或生成设置后重试。'}
+            size="xs"
+            className="nodrag h-full px-4"
+            retryLabel="重新获取结果"
+            onRetry={canRetrieveResult ? retryResult : undefined}
+          />
+        ) : data.isGenerating ? (
+          <UiLoading message="正在准备多图层图片…" size="xs" className="h-full" />
+        ) : preview ? (
           <img src={resolveImageDisplayUrl(preview)} alt="多图层图片预览" className="h-full w-full object-contain" />
         ) : (
-          <div className="flex h-full flex-col items-center justify-center gap-2 text-text-muted">
-            <ICON_NODE_ASSET_GROUP className="h-8 w-8" />
-            <span className="text-xs">多图层图片暂不可用</span>
-          </div>
+          <UiEmpty title="多图层图片暂不可用" size="xs" className="h-full" />
         )}
         {document?.status === 'degraded' && !isEditableV3 && (
           <div className="absolute bottom-3 left-3 flex items-center gap-2 rounded-lg bg-overlay px-2.5 py-1.5 text-2xs text-text-soft">
             <span>部分图层资源缺失</span>
           </div>
         )}
-        {(isEditableV3 || document) && (
+        {!generationError && !data.isGenerating && (isEditableV3 || document) && (
           <UiButton
             type="button"
             size="sm"

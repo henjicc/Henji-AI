@@ -6,7 +6,10 @@ import type {
 } from '@/core/assistant/capabilities/canvasMutationApplicationCapabilities'
 import {
   OPEN_MULTI_LAYER_DOCUMENT_NODE_EDITOR_CAPABILITY_ID,
+  RETRY_LAYER_STACK_RESULT_CAPABILITY_ID,
 } from '@/core/assistant/capabilities/canvasEditorApplicationCapabilities'
+import type { ApplicationRef } from '@/core/application-control'
+import { retryLayerStackResult } from '@/features/canvas/application/layerStackResultRecoveryService'
 import type { AssistantCanvasImageCapabilityId } from '@/core/canvas/imageCapabilityIds'
 import type { CanvasDownloadDestination } from '@/core/assistant/capabilities/canvasExportApplicationCapabilities'
 import {
@@ -233,6 +236,23 @@ export function registerCanvasCapabilityHandlers(
     )
     return { ...await openMultiLayerDocumentNodeEditor({
       ...parsed,
+      signal: context.signal,
+      correlation: context,
+    }) }
+  })
+
+  registrar.registerHandler(RETRY_LAYER_STACK_RESULT_CAPABILITY_ID, (input, context) => {
+    throwIfCapabilityAborted(context.signal)
+    const parsed = parseCapabilityInput<{ projectRef: ApplicationRef; nodeRef: ApplicationRef }>(
+      RETRY_LAYER_STACK_RESULT_CAPABILITY_ID, input,
+    )
+    const prefix = `${parsed.projectRef.id}:`
+    if (!parsed.nodeRef.id.startsWith(prefix) || parsed.nodeRef.id.length === prefix.length) {
+      throw new Error(`请读取目标画布的完整节点引用，格式为 ${prefix}<nodeId>。`)
+    }
+    return { ...retryLayerStackResult({
+      projectId: parsed.projectRef.id,
+      nodeId: parsed.nodeRef.id.slice(prefix.length),
       signal: context.signal,
       correlation: context,
     }) }

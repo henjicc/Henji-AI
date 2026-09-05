@@ -12,6 +12,7 @@ import {
 
 export const OPEN_MULTI_LAYER_DOCUMENT_NODE_EDITOR_CAPABILITY_ID =
   'open_multi_layer_document_node_editor'
+export const RETRY_LAYER_STACK_RESULT_CAPABILITY_ID = 'retry_layer_stack_result'
 
 const canvasProjectRefSchema = applicationRefSchema.extend({
   kind: z.literal('canvas.project'),
@@ -98,6 +99,46 @@ const openMultiLayerDocumentNodeEditor = defineApplicationCapability({
   ],
 })
 
+const retryLayerStackResult = defineApplicationCapability({
+  id: RETRY_LAYER_STACK_RESULT_CAPABILITY_ID,
+  version: 1,
+  title: '重新获取多图层图片结果',
+  description: '重新下载当前画布工程中已生成但下载失败的多图层图片，安全恢复原任务并继续获取结果。不会重新生成图片。',
+  domain: 'canvas',
+  aliases: ['图层拆分下载失败', '多图层图片暂不可用', '重新获取结果', 'retry layer separation download'],
+  readOnly: false,
+  control: capabilityControl('execute', ['canvas.node'], {
+    revisionScopes: ['canvas'], resultState: 'submitted', verificationRequired: false,
+  }),
+  risk: 'R1',
+  dataClasses: ['C1'],
+  permission: 'canvas:write',
+  idempotent: true,
+  destructive: false,
+  timeoutMs: 5_000,
+  supportsPreview: false,
+  supportsUndo: false,
+  completionKind: 'submitted',
+  requiredScopes: ['canvas'],
+  availability: ['目标画布工程已打开，目标多图层结果存在可安全续取的下载失败任务。'],
+  prerequisites: ['从已打开画布读取 projectRef 和 nodeRef；仅续取既有任务，不提交生成请求。'],
+  acceptsRefs: ['canvas.project', 'canvas.node'],
+  producesRefs: ['canvas.node'],
+  inputSchema: z.object({ projectRef: canvasProjectRefSchema, nodeRef: canvasNodeRefSchema }).strict(),
+  outputSchema: capabilityOutputSchema({
+    nodeRef: canvasNodeRefSchema,
+    status: z.enum(['retrieving', 'already_retrieving']),
+    resultRefs: z.array(canvasNodeRefSchema).length(1),
+  }),
+  concurrencyKey: 'canvas',
+  resolveConcurrencyKey: (input) => `canvas:${input.projectRef.id}`,
+  resolveTargetIds: (input) => ({ projectId: input.projectRef.id, nodeRefId: input.nodeRef.id }),
+  summarize: () => '已启动原多图层图片结果的重新获取；下载是否完成需后续读取节点确认。',
+  successEvidence: ['目标节点已保留原任务并进入续取状态；仅证明恢复请求已提交，不证明下载完成。'],
+  failureRecovery: ['按错误读取当前工程和节点状态；已完成、取消、生成失败或来源变化的节点不能恢复，不要自动重新生成。'],
+})
+
 export const CANVAS_EDITOR_APPLICATION_CAPABILITIES: ApplicationCapabilityDefinition[] = [
   openMultiLayerDocumentNodeEditor,
+  retryLayerStackResult,
 ]

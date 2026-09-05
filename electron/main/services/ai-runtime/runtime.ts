@@ -14,7 +14,7 @@ import {
 
 import { getAiProviderApiKey, getAiProviderKeyStatus } from '../keystore'
 import { createMainLogger, sanitizeJsonValue } from '../logging'
-import { releaseSavedMediaFileLease, saveMediaFromUrlTracked } from './media-store'
+import { releaseSavedMediaFileLease, saveMediaFromUrlTracked, type MediaDownloadContext } from './media-store'
 import { getProgressEstimate, recordProgressSample } from './progress'
 import { savePendingResult } from './pending-results'
 import { materializeStructuredOutput } from './structured-output'
@@ -102,7 +102,7 @@ export async function generate(
       providerResult.metadata
     )
     const persistedMedia = providerResult.status === 'completed'
-      ? await saveMediaPaths(providerResult.url)
+      ? await saveMediaPaths(providerResult.url, { requestId, modelId: request.modelId, taskId: providerResult.taskId })
       : { filePath: undefined, createdFilePaths: [] }
     const { filePath, createdFilePaths } = persistedMedia
     ownedMediaPaths = createdFilePaths
@@ -205,7 +205,7 @@ export async function continuePolling(
         responseBody: trace.responseBody,
       },
     })
-    const { filePath, createdFilePaths } = await saveMediaPaths(providerResult.url)
+    const { filePath, createdFilePaths } = await saveMediaPaths(providerResult.url, { requestId, modelId: request.modelId, taskId })
     ownedMediaPaths = createdFilePaths
     const structuredOutput = materializeStructuredOutput(providerResult.structuredOutput, filePath)
     const responseResult = {
@@ -283,7 +283,7 @@ function requireRequestInfo(
   return info
 }
 
-async function saveMediaPaths(joinedUrls: string): Promise<{
+async function saveMediaPaths(joinedUrls: string, context: MediaDownloadContext): Promise<{
   filePath?: string
   createdFilePaths: string[]
 }> {
@@ -291,8 +291,9 @@ async function saveMediaPaths(joinedUrls: string): Promise<{
   const createdFilePaths: string[] = []
   const createdPathSet = new Set<string>()
   try {
-    for (const url of joinedUrls.split('|||').map((item) => item.trim()).filter(Boolean)) {
-      const saved = await saveMediaFromUrlTracked(url)
+    const urls = joinedUrls.split('|||').map((item) => item.trim()).filter(Boolean)
+    for (const [outputIndex, url] of urls.entries()) {
+      const saved = await saveMediaFromUrlTracked(url, { ...context, outputIndex })
       if (saved) {
         savedPaths.push(saved.filePath)
         if (saved.created && createdPathSet.has(saved.filePath)) {

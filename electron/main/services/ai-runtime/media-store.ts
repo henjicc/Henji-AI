@@ -1,6 +1,6 @@
 import fs from 'node:fs/promises'
 import path from 'node:path'
-import { createHash } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import { AiRuntimeError } from '@henjicc/ai-sdk'
 
 import {
@@ -8,6 +8,75 @@ import {
   releaseManagedMediaFileLease,
 } from '../image/managed-media-leases'
 import { getDataRootDir } from '../image/path-utils'
+import { createMainLogger } from '../logging'
+
+const logger = createMainLogger('main.ai_runtime.media_download')
+const DOWNLOAD_ATTEMPTS = 3
+const DOWNLOAD_TIMEOUT_MS = 120_000
+
+export interface MediaDownloadContext {
+  requestId: string
+  modelId?: string
+  taskId?: string
+  outputIndex?: number
+}
+
+class MediaHttpError extends Error {
+  constructor(readonly status: number) {
+    super(`HTTP ${status} while downloading media`)
+  }
+}
+
+function isTransientDownloadError(error: unknown): boolean {
+  if (error instanceof MediaHttpError) return [408, 429].includes(error.status) || error.status >= 500
+  if (!(error instanceof Error) || error.name === 'AbortError') return false
+  const cause = error.cause as { code?: string } | undefined
+  return error instanceof TypeError || error.name === 'TimeoutError'
+    || ['ECONNRESET', 'ETIMEDOUT', 'UND_ERR_SOCKET', 'UND_ERR_CONNECT_TIMEOUT'].includes(cause?.code ?? '')
+}
+
+async function downloadMedia(
+  url: string,
+  context: MediaDownloadContext,
+): Promise<{ bytes: Uint8Array; contentType: string }> {
+  const { outputIndex, ...identity } = context
+  logger.info('开始下载生成结果', {
+    event: 'ai_runtime.media_download.start', ...identity, context: { outputIndex },
+  })
+  for (let attempt = 1; attempt <= DOWNLOAD_ATTEMPTS; attempt += 1) {
+    try {
+      const response = await fetch(url, { signal: AbortSignal.timeout(DOWNLOAD_TIMEOUT_MS) })
+      if (!response.ok) {
+        await response.body?.cancel().catch(() => undefined)
+        throw new MediaHttpError(response.status)
+      }
+      // 响应头成功不代表文件完整；body 中途断流也必须重取整个文件。
+      const bytes = new Uint8Array(await response.arrayBuffer())
+      logger.info('生成结果下载完成', {
+        event: 'ai_runtime.media_download.completed', ...identity,
+        context: { outputIndex, attempt, byteLength: bytes.byteLength },
+      })
+      return { bytes, contentType: response.headers.get('content-type') ?? 'application/octet-stream' }
+    } catch (error) {
+      const retry = attempt < DOWNLOAD_ATTEMPTS && isTransientDownloadError(error)
+      const details = {
+        ...identity,
+        context: { outputIndex, attempt, httpStatus: error instanceof MediaHttpError ? error.status : undefined },
+        error,
+      }
+      if (!retry) {
+        logger.error('生成结果下载失败', { event: 'ai_runtime.media_download.failed', ...details })
+        if (error instanceof Error && error.name === 'AbortError') throw error
+        const failure = new AiRuntimeError('media_download_failed', '结果已生成，但下载未完成。请重试获取结果。')
+        failure.cause = error
+        throw failure
+      }
+      logger.warn('生成结果下载中断，正在重试', { event: 'ai_runtime.media_download.retry', ...details })
+      await new Promise((resolve) => setTimeout(resolve, 250 * attempt))
+    }
+  }
+  throw new Error('Unreachable media download state')
+}
 
 export async function saveMediaFromUrl(url: string): Promise<string | undefined> {
   return (await saveMediaFromUrlTracked(url))?.filePath
@@ -20,18 +89,15 @@ export interface SavedMediaFile {
 }
 
 /** 下载并报告本次调用是否取得可释放租约，供上层做精确所有权回收。 */
-export async function saveMediaFromUrlTracked(url: string): Promise<SavedMediaFile | undefined> {
+export async function saveMediaFromUrlTracked(
+  url: string,
+  context: MediaDownloadContext = { requestId: `media-download-${randomUUID()}` },
+): Promise<SavedMediaFile | undefined> {
   if (!url.trim()) {
     return undefined
   }
 
-  const response = await fetch(url)
-  if (!response.ok) {
-    throw new AiRuntimeError('media_download_failed', `HTTP ${response.status} while downloading media`)
-  }
-
-  const contentType = response.headers.get('content-type') ?? 'application/octet-stream'
-  const bytes = new Uint8Array(await response.arrayBuffer())
+  const { bytes, contentType } = await downloadMedia(url, context)
   const fileName = buildFileName(url, bytes, contentType)
   const mediaDir = path.join(getDataRootDir(), 'Media')
   await fs.mkdir(mediaDir, { recursive: true })

@@ -31,6 +31,7 @@ import {
   type CanvasNodeType,
 } from '@/features/canvas/domain/canvasNodes'
 import { createDefaultGenerationOutputItems } from '@/features/canvas/domain/generationOutputs'
+import { createCanvasGenerationFailurePatch } from '@/features/canvas/domain/generationFailure'
 import type { MediaKind } from '@/features/canvas/domain/nodePorts'
 import type { RowMediaKind } from '@/features/canvas/domain/socketTypes'
 import {
@@ -385,13 +386,9 @@ export function useGenerationNodeExecution(options: UseGenerationNodeExecutionOp
           return { status: 'completed', resultNodeIds: committed.resultNodeIds }
         } catch (error) {
           if (isProjectCurrent()) {
-            useCanvasStore.getState().updateNodeData(resultNodeId, {
-              isGenerating: false,
-              generationStartedAt: null,
-              generationError: error instanceof Error ? error.message : current.t('ai.error'),
-              serverTaskId: null,
-              serverTaskModelId: null,
-            })
+            useCanvasStore.getState().updateNodeData(resultNodeId, createCanvasGenerationFailurePatch(
+              error, current.capability?.outputPolicy.resultKind,
+            ))
           }
           throw error
         } finally {

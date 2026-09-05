@@ -139,6 +139,43 @@ describe('useCanvasResumePolling 异步结果恢复', () => {
     generationMocks.embedStoryboardImageMetadata.mockResolvedValue('/managed/storyboard-metadata.png');
   });
 
+  it('图层下载失败保留原任务并停止自动重试，明确续取后提交同一占位节点', async () => {
+    const node: CanvasNode = {
+      id: 'layer-result', type: CANVAS_NODE_TYPES.layerStackResult, position: { x: 0, y: 0 },
+      data: {
+        resultKind: 'layer-stack', imageUrl: null, isGenerating: true,
+        serverTaskId: 'existing-kie-task', serverTaskModelId: 'kie-seedream-5.0-pro',
+        generationSourceNodeId: 'layer-generator', generationInputImages: ['/input.png'],
+        generationProviderId: 'kie',
+      },
+    }
+    useCanvasStore.getState().setCanvasData([node], [], { past: [], future: [] })
+    generationMocks.resumeCanvasGeneration.mockRejectedValueOnce(
+      new Error('Continue polling failed for kie-seedream-5.0-pro: [media_download_failed] terminated'),
+    ).mockResolvedValue({ outputs: ['/downloaded-layer.png'], primary: '/downloaded-layer.png' })
+    generationMocks.commitLayerSeparationGeneration.mockImplementation(async () => {
+      useCanvasStore.getState().updateNodeData(node.id, {
+        imageUrl: '/composite.png', previewImageUrl: '/composite.png',
+        isGenerating: false, generationError: null, serverTaskId: null, serverTaskModelId: null,
+      })
+      return { resultNodeIds: [node.id] }
+    })
+    const { rerender } = renderHook(() => useCanvasResumePolling())
+    await waitFor(() => expect(useCanvasStore.getState().nodes[0]?.data.generationError).toContain('下载未完成'))
+    expect(useCanvasStore.getState().nodes[0]?.data.serverTaskId).toBe('existing-kie-task')
+    rerender()
+    expect(generationMocks.resumeCanvasGeneration).toHaveBeenCalledTimes(1)
+
+    act(() => useCanvasStore.getState().updateNodeData(node.id, { generationError: null, isGenerating: true }))
+    await waitFor(() => expect(useCanvasStore.getState().nodes[0]?.data.imageUrl).toBe('/composite.png'))
+    expect(generationMocks.resumeCanvasGeneration).toHaveBeenCalledTimes(2)
+    expect(generationMocks.resumeCanvasGeneration).toHaveBeenLastCalledWith(expect.objectContaining({
+      taskId: 'existing-kie-task', modelId: 'kie-seedream-5.0-pro',
+    }))
+    expect(generationMocks.commitLayerSeparationGeneration).toHaveBeenCalledTimes(1)
+    expect(useCanvasStore.getState().nodes).toHaveLength(1)
+  })
+
   it('不接管当前页面仍由原始生成链路轮询的任务', async () => {
     markCanvasGenerationTaskActive('panorama-task');
     renderHook(() => useCanvasResumePolling());

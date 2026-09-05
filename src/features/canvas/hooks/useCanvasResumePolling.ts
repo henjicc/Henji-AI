@@ -17,6 +17,7 @@ import { getResultNodeMediaType } from '../domain/nodeRegistry';
 import type { CanvasNodeType } from '../domain/canvasNodes';
 import { createDefaultGenerationOutputItems } from '../domain/generationOutputs';
 import { readResumableServerTask } from '../domain/resumableTask';
+import { createCanvasGenerationFailurePatch } from '../domain/generationFailure';
 import { resumeCanvasGeneration } from '../generation/runGeneration';
 import {
   acquireCanvasGenerationResumeLease,
@@ -74,6 +75,8 @@ export function useCanvasResumePolling(): void {
       if (
         !task
         || isCanvasGenerationTaskActive(task.taskId)
+        // 已显示下载失败的结果等待用户明确续取，避免节点更新触发无限重试。
+        || (node.data.resultKind === 'layer-stack' && Boolean(node.data.generationError))
       ) {
         continue;
       }
@@ -362,13 +365,7 @@ async function resumeNodeTask(input: ResumeNodeTaskInput): Promise<void> {
   } catch (error) {
     if (!isContextCurrent()) return;
     const message = error instanceof Error ? error.message : String(error);
-    updateNodeData(nodeId, {
-      isGenerating: false,
-      generationStartedAt: null,
-      generationError: message,
-      serverTaskId: null,
-      serverTaskModelId: null,
-    });
+    updateNodeData(nodeId, createCanvasGenerationFailurePatch(error, resultNodeData.resultKind));
     logger.error('[CanvasResume] 异步生成恢复失败', error, {
       event: 'canvas.resume_polling.failed',
       taskId,
