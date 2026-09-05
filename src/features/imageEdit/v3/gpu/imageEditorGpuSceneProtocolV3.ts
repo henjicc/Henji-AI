@@ -6,6 +6,7 @@ import type {
   ImageEditorV3ResourceDescriptor,
   ImageEditorV3ResourceRef,
   ImageEditorV3SourceTile,
+  ImageEditorV3PyramidDescriptor,
 } from '@/platform/contracts/imageEditorV3'
 import type { ImageEditorViewportLayoutV3 } from '../editor/useImageEditorViewportLayoutV3'
 
@@ -55,6 +56,8 @@ export interface ImageEditorGpuSceneSyncRequestV3 extends ImageEditorGpuSceneSeq
   type: 'sync-scene'
   document: ImageEditDocumentV3
   resourceDescriptors: readonly ImageEditorV3ResourceDescriptor[]
+  /** 主进程按资源身份读取的 EXIF 方向应用后源金字塔；不能用文档尺寸推测。 */
+  sourcePyramids?: Readonly<Record<string, ImageEditorV3PyramidDescriptor>>
 }
 
 export interface ImageEditorGpuSceneUploadTilesRequestV3 extends ImageEditorGpuSceneSequencedRequestV3 {

@@ -4,6 +4,15 @@ const path = require('node:path')
 const test = require('node:test')
 const { UI_AUDIT_RULES } = require('./uiAuditDom.cjs')
 const {
+  createExistingMultiLayerReadOnlySceneDefinition,
+  readExistingMultiLayerTarget,
+} = require('./uiInspectionSceneCanvasExistingMultiLayer.cjs')
+const {
+  createExistingMultiLayerIsolatedCpuSceneDefinition,
+  detectImageMediaType,
+  readExistingMultiLayerFixtureSource,
+} = require('./uiInspectionExistingMultiLayerFixture.cjs')
+const {
   DEFAULT_WINDOW_SIZES,
   UI_INSPECTION_SCENES,
   filterScenes,
@@ -37,6 +46,70 @@ test('真实数据模式必须显式开启，写业务数据的场景默认被�
     allowWrites: true,
   })
   assert.deepEqual(allowed.scenes.map((scene) => scene.id).sort(), ['read', 'write'])
+})
+
+test('已有多图层文档只读场景仅在完整环境参数下注册且不声明写入', async () => {
+  assert.equal(readExistingMultiLayerTarget({}), null)
+  assert.throws(
+    () => readExistingMultiLayerTarget({ HENJI_REAL_MULTI_LAYER_PROJECT_ID: 'project' }),
+    /必须同时设置/,
+  )
+  assert.throws(
+    () => readExistingMultiLayerTarget({
+      HENJI_REAL_MULTI_LAYER_PROJECT_ID: 'project',
+      HENJI_REAL_MULTI_LAYER_NODE_ID: 'node',
+      HENJI_REAL_MULTI_LAYER_EXPECTED_LAYER_COUNT: '1',
+    }),
+    /大于等于 2 的整数/,
+  )
+  const calls = []
+  const environment = {
+    HENJI_REAL_MULTI_LAYER_PROJECT_ID: 'project-from-env',
+    HENJI_REAL_MULTI_LAYER_NODE_ID: 'node-from-env',
+    HENJI_REAL_MULTI_LAYER_EXPECTED_LAYER_COUNT: '10',
+  }
+  const gpuScene = createExistingMultiLayerReadOnlySceneDefinition(
+    async (...args) => { calls.push(args) },
+    environment,
+  )
+  const cpuScene = createExistingMultiLayerIsolatedCpuSceneDefinition(
+    async (...args) => { calls.push(args) },
+    {
+      HENJI_REAL_MULTI_LAYER_DOCUMENT_PATH: '/fixture/document.json',
+      HENJI_REAL_MULTI_LAYER_EXPECTED_LAYER_COUNT: '10',
+    },
+  )
+  assert.ok(gpuScene)
+  assert.ok(cpuScene)
+  assert.equal(gpuScene.id, 'canvas-existing-multi-layer-readonly')
+  assert.equal(cpuScene.id, 'canvas-existing-multi-layer-isolated-cpu-fallback')
+  assert.notEqual(gpuScene.writesUserData, true)
+  assert.equal(cpuScene.writesUserData, true)
+  assert.equal(cpuScene.forceGpuInitializationFailure, true)
+  await gpuScene.setup('page', 'app', 'inspection')
+  await cpuScene.setup('page', 'app', 'inspection')
+  const expectedCall = [
+    'page',
+    'app',
+    'inspection',
+    { projectId: 'project-from-env', nodeId: 'node-from-env', expectedLayerCount: 10 },
+  ]
+  assert.deepEqual(calls, [expectedCall, [
+    'page',
+    'app',
+    'inspection',
+    { documentPath: '/fixture/document.json', expectedLayerCount: 10 },
+  ]])
+  assert.equal(readExistingMultiLayerFixtureSource({}), null)
+})
+
+test('已有多图层隔离夹具按文件魔数识别正式导入媒体类型', () => {
+  assert.equal(detectImageMediaType(Buffer.from([
+    0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
+  ])), 'image/png')
+  assert.equal(detectImageMediaType(Buffer.from([0xff, 0xd8, 0xff])), 'image/jpeg')
+  assert.equal(detectImageMediaType(Buffer.from('RIFF0000WEBP')), 'image/webp')
+  assert.throws(() => detectImageMediaType(Buffer.from('GIF89a')), /不支持的源资源格式/)
 })
 
 test('拒绝未知的数据模式', () => {

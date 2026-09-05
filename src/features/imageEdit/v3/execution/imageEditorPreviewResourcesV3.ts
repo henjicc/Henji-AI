@@ -1,9 +1,9 @@
 import {
-  describeImageEditorV3SourcePyramid,
   prewarmImageEditorV3SourcePyramid,
   readImageEditorV3FastProxy,
 } from '@/commands/imageEditorV3'
 import { createLogger } from '@/core/logging'
+import { readSharedImageEditorSourcePyramidV3 } from './imageEditorSourcePyramidsV3'
 import type {
   ImageEditMemoryLease,
   ImageEditResourceBudget,
@@ -126,7 +126,7 @@ export class ImageEditorPreviewResourceLoaderV3 {
   constructor(private readonly options: ImageEditorPreviewResourceLoaderOptionsV3) {
     this.proxyReader = options.proxyReader ?? readImageEditorV3FastProxy
     this.pyramidDescriptorReader = options.pyramidDescriptorReader
-      ?? describeImageEditorV3SourcePyramid
+      ?? readSharedImageEditorSourcePyramidV3
     this.pyramidPrewarmer = options.pyramidPrewarmer ?? prewarmImageEditorV3SourcePyramid
     this.proxyCacheMaxBytes = options.proxyCacheMaxBytes
       ?? IMAGE_EDITOR_PREVIEW_PROXY_CACHE_MAX_BYTES_V3

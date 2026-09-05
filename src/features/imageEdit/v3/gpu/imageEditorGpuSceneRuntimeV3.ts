@@ -111,6 +111,7 @@ export class ImageEditorGpuSceneRuntimeV3 {
           const compilation = compileImageEditorGpuRasterSceneV3(
             request.document,
             request.resourceDescriptors,
+            request.sourcePyramids,
           )
           this.scene = compilation.supported ? compilation.scene : null
           this.states.peek()?.compositor.syncScene(this.scene)

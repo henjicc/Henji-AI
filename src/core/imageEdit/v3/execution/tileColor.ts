@@ -212,6 +212,32 @@ export function convertFloat32TileWorkingSpaceV3(
   return convertFloat32TileColorDomainV3(targetLinear, originalDomain);
 }
 
+/** 在合成边界统一完整颜色契约；参考白换算必须在线性域执行，不能仅改元数据。 */
+export function convertFloat32TileColorContractV3(
+  tile: Float32PremultipliedRgbaTile,
+  target: Pick<Float32PremultipliedRgbaTile,
+    'colorDomain' | 'workingSpace' | 'transferFunction' | 'referenceWhiteNits'>,
+): Float32PremultipliedRgbaTile {
+  if (tile.workingSpace === target.workingSpace
+    && tile.transferFunction === target.transferFunction
+    && tile.referenceWhiteNits === target.referenceWhiteNits) {
+    return convertFloat32TileColorDomainV3(tile, target.colorDomain);
+  }
+  const linear = convertFloat32TileWorkingSpaceV3(
+    convertFloat32TileColorDomainV3(tile, 'linear-light'), target.workingSpace,
+  );
+  const data = new Float32Array(linear.data);
+  const whiteScale = linear.referenceWhiteNits / target.referenceWhiteNits;
+  for (let offset = 0; offset < data.length; offset += 4) {
+    for (let channel = 0; channel < 3; channel += 1) data[offset + channel] *= whiteScale;
+  }
+  const converted = createFloat32PremultipliedRgbaTile(
+    tile.width, tile.height, 'linear-light', data, target.workingSpace,
+    target.transferFunction, target.referenceWhiteNits,
+  );
+  return convertFloat32TileColorDomainV3(converted, target.colorDomain);
+}
+
 /** HDR/宽色域到普通屏幕的明确显示变换；仅生成预览，绝不修改权威像素。 */
 export function toneMapFloat32TileToSdrV3(
   tile: Float32PremultipliedRgbaTile,

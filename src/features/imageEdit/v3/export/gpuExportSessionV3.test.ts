@@ -35,6 +35,46 @@ function request(document: ReturnType<typeof createImageEditDocumentV3>) {
 }
 
 describe('ImageEditorGpuExportSessionV3', () => {
+  it.each(['初始化失败', '设备丢失'])('%s之后的新导出立即拒绝等待，恢复ready后允许正常GPU导出', async (reason) => {
+    const gpu = client()
+    const session = new ImageEditorGpuExportSessionV3(gpu)
+    const document = createImageEditDocumentV3({ width: 16, height: 16 })
+    session.syncSnapshot({ document, renderGeneration: 1, geometryHash: 'a', quality: 'stable',
+      resourceDescriptors: [] })
+    if (reason === '设备丢失') session.notifyDeviceReady()
+    session.notifyDeviceUnavailable(new Error(reason))
+    const failed = session.render(request(document))!
+    await expect(failed[Symbol.asyncIterator]().next()).rejects.toThrow(reason)
+    expect(gpu.requestExport).not.toHaveBeenCalled()
+
+    session.notifyDeviceReady()
+    const recovered = session.render(request(document))!
+    expect(gpu.requestExport).toHaveBeenCalledOnce()
+    const exportRequest = gpu.requestExport.mock.calls[0]![0]
+    session.handleEvent({ type: 'export-tile', sceneGeneration: 1, deviceGeneration: 2,
+      requestId: exportRequest.requestId, tileX: 0, tileY: 0, x: 0, y: 0,
+      width: 16, height: 16, rowStride: 64, pixels: new ArrayBuffer(1024), completed: true })
+    const iterator = recovered[Symbol.asyncIterator]()
+    await expect(iterator.next()).resolves.toMatchObject({ done: false })
+    await expect(iterator.next()).resolves.toMatchObject({ done: true })
+    session.dispose()
+  })
+
+  it('初始化中的导出等待被失败唤醒，后续导出也立即失败而不是再等待', async () => {
+    const gpu = client()
+    const session = new ImageEditorGpuExportSessionV3(gpu)
+    const document = createImageEditDocumentV3({ width: 16, height: 16 })
+    session.syncSnapshot({ document, renderGeneration: 1, geometryHash: 'a', quality: 'stable',
+      resourceDescriptors: [] })
+    const next = session.render(request(document))![Symbol.asyncIterator]().next()
+    expect(gpu.requestExport).not.toHaveBeenCalled()
+    session.notifyDeviceUnavailable(new Error('adapter unavailable'))
+    await expect(next).rejects.toThrow('adapter unavailable')
+    await expect(session.render(request(document))![Symbol.asyncIterator]().next()).rejects.toThrow('adapter unavailable')
+    expect(gpu.requestExport).not.toHaveBeenCalled()
+    session.dispose()
+  })
+
   it('把活动scene绑定到文档revision，并在消费后才确认tile', async () => {
     const gpu = client()
     const session = new ImageEditorGpuExportSessionV3(gpu)

@@ -26,6 +26,7 @@ interface ActiveExportV3 {
   events: ImageEditorV3RenderedExportTile[]
   wake: (() => void) | null
   error: Error | null
+  errorDiagnostic: boolean
   completed: boolean
   cancelSent: boolean
   diagnostics: Extract<ImageEditorGpuSceneWorkerEventV3, { type: 'export-tile' }>['diagnostics']
@@ -41,6 +42,8 @@ export class ImageEditorGpuExportSessionV3 {
   private active: ActiveExportV3 | null = null
   private readonly diagnosticEventListener: EventListener | null
   private deviceReady = false
+  private deviceFailure: Error | null = null
+  private deviceFailureDiagnostic = false
   private diagnosticFailureAfterTiles: number | null = null
 
   constructor(
@@ -79,12 +82,16 @@ export class ImageEditorGpuExportSessionV3 {
 
   notifyDeviceReady(): void {
     this.deviceReady = true
+    this.deviceFailure = null
+    this.deviceFailureDiagnostic = false
     if (this.active) this.startActive(this.active)
   }
 
-  notifyDeviceUnavailable(error: Error): void {
+  notifyDeviceUnavailable(error: Error, diagnostic = false): void {
     this.deviceReady = false
-    this.failActive(error)
+    this.deviceFailure = error
+    this.deviceFailureDiagnostic = diagnostic
+    this.failActive(error, diagnostic)
   }
 
   handleEvent(event: ImageEditorGpuSceneWorkerEventV3): boolean {
@@ -105,7 +112,7 @@ export class ImageEditorGpuExportSessionV3 {
       return true
     }
     if (event.type === 'failed' && event.requestId === active.requestId) {
-      this.failActive(new Error(event.message))
+      this.failActive(new Error(event.message), event.diagnostic)
       return true
     }
     return false
@@ -132,7 +139,10 @@ export class ImageEditorGpuExportSessionV3 {
       requestId,
       events: [],
       wake: null,
-      error: null,
+      // 初始化尚在进行时可等待 ready；已失败的设备必须立即拒绝流，
+      // 由既有导出事务从 tile 0 重试 CPU，不能永久等待不会再来的 ready。
+      error: request.signal?.aborted ? abortError(request.signal.reason) : this.deviceFailure,
+      errorDiagnostic: !request.signal?.aborted && this.deviceFailureDiagnostic,
       completed: false,
       cancelSent: false,
       diagnostics: undefined,
@@ -151,7 +161,7 @@ export class ImageEditorGpuExportSessionV3 {
       context: { documentId: request.document.id, revision: request.document.revision,
         tileCount: output.tiles.length, multiscale: Boolean(output.multiscaleAnalysis) },
     })
-    if (this.deviceReady) this.startActive(active)
+    if (this.deviceReady && !active.error) this.startActive(active)
     return this.stream(active, request)
   }
 
@@ -178,6 +188,7 @@ export class ImageEditorGpuExportSessionV3 {
   ): ImageEditorV3ExportTileStream {
     const abort = (): void => this.failActive(abortError(request.signal?.reason))
     request.signal?.addEventListener('abort', abort, { once: true })
+    if (request.signal?.aborted) abort()
     let completed = 0
     let drained = false
     try {
@@ -200,6 +211,7 @@ export class ImageEditorGpuExportSessionV3 {
         )
         if (active.diagnosticFailureAfterTiles !== null
           && completed >= active.diagnosticFailureAfterTiles) {
+          active.errorDiagnostic = true
           throw new Error('Reality 注入：GPU 导出首批瓦片后失败')
         }
         if (active.completed && active.events.length === 0) { drained = true; return }
@@ -210,7 +222,7 @@ export class ImageEditorGpuExportSessionV3 {
         event: 'image_editor_v3.gpu_export.failed', requestId: active.requestId,
         context: { completedTiles: completed },
       }
-      if (failure.message.startsWith('Reality 注入：')) {
+      if (active.errorDiagnostic) {
         logger.warn('图片编辑 GPU 分块导出已执行 Reality 故障注入', logDetails)
       } else {
         logger.error('图片编辑 GPU 分块导出失败', failure, logDetails)
@@ -262,16 +274,17 @@ export class ImageEditorGpuExportSessionV3 {
     }
   }
 
-  private failActive(error: Error): void {
+  private failActive(error: Error, diagnostic = false): void {
     const active = this.active
     if (!active) return
     active.error = error
+    active.errorDiagnostic = diagnostic
     this.wake(active)
     this.cancelWorker(active)
   }
 
   private startActive(active: ActiveExportV3): void {
-    if (this.active !== active || active.cancelSent || active.started) return
+    if (this.active !== active || active.error || active.cancelSent || active.started) return
     active.started = true
     this.client?.requestExport?.(active.request)
   }

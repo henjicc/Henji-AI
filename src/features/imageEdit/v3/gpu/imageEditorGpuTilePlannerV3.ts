@@ -83,13 +83,23 @@ export function planImageEditorGpuRasterTilesV3(
     Math.hypot(layer.transform[2], layer.transform[3]),
   )
   const sourceZoom = Math.max(Number.EPSILON, viewport.zoom * layerScale)
-  const pyramid = createImageEditorGpuPyramidDescriptorV3(scene.width, scene.height)
+  const pyramid = layer.sourcePyramid ?? createImageEditorGpuPyramidDescriptorV3(scene.width, scene.height)
+  const sourceSize = pyramid.levels.find((level) => level.mip === 0)!
   const hasSparseOverrides = Object.keys(layer.sparseTiles).length > 0
+  // 稀疏画笔覆盖属于图层的文档坐标空间，允许画到原始小图片边界之外。
+  const sparseExtent = Object.keys(layer.sparseTiles).reduce((size, key) => {
+    const [, x, y] = key.split('/').map(Number)
+    return { width: Math.max(size.width, (x + 1) * IMAGE_EDIT_STORAGE_TILE_SIZE),
+      height: Math.max(size.height, (y + 1) * IMAGE_EDIT_STORAGE_TILE_SIZE) }
+  }, { width: Math.max(scene.width, sourceSize.width), height: Math.max(scene.height, sourceSize.height) })
+  const planningPyramid = hasSparseOverrides
+    ? createImageEditorGpuPyramidDescriptorV3(sparseExtent.width, sparseExtent.height) : pyramid
+  const planningSize = hasSparseOverrides ? sparseExtent : sourceSize
   const plan = planImageEditorViewportTilesV3({
     resourceRef: layer.resourceRef ?? syntheticTransparentResourceRef(layer.layerId),
-    documentSize: { width: scene.width, height: scene.height },
-    sourceSize: { width: scene.width, height: scene.height },
-    pyramid,
+    documentSize: planningSize,
+    sourceSize: planningSize,
+    pyramid: planningPyramid,
     viewport: {
       documentX: minX,
       documentY: minY,
@@ -112,9 +122,9 @@ export function planImageEditorGpuRasterTilesV3(
   const plannedMip = hasSparseOverrides ? 0 : plan.mip
   const coordinates = plannedMip === plan.mip ? plan.tiles : planImageEditorViewportTilesV3({
     resourceRef: layer.resourceRef ?? syntheticTransparentResourceRef(layer.layerId),
-    documentSize: { width: scene.width, height: scene.height },
-    sourceSize: { width: scene.width, height: scene.height },
-    pyramid: { tileSize: IMAGE_EDIT_STORAGE_TILE_SIZE, levels: [pyramid.levels[0]!] },
+    documentSize: planningSize,
+    sourceSize: planningSize,
+    pyramid: { tileSize: IMAGE_EDIT_STORAGE_TILE_SIZE, levels: [planningPyramid.levels[0]!] },
     viewport: {
       documentX: minX, documentY: minY,
       width: Math.max(Number.EPSILON, (maxX - minX) * sourceZoom),
@@ -126,9 +136,11 @@ export function planImageEditorGpuRasterTilesV3(
     haloDocumentPixels: 1, overscanViewports: viewport.interacting ? 0.25 : 0.125,
     forwardPrefetchViewports: 0.25, previousMip: 0,
   }).tiles
-  const mipDimensions = mipSize({ width: scene.width, height: scene.height }, plannedMip)
   const tiles = coordinates.flatMap((tile) => {
     const override = plannedMip === 0 ? layer.sparseTiles[`0/${tile.tileX}/${tile.tileY}`] : undefined
+    const mipDimensions = (override ? planningPyramid : pyramid).levels.find((level) => level.mip === plannedMip)
+    // 非覆盖区只请求真实源覆盖的瓦片；源范围之外是透明，不是一个可解码瓦片。
+    if (!mipDimensions || tile.tileX >= mipDimensions.columns || tile.tileY >= mipDimensions.rows) return []
     if (!override && !layer.resourceRef && layer.sourceKind !== 'annotation') return []
     const resourceRef = override?.resourceRef ?? layer.resourceRef
     if (!resourceRef) return []

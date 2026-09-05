@@ -1,4 +1,8 @@
 import { createLogger } from '@/core/logging'
+import { createImageEditorV3RequestId } from '@/commands/imageEditorV3'
+import { readSharedImageEditorSourcePyramidV3 } from '../execution/imageEditorSourcePyramidsV3'
+import type { ImageEditDocumentV3 } from '@/core/imageEdit/v3/documentTypes'
+import type { ImageEditorV3ResourceRef } from '@/platform/contracts/imageEditorV3'
 import {
   isUiInspectionActive,
   isUiInspectionGpuInitializationFailure,
@@ -15,6 +19,7 @@ import {
   type ImageEditorGpuSceneWorkerEventV3,
   type ImageEditorGpuSceneWorkerFactoryV3,
   type ImageEditorGpuSceneWorkerPortV3,
+  type ImageEditorGpuSceneWorkerRequestV3,
 } from './imageEditorGpuSceneProtocolV3'
 import { ImageEditorGpuSceneSequenceGateV3 } from './imageEditorGpuSceneSequenceV3'
 
@@ -27,6 +32,7 @@ export interface ImageEditorGpuSceneClientOptionsV3 {
   memoryBudgetBytes?: number
   /** 仅测试可显式关闭；正式会话默认请求 Surface / ImageBitmap GPU 帧。 */
   renderingEnabled?: boolean
+  sourcePyramidReader?: typeof readSharedImageEditorSourcePyramidV3
 }
 
 export interface ImageEditorGpuSceneClientV3Like {
@@ -83,6 +89,10 @@ export class ImageEditorGpuSceneClientV3 implements ImageEditorGpuSceneClientV3L
   private surfaceGeneration = 0
   private readonly diagnosticEventListener: EventListener | null
   private disposed = false
+  private preparingScene: AbortController | null = null
+  private pendingSceneMessages: Array<{ message: ImageEditorGpuSceneWorkerRequestV3; transfer?: Transferable[] }> = []
+  private pendingReady: Extract<ImageEditorGpuSceneWorkerEventV3, { type: 'ready' }> | null = null
+  private deviceGeneration = 0
 
   constructor(private readonly options: ImageEditorGpuSceneClientOptionsV3) {
     if (!options.sessionId.trim()) throw new Error('GPU Scene 会话 ID 不能为空')
@@ -121,11 +131,53 @@ export class ImageEditorGpuSceneClientV3 implements ImageEditorGpuSceneClientV3L
   syncScene(snapshot: ImageEditorRenderSnapshotV3): void {
     this.assertUsable()
     if (!this.sequence.syncScene(snapshot.renderGeneration)) return
-    this.worker.postMessage({
+    this.preparingScene?.abort()
+    this.pendingSceneMessages = []
+    const request = {
       type: 'sync-scene',
       sceneGeneration: snapshot.renderGeneration,
       document: snapshot.document,
       resourceDescriptors: snapshot.resourceDescriptors,
+    } as const
+    const refs = rasterSourceRefs(snapshot.document.layers)
+    if (refs.length === 0) {
+      this.preparingScene = null
+      this.worker.postMessage({ ...request, sourcePyramids: {} })
+      if (this.pendingReady) {
+        const ready = this.pendingReady
+        this.pendingReady = null
+        this.handleEvent({ ...ready, sceneGeneration: snapshot.renderGeneration })
+      }
+      return
+    }
+    const controller = new AbortController()
+    this.preparingScene = controller
+    const readPyramid = this.options.sourcePyramidReader ?? readSharedImageEditorSourcePyramidV3
+    void Promise.all(refs.map(async (resourceRef) => [resourceRef, await readPyramid({
+      requestId: createImageEditorV3RequestId('gpu-source-pyramid'), resourceRef,
+    }, controller.signal)] as const)).then((entries) => {
+      if (controller.signal.aborted || this.disposed || this.preparingScene !== controller) return
+      this.worker.postMessage({ ...request, sourcePyramids: Object.fromEntries(entries) })
+      this.preparingScene = null
+      const pending = this.pendingSceneMessages
+      this.pendingSceneMessages = []
+      for (const queued of pending) this.worker.postMessage(queued.message, queued.transfer)
+      if (this.pendingReady) {
+        const ready = this.pendingReady
+        this.pendingReady = null
+        this.handleEvent({ ...ready, sceneGeneration: snapshot.renderGeneration })
+      }
+    }).catch((error: unknown) => {
+      if (controller.signal.aborted || this.disposed || this.preparingScene !== controller) return
+      this.pendingSceneMessages = []
+      this.preparingScene = null
+      this.pendingReady = null
+      controller.abort()
+      this.handleEvent({
+        type: 'failed', sceneGeneration: snapshot.renderGeneration, deviceGeneration: 0,
+        requestId: null, code: 'initialization-failed', recoverable: true,
+        message: `读取图片资源几何失败：${error instanceof Error ? error.message : String(error)}`,
+      })
     })
   }
 
@@ -143,7 +195,7 @@ export class ImageEditorGpuSceneClientV3 implements ImageEditorGpuSceneClientV3L
   uploadTiles(sceneGeneration: number, tiles: readonly ImageEditorGpuSceneUploadTileV3[]): void {
     this.assertUsable()
     if (sceneGeneration !== this.sequence.snapshot().sceneGeneration || tiles.length === 0) return
-    this.worker.postMessage(
+    this.postSceneMessage(
       { type: 'upload-tiles', sceneGeneration, tiles },
       tiles.map((entry) => entry.tile.pixels),
     )
@@ -156,7 +208,7 @@ export class ImageEditorGpuSceneClientV3 implements ImageEditorGpuSceneClientV3L
   ): void {
     this.assertUsable()
     if (sceneGeneration !== this.sequence.snapshot().sceneGeneration || tiles.length === 0) return
-    this.worker.postMessage(
+    this.postSceneMessage(
       { type: 'upload-tiles', sceneGeneration, exportRequestId, tiles },
       tiles.map((entry) => entry.tile.pixels),
     )
@@ -165,11 +217,14 @@ export class ImageEditorGpuSceneClientV3 implements ImageEditorGpuSceneClientV3L
   requestExport(request: ImageEditorGpuSceneExportRequestV3): void {
     this.assertUsable()
     if (request.sceneGeneration !== this.sequence.snapshot().sceneGeneration) return
-    this.worker.postMessage(request)
+    this.postSceneMessage(request)
   }
 
   cancelExport(requestId: string): void {
     if (this.disposed) return
+    this.pendingSceneMessages = this.pendingSceneMessages.filter(({ message }) => (
+      message.type !== 'export' || message.requestId !== requestId
+    ))
     this.worker.postMessage({ type: 'cancel-export', requestId })
   }
 
@@ -186,7 +241,7 @@ export class ImageEditorGpuSceneClientV3 implements ImageEditorGpuSceneClientV3L
   ): void {
     this.assertUsable()
     if (!this.sequence.updateInteraction(sceneGeneration, interactionSequence)) return
-    this.worker.postMessage({
+    this.postSceneMessage({
       type: 'update-transform', sceneGeneration, interactionSequence, layerId, transform,
     })
   }
@@ -198,7 +253,7 @@ export class ImageEditorGpuSceneClientV3 implements ImageEditorGpuSceneClientV3L
   ): void {
     this.assertUsable()
     if (!this.sequence.updateInteraction(sceneGeneration, interactionSequence)) return
-    this.worker.postMessage({
+    this.postSceneMessage({
       type: 'update-transform', sceneGeneration, interactionSequence, layerId, transform: null,
     })
   }
@@ -210,7 +265,7 @@ export class ImageEditorGpuSceneClientV3 implements ImageEditorGpuSceneClientV3L
   ): void {
     this.assertUsable()
     if (!this.sequence.updateCamera(sceneGeneration, cameraSequence)) return
-    this.worker.postMessage({ type: 'update-viewport', sceneGeneration, cameraSequence, layout })
+    this.postSceneMessage({ type: 'update-viewport', sceneGeneration, cameraSequence, layout })
   }
 
   requestFrame(
@@ -225,7 +280,7 @@ export class ImageEditorGpuSceneClientV3 implements ImageEditorGpuSceneClientV3L
     if (sceneGeneration !== current.sceneGeneration
       || cameraSequence !== current.cameraSequence
       || interactionSequence !== current.interactionSequence) return
-    this.worker.postMessage({
+    this.postSceneMessage({
       type: 'render',
       requestId: `${this.options.sessionId}:gpu-frame:${++this.requestSequence}`,
       sceneGeneration,
@@ -244,6 +299,9 @@ export class ImageEditorGpuSceneClientV3 implements ImageEditorGpuSceneClientV3L
   dispose(): void {
     if (this.disposed) return
     this.disposed = true
+    this.preparingScene?.abort()
+    this.pendingSceneMessages = []
+    this.pendingReady = null
     this.worker.postMessage({ type: 'dispose' })
     this.worker.terminate()
     this.worker.onmessage = null
@@ -255,6 +313,21 @@ export class ImageEditorGpuSceneClientV3 implements ImageEditorGpuSceneClientV3L
   }
 
   private handleEvent(event: ImageEditorGpuSceneWorkerEventV3): void {
+    // 设备生命周期独立于场景；ready 可能在 sync-scene 发送前就由 Worker 发出。
+    if (event.type === 'ready' || event.type === 'device-lost') {
+      if (event.deviceGeneration < this.deviceGeneration) return
+      this.deviceGeneration = event.deviceGeneration
+      event = { ...event, sceneGeneration: this.sequence.snapshot().sceneGeneration }
+    }
+    if (event.type === 'ready' && this.preparingScene) {
+      this.pendingReady = event
+      return
+    }
+    if (event.type === 'device-lost'
+      || (event.type === 'failed' && event.code === 'initialization-failed')) {
+      event = { ...event, sceneGeneration: this.sequence.snapshot().sceneGeneration }
+      this.pendingReady = null
+    }
     if (!this.sequence.acceptsEvent(event)) {
       if (event.type === 'frame-ready') event.bitmap.close()
       return
@@ -339,6 +412,29 @@ export class ImageEditorGpuSceneClientV3 implements ImageEditorGpuSceneClientV3L
   private assertUsable(): void {
     if (this.disposed) throw new Error('GPU Scene 客户端已销毁')
   }
+
+  private postSceneMessage(message: ImageEditorGpuSceneWorkerRequestV3, transfer?: Transferable[]): void {
+    if (!this.preparingScene) {
+      this.worker.postMessage(message, transfer)
+      return
+    }
+    if (message.type === 'update-viewport' || message.type === 'render' || message.type === 'update-transform') {
+      this.pendingSceneMessages = this.pendingSceneMessages.filter(({ message: previous }) => (
+        previous.type !== message.type
+        || (previous.type === 'update-transform' && message.type === 'update-transform'
+          && previous.layerId !== message.layerId)
+      ))
+    }
+    this.pendingSceneMessages.push({ message, transfer })
+  }
+}
+
+function rasterSourceRefs(layers: ImageEditDocumentV3['layers']): ImageEditorV3ResourceRef[] {
+  return [...new Set(layers.flatMap((layer): ImageEditorV3ResourceRef[] => {
+    if (layer.type === 'group') return rasterSourceRefs(layer.children)
+    return layer.type === 'raster' && layer.source.kind === 'resource'
+      ? [layer.source.resourceId as ImageEditorV3ResourceRef] : []
+  }))]
 }
 
 export function createDefaultImageEditorGpuSceneClientV3(

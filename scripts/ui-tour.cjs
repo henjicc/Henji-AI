@@ -100,7 +100,7 @@ async function main() {
     mainEntry: MAIN_ENTRY,
     profile: options.profile,
     readOnly: !options.allowWrites,
-    extraEnv: scenes.length === 1 && scenes[0]?.id === 'image-editor-gpu-initialization-fallback'
+    extraEnv: scenes.length === 1 && scenes[0]?.forceGpuInitializationFailure === true
       ? { HENJI_UI_INSPECTION_GPU_INIT_FAILURE: '1' }
       : {},
   })

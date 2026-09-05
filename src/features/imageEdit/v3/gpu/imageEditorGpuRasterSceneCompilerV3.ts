@@ -12,13 +12,14 @@ import {
   type ImageEditTransformV3,
 } from '@/core/imageEdit/v3/layerTypes'
 import type { ImageEditRenderPlanNode } from '@/core/imageEdit/v3/renderPlan'
-import type { ImageEditorV3ResourceDescriptor } from '@/platform/contracts/imageEditorV3'
+import type { ImageEditorV3PyramidDescriptor, ImageEditorV3ResourceDescriptor } from '@/platform/contracts/imageEditorV3'
 import type { ImageEditorGpuSceneTileKeyV3 } from './imageEditorGpuSceneProtocolV3'
 
 export interface ImageEditorGpuRasterLayerV3 {
   layerId: string
   sourceKind: 'raster' | 'annotation'
   resourceRef: `sha256:${string}` | null
+  sourcePyramid?: ImageEditorV3PyramidDescriptor
   contentVersion: string
   sparseTiles: Readonly<Record<string, {
     resourceRef: `sha256:${string}`
@@ -127,6 +128,7 @@ const registry = createBuiltInImageEditRenderNodeRegistry()
 export function compileImageEditorGpuRasterSceneV3(
   document: ImageEditDocumentV3,
   resourceDescriptors: readonly ImageEditorV3ResourceDescriptor[],
+  sourcePyramids?: Readonly<Record<string, ImageEditorV3PyramidDescriptor>>,
 ): ImageEditorGpuRasterSceneCompilationV3 {
   const descriptors = new Map(resourceDescriptors.map((entry) => [entry.resourceRef, entry]))
   const plan = compileImageEditRenderPlanV3(document, registry, 'stable')
@@ -164,6 +166,16 @@ export function compileImageEditorGpuRasterSceneV3(
   }
   const layers: ImageEditorGpuRasterLayerV3[] = []
   collectRasterLayers(document.layers, descriptors, plan.nodes, layers)
+  if (sourcePyramids) {
+    for (const layer of layers) {
+      if (layer.sourceKind !== 'raster' || !layer.resourceRef) continue
+      const pyramid = sourcePyramids[layer.resourceRef]
+      if (!pyramid?.levels.some((level) => level.mip === 0)) {
+        return { supported: false, reason: `图层 ${layer.layerId} 缺少权威源金字塔` }
+      }
+      layer.sourcePyramid = structuredClone(pyramid)
+    }
+  }
   const requiresRenderGraph = graph.some((node) => (
     node.kind === 'adjustment'
     || node.kind === 'effect'

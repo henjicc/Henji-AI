@@ -263,7 +263,7 @@ export class ImageEditorRenderSessionGpuBridgeV3 {
         return
       }
       this.pendingFrame = false
-      this.exportSession.notifyDeviceUnavailable(new Error(event.message))
+      this.exportSession.notifyDeviceUnavailable(new Error(event.message), event.diagnostic)
       this.fallback(event.message)
     }
   }

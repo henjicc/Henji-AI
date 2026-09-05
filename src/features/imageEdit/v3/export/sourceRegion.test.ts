@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import type { ImageEditorV3SourceTile } from '@/platform/contracts/imageEditorV3'
 import type { ImageEditorV3ExportSourceTileRequest } from './contracts'
 import { loadImageEditorV3SourceRegion } from './sourceRegion'
+import { fakeSourcePyramidReader } from './renderExportTestFixtures'
 
 const RESOURCE = `sha256:${'7'.repeat(64)}` as const
 
@@ -46,6 +47,7 @@ function load(
     bitDepth === 32 ? 250 : 203,
     new AbortController().signal,
     {
+      readSourcePyramid: fakeSourcePyramidReader(new Map([[RESOURCE, { width: 1, height: 1 }]])),
       readSourceTile: async (request: ImageEditorV3ExportSourceTileRequest) => {
         expect(request.bitDepth).toBe(bitDepth)
         return tile

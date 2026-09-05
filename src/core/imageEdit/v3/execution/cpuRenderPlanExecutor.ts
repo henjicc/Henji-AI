@@ -22,7 +22,7 @@ import type { ImageEditBlendModeV3, ImageEditMaskReferenceV3 } from '../layerTyp
 import type { ImageEditRenderPlan, ImageEditRenderPlanNode } from '../renderPlan';
 import {
   convertFloat32TileColorDomainV3,
-  convertFloat32TileWorkingSpaceV3,
+  convertFloat32TileColorContractV3,
 } from './tileColor';
 import {
   applyContentMaskAndOpacityV3,
@@ -277,8 +277,7 @@ async function executeComposite(
   }
   const backdrop = node.inputNodeIds.length > 1 ? requireInput(outputs, node, 0) : null;
   if (backdrop) {
-    content = convertFloat32TileWorkingSpaceV3(content, backdrop.workingSpace);
-    content = convertFloat32TileColorDomainV3(content, backdrop.colorDomain);
+    content = convertFloat32TileColorContractV3(content, backdrop);
   }
   const masked = applyContentMaskAndOpacityV3(
     content,

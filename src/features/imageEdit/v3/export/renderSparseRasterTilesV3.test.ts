@@ -12,6 +12,7 @@ import type {
 } from '@/platform/contracts/imageEditorV3'
 import type { ImageEditorV3ExportSourceTileRequest } from './contracts'
 import { renderImageEditorV3ExportTiles } from './renderExportTilesV3'
+import { fakeSourcePyramidReader } from './renderExportTestFixtures'
 
 const LOWER = `sha256:${'1'.repeat(64)}` as const
 const UPPER = `sha256:${'2'.repeat(64)}` as const
@@ -127,6 +128,9 @@ describe('图片编辑 V3 稀疏栅格分块导出', () => {
       description: description(4, 1),
       tileSize: 16,
     }, {
+      readSourcePyramid: fakeSourcePyramidReader(new Map([
+        [LOWER, { width: 4, height: 1 }], [UPPER, { width: 4, height: 1 }],
+      ])),
       readSourceTile: sourceReader(new Map([
         [LOWER, [0, 255, 0, 255] as const],
         [UPPER, [255, 0, 0, 255] as const],

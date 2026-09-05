@@ -233,6 +233,7 @@ function createGpuRasterScenes(context) {
     surface: '画布',
     name: '画布节点-图片编辑器初始化失败回退',
     writesUserData: true,
+    forceGpuInitializationFailure: true,
     setup: async (page, _app, inspection) => {
       const startedAt = new Date().toISOString()
       const { dialog, editor } = await openCanvasImageEditorV3Fixture({

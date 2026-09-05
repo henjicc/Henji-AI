@@ -15,7 +15,7 @@ import {
 } from './tileBlend'
 import {
   convertFloat32TileColorDomainV3,
-  convertFloat32TileWorkingSpaceV3,
+  convertFloat32TileColorContractV3,
 } from './tileColor'
 import {
   cropImageEditRgbaRegionV3,
@@ -64,6 +64,8 @@ export interface ImageEditCpuRegionRenderContextV3 {
 }
 
 export interface ImageEditCpuRegionRequirementsV3 {
+  /** 每个求值节点的去重输出区域；用于按真实 ROI 估算 memo 与临时工作集。 */
+  nodeRegions: ReadonlyMap<string, readonly ImageEditRect[]>
   /** render node id → 它需要的源坐标区域。 */
   rasterRegions: ReadonlyMap<string, readonly ImageEditRect[]>
   /** 持有蒙版的 render node id → 蒙版本地坐标区域。 */
@@ -214,8 +216,10 @@ export function collectImageEditCpuRegionRequirementsV3(
   const nodes = nodeMap(plan)
   const rasters = new Map<string, Map<string, ImageEditRect>>()
   const masks = new Map<string, Map<string, ImageEditRect>>()
+  const regionsByNode = new Map<string, Map<string, ImageEditRect>>()
   const visit = (node: ImageEditRenderPlanNode, region: ImageEditRect): void => {
     if (region.width === 0 || region.height === 0) return
+    addRegion(regionsByNode, node.id, region)
     if (node.definitionId === 'source.raster') {
       addRegion(rasters, node.id, region)
       return
@@ -246,7 +250,7 @@ export function collectImageEditCpuRegionRequirementsV3(
   const freeze = (source: Map<string, Map<string, ImageEditRect>>): ReadonlyMap<string, readonly ImageEditRect[]> => (
     new Map([...source].map(([id, regions]) => [id, [...regions.values()]]))
   )
-  return { rasterRegions: freeze(rasters), maskRegions: freeze(masks) }
+  return { nodeRegions: freeze(regionsByNode), rasterRegions: freeze(rasters), maskRegions: freeze(masks) }
 }
 
 /**
@@ -295,7 +299,10 @@ export async function executeImageEditCpuRenderRegionPlanV3(
           mask = await context.loadMask(node.mask, node, transformed.region)
           if (node.mask.inverted) mask = invertMask(mask)
         }
-        if (!isIdentityTransform(transformed.transform)) {
+        // 恒等矩阵仍可能读取被源边界裁短（或采样 halo 扩大）的区域；
+        // 只有像素坐标与范围都相同，才可以直接作为输出区域参与合成。
+        if (!isIdentityTransform(transformed.transform)
+          || regionKey(transformed.region) !== regionKey(region)) {
           if (transformed.region.width > 0 && transformed.region.height > 0) {
             content = resampleImageEditRgbaAffineV3(
               content,
@@ -317,8 +324,7 @@ export async function executeImageEditCpuRenderRegionPlanV3(
           }
         }
         if (backdrop) {
-          content = convertFloat32TileWorkingSpaceV3(content, backdrop.workingSpace)
-          content = convertFloat32TileColorDomainV3(content, backdrop.colorDomain)
+          content = convertFloat32TileColorContractV3(content, backdrop)
         }
         const masked = applyContentMaskAndOpacityV3(
           content,

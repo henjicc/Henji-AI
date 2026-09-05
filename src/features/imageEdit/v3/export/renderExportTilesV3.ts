@@ -1,11 +1,10 @@
+import { transparentRegion, safeWorkingSetBytes, acquireOrThrow } from './renderExportResourcesV3'
 import {
   DIFFUSION_V4_RECIPE_ADAPTER,
   IMAGE_EDIT_RENDER_PRIORITY,
-  ImageEditResourceBudget,
   applyDiffusionV4,
   applyFastBlurV3,
   convertFloat32TileColorDomainV3,
-  createFloat32PremultipliedRgbaTile,
   createBuiltInImageEditRenderNodeRegistry,
   createTileRegion,
   collectImageEditCpuRegionRequirementsV3,
@@ -63,6 +62,7 @@ import {
 } from '../execution/imageEditorSessionResourceBudgetV3'
 import { getImageEditorGlobalRenderSchedulerV3 } from '../execution/imageEditorGlobalRenderSchedulerV3'
 import { loadImageEditorV3SparseMaskRegion } from './maskRegion'
+import { prepareImageEditorExportSourceGeometryV3 } from './sourceGeometry'
 import {
   buildImageEditorV3VgpuGlowAnalyses,
 } from './vgpuGlowAnalysis'
@@ -105,51 +105,9 @@ function rasterResourceId(node: ImageEditRenderPlanNode): string | null {
     : null
 }
 
-function transparentRegion(
-  region: ImageEditorV3ExportRenderRegion,
-  workingSpace: 'srgb' | 'display-p3' | 'rec2020',
-  transferFunction: 'srgb' | 'linear' | 'pq' | 'hlg',
-  referenceWhiteNits: number,
-): Float32PremultipliedRgbaTile {
-  return createFloat32PremultipliedRgbaTile(
-    region.width,
-    region.height,
-    'linear-light',
-    new Float32Array(region.width * region.height * 4),
-    workingSpace,
-    transferFunction,
-    referenceWhiteNits,
-  )
-}
-
-function safeWorkingSetBytes(region: ImageEditorV3ExportRenderRegion, nodeCount: number): number {
-  const bytes = region.width * region.height * 4 * 4 * Math.max(3, nodeCount + 2)
-  if (!Number.isSafeInteger(bytes)) {
-    throw new ImageEditorV3ExportCapabilityError(
-      'WORKING_SET_EXCEEDED',
-      '单个导出瓦片的工作集超出安全整数范围',
-    )
-  }
-  return bytes
-}
-
 interface RenderedLeasedTile {
   tile: ImageEditorV3RenderedExportTile
   transferLease: ImageEditMemoryLease
-}
-
-function acquireOrThrow(
-  budget: ImageEditResourceBudget,
-  category: 'in-flight' | 'transfer',
-  bytes: number,
-): ImageEditMemoryLease {
-  const lease = budget.acquire(category, bytes)
-  if (lease) return lease
-  const snapshot = budget.snapshot()
-  throw new ImageEditorV3ExportCapabilityError(
-    'WORKING_SET_EXCEEDED',
-    `图片导出资源账本拒绝 ${Math.ceil(bytes / 1024 / 1024)}MiB ${category} 工作集；当前已使用 ${Math.ceil(snapshot.totalBytes / 1024 / 1024)}MiB`,
-  )
 }
 
 export function renderImageEditorV3ExportTiles(
@@ -225,6 +183,9 @@ async function* renderTiles(
   })
   try {
     throwIfAborted(controller.signal)
+    const resolveSourceSize = await prepareImageEditorExportSourceGeometryV3(
+      plan, document.geometry, 0, controller.signal, dependencies,
+    )
     diffusionAnalysisSet = await buildImageEditorV3DiffusionAnalyses(
       document,
       plan,
@@ -301,21 +262,13 @@ async function* renderTiles(
               {
                 registry,
                 size: { width: geometry.sourceWidth, height: geometry.sourceHeight },
+                resolveSourceSize,
               },
             )
-            const largestRequiredPixels = [
-              sourceRegion.width * sourceRegion.height,
-              ...[...requirements.rasterRegions.values(), ...requirements.maskRegions.values()]
-                .flat()
-                .map((region) => region.width * region.height),
-            ].reduce((largest, pixels) => Math.max(largest, pixels), 0)
             const workingLease = acquireOrThrow(
               budget,
               'in-flight',
-              safeWorkingSetBytes(
-                { ...sourceRegion, width: largestRequiredPixels, height: 1 },
-                plan.nodes.length,
-              ),
+              safeWorkingSetBytes(requirements, sourceRegion),
             )
             try {
               const sourceCache = new Map<string, Promise<Float32PremultipliedRgbaTile>>()
@@ -344,6 +297,7 @@ async function* renderTiles(
                 size: { width: geometry.sourceWidth, height: geometry.sourceHeight },
                 registry,
                 signal: taskContext.signal,
+                resolveSourceSize,
                 createTransparent: (region) => transparentRegion(
                   region,
                   document.color.workingSpace,

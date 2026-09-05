@@ -16,6 +16,7 @@ import {
   type ImageEditResourceBudget,
 } from '@/core/imageEdit/v3'
 import { rasterizeImageEditorV3ExportAnnotations } from './annotations'
+import { prepareImageEditorExportSourceGeometryV3 } from './sourceGeometry'
 import {
   resolveImageEditorV3ExportReferenceWhiteNits,
   resolveImageEditorV3ExportSourceBitDepth,
@@ -138,6 +139,7 @@ export async function buildImageEditorV3DiffusionAnalyses(
   const sourceBitDepth = resolveImageEditorV3ExportSourceBitDepth(document)
   const referenceWhiteNits = resolveImageEditorV3ExportReferenceWhiteNits(document)
   const size = mipSize(document.geometry, mip)
+  const resolveSourceSize = await prepareImageEditorExportSourceGeometryV3(plan, document.geometry, mip, signal, dependencies)
   const region: ImageEditorV3ExportRenderRegion = { x: 0, y: 0, ...size }
   const analyses = new Map<string, ImageEditorV3DiffusionAnalysis>()
   const cacheLeases: ImageEditMemoryLease[] = []
@@ -186,6 +188,7 @@ export async function buildImageEditorV3DiffusionAnalyses(
           scaleY: 1 / (2 ** mip),
           registry,
           signal,
+          resolveSourceSize,
           createTransparent: (requestedRegion) => transparentRegion(requestedRegion, document),
           loadRaster: async (node, requestedRegion) => {
             const resourceId = rasterResourceId(node)

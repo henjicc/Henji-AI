@@ -13,6 +13,7 @@ import type {
   ImageEditorV3RasterExportDescription,
   ImageEditorV3ResourceDescriptor,
   ImageEditorV3SourceTile,
+  ImageEditorV3PyramidDescriptor,
 } from '@/platform/contracts/imageEditorV3'
 
 export type ImageEditorV3ExportCapabilityCode =
@@ -86,6 +87,10 @@ export interface ImageEditorV3VgpuGlowRuntime {
 }
 
 export interface ImageEditorV3ExportRenderDependencies {
+  readSourcePyramid?: (
+    resourceRef: `sha256:${string}`,
+    signal: AbortSignal,
+  ) => Promise<ImageEditorV3PyramidDescriptor>
   readSourceTile?: (
     request: ImageEditorV3ExportSourceTileRequest,
     signal: AbortSignal,

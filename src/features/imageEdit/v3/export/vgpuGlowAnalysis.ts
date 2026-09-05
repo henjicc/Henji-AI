@@ -19,6 +19,7 @@ import {
 import { WorkerWebGpuRuntimeBackend } from '@/core/imageEdit/worker/webgpuRuntimeBackend'
 import type { VgpuGlowGlobalScatter } from '@/core/imageEdit/webgpu/vgpuGlowRenderer'
 import { rasterizeImageEditorV3ExportAnnotations } from './annotations'
+import { prepareImageEditorExportSourceGeometryV3 } from './sourceGeometry'
 import {
   resolveImageEditorV3ExportReferenceWhiteNits,
   resolveImageEditorV3ExportSourceBitDepth,
@@ -231,6 +232,7 @@ export async function buildImageEditorV3VgpuGlowAnalyses(
   }
   const mip = analysisMip(document)
   const size = mipSize(document.geometry, mip)
+  const resolveSourceSize = await prepareImageEditorExportSourceGeometryV3(plan, document.geometry, mip, signal, dependencies)
   const region: ImageEditorV3ExportRenderRegion = { x: 0, y: 0, ...size }
   const sourceBitDepth = resolveImageEditorV3ExportSourceBitDepth(document)
   const referenceWhiteNits = resolveImageEditorV3ExportReferenceWhiteNits(document)
@@ -281,6 +283,7 @@ export async function buildImageEditorV3VgpuGlowAnalyses(
           scaleY: 1 / (2 ** mip),
           registry,
           signal,
+          resolveSourceSize,
           createTransparent: (requestedRegion) => transparentRegion(requestedRegion, document),
           loadRaster: async (sourceNode, requestedRegion) => {
             const resourceId = rasterResourceId(sourceNode)

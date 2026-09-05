@@ -77,6 +77,12 @@ async function render(
     },
     tileSize: 16,
   }, {
+    readSourcePyramid: async (resourceRef) => {
+      const pixels = images.get(resourceRef)
+      if (!pixels) throw new Error(`missing source ${resourceRef}`)
+      return { tileSize: 512, levels: [{ mip: 0, width: pixels.length, height: 1,
+        columns: Math.ceil(pixels.length / 512), rows: 1 }] }
+    },
     readSourceTile: sourceReader(images),
     rasterizeAnnotations,
   })) {

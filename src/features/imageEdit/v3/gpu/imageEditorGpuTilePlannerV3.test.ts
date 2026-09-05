@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest'
 
 import { createDefaultImageEditColorModeV3 } from '@/core/imageEdit/v3/colorTypes'
 import type { ImageEditorGpuRasterSceneV3 } from './imageEditorGpuRasterSceneCompilerV3'
-import { planImageEditorGpuRasterTilesV3 } from './imageEditorGpuTilePlannerV3'
+import { createImageEditorGpuPyramidDescriptorV3, planImageEditorGpuRasterTilesV3 } from './imageEditorGpuTilePlannerV3'
+import { compileImageEditorGpuRasterSceneV3 } from './imageEditorGpuRasterSceneCompilerV3'
+import { createImageEditDocumentV3, createImageEditRasterLayerV3 } from '@/core/imageEdit/v3/documentFactory'
 
 const RESOURCE = `sha256:${'a'.repeat(64)}` as const
 
@@ -24,6 +26,66 @@ function scene(): Pick<ImageEditorGpuRasterSceneV3, 'width' | 'height' | 'color'
 }
 
 describe('GPU 大图视口瓦片规划', () => {
+  it('不同供应商十个异形源按自身金字塔规划，边缘核心尺寸不借用画布', () => {
+    const sizes = [[2672, 1504], [1522, 1520], [1631, 1111], [3600, 549], [1275, 1870],
+      [933, 1068], [1809, 1597], [1748, 1816], [2019, 713], [1847, 872]]
+    const document = createImageEditDocumentV3({ width: 2672, height: 1504 })
+    const refs = sizes.map((_, index) => `sha256:${index.toString(16).repeat(64)}` as const)
+    document.layers = refs.map((ref, index) => createImageEditRasterLayerV3(`layer-${index}`, '图层', ref))
+    const pyramids = Object.fromEntries(sizes.map(([width, height], index) => (
+      [refs[index], createImageEditorGpuPyramidDescriptorV3(width, height)]
+    )))
+    const compiled = compileImageEditorGpuRasterSceneV3(document,
+      refs.map((resourceRef) => ({ resourceRef, byteLength: 1, mediaType: 'image/png' })), pyramids)
+    expect(compiled.supported).toBe(true)
+    if (!compiled.supported) return
+    for (const layer of compiled.scene.layers) {
+      const plan = planImageEditorGpuRasterTilesV3(compiled.scene, layer, {
+        stageWidth: 1336, stageHeight: 752, viewportKey: '真实异形源',
+        viewport: { documentX: 0, documentY: 0, width: 1336, height: 752, zoom: 0.5, devicePixelRatio: 1 },
+      })
+      const mip = pyramids[layer.resourceRef!].levels.find((level) => level.mip === plan.mip)!
+      expect(plan.tiles.length).toBeGreaterThan(0)
+      for (const tile of plan.tiles) {
+        expect(tile.key.tileX).toBeLessThan(mip.columns)
+        expect(tile.key.tileY).toBeLessThan(mip.rows)
+        expect(tile.coreWidth).toBe(Math.min(512, mip.width - tile.coreOriginX))
+        expect(tile.coreHeight).toBe(Math.min(512, mip.height - tile.coreOriginY))
+      }
+    }
+  })
+
+  it('小源之外的稀疏画笔仍保留，空白区域不会请求不存在的源瓦片', () => {
+    const value = scene()
+    const brush = `sha256:${'f'.repeat(64)}` as const
+    const plan = planImageEditorGpuRasterTilesV3(value, {
+      ...value.layers[0], sourcePyramid: createImageEditorGpuPyramidDescriptorV3(600, 100),
+      sparseTiles: { '0/2/0': { resourceRef: brush, contentVersion: 'stroke', byteLength: 32 } },
+    }, {
+      stageWidth: 2048, stageHeight: 512, viewportKey: '扩展画笔',
+      viewport: { documentX: 0, documentY: 0, width: 2048, height: 512, zoom: 1, devicePixelRatio: 1 },
+    })
+    expect([...plan.tiles].sort((a, b) => a.key.tileX - b.key.tileX)
+      .map((tile) => [tile.key.resourceRef, tile.key.tileX, tile.coreWidth, tile.coreHeight]))
+      .toEqual([[RESOURCE, 0, 512, 100], [RESOURCE, 1, 88, 100], [brush, 2, 512, 512]])
+  })
+
+  it('大于画布的源添加画笔后不会截掉可由图层缩放带入视口的像素', () => {
+    const value = scene()
+    value.width = 2672
+    value.height = 1504
+    value.geometry = { ...value.geometry, width: value.width, height: value.height }
+    const brush = `sha256:${'f'.repeat(64)}` as const
+    const plan = planImageEditorGpuRasterTilesV3(value, {
+      ...value.layers[0], sourcePyramid: createImageEditorGpuPyramidDescriptorV3(3600, 549),
+      transform: [0.5, 0, 0, 0.5, 0, 0],
+      sparseTiles: { '0/0/0': { resourceRef: brush, contentVersion: 'stroke', byteLength: 32 } },
+    }, { stageWidth: 2672, stageHeight: 1504, viewportKey: '大源缩放',
+      viewport: { documentX: 0, documentY: 0, width: 2672, height: 1504, zoom: 1, devicePixelRatio: 1 } })
+    expect(plan.tiles.find((tile) => tile.key.tileX === 7 && tile.key.tileY === 0))
+      .toMatchObject({ coreWidth: 16, coreHeight: 512, key: { resourceRef: RESOURCE } })
+  })
+
   it('复用视口 planner 按缩放选 mip，不会要求 8192 整图纹理', () => {
     const value = scene()
     const layer = value.layers[0]

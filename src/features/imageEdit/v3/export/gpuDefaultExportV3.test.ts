@@ -7,7 +7,8 @@ import type {
   ImageEditorGpuSceneWorkerRequestV3,
 } from '../gpu/imageEditorGpuSceneProtocolV3'
 import { renderImageEditorV3ExportTilesWithGpu } from './gpuDefaultExportV3'
-import { renderImageEditorV3ExportTilesFromActiveGpuScene } from './gpuExportSessionV3'
+import { ImageEditorGpuExportSessionV3, renderImageEditorV3ExportTilesFromActiveGpuScene } from './gpuExportSessionV3'
+import type { ImageEditorGpuSceneClientV3Like } from '../gpu/imageEditorGpuSceneClientV3'
 
 class FakeWorker {
   static latest: FakeWorker | null = null
@@ -49,6 +50,32 @@ afterEach(() => {
 })
 
 describe('默认 GPU 导出临时 Scene', () => {
+  it('已失败的活动设备立即进入CPU事务回退，不创建第二个Worker或无限等待ready', async () => {
+    vi.stubGlobal('Worker', FakeWorker)
+    const client: ImageEditorGpuSceneClientV3Like = {
+      syncScene: vi.fn(), uploadTiles: vi.fn(), updateTransientLayerTransform: vi.fn(),
+      clearTransientLayerTransform: vi.fn(), updateViewport: vi.fn(), requestFrame: vi.fn(),
+      subscribe: vi.fn(() => () => undefined), dispose: vi.fn(),
+      requestExport: vi.fn(), cancelExport: vi.fn(), acknowledgeExportTile: vi.fn(),
+    }
+    const session = new ImageEditorGpuExportSessionV3(client)
+    session.syncSnapshot({ document, renderGeneration: 1, geometryHash: 'a', quality: 'stable', resourceDescriptors: [] })
+    const failure = new Error('Reality 注入：GPU 初始化失败')
+    session.notifyDeviceUnavailable(failure, true)
+    try {
+      const stream = renderImageEditorV3ExportTilesWithGpu(request) as ImageEditorV3RestartableExportTileStream
+      await expect(stream[Symbol.asyncIterator]().next()).rejects.toBe(failure)
+      expect(FakeWorker.latest).toBeNull()
+      expect(client.requestExport).not.toHaveBeenCalled()
+      const tiles = []
+      for await (const tile of stream.createCpuFallback(failure)) tiles.push(tile)
+      expect(tiles).toHaveLength(1)
+      expect(tiles[0]).toMatchObject({ x: 0, y: 0, width: 16, height: 16 })
+    } finally {
+      session.dispose()
+    }
+  })
+
   it('ready前不导出，完成后销毁Worker并注销registry', async () => {
     vi.stubGlobal('Worker', FakeWorker)
     const stream = renderImageEditorV3ExportTilesWithGpu(request) as

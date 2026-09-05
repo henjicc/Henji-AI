@@ -1,9 +1,9 @@
 import {
   createImageEditorV3RequestId,
-  describeImageEditorV3SourcePyramid,
   readImageEditorV3SourceTile,
 } from '@/commands/imageEditorV3'
 import { readImageEditorV3SourceTiles } from '@/commands/imageEditorV3Tiles'
+import { readSharedImageEditorSourcePyramidV3 } from './imageEditorSourcePyramidsV3'
 import type { ImageEditSize } from '@/core/imageEdit/v3/tileGeometry'
 import type {
   ImageEditorV3PyramidDescriptor,
@@ -133,7 +133,7 @@ export class ImageEditorViewportTileSchedulerV3 {
     if (!options.cache && options.disposeCache === false) {
       throw new Error('只有外部 cache 才能关闭调度器自动释放')
     }
-    this.descriptorReader = options.describePyramid ?? describeImageEditorV3SourcePyramid
+    this.descriptorReader = options.describePyramid ?? readSharedImageEditorSourcePyramidV3
     this.tileReader = options.readSourceTile ?? readImageEditorV3SourceTile
     this.tileBatchReader = options.readSourceTiles
       ?? (options.readSourceTile ? null : readImageEditorV3SourceTiles)

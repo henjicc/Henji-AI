@@ -19,6 +19,7 @@ import type {
   ImageEditorV3ExportRenderRegion,
   ImageEditorV3ExportSourceTileRequest,
 } from './contracts'
+import { readImageEditorExportSourcePyramidV3 } from './sourceGeometry'
 
 function throwIfAborted(signal: AbortSignal): void {
   if (!signal.aborted) return
@@ -143,7 +144,7 @@ function validateReturnedTile(
 export async function loadImageEditorV3SourceRegion(
   resourceRef: string,
   region: ImageEditorV3ExportRenderRegion,
-  canvasSize: { width: number; height: number },
+  _canvasSize: { width: number; height: number },
   bitDepth: 8 | 16 | 32,
   targetWorkingSpace: ImageEditWorkingSpaceV3,
   targetTransferFunction: ImageEditTransferFunctionV3,
@@ -156,8 +157,11 @@ export async function loadImageEditorV3SourceRegion(
     throw new Error(`图片编辑资源引用无效：${resourceRef}`)
   }
   const readTile = dependencies.readSourceTile ?? defaultReadSourceTile
+  const pyramid = await readImageEditorExportSourcePyramidV3(resourceRef, signal, dependencies)
+  const sourceSize = pyramid.levels.find((level) => level.mip === 0)
+  if (!sourceSize) throw new Error('图片源金字塔缺少原始尺寸')
   const output = new Float32Array(region.width * region.height * 4)
-  const coordinates = enumerateTilesForRect(canvasSize, mip, region)
+  const coordinates = enumerateTilesForRect(sourceSize, mip, region)
   for (const coordinate of coordinates) {
     throwIfAborted(signal)
     const request: ImageEditorV3ExportSourceTileRequest = {

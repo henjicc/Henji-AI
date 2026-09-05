@@ -1,3 +1,10 @@
+const {
+  createExistingMultiLayerReadOnlySceneDefinition,
+} = require('./uiInspectionSceneCanvasExistingMultiLayer.cjs')
+const {
+  createExistingMultiLayerIsolatedCpuSceneDefinition,
+} = require('./uiInspectionExistingMultiLayerFixture.cjs')
+
 function createCanvasScenes(context) {
   const {
     setupCanvas,
@@ -10,6 +17,8 @@ function createCanvasScenes(context) {
     setupCanvasElementEditNode,
     setupCanvasMultiLayerDocumentEditor,
     setupCanvasGpuFiveLayerPerformance,
+    setupCanvasExistingMultiLayerReadOnly,
+    setupCanvasExistingMultiLayerIsolatedCpuFallback,
     setupCanvasNineGrid,
     setupCanvasPanoramaViewer,
     setupCanvasMidjourneyNode,
@@ -19,6 +28,13 @@ function createCanvasScenes(context) {
     setupCanvasAssetGroupRemoveConfirmation,
     setupCanvasQuickConnectPrompt,
   } = context
+
+  const existingMultiLayerReadOnly = createExistingMultiLayerReadOnlySceneDefinition(
+    setupCanvasExistingMultiLayerReadOnly,
+  )
+  const existingMultiLayerIsolatedCpu = createExistingMultiLayerIsolatedCpuSceneDefinition(
+    setupCanvasExistingMultiLayerIsolatedCpuFallback,
+  )
 
   return [
     { id: 'canvas-projects', surface: '画布', name: '画布-项目列表', setup: setupCanvas },
@@ -92,6 +108,8 @@ function createCanvasScenes(context) {
       name: '画布-多图层图片文档编辑器',
       setup: setupCanvasMultiLayerDocumentEditor,
     },
+    ...(existingMultiLayerReadOnly ? [existingMultiLayerReadOnly] : []),
+    ...(existingMultiLayerIsolatedCpu ? [existingMultiLayerIsolatedCpu] : []),
     {
       id: 'canvas-nine-grid',
       surface: '画布',
