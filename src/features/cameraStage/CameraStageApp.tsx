@@ -1,8 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react'
-import { cameraStageApplicationService } from './application/cameraStageApplicationService'
 import CameraStageEditor from './CameraStageEditor'
 import CameraStageErrorBoundary from './CameraStageErrorBoundary'
 import CameraStageProjectList from './projects/CameraStageProjectList'
+import { loadProjectIntoScene } from './projects/cameraStageProjectService'
 import { persistDirectorView } from './scene/directorViewState'
 import { useCameraStageSessionStore } from './store/cameraStageSessionStore'
 import { useCameraStageStore } from './store/cameraStageStore'
@@ -24,12 +24,20 @@ const CameraStageAppInner: React.FC<CameraStageAppProps> = ({ onBackToToolbox })
   const setAppView = useCameraStageSessionStore((state) => state.setAppView)
   const setLastProjectId = useCameraStageSessionStore((state) => state.setLastProjectId)
   const [restoring, setRestoring] = useState(true)
-  const restoredSessionKeyRef = useRef<string | null>(null)
+  const restoredProjectIdRef = useRef<string | null>(null)
+  const restoreQueueRef = useRef<Promise<void>>(Promise.resolve())
+  const restoreTargetRef = useRef({ projectId: lastProjectId, viewMode: stageViewMode })
+  if (restoreTargetRef.current.projectId !== lastProjectId) {
+    restoreTargetRef.current = { projectId: lastProjectId, viewMode: stageViewMode }
+  }
 
   useEffect(() => {
     let cancelled = false
 
     const restoreLastSession = async (): Promise<void> => {
+      const currentSession = useCameraStageSessionStore.getState()
+      if (cancelled || currentSession.appView !== view
+        || currentSession.lastProjectId !== lastProjectId) return
       if (view !== 'editor') {
         if (!cancelled) setRestoring(false)
         return
@@ -40,43 +48,43 @@ const CameraStageAppInner: React.FC<CameraStageAppProps> = ({ onBackToToolbox })
         return
       }
 
-      const sessionKey = `${lastProjectId}:${stageViewMode}`
-      if (restoredSessionKeyRef.current === sessionKey) {
+      if (restoredProjectIdRef.current === lastProjectId) {
         if (!cancelled) setRestoring(false)
         return
       }
-      restoredSessionKeyRef.current = sessionKey
+      restoredProjectIdRef.current = lastProjectId
+      const restoreViewMode = restoreTargetRef.current.projectId === lastProjectId
+        ? restoreTargetRef.current.viewMode
+        : useCameraStageSessionStore.getState().stageViewMode
 
       const currentProjectId = useCameraStageStore.getState().currentProjectId
       const shouldLoadProject = currentProjectId !== lastProjectId
       let ok = true
       if (shouldLoadProject) {
-        try {
-          await cameraStageApplicationService.openProject(lastProjectId)
-        } catch (error) {
-          if (!(error instanceof Error) || error.message !== 'NOT_FOUND') throw error
-          ok = false
-        }
+        ok = await loadProjectIntoScene(lastProjectId, { updateSession: false })
       }
       if (!ok) {
+        if (cancelled || useCameraStageSessionStore.getState().lastProjectId !== lastProjectId) return
         setAppView('list')
         setLastProjectId(null)
         if (!cancelled) setRestoring(false)
         return
       }
 
+      if (cancelled || useCameraStageSessionStore.getState().lastProjectId !== lastProjectId) return
       const stage = useCameraStageStore.getState()
-      if (stage.viewMode !== stageViewMode) stage.setViewMode(stageViewMode)
+      if (stage.currentProjectId !== lastProjectId) return
+      if (stage.viewMode !== restoreViewMode) stage.setViewMode(restoreViewMode)
       if (!cancelled) setRestoring(false)
     }
 
-    void restoreLastSession()
+    restoreQueueRef.current = restoreQueueRef.current.then(restoreLastSession, restoreLastSession)
 
     return () => {
       cancelled = true
       persistDirectorView()
     }
-  }, [lastProjectId, setAppView, setLastProjectId, stageViewMode, view])
+  }, [lastProjectId, setAppView, setLastProjectId, view])
 
   if (restoring) {
     return <div className="flex h-full items-center justify-center bg-app text-sm text-text-muted">恢复上次视图中…</div>
