@@ -3,6 +3,11 @@ import { getStoryboardProject, listStoryboardProjects } from '@/features/canvas/
 import { commitImageEdit } from '@/features/imageEdit/application/imageEditApplicationService'
 import { getToolboxState, listToolboxTools } from '@/features/toolbox/application/toolboxApplicationService'
 import { selectToolboxTool } from '@/stores/navigationStore'
+import {
+  CAMERA_STAGE_RENDER_CAPABILITY_ID,
+  CANCEL_CAMERA_STAGE_RENDER_TASK_CAPABILITY_ID,
+  GET_CAMERA_STAGE_RENDER_TASK_CAPABILITY_ID,
+} from '@/core/assistant/capabilities/cameraStageRenderApplicationCapabilities'
 
 import type { ApplicationCapabilityHandlerRegistrar } from './handlerTypes'
 import { createImageEditPreviewFromRef } from './generationCapabilities'
@@ -23,6 +28,11 @@ import {
   updateCameraStageObject,
   verifyCameraStage,
 } from './cameraStageCapabilityAdapter'
+import {
+  cancelCameraStageRenderTask,
+  getCameraStageRenderTask,
+  renderCameraStageOutput,
+} from './cameraStageRenderCapabilityAdapter'
 
 interface ProjectInput {
   projectId: string
@@ -137,6 +147,32 @@ export function registerToolboxCapabilityHandlers(
     throwIfCapabilityAborted(context.signal)
     const parsed = parseCapabilityInput<Parameters<typeof verifyCameraStage>[0]>('verify_camera_stage_scene', input)
     return await verifyCameraStage(parsed)
+  })
+
+  registrar.registerHandler(CAMERA_STAGE_RENDER_CAPABILITY_ID, async (input, context) => {
+    throwIfCapabilityAborted(context.signal)
+    const parsed = parseCapabilityInput<Parameters<typeof renderCameraStageOutput>[0]>(
+      CAMERA_STAGE_RENDER_CAPABILITY_ID,
+      input,
+    )
+    return await renderCameraStageOutput(parsed, context)
+  })
+
+  registrar.registerHandler(GET_CAMERA_STAGE_RENDER_TASK_CAPABILITY_ID, async (input) => {
+    const parsed = parseCapabilityInput<{ taskRef: Parameters<typeof getCameraStageRenderTask>[0] }>(
+      GET_CAMERA_STAGE_RENDER_TASK_CAPABILITY_ID,
+      input,
+    )
+    return await getCameraStageRenderTask(parsed.taskRef)
+  })
+
+  registrar.registerHandler(CANCEL_CAMERA_STAGE_RENDER_TASK_CAPABILITY_ID, async (input, context) => {
+    throwIfCapabilityAborted(context.signal)
+    const parsed = parseCapabilityInput<{ taskRef: Parameters<typeof cancelCameraStageRenderTask>[0] }>(
+      CANCEL_CAMERA_STAGE_RENDER_TASK_CAPABILITY_ID,
+      input,
+    )
+    return await cancelCameraStageRenderTask(parsed.taskRef)
   })
 
   registrar.registerHandler('create_image_edit_preview', async (input, context) => {

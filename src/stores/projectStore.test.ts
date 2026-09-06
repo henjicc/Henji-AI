@@ -120,4 +120,45 @@ describe('encodeProjectAsRecord', () => {
         .toContain('canvas-local:generation-node:media-1');
     }
   });
+
+  it('完整保留 3D 输出结果的不可变请求回执', () => {
+    const node = {
+      id: 'camera-result',
+      type: CANVAS_NODE_TYPES.exportImage,
+      position: { x: 0, y: 0 },
+      data: {
+        imageUrl: 'henji-media://camera-result.png',
+        aspectRatio: '16:9',
+        generationOutputCommitId: 'camera-stage-render:request-1',
+        cameraStageRenderReceipt: {
+          version: 1,
+          requestId: 'request-1',
+          canvasProjectId: 'canvas-1',
+          nodeId: 'camera-stage-node',
+          cameraStageProjectId: 'camera-project-1',
+          resolutionPreset: '1080p',
+          outputKind: 'image',
+          selectedTimeSec: 1.25,
+        },
+      },
+    } as CanvasNode;
+    const project: Project = {
+      id: 'canvas-1',
+      name: '3D 输出工程',
+      createdAt: 1,
+      updatedAt: 2,
+      nodeCount: 1,
+      coverPath: null,
+      nodes: [node],
+      edges: [],
+      viewport: { x: 0, y: 0, zoom: 1 },
+      history: { past: [], future: [] },
+    };
+
+    const restored = decodeProjectRecord(encodeProjectAsRecord(project));
+
+    expect(restored.nodes[0].data.cameraStageRenderReceipt).toEqual(
+      node.data.cameraStageRenderReceipt,
+    );
+  });
 });

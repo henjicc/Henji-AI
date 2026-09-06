@@ -10,6 +10,7 @@ import {
   createPrimitiveObject,
   pickDefaultColor,
 } from '../domain/sceneDefaults'
+import { createDefaultCameraStageSceneSnapshot } from '../domain/defaultSceneSnapshot'
 import { createPoseMotion } from '../domain/characterMotion'
 import { applyObjectPatch, getCameraObjects, isCameraId } from '../domain/cameraUtils'
 import { getDirectorView, resetDirectorView } from '../scene/directorViewState'
@@ -472,25 +473,22 @@ export const useCameraStageStore = create<CameraStageState>()(
     resetDirectorView()
     resetCameraStagePlaybackRuntime(0, null)
     set(() => {
-      // 新工程默认自带一台摄像机并直接进入摄像机视角，打开即有可拍画面
-      const camera = createCameraObject(nextName([], '摄像机'), pickDefaultColor(0))
-      const objects = [camera]
-      const stateKeyframes = [createStateKeyframe(objects, '关键帧 1', camera.id)]
+      const snapshot = createDefaultCameraStageSceneSnapshot()
       return {
-      objects,
-      selectedId: camera.id,
-      gizmoMode: 'translate',
-      viewMode: 'camera',
-      activeCameraId: camera.id,
-      currentProjectId: null,
-      currentProjectName: name,
-      animation: compileStateKeyframesToAnimation(stateKeyframes, objects),
-      playback: createDefaultPlayback(),
-      sceneSettings: createDefaultSceneSettings(),
-      stateKeyframes,
-      selectedStateKeyframeId: stateKeyframes[0].id,
-      selectedStateKeyframeIds: [],
-      focusToken: 0,
+        objects: snapshot.objects,
+        selectedId: snapshot.defaultCameraId,
+        gizmoMode: 'translate',
+        viewMode: 'camera',
+        activeCameraId: snapshot.activeCameraId,
+        currentProjectId: null,
+        currentProjectName: name,
+        animation: compileStateKeyframesToAnimation(snapshot.stateKeyframes, snapshot.objects),
+        playback: createDefaultPlayback(),
+        sceneSettings: snapshot.sceneSettings,
+        stateKeyframes: snapshot.stateKeyframes,
+        selectedStateKeyframeId: snapshot.defaultStateKeyframeId,
+        selectedStateKeyframeIds: [],
+        focusToken: 0,
       }
     })
   },

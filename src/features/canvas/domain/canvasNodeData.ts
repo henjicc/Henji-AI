@@ -28,6 +28,10 @@ export interface NodeDisplayData {
   [key: string]: DynamicValue;
 }
 
+export interface CameraStageRenderCompletionReceiptV1 extends CameraStageRenderRequest {
+  version: 1;
+}
+
 /**
  * 结果节点的生成状态。
  * 占位节点在点击生成时就已建好（见 GenerationNodeShell），这组字段描述它此刻处于
@@ -50,6 +54,8 @@ export interface NodeGenerationStatus {
   generationOutputCommitId?: string;
   /** 成员在多结果批次中的稳定顺序与业务语义。 */
   generationOutputDescriptor?: CanvasGenerationOutputDescriptorV1;
+  /** 3D 后台输出的不可变请求回执；用于稳定任务引用在 ack 后校验幂等载荷。 */
+  cameraStageRenderReceipt?: CameraStageRenderCompletionReceiptV1;
 }
 
 export interface NodeImageData extends NodeDisplayData, NodeGenerationStatus {

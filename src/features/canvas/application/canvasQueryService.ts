@@ -81,6 +81,13 @@ export async function readCanvasProjectSnapshot(projectId: string): Promise<Proj
   return decodeProjectRecord(record)
 }
 
+/** 只读取已落盘快照；后台任务终态不能用尚未确认的内存投影冒充持久结果。 */
+export async function readPersistedCanvasProjectSnapshot(projectId: string): Promise<Project> {
+  const record = await getProjectRecord(projectId)
+  if (!record) throw new Error('PROJECT_NOT_FOUND')
+  return decodeProjectRecord(record)
+}
+
 export async function getCanvasProject(projectId: string): Promise<Record<string, unknown>> {
   const project = await readCanvasProjectSnapshot(projectId)
   const isCurrent = useProjectStore.getState().currentProject?.id === projectId

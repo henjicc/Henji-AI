@@ -12,6 +12,7 @@ import type {
   CameraStageProjectPlatformWrite,
 } from '@/platform/contracts/cameraStageProjects'
 import { deserializeScene, isCurrentCameraStageScene, serializeScene } from '../domain/sceneSerialization'
+import { createDefaultCameraStageSceneSnapshot } from '../domain/defaultSceneSnapshot'
 import type { StageSceneAnimation } from '../domain/animationTypes'
 import type { StageObject, StageSceneSettings } from '../domain/sceneTypes'
 import type { StageStateKeyframe } from '../domain/stateKeyframeTypes'
@@ -46,6 +47,11 @@ async function enqueueProjectMutation(projectId: string, mutation: () => Promise
 export interface SavedProjectInfo {
   id: string
   name: string
+}
+
+export interface CreatedCameraStageProjectInfo extends SavedProjectInfo {
+  defaultCameraId: string
+  defaultStateKeyframeId: string
 }
 
 export interface CameraStageProjectDraft {
@@ -129,6 +135,36 @@ export async function saveProjectDraft(
 /** 保存当前场景为工程；新场景自动生成 id，返回保存后的工程标识 */
 export async function saveCurrentProject(): Promise<SavedProjectInfo> {
   return await saveProjectDraft(createCurrentProjectDraft())
+}
+
+/** 创建并持久化默认工程，但不绑定或重置当前编辑器会话。 */
+export async function createStoredCameraStageProject(
+  name: string = CAMERA_STAGE_DEFAULT_PROJECT_NAME,
+): Promise<CreatedCameraStageProjectInfo> {
+  const id = uuidv4()
+  const now = Date.now()
+  const projectName = name.trim() || CAMERA_STAGE_DEFAULT_PROJECT_NAME
+  const snapshot = createDefaultCameraStageSceneSnapshot()
+  const sceneJson = serializeScene(snapshot)
+  await saveProjectDraft({
+    id,
+    name: projectName,
+    fingerprint: createDraftFingerprint(id, projectName, sceneJson),
+    record: {
+      id,
+      name: projectName,
+      createdAt: now,
+      updatedAt: now,
+      objectCount: snapshot.objects.length,
+      sceneJson,
+    },
+  }, false)
+  return {
+    id,
+    name: projectName,
+    defaultCameraId: snapshot.defaultCameraId,
+    defaultStateKeyframeId: snapshot.defaultStateKeyframeId,
+  }
 }
 
 /** 把画布图片输入同步为工程环境贴图；路径只在工程内部持久化，不进入助手反射字段。 */

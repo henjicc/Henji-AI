@@ -9,7 +9,7 @@ import { createLogger } from '@/core/logging';
 import { collectCameraStageAsset } from '@/features/assets/services/cameraStageAssetCollection';
 import {
   applyProjectEnvironmentImage,
-  createNewProject,
+  createStoredCameraStageProject,
   saveCurrentProject,
 } from '@/features/cameraStage/projects/cameraStageProjectService';
 import { useCameraStageStore } from '@/features/cameraStage/store/cameraStageStore';
@@ -33,6 +33,16 @@ const startingNodes = new Set<string>();
 const startingRequests = new Set<string>();
 
 export type CameraStageNodeRenderTaskReference = CameraStageRenderTaskDescriptor;
+export type CameraStageNodeRenderTaskScopeReference = CameraStageRenderTaskScope;
+export interface CameraStageNodeRenderStartOptions {
+  requestId?: string;
+  resolutionPreset?: '720p' | '1080p';
+  selectedTimeSec?: number;
+  expectedOwner?: {
+    canvasProjectId: string;
+    cameraStageProjectId: string | null;
+  };
+}
 
 function isTerminalTask(task: CameraStageRenderTaskSnapshot): boolean {
   return task.status === 'completed' || task.status === 'failed' || task.status === 'cancelled';
@@ -43,7 +53,7 @@ function isNewerTaskSnapshot(current: CameraStageRenderTaskSnapshot, candidate: 
   return isTerminalTask(candidate) && !isTerminalTask(current);
 }
 
-function scopeOf(task: CameraStageRenderTaskDescriptor | CameraStageRenderTaskSnapshot): CameraStageRenderTaskScope {
+function scopeOf(task: CameraStageRenderTaskScope): CameraStageRenderTaskScope {
   return { requestId: task.requestId, canvasProjectId: task.canvasProjectId, nodeId: task.nodeId };
 }
 
@@ -115,6 +125,16 @@ async function applyCompletedTask(task: CameraStageRenderTaskSnapshot): Promise<
     resultNodeData: {
       displayName: mediaType === 'image' ? '3D 镜头图片' : '3D 镜头视频',
       aspectRatio: sourceNode.data.aspectRatio,
+      cameraStageRenderReceipt: {
+        version: 1,
+        requestId: task.requestId,
+        canvasProjectId: task.canvasProjectId,
+        nodeId: task.nodeId,
+        cameraStageProjectId: task.cameraStageProjectId,
+        resolutionPreset: task.resolutionPreset,
+        outputKind: task.outputKind,
+        selectedTimeSec: task.selectedTimeSec,
+      },
       ...(mediaType === 'image' ? { resultKind: 'generic' } : {}),
     },
     completionId: `camera-stage-render:${task.requestId}`,
@@ -225,36 +245,57 @@ export async function applyCameraStageRenderTask(task: CameraStageRenderTaskSnap
 export async function startCameraStageNodeRender(
   nodeId: string,
   outputKind: 'image' | 'video',
+  options: CameraStageNodeRenderStartOptions = {},
 ): Promise<CameraStageNodeRenderTaskReference | null> {
   const canvasProjectId = currentCanvasProjectId();
+  if (options.expectedOwner && options.expectedOwner.canvasProjectId !== canvasProjectId) {
+    throw new Error('目标画布项目已经切换，请重新读取节点后再输出');
+  }
   const startKey = `${canvasProjectId}:${nodeId}`;
+  const requireUnchangedOwner = (expectedCameraStageProjectId: string | null) => {
+    const current = requireCurrentNode(canvasProjectId, nodeId);
+    if (current.data.projectId !== expectedCameraStageProjectId) {
+      throw new Error('3D 镜头节点绑定的工程已经变化，请重新读取节点后再输出');
+    }
+    return current;
+  };
   if (startingNodes.has(startKey)) {
-    const current = useCanvasStore.getState().nodes.find((candidate) => candidate.id === nodeId);
+    const current = options.expectedOwner
+      ? requireUnchangedOwner(options.expectedOwner.cameraStageProjectId)
+      : useCanvasStore.getState().nodes.find((candidate) => candidate.id === nodeId);
     return isCameraStageNode(current) ? current.data.renderTask ?? null : null;
   }
   startingNodes.add(startKey);
   const node = useCanvasStore.getState().nodes.find((candidate) => candidate.id === nodeId);
+  let ownedCameraStageProjectId = isCameraStageNode(node) ? node.data.projectId : null;
   try {
     if (!isCameraStageNode(node)) return null;
+    if (options.expectedOwner && node.data.projectId !== options.expectedOwner.cameraStageProjectId) {
+      throw new Error('3D 镜头节点绑定的工程已经变化，请重新读取节点后再输出');
+    }
     if (node.data.renderTask) return node.data.renderTask;
     let cameraStageProjectId = node.data.projectId;
     if (!cameraStageProjectId) {
-      cameraStageProjectId = (await createNewProject(node.data.displayName || '3D 镜头参考')).id;
+      cameraStageProjectId = (await createStoredCameraStageProject(node.data.displayName || '3D 镜头参考')).id;
     } else if (useCameraStageStore.getState().currentProjectId === cameraStageProjectId) {
       await saveCurrentProject();
     }
-    const latestNode = requireCurrentNode(canvasProjectId, nodeId, null);
+    const latestNode = requireUnchangedOwner(ownedCameraStageProjectId);
+    requireCurrentNode(canvasProjectId, nodeId, null);
     await applyProjectEnvironmentImage(cameraStageProjectId, latestNode.data.environmentImageUrl ?? null);
+    requireUnchangedOwner(ownedCameraStageProjectId);
     requireCurrentNode(canvasProjectId, nodeId, null);
     const task: CameraStageRenderTaskDescriptor = {
       version: 1,
-      requestId: crypto.randomUUID(),
+      requestId: options.requestId ?? crypto.randomUUID(),
       canvasProjectId,
       nodeId,
       cameraStageProjectId,
-      resolutionPreset: '720p',
+      resolutionPreset: options.resolutionPreset ?? '720p',
       outputKind,
-      selectedTimeSec: outputKind === 'image' ? latestNode.data.selectedTimeSec : undefined,
+      selectedTimeSec: outputKind === 'image'
+        ? options.selectedTimeSec ?? latestNode.data.selectedTimeSec
+        : undefined,
     };
     startingRequests.add(task.requestId);
     let preservePending = false;
@@ -271,6 +312,7 @@ export async function startCameraStageNodeRender(
         };
     try {
       await persistNodePatch(canvasProjectId, nodeId, pendingPatch, null);
+      ownedCameraStageProjectId = cameraStageProjectId;
       try {
         const registration = await startCameraStageRender(task);
         await applyCameraStageRenderTask(registration.task);
@@ -312,7 +354,7 @@ export async function startCameraStageNodeRender(
   } catch (error) {
     try {
       const current = requireCurrentNode(canvasProjectId, nodeId);
-      if (!current.data.renderTask) {
+      if (!current.data.renderTask && current.data.projectId === ownedCameraStageProjectId) {
         const message = error instanceof Error ? error.message : String(error);
         await persistNodePatch(canvasProjectId, nodeId, outputKind === 'image'
           ? { imageExporting: false, imageRenderRequestId: null, imageRenderError: message }
@@ -338,21 +380,19 @@ export async function startCameraStageNodeRender(
 }
 
 export async function readCameraStageNodeRenderTask(
-  reference: CameraStageNodeRenderTaskReference,
+  reference: CameraStageNodeRenderTaskScopeReference,
 ): Promise<CameraStageRenderTaskSnapshot | null> {
   return await getCameraStageRenderTaskCommand(scopeOf(reference));
 }
 
 export async function cancelCameraStageNodeRenderTask(
-  reference: CameraStageNodeRenderTaskReference,
+  reference: CameraStageNodeRenderTaskScopeReference,
 ): Promise<void> {
   const task = await readCameraStageNodeRenderTask(reference);
   if (!task) return;
   if (task.status === 'queued' || task.status === 'running') {
     await cancelCameraStageRenderCommand(scopeOf(reference));
-    return;
   }
-  await acknowledgeCameraStageRender(scopeOf(reference));
 }
 
 export async function reconcileCameraStageRenderTasks(canvasProjectId: string): Promise<void> {

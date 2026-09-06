@@ -27,7 +27,7 @@ vi.mock('@/commands/cameraStageRender', () => ({
 vi.mock('@/features/assets/services/cameraStageAssetCollection', () => ({ collectCameraStageAsset: mocks.collect }));
 vi.mock('@/features/cameraStage/projects/cameraStageProjectService', () => ({
   applyProjectEnvironmentImage: mocks.applyEnvironment,
-  createNewProject: mocks.createProject,
+  createStoredCameraStageProject: mocks.createProject,
   saveCurrentProject: mocks.saveProject,
 }));
 vi.mock('@/features/cameraStage/store/cameraStageStore', () => ({
@@ -127,14 +127,64 @@ describe('cameraStageRenderApplicationService', () => {
       return { task: { ...request, status: 'queued', phase: 'preparing', progress: 0, result: null,
         message: null, createdAt: 1, updatedAt: 1 }, idempotent: false };
     });
-    const reference = await startCameraStageNodeRender('node-1', 'image');
+    const reference = await startCameraStageNodeRender('node-1', 'image', {
+      requestId: 'capability-call-1',
+      resolutionPreset: '1080p',
+      selectedTimeSec: 2,
+    });
     expect(order).toEqual(['persist', 'start']);
     expect(reference).toMatchObject({
       canvasProjectId: 'canvas-1', nodeId: 'node-1', cameraStageProjectId: 'stage-1', outputKind: 'image',
     });
     expect(mocks.start).toHaveBeenCalledWith(expect.objectContaining({
       canvasProjectId: 'canvas-1', nodeId: 'node-1', cameraStageProjectId: 'stage-1',
+      requestId: 'capability-call-1', resolutionPreset: '1080p', selectedTimeSec: 2,
     }));
+  });
+
+  it('creates an unbound node project through the non-navigating persistence service', async () => {
+    (mocks.nodes[0].data as Record<string, unknown>).projectId = null;
+    mocks.createProject.mockResolvedValue({ id: 'stage-created' });
+
+    await startCameraStageNodeRender('node-1', 'image');
+
+    expect(mocks.createProject).toHaveBeenCalledWith('镜头');
+    expect(mocks.start).toHaveBeenCalledWith(expect.objectContaining({
+      cameraStageProjectId: 'stage-created',
+    }));
+  });
+
+  it('rejects a stale assistant owner before writing or submitting to another canvas', async () => {
+    mocks.projectState = { currentProjectId: 'canvas-2', currentProject: { id: 'canvas-2', nodes: mocks.nodes } };
+
+    await expect(startCameraStageNodeRender('node-1', 'image', {
+      expectedOwner: { canvasProjectId: 'canvas-1', cameraStageProjectId: 'stage-1' },
+    })).rejects.toThrow('目标画布项目已经切换');
+
+    expect(mocks.updateNodeData).not.toHaveBeenCalled();
+    expect(mocks.start).not.toHaveBeenCalled();
+  });
+
+  it('does not overwrite a node rebound while its background project is being created', async () => {
+    (mocks.nodes[0].data as Record<string, unknown>).projectId = null;
+    let finishCreate!: () => void;
+    mocks.createProject.mockImplementationOnce(async () => await new Promise((resolve) => {
+      finishCreate = () => resolve({ id: 'stage-created' });
+    }));
+    const rendering = startCameraStageNodeRender('node-1', 'image', {
+      expectedOwner: { canvasProjectId: 'canvas-1', cameraStageProjectId: null },
+    });
+    await vi.waitFor(() => expect(finishCreate).toBeTypeOf('function'));
+    (mocks.nodes[0].data as Record<string, unknown>).projectId = 'stage-user-selected';
+    finishCreate();
+
+    await expect(rendering).rejects.toThrow('绑定的工程已经变化');
+    expect(mocks.start).not.toHaveBeenCalled();
+    expect(mocks.updateNodeData).not.toHaveBeenCalled();
+    expect(mocks.nodes[0].data).toMatchObject({
+      projectId: 'stage-user-selected',
+      renderTask: null,
+    });
   });
 
   it('exposes scoped task lookup and cancellation for shared application capabilities', async () => {
@@ -154,6 +204,15 @@ describe('cameraStageRenderApplicationService', () => {
     expect(mocks.acknowledge).not.toHaveBeenCalled();
   });
 
+  it('does not acknowledge or cancel a terminal task through the public cancel helper', async () => {
+    mocks.get.mockResolvedValue(task('completed'));
+
+    await cancelCameraStageNodeRenderTask(descriptor());
+
+    expect(mocks.cancel).not.toHaveBeenCalled();
+    expect(mocks.acknowledge).not.toHaveBeenCalled();
+  });
+
   it('commits a completed result once and only acknowledges after durable node state', async () => {
     setupNode(descriptor());
     mocks.nodes.push({ id: 'result-1', type: 'exportImage', data: {
@@ -166,6 +225,10 @@ describe('cameraStageRenderApplicationService', () => {
     await applyCameraStageRenderTask(task());
     await applyCameraStageRenderTask(task());
     expect(mocks.commit).toHaveBeenCalledTimes(1);
+    expect(mocks.commit).toHaveBeenCalledWith(expect.objectContaining({
+      completionId: 'camera-stage-render:request-1',
+      resultNodeData: expect.objectContaining({ cameraStageRenderReceipt: descriptor() }),
+    }));
     expect(order).toEqual(['persist', 'ack', 'persist', 'ack']);
     expect((mocks.nodes[0].data as Record<string, unknown>).imageUrl).toBe('managed://image.png');
   });

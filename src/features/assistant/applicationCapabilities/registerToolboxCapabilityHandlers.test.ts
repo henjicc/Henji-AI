@@ -22,6 +22,11 @@ const mocks = vi.hoisted(() => ({
     updateCameraStageObject: vi.fn(),
     verifyCameraStage: vi.fn(),
   },
+  cameraRenderAdapter: {
+    cancelCameraStageRenderTask: vi.fn(),
+    getCameraStageRenderTask: vi.fn(),
+    renderCameraStageOutput: vi.fn(),
+  },
   selectToolboxTool: vi.fn(),
   openApplicationSurface: vi.fn(),
   createImageEditPreviewFromRef: vi.fn(),
@@ -39,6 +44,7 @@ vi.mock('@/features/toolbox/application/toolboxApplicationService', () => ({
   listToolboxTools: mocks.listToolboxTools,
 }))
 vi.mock('./cameraStageCapabilityAdapter', () => mocks.cameraAdapter)
+vi.mock('./cameraStageRenderCapabilityAdapter', () => mocks.cameraRenderAdapter)
 vi.mock('@/stores/navigationStore', () => ({ selectToolboxTool: mocks.selectToolboxTool }))
 vi.mock('./surfaceRegistry', () => ({ openApplicationSurface: mocks.openApplicationSurface }))
 vi.mock('./generationCapabilities', () => ({
@@ -117,6 +123,46 @@ describe('toolbox capability handlers', () => {
       ],
     })
     expect(mocks.openApplicationSurface).not.toHaveBeenCalled()
+  })
+
+  it('3D 输出任务处理器委托共享服务并保持稳定任务引用', async () => {
+    const taskRef = { kind: 'camera_stage.render_task' as const, id: 'task-ref-1' }
+    mocks.cameraRenderAdapter.renderCameraStageOutput.mockResolvedValue({
+      taskRef,
+      status: 'submitted',
+      resultRefs: [taskRef],
+    })
+    mocks.cameraRenderAdapter.getCameraStageRenderTask.mockResolvedValue({
+      taskRef,
+      status: 'running',
+      phase: 'rendering',
+      progress: 0.5,
+      outputKind: 'image',
+      message: null,
+      resultRefs: [],
+    })
+    mocks.cameraRenderAdapter.cancelCameraStageRenderTask.mockResolvedValue({
+      taskRef,
+      status: 'cancellation_requested',
+      resultRefs: [],
+    })
+    const handlers = registeredHandlers()
+    const renderInput = {
+      projectRef: { kind: 'canvas.project' as const, id: 'canvas-1' },
+      nodeRef: { kind: 'canvas.node' as const, id: 'canvas-1:stage-node' },
+      outputKind: 'image' as const,
+      resolutionPreset: '720p' as const,
+    }
+
+    await expect(handlers.get('render_camera_stage_output')?.(renderInput, context))
+      .resolves.toMatchObject({ status: 'submitted', taskRef })
+    await expect(handlers.get('get_camera_stage_render_task')?.({ taskRef }, context))
+      .resolves.toMatchObject({ status: 'running', taskRef })
+    await expect(handlers.get('cancel_camera_stage_render_task')?.({ taskRef }, context))
+      .resolves.toMatchObject({ status: 'cancellation_requested', taskRef })
+    expect(mocks.cameraRenderAdapter.renderCameraStageOutput).toHaveBeenCalledWith(renderInput, context)
+    expect(mocks.cameraRenderAdapter.getCameraStageRenderTask).toHaveBeenCalledWith(taskRef)
+    expect(mocks.cameraRenderAdapter.cancelCameraStageRenderTask).toHaveBeenCalledWith(taskRef)
   })
 
   it('选择工具通过统一 Surface 入口，关闭工具只清空选择', async () => {

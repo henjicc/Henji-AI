@@ -1,8 +1,8 @@
 import type { ApplicationTransactionResult, JsonValue } from '@/core/application-control'
 import { cameraStageApplicationService, type CameraStageObjectUpdate } from '@/features/cameraStage/application/cameraStageApplicationService'
 import { verifyCameraStageScene, type CameraStageVerificationRequest } from '@/features/cameraStage/application/cameraStageVerification'
+import { createStoredCameraStageProject } from '@/features/cameraStage/projects/cameraStageProjectService'
 import { useCameraStageSessionStore } from '@/features/cameraStage/store/cameraStageSessionStore'
-import { useCameraStageStore } from '@/features/cameraStage/store/cameraStageStore'
 
 import { getHostScopeRevisions, notifyHostScopeChanged } from '../hostContext/hostContext'
 import {
@@ -145,18 +145,20 @@ export async function openCameraStageProject(projectId: string): Promise<Record<
 }
 
 export async function createCameraStageProject(name: string): Promise<Record<string, unknown>> {
-  const result = await cameraStageApplicationService.createProject(name)
-  useCameraStageSessionStore.getState().setAppView('editor')
+  const created = await createStoredCameraStageProject(name)
   notifyHostScopeChanged('toolbox')
-  const state = useCameraStageStore.getState()
-  const defaultCameraId = state.activeCameraId
-  const defaultStateKeyframeId = state.stateKeyframes[0]?.id
-  const projectId = result.projectId
-  if (typeof projectId !== 'string' || !projectId || !defaultCameraId || !defaultStateKeyframeId) {
+  const {
+    id: projectId,
+    name: projectName,
+    defaultCameraId,
+    defaultStateKeyframeId,
+  } = created
+  if (!projectId || !defaultCameraId || !defaultStateKeyframeId) {
     throw new Error('CAPABILITY_REJECTED')
   }
   return {
-    ...result,
+    projectId,
+    name: projectName,
     defaultCameraId,
     defaultStateKeyframeId,
     resultRefs: [
