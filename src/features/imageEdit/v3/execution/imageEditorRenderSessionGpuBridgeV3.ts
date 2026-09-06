@@ -91,6 +91,8 @@ export class ImageEditorRenderSessionGpuBridgeV3 {
   }
 
   attachPresentationSurface(transfer: ImageEditorPresentationSurfaceTransferV3): void {
+    this.frameInFlight = false
+    this.inFlightEventTimestamp = null
     this.client?.attachPresentationSurface?.(transfer.surfaceGeneration, transfer.canvas)
   }
   syncSnapshot(snapshot: ImageEditorRenderSnapshotV3): void {

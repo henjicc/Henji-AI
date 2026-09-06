@@ -260,6 +260,7 @@ describe('ImageEditorPresentationSurfaceV3', () => {
       canvas: offscreen,
     })
     expect(gpu.style.visibility).toBe('hidden')
+    expect([getComputedStyle(front).visibility, getComputedStyle(safety).visibility]).toEqual(['visible', 'hidden'])
     expect(surface.attach({ surfaceId: 'direct', front, safety, gpu })).toBeNull()
     expect(transfer).toHaveBeenCalledOnce()
 
@@ -282,11 +283,16 @@ describe('ImageEditorPresentationSurfaceV3', () => {
     expect(accepted).toBe(true)
     expect(contexts.size).toBe(0)
     expect(gpu.style.visibility).toBe('visible')
+    // GPU的透明像素应透出文档棋盘，不能叠加旧CPU稳定帧中的不透明原图。
+    expect([front.style.visibility, safety.style.visibility]).toEqual(['hidden', 'hidden'])
+    expect(surface.attach({ surfaceId: 'direct', front, safety, gpu })).toBeNull()
+    expect([front.style.visibility, safety.style.visibility, gpu.style.visibility]).toEqual(['hidden', 'hidden', 'visible'])
     expect(front.dataset).toMatchObject({
       renderGeneration: '8', cameraSequence: '9', interactionSequence: '10',
       gpuReadbackCount: '0', gpuSurfaceFrameCount: '1', gpuImageBitmapFrameCount: '0',
     })
     surface.dispose()
+    expect([front.style.visibility, safety.style.visibility, gpu.style.visibility]).toEqual(['visible', 'hidden', 'hidden'])
   })
 
   it('旧Surface代次或旧DPR尺寸不能覆盖稳定表面，回退先恢复CPU帧再隐藏GPU', () => {
@@ -310,15 +316,50 @@ describe('ImageEditorPresentationSurfaceV3', () => {
     expect(surface.presentGpuSurface(directLayout, 1, 1, 1, 0, 320, 240, null)).toBe(false)
     expect(surface.presentGpuSurface(directLayout, 1, 1, 1, 1, 640, 480, null)).toBe(false)
     expect(gpu.style.visibility).toBe('hidden')
+    expect([getComputedStyle(front).visibility, getComputedStyle(safety).visibility]).toEqual(['visible', 'hidden'])
     expect(contexts.size).toBe(0)
 
     expect(surface.presentGpuSurface(directLayout, 1, 1, 1, 1, 320, 240, null)).toBe(true)
     const order: string[] = []
     surface.fallbackToStableFrame(() => {
       order.push(`cpu:${gpu.style.visibility}`)
+      const rendered = result()
+      surface.present(rendered, null, directLayout, 1, rendered.geometry, rendered.geometryHash)
     })
     order.push(`gpu:${gpu.style.visibility}`)
     expect(order).toEqual(['cpu:visible', 'gpu:hidden'])
+    expect([front.style.visibility, safety.style.visibility]).toEqual(['visible', 'hidden'])
+    surface.dispose()
+  })
+
+  it('新GPU画布不可继承旧接管状态，CPU与ImageBitmap仅显示front且保留备用像素', () => {
+    const surface = new ImageEditorPresentationSurfaceV3()
+    const front = document.createElement('canvas'), safety = document.createElement('canvas')
+    const firstGpu = document.createElement('canvas'), nextGpu = document.createElement('canvas')
+    for (const gpu of [firstGpu, nextGpu]) Object.defineProperty(gpu, 'transferControlToOffscreen', {
+      value: vi.fn(() => ({ width: 300, height: 150 } as OffscreenCanvas)),
+    })
+    const layout = { stageWidth: 1024, stageHeight: 512, viewportKey: 'viewport',
+      viewport: { documentX: 0, documentY: 0, width: 1024, height: 512, zoom: 1, devicePixelRatio: 1 } }
+    surface.attach({ surfaceId: 'surface', front, safety, gpu: firstGpu })
+    const rendered = result()
+    surface.present(rendered, null, layout, 1, rendered.geometry, rendered.geometryHash)
+    expect([front.style.visibility, safety.style.visibility, firstGpu.style.visibility])
+      .toEqual(['visible', 'hidden', 'hidden'])
+    const draws = contexts.get(front)!.drawImage.mock.calls.length
+    const clears = contexts.get(front)!.clearRect.mock.calls.length
+    expect(surface.presentGpuSurface(layout, 1, 1, 1, 1, 1024, 512, null)).toBe(true)
+    expect(surface.attach({ surfaceId: 'surface-next', front, safety, gpu: nextGpu })?.surfaceGeneration).toBe(2)
+    expect([front.style.visibility, safety.style.visibility, firstGpu.style.visibility, nextGpu.style.visibility])
+      .toEqual(['visible', 'hidden', 'hidden', 'hidden'])
+    expect(contexts.get(front)!.drawImage).toHaveBeenCalledTimes(draws)
+    expect(contexts.get(front)!.clearRect).toHaveBeenCalledTimes(clears)
+    expect(surface.presentGpuSurface(layout, 1, 1, 1, 1, 1024, 512, null)).toBe(false)
+    expect(nextGpu.style.visibility).toBe('hidden')
+    expect(surface.presentGpuSurface(layout, 2, 1, 1, 2, 1024, 512, null)).toBe(true)
+    expect(surface.presentGpuBitmap({ width: 1024, height: 512 } as ImageBitmap, layout, 2, 1, 1)).toBe(true)
+    expect([front.style.visibility, safety.style.visibility, nextGpu.style.visibility])
+      .toEqual(['visible', 'hidden', 'hidden'])
     surface.dispose()
   })
 })

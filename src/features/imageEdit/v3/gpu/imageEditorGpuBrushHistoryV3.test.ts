@@ -13,7 +13,7 @@ afterAll(() => gpu?.dispose())
 
 describe('真实GPU同会话画笔历史与flat/graph往返', () => {
   it.each([{ source: 16, scale: 1, from: 48, to: 52 }, { source: 640, scale: .1, from: 500, to: 540 }])(
-    '$source源在DPR1.8撤销重做保持同一资源的精确像素', async ({ source, scale, from, to }) => {
+    '$source源在DPR1.8撤销重做及重建会话保持同一资源的精确像素', async ({ source, scale, from, to }) => {
       const value = createRasterSourceBrushFixtureV3(source, 64, scale)
       type BrushTile = NonNullable<ReturnType<typeof value.stored.get>>
       const brushes = new Map<`sha256:${string}`, BrushTile>()
@@ -24,7 +24,7 @@ describe('真实GPU同会话画笔历史与flat/graph往返', () => {
         brushes.set(resourceId, tile)
         return { tileKey, resourceId, byteSize: tile.data.byteLength }
       }))
-      const compositor = new ImageEditorGpuRasterCompositorV3(gpu)
+      let compositor = new ImageEditorGpuRasterCompositorV3(gpu)
       const textures = new Map<string, ReturnType<typeof compositor.uploadTile>>()
       const render = async (graph: boolean) => {
         const descriptors = [{ resourceRef: SOURCE, byteLength: source * source * 4, mediaType: 'image/png' },
@@ -74,6 +74,11 @@ describe('真实GPU同会话画笔历史与flat/graph往返', () => {
         expect(value.bus.redo()).toBe(true)
         expect(await render(true)).toEqual(blurred)
         expect(value.persistTiles).toHaveBeenCalledTimes(1)
+        for (const resource of textures.values()) resource.destroy()
+        textures.clear()
+        compositor.dispose()
+        compositor = new ImageEditorGpuRasterCompositorV3(gpu)
+        expect(await render(true)).toEqual(blurred)
       } finally {
         for (const resource of textures.values()) resource.destroy()
         compositor.dispose()
