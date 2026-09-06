@@ -6,6 +6,7 @@
  */
 const fs = require('node:fs')
 const path = require('node:path')
+const { captureInspectionPage } = require('./lib/uiInspectionCapture.cjs')
 const { createRuntimeEvidenceCollector, finalizeSceneEvidence } = require('./lib/runtimeEvidence.cjs')
 const {
   UI_INSPECTION_SCENES,
@@ -16,6 +17,7 @@ const {
   resolveOutputDir,
   selectInspectionScenes,
   setInspectionWindowSize,
+  assertInspectionWindowSize,
 } = require('./lib/uiInspection.cjs')
 
 const ROOT = path.resolve(__dirname, '..')
@@ -108,29 +110,36 @@ async function main() {
 
   try {
     for (const size of options.sizes) {
-      await setInspectionWindowSize(app, size)
       const sizeLabel = formatWindowSize(size)
       for (const scene of scenes) {
         const evidenceKey = `${sizeLabel} / ${scene.name}`
         collector.begin(evidenceKey)
         let sceneFailed = false
         let sceneError = null
+        const windowEvidence = { requestedOuter: size, baseline: null, completed: null, captures: [] }
         try {
+          windowEvidence.baseline = await setInspectionWindowSize(app, size)
           const capture = async (suffix) => {
             if (!/^[a-z0-9-]+$/.test(suffix)) throw new Error(`截图后缀无效：${suffix}`)
             const fileName = `${sizeLabel}-${scene.id}-${suffix}.png`
-            await app.page.screenshot({
-              path: path.join(outDir, fileName),
-              animations: 'disabled',
-            })
+            const actual = await assertInspectionWindowSize(app, size, windowEvidence.baseline)
+            let pixels
+            const bytes = await captureInspectionPage(app.app, app.page, { onEvidence: (value) => { pixels = value } })
+            fs.writeFileSync(path.join(outDir, fileName), bytes)
+            await assertInspectionWindowSize(app, size, windowEvidence.baseline)
+            windowEvidence.captures.push({ suffix, ...actual, pixels })
             rows.push({ ...scene, name: `${scene.name}-${suffix}`, size: sizeLabel, file: fileName })
           }
-          await scene.setup(app.page, app.app, { capture })
+          await scene.setup(app.page, app.app, { capture, electronApp: app.app,
+            requestedWindowSize: size, windowEvidence: windowEvidence.baseline })
           const fileName = `${sizeLabel}-${scene.id}.png`
-          await app.page.screenshot({
-            path: path.join(outDir, fileName),
-            animations: 'disabled',
-          })
+          windowEvidence.completed = await assertInspectionWindowSize(app, size, windowEvidence.baseline)
+          let pixels
+          const bytes = await captureInspectionPage(app.app, app.page, { onEvidence: (value) => { pixels = value } })
+          fs.writeFileSync(path.join(outDir, fileName), bytes)
+          await assertInspectionWindowSize(app, size, windowEvidence.baseline)
+          windowEvidence.captures.push({ suffix: 'final', ...windowEvidence.completed,
+            pixels })
           rows.push({ ...scene, size: sizeLabel, file: fileName })
           console.log(`✓ ${sizeLabel} / ${scene.name}`)
         } catch (error) {
@@ -142,6 +151,7 @@ async function main() {
         }
         try {
           evidence[evidenceKey] = finalizeSceneEvidence(await collector.finish(), sceneError)
+          evidence[evidenceKey].window = windowEvidence
           if (!sceneFailed && !evidence[evidenceKey].passed) {
             const runtimeErrorCount = evidence[evidenceKey].browserErrors.length + evidence[evidenceKey].logErrors.length
             failures.push({ name: scene.name, size: sizeLabel, message: `捕获到 ${runtimeErrorCount} 个运行时错误，详见 evidence.json` })

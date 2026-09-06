@@ -5,20 +5,37 @@ function attachUiInspectionCommon(context) {
   } = context
 
   async function closeTransientUi(page) {
-    await page.keyboard.press('Escape')
-    await page.waitForTimeout(240)
+    if (!(await page.locator('[data-dialog="true"]:visible').count())) {
+      await page.keyboard.press('Escape')
+      await page.waitForTimeout(240)
+    }
 
     const closeDeadline = Date.now() + 30000
     while (Date.now() < closeDeadline) {
       const dialog = page.locator('[data-dialog="true"]:visible').last()
       if (!(await dialog.count())) break
-      const closeButton = dialog.getByRole('button', { name: /关闭|Close/i }).last()
-      if (await closeButton.count() && await closeButton.isEnabled({ timeout: 500 })) {
-        await closeButton.click({ timeout: 1000 })
-        await page.waitForTimeout(240)
-        continue
+      const element = await dialog.elementHandle()
+      if (!element) continue
+      let requestedClose = false
+      try {
+        while (await element.isVisible() && Date.now() < closeDeadline) {
+          const failure = (await element.textContent())?.match(/保存失败[^\n]{0,100}|重试关闭|save failed[^\n]{0,100}|retry clos(?:e|ing)/i)
+          if (failure) throw new Error(`上一场景弹窗清理失败：${failure[0]}；停止自动重试，保留现场`)
+          if (!requestedClose) {
+            const closeButton = dialog.getByRole('button', { name: /关闭|Close/i }).last()
+            if (!(await closeButton.count())) {
+              await page.keyboard.press('Escape')
+              requestedClose = true
+            } else if (await closeButton.isEnabled({ timeout: 500 })) {
+              await closeButton.click({ timeout: 1000 })
+              requestedClose = true
+            }
+          }
+          await page.waitForTimeout(120)
+        }
+      } finally {
+        await element.dispose()
       }
-      await page.waitForTimeout(120)
     }
     if (await page.locator('[data-dialog="true"]:visible').count()) {
       throw new Error('上一场景弹窗在 30 秒清理期限内仍不可关闭')

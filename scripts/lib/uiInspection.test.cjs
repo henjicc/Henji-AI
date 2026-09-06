@@ -2,6 +2,7 @@ const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const path = require('node:path')
 const test = require('node:test')
+const { attachUiInspectionCommon } = require('./uiInspectionSceneCommon.cjs')
 const { UI_AUDIT_RULES } = require('./uiAuditDom.cjs')
 const {
   createExistingMultiLayerReadOnlySceneDefinition,
@@ -20,7 +21,70 @@ const {
   parseWindowSize,
   resolveOutputDir,
   selectInspectionScenes,
+  assertInspectionWindowEvidence,
+  inspectInspectionScreenshot,
 } = require('./uiInspection.cjs')
+
+test('弹窗清理每个弹窗只关闭一次，保存失败保留现场且不自动重试', async (t) => {
+  let clock = 0
+  t.mock.method(Date, 'now', () => clock)
+  for (const mode of ['closed', 'failed', 'already-failed', 'timeout']) {
+    let clicks = 0; let visible = true; let disposed = false
+    const element = { isVisible: async () => visible, dispose: async () => { disposed = true },
+      textContent: async () => mode === 'already-failed' || (mode === 'failed' && clicks) ? '保存失败，重试关闭' : '图片编辑' }
+    const button = { last() { return this }, count: async () => 1, isEnabled: async () => true,
+      click: async () => { clicks += 1; if (mode === 'closed') visible = false } }
+    const dialog = { last() { return this }, count: async () => Number(visible),
+      elementHandle: async () => element, getByRole: () => button }
+    const empty = { count: async () => 0 }
+    const page = { keyboard: { press: async () => assert.fail('有弹窗时不得先Escape触发重复保存') },
+      waitForTimeout: async (delay) => { clock += delay },
+      locator: (selector) => selector.includes('data-dialog') ? dialog : empty }
+    const context = {}; attachUiInspectionCommon(context)
+    if (mode === 'closed') await context.closeTransientUi(page)
+    else await assert.rejects(context.closeTransientUi(page), mode === 'timeout' ? /30 秒/ : /保存失败/)
+    assert.equal(clicks, mode === 'already-failed' ? 0 : 1)
+    assert.equal(disposed, true)
+    assert.equal(visible, mode !== 'closed', '失败不强关或假报已清理')
+  }
+})
+
+test('窗口证据拒绝场景放大和CSS缩放漂移，下一场景恢复尺寸后通过', () => {
+  const requested = { width: 1440, height: 900 }
+  const baseline = { outer: requested, content: requested, renderer: { ...requested, dpr: 2 }, zoomFactor: 1, nativeScaleFactor: 2 }
+  assert.deepEqual(assertInspectionWindowEvidence(requested, baseline, structuredClone(baseline)), baseline)
+  assert.throws(() => assertInspectionWindowEvidence(requested, baseline, { ...baseline,
+    outer: { width: 1600, height: 1000 } }), /尺寸发生漂移/)
+  assert.throws(() => assertInspectionWindowEvidence(requested, baseline, { ...baseline,
+    renderer: { ...baseline.renderer, width: 1200 } }), /尺寸发生漂移/)
+  assert.deepEqual(assertInspectionWindowEvidence(requested, baseline, structuredClone(baseline)), baseline)
+})
+
+test('截图按内容DIP辨别实际1x或显示器密度，拒绝带黑边的3200×2000', async () => {
+  const sharp = require('sharp')
+  const evidence = { content: { width: 1440, height: 900 }, renderer: { width: 1440, height: 900, dpr: 2 }, nativeScaleFactor: 2 }
+  const png = (width, height) => sharp({ create: { width, height, channels: 4, background: '#000000' } }).png().toBuffer()
+  assert.deepEqual(await inspectInspectionScreenshot(await png(2880, 1800), evidence),
+    { width: 2880, height: 1800, captureScale: 2, captureMethod: 'electron-capture-page', monitorScale: 2 })
+  assert.equal((await inspectInspectionScreenshot(await png(1440, 900), evidence)).captureScale, 1)
+  await assert.rejects(inspectInspectionScreenshot(await png(3200, 2000), evidence), /截图像素尺寸不匹配/)
+})
+
+test('0.9页面缩放分别核对外框、CSS、effective DPR与native scale，不混同物理屏幕像素', async () => {
+  const requested = { width: 1440, height: 900 }
+  const evidence = { outer: requested, content: requested, zoomFactor: 0.9, nativeScaleFactor: 2,
+    renderer: { width: 1600, height: 1000, dpr: 1.7999999523162842 } }
+  assert.equal(assertInspectionWindowEvidence(requested, evidence, evidence), evidence)
+  const sharp = require('sharp')
+  const png = (width, height) => sharp({ create: { width, height, channels: 3, background: '#000000' } }).png().toBuffer()
+  assert.equal((await inspectInspectionScreenshot(await png(2880, 1800), evidence)).captureScale, 2)
+  await assert.rejects(inspectInspectionScreenshot(await png(3200, 2000), evidence), /截图像素尺寸不匹配/)
+  assert.throws(() => assertInspectionWindowEvidence(requested, evidence, { ...evidence, nativeScaleFactor: 1.8 }), /尺寸发生漂移/)
+  const badDpr = { ...evidence, renderer: { ...evidence.renderer, dpr: 2 } }
+  assert.throws(() => assertInspectionWindowEvidence(requested, badDpr, badDpr), /尺寸发生漂移/)
+  const badCss = { ...evidence, renderer: { ...evidence.renderer, width: 1440 } }
+  assert.throws(() => assertInspectionWindowEvidence(requested, badCss, badCss), /尺寸发生漂移/)
+})
 
 test('默认覆盖两档项目窗口尺寸', () => {
   const options = parseUiInspectionArgs([], '.ui-tour')

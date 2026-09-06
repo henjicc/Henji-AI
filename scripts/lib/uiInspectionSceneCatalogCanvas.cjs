@@ -98,7 +98,7 @@ function createCanvasScenes(context) {
       id: 'canvas-gpu-five-layer-performance',
       surface: '画布',
       writesUserData: true,
-      name: '画布-固定KIE五层GPU拖动基准',
+      name: '画布-合成五独立资源GPU连续输入',
       setup: setupCanvasGpuFiveLayerPerformance,
     },
     {

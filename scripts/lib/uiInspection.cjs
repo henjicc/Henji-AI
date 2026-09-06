@@ -2,6 +2,7 @@ const fs = require('node:fs')
 const path = require('node:path')
 const { launchElectronApp, waitForApp } = require('./electronLaunch.cjs')
 const { createUiInspectionScenes } = require('./uiInspectionScenes.cjs')
+const { inspectInspectionScreenshot } = require('./uiInspectionCapture.cjs')
 
 const WINDOW_SIZE_TOLERANCE_PX = 2
 const UI_INSPECTION_CANVAS_PROJECT_ID = '__henji_ui_inspection_canvas_fixture__'
@@ -261,6 +262,43 @@ async function setInspectionWindowSize(app, size) {
     throw new Error(`窗口尺寸设置失败：期望 ${formatWindowSize(size)}，实际 ${actualSize.join('x')}`)
   }
   await settlePage(app.page, 450)
+  const baseline = await readInspectionWindowEvidence(app)
+  return assertInspectionWindowEvidence(size, baseline, baseline)
+}
+
+async function readInspectionWindowEvidence(app) {
+  const windowHandle = await app.app.browserWindow(app.page)
+  const native = await windowHandle.evaluate((handle) => ({
+    outer: handle.getSize(), content: handle.getContentSize(), zoomFactor: handle.webContents.getZoomFactor(),
+    bounds: handle.getBounds(),
+  }))
+  const nativeScaleFactor = await app.app.evaluate(({ screen }, bounds) => screen.getDisplayMatching(bounds).scaleFactor, native.bounds)
+  const renderer = await app.page.evaluate(() => ({ width: innerWidth, height: innerHeight, dpr: devicePixelRatio }))
+  return { outer: { width: native.outer[0], height: native.outer[1] },
+    content: { width: native.content[0], height: native.content[1] },
+    zoomFactor: native.zoomFactor, nativeScaleFactor, renderer }
+}
+
+/** --size 始终指 BrowserWindow 外框；CSS、内容区及 DPR 另列，不能混成同一尺寸。 */
+function assertInspectionWindowEvidence(requested, baseline, current) {
+  const near = (a, b) => Number.isFinite(a) && Number.isFinite(b) && Math.abs(a - b) <= WINDOW_SIZE_TOLERANCE_PX
+  if (!near(current.outer.width, requested.width) || !near(current.outer.height, requested.height)
+    || ['outer', 'content', 'renderer'].some((field) => ['width', 'height'].some((axis) => !near(current[field][axis], baseline[field][axis])))
+    || current.renderer.dpr !== baseline.renderer.dpr || current.zoomFactor !== baseline.zoomFactor
+    || current.nativeScaleFactor !== baseline.nativeScaleFactor
+    || !Number.isFinite(current.nativeScaleFactor) || current.nativeScaleFactor <= 0
+    || !Number.isFinite(current.zoomFactor) || current.zoomFactor <= 0
+    || !Number.isFinite(current.renderer.dpr)
+    || Math.abs(current.renderer.dpr - current.nativeScaleFactor * current.zoomFactor) > 1e-5
+    || !near(current.renderer.width * current.zoomFactor, current.content.width)
+    || !near(current.renderer.height * current.zoomFactor, current.content.height)) {
+    throw new Error(`场景窗口尺寸发生漂移：${JSON.stringify({ requested, baseline, current })}`)
+  }
+  return current
+}
+
+async function assertInspectionWindowSize(app, requested, baseline) {
+  return assertInspectionWindowEvidence(requested, baseline, await readInspectionWindowEvidence(app))
 }
 
 function resolveOutputDir(root, outDir) {
@@ -278,5 +316,9 @@ module.exports = {
   resolveOutputDir,
   selectInspectionScenes,
   setInspectionWindowSize,
+  readInspectionWindowEvidence,
+  assertInspectionWindowEvidence,
+  assertInspectionWindowSize,
+  inspectInspectionScreenshot,
   settlePage,
 }

@@ -441,7 +441,7 @@ function attachUiInspectionCanvasEditing(context) {
       inspection,
     })
     console.log(`[image-editor-gpu-baseline] ${JSON.stringify({
-      fixture: 'kie-five-layer',
+      fixture: 'synthetic-complex-layer-graph',
       path: 'webgpu-surface-transient-transform',
       ...verifiedDrag.dragBaseline,
     })}`)

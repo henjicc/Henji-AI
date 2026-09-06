@@ -4,14 +4,19 @@ async function openCanvasImageEditorV3Fixture({
   width,
   height,
   label,
+  sourceWidth = width,
+  sourceHeight = height,
+  transform = [1, 0, 0, 1, 0, 0],
+  solidColor = null,
+  foreground = null,
 }) {
   const { projectId } = await context.seedAndOpenCanvasPanoramaProject(page)
   await page.getByRole('button', { name: /返回项目|Back to Projects/ }).click()
   await context.settlePage(page, 500)
   const fixture = await page.evaluate(async (payload) => {
     const canvas = document.createElement('canvas')
-    canvas.width = payload.width
-    canvas.height = payload.height
+    canvas.width = payload.sourceWidth
+    canvas.height = payload.sourceHeight
     const drawing = canvas.getContext('2d')
     if (!drawing) throw new Error(`${payload.label}夹具画布不可用`)
     const gradient = drawing.createLinearGradient(0, 0, payload.width, payload.height)
@@ -26,6 +31,10 @@ async function openCanvasImageEditorV3Fixture({
     drawing.fill()
     drawing.fillStyle = 'rgba(15, 23, 42, 0.68)'
     drawing.fillRect(payload.width * 0.58, payload.height * 0.18, payload.width * 0.27, payload.height * 0.64)
+    if (payload.solidColor) {
+      drawing.fillStyle = payload.solidColor
+      drawing.fillRect(0, 0, canvas.width, canvas.height)
+    }
     const blob = await new Promise((resolve, reject) => canvas.toBlob(
       (value) => value ? resolve(value) : reject(new Error(`${payload.label}夹具编码失败`)),
       'image/png',
@@ -38,6 +47,23 @@ async function openCanvasImageEditorV3Fixture({
       requestId: `reality-canvas-gpu-ingest-${crypto.randomUUID()}`,
       source: { kind: 'local-path', filePath: source },
     })
+    let foregroundSource = null
+    if (payload.foreground) {
+      const overlay = document.createElement('canvas')
+      overlay.width = payload.foreground.width
+      overlay.height = payload.foreground.height
+      const paint = overlay.getContext('2d')
+      if (!paint) throw new Error('独立前景夹具画布不可用')
+      paint.fillStyle = payload.foreground.color
+      paint.fillRect(0, 0, overlay.width, overlay.height)
+      foregroundSource = await window.henjiNative.imageEditorV3.ingestSource({
+        requestId: `reality-canvas-foreground-ingest-${crypto.randomUUID()}`,
+        source: { kind: 'data-url', dataUrl: overlay.toDataURL('image/png') },
+      })
+      if (foregroundSource.resource.resourceRef === managed.resource.resourceRef) {
+        throw new Error('前景和背景必须是两个独立图片资源')
+      }
+    }
     const documentId = `reality-canvas-gpu-${crypto.randomUUID()}`
     const saved = await window.henjiNative.imageEditorV3.saveDocument({
       requestId: `reality-canvas-gpu-save-${crypto.randomUUID()}`,
@@ -46,8 +72,8 @@ async function openCanvasImageEditorV3Fixture({
         id: documentId,
         revision: 0,
         geometry: {
-          width: managed.metadata.width,
-          height: managed.metadata.height,
+          width: payload.width,
+          height: payload.height,
           orientation: { rotate: 0, mirrored: false },
           crop: null,
         },
@@ -58,13 +84,18 @@ async function openCanvasImageEditorV3Fixture({
         layers: [{
           id: 'reality-gpu-source-layer', name: payload.label, type: 'raster',
           visible: true, locked: false, opacity: 1, blendMode: 'normal',
-          transform: [1, 0, 0, 1, 0, 0], mask: null,
+          transform: payload.transform, mask: null,
           source: { kind: 'resource', resourceId: managed.resource.resourceRef }, tiles: {},
-        }],
+        }, ...(foregroundSource ? [{
+          id: 'reality-gpu-foreground-layer', name: '独立前景', type: 'raster',
+          visible: true, locked: false, opacity: 1, blendMode: 'normal',
+          transform: payload.foreground.transform, mask: null,
+          source: { kind: 'resource', resourceId: foregroundSource.resource.resourceRef }, tiles: {},
+        }] : [])],
       },
       expectedRevision: 0,
       history: null,
-      resourceRefs: [managed.resource.resourceRef],
+      resourceRefs: [managed.resource.resourceRef, ...(foregroundSource ? [foregroundSource.resource.resourceRef] : [])],
       previewRef: null,
     })
     const rows = await window.henjiNative.db.select(
@@ -86,7 +117,7 @@ async function openCanvasImageEditorV3Fixture({
         displayName: payload.label,
         imageUrl: managed.mediaUrl,
         previewImageUrl: managed.mediaUrl,
-        aspectRatio: `${managed.metadata.width}:${managed.metadata.height}`,
+        aspectRatio: `${payload.width}:${payload.height}`,
         resultKind: 'layer-stack',
         imageEditSession: {
           kind: 'image-edit-v3', sourceUrl: managed.mediaUrl,
@@ -105,8 +136,11 @@ async function openCanvasImageEditorV3Fixture({
       'UPDATE storyboard_projects SET node_count = ?, nodes_json = ?, edges_json = ?, viewport_json = ? WHERE id = ?',
       [nodes.length, JSON.stringify(nodes), JSON.stringify(edges), JSON.stringify({ x: 50, y: 120, zoom: 0.7 }), payload.projectId],
     )
-    return { nodeId, documentRef: saved.documentRef }
-  }, { projectId, width, height, label })
+    return { nodeId, documentRef: saved.documentRef, initialRevision: saved.revision,
+      sourceResourceRef: managed.resource.resourceRef,
+      foregroundResourceRef: foregroundSource?.resource.resourceRef ?? null,
+      sourceGeometry: { width: managed.metadata.width, height: managed.metadata.height } }
+  }, { projectId, width, height, label, sourceWidth, sourceHeight, transform, solidColor, foreground })
   await page.locator(`[data-project-id="${projectId}"]:visible`).click()
   const node = page.locator(`[data-layer-stack-node-id="${fixture.nodeId}"][data-layer-stack-status="editable-v3"]`)
   await node.waitFor({ state: 'visible', timeout: 12000 })

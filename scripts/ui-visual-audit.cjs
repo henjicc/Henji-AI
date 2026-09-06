@@ -15,6 +15,7 @@ const {
   resolveOutputDir,
   selectInspectionScenes,
   setInspectionWindowSize,
+  assertInspectionWindowSize,
 } = require('./lib/uiInspection.cjs')
 
 const ROOT = path.resolve(__dirname, '..')
@@ -134,15 +135,18 @@ async function main() {
 
   try {
     for (const size of options.sizes) {
-      await setInspectionWindowSize(app, size)
       const sizeLabel = formatWindowSize(size)
       for (const scene of scenes) {
         const resultKey = `${sizeLabel} / ${scene.name}`
         collector.begin(resultKey)
         let sceneFailed = false
         let sceneError = null
+        const windowEvidence = { requestedOuter: size, baseline: null, completed: null }
         try {
-          await scene.setup(app.page, app.app)
+          windowEvidence.baseline = await setInspectionWindowSize(app, size)
+          await scene.setup(app.page, app.app, { electronApp: app.app,
+            requestedWindowSize: size, windowEvidence: windowEvidence.baseline })
+          windowEvidence.completed = await assertInspectionWindowSize(app, size, windowEvidence.baseline)
           const result = await app.page.evaluate(auditUiDom, {
             scene: scene.name,
             surface: scene.surface,
@@ -158,6 +162,7 @@ async function main() {
         }
         try {
           runtimeEvidence[resultKey] = finalizeSceneEvidence(await collector.finish(), sceneError)
+          runtimeEvidence[resultKey].window = windowEvidence
           if (!sceneFailed && !runtimeEvidence[resultKey].passed) {
             const runtimeErrorCount = runtimeEvidence[resultKey].browserErrors.length
               + runtimeEvidence[resultKey].logErrors.length

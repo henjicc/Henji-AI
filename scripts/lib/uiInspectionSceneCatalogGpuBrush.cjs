@@ -1,4 +1,6 @@
 const sharp = require('sharp')
+const { createCanvasBrushGeometryScenes } = require('./uiInspectionCanvasBrushGeometry.cjs')
+const { createSourceFreeFallbackScene } = require('./uiInspectionCanvasSourceFreeFallback.cjs')
 
 function createGpuBrushScenes(context) {
   const { settlePage, clickNamedButton, setupToolbox } = context
@@ -207,7 +209,7 @@ function createGpuBrushScenes(context) {
       if (issues.length > 0) process.stdout.write(`  GPU 画笔问题诊断：${JSON.stringify(issues)}\n`)
       await settlePage(page, 500)
     },
-  }]
+  }, ...createCanvasBrushGeometryScenes(context), createSourceFreeFallbackScene(context)]
 }
 
 module.exports = { createGpuBrushScenes }

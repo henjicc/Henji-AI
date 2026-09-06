@@ -1,3 +1,39 @@
+const { runContinuousGpuDrag, waitForVisibleFixtureColors, isGpuSurfaceReady } = require('./uiInspectionGpuDragEvidence.cjs')
+const { captureInspectionPage } = require('./uiInspectionCapture.cjs')
+
+async function readDragPersistenceEvidence(page, payload) {
+  return page.evaluate(async ({ afterTimestamp, documentRef, documentId, revision, projectId, nodeId }) => {
+    // 先按正式事件过滤，再限量；频繁 load.completed 不能挤掉首次真实保存。
+    const result = await window.henjiNative.logging.queryLogEvents({
+      date: afterTimestamp.slice(0, 10), afterTimestamp, level: 'info',
+      domainPrefix: 'main.image_editor_v3.documents',
+      keyword: 'image_editor_v3.document.save.completed', limit: 20,
+    })
+    if (result.hasMore) throw new Error('本次保存事件超出有界证据范围，不能据截断结果报告只保存一次')
+    const loaded = await window.henjiNative.imageEditorV3.loadDocument({
+      requestId: `reality-multi-layer-post-drag-${crypto.randomUUID()}`, documentRef,
+    })
+    const rows = await window.henjiNative.db.select('SELECT nodes_json FROM storyboard_projects WHERE id = ? LIMIT 1', [projectId])
+    const node = JSON.parse(rows[0]?.nodes_json ?? '[]').find((value) => value.id === nodeId)
+    return {
+      repositorySaveCount: result.events.filter((event) => event.event === 'image_editor_v3.document.save.completed'
+        && event.context?.documentId === documentId && event.context?.revision === revision).length,
+      persistedDocumentId: loaded?.document?.id,
+      persistedRevision: loaded?.revision ?? -1,
+      persistedTransform: loaded?.document?.layers.find((layer) => layer.id === 'ui-foreground-layer')?.transform,
+      nodeDocumentRef: node?.data?.imageEditSession?.documentRef,
+      nodeRevision: node?.data?.imageEditSession?.revision,
+    }
+  }, payload)
+}
+
+function isDragPersistenceConfirmed(evidence, { documentId, documentRef, revision, initialRevision }) {
+  // UI 自动保存只写文档；关闭才物化预览并更新画布节点，不能要求每次 pointerup 保存画布。
+  return evidence.repositorySaveCount === 1 && evidence.persistedDocumentId === documentId
+    && evidence.persistedRevision === revision && evidence.nodeDocumentRef === documentRef
+    && evidence.nodeRevision === initialRevision
+}
+
 async function waitForEditorState(page, { message, read, accept, timeout = 30000 }) {
   const startedAt = Date.now()
   let lastEvidence = null
@@ -7,11 +43,6 @@ async function waitForEditorState(page, { message, read, accept, timeout = 30000
     await page.waitForTimeout(80)
   }
   throw new Error(`${message}：${JSON.stringify(lastEvidence)}`)
-}
-
-function percentile(samples, quantile) {
-  const sorted = [...samples].sort((left, right) => left - right)
-  return Number((sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * quantile))] ?? 0).toFixed(3))
 }
 
 async function readPasteboardDiagnostic(page, documentRef) {
@@ -48,9 +79,9 @@ async function readPasteboardDiagnostic(page, documentRef) {
 
 async function verifyMultiLayerDragPerformance({
   page,
+  app,
   projectId,
   fixture,
-  settlePage,
   inspection,
 }) {
   await page.locator(`[data-project-id="${projectId}"]:visible`).click()
@@ -86,6 +117,9 @@ async function verifyMultiLayerDragPerformance({
       nodeRevision: node?.data?.imageEditSession?.revision,
       loadedDocumentRef: loaded?.documentRef,
       loadedRevision: loaded?.revision,
+      documentId: loaded?.document?.id,
+      initialTransform: loaded?.document?.layers.find((layer) => layer.id === 'ui-foreground-layer')?.transform,
+      geometry: loaded?.document?.geometry,
     }
   }, {
     targetProjectId: projectId,
@@ -121,32 +155,8 @@ async function verifyMultiLayerDragPerformance({
     accept: ({ loading, coverage }) => loading === 0 && Number.isFinite(coverage) && coverage > 0,
     timeout: 60000,
   })
-  await settlePage(page, 350)
-  await inspection?.capture?.('editor')
-
   const commandBar = editor.locator('[data-command-bar]')
   const rasterStack = editor.locator('[data-raster-pasteboard-stack="multi"]')
-  if (!fixture.complexGraph) {
-    try {
-      await waitForEditorState(page, {
-        message: '多图层资源代理栈没有就绪',
-        read: async () => {
-          const attached = await rasterStack.count()
-          return {
-            attached,
-            ready: attached ? await rasterStack.getAttribute('data-raster-source-ready') : null,
-            layers: attached
-              ? await rasterStack.locator('[data-raster-pasteboard-layer]').count()
-              : 0,
-          }
-        },
-        accept: ({ attached, ready, layers }) => attached === 1 && ready === 'true' && layers === 5,
-      })
-    } catch (error) {
-      const diagnostic = await readPasteboardDiagnostic(page, fixture.documentRef)
-      throw new Error(`${error instanceof Error ? error.message : String(error)}；诊断：${JSON.stringify(diagnostic)}`)
-    }
-  }
   await editor.locator('[data-layer-id="ui-foreground-layer"] [data-layer-select]').click()
   await waitForEditorState(page, {
     message: '多图层移动工具没有就绪',
@@ -160,6 +170,9 @@ async function verifyMultiLayerDragPerformance({
     read: async () => ({
       composition: await previewSurface.getAttribute('data-preview-composition-backend'),
       presentation: await previewSurface.getAttribute('data-preview-presentation-backend'),
+      visible: await editor.locator('[data-presentation-gpu-surface]')
+        .evaluate((element) => getComputedStyle(element).visibility === 'visible'),
+      coverage: Number(await previewSurface.getAttribute('data-preview-coverage')),
       frameCount: Number(await editor.locator('[data-presentation-front-surface]')
         .getAttribute('data-gpu-frame-count') ?? '0'),
       surfaceFrameCount: Number(await editor.locator('[data-presentation-front-surface]')
@@ -167,139 +180,27 @@ async function verifyMultiLayerDragPerformance({
       imageBitmapFrameCount: Number(await editor.locator('[data-presentation-front-surface]')
         .getAttribute('data-gpu-image-bitmap-frame-count') ?? '-1'),
     }),
-    accept: ({ composition, presentation, frameCount, surfaceFrameCount, imageBitmapFrameCount }) => (
-      composition === 'gpu'
-      && presentation === 'webgpu-surface'
-      && frameCount > 0
-      && surfaceFrameCount > 0
-      && imageBitmapFrameCount === 0
-    ),
+    accept: isGpuSurfaceReady,
     timeout: 30000,
+  }).catch(async (error) => {
+    const diagnostic = await readPasteboardDiagnostic(page, fixture.documentRef)
+    throw new Error(`${error instanceof Error ? error.message : String(error)}；诊断：${JSON.stringify(diagnostic)}`)
   })
-  const previewBox = await previewSurface.boundingBox()
-  if (!previewBox) throw new Error('多图层拖动前无法读取预览区域')
-  const dragStartX = previewBox.x + previewBox.width / 2
-  const dragStartY = previewBox.y + previewBox.height / 2
+  const contentBox = await editor.locator('[data-viewport-content]').boundingBox()
+  if (!contentBox) throw new Error('多图层拖动前无法读取真实画面区域')
+  if (fixture.expectedColors) await waitForVisibleFixtureColors(
+    page, () => captureInspectionPage(app ?? inspection?.electronApp, page, { clip: contentBox }), fixture.expectedColors,
+  )
+  await inspection?.capture?.('editor')
   const beforeLayerMove = Number(await commandBar.getAttribute('data-document-revision'))
-  if (beforeLayerMove !== fixture.initialRevision) {
-    throw new Error(`多图层拖动前 revision 异常：${beforeLayerMove}`)
-  }
+  if (beforeLayerMove !== fixture.initialRevision) throw new Error('拖动前文档版本异常')
   const stableRaster = editor.locator('[data-raster-display-frame]')
-  const gpuSurface = editor.locator('[data-presentation-front-surface]')
-  const presentSamplesMs = []
-  const driverSamplesMs = []
-  const samples = []
   const dragStartedAt = new Date().toISOString()
-  const beforeHotPath = await page.evaluate(({ previewSelector, gpuSelector }) => {
-    const preview = document.querySelector(previewSelector)
-    const gpu = document.querySelector(gpuSelector)
-    return {
-      renderGeneration: Number(preview?.getAttribute('data-preview-render-generation') ?? '-1'),
-      overrideCount: Number(preview?.getAttribute('data-preview-override-count') ?? '-1'),
-      renderPlanCompileCount: Number(gpu?.getAttribute('data-render-plan-compile-count') ?? '-1'),
-      cpuTaskStartCount: Number(gpu?.getAttribute('data-cpu-task-start-count') ?? '-1'),
-      uploadCount: Number(gpu?.getAttribute('data-gpu-upload-count') ?? '-1'),
-      readbackCount: Number(gpu?.getAttribute('data-gpu-readback-count') ?? '-1'),
-      frameCount: Number(gpu?.getAttribute('data-gpu-frame-count') ?? '-1'),
-      surfaceFrameCount: Number(gpu?.getAttribute('data-gpu-surface-frame-count') ?? '-1'),
-      imageBitmapFrameCount: Number(gpu?.getAttribute('data-gpu-image-bitmap-frame-count') ?? '-1'),
-      directSurfaceFailureCount: Number(gpu?.getAttribute('data-gpu-direct-surface-failure-count') ?? '-1'),
-      uniformUpdateCount: Number(gpu?.getAttribute('data-gpu-uniform-update-count') ?? '-1'),
-      interactionSequence: Number(gpu?.getAttribute('data-interaction-sequence') ?? '-1'),
-    }
-  }, {
-    previewSelector: '[data-preview-surface]',
-    gpuSelector: '[data-presentation-front-surface]',
-  })
-  await page.keyboard.down('Control')
-  await page.mouse.move(dragStartX, dragStartY)
-  await page.mouse.down()
-  for (let step = 1; step <= 100; step += 1) {
-    const startedAt = performance.now()
-    const previousSequence = Number(await gpuSurface.getAttribute('data-interaction-sequence') ?? '-1')
-    await page.mouse.move(dragStartX + 1.5 * step, dragStartY + step)
-    await page.waitForFunction(({ previous }) => Number(
-      document.querySelector('[data-presentation-front-surface]')
-        ?.getAttribute('data-interaction-sequence') ?? '-1'
-    ) > previous, { previous: previousSequence }, { timeout: 5000 })
-    const driverMs = performance.now() - startedAt
-    driverSamplesMs.push(driverMs)
-    const evidence = {
-      revision: Number(await commandBar.getAttribute('data-document-revision')),
-      overrideCount: Number(await previewSurface.getAttribute('data-preview-override-count')),
-      renderGeneration: Number(await previewSurface.getAttribute('data-preview-render-generation')),
-      stackVisibility: await rasterStack.count()
-        ? await rasterStack.evaluate((element) => getComputedStyle(element).visibility)
-        : 'absent',
-      stableVisibility: await stableRaster.evaluate((element) => getComputedStyle(element).visibility),
-      eventToPresentMs: Number(await gpuSurface.getAttribute('data-event-to-present-ms')),
-      renderPlanCompileCount: Number(await gpuSurface.getAttribute('data-render-plan-compile-count')),
-      cpuTaskStartCount: Number(await gpuSurface.getAttribute('data-cpu-task-start-count')),
-      uploadCount: Number(await gpuSurface.getAttribute('data-gpu-upload-count')),
-      readbackCount: Number(await gpuSurface.getAttribute('data-gpu-readback-count')),
-      frameCount: Number(await gpuSurface.getAttribute('data-gpu-frame-count')),
-      surfaceFrameCount: Number(await gpuSurface.getAttribute('data-gpu-surface-frame-count')),
-      imageBitmapFrameCount: Number(await gpuSurface.getAttribute('data-gpu-image-bitmap-frame-count')),
-      directSurfaceFailureCount: Number(await gpuSurface.getAttribute('data-gpu-direct-surface-failure-count')),
-      uniformUpdateCount: Number(await gpuSurface.getAttribute('data-gpu-uniform-update-count')),
-    }
-    if (evidence.revision !== beforeLayerMove
-      || evidence.overrideCount !== 0
-      || evidence.renderGeneration !== beforeHotPath.renderGeneration
-      || (!fixture.complexGraph && evidence.stackVisibility !== 'hidden')
-      || evidence.stableVisibility !== 'visible'
-      || evidence.renderPlanCompileCount !== beforeHotPath.renderPlanCompileCount
-      || evidence.cpuTaskStartCount !== beforeHotPath.cpuTaskStartCount
-      || evidence.uploadCount !== beforeHotPath.uploadCount
-      || evidence.readbackCount !== 0
-      || evidence.imageBitmapFrameCount !== 0
-      || evidence.directSurfaceFailureCount !== 0
-      || evidence.surfaceFrameCount < beforeHotPath.surfaceFrameCount
-      || !Number.isFinite(evidence.eventToPresentMs)
-      || evidence.uniformUpdateCount > evidence.frameCount) {
-      throw new Error(`GPU 移动热路径发生了权威/CPU/上传/回读副作用：${JSON.stringify({ beforeHotPath, evidence })}`)
-    }
-    presentSamplesMs.push(evidence.eventToPresentMs)
-    samples.push({
-      step,
-      frameCount: evidence.frameCount,
-      eventToPresentMs: evidence.eventToPresentMs,
-      driverMs: Number(driverMs.toFixed(3)),
-    })
-  }
-  const afterHotPath = await page.evaluate((gpuSelector) => {
-    const gpu = document.querySelector(gpuSelector)
-    return {
-      frameCount: Number(gpu?.getAttribute('data-gpu-frame-count') ?? '-1'),
-      surfaceFrameCount: Number(gpu?.getAttribute('data-gpu-surface-frame-count') ?? '-1'),
-      imageBitmapFrameCount: Number(gpu?.getAttribute('data-gpu-image-bitmap-frame-count') ?? '-1'),
-      directSurfaceFailureCount: Number(gpu?.getAttribute('data-gpu-direct-surface-failure-count') ?? '-1'),
-      uniformUpdateCount: Number(gpu?.getAttribute('data-gpu-uniform-update-count') ?? '-1'),
-      interactionSequence: Number(gpu?.getAttribute('data-interaction-sequence') ?? '-1'),
-    }
-  }, '[data-presentation-front-surface]')
-  const presentedFrameDelta = afterHotPath.frameCount - beforeHotPath.frameCount
-  const uniformUpdateDelta = afterHotPath.uniformUpdateCount - beforeHotPath.uniformUpdateCount
-  const surfaceFrameDelta = afterHotPath.surfaceFrameCount - beforeHotPath.surfaceFrameCount
-  const interactionSequenceDelta = afterHotPath.interactionSequence
-    - beforeHotPath.interactionSequence
-  if (presentSamplesMs.length !== 100
-    || interactionSequenceDelta !== 100
-    || presentedFrameDelta < presentSamplesMs.length
-    || surfaceFrameDelta < presentSamplesMs.length
-    || afterHotPath.imageBitmapFrameCount !== 0
-    || afterHotPath.directSurfaceFailureCount !== 0
-    || uniformUpdateDelta > presentedFrameDelta) {
-    throw new Error(`GPU 移动采样没有逐事件推进实际呈现：${JSON.stringify({
-      sampleCount: presentSamplesMs.length,
-      interactionSequenceDelta,
-      presentedFrameDelta,
-      surfaceFrameDelta,
-      uniformUpdateDelta,
-    })}`)
-  }
-  await page.mouse.up()
-  await page.keyboard.up('Control')
+  const dragMetrics = await runContinuousGpuDrag({ page, app: app ?? inspection?.electronApp,
+    editor, box: contentBox })
+  const expectedTransform = [...firstOpenEvidence.initialTransform]
+  expectedTransform[4] += (dragMetrics.finalPoint.x - dragMetrics.start.x) / contentBox.width * firstOpenEvidence.geometry.width
+  expectedTransform[5] += (dragMetrics.finalPoint.y - dragMetrics.start.y) / contentBox.height * firstOpenEvidence.geometry.height
   await waitForEditorState(page, {
     message: '多图层移动松手后没有只提交一个 revision',
     read: async () => Number(await commandBar.getAttribute('data-document-revision')),
@@ -313,94 +214,38 @@ async function verifyMultiLayerDragPerformance({
         ? await rasterStack.evaluate((element) => getComputedStyle(element).visibility)
         : 'absent',
       stableVisibility: await stableRaster.evaluate((element) => getComputedStyle(element).visibility),
+      gpuVisibility: await editor.locator('[data-presentation-gpu-surface]')
+        .evaluate((element) => getComputedStyle(element).visibility),
+      composition: await previewSurface.getAttribute('data-preview-composition-backend'),
+      presentation: await previewSurface.getAttribute('data-preview-presentation-backend'),
     }),
-    accept: (evidence) => (fixture.complexGraph || evidence.stackVisibility === 'hidden')
-      && evidence.stableVisibility === 'visible',
+    accept: (evidence) => ['hidden', 'absent'].includes(evidence.stackVisibility)
+      && evidence.stableVisibility === 'visible' && evidence.gpuVisibility === 'visible'
+      && evidence.composition === 'gpu' && evidence.presentation === 'webgpu-surface',
   })
-  await waitForEditorState(page, {
+  const saveEvidence = await waitForEditorState(page, {
     message: 'GPU 移动松手后没有完成一次保存/一次 revision',
-    read: () => page.evaluate(async ({ afterTimestamp, documentRef }) => {
-      const result = await window.henjiNative.logging.queryLogEvents({
-        date: new Date().toISOString().slice(0, 10),
-        afterTimestamp,
-        level: 'info',
-        limit: 200,
-      })
-      const loaded = await window.henjiNative.imageEditorV3.loadDocument({
-        requestId: `reality-multi-layer-post-drag-${crypto.randomUUID()}`,
-        documentRef,
-      })
-      return {
-        repositorySaveCount: result.events.filter((event) => (
-          event.event === 'image_editor_v3.document.save.completed'
-        )).length,
-        canvasSaveCount: result.events.filter((event) => (
-          event.event === 'canvas.image_edit_v3.persistence.completed'
-        )).length,
-        persistedRevision: loaded?.revision ?? -1,
-      }
-    }, { afterTimestamp: dragStartedAt, documentRef: fixture.documentRef }),
-    accept: (evidence) => evidence.canvasSaveCount === 1
-      && evidence.persistedRevision === beforeLayerMove + 1,
+    read: () => readDragPersistenceEvidence(page, { afterTimestamp: dragStartedAt,
+      documentRef: fixture.documentRef, documentId: firstOpenEvidence.documentId,
+      revision: beforeLayerMove + 1, projectId, nodeId: fixture.nodeId }),
+    accept: (evidence) => isDragPersistenceConfirmed(evidence, { documentId: firstOpenEvidence.documentId,
+      documentRef: fixture.documentRef, revision: beforeLayerMove + 1, initialRevision: fixture.initialRevision }),
     timeout: 12000,
   })
+  if (!saveEvidence.persistedTransform || saveEvidence.persistedTransform.some((value, index) => (
+    Math.abs(value - expectedTransform[index]) > 1e-4
+  ))) throw new Error(`保存的 transform 不是末次反向输入：${JSON.stringify({ expectedTransform, saveEvidence })}`)
   const rendererSize = await page.evaluate(() => ({
     width: window.innerWidth,
     height: window.innerHeight,
   }))
-  const requestedWindowSize = fixture.windowSize ?? rendererSize
-  const baseline = requestedWindowSize.width <= 960
-    ? { p95Ms: 24.707, p99Ms: 31.821 }
-    : { p95Ms: 23.947, p99Ms: 30.851 }
-  const dragMetrics = {
-    eventCount: 100,
-    sampleCount: presentSamplesMs.length,
-    interactionSequenceDelta,
-    presentedFrameDelta,
-    uniformUpdateDelta,
-    p50Ms: percentile(presentSamplesMs, 0.5),
-    p95Ms: percentile(presentSamplesMs, 0.95),
-    p99Ms: percentile(presentSamplesMs, 0.99),
-    driverP95Ms: percentile(driverSamplesMs, 0.95),
-    driverP99Ms: percentile(driverSamplesMs, 0.99),
-    slowestSamples: [...samples]
-      .sort((left, right) => right.eventToPresentMs - left.eventToPresentMs)
-      .slice(0, 5),
-  }
-  const p95LimitMs = fixture.complexGraph ? 16.7 : Math.min(16.7, baseline.p95Ms / 3)
-  const p99LimitMs = fixture.complexGraph ? 33.4 : Math.min(33.4, baseline.p99Ms / 3)
-  if (dragMetrics.p95Ms > p95LimitMs || dragMetrics.p99Ms > p99LimitMs) {
-    throw new Error(`GPU 拖动性能未满足当前夹具门槛：${JSON.stringify({
-      requestedWindowSize,
-      rendererSize,
-      baseline,
-      p95LimitMs,
-      p99LimitMs,
-      dragMetrics,
-    })}`)
-  }
-
   return {
-    dialog,
-    editor,
-    initialPreviewSource,
-    result,
+    dialog, editor, initialPreviewSource, result,
     dragBaseline: {
       ...dragMetrics,
-      requestedWindowSize,
+      saveEvidence,
+      requestedWindowSize: inspection?.requestedWindowSize ?? fixture.windowSize ?? null,
       rendererSize,
-      comparison: fixture.complexGraph ? 'complex-absolute-budget' : 'kie-five-layer-1.1-baseline',
-      baseline,
-      p95Speedup: Number((baseline.p95Ms / dragMetrics.p95Ms).toFixed(3)),
-      p99Speedup: Number((baseline.p99Ms / dragMetrics.p99Ms).toFixed(3)),
-      hotPath: {
-        previewOverrideDelta: 0,
-        revisionDelta: 0,
-        renderPlanDelta: 0,
-        cpuTaskDelta: 0,
-        uploadDelta: 0,
-        readbackDelta: 0,
-      },
     },
   }
 }
@@ -448,6 +293,8 @@ async function selectOverlappingReactFlowNode({ page, nodeContent, nodeId }) {
 }
 
 module.exports = {
+  readDragPersistenceEvidence,
+  isDragPersistenceConfirmed,
   selectOverlappingReactFlowNode,
   verifyHiddenBackgroundRasterStack,
   verifyMultiLayerDragPerformance,
