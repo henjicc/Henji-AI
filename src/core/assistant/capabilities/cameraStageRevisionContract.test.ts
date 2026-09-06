@@ -13,6 +13,16 @@ import { BUILTIN_APPLICATION_CAPABILITIES } from '../builtinApplicationCapabilit
 const cameraStageWrites = BUILTIN_APPLICATION_CAPABILITIES.filter((capability) => (
   capability.domain === 'camera_stage' && !capability.readOnly
 ))
+const renderTaskWriteIds = new Set([
+  'render_camera_stage_output',
+  'cancel_camera_stage_render_task',
+])
+const cameraStageSceneWrites = cameraStageWrites.filter(
+  (capability) => !renderTaskWriteIds.has(capability.id)
+)
+const cameraStageRenderTaskWrites = cameraStageWrites.filter(
+  (capability) => renderTaskWriteIds.has(capability.id)
+)
 
 function schemaKeys(schema: unknown): string[] {
   const shape = (schema as { shape?: Record<string, unknown> } | undefined)?.shape
@@ -26,12 +36,12 @@ describe('三维写入的 revision 契约', () => {
   })
 
   // 新建与打开工程不存在"读取之后被改动"的问题，天然没有基线可比。
-  const revisionScoped = cameraStageWrites.filter((capability) => (
+  const revisionScoped = cameraStageSceneWrites.filter((capability) => (
     schemaKeys(capability.inputSchema).includes('baseRevision')
   ))
 
   it('除新建与打开外的写能力都收 baseRevision', () => {
-    const withoutBaseRevision = cameraStageWrites
+    const withoutBaseRevision = cameraStageSceneWrites
       .filter((capability) => !revisionScoped.includes(capability))
       .map((capability) => capability.id)
       .sort()
@@ -39,7 +49,7 @@ describe('三维写入的 revision 契约', () => {
   })
 
   it('每个写能力都回带 baseRevision，形状与读能力一致', () => {
-    const missing = cameraStageWrites
+    const missing = cameraStageSceneWrites
       .filter((capability) => !schemaKeys(capability.outputSchema).includes('baseRevision'))
       .map((capability) => capability.id)
     expect(missing).toEqual([])
@@ -50,6 +60,54 @@ describe('三维写入的 revision 契约', () => {
       .filter((capability) => !capability.failureRecovery.some((item) => item.includes('CONFLICT')))
       .map((capability) => capability.id)
     expect(missing).toEqual([])
+  })
+
+  it('后台渲染任务以画布目标和稳定 taskRef 防串，不伪装成场景 revision 写入', () => {
+    expect(cameraStageRenderTaskWrites.map((capability) => capability.id).sort()).toEqual([
+      'cancel_camera_stage_render_task',
+      'render_camera_stage_output',
+    ])
+    expect(cameraStageRenderTaskWrites.every((capability) => (
+      !schemaKeys(capability.inputSchema).includes('baseRevision')
+      && !schemaKeys(capability.outputSchema).includes('baseRevision')
+      && capability.producesRefs.includes('camera_stage.render_task')
+    ))).toBe(true)
+
+    const render = cameraStageRenderTaskWrites.find(
+      (capability) => capability.id === 'render_camera_stage_output'
+    )
+    const renderInput = render?.inputSchema.parse({
+      projectRef: { kind: 'canvas.project', id: 'canvas-1' },
+      nodeRef: { kind: 'canvas.node', id: 'canvas-1:camera-node-1' },
+      outputKind: 'image',
+      resolutionPreset: '720p',
+      selectedTimeSec: 0,
+    })
+    expect(render?.resolveTargetIds?.(renderInput)).toEqual({
+      projectId: 'canvas-1', nodeRefId: 'canvas-1:camera-node-1',
+    })
+    expect(render?.outputSchema.parse({
+      revision: 0,
+      scopeRevisions: {},
+      taskRef: { kind: 'camera_stage.render_task', id: 'task-1' },
+      status: 'submitted',
+      resultRefs: [{ kind: 'camera_stage.render_task', id: 'task-1' }],
+    })).toMatchObject({ status: 'submitted' })
+
+    const cancel = cameraStageRenderTaskWrites.find(
+      (capability) => capability.id === 'cancel_camera_stage_render_task'
+    )
+    const cancelInput = cancel?.inputSchema.parse({
+      taskRef: { kind: 'camera_stage.render_task', id: 'task-1' },
+    })
+    expect(cancel?.resolveTargetIds?.(cancelInput)).toEqual({ taskRefId: 'task-1' })
+    expect(cancel?.outputSchema.parse({
+      revision: 0,
+      scopeRevisions: {},
+      taskRef: { kind: 'camera_stage.render_task', id: 'task-1' },
+      status: 'cancellation_requested',
+      resultRefs: [],
+    })).toMatchObject({ status: 'cancellation_requested' })
   })
 
   it('旧程序配方不再作为第二套应用能力注册', () => {
