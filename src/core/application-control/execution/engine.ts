@@ -12,7 +12,8 @@ import type { ApplicationReflectionRegistry } from '../registry'
 import { ApplicationExecutionPlanStore } from './planStore'
 import { ApplicationPlanBuilder } from './planner'
 import { ApplicationTransactionVerifier } from './verifier'
-import { ApplicationExecutionSupport } from './executionSupport'
+import { ApplicationExecutionFailureSupport } from './failureSupport'
+import { ApplicationExecutionScopeGuard } from './scopeGuard'
 import { ApplicationExecutionProgressFailure, ApplicationPersistenceBoundaryFailure, withApplicationPersistenceBoundary, type ApplicationPersistenceReceipt } from './persistence'
 import { acceptedPropertyOperations, type ApplicationMutationOperation } from './writerTable'
 import type {
@@ -51,19 +52,6 @@ function failure(
   return applicationTransactionResultSchema.parse({ status: 'failed', code, message, recoverable, ...extra })
 }
 
-/**
- * 从 `PARTIAL_FAILURE:<n>:<原始错误>` / `COMPENSATED_FAILURE:<下标>:<原始错误>` 里取回原因。
- *
- * 这些包装串以前只用来判分支，原始错误连一个字都没进最终结果——调用方拿到的永远是
- * "事务执行失败"这六个字。实测排查三维布置时，模型收到的就是这句，它既不知道是
- * targetObjectId 填错了，也不可能自我修正。
- */
-function failureCause(message: string): string {
-  const cause = /^(?:PARTIAL_FAILURE|COMPENSATED_FAILURE):[^:]*:([\s\S]+)$/.exec(message)
-  const detail = cause?.[1]?.trim()
-  return detail ? `原因：${detail}` : ''
-}
-
 function mergeRevisions(target: Record<string, number>, source: Record<string, number>): void {
   for (const [scope, revision] of Object.entries(source)) target[scope] = revision
 }
@@ -89,7 +77,8 @@ function assertExpectedRevisions(
   }
 }
 
-export class ApplicationControlExecutionEngine extends ApplicationExecutionSupport implements ApplicationControlExecutionApi {
+export class ApplicationControlExecutionEngine extends ApplicationExecutionFailureSupport implements ApplicationControlExecutionApi {
+  private readonly scopeGuard = new ApplicationExecutionScopeGuard()
   private readonly undoRecords = new Map<string, UndoRecord>()
   private readonly now: () => Date
   private readonly createOpaqueRef: (kind: 'plan' | 'transaction' | 'undo') => string
@@ -171,6 +160,14 @@ export class ApplicationControlExecutionEngine extends ApplicationExecutionSuppo
     context: ApplicationExecutionContext
   ): Promise<ApplicationTransactionResult> {
     const request = applicationCommitRequestSchema.parse(input)
+    const stored = this.store.getPlan(request.planRef)
+    return this.guarded(request.planRef, request.idempotencyKey,
+      stored && !stored.committed ? stored.plan.steps : [], context,
+      (assertOwnership) => this.commitLocked(request, context, assertOwnership))
+  }
+
+  private async commitLocked(request: ApplicationCommitRequest, context: ApplicationExecutionContext,
+    assertOwnership: (scopes?: string[]) => void): Promise<ApplicationTransactionResult> {
     try {
       const idempotent = this.store.getIdempotent(request.idempotencyKey, request.planRef)
       if (idempotent) return idempotent
@@ -186,12 +183,17 @@ export class ApplicationControlExecutionEngine extends ApplicationExecutionSuppo
     if (approvalFailure) return approvalFailure
     const transactionRef = this.createOpaqueRef('transaction')
     const expected = planRevisions(stored.plan)
+    const persistenceReceipts: ApplicationPersistenceReceipt[] = []
     try {
       assertExpectedRevisions(expected, request.expectedRevisions)
       const current = await this.readCurrentRevisions(stored.plan.steps, context)
       assertExpectedRevisions(expected, current)
+      assertOwnership(Object.keys(current))
       await this.preflightPlan(stored.plan.steps, context, stored.plan.transactionMode)
-      const persistenceReceipts: ApplicationPersistenceReceipt[] = []
+      assertOwnership()
+      const checked = await this.readCurrentRevisions(stored.plan.steps, context)
+      assertExpectedRevisions(expected, checked)
+      assertOwnership(Object.keys(checked))
       const execution = await withApplicationPersistenceBoundary({
         participants: this.resolvePersistenceParticipants?.(stored.plan.steps, context) ?? [],
         context,
@@ -219,18 +221,20 @@ export class ApplicationControlExecutionEngine extends ApplicationExecutionSuppo
         return result
       }
       const evidence = execution.completed.flatMap((item) => item.evidence)
-      if (evidence.length === 0) throw new Error('SUCCESS_EVIDENCE_REQUIRED')
-      const verification = await this.verifier.verify(
-        stored.plan.verificationConditions,
-        evidence,
-        context,
-        this.now()
-      )
+      const effects = [...this.collectEffects(stored.plan.steps, execution.completed), ...persistenceReceipts.flatMap((receipt) => receipt.effects)]
       const resultingRevisions: Record<string, number> = {}
       execution.completed.forEach((result) => mergeRevisions(resultingRevisions, result.resultingRevisions))
       persistenceReceipts.forEach((receipt) => mergeRevisions(resultingRevisions, receipt.resultingRevisions))
       const undoRef = this.createUndoRef(stored.plan.steps, execution.completed)
       this.store.markCommitted(stored.plan.planRef)
+      // 从此处起业务已执行；验证器抛错也不能再进入“零步失败”或允许重放的分支。
+      const verification = await this.verifier.verify(stored.plan.verificationConditions, evidence, context, this.now())
+        .catch(() => ({ verified: false, evidence: [],
+          unmetConditions: ['无法完成提交后的正式状态验证，请先读取当前内容，不要重复已执行的修改。'], checkedAt: this.now().toISOString() }))
+      if (evidence.length === 0) {
+        verification.verified = false
+        verification.unmetConditions.push('缺少正式执行证据，请先读取当前内容。')
+      }
       if (!verification.verified) {
         const detail = verification.unmetConditions.join('；')
         const result = failure(
@@ -240,6 +244,8 @@ export class ApplicationControlExecutionEngine extends ApplicationExecutionSuppo
           {
           transactionRef,
           currentRevisions: resultingRevisions,
+          resultRefs: execution.completed.flatMap((item) => item.directRefs),
+          effects,
           verification,
           ...(undoRef ? { undoRef } : {}),
           partial: {
@@ -257,7 +263,7 @@ export class ApplicationControlExecutionEngine extends ApplicationExecutionSuppo
         transactionRef,
         resultingRevisions,
         resultRefs: execution.completed.flatMap((item) => item.directRefs),
-        effects: [...this.collectEffects(stored.plan.steps, execution.completed), ...persistenceReceipts.flatMap((receipt) => receipt.effects)],
+        effects,
         evidence: [...evidence, ...verification.evidence],
         verification,
         ...(undoRef ? { undoRef } : {}),
@@ -266,8 +272,9 @@ export class ApplicationControlExecutionEngine extends ApplicationExecutionSuppo
       this.store.saveIdempotent(request.idempotencyKey, request.planRef, result)
       return result
     } catch (error) {
-      if (error instanceof ApplicationPersistenceBoundaryFailure) this.store.markCommitted(stored.plan.planRef)
-      const result = await this.handleExecutionFailure(error, stored.plan, transactionRef, context)
+      if (error instanceof ApplicationPersistenceBoundaryFailure
+        || (error instanceof ApplicationExecutionProgressFailure && error.completed.length > 0)) this.store.markCommitted(stored.plan.planRef)
+      const result = await this.handleExecutionFailure(error, stored.plan, transactionRef, context, persistenceReceipts)
       this.store.saveIdempotent(request.idempotencyKey, request.planRef, result)
       return result
     }
@@ -278,6 +285,13 @@ export class ApplicationControlExecutionEngine extends ApplicationExecutionSuppo
     context: ApplicationExecutionContext
   ): Promise<ApplicationTransactionResult> {
     const request = applicationUndoRequestSchema.parse(input)
+    return this.guarded(request.undoRef, request.idempotencyKey,
+      this.undoRecords.get(request.undoRef)?.steps ?? [], context,
+      (assertOwnership) => this.undoLocked(request, context, assertOwnership))
+  }
+
+  private async undoLocked(request: ApplicationUndoRequest, context: ApplicationExecutionContext,
+    assertOwnership: (scopes?: string[]) => void): Promise<ApplicationTransactionResult> {
     try {
       const idempotent = this.store.getIdempotent(request.idempotencyKey, request.undoRef)
       if (idempotent) return idempotent
@@ -286,13 +300,20 @@ export class ApplicationControlExecutionEngine extends ApplicationExecutionSuppo
     }
     const record = this.undoRecords.get(request.undoRef)
     if (!record) return failure('NOT_FOUND', '撤销引用不存在或已使用。', false)
+    const persistenceReceipts: ApplicationPersistenceReceipt[] = []
     try {
+      await this.assertUndoPermissions(record.steps, context)
       const current = await this.readCurrentRevisions(record.steps, context)
       const resultingRevisions: Record<string, number> = {}
       record.results.forEach((result) => mergeRevisions(resultingRevisions, result.resultingRevisions))
       assertExpectedRevisions(resultingRevisions, request.expectedRevisions)
       assertExpectedRevisions(request.expectedRevisions, current)
-      const persistenceReceipts: ApplicationPersistenceReceipt[] = []
+      assertOwnership(Object.keys(current))
+      const assertPermissions = await this.assertUndoPermissions(record.steps, context)
+      const checked = await this.readCurrentRevisions(record.steps, context)
+      assertExpectedRevisions(request.expectedRevisions, checked)
+      assertOwnership(Object.keys(checked))
+      assertPermissions()
       const results = await withApplicationPersistenceBoundary({
         participants: this.resolvePersistenceParticipants?.(record.steps, context) ?? [],
         context,
@@ -305,12 +326,9 @@ export class ApplicationControlExecutionEngine extends ApplicationExecutionSuppo
               applied.push(await this.undoStep(record.steps[index], original.undoToken, batchContext))
             }
           } catch (error) {
-            if (batchContext.persistenceScopes?.size) {
-              if (applied.length > 0) this.undoRecords.delete(request.undoRef)
-              throw new ApplicationExecutionProgressFailure(`撤销执行失败：${String(error)}`, applied, [], error,
-                applied.map((_, index) => record.steps.length - 1 - index))
-            }
-            throw error
+            if (applied.length > 0) this.undoRecords.delete(request.undoRef)
+            throw new ApplicationExecutionProgressFailure(`撤销执行失败：${String(error)}`, applied, [], error,
+              applied.map((_, index) => record.steps.length - 1 - index))
           }
           return applied
         },
@@ -328,7 +346,7 @@ export class ApplicationControlExecutionEngine extends ApplicationExecutionSuppo
         transactionRef: this.createOpaqueRef('transaction'),
         resultingRevisions: undoRevisions,
         resultRefs: results.flatMap((item) => item.directRefs),
-        effects: [...this.collectEffects([...record.steps].reverse(), results), ...persistenceReceipts.flatMap((receipt) => receipt.effects)],
+        effects: [...this.collectEffects([...record.steps].reverse(), results, 'undo'), ...persistenceReceipts.flatMap((receipt) => receipt.effects)],
         evidence,
         verification: { verified: true, evidence: [], unmetConditions: [], checkedAt: this.now().toISOString() },
         completedAt: this.now().toISOString(),
@@ -338,10 +356,36 @@ export class ApplicationControlExecutionEngine extends ApplicationExecutionSuppo
     } catch (error) {
       if (error instanceof ApplicationPersistenceBoundaryFailure) this.undoRecords.delete(request.undoRef)
       const result = error instanceof ApplicationPersistenceBoundaryFailure
-        ? await this.describePersistenceFailure(error, record.steps, context) : this.toFailure(error)
+        ? await this.describePersistenceFailure(error, record.steps, context, undefined, 'undo')
+        : error instanceof ApplicationExecutionProgressFailure
+          ? await this.describeProgressFailure(error, record.steps, context, undefined, persistenceReceipts, 'undo') : this.toFailure(error)
       this.store.saveIdempotent(request.idempotencyKey, request.undoRef, result)
       return result
     }
+  }
+
+  /** Gateway 实例并非事务所有者；提交、撤销和其幂等结果均在这个共享入口串行确认。 */
+  private async guarded(operationRef: string, idempotencyKey: string, steps: ApplicationPlannedStep[],
+    context: ApplicationExecutionContext, execute: (assertOwnership: (scopes?: string[]) => void) => Promise<ApplicationTransactionResult>) {
+    try {
+      const participants = this.resolvePersistenceParticipants?.(steps, context) ?? []
+      const scopes = () => [...this.affectedScopes(steps), ...participants.flatMap((owner) =>
+        (owner.persistenceEffects ?? []).flatMap((effect) => effect.revisionScopes))]
+      const heldScopes = new Set([...scopes(), ...Object.keys(await this.readCurrentRevisions(steps, context))])
+      const assertOwnership = (readScopes: string[] = []) => {
+        if (context.signal?.aborted) throw new Error('CANCELLED')
+        const latest = this.resolvePersistenceParticipants?.(steps, context) ?? []
+        const currentScopes = [...readScopes, ...this.affectedScopes(steps), ...latest.flatMap((owner) =>
+          (owner.persistenceEffects ?? []).flatMap((effect) => effect.revisionScopes))]
+        if (latest.length !== participants.length || latest.some((owner) => !participants.includes(owner))
+          || currentScopes.some((scope) => !heldScopes.has(scope))) {
+          throw new Error('REVISION_CONFLICT:事务关联作用域或保存宿主已变化，请重新读取并规划')
+        }
+      }
+      return await this.scopeGuard.run([
+        ...[...heldScopes].map((scope) => `scope:${scope}`), `operation:${operationRef}`, `idempotency:${idempotencyKey}`,
+      ], context.signal, () => execute(assertOwnership))
+    } catch (error) { return this.toFailure(error) }
   }
 
   private checkApproval(
@@ -374,109 +418,5 @@ export class ApplicationControlExecutionEngine extends ApplicationExecutionSuppo
     this.undoRecords.set(undoRef, { steps, results })
     return undoRef
   }
-
-  private async handleExecutionFailure(
-    error: unknown,
-    plan: ApplicationChangePlan,
-    transactionRef: string,
-    _context: ApplicationExecutionContext
-  ): Promise<ApplicationTransactionResult> {
-    if (error instanceof ApplicationPersistenceBoundaryFailure) return this.describePersistenceFailure(error, plan.steps, _context, transactionRef)
-    if (error instanceof ApplicationExecutionProgressFailure) return this.toFailure(error, transactionRef)
-    const message = error instanceof Error ? error.message : String(error)
-    const compensated = /^COMPENSATED_FAILURE:([^:]*):/.exec(message)
-    if (compensated) {
-      const indexes = compensated[1] ? compensated[1].split(',').map(Number) : []
-      return failure('EXECUTION_FAILED', `事务执行失败，已完成步骤均已补偿，应用状态未改变。${failureCause(message)}`, true, {
-        transactionRef,
-        partial: { completedStepIndexes: indexes, compensatedStepIndexes: indexes, uncompensatedStepIndexes: [] },
-      })
-    }
-    const partial = /^PARTIAL_FAILURE:(\d+):/.exec(message)
-    if (partial) {
-      const count = Number(partial[1])
-      const indexes = Array.from({ length: count }, (_, index) => index)
-      // 零步完成时**不能**说"部分步骤已完成且未补偿、不可重试"。这句话曾经无视 count 硬写
-      // 出来：单步事务失败时一步都没写，调用方却被告知应用已被改动且不可重试。实测中模型
-      // 就是读到这句之后按规则停止了所有后续写入——它的行为是对的，是这条报告在骗它。
-      if (count === 0) {
-        return failure('EXECUTION_FAILED', `事务执行失败，没有任何步骤被提交，应用状态未改变。${failureCause(message)}`, true, {
-          transactionRef,
-          partial: { completedStepIndexes: [], compensatedStepIndexes: [], uncompensatedStepIndexes: [] },
-        })
-      }
-      return failure('EXECUTION_FAILED', `事务执行失败，前 ${count} 步已完成且未补偿，应用处于中间状态。${failureCause(message)}`, false, {
-        transactionRef,
-        partial: { completedStepIndexes: indexes, compensatedStepIndexes: [], uncompensatedStepIndexes: indexes },
-      })
-    }
-    return this.toFailure(error, transactionRef, planRevisions(plan))
-  }
-
-  /** commit 与 undo 共用实际已执行事实；撤销的索引始终指向原计划步骤。 */
-  private async describePersistenceFailure(error: ApplicationPersistenceBoundaryFailure,
-    steps: ApplicationPlannedStep[], context: ApplicationExecutionContext, transactionRef?: string): Promise<ApplicationTransactionResult> {
-    const result = this.toFailure(error, transactionRef)
-    if (result.status !== 'failed') return result
-    const compensated = error.executionFailure?.compensatedStepIndexes ?? []
-    const remaining = error.completed.map((item, offset) => ({ item, index: error.completedStepIndexes[offset] }))
-      .filter(({ index }) => !compensated.includes(index))
-    const effects = this.collectEffects(remaining.map(({ index }) => steps[index]), remaining.map(({ item }) => item))
-    const current = await this.readCurrentRevisions(steps, context).catch(() => ({}))
-    return { ...result, currentRevisions: { ...result.currentRevisions, ...current },
-      effects: [...effects, ...(result.effects ?? [])] }
-  }
-
-  private toFailure(
-    error: unknown,
-    transactionRef?: string,
-    currentRevisions?: Record<string, number>
-  ): ApplicationTransactionResult {
-    if (error instanceof ApplicationExecutionProgressFailure) {
-      const indexes = error.completedStepIndexes
-      const uncompensated = indexes.filter((index) => !error.compensatedStepIndexes.includes(index))
-      return failure('EXECUTION_FAILED', `操作未完整完成：${error.message}。请先检查当前内容，不要重复已执行的步骤。`.slice(0, 2000), uncompensated.length === 0, {
-        transactionRef, partial: { completedStepIndexes: indexes, compensatedStepIndexes: error.compensatedStepIndexes,
-          uncompensatedStepIndexes: uncompensated },
-      })
-    }
-    if (error instanceof ApplicationPersistenceBoundaryFailure) {
-      const indexes = error.completedStepIndexes
-      const compensated = error.executionFailure?.compensatedStepIndexes ?? []
-      const revisions: Record<string, number> = {}
-      error.completed.forEach((result) => mergeRevisions(revisions, result.resultingRevisions))
-      error.receipts.forEach((receipt) => mergeRevisions(revisions, receipt.resultingRevisions))
-      return failure('EXECUTION_FAILED', error.executionFailure
-        ? `${error.message} 原业务失败：${error.executionFailure.message}`.slice(0, 2000) : error.message, true, {
-        transactionRef,
-        currentRevisions: revisions,
-        effects: error.receipts.flatMap((receipt) => receipt.effects),
-        partial: { completedStepIndexes: indexes, compensatedStepIndexes: compensated,
-          uncompensatedStepIndexes: indexes.filter((index) => !compensated.includes(index)) },
-        persistence: error.failure.facts,
-      })
-    }
-    const message = error instanceof Error ? error.message : String(error)
-    if (message.includes('REVISION_CONFLICT')) {
-      return failure('CONFLICT', '应用状态已变化，请重新观察并规划。', true, { transactionRef, currentRevisions })
-    }
-    // 属性写不了要报出是哪条、以及这个实体上有哪些能写——原始错误里已经带了这些，
-    // 归类时丢掉它们，模型看到的就只剩"权限或可写状态已变化"，无从自纠。
-    if (message.includes('PROPERTY_NOT_WRITABLE') || message.includes('PROPERTY_OPERATION_NOT_SUPPORTED')) {
-      return failure('PERMISSION_DENIED', `属性写入被拒绝。原因：${message}`, true, { transactionRef })
-    }
-    if (message.includes('COLLECTION_CREATE_NOT_AVAILABLE') || message.includes('COLLECTION_REMOVE_NOT_AVAILABLE')) {
-      return failure('PERMISSION_DENIED', `集合写入被拒绝。原因：${message}`, true, { transactionRef })
-    }
-    if (message.includes('PERMISSION_DENIED')) {
-      return failure('PERMISSION_DENIED', '提交时权限或属性可写状态已变化。', true, { transactionRef })
-    }
-    if (message.includes('NOT_FOUND')) return failure('NOT_FOUND', `计划引用的对象不存在。原因：${message}`, true, { transactionRef })
-    if (message === 'CANCELLED') return failure('CANCELLED', '操作已取消。', false, { transactionRef })
-    // 兜底分支同样要带上原始错误：否则任何未归类的失败对调用方都只是"应用事务执行失败"，
-    // 既无法自我修正，也无法据以判断该不该重试。
-    return failure('EXECUTION_FAILED', `应用事务执行失败。原因：${message}`, false, { transactionRef })
-  }
-
 
 }

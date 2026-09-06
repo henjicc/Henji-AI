@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { agentObservedEffectSchema } from './observedEffect'
+import { applicationTransactionFailureFactsSchema } from './applicationTransactionFailureFacts'
 
 import {
   agentApprovalRequestSchema,
@@ -46,6 +47,7 @@ export const agentToolErrorSchema = z.object({
   message: z.string().min(1),
   retryable: z.boolean(),
   recovery: z.enum(['refresh_context', 'request_approval', 'wait', 'user_action', 'none']),
+  transaction: applicationTransactionFailureFactsSchema.optional(),
 }).strict()
 export type AgentToolError = z.infer<typeof agentToolErrorSchema>
 

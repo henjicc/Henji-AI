@@ -6,6 +6,7 @@ import { modelStepUsageSchema } from '@henjicc/ai-sdk'
 import { modelProviderErrorCategorySchema } from '@henjicc/ai-sdk'
 import { agentWorkingSummarySchema } from './workingContext'
 import { agentObservedEffectSchema } from './observedEffect'
+import { applicationTransactionFailureFactsSchema } from './applicationTransactionFailureFacts'
 
 export const AGENT_EVENT_SCHEMA_VERSION = 'agent-event/v2' as const
 
@@ -44,6 +45,7 @@ export const serializedAgentErrorSchema = z.object({
   message: z.string().min(1),
   retryable: z.boolean(),
   recovery: z.enum(['refresh_context', 'request_approval', 'wait', 'user_action', 'none']),
+  transaction: applicationTransactionFailureFactsSchema.optional(),
 }).strict()
 export type SerializedAgentError = z.infer<typeof serializedAgentErrorSchema>
 

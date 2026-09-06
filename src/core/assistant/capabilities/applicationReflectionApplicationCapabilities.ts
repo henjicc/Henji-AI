@@ -248,7 +248,7 @@ function requiredMutationScopes(input: z.infer<typeof changeEntitiesInputSchema>
 
 const changeEntities = defineApplicationCapability({
   id: 'change_application_entities', version: 2, title: '修改应用状态',
-  description: '在一次有序事务里设置、清空或增删实体属性值，也可以在集合中新增或删除成员。changes 会按数组顺序执行，后一步能看到前一步刚建立的状态；同一目标的多步常规改动应合并到一次调用，失败会整体回滚。target 必须原样使用 list_application_entities 或读取结果返回的稳定引用，不要截取 ID。属性键用 describe_application_entities 返回的完整属性 ID，也可以只写 entityType 之后的那一段（例如实体为 camera_stage.state_keyframe 时，time 等价于 camera_stage.state_keyframe.time）。',
+  description: '在一次有序事务里设置、清空或增删实体属性值，也可以在集合中新增或删除成员。changes 会按数组顺序执行，后一步能看到前一步刚建立的状态；同一目标的多步常规改动应合并到一次调用。业务失败会尝试补偿；补偿失败、保存未确认或提交后验证失败时保留实际修改与恢复回执，不要重复已执行的步骤。target 必须原样使用 list_application_entities 或读取结果返回的稳定引用，不要截取 ID。属性键用 describe_application_entities 返回的完整属性 ID，也可以只写 entityType 之后的那一段（例如实体为 camera_stage.state_keyframe 时，time 等价于 camera_stage.state_keyframe.time）。',
   domain: 'application',
   aliases: ['改属性', '增删属性值', '加关键帧', '做动画', '上下漂浮', '新增成员', '删除成员', 'change entities', 'set property'],
   readOnly: false, risk: 'R1', dataClasses: ['C1'], permission: 'application:write',
@@ -257,6 +257,7 @@ const changeEntities = defineApplicationCapability({
   resolveRequiredScopes: requiredMutationScopes,
   successEvidence: ['事务返回受影响引用、写入后的并发基线和结构化证据。'],
   failureRecovery: [
+    '失败回执包含 transaction 时，先检查其中已发生的修改与恢复动作；replayMutation:false 表示禁止重复原修改，保存失败只重试保存。',
     'CONFLICT 表示状态在读取之后被改动过：重新读取实体拿到新的 revisions 后重试一次。',
     '属性不可写或集合不允许增删时不要重试，改用 describe_application_entities 确认可写范围。',
   ],

@@ -20,6 +20,7 @@ import {
 } from './runner-results'
 import { compileActionGroups, type CompiledActionGroup } from './action-plan-compiler'
 import { AgentStopPolicyExceededError } from './budget'
+import { failureObservedEffects } from '../../../../../src/core/assistant/applicationTransactionFailureFacts'
 
 type ApprovalDecision = 'approve' | 'reject' | 'expired'
 
@@ -27,7 +28,7 @@ interface ToolCallOutcome {
   call: ModelStepToolCall
   observation: AgentToolObservation
   error: ReturnType<typeof serializeError> | null
-  resultingRevisions: HostScopeRevisions | null
+  resultingRevisions: Partial<HostScopeRevisions> | null
   activationRecoveryQueued: boolean
   /** 首次触发的执行守卫纠正：模型能据此自纠，不应计入连续失败预算。 */
   contractCorrection: boolean
@@ -87,6 +88,7 @@ function mergeRevisions(
   for (const outcome of outcomes) {
     if (!outcome.resultingRevisions) continue
     for (const [scope, revision] of Object.entries(outcome.resultingRevisions)) {
+      if (revision === undefined) continue
       const key = scope as keyof HostScopeRevisions
       merged[key] = Math.max(merged[key] ?? 0, revision)
     }
@@ -102,9 +104,10 @@ function failedObservation(
   return agentToolObservationSchema.parse({
     source: { toolName: call.toolName, toolVersion: 1, toolCallId: call.toolCallId },
     trust: 'untrusted_observation',
-    dataClasses: ['C0'],
+    dataClasses: error.transaction ? ['C1'] : ['C0'],
     summary,
     output: { ok: false, error },
+    ...(error.transaction ? { effects: failureObservedEffects(error.transaction) } : {}),
   })
 }
 
@@ -365,6 +368,7 @@ export class AgentToolCallScheduler {
           code: completedFailure.code,
           message: completedFailure.message ?? result.observation.summary,
           retryable: false,
+          ...(completedFailure.transaction ? { transaction: completedFailure.transaction } : {}),
           recovery: ['refresh_context', 'request_approval', 'wait', 'user_action', 'none']
             .includes(completedFailure.recovery ?? '')
             ? completedFailure.recovery as 'refresh_context' | 'request_approval' | 'wait' | 'user_action' | 'none'
@@ -385,7 +389,7 @@ export class AgentToolCallScheduler {
         call,
         observation: failedObservation(call, serialized),
         error: serialized,
-        resultingRevisions: null,
+        resultingRevisions: serialized.transaction?.currentRevisions ?? null,
         activationRecoveryQueued,
         contractCorrection,
         expectedRevisions,

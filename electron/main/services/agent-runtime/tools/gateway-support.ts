@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { ApplicationTransactionFactsError, type ApplicationTransactionFailureFacts } from '../../../../../src/core/assistant/applicationTransactionFailureFacts'
 
 import type { HostContextSnapshot, HostScope, HostScopeRevisions } from '../../../../../src/core/assistant/hostContracts'
 import type { AgentToolErrorCode, AgentToolPreview } from '../../../../../src/core/assistant/toolContracts'
@@ -13,7 +14,8 @@ export class AgentToolGatewayError extends Error {
     readonly code: AgentToolErrorCode,
     message: string,
     readonly retryable = false,
-    readonly recovery: 'refresh_context' | 'request_approval' | 'wait' | 'user_action' | 'none' = 'none'
+    readonly recovery: 'refresh_context' | 'request_approval' | 'wait' | 'user_action' | 'none' = 'none',
+    readonly transaction?: ApplicationTransactionFailureFacts,
   ) {
     super(message)
     this.name = 'AgentToolGatewayError'
@@ -115,6 +117,9 @@ export function redactToolInputForLog(input: unknown, depth = 0): unknown {
 
 export function toGatewayError(error: unknown, input?: unknown): AgentToolGatewayError {
   if (error instanceof AgentToolGatewayError) return error
+  if (error instanceof ApplicationTransactionFactsError) {
+    return new AgentToolGatewayError('EXECUTION_FAILED', error.message, false, 'user_action', error.transaction)
+  }
   if (error instanceof AgentApprovalError) {
     return new AgentToolGatewayError(error.code, error.message, false, 'request_approval')
   }
@@ -303,5 +308,4 @@ export async function executeToolWithRetry(
   }
   throw new AgentToolGatewayError('EXECUTION_FAILED', '工具重试状态异常')
 }
-
 

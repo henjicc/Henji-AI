@@ -249,6 +249,7 @@ export const applicationTransactionResultSchema = z.discriminatedUnion('status',
       }).strict(),
     }).strict().optional(),
     currentRevisions: applicationRevisionSetSchema.optional(),
+    resultRefs: z.array(applicationRefSchema).max(256).optional(),
     effects: z.array(applicationEffectReceiptSchema).max(512).optional(),
     undoRef: applicationOpaqueRefSchema.optional(),
     partial: z.object({

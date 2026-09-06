@@ -1,3 +1,5 @@
+import type { ApplicationTransactionFailureFacts } from '../../../../../src/core/assistant/applicationTransactionFailureFacts'
+
 export interface HenjiSourceLocation {
   line: number
   column: number
@@ -81,6 +83,7 @@ export class HenjiScriptError extends Error {
     message: string,
     readonly location: HenjiSourceLocation | null = null,
     readonly stepId: string | null = null,
+    readonly transaction?: ApplicationTransactionFailureFacts,
   ) {
     super(`[INVALID_INPUT] ${message}`)
     this.name = 'HenjiScriptError'

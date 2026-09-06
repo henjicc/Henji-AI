@@ -16,9 +16,46 @@ export class ApplicationExecutionSupport {
   protected readonly operationExecutors = new Map<string, ApplicationSemanticOperationExecutor>()
   constructor(protected readonly registry: ApplicationReflectionRegistry,
     protected readonly describeCollectionWriters?: ApplicationControlExecutionDependencies['describeCollectionWriters']) {}
+  protected affectedScopes(steps: readonly ApplicationPlannedStep[]): string[] {
+    const scopes = new Set<string>()
+    for (const step of steps) {
+      Object.keys(step.expectedRevisions).forEach((scope) => scopes.add(scope))
+      const executor = step.kind === 'mutation' ? this.mutationExecutors.get(step.entityType)
+        : step.kind === 'collection' ? this.collectionExecutors.get(step.entityType)
+          : this.getOperationExecutor(step.capabilityId, step.capabilityVersion)
+      for (const effect of [...(executor?.effectContract.direct ?? []), ...(executor?.effectContract.cascades ?? [])]) {
+        effect.revisionScopes.forEach((scope) => scopes.add(scope))
+      }
+      if (step.kind === 'operation') continue
+      this.registry.getEntity(step.entityType)?.revisionScopes.forEach((scope) => scopes.add(scope))
+      if (step.kind === 'collection') this.registry.getEntity(step.parent.kind)?.revisionScopes.forEach((scope) => scopes.add(scope))
+      else for (const mutation of step.mutations) {
+        this.registry.getProperty(mutation.propertyId)?.revisionScopes.forEach((scope) => scopes.add(scope))
+      }
+    }
+    return [...scopes]
+  }
+  /** 撤销检查写权限，不把原集合动作的动态 availability 当成反向动作的准入。 */
+  protected async assertUndoPermissions(steps: readonly ApplicationPlannedStep[], context: ApplicationExecutionContext): Promise<() => void> {
+    const permissions = new Set<string>()
+    for (const step of steps) {
+      const required = step.kind === 'operation' ? this.requireOperationExecutor(step).requiredPermissions
+        : step.kind === 'mutation' ? step.mutations.flatMap((mutation) => this.registry.getProperty(mutation.propertyId)?.requiredPermissions.write ?? [])
+          : (await this.registry.getCollectionAvailability(step.parent, step.entityType, context))[
+            step.operation.kind === 'create' ? 'remove' : 'create'].requiredPermissions
+      if (step.kind === 'mutation' && step.mutations.some((mutation) => {
+        const descriptor = this.registry.getProperty(mutation.propertyId)
+        return !descriptor || Boolean(descriptor.readOnlyReason)
+      })) throw new Error('PERMISSION_DENIED:撤销所需属性不再可写')
+      if (required.some((permission) => !context.permissions.has(permission))) throw new Error('PERMISSION_DENIED:撤销需要原操作的写入权限')
+      required.forEach((permission) => permissions.add(permission))
+    }
+    return () => { if ([...permissions].some((permission) => !context.permissions.has(permission))) throw new Error('PERMISSION_DENIED:撤销写入权限已变化') }
+  }
   protected collectEffects(
     steps: ApplicationPlannedStep[],
     results: ApplicationCompletedStepResult[],
+    direction: 'commit' | 'undo' = 'commit',
   ): ApplicationEffectReceipt[] {
     return results.flatMap((result, index) => {
       const step = steps[index]
@@ -50,7 +87,8 @@ export class ApplicationExecutionSupport {
           }]
         : step.kind === 'collection'
           ? [{
-              effect: step.operation.kind === 'create' ? 'create' as const : 'delete' as const,
+              // 只反转引擎已知的集合动作；算法及级联使用 undo 返回的实际声明事实。
+              effect: (step.operation.kind === 'create') !== (direction === 'undo') ? 'create' as const : 'delete' as const,
               entityType: step.entityType,
               refs: result.directRefs,
               propertyIds: [],
@@ -378,13 +416,11 @@ export class ApplicationExecutionSupport {
         for (let index = results.length - 1; index >= 0; index -= 1) {
           try { await this.compensateStep(steps[index], results[index], context); compensated.push(index) }
           catch (cause) {
-            if (context.persistenceScopes?.size) throw new ApplicationExecutionProgressFailure(
+            throw new ApplicationExecutionProgressFailure(
               `${String(error)}；补偿失败：${String(cause)}`, results, compensated, error)
-            throw cause
           }
         }
-        if (context.persistenceScopes?.size) throw new ApplicationExecutionProgressFailure(String(error), results, compensated, error)
-        throw error
+        throw new ApplicationExecutionProgressFailure(String(error), results, compensated, error)
       }
       return { completed: results }
     }
@@ -403,9 +439,8 @@ export class ApplicationExecutionSupport {
       return { completed }
     } catch (error) {
       const original = error instanceof Error ? error.message : String(error)
-      const executionFailure = (message: string, compensated: number[] = []) => context.persistenceScopes?.size
-        ? new ApplicationExecutionProgressFailure(message, completed, compensated, error)
-        : new Error(message)
+      const executionFailure = (message: string, compensated: number[] = []) =>
+        new ApplicationExecutionProgressFailure(message, completed, compensated, error)
       // `atomic` 也必须补偿。此前只有 `compensatable` 走补偿，于是声明 atomic 的计划失败后
       // 把已完成的步骤原样留在应用里，却对调用方自称"事务"——三维布置就是这么留下一个
       // 压在立方体上的圆柱体的。只有 `non_reversible` 才允许不补偿，那是它的字面语义。

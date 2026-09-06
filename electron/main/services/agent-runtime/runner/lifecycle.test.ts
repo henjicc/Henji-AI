@@ -61,7 +61,7 @@ describe('AgentRunnerLifecycle 执行与说明终态分离', () => {
     expect(state.status).toBe('completed_with_warning')
     expect(state.executionOutcome.status).toBe('sealed_success')
     expect(state.presentationOutcome.status).toBe('fallback')
-    expect(state.finalText).toContain('应用操作已经完成')
+    expect(state.finalText).toContain('三点动画与播放已验证')
     expect(events.some((event) => event.type === 'RunCompletedWithWarning')).toBe(true)
     expect(events.some((event) => event.type === 'RunFailed')).toBe(false)
   })
@@ -75,5 +75,19 @@ describe('AgentRunnerLifecycle 执行与说明终态分离', () => {
     expect(state.executionOutcome.status).toBe('failed')
     expect(events.some((event) => event.type === 'RunFailed')).toBe(true)
     expect(events.some((event) => event.type === 'RunCompletedWithWarning')).toBe(false)
+  })
+
+  it('封存未验证的部分修改后，最终模型失败保留意见而不虚报全部完成或验证', () => {
+    const { lifecycle, state, events } = fixture()
+    lifecycle.sealExecution({ effects: [{ effect: 'update', entityTypes: ['image_edit.layer'], propertyIds: [],
+      targetRefs: [{ kind: 'image_edit.layer', id: 'v3:doc:layer' }], count: 1, verified: false, evidence: [] }],
+      summary: '已记录图层修改。仍有未收敛事项：图片内容已修改，但保存未确认，请只重试保存。', evidence: [] })
+    lifecycle.fail(new Error('[MODEL_REQUEST_FAILED] 最终说明失败'))
+    expect(state.status).toBe('completed_with_warning')
+    expect(state.finalText).toContain('保存未确认，请只重试保存')
+    expect(state.finalText).not.toContain('应用操作已经完成')
+    expect(state.finalText).not.toContain('通过结构化状态验证')
+    expect(state.executionOutcome.effects[0].verified).toBe(false)
+    expect(events.some((event) => event.type === 'RunFailed')).toBe(false)
   })
 })

@@ -4,6 +4,7 @@ import { applicationRefSchema } from '../../application-control'
 import type { ApplicationCapabilityDefinition } from '../applicationCapabilities'
 import { henjiScriptCheckpointSchema } from '../externalWait'
 import { agentObservedEffectSchema } from '../observedEffect'
+import { applicationTransactionFailureFactsSchema } from '../applicationTransactionFailureFacts'
 import { defineApplicationCapability } from './defineApplicationCapability'
 
 export const HENJI_SCRIPT_LANGUAGE = 'henji-ts/v1' as const
@@ -32,6 +33,7 @@ export const henjiScriptErrorSchema = z.object({
   message: z.string().min(1).max(1_000),
   location: scriptSourceLocationSchema.nullable(),
   stepId: z.string().min(1).max(80).nullable(),
+  transaction: applicationTransactionFailureFactsSchema.optional(),
 }).strict()
 
 export const henjiScriptStepReceiptSchema = z.object({
@@ -184,4 +186,3 @@ export const runHenjiScriptCapability = defineApplicationCapability({
 export const HENJI_SCRIPT_APPLICATION_CAPABILITIES: ApplicationCapabilityDefinition[] = [
   runHenjiScriptCapability,
 ]
-

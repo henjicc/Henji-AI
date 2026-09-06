@@ -261,8 +261,7 @@ function completedTransaction(
   if (result.status === 'completed') return result
   // 失败信息原样上抛：引擎已经把原始错误拼进 message，这里再包一层只会把它盖掉。
   if (result.status === 'failed') {
-    if (result.persistence) throw new ApplicationTransactionFailure(result)
-    throw new Error(result.code === 'CONFLICT' ? `CONFLICT:${result.message}` : result.message)
+    throw new ApplicationTransactionFailure(result)
   }
   throw new Error('CAPABILITY_REJECTED')
 }

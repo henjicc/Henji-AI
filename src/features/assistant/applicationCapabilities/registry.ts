@@ -27,6 +27,7 @@ import { CanvasApplicationError } from '@/features/canvas/application/canvasAppl
 import { MultiLayerDocumentNodeApplicationError } from '@/features/canvas/application/multiLayerDocumentNodeApplicationService'
 import { ZodError } from 'zod'
 import { ApplicationTransactionFailure } from '@/core/application-control/execution/transactionFailure'
+import { transactionFailureFacts } from '@/core/assistant/applicationTransactionFailureFacts'
 import { ApplicationPersistenceFailure } from '@/core/application-control/execution/persistence'
 
 import { APPLICATION_REFLECTION_APPLICATION_CAPABILITIES } from '@/core/assistant/capabilities/applicationReflectionApplicationCapabilities'
@@ -222,8 +223,9 @@ function describeSchemaIssues(error: ZodError): string {
 
 function toFailure(error: unknown): ApplicationCapabilityResult {
   if (error instanceof ApplicationTransactionFailure) {
-    return { ok: false, error: { code: 'CAPABILITY_REJECTED', message: error.message,
-      recoverable: error.result.recoverable, details: { transaction: error.result } } }
+    const transaction = transactionFailureFacts(error.result)
+    return { ok: false, error: { code: error.result.code === 'CONFLICT' ? 'CONFLICT' : 'CAPABILITY_REJECTED', message: error.message,
+      recoverable: error.result.recoverable, ...(transaction ? { details: { transaction } } : {}) } }
   }
   if (error instanceof ApplicationPersistenceFailure) {
     return { ok: false, error: { code: 'CAPABILITY_REJECTED', message: error.message,

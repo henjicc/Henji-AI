@@ -16,6 +16,7 @@ import { resolveToolOffloadByteThreshold, shouldOffloadObservation } from '../co
 import { AGENT_DISCOVERY_LEASE_TOOL_LIMIT } from '../../../../../src/core/assistant/toolBudget'
 import { sanitizeObservationValue } from '../context/sanitize'
 import { AgentToolGatewayError } from '../tools/gateway'
+import { applicationTransactionFailureFactsSchema, type ApplicationTransactionFailureFacts } from '../../../../../src/core/assistant/applicationTransactionFailureFacts'
 import { AgentBudgetExceededError } from './budget'
 
 export function errorCode(error: unknown): string {
@@ -42,6 +43,7 @@ export function serializeError(error: unknown): SerializedAgentError {
   return {
     code,
     message: message.slice(0, 1_000) || 'Agent 运行失败',
+    ...(error instanceof AgentToolGatewayError && error.transaction ? { transaction: error.transaction } : {}),
     retryable: error instanceof AgentToolGatewayError ? error.retryable : false,
     recovery: error instanceof AgentToolGatewayError
       ? error.recovery
@@ -55,6 +57,7 @@ export function failureEnvelope(output: unknown): {
   message?: string
   retryable?: boolean
   recovery?: string
+  transaction?: ApplicationTransactionFailureFacts
 } | null {
   if (!output || typeof output !== 'object' || Array.isArray(output)) return null
   const record = output as Record<string, unknown>
@@ -63,11 +66,13 @@ export function failureEnvelope(output: unknown): {
   if (!error || typeof error !== 'object' || Array.isArray(error)) return null
   const value = error as Record<string, unknown>
   if (typeof value.code !== 'string') return null
+  const transaction = applicationTransactionFailureFactsSchema.safeParse(value.transaction)
   return {
     code: value.code,
     ...(typeof value.message === 'string' ? { message: value.message } : {}),
     ...(typeof value.retryable === 'boolean' ? { retryable: value.retryable } : {}),
     ...(typeof value.recovery === 'string' ? { recovery: value.recovery } : {}),
+    ...(transaction.success ? { transaction: transaction.data } : {}),
   }
 }
 

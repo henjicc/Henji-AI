@@ -458,9 +458,9 @@ export class AgentToolGateway {
       error.code,
       `${error.message}。${entityType} 的增删由专用能力负责，请改用：${candidates.join('、')}`,
       error.retryable,
-      error.recovery
+      error.recovery,
+      error.transaction,
     )
   }
 }
-
 

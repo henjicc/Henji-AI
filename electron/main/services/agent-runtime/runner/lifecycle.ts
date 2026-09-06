@@ -101,7 +101,7 @@ export class AgentRunnerLifecycle {
     this.options.state.presentationOutcome = { status: 'fallback', warning }
     this.transition('completed_with_warning', warning.code)
     this.emit({ type: 'RunCompletedWithWarning', finalText, warning, usage: this.options.budget.snapshot() })
-    logger.warn('Agent 应用执行成功，但最终说明降级', {
+    logger.warn('Agent 执行事实已记录，最终说明降级', {
       event: 'agent_runtime.run.completed_with_warning', requestId: this.options.runId,
       context: { warningCode: warning.code, turns: this.options.budget.snapshot().turns },
     })
@@ -145,10 +145,8 @@ export class AgentRunnerLifecycle {
    */
   private fallbackSummary(): string {
     const outcome = this.options.state.executionOutcome
-    const entityTypes = [...new Set(outcome.effects.flatMap((effect) => effect.entityTypes))].slice(0, 6)
-    const completed = outcome.verificationSummary.summary
-      || (entityTypes.length > 0 ? `已修改 ${entityTypes.join('、')}` : '')
-    return `应用操作已经完成，并通过结构化状态验证。已完成：${completed || '已验证的应用修改'}。最终说明生成失败，可继续使用当前结果。`
+    const recorded = outcome.verificationSummary.summary || '请检查当前应用中的实际结果。'
+    return `已保留本次实际发生的操作记录。${recorded} 最终说明生成失败，请根据以上结果与未完成事项继续处理。`
   }
 
   exhaustBudget(code: string, error: unknown): void {
