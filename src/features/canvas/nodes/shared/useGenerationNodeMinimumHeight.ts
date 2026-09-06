@@ -16,6 +16,7 @@ interface GenerationNodeMinimumHeightResult {
 export function resolveGenerationNodeMinimumHeight(
   configuredMinimumHeight: number,
   inputRowsHeight: number,
+  showPromptInput = true,
 ): number {
   const safeConfiguredMinimum = Number.isFinite(configuredMinimumHeight)
     ? Math.max(0, configuredMinimumHeight)
@@ -26,7 +27,7 @@ export function resolveGenerationNodeMinimumHeight(
 
   return Math.max(
     safeConfiguredMinimum,
-    GENERATION_PROMPT_MIN_HEIGHT_PX
+    (showPromptInput ? GENERATION_PROMPT_MIN_HEIGHT_PX : 0)
       + GENERATION_NODE_FIXED_VERTICAL_SPACE_PX
       + safeInputRowsHeight,
   )
@@ -51,6 +52,7 @@ export function resolveGenerationNodeManualDimension(
  */
 export function useGenerationNodeMinimumHeight(
   configuredMinimumHeight: number,
+  showPromptInput = true,
 ): GenerationNodeMinimumHeightResult {
   const rootRef = useRef<HTMLDivElement>(null)
   const inputRowsRef = useRef<HTMLDivElement>(null)
@@ -58,6 +60,7 @@ export function useGenerationNodeMinimumHeight(
   const minimumHeight = resolveGenerationNodeMinimumHeight(
     configuredMinimumHeight,
     inputRowsHeight,
+    showPromptInput,
   )
 
   useLayoutEffect(() => {

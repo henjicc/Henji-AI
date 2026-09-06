@@ -61,7 +61,6 @@ import {
   resolveCanvasCapabilityPromptTemplateVersion,
 } from '@/features/canvas/capabilities';
 import { useGenerationNodeExecution } from './useGenerationNodeExecution';
-import { ToolWorkbenchSourcePreview } from './ToolWorkbenchNodeFrame';
 import type { GenerationNodeShellProps } from './generationNodeShellTypes';
 
 export type { GenerationNodeShellData } from './useGenerationPromptDocument';
@@ -103,7 +102,6 @@ export const GenerationNodeShell = memo(({
   additionalInputRows,
   layoutMode = 'stacked',
   workbenchStage,
-  workbenchSummary,
   minWidth = 320,
   minHeight = 160,
   maxWidth = 1400,
@@ -260,13 +258,15 @@ export const GenerationNodeShell = memo(({
     () => resolveNodeDisplayName(nodeType, data as CanvasNodeData),
     [data, nodeType]
   );
-  const resolvedMinWidth = layoutMode === 'workbench' ? Math.max(640, minWidth) : minWidth;
-  const resolvedMinHeight = layoutMode === 'workbench' ? Math.max(300, minHeight) : minHeight;
+  // 旧工程仍可能声明 workbench；只有真实交互工作面才展开双栏。
+  const resolvedLayoutMode = layoutMode === 'workbench' && workbenchStage != null ? 'workbench' : 'stacked';
+  const resolvedMinWidth = resolvedLayoutMode === 'workbench' ? Math.max(640, minWidth) : minWidth;
+  const resolvedMinHeight = resolvedLayoutMode === 'workbench' ? Math.max(300, minHeight) : minHeight;
   const {
     rootRef,
     inputRowsRef,
     minimumHeight: resolvedMinimumHeight,
-  } = useGenerationNodeMinimumHeight(resolvedMinHeight);
+  } = useGenerationNodeMinimumHeight(resolvedMinHeight, showPromptInput);
   // ReactFlow 的 width/height 同时包含内容测量值。只有用户拖拽过尺寸后才沿用，
   // 避免旧版参数组内联展开产生的测量高度在收起后继续把节点撑大。
   const isSizeManuallyAdjusted = data.isSizeManuallyAdjusted === true;
@@ -395,7 +395,7 @@ export const GenerationNodeShell = memo(({
       ref={rootRef}
       data-generation-node-id={id}
       data-generation-node-model-id={effectiveModelId}
-      data-generation-node-layout={layoutMode}
+      data-generation-node-layout={resolvedLayoutMode}
       className={`
         canvas-node-dynamic-min-height group relative flex flex-col overflow-visible rounded-[var(--node-radius)] border bg-surface-dark/90 p-2 transition-colors duration-150
         ${selected
@@ -405,7 +405,7 @@ export const GenerationNodeShell = memo(({
       style={{
         width: resolvedWidth !== null
           ? `${resolvedWidth}px`
-          : layoutMode === 'workbench' ? `${resolvedMinWidth}px` : 'max-content',
+          : resolvedLayoutMode === 'workbench' ? `${resolvedMinWidth}px` : 'max-content',
         minWidth: `${resolvedMinWidth}px`,
         maxWidth: `${maxWidth}px`,
         height: `${resolvedHeight}px`,
@@ -431,18 +431,10 @@ export const GenerationNodeShell = memo(({
 
       <NodeLodPlaceholder title={resolvedTitle} icon={icon ?? <Sparkles className="h-6 w-6" />} />
 
-      {layoutMode === 'workbench' ? (
+      {resolvedLayoutMode === 'workbench' ? (
         <div className="canvas-node-lod-detail grid min-h-0 min-w-0 flex-1 grid-cols-[minmax(0,1.35fr)_minmax(240px,0.65fr)] overflow-hidden rounded-lg bg-bg-dark/45">
           <main className="nodrag nowheel flex min-h-0 min-w-0 overflow-hidden">
-            {resolvedWorkbenchStage ?? (
-              <ToolWorkbenchSourcePreview
-                source={effectiveImages[0] ?? null}
-                alt={resolvedTitle}
-                icon={icon ?? <Sparkles className="h-8 w-8" />}
-                emptyText={t('node.mediaRow.image')}
-                summary={workbenchSummary}
-              />
-            )}
+            {resolvedWorkbenchStage}
           </main>
           <aside className="nodrag nowheel flex min-h-0 min-w-0 flex-col gap-1.5 overflow-y-auto border-l border-veil-subtle p-2">
             {promptEditor}

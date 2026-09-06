@@ -251,15 +251,12 @@ export const NodeActionToolbar = memo(({ node }: NodeActionToolbarProps) => {
     setPendingCapabilityId(capabilityId);
     try {
       await executeCanvasImageCapabilityFromSource(node.id, capabilityId);
-    } catch {
-      canvasEventBus.publish('canvas/toast', {
-        message: t('nodeToolbar.imageCapabilityExecutionFailed'),
-        type: 'error',
-      });
+    } catch (error) {
+      reportCanvasOperationFailure(error);
     } finally {
       setPendingCapabilityId(null);
     }
-  }, [node.id, pendingCapabilityId, t]);
+  }, [node.id, pendingCapabilityId]);
 
   return (
     <ReactFlowNodeToolbar

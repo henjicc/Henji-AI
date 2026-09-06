@@ -32,7 +32,7 @@
 5. 高频拖动先写组件局部状态，在 `pointerup`、确认或编辑结束时一次写回节点 data。
 6. `MediaInputRow`/`ModelInputRow`/`NodeParamRows` 仍是输入契约唯一入口；允许改变它们在检查器中的编排，不允许复制实现。
 
-固定转换工具没有独有舞台时，`GenerationNodeShell layoutMode="workbench"` 负责左侧源图预览与右侧标准参数区；不要为高清放大、修复、抠图等工具各写一份相同壳层。
+固定转换工具没有独有工作面时，使用 `GenerationNodeShell` 默认紧凑参数布局；只保留输入缩略图，不重复展开源图。高清放大、修复、抠图、图层拆分等共用这一壳层。只有遮罩绘制、灯位或镜头等实际可视化操作才传入 `workbenchStage` 并使用 `layoutMode="workbench"`。
 
 ## 内容编排型：分镜生成节点
 

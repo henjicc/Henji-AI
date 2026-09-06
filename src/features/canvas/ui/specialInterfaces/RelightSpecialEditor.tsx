@@ -1,5 +1,5 @@
 import { useId, useMemo, type ReactNode } from 'react'
-import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, CircleOff, SunMedium } from 'lucide-react'
+import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, CircleOff } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
 import FileUploader from '@/components/ui/FileUploader'
@@ -8,7 +8,6 @@ import { UiButton, UiOptionButton, UiTextAreaField } from '@/components/ui/primi
 import { UiModal } from '@/components/ui/UiModal'
 import {
   UI_GLASS_ADAPTIVE_REGION_CLASS,
-  UI_GLASS_ADAPTIVE_SURFACE_CLASS,
   UI_TEXT_LABEL_CLASS,
   UI_TEXT_META_CLASS,
   UI_TEXT_SECTION_CLASS,
@@ -130,34 +129,20 @@ export function RelightWorkbench({
   return (
       <div
         data-relight-workbench="true"
-        className="grid min-h-0 min-w-0 flex-1 grid-cols-[minmax(0,1.25fr)_minmax(240px,0.75fr)]"
+        className={`grid min-h-0 min-w-0 flex-1 ${settings.lightingMode === 'manual' ? 'grid-cols-[minmax(0,1.25fr)_minmax(240px,0.75fr)]' : 'grid-cols-1'}`}
       >
-        <div className={`flex min-h-0 ${embedded ? 'p-2' : 'p-4'}`}>
-          {settings.lightingMode === 'manual' ? (
+        {settings.lightingMode === 'manual' && (
+          <div className={`flex min-h-0 ${embedded ? 'p-2' : 'p-4'}`}>
             <RelightDirectionVisualizer
               direction={settings.manual.keyDirection}
               sourceImage={sourceImageUrl}
               sourceAlt={t('node.relightGeneration.sourceAlt')}
               onDirectionChange={(keyDirection) => patchManual({ keyDirection })}
             />
-          ) : (
-            <div className={`relative flex min-h-0 w-full items-center justify-center overflow-hidden rounded-xl ${embedded ? 'bg-bg-dark/45' : UI_GLASS_ADAPTIVE_SURFACE_CLASS}`}>
-              {sourceImageUrl ? (
-                <img src={sourceImageUrl} alt={t('node.relightGeneration.sourceAlt')} className="max-h-full max-w-full object-contain" />
-              ) : (
-                <div className="flex flex-col items-center gap-2 text-text-muted">
-                  <SunMedium className="h-8 w-8" />
-                  <p className="text-sm">{t('node.relightGeneration.sourceRequired')}</p>
-                </div>
-              )}
-              <div className="pointer-events-none absolute bottom-3 left-3 right-3 rounded-lg bg-overlay px-3 py-2 text-xs text-text-soft">
-                智能打光由提示词与参考图控制，不使用手动灯位。
-              </div>
-            </div>
-          )}
-        </div>
+          </div>
+        )}
 
-        <div className={`min-h-0 overflow-y-auto border-l border-veil-subtle ${embedded ? 'p-3' : `p-5 ${UI_GLASS_ADAPTIVE_REGION_CLASS}`}`}>
+        <div className={`min-h-0 overflow-y-auto ${settings.lightingMode === 'manual' ? 'border-l border-veil-subtle' : ''} ${embedded ? 'p-3' : `p-5 ${UI_GLASS_ADAPTIVE_REGION_CLASS}`}`}>
           <div className="max-w-3xl">
           {sourceControl ? <div className="mb-3">{sourceControl}</div> : null}
           <section className="space-y-3">

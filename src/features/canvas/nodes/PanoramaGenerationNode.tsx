@@ -1,6 +1,5 @@
 import { memo } from 'react';
 import type { NodeProps } from '@xyflow/react';
-import { useTranslation } from 'react-i18next';
 
 import { ICON_PANORAMA } from '@/core/theme/icons';
 import { CANVAS_IMAGE_CAPABILITY_IDS } from '@/features/canvas/capabilities';
@@ -28,7 +27,6 @@ export const PanoramaGenerationNode = memo(({
   width,
   height,
 }: PanoramaGenerationNodeProps) => {
-  const { t } = useTranslation();
   return (
     <GenerationNodeShell
       id={id}
@@ -45,9 +43,6 @@ export const PanoramaGenerationNode = memo(({
       resultTitleKey="node.panoramaGeneration.resultTitle"
       resultNodeExtraData={{ resultKind: 'panorama' }}
       requirePrompt={false}
-      layoutMode="workbench"
-      workbenchSummary={t('node.panoramaGeneration.workbenchSummary')}
-      minHeight={320}
     />
   );
 });

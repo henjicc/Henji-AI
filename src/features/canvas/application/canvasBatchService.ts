@@ -169,7 +169,7 @@ async function executeOperation(projectId: string, operation: CanvasBatchOperati
   }
 }
 
-type CanvasAtomicExecutor = (options: CanvasCommitOptions) => Promise<Record<string, unknown>[]>
+type CanvasAtomicExecutor = (options: CanvasCommitOptions) => Record<string, unknown>[] | Promise<Record<string, unknown>[]>
 
 /**
  * 共享画布事务内核。当后续操作需要使用前一步产生的节点 id 时，
@@ -199,11 +199,13 @@ export async function runCanvasTransaction(
   const persistenceEffects: Array<() => void> = []
   let results: Record<string, unknown>[]
   try {
-    results = await execute({
+    const execution = execute({
       deferCommit: true,
       checkpoint,
       afterPersistenceConfirmed: (effect) => persistenceEffects.push(effect),
     })
+    // 无 I/O 的组合写入在同一个同步阶段封存，避免 React 挂载/测量插入半成品事务。
+    results = Array.isArray(execution) ? execution : await execution
   } catch (error) {
     if (!isCanvasMutationCheckpointCurrent(checkpoint)) {
       releasePersistence()

@@ -296,7 +296,9 @@ export const RelightGenerationNode = memo(({
       title={data.displayName ?? t('node.menu.relightGeneration')}
       icon={<SunMedium className="h-4 w-4" />}
       selected={selected}
-      width={width}
+      width={data.isSizeManuallyAdjusted ? width : undefined}
+      defaultWidth={settings.lightingMode === 'manual' ? 680 : 360}
+      minWidth={settings.lightingMode === 'manual' ? 600 : 320}
       height={height}
       hasSourceConnections={hasSourceConnections}
       onSelect={() => setSelectedNode(id)}
@@ -307,7 +309,7 @@ export const RelightGenerationNode = memo(({
         'data-relight-mode': settings.lightingMode,
       }}
     >
-      {selected ? (
+      {selected || settings.lightingMode === 'smart' ? (
         <RelightWorkbench
           settings={settings}
           sourceImage={sourceImages[0] ?? null}

@@ -70,6 +70,11 @@ function attachUiInspectionCanvasRelight(context) {
       .fill('保留主体与文字，只调整光照氛围')
     const smartRelightShell = page.locator(`[data-relight-node-id="${relightNodeId}"][data-relight-mode="smart"]`)
     await smartRelightShell.waitFor({ state: 'visible', timeout: 8000 })
+    if (await editor.locator('[data-relight-direction-control], img').evaluateAll((elements) =>
+      elements.some((element) => element.hasAttribute('data-relight-direction-control') || element.offsetWidth > 96 || element.offsetHeight > 96))) {
+      throw new Error('智能打光不应保留手动灯位或重复源图大图')
+    }
+
 
     await page.waitForTimeout(900)
     await page.getByRole('button', { name: /返回项目|Back to Projects/ }).click()

@@ -13,13 +13,13 @@ import {
 import type { CanvasNode } from '../domain/canvasNodes'
 import { canvasEventBus } from './canvasServices'
 import {
-  addControlledCanvasNode,
+  stageControlledCanvasNode,
   CanvasApplicationError,
-  connectCanvasNodes,
+  stageCanvasConnection,
   requireCurrentCanvasProject,
 } from './canvasApplicationService'
 import { runCanvasTransaction } from './canvasBatchService'
-import { confirmCanvasPersistence } from './canvasPersistenceService'
+import { runCanvasMutationStage } from './canvasPersistenceService'
 import { selectCanvasNode } from './canvasMutationService'
 import { openCanvasSpecialEditor } from './specialEditorApplicationService'
 
@@ -142,8 +142,8 @@ async function executeCanvasImageCapability(
     const { undoRef } = await runCanvasTransaction(
       projectId,
       3,
-      async (commitOptions) => {
-        const created = await addControlledCanvasNode({
+      (commitOptions) => runCanvasMutationStage(commitOptions, () => {
+        const created = stageControlledCanvasNode({
           projectId,
           nodeType: execution.nodeType,
           placement: { mode: 'right_of_node', anchorNodeId: sourceNodeId },
@@ -158,7 +158,7 @@ async function executeCanvasImageCapability(
           throw new CanvasApplicationError('CAPABILITY_REJECTED', '图片能力未能创建目标节点')
         }
         const nodeId = created.nodeId
-        const connection = await connectCanvasNodes({
+        const connection = stageCanvasConnection({
           projectId,
           sourceNodeId,
           targetNodeId: nodeId,
@@ -179,9 +179,8 @@ async function executeCanvasImageCapability(
         if (selectionChanges.length > 0) canvas.onNodesChange(selectionChanges)
         const selected = selectCanvasNode(projectId, nodeId)
 
-        await confirmCanvasPersistence(projectId, commitOptions)
         return [created, connection, selected]
-      },
+      }),
       { capabilityId, sourceNodeId },
     )
     const nodeId = createdNodeId

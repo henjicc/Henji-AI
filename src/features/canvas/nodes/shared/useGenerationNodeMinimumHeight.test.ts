@@ -17,6 +17,10 @@ describe('resolveGenerationNodeMinimumHeight', () => {
     )
   })
 
+  it('无提示词工具不为隐藏编辑器预留空白', () => {
+    expect(resolveGenerationNodeMinimumHeight(160, 200, false)).toBe(224)
+  })
+
   it('过滤无效测量值并向上取整，避免亚像素裁切', () => {
     expect(resolveGenerationNodeMinimumHeight(160, 200.2)).toBe(325)
     expect(resolveGenerationNodeMinimumHeight(160, Number.NaN)).toBe(160)

@@ -41,7 +41,7 @@ export function createFalUtilityCapability(options: {
           generationUi: {
             promptMode: options.promptMode ?? 'hidden',
             modelMode: 'locked',
-            layoutMode: 'workbench',
+            layoutMode: 'stacked',
             excludeParamIds: ['image'],
             ...(options.promptMaxCharacters
               ? { promptMaxCharacters: options.promptMaxCharacters }

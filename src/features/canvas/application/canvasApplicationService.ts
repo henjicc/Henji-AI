@@ -35,7 +35,7 @@ import {
   wouldCreateCanvasCycle,
 } from '../domain/connectionIndex'
 
-import { assertCanvasCommitContext, confirmCanvasPersistence, runPersistedCanvasUndo, type CanvasCommitOptions, type CanvasUndoPersistenceState } from './canvasPersistenceService'
+import { assertCanvasCommitContext, runCanvasMutationStage, confirmCanvasPersistence, runPersistedCanvasUndo, type CanvasCommitOptions, type CanvasUndoPersistenceState } from './canvasPersistenceService'
 
 const MAX_UNDO_RECORDS = 100
 const FOCUS_HANDLER_WAIT_MS = 2_000
@@ -225,20 +225,22 @@ export async function addCanvasNode(input: {
 /**
  * 仅供已登记的产品能力创建固定模型或专用编辑器节点。公共 addCanvasNode 继续只接受
  * 助手可见 schema，避免任何调用方凭模型 id 绕过受控能力入口。
+ * 同步阶段只供事务组合；独立调用使用 addControlledCanvasNode 等待保存。
  */
-export async function addControlledCanvasNode(input: {
+export function stageControlledCanvasNode(input: {
   projectId: string
   nodeType: string
   placement: CanvasNodePlacement
   data?: Record<string, unknown>
-}, options: CanvasCommitOptions = {}): Promise<Record<string, unknown>> {
+}, options: CanvasCommitOptions = {}): Record<string, unknown> {
   requireCurrentCanvasProject(input.projectId)
   assertCanvasCommitContext(input.projectId, options)
   const parsed = parseCanvasControlledNodeData(input.nodeType, input.data)
   const position = resolveNodePosition(input.placement)
-  const nodeId = useCanvasStore.getState().addNode(parsed.nodeType, position, parsed.data)
+  const nodeId = runCanvasMutationStage(options, () =>
+    useCanvasStore.getState().addNode(parsed.nodeType, position, parsed.data),
+  )
   const undoRef = options.deferCommit ? undefined : rememberCanvasUndo(input.projectId, 'add_node')
-  await confirmCanvasPersistence(input.projectId, options)
   return {
     projectId: input.projectId,
     nodeId,
@@ -246,6 +248,15 @@ export async function addControlledCanvasNode(input: {
     position,
     ...(undoRef ? { undoRef } : {}),
   }
+}
+
+export async function addControlledCanvasNode(
+  input: Parameters<typeof stageControlledCanvasNode>[0],
+  options: CanvasCommitOptions = {},
+): Promise<Record<string, unknown>> {
+  const result = stageControlledCanvasNode(input, options)
+  await confirmCanvasPersistence(input.projectId, options)
+  return result
 }
 
 /**
@@ -268,13 +279,14 @@ export async function addTrustedMediaCanvasNode(input: {
   return { projectId: input.projectId, nodeId, nodeType: parsed.nodeType, position, undoRef }
 }
 
-export async function connectCanvasNodes(input: {
+/** 同步连接阶段；独立操作必须使用 connectCanvasNodes 等待保存。 */
+export function stageCanvasConnection(input: {
   projectId: string
   sourceNodeId: string
   targetNodeId: string
   sourceHandle?: string
   targetHandle?: string
-}, options: CanvasCommitOptions = {}): Promise<Record<string, unknown>> {
+}, options: CanvasCommitOptions = {}): Record<string, unknown> {
   requireCurrentCanvasProject(input.projectId)
   assertCanvasCommitContext(input.projectId, options)
   if (input.sourceNodeId === input.targetNodeId) {
@@ -336,12 +348,12 @@ export async function connectCanvasNodes(input: {
   }
   const beforeNodeIds = new Set(canvas.nodes.map((node) => node.id))
   const beforeEdgeIds = new Set(canvas.edges.map((edge) => edge.id))
-  canvas.onConnect({
+  runCanvasMutationStage(options, () => canvas.onConnect({
     source: input.sourceNodeId,
     target: input.targetNodeId,
     sourceHandle: handles.sourceHandle,
     targetHandle: handles.targetHandle,
-  })
+  }))
   const after = useCanvasStore.getState()
   const nodeById = new Map(after.nodes.map((node) => [node.id, node]))
   const directEdge = after.edges.find((item) => isMatchingEdge(
@@ -360,7 +372,6 @@ export async function connectCanvasNodes(input: {
   const createdNodeIds = after.nodes.filter((node) => !beforeNodeIds.has(node.id)).map((node) => node.id)
   const createdEdgeIds = after.edges.filter((item) => !beforeEdgeIds.has(item.id)).map((item) => item.id)
   const undoRef = options.deferCommit ? undefined : rememberCanvasUndo(input.projectId, 'connect_nodes')
-  await confirmCanvasPersistence(input.projectId, options)
   return {
     projectId: input.projectId,
     edgeId: edge.id,
@@ -372,6 +383,15 @@ export async function connectCanvasNodes(input: {
     ...handles,
     ...(undoRef ? { undoRef } : {}),
   }
+}
+
+export async function connectCanvasNodes(
+  input: Parameters<typeof stageCanvasConnection>[0],
+  options: CanvasCommitOptions = {},
+): Promise<Record<string, unknown>> {
+  const result = stageCanvasConnection(input, options)
+  await confirmCanvasPersistence(input.projectId, options)
+  return result
 }
 
 export async function undoCanvasChange(projectId: string, undoRef: string): Promise<Record<string, unknown>> {

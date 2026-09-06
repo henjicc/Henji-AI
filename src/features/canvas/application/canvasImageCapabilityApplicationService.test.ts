@@ -209,6 +209,33 @@ describe('画布图片能力应用服务', () => {
     expect(useCanvasStore.getState().history).toEqual({ past: [], future: [] })
   })
 
+  it('全景创建在界面自动更新前完成连线与选中，不把挂载回写误报为并发编辑', async () => {
+    let observedCompleteGraph = false
+    let scheduled = false
+    const unsubscribe = useCanvasStore.subscribe((state) => {
+      const node = state.nodes.find((item) => item.type === CANVAS_NODE_TYPES.panoramaGen)
+      if (!node || scheduled) return
+      scheduled = true
+      queueMicrotask(() => {
+        const canvas = useCanvasStore.getState()
+        observedCompleteGraph = canvas.selectedNodeId === node.id
+          && canvas.edges.some((edge) => edge.source === sourceNodeId && edge.target === node.id)
+        // 模拟挂载后按已经连接的图片更新派生模板，必须发生在完整图封存之后。
+        canvas.updateNodeData(node.id, { promptTemplateVersion: 'panorama-equirectangular-reference-v1' }, { skipHistory: true })
+      })
+    })
+    try {
+      const result = await createCanvasImageCapabilityExecutor()(sourceNodeId, CANVAS_IMAGE_CAPABILITY_IDS.panorama)
+      expect(observedCompleteGraph).toBe(true)
+      expect(result.kind).toBe('canvas-node')
+      expect(useCanvasStore.getState().nodes).toHaveLength(2)
+      expect(useCanvasStore.getState().edges).toHaveLength(1)
+      expect(useCanvasStore.getState().history.past).toHaveLength(1)
+    } finally {
+      unsubscribe()
+    }
+  })
+
   it('全景能力通过受控节点目录创建并连接专用生成节点', async () => {
     const execute = createCanvasImageCapabilityExecutor()
     const result = await execute(sourceNodeId, CANVAS_IMAGE_CAPABILITY_IDS.panorama)
@@ -284,7 +311,7 @@ describe('画布图片能力应用服务', () => {
         generationUi: {
           promptMode,
           modelMode: 'locked',
-          layoutMode: 'workbench',
+          layoutMode: 'stacked',
           excludeParamIds: ['image'],
           ...(promptMaxCharacters ? { promptMaxCharacters } : {}),
         },

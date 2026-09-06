@@ -218,8 +218,8 @@ function attachUiInspectionCanvasWorkspace(context) {
     await upscaleAction.click()
     const upscaleShell = page.locator('[data-generation-node-id][data-generation-node-model-id="fal-ai-topaz-image-upscale"]').last()
     await upscaleShell.waitFor({ state: 'visible', timeout: 12000 })
-    if (await upscaleShell.getAttribute('data-generation-node-layout') !== 'workbench') {
-      throw new Error('工具条功能节点没有采用统一的工作台布局')
+    if (await upscaleShell.getAttribute('data-generation-node-layout') !== 'stacked') {
+      throw new Error('工具条功能节点没有采用紧凑参数布局')
     }
     const upscaleNode = upscaleShell.locator('xpath=ancestor::*[contains(@class,"react-flow__node")][1]')
     if (!(await upscaleNode.evaluate((element) => element.classList.contains('selected')))) {
@@ -256,6 +256,43 @@ function attachUiInspectionCanvasWorkspace(context) {
     await settlePage(page, 900)
   }
 
+  async function setupCanvasParameterTools(page) {
+    await seedAndOpenCanvasPanoramaProject(page)
+    const source = page.locator('.react-flow__node[data-id="__ui_panorama_source"]')
+    const capabilities = [
+      'image.panorama', 'image.upscale', 'image.portrait-texture',
+      'image.preset-relight', 'image.low-light-enhancement', 'image.outpaint',
+      'image.product-photography', 'image.photo-restoration', 'image.background-removal',
+      'image.layer-separation',
+    ]
+    for (const capabilityId of capabilities) {
+      await source.click()
+      let action = page.locator(`[data-image-capability-id="${capabilityId}"]:visible`)
+      if (!(await action.count())) {
+        await page.locator('[data-image-capability-more="true"]:visible').click()
+        action = page.locator(`[data-image-capability-id="${capabilityId}"]:visible`)
+      }
+      await action.click()
+      const node = page.locator('.react-flow__node.selected').filter({ has: page.locator('[data-generation-node-id]') })
+      const shell = node.locator('[data-generation-node-id]')
+      await shell.waitFor({ state: 'visible', timeout: 12000 })
+      await settlePage(page, 250)
+      const layout = await shell.evaluate((element) => ({
+        mode: element.getAttribute('data-generation-node-layout'),
+        width: element.offsetWidth,
+        largeImageCount: Array.from(element.querySelectorAll('img')).filter((img) => img.offsetWidth > 96 || img.offsetHeight > 96).length,
+      }))
+      if (layout.mode !== 'stacked' || layout.width > 360 || layout.largeImageCount !== 0) {
+        throw new Error(`${capabilityId} 应只保留紧凑参数与输入缩略图：${JSON.stringify(layout)}`)
+      }
+      if (capabilityId !== capabilities.at(-1)) {
+        await page.getByRole('button', { name: /^(删除|Delete)$/i }).filter({ visible: true }).click()
+        await shell.waitFor({ state: 'detached', timeout: 8000 })
+      }
+    }
+    await settlePage(page, 800)
+  }
+
   async function setupCanvasPanoramaToolbar(page) {
     const fixture = await seedAndOpenCanvasPanoramaProject(page)
     const sourceNode = page.locator('.react-flow__node[data-id="__ui_panorama_source"]')
@@ -269,8 +306,8 @@ function attachUiInspectionCanvasWorkspace(context) {
     await panoramaAction.click()
     const generatedShell = page.locator('[data-generation-node-id][data-generation-node-model-id]').filter({ hasText: /720°全景/ }).last()
     await generatedShell.waitFor({ state: 'visible', timeout: 12000 })
-    if (await generatedShell.getAttribute('data-generation-node-layout') !== 'workbench') {
-      throw new Error('全景工具节点没有采用统一的工作台布局')
+    if (await generatedShell.getAttribute('data-generation-node-layout') !== 'stacked') {
+      throw new Error('全景工具节点没有采用紧凑参数布局')
     }
     const generatedNode = generatedShell.locator('xpath=ancestor::*[contains(@class,"react-flow__node")][1]')
     const generatedNodeId = await generatedNode.getAttribute('data-id')
@@ -315,6 +352,7 @@ function attachUiInspectionCanvasWorkspace(context) {
     seedAndOpenCanvasPanoramaProject,
     setupCanvasImageCapabilityToolbar,
     setupCanvasPanoramaToolbar,
+    setupCanvasParameterTools,
   })
 }
 

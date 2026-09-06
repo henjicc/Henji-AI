@@ -1,6 +1,5 @@
 import { memo, useCallback, useMemo } from 'react'
 import type { NodeProps } from '@xyflow/react'
-import { useTranslation } from 'react-i18next'
 
 import { createPlainTextPromptDocument } from '@/core/inputs/promptDocument'
 import { ICON_TOOL_IMAGE_EDIT } from '@/core/theme/icons'
@@ -48,7 +47,6 @@ export const PortraitTextureGenerationNode = memo(({
   width,
   height,
 }: PortraitTextureGenerationNodeProps) => {
-  const { t } = useTranslation()
   const updateNodeData = useCanvasStore((state) => state.updateNodeData)
   const settings = useMemo(
     () => readSettings(data.portraitTextureSettings),
@@ -132,9 +130,6 @@ export const PortraitTextureGenerationNode = memo(({
       requirePrompt={false}
       additionalInputRows={settingsRows}
       prepareRuntimeParams={prepareRuntimeParams}
-      layoutMode="workbench"
-      workbenchSummary={t('node.portraitTextureGeneration.workbenchSummary')}
-      minHeight={320}
     />
   )
 })

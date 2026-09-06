@@ -28,8 +28,8 @@ function attachUiInspectionCanvasEnhance(context) {
     const shell = page.locator('[data-generation-node-id][data-generation-node-model-id="fal-ai-topaz-image-upscale"]')
       .filter({ hasText: /高清放大|Upscale/ }).last()
     await shell.waitFor({ state: 'visible', timeout: 12000 })
-    if (await shell.getAttribute('data-generation-node-layout') !== 'workbench') {
-      throw new Error('高清放大节点没有采用统一的工作台布局')
+    if (await shell.getAttribute('data-generation-node-layout') !== 'stacked') {
+      throw new Error('高清放大节点没有采用紧凑参数布局')
     }
     const node = shell.locator('xpath=ancestor::*[contains(@class,"react-flow__node")][1]')
     const nodeId = await node.getAttribute('data-id')
@@ -147,8 +147,8 @@ function attachUiInspectionCanvasEnhance(context) {
     const shell = page.locator('[data-generation-node-id][data-generation-node-model-id="fal-ai-gpt-image-2"]')
       .filter({ hasText: /人像质感|Portrait Texture/ }).last()
     await shell.waitFor({ state: 'visible', timeout: 12000 })
-    if (await shell.getAttribute('data-generation-node-layout') !== 'workbench') {
-      throw new Error('人像质感节点没有采用统一的工作台布局')
+    if (await shell.getAttribute('data-generation-node-layout') !== 'stacked') {
+      throw new Error('人像质感节点没有采用紧凑参数布局')
     }
     const node = shell.locator('xpath=ancestor::*[contains(@class,"react-flow__node")][1]')
     const nodeId = await node.getAttribute('data-id')

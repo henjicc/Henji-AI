@@ -1,6 +1,5 @@
 import { memo, useCallback } from 'react';
 import type { NodeProps } from '@xyflow/react';
-import { useTranslation } from 'react-i18next';
 
 import { ICON_NODE_ASSET_GROUP } from '@/core/theme/icons';
 import { CANVAS_IMAGE_CAPABILITY_IDS } from '@/features/canvas/capabilities';
@@ -29,7 +28,6 @@ export const LayerSeparationGenerationNode = memo(({
   width,
   height,
 }: LayerSeparationGenerationNodeProps) => {
-  const { t } = useTranslation();
   const prepareRuntimeParams = useCallback(({ images }: GenerationNodeRuntimePreparationContext) => {
     if (images.length !== 1) throw new Error('图层拆分必须且只能提供 1 张源图');
     return {};
@@ -67,9 +65,6 @@ export const LayerSeparationGenerationNode = memo(({
       requirePrompt={false}
       prepareRuntimeParams={prepareRuntimeParams}
       commitGenerationResult={commitGenerationResult}
-      layoutMode="workbench"
-      workbenchSummary={t('node.layerSeparationGeneration.workbenchSummary')}
-      minHeight={320}
     />
   );
 });

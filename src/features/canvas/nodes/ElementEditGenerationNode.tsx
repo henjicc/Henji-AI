@@ -147,9 +147,6 @@ export const ElementEditGenerationNode = memo(({
       additionalInputRows={settingsRows}
       layoutMode="workbench"
       workbenchStage={renderWorkbenchStage}
-      workbenchSummary={t(data.localRedrawMaskSource
-        ? 'node.elementEditGeneration.summarySaved'
-        : 'node.elementEditGeneration.summaryEmpty')}
       minHeight={360}
     />
   )

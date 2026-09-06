@@ -57,12 +57,10 @@ export interface GenerationNodeShellProps {
   ) => Promise<GenerationNodeResultCommitResult>
   /** 复用标准生成壳时追加的能力语义行；只放产品设置，不复制模型 schema 参数。 */
   additionalInputRows?: ReactNode
-  /** 图片工具节点使用横向工作台；普通生成节点保持 stacked。 */
+  /** 有直接可视化操作的节点使用 workbench；纯参数处理使用 stacked。 */
   layoutMode?: 'stacked' | 'workbench'
-  /** 工作台左侧的专属交互；省略时显示当前源媒体预览。 */
+  /** 工作台的专属交互；省略时使用紧凑参数布局，不重复预览源媒体。 */
   workbenchStage?: ReactNode | ((context: GenerationNodeWorkbenchContext) => ReactNode)
-  /** 未提供专属交互时覆盖在源媒体预览底部的简短状态。 */
-  workbenchSummary?: ReactNode
   minWidth?: number
   minHeight?: number
   maxWidth?: number
