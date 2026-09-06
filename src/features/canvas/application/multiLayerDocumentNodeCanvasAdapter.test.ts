@@ -52,6 +52,22 @@ function node(): CanvasNode {
   }
 }
 
+function downstreamNode(): CanvasNode {
+  return {
+    id: 'downstream',
+    type: CANVAS_NODE_TYPES.exportImage,
+    position: { x: 620, y: 80 },
+    width: 320,
+    height: 240,
+    data: {
+      imageUrl: '/managed/downstream.png',
+      previewImageUrl: '/managed/downstream.png',
+      aspectRatio: '4:3',
+      resultKind: 'generic',
+    },
+  }
+}
+
 function project(nodes: CanvasNode[]): Project {
   return {
     id: 'project-a',
@@ -81,8 +97,9 @@ describe('多图层文档节点投影 CAS', () => {
   beforeEach(() => {
     vi.mocked(upsertProjectRecord).mockReset()
     const source = node()
+    const downstream = downstreamNode()
     useCanvasStore.setState({
-      nodes: [source],
+      nodes: [source, downstream],
       edges: [{ id: 'edge-a', source: source.id, target: 'downstream' }],
       history: { past: [{ nodes: [source], edges: [] }], future: [] },
       selectedNodeId: source.id,
@@ -90,7 +107,7 @@ describe('多图层文档节点投影 CAS', () => {
     })
     useProjectStore.setState({
       currentProjectId: 'project-a',
-      currentProject: project([source]),
+      currentProject: project([source, downstream]),
     })
   })
 
