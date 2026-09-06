@@ -61,7 +61,7 @@ export function ProjectManager(): JSX.Element {
   const [isImporting, setIsImporting] = useState(false);
   const [packageError, setPackageError] = useState<string | null>(null);
 
-  const { projects, isOpeningProject, persistenceError, createProject, deleteProject, renameProject, openProject, hydrate } =
+  const { projects, isOpeningProject, openError, persistenceError, createProject, deleteProject, renameProject, openProject, hydrate } =
     useProjectStore();
 
   const cardItems = projects.map((project) => toCardItem(project, (count) => t('project.nodesCount', { count })));
@@ -116,11 +116,11 @@ export function ProjectManager(): JSX.Element {
             {isImporting ? t('project.importing') : t('project.importPackage')}
           </UiButton>
         )}
-        banner={(packageError || persistenceError) ? (
+        banner={(packageError || openError || persistenceError) ? (
           <UiError
             size="xs"
             className="mb-4"
-            message={packageError ?? t(persistenceError ?? 'project.persistenceFailed')}
+            message={packageError ?? t(openError ?? persistenceError ?? 'project.persistenceFailed')}
           />
         ) : null}
         extraActions={(item) => [

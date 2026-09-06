@@ -90,6 +90,7 @@ interface ProjectState {
   currentProject: Project | null;
   isHydrated: boolean;
   isOpeningProject: boolean;
+  openError: string | null;
   persistenceError: string | null;
   persistenceErrors: Record<string, string>;
 
@@ -118,6 +119,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
   currentProject: null,
   isHydrated: false,
   isOpeningProject: false,
+  openError: null,
   persistenceError: null,
   persistenceErrors: {},
 
@@ -175,6 +177,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       currentProject: project,
       isOpeningProject: false,
       persistenceError: null,
+      openError: null,
     }));
     return id;
   },
@@ -237,7 +240,8 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
 
   openProject: (id) => {
     const reqSeq = ++openProjectRequestSeq;
-    set({ isOpeningProject: true });
+    set({ isOpeningProject: true, openError: null });
+    logger.debug('开始打开工程', { event: 'project.open.start', context: { projectId: id } });
 
     void (async () => {
       try {
@@ -247,7 +251,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
           return;
         }
         if (!record && !unsaved) {
-          set({ isOpeningProject: false });
+          set({ isOpeningProject: false, openError: 'project.openFailed' });
           return;
         }
 
@@ -266,12 +270,15 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
             coverPath: project.coverPath,
           }),
         }));
+        logger.debug('完成打开工程', { event: 'project.open.completed', context: { projectId: id } });
       } catch (error) {
         if (reqSeq !== openProjectRequestSeq) {
           return;
         }
-        logger.error('Failed to open project', error);
-        set({ isOpeningProject: false });
+        logger.error('工程无法打开，保留当前工程与原始记录', error, {
+          event: 'project.open.failed', context: { projectId: id },
+        });
+        set({ isOpeningProject: false, openError: 'project.openFailed' });
       }
     })();
   },
@@ -319,6 +326,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       currentProject: null,
       isOpeningProject: false,
       persistenceError: null,
+      openError: null,
     }));
   },
 

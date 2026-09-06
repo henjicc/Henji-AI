@@ -1,5 +1,33 @@
 import { getDb } from './db'
 import { clearProjectCover } from './project-covers'
+import { validateStoryboardProjectRecord } from './storyboard-project-validation'
+import { parseCanvasProjectViewport, CanvasProjectRecordError } from '../../../src/core/canvas/projectRecordCodec'
+import { createMainLogger } from './logging'
+
+const logger = createMainLogger('main.storyboard-projects')
+
+function checkedOperation<T>(projectId: string, operation: string, run: () => T): T {
+  logger.debug('开始处理工程数据', { event: `storyboard_project.${operation}.start`, context: { projectId } })
+  try {
+    const result = run()
+    logger.debug('完成处理工程数据', { event: `storyboard_project.${operation}.completed`, context: { projectId } })
+    return result
+  } catch (error) {
+    logger.error('工程数据处理失败，保留原内容', {
+      event: `storyboard_project.${operation}.failed`, error, context: { projectId,
+        ...(error instanceof CanvasProjectRecordError ? { field: error.field, reason: error.reason } : {}) },
+    })
+    throw error
+  }
+}
+
+/** 同一写事务检查原件再写入，其他连接不能在检查后抢先损坏原件。 */
+function protectedWrite(projectId: string, write: () => void, allowCreate = false): void {
+  checkedOperation(projectId, 'write', () => getDb().transaction(() => {
+    if (!getStoryboardProject(projectId) && !allowCreate) throw new Error('工程不存在，无法保存或重命名，请返回工程列表重新打开。')
+    write()
+  }).immediate())
+}
 
 interface StoryboardProjectRow {
   id: string
@@ -72,16 +100,23 @@ export function listStoryboardProjectSummaries(): StoryboardProjectSummaryDto[] 
 }
 
 export function getStoryboardProject(projectId: string): StoryboardProjectRecordDto | null {
+  return checkedOperation(projectId, 'read', () => {
   const row = getDb().prepare(
     `SELECT id, name, created_at, updated_at, node_count, nodes_json, edges_json, viewport_json, history_json, cover_path
      FROM storyboard_projects
      WHERE id = ?
      LIMIT 1`
   ).get(projectId) as StoryboardProjectRow | undefined
-  return row ? rowToRecord(row) : null
+    if (!row) return null
+    const record = rowToRecord(row)
+    validateStoryboardProjectRecord(record)
+    return record
+  })
 }
 
 export function upsertStoryboardProject(record: StoryboardProjectWriteDto): void {
+  protectedWrite(record.id, () => {
+  validateStoryboardProjectRecord(record)
   getDb().prepare(
     `INSERT INTO storyboard_projects (
       id, name, created_at, updated_at, node_count, nodes_json, edges_json, viewport_json, history_json
@@ -106,22 +141,28 @@ export function upsertStoryboardProject(record: StoryboardProjectWriteDto): void
     record.viewportJson,
     record.historyJson
   )
+  }, true)
 }
 
 export function updateStoryboardProjectViewport(projectId: string, viewportJson: string): void {
+  protectedWrite(projectId, () => {
+  parseCanvasProjectViewport(viewportJson)
   getDb().prepare(
     `UPDATE storyboard_projects
      SET viewport_json = ?, updated_at = ?
      WHERE id = ?`
   ).run(viewportJson, Date.now(), projectId)
+  })
 }
 
 export function renameStoryboardProject(projectId: string, name: string, updatedAt: number): void {
+  protectedWrite(projectId, () => {
   getDb().prepare(
     `UPDATE storyboard_projects
      SET name = ?, updated_at = ?
      WHERE id = ?`
   ).run(name, normalizeTimestamp(updatedAt), projectId)
+  })
 }
 
 export async function deleteStoryboardProject(projectId: string): Promise<void> {

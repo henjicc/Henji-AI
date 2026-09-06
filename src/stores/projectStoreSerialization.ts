@@ -1,16 +1,12 @@
 import type { Viewport } from '@xyflow/react';
-import { createLogger } from '@/core/logging';
-import { mapCanvasNodeMediaReferences } from '@/features/canvas/application/canvasNodeMediaReferences';
+import { mapCanvasNodeMediaReferences, resolveCanvasNodeMediaSchema } from '@/features/canvas/application/canvasNodeMediaReferences';
 import { resetTransientNodeRuntimeState } from '@/features/canvas/domain/nodeMigrations';
 import type { CanvasNode, CanvasEdge, CanvasHistoryState, CanvasNodeData } from './canvasStore';
 import type { ProjectRecord, ProjectSummaryRecord } from '@/commands/projectState';
-const logger = createLogger('stores.projectStore');
-const DEFAULT_VIEWPORT: Viewport = { x: 0, y: 0, zoom: 1 };
-function createEmptyHistory(): CanvasHistoryState { return { past: [], future: [] }; }
+import { parseCanvasProjectRecord, decodeCanvasProjectImageReference, PROJECT_IMAGE_REFERENCE_PREFIX } from '@/core/canvas/projectRecordCodec';
 
-const IMAGE_REF_PREFIX = '__img_ref__:';
+const IMAGE_REF_PREFIX = PROJECT_IMAGE_REFERENCE_PREFIX;
 const MAX_PERSISTED_HISTORY_STEPS = 12;
-const MAX_HISTORY_RESTORE_JSON_CHARS = 1_500_000;
 
 export interface ProjectSummary {
   id: string;
@@ -61,12 +57,7 @@ function decodeImageReference(
     return imageUrl;
   }
 
-  const index = Number.parseInt(imageUrl.slice(IMAGE_REF_PREFIX.length), 10);
-  if (!Number.isFinite(index) || index < 0) {
-    return imageUrl;
-  }
-
-  return imagePool[index] ?? null;
+  return decodeCanvasProjectImageReference(imageUrl, imagePool, 'nodesJson');
 }
 
 function mapNodeImageReferences(
@@ -151,77 +142,6 @@ function decodeProject(project: PersistedProject): Project {
   };
 }
 
-function safeParseJson<T>(value: string, fallback: T): T {
-  try {
-    return JSON.parse(value) as T;
-  } catch {
-    return fallback;
-  }
-}
-
-function extractImagePoolFromHistoryJson(historyJson: string): string[] {
-  const imagePoolKey = '"imagePool"';
-  const keyIndex = historyJson.indexOf(imagePoolKey);
-  if (keyIndex < 0) {
-    return [];
-  }
-
-  const arrayStart = historyJson.indexOf('[', keyIndex + imagePoolKey.length);
-  if (arrayStart < 0) {
-    return [];
-  }
-
-  let depth = 0;
-  let inString = false;
-  let escaped = false;
-  let arrayEnd = -1;
-
-  for (let index = arrayStart; index < historyJson.length; index += 1) {
-    const char = historyJson[index];
-
-    if (inString) {
-      if (escaped) {
-        escaped = false;
-      } else if (char === '\\') {
-        escaped = true;
-      } else if (char === '"') {
-        inString = false;
-      }
-      continue;
-    }
-
-    if (char === '"') {
-      inString = true;
-      continue;
-    }
-
-    if (char === '[') {
-      depth += 1;
-      continue;
-    }
-
-    if (char === ']') {
-      depth -= 1;
-      if (depth === 0) {
-        arrayEnd = index;
-        break;
-      }
-    }
-  }
-
-  if (arrayEnd < 0) {
-    return [];
-  }
-
-  const rawArrayJson = historyJson.slice(arrayStart, arrayEnd + 1);
-  const parsed = safeParseJson<DynamicValue>(rawArrayJson, []);
-  if (!Array.isArray(parsed)) {
-    return [];
-  }
-
-  return parsed.filter((item): item is string => typeof item === 'string');
-}
-
 export function toProjectSummary(record: ProjectSummaryRecord): ProjectSummary {
   return {
     id: record.id,
@@ -262,7 +182,7 @@ export function toProjectRecord(project: Project): ProjectRecord {
     });
   }
 
-  return {
+  const record: ProjectRecord = {
     id: encodedProject.id,
     name: encodedProject.name,
     createdAt: encodedProject.createdAt,
@@ -276,54 +196,22 @@ export function toProjectRecord(project: Project): ProjectRecord {
       imagePool: encodedProject.imagePool ?? [],
     }),
   };
+  parseCanvasProjectRecord(record, resolveCanvasNodeMediaSchema);
+  return record;
 }
 
 export function fromProjectRecord(record: ProjectRecord): Project {
-  const parsedNodes = safeParseJson<CanvasNode[]>(record.nodesJson, []);
-  const parsedEdges = safeParseJson<CanvasEdge[]>(record.edgesJson, []);
-  const parsedViewport = safeParseJson<Viewport>(record.viewportJson, DEFAULT_VIEWPORT);
-  const shouldRestoreHistory = record.historyJson.length <= MAX_HISTORY_RESTORE_JSON_CHARS;
-  const extractedImagePool = extractImagePoolFromHistoryJson(record.historyJson);
-  const parsedHistoryPayload = shouldRestoreHistory
-    ? safeParseJson<{
-        past?: CanvasHistoryState['past'];
-        future?: CanvasHistoryState['future'];
-        imagePool?: string[];
-      }>(record.historyJson, {})
-    : {};
-
-  if (!shouldRestoreHistory) {
-    logger.warn(
-      `Skip restoring oversized history payload (${record.historyJson.length} chars) for project ${record.id}`
-    );
-  }
-
-  const parsedHistory = {
-    past: parsedHistoryPayload.past ?? [],
-    future: parsedHistoryPayload.future ?? [],
-  };
-
-  const persistedProject: PersistedProject = {
-    id: record.id,
-    name: record.name,
-    createdAt: record.createdAt,
-    updatedAt: record.updatedAt,
-    nodeCount: record.nodeCount,
+  const parsed = parseCanvasProjectRecord(record, resolveCanvasNodeMediaSchema);
+  return decodeProject({
+    id: record.id, name: record.name, createdAt: record.createdAt, updatedAt: record.updatedAt,
+    nodeCount: parsed.nodes.length,
     coverPath: (record as { coverPath?: string | null }).coverPath ?? null,
-    nodes: parsedNodes,
-    edges: parsedEdges,
-    viewport: parsedViewport ?? DEFAULT_VIEWPORT,
-    history: parsedHistory,
-    imagePool: parsedHistoryPayload.imagePool ?? extractedImagePool,
-  };
-
-  const decodedProject = decodeProject(persistedProject);
-  return {
-    ...decodedProject,
-    nodeCount: parsedNodes.length,
-    viewport: decodedProject.viewport ?? DEFAULT_VIEWPORT,
-    history: decodedProject.history ?? createEmptyHistory(),
-  };
+    nodes: parsed.nodes as CanvasNode[],
+    edges: parsed.edges as CanvasEdge[],
+    viewport: parsed.viewport,
+    history: parsed.history as CanvasHistoryState,
+    imagePool: parsed.imagePool,
+  });
 }
 
 /** 解码项目记录为运行时 Project（供项目包导出等服务使用） */

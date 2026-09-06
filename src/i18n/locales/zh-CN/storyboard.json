@@ -691,6 +691,7 @@
     "exportFailed": "项目导出失败",
     "importFailed": "项目导入失败",
     "persistenceFailed": "画布项目保存失败，请检查磁盘空间后重试",
+    "openFailed": "工程无法安全打开，原内容未被修改。请重新打开，或从有效项目包导入为新工程。",
     "open": "打开项目",
     "save": "保存项目",
     "name": "项目名称",

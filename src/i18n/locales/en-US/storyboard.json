@@ -691,6 +691,7 @@
     "exportFailed": "Failed to export project",
     "importFailed": "Failed to import project",
     "persistenceFailed": "Failed to save the canvas project. Check available disk space and try again.",
+    "openFailed": "The project could not be opened safely. Its original contents have not been changed. Try opening it again, or import a valid project package as a new project.",
     "open": "Open Project",
     "save": "Save Project",
     "name": "Project Name",

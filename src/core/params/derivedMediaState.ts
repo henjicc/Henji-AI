@@ -1,6 +1,7 @@
 import type { ParamDef } from '@/core/types'
 
-const DERIVED_MEDIA_STATE_PREFIX = '__henjiDerivedMediaAuthoring__'
+import { DERIVED_MEDIA_STATE_PREFIX, derivedMediaStateKey } from './derivedMediaStateKey'
+export { derivedMediaStateKey } from './derivedMediaStateKey'
 
 function firstNonEmptyString(value: DynamicValue): string | null {
   if (!Array.isArray(value)) return null
@@ -11,11 +12,6 @@ function readSourceRef(value: DynamicValue): string | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null
   const sourceRef = (value as DynamicValueMap).sourceRef
   return typeof sourceRef === 'string' && sourceRef.length > 0 ? sourceRef : null
-}
-
-/** 派生媒体编辑文档在参数状态中的保留键；不会进入供应商请求。 */
-export function derivedMediaStateKey(paramId: string): string {
-  return `${DERIVED_MEDIA_STATE_PREFIX}${paramId}`
 }
 
 /**
