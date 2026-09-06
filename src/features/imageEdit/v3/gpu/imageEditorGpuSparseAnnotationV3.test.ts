@@ -26,7 +26,7 @@ const registry = createBuiltInImageEditRenderNodeRegistry()
 let gpu: Gpu
 
 beforeAll(async () => { gpu = await init() })
-afterAll(() => gpu.dispose())
+afterAll(() => gpu?.dispose())
 
 describe('GPU 稀疏资源、标注缓存与 halo（真实 WebGPU）', () => {
   it('标注光栅纹理在重复帧命中GPU子图缓存', async () => {

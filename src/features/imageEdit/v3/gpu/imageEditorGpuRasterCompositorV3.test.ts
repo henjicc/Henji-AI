@@ -31,7 +31,7 @@ beforeAll(async () => {
   gpu = await init()
 })
 
-afterAll(() => gpu.dispose())
+afterAll(() => gpu?.dispose())
 
 describe('ImageEditorGpuRasterCompositorV3（真实 WebGPU）', () => {
   it.each(['kie-five-layer', 'sixteen-layer'] as const)(

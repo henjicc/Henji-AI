@@ -356,6 +356,8 @@ find src electron \( -name '*.ts' -o -name '*.tsx' \) \
 
 ## 七、CI 全量兜底
 
-`.github/workflows/build.yml` 的代码检查 job 仍执行生成器、静态规则、渲染层/主进程 lint 与类型检查、全量 Vitest。CI 全量覆盖与本地最小验证分工不同，不应互相替代。
+`.github/workflows/build.yml` 每次 push / PR 分三层必跑：代码检查 job 执行生成器、静态规则、渲染层/主进程 lint 与类型检查、`test:suites` 分层完整性门禁及 `test:unit`；WebGPU job 安装官方软件 Vulkan adapter、通过 `vgpu doctor` 真渲染后执行 `test:gpu`（含 HDR probe）；大图导出 job 独占 worker 执行 `test:image-export`。三套测试互斥并覆盖完整 Vitest 清单，`npm test` / `npx vitest run` 仍保留本地全量入口。缺失设备或专项失败不得跳过、降级成成功。
+
+稳定的「质量门禁」聚合检查只在三层全部成功时通过，安装包构建依赖该门禁。软件 WebGPU 的像素正确性不代表真实 Electron 的交互流畅度；后者仍由匹配场景的 Reality / 性能专项证明。CI 全量覆盖与本地最小验证分工不同，不应互相替代。
 
 构建 job 只在标签或手动触发时运行 `npm run electron:build` 并打包发布。

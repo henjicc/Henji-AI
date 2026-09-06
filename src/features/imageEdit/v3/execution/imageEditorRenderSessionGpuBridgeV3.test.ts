@@ -11,7 +11,8 @@ const { readSourceTile, readSourceTiles } = vi.hoisted(() => ({
   readSourceTile: vi.fn(),
   readSourceTiles: vi.fn(),
 }))
-vi.mock('@/commands/imageEditorV3', () => ({
+vi.mock('@/commands/imageEditorV3', async (importOriginal) => ({
+  ...await importOriginal<typeof import('@/commands/imageEditorV3')>(),
   createImageEditorV3RequestId: () => 'gpu-scene-tile:test',
   readImageEditorV3BrushTiles: vi.fn(),
   readImageEditorV3SourceTile: readSourceTile,

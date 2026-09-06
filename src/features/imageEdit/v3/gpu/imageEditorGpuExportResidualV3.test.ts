@@ -14,7 +14,7 @@ struct Params { color: vec4f }
 
 let gpu: Gpu
 beforeAll(async () => { gpu = await init() })
-afterAll(() => gpu.dispose())
+afterAll(() => gpu?.dispose())
 
 async function filled(size: readonly [number, number], color: readonly [number, number, number, number]): Promise<Target> {
   const output = target(gpu, { size, format: 'rgba16float', clearColor: [0, 0, 0, 0] })

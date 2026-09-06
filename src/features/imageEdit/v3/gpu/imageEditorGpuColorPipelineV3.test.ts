@@ -19,7 +19,7 @@ const RESOURCE = `sha256:${'c'.repeat(64)}` as const
 let gpu: Gpu
 
 beforeAll(async () => { gpu = await init() })
-afterAll(() => gpu.dispose())
+afterAll(() => gpu?.dispose())
 
 describe('GPU 宽色域/HDR 色彩管线（真实 WebGPU）', () => {
   it.each([

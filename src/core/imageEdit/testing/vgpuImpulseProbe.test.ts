@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
   analyzeVgpuImpulseReadback,
-  runVgpuHdrImpulseProbe,
 } from './vgpuImpulseProbe';
 
 function rgbaFixture(
@@ -75,32 +74,3 @@ describe('VGPU HDR impulse 读回分析', () => {
     })).toThrow('期望 16，实际 15');
   });
 });
-
-// 真实 Dawn/WebGPU 设备依赖主机驱动，只在专项命令显式开启，避免进入日常易波动单测：
-// HENJI_VGPU_GLOW_IMPULSE_PROBE=1 npx vitest run src/core/imageEdit/testing/vgpuImpulseProbe.test.ts
-if (process.env.HENJI_VGPU_GLOW_IMPULSE_PROBE === '1') {
-  describe('VGPU HDR impulse 真实设备专项 probe', () => {
-    it('通过 Target.readFloats 保留半浮点 HDR，并保持 impulse 能量与质心', async () => {
-      const { init } = await import('vgpu/node');
-      const gpu = await init();
-
-      try {
-        const result = await runVgpuHdrImpulseProbe(gpu);
-
-        expect(result.format).toBe('rgba16float');
-        expect(result.pixels).toHaveLength(65 * 65 * 4);
-        for (const [channel, expectedEnergy] of [8, 4, 2, 1].entries()) {
-          const metrics = result.analysis.channels[channel];
-          expect(metrics.signedEnergy).toBeCloseTo(expectedEnergy, 3);
-          expect(metrics.negativeEnergy).toBe(0);
-          expect(metrics.nonFiniteSamples).toBe(0);
-          expect(metrics.peak.value).toBeCloseTo(expectedEnergy, 3);
-          expect(metrics.centroidOffsetPx?.[0]).toBeCloseTo(0, 3);
-          expect(metrics.centroidOffsetPx?.[1]).toBeCloseTo(0, 3);
-        }
-      } finally {
-        gpu.dispose();
-      }
-    }, 30_000);
-  });
-}

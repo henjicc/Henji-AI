@@ -18,7 +18,8 @@ vi.mock('@/commands/projectState', () => ({
   updateProjectViewportRecord: vi.fn(),
   upsertProjectRecord: mocks.upsertProjectRecord,
 }))
-vi.mock('@/commands/imageEditorV3', () => ({
+vi.mock('@/commands/imageEditorV3', async (importOriginal) => ({
+  ...await importOriginal<typeof import('@/commands/imageEditorV3')>(),
   deleteImageEditorV3DocumentIfRevision: mocks.deleteDocumentIfRevision,
 }))
 vi.mock('@/platform/runtime', () => ({

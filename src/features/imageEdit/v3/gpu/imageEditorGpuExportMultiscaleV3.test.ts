@@ -33,7 +33,7 @@ let gpu: Gpu
 const registry = createBuiltInImageEditRenderNodeRegistry()
 
 beforeAll(async () => { gpu = await init() })
-afterAll(() => gpu.dispose())
+afterAll(() => gpu?.dispose())
 
 describe('GPU 多尺度分块导出（真实WebGPU）', () => {
   it.each([

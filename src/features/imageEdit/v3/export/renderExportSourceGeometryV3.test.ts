@@ -105,5 +105,6 @@ describe('真实异尺寸图层的 CPU 导出源几何', () => {
       expect(request.tileY * 512).toBeLessThan(Math.ceil(source.height / 2 ** request.mip))
     }
     expect(readSourceTile.mock.calls.some(([request]) => request.resourceRef === WIDE && request.tileX === 6)).toBe(true)
-  })
+  // 与上面的 10 层场景相同：18 块真实像素导出是正确性验收，不是 5 秒单测性能门槛。
+  }, 15_000)
 })

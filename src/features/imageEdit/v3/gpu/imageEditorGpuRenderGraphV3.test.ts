@@ -38,7 +38,7 @@ const registry = createBuiltInImageEditRenderNodeRegistry()
 let gpu: Gpu
 
 beforeAll(async () => { gpu = await init() })
-afterAll(() => gpu.dispose())
+afterAll(() => gpu?.dispose())
 
 describe('GPU RenderGraph 完整图层语义（真实 WebGPU）', () => {
   it.each(IMAGE_EDIT_BLEND_MODES_V3)('%s 混合与CPU真值一致', async (blendMode) => {

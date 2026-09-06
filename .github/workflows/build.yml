@@ -74,11 +74,65 @@ jobs:
       - name: 类型检查（主进程）
         run: npx tsc -p tsconfig.electron.json --noEmit
 
-      - name: 单元测试
-        run: npx vitest run
+      - name: 测试分层完整性检查
+        run: npm run test:suites
+
+      - name: 普通单元测试（不依赖真实 GPU）
+        run: npm run test:unit -- --maxWorkers=2 --minWorkers=1
 
       - name: 验证工具自检
         run: npm run test:validation-tools
+
+  gpu-tests:
+    name: WebGPU 像素正确性
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      # 0.3.1 官方 adapter 支持的显式软件设备；仍执行正式 WGSL，不是 CPU 业务回退。
+      VGPU_ADAPTER: software
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+      - run: npm ci
+      - name: 安装带 SHA-256 校验的官方软件 Vulkan 渲染器
+        run: npx --no-install vgpu install-software-renderer
+      - name: 验证设备与真实帧渲染（不可降级或跳过）
+        run: npx --no-install vgpu doctor --pretty
+      - name: 顺序执行 WebGPU 像素与 HDR probe
+        run: npm run test:gpu
+
+  image-export-tests:
+    name: 大图导出正确性
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+      - run: npm ci
+      - name: 独占 worker 执行真实尺寸图层与内存预算验收
+        run: npm run test:image-export
+
+  quality-gate:
+    name: 质量门禁
+    if: always()
+    needs: [checks, gpu-tests, image-export-tests]
+    runs-on: ubuntu-latest
+    steps:
+      - name: 所有必跑检查成功才允许交付
+        env:
+          CHECKS_RESULT: ${{ needs.checks.result }}
+          GPU_RESULT: ${{ needs.gpu-tests.result }}
+          IMAGE_EXPORT_RESULT: ${{ needs.image-export-tests.result }}
+        run: |
+          test "$CHECKS_RESULT" = success
+          test "$GPU_RESULT" = success
+          test "$IMAGE_EXPORT_RESULT" = success
 
   # ---------------------------------------------------------------------------
   # 安装包构建：只在推 v* 标签或手动触发时运行。
@@ -94,7 +148,7 @@ jobs:
   build:
     name: 构建 ${{ matrix.label }}
     if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
-    needs: checks
+    needs: quality-gate
     strategy:
       max-parallel: 1
       fail-fast: false
