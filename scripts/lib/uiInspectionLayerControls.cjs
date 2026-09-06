@@ -1,9 +1,11 @@
 const { openCanvasImageEditorV3Fixture } = require('./uiInspectionCanvasImageEditorV3.cjs')
+const { captureInspectionPage } = require('./uiInspectionCapture.cjs')
+const sharp = require('sharp')
 
 function createLayerControlsScene(context) {
   return {
     id: 'image-editor-layer-controls', surface: '画布', name: '画布节点-图片图层点击选择与变换控制点', writesUserData: true,
-    setup: async (page, _app, inspection) => {
+    setup: async (page, app, inspection) => {
       const { editor, dialog, fixture, projectId } = await openCanvasImageEditorV3Fixture({
         page, context, width: 960, height: 640, label: '图层交互测试', solidColor: 'rgb(30,90,160)',
         foreground: { width: 960, height: 640, color: 'rgb(230,120,30)', transform: [1, 0, 0, 1, 0, 0],
@@ -15,6 +17,22 @@ function createLayerControlsScene(context) {
       const frame = await editor.locator('[data-viewport-content]').boundingBox()
       if (!frame) throw new Error('缺少文档视口')
       const point = (x, y) => [frame.x + x * frame.width / 960, frame.y + y * frame.height / 640]
+      let releasePixelSamples = 0
+      const checkMovedPixels = async () => {
+        const bytes = await captureInspectionPage(app, page, { clip: frame })
+        const { data, info } = await sharp(bytes).ensureAlpha().raw().toBuffer({ resolveWithObject: true })
+        const pixel = (x, y) => {
+          const index = (Math.floor(y * info.height / 640) * info.width + Math.floor(x * info.width / 960)) * 4
+          return [...data.subarray(index, index + 3)]
+        }
+        // 这两点远离控制框和光标：旧位置必须露出蓝底，新位置必须保持橙色。
+        const old = pixel(170, 280), moved = pixel(380, 280)
+        if (old[2] - old[0] < 80 || moved[0] - moved[2] < 120) {
+          await inspection?.capture?.('release-position-flash')
+          throw new Error(`松手交接中图片闪回旧位置：${JSON.stringify({ old, moved, releasePixelSamples })}`)
+        }
+        releasePixelSamples += 1
+      }
       const revision = async () => Number(await editor.locator('[data-command-bar]').getAttribute('data-document-revision'))
       const waitForRevision = async (expected) => {
         try {
@@ -76,7 +94,14 @@ function createLayerControlsScene(context) {
         if (await revision() !== expectedRevision || await preview.getAttribute('data-preview-override-count') !== '0') {
           throw new Error('GPU 变换过程中写入了持久文档或草稿')
         }
-        await page.mouse.up()
+        if (trackTranslation) {
+          await checkMovedPixels()
+          // 通过原生窗口截图观察图片，不用控制框位置代替实际 GPU 合成结果。
+          await Promise.all([page.mouse.up(), (async () => {
+            for (let sample = 0; sample < 12; sample++) await checkMovedPixels()
+          })()])
+          await inspection?.capture?.('release-handoff')
+        } else await page.mouse.up()
         if (trackTranslation) await page.keyboard.up('Control')
         await waitForRevision(expectedRevision + 1)
       }
@@ -162,7 +187,7 @@ function createLayerControlsScene(context) {
       console.log(`[image-editor-layer-controls] ${JSON.stringify({ alphaClickThrough: true, revision: 8,
         undoCount: snapshot.history.undo.length, transform, gpuTransient: true, cancelPreserved: true,
         zoomedPicking: true, constantHandleSize: true, keyboardUndoRedo: true, closedReopened: true,
-        dragFrameSamples: 60, controlsFollowPointer: true })}`)
+        dragFrameSamples: 60, controlsFollowPointer: true, releasePixelSamples })}`)
     },
   }
 }

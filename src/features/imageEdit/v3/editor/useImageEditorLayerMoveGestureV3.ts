@@ -162,16 +162,24 @@ export function useImageEditorLayerMoveGestureV3(
       && typeof gesture.captureTarget.releasePointerCapture === 'function'
     ) gesture.captureTarget.releasePointerCapture(gesture.pointerId)
     if (gesture.gpuTransient) {
-      interactionSequenceRef.current += 1
-      renderSession.clearTransientLayerTransform(
-        gesture.layerId,
-        interactionSequenceRef.current,
-      )
-      renderSession.requestFrame('draft')
-      if (commit && gesture.changed) {
-        controller.updateLayerCommon(gesture.layerId, { transform: gesture.pendingTransform })
+      const cancelTransform = (): void => {
+        interactionSequenceRef.current += 1
+        renderSession.clearTransientLayerTransform(gesture.layerId, interactionSequenceRef.current)
+        renderSession.requestFrame('draft')
+        interactionRef.current?.feedback(gesture.layerId, null)
       }
-      releaseMoveFeedback(false)
+      try {
+        if (commit && gesture.changed) {
+          // 瞬态属于旧 GPU 场景：保留到 sync-scene 在安装新文档时原子清理。
+          // 此处提前 clear + render 会在 React 同步新快照前把旧位置呈现一帧。
+          controller.updateLayerCommon(gesture.layerId, { transform: gesture.pendingTransform })
+        } else cancelTransform()
+      } catch (error) {
+        cancelTransform()
+        throw error
+      } finally {
+        releaseMoveFeedback(false)
+      }
       return
     }
     if (commit && gesture.changed) {
