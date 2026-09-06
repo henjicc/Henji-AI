@@ -28,10 +28,11 @@ export function presentWindow(
   win: PresentableWindow,
   mode: WindowPresentationMode,
 ): void {
+  // 后台启动也先准备最大化状态，保证首次从 Dock 恢复时与前台启动一致。
+  win.maximize()
   if (mode === 'background') {
     win.minimize()
     return
   }
-  win.maximize()
   win.show()
 }

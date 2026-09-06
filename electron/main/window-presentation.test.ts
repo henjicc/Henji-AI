@@ -50,7 +50,7 @@ describe('resolveBackgroundThrottling', () => {
 })
 
 describe('presentWindow', () => {
-  it('minimizes a background window without showing or maximizing it', () => {
+  it('prepares a maximized background window before minimizing it without focusing it', () => {
     const win = {
       maximize: vi.fn(),
       minimize: vi.fn(),
@@ -60,8 +60,10 @@ describe('presentWindow', () => {
     presentWindow(win, 'background')
 
     expect(win.minimize).toHaveBeenCalledOnce()
-    expect(win.maximize).not.toHaveBeenCalled()
+    expect(win.maximize).toHaveBeenCalledOnce()
     expect(win.show).not.toHaveBeenCalled()
+    expect(win.maximize.mock.invocationCallOrder[0])
+      .toBeLessThan(win.minimize.mock.invocationCallOrder[0])
   })
 
   it('preserves the normal foreground presentation', () => {

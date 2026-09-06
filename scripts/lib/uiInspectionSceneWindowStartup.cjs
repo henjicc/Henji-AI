@@ -23,7 +23,7 @@ async function inspectRestore(electronApp, page, { initial = false } = {}) {
       await waitFor('restore', () => win.restore())
       win.focus()
       await new Promise((resolve) => setTimeout(resolve, 300))
-      return { before, after: win.getBounds(), wasMinimized, workArea, moves }
+      return { before, after: win.getBounds(), wasMinimized, isMaximized: win.isMaximized(), workArea, moves }
     } finally {
       win.off('move', onMove)
     }
@@ -32,7 +32,8 @@ async function inspectRestore(electronApp, page, { initial = false } = {}) {
   assert.deepEqual(result.after, result.before, '展开后窗口位置/尺寸发生变化')
   for (const bounds of result.moves) assert.deepEqual(bounds, result.before, '展开期间窗口发生二次移动')
   if (initial) {
-    assert.equal(result.wasMinimized, true, '启动场景必须从未显示过的后台窗口开始')
+    assert.equal(result.wasMinimized, true, '启动场景必须从后台最小化窗口开始')
+    assert.equal(result.isMaximized, true, '首次从 Dock 展开时必须已经最大化')
     assert.ok(result.before.y >= result.workArea.y,
       `初始窗口侵入菜单栏区域：${JSON.stringify(result)}`)
     assert.ok(result.before.x >= result.workArea.x, '初始窗口超出工作区左侧')
