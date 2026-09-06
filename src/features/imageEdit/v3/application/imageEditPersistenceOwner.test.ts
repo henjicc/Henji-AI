@@ -4,6 +4,7 @@ import type { ImageEditDocumentRepositoryV3 } from '@/core/imageEdit/v3/serviceC
 import { ImageMarkV3PersistenceQueue } from '@/features/imageMark/standalone/imageMarkV3Persistence'
 import { ImageEditCommandBusV3 } from './imageEditCommandBus'
 import { ImageEditPersistenceOwnerV3 } from './imageEditPersistenceOwner'
+import { getLogEvents } from '@/core/logging/store'
 
 function setup(save?: ImageEditDocumentRepositoryV3['save']) {
   const bus = new ImageEditCommandBusV3(createImageEditDocumentV3({ width: 8, height: 8, documentId: 'owned' }))
@@ -18,6 +19,20 @@ function setup(save?: ImageEditDocumentRepositoryV3['save']) {
 }
 
 describe('图片编辑唯一保存宿主', () => {
+  it('保存成功和失败的正式日志context保留文档归属，而不是被logger忽略的顶层字段', async () => {
+    const successful = setup()
+    successful.add('logged-success')
+    await successful.owner.confirm()
+    expect(getLogEvents().filter((event) => event.event === 'image_edit.v3.persistence.confirm.completed').at(-1)?.context)
+      .toEqual({ documentId: 'owned', revision: 1 })
+    const failed = setup(async () => { throw new Error('受控拒写') })
+    failed.add('logged-failure')
+    await expect(failed.owner.confirm()).rejects.toThrow('保存未确认')
+    expect(getLogEvents().filter((event) => event.event === 'image_edit.v3.persistence.confirm.failed').at(-1)?.context)
+      .toEqual({ documentId: 'owned', stage: 'document' })
+    successful.owner.dispose()
+    failed.owner.dispose()
+  })
   it('已有自动保存进行中时在业务修改前拒绝新批次，旧确认不能借新批次令牌落中间状态', async () => {
     let finish!: () => void
     const delayed = new Promise<void>((resolve) => { finish = resolve })

@@ -140,14 +140,14 @@ export class ImageEditPersistenceOwnerV3 implements ApplicationPersistencePartic
           this.projectedHistory = JSON.stringify(snapshot.history)
         }
         logger.info('图片编辑持久化确认完成', {
-          event: 'image_edit.v3.persistence.confirm.completed', documentId: this.documentId,
-          context: { revision: reference.revision },
+          event: 'image_edit.v3.persistence.confirm.completed',
+          context: { documentId: this.documentId, revision: reference.revision },
         })
         return this.queue.getReference()
       }
     } catch (cause) {
       logger.error('图片编辑持久化确认失败', cause, {
-        event: 'image_edit.v3.persistence.confirm.failed', documentId: this.documentId, context: { stage },
+        event: 'image_edit.v3.persistence.confirm.failed', context: { documentId: this.documentId, stage },
       })
       throw new ApplicationPersistenceFailure(
         '当前图片编辑内容已保留，但保存未确认。请重试保存，不要重复修改、新增、删除或撤销操作。',
