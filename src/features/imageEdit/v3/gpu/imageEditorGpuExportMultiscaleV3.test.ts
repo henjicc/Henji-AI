@@ -36,7 +36,7 @@ beforeAll(async () => { gpu = await init() })
 afterAll(() => gpu?.dispose())
 
 describe('GPU 多尺度分块导出（真实WebGPU）', () => {
-  it.each([
+  for (const [label, effectId, parameters] of [
     ['gaussian-blur', 'image.gaussian-blur-v2', { radius: 1000, mip: 0 }],
     ['legacy-blur', 'image.blur', { radiusPixels: 160 }],
     ['fast-blur', 'image.fast-blur-v3', { radius: 1000, mip: 0 }],
@@ -44,9 +44,11 @@ describe('GPU 多尺度分块导出（真实WebGPU）', () => {
       mode: 'glow', strength: 1, glowRange: 1, softness: 1 }],
     ['glow', 'image.vgpu-glow', { ...createDefaultVgpuGlowOperationParams(), intensity: 1,
       radius: 1, chromaticAberration: 1 }],
-  ] as const)('最大合法%s在core边界与全图GPU参考SSIM>=0.999且无可测接缝', async (
-    label, effectId, parameters,
-  ) => {
+  ] as const) {
+    // 最大 fast-blur 覆盖 14 次效果图遍历与 CPU 参考；CI llvmpipe 已实测超过 30 秒。
+    // 这里只给软件设备的该项正确性验收留出有界余量，不改变硬件期限或像素门槛。
+    const timeout = label === 'fast-blur' && process.env.VGPU_ADAPTER === 'software' ? 90_000 : 30_000
+    it(`最大合法${label}在core边界与全图GPU参考SSIM>=0.999且无可测接缝`, async () => {
     const document = createImageEditDocumentV3({ width: WIDTH, height: HEIGHT })
     document.layers = [
       createImageEditRasterLayerV3('source', '源', RESOURCE),
@@ -137,7 +139,8 @@ describe('GPU 多尺度分块导出（真实WebGPU）', () => {
     residual.dispose()
     release(wholeResources)
     whole.dispose()
-  }, 30_000)
+    }, timeout)
+  }
 })
 
 function layout(key: string, x: number, y: number, width: number, height: number, outputWidth: number) {
