@@ -6,8 +6,6 @@ import {
   planImageEditorViewportTilesV3,
 } from './viewportTilePlannerV3'
 
-const resourceRef = `sha256:${'a'.repeat(64)}` as const
-
 function pyramid(width: number, height: number): ImageEditorV3PyramidDescriptor {
   const levels: ImageEditorV3PyramidDescriptor['levels'] = []
   for (let mip = 0; mip <= 30; mip += 1) {
@@ -28,7 +26,6 @@ function pyramid(width: number, height: number): ImageEditorV3PyramidDescriptor 
 describe('图片编辑 V3 视口瓦片规划', () => {
   it('200MP 高位深适配视口只规划 15 个相交瓦片，不请求完整表面', () => {
     const plan = planImageEditorViewportTilesV3({
-      resourceRef,
       documentSize: { width: 20_000, height: 10_000 },
       pyramid: pyramid(20_000, 10_000),
       bitDepth: 32,
@@ -57,7 +54,6 @@ describe('图片编辑 V3 视口瓦片规划', () => {
 
   it('devicePixelRatio、缩放和平移会选择目标 mip 并只覆盖可见范围', () => {
     const highDpi = planImageEditorViewportTilesV3({
-      resourceRef,
       documentSize: { width: 20_000, height: 10_000 },
       pyramid: pyramid(20_000, 10_000),
       bitDepth: 8,
@@ -75,7 +71,6 @@ describe('图片编辑 V3 视口瓦片规划', () => {
     expect(highDpi.physicalPixelsPerMipPixel).toBeLessThanOrEqual(1)
 
     const panned = planImageEditorViewportTilesV3({
-      resourceRef,
       documentSize: { width: 4_096, height: 4_096 },
       pyramid: pyramid(4_096, 4_096),
       bitDepth: 8,
@@ -93,7 +88,6 @@ describe('图片编辑 V3 视口瓦片规划', () => {
     ])
 
     const zoomed = planImageEditorViewportTilesV3({
-      resourceRef,
       documentSize: { width: 4_096, height: 4_096 },
       pyramid: pyramid(4_096, 4_096),
       bitDepth: 8,
@@ -111,7 +105,6 @@ describe('图片编辑 V3 视口瓦片规划', () => {
 
   it('极端长宽比在粗 mip 只产生沿长边的少量瓦片', () => {
     const plan = planImageEditorViewportTilesV3({
-      resourceRef,
       documentSize: { width: 100_000, height: 100 },
       pyramid: pyramid(100_000, 100),
       bitDepth: 8,
@@ -132,7 +125,6 @@ describe('图片编辑 V3 视口瓦片规划', () => {
 
   it('halo 从文档坐标缩放到 mip，并纳入边缘裁剪后的字节估算', () => {
     const plan = planImageEditorViewportTilesV3({
-      resourceRef,
       documentSize: { width: 2_048, height: 2_048 },
       pyramid: pyramid(2_048, 2_048),
       bitDepth: 16,
@@ -163,7 +155,6 @@ describe('图片编辑 V3 视口瓦片规划', () => {
 
   it('位深必须显式提供，halo 在进入主进程前限制为 2048 文档像素', () => {
     const base = {
-      resourceRef,
       documentSize: { width: 4_096, height: 4_096 },
       pyramid: pyramid(4_096, 4_096),
       viewport: {
@@ -196,7 +187,6 @@ describe('图片编辑 V3 视口瓦片规划', () => {
   it('admission 拒绝时逐级降画质，最粗层仍超预算则明确失败', () => {
     const admit = vi.fn((candidate: { mip: number }) => candidate.mip >= 1)
     const plan = planImageEditorViewportTilesV3({
-      resourceRef,
       documentSize: { width: 2_048, height: 2_048 },
       pyramid: pyramid(2_048, 2_048),
       bitDepth: 8,
@@ -217,7 +207,6 @@ describe('图片编辑 V3 视口瓦片规划', () => {
     expect(admit.mock.calls.map(([candidate]) => candidate.mip)).toEqual([0, 1])
 
     expect(() => planImageEditorViewportTilesV3({
-      resourceRef,
       documentSize: { width: 2_048, height: 2_048 },
       pyramid: pyramid(2_048, 2_048),
       bitDepth: 8,
@@ -235,7 +224,6 @@ describe('图片编辑 V3 视口瓦片规划', () => {
 
   it('视口完全位于图片外时不请求瓦片，非法金字塔会被拒绝', () => {
     const offscreen = planImageEditorViewportTilesV3({
-      resourceRef,
       documentSize: { width: 1_024, height: 1_024 },
       pyramid: pyramid(1_024, 1_024),
       bitDepth: 8,
@@ -253,7 +241,6 @@ describe('图片编辑 V3 视口瓦片规划', () => {
     const invalid = pyramid(1_024, 1_024)
     invalid.levels[0] = { ...invalid.levels[0], columns: 3 }
     expect(() => planImageEditorViewportTilesV3({
-      resourceRef,
       documentSize: { width: 1_024, height: 1_024 },
       pyramid: invalid,
       bitDepth: 8,
@@ -270,7 +257,6 @@ describe('图片编辑 V3 视口瓦片规划', () => {
 
   it('静止预取半个视口，运动时再沿前进方向预取一个视口', () => {
     const base = {
-      resourceRef,
       documentSize: { width: 4_096, height: 2_048 },
       pyramid: pyramid(4_096, 2_048),
       bitDepth: 8 as const,
@@ -310,7 +296,6 @@ describe('图片编辑 V3 视口瓦片规划', () => {
   it('在清晰度滞回带内保持 mip，并能规划完整文档最粗兜底', () => {
     const descriptor = pyramid(8_192, 4_096)
     const held = planImageEditorViewportTilesV3({
-      resourceRef,
       documentSize: { width: 8_192, height: 4_096 },
       pyramid: descriptor,
       bitDepth: 8,
@@ -328,7 +313,6 @@ describe('图片编辑 V3 视口瓦片规划', () => {
 
     const baselinePyramid = pyramid(5_802, 3_655)
     const commonZoom = planImageEditorViewportTilesV3({
-      resourceRef,
       documentSize: { width: 5_802, height: 3_655 },
       pyramid: baselinePyramid,
       bitDepth: 8,
@@ -344,7 +328,6 @@ describe('图片编辑 V3 视口瓦片规划', () => {
     })
     expect(commonZoom).toMatchObject({ mip: 1, idealMip: 0 })
     const highZoom = planImageEditorViewportTilesV3({
-      resourceRef,
       documentSize: { width: 5_802, height: 3_655 },
       pyramid: baselinePyramid,
       bitDepth: 8,
@@ -362,7 +345,6 @@ describe('图片编辑 V3 视口瓦片规划', () => {
 
     const coarsest = descriptor.levels.at(-1)?.mip ?? 0
     const fallback = planImageEditorViewportTilesV3({
-      resourceRef,
       documentSize: { width: 8_192, height: 4_096 },
       pyramid: descriptor,
       bitDepth: 8,
@@ -382,9 +364,37 @@ describe('图片编辑 V3 视口瓦片规划', () => {
     expect(fallback.tiles).toHaveLength(1)
   })
 
+  it('安全 mip 下界不受视口理想层级影响，预算只能继续降到更粗层', () => {
+    const descriptor = pyramid(8_192, 8_192)
+    const admitted = planImageEditorViewportTilesV3({
+      documentSize: { width: 8_192, height: 8_192 },
+      pyramid: descriptor,
+      bitDepth: 8,
+      viewport: {
+        documentX: 0, documentY: 0, width: 8_192, height: 8_192,
+        zoom: 1, devicePixelRatio: 1,
+      },
+      minimumMip: 3,
+      coverage: 'document',
+      admit: ({ mip }) => mip >= 4,
+    })
+
+    expect(admitted).toMatchObject({ mip: 4, idealMip: 0, degradedForBudget: true })
+    expect(Math.max(admitted.mipSize.width, admitted.mipSize.height)).toBeLessThanOrEqual(1_024)
+    expect(() => planImageEditorViewportTilesV3({
+      documentSize: { width: 8_192, height: 8_192 },
+      pyramid: descriptor,
+      bitDepth: 8,
+      viewport: {
+        documentX: 0, documentY: 0, width: 8_192, height: 8_192,
+        zoom: 1, devicePixelRatio: 1,
+      },
+      minimumMip: 31,
+    })).toThrow('安全 mip 下界必须是 0～30 的整数')
+  })
+
   it('输出几何与源金字塔尺寸独立校验', () => {
     const plan = planImageEditorViewportTilesV3({
-      resourceRef,
       documentSize: { width: 1_000, height: 800 },
       sourceSize: { width: 4_000, height: 3_000 },
       pyramid: pyramid(4_000, 3_000),

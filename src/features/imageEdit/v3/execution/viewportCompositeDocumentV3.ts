@@ -12,15 +12,15 @@ import {
   type ImageEditDocumentV3,
   type ImageEditRect,
   type ImageEditRenderPlan,
-  type ImageEditRenderPlanNode,
   type ImageEditOutputGeometryV3,
   type ImageEditSize,
 } from '@/core/imageEdit/v3'
 import type { ImageEditRenderQuality } from '@/core/imageEdit/v3/renderNodeDefinition'
-import { resolveImageEditRasterSourceExtentV3, resolveImageEditRasterStorageSizeV3, imageEditRasterOverrideRectV3 } from '@/core/imageEdit/v3/execution/rasterSourceGeometry'
+import { resolveImageEditRasterStorageSizeV3, imageEditRasterOverrideRectV3 } from '@/core/imageEdit/v3/execution/rasterSourceGeometry'
 import { imageEditRasterBoundaryBasePointsV3 } from '@/core/imageEdit/v3/execution/rasterTileReplacement'
 import type {
   ImageEditorV3ResourceDescriptor,
+  ImageEditorV3PyramidDescriptor,
   ImageEditorV3ResourceRef,
 } from '@/platform/contracts/imageEditorV3'
 import {
@@ -35,6 +35,10 @@ import {
   type ImageEditorViewportTilePlanV3,
   type ImageEditorViewportTileRequestV3,
 } from './viewportTilePlannerV3'
+import {
+  resolveImageEditorViewportSourceMipV3,
+} from './viewportTileSchedulingSupportV3'
+import { createImageEditorViewportSamplingGridResolverV3 } from './viewportCompositeSamplingGridV3'
 
 const registry = createBuiltInImageEditRenderNodeRegistry()
 const RESOURCE_REF_PATTERN = /^sha256:[a-f0-9]{64}$/
@@ -52,7 +56,7 @@ export interface PreparedImageEditorViewportCompositeV3 {
   plan: ImageEditRenderPlan
   outputGeometry: ImageEditOutputGeometryV3
   resourceRefs: readonly ImageEditorV3ResourceRef[]
-  primaryResourceRef: ImageEditorV3ResourceRef
+  primaryResourceRef: ImageEditorV3ResourceRef | null
   /** 局部 halo 由区域 RenderPlan 递归规划，不再绑在屏幕瓦片上。 */
   haloDocumentPixels: 0
   resourceDescriptors: readonly ImageEditorV3ResourceDescriptor[]
@@ -89,35 +93,6 @@ function rasterResourceId(node: ImageEditRenderPlan['nodes'][number]): ImageEdit
     : null
 }
 
-/** 顺着单输入效果链找到栅格源，使图层仿射以资源自身几何而非文档几何裁剪。 */
-export function createImageEditorViewportSourceSizeResolverV3(
-  plan: ImageEditRenderPlan,
-  resourceSizes: ReadonlyMap<string, ImageEditSize>,
-  fallback: ImageEditSize,
-  mip: number,
-  canvasSize: ImageEditSize = { width: fallback.width * (2 ** mip), height: fallback.height * (2 ** mip) },
-): (node: ImageEditRenderPlanNode) => ImageEditSize {
-  const nodes = new Map(plan.nodes.map((node) => [node.id, node]))
-  const resolve = (node: ImageEditRenderPlanNode, seen: Set<string>): ImageEditSize => {
-    if (seen.has(node.id)) return fallback
-    seen.add(node.id)
-    // composite 的输入/输出都在文档坐标系；只有它逆变换后的 content 链使用源几何。
-    if (node.definitionId === 'composite.layer' || node.definitionId === 'vector.annotation') {
-      return fallback
-    }
-    const resourceRef = rasterResourceId(node)
-    if (node.definitionId === 'source.raster') {
-      const size = resourceRef ? resourceSizes.get(resourceRef) : undefined
-      const keys = isRecord(node.parameters.tiles) ? Object.keys(node.parameters.tiles) : []
-      return mipSize(resolveImageEditRasterSourceExtentV3(size ?? null, canvasSize, keys), mip)
-    }
-    if (node.inputNodeIds.length !== 1) return fallback
-    const input = nodes.get(node.inputNodeIds[0] ?? '')
-    return input ? resolve(input, seen) : fallback
-  }
-  return (node) => resolve(node, new Set())
-}
-
 function activeBrushResourceIds(plan: ImageEditRenderPlan): ReadonlySet<string> {
   const result = new Set<string>()
   for (const node of plan.nodes) {
@@ -147,16 +122,13 @@ export function prepareImageEditorViewportCompositeV3(
     }
   }
   const resourceRefs = nodeResourceRefs(plan)
-  if (resourceRefs.length === 0) {
-    throw new ImageEditorViewportCompositeUnsupportedErrorV3('当前文档没有可规划的图片金字塔资源')
-  }
   return {
     document,
     quality,
     plan,
     outputGeometry: resolveImageEditOutputGeometryV3(document.geometry),
     resourceRefs,
-    primaryResourceRef: resourceRefs[0],
+    primaryResourceRef: resourceRefs[0] ?? null,
     haloDocumentPixels: 0,
     resourceDescriptors,
   }
@@ -194,6 +166,7 @@ function requirementsForCandidate(
   prepared: PreparedImageEditorViewportCompositeV3,
   candidate: ImageEditorViewportTileCandidateV3,
   resourceSizes: ReadonlyMap<string, ImageEditSize> = new Map(),
+  sourceMips: ReadonlyMap<string, number> = new Map(),
 ): {
   plan: ImageEditRenderPlan
   rasterRegions: ReadonlyMap<string, readonly ImageEditRect[]>
@@ -210,12 +183,12 @@ function requirementsForCandidate(
         size: mipSize(prepared.document.geometry, candidate.mip),
         scaleX: 1 / (2 ** candidate.mip),
         scaleY: 1 / (2 ** candidate.mip),
-        resolveSourceSize: createImageEditorViewportSourceSizeResolverV3(
+        resolveSamplingGrid: createImageEditorViewportSamplingGridResolverV3(
           plan,
           resourceSizes,
-          mipSize(prepared.document.geometry, candidate.mip),
-          candidate.mip,
+          sourceMips,
           prepared.document.geometry,
+          candidate.mip,
         ),
       },
     ),
@@ -256,15 +229,30 @@ export function createImageEditorViewportSourceTileRequestsV3(
   bitDepth: 8 | 16 | 32,
   wholeSource = false,
   resourceSizes: ReadonlyMap<string, ImageEditSize> = new Map(),
+  resourcePyramids: ReadonlyMap<ImageEditorV3ResourceRef, ImageEditorV3PyramidDescriptor> = new Map(),
 ): ImageEditorViewportTileRequestV3[] {
   const requests = new Map<string, ImageEditorViewportTileRequestV3>()
-  const addRegions = (resourceRef: ImageEditorV3ResourceRef, regions: readonly ImageEditRect[]): void => {
+  const sourceMips = new Map(prepared.resourceRefs.map((resourceRef) => [
+    resourceRef,
+    resourcePyramids.has(resourceRef)
+      ? resolveImageEditorViewportSourceMipV3(resourcePyramids.get(resourceRef)!, candidate.mip)
+      : candidate.mip,
+  ]))
+  const addRegions = (
+    resourceRef: ImageEditorV3ResourceRef,
+    regions: readonly ImageEditRect[],
+    coordinateMip = candidate.mip,
+  ): void => {
     const sourceSize = resourceSizes.get(resourceRef) ?? prepared.document.geometry
+    const sourceMip = sourceMips.get(resourceRef) ?? candidate.mip
     for (const region of regions) {
-      for (const coordinate of enumerateTilesForRect(sourceSize, candidate.mip, region)) {
+      if (coordinateMip !== sourceMip) {
+        throw new Error('视口源读取区域与采样网格 mip 不一致')
+      }
+      for (const coordinate of enumerateTilesForRect(sourceSize, sourceMip, region)) {
         const request = sourceRequest(
           resourceRef,
-          candidate.mip,
+          sourceMip,
           coordinate.x,
           coordinate.y,
           bitDepth,
@@ -276,23 +264,33 @@ export function createImageEditorViewportSourceTileRequestsV3(
   }
   if (wholeSource) {
     for (const resourceRef of prepared.resourceRefs) {
-      const size = mipSize(resourceSizes.get(resourceRef) ?? prepared.document.geometry, candidate.mip)
-      addRegions(resourceRef, [{ x: 0, y: 0, ...size }])
+      const size = mipSize(
+        resourceSizes.get(resourceRef) ?? prepared.document.geometry,
+        sourceMips.get(resourceRef) ?? candidate.mip,
+      )
+      addRegions(resourceRef, [{ x: 0, y: 0, ...size }], sourceMips.get(resourceRef))
     }
   }
-  const requirements = requirementsForCandidate(prepared, candidate, resourceSizes)
+  const requirements = requirementsForCandidate(prepared, candidate, resourceSizes, sourceMips)
   for (const node of requirements.plan.nodes) {
     if (node.definitionId === 'source.raster') {
       const resourceRef = rasterResourceId(node)
       const regions = requirements.rasterRegions.get(node.id)
-      if (resourceRef && regions) addRegions(resourceRef, regions)
-      if (resourceRef && candidate.mip >= 10 && isRecord(node.parameters.tiles)) {
+      const rasterMip = resourceRef
+        ? sourceMips.get(resourceRef) ?? candidate.mip
+        : candidate.mip
+      if (resourceRef && regions) addRegions(
+        resourceRef,
+        regions,
+        rasterMip,
+      )
+      if (resourceRef && rasterMip >= 10 && isRecord(node.parameters.tiles)) {
         const size = resourceSizes.get(resourceRef)
         if (!size) throw new Error('画笔边界采样缺少真实源几何')
         const storage = resolveImageEditRasterStorageSizeV3(size, prepared.document.geometry)
         const rectangles = Object.keys(node.parameters.tiles).map((key) => imageEditRasterOverrideRectV3(storage, key))
-        const sampleRegions = wholeSource ? [{ x: 0, y: 0, ...mipSize(size, candidate.mip) }] : regions ?? []
-        for (const region of sampleRegions) for (const point of imageEditRasterBoundaryBasePointsV3(region, candidate.mip, size, rectangles)) {
+        const sampleRegions = wholeSource ? [{ x: 0, y: 0, ...mipSize(size, rasterMip) }] : regions ?? []
+        for (const region of sampleRegions) for (const point of imageEditRasterBoundaryBasePointsV3(region, rasterMip, size, rectangles)) {
           const request = sourceRequest(resourceRef, 0, Math.floor(point.x / 512), Math.floor(point.y / 512), bitDepth, size)
           requests.set(request.key, request)
         }
@@ -301,7 +299,11 @@ export function createImageEditorViewportSourceTileRequestsV3(
     if (node.mask && !isImageEditSparseMaskReferenceV3(node.mask)) {
       const regions = requirements.maskRegions.get(node.id)
       if (regions && RESOURCE_REF_PATTERN.test(node.mask.resourceId)) {
-        addRegions(node.mask.resourceId as ImageEditorV3ResourceRef, regions)
+        addRegions(
+          node.mask.resourceId as ImageEditorV3ResourceRef,
+          regions,
+          sourceMips.get(node.mask.resourceId as ImageEditorV3ResourceRef) ?? candidate.mip,
+        )
       }
     }
   }
@@ -313,24 +315,26 @@ export function estimateImageEditorViewportWorkingRegionPixelsV3(
   candidate: ImageEditorViewportTileCandidateV3,
   wholeSource = false,
   resourceSizes: ReadonlyMap<string, ImageEditSize> = new Map(),
+  sourceMips: ReadonlyMap<string, number> = new Map(),
+  sourceDecodePixels = 0,
 ): number {
-  // 跨 sparse/source 的像素中心足迹可能要求 mip0 底图；同时计入解码后的 Float32 常驻区域。
-  const boundaryPixels = candidate.mip >= 10
-    ? createImageEditorViewportSourceTileRequestsV3(prepared, candidate, 32, wholeSource, resourceSizes)
-      .filter((tile) => tile.mip === 0).reduce((sum, tile) => sum + tile.width * tile.height, 0)
-    : 0
+  // sourceDecodePixels 直接来自本候选的真实读取请求，包含 sparse 边界补读和源实际 mip。
+  // 预算不得在这里用输出 mip 再推导一套源请求，否则缺层 pyramid 会低估 Float32 工作集。
   if (wholeSource) {
     const canvas = mipSize(prepared.document.geometry, candidate.mip)
-    return Math.max(boundaryPixels, canvas.width * canvas.height, ...prepared.resourceRefs.map((resourceRef) => {
-      const size = mipSize(resourceSizes.get(resourceRef) ?? prepared.document.geometry, candidate.mip)
+    return Math.max(sourceDecodePixels, canvas.width * canvas.height, ...prepared.resourceRefs.map((resourceRef) => {
+      const size = mipSize(
+        resourceSizes.get(resourceRef) ?? prepared.document.geometry,
+        sourceMips.get(resourceRef) ?? candidate.mip,
+      )
       return size.width * size.height
     }))
   }
-  const requirements = requirementsForCandidate(prepared, candidate, resourceSizes)
-  return [
+  const requirements = requirementsForCandidate(prepared, candidate, resourceSizes, sourceMips)
+  return Math.max(sourceDecodePixels, ...[
     ...outputRegionsForCandidate(prepared, candidate),
     ...[...requirements.rasterRegions.values(), ...requirements.maskRegions.values()].flat(),
-  ].reduce((largest, region) => Math.max(largest, region.width * region.height), boundaryPixels)
+  ].map((region) => region.width * region.height))
 }
 
 function brushIntersectsRegion(
@@ -355,6 +359,7 @@ export function collectImageEditorViewportBrushRequestsV3(
   candidate: ImageEditorViewportTilePlanV3,
   wholeSource = false,
   resourceSizes: ReadonlyMap<string, ImageEditSize> = new Map(),
+  sourceMips: ReadonlyMap<string, number> = new Map(),
 ): ImageEditorPreviewBrushResourceRequestV3[] {
   const activeBrushes = activeBrushResourceIds(prepared.plan)
   const masks = createImageEditorSparseMaskPlanV3(prepared.plan, prepared.document.geometry, prepared.resourceDescriptors)
@@ -363,28 +368,38 @@ export function collectImageEditorViewportBrushRequestsV3(
     .filter((request): request is ImageEditorPreviewBrushResourceRequestV3 => request.kind === 'brush-tile'
       && (request.storage === 'rgba-float32' ? activeBrushes : activeMasks).has(request.resourceId))
   if (wholeSource) return brushRequests
-  const requirements = requirementsForCandidate(prepared, candidate, resourceSizes)
-  const regionsByResource = new Map<string, ImageEditRect[]>()
-  const append = (resourceId: string, regions: readonly ImageEditRect[]): void => {
+  const requirements = requirementsForCandidate(prepared, candidate, resourceSizes, sourceMips)
+  const regionsByResource = new Map<string, Array<{ region: ImageEditRect; mip: number }>>()
+  const append = (
+    resourceId: string,
+    regions: readonly ImageEditRect[],
+    mip: number,
+  ): void => {
     const current = regionsByResource.get(resourceId) ?? []
-    current.push(...regions)
+    current.push(...regions.map((region) => ({ region, mip })))
     regionsByResource.set(resourceId, current)
   }
   for (const node of requirements.plan.nodes) {
     const rasterRegions = requirements.rasterRegions.get(node.id)
     if (rasterRegions && node.definitionId === 'source.raster' && isRecord(node.parameters.tiles)) {
+      const resourceRef = rasterResourceId(node)
+      const mip = resourceRef
+        ? sourceMips.get(resourceRef) ?? candidate.mip
+        : candidate.mip
       for (const resourceId of Object.values(node.parameters.tiles)) {
-        if (typeof resourceId === 'string') append(resourceId, rasterRegions)
+        if (typeof resourceId === 'string') append(resourceId, rasterRegions, mip)
       }
     }
     const maskRegions = requirements.maskRegions.get(node.id)
     if (maskRegions && node.mask && isImageEditSparseMaskReferenceV3(node.mask)) {
-      for (const resourceId of Object.values(node.mask.tiles)) append(resourceId, maskRegions)
+      for (const resourceId of Object.values(node.mask.tiles)) {
+        append(resourceId, maskRegions, candidate.mip)
+      }
     }
   }
   return brushRequests.filter((request) => (
-    regionsByResource.get(request.resourceId)?.some((region) => (
-      brushIntersectsRegion(request, region, candidate.mip)
+    regionsByResource.get(request.resourceId)?.some(({ region, mip }) => (
+      brushIntersectsRegion(request, region, mip)
     )) ?? false
   ))
 }

@@ -1,14 +1,20 @@
 import { describe, expect, it } from 'vitest'
 import {
-  createImageEditDocumentV3, createImageEditGroupLayerV3, createImageEditRasterLayerV3, createTileRegion,
+  createImageEditAnnotationLayerV3, createImageEditDocumentV3, createImageEditGroupLayerV3,
+  createImageEditRasterLayerV3, createTileRegion,
   ImageEditRenderScheduler, ImageEditResourceBudget, mipSize,
   type ImageEditDocumentV3,
 } from '@/core/imageEdit/v3'
 import type { ImageEditorV3PyramidDescriptor, ImageEditorV3ResourceRef, ImageEditorV3SourceTile } from '@/platform/contracts/imageEditorV3'
 import { ImageEditorViewportTileSchedulerV3 } from './viewportTileSchedulerV3'
 import { ImageEditorViewportCompositeClientV3 } from './viewportCompositeClientV3'
-import { ImageEditorViewportCompositeUnsupportedErrorV3, prepareImageEditorViewportCompositeV3 } from './viewportCompositeDocumentV3'
-import { renderImageEditorViewportCompositeV3, type ImageEditorViewportRenderedRegionV3 } from './viewportCompositeRendererV3'
+import { ImageEditorPreviewBrushTileLoaderV3 } from './previewBrushTileLoaderV3'
+import { IMAGE_EDITOR_V3_BRUSH_TILE_MEDIA_TYPE } from '../application/imageEditorResourceDescriptorsV3'
+import {
+  renderImageEditorViewportCompositeV3,
+  type ImageEditorViewportCompositeRendererDependenciesV3,
+  type ImageEditorViewportRenderedRegionV3,
+} from './viewportCompositeRendererV3'
 import type { ImageEditorViewportCompositeWorkerRequestV3 } from './viewportCompositeProtocolV3'
 import { bitmap, emitCompletedFrame, FakeViewportWorker, RENDER_IDENTITY } from './viewportCompositeClientV3.testSupport'
 
@@ -28,11 +34,23 @@ function pyramid(source: Source): ImageEditorV3PyramidDescriptor {
 }
 
 /** 只替换存储读取及 Worker 传输，保留客户端、调度器、资源依赖规划与 CPU 像素执行。 */
-async function render(document: ImageEditDocumentV3, sources: ReadonlyMap<ImageEditorV3ResourceRef, Source>): Promise<{
+async function render(
+  document: ImageEditDocumentV3,
+  sources: ReadonlyMap<ImageEditorV3ResourceRef, Source>,
+  options: {
+    minimumMip?: number
+    descriptors?: Array<{ resourceRef: ImageEditorV3ResourceRef; byteLength: number; mediaType: string }>
+    brushLoader?: ImageEditorPreviewBrushTileLoaderV3
+    rasterizeAnnotations?: ImageEditorViewportCompositeRendererDependenciesV3['rasterizeAnnotations']
+  } = {},
+): Promise<{
   reads: Array<{ resourceRef: string; mip: number; tileX: number }>
+  describes: number
+  request: Extract<ImageEditorViewportCompositeWorkerRequestV3, { type: 'render' }>
   pixel(x: number, y: number): number[]
 }> {
   const reads: Array<{ resourceRef: string; mip: number; tileX: number }> = []
+  let describes = 0
   const source = (ref: ImageEditorV3ResourceRef): Source => {
     const found = sources.get(ref)
     if (!found) throw new Error('测试源不存在')
@@ -40,7 +58,7 @@ async function render(document: ImageEditDocumentV3, sources: ReadonlyMap<ImageE
   }
   const scheduler = new ImageEditorViewportTileSchedulerV3({
     sessionId: 'heterogeneous-source-integration',
-    describePyramid: async ({ resourceRef }) => pyramid(source(resourceRef)),
+    describePyramid: async ({ resourceRef }) => { describes += 1; return pyramid(source(resourceRef)) },
     readSourceTile: async (request): Promise<ImageEditorV3SourceTile> => {
       const original = source(request.resourceRef)
       expect(pyramid(original).levels.some(({ mip }) => mip === request.mip)).toBe(true)
@@ -60,7 +78,9 @@ async function render(document: ImageEditDocumentV3, sources: ReadonlyMap<ImageE
       super.postMessage(message)
       if (message.type !== 'render') return
       void renderImageEditorViewportCompositeV3(message, new AbortController().signal,
-        (region) => { regions.push(region) }).then(() => {
+        (region) => { regions.push(region) }, {
+          ...(options.rasterizeAnnotations ? { rasterizeAnnotations: options.rasterizeAnnotations } : {}),
+        }).then(() => {
         emitCompletedFrame(this, message, { revision: document.revision, mip: message.plan.mip, width: 64, height: 64 },
           regions.map(({ outputRect }) => ({ outputRect, bitmap: bitmap(outputRect.width, outputRect.height) })))
       }).catch((error: unknown) => {
@@ -72,20 +92,27 @@ async function render(document: ImageEditDocumentV3, sources: ReadonlyMap<ImageE
   const worker = new CpuWorker()
   const budget = new ImageEditResourceBudget()
   const client = new ImageEditorViewportCompositeClientV3({ sessionId: 'source-geometry-client', scheduler,
-    workerFactory: () => worker, resourceBudget: budget, renderScheduler: new ImageEditRenderScheduler() })
+    workerFactory: () => worker, resourceBudget: budget, renderScheduler: new ImageEditRenderScheduler(),
+    ...(options.brushLoader ? { brushTileLoader: options.brushLoader } : {}) })
   try {
-    const result = await client.render({ document, ...RENDER_IDENTITY, quality: 'stable', resourceDescriptors: [],
+    const result = await client.render({ document, ...RENDER_IDENTITY, quality: 'stable',
+      resourceDescriptors: options.descriptors ?? [], minimumMip: options.minimumMip,
       viewportKey: 'source-geometry', coverage: 'document', overscanViewports: 0,
       viewport: { documentX: 0, documentY: 0, width: 64, height: 64, zoom: 1, devicePixelRatio: 1 } })
     result.release()
     expect(regions).toHaveLength(1)
-    expect(regions[0].outputRect).toEqual({ x: 0, y: 0, width: 64, height: 64 })
     const request = worker.messages.find((message) => message.type === 'render')
     if (!request || request.type !== 'render') throw new Error('缺少正式 Worker 请求')
+    const outputSize = mipSize(document.geometry, request.plan.mip)
+    expect(regions[0].outputRect).toEqual({ x: 0, y: 0, ...outputSize })
     expect(request.resourceSizes).toEqual([...sources].map(([resourceRef, size]) => ({
       resourceRef, width: size.width, height: size.height,
     })))
-    return { reads, pixel: (x: number, y: number): number[] => Array.from(regions[0].tile.data.slice((y * 64 + x) * 4, (y * 64 + x) * 4 + 4)) }
+    return { reads, describes, request,
+      pixel: (x: number, y: number): number[] => Array.from(regions[0].tile.data.slice(
+        (y * regions[0].tile.width + x) * 4,
+        (y * regions[0].tile.width + x) * 4 + 4,
+      )) }
   } finally {
     client.dispose()
     expect(budget.snapshot().totalBytes).toBe(0)
@@ -113,14 +140,90 @@ describe('CPU 视口异尺寸源的完整外层入口', () => {
     } finally { scheduler.dispose() }
   })
 
-  it('全隐藏与空组保留既有无图片资源 Unsupported 分类，不借隐藏图片伪造可见像素', () => {
+  it('全隐藏与空组通过正式客户端输出透明像素且 0 源读取', async () => {
     const document = createImageEditDocumentV3({ width: 64, height: 64, sourceResourceId: SOURCE })
     document.layers[0].visible = false
     document.layers.push(createImageEditGroupLayerV3('empty', '空组'))
-    expect(() => prepareImageEditorViewportCompositeV3(document, 'stable', []))
-      .toThrow(ImageEditorViewportCompositeUnsupportedErrorV3)
-    expect(() => prepareImageEditorViewportCompositeV3(document, 'stable', []))
-      .toThrow('当前文档没有可规划的图片金字塔资源')
+    const result = await render(document, new Map())
+    expect(result.describes).toBe(0)
+    expect(result.reads).toEqual([])
+    expect(result.request.resourceSizes).toEqual([])
+    expect(result.request.sourceMipLevels).toEqual([])
+    expect(result.pixel(0, 0)).toEqual([0, 0, 0, 0])
+  })
+
+  it('无图片源的标注仍执行区域 RenderPlan，不被透明快路吞掉', async () => {
+    const document = createImageEditDocumentV3({ width: 64, height: 64 })
+    document.layers = [createImageEditAnnotationLayerV3('annotation', '标注')]
+    const result = await render(document, new Map(), {
+      rasterizeAnnotations: (_node, _document, region) => {
+        const data = new Float32Array(region.width * region.height * 4)
+        data.set([0.5, 0, 0, 0.5])
+        return { width: region.width, height: region.height, storage: 'rgba-float32', alpha: 'premultiplied', colorDomain: 'linear-light',
+          workingSpace: 'srgb', transferFunction: 'srgb', referenceWhiteNits: 203, data }
+      },
+    })
+    expect(result.describes).toBe(0)
+    expect(result.reads).toEqual([])
+    expect(result.pixel(0, 0)[0]).toBeGreaterThan(0)
+  })
+
+  it('无底图的稀疏画笔仍从正式客户端进入 Worker 并输出非透明像素', async () => {
+    const document = createImageEditDocumentV3({ width: 64, height: 64 })
+    const raster = createImageEditRasterLayerV3('paint', '绘画')
+    const brush = `sha256:${'4'.repeat(64)}` as const
+    raster.tiles = { '0/0/0': brush }
+    document.layers = [raster]
+    const data = new Float32Array(64 * 64 * 4)
+    for (let offset = 0; offset < data.length; offset += 4) data.set([0, 0.5, 0, 0.5], offset)
+    const brushLoader = new ImageEditorPreviewBrushTileLoaderV3({
+      reader: async ({ tiles }) => ({ tiles: tiles.map(({ tileKey }) => ({
+        tileKey,
+        tile: { width: 64, height: 64, storage: 'rgba-float32', colorDomain: 'linear-light', workingSpace: 'srgb',
+          transferFunction: 'srgb', referenceWhiteNits: 203, alpha: 'premultiplied', data: data.slice() },
+      })) }),
+    })
+    const result = await render(document, new Map(), {
+      descriptors: [{ resourceRef: brush, byteLength: data.byteLength,
+        mediaType: IMAGE_EDITOR_V3_BRUSH_TILE_MEDIA_TYPE }],
+      brushLoader,
+    })
+    expect(result.describes).toBe(0)
+    expect(result.reads).toEqual([])
+    expect(result.pixel(0, 0)[1]).toBeGreaterThan(0)
+    expect(result.pixel(0, 0)[3]).toBeCloseTo(0.5, 5)
+  })
+
+  it('小图源经明确缩放铺满画布时，更粗输出 mip 仍按真实末级读取并保留像素', async () => {
+    const document = createImageEditDocumentV3({ width: 64, height: 64, sourceResourceId: SOURCE })
+    document.layers[0].transform = [64, 0, 0, 64, 0, 0]
+    const result = await render(
+      document,
+      new Map([[SOURCE, { width: 1, height: 1, rgba: [255, 0, 0, 255] }]]),
+      { minimumMip: 3 },
+    )
+    expect(result.request.plan).toMatchObject({ mip: 3, mipSize: { width: 8, height: 8 } })
+    expect(result.request.sourceMipLevels).toEqual([{ resourceRef: SOURCE, mip: 0 }])
+    expect(result.reads).toEqual([expect.objectContaining({ resourceRef: SOURCE, mip: 0, tileX: 0 })])
+    const center = result.pixel(4, 4)
+    expect(center[0]).toBeCloseTo(center[3], 5)
+    expect(center[0]).toBeGreaterThan(0.8)
+    expect(result.pixel(0, 0)[0]).toBeGreaterThan(0)
+    expect(result.pixel(7, 7)[0]).toBeGreaterThan(0)
+  })
+
+  it('奇数小图源在输出 mip 超过末级时仍按二次幂坐标缩放，不按 ceil 尺寸拉满', async () => {
+    const document = createImageEditDocumentV3({ width: 64, height: 64, sourceResourceId: SOURCE })
+    const result = await render(
+      document,
+      new Map([[SOURCE, { width: 3, height: 5, rgba: [255, 0, 0, 255] }]]),
+      { minimumMip: 4 },
+    )
+    expect(result.request.plan).toMatchObject({ mip: 4, mipSize: { width: 4, height: 4 } })
+    expect(result.request.sourceMipLevels).toEqual([{ resourceRef: SOURCE, mip: 3 }])
+    expect(result.pixel(0, 0)[3]).toBeGreaterThan(0)
+    expect(result.pixel(0, 0)[3]).toBeLessThan(1)
+    expect(result.pixel(1, 0)).toEqual([0, 0, 0, 0])
   })
 
   it('16×16 首源放入 64×64 文档，源外透明且没有将源 metadata 改成文档尺寸', async () => {

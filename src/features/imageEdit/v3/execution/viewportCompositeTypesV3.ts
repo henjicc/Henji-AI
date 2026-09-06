@@ -41,6 +41,8 @@ export interface ImageEditorViewportCompositeRequestV3 {
   phase?: 'coarse' | 'analysis' | 'target'
   /** 完整文档粗略兜底使用最粗 mip；普通视口渲染省略。 */
   preferredMip?: number
+  /** 安全帧硬下界；即使视口需求更细，CPU 也不得规划更细 mip。 */
+  minimumMip?: number
   /** document 只用于 generation 原子晋升前的全图粗略覆盖。 */
   coverage?: 'viewport' | 'document'
   /** 在受限 mip 上准备全局效果共享分析，完成前不启动目标视口。 */

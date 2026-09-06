@@ -34,7 +34,6 @@ describe('视口合成候选联合预算', () => {
     })
     const prepared = prepareImageEditorViewportCompositeV3(document, 'stable', [])
     const candidate = planImageEditorViewportTilesV3({
-      resourceRef: RESOURCE,
       documentSize: { width: 20_000, height: 10_000 },
       pyramid: pyramid(20_000, 10_000),
       viewport: {
@@ -43,7 +42,15 @@ describe('视口合成候选联合预算', () => {
       },
       bitDepth: 32,
     })
-    const shared = { prepared, document, candidate, bitDepth: 32 as const, wholeSource: false }
+    const shared = {
+      prepared,
+      document,
+      candidate,
+      bitDepth: 32 as const,
+      wholeSource: false,
+      resourceSizes: new Map([[RESOURCE, document.geometry]]),
+      resourcePyramids: new Map([[RESOURCE, pyramid(20_000, 10_000)]]),
+    }
 
     expect(imageEditorViewportCompositeCandidateFitsBudgetV3({
       ...shared,
@@ -57,5 +64,45 @@ describe('视口合成候选联合预算', () => {
       ...shared,
       budget: new ImageEditResourceBudget(),
     })).toBe(true)
+  })
+
+  it('源缺少输出mip时按实际解码网格预算，不按输出层级低估Float32工作集', () => {
+    const document = createImageEditDocumentV3({
+      width: 8_192,
+      height: 8_192,
+      sourceResourceId: RESOURCE,
+      idFactory: () => 'source',
+    })
+    const prepared = prepareImageEditorViewportCompositeV3(document, 'stable', [])
+    const candidate = planImageEditorViewportTilesV3({
+      documentSize: document.geometry,
+      pyramid: pyramid(document.geometry.width, document.geometry.height),
+      viewport: {
+        documentX: 0, documentY: 0, width: 1_024, height: 1_024,
+        zoom: 1 / 8, devicePixelRatio: 1,
+      },
+      bitDepth: 8,
+      minimumMip: 3,
+      coverage: 'document',
+    })
+    const sourceSize = { width: 640, height: 640 }
+    const sourcePyramid = {
+      tileSize: 512 as const,
+      levels: [{ mip: 0, ...sourceSize, columns: 2, rows: 2 }],
+    }
+    expect(imageEditorViewportCompositeCandidateFitsBudgetV3({
+      budget: new ImageEditResourceBudget({
+        totalBytes: 10 * 1024 * 1024,
+        cpuCacheTargetBytes: 0,
+        gpuTargetBytes: 0,
+      }),
+      prepared,
+      document,
+      candidate,
+      bitDepth: 8,
+      wholeSource: false,
+      resourceSizes: new Map([[RESOURCE, sourceSize]]),
+      resourcePyramids: new Map([[RESOURCE, sourcePyramid]]),
+    })).toBe(false)
   })
 })

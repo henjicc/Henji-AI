@@ -77,7 +77,6 @@ function request(
     document,
     quality: 'stable',
     plan: planImageEditorViewportTilesV3({
-      resourceRef: RESOURCE,
       documentSize: imageEditOutputSizeV3(document.geometry),
       sourceSize: document.geometry,
       pyramid: {
@@ -88,12 +87,39 @@ function request(
       bitDepth: 8,
     }),
     resourceSizes: [{ resourceRef: RESOURCE, width: document.geometry.width, height: document.geometry.height }],
+    sourceMipLevels: [{ resourceRef: RESOURCE, mip: tile.mip }],
     sourceTiles: [tile],
     brushTiles: [],
   }
 }
 
 describe('图片编辑 V3 视口成品分块执行器', () => {
+  it('严格要求每个资源都有且仅有一个真实源 mip 映射', async () => {
+    const document = createImageEditDocumentV3({
+      width: 4,
+      height: 4,
+      documentId: 'viewport-source-mip-contract',
+      sourceResourceId: RESOURCE,
+      idFactory: () => 'source',
+    })
+    const renderRequest = request(document, sourceTile(64))
+    renderRequest.sourceMipLevels = []
+
+    await expect(renderImageEditorViewportCompositeV3(
+      renderRequest,
+      new AbortController().signal,
+      () => undefined,
+    )).rejects.toThrow('无效的源 mip 映射')
+
+    const duplicate = request(document, sourceTile(64))
+    duplicate.sourceMipLevels.push({ resourceRef: RESOURCE, mip: 0 })
+    await expect(renderImageEditorViewportCompositeV3(
+      duplicate,
+      new AbortController().signal,
+      () => undefined,
+    )).rejects.toThrow('无效的源 mip 映射')
+  })
+
   it('在小区域内执行调整图层，而不是把原始 source tile 直接发布', async () => {
     const document = createImageEditDocumentV3({
       width: 4,
@@ -213,7 +239,6 @@ describe('图片编辑 V3 视口成品分块执行器', () => {
       document,
       quality: 'stable',
       plan: planImageEditorViewportTilesV3({
-        resourceRef: RESOURCE,
         documentSize: document.geometry,
         pyramid: {
           tileSize: 512,
@@ -226,6 +251,7 @@ describe('图片编辑 V3 视口成品分块执行器', () => {
         bitDepth: 8,
       }),
       resourceSizes: [{ resourceRef: RESOURCE, width: 1_024, height: 1 }],
+      sourceMipLevels: [{ resourceRef: RESOURCE, mip: 0 }],
       sourceTiles: [wideSourceTile(0, 96)],
       brushTiles: [],
     }

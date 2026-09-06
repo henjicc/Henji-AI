@@ -6,10 +6,7 @@ import {
   type ImageEditRect,
   type ImageEditSize,
 } from '@/core/imageEdit/v3/tileGeometry'
-import type {
-  ImageEditorV3PyramidDescriptor,
-  ImageEditorV3ResourceRef,
-} from '@/platform/contracts/imageEditorV3'
+import type { ImageEditorV3PyramidDescriptor, ImageEditorV3ResourceRef } from '@/platform/contracts/imageEditorV3'
 
 const PREVIOUS_MIP_MIN_PHYSICAL_PIXELS_V3 = 0.7
 const PREVIOUS_MIP_MAX_PHYSICAL_PIXELS_V3 = 1.6
@@ -47,9 +44,15 @@ export interface ImageEditorViewportTileRequestV3 {
   estimatedBytes: number
 }
 
+export type ImageEditorViewportOutputTileV3 = Omit<
+  ImageEditorViewportTileRequestV3,
+  'key' | 'resourceRef'
+>
+
 export interface ImageEditorViewportTileCandidateV3 {
   mip: number
-  tiles: readonly ImageEditorViewportTileRequestV3[]
+  /** 输出坐标瓦片，不借用任何源资源身份。 */
+  tiles: readonly ImageEditorViewportOutputTileV3[]
   estimatedBytes: number
 }
 
@@ -65,7 +68,6 @@ export interface ImageEditorViewportTilePlanV3 extends ImageEditorViewportTileCa
 }
 
 export interface ImageEditorViewportTilePlanOptionsV3 {
-  resourceRef: ImageEditorV3ResourceRef
   /** 输出几何；裁剪和方向只改变这里。 */
   documentSize: ImageEditSize
   /** 源金字塔几何；省略时与输出几何相同。 */
@@ -83,6 +85,8 @@ export interface ImageEditorViewportTilePlanOptionsV3 {
   previousMip?: number
   /** 强制从指定 mip 开始，供完整文档最粗兜底使用。 */
   preferredMip?: number
+  /** 安全输出的最小 mip；预算只能在此基础上继续变粗。 */
+  minimumMip?: number
   coverage?: 'viewport' | 'document'
   /** 返回 false 时尝试更粗一级 mip；所有 mip 均拒绝则抛出明确错误。 */
   admit?: (candidate: ImageEditorViewportTileCandidateV3) => boolean
@@ -124,7 +128,7 @@ function safeBytes(width: number, height: number, bitDepth: 8 | 16 | 32): number
   return bytes
 }
 
-function validatePyramid(
+export function validateImageEditorViewportPyramidV3(
   sourceSize: ImageEditSize,
   pyramid: ImageEditorV3PyramidDescriptor,
 ): ImageEditorV3PyramidDescriptor['levels'] {
@@ -263,18 +267,9 @@ function candidateForMip(
       const rightY = (right.y + 0.5) * IMAGE_EDIT_STORAGE_TILE_SIZE - centerY
       return leftX * leftX + leftY * leftY - rightX * rightX - rightY * rightY
     })
-  const tiles = coordinates.map((coordinate): ImageEditorViewportTileRequestV3 => {
+  const tiles = coordinates.map((coordinate): ImageEditorViewportOutputTileV3 => {
     const region = createTileRegion(options.documentSize, coordinate, halo)
     return {
-      key: imageEditorViewportTileCacheKeyV3({
-        resourceRef: options.resourceRef,
-        mip,
-        tileX: coordinate.x,
-        tileY: coordinate.y,
-        halo,
-        bitDepth,
-      }),
-      resourceRef: options.resourceRef,
       mip,
       tileX: coordinate.x,
       tileY: coordinate.y,
@@ -350,9 +345,16 @@ export function planImageEditorViewportTilesV3(
     options.forwardPrefetchViewports ?? 0,
     '运动方向预取范围',
   )
-  const levels = validatePyramid(sourceSize, options.pyramid)
+  const levels = validateImageEditorViewportPyramidV3(sourceSize, options.pyramid)
   const idealMip = idealMipForViewport(viewport)
-  const requestedMip = options.preferredMip ?? targetMipForViewport(viewport, options.previousMip)
+  const minimumMip = options.minimumMip ?? 0
+  if (!Number.isSafeInteger(minimumMip) || minimumMip < 0 || minimumMip > 30) {
+    throw new Error('安全 mip 下界必须是 0～30 的整数')
+  }
+  const requestedMip = Math.max(
+    minimumMip,
+    options.preferredMip ?? targetMipForViewport(viewport, options.previousMip),
+  )
   if (!Number.isSafeInteger(requestedMip) || requestedMip < 0 || requestedMip > 30) {
     throw new Error('指定 mip 必须是 0～30 的整数')
   }

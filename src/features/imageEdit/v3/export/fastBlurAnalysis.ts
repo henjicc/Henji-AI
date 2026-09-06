@@ -141,7 +141,7 @@ export async function buildImageEditorV3FastBlurAnalyses(
   if (nodes.length === 0) return { analyses: new Map(), release: () => undefined }
   const mip = analysisMip(document)
   const size = mipSize(document.geometry, mip)
-  const resolveSourceSize = await prepareImageEditorExportSourceGeometryV3(plan, document.geometry, mip, signal, dependencies)
+  const resolveSamplingGrid = await prepareImageEditorExportSourceGeometryV3(plan, document.geometry, mip, signal, dependencies)
   const region: ImageEditorV3ExportRenderRegion = { x: 0, y: 0, ...size }
   const sourceBitDepth = resolveImageEditorV3ExportSourceBitDepth(document)
   const referenceWhiteNits = resolveImageEditorV3ExportReferenceWhiteNits(document)
@@ -193,7 +193,7 @@ export async function buildImageEditorV3FastBlurAnalyses(
           scaleY: 1 / (2 ** mip),
           registry,
           signal,
-          resolveSourceSize,
+          resolveSamplingGrid,
           createTransparent: (requestedRegion) => transparentRegion(requestedRegion, document),
           loadRaster: (node, requestedRegion) => loadImageEditorRasterRegionV3({
             node: node, region: requestedRegion, mip, document, sparsePlan: sparseRasterPlan,

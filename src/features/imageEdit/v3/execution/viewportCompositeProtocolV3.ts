@@ -18,6 +18,8 @@ export interface ImageEditorViewportCompositeRenderRequestV3 {
   analysisRequested?: boolean
   plan: ImageEditorViewportTilePlanV3
   resourceSizes: Array<{ resourceRef: string; width: number; height: number }>
+  /** 输出 mip 与小图源末级不同时，保留真实读取层级。 */
+  sourceMipLevels: Array<{ resourceRef: string; mip: number }>
   sourceTiles: ImageEditorV3SourceTile[]
   brushTiles: ImageEditorPreviewBrushTileV3[]
 }

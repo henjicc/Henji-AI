@@ -16,7 +16,6 @@ import {
 import { isImageEditSparseMaskReferenceV3 } from '@/core/imageEdit/v3/layerTypes'
 import { convertPreviewWorkingSpaceToSrgbDisplayV3 } from './previewColorV3'
 import { scaleImageEditorPreviewEffectsV3 } from './previewEffectScalingV3'
-import { createImageEditorViewportSourceSizeResolverV3 } from './viewportCompositeDocumentV3'
 import { resolveImageEditRasterSourceExtentV3 } from '@/core/imageEdit/v3/execution/rasterSourceGeometry'
 import { ImageEditorPreviewCustomEffectsV3 } from './previewCustomEffectsV3'
 import { ImageEditorViewportGlobalAnalysisCacheV3 } from './viewportGlobalAnalysisV3'
@@ -31,6 +30,7 @@ import {
   rasterizeImageEditorViewportAnnotationsV3,
   viewportCompositeSourceTileKeyV3,
 } from './viewportCompositePixelsV3'
+import { createImageEditorViewportSamplingGridResolverV3 } from './viewportCompositeSamplingGridV3'
 
 const registry = createBuiltInImageEditRenderNodeRegistry()
 
@@ -118,12 +118,6 @@ export async function renderImageEditorViewportCompositeV3(
     || request.plan.mipSize.height !== imageEditOutputMipSizeV3(request.document.geometry, request.plan.mip).height
   ) throw new Error('视口合成计划与文档几何不一致')
   const originalPlan = compileImageEditRenderPlanV3(request.document, registry, request.quality)
-  const plan = compileImageEditRenderPlanV3(
-    scaleImageEditorPreviewEffectsV3(request.document, 1 / (2 ** request.plan.mip)),
-    registry,
-    request.quality,
-  )
-  if (plan.diagnostics.length > 0) throw new Error('视口合成计划包含不可渲染图层')
   const sourceTiles = new Map(request.sourceTiles.map((tile) => [
     viewportCompositeSourceTileKeyV3(tile),
     tile,
@@ -136,6 +130,26 @@ export async function renderImageEditorViewportCompositeV3(
   if (resourceSizes.size !== request.resourceSizes.length) {
     throw new Error('视口合成包含重复资源几何')
   }
+  const sourceMipLevels = new Map(request.sourceMipLevels.map(({ resourceRef, mip }) => [
+    resourceRef,
+    mip,
+  ]))
+  if (sourceMipLevels.size !== request.sourceMipLevels.length
+    || sourceMipLevels.size !== resourceSizes.size
+    || [...sourceMipLevels].some(([resourceRef, mip]) => (
+      !resourceSizes.has(resourceRef)
+      || !Number.isSafeInteger(mip)
+      || mip < 0
+      || mip > request.plan.mip
+  ))) {
+    throw new Error('视口合成包含无效的源 mip 映射')
+  }
+  const plan = compileImageEditRenderPlanV3(
+    scaleImageEditorPreviewEffectsV3(request.document, 1 / (2 ** request.plan.mip)),
+    registry,
+    request.quality,
+  )
+  if (plan.diagnostics.length > 0) throw new Error('视口合成计划包含不可渲染图层')
   const rasterizeAnnotations = dependencies.rasterizeAnnotations
     ?? rasterizeImageEditorViewportAnnotationsV3
   const customEffects = dependencies.customEffects ?? new ImageEditorPreviewCustomEffectsV3()
@@ -146,16 +160,19 @@ export async function renderImageEditorViewportCompositeV3(
     resourceId: string,
     requestedRegion: ImageEditRect,
   ): Float32PremultipliedRgbaTile => {
-    const key = `${resourceId}:${requestedRegion.x}:${requestedRegion.y}:${requestedRegion.width}:${requestedRegion.height}`
+    const sourceMip = sourceMipLevels.get(resourceId)
+    if (sourceMip === undefined) throw new Error('视口合成缺少资源源 mip 映射')
+    const key = `${resourceId}:m${sourceMip}:${requestedRegion.x}:${requestedRegion.y}:${requestedRegion.width}:${requestedRegion.height}`
     const cached = decoded.get(key)
     if (cached) return cached
+    const resourceSize = resourceSizes.get(resourceId) ?? request.document.geometry
     const result = loadImageEditorViewportSourceRegionV3(
       sourceTiles,
       resourceId,
-      request.plan.mip,
+      sourceMip,
       requestedRegion,
       request.document,
-      resourceSizes.get(resourceId) ?? request.document.geometry,
+      resourceSize,
     )
     decoded.set(key, result)
     return result
@@ -174,15 +191,12 @@ export async function renderImageEditorViewportCompositeV3(
       scaleX: 1 / (2 ** request.plan.mip),
       scaleY: 1 / (2 ** request.plan.mip),
       registry,
-      resolveSourceSize: createImageEditorViewportSourceSizeResolverV3(
+      resolveSamplingGrid: createImageEditorViewportSamplingGridResolverV3(
         plan,
         resourceSizes,
-        {
-          width: Math.max(1, Math.ceil(request.document.geometry.width / (2 ** request.plan.mip))),
-          height: Math.max(1, Math.ceil(request.document.geometry.height / (2 ** request.plan.mip))),
-        },
-        request.plan.mip,
+        sourceMipLevels,
         request.document.geometry,
+        request.plan.mip,
       ),
       signal,
       createTransparent: (region) => createTransparentImageEditorViewportRegionV3(
@@ -191,6 +205,9 @@ export async function renderImageEditorViewportCompositeV3(
       ),
       loadRaster: async (node, region) => {
         const resourceId = rasterResourceId(node)
+        const rasterMip = resourceId
+          ? sourceMipLevels.get(resourceId)
+          : request.plan.mip
         const base = resourceId
           ? loadResource(resourceId, region)
           : createTransparentImageEditorViewportRegionV3(region, request.document)
@@ -198,7 +215,7 @@ export async function renderImageEditorViewportCompositeV3(
           node,
           base,
           region,
-          request.plan.mip,
+          rasterMip ?? request.plan.mip,
           request.brushTiles,
           signal,
           (x, y, channel) => {

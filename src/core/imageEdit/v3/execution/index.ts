@@ -4,3 +4,4 @@ export * from './cpuRenderPlanExecutor';
 export * from './sourceTileDecode';
 export * from './affineTransform';
 export * from './cpuRenderRegionExecutor';
+export * from './cpuSamplingGrid';

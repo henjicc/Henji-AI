@@ -95,7 +95,6 @@ export function planImageEditorGpuRasterTilesV3(
     ? createImageEditorGpuPyramidDescriptorV3(sparseExtent.width, sparseExtent.height) : pyramid
   const planningSize = hasSparseOverrides ? sparseExtent : sourceSize
   const plan = planImageEditorViewportTilesV3({
-    resourceRef: layer.resourceRef ?? syntheticTransparentResourceRef(layer.layerId),
     documentSize: planningSize,
     sourceSize: planningSize,
     pyramid: planningPyramid,
@@ -120,7 +119,6 @@ export function planImageEditorGpuRasterTilesV3(
   // 的低 mip 覆盖新笔画。未带稀疏覆盖的 8192 路径仍按 4.1 正常选 mip。
   const plannedMip = hasSparseOverrides ? 0 : plan.mip
   const coordinates = plannedMip === plan.mip ? plan.tiles : planImageEditorViewportTilesV3({
-    resourceRef: layer.resourceRef ?? syntheticTransparentResourceRef(layer.layerId),
     documentSize: planningSize,
     sourceSize: planningSize,
     pyramid: { tileSize: IMAGE_EDIT_STORAGE_TILE_SIZE, levels: [planningPyramid.levels[0]!] },
@@ -171,11 +169,6 @@ export function planImageEditorGpuRasterTilesV3(
     mip: plannedMip,
     tiles,
   }
-}
-
-function syntheticTransparentResourceRef(layerId: string): `sha256:${string}` {
-  const hex = [...layerId].reduce((value, char) => Math.imul(value ^ char.charCodeAt(0), 0x01000193), 0x811c9dc5) >>> 0
-  return `sha256:${hex.toString(16).padStart(8, '0').repeat(8)}`
 }
 
 function outputToLayerSource(

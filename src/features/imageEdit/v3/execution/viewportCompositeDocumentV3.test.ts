@@ -63,7 +63,6 @@ describe('图片编辑 V3 视口合成能力边界', () => {
     }))
     const prepared = prepareImageEditorViewportCompositeV3(document, 'stable', descriptors)
     const plan = planImageEditorViewportTilesV3({
-      resourceRef: SOURCE,
       documentSize: document.geometry,
       pyramid: {
         tileSize: 512,
@@ -73,7 +72,13 @@ describe('图片编辑 V3 视口合成能力边界', () => {
       bitDepth: 8,
     })
 
-    expect(collectImageEditorViewportBrushRequestsV3(prepared, plan)).toEqual([
+    expect(collectImageEditorViewportBrushRequestsV3(
+      prepared,
+      plan,
+      false,
+      new Map([[SOURCE, document.geometry]]),
+      new Map([[SOURCE, 0]]),
+    )).toEqual([
       expect.objectContaining({ resourceId: BRUSH_LEFT, tileKey: '0/0/0' }),
     ])
   })
@@ -89,7 +94,6 @@ describe('图片编辑 V3 视口合成能力边界', () => {
     document.layers[0].transform = [1, 0, 0, 1, 512, 0]
     const prepared = prepareImageEditorViewportCompositeV3(document, 'stable', [])
     const plan = planImageEditorViewportTilesV3({
-      resourceRef: SOURCE,
       documentSize: document.geometry,
       pyramid: {
         tileSize: 512,
@@ -102,7 +106,13 @@ describe('图片编辑 V3 视口合成能力边界', () => {
       bitDepth: 8,
     })
 
-    expect(createImageEditorViewportSourceTileRequestsV3(prepared, plan, 8))
+    expect(createImageEditorViewportSourceTileRequestsV3(
+      prepared,
+      plan,
+      8,
+      false,
+      new Map([[SOURCE, document.geometry]]),
+    ))
       .toEqual([expect.objectContaining({ tileX: 0, tileY: 0, originX: 0 })])
   })
 
@@ -117,7 +127,6 @@ describe('图片编辑 V3 视口合成能力边界', () => {
     document.layers[0].transform = [2, 0, 0, 2, 0, 0]
     const prepared = prepareImageEditorViewportCompositeV3(document, 'stable', [])
     const plan = planImageEditorViewportTilesV3({
-      resourceRef: SOURCE,
       documentSize: document.geometry,
       pyramid: {
         tileSize: 512,
@@ -156,7 +165,6 @@ describe('图片编辑 V3 视口合成能力边界', () => {
     }))
     const prepared = prepareImageEditorViewportCompositeV3(document, 'stable', descriptors)
     const plan = planImageEditorViewportTilesV3({
-      resourceRef: SOURCE,
       documentSize: { width: 256, height: 256 },
       sourceSize: document.geometry,
       pyramid: {
@@ -168,11 +176,23 @@ describe('图片编辑 V3 视口合成能力边界', () => {
       coverage: 'document',
     })
 
-    expect(createImageEditorViewportSourceTileRequestsV3(prepared, plan, 8, true))
+    expect(createImageEditorViewportSourceTileRequestsV3(
+      prepared,
+      plan,
+      8,
+      true,
+      new Map([[SOURCE, document.geometry]]),
+    ))
       .toEqual(expect.arrayContaining([
         expect.objectContaining({ tileX: 0, tileY: 0 }),
         expect.objectContaining({ tileX: 1, tileY: 0 }),
       ]))
-    expect(collectImageEditorViewportBrushRequestsV3(prepared, plan, true)).toHaveLength(2)
+    expect(collectImageEditorViewportBrushRequestsV3(
+      prepared,
+      plan,
+      true,
+      new Map([[SOURCE, document.geometry]]),
+      new Map([[SOURCE, 0]]),
+    )).toHaveLength(2)
   })
 })

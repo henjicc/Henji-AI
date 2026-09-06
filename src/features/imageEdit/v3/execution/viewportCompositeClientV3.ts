@@ -200,7 +200,7 @@ export class ImageEditorViewportCompositeClientV3 {
     const bitDepth = typeof job.document.color.bitDepth === 'number' ? job.document.color.bitDepth : 32
     job.prepared = prepared
     const frame = await this.scheduler.render({
-      resourceRef: prepared.primaryResourceRef,
+      ...(prepared.primaryResourceRef ? { resourceRef: prepared.primaryResourceRef } : {}),
       resourceRefs: prepared.resourceRefs,
       revision: job.document.revision,
       documentSize: imageEditOutputSizeV3(job.document.geometry),
@@ -211,9 +211,11 @@ export class ImageEditorViewportCompositeClientV3 {
       forwardPrefetchViewports: job.forwardPrefetchViewports ?? 1,
       previousMip: job.previousMip,
       preferredMip: job.preferredMip,
+      minimumMip: job.minimumMip,
       coverage: job.coverage,
       resolveSourceTileRequests: (candidate, descriptors) => createImageEditorViewportSourceTileRequestsV3(
-        prepared, candidate, bitDepth, wholeSource, imageEditorViewportResourceSizesV3(descriptors),
+        prepared, candidate, bitDepth, wholeSource,
+        imageEditorViewportResourceSizesV3(descriptors), descriptors,
       ),
       admitCandidate: (candidate, descriptors) => imageEditorViewportCompositeCandidateFitsBudgetV3({
         budget: this.budget,
@@ -223,6 +225,7 @@ export class ImageEditorViewportCompositeClientV3 {
         bitDepth,
         wholeSource,
         resourceSizes: imageEditorViewportResourceSizesV3(descriptors),
+        resourcePyramids: descriptors,
       }),
     })
     if (this.active !== job || job.controller.signal.aborted || this.disposed) {
@@ -242,7 +245,9 @@ export class ImageEditorViewportCompositeClientV3 {
     if (frame.plan.tiles.length === 0) {
       throw new ImageEditorViewportCompositeUnsupportedErrorV3('视口未与文档相交')
     }
-    const brushRequests = collectImageEditorViewportBrushRequestsV3(prepared, frame.plan, wholeSource, frame.resourceSizes)
+    const brushRequests = collectImageEditorViewportBrushRequestsV3(
+      prepared, frame.plan, wholeSource, frame.resourceSizes, frame.sourceMipLevels,
+    )
     const transferBytes = imageEditorViewportSourceTransferBytesV3(frame)
       + imageEditorViewportBrushTransferBytesV3(brushRequests)
     if (!Number.isSafeInteger(transferBytes) || transferBytes > this.transferMaxBytes) {
@@ -256,7 +261,11 @@ export class ImageEditorViewportCompositeClientV3 {
       'lower-mip',
     )
     const maxRegionPixels = estimateImageEditorViewportWorkingRegionPixelsV3(
-      prepared, frame.plan, wholeSource, frame.resourceSizes,
+      prepared, frame.plan, wholeSource, frame.resourceSizes, frame.sourceMipLevels,
+      [...frame.resourceTiles.values()].flat().reduce(
+        (total, tile) => total + tile.width * tile.height,
+        0,
+      ),
     )
     const workingBytes = maxRegionPixels * 4 * Float32Array.BYTES_PER_ELEMENT
       * Math.max(3, prepared.plan.nodes.length + 2)
@@ -331,6 +340,10 @@ export class ImageEditorViewportCompositeClientV3 {
             resourceSizes: [...frame.resourceSizes].map(([resourceRef, size]) => ({
               resourceRef,
               ...size,
+            })),
+            sourceMipLevels: [...frame.sourceMipLevels].map(([resourceRef, mip]) => ({
+              resourceRef,
+              mip,
             })),
             sourceTiles,
             brushTiles,

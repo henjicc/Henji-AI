@@ -53,7 +53,6 @@ function pyramid(width: number, height: number) {
 
 export function createFrame(width = 20_000, height = 10_000): ImageEditorViewportFrameV3 {
   const plan = planImageEditorViewportTilesV3({
-    resourceRef: RESOURCE,
     documentSize: { width, height },
     pyramid: pyramid(width, height),
     viewport: {
@@ -95,6 +94,7 @@ export function createFrame(width = 20_000, height = 10_000): ImageEditorViewpor
     tiles,
     resourceTiles: new Map([[RESOURCE, tiles]]),
     resourceSizes: new Map([[RESOURCE, { width, height }]]),
+    sourceMipLevels: new Map([[RESOURCE, plan.mip]]),
     release: vi.fn(),
   }
 }

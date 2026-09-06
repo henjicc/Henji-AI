@@ -131,7 +131,7 @@ export async function buildImageEditorV3DiffusionAnalyses(
   const sourceBitDepth = resolveImageEditorV3ExportSourceBitDepth(document)
   const referenceWhiteNits = resolveImageEditorV3ExportReferenceWhiteNits(document)
   const size = mipSize(document.geometry, mip)
-  const resolveSourceSize = await prepareImageEditorExportSourceGeometryV3(plan, document.geometry, mip, signal, dependencies)
+  const resolveSamplingGrid = await prepareImageEditorExportSourceGeometryV3(plan, document.geometry, mip, signal, dependencies)
   const region: ImageEditorV3ExportRenderRegion = { x: 0, y: 0, ...size }
   const analyses = new Map<string, ImageEditorV3DiffusionAnalysis>()
   const cacheLeases: ImageEditMemoryLease[] = []
@@ -181,7 +181,7 @@ export async function buildImageEditorV3DiffusionAnalyses(
           scaleY: 1 / (2 ** mip),
           registry,
           signal,
-          resolveSourceSize,
+          resolveSamplingGrid,
           createTransparent: (requestedRegion) => transparentRegion(requestedRegion, document),
           loadRaster: (node, requestedRegion) => loadImageEditorRasterRegionV3({
             node: node, region: requestedRegion, mip, document, sparsePlan: sparseRasterPlan,

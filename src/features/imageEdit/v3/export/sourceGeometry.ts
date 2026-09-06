@@ -1,8 +1,8 @@
 import { createImageEditorV3RequestId } from '@/commands/imageEditorV3'
-import { mipSize, type ImageEditRenderPlan, type ImageEditRenderPlanNode, type ImageEditSize } from '@/core/imageEdit/v3'
+import { mipSize, type ImageEditCpuSamplingContextV3, type ImageEditRenderPlan, type ImageEditSize } from '@/core/imageEdit/v3'
+import { resolveImageEditRasterSourceExtentV3 } from '@/core/imageEdit/v3/execution/rasterSourceGeometry'
 import type { ImageEditorV3PyramidDescriptor } from '@/platform/contracts/imageEditorV3'
 import { readSharedImageEditorSourcePyramidV3 } from '../execution/imageEditorSourcePyramidsV3'
-import { createImageEditorViewportSourceSizeResolverV3 } from '../execution/viewportCompositeDocumentV3'
 import type { ImageEditorV3ExportRenderDependencies } from './contracts'
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -33,16 +33,18 @@ export async function readImageEditorRenderSourceSizesV3(
   dependencies: ImageEditorV3ExportRenderDependencies,
 ): Promise<ReadonlyMap<string, ImageEditSize>> {
   const sizes = new Map<string, ImageEditSize>()
+  const resourceRefs = new Set<string>()
   for (const node of plan.nodes) {
-    if (node.definitionId !== 'source.raster') continue
     const source = node.parameters.source
-    if (!isRecord(source)
-      || source.kind !== 'resource' || typeof source.resourceId !== 'string'
-      || sizes.has(source.resourceId)) continue
-    const pyramid = await readImageEditorExportSourcePyramidV3(source.resourceId, signal, dependencies)
+    if (node.definitionId === 'source.raster' && isRecord(source)
+      && source.kind === 'resource' && typeof source.resourceId === 'string') resourceRefs.add(source.resourceId)
+    if (node.mask && 'resourceId' in node.mask) resourceRefs.add(node.mask.resourceId)
+  }
+  for (const resourceRef of resourceRefs) {
+    const pyramid = await readImageEditorExportSourcePyramidV3(resourceRef, signal, dependencies)
     const base = pyramid.levels.find((level) => level.mip === 0)
     if (!base) throw new Error('图片源金字塔缺少原始尺寸')
-    sizes.set(source.resourceId, { width: base.width, height: base.height })
+    sizes.set(resourceRef, { width: base.width, height: base.height })
   }
   return sizes
 }
@@ -53,7 +55,20 @@ export async function prepareImageEditorExportSourceGeometryV3(
   mip: number,
   signal: AbortSignal,
   dependencies: ImageEditorV3ExportRenderDependencies,
-): Promise<(node: ImageEditRenderPlanNode) => ImageEditSize> {
+): Promise<NonNullable<ImageEditCpuSamplingContextV3['resolveSamplingGrid']>> {
   const sizes = await readImageEditorRenderSourceSizesV3(plan, signal, dependencies)
-  return createImageEditorViewportSourceSizeResolverV3(plan, sizes, mipSize(canvasSize, mip), mip, canvasSize)
+  return (target) => {
+    let size = canvasSize
+    if (target.kind === 'mask') {
+      if ('resourceId' in target.reference) size = sizes.get(target.reference.resourceId) ?? canvasSize
+    } else if (target.node.definitionId === 'source.raster') {
+      const source = target.node.parameters.source
+      const resourceId = isRecord(source) && source.kind === 'resource' && typeof source.resourceId === 'string'
+        ? source.resourceId : null
+      size = resolveImageEditRasterSourceExtentV3(resourceId ? sizes.get(resourceId) ?? null : null,
+        canvasSize, isRecord(target.node.parameters.tiles) ? Object.keys(target.node.parameters.tiles) : [])
+    }
+    // 现有导出/效果分析载入器直接返回请求的求值 mip，不做第二次网格缩放。
+    return { size: mipSize(size, mip), toEvaluation: [1, 0, 0, 1, 0, 0] }
+  }
 }

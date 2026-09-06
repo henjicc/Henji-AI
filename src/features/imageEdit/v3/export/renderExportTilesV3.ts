@@ -168,7 +168,7 @@ async function* renderTiles(
     throwIfAborted(controller.signal)
     const sourceSizes = await readImageEditorRenderSourceSizesV3(plan, controller.signal, dependencies)
     const sparseRasterPlan = createImageEditorV3SparseRasterPlan(plan, document.geometry, request.resourceDescriptors, sourceSizes)
-    const resolveSourceSize = await prepareImageEditorExportSourceGeometryV3(
+    const resolveSamplingGrid = await prepareImageEditorExportSourceGeometryV3(
       plan, document.geometry, 0, controller.signal, dependencies,
     )
     diffusionAnalysisSet = await buildImageEditorV3DiffusionAnalyses(
@@ -250,7 +250,7 @@ async function* renderTiles(
               {
                 registry,
                 size: { width: geometry.sourceWidth, height: geometry.sourceHeight },
-                resolveSourceSize,
+                resolveSamplingGrid,
               },
             )
             const workingLease = acquireOrThrow(
@@ -285,7 +285,7 @@ async function* renderTiles(
                 size: { width: geometry.sourceWidth, height: geometry.sourceHeight },
                 registry,
                 signal: taskContext.signal,
-                resolveSourceSize,
+                resolveSamplingGrid,
                 createTransparent: (region) => transparentRegion(
                   region,
                   document.color.workingSpace,

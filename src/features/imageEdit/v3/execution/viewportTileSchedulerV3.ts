@@ -16,6 +16,7 @@ import {
 } from './viewportTileCacheV3'
 import {
   planImageEditorViewportTilesV3,
+  validateImageEditorViewportPyramidV3,
   type ImageEditorViewportTileCandidateV3,
   type ImageEditorViewportTileRequestV3,
   type ImageEditorViewportTilePlanV3,
@@ -25,10 +26,11 @@ import {
   acquireImageEditorViewportDecodeSlotV3,
   assertCompatibleImageEditorViewportPyramidV3,
   awaitImageEditorViewportOperationV3,
+  createImageEditorViewportOutputPyramidV3,
   IMAGE_EDITOR_VIEWPORT_PROCESS_DECODE_LIMIT_V3,
   normalizeImageEditorViewportResourceRefsV3,
   resolveImageEditorViewportTileRequestsV3,
-  sharedImageEditorViewportPyramidV3,
+  resolveImageEditorViewportSourceMipV3,
 } from './viewportTileSchedulingSupportV3'
 import type {
   ImageEditorViewportPyramidReaderV3,
@@ -53,7 +55,7 @@ export class ImageEditorViewportCancelledErrorV3 extends Error {
 }
 
 export interface ImageEditorViewportRenderRequestV3 {
-  resourceRef: ImageEditorV3ResourceRef
+  resourceRef?: ImageEditorV3ResourceRef
   /** 参与合成的全部普通图片资源；每个资源使用自身几何。 */
   resourceRefs?: readonly ImageEditorV3ResourceRef[]
   revision: number
@@ -66,6 +68,7 @@ export interface ImageEditorViewportRenderRequestV3 {
   forwardPrefetchViewports?: number
   previousMip?: number
   preferredMip?: number
+  minimumMip?: number
   coverage?: 'viewport' | 'document'
   /** 让 RenderPlan 按逆向依赖为当前 mip 补充/替换实际源瓦片。 */
   resolveSourceTileRequests?: (
@@ -89,15 +92,9 @@ export interface ImageEditorViewportFrameV3 {
   resourceTiles: ReadonlyMap<ImageEditorV3ResourceRef, readonly ImageEditorV3SourceTile[]>
   /** 各图片资源在 mip 0 的独立像素几何。 */
   resourceSizes: ReadonlyMap<ImageEditorV3ResourceRef, ImageEditSize>
+  /** 每个资源本帧实际读取的金字塔层级。 */
+  sourceMipLevels: ReadonlyMap<ImageEditorV3ResourceRef, number>
   release(): void
-}
-
-function toError(error: unknown): Error {
-  return error instanceof Error ? error : new Error(String(error))
-}
-
-function validateRevision(revision: number): void {
-  if (!Number.isSafeInteger(revision) || revision < 0) throw new Error('视口 revision 必须是非负整数')
 }
 
 function abortedJobError(signal: AbortSignal): Error {
@@ -147,7 +144,9 @@ export class ImageEditorViewportTileSchedulerV3 {
 
   render(request: ImageEditorViewportRenderRequestV3): Promise<ImageEditorViewportFrameV3> {
     if (this.disposed) return Promise.reject(new Error('视口瓦片会话已经释放'))
-    validateRevision(request.revision)
+    if (!Number.isSafeInteger(request.revision) || request.revision < 0) {
+      return Promise.reject(new Error('视口 revision 必须是非负整数'))
+    }
     const sequence = ++this.sequence
     this.latestSequence = sequence
     return new Promise((resolve, reject) => {
@@ -209,7 +208,7 @@ export class ImageEditorViewportTileSchedulerV3 {
     }).catch((error: unknown) => {
       this.releaseJobResources(job)
       const normalized = job.sequence === this.latestSequence && !job.controller.signal.aborted
-        ? toError(error)
+        ? error instanceof Error ? error : new Error(String(error))
         : new ImageEditorViewportSupersededErrorV3()
       job.reject(normalized)
     }).finally(() => this.finish(job))
@@ -221,23 +220,20 @@ export class ImageEditorViewportTileSchedulerV3 {
       this.readDescriptor(resourceRef, job)
     )))
     this.assertCurrent(job)
-    const primaryDescriptor = descriptors[0]
-    if (!primaryDescriptor) throw new Error('视口图片资源缺少金字塔描述')
-    const sourceSize = primaryDescriptor.levels.find(({ mip }) => mip === 0)
-    if (!sourceSize) throw new Error('视口图片资源缺少 mip 0 几何')
-    for (const candidate of descriptors.slice(1)) {
-      assertCompatibleImageEditorViewportPyramidV3(primaryDescriptor, candidate)
-    }
     const descriptorMap = new Map(resourceRefs.map((resourceRef, index) => [
       resourceRef,
       descriptors[index] as ImageEditorV3PyramidDescriptor,
     ]))
-    const descriptor = sharedImageEditorViewportPyramidV3(primaryDescriptor, descriptors.slice(1))
+    for (const [index, descriptor] of descriptors.entries()) {
+      const sourceSize = descriptor.levels.find(({ mip }) => mip === 0)
+      if (!sourceSize) throw new Error('视口图片资源缺少 mip 0 几何')
+      validateImageEditorViewportPyramidV3(sourceSize, descriptor)
+      if (index > 0) assertCompatibleImageEditorViewportPyramidV3(descriptors[0]!, descriptor)
+    }
+    const outputPyramid = createImageEditorViewportOutputPyramidV3(job.request.documentSize)
     const plan = planImageEditorViewportTilesV3({
-      resourceRef: job.request.resourceRef,
       documentSize: job.request.documentSize,
-      sourceSize,
-      pyramid: descriptor,
+      pyramid: outputPyramid,
       viewport: job.request.viewport,
       bitDepth: job.request.bitDepth,
       haloDocumentPixels: job.request.haloDocumentPixels,
@@ -245,6 +241,7 @@ export class ImageEditorViewportTileSchedulerV3 {
       forwardPrefetchViewports: job.request.forwardPrefetchViewports,
       previousMip: job.request.previousMip,
       preferredMip: job.request.preferredMip,
+      minimumMip: job.request.minimumMip,
       coverage: job.request.coverage,
       admit: (candidate) => (
         this.cache.admission(
@@ -431,7 +428,13 @@ export class ImageEditorViewportTileSchedulerV3 {
       if (!level) throw new Error('视口图片资源缺少 mip 0 几何')
       resourceSizes.set(resourceRef, { width: level.width, height: level.height })
     }
-    const tiles = resourceTiles.get(job.request.resourceRef) ?? []
+    const tiles = job.request.resourceRef
+      ? resourceTiles.get(job.request.resourceRef) ?? []
+      : []
+    const sourceMipLevels = new Map(resourceRefs.map((resourceRef) => [
+      resourceRef,
+      resolveImageEditorViewportSourceMipV3(descriptors.get(resourceRef)!, plan.mip),
+    ]))
     job.tileLeases.clear()
     let released = false
     const release = (): void => {
@@ -448,6 +451,7 @@ export class ImageEditorViewportTileSchedulerV3 {
       tiles,
       resourceTiles,
       resourceSizes,
+      sourceMipLevels,
       release,
     }
     job.preparedFrame = frame

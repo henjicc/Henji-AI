@@ -23,23 +23,24 @@ import {
   isImageEditTransformInvertibleV3,
   resampleImageEditMaskAffineV3,
   resampleImageEditRgbaAffineV3,
-  resolveImageEditInverseSourceRectV3,
   scaleImageEditTransformV3,
 } from './affineTransform'
+import {
+  resolveImageEditCpuSamplingGridV3,
+  resolveImageEditCpuSamplingRegionV3,
+  type ImageEditCpuSamplingContextV3,
+} from './cpuSamplingGrid'
 import {
   executeImageEditCpuAdjustmentNodeV3,
   executeImageEditCpuEffectNodeV3,
   imageEditCpuRenderNodeBlendModeV3,
 } from './cpuRenderPlanExecutor'
 
-export interface ImageEditCpuRegionRenderContextV3 {
-  size: ImageEditSize
+export interface ImageEditCpuRegionRenderContextV3 extends ImageEditCpuSamplingContextV3 {
   /** 文档坐标到当前求值坐标的比例；mip 0 为 1。 */
   scaleX?: number
   scaleY?: number
   registry: ImageEditRenderNodeRegistry
-  /** 返回节点实际像素源的独立几何；旧文档省略时回退到文档几何。 */
-  resolveSourceSize?(node: ImageEditRenderPlanNode): ImageEditSize | undefined
   createTransparent(region: ImageEditRect): Float32PremultipliedRgbaTile
   loadRaster(
     node: ImageEditRenderPlanNode,
@@ -180,19 +181,6 @@ function effectInputRegion(
   return { x: left, y: top, width: right - left, height: bottom - top }
 }
 
-function transformedContentRegion(
-  node: ImageEditRenderPlanNode,
-  outputRegion: ImageEditRect,
-  context: Pick<ImageEditCpuRegionRenderContextV3, 'size' | 'scaleX' | 'scaleY'>,
-  sourceSize: ImageEditSize,
-): { transform: readonly number[]; region: ImageEditRect } {
-  const transform = nodeTransform(node, context.scaleX ?? 1, context.scaleY ?? context.scaleX ?? 1)
-  return {
-    transform,
-    region: resolveImageEditInverseSourceRectV3(outputRegion, transform, sourceSize),
-  }
-}
-
 function addRegion(
   target: Map<string, Map<string, ImageEditRect>>,
   nodeId: string,
@@ -210,7 +198,7 @@ export function collectImageEditCpuRegionRequirementsV3(
   outputRegions: readonly ImageEditRect[],
   context: Pick<
     ImageEditCpuRegionRenderContextV3,
-    'registry' | 'size' | 'scaleX' | 'scaleY' | 'resolveSourceSize'
+    'registry' | 'size' | 'scaleX' | 'scaleY' | 'resolveSamplingGrid'
   >,
 ): ImageEditCpuRegionRequirementsV3 {
   const nodes = nodeMap(plan)
@@ -229,20 +217,25 @@ export function collectImageEditCpuRegionRequirementsV3(
       const contentIndex = node.inputNodeIds.length === 1 ? 0 : 1
       if (node.inputNodeIds.length > 1) visit(inputNode(nodes, node, 0), region)
       const content = inputNode(nodes, node, contentIndex)
-      const transformed = transformedContentRegion(
-        node,
-        region,
+      const transform = nodeTransform(node, context.scaleX ?? 1, context.scaleY ?? context.scaleX ?? 1)
+      const transformed = resolveImageEditCpuSamplingRegionV3(
         context,
-        context.resolveSourceSize?.(content) ?? context.size,
+        { kind: 'content', node: content },
+        region,
+        transform,
       )
-      if (node.mask) addRegion(masks, node.id, transformed.region)
+      if (node.mask) addRegion(masks, node.id, resolveImageEditCpuSamplingRegionV3(
+        context, { kind: 'mask', ownerNode: node, reference: node.mask }, region, transform,
+      ).region)
       visit(content, transformed.region)
       return
     }
     const inputRegion = node.definitionId === 'group.isolated'
       ? region
       : effectInputRegion(node, region, context)
-    if (node.mask) addRegion(masks, node.id, inputRegion)
+    if (node.mask) addRegion(masks, node.id, resolveImageEditCpuSamplingRegionV3(
+      context, { kind: 'mask', ownerNode: node, reference: node.mask }, inputRegion,
+    ).region)
     visit(inputNode(nodes, node, 0), inputRegion)
   }
   const output = plan.outputNodeId ? nodes.get(plan.outputNodeId) : null
@@ -266,11 +259,32 @@ export async function executeImageEditCpuRenderRegionPlanV3(
   validateRegion(outputRegion, context.size)
   const nodes = nodeMap(plan)
   const memo = new Map<string, Promise<Float32PremultipliedRgbaTile>>()
+  const sampleMask = async (
+    node: ImageEditRenderPlanNode,
+    region: ImageEditRect,
+    transform?: readonly number[],
+  ): Promise<Float32MaskTile | undefined> => {
+    if (!node.mask) return undefined
+    const requested = resolveImageEditCpuSamplingRegionV3(
+      context, { kind: 'mask', ownerNode: node, reference: node.mask }, region, transform,
+    )
+    let sampled: Float32MaskTile
+    if (requested.region.width === 0 || requested.region.height === 0) {
+      sampled = createFloat32MaskTile(region.width, region.height, new Float32Array(region.width * region.height))
+    } else {
+      const mask = await context.loadMask(node.mask, node, requested.region)
+      sampled = isIdentityTransform(requested.transform) && regionKey(requested.region) === regionKey(region)
+        ? mask
+        : resampleImageEditMaskAffineV3(mask, requested.region, region, requested.transform)
+    }
+    // 资源范围外的原始蒙版为零；须先补齐输出采样域，再统一反转。
+    return node.mask.inverted ? invertMask(sampled) : sampled
+  }
   const render = (
     node: ImageEditRenderPlanNode,
     region: ImageEditRect,
   ): Promise<Float32PremultipliedRgbaTile> => {
-    validateRegion(region, context.resolveSourceSize?.(node) ?? context.size)
+    validateRegion(region, resolveImageEditCpuSamplingGridV3(context, { kind: 'content', node }).size)
     const key = `${node.id}:${regionKey(region)}`
     const cached = memo.get(key)
     if (cached) return cached
@@ -285,20 +299,16 @@ export async function executeImageEditCpuRenderRegionPlanV3(
           : null
         const contentIndex = node.inputNodeIds.length === 1 ? 0 : 1
         const contentNode = inputNode(nodes, node, contentIndex)
-        const transformed = transformedContentRegion(
-          node,
-          region,
+        const transform = nodeTransform(node, context.scaleX ?? 1, context.scaleY ?? context.scaleX ?? 1)
+        const transformed = resolveImageEditCpuSamplingRegionV3(
           context,
-          context.resolveSourceSize?.(contentNode) ?? context.size,
+          { kind: 'content', node: contentNode },
+          region,
+          transform,
         )
         let content = transformed.region.width > 0 && transformed.region.height > 0
           ? await render(contentNode, transformed.region)
           : context.createTransparent(region)
-        let mask: Float32MaskTile | undefined
-        if (node.mask && transformed.region.width > 0 && transformed.region.height > 0) {
-          mask = await context.loadMask(node.mask, node, transformed.region)
-          if (node.mask.inverted) mask = invertMask(mask)
-        }
         // 恒等矩阵仍可能读取被源边界裁短（或采样 halo 扩大）的区域；
         // 只有像素坐标与范围都相同，才可以直接作为输出区域参与合成。
         if (!isIdentityTransform(transformed.transform)
@@ -310,17 +320,8 @@ export async function executeImageEditCpuRenderRegionPlanV3(
               region,
               transformed.transform,
             )
-            if (mask) {
-              mask = resampleImageEditMaskAffineV3(
-                mask,
-                transformed.region,
-                region,
-                transformed.transform,
-              )
-            }
           } else {
             content = context.createTransparent(region)
-            mask = undefined
           }
         }
         if (backdrop) {
@@ -329,7 +330,7 @@ export async function executeImageEditCpuRenderRegionPlanV3(
         const masked = applyContentMaskAndOpacityV3(
           content,
           numberParameter(node, 'opacity', 1),
-          mask,
+          await sampleMask(node, region, transform),
         )
         return compositePremultipliedTilesV3(
           backdrop,
@@ -339,8 +340,7 @@ export async function executeImageEditCpuRenderRegionPlanV3(
       }
       const expanded = effectInputRegion(node, region, context)
       const source = await render(inputNode(nodes, node, 0), expanded)
-      let mask = node.mask ? await context.loadMask(node.mask, node, expanded) : undefined
-      if (mask && node.mask?.inverted) mask = invertMask(mask)
+      const mask = await sampleMask(node, expanded)
       const processed = node.definitionId.startsWith('adjustment.')
         ? await executeImageEditCpuAdjustmentNodeV3(node, source, mask)
         : await executeImageEditCpuEffectNodeV3(node, source, mask, {

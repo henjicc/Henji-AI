@@ -43,10 +43,11 @@ describe('真实下笔的像素在所有 CPU 消费入口一致', () => {
       const output: Float32PremultipliedRgbaTile[] = []
       await renderImageEditorViewportCompositeV3({ type: 'render', requestId: 'stroke-viewport', sequence: 1,
         document: value.document, quality: 'stable', renderGeneration: 1, cameraSequence: 1, geometryHash: '64',
-        plan: planImageEditorViewportTilesV3({ resourceRef: SOURCE, documentSize: size, sourceSize: size,
+        plan: planImageEditorViewportTilesV3({ documentSize: size, sourceSize: size,
           pyramid: { tileSize: 512, levels: [{ mip: 0, ...size, columns: 1, rows: 1 }] },
           viewport: { documentX: 0, documentY: 0, ...size, zoom: 1, devicePixelRatio: 1 }, bitDepth: 8 }),
-        resourceSizes: [{ resourceRef: SOURCE, width: source, height: source }], sourceTiles,
+        resourceSizes: [{ resourceRef: SOURCE, width: source, height: source }],
+        sourceMipLevels: [{ resourceRef: SOURCE, mip: 0 }], sourceTiles,
         brushTiles: [...value.stored.values()].map((tile) => ({ resourceId: BRUSH, storage: 'rgba-float32',
           width: tile.width, height: tile.height, bytes: tile.data.slice().buffer })),
       }, new AbortController().signal, ({ tile }) => { output.push(tile) })

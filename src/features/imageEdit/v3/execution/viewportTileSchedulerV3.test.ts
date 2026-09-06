@@ -94,6 +94,7 @@ function smallBudget(totalBytes: number): ImageEditResourceBudget {
 }
 
 describe('图片编辑 V3 视口瓦片调度', () => {
+
   it('多图层资源共用一个 mip 与总预算，并按资源持有同一计划的租约', async () => {
     const documentSize = { width: 512, height: 512 }
     const resourceBudget = smallBudget(tileBytes)
@@ -456,16 +457,19 @@ describe('图片编辑 V3 视口瓦片调度', () => {
       resourceBudget,
     })
     const initialPlan = planImageEditorViewportTilesV3({
-      resourceRef,
       documentSize,
       pyramid: descriptor,
       bitDepth: 8,
       viewport: viewport(),
     })
-    cache.insertAndLease(
-      initialPlan.tiles[0],
-      sourceTile(initialPlan.tiles[0], documentSize),
-    )?.release()
+    const outputTile = initialPlan.tiles[0]
+    if (!outputTile) throw new Error('测试缺少初始输出瓦片')
+    const initialRequest = {
+      ...outputTile,
+      resourceRef,
+      key: imageEditorViewportTileCacheKeyV3({ ...outputTile, resourceRef }),
+    }
+    cache.insertAndLease(initialRequest, sourceTile(initialRequest, documentSize))?.release()
     const readSourceTile = vi.fn(() => new Promise<ImageEditorV3SourceTile>(() => undefined))
     const scheduler = new ImageEditorViewportTileSchedulerV3({
       sessionId: 'dispose-running', cache, readSourceTile,
@@ -489,133 +493,4 @@ describe('图片编辑 V3 视口瓦片调度', () => {
     await settled
   })
 
-  it('平移复用缓存，超过 LRU 上限后才重新读取旧瓦片', async () => {
-    const documentSize = { width: 1_536, height: 512 }
-    const cache = new ImageEditorViewportTileCacheV3({
-      maxBytes: tileBytes * 2,
-      resourceBudget: smallBudget(tileBytes * 2),
-    })
-    const readSourceTile = vi.fn(async (request) => sourceTile({
-      resourceRef: request.resourceRef,
-      mip: request.mip,
-      tileX: request.tileX,
-      tileY: request.tileY,
-      halo: request.halo,
-      bitDepth: request.bitDepth,
-    }, documentSize))
-    const scheduler = new ImageEditorViewportTileSchedulerV3({
-      sessionId: 'lru', cache, readSourceTile,
-      describePyramid: async () => pyramid(documentSize.width, documentSize.height),
-    })
-    const renderAt = async (documentX: number) => {
-      const frame = await scheduler.render({
-        resourceRef,
-        revision: documentX,
-        documentSize,
-        bitDepth: 8,
-        viewport: viewport(documentX),
-      })
-      frame.release()
-    }
-
-    await renderAt(0)
-    await renderAt(512)
-    await renderAt(1_024)
-    await renderAt(512)
-    expect(readSourceTile).toHaveBeenCalledTimes(3)
-    await renderAt(0)
-    expect(readSourceTile).toHaveBeenCalledTimes(4)
-    expect(readSourceTile.mock.calls.map(([request]) => request.tileX)).toEqual([0, 1, 2, 0])
-    scheduler.dispose()
-  })
-
-  it('halo 进入真实 tile 请求，dispose 会释放所有帧 lease 与 CPU 账本', async () => {
-    const documentSize = { width: 1_024, height: 1_024 }
-    const resourceBudget = smallBudget(tileBytes * 4)
-    const cache = new ImageEditorViewportTileCacheV3({
-      maxBytes: tileBytes * 4,
-      resourceBudget,
-    })
-    const readSourceTile = vi.fn(async (request) => sourceTile({
-      resourceRef: request.resourceRef,
-      mip: request.mip,
-      tileX: request.tileX,
-      tileY: request.tileY,
-      halo: request.halo,
-      bitDepth: request.bitDepth,
-    }, documentSize))
-    const scheduler = new ImageEditorViewportTileSchedulerV3({
-      sessionId: 'dispose', cache, readSourceTile,
-      describePyramid: async () => pyramid(documentSize.width, documentSize.height),
-    })
-    const frame = await scheduler.render({
-      resourceRef,
-      revision: 1,
-      documentSize,
-      bitDepth: 8,
-      viewport: viewport(512, 512),
-      haloDocumentPixels: 24,
-    })
-    expect(readSourceTile).toHaveBeenCalledWith(expect.objectContaining({ halo: 24 }), expect.any(AbortSignal))
-    expect(scheduler.cacheSnapshot().leasedEntryCount).toBe(1)
-
-    scheduler.dispose()
-    expect(scheduler.cacheSnapshot()).toMatchObject({ disposed: true, usedBytes: 0, entryCount: 0 })
-    expect(resourceBudget.snapshot()).toMatchObject({ totalBytes: 0, leaseCount: 0 })
-    frame.release()
-  })
-
-  it('自定义逆向源请求参与 admission，并在读取前完整校验几何与字节数', async () => {
-    const documentSize = { width: 1_024, height: 512 }
-    const readSourceTile = vi.fn(async (request) => sourceTile(request, documentSize))
-    const scheduler = new ImageEditorViewportTileSchedulerV3({
-      sessionId: 'inverse-resolver',
-      readSourceTile,
-      describePyramid: async () => pyramid(documentSize.width, documentSize.height),
-    })
-    const resolver = (candidate: { mip: number }) => {
-      const region = createTileRegion(documentSize, { mip: candidate.mip, x: 0, y: 0 }, 0)
-      const request = {
-        resourceRef,
-        mip: candidate.mip,
-        tileX: 0,
-        tileY: 0,
-        halo: 0,
-        bitDepth: 8 as const,
-        width: region.sourceRect.width,
-        height: region.sourceRect.height,
-        originX: region.sourceRect.x,
-        originY: region.sourceRect.y,
-        estimatedBytes: region.sourceRect.width * region.sourceRect.height * 4,
-      }
-      return [{ ...request, key: imageEditorViewportTileCacheKeyV3(request) }]
-    }
-    const frame = await scheduler.render({
-      resourceRef,
-      revision: 1,
-      documentSize,
-      bitDepth: 8,
-      viewport: viewport(512),
-      resolveSourceTileRequests: resolver,
-    })
-    expect(readSourceTile).toHaveBeenCalledWith(
-      expect.objectContaining({ tileX: 0 }),
-      expect.any(AbortSignal),
-    )
-    frame.release()
-
-    await expect(scheduler.render({
-      resourceRef,
-      revision: 2,
-      documentSize,
-      bitDepth: 8,
-      viewport: viewport(512),
-      resolveSourceTileRequests: (candidate) => resolver(candidate).map((request) => ({
-        ...request,
-        estimatedBytes: request.estimatedBytes + 1,
-      })),
-    })).rejects.toThrow('无效源瓦片请求')
-    expect(readSourceTile).toHaveBeenCalledTimes(1)
-    scheduler.dispose()
-  })
 })

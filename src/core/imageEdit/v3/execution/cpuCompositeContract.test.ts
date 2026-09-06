@@ -31,8 +31,9 @@ describe('CPU 图层合成完整契约', () => {
       compileImageEditRenderPlanV3(document, registry, 'stable'), region, {
         size: document.geometry,
         registry,
-        resolveSourceSize: (node) => node.definitionId === 'source.raster' && node.layerId === 'bamboo'
-          ? { width: 1_631, height: 1_111 } : document.geometry,
+        resolveSamplingGrid: (target) => ({ toEvaluation: [1, 0, 0, 1, 0, 0],
+          size: target.kind === 'content' && target.node.definitionId === 'source.raster' && target.node.layerId === 'bamboo'
+            ? { width: 1_631, height: 1_111 } : document.geometry }),
         createTransparent: (requested) => filled(requested, [0, 0, 0, 0]),
         loadRaster: async (node, requested) => {
           if (node.layerId === 'bamboo') {
@@ -70,8 +71,9 @@ describe('CPU 图层合成完整契约', () => {
       plan, { x: 1, y: 1, width: 3, height: 2 }, {
         size: document.geometry,
         registry,
-        resolveSourceSize: (node) => node.definitionId === 'source.raster' && node.layerId === 'small'
-          ? { width: 2, height: 2 } : document.geometry,
+        resolveSamplingGrid: (target) => ({ toEvaluation: [1, 0, 0, 1, 0, 0],
+          size: target.kind === 'content' && target.node.definitionId === 'source.raster' && target.node.layerId === 'small'
+            ? { width: 2, height: 2 } : document.geometry }),
         createTransparent: (region) => filled(region, [0, 0, 0, 0]),
         loadRaster: async (node, region) => filled(region, node.layerId === 'small'
           ? [1, 0, 0, 1] : [0, 0, 1, 1]),
@@ -97,8 +99,9 @@ describe('CPU 图层合成完整契约', () => {
       { x: 0, y: 0, width: 4, height: 3 }, {
         size: document.geometry,
         registry,
-        resolveSourceSize: (node) => node.definitionId === 'source.raster'
-          ? { width: 2, height: 1 } : document.geometry,
+        resolveSamplingGrid: (target) => ({ toEvaluation: [1, 0, 0, 1, 0, 0],
+          size: target.kind === 'content' && target.node.definitionId === 'source.raster'
+            ? { width: 2, height: 1 } : document.geometry }),
         createTransparent: (region) => filled(region, [0, 0, 0, 0]),
         loadRaster: async (_node, region) => filled(region, [1, 0, 0, 1]),
         rasterizeAnnotations: async () => { throw new Error('没有标注') },
