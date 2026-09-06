@@ -26,7 +26,7 @@ export function createMultiLayerDocumentPersistenceConfirmation(input: {
     if (useProjectStore.getState().currentProjectId !== input.projectId || !isEditableLayerStackResultNode(node)
       || node.data.imageEditSession?.documentRef !== input.documentRef) {
       throw new MultiLayerDocumentNodeApplicationError('NODE_TARGET_CHANGED',
-        '图片内容已保存，但原画布节点已删除或不再关联此图片。请恢复原节点及其文档关联后重试同步；当前编辑内容不会覆盖其他节点。', true)
+        '图片内容已保存，但当前工程或原画布节点的文档关联已变化。请返回原项目，恢复原节点及其文档关联后重试同步；当前编辑内容不会覆盖其他节点。', true)
     }
     return node
   }
