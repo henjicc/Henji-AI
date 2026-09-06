@@ -1,5 +1,8 @@
 const { setupCameraStagePlaybackClock } = require('./uiInspectionCameraStagePlayback.cjs')
 const { setupCameraStageBackgroundRender } = require('./uiInspectionCameraStageBackgroundRender.cjs')
+const {
+  setupCameraStageAssistantCapability,
+} = require('./uiInspectionCameraStageAssistantCapability.cjs')
 
 function createCameraStagePlaybackScenes(context) {
   return [
@@ -19,6 +22,15 @@ function createCameraStagePlaybackScenes(context) {
       writesUserData: true,
       setup: (page, _electronApp, inspection) => (
         setupCameraStageBackgroundRender(page, context, inspection)
+      ),
+    },
+    {
+      id: 'canvas-camera-stage-assistant-render-capability',
+      surface: '画布',
+      name: '画布-助手3D后台输出正式能力',
+      writesUserData: true,
+      setup: (page, _electronApp, inspection) => (
+        setupCameraStageAssistantCapability(page, context, inspection)
       ),
     },
   ]
