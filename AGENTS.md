@@ -67,8 +67,8 @@ npm run assistant:live:suite -- --only camera --skip-generation
 2. **生成链路固定**：`GenerationService` → `commands/aiRuntime.ts` → `platform/` → preload → `electron/main/ipc/ai-runtime.ts` → `electron/main/services/ai-runtime/` 宿主薄壳 → `@henjicc/ai-sdk` 的 client/catalog/provider/upload。Electron 侧只保留日志、落盘、取消、进度与 IPC 等宿主能力。
 3. **PAL 收口**：渲染层只通过 `src/platform/*`、`src/commands/*`、领域服务访问桌面能力。主进程保持 `contextIsolation: true`、`nodeIntegration: false`、`sandbox: true`。
 4. **禁止跨层导入**：组件 ✗→ 主进程/provider 实现；主进程 ✗→ `components/`；模型 ✗→ `services/`/`components/`。桥梁只用 `core/`、`commands/`、`platform/`。
-5. **前后端职责**：移除当前界面后仍然成立、仍需执行或可能被其他界面复用的逻辑，放后端或独立核心模块。不得因前端实现方便就把业务逻辑堆在前端。
-6. **文件体积**：新文件优先 `<= 400` 行，`400~500` 可接受，`> 500` 禁止继续膨胀且修改即拆分。
+5. **领域与线程分离**：可复用业务逻辑放正式领域服务或独立核心模块，不堆在组件里。主进程协调 I/O、权限与生命周期；CPU 重计算放 Worker/utility process，适合并行的像素计算按实测选择 GPU，不因“属于业务”就阻塞主进程。
+6. **文件体积**：新文件优先 `<= 400` 行，`400~500` 可接受；新增或扩展职责时优先拆分。存量大文件的局部修复允许最小修改，不为行数引入无关重构，也不得压行绕过规范。
 7. **SDK 开发与公共消费边界**：Henji-AI 是 `@henjicc/ai-sdk` 的唯一主开发仓库与首发验证宿主，仓内通过 `packages/ai-sdk` workspace 源码开发、构建和验证；Henji-AI 之外的项目一律从公共 npm registry 安装已经发布的精确版本，禁止使用 `workspace:`、`file:`、Git URL、GitHub Packages、源码复制或其他旁路。消费方需要尚未发布的能力时，必须先回到本仓库实现并完成首发验证，经维护者对该次正式发布明确授权后发布，再升级消费项目。合并代码不等于获得发布授权。详细门槛只维护在 [文档采集手册.md](packages/ai-sdk/docs/model-adaptation/文档采集手册.md)。
 8. **SDK 故障先判归属**：升级后报错先对照公共 DTO 并做同版本 SDK 最小直调；合法输入在 SDK 内失败或请求偏离官方契约才修 SDK，`null`/错类型、序列化、凭据、transport、媒体、取消和宿主生命周期问题修消费项目。`field?: T` 只允许省略或 `T`，不自动允许 `null`。完整矩阵见 [model-adaptation.md](docs/rules/model-adaptation.md#sdk-故障归属与修复位置)。
 
@@ -96,7 +96,7 @@ npm run assistant:live:suite -- --only camera --skip-generation
 - 改代码前先确认现有实现：本项目大量能力已有唯一入口，先找再写
 - 新增通用 UI 组件前，先告诉用户原因和替代方案，等确认后再创建
 - 遇到与规则冲突的需求，先说明冲突点，并给出建议，最终由用户决定
-- 不轻易打补丁，发现问题去找根本原因，敢于推倒重写，绝不不盲目叠加判断、复制旧逻辑修改参数等打补丁行为
+- 先定位根因，再做覆盖受影响路径的最小完整修复。局部修改能恢复正确契约时不要重写；禁止吞错、复制业务分支或只改参数掩盖原因。确需重构时说明为何局部修复不足及验证范围。
 - 涉及浏览器操作（调研、抓取网页、自动化）优先主动查找并使用 ego-browser skill；开发环境里没有装 ego-browser 时不强求，改用其他浏览器工具即可
 - VGPU 尚属较新的图形库；涉及 VGPU API、GPU context、target、frame、effect、WGSL、资源生命周期、性能或兼容性时，只要对实现拿不准，必须优先使用官方 VGPU MCP（名称 `vgpu`）的 `docs` / `examples` 工具查证。支持 Modern MCP `2026-07-28` 自动协商的客户端使用 Hosted HTTP `https://vgpu.sh/api/mcp`；仍使用旧协议的 Codex 客户端改用官方只读 stdio `npx -y vgpu mcp`，不得反复配置已确认无法握手的 HTTP 端点。当前会话未加载 MCP 或连接失败时，立即回退查阅 [VGPU 官方文档](https://vgpu.sh/docs)、官方示例与 API Reference。实现判断一律以这些一手资料为准，不得仅凭记忆或二手文章判断
 
@@ -117,6 +117,7 @@ npm run assistant:live:suite -- --only camera --skip-generation
 - 工作区存在其他任务的未提交改动时，禁止为了同步而自动 stash、覆盖、丢弃、还原或误提交这些改动；先执行 `git fetch` 判断远端差异。若上游未前进，可在精确提交后正常推送；若上游已经前进且当前工作区无法安全 rebase，则等待安全边界或把任务转移到独立 worktree 后再同步，不得强行处理
 - 一组改动完成并通过匹配验证后，标准顺序为：提交本次改动 → `git pull --rebase` 再次吸收工作期间产生的远端提交 → 必要时解决冲突并重跑受影响验证 → 推送当前分支。共享脏工作区只能按上一条规定的安全分支处理
 - 每次创建 commit 后都必须立即推送到当前分支的上游；没有上游时使用 `git push -u origin <当前分支>` 建立跟踪关系。推送失败不得声称已同步，必须保留本地提交并如实报告原因
+- Git 网络故障先分类：临时 TLS 握手中断/EOF、连接重置或超时，保持原配置，按 2/5/10 秒退避最多重试 3 次；结果不确定时先核对远端引用。非快进按上面的同步规则处理，认证/权限拒绝、证书校验失败停止盲重试并报告。禁止关闭 TLS 校验、擅改代理或网络配置、用强推绕过失败。
 - 推送完成后检查当前分支与上游既不 ahead 也不 behind，确认本次提交已存在于远端，才算该组改动完成
 - 默认禁止 `git push --force`、`git push --force-with-lease` 及任何会改写远端历史的操作；确需改写历史时必须先获得用户明确授权
 
@@ -125,7 +126,7 @@ npm run assistant:live:suite -- --only camera --skip-generation
 每次改完代码：
 
 1. 跑完 [testing.md](docs/rules/testing.md) 中与本次改动匹配的检查，如实报告结果
-2. 只有本次改变了拖拽、点击、悬浮、窗口、WebGL、IPC 或其他必须在真实容器中证明的行为，才运行项目正式 `npm run test:reality -- --build --suite ui|ui-audit`；普通 TSX、样式、文案、纯逻辑和已有精确测试覆盖的交互不自动升级。需要真实应用视觉审查时禁止使用浏览器、ego-browser 或 Chrome 代替 Electron，并由 Agent 打开实际截图目视检查。
+2. 只有关键结论依赖真实 Electron 的布局命中、合成呈现、原生桥接或生命周期，且精确测试不足以证明时，才运行正式 `npm run test:reality -- --suite ui|ui-audit --only <相关场景>`；运行产物过期时才加 `--build`。出现“点击/拖拽/悬浮”等词、修改 TSX 或已有精确测试覆盖的交互，不自动触发 Reality。需要真实应用视觉审查时禁止使用浏览器、ego-browser 或 Chrome 代替 Electron，并由 Agent 打开实际截图目视检查。
 3. **只有本次改动需要把真实应用交给用户继续查看、改变了 Electron 运行时代码，或实际运行过会中断开发实例的构建/Reality 验收时，最终回复前才检查并维护开发环境。** 分析、规则/文档、测试文件、纯 SDK、纯脚本和无需真实窗口的局部逻辑任务不启动、不重启开发环境。需要维护时只识别工作目录属于当前仓库的 `npm run electron:dev` 进程，禁止按 `node` / `Electron` 名称宽泛结束其他项目进程，并优先使用 `npm run electron:dev -- --background`：
    - 未运行：在可持续运行的终端会话中执行 `npm run electron:dev -- --background`，确认启动成功后再交付
    - 已运行且本次改动需要重启：只结束当前仓库对应的完整开发进程树，然后重新执行 `npm run electron:dev -- --background`
@@ -133,5 +134,5 @@ npm run assistant:live:suite -- --only camera --skip-generation
    - 启动或重启失败：不得声称已完成，保留错误输出并如实报告
    - 只有触发本条时，最终回复才写实际状态：`🟢 开发环境已启动` / `🔄 开发环境已重启` / `✔️无需重启（开发环境保持运行）` / `🔴 开发环境启动失败`
    - 开发重启默认带 `--dev-skip-onboarding`，仅临时隐藏本次启动的首次引导，不得改写用户真实引导状态；验证首次安装/引导本身时必须去掉该参数。
-   - 改动有明确界面时，重启后必须通过 `--dev-surface=<ApplicationSurfaceId>` 自动打开本次修改的页面；需要固定测试素材时再加 `--dev-media=<文件路径>`，由对应页面消费。图片编辑器使用 `--dev-surface=tool.image_edit --dev-media=docs/ref/test01.jpg`。这些参数只服务开发验收，禁止出现在正式用户界面。
+   - 改动有明确界面时，通过已登记的开发导航参数或正式应用能力打开实际宿主。工具箱独立图片编辑器可用 `--dev-surface=tool.image_edit --dev-media=docs/ref/test01.jpg`；画布文档节点应打开对应画布工程或从目标节点进入编辑器，不能用工具箱页面代替。稳定目标或入口缺失时如实报告，不猜 ID、不创建无关工程。这些开发参数禁止出现在正式用户界面。
 4. 助手改动还要多一步：对照 [assistant-status.md](docs/rules/assistant-status.md) 第零节，判断本次是否改变了「通/不通」、增减了欠账，或**推翻了以前已确定做好的内容**——命中任一条就更新那份台账。普通缺陷修复不用动它。

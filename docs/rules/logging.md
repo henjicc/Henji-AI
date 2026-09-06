@@ -40,4 +40,4 @@ npm run logs:query -- --chain <runId>
 
 ## 改动后
 
-至少执行相应静态检查；涉及真实窗口、文件落盘或主进程事件可见性时，写清用户手动验证步骤（见 [docs/rules/testing.md](../../docs/rules/testing.md)）。
+按 [docs/rules/testing.md](../../docs/rules/testing.md) 的最小分层选择精确检查。只有结论依赖真实窗口、Electron 原生 I/O 或主进程到日志查询的可见性，且精确测试不足以证明时，才升级到正式容器验收并回读结构化日志；可自动验证的结果不得默认改为用户手动步骤。确有无法自动验证的外部条件时，才记录原因和最小手动步骤。

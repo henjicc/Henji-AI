@@ -25,7 +25,7 @@
 npx vitest run path/to/module.test.ts
 
 # 依赖关系不完全明确时，只跑受改动源文件影响的测试
-npx vitest related --run path/to/changed-source.ts --passWithNoTests
+npx vitest related --run path/to/changed-source.ts
 
 # 只检查本次改动的 TS/TSX 文件
 npx eslint path/to/changed.ts path/to/changed.tsx --report-unused-disable-directives --max-warnings 0
@@ -34,6 +34,7 @@ npx eslint path/to/changed.ts path/to/changed.tsx --report-unused-disable-direct
 - 纯样式、文案、静态资源替换不因“文件是 `.tsx`”就自动跑全量单测或全量类型检查
 - 只改测试文件时，只运行该测试文件；除非同时改了共享测试设施，不跑全量套件
 - `vitest related` 只接收**源文件**；已知测试路径时优先直接运行测试文件
+- `related` 找不到测试不等于已有覆盖；必须补充或指出真正覆盖该行为的测试，不能凭 `--passWithNoTests` 的退出码报通过
 
 Agent 日常优先使用统一入口，并显式列出**本次任务自己的文件**：
 
@@ -41,7 +42,7 @@ Agent 日常优先使用统一入口，并显式列出**本次任务自己的文
 npm run verify:changed -- --level L1 src/path/source.ts src/path/source.test.ts
 ```
 
-该命令不会读取整个 `git diff`，因此不会把并行任务留在同一工作区的改动纳入验证。可先加 `--dry-run` 查看计划；不得为了省事省略文件清单后改跑全量。
+该命令只支持 L0–L2，不读取整个 `git diff`。先加 `--dry-run` 核对范围与去重：现实现可能同时安排精确测试和 `related --passWithNoTests`，必要时手动执行去重后的明确命令。它对 package/锁文件、workflow、tsconfig、Vite/Vitest 配置固定拒绝局部验证；有界改动可按本规则说明风险依据、手选检查，但不能声称自动入口已经支持，也不能绕过必需 CI 门禁。
 
 ### L2：共享或高风险模块改动
 
@@ -59,10 +60,10 @@ npx tsc -p tsconfig.json --noEmit
 
 # Electron 主进程 / preload
 npx tsc -p tsconfig.electron.json --noEmit
-npm run lint:electron
+npx eslint electron/main/path/to/changed.ts --cache --cache-location node_modules/.eslintcache-electron --report-unused-disable-directives --max-warnings 0
 ```
 
-两套 TypeScript 工程已启用本地增量缓存；仍然只能检查改动所属工程，不能因为第二次更快就无差别跑两套。也可以用显式文件入口让它自动选择所属工程：
+文件级 ESLint 使用仓库现有 `.eslintrc.json`，不必为主进程叶子改动全扫 `lint:electron`。两套 TypeScript 工程有增量缓存，仍只检查改动所属工程；也可用显式文件入口：
 
 ```bash
 npm run verify:changed -- --level L2 electron/main/path/to/changed.ts
@@ -77,7 +78,7 @@ SDK 的请求/响应、轮询、SSE、WebSocket 或流式 parser 属于 L2 起�
 仅适用于以下情况：
 
 - 无法可靠界定影响范围的跨目录/跨层重构
-- 修改构建配置、测试基础设施、核心公共契约或关键依赖
+- 改变全局构建/测试执行或覆盖语义且无法局部证明影响范围，或修改核心公共契约、关键依赖
 - 合并前的高风险检查、发布、复现 CI 全量失败
 - 用户明确要求全量验证
 
@@ -91,16 +92,19 @@ npx vitest run
 
 `npm test` / `npx vitest run` 是全量单测，**不是每次代码改动的默认收尾命令**。`electron:build` 也不是全量单测的替代品。
 
+配置、测试工具的有界局部修复按实际风险选 L0–L2；只改测试文件不自动成为“测试基础设施 L3”。不得借此省略真正的全局覆盖、构建或核心公共风险检查。
+
 历史任务文件中的验证清单不具有持续升级权：`docs/task/**` 只记录当时范围和证据。恢复旧任务时仍按本文件重新判级；只有用户明确要求复现原验收、发布或当前改动本身满足 L3，才照搬其中的全量命令。
 
 ## 二、验证范围只能因风险升级
 
-按以下顺序选择验证，不得倒序从全量开始：
+先用一句话确定：**改变了什么行为 → 哪个风险会出错 → 最低哪层证据能证明它。**
 
-1. 明确本次改动改变了什么行为、有哪些直接消费者
-2. 先跑精确测试或单个专项检查
-3. 影响边界不清时扩大到 `vitest related`
-4. 只有发现共享契约影响、相关测试失败指向更广范围，或符合 L3 条件时才跑全量
+- 普通叶子优先一份定向测试，覆盖正常路径、实际缺陷及相关失败边界；状态机按受影响的转移选例，不硬凑测试数量。
+- 跨边界时选择覆盖相关风险的最短集成链路，不设“一条”的硬上限；已由精确测试证明的细节不在每层重复。影响范围不清再用 `related` 或按 L3 升级。
+- GUI 默认只跑一个故障尺寸；响应式、DPI、尺寸相关问题或用户明确矩阵才跑双尺寸。重规模优先一个临界规模，保留真实处理路径；互不影响的风险不做无意义的场景×尺寸×设备笛卡尔积。
+- 修复测试失败后先重跑失败精确项；修改稳定后把仍需验证的受影响文件去重合并一次，不在每次小编辑后重跑全套。
+- 同代码、同依赖、同环境、同范围的通过证据可复用。主代理审查子代理的命令和结果，不默认重复全跑；相关代码、依赖或环境变化后只重验失效范围，整体验收另按真实集成风险选择。
 
 禁止做法：
 
@@ -109,6 +113,7 @@ npx vitest run
 - 为了显得验证充分，把 lint、两个 tsc、全量 Vitest、build、smoke 无差别全部叠加
 - 在精确测试已经失败时继续盲目跑更大的套件；应先定位并修复当前失败
 - 把 CI 会执行全量检查理解成本地也必须重复执行全量检查
+- 为省时间放松像素/性能/数据阈值，或删除、跳过尚未解决的失败测试
 
 ## 三、哪些测试值得保留
 
@@ -138,23 +143,9 @@ npx vitest run
 
 当问题必须回答“在真实应用里到底通不通”，统一走 `npm run test:reality`，按证据成本选层，禁止另写一条临时 Electron/Playwright 启动链。需要新产物时显式传 `--build`，它只运行轻量 `electron:bundle`，不会附带完整质量门禁：
 
-> ⚠️ **默认直接使用 `out/` 里的构建产物；只有显式 `--build` 才先做轻量构建。** 只改源码没重新构建就跑，
-> 截图与断言反映的是**上一次构建的应用**，会得到一个全绿但毫无意义的结果。
+> 默认读取 `out/`，`scripts/lib/electronLaunch.cjs` 的 `assertBuildFreshness` 会拒绝缺失或旧于 `src/`、`electron/` 的产物。改过运行时代码应加 `--build` 或先 `npm run electron:bundle`，不因此升级到完整 `electron:build`。仅为明确的旧产物诊断才可使用 `HENJI_SKIP_BUILD_FRESHNESS=1`，结果不得冒充新代码验证。
 >
-> `scripts/lib/electronLaunch.cjs` 的 `assertBuildFreshness` 会在启动前比对
-> `src/` `electron/` 下最新的源码改动时间与产物时间，**产物更旧就直接失败**并给出
-> 要跑的命令；产物不存在同样失败。这条守卫覆盖全部经 `launchElectronApp` 启动的脚本
-> （巡检、审计、smoke、DPI、更新 e2e、画布压测与基准）。
->
-> 所以改了运行时代码后优先给 `test:reality` 加 `--build`，或单独运行 `npm run electron:bundle`。
-> `npm run electron:build` 会连带全部静态检查，只为看界面时用不着。确实要在旧产物上跑，设
-> `HENJI_SKIP_BUILD_FRESHNESS=1`——但那等于放弃结论的有效性，要有明确理由。
->
-> ⚠️ **构建会打断正在运行的 `electron:dev`。** 开发模式也是从 `out/` 加载的，
-> 重新构建等于在它脚下换文件，轻则整页重载、重则主进程直接崩。跑巡检的正确顺序是：
-> **先停 `electron:dev` → 构建 → 跑巡检 → 再以 `npm run electron:dev -- --background` 启动**。
-> 收尾时按项目规则确认开发环境状态，别把崩掉的实例当成还在运行；重启前先确认
-> 5173 端口已释放，否则新实例会退到 5174，变成同时跑两份。
+> 构建前暂停当前仓库中读取同一 `out/` 产物的开发实例，避免在其运行时替换文件；完成后按 [AGENTS.md 完成标准](../../AGENTS.md#完成标准) 恢复开发环境。
 
 | 层 | `--suite` | 使用的真实性 |
 |---|---|---|
@@ -175,13 +166,13 @@ npx vitest run
 npm run test:reality -- --suite unit --test src/features/example.test.ts
 npm run test:reality -- --suite integration
 npm run test:reality -- --build --suite ui --only 3D --size 1440x900
-npm run test:reality -- --build --suite ui --profile real --only 设置
+npm run test:reality -- --build --suite ui --only 设置 --size 960x640
 npm run test:reality -- --build --suite live --profile real --allow-paid --allow-writes --only camera
 ```
 
 UI 真实性测试不能只证明“脚本点完了”或“截图生成了”。每个场景同时订阅浏览器 `console error` / `pageerror`，并通过应用正式 logging 查询接口用 `afterTimestamp + level + limit` 截取该场景之后的结构化错误与警告。错误进入失败判据，警告进入 `evidence.json` 供诊断。**不要让测试脚本直接读取整份日志文件**：日志文件仍是唯一持久化来源，主进程接口负责流式过滤、限量和脱敏，脚本只消费窄结果；只有日志 IPC/查询服务本身坏掉时，才把直接读文件作为救援路径。
 
-真实应用视觉审查按固定顺序执行：确认并暂停占用同一真实资料目录的当前仓库开发实例 → 用 `test:reality --build --suite ui|ui-audit --profile real` 运行最小只读场景 → Agent 逐张打开实际截图检查对齐、裁切、层级、颜色与文案 → 核对 `evidence.json` 和结构化日志 → 退出巡检实例 → 仅在本次需要交付运行中应用时恢复或重启开发环境。禁止用浏览器、ego-browser、Chrome、裸 Vite 或临时 profile 的截图冒充真实用户环境；DOM 断言通过也不能替代目视截图。项目正式 Electron 自动化可以执行点击、悬浮和画布交互，不受下文“不要人工上手”的限制。
+真实视觉审查运行正式 Electron 的最小场景后，Agent 打开实际截图并核对 `evidence.json`、日志。隔离临时 profile 是合法的真实容器证据；只有问题依赖用户真实工程、配置或密钥链时才需要 `--profile real`，副作用仍须授权。禁止用浏览器、裸 Vite 冒充 Electron，或把临时夹具说成用户真实数据；DOM 断言不能替代目视截图。正式 Electron 自动化可以执行点击、悬浮和画布交互。
 
 ## 四、按改动类型追加专项检查
 
@@ -292,7 +283,7 @@ L-B **不证明**"模型会这么做"，只证明"这么做的话运行时是对
 - **（第 16 条）改域清单、能力目录或发现投影时，静态不变量必须全域穷举，不许手挑场景。** 手挑守的是「我想到的那几个域没问题」，而问题是注册数据的函数：某个域多注册两条能力、某条 schema 深一层就可能越线，没被挑中的域没有任何东西盯着它。四条现成的：域非空与可路由（`capability-domain-coverage.test.ts`）、投影体积与深度（`capability-discovery-size.test.ts`）、评测用例点名的工具真实存在（`regression-cases.test.ts`）、并发基线发布得出来且认得出来（`hostScopeCoverage.test.ts`）。**门禁必须与生产用同一把尺子**——阈值、档位、作用域解析一律从生产函数取，写死常量或另写一份平行判断会造出假红假绿，实测三处都发生过。
 
   **「注册了但用不上」是一整类事故，不是几个孤立 bug。** 已经出现四种形状：域名没进工具契约（模型说不出）、域没有任何能力（说得出但目录是空的）、发现结果撞输出深度上限（连目录都拿不到）、并发基线发布不出来（拿得到目录但写不进去）。每一种都是"声明齐全、实际走不通"，而覆盖门禁（`propertyCoverage` / `storeActionCoverage`）看不见它们——那些守的是"声明与执行器一致"，不是"这条路经 Gateway 走得通"。新增这类门禁时按同一形状写：遍历注册表、走生产同一条路、把欠账登记成**会缩短的清单**而不是豁免表。
-- **（第 17 条）改拒绝路径、实体读写落地或脚本执行链路时，跑 `npm run test:assistant-harness`。** 这层用剧本驱动真运行时（真注册表、真 Gateway、真解释器、真领域执行器、真 zustand）。替身只允许出现在进程边界和外部付费/像素边界上——目前只有两个：LLM（剧本），以及需要创建实例的用例装的内存 `window.henjiNative`（`src/tests/harnessNativeStorage.ts`）。schema、权限、revision、动态 availability、执行器、真相源一旦出现替身，这层立刻变成漂亮的假绿。判断方法：把替身撤掉后，被测行为的**判断逻辑**有没有任何一条搬进了替身里。
+- **（第 17 条）改拒绝路径、实体读写落地或脚本执行链路时，运行对应 harness 文件**，例如 `npx vitest run src/tests/assistantHarness.settings.test.ts`；只有共享跨域执行链变化才跑整套 `npm run test:assistant-harness`（`test:reality --suite integration` 也是整套，不是精确筛选）。仍须走真注册表、Gateway、解释器、领域执行器和状态源；替身只在 LLM、进程/外部付费/像素边界，不能替代 schema、权限、revision、动态 availability 或业务判断。
 
   **存储替身只能存，不能判。** 它复刻的只有存储语义（主键/唯一冲突、行不存在、排序、upsert 保留 createdAt、边界上的结构化克隆），不复刻边界之后主进程在存储之上的加工，因此这一层不能用来断言那些加工。**没实现的方法必须抛错，不许返回空值或假成功**——返回空值等于悄悄伪造业务结果，调用方会把"没这个能力"当成"查到了但是空的"继续走，最后在离现场很远的地方失败。这条本身要有测试钉住（`harnessNativeStorage.test.ts`）。
 
@@ -300,7 +291,7 @@ L-B **不证明**"模型会这么做"，只证明"这么做的话运行时是对
 - 真机场景按**交互模式**组织，不按领域。运行时与领域无关（所有前端能力走同一条适配路径，Gateway、租约、revision 都不看域），所以「A 域通 B 域不通」只可能来自注册数据（L-A）、领域执行器（L-B）或模型对该域词汇的理解（只有 L-C）。前两类不该占用真机预算。
 - 真机场景里**不得嵌入每次运行都变的值**。目标文本用 `nonce`（`n` + 6 位 36 进制随机串）而不是时间戳：纯数字反替换时会误伤坐标、时长这类正常数值，而录制器要把它整份换成 `{{nonce}}` 才能回放。运行时产物 id（taskId、projectId 等）不能替换成常量——它们是真实产物，只能参数化成对前序步骤结果的引用，或把该剧本降级为手写；`npm run assistant:record` 检测到未参数化的产物 id 会告警，加载器拒绝回放。
 
-新增或扩展门禁时必须做一次断牙验证：临时撤掉它要保护的修复，确认目标命令稳定变红且错误能定位，再恢复代码并确认转绿。把失败断言摘要记入对应任务执行记录；未证明能变红的门禁不算完成。
+新增关键保护或门禁须证明“坏情况确实变红、修复后变绿”：优先修前红测或安全隔离的失败注入，不要求在共享工作区撤回生产修复。普通叶子不重复做断牙；证据写在交接消息或已有执行记录，不为此新建文档。
 
 ### Electron 主进程能力
 
@@ -322,20 +313,18 @@ L-B **不证明**"模型会这么做"，只证明"这么做的话运行时是对
 
 ## 五、人工核查
 
-以下检查仅在改动可能引入对应问题时执行：
+只检查本次可能引入的问题；下列示例路径应替换为明确的本次文件，不扫描整个脏工作区：
 
 ```bash
-# 原生控件检查（业务代码里的命中都要处理；测试替身与 ui 基元层除外）
-grep -rn --include='*.tsx' -E '<(button|input|select|textarea)\b' src \
-  | grep -vE '\.test\.tsx:|src/components/ui/' \
-  | grep -vE ':[[:space:]]*(\*|//)'
+# 改动文件的 lint 与可疑原生控件（搜索命中仍需区分注释）
+npx eslint src/App.tsx --report-unused-disable-directives --max-warnings 0
+rg -n '<(button|input|select|textarea)\b' src/App.tsx
 
-# 文件行数治理（重点关注本次新增/修改后超过 500 行的文件）
-find src electron \( -name '*.ts' -o -name '*.tsx' \) \
-  | xargs wc -l | awk '$1 > 500 && $2 != "total"' | sort -rn
+# 只看本次新增/修改文件的行数
+wc -l src/App.tsx
 ```
 
-第一条排除了测试替身、`src/components/ui/` 基元层和注释行。**任何剩余命中都是需要处理的违规**——存量已于 2026-08-26 清零（最后一处是 `ModelSyncDialog` 的分组折叠按钮，已改用 `UiOptionButton variant="menu"`），现在这条命令应当无输出。
+原生控件只豁免 `src/components/ui/primitives.tsx` 和测试替身，不能豁免整个 `src/components/ui/`。判断以当前命中为准，不拿历史“清零”推定现状；体积规则沿用 [architecture.md](architecture.md)。
 
 不要人工接管用户鼠标做验收。拖拽、点击、悬浮、画布交互优先补入并运行正式 Electron UI 场景；尚未覆盖或必须由用户主观判断的交互，再把具体操作步骤和验证点交给用户。真实 API key 下的生成链路、真实项目包导入导出、macOS 真机行为仍交给用户，除非用户已明确授权对应真实副作用。
 
@@ -347,12 +336,10 @@ find src electron \( -name '*.ts' -o -name '*.tsx' \) \
 2. 该级别中与改动**直接相关**的最小检查已实际执行并通过；不相关命令不需要跑
 3. 有失败的，如实报告失败输出，不隐瞒、不用无关测试数量淡化
 4. 需要用户手动验证的部分，已写出可照做的步骤和验证点
-5. 只有本次需要交付运行中应用、改变了 Electron 运行时代码，或实际运行过会中断开发实例的构建/Reality 验收时，最终回复前才检查当前仓库的 `npm run electron:dev`。分析、规则/文档、测试文件、纯 SDK、纯脚本和无需真实窗口的局部逻辑任务跳过本条。触发时：未运行则优先用 `npm run electron:dev -- --background` 启动；已运行且本次需要重启则仅重启当前仓库的开发进程树；已运行且无需重启则保持单实例。进程归属必须通过当前仓库工作目录或明确命令链确认，禁止宽泛结束其他 `node` / `Electron` 进程
+5. 是否维护开发环境及启动、重启、页面定位方式，统一按 [AGENTS.md 完成标准](../../AGENTS.md#完成标准) 执行；本文件不另设触发条件
 6. 新增/改造的关键业务链路已按 [logging.md](logging.md) 补齐结构化日志
 
 完成报告只列实际执行的检查及结果，不需要为未运行且不相关的全量命令道歉。
-
-触发开发环境维护时，状态统一写成以下四种之一：`🟢 开发环境已启动` / `🔄 开发环境已重启` / `✔️无需重启（开发环境保持运行）` / `🔴 开发环境启动失败`；未触发时不必报告开发环境。
 
 ## 七、CI 全量兜底
 
@@ -368,5 +355,5 @@ find src electron \( -name '*.ts' -o -name '*.tsx' \) \
 
 - 证据须对应本次修改后的代码、具体输入规模和实际命令；历史任务的“已完成”不能替代当前验证。
 - 需要真实容器的行为按第三节运行正式 Reality，并记录实际窗口/设备与截图。提交确认、GPU 完成和物理屏幕呈现是不同指标，不得混称。
-- 新增或修改的关键保护判据须做匹配的断牙验证：临时破坏对应约束，确认精确测试变红，恢复后再变绿；不要求每个叶子改动都运行全量或真机。
+- 关键保护的红→绿证据按第四节断牙规则提供；同代码与环境的实际通过结果可复用，历史“已完成”标签不可替代证据。
 - 本地按 L0–L3 裁剪验证；提交推送后核对**当前提交**的必需远端质量门禁。尚在运行或失败时明确待验证/阻塞，不以旧提交绿灯、取消运行或后续无关通过项代替。
