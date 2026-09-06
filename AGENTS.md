@@ -68,7 +68,7 @@ npm run assistant:live:suite -- --only camera --skip-generation
 3. **PAL 收口**：渲染层只通过 `src/platform/*`、`src/commands/*`、领域服务访问桌面能力。主进程保持 `contextIsolation: true`、`nodeIntegration: false`、`sandbox: true`。
 4. **禁止跨层导入**：组件 ✗→ 主进程/provider 实现；主进程 ✗→ `components/`；模型 ✗→ `services/`/`components/`。桥梁只用 `core/`、`commands/`、`platform/`。
 5. **领域与线程分离**：可复用业务逻辑放正式领域服务或独立核心模块，不堆在组件里。主进程协调 I/O、权限与生命周期；CPU 重计算放 Worker/utility process，适合并行的像素计算按实测选择 GPU，不因“属于业务”就阻塞主进程。
-6. **文件体积**：新文件优先 `<= 400` 行，`400~500` 可接受；新增或扩展职责时优先拆分。存量大文件的局部修复允许最小修改，不为行数引入无关重构，也不得压行绕过规范。
+6. **文件职责**：不设统一行数门槛。按职责内聚、依赖边界和可验证性判断是否拆分；行数只提示需要审查，不单独阻断改动。拆分应减少理解和修改成本，不为凑行数引入无关重构、机械碎片或压缩代码。具体判断见 [architecture.md](docs/rules/architecture.md#文件体积与职责)。
 7. **SDK 开发与公共消费边界**：Henji-AI 是 `@henjicc/ai-sdk` 的唯一主开发仓库与首发验证宿主，仓内通过 `packages/ai-sdk` workspace 源码开发、构建和验证；Henji-AI 之外的项目一律从公共 npm registry 安装已经发布的精确版本，禁止使用 `workspace:`、`file:`、Git URL、GitHub Packages、源码复制或其他旁路。消费方需要尚未发布的能力时，必须先回到本仓库实现并完成首发验证，经维护者对该次正式发布明确授权后发布，再升级消费项目。合并代码不等于获得发布授权。详细门槛只维护在 [文档采集手册.md](packages/ai-sdk/docs/model-adaptation/文档采集手册.md)。
 8. **SDK 故障先判归属**：升级后报错先对照公共 DTO 并做同版本 SDK 最小直调；合法输入在 SDK 内失败或请求偏离官方契约才修 SDK，`null`/错类型、序列化、凭据、transport、媒体、取消和宿主生命周期问题修消费项目。`field?: T` 只允许省略或 `T`，不自动允许 `null`。完整矩阵见 [model-adaptation.md](docs/rules/model-adaptation.md#sdk-故障归属与修复位置)。
 
@@ -99,6 +99,15 @@ npm run assistant:live:suite -- --only camera --skip-generation
 - 先定位根因，再做覆盖受影响路径的最小完整修复。局部修改能恢复正确契约时不要重写；禁止吞错、复制业务分支或只改参数掩盖原因。确需重构时说明为何局部修复不足及验证范围。
 - 涉及浏览器操作（调研、抓取网页、自动化）优先主动查找并使用 ego-browser skill；开发环境里没有装 ego-browser 时不强求，改用其他浏览器工具即可
 - VGPU 尚属较新的图形库；涉及 VGPU API、GPU context、target、frame、effect、WGSL、资源生命周期、性能或兼容性时，只要对实现拿不准，必须优先使用官方 VGPU MCP（名称 `vgpu`）的 `docs` / `examples` 工具查证。支持 Modern MCP `2026-07-28` 自动协商的客户端使用 Hosted HTTP `https://vgpu.sh/api/mcp`；仍使用旧协议的 Codex 客户端改用官方只读 stdio `npx -y vgpu mcp`，不得反复配置已确认无法握手的 HTTP 端点。当前会话未加载 MCP 或连接失败时，立即回退查阅 [VGPU 官方文档](https://vgpu.sh/docs)、官方示例与 API Reference。实现判断一律以这些一手资料为准，不得仅凭记忆或二手文章判断
+
+### 子代理使用
+
+- 默认由主代理直接完成连贯任务；不因存在任务编号、可用并发槽位或历史任务曾要求派发，就自动为当前任务创建子代理。用户对本次任务有明确分工要求时按其要求执行。
+- 派发前确认：子任务边界清楚、输入足够、结果可以独立检查，且能与主代理的有效工作并行；预期节省时间或提高质量的收益应大于交接、重复探索、集成和额外用量成本。
+- 适合派发：互不依赖的代码调查、不同模块的证据收集、接口已经明确的独立实现，以及与实现并行的定向审查。不适合派发：小修复、紧密耦合且根因未明的问题、主代理下一步立即依赖的串行工作，或多人争用同一文件与运行状态。简单的并行读取优先使用工具并行调用。
+- 使用完成任务所需的最少代理，不默认递归派发。每次交代目标、上下文、文件范围、接口约束和验收条件；交回实际改动、验证证据与遗留风险。默认通过消息或现有任务文件交接，不额外创建交接文档，除非用户要求。
+- 并行实现划定文件所有权，优先独立 worktree；禁止并发修改同一文件，或并发执行争用同一运行产物/实例的构建与 Reality。验证按 [testing.md](docs/rules/testing.md) 裁剪并复用有效证据，不让每个代理重复跑整套检查。
+- 主代理负责接口一致性、集成审查和最终结论；子代理声称完成不等于验收通过，意见冲突按代码与测试证据解决，不以代理数量投票。
 
 ### Git 提交规范
 
