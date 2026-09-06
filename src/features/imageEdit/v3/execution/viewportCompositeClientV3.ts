@@ -204,7 +204,6 @@ export class ImageEditorViewportCompositeClientV3 {
       resourceRefs: prepared.resourceRefs,
       revision: job.document.revision,
       documentSize: imageEditOutputSizeV3(job.document.geometry),
-      sourceSize: job.document.geometry,
       viewport: job.viewport,
       bitDepth,
       haloDocumentPixels: prepared.haloDocumentPixels,

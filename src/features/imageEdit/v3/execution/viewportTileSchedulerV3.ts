@@ -54,13 +54,11 @@ export class ImageEditorViewportCancelledErrorV3 extends Error {
 
 export interface ImageEditorViewportRenderRequestV3 {
   resourceRef: ImageEditorV3ResourceRef
-  /** 同一文档几何下参与合成的全部普通图片资源；首项仍由 resourceRef 决定。 */
+  /** 参与合成的全部普通图片资源；每个资源使用自身几何。 */
   resourceRefs?: readonly ImageEditorV3ResourceRef[]
   revision: number
   /** 输出坐标空间尺寸。 */
   documentSize: ImageEditSize
-  /** 源金字塔尺寸；裁剪/方向不会改变它。 */
-  sourceSize?: ImageEditSize
   viewport: ImageEditorViewportTransformV3
   bitDepth: 8 | 16 | 32
   haloDocumentPixels?: number
@@ -225,6 +223,8 @@ export class ImageEditorViewportTileSchedulerV3 {
     this.assertCurrent(job)
     const primaryDescriptor = descriptors[0]
     if (!primaryDescriptor) throw new Error('视口图片资源缺少金字塔描述')
+    const sourceSize = primaryDescriptor.levels.find(({ mip }) => mip === 0)
+    if (!sourceSize) throw new Error('视口图片资源缺少 mip 0 几何')
     for (const candidate of descriptors.slice(1)) {
       assertCompatibleImageEditorViewportPyramidV3(primaryDescriptor, candidate)
     }
@@ -236,7 +236,7 @@ export class ImageEditorViewportTileSchedulerV3 {
     const plan = planImageEditorViewportTilesV3({
       resourceRef: job.request.resourceRef,
       documentSize: job.request.documentSize,
-      sourceSize: job.request.sourceSize,
+      sourceSize,
       pyramid: descriptor,
       viewport: job.request.viewport,
       bitDepth: job.request.bitDepth,
