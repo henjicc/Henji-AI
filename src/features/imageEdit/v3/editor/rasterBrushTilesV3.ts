@@ -1,7 +1,6 @@
 import {
   createImageEditorV3RequestId,
   readImageEditorV3BrushTiles,
-  readImageEditorV3SourceTile,
 } from '@/commands/imageEditorV3'
 import type {
   ImageEditBrushResourceReferenceV3,
@@ -10,12 +9,16 @@ import type {
   ImageEditBrushTileV3,
 } from '@/core/imageEdit/v3/brush/contracts'
 import { createFloat32PremultipliedRgbaTile } from '@/core/imageEdit/v3/effects/contracts'
-import { decodeInterleavedRgbaSourceTileV3 } from '@/core/imageEdit/v3/execution/sourceTileDecode'
 import type { ImageEditDocumentV3 } from '@/core/imageEdit/v3/documentTypes'
 import type { ImageEditRasterLayerV3 } from '@/core/imageEdit/v3/layerTypes'
 import { IMAGE_EDIT_HDR_REFERENCE_WHITE_NITS_V3 } from '@/core/imageEdit/v3/colorTypes'
 import { createTileRegion, type ImageEditTileCoordinate } from '@/core/imageEdit/v3/tileGeometry'
-import type { ImageEditorV3SourceTile } from '@/platform/contracts/imageEditorV3'
+import type { ImageEditorV3SourceTile, ImageEditorV3PyramidDescriptor } from '@/platform/contracts/imageEditorV3'
+import { loadImageEditorV3SourceRegion } from '../export/sourceRegion'
+import { readImageEditorExportSourcePyramidV3 } from '../export/sourceGeometry'
+import { resolveImageEditRasterStorageSizeV3 } from '@/core/imageEdit/v3/execution/rasterSourceGeometry'
+import type { ImageEditSize } from '@/core/imageEdit/v3/tileGeometry'
+import type { ImageEditorV3ExportRenderDependencies } from '../export/contracts'
 
 const TILE_SIZE = 512
 
@@ -36,6 +39,7 @@ export interface ImageEditorRasterBrushTileLoaderOptionsV3 {
   resourceByteSizes: ReadonlyMap<string, number>
   readBrushTile?: BrushTileReaderV3
   readSourceTile?: SourceTileReaderV3
+  readSourcePyramid?: ImageEditorV3ExportRenderDependencies['readSourcePyramid']
 }
 
 function tileKey(coordinate: ImageEditTileCoordinate): string {
@@ -91,53 +95,31 @@ function defaultBrushTileReader(
   })
 }
 
-function createDefaultSourceTileReader(
-  document: ImageEditDocumentV3,
-  layer: ImageEditRasterLayerV3,
-): SourceTileReaderV3 {
-  return async (coordinate, signal) => {
-    if (layer.source.kind !== 'resource') throw new Error('空栅格图层没有源瓦片')
-    return readImageEditorV3SourceTile({
-      requestId: createImageEditorV3RequestId('brush-source-tile-read'),
-      resourceRef: layer.source.resourceId as `sha256:${string}`,
-      mip: coordinate.mip,
-      tileX: coordinate.x,
-      tileY: coordinate.y,
-      halo: 0,
-      bitDepth: sourceBitDepth(document),
-    }, signal)
-  }
-}
-
-function validateSourceTile(
-  tile: ImageEditorV3SourceTile,
-  coordinate: ImageEditTileCoordinate,
-  width: number,
-  height: number,
-): void {
-  if (
-    tile.mip !== coordinate.mip
-    || tile.tileX !== coordinate.x
-    || tile.tileY !== coordinate.y
-    || tile.halo !== 0
-    || tile.width !== width
-    || tile.height !== height
-    || tile.channels !== 4
-    || tile.alphaMode !== 'straight'
-  ) throw new Error(`图片源瓦片与画笔请求不匹配：${tileKey(coordinate)}`)
-}
-
 /** 稀疏覆盖优先；没有覆盖时从图层源读取，空图层则创建透明边缘瓦片。 */
 export function createImageEditorRasterBrushTileLoaderV3(
   options: ImageEditorRasterBrushTileLoaderOptionsV3,
-): ImageEditBrushTileLoaderV3 {
+): ImageEditBrushTileLoaderV3 & { resolveStorageSize(signal: AbortSignal): Promise<ImageEditSize> } {
   const target = createImageEditorRasterBrushTargetV3(options.document)
   const readBrushTile = options.readBrushTile ?? defaultBrushTileReader
-  const readSourceTile = options.readSourceTile
-    ?? createDefaultSourceTileReader(options.document, options.layer)
-  return async (coordinate, signal) => {
+  let storageSize: ImageEditSize | undefined
+  let sourcePyramid: ImageEditorV3PyramidDescriptor | undefined
+  const resolveStorageSize = async (signal: AbortSignal): Promise<ImageEditSize> => {
+    signal.throwIfAborted()
+    if (storageSize) return storageSize
+    if (options.layer.source.kind === 'empty') return options.document.geometry
+    const pyramid = await readImageEditorExportSourcePyramidV3(options.layer.source.resourceId, signal, {
+      readSourcePyramid: options.readSourcePyramid,
+    })
+    signal.throwIfAborted()
+    const source = pyramid.levels.find((level) => level.mip === 0)
+    if (!source) throw new Error('图片源金字塔缺少原始尺寸')
+    sourcePyramid = pyramid
+    storageSize = resolveImageEditRasterStorageSizeV3(source, options.document.geometry)
+    return storageSize
+  }
+  const load: ImageEditBrushTileLoaderV3 = async (coordinate, signal) => {
     const key = tileKey(coordinate)
-    const region = createTileRegion(options.document.geometry, coordinate, 0, TILE_SIZE)
+    const region = createTileRegion(await resolveStorageSize(signal), coordinate, 0, TILE_SIZE)
     const resourceId = options.layer.tiles[key]
     if (resourceId) {
       const byteSize = options.resourceByteSizes.get(resourceId)
@@ -147,6 +129,9 @@ export function createImageEditorRasterBrushTileLoaderV3(
       const resource = { resourceId, byteSize }
       const tile = await readBrushTile(key, resource, signal)
       if (tile.storage !== 'rgba-float32') throw new Error(`栅格图层包含非 RGBA 画笔瓦片：${key}`)
+      if (tile.width !== region.outputRect.width || tile.height !== region.outputRect.height) {
+        throw new Error(`画笔存储瓦片尺寸不匹配：${key}`)
+      }
       return { tile: normalizeTileEncoding(tile, target), resource }
     }
     if (options.layer.source.kind === 'empty') {
@@ -163,21 +148,20 @@ export function createImageEditorRasterBrushTileLoaderV3(
         resource: null,
       }
     }
-    const source = await readSourceTile(coordinate, signal)
-    validateSourceTile(source, coordinate, region.outputRect.width, region.outputRect.height)
-    const decoded = decodeInterleavedRgbaSourceTileV3({
-      width: source.width,
-      height: source.height,
-      rowStride: source.rowStride,
-      bitDepth: source.bitDepth,
-      sampleFormat: source.sampleFormat,
-      numericRange: source.numericRange,
-      byteOrder: source.byteOrder,
-      colorSpace: 'srgb',
-      transferFunction: source.transferFunction,
-      alphaMode: source.alphaMode,
-      pixels: source.pixels,
-    }, target.workingSpace)
+    const decoded = await loadImageEditorV3SourceRegion(
+      options.layer.source.resourceId, region.outputRect, options.document.geometry,
+      sourceBitDepth(options.document), target.workingSpace, target.transferFunction,
+      target.referenceWhiteNits, signal, {
+        readSourcePyramid: async () => {
+          if (!sourcePyramid) throw new Error('画笔源几何尚未准备')
+          return sourcePyramid
+        },
+        readSourceTile: options.readSourceTile ? (request, requestSignal) => options.readSourceTile!(
+          { mip: request.mip, x: request.tileX, y: request.tileY }, requestSignal,
+        ) : undefined,
+      }, coordinate.mip,
+    )
     return { tile: normalizeTileEncoding(decoded, target), resource: null }
   }
+  return Object.assign(load, { resolveStorageSize })
 }

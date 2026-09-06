@@ -4,6 +4,7 @@ import {
   createFloat32PremultipliedRgbaTile,
   decodeInterleavedRgbaSourceTileV3,
   enumerateTilesForRect,
+  createTileRegion,
   type Float32MaskTile,
   type Float32PremultipliedRgbaTile,
   type ImageEditTransferFunctionV3,
@@ -153,11 +154,13 @@ export async function loadImageEditorV3SourceRegion(
   dependencies: ImageEditorV3ExportRenderDependencies,
   mip = 0,
 ): Promise<Float32PremultipliedRgbaTile> {
+  throwIfAborted(signal)
   if (!/^sha256:[a-f0-9]{64}$/.test(resourceRef)) {
     throw new Error(`图片编辑资源引用无效：${resourceRef}`)
   }
   const readTile = dependencies.readSourceTile ?? defaultReadSourceTile
   const pyramid = await readImageEditorExportSourcePyramidV3(resourceRef, signal, dependencies)
+  throwIfAborted(signal)
   const sourceSize = pyramid.levels.find((level) => level.mip === 0)
   if (!sourceSize) throw new Error('图片源金字塔缺少原始尺寸')
   const output = new Float32Array(region.width * region.height * 4)
@@ -173,7 +176,13 @@ export async function loadImageEditorV3SourceRegion(
       bitDepth,
     }
     const tile = await readTile(request, signal)
+    throwIfAborted(signal)
     validateReturnedTile(request, tile)
+    const expected = createTileRegion(sourceSize, coordinate, 0).sourceRect
+    if (tile.width !== expected.width || tile.height !== expected.height
+      || tile.originX !== expected.x || tile.originY !== expected.y) {
+      throw new Error('图片源瓦片与真实源几何不匹配')
+    }
     copyIntersection(
       decodeSourceTile(tile, targetWorkingSpace, referenceWhiteNits),
       tile.originX,

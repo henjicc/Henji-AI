@@ -1,5 +1,6 @@
 import type { ImageEditDocumentV3 } from '@/core/imageEdit/v3/documentTypes'
-import { createTileRegion } from '@/core/imageEdit/v3/tileGeometry'
+import { createTileRegion, type ImageEditSize } from '@/core/imageEdit/v3/tileGeometry'
+import { resolveImageEditRasterStorageSizeV3 } from '@/core/imageEdit/v3/execution/rasterSourceGeometry'
 import type { ImageEditorV3ResourceDescriptor } from '@/platform/contracts/imageEditorV3'
 import type {
   ImageEditJsonObjectV3,
@@ -14,6 +15,35 @@ import type {
 } from '../application/imageEditCommandBus'
 import { IMAGE_EDITOR_V3_BRUSH_TILE_MEDIA_TYPE } from '../application/imageEditorResourceDescriptorsV3'
 import { createImageEditorSparseMaskReferencePlanV3 } from './sparseMaskResourcesV3'
+import { readSharedImageEditorSourcePyramidV3 } from './imageEditorSourcePyramidsV3'
+import type { ImageEditorPreviewPyramidDescriptorReaderV3 } from './imageEditorPreviewResourcesV3'
+import { createImageEditorV3RequestId } from '@/commands/imageEditorV3'
+
+/** 旧代理预览仅为确有稀疏画笔的资源补读小型元数据，不触发像素预热。 */
+export async function readImageEditorPreviewBrushSourceSizesV3(document: ImageEditDocumentV3, signal: AbortSignal,
+  reader: ImageEditorPreviewPyramidDescriptorReaderV3 = readSharedImageEditorSourcePyramidV3): Promise<ReadonlyMap<string, ImageEditSize>> {
+  const refs = new Set<`sha256:${string}`>()
+  const visit = (layers: readonly ImageEditLayerV3[]): void => {
+    for (const layer of layers) {
+      if (layer.type === 'group') visit(layer.children)
+      else if (layer.type === 'raster' && layer.source.kind === 'resource' && Object.keys(layer.tiles).length > 0) {
+        if (!/^sha256:[a-f0-9]{64}$/.test(layer.source.resourceId)) throw new Error('画笔底图资源引用无效')
+        refs.add(layer.source.resourceId as `sha256:${string}`)
+      }
+    }
+  }
+  visit(document.layers)
+  const sizes = new Map<string, ImageEditSize>()
+  for (const resourceRef of refs) {
+    signal.throwIfAborted()
+    const descriptor = await reader({ requestId: createImageEditorV3RequestId('brush-geometry'), resourceRef }, signal)
+    signal.throwIfAborted()
+    const source = descriptor.levels.find((level) => level.mip === 0)
+    if (!source) throw new Error('图片源金字塔缺少原始尺寸')
+    sizes.set(resourceRef, { width: source.width, height: source.height })
+  }
+  return sizes
+}
 
 export const IMAGE_EDITOR_PREVIEW_STABLE_MAX_EDGE_V3 = 1_600
 export const IMAGE_EDITOR_PREVIEW_DRAFT_MAX_EDGE_V3 = 720
@@ -195,6 +225,7 @@ function addBrushRequest(
   descriptors: ReadonlyMap<string, ImageEditorV3ResourceDescriptor>,
   requests: Map<string, ImageEditorPreviewBrushResourceRequestV3>,
   storage: ImageEditorPreviewBrushResourceRequestV3['storage'] = 'rgba-float32',
+  storageSize: ImageEditSize = document.geometry,
 ): void {
   const match = TILE_KEY_PATTERN.exec(tileKey)
   if (!match) throw new Error(`栅格图层“${layerId}”包含无效画笔瓦片键：${tileKey}`)
@@ -209,7 +240,7 @@ function addBrushRequest(
   }
   let region
   try {
-    region = createTileRegion(document.geometry, { mip, x, y }, 0, BRUSH_TILE_SIZE)
+    region = createTileRegion(storageSize, { mip, x, y }, 0, BRUSH_TILE_SIZE)
   } catch (error) {
     throw new Error(`栅格图层“${layerId}”的画笔瓦片超出文档边界：${tileKey}`, { cause: error })
   }
@@ -249,6 +280,7 @@ function collectLayerResources(
   descriptors: ReadonlyMap<string, ImageEditorV3ResourceDescriptor>,
   proxies: Map<string, number>,
   brushes: Map<string, ImageEditorPreviewBrushResourceRequestV3>,
+  resourceSizes: ReadonlyMap<string, ImageEditSize>,
 ): void {
   if (layer.mask) {
     if (isImageEditSparseMaskReferenceV3(layer.mask)) {
@@ -277,11 +309,13 @@ function collectLayerResources(
       addProxyRequest(layer.source.resourceId, maxDimension, descriptors, proxies)
     }
     for (const [tileKey, resourceId] of Object.entries(layer.tiles)) {
-      addBrushRequest(document, layer.id, tileKey, resourceId, descriptors, brushes)
+      const sourceSize = layer.source.kind === 'resource' ? resourceSizes.get(layer.source.resourceId) : undefined
+      addBrushRequest(document, layer.id, tileKey, resourceId, descriptors, brushes, 'rgba-float32',
+        resolveImageEditRasterStorageSizeV3(sourceSize ?? null, document.geometry))
     }
   } else if (layer.type === 'group') {
     for (const child of layer.children) {
-      collectLayerResources(document, child, maxDimension, descriptors, proxies, brushes)
+      collectLayerResources(document, child, maxDimension, descriptors, proxies, brushes, resourceSizes)
     }
   }
 }
@@ -290,12 +324,13 @@ export function collectImageEditorPreviewResourceRequestsV3(
   document: ImageEditDocumentV3,
   maxDimension: number,
   resourceDescriptors: readonly ImageEditorV3ResourceDescriptor[] = [],
+  resourceSizes: ReadonlyMap<string, ImageEditSize> = new Map(),
 ): ImageEditorPreviewResourceRequestV3[] {
   const descriptors = createDescriptorMap(resourceDescriptors)
   const proxies = new Map<string, number>()
   const brushes = new Map<string, ImageEditorPreviewBrushResourceRequestV3>()
   for (const layer of document.layers) {
-    collectLayerResources(document, layer, maxDimension, descriptors, proxies, brushes)
+    collectLayerResources(document, layer, maxDimension, descriptors, proxies, brushes, resourceSizes)
   }
   return [
     ...[...proxies].map(([resourceId, requestedMaxDimension]) => ({

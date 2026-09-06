@@ -1,3 +1,4 @@
+import { createImageEditRasterReplacementV3, addImageEditRasterReplacementV3, finishImageEditRasterReplacementV3 } from '@/core/imageEdit/v3/execution/rasterTileReplacement'
 import {
   IMAGE_EDIT_HDR_REFERENCE_WHITE_NITS_V3,
   convertFloat32TileColorDomainV3,
@@ -102,7 +103,7 @@ export function loadImageEditorViewportSourceRegionV3(
       )
     }
   }
-  if (!template) throw new Error('视口合成源区域为空')
+  if (!template) return createTransparentImageEditorViewportRegionV3(region, document)
   return createFloat32PremultipliedRgbaTile(
     region.width,
     region.height,
@@ -151,34 +152,6 @@ function brushMap(
   return result
 }
 
-function sampleBrushPixel(
-  source: Float32Array,
-  width: number,
-  height: number,
-  x: number,
-  y: number,
-  target: Float32Array,
-  offset: number,
-): void {
-  const floorX = Math.floor(x)
-  const floorY = Math.floor(y)
-  const x0 = Math.max(0, Math.min(width - 1, floorX))
-  const y0 = Math.max(0, Math.min(height - 1, floorY))
-  const x1 = Math.min(width - 1, x0 + 1)
-  const y1 = Math.min(height - 1, y0 + 1)
-  const tx = Math.max(0, Math.min(1, x - floorX))
-  const ty = Math.max(0, Math.min(1, y - floorY))
-  for (let channel = 0; channel < 4; channel += 1) {
-    const topLeft = source[(y0 * width + x0) * 4 + channel]
-    const topRight = source[(y0 * width + x1) * 4 + channel]
-    const bottomLeft = source[(y1 * width + x0) * 4 + channel]
-    const bottomRight = source[(y1 * width + x1) * 4 + channel]
-    const top = topLeft + (topRight - topLeft) * tx
-    const bottom = bottomLeft + (bottomRight - bottomLeft) * tx
-    target[offset + channel] = top + (bottom - top) * ty
-  }
-}
-
 /** mip0 稀疏画笔是栅格源对应区域的 whole-tile replacement。 */
 export function applyImageEditorViewportBrushTilesV3(
   node: ImageEditRenderPlanNode,
@@ -187,12 +160,14 @@ export function applyImageEditorViewportBrushTilesV3(
   mip: number,
   tiles: readonly ImageEditorPreviewBrushTileV3[],
   signal: AbortSignal,
+  sampleBase: (x: number, y: number, channel: number) => number = () => 0,
+  contentSize?: ImageEditSize,
 ): Float32PremultipliedRgbaTile {
   const references = isRecord(node.parameters.tiles) ? node.parameters.tiles : null
   if (!references || Object.keys(references).length === 0) return base
   const available = brushMap(tiles)
-  const output = new Float32Array(base.data)
   const scale = 2 ** mip
+  const replacement = createImageEditRasterReplacementV3(base, region, scale, scale, contentSize)
   for (const [tileKey, resourceId] of Object.entries(references)) {
     const [mipValue, tileXValue, tileYValue, extra] = tileKey.split('/')
     const tileX = Number(tileXValue)
@@ -214,22 +189,11 @@ export function applyImageEditorViewportBrushTilesV3(
     if (tile.storage !== 'rgba-float32') {
       throw new Error(`视口栅格图层引用了非 RGBA 瓦片：${String(resourceId)}`)
     }
-    const source = new Float32Array(tile.bytes)
-    for (let y = targetTop; y < targetBottom; y += 1) {
-      throwIfAborted(signal)
-      for (let x = targetLeft; x < targetRight; x += 1) {
-        sampleBrushPixel(
-          source,
-          tile.width,
-          tile.height,
-          (x + 0.5) * scale - tileX * 512 - 0.5,
-          (y + 0.5) * scale - tileY * 512 - 0.5,
-          output,
-          ((y - region.y) * region.width + x - region.x) * 4,
-        )
-      }
-    }
+    addImageEditRasterReplacementV3(replacement,
+      createFloat32PremultipliedRgbaTile(tile.width, tile.height, base.colorDomain, new Float32Array(tile.bytes),
+        base.workingSpace, base.transferFunction, base.referenceWhiteNits), tileX * 512, tileY * 512, signal)
   }
+  const output = finishImageEditRasterReplacementV3(replacement, sampleBase)
   return createFloat32PremultipliedRgbaTile(
     base.width,
     base.height,

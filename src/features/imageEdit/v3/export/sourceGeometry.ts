@@ -14,23 +14,24 @@ export async function readImageEditorExportSourcePyramidV3(
   signal: AbortSignal,
   dependencies: ImageEditorV3ExportRenderDependencies,
 ): Promise<ImageEditorV3PyramidDescriptor> {
+  signal.throwIfAborted()
   if (!/^sha256:[a-f0-9]{64}$/.test(resourceRef)) throw new Error('图片编辑资源引用无效')
   const ref = resourceRef as `sha256:${string}`
-  return dependencies.readSourcePyramid
+  const result = await (dependencies.readSourcePyramid
     ? dependencies.readSourcePyramid(ref, signal)
     : readSharedImageEditorSourcePyramidV3({
         requestId: createImageEditorV3RequestId('export-source-pyramid'), resourceRef: ref,
-      }, signal)
+      }, signal))
+  signal.throwIfAborted()
+  return result
 }
 
 /** 源几何来自主进程金字塔，不使用文档画布大小替代某张图片。 */
-export async function prepareImageEditorExportSourceGeometryV3(
+export async function readImageEditorRenderSourceSizesV3(
   plan: ImageEditRenderPlan,
-  canvasSize: ImageEditSize,
-  mip: number,
   signal: AbortSignal,
   dependencies: ImageEditorV3ExportRenderDependencies,
-): Promise<(node: ImageEditRenderPlanNode) => ImageEditSize> {
+): Promise<ReadonlyMap<string, ImageEditSize>> {
   const sizes = new Map<string, ImageEditSize>()
   for (const node of plan.nodes) {
     if (node.definitionId !== 'source.raster') continue
@@ -43,23 +44,16 @@ export async function prepareImageEditorExportSourceGeometryV3(
     if (!base) throw new Error('图片源金字塔缺少原始尺寸')
     sizes.set(source.resourceId, { width: base.width, height: base.height })
   }
-  const resolve = createImageEditorViewportSourceSizeResolverV3(plan, sizes, mipSize(canvasSize, mip), mip)
-  const nodes = new Map(plan.nodes.map((node) => [node.id, node]))
-  const resolveNode = (node: ImageEditRenderPlanNode, seen: Set<string>): ImageEditSize => {
-    const size = resolve(node)
-    if (seen.has(node.id)) return size
-    seen.add(node.id)
-    if (node.definitionId !== 'source.raster') {
-      if (node.definitionId === 'composite.layer' || node.definitionId === 'vector.annotation'
-        || node.inputNodeIds.length !== 1) return size
-      const input = nodes.get(node.inputNodeIds[0])
-      return input ? resolveNode(input, seen) : size
-    }
-    const tiles = node.parameters.tiles
-    if (!tiles || typeof tiles !== 'object'
-      || Array.isArray(tiles) || Object.keys(tiles).length === 0) return size
-    const canvas = mipSize(canvasSize, mip)
-    return { width: Math.max(size.width, canvas.width), height: Math.max(size.height, canvas.height) }
-  }
-  return (node) => resolveNode(node, new Set())
+  return sizes
+}
+
+export async function prepareImageEditorExportSourceGeometryV3(
+  plan: ImageEditRenderPlan,
+  canvasSize: ImageEditSize,
+  mip: number,
+  signal: AbortSignal,
+  dependencies: ImageEditorV3ExportRenderDependencies,
+): Promise<(node: ImageEditRenderPlanNode) => ImageEditSize> {
+  const sizes = await readImageEditorRenderSourceSizesV3(plan, signal, dependencies)
+  return createImageEditorViewportSourceSizeResolverV3(plan, sizes, mipSize(canvasSize, mip), mip, canvasSize)
 }

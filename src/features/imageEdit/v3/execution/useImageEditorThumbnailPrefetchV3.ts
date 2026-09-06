@@ -1,20 +1,21 @@
 import { useEffect, useId, useMemo } from 'react'
 
 import { createLogger } from '@/core/logging'
-import { IMAGE_EDIT_RENDER_PRIORITY } from '@/core/imageEdit/v3/renderScheduler'
 import type { ImageEditorV3ResourceDescriptor } from '@/platform/contracts/imageEditorV3'
 import type { ImageEditCommandBusSnapshotV3 } from '../application/imageEditCommandBus'
 import type { ImageEditorV3PackageThumbnailSnapshot } from '../editor/types'
 import {
-  ImageEditorPreviewClientV3,
-  ImageEditorPreviewDisposedErrorV3,
-  ImageEditorPreviewSupersededErrorV3,
-} from './imageEditorPreviewClientV3'
+  ImageEditorViewportCompositeClientV3,
+  ImageEditorViewportCompositeDisposedErrorV3,
+  ImageEditorViewportCompositeSupersededErrorV3,
+} from './viewportCompositeClientV3'
+import { renderImageEditorThumbnailV3 } from './viewportThumbnailV3'
+import { ImageEditorPreviewClientV3 } from './imageEditorPreviewClientV3'
+import { IMAGE_EDIT_RENDER_PRIORITY } from '@/core/imageEdit/v3/renderScheduler'
 import { projectImageEditorPreviewDocumentV3 } from './previewDocumentV3'
 import { useImageEditorDisposableV3 } from './useImageEditorDisposableV3'
 
 const logger = createLogger('image_editor_v3.thumbnail')
-const THUMBNAIL_MAX_EDGE_V3 = 512
 
 interface IdleCapableWindowV3 {
   requestIdleCallback?: (callback: () => void) => number
@@ -42,14 +43,10 @@ export function useImageEditorThumbnailPrefetchV3(
   onThumbnail: ((thumbnail: ImageEditorV3PackageThumbnailSnapshot) => void) | undefined,
 ): void {
   const resourceBudgetConsumerId = useId()
-  const client = useMemo(() => new ImageEditorPreviewClientV3({
+  const client = useMemo(() => new ImageEditorViewportCompositeClientV3({
     sessionId,
     resourceBudgetConsumerId: `thumbnail-prefetch:${resourceBudgetConsumerId}`,
-    coalescingKey: 'thumbnail',
-    taskKind: 'prefetch',
     purpose: 'thumbnail',
-    priority: IMAGE_EDIT_RENDER_PRIORITY.prefetch,
-    pyramidPrewarmEnabled: false,
   }), [resourceBudgetConsumerId, sessionId])
 
   useImageEditorDisposableV3(client)
@@ -58,31 +55,20 @@ export function useImageEditorThumbnailPrefetchV3(
     if (!enabled || !onThumbnail || typeof Worker === 'undefined') return
     if (Object.keys(snapshot.previewOverrides).length > 0) return
     let active = true
+    const controller = new AbortController()
     const cancelIdle = scheduleThumbnailPrefetchV3(() => {
       if (!active) return
       const document = projectImageEditorPreviewDocumentV3(snapshot)
-      void client.render({
-        document,
-        quality: 'stable',
-        maxDimension: THUMBNAIL_MAX_EDGE_V3,
-        resourceDescriptors,
-      }).then((result) => {
-        try {
-          if (!active || !result.thumbnail) return
-          onThumbnail({
-            documentId: snapshot.document.id,
-            revision: snapshot.document.revision,
-            bytes: result.thumbnail.bytes.slice(0),
-            mediaType: result.thumbnail.mediaType,
-            extension: result.thumbnail.mediaType === 'image/webp' ? 'webp' : 'png',
-          })
-        } finally {
-          result.release()
-        }
+      void renderImageEditorThumbnailV3(client, () => new ImageEditorPreviewClientV3({
+        sessionId, resourceBudgetConsumerId: `thumbnail-plain:${resourceBudgetConsumerId}`,
+        coalescingKey: 'thumbnail', taskKind: 'prefetch', purpose: 'thumbnail',
+        priority: IMAGE_EDIT_RENDER_PRIORITY.prefetch, pyramidPrewarmEnabled: false,
+      }), document, resourceDescriptors, controller.signal, sessionId).then((thumbnail) => {
+        if (active) onThumbnail(thumbnail)
       }).catch((error: unknown) => {
         if (!active
-          || error instanceof ImageEditorPreviewSupersededErrorV3
-          || error instanceof ImageEditorPreviewDisposedErrorV3) return
+          || error instanceof ImageEditorViewportCompositeSupersededErrorV3
+          || error instanceof ImageEditorViewportCompositeDisposedErrorV3) return
         logger.warn('图片编辑 V3 缩略图空闲预取失败', {
           event: 'image_editor_v3.thumbnail.failed',
           context: {
@@ -97,6 +83,8 @@ export function useImageEditorThumbnailPrefetchV3(
     return () => {
       active = false
       cancelIdle()
+      controller.abort()
+      client.cancel()
     }
-  }, [client, enabled, onThumbnail, resourceDescriptors, snapshot])
+  }, [client, enabled, onThumbnail, resourceDescriptors, snapshot, sessionId, resourceBudgetConsumerId])
 }

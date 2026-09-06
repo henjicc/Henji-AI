@@ -1,4 +1,5 @@
 import { invertImageEditTransformV3 } from '@/core/imageEdit/v3/execution/affineTransform'
+import { imageEditRasterOverrideRectV3, resolveImageEditRasterSourceExtentV3, resolveImageEditRasterStorageSizeV3 } from '@/core/imageEdit/v3/execution/rasterSourceGeometry'
 import type { ImageEditTransformV3 } from '@/core/imageEdit/v3/layerTypes'
 import { resolveImageEditOutputGeometryV3, type ImageEditOutputGeometryV3 } from '@/core/imageEdit/v3/outputGeometry'
 import { IMAGE_EDIT_STORAGE_TILE_SIZE, mipSize } from '@/core/imageEdit/v3/tileGeometry'
@@ -87,11 +88,9 @@ export function planImageEditorGpuRasterTilesV3(
   const sourceSize = pyramid.levels.find((level) => level.mip === 0)!
   const hasSparseOverrides = Object.keys(layer.sparseTiles).length > 0
   // 稀疏画笔覆盖属于图层的文档坐标空间，允许画到原始小图片边界之外。
-  const sparseExtent = Object.keys(layer.sparseTiles).reduce((size, key) => {
-    const [, x, y] = key.split('/').map(Number)
-    return { width: Math.max(size.width, (x + 1) * IMAGE_EDIT_STORAGE_TILE_SIZE),
-      height: Math.max(size.height, (y + 1) * IMAGE_EDIT_STORAGE_TILE_SIZE) }
-  }, { width: Math.max(scene.width, sourceSize.width), height: Math.max(scene.height, sourceSize.height) })
+  const sparseExtent = resolveImageEditRasterSourceExtentV3(
+    layer.resourceRef ? sourceSize : null, scene, Object.keys(layer.sparseTiles),
+  )
   const planningPyramid = hasSparseOverrides
     ? createImageEditorGpuPyramidDescriptorV3(sparseExtent.width, sparseExtent.height) : pyramid
   const planningSize = hasSparseOverrides ? sparseExtent : sourceSize
@@ -138,6 +137,9 @@ export function planImageEditorGpuRasterTilesV3(
   }).tiles
   const tiles = coordinates.flatMap((tile) => {
     const override = plannedMip === 0 ? layer.sparseTiles[`0/${tile.tileX}/${tile.tileY}`] : undefined
+    const overrideRect = override ? imageEditRasterOverrideRectV3(
+      resolveImageEditRasterStorageSizeV3(layer.resourceRef ? sourceSize : null, scene), `0/${tile.tileX}/${tile.tileY}`,
+    ) : null
     const mipDimensions = (override ? planningPyramid : pyramid).levels.find((level) => level.mip === plannedMip)
     // 非覆盖区只请求真实源覆盖的瓦片；源范围之外是透明，不是一个可解码瓦片。
     if (!mipDimensions || tile.tileX >= mipDimensions.columns || tile.tileY >= mipDimensions.rows) return []
@@ -160,8 +162,8 @@ export function planImageEditorGpuRasterTilesV3(
       key,
       coreOriginX: tile.tileX * IMAGE_EDIT_STORAGE_TILE_SIZE,
       coreOriginY: tile.tileY * IMAGE_EDIT_STORAGE_TILE_SIZE,
-      coreWidth: Math.min(IMAGE_EDIT_STORAGE_TILE_SIZE, mipDimensions.width - tile.tileX * IMAGE_EDIT_STORAGE_TILE_SIZE),
-      coreHeight: Math.min(IMAGE_EDIT_STORAGE_TILE_SIZE, mipDimensions.height - tile.tileY * IMAGE_EDIT_STORAGE_TILE_SIZE),
+      coreWidth: overrideRect?.width ?? Math.min(IMAGE_EDIT_STORAGE_TILE_SIZE, mipDimensions.width - tile.tileX * IMAGE_EDIT_STORAGE_TILE_SIZE),
+      coreHeight: overrideRect?.height ?? Math.min(IMAGE_EDIT_STORAGE_TILE_SIZE, mipDimensions.height - tile.tileY * IMAGE_EDIT_STORAGE_TILE_SIZE),
     }]
   })
   return {

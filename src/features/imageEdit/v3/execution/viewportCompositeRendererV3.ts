@@ -17,12 +17,14 @@ import { isImageEditSparseMaskReferenceV3 } from '@/core/imageEdit/v3/layerTypes
 import { convertPreviewWorkingSpaceToSrgbDisplayV3 } from './previewColorV3'
 import { scaleImageEditorPreviewEffectsV3 } from './previewEffectScalingV3'
 import { createImageEditorViewportSourceSizeResolverV3 } from './viewportCompositeDocumentV3'
+import { resolveImageEditRasterSourceExtentV3 } from '@/core/imageEdit/v3/execution/rasterSourceGeometry'
 import { ImageEditorPreviewCustomEffectsV3 } from './previewCustomEffectsV3'
 import { ImageEditorViewportGlobalAnalysisCacheV3 } from './viewportGlobalAnalysisV3'
 import type { ImageEditorViewportCompositeRenderRequestV3 } from './viewportCompositeProtocolV3'
 import {
   applyImageEditorViewportBrushTilesV3,
   createTransparentImageEditorViewportRegionV3,
+  decodeImageEditorViewportSourceTileV3,
   imageEditorViewportTileToMaskV3,
   loadImageEditorViewportSourceRegionV3,
   loadImageEditorViewportSparseMaskV3,
@@ -180,6 +182,7 @@ export async function renderImageEditorViewportCompositeV3(
           height: Math.max(1, Math.ceil(request.document.geometry.height / (2 ** request.plan.mip))),
         },
         request.plan.mip,
+        request.document.geometry,
       ),
       signal,
       createTransparent: (region) => createTransparentImageEditorViewportRegionV3(
@@ -198,6 +201,23 @@ export async function renderImageEditorViewportCompositeV3(
           request.plan.mip,
           request.brushTiles,
           signal,
+          (x, y, channel) => {
+            if (!resourceId) return 0
+            const size = resourceSizes.get(resourceId)
+            if (!size) throw new Error('画笔边界采样缺少原图尺寸')
+            if (x < 0 || y < 0 || x >= size.width || y >= size.height) return 0
+            const key = `${resourceId}:m0:x${Math.floor(x / 512)}:y${Math.floor(y / 512)}`
+            let tile = decoded.get(key)
+            if (!tile) {
+              const source = sourceTiles.get(key)
+              if (!source) throw new Error('画笔跨瓦片采样缺少 mip0 底图')
+              tile = decodeImageEditorViewportSourceTileV3(source, request.document)
+              decoded.set(key, tile)
+            }
+            return tile.data[((y % 512) * tile.width + x % 512) * 4 + channel]
+          },
+          resolveImageEditRasterSourceExtentV3(resourceId ? resourceSizes.get(resourceId) ?? null : null,
+            request.document.geometry, Object.keys(node.parameters.tiles as Record<string, unknown>)),
         )
       },
       rasterizeAnnotations: async (node, region) => rasterizeAnnotations(

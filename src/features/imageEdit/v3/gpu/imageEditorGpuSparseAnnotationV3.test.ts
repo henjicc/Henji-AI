@@ -17,6 +17,10 @@ import { ANNOTATION_DEFAULT_STROKE_HEX, WHITE_HEX } from '@/core/theme/colorToke
 import type { ImageEditorV3SourceTile } from '@/platform/contracts/imageEditorV3'
 import { ImageEditorGpuRasterCompositorV3 } from './imageEditorGpuRasterCompositorV3'
 import { compileImageEditorGpuRasterSceneV3 } from './imageEditorGpuRasterSceneCompilerV3'
+import { BRUSH, SOURCE, createRasterSourceBrushFixtureV3 } from '../editor/rasterBrushSourceGeometryV3.testSupport'
+import { renderImageEditorV3ExportTiles } from '../export/renderExportTilesV3'
+import { description } from '../export/renderExportTestFixtures'
+import { floatPremultipliedTileToGpuSource } from '../execution/imageEditorGpuTileSourceV3'
 import {
   imageEditorGpuSceneTileKeyV3,
   type ImageEditorGpuSceneTileKeyV3,
@@ -29,6 +33,55 @@ beforeAll(async () => { gpu = await init() })
 afterAll(() => gpu?.dispose())
 
 describe('GPU 稀疏资源、标注缓存与 halo（真实 WebGPU）', () => {
+  it.each([{ source: 16, x: 48, scale: 1 }, { source: 640, x: 505, scale: 0.1 }])(
+    '实际下笔：$source原图独立几何的GPU像素与正式CPU导出一致', async ({ source, x, scale }) => {
+      const value = createRasterSourceBrushFixtureV3(source, 64, scale)
+      value.stroke.begin()
+      await value.stroke.append([{ x, y: x, screenX: x * scale, screenY: x * scale }])
+      await value.stroke.finish()
+      const document = value.bus.getSnapshot().document
+      const brush = [...value.stored.values()][0]
+      const descriptors = [{ resourceRef: SOURCE, byteLength: source * source * 4, mediaType: 'image/png' },
+        { resourceRef: BRUSH, byteLength: brush.data.byteLength, mediaType: 'application/x-henji-brush-tile-v3' }]
+      const compilation = compileImageEditorGpuRasterSceneV3(document, descriptors, { [SOURCE]: value.pyramid })
+      if (!compilation.supported) throw new Error(compilation.reason)
+      const compositor = new ImageEditorGpuRasterCompositorV3(gpu)
+      const textures = new Map<string, ReturnType<typeof compositor.uploadTile>>()
+      try {
+        compositor.syncScene(compilation.scene)
+        compositor.updateViewport({ stageWidth: 64, stageHeight: 64, viewportKey: 'actual-stroke',
+          viewport: { documentX: 0, documentY: 0, width: 64, height: 64, zoom: 1, devicePixelRatio: 1 } })
+        for (const key of compositor.requiredResourceKeys()) {
+          const sourceTile = key.resourceRef === BRUSH
+            ? floatPremultipliedTileToGpuSource(key, brush.data, brush.width, brush.height)
+            : await value.readSourceTile({ mip: key.mip, x: key.tileX, y: key.tileY })
+          textures.set(imageEditorGpuSceneTileKeyV3(key), compositor.uploadTile(key, sourceTile))
+        }
+        const pixels = await compositor.readLinearPixelsForTest((key) => textures.get(imageEditorGpuSceneTileKeyV3(key)) ?? null)
+        const output = renderImageEditorV3ExportTiles({ document, resourceDescriptors: descriptors,
+          description: description(64, 64), tileSize: 64 }, {
+          readSourcePyramid: value.readSourcePyramid,
+          readSourceTile: (request) => value.readSourceTile({ mip: request.mip, x: request.tileX, y: request.tileY }),
+          readBrushTiles: async (requests) => ({ tiles: requests.map(({ tileKey }) => ({ tileKey, tile: value.stored.get(tileKey)! })) }),
+        })
+        const iterator = output[Symbol.asyncIterator]()
+        try {
+          const exported = await iterator.next()
+          if (exported.done) throw new Error('缺少正式CPU导出')
+          const reference = new Uint8Array(exported.value.pixels)
+          const pixel = Math.floor(x * scale), offset = (pixel * 64 + pixel) * 4
+          expect(pixels[offset]).toBeGreaterThan(0.5)
+          for (let i = 0; i < pixels.length; i++) {
+            // 本素材仅含0/1、不透明黑底与白笔，避免编码域误差掩盖几何差异。
+            expect(Math.abs(pixels[i] - reference[i] / 255)).toBeLessThanOrEqual(1 / 255)
+          }
+        } finally { await iterator.return?.() }
+      } finally {
+        for (const texture of textures.values()) texture.destroy()
+        compositor.dispose()
+      }
+    })
+
   it('标注光栅纹理在重复帧命中GPU子图缓存', async () => {
     const width = 32; const height = 24
     const document = createImageEditDocumentV3({ width, height, documentId: 'annotation-cache' })

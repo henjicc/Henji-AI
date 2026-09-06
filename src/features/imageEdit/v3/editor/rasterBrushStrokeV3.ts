@@ -16,6 +16,7 @@ import type {
 } from '@/core/imageEdit/v3/brush/contracts'
 import { createImageEditIdV3 } from '@/core/imageEdit/v3/documentFactory'
 import type { ImageEditDocumentV3 } from '@/core/imageEdit/v3/documentTypes'
+import type { ImageEditSize } from '@/core/imageEdit/v3/tileGeometry'
 import { createLogger } from '@/core/logging'
 import type { ImageEditCommandBusV3 } from '../application/imageEditCommandBus'
 
@@ -30,6 +31,7 @@ export interface ImageEditorRasterBrushStrokeOptionsV3 {
   shape: ImageEditBrushShapeV3
   target: ImageEditBrushTargetV3
   loadTile: ImageEditBrushTileLoaderV3
+  resolveStorageSize?: (signal: AbortSignal) => Promise<ImageEditSize>
   resourceByteSizes: Map<string, number>
   onPreviewTiles: (changes: readonly ImageEditBrushTileChangeV3[]) => void
   onCommittedTiles?: (
@@ -57,7 +59,8 @@ async function defaultPersistTiles(
 
 /** 一个 pointer 手势对应一个 session、一个 PreviewOverride 和一个历史命令。 */
 export class ImageEditorRasterBrushStrokeV3 {
-  private readonly session: ImageEditBrushStrokeSessionV3
+  private session: ImageEditBrushStrokeSessionV3 | null = null
+  private sessionPromise: Promise<ImageEditBrushStrokeSessionV3> | null = null
   private readonly previewId = createImageEditIdV3('brush-preview')
   private readonly commandId = createImageEditIdV3('brush-stroke')
   private readonly abortController = new AbortController()
@@ -67,11 +70,19 @@ export class ImageEditorRasterBrushStrokeV3 {
 
   constructor(private readonly options: ImageEditorRasterBrushStrokeOptionsV3) {
     this.persistTiles = options.persistTiles ?? defaultPersistTiles
-    this.session = new ImageEditBrushStrokeSessionV3({
-      canvas: {
-        width: options.document.geometry.width,
-        height: options.document.geometry.height,
-      },
+  }
+
+  private getSession(): Promise<ImageEditBrushStrokeSessionV3> {
+    this.sessionPromise ??= (async () => {
+      const options = this.options
+      const canvas = await options.resolveStorageSize?.(this.abortController.signal) ?? options.document.geometry
+      this.abortController.signal.throwIfAborted()
+      const current = options.bus.getSnapshot().document
+      if (current.id !== options.document.id || current.revision !== this.baseRevision) {
+        throw new Error('栅格笔画读取期间文档已变化，请重新落笔')
+      }
+      this.session = new ImageEditBrushStrokeSessionV3({
+      canvas,
       tool: options.tool,
       shape: options.shape,
       target: options.target,
@@ -80,6 +91,9 @@ export class ImageEditorRasterBrushStrokeV3 {
       simplifyScreenTolerance: 0.75,
       simplifyPressureTolerance: 0.02,
     })
+      return this.session
+    })()
+    return this.sessionPromise
   }
 
   begin(): void {
@@ -118,8 +132,10 @@ export class ImageEditorRasterBrushStrokeV3 {
   async append(points: readonly ImageEditBrushPointV3[]): Promise<void> {
     this.assertState('active')
     if (points.length === 0) return
-    this.session.appendCoalescedPoints(points)
-    const dirty = await this.session.renderPending()
+    const session = await this.getSession()
+    this.assertState('active')
+    session.appendCoalescedPoints(points)
+    const dirty = await session.renderPending()
     if (this.state !== 'active') return
     if (dirty.length > 0) this.options.onPreviewTiles(dirty)
   }
@@ -128,7 +144,7 @@ export class ImageEditorRasterBrushStrokeV3 {
     this.assertState('active')
     this.state = 'finishing'
     try {
-      const stroke = await this.session.finish()
+      const stroke = await (await this.getSession()).finish()
       if (this.isCancelled()) return null
       if (!stroke) {
         this.options.bus.clearPreview(this.previewId)
@@ -182,7 +198,7 @@ export class ImageEditorRasterBrushStrokeV3 {
     if (this.state === 'completed' || this.state === 'cancelled') return
     this.state = 'cancelled'
     this.abortController.abort()
-    this.session.cancel()
+    this.session?.cancel()
     this.options.bus.clearPreview(this.previewId)
   }
 

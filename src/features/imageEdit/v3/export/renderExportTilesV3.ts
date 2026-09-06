@@ -1,3 +1,4 @@
+import { loadImageEditorRasterRegionV3 } from './rasterRegion'
 import { transparentRegion, safeWorkingSetBytes, acquireOrThrow } from './renderExportResourcesV3'
 import {
   DIFFUSION_V4_RECIPE_ADAPTER,
@@ -13,7 +14,6 @@ import {
   tileGridSize,
   type Float32PremultipliedRgbaTile,
   type ImageEditMemoryLease,
-  type ImageEditRenderPlanNode,
 } from '@/core/imageEdit/v3'
 import type { ImageEditorV3RenderedExportTile } from '@/commands/imageEditorV3Export'
 import { createLogger } from '@/core/logging'
@@ -47,9 +47,8 @@ import {
   projectImageEditorV3RenderedRegionToOutput,
 } from './outputTile'
 import {
-  applyImageEditorV3SparseRasterRegion,
   createImageEditorV3SparseRasterPlan,
-  type ImageEditorV3SparseRasterPlan,
+  validateImageEditorV3SparseRasterResources,
 } from './brushRegion'
 import {
   imageEditorV3SourceRegionToMask,
@@ -62,7 +61,7 @@ import {
 } from '../execution/imageEditorSessionResourceBudgetV3'
 import { getImageEditorGlobalRenderSchedulerV3 } from '../execution/imageEditorGlobalRenderSchedulerV3'
 import { loadImageEditorV3SparseMaskRegion } from './maskRegion'
-import { prepareImageEditorExportSourceGeometryV3 } from './sourceGeometry'
+import { prepareImageEditorExportSourceGeometryV3, readImageEditorRenderSourceSizesV3 } from './sourceGeometry'
 import {
   buildImageEditorV3VgpuGlowAnalyses,
 } from './vgpuGlowAnalysis'
@@ -94,17 +93,6 @@ function createSessionId(requested?: string): string {
   return `image-edit-export:${suffix}`
 }
 
-function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
-}
-
-function rasterResourceId(node: ImageEditRenderPlanNode): string | null {
-  const source = isRecord(node.parameters.source) ? node.parameters.source : null
-  return source?.kind === 'resource' && typeof source.resourceId === 'string'
-    ? source.resourceId
-    : null
-}
-
 interface RenderedLeasedTile {
   tile: ImageEditorV3RenderedExportTile
   transferLease: ImageEditMemoryLease
@@ -117,17 +105,13 @@ export function renderImageEditorV3ExportTiles(
   if (request.signal?.aborted) throwIfAborted(request.signal)
   const prepared = prepareImageEditorV3ExportRender(request.document, request.description)
   const geometry = resolveImageEditorV3ExportGeometry(prepared.document, request.description)
-  const sparseRasterPlan = createImageEditorV3SparseRasterPlan(
-    prepared.plan,
-    { width: geometry.sourceWidth, height: geometry.sourceHeight },
-    request.resourceDescriptors,
-  )
+  validateImageEditorV3SparseRasterResources(prepared.plan, request.resourceDescriptors)
   const sparseMaskPlan = createImageEditorSparseMaskPlanV3(
     prepared.plan,
     { width: geometry.sourceWidth, height: geometry.sourceHeight },
     request.resourceDescriptors,
   )
-  return renderTiles(request, dependencies, prepared, geometry, sparseRasterPlan, sparseMaskPlan)
+  return renderTiles(request, dependencies, prepared, geometry, sparseMaskPlan)
 }
 
 async function* renderTiles(
@@ -135,7 +119,6 @@ async function* renderTiles(
   dependencies: ImageEditorV3ExportRenderDependencies,
   prepared: ReturnType<typeof prepareImageEditorV3ExportRender>,
   geometry: ReturnType<typeof resolveImageEditorV3ExportGeometry>,
-  sparseRasterPlan: ImageEditorV3SparseRasterPlan,
   sparseMaskPlan: ReturnType<typeof createImageEditorSparseMaskPlanV3>,
 ): AsyncGenerator<ImageEditorV3RenderedExportTile> {
   const { document, plan } = prepared
@@ -183,6 +166,8 @@ async function* renderTiles(
   })
   try {
     throwIfAborted(controller.signal)
+    const sourceSizes = await readImageEditorRenderSourceSizesV3(plan, controller.signal, dependencies)
+    const sparseRasterPlan = createImageEditorV3SparseRasterPlan(plan, document.geometry, request.resourceDescriptors, sourceSizes)
     const resolveSourceSize = await prepareImageEditorExportSourceGeometryV3(
       plan, document.geometry, 0, controller.signal, dependencies,
     )
@@ -193,6 +178,7 @@ async function* renderTiles(
       dependencies,
       budget,
       sparseMaskPlan,
+      sparseRasterPlan,
     )
     const diffusionAnalyses = diffusionAnalysisSet.analyses
     glowAnalysisSet = await buildImageEditorV3VgpuGlowAnalyses(
@@ -202,6 +188,7 @@ async function* renderTiles(
       dependencies,
       budget,
       sparseMaskPlan,
+      sparseRasterPlan,
       diffusionAnalyses,
     )
     fastBlurAnalysisSet = await buildImageEditorV3FastBlurAnalyses(
@@ -211,6 +198,7 @@ async function* renderTiles(
       dependencies,
       budget,
       sparseMaskPlan,
+      sparseRasterPlan,
       diffusionAnalyses,
       glowAnalysisSet,
     )
@@ -304,32 +292,10 @@ async function* renderTiles(
                   document.color.transferFunction,
                   referenceWhiteNits,
                 ),
-                loadRaster: async (node, region) => {
-                  const resourceId = rasterResourceId(node)
-                  const base = resourceId
-                    ? loadSource(resourceId, region)
-                    : transparentRegion(
-                        region,
-                        document.color.workingSpace,
-                        document.color.transferFunction,
-                        referenceWhiteNits,
-                      )
-                  return applyImageEditorV3SparseRasterRegion(
-                    node,
-                    await base,
-                    region,
-                    { width: geometry.sourceWidth, height: geometry.sourceHeight },
-                    sparseRasterPlan,
-                    {
-                      workingSpace: document.color.workingSpace,
-                      transferFunction: document.color.transferFunction,
-                      referenceWhiteNits,
-                    },
-                    taskContext.signal,
-                    dependencies,
-                    budget,
-                  )
-                },
+                loadRaster: (node, region) => loadImageEditorRasterRegionV3({
+                  node, region, mip: 0, document, sparsePlan: sparseRasterPlan,
+                  signal: taskContext.signal, dependencies, budget, loadSource,
+                }),
                 rasterizeAnnotations: (node, region) => (
                   dependencies.rasterizeAnnotations ?? rasterizeImageEditorV3ExportAnnotations
                 )({ node, document, region, signal: taskContext.signal }),

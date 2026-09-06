@@ -50,6 +50,7 @@ describe('图片编辑 V3 栅格画笔瓦片读取', () => {
       layer,
       resourceByteSizes: new Map(),
       readSourceTile,
+      readSourcePyramid: async () => ({ tileSize: 512, levels: [{ mip: 0, width: 513, height: 1, columns: 2, rows: 1 }] }),
     })
 
     const snapshot = await loadTile({ mip: 0, x: 1, y: 0 }, new AbortController().signal)

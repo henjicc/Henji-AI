@@ -1,3 +1,5 @@
+import { loadImageEditorRasterRegionV3 } from './rasterRegion'
+import type { ImageEditorV3SparseRasterPlan } from './brushRegion'
 import {
   DIFFUSION_V4_RECIPE_ADAPTER,
   VGPU_GLOW_V4_RECIPE_ADAPTER,
@@ -13,7 +15,6 @@ import {
   type ImageEditDocumentV3,
   type ImageEditMemoryLease,
   type ImageEditRenderPlan,
-  type ImageEditRenderPlanNode,
   type ImageEditResourceBudget,
 } from '@/core/imageEdit/v3'
 import { WorkerWebGpuRuntimeBackend } from '@/core/imageEdit/worker/webgpuRuntimeBackend'
@@ -52,17 +53,6 @@ export interface ImageEditorV3VgpuGlowAnalysisSet {
 }
 
 const registry = createBuiltInImageEditRenderNodeRegistry()
-
-function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
-}
-
-function rasterResourceId(node: ImageEditRenderPlanNode): string | null {
-  const source = isRecord(node.parameters.source) ? node.parameters.source : null
-  return source?.kind === 'resource' && typeof source.resourceId === 'string'
-    ? source.resourceId
-    : null
-}
 
 function transparentRegion(
   region: ImageEditorV3ExportRenderRegion,
@@ -223,6 +213,7 @@ export async function buildImageEditorV3VgpuGlowAnalyses(
   dependencies: ImageEditorV3ExportRenderDependencies,
   budget: ImageEditResourceBudget,
   sparseMaskPlan: ImageEditorSparseMaskPlanV3,
+  sparseRasterPlan: ImageEditorV3SparseRasterPlan,
   diffusionAnalyses: ReadonlyMap<string, ImageEditorV3DiffusionAnalysis>,
 ): Promise<ImageEditorV3VgpuGlowAnalysisSet> {
   const nodes = plan.nodes.filter((node) => node.definitionId === 'effect.vgpu-glow')
@@ -258,8 +249,9 @@ export async function buildImageEditorV3VgpuGlowAnalyses(
         const loadSource = (
           resourceId: string,
           requestedRegion: ImageEditorV3ExportRenderRegion,
+          sourceMip = mip,
         ): Promise<Float32PremultipliedRgbaTile> => {
-          const key = `${resourceId}:${requestedRegion.x}:${requestedRegion.y}:${requestedRegion.width}:${requestedRegion.height}`
+          const key = `${resourceId}:m${sourceMip}:${requestedRegion.x}:${requestedRegion.y}:${requestedRegion.width}:${requestedRegion.height}`
           const cached = sourceCache.get(key)
           if (cached) return cached
           const loaded = loadImageEditorV3SourceRegion(
@@ -272,7 +264,7 @@ export async function buildImageEditorV3VgpuGlowAnalyses(
             referenceWhiteNits,
             signal,
             dependencies,
-            mip,
+            sourceMip,
           )
           sourceCache.set(key, loaded)
           return loaded
@@ -285,12 +277,10 @@ export async function buildImageEditorV3VgpuGlowAnalyses(
           signal,
           resolveSourceSize,
           createTransparent: (requestedRegion) => transparentRegion(requestedRegion, document),
-          loadRaster: async (sourceNode, requestedRegion) => {
-            const resourceId = rasterResourceId(sourceNode)
-            return resourceId
-              ? loadSource(resourceId, requestedRegion)
-              : transparentRegion(requestedRegion, document)
-          },
+          loadRaster: (sourceNode, requestedRegion) => loadImageEditorRasterRegionV3({
+            node: sourceNode, region: requestedRegion, mip, document, sparsePlan: sparseRasterPlan,
+            signal, dependencies, budget, loadSource,
+          }),
           rasterizeAnnotations: (annotationNode, requestedRegion) => (
             dependencies.rasterizeAnnotations ?? rasterizeImageEditorV3ExportAnnotations
           )({ node: annotationNode, document, region: requestedRegion, mip, signal }),

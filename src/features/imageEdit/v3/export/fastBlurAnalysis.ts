@@ -1,3 +1,5 @@
+import { loadImageEditorRasterRegionV3 } from './rasterRegion'
+import type { ImageEditorV3SparseRasterPlan } from './brushRegion'
 import {
   DIFFUSION_V4_RECIPE_ADAPTER,
   applyDiffusionV4,
@@ -50,17 +52,6 @@ export interface ImageEditorV3FastBlurAnalysisSet {
 }
 
 const registry = createBuiltInImageEditRenderNodeRegistry()
-
-function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
-}
-
-function rasterResourceId(node: ImageEditRenderPlanNode): string | null {
-  const source = isRecord(node.parameters.source) ? node.parameters.source : null
-  return source?.kind === 'resource' && typeof source.resourceId === 'string'
-    ? source.resourceId
-    : null
-}
 
 function numberParameter(node: ImageEditRenderPlanNode, key: string, fallback: number): number {
   const value = node.parameters[key]
@@ -138,6 +129,7 @@ export async function buildImageEditorV3FastBlurAnalyses(
   dependencies: ImageEditorV3ExportRenderDependencies,
   budget: ImageEditResourceBudget,
   sparseMaskPlan: ImageEditorSparseMaskPlanV3,
+  sparseRasterPlan: ImageEditorV3SparseRasterPlan,
   diffusionAnalyses: ReadonlyMap<string, ImageEditorV3DiffusionAnalysis>,
   glowAnalysisSet: ImageEditorV3VgpuGlowAnalysisSet,
 ): Promise<ImageEditorV3FastBlurAnalysisSet> {
@@ -175,8 +167,9 @@ export async function buildImageEditorV3FastBlurAnalyses(
         const loadSource = (
           resourceId: string,
           requestedRegion: ImageEditorV3ExportRenderRegion,
+          sourceMip = mip,
         ): Promise<Float32PremultipliedRgbaTile> => {
-          const key = `${resourceId}:${requestedRegion.x}:${requestedRegion.y}:${requestedRegion.width}:${requestedRegion.height}`
+          const key = `${resourceId}:m${sourceMip}:${requestedRegion.x}:${requestedRegion.y}:${requestedRegion.width}:${requestedRegion.height}`
           const cached = sourceCache.get(key)
           if (cached) return cached
           const loaded = loadImageEditorV3SourceRegion(
@@ -189,7 +182,7 @@ export async function buildImageEditorV3FastBlurAnalyses(
             referenceWhiteNits,
             signal,
             dependencies,
-            mip,
+            sourceMip,
           )
           sourceCache.set(key, loaded)
           return loaded
@@ -202,10 +195,10 @@ export async function buildImageEditorV3FastBlurAnalyses(
           signal,
           resolveSourceSize,
           createTransparent: (requestedRegion) => transparentRegion(requestedRegion, document),
-          loadRaster: async (node, requestedRegion) => {
-            const resourceId = rasterResourceId(node)
-            return resourceId ? loadSource(resourceId, requestedRegion) : transparentRegion(requestedRegion, document)
-          },
+          loadRaster: (node, requestedRegion) => loadImageEditorRasterRegionV3({
+            node: node, region: requestedRegion, mip, document, sparsePlan: sparseRasterPlan,
+            signal, dependencies, budget, loadSource,
+          }),
           rasterizeAnnotations: (node, requestedRegion) => (
             dependencies.rasterizeAnnotations ?? rasterizeImageEditorV3ExportAnnotations
           )({ node, document, region: requestedRegion, mip, signal }),

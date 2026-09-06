@@ -1,28 +1,23 @@
-import type { ImageEditDocumentV3 } from '@/core/imageEdit/v3/documentTypes'
+import type { ImageEditorManagedPreviewRequestV3, ImageEditorPreviewClientOptionsV3, ScheduledJobV3 } from './imageEditorPreviewClientTypesV3'
 import { createLogger } from '@/core/logging'
 import {
   IMAGE_EDIT_RENDER_PRIORITY,
   ImageEditTaskCancelledError,
   ImageEditTaskSupersededError,
-  type ImageEditRenderPurpose,
   type ImageEditRenderScheduler,
-  type ImageEditRenderTaskKind,
 } from '@/core/imageEdit/v3/renderScheduler'
 import {
-  type ImageEditMemoryLease,
   type ImageEditResourceBudget,
 } from '@/core/imageEdit/v3/resourceBudget'
-import type { ImageEditRenderQuality } from '@/core/imageEdit/v3/renderNodeDefinition'
 import {
   IMAGE_EDITOR_V3_PACKAGE_THUMBNAIL_MAX_BYTES,
-  type ImageEditorV3ResourceDescriptor,
 } from '@/platform/contracts/imageEditorV3'
 import {
   ImageEditorPreviewBrushTileLoaderV3,
-  type ImageEditorPreviewBrushTileReaderV3,
 } from './previewBrushTileLoaderV3'
 import {
   collectImageEditorPreviewResourceRequestsV3,
+  readImageEditorPreviewBrushSourceSizesV3,
   type ImageEditorPreviewBrushResourceRequestV3,
   type ImageEditorPreviewProxyResourceRequestV3,
 } from './previewDocumentV3'
@@ -32,7 +27,6 @@ import {
 import {
   ImageEditorPreviewResultOwnerV3,
   type ImageEditorManagedPreviewResultV3,
-  type ImageEditorPreviewUrlFactoryV3,
 } from './imageEditorPreviewResultLeaseV3'
 import {
   acquireImageEditorSessionResourceBudgetV3,
@@ -47,9 +41,6 @@ import {
 } from './imageEditorPreviewMemoryV3'
 import {
   ImageEditorPreviewResourceLoaderV3,
-  type ImageEditorPreviewProxyReaderV3,
-  type ImageEditorPreviewPyramidDescriptorReaderV3,
-  type ImageEditorPreviewPyramidPrewarmerV3,
 } from './imageEditorPreviewResourcesV3'
 import type {
   ImageEditorPreviewWorkerEventV3,
@@ -76,50 +67,7 @@ export class ImageEditorPreviewDisposedErrorV3 extends Error {
 
 export type { ImageEditorManagedPreviewResultV3 } from './imageEditorPreviewResultLeaseV3'
 
-export interface ImageEditorManagedPreviewRequestV3 {
-  document: ImageEditDocumentV3
-  quality: ImageEditRenderQuality
-  maxDimension: number
-  resourceDescriptors: readonly ImageEditorV3ResourceDescriptor[]
-}
-
-export interface ImageEditorPreviewClientOptionsV3 {
-  sessionId: string
-  workerFactory?: ImageEditorPreviewWorkerFactoryV3
-  readFastProxy?: ImageEditorPreviewProxyReaderV3
-  describePyramid?: ImageEditorPreviewPyramidDescriptorReaderV3
-  prewarmPyramid?: ImageEditorPreviewPyramidPrewarmerV3
-  readBrushTiles?: ImageEditorPreviewBrushTileReaderV3
-  urlFactory?: ImageEditorPreviewUrlFactoryV3
-  proxyCacheMaxBytes?: number
-  brushCacheMaxBytes?: number
-  brushTransferMaxBytes?: number
-  resourceBudget?: ImageEditResourceBudget
-  resourceBudgetConsumerId?: string
-  renderScheduler?: ImageEditRenderScheduler
-  /** 同一编辑会话内相互独立的画面流，例如 display 与 thumbnail。 */
-  coalescingKey?: string
-  taskKind?: ImageEditRenderTaskKind
-  purpose?: ImageEditRenderPurpose
-  priority?: number
-  /** display 负责预热；thumbnail 等派生流应关闭，避免重复占用主进程额度。 */
-  pyramidPrewarmEnabled?: boolean
-}
-
-interface ScheduledJobV3 extends ImageEditorManagedPreviewRequestV3 {
-  requestId: string
-  sequence: number
-  abortController: AbortController
-  inputLeases: ImageEditMemoryLease[]
-  transferLease: ImageEditMemoryLease | null
-  workingLease: ImageEditMemoryLease | null
-  outputLease: ImageEditMemoryLease | null
-  posted: boolean
-  renderTaskId: string
-  workerCompletion: ImageEditorWorkerCompletionV3<ImageEditorPreviewWorkerEventV3>
-  resolve: (result: ImageEditorManagedPreviewResultV3) => void
-  reject: (error: Error) => void
-}
+export type { ImageEditorManagedPreviewRequestV3, ImageEditorPreviewClientOptionsV3 } from './imageEditorPreviewClientTypesV3'
 
 let previewClientSequence = 0
 
@@ -292,10 +240,12 @@ export class ImageEditorPreviewClientV3 {
       memory.workingBytes,
       'lower-mip',
     )
+    const sourceSizes = await readImageEditorPreviewBrushSourceSizesV3(job.document, job.abortController.signal, this.options.describePyramid)
     const requests = collectImageEditorPreviewResourceRequestsV3(
       job.document,
       job.maxDimension,
       job.resourceDescriptors,
+      sourceSizes,
     )
     const proxyRequests = requests.filter(
       (request): request is ImageEditorPreviewProxyResourceRequestV3 => request.kind === 'image-proxy',

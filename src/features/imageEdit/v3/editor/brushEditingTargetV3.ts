@@ -4,6 +4,7 @@ import type {
   ImageEditBrushToolV3,
 } from '@/core/imageEdit/v3/brush/contracts'
 import type { ImageEditDocumentV3 } from '@/core/imageEdit/v3/documentTypes'
+import type { ImageEditSize } from '@/core/imageEdit/v3/tileGeometry'
 import type { AnnotationMatrixV3 } from './annotationGeometryV3'
 import { resolveImageEditorMaskBrushLayerV3 } from './maskBrushLayerV3'
 import {
@@ -28,6 +29,7 @@ export interface ImageEditorBrushEditingTargetV3 {
   tool: ImageEditBrushToolV3
   target: ImageEditBrushTargetV3
   loadTile: ImageEditBrushTileLoaderV3
+  resolveStorageSize?: (signal: AbortSignal) => Promise<ImageEditSize>
 }
 
 export type ImageEditorBrushEditingTargetResolutionV3 =
@@ -67,6 +69,9 @@ export function resolveImageEditorBrushEditingTargetV3(input: {
   const resolved = resolveImageEditorRasterBrushLayerV3(input.document, input.selectedLayerIds)
   if (!resolved.ready) return resolved
   const { layer, matrix, inverseMatrix } = resolved.target
+  const loadTile = createImageEditorRasterBrushTileLoaderV3({
+    document: input.document, layer, resourceByteSizes: input.resourceByteSizes,
+  })
   return {
     ready: true,
     target: {
@@ -78,11 +83,8 @@ export function resolveImageEditorBrushEditingTargetV3(input: {
       destination: { kind: 'raster' },
       tool: input.activeTool === 'eraser' ? 'eraser' : 'brush',
       target: createImageEditorRasterBrushTargetV3(input.document),
-      loadTile: createImageEditorRasterBrushTileLoaderV3({
-        document: input.document,
-        layer,
-        resourceByteSizes: input.resourceByteSizes,
-      }),
+      loadTile,
+      resolveStorageSize: loadTile.resolveStorageSize,
     },
   }
 }

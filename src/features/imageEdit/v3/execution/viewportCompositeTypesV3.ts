@@ -82,6 +82,8 @@ export interface ImageEditorManagedViewportCompositeV3 {
 
 export interface ImageEditorViewportCompositeClientOptionsV3 {
   sessionId: string
+  /** 缩略图复用同一像素内核，但不得抢占交互显示队列。 */
+  purpose?: 'display' | 'thumbnail'
   workerFactory?: ImageEditorViewportCompositeWorkerFactoryV3
   scheduler?: Pick<ImageEditorViewportTileSchedulerV3, 'render' | 'cancel' | 'dispose'>
   resourceBudget?: ImageEditResourceBudget

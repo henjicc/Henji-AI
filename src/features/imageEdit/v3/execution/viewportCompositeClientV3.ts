@@ -1,14 +1,10 @@
+import { imageEditorViewportResourceSizesV3, type ActiveViewportJobV3 } from './viewportCompositeJobV3'
 import {
   createTileRegion,
   imageEditOutputSizeV3,
-  type ImageEditMemoryLease,
   type ImageEditResourceBudget,
 } from '@/core/imageEdit/v3'
-import type { ImageEditRenderScheduler } from '@/core/imageEdit/v3/renderScheduler'
-import type {
-  ImageEditorV3PyramidDescriptor,
-  ImageEditorV3ResourceRef,
-} from '@/platform/contracts/imageEditorV3'
+import { IMAGE_EDIT_RENDER_PRIORITY, type ImageEditRenderScheduler } from '@/core/imageEdit/v3/renderScheduler'
 import { ImageEditorPreviewBrushTileLoaderV3 } from './previewBrushTileLoaderV3'
 import {
   collectImageEditorViewportBrushRequestsV3,
@@ -16,7 +12,6 @@ import {
   estimateImageEditorViewportWorkingRegionPixelsV3,
   ImageEditorViewportCompositeUnsupportedErrorV3,
   prepareImageEditorViewportCompositeV3,
-  type PreparedImageEditorViewportCompositeV3,
 } from './viewportCompositeDocumentV3'
 import type {
   ImageEditorViewportCompositeWorkerEventV3,
@@ -25,9 +20,7 @@ import type {
 } from './viewportCompositeProtocolV3'
 import {
   ImageEditorViewportTileSchedulerV3,
-  type ImageEditorViewportFrameV3,
 } from './viewportTileSchedulerV3'
-import type { ImageEditorViewportTilePlanV3 } from './viewportTilePlannerV3'
 import {
   cloneImageEditorViewportSourceTilesV3,
   imageEditorViewportBrushTransferBytesV3,
@@ -76,37 +69,6 @@ export {
   ImageEditorViewportCompositeSupersededErrorV3,
 } from './viewportCompositeTypesV3'
 
-function imageEditorViewportResourceSizesV3(
-  descriptors: ReadonlyMap<ImageEditorV3ResourceRef, ImageEditorV3PyramidDescriptor>,
-): ReadonlyMap<ImageEditorV3ResourceRef, { width: number; height: number }> {
-  return new Map([...descriptors].map(([resourceRef, descriptor]) => {
-    const level = descriptor.levels.find(({ mip }) => mip === 0)
-    if (!level) throw new Error('视口图片资源缺少 mip 0 几何')
-    return [resourceRef, { width: level.width, height: level.height }]
-  }))
-}
-
-interface ActiveViewportJobV3 extends ImageEditorViewportCompositeRequestV3 {
-  sequence: number
-  requestId: string
-  controller: AbortController
-  prepared: PreparedImageEditorViewportCompositeV3 | null
-  frame: ImageEditorViewportFrameV3 | null
-  tilePlan: ImageEditorViewportTilePlanV3 | null
-  progress: ImageEditorViewportCompositeProgressV3 | null
-  transferLease: ImageEditMemoryLease | null
-  workingLease: ImageEditMemoryLease | null
-  outputLease: ImageEditMemoryLease | null
-  posted: boolean
-  renderTaskId: string
-  workerCompletion: ImageEditorWorkerCompletionV3<ImageEditorViewportCompositeWorkerEventV3>
-  settled: boolean
-  startedAt: number
-  sourceReadyAt: number | null
-  workerStartedAt: number | null
-  resolve: (result: ImageEditorManagedViewportCompositeV3) => void
-  reject: (error: Error) => void
-}
 
 function createDefaultWorker(): ImageEditorViewportCompositeWorkerPortV3 {
   return acquireSharedImageEditorViewportCompositeWorkerV3()
@@ -281,7 +243,7 @@ export class ImageEditorViewportCompositeClientV3 {
     if (frame.plan.tiles.length === 0) {
       throw new ImageEditorViewportCompositeUnsupportedErrorV3('视口未与文档相交')
     }
-    const brushRequests = collectImageEditorViewportBrushRequestsV3(prepared, frame.plan, wholeSource)
+    const brushRequests = collectImageEditorViewportBrushRequestsV3(prepared, frame.plan, wholeSource, frame.resourceSizes)
     const transferBytes = imageEditorViewportSourceTransferBytesV3(frame)
       + imageEditorViewportBrushTransferBytesV3(brushRequests)
     if (!Number.isSafeInteger(transferBytes) || transferBytes > this.transferMaxBytes) {
@@ -338,12 +300,13 @@ export class ImageEditorViewportCompositeClientV3 {
     const event = await this.renderScheduler.schedule<ImageEditorViewportCompositeWorkerEventV3>({
       id: job.renderTaskId,
       sessionId: this.options.sessionId,
-      coalescingKey: 'display',
+      coalescingKey: this.options.purpose ?? 'display',
       revision: job.document.revision,
-      kind: 'preview',
-      purpose: 'display',
+      kind: this.options.purpose === 'thumbnail' ? 'prefetch' : 'preview',
+      purpose: this.options.purpose ?? 'display',
       lane: 'gpu',
-      priority: resolveImageEditorViewportCompositePriorityV3(job),
+      priority: this.options.purpose === 'thumbnail'
+        ? IMAGE_EDIT_RENDER_PRIORITY.prefetch : resolveImageEditorViewportCompositePriorityV3(job),
       run: ({ signal }) => job.workerCompletion.wait({
         signals: [signal, job.controller.signal],
         onAbort: () => {

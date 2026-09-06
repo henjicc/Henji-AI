@@ -5,7 +5,6 @@ import {
 import {
   createFloat32PremultipliedRgbaTile,
   createTileRegion,
-  enumerateTilesForRect,
   imageEditBrushTileKeyV3,
   type Float32PremultipliedRgbaTile,
   type ImageEditBrushResourceReferenceV3,
@@ -24,6 +23,9 @@ import {
   type ImageEditorV3ExportRenderDependencies,
   type ImageEditorV3ExportRenderRegion,
 } from './contracts'
+import { resolveImageEditRasterStorageSizeV3, resolveImageEditRasterSourceExtentV3 } from '@/core/imageEdit/v3/execution/rasterSourceGeometry'
+import { createImageEditRasterReplacementV3, addImageEditRasterReplacementV3,
+  missingImageEditRasterBaseSamplesV3, finishImageEditRasterReplacementV3 } from '@/core/imageEdit/v3/execution/rasterTileReplacement'
 
 const BRUSH_TILE_SIZE = 512
 const BRUSH_TILE_BATCH_SIZE = 16
@@ -45,6 +47,7 @@ interface SparseRasterTileReference {
 
 export interface ImageEditorV3SparseRasterPlan {
   byNodeId: ReadonlyMap<string, ReadonlyMap<string, SparseRasterTileReference>>
+  extentByNodeId: ReadonlyMap<string, ImageEditSize>
 }
 
 function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
@@ -98,11 +101,10 @@ function descriptorMap(
 
 function parseSparseReference(
   node: ImageEditRenderPlanNode,
-  canvasSize: ImageEditSize,
   key: string,
   resourceId: unknown,
   descriptors: ReadonlyMap<string, ImageEditorV3ResourceDescriptor>,
-): SparseRasterTileReference {
+): Omit<SparseRasterTileReference, 'width' | 'height'> {
   const match = TILE_KEY_PATTERN.exec(key)
   if (!match) throw new Error(`栅格图层“${node.layerId}”包含无效画笔瓦片键：${key}`)
   const mip = Number(match[1])
@@ -116,12 +118,6 @@ function parseSparseReference(
   }
   if (key !== imageEditBrushTileKeyV3({ mip, x: tileX, y: tileY })) {
     throw new Error(`栅格图层“${node.layerId}”包含非规范画笔瓦片键：${key}`)
-  }
-  let region
-  try {
-    region = createTileRegion(canvasSize, { mip, x: tileX, y: tileY }, 0, BRUSH_TILE_SIZE)
-  } catch (error) {
-    throw new Error(`栅格图层“${node.layerId}”的画笔瓦片超出文档边界：${key}`, { cause: error })
   }
   if (typeof resourceId !== 'string' || !RESOURCE_REF_PATTERN.test(resourceId)) {
     throw new Error(`栅格图层“${node.layerId}”的画笔瓦片资源引用无效：${key}`)
@@ -143,8 +139,17 @@ function parseSparseReference(
     byteSize: descriptor.byteLength,
     tileX,
     tileY,
-    width: region.outputRect.width,
-    height: region.outputRect.height,
+  }
+}
+
+/** 尚未读取源几何时先拒绝坏键/资源，绝不猜测它的存储边缘宽高。 */
+export function validateImageEditorV3SparseRasterResources(plan: ImageEditRenderPlan,
+  resources: readonly ImageEditorV3ResourceDescriptor[]): void {
+  const descriptors = descriptorMap(resources)
+  for (const node of plan.nodes) {
+    if (node.definitionId !== 'source.raster') continue
+    if (!isRecord(node.parameters.tiles)) throw new Error(`栅格渲染节点缺少画笔瓦片映射：${node.layerId}`)
+    for (const [key, resourceId] of Object.entries(node.parameters.tiles)) parseSparseReference(node, key, resourceId, descriptors)
   }
 }
 
@@ -153,21 +158,30 @@ export function createImageEditorV3SparseRasterPlan(
   plan: ImageEditRenderPlan,
   canvasSize: ImageEditSize,
   resourceDescriptors: readonly ImageEditorV3ResourceDescriptor[],
+  resourceSizes: ReadonlyMap<string, ImageEditSize> = new Map(),
 ): ImageEditorV3SparseRasterPlan {
   const descriptors = descriptorMap(resourceDescriptors)
   const byNodeId = new Map<string, ReadonlyMap<string, SparseRasterTileReference>>()
+  const extentByNodeId = new Map<string, ImageEditSize>()
   for (const node of plan.nodes) {
     if (node.definitionId !== 'source.raster') continue
     if (!isRecord(node.parameters.tiles)) {
       throw new Error(`栅格渲染节点缺少画笔瓦片映射：${node.layerId}`)
     }
     const byKey = new Map<string, SparseRasterTileReference>()
+    const source = isRecord(node.parameters.source) ? node.parameters.source : null
+    const sourceSize = source?.kind === 'resource' && typeof source.resourceId === 'string'
+      ? resourceSizes.get(source.resourceId) : undefined
+    const storageSize = resolveImageEditRasterStorageSizeV3(sourceSize ?? null, canvasSize)
+    extentByNodeId.set(node.id, resolveImageEditRasterSourceExtentV3(sourceSize ?? null, canvasSize, Object.keys(node.parameters.tiles)))
     for (const [key, resourceId] of Object.entries(node.parameters.tiles)) {
-      byKey.set(key, parseSparseReference(node, canvasSize, key, resourceId, descriptors))
+      const reference = parseSparseReference(node, key, resourceId, descriptors)
+      const region = createTileRegion(storageSize, { mip: 0, x: reference.tileX, y: reference.tileY }, 0, BRUSH_TILE_SIZE)
+      byKey.set(key, { ...reference, width: region.outputRect.width, height: region.outputRect.height })
     }
     if (byKey.size > 0) byNodeId.set(node.id, byKey)
   }
-  return { byNodeId }
+  return { byNodeId, extentByNodeId }
 }
 
 function defaultReadBrushTiles(
@@ -232,33 +246,12 @@ function validateBrushTile(
   }
 }
 
-function copyBrushIntersection(
-  reference: SparseRasterTileReference,
-  tile: Extract<ImageEditBrushTileV3, { storage: 'rgba-float32' }>,
-  target: Float32Array,
-  region: ImageEditorV3ExportRenderRegion,
-): void {
-  const originX = reference.tileX * BRUSH_TILE_SIZE
-  const originY = reference.tileY * BRUSH_TILE_SIZE
-  const left = Math.max(region.x, originX)
-  const top = Math.max(region.y, originY)
-  const right = Math.min(region.x + region.width, originX + tile.width)
-  const bottom = Math.min(region.y + region.height, originY + tile.height)
-  if (right <= left || bottom <= top) return
-  const copyWidth = right - left
-  for (let y = top; y < bottom; y += 1) {
-    const sourceOffset = ((y - originY) * tile.width + left - originX) * 4
-    const targetOffset = ((y - region.y) * region.width + left - region.x) * 4
-    target.set(tile.data.subarray(sourceOffset, sourceOffset + copyWidth * 4), targetOffset)
-  }
-}
-
 /** 稀疏画笔瓦片是该栅格图层对应存储区域的完整替换，而不是叠加笔迹。 */
 export async function applyImageEditorV3SparseRasterRegion(
   node: ImageEditRenderPlanNode,
   base: Float32PremultipliedRgbaTile,
   region: ImageEditorV3ExportRenderRegion,
-  canvasSize: ImageEditSize,
+  _canvasSize: ImageEditSize,
   plan: ImageEditorV3SparseRasterPlan,
   expected: {
     workingSpace: 'srgb' | 'display-p3' | 'rec2020'
@@ -268,15 +261,19 @@ export async function applyImageEditorV3SparseRasterRegion(
   signal: AbortSignal,
   dependencies: ImageEditorV3ExportRenderDependencies,
   budget: ImageEditResourceBudget,
+  mip = 0,
+  readBasePixel?: (x: number, y: number) => Promise<Float32Array>,
 ): Promise<Float32PremultipliedRgbaTile> {
   const byKey = plan.byNodeId.get(node.id)
   if (!byKey) return base
-  const references = enumerateTilesForRect(canvasSize, 0, region, BRUSH_TILE_SIZE)
-    .map((coordinate) => byKey.get(imageEditBrushTileKeyV3(coordinate)))
-    .filter((value): value is SparseRasterTileReference => value !== undefined)
+  const scale = 2 ** mip
+  const references = [...byKey.values()].filter((tile) => tile.tileX * BRUSH_TILE_SIZE < (region.x + region.width) * scale
+    && tile.tileY * BRUSH_TILE_SIZE < (region.y + region.height) * scale
+    && tile.tileX * BRUSH_TILE_SIZE + tile.width > region.x * scale
+    && tile.tileY * BRUSH_TILE_SIZE + tile.height > region.y * scale)
   if (references.length === 0) return base
 
-  const output = new Float32Array(base.data)
+  const replacement = createImageEditRasterReplacementV3(base, region, scale, scale, plan.extentByNodeId.get(node.id))
   const readBrushTiles = dependencies.readBrushTiles ?? defaultReadBrushTiles
   for (let start = 0; start < references.length; start += BRUSH_TILE_BATCH_SIZE) {
     throwIfAborted(signal)
@@ -304,12 +301,28 @@ export async function applyImageEditorV3SparseRasterRegion(
         const tile = returned.get(reference.tileKey)
         if (!tile) throw new Error(`画笔瓦片读取结果缺失：${reference.tileKey}`)
         validateBrushTile(reference, tile, expected, signal)
-        copyBrushIntersection(reference, tile, output, region)
+        addImageEditRasterReplacementV3(replacement, tile, reference.tileX * BRUSH_TILE_SIZE, reference.tileY * BRUSH_TILE_SIZE, signal)
       }
     } finally {
       lease.release()
     }
   }
+  const basePixels = new Map<string, Float32Array>()
+  for (const point of missingImageEditRasterBaseSamplesV3(replacement)) {
+    throwIfAborted(signal)
+    if (!readBasePixel) throw new Error('低 mip 跨画笔边界采样缺少原图像素读取器')
+    // 单个边界像素仍可能解码完整 mip0 源块；不能按低 mip 的 1px 工作集隐瞒此峰值。
+    const lease = acquireDecodedLease(budget, BRUSH_TILE_SIZE * BRUSH_TILE_SIZE * 16 * 2)
+    try {
+      basePixels.set(`${point.x}:${point.y}`, await raceWithAbort(readBasePixel(point.x, point.y), signal))
+    } finally { lease.release() }
+  }
+  throwIfAborted(signal)
+  const output = finishImageEditRasterReplacementV3(replacement, (x, y, channel) => {
+    const pixel = basePixels.get(`${x}:${y}`)
+    if (!pixel) throw new Error('画笔边界原图采样缺失')
+    return pixel[channel]
+  })
   return createFloat32PremultipliedRgbaTile(
     base.width,
     base.height,

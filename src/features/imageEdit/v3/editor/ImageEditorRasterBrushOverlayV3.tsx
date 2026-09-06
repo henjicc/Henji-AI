@@ -342,6 +342,7 @@ export function ImageEditorRasterBrushOverlayV3({
       },
       target: target.target,
       loadTile: target.loadTile,
+      resolveStorageSize: target.resolveStorageSize,
       resourceByteSizes: resourceSizesRef.current,
       onPreviewTiles: (changes) => setOverlay((current) => {
         const tiles = new Map(current?.tiles ?? [])
