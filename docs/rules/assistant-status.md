@@ -40,15 +40,16 @@
 对照 [assistant-goal.md](assistant-goal.md) 的四条判据：
 
 - **判据 1（广度）**：`storeActionCoverage.test.ts` 的 `GAP_BASELINE = 0`，且断言是
-  `gaps.length <= GAP_BASELINE`——**当前实际缺口为 0**。28/28 个 store 全部建账，
-  人在界面上能做的每一件事助手都能做。三维 11 项、画布 5 项缺口已全部归零。
+  `gaps.length <= GAP_BASELINE`——**已登记账本的静态缺口为 0**。2026-08-31 快照中，
+  28/28 个 store 全部建账，三维 11 项、画布 5 项登记缺口已归零；这不等于全部界面动作已经
+  经正式 Gateway 和真实模型逐项验证，实际可执行性仍需结果测试与对应验收证明。
   （该文件的长注释里有 `0 → 2`、`2 → 8` 这类**中间态**数字，是任务推进过程的记录，不是现值；
   以文件末尾的常量和断言为准。）
 - **判据 2（唯一性）**：旧 `HostCommand` / `HostQuery` 执行入口**已删除**，助手与界面共用正式领域服务。
   `AGENTS.md` 明令禁止新增该类工具。双路径一致性由 `check:assistant-capabilities` 守。
 - **判据 3（走得通）**：四大覆盖门禁 `propertyCoverage` / `storeActionCoverage` / `collectionCoverage` /
-  `resultBehaviorCoverage` **零豁免清单**。8 个写域全部有「经模型链路读改验」的回环覆盖
-  （`assistantHarness.writeLoop.test.ts`）。
+  `resultBehaviorCoverage` **零豁免清单**。8 个写域全部有脚本化模型替身驱动正式运行时的读改验回环
+  （`assistantHarness.writeLoop.test.ts`，L-B）；它证明给定操作链路可执行，不证明真实模型会选择该路线。
 - **判据 4（可自纠）**：拒绝路径的自我修正由 `assistantHarness.rejectionMatrix.test.ts` 守。
 
 2026-08-21 新增 `general.primary_provider` 与按媒体分类的 `generation.default_*_model`：默认供应商
@@ -121,8 +122,10 @@ service/capability 建账，不能把容器开关误归给单一能力。本次�
 2026-09-06 3D 镜头输出新增 `render_camera_stage_output`、`get_camera_stage_render_task` 与
 `cancel_camera_stage_render_task`：助手与画布节点共用同一后台渲染任务服务，提交后可离开画布并按稳定引用
 查询或取消；只有带匹配请求回执的持久结果节点才能报告完成。新建 3D 工程也改用不切换当前界面的后台落库
-入口，返回默认摄像机与首状态关键帧引用；打开工程仍由独立导航能力负责。L-A/L-B 已通过，正式 Electron
-能力入口待本轮统一 Reality 验证。
+入口，返回默认摄像机与首状态关键帧引用；打开工程仍由独立导航能力负责（`2a1cf8f2`），L-A/L-B 已通过。
+2026-09-07 补验：正式 Electron 的播放、跨工程后台任务、助手输出能力三类场景在双尺寸下 6/6 通过，
+浏览器错误、应用错误与警告均为 0；助手能力场景登记于 `3adcf77a`，工程恢复循环修复为 `ca0cb7ca`。
+证据：`.ui-tour/三维修复与画笔原图取证/evidence.json`。本次是非 LLM、非付费的应用验收，不计作 L-C。
 
 验证层（详见 [testing.md](testing.md) 第四节）：
 
@@ -181,7 +184,7 @@ service/capability 建账，不能把容器开关误归给单一能力。本次�
 
 格式：`日期 · 提交 · 推翻了什么 → 换成了什么 · 为什么旧的不能留`
 
-- **2026-09-06 · 当前改动（待集成 L3）** · 补正 Gateway 单并发键能保护通用事务、失败文本足以保留
+- **2026-09-06 · `2dcc2a2a`** · 补正 Gateway 单并发键能保护通用事务、失败文本足以保留
   实际修改的判断：core 的 commit/undo 现在一次占住全部受影响 scope（含附着图片的画布投影），
   并在锁内复核 revision、幂等、消费状态、写权限与宿主；无关 scope 不串行，不给 UI 指针事件加锁。
   业务部分失败、保存失败和提交后验证失败的有界事实沿原 renderer/Gateway/脚本账本传输，保留
@@ -190,17 +193,22 @@ service/capability 建账，不能把容器开关误归给单一能力。本次�
   失败操作仍为失败、Effects 不伪装 verified。任务级 seal 继续表示封存事实而非全部成功，保留意见
   不消失；最终模型失败的兜底说明只复述已记录摘要，不笼统宣称全部完成或验证。权限仍沿用
   `application:write` 信任模型，scope 不是权限，也未新增细粒度授权体系。
+  后续 `108d28a9` 补齐同批修改后直接删除的安全撤销：只接受同一已完成记录的 direct remove 解释
+  目标缺失，仍以集合权威 revision 复核；无关缺失和过期基线继续拒绝，由
+  `engineUndoRemovedTarget.test.ts` / `undoRevisionProbe.test.ts` 守住。
+  2026-09-07 集成证据：`4b266c93` 的 CI `34044815072` 四项必需门禁均通过，覆盖此处及下条图片
+  持久化改动；该证据不外推后续提交的 CI 状态，也不表示整轮界面验收全部完成。
 
-- **2026-09-06 · 当前改动（待集成 L3）** · 补正 V3 实时可写即代表可靠保存的结论：同步命令成功
+- **2026-09-06 · `9ff5d313`** · 补正 V3 实时可写即代表可靠保存的结论：同步命令成功
   只能证明内存变化。四类正式宿主现在复用同一保存队列登记 durable owner，预览宿主不开放写入；
   core 在整批修改或撤销末尾只确认一次，失败保留实际修改、部分补偿和恢复事实，不重放命令。
   附着画布节点通过原有唯一物化服务确认节点投影，普通工具草稿不自动 Apply；重试仅保存的节点
   确认不得伪造第二次修改 Effect。`assistantHarness.imageEditPersistence.test.ts` 与
   `imageEditPersistenceRecovery.test.ts` 覆盖拒写恢复、双域存储回读和级联回执；异步宿主、跨组批次与
-  撤销由精确测试补充。恢复能力沿用 `application:write` 信任边界；细粒度授权贯通与全部 scope
-  并发守卫仍属后续公共运行时工作，不在本次伪造保障。
+  撤销由精确测试补充。恢复能力沿用 `application:write` 信任边界；全部受影响 scope 的并发守卫与
+  失败事实跨 Gateway 传输已由后续 `2dcc2a2a` 补齐，未新增细粒度授权体系。
 
-- **2026-09-06 · 当前改动** · 补正 2026-08-25「画布显式写入已等待存储」的结论：当时只覆盖工程操作，
+- **2026-09-06 · `d5f973e0`** · 补正 2026-08-25「画布显式写入已等待存储」的结论：当时只覆盖工程操作，
   节点、素材组、批次与撤销仍把防抖入队当作成功。现在共用串行持久化确认屏障；失败保留当前修改和
   资源引用，`retry_canvas_project_save` 与界面重试均只保存、不重放业务，跨工程失败按原工程归属。
   `assistantHarness.canvasPersistence.test.ts` 经正式发现、脚本、Gateway 与存储回读验证拒绝及恢复。
