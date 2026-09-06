@@ -1,5 +1,92 @@
 const { openCanvasImageEditorV3Fixture } = require('./uiInspectionCanvasImageEditorV3.cjs')
 
+const LARGE_CPU_CLOSE_TIMEOUT_MS = 180000
+
+async function readCurrentImageEditorDialog(page) {
+  return page.evaluate(() => {
+    const editor = document.querySelector('[data-image-editor-v3]')
+    const dialog = editor?.closest('[role="dialog"]')
+    return dialog
+      ? { attached: true, text: dialog.textContent ?? '' }
+      : { attached: false, text: '' }
+  })
+}
+
+async function closeLargeCpuFallbackDocument(page, dialog, editor, fixture, projectId) {
+  const revision = Number(await editor.locator('[data-command-bar]').getAttribute('data-document-revision'))
+  if (!Number.isInteger(revision) || revision < 0) throw new Error('大图关闭前没有有效权威版本')
+  const before = await page.evaluate(async (documentRef) => window.henjiNative.imageEditorV3.loadDocument({
+    requestId: `reality-large-before-close-${crypto.randomUUID()}`, documentRef,
+  }), fixture.documentRef)
+  if (before.revision !== revision) throw new Error('大图关闭前文档尚未完成自动保存')
+  const started = Date.now(); const afterTimestamp = new Date(started).toISOString()
+  const deadline = started + LARGE_CPU_CLOSE_TIMEOUT_MS
+  let lastProgressAt = started
+  const seen = new Set()
+  // 五层8192完整CPU合成及编码是重图正确性场景，不能借下一场景的通用30秒清理预算。
+  await dialog.getByRole('button', { name: /关闭编辑器|Close editor/i }).click({ timeout: 5000 })
+  while (true) {
+    // 在同一次页面脚本中同时取“当前是否挂载”和文本，避免 dialog 在
+    // isVisible 与 textContent 两次 locator 操作之间卸载后，后者等待已消失元素重新出现。
+    const dialogState = await readCurrentImageEditorDialog(page)
+    if (!dialogState.attached) break
+    const failure = dialogState.text.match(/保存失败[^\n]{0,100}|重试关闭|save failed[^\n]{0,100}|retry clos(?:e|ing)/i)
+    if (failure) throw new Error(`8192 CPU关闭保存失败：${failure[0]}；保留现场，不重试`)
+    if (Date.now() >= deadline) throw new Error(`8192 CPU关闭超出180秒正确性预算，耗时=${Date.now() - started}ms；保留现场`)
+    if (Date.now() - lastProgressAt >= 10000) {
+      const events = await page.evaluate(async ({ afterTimestamp, documentId, revision }) => {
+        const names = ['image_editor_v3.raster_export.session.started',
+          'image_editor_v3.export.render.completed', 'image_edit.v3.persistence.confirm.completed']
+        const events = []
+        for (const name of names) {
+          const result = await window.henjiNative.logging.queryLogEvents({ date: afterTimestamp.slice(0, 10),
+            afterTimestamp, level: 'info', keyword: name, limit: 20 })
+          if (result.hasMore) throw new Error('大图关闭进展事件被截断，不能报告完整证据')
+          for (const event of result.events) if (event.event === name
+            && event.context?.documentId === documentId && event.context?.revision === revision) {
+            events.push({ event: name, timestamp: event.timestamp, requestId: event.requestId })
+          }
+        }
+        return events
+      }, { afterTimestamp, documentId: before.document.id, revision })
+      const fresh = events.filter((event) => {
+        const key = JSON.stringify(event)
+        if (seen.has(key)) return false
+        seen.add(key); return true
+      })
+      console.log(`[canvas-gpu-large-close] ${JSON.stringify({ elapsedMs: Date.now() - started,
+        state: 'waiting-for-close', newEvents: fresh })}`)
+      lastProgressAt = Date.now()
+    }
+    await page.waitForTimeout(120)
+  }
+  const result = await page.evaluate(async ({ documentRef, projectId, nodeId }) => {
+    const loaded = await window.henjiNative.imageEditorV3.loadDocument({
+      requestId: `reality-large-closed-${crypto.randomUUID()}`, documentRef,
+    })
+    const rows = await window.henjiNative.db.select('SELECT nodes_json FROM storyboard_projects WHERE id = ? LIMIT 1', [projectId])
+    const node = JSON.parse(rows[0]?.nodes_json ?? '[]').find((entry) => entry.id === nodeId)
+    const metadata = loaded.previewRef ? await window.henjiNative.imageEditorV3.describeSourcePyramid({
+      requestId: `reality-large-preview-${crypto.randomUUID()}`, resourceRef: loaded.previewRef,
+    }) : null
+    return { loaded, projection: node?.data?.imageEditSession, metadata }
+  }, { documentRef: fixture.documentRef, projectId, nodeId: fixture.nodeId })
+  const { loaded, projection, metadata } = result
+  if (loaded.documentRef !== fixture.documentRef || loaded.revision !== revision
+    || JSON.stringify(loaded.document) !== JSON.stringify(before.document) || !loaded.previewRef
+    || projection?.documentRef !== fixture.documentRef || projection?.revision !== revision
+    || projection?.previewRef !== loaded.previewRef
+    || !metadata?.levels?.some((level) => level.mip === 0 && level.width === 8192 && level.height === 8192)) {
+    throw new Error('8192 CPU关闭后权威文档、真实预览或节点投影不一致')
+  }
+  const elapsedMs = Date.now() - started
+  if (elapsedMs > LARGE_CPU_CLOSE_TIMEOUT_MS) throw new Error('8192 CPU关闭回读超出180秒正确性预算')
+  console.log(`[canvas-gpu-large-close] ${JSON.stringify({ elapsedMs, revision,
+    state: 'closed-and-persisted', sameDocument: true, previewSize: [8192, 8192],
+    budgetMeaning: 'large-cpu-export-correctness; not a performance target' })}`)
+  return { elapsedMs, revision }
+}
+
 function createGpuRasterScenes(context) {
   const { settlePage } = context
 
@@ -27,7 +114,7 @@ function createGpuRasterScenes(context) {
         }
         throw new Error(message)
       }
-      const { dialog, editor } = await openCanvasImageEditorV3Fixture({
+      const { dialog, editor, fixture, projectId } = await openCanvasImageEditorV3Fixture({
         page, context, width: 8192, height: 8192, label: '8192 多图层文档',
       })
       const duplicate = editor.getByRole('button', { name: /^(复制图层|Duplicate layer)$/i })
@@ -227,6 +314,7 @@ function createGpuRasterScenes(context) {
       })}\n`)
       await settlePage(page, 600)
       await inspection?.capture?.('editor')
+      await closeLargeCpuFallbackDocument(page, dialog, editor, fixture, projectId)
     },
   }, {
     id: 'image-editor-gpu-initialization-fallback',
@@ -324,4 +412,4 @@ function createGpuRasterScenes(context) {
   }]
 }
 
-module.exports = { createGpuRasterScenes }
+module.exports = { createGpuRasterScenes, closeLargeCpuFallbackDocument, LARGE_CPU_CLOSE_TIMEOUT_MS }
