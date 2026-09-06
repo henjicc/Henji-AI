@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ImageEditResourceBudget, createImageEditDocumentV3, createImageEditRasterLayerV3, type ImageEditTransformV3 } from '@/core/imageEdit/v3'
 import { loadImageEditorV3SourceRegion } from './sourceRegion'
 import { renderImageEditorV3ExportTiles } from './renderExportTilesV3'
@@ -7,6 +7,27 @@ import { description, fakeSourcePyramidReader, fakeSourceReader, type FakeImage 
 const BASE = `sha256:${'a'.repeat(64)}` as const
 const BAMBOO = `sha256:${'b'.repeat(64)}` as const
 const WIDE = `sha256:${'c'.repeat(64)}` as const
+// 独立 CI worker 上 10 层正式像素导出实测约 18.4 秒，15 秒会误报并让任务继续后台运行。
+// 两个重图用例使用有界正确性预算；18 块输出、像素、源边界和工作内存预算断言全部保留。
+const LARGE_EXPORT_CORRECTNESS_TIMEOUT = 60_000
+let activeExport: { controller: AbortController; settled: Promise<void> } | null = null
+
+function runExportTask(operation: (signal: AbortSignal) => Promise<void>): Promise<void> {
+  const controller = new AbortController()
+  const task = operation(controller.signal)
+  // 返回原 Promise 让业务错误仍由测试判失败；这个独立观察者只供超时后收尾等待。
+  activeExport = { controller, settled: task.then(() => undefined, () => undefined) }
+  return task
+}
+
+afterEach(async () => {
+  const active = activeExport
+  if (!active) return
+  active.controller.abort(new DOMException('测试结束，取消尚未完成的导出', 'AbortError'))
+  await active.settled
+  activeExport = null
+}, 10_000)
+
 const images = new Map<string, FakeImage>([
   [BASE, { width: 2672, height: 1504, pixel: () => [0, 0, 255, 255] }],
   [BAMBOO, { width: 1631, height: 1111, pixel: () => [255, 0, 0, 255] }],
@@ -14,7 +35,7 @@ const images = new Map<string, FakeImage>([
 ])
 
 describe('真实异尺寸图层的 CPU 导出源几何', () => {
-  it('真实10层缩放及878MiB预览占用共存时，不把最大源ROI重复乘给全部节点', async () => {
+  it('真实10层缩放及878MiB预览占用共存时，不把最大源ROI重复乘给全部节点', () => runExportTask(async (signal) => {
     const dimensions = [[2672, 1504], [1522, 1520], [1631, 1111], [3600, 549], [1275, 1870],
       [933, 1068], [1809, 1597], [1748, 1816], [2019, 713], [1847, 872]]
     const transforms: ImageEditTransformV3[] = [
@@ -42,14 +63,14 @@ describe('真实异尺寸图层的 CPU 导出源几何', () => {
     let completed = 0
     try {
       for await (const _tile of renderImageEditorV3ExportTiles({
-        document, resourceDescriptors: [], description: description(2672, 1504), tileSize: 512,
+        document, resourceDescriptors: [], description: description(2672, 1504), tileSize: 512, signal,
       }, { resourceBudget: budget, readSourceTile: fakeSourceReader(fixtureImages),
         readSourcePyramid: fakeSourcePyramidReader(fixtureImages) })) completed += 1
       expect(completed).toBe(18)
       expect(budget.snapshot()).toMatchObject({ totalBytes: previewLease.bytes, leaseCount: 1 })
     } finally { previewLease.release() }
     expect(budget.snapshot().totalBytes).toBe(0)
-  }, 15_000)
+  }), LARGE_EXPORT_CORRECTNESS_TIMEOUT)
 
   it('真实loader仅请求源覆盖的瓦片，源外区域透明补齐', async () => {
     const readSourceTile = vi.fn(fakeSourceReader(images))
@@ -71,7 +92,7 @@ describe('真实异尺寸图层的 CPU 导出源几何', () => {
     expect([...outside.data].every((value) => value === 0)).toBe(true)
   })
 
-  it('18块正式导出完成：小源恒等层不越界，大源缩放后的右侧内容不被文档尺寸裁掉', async () => {
+  it('18块正式导出完成：小源恒等层不越界，大源缩放后的右侧内容不被文档尺寸裁掉', () => runExportTask(async (signal) => {
     const document = createImageEditDocumentV3({ width: 2672, height: 1504, sourceResourceId: BASE })
     const bamboo = createImageEditRasterLayerV3('bamboo', '竹林', BAMBOO)
     const wide = createImageEditRasterLayerV3('wide', '宽幅元素', WIDE)
@@ -82,7 +103,7 @@ describe('真实异尺寸图层的 CPU 导出源几何', () => {
     const readSourceTile = vi.fn(fakeSourceReader(images))
     let count = 0
     for await (const tile of renderImageEditorV3ExportTiles({
-      document, resourceDescriptors: [], description: description(2672, 1504), tileSize: 512,
+      document, resourceDescriptors: [], description: description(2672, 1504), tileSize: 512, signal,
     }, { readSourceTile, readSourcePyramid: fakeSourcePyramidReader(images) })) {
       count += 1
       const bytes = tile.pixels instanceof Uint8Array ? tile.pixels : new Uint8Array(tile.pixels)
@@ -105,6 +126,21 @@ describe('真实异尺寸图层的 CPU 导出源几何', () => {
       expect(request.tileY * 512).toBeLessThan(Math.ceil(source.height / 2 ** request.mip))
     }
     expect(readSourceTile.mock.calls.some(([request]) => request.resourceRef === WIDE && request.tileX === 6)).toBe(true)
-  // 与上面的 10 层场景相同：18 块真实像素导出是正确性验收，不是 5 秒单测性能门槛。
-  }, 15_000)
+  }), LARGE_EXPORT_CORRECTNESS_TIMEOUT)
+
+  it('取消正在运行的正式导出后等待退出并释放全部工作与传输预算', async () => {
+    const document = createImageEditDocumentV3({ width: 1024, height: 512, sourceResourceId: BASE })
+    const budget = new ImageEditResourceBudget()
+    let completed = 0
+    const task = runExportTask(async (signal) => {
+      for await (const _tile of renderImageEditorV3ExportTiles({
+        document, resourceDescriptors: [], description: description(1024, 512), tileSize: 512, signal,
+        onTileRendered: () => activeExport!.controller.abort(new DOMException('取消测试导出', 'AbortError')),
+      }, { resourceBudget: budget, readSourceTile: fakeSourceReader(images),
+        readSourcePyramid: fakeSourcePyramidReader(images) })) completed += 1
+    })
+    await expect(task).rejects.toMatchObject({ name: 'AbortError', message: '取消测试导出' })
+    expect(completed).toBe(1)
+    expect(budget.snapshot()).toMatchObject({ totalBytes: 0, leaseCount: 0 })
+  })
 })
