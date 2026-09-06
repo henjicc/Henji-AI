@@ -5,7 +5,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { useCanvasStore } from '@/stores/canvasStore';
 import { useCanvasGenerationProgressStore } from '@/stores/canvasGenerationProgressStore';
-import { useProjectStore, type Project } from '@/stores/projectStore';
+import { flushCanvasProjectSnapshot, useProjectStore, type Project } from '@/stores/projectStore';
+
+import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from '@/tests/harnessNativeStorage';
+import { getProjectRecord } from '@/commands/projectState';
+import { fromProjectRecord } from '@/stores/projectStoreSerialization';
 
 import { CANVAS_NODE_TYPES, type CanvasNode } from '../domain/canvasNodes';
 import {
@@ -42,13 +46,16 @@ vi.mock('../application/canvasExecutionService', async () => ({
   isCanvasNodeInputSignatureCurrent: executionMocks.isCanvasNodeInputSignatureCurrent,
 }));
 
-vi.mock('@/platform', () => ({
-  getPlatform: () => ({
+vi.mock('@/platform', async () => {
+  const actual = await vi.importActual<typeof import('@/platform')>('@/platform');
+  return { ...actual, getPlatform: () => ({
+    ...actual.getPlatform(),
     image: {
+      ...actual.getPlatform().image,
       releaseManagedGenerationMedia: platformMocks.releaseManagedGenerationMedia,
     },
-  }),
-}));
+  }) };
+});
 
 vi.mock('../generation/mediaResultPersist', () => ({
   persistGenerationResult: generationMocks.persistGenerationResult,
@@ -90,9 +97,15 @@ function createResumablePanoramaResult(): CanvasNode {
 }
 
 describe('useCanvasResumePolling 异步结果恢复', () => {
-  afterEach(() => cleanup());
+  afterEach(async () => {
+    cleanup();
+    const projectId = useProjectStore.getState().currentProjectId;
+    if (projectId) await flushCanvasProjectSnapshot(projectId);
+    uninstallHarnessNativeStorage();
+  });
 
   beforeEach(() => {
+    installHarnessNativeStorage();
     generationMocks.resumeCanvasGeneration.mockReset();
     generationMocks.persistGenerationResult.mockReset();
     generationMocks.commitLayerSeparationGeneration.mockReset();
@@ -128,7 +141,6 @@ describe('useCanvasResumePolling 异步结果恢复', () => {
       currentProject: project,
       isHydrated: true,
       isOpeningProject: false,
-      saveCurrentProject: vi.fn(),
     });
     generationMocks.resumeCanvasGeneration.mockResolvedValue({ primary: 'remote-result' });
     generationMocks.prepareNodeImage.mockResolvedValue({
@@ -245,6 +257,12 @@ describe('useCanvasResumePolling 异步结果恢复', () => {
     await waitFor(() => expect(platformMocks.releaseManagedGenerationMedia).toHaveBeenCalledWith([
       '/data/Media/resumed-result.png',
     ]));
+    const saved = await getProjectRecord('resume-project');
+    expect(saved).not.toBeNull();
+    expect(fromProjectRecord(saved!).nodes[0]?.data).toMatchObject({
+      imageUrl: 'managed-panorama.png', resultKind: 'panorama', generationError: null,
+    });
+    expect(useProjectStore.getState().persistenceError).toBeNull();
   });
 
   it('续查未新建受管媒体时不调用释放', async () => {

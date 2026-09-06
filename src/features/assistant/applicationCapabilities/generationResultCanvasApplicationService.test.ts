@@ -17,16 +17,16 @@ import { addGenerationResultToCanvas } from './generationResultCanvasApplication
 describe('generation result canvas bridge', () => {
   beforeEach(() => { vi.clearAllMocks() })
 
-  it('只凭稳定生成结果引用解析内部媒体，并落成可验证画布节点', () => {
+  it('只凭稳定生成结果引用解析内部媒体，并落成可验证画布节点', async () => {
     mocks.getResult.mockReturnValue({
       taskId: 'task-1', mediaType: 'image', url: 'henji-media://generation/result-1',
       filePath: 'C:/managed-generation/result-1.png', prompt: '赛博朋克海报',
     })
-    mocks.addTrustedMediaCanvasNode.mockReturnValue({
+    mocks.addTrustedMediaCanvasNode.mockResolvedValue({
       projectId: 'canvas-1', nodeId: 'node-1', nodeType: 'uploadNode', undoRef: 'undo-1',
     })
 
-    const result = addGenerationResultToCanvas({
+    const result = await addGenerationResultToCanvas({
       projectId: 'canvas-1',
       resultRef: { kind: 'generation.result', id: 'task-1' },
       placement: { mode: 'absolute', x: 320, y: 180 },
@@ -46,13 +46,13 @@ describe('generation result canvas bridge', () => {
     expect(result).not.toHaveProperty('url')
   })
 
-  it('未完成或失效的生成引用不会调用画布写入', () => {
+  it('未完成或失效的生成引用不会调用画布写入', async () => {
     mocks.getResult.mockReturnValue(null)
-    expect(() => addGenerationResultToCanvas({
+    await expect(addGenerationResultToCanvas({
       projectId: 'canvas-1',
       resultRef: { kind: 'generation.result', id: 'task-pending' },
       placement: { mode: 'viewport_center' },
-    })).toThrow('GENERATION_RESULT_NOT_AVAILABLE')
+    })).rejects.toThrow('GENERATION_RESULT_NOT_AVAILABLE')
     expect(mocks.addTrustedMediaCanvasNode).not.toHaveBeenCalled()
   })
 })

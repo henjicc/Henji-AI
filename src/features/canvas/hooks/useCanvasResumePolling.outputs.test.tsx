@@ -5,7 +5,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { useCanvasStore } from '@/stores/canvasStore';
 import { useCanvasGenerationProgressStore } from '@/stores/canvasGenerationProgressStore';
-import { useProjectStore, type Project } from '@/stores/projectStore';
+import { flushCanvasProjectSnapshot, useProjectStore, type Project } from '@/stores/projectStore';
+
+import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from '@/tests/harnessNativeStorage';
+import { getProjectRecord } from '@/commands/projectState';
+import { fromProjectRecord } from '@/stores/projectStoreSerialization';
 
 import { CANVAS_NODE_TYPES, type CanvasNode } from '../domain/canvasNodes';
 import { createLayerStackCompositeOutputDescriptor } from '../domain/generationOutputs';
@@ -46,13 +50,16 @@ vi.mock('../application/canvasExecutionService', async () => ({
   isCanvasNodeInputSignatureCurrent: executionMocks.isCanvasNodeInputSignatureCurrent,
 }));
 
-vi.mock('@/platform', () => ({
-  getPlatform: () => ({
+vi.mock('@/platform', async () => {
+  const actual = await vi.importActual<typeof import('@/platform')>('@/platform');
+  return { ...actual, getPlatform: () => ({
+    ...actual.getPlatform(),
     image: {
+      ...actual.getPlatform().image,
       releaseManagedGenerationMedia: platformMocks.releaseManagedGenerationMedia,
     },
-  }),
-}));
+  }) };
+});
 
 vi.mock('../generation/mediaResultPersist', () => ({
   persistGenerationResult: generationMocks.persistGenerationResult,
@@ -169,9 +176,15 @@ function setResumeProject(nodes: CanvasNode[], edges: Project['edges']): void {
 }
 
 describe('useCanvasResumePolling 结构化结果恢复', () => {
-  afterEach(() => cleanup());
+  afterEach(async () => {
+    cleanup();
+    const projectId = useProjectStore.getState().currentProjectId;
+    if (projectId) await flushCanvasProjectSnapshot(projectId);
+    uninstallHarnessNativeStorage();
+  });
 
   beforeEach(() => {
+    installHarnessNativeStorage();
     generationMocks.resumeCanvasGeneration.mockReset();
     generationMocks.persistGenerationResult.mockReset();
     generationMocks.commitLayerSeparationGeneration.mockReset();
@@ -207,7 +220,6 @@ describe('useCanvasResumePolling 结构化结果恢复', () => {
       currentProject: project,
       isHydrated: true,
       isOpeningProject: false,
-      saveCurrentProject: vi.fn(),
     });
     generationMocks.resumeCanvasGeneration.mockResolvedValue({ primary: 'remote-result' });
     generationMocks.prepareNodeImage.mockResolvedValue({
@@ -256,11 +268,19 @@ describe('useCanvasResumePolling 结构化结果恢复', () => {
       '/managed/storyboard-source.png',
       { gridRows: 2, gridCols: 2, frameNotes: ['远景', '中景', '近景', '特写'] },
     );
-    expect(useCanvasStore.getState().nodes.find((node) => node.id === 'storyboard-generator')?.data.latestExecution)
+    await waitFor(() => expect(useCanvasStore.getState().nodes.find((node) => node.id === 'storyboard-generator')?.data.latestExecution)
       .toMatchObject({
         inputSignature: 'storyboard-input-v1',
         outputRefs: [{ resultNodeId: 'storyboard-result' }],
-      });
+      }));
+    const saved = await getProjectRecord('resume-project');
+    expect(saved).not.toBeNull();
+    expect(fromProjectRecord(saved!).nodes.find((node) => node.id === 'storyboard-result')?.data)
+      .toMatchObject({ generationSourceNodeId: 'storyboard-generator',
+        generationOutputCommitId: 'storyboard-grid:storyboard-result',
+        imageUrl: '/managed/storyboard-metadata.png',
+        generationOutputDescriptor: { semantic: { kind: 'grid-composite' } } });
+    expect(useProjectStore.getState().persistenceError).toBeNull();
   });
 
   it('分镜多图续查恢复 grid-cell 行列与备注契约并创建结果组', async () => {

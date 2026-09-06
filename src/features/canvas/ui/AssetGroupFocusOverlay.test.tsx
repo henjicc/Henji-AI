@@ -59,7 +59,9 @@ function canvasNode(id: string, type: CanvasNode['type'], data: CanvasNode['data
 describe('AssetGroupFocusOverlay', () => {
   beforeEach(() => {
     mocks.removeAssetGroupMember.mockReset();
+    mocks.removeAssetGroupMember.mockResolvedValue(undefined);
     mocks.addAssetToAssetGroup.mockReset();
+    mocks.addAssetToAssetGroup.mockResolvedValue(undefined);
     mocks.importFilesToAssetGroup.mockReset();
     mocks.readAssetDragPayload.mockReset();
     mocks.readAssetDragPayload.mockReturnValue(null);
@@ -67,7 +69,9 @@ describe('AssetGroupFocusOverlay', () => {
       projectId: 'project-1', groupId: 'group-1', added: 1, skipped: 0, failed: 0,
     });
     mocks.restoreAssetGroupBinding.mockReset();
+    mocks.restoreAssetGroupBinding.mockResolvedValue(undefined);
     mocks.updateAssetGroup.mockReset();
+    mocks.updateAssetGroup.mockResolvedValue(undefined);
     mocks.edges = [];
     mocks.nodes = [
       canvasNode('group-1', CANVAS_NODE_TYPES.assetGroup, {

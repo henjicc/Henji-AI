@@ -1,11 +1,16 @@
 // @vitest-environment jsdom
 
 import { cleanup, renderHook, waitFor } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { loadRealModelsIntoRegistry } from '@/tests/loadRealModels';
 
 import { useCanvasGenerationProgressStore } from '@/stores/canvasGenerationProgressStore';
 import { useCanvasStore } from '@/stores/canvasStore';
-import { useProjectStore, type Project } from '@/stores/projectStore';
+import { flushCanvasProjectSnapshot, useProjectStore, type Project } from '@/stores/projectStore';
+
+import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from '@/tests/harnessNativeStorage';
+import { getProjectRecord } from '@/commands/projectState';
+import { fromProjectRecord } from '@/stores/projectStoreSerialization';
 
 import { CANVAS_NODE_TYPES, type CanvasNode } from '../domain/canvasNodes';
 import { clearActiveCanvasGenerationTasksForTest } from '../generation/activeGenerationTasks';
@@ -45,13 +50,16 @@ vi.mock('@/commands/image', async () => ({
   composeLocalRedraw: generationMocks.composeLocalRedraw,
 }));
 
-vi.mock('@/platform', () => ({
-  getPlatform: () => ({
+vi.mock('@/platform', async () => {
+  const actual = await vi.importActual<typeof import('@/platform')>('@/platform');
+  return { ...actual, getPlatform: () => ({
+    ...actual.getPlatform(),
     image: {
+      ...actual.getPlatform().image,
       releaseManagedGenerationMedia: platformMocks.releaseManagedGenerationMedia,
     },
-  }),
-}));
+  }) };
+});
 
 function setResumeProject(context: DynamicValue): { source: CanvasNode; result: CanvasNode } {
   const source: CanvasNode = {
@@ -100,15 +108,21 @@ function setResumeProject(context: DynamicValue): { source: CanvasNode; result: 
     currentProject: project,
     isHydrated: true,
     isOpeningProject: false,
-    saveCurrentProject: vi.fn(),
   });
   return { source, result };
 }
 
 describe('useCanvasResumePolling 局部重绘恢复', () => {
-  afterEach(() => cleanup());
+  beforeAll(async () => { await loadRealModelsIntoRegistry(); });
+  afterEach(async () => {
+    cleanup();
+    const projectId = useProjectStore.getState().currentProjectId;
+    if (projectId) await flushCanvasProjectSnapshot(projectId);
+    uninstallHarnessNativeStorage();
+  });
 
   beforeEach(() => {
+    installHarnessNativeStorage();
     generationMocks.resumeCanvasGeneration.mockReset();
     generationMocks.persistGenerationResult.mockReset();
     generationMocks.composeLocalRedraw.mockReset();
@@ -174,14 +188,20 @@ describe('useCanvasResumePolling 局部重绘恢复', () => {
       generatedSource: '/remote/generated-crop.png',
       context,
     });
-    expect(useCanvasStore.getState().nodes.find((node) => node.id === source.id)?.data.latestExecution)
+    await waitFor(() => expect(useCanvasStore.getState().nodes.find((node) => node.id === source.id)?.data.latestExecution)
       .toMatchObject({
         inputSignature: 'local-redraw-input-v2',
         outputRefs: [{ resultNodeId: result.id }],
-      });
+      }));
     await waitFor(() => expect(platformMocks.releaseManagedGenerationMedia).toHaveBeenCalledWith([
       '/data/Media/generated-crop.png',
     ]));
+    const saved = await getProjectRecord('local-redraw-resume-project');
+    expect(saved).not.toBeNull();
+    expect(fromProjectRecord(saved!).nodes.find((node) => node.id === result.id)?.data)
+      .toMatchObject({ imageUrl: '/managed/local-redraw-composite.png',
+        generationSourceNodeId: source.id, generationOutputCommitId: `generation-output:${result.id}` });
+    expect(useProjectStore.getState().persistenceError).toBeNull();
   });
 
   it('缺少有效裁剪上下文时保留占位节点并进入可见失败态', async () => {
