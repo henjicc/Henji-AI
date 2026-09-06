@@ -23,22 +23,10 @@ import type { ImageEditorGpuTileAtlasAllocationV3 } from './imageEditorGpuTileAt
 
 export function imageEditorGpuGraphCompositeValuesV3(
   node: ImageEditorGpuGraphCompositeNodeV3,
-  virtualSource: boolean,
-  transientTransform: ImageEditTransformV3 | undefined,
-  layout: ImageEditorViewportLayoutV3,
 ): Float32Array {
-  const transform = virtualSource ? transientTransform ?? node.transform : [1, 0, 0, 1, 0, 0] as ImageEditTransformV3
-  const inverse = invertImageEditTransformV3(transform)
-  const viewport = layout.viewport
-  const scale = viewport.zoom * viewport.devicePixelRatio
-  const translationX = scale * (
-    inverse[0] * viewport.documentX + inverse[2] * viewport.documentY + inverse[4] - viewport.documentX
-  )
-  const translationY = scale * (
-    inverse[1] * viewport.documentX + inverse[3] * viewport.documentY + inverse[5] - viewport.documentY
-  )
+  // 源瓦片、蒙版和上游组/效果均已投影为视口纹理；合成不再执行图层变换。
   return new Float32Array([
-    inverse[0], inverse[1], inverse[2], inverse[3], translationX, translationY, 0, 0,
+    1, 0, 0, 1, 0, 0, 0, 0,
     node.opacity, imageEditorGpuGraphBlendIndexV3(node.blendMode), 0, 0,
     node.mask ? 1 : 0, node.mask?.defaultValue ?? 1, node.mask?.inverted ? 1 : 0, 0,
   ])

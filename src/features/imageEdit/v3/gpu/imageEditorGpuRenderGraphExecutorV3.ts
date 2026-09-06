@@ -1,5 +1,6 @@
 import { draw, frame, target, type Draw, type Gpu, type Target, type Texture } from 'vgpu'
 import type { ImageEditTransformV3 } from '@/core/imageEdit/v3/layerTypes'
+import { createImageEditGeometryHashV3 } from '@/core/imageEdit/v3/outputGeometry'
 import type { ImageEditorViewportLayoutV3 } from '../editor/useImageEditorViewportLayoutV3'
 import type {
   ImageEditorGpuRasterSceneV3,
@@ -99,7 +100,6 @@ export class ImageEditorGpuRenderGraphExecutorV3 {
   private sourceScratchDependencies: readonly unknown[] = []
   private cameraBindGroup: NativeBindGroup | null = null
   private scene: ImageEditorGpuRasterSceneV3 | null = null
-  private layout: ImageEditorViewportLayoutV3 | null = null
   private stats: ImageEditorGpuRenderGraphStatsV3 = {
     renderedNodeCount: 0, cacheHitCount: 0, invalidatedNodeCount: 0, fusedAdjustmentCount: 0,
     maximumTargetWidth: 0, maximumTargetHeight: 0,
@@ -148,7 +148,6 @@ export class ImageEditorGpuRenderGraphExecutorV3 {
     awaitCompletion = true,
   ): Promise<Target | null> {
     if (!this.scene?.outputNodeId) return null
-    this.layout = layout
     const outputs = new Map<string, Target>()
     const fingerprints = new Map<string, string>()
     const tasks: GraphTask[] = []
@@ -325,7 +324,9 @@ export class ImageEditorGpuRenderGraphExecutorV3 {
 
   private fingerprint(node: Exclude<ImageEditorGpuRenderGraphNodeV3, { kind: 'alias' }>, fingerprints: ReadonlyMap<string, string>): string {
     if (node.kind === 'source') {
-      return node.fingerprint
+      const transform = this.transientTransforms.get(node.layerId)
+        ?? this.scene?.layers.find((layer) => layer.layerId === node.layerId)?.transform
+      return `${node.fingerprint}:${node.layerId}:${transform?.join(',')}:${createImageEditGeometryHashV3(this.scene!.geometry)}`
     }
     const input = fingerprints.get(node.kind === 'composite' ? node.contentNodeId : node.inputNodeId) ?? 'missing'
     const backdrop = node.kind === 'composite' && node.backdropNodeId ? fingerprints.get(node.backdropNodeId) ?? 'missing' : 'transparent'
@@ -366,16 +367,14 @@ export class ImageEditorGpuRenderGraphExecutorV3 {
         if (this.sourceScratchFingerprint !== task.sourceFingerprint
           || !sameDependencies(this.sourceScratchDependencies, dependencies)) {
           this.encodeSource(
-            currentFrame, this.sourceScratch!, task.node.layerId, task.sourcePlan, buffers, true,
+            currentFrame, this.sourceScratch!, task.node.layerId, task.sourcePlan, buffers,
           )
           this.sourceScratchFingerprint = task.sourceFingerprint
           this.sourceScratchDependencies = [...dependencies]
         }
       }
       const input = task.sourcePlan ? this.sourceScratch : task.input
-      const values = imageEditorGpuGraphCompositeValuesV3(
-        task.node, task.sourcePlan !== null, this.transientTransforms.get(task.node.layerId), this.layout!,
-      )
+      const values = imageEditorGpuGraphCompositeValuesV3(task.node)
       const buffer = this.uniform(values)
       buffers.push(buffer)
       const maskView = task.mask?.color.view ?? this.fallbackMask.view
@@ -421,7 +420,6 @@ export class ImageEditorGpuRenderGraphExecutorV3 {
     layerId: string,
     sourcePlan: ImageEditorGpuGraphSourcePlanV3,
     buffers: NativeBuffer[],
-    identityTransform = false,
   ): void {
     const layer = this.scene!.layers.find((entry) => entry.layerId === layerId)
     if (!layer) throw new Error(`GPU RenderGraph 缺少源图层：${layerId}`)
@@ -435,8 +433,7 @@ export class ImageEditorGpuRenderGraphExecutorV3 {
       if (!resource) throw new Error(`GPU RenderGraph 源图层 ${layerId} 缺少瓦片`)
       const buffer = this.uniform(imageEditorGpuGraphSourceTileValuesV3(
         this.scene!, layer, planned, resource,
-        identityTransform ? [1, 0, 0, 1, 0, 0]
-          : this.transientTransforms.get(layer.layerId) ?? layer.transform,
+        this.transientTransforms.get(layer.layerId) ?? layer.transform,
       ))
       buffers.push(buffer)
       return this.bind(this.sourceDraw, [resource.textureView, { buffer }])
