@@ -1,3 +1,5 @@
+const { createWindowStartupScene } = require('./uiInspectionSceneWindowStartup.cjs')
+
 function createSupportScenes(context) {
   const {
     settlePage,
@@ -7,6 +9,7 @@ function createSupportScenes(context) {
   } = context
 
   return [
+    createWindowStartupScene(),
     { id: 'assets-home', surface: '资产库', name: '资产库-首页', setup: setupAssets },
     {
       id: 'assets-search-focus',

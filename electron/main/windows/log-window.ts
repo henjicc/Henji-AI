@@ -1,8 +1,9 @@
-import { BrowserWindow } from 'electron'
+import { BrowserWindow, screen } from 'electron'
 import path from 'node:path'
 import { bindWindowStateEvents } from '../ipc/window'
 import { APP_WINDOW_BACKGROUND_HEX } from '../../../src/core/theme/colorTokens'
 import { resolveAppIconPath } from '../app-icon'
+import { resolveInitialWindowPosition } from '../window-presentation'
 
 let logWindowInstance: BrowserWindow | null = null
 
@@ -22,9 +23,12 @@ export function openLogWindow(): void {
   }
 
   const iconPath = resolveAppIconPath()
+  const initialSize = { width: 1040, height: 720 }
   const win = new BrowserWindow({
-    width: 1040,
-    height: 720,
+    ...initialSize,
+    ...(process.platform === 'darwin'
+      ? resolveInitialWindowPosition(initialSize, screen.getPrimaryDisplay().workArea)
+      : {}),
     minWidth: 720,
     minHeight: 420,
     show: false,

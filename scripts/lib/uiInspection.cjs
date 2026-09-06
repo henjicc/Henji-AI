@@ -200,7 +200,7 @@ async function cleanupCanvasInspectionFixtures(page, seededAt) {
   })
 }
 
-async function launchUiInspectionApp({ root, mainEntry, extraEnv = {}, profile = 'temporary', readOnly = true }) {
+async function launchUiInspectionApp({ root, mainEntry, extraEnv = {}, extraArgs = [], profile = 'temporary', readOnly = true }) {
   if (!fs.existsSync(mainEntry)) {
     throw new Error(`未找到 Electron 构建产物：${mainEntry}\n请先运行 npm run electron:bundle`)
   }
@@ -210,6 +210,7 @@ async function launchUiInspectionApp({ root, mainEntry, extraEnv = {}, profile =
     isolateUserData: profile === 'temporary',
     useElectronApi: true,
     skipOnboarding: true,
+    extraArgs,
     extraEnv: {
       HENJI_UI_INSPECTION_ALLOW_OVERSIZE: '1',
       HENJI_UI_INSPECTION_READ_ONLY: readOnly ? '1' : '0',

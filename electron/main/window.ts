@@ -1,4 +1,4 @@
-import { BrowserWindow } from 'electron'
+import { BrowserWindow, screen } from 'electron'
 import path from 'node:path'
 import { resolveAppIconPath } from './app-icon'
 import { bindWindowStateEvents } from './ipc/window'
@@ -11,6 +11,7 @@ import { warmupMediaImportPipeline } from './services/media-import'
 import {
   presentWindow,
   resolveBackgroundThrottling,
+  resolveInitialWindowPosition,
   type WindowPresentationMode,
 } from './window-presentation'
 import { isTrustedMainRendererUrl } from './security/main-renderer-url'
@@ -33,9 +34,12 @@ export function createWindow(options: CreateWindowOptions = {}): BrowserWindow {
   const presentation = options.presentation ?? 'foreground'
   const allowOversizeForInspection = process.env['HENJI_UI_INSPECTION_ALLOW_OVERSIZE'] === '1'
   const iconPath = resolveAppIconPath()
+  const initialSize = { width: 1200, height: 800 }
   const win = new BrowserWindow({
-    width: 1200,
-    height: 800,
+    ...initialSize,
+    ...(process.platform === 'darwin'
+      ? resolveInitialWindowPosition(initialSize, screen.getPrimaryDisplay().workArea)
+      : {}),
     minWidth: 960,
     minHeight: 640,
     enableLargerThanScreen: allowOversizeForInspection,

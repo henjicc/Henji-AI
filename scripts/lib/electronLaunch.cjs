@@ -216,10 +216,12 @@ async function launchElectronApp({
   isolateUserData = false,
   useElectronApi = false,
   skipOnboarding = false,
+  extraArgs = [],
 } = {}) {
   assertBuildFreshness(mainEntry)
   const userDataDir = isolateUserData ? createIsolatedUserDataDir() : null
   const launchArgs = userDataDir ? [`--user-data-dir=${userDataDir}`, mainEntry] : [mainEntry]
+  launchArgs.push(...extraArgs)
   // LOCALAPPDATA/APPDATA 只在 Windows 上决定数据目录；macOS / Linux 走
   // app.getPath('appData')，必须由主进程按 HENJI_ISOLATED_APP_DATA 重定向，
   // 否则 --user-data-dir 隔离的只是 Chromium 侧，业务数据仍写用户真实资料。

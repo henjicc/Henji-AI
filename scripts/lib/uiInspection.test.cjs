@@ -357,12 +357,13 @@ test('输出目录相对项目根解析且绝对路径保持不变', () => {
   assert.equal(resolveOutputDir(root, absolute), absolute)
 })
 
-test('场景覆盖六类界面且规则数固定为十一条', () => {
+test('场景覆盖应用界面和原生窗口且规则数固定为十一条', () => {
   assert.deepEqual([...new Set(UI_INSPECTION_SCENES.map((scene) => scene.surface))].sort(), [
     '助手',
     '工具箱',
     '生成',
     '画布',
+    '窗口',
     '设置',
     '资产库',
   ])

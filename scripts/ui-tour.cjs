@@ -102,11 +102,15 @@ async function main() {
     mainEntry: MAIN_ENTRY,
     profile: options.profile,
     readOnly: !options.allowWrites,
-    extraEnv: scenes.length === 1 && scenes[0]?.forceGpuInitializationFailure === true
-      ? { HENJI_UI_INSPECTION_GPU_INIT_FAILURE: '1' }
-      : {},
+    extraArgs: scenes.length === 1 ? scenes[0].launchArgs ?? [] : [],
+    extraEnv: {
+      ...(scenes.length === 1 ? scenes[0].launchEnv ?? {} : {}),
+      ...(scenes.length === 1 && scenes[0]?.forceGpuInitializationFailure === true
+        ? { HENJI_UI_INSPECTION_GPU_INIT_FAILURE: '1' } : {}),
+    },
   })
   const collector = createRuntimeEvidenceCollector(app.page)
+  let launchInspected = false
 
   try {
     for (const size of options.sizes) {
@@ -118,6 +122,11 @@ async function main() {
         let sceneError = null
         const windowEvidence = { requestedOuter: size, baseline: null, completed: null, captures: [] }
         try {
+          // 启动位置必须在巡检主动居中/调整尺寸之前检查，而且每次进程只检查一次。
+          if (!launchInspected && scenes.length === 1 && scene.inspectLaunch) {
+            launchInspected = true
+            windowEvidence.launch = await scene.inspectLaunch(app.app, app.page)
+          }
           windowEvidence.baseline = await setInspectionWindowSize(app, size)
           const capture = async (suffix) => {
             if (!/^[a-z0-9-]+$/.test(suffix)) throw new Error(`截图后缀无效：${suffix}`)
