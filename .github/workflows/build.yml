@@ -118,10 +118,33 @@ jobs:
       - name: 独占 worker 执行真实尺寸图层与内存预算验收
         run: npm run test:image-export
 
+  native-tests:
+    name: Electron 原生 SQLite 正确性
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+      - name: 安装原生编译工具与 Electron 动态库（Node 模式不启动桌面）
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y python3 make g++ libgtk-3-0t64 libnss3 libgbm1 libasound2t64
+      - run: npm ci
+      # 此 job 独占 node_modules；不能把 Electron ABI 驱动带回普通 Node/GPU job。
+      - name: 按当前锁定 Electron 重建 SQLite
+        run: npm run electron:rebuild
+      - name: 原生验收器的报告与进程生命周期自检
+        run: node --test scripts/lib/nativePersistenceRunner.test.cjs
+      - name: 完整原生 SQLite 清单（禁止零用例、跳过或漏文件）
+        run: npm run test:assistant-persistence
+
   quality-gate:
     name: 质量门禁
     if: always()
-    needs: [checks, gpu-tests, image-export-tests]
+    needs: [checks, gpu-tests, image-export-tests, native-tests]
     runs-on: ubuntu-latest
     steps:
       - name: 所有必跑检查成功才允许交付
@@ -129,10 +152,12 @@ jobs:
           CHECKS_RESULT: ${{ needs.checks.result }}
           GPU_RESULT: ${{ needs.gpu-tests.result }}
           IMAGE_EXPORT_RESULT: ${{ needs.image-export-tests.result }}
+          NATIVE_RESULT: ${{ needs.native-tests.result }}
         run: |
           test "$CHECKS_RESULT" = success
           test "$GPU_RESULT" = success
           test "$IMAGE_EXPORT_RESULT" = success
+          test "$NATIVE_RESULT" = success
 
   # ---------------------------------------------------------------------------
   # 安装包构建：只在推 v* 标签或手动触发时运行。

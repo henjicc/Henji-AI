@@ -356,8 +356,17 @@ find src electron \( -name '*.ts' -o -name '*.tsx' \) \
 
 ## 七、CI 全量兜底
 
-`.github/workflows/build.yml` 每次 push / PR 分三层必跑：代码检查 job 执行生成器、静态规则、渲染层/主进程 lint 与类型检查、`test:suites` 分层完整性门禁及 `test:unit`；WebGPU job 安装官方软件 Vulkan adapter、通过 `vgpu doctor` 真渲染后执行 `test:gpu`（含 HDR probe）；大图导出 job 独占 worker 执行 `test:image-export`。三套测试互斥并覆盖完整 Vitest 清单，`npm test` / `npx vitest run` 仍保留本地全量入口。缺失设备或专项失败不得跳过、降级成成功。
+`.github/workflows/build.yml` 每次 push / PR 分四层必跑：代码检查 job 执行生成器、静态规则、渲染层/主进程 lint 与类型检查、`test:suites` 分层完整性门禁及 `test:unit`；WebGPU job 安装官方软件 Vulkan adapter、通过 `vgpu doctor` 真渲染后执行 `test:gpu`（含 HDR probe）；大图导出 job 独占 worker 执行 `test:image-export`；原生 SQLite job 在独立依赖目录中执行 `electron:rebuild`，再用 `test:assistant-persistence` 运行唯一原生清单（历史命令名，现在包含助手与工程持久化）。四套测试互斥并覆盖完整 Vitest 清单；`npm test` / `npx vitest run` 保留本地全量入口，但普通 Node 中的 Electron 条件跳过不代表原生验证通过。
 
-稳定的「质量门禁」聚合检查只在三层全部成功时通过，安装包构建依赖该门禁。软件 WebGPU 的像素正确性不代表真实 Electron 的交互流畅度；后者仍由匹配场景的 Reality / 性能专项证明。CI 全量覆盖与本地最小验证分工不同，不应互相替代。
+原生清单维护在 `scripts/lib/testSuites.cjs`，新增 Electron 条件测试必须登记。验收器要求所有声明文件实际执行、每文件至少一项、零跳过/待办/失败，并核对报告统计与子进程正常退出；不能只看 `success:true` 或报告文件存在。显式基准开关与平台专属测试不冒充原生清单。缺失设备、ABI 错配或专项失败均不能降级成成功。
+
+稳定的「质量门禁」聚合检查只在四层全部成功时通过，安装包构建依赖该门禁。软件 WebGPU 的像素正确性不代表真实 Electron 的交互流畅度；后者仍由匹配场景的 Reality / 性能专项证明。CI 全量覆盖与本地最小验证分工不同，不应互相替代。
 
 构建 job 只在标签或手动触发时运行 `npm run electron:build` 并打包发布。
+
+## 八、交付证据不能借用历史结论
+
+- 证据须对应本次修改后的代码、具体输入规模和实际命令；历史任务的“已完成”不能替代当前验证。
+- 需要真实容器的行为按第三节运行正式 Reality，并记录实际窗口/设备与截图。提交确认、GPU 完成和物理屏幕呈现是不同指标，不得混称。
+- 新增或修改的关键保护判据须做匹配的断牙验证：临时破坏对应约束，确认精确测试变红，恢复后再变绿；不要求每个叶子改动都运行全量或真机。
+- 本地按 L0–L3 裁剪验证；提交推送后核对**当前提交**的必需远端质量门禁。尚在运行或失败时明确待验证/阻塞，不以旧提交绿灯、取消运行或后续无关通过项代替。
