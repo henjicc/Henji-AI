@@ -265,4 +265,39 @@ describe('图片编辑 V3 图层变换交互', () => {
     fireEvent.blur(scaleX)
     expect(changes).toHaveLength(1)
   })
+
+  it('角点缩放和旋转只在松手提交，Esc 取消且撤销恢复矩阵', async () => {
+    const changes: ImageEditDocumentV3[] = []
+    const persistence: ImageEditPersistenceSnapshotV3[] = []
+    const rendered = renderEditor(createDocument([createImageEditRasterLayerV3('raster', '底图')]), {
+      onDocumentChange: (next) => changes.push(next), onPersistenceChange: (next) => persistence.push(next),
+    })
+    const surface = rendered.container.querySelector<HTMLElement>('[data-preview-surface]')!
+    mockViewportRect(rendered.container.querySelector('[data-viewport-content]')!)
+    const corner = await waitFor(() => {
+      const handle = rendered.container.querySelector('[data-layer-transform-handle="se"]')
+      expect(handle).toBeTruthy(); return handle!
+    })
+    fireEvent.pointerDown(corner, { pointerId: 40, isPrimary: true, button: 0, clientX: 400, clientY: 225 })
+    fireEvent.pointerMove(surface, { pointerId: 40, clientX: 600, clientY: 337.5 })
+    expect(changes).toHaveLength(0)
+    fireEvent.pointerUp(surface, { pointerId: 40, clientX: 600, clientY: 337.5 })
+    await waitFor(() => expect(changes).toHaveLength(1))
+    expect(changes[0].layers[0].transform).toEqual([1.5, 0, 0, 1.5, 0, 0])
+    expect(persistence[0].history.undo).toHaveLength(1)
+    const rotate = rendered.container.querySelector('[data-layer-transform-handle="rotate"]')!
+    fireEvent.pointerDown(rotate, { pointerId: 41, isPrimary: true, button: 0, clientX: 300, clientY: 0 })
+    fireEvent.pointerMove(surface, { pointerId: 41, clientX: 468.75, clientY: 168.75 })
+    fireEvent.keyDown(window, { key: 'Escape' })
+    fireEvent.pointerUp(surface, { pointerId: 41 })
+    expect(changes).toHaveLength(1)
+    fireEvent.pointerDown(rotate, { pointerId: 42, isPrimary: true, button: 0, clientX: 300, clientY: 0 })
+    fireEvent.pointerMove(surface, { pointerId: 42, clientX: 468.75, clientY: 168.75 })
+    fireEvent.pointerUp(surface, { pointerId: 42, clientX: 468.75, clientY: 168.75 })
+    await waitFor(() => expect(changes).toHaveLength(2))
+    expect(changes[1].layers[0].transform[1]).toBeCloseTo(1.5)
+    fireEvent.click(screen.getByRole('button', { name: '撤销' }))
+    await waitFor(() => expect(changes).toHaveLength(3))
+    expect(changes[2].layers[0].transform).toEqual([1.5, 0, 0, 1.5, 0, 0])
+  })
 })

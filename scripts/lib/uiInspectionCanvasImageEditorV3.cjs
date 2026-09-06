@@ -56,6 +56,11 @@ async function openCanvasImageEditorV3Fixture({
       if (!paint) throw new Error('独立前景夹具画布不可用')
       paint.fillStyle = payload.foreground.color
       paint.fillRect(0, 0, overlay.width, overlay.height)
+      if (payload.foreground.contentRect) {
+        paint.clearRect(0, 0, overlay.width, overlay.height)
+        paint.fillRect(...payload.foreground.contentRect)
+      }
+      if (payload.foreground.hole) paint.clearRect(...payload.foreground.hole)
       foregroundSource = await window.henjiNative.imageEditorV3.ingestSource({
         requestId: `reality-canvas-foreground-ingest-${crypto.randomUUID()}`,
         source: { kind: 'data-url', dataUrl: overlay.toDataURL('image/png') },

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef } from 'react'
 import type { PointerEvent as ReactPointerEvent, RefObject } from 'react'
+import Konva from 'konva'
 
 import type { ImageEditTransformV3 } from '@/core/imageEdit/v3/layerTypes'
 
@@ -22,6 +23,13 @@ import {
 import type { ImageEditorToolIdV3 } from '../application/imageEditorHostProfiles'
 import type { ImageEditorV3Controller } from './types'
 import type { ImageEditorRenderSessionV3 } from '../execution/imageEditorRenderSessionV3'
+import { LAYER_TRANSFORM_HANDLES_V3, transformImageEditorLayerByHandleV3, type LayerContentBoundsV3, type LayerTransformHandleV3 } from './layerPickingV3'
+
+export interface ImageEditorLayerInteractionV3 {
+  pick(point: readonly [number, number]): string | null | undefined
+  bounds(layerId: string): LayerContentBoundsV3 | null
+  feedback(layerId: string, transform: ImageEditTransformV3 | null): void
+}
 
 interface ImageEditorLayerMoveGestureV3 {
   pointerId: number
@@ -43,6 +51,9 @@ interface ImageEditorLayerMoveGestureV3 {
   gpuTransient: boolean
   interactionSequence: number
   eventTimestamp: number
+  handle: LayerTransformHandleV3 | null
+  bounds: LayerContentBoundsV3 | null
+  documentRevision: number
 }
 
 const EMPTY_LAYER_IDS_V3: readonly string[] = []
@@ -72,7 +83,10 @@ export function useImageEditorLayerMoveGestureV3(
   snapGuideRefs: ImageEditorMoveSnapGuideRefsV3,
   renderSession: ImageEditorRenderSessionV3,
   gpuInteractionEnabled: boolean,
+  interaction?: ImageEditorLayerInteractionV3,
 ): ImageEditorLayerMoveGestureHandlersV3 {
+  const interactionRef = useRef(interaction)
+  interactionRef.current = interaction
   const gestureRef = useRef<ImageEditorLayerMoveGestureV3 | null>(null)
   const interactionSequenceRef = useRef(0)
   const selectedLayerIds = useImageEditorSessionStoreV3(
@@ -141,6 +155,7 @@ export function useImageEditorLayerMoveGestureV3(
     gestureRef.current = null
     cancelScheduledPreview(gesture)
     clearSnapGuides()
+    interactionRef.current?.feedback(gesture.layerId, commit ? gesture.pendingTransform : null)
     if (
       typeof gesture.captureTarget.hasPointerCapture === 'function'
       && gesture.captureTarget.hasPointerCapture(gesture.pointerId)
@@ -204,10 +219,22 @@ export function useImageEditorLayerMoveGestureV3(
   }, [activeTool, release])
   useEffect(() => () => release(false), [release])
   useEffect(() => {
+    const onKey = (event: KeyboardEvent): void => {
+      if (event.key === 'Escape' && gestureRef.current) {
+        // 先于外层弹窗处理 Esc：取消手势不能顺带关闭编辑器。
+        event.preventDefault(); event.stopPropagation(); release(false)
+      }
+    }
+    const onBlur = (): void => release(false)
+    window.addEventListener('keydown', onKey, true)
+    window.addEventListener('blur', onBlur)
+    return () => { window.removeEventListener('keydown', onKey, true); window.removeEventListener('blur', onBlur) }
+  }, [release])
+  useEffect(() => {
     const gesture = gestureRef.current
     if (!gesture) return
     const location = findImageEditLayerLocationV3(controller.document.layers, gesture.layerId)
-    if (!isImageEditLayerTransformableV3(location)) release(false)
+    if (!isImageEditLayerTransformableV3(location) || gesture.documentRevision !== controller.document.revision) release(false)
   }, [controller.document.id, controller.document.revision, controller.document.layers, release])
   useEffect(() => {
     const gesture = gestureRef.current
@@ -248,20 +275,42 @@ export function useImageEditorLayerMoveGestureV3(
     // 具体标注对象仍由 annotation overlay 选中和二次编辑；
     // 只在画布/非对象区域拖动当前单选图层。
     if (event.target instanceof Element && event.target.closest('[data-annotation-id]')) return
+    if (event.target instanceof Element && event.target.closest('[data-annotation-editor-overlay]')) {
+      const target = event.target
+      const stage = Konva.stages.find((entry) => entry.container().contains(target))
+      const rect = stage?.container().getBoundingClientRect()
+      if (stage && rect && rect.width > 0 && rect.height > 0) {
+        const shape = stage.getIntersection({ x: (event.clientX - rect.left) * stage.width() / rect.width,
+          y: (event.clientY - rect.top) * stage.height() / rect.height })
+        if (shape && shape.name() !== 'mark-background') return
+      }
+    }
     if (
       selectedLocation?.layer.type === 'annotation'
       && event.target instanceof Element
       && event.target.closest('[data-annotation-editor-overlay]')
     ) return
-    const layerId = selectedLayerIds.length === 1 ? selectedLayerIds[0] : null
-    if (!layerId) return
-    const location = findImageEditLayerLocationV3(controller.document.layers, layerId)
+    const handleName = event.target instanceof Element
+      ? event.target.closest<HTMLElement>('[data-layer-transform-handle]')?.dataset.layerTransformHandle : undefined
+    const handle = LAYER_TRANSFORM_HANDLES_V3.find((entry) => entry === handleName) ?? null
     const viewportRect = viewportContentRef.current?.getBoundingClientRect()
     const surfaceRect = event.currentTarget.getBoundingClientRect()
     if (!viewportRect) return
-    const outputPoint = clientToOutput(viewportRect, event.clientX, event.clientY)
+    const outputPoint = clientToOutput(viewportRect, event.clientX, event.clientY, Boolean(handle))
+    if (!outputPoint) return
+    let layerId = selectedLayerIds.length === 1 ? selectedLayerIds[0] : null
+    if (!handle && interactionRef.current) {
+      const picked = interactionRef.current.pick(outputPoint)
+      if (picked === undefined) return
+      layerId = picked
+      useImageEditorSessionStoreV3.getState().setSelectedLayerIds(controller.sessionId, layerId ? [layerId] : [])
+    }
+    if (!layerId) return
+    const location = findImageEditLayerLocationV3(controller.document.layers, layerId)
     if (!isImageEditLayerTransformableV3(location) || !outputPoint) return
-    const feedbackTarget = !gpuInteractionEnabled
+    const bounds = interactionRef.current?.bounds(layerId) ?? null
+    if (handle && !bounds) return
+    const feedbackTarget = !handle && !gpuInteractionEnabled
       && location.parentId === null && location.layer.type === 'raster'
       ? acquireMoveFeedback(layerId)
       : null
@@ -301,6 +350,9 @@ export function useImageEditorLayerMoveGestureV3(
       gpuTransient: gpuInteractionEnabled,
       interactionSequence: interactionSequenceRef.current,
       eventTimestamp: typeof performance === 'undefined' ? Date.now() : performance.now(),
+      handle,
+      bounds,
+      documentRevision: controller.document.revision,
     }
   }
 
@@ -327,7 +379,7 @@ export function useImageEditorLayerMoveGestureV3(
       rawDeltaX,
       rawDeltaY,
     )
-    const movingBounds = snappingEnabled && !event.ctrlKey
+    const movingBounds = !gesture.handle && snappingEnabled && !event.ctrlKey
       ? resolveImageEditRasterLayerOutputBoundsV3(controller.document, location, rawTransform)
       : null
     const snap = movingBounds
@@ -351,16 +403,23 @@ export function useImageEditorLayerMoveGestureV3(
     )
     const deltaX = point[0] - gesture.startParentPoint[0]
     const deltaY = point[1] - gesture.startParentPoint[1]
-    const changed = Math.hypot(deltaX, deltaY) >= 0.01
+    const handleTransform = gesture.handle && gesture.bounds
+      ? transformImageEditorLayerByHandleV3(gesture.startTransform, gesture.bounds, gesture.handle,
+          gesture.startParentPoint, rawPoint, event.shiftKey)
+      : null
+    const changed = handleTransform
+      ? handleTransform.some((value, index) => Math.abs(value - gesture.startTransform[index]) > 1e-7)
+      : Math.hypot(deltaX, deltaY) >= 0.01
     if (!rawChanged && !gesture.interacted) return
     event.preventDefault()
     event.stopPropagation()
     gesture.interacted = true
     gesture.changed = changed
     updateSnapGuides(gesture, snap.guides)
-    gesture.pendingTransform = changed
+    gesture.pendingTransform = handleTransform ?? (changed
       ? translateImageEditLayerTransformV3(gesture.startTransform, deltaX, deltaY)
-      : [...gesture.startTransform]
+      : [...gesture.startTransform])
+    interactionRef.current?.feedback(gesture.layerId, gesture.pendingTransform)
     gesture.eventTimestamp = typeof performance === 'undefined' ? Date.now() : performance.now()
     if (gesture.gpuTransient) {
       // GPU 会话已经按 in-flight 帧合并 pending transform；这里再等一次 rAF

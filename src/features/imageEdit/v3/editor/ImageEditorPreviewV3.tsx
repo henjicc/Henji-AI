@@ -8,6 +8,11 @@ import { useImageEditorDisplayPipelineV3, useImageEditorThumbnailPrefetchV3 } fr
 import { projectImageEditorPreviewDocumentV3 } from '../execution/previewDocumentV3'
 import { useImageEditorResultLeaseV3 } from '../execution/useImageEditorResultLeaseV3'
 import { ImageEditorAnnotationOverlayV3 } from './ImageEditorAnnotationOverlayV3'
+import { ImageEditorLayerControlsV3 } from './ImageEditorLayerControlsV3'
+import { paintImageEditorLayerControlsV3 } from './layerControlsPresentationV3'
+import { useImageEditorLayerPickingV3 } from './useImageEditorLayerPickingV3'
+import { imageEditorLayerContentBoundsV3, layerToOutputV3, pickImageEditorLayerV3 } from './layerPickingV3'
+import { findImageEditLayerLocationV3 } from './layerTreeV3'
 import {
   ImageEditorFramePreviewV3,
   ImageEditorUrlPreviewV3,
@@ -53,6 +58,7 @@ interface ImageEditorPreviewV3Props extends Pick<
 
 const ZERO_VIEWPORT_PAN_V3: ImageEditorViewportPanV3 = { x: 0, y: 0 }
 const EMPTY_PREVIEW_OVERRIDES_V3: ImageEditCommandBusSnapshotV3['previewOverrides'] = Object.freeze({})
+const EMPTY_SELECTED_LAYERS_V3: readonly string[] = []
 
 function withoutCropPreviewV3(
   previewOverrides: ImageEditCommandBusSnapshotV3['previewOverrides'],
@@ -80,6 +86,18 @@ export function ImageEditorPreviewV3({
   const documentClipRef = useRef<HTMLDivElement | null>(null)
   const horizontalSnapGuideRef = useRef<HTMLDivElement | null>(null)
   const verticalSnapGuideRef = useRef<HTMLDivElement | null>(null)
+  const layerControlsRef = useRef<HTMLDivElement | null>(null)
+  const selectedLayerIds = useImageEditorSessionStoreV3(
+    (state) => state.sessions[controller.sessionId]?.selectedLayerIds ?? EMPTY_SELECTED_LAYERS_V3,
+  )
+  const selectedLayerId = selectedLayerIds.length === 1 ? selectedLayerIds[0] : null
+  const alphaMaps = useImageEditorLayerPickingV3(controller.document, resourceDescriptors ?? [])
+  const layerBounds = (layerId: string) => {
+    const location = findImageEditLayerLocationV3(controller.document.layers, layerId)
+    if (!location || location.layer.type !== 'raster') return null
+    return imageEditorLayerContentBoundsV3(location.layer, alphaMaps)
+      ?? { x: 0, y: 0, width: controller.document.geometry.width, height: controller.document.geometry.height }
+  }
   const snapshot = useImageEditorBusSnapshotV3(bus)
   const activeTool = useImageEditorSessionStoreV3(
     (state) => state.sessions[controller.sessionId]?.activeTool ?? 'move',
@@ -333,6 +351,24 @@ export function ImageEditorPreviewV3({
     },
     viewportComposite.session,
     gpuPresentationActive,
+    {
+      pick: (point) => {
+        // 自定义预览宿主不提供资源读取契约，仍允许显式选择后的变换。
+        if (!resourceDescriptors?.length) return selectedLayerId
+        const picked = pickImageEditorLayerV3(controller.document, point, alphaMaps)
+        if (picked) useImageEditorInteractionStoreV3.getState().selectAnnotation(controller.sessionId, null)
+        return picked
+      },
+      bounds: layerBounds,
+      feedback: (layerId, transform) => {
+        const location = findImageEditLayerLocationV3(controller.document.layers, layerId)
+        const bounds = layerBounds(layerId)
+        if (!location || !bounds) return
+        paintImageEditorLayerControlsV3(layerControlsRef.current,
+          layerToOutputV3(controller.document, location, transform ?? location.layer.transform),
+          bounds, outputGeometry.width, outputGeometry.height, zoom)
+      },
+    },
   )
 
   const navigationCursor = navigation.effectiveTool === 'hand'
@@ -340,13 +376,14 @@ export function ImageEditorPreviewV3({
     : navigation.effectiveTool === 'zoom'
       ? 'cursor-zoom-in'
       : navigation.effectiveTool === 'move'
-        ? layerMoveHandlers.unavailableReason ? 'cursor-not-allowed' : 'cursor-move'
+        ? 'cursor-default'
         : ''
 
   return (
     <main
       ref={surfaceRef}
       data-preview-surface
+      data-layer-picking-ready-count={alphaMaps.size}
       data-preview-display-source={previewRenderer ? 'custom' : displayPipeline.displaySource}
       data-preview-coverage={previewRenderer ? undefined : viewportComposite.coverage.toFixed(4)}
       data-preview-target-mip-coverage={previewRenderer ? undefined : viewportComposite.targetMipCoverage.toFixed(4)}
@@ -378,6 +415,7 @@ export function ImageEditorPreviewV3({
       onPointerMoveCapture={layerMoveHandlers.onPointerMoveCapture}
       onPointerUpCapture={layerMoveHandlers.onPointerUpCapture}
       onPointerCancelCapture={layerMoveHandlers.onPointerCancelCapture}
+      onLostPointerCapture={layerMoveHandlers.onPointerCancelCapture}
       onPointerDown={navigation.onPointerDown}
       onPointerMove={navigation.onPointerMove}
       onPointerUp={navigation.onPointerUp}
@@ -454,6 +492,11 @@ export function ImageEditorPreviewV3({
             controller={controller}
             resourceByteSizes={resourceByteSizes}
           />
+          {navigation.effectiveTool === 'move' ? (
+            <ImageEditorLayerControlsV3 rootRef={layerControlsRef} document={controller.document}
+              layerId={selectedLayerId} bounds={selectedLayerId ? layerBounds(selectedLayerId) : null}
+              outputWidth={outputGeometry.width} outputHeight={outputGeometry.height} zoom={zoom} />
+          ) : null}
           {annotationOverlay ? (
             <div data-annotation-overlay className="pointer-events-none absolute inset-0">
               {annotationOverlay}
@@ -480,7 +523,8 @@ export function ImageEditorPreviewV3({
           </span>
         </div>
       ) : null}
-      {navigation.effectiveTool === 'move' && layerMoveHandlers.unavailableReason ? (
+      {navigation.effectiveTool === 'move' && layerMoveHandlers.unavailableReason
+        && layerMoveHandlers.unavailableReason !== 'select-one' ? (
         <div
           role="status"
           className="ui-glass pointer-events-none absolute left-1/2 top-3 flex max-w-[min(34rem,calc(100%-1.5rem))] -translate-x-1/2 items-start gap-2 rounded-lg px-3 py-2 text-xs text-text-dark"

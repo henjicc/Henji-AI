@@ -46,6 +46,7 @@ const viewportBackend = vi.hoisted(() => ({
 const rasterPasteboardResources = vi.hoisted(() => ({
   readFastProxy: vi.fn(),
   readSourceMetadata: vi.fn(),
+  readSourceTile: vi.fn(),
 }))
 vi.mock('@/commands/imageEditorV3', async (importOriginal) => {
   const original = await importOriginal<typeof import('@/commands/imageEditorV3')>()
@@ -53,6 +54,7 @@ vi.mock('@/commands/imageEditorV3', async (importOriginal) => {
     ...original,
     readImageEditorV3FastProxy: rasterPasteboardResources.readFastProxy,
     readImageEditorV3SourceMetadata: rasterPasteboardResources.readSourceMetadata,
+    readImageEditorV3SourceTile: rasterPasteboardResources.readSourceTile,
   }
 })
 vi.mock('../execution', async (importOriginal) => {
@@ -118,6 +120,15 @@ describe('ImageEditorPreviewV3 managed frame ownership', () => {
     vi.clearAllMocks()
     rasterPasteboardResources.readFastProxy.mockReset()
     rasterPasteboardResources.readSourceMetadata.mockReset()
+    rasterPasteboardResources.readSourceTile.mockReset()
+    rasterPasteboardResources.readSourceTile.mockImplementation(async (request: { resourceRef: string }) => {
+      const pixels = new Uint8Array(320 * 180 * 4)
+      // 顶层透明，点击可穿透；前景与底图覆盖点击点。
+      if (!request.resourceRef.endsWith('cccccccc')) {
+        for (let i = 3; i < pixels.length; i += 4) pixels[i] = 255
+      }
+      return { ...request, width: 320, height: 180, bitDepth: 8, pixels: pixels.buffer }
+    })
     rasterPasteboardResources.readFastProxy.mockImplementation(async (
       request: { resourceRef: `sha256:${string}` },
     ) => ({
@@ -254,7 +265,7 @@ describe('ImageEditorPreviewV3 managed frame ownership', () => {
             mediaType: 'image/png',
           }))}
           profileId="full"
-          initialSelectedLayerId={document.layers[1].id}
+          initialSelectedLayerId={document.layers[0].id}
           onDocumentChange={changes}
         />
       </div>
@@ -286,13 +297,15 @@ describe('ImageEditorPreviewV3 managed frame ownership', () => {
     })
     await waitFor(() => expect(
       Object.values(useImageEditorSessionStoreV3.getState().sessions)[0]?.selectedLayerIds,
-    ).toEqual([document.layers[1].id]))
+    ).toEqual([document.layers[0].id]))
     const liveSession = requireImageEditV3LiveSession(document.id)
+    await waitFor(() => expect(surface.dataset.layerPickingReadyCount).toBe('3'))
     const targetFeedback = layerFrames[1]
     const untouchedFeedback = [layerFrames[0], layerFrames[2]]
     fireEvent.pointerDown(surface, {
       pointerId: 50, isPrimary: true, button: 0, clientX: 10, clientY: 10,
     })
+    expect(Object.values(useImageEditorSessionStoreV3.getState().sessions)[0]?.selectedLayerIds).toEqual([document.layers[1].id])
     expect(stack.style.visibility).toBe('visible')
     expect(stableDisplay.style.visibility).toBe('hidden')
     for (let index = 1; index <= 100; index += 1) {
@@ -333,6 +346,7 @@ describe('ImageEditorPreviewV3 managed frame ownership', () => {
     expect(stack.style.visibility).toBe('visible')
     expect(stableDisplay.style.visibility).toBe('hidden')
     expect(rasterPasteboardResources.readFastProxy).toHaveBeenCalledTimes(3)
+    expect(rasterPasteboardResources.readSourceTile).toHaveBeenCalledTimes(3)
     managedPreview.state = {
       result: {
         kind: 'bitmap',

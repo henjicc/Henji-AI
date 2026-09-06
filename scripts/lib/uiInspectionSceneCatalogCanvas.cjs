@@ -5,6 +5,8 @@ const {
   createExistingMultiLayerIsolatedCpuSceneDefinition,
 } = require('./uiInspectionExistingMultiLayerFixture.cjs')
 
+const { createLayerControlsScene } = require('./uiInspectionLayerControls.cjs')
+
 function createCanvasScenes(context) {
   const {
     setupCanvas,
@@ -37,6 +39,7 @@ function createCanvasScenes(context) {
   )
 
   return [
+    createLayerControlsScene(context),
     { id: 'canvas-projects', surface: '画布', name: '画布-项目列表', setup: setupCanvas },
     {
       id: 'canvas-image-capability-toolbar',

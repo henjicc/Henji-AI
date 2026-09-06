@@ -744,6 +744,10 @@
         "eraser": "Eraser",
         "mask-edit": "Edit mask"
       },
+      "layerControls": {
+        "rotate": "Rotate layer",
+        "resize": "Resize layer {{handle}}"
+      },
       "moveTool": {
         "select-one": "Select one layer to move.",
         "unsupported": "Effect and adjustment layers cannot be moved directly. Select a raster, annotation, or group layer.",
