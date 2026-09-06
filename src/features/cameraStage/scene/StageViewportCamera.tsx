@@ -6,35 +6,85 @@ import { registerPlaybackApplier } from '../store/playbackAppliers'
 import type { StageCameraObject, StageVec3 } from '../domain/sceneTypes'
 import { sampleCameraEffectorOffsets } from '../domain/cameraEffectors'
 import { rotationFromPositionAndTarget } from '../domain/cameraUtils'
-import { useCameraStageStore } from '../store/cameraStageStore'
+import type { RenderCameraScheduleEntry } from '../domain/renderCameraSchedule'
+import {
+  readCameraStagePlaybackRuntime,
+  subscribeCameraStagePlaybackRuntime,
+} from './playbackRuntime'
+import { resolveStageViewportCameraId } from './viewportCameraRuntime'
 
 interface StageViewportCameraProps {
   cameraObject: StageCameraObject
   lookAtTarget: StageVec3
   interactionRef: React.MutableRefObject<boolean>
+  cameraObjects: StageCameraObject[]
+  lookAtTargets: ReadonlyMap<string, StageVec3>
+  renderCameraSchedule: RenderCameraScheduleEntry[] | null
+  fallbackCameraId: string | null
 }
 
-/** 摄像机视角真实渲染相机：位置/FOV/lookAt 完全来自当前摄像机对象数据 */
-const StageViewportCamera: React.FC<StageViewportCameraProps> = ({ cameraObject, lookAtTarget, interactionRef }) => {
-  const cameraRef = useRef<ThreePerspectiveCamera>(null)
-  const { position } = cameraObject.transform
-  const staticRotation = useMemo(() => (
-    cameraObject.lookAt.mode === 'object'
-      ? rotationFromPositionAndTarget(position, lookAtTarget, cameraObject.transform.rotation.z)
-      : cameraObject.transform.rotation
-  ), [cameraObject.lookAt.mode, cameraObject.transform.rotation, lookAtTarget, position])
-  const sampledPositionRef = useRef<StageVec3>(position)
-  const sampledRotationRef = useRef<StageVec3>(staticRotation)
+interface RuntimeCameraSample {
+  object: StageCameraObject
+  position: StageVec3
+  rotation: StageVec3
+  fov: number
+}
 
-  const applyCameraSample = useCallback((camera: ThreePerspectiveCamera, time: number): void => {
-    const basePosition = sampledPositionRef.current
-    const rotation = sampledRotationRef.current
-    camera.position.set(basePosition.x, basePosition.y, basePosition.z)
-    // 摄像机旋转数据语义为 YXZ（先水平角 Y、再俯仰 X、最后 roll Z），与 lookAt 换算函数一致；
-    // three.js 默认 XYZ 顺序回放会把俯仰+水平的组合分解出一个假 roll，表现为画面水平线倾斜
+function createRuntimeCameraSample(
+  object: StageCameraObject,
+  lookAtTarget: StageVec3,
+): RuntimeCameraSample {
+  return {
+    object,
+    position: object.transform.position,
+    rotation: object.lookAt.mode === 'object'
+      ? rotationFromPositionAndTarget(
+        object.transform.position,
+        lookAtTarget,
+        object.transform.rotation.z,
+      )
+      : object.transform.rotation,
+    fov: object.fov,
+  }
+}
+
+/** 摄像机视角真实渲染相机；在 gl.render 前从会话 runtime 选择并应用同一帧机位。 */
+const StageViewportCamera: React.FC<StageViewportCameraProps> = ({
+  cameraObject,
+  lookAtTarget,
+  interactionRef,
+  cameraObjects,
+  lookAtTargets,
+  renderCameraSchedule,
+  fallbackCameraId,
+}) => {
+  const cameraRef = useRef<ThreePerspectiveCamera>(null)
+  const samplesRef = useRef(new Map<string, RuntimeCameraSample>())
+  const fallbackSample = useMemo(
+    () => createRuntimeCameraSample(cameraObject, lookAtTarget),
+    [cameraObject, lookAtTarget],
+  )
+
+  const applyRuntimeCamera = useCallback((time: number): void => {
+    const camera = cameraRef.current
+    if (!camera || interactionRef.current) return
+    const scheduledId = resolveStageViewportCameraId(
+      renderCameraSchedule,
+      cameraObject.id,
+      fallbackCameraId,
+      time,
+    )
+    const sample = (scheduledId ? samplesRef.current.get(scheduledId) : null) ?? fallbackSample
+    const { position, rotation, object, fov } = sample
+    camera.position.set(position.x, position.y, position.z)
     camera.rotation.order = 'YXZ'
-    camera.rotation.set(rotation.x * Math.PI / 180, rotation.y * Math.PI / 180, rotation.z * Math.PI / 180)
-    const { positionOffset, rotationOffset } = sampleCameraEffectorOffsets(cameraObject.effectors, time)
+    camera.rotation.set(
+      rotation.x * Math.PI / 180,
+      rotation.y * Math.PI / 180,
+      rotation.z * Math.PI / 180,
+    )
+    camera.fov = fov
+    const { positionOffset, rotationOffset } = sampleCameraEffectorOffsets(object.effectors, time)
     camera.translateX(positionOffset.x)
     camera.translateY(positionOffset.y)
     camera.translateZ(positionOffset.z)
@@ -42,71 +92,50 @@ const StageViewportCamera: React.FC<StageViewportCameraProps> = ({ cameraObject,
     camera.rotateY(rotationOffset.y)
     camera.rotateZ(rotationOffset.z)
     camera.updateProjectionMatrix()
-  }, [cameraObject.effectors])
-
-  // OrbitControls 即使没有用户输入也会持续执行 lookAt；在它之后重放权威姿态，
-  // 保证静态 scrub、空格播放和 Z 轴 roll 使用完全相同的 XYZ 数据。
-  useFrame(() => {
-    const camera = cameraRef.current
-    if (!camera || interactionRef.current) return
-    applyCameraSample(camera, useCameraStageStore.getState().playback.currentTime)
-  }, -0.5)
-
-  // 播放期命令式采样：摄像机视角下真实渲染相机的位置/FOV 直接由采样值驱动（不写 store）
-  useEffect(() => {
-    const unregs: Array<() => void> = []
-    unregs.push(
-      registerPlaybackApplier(cameraObject.id, 'transform.position', (value, time) => {
-        const camera = cameraRef.current
-        if (!camera) return
-        sampledPositionRef.current = value as StageVec3
-        applyCameraSample(camera, time)
-      }),
-    )
-    unregs.push(
-      registerPlaybackApplier(cameraObject.id, 'transform.rotation', (value, time) => {
-        const camera = cameraRef.current
-        if (!camera) return
-        sampledRotationRef.current = value as StageVec3
-        applyCameraSample(camera, time)
-      }),
-    )
-    unregs.push(
-      registerPlaybackApplier(cameraObject.id, 'fov', (value) => {
-        const camera = cameraRef.current
-        if (!camera) return
-        camera.fov = value as number
-        camera.updateProjectionMatrix()
-      }),
-    )
-    return () => unregs.forEach((unregister) => unregister())
-  }, [applyCameraSample, cameraObject.id])
+  }, [cameraObject.id, fallbackCameraId, fallbackSample, interactionRef, renderCameraSchedule])
 
   useLayoutEffect(() => {
-    const camera = cameraRef.current
-    if (!camera) return
-    camera.fov = cameraObject.fov
-    sampledPositionRef.current = position
-    sampledRotationRef.current = staticRotation
-    if (!interactionRef.current) {
-      applyCameraSample(camera, useCameraStageStore.getState().playback.currentTime)
+    const next = new Map<string, RuntimeCameraSample>()
+    for (const object of cameraObjects) {
+      const target = lookAtTargets.get(object.id)
+      if (target) next.set(object.id, createRuntimeCameraSample(object, target))
     }
-  }, [
-    cameraObject.fov,
-    cameraObject.effectors,
-    cameraObject.transform.rotation.z,
-    staticRotation,
-    applyCameraSample,
-    interactionRef,
-    lookAtTarget,
-    lookAtTarget.x,
-    lookAtTarget.y,
-    lookAtTarget.z,
-    position,
-    position.x,
-    position.y,
-    position.z,
-  ])
+    samplesRef.current = next
+    // 离屏导出用 flushSync seek 后会立即抓图，不能等待下一次 RAF 才把样本落到真实相机。
+    applyRuntimeCamera(readCameraStagePlaybackRuntime().time)
+  }, [applyRuntimeCamera, cameraObjects, lookAtTargets])
+
+  useEffect(() => {
+    const unregs = cameraObjects.flatMap((object) => [
+      registerPlaybackApplier(object.id, 'transform.position', (value, time) => {
+        const sample = samplesRef.current.get(object.id)
+        if (sample) sample.position = value as StageVec3
+        applyRuntimeCamera(time)
+      }),
+      registerPlaybackApplier(object.id, 'transform.rotation', (value, time) => {
+        const sample = samplesRef.current.get(object.id)
+        if (sample) sample.rotation = value as StageVec3
+        applyRuntimeCamera(time)
+      }),
+      registerPlaybackApplier(object.id, 'fov', (value, time) => {
+        const sample = samplesRef.current.get(object.id)
+        if (sample) sample.fov = value as number
+        applyRuntimeCamera(time)
+      }),
+    ])
+    return () => unregs.forEach((unregister) => unregister())
+  }, [applyRuntimeCamera, cameraObjects])
+
+  // 机位边界即使没有任何属性轨道，也要在 seek/runtime publish 时切换真实相机。
+  useEffect(() => subscribeCameraStagePlaybackRuntime((runtime) => {
+    applyRuntimeCamera(runtime.time)
+  }), [applyRuntimeCamera])
+
+  // drei OrbitControls 在 -1 更新；播放驱动 -2 先采样，本订阅 -0.5 再重放权威姿态，
+  // 最后才进入 gl.render。这样 controls 不会覆盖 roll/效果器，相机切换也不依赖 React commit。
+  useFrame(() => {
+    applyRuntimeCamera(readCameraStagePlaybackRuntime().time)
+  }, -0.5)
 
   return (
     <PerspectiveCamera
@@ -115,7 +144,11 @@ const StageViewportCamera: React.FC<StageViewportCameraProps> = ({ cameraObject,
       fov={cameraObject.fov}
       near={0.05}
       far={1000}
-      position={[position.x, position.y, position.z]}
+      position={[
+        cameraObject.transform.position.x,
+        cameraObject.transform.position.y,
+        cameraObject.transform.position.z,
+      ]}
     />
   )
 }

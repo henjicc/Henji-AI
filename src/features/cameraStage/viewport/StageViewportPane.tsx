@@ -12,6 +12,7 @@ import type { StageCaptureFn } from '../scene/StageCaptureBridge'
 import { useCameraStageStore } from '../store/cameraStageStore'
 import { useCameraStageViewportStore } from '../store/cameraStageViewportStore'
 import type { StageViewportId, StageViewportSource } from './viewportTypes'
+import { useRenderCameraId } from '../scene/useRenderCameraId'
 
 interface StageViewportPaneProps {
   viewportId: StageViewportId
@@ -50,7 +51,7 @@ const StageViewportPane: React.FC<StageViewportPaneProps> = ({ viewportId, captu
   const setSource = useCameraStageViewportStore((state) => state.setViewportSource)
   const toggleMaximized = useCameraStageViewportStore((state) => state.toggleMaximized)
   const objects = useCameraStageStore((state) => state.objects)
-  const activeCameraId = useCameraStageStore((state) => state.activeCameraId)
+  const renderCameraId = useRenderCameraId()
   const setViewMode = useCameraStageStore((state) => state.setViewMode)
   const setActiveCameraId = useCameraStageStore((state) => state.setActiveCameraId)
   const renderStyle = useCameraStageStore((state) => state.sceneSettings.render.style)
@@ -71,7 +72,7 @@ const StageViewportPane: React.FC<StageViewportPaneProps> = ({ viewportId, captu
   // 取景框覆盖层要知道画的是哪台机器；跟随档在这里落成具体 id。
   const overlayCameraId = source.kind === 'camera'
     ? source.cameraId
-    : source.kind === 'active_camera' ? activeCameraId : null
+    : source.kind === 'active_camera' ? renderCameraId : null
   const options = [
     { label: '自由透视', value: 'director' },
     { label: '当前摄像机', value: 'active_camera' },

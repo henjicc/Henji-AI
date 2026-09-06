@@ -1,7 +1,15 @@
-import { useRef } from 'react'
+import { useEffect, useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
 import { applyAnimationToPlaybackAppliers } from '../store/playbackAppliers'
 import { useCameraStageStore } from '../store/cameraStageStore'
+import {
+  advanceCameraStagePlaybackRuntime,
+  claimCameraStagePlaybackDriver,
+  readCameraStagePlaybackRuntime,
+  releaseCameraStagePlaybackDriver,
+  resumeCameraStagePlaybackDriver,
+  seekCameraStagePlaybackRuntime,
+} from './playbackRuntime'
 
 /**
  * 播放采样驱动：播放态下每帧推进播放头，采样全部轨道并经命令式 appliers 直改 three 对象，
@@ -14,51 +22,63 @@ const PLAYHEAD_PUSH_INTERVAL = 0.05
 const MAX_FRAME_DELTA = 0.1
 
 const StagePlaybackDriver: React.FC = () => {
-  const timeRef = useRef(0)
-  const lastPushRef = useRef(0)
-  const wasPlayingRef = useRef(false)
+  const currentProjectId = useCameraStageStore((state) => state.currentProjectId)
+  const driverRef = useRef<symbol | null>(null)
+  const pushElapsedRef = useRef(0)
+
+  useEffect(() => {
+    const playback = useCameraStageStore.getState().playback
+    const token = claimCameraStagePlaybackDriver({
+      sessionKey: currentProjectId,
+      time: playback.currentTime,
+      playing: playback.playing,
+    })
+    driverRef.current = token
+    pushElapsedRef.current = 0
+    return () => {
+      releaseCameraStagePlaybackDriver(token)
+      if (driverRef.current === token) driverRef.current = null
+    }
+  }, [currentProjectId])
 
   useFrame((_, rawDelta) => {
+    const driver = driverRef.current
+    if (!driver) return
     const state = useCameraStageStore.getState()
     const { playing, currentTime, loop } = state.playback
+    if (!resumeCameraStagePlaybackDriver(driver, state.currentProjectId)) return
+    const runtime = readCameraStagePlaybackRuntime()
 
     if (!playing) {
-      wasPlayingRef.current = false
-      timeRef.current = currentTime
-      lastPushRef.current = currentTime
+      pushElapsedRef.current = 0
+      if (runtime.playing || runtime.time !== currentTime) {
+        seekCameraStagePlaybackRuntime(currentTime, false)
+      }
       return
     }
-    // 刚进入播放：以 store 播放头为起点
-    if (!wasPlayingRef.current) {
-      wasPlayingRef.current = true
-      timeRef.current = currentTime
-      lastPushRef.current = currentTime
+    // 兼容测试/宿主直接恢复 playback 的入口；正常 play/seek 已同步 runtime。
+    if (!runtime.playing) {
+      seekCameraStagePlaybackRuntime(currentTime, true)
     }
 
     const { tracks, duration } = state.animation
-    let t = timeRef.current + Math.min(rawDelta, MAX_FRAME_DELTA)
-    let reachedEnd = false
-    if (t >= duration) {
-      if (loop) {
-        t = duration <= 0 ? 0 : t % duration
-      } else {
-        t = duration
-        reachedEnd = true
-      }
-    }
-    timeRef.current = t
+    const delta = Math.min(rawDelta, MAX_FRAME_DELTA)
+    const advanced = advanceCameraStagePlaybackRuntime({ driver, delta, duration, loop })
+    if (!advanced.accepted) return
 
-    applyAnimationToPlaybackAppliers(state.objects, tracks, t)
+    applyAnimationToPlaybackAppliers(state.objects, tracks, advanced.time)
 
-    if (reachedEnd || t - lastPushRef.current >= PLAYHEAD_PUSH_INTERVAL) {
-      lastPushRef.current = t
-      state.setPlaybackTime(t)
+    // 以累计帧间隔节流，循环回绕不会再因时间差为负而停止更新 UI。
+    pushElapsedRef.current += delta
+    if (advanced.wrapped || advanced.reachedEnd || pushElapsedRef.current >= PLAYHEAD_PUSH_INTERVAL) {
+      pushElapsedRef.current = 0
+      state.setPlaybackTime(advanced.time)
     }
     // 非循环播放到末尾：暂停并把末帧采样落回对象（保持画面停在末帧）
-    if (reachedEnd) {
+    if (advanced.reachedEnd) {
       useCameraStageStore.getState().pause()
     }
-  })
+  }, -2)
 
   return null
 }

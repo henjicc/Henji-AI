@@ -22,7 +22,6 @@ import {
   type StageStateKeyframe,
 } from '../domain/stateKeyframeTypes'
 import { compileStateKeyframesToAnimation } from '../domain/stateKeyframeCompiler'
-import { quantizeToFrame } from '../stateKeyframes/timeline/stateKeyframeClipGeometry'
 import {
   createDefaultPlayback,
   type StagePlaybackState,
@@ -38,6 +37,8 @@ import {
   type StateKeyframeTransitionPatch,
 } from './stateKeyframeSlice'
 import { applyAnimationAtTime } from './playbackSampling'
+import { createPlaybackSlice } from './playbackSlice'
+import { resetCameraStagePlaybackRuntime } from '../scene/playbackRuntime'
 import type { CameraStagePathActions } from './pathActionTypes'
 import type {
   StageGizmoMode,
@@ -227,7 +228,7 @@ const initialStateKeyframe = createStateKeyframe([], '关键帧 1')
 
 export const useCameraStageStore = create<CameraStageState>()(
   temporal(
-    (set) => ({
+    (set, get) => ({
   objects: [],
   selectedId: null,
   gizmoMode: 'translate',
@@ -469,6 +470,7 @@ export const useCameraStageStore = create<CameraStageState>()(
   newScene: (name) => {
     // 新工程不继承上一次离开时的自由视角（跨工程共享的 localStorage 快照），回到标准正视角度
     resetDirectorView()
+    resetCameraStagePlaybackRuntime(0, null)
     set(() => {
       // 新工程默认自带一台摄像机并直接进入摄像机视角，打开即有可拍画面
       const camera = createCameraObject(nextName([], '摄像机'), pickDefaultColor(0))
@@ -493,7 +495,8 @@ export const useCameraStageStore = create<CameraStageState>()(
     })
   },
 
-  loadSnapshot: (snapshot, project) =>
+  loadSnapshot: (snapshot, project) => {
+    resetCameraStagePlaybackRuntime(0, project.id)
     set(() => {
       const activeCameraId = isCameraId(snapshot.objects, snapshot.activeCameraId)
         ? snapshot.activeCameraId
@@ -517,47 +520,12 @@ export const useCameraStageStore = create<CameraStageState>()(
         selectedStateKeyframeIds: [],
         focusToken: 0,
       }
-    }),
+    })
+  },
 
   ...createStateKeyframeSlice(set),
 
-  play: () =>
-    set((state) => {
-      const canPlay = state.stateKeyframes.length > 0 && state.animation.duration > 0
-      if (!canPlay) return {}
-      // 播放到末尾后再按播放，从头开始
-      const atEnd = state.playback.currentTime >= state.animation.duration
-      return {
-        playback: { ...state.playback, playing: true, currentTime: atEnd ? 0 : state.playback.currentTime },
-      }
-    }),
-
-  pause: () => {
-    // 播放中按连续时间采样以保持丝滑；停下时吸附到最近帧，让后续编辑永远落在帧格上。
-    const state = useCameraStageStore.getState()
-    const snapped = quantizeToFrame(state.playback.currentTime, state.animation.fps)
-    applySampledObjectsSilently(snapped)
-    set((current) => ({ playback: { ...current.playback, playing: false, currentTime: snapped } }))
-  },
-
-  stop: () => {
-    applySampledObjectsSilently(0)
-    set((state) => ({ playback: { ...state.playback, playing: false, currentTime: 0 } }))
-  },
-
-  seek: (time) => {
-    const state = useCameraStageStore.getState()
-    const snapped = quantizeToFrame(time, state.animation.fps)
-    // 允许把播放头放到最后关键帧之后，以便在未来时间直接添加状态关键帧。
-    const clamped = Math.max(0, snapped)
-    if (!state.playback.playing) applySampledObjectsSilently(clamped)
-    set((current) => ({ playback: { ...current.playback, currentTime: clamped } }))
-  },
-
-  setPlaybackTime: (time) =>
-    set((state) => ({ playback: { ...state.playback, currentTime: time } })),
-
-  toggleLoop: () => set((state) => ({ playback: { ...state.playback, loop: !state.playback.loop } })),
+  ...createPlaybackSlice(set, get, applySampledObjectsSilently),
 
   setSceneGroundColor: (color) =>
     set((state) => ({

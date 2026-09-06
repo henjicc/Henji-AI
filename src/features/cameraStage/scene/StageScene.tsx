@@ -26,6 +26,7 @@ import StageMotionPathOverlay from './StageMotionPathOverlay'
 import { useRenderCameraId } from './useRenderCameraId'
 import type { StageViewportSource } from '../viewport/viewportTypes'
 import StageFixedViewportCamera from './StageFixedViewportCamera'
+import { buildRenderCameraSchedule } from '../domain/renderCameraSchedule'
 
 /**
  * 场景三维视图：数据驱动渲染 store 中的对象列表，
@@ -104,6 +105,7 @@ const StageScene: React.FC<StageSceneProps> = ({
   const selectedId = useCameraStageStore((state) => state.selectedId)
   const gizmoMode = useCameraStageStore((state) => state.gizmoMode)
   const viewMode = useCameraStageStore((state) => state.viewMode)
+  const activeCameraId = useCameraStageStore((state) => state.activeCameraId)
   // 播放/scrub 跨机位切换点时按状态关键帧时间表切换，与 activeCameraId（编辑机位）区分。
   const renderCameraId = useRenderCameraId()
   const sceneSettings = useCameraStageStore((state) => state.sceneSettings)
@@ -206,6 +208,14 @@ const StageScene: React.FC<StageSceneProps> = ({
     }
     return targets
   }, [objects])
+  const cameraObjects = useMemo(
+    () => objects.filter((object): object is StageCameraObject => object.type === 'camera'),
+    [objects],
+  )
+  const renderCameraSchedule = useMemo(
+    () => buildRenderCameraSchedule(stateKeyframes, activeCameraId),
+    [activeCameraId, stateKeyframes],
+  )
   /*
    * `active_camera` 走 renderCameraId 而不是 activeCameraId：播放/scrub 跨机位切换点时
    * 渲染机位按状态关键帧时间表走（重要记录 005），跟随档要跟的是**画面上真正在用的那台**，
@@ -277,6 +287,10 @@ const StageScene: React.FC<StageSceneProps> = ({
             cameraObject={activeCamera}
             lookAtTarget={activeCameraTarget}
             interactionRef={cameraViewInteractionRef}
+            cameraObjects={cameraObjects}
+            lookAtTargets={cameraLookAtTargets}
+            renderCameraSchedule={viewportSource?.kind === 'camera' ? null : renderCameraSchedule}
+            fallbackCameraId={activeCameraId}
           />
           {interactive && activeCamera.lookAt.mode === 'manual' && (
             <StageCameraViewControls

@@ -16,6 +16,9 @@ const { attachUiInspectionSupport } = require('./uiInspectionSceneSupport.cjs')
 const { createGenerationSettingsScenes } = require('./uiInspectionSceneCatalogGeneration.cjs')
 const { createCanvasScenes } = require('./uiInspectionSceneCatalogCanvas.cjs')
 const { createToolboxScenes } = require('./uiInspectionSceneCatalogToolbox.cjs')
+const {
+  createCameraStagePlaybackScenes,
+} = require('./uiInspectionSceneCatalogCameraStagePlayback.cjs')
 const { createGpuRasterScenes } = require('./uiInspectionSceneCatalogGpuRaster.cjs')
 const { createGpuExportScenes } = require('./uiInspectionSceneCatalogGpuExport.cjs')
 const { createGpuBrushScenes } = require('./uiInspectionSceneCatalogGpuBrush.cjs')
@@ -57,6 +60,7 @@ function createUiInspectionScenes({ canvasFixtureProjectId, settlePage }) {
     ...createGenerationSettingsScenes(context),
     ...createCanvasScenes(context),
     ...createToolboxScenes(context),
+    ...createCameraStagePlaybackScenes(context),
     ...createGpuRasterScenes(context),
     ...createGpuExportScenes(context),
     ...createGpuBrushScenes(context),

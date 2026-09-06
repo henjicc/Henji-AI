@@ -1,6 +1,10 @@
-import { useMemo } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { buildRenderCameraSchedule, resolveRenderCameraAt } from '../domain/renderCameraSchedule'
 import { useCameraStageStore } from '../store/cameraStageStore'
+import {
+  readCameraStagePlaybackRuntime,
+  subscribeCameraStagePlaybackRuntime,
+} from './playbackRuntime'
 
 /**
  * 当前渲染机位派生 hook（重要记录 005，3.2）：区分"编辑机位"（`activeCameraId`，用户显式选择，
@@ -14,12 +18,27 @@ export function useRenderCameraId(): string | null {
   const stateKeyframes = useCameraStageStore((state) => state.stateKeyframes)
   const activeCameraId = useCameraStageStore((state) => state.activeCameraId)
   const currentTime = useCameraStageStore((state) => state.playback.currentTime)
+  const playing = useCameraStageStore((state) => state.playback.playing)
 
   const schedule = useMemo(
     () => buildRenderCameraSchedule(stateKeyframes, activeCameraId),
     [stateKeyframes, activeCameraId],
   )
 
-  if (schedule.length === 0) return activeCameraId
-  return resolveRenderCameraAt(schedule, currentTime) ?? activeCameraId
+  const resolveAt = useCallback((time: number): string | null => (
+    schedule.length === 0 ? activeCameraId : resolveRenderCameraAt(schedule, time) ?? activeCameraId
+  ), [activeCameraId, schedule])
+  const [runtimeCameraId, setRuntimeCameraId] = useState(() => resolveAt(currentTime))
+
+  useEffect(() => {
+    const sync = (time: number): void => {
+      const next = resolveAt(time)
+      setRuntimeCameraId((current) => current === next ? current : next)
+    }
+    sync(playing ? readCameraStagePlaybackRuntime().time : currentTime)
+    if (!playing) return undefined
+    return subscribeCameraStagePlaybackRuntime((runtime) => sync(runtime.time))
+  }, [currentTime, playing, resolveAt])
+
+  return runtimeCameraId
 }

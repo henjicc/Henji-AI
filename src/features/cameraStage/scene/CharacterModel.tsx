@@ -1,7 +1,6 @@
-import React, { useEffect, useMemo } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef } from 'react'
 import { useGLTF } from '@react-three/drei'
-import { useFrame } from '@react-three/fiber'
-import { AnimationMixer, Bone, Euler, Group, LoopRepeat, Mesh, MeshStandardMaterial, Quaternion, Vector3 } from 'three'
+import { AnimationMixer, Bone, Euler, Group, Mesh, MeshStandardMaterial, Quaternion, Vector3 } from 'three'
 import { SkeletonUtils } from 'three-stdlib'
 import { getBodyVariant } from '../domain/bodyVariants'
 import { DEFAULT_CHARACTER_MOTION } from '../domain/characterMotion'
@@ -12,6 +11,11 @@ import { poseJointPath } from '../domain/animatableProps'
 import { useCameraStageStore } from '../store/cameraStageStore'
 import { registerPlaybackApplier } from '../store/playbackAppliers'
 import type { StageCharacterObject, StageVec3 } from '../domain/sceneTypes'
+import {
+  readCameraStagePlaybackRuntime,
+  subscribeCameraStagePlaybackRuntime,
+} from './playbackRuntime'
+import { CharacterClipPlaybackController } from './characterClipPlayback'
 
 /**
  * 角色骨骼模型渲染：加载内置 GLB（骨架 + 蒙皮网格），按对象数据应用
@@ -67,20 +71,18 @@ const CharacterModel: React.FC<CharacterModelProps> = ({ object, selected, url }
   const rig = useMemo(() => buildRig(gltf.scene as Group), [gltf.scene])
   const mixer = useMemo(() => new AnimationMixer(rig.scene), [rig])
   const material = useMemo(() => new MeshStandardMaterial(), [])
-  const currentTime = useCameraStageStore((state) => state.playback.currentTime)
   const motionSchedule = useCameraStageStore((state) => state.animation.motionSchedule)
-  const resolvedMotion = useMemo(
-    () => resolveCharacterMotionAtTime(motionSchedule, object.id, currentTime, object.motion ?? DEFAULT_CHARACTER_MOTION),
-    [currentTime, motionSchedule, object.id, object.motion],
+  const clipController = useMemo(
+    () => new CharacterClipPlaybackController(mixer, rig.scene, gltf.animations),
+    [gltf.animations, mixer, rig.scene],
   )
-  const motion = resolvedMotion.motion
-  const activeClip = useMemo(() => {
-    if (motion.mode !== 'clip') return null
-    return gltf.animations.find((clip) => clip.name === motion.clipName) ?? null
-  }, [gltf.animations, motion])
+  const clipDrivenRef = useRef(false)
 
   useEffect(() => () => material.dispose(), [material])
-  useEffect(() => () => mixer.uncacheRoot(rig.scene), [mixer, rig.scene])
+  useEffect(() => () => {
+    clipController.dispose()
+    mixer.uncacheRoot(rig.scene)
+  }, [clipController, mixer, rig.scene])
 
   // 纯色材质覆盖：GLB 自带材质替换为单一颜色（对齐一期"纯色渲染"美术方向）
   useEffect(() => {
@@ -98,9 +100,7 @@ const CharacterModel: React.FC<CharacterModelProps> = ({ object, selected, url }
     material.emissiveIntensity = selected ? 0.35 : 0
   }, [material, object.color, selected])
 
-  // FK 姿态应用：受控关节 = 绑定姿态 × 欧拉偏移；未记录的关节回到绑定姿态
-  useEffect(() => {
-    if (motion.mode === 'clip' && activeClip) return
+  const applyFkPose = useCallback(() => {
     const euler = new Euler()
     const offset = new Quaternion()
     for (const [jointId, boneName] of Object.entries(POSE_JOINT_BONES)) {
@@ -124,42 +124,36 @@ const CharacterModel: React.FC<CharacterModelProps> = ({ object, selected, url }
         .copy(rig.pelvisRestPosition)
         .add(hipsOffset ? new Vector3(hipsOffset.x, hipsOffset.y, hipsOffset.z) : new Vector3())
     }
-  }, [activeClip, rig, object.pose, motion.mode])
+  }, [object.pose, rig])
 
-  // 仅在片段本身变化时重建 action；播放位置和速度统一由时间轴驱动，避免速度调整时重播。
+  // 同一 runtime 通知内决定 clip/FK 并推进 mixer；先于本帧轨道 applier，边界不会晚 50ms。
   useEffect(() => {
-    mixer.stopAllAction()
-    if (!activeClip) return undefined
-
-    const action = mixer.clipAction(activeClip, rig.scene)
-    action.reset()
-    action.setLoop(LoopRepeat, Infinity)
-    action.clampWhenFinished = false
-    action.enabled = true
-    action.play()
-    mixer.update(0)
-
-    return () => {
-      action.stop()
+    let initialized = false
+    const applyAt = (time: number): void => {
+      const resolved = resolveCharacterMotionAtTime(
+        motionSchedule,
+        object.id,
+        time,
+        object.motion ?? DEFAULT_CHARACTER_MOTION,
+      )
+      const wasClipDriven = clipDrivenRef.current
+      clipDrivenRef.current = clipController.apply(resolved, time)
+      // FK 静态姿态只在首次或 clip→pose 边界恢复；逐帧 FK 动画继续由下方 applier 写骨骼。
+      if (!clipDrivenRef.current && (!initialized || wasClipDriven)) applyFkPose()
+      initialized = true
     }
-  }, [activeClip, mixer, rig.scene])
-
-  useFrame(() => {
-    if (motion.mode === 'clip' && activeClip) {
-      const { currentTime } = useCameraStageStore.getState().playback
-      mixer.setTime(Math.max(0, currentTime - resolvedMotion.timeOrigin) * motion.speed)
-    }
-  })
+    applyAt(readCameraStagePlaybackRuntime().time)
+    return subscribeCameraStagePlaybackRuntime((runtime) => applyAt(runtime.time))
+  }, [applyFkPose, clipController, motionSchedule, object.id, object.motion])
 
   // 播放期命令式采样：clip 生效时骨骼只由 mixer 驱动，避免与关节关键帧采样双写。
   useEffect(() => {
-    if (activeClip) return undefined
-
     const euler = new Euler()
     const quat = new Quaternion()
     const unregs = (Object.keys(POSE_JOINT_BONES) as StagePoseJointId[]).map(
       (jointId) =>
         registerPlaybackApplier(object.id, poseJointPath(jointId), (value) => {
+          if (clipDrivenRef.current) return
           const bone = rig.bones.get(POSE_JOINT_BONES[jointId])
           const rest = rig.restQuaternions.get(POSE_JOINT_BONES[jointId])
           if (!bone || !rest) return
@@ -170,7 +164,7 @@ const CharacterModel: React.FC<CharacterModelProps> = ({ object, selected, url }
         }),
     )
     return () => unregs.forEach((unregister) => unregister())
-  }, [activeClip, object.id, rig])
+  }, [object.id, rig])
 
   // 颜色关键帧不与 mixer 冲突，始终注册，避免切换动作时颜色动画失效。
   useEffect(() => registerPlaybackApplier(object.id, 'color', (value) => {
