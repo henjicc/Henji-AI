@@ -44,7 +44,7 @@ describe('specialEditorApplicationService', () => {
     });
   });
 
-  it('通过画布应用服务提交草稿并关闭会话', () => {
+  it('通过画布应用服务提交草稿并关闭会话', async () => {
     const nodeId = useCanvasStore.getState().addNode(
       CANVAS_NODE_TYPES.imageEdit,
       { x: 0, y: 0 },
@@ -58,7 +58,7 @@ describe('specialEditorApplicationService', () => {
     });
     useCanvasSpecialEditorController.getState().updateDraft({ prompt: '已确认的提示词' });
 
-    commitCanvasSpecialEditor(sessionId);
+    await commitCanvasSpecialEditor(sessionId);
 
     expect(useCanvasStore.getState().nodes.find((node) => node.id === nodeId)?.data.prompt)
       .toBe('已确认的提示词');
@@ -66,7 +66,7 @@ describe('specialEditorApplicationService', () => {
     expect(useProjectStore.getState().saveCurrentProject).toHaveBeenCalled();
   });
 
-  it('打光编辑器仅通过内部白名单原子写回契约数据', () => {
+  it('打光编辑器仅通过内部白名单原子写回契约数据', async () => {
     const nodeId = useCanvasStore.getState().addNode(
       CANVAS_NODE_TYPES.relightGen,
       { x: 0, y: 0 },
@@ -95,7 +95,7 @@ describe('specialEditorApplicationService', () => {
       relightRouteReasons: [],
     });
 
-    commitCanvasSpecialEditor(sessionId);
+    await commitCanvasSpecialEditor(sessionId);
 
     const data = useCanvasStore.getState().nodes.find((node) => node.id === nodeId)?.data;
     expect(data).toMatchObject({
@@ -106,3 +106,9 @@ describe('specialEditorApplicationService', () => {
     expect(useCanvasSpecialEditorController.getState().session).toBeNull();
   });
 });
+
+// 本文件验证领域变换；仅替换最终存储边界，保存完成/拒绝由专门结果测试覆盖。
+vi.mock('@/commands/projectState', async (importOriginal) => ({
+  ...await importOriginal<typeof import('@/commands/projectState')>(),
+  upsertProjectRecord: vi.fn(async () => undefined),
+}))

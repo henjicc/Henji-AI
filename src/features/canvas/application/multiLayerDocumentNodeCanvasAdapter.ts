@@ -7,7 +7,7 @@ import { useProjectStore } from '@/stores/projectStore'
 
 import { isLayerStackResultNode } from '../domain/canvasNodeGuards'
 import { parseMultiLayerDocumentNodeState } from '../domain/multiLayerDocumentNode'
-import { persistCanvasState } from './canvasApplicationService'
+import { confirmCanvasPersistence, runCanvasMutationStage } from './canvasPersistenceService'
 import { runCanvasTransaction } from './canvasBatchService'
 import {
   MULTI_LAYER_NODE_PROJECTION_HISTORY_POLICY,
@@ -63,7 +63,7 @@ export function createMultiLayerDocumentExportCanvasPort(): MultiLayerDocumentEx
       try {
         let nodeId = ''
         let edgeId = ''
-        const transaction = await runCanvasTransaction(input.projectId, 2, async () => {
+        const transaction = await runCanvasTransaction(input.projectId, 2, async (options) => runCanvasMutationStage(options, () => {
           const canvas = useCanvasStore.getState()
           if (!canvas.nodes.some((node) => node.id === input.sourceNodeId)) {
             throw new MultiLayerDocumentNodeApplicationError(
@@ -89,7 +89,7 @@ export function createMultiLayerDocumentExportCanvasPort(): MultiLayerDocumentEx
           edgeId = createdEdgeId
           useCanvasStore.setState({ selectedNodeId, activeToolDialog })
           return [{ nodeId }, { edgeId }]
-        }, {
+        }), {
           operation: 'multi_layer_document.export_target',
           sourceNodeId: input.sourceNodeId,
           targetKind: input.target.kind,
@@ -168,7 +168,7 @@ export function createMultiLayerDocumentProjectionCanvasPort(
           true,
         )
       }
-      if (status === 'committed') persistCanvasState()
+      await confirmCanvasPersistence(input.projectId)
       return status
     },
 
@@ -248,7 +248,7 @@ export function createMultiLayerDocumentProjectionCanvasPort(
           true,
         )
       }
-      persistCanvasState()
+      await confirmCanvasPersistence(input.projectId)
 
       const replacedSources: Array<string | null> = [
         replacedImageUrl,

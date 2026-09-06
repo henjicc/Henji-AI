@@ -9,6 +9,7 @@ import {
 } from './specialEditorController';
 import { CanvasApplicationError, requireCurrentCanvasProject } from './canvasApplicationService';
 import { updateCanvasNodeFromSpecialEditor } from './canvasMutationService';
+import { confirmCanvasPersistence } from './canvasPersistenceService';
 
 const logger = createLogger('features.canvas.specialEditor');
 
@@ -30,7 +31,7 @@ export function openCanvasSpecialEditor(input: {
   return useCanvasSpecialEditorController.getState().open(input);
 }
 
-export function commitCanvasSpecialEditor(sessionId: string): void {
+export async function commitCanvasSpecialEditor(sessionId: string): Promise<void> {
   const controller = useCanvasSpecialEditorController.getState();
   const session = controller.session;
   if (!session || session.sessionId !== sessionId) {
@@ -44,16 +45,22 @@ export function commitCanvasSpecialEditor(sessionId: string): void {
   });
   try {
     if (session.isDirty) {
+      const liveData = useCanvasStore.getState().nodes.find((node) => node.id === session.nodeId)?.data;
       const changedEntries = Object.entries(session.draftState).filter(([key, value]) => (
         JSON.stringify(value) !== JSON.stringify(session.initialState[key])
+        && JSON.stringify(value) !== JSON.stringify(liveData?.[key])
       ));
-      updateCanvasNodeFromSpecialEditor({
+      if (changedEntries.length > 0) await updateCanvasNodeFromSpecialEditor({
         projectId: session.projectId,
         nodeId: session.nodeId,
         data: Object.fromEntries(changedEntries),
       });
+      else await confirmCanvasPersistence(session.projectId);
     }
-    useCanvasSpecialEditorController.getState().complete();
+    // 存储确认期间可以打开另一个会话；旧提交不得关闭新的编辑草稿。
+    if (useCanvasSpecialEditorController.getState().session === session) {
+      useCanvasSpecialEditorController.getState().complete();
+    }
     logger.info('专用编辑器提交完成', {
       event: 'canvas.special_editor.commit.completed',
       projectId: session.projectId,

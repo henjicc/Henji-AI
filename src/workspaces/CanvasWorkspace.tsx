@@ -9,6 +9,7 @@ import { ProjectManager } from '@/features/project/ProjectManager';
 import { useProjectStore } from '@/stores/projectStore';
 import '@/features/canvas/storyboard.css';
 import { isUiInspectionReadOnly } from '@/platform/runtime';
+import { confirmCanvasPersistence } from '@/features/canvas/application/canvasPersistenceService';
 
 const CanvasWorkspace = (): JSX.Element => {
   const { t } = useTranslation();
@@ -73,6 +74,7 @@ const CanvasWorkspace = (): JSX.Element => {
                 className="absolute left-1/2 top-3 z-sticky -translate-x-1/2"
                 message={t('project.persistenceFailed')}
                 size="xs"
+                onRetry={() => { void confirmCanvasPersistence(currentProjectId).catch(() => undefined); }}
               />
             )}
             <Canvas />

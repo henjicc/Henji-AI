@@ -11,12 +11,7 @@ import {
   createMultiLayerDocumentProjectionCanvasPort,
 } from './multiLayerDocumentNodeCanvasAdapter'
 
-const mocks = vi.hoisted(() => ({ persist: vi.fn() }))
-
-vi.mock('./canvasApplicationService', () => ({
-  persistCanvasState: mocks.persist,
-  requireCurrentCanvasProject: vi.fn(),
-}))
+import { upsertProjectRecord } from '@/commands/projectState'
 
 const oldSession = {
   kind: 'image-edit-v3' as const,
@@ -84,7 +79,7 @@ function commitInput() {
 
 describe('多图层文档节点投影 CAS', () => {
   beforeEach(() => {
-    mocks.persist.mockReset()
+    vi.mocked(upsertProjectRecord).mockReset()
     const source = node()
     useCanvasStore.setState({
       nodes: [source],
@@ -134,7 +129,7 @@ describe('多图层文档节点投影 CAS', () => {
       '/managed/old-composite.png',
       '/managed/old-preview.webp',
     ])
-    expect(mocks.persist).toHaveBeenCalledOnce()
+    expect(vi.mocked(upsertProjectRecord)).toHaveBeenCalledOnce()
   })
 
   it('旧平面资源释放失败不回滚已经提交的节点状态', async () => {
@@ -170,13 +165,13 @@ describe('多图层文档节点投影 CAS', () => {
       recoverable: true,
     })
     expect(useCanvasStore.getState().nodes).toBe(before)
-    expect(mocks.persist).not.toHaveBeenCalled()
+    expect(vi.mocked(upsertProjectRecord)).not.toHaveBeenCalled()
   })
 })
 
 describe('多图层文档目标导出画布事务', () => {
   beforeEach(() => {
-    mocks.persist.mockReset()
+    vi.mocked(upsertProjectRecord).mockReset()
     const source = node()
     useCanvasStore.setState({
       nodes: [source],
@@ -268,3 +263,8 @@ describe('多图层文档目标导出画布事务', () => {
     expect(useCanvasStore.getState().nodes).toHaveLength(1)
   })
 })
+// 本文件验证图投影，真实存储拒绝与恢复由 canvasPersistenceService.test.ts 覆盖。
+vi.mock('@/commands/projectState', async (importOriginal) => ({
+  ...await importOriginal<typeof import('@/commands/projectState')>(),
+  upsertProjectRecord: vi.fn(async () => undefined),
+}))

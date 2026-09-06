@@ -58,8 +58,8 @@ describe('projectPersistenceQueue', () => {
     queue.queueProject({ id: 'p1', version: 3 }, { immediate: true })
     explicit.resolve()
     await flushed
-
-    expect(writes).toEqual([2, 3])
+    // 屏障只确认它捕获的代次；后续用户编辑仍按序写，不延长已完成操作的等待。
+    await vi.waitFor(() => expect(writes).toEqual([2, 3]))
   })
 
   it('删除等待进行中的保存，并丢弃排队中的旧快照', async () => {

@@ -112,7 +112,7 @@ export class CanvasCollectionExecutor implements ApplicationCollectionExecutor {
     const projectId = typeof parsed.projectId === 'string' ? parsed.projectId : ''
     const undoRef = typeof parsed.undoRef === 'string' ? parsed.undoRef : ''
     if (!projectId || !undoRef) throw new Error('CANVAS_COLLECTION_UNDO_INVALID')
-    const restored = undoCanvasBatch(projectId, undoRef)
+    const restored = await undoCanvasBatch(projectId, undoRef)
     if (!restored) throw new Error('CANVAS_COLLECTION_UNDO_NOT_FOUND')
     this.dependencies.bumpRevision()
     const revision = this.dependencies.readRevision()

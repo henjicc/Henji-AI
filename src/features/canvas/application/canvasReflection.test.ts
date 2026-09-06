@@ -174,7 +174,7 @@ describe('canvas reflection and mutation', () => {
       nodeId,
       displayName: '新标题',
       position: { x: 320, y: 480 },
-    }])
+    }], expect.objectContaining({ deferCommit: true, checkpoint: expect.objectContaining({ projectId }) }))
     expect(useCanvasStore.getState().nodes[0]).toMatchObject({
       position: { x: 320, y: 480 },
       data: { displayName: '新标题' },
@@ -288,3 +288,9 @@ describe('canvas reflection and mutation', () => {
     expect(useCanvasStore.getState().nodes[0].data.displayName).toBe('原节点')
   })
 })
+
+// 本文件验证领域变换；仅替换最终存储边界，保存完成/拒绝由专门结果测试覆盖。
+vi.mock('@/commands/projectState', async (importOriginal) => ({
+  ...await importOriginal<typeof import('@/commands/projectState')>(),
+  upsertProjectRecord: vi.fn(async () => undefined),
+}))

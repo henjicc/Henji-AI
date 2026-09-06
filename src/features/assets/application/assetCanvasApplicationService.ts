@@ -22,7 +22,7 @@ export async function addAssetToCanvas(input: {
     durationSeconds: asset.durationSeconds,
     displayName: asset.displayName,
   }
-  const result = addTrustedMediaCanvasNode({
+  const result = await addTrustedMediaCanvasNode({
     projectId: input.projectId,
     nodeType: mediaSourceNodeType(asset.mediaType),
     placement: input.placement,

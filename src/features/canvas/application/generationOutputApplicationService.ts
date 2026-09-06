@@ -17,6 +17,8 @@ import type { RowMediaKind } from '../domain/socketTypes';
 import { persistGenerationResult } from '../generation/mediaResultPersist';
 import { createAssetGroupGraph, updateAssetGroupDataGraph } from './assetGroupGraph';
 import { runCanvasTransaction } from './canvasBatchService';
+import { runCanvasMutationStage, retainsCanvasMutation, confirmCanvasPersistence } from './canvasPersistenceService';
+import { hasUnconfirmedCanvasProjectSnapshot } from '@/stores/projectStore';
 import { requireCurrentCanvasProject } from './canvasApplicationService';
 import { canvasNodeFactory } from './canvasServices';
 import {
@@ -147,6 +149,7 @@ export async function commitCanvasGenerationOutputs(
   const completionId = input.completionId?.trim() || `generation-output:${input.placeholderNodeId}`;
   const existing = findExistingCommit(completionId, input.resultNodeType);
   if (existing) {
+    if (hasUnconfirmedCanvasProjectSnapshot(projectId)) await confirmCanvasPersistence(projectId);
     return {
       projectId,
       completionId,
@@ -243,7 +246,7 @@ export async function commitCanvasGenerationOutputs(
     const result = await runCanvasTransaction(
       projectId,
       ordered.length + (input.contract.strategy === 'assetGroup' ? 1 : 0),
-      async () => {
+      async (options) => runCanvasMutationStage(options, () => {
         const resultNodeIds: string[] = [];
         const appendLabel = ordered.length > 1;
         const firstData = createCompletedNodeData(
@@ -316,7 +319,7 @@ export async function commitCanvasGenerationOutputs(
           resultNodeIds,
           groupNodeId,
         }];
-      },
+      }),
       { completionId, strategy: input.contract.strategy },
     );
     const operation = result.appliedOperations[0];
@@ -341,6 +344,7 @@ export async function commitCanvasGenerationOutputs(
       idempotent: false,
     };
   } catch (error) {
+    if (retainsCanvasMutation(error)) ownershipTransferred = true;
     logger.error('生成结果原子落图失败', error, {
       event: 'canvas.generation_output.commit.failed',
       projectId,

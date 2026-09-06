@@ -46,8 +46,8 @@ export const PROJECT_STORE_LEDGER: ApplicationStoreActionLedger<ActionName> = {
     saveCurrentProject: {
       kind: 'excluded',
       category: 'internal',
-      reason: 'persistCanvasState() 在每次画布写入后自动调用来落盘；画布内容本身的写入走 '
-        + 'canvas.node / canvas.edge 的通用动词，这里只是落盘环节，不是独立入口。',
+      reason: '自动编辑使用共享防抖队列；正式画布操作通过 confirmCanvasPersistence 等待同一存储确认。'
+        + '保存拒绝后的恢复动作 retry_canvas_project_save 复用该屏障，不重放节点/连线修改。',
     },
     setProjectCover: {
       kind: 'excluded',

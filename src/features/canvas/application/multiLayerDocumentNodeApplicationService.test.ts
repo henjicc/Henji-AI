@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
+import { CanvasPersistenceError } from './canvasPersistenceService'
 
 import {
   imageEditV3GroupRef,
@@ -184,6 +185,23 @@ describe('多图层文档节点 application 服务', () => {
     })).rejects.toMatchObject({ code: 'OPERATION_FAILED', recoverable: true })
     expect(documentPort.rollbackMaterialization).toHaveBeenCalledOnce()
     expect(documentPort.finalizeMaterialization).not.toHaveBeenCalled()
+  })
+
+  it('节点已经接管但保存拒绝时，不回滚其预览也不释放独立导出资源', async () => {
+    const { service, documentPort, canvasPort } = setup()
+    const failure = new CanvasPersistenceError('project-a', new Error('readonly'))
+    vi.mocked(canvasPort.commitMaterializedProjection).mockRejectedValueOnce(failure)
+    await expect(service.saveMaterializedProjection({
+      projectId: 'project-a', nodeId: 'node-a', data: nodeData(), session: flushedSession,
+    })).rejects.toBe(failure)
+    expect(documentPort.rollbackMaterialization).not.toHaveBeenCalled()
+    expect(documentPort.finalizeMaterialization).not.toHaveBeenCalled()
+    vi.mocked(canvasPort.createExportedImageNode).mockRejectedValueOnce(failure)
+    await expect(service.exportTarget({
+      projectId: 'project-a', sourceNodeId: 'node-a', data: nodeData(),
+      target: { kind: 'raster-layer', ref: imageEditV3LayerRef('document-a', 'layer-a') },
+    })).rejects.toBe(failure)
+    expect(documentPort.releaseExportRaster).not.toHaveBeenCalled()
   })
 
   it('节点已接管投影后旧预览释放失败只登记清理候选，不回滚成功状态', async () => {

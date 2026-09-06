@@ -1,3 +1,4 @@
+import { reportCanvasOperationFailure } from '@/features/canvas/application/canvasOperationFeedback';
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Plus, RotateCcw, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
@@ -111,7 +112,7 @@ export const AssetGroupFocusOverlay = memo(({ groupId, onClose }: AssetGroupFocu
 
   const requestRemove = (memberId: string): void => {
     if (skipRemoveConfirmation) {
-      removeAssetGroupMember({ groupId: node.id, memberId });
+      void removeAssetGroupMember({ groupId: node.id, memberId }).catch(reportCanvasOperationFailure);
       if (viewerMemberId === memberId) setViewerMemberId(null);
       return;
     }
@@ -120,7 +121,7 @@ export const AssetGroupFocusOverlay = memo(({ groupId, onClose }: AssetGroupFocu
   };
   const confirmRemove = (): void => {
     if (!removeCandidateId) return;
-    removeAssetGroupMember({ groupId: node.id, memberId: removeCandidateId });
+    void removeAssetGroupMember({ groupId: node.id, memberId: removeCandidateId }).catch(reportCanvasOperationFailure);
     if (viewerMemberId === removeCandidateId) setViewerMemberId(null);
     if (skipCheckedInDialog) setSkipRemoveConfirmation(true);
     setRemoveCandidateId(null);
@@ -151,7 +152,7 @@ export const AssetGroupFocusOverlay = memo(({ groupId, onClose }: AssetGroupFocu
         dragDepthRef.current = Math.max(0, dragDepthRef.current - 1);
         if (dragDepthRef.current === 0) setIsDraggingMedia(false);
       }}
-      onDrop={(event) => {
+      onDrop={async (event) => {
         if (!isSupportedDrag(event)) return;
         event.preventDefault();
         dragDepthRef.current = 0;
@@ -159,7 +160,7 @@ export const AssetGroupFocusOverlay = memo(({ groupId, onClose }: AssetGroupFocu
         const asset = readAssetDragPayload(event.dataTransfer);
         if (asset) {
           try {
-            addAssetToAssetGroup({ groupId: node.id, asset });
+            await addAssetToAssetGroup({ groupId: node.id, asset });
             canvasEventBus.publish('canvas/toast', {
               message: t('canvas.assetGroup.manager.added', { count: 1 }),
               type: 'success',
@@ -258,8 +259,8 @@ export const AssetGroupFocusOverlay = memo(({ groupId, onClose }: AssetGroupFocu
                     fromIndex,
                     toIndex,
                   ),
-                })}
-                onSetCover={(memberId) => updateAssetGroup({ groupId: node.id, coverMemberId: memberId })}
+                }).catch(reportCanvasOperationFailure)}
+                onSetCover={(memberId) => updateAssetGroup({ groupId: node.id, coverMemberId: memberId }).catch(reportCanvasOperationFailure)}
                 onRemoveRequest={requestRemove}
                 onOpenViewer={setViewerMemberId}
               />
@@ -291,7 +292,7 @@ export const AssetGroupFocusOverlay = memo(({ groupId, onClose }: AssetGroupFocu
                     variant="plain"
                     size="sm"
                     className="h-7 gap-1 px-2"
-                    onClick={() => restoreAssetGroupBinding({ groupId: node.id, bindingId: binding.id })}
+                    onClick={() => restoreAssetGroupBinding({ groupId: node.id, bindingId: binding.id }).catch(reportCanvasOperationFailure)}
                   >
                     <RotateCcw className="h-3 w-3" />
                     {t('canvas.assetGroup.manager.restore')}

@@ -7,6 +7,7 @@ import {
 } from '../domain/generationOutputs';
 import { validateLayerStackDocument, type LayerStackDocumentV1 } from '../domain/layerStack';
 import { runCanvasTransaction } from './canvasBatchService';
+import { runCanvasMutationStage, retainsCanvasMutation } from './canvasPersistenceService';
 import {
   GenerationOutputApplicationError,
   type CommitCanvasGenerationOutputsInput,
@@ -81,7 +82,7 @@ export async function commitPreparedLayerStack(input: CommitCanvasGenerationOutp
       throw new GenerationOutputApplicationError('CONFLICT', '图层栈提交已取消');
     }
     const committedProjection = projection;
-    const transaction = await runCanvasTransaction(input.projectId, 1, async () => {
+    const transaction = await runCanvasTransaction(input.projectId, 1, async (options) => runCanvasMutationStage(options, () => {
       const latest = useCanvasStore.getState();
       const latestPlaceholder = latest.nodes.find((node) => node.id === placeholderNodeId);
       if (!latestPlaceholder || latestPlaceholder.type !== input.resultNodeType) {
@@ -116,7 +117,7 @@ export async function commitPreparedLayerStack(input: CommitCanvasGenerationOutp
         resultNodeIds: [placeholderNodeId],
         groupNodeId: null,
       }];
-    }, { completionId: input.completionId, strategy: 'layer-stack' });
+    }), { completionId: input.completionId, strategy: 'layer-stack' });
     if (transaction.appliedOperations.length !== 1) {
       throw new GenerationOutputApplicationError('CONFLICT', '图层栈事务未完整应用');
     }
@@ -140,6 +141,7 @@ export async function commitPreparedLayerStack(input: CommitCanvasGenerationOutp
       idempotent: false,
     };
   } catch (error) {
+    if (retainsCanvasMutation(error)) ownershipTransferred = true;
     logger.error('图层栈原子落图失败', error, {
       event: 'canvas.generation_output.layer_stack.commit.failed',
       projectId: input.projectId,

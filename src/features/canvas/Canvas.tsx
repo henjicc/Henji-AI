@@ -1,3 +1,4 @@
+import { reportCanvasOperationFailure } from '@/features/canvas/application/canvasOperationFeedback';
 import {
   type MouseEvent as ReactMouseEvent,
   useCallback,
@@ -228,7 +229,7 @@ export function Canvas() {
       event.preventDefault();
       event.stopPropagation();
       const bundle = edge.data?.assetGroupBundle;
-      if (bundle) disconnectAssetGroup({ groupId: bundle.groupId, targetNodeId: bundle.targetNodeId });
+      if (bundle) void disconnectAssetGroup({ groupId: bundle.groupId, targetNodeId: bundle.targetNodeId }).catch(reportCanvasOperationFailure);
       else deleteEdge(edge.id);
       scheduleCanvasPersist(0);
     },

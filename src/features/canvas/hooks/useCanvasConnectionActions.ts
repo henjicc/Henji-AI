@@ -24,6 +24,8 @@ import { isConnectionCompatible } from '@/features/canvas/domain/nodeRegistry';
 import { isParamPortId } from '@/features/canvas/domain/socketTypes';
 import { canNodeBeManualConnectionSource } from '@/features/canvas/canvasUtils';
 import { useCanvasStore } from '@/stores/canvasStore';
+import { useProjectStore } from '@/stores/projectStore';
+import { confirmCanvasPersistence } from '../application/canvasPersistenceService';
 
 type Toast = (message: string, type?: 'success' | 'error') => void;
 
@@ -48,9 +50,9 @@ function readCanvasGraph(): { nodes: CanvasNode[]; edges: CanvasEdge[] } {
 export function useCanvasConnectionActions(input: UseCanvasConnectionActionsInput) {
   const { connectNodes, connectMany, schedulePersist, showToast, t } = input;
 
-  const bindGroup = useCallback((groupId: string, targetNodeId: string) => {
+  const bindGroup = useCallback(async (groupId: string, targetNodeId: string) => {
     try {
-      const result = bindAssetGroup({ groupId, targetNodeId });
+      const result = await bindAssetGroup({ groupId, targetNodeId });
       showToast(t('canvas.assetGroup.bindingSummary', result), 'success');
     } catch (error) {
       showToast(error instanceof Error ? error.message : t('canvas.connection.typeMismatch'));
@@ -134,12 +136,19 @@ export function useCanvasConnectionActions(input: UseCanvasConnectionActionsInpu
     schedulePersist(0);
   }, [bindGroup, connectMany, connectNodes, schedulePersist, showToast, t]);
 
-  const handleBatchConnect = useCallback((sourceNodeIds: string[], targetNodeId: string) => {
+  const handleBatchConnect = useCallback(async (sourceNodeIds: string[], targetNodeId: string) => {
     const { nodes, edges } = readCanvasGraph();
     const plan = planMediaConnections({ sourceNodeIds, targetNodeId, nodes, edges });
     if (plan.connections.length > 0) {
+      const projectId = useProjectStore.getState().currentProjectId;
+      if (!projectId) return;
       connectMany(plan.connections);
-      schedulePersist(0);
+      try {
+        await confirmCanvasPersistence(projectId);
+      } catch (error) {
+        showToast(error instanceof Error ? error.message : t('canvas.assetGroup.createFailed'), 'error');
+        return;
+      }
     }
     if (plan.connections.length === 0 && plan.skipped.length === 0) return;
     const reasonCounts = new Map<string, number>();
@@ -154,11 +163,11 @@ export function useCanvasConnectionActions(input: UseCanvasConnectionActionsInpu
       skipped: plan.skipped.length,
     });
     showToast(reasons ? `${summary}（${reasons}）` : summary, plan.connections.length > 0 ? 'success' : 'error');
-  }, [connectMany, schedulePersist, showToast, t]);
+  }, [connectMany, showToast, t]);
 
-  const createGroup = useCallback((memberIds: string[]) => {
+  const createGroup = useCallback(async (memberIds: string[]) => {
     try {
-      const result = createAssetGroup({ memberIds });
+      const result = await createAssetGroup({ memberIds });
       const message = result.disconnectedConnectionCount > 0
         ? t('canvas.assetGroup.createdDisconnected', {
           count: result.accepted,
@@ -176,9 +185,9 @@ export function useCanvasConnectionActions(input: UseCanvasConnectionActionsInpu
     }
   }, [showToast, t]);
 
-  const addToGroup = useCallback((groupId: string, memberIds: string[]) => {
+  const addToGroup = useCallback(async (groupId: string, memberIds: string[]) => {
     try {
-      const result = addAssetGroupMembers({ groupId, memberIds });
+      const result = await addAssetGroupMembers({ groupId, memberIds });
       showToast(t('canvas.assetGroup.memberCount', { count: result.memberCount }), 'success');
     } catch (error) {
       showToast(error instanceof Error ? error.message : t('canvas.assetGroup.addFailed'));

@@ -19,7 +19,6 @@ import {
 import {
   addControlledCanvasNode,
   CanvasApplicationError,
-  persistCanvasState,
   rememberCanvasUndo,
   requireCurrentCanvasProject,
 } from './canvasApplicationService'
@@ -30,6 +29,7 @@ import {
   dissolveAssetGroup,
   updateAssetGroup,
 } from './assetGroupApplicationService'
+import { assertCanvasCommitContext, confirmCanvasPersistence, CanvasPersistenceError, type CanvasCommitOptions } from './canvasPersistenceService'
 const logger = createLogger('features.canvas.canvas_mutation')
 
 interface CanvasNodePatch {
@@ -61,21 +61,23 @@ function requireNode(projectId: string, nodeId: string): CanvasNode {
 }
 
 /** 画布节点数据/位置写入的共享内核；专用能力与通用属性动词都必须委托这里。 */
-function applyCanvasNodePatches(projectId: string, patches: CanvasNodePatch[]): void {
+async function applyCanvasNodePatches(projectId: string, patches: CanvasNodePatch[], options: CanvasCommitOptions = {}): Promise<void> {
   requireCurrentCanvasProject(projectId)
+  assertCanvasCommitContext(projectId, options)
   for (const patch of patches) requireNode(projectId, patch.nodeId)
   const canvas = useCanvasStore.getState()
   for (const patch of patches) {
     if (patch.data && Object.keys(patch.data).length > 0) canvas.updateNodeData(patch.nodeId, patch.data)
     if (patch.position) canvas.updateNodePosition(patch.nodeId, patch.position)
   }
-  persistCanvasState()
+  await confirmCanvasPersistence(projectId, options)
 }
 
-export function applyCanvasNodePropertyPatches(
+export async function applyCanvasNodePropertyPatches(
   projectId: string,
   patches: CanvasNodePropertyPatch[],
-): void {
+  options: CanvasCommitOptions = {},
+): Promise<void> {
   const normalized = patches.map((patch) => {
     if (patch.displayName !== undefined && !patch.displayName.trim()) {
       throw new CanvasApplicationError('INVALID_INPUT', '画布节点标题不能为空')
@@ -91,16 +93,17 @@ export function applyCanvasNodePropertyPatches(
       ...(patch.position ? { position: patch.position } : {}),
     }
   })
-  applyCanvasNodePatches(projectId, normalized)
+  await applyCanvasNodePatches(projectId, normalized, { ...options, deferCommit: true })
   for (const patch of patches) {
     if (patch.assetGroupMemberOrder === undefined && patch.assetGroupCoverMemberId === undefined) continue
-    updateAssetGroup({
+    await updateAssetGroup({
       projectId,
       groupId: patch.nodeId,
       memberOrder: patch.assetGroupMemberOrder,
       coverMemberId: patch.assetGroupCoverMemberId,
-    })
+    }, { ...options, deferCommit: true })
   }
+  await confirmCanvasPersistence(projectId, options)
 }
 
 /**
@@ -113,12 +116,14 @@ export function applyCanvasNodePropertyPatches(
  * 这里的"整批格子各自要什么 order"对不上）：`reorderStoryboardFrame` 内部本质也是把移动后每张
  * 格子的 `order` 重新赋值为数组下标，直接对每张格子写 `order` 字段是同一件事，还更直接。
  */
-export function applyStoryboardFramePatches(
+export async function applyStoryboardFramePatches(
   projectId: string,
   nodeId: string,
   frames: CanvasStoryboardFramePatch[],
-): void {
+  options: CanvasCommitOptions = {},
+): Promise<void> {
   requireCurrentCanvasProject(projectId)
+  assertCanvasCommitContext(projectId, options)
   const node = useCanvasStore.getState().nodes.find((item) => item.id === nodeId)
   if (!node) throw new CanvasApplicationError('NOT_FOUND', '画布节点不存在', true, { nodeId })
   if (!isStoryboardSplitNode(node)) {
@@ -136,7 +141,7 @@ export function applyStoryboardFramePatches(
     if (frame.order !== undefined) patch.order = frame.order
     if (Object.keys(patch).length > 0) canvas.updateStoryboardFrame(nodeId, frame.id, patch)
   }
-  persistCanvasState()
+  await confirmCanvasPersistence(projectId, options)
 }
 
 export async function commitCanvasNodeDuplication<T>(input: {
@@ -166,6 +171,7 @@ export async function commitCanvasNodeDuplication<T>(input: {
       aspectRatio: projection.aspectRatio,
     })
   } catch (error) {
+    if (error instanceof CanvasPersistenceError) throw error
     await documentAdapter.rollbackCreatedMultiLayerDocument(projection).catch((rollbackError) => {
       logger.error('复制节点失败后的文档补偿失败', rollbackError, {
         event: 'canvas.multi_layer_document.fork.rollback.failed',
@@ -185,7 +191,7 @@ export async function duplicateCanvasNode(input: {
   projectId: string
   nodeId: string
   placement: CanvasNodePlacement
-}): Promise<Record<string, unknown>> {
+}, options: CanvasCommitOptions = {}): Promise<Record<string, unknown>> {
   const node = requireNode(input.projectId, input.nodeId)
   const editableDocument = isEditableLayerStackResultNode(node)
   const data = editableDocument
@@ -198,14 +204,14 @@ export async function duplicateCanvasNode(input: {
     projectId: input.projectId,
     sourceNodeId: node.id,
     data,
-    createNode: (forkedData) => {
+    createNode: async (forkedData) => {
       if (!editableDocument) {
         return addControlledCanvasNode({
           projectId: input.projectId,
           nodeType: node.type,
           placement: input.placement,
           data: forkedData,
-        })
+        }, options)
       }
       const canvas = useCanvasStore.getState()
       const before = {
@@ -214,17 +220,18 @@ export async function duplicateCanvasNode(input: {
         history: canvas.history,
       }
       try {
-        const created = addControlledCanvasNode({
+        const created = await addControlledCanvasNode({
           projectId: input.projectId,
           nodeType: node.type,
           placement: input.placement,
-        }, { deferCommit: true })
+        }, { ...options, deferCommit: true })
         const nodeId = String(created.nodeId)
         useCanvasStore.getState().updateNodeData(nodeId, forkedData, { skipHistory: true })
         const undoRef = rememberCanvasUndo(input.projectId, 'duplicate_node')
-        persistCanvasState()
+        await confirmCanvasPersistence(input.projectId, options)
         return { ...created, undoRef }
       } catch (error) {
+        if (error instanceof CanvasPersistenceError) throw error
         useCanvasStore.getState().setCanvasData(before.nodes, before.edges, before.history)
         throw error
       }
@@ -233,11 +240,11 @@ export async function duplicateCanvasNode(input: {
   return { ...result, duplicatedFromNodeId: node.id }
 }
 
-export function updateCanvasNode(input: {
+export async function updateCanvasNode(input: {
   projectId: string
   nodeId: string
   data: Record<string, unknown>
-}): Record<string, unknown> {
+}, options: CanvasCommitOptions = {}): Promise<Record<string, unknown>> {
   const node = requireNode(input.projectId, input.nodeId)
   const generationUi = node.data.generationUi
   const isLockedModel = Boolean(
@@ -266,7 +273,7 @@ export function updateCanvasNode(input: {
   )
   const canvas = useCanvasStore.getState()
   const beforeDepth = canvas.history.past.length
-  applyCanvasNodePatches(input.projectId, [{ nodeId: node.id, data: safeData }])
+  await applyCanvasNodePatches(input.projectId, [{ nodeId: node.id, data: safeData }], options)
   if (useCanvasStore.getState().history.past.length === beforeDepth) {
     /*
      * 不能只说"没有变化"——调用方无从知道是**值本来就一样**还是**键被悄悄丢掉了**。
@@ -296,20 +303,21 @@ export function updateCanvasNode(input: {
  * 专用编辑器确认时的受控写入入口。它使用节点内部白名单，
  * 不会为了 UI 保存而放宽助手的公开 data schema。
  */
-export function updateCanvasNodeFromSpecialEditor(input: {
+export async function updateCanvasNodeFromSpecialEditor(input: {
   projectId: string
   nodeId: string
   data: Record<string, unknown>
-}): Record<string, unknown> {
+}, options: CanvasCommitOptions = {}): Promise<Record<string, unknown>> {
   const node = requireNode(input.projectId, input.nodeId)
   const safeData = parseCanvasSpecialEditorData(node.type, input.data)
-  applyCanvasNodePatches(input.projectId, [{ nodeId: node.id, data: safeData }])
+  await applyCanvasNodePatches(input.projectId, [{ nodeId: node.id, data: safeData }], options)
   const undoRef = rememberCanvasUndo(input.projectId, 'update_node')
   return { projectId: input.projectId, nodeId: node.id, updatedKeys: Object.keys(safeData), undoRef }
 }
 
-export function deleteCanvasNodes(projectId: string, nodeIds: string[]): Record<string, unknown> {
+export async function deleteCanvasNodes(projectId: string, nodeIds: string[], options: CanvasCommitOptions = {}): Promise<Record<string, unknown>> {
   requireCurrentCanvasProject(projectId)
+  assertCanvasCommitContext(projectId, options)
   const beforeNodes = useCanvasStore.getState().nodes
   const existing = new Set(beforeNodes.map((node) => node.id))
   const unique = [...new Set(nodeIds)].filter((nodeId) => existing.has(nodeId))
@@ -320,7 +328,7 @@ export function deleteCanvasNodes(projectId: string, nodeIds: string[]): Record<
     .filter(isEditableLayerStackResultNode)
     .filter((node) => !remainingIds.has(node.id))
   const undoRef = rememberCanvasUndo(projectId, 'delete_nodes')
-  persistCanvasState()
+  await confirmCanvasPersistence(projectId, options)
   void import('./multiLayerDocumentNodeGenerationAdapter').then(({ markMultiLayerDocumentReleaseCandidate }) => (
     Promise.all(removedDocumentNodes.map((node) => (
       markMultiLayerDocumentReleaseCandidate({ nodeId: node.id, data: node.data })
@@ -342,8 +350,9 @@ export function deleteCanvasNodes(projectId: string, nodeIds: string[]): Record<
  * 多绕两步，不如照 `undo_canvas_change`/`group_canvas_nodes` 的先例：工程级整体状态操作
  * 走专用能力，不勉强表达成集合写入。
  */
-export function clearCanvasProject(projectId: string): Record<string, unknown> {
+export async function clearCanvasProject(projectId: string, options: CanvasCommitOptions = {}): Promise<Record<string, unknown>> {
   requireCurrentCanvasProject(projectId)
+  assertCanvasCommitContext(projectId, options)
   const before = useCanvasStore.getState()
   const clearedNodeCount = before.nodes.length
   const clearedEdgeCount = before.edges.length
@@ -352,7 +361,7 @@ export function clearCanvasProject(projectId: string): Record<string, unknown> {
   }
   useCanvasStore.getState().clearCanvas()
   const undoRef = rememberCanvasUndo(projectId, 'clear_canvas')
-  persistCanvasState()
+  await confirmCanvasPersistence(projectId, options)
   const documentNodes = before.nodes.filter(isEditableLayerStackResultNode)
   void import('./multiLayerDocumentNodeGenerationAdapter').then(({ markMultiLayerDocumentReleaseCandidate }) => (
     Promise.all(documentNodes.map((node) => (
@@ -375,21 +384,22 @@ export function selectCanvasNode(projectId: string, nodeId: string | null): Reco
   return { projectId, selectedNodeId: nodeId }
 }
 
-export function groupCanvasNodes(
+export async function groupCanvasNodes(
   projectId: string,
   nodeIds: string[],
   groupKind: 'spatial' | 'asset' = 'spatial',
-): Record<string, unknown> {
+  options: CanvasCommitOptions = {}): Promise<Record<string, unknown>> {
   requireCurrentCanvasProject(projectId)
+  assertCanvasCommitContext(projectId, options)
   if (groupKind === 'asset') {
-    const result = createAssetGroup({ projectId, memberIds: nodeIds })
+    const result = await createAssetGroup({ projectId, memberIds: nodeIds }, options)
     const undoRef = rememberCanvasUndo(projectId, 'group_asset_nodes')
     return { projectId, groupNodeId: result.groupId, groupKind, accepted: result.accepted, undoRef }
   }
   const groupNodeId = useCanvasStore.getState().groupNodes(nodeIds)
   if (!groupNodeId) throw new CanvasApplicationError('INVALID_INPUT', '至少需要两个存在且不相互嵌套的节点才能分组', true)
   const undoRef = rememberCanvasUndo(projectId, 'group_nodes')
-  persistCanvasState()
+  await confirmCanvasPersistence(projectId, options)
   return { projectId, groupNodeId, groupKind, undoRef }
 }
 
@@ -399,11 +409,12 @@ export function groupCanvasNodes(
  * 子树），而解散分组要求子节点**保留**、只把 group 包装节点去掉。两种语义用同一个入口表达
  * 会产生歧义，所以解散走独立的 `store.ungroupNode`，未重写它的释放/绝对坐标换算逻辑。
  */
-export function ungroupCanvasNode(projectId: string, groupNodeId: string): Record<string, unknown> {
+export async function ungroupCanvasNode(projectId: string, groupNodeId: string, options: CanvasCommitOptions = {}): Promise<Record<string, unknown>> {
   requireCurrentCanvasProject(projectId)
+  assertCanvasCommitContext(projectId, options)
   const candidate = useCanvasStore.getState().nodes.find((node) => node.id === groupNodeId)
   if (candidate && isAssetGroupNode(candidate)) {
-    dissolveAssetGroup({ projectId, groupId: groupNodeId })
+    await dissolveAssetGroup({ projectId, groupId: groupNodeId }, options)
     const undoRef = rememberCanvasUndo(projectId, 'ungroup_asset_node')
     return { projectId, groupNodeId, undoRef }
   }
@@ -411,38 +422,41 @@ export function ungroupCanvasNode(projectId: string, groupNodeId: string): Recor
     throw new CanvasApplicationError('NOT_FOUND', '目标不是可解散的分组节点，或分组内没有子节点', true, { groupNodeId })
   }
   const undoRef = rememberCanvasUndo(projectId, 'ungroup_node')
-  persistCanvasState()
+  await confirmCanvasPersistence(projectId, options)
   return { projectId, groupNodeId, undoRef }
 }
 
-export function connectAssetGroupToTarget(
+export async function connectAssetGroupToTarget(
   projectId: string,
   groupNodeId: string,
   targetNodeId: string,
-): Record<string, unknown> {
+  options: CanvasCommitOptions = {}): Promise<Record<string, unknown>> {
   requireCurrentCanvasProject(projectId)
-  const status = bindAssetGroup({ projectId, groupId: groupNodeId, targetNodeId })
+  assertCanvasCommitContext(projectId, options)
+  const status = await bindAssetGroup({ projectId, groupId: groupNodeId, targetNodeId }, options)
   const undoRef = rememberCanvasUndo(projectId, 'connect_asset_group')
   return { projectId, groupNodeId, targetNodeId, ...status, undoRef }
 }
 
-export function disconnectAssetGroupFromTarget(
+export async function disconnectAssetGroupFromTarget(
   projectId: string,
   groupNodeId: string,
   targetNodeId: string,
-): Record<string, unknown> {
+  options: CanvasCommitOptions = {}): Promise<Record<string, unknown>> {
   requireCurrentCanvasProject(projectId)
-  disconnectAssetGroup({ projectId, groupId: groupNodeId, targetNodeId })
+  assertCanvasCommitContext(projectId, options)
+  await disconnectAssetGroup({ projectId, groupId: groupNodeId, targetNodeId }, options)
   const undoRef = rememberCanvasUndo(projectId, 'disconnect_asset_group')
   return { projectId, groupNodeId, targetNodeId, undoRef }
 }
 
-export function disconnectCanvasEdge(projectId: string, edgeId: string): Record<string, unknown> {
+export async function disconnectCanvasEdge(projectId: string, edgeId: string, options: CanvasCommitOptions = {}): Promise<Record<string, unknown>> {
   requireCurrentCanvasProject(projectId)
+  assertCanvasCommitContext(projectId, options)
   const edge = useCanvasStore.getState().edges.find((item) => item.id === edgeId)
   if (!edge) throw new CanvasApplicationError('NOT_FOUND', '画布连接不存在', true, { edgeId })
   useCanvasStore.getState().deleteEdge(edge.id)
   const undoRef = rememberCanvasUndo(projectId, 'disconnect_edge')
-  persistCanvasState()
+  await confirmCanvasPersistence(projectId, options)
   return { projectId, edgeId: edge.id, undoRef }
 }

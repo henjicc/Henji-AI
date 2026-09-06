@@ -62,22 +62,22 @@ describe('canvas application service', () => {
     expect(isCanvasProjectContextCurrent(projectId, null)).toBe(false)
   })
 
-  it('按目录 schema 添加、确定性布局、合法连接并逐步撤销', () => {
-    const upload = addCanvasNode({
+  it('按目录 schema 添加、确定性布局、合法连接并逐步撤销', async () => {
+    const upload = await addCanvasNode({
       projectId,
       nodeType: CANVAS_NODE_TYPES.upload,
       placement: { mode: 'viewport_center' },
       data: { displayName: '输入图' },
     })
     const uploadId = String(upload.nodeId)
-    const generation = addCanvasNode({
+    const generation = await addCanvasNode({
       projectId,
       nodeType: CANVAS_NODE_TYPES.imageEdit,
       placement: { mode: 'right_of_node', anchorNodeId: uploadId },
       data: { prompt: '一只纸雕风格的猫' },
     })
     const generationId = String(generation.nodeId)
-    const connection = connectCanvasNodes({
+    const connection = await connectCanvasNodes({
       projectId,
       sourceNodeId: uploadId,
       targetNodeId: generationId,
@@ -97,16 +97,16 @@ describe('canvas application service', () => {
       useCanvasStore.getState().nodes[0].position.x
     )
 
-    expect(undoCanvasChange(projectId, String(connection.undoRef))).toMatchObject({ status: 'undone' })
+    expect(await undoCanvasChange(projectId, String(connection.undoRef))).toMatchObject({ status: 'undone' })
     expect(useCanvasStore.getState().edges).toHaveLength(0)
-    undoCanvasChange(projectId, String(generation.undoRef))
+    await undoCanvasChange(projectId, String(generation.undoRef))
     expect(useCanvasStore.getState().nodes).toHaveLength(1)
-    undoCanvasChange(projectId, String(upload.undoRef))
+    await undoCanvasChange(projectId, String(upload.undoRef))
     expect(useCanvasStore.getState().nodes).toHaveLength(0)
   })
 
-  it('把正式素材数据落成可读取的媒体源节点', () => {
-    const created = addTrustedMediaCanvasNode({
+  it('把正式素材数据落成可读取的媒体源节点', async () => {
+    const created = await addTrustedMediaCanvasNode({
       projectId,
       nodeType: CANVAS_NODE_TYPES.upload,
       placement: { mode: 'viewport_center' },
@@ -126,9 +126,9 @@ describe('canvas application service', () => {
       })
   })
 
-  it('绝对坐标布局不依赖当前视口，可精确复现脚本位置', () => {
+  it('绝对坐标布局不依赖当前视口，可精确复现脚本位置', async () => {
     useCanvasStore.setState({ currentViewport: { x: 900, y: -400, zoom: 2 } })
-    const created = addCanvasNode({
+    const created = await addCanvasNode({
       projectId,
       nodeType: CANVAS_NODE_TYPES.stringSource,
       placement: { mode: 'absolute', x: 320, y: 180 },
@@ -138,21 +138,21 @@ describe('canvas application service', () => {
       .toEqual({ x: 320, y: 180 })
   })
 
-  it('按明确参数端口连接文本值节点与图片生成节点', () => {
-    const prompt = addCanvasNode({
+  it('按明确参数端口连接文本值节点与图片生成节点', async () => {
+    const prompt = await addCanvasNode({
       projectId,
       nodeType: CANVAS_NODE_TYPES.stringSource,
       placement: { mode: 'viewport_center' },
       data: { displayName: '提示词', value: '一只纸雕风格的猫' },
     })
-    const generation = addCanvasNode({
+    const generation = await addCanvasNode({
       projectId,
       nodeType: CANVAS_NODE_TYPES.imageEdit,
       placement: { mode: 'right_of_node', anchorNodeId: String(prompt.nodeId) },
       data: { prompt: '' },
     })
 
-    const connection = connectCanvasNodes({
+    const connection = await connectCanvasNodes({
       projectId,
       sourceNodeId: String(prompt.nodeId),
       targetNodeId: String(generation.nodeId),
@@ -169,20 +169,20 @@ describe('canvas application service', () => {
     }))
   })
 
-  it('文本展示节点拒绝新增第二条上游连接', () => {
-    const firstSource = addCanvasNode({
+  it('文本展示节点拒绝新增第二条上游连接', async () => {
+    const firstSource = await addCanvasNode({
       projectId,
       nodeType: CANVAS_NODE_TYPES.textProcessing,
       placement: { mode: 'absolute', x: 0, y: 0 },
       data: { prompt: '第一个输入' },
     })
-    const secondSource = addCanvasNode({
+    const secondSource = await addCanvasNode({
       projectId,
       nodeType: CANVAS_NODE_TYPES.textProcessing,
       placement: { mode: 'absolute', x: 0, y: 160 },
       data: { prompt: '第二个输入' },
     })
-    const display = addCanvasNode({
+    const display = await addCanvasNode({
       projectId,
       nodeType: CANVAS_NODE_TYPES.textAnnotation,
       placement: { mode: 'absolute', x: 360, y: 0 },
@@ -196,28 +196,28 @@ describe('canvas application service', () => {
       targetHandle: 'target',
     })
 
-    expect(() => connectCanvasNodes({
+    await expect(connectCanvasNodes({
       projectId,
       sourceNodeId: String(secondSource.nodeId),
       targetNodeId: String(display.nodeId),
-    })).toThrow('只能连接一个上游输入')
+    })).rejects.toThrow('只能连接一个上游输入')
     expect(useCanvasStore.getState().edges).toHaveLength(1)
   })
 
-  it('开启设置后原子插入一个共享文本展示节点并复用于多个目标', () => {
-    const processing = addCanvasNode({
+  it('开启设置后原子插入一个共享文本展示节点并复用于多个目标', async () => {
+    const processing = await addCanvasNode({
       projectId,
       nodeType: CANVAS_NODE_TYPES.textProcessing,
       placement: { mode: 'viewport_center' },
       data: { prompt: '优化提示词' },
     })
-    const firstTarget = addCanvasNode({
+    const firstTarget = await addCanvasNode({
       projectId,
       nodeType: CANVAS_NODE_TYPES.imageEdit,
       placement: { mode: 'right_of_node', anchorNodeId: String(processing.nodeId) },
       data: { prompt: '' },
     })
-    const secondTarget = addCanvasNode({
+    const secondTarget = await addCanvasNode({
       projectId,
       nodeType: CANVAS_NODE_TYPES.videoGen,
       placement: { mode: 'right_of_node', anchorNodeId: String(firstTarget.nodeId) },
@@ -225,13 +225,13 @@ describe('canvas application service', () => {
     })
     useSettingsStore.getState().setAutoInsertTextDisplayNode(true)
 
-    const first = connectCanvasNodes({
+    const first = await connectCanvasNodes({
       projectId,
       sourceNodeId: String(processing.nodeId),
       targetNodeId: String(firstTarget.nodeId),
       targetHandle: 'param:__prompt',
     })
-    const second = connectCanvasNodes({
+    const second = await connectCanvasNodes({
       projectId,
       sourceNodeId: String(processing.nodeId),
       targetNodeId: String(secondTarget.nodeId),
@@ -255,14 +255,14 @@ describe('canvas application service', () => {
     ]))
   })
 
-  it('自动插入节点与两条连线可用一次撤销完整恢复', () => {
-    const processing = addCanvasNode({
+  it('自动插入节点与两条连线可用一次撤销完整恢复', async () => {
+    const processing = await addCanvasNode({
       projectId,
       nodeType: CANVAS_NODE_TYPES.textProcessing,
       placement: { mode: 'viewport_center' },
       data: { prompt: '优化提示词' },
     })
-    const target = addCanvasNode({
+    const target = await addCanvasNode({
       projectId,
       nodeType: CANVAS_NODE_TYPES.imageEdit,
       placement: { mode: 'right_of_node', anchorNodeId: String(processing.nodeId) },
@@ -270,7 +270,7 @@ describe('canvas application service', () => {
     })
     useSettingsStore.getState().setAutoInsertTextDisplayNode(true)
 
-    const connection = connectCanvasNodes({
+    const connection = await connectCanvasNodes({
       projectId,
       sourceNodeId: String(processing.nodeId),
       targetNodeId: String(target.nodeId),
@@ -279,18 +279,18 @@ describe('canvas application service', () => {
     expect(useCanvasStore.getState().nodes).toHaveLength(3)
     expect(useCanvasStore.getState().edges).toHaveLength(2)
 
-    expect(undoCanvasChange(projectId, String(connection.undoRef))).toMatchObject({ status: 'undone' })
+    expect(await undoCanvasChange(projectId, String(connection.undoRef))).toMatchObject({ status: 'undone' })
     expect(useCanvasStore.getState().nodes).toHaveLength(2)
     expect(useCanvasStore.getState().edges).toHaveLength(0)
   })
 
-  it('自动插入连接被循环检测拒绝时不留下展示节点或悬空边', () => {
-    const processing = addCanvasNode({
+  it('自动插入连接被循环检测拒绝时不留下展示节点或悬空边', async () => {
+    const processing = await addCanvasNode({
       projectId,
       nodeType: CANVAS_NODE_TYPES.textProcessing,
       placement: { mode: 'viewport_center' },
     })
-    const target = addCanvasNode({
+    const target = await addCanvasNode({
       projectId,
       nodeType: CANVAS_NODE_TYPES.imageEdit,
       placement: { mode: 'right_of_node', anchorNodeId: String(processing.nodeId) },
@@ -304,12 +304,12 @@ describe('canvas application service', () => {
     const before = useCanvasStore.getState()
     useSettingsStore.getState().setAutoInsertTextDisplayNode(true)
 
-    expect(() => connectCanvasNodes({
+    await expect(connectCanvasNodes({
       projectId,
       sourceNodeId: String(processing.nodeId),
       targetNodeId: String(target.nodeId),
       targetHandle: 'param:__prompt',
-    })).toThrow('循环依赖')
+    })).rejects.toThrow('循环依赖')
     expect(useCanvasStore.getState().nodes).toHaveLength(before.nodes.length)
     expect(useCanvasStore.getState().edges).toHaveLength(before.edges.length)
     expect(useCanvasStore.getState().nodes.some(
@@ -317,8 +317,8 @@ describe('canvas application service', () => {
     )).toBe(false)
   })
 
-  it('文本处理无输出时只原子创建一次文本展示节点', () => {
-    const processing = addCanvasNode({
+  it('文本处理无输出时只原子创建一次文本展示节点', async () => {
+    const processing = await addCanvasNode({
       projectId,
       nodeType: CANVAS_NODE_TYPES.textProcessing,
       placement: { mode: 'viewport_center' },
@@ -340,8 +340,8 @@ describe('canvas application service', () => {
     expect(useCanvasStore.getState().history.past).toHaveLength(beforeHistory + 1)
   })
 
-  it('撤销之后能重做，重做之后没有可重做操作时拒绝', () => {
-    const upload = addCanvasNode({
+  it('撤销之后能重做，重做之后没有可重做操作时拒绝', async () => {
+    const upload = await addCanvasNode({
       projectId,
       nodeType: CANVAS_NODE_TYPES.upload,
       placement: { mode: 'viewport_center' },
@@ -349,52 +349,52 @@ describe('canvas application service', () => {
     })
     expect(useCanvasStore.getState().nodes).toHaveLength(1)
 
-    undoCanvasChange(projectId, String(upload.undoRef))
+    await undoCanvasChange(projectId, String(upload.undoRef))
     expect(useCanvasStore.getState().nodes).toHaveLength(0)
 
-    expect(redoCanvasChange(projectId)).toMatchObject({ projectId, status: 'redone' })
+    expect(await redoCanvasChange(projectId)).toMatchObject({ projectId, status: 'redone' })
     expect(useCanvasStore.getState().nodes).toHaveLength(1)
 
-    expect(() => redoCanvasChange(projectId)).toThrow('当前画布没有可重做操作')
+    await expect(redoCanvasChange(projectId)).rejects.toThrow('当前画布没有可重做操作')
   })
 
-  it('撤销之后新的编辑会清空重做栈', () => {
-    const upload = addCanvasNode({
+  it('撤销之后新的编辑会清空重做栈', async () => {
+    const upload = await addCanvasNode({
       projectId,
       nodeType: CANVAS_NODE_TYPES.upload,
       placement: { mode: 'viewport_center' },
     })
-    undoCanvasChange(projectId, String(upload.undoRef))
-    addCanvasNode({
+    await undoCanvasChange(projectId, String(upload.undoRef))
+    await addCanvasNode({
       projectId,
       nodeType: CANVAS_NODE_TYPES.upload,
       placement: { mode: 'viewport_center' },
     })
 
-    expect(() => redoCanvasChange(projectId)).toThrow('当前画布没有可重做操作')
+    await expect(redoCanvasChange(projectId)).rejects.toThrow('当前画布没有可重做操作')
   })
 
-  it('拒绝目录外节点、任意媒体路径和非当前项目', () => {
-    expect(() => addCanvasNode({
+  it('拒绝目录外节点、任意媒体路径和非当前项目', async () => {
+    await expect(addCanvasNode({
       projectId,
       nodeType: 'unknownNode',
       placement: { mode: 'viewport_center' },
-    })).toThrow(/不支持节点类型/)
-    expect(() => addCanvasNode({
+    })).rejects.toThrow(/不支持节点类型/)
+    await expect(addCanvasNode({
       projectId,
       nodeType: CANVAS_NODE_TYPES.upload,
       placement: { mode: 'viewport_center' },
       data: { imageUrl: 'C:\\secret\\probe.png' },
-    })).toThrow()
-    expect(() => addCanvasNode({
+    })).rejects.toThrow()
+    await expect(addCanvasNode({
       projectId: 'other-project',
       nodeType: CANVAS_NODE_TYPES.upload,
       placement: { mode: 'viewport_center' },
-    })).toThrow(/项目与命令目标不一致/)
+    })).rejects.toThrow(/项目与命令目标不一致/)
   })
 
   it('通过画布注册的窄处理器定位节点', async () => {
-    const created = addCanvasNode({
+    const created = await addCanvasNode({
       projectId,
       nodeType: CANVAS_NODE_TYPES.upload,
       placement: { mode: 'viewport_center' },
@@ -411,3 +411,9 @@ describe('canvas application service', () => {
     dispose()
   })
 })
+
+// 本文件验证领域变换；仅替换最终存储边界，保存完成/拒绝由专门结果测试覆盖。
+vi.mock('@/commands/projectState', async (importOriginal) => ({
+  ...await importOriginal<typeof import('@/commands/projectState')>(),
+  upsertProjectRecord: vi.fn(async () => undefined),
+}))

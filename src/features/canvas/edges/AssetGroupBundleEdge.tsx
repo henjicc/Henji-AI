@@ -1,3 +1,4 @@
+import { reportCanvasOperationFailure } from '@/features/canvas/application/canvasOperationFeedback';
 import { memo, useMemo } from 'react';
 import { CircleX } from 'lucide-react';
 import {
@@ -61,7 +62,7 @@ export const AssetGroupBundleEdge = memo(function AssetGroupBundleEdge(props: Ed
               aria-label="解除素材组绑定"
               onClick={(event) => {
                 event.stopPropagation();
-                disconnectAssetGroup({ groupId: bundle.groupId, targetNodeId: bundle.targetNodeId });
+                void disconnectAssetGroup({ groupId: bundle.groupId, targetNodeId: bundle.targetNodeId }).catch(reportCanvasOperationFailure);
               }}
             >
               <CircleX className="h-4 w-4" />

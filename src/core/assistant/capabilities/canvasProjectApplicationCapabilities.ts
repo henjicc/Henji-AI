@@ -366,7 +366,32 @@ const getCanvasNode = defineApplicationCapability({
   summarize: (output) => `已读取画布节点 ${String(output.node.id ?? '')}。`,
 })
 
+const retryCanvasProjectSave = defineApplicationCapability({
+  id: 'retry_canvas_project_save', version: 1,
+  title: '重试保存画布项目',
+  description: '保存当前画布中已发生的修改并等待存储确认，不重复新增、删除、撤销或其他业务操作。',
+  domain: 'canvas', aliases: ['重试保存', '画布保存失败', 'retry canvas save'],
+  readOnly: false,
+  control: capabilityControl('execute', ['canvas.project'], { revisionScopes: ['canvas'] }),
+  risk: 'R1', dataClasses: ['C1'], permission: 'canvas:project_write',
+  idempotent: true, destructive: false, timeoutMs: 15_000,
+  supportsPreview: false, supportsUndo: false, requiredScopes: ['canvas'],
+  acceptsRefs: ['canvas.project'], producesRefs: ['canvas.project'],
+  successEvidence: ['当前工程快照已经由正式存储确认；节点、连线及撤销历史没有再次执行。'],
+  failureRecovery: ['保存失败时保留当前编辑，再次调用本能力；项目已切换时先检查并返回原项目。'],
+  inputSchema: z.object({ projectRef: z.object({ kind: z.literal('canvas.project'), id: z.string().min(1) }).strict() }).strict(),
+  outputSchema: capabilityOutputSchema({
+    ref: z.object({ kind: z.literal('canvas.project'), id: z.string().min(1) }).strict(),
+    status: z.literal('persisted'),
+  }),
+  concurrencyKey: 'canvas_project',
+  resolveConcurrencyKey: (input) => `canvas:${input.projectRef.id}`,
+  resolveTargetIds: (input) => projectTarget(input.projectRef.id),
+  summarize: () => '画布修改已保存，未重复执行原操作。',
+})
+
 export const CANVAS_PROJECT_APPLICATION_CAPABILITIES: ApplicationCapabilityDefinition[] = [
+  retryCanvasProjectSave,
   listCanvasProjects,
   openCanvasProject,
   searchCanvasNodeTypes,

@@ -132,7 +132,7 @@ describe('useCanvasConnectionActions.handleConnect', () => {
 
   it('从素材组端口拖出时转为整组绑定', () => {
     const bindAssetGroup = vi.spyOn(assetGroupApplicationService, 'bindAssetGroup')
-      .mockReturnValue({ connected: 2, pending: 1, unsupported: 0, excluded: 0 });
+      .mockResolvedValue({ connected: 2, pending: 1, unsupported: 0, excluded: 0 });
     const group: CanvasNode = {
       id: 'group-1',
       type: CANVAS_NODE_TYPES.assetGroup,
@@ -166,17 +166,17 @@ describe('useCanvasConnectionActions.handleConnect', () => {
     expect(useCanvasStore.getState().edges).toHaveLength(0);
   });
 
-  it('创建素材组后明确提示连线被保留或被解开', () => {
+  it('创建素材组后明确提示连线被保留或被解开', async () => {
     const showToast = vi.fn();
     const createAssetGroup = vi.spyOn(assetGroupApplicationService, 'createAssetGroup')
-      .mockReturnValueOnce({
+      .mockResolvedValueOnce({
         projectId: 'project-1',
         groupId: 'group-1',
         accepted: 2,
         preservedConnectionCount: 2,
         disconnectedConnectionCount: 0,
       })
-      .mockReturnValueOnce({
+      .mockResolvedValueOnce({
         projectId: 'project-1',
         groupId: 'group-2',
         accepted: 2,
@@ -191,8 +191,8 @@ describe('useCanvasConnectionActions.handleConnect', () => {
       t: ((key: string) => key) as unknown as TFunction,
     }));
 
-    result.current.createAssetGroup(['upload-1', 'upload-2']);
-    result.current.createAssetGroup(['upload-1', 'upload-2']);
+    await result.current.createAssetGroup(['upload-1', 'upload-2']);
+    await result.current.createAssetGroup(['upload-1', 'upload-2']);
 
     expect(createAssetGroup).toHaveBeenCalledTimes(2);
     expect(showToast).toHaveBeenNthCalledWith(1, 'canvas.assetGroup.createdPreserved', 'success');

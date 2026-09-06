@@ -34,6 +34,12 @@ beforeAll(async () => {
   await loadRealModelsIntoRegistry()
 })
 
+// 本文件验证领域变换；仅替换最终存储边界，保存完成/拒绝由专门结果测试覆盖。
+vi.mock('@/commands/projectState', async (importOriginal) => ({
+  ...await importOriginal<typeof import('@/commands/projectState')>(),
+  upsertProjectRecord: vi.fn(async () => undefined),
+}))
+
 function createSourceNode(): CanvasNode {
   return {
     id: sourceNodeId,
@@ -185,7 +191,7 @@ describe('画布图片能力应用服务', () => {
     expect(canvas.history.past).toHaveLength(1)
     expect(useProjectStore.getState().saveCurrentProject).toHaveBeenCalledTimes(1)
 
-    expect(undoCanvasBatch(projectId, result.undoRef)).toMatchObject({ status: 'undone' })
+    expect(await undoCanvasBatch(projectId, result.undoRef)).toMatchObject({ status: 'undone' })
     expect(useCanvasStore.getState().nodes).toHaveLength(1)
     expect(useCanvasStore.getState().edges).toHaveLength(0)
     expect(useCanvasStore.getState().selectedNodeId).toBe(sourceNodeId)

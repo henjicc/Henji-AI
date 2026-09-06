@@ -86,7 +86,7 @@ describe('assetGroupApplicationService media import', () => {
     expect(useCanvasStore.getState().history.past).toHaveLength(1);
   });
 
-  it('资产拖入时直接使用可信本地路径创建对应媒体节点', () => {
+  it('资产拖入时直接使用可信本地路径创建对应媒体节点', async () => {
     const asset: AssetDragPayload = {
       assetId: 'asset-1',
       sourceType: 'asset',
@@ -96,7 +96,7 @@ describe('assetGroupApplicationService media import', () => {
       displayName: '旁白',
     };
 
-    addAssetToAssetGroup({ groupId: 'group-1', asset });
+    await addAssetToAssetGroup({ groupId: 'group-1', asset });
 
     const member = useCanvasStore.getState().nodes.find((node) => node.parentId === 'group-1');
     expect(member).toMatchObject({
@@ -106,7 +106,7 @@ describe('assetGroupApplicationService media import', () => {
     });
   });
 
-  it('不同目标的现有连线随创建事务一起解开并可由历史恢复', () => {
+  it('不同目标的现有连线随创建事务一起解开并可由历史恢复', async () => {
     const imageOne = canvasNodeFactory.createNode(CANVAS_NODE_TYPES.upload, { x: 0, y: 0 }, {
       imageUrl: '/one.png', aspectRatio: '1:1',
     });
@@ -124,10 +124,16 @@ describe('assetGroupApplicationService media import', () => {
       { past: [], future: [] },
     );
 
-    const result = createAssetGroup({ memberIds: [imageOne.id, imageTwo.id] });
+    const result = await createAssetGroup({ memberIds: [imageOne.id, imageTwo.id] });
 
     expect(result).toMatchObject({ accepted: 2, preservedConnectionCount: 0, disconnectedConnectionCount: 2 });
     expect(useCanvasStore.getState().edges).toEqual([]);
     expect(useCanvasStore.getState().history.past[0]?.edges).toHaveLength(2);
   });
 });
+
+// 本文件验证领域变换；仅替换最终存储边界，保存完成/拒绝由专门结果测试覆盖。
+vi.mock('@/commands/projectState', async (importOriginal) => ({
+  ...await importOriginal<typeof import('@/commands/projectState')>(),
+  upsertProjectRecord: vi.fn(async () => undefined),
+}))

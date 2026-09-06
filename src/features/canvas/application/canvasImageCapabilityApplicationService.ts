@@ -19,6 +19,7 @@ import {
   requireCurrentCanvasProject,
 } from './canvasApplicationService'
 import { runCanvasTransaction } from './canvasBatchService'
+import { confirmCanvasPersistence } from './canvasPersistenceService'
 import { selectCanvasNode } from './canvasMutationService'
 import { openCanvasSpecialEditor } from './specialEditorApplicationService'
 
@@ -141,8 +142,8 @@ async function executeCanvasImageCapability(
     const { undoRef } = await runCanvasTransaction(
       projectId,
       3,
-      async () => {
-        const created = addControlledCanvasNode({
+      async (commitOptions) => {
+        const created = await addControlledCanvasNode({
           projectId,
           nodeType: execution.nodeType,
           placement: { mode: 'right_of_node', anchorNodeId: sourceNodeId },
@@ -152,16 +153,16 @@ async function executeCanvasImageCapability(
               ? { displayName: i18n.t(capability.titleKey) }
               : {}),
           },
-        }, { deferCommit: true })
+        }, commitOptions)
         if (typeof created.nodeId !== 'string' || !created.nodeId) {
           throw new CanvasApplicationError('CAPABILITY_REJECTED', '图片能力未能创建目标节点')
         }
         const nodeId = created.nodeId
-        const connection = connectCanvasNodes({
+        const connection = await connectCanvasNodes({
           projectId,
           sourceNodeId,
           targetNodeId: nodeId,
-        }, { deferCommit: true })
+        }, commitOptions)
         if (typeof connection.edgeId !== 'string' || !connection.edgeId) {
           throw new CanvasApplicationError('CAPABILITY_REJECTED', '图片能力未能创建目标连线')
         }
@@ -178,6 +179,7 @@ async function executeCanvasImageCapability(
         if (selectionChanges.length > 0) canvas.onNodesChange(selectionChanges)
         const selected = selectCanvasNode(projectId, nodeId)
 
+        await confirmCanvasPersistence(projectId, commitOptions)
         return [created, connection, selected]
       },
       { capabilityId, sourceNodeId },

@@ -3,6 +3,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { registry } from '@/core/ModelRegistry';
+import { upsertProjectRecord } from '@/commands/projectState';
 import type { ModelDefinition } from '@/core/types';
 import { collectAndRewriteMedia, rewritePackagePathsToLocal } from '@/services/projectPackage/collectMediaRefs';
 import { useCanvasStore } from '@/stores/canvasStore';
@@ -147,6 +148,28 @@ describe('generationOutputApplicationService', () => {
     registry.clear();
     registry.register(multiImageModel);
     setupCanvas();
+  });
+
+  it('图已提交但存储拒绝时保留节点引用的媒体；相同完成键只重试写盘', async () => {
+    vi.mocked(upsertProjectRecord).mockRejectedValueOnce(new Error('readonly'));
+    const persistOutput = vi.fn(async (_mediaType: unknown, source: string) => ({
+      patch: imagePatch(source), createdFilePaths: ['/managed/owned.png'],
+    }));
+    const releaseCreatedFiles = vi.fn(async () => undefined);
+    const input = {
+      sourceNodeId: 'source-node', placeholderNodeId: 'placeholder-node',
+      resultNodeType: CANVAS_NODE_TYPES.exportImage, contract: contract(1),
+      completionId: 'refused-result', persistOutput, releaseCreatedFiles,
+    };
+    await expect(commitCanvasGenerationOutputs(input)).rejects.toMatchObject({ code: 'PERSISTENCE_FAILED' });
+    const before = useCanvasStore.getState();
+    expect(before.nodes.find((node) => node.id === 'placeholder-node')?.data.imageUrl).toBeTruthy();
+    expect(releaseCreatedFiles).not.toHaveBeenCalled();
+    await expect(commitCanvasGenerationOutputs(input)).resolves.toMatchObject({ idempotent: true });
+    expect(persistOutput).toHaveBeenCalledTimes(1);
+    expect(useCanvasStore.getState().nodes).toBe(before.nodes);
+    expect(useCanvasStore.getState().history).toBe(before.history);
+    expect(releaseCreatedFiles).not.toHaveBeenCalled();
   });
 
   it('零输出明确拒绝且不执行媒体落盘', async () => {
@@ -453,3 +476,9 @@ describe('generationOutputApplicationService', () => {
   });
 
 });
+
+// 本文件验证领域变换；仅替换最终存储边界，保存完成/拒绝由专门结果测试覆盖。
+vi.mock('@/commands/projectState', async (importOriginal) => ({
+  ...await importOriginal<typeof import('@/commands/projectState')>(),
+  upsertProjectRecord: vi.fn(async () => undefined),
+}))

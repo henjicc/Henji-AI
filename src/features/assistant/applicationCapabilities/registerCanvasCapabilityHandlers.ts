@@ -80,6 +80,7 @@ import { createHostContextSnapshot } from '../hostContext/hostContext'
 import type { ApplicationCapabilityHandlerRegistrar } from './handlerTypes'
 import { parseCapabilityInput, throwIfCapabilityAborted } from './handlerUtils'
 import { openApplicationSurface } from './surfaceRegistry'
+import { confirmCanvasPersistence } from '@/features/canvas/application/canvasPersistenceService'
 
 interface ProjectInput {
   projectId: string
@@ -98,6 +99,14 @@ interface AddNodeInput extends ProjectInput {
 export function registerCanvasCapabilityHandlers(
   registrar: ApplicationCapabilityHandlerRegistrar
 ): void {
+  registrar.registerHandler('retry_canvas_project_save', async (input, context) => {
+    throwIfCapabilityAborted(context.signal)
+    const { projectRef } = parseCapabilityInput<{ projectRef: { kind: 'canvas.project'; id: string } }>(
+      'retry_canvas_project_save', input,
+    )
+    await confirmCanvasPersistence(projectRef.id)
+    return { ref: projectRef, status: 'persisted' }
+  })
   registrar.registerHandler('list_canvas_projects', async () => ({
     projects: await listCanvasProjectSummaries(),
   }))

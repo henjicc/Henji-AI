@@ -1,3 +1,4 @@
+import { reportCanvasOperationFailure } from '@/features/canvas/application/canvasOperationFeedback';
 import { Suspense, useCallback, useEffect } from 'react';
 
 import { commitCanvasSpecialEditor } from '@/features/canvas/application/specialEditorApplicationService';
@@ -36,7 +37,7 @@ export function CanvasSpecialEditorHost(): JSX.Element | null {
   useEffect(() => () => discard(), [discard]);
 
   const handleConfirm = useCallback(() => {
-    if (session) commitCanvasSpecialEditor(session.sessionId);
+    if (session) void commitCanvasSpecialEditor(session.sessionId).catch(reportCanvasOperationFailure);
   }, [session]);
 
   if (!session) return null;

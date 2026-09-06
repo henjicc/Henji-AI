@@ -5,6 +5,7 @@ import { useProjectStore } from '@/stores/projectStore';
 
 import { CANVAS_NODE_TYPES } from '../domain/canvasNodes';
 import { runCanvasTransaction } from './canvasBatchService';
+import { runCanvasMutationStage, retainsCanvasMutation } from './canvasPersistenceService';
 import { prepareNodeImage } from './imageData';
 
 const logger = createLogger('features.canvas.panoramaSnapshot');
@@ -24,7 +25,7 @@ export async function commitPanoramaViewSnapshot(input: {
     if (!projectId || project.currentProject?.id !== projectId) {
       throw new Error('当前画布项目不可用');
     }
-    await runCanvasTransaction(projectId, 2, async () => {
+    await runCanvasTransaction(projectId, 2, async (options) => runCanvasMutationStage(options, () => {
       const canvas = useCanvasStore.getState();
       const sourceNode = canvas.nodes.find((node) => node.id === input.sourceNodeId);
       if (!sourceNode || sourceNode.type !== CANVAS_NODE_TYPES.panoramaViewer) {
@@ -51,7 +52,7 @@ export async function commitPanoramaViewSnapshot(input: {
         resultNodeId: createdNodeId,
         edgeId,
       }];
-    }, {
+    }), {
       sourceNodeId: input.sourceNodeId,
       operation: 'panorama-view-snapshot',
     });
@@ -65,6 +66,7 @@ export async function commitPanoramaViewSnapshot(input: {
     });
     return createdNodeId;
   } catch (error) {
+    if (retainsCanvasMutation(error)) ownershipTransferred = true;
     logger.error('全景视角截图落图失败', error, {
       event: 'panorama.snapshot.commit.failed',
       sourceNodeId: input.sourceNodeId,

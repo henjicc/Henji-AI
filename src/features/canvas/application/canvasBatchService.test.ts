@@ -80,7 +80,7 @@ describe('canvas batch service', () => {
     ])
     expect(useCanvasStore.getState().history.past).toHaveLength(1)
 
-    expect(undoCanvasBatch(projectId, String(committed.undoRef))).toMatchObject({
+    expect(await undoCanvasBatch(projectId, String(committed.undoRef))).toMatchObject({
       operation: 'batch',
       status: 'undone',
     })
@@ -163,3 +163,9 @@ describe('canvas batch service', () => {
     })
   })
 })
+
+// 本文件验证领域变换；仅替换最终存储边界，保存完成/拒绝由专门结果测试覆盖。
+vi.mock('@/commands/projectState', async (importOriginal) => ({
+  ...await importOriginal<typeof import('@/commands/projectState')>(),
+  upsertProjectRecord: vi.fn(async () => undefined),
+}))

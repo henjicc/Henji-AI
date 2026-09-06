@@ -8,7 +8,6 @@ import {
   addCanvasNode,
   CanvasApplicationError,
   connectCanvasNodes,
-  persistCanvasState,
   requireCurrentCanvasProject,
 } from './canvasApplicationService'
 import {
@@ -32,7 +31,7 @@ interface CanvasBatchPlan {
   committed: boolean
 }
 
-interface CanvasBatchUndo {
+interface CanvasBatchUndo extends CanvasUndoPersistenceState {
   undoRef: string
   projectId: string
   beforeNodes: CanvasNode[]
@@ -49,6 +48,8 @@ interface CanvasBatchUndo {
 
 const plans = new Map<string, CanvasBatchPlan>()
 const undos = new Map<string, CanvasBatchUndo>()
+import { pauseCanvasProjectPersistence } from '@/stores/projectStore'
+import { confirmCanvasPersistence, runPersistedCanvasUndo, createCanvasMutationCheckpoint, isCanvasMutationCheckpointCurrent, assertCanvasCommitContext, CanvasTransactionConflictError, type CanvasCommitOptions, type CanvasUndoPersistenceState } from './canvasPersistenceService'
 const PLAN_TTL_MS = 15 * 60_000
 const logger = createLogger('features.canvas.batch')
 
@@ -150,20 +151,25 @@ export function previewCanvasBatch(planRef: string): Record<string, unknown> {
   }
 }
 
-async function executeOperation(projectId: string, operation: CanvasBatchOperation): Promise<Record<string, unknown>> {
+async function executeOperation(projectId: string, operation: CanvasBatchOperation, options: CanvasCommitOptions): Promise<Record<string, unknown>> {
+  assertCanvasCommitContext(projectId, options)
   switch (operation.kind) {
-    case 'add_node': return addCanvasNode({ projectId, nodeType: operation.nodeType, placement: operation.placement, data: operation.data })
-    case 'duplicate_node': return duplicateCanvasNode({ projectId, nodeId: operation.nodeId, placement: operation.placement })
-    case 'update_node': return updateCanvasNode({ projectId, nodeId: operation.nodeId, data: operation.data })
-    case 'delete_nodes': return deleteCanvasNodes(projectId, operation.nodeIds)
-    case 'connect_nodes': return connectCanvasNodes({ projectId, sourceNodeId: operation.sourceNodeId, targetNodeId: operation.targetNodeId })
-    case 'disconnect_edge': return disconnectCanvasEdge(projectId, operation.edgeId)
-    case 'group_nodes': return groupCanvasNodes(projectId, operation.nodeIds)
-    case 'select_node': return selectCanvasNode(projectId, operation.nodeId)
+    case 'add_node': return addCanvasNode({ projectId, nodeType: operation.nodeType, placement: operation.placement, data: operation.data }, options)
+    case 'duplicate_node': return duplicateCanvasNode({ projectId, nodeId: operation.nodeId, placement: operation.placement }, options)
+    case 'update_node': return updateCanvasNode({ projectId, nodeId: operation.nodeId, data: operation.data }, options)
+    case 'delete_nodes': return deleteCanvasNodes(projectId, operation.nodeIds, options)
+    case 'connect_nodes': return connectCanvasNodes({ projectId, sourceNodeId: operation.sourceNodeId, targetNodeId: operation.targetNodeId }, options)
+    case 'disconnect_edge': return disconnectCanvasEdge(projectId, operation.edgeId, options)
+    case 'group_nodes': return groupCanvasNodes(projectId, operation.nodeIds, 'spatial', options)
+    case 'select_node': {
+      const result = selectCanvasNode(projectId, operation.nodeId)
+      await confirmCanvasPersistence(projectId, options)
+      return result
+    }
   }
 }
 
-type CanvasAtomicExecutor = () => Promise<Record<string, unknown>[]>
+type CanvasAtomicExecutor = (options: CanvasCommitOptions) => Promise<Record<string, unknown>[]>
 
 /**
  * 共享画布事务内核。当后续操作需要使用前一步产生的节点 id 时，
@@ -188,19 +194,31 @@ export async function runCanvasTransaction(
     event: 'canvas.batch.apply.start', projectId, operationCount, ...logContext,
   })
 
+  const checkpoint = createCanvasMutationCheckpoint(projectId)
+  const releasePersistence = pauseCanvasProjectPersistence(projectId)
   let results: Record<string, unknown>[]
   try {
-    results = await execute()
+    results = await execute({ deferCommit: true, checkpoint })
   } catch (error) {
+    if (!isCanvasMutationCheckpointCurrent(checkpoint)) {
+      releasePersistence()
+      throw new CanvasTransactionConflictError(projectId, error)
+    }
     useCanvasStore.getState().setCanvasData(beforeNodes, beforeEdges, beforeHistory)
     useCanvasStore.getState().setSelectedNode(beforeSelectedNodeId)
-    persistCanvasState()
+    const recovery = confirmCanvasPersistence(projectId)
+    releasePersistence()
+    await recovery
     logger.error('画布批量写入失败', error, {
       event: 'canvas.batch.apply.failed', projectId, operationCount, ...logContext,
     })
     throw error
   }
 
+  if (!isCanvasMutationCheckpointCurrent(checkpoint)) {
+    releasePersistence()
+    throw new CanvasTransactionConflictError(projectId)
+  }
   const after = useCanvasStore.getState()
   const undoRef = `canvas-batch-undo:${uuidv4()}`
   undos.set(undoRef, {
@@ -226,7 +244,9 @@ export async function runCanvasTransaction(
     dragHistorySnapshot: null,
     activeHistoryGroup: null,
   })
-  persistCanvasState()
+  const completion = confirmCanvasPersistence(projectId)
+  releasePersistence()
+  await completion
   logger.info('画布批量写入完成', {
     event: 'canvas.batch.apply.completed', projectId, operationCount: results.length, undoRef, ...logContext,
   })
@@ -241,7 +261,7 @@ export async function runCanvasTransaction(
  * 是唯一还没分叉的，别在这里开第一刀。
  *
  * 语义保证：
- * - 任一操作失败，整批回滚到调用前状态，异常原样上抛
+ * - 业务失败仅在本批次仍持有状态时补偿；出现新编辑或存储拒绝时保留现场并报告恢复动作
  * - 成功后整批合成**一条**撤销历史，用户按一次撤销就能整体退回
  * - 返回的 undoRef 可交给 `undoCanvasBatch` 精确回退，且带指纹校验防止过期引用
  */
@@ -250,13 +270,13 @@ export async function applyCanvasOperationsAtomically(
   operations: CanvasBatchOperation[],
   logContext: Record<string, unknown> = {},
 ): Promise<{ appliedOperations: Record<string, unknown>[]; undoRef: string }> {
-  return await runCanvasTransaction(projectId, operations.length, async () => {
+  return await runCanvasTransaction(projectId, operations.length, async (options) => {
     const results: Record<string, unknown>[] = []
     for (const [index, operation] of operations.entries()) {
       results.push({
         index,
         kind: operation.kind,
-        ...await executeOperation(projectId, operation),
+        ...await executeOperation(projectId, operation, options),
       })
     }
     return results
@@ -293,21 +313,22 @@ export async function commitCanvasBatch(planRef: string): Promise<Record<string,
   }
 }
 
-export function undoCanvasBatch(projectId: string, undoRef: string): Record<string, unknown> | null {
+export async function undoCanvasBatch(projectId: string, undoRef: string): Promise<Record<string, unknown> | null> {
   const record = undos.get(undoRef)
   if (!record) return null
   requireCurrentCanvasProject(projectId)
-  const canvas = useCanvasStore.getState()
-  if (
-    record.projectId !== projectId
-    || canvas.nodes !== record.afterNodes
-    || canvas.edges !== record.afterEdges
-  ) {
-    throw new CanvasApplicationError('STALE_CONTEXT', '批量操作后画布已发生其它变化，该批量撤销引用失效')
-  }
-  canvas.setCanvasData(record.beforeNodes, record.beforeEdges, record.beforeHistory)
-  canvas.setSelectedNode(record.beforeSelectedNodeId)
-  persistCanvasState()
+  await runPersistedCanvasUndo(projectId, undoRef, () => {
+    const canvas = useCanvasStore.getState()
+    if (
+      record.projectId !== projectId
+      || canvas.nodes !== record.afterNodes
+      || canvas.edges !== record.afterEdges
+    ) {
+      throw new CanvasApplicationError('STALE_CONTEXT', '批量操作后画布已发生其它变化，该批量撤销引用失效')
+    }
+    canvas.setCanvasData(record.beforeNodes, record.beforeEdges, record.beforeHistory)
+    canvas.setSelectedNode(record.beforeSelectedNodeId)
+  }, record)
   undos.delete(undoRef)
   return { projectId, undoRef, operation: 'batch', status: 'undone' }
 }

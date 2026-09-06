@@ -2,14 +2,11 @@ import { createLogger } from '@/core/logging'
 import { create } from 'zustand';
 import { v4 as uuidv4 } from 'uuid';
 import type { Viewport } from '@xyflow/react';
-import { mapCanvasNodeMediaReferences } from '@/features/canvas/application/canvasNodeMediaReferences';
-import { resetTransientNodeRuntimeState } from '@/features/canvas/domain/nodeMigrations';
 import {
   useCanvasStore,
   type CanvasEdge,
   type CanvasHistoryState,
   type CanvasNode,
-  type CanvasNodeData,
 } from './canvasStore';
 import {
 
@@ -19,10 +16,12 @@ import {
   renameProjectRecord,
   updateProjectViewportRecord,
   upsertProjectRecord,
-  type ProjectRecord,
-  type ProjectSummaryRecord,
 } from '@/commands/projectState';
 import { createProjectPersistenceQueue } from './projectPersistenceQueue';
+
+import { fromProjectRecord, toProjectRecord, toProjectSummary, type Project, type ProjectSummary } from './projectStoreSerialization';
+export { decodeProjectRecord, encodeProjectAsRecord } from './projectStoreSerialization';
+export type { Project, ProjectSummary } from './projectStoreSerialization';
 
 const logger = createLogger('stores.projectStore')
 
@@ -39,335 +38,8 @@ function createEmptyHistory(): CanvasHistoryState {
   };
 }
 
-const IMAGE_REF_PREFIX = '__img_ref__:';
 let openProjectRequestSeq = 0;
 const VIEWPORT_EPSILON = 0.001;
-const MAX_PERSISTED_HISTORY_STEPS = 12;
-const MAX_HISTORY_RESTORE_JSON_CHARS = 1_500_000;
-
-export interface ProjectSummary {
-  id: string;
-  name: string;
-  createdAt: number;
-  updatedAt: number;
-  nodeCount: number;
-  /** 项目封面缩略图的本地路径；未生成过封面时为 null */
-  coverPath: string | null;
-}
-
-export interface Project extends ProjectSummary {
-  nodes: CanvasNode[];
-  edges: CanvasEdge[];
-  viewport: Viewport;
-  history: CanvasHistoryState;
-}
-
-type PersistedProject = Project & {
-  imagePool?: string[];
-};
-
-function encodeImageReference(
-  imageUrl: string | null | undefined,
-  imagePool: string[],
-  imageIndexMap: Map<string, number>
-): string | null | undefined {
-  if (typeof imageUrl !== 'string' || imageUrl.length === 0) {
-    return imageUrl;
-  }
-
-  const existingIndex = imageIndexMap.get(imageUrl);
-  if (typeof existingIndex === 'number') {
-    return `${IMAGE_REF_PREFIX}${existingIndex}`;
-  }
-
-  const nextIndex = imagePool.length;
-  imagePool.push(imageUrl);
-  imageIndexMap.set(imageUrl, nextIndex);
-  return `${IMAGE_REF_PREFIX}${nextIndex}`;
-}
-
-function decodeImageReference(
-  imageUrl: string | null | undefined,
-  imagePool: string[] | undefined
-): string | null | undefined {
-  if (typeof imageUrl !== 'string' || !imagePool || !imageUrl.startsWith(IMAGE_REF_PREFIX)) {
-    return imageUrl;
-  }
-
-  const index = Number.parseInt(imageUrl.slice(IMAGE_REF_PREFIX.length), 10);
-  if (!Number.isFinite(index) || index < 0) {
-    return imageUrl;
-  }
-
-  return imagePool[index] ?? null;
-}
-
-function mapNodeImageReferences(
-  nodes: CanvasNode[],
-  mapImageUrl: (imageUrl: string | null | undefined) => string | null | undefined
-): CanvasNode[] {
-  return nodes.map((node) => {
-    const nextData = mapCanvasNodeMediaReferences(
-      node.data as DynamicValueMap,
-      (value) => mapImageUrl(value) ?? value,
-    );
-
-    return {
-      ...node,
-      data: nextData as CanvasNodeData,
-    };
-  });
-}
-
-function mapHistoryImageReferences(
-  history: CanvasHistoryState,
-  mapImageUrl: (imageUrl: string | null | undefined) => string | null | undefined
-): CanvasHistoryState {
-  return {
-    past: history.past.map((snapshot) => ({
-      ...snapshot,
-      nodes: mapNodeImageReferences(snapshot.nodes, mapImageUrl),
-    })),
-    future: history.future.map((snapshot) => ({
-      ...snapshot,
-      nodes: mapNodeImageReferences(snapshot.nodes, mapImageUrl),
-    })),
-  };
-}
-
-function trimHistoryForPersistence(history: CanvasHistoryState): CanvasHistoryState {
-  return {
-    past: history.past.slice(-MAX_PERSISTED_HISTORY_STEPS),
-    future: history.future.slice(-MAX_PERSISTED_HISTORY_STEPS),
-  };
-}
-
-function encodeProject(project: Project): PersistedProject {
-  const imagePool: string[] = [];
-  const imageIndexMap = new Map<string, number>();
-  const encode = (imageUrl: string | null | undefined) =>
-    encodeImageReference(imageUrl, imagePool, imageIndexMap);
-  const resetRuntimeState = (nodes: CanvasNode[]): CanvasNode[] => nodes.map((node) => {
-    const data = { ...(node.data as DynamicValueMap) };
-    resetTransientNodeRuntimeState(node.type, data);
-    return {
-      ...node,
-      data: data as CanvasNodeData,
-    };
-  });
-
-  return {
-    ...project,
-    nodes: mapNodeImageReferences(resetRuntimeState(project.nodes), encode),
-    history: mapHistoryImageReferences({
-      past: project.history.past.map((snapshot) => ({
-        ...snapshot,
-        nodes: resetRuntimeState(snapshot.nodes),
-      })),
-      future: project.history.future.map((snapshot) => ({
-        ...snapshot,
-        nodes: resetRuntimeState(snapshot.nodes),
-      })),
-    }, encode),
-    imagePool,
-  };
-}
-
-function decodeProject(project: PersistedProject): Project {
-  const decode = (imageUrl: string | null | undefined) =>
-    decodeImageReference(imageUrl, project.imagePool);
-
-  return {
-    ...project,
-    nodes: mapNodeImageReferences(project.nodes, decode),
-    history: mapHistoryImageReferences(project.history, decode),
-  };
-}
-
-function safeParseJson<T>(value: string, fallback: T): T {
-  try {
-    return JSON.parse(value) as T;
-  } catch {
-    return fallback;
-  }
-}
-
-function extractImagePoolFromHistoryJson(historyJson: string): string[] {
-  const imagePoolKey = '"imagePool"';
-  const keyIndex = historyJson.indexOf(imagePoolKey);
-  if (keyIndex < 0) {
-    return [];
-  }
-
-  const arrayStart = historyJson.indexOf('[', keyIndex + imagePoolKey.length);
-  if (arrayStart < 0) {
-    return [];
-  }
-
-  let depth = 0;
-  let inString = false;
-  let escaped = false;
-  let arrayEnd = -1;
-
-  for (let index = arrayStart; index < historyJson.length; index += 1) {
-    const char = historyJson[index];
-
-    if (inString) {
-      if (escaped) {
-        escaped = false;
-      } else if (char === '\\') {
-        escaped = true;
-      } else if (char === '"') {
-        inString = false;
-      }
-      continue;
-    }
-
-    if (char === '"') {
-      inString = true;
-      continue;
-    }
-
-    if (char === '[') {
-      depth += 1;
-      continue;
-    }
-
-    if (char === ']') {
-      depth -= 1;
-      if (depth === 0) {
-        arrayEnd = index;
-        break;
-      }
-    }
-  }
-
-  if (arrayEnd < 0) {
-    return [];
-  }
-
-  const rawArrayJson = historyJson.slice(arrayStart, arrayEnd + 1);
-  const parsed = safeParseJson<DynamicValue>(rawArrayJson, []);
-  if (!Array.isArray(parsed)) {
-    return [];
-  }
-
-  return parsed.filter((item): item is string => typeof item === 'string');
-}
-
-function toProjectSummary(record: ProjectSummaryRecord): ProjectSummary {
-  return {
-    id: record.id,
-    name: record.name,
-    createdAt: record.createdAt,
-    updatedAt: record.updatedAt,
-    nodeCount: record.nodeCount,
-    coverPath: record.coverPath ?? null,
-  };
-}
-
-function assertNoPersistedBlobMedia(value: unknown, pathLabel = 'project'): void {
-  if (typeof value === 'string') {
-    if (value.startsWith('blob:')) {
-      throw new Error(`Transient blob URL reached project persistence at ${pathLabel}`)
-    }
-    return
-  }
-  if (Array.isArray(value)) {
-    value.forEach((item, index) => assertNoPersistedBlobMedia(item, `${pathLabel}[${index}]`))
-    return
-  }
-  if (typeof value === 'object' && value !== null) {
-    Object.entries(value).forEach(([key, item]) => assertNoPersistedBlobMedia(item, `${pathLabel}.${key}`))
-  }
-}
-
-function toProjectRecord(project: Project): ProjectRecord {
-  const encodedProject = encodeProject(project);
-  const persistedNodes = encodedProject.nodes;
-  const persistedHistory = trimHistoryForPersistence(encodedProject.history);
-
-  if (import.meta.env.DEV) {
-    assertNoPersistedBlobMedia({
-      nodes: persistedNodes,
-      history: persistedHistory,
-      imagePool: encodedProject.imagePool ?? [],
-    });
-  }
-
-  return {
-    id: encodedProject.id,
-    name: encodedProject.name,
-    createdAt: encodedProject.createdAt,
-    updatedAt: encodedProject.updatedAt,
-    nodeCount: encodedProject.nodeCount,
-    nodesJson: JSON.stringify(persistedNodes),
-    edgesJson: JSON.stringify(encodedProject.edges),
-    viewportJson: JSON.stringify(encodedProject.viewport),
-    historyJson: JSON.stringify({
-      ...persistedHistory,
-      imagePool: encodedProject.imagePool ?? [],
-    }),
-  };
-}
-
-function fromProjectRecord(record: ProjectRecord): Project {
-  const parsedNodes = safeParseJson<CanvasNode[]>(record.nodesJson, []);
-  const parsedEdges = safeParseJson<CanvasEdge[]>(record.edgesJson, []);
-  const parsedViewport = safeParseJson<Viewport>(record.viewportJson, DEFAULT_VIEWPORT);
-  const shouldRestoreHistory = record.historyJson.length <= MAX_HISTORY_RESTORE_JSON_CHARS;
-  const extractedImagePool = extractImagePoolFromHistoryJson(record.historyJson);
-  const parsedHistoryPayload = shouldRestoreHistory
-    ? safeParseJson<{
-        past?: CanvasHistoryState['past'];
-        future?: CanvasHistoryState['future'];
-        imagePool?: string[];
-      }>(record.historyJson, {})
-    : {};
-
-  if (!shouldRestoreHistory) {
-    logger.warn(
-      `Skip restoring oversized history payload (${record.historyJson.length} chars) for project ${record.id}`
-    );
-  }
-
-  const parsedHistory = {
-    past: parsedHistoryPayload.past ?? [],
-    future: parsedHistoryPayload.future ?? [],
-  };
-
-  const persistedProject: PersistedProject = {
-    id: record.id,
-    name: record.name,
-    createdAt: record.createdAt,
-    updatedAt: record.updatedAt,
-    nodeCount: record.nodeCount,
-    coverPath: (record as { coverPath?: string | null }).coverPath ?? null,
-    nodes: parsedNodes,
-    edges: parsedEdges,
-    viewport: parsedViewport ?? DEFAULT_VIEWPORT,
-    history: parsedHistory,
-    imagePool: parsedHistoryPayload.imagePool ?? extractedImagePool,
-  };
-
-  const decodedProject = decodeProject(persistedProject);
-  return {
-    ...decodedProject,
-    nodeCount: parsedNodes.length,
-    viewport: decodedProject.viewport ?? DEFAULT_VIEWPORT,
-    history: decodedProject.history ?? createEmptyHistory(),
-  };
-}
-
-/** 解码项目记录为运行时 Project（供项目包导出等服务使用） */
-export function decodeProjectRecord(record: ProjectRecord): Project {
-  return fromProjectRecord(record);
-}
-
-/** 编码运行时 Project 为持久化记录（供项目包导入等服务使用） */
-export function encodeProjectAsRecord(project: Project): ProjectRecord {
-  return toProjectRecord(project);
-}
 
 function hasViewportMeaningfulDelta(current: Viewport, next: Viewport): boolean {
   return (
@@ -385,7 +57,7 @@ function normalizeViewport(viewport: Viewport): Viewport {
   };
 }
 
-let reportBackgroundPersistenceError: (operation: 'save' | 'viewport', error: unknown) => void = (
+let reportBackgroundPersistenceError: (operation: 'save' | 'viewport', error: unknown, projectId: string) => void = (
   operation,
   error
 ) => {
@@ -394,10 +66,13 @@ let reportBackgroundPersistenceError: (operation: 'save' | 'viewport', error: un
 
 const persistenceQueue = createProjectPersistenceQueue<Project>({
   getProjectId: (project) => project.id,
-  upsertProject: async (project) => { await upsertProjectRecord(toProjectRecord(project)) },
+  upsertProject: async (project) => {
+    await upsertProjectRecord(toProjectRecord(project))
+    setProjectPersistenceError(project.id, null)
+  },
   updateViewport: updateProjectViewportRecord,
   deleteProject: deleteProjectRecord,
-  onBackgroundError: (operation, error) => reportBackgroundPersistenceError(operation, error),
+  onBackgroundError: (operation, error, projectId) => reportBackgroundPersistenceError(operation, error, projectId),
 })
 
 function updateProjectSummary(
@@ -416,6 +91,7 @@ interface ProjectState {
   isHydrated: boolean;
   isOpeningProject: boolean;
   persistenceError: string | null;
+  persistenceErrors: Record<string, string>;
 
   hydrate: () => Promise<void>;
   createProject: (name: string) => Promise<string>;
@@ -443,6 +119,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
   isHydrated: false,
   isOpeningProject: false,
   persistenceError: null,
+  persistenceErrors: {},
 
   hydrate: async () => {
     if (get().isHydrated) {
@@ -489,7 +166,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       await persistenceQueue.flushProject(project)
     } catch (error) {
       logger.error('Failed to create project record', error)
-      set({ persistenceError: 'project.persistenceFailed' })
+      setProjectPersistenceError(id, 'project.persistenceFailed')
       throw error
     }
     set((state) => ({
@@ -507,22 +184,22 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       await persistenceQueue.deleteProject(id)
     } catch (error) {
       logger.error('Failed to delete project record', error)
-      set({ persistenceError: 'project.persistenceFailed' })
+      setProjectPersistenceError(id, 'project.persistenceFailed')
       throw error
     }
+    setProjectPersistenceError(id, null)
     set((state) => ({
       projects: state.projects.filter((project) => project.id !== id),
       currentProjectId: state.currentProjectId === id ? null : state.currentProjectId,
       currentProject: state.currentProject?.id === id ? null : state.currentProject,
       isOpeningProject: false,
-      persistenceError: null,
+      persistenceError: state.currentProjectId === id ? null : state.persistenceError,
     }));
   },
 
   renameProject: async (id, name) => {
     const now = Date.now();
     const currentProject = get().currentProject
-    const previousSummary = get().projects.find((project) => project.id === id)
     const nextCurrentProject = currentProject?.id === id
       ? { ...currentProject, name, updatedAt: now }
       : null
@@ -541,18 +218,10 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       else await renameProjectRecord(id, name, now)
     } catch (error) {
       logger.error('Failed to rename project record', error)
-      set((state) => ({
-        projects: previousSummary
-          ? updateProjectSummary(state.projects, previousSummary)
-          : state.projects,
-        currentProject: state.currentProject?.id === id && currentProject
-          ? { ...state.currentProject, name: currentProject.name, updatedAt: currentProject.updatedAt }
-          : state.currentProject,
-        persistenceError: 'project.persistenceFailed',
-      }))
+      setProjectPersistenceError(id, 'project.persistenceFailed')
       throw error
     }
-    set({ persistenceError: null })
+    setProjectPersistenceError(id, null)
   },
 
   setProjectCover: (id, coverPath) => {
@@ -572,20 +241,22 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
 
     void (async () => {
       try {
-        const record = await getProjectRecord(id);
+        const unsaved = persistenceQueue.getUnsavedProject(id);
+        const record = unsaved ? null : await getProjectRecord(id);
         if (reqSeq !== openProjectRequestSeq) {
           return;
         }
-        if (!record) {
+        if (!record && !unsaved) {
           set({ isOpeningProject: false });
           return;
         }
 
-        const project = fromProjectRecord(record);
+        const project = unsaved ?? fromProjectRecord(record!);
         set((state) => ({
           currentProjectId: id,
           currentProject: project,
           isOpeningProject: false,
+          persistenceError: state.persistenceErrors[id] ?? null,
           projects: updateProjectSummary(state.projects, {
             id: project.id,
             name: project.name,
@@ -634,9 +305,10 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
         await persistenceQueue.flushProject(nextProject)
       } catch (error) {
         logger.error('Failed to persist project before closing', error)
-        set({ persistenceError: 'project.persistenceFailed' })
+        setProjectPersistenceError(currentProjectId, 'project.persistenceFailed')
         throw error
       }
+      setProjectPersistenceError(currentProjectId, null)
     }
 
     set((state) => ({
@@ -742,7 +414,39 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
   },
 }));
 
-reportBackgroundPersistenceError = (operation, error) => {
-  logger.error(`Failed to persist project ${operation}`, error)
-  useProjectStore.setState({ persistenceError: 'project.persistenceFailed' })
+reportBackgroundPersistenceError = (operation, error, projectId) => {
+  logger.error(`Failed to persist project ${operation}`, error, { projectId })
+  setProjectPersistenceError(projectId, 'project.persistenceFailed')
+}
+
+function setProjectPersistenceError(projectId: string, error: string | null): void {
+  useProjectStore.setState((state) => {
+    const persistenceErrors = { ...state.persistenceErrors }
+    if (error) persistenceErrors[projectId] = error
+    else delete persistenceErrors[projectId]
+    return { persistenceErrors, persistenceError: state.currentProjectId === projectId
+      ? error : state.persistenceError }
+  })
+}
+
+/** 捕获当前项目快照后等待真实存储；重试不依赖 hasChanged，也不重放业务动作。 */
+export function hasUnconfirmedCanvasProjectSnapshot(projectId: string): boolean {
+  return persistenceQueue.getUnsavedProject(projectId) !== undefined
+}
+
+export async function flushCanvasProjectSnapshot(projectId: string): Promise<void> {
+  const project = useProjectStore.getState().currentProject
+  if (!project || project.id !== projectId) throw new Error('当前画布项目已切换，请返回原项目后重试保存')
+  try {
+    await persistenceQueue.flushProject(project)
+    setProjectPersistenceError(projectId, null)
+  } catch (error) {
+    setProjectPersistenceError(projectId, 'project.persistenceFailed')
+    throw error
+  }
+}
+
+/** 仅阻挡存储 writer，不阻塞 UI；调用方释放前必须入队最终提交或恢复快照。 */
+export function pauseCanvasProjectPersistence(projectId: string): () => void {
+  return persistenceQueue.pauseProject(projectId)
 }

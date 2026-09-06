@@ -1,3 +1,4 @@
+import { reportCanvasOperationFailure } from '@/features/canvas/application/canvasOperationFeedback';
 import { createLogger } from '@/core/logging'
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { NodeToolbar as ReactFlowNodeToolbar } from '@xyflow/react';
@@ -420,7 +421,7 @@ export const NodeActionToolbar = memo(({ node }: NodeActionToolbarProps) => {
             onClick={(event) => {
               event.stopPropagation();
               closeDownloadMenu();
-              if (isAssetGroupNode(node)) dissolveAssetGroup({ groupId: node.id });
+              if (isAssetGroupNode(node)) void dissolveAssetGroup({ groupId: node.id }).catch(reportCanvasOperationFailure);
               else ungroupNode(node.id);
             }}
           >
@@ -434,7 +435,7 @@ export const NodeActionToolbar = memo(({ node }: NodeActionToolbarProps) => {
           onClick={(event) => {
             event.stopPropagation();
             closeDownloadMenu();
-            if (projectId) void deleteCanvasNodes(projectId, [node.id]);
+            if (projectId) void deleteCanvasNodes(projectId, [node.id]).catch(reportCanvasOperationFailure);
           }}
         >
           <Trash2 className="h-3.5 w-3.5" />

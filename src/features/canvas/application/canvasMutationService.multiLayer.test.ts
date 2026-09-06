@@ -85,6 +85,12 @@ beforeEach(() => {
   })
 })
 
+// 本文件验证领域变换；仅替换最终存储边界，保存完成/拒绝由专门结果测试覆盖。
+vi.mock('@/commands/projectState', async (importOriginal) => ({
+  ...await importOriginal<typeof import('@/commands/projectState')>(),
+  upsertProjectRecord: vi.fn(async () => undefined),
+}))
+
 describe('多图层文档节点复制事务', () => {
   it('副本获得独立 documentRef，源节点保持不变', async () => {
     const result = await duplicateCanvasNode({
@@ -111,14 +117,14 @@ describe('多图层文档节点复制事务', () => {
   })
 
   it('删除只登记候选，撤销与重做继续保留画布历史语义', async () => {
-    const deleted = deleteCanvasNodes(projectId, ['source-node'])
+    const deleted = await deleteCanvasNodes(projectId, ['source-node'])
     expect(useCanvasStore.getState().nodes).toHaveLength(0)
     expect(useCanvasStore.getState().history.past.at(-1)?.nodes[0]?.id).toBe('source-node')
     await vi.waitFor(() => expect(mocks.markReleaseCandidate).toHaveBeenCalledOnce())
 
-    undoCanvasChange(projectId, String(deleted.undoRef))
+    await undoCanvasChange(projectId, String(deleted.undoRef))
     expect(useCanvasStore.getState().nodes[0]?.id).toBe('source-node')
-    redoCanvasChange(projectId)
+    await redoCanvasChange(projectId)
     expect(useCanvasStore.getState().nodes).toHaveLength(0)
     expect(useCanvasStore.getState().history.past.at(-1)?.nodes[0]?.id).toBe('source-node')
   })

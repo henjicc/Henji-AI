@@ -35,11 +35,13 @@ import {
   wouldCreateCanvasCycle,
 } from '../domain/connectionIndex'
 
+import { assertCanvasCommitContext, confirmCanvasPersistence, runPersistedCanvasUndo, type CanvasCommitOptions, type CanvasUndoPersistenceState } from './canvasPersistenceService'
+
 const MAX_UNDO_RECORDS = 100
 const FOCUS_HANDLER_WAIT_MS = 2_000
 const logger = createLogger('features.canvas.application')
 
-interface UndoRecord {
+interface UndoRecord extends CanvasUndoPersistenceState {
   token: string
   projectId: string
   operation: string
@@ -135,15 +137,7 @@ export async function openCanvasProject(
   return { projectId }
 }
 
-export function persistCanvasState(): void {
-  const canvas = useCanvasStore.getState()
-  useProjectStore.getState().saveCurrentProject(
-    canvas.nodes,
-    canvas.edges,
-    canvas.currentViewport,
-    canvas.history
-  )
-}
+export { persistCanvasState } from './canvasPersistenceService'
 
 export function rememberCanvasUndo(projectId: string, operation: string): string {
   const token = `canvas-undo:${uuidv4()}`
@@ -212,18 +206,19 @@ function isMatchingEdge(
     && (edge.targetHandle ?? 'target') === targetHandle
 }
 
-export function addCanvasNode(input: {
+export async function addCanvasNode(input: {
   projectId: string
   nodeType: string
   placement: CanvasNodePlacement
   data?: Record<string, unknown>
-}): Record<string, unknown> {
+}, options: CanvasCommitOptions = {}): Promise<Record<string, unknown>> {
   requireCurrentCanvasProject(input.projectId)
+  assertCanvasCommitContext(input.projectId, options)
   const parsed = parseCanvasNodeData(input.nodeType, input.data)
   const position = resolveNodePosition(input.placement)
   const nodeId = useCanvasStore.getState().addNode(parsed.nodeType, position, parsed.data)
   const undoRef = rememberCanvasUndo(input.projectId, 'add_node')
-  persistCanvasState()
+  await confirmCanvasPersistence(input.projectId, options)
   return { projectId: input.projectId, nodeId, nodeType: parsed.nodeType, position, undoRef }
 }
 
@@ -231,18 +226,19 @@ export function addCanvasNode(input: {
  * 仅供已登记的产品能力创建固定模型或专用编辑器节点。公共 addCanvasNode 继续只接受
  * 助手可见 schema，避免任何调用方凭模型 id 绕过受控能力入口。
  */
-export function addControlledCanvasNode(input: {
+export async function addControlledCanvasNode(input: {
   projectId: string
   nodeType: string
   placement: CanvasNodePlacement
   data?: Record<string, unknown>
-}, options: { deferCommit?: boolean } = {}): Record<string, unknown> {
+}, options: CanvasCommitOptions = {}): Promise<Record<string, unknown>> {
   requireCurrentCanvasProject(input.projectId)
+  assertCanvasCommitContext(input.projectId, options)
   const parsed = parseCanvasControlledNodeData(input.nodeType, input.data)
   const position = resolveNodePosition(input.placement)
   const nodeId = useCanvasStore.getState().addNode(parsed.nodeType, position, parsed.data)
   const undoRef = options.deferCommit ? undefined : rememberCanvasUndo(input.projectId, 'add_node')
-  if (!options.deferCommit) persistCanvasState()
+  await confirmCanvasPersistence(input.projectId, options)
   return {
     projectId: input.projectId,
     nodeId,
@@ -256,29 +252,31 @@ export function addControlledCanvasNode(input: {
  * 把已经由素材领域确认存在的媒体放入画布。公共 addCanvasNode 仍拒绝媒体路径；这条入口只接收
  * assetCanvasApplicationService 从正式素材记录构造的数据，避免安全边界与内部导入互相冲突。
  */
-export function addTrustedMediaCanvasNode(input: {
+export async function addTrustedMediaCanvasNode(input: {
   projectId: string
   nodeType: string
   placement: CanvasNodePlacement
   data: Record<string, unknown>
-}): Record<string, unknown> {
+}, options: CanvasCommitOptions = {}): Promise<Record<string, unknown>> {
   requireCurrentCanvasProject(input.projectId)
+  assertCanvasCommitContext(input.projectId, options)
   const parsed = parseTrustedMediaNodeData(input.nodeType, input.data)
   const position = resolveNodePosition(input.placement)
   const nodeId = useCanvasStore.getState().addNode(parsed.nodeType, position, parsed.data)
   const undoRef = rememberCanvasUndo(input.projectId, 'add_node')
-  persistCanvasState()
+  await confirmCanvasPersistence(input.projectId, options)
   return { projectId: input.projectId, nodeId, nodeType: parsed.nodeType, position, undoRef }
 }
 
-export function connectCanvasNodes(input: {
+export async function connectCanvasNodes(input: {
   projectId: string
   sourceNodeId: string
   targetNodeId: string
   sourceHandle?: string
   targetHandle?: string
-}, options: { deferCommit?: boolean } = {}): Record<string, unknown> {
+}, options: CanvasCommitOptions = {}): Promise<Record<string, unknown>> {
   requireCurrentCanvasProject(input.projectId)
+  assertCanvasCommitContext(input.projectId, options)
   if (input.sourceNodeId === input.targetNodeId) {
     throw new CanvasApplicationError('INVALID_INPUT', '画布节点不能连接到自身')
   }
@@ -362,7 +360,7 @@ export function connectCanvasNodes(input: {
   const createdNodeIds = after.nodes.filter((node) => !beforeNodeIds.has(node.id)).map((node) => node.id)
   const createdEdgeIds = after.edges.filter((item) => !beforeEdgeIds.has(item.id)).map((item) => item.id)
   const undoRef = options.deferCommit ? undefined : rememberCanvasUndo(input.projectId, 'connect_nodes')
-  if (!options.deferCommit) persistCanvasState()
+  await confirmCanvasPersistence(input.projectId, options)
   return {
     projectId: input.projectId,
     edgeId: edge.id,
@@ -376,9 +374,9 @@ export function connectCanvasNodes(input: {
   }
 }
 
-export function undoCanvasChange(projectId: string, undoRef: string): Record<string, unknown> {
+export async function undoCanvasChange(projectId: string, undoRef: string): Promise<Record<string, unknown>> {
   if (undoRef.startsWith('canvas-batch-undo:')) {
-    const result = undoCanvasBatch(projectId, undoRef)
+    const result = await undoCanvasBatch(projectId, undoRef)
     if (result) return result
   }
   requireCurrentCanvasProject(projectId)
@@ -386,13 +384,14 @@ export function undoCanvasChange(projectId: string, undoRef: string): Record<str
   if (!record || record.projectId !== projectId) {
     throw new CanvasApplicationError('NOT_FOUND', '画布撤销引用不存在或不属于当前项目')
   }
-  const canvas = useCanvasStore.getState()
-  if (canvas.history.past.length !== record.historyDepth) {
-    throw new CanvasApplicationError('STALE_CONTEXT', '画布在该操作后已发生其它变化，旧撤销引用失效')
-  }
-  if (!canvas.undo()) throw new CanvasApplicationError('CONFLICT', '当前画布没有可撤销操作')
+  await runPersistedCanvasUndo(projectId, undoRef, () => {
+    const canvas = useCanvasStore.getState()
+    if (canvas.history.past.length !== record.historyDepth) {
+      throw new CanvasApplicationError('STALE_CONTEXT', '画布在该操作后已发生其它变化，旧撤销引用失效')
+    }
+    if (!canvas.undo()) throw new CanvasApplicationError('CONFLICT', '当前画布没有可撤销操作')
+  }, record)
   undoRecords.delete(undoRef)
-  persistCanvasState()
   void maintainMultiLayerDocumentReleaseCandidates(projectId)
   return { projectId, undoRef, operation: record.operation, status: 'undone' }
 }
@@ -403,12 +402,12 @@ export function undoCanvasChange(projectId: string, undoRef: string): Record<str
  * （`canvasStore.ts` 里每个正向动作都显式 `future: []`）。所以 `history.future` 非空这件事本身
  * 就等价于"确实存在一个刚被撤销、还没被别的改动覆盖的操作"，不需要额外的引用比对。
  */
-export function redoCanvasChange(projectId: string): Record<string, unknown> {
+export async function redoCanvasChange(projectId: string): Promise<Record<string, unknown>> {
   requireCurrentCanvasProject(projectId)
   if (!useCanvasStore.getState().redo()) {
     throw new CanvasApplicationError('CONFLICT', '当前画布没有可重做操作')
   }
-  persistCanvasState()
+  await confirmCanvasPersistence(projectId)
   void maintainMultiLayerDocumentReleaseCandidates(projectId)
   return { projectId, status: 'redone' }
 }
