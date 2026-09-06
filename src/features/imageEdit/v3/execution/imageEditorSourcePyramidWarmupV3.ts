@@ -8,7 +8,7 @@ import type {
   ImageEditorV3ResourceDescriptor,
   ImageEditorV3ResourceRef,
 } from '@/platform/contracts/imageEditorV3'
-import { collectImageEditorPreviewResourceRequestsV3 } from './previewDocumentV3'
+import { collectImageEditResourceRolesV3 } from '@/core/imageEdit/v3/resourceRoles'
 
 const logger = createLogger('image_editor_v3.source_warmup')
 // 2K 让常见高分辨率照片在放大时直接命中 mip 1；以 5802×3655 的基准图计，
@@ -29,16 +29,12 @@ export class ImageEditorSourcePyramidWarmupV3 {
 
   warm(
     document: ImageEditDocumentV3,
-    descriptors: readonly ImageEditorV3ResourceDescriptor[],
+    _descriptors: readonly ImageEditorV3ResourceDescriptor[],
   ): void {
     if (this.disposed) return
-    let requests: ReturnType<typeof collectImageEditorPreviewResourceRequestsV3>
+    let imageRefs: ReadonlySet<string>
     try {
-      requests = collectImageEditorPreviewResourceRequestsV3(
-        document,
-        IMAGE_EDITOR_SOURCE_WARMUP_MAX_DIMENSION_V3,
-        descriptors,
-      )
+      imageRefs = collectImageEditResourceRolesV3(document).images
     } catch (error) {
       logger.warn('无法规划图片源预热，继续使用按需瓦片', {
         event: 'image_editor_v3.source_warmup.plan_failed',
@@ -46,9 +42,9 @@ export class ImageEditorSourcePyramidWarmupV3 {
       })
       return
     }
-    for (const request of requests) {
-      if (request.kind !== 'image-proxy') continue
-      const resourceRef = request.resourceId as ImageEditorV3ResourceRef
+    for (const imageRef of imageRefs) {
+      if (!/^sha256:[a-f0-9]{64}$/.test(imageRef)) continue
+      const resourceRef = imageRef as ImageEditorV3ResourceRef
       if (this.completed.has(resourceRef) || this.controllers.has(resourceRef) || this.queued.has(resourceRef)) continue
       this.queued.add(resourceRef)
       this.queue.push(resourceRef)

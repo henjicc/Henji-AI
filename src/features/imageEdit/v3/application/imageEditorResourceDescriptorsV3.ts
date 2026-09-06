@@ -1,9 +1,6 @@
 import type { ImageEditHistoryResourceReferenceV3 } from '@/core/imageEdit/v3/commandTypes'
 import type { ImageEditDocumentV3 } from '@/core/imageEdit/v3/documentTypes'
-import {
-  isImageEditSparseMaskReferenceV3,
-  type ImageEditLayerV3,
-} from '@/core/imageEdit/v3/layerTypes'
+import { collectImageEditResourceRolesV3 } from '@/core/imageEdit/v3/resourceRoles'
 import { collectImageEditJsonResourceIdsV3 } from '@/core/imageEdit/v3/resourceReferences'
 import type {
   ImageEditorV3ResourceDescriptor,
@@ -11,22 +8,6 @@ import type {
 } from '@/platform/contracts/imageEditorV3'
 
 export const IMAGE_EDITOR_V3_BRUSH_TILE_MEDIA_TYPE = 'application/x-henji-brush-tile-v3'
-
-function collectCurrentBrushResources(layers: readonly ImageEditLayerV3[]): Set<string> {
-  const resources = new Set<string>()
-  const visit = (layer: ImageEditLayerV3): void => {
-    if (layer.mask && isImageEditSparseMaskReferenceV3(layer.mask)) {
-      Object.values(layer.mask.tiles).forEach((resourceId) => resources.add(resourceId))
-    }
-    if (layer.type === 'raster') {
-      Object.values(layer.tiles).forEach((resourceId) => resources.add(resourceId))
-    } else if (layer.type === 'group') {
-      layer.children.forEach(visit)
-    }
-  }
-  layers.forEach(visit)
-  return resources
-}
 
 export function createImageEditorV3ResourceByteSizes(
   descriptors: readonly ImageEditorV3ResourceDescriptor[],
@@ -47,7 +28,7 @@ export function reconcileImageEditorV3ResourceDescriptors(
   retainedResources: readonly ImageEditHistoryResourceReferenceV3[],
 ): ImageEditorV3ResourceDescriptor[] {
   const retainedById = new Map(retainedResources.map((resource) => [resource.resourceId, resource]))
-  const currentBrushResources = collectCurrentBrushResources(document.layers)
+  const currentBrushResources = collectImageEditResourceRolesV3(document).sparse
   const reachableIds = new Set([
     ...collectImageEditJsonResourceIdsV3(document),
     ...retainedById.keys(),

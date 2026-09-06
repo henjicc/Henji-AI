@@ -2,7 +2,6 @@ import { BrowserWindow, type IpcMainEvent, type IpcMainInvokeEvent, type WebCont
 import type { ImageEditDocumentV3 } from '../../../src/core/imageEdit/v3/documentTypes'
 import type {
   ImageEditorV3DocumentSnapshot,
-  ImageEditorV3ResourceDescriptor,
 } from '../../../src/platform/contracts/imageEditorV3'
 import { getMainWindow } from '../window'
 import { isTrustedMainRendererUrl } from '../security/main-renderer-url'
@@ -21,7 +20,6 @@ import {
   SharpSourceProvider,
   toDocumentRef,
   type ImageEditDocumentEnvelope,
-  type ResourceDescriptor,
   type ResourceId,
   collectPersistedImageEditHistoryResourcesV3,
   getImageEditorV3StoragePaths,
@@ -41,6 +39,8 @@ import {
 import { registerIpcHandler } from './registry'
 import { ImageEditorV3RequestAdmission } from './image-editor-v3-request-admission'
 import { registerImageEditorV3SourceIpc } from './image-editor-v3-source'
+import { describeImageEditorV3DocumentResources } from '../services/image-editor-v3/snapshot-resources'
+export { describeImageEditorV3SnapshotResources } from '../services/image-editor-v3/snapshot-resources'
 import {
   abandonImageEditorV3PendingPackageImports,
   disposeImageEditorV3PendingPackageImports,
@@ -140,47 +140,6 @@ function validateSnapshotDocument(envelope: ImageEditDocumentEnvelope): ImageEdi
   return normalized.document as ImageEditDocumentV3
 }
 
-export async function describeImageEditorV3SnapshotResources(
-  resourceRefs: readonly ResourceId[],
-  describeResource: (resourceId: ResourceId) => Promise<ResourceDescriptor>,
-  signal: AbortSignal,
-): Promise<ImageEditorV3ResourceDescriptor[]> {
-  if (new Set(resourceRefs).size !== resourceRefs.length) {
-    throw new Error('Image editor snapshot contains duplicate resource references')
-  }
-  const results = new Array<ImageEditorV3ResourceDescriptor>(resourceRefs.length)
-  let cursor = 0
-  let stopped = false
-  const worker = async (): Promise<void> => {
-    while (!stopped && cursor < resourceRefs.length) {
-      throwIfAborted(signal)
-      const index = cursor
-      cursor += 1
-      const resourceRef = resourceRefs[index]
-      try {
-        const descriptor = await raceWithAbort(describeResource(resourceRef), signal)
-        if (descriptor.id !== resourceRef
-          || descriptor.sha256 !== resourceRef.slice('sha256:'.length)
-          || !Number.isSafeInteger(descriptor.byteLength)
-          || descriptor.byteLength < 0
-          || (descriptor.mediaType !== undefined && typeof descriptor.mediaType !== 'string')) {
-          throw new Error(`Image editor resource descriptor does not match snapshot reference: ${resourceRef}`)
-        }
-        results[index] = toResource(descriptor)
-      } catch (error) {
-        stopped = true
-        throw error
-      }
-    }
-  }
-  await Promise.all(Array.from(
-    { length: Math.min(8, resourceRefs.length) },
-    () => worker(),
-  ))
-  throwIfAborted(signal)
-  return results
-}
-
 async function toSnapshot(
   envelope: ImageEditDocumentEnvelope,
   signal: AbortSignal,
@@ -192,9 +151,12 @@ async function toSnapshot(
     sourceFingerprint: createImageEditSourceFingerprint(envelope) as ImageEditorV3DocumentSnapshot['sourceFingerprint'],
     previewRef: envelope.previewRef ?? null,
     resourceRefs: envelope.resourceRefs,
-    resources: await describeImageEditorV3SnapshotResources(
+    resources: await describeImageEditorV3DocumentResources(
+      document,
+      envelope.history,
       envelope.resourceRefs,
       (resourceRef) => getRuntime().resources.describe(resourceRef),
+      getRuntime().brushTiles,
       signal,
     ),
     history: envelope.history ?? null,
@@ -214,10 +176,6 @@ function toReference(envelope: ImageEditDocumentEnvelope): Record<string, unknow
   }
 }
 
-function toResource(descriptor: ResourceDescriptor): ImageEditorV3ResourceDescriptor {
-  return { resourceRef: descriptor.id, byteLength: descriptor.byteLength, mediaType: descriptor.mediaType ?? null }
-}
-
 function isNotFound(error: unknown): boolean {
   return error instanceof Error && 'code' in error && error.code === 'ENOENT'
 }
@@ -231,24 +189,6 @@ function throwIfAborted(signal: AbortSignal): void {
   const error = new Error('Image editor request cancelled')
   error.name = 'AbortError'
   throw error
-}
-
-async function raceWithAbort<T>(operation: Promise<T>, signal: AbortSignal): Promise<T> {
-  throwIfAborted(signal)
-  let onAbort: (() => void) | undefined
-  const cancelled = new Promise<never>((_, reject) => {
-    onAbort = () => {
-      const error = new Error('Image editor request cancelled')
-      error.name = 'AbortError'
-      reject(error)
-    }
-    signal.addEventListener('abort', onAbort, { once: true })
-  })
-  try {
-    return await Promise.race([operation, cancelled])
-  } finally {
-    if (onAbort) signal.removeEventListener('abort', onAbort)
-  }
 }
 
 async function assertHistoryResourceSizes(

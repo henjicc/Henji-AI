@@ -30,6 +30,17 @@ import {
 const RESOURCE = `sha256:${'a'.repeat(64)}`
 
 describe('ImageEditorSourcePyramidWarmupV3', () => {
+  it('大原图跨512画笔不参与图片预热规划，缺brush描述也不妨碍源预热', async () => {
+    const document = createImageEditDocumentV3({ width: 64, height: 64, sourceResourceId: RESOURCE })
+    const layer = document.layers[0]
+    if (layer.type !== 'raster') throw new Error('fixture')
+    layer.tiles = { '0/1/0': `sha256:${'b'.repeat(64)}` }
+    const warmup = new ImageEditorSourcePyramidWarmupV3()
+    warmup.warm(document, [])
+    await vi.waitFor(() => expect(readFastProxy).toHaveBeenCalledOnce())
+    expect(readFastProxy.mock.calls[0][0].resourceRef).toBe(RESOURCE)
+    warmup.dispose()
+  })
   beforeEach(() => {
     readFastProxy.mockReset().mockResolvedValue({
       resourceRef: RESOURCE,
