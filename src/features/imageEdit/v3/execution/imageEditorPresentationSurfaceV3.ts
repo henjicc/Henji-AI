@@ -274,6 +274,15 @@ export class ImageEditorPresentationSurfaceV3 {
     this.deactivateGpuSurface()
   }
 
+  resetDocumentFrame(): void {
+    this.retainFrames([])
+    this.atlas.dispose()
+    for (const canvas of [this.elements?.front, this.elements?.safety, this.staging, this.resizeBuffer]) {
+      if (canvas) canvas.getContext('2d')?.clearRect(0, 0, canvas.width, canvas.height)
+    }
+    this.deactivateGpuSurface()
+  }
+
   updateRuntimeDiagnostics(renderPlanCompileCount: number, cpuTaskStartCount: number): void {
     if (!this.elements) return
     this.elements.front.dataset.renderPlanCompileCount = String(renderPlanCompileCount)

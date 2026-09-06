@@ -22,6 +22,7 @@ const {
 const { createGpuRasterScenes } = require('./uiInspectionSceneCatalogGpuRaster.cjs')
 const { createGpuExportScenes } = require('./uiInspectionSceneCatalogGpuExport.cjs')
 const { createGpuBrushScenes } = require('./uiInspectionSceneCatalogGpuBrush.cjs')
+const { createImageEditorWorkloadScenes } = require('./uiInspectionImageEditorWorkload.cjs')
 const { createGpuBudgetScenes } = require('./uiInspectionSceneCatalogGpuBudget.cjs')
 const { createGpuAnnotationScenes } = require('./uiInspectionSceneCatalogGpuAnnotation.cjs')
 const { createSupportScenes } = require('./uiInspectionSceneCatalogSupport.cjs')
@@ -64,6 +65,7 @@ function createUiInspectionScenes({ canvasFixtureProjectId, settlePage }) {
     ...createGpuRasterScenes(context),
     ...createGpuExportScenes(context),
     ...createGpuBrushScenes(context),
+    ...createImageEditorWorkloadScenes(context),
     ...createGpuBudgetScenes(context),
     ...createGpuAnnotationScenes(context),
     ...createSupportScenes(context),

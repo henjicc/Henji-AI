@@ -60,7 +60,6 @@ export class ImageEditorRenderSessionGpuBridgeV3 {
   private tileRetryUsed = false
   private tileResourcesFailed = false
   private tileRetryTimer: ReturnType<typeof setTimeout> | null = null
-  private gpuPresented = false
   private interactionEventTimestamp: number | null = null
   private inFlightEventTimestamp: number | null = null
   private pendingTransform: {
@@ -79,7 +78,7 @@ export class ImageEditorRenderSessionGpuBridgeV3 {
       event: GpuPresentableFrameV3,
       layout: ImageEditorViewportLayoutV3,
       eventToPresentMs: number | null,
-    ) => boolean,
+    ) => boolean | 'deferred',
     private readonly fallbackToStableFrame?: () => void,
     private readonly readBrushTiles = readImageEditorV3BrushTiles,
   ) {
@@ -208,14 +207,15 @@ export class ImageEditorRenderSessionGpuBridgeV3 {
         ? null
         : Math.max(0, performance.now() - this.inFlightEventTimestamp)
       this.inFlightEventTimestamp = null
-      let presented = false
+      let presented: boolean | 'deferred' = false
       if (event.type === 'frame-ready') try {
-        presented = Boolean(layout && this.presentFrame?.(event, layout, eventToPresentMs))
+        presented = layout ? this.presentFrame?.(event, layout, eventToPresentMs) ?? false : false
       } finally {
         event.bitmap.close()
       } else {
-        presented = Boolean(layout && this.presentFrame?.(event, layout, eventToPresentMs))
+        presented = layout ? this.presentFrame?.(event, layout, eventToPresentMs) ?? false : false
       }
+      if (presented === 'deferred') return
       const frameLog = {
         event: this.diagnosticRenderingEnabled
           ? 'image_editor_v3.gpu_scene.hidden_frame_ready'
@@ -225,8 +225,7 @@ export class ImageEditorRenderSessionGpuBridgeV3 {
       }
       if (this.diagnosticRenderingEnabled) logger.info('图片编辑 GPU Scene 帧完成', frameLog)
       else logger.debug('图片编辑 GPU Scene 帧完成', frameLog)
-      if (presented && !this.gpuPresented) {
-        this.gpuPresented = true
+      if (presented) {
         this.publish({
           deviceStatus: 'ready',
           compositionBackend: 'gpu',
@@ -331,7 +330,6 @@ export class ImageEditorRenderSessionGpuBridgeV3 {
     deviceStatus: 'lost' | 'fallback' = 'fallback',
     deviceGeneration?: number,
   ): void {
-    this.gpuPresented = false
     this.fallbackToStableFrame?.()
     logger.warn('图片编辑 GPU Scene 已切换稳定 CPU 后备', {
       event: 'image_editor_v3.gpu_scene.fallback',

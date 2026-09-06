@@ -1,4 +1,3 @@
-import { compileImageEditRenderPlanV3, createBuiltInImageEditRenderNodeRegistry } from '@/core/imageEdit/v3'
 import type { ImageEditTransformV3 } from '@/core/imageEdit/v3/layerTypes'
 import type { ImageEditRenderQuality } from '@/core/imageEdit/v3/renderNodeDefinition'
 import { isUiInspectionReadOnly } from '@/platform/runtime'
@@ -10,14 +9,12 @@ import { imageEditorRenderResultMatchesViewV3, sameImageEditorRenderSnapshotV3 }
 import { presentImageEditorRenderSessionFrameV3 } from './imageEditorRenderSessionPresentationV3'
 import { ImageEditorViewportCompositeDisposedErrorV3, ImageEditorViewportCompositeSupersededErrorV3 } from './viewportCompositeClientV3'
 import type { ImageEditorManagedViewportCompositeV3, ImageEditorViewportCompositeClientOptionsV3 } from './viewportCompositeTypesV3'
-import { resolveImageEditorViewportAnalysisMipV3 } from './viewportGlobalAnalysisV3'
 import { imageEditorRenderRuntimePatchV3 } from './imageEditorRenderRuntimeV3'
 import { ImageEditorRenderSessionGpuBridgeV3 } from './imageEditorRenderSessionGpuBridgeV3'
 import { ImageEditorRenderSessionGpuPresentationV3 } from './imageEditorRenderSessionGpuPresentationV3'
 import { ImageEditorRenderSessionWorkV3, type ImageEditorRenderSessionWorkLayoutV3 } from './imageEditorRenderSessionWorkV3'
 import { ImageEditorRenderSessionScheduleV3 } from './imageEditorRenderSessionScheduleV3'
-
-const registry = createBuiltInImageEditRenderNodeRegistry()
+import { ImageEditorRenderSessionCpuWorkV3 } from './imageEditorRenderSessionCpuWorkV3'
 
 export type {
   ImageEditorRenderSessionDependenciesV3,
@@ -35,24 +32,19 @@ export class DefaultImageEditorRenderSessionV3 implements ImageEditorRenderSessi
   private readonly clients: ImageEditorRenderSessionClientLanesV3
   private readonly gpuBridge: ImageEditorRenderSessionGpuBridgeV3
   private readonly work: ImageEditorRenderSessionWorkV3
+  private readonly cpu: ImageEditorRenderSessionCpuWorkV3
   private readonly schedule = new ImageEditorRenderSessionScheduleV3()
   private readonly compositor = new ImageEditorPresentationSurfaceV3()
   private readonly gpuPresentation = new ImageEditorRenderSessionGpuPresentationV3(this.compositor)
   private readonly diagnosticsListeners = new Set<(value: ImageEditorRenderSessionDiagnosticsV3) => void>()
   private readonly stateListeners = new Set<(value: ImageEditorRenderSessionStateV3) => void>()
-  private readonly inFlightTasks = new Set<string>()
-  private renderPlanCompileCount = 0
-  private cpuTaskStartCount = 0
   private snapshot: ImageEditorRenderSnapshotV3 | null = null
   private layout: ImageEditorRenderSessionWorkLayoutV3 | null = null
   private stable: ImageEditorManagedViewportCompositeV3 | null = null
   private draft: ImageEditorManagedViewportCompositeV3 | null = null
   private backdrop: ImageEditorManagedViewportCompositeV3 | null = null
   private state: ImageEditorRenderSessionStateV3
-  private epoch = 0
   private cameraSequence = 0
-  private analysisMip: number | null = null
-  private analysisReadyGeneration: number | null = null
   private cameraFrame: number | null = null
   private pendingLayout: ImageEditorViewportLayoutV3 | null = null
   private readonly unsubscribeRuntime: () => void
@@ -64,6 +56,12 @@ export class DefaultImageEditorRenderSessionV3 implements ImageEditorRenderSessi
     dependencies: ImageEditorRenderSessionDependenciesV3 = {},
   ) {
     this.clients = createImageEditorRenderSessionClientLanesV3(options, dependencies)
+    this.cpu = new ImageEditorRenderSessionCpuWorkV3(this.clients,
+      () => this.compositor.updateRuntimeDiagnostics(this.cpu.renderPlanCompileCount, this.cpu.taskStartCount),
+      (settled) => {
+        this.publish({ rendering: this.cpu.rendering })
+        if (settled) this.scheduleCurrentWork()
+      })
     this.state = {
       surfaceId: null, renderGeneration: 0, geometryHash: '', cameraSequence: 0,
       coverage: 0, targetMipCoverage: 0, targetMip: null, eventToPresentMs: null,
@@ -72,7 +70,7 @@ export class DefaultImageEditorRenderSessionV3 implements ImageEditorRenderSessi
       rendering: false, fallbackRequired: false, diagnostic: null, result: null,
     }
     this.unsubscribeRuntime = this.clients.subscribeRuntime((event) => {
-      if (event.renderGeneration !== this.snapshot?.renderGeneration) return
+      if (this.cpu.suspended || event.renderGeneration !== this.snapshot?.renderGeneration) return
       this.publish(imageEditorRenderRuntimePatchV3(event, this.state.diagnostic))
     })
     this.gpuBridge = new ImageEditorRenderSessionGpuBridgeV3(
@@ -80,10 +78,14 @@ export class DefaultImageEditorRenderSessionV3 implements ImageEditorRenderSessi
       dependencies.gpuSceneClient,
       (patch) => this.publish(patch),
       isUiInspectionReadOnly(),
-      (event, layout, eventToPresentMs) => this.gpuPresentation.present(
-        event, layout, eventToPresentMs,
-      ),
-      () => this.gpuPresentation.fallback(() => this.present()),
+      (event, layout, eventToPresentMs) => {
+        if (!this.visible) return 'deferred'
+        if (this.disposed) return false
+        const presented = this.gpuPresentation.present(event, layout, eventToPresentMs)
+        if (presented) this.suspendCpuAfterGpuPresentation()
+        return presented
+      },
+      () => this.resumeCpuFallback(),
     )
     this.work = new ImageEditorRenderSessionWorkV3({
       clients: this.clients,
@@ -106,7 +108,7 @@ export class DefaultImageEditorRenderSessionV3 implements ImageEditorRenderSessi
     const gpuSurface = this.compositor.attach(elements)
     if (gpuSurface) this.gpuBridge.attachPresentationSurface(gpuSurface)
     this.compositor.updateRuntimeDiagnostics(
-      this.renderPlanCompileCount, this.cpuTaskStartCount,
+      this.cpu.renderPlanCompileCount, this.cpu.taskStartCount,
     )
     this.publish({ surfaceId: elements.surfaceId })
     this.present()
@@ -124,33 +126,27 @@ export class DefaultImageEditorRenderSessionV3 implements ImageEditorRenderSessi
       && snapshot.quality === 'draft'
       && previousSnapshot.geometryHash === snapshot.geometryHash
     this.snapshot = snapshot
-    this.gpuBridge.syncSnapshot(snapshot)
-    const plan = compileImageEditRenderPlanV3(snapshot.document, registry, snapshot.quality)
-    this.renderPlanCompileCount += 1
-    this.compositor.updateRuntimeDiagnostics(
-      this.renderPlanCompileCount, this.cpuTaskStartCount,
-    )
-    this.analysisMip = resolveImageEditorViewportAnalysisMipV3(
-      snapshot.document, plan, snapshot.quality,
-    )
-    this.analysisReadyGeneration = this.analysisMip === null ? snapshot.renderGeneration : null
+    if (previousSnapshot && previousSnapshot.document.id !== snapshot.document.id) {
+      this.releaseResults()
+      if (!this.cpu.resume()) this.cpu.cancel()
+      this.gpuPresentation.fallback(() => this.compositor.resetDocumentFrame())
+    }
     this.schedule.reset()
-    if (!coalesceDraft) {
-      this.epoch += 1
-      this.clients.cancelAll()
-      this.inFlightTasks.clear()
+    if (!coalesceDraft && !this.cpu.suspended) {
+      this.cpu.cancel()
       if (this.stable || this.backdrop) this.releaseDraft()
     }
     this.publish({
       renderGeneration: snapshot.renderGeneration,
       geometryHash: snapshot.geometryHash,
-      rendering: this.inFlightTasks.size > 0,
+      rendering: this.cpu.rendering,
       fallbackRequired: this.stable === null && this.draft === null && this.backdrop === null,
       diagnostic: null,
       targetMipCoverage: 0,
       targetMip: null,
       result: this.currentResult(),
     })
+    this.gpuBridge.syncSnapshot(snapshot)
     this.clients.warmSource(snapshot.document, snapshot.resourceDescriptors)
     this.present()
     this.scheduleCurrentWork()
@@ -196,9 +192,9 @@ export class DefaultImageEditorRenderSessionV3 implements ImageEditorRenderSessi
       },
     }
     this.gpuBridge.updateViewport(this.cameraSequence, this.layout)
-    if (previous) {
+    if (previous && !this.cpu.suspended) {
       this.clients.cancelInteractive()
-      this.removeInteractiveTasks()
+      this.cpu.removeInteractiveTasks()
     }
     this.publish({ cameraSequence: this.cameraSequence, targetMipCoverage: 0 })
     this.present()
@@ -244,12 +240,12 @@ export class DefaultImageEditorRenderSessionV3 implements ImageEditorRenderSessi
     if (this.visible === visible) return
     this.visible = visible
     if (!visible) {
-      this.clients.cancelAll()
-      this.inFlightTasks.clear()
+      this.cpu.cancel()
       this.schedule.reset()
       this.publish({ rendering: false })
       return
     }
+    if (this.snapshot) this.gpuBridge.requestFrame(this.snapshot.quality)
     this.present()
     this.scheduleCurrentWork()
   }
@@ -257,7 +253,7 @@ export class DefaultImageEditorRenderSessionV3 implements ImageEditorRenderSessi
   dispose(): void {
     if (this.disposed) return
     this.disposed = true
-    this.epoch += 1
+    this.cpu.dispose()
     if (this.cameraFrame !== null) cancelAnimationFrame(this.cameraFrame)
     this.cameraFrame = null
     this.pendingLayout = null
@@ -271,33 +267,35 @@ export class DefaultImageEditorRenderSessionV3 implements ImageEditorRenderSessi
   }
 
   private scheduleCurrentWork(): void {
-    if (!this.visible || !this.snapshot || !this.layout) return
+    if (this.cpu.suspended || !this.visible || !this.snapshot || !this.layout) return
     const snapshot = this.snapshot
     const layout = this.layout
+    this.cpu.prepare(snapshot)
+    const epoch = this.cpu.epoch
     this.schedule.schedule({
-      epoch: this.epoch,
+      epoch,
       snapshot,
       layout,
       stable: this.stable,
       draft: this.draft,
-      analysisMip: this.analysisMip,
-      analysisReadyGeneration: this.analysisReadyGeneration,
+      analysisMip: this.cpu.analysisMip,
+      analysisReadyGeneration: this.cpu.analysisReadyGeneration,
       hasReusableClearFrame: this.hasReusableClearFrame(),
-      hasTaskPrefix: (prefix) => this.hasTaskPrefix(prefix),
+      hasTaskPrefix: (prefix) => this.cpu.hasTaskPrefix(prefix),
       publishClearFrame: () => this.publish({
         targetMipCoverage: 1,
         targetMip: this.stable?.mip ?? null,
       }),
-      startTask: (token, run) => this.startTask(token, run),
+      startTask: (token, run) => this.cpu.startTask(token, run),
       renderDraft: async (viewKey) => this.work.renderDraft(
-        this.epoch, snapshot, layout, viewKey,
+        epoch, snapshot, layout, viewKey,
       ),
       renderAnalysis: async () => this.work.renderAnalysis(
-        this.epoch, snapshot, layout, this.analysisMip!,
+        epoch, snapshot, layout, this.cpu.analysisMip!,
       ),
-      renderBackdrop: async () => this.work.renderBackdrop(this.epoch, snapshot, layout),
+      renderBackdrop: async () => this.work.renderBackdrop(epoch, snapshot, layout),
       renderTarget: async (viewKey, preferredMip) => this.work.renderTarget(
-        this.epoch, snapshot, layout, viewKey, preferredMip,
+        epoch, snapshot, layout, viewKey, preferredMip,
       ),
     })
   }
@@ -321,7 +319,7 @@ export class DefaultImageEditorRenderSessionV3 implements ImageEditorRenderSessi
     current: boolean,
   ): void {
     this.replaceBackdrop(result)
-    if (current) this.analysisReadyGeneration = result.renderGeneration
+    if (current) this.cpu.analysisReadyGeneration = result.renderGeneration
     this.present()
     this.publish({ fallbackRequired: false, result: this.currentResult() })
     this.scheduleCurrentWork()
@@ -371,31 +369,25 @@ export class DefaultImageEditorRenderSessionV3 implements ImageEditorRenderSessi
     })
   }
 
-  private startTask(token: string, run: () => Promise<void>): void {
-    this.inFlightTasks.add(token)
-    this.cpuTaskStartCount += 1
-    this.compositor.updateRuntimeDiagnostics(
-      this.renderPlanCompileCount, this.cpuTaskStartCount,
-    )
-    this.publish({ rendering: true })
-    void run().finally(() => {
-      this.inFlightTasks.delete(token)
-      this.publish({ rendering: this.inFlightTasks.size > 0 })
-      this.scheduleCurrentWork()
-    })
+  private suspendCpuAfterGpuPresentation(): void {
+    if (this.cpu.suspend()) {
+      this.schedule.reset()
+      this.publish({ rendering: false })
+    }
+    if (!this.snapshot || !this.layout) return
+    const documentId = this.snapshot.document.id
+    this.cpu.captureSafetyOnce(this.snapshot, this.layout, this.backdrop,
+      (result) => {
+        if (this.snapshot?.document.id !== documentId) { result.release(); return }
+        this.replaceBackdrop(result)
+      })
   }
 
-  private removeInteractiveTasks(): void {
-    for (const token of [...this.inFlightTasks]) {
-      if (token.startsWith('draft:') || token.startsWith('target:')) this.inFlightTasks.delete(token)
-    }
-  }
-
-  private hasTaskPrefix(prefix: string): boolean {
-    for (const token of this.inFlightTasks) {
-      if (token.startsWith(prefix)) return true
-    }
-    return false
+  private resumeCpuFallback(): void {
+    if (this.disposed) return
+    if (this.cpu.resume()) this.schedule.reset()
+    this.gpuPresentation.fallback(() => this.present())
+    this.scheduleCurrentWork()
   }
 
   private handleFailure(
@@ -403,7 +395,7 @@ export class DefaultImageEditorRenderSessionV3 implements ImageEditorRenderSessi
     error: unknown,
     snapshot?: ImageEditorRenderSnapshotV3,
   ): void {
-    if (epoch !== this.epoch
+    if (this.cpu.suspended || epoch !== this.cpu.epoch
       || (snapshot !== undefined && snapshot !== this.snapshot)
       || error instanceof ImageEditorViewportCompositeSupersededErrorV3
       || error instanceof ImageEditorViewportCompositeDisposedErrorV3) return
@@ -414,7 +406,7 @@ export class DefaultImageEditorRenderSessionV3 implements ImageEditorRenderSessi
   }
 
   private accepts(epoch: number, snapshot: ImageEditorRenderSnapshotV3): boolean {
-    return !this.disposed && epoch === this.epoch && this.snapshot === snapshot
+    return !this.disposed && !this.cpu.suspended && epoch === this.cpu.epoch && this.snapshot === snapshot
   }
 
   private acceptsView(
@@ -426,7 +418,7 @@ export class DefaultImageEditorRenderSessionV3 implements ImageEditorRenderSessi
     return this.accepts(epoch, snapshot)
       && this.layout === layout
       && viewKey === [
-        this.epoch,
+        this.cpu.epoch,
         snapshot.renderGeneration,
         layout.cameraSequence,
         layout.viewportKey,
@@ -438,7 +430,8 @@ export class DefaultImageEditorRenderSessionV3 implements ImageEditorRenderSessi
     snapshot: ImageEditorRenderSnapshotV3,
   ): boolean {
     return !this.disposed
-      && epoch === this.epoch
+      && !this.cpu.suspended
+      && epoch === this.cpu.epoch
       && snapshot.quality === 'draft'
       && this.snapshot?.quality === 'draft'
       && snapshot.geometryHash === this.snapshot.geometryHash
