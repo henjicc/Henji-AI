@@ -24,6 +24,7 @@ import {
 type TranscodeFormat = Exclude<RasterExportFormat, 'bigtiff'>
 type SharpInstance = ReturnType<typeof SharpType>
 type SharpFormatKey = 'jpeg' | 'webp' | 'png' | 'tiff' | 'heif'
+type RasterDimensions = Pick<TileOutputDescription, 'width' | 'height'>
 
 export type TranscodingExportOptions = RasterExportOptions & { format: TranscodeFormat }
 
@@ -80,6 +81,20 @@ async function loadRequiredSharp(format: TranscodeFormat): Promise<typeof SharpT
     )
   }
   return sharp
+}
+
+function resolveSafeTiffTileSize(
+  requestedTileSize: number,
+  dimensions: RasterDimensions,
+): number {
+  // libvips rejects TIFF tiles larger than this image-relative safety bound. If the
+  // requested grid exceeds it, the complete image still fits in the reduced tile,
+  // so renderer tile geometry remains a single edge tile and needs no repacking.
+  const imageRelativeLimit = Math.min(
+    8192,
+    Math.ceil((2 * Math.max(dimensions.width, dimensions.height)) / 256) * 256,
+  )
+  return Math.min(requestedTileSize, imageRelativeLimit)
 }
 
 function configurePipeline(
@@ -167,7 +182,7 @@ export class TranscodingTileOutputSink extends FileTileOutputSinkBase {
     )
     this.intermediatePath = intermediatePath
     const writer = new IncrementalBigTiffWriter(intermediatePath, {
-      tileSize: this.tileSize,
+      tileSize: resolveSafeTiffTileSize(this.tileSize, description),
       compressionLevel: this.exportOptions.compressionLevel,
       iccProfile: metadata.iccProfile,
     })
@@ -194,7 +209,7 @@ export class TranscodingTileOutputSink extends FileTileOutputSinkBase {
 
   protected async onComplete(
     stagedPath: string,
-    _description: TileOutputDescription,
+    description: TileOutputDescription,
   ): Promise<void> {
     if (this.hdrEncoder) {
       await this.hdrEncoder.complete()
@@ -212,7 +227,11 @@ export class TranscodingTileOutputSink extends FileTileOutputSinkBase {
         limitInputPixels: false,
         sequentialRead: true,
       }).keepIccProfile()
-      pipeline = configurePipeline(pipeline, this.exportOptions, this.tileSize)
+      pipeline = configurePipeline(
+        pipeline,
+        this.exportOptions,
+        resolveSafeTiffTileSize(this.tileSize, description),
+      )
       this.pipeline = pipeline
       await pipeline.toFile(stagedPath)
     } catch (error) {
