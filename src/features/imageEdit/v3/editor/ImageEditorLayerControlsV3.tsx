@@ -1,15 +1,15 @@
-import { useLayoutEffect, type RefObject } from 'react'
+import { useLayoutEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { UiButton } from '@/components/ui'
 import type { ImageEditDocumentV3 } from '@/core/imageEdit/v3/documentTypes'
-import { paintImageEditorLayerControlsV3 } from './layerControlsPresentationV3'
+import type { ImageEditorLayerControlsPresentationV3 } from './layerControlsPresentationV3'
 import { findImageEditLayerLocationV3 } from './layerTreeV3'
 import { isImageEditLayerTransformableV3 } from './layerTransformV3'
 import { layerToOutputV3, LAYER_TRANSFORM_HANDLES_V3, type LayerContentBoundsV3 } from './layerPickingV3'
 
 
-export function ImageEditorLayerControlsV3({ rootRef, document, layerId, bounds, outputWidth, outputHeight, zoom }: {
-  rootRef: RefObject<HTMLDivElement>
+export function ImageEditorLayerControlsV3({ presentation, document, layerId, bounds, outputWidth, outputHeight, zoom }: {
+  presentation: ImageEditorLayerControlsPresentationV3
   document: ImageEditDocumentV3
   layerId: string | null
   bounds: LayerContentBoundsV3 | null
@@ -18,12 +18,16 @@ export function ImageEditorLayerControlsV3({ rootRef, document, layerId, bounds,
   zoom: number
 }): JSX.Element | null {
   const { t } = useTranslation('ui')
+  const rootRef = useRef<HTMLDivElement>(null)
   const location = layerId ? findImageEditLayerLocationV3(document.layers, layerId) : null
   const visible = isImageEditLayerTransformableV3(location) && location.layer.type === 'raster' && bounds !== null
   useLayoutEffect(() => {
-    if (visible && location && bounds) paintImageEditorLayerControlsV3(rootRef.current,
-      layerToOutputV3(document, location), bounds, outputWidth, outputHeight, zoom)
-  }, [bounds, document, location, outputHeight, outputWidth, rootRef, visible, zoom])
+    presentation.sync(rootRef.current, visible && location && bounds ? {
+      documentId: document.id, revision: document.revision, layerId: location.layer.id,
+      matrix: layerToOutputV3(document, location), bounds, outputWidth, outputHeight, zoom,
+    } : null)
+  }, [bounds, document, location, outputHeight, outputWidth, presentation, visible, zoom])
+  useLayoutEffect(() => () => presentation.sync(null, null), [presentation])
   if (!visible) return null
   return (
     <div ref={rootRef} data-layer-transform-controls={layerId} className="pointer-events-none absolute inset-0">

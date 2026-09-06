@@ -2,6 +2,59 @@ import { mapImageEditTransformPointV3 } from '@/core/imageEdit/v3'
 import type { ImageEditTransformV3 } from '@/core/imageEdit/v3/layerTypes'
 import { LAYER_TRANSFORM_HANDLES_V3, type LayerContentBoundsV3 } from './layerPickingV3'
 
+export interface ImageEditorLayerControlsFrameV3 {
+  documentId: string
+  revision: number
+  layerId: string
+  matrix: ImageEditTransformV3
+  bounds: LayerContentBoundsV3
+  outputWidth: number
+  outputHeight: number
+  zoom: number
+}
+
+/** 控制框唯一的位置来源：同一文档版本内瞬态变换优先，提交新版本后交还文档。 */
+export class ImageEditorLayerControlsPresentationV3 {
+  private root: HTMLDivElement | null = null
+  private frame: ImageEditorLayerControlsFrameV3 | null = null
+  private transient: Pick<ImageEditorLayerControlsFrameV3, 'documentId' | 'revision' | 'layerId' | 'matrix'>
+    & { bounds: LayerContentBoundsV3 | null } | null = null
+
+  sync(root: HTMLDivElement | null, frame: ImageEditorLayerControlsFrameV3 | null): void {
+    this.root = root
+    this.frame = frame
+    if (!frame || (this.transient && !this.matches(frame, this.transient))) this.transient = null
+    this.paint()
+  }
+
+  updateTransform(documentId: string, revision: number, layerId: string, matrix: ImageEditTransformV3 | null): void {
+    if (!matrix) {
+      if (this.transient?.layerId === layerId) this.transient = null
+    } else {
+      const identity = { documentId, revision, layerId }
+      // 资源异步就绪或预览帧刷新不能在同一手势中改变控制框局部边界。
+      const bounds = this.transient && this.matches(identity, this.transient) ? this.transient.bounds
+        : this.frame && this.matches(identity, this.frame) ? this.frame.bounds : null
+      this.transient = { ...identity, matrix: [...matrix], bounds }
+    }
+    this.paint()
+  }
+
+  private matches(a: Pick<ImageEditorLayerControlsFrameV3, 'documentId' | 'revision' | 'layerId'>,
+    b: Pick<ImageEditorLayerControlsFrameV3, 'documentId' | 'revision' | 'layerId'>): boolean {
+    return a.documentId === b.documentId && a.revision === b.revision && a.layerId === b.layerId
+  }
+
+  private paint(): void {
+    const frame = this.frame
+    if (!frame || !this.root) return
+    const transient = this.transient && this.matches(frame, this.transient) ? this.transient : null
+    if (transient && !transient.bounds) transient.bounds = frame.bounds
+    paintImageEditorLayerControlsV3(this.root, transient?.matrix ?? frame.matrix,
+      transient?.bounds ?? frame.bounds, frame.outputWidth, frame.outputHeight, frame.zoom)
+  }
+}
+
 export function paintImageEditorLayerControlsV3(root: HTMLDivElement | null, matrix: ImageEditTransformV3,
   bounds: LayerContentBoundsV3, outputWidth: number, outputHeight: number, zoom: number): void {
   if (!root) return

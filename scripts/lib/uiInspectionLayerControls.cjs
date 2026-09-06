@@ -46,13 +46,38 @@ function createLayerControlsScene(context) {
         throw new Error(`控制框未贴合有效像素边界：${JSON.stringify({ box, frame, expectedCorner,
           control: await corner.getAttribute('style') })}`)
       }
-      const drag = async (from, to, expectedRevision) => {
+      const drag = async (from, to, expectedRevision, trackTranslation = false) => {
+        const startBox = await editor.locator('[data-layer-transform-handle="nw"]').boundingBox()
+        if (trackTranslation) await page.keyboard.down('Control') // 暂停吸附，精确核对指针与框的位移。
         await page.mouse.move(...from); await page.mouse.down()
-        await page.mouse.move(...to, { steps: 20 })
+        if (trackTranslation) {
+          for (let step = 1; step <= 20; step++) {
+            const dx = (to[0] - from[0]) * step / 20, dy = (to[1] - from[1]) * step / 20
+            await page.mouse.move(from[0] + dx, from[1] + dy)
+            await page.evaluate(async ({ x, y }) => {
+              // 检查连续的呈现帧，而非只看 pointermove 或松手后的那一刻。
+              for (let frame = 0; frame < 3; frame++) {
+                await new Promise(requestAnimationFrame)
+                const box = document.querySelector('[data-layer-transform-handle="nw"]').getBoundingClientRect()
+                if (Math.abs(box.x + box.width / 2 - x) > 1 || Math.abs(box.y + box.height / 2 - y) > 1) {
+                  throw new Error(`控制框在拖动帧闪回或漂移：${JSON.stringify({ x, y, actualX: box.x + box.width / 2, actualY: box.y + box.height / 2 })}`)
+                }
+              }
+            }, { x: startBox.x + startBox.width / 2 + dx, y: startBox.y + startBox.height / 2 + dy })
+          }
+          await inspection?.capture?.('controls-during-drag')
+        } else {
+          await page.mouse.move(...to, { steps: 20 })
+          const settled = await editor.locator('[data-layer-transform-handle="nw"]').boundingBox()
+          await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))))
+          const after = await editor.locator('[data-layer-transform-handle="nw"]').boundingBox()
+          if (Math.abs(settled.x - after.x) > 1 || Math.abs(settled.y - after.y) > 1) throw new Error('变换暂停时控制框自行跳动')
+        }
         if (await revision() !== expectedRevision || await preview.getAttribute('data-preview-override-count') !== '0') {
           throw new Error('GPU 变换过程中写入了持久文档或草稿')
         }
         await page.mouse.up()
+        if (trackTranslation) await page.keyboard.up('Control')
         await waitForRevision(expectedRevision + 1)
       }
       await drag([box.x + box.width / 2, box.y + box.height / 2],
@@ -63,7 +88,7 @@ function createLayerControlsScene(context) {
       await waitForRevision(3)
       await page.keyboard.press('Meta+z')
       await waitForRevision(4)
-      await drag(point(180, 180), point(220, 195), 4)
+      await drag(point(180, 180), point(220, 195), 4, true)
       const rotation = await editor.locator('[data-layer-transform-handle="rotate"]').boundingBox()
       const nw = await editor.locator('[data-layer-transform-handle="nw"]').boundingBox()
       const se = await corner.boundingBox()
@@ -136,7 +161,8 @@ function createLayerControlsScene(context) {
       await inspection?.capture?.('keyboard-history-reopened')
       console.log(`[image-editor-layer-controls] ${JSON.stringify({ alphaClickThrough: true, revision: 8,
         undoCount: snapshot.history.undo.length, transform, gpuTransient: true, cancelPreserved: true,
-        zoomedPicking: true, constantHandleSize: true, keyboardUndoRedo: true, closedReopened: true })}`)
+        zoomedPicking: true, constantHandleSize: true, keyboardUndoRedo: true, closedReopened: true,
+        dragFrameSamples: 60, controlsFollowPointer: true })}`)
     },
   }
 }

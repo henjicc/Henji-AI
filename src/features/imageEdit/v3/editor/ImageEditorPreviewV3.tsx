@@ -9,7 +9,7 @@ import { projectImageEditorPreviewDocumentV3 } from '../execution/previewDocumen
 import { useImageEditorResultLeaseV3 } from '../execution/useImageEditorResultLeaseV3'
 import { ImageEditorAnnotationOverlayV3 } from './ImageEditorAnnotationOverlayV3'
 import { ImageEditorLayerControlsV3 } from './ImageEditorLayerControlsV3'
-import { paintImageEditorLayerControlsV3 } from './layerControlsPresentationV3'
+import { ImageEditorLayerControlsPresentationV3 } from './layerControlsPresentationV3'
 import { useImageEditorLayerPickingV3 } from './useImageEditorLayerPickingV3'
 import { imageEditorLayerContentBoundsV3, layerToOutputV3, pickImageEditorLayerV3 } from './layerPickingV3'
 import { findImageEditLayerLocationV3 } from './layerTreeV3'
@@ -86,7 +86,7 @@ export function ImageEditorPreviewV3({
   const documentClipRef = useRef<HTMLDivElement | null>(null)
   const horizontalSnapGuideRef = useRef<HTMLDivElement | null>(null)
   const verticalSnapGuideRef = useRef<HTMLDivElement | null>(null)
-  const layerControlsRef = useRef<HTMLDivElement | null>(null)
+  const layerControlsPresentation = useMemo(() => new ImageEditorLayerControlsPresentationV3(), [])
   const selectedLayerIds = useImageEditorSessionStoreV3(
     (state) => state.sessions[controller.sessionId]?.selectedLayerIds ?? EMPTY_SELECTED_LAYERS_V3,
   )
@@ -362,11 +362,9 @@ export function ImageEditorPreviewV3({
       bounds: layerBounds,
       feedback: (layerId, transform) => {
         const location = findImageEditLayerLocationV3(controller.document.layers, layerId)
-        const bounds = layerBounds(layerId)
-        if (!location || !bounds) return
-        paintImageEditorLayerControlsV3(layerControlsRef.current,
-          layerToOutputV3(controller.document, location, transform ?? location.layer.transform),
-          bounds, outputGeometry.width, outputGeometry.height, zoom)
+        if (!location) return
+        layerControlsPresentation.updateTransform(controller.document.id, controller.document.revision, layerId,
+          transform ? layerToOutputV3(controller.document, location, transform) : null)
       },
     },
   )
@@ -493,7 +491,7 @@ export function ImageEditorPreviewV3({
             resourceByteSizes={resourceByteSizes}
           />
           {navigation.effectiveTool === 'move' ? (
-            <ImageEditorLayerControlsV3 rootRef={layerControlsRef} document={controller.document}
+            <ImageEditorLayerControlsV3 presentation={layerControlsPresentation} document={controller.document}
               layerId={selectedLayerId} bounds={selectedLayerId ? layerBounds(selectedLayerId) : null}
               outputWidth={outputGeometry.width} outputHeight={outputGeometry.height} zoom={zoom} />
           ) : null}
