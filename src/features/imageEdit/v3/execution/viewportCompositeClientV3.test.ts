@@ -12,7 +12,10 @@ import {
   ImageEditorViewportCompositeSupersededErrorV3,
 } from './viewportCompositeClientV3'
 import { ImageEditorResourcePressureErrorV3 } from './imageEditorResourcePressureV3'
-import { prepareImageEditorViewportCompositeV3 } from './viewportCompositeDocumentV3'
+import {
+  estimateImageEditorViewportWorkingRegionPixelsV3,
+  prepareImageEditorViewportCompositeV3,
+} from './viewportCompositeDocumentV3'
 import type { ImageEditorViewportCompositeWorkerRequestV3 } from './viewportCompositeProtocolV3'
 import type { ImageEditorViewportFrameV3 } from './viewportTileSchedulerV3'
 import {
@@ -24,6 +27,30 @@ import {
   RENDER_IDENTITY,
   RESOURCE,
 } from './viewportCompositeClientV3.testSupport'
+
+function frameBudgetBytes(
+  frame: ImageEditorViewportFrameV3,
+  document: ReturnType<typeof createImageEditDocumentV3>,
+) {
+  const prepared = prepareImageEditorViewportCompositeV3(document, 'stable', [])
+  const transferBytes = frame.tiles.reduce((total, tile) => total + tile.pixels.byteLength, 0)
+  const decodedPixels = [...frame.resourceTiles.values()].flat()
+    .reduce((total, tile) => total + tile.width * tile.height, 0)
+  const workingPixels = estimateImageEditorViewportWorkingRegionPixelsV3(
+    prepared, frame.plan, false, frame.resourceSizes, frame.sourceMipLevels, decodedPixels,
+  )
+  const workingBytes = workingPixels * 4 * Float32Array.BYTES_PER_ELEMENT
+    * Math.max(3, prepared.plan.nodes.length + 2)
+  const outputBytes = frame.plan.tiles.reduce((total, tile) => {
+    const output = createTileRegion(
+      document.geometry,
+      { mip: frame.plan.mip, x: tile.tileX, y: tile.tileY },
+      tile.halo,
+    ).outputRect
+    return total + output.width * output.height * 4
+  }, 0)
+  return { transferBytes, workingBytes, outputBytes }
+}
 
 describe('图片编辑 V3 视口成品客户端', () => {
   it('把高分辨率视口帧登记为全局 GPU 原子任务', async () => {
@@ -210,22 +237,7 @@ describe('图片编辑 V3 视口成品客户端', () => {
       sourceResourceId: RESOURCE,
       idFactory: () => 'source',
     })
-    const prepared = prepareImageEditorViewportCompositeV3(document, 'stable', [])
-    const transferBytes = frame.tiles.reduce((total, tile) => total + tile.pixels.byteLength, 0)
-    const maxRegionPixels = frame.plan.tiles.reduce(
-      (largest, tile) => Math.max(largest, tile.width * tile.height),
-      0,
-    )
-    const workingBytes = maxRegionPixels * 4 * Float32Array.BYTES_PER_ELEMENT
-      * Math.max(3, prepared.plan.nodes.length + 2)
-    const outputBytes = frame.plan.tiles.reduce((total, tile) => {
-      const output = createTileRegion(
-        document.geometry,
-        { mip: frame.plan.mip, x: tile.tileX, y: tile.tileY },
-        tile.halo,
-      ).outputRect
-      return total + output.width * output.height * 4
-    }, 0)
+    const { transferBytes, workingBytes, outputBytes } = frameBudgetBytes(frame, document)
     const budget = new ImageEditResourceBudget({
       totalBytes: transferBytes + workingBytes + outputBytes - 1,
       cpuCacheTargetBytes: 0,
@@ -386,9 +398,19 @@ describe('图片编辑 V3 视口成品客户端', () => {
       cancel: vi.fn(),
       dispose: vi.fn(),
     }
+    const document = createImageEditDocumentV3({
+      width: 20_000,
+      height: 10_000,
+      documentId: 'viewport-rapid-update',
+      sourceResourceId: RESOURCE,
+      idFactory: () => 'source',
+    })
+    const referenceFrame = createFrame()
+    const expectedSingleJobBytes = Object.values(frameBudgetBytes(referenceFrame, document))
+      .reduce((total, bytes) => total + bytes, 0)
     const workers: FakeViewportWorker[] = []
     const budget = new ImageEditResourceBudget({
-      totalBytes: 64 * 1024 * 1024,
+      totalBytes: expectedSingleJobBytes,
       cpuCacheTargetBytes: 0,
       gpuTargetBytes: 0,
     })
@@ -401,13 +423,6 @@ describe('图片编辑 V3 视口成品客户端', () => {
         return worker
       },
       resourceBudget: budget,
-    })
-    const document = createImageEditDocumentV3({
-      width: 20_000,
-      height: 10_000,
-      documentId: 'viewport-rapid-update',
-      sourceResourceId: RESOURCE,
-      idFactory: () => 'source',
     })
     const request = (viewportKey: string) => ({
       document,
@@ -427,7 +442,7 @@ describe('图片编辑 V3 视口成品客户端', () => {
     )
     await flushUntil(() => workers[0]?.messages.some((message) => message.type === 'render') ?? false)
     const singleJobBytes = budget.snapshot().totalBytes
-    expect(singleJobBytes).toBeGreaterThan(0)
+    expect(singleJobBytes).toBe(expectedSingleJobBytes)
 
     const second = client.render(request('rapid-2'))
     await firstSettled
