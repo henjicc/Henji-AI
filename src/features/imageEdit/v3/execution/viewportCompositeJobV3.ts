@@ -39,4 +39,3 @@ export interface ActiveViewportJobV3 extends ImageEditorViewportCompositeRequest
   resolve: (result: ImageEditorManagedViewportCompositeV3) => void
   reject: (error: Error) => void
 }
-

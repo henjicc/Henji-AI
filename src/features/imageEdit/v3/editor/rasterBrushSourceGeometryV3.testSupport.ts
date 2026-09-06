@@ -44,4 +44,3 @@ export function createRasterSourceBrushFixtureV3(sourceSize: number, canvasSize:
     loadTile: loader, resolveStorageSize: loader.resolveStorageSize, resourceByteSizes, onPreviewTiles: vi.fn(), persistTiles })
   return { document, bus, layer, loader, stroke, readSourcePyramid, readSourceTile, pyramid, stored, persistTiles }
 }
-

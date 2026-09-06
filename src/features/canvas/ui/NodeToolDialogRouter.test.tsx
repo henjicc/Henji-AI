@@ -72,7 +72,7 @@ describe('NodeToolDialogRouter', () => {
     expect(screen.queryByTestId('standard-tool-dialog')).toBeNull()
   })
 
-  it('关闭前把 flush 精确会话和打开时冻结的旧节点交给唯一应用服务', async () => {
+  it('同工程关闭把 flush 精确会话和权威节点交给唯一应用服务', async () => {
     const node = editableNode()
     useProjectStore.setState({ currentProjectId: 'project-a' })
     useCanvasStore.setState({
@@ -92,15 +92,38 @@ describe('NodeToolDialogRouter', () => {
     useCanvasStore.setState({
       nodes: [{ ...node, position: { x: 120, y: 80 } }],
     })
-    useProjectStore.setState({ currentProjectId: 'project-b' })
+    routerMocks.saveAfterEditing.mockResolvedValueOnce({ imageEditSession: flushedSession })
     await act(() => onCloseReady({ nodeId: node.id, session: flushedSession }))
 
     expect(routerMocks.saveAfterEditing).toHaveBeenCalledWith({
       projectId: 'project-a',
       nodeId: node.id,
+      documentRef: node.data.imageEditSession?.documentRef,
       data: node.data,
       session: flushedSession,
     })
+  })
+
+  it('切换工程后旧关闭回调不得借新工程确认，返回原工程后可重试原会话', async () => {
+    const node = editableNode()
+    useProjectStore.setState({ currentProjectId: 'project-a' })
+    useCanvasStore.setState({ nodes: [node], activeToolDialog: { nodeId: node.id, toolType: 'edit' } })
+    render(<NodeToolDialogRouter />)
+    const onCloseReady = routerMocks.documentDialogProps?.onCloseReady as (
+      result: { nodeId: string; session: Record<string, unknown> }
+    ) => Promise<void>
+    const flushedSession = { ...node.data.imageEditSession, revision: 2 }
+    useProjectStore.setState({ currentProjectId: 'project-b' })
+    await act(async () => {
+      await expect(onCloseReady({ nodeId: node.id, session: flushedSession })).rejects.toThrow('返回原项目')
+    })
+    expect(routerMocks.saveAfterEditing).not.toHaveBeenCalled()
+    expect(useCanvasStore.getState().nodes[0].data.imageEditSession?.revision).toBe(1)
+    useProjectStore.setState({ currentProjectId: 'project-a' })
+    routerMocks.saveAfterEditing.mockResolvedValueOnce({ imageEditSession: flushedSession })
+    await act(() => onCloseReady({ nodeId: node.id, session: flushedSession }))
+    expect(routerMocks.saveAfterEditing).toHaveBeenCalledTimes(1)
+    expect(routerMocks.saveAfterEditing).toHaveBeenCalledWith(expect.objectContaining({ projectId: 'project-a', session: flushedSession }))
   })
 
   it('普通图片和旧 V1 图层节点仍走原工具对话框', () => {

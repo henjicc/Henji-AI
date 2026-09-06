@@ -53,4 +53,3 @@ export interface ScheduledJobV3 extends ImageEditorManagedPreviewRequestV3 {
   resolve: (result: ImageEditorManagedPreviewResultV3) => void
   reject: (error: Error) => void
 }
-
