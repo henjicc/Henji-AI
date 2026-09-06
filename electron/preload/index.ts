@@ -8,8 +8,8 @@ import type {
   HenjiAiApi,
   HenjiCameraStageProjectsApi,
   HenjiCameraStageRenderApi,
-  HenjiCameraStageRenderEvent,
   HenjiCameraStageRenderRequest,
+  HenjiCameraStageRenderTaskSnapshot,
   HenjiCanvasProjectsApi,
   HenjiProjectCoversApi,
   HenjiClipboardApi,
@@ -393,9 +393,12 @@ const assetLibraryApi: HenjiAssetLibraryApi = {
 
 const cameraStageRenderApi: HenjiCameraStageRenderApi = {
   start: (request) => nativeInvoke('cameraStageRender:start', request),
-  cancel: (requestId) => nativeInvoke('cameraStageRender:cancel', { requestId }),
+  get: (scope) => nativeInvoke('cameraStageRender:get', scope),
+  list: (canvasProjectId) => nativeInvoke('cameraStageRender:list', { canvasProjectId }),
+  cancel: (scope) => nativeInvoke('cameraStageRender:cancel', scope),
+  acknowledge: (scope) => nativeInvoke('cameraStageRender:acknowledge', scope),
   onEvent: (handler) => {
-    const listener = (_event: Electron.IpcRendererEvent, payload: HenjiCameraStageRenderEvent): void => {
+    const listener = (_event: Electron.IpcRendererEvent, payload: HenjiCameraStageRenderTaskSnapshot): void => {
       handler(payload)
     }
     ipcRenderer.on('cameraStageRender:event', listener)

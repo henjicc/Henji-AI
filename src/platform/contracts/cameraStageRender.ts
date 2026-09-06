@@ -3,8 +3,9 @@ export type CameraStageRenderOutputKind = 'image' | 'video'
 
 export interface CameraStageRenderRequest {
   requestId: string
+  canvasProjectId: string
   nodeId: string
-  projectId: string
+  cameraStageProjectId: string
   resolutionPreset: CameraStageRenderResolutionPreset
   outputKind: CameraStageRenderOutputKind
   selectedTimeSec?: number
@@ -60,10 +61,31 @@ export type CameraStageRenderEvent =
       nodeId: string
     }
 
+export type CameraStageRenderTaskStatus = 'queued' | 'running' | 'completed' | 'failed' | 'cancelled'
+
+export interface CameraStageRenderTaskScope {
+  requestId: string
+  canvasProjectId: string
+  nodeId: string
+}
+
+export interface CameraStageRenderTaskSnapshot extends CameraStageRenderRequest {
+  status: CameraStageRenderTaskStatus
+  phase: 'preparing' | 'rendering' | 'encoding' | null
+  progress: number
+  result: CameraStageRenderResult | null
+  message: string | null
+  createdAt: number
+  updatedAt: number
+}
+
 export interface CameraStageRenderPlatform {
-  start(request: CameraStageRenderRequest): Promise<{ accepted: true }>
-  cancel(requestId: string): Promise<void>
-  onEvent(listener: (event: CameraStageRenderEvent) => void): () => void
+  start(request: CameraStageRenderRequest): Promise<{ task: CameraStageRenderTaskSnapshot; idempotent: boolean }>
+  get(scope: CameraStageRenderTaskScope): Promise<CameraStageRenderTaskSnapshot | null>
+  list(canvasProjectId: string): Promise<CameraStageRenderTaskSnapshot[]>
+  cancel(scope: CameraStageRenderTaskScope): Promise<void>
+  acknowledge(scope: CameraStageRenderTaskScope): Promise<void>
+  onEvent(listener: (event: CameraStageRenderTaskSnapshot) => void): () => void
   workerReady(): Promise<void>
   onWorkerJob(listener: (request: CameraStageRenderRequest) => void): () => void
   onWorkerCancel(listener: (requestId: string) => void): () => void

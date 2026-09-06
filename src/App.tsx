@@ -40,6 +40,7 @@ import { useProjectStore } from '@/stores/projectStore'
 import { readDevelopmentLaunchOptions } from '@/core/development/developmentLaunch'
 import { openApplicationSurface } from '@/features/navigation/application/surfaceNavigationService'
 import { runApplicationCloseGuards } from '@/core/applicationLifecycle/applicationCloseGuards'
+import { CameraStageRenderLifecycleHost } from '@/features/canvas/application/CameraStageRenderLifecycleHost'
 
 const logger = createLogger('App')
 
@@ -258,6 +259,7 @@ const App: React.FC = () => {
 
   return (
     <NotificationProvider>
+      <CameraStageRenderLifecycleHost />
       <div
         className="h-screen min-h-screen bg-app text-white flex flex-col relative overflow-hidden"
         style={{

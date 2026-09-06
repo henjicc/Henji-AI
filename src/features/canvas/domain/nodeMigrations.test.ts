@@ -427,6 +427,35 @@ describe('resetTransientNodeRuntimeState', () => {
       imageExporting: false,
       imageRenderRequestId: null,
       imageRenderError: null,
+      renderTask: null,
+    });
+  });
+
+  it('保留可由应用级宿主恢复的 3D 后台渲染描述符', () => {
+    const data: DynamicValueMap = {
+      renderTask: {
+        version: 1,
+        requestId: 'request-1',
+        canvasProjectId: 'canvas-1',
+        nodeId: 'node-1',
+        cameraStageProjectId: 'stage-1',
+        resolutionPreset: '720p',
+        outputKind: 'video',
+      },
+      videoExporting: false,
+      videoRenderRequestId: null,
+      imageExporting: true,
+      imageRenderRequestId: 'stale-image',
+    };
+
+    resetTransientNodeRuntimeState(CANVAS_NODE_TYPES.cameraStage, data);
+
+    expect(data.renderTask).toMatchObject({ requestId: 'request-1', canvasProjectId: 'canvas-1' });
+    expect(data).toMatchObject({
+      videoExporting: true,
+      videoRenderRequestId: 'request-1',
+      imageExporting: false,
+      imageRenderRequestId: null,
     });
   });
 

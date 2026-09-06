@@ -261,4 +261,4 @@ async function setupCameraStagePlaybackClock(page, context, inspection = {}) {
   await settlePage(page, 400)
 }
 
-module.exports = { setupCameraStagePlaybackClock }
+module.exports = { createPlaybackFixture, setupCameraStagePlaybackClock }

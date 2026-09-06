@@ -83,8 +83,9 @@ vi.mock('./logging/main-logger', () => ({
 function imageRequest(requestId: string) {
   return {
     requestId,
+    canvasProjectId: 'canvas-project-1',
     nodeId: 'node-1',
-    projectId: 'project-1',
+    cameraStageProjectId: 'project-1',
     resolutionPreset: '720p' as const,
     outputKind: 'image' as const,
     selectedTimeSec: 1,
@@ -117,7 +118,7 @@ describe('camera stage background render recovery', () => {
     expect(mocks.ownerSend).toHaveBeenCalledWith(
       'cameraStageRender:event',
       expect.objectContaining({
-        type: 'failed',
+        status: 'failed',
         requestId: 'request-timeout',
         message: expect.stringContaining('长时间没有进展'),
       }),
@@ -151,7 +152,7 @@ describe('camera stage background render recovery', () => {
     expect(mocks.ownerSend).toHaveBeenCalledWith(
       'cameraStageRender:event',
       expect.objectContaining({
-        type: 'failed',
+        status: 'failed',
         requestId: 'request-mismatch',
         message: expect.stringContaining('类型与请求不一致'),
       }),

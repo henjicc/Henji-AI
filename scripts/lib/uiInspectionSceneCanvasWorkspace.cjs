@@ -82,7 +82,7 @@ function attachUiInspectionCanvasWorkspace(context) {
     await page.evaluate(async (payload) => {
       await window.henjiNative.db.execute(
         'UPDATE storyboard_projects SET node_count = ?, nodes_json = ?, edges_json = ?, viewport_json = ?, history_json = ? WHERE id = ?',
-        [payload.nodes.length, JSON.stringify(payload.nodes), '[]', JSON.stringify({ x: payload.viewportX, y: 80, zoom: 0.65 }), JSON.stringify({ past: [], future: [] }), payload.projectId]
+        [payload.nodes.length, JSON.stringify(payload.nodes), '[]', JSON.stringify({ x: payload.viewportX, y: 80, zoom: 0.65 }), JSON.stringify({ past: [], future: [], imagePool: [] }), payload.projectId]
       )
     }, { projectId, nodes, viewportX })
     await projectCard.click()

@@ -4,6 +4,7 @@ import { createLogger } from '@/core/logging'
 import type { CanvasNodePlacement } from '@/core/assistant/capabilities/canvasMutationApplicationCapabilities'
 import {
   isAssetGroupNode,
+  isCameraStageNode,
   isStoryboardSplitNode,
   type CanvasNode,
   type CanvasNodeData,
@@ -29,7 +30,14 @@ import {
   dissolveAssetGroup,
   updateAssetGroup,
 } from './assetGroupApplicationService'
-import { assertCanvasCommitContext, confirmCanvasPersistence, CanvasPersistenceError, type CanvasCommitOptions } from './canvasPersistenceService'
+import {
+  assertCanvasCommitContext,
+  assertCanvasPersistenceEffectRegistration,
+  confirmCanvasPersistence,
+  CanvasPersistenceError,
+  runAfterCanvasPersistence,
+  type CanvasCommitOptions,
+} from './canvasPersistenceService'
 const logger = createLogger('features.canvas.canvas_mutation')
 
 interface CanvasNodePatch {
@@ -322,6 +330,10 @@ export async function deleteCanvasNodes(projectId: string, nodeIds: string[], op
   const existing = new Set(beforeNodes.map((node) => node.id))
   const unique = [...new Set(nodeIds)].filter((nodeId) => existing.has(nodeId))
   if (unique.length === 0) throw new CanvasApplicationError('NOT_FOUND', '没有可删除的画布节点', true)
+  const removedCameraTasks = beforeNodes
+    .filter((node) => unique.includes(node.id) && isCameraStageNode(node))
+    .flatMap((node) => node.data.renderTask ? [node.data.renderTask] : [])
+  if (removedCameraTasks.length > 0) assertCanvasPersistenceEffectRegistration(options)
   useCanvasStore.getState().deleteNodes(unique)
   const remainingIds = new Set(useCanvasStore.getState().nodes.map((node) => node.id))
   const removedDocumentNodes = beforeNodes
@@ -329,6 +341,17 @@ export async function deleteCanvasNodes(projectId: string, nodeIds: string[], op
     .filter((node) => !remainingIds.has(node.id))
   const undoRef = rememberCanvasUndo(projectId, 'delete_nodes')
   await confirmCanvasPersistence(projectId, options)
+  if (removedCameraTasks.length > 0) {
+    runAfterCanvasPersistence(options, () => {
+      void import('./cameraStageRenderApplicationService').then(({ cancelCameraStageNodeTasks }) => (
+        cancelCameraStageNodeTasks(projectId, removedCameraTasks)
+      )).catch((error) => logger.error('删除节点后的 3D 后台渲染取消失败', error, {
+        event: 'canvas.camera_stage.background_render.delete_cancel.failed',
+        projectId,
+        context: { taskCount: removedCameraTasks.length },
+      }))
+    })
+  }
   void import('./multiLayerDocumentNodeGenerationAdapter').then(({ markMultiLayerDocumentReleaseCandidate }) => (
     Promise.all(removedDocumentNodes.map((node) => (
       markMultiLayerDocumentReleaseCandidate({ nodeId: node.id, data: node.data })
@@ -359,9 +382,24 @@ export async function clearCanvasProject(projectId: string, options: CanvasCommi
   if (clearedNodeCount === 0 && clearedEdgeCount === 0) {
     throw new CanvasApplicationError('INVALID_INPUT', '画布已经是空的，没有可清空的内容', true)
   }
+  const removedCameraTasks = before.nodes
+    .filter(isCameraStageNode)
+    .flatMap((node) => node.data.renderTask ? [node.data.renderTask] : [])
+  if (removedCameraTasks.length > 0) assertCanvasPersistenceEffectRegistration(options)
   useCanvasStore.getState().clearCanvas()
   const undoRef = rememberCanvasUndo(projectId, 'clear_canvas')
   await confirmCanvasPersistence(projectId, options)
+  if (removedCameraTasks.length > 0) {
+    runAfterCanvasPersistence(options, () => {
+      void import('./cameraStageRenderApplicationService').then(({ cancelCameraStageNodeTasks }) => (
+        cancelCameraStageNodeTasks(projectId, removedCameraTasks)
+      )).catch((error) => logger.error('清空画布后的 3D 后台渲染取消失败', error, {
+        event: 'canvas.camera_stage.background_render.clear_cancel.failed',
+        projectId,
+        context: { taskCount: removedCameraTasks.length },
+      }))
+    })
+  }
   const documentNodes = before.nodes.filter(isEditableLayerStackResultNode)
   void import('./multiLayerDocumentNodeGenerationAdapter').then(({ markMultiLayerDocumentReleaseCandidate }) => (
     Promise.all(documentNodes.map((node) => (

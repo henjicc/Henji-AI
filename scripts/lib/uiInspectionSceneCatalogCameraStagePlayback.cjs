@@ -1,4 +1,5 @@
 const { setupCameraStagePlaybackClock } = require('./uiInspectionCameraStagePlayback.cjs')
+const { setupCameraStageBackgroundRender } = require('./uiInspectionCameraStageBackgroundRender.cjs')
 
 function createCameraStagePlaybackScenes(context) {
   return [
@@ -9,6 +10,15 @@ function createCameraStagePlaybackScenes(context) {
       writesUserData: true,
       setup: (page, _electronApp, inspection) => (
         setupCameraStagePlaybackClock(page, context, inspection)
+      ),
+    },
+    {
+      id: 'canvas-camera-stage-background-render-lifecycle',
+      surface: '画布',
+      name: '画布-3D 后台渲染跨工程生命周期',
+      writesUserData: true,
+      setup: (page, _electronApp, inspection) => (
+        setupCameraStageBackgroundRender(page, context, inspection)
       ),
     },
   ]

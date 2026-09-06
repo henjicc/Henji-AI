@@ -236,6 +236,7 @@ const MISSING_TYPE_FIXTURES = {
       imageExporting: false, imageRenderRequestId: null, imageRenderError: null,
       videoProgress: null, videoExporting: false, videoRenderPhase: null,
       videoRenderRequestId: null, videoRenderError: null, outputKind: 'image',
+      renderTask: null,
     },
     width: 480,
     height: 320,

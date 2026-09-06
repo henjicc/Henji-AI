@@ -2,20 +2,34 @@ import { getPlatform } from '@/platform'
 import type {
   CameraStageRenderEvent,
   CameraStageRenderRequest,
+  CameraStageRenderTaskScope,
+  CameraStageRenderTaskSnapshot,
 } from '@/platform/contracts/cameraStageRender'
 
 export async function startCameraStageRender(
   request: CameraStageRenderRequest,
-): Promise<{ accepted: true }> {
+): Promise<{ task: CameraStageRenderTaskSnapshot; idempotent: boolean }> {
   return await getPlatform().cameraStageRender.start(request)
 }
 
-export async function cancelCameraStageRender(requestId: string): Promise<void> {
-  await getPlatform().cameraStageRender.cancel(requestId)
+export async function getCameraStageRenderTask(scope: CameraStageRenderTaskScope): Promise<CameraStageRenderTaskSnapshot | null> {
+  return await getPlatform().cameraStageRender.get(scope)
+}
+
+export async function listCameraStageRenderTasks(canvasProjectId: string): Promise<CameraStageRenderTaskSnapshot[]> {
+  return await getPlatform().cameraStageRender.list(canvasProjectId)
+}
+
+export async function cancelCameraStageRender(scope: CameraStageRenderTaskScope): Promise<void> {
+  await getPlatform().cameraStageRender.cancel(scope)
+}
+
+export async function acknowledgeCameraStageRender(scope: CameraStageRenderTaskScope): Promise<void> {
+  await getPlatform().cameraStageRender.acknowledge(scope)
 }
 
 export function onCameraStageRenderEvent(
-  listener: (event: CameraStageRenderEvent) => void,
+  listener: (event: CameraStageRenderTaskSnapshot) => void,
 ): () => void {
   return getPlatform().cameraStageRender.onEvent(listener)
 }

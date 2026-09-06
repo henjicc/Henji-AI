@@ -2,10 +2,15 @@ import type {
   CameraStageRenderEventDto,
   CameraStageRenderRequestDto,
   CameraStageRenderResultDto,
+  CameraStageRenderTaskScopeDto,
+  CameraStageRenderTaskSnapshotDto,
 } from '../services/camera-stage-render'
 import {
+  acknowledgeCameraStageRenderTask,
   cancelCameraStageRenderTask,
+  getCameraStageRenderTask,
   handleCameraStageRenderWorkerEvent,
+  listCameraStageRenderTasks,
   markCameraStageRenderWorkerReady,
   startCameraStageRenderTask,
 } from '../services/camera-stage-render'
@@ -15,13 +20,17 @@ function parseRenderRequest(input: unknown): CameraStageRenderRequestDto {
   const record = parseRecord(input)
   const requestId = record.requestId
   const nodeId = record.nodeId
-  const projectId = record.projectId
+  const canvasProjectId = record.canvasProjectId
+  const cameraStageProjectId = record.cameraStageProjectId
   const resolutionPreset = record.resolutionPreset
   const outputKind = record.outputKind
   const selectedTimeSec = record.selectedTimeSec === undefined ? undefined : Number(record.selectedTimeSec)
   if (typeof requestId !== 'string' || !requestId) throw new Error('Expected render requestId')
   if (typeof nodeId !== 'string' || !nodeId) throw new Error('Expected render nodeId')
-  if (typeof projectId !== 'string' || !projectId) throw new Error('Expected render projectId')
+  if (typeof canvasProjectId !== 'string' || !canvasProjectId) throw new Error('Expected canvasProjectId')
+  if (typeof cameraStageProjectId !== 'string' || !cameraStageProjectId) {
+    throw new Error('Expected cameraStageProjectId')
+  }
   if (resolutionPreset !== '720p' && resolutionPreset !== '1080p') {
     throw new Error('Expected render resolutionPreset')
   }
@@ -29,7 +38,15 @@ function parseRenderRequest(input: unknown): CameraStageRenderRequestDto {
   if (selectedTimeSec !== undefined && (!Number.isFinite(selectedTimeSec) || selectedTimeSec < 0)) {
     throw new Error('Expected non-negative render selectedTimeSec')
   }
-  return { requestId, nodeId, projectId, resolutionPreset, outputKind, selectedTimeSec }
+  return { requestId, nodeId, canvasProjectId, cameraStageProjectId, resolutionPreset, outputKind, selectedTimeSec }
+}
+
+function parseTaskScope(input: unknown): CameraStageRenderTaskScopeDto {
+  return {
+    requestId: parseStringField(input, 'requestId'),
+    canvasProjectId: parseStringField(input, 'canvasProjectId'),
+    nodeId: parseStringField(input, 'nodeId'),
+  }
 }
 
 function parseRenderResult(input: unknown): CameraStageRenderResultDto {
@@ -93,15 +110,30 @@ function parseWorkerEvent(input: unknown): CameraStageRenderEventDto {
 }
 
 export function registerCameraStageRenderIpc(): void {
-  registerIpcHandler<CameraStageRenderRequestDto, { accepted: true }>(
+  registerIpcHandler<CameraStageRenderRequestDto, { task: CameraStageRenderTaskSnapshotDto; idempotent: boolean }>(
     'cameraStageRender:start',
     parseRenderRequest,
     (request, event) => startCameraStageRenderTask(request, event.sender.id),
   )
-  registerIpcHandler<{ requestId: string }, void>(
+  registerIpcHandler<CameraStageRenderTaskScopeDto, CameraStageRenderTaskSnapshotDto | null>(
+    'cameraStageRender:get',
+    parseTaskScope,
+    (scope, event) => getCameraStageRenderTask(scope, event.sender.id),
+  )
+  registerIpcHandler<{ canvasProjectId: string }, CameraStageRenderTaskSnapshotDto[]>(
+    'cameraStageRender:list',
+    (input) => ({ canvasProjectId: parseStringField(input, 'canvasProjectId') }),
+    ({ canvasProjectId }, event) => listCameraStageRenderTasks(canvasProjectId, event.sender.id),
+  )
+  registerIpcHandler<CameraStageRenderTaskScopeDto, void>(
     'cameraStageRender:cancel',
-    (input) => ({ requestId: parseStringField(input, 'requestId') }),
-    ({ requestId }) => cancelCameraStageRenderTask(requestId),
+    parseTaskScope,
+    (scope, event) => cancelCameraStageRenderTask(scope, event.sender.id),
+  )
+  registerIpcHandler<CameraStageRenderTaskScopeDto, void>(
+    'cameraStageRender:acknowledge',
+    parseTaskScope,
+    (scope, event) => acknowledgeCameraStageRenderTask(scope, event.sender.id),
   )
   registerIpcHandler<void, void>(
     'cameraStageRender:workerReady',

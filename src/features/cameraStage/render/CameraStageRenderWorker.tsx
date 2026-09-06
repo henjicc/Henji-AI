@@ -73,7 +73,7 @@ export default function CameraStageRenderWorker(): JSX.Element {
       logger.error('后台 3D 渲染失败', error, {
         event: 'camera_stage.background_worker.failed',
         requestId: request.requestId,
-        context: { nodeId: request.nodeId, projectId: request.projectId },
+        context: { nodeId: request.nodeId, projectId: request.cameraStageProjectId },
       })
       await reportCameraStageRenderWorkerEvent({
         type: 'failed',
@@ -93,7 +93,7 @@ export default function CameraStageRenderWorker(): JSX.Element {
           phase: 'preparing',
           progress: 0.02,
         })
-        const loaded = await loadProjectIntoScene(request.projectId, { updateSession: false })
+        const loaded = await loadProjectIntoScene(request.cameraStageProjectId, { updateSession: false })
         if (!loaded) throw new Error('未找到需要渲染的 3D 镜头参考工程')
         if (cancelRef.current) {
           await reportCameraStageRenderWorkerEvent({
@@ -137,7 +137,7 @@ export default function CameraStageRenderWorker(): JSX.Element {
           logger.info('后台 3D 静态帧渲染开始', {
             event: 'camera_stage.background_worker.image_start',
             requestId: request.requestId,
-            context: { nodeId: request.nodeId, projectId: request.projectId, selectedTimeSec },
+            context: { nodeId: request.nodeId, projectId: request.cameraStageProjectId, selectedTimeSec },
           })
           const capture = captureRef.current
           if (!capture) throw new Error('后台渲染场景未提供静态帧捕获能力')
@@ -181,7 +181,7 @@ export default function CameraStageRenderWorker(): JSX.Element {
           logger.info('后台 3D 静态帧渲染完成', {
             event: 'camera_stage.background_worker.image_completed',
             requestId: request.requestId,
-            context: { nodeId: request.nodeId, projectId: request.projectId, selectedTimeSec },
+            context: { nodeId: request.nodeId, projectId: request.cameraStageProjectId, selectedTimeSec },
           })
           return
         }
@@ -199,7 +199,7 @@ export default function CameraStageRenderWorker(): JSX.Element {
           requestId: request.requestId,
           context: {
             nodeId: request.nodeId,
-            projectId: request.projectId,
+            projectId: request.cameraStageProjectId,
             frameCount: Math.max(1, Math.round(exportState.animation.duration * exportState.animation.fps)),
           },
         })
@@ -254,7 +254,7 @@ export default function CameraStageRenderWorker(): JSX.Element {
         logger.info('后台 3D 视频渲染完成', {
           event: 'camera_stage.background_worker.completed',
           requestId: request.requestId,
-          context: { nodeId: request.nodeId, projectId: request.projectId, frameCount: result.frameCount },
+          context: { nodeId: request.nodeId, projectId: request.cameraStageProjectId, frameCount: result.frameCount },
         })
       } catch (error) {
         if (!disposed) await reportFailure(error)

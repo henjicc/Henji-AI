@@ -24,6 +24,9 @@ import { hasGenerationResult, hasResumableServerTask } from './resumableTask';
 import { resolveMediaTargetHandle, type RowMediaKind } from './socketTypes';
 
 const LEGACY_TARGET_HANDLE_ID = 'target';
+const isRecord = (value: unknown): value is Record<string, unknown> => (
+  typeof value === 'object' && value !== null && !Array.isArray(value)
+);
 const LEGACY_GENERATION_DISPLAY_NAMES: Partial<Record<CanvasNodeType, string>> = {
   [CANVAS_NODE_TYPES.imageEdit]: 'AI 图片',
   [CANVAS_NODE_TYPES.videoGen]: 'AI 视频',
@@ -125,6 +128,23 @@ export function resetTransientNodeRuntimeState(
     return;
   }
 
+  const task = isRecord(data.renderTask) ? data.renderTask : null;
+  const hasPendingTask = task?.version === 1
+    && typeof task.requestId === 'string' && task.requestId.length > 0
+    && typeof task.canvasProjectId === 'string' && task.canvasProjectId.length > 0
+    && typeof task.nodeId === 'string' && task.nodeId.length > 0
+    && typeof task.cameraStageProjectId === 'string' && task.cameraStageProjectId.length > 0
+    && (task.outputKind === 'image' || task.outputKind === 'video')
+    && (task.resolutionPreset === '720p' || task.resolutionPreset === '1080p');
+  if (hasPendingTask) {
+    data.imageExporting = task.outputKind === 'image';
+    data.imageRenderRequestId = task.outputKind === 'image' ? task.requestId : null;
+    data.videoExporting = task.outputKind === 'video';
+    data.videoRenderRequestId = task.outputKind === 'video' ? task.requestId : null;
+    return;
+  }
+
+  data.renderTask = null;
   data.videoExporting = false;
   data.videoProgress = null;
   data.videoRenderPhase = null;

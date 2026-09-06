@@ -11,7 +11,23 @@ export interface CanvasMutationCheckpoint {
   history: unknown
   conflicted: boolean
 }
-export interface CanvasCommitOptions { deferCommit?: boolean; checkpoint?: CanvasMutationCheckpoint }
+export interface CanvasCommitOptions {
+  deferCommit?: boolean
+  checkpoint?: CanvasMutationCheckpoint
+  /** 批事务最终持久化成功后才允许触发的外部副作用；回滚或写盘失败时不会执行。 */
+  afterPersistenceConfirmed?: (effect: () => void) => void
+}
+
+export function assertCanvasPersistenceEffectRegistration(options: CanvasCommitOptions): void {
+  if (options.deferCommit && !options.afterPersistenceConfirmed) {
+    throw new Error('延迟画布事务缺少持久化后置协调器，不能安全处理外部副作用')
+  }
+}
+
+export function runAfterCanvasPersistence(options: CanvasCommitOptions, effect: () => void): void {
+  if (options.deferCommit) options.afterPersistenceConfirmed!(effect)
+  else effect()
+}
 
 export class CanvasTransactionConflictError extends Error {
   readonly code = 'STALE_CONTEXT'

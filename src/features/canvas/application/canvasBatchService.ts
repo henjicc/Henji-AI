@@ -196,9 +196,14 @@ export async function runCanvasTransaction(
 
   const checkpoint = createCanvasMutationCheckpoint(projectId)
   const releasePersistence = pauseCanvasProjectPersistence(projectId)
+  const persistenceEffects: Array<() => void> = []
   let results: Record<string, unknown>[]
   try {
-    results = await execute({ deferCommit: true, checkpoint })
+    results = await execute({
+      deferCommit: true,
+      checkpoint,
+      afterPersistenceConfirmed: (effect) => persistenceEffects.push(effect),
+    })
   } catch (error) {
     if (!isCanvasMutationCheckpointCurrent(checkpoint)) {
       releasePersistence()
@@ -247,6 +252,17 @@ export async function runCanvasTransaction(
   const completion = confirmCanvasPersistence(projectId)
   releasePersistence()
   await completion
+  for (const effect of persistenceEffects) {
+    try {
+      effect()
+    } catch (error) {
+      // 业务数据已经持久化成功；后置协调失败只能单独记录并由领域任务重入恢复，
+      // 不能把已经完成的画布事务谎报成失败。
+      logger.error('画布持久化后置协调启动失败', error, {
+        event: 'canvas.batch.after_persistence.failed', projectId, ...logContext,
+      })
+    }
+  }
   logger.info('画布批量写入完成', {
     event: 'canvas.batch.apply.completed', projectId, operationCount: results.length, undoRef, ...logContext,
   })

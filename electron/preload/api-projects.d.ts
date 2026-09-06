@@ -1,3 +1,14 @@
+import type {
+  CameraStageRenderEvent,
+  CameraStageRenderOutputKind,
+  CameraStageRenderRequest,
+  CameraStageRenderResolutionPreset,
+  CameraStageRenderResult,
+  CameraStageRenderTaskScope,
+  CameraStageRenderTaskSnapshot,
+  CameraStageRenderTaskStatus,
+} from '../../src/platform/contracts/cameraStageRender'
+
 export interface HenjiWindowStatePayload {
   isMaximized: boolean
 }
@@ -141,72 +152,22 @@ export interface HenjiCameraStageProjectsApi {
   deleteProjectRecord(projectId: string): Promise<void>
 }
 
-export type HenjiCameraStageRenderResolutionPreset = '720p' | '1080p'
-export type HenjiCameraStageRenderOutputKind = 'image' | 'video'
-
-export interface HenjiCameraStageRenderRequest {
-  requestId: string
-  nodeId: string
-  projectId: string
-  resolutionPreset: HenjiCameraStageRenderResolutionPreset
-  outputKind: HenjiCameraStageRenderOutputKind
-  selectedTimeSec?: number
-}
-
-export interface HenjiCameraStageImageRenderResult {
-  kind: 'image'
-  mediaUrl: string
-  mediaPath: string
-  savedPath: string
-  width: number
-  height: number
-  aspectRatio: string
-  selectedTimeSec: number
-}
-
-export interface HenjiCameraStageVideoRenderResult {
-  kind: 'video'
-  mediaUrl: string
-  mediaPath: string
-  savedPath: string
-  durationSeconds: number
-  frameCount: number
-  width: number
-  height: number
-}
-
-export type HenjiCameraStageRenderResult = HenjiCameraStageImageRenderResult | HenjiCameraStageVideoRenderResult
-
-export type HenjiCameraStageRenderEvent =
-  | {
-      type: 'progress'
-      requestId: string
-      nodeId: string
-      phase: 'preparing' | 'rendering' | 'encoding'
-      progress: number
-    }
-  | {
-      type: 'completed'
-      requestId: string
-      nodeId: string
-      result: HenjiCameraStageRenderResult
-    }
-  | {
-      type: 'failed'
-      requestId: string
-      nodeId: string
-      message: string
-    }
-  | {
-      type: 'cancelled'
-      requestId: string
-      nodeId: string
-    }
+export type HenjiCameraStageRenderResolutionPreset = CameraStageRenderResolutionPreset
+export type HenjiCameraStageRenderOutputKind = CameraStageRenderOutputKind
+export type HenjiCameraStageRenderRequest = CameraStageRenderRequest
+export type HenjiCameraStageRenderResult = CameraStageRenderResult
+export type HenjiCameraStageRenderEvent = CameraStageRenderEvent
+export type HenjiCameraStageRenderTaskStatus = CameraStageRenderTaskStatus
+export type HenjiCameraStageRenderTaskScope = CameraStageRenderTaskScope
+export type HenjiCameraStageRenderTaskSnapshot = CameraStageRenderTaskSnapshot
 
 export interface HenjiCameraStageRenderApi {
-  start(request: HenjiCameraStageRenderRequest): Promise<{ accepted: true }>
-  cancel(requestId: string): Promise<void>
-  onEvent(handler: (event: HenjiCameraStageRenderEvent) => void): () => void
+  start(request: HenjiCameraStageRenderRequest): Promise<{ task: HenjiCameraStageRenderTaskSnapshot; idempotent: boolean }>
+  get(scope: HenjiCameraStageRenderTaskScope): Promise<HenjiCameraStageRenderTaskSnapshot | null>
+  list(canvasProjectId: string): Promise<HenjiCameraStageRenderTaskSnapshot[]>
+  cancel(scope: HenjiCameraStageRenderTaskScope): Promise<void>
+  acknowledge(scope: HenjiCameraStageRenderTaskScope): Promise<void>
+  onEvent(handler: (event: HenjiCameraStageRenderTaskSnapshot) => void): () => void
   workerReady(): Promise<void>
   onWorkerJob(handler: (request: HenjiCameraStageRenderRequest) => void): () => void
   onWorkerCancel(handler: (requestId: string) => void): () => void

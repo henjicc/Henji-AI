@@ -163,7 +163,7 @@ async function seedExistingMultiLayerIsolatedFixture(page, context, source) {
        SET node_count = 1, nodes_json = ?, edges_json = '[]', viewport_json = ?, history_json = ?
        WHERE id = ?`,
       [JSON.stringify([node]), JSON.stringify({ x: 50, y: 120, zoom: 0.7 }),
-        JSON.stringify({ past: [], future: [] }), targetProjectId]
+        JSON.stringify({ past: [], future: [], imagePool: [] }), targetProjectId]
     )
     return {
       projectId: targetProjectId,

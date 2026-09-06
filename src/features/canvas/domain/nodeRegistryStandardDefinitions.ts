@@ -221,6 +221,7 @@ export const cameraStageNodeDefinition: CanvasNodeDefinition<CameraStageNodeData
     assetCollectionEnabled: false,
     assetCollectionLibraryId: null,
     videoRenderError: null,
+    renderTask: null,
     outputKind: 'image',
   }),
 };

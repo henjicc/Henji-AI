@@ -13,7 +13,10 @@ function getNativeCameraStageRender(): NonNullable<typeof window.henjiNative>['c
 export function createElectronCameraStageRender(): CameraStageRenderPlatform {
   return {
     start: (request) => getNativeCameraStageRender().start(request),
-    cancel: (requestId) => getNativeCameraStageRender().cancel(requestId),
+    get: (scope) => getNativeCameraStageRender().get(scope),
+    list: (canvasProjectId) => getNativeCameraStageRender().list(canvasProjectId),
+    cancel: (scope) => getNativeCameraStageRender().cancel(scope),
+    acknowledge: (scope) => getNativeCameraStageRender().acknowledge(scope),
     onEvent: (listener) => getNativeCameraStageRender().onEvent(listener),
     workerReady: () => getNativeCameraStageRender().workerReady(),
     onWorkerJob: (listener) => getNativeCameraStageRender().onWorkerJob(listener),

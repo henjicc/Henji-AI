@@ -3,74 +3,29 @@ import path from 'node:path'
 import { APP_WINDOW_BACKGROUND_HEX } from '../../../src/core/theme/colorTokens'
 import { cleanupAllVideoFrameExports } from './video/frame-export'
 import { createMainLogger } from './logging/main-logger'
+import {
+  CameraStageRenderTaskRegistry,
+  type CameraStageRenderEventDto,
+  type CameraStageRenderRequestDto,
+  type CameraStageRenderTaskRegistration,
+  type CameraStageRenderTaskScopeDto,
+  type CameraStageRenderTaskSnapshotDto,
+} from './camera-stage-render-task-registry'
 
-export type CameraStageRenderResolutionPreset = '720p' | '1080p'
-export type CameraStageRenderOutputKind = 'image' | 'video'
-
-export interface CameraStageRenderRequestDto {
-  requestId: string
-  nodeId: string
-  projectId: string
-  resolutionPreset: CameraStageRenderResolutionPreset
-  outputKind: CameraStageRenderOutputKind
-  selectedTimeSec?: number
-}
-
-export interface CameraStageImageRenderResultDto {
-  kind: 'image'
-  mediaUrl: string
-  mediaPath: string
-  savedPath: string
-  width: number
-  height: number
-  aspectRatio: string
-  selectedTimeSec: number
-}
-
-export interface CameraStageVideoRenderResultDto {
-  kind: 'video'
-  mediaUrl: string
-  mediaPath: string
-  savedPath: string
-  durationSeconds: number
-  frameCount: number
-  width: number
-  height: number
-}
-
-export type CameraStageRenderResultDto = CameraStageImageRenderResultDto | CameraStageVideoRenderResultDto
-
-export type CameraStageRenderEventDto =
-  | {
-      type: 'progress'
-      requestId: string
-      nodeId: string
-      phase: 'preparing' | 'rendering' | 'encoding'
-      progress: number
-    }
-  | {
-      type: 'completed'
-      requestId: string
-      nodeId: string
-      result: CameraStageRenderResultDto
-    }
-  | {
-      type: 'failed'
-      requestId: string
-      nodeId: string
-      message: string
-    }
-  | {
-      type: 'cancelled'
-      requestId: string
-      nodeId: string
-    }
+export type {
+  CameraStageRenderEventDto,
+  CameraStageRenderRequestDto,
+  CameraStageRenderResultDto,
+  CameraStageRenderTaskScopeDto,
+  CameraStageRenderTaskSnapshotDto,
+} from './camera-stage-render-task-registry'
 
 interface QueuedRenderTask extends CameraStageRenderRequestDto {
   ownerWebContentsId: number
 }
 
 const logger = createMainLogger('main.camera-stage-render')
+const taskRegistry = new CameraStageRenderTaskRegistry()
 const queue: QueuedRenderTask[] = []
 let workerWindow: BrowserWindow | null = null
 let workerReady = false
@@ -96,16 +51,17 @@ function clearActiveTaskTimer(): void {
 
 function failQueuedTasks(message: string): void {
   for (const task of queue.splice(0, queue.length)) {
-    sendToOwner(task, {
+    const snapshot = taskRegistry.applyEvent({
       type: 'failed',
       requestId: task.requestId,
       nodeId: task.nodeId,
       message,
     })
+    sendToOwner(task, snapshot)
   }
 }
 
-function sendToOwner(task: QueuedRenderTask, event: CameraStageRenderEventDto): void {
+function sendToOwner(task: QueuedRenderTask, event: CameraStageRenderTaskSnapshotDto): void {
   const owner = webContents.fromId(task.ownerWebContentsId)
   if (!owner || owner.isDestroyed()) return
   owner.send('cameraStageRender:event', event)
@@ -139,16 +95,17 @@ function failActiveTask(message: string): void {
   const task = activeTask
   if (!task) return
   clearActiveTaskTimer()
-  sendToOwner(task, {
+  const snapshot = taskRegistry.applyEvent({
     type: 'failed',
     requestId: task.requestId,
     nodeId: task.nodeId,
     message,
   })
+  sendToOwner(task, snapshot)
   logger.error('隐藏渲染任务失败', {
     event: 'camera_stage.background_render.failed',
     requestId: task.requestId,
-    context: { nodeId: task.nodeId, projectId: task.projectId, message },
+    context: { nodeId: task.nodeId, projectId: task.cameraStageProjectId, message },
   })
   activeTask = null
   stopPowerSaveBlocker()
@@ -242,15 +199,17 @@ function dispatchNextTask(): void {
   activeTask = task
   armActiveTaskTimer(task)
   startPowerSaveBlocker()
+  taskRegistry.markRunning(task.requestId)
   logger.info('隐藏渲染任务开始', {
     event: 'camera_stage.background_render.start',
     requestId: task.requestId,
-    context: { nodeId: task.nodeId, projectId: task.projectId, outputKind: task.outputKind },
+    context: { nodeId: task.nodeId, projectId: task.cameraStageProjectId, outputKind: task.outputKind },
   })
   win.webContents.send('cameraStageRender:workerJob', {
     requestId: task.requestId,
     nodeId: task.nodeId,
-    projectId: task.projectId,
+    canvasProjectId: task.canvasProjectId,
+    cameraStageProjectId: task.cameraStageProjectId,
     resolutionPreset: task.resolutionPreset,
     outputKind: task.outputKind,
     selectedTimeSec: task.selectedTimeSec,
@@ -260,34 +219,54 @@ function dispatchNextTask(): void {
 export function startCameraStageRenderTask(
   request: CameraStageRenderRequestDto,
   ownerWebContentsId: number,
-): { accepted: true } {
-  const duplicate = activeTask?.requestId === request.requestId
-    || queue.some((task) => task.requestId === request.requestId)
-  if (duplicate) throw new Error(`Camera stage render request already exists: ${request.requestId}`)
+): CameraStageRenderTaskRegistration {
+  const registration = taskRegistry.register(request, ownerWebContentsId)
+  if (registration.idempotent) return registration
 
   const task: QueuedRenderTask = { ...request, ownerWebContentsId }
   queue.push(task)
-  sendToOwner(task, {
-    type: 'progress',
-    requestId: task.requestId,
-    nodeId: task.nodeId,
-    phase: 'preparing',
-    progress: 0,
-  })
+  sendToOwner(task, registration.task)
   ensureWorkerWindow()
   dispatchNextTask()
-  return { accepted: true }
+  return registration
 }
 
-export function cancelCameraStageRenderTask(requestId: string): void {
-  const queuedIndex = queue.findIndex((task) => task.requestId === requestId)
+export function getCameraStageRenderTask(
+  scope: CameraStageRenderTaskScopeDto,
+  ownerWebContentsId: number,
+): CameraStageRenderTaskSnapshotDto | null {
+  return taskRegistry.require(scope, ownerWebContentsId)
+}
+
+export function listCameraStageRenderTasks(
+  canvasProjectId: string,
+  ownerWebContentsId: number,
+): CameraStageRenderTaskSnapshotDto[] {
+  return taskRegistry.list(canvasProjectId, ownerWebContentsId)
+}
+
+export function acknowledgeCameraStageRenderTask(
+  scope: CameraStageRenderTaskScopeDto,
+  ownerWebContentsId: number,
+): void {
+  taskRegistry.acknowledge(scope, ownerWebContentsId)
+}
+
+export function cancelCameraStageRenderTask(
+  scope: CameraStageRenderTaskScopeDto,
+  ownerWebContentsId: number,
+): void {
+  const current = taskRegistry.require(scope, ownerWebContentsId)
+  if (!current || current.status === 'completed' || current.status === 'failed' || current.status === 'cancelled') return
+  const queuedIndex = queue.findIndex((task) => task.requestId === scope.requestId)
   if (queuedIndex >= 0) {
     const [task] = queue.splice(queuedIndex, 1)
-    sendToOwner(task, { type: 'cancelled', requestId: task.requestId, nodeId: task.nodeId })
+    const snapshot = taskRegistry.applyEvent({ type: 'cancelled', requestId: task.requestId, nodeId: task.nodeId })
+    sendToOwner(task, snapshot)
     return
   }
-  if (activeTask?.requestId !== requestId) return
-  workerWindow?.webContents.send('cameraStageRender:workerCancel', requestId)
+  if (activeTask?.requestId !== scope.requestId) return
+  workerWindow?.webContents.send('cameraStageRender:workerCancel', scope.requestId)
 }
 
 export function markCameraStageRenderWorkerReady(senderWebContentsId: number): void {
@@ -320,7 +299,8 @@ export function handleCameraStageRenderWorkerEvent(
     )
     return
   }
-  sendToOwner(task, event)
+  const snapshot = taskRegistry.applyEvent(event)
+  sendToOwner(task, snapshot)
   if (event.type === 'progress') {
     armActiveTaskTimer(task)
     return
@@ -332,7 +312,7 @@ export function handleCameraStageRenderWorkerEvent(
       requestId: task.requestId,
       context: {
         nodeId: task.nodeId,
-        projectId: task.projectId,
+        projectId: task.cameraStageProjectId,
         outputKind: event.result.kind,
         frameCount: event.result.kind === 'video' ? event.result.frameCount : 1,
       },
@@ -341,13 +321,13 @@ export function handleCameraStageRenderWorkerEvent(
     logger.info('隐藏渲染任务已取消', {
       event: 'camera_stage.background_render.cancelled',
       requestId: task.requestId,
-      context: { nodeId: task.nodeId, projectId: task.projectId },
+      context: { nodeId: task.nodeId, projectId: task.cameraStageProjectId },
     })
   } else {
     logger.error('隐藏渲染任务失败', {
       event: 'camera_stage.background_render.failed',
       requestId: task.requestId,
-      context: { nodeId: task.nodeId, projectId: task.projectId, message: event.message },
+      context: { nodeId: task.nodeId, projectId: task.cameraStageProjectId, message: event.message },
     })
   }
   workerReady = false
@@ -360,6 +340,7 @@ export function closeCameraStageRenderWindow(): void {
   clearWorkerReadyTimer()
   clearActiveTaskTimer()
   queue.splice(0, queue.length)
+  taskRegistry.clear()
   activeTask = null
   stopPowerSaveBlocker()
   if (workerWindow && !workerWindow.isDestroyed()) workerWindow.close()

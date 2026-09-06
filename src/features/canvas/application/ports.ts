@@ -76,10 +76,6 @@ export interface CanvasEventMap {
   'camera-stage/open': {
     nodeId: string;
   };
-  'camera-stage/output': {
-    nodeId: string;
-    kind: 'image' | 'video';
-  };
   'camera-stage/render-image': {
     nodeId: string;
   };

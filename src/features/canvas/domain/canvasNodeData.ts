@@ -2,6 +2,7 @@ import type { PromptDocumentV1, PromptMediaBinding } from '@/core/inputs/promptD
 import type { ImageEditSessionReferenceV3 } from '@/core/imageEdit/v3/sessionReference';
 import type { MaskEditorDocument } from '@/features/maskEditor';
 import type { LocalRedrawSettings } from '@/platform/contracts/image';
+import type { CameraStageRenderRequest } from '@/platform/contracts/cameraStageRender';
 
 import type {
   CanvasGenerationResultKind,
@@ -381,6 +382,10 @@ export interface VideoMediaNodeData extends NodeDisplayData, NodeGenerationStatu
   [key: string]: DynamicValue;
 }
 
+export interface CameraStageRenderTaskDescriptor extends CameraStageRenderRequest {
+  version: 1;
+}
+
 export interface CameraStageNodeData extends NodeDisplayData {
   projectId: string | null;
   imageUrl: string | null;
@@ -400,6 +405,8 @@ export interface CameraStageNodeData extends NodeDisplayData {
   videoRenderPhase?: 'preparing' | 'rendering' | 'encoding' | null;
   videoRenderRequestId?: string | null;
   videoRenderError?: string | null;
+  /** 可跨页面生命周期恢复的后台渲染身份；收到持久终态后才清除。 */
+  renderTask?: CameraStageRenderTaskDescriptor | null;
   assetCollectionEnabled?: boolean;
   assetCollectionLibraryId?: string | null;
   /** 场景时间轴决定的唯一可用输出类型；旧节点缺省按静态图片处理。 */

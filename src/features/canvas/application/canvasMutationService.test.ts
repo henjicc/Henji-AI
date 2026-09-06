@@ -2,6 +2,7 @@
 
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { upsertProjectRecord } from '@/commands/projectState'
 import { CANVAS_NODE_TYPES } from '@/features/canvas/domain/canvasNodes'
 import { useCanvasStore } from '@/stores/canvasStore'
 import { useProjectStore, type Project } from '@/stores/projectStore'
@@ -18,10 +19,15 @@ import {
   connectAssetGroupToTarget,
   disconnectAssetGroupFromTarget,
   duplicateCanvasNode,
+  deleteCanvasNodes,
   groupCanvasNodes,
   ungroupCanvasNode,
   updateCanvasNode,
 } from './canvasMutationService'
+import { runCanvasTransaction } from './canvasBatchService'
+
+const cancelCameraStageNodeTasks = vi.hoisted(() => vi.fn(async () => undefined))
+vi.mock('./cameraStageRenderApplicationService', () => ({ cancelCameraStageNodeTasks }))
 
 const projectId = 'project-3-1'
 
@@ -59,6 +65,7 @@ function emptyProject(): Project {
  */
 describe('画布清空与解散分组', () => {
   beforeEach(() => {
+    cancelCameraStageNodeTasks.mockClear()
     resetCanvasApplicationStateForTests()
     useCanvasStore.getState().setCanvasData([], [], { past: [], future: [] })
     useCanvasStore.setState({
@@ -100,6 +107,114 @@ describe('画布清空与解散分组', () => {
 
     it('画布已经是空的时拒绝，不产生空的撤销记录', async () => {
       await expect(clearCanvasProject(projectId)).rejects.toThrow('画布已经是空的')
+    })
+
+    it('持久化清空后按稳定身份取消 3D 后台任务', async () => {
+      const created = await addCanvasNode({
+        projectId, nodeType: CANVAS_NODE_TYPES.cameraStage, placement: { mode: 'viewport_center' },
+      })
+      const nodeId = String(created.nodeId)
+      const renderTask = {
+        version: 1 as const,
+        requestId: 'request-1', canvasProjectId: projectId, nodeId,
+        cameraStageProjectId: 'stage-1', resolutionPreset: '720p' as const, outputKind: 'image' as const,
+      }
+      useCanvasStore.getState().updateNodeData(nodeId, { renderTask })
+
+      await clearCanvasProject(projectId)
+
+      await vi.waitFor(() => expect(cancelCameraStageNodeTasks).toHaveBeenCalledWith(projectId, [renderTask]))
+    })
+
+    it('批事务只在最终持久化成功后取消已删除节点的后台任务', async () => {
+      const created = await addCanvasNode({
+        projectId, nodeType: CANVAS_NODE_TYPES.cameraStage, placement: { mode: 'viewport_center' },
+      })
+      const nodeId = String(created.nodeId)
+      const renderTask = {
+        version: 1 as const,
+        requestId: 'request-batch-success', canvasProjectId: projectId, nodeId,
+        cameraStageProjectId: 'stage-1', resolutionPreset: '720p' as const, outputKind: 'image' as const,
+      }
+      useCanvasStore.getState().updateNodeData(nodeId, { renderTask })
+
+      let releasePersistence!: () => void
+      vi.mocked(upsertProjectRecord).mockImplementationOnce(async () => await new Promise<void>((resolve) => {
+        releasePersistence = resolve
+      }))
+
+      const transaction = runCanvasTransaction(projectId, 1, async (options) => {
+        const result = await deleteCanvasNodes(projectId, [nodeId], options)
+        expect(cancelCameraStageNodeTasks).not.toHaveBeenCalled()
+        return [result]
+      })
+
+      await vi.waitFor(() => expect(releasePersistence).toBeTypeOf('function'))
+      expect(cancelCameraStageNodeTasks).not.toHaveBeenCalled()
+      releasePersistence()
+      await transaction
+      await vi.waitFor(() => expect(cancelCameraStageNodeTasks).toHaveBeenCalledWith(projectId, [renderTask]))
+    })
+
+    it('批事务回滚会丢弃删除任务的取消副作用', async () => {
+      const created = await addCanvasNode({
+        projectId, nodeType: CANVAS_NODE_TYPES.cameraStage, placement: { mode: 'viewport_center' },
+      })
+      const nodeId = String(created.nodeId)
+      const renderTask = {
+        version: 1 as const,
+        requestId: 'request-batch-rollback', canvasProjectId: projectId, nodeId,
+        cameraStageProjectId: 'stage-1', resolutionPreset: '720p' as const, outputKind: 'image' as const,
+      }
+      useCanvasStore.getState().updateNodeData(nodeId, { renderTask })
+
+      await expect(runCanvasTransaction(projectId, 2, async (options) => {
+        await deleteCanvasNodes(projectId, [nodeId], options)
+        throw new Error('后续步骤失败')
+      })).rejects.toThrow('后续步骤失败')
+
+      expect(useCanvasStore.getState().nodes.some((node) => node.id === nodeId)).toBe(true)
+      await Promise.resolve()
+      expect(cancelCameraStageNodeTasks).not.toHaveBeenCalled()
+    })
+
+    it('最终持久化拒绝时保留删除现场但不提前取消后台任务', async () => {
+      const created = await addCanvasNode({
+        projectId, nodeType: CANVAS_NODE_TYPES.cameraStage, placement: { mode: 'viewport_center' },
+      })
+      const nodeId = String(created.nodeId)
+      useCanvasStore.getState().updateNodeData(nodeId, { renderTask: {
+        version: 1, requestId: 'request-save-failed', canvasProjectId: projectId, nodeId,
+        cameraStageProjectId: 'stage-1', resolutionPreset: '720p', outputKind: 'image',
+      } })
+      vi.mocked(upsertProjectRecord).mockRejectedValueOnce(new Error('disk full'))
+
+      await expect(runCanvasTransaction(projectId, 1, async (options) => [
+        await deleteCanvasNodes(projectId, [nodeId], options),
+      ])).rejects.toThrow('保存未确认')
+
+      expect(useCanvasStore.getState().nodes.some((node) => node.id === nodeId)).toBe(false)
+      await Promise.resolve()
+      expect(cancelCameraStageNodeTasks).not.toHaveBeenCalled()
+    })
+
+    it('持久化后的取消协调失败不把已经成功的删除事务改判为失败', async () => {
+      const created = await addCanvasNode({
+        projectId, nodeType: CANVAS_NODE_TYPES.cameraStage, placement: { mode: 'viewport_center' },
+      })
+      const nodeId = String(created.nodeId)
+      useCanvasStore.getState().updateNodeData(nodeId, { renderTask: {
+        version: 1, requestId: 'request-cancel-failed', canvasProjectId: projectId, nodeId,
+        cameraStageProjectId: 'stage-1', resolutionPreset: '720p', outputKind: 'image',
+      } })
+      cancelCameraStageNodeTasks.mockRejectedValueOnce(new Error('ipc unavailable'))
+
+      await expect(runCanvasTransaction(projectId, 1, async (options) => [
+        await deleteCanvasNodes(projectId, [nodeId], options),
+      ])).resolves.toMatchObject({ appliedOperations: [expect.objectContaining({ deletedNodeIds: [nodeId] })] })
+
+      await vi.waitFor(() => expect(cancelCameraStageNodeTasks).toHaveBeenCalledTimes(1))
+      expect(useCanvasStore.getState().nodes.some((node) => node.id === nodeId)).toBe(false)
     })
   })
 

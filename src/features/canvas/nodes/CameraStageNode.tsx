@@ -6,12 +6,9 @@ import { useStoreWithEqualityFn } from 'zustand/traditional';
 
 import {
   CANVAS_NODE_TYPES,
-  EXPORT_RESULT_NODE_DEFAULT_WIDTH,
-  EXPORT_RESULT_NODE_LAYOUT_HEIGHT,
   EXPORT_RESULT_NODE_MIN_HEIGHT,
   EXPORT_RESULT_NODE_MIN_WIDTH,
   type CameraStageNodeData,
-  isCameraStageNode,
 } from '@/features/canvas/domain/canvasNodes';
 import { canvasEventBus } from '@/features/canvas/application/canvasServices';
 import {
@@ -52,9 +49,6 @@ export const CameraStageNode = memo(({ id, data, selected, width, height }: Came
   const { t } = useTranslation();
   const updateNodeInternals = useUpdateNodeInternals();
   const updateNodeData = useCanvasStore((state) => state.updateNodeData);
-  const addNode = useCanvasStore((state) => state.addNode);
-  const addEdge = useCanvasStore((state) => state.addEdge);
-  const findNodePosition = useCanvasStore((state) => state.findNodePosition);
   const setSelectedNode = useCanvasStore((state) => state.setSelectedNode);
   const edges = useCanvasStore((state) => state.edges);
   const upstreamImages = useStoreWithEqualityFn(
@@ -122,46 +116,6 @@ export const CameraStageNode = memo(({ id, data, selected, width, height }: Came
     }
     canvasEventBus.publish('camera-stage/open', { nodeId: id });
   }, [data.imageExporting, data.imageRenderRequestId, data.videoExporting, data.videoRenderRequestId, id]);
-
-  const createOutputNode = useCallback((kind: 'image' | 'video'): void => {
-    const currentNode = useCanvasStore.getState().nodes.find((node) => node.id === id);
-    if (!isCameraStageNode(currentNode)) return;
-    const currentData = currentNode.data;
-    const mediaUrl = kind === 'image' ? currentData.imageUrl : currentData.videoUrl;
-    if (!mediaUrl) return;
-
-    const position = findNodePosition(
-      id,
-      EXPORT_RESULT_NODE_DEFAULT_WIDTH,
-      EXPORT_RESULT_NODE_LAYOUT_HEIGHT,
-    );
-    const outputNodeId = kind === 'image'
-      ? addNode(CANVAS_NODE_TYPES.exportImage, position, {
-          imageUrl: mediaUrl,
-          previewImageUrl: currentData.previewImageUrl ?? mediaUrl,
-          aspectRatio: currentData.aspectRatio,
-          displayName: t('node.cameraStage.imageResultTitle'),
-          resultKind: 'generic',
-        })
-      : addNode(CANVAS_NODE_TYPES.exportVideo, position, {
-          videoUrl: mediaUrl,
-          // 3D 节点上的 previewImageUrl 是用户手动保存的静态画面，可能来自任意时间点，
-          // 不能作为新视频的 poster；视频节点会直接解码并展示自己的第 0 帧。
-          previewImageUrl: null,
-          aspectRatio: currentData.aspectRatio,
-          durationSec: currentData.durationSec,
-          displayName: t('node.cameraStage.videoResultTitle'),
-        });
-    addEdge(id, outputNodeId);
-    logger.info('画布 3D 镜头参考已创建输出节点', {
-      event: 'canvas.camera_stage.output.completed',
-      context: { nodeId: id, outputNodeId, kind },
-    });
-  }, [addEdge, addNode, findNodePosition, id, t]);
-
-  useEffect(() => canvasEventBus.subscribe('camera-stage/output', ({ nodeId, kind }) => {
-    if (nodeId === id) createOutputNode(kind);
-  }), [createOutputNode, id]);
 
   return (
     <div
