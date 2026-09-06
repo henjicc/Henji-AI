@@ -285,9 +285,11 @@ export class ApplicationControlExecutionEngine extends ApplicationExecutionFailu
     context: ApplicationExecutionContext
   ): Promise<ApplicationTransactionResult> {
     const request = applicationUndoRequestSchema.parse(input)
+    const record = this.undoRecords.get(request.undoRef)
     return this.guarded(request.undoRef, request.idempotencyKey,
-      this.undoRecords.get(request.undoRef)?.steps ?? [], context,
-      (assertOwnership) => this.undoLocked(request, context, assertOwnership))
+      record?.steps ?? [], context,
+      (assertOwnership) => this.undoLocked(request, context, assertOwnership),
+      record ? (steps) => this.readUndoCurrentRevisions(steps, record.results, context) : undefined)
   }
 
   private async undoLocked(request: ApplicationUndoRequest, context: ApplicationExecutionContext,
@@ -303,14 +305,14 @@ export class ApplicationControlExecutionEngine extends ApplicationExecutionFailu
     const persistenceReceipts: ApplicationPersistenceReceipt[] = []
     try {
       await this.assertUndoPermissions(record.steps, context)
-      const current = await this.readCurrentRevisions(record.steps, context)
+      const current = await this.readUndoCurrentRevisions(record.steps, record.results, context)
       const resultingRevisions: Record<string, number> = {}
       record.results.forEach((result) => mergeRevisions(resultingRevisions, result.resultingRevisions))
       assertExpectedRevisions(resultingRevisions, request.expectedRevisions)
       assertExpectedRevisions(request.expectedRevisions, current)
       assertOwnership(Object.keys(current))
       const assertPermissions = await this.assertUndoPermissions(record.steps, context)
-      const checked = await this.readCurrentRevisions(record.steps, context)
+      const checked = await this.readUndoCurrentRevisions(record.steps, record.results, context)
       assertExpectedRevisions(request.expectedRevisions, checked)
       assertOwnership(Object.keys(checked))
       assertPermissions()
@@ -366,12 +368,14 @@ export class ApplicationControlExecutionEngine extends ApplicationExecutionFailu
 
   /** Gateway 实例并非事务所有者；提交、撤销和其幂等结果均在这个共享入口串行确认。 */
   private async guarded(operationRef: string, idempotencyKey: string, steps: ApplicationPlannedStep[],
-    context: ApplicationExecutionContext, execute: (assertOwnership: (scopes?: string[]) => void) => Promise<ApplicationTransactionResult>) {
+    context: ApplicationExecutionContext, execute: (assertOwnership: (scopes?: string[]) => void) => Promise<ApplicationTransactionResult>,
+    readRevisions: ((steps: ApplicationPlannedStep[]) => Promise<Record<string, number>>)
+      = (currentSteps) => this.readCurrentRevisions(currentSteps, context)) {
     try {
       const participants = this.resolvePersistenceParticipants?.(steps, context) ?? []
       const scopes = () => [...this.affectedScopes(steps), ...participants.flatMap((owner) =>
         (owner.persistenceEffects ?? []).flatMap((effect) => effect.revisionScopes))]
-      const heldScopes = new Set([...scopes(), ...Object.keys(await this.readCurrentRevisions(steps, context))])
+      const heldScopes = new Set([...scopes(), ...Object.keys(await readRevisions(steps))])
       const assertOwnership = (readScopes: string[] = []) => {
         if (context.signal?.aborted) throw new Error('CANCELLED')
         const latest = this.resolvePersistenceParticipants?.(steps, context) ?? []

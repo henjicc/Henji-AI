@@ -3,6 +3,7 @@ import type { ApplicationReflectionRegistry } from '../registry'
 import { assertCollectionOperationAvailable } from './availability'
 import { ApplicationExecutionProgressFailure } from './persistence'
 import type { ApplicationMutationExecutor, ApplicationCollectionExecutor, ApplicationSemanticOperationExecutor, ApplicationControlExecutionDependencies, ApplicationExecutionContext, ApplicationCompletedStepResult, ApplicationStepExecutionResult } from './types'
+import { resolveUndoExpectedAbsentMutations } from './undoRevisionProbe'
 
 function refKey(ref: { kind: string; id: string }): string { return `${ref.kind}\u0000${ref.id}` }
 function mergeRevisions(target: Record<string, number>, source: Record<string, number>): void {
@@ -342,6 +343,33 @@ export class ApplicationExecutionSupport {
             : (await this.registry.readEntity(step.parent, [], context)).revisions
           : await this.requireOperationExecutor(step).getCurrentRevisions(step.input)
       mergeRevisions(revisions, current)
+    }
+    return revisions
+  }
+
+  /** 撤销的最终世界可能合法缺少先改后删的实体；只用同记录 direct remove 的父集合作权威 probe。 */
+  protected async readUndoCurrentRevisions(
+    steps: ApplicationPlannedStep[],
+    results: ApplicationCompletedStepResult[],
+    context: ApplicationExecutionContext,
+  ): Promise<Record<string, number>> {
+    const absentMutations = resolveUndoExpectedAbsentMutations(steps, results)
+    const revisions: Record<string, number> = {}
+    const removalProbes = new Map<number, Record<string, number>>()
+    const removalIndexes = new Set(absentMutations.values())
+    for (let index = 0; index < steps.length; index += 1) {
+      if (absentMutations.has(index)) continue
+      const current = await this.readCurrentRevisions([steps[index]], context)
+      mergeRevisions(revisions, current)
+      if (removalIndexes.has(index)) removalProbes.set(index, current)
+    }
+    for (const [mutationIndex, removalIndex] of absentMutations) {
+      const anchor = removalProbes.get(removalIndex) ?? {}
+      for (const scope of this.affectedScopes([steps[mutationIndex]])) {
+        if (anchor[scope] === undefined) {
+          throw new Error(`REVISION_CONFLICT:UNDO_SCOPE_NOT_COVERED:${scope}`)
+        }
+      }
     }
     return revisions
   }
