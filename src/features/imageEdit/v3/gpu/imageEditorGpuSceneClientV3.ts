@@ -1,6 +1,7 @@
 import { createLogger } from '@/core/logging'
 import { createImageEditorV3RequestId } from '@/commands/imageEditorV3'
 import { readSharedImageEditorSourcePyramidV3 } from '../execution/imageEditorSourcePyramidsV3'
+import { IMAGE_EDITOR_GPU_RESOURCE_RETRY_DELAY_MS_V3, isTransientImageEditorGpuResourceFailureV3 } from '../execution/imageEditorGpuResourceRetryV3'
 import type { ImageEditDocumentV3 } from '@/core/imageEdit/v3/documentTypes'
 import type { ImageEditorV3ResourceRef } from '@/platform/contracts/imageEditorV3'
 import {
@@ -91,8 +92,12 @@ export class ImageEditorGpuSceneClientV3 implements ImageEditorGpuSceneClientV3L
   private disposed = false
   private preparingScene: AbortController | null = null
   private pendingSceneMessages: Array<{ message: ImageEditorGpuSceneWorkerRequestV3; transfer?: Transferable[] }> = []
-  private pendingReady: Extract<ImageEditorGpuSceneWorkerEventV3, { type: 'ready' }> | null = null
   private deviceGeneration = 0
+  private lostDeviceGeneration = -1
+  private readyDeviceGeneration = -1
+  private sceneResourcesReady = false
+  private latestSnapshot: ImageEditorRenderSnapshotV3 | null = null
+  private resourceRetryTimer: ReturnType<typeof setTimeout> | null = null
 
   constructor(private readonly options: ImageEditorGpuSceneClientOptionsV3) {
     if (!options.sessionId.trim()) throw new Error('GPU Scene 会话 ID 不能为空')
@@ -131,8 +136,19 @@ export class ImageEditorGpuSceneClientV3 implements ImageEditorGpuSceneClientV3L
   syncScene(snapshot: ImageEditorRenderSnapshotV3): void {
     this.assertUsable()
     if (!this.sequence.syncScene(snapshot.renderGeneration)) return
+    this.clearResourceRetry()
     this.preparingScene?.abort()
     this.pendingSceneMessages = []
+    this.latestSnapshot = snapshot
+    this.sceneResourcesReady = false
+    this.prepareScene(snapshot, true)
+  }
+
+  private prepareScene(snapshot: ImageEditorRenderSnapshotV3, retryAllowed: boolean): void {
+    logger.debug('开始准备图片编辑 GPU 场景资源', {
+      event: 'image_editor_v3.gpu_scene.resources.start',
+      context: { sceneGeneration: snapshot.renderGeneration, retry: !retryAllowed },
+    })
     const request = {
       type: 'sync-scene',
       sceneGeneration: snapshot.renderGeneration,
@@ -143,11 +159,7 @@ export class ImageEditorGpuSceneClientV3 implements ImageEditorGpuSceneClientV3L
     if (refs.length === 0) {
       this.preparingScene = null
       this.worker.postMessage({ ...request, sourcePyramids: {} })
-      if (this.pendingReady) {
-        const ready = this.pendingReady
-        this.pendingReady = null
-        this.handleEvent({ ...ready, sceneGeneration: snapshot.renderGeneration })
-      }
+      this.publishResourcesReady(snapshot.renderGeneration)
       return
     }
     const controller = new AbortController()
@@ -162,23 +174,39 @@ export class ImageEditorGpuSceneClientV3 implements ImageEditorGpuSceneClientV3L
       const pending = this.pendingSceneMessages
       this.pendingSceneMessages = []
       for (const queued of pending) this.worker.postMessage(queued.message, queued.transfer)
-      if (this.pendingReady) {
-        const ready = this.pendingReady
-        this.pendingReady = null
-        this.handleEvent({ ...ready, sceneGeneration: snapshot.renderGeneration })
-      }
+      this.publishResourcesReady(snapshot.renderGeneration)
     }).catch((error: unknown) => {
       if (controller.signal.aborted || this.disposed || this.preparingScene !== controller) return
-      this.pendingSceneMessages = []
+      this.pendingSceneMessages = this.pendingSceneMessages.filter(({ message }) => (
+        message.type === 'update-viewport' || message.type === 'update-transform'
+      ))
       this.preparingScene = null
-      this.pendingReady = null
       controller.abort()
       this.handleEvent({
-        type: 'failed', sceneGeneration: snapshot.renderGeneration, deviceGeneration: 0,
-        requestId: null, code: 'initialization-failed', recoverable: true,
+        type: 'failed', sceneGeneration: snapshot.renderGeneration, deviceGeneration: this.deviceGeneration,
+        requestId: null, code: 'scene-resources-failed', recoverable: true,
         message: `读取图片资源几何失败：${error instanceof Error ? error.message : String(error)}`,
       })
+      if (retryAllowed && isTransientImageEditorGpuResourceFailureV3(error)) {
+        this.resourceRetryTimer = setTimeout(() => {
+          this.resourceRetryTimer = null
+          if (!this.disposed && this.latestSnapshot === snapshot) this.prepareScene(snapshot, false)
+        }, IMAGE_EDITOR_GPU_RESOURCE_RETRY_DELAY_MS_V3)
+      }
     })
+  }
+
+  private publishResourcesReady(sceneGeneration: number): void {
+    this.sceneResourcesReady = true
+    logger.debug('完成图片编辑 GPU 场景资源准备', {
+      event: 'image_editor_v3.gpu_scene.resources.completed', context: { sceneGeneration },
+    })
+    this.handleEvent({ type: 'scene-resources-ready', sceneGeneration, deviceGeneration: this.deviceGeneration })
+  }
+
+  private clearResourceRetry(): void {
+    if (this.resourceRetryTimer !== null) clearTimeout(this.resourceRetryTimer)
+    this.resourceRetryTimer = null
   }
 
   attachPresentationSurface(surfaceGeneration: number, canvas: OffscreenCanvas): void {
@@ -300,8 +328,8 @@ export class ImageEditorGpuSceneClientV3 implements ImageEditorGpuSceneClientV3L
     if (this.disposed) return
     this.disposed = true
     this.preparingScene?.abort()
+    this.clearResourceRetry()
     this.pendingSceneMessages = []
-    this.pendingReady = null
     this.worker.postMessage({ type: 'dispose' })
     this.worker.terminate()
     this.worker.onmessage = null
@@ -313,20 +341,41 @@ export class ImageEditorGpuSceneClientV3 implements ImageEditorGpuSceneClientV3L
   }
 
   private handleEvent(event: ImageEditorGpuSceneWorkerEventV3): void {
+    if (this.disposed) {
+      if (event.type === 'frame-ready') event.bitmap.close()
+      return
+    }
+    if (event.deviceGeneration < this.deviceGeneration) {
+      if (event.type === 'frame-ready') event.bitmap.close()
+      return
+    }
+    if (event.deviceGeneration <= this.lostDeviceGeneration
+      && (event.type === 'frame-ready' || event.type === 'surface-frame-ready'
+        || event.type === 'tiles-needed' || event.type === 'export-tile')) {
+      if (event.type === 'frame-ready') event.bitmap.close()
+      return
+    }
     // 设备生命周期独立于场景；ready 可能在 sync-scene 发送前就由 Worker 发出。
     if (event.type === 'ready' || event.type === 'device-lost') {
-      if (event.deviceGeneration < this.deviceGeneration) return
+      if (event.type === 'ready') {
+        if (event.deviceGeneration <= this.lostDeviceGeneration
+          || event.deviceGeneration === this.readyDeviceGeneration) return
+        this.readyDeviceGeneration = event.deviceGeneration
+      }
       this.deviceGeneration = event.deviceGeneration
       event = { ...event, sceneGeneration: this.sequence.snapshot().sceneGeneration }
     }
-    if (event.type === 'ready' && this.preparingScene) {
-      this.pendingReady = event
-      return
-    }
     if (event.type === 'device-lost'
       || (event.type === 'failed' && event.code === 'initialization-failed')) {
+      this.lostDeviceGeneration = event.deviceGeneration
       event = { ...event, sceneGeneration: this.sequence.snapshot().sceneGeneration }
-      this.pendingReady = null
+      this.clearResourceRetry()
+      this.preparingScene?.abort()
+      this.preparingScene = null
+      // 尚未同步的新场景仍需最新相机/手势；丢弃旧设备的像素、帧和导出任务。
+      this.pendingSceneMessages = this.pendingSceneMessages.filter(({ message }) => (
+        message.type === 'update-viewport' || message.type === 'update-transform'
+      ))
     }
     if (!this.sequence.acceptsEvent(event)) {
       if (event.type === 'frame-ready') event.bitmap.close()
@@ -359,7 +408,9 @@ export class ImageEditorGpuSceneClientV3 implements ImageEditorGpuSceneClientV3L
     } else if (event.type === 'failed') {
       const expectedFallback = event.code === 'resource-budget-exceeded' && event.recoverable
       const metadata = {
-        event: expectedFallback
+        event: event.code === 'scene-resources-failed'
+          ? 'image_editor_v3.gpu_scene.resources.failed'
+          : expectedFallback
           ? 'image_editor_v3.gpu_scene.resource_budget_fallback'
           : event.code === 'composition-not-ready' && event.recoverable
             ? 'image_editor_v3.gpu_scene.composition_deferred'
@@ -394,6 +445,8 @@ export class ImageEditorGpuSceneClientV3 implements ImageEditorGpuSceneClientV3L
       })
     }
     for (const listener of this.listeners) listener(event)
+    if (event.type === 'ready' && event.recovered && !this.sceneResourcesReady && !this.preparingScene
+      && this.latestSnapshot) this.prepareScene(this.latestSnapshot, true)
   }
 
   private handleWorkerError(event: ErrorEvent): void {
@@ -401,7 +454,7 @@ export class ImageEditorGpuSceneClientV3 implements ImageEditorGpuSceneClientV3L
     this.handleEvent({
       type: 'failed',
       sceneGeneration: current.sceneGeneration,
-      deviceGeneration: 0,
+      deviceGeneration: this.deviceGeneration,
       requestId: null,
       code: 'initialization-failed',
       message: event.message || 'GPU Scene Worker 启动失败',
@@ -414,7 +467,7 @@ export class ImageEditorGpuSceneClientV3 implements ImageEditorGpuSceneClientV3L
   }
 
   private postSceneMessage(message: ImageEditorGpuSceneWorkerRequestV3, transfer?: Transferable[]): void {
-    if (!this.preparingScene) {
+    if (this.sceneResourcesReady && !this.preparingScene) {
       this.worker.postMessage(message, transfer)
       return
     }

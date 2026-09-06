@@ -168,6 +168,11 @@ export interface ImageEditorGpuSceneReadyEventV3 extends ImageEditorGpuSceneEven
   recovered: boolean
 }
 
+/** 宿主完成本场景源几何准备；不是 Worker 的设备就绪事件。 */
+export interface ImageEditorGpuSceneResourcesReadyEventV3 extends ImageEditorGpuSceneEventBaseV3 {
+  type: 'scene-resources-ready'
+}
+
 export interface ImageEditorGpuSceneTilesNeededEventV3 extends ImageEditorGpuSceneEventBaseV3 {
   type: 'tiles-needed'
   /** 存在时资源必须回到对应导出 job，不能写入预览 residency。 */
@@ -245,7 +250,7 @@ export interface ImageEditorGpuSceneDeviceLostEventV3 extends ImageEditorGpuScen
 export interface ImageEditorGpuSceneFailedEventV3 extends ImageEditorGpuSceneEventBaseV3 {
   type: 'failed'
   requestId: string | null
-  code: 'initialization-failed' | 'resource-budget-exceeded' | 'composition-not-ready' | 'export-not-ready'
+  code: 'initialization-failed' | 'scene-resources-failed' | 'resource-budget-exceeded' | 'composition-not-ready' | 'export-not-ready'
   message: string
   recoverable: boolean
   diagnostic?: boolean
@@ -254,6 +259,7 @@ export interface ImageEditorGpuSceneFailedEventV3 extends ImageEditorGpuSceneEve
 
 export type ImageEditorGpuSceneWorkerEventV3 =
   | ImageEditorGpuSceneReadyEventV3
+  | ImageEditorGpuSceneResourcesReadyEventV3
   | ImageEditorGpuSceneTilesNeededEventV3
   | ImageEditorGpuSceneFrameReadyEventV3
   | ImageEditorGpuSceneSurfaceFrameReadyEventV3

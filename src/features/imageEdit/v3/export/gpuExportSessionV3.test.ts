@@ -35,6 +35,20 @@ function request(document: ReturnType<typeof createImageEditDocumentV3>) {
 }
 
 describe('ImageEditorGpuExportSessionV3', () => {
+  it('设备已失败时切换快照不会清除立即失败门禁', async () => {
+    const gpu = client()
+    const session = new ImageEditorGpuExportSessionV3(gpu)
+    const document = createImageEditDocumentV3({ width: 16, height: 16 })
+    const snapshot = { document, renderGeneration: 1, geometryHash: 'a', quality: 'stable' as const,
+      resourceDescriptors: [] }
+    session.syncSnapshot(snapshot)
+    session.notifyDeviceUnavailable(new Error('device lost'))
+    session.syncSnapshot({ ...snapshot, renderGeneration: 2 })
+    await expect(session.render(request(document))![Symbol.asyncIterator]().next()).rejects.toThrow('device lost')
+    expect(gpu.requestExport).not.toHaveBeenCalled()
+    session.dispose()
+  })
+
   it.each(['初始化失败', '设备丢失'])('%s之后的新导出立即拒绝等待，恢复ready后允许正常GPU导出', async (reason) => {
     const gpu = client()
     const session = new ImageEditorGpuExportSessionV3(gpu)

@@ -25,7 +25,9 @@ function clientHarness(): {
 } {
   let subscribed: ((event: ImageEditorGpuSceneWorkerEventV3) => void) | null = null
   const client = {
-    syncScene: vi.fn(), uploadTiles: vi.fn(), updateTransientLayerTransform: vi.fn(),
+    syncScene: vi.fn((snapshot) => subscribed?.({
+      type: 'scene-resources-ready', sceneGeneration: snapshot.renderGeneration, deviceGeneration: 0,
+    })), uploadTiles: vi.fn(), updateTransientLayerTransform: vi.fn(),
     clearTransientLayerTransform: vi.fn(), updateViewport: vi.fn(), requestFrame: vi.fn(),
     subscribe: vi.fn((listener) => { subscribed = listener; return vi.fn() }), dispose: vi.fn(),
     requestExport: vi.fn(), cancelExport: vi.fn(), acknowledgeExportTile: vi.fn(),

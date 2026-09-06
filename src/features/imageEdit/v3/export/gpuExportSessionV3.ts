@@ -73,6 +73,8 @@ export class ImageEditorGpuExportSessionV3 {
   syncSnapshot(snapshot: ImageEditorRenderSnapshotV3): void {
     this.unregister()
     this.failActive(new Error('GPU Scene 文档版本已变化'))
+    // 新场景必须重新等待资源就绪；设备失败事实仍保留，不能让导出永久等候失效设备。
+    this.deviceReady = false
     this.snapshot = snapshot
     this.registryKey = key(snapshot.document.id, snapshot.document.revision)
     const registered = sessions.get(this.registryKey) ?? new Set<ImageEditorGpuExportSessionV3>()

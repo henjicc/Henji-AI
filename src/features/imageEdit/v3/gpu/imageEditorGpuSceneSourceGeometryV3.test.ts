@@ -57,7 +57,7 @@ describe('GPU 源几何同步顺序', () => {
       h.client.requestFrame(1, sequence, sequence, 'draft')
     }
     expect(h.messages.map((message) => message.type)).toEqual(['initialize'])
-    expect(h.listener).not.toHaveBeenCalled()
+    expect(h.listener).toHaveBeenCalledWith(expect.objectContaining({ type: 'ready', sceneGeneration: 1 }))
     pending.resolve(pyramid)
     await vi.waitFor(() => expect(h.messages).toHaveLength(5))
     expect(h.messages[1]).toMatchObject({ type: 'sync-scene', sourcePyramids: { [REF]: pyramid } })
@@ -86,13 +86,13 @@ describe('GPU 源几何同步顺序', () => {
     h.client.dispose()
   })
 
-  it('切换为空场景仍发布待交接 ready', async () => {
+  it('切换为空场景发布资源就绪，不伪造第二次设备 ready', async () => {
     const pending = deferred()
     const h = harness(() => pending.promise)
     h.client.syncScene(snapshot(1))
     h.ready()
     h.client.syncScene(snapshot(2, false))
-    expect(h.listener).toHaveBeenCalledWith(expect.objectContaining({ type: 'ready', sceneGeneration: 2 }))
+    expect(h.listener).toHaveBeenCalledWith(expect.objectContaining({ type: 'scene-resources-ready', sceneGeneration: 2 }))
     pending.resolve(pyramid)
     await Promise.resolve()
     expect(h.messages.filter((message) => message.type === 'sync-scene')).toHaveLength(1)
@@ -116,7 +116,7 @@ describe('GPU 源几何同步顺序', () => {
     h.client.updateViewport(1, 1, layout)
     pending.reject(new Error('资源缺失'))
     await vi.waitFor(() => expect(h.listener).toHaveBeenCalledWith(expect.objectContaining({
-      type: 'failed', code: 'initialization-failed', sceneGeneration: 1,
+      type: 'failed', code: 'scene-resources-failed', sceneGeneration: 1,
     })))
     expect(h.messages.map((message) => message.type)).toEqual(['initialize'])
     h.client.dispose()
