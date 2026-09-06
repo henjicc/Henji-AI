@@ -6,6 +6,7 @@ const GPU_TEST_FILES = [
   'src/features/imageEdit/v3/gpu/imageEditorGpuRasterCompositorV3.test.ts',
   'src/features/imageEdit/v3/gpu/imageEditorGpuRenderGraphV3.test.ts',
   'src/features/imageEdit/v3/gpu/imageEditorGpuGraphSourceGeometryV3.test.ts',
+  'src/features/imageEdit/v3/gpu/imageEditorGpuBrushHistoryV3.test.ts',
   'src/features/imageEdit/v3/gpu/imageEditorGpuSparseAnnotationV3.test.ts',
   'src/core/imageEdit/testing/vgpuImpulseProbe.gpu.test.ts',
 ]
