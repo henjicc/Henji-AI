@@ -22,7 +22,7 @@ describe('图片编辑 V3 宿主能力裁剪', () => {
     })
   })
 
-  it('工具箱开放栅格画笔与橡皮，画布宿主仍只开放导航、裁剪与标注', () => {
+  it('工具箱与画布节点共享已实现的画笔和橡皮，画布不扩展蒙版、选择或导出权限', () => {
     const profile = getImageEditorHostProfileV3('full')
 
     expect(getReadyImageEditorToolIdsV3(profile)).toEqual([
@@ -42,7 +42,11 @@ describe('图片编辑 V3 宿主能力裁剪', () => {
       'eraser',
     ])
     expect(getReadyImageEditorToolIdsV3(getImageEditorHostProfileV3('canvas-edit')))
-      .toEqual(getReadyImageEditorToolIdsV3(profile).slice(0, -2))
+      .toEqual(getReadyImageEditorToolIdsV3(profile))
+    expect(getImageEditorHostProfileV3('canvas-edit')).toMatchObject({
+      saveActions: ['save-document'], adjustments: [], layerControls: [],
+      hdrReadiness: { state: 'disabled' }, allowPackageExternalSources: false,
+    })
     expect(getImageEditorHostProfileV3('quick')).toMatchObject({
       layerKinds: ['effect'],
       adjustments: [],

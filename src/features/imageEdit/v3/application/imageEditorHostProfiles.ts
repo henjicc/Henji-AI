@@ -157,7 +157,7 @@ export const IMAGE_EDITOR_HOST_PROFILES_V3: Readonly<
   },
   'canvas-edit': {
     id: 'canvas-edit',
-    tools: [...NAVIGATION_TOOLS, ready('crop'), ...ANNOTATION_TOOLS],
+    tools: [...NAVIGATION_TOOLS, ready('crop'), ...ANNOTATION_TOOLS, ...RASTER_PAINT_TOOLS],
     layerKinds: ['raster', 'effect'],
     effects: CORE_EFFECTS,
     adjustments: [],

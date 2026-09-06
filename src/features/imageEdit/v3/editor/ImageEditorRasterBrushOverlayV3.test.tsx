@@ -50,9 +50,11 @@ class ImageDataStub {
 function ControlledRasterEditor({
   onDocumentChange,
   onPersistenceChange,
+  profileId = 'mask',
 }: {
   onDocumentChange: (document: ImageEditDocumentV3) => void
   onPersistenceChange: () => void
+  profileId?: 'full' | 'canvas-edit' | 'mask'
 }): JSX.Element {
   const initial = createImageEditDocumentV3({ width: 64, height: 64, documentId: 'brush-ui' })
   initial.layers = [createImageEditRasterLayerV3('raster', '可绘制图层')]
@@ -62,7 +64,7 @@ function ControlledRasterEditor({
       <ImageEditorV3
         sourceImageUrl="preview.png"
         document={document}
-        profileId="mask"
+        profileId={profileId}
         onDocumentChange={(next) => {
           onDocumentChange(next)
           setDocument(next)
@@ -108,11 +110,12 @@ describe('ImageEditorRasterBrushOverlayV3', () => {
     vi.unstubAllGlobals()
   })
 
-  it('pointer 手势先显示 dirty tile，抬笔后只持久化一次且撤销重做恢复引用', async () => {
+  it.each(['mask', 'full', 'canvas-edit'] as const)('%s pointer 手势先显示 dirty tile，抬笔后只持久化一次且撤销重做恢复引用', async (profileId) => {
     const changes: ImageEditDocumentV3[] = []
     const persistentChanges = vi.fn()
     const rendered = render(
       <ControlledRasterEditor
+        profileId={profileId}
         onDocumentChange={(document) => changes.push(document)}
         onPersistenceChange={persistentChanges}
       />,
