@@ -15,7 +15,8 @@ const { readFastProxy } = vi.hoisted(() => ({
   })),
 }))
 
-vi.mock('@/commands/imageEditorV3', () => ({
+vi.mock('@/commands/imageEditorV3', async (importOriginal) => ({
+  ...await importOriginal<typeof import('@/commands/imageEditorV3')>(),
   createImageEditorV3RequestId: () => 'source-warmup-test',
   readImageEditorV3FastProxy: readFastProxy,
 }))
