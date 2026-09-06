@@ -15,7 +15,8 @@ import {
 import { createHostContextSnapshot } from '@/features/assistant/hostContext/hostContext'
 import { useCameraStageStore } from '@/features/cameraStage/store/cameraStageStore'
 import { ImageEditCommandBusV3 } from '@/features/imageEdit/v3/application/imageEditCommandBus'
-import { registerImageEditV3LiveSession } from '@/features/imageEdit/v3/application/imageEditLiveSessionRegistry'
+import { registerPersistedImageEditTestSession } from './imageEditPersistenceTestSession'
+import { ImageEditorV3CommandRepository } from '@/commands/imageEditorV3'
 import { useImageEditSessionStore } from '@/features/imageEdit/store/imageEditSessionStore'
 import { getPlatform } from '@/platform/runtime'
 import { useCanvasStore } from '@/stores/canvasStore'
@@ -171,9 +172,10 @@ function loops(): WriteLoop[] {
           { radius: 8 },
         )]
         imageEditV3HarnessBus = new ImageEditCommandBusV3(document)
-        disposeImageEditV3HarnessSession = registerImageEditV3LiveSession(
+        disposeImageEditV3HarnessSession = registerPersistedImageEditTestSession(
           'harness-image-edit-v3-session',
           imageEditV3HarnessBus,
+          new ImageEditorV3CommandRepository(),
         )
       },
       seed: [

@@ -238,7 +238,18 @@ export const applicationTransactionResultSchema = z.discriminatedUnion('status',
     code: z.enum(['INVALID_PLAN', 'CONFLICT', 'NOT_FOUND', 'NOT_AVAILABLE', 'PERMISSION_DENIED', 'CANCELLED', 'EXECUTION_FAILED', 'VERIFICATION_FAILED']),
     message: z.string().min(1).max(2_000),
     recoverable: z.boolean(),
+    persistence: z.object({
+      memoryState: z.enum(['modified', 'preserved']),
+      persistenceState: z.literal('unconfirmed'),
+      stage: z.enum(['document', 'projection']),
+      recovery: z.object({
+        capabilityId: z.string().min(1),
+        target: applicationRefSchema,
+        replayMutation: z.literal(false),
+      }).strict(),
+    }).strict().optional(),
     currentRevisions: applicationRevisionSetSchema.optional(),
+    effects: z.array(applicationEffectReceiptSchema).max(512).optional(),
     undoRef: applicationOpaqueRefSchema.optional(),
     partial: z.object({
       completedStepIndexes: z.array(z.number().int().nonnegative()).max(256),

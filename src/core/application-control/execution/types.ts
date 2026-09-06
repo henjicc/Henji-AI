@@ -15,6 +15,7 @@ import type {
 import type { ApplicationControlAccessContext } from '../registry'
 import type { ApplicationRef, JsonValue } from '../identifiers'
 import type { ApplicationMutationOperation } from './writerTable'
+import type { ApplicationPersistenceResolver } from './persistence'
 
 export type ApplicationRisk = 'R0' | 'R1' | 'R2' | 'R3' | 'R4'
 
@@ -29,6 +30,8 @@ export interface ApplicationPlanRequest {
 export interface ApplicationExecutionContext extends ApplicationControlAccessContext {
   requestId: string
   signal?: AbortSignal
+  /** 仅由事务引擎创建；领域单步入口据此复用本批次，不逐字段确认。 */
+  persistenceScopes?: ReadonlySet<string>
 }
 
 export interface ApplicationCompletedStepResult {
@@ -169,6 +172,7 @@ export interface ApplicationCustomVerifier {
 }
 
 export interface ApplicationControlExecutionDependencies {
+  resolvePersistenceParticipants?: ApplicationPersistenceResolver
   now?: () => Date
   createOpaqueRef?: (kind: 'plan' | 'transaction' | 'undo') => string
   maxPlans?: number

@@ -26,6 +26,9 @@ export class ImageMarkV3PersistenceQueue {
   private inFlight: Promise<ImageEditDocumentReferenceV3> | null = null
   private reference: ImageEditDocumentReferenceV3
   private persistedHistory: string
+  private pauseToken: symbol | null = null
+  private resumed: Promise<void> | null = null
+  private resume: (() => void) | null = null
 
   constructor(private readonly options: ImageMarkV3PersistenceOptions) {
     this.reference = options.initialReference
@@ -34,6 +37,15 @@ export class ImageMarkV3PersistenceQueue {
 
   getReference(): ImageEditDocumentReferenceV3 {
     return this.reference
+  }
+
+  /** 物化不增加文档版本；只接纳当前已保存版本的权威预览，不覆盖更新中的内容。 */
+  confirmProjectionReference(reference: ImageEditDocumentReferenceV3): void {
+    if (reference.documentId !== this.reference.documentId || reference.revision !== this.reference.revision) {
+      throw new Error('图片文档预览确认与已保存版本不一致')
+    }
+    this.reference = reference
+    this.options.onStatusChange?.({ kind: 'idle', reference })
   }
 
   enqueue(snapshot: ImageEditPersistenceSnapshotV3): void {
@@ -50,12 +62,34 @@ export class ImageMarkV3PersistenceQueue {
     if (!this.pending || document.revision >= this.pending.document.revision) this.pending = snapshot
   }
 
-  async flush(): Promise<ImageEditDocumentReferenceV3> {
+  /** 暂停自动写入；同一文档不允许两个业务批次交错。 */
+  pause(): { flush: () => Promise<ImageEditDocumentReferenceV3>; release: () => void } {
+    if (this.pauseToken) throw new Error('图片编辑正在确认另一组修改，请等待完成后重试')
+    const token = Symbol('image-edit-persistence-batch')
+    this.pauseToken = token
+    this.resumed = new Promise<void>((resolve) => { this.resume = resolve })
+    return {
+      flush: () => this.flush(token),
+      release: () => {
+        if (this.pauseToken !== token) return
+        this.pauseToken = null
+        this.resume?.()
+        this.resume = null
+        this.resumed = null
+      },
+    }
+  }
+
+  async flush(token?: symbol): Promise<ImageEditDocumentReferenceV3> {
+    if (this.pauseToken && this.pauseToken !== token) {
+      await this.resumed
+      return this.flush()
+    }
     if (this.inFlight) {
       await this.inFlight
-      return this.pending ? this.flush() : this.reference
+      return this.pending ? this.flush(token) : this.reference
     }
-    this.inFlight = this.drain()
+    this.inFlight = this.drain(token)
     try {
       return await this.inFlight
     } finally {
@@ -63,8 +97,8 @@ export class ImageMarkV3PersistenceQueue {
     }
   }
 
-  private async drain(): Promise<ImageEditDocumentReferenceV3> {
-    while (this.pending) {
+  private async drain(token?: symbol): Promise<ImageEditDocumentReferenceV3> {
+    while (this.pending && (!this.pauseToken || this.pauseToken === token)) {
       const snapshot = this.pending
       const { document, history } = snapshot
       this.pending = null

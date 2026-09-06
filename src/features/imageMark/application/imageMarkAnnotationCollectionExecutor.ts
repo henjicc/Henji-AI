@@ -1,8 +1,10 @@
+import { runImageEditPersistedOperationV3 } from '@/features/imageEdit/v3/application/imageEditPersistenceOperations'
 import type {
   ApplicationCollectionExecutor,
   ApplicationCompletedStepResult,
   ApplicationEvidence,
   ApplicationPlannedStep,
+  ApplicationExecutionContext,
 } from '@/core/application-control'
 import { createLogger } from '@/core/logging'
 import {
@@ -57,7 +59,15 @@ export class ImageMarkAnnotationCollectionExecutor implements ApplicationCollect
   readonly entityType = IMAGE_MARK_ENTITY_TYPES.annotation
   readonly effectContract = { direct: [], cascades: [] }
 
-  async apply(step: CollectionStep): Promise<ApplicationCompletedStepResult> {
+  async apply(step: CollectionStep, context?: ApplicationExecutionContext): Promise<ApplicationCompletedStepResult> {
+    if (step.parent.id.startsWith('v3:')) {
+      const documentId = decodeURIComponent(step.parent.id.slice(3).split(':')[0])
+      return runImageEditPersistedOperationV3(documentId, context, () => this.applyInMemory(step))
+    }
+    return this.applyInMemory(step)
+  }
+
+  private async applyInMemory(step: CollectionStep): Promise<ApplicationCompletedStepResult> {
     if (step.parent.kind === 'image_edit.layer' && isImageEditV3Ref(step.parent)) {
       return this.applyV3(step)
     }
@@ -97,7 +107,15 @@ export class ImageMarkAnnotationCollectionExecutor implements ApplicationCollect
     return this.completed(sessionId, previousDocument, nextDocument, step.operation.targets, `已删除 ${markDoc.items.length - nextItems.length} 条标注。`)
   }
 
-  async compensate(_step: CollectionStep, result: ApplicationCompletedStepResult): Promise<ApplicationEvidence[]> {
+  async compensate(step: CollectionStep, result: ApplicationCompletedStepResult, context?: ApplicationExecutionContext): Promise<ApplicationEvidence[]> {
+    if (result.undoToken?.startsWith(V3_UNDO_PREFIX)) {
+      const payload = JSON.parse(result.undoToken.slice(V3_UNDO_PREFIX.length)) as V3UndoPayload
+      return runImageEditPersistedOperationV3(payload.documentId, context, () => this.compensateInMemory(step, result))
+    }
+    return this.compensateInMemory(step, result)
+  }
+
+  private async compensateInMemory(_step: CollectionStep, result: ApplicationCompletedStepResult): Promise<ApplicationEvidence[]> {
     if (!result.undoToken) return []
     if (result.undoToken.startsWith(V3_UNDO_PREFIX)) {
       const payload = JSON.parse(result.undoToken.slice(V3_UNDO_PREFIX.length)) as V3UndoPayload
@@ -114,7 +132,15 @@ export class ImageMarkAnnotationCollectionExecutor implements ApplicationCollect
     return (await this.undo(result.undoToken)).evidence
   }
 
-  async undo(undoToken: string): Promise<ApplicationCompletedStepResult> {
+  async undo(undoToken: string, context?: ApplicationExecutionContext): Promise<ApplicationCompletedStepResult> {
+    if (undoToken.startsWith(V3_UNDO_PREFIX)) {
+      const payload = JSON.parse(undoToken.slice(V3_UNDO_PREFIX.length)) as V3UndoPayload
+      return runImageEditPersistedOperationV3(payload.documentId, context, () => this.undoInMemory(undoToken))
+    }
+    return this.undoInMemory(undoToken)
+  }
+
+  private async undoInMemory(undoToken: string): Promise<ApplicationCompletedStepResult> {
     if (undoToken.startsWith(V3_UNDO_PREFIX)) {
       const payload = JSON.parse(undoToken.slice(V3_UNDO_PREFIX.length)) as V3UndoPayload
       const { bus } = requireImageEditV3LiveSession(payload.documentId)

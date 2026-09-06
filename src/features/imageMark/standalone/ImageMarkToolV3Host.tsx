@@ -89,6 +89,7 @@ export function ImageMarkToolV3Host(props: ImageMarkToolV3HostProps): JSX.Elemen
       profileId="full"
       onDocumentChange={host.handleDocumentChange}
       onPersistenceChange={host.handlePersistenceChange}
+      persistenceHost={host.persistenceHost}
       onPackageThumbnailChange={host.handlePackageThumbnailChange}
       onReloadEditor={host.retryBootstrap}
       onOpenLegacyEditor={isImageEditDocumentLegacyExpressibleV3(host.bootstrap.document)

@@ -1,8 +1,10 @@
+import { assertImageEditPersistenceCurrentV3, runImageEditPersistedOperationV3 } from '@/features/imageEdit/v3/application/imageEditPersistenceOperations'
 import type {
   ApplicationCompletedStepResult,
   ApplicationEvidence,
   ApplicationMutationExecutor,
   ApplicationPlannedStep,
+  ApplicationExecutionContext,
 } from '@/core/application-control'
 import { applyWriterTable, fieldWriterTable, propertyOperations, writableProperties } from '@/core/application-control'
 import { createLogger } from '@/core/logging'
@@ -51,7 +53,15 @@ export class ImageMarkAnnotationMutationExecutor implements ApplicationMutationE
   readonly writableProperties = writableProperties(WRITERS)
   readonly propertyOperations = propertyOperations(WRITERS)
 
-  async apply(step: MutationStep): Promise<ApplicationCompletedStepResult> {
+  async apply(step: MutationStep, context?: ApplicationExecutionContext): Promise<ApplicationCompletedStepResult> {
+    if (step.target.id.startsWith('v3:')) {
+      const documentId = decodeURIComponent(step.target.id.slice(3).split(':')[0])
+      return runImageEditPersistedOperationV3(documentId, context, () => this.applyInMemory(step))
+    }
+    return this.applyInMemory(step)
+  }
+
+  private async applyInMemory(step: MutationStep): Promise<ApplicationCompletedStepResult> {
     if (isImageEditV3Ref(step.target)) return this.applyV3(step)
     const { sessionId, annotationId } = splitAnnotationRef(step.target)
     const previousDocument = requireSessionDocument(sessionId)
@@ -90,7 +100,15 @@ export class ImageMarkAnnotationMutationExecutor implements ApplicationMutationE
     }
   }
 
-  async compensate(_step: MutationStep, result: ApplicationCompletedStepResult): Promise<ApplicationEvidence[]> {
+  async compensate(step: MutationStep, result: ApplicationCompletedStepResult, context?: ApplicationExecutionContext): Promise<ApplicationEvidence[]> {
+    if (result.undoToken?.startsWith(V3_UNDO_PREFIX)) {
+      const payload = JSON.parse(result.undoToken.slice(V3_UNDO_PREFIX.length)) as V3UndoPayload
+      return runImageEditPersistedOperationV3(payload.documentId, context, () => this.compensateInMemory(step, result))
+    }
+    return this.compensateInMemory(step, result)
+  }
+
+  private async compensateInMemory(_step: MutationStep, result: ApplicationCompletedStepResult): Promise<ApplicationEvidence[]> {
     if (!result.undoToken) return []
     if (result.undoToken.startsWith(V3_UNDO_PREFIX)) {
       const payload = JSON.parse(result.undoToken.slice(V3_UNDO_PREFIX.length)) as V3UndoPayload
@@ -109,7 +127,15 @@ export class ImageMarkAnnotationMutationExecutor implements ApplicationMutationE
     return (await this.undo(result.undoToken)).evidence
   }
 
-  async undo(undoToken: string): Promise<ApplicationCompletedStepResult> {
+  async undo(undoToken: string, context?: ApplicationExecutionContext): Promise<ApplicationCompletedStepResult> {
+    if (undoToken.startsWith(V3_UNDO_PREFIX)) {
+      const payload = JSON.parse(undoToken.slice(V3_UNDO_PREFIX.length)) as V3UndoPayload
+      return runImageEditPersistedOperationV3(payload.documentId, context, () => this.undoInMemory(undoToken))
+    }
+    return this.undoInMemory(undoToken)
+  }
+
+  private async undoInMemory(undoToken: string): Promise<ApplicationCompletedStepResult> {
     if (undoToken.startsWith(V3_UNDO_PREFIX)) {
       const payload = JSON.parse(undoToken.slice(V3_UNDO_PREFIX.length)) as V3UndoPayload
       const { bus } = requireImageEditV3LiveSession(payload.documentId)
@@ -153,6 +179,7 @@ export class ImageMarkAnnotationMutationExecutor implements ApplicationMutationE
     if (!item) throw new Error('NOT_FOUND')
     const draft: MarkItem = structuredClone(item)
     await applyWriterTable(WRITERS, draft, step.mutations)
+    assertImageEditPersistenceCurrentV3(documentId)
     const commandId = createImageEditIdV3('assistant-command')
     bus.dispatch({
       commandId,

@@ -37,6 +37,9 @@ type MutationStep = Extract<ApplicationPlannedStep, { kind: 'mutation' }>
 const logger = createLogger('features.imageEdit.v3.application_mutation')
 const UNDO_PREFIX = 'image-edit-v3-undo:'
 
+import { assertImageEditPersistenceCurrentV3, runImageEditPersistedOperationV3 } from './imageEditPersistenceOperations'
+import { ApplicationExecutionProgressFailure } from '@/core/application-control/execution/persistence'
+
 interface UndoPayload {
   entityType: 'image_edit.layer' | 'image_edit.group' | 'image_edit.mask'
   documentId: string
@@ -132,6 +135,11 @@ abstract class ImageEditV3MutationExecutorBase implements ApplicationMutationExe
   abstract createCommands(step: MutationStep): Promise<{ documentId: string; commands: ImageEditCommandV3[] }>
 
   async apply(step: MutationStep, context: ApplicationExecutionContext): Promise<ApplicationCompletedStepResult> {
+    const { documentId } = splitImageEditV3LayerRef(step.target, this.entityType)
+    return runImageEditPersistedOperationV3(documentId, context, (batchContext) => this.applyInMemory(step, batchContext!))
+  }
+
+  private async applyInMemory(step: MutationStep, context: ApplicationExecutionContext): Promise<ApplicationCompletedStepResult> {
     if (context.signal?.aborted) throw new Error('CANCELLED')
     logger.info('图片编辑 V3 属性写入开始', {
       event: 'image_edit.v3.application_mutation.apply.start',
@@ -143,6 +151,7 @@ abstract class ImageEditV3MutationExecutorBase implements ApplicationMutationExe
     const { bus } = requireImageEditV3LiveSession(documentId)
     const applied: string[] = []
     try {
+      assertImageEditPersistenceCurrentV3(documentId)
       for (const command of commands) {
         if (context.signal?.aborted) throw new Error('CANCELLED')
         bus.dispatch({ ...command, expectedRevision: bus.getSnapshot().document.revision })
@@ -174,29 +183,46 @@ abstract class ImageEditV3MutationExecutorBase implements ApplicationMutationExe
     steps: MutationStep[],
     context: ApplicationExecutionContext,
   ): Promise<ApplicationCompletedStepResult[]> {
+    const { documentId } = splitImageEditV3LayerRef(steps[0].target, this.entityType)
+    if (steps.some((step) => splitImageEditV3LayerRef(step.target, this.entityType).documentId !== documentId)) {
+      throw new Error('图片编辑原子修改只能针对同一文档，请拆分不同文档的操作')
+    }
+    return runImageEditPersistedOperationV3(documentId, context, (batchContext) => this.applyAtomicInMemory(steps, batchContext!))
+  }
+
+  private async applyAtomicInMemory(steps: MutationStep[], context: ApplicationExecutionContext): Promise<ApplicationCompletedStepResult[]> {
     const results: ApplicationCompletedStepResult[] = []
     try {
       for (const step of steps) results.push(await this.apply(step, context))
       return results
     } catch (error) {
+      const compensated: number[] = []
       for (let index = results.length - 1; index >= 0; index -= 1) {
         const token = results[index]?.undoToken
-        if (token) await rollbackPayload(decodeUndo(token))
+        try {
+          if (token) await rollbackPayload(decodeUndo(token))
+          compensated.push(index)
+        } catch (cause) {
+          throw new ApplicationExecutionProgressFailure(`${String(error)}；补偿失败：${String(cause)}`, results, compensated, error)
+        }
       }
-      throw error
+      throw new ApplicationExecutionProgressFailure(String(error), results, compensated, error)
     }
   }
 
   async compensate(
     _step: MutationStep,
     result: ApplicationCompletedStepResult,
+    context?: ApplicationExecutionContext,
   ): Promise<ApplicationEvidence[]> {
     if (!result.undoToken) return []
-    return (await rollbackPayload(decodeUndo(result.undoToken))).evidence
+    const payload = decodeUndo(result.undoToken)
+    return (await runImageEditPersistedOperationV3(payload.documentId, context, () => rollbackPayload(payload))).evidence
   }
 
-  async undo(undoToken: string): Promise<ApplicationCompletedStepResult> {
-    return undoPayload(decodeUndo(undoToken))
+  async undo(undoToken: string, context?: ApplicationExecutionContext): Promise<ApplicationCompletedStepResult> {
+    const payload = decodeUndo(undoToken)
+    return runImageEditPersistedOperationV3(payload.documentId, context, () => undoPayload(payload))
   }
 }
 

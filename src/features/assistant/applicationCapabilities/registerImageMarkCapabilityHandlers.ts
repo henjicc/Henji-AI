@@ -2,10 +2,20 @@ import { useImageEditSessionStore } from '@/features/imageEdit/store/imageEditSe
 
 import type { ApplicationCapabilityHandlerRegistrar } from './handlerTypes'
 import { parseCapabilityInput, throwIfCapabilityAborted } from './handlerUtils'
+import { retryImageEditDocumentSaveV3 } from '@/features/imageEdit/v3/application/imageEditPersistenceOperations'
+import { splitImageEditV3DocumentRef } from '@/features/imageEdit/v3/application/imageEditLiveSessionRegistry'
 
 export function registerImageMarkCapabilityHandlers(
   registrar: ApplicationCapabilityHandlerRegistrar
 ): void {
+  registrar.registerHandler('retry_image_edit_document_save', async (input, context) => {
+    throwIfCapabilityAborted(context.signal)
+    const { documentRef } = parseCapabilityInput<{ documentRef: { kind: 'image_edit.document'; id: string } }>(
+      'retry_image_edit_document_save', input)
+    const saved = await retryImageEditDocumentSaveV3(splitImageEditV3DocumentRef(documentRef).documentId)
+    return { ref: documentRef, status: 'persisted', effects: saved.receipt?.effects ?? [],
+      resultingRevisions: saved.receipt?.resultingRevisions ?? {} }
+  })
   registrar.registerHandler('undo_image_mark_change', (input, context) => {
     throwIfCapabilityAborted(context.signal)
     const parsed = parseCapabilityInput<{ sessionId: string }>('undo_image_mark_change', input)

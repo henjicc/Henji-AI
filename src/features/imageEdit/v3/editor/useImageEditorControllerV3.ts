@@ -80,6 +80,7 @@ export function useImageEditorControllerV3(
     | 'initialToolId'
     | 'onDocumentChange'
     | 'onPersistenceChange'
+    | 'persistenceHost'
     | 'resourceByteSizes'
     | 'resourceDescriptors'
   >,
@@ -133,8 +134,8 @@ export function useImageEditorControllerV3(
   useEffect(() => () => binding.bus.dispose(), [binding.bus])
 
   useEffect(
-    () => registerImageEditV3LiveSession(sessionId, binding.bus),
-    [binding.bus, sessionId],
+    () => registerImageEditV3LiveSession(sessionId, binding.bus, props.persistenceHost),
+    [binding.bus, sessionId, props.persistenceHost],
   )
 
   useEffect(() => binding.bus.subscribe((snapshot) => {

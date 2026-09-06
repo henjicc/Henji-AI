@@ -1,3 +1,5 @@
+import { flushImageEditHostPersistenceV3 } from '@/features/imageEdit/v3/application/imageEditPersistenceOperations'
+import type { ImageEditPersistenceHostV3 } from '@/features/imageEdit/v3/application/imageEditPersistenceOwner'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -78,6 +80,7 @@ export type ViewerMarkEditorV3BootstrapState =
     }
 
 export interface ViewerMarkEditorV3HostController {
+  persistenceHost: ImageEditPersistenceHostV3
   bootstrap: ViewerMarkEditorV3BootstrapState
   persistenceStatus: ImageMarkV3PersistenceStatus | null
   materialization: ViewerMarkV3MaterializationState | null
@@ -117,6 +120,7 @@ export function useViewerMarkEditorV3Host(
   const sourceUrlRef = useRef(imageUrl)
   const persistenceSnapshotRef = useRef<ImageEditPersistenceSnapshotV3 | null>(null)
   const persistenceRef = useRef<ImageMarkV3PersistenceQueue | null>(null)
+  const persistenceHost = useMemo<ImageEditPersistenceHostV3>(() => ({ getQueue: () => persistenceRef.current }), [])
   const autosaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const materializationAbortRef = useRef<AbortController | null>(null)
 
@@ -241,8 +245,7 @@ export function useViewerMarkEditorV3Host(
     const queue = persistenceRef.current
     const snapshot = persistenceSnapshotRef.current
     if (!queue || !snapshot) throw new Error('快速编辑文档尚未准备完成')
-    queue.enqueue(snapshot)
-    return queue.flush()
+    return flushImageEditHostPersistenceV3(queue, snapshot)
   }, [])
 
   useEffect(() => () => {
@@ -439,6 +442,7 @@ export function useViewerMarkEditorV3Host(
 
   return {
     bootstrap,
+    persistenceHost,
     persistenceStatus,
     materialization,
     busy,

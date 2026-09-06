@@ -26,6 +26,8 @@ import { createLogger } from '@/core/logging'
 import { CanvasApplicationError } from '@/features/canvas/application/canvasApplicationService'
 import { MultiLayerDocumentNodeApplicationError } from '@/features/canvas/application/multiLayerDocumentNodeApplicationService'
 import { ZodError } from 'zod'
+import { ApplicationTransactionFailure } from '@/core/application-control/execution/transactionFailure'
+import { ApplicationPersistenceFailure } from '@/core/application-control/execution/persistence'
 
 import { APPLICATION_REFLECTION_APPLICATION_CAPABILITIES } from '@/core/assistant/capabilities/applicationReflectionApplicationCapabilities'
 
@@ -219,6 +221,14 @@ function describeSchemaIssues(error: ZodError): string {
 }
 
 function toFailure(error: unknown): ApplicationCapabilityResult {
+  if (error instanceof ApplicationTransactionFailure) {
+    return { ok: false, error: { code: 'CAPABILITY_REJECTED', message: error.message,
+      recoverable: error.result.recoverable, details: { transaction: error.result } } }
+  }
+  if (error instanceof ApplicationPersistenceFailure) {
+    return { ok: false, error: { code: 'CAPABILITY_REJECTED', message: error.message,
+      recoverable: true, details: { persistence: error.facts } } }
+  }
   const message = error instanceof Error ? error.message : String(error)
   if (error instanceof CanvasApplicationError) {
     return {

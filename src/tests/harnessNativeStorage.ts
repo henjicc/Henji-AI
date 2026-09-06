@@ -38,6 +38,7 @@ import type {
   StoryboardProjectPlatformSummary,
   StoryboardProjectPlatformWrite,
 } from '@/platform/contracts/storyboardProjects'
+import type { ImageEditorV3Platform } from '@/platform/contracts/imageEditorV3'
 
 const FIX_HINT = '替身只负责存储：要用到新方法，就在 src/tests/harnessNativeStorage.ts 里补一段'
   + '**只存不判断**的实现，不要返回空值糊过去——那等于伪造业务结果。'
@@ -208,6 +209,23 @@ const NAMESPACES: Record<string, object> = {
   assetLibrary: assetLibraryStorage,
   cameraStageProjects: cameraStageProjectsStorage,
   storyboardProjects: storyboardProjectsStorage,
+  imageEditorV3: {
+    async saveDocument(request: Parameters<ImageEditorV3Platform['saveDocument']>[0]) {
+      const previous = imageDocuments.get(request.document.id)
+      if ((previous?.document.revision ?? 0) !== request.expectedRevision) throw new Error('REVISION_CONFLICT')
+      imageDocuments.set(request.document.id, wire(request))
+      return { documentRef: `image-edit-v3:${request.document.id}` as const,
+        revision: request.document.revision, previewRef: request.previewRef ?? null }
+    },
+  },
+}
+
+const imageDocuments = new Map<string, Parameters<ImageEditorV3Platform['saveDocument']>[0]>()
+
+/** 只读存储边界事实；不模拟主进程的资源检查、物化或指纹计算。 */
+export function readHarnessImageEditDocument(documentId: string) {
+  const value = imageDocuments.get(documentId)
+  return value ? wire(value) : null
 }
 
 /**
@@ -269,6 +287,7 @@ export function installHarnessNativeStorage(): void {
 
 /** 清空全部存储。用例之间必须调，否则上一条用例造的素材集合会漏进下一条。 */
 export function resetHarnessNativeStorage(): void {
+  imageDocuments.clear()
   libraries.clear()
   cameraStageProjects.clear()
   storyboardProjects.clear()

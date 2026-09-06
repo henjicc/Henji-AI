@@ -44,9 +44,15 @@ type BootstrapState =
 
 export interface CanvasEditToolEditorV3Lifecycle {
   flushPending: () => Promise<ImageEditSessionReferenceV3>
+  confirmPending: () => Promise<ImageEditSessionReferenceV3>
 }
 
+import { flushImageEditHostPersistenceV3 } from '@/features/imageEdit/v3/application/imageEditPersistenceOperations'
+import type { ImageEditPersistenceHostV3, ImageEditPersistenceProjectionV3 } from '@/features/imageEdit/v3/application/imageEditPersistenceOwner'
+
 interface CanvasEditToolEditorV3HostProps extends VisualToolEditorProps {
+  onPersistenceConfirmed?: (session: ImageEditSessionReferenceV3) => Promise<ImageEditPersistenceProjectionV3 | void>
+  persistenceProjection?: ImageEditPersistenceHostV3['projection']
   beforePrepare?: (signal: AbortSignal) => Promise<ImageEditSessionReferenceV3>
   onLifecycleChange?: (lifecycle: CanvasEditToolEditorV3Lifecycle | null) => void
   onBootstrapKindChange?: (kind: BootstrapState['kind']) => void
@@ -69,6 +75,8 @@ export function CanvasEditToolEditorV3Host({
   onLifecycleChange,
   onBootstrapKindChange,
   onReferenceChange,
+  onPersistenceConfirmed,
+  persistenceProjection,
   onEditorContextChange,
   toolbarLeading,
   toolbarActions,
@@ -95,6 +103,20 @@ export function CanvasEditToolEditorV3Host({
   const [saveFailed, setSaveFailed] = useState(false)
   const mountedRef = useRef(true)
   const persistenceRef = useRef<ImageMarkV3PersistenceQueue | null>(null)
+  const persistenceHost = useMemo(() => ({
+    getQueue: () => persistenceRef.current,
+    projection: persistenceProjection,
+    confirmProjection: onPersistenceConfirmed ? async (reference: ImageEditDocumentReferenceV3) => {
+      try {
+        const result = await onPersistenceConfirmed(createCanvasEditV3SessionReference(sourceImageUrl, reference))
+        setSaveFailed(false)
+        return result
+      } catch (error) {
+        setSaveFailed(true)
+        throw error
+      }
+    } : undefined,
+  }), [sourceImageUrl, onPersistenceConfirmed, persistenceProjection])
   const persistenceSnapshotRef = useRef<ImageEditPersistenceSnapshotV3 | null>(null)
   const autosaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const interactionRootRef = useRef<HTMLDivElement | null>(null)
@@ -123,8 +145,7 @@ export function CanvasEditToolEditorV3Host({
     const queue = persistenceRef.current
     const snapshot = persistenceSnapshotRef.current
     if (!queue || !snapshot) throw new Error('画布图片编辑文档尚未准备完成')
-    queue.enqueue(snapshot)
-    return queue.flush()
+    return flushImageEditHostPersistenceV3(queue, snapshot)
   }, [])
 
   const flushSession = useCallback(async (): Promise<ImageEditSessionReferenceV3> => (
@@ -133,7 +154,14 @@ export function CanvasEditToolEditorV3Host({
 
   const lifecycle = useMemo<CanvasEditToolEditorV3Lifecycle>(() => ({
     flushPending: flushSession,
-  }), [flushSession])
+    confirmPending: async () => {
+      const queue = persistenceRef.current
+      const snapshot = persistenceSnapshotRef.current
+      if (!queue || !snapshot) throw new Error('画布图片编辑文档尚未准备完成')
+      return createCanvasEditV3SessionReference(sourceImageUrl,
+        await flushImageEditHostPersistenceV3(queue, snapshot, true))
+    },
+  }), [flushSession, sourceImageUrl])
 
   const isCurrentReference = useCallback((reference: ImageEditDocumentReferenceV3): boolean => {
     const current = persistenceSnapshotRef.current
@@ -360,6 +388,7 @@ export function CanvasEditToolEditorV3Host({
       profileId="canvas-edit"
       onDocumentChange={handleDocumentChange}
       onPersistenceChange={handlePersistenceChange}
+      persistenceHost={persistenceHost}
       onEditorContextChange={onEditorContextChange}
       onReloadEditor={() => setBootstrapAttempt((value) => value + 1)}
       toolbarLeading={toolbarLeading}

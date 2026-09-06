@@ -16,7 +16,6 @@ import {
   imageEditV3LayerRef,
   imageEditV3MaskRef,
   imageEditV3ResourceRef,
-  registerImageEditV3LiveSession,
   splitImageEditV3LayerRef,
 } from '@/features/imageEdit/v3/application/imageEditLiveSessionRegistry'
 import { imageMarkRevision } from '@/features/imageMark/application/imageMarkSessionAccess'
@@ -25,6 +24,8 @@ import {
   getApplicationControlExecutionEngine,
   getApplicationReflectionRegistry,
 } from '@/features/assistant/applicationCapabilities/applicationControlRegistry'
+
+import { registerPersistedImageEditTestSession } from '@/tests/imageEditPersistenceTestSession'
 
 const accessContext: ApplicationControlAccessContext = {
   exposure: 'assistant',
@@ -90,7 +91,7 @@ describe('图片编辑 V3 实时 Application Control', () => {
         'sha256:mask-tile-b': 256,
       },
     })
-    disposers.push(registerImageEditV3LiveSession('assistant-v3-session-a', bus))
+    disposers.push(registerPersistedImageEditTestSession('assistant-v3-session-a', bus))
 
     const registry = getApplicationReflectionRegistry()
     const documentRef = imageEditV3DocumentRef(document.id)
@@ -212,7 +213,7 @@ describe('图片编辑 V3 实时 Application Control', () => {
       documentId: 'assistant-v3-fast-blur',
     })
     const bus = new ImageEditCommandBusV3(document)
-    disposers.push(registerImageEditV3LiveSession('assistant-v3-fast-blur-session', bus))
+    disposers.push(registerPersistedImageEditTestSession('assistant-v3-fast-blur-session', bus))
     const documentRef = imageEditV3DocumentRef(document.id)
     const initial = await getApplicationReflectionRegistry().readEntity(
       documentRef,
@@ -250,7 +251,7 @@ describe('图片编辑 V3 实时 Application Control', () => {
     const document = createImageEditDocumentV3({ width: 640, height: 480, documentId: 'assistant-v3-doc-b' })
     document.layers = [createImageEditAnnotationLayerV3('annotations-b', '标注')]
     const bus = new ImageEditCommandBusV3(document)
-    disposers.push(registerImageEditV3LiveSession('assistant-v3-session-b', bus))
+    disposers.push(registerPersistedImageEditTestSession('assistant-v3-session-b', bus))
     const registry = getApplicationReflectionRegistry()
     const documentRef = imageEditV3DocumentRef(document.id)
 

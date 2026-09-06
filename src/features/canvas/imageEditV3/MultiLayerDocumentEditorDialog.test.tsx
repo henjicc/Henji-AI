@@ -46,7 +46,8 @@ const editorDocument: ImageEditDocumentV3 = {
 vi.mock('./CanvasEditToolEditorV3Host', () => ({
   CanvasEditToolEditorV3Host: (props: {
     beforePrepare?: (signal: AbortSignal) => Promise<typeof session>
-    onLifecycleChange?: (lifecycle: { flushPending: () => Promise<typeof session> } | null) => void
+    onLifecycleChange?: (lifecycle: { flushPending: () => Promise<typeof session>; confirmPending: () => Promise<typeof session> } | null) => void
+    onPersistenceConfirmed?: (reference: typeof session) => Promise<unknown>
     onBootstrapKindChange?: (kind: 'loading' | 'failed' | 'ready') => void
     onEditorContextChange?: (context: { sessionId: string; document: ImageEditDocumentV3 } | null) => void
     toolbarLeading?: ReactNode
@@ -58,7 +59,11 @@ vi.mock('./CanvasEditToolEditorV3Host', () => ({
       const controller = new AbortController()
       void mountedProps.beforePrepare?.(controller.signal).then(() => {
         mountedProps.onBootstrapKindChange?.('ready')
-        mountedProps.onLifecycleChange?.({ flushPending: mocks.flush })
+        mountedProps.onLifecycleChange?.({ flushPending: mocks.flush, confirmPending: async () => {
+          const reference = await mocks.flush()
+          await mountedProps.onPersistenceConfirmed?.(reference)
+          return reference
+        } })
         mountedProps.onEditorContextChange?.({ sessionId: 'editor-session', document: editorDocument })
       })
       return () => {

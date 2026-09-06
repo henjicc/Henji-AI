@@ -30,6 +30,8 @@ import {
   splitImageEditV3LayerRef,
 } from './imageEditLiveSessionRegistry'
 
+import { runImageEditPersistedOperationV3 } from './imageEditPersistenceOperations'
+
 type CollectionStep = Extract<ApplicationPlannedStep, { kind: 'collection' }>
 type CollectionEntityType = 'image_edit.layer' | 'image_edit.group'
 
@@ -181,6 +183,11 @@ export class ImageEditV3CollectionExecutor implements ApplicationCollectionExecu
   constructor(readonly entityType: CollectionEntityType) {}
 
   async apply(step: CollectionStep, context: ApplicationExecutionContext): Promise<ApplicationCompletedStepResult> {
+    return runImageEditPersistedOperationV3(parentIdentity(step.parent).documentId, context,
+      (batchContext) => this.applyInMemory(step, batchContext!))
+  }
+
+  private async applyInMemory(step: CollectionStep, context: ApplicationExecutionContext): Promise<ApplicationCompletedStepResult> {
     if (context.signal?.aborted) throw new Error('CANCELLED')
     const { documentId, parentId } = parentIdentity(step.parent)
     const { bus } = requireImageEditV3LiveSession(documentId)
@@ -283,12 +290,15 @@ export class ImageEditV3CollectionExecutor implements ApplicationCollectionExecu
   async compensate(
     _step: CollectionStep,
     result: ApplicationCompletedStepResult,
+    context?: ApplicationExecutionContext,
   ): Promise<ApplicationEvidence[]> {
     if (!result.undoToken) return []
-    return (await rollbackPayload(decodeUndo(result.undoToken))).evidence
+    const payload = decodeUndo(result.undoToken)
+    return (await runImageEditPersistedOperationV3(payload.documentId, context, () => rollbackPayload(payload))).evidence
   }
 
-  async undo(undoToken: string): Promise<ApplicationCompletedStepResult> {
-    return undoPayload(decodeUndo(undoToken))
+  async undo(undoToken: string, context?: ApplicationExecutionContext): Promise<ApplicationCompletedStepResult> {
+    const payload = decodeUndo(undoToken)
+    return runImageEditPersistedOperationV3(payload.documentId, context, () => undoPayload(payload))
   }
 }

@@ -2,9 +2,11 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 import { getPlatform, isDesktopRuntime } from '@/platform/runtime'
+import { createImageEditDocumentV3 } from '@/core/imageEdit/v3/documentFactory'
 
 import {
   installHarnessNativeStorage,
+  readHarnessImageEditDocument,
   resetHarnessNativeStorage,
   uninstallHarnessNativeStorage,
 } from './harnessNativeStorage'
@@ -92,5 +94,32 @@ describe('harness 内存 native 替身', () => {
     const record = await projects.getProjectRecord('p2')
     record!.name = '被调用方改掉了'
     expect((await projects.getProjectRecord('p2'))!.name).toBe('原名')
+  })
+
+  it('图片文档保存执行存储 CAS，失败不替换已存快照，重试可保存最新内容', async () => {
+    const document = createImageEditDocumentV3({ width: 8, height: 8, documentId: 'image-cas' })
+    const storage = getPlatform().imageEditorV3
+    await storage.saveDocument({ requestId: 'save-first', document: { ...document, revision: 1 }, expectedRevision: 0, resourceRefs: [] })
+    await expect(storage.saveDocument({ requestId: 'save-stale', document: { ...document, revision: 2 }, expectedRevision: 0, resourceRefs: [] }))
+      .rejects.toThrow('REVISION_CONFLICT')
+    expect(readHarnessImageEditDocument(document.id)?.document.revision).toBe(1)
+    await storage.saveDocument({ requestId: 'save-retry', document: { ...document, revision: 3 }, expectedRevision: 1, resourceRefs: [] })
+    expect(readHarnessImageEditDocument(document.id)?.document.revision).toBe(3)
+  })
+
+  it('图片文档存取均克隆，reset 清理且未实现的读取和物化仍拒绝', async () => {
+    const document = createImageEditDocumentV3({ width: 8, height: 8, documentId: 'image-clone' })
+    const request = { requestId: 'save-clone', document, expectedRevision: 0, resourceRefs: [] }
+    await getPlatform().imageEditorV3.saveDocument(request)
+    request.document.revision = 99
+    const read = readHarnessImageEditDocument(document.id)!
+    expect(read.document.revision).toBe(0)
+    read.document.revision = 88
+    expect(readHarnessImageEditDocument(document.id)?.document.revision).toBe(0)
+    const native = (window as unknown as { henjiNative: { imageEditorV3: Record<string, unknown> } }).henjiNative
+    expect(() => native.imageEditorV3.loadDocument).toThrow(/没有实现/)
+    expect(() => native.imageEditorV3.materializeDocument).toThrow(/没有实现/)
+    resetHarnessNativeStorage()
+    expect(readHarnessImageEditDocument(document.id)).toBeNull()
   })
 })

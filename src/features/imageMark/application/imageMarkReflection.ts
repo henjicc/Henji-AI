@@ -22,6 +22,7 @@ import {
 
 import { IMAGE_MARK_ANNOTATION_FIELDS, IMAGE_MARK_DOCUMENT_FIELDS, IMAGE_MARK_ENTITY_TYPES } from './imageMarkFields'
 import { annotationRef, imageMarkRevision, requireSessionDocument, splitAnnotationRef } from './imageMarkSessionAccess'
+import { IMAGE_EDIT_PREVIEW_ONLY_REASON, imageEditPersistenceAvailabilityV3, imageEditPersistenceRevisionsV3, imageEditPersistencePermissionsV3 } from '@/features/imageEdit/v3/application/imageEditPersistenceOperations'
 
 function digest(seed: string): string {
   const value = [...seed].reduce((total, char) => (total * 33 + char.charCodeAt(0)) >>> 0, 5381).toString(16)
@@ -146,7 +147,7 @@ class ImageMarkAnnotationReflectionProvider implements ApplicationEntityProvider
     return {
       ref,
       entityType: this.entityType,
-      revisions: { image_mark: imageMarkRevision() },
+      revisions: { image_mark: imageMarkRevision(), ...imageEditPersistenceRevisionsV3(ref) },
       properties: request.propertyIds ? Object.fromEntries(Object.entries(values).filter(([id]) => request.propertyIds?.includes(id))) : values,
       capturedAt: new Date().toISOString(),
     }
@@ -160,6 +161,7 @@ class ImageMarkAnnotationReflectionProvider implements ApplicationEntityProvider
       const location = findImageEditV3LiveLayer(document, layerId)
       if (!location || location.layer.type !== 'annotation') throw new Error('NOT_FOUND')
       findAnnotation({ version: 1, orientation: { rotate: 0, mirrored: false }, crop: null, items: location.layer.annotations }, annotationId)
+      if (!requireImageEditV3LiveSession(documentId).persistenceOwner) stateReason = IMAGE_EDIT_PREVIEW_ONLY_REASON
       if (location.layer.locked || location.ancestors.some((ancestor) => ancestor.locked)) {
         stateReason = '标注图层或其父组已锁定。'
       }
@@ -169,7 +171,7 @@ class ImageMarkAnnotationReflectionProvider implements ApplicationEntityProvider
       findAnnotation(imageEditDocumentToMarkDoc(document), annotationId)
     }
     const descriptorMap = new Map(fieldDescriptors(IMAGE_MARK_ANNOTATION_FIELDS).map((item) => [item.id, item]))
-    const revisions = { image_mark: imageMarkRevision() }
+    const revisions = { image_mark: imageMarkRevision(), ...imageEditPersistenceRevisionsV3(ref) }
     return propertyIds.map((propertyId) => {
       const descriptor = descriptorMap.get(propertyId)
       if (!descriptor) throw new Error(`PROPERTY_NOT_FOUND:${propertyId}`)
@@ -179,7 +181,7 @@ class ImageMarkAnnotationReflectionProvider implements ApplicationEntityProvider
         readable: true,
         writable,
         reasons: writable ? [] : [stateReason ?? descriptor.readOnlyReason ?? '只读状态'],
-        requiredPermissions: writable ? descriptor.requiredPermissions.write : descriptor.requiredPermissions.read,
+        requiredPermissions: writable ? [...descriptor.requiredPermissions.write, ...imageEditPersistencePermissionsV3(ref)] : descriptor.requiredPermissions.read,
         revisions,
       }
     })
@@ -191,12 +193,13 @@ class ImageMarkAnnotationReflectionProvider implements ApplicationEntityProvider
       const document = requireImageEditV3LiveSession(documentId).bus.getSnapshot().document
       const location = findImageEditV3LiveLayer(document, layerId)
       if (!location || location.layer.type !== 'annotation') throw new Error('NOT_FOUND')
-      const availability = unrestrictedCollectionAvailability(
+      const availability = imageEditPersistenceAvailabilityV3(documentId, unrestrictedCollectionAvailability(
         this.entityType,
         parent,
         { image_mark: imageMarkRevision() },
         ['image_mark:write'],
-      )
+      ))
+      if (!requireImageEditV3LiveSession(documentId).persistenceOwner) return imageEditPersistenceAvailabilityV3(documentId, availability)
       if (!location.layer.locked && !location.ancestors.some((ancestor) => ancestor.locked)) return availability
       const reason = '标注图层或其父组已锁定。'
       const block = {

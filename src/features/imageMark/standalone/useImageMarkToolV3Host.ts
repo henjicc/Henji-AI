@@ -1,3 +1,5 @@
+import { flushImageEditHostPersistenceV3 } from '@/features/imageEdit/v3/application/imageEditPersistenceOperations'
+import type { ImageEditPersistenceHostV3 } from '@/features/imageEdit/v3/application/imageEditPersistenceOwner'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -73,6 +75,7 @@ export type { ImageMarkV3RasterExportUiState } from './useImageMarkToolV3Actions
 
 export interface ImageMarkToolV3HostController extends ImageMarkToolV3ActionsController {
   bootstrap: ImageMarkV3BootstrapState
+  persistenceHost: ImageEditPersistenceHostV3
   persistenceStatus: ImageMarkV3PersistenceStatus | null
   retryBootstrap: () => void
   flushPending: () => Promise<ImageEditDocumentReferenceV3>
@@ -110,6 +113,7 @@ export function useImageMarkToolV3Host(
   const documentIdRef = useRef(createImageEditIdV3('document'))
   const persistenceSnapshotRef = useRef<ImageEditPersistenceSnapshotV3 | null>(null)
   const persistenceRef = useRef<ImageMarkV3PersistenceQueue | null>(null)
+  const persistenceHost = useMemo<ImageEditPersistenceHostV3>(() => ({ getQueue: () => persistenceRef.current }), [])
   const autosaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const packageThumbnailRef = useRef<ImageEditorV3PackageThumbnailSnapshot | null>(null)
 
@@ -291,8 +295,7 @@ export function useImageMarkToolV3Host(
     const queue = persistenceRef.current
     const snapshot = persistenceSnapshotRef.current
     if (!queue || !snapshot) throw new Error('图片编辑文档尚未准备完成')
-    queue.enqueue(snapshot)
-    return queue.flush()
+    return flushImageEditHostPersistenceV3(queue, snapshot)
   }, [])
 
   useEffect(() => () => {
@@ -406,6 +409,7 @@ export function useImageMarkToolV3Host(
 
   return {
     bootstrap,
+    persistenceHost,
     persistenceStatus,
     ...actions,
     retryBootstrap: () => setBootstrapAttempt((value) => value + 1),

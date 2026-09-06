@@ -4,6 +4,7 @@ import {
 } from '@/core/application-control'
 import { APPLICATION_CAPABILITY_CATALOG_VERSION } from '@/core/assistant/applicationCapabilities'
 import { BUILTIN_APPLICATION_CAPABILITIES } from '@/core/assistant/builtinApplicationCapabilityRegistry'
+import { resolveImageEditPersistenceParticipantsV3 } from '@/features/imageEdit/v3/application/imageEditPersistenceOperations'
 
 import {
   createSettingsReflectionRegistration,
@@ -169,6 +170,7 @@ export function getApplicationControlExecutionEngine(): ApplicationControlExecut
   const creators = collectionWritersByEntityType('create')
   const removers = collectionWritersByEntityType('remove')
   const next = new ApplicationControlExecutionEngine(getApplicationReflectionRegistry(), {
+    resolvePersistenceParticipants: resolveImageEditPersistenceParticipantsV3,
     describeCollectionWriters: (entityType, operation) => (
       (operation === 'create' ? creators : removers).get(entityType) ?? []
     ),

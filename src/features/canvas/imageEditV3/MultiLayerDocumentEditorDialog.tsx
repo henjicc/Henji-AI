@@ -25,9 +25,11 @@ import {
   type CanvasEditToolEditorV3Lifecycle,
 } from './CanvasEditToolEditorV3Host'
 import { resolveMultiLayerDocumentExportSelection } from './multiLayerDocumentExportSelection'
+import type { ImageEditPersistenceHostV3, ImageEditPersistenceProjectionV3 } from '@/features/imageEdit/v3/application/imageEditPersistenceOwner'
 
 const logger = createLogger('features.canvas.multi_layer_document_editor')
 const EMPTY_LAYER_IDS: readonly string[] = []
+const NO_CLOSE_CONTINUATION = async (): Promise<void> => undefined
 
 export interface MultiLayerDocumentEditorCloseResult {
   nodeId: string
@@ -36,20 +38,22 @@ export interface MultiLayerDocumentEditorCloseResult {
 
 export type MultiLayerDocumentEditorCloseContinuation = (
   result: MultiLayerDocumentEditorCloseResult,
-) => Promise<void>
+) => Promise<ImageEditPersistenceProjectionV3 | void>
 
 interface MultiLayerDocumentEditorDialogProps {
   isOpen: boolean
   node: CanvasNode
   onCloseReady?: MultiLayerDocumentEditorCloseContinuation
   onCloseApproved?: () => void
+  persistenceProjection?: ImageEditPersistenceHostV3['projection']
 }
 
 export function MultiLayerDocumentEditorDialog({
   isOpen,
   node,
-  onCloseReady = async () => undefined,
+  onCloseReady = NO_CLOSE_CONTINUATION,
   onCloseApproved,
+  persistenceProjection,
 }: MultiLayerDocumentEditorDialogProps): JSX.Element | null {
   const { t } = useTranslation()
   const lifecycleRef = useRef<CanvasEditToolEditorV3Lifecycle | null>(null)
@@ -66,6 +70,7 @@ export function MultiLayerDocumentEditorDialog({
   const [exporting, setExporting] = useState(false)
   const [exportFailed, setExportFailed] = useState(false)
   const currentProjectId = useProjectStore((state) => state.currentProjectId)
+  const confirmPersistence = useCallback((session: ImageEditSessionReferenceV3) => onCloseReady({ nodeId: node.id, session }), [node.id, onCloseReady])
   const selectedLayerIds = useImageEditorSessionStoreV3((state) => (
     editorContext ? state.sessions[editorContext.sessionId]?.selectedLayerIds ?? EMPTY_LAYER_IDS : EMPTY_LAYER_IDS
   ))
@@ -95,8 +100,7 @@ export function MultiLayerDocumentEditorDialog({
         if (bootstrapKind === 'ready') {
           const lifecycle = lifecycleRef.current
           if (!lifecycle) throw new Error(t('toolDialog.imageEditorV3.stillOpening'))
-          const session = await lifecycle.flushPending()
-          await onCloseReady({ nodeId: node.id, session })
+          await lifecycle.confirmPending()
         }
         if (mountedRef.current) setCloseApproved(true)
         onCloseApproved?.()
@@ -125,7 +129,7 @@ export function MultiLayerDocumentEditorDialog({
       closePromiseRef.current = null
     })
     return closePromiseRef.current
-  }, [bootstrapKind, node.id, onCloseApproved, onCloseReady, t])
+  }, [bootstrapKind, node.id, onCloseApproved, t])
 
   useEffect(() => {
     mountedRef.current = true
@@ -211,6 +215,8 @@ export function MultiLayerDocumentEditorDialog({
         options={{}}
         sourceImageUrl={documentState.imageUrl}
         onOptionsChange={() => undefined}
+        onPersistenceConfirmed={confirmPersistence}
+        persistenceProjection={persistenceProjection}
         beforePrepare={(signal) => openMultiLayerDocumentForEditing({
           nodeId: node.id,
           data: node.data,

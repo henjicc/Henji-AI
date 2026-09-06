@@ -4,10 +4,7 @@ import {
   applicationUndoRequestSchema,
   type ApplicationChangePlan,
   type ApplicationCommitRequest,
-  type ApplicationEvidence,
-  type ApplicationEffectReceipt,
   type ApplicationPlannedStep,
-  type ApplicationTransactionMode,
   type ApplicationTransactionResult,
   type ApplicationUndoRequest,
 } from '../transactions'
@@ -15,7 +12,8 @@ import type { ApplicationReflectionRegistry } from '../registry'
 import { ApplicationExecutionPlanStore } from './planStore'
 import { ApplicationPlanBuilder } from './planner'
 import { ApplicationTransactionVerifier } from './verifier'
-import { assertCollectionOperationAvailable } from './availability'
+import { ApplicationExecutionSupport } from './executionSupport'
+import { ApplicationExecutionProgressFailure, ApplicationPersistenceBoundaryFailure, withApplicationPersistenceBoundary, type ApplicationPersistenceReceipt } from './persistence'
 import { acceptedPropertyOperations, type ApplicationMutationOperation } from './writerTable'
 import type {
   ApplicationCollectionExecutor,
@@ -28,7 +26,6 @@ import type {
   ApplicationPlanRequest,
   ApplicationRisk,
   ApplicationSemanticOperationExecutor,
-  ApplicationStepExecutionResult,
 } from './types'
 
 const RISK_RANK: Record<ApplicationRisk, number> = { R0: 0, R1: 1, R2: 2, R3: 3, R4: 4 }
@@ -71,10 +68,6 @@ function mergeRevisions(target: Record<string, number>, source: Record<string, n
   for (const [scope, revision] of Object.entries(source)) target[scope] = revision
 }
 
-function refKey(ref: { kind: string; id: string }): string {
-  return `${ref.kind}\u0000${ref.id}`
-}
-
 function planRevisions(plan: ApplicationChangePlan): Record<string, number> {
   const revisions: Record<string, number> = {}
   for (const step of plan.steps) {
@@ -96,23 +89,21 @@ function assertExpectedRevisions(
   }
 }
 
-export class ApplicationControlExecutionEngine implements ApplicationControlExecutionApi {
-  private readonly mutationExecutors = new Map<string, ApplicationMutationExecutor>()
-  private readonly collectionExecutors = new Map<string, ApplicationCollectionExecutor>()
-  private readonly operationExecutors = new Map<string, ApplicationSemanticOperationExecutor>()
+export class ApplicationControlExecutionEngine extends ApplicationExecutionSupport implements ApplicationControlExecutionApi {
   private readonly undoRecords = new Map<string, UndoRecord>()
   private readonly now: () => Date
   private readonly createOpaqueRef: (kind: 'plan' | 'transaction' | 'undo') => string
   private readonly store: ApplicationExecutionPlanStore
   private readonly verifier: ApplicationTransactionVerifier
   private readonly planner: ApplicationPlanBuilder
-  private readonly describeCollectionWriters?: ApplicationControlExecutionDependencies['describeCollectionWriters']
+  private readonly resolvePersistenceParticipants?: ApplicationControlExecutionDependencies['resolvePersistenceParticipants']
 
   constructor(
-    private readonly registry: ApplicationReflectionRegistry,
+    registry: ApplicationReflectionRegistry,
     dependencies: ApplicationControlExecutionDependencies = {}
   ) {
-    this.describeCollectionWriters = dependencies.describeCollectionWriters
+    super(registry, dependencies.describeCollectionWriters)
+    this.resolvePersistenceParticipants = dependencies.resolvePersistenceParticipants
     this.now = dependencies.now ?? (() => new Date())
     this.createOpaqueRef = dependencies.createOpaqueRef ?? defaultOpaqueRef
     this.store = new ApplicationExecutionPlanStore(
@@ -200,7 +191,14 @@ export class ApplicationControlExecutionEngine implements ApplicationControlExec
       const current = await this.readCurrentRevisions(stored.plan.steps, context)
       assertExpectedRevisions(expected, current)
       await this.preflightPlan(stored.plan.steps, context, stored.plan.transactionMode)
-      const execution = await this.executePlan(stored.plan, context)
+      const persistenceReceipts: ApplicationPersistenceReceipt[] = []
+      const execution = await withApplicationPersistenceBoundary({
+        participants: this.resolvePersistenceParticipants?.(stored.plan.steps, context) ?? [],
+        context,
+        execute: (batchContext) => this.executePlan(stored.plan, batchContext),
+        completed: (result) => result.completed,
+        onReceipt: (receipt) => persistenceReceipts.push(receipt),
+      })
       if (execution.deferred) {
         this.store.markCommitted(stored.plan.planRef)
         const result = execution.deferred.status === 'submitted'
@@ -230,6 +228,7 @@ export class ApplicationControlExecutionEngine implements ApplicationControlExec
       )
       const resultingRevisions: Record<string, number> = {}
       execution.completed.forEach((result) => mergeRevisions(resultingRevisions, result.resultingRevisions))
+      persistenceReceipts.forEach((receipt) => mergeRevisions(resultingRevisions, receipt.resultingRevisions))
       const undoRef = this.createUndoRef(stored.plan.steps, execution.completed)
       this.store.markCommitted(stored.plan.planRef)
       if (!verification.verified) {
@@ -258,7 +257,7 @@ export class ApplicationControlExecutionEngine implements ApplicationControlExec
         transactionRef,
         resultingRevisions,
         resultRefs: execution.completed.flatMap((item) => item.directRefs),
-        effects: this.collectEffects(stored.plan.steps, execution.completed),
+        effects: [...this.collectEffects(stored.plan.steps, execution.completed), ...persistenceReceipts.flatMap((receipt) => receipt.effects)],
         evidence: [...evidence, ...verification.evidence],
         verification,
         ...(undoRef ? { undoRef } : {}),
@@ -267,6 +266,7 @@ export class ApplicationControlExecutionEngine implements ApplicationControlExec
       this.store.saveIdempotent(request.idempotencyKey, request.planRef, result)
       return result
     } catch (error) {
+      if (error instanceof ApplicationPersistenceBoundaryFailure) this.store.markCommitted(stored.plan.planRef)
       const result = await this.handleExecutionFailure(error, stored.plan, transactionRef, context)
       this.store.saveIdempotent(request.idempotencyKey, request.planRef, result)
       return result
@@ -292,24 +292,43 @@ export class ApplicationControlExecutionEngine implements ApplicationControlExec
       record.results.forEach((result) => mergeRevisions(resultingRevisions, result.resultingRevisions))
       assertExpectedRevisions(resultingRevisions, request.expectedRevisions)
       assertExpectedRevisions(request.expectedRevisions, current)
-      const results: ApplicationCompletedStepResult[] = []
-      for (let index = record.steps.length - 1; index >= 0; index -= 1) {
-        const step = record.steps[index]
-        const original = record.results[index]
-        if (!original.undoToken) throw new Error('UNDO_NOT_SUPPORTED')
-        const result = await this.undoStep(step, original.undoToken, context)
-        results.push(result)
-      }
+      const persistenceReceipts: ApplicationPersistenceReceipt[] = []
+      const results = await withApplicationPersistenceBoundary({
+        participants: this.resolvePersistenceParticipants?.(record.steps, context) ?? [],
+        context,
+        execute: async (batchContext) => {
+          const applied: ApplicationCompletedStepResult[] = []
+          try {
+            for (let index = record.steps.length - 1; index >= 0; index -= 1) {
+              const original = record.results[index]
+              if (!original.undoToken) throw new Error('UNDO_NOT_SUPPORTED')
+              applied.push(await this.undoStep(record.steps[index], original.undoToken, batchContext))
+            }
+          } catch (error) {
+            if (batchContext.persistenceScopes?.size) {
+              if (applied.length > 0) this.undoRecords.delete(request.undoRef)
+              throw new ApplicationExecutionProgressFailure(`撤销执行失败：${String(error)}`, applied, [], error,
+                applied.map((_, index) => record.steps.length - 1 - index))
+            }
+            throw error
+          }
+          return applied
+        },
+        completed: (result) => result,
+        completedIndexes: (result) => result.map((_, index) => record.steps.length - 1 - index),
+        onReceipt: (receipt) => persistenceReceipts.push(receipt),
+      })
       this.undoRecords.delete(request.undoRef)
       const evidence = results.flatMap((result) => result.evidence)
       const undoRevisions: Record<string, number> = {}
       results.forEach((result) => mergeRevisions(undoRevisions, result.resultingRevisions))
+      persistenceReceipts.forEach((receipt) => mergeRevisions(undoRevisions, receipt.resultingRevisions))
       const result = applicationTransactionResultSchema.parse({
         status: 'completed',
         transactionRef: this.createOpaqueRef('transaction'),
         resultingRevisions: undoRevisions,
         resultRefs: results.flatMap((item) => item.directRefs),
-        effects: this.collectEffects([...record.steps].reverse(), results),
+        effects: [...this.collectEffects([...record.steps].reverse(), results), ...persistenceReceipts.flatMap((receipt) => receipt.effects)],
         evidence,
         verification: { verified: true, evidence: [], unmetConditions: [], checkedAt: this.now().toISOString() },
         completedAt: this.now().toISOString(),
@@ -317,371 +336,12 @@ export class ApplicationControlExecutionEngine implements ApplicationControlExec
       this.store.saveIdempotent(request.idempotencyKey, request.undoRef, result)
       return result
     } catch (error) {
-      const result = this.toFailure(error)
+      if (error instanceof ApplicationPersistenceBoundaryFailure) this.undoRecords.delete(request.undoRef)
+      const result = error instanceof ApplicationPersistenceBoundaryFailure
+        ? await this.describePersistenceFailure(error, record.steps, context) : this.toFailure(error)
       this.store.saveIdempotent(request.idempotencyKey, request.undoRef, result)
       return result
     }
-  }
-
-  private async executePlan(
-    plan: ApplicationChangePlan,
-    context: ApplicationExecutionContext
-  ): Promise<{ completed: ApplicationCompletedStepResult[]; deferred?: Exclude<ApplicationStepExecutionResult, { status: 'completed' }> }> {
-    if (plan.transactionMode === 'atomic' && plan.steps.length > 1) {
-      const steps = plan.steps as Array<Extract<ApplicationPlannedStep, { kind: 'mutation' }>>
-      const executor = this.mutationExecutors.get(steps[0].entityType)
-      if (!executor?.applyAtomic) throw new Error('ATOMIC_GROUP_NOT_SUPPORTED')
-      const results = await executor.applyAtomic(steps, context)
-      try {
-        this.collectEffects(steps, results)
-      } catch (error) {
-        for (let index = results.length - 1; index >= 0; index -= 1) {
-          await this.compensateStep(steps[index], results[index], context)
-        }
-        throw error
-      }
-      return { completed: results }
-    }
-    const completed: ApplicationCompletedStepResult[] = []
-    try {
-      for (const step of plan.steps) {
-        if (context.signal?.aborted) throw new Error('CANCELLED')
-        const result = await this.executeStep(step, context)
-        if (result.status !== 'completed') {
-          if (plan.steps.length !== 1) throw new Error('DEFERRED_GROUP_NOT_SUPPORTED')
-          return { completed, deferred: result }
-        }
-        try {
-          this.collectEffects([step], [result])
-        } catch (error) {
-          if (plan.transactionMode === 'non_reversible') {
-            completed.push(result)
-          } else {
-            await this.compensateStep(step, result, context)
-          }
-          throw error
-        }
-        completed.push(result)
-      }
-      return { completed }
-    } catch (error) {
-      const original = error instanceof Error ? error.message : String(error)
-      // `atomic` 也必须补偿。此前只有 `compensatable` 走补偿，于是声明 atomic 的计划失败后
-      // 把已完成的步骤原样留在应用里，却对调用方自称"事务"——三维布置就是这么留下一个
-      // 压在立方体上的圆柱体的。只有 `non_reversible` 才允许不补偿，那是它的字面语义。
-      if (plan.transactionMode === 'non_reversible') {
-        throw new Error(`PARTIAL_FAILURE:${completed.length}:${original}`)
-      }
-      const compensated: number[] = []
-      for (let index = completed.length - 1; index >= 0; index -= 1) {
-        try {
-          await this.compensateStep(plan.steps[index], completed[index], context)
-          compensated.push(index)
-        } catch (compensationError) {
-          // 补偿失败不能顶掉原始错误：原始错误才是调用方需要据以决策的那条。这里如实降级
-          // 成"部分未补偿"，并把两条信息都带出去。
-          const detail = compensationError instanceof Error
-            ? compensationError.message
-            : String(compensationError)
-          throw new Error(
-            `PARTIAL_FAILURE:${completed.length}:${original}（补偿在第 ${index} 步失败：${detail}）`
-          )
-        }
-      }
-      throw new Error(`COMPENSATED_FAILURE:${compensated.join(',')}:${original}`)
-    }
-  }
-
-  private collectEffects(
-    steps: ApplicationPlannedStep[],
-    results: ApplicationCompletedStepResult[],
-  ): ApplicationEffectReceipt[] {
-    return results.flatMap((result, index) => {
-      const step = steps[index]
-      if (!step) throw new Error('EFFECT_STEP_RESULT_MISMATCH')
-      const executor = step.kind === 'mutation'
-        ? this.mutationExecutors.get(step.entityType)
-        : step.kind === 'collection'
-          ? this.collectionExecutors.get(step.entityType)
-          : this.getOperationExecutor(step.capabilityId, step.capabilityVersion)
-      if (!executor) throw new Error('EFFECT_EXECUTOR_NOT_FOUND')
-      const declarations = new Map(executor.effectContract.cascades.map((item) => [item.declarationId, item]))
-      for (const effect of result.cascadeEffects ?? []) {
-        if (effect.origin.kind !== 'cascade') throw new Error('CASCADE_EFFECT_ORIGIN_INVALID')
-        const declaration = declarations.get(effect.origin.declarationId)
-        if (!declaration
-          || declaration.effect !== effect.effect
-          || declaration.entityType !== effect.entityType
-          || declaration.propertyIds.some((propertyId) => !effect.propertyIds.includes(propertyId))) {
-          throw new Error(`UNDECLARED_CASCADE_EFFECT:${effect.origin.declarationId}`)
-        }
-      }
-      const direct = step.kind === 'mutation'
-        ? [{
-            effect: 'update' as const,
-            entityType: step.entityType,
-            refs: result.directRefs,
-            propertyIds: step.mutations.map((mutation) => mutation.propertyId),
-            origin: { kind: 'direct' as const },
-          }]
-        : step.kind === 'collection'
-          ? [{
-              effect: step.operation.kind === 'create' ? 'create' as const : 'delete' as const,
-              entityType: step.entityType,
-              refs: result.directRefs,
-              propertyIds: [],
-              origin: { kind: 'direct' as const },
-            }]
-          : result.directEffects ?? []
-      this.assertDirectRefs(step, direct)
-      return [...direct, ...(result.cascadeEffects ?? [])]
-    })
-  }
-
-  private assertDirectRefs(step: ApplicationPlannedStep, effects: ApplicationEffectReceipt[]): void {
-    if (step.kind === 'operation') {
-      if (effects.length === 0) throw new Error(`DIRECT_EFFECT_REQUIRED:${step.capabilityId}`)
-      return
-    }
-    const refs = effects.flatMap((effect) => effect.refs)
-    if (refs.some((ref) => ref.kind !== step.entityType)) throw new Error('DIRECT_EFFECT_REF_KIND_MISMATCH')
-    if (step.kind === 'mutation') {
-      const expected = refKey(step.target)
-      if (refs.length !== 1 || refKey(refs[0]) !== expected) throw new Error('DIRECT_EFFECT_REF_MISMATCH')
-      return
-    }
-    const expectedCount = step.operation.kind === 'create'
-      ? step.operation.items.length
-      : step.operation.targets.length
-    if (refs.length !== expectedCount) throw new Error('DIRECT_EFFECT_REF_COUNT_MISMATCH')
-    if (step.operation.kind === 'remove') {
-      const actual = new Set(refs.map(refKey))
-      if (step.operation.targets.some((target) => !actual.has(refKey(target)))) {
-        throw new Error('DIRECT_EFFECT_REF_MISMATCH')
-      }
-    }
-  }
-
-  /**
-   * 声明了可回退语义的**多步**计划，必须每一步都真的能补偿——在执行任何一步之前验明。
-   *
-   * 否则会出现"计划自称 atomic、执行器却没有补偿能力"的组合：中途失败时应用被改了一半，
-   * 而调用方（包括模型）是按 atomic 的承诺来决策的。让这种组合在预检就失败，比在改坏之后
-   * 才发现要好得多。
-   *
-   * 只查多步计划：单步计划失败时 `completed` 是空的，补偿循环一次都不会执行，这时要求执行器
-   * 实现 compensate 是纯粹的死要求。**单步内部的部分写入引擎补偿不了**（失败的那步不在
-   * `completed` 里），那必须由执行器自己回滚——三维布置就是这么修的。
-   */
-  private assertCompensable(steps: ApplicationPlannedStep[], mode: ApplicationTransactionMode): void {
-    if (mode === 'non_reversible' || steps.length < 2) return
-    for (const step of steps) {
-      const executor = step.kind === 'mutation'
-        ? this.mutationExecutors.get(step.entityType)
-        : step.kind === 'collection'
-          ? this.collectionExecutors.get(step.entityType)
-          : this.getOperationExecutor(step.capabilityId, step.capabilityVersion)
-      if (executor && !executor.compensate) {
-        const label = step.kind === 'operation' ? step.capabilityId : step.entityType
-        throw new Error(`COMPENSATION_NOT_SUPPORTED:${label} 无法补偿，不能用于 ${mode} 事务`)
-      }
-    }
-  }
-
-  /**
-   * 集合写入的预检：类型必须声明 creatable/removable，创建时必须给齐必填属性，数量不得超上限。
-   *
-   * 全部在执行之前做完——这是三维布置那次事故的教训：任何能靠输入判断的错误都不该等到写了
-   * 一半才抛。
-   */
-  private async assertCollectionAllowed(
-    step: Extract<ApplicationPlannedStep, { kind: 'collection' }>,
-    context: ApplicationExecutionContext,
-    previousSteps: ApplicationPlannedStep[] = [],
-  ): Promise<void> {
-    const descriptor = this.registry.describe({ entityTypes: [step.entityType] }, context).entities[0]
-    if (!descriptor) {
-      // 与 registry.requireEntity 同一条道理：只说"没找到"，调用方无从知道正确的叫什么。
-      const available = this.registry.describe({}, context).entities.map((entity) => entity.id)
-      const domain = step.entityType.split('.')[0] ?? ''
-      const sameDomain = domain.length >= 3
-        ? available.filter((candidate) => candidate.startsWith(`${domain}.`))
-        : []
-      const listed = (sameDomain.length > 0 ? sameDomain : available).slice(0, 32)
-      throw new Error(
-        `ENTITY_TYPE_NOT_FOUND:${step.entityType}`
-        + (listed.length > 0 ? `（可用实体类型：${listed.join('、')}）` : '')
-      )
-    }
-    const rule = descriptor.collectionWrite
-    const operation = step.operation.kind === 'create' ? 'create' : 'remove'
-    if (!rule) {
-      throw new Error(
-        `COLLECTION_WRITE_NOT_DECLARED:${step.entityType} 未声明可增删${this.collectionWriterHint(step.entityType, operation)}`
-      )
-    }
-    const availability = await this.registry.getCollectionAvailability(step.parent, step.entityType, context)
-    const current = availability[operation]
-    const previousEffects = this.potentialEffects(previousSteps)
-    const stateBlocks = (current.blocks ?? []).filter((block) => block.kind === 'state')
-    const canDependOnPreviousSteps = !current.available && stateBlocks.length > 0
-      && stateBlocks.every((block) => previousEffects.some((effect) => (
-        block.affectedEntityTypes.includes(effect.entityType)
-        && (effect.revisionScopes.length === 0
-          || block.revisionScopes.some((scope) => effect.revisionScopes.includes(scope)))
-      )))
-    if (!current.available && !canDependOnPreviousSteps) {
-      assertCollectionOperationAvailable(availability, operation)
-    }
-    if (step.operation.kind === 'create') {
-      if (!rule.creatable) {
-        throw new Error(
-          `COLLECTION_CREATE_NOT_ALLOWED:${step.entityType}${this.collectionWriterHint(step.entityType, 'create')}`
-        )
-      }
-      if (step.operation.items.length > rule.maxItemsPerChange) {
-        throw new Error(
-          `COLLECTION_TOO_MANY_ITEMS:${step.entityType} 一次最多创建 ${rule.maxItemsPerChange} 个，`
-          + `本次 ${step.operation.items.length} 个`
-        )
-      }
-      for (const [index, item] of step.operation.items.entries()) {
-        const missing = rule.requiredPropertyIds.filter((propertyId) => !(propertyId in item.properties))
-        if (missing.length > 0) {
-          throw new Error(`COLLECTION_REQUIRED_PROPERTY_MISSING:第 ${index} 项缺少 ${missing.join('、')}`)
-        }
-      }
-      return
-    }
-    if (!rule.removable) {
-      throw new Error(
-        `COLLECTION_REMOVE_NOT_ALLOWED:${step.entityType}${this.collectionWriterHint(step.entityType, 'remove')}`
-      )
-    }
-    if (step.operation.targets.length > rule.maxItemsPerChange) {
-      throw new Error(`COLLECTION_TOO_MANY_ITEMS:${step.entityType} 一次最多删除 ${rule.maxItemsPerChange} 个`)
-    }
-  }
-
-  /**
-   * 拒绝通用增删时，把真正能做这件事的专用能力一并说出来。
-   *
-   * 没有这一句，模型收到的是死胡同，只能推断"应用做不到"——那正是它上一次凭空否认能力的
-   * 来源。有这一句，同一个拒绝就变成一次改道。
-   */
-  private collectionWriterHint(entityType: string, operation: 'create' | 'remove'): string {
-    const writers = this.describeCollectionWriters?.(entityType, operation) ?? []
-    if (writers.length === 0) return ''
-    return `；${operation === 'create' ? '创建' : '删除'}这类实体走专用能力：${writers.join('、')}`
-  }
-
-  private async preflightPlan(
-    steps: ApplicationPlannedStep[],
-    context: ApplicationExecutionContext,
-    mode: ApplicationTransactionMode
-  ): Promise<void> {
-    this.assertCompensable(steps, mode)
-    for (const [stepIndex, step] of steps.entries()) {
-      if (step.kind === 'mutation') {
-        const propertyIds = step.mutations.map((mutation) => mutation.propertyId)
-        const availability = await this.registry.getPropertyAvailability(step.target, propertyIds, context)
-        const blocked = availability.filter((item) => !item.writable)
-        const dynamicallyDeferred = stepIndex > 0 && blocked.every((item) => {
-          const descriptor = this.registry.getProperty(item.propertyId)
-          const stateBlocks = (item.blocks ?? []).filter((block) => block.kind === 'state')
-          const previousEffects = this.potentialEffects(steps.slice(0, stepIndex))
-          return descriptor !== undefined
-            && !descriptor.readOnlyReason
-            && descriptor.requiredPermissions.write.every((permission) => context.permissions.has(permission))
-            && stateBlocks.length > 0
-            && stateBlocks.every((block) => previousEffects.some((effect) => (
-              block.affectedEntityTypes.includes(effect.entityType)
-              && (effect.revisionScopes.length === 0
-                || block.revisionScopes.some((scope) => effect.revisionScopes.includes(scope)))
-            )))
-        })
-        if (blocked.length > 0 && !dynamicallyDeferred) {
-          // 带上是哪几条、为什么：只说"不可写"会让一个本可自纠的失败变成任务中断。
-          throw new Error(`PROPERTY_NOT_WRITABLE:${blocked
-            .map((item) => `${item.propertyId}（${item.reasons.join('；') || '无写权限'}）`)
-            .join('、')}`)
-        }
-        continue
-      }
-      if (step.kind === 'collection') {
-        await this.assertCollectionAllowed(step, context, steps.slice(0, stepIndex))
-        if (!this.collectionExecutors.has(step.entityType)) {
-          throw new Error(`COLLECTION_EXECUTOR_NOT_FOUND:${step.entityType}`)
-        }
-        continue
-      }
-      const executor = this.requireOperationExecutor(step)
-      if (!executor.requiredPermissions.every((permission) => context.permissions.has(permission))) {
-        throw new Error(`PERMISSION_DENIED:${step.capabilityId}`)
-      }
-      executor.normalizeInput(step.input)
-    }
-  }
-
-  private potentialEffects(steps: ApplicationPlannedStep[]) {
-    return steps.flatMap((step) => {
-      if (step.kind === 'mutation') {
-        const contract = this.mutationExecutors.get(step.entityType)?.effectContract
-        return [{ entityType: step.entityType, revisionScopes: [] as readonly string[] }, ...(contract?.cascades ?? [])]
-      }
-      if (step.kind === 'collection') return [{ entityType: step.entityType, revisionScopes: [] as readonly string[] }]
-      const contract = this.getOperationExecutor(step.capabilityId, step.capabilityVersion)?.effectContract
-      return [...(contract?.direct ?? []), ...(contract?.cascades ?? [])]
-    })
-  }
-
-  private async executeStep(
-    step: ApplicationPlannedStep,
-    context: ApplicationExecutionContext
-  ): Promise<ApplicationStepExecutionResult> {
-    if (step.kind === 'mutation') {
-      const propertyIds = step.mutations.map((mutation) => mutation.propertyId)
-      const availability = await this.registry.getPropertyAvailability(step.target, propertyIds, context)
-      const blocked = availability.filter((item) => !item.writable)
-      if (blocked.length > 0) {
-        throw new Error(`PROPERTY_NOT_WRITABLE:${blocked
-          .map((item) => `${item.propertyId}（${item.reasons.join('；') || '无写权限'}）`)
-          .join('、')}`)
-      }
-      const executor = this.mutationExecutors.get(step.entityType)
-      if (!executor) throw new Error(`MUTATION_EXECUTOR_NOT_FOUND:${step.entityType}`)
-      return await executor.apply(step, context)
-    }
-    if (step.kind === 'collection') {
-      await this.assertCollectionAllowed(step, context)
-      const executor = this.collectionExecutors.get(step.entityType)
-      if (!executor) throw new Error(`COLLECTION_EXECUTOR_NOT_FOUND:${step.entityType}`)
-      return await executor.apply(step, context)
-    }
-    const executor = this.getOperationExecutor(step.capabilityId, step.capabilityVersion)
-    if (!executor) throw new Error(`OPERATION_EXECUTOR_NOT_FOUND:${step.capabilityId}`)
-    if (!executor.requiredPermissions.every((permission) => context.permissions.has(permission))) {
-      throw new Error(`PERMISSION_DENIED:${step.capabilityId}`)
-    }
-    return await executor.execute(executor.normalizeInput(step.input), context)
-  }
-
-  private async readCurrentRevisions(
-    steps: ApplicationPlannedStep[],
-    context: ApplicationExecutionContext
-  ): Promise<Record<string, number>> {
-    const revisions: Record<string, number> = {}
-    for (const step of steps) {
-      const current = step.kind === 'mutation'
-        ? (await this.registry.readEntity(step.target, [], context)).revisions
-        : step.kind === 'collection'
-          ? this.registry.describe({ entityTypes: [step.entityType] }, context).entities[0]?.collectionWrite
-            ? (await this.registry.getCollectionAvailability(step.parent, step.entityType, context)).revisions
-            : (await this.registry.readEntity(step.parent, [], context)).revisions
-          : await this.requireOperationExecutor(step).getCurrentRevisions(step.input)
-      mergeRevisions(revisions, current)
-    }
-    return revisions
   }
 
   private checkApproval(
@@ -715,46 +375,14 @@ export class ApplicationControlExecutionEngine implements ApplicationControlExec
     return undoRef
   }
 
-  private async undoStep(
-    step: ApplicationPlannedStep,
-    undoToken: string,
-    context: ApplicationExecutionContext
-  ): Promise<ApplicationCompletedStepResult> {
-    const executor = step.kind === 'mutation'
-      ? this.mutationExecutors.get(step.entityType)
-      : step.kind === 'collection'
-        ? this.collectionExecutors.get(step.entityType)
-        : this.getOperationExecutor(step.capabilityId, step.capabilityVersion)
-    if (!executor?.undo) throw new Error('UNDO_NOT_SUPPORTED')
-    return await executor.undo(undoToken, context)
-  }
-
-  private async compensateStep(
-    step: ApplicationPlannedStep,
-    result: ApplicationCompletedStepResult,
-    context: ApplicationExecutionContext
-  ): Promise<ApplicationEvidence[]> {
-    if (step.kind === 'mutation') {
-      const executor = this.mutationExecutors.get(step.entityType)
-      if (!executor?.compensate) throw new Error('COMPENSATION_NOT_SUPPORTED')
-      return await executor.compensate(step, result, context)
-    }
-    if (step.kind === 'collection') {
-      const executor = this.collectionExecutors.get(step.entityType)
-      if (!executor?.compensate) throw new Error('COMPENSATION_NOT_SUPPORTED')
-      return await executor.compensate(step, result, context)
-    }
-    const executor = this.getOperationExecutor(step.capabilityId, step.capabilityVersion)
-    if (!executor?.compensate) throw new Error('COMPENSATION_NOT_SUPPORTED')
-    return await executor.compensate(step.input, result, context)
-  }
-
   private async handleExecutionFailure(
     error: unknown,
     plan: ApplicationChangePlan,
     transactionRef: string,
     _context: ApplicationExecutionContext
   ): Promise<ApplicationTransactionResult> {
+    if (error instanceof ApplicationPersistenceBoundaryFailure) return this.describePersistenceFailure(error, plan.steps, _context, transactionRef)
+    if (error instanceof ApplicationExecutionProgressFailure) return this.toFailure(error, transactionRef)
     const message = error instanceof Error ? error.message : String(error)
     const compensated = /^COMPENSATED_FAILURE:([^:]*):/.exec(message)
     if (compensated) {
@@ -785,11 +413,49 @@ export class ApplicationControlExecutionEngine implements ApplicationControlExec
     return this.toFailure(error, transactionRef, planRevisions(plan))
   }
 
+  /** commit 与 undo 共用实际已执行事实；撤销的索引始终指向原计划步骤。 */
+  private async describePersistenceFailure(error: ApplicationPersistenceBoundaryFailure,
+    steps: ApplicationPlannedStep[], context: ApplicationExecutionContext, transactionRef?: string): Promise<ApplicationTransactionResult> {
+    const result = this.toFailure(error, transactionRef)
+    if (result.status !== 'failed') return result
+    const compensated = error.executionFailure?.compensatedStepIndexes ?? []
+    const remaining = error.completed.map((item, offset) => ({ item, index: error.completedStepIndexes[offset] }))
+      .filter(({ index }) => !compensated.includes(index))
+    const effects = this.collectEffects(remaining.map(({ index }) => steps[index]), remaining.map(({ item }) => item))
+    const current = await this.readCurrentRevisions(steps, context).catch(() => ({}))
+    return { ...result, currentRevisions: { ...result.currentRevisions, ...current },
+      effects: [...effects, ...(result.effects ?? [])] }
+  }
+
   private toFailure(
     error: unknown,
     transactionRef?: string,
     currentRevisions?: Record<string, number>
   ): ApplicationTransactionResult {
+    if (error instanceof ApplicationExecutionProgressFailure) {
+      const indexes = error.completedStepIndexes
+      const uncompensated = indexes.filter((index) => !error.compensatedStepIndexes.includes(index))
+      return failure('EXECUTION_FAILED', `操作未完整完成：${error.message}。请先检查当前内容，不要重复已执行的步骤。`.slice(0, 2000), uncompensated.length === 0, {
+        transactionRef, partial: { completedStepIndexes: indexes, compensatedStepIndexes: error.compensatedStepIndexes,
+          uncompensatedStepIndexes: uncompensated },
+      })
+    }
+    if (error instanceof ApplicationPersistenceBoundaryFailure) {
+      const indexes = error.completedStepIndexes
+      const compensated = error.executionFailure?.compensatedStepIndexes ?? []
+      const revisions: Record<string, number> = {}
+      error.completed.forEach((result) => mergeRevisions(revisions, result.resultingRevisions))
+      error.receipts.forEach((receipt) => mergeRevisions(revisions, receipt.resultingRevisions))
+      return failure('EXECUTION_FAILED', error.executionFailure
+        ? `${error.message} 原业务失败：${error.executionFailure.message}`.slice(0, 2000) : error.message, true, {
+        transactionRef,
+        currentRevisions: revisions,
+        effects: error.receipts.flatMap((receipt) => receipt.effects),
+        partial: { completedStepIndexes: indexes, compensatedStepIndexes: compensated,
+          uncompensatedStepIndexes: indexes.filter((index) => !compensated.includes(index)) },
+        persistence: error.failure.facts,
+      })
+    }
     const message = error instanceof Error ? error.message : String(error)
     if (message.includes('REVISION_CONFLICT')) {
       return failure('CONFLICT', '应用状态已变化，请重新观察并规划。', true, { transactionRef, currentRevisions })
@@ -812,22 +478,5 @@ export class ApplicationControlExecutionEngine implements ApplicationControlExec
     return failure('EXECUTION_FAILED', `应用事务执行失败。原因：${message}`, false, { transactionRef })
   }
 
-  private requireOperationExecutor(
-    step: Extract<ApplicationPlannedStep, { kind: 'operation' }>
-  ): ApplicationSemanticOperationExecutor {
-    const executor = this.getOperationExecutor(step.capabilityId, step.capabilityVersion)
-    if (!executor) throw new Error(`OPERATION_EXECUTOR_NOT_FOUND:${step.capabilityId}`)
-    return executor
-  }
 
-  private getOperationExecutor(
-    capabilityId: string,
-    version: number
-  ): ApplicationSemanticOperationExecutor | undefined {
-    return this.operationExecutors.get(this.operationKey(capabilityId, version))
-  }
-
-  private operationKey(capabilityId: string, version: number): string {
-    return `${capabilityId}@${version}`
-  }
 }

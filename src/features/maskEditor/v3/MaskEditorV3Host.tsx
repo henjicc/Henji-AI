@@ -93,6 +93,8 @@ function toSessionReference(
   }
 }
 
+import { flushImageEditHostPersistenceV3 } from '@/features/imageEdit/v3/application/imageEditPersistenceOperations'
+
 export const MaskEditorV3Host = forwardRef<MaskEditorV3HostHandle, MaskEditorV3HostProps>(
   function MaskEditorV3Host({
     sourceImageUrl,
@@ -113,6 +115,7 @@ export const MaskEditorV3Host = forwardRef<MaskEditorV3HostHandle, MaskEditorV3H
     const [saving, setSaving] = useState(false)
     const [saveError, setSaveError] = useState(false)
     const queueRef = useRef<ImageMarkV3PersistenceQueue | null>(null)
+    const persistenceHost = useMemo(() => ({ getQueue: () => queueRef.current }), [])
     const snapshotRef = useRef<ImageEditPersistenceSnapshotV3 | null>(null)
     const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
     const persistedSessionRef = useRef(sessionReference)
@@ -231,8 +234,7 @@ export const MaskEditorV3Host = forwardRef<MaskEditorV3HostHandle, MaskEditorV3H
       const queue = queueRef.current
       const snapshot = snapshotRef.current
       if (!queue || !snapshot) throw new Error('V3 蒙版宿主尚未加载完成')
-      queue.enqueue(snapshot)
-      await queue.flush()
+      await flushImageEditHostPersistenceV3(queue, snapshot)
       return persistedSessionRef.current
     }, [])
 
@@ -287,6 +289,7 @@ export const MaskEditorV3Host = forwardRef<MaskEditorV3HostHandle, MaskEditorV3H
           ? { ...current, value: { ...current.value, document } }
           : current)}
         onPersistenceChange={handlePersistenceChange}
+        persistenceHost={persistenceHost}
         onReloadEditor={() => setAttempt((value) => value + 1)}
         toolbarActions={(
           <>

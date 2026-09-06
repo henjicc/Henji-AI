@@ -44,6 +44,7 @@ export type ImageEditV3ReflectedEntityType =
   | 'image_edit.resource'
 
 const READ_ONLY_DOCUMENT = '由当前打开的 V3 编辑器命令总线维护。'
+import { IMAGE_EDIT_PREVIEW_ONLY_REASON, imageEditPersistenceAvailabilityV3, imageEditPersistenceRevisionsV3, imageEditPersistencePermissionsV3 } from './imageEditPersistenceOperations'
 
 function property(
   entityType: ImageEditV3ReflectedEntityType,
@@ -180,12 +181,16 @@ function layerAvailability(
   const descriptors = new Map(IMAGE_EDIT_V3_PROPERTIES[entityType].map((item) => [item.id, item]))
   const ancestorLocked = source.location.ancestors.some((ancestor) => ancestor.locked)
   const layerLocked = source.location.layer.locked
-  const revisions = { image_edit: getImageEditV3LiveRevision() }
+  const revisions = { image_edit: getImageEditV3LiveRevision(), ...imageEditPersistenceRevisionsV3(ref) }
   return propertyIds.map((propertyId) => {
     const descriptor = descriptors.get(propertyId)
     if (!descriptor) throw new Error(`PROPERTY_NOT_FOUND:${propertyId}`)
     const reasons: string[] = []
     let writable = !descriptor.readOnlyReason
+    if (writable && !requireImageEditV3LiveSession(source.documentId).persistenceOwner) {
+      writable = false
+      reasons.push(IMAGE_EDIT_PREVIEW_ONLY_REASON)
+    }
     if (writable && ancestorLocked) {
       writable = false
       reasons.push('图层所在的父组已锁定。')
@@ -211,7 +216,7 @@ function layerAvailability(
       readable: true,
       writable,
       reasons,
-      requiredPermissions: writable ? descriptor.requiredPermissions.write : descriptor.requiredPermissions.read,
+      requiredPermissions: writable ? [...descriptor.requiredPermissions.write, ...imageEditPersistencePermissionsV3(ref)] : descriptor.requiredPermissions.read,
       revisions,
     }
   })
@@ -288,7 +293,7 @@ export class ImageEditV3ReflectionProvider {
     return {
       ref,
       entityType: this.entityType,
-      revisions: { image_edit: revision },
+      revisions: { image_edit: revision, ...imageEditPersistenceRevisionsV3(ref) },
       properties: selectProperties(values, request.propertyIds),
       capturedAt: new Date().toISOString(),
     }
@@ -316,7 +321,7 @@ export class ImageEditV3ReflectionProvider {
         writable: false,
         reasons: [descriptor.readOnlyReason ?? READ_ONLY_DOCUMENT],
         requiredPermissions: descriptor.requiredPermissions.read,
-        revisions: { image_edit: getImageEditV3LiveRevision() },
+        revisions: { image_edit: getImageEditV3LiveRevision(), ...imageEditPersistenceRevisionsV3(ref) },
       }
     })
   }
@@ -328,18 +333,22 @@ export class ImageEditV3ReflectionProvider {
     }
     if (parent.kind === 'image_edit.document') {
       const { documentId } = splitImageEditV3DocumentRef(parent)
-      requireImageEditV3LiveSession(documentId)
-      return unrestrictedCollectionAvailability(this.entityType, parent, revision, ['image_edit:write'])
+      return imageEditPersistenceAvailabilityV3(documentId,
+        unrestrictedCollectionAvailability(this.entityType, parent, revision, ['image_edit:write']))
     }
     const source = layerSource(parent, 'image_edit.group')
+    if (!requireImageEditV3LiveSession(source.documentId).persistenceOwner) {
+      return imageEditPersistenceAvailabilityV3(source.documentId,
+        unrestrictedCollectionAvailability(this.entityType, parent, revision, ['image_edit:write']))
+    }
     const blocked = source.location.layer.locked
       || source.location.ancestors.some((ancestor) => ancestor.locked)
-    const availability = unrestrictedCollectionAvailability(
+    const availability = imageEditPersistenceAvailabilityV3(source.documentId, unrestrictedCollectionAvailability(
       this.entityType,
       parent,
       revision,
       ['image_edit:write'],
-    )
+    ))
     if (!blocked) return availability
     const reason = '目标图层组已锁定，不能增删其子图层。'
     const block = {

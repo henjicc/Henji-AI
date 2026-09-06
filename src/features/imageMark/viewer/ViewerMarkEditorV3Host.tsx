@@ -102,6 +102,7 @@ export function ViewerMarkEditorV3Host(props: ViewerMarkEditorV3HostProps): JSX.
       profileId="quick"
       onDocumentChange={host.handleDocumentChange}
       onPersistenceChange={host.handlePersistenceChange}
+      persistenceHost={host.persistenceHost}
       onReloadEditor={host.retryBootstrap}
       toolbarActions={(
         <>

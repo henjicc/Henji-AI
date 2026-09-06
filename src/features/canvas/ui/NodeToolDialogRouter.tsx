@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import { UI_DIALOG_TRANSITION_MS } from '@/components/ui/motion'
-import { saveMultiLayerDocumentAfterEditing } from '@/features/canvas/application/multiLayerDocumentNodeGenerationAdapter'
+import { createMultiLayerDocumentPersistenceConfirmation } from '@/features/canvas/application/multiLayerDocumentPersistenceConfirmation'
 import { retainMultiLayerDocumentReferences } from '@/features/canvas/application/multiLayerDocumentLifecycleService'
 import { isEditableLayerStackResultNode } from '@/features/canvas/domain/canvasNodeGuards'
 import type { CanvasNode } from '@/features/canvas/domain/canvasNodes'
@@ -69,20 +69,21 @@ export function NodeToolDialogRouter(): JSX.Element {
     }, UI_DIALOG_TRANSITION_MS)
   }, [])
 
+  const documentConfirmation = useMemo(() => displayDocumentContext?.data.imageEditSession
+    ? createMultiLayerDocumentPersistenceConfirmation({ projectId: displayDocumentContext.projectId,
+        nodeId: displayDocumentContext.node.id, documentRef: displayDocumentContext.data.imageEditSession.documentRef })
+    : null, [displayDocumentContext])
+
   const handleDocumentCloseReady = useCallback(async (
     result: MultiLayerDocumentEditorCloseResult,
-  ): Promise<void> => {
+  ) => {
     const context = displayDocumentContext
     if (!context || context.node.id !== result.nodeId) {
       throw new Error('多图层文档关闭上下文已失效')
     }
-    await saveMultiLayerDocumentAfterEditing({
-      projectId: context.projectId,
-      nodeId: result.nodeId,
-      data: context.data,
-      session: result.session,
-    })
-  }, [displayDocumentContext])
+    if (!documentConfirmation) throw new Error('图片文档保存宿主尚未就绪')
+    return documentConfirmation.confirm(result.session)
+  }, [displayDocumentContext, documentConfirmation])
 
   return (
     <>
@@ -92,6 +93,7 @@ export function NodeToolDialogRouter(): JSX.Element {
           isOpen={Boolean(activeDocumentNode)}
           node={displayDocumentContext.node}
           onCloseReady={handleDocumentCloseReady}
+          persistenceProjection={documentConfirmation?.projection}
           onCloseApproved={handleDocumentDialogClosed}
         />
       )}
