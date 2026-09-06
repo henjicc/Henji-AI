@@ -47,7 +47,7 @@ export class ImageEditorGpuRasterPresentationV3 {
   private readonly unsubscribeError: () => void
   private readonly compiledFormats = new Set<PresentationFormatV3>()
   private bindGroup: ReturnType<Gpu['gpu']['createBindGroup']> | null = null
-  private source: Target | null = null
+  private sourceView: Target['color']['view'] | null = null
   private direct: DirectSurfaceStateV3 | null = null
   private attachedSurfaceGeneration = 0
   private failedSurfaceGeneration = 0
@@ -265,16 +265,19 @@ export class ImageEditorGpuRasterPresentationV3 {
   }
 
   private bind(output: Target): void {
-    if (this.source === output && this.bindGroup) return
+    // vGPU Target.resize 保留 Target 对象，但会销毁并重建 color 纹理。
+    // 原生 bindgroup 捕获的是 view，必须跟随真实资源身份失效。
+    const view = output.color.view
+    if (this.sourceView === view && this.bindGroup) return
     this.bindGroup = this.gpu.gpu.createBindGroup({
       layout: this.presentDraw.layout(0),
       entries: [
-        { binding: 0, resource: output.color.view },
+        { binding: 0, resource: view },
         { binding: 1, resource: { buffer: this.colorBuffer } },
       ],
     })
     this.presentDraw.group(0, this.bindGroup)
-    this.source = output
+    this.sourceView = view
   }
 
   private assertUsable(): void {

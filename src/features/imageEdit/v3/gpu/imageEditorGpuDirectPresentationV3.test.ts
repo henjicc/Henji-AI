@@ -140,4 +140,24 @@ describe('ImageEditorGpuRasterPresentationV3', () => {
     expect(vgpuMocks.target).not.toHaveBeenCalled()
     presentation.dispose()
   })
+
+  it('同一Target复用view时不重绑，resize替换view后只重建一次绑定', async () => {
+    const device = gpu()
+    const presentation = new ImageEditorGpuRasterPresentationV3(device, vi.fn())
+    const source = output()
+    presentation.attachSurface({ width: 32, height: 24 } as OffscreenCanvas, 1)
+    const render = () => presentation.render(source, createDefaultImageEditColorModeV3(), 1, () => true)
+    await render()
+    await render()
+    expect(device.gpu.createBindGroup).toHaveBeenCalledTimes(1)
+    const replacementView = {}
+    Object.defineProperty(source.color, 'view', { value: replacementView })
+    await render()
+    await render()
+    expect(device.gpu.createBindGroup).toHaveBeenCalledTimes(2)
+    expect(device.gpu.createBindGroup).toHaveBeenLastCalledWith(expect.objectContaining({
+      entries: expect.arrayContaining([{ binding: 0, resource: replacementView }]),
+    }))
+    presentation.dispose()
+  })
 })

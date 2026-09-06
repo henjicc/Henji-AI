@@ -1,6 +1,9 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { init } from 'vgpu/node'
 import type { Gpu } from 'vgpu'
+import { frame, target } from 'vgpu'
+import { createDefaultImageEditColorModeV3 } from '@/core/imageEdit/v3/colorTypes'
+import { ImageEditorGpuRasterPresentationV3 } from './imageEditorGpuDirectPresentationV3'
 
 import {
   compileImageEditRenderPlanV3,
@@ -34,6 +37,29 @@ beforeAll(async () => {
 afterAll(() => gpu?.dispose())
 
 describe('ImageEditorGpuRasterCompositorV3（真实 WebGPU）', () => {
+  it('64像素白图改变视口尺寸后呈现重绑真实纹理，后续导出不受过期绑定污染', async () => {
+    const output = target(gpu, { size: [64, 64], format: 'rgba16float' })
+    const presentation = new ImageEditorGpuRasterPresentationV3(gpu, () => undefined)
+    const errors: Error[] = []
+    const unsubscribe = gpu.onError((error) => errors.push(error))
+    try {
+      for (const size of [64, 128, 64]) {
+        output.resize([size, size])
+        await frame(gpu, (current) => current.pass({ target: output, clear: [1, 1, 1, 1] }, () => undefined)).done
+        const pixels = await presentation.readPixels(output, createDefaultImageEditColorModeV3())
+        expect(pixels).toHaveLength(size * size * 4)
+        expect(pixels.every((value) => value === 255)).toBe(true)
+      }
+      // 与正式导出相同的线性 Target 回读；不能携带上一帧的异步验证错误。
+      expect((await output.readFloats()).every((value) => value === 1)).toBe(true)
+      await gpu.settled()
+      expect(errors).toEqual([])
+    } finally {
+      unsubscribe()
+      presentation.dispose()
+      output.color.destroy()
+    }
+  })
   it.each(['kie-five-layer', 'sixteen-layer'] as const)(
     '%s 与同输入CPU golden保持FP16允许误差，且重复帧不上传或重建Pipeline',
     async (fixtureId) => {
