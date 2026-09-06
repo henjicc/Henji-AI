@@ -19,6 +19,7 @@ import {
   type ImageMarkV3PersistenceStatus,
 } from '@/features/imageMark/standalone/imageMarkV3Persistence'
 import type { VisualToolEditorProps } from '../ui/tool-editors/types'
+import { MultiLayerDocumentNodeApplicationError } from '../application/multiLayerDocumentNodeApplicationContracts'
 import {
   CANVAS_EDIT_V3_SESSION_OPTION,
   createCanvasEditV3Repository,
@@ -101,18 +102,27 @@ export function CanvasEditToolEditorV3Host({
   const [bootstrapAttempt, setBootstrapAttempt] = useState(0)
   const [saving, setSaving] = useState(false)
   const [saveFailed, setSaveFailed] = useState(false)
+  // 文档落盘与节点同步是不同的确认阶段；文档保存成功不能清除同步失败。
+  const [projectionFailure, setProjectionFailure] = useState<'sync' | 'target-changed' | null>(null)
+  const projectionUnconfirmedRef = useRef(false)
   const mountedRef = useRef(true)
   const persistenceRef = useRef<ImageMarkV3PersistenceQueue | null>(null)
   const persistenceHost = useMemo(() => ({
     getQueue: () => persistenceRef.current,
     projection: persistenceProjection,
     confirmProjection: onPersistenceConfirmed ? async (reference: ImageEditDocumentReferenceV3) => {
+      projectionUnconfirmedRef.current = true
+      onExecutionReadyChangeRef.current?.(false)
       try {
         const result = await onPersistenceConfirmed(createCanvasEditV3SessionReference(sourceImageUrl, reference))
-        setSaveFailed(false)
+        projectionUnconfirmedRef.current = false
+        setProjectionFailure(null)
+        const current = persistenceSnapshotRef.current?.document
+        onExecutionReadyChangeRef.current?.(current?.id === reference.documentId && current.revision === reference.revision)
         return result
       } catch (error) {
-        setSaveFailed(true)
+        setProjectionFailure(error instanceof MultiLayerDocumentNodeApplicationError
+          && error.code === 'NODE_TARGET_CHANGED' ? 'target-changed' : 'sync')
         throw error
       }
     } : undefined,
@@ -192,7 +202,7 @@ export function CanvasEditToolEditorV3Host({
         return
       }
       publishReference(status.reference)
-      onExecutionReadyChangeRef.current?.(true)
+      onExecutionReadyChangeRef.current?.(!projectionUnconfirmedRef.current)
       logger.info('画布图片编辑文档保存完成', {
         event: 'canvas.image_edit_v3.persistence.completed',
         context: {
@@ -227,6 +237,8 @@ export function CanvasEditToolEditorV3Host({
     setBootstrap({ kind: 'loading' })
     setSaving(false)
     setSaveFailed(false)
+    setProjectionFailure(null)
+    projectionUnconfirmedRef.current = false
     persistenceRef.current = null
     persistenceSnapshotRef.current = null
     onExecutionReadyChangeRef.current?.(false)
@@ -357,14 +369,18 @@ export function CanvasEditToolEditorV3Host({
     )
   }
 
-  const persistenceAction = saving || saveFailed ? (
-    saveFailed ? (
+  const persistenceAction = saving || saveFailed || projectionFailure ? (
+    saveFailed || projectionFailure ? (
       <UiButton
         variant="plain"
         size="sm"
+        disabled={saving || interactionDisabled}
+        title={t(`toolDialog.imageEditorV3.${saveFailed ? 'saveFailedDescription'
+          : projectionFailure === 'target-changed' ? 'targetChangedDescription' : 'syncFailedDescription'}`)}
         onClick={() => { void flushPending().catch(() => undefined) }}
       >
-        {t('toolDialog.imageEditorV3.retrySave')}
+        {t(`toolDialog.imageEditorV3.${saveFailed ? 'saveFailedRetry'
+          : projectionFailure === 'target-changed' ? 'targetChangedRetry' : 'syncFailedRetry'}`)}
       </UiButton>
     ) : (
       <span role="status" className="text-xs text-text-muted">

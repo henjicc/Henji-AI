@@ -61,7 +61,6 @@ export function MultiLayerDocumentEditorDialog({
   const mountedRef = useRef(true)
   const [bootstrapKind, setBootstrapKind] = useState<'loading' | 'failed' | 'ready'>('loading')
   const [closing, setClosing] = useState(false)
-  const [closeFailed, setCloseFailed] = useState(false)
   const [closeApproved, setCloseApproved] = useState(false)
   const [editorContext, setEditorContext] = useState<{
     sessionId: string
@@ -90,7 +89,6 @@ export function MultiLayerDocumentEditorDialog({
     const operation = (async () => {
       if (mountedRef.current) {
         setClosing(true)
-        setCloseFailed(false)
       }
       logger.info('多图层图片文档编辑器开始关闭', {
         event: 'canvas.multi_layer_document_editor.close.start',
@@ -112,7 +110,6 @@ export function MultiLayerDocumentEditorDialog({
       } catch (error) {
         if (mountedRef.current) {
           setClosing(false)
-          setCloseFailed(true)
         }
         logger.error('多图层图片文档编辑器关闭失败', error, {
           event: 'canvas.multi_layer_document_editor.close.failed',
@@ -246,14 +243,7 @@ export function MultiLayerDocumentEditorDialog({
             {t('toolDialog.imageEditorV3.closing')}
           </span>
         ) : (
-          <>
-            {exportButton}
-            {closeFailed ? (
-              <UiButton variant="plain" size="sm" onClick={requestCloseFromUi}>
-                {t('toolDialog.imageEditorV3.closeFailedRetry')}
-              </UiButton>
-            ) : null}
-          </>
+          exportButton
         )}
       />
     </UiModal>

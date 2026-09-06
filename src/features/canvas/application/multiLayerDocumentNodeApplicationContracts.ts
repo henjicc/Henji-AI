@@ -13,6 +13,7 @@ export type MultiLayerDocumentNodeApplicationErrorCode =
   | 'MIGRATION_REQUIRED'
   | 'DOCUMENT_NOT_FOUND'
   | 'DOCUMENT_CONFLICT'
+  | 'NODE_TARGET_CHANGED'
   | 'UNSUPPORTED_EXPORT_TARGET'
   | 'CANCELLED'
   | 'OPERATION_FAILED'

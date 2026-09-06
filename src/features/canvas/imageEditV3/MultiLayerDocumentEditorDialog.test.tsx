@@ -152,11 +152,13 @@ describe('MultiLayerDocumentEditorDialog', () => {
     await waitFor(() => expect(mocks.openAndValidate).toHaveBeenCalledOnce())
 
     fireEvent.click(screen.getByRole('button', { name: '关闭编辑器' }))
-    expect(await screen.findByRole('button', { name: '保存失败，重试关闭' })).toBeTruthy()
+    await waitFor(() => expect(mocks.flush).toHaveBeenCalledOnce())
+    await waitFor(() => expect(screen.getByRole('button', { name: '关闭编辑器' })).toHaveProperty('disabled', false))
+    expect(screen.queryByRole('button', { name: '保存失败，重试关闭' })).toBeNull()
     expect(screen.getByRole('dialog')).toBeTruthy()
     expect(closed).toHaveLength(0)
 
-    fireEvent.click(screen.getByRole('button', { name: '保存失败，重试关闭' }))
+    fireEvent.click(screen.getByRole('button', { name: '关闭编辑器' }))
     await waitFor(() => expect(closed).toHaveLength(1))
     expect(mocks.flush).toHaveBeenCalledTimes(2)
     unsubscribe()

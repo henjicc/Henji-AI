@@ -6,6 +6,7 @@ import { useProjectStore } from '@/stores/projectStore'
 import { isEditableLayerStackResultNode } from '../domain/canvasNodeGuards'
 import { saveMultiLayerDocumentAfterEditing } from './multiLayerDocumentNodeGenerationAdapter'
 import { CanvasPersistenceError, confirmCanvasPersistence } from './canvasPersistenceService'
+import { MultiLayerDocumentNodeApplicationError } from './multiLayerDocumentNodeApplicationContracts'
 
 /** 每个附着宿主拥有一个确认器；只有本确认器已安装但尚未落盘的投影能跳过再次物化。 */
 export function createMultiLayerDocumentPersistenceConfirmation(input: {
@@ -24,7 +25,8 @@ export function createMultiLayerDocumentPersistenceConfirmation(input: {
     const node = useCanvasStore.getState().nodes.find((candidate) => candidate.id === input.nodeId)
     if (useProjectStore.getState().currentProjectId !== input.projectId || !isEditableLayerStackResultNode(node)
       || node.data.imageEditSession?.documentRef !== input.documentRef) {
-      throw new Error('原画布文档节点已切换，请返回原项目核对保存结果')
+      throw new MultiLayerDocumentNodeApplicationError('NODE_TARGET_CHANGED',
+        '图片内容已保存，但原画布节点已删除或不再关联此图片。请恢复原节点及其文档关联后重试同步；当前编辑内容不会覆盖其他节点。', true)
     }
     return node
   }

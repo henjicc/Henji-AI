@@ -105,6 +105,7 @@ export function useCanvasShortcuts(params: UseCanvasShortcutsParams): void {
   useEffect(() => {
     const handlePaste = (event: ClipboardEvent) => {
       pasteImageHandledRef.current = false
+      if (event.defaultPrevented || document.querySelector('[aria-modal="true"]')) return
       if (isTypingTarget(event.target)) return
 
       const media = resolveClipboardMediaFile(event)
@@ -151,6 +152,8 @@ export function useCanvasShortcuts(params: UseCanvasShortcutsParams): void {
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
+      // 画布是背景宿主，不能接管模态编辑器、确认框或已被控件处理的按键。
+      if (event.defaultPrevented || document.querySelector('[aria-modal="true"]')) return
       if (isTypingTarget(event.target)) return
 
       const commandPressed = event.ctrlKey || event.metaKey

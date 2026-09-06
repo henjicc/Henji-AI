@@ -300,4 +300,42 @@ describe('图片编辑 V3 图层变换交互', () => {
     await waitFor(() => expect(changes).toHaveLength(3))
     expect(changes[2].layers[0].transform).toEqual([1.5, 0, 0, 1.5, 0, 0])
   })
+
+  it.each(['ctrlKey', 'metaKey'] as const)('%s 撤销的是刚刚移动，并隔离外层历史及输入框', async (modifier) => {
+    const changes: ImageEditDocumentV3[] = []
+    const persistence: ImageEditPersistenceSnapshotV3[] = []
+    const rendered = renderEditor(createDocument([createImageEditRasterLayerV3('raster', '底图')]), {
+      onDocumentChange: (next) => changes.push(next), onPersistenceChange: (next) => persistence.push(next),
+    })
+    const surface = rendered.container.querySelector<HTMLElement>('[data-preview-surface]')!
+    mockViewportRect(rendered.container.querySelector('[data-viewport-content]')!)
+    const outsideUndo = vi.fn()
+    document.addEventListener('keydown', outsideUndo)
+    try {
+      fireEvent.pointerDown(surface, { pointerId: 90, isPrimary: true, button: 0, clientX: 10, clientY: 10 })
+      fireEvent.pointerMove(surface, { pointerId: 90, clientX: 35, clientY: 20 })
+      fireEvent.pointerUp(surface, { pointerId: 90, clientX: 35, clientY: 20 })
+      await waitFor(() => expect(changes).toHaveLength(1))
+      const moved = changes[0].layers[0].transform
+      expect(moved).toEqual([1, 0, 0, 1, 100, 40])
+      fireEvent.keyDown(document.activeElement!, { key: 'z', [modifier]: true })
+      expect(changes.at(-1)?.layers[0].transform).toEqual([1, 0, 0, 1, 0, 0])
+      expect(persistence.at(-1)?.history.redo).toHaveLength(1)
+      fireEvent.keyDown(document.activeElement!, { key: 'z', shiftKey: true, [modifier]: true })
+      expect(changes.at(-1)?.layers[0].transform).toEqual(moved)
+      expect(persistence.at(-1)?.history.undo).toHaveLength(1)
+      expect(outsideUndo).not.toHaveBeenCalled()
+
+      // 没有可撤销步骤也不能把按键交给画布。
+      fireEvent.keyDown(document.activeElement!, { key: 'z', [modifier]: true })
+      const count = changes.length
+      fireEvent.keyDown(document.activeElement!, { key: 'z', [modifier]: true })
+      expect(changes).toHaveLength(count)
+      expect(outsideUndo).not.toHaveBeenCalled()
+      const input = screen.getByRole('spinbutton', { name: 'X 位置' })
+      input.focus()
+      expect(fireEvent.keyDown(input, { key: 'z', [modifier]: true })).toBe(true)
+      expect(changes).toHaveLength(count)
+    } finally { document.removeEventListener('keydown', outsideUndo) }
+  })
 })

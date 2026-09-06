@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { exportDiagnosticBundle } from '@/commands/logging'
@@ -9,10 +9,13 @@ import { ImageEditorPreviewV3 } from './ImageEditorPreviewV3'
 import { ImageEditorToolRailV3 } from './ImageEditorToolRailV3'
 import type { ImageEditorV3Props } from './types'
 import { useImageEditorControllerV3 } from './useImageEditorControllerV3'
+import { useImageEditorHistoryShortcutsV3 } from './useImageEditorHistoryShortcutsV3'
 import { createImageEditorDiagnosticSummaryV3 } from './imageEditorDiagnosticSummaryV3'
 
 function ImageEditorWorkspaceV3(props: ImageEditorV3Props): JSX.Element {
   const { controller, bus } = useImageEditorControllerV3(props)
+  const rootRef = useRef<HTMLDivElement>(null)
+  useImageEditorHistoryShortcutsV3(rootRef, controller)
   const { onEditorContextChange } = props
   const showLayers = controller.profile.panels.includes('layers')
   const showProperties = controller.profile.panels.includes('properties')
@@ -28,6 +31,14 @@ function ImageEditorWorkspaceV3(props: ImageEditorV3Props): JSX.Element {
 
   return (
     <div
+      ref={rootRef}
+      tabIndex={-1}
+      onPointerDownCapture={(event) => {
+        const target = event.target instanceof Element ? event.target : null
+        if (!target?.closest('button, input, textarea, select, a, [contenteditable]')) {
+          rootRef.current?.focus({ preventScroll: true })
+        }
+      }}
       data-image-editor-v3
       data-host-profile={controller.profile.id}
       className={`flex h-full min-h-0 min-w-0 flex-col overflow-hidden bg-bg-dark text-text-dark ${props.className ?? ''}`}

@@ -1,13 +1,18 @@
 /** @vitest-environment jsdom */
 
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
-import type { ReactNode } from 'react'
+import { useEffect, useRef, type ReactNode } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { createImageEditDocumentV3 } from '@/core/imageEdit/v3/documentFactory'
 import type { ImageEditDocumentV3 } from '@/core/imageEdit/v3/documentTypes'
 import type { ImageEditPersistenceSnapshotV3 } from '@/core/imageEdit/v3/serviceContracts'
 import i18n from '@/i18n/config'
+import { ImageEditCommandBusV3 } from '@/features/imageEdit/v3/application/imageEditCommandBus'
+import { registerImageEditV3LiveSession } from '@/features/imageEdit/v3/application/imageEditLiveSessionRegistry'
+import type { ImageEditPersistenceHostV3 } from '@/features/imageEdit/v3/application/imageEditPersistenceOwner'
+import { createImageEditRasterLayerV3 } from '@/core/imageEdit/v3/documentFactory'
+import { MultiLayerDocumentNodeApplicationError } from '../application/multiLayerDocumentNodeApplicationContracts'
 import {
   CanvasEditToolEditorV3Host,
   type CanvasEditToolEditorV3Lifecycle,
@@ -16,6 +21,7 @@ import {
 const mocks = vi.hoisted(() => ({
   prepare: vi.fn(),
   save: vi.fn(),
+  live: false,
 }))
 
 vi.mock('./canvasEditV3Session', async () => {
@@ -49,28 +55,42 @@ vi.mock('@/features/imageEdit/v3/editor', () => ({
     profileId,
     onPersistenceChange,
     toolbarActions,
+    persistenceHost,
   }: {
     document: ImageEditDocumentV3
     profileId: string
     onPersistenceChange: (snapshot: ImageEditPersistenceSnapshotV3) => void
     toolbarActions?: ReactNode
-  }) => (
+    persistenceHost?: ImageEditPersistenceHostV3
+  }) => {
+    const bus = useRef(new ImageEditCommandBusV3(document)).current
+    useEffect(() => mocks.live
+      ? registerImageEditV3LiveSession('test-host', bus, persistenceHost) : undefined, [bus, persistenceHost])
+    const edit = (revision: number): void => {
+      if (!mocks.live) { onPersistenceChange(persistence({ ...document, revision })); return }
+      bus.dispatch({ type: 'layer.add', commandId: `add-${revision}`,
+        expectedRevision: bus.getSnapshot().document.revision, parentId: null, index: 0,
+        layer: createImageEditRasterLayerV3(`layer-${revision}`, '测试图层') })
+      onPersistenceChange(bus.getPersistenceSnapshot())
+    }
+    return (
     <div data-testid="shared-v3-editor" data-profile={profileId}>
       {toolbarActions}
       <button
         type="button"
-        onClick={() => onPersistenceChange(persistence({ ...document, revision: 1 }))}
+        onClick={() => edit(1)}
       >
         persist-one
       </button>
       <button
         type="button"
-        onClick={() => onPersistenceChange(persistence({ ...document, revision: 2 }))}
+        onClick={() => edit(2)}
       >
         persist-two
       </button>
     </div>
-  ),
+    )
+  },
 }))
 
 const initialDocument = createImageEditDocumentV3({
@@ -83,6 +103,7 @@ describe('CanvasEditToolEditorV3Host', () => {
   beforeEach(async () => {
     await i18n.changeLanguage('zh-CN')
     vi.useFakeTimers()
+    mocks.live = false
     mocks.save.mockReset().mockImplementation(async (document: ImageEditDocumentV3) => ({
       documentId: document.id,
       revision: document.revision,
@@ -262,5 +283,47 @@ describe('CanvasEditToolEditorV3Host', () => {
       revision: 2,
     })
     expect(onExecutionReadyChange).toHaveBeenLastCalledWith(true)
+  })
+
+  it('节点同步失败只显示一个准确入口；重试成功清除提示且不重复编辑或保存', async () => {
+    mocks.live = true
+    const confirm = vi.fn().mockRejectedValueOnce(new Error('预览写入失败')).mockResolvedValue(undefined)
+    let lifecycle: CanvasEditToolEditorV3Lifecycle | null = null
+    render(<CanvasEditToolEditorV3Host plugin={{} as never} options={{}} sourceImageUrl="source.png"
+      onOptionsChange={vi.fn()} onPersistenceConfirmed={confirm}
+      onLifecycleChange={(next) => { lifecycle = next }} />)
+    await act(async () => { await Promise.resolve() })
+    fireEvent.click(screen.getByRole('button', { name: 'persist-one' }))
+    await act(async () => { await expect(lifecycle!.confirmPending()).rejects.toThrow('保存未确认') })
+    expect(mocks.save).toHaveBeenCalledOnce()
+    expect(screen.getAllByRole('button', { name: '节点同步失败，重试' })).toHaveLength(1)
+    expect(screen.queryByText('保存失败，重试关闭')).toBeNull()
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: '节点同步失败，重试' })) })
+    expect(confirm).toHaveBeenCalledTimes(2)
+    expect(mocks.save).toHaveBeenCalledOnce()
+    expect(screen.queryByRole('button', { name: '节点同步失败，重试' })).toBeNull()
+  })
+
+  it('节点变化的提示不会被后续文档落盘清掉，也不会混称文件保存失败', async () => {
+    mocks.live = true
+    const confirm = vi.fn().mockRejectedValue(new MultiLayerDocumentNodeApplicationError(
+      'NODE_TARGET_CHANGED', '原节点已变化', true))
+    let lifecycle: CanvasEditToolEditorV3Lifecycle | null = null
+    render(<CanvasEditToolEditorV3Host plugin={{} as never} options={{}} sourceImageUrl="source.png"
+      onOptionsChange={vi.fn()} onPersistenceConfirmed={confirm}
+      onLifecycleChange={(next) => { lifecycle = next }} />)
+    await act(async () => { await Promise.resolve() })
+    fireEvent.click(screen.getByRole('button', { name: 'persist-one' }))
+    await act(async () => { await expect(lifecycle!.confirmPending()).rejects.toThrow('保存未确认') })
+    const retry = screen.getByRole('button', { name: '原节点已变化，重试同步' })
+    expect(retry.title).toContain('图片内容已保存')
+    let resolveSave!: (value: { documentId: string; revision: number; previewRef: null }) => void
+    mocks.save.mockImplementationOnce(() => new Promise((resolve) => { resolveSave = resolve }))
+    fireEvent.click(screen.getByRole('button', { name: 'persist-two' }))
+    await act(async () => { await vi.advanceTimersByTimeAsync(500) })
+    expect(screen.getByRole('button', { name: '原节点已变化，重试同步' })).toHaveProperty('disabled', true)
+    await act(async () => { resolveSave({ documentId: 'canvas-host', revision: 2, previewRef: null }) })
+    expect(screen.getByRole('button', { name: '原节点已变化，重试同步' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: '保存失败，重试' })).toBeNull()
   })
 })

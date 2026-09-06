@@ -5,7 +5,7 @@ import { useTranslation } from 'react-i18next'
 import { UiIconButton } from '@/components/ui'
 import { ICON_TOOL_IMAGE_EDIT } from '@/core/theme/icons'
 import type { ImageEditCommandBusV3 } from '../application/imageEditCommandBus'
-import { useImageEditorInteractionStoreV3, useImageEditorSessionStoreV3 } from '../store'
+import { useImageEditorSessionStoreV3 } from '../store'
 import { ImageEditorToolParametersV3 } from './ImageEditorToolParametersV3'
 import type { ImageEditorV3Controller } from './types'
 
@@ -24,9 +24,6 @@ export function ImageEditorCommandBarV3({
 }: ImageEditorCommandBarV3Props): JSX.Element {
   const { t } = useTranslation('ui')
   const EditorIcon = ICON_TOOL_IMAGE_EDIT
-  const zoom = useImageEditorInteractionStoreV3(
-    (state) => state.viewportZoomBySession[controller.sessionId] ?? 1,
-  )
   const activeTool = useImageEditorSessionStoreV3(
     (state) => state.sessions[controller.sessionId]?.activeTool,
   )
@@ -87,9 +84,6 @@ export function ImageEditorCommandBarV3({
           data-command-bar-actions
           className="flex min-w-0 shrink-0 items-center gap-3"
         >
-          <span className="w-12 text-right text-xs tabular-nums text-text-muted">
-            {Math.round(zoom * 100)}%
-          </span>
           {toolbarActions}
         </div>
       </div>
