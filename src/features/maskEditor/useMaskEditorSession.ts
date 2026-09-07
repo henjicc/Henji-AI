@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
+import { useCallback, useEffect, useReducer, useRef, useState, type RefObject } from 'react';
 
 import { createLogger } from '@/core/logging';
 import { loadImageElement } from '@/services/imageSource';
@@ -31,6 +31,9 @@ interface UseMaskEditorSessionOptions {
   sourceImage: string;
   initialDocument?: MaskEditorDocument | null;
   active?: boolean;
+  /** 保留会话和画面时，可单独关闭后台节点的快捷键。 */
+  keyboardEnabled?: boolean;
+  keyboardScope?: RefObject<HTMLElement>;
   onConfirm?: (result: MaskEditorResult) => void | Promise<void>;
 }
 
@@ -46,6 +49,8 @@ export function useMaskEditorSession({
   sourceImage,
   initialDocument,
   active = true,
+  keyboardEnabled = true,
+  keyboardScope,
   onConfirm,
 }: UseMaskEditorSessionOptions) {
   const sourceSessionRef = useRef({ sourceImage, initialDocument });
@@ -179,8 +184,13 @@ export function useMaskEditorSession({
   }, [history.document, onConfirm]);
 
   useEffect(() => {
-    if (!active) return;
+    if (!active || !keyboardEnabled) return;
     const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.defaultPrevented) return;
+      const target = event.target;
+      if (target instanceof HTMLElement && target.closest('input, textarea, select, [contenteditable="true"], [role="textbox"]')) return;
+      const modal = document.querySelector('[aria-modal="true"]');
+      if (modal && keyboardScope?.current && !modal.contains(keyboardScope.current)) return;
       if (event.metaKey || event.ctrlKey) {
         if (event.key.toLowerCase() === 'z') {
           event.preventDefault();
@@ -201,9 +211,10 @@ export function useMaskEditorSession({
       if (key === 'd') setMode('paint');
       if (key === 'e') setMode('erase');
     };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [active]);
+    // 在背景画布的 document 监听器之前消费撤销，避免一次按键同时撤销节点和遮罩。
+    window.addEventListener('keydown', handleKeyDown, true);
+    return () => window.removeEventListener('keydown', handleKeyDown, true);
+  }, [active, keyboardEnabled, keyboardScope]);
 
   return {
     loadState,

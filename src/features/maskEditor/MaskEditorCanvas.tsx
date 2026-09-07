@@ -188,7 +188,7 @@ function isMeaningfulMark(mark: MaskMark): boolean {
   return mark.kind === 'circle' ? Math.max(deltaX, deltaY) >= 1 : deltaX >= 1 && deltaY >= 1;
 }
 
-export function MaskEditorCanvas({
+export const MaskEditorCanvas = memo(function MaskEditorCanvas({
   image,
   document,
   tool,
@@ -376,4 +376,4 @@ export function MaskEditorCanvas({
       </Stage>
     </div>
   );
-}
+});

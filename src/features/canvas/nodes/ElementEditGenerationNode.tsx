@@ -28,6 +28,7 @@ import {
 import { useCanvasStore } from '@/stores/canvasStore'
 import { LocalRedrawSettingsRows } from './localRedraw/LocalRedrawSettingsRows'
 import { LocalRedrawWorkbenchStage } from './localRedraw/LocalRedrawWorkbenchStage'
+import type { MaskEditorDocument } from '@/features/maskEditor/types'
 import { ToolWorkbenchSourcePreview } from './shared/ToolWorkbenchNodeFrame'
 
 type ElementEditGenerationNodeProps = NodeProps & {
@@ -113,9 +114,17 @@ export const ElementEditGenerationNode = memo(({
     />
   ), [id, settings, updateNodeData])
 
+  const persistMask = useCallback(({ maskSource, document }: {
+    maskSource: string | null
+    document: MaskEditorDocument
+  }) => updateNodeData(id, {
+    localRedrawMaskSource: maskSource,
+    localRedrawMaskDocument: document,
+  }, { skipHistory: true }), [id, updateNodeData])
+
   const renderWorkbenchStage = useCallback((context: GenerationNodeWorkbenchContext) => {
     const sourceImage = context.images[0]
-    if (!selected || !sourceImage) {
+    if (!sourceImage) {
       return (
         <ToolWorkbenchSourcePreview
           source={sourceImage ?? null}
@@ -127,15 +136,13 @@ export const ElementEditGenerationNode = memo(({
     }
     return (
       <LocalRedrawWorkbenchStage
+        selected={Boolean(selected)}
         sourceImage={sourceImage}
         initialDocument={data.localRedrawMaskDocument}
-        onPersist={({ maskSource, document }) => updateNodeData(id, {
-          localRedrawMaskSource: maskSource,
-          localRedrawMaskDocument: document,
-        }, { skipHistory: true })}
+        onPersist={persistMask}
       />
     )
-  }, [data.localRedrawMaskDocument, id, selected, t, updateNodeData])
+  }, [data.localRedrawMaskDocument, persistMask, selected, t])
 
   return (
     <GenerationNodeShell

@@ -159,28 +159,52 @@ function attachUiInspectionCanvasEditing(context) {
     await reopened.waitFor({ state: 'visible', timeout: 12000 })
     await page.locator('.react-flow__node[data-id="__ui_element_edit_result"]')
       .getByText('局部重绘结果（本地模拟）').waitFor({ state: 'visible', timeout: 8000 })
-    async function assertSourcePreviewAfterSelectingResult() {
-      await page.locator('.react-flow__node[data-id="__ui_element_edit_result"]').click()
-      await reopened.locator('main img').waitFor({ state: 'visible', timeout: 12000 })
-      await page.waitForFunction((targetNodeId) => {
-        const image = document.querySelector(`[data-generation-node-id="${targetNodeId}"] main img`)
-        return image instanceof HTMLImageElement && image.complete && image.naturalWidth > 0
-      }, nodeId)
-      if (await reopened.locator('[data-local-redraw-workbench="true"]').count()) {
-        throw new Error('未选中局部重绘节点时仍挂载遮罩编辑器')
-      }
-      await assertImageInputAtNodeEdge(reopened)
-    }
-    await assertSourcePreviewAfterSelectingResult()
-    await reopened.click()
     const reopenedEditor = reopened.locator('[data-local-redraw-workbench="true"]')
+    await reopenedEditor.locator('canvas').first().waitFor({ state: 'visible', timeout: 12000 })
+    const retainedCanvas = await reopenedEditor.locator('canvas').first().elementHandle()
+    async function assertWorkbenchAfterSelectingResult() {
+      await page.locator('.react-flow__node[data-id="__ui_element_edit_result"]').click()
+      await reopenedEditor.waitFor({ state: 'visible', timeout: 8000 })
+      if (!(await retainedCanvas.evaluate((canvas) => canvas.isConnected))) {
+        throw new Error('取消选中时局部重绘画布被卸载重建')
+      }
+      await reopenedEditor.getByRole('button', { name: /清空遮罩/ }).waitFor({ state: 'visible', timeout: 8000 })
+      if (await reopenedEditor.getByRole('button', { name: /清空遮罩/ }).isDisabled()) throw new Error('取消选中后遮罩丢失')
+      await assertImageInputAtNodeEdge(reopened)
+      await page.mouse.move(20, 100)
+      await settlePage(page, 500)
+      const idleDraws = await reopenedEditor.evaluate(async (element) => {
+        const canvases = new Set(element.querySelectorAll('canvas'))
+        if (canvases.size < 2) throw new Error('局部重绘没有保留图片和遮罩绘制层')
+        const prototype = CanvasRenderingContext2D.prototype
+        const original = prototype.clearRect
+        let count = 0
+        prototype.clearRect = function (...args) {
+          if (canvases.has(this.canvas)) count += 1
+          return original.apply(this, args)
+        }
+        try {
+          // 零面积清除校验探针确实覆盖当前画布，不改变任何像素。
+          element.querySelector('canvas').getContext('2d').clearRect(0, 0, 0, 0)
+          if (count !== 1) throw new Error('闲置重绘探针未命中当前画布')
+          count = 0
+          await new Promise((resolve) => setTimeout(resolve, 1000))
+          return count
+        } finally {
+          prototype.clearRect = original
+        }
+      })
+      if (idleDraws !== 0) throw new Error(`未选中局部重绘节点闲置时仍重绘 ${idleDraws} 次`)
+    }
+    await assertWorkbenchAfterSelectingResult()
+    await reopened.click({ position: { x: 4, y: 4 } })
     await reopenedEditor.waitFor({ state: 'visible', timeout: 12000 })
     await reopenedEditor.locator('[data-application-observation-region="mask_editor.canvas"]')
       .waitFor({ state: 'visible', timeout: 12000 })
     if (await reopenedEditor.getByRole('button', { name: /清空遮罩/ }).isDisabled()) {
       throw new Error('局部重绘节点重开后没有恢复已保存的遮罩文档')
     }
-    await assertSourcePreviewAfterSelectingResult()
+    await assertWorkbenchAfterSelectingResult()
     await settlePage(page, 900)
   }
 

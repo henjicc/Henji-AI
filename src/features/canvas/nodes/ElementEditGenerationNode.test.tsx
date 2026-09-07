@@ -17,8 +17,8 @@ vi.mock('./shared/GenerationNodeShell', () => ({
   ),
 }))
 vi.mock('./localRedraw/LocalRedrawWorkbenchStage', () => ({
-  LocalRedrawWorkbenchStage: ({ sourceImage, initialDocument }: ComponentProps<typeof LocalRedrawWorkbenchStage>) => (
-    <div data-testid="mask-editor" data-source={sourceImage} data-strokes={initialDocument?.strokes.length} />
+  LocalRedrawWorkbenchStage: ({ sourceImage, initialDocument, selected }: ComponentProps<typeof LocalRedrawWorkbenchStage>) => (
+    <div data-testid="mask-editor" data-selected={selected} data-source={sourceImage} data-strokes={initialDocument?.strokes.length} />
   ),
 }))
 vi.mock('@/features/canvas/application/imageData', async (importOriginal) => ({
@@ -51,16 +51,20 @@ function nodeProps(selected: boolean): ComponentProps<typeof ElementEditGenerati
 }
 
 describe('局部重绘工作面选中状态切换', () => {
-  it('选中结果后仍显示源图，再选中操作节点时恢复原遮罩', () => {
+  it('选中结果后保持同一个编辑器与遮罩，只停用该节点快捷键', () => {
     const { rerender } = render(<ElementEditGenerationNode {...nodeProps(true)} />)
-    expect(screen.getByTestId('mask-editor').getAttribute('data-strokes')).toBe('1')
+    const editor = screen.getByTestId('mask-editor')
+    expect(editor.getAttribute('data-strokes')).toBe('1')
 
     rerender(<ElementEditGenerationNode {...nodeProps(false)} />)
-    expect(screen.queryByTestId('mask-editor')).toBeNull()
-    expect(screen.getByRole('img').getAttribute('src')).toBe('henji-media://local/managed/source.png')
+    expect(screen.getByTestId('mask-editor')).toBe(editor)
+    expect(editor.getAttribute('data-selected')).toBe('false')
+    expect(editor.getAttribute('data-strokes')).toBe('1')
 
     rerender(<ElementEditGenerationNode {...nodeProps(true)} />)
     expect(screen.queryByRole('img')).toBeNull()
+    expect(screen.getByTestId('mask-editor')).toBe(editor)
+    expect(editor.getAttribute('data-selected')).toBe('true')
     expect(screen.getByTestId('mask-editor').getAttribute('data-source')).toBe('/managed/source.png')
     expect(screen.getByTestId('mask-editor').getAttribute('data-strokes')).toBe('1')
   })

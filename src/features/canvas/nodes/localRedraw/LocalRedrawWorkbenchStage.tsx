@@ -1,4 +1,5 @@
 import { Brush, Circle, Eraser, Lasso, Redo2, Square, Trash2, Undo2 } from 'lucide-react';
+import { memo, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { UiChipButton, UiError, UiIconButton, UiLoading, UiRangeInput } from '@/components/ui';
@@ -9,6 +10,7 @@ import { maxMaskBrushSize, useMaskEditorSession } from '@/features/maskEditor/us
 import { useLocalRedrawMaskAutosave } from './useLocalRedrawMaskAutosave';
 
 interface LocalRedrawWorkbenchStageProps {
+  selected: boolean;
   sourceImage: string;
   initialDocument?: MaskEditorDocument | null;
   onPersist: (result: { maskSource: string | null; document: MaskEditorDocument }) => void;
@@ -25,15 +27,19 @@ const TOOLS: ReadonlyArray<{
   { value: 'lasso', labelKey: 'node.elementEditGeneration.tools.lasso', icon: Lasso },
 ];
 
-export function LocalRedrawWorkbenchStage({
+export const LocalRedrawWorkbenchStage = memo(function LocalRedrawWorkbenchStage({
+  selected,
   sourceImage,
   initialDocument,
   onPersist,
 }: LocalRedrawWorkbenchStageProps): JSX.Element {
   const { t } = useTranslation();
+  const keyboardScope = useRef<HTMLDivElement>(null);
   const editor = useMaskEditorSession({
     sourceImage,
     initialDocument,
+    keyboardEnabled: selected,
+    keyboardScope,
   });
   const autosave = useLocalRedrawMaskAutosave({
     document: editor.history.document,
@@ -45,6 +51,7 @@ export function LocalRedrawWorkbenchStage({
 
   return (
     <div
+      ref={keyboardScope}
       data-local-redraw-workbench="true"
       className="nodrag nowheel relative flex min-h-0 min-w-0 flex-1 overflow-hidden"
     >
@@ -160,4 +167,4 @@ export function LocalRedrawWorkbenchStage({
       </div>
     </div>
   );
-}
+});
