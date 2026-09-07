@@ -28,6 +28,7 @@ import {
 import { useCanvasStore } from '@/stores/canvasStore'
 import { LocalRedrawSettingsRows } from './localRedraw/LocalRedrawSettingsRows'
 import { LocalRedrawWorkbenchStage } from './localRedraw/LocalRedrawWorkbenchStage'
+import { ToolWorkbenchSourcePreview } from './shared/ToolWorkbenchNodeFrame'
 
 type ElementEditGenerationNodeProps = NodeProps & {
   id: string
@@ -114,7 +115,16 @@ export const ElementEditGenerationNode = memo(({
 
   const renderWorkbenchStage = useCallback((context: GenerationNodeWorkbenchContext) => {
     const sourceImage = context.images[0]
-    if (!selected || !sourceImage) return null
+    if (!selected || !sourceImage) {
+      return (
+        <ToolWorkbenchSourcePreview
+          source={sourceImage ?? null}
+          alt={t('node.mediaRow.image')}
+          icon={<ElementEditIcon className="h-8 w-8" />}
+          emptyText={t('node.elementEditGeneration.missingInput')}
+        />
+      )
+    }
     return (
       <LocalRedrawWorkbenchStage
         sourceImage={sourceImage}
@@ -125,7 +135,7 @@ export const ElementEditGenerationNode = memo(({
         }, { skipHistory: true })}
       />
     )
-  }, [data.localRedrawMaskDocument, id, selected, updateNodeData])
+  }, [data.localRedrawMaskDocument, id, selected, t, updateNodeData])
 
   return (
     <GenerationNodeShell
@@ -146,6 +156,7 @@ export const ElementEditGenerationNode = memo(({
       commitGenerationResult={commitGenerationResult}
       additionalInputRows={settingsRows}
       layoutMode="workbench"
+      workbenchMediaInput="image"
       workbenchStage={renderWorkbenchStage}
       minHeight={360}
     />

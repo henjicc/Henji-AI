@@ -17,6 +17,7 @@ import {
   MODEL_PARAM_ID,
   PROMPT_PARAM_ID,
   getSocketColor,
+  mediaPortId,
 } from '@/features/canvas/domain/socketTypes';
 import { NodeHeader, NODE_HEADER_FLOATING_POSITION_CLASS } from '@/features/canvas/ui/NodeHeader';
 import { NodeLodPlaceholder } from '@/features/canvas/ui/NodeLodPlaceholder';
@@ -102,6 +103,7 @@ export const GenerationNodeShell = memo(({
   additionalInputRows,
   layoutMode = 'stacked',
   workbenchStage,
+  workbenchMediaInput,
   minWidth = 320,
   minHeight = 160,
   maxWidth = 1400,
@@ -116,6 +118,11 @@ export const GenerationNodeShell = memo(({
   const hasSourceConnections = useCanvasStore(
     (state) => getMainPortConnectionFlags(state.edges).get(id)?.hasMainSource ?? false
   );
+  const workbenchInputHandle = layoutMode === 'workbench' && workbenchStage != null
+    ? workbenchMediaInput
+    : undefined;
+  const hasWorkbenchInputConnection = useCanvasStore((state) => Boolean(workbenchInputHandle
+    && state.edges.some((edge) => edge.target === id && edge.targetHandle === mediaPortId(workbenchInputHandle))));
 
   const definition = useMemo(() => getNodeDefinition(nodeType), [nodeType]);
   const capability = useMemo(
@@ -358,6 +365,7 @@ export const GenerationNodeShell = memo(({
         modelId={effectiveModelId}
         mediaType={modelType}
         acceptedMediaKinds={acceptedMediaKinds}
+        externalMediaHandle={workbenchInputHandle}
         schema={schema}
         values={modelParamValues}
         setParam={setParam}
@@ -446,6 +454,15 @@ export const GenerationNodeShell = memo(({
           {promptEditor}
           {inputRows}
         </div>
+      )}
+      {workbenchInputHandle && (
+        <Handle
+          type="target"
+          id={mediaPortId(workbenchInputHandle)}
+          position={Position.Left}
+          className={`${NODE_PORT_NODE_CLASS} ${hasWorkbenchInputConnection ? NODE_PORT_VISIBLE_CLASS : ''}`}
+          style={{ background: getSocketColor(workbenchInputHandle.toUpperCase()), left: 0, top: '50%', transform: 'translate(-50%, -50%)' }}
+        />
       )}
       <Handle
         type="source"

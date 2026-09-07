@@ -2,6 +2,7 @@ import type { ReactNode } from 'react'
 
 import type { CanvasNodeData, CanvasNodeType } from '@/features/canvas/domain/canvasNodes'
 import type { CanvasImageCapabilityId } from '@/features/canvas/capabilities'
+import type { RowMediaKind } from '@/features/canvas/domain/socketTypes'
 
 import type { GenerationNodeShellData } from './useGenerationPromptDocument'
 import type {
@@ -61,6 +62,8 @@ export interface GenerationNodeShellProps {
   layoutMode?: 'stacked' | 'workbench'
   /** 工作台的专属交互；省略时使用紧凑参数布局，不重复预览源媒体。 */
   workbenchStage?: ReactNode | ((context: GenerationNodeWorkbenchContext) => ReactNode)
+  /** 工作面直接编辑的媒体，输入端口放在节点外缘，参数行保留缩略图与上传。 */
+  workbenchMediaInput?: RowMediaKind
   minWidth?: number
   minHeight?: number
   maxWidth?: number

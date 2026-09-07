@@ -38,7 +38,20 @@ function attachUiInspectionCanvasEditing(context) {
     }
     const editor = shell.locator('[data-local-redraw-workbench="true"]')
     await editor.waitFor({ state: 'visible', timeout: 12000 })
+    async function assertImageInputAtNodeEdge(targetShell) {
+      const geometry = await targetShell.evaluate((element) => {
+        const handles = element.querySelectorAll('.react-flow__handle[data-handleid="param:__image"]')
+        const nodeBox = element.getBoundingClientRect()
+        const handleBox = handles[0]?.getBoundingClientRect()
+        return { count: handles.length, left: nodeBox.left, inputX: handleBox ? handleBox.left + handleBox.width / 2 : null }
+      })
+      if (geometry.count !== 1 || geometry.inputX === null || Math.abs(geometry.inputX - geometry.left) > 2) {
+        throw new Error(`局部重绘图片端口必须唯一且位于节点最左侧：${JSON.stringify(geometry)}`)
+      }
+    }
+    await assertImageInputAtNodeEdge(shell)
     await resizeCanvasNodeAndAssertHitBox(page, node, shell, '局部重绘节点')
+    await assertImageInputAtNodeEdge(shell)
     for (const settingLabel of [
       /^(上下文范围|Context range)$/i,
       /^(裁剪比例|Crop ratio)$/i,
@@ -124,7 +137,7 @@ function attachUiInspectionCanvasEditing(context) {
       const generator = nodes.find((candidate) => candidate.id === targetNodeId)
       nodes.push({
         id: '__ui_element_edit_result', type: 'exportImageNode',
-        position: { x: (generator?.position?.x ?? 720) + 430, y: generator?.position?.y ?? 80 },
+        position: { x: generator?.position?.x ?? 720, y: (generator?.position?.y ?? 80) + (generator?.height ?? 360) + 80 },
         width: 384, height: 220, measured: { width: 384, height: 220 }, style: { width: 384, height: 220 },
         data: {
           displayName: '局部重绘结果（本地模拟）', resultKind: 'image', sourceCapabilityId: 'image.element-edit',
@@ -146,6 +159,19 @@ function attachUiInspectionCanvasEditing(context) {
     await reopened.waitFor({ state: 'visible', timeout: 12000 })
     await page.locator('.react-flow__node[data-id="__ui_element_edit_result"]')
       .getByText('局部重绘结果（本地模拟）').waitFor({ state: 'visible', timeout: 8000 })
+    async function assertSourcePreviewAfterSelectingResult() {
+      await page.locator('.react-flow__node[data-id="__ui_element_edit_result"]').click()
+      await reopened.locator('main img').waitFor({ state: 'visible', timeout: 12000 })
+      await page.waitForFunction((targetNodeId) => {
+        const image = document.querySelector(`[data-generation-node-id="${targetNodeId}"] main img`)
+        return image instanceof HTMLImageElement && image.complete && image.naturalWidth > 0
+      }, nodeId)
+      if (await reopened.locator('[data-local-redraw-workbench="true"]').count()) {
+        throw new Error('未选中局部重绘节点时仍挂载遮罩编辑器')
+      }
+      await assertImageInputAtNodeEdge(reopened)
+    }
+    await assertSourcePreviewAfterSelectingResult()
     await reopened.click()
     const reopenedEditor = reopened.locator('[data-local-redraw-workbench="true"]')
     await reopenedEditor.waitFor({ state: 'visible', timeout: 12000 })
@@ -154,6 +180,7 @@ function attachUiInspectionCanvasEditing(context) {
     if (await reopenedEditor.getByRole('button', { name: /清空遮罩/ }).isDisabled()) {
       throw new Error('局部重绘节点重开后没有恢复已保存的遮罩文档')
     }
+    await assertSourcePreviewAfterSelectingResult()
     await settlePage(page, 900)
   }
 

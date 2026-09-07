@@ -32,6 +32,8 @@ interface NodeInputRowsProps {
   mediaType: CanvasModelMediaType;
   /** 该节点声明可接受的媒体类型（来自 ports.target.accepts，已过滤为 image/video/audio） */
   acceptedMediaKinds: RowMediaKind[];
+  /** 由宿主节点外缘承载的媒体端口。 */
+  externalMediaHandle?: RowMediaKind;
   schema: ParamDef[];
   values: DynamicValueMap;
   setParam: (key: string, value: DynamicValue, options?: CanvasHistoryGroupOptions) => void;
@@ -70,6 +72,7 @@ export function NodeInputRows({
   modelId,
   mediaType,
   acceptedMediaKinds,
+  externalMediaHandle,
   schema,
   values,
   setParam,
@@ -119,7 +122,7 @@ export function NodeInputRows({
   );
 
   // 媒体行随模型/模式联动增减（如切到"参考生视频"多出视频行），端口位置随之下移
-  useNodeHandlesSync(nodeId, `${showModelInput ? 'model' : 'fixed'}|${mediaRows.map((row) => row.kind).join('|')}`);
+  useNodeHandlesSync(nodeId, `${showModelInput ? 'model' : 'fixed'}|${mediaRows.map((row) => row.kind).join('|')}|${externalMediaHandle ?? ''}`);
 
   return (
     <div className={`flex flex-col ${NODE_ROW_GAP_CLASS} ${className}`}>
@@ -141,6 +144,7 @@ export function NodeInputRows({
           key={kind}
           nodeId={nodeId}
           mediaKind={kind}
+          showHandle={kind !== externalMediaHandle}
           label={t(`node.mediaRow.${kind}`)}
           maxCount={max}
           inlineValue={mediaInputs[kind] ?? []}

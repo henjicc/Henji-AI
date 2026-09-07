@@ -34,6 +34,8 @@ import {
 } from '@/features/canvas/application/generationMediaInputConstraints';
 
 interface MediaInputRowProps {
+  /** 宿主已在节点外缘提供同一端口时隐藏行内端口。 */
+  showHandle?: boolean;
   nodeId: string;
   mediaKind: RowMediaKind;
   label: string;
@@ -93,6 +95,7 @@ function moveArrayItem<T>(list: T[], fromIndex: number, toIndex: number): T[] {
  * 已连线（上游有该媒体类型输出）→ 只读展示上游媒体；未连线 → 槛位可本地上传。
  */
 export function MediaInputRow({
+  showHandle = true,
   nodeId,
   mediaKind,
   label,
@@ -265,13 +268,13 @@ export function MediaInputRow({
         }
       }}
     >
-      <Handle
+      {showHandle && <Handle
         type="target"
         id={mediaHandleId}
         position={Position.Left}
         style={{ background: socketColor, left: 0, top: '50%', transform: 'translate(-50%, -50%)' }}
         className={`${NODE_PORT_ROW_CLASS} ${isConnected ? NODE_PORT_VISIBLE_CLASS : ''}`}
-      />
+      />}
       <span className={NODE_ROW_LABEL_CLASS}>{label}</span>
       <div
         className={`nodrag nowheel gap-1.5 ${NODE_ROW_CONTROL_SLOT_CLASS} ${
