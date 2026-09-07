@@ -1,3 +1,4 @@
+import { useNodeToolbarBoundary } from './useNodeToolbarBoundary'
 import { memo } from 'react'
 import { NodeToolbar as ReactFlowNodeToolbar } from '@xyflow/react'
 import { Download } from 'lucide-react'
@@ -50,6 +51,11 @@ export const MultiNodeActionToolbar = memo(({
   const canCreateAssetGroup = !selectedGroup && mediaNodes.length >= 2
   const canAddToAssetGroup = Boolean(selectedGroup && mediaNodes.length > 0)
 
+  const toolbarPanelRef = useNodeToolbarBoundary(
+    nodes.map((node) => node.id).join(' '),
+    canDownload || canCreateAssetGroup || canAddToAssetGroup,
+  )
+
   return (
     <>
       {(canDownload || canCreateAssetGroup || canAddToAssetGroup) && (
@@ -61,7 +67,7 @@ export const MultiNodeActionToolbar = memo(({
           offset={NODE_TOOLBAR_OFFSET}
           className={NODE_TOOLBAR_CLASS}
         >
-          <UiPanel variant="glass" className="flex items-center gap-1 p-1">
+          <UiPanel ref={toolbarPanelRef} variant="glass" data-node-toolbar-panel className="ui-scrollbar flex w-max items-center gap-1 overflow-x-auto p-1 [&>*]:shrink-0">
             {canCreateAssetGroup && (
               <UiChipButton
                 className={`h-8 ${NODE_TOOLBAR_BUTTON_RADIUS_CLASS} px-2.5 text-xs ${NODE_TOOLBAR_NEUTRAL_BUTTON_CLASS}`}
@@ -95,6 +101,7 @@ export const MultiNodeActionToolbar = memo(({
             menu={downloadMenu}
             isVisible={isDownloadMenuVisible}
             menuRef={downloadMenuRef}
+          boundaryRef={toolbarPanelRef}
             downloadPresetPaths={downloadPresetPaths}
             saveAsLabel={t('nodeToolbar.chooseDownloadFolder')}
             noPresetHintLabel={t('nodeToolbar.noDownloadPresetPathsHint')}

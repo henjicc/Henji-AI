@@ -1,3 +1,4 @@
+import { useNodeToolbarBoundary } from './useNodeToolbarBoundary'
 import { reportCanvasOperationFailure } from '@/features/canvas/application/canvasOperationFeedback';
 import { createLogger } from '@/core/logging'
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -74,6 +75,7 @@ const toolIconMap: Record<ToolIconKey, typeof Crop> = {
 };
 
 export const NodeActionToolbar = memo(({ node }: NodeActionToolbarProps) => {
+  const toolbarPanelRef = useNodeToolbarBoundary(node.id)
   const { t } = useTranslation();
   const isImageEdit = isImageEditNode(node);
   const isCameraStage = isCameraStageNode(node);
@@ -268,7 +270,7 @@ export const NodeActionToolbar = memo(({ node }: NodeActionToolbarProps) => {
       className={NODE_TOOLBAR_CLASS}
     >
       {/* 工具条浮在画布/图片节点之上，背后是用户内容而非纯色 UI，走玻璃材质 */}
-      <UiPanel variant="glass" className="flex items-center gap-1 p-1">
+      <UiPanel ref={toolbarPanelRef} variant="glass" data-node-toolbar-panel className="ui-scrollbar flex w-max items-center gap-1 overflow-x-auto p-1 [&>*]:shrink-0">
         {canTriggerGeneration && (
           <UiChipButton
             key="node-generate"
@@ -445,6 +447,7 @@ export const NodeActionToolbar = memo(({ node }: NodeActionToolbarProps) => {
           menu={downloadMenu}
           isVisible={isDownloadMenuVisible}
           menuRef={downloadMenuRef}
+          boundaryRef={toolbarPanelRef}
           downloadPresetPaths={downloadPresetPaths}
           saveAsLabel={t('nodeToolbar.saveAs')}
           noPresetHintLabel={t('nodeToolbar.noDownloadPresetPathsHint')}

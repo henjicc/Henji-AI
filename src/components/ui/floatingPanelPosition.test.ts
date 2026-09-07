@@ -46,3 +46,18 @@ describe('resolveFloatingPanelPosition', () => {
     expect(position.width).toBe(320)
   })
 })
+
+it('画布内菜单避开侧栏并按宿主范围限制宽高', () => {
+  const result = resolveFloatingPanelPosition({
+    anchor: { left: 940, top: 600, bottom: 630, width: 40 },
+    panelWidth: 320, panelHeight: 800,
+    viewportWidth: 1200, viewportHeight: 900,
+    preferredPlacement: 'below', horizontalAlign: 'left', gap: 8,
+    boundary: { left: 220, top: 80, width: 760, height: 600 },
+    viewportGutter: 12,
+  })
+  expect(result.left).toBe(648)
+  expect(result.placement).toBe('above')
+  expect(result.top).toBe(92)
+  expect(result.maxHeight).toBe(500)
+})

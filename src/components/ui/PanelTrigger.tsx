@@ -23,6 +23,8 @@ type PanelTriggerProps = {
   panelClassName?: string
   zIndex?: number
   panelWidth?: number
+  /** 可选的最近宿主边界，如画布可见区域。 */
+  boundarySelector?: string
   /** 纯文字菜单可传入全部项目文案，在打开前按最长项计算稳定宽度。 */
   panelWidthLabels?: readonly string[]
   alignment?: 'bottomLeft' | 'aboveCenter'
@@ -64,6 +66,7 @@ export default function PanelTrigger(props: PanelTriggerProps): React.ReactEleme
     panelClassName,
     zIndex = 1000,
     panelWidth,
+    boundarySelector,
     panelWidthLabels,
     alignment = 'bottomLeft',
     gap: gapProp = 45,
@@ -122,6 +125,7 @@ export default function PanelTrigger(props: PanelTriggerProps): React.ReactEleme
     )
     const position = resolveFloatingPanelPosition({
       anchor: rect,
+      boundary: boundarySelector ? ref.current?.closest(boundarySelector)?.getBoundingClientRect() : undefined,
       panelWidth: resolvedPanelWidth ?? rect.width,
       panelHeight: measuredPanelHeight,
       viewportWidth: window.innerWidth,
@@ -140,7 +144,7 @@ export default function PanelTrigger(props: PanelTriggerProps): React.ReactEleme
 
     setPos(position)
     if (reveal) setReady(true)
-  }, [_panelHeight, alignment, gapProp, resolvedPanelWidth, stableHeight])
+  }, [_panelHeight, alignment, boundarySelector, gapProp, resolvedPanelWidth, stableHeight])
 
   const computePanelPosition = useCallback((): void => {
     if (!ref.current) return
@@ -221,14 +225,18 @@ export default function PanelTrigger(props: PanelTriggerProps): React.ReactEleme
       const onScrollOrResize = () => {
         updateAnchor(true)
       }
+      const boundary = boundarySelector ? ref.current?.closest(boundarySelector) : null
+      const boundaryObserver = boundary ? new ResizeObserver(onScrollOrResize) : null
+      if (boundary) boundaryObserver?.observe(boundary)
       window.addEventListener('scroll', onScrollOrResize, true)
       window.addEventListener('resize', onScrollOrResize)
       return () => {
+        boundaryObserver?.disconnect()
         window.removeEventListener('scroll', onScrollOrResize, true)
         window.removeEventListener('resize', onScrollOrResize)
       }
     }
-  }, [freezePositionOnOpen, open, updatePanelPosition])
+  }, [boundarySelector, freezePositionOnOpen, open, updatePanelPosition])
 
   useLayoutEffect(() => {
     if (!open) return

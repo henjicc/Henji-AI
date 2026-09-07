@@ -23,7 +23,7 @@ function attachUiInspectionCanvasWorkspace(context) {
     await waitForPageHeader(page)
   }
 
-  async function seedAndOpenCanvasPanoramaProject(page) {
+  async function seedAndOpenCanvasPanoramaProject(page, toolbarBoundary = false) {
     await setupCanvas(page)
     if (await page.locator('.react-flow').count()) {
       await page.getByRole('button', { name: /返回项目|Back to Projects/ }).click()
@@ -70,7 +70,7 @@ function attachUiInspectionCanvasWorkspace(context) {
         previewImageUrl: panoramaSource, aspectRatio: '2:1', isGenerating: false,
       },
     }, {
-      id: '__ui_panorama_result', type: 'exportImageNode', hidden: true, position: { x: 1400, y: 900 },
+      id: '__ui_panorama_result', type: 'exportImageNode', hidden: !toolbarBoundary, position: toolbarBoundary ? { x: 100, y: 400 } : { x: 1400, y: 900 },
       width: 520, height: 260, measured: { width: 520, height: 260 }, style: { width: 520, height: 260 },
       data: {
         displayName: '720°全景', resultKind: 'panorama', imageUrl: panoramaSource,
@@ -256,6 +256,112 @@ function attachUiInspectionCanvasWorkspace(context) {
     await settlePage(page, 900)
   }
 
+  async function setupCanvasToolbarBoundary(page) {
+    // 仅在隔离场景中设置菜单夹具，不触发下载或付费生成。
+    await page.evaluate(() => {
+      const settings = JSON.parse(localStorage.getItem('settings-storage') || '{}')
+      settings.state = { ...settings.state, downloadPresetPaths: ['/tmp/toolbar-download-fixture'] }
+      localStorage.setItem('settings-storage', JSON.stringify(settings))
+      localStorage.setItem('enable_quick_download', 'false')
+    })
+    await page.reload()
+    await seedAndOpenCanvasPanoramaProject(page, true)
+    const source = page.locator('.react-flow__node[data-id="__ui_panorama_source"]')
+    const other = page.locator('.react-flow__node[data-id="__ui_panorama_result"]')
+    const assertInside = async (selector) => {
+      await page.waitForFunction((selector) => {
+        const element = document.querySelector(selector)
+        const renderer = document.querySelector('.react-flow__renderer')
+        if (!element || !renderer) return false
+        const box = element.getBoundingClientRect()
+        const area = renderer.getBoundingClientRect()
+        return box.width > 0 && box.height > 0 && box.left >= area.left + 11 && box.top >= area.top + 7
+          && box.right <= Math.min(area.right, innerWidth) - 7 && box.bottom <= Math.min(area.bottom, innerHeight) - 7
+      }, selector, { timeout: 5000 })
+    }
+    await source.click()
+    const renderer = await page.locator('.react-flow__renderer').boundingBox()
+    for (const [name, x, y] of [
+      ['left', renderer.x + 20, renderer.y + 210],
+      ['bottom', renderer.x + renderer.width / 2 - 140, renderer.y + renderer.height - 180],
+      ['right', renderer.x + renderer.width - 290, renderer.y + 210],
+      ['top', renderer.x + 20, renderer.y + 30],
+    ]) {
+      const box = await source.boundingBox()
+      await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2)
+      await page.mouse.down()
+      await page.mouse.move(x + box.width / 2, y + box.height / 2, { steps: 12 })
+      await page.mouse.up()
+      await settlePage(page, 200)
+      await assertInside('[data-node-toolbar-panel]')
+      const overflow = await page.locator('[data-node-toolbar-panel]').evaluate((element) => element.scrollWidth > element.clientWidth + 2)
+      if (overflow) throw new Error(`${name} 工具栏未充分收纳按钮`)
+    }
+    if (await page.locator('.react-flow__node-toolbar').getAttribute('data-toolbar-side') !== 'below') {
+      throw new Error('顶部工具栏没有避让到图片下方')
+    }
+    const capacity = await page.evaluate(() => ({
+      width: document.querySelector('.react-flow__renderer').clientWidth,
+      inline: document.querySelectorAll('[data-image-capability-placement="inline"]').length,
+    }))
+    if (capacity.width < 950 && capacity.inline >= 4) throw new Error(`窄画布没有收纳图片功能：${JSON.stringify(capacity)}`)
+    const samples = await page.evaluate(async () => {
+      const samples = []
+      for (let i = 0; i < 8; i++) {
+        await new Promise(requestAnimationFrame)
+        const toolbar = document.querySelector('.react-flow__node-toolbar')
+        const box = toolbar.getBoundingClientRect()
+        samples.push({ left: box.left, top: box.top, width: box.width, translate: toolbar.style.translate, transform: toolbar.style.transform })
+      }
+      return samples
+    })
+    if (samples.some((sample) => Math.abs(sample.left - samples[0].left) > 0 || Math.abs(sample.top - samples[0].top) > 0 || Math.abs(sample.width - samples[0].width) > 0)) {
+      throw new Error(`静止工具栏持续抖动：${JSON.stringify(samples)}`)
+    }
+    const size = await page.evaluate(() => `${innerWidth}x${innerHeight}`)
+    await page.screenshot({ path: `.ui-tour/${size}-toolbar-top.png` })
+    await page.locator('[data-image-capability-more="true"]').click()
+    await assertInside('[data-panel-placement]')
+    const capabilities = await page.locator('[data-image-capability-id]').count()
+    if (capabilities !== 15) throw new Error(`收纳后功能丢失：${capabilities}`)
+    await page.keyboard.press('Escape')
+    await settlePage(page, 250)
+    await page.locator('[data-node-toolbar-panel]').getByRole('button', { name: /^(下载|Download)$/i }).click()
+    await assertInside('[data-node-download-menu]')
+    await page.screenshot({ path: `.ui-tour/${size}-toolbar-download.png` })
+    await source.click()
+    await other.click({ modifiers: ['Meta'] })
+    await page.waitForFunction(() => document.querySelectorAll('.react-flow__node.selected').length === 2)
+    await assertInside('[data-node-toolbar-panel]')
+    await page.locator('.react-flow__pane').click({ position: { x: renderer.width - 30, y: renderer.height / 2 } })
+    await source.click()
+    await page.locator('[data-image-capability-more="true"]').click()
+    await assertInside('[data-panel-placement]')
+    await page.getByRole('button', { name: '智能助手', exact: true }).click()
+    await settlePage(page, 400)
+    await page.keyboard.press('Escape')
+    await settlePage(page, 250)
+    await assertInside('[data-node-toolbar-panel]')
+    const compact = await page.locator('[data-node-toolbar-panel]').evaluate((element) => ({
+      overflow: element.scrollWidth > element.clientWidth + 2,
+      inline: element.querySelectorAll('[data-image-capability-placement="inline"]').length,
+      canvasWidth: element.closest('.react-flow__renderer').clientWidth,
+    }))
+    if (compact.overflow || (compact.canvasWidth < 950 && compact.inline >= 4)) {
+      throw new Error(`侧栏挤占空间后没有收纳工具栏：${JSON.stringify(compact)}`)
+    }
+    await page.locator('[data-image-capability-more="true"]').click()
+    await assertInside('[data-panel-placement]')
+    await settlePage(page, 250)
+    await page.screenshot({ path: `.ui-tour/${size}-toolbar-sidebar.png` })
+    await page.getByRole('button', { name: '智能助手', exact: true }).click()
+    await settlePage(page, 400)
+    await page.keyboard.press('Escape')
+    await settlePage(page, 250)
+    await page.locator('[data-image-capability-more="true"]').click()
+    await settlePage(page, 250)
+  }
+
   async function setupCanvasParameterTools(page) {
     await seedAndOpenCanvasPanoramaProject(page)
     const source = page.locator('.react-flow__node[data-id="__ui_panorama_source"]')
@@ -353,6 +459,7 @@ function attachUiInspectionCanvasWorkspace(context) {
     setupCanvasImageCapabilityToolbar,
     setupCanvasPanoramaToolbar,
     setupCanvasParameterTools,
+    setupCanvasToolbarBoundary,
   })
 }
 

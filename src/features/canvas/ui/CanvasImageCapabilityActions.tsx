@@ -5,7 +5,7 @@ import {
 } from 'lucide-react'
 import {
   useCallback,
-  useEffect,
+  useLayoutEffect,
   useRef,
   useState,
 } from 'react'
@@ -80,13 +80,42 @@ export function CanvasImageCapabilityActions({
   const shouldFocusMenuRef = useRef(false)
   const partition = partitionCanvasImageCapabilities(actions, inlineCapacity)
 
-  useEffect(() => {
-    const handleResize = (): void => {
-      setInlineCapacity(resolveCanvasImageCapabilityInlineCapacity(window.innerWidth))
+  const inlineWidthsRef = useRef(new Map<string, number>())
+  useLayoutEffect(() => {
+    const panel = moreButtonRef.current?.closest<HTMLElement>('[data-node-toolbar-panel]')
+    const renderer = panel?.closest<HTMLElement>('.react-flow__renderer')
+    if (!panel || !renderer) return
+    const updateCapacity = (): void => {
+      if (moreButtonRef.current?.getAttribute('aria-expanded') === 'true') return
+      const inline = Array.from(panel.querySelectorAll<HTMLElement>('[data-image-capability-placement="inline"]'))
+      inline.forEach((button) => inlineWidthsRef.current.set(button.dataset.imageCapabilityId ?? '', button.offsetWidth + 4))
+      const area = renderer.getBoundingClientRect()
+      const available = Math.max(0, Math.min(area.right, window.innerWidth) - Math.max(0, area.left) - 24)
+      const usedByInline = inline.reduce((sum, button) => sum + button.offsetWidth + 4, 0)
+      const fixedWidth = panel.scrollWidth - usedByInline
+      let remaining = available - fixedWidth - 2
+      let capacity = 0
+      for (const action of actions.filter((item) => item.disabledReasonKey === null).slice(0, 4)) {
+        const width = inlineWidthsRef.current.get(action.capability.id) ?? 120
+        if (remaining < width) break
+        remaining -= width
+        capacity++
+      }
+      setInlineCapacity((previous) => previous === capacity ? previous : capacity)
     }
-    window.addEventListener('resize', handleResize)
-    return () => window.removeEventListener('resize', handleResize)
-  }, [])
+    updateCapacity()
+    const observer = new ResizeObserver(updateCapacity)
+    observer.observe(panel)
+    observer.observe(renderer)
+    const menuObserver = new MutationObserver(updateCapacity)
+    if (moreButtonRef.current) menuObserver.observe(moreButtonRef.current, { attributes: true, attributeFilter: ['aria-expanded'] })
+    window.addEventListener('resize', updateCapacity)
+    return () => {
+      observer.disconnect()
+      menuObserver.disconnect()
+      window.removeEventListener('resize', updateCapacity)
+    }
+  }, [actions, inlineCapacity])
 
   const setMenuElement = useCallback((element: HTMLDivElement | null): void => {
     menuRef.current = element
@@ -151,6 +180,7 @@ export function CanvasImageCapabilityActions({
       {partition.overflowGroups.length > 0 && (
         <PanelTrigger
           alignment="bottomLeft"
+          boundarySelector=".react-flow__renderer"
           gap={8}
           panelWidth={320}
           zIndex={Z_LAYERS.dropdown}

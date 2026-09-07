@@ -18,6 +18,7 @@ interface ResolveFloatingPanelPositionOptions {
   gap: number
   viewportGutter?: number
   viewportTopInset?: number
+  boundary?: { left: number; top: number; width: number; height: number }
 }
 
 export interface FloatingPanelPosition {
@@ -43,14 +44,17 @@ export function resolveFloatingPanelPosition({
   gap,
   viewportGutter = 8,
   viewportTopInset = viewportGutter,
+  boundary,
 }: ResolveFloatingPanelPositionOptions): FloatingPanelPosition {
-  const viewportTop = Math.max(viewportGutter, viewportTopInset)
-  const viewportBottom = Math.max(viewportTop, viewportHeight - viewportGutter)
-  const width = Math.min(Math.max(0, panelWidth), Math.max(0, viewportWidth - viewportGutter * 2))
+  const viewportLeft = Math.max(0, boundary?.left ?? 0) + viewportGutter
+  const viewportRight = Math.min(viewportWidth, boundary ? boundary.left + boundary.width : viewportWidth) - viewportGutter
+  const viewportTop = Math.max(viewportGutter, viewportTopInset, (boundary?.top ?? 0) + viewportGutter)
+  const viewportBottom = Math.max(viewportTop, Math.min(viewportHeight, boundary ? boundary.top + boundary.height : viewportHeight) - viewportGutter)
+  const width = Math.min(Math.max(0, panelWidth), Math.max(0, viewportRight - viewportLeft))
   const centeredLeft = anchor.left + anchor.width / 2 - width / 2
   const preferredLeft = horizontalAlign === 'center' ? centeredLeft : anchor.left
-  const maxLeft = Math.max(viewportGutter, viewportWidth - width - viewportGutter)
-  const left = Math.min(Math.max(viewportGutter, preferredLeft), maxLeft)
+  const maxLeft = Math.max(viewportLeft, viewportRight - width)
+  const left = Math.min(Math.max(viewportLeft, preferredLeft), maxLeft)
   const spaceAbove = Math.max(0, anchor.top - gap - viewportTop)
   const spaceBelow = Math.max(0, viewportBottom - anchor.bottom - gap)
   const preferredSpace = preferredPlacement === 'above' ? spaceAbove : spaceBelow
