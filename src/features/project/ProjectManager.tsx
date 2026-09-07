@@ -6,7 +6,6 @@ import { ProjectLibraryPage, type ProjectLibraryLabels } from '@/components/Proj
 import { ICON_WORKSPACE_CANVAS } from '@/core/theme/icons';
 import { createLogger } from '@/core/logging';
 import { UiButton, UiError } from '@/components/ui';
-import { UI_CONTENT_OVERLAY_INSET_CLASS } from '@/components/ui/motion';
 import { useProjectStore, type ProjectSummary } from '@/stores/projectStore';
 import { exportProjectToPackage } from '@/services/projectPackage/exportProject';
 import { importProjectFromPackage } from '@/services/projectPackage/importProject';
@@ -139,10 +138,6 @@ export function ProjectManager(): JSX.Element {
           await Promise.all(items.map((item) => deleteProject(item.id))).catch(() => undefined)
         }}
       />
-
-      {isOpeningProject && (
-        <div className={/* ui-surface-allow: 打开项目时的加载遮罩，pointer-events-none 且无内容，不是弹窗 */ `pointer-events-none fixed ${UI_CONTENT_OVERLAY_INSET_CLASS} bg-black/10`} />
-      )}
     </>
   );
 }

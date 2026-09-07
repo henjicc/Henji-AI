@@ -39,6 +39,23 @@ function createEmptyHistory(): CanvasHistoryState {
 }
 
 let openProjectRequestSeq = 0;
+/** 让打开状态先完成一帧呈现，再开始解码和挂载；后台窗口不依赖可能暂停的 RAF。 */
+function yieldForProjectLoadingPaint(): Promise<void> {
+  if (typeof document === 'undefined' || document.visibilityState !== 'visible'
+    || typeof requestAnimationFrame === 'undefined') return Promise.resolve();
+  return new Promise((resolve) => {
+    let afterFrame: ReturnType<typeof setTimeout> | undefined;
+    const finish = () => {
+      clearTimeout(fallback);
+      clearTimeout(afterFrame);
+      cancelAnimationFrame(frame);
+      resolve();
+    };
+    const fallback = setTimeout(finish, 100);
+    const frame = requestAnimationFrame(() => { afterFrame = setTimeout(finish, 0); });
+  });
+}
+
 const VIEWPORT_EPSILON = 0.001;
 
 function hasViewportMeaningfulDelta(current: Viewport, next: Viewport): boolean {
@@ -245,12 +262,15 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
 
     void (async () => {
       try {
+        await yieldForProjectLoadingPaint();
+        if (reqSeq !== openProjectRequestSeq) return;
         const unsaved = persistenceQueue.getUnsavedProject(id);
         const record = unsaved ? null : await getProjectRecord(id);
         if (reqSeq !== openProjectRequestSeq) {
           return;
         }
         if (!record && !unsaved) {
+          logger.warn('工程记录不存在', { event: 'project.open.failed', context: { projectId: id } });
           set({ isOpeningProject: false, openError: 'project.openFailed' });
           return;
         }

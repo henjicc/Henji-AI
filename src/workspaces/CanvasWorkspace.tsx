@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { ReactFlowProvider } from '@xyflow/react';
 import { useTranslation } from 'react-i18next';
-import { UiButton, UiError } from '@/components/ui';
+import { UiButton, UiError, UiLoading } from '@/components/ui';
 import { Canvas } from '@/features/canvas/Canvas';
 import { updateCanvasProjectCover } from '@/features/canvas/application/canvasProjectCover';
 import { useCanvasProjectCoverAutosave } from '@/features/canvas/application/useCanvasProjectCoverAutosave';
@@ -16,6 +16,8 @@ const CanvasWorkspace = (): JSX.Element => {
   const isHydrated = useProjectStore((state) => state.isHydrated);
   const hydrate = useProjectStore((state) => state.hydrate);
   const currentProjectId = useProjectStore((state) => state.currentProjectId);
+  const isOpeningProject = useProjectStore((state) => state.isOpeningProject);
+  const openError = useProjectStore((state) => state.openError);
   const closeProject = useProjectStore((state) => state.closeProject);
   const persistenceError = useProjectStore((state) => state.persistenceError);
   const [isLeavingProject, setIsLeavingProject] = useState(false);
@@ -51,16 +53,17 @@ const CanvasWorkspace = (): JSX.Element => {
   return (
     <ReactFlowProvider>
       <div className="h-full min-h-0 w-full bg-app text-text-dark">
-        {!isHydrated && <div className="h-full w-full bg-app" />}
+        {!isHydrated && <UiLoading className="h-full" message={t('common.loading')} />}
 
-        {isHydrated && !currentProjectId && <ProjectManager />}
+        {isHydrated && !currentProjectId && !isOpeningProject && <ProjectManager />}
 
-        {isHydrated && currentProjectId && (
-          <div className="relative h-full w-full">
+        {isHydrated && (currentProjectId || isOpeningProject) && (
+          <div className="relative h-full w-full bg-canvas" aria-busy={isOpeningProject}>
             {/* 截封面期间隐藏自己：它悬在画布上，留着会被一起截进节点区域封面里 */}
             {!isLeavingProject && (
               <UiButton
                 onClick={() => void handleBackToProjects()}
+                disabled={isOpeningProject && Boolean(currentProjectId)}
                 /* 悬浮在画布上，背后是用户内容而非纯色 UI */
                 variant="glass"
                 size="sm"
@@ -69,15 +72,19 @@ const CanvasWorkspace = (): JSX.Element => {
                 返回项目
               </UiButton>
             )}
-            {persistenceError && (
+            {(persistenceError || openError) && (
               <UiError
                 className="absolute left-1/2 top-3 z-sticky -translate-x-1/2"
-                message={t('project.persistenceFailed')}
+                message={t(openError ?? 'project.persistenceFailed')}
                 size="xs"
-                onRetry={() => { void confirmCanvasPersistence(currentProjectId).catch(() => undefined); }}
+                onRetry={!openError && currentProjectId
+                  ? () => { void confirmCanvasPersistence(currentProjectId).catch(() => undefined); } : undefined}
               />
             )}
-            <Canvas />
+            {currentProjectId && <Canvas />}
+            {isOpeningProject && (
+              <UiLoading className="absolute inset-0 z-raised bg-canvas" message={t('common.loading')} />
+            )}
           </div>
         )}
       </div>
