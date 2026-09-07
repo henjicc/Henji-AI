@@ -97,7 +97,7 @@ export function ImageViewerModal({
   const [isVisible, setIsVisible] = useState(false);
   const [overlayOpacity, setOverlayOpacity] = useState(0);
   const [requestedMode, setRequestedMode] = useState<ImageComparisonMode>('single');
-  const [swappedModes, setSwappedModes] = useState({ 'side-by-side': false, overlay: false });
+  const [swappedModes, setSwappedModes] = useState({ 'side-by-side': true, overlay: true });
   const [failedOriginal, setFailedOriginal] = useState<string | null>(null);
   const comparisonAvailable = Boolean(comparisonImageUrl) && failedOriginal !== comparisonImageUrl;
   const [decodedOriginal, setDecodedOriginal] = useState<string | null>(null);
@@ -142,7 +142,7 @@ export function ImageViewerModal({
 
   useEffect(() => {
     setRequestedMode('single');
-    setSwappedModes({ 'side-by-side': false, overlay: false });
+    setSwappedModes({ 'side-by-side': true, overlay: true });
     setFailedOriginal(null);
     dividerPositionRef.current = 50;
   }, [open, imageUrl, comparisonImageUrl]);

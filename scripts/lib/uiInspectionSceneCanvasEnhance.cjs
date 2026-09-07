@@ -177,7 +177,7 @@ function attachUiInspectionCanvasEnhance(context) {
       .every((img) => img.complete && img.naturalWidth > 0))
     const originalBox = await original.boundingBox()
     const resultBox = await result.boundingBox()
-    if (!originalBox || !resultBox || originalBox.x >= resultBox.x
+    if (!originalBox || !resultBox || originalBox.x <= resultBox.x
       || Math.abs(originalBox.width - resultBox.width) > 1) throw new Error('对比布局未等宽左右排列')
     await assertFullComparisonViewport()
     const readTransforms = () => viewer.locator('[data-comparison-pane] img').evaluateAll((imgs) => imgs.map((img) => img.style.transform))
@@ -201,7 +201,7 @@ function attachUiInspectionCanvasEnhance(context) {
     await viewer.getByRole('button', { name: /^(左右对比|Side by side)$/i }).click()
     const swappedOriginal = await original.boundingBox()
     const swappedResult = await result.boundingBox()
-    if (!swappedOriginal || !swappedResult || swappedOriginal.x <= swappedResult.x
+    if (!swappedOriginal || !swappedResult || swappedOriginal.x >= swappedResult.x
       || (await readTransforms()).some((transform) => transform !== pannedSide)) {
       throw new Error('左右交换未改变图片位置，或重置了缩放和平移')
     }
@@ -209,7 +209,7 @@ function attachUiInspectionCanvasEnhance(context) {
     await page.mouse.wheel(0, -120)
     await assertSynchronized(pannedSide)
     await viewer.getByRole('button', { name: /^(左右对比|Side by side)$/i }).click()
-    if ((await original.boundingBox()).x >= (await result.boundingBox()).x) throw new Error('再次交换未恢复原图在左')
+    if ((await original.boundingBox()).x <= (await result.boundingBox()).x) throw new Error('再次交换未恢复放大图在左')
     await writeFile('.ui-tour/canvas-upscale-side-by-side.png', await captureInspectionPage(electronApp, page))
     await viewer.getByRole('button', { name: /^(叠加对比|Overlay)$/i }).click()
     await viewer.locator('[role="slider"]').waitFor({ state: 'visible' })
@@ -245,8 +245,8 @@ function attachUiInspectionCanvasEnhance(context) {
     await viewer.getByRole('button', { name: /^(叠加对比|Overlay)$/i }).click()
     const swappedClips = await viewer.locator('[data-comparison-pane]')
       .evaluateAll((panes) => panes.map((pane) => ({ kind: pane.dataset.comparisonPane, clip: pane.style.clipPath })))
-    const originalClip = swappedClips.find((pane) => pane.kind === 'original')?.clip
-    const clipPosition = Number(originalClip?.match(/^inset\(0px 0px 0px ([\d.]+)%\)$/)?.[1])
+    const resultClip = swappedClips.find((pane) => pane.kind === 'result')?.clip
+    const clipPosition = Number(resultClip?.match(/^inset\(0px 0px 0px ([\d.]+)%\)$/)?.[1])
     if (!Number.isFinite(clipPosition) || Math.abs(clipPosition - 30) > 1
       || Number(await divider.getAttribute('aria-valuenow')) !== 30
       || (await readTransforms()).some((transform) => transform !== pannedOverlay)) {
