@@ -185,21 +185,24 @@ export const NodeActionToolbar = memo(({ node }: NodeActionToolbarProps) => {
       return;
     }
 
-    setIsCopySuccess(true);
-    if (copyFeedbackTimerRef.current) {
-      clearTimeout(copyFeedbackTimerRef.current);
-    }
-    copyFeedbackTimerRef.current = setTimeout(() => {
-      setIsCopySuccess(false);
-      copyFeedbackTimerRef.current = null;
-    }, 1100);
-
     try {
       await copyImageSourceToClipboard(imageSource);
+      setIsCopySuccess(true);
+      if (copyFeedbackTimerRef.current) {
+        clearTimeout(copyFeedbackTimerRef.current);
+      }
+      copyFeedbackTimerRef.current = setTimeout(() => {
+        setIsCopySuccess(false);
+        copyFeedbackTimerRef.current = null;
+      }, 1100);
     } catch (error) {
       logger.error('Failed to copy image to clipboard', error);
+      setIsCopySuccess(false);
+      reportCanvasOperationFailure(new Error(t('ui:workspace.toast.copyFailed', {
+        reason: error instanceof Error ? error.message : String(error),
+      })));
     }
-  }, [imageSource]);
+  }, [imageSource, t]);
 
   const storyboardText = useMemo(() => {
     if (isStoryboardGen) {
@@ -230,21 +233,24 @@ export const NodeActionToolbar = memo(({ node }: NodeActionToolbarProps) => {
       return;
     }
 
-    setIsCopyTextSuccess(true);
-    if (copyTextFeedbackTimerRef.current) {
-      clearTimeout(copyTextFeedbackTimerRef.current);
-    }
-    copyTextFeedbackTimerRef.current = setTimeout(() => {
-      setIsCopyTextSuccess(false);
-      copyTextFeedbackTimerRef.current = null;
-    }, 1100);
-
     try {
       await navigator.clipboard.writeText(storyboardText);
+      setIsCopyTextSuccess(true);
+      if (copyTextFeedbackTimerRef.current) {
+        clearTimeout(copyTextFeedbackTimerRef.current);
+      }
+      copyTextFeedbackTimerRef.current = setTimeout(() => {
+        setIsCopyTextSuccess(false);
+        copyTextFeedbackTimerRef.current = null;
+      }, 1100);
     } catch (error) {
       logger.error('Failed to copy storyboard text', error);
+      setIsCopyTextSuccess(false);
+      reportCanvasOperationFailure(new Error(t('ui:workspace.toast.copyFailed', {
+        reason: error instanceof Error ? error.message : String(error),
+      })));
     }
-  }, [storyboardText]);
+  }, [storyboardText, t]);
 
   const handleExecuteImageCapability = useCallback(async (
     capabilityId: CanvasImageCapabilityId,
@@ -360,6 +366,7 @@ export const NodeActionToolbar = memo(({ node }: NodeActionToolbarProps) => {
         {!isImageEdit && canHandleImage && (
           <UiChipButton
             key="image-copy"
+            aria-label={isCopySuccess ? t('ui:workspace.toast.copySuccess') : t('nodeToolbar.copy')}
             className={`h-8 ${NODE_TOOLBAR_BUTTON_RADIUS_CLASS} px-2.5 text-xs ${NODE_TOOLBAR_NEUTRAL_BUTTON_CLASS} ${
               isCopySuccess
                 ? '!border-emerald-400/70 !bg-emerald-500/20 !text-emerald-200 hover:!bg-emerald-500/30'
@@ -390,6 +397,7 @@ export const NodeActionToolbar = memo(({ node }: NodeActionToolbarProps) => {
         {!isImageEdit && canCopyStoryboardText && (
           <UiChipButton
             key="storyboard-text-copy"
+            aria-label={isCopyTextSuccess ? t('ui:workspace.toast.copySuccess') : t('nodeToolbar.copyText')}
             className={`h-8 ${NODE_TOOLBAR_BUTTON_RADIUS_CLASS} px-2.5 text-xs ${NODE_TOOLBAR_NEUTRAL_BUTTON_CLASS} ${
               isCopyTextSuccess
                 ? '!border-emerald-400/70 !bg-emerald-500/20 !text-emerald-200 hover:!bg-emerald-500/30'
