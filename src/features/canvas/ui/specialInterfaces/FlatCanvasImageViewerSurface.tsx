@@ -1,11 +1,19 @@
 import { ImageViewerModal } from '@/components/mediaViewer/ImageViewerModal';
+import { useCanvasStore } from '@/stores/canvasStore';
+import { resolveImageDisplayUrl } from '@/services/imageSource';
+import { resolveUpscaleComparisonSource } from '../../domain/upscaleComparison';
 
 import type { CanvasImageViewerSurfaceProps } from './viewerSurfaceRegistry';
 
-/** 平面查看器适配层：专用路由的来源节点字段不泄漏到通用媒体查看器。 */
+/** 对比原图取生成时保存的输入，不追踪可被用户换图的上游连线。 */
 export function FlatCanvasImageViewerSurface({
-  sourceNodeId: _sourceNodeId,
+  sourceNodeId,
   ...viewerProps
 }: CanvasImageViewerSurfaceProps): JSX.Element | null {
-  return <ImageViewerModal {...viewerProps} />;
+  const original = useCanvasStore((state) => resolveUpscaleComparisonSource(
+    sourceNodeId ? state.nodes.find((node) => node.id === sourceNodeId)?.data : undefined,
+    viewerProps.imageUrl,
+    resolveImageDisplayUrl,
+  ));
+  return <ImageViewerModal {...viewerProps} comparisonImageUrl={original ?? undefined} />;
 }

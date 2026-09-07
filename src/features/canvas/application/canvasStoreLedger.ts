@@ -116,7 +116,7 @@ export const CANVAS_STORE_LEDGER: ApplicationStoreActionLedger<ActionName> = {
     openImageViewer: {
       kind: 'excluded',
       category: 'view_state',
-      reason: '查看器只是同一张图的放大浮层；助手要看图直接用素材的稳定媒体引用，比截查看器更清晰。',
+      reason: '查看器的缩放、同步对比模式与分界线属于本地临时视图态，不改写素材；助手通过结果及其生成输入的稳定媒体引用读取原图和结果，视觉上下文由当前画布表面观察提供。',
     },
     closeImageViewer: {
       kind: 'excluded',

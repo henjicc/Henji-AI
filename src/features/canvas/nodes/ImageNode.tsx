@@ -139,6 +139,7 @@ export const ImageNode = memo(({ id, data, selected, type, width, height }: Imag
             alt={isExportResultNode ? t('node.imageNode.resultAlt') : t('node.imageNode.generatedAlt')}
             viewerSourceUrl={originalImageUrl}
             viewerMode="image"
+            viewerSourceNodeId={id}
             className="h-full w-full object-contain"
           />
         ) : (

@@ -333,6 +333,14 @@
     }
   },
   "viewer": {
+    "original": "原图",
+    "upscaled": "放大后",
+    "compare": "对比查看",
+    "resultOnly": "仅结果",
+    "sideBySide": "左右对比",
+    "overlay": "叠加对比",
+    "comparisonDivider": "对比分界线",
+    "originalUnavailable": "原图无法加载，仍可查看放大结果",
     "imageAlt": "图片",
     "speed": "播放速度",
     "loop": "循环播放",

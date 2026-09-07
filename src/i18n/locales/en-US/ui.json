@@ -333,6 +333,14 @@
     }
   },
   "viewer": {
+    "original": "Original",
+    "upscaled": "Upscaled",
+    "compare": "Compare",
+    "resultOnly": "Result only",
+    "sideBySide": "Side by side",
+    "overlay": "Overlay",
+    "comparisonDivider": "Comparison divider",
+    "originalUnavailable": "Original unavailable. You can still view the upscaled result.",
     "imageAlt": "Image",
     "speed": "Playback speed",
     "loop": "Loop",

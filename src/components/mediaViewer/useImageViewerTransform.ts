@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useRef, useState, type MouseEvent, type RefObject, type SyntheticEvent } from 'react';
 
+export type ImageComparisonMode = 'single' | 'side-by-side' | 'overlay';
+
 export interface ImageViewerTransformHandlers {
+  comparisonImageRef: RefObject<HTMLImageElement>;
   containerRef: RefObject<HTMLDivElement>;
   imageRef: RefObject<HTMLImageElement>;
   scaleDisplayRef: RefObject<HTMLDivElement>;
@@ -15,9 +18,10 @@ export interface ImageViewerTransformHandlers {
   isPointOnImageContent: (clientX: number, clientY: number) => boolean;
 }
 
-export function useImageViewerTransform(isOpen: boolean): ImageViewerTransformHandlers {
+export function useImageViewerTransform(isOpen: boolean, mode: ImageComparisonMode = 'single'): ImageViewerTransformHandlers {
   const containerRef = useRef<HTMLDivElement>(null);
   const imageRef = useRef<HTMLImageElement>(null);
+  const comparisonImageRef = useRef<HTMLImageElement>(null);
   const scaleDisplayRef = useRef<HTMLDivElement>(null);
 
   const [viewerOpacity, setViewerOpacity] = useState(0);
@@ -36,7 +40,9 @@ export function useImageViewerTransform(isOpen: boolean): ImageViewerTransformHa
     if (!img) return;
     const scale = imageScaleRef.current;
     const pos = imagePositionRef.current;
-    img.style.transform = `scale(${scale}) translate(${pos.x / scale}px, ${pos.y / scale}px)`;
+    const transform = `scale(${scale}) translate(${pos.x / scale}px, ${pos.y / scale}px)`;
+    img.style.transform = transform;
+    if (comparisonImageRef.current) comparisonImageRef.current.style.transform = transform;
     if (scaleDisplayRef.current) {
       const totalScale = cssScaleRef.current * scale;
       scaleDisplayRef.current.innerText = `${Math.round(totalScale * 100)}%`;
@@ -44,6 +50,10 @@ export function useImageViewerTransform(isOpen: boolean): ImageViewerTransformHa
   }, []);
 
   const resetView = useCallback((): void => {
+    if (animationFrameRef.current !== null) {
+      cancelAnimationFrame(animationFrameRef.current);
+      animationFrameRef.current = null;
+    }
     imageScaleRef.current = 1;
     imagePositionRef.current = { x: 0, y: 0 };
     targetScaleRef.current = 1;
@@ -51,8 +61,17 @@ export function useImageViewerTransform(isOpen: boolean): ImageViewerTransformHa
     updateImageTransform();
   }, [updateImageTransform]);
 
+  const imageAtPoint = useCallback((clientX: number, clientY: number): HTMLImageElement | null => {
+    if (mode === 'single') return imageRef.current;
+    return [imageRef.current, comparisonImageRef.current].find((img) => {
+      const rect = img?.parentElement?.getBoundingClientRect();
+      return rect && clientX >= rect.left && clientX <= rect.right
+        && clientY >= rect.top && clientY <= rect.bottom;
+    }) ?? null;
+  }, [mode]);
+
   const isPointOnImageContent = useCallback((clientX: number, clientY: number): boolean => {
-    const img = imageRef.current;
+    const img = imageAtPoint(clientX, clientY);
     if (!img || !img.naturalWidth || !img.naturalHeight) return false;
     const rect = img.getBoundingClientRect();
     const imgRatio = img.naturalWidth / img.naturalHeight;
@@ -82,7 +101,7 @@ export function useImageViewerTransform(isOpen: boolean): ImageViewerTransformHa
       clickY >= offsetY &&
       clickY <= offsetY + contentHeight
     );
-  }, []);
+  }, [imageAtPoint]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -112,6 +131,7 @@ export function useImageViewerTransform(isOpen: boolean): ImageViewerTransformHa
     };
 
     const handleWheel = (e: WheelEvent) => {
+      if ((e.target as Element | null)?.closest('button, [role="slider"]')) return;
       if (!isPointOnImageContent(e.clientX, e.clientY)) return;
       e.preventDefault();
 
@@ -126,7 +146,8 @@ export function useImageViewerTransform(isOpen: boolean): ImageViewerTransformHa
       let newScale = currentScale * Math.pow(2, pinchDelta);
       newScale = Math.max(0.1, Math.min(10, newScale));
 
-      const rect = container.getBoundingClientRect();
+      const rect = imageAtPoint(e.clientX, e.clientY)?.parentElement?.getBoundingClientRect()
+        ?? container.getBoundingClientRect();
       const centerX = rect.width / 2;
       const centerY = rect.height / 2;
       const mouseX = e.clientX - rect.left;
@@ -183,12 +204,16 @@ export function useImageViewerTransform(isOpen: boolean): ImageViewerTransformHa
         animationFrameRef.current = null;
       }
     };
-  }, [isOpen, isPointOnImageContent, updateImageTransform]);
+  }, [isOpen, imageAtPoint, isPointOnImageContent, updateImageTransform]);
 
   const handleImageMouseDown = useCallback((e: MouseEvent<HTMLImageElement>): void => {
     if (e.button !== 0) return;
     if (!isPointOnImageContent(e.clientX, e.clientY)) return;
     e.preventDefault();
+    if (animationFrameRef.current !== null) {
+      cancelAnimationFrame(animationFrameRef.current);
+      animationFrameRef.current = null;
+    }
     setIsDragging(true);
     dragStartRef.current = {
       x: e.clientX - imagePositionRef.current.x,
@@ -216,31 +241,32 @@ export function useImageViewerTransform(isOpen: boolean): ImageViewerTransformHa
     e.currentTarget.style.cursor = isOnContent ? (isDragging ? 'grabbing' : 'default') : 'default';
   }, [isDragging, isPointOnImageContent]);
 
-  const handleImageLoad = useCallback((e: SyntheticEvent<HTMLImageElement>): void => {
-    const img = e.currentTarget;
-    if (!img.naturalWidth || !img.naturalHeight || !img.offsetWidth || !img.offsetHeight) return;
-
-    const naturalRatio = img.naturalWidth / img.naturalHeight;
-    const layoutRatio = img.offsetWidth / img.offsetHeight;
-
-    let actualDisplayWidth: number;
-    if (naturalRatio > layoutRatio) {
-      actualDisplayWidth = img.offsetWidth;
-    } else {
-      actualDisplayWidth = img.offsetHeight * naturalRatio;
-    }
-
-    cssScaleRef.current = actualDisplayWidth / img.naturalWidth;
-    imageScaleRef.current = 1;
-    targetScaleRef.current = 1;
-    imagePositionRef.current = { x: 0, y: 0 };
-    targetPositionRef.current = { x: 0, y: 0 };
+  const measureImage = useCallback((): void => {
+    const img = imageRef.current;
+    if (!img?.naturalWidth || !img.naturalHeight || !img.offsetWidth || !img.offsetHeight) return;
+    cssScaleRef.current = Math.min(img.offsetWidth / img.naturalWidth, img.offsetHeight / img.naturalHeight);
     updateImageTransform();
   }, [updateImageTransform]);
+
+  const handleImageLoad = useCallback((_event: SyntheticEvent<HTMLImageElement>): void => {
+    measureImage();
+  }, [measureImage]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    resetView();
+    measureImage();
+    const img = imageRef.current;
+    if (!img) return;
+    const observer = new ResizeObserver(measureImage);
+    observer.observe(img);
+    return () => observer.disconnect();
+  }, [isOpen, mode, resetView, measureImage]);
 
   return {
     containerRef,
     imageRef,
+    comparisonImageRef,
     scaleDisplayRef,
     viewerOpacity,
     isDragging,
