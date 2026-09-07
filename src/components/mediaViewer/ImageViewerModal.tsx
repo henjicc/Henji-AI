@@ -20,13 +20,15 @@ const ViewerMarkEditor = React.lazy(() =>
 
 const logger = createLogger('components.mediaViewer.ImageViewerModal');
 
+const VIEWER_HEIGHT_CLASS = '!h-10';
+
 /** 只读读数芯片（页码 / 缩放比例）：静态玻璃，无交互态 */
 const VIEWER_CONTROL_CLASS =
-  'ui-glass inline-flex h-10 items-center justify-center rounded-full px-4 text-sm text-white';
+  `${VIEWER_HEIGHT_CLASS} ui-glass inline-flex items-center justify-center rounded-full px-4 text-sm text-white`;
 /** 玻璃上的圆形图标按钮，配合 `appearance="glass"`：这里只给形状，材质与交互态归 primitive */
-const VIEWER_ICON_BUTTON_CLASS = '!h-10 !w-10 !rounded-full';
+const VIEWER_ICON_BUTTON_CLASS = `${VIEWER_HEIGHT_CLASS} !w-10 !rounded-full`;
 /** 玻璃上的胶囊按钮，配合 `variant="glass"` */
-const VIEWER_PILL_BUTTON_CLASS = '!h-10 !rounded-full !px-3';
+const VIEWER_PILL_BUTTON_CLASS = `${VIEWER_HEIGHT_CLASS} !rounded-full !px-3`;
 
 export interface ImageViewerModalProps {
   open: boolean;
@@ -93,9 +95,12 @@ export function ImageViewerModal({
   const [requestedMode, setRequestedMode] = useState<ImageComparisonMode>('single');
   const [failedOriginal, setFailedOriginal] = useState<string | null>(null);
   const comparisonAvailable = Boolean(comparisonImageUrl) && failedOriginal !== comparisonImageUrl;
-  const mode = comparisonAvailable ? requestedMode : 'single';
+  const [decodedOriginal, setDecodedOriginal] = useState<string | null>(null);
+  const originalDisplayUrl = comparisonImageUrl ? resolveImageDisplayUrl(comparisonImageUrl) : null;
+  const mode = comparisonAvailable && decodedOriginal === originalDisplayUrl ? requestedMode : 'single';
   const comparing = mode !== 'single';
   const comparisonStageRef = useRef<HTMLDivElement>(null);
+  const resultPaneRef = useRef<HTMLDivElement>(null);
   const wipeRef = useRef<HTMLDivElement>(null);
   const dividerRef = useRef<HTMLButtonElement>(null);
   const dividerPointerRef = useRef<number | null>(null);
@@ -103,6 +108,8 @@ export function ImageViewerModal({
   const setDivider = (value: number) => {
     const position = Math.max(0, Math.min(100, value));
     dividerPositionRef.current = position;
+    if (mode !== 'overlay') return;
+    if (resultPaneRef.current) resultPaneRef.current.style.clipPath = `inset(0 0 0 ${position}%)`;
     if (wipeRef.current) wipeRef.current.style.clipPath = `inset(0 ${100 - position}% 0 0)`;
     if (dividerRef.current) {
       dividerRef.current.style.left = `${position}%`;
@@ -132,6 +139,10 @@ export function ImageViewerModal({
     setFailedOriginal(null);
     dividerPositionRef.current = 50;
   }, [open, imageUrl, comparisonImageUrl]);
+
+  useEffect(() => {
+    if (!isVisible) setDecodedOriginal(null);
+  }, [isVisible]);
 
   useEffect(() => {
     if (!isVisible) return;
@@ -265,29 +276,38 @@ export function ImageViewerModal({
             if (e.target === e.currentTarget) onClose();
           }}
         >
-          {comparing ? (
-            <div ref={comparisonStageRef} className="absolute inset-4 bg-bg-dark" data-comparison-stage="true">
-              <div
-                className="absolute inset-y-0 right-0 overflow-hidden"
-                style={{ width: mode === 'side-by-side' ? '50%' : '100%' }}
-                data-comparison-pane="result"
-              >
-                <img
-                  ref={imageRef}
-                  src={resolveImageDisplayUrl(imageUrl)}
-                  alt={t('viewer.upscaled', '放大后')}
-                  className="h-full w-full select-none object-contain"
-                  draggable={false}
-                  onLoad={handleImageLoad}
-                  onMouseDown={handleImageMouseDown}
-                  onMouseMove={handleImageMouseMove}
-                  onContextMenu={(e) => onContextMenu?.(e, currentFilePath)}
-                />
-              </div>
+          <div ref={comparisonStageRef} className="absolute inset-4" data-comparison-stage="true">
+            <div
+              ref={resultPaneRef}
+              className="absolute inset-y-0 right-0 overflow-hidden"
+              style={{
+                clipPath: mode === 'overlay' ? `inset(0 0 0 ${dividerPositionRef.current}%)` : undefined,
+                width: mode === 'side-by-side' ? '50%' : '100%',
+              }}
+              data-comparison-pane="result"
+            >
+              <img
+                ref={imageRef}
+                src={resolveImageDisplayUrl(imageUrl)}
+                alt={comparing ? t('viewer.upscaled', '放大后') : t('viewer.imageAlt', '图片')}
+                className="h-full w-full select-none object-contain"
+                style={{ opacity: viewerOpacity * overlayOpacity }}
+                draggable={false}
+                onClick={(event) => {
+                  if (!comparing && !isPointOnImageContent(event.clientX, event.clientY)) onClose();
+                }}
+                onLoad={handleImageLoad}
+                onMouseDown={handleImageMouseDown}
+                onMouseMove={handleImageMouseMove}
+                onContextMenu={(e) => onContextMenu?.(e, currentFilePath)}
+              />
+            </div>
+            {originalDisplayUrl && (
               <div
                 ref={wipeRef}
-                className="absolute inset-y-0 left-0 overflow-hidden bg-bg-dark"
+                className="absolute inset-y-0 left-0 overflow-hidden"
                 style={{
+                  visibility: comparing ? 'visible' : 'hidden',
                   width: mode === 'side-by-side' ? '50%' : '100%',
                   clipPath: mode === 'overlay' ? `inset(0 ${100 - dividerPositionRef.current}% 0 0)` : undefined,
                 }}
@@ -295,11 +315,25 @@ export function ImageViewerModal({
               >
                 <img
                   ref={comparisonImageRef}
-                  src={resolveImageDisplayUrl(comparisonImageUrl ?? '')}
+                  key={originalDisplayUrl}
+                  src={originalDisplayUrl}
                   alt={t('viewer.original', '原图')}
                   className="h-full w-full select-none object-contain"
                   draggable={false}
-                  onLoad={handleImageLoad}
+                  style={{ opacity: viewerOpacity * overlayOpacity }}
+                  onLoad={(event) => {
+                    const img = event.currentTarget;
+                    handleImageLoad(event);
+                    // load 只表示资源到达；decode 完成后才能切换裁切，避免露出空白半屏。
+                    void img.decode().then(() => {
+                      if (comparisonImageRef.current !== img || !img.isConnected) return;
+                      setDecodedOriginal(originalDisplayUrl);
+                    }).catch(() => {
+                      if (comparisonImageRef.current !== img || !img.isConnected) return;
+                      logger.warn('image_viewer.comparison.failed', { reason: 'original_image_decode_failed' });
+                      setFailedOriginal(comparisonImageUrl ?? null);
+                    });
+                  }}
                   onMouseDown={handleImageMouseDown}
                   onMouseMove={handleImageMouseMove}
                   onError={() => {
@@ -308,89 +342,66 @@ export function ImageViewerModal({
                   }}
                 />
               </div>
-              <span className="pointer-events-none absolute left-16 top-3 rounded-full bg-black/60 px-3 py-1 text-sm text-white">
-                {t('viewer.original', '原图')}
-              </span>
-              <span className="pointer-events-none absolute right-16 top-3 rounded-full bg-black/60 px-3 py-1 text-sm text-white">
-                {t('viewer.upscaled', '放大后')}
-              </span>
-              {mode === 'overlay' && (
-                <UiButton
-                  ref={dividerRef}
-                  variant="plain"
-                  role="slider"
-                  aria-label={t('viewer.comparisonDivider', '对比分界线')}
-                  aria-valuemin={0}
-                  aria-valuemax={100}
-                  aria-valuenow={Math.round(dividerPositionRef.current)}
-                  aria-orientation="horizontal"
-                  className="absolute inset-y-0 !h-full !w-8 -translate-x-1/2 !cursor-ew-resize !p-0 touch-none"
-                  style={{ left: `${dividerPositionRef.current}%` }}
-                  onPointerDown={(event) => {
-                    if (event.button !== 0) return;
-                    event.preventDefault();
-                    event.stopPropagation();
-                    handleContainerMouseUp();
-                    dividerPointerRef.current = event.pointerId;
-                    event.currentTarget.setPointerCapture(event.pointerId);
-                  }}
-                  onPointerMove={(event) => {
-                    if (dividerPointerRef.current !== event.pointerId) return;
-                    const rect = comparisonStageRef.current?.getBoundingClientRect();
-                    if (rect?.width) setDivider((event.clientX - rect.left) / rect.width * 100);
-                  }}
-                  onPointerUp={(event) => {
-                    dividerPointerRef.current = null;
-                    if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
-                  }}
-                  onPointerCancel={() => { dividerPointerRef.current = null; }}
-                  onLostPointerCapture={() => { dividerPointerRef.current = null; }}
-                  onKeyDown={(event) => {
-                    const next = event.key === 'ArrowLeft' ? dividerPositionRef.current - 2
-                      : event.key === 'ArrowRight' ? dividerPositionRef.current + 2
-                        : event.key === 'Home' ? 0 : event.key === 'End' ? 100 : null;
-                    if (next === null) return;
-                    event.preventDefault();
-                    event.stopPropagation();
-                    setDivider(next);
-                  }}
-                >
-                  <span className="pointer-events-none absolute inset-y-0 left-1/2 w-px bg-white" />
-                  <span className="pointer-events-none relative flex h-10 w-7 items-center justify-center rounded-full bg-panel text-text-dark shadow-panel">
-                    <GripVertical className="h-5 w-5" />
-                  </span>
-                </UiButton>
-              )}
-            </div>
-          ) : (
-            <div className="absolute inset-4">
-              <img
-                ref={imageRef}
-                src={resolveImageDisplayUrl(imageUrl)}
-                alt={t('viewer.imageAlt', '图片')}
-                className="select-none transition-opacity duration-300"
-                style={{
-                  opacity: viewerOpacity * overlayOpacity,
-                  transformOrigin: 'center',
-                  width: '100%',
-                  height: '100%',
-                  objectFit: 'contain',
+            )}
+            {comparing && (
+              <>
+                <span className="pointer-events-none absolute left-16 top-3 rounded-full bg-black/60 px-3 py-1 text-sm text-white">
+                  {t('viewer.original', '原图')}
+                </span>
+                <span className="pointer-events-none absolute right-16 top-3 rounded-full bg-black/60 px-3 py-1 text-sm text-white">
+                  {t('viewer.upscaled', '放大后')}
+                </span>
+              </>
+            )}
+            {mode === 'overlay' && (
+              <UiButton
+                ref={dividerRef}
+                variant="plain"
+                role="slider"
+                aria-label={t('viewer.comparisonDivider', '对比分界线')}
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-valuenow={Math.round(dividerPositionRef.current)}
+                aria-orientation="horizontal"
+                className="absolute inset-y-0 !h-full !w-8 -translate-x-1/2 !cursor-ew-resize !p-0 touch-none"
+                style={{ left: `${dividerPositionRef.current}%` }}
+                onPointerDown={(event) => {
+                  if (event.button !== 0) return;
+                  event.preventDefault();
+                  event.stopPropagation();
+                  handleContainerMouseUp();
+                  dividerPointerRef.current = event.pointerId;
+                  event.currentTarget.setPointerCapture(event.pointerId);
                 }}
-                onLoad={handleImageLoad}
-                onMouseDown={handleImageMouseDown}
-                onMouseMove={handleImageMouseMove}
-                onClick={(e) => {
-                  if (isPointOnImageContent(e.clientX, e.clientY)) {
-                    e.stopPropagation();
-                  } else {
-                    onClose();
-                  }
+                onPointerMove={(event) => {
+                  if (dividerPointerRef.current !== event.pointerId) return;
+                  const rect = comparisonStageRef.current?.getBoundingClientRect();
+                  if (rect?.width) setDivider((event.clientX - rect.left) / rect.width * 100);
                 }}
-                onContextMenu={(e) => onContextMenu?.(e, currentFilePath)}
-                draggable={false}
-              />
-            </div>
-          )}
+                onPointerUp={(event) => {
+                  dividerPointerRef.current = null;
+                  if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+                }}
+                onPointerCancel={() => { dividerPointerRef.current = null; }}
+                onLostPointerCapture={() => { dividerPointerRef.current = null; }}
+                onKeyDown={(event) => {
+                  const next = event.key === 'ArrowLeft' ? dividerPositionRef.current - 2
+                    : event.key === 'ArrowRight' ? dividerPositionRef.current + 2
+                      : event.key === 'Home' ? 0 : event.key === 'End' ? 100 : null;
+                  if (next === null) return;
+                  event.preventDefault();
+                  event.stopPropagation();
+                  setDivider(next);
+                }}
+              >
+                <span className="pointer-events-none absolute inset-y-0 left-1/2 w-px bg-white" />
+                <span className="pointer-events-none relative flex h-10 w-7 items-center justify-center rounded-full bg-panel text-text-dark shadow-panel">
+                  <GripVertical className="h-5 w-5" />
+                </span>
+              </UiButton>
+            )}
+          </div>
+
 
           <UiIconButton
             appearance="glass"
@@ -411,15 +422,15 @@ export function ImageViewerModal({
           )}
           <div data-viewer-controls="true" className="absolute bottom-8 left-1/2 z-sticky flex max-w-[calc(100%_-_2rem)] -translate-x-1/2 items-center gap-3 overflow-x-auto">
             {comparisonImageUrl && (
-              <div className="ui-glass flex shrink-0 items-center gap-1 rounded-full p-1" role="group" aria-label={t('viewer.compare', '对比查看')}>
+              <div className={`${VIEWER_HEIGHT_CLASS} ui-glass flex shrink-0 items-center gap-1 rounded-full p-1`} role="group" aria-label={t('viewer.compare', '对比查看')}>
                 {(['single', 'side-by-side', 'overlay'] as const).map((value) => (
                   <UiOptionButton
                     key={value}
                     variant="menu"
-                    active={mode === value}
-                    aria-pressed={mode === value}
+                    active={(comparisonAvailable ? requestedMode : 'single') === value}
+                    aria-pressed={(comparisonAvailable ? requestedMode : 'single') === value}
                     disabled={value !== 'single' && !comparisonAvailable}
-                    className="!rounded-full !px-4 !py-2 whitespace-nowrap"
+                    className="!h-full !rounded-full !px-4 !py-0 text-sm whitespace-nowrap"
                     onClick={() => setRequestedMode(value)}
                   >
                     {value === 'single' ? t('viewer.resultOnly', '仅结果')
@@ -458,7 +469,7 @@ export function ImageViewerModal({
                   {currentIndex + 1} / {imageList.length}
                 </div>
               )}
-              <div ref={scaleDisplayRef} className={`${VIEWER_CONTROL_CLASS} min-w-[74px]`}>
+              <div data-viewer-scale="true" ref={scaleDisplayRef} className={`${VIEWER_CONTROL_CLASS} min-w-[74px]`}>
                 100%
               </div>
               <UiButton

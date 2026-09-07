@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type MouseEvent, type RefObject, type SyntheticEvent } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type MouseEvent, type RefObject, type SyntheticEvent } from 'react';
 
 export type ImageComparisonMode = 'single' | 'side-by-side' | 'overlay';
 
@@ -252,7 +252,9 @@ export function useImageViewerTransform(isOpen: boolean, mode: ImageComparisonMo
     measureImage();
   }, [measureImage]);
 
-  useEffect(() => {
+  // 仅左右布局改变适配比例；仅结果与叠加共用几何，不重置用户的缩放和平移。
+  const splitView = mode === 'side-by-side';
+  useLayoutEffect(() => {
     if (!isOpen) return;
     resetView();
     measureImage();
@@ -261,7 +263,7 @@ export function useImageViewerTransform(isOpen: boolean, mode: ImageComparisonMo
     const observer = new ResizeObserver(measureImage);
     observer.observe(img);
     return () => observer.disconnect();
-  }, [isOpen, mode, resetView, measureImage]);
+  }, [isOpen, splitView, resetView, measureImage]);
 
   return {
     containerRef,

@@ -34,6 +34,7 @@ beforeEach(() => {
   vi.stubGlobal('cancelAnimationFrame', (id: number) => window.clearTimeout(id));
   vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} });
   vi.clearAllMocks();
+  Object.defineProperty(HTMLImageElement.prototype, 'decode', { configurable: true, writable: true, value: vi.fn(() => Promise.resolve()) });
 });
 afterEach(() => { cleanup(); vi.useRealTimers(); vi.unstubAllGlobals(); });
 
@@ -50,10 +51,11 @@ describe('图片查看与同步对比', () => {
     fireEvent.keyDown(window, { key: 'Escape' });
     expect(props.onClose).toHaveBeenCalledTimes(2);
   });
-  it('两张不同分辨率的图在任意一侧缩放和平移时同步，重置会停止进行中的缩放', () => {
+  it('两张不同分辨率的图在任意一侧缩放和平移时同步，重置会停止进行中的缩放', async () => {
     render(<ImageViewerModal {...props} comparisonImageUrl="original.png" />);
     fireEvent.click(screen.getByRole('button', { name: '左右对比' }));
     const original = screen.getByAltText('原图') as HTMLImageElement;
+    await act(async () => { fireEvent.load(original); });
     const result = screen.getByAltText('放大后') as HTMLImageElement;
     geometry(original, 0, 400);
     geometry(result, 400, 1600);
@@ -74,12 +76,15 @@ describe('图片查看与同步对比', () => {
     expect(original.style.transform).toBe(result.style.transform);
     expect(vi.getTimerCount()).toBe(0);
   });
-  it('分界线键盘调整不翻页，原图失效回退普通结果且换图后不残留错误', () => {
+  it('分界线键盘调整不翻页，原图失效回退普通结果且换图后不残留错误', async () => {
     const view = render(<ImageViewerModal {...props} comparisonImageUrl="original.png" />);
     fireEvent.click(screen.getByRole('button', { name: '叠加对比' }));
+    await act(async () => { fireEvent.load(screen.getByAltText('原图')); });
     const slider = screen.getByRole('slider');
     fireEvent.keyDown(slider, { key: 'ArrowRight' });
     expect(slider.getAttribute('aria-valuenow')).toBe('52');
+    expect(screen.getByAltText('原图').parentElement?.style.clipPath).toBe('inset(0 48% 0 0)');
+    expect(screen.getByAltText('放大后').parentElement?.style.clipPath).toBe('inset(0 0 0 52%)');
     expect(props.onNavigate).not.toHaveBeenCalled();
     fireEvent.error(screen.getByAltText('原图'));
     expect(screen.queryByAltText('放大后')).toBeNull();
@@ -88,6 +93,51 @@ describe('图片查看与同步对比', () => {
     view.rerender(<ImageViewerModal {...props} imageUrl="other.png" comparisonImageUrl="other-original.png" />);
     expect(screen.queryByRole('alert')).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: '叠加对比' }));
+    await act(async () => { fireEvent.load(screen.getByAltText('原图')); });
     expect(screen.getByRole('slider').getAttribute('aria-valuenow')).toBe('50');
   });
+  it('原图解码完成前保持完整结果，切换模式复用已解码图片且不会被旧图片的解码结果覆盖', async () => {
+    let completeDecode!: () => void;
+    const view = render(<ImageViewerModal {...props} comparisonImageUrl="original.png" />);
+    const result = screen.getByAltText('图片') as HTMLImageElement;
+    geometry(result, 0, 800);
+    fireEvent.wheel(result, { clientX: 200, clientY: 200, deltaY: -250 });
+    act(() => vi.advanceTimersByTime(1000));
+    const zoomedTransform = result.style.transform;
+    const original = screen.getByAltText('原图') as HTMLImageElement;
+    original.decode = vi.fn(() => new Promise<void>((resolve) => { completeDecode = resolve; }));
+    fireEvent.load(original);
+    fireEvent.click(screen.getByRole('button', { name: '叠加对比' }));
+    expect(screen.queryByRole('slider')).toBeNull();
+    expect(screen.getByAltText('图片')).toBe(result);
+    await act(async () => completeDecode());
+    expect(screen.getByAltText('放大后')).toBe(result);
+    expect(result.style.transform).toBe(zoomedTransform);
+    expect(screen.getByRole('slider')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: '仅结果' }));
+    fireEvent.click(screen.getByRole('button', { name: '叠加对比' }));
+    expect(screen.getByAltText('原图')).toBe(original);
+    expect(screen.getByAltText('放大后')).toBe(result);
+    expect(original.decode).toHaveBeenCalledTimes(1);
+    // 切换另一张图后，上一张尚未结束的解码不得切换当前视图。
+    fireEvent.load(original);
+    view.rerender(<ImageViewerModal {...props} imageUrl="other.png" comparisonImageUrl="other-original.png" />);
+    fireEvent.click(screen.getByRole('button', { name: '叠加对比' }));
+    await act(async () => completeDecode());
+    expect(screen.queryByRole('slider')).toBeNull();
+    await act(async () => { fireEvent.load(screen.getByAltText('原图')); });
+    expect(screen.getByRole('slider')).toBeTruthy();
+  });
+
+  it('原图解码失败后保留结果并显示错误', async () => {
+    render(<ImageViewerModal {...props} comparisonImageUrl="original.png" />);
+    const original = screen.getByAltText('原图') as HTMLImageElement;
+    original.decode = vi.fn(() => Promise.reject(new Error('decode failed')));
+    fireEvent.click(screen.getByRole('button', { name: '叠加对比' }));
+    await act(async () => { fireEvent.load(original); });
+    expect(screen.queryByRole('slider')).toBeNull();
+    expect(screen.getByAltText('图片').getAttribute('src')).toBe('result.png');
+    expect(screen.getByRole('alert')).toBeTruthy();
+  });
+
 });

@@ -144,16 +144,24 @@ function attachUiInspectionCanvasEnhance(context) {
     const closeBox = await close.boundingBox()
     if (!viewerBox || !closeBox || closeBox.x < viewerBox.x + viewerBox.width - 90
       || closeBox.y > viewerBox.y + 70) throw new Error('查看器关闭按钮未位于右上角')
+    const resultElement = await viewer.locator('[data-comparison-pane="result"] img').elementHandle()
     const singleViewport = await viewer.locator('img').first().evaluate((img) => {
       const rect = img.parentElement.getBoundingClientRect()
       return { x: rect.x, y: rect.y, width: rect.width, height: rect.height }
     })
     const assertFullComparisonViewport = async () => {
+      if (!await resultElement.evaluate((img) => img === document.querySelector('[data-comparison-pane="result"] img'))) {
+        throw new Error('切换查看模式重新挂载了结果图片')
+      }
       const stage = await viewer.locator('[data-comparison-stage]').boundingBox()
       const controls = await viewer.locator('[data-viewer-controls]').boundingBox()
       const modes = await viewer.getByRole('group', { name: /^(对比查看|Compare)$/i }).boundingBox()
+      const scale = await viewer.locator('[data-viewer-scale]').boundingBox()
+      const transparentPlanes = await viewer.locator('[data-comparison-stage], [data-comparison-pane]').evaluateAll((elements) =>
+        elements.every((element) => getComputedStyle(element).backgroundColor === 'rgba(0, 0, 0, 0)'))
       const reset = await viewer.getByTitle(/^(重置视图|Reset View)$/i).boundingBox()
-      if (!stage || !controls || !modes || !reset
+      if (!stage || !controls || !modes || !reset || !scale || !transparentPlanes
+        || Math.abs(modes.height - reset.height) > 1 || Math.abs(scale.height - reset.height) > 1
         || ['x', 'y', 'width', 'height'].some((key) => Math.abs(stage[key] - singleViewport[key]) > 1)
         || stage.height < viewerBox.height - 40
         || controls.y + controls.height > stage.y + stage.height
@@ -192,6 +200,7 @@ function attachUiInspectionCanvasEnhance(context) {
     await assertSynchronized(zoomed)
     await writeFile('.ui-tour/canvas-upscale-side-by-side.png', await captureInspectionPage(electronApp, page))
     await viewer.getByRole('button', { name: /^(叠加对比|Overlay)$/i }).click()
+    await viewer.locator('[role="slider"]').waitFor({ state: 'visible' })
     await assertFullComparisonViewport()
     const divider = viewer.getByRole('slider')
     const stageBox = await viewer.locator('[data-comparison-stage]').boundingBox()
