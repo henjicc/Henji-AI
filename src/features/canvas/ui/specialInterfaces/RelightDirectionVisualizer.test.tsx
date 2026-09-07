@@ -33,7 +33,9 @@ describe('打光方向可视化控件', () => {
       />,
     )
     expect(control.getAttribute('data-relight-direction')).toBe('right')
-    expect(screen.getByText('模型方向 · 右侧')).toBeTruthy()
+    expect(screen.getByRole('button', { name: '右侧' }).getAttribute('aria-pressed')).toBe('true')
+    fireEvent.click(screen.getByRole('button', { name: '上方' }))
+    expect(onDirectionChange).toHaveBeenLastCalledWith('top')
   })
 
   it('拖过右侧分区时只发送模型支持的右侧方向', () => {

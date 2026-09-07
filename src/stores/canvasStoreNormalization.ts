@@ -227,6 +227,15 @@ export function normalizeNodes(rawNodes: CanvasNode[]): CanvasNode[] {
         type: normalizedType,
         data: mergedData,
       };
+      // 自动尺寸属于派生布局；旧版本的固定外框会裁切新工作台或阻止模式切换收缩。
+      // 手动缩放过的节点仍以用户保存的尺寸为准。
+      if (normalizedType === CANVAS_NODE_TYPES.relightGen && !mergedData.isSizeManuallyAdjusted) {
+        const style = { ...normalizedNode.style };
+        delete style.width;
+        delete style.height;
+        return { ...normalizedNode, width: undefined, height: undefined,
+          initialWidth: undefined, initialHeight: undefined, measured: undefined, style };
+      }
       return normalizedNode;
     })
     .filter((node): node is CanvasNode => Boolean(node));

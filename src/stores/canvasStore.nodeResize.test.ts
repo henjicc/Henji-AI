@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { canvasNodeFactory } from '@/features/canvas/application/canvasServices';
 import { CANVAS_NODE_TYPES, type CanvasNodeType } from '@/features/canvas/domain/canvasNodes';
 import { useCanvasStore } from './canvasStore';
+import { normalizeNodes } from './canvasStoreNormalization';
 
 const TOOL_GENERATION_NODE_TYPES: readonly CanvasNodeType[] = [
   CANVAS_NODE_TYPES.panoramaGen,
@@ -43,5 +44,22 @@ describe('画布工具节点尺寸跟踪', () => {
     expect(resized?.width).toBe(920);
     expect(resized?.height).toBe(580);
     expect(resized?.data.isSizeManuallyAdjusted).toBe(true);
+  });
+});
+
+describe('打光工作台历史尺寸兼容', () => {
+  it('自动尺寸重开后交给工作台测量，手动尺寸保持原样', () => {
+    const node = canvasNodeFactory.createNode(CANVAS_NODE_TYPES.relightGen, { x: 40, y: 60 });
+    const legacy = { ...node, width: 680, height: 360, measured: { width: 680, height: 360 },
+      style: { width: 680, height: 360, opacity: 0.8 } };
+    const [automatic] = normalizeNodes([legacy]);
+    expect(automatic.width).toBeUndefined();
+    expect(automatic.height).toBeUndefined();
+    expect(automatic.measured).toBeUndefined();
+    expect(automatic.style).toEqual({ opacity: 0.8 });
+    const [manual] = normalizeNodes([{ ...legacy, data: { ...legacy.data, isSizeManuallyAdjusted: true } }]);
+    expect(manual.width).toBe(680);
+    expect(manual.height).toBe(360);
+    expect(manual.style).toEqual(legacy.style);
   });
 });

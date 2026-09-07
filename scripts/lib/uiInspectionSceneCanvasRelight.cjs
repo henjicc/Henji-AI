@@ -1,3 +1,6 @@
+const { writeFile } = require('node:fs/promises')
+const { captureInspectionPage } = require('./uiInspectionCapture.cjs')
+
 function attachUiInspectionCanvasRelight(context) {
   const {
     settlePage,
@@ -40,7 +43,7 @@ function attachUiInspectionCanvasRelight(context) {
     }
   }
 
-  async function setupCanvasRelightEditor(page) {
+  async function setupCanvasRelightEditor(page, electronApp) {
     const { projectId } = await seedAndOpenCanvasPanoramaProject(page)
     const sourceNode = page.locator('.react-flow__node[data-id="__ui_panorama_source"]')
     await sourceNode.click()
@@ -65,9 +68,33 @@ function attachUiInspectionCanvasRelight(context) {
     const editor = page.locator(`[data-relight-node-id="${relightNodeId}"] [data-relight-workbench="true"]`)
     await editor.waitFor({ state: 'visible', timeout: 12000 })
     const relightNode = relightShell.locator('xpath=ancestor::*[contains(@class,"react-flow__node")][1]')
+    const defaultLayout = await editor.evaluate((element) => {
+      const inspector = element.querySelector('[data-relight-inspector]')
+      const stage = element.querySelector('[data-relight-direction-control]')?.getBoundingClientRect()
+      return { overflow: inspector.scrollHeight - inspector.clientHeight,
+        stage: stage && { width: stage.width, height: stage.height },
+        images: element.querySelectorAll('img').length }
+    })
+    if (defaultLayout.overflow > 1 || defaultLayout.images !== 1
+      || !defaultLayout.stage || defaultLayout.stage.width < 140
+      || Math.abs(defaultLayout.stage.width - defaultLayout.stage.height) > 1) {
+      throw new Error(`打光默认布局裁切或重复显示原图：${JSON.stringify(defaultLayout)}`)
+    }
+    await writeFile('.ui-tour/canvas-relight-default.png', await captureInspectionPage(electronApp, page))
+    await editor.getByRole('button', { name: /智能打光/ }).click()
+    const smartOverflow = await editor.locator('[data-relight-inspector]').evaluate((element) => element.scrollHeight - element.clientHeight)
+    if (smartOverflow > 1) throw new Error(`智能打光默认尺寸未完整显示参数：${smartOverflow}`)
+    await page.waitForTimeout(250) // 等按钮选中态颜色过渡结束再截图。
+    await writeFile('.ui-tour/canvas-relight-smart-default.png', await captureInspectionPage(electronApp, page))
+    await editor.getByRole('button', { name: /手动打光/ }).click()
+    await editor.getByRole('button', { name: '色调', exact: true }).click()
+    await page.getByRole('option', { name: '暖白', exact: true }).click()
+    await editor.getByRole('button', { name: '轮廓光', exact: true }).click()
+    await page.getByRole('option', { name: '左上', exact: true }).click()
+    await editor.getByPlaceholder('例如：保留商品标签清晰可读').fill('保留商品标签清晰可读')
     await resizeCanvasNodeAndAssertHitBox(page, relightNode, relightShell, '图片打光节点')
     await verifyWorkbenchSelection(page, relightShell, sourceNode, editor)
-    await editor.getByText('主光方向 · 离散偏好', { exact: true })
+    await editor.getByText('主光方向', { exact: true })
       .waitFor({ state: 'visible', timeout: 8000 })
     const directionControl = editor.locator('[data-relight-direction-control="true"]')
     await directionControl.waitFor({ state: 'visible', timeout: 8000 })
@@ -98,9 +125,10 @@ function attachUiInspectionCanvasRelight(context) {
     ), relightNodeId, { timeout: 3000 }).catch(async () => {
       throw new Error(`图片打光拖拽没有映射到右侧模型方向，实际为 ${await directionControl.getAttribute('data-relight-direction')}，命中为 ${JSON.stringify(directionHitTargets)}`)
     })
-    await editor.getByText('模型方向 · 右侧', { exact: true }).waitFor({ state: 'visible', timeout: 8000 })
+    if (await editor.getByRole('button', { name: '右侧', exact: true }).getAttribute('aria-pressed') !== 'true') throw new Error('方向按钮未同步拖拽结果')
     await editor.getByRole('button', { name: /智能打光/ }).click()
-    await editor.getByRole('button', { name: /霓虹氛围/ }).click()
+    await editor.getByRole('button', { name: '氛围预设', exact: true }).click()
+    await page.getByRole('option', { name: '霓虹氛围', exact: true }).click()
     await editor.getByPlaceholder('例如：在保留背景布局的前提下增强商品高光')
       .fill('保留主体与文字，只调整光照氛围')
     const smartRelightShell = page.locator(`[data-relight-node-id="${relightNodeId}"][data-relight-mode="smart"]`)
@@ -128,6 +156,7 @@ function attachUiInspectionCanvasRelight(context) {
       return {
         nodeType: node?.type,
         lightingMode: node?.data?.relightSettings?.lightingMode,
+        manual: node?.data?.relightSettings?.manual,
         preset: node?.data?.relightSettings?.smart?.preset,
         templateVersion: node?.data?.promptTemplateVersion,
         referenceCount: node?.data?.relightSettings?.smart?.lightingReferenceImages?.length,
@@ -140,25 +169,48 @@ function attachUiInspectionCanvasRelight(context) {
     if (persisted.nodeType !== 'relightGenNode'
       || persisted.lightingMode !== 'smart'
       || persisted.preset !== 'neon'
+      || persisted.manual?.colorPreset !== 'warm'
+      || persisted.manual?.rimDirection !== 'top-left'
+      || persisted.manual?.extraPrompt !== '保留商品标签清晰可读'
       || persisted.templateVersion !== 'relight-smart-gpt-image-2-v1'
       || persisted.referenceCount !== 0
       || persisted.manuallyResized !== true
-      || persisted.width <= 680
-      || persisted.height <= 360
+      || persisted.width <= 720
+      || persisted.height <= 420
       || !persisted.hasSourceEdge) {
       throw new Error(`图片打光保存语义或连线丢失：${JSON.stringify(persisted)}`)
     }
 
+    // 模拟旧版本保存的自动尺寸，确认新默认大小不会被旧测量盒裁切。
+    await page.evaluate(async ({ projectId, nodeId }) => {
+      const rows = await window.henjiNative.db.select('SELECT nodes_json FROM storyboard_projects WHERE id = ?', [projectId])
+      const nodes = JSON.parse(rows[0].nodes_json)
+      const node = nodes.find((item) => item.id === nodeId)
+      node.data.isSizeManuallyAdjusted = false
+      node.width = 680
+      node.height = 360
+      node.style = { ...node.style, width: 680, height: 360 }
+      await window.henjiNative.db.execute('UPDATE storyboard_projects SET nodes_json = ? WHERE id = ?', [JSON.stringify(nodes), projectId])
+    }, { projectId, nodeId: relightNodeId })
     await page.locator(`[data-project-id="${projectId}"]:visible`).click()
     const reopened = page.locator(`[data-relight-node-id="${relightNodeId}"][data-relight-mode="smart"]`)
     await reopened.waitFor({ state: 'visible', timeout: 12000 })
     await reopened.click()
     const reopenedEditor = page.locator(`[data-relight-node-id="${relightNodeId}"] [data-relight-workbench="true"]`)
     await reopenedEditor.waitFor({ state: 'visible', timeout: 12000 })
-    await reopenedEditor.getByText('氛围预设 · 模型近似').waitFor({ state: 'visible', timeout: 8000 })
+    await reopenedEditor.getByText('氛围预设').waitFor({ state: 'visible', timeout: 8000 })
     await reopenedEditor.getByRole('button', { name: /手动打光/ }).click()
     await reopenedEditor.locator('[data-relight-direction-control="true"][data-relight-direction="right"]')
       .waitFor({ state: 'visible', timeout: 8000 })
+    const reopenedGeometry = await page.locator(`[data-relight-node-id="${relightNodeId}"]`).evaluate((element) => {
+      const root = element.getBoundingClientRect()
+      const wrapper = element.closest('.react-flow__node').getBoundingClientRect()
+      return { root: { width: root.width, height: root.height }, wrapper: { width: wrapper.width, height: wrapper.height } }
+    })
+    if (Math.abs(reopenedGeometry.root.width - reopenedGeometry.wrapper.width) > 1
+      || Math.abs(reopenedGeometry.root.height - reopenedGeometry.wrapper.height) > 1) {
+      throw new Error(`旧尺寸仍裁切新的打光工作台：${JSON.stringify(reopenedGeometry)}`)
+    }
     await reopenedEditor.getByRole('button', { name: '正面', exact: true }).click()
     await reopenedEditor.getByRole('button', { name: '透视', exact: true }).click()
     await verifyWorkbenchSelection(page, page.locator(`[data-relight-node-id="${relightNodeId}"]`), sourceNode, reopenedEditor, false)

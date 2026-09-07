@@ -1,7 +1,7 @@
 import { useId, useMemo, type ReactNode } from 'react'
-import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, CircleOff } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
+import Dropdown from '@/components/ui/Dropdown'
 import FileUploader from '@/components/ui/FileUploader'
 import Tooltip from '@/components/ui/Tooltip'
 import { UiButton, UiOptionButton, UiTextAreaField } from '@/components/ui/primitives'
@@ -10,19 +10,16 @@ import {
   UI_GLASS_ADAPTIVE_REGION_CLASS,
   UI_TEXT_LABEL_CLASS,
   UI_TEXT_META_CLASS,
-  UI_TEXT_SECTION_CLASS,
 } from '@/components/ui/styleTokens'
 import { resolveImageDisplayUrl } from '@/features/canvas/application/imageData'
 import {
   RELIGHT_BRIGHTNESS_LEVELS,
   RELIGHT_COLOR_PRESETS,
-  RELIGHT_KEY_DIRECTIONS,
   RELIGHT_RIM_DIRECTIONS,
   RELIGHT_SMART_PRESETS,
   normalizeRelightSettings,
   type RelightBrightness,
   type RelightColorPreset,
-  type RelightKeyDirection,
   type RelightRimDirection,
   type RelightSettingsV1,
   type RelightSmartPreset,
@@ -30,12 +27,8 @@ import {
 import { importLocalMedia } from '@/services/localMediaImport'
 import { RelightDirectionVisualizer } from './RelightDirectionVisualizer'
 import { buildRelightEditorDraft } from './relightEditorDraft'
-import { RELIGHT_DIRECTION_LABELS } from './relightDirectionVisualizerState'
 import type { CanvasSpecialEditorSurfaceProps } from './specialEditorRegistry'
 
-const DIRECTION_ICONS = {
-  none: CircleOff, left: ArrowLeft, right: ArrowRight, top: ArrowUp, bottom: ArrowDown,
-} satisfies Record<RelightKeyDirection, typeof ArrowLeft>
 const COLOR_LABELS: Record<RelightColorPreset, string> = {
   neutral: '中性白', warm: '暖白', cool: '冷白', amber: '琥珀',
   red: '红色', blue: '蓝色', cyan: '青色', magenta: '品红',
@@ -129,7 +122,7 @@ export function RelightWorkbench({
   return (
       <div
         data-relight-workbench="true"
-        className={`grid min-h-0 min-w-0 flex-1 ${settings.lightingMode === 'manual' ? 'grid-cols-[minmax(0,1.25fr)_minmax(240px,0.75fr)]' : 'grid-cols-1'}`}
+        className={`grid min-h-0 min-w-0 flex-1 ${settings.lightingMode === 'manual' ? 'grid-cols-[minmax(0,1fr)_280px]' : 'grid-cols-1'}`}
       >
         {settings.lightingMode === 'manual' && (
           <div className={`flex min-h-0 ${embedded ? 'p-2' : 'p-4'}`}>
@@ -142,117 +135,66 @@ export function RelightWorkbench({
           </div>
         )}
 
-        <div className={`min-h-0 overflow-y-auto ${settings.lightingMode === 'manual' ? 'border-l border-veil-subtle' : ''} ${embedded ? 'p-3' : `p-5 ${UI_GLASS_ADAPTIVE_REGION_CLASS}`}`}>
+        <div data-relight-inspector="true" className={`min-h-0 min-w-0 overflow-y-auto ${settings.lightingMode === 'manual' ? 'border-l border-veil-subtle' : ''} ${embedded ? 'p-3' : `p-5 ${UI_GLASS_ADAPTIVE_REGION_CLASS}`}`}>
           <div className="max-w-3xl">
           {sourceControl ? <div className="mb-3">{sourceControl}</div> : null}
-          <section className="space-y-3">
-            <h3 className={UI_TEXT_SECTION_CLASS}>模式</h3>
+          <section aria-label="打光模式">
             <div className="grid grid-cols-2 gap-2">
               <UiOptionButton
                 type="button"
-                variant="flat"
+                variant="menu"
                 active={settings.lightingMode === 'manual'}
+                className="!h-9 justify-center whitespace-nowrap !px-2 text-xs"
                 onClick={() => updateSettings({ ...settings, lightingMode: 'manual' })}
               >
-                <span className="flex flex-col">
-                  <span className="text-sm font-medium">手动打光</span>
-                  <span className="text-xs">IC-Light v2</span>
-                </span>
+                手动打光
               </UiOptionButton>
               <UiOptionButton
                 type="button"
-                variant="flat"
+                variant="menu"
                 active={settings.lightingMode === 'smart'}
+                className="!h-9 justify-center whitespace-nowrap !px-2 text-xs"
                 onClick={() => updateSettings({ ...settings, lightingMode: 'smart' })}
               >
-                <span className="flex flex-col">
-                  <span className="text-sm font-medium">智能打光</span>
-                  <span className="text-xs">GPT Image 2</span>
-                </span>
+                智能打光
               </UiOptionButton>
             </div>
           </section>
 
           {settings.lightingMode === 'manual' ? (
-            <div className="mt-5 space-y-5">
+            <div className="mt-4 space-y-3">
+              <div className="flex items-center justify-between gap-3">
+                <FieldTitle tooltip="选择画面整体的明暗感受，实际效果由模型生成。">亮度</FieldTitle>
+                <Dropdown
+                  ariaLabel="亮度"
+                  className="w-36"
+                  value={settings.manual.brightness}
+                  options={RELIGHT_BRIGHTNESS_LEVELS.map((value) => ({ value, label: BRIGHTNESS_LABELS[value] }))}
+                  onSelect={(brightness) => patchManual({ brightness })}
+                />
+              </div>
+              <div className="flex items-center justify-between gap-3">
+                <FieldTitle tooltip="选择灯光色调，实际颜色可能略有差异。">色调</FieldTitle>
+                <Dropdown
+                  ariaLabel="色调"
+                  className="w-36"
+                  value={settings.manual.colorPreset}
+                  options={RELIGHT_COLOR_PRESETS.map((value) => ({ value, label: COLOR_LABELS[value] }))}
+                  onSelect={(colorPreset) => patchManual({ colorPreset })}
+                />
+              </div>
+              <div className="flex items-center justify-between gap-3">
+                <FieldTitle tooltip="在主体边缘增加光线，方向用于引导生成效果。">轮廓光</FieldTitle>
+                <Dropdown
+                  ariaLabel="轮廓光"
+                  className="w-36"
+                  value={settings.manual.rimDirection}
+                  options={RELIGHT_RIM_DIRECTIONS.map((value) => ({ value, label: RIM_LABELS[value] }))}
+                  onSelect={(rimDirection) => patchManual({ rimDirection })}
+                />
+              </div>
               <section className="space-y-2">
-                <FieldTitle tooltip="五档方向会直接发送给 IC-Light，但它们是光照偏好，不代表可测量的灯位角度。">主光方向 · 离散偏好</FieldTitle>
-                <div className="grid grid-cols-5 gap-1.5">
-                  {RELIGHT_KEY_DIRECTIONS.map((direction) => {
-                    const Icon = DIRECTION_ICONS[direction]
-                    return (
-                      <UiOptionButton
-                        key={direction}
-                        type="button"
-                        variant="flat"
-                        active={settings.manual.keyDirection === direction}
-                        className="flex-col justify-center gap-1 px-1"
-                        onClick={() => patchManual({ keyDirection: direction })}
-                      >
-                        <Icon className="h-4 w-4" />
-                        <span className="text-2xs">{RELIGHT_DIRECTION_LABELS[direction]}</span>
-                      </UiOptionButton>
-                    )
-                  })}
-                </div>
-              </section>
-
-              <section className="space-y-2">
-                <FieldTitle tooltip="五档亮度会转换为提示词，不是曝光值。">亮度 · 模型近似</FieldTitle>
-                <div className="grid grid-cols-5 gap-1.5">
-                  {RELIGHT_BRIGHTNESS_LEVELS.map((brightness) => (
-                    <UiOptionButton
-                      key={brightness}
-                      type="button"
-                      variant="flat"
-                      active={settings.manual.brightness === brightness}
-                      className="justify-center px-1 text-xs"
-                      onClick={() => patchManual({ brightness })}
-                    >
-                      {BRIGHTNESS_LABELS[brightness]}
-                    </UiOptionButton>
-                  ))}
-                </div>
-              </section>
-
-              <section className="space-y-2">
-                <FieldTitle tooltip="色调会转换为提示词，不保证与显示名称完全一致。">色调 · 模型近似</FieldTitle>
-                <div className="grid grid-cols-4 gap-1.5">
-                  {RELIGHT_COLOR_PRESETS.map((preset) => (
-                    <UiOptionButton
-                      key={preset}
-                      type="button"
-                      variant="flat"
-                      active={settings.manual.colorPreset === preset}
-                      className="justify-center text-xs"
-                      onClick={() => patchManual({ colorPreset: preset })}
-                    >
-                      {COLOR_LABELS[preset]}
-                    </UiOptionButton>
-                  ))}
-                </div>
-              </section>
-
-              <section className="space-y-2">
-                <FieldTitle tooltip="轮廓光方向是生成引导，不是可精确布置的第二个灯源。">轮廓光 · 模型近似</FieldTitle>
-                <div className="grid grid-cols-3 gap-1.5">
-                  {RELIGHT_RIM_DIRECTIONS.map((direction) => (
-                    <UiOptionButton
-                      key={direction}
-                      type="button"
-                      variant="flat"
-                      active={settings.manual.rimDirection === direction}
-                      className="justify-center text-xs"
-                      onClick={() => patchManual({ rimDirection: direction })}
-                    >
-                      {RIM_LABELS[direction]}
-                    </UiOptionButton>
-                  ))}
-                </div>
-              </section>
-
-              <section className="space-y-2">
-                <FieldTitle tooltip="补充文字与其他近似控制共同编译为固定版本的提示词。">补充要求 · 模型近似</FieldTitle>
+                <FieldTitle tooltip="补充需要保留的细节或希望达到的光照效果。">补充要求</FieldTitle>
                 <UiTextAreaField
                   value={settings.manual.extraPrompt}
                   rows={3}
@@ -263,27 +205,20 @@ export function RelightWorkbench({
               </section>
             </div>
           ) : (
-            <div className="mt-5 space-y-5">
-              <section className="space-y-2">
-                <FieldTitle tooltip="预设会转换为版本化提示词，不是物理灯光参数。">氛围预设 · 模型近似</FieldTitle>
-                <div className="grid grid-cols-2 gap-1.5">
-                  {RELIGHT_SMART_PRESETS.map((preset) => (
-                    <UiOptionButton
-                      key={preset}
-                      type="button"
-                      variant="flat"
-                      active={settings.smart.preset === preset}
-                      className="justify-center text-xs"
-                      onClick={() => patchSmart({ preset })}
-                    >
-                      {SMART_LABELS[preset]}
-                    </UiOptionButton>
-                  ))}
-                </div>
-              </section>
+            <div className="mt-3 space-y-3">
+              <div className="flex items-center justify-between gap-3">
+                <FieldTitle tooltip="选择希望营造的光照氛围。">氛围预设</FieldTitle>
+                <Dropdown
+                  ariaLabel="氛围预设"
+                  className="w-36"
+                  value={settings.smart.preset}
+                  options={RELIGHT_SMART_PRESETS.map((value) => ({ value, label: SMART_LABELS[value] }))}
+                  onSelect={(preset) => patchSmart({ preset })}
+                />
+              </div>
 
               <section className="space-y-2">
-                <FieldTitle tooltip="模型只借用参考图的光感和氛围，不保证复制相同光场。">光照参考图 · 最多 1 张</FieldTitle>
+                <FieldTitle tooltip="模型只借用参考图的光感和氛围，不保证复制相同光场。">光照参考图</FieldTitle>
                 <FileUploader
                   density="compact"
                   files={referenceFiles}
@@ -296,10 +231,10 @@ export function RelightWorkbench({
               </section>
 
               <section className="space-y-2">
-                <FieldTitle tooltip="自然语言要求由 GPT Image 2 近似执行，不承诺精确灯位。">补充要求 · 模型近似</FieldTitle>
+                <FieldTitle tooltip="描述希望达到的光照效果和需要保留的细节。">补充要求</FieldTitle>
                 <UiTextAreaField
                   value={settings.smart.prompt}
-                  rows={4}
+                  rows={2}
                   maxLength={32 * 1024}
                   placeholder="例如：在保留背景布局的前提下增强商品高光"
                   onChange={(event) => patchSmart({ prompt: event.target.value })}

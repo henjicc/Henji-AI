@@ -6,14 +6,13 @@ import {
   type KeyboardEvent,
   type PointerEvent,
 } from 'react'
-import { MousePointer2, SunMedium } from 'lucide-react'
+import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, CircleOff, SunMedium } from 'lucide-react'
 
-import { UiChipButton } from '@/components/ui/primitives'
+import { UiChipButton, UiOptionButton } from '@/components/ui/primitives'
 import {
   UI_FIELD_FOCUS_CLASS,
-  UI_INSET_SURFACE_CLASS,
   UI_TEXT_META_CLASS,
-  UI_TEXT_SECTION_CLASS,
+  UI_TEXT_LABEL_CLASS,
 } from '@/components/ui/styleTokens'
 import type { RelightKeyDirection } from '@/features/canvas/capabilities/relightPolicy'
 import {
@@ -25,6 +24,10 @@ import {
   type RelightDirectionPoint,
   type RelightVisualizerView,
 } from './relightDirectionVisualizerState'
+
+const DIRECTION_ICONS = {
+  none: CircleOff, left: ArrowLeft, right: ArrowRight, top: ArrowUp, bottom: ArrowDown,
+} satisfies Record<RelightKeyDirection, typeof ArrowLeft>
 
 function stagePoint(event: PointerEvent<HTMLDivElement>): RelightDirectionPoint {
   const bounds = event.currentTarget.getBoundingClientRect()
@@ -130,20 +133,15 @@ export function RelightDirectionVisualizer({
   const showBeam = direction !== 'none' || dragging
 
   return (
-    <section className={`flex min-h-0 flex-col rounded-xl p-3 ${UI_INSET_SURFACE_CLASS}`}>
-      <div className="flex items-center justify-between gap-3">
-        <h3 className={UI_TEXT_SECTION_CLASS}>可视化灯位</h3>
-        <span className="rounded bg-veil-faint px-2 py-1 text-xs text-text-soft">
-          模型方向 · {RELIGHT_DIRECTION_LABELS[direction]}
-        </span>
-      </div>
-
-      <div className="mx-auto mt-3 grid w-full max-w-64 grid-cols-2 rounded-lg bg-surface-dark/60 p-1">
+    <section className="flex min-h-0 min-w-0 w-full flex-col gap-2">
+      <div className="flex shrink-0 items-center justify-between gap-2">
+        <h3 className={UI_TEXT_LABEL_CLASS}>主光方向</h3>
+        <div className="grid grid-cols-2 gap-1">
         <UiChipButton
           type="button"
           selectionRole="navigation"
           active={view === 'perspective'}
-          className="h-8 justify-center text-xs"
+          className="!h-8 justify-center !px-3 !py-0 text-xs"
           onClick={() => setView('perspective')}
         >
           透视
@@ -152,13 +150,15 @@ export function RelightDirectionVisualizer({
           type="button"
           selectionRole="navigation"
           active={view === 'front'}
-          className="h-8 justify-center text-xs"
+          className="!h-8 justify-center !px-3 !py-0 text-xs"
           onClick={() => setView('front')}
         >
           正面
         </UiChipButton>
+        </div>
       </div>
 
+      <div className="flex min-h-0 flex-1 items-center justify-center [container-type:size]">
       <div
         role="slider"
         tabIndex={0}
@@ -169,7 +169,8 @@ export function RelightDirectionVisualizer({
         aria-valuetext={RELIGHT_DIRECTION_LABELS[direction]}
         data-relight-direction-control="true"
         data-relight-direction={direction}
-        className={`relative mx-auto mt-3 aspect-square w-full max-w-72 touch-none select-none overflow-hidden rounded-xl bg-app/50 text-veil-subtle ${UI_FIELD_FOCUS_CLASS} ${dragging ? 'cursor-grabbing' : 'cursor-grab'}`}
+        style={{ width: 'min(100cqw, 100cqh)', height: 'min(100cqw, 100cqh)' }}
+        className={`relative shrink-0 touch-none select-none overflow-hidden rounded-lg text-veil-subtle ${UI_FIELD_FOCUS_CLASS} ${dragging ? 'cursor-grabbing' : 'cursor-grab'}`}
         onKeyDown={handleKeyDown}
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
@@ -187,10 +188,10 @@ export function RelightDirectionVisualizer({
         </svg>
 
         <div
-          className={`pointer-events-none absolute left-1/2 top-1/2 z-raised aspect-[4/3] w-[30%] overflow-hidden rounded-md border border-veil-soft bg-surface-dark ${view === 'perspective' ? '[transform:translate(-50%,-50%)_perspective(360px)_rotateY(-28deg)_rotateZ(4deg)]' : '-translate-x-1/2 -translate-y-1/2'}`}
+          className={`pointer-events-none absolute left-1/2 top-1/2 z-raised aspect-[4/3] w-[42%] overflow-hidden rounded-md border border-veil-soft bg-surface-dark ${view === 'perspective' ? '[transform:translate(-50%,-50%)_perspective(360px)_rotateY(-28deg)_rotateZ(4deg)]' : '-translate-x-1/2 -translate-y-1/2'}`}
         >
           {sourceImage ? (
-            <img src={sourceImage} alt={sourceAlt} className="h-full w-full object-cover" draggable={false} />
+            <img src={sourceImage} alt={sourceAlt} className="h-full w-full object-contain" draggable={false} />
           ) : (
             <span className="flex h-full w-full items-center justify-center text-text-muted">
               <SunMedium className="h-5 w-5" />
@@ -206,12 +207,26 @@ export function RelightDirectionVisualizer({
         </svg>
       </div>
 
-      <div className="mt-3 flex items-start gap-2 text-text-muted">
-        <MousePointer2 className="mt-0.5 h-4 w-4 shrink-0" />
-        <p className={UI_TEXT_META_CLASS}>
-          拖动光点选择方向；连续位置会就近映射到模型支持的五档，也可使用方向键调整。
-        </p>
       </div>
+      <div className="grid shrink-0 grid-cols-5 gap-1" role="group" aria-label="主光方向预设">
+        {RELIGHT_DIRECTION_ORDER.map((value) => {
+          const Icon = DIRECTION_ICONS[value]
+          return (
+            <UiOptionButton
+              key={value}
+              variant="menu"
+              active={direction === value}
+              aria-pressed={direction === value}
+              className="!h-8 justify-center gap-1 whitespace-nowrap !px-1 !py-0 text-2xs"
+              onClick={() => chooseDirection(value)}
+            >
+              <Icon className="h-3 w-3 shrink-0" />
+              {RELIGHT_DIRECTION_LABELS[value]}
+            </UiOptionButton>
+          )
+        })}
+      </div>
+      <p className={`${UI_TEXT_META_CLASS} shrink-0 text-center`}>拖动光点或选择方向，调整主光位置</p>
     </section>
   )
 }

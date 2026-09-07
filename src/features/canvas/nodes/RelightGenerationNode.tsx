@@ -297,9 +297,11 @@ export const RelightGenerationNode = memo(({
       icon={<SunMedium className="h-4 w-4" />}
       selected={selected}
       width={data.isSizeManuallyAdjusted ? width : undefined}
-      defaultWidth={settings.lightingMode === 'manual' ? 680 : 360}
+      defaultWidth={settings.lightingMode === 'manual' ? 720 : 360}
       minWidth={settings.lightingMode === 'manual' ? 600 : 320}
-      height={height}
+      height={data.isSizeManuallyAdjusted ? height : undefined}
+      defaultHeight={420}
+      minHeight={300}
       hasSourceConnections={hasSourceConnections}
       onSelect={() => setSelectedNode(id)}
       onTitleChange={(displayName) => updateNodeData(id, { displayName })}
@@ -314,7 +316,7 @@ export const RelightGenerationNode = memo(({
           settings={settings}
           sourceImage={sourceImages[0] ?? null}
           embedded
-          sourceControl={(
+          sourceControl={settings.lightingMode === 'smart' || incomingSourceMedia.length === 0 ? (
             <MediaInputRow
               showHandle={false}
               nodeId={id}
@@ -326,7 +328,7 @@ export const RelightGenerationNode = memo(({
                 mediaInputs: { ...(data.mediaInputs ?? {}), image: images },
               })}
             />
-          )}
+          ) : undefined}
           onSettingsChange={(nextSettings) => updateNodeData(
             id,
             buildRelightEditorDraft(data, nextSettings),
