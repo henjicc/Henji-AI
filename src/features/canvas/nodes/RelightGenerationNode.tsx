@@ -316,6 +316,7 @@ export const RelightGenerationNode = memo(({
           embedded
           sourceControl={(
             <MediaInputRow
+              showHandle={false}
               nodeId={id}
               mediaKind="image"
               label={t('node.relightGeneration.sourceImage')}

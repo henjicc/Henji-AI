@@ -6,6 +6,40 @@ function attachUiInspectionCanvasRelight(context) {
     seedAndOpenCanvasPanoramaProject,
   } = context
 
+  async function assertWorkbenchImageInput(shell) {
+    const geometry = await shell.evaluate((element) => {
+      const inputs = element.querySelectorAll('.react-flow__handle[data-handleid="param:__image"]')
+      const nodeBox = element.getBoundingClientRect()
+      const inputBox = inputs[0]?.getBoundingClientRect()
+      return {
+        count: inputs.length,
+        left: nodeBox.left,
+        inputX: inputBox ? inputBox.left + inputBox.width / 2 : null,
+        opacity: inputs[0] ? Number(getComputedStyle(inputs[0]).opacity) : 0,
+      }
+    })
+    if (geometry.count !== 1 || geometry.inputX === null || Math.abs(geometry.inputX - geometry.left) > 2 || geometry.opacity === 0) {
+      throw new Error(`工作台已连接图片端口必须唯一、可见并位于节点最左侧：${JSON.stringify(geometry)}`)
+    }
+  }
+
+  async function verifyWorkbenchSelection(page, shell, sourceNode, editor, restoreSelection = true) {
+    await assertWorkbenchImageInput(shell)
+    await sourceNode.click()
+    await editor.waitFor({ state: 'detached', timeout: 8000 })
+    const preview = shell.locator('img').first()
+    await preview.waitFor({ state: 'visible', timeout: 8000 })
+    await page.waitForFunction((image) => image instanceof HTMLImageElement && image.complete && image.naturalWidth > 0,
+      await preview.elementHandle(), { timeout: 8000 })
+    await page.mouse.move(20, 100)
+    await assertWorkbenchImageInput(shell)
+    if (restoreSelection) {
+      await shell.click()
+      await editor.waitFor({ state: 'visible', timeout: 12000 })
+      await assertWorkbenchImageInput(shell)
+    }
+  }
+
   async function setupCanvasRelightEditor(page) {
     const { projectId } = await seedAndOpenCanvasPanoramaProject(page)
     const sourceNode = page.locator('.react-flow__node[data-id="__ui_panorama_source"]')
@@ -32,6 +66,7 @@ function attachUiInspectionCanvasRelight(context) {
     await editor.waitFor({ state: 'visible', timeout: 12000 })
     const relightNode = relightShell.locator('xpath=ancestor::*[contains(@class,"react-flow__node")][1]')
     await resizeCanvasNodeAndAssertHitBox(page, relightNode, relightShell, '图片打光节点')
+    await verifyWorkbenchSelection(page, relightShell, sourceNode, editor)
     await editor.getByText('主光方向 · 离散偏好', { exact: true })
       .waitFor({ state: 'visible', timeout: 8000 })
     const directionControl = editor.locator('[data-relight-direction-control="true"]')
@@ -70,6 +105,9 @@ function attachUiInspectionCanvasRelight(context) {
       .fill('保留主体与文字，只调整光照氛围')
     const smartRelightShell = page.locator(`[data-relight-node-id="${relightNodeId}"][data-relight-mode="smart"]`)
     await smartRelightShell.waitFor({ state: 'visible', timeout: 8000 })
+    await sourceNode.click()
+    await page.mouse.move(20, 100)
+    await assertWorkbenchImageInput(smartRelightShell)
     if (await editor.locator('[data-relight-direction-control], img').evaluateAll((elements) =>
       elements.some((element) => element.hasAttribute('data-relight-direction-control') || element.offsetWidth > 96 || element.offsetHeight > 96))) {
       throw new Error('智能打光不应保留手动灯位或重复源图大图')
@@ -123,6 +161,7 @@ function attachUiInspectionCanvasRelight(context) {
       .waitFor({ state: 'visible', timeout: 8000 })
     await reopenedEditor.getByRole('button', { name: '正面', exact: true }).click()
     await reopenedEditor.getByRole('button', { name: '透视', exact: true }).click()
+    await verifyWorkbenchSelection(page, page.locator(`[data-relight-node-id="${relightNodeId}"]`), sourceNode, reopenedEditor, false)
     await settlePage(page, 900)
   }
 
@@ -149,6 +188,7 @@ function attachUiInspectionCanvasRelight(context) {
     await editor.waitFor({ state: 'visible', timeout: 12000 })
     const multiAngleNode = shell.locator('xpath=ancestor::*[contains(@class,"react-flow__node")][1]')
     await resizeCanvasNodeAndAssertHitBox(page, multiAngleNode, shell, '多角度节点')
+    await verifyWorkbenchSelection(page, shell, sourceNode, editor)
     await editor.locator('[data-multi-angle-orbit="demand"] canvas').waitFor({ state: 'visible', timeout: 12000 })
     await editor.getByText(/不代表真实焦距/).waitFor({ state: 'visible', timeout: 8000 })
     if (await editor.locator('textarea, [contenteditable="true"]').count()) throw new Error('角度编辑器不应显示提示词')
@@ -229,6 +269,7 @@ function attachUiInspectionCanvasRelight(context) {
     await page.mouse.down()
     await page.mouse.move(reopenedBounds.x + reopenedBounds.width / 2 + 72, reopenedBounds.y + reopenedBounds.height / 2 - 48, { steps: 8 })
     await page.mouse.up()
+    await verifyWorkbenchSelection(page, page.locator(`[data-multi-angle-node-id="${nodeId}"]`), sourceNode, reopenedEditor, false)
     await settlePage(page, 900)
   }
 

@@ -341,6 +341,7 @@ export const MultiAngleGenerationNode = memo(({
           embedded
           sourceControl={(
             <MediaInputRow
+              showHandle={false}
               nodeId={id}
               mediaKind="image"
               label={t('node.multiAngleGeneration.sourceImage')}

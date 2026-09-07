@@ -2,7 +2,9 @@ import type { ReactNode } from 'react';
 import { Handle, Position } from '@xyflow/react';
 
 import { resolveImageDisplayUrl } from '@/features/canvas/application/imageData';
-import { getSocketColor } from '@/features/canvas/domain/socketTypes';
+import { getSocketColor, mediaPortId } from '@/features/canvas/domain/socketTypes';
+import { useNodeHandlesSync } from '@/features/canvas/hooks/useNodeHandlesSync';
+import { useCanvasStore } from '@/stores/canvasStore';
 import { NodeHeader, NODE_HEADER_FLOATING_POSITION_CLASS } from '@/features/canvas/ui/NodeHeader';
 import { NodeLodPlaceholder } from '@/features/canvas/ui/NodeLodPlaceholder';
 import { NodeResizeHandle } from '@/features/canvas/ui/NodeResizeHandle';
@@ -56,6 +58,11 @@ export function ToolWorkbenchNodeFrame({
 }: ToolWorkbenchNodeFrameProps): JSX.Element {
   const resolvedWidth = Math.max(minWidth, typeof width === 'number' ? width : defaultWidth);
   const resolvedHeight = Math.max(minHeight, typeof height === 'number' ? height : defaultHeight);
+  const imageHandleId = mediaPortId('image');
+  const hasImageConnection = useCanvasStore((state) => state.edges.some(
+    (edge) => edge.target === nodeId && edge.targetHandle === imageHandleId,
+  ));
+  useNodeHandlesSync(nodeId, `${resolvedWidth}|${resolvedHeight}`);
 
   return (
     <div
@@ -79,6 +86,14 @@ export function ToolWorkbenchNodeFrame({
       <div className="canvas-node-lod-detail nodrag nowheel flex min-h-0 min-w-0 flex-1 overflow-hidden rounded-lg bg-bg-dark/45">
         {children}
       </div>
+      {/* 图片输入属于节点外壳，不随内部编辑器的选中状态或模式卸载。 */}
+      <Handle
+        type="target"
+        id={imageHandleId}
+        position={Position.Left}
+        className={`${NODE_PORT_NODE_CLASS} ${hasImageConnection ? NODE_PORT_VISIBLE_CLASS : ''}`}
+        style={{ background: getSocketColor('IMAGE'), left: 0, top: '50%', transform: 'translate(-50%, -50%)' }}
+      />
       <Handle
         type="source"
         id="source"
