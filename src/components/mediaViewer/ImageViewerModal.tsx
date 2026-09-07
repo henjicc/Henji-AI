@@ -30,6 +30,10 @@ const VIEWER_ICON_BUTTON_CLASS = `${VIEWER_HEIGHT_CLASS} !w-10 !rounded-full`;
 /** 玻璃上的胶囊按钮，配合 `variant="glass"` */
 const VIEWER_PILL_BUTTON_CLASS = `${VIEWER_HEIGHT_CLASS} !rounded-full !px-3`;
 
+function comparisonClip(left: boolean, position: number): string {
+  return left ? `inset(0 ${100 - position}% 0 0)` : `inset(0 0 0 ${position}%)`;
+}
+
 export interface ImageViewerModalProps {
   open: boolean;
   imageUrl: string;
@@ -93,12 +97,14 @@ export function ImageViewerModal({
   const [isVisible, setIsVisible] = useState(false);
   const [overlayOpacity, setOverlayOpacity] = useState(0);
   const [requestedMode, setRequestedMode] = useState<ImageComparisonMode>('single');
+  const [swappedModes, setSwappedModes] = useState({ 'side-by-side': false, overlay: false });
   const [failedOriginal, setFailedOriginal] = useState<string | null>(null);
   const comparisonAvailable = Boolean(comparisonImageUrl) && failedOriginal !== comparisonImageUrl;
   const [decodedOriginal, setDecodedOriginal] = useState<string | null>(null);
   const originalDisplayUrl = comparisonImageUrl ? resolveImageDisplayUrl(comparisonImageUrl) : null;
   const mode = comparisonAvailable && decodedOriginal === originalDisplayUrl ? requestedMode : 'single';
   const comparing = mode !== 'single';
+  const swapped = mode === 'single' ? false : swappedModes[mode];
   const comparisonStageRef = useRef<HTMLDivElement>(null);
   const resultPaneRef = useRef<HTMLDivElement>(null);
   const wipeRef = useRef<HTMLDivElement>(null);
@@ -109,8 +115,8 @@ export function ImageViewerModal({
     const position = Math.max(0, Math.min(100, value));
     dividerPositionRef.current = position;
     if (mode !== 'overlay') return;
-    if (resultPaneRef.current) resultPaneRef.current.style.clipPath = `inset(0 0 0 ${position}%)`;
-    if (wipeRef.current) wipeRef.current.style.clipPath = `inset(0 ${100 - position}% 0 0)`;
+    if (resultPaneRef.current) resultPaneRef.current.style.clipPath = comparisonClip(swapped, position);
+    if (wipeRef.current) wipeRef.current.style.clipPath = comparisonClip(!swapped, position);
     if (dividerRef.current) {
       dividerRef.current.style.left = `${position}%`;
       dividerRef.current.setAttribute('aria-valuenow', String(Math.round(position)));
@@ -136,6 +142,7 @@ export function ImageViewerModal({
 
   useEffect(() => {
     setRequestedMode('single');
+    setSwappedModes({ 'side-by-side': false, overlay: false });
     setFailedOriginal(null);
     dividerPositionRef.current = 50;
   }, [open, imageUrl, comparisonImageUrl]);
@@ -279,9 +286,11 @@ export function ImageViewerModal({
           <div ref={comparisonStageRef} className="absolute inset-4" data-comparison-stage="true">
             <div
               ref={resultPaneRef}
-              className="absolute inset-y-0 right-0 overflow-hidden"
+              className="absolute inset-y-0 overflow-hidden"
               style={{
-                clipPath: mode === 'overlay' ? `inset(0 0 0 ${dividerPositionRef.current}%)` : undefined,
+                clipPath: mode === 'overlay' ? comparisonClip(swapped, dividerPositionRef.current) : undefined,
+                left: mode === 'side-by-side' && swapped ? 0 : undefined,
+                right: mode === 'side-by-side' && swapped ? undefined : 0,
                 width: mode === 'side-by-side' ? '50%' : '100%',
               }}
               data-comparison-pane="result"
@@ -305,11 +314,13 @@ export function ImageViewerModal({
             {originalDisplayUrl && (
               <div
                 ref={wipeRef}
-                className="absolute inset-y-0 left-0 overflow-hidden"
+                className="absolute inset-y-0 overflow-hidden"
                 style={{
                   visibility: comparing ? 'visible' : 'hidden',
+                  left: mode === 'side-by-side' && swapped ? undefined : 0,
+                  right: mode === 'side-by-side' && swapped ? 0 : undefined,
                   width: mode === 'side-by-side' ? '50%' : '100%',
-                  clipPath: mode === 'overlay' ? `inset(0 ${100 - dividerPositionRef.current}% 0 0)` : undefined,
+                  clipPath: mode === 'overlay' ? comparisonClip(!swapped, dividerPositionRef.current) : undefined,
                 }}
                 data-comparison-pane="original"
               >
@@ -346,10 +357,10 @@ export function ImageViewerModal({
             {comparing && (
               <>
                 <span className="pointer-events-none absolute left-16 top-3 rounded-full bg-black/60 px-3 py-1 text-sm text-white">
-                  {t('viewer.original', '原图')}
+                  {swapped ? t('viewer.upscaled', '放大后') : t('viewer.original', '原图')}
                 </span>
                 <span className="pointer-events-none absolute right-16 top-3 rounded-full bg-black/60 px-3 py-1 text-sm text-white">
-                  {t('viewer.upscaled', '放大后')}
+                  {swapped ? t('viewer.original', '原图') : t('viewer.upscaled', '放大后')}
                 </span>
               </>
             )}
@@ -363,7 +374,7 @@ export function ImageViewerModal({
                 aria-valuemax={100}
                 aria-valuenow={Math.round(dividerPositionRef.current)}
                 aria-orientation="horizontal"
-                className="absolute inset-y-0 !h-full !w-8 -translate-x-1/2 !cursor-ew-resize !p-0 touch-none"
+                className="absolute inset-y-0 !h-full !w-8 -translate-x-1/2 !cursor-ew-resize !p-0 !bg-transparent touch-none"
                 style={{ left: `${dividerPositionRef.current}%` }}
                 onPointerDown={(event) => {
                   if (event.button !== 0) return;
@@ -431,7 +442,15 @@ export function ImageViewerModal({
                     aria-pressed={(comparisonAvailable ? requestedMode : 'single') === value}
                     disabled={value !== 'single' && !comparisonAvailable}
                     className="!h-full !rounded-full !px-4 !py-0 text-sm whitespace-nowrap"
-                    onClick={() => setRequestedMode(value)}
+                    title={value !== 'single' && requestedMode === value
+                      ? t('viewer.swapImages', '再次点击交换原图与放大图') : undefined}
+                    onClick={() => {
+                      if (value !== 'single' && requestedMode === value) {
+                        setSwappedModes((previous) => ({ ...previous, [value]: !previous[value] }));
+                      } else {
+                        setRequestedMode(value);
+                      }
+                    }}
                   >
                     {value === 'single' ? t('viewer.resultOnly', '仅结果')
                       : value === 'side-by-side' ? t('viewer.sideBySide', '左右对比')

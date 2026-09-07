@@ -197,7 +197,19 @@ function attachUiInspectionCanvasEnhance(context) {
     await page.mouse.down()
     await page.mouse.move(resultBox.x + resultBox.width / 2 + 60, resultBox.y + resultBox.height / 2 + 30, { steps: 8 })
     await page.mouse.up()
-    await assertSynchronized(zoomed)
+    const pannedSide = await assertSynchronized(zoomed)
+    await viewer.getByRole('button', { name: /^(左右对比|Side by side)$/i }).click()
+    const swappedOriginal = await original.boundingBox()
+    const swappedResult = await result.boundingBox()
+    if (!swappedOriginal || !swappedResult || swappedOriginal.x <= swappedResult.x
+      || (await readTransforms()).some((transform) => transform !== pannedSide)) {
+      throw new Error('左右交换未改变图片位置，或重置了缩放和平移')
+    }
+    await page.mouse.move(swappedOriginal.x + swappedOriginal.width / 2, swappedOriginal.y + swappedOriginal.height / 2)
+    await page.mouse.wheel(0, -120)
+    await assertSynchronized(pannedSide)
+    await viewer.getByRole('button', { name: /^(左右对比|Side by side)$/i }).click()
+    if ((await original.boundingBox()).x >= (await result.boundingBox()).x) throw new Error('再次交换未恢复原图在左')
     await writeFile('.ui-tour/canvas-upscale-side-by-side.png', await captureInspectionPage(electronApp, page))
     await viewer.getByRole('button', { name: /^(叠加对比|Overlay)$/i }).click()
     await viewer.locator('[role="slider"]').waitFor({ state: 'visible' })
@@ -208,7 +220,15 @@ function attachUiInspectionCanvasEnhance(context) {
     if (!stageBox || !dividerBox) throw new Error('叠加对比分界线不可见')
     const beforeDivider = (await readTransforms())[0]
     await page.mouse.move(dividerBox.x + dividerBox.width / 2, dividerBox.y + dividerBox.height / 2)
+    const assertTransparentDivider = async () => {
+      if (await divider.evaluate((element) => getComputedStyle(element).backgroundColor) !== 'rgba(0, 0, 0, 0)') {
+        throw new Error('分界线透明命中区在悬浮或拖动时出现底色')
+      }
+    }
+    await assertTransparentDivider()
     await page.mouse.down()
+    await assertTransparentDivider()
+    await writeFile('.ui-tour/canvas-upscale-divider-drag.png', await captureInspectionPage(electronApp, page))
     await page.mouse.move(stageBox.x + stageBox.width * 0.3, stageBox.y + stageBox.height / 2, { steps: 10 })
     await page.mouse.up()
     const dividerValue = Number(await divider.getAttribute('aria-valuenow'))
@@ -221,7 +241,18 @@ function attachUiInspectionCanvasEnhance(context) {
     await page.mouse.down()
     await page.mouse.move(stageBox.x + stageBox.width * 0.7 - 80, stageBox.y + stageBox.height / 2 - 40, { steps: 8 })
     await page.mouse.up()
-    await assertSynchronized(overlayZoom)
+    const pannedOverlay = await assertSynchronized(overlayZoom)
+    await viewer.getByRole('button', { name: /^(叠加对比|Overlay)$/i }).click()
+    const swappedClips = await viewer.locator('[data-comparison-pane]')
+      .evaluateAll((panes) => panes.map((pane) => ({ kind: pane.dataset.comparisonPane, clip: pane.style.clipPath })))
+    const originalClip = swappedClips.find((pane) => pane.kind === 'original')?.clip
+    const clipPosition = Number(originalClip?.match(/^inset\(0px 0px 0px ([\d.]+)%\)$/)?.[1])
+    if (!Number.isFinite(clipPosition) || Math.abs(clipPosition - 30) > 1
+      || Number(await divider.getAttribute('aria-valuenow')) !== 30
+      || (await readTransforms()).some((transform) => transform !== pannedOverlay)) {
+      throw new Error(`叠加交换丢失图片顺序或视图：${JSON.stringify(swappedClips)}`)
+    }
+    await viewer.getByRole('button', { name: /^(叠加对比|Overlay)$/i }).click()
     // 只观测目标图片与分界线：操作结束后不应存在持续更新的动画循环。
     const idleMutations = await viewer.evaluate(async (element) => {
       let count = 0

@@ -333,6 +333,7 @@
     }
   },
   "viewer": {
+    "swapImages": "Click again to swap original and upscaled images",
     "original": "Original",
     "upscaled": "Upscaled",
     "compare": "Compare",

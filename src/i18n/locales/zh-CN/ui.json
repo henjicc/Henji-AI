@@ -333,6 +333,7 @@
     }
   },
   "viewer": {
+    "swapImages": "再次点击交换原图与放大图",
     "original": "原图",
     "upscaled": "放大后",
     "compare": "对比查看",
