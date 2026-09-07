@@ -144,6 +144,23 @@ function attachUiInspectionCanvasEnhance(context) {
     const closeBox = await close.boundingBox()
     if (!viewerBox || !closeBox || closeBox.x < viewerBox.x + viewerBox.width - 90
       || closeBox.y > viewerBox.y + 70) throw new Error('查看器关闭按钮未位于右上角')
+    const singleViewport = await viewer.locator('img').first().evaluate((img) => {
+      const rect = img.parentElement.getBoundingClientRect()
+      return { x: rect.x, y: rect.y, width: rect.width, height: rect.height }
+    })
+    const assertFullComparisonViewport = async () => {
+      const stage = await viewer.locator('[data-comparison-stage]').boundingBox()
+      const controls = await viewer.locator('[data-viewer-controls]').boundingBox()
+      const modes = await viewer.getByRole('group', { name: /^(对比查看|Compare)$/i }).boundingBox()
+      const reset = await viewer.getByTitle(/^(重置视图|Reset View)$/i).boundingBox()
+      if (!stage || !controls || !modes || !reset
+        || ['x', 'y', 'width', 'height'].some((key) => Math.abs(stage[key] - singleViewport[key]) > 1)
+        || stage.height < viewerBox.height - 40
+        || controls.y + controls.height > stage.y + stage.height
+        || Math.abs(modes.y + modes.height / 2 - reset.y - reset.height / 2) > 1) {
+        throw new Error(`对比画面未充分利用视口，或底部工具未合并为一行：${JSON.stringify({ singleViewport, stage, controls, modes, reset })}`)
+      }
+    }
     await viewer.getByRole('button', { name: /^(左右对比|Side by side)$/i }).click()
     const original = viewer.locator('[data-comparison-pane="original"] img')
     const result = viewer.locator('[data-comparison-pane="result"] img')
@@ -154,6 +171,7 @@ function attachUiInspectionCanvasEnhance(context) {
     const resultBox = await result.boundingBox()
     if (!originalBox || !resultBox || originalBox.x >= resultBox.x
       || Math.abs(originalBox.width - resultBox.width) > 1) throw new Error('对比布局未等宽左右排列')
+    await assertFullComparisonViewport()
     const readTransforms = () => viewer.locator('[data-comparison-pane] img').evaluateAll((imgs) => imgs.map((img) => img.style.transform))
     const assertSynchronized = async (before) => {
       await page.waitForTimeout(450)
@@ -174,6 +192,7 @@ function attachUiInspectionCanvasEnhance(context) {
     await assertSynchronized(zoomed)
     await writeFile('.ui-tour/canvas-upscale-side-by-side.png', await captureInspectionPage(electronApp, page))
     await viewer.getByRole('button', { name: /^(叠加对比|Overlay)$/i }).click()
+    await assertFullComparisonViewport()
     const divider = viewer.getByRole('slider')
     const stageBox = await viewer.locator('[data-comparison-stage]').boundingBox()
     const dividerBox = await divider.boundingBox()

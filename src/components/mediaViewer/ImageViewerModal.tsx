@@ -266,7 +266,7 @@ export function ImageViewerModal({
           }}
         >
           {comparing ? (
-            <div ref={comparisonStageRef} className="absolute inset-x-4 top-16 bottom-36 bg-bg-dark" data-comparison-stage="true">
+            <div ref={comparisonStageRef} className="absolute inset-4 bg-bg-dark" data-comparison-stage="true">
               <div
                 className="absolute inset-y-0 right-0 overflow-hidden"
                 style={{ width: mode === 'side-by-side' ? '50%' : '100%' }}
@@ -308,10 +308,10 @@ export function ImageViewerModal({
                   }}
                 />
               </div>
-              <span className="pointer-events-none absolute left-3 top-3 rounded-full bg-black/60 px-3 py-1 text-sm text-white">
+              <span className="pointer-events-none absolute left-16 top-3 rounded-full bg-black/60 px-3 py-1 text-sm text-white">
                 {t('viewer.original', '原图')}
               </span>
-              <span className="pointer-events-none absolute right-3 top-3 rounded-full bg-black/60 px-3 py-1 text-sm text-white">
+              <span className="pointer-events-none absolute right-16 top-3 rounded-full bg-black/60 px-3 py-1 text-sm text-white">
                 {t('viewer.upscaled', '放大后')}
               </span>
               {mode === 'overlay' && (
@@ -363,7 +363,7 @@ export function ImageViewerModal({
               )}
             </div>
           ) : (
-            <div className="relative">
+            <div className="absolute inset-4">
               <img
                 ref={imageRef}
                 src={resolveImageDisplayUrl(imageUrl)}
@@ -372,8 +372,8 @@ export function ImageViewerModal({
                 style={{
                   opacity: viewerOpacity * overlayOpacity,
                   transformOrigin: 'center',
-                  width: '95vw',
-                  height: '95vh',
+                  width: '100%',
+                  height: '100%',
                   objectFit: 'contain',
                 }}
                 onLoad={handleImageLoad}
@@ -404,9 +404,14 @@ export function ImageViewerModal({
 
           <ImageInfoPanel open={open} imageSource={resolvedInfoSource} />
 
-          <div className="absolute bottom-8 left-1/2 z-sticky flex -translate-x-1/2 flex-col items-center gap-3">
+          {failedOriginal && (
+            <div className="absolute bottom-24 left-1/2 z-sticky -translate-x-1/2">
+              <UiError size="xs" message={t('viewer.originalUnavailable', '原图无法加载，仍可查看放大结果')} />
+            </div>
+          )}
+          <div data-viewer-controls="true" className="absolute bottom-8 left-1/2 z-sticky flex max-w-[calc(100%_-_2rem)] -translate-x-1/2 items-center gap-3 overflow-x-auto">
             {comparisonImageUrl && (
-              <div className="ui-glass flex max-w-full items-center gap-1 rounded-full p-1" role="group" aria-label={t('viewer.compare', '对比查看')}>
+              <div className="ui-glass flex shrink-0 items-center gap-1 rounded-full p-1" role="group" aria-label={t('viewer.compare', '对比查看')}>
                 {(['single', 'side-by-side', 'overlay'] as const).map((value) => (
                   <UiOptionButton
                     key={value}
@@ -424,9 +429,8 @@ export function ImageViewerModal({
                 ))}
               </div>
             )}
-            {failedOriginal && <UiError size="xs" message={t('viewer.originalUnavailable', '原图无法加载，仍可查看放大结果')} />}
             {imageList.length > 1 && (
-              <div className="flex items-center gap-3">
+              <div className="flex shrink-0 items-center gap-3">
                 <UiIconButton
                   appearance="glass"
                   onClick={() => onNavigate('prev')}
@@ -448,7 +452,7 @@ export function ImageViewerModal({
               </div>
             )}
 
-            <div className="flex items-center gap-4">
+            <div className="flex shrink-0 items-center gap-3">
               {imageList.length > 1 && (
                 <div className={VIEWER_CONTROL_CLASS}>
                   {currentIndex + 1} / {imageList.length}
