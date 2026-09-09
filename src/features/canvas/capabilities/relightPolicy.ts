@@ -7,7 +7,7 @@ import {
 import type { CanvasImageCapabilityModelPolicy } from './types'
 
 export const RELIGHT_CONTRACT_VERSION = 1 as const
-export const RELIGHT_MANUAL_TEMPLATE_VERSION = 'relight-manual-iclight-v1'
+export const RELIGHT_MANUAL_TEMPLATE_VERSION = 'relight-manual-iclight-v2'
 export const RELIGHT_SMART_TEMPLATE_VERSION = 'relight-smart-gpt-image-2-v1'
 
 export const RELIGHT_KEY_DIRECTIONS = ['none', 'left', 'right', 'top', 'bottom'] as const
@@ -183,7 +183,7 @@ const COLOR_PROMPTS: Record<RelightColorPreset, string> = {
   cool: 'cool white illumination',
   amber: 'amber key-light tint',
   red: 'red key-light tint',
-  blue: 'blue key-light tint',
+  blue: 'blue key-light tint, distinctly blue illumination across the subject and blue highlights, not neutral white daylight',
   cyan: 'cyan key-light tint',
   magenta: 'magenta key-light tint',
 }
@@ -205,9 +205,9 @@ export function compileManualRelightPrompt(settings: RelightSettingsV1): string 
     ? 'no additional rim light request'
     : `subtle rim light from the ${normalized.manual.rimDirection} image-relative direction; keep it secondary to the key light`
   const user = normalized.manual.extraPrompt
-    ? `\n\n[用户补充]\n${normalized.manual.extraPrompt}`
+    ? `\n\nAdditional requirements: ${normalized.manual.extraPrompt}`
     : ''
-  return `[任务]\n仅对输入图像重新打光。保留原始主体身份、五官、姿势、轮廓、物体几何、构图、镜头和核心材质，不新增或删除对象。\n\n[亮度意图]\n${BRIGHTNESS_PROMPTS[normalized.manual.brightness]}\n\n[主光色调]\n${COLOR_PROMPTS[normalized.manual.colorPreset]}\n\n[轮廓光]\n${rim}${user}\n\n[负面约束]\n不改变背景布局，不改变衣着、产品标志、文字、手部或边缘细节，不生成第二个主体。`
+  return `${COLOR_PROMPTS[normalized.manual.colorPreset]}. ${BRIGHTNESS_PROMPTS[normalized.manual.brightness]}. ${rim}. Relight the original subject only. Preserve identity, face, pose, anatomy, proportions, clothing, materials, composition, background layout, text and logos. Keep the light color visible on the subject, not only in the background. No added objects.${user}`
 }
 
 export function compileSmartRelightPrompt(settings: RelightSettingsV1): string {

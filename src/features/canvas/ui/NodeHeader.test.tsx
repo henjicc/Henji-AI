@@ -130,14 +130,15 @@ describe('NodeHeader', () => {
     expect(rendered.getByRole('textbox')).toBeTruthy();
   });
 
-  it('在标题旁显示当前节点的执行阶段', () => {
+  it.each(['processing', 'generating'] as const)('执行阶段 %s 不在标题旁重复显示文字', (phase) => {
     useCanvasExecutionStateStore.getState().beginNodeExecution('node-1', {
       runId: 'run-1',
-      phase: 'processing',
+      phase,
     });
 
     const { rendered } = renderHeader();
 
-    expect(rendered.getByRole('status').textContent).toContain('处理中');
+    expect(rendered.queryByRole('status')).toBeNull();
+    expect(rendered.getByText('AI 图片')).toBeTruthy();
   });
 });

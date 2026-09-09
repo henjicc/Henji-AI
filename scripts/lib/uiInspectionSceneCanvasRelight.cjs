@@ -3,7 +3,7 @@ const { captureInspectionPage } = require('./uiInspectionCapture.cjs')
 const { verifyRelightRim } = require('./uiInspectionRelightRim.cjs')
 const { prepareRelightPortrait, verifyRelightSpatial } = require('./uiInspectionRelightSpatial.cjs')
 const { assertStableWorkbenchSelection } = require('./uiInspectionWorkbenchSelection.cjs')
-const { readRelightLayout, switchRelightMode, verifyRelightResizeModes, ensureWorkbenchInViewport } = require('./uiInspectionRelightLayout.cjs')
+const { readRelightLayout, switchRelightMode, verifyRelightResizeModes, ensureWorkbenchInViewport, assertWorkbenchHeaderAlignment } = require('./uiInspectionRelightLayout.cjs')
 
 function attachUiInspectionCanvasRelight(context) {
   const {
@@ -32,6 +32,7 @@ function attachUiInspectionCanvasRelight(context) {
 
   async function verifyWorkbenchSelection(page, shell, sourceNode, editor, electronApp, name, restoreSelection = true) {
     await ensureWorkbenchInViewport(page, shell)
+    await assertWorkbenchHeaderAlignment(shell)
     await assertWorkbenchImageInput(shell)
     await assertStableWorkbenchSelection(page, shell, sourceNode, editor, electronApp, name, restoreSelection)
     await assertWorkbenchImageInput(shell)

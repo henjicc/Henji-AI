@@ -2,7 +2,7 @@
 
 | 项目 | 内容 |
 |---|---|
-| 最后更新 | 2026-08-29 |
+| 最后更新 | 2026-09-10 |
 | 模态 | 图片编辑 / 重打光 |
 | 供应商 | fal.ai（聚合平台） |
 | 平台模型 ID | `fal-ai/iclight-v2` |
@@ -30,20 +30,20 @@ IC-Light v2 接收一张源图，通过文字描述和离散的初始光照偏�
 | `prompt` | string | 是 | — | 由手动模式提示词编译器生成 |
 | `image_url` | string | 是 | — | 恰好一张源图，由现有 Fal 上传链路提供 |
 | `initial_latent` | enum | 否 | `None` | 仅 `None` / `Left` / `Right` / `Top` / `Bottom` |
-| `image_size` | enum/object | 否 | `square_hd` | 首版按源图比例选择最近常见比例并固定约 1MP |
+| `image_size` | enum/object | 否 | — | 按源图实际比例计算约 1MP 自定义整数宽高，不吸附到预设比例；两边均为 1–14142 |
 | `num_images` | integer | 否 | `1` | 固定 `1` |
 | `num_inference_steps` | integer | 否 | `28` | 固定 `28` |
-| `cfg_scale` | number | 否 | `1` | 固定 `1` |
+| `cfg` | number | 否 | `1` | 固定 `1`，范围 0.01–5；旧文档的 `cfg_scale` 不属于官方字段 |
 | `guidance_scale` | number | 否 | `5` | 固定 `5` |
 | `lowres_denoise` | number | 否 | `0.98` | 固定 `0.98` |
 | `highres_denoise` | number | 否 | `0.95` | 固定 `0.95` |
-| `highres_scale` | number | 否 | `0.5` | 固定 `0.5` |
+| `hr_downscale` | number | 否 | `0.5` | 固定 `0.5`，范围 0.01–1；旧文档的 `highres_scale` 不属于官方字段 |
 | `enable_hr_fix` | boolean | 否 | `false` | 固定 `false`，首版避免额外成本与时延 |
 | `enable_safety_checker` | boolean | 否 | `true` | 固定 `true` |
-| `mask_url` | string | 否 | — | 首版不开放 |
+| `mask_image_url` | string | 否 | — | 首版不开放 |
 | `negative_prompt` | string | 否 | — | 不展示、不发送 |
 | `seed` | integer | 否 | — | 不展示、不发送 |
-| `output_format` | enum | 否 | `png` | 不展示、不发送，沿用供应商默认 |
+| `output_format` | enum | 否 | `jpeg` | 不展示、不发送，沿用供应商默认 |
 
 ## 4. 请求示例
 
@@ -52,14 +52,14 @@ IC-Light v2 接收一张源图，通过文字描述和离散的初始光照偏�
   "prompt": "Preserve the subject and composition. Apply a soft warm key light from the left.",
   "image_url": "https://.../source.png",
   "initial_latent": "Left",
-  "image_size": { "width": 1376, "height": 768 },
+  "image_size": { "width": 1365, "height": 768 },
   "num_images": 1,
   "num_inference_steps": 28,
-  "cfg_scale": 1,
+  "cfg": 1,
   "guidance_scale": 5,
   "lowres_denoise": 0.98,
   "highres_denoise": 0.95,
-  "highres_scale": 0.5,
+  "hr_downscale": 0.5,
   "enable_hr_fix": false,
   "enable_safety_checker": true
 }
@@ -70,7 +70,7 @@ IC-Light v2 接收一张源图，通过文字描述和离散的初始光照偏�
 ```json
 {
   "images": [
-    { "url": "https://...", "width": 1376, "height": 768, "content_type": "image/png" }
+    { "url": "https://...", "width": 1365, "height": 768, "content_type": "image/jpeg" }
   ]
 }
 ```
@@ -78,6 +78,9 @@ IC-Light v2 接收一张源图，通过文字描述和离散的初始光照偏�
 Fal 模型页公开价格为 **$0.10/百万像素**。首版固定约 1MP、单张输出，目录保守估算为 **$0.10/次**。实际账单仍以 Fal 返回和账户账单为准，登录后的额度、地区可用性与最终账单尚待真实验证。
 
 ## 6. 错误与降级
+
+- 2026-09-10 重核官方 OpenAPI：自定义宽高合法，不存在只能选择五种比例的限制。旧代码把约 2:3 原图选成约 3:4 输出，属于本地请求尺寸策略错误；改为直接使用源图比例，仅有整数像素舍入误差。上传原图和下载结果不作非等比拉伸，也不为预设比例额外裁切。Fal 内部如何变换图像未在公开 schema 中说明，不能把输出人物变化全部归因于本地缩放。
+- 亮度、色调和轮廓光只有提示词意图，没有对应数值 API 字段；颜色传达正确不代表生成结果能精确还原预览。手动提示词将主光颜色放在开头，并明确彩色光照射主体，仍需真实生成评估效果。
 
 - 缺少源图或源图超过一张：在请求构建前失败，不提交任务。
 - Fal 凭据、端点或余额不可用：显示明确失败，不自动切换模型。

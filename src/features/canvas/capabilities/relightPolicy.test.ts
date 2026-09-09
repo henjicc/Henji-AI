@@ -85,6 +85,17 @@ describe('打光设置与路由契约', () => {
     expect(route.params.falGptImage2NumImages).toBe(1)
   })
 
+  it('蓝色高亮意图进入最终官方请求，且源图保持原样', async () => {
+    const prepared = prepareRelightGenerationInput({ ...DEFAULT_RELIGHT_SETTINGS,
+      manual: { ...DEFAULT_RELIGHT_SETTINGS.manual, colorPreset: 'blue', brightness: 2, keyDirection: 'left' },
+    }, models, ['source.png'])
+    const body = await falIcLightV2Model.request!.builder!({ ...prepared.params, __firstImageRatio: 853 / 1280 })
+    expect(body.prompt).toMatch(/^blue key-light tint, distinctly blue illumination/)
+    expect(body.prompt).toContain('high-key bright illumination')
+    expect(body).toMatchObject({ image_url: 'source.png', initial_latent: 'Left' })
+    expect(prepared.upstream.images).toEqual(['source.png'])
+  })
+
   it('显式拒绝多张光照参考图和不可用路由', () => {
     expect(() => normalizeRelightSettings({
       ...DEFAULT_RELIGHT_SETTINGS,

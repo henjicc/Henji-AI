@@ -1,0 +1,237 @@
+{
+  "kind": "capability",
+  "source": {
+    "url": "https://fal.ai/api/openapi/queue/openapi.json?endpoint_id=fal-ai/iclight-v2",
+    "retrievedAt": "2026-09-10",
+    "requiresLogin": false,
+    "classification": "官方 OpenAPI 原样摘取 BaseInput 与 ImageSize schema"
+  },
+  "input": {
+    "title": "BaseInput",
+    "x-fal-order-properties": [
+      "prompt",
+      "negative_prompt",
+      "image_url",
+      "mask_image_url",
+      "background_threshold",
+      "image_size",
+      "num_inference_steps",
+      "seed",
+      "initial_latent",
+      "enable_hr_fix",
+      "sync_mode",
+      "num_images",
+      "cfg",
+      "lowres_denoise",
+      "highres_denoise",
+      "hr_downscale",
+      "guidance_scale",
+      "enable_safety_checker",
+      "output_format"
+    ],
+    "required": [
+      "prompt",
+      "image_url"
+    ],
+    "type": "object",
+    "properties": {
+      "seed": {
+        "title": "Seed",
+        "description": "\n            The same seed and the same prompt given to the same version of the model\n            will output the same image every time.\n        ",
+        "anyOf": [
+          {
+            "type": "integer"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "image_url": {
+        "examples": [
+          "https://storage.googleapis.com/falserverless/iclight-v2/bottle.png"
+        ],
+        "title": "Image Url",
+        "type": "string",
+        "description": "URL of image to be used for relighting"
+      },
+      "negative_prompt": {
+        "title": "Negative Prompt",
+        "type": "string",
+        "description": "Negative Prompt for the image",
+        "default": ""
+      },
+      "sync_mode": {
+        "title": "Sync Mode",
+        "type": "boolean",
+        "description": "If `True`, the media will be returned as a data URI and the output data won't be available in the request history.",
+        "default": false
+      },
+      "initial_latent": {
+        "title": "Initial Latent",
+        "enum": [
+          "None",
+          "Left",
+          "Right",
+          "Top",
+          "Bottom"
+        ],
+        "type": "string",
+        "description": "\n            Provide lighting conditions for the model\n        ",
+        "default": "None"
+      },
+      "guidance_scale": {
+        "title": "Guidance scale (CFG)",
+        "maximum": 20,
+        "minimum": 0,
+        "type": "number",
+        "description": "\n            The CFG (Classifier Free Guidance) scale is a measure of how close you want\n            the model to stick to your prompt when looking for a related image to show you.\n        ",
+        "default": 5
+      },
+      "mask_image_url": {
+        "title": "Mask Image Url",
+        "description": "URL of mask to be used for ic-light conditioning image",
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "background_threshold": {
+        "title": "Background Threshold",
+        "maximum": 1,
+        "minimum": 0.01,
+        "type": "number",
+        "description": "Threshold for the background removal algorithm. A high threshold will produce sharper masks. Note: This parameter is currently deprecated and has no effect on the output.",
+        "default": 0.67
+      },
+      "highres_denoise": {
+        "title": "Highres Denoise",
+        "maximum": 1,
+        "minimum": 0.01,
+        "type": "number",
+        "description": "Strength for high-resolution pass. Only used if enable_hr_fix is True.",
+        "default": 0.95
+      },
+      "enable_hr_fix": {
+        "title": "Enable Hr Fix",
+        "type": "boolean",
+        "description": "Use HR fix",
+        "default": false
+      },
+      "cfg": {
+        "title": "Cfg",
+        "maximum": 5,
+        "minimum": 0.01,
+        "type": "number",
+        "description": "The real classifier-free-guidance scale for the generation.",
+        "default": 1
+      },
+      "image_size": {
+        "title": "Image Size",
+        "description": "The size of the generated image.",
+        "anyOf": [
+          {
+            "$ref": "#/components/schemas/ImageSize"
+          },
+          {
+            "enum": [
+              "square_hd",
+              "square",
+              "portrait_4_3",
+              "portrait_16_9",
+              "landscape_4_3",
+              "landscape_16_9"
+            ],
+            "type": "string"
+          }
+        ]
+      },
+      "output_format": {
+        "title": "Output Format",
+        "enum": [
+          "jpeg",
+          "png"
+        ],
+        "type": "string",
+        "description": "The format of the generated image.",
+        "default": "jpeg"
+      },
+      "num_inference_steps": {
+        "title": "Num Inference Steps",
+        "maximum": 50,
+        "minimum": 1,
+        "type": "integer",
+        "description": "The number of inference steps to perform.",
+        "default": 28
+      },
+      "hr_downscale": {
+        "title": "Hr Downscale",
+        "maximum": 1,
+        "minimum": 0.01,
+        "type": "number",
+        "description": "",
+        "default": 0.5
+      },
+      "lowres_denoise": {
+        "title": "Lowres Denoise",
+        "maximum": 1,
+        "minimum": 0.01,
+        "type": "number",
+        "description": "Strength for low-resolution pass.",
+        "default": 0.98
+      },
+      "prompt": {
+        "examples": [
+          "perfume bottle in a volcano surrounded by lava."
+        ],
+        "title": "Prompt",
+        "type": "string",
+        "description": "The prompt to generate an image from."
+      },
+      "enable_safety_checker": {
+        "title": "Enable Safety Checker",
+        "type": "boolean",
+        "description": "If set to true, the safety checker will be enabled. Disabling it requires account authorization; unauthorized requests are always checked.",
+        "default": true
+      },
+      "num_images": {
+        "title": "Num Images",
+        "maximum": 4,
+        "minimum": 1,
+        "type": "integer",
+        "description": "The number of images to generate.",
+        "default": 1
+      }
+    }
+  },
+  "imageSize": {
+    "title": "ImageSize",
+    "x-fal-order-properties": [
+      "width",
+      "height"
+    ],
+    "type": "object",
+    "properties": {
+      "height": {
+        "title": "Height",
+        "maximum": 14142,
+        "type": "integer",
+        "description": "The height of the generated image.",
+        "default": 512,
+        "exclusiveMinimum": 0
+      },
+      "width": {
+        "title": "Width",
+        "maximum": 14142,
+        "type": "integer",
+        "description": "The width of the generated image.",
+        "default": 512,
+        "exclusiveMinimum": 0
+      }
+    }
+  }
+}

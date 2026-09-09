@@ -75,4 +75,14 @@ async function ensureWorkbenchInViewport(page, shell) {
   throw new Error('完整工作面无法进入当前巡检视口')
 }
 
-module.exports = { readRelightLayout, switchRelightMode, verifyRelightResizeModes, ensureWorkbenchInViewport }
+async function assertWorkbenchHeaderAlignment(shell) {
+  const delta = await shell.locator('[data-node-header="true"]').evaluate(header => {
+    const title = header.querySelector('button[title]')?.getBoundingClientRect()
+    const meta = header.querySelector('[data-node-header-meta]')?.getBoundingClientRect()
+    if (!title || !meta) throw new Error('工作台标题或价格缺失')
+    return Math.abs(title.top + title.height / 2 - meta.top - meta.height / 2)
+  })
+  if (delta > 1) throw new Error(`工作台标题与模型价格未对齐：${delta}px`)
+}
+
+module.exports = { readRelightLayout, switchRelightMode, verifyRelightResizeModes, ensureWorkbenchInViewport, assertWorkbenchHeaderAlignment }

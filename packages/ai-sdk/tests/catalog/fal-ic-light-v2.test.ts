@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import { falIcLightV2Model } from '../../src/catalog/fal/ic-light-v2.model'
+import officialSchema from '../fixtures/fal/ic-light-v2-schema.json'
 
 describe('Fal IC-Light v2 catalog', () => {
   it('固定使用官方端点与单图输入契约', async () => {
@@ -22,14 +23,14 @@ describe('Fal IC-Light v2 catalog', () => {
       prompt: 'soft warm key light',
       image_url: 'source.png',
       initial_latent: 'Left',
-      image_size: { width: 1376, height: 768 },
+      image_size: { width: 1365, height: 768 },
       num_images: 1,
       num_inference_steps: 28,
-      cfg_scale: 1,
+      cfg: 1,
       guidance_scale: 5,
       lowres_denoise: 0.98,
       highres_denoise: 0.95,
-      highres_scale: 0.5,
+      hr_downscale: 0.5,
       enable_hr_fix: false,
       enable_safety_checker: true,
     })
@@ -55,5 +56,16 @@ describe('Fal IC-Light v2 catalog', () => {
   it('按 Fal 官方百万像素单价保守估算首版费用', () => {
     expect(falIcLightV2Model.pricing.calculator?.({})).toBe(0.1)
     expect(falIcLightV2Model.pricing.description).toContain('$0.10/百万像素')
+  })
+
+  it.each([853 / 1280, 2 / 3, 3 / 2, 1 / 3, 3, 16 / 9])('保留源图比例 %s 而非强制套入预设', async (ratio) => {
+    const body = await falIcLightV2Model.request!.builder!({ images: ['source.png'], __firstImageRatio: ratio })
+    const size = body.image_size as { width: number; height: number }
+    expect(Math.abs(size.width / size.height / ratio - 1)).toBeLessThan(0.0015)
+    expect(size.width * size.height).toBeGreaterThan(1040000)
+    expect(size.width * size.height).toBeLessThan(1058000)
+    expect(body.image_url).toBe('source.png')
+    for (const field of Object.keys(body)) expect(officialSchema.input.properties).toHaveProperty(field)
+    for (const field of officialSchema.input.required) expect(body).toHaveProperty(field)
   })
 })

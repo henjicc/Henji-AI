@@ -10,15 +10,12 @@ import {
   useState,
 } from 'react';
 import { useInternalNode, useNodeId, useStoreApi, ViewportPortal } from '@xyflow/react';
-import { useTranslation } from 'react-i18next';
 import {
-  UI_COLOR_ACCENT_TEXT_CLASS,
   UI_FIELD_FOCUS_CLASS,
   UI_FIELD_SURFACE_CLASS,
   UiButton,
   UiInput,
 } from '@/components/ui';
-import { useCanvasExecutionStateStore } from '@/stores/canvasExecutionStateStore';
 
 type HeaderAdjust = {
   x?: number;
@@ -54,7 +51,7 @@ type NodeHeaderProps = {
 export const NODE_HEADER_ICON_TITLE_ADJUST: HeaderAdjust = { x: -8, y: 8, scale: 1 };
 // 统一控制点：所有节点右上角价格徽标（PriceEstimate）相对于节点的位置微调。
 // 只改这一处数值即可同时影响全部节点；x/y 单位为 px，scale 为缩放比例。
-export const NODE_HEADER_PRICE_ADJUST: HeaderAdjust = { x: -8, y: 0, scale: 1 };
+export const NODE_HEADER_PRICE_ADJUST: HeaderAdjust = NODE_HEADER_ICON_TITLE_ADJUST;
 
 export const NODE_HEADER_TONE_CLASS = 'text-white/55';
 export const NODE_HEADER_TITLE_CLASS = 'text-14 font-normal';
@@ -124,13 +121,9 @@ export function NodeHeader({
   editable = false,
   onTitleChange,
 }: NodeHeaderProps) {
-  const { t } = useTranslation();
   const nodeId = useNodeId();
   const internalNode = useInternalNode(nodeId ?? '');
   const storeApi = useStoreApi();
-  const activeExecution = useCanvasExecutionStateStore(
-    (state) => nodeId ? state.activeNodes[nodeId] : undefined,
-  );
   const tone = toneClassName ?? NODE_HEADER_TONE_CLASS;
   const canEditTitle = editable && typeof titleText === 'string' && typeof onTitleChange === 'function';
   const inputRef = useRef<HTMLInputElement | null>(null);
@@ -281,19 +274,6 @@ export function NodeHeader({
   const resolvedMeta = metaText
     ? <span className={joinClasses(NODE_HEADER_META_CLASS, metaClassName)}>{metaText}</span>
     : meta;
-  const executionStatus = activeExecution ? (
-    <span
-      role="status"
-      aria-live="polite"
-      className={joinClasses(
-        'inline-flex shrink-0 items-center gap-1 text-2xs font-medium',
-        UI_COLOR_ACCENT_TEXT_CLASS,
-      )}
-    >
-      <span className="h-1.5 w-1.5 rounded-full bg-accent" aria-hidden="true" />
-      {t(`node.execution.${activeExecution.phase}`)}
-    </span>
-  ) : null;
 
   const handleDragSurfaceMouseDown = useCallback((event: ReactMouseEvent<HTMLDivElement>) => {
     if (!nodeId || event.button !== 0 || isEditingTitle) {
@@ -389,7 +369,7 @@ export function NodeHeader({
 
   return (
     <>
-      <div className={joinClasses('flex w-full max-w-full items-start justify-between gap-2', className)}>
+      <div data-node-header="true" className={joinClasses('flex w-full max-w-full items-center justify-between gap-2', className)}>
         <div className="min-w-0 flex-1" style={composeTransformStyle(headerAdjust)}>
           <div className={joinClasses('flex w-full items-center gap-1', titleRowClassName)}>
             {icon ? (
@@ -402,7 +382,6 @@ export function NodeHeader({
             ) : null}
             <div className="flex min-w-0 flex-1 items-baseline gap-2" style={composeTransformStyle(titleAdjust)}>
               {resolvedTitle}
-              {executionStatus}
               {resolvedMeta}
             </div>
           </div>
@@ -413,7 +392,7 @@ export function NodeHeader({
           ) : null}
         </div>
         {rightSlot ? (
-          <div className="shrink-0" style={composeTransformStyle(rightSlotAdjust)}>
+          <div data-node-header-meta="true" className="flex shrink-0 items-center" style={composeTransformStyle(rightSlotAdjust)}>
             {rightSlot}
           </div>
         ) : null}

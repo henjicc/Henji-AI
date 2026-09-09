@@ -1,6 +1,5 @@
 import { defineModel } from '../defineModel'
 import type { JsonObject, JsonValue } from '../../types/runtime'
-import { falOneMegapixelSize } from './imageSizing'
 
 const IC_LIGHT_DIRECTIONS = ['None', 'Left', 'Right', 'Top', 'Bottom'] as const
 
@@ -10,15 +9,12 @@ function cleanImages(value: JsonValue): string[] {
     : []
 }
 
-function nearestRatioText(ratio: number): string {
-  const candidates = ['1:1', '4:3', '3:4', '16:9', '9:16'] as const
-  return candidates.reduce((best, candidate) => {
-    const [width, height] = candidate.split(':').map(Number)
-    const [bestWidth, bestHeight] = best.split(':').map(Number)
-    return Math.abs(width / height - ratio) < Math.abs(bestWidth / bestHeight - ratio)
-      ? candidate
-      : best
-  }, '1:1' as (typeof candidates)[number])
+function sourceAspectSize(ratio: number): JsonObject {
+  // Fal ImageSize 接受自定义整数尺寸，不应把源图吸附到少数比例预设。
+  // 只等比控制约 1MP 的输出尺寸；不对上传原图作非等比拉伸。
+  const scale = Math.min(1024, 14142 / Math.sqrt(ratio), 14142 * Math.sqrt(ratio))
+  return { width: Math.max(1, Math.round(scale * Math.sqrt(ratio))),
+    height: Math.max(1, Math.round(scale / Math.sqrt(ratio))) }
 }
 
 export const falIcLightV2Model = defineModel({
@@ -68,14 +64,14 @@ export const falIcLightV2Model = defineModel({
         prompt: typeof params.prompt === 'string' ? params.prompt.slice(0, 32000) : '',
         image_url: images[0],
         initial_latent: direction,
-        image_size: falOneMegapixelSize(nearestRatioText(ratio)),
+        image_size: sourceAspectSize(ratio),
         num_images: 1,
         num_inference_steps: 28,
-        cfg_scale: 1,
+        cfg: 1,
         guidance_scale: 5,
         lowres_denoise: 0.98,
         highres_denoise: 0.95,
-        highres_scale: 0.5,
+        hr_downscale: 0.5,
         enable_hr_fix: false,
         enable_safety_checker: true,
       } satisfies JsonObject

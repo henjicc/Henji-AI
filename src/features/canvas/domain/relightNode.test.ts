@@ -27,7 +27,7 @@ describe('图片打光节点定义', () => {
     expect(canvasNodeDefinitions[CANVAS_NODE_TYPES.relightGen].createDefaultData()).toMatchObject({
       displayName: '图片打光',
       capabilityId: CANVAS_IMAGE_CAPABILITY_IDS.relight,
-      promptTemplateVersion: 'relight-manual-iclight-v1',
+      promptTemplateVersion: 'relight-manual-iclight-v2',
       relightSettings: {
         relightContractVersion: 1,
         lightingMode: 'manual',
