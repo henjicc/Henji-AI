@@ -1,4 +1,4 @@
-import { useId, useMemo, type ReactNode } from 'react'
+import { useId, useMemo, useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import Dropdown from '@/components/ui/Dropdown'
@@ -13,26 +13,19 @@ import {
 } from '@/components/ui/styleTokens'
 import { resolveImageDisplayUrl } from '@/features/canvas/application/imageData'
 import {
-  RELIGHT_BRIGHTNESS_LEVELS,
-  RELIGHT_COLOR_PRESETS,
   RELIGHT_RIM_DIRECTIONS,
   RELIGHT_SMART_PRESETS,
   normalizeRelightSettings,
-  type RelightBrightness,
-  type RelightColorPreset,
   type RelightRimDirection,
   type RelightSettingsV1,
   type RelightSmartPreset,
 } from '@/features/canvas/capabilities/relightPolicy'
 import { importLocalMedia } from '@/services/localMediaImport'
 import { RelightDirectionVisualizer } from './RelightDirectionVisualizer'
+import { RelightLightingControls, type RelightLightingDraft } from './RelightLightingControls'
 import { buildRelightEditorDraft } from './relightEditorDraft'
 import type { CanvasSpecialEditorSurfaceProps } from './specialEditorRegistry'
 
-const COLOR_LABELS: Record<RelightColorPreset, string> = {
-  neutral: '中性白', warm: '暖白', cool: '冷白', amber: '琥珀',
-  red: '红色', blue: '蓝色', cyan: '青色', magenta: '品红',
-}
 const RIM_LABELS: Record<RelightRimDirection, string> = {
   off: '关闭', left: '左', right: '右', top: '上', 'top-left': '左上',
   'top-right': '右上', bottom: '下', 'bottom-left': '左下', 'bottom-right': '右下',
@@ -41,9 +34,6 @@ const SMART_LABELS: Record<RelightSmartPreset, string> = {
   'natural-studio': '自然影棚', 'soft-window': '柔和窗光', 'golden-hour': '黄金时刻',
   overcast: '阴天柔光', 'hard-studio': '硬光影棚', moonlight: '月光夜景',
   neon: '霓虹氛围', dramatic: '戏剧光影',
-}
-const BRIGHTNESS_LABELS: Record<RelightBrightness, string> = {
-  [-2]: '很暗', [-1]: '偏暗', 0: '自然', 1: '偏亮', 2: '高调',
 }
 
 function sourceImageFromState(state: Readonly<DynamicValueMap>): string | null {
@@ -98,6 +88,8 @@ export function RelightWorkbench({
   embedded = false,
 }: RelightWorkbenchProps): JSX.Element {
   const { t } = useTranslation()
+  const [lightingDraft, setLightingDraft] = useState<RelightLightingDraft | null>(null)
+  const lighting = lightingDraft ?? settings.manual
   const updateSettings = (next: RelightSettingsV1): void => {
     onSettingsChange(normalizeRelightSettings(next))
   }
@@ -128,6 +120,8 @@ export function RelightWorkbench({
           <div className={`flex min-h-0 ${embedded ? 'p-2' : 'p-4'}`}>
             <RelightDirectionVisualizer
               direction={settings.manual.keyDirection}
+              brightness={lighting.brightness}
+              colorPreset={lighting.colorPreset}
               sourceImage={sourceImageUrl}
               sourceAlt={t('node.relightGeneration.sourceAlt')}
               onDirectionChange={(keyDirection) => patchManual({ keyDirection })}
@@ -163,26 +157,13 @@ export function RelightWorkbench({
 
           {settings.lightingMode === 'manual' ? (
             <div className="mt-4 space-y-3">
-              <div className="flex items-center justify-between gap-3">
-                <FieldTitle tooltip="选择画面整体的明暗感受，实际效果由模型生成。">亮度</FieldTitle>
-                <Dropdown
-                  ariaLabel="亮度"
-                  className="w-36"
-                  value={settings.manual.brightness}
-                  options={RELIGHT_BRIGHTNESS_LEVELS.map((value) => ({ value, label: BRIGHTNESS_LABELS[value] }))}
-                  onSelect={(brightness) => patchManual({ brightness })}
-                />
-              </div>
-              <div className="flex items-center justify-between gap-3">
-                <FieldTitle tooltip="选择灯光色调，实际颜色可能略有差异。">色调</FieldTitle>
-                <Dropdown
-                  ariaLabel="色调"
-                  className="w-36"
-                  value={settings.manual.colorPreset}
-                  options={RELIGHT_COLOR_PRESETS.map((value) => ({ value, label: COLOR_LABELS[value] }))}
-                  onSelect={(colorPreset) => patchManual({ colorPreset })}
-                />
-              </div>
+              <RelightLightingControls
+                value={lighting}
+                brightnessTitle={<FieldTitle tooltip="拖动选择五档明暗；光束为示意，实际效果由模型生成。">亮度</FieldTitle>}
+                colorTitle={<FieldTitle tooltip="拖动选择灯光色调，光束同步显示所选颜色。">色调</FieldTitle>}
+                onPreview={setLightingDraft}
+                onCommit={patchManual}
+              />
               <div className="flex items-center justify-between gap-3">
                 <FieldTitle tooltip="在主体边缘增加光线，方向用于引导生成效果。">轮廓光</FieldTitle>
                 <Dropdown

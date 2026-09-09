@@ -1,4 +1,7 @@
-import { APP_ACCENT_HEX, TEXT_LIGHT_HEX, WHITE_HEX } from '@/core/theme/colorTokens';
+import {
+  APP_ACCENT_HEX, TEXT_LIGHT_HEX, WHITE_HEX, CAMERA_STAGE_COLOR_HEX,
+  IMAGE_EDITOR_GLOW_TINT_HEX, SOCKET_TYPE_COLOR_HEX, CANVAS_GRID_ALT_HEX,
+} from '@/core/theme/colorTokens';
 
 export const UI_COLOR_ACCENT_BORDER_CLASS = 'border-brand-500';
 export const UI_COLOR_ACCENT_BG_CLASS = 'bg-accent';
@@ -290,3 +293,23 @@ export type UiModalSize = keyof typeof UI_MODAL_SIZE_CLASS;
 
 export const UI_UPLOADER_CARD_BORDER_CLASS = 'border-1.5 border-veil-strong';
 export const UI_UPLOADER_CARD_BORDER_OVERRIDE_CLASS = '!border-1.5 !border-veil-strong';
+/** 灯光色值是所选光源的内容色，不随界面主题变色。 */
+export const UI_LIGHTING_COLORS = {
+  amber: SOCKET_TYPE_COLOR_HEX.ENUM, warm: CAMERA_STAGE_COLOR_HEX.sunlightWarm,
+  neutral: WHITE_HEX, cool: IMAGE_EDITOR_GLOW_TINT_HEX.dreamy,
+  cyan: IMAGE_EDITOR_GLOW_TINT_HEX.neon, blue: SOCKET_TYPE_COLOR_HEX.NUMBER,
+  magenta: SOCKET_TYPE_COLOR_HEX.AUDIO, red: SOCKET_TYPE_COLOR_HEX.VIDEO,
+} as const
+
+export const UI_LIGHTING_BRIGHTNESS_GRADIENT = `linear-gradient(90deg, ${CANVAS_GRID_ALT_HEX}, ${TEXT_LIGHT_HEX})`
+export const UI_LIGHTING_COLOR_GRADIENT = `linear-gradient(90deg, ${Object.values(UI_LIGHTING_COLORS).join(', ')})`
+
+export const UI_LIGHTING_RANGE_CLASS = `rounded-full focus-visible:ring-2 focus-visible:ring-brand-300
+  [&::-webkit-slider-runnable-track]:!h-2.5 [&::-moz-range-track]:!h-2.5
+  [&::-webkit-slider-runnable-track]:[background:var(--lighting-track)] [&::-moz-range-track]:[background:var(--lighting-track)]
+  [&::-webkit-slider-thumb]:!mt-[-3px] [&::-webkit-slider-thumb]:!h-4 [&::-webkit-slider-thumb]:!w-7
+  [&::-moz-range-thumb]:!h-4 [&::-moz-range-thumb]:!w-7
+  [&::-webkit-slider-thumb]:!bg-[var(--lighting-color)] [&::-moz-range-thumb]:!bg-[var(--lighting-color)]
+  [&::-webkit-slider-thumb]:!border-2 [&::-webkit-slider-thumb]:!border-solid [&::-webkit-slider-thumb]:!border-veil-bright
+  [&::-moz-range-thumb]:!border-2 [&::-moz-range-thumb]:!border-solid [&::-moz-range-thumb]:!border-veil-bright
+  [&::-webkit-slider-thumb]:shadow-thumb [&::-moz-range-thumb]:shadow-thumb`

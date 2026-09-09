@@ -15,6 +15,7 @@ import {
   UI_FIELD_SURFACE_CLASS,
   UI_GLASS_ADAPTIVE_CONTROL_CLASS,
   UI_INSET_SURFACE_CLASS,
+  UI_LIGHTING_RANGE_CLASS,
   UI_PANEL_SURFACE_CLASS,
 } from './styleTokens'
 
@@ -107,7 +108,7 @@ export interface UiPanelProps extends HTMLAttributes<HTMLDivElement> {
 }
 
 /** 轨道底色。`hue` 铺满色相光谱，供色相选择使用。 */
-export type UiRangeTrackTone = 'neutral' | 'hue'
+export type UiRangeTrackTone = 'neutral' | 'hue' | 'lighting'
 
 export interface UiRangeInputProps extends Omit<InputHTMLAttributes<HTMLInputElement>, 'type'> {
   trackTone?: UiRangeTrackTone
@@ -170,4 +171,5 @@ export function resolveUiPanelSurface(variant: UiPanelVariant): string {
 export const UI_RANGE_TRACK_TONE_CLASS: Record<UiRangeTrackTone, string> = {
   neutral: '[&::-webkit-slider-runnable-track]:bg-layer/80 [&::-moz-range-track]:bg-layer/80',
   hue: 'ui-range-track-hue',
+  lighting: UI_LIGHTING_RANGE_CLASS,
 }

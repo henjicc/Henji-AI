@@ -87,8 +87,9 @@ function attachUiInspectionCanvasRelight(context) {
     await page.waitForTimeout(250) // 等按钮选中态颜色过渡结束再截图。
     await writeFile('.ui-tour/canvas-relight-smart-default.png', await captureInspectionPage(electronApp, page))
     await editor.getByRole('button', { name: /手动打光/ }).click()
-    await editor.getByRole('button', { name: '色调', exact: true }).click()
-    await page.getByRole('option', { name: '暖白', exact: true }).click()
+    await editor.getByRole('slider', { name: '色调', exact: true }).focus()
+    await page.keyboard.press('Home')
+    await page.keyboard.press('ArrowRight')
     await editor.getByRole('button', { name: '轮廓光', exact: true }).click()
     await page.getByRole('option', { name: '左上', exact: true }).click()
     await editor.getByPlaceholder('例如：保留商品标签清晰可读').fill('保留商品标签清晰可读')
@@ -126,6 +127,7 @@ function attachUiInspectionCanvasRelight(context) {
       throw new Error(`图片打光拖拽没有映射到右侧模型方向，实际为 ${await directionControl.getAttribute('data-relight-direction')}，命中为 ${JSON.stringify(directionHitTargets)}`)
     })
     if (await editor.getByRole('button', { name: '右侧', exact: true }).getAttribute('aria-pressed') !== 'true') throw new Error('方向按钮未同步拖拽结果')
+    await verifyLightingSliders(page, editor, electronApp)
     await editor.getByRole('button', { name: /智能打光/ }).click()
     await editor.getByRole('button', { name: '氛围预设', exact: true }).click()
     await page.getByRole('option', { name: '霓虹氛围', exact: true }).click()
@@ -170,6 +172,7 @@ function attachUiInspectionCanvasRelight(context) {
       || persisted.lightingMode !== 'smart'
       || persisted.preset !== 'neon'
       || persisted.manual?.colorPreset !== 'warm'
+      || persisted.manual?.brightness !== 2
       || persisted.manual?.rimDirection !== 'top-left'
       || persisted.manual?.extraPrompt !== '保留商品标签清晰可读'
       || persisted.templateVersion !== 'relight-smart-gpt-image-2-v1'
@@ -329,6 +332,57 @@ function attachUiInspectionCanvasRelight(context) {
     setupCanvasRelightEditor,
     setupCanvasMultiAngleEditor,
   })
+}
+
+async function verifyLightingSliders(page, editor, electronApp) {
+  const brightness = editor.getByRole('slider', { name: '亮度', exact: true })
+  const color = editor.getByRole('slider', { name: '色调', exact: true })
+  const stage = editor.locator('[data-relight-direction-control]')
+  await brightness.focus()
+  await page.keyboard.press('Home')
+  if (await stage.getAttribute('data-relight-brightness') !== '-2') throw new Error('亮度键盘操作未更新光束')
+  await writeFile('.ui-tour/canvas-relight-dim-warm.png', await captureInspectionPage(electronApp, page))
+  const before = await editor.boundingBox()
+  const track = await brightness.boundingBox()
+  if (!track || !before) throw new Error('打光滑条没有可操作尺寸')
+  await page.mouse.move(track.x + 14, track.y + track.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(track.x + track.width - 14, track.y + track.height / 2, { steps: 12 })
+  if (await stage.getAttribute('data-relight-brightness') !== '2') throw new Error('拖动亮度时没有实时预览')
+  await page.mouse.up()
+  const after = await editor.boundingBox()
+  if (!after || Math.abs(after.x - before.x) > 1 || Math.abs(after.y - before.y) > 1) throw new Error('操作滑条误拖动了节点')
+  await color.focus()
+  await page.keyboard.press('Home')
+  await page.keyboard.press('ArrowRight')
+  await page.keyboard.press('ArrowRight')
+  await page.keyboard.press('ArrowRight')
+  if (await stage.getAttribute('data-relight-color') !== 'cool') throw new Error('色调档位未更新光束')
+  const capture = await captureInspectionPage(electronApp, page)
+  const sharp = require('sharp')
+  const metadata = await sharp(capture).metadata()
+  const viewport = await page.evaluate(() => ({ width: innerWidth, height: innerHeight }))
+  // Chromium 不公开原生 range 伪元素的 computedStyle，用最终截图证明轨道确实有颜色过渡。
+  for (const [name, slider] of [['亮度', brightness], ['色调', color]]) {
+    const box = await slider.boundingBox()
+    const sample = async (fraction) => {
+      const pixels = await sharp(capture).extract({
+        left: Math.round((box.x + box.width * fraction) * metadata.width / viewport.width),
+        top: Math.round((box.y + box.height / 2) * metadata.height / viewport.height),
+        width: 2, height: 2,
+      }).toBuffer()
+      const stats = await sharp(pixels).stats()
+      return stats.channels.slice(0, 3).map((channel) => channel.mean)
+    }
+    const left = await sample(0.1)
+    const right = await sample(0.8)
+    if (Math.hypot(...left.map((channel, index) => channel - right[index])) < 60) {
+      throw new Error(`${name}滑条未显示足够可辨的渐变：${JSON.stringify({ left, right })}`)
+    }
+  }
+  await writeFile('.ui-tour/canvas-relight-bright-cool.png', capture)
+  await page.keyboard.press('ArrowLeft')
+  await page.keyboard.press('ArrowLeft')
 }
 
 module.exports = { attachUiInspectionCanvasRelight }
