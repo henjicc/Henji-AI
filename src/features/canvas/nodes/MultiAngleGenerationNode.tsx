@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { memo, useCallback, useEffect, useMemo, useRef } from 'react'
 import { type NodeProps } from '@xyflow/react'
 import { Camera } from 'lucide-react'
 import { useStoreWithEqualityFn } from 'zustand/traditional'
@@ -42,14 +42,12 @@ import { MediaInputRow } from '@/features/canvas/params/MediaInputRow'
 import { useCanvasStore } from '@/stores/canvasStore'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { ensureGenerationProviderConfigured } from './shared/generationNodeGuards'
-import { summarizeLocalizedMultiAngleConfig } from '@/features/canvas/ui/specialInterfaces/multiAngle/multiAngleLocalization'
 import {
   MultiAngleWorkbench,
 } from '@/features/canvas/ui/specialInterfaces/multiAngle/MultiAngleSpecialEditor'
 import { buildMultiAngleEditorDraft } from '@/features/canvas/ui/specialInterfaces/multiAngle/multiAngleEditorState'
 import {
   ToolWorkbenchNodeFrame,
-  ToolWorkbenchSourcePreview,
 } from './shared/ToolWorkbenchNodeFrame'
 
 export interface MultiAngleGenerationNodeData extends ImageEditNodeData {
@@ -146,7 +144,6 @@ export const MultiAngleGenerationNode = memo(({
   height,
 }: MultiAngleGenerationNodeProps) => {
   const { t } = useTranslation()
-  const [workbenchReady, setWorkbenchReady] = useState(false)
   const updateNodeData = useCanvasStore((state) => state.updateNodeData)
   const setSelectedNode = useCanvasStore((state) => state.setSelectedNode)
   const providerConfigured = useSettingsStore((state) => state.providerKeyStatus.fal === true)
@@ -164,17 +161,7 @@ export const MultiAngleGenerationNode = memo(({
     ? incomingSourceMedia.map((item) => item.url)
     : inlineSources.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
   const config = useMemo(() => normalizeMultiAngleConfig(data.multiAngleConfig), [data.multiAngleConfig])
-  const summary = useMemo(() => summarizeLocalizedMultiAngleConfig(t, config), [config, t])
 
-  useEffect(() => {
-    if (!selected) {
-      setWorkbenchReady(false)
-      return undefined
-    }
-    // 先让 ReactFlow 提交节点骨架，再在下一帧初始化 Three/WebGL，避免工具条点击被 GPU 上下文创建卡住。
-    const frame = window.requestAnimationFrame(() => setWorkbenchReady(true))
-    return () => window.cancelAnimationFrame(frame)
-  }, [selected])
 
   const prepareExecution = useCallback(() => {
     const latest = useCanvasStore.getState().nodes.find((node) => node.id === id)
@@ -307,6 +294,33 @@ export const MultiAngleGenerationNode = memo(({
   }), [handleGenerate, id, t])
   useEffect(() => () => activeControllerRef.current?.abort(), [])
 
+  const sourceImage = sourceImages[0] ?? null
+  // Selection updates the frame only; retain the workbench instance and its local view state.
+  const workbench = useMemo(() => (
+        <MultiAngleWorkbench
+          config={config}
+          sourceImage={sourceImage}
+          embedded
+          sourceControl={(
+            <MediaInputRow
+              showHandle={false}
+              nodeId={id}
+              mediaKind="image"
+              label={t('node.multiAngleGeneration.sourceImage')}
+              maxCount={1}
+              inlineValue={data.mediaInputs?.image ?? []}
+              onInlineChange={(images) => updateNodeData(id, {
+                mediaInputs: { ...(data.mediaInputs ?? {}), image: images },
+              })}
+            />
+          )}
+          onConfigChange={(nextConfig) => updateNodeData(
+            id,
+            buildMultiAngleEditorDraft(data, nextConfig),
+          )}
+        />
+  ), [config, data, id, sourceImage, t, updateNodeData])
+
   return (
     <ToolWorkbenchNodeFrame
       nodeId={id}
@@ -334,38 +348,7 @@ export const MultiAngleGenerationNode = memo(({
       minWidth={640}
       minHeight={340}
     >
-      {selected && workbenchReady ? (
-        <MultiAngleWorkbench
-          config={config}
-          sourceImage={sourceImages[0] ?? null}
-          embedded
-          sourceControl={(
-            <MediaInputRow
-              showHandle={false}
-              nodeId={id}
-              mediaKind="image"
-              label={t('node.multiAngleGeneration.sourceImage')}
-              maxCount={1}
-              inlineValue={inlineSources}
-              onInlineChange={(images) => updateNodeData(id, {
-                mediaInputs: { ...(data.mediaInputs ?? {}), image: images },
-              })}
-            />
-          )}
-          onConfigChange={(nextConfig) => updateNodeData(
-            id,
-            buildMultiAngleEditorDraft(data, nextConfig),
-          )}
-        />
-      ) : (
-        <ToolWorkbenchSourcePreview
-          source={sourceImages[0] ?? null}
-          alt={t('node.multiAngleEditor.sourceAlt')}
-          icon={<Camera className="h-8 w-8" />}
-          emptyText={t('node.multiAngleEditor.sourceRequired')}
-          summary={summary}
-        />
-      )}
+      {workbench}
     </ToolWorkbenchNodeFrame>
   )
 })

@@ -26,7 +26,6 @@ import {
   normalizeRelightSettings,
   prepareRelightGenerationInput,
   prepareRelightRoute,
-  summarizeRelightSettings,
   type RelightSettingsV1,
 } from '@/features/canvas/capabilities/relightPolicy'
 import {
@@ -49,7 +48,6 @@ import { useSettingsStore } from '@/stores/settingsStore'
 import { ensureGenerationProviderConfigured } from './shared/generationNodeGuards'
 import {
   ToolWorkbenchNodeFrame,
-  ToolWorkbenchSourcePreview,
 } from './shared/ToolWorkbenchNodeFrame'
 import {
   RelightWorkbench,
@@ -123,13 +121,6 @@ export const RelightGenerationNode = memo(({
   const providerConfigured = route.model
     ? providerKeyStatus[route.model.meta.provider] === true
     : false
-  const summary = useMemo(() => {
-    try {
-      return summarizeRelightSettings(settings)
-    } catch {
-      return '设置需要迁移'
-    }
-  }, [settings])
 
   const prepareExecution = useCallback(() => {
     const latest = useCanvasStore.getState().nodes.find((node) => node.id === id)
@@ -290,6 +281,35 @@ export const RelightGenerationNode = memo(({
     ? `${getI18nText(route.model.meta.name, 'zh-CN')} · 已就绪`
       : `${getI18nText(route.model.meta.name, 'zh-CN')} · 未配置`
 
+  const sourceImage = sourceImages[0] ?? null
+  const hasIncomingSource = incomingSourceMedia.length > 0
+  // Selection updates the frame only; retain the workbench instance and its local view state.
+  const workbench = useMemo(() => (
+        <RelightWorkbench
+          settings={settings}
+          spatialState={data.relightSpatialState}
+          sourceImage={sourceImage}
+          embedded
+          sourceControl={settings.lightingMode === 'smart' || !hasIncomingSource ? (
+            <MediaInputRow
+              showHandle={false}
+              nodeId={id}
+              mediaKind="image"
+              label={t('node.relightGeneration.sourceImage')}
+              maxCount={1}
+              inlineValue={data.mediaInputs?.image ?? []}
+              onInlineChange={(images) => updateNodeData(id, {
+                mediaInputs: { ...(data.mediaInputs ?? {}), image: images },
+              })}
+            />
+          ) : undefined}
+          onSettingsChange={(nextSettings, spatial) => updateNodeData(
+            id,
+            { ...buildRelightEditorDraft(data, nextSettings), ...(spatial ? { relightSpatialState: spatial } : {}) },
+          )}
+        />
+  ), [data, id, settings, sourceImage, hasIncomingSource, t, updateNodeData])
+
   return (
     <ToolWorkbenchNodeFrame
       nodeId={id}
@@ -311,39 +331,7 @@ export const RelightGenerationNode = memo(({
         'data-relight-mode': settings.lightingMode,
       }}
     >
-      {selected || settings.lightingMode === 'smart' ? (
-        <RelightWorkbench
-          settings={settings}
-          spatialState={data.relightSpatialState}
-          sourceImage={sourceImages[0] ?? null}
-          embedded
-          sourceControl={settings.lightingMode === 'smart' || incomingSourceMedia.length === 0 ? (
-            <MediaInputRow
-              showHandle={false}
-              nodeId={id}
-              mediaKind="image"
-              label={t('node.relightGeneration.sourceImage')}
-              maxCount={1}
-              inlineValue={sourceInline}
-              onInlineChange={(images) => updateNodeData(id, {
-                mediaInputs: { ...(data.mediaInputs ?? {}), image: images },
-              })}
-            />
-          ) : undefined}
-          onSettingsChange={(nextSettings, spatial) => updateNodeData(
-            id,
-            { ...buildRelightEditorDraft(data, nextSettings), ...(spatial ? { relightSpatialState: spatial } : {}) },
-          )}
-        />
-      ) : (
-        <ToolWorkbenchSourcePreview
-          source={sourceImages[0] ?? null}
-          alt={t('node.relightGeneration.sourceAlt')}
-          icon={<SunMedium className="h-8 w-8" />}
-          emptyText={t('node.relightGeneration.sourceRequired')}
-          summary={`${summary} · ${statusText}`}
-        />
-      )}
+      {workbench}
     </ToolWorkbenchNodeFrame>
   )
 })

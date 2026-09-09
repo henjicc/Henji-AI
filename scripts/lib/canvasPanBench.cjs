@@ -83,7 +83,7 @@ function duplicateGraph(nodesJson, edgesJson, multiplier) {
 async function readProjectRowByName(page, name) {
   return page.evaluate(async (projectName) => {
     const rows = await window.henjiNative.db.select(
-      `SELECT id, name, node_count, nodes_json, edges_json, viewport_json
+      `SELECT id, name, node_count, nodes_json, edges_json, viewport_json, history_json
        FROM storyboard_projects WHERE name = ? ORDER BY updated_at DESC LIMIT 1`,
       [projectName]
     )
@@ -130,7 +130,7 @@ async function createRealContentFixture(page, {
         payload.nodesJson,
         payload.edgesJson,
         payload.viewportJson,
-        JSON.stringify({ past: [], future: [], imagePool: [] }),
+        JSON.stringify({ past: [], future: [], imagePool: payload.imagePool }),
       ]
     )
     return id
@@ -140,6 +140,8 @@ async function createRealContentFixture(page, {
     nodesJson: JSON.stringify(nodes),
     edgesJson: JSON.stringify(edges),
     viewportJson: JSON.stringify({ x: viewport.x, y: viewport.y, zoom: viewport.zoom }),
+    // 节点中的 __img_ref__ 依赖原工程媒体池；仅清历史，不丢弃真实媒体负载。
+    imagePool: JSON.parse(source.history_json || '{}').imagePool ?? [],
   })
 
   return {

@@ -7,7 +7,6 @@ import {
   type PointerEvent,
   type WheelEvent,
 } from 'react'
-import { Canvas, useThree } from '@react-three/fiber'
 import { useTranslation } from 'react-i18next'
 
 import { UI_FIELD_FOCUS_CLASS } from '@/components/ui/styleTokens'
@@ -17,10 +16,7 @@ import type {
   MultiAngleFluxViewV1,
   MultiAngleViewV1,
 } from '@/features/canvas/capabilities/multiAnglePolicy'
-import {
-  createMultiAngleEditorResources,
-  disposeMultiAngleEditorResources,
-} from './multiAngleEditorResources'
+import { MultiAngleOrbitScene } from './MultiAngleOrbitScene'
 import {
   continuousCameraFromDrag,
   continuousCameraFromKey,
@@ -33,65 +29,6 @@ import {
   type MultiAngleFluxCameraDragOrigin,
 } from './multiAngleCameraVisualizerState'
 import { describeLocalizedMultiAngleCamera } from './multiAngleLocalization'
-
-function markerPosition(view: MultiAngleViewV1): [number, number, number] {
-  if (view.kind === 'continuous') {
-    const yaw = (view.yawControlDeg / 180) * Math.PI
-    const radius = 1.62 - view.proximity * 0.052
-    return [
-      -Math.sin(yaw) * radius,
-      -view.verticalControl * 0.95,
-      Math.cos(yaw) * radius,
-    ]
-  }
-  if (view.kind === 'flux') {
-    const horizontal = (view.horizontalAngleDeg / 180) * Math.PI
-    const vertical = (view.verticalAngleDeg / 180) * Math.PI
-    const radius = 1.62 - view.zoom * 0.052
-    return [
-      Math.sin(horizontal) * Math.cos(vertical) * radius,
-      Math.sin(vertical) * radius,
-      Math.cos(horizontal) * Math.cos(vertical) * radius,
-    ]
-  }
-  const positions: Record<MultiAngleDiscretePreset, [number, number, number]> = {
-    front: [0, 0, 1.55],
-    left_side: [-1.55, 0, 0],
-    right_side: [1.55, 0, 0],
-    back: [0, 0, -1.55],
-    top_down: [0, 1.4, 0],
-    bottom_up: [0, -1.4, 0],
-    birds_eye: [-0.5, 1.25, 0.85],
-    three_quarter_left: [-1.08, 0, 1.08],
-    three_quarter_right: [1.08, 0, 1.08],
-  }
-  return positions[view.preset]
-}
-
-function OrbitScene({ views, selectedViewId }: { views: MultiAngleViewV1[]; selectedViewId: string }): JSX.Element {
-  const resources = useMemo(createMultiAngleEditorResources, [])
-  const { invalidate } = useThree()
-
-  useEffect(() => () => disposeMultiAngleEditorResources(resources), [resources])
-  useEffect(() => { invalidate() }, [invalidate, selectedViewId, views])
-
-  return (
-    <>
-      <mesh geometry={resources.horizontalOrbit} material={resources.orbitMaterial} rotation={[Math.PI / 2, 0, 0]} dispose={null} />
-      <mesh geometry={resources.verticalOrbit} material={resources.orbitMaterial} rotation={[0, Math.PI / 2, 0]} dispose={null} />
-      {views.map((view) => (
-        <mesh
-          key={view.viewId}
-          geometry={resources.marker}
-          material={view.viewId === selectedViewId ? resources.markerMaterial : resources.orbitMaterial}
-          position={markerPosition(view)}
-          scale={view.viewId === selectedViewId ? 1.35 : 0.85}
-          dispose={null}
-        />
-      ))}
-    </>
-  )
-}
 
 export function MultiAngleOrbitPreview({
   views,
@@ -303,15 +240,7 @@ export function MultiAngleOrbitPreview({
       onPointerCancel={finishPointer}
       onWheel={handleWheel}
     >
-      <Canvas
-        className="pointer-events-none"
-        frameloop="demand"
-        dpr={[1, 1.5]}
-        camera={{ fov: 48, near: 0.1, far: 20, position: [3.8, 2.5, 4.5] }}
-        gl={{ alpha: true, antialias: true, powerPreference: 'high-performance' }}
-      >
-        <OrbitScene views={visualViews} selectedViewId={selectedViewId} />
-      </Canvas>
+      <MultiAngleOrbitScene views={visualViews} selectedViewId={selectedViewId} />
 
       <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-3xs font-medium uppercase tracking-wide text-text-muted">{t('node.multiAngleEditor.orbit.left')}</span>
       <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-3xs font-medium uppercase tracking-wide text-text-muted">{t('node.multiAngleEditor.orbit.right')}</span>

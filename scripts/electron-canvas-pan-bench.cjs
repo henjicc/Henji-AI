@@ -15,6 +15,7 @@
  * 环境变量：
  *   BENCH_PROJECT  源项目名称（默认 TEST），只读取不修改
  *   BENCH_MULT     真实内容复制份数（默认 1）
+ *   BENCH_ZOOM     临时基准视口缩放（默认沿用源工程，不改源工程）
  *   BENCH_SWEEP_MS 单轮扫掠时长（默认 1500）
  *   BENCH_REPS     每个配置的采样轮数（默认 5）
  *   BENCH_SET      逗号分隔的配置名（默认 off,hidenodes）
@@ -50,6 +51,7 @@ const STYLE_ID = '__pan_bench_style__'
 
 const SOURCE_PROJECT = process.env.BENCH_PROJECT || 'TEST'
 const MULTIPLIER = Math.max(1, Number(process.env.BENCH_MULT || 1))
+const BENCH_ZOOM = process.env.BENCH_ZOOM === undefined ? undefined : Number(process.env.BENCH_ZOOM)
 const SWEEP_MS = Math.max(400, Number(process.env.BENCH_SWEEP_MS || 1200))
 const REPS = Math.max(1, Number(process.env.BENCH_REPS || 5))
 const OUT_DIR = path.join(ROOT, process.env.BENCH_OUT || '.pan-bench')
@@ -113,6 +115,7 @@ async function applyConfig(page, name) {
 }
 
 async function openFixtureProject(page, projectName, expectedNodeCount) {
+  const startedAt = new Date().toISOString()
   await page.getByRole('button', { name: /画布|Canvas/ }).click()
   await page.waitForTimeout(600)
   if (await page.locator('.react-flow').count() > 0) {
@@ -120,7 +123,12 @@ async function openFixtureProject(page, projectName, expectedNodeCount) {
     await page.waitForTimeout(600)
   }
   await page.getByText(projectName, { exact: true }).click()
-  await page.waitForSelector('.react-flow', { timeout: 30000 })
+  await page.waitForSelector('.react-flow', { timeout: 30000 }).catch(async (error) => {
+    const logs = await page.evaluate(async (afterTimestamp) => window.henjiNative.logging.queryLogEvents({
+      date: afterTimestamp.slice(0, 10), afterTimestamp, level: 'error', limit: 10,
+    }), startedAt)
+    throw new Error(`${error.message}\n工程打开后的界面：${(await page.locator('body').innerText()).slice(-3000)}\n加载错误：${JSON.stringify(logs)}`)
+  })
   await page.waitForFunction(
     (expected) => document.querySelectorAll('.react-flow__node').length >= expected,
     expectedNodeCount,
@@ -286,6 +294,9 @@ async function main() {
       throw new Error(`未知配置：${name}（可用：${Object.keys(CONFIGS).join(', ')}, hidetype:<nodeType>）`)
     }
   }
+  if (BENCH_ZOOM !== undefined && (!Number.isFinite(BENCH_ZOOM) || BENCH_ZOOM <= 0)) {
+    throw new Error('BENCH_ZOOM 必须是正数')
+  }
 
   const app = await launchElectronApp({ mainEntry: MAIN_ENTRY, cwd: ROOT, skipOnboarding: true })
   const page = app.page
@@ -314,7 +325,7 @@ async function main() {
       sourceProject: SOURCE_PROJECT,
       multiplier: MULTIPLIER,
       tempName: `${FIXTURE_PREFIX}${Date.now()}`,
-      viewportPlan: { ...windowSize, sweepScreenDistance: SWEEP_SCREEN_DISTANCE },
+      viewportPlan: { ...windowSize, zoom: BENCH_ZOOM, sweepScreenDistance: SWEEP_SCREEN_DISTANCE },
     })
 
     await openFixtureProject(page, fixture.projectName, fixture.nodeCount)

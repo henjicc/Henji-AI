@@ -16,12 +16,12 @@ vi.mock('@/features/canvas/ui/NodeHeader', () => ({
   NODE_HEADER_FLOATING_POSITION_CLASS: '',
 }))
 
-import { ToolWorkbenchNodeFrame, ToolWorkbenchSourcePreview } from './ToolWorkbenchNodeFrame'
+import { ToolWorkbenchNodeFrame } from './ToolWorkbenchNodeFrame'
 
 afterEach(cleanup)
 
 describe('图片工作台的输入端口生命周期', () => {
-  it('内部编辑器卸载和重新挂载时，原媒体端口持续存在', () => {
+  it('选中切换时工作面与原媒体端口都保持同一个实例', () => {
     const props = {
       nodeId: 'workbench', title: '图片工具', icon: null,
       hasSourceConnections: false, onSelect: vi.fn(), onTitleChange: vi.fn(),
@@ -32,13 +32,13 @@ describe('图片工作台的输入端口生命周期', () => {
       </ToolWorkbenchNodeFrame>,
     )
     const input = screen.getByTestId('target:param:__image')
+    const editor = screen.getByTestId('editor')
     rerender(
       <ToolWorkbenchNodeFrame {...props} selected={false}>
-        <ToolWorkbenchSourcePreview source="source.png" alt="源图" icon={null} emptyText="请选择图片" />
+        <div data-testid="editor" />
       </ToolWorkbenchNodeFrame>,
     )
-    expect(screen.queryByTestId('editor')).toBeNull()
-    expect(screen.getByRole('img', { name: '源图' })).toBeTruthy()
+    expect(screen.getByTestId('editor')).toBe(editor)
     expect(screen.getByTestId('target:param:__image')).toBe(input)
 
     rerender(
@@ -46,7 +46,7 @@ describe('图片工作台的输入端口生命周期', () => {
         <div data-testid="editor" />
       </ToolWorkbenchNodeFrame>,
     )
-    expect(screen.getByTestId('editor')).toBeTruthy()
+    expect(screen.getByTestId('editor')).toBe(editor)
     expect(screen.getByTestId('target:param:__image')).toBe(input)
   })
 })
