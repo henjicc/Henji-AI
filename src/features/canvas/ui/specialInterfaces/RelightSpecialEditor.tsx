@@ -141,7 +141,7 @@ export function RelightWorkbench({
         )}
 
         <div data-relight-inspector="true" className={`min-h-0 min-w-0 overflow-y-auto ${settings.lightingMode === 'manual' ? 'border-l border-veil-subtle' : ''} ${embedded ? 'p-3' : `p-5 ${UI_GLASS_ADAPTIVE_REGION_CLASS}`}`}>
-          <div className="max-w-3xl">
+          <div className="flex min-h-full flex-col">
           {sourceControl ? <div className="mb-3">{sourceControl}</div> : null}
           <section aria-label="打光模式">
             <div className="grid grid-cols-2 gap-2">
@@ -167,7 +167,7 @@ export function RelightWorkbench({
           </section>
 
           {settings.lightingMode === 'manual' ? (
-            <div className="mt-4 space-y-3">
+            <div className="mt-4 flex flex-1 flex-col gap-3">
               <RelightLightingControls
                 value={lighting}
                 brightnessTitle={<FieldTitle tooltip="拖动选择五档明暗；光束为示意，实际效果由模型生成。">亮度</FieldTitle>}
@@ -187,11 +187,12 @@ export function RelightWorkbench({
                     }} />
                 </div>
               </div>
-              <section className="space-y-2">
+              <section className="flex min-h-24 flex-1 flex-col gap-2">
                 <FieldTitle tooltip="补充需要保留的细节或希望达到的光照效果。">补充要求</FieldTitle>
                 <UiTextAreaField
                   value={settings.manual.extraPrompt}
                   rows={3}
+                  className="min-h-16 flex-1"
                   maxLength={32 * 1024}
                   placeholder="例如：保留商品标签清晰可读"
                   onChange={(event) => patchManual({ extraPrompt: event.target.value })}
@@ -199,7 +200,7 @@ export function RelightWorkbench({
               </section>
             </div>
           ) : (
-            <div className="mt-3 space-y-3">
+            <div className="mt-3 flex flex-1 flex-col gap-3">
               <div className="flex items-center justify-between gap-3">
                 <FieldTitle tooltip="选择希望营造的光照氛围。">氛围预设</FieldTitle>
                 <Dropdown
@@ -224,11 +225,12 @@ export function RelightWorkbench({
                 />
               </section>
 
-              <section className="space-y-2">
+              <section className="flex min-h-24 flex-1 flex-col gap-2">
                 <FieldTitle tooltip="描述希望达到的光照效果和需要保留的细节。">补充要求</FieldTitle>
                 <UiTextAreaField
                   value={settings.smart.prompt}
                   rows={2}
+                  className="min-h-16 flex-1"
                   maxLength={32 * 1024}
                   placeholder="例如：在保留背景布局的前提下增强商品高光"
                   onChange={(event) => patchSmart({ prompt: event.target.value })}

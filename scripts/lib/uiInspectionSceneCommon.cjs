@@ -94,7 +94,8 @@ function attachUiInspectionCommon(context) {
   }
 
   async function resizeCanvasNodeAndAssertHitBox(page, node, visibleRoot, label) {
-    await node.click({ position: { x: 24, y: 24 } })
+    // 只点外壳上边缘选中；内容区可能正好是模式切换或绘图控件。
+    await node.click({ position: { x: 24, y: 4 } })
     const resizeHandle = node.locator('.react-flow__resize-control.bottom.right').last()
     await resizeHandle.waitFor({ state: 'attached', timeout: 8000 })
     const viewport = await page.evaluate(() => ({ width: window.innerWidth, height: window.innerHeight }))

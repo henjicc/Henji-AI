@@ -7,6 +7,8 @@ import { useStoreWithEqualityFn } from 'zustand/traditional'
 import { registry } from '@/core/ModelRegistry'
 import { GenerationService } from '@/core/services/GenerationService'
 import { getI18nText } from '@/core/types'
+import PriceEstimate from '@/components/ui/PriceEstimate'
+import { RELIGHT_NODE_LAYOUT } from '@/features/canvas/domain/relightNodeLayout'
 import {
   areMediaOutputListsEqual,
   collectInputMediaByKind,
@@ -98,7 +100,6 @@ export const RelightGenerationNode = memo(({
   const addNode = useCanvasStore((state) => state.addNode)
   const addEdge = useCanvasStore((state) => state.addEdge)
   const findNodePosition = useCanvasStore((state) => state.findNodePosition)
-  const providerKeyStatus = useSettingsStore((state) => state.providerKeyStatus)
   const setProgress = useCanvasGenerationProgressStore((state) => state.setProgress)
   const hasSourceConnections = useCanvasStore(
     (state) => getMainPortConnectionFlags(state.edges).get(id)?.hasMainSource ?? false,
@@ -118,9 +119,6 @@ export const RelightGenerationNode = memo(({
   const sourceImages = incomingSourceMedia.length > 0
     ? incomingSourceMedia.map((item) => item.url)
     : sourceInline.filter((item) => typeof item === 'string' && item.trim())
-  const providerConfigured = route.model
-    ? providerKeyStatus[route.model.meta.provider] === true
-    : false
 
   const prepareExecution = useCallback(() => {
     const latest = useCanvasStore.getState().nodes.find((node) => node.id === id)
@@ -275,13 +273,11 @@ export const RelightGenerationNode = memo(({
     run: handleGenerate,
   }), [handleGenerate, id, preflightBeforeDependencies])
 
-  const statusText = !route.model
-    ? route.reasons[0] ?? '模型不可用'
-    : providerConfigured
-    ? `${getI18nText(route.model.meta.name, 'zh-CN')} · 已就绪`
-      : `${getI18nText(route.model.meta.name, 'zh-CN')} · 未配置`
-
   const sourceImage = sourceImages[0] ?? null
+  const layout = RELIGHT_NODE_LAYOUT[settings.lightingMode]
+  const priceParams = useMemo(() => ({ ...route.params, images: sourceImage
+    ? [sourceImage, ...(settings.lightingMode === 'smart' ? settings.smart.lightingReferenceImages : [])] : [] }),
+  [route.params, settings.lightingMode, settings.smart.lightingReferenceImages, sourceImage])
   const hasIncomingSource = incomingSourceMedia.length > 0
   // Selection updates the frame only; retain the workbench instance and its local view state.
   const workbench = useMemo(() => (
@@ -290,7 +286,7 @@ export const RelightGenerationNode = memo(({
           spatialState={data.relightSpatialState}
           sourceImage={sourceImage}
           embedded
-          sourceControl={settings.lightingMode === 'smart' || !hasIncomingSource ? (
+          sourceControl={settings.lightingMode === 'manual' && !hasIncomingSource ? (
             <MediaInputRow
               showHandle={false}
               nodeId={id}
@@ -316,16 +312,19 @@ export const RelightGenerationNode = memo(({
       title={data.displayName ?? t('node.menu.relightGeneration')}
       icon={<SunMedium className="h-4 w-4" />}
       selected={selected}
-      width={data.isSizeManuallyAdjusted ? width : undefined}
-      defaultWidth={settings.lightingMode === 'manual' ? 720 : 360}
-      minWidth={settings.lightingMode === 'manual' ? 600 : 320}
-      height={data.isSizeManuallyAdjusted ? height : undefined}
-      defaultHeight={420}
-      minHeight={300}
+      width={width}
+      defaultWidth={layout.width}
+      minWidth={layout.minWidth}
+      height={height}
+      defaultHeight={layout.height}
+      minHeight={layout.minHeight}
       hasSourceConnections={hasSourceConnections}
       onSelect={() => setSelectedNode(id)}
       onTitleChange={(displayName) => updateNodeData(id, { displayName })}
-      rightSlot={<span className="max-w-48 truncate text-2xs text-text-muted">{statusText}</span>}
+      rightSlot={route.model && <div className="flex items-center gap-2">
+        <span className="max-w-36 truncate text-2xs text-text-muted">{getI18nText(route.model.meta.name, 'zh-CN')}</span>
+        <PriceEstimate providerId={route.model.meta.provider} modelId={route.model.meta.id} params={priceParams} variant="badge" />
+      </div>}
       dataAttributes={{
         'data-relight-node-id': id,
         'data-relight-mode': settings.lightingMode,

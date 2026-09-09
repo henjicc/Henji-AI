@@ -77,12 +77,24 @@ export function createCanvasConnectionActions(
       );
 
       let nextNodes = applyNodeChanges<CanvasNode>(changes, state.nodes);
-      if (resizedNodeIds.size > 0) {
+      const resizeBoxes = new Map(changes.flatMap((change) =>
+        change.type === 'dimensions' && change.resizing === true && change.dimensions
+          ? [[change.id, change.dimensions] as const] : []
+      ));
+      if (resizedNodeIds.size > 0 || resizeBoxes.size > 0) {
         nextNodes = nextNodes.map((node) => {
-          if (!resizedNodeIds.has(node.id) || !isManualSizeTrackingNodeType(node.type)) {
-            return node;
+          const dimensions = resizeBoxes.get(node.id);
+          let next = node;
+          // ReactFlow 更新 width/height，却保留原 style 尺寸；旧外框会覆盖新尺寸并裁切内容。
+          // 只同步真实 resize，普通 ResizeObserver 测量不能反过来锁死自动布局。
+          if (dimensions && node.style && (node.style.width !== undefined || node.style.height !== undefined)) {
+            next = { ...node, style: { ...node.style,
+              ...(node.style.width !== undefined ? { width: dimensions.width } : {}),
+              ...(node.style.height !== undefined ? { height: dimensions.height } : {}),
+            } };
           }
-          return withManualSizeLock(node);
+          return resizedNodeIds.has(node.id) && isManualSizeTrackingNodeType(node.type)
+            ? withManualSizeLock(next) : next;
         });
       }
       const hasMeaningfulChange = changes.some((change) => change.type !== 'select');

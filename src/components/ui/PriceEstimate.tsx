@@ -16,18 +16,21 @@ interface PriceEstimateProps {
     params: DynamicValueMap
     /** panel=对话模式面板样式（默认）；badge=画布节点紧凑徽标 */
     variant?: 'panel' | 'badge'
+    /** 相同计价参数的请求次数；单位参考价仍按单位展示。 */
+    requestCount?: number
 }
 
-const PriceEstimate: React.FC<PriceEstimateProps> = ({ modelId, params, variant = 'panel' }) => {
+const PriceEstimate: React.FC<PriceEstimateProps> = ({ modelId, params, variant = 'panel', requestCount = 1 }) => {
     const model = useMemo(() => registry.getModel(modelId), [modelId])
     const { t, i18n } = useI18n('ui')
     const resolvedContext = usePriceEstimateMediaContext(model?.pricing.mediaContext, params)
 
     // 计算价格
     const price = useMemo(() => {
-        if (!model || !resolvedContext.ready) return null
-        return registry.calculatePrice(modelId, resolvedContext.params)
-    }, [model, modelId, resolvedContext.params, resolvedContext.ready])
+        if (!model || !resolvedContext.ready || !Number.isSafeInteger(requestCount) || requestCount < 1) return null
+        const estimate = registry.calculatePrice(modelId, resolvedContext.params)
+        return estimate === null ? null : estimate * (model.pricing.estimateMode === 'unit' ? 1 : requestCount)
+    }, [model, modelId, resolvedContext.params, resolvedContext.ready, requestCount])
 
     // 检查用户是否开启价格显示
     const [priceSettings, setPriceSettings] = useState(() => readPriceEstimateDisplaySettings())

@@ -13,6 +13,7 @@ import { findStaleParamEdgeIds } from '@/features/canvas/application/graphValueR
 import { nodeCatalog } from '@/features/canvas/application/nodeCatalog';
 import { DEFAULT_NODE_DISPLAY_NAME } from '@/features/canvas/domain/nodeDisplay';
 import { reconcileAssetGroupGraph } from '@/features/canvas/application/assetGroupGraph';
+import { applyRelightModeLayout } from '@/features/canvas/domain/relightNodeLayout';
 import type {
   CanvasNodeUpdateActions,
   CanvasStoreGet,
@@ -53,7 +54,7 @@ export function createCanvasNodeUpdateActions(
         const resizedNode = maybeApplyMediaAutoResize(node, mergedData, data);
 
         changed = true;
-        return resizedNode;
+        return applyRelightModeLayout(node, resizedNode);
       });
 
       if (!changed) {

@@ -3,6 +3,7 @@ const { captureInspectionPage } = require('./uiInspectionCapture.cjs')
 const { verifyRelightRim } = require('./uiInspectionRelightRim.cjs')
 const { prepareRelightPortrait, verifyRelightSpatial } = require('./uiInspectionRelightSpatial.cjs')
 const { assertStableWorkbenchSelection } = require('./uiInspectionWorkbenchSelection.cjs')
+const { readRelightLayout, switchRelightMode, verifyRelightResizeModes, ensureWorkbenchInViewport } = require('./uiInspectionRelightLayout.cjs')
 
 function attachUiInspectionCanvasRelight(context) {
   const {
@@ -30,6 +31,7 @@ function attachUiInspectionCanvasRelight(context) {
   }
 
   async function verifyWorkbenchSelection(page, shell, sourceNode, editor, electronApp, name, restoreSelection = true) {
+    await ensureWorkbenchInViewport(page, shell)
     await assertWorkbenchImageInput(shell)
     await assertStableWorkbenchSelection(page, shell, sourceNode, editor, electronApp, name, restoreSelection)
     await assertWorkbenchImageInput(shell)
@@ -74,18 +76,22 @@ function attachUiInspectionCanvasRelight(context) {
       throw new Error(`打光默认布局裁切或重复显示原图：${JSON.stringify(defaultLayout)}`)
     }
     await writeFile('.ui-tour/canvas-relight-default.png', await captureInspectionPage(electronApp, page))
-    await editor.getByRole('button', { name: /智能打光/ }).click()
+    await switchRelightMode(page, relightNodeId, '智能打光')
     const smartOverflow = await editor.locator('[data-relight-inspector]').evaluate((element) => element.scrollHeight - element.clientHeight)
     if (smartOverflow > 1) throw new Error(`智能打光默认尺寸未完整显示参数：${smartOverflow}`)
     await page.waitForTimeout(250) // 等按钮选中态颜色过渡结束再截图。
     await writeFile('.ui-tour/canvas-relight-smart-default.png', await captureInspectionPage(electronApp, page))
-    await editor.getByRole('button', { name: /手动打光/ }).click()
+    await switchRelightMode(page, relightNodeId, '手动打光')
     await editor.getByRole('slider', { name: '色调', exact: true }).focus()
     await page.keyboard.press('Home')
     await page.keyboard.press('ArrowRight')
     await editor.getByRole('switch', { name: '轮廓光', exact: true }).click()
     await editor.getByPlaceholder('例如：保留商品标签清晰可读').fill('保留商品标签清晰可读')
+    const beforeResize = await readRelightLayout(page, relightNodeId)
     await resizeCanvasNodeAndAssertHitBox(page, relightNode, relightShell, '图片打光节点')
+    const afterResize = await readRelightLayout(page, relightNodeId)
+    if (afterResize.fieldHeight < beforeResize.fieldHeight + 8) throw new Error('手动打光输入框没有随节点增高')
+    await verifyRelightResizeModes(page, relightNodeId, resizeCanvasNodeAndAssertHitBox, electronApp)
     await verifyWorkbenchSelection(page, relightShell, sourceNode, editor, electronApp, 'relight')
     await editor.getByText('主光方向', { exact: true })
       .waitFor({ state: 'visible', timeout: 8000 })
@@ -159,6 +165,7 @@ function attachUiInspectionCanvasRelight(context) {
         manuallyResized: node?.data?.isSizeManuallyAdjusted,
         width: node?.width,
         height: node?.height,
+        modeSizes: node?.data?.relightModeSizes,
         hasSourceEdge: edges.some((edge) => edge.source === '__ui_panorama_source' && edge.target === targetNodeId),
       }
     }, { targetProjectId: projectId, targetNodeId: relightNodeId })
@@ -172,7 +179,8 @@ function attachUiInspectionCanvasRelight(context) {
       || persisted.templateVersion !== 'relight-smart-gpt-image-2-v1'
       || persisted.referenceCount !== 0
       || persisted.manuallyResized !== true
-      || persisted.width <= 720
+      || persisted.width <= 360
+      || persisted.modeSizes?.manual?.width <= 720
       || persisted.height <= 420
       || !persisted.hasSourceEdge) {
       throw new Error(`图片打光保存语义或连线丢失：${JSON.stringify(persisted)}`)

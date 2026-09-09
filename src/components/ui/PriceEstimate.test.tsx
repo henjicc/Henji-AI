@@ -99,10 +99,20 @@ describe('PriceEstimate', () => {
 
   it('单位参考价明确显示 /MP，不伪装成单次总价', () => {
     const rendered = render(
-      <PriceEstimate providerId="fal" modelId={unitPriceModel.meta.id} params={{}} variant="badge" />,
+      <PriceEstimate providerId="fal" modelId={unitPriceModel.meta.id} params={{}} requestCount={4} variant="badge" />,
     )
 
     expect(rendered.getByText('$0.03/MP')).toBeTruthy()
+  })
+
+  it('相同参数的多请求按次数估算总价，改变视图数量后更新', () => {
+    const model: ModelDefinition = { ...unitPriceModel, meta: { ...unitPriceModel.meta, id: 'batch-price-test' },
+      pricing: { currency: '$', calculator: () => 0.035 } }
+    registry.register(model)
+    const rendered = render(<PriceEstimate providerId="fal" modelId={model.meta.id} params={{}} requestCount={4} variant="badge" />)
+    expect(rendered.getByText('$0.14')).toBeTruthy()
+    rendered.rerender(<PriceEstimate providerId="fal" modelId={model.meta.id} params={{}} requestCount={2} variant="badge" />)
+    expect(rendered.getByText('$0.07')).toBeTruthy()
   })
 
   it('媒体指标未解析时不显示兜底价，解析后随放大倍率实时更新', async () => {

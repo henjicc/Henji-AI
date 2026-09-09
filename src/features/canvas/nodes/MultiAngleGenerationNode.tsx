@@ -3,7 +3,9 @@ import { type NodeProps } from '@xyflow/react'
 import { Camera } from 'lucide-react'
 import { useStoreWithEqualityFn } from 'zustand/traditional'
 import { useTranslation } from 'react-i18next'
-import type { TFunction } from 'i18next'
+import { registry } from '@/core/ModelRegistry'
+import { getI18nText } from '@/core/types'
+import PriceEstimate from '@/components/ui/PriceEstimate'
 
 import { GenerationService } from '@/core/services/GenerationService'
 import {
@@ -118,24 +120,6 @@ function createPlaceholder(
   return nodeId
 }
 
-function batchStatus(
-  snapshot: MultiAngleBatchSnapshotV1 | null | undefined,
-  t: TFunction,
-): string {
-  if (!snapshot) return t('node.multiAngleGeneration.status.notGenerated')
-  const success = snapshot.items.filter((item) => item.status === 'succeeded').length
-  const failed = snapshot.items.filter((item) => item.status === 'failed').length
-  if (failed > 0) return t('node.multiAngleGeneration.status.failed', {
-    success,
-    total: snapshot.items.length,
-    failed,
-  })
-  if (snapshot.items.some((item) => item.status === 'running')) {
-    return t('node.multiAngleGeneration.status.running', { success, total: snapshot.items.length })
-  }
-  return t('node.multiAngleGeneration.status.cached', { success, total: snapshot.items.length })
-}
-
 export const MultiAngleGenerationNode = memo(({
   id,
   data,
@@ -143,10 +127,9 @@ export const MultiAngleGenerationNode = memo(({
   width,
   height,
 }: MultiAngleGenerationNodeProps) => {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const updateNodeData = useCanvasStore((state) => state.updateNodeData)
   const setSelectedNode = useCanvasStore((state) => state.setSelectedNode)
-  const providerConfigured = useSettingsStore((state) => state.providerKeyStatus.fal === true)
   const activeControllerRef = useRef<AbortController | null>(null)
   const hasSourceConnections = useCanvasStore(
     (state) => getMainPortConnectionFlags(state.edges).get(id)?.hasMainSource ?? false,
@@ -161,6 +144,8 @@ export const MultiAngleGenerationNode = memo(({
     ? incomingSourceMedia.map((item) => item.url)
     : inlineSources.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
   const config = useMemo(() => normalizeMultiAngleConfig(data.multiAngleConfig), [data.multiAngleConfig])
+  const priceModel = useMemo(() => registry.getModel(resolveMultiAngleExecutionTarget(config.controlProfile).modelId), [config.controlProfile])
+  const priceParams = useMemo(() => data.params ?? {}, [data.params])
 
 
   const prepareExecution = useCallback(() => {
@@ -332,13 +317,11 @@ export const MultiAngleGenerationNode = memo(({
       hasSourceConnections={hasSourceConnections}
       onSelect={() => setSelectedNode(id)}
       onTitleChange={(displayName) => updateNodeData(id, { displayName })}
-      rightSlot={(
-        <span className="max-w-48 truncate text-2xs text-text-muted">
-          {providerConfigured
-            ? batchStatus(data.multiAngleBatch, t)
-            : t('node.multiAngleGeneration.status.falNotConfigured')}
-        </span>
-      )}
+      rightSlot={priceModel && <div className="flex items-center gap-2">
+        <span className="max-w-36 truncate text-2xs text-text-muted">{getI18nText(priceModel.meta.name, i18n.language)}</span>
+        <PriceEstimate providerId={priceModel.meta.provider} modelId={priceModel.meta.id} params={priceParams}
+          requestCount={config.views.length} variant="badge" />
+      </div>}
       dataAttributes={{
         'data-multi-angle-node-id': id,
         'data-multi-angle-profile': config.controlProfile,

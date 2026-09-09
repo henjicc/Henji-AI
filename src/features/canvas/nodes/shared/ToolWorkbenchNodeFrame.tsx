@@ -56,8 +56,8 @@ export function ToolWorkbenchNodeFrame({
   maxHeight = 1000,
   dataAttributes,
 }: ToolWorkbenchNodeFrameProps): JSX.Element {
-  const resolvedWidth = Math.max(minWidth, typeof width === 'number' ? width : defaultWidth);
-  const resolvedHeight = Math.max(minHeight, typeof height === 'number' ? height : defaultHeight);
+  const resolvedWidth = Math.max(minWidth, typeof width === 'number' && Number.isFinite(width) && width > 0 ? width : defaultWidth);
+  const resolvedHeight = Math.max(minHeight, typeof height === 'number' && Number.isFinite(height) && height > 0 ? height : defaultHeight);
   const imageHandleId = mediaPortId('image');
   const hasImageConnection = useCanvasStore((state) => state.edges.some(
     (edge) => edge.target === nodeId && edge.targetHandle === imageHandleId,
