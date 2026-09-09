@@ -1,6 +1,7 @@
 const { writeFile } = require('node:fs/promises')
 const { captureInspectionPage } = require('./uiInspectionCapture.cjs')
 const { verifyRelightRim } = require('./uiInspectionRelightRim.cjs')
+const { prepareRelightPortrait, verifyRelightSpatial } = require('./uiInspectionRelightSpatial.cjs')
 
 function attachUiInspectionCanvasRelight(context) {
   const {
@@ -46,6 +47,7 @@ function attachUiInspectionCanvasRelight(context) {
 
   async function setupCanvasRelightEditor(page, electronApp) {
     const { projectId } = await seedAndOpenCanvasPanoramaProject(page)
+    await prepareRelightPortrait(page, projectId)
     const sourceNode = page.locator('.react-flow__node[data-id="__ui_panorama_source"]')
     await sourceNode.click()
     let relightAction = page.getByRole('button', { name: /^(打光|Relight)$/i })
@@ -126,9 +128,10 @@ function attachUiInspectionCanvasRelight(context) {
     ), relightNodeId, { timeout: 3000 }).catch(async () => {
       throw new Error(`图片打光拖拽没有映射到右侧模型方向，实际为 ${await directionControl.getAttribute('data-relight-direction')}，命中为 ${JSON.stringify(directionHitTargets)}`)
     })
-    if (await editor.getByRole('button', { name: '右侧', exact: true }).getAttribute('aria-pressed') !== 'true') throw new Error('方向按钮未同步拖拽结果')
+    if (await editor.getByRole('group', { name: '主光方向预设' }).count()) throw new Error('仍存在已移除的方位按钮')
     await verifyLightingSliders(page, editor, electronApp)
     await verifyRelightRim(page, editor, electronApp)
+    const savedSpatial = await verifyRelightSpatial(page, editor, electronApp)
     await editor.getByRole('button', { name: /智能打光/ }).click()
     await editor.getByRole('button', { name: '氛围预设', exact: true }).click()
     await page.getByRole('option', { name: '霓虹氛围', exact: true }).click()
@@ -208,6 +211,10 @@ function attachUiInspectionCanvasRelight(context) {
       .waitFor({ state: 'visible', timeout: 8000 })
     if (await reopenedEditor.getByRole('slider', { name: '轮廓光方向' }).getAttribute('aria-valuetext') !== '左上') {
       throw new Error('轮廓光灯位重开后没有恢复')
+    }
+    if (await reopenedEditor.getByRole('slider', { name: '主光方向' }).getAttribute('data-light-z') !== savedSpatial.mainZ
+      || await reopenedEditor.getByRole('slider', { name: '轮廓光方向' }).getAttribute('data-light-z') !== savedSpatial.rimZ) {
+      throw new Error('重开后丢失三维灯位')
     }
     const reopenedGeometry = await page.locator(`[data-relight-node-id="${relightNodeId}"]`).evaluate((element) => {
       const root = element.getBoundingClientRect()

@@ -1,5 +1,4 @@
 import type { RelightKeyDirection, RelightRimDirection } from '@/features/canvas/capabilities/relightPolicy'
-import type { RelightDirectionPoint, RelightVisualizerView } from './relightDirectionVisualizerState'
 
 export type EnabledRimDirection = Exclude<RelightRimDirection, 'off'>
 export const RIM_DIRECTION_ORDER: EnabledRimDirection[] = [
@@ -24,18 +23,4 @@ export function rimAngleForDirection(direction: EnabledRimDirection): number {
 export function rimDirectionFromAngle(angle: number): EnabledRimDirection {
   const sector = Math.round(angle / (Math.PI / 4))
   return RIM_DIRECTION_ORDER[((sector % 8) + 8) % 8]
-}
-
-/** 轮廓光走更靠近主体的内轨道，避免与主光的外轨道灯位重叠。 */
-export function rimPointForAngle(angle: number, view: RelightVisualizerView): RelightDirectionPoint {
-  const x = Math.cos(angle) * 0.65
-  const y = Math.sin(angle) * 0.65
-  return view === 'front' ? { x, y } : { x: x * 0.88, y: y * 0.82 - x * 0.16 }
-}
-
-export function rimAngleFromPoint(point: RelightDirectionPoint, view: RelightVisualizerView): number | null {
-  const x = view === 'front' ? point.x : point.x / 0.88
-  const y = view === 'front' ? point.y : (point.y + x * 0.16) / 0.82
-  // 拖到中心仍保留上一个方位，关闭只能由开关表达。
-  return Math.hypot(x, y) < 0.08 ? null : Math.atan2(y, x)
 }

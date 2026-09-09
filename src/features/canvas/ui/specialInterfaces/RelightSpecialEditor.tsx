@@ -22,7 +22,8 @@ import {
 import { importLocalMedia } from '@/services/localMediaImport'
 import { RelightDirectionVisualizer } from './RelightDirectionVisualizer'
 import { RelightLightingControls, type RelightLightingDraft } from './RelightLightingControls'
-import { defaultRimDirection, RIM_DIRECTION_LABELS } from './relightRimLightState'
+import { defaultRimDirection } from './relightRimLightState'
+import type { RelightSpatialState } from './relightSpatialState'
 import { buildRelightEditorDraft } from './relightEditorDraft'
 import type { CanvasSpecialEditorSurfaceProps } from './specialEditorRegistry'
 
@@ -71,7 +72,8 @@ function FieldTitle({ children, tooltip }: { children: string; tooltip: string }
 interface RelightWorkbenchProps {
   settings: RelightSettingsV1
   sourceImage: string | null
-  onSettingsChange: (settings: RelightSettingsV1) => void
+  onSettingsChange: (settings: RelightSettingsV1, spatialState?: RelightSpatialState) => void
+  spatialState?: unknown
   sourceControl?: ReactNode
   embedded?: boolean
 }
@@ -80,6 +82,7 @@ export function RelightWorkbench({
   settings,
   sourceImage,
   onSettingsChange,
+  spatialState,
   sourceControl,
   embedded = false,
 }: RelightWorkbenchProps): JSX.Element {
@@ -128,6 +131,11 @@ export function RelightWorkbench({
               sourceImage={sourceImageUrl}
               sourceAlt={t('node.relightGeneration.sourceAlt')}
               onDirectionChange={(keyDirection) => patchManual({ keyDirection })}
+              spatialState={spatialState}
+              onSpatialCommit={(next, keyDirection, rimDirection) => {
+                if (rimDirection !== 'off') lastRimDirection.current = rimDirection
+                onSettingsChange(normalizeRelightSettings({ ...settings, manual: { ...settings.manual, keyDirection, rimDirection } }), next)
+              }}
             />
           </div>
         )}
@@ -170,9 +178,6 @@ export function RelightWorkbench({
               <div className="flex items-center justify-between gap-3">
                 <FieldTitle tooltip="开启后拖动小光点选择轮廓光方向。它用于勾勒主体边缘，主光方向仍可独立调整；实际效果由模型生成。">轮廓光</FieldTitle>
                 <div className="flex items-center gap-3">
-                  {settings.manual.rimDirection !== 'off' ? (
-                    <span className="text-xs text-text-soft">{RIM_DIRECTION_LABELS[settings.manual.rimDirection]}</span>
-                  ) : null}
                   <UiSwitch aria-label="轮廓光" checked={settings.manual.rimDirection !== 'off'}
                     onCheckedChange={(enabled) => {
                       if (!enabled) lastRimDirection.current = settings.manual.rimDirection
@@ -274,7 +279,9 @@ export default function RelightSpecialEditor({
       <RelightWorkbench
         settings={settings}
         sourceImage={sourceImage}
-        onSettingsChange={(next) => onDraftChange(buildRelightEditorDraft(session.draftState, next))}
+        spatialState={session.draftState.relightSpatialState}
+        onSettingsChange={(next, spatial) => onDraftChange({ ...buildRelightEditorDraft(session.draftState, next),
+          ...(spatial ? { relightSpatialState: spatial } : {}) })}
       />
     </UiModal>
   )

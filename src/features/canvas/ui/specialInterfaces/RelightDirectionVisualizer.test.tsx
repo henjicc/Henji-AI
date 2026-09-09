@@ -33,8 +33,8 @@ describe('打光方向可视化控件', () => {
       />,
     )
     expect(control.getAttribute('data-relight-direction')).toBe('right')
-    expect(screen.getByRole('button', { name: '右侧' }).getAttribute('aria-pressed')).toBe('true')
-    fireEvent.click(screen.getByRole('button', { name: '上方' }))
+    expect(screen.queryByRole('group', { name: '主光方向预设' })).toBeNull()
+    fireEvent.keyDown(control, { key: 'ArrowUp' })
     expect(onDirectionChange).toHaveBeenLastCalledWith('top')
   })
 
@@ -50,7 +50,7 @@ describe('打光方向可视化控件', () => {
     )
 
     const control = screen.getByRole('slider', { name: '主光方向' })
-    control.getBoundingClientRect = () => ({
+    control.parentElement!.getBoundingClientRect = () => ({
       x: 0,
       y: 0,
       width: 200,

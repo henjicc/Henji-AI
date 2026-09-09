@@ -1,23 +1,14 @@
 import { describe, expect, it } from 'vitest'
 import {
-  RIM_DIRECTION_ORDER, rimAngleForDirection, rimAngleFromPoint,
-  rimDirectionFromAngle, rimPointForAngle,
+  RIM_DIRECTION_ORDER, rimAngleForDirection, rimDirectionFromAngle,
 } from './relightRimLightState'
 
 describe('轮廓光方向映射', () => {
-  it.each(['front', 'perspective'] as const)('%s 视图的八个方位投影可逆，方向不会因切换视图偏转', (view) => {
+  it('八档方向映射可逆，跨越角度零点仍保持正确方向', () => {
     for (const direction of RIM_DIRECTION_ORDER) {
-      const point = rimPointForAngle(rimAngleForDirection(direction), view)
-      const angle = rimAngleFromPoint(point, view)
-      expect(angle).not.toBeNull()
-      expect(rimDirectionFromAngle(angle!)).toBe(direction)
+      const angle = rimAngleForDirection(direction)
+      expect(rimDirectionFromAngle(angle)).toBe(direction)
+      expect(rimDirectionFromAngle(angle - Math.PI * 2)).toBe(direction)
     }
-  })
-  it('只保留方向，越界不会离开轨道，中心不会被解释为关闭', () => {
-    const angle = rimAngleFromPoint({ x: -20, y: -20 }, 'front')!
-    expect(rimDirectionFromAngle(angle)).toBe('top-left')
-    const point = rimPointForAngle(angle, 'front')
-    expect(Math.hypot(point.x, point.y)).toBeCloseTo(0.65)
-    expect(rimAngleFromPoint({ x: 0, y: 0 }, 'perspective')).toBeNull()
   })
 })
