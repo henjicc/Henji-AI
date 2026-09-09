@@ -1,0 +1,32 @@
+const { writeFile } = require('node:fs/promises')
+const { captureInspectionPage } = require('./uiInspectionCapture.cjs')
+
+async function verifyRelightRim(page, editor, electronApp) {
+  const rim = editor.getByRole('slider', { name: '轮廓光方向', exact: true })
+  const main = editor.getByRole('slider', { name: '主光方向', exact: true })
+  const before = await editor.boundingBox()
+  const mainDirection = await main.getAttribute('data-relight-direction')
+  const stage = await main.boundingBox()
+  const lamp = await rim.boundingBox()
+  if (!stage || !lamp || !before) throw new Error('轮廓光缺少可拖动灯位')
+  await page.mouse.move(lamp.x + lamp.width / 2, lamp.y + lamp.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(stage.x + stage.width * 0.8, stage.y + stage.height * 0.75, { steps: 12 })
+  if (await rim.getAttribute('aria-valuetext') !== '右下') throw new Error('轮廓光未实时跟随拖动')
+  await page.mouse.up()
+  if (await main.getAttribute('data-relight-direction') !== mainDirection) throw new Error('轮廓光拖动改变了主光')
+  const after = await editor.boundingBox()
+  if (!after || Math.abs(after.x - before.x) > 1 || Math.abs(after.y - before.y) > 1) throw new Error('轮廓光拖动误移动节点')
+  await writeFile('.ui-tour/canvas-relight-rim-enabled.png', await captureInspectionPage(electronApp, page))
+  const toggle = editor.getByRole('switch', { name: '轮廓光', exact: true })
+  await toggle.click()
+  if (await rim.count()) throw new Error('关闭轮廓光后仍存在第二光点')
+  await toggle.click()
+  if (await rim.getAttribute('aria-valuetext') !== '右下') throw new Error('重新开启轮廓光丢失上次位置')
+  await rim.focus()
+  await page.keyboard.press('Home')
+  for (let i = 0; i < 3; i++) await page.keyboard.press('ArrowLeft')
+  if (await rim.getAttribute('aria-valuetext') !== '左上') throw new Error('轮廓光键盘选择无效')
+}
+
+module.exports = { verifyRelightRim }

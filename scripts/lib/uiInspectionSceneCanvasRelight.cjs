@@ -1,5 +1,6 @@
 const { writeFile } = require('node:fs/promises')
 const { captureInspectionPage } = require('./uiInspectionCapture.cjs')
+const { verifyRelightRim } = require('./uiInspectionRelightRim.cjs')
 
 function attachUiInspectionCanvasRelight(context) {
   const {
@@ -90,8 +91,7 @@ function attachUiInspectionCanvasRelight(context) {
     await editor.getByRole('slider', { name: '色调', exact: true }).focus()
     await page.keyboard.press('Home')
     await page.keyboard.press('ArrowRight')
-    await editor.getByRole('button', { name: '轮廓光', exact: true }).click()
-    await page.getByRole('option', { name: '左上', exact: true }).click()
+    await editor.getByRole('switch', { name: '轮廓光', exact: true }).click()
     await editor.getByPlaceholder('例如：保留商品标签清晰可读').fill('保留商品标签清晰可读')
     await resizeCanvasNodeAndAssertHitBox(page, relightNode, relightShell, '图片打光节点')
     await verifyWorkbenchSelection(page, relightShell, sourceNode, editor)
@@ -128,6 +128,7 @@ function attachUiInspectionCanvasRelight(context) {
     })
     if (await editor.getByRole('button', { name: '右侧', exact: true }).getAttribute('aria-pressed') !== 'true') throw new Error('方向按钮未同步拖拽结果')
     await verifyLightingSliders(page, editor, electronApp)
+    await verifyRelightRim(page, editor, electronApp)
     await editor.getByRole('button', { name: /智能打光/ }).click()
     await editor.getByRole('button', { name: '氛围预设', exact: true }).click()
     await page.getByRole('option', { name: '霓虹氛围', exact: true }).click()
@@ -205,6 +206,9 @@ function attachUiInspectionCanvasRelight(context) {
     await reopenedEditor.getByRole('button', { name: /手动打光/ }).click()
     await reopenedEditor.locator('[data-relight-direction-control="true"][data-relight-direction="right"]')
       .waitFor({ state: 'visible', timeout: 8000 })
+    if (await reopenedEditor.getByRole('slider', { name: '轮廓光方向' }).getAttribute('aria-valuetext') !== '左上') {
+      throw new Error('轮廓光灯位重开后没有恢复')
+    }
     const reopenedGeometry = await page.locator(`[data-relight-node-id="${relightNodeId}"]`).evaluate((element) => {
       const root = element.getBoundingClientRect()
       const wrapper = element.closest('.react-flow__node').getBoundingClientRect()

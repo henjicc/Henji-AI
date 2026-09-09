@@ -1,10 +1,10 @@
-import { useId, useMemo, useState, type ReactNode } from 'react'
+import { useId, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import Dropdown from '@/components/ui/Dropdown'
 import FileUploader from '@/components/ui/FileUploader'
 import Tooltip from '@/components/ui/Tooltip'
-import { UiButton, UiOptionButton, UiTextAreaField } from '@/components/ui/primitives'
+import { UiButton, UiOptionButton, UiSwitch, UiTextAreaField } from '@/components/ui/primitives'
 import { UiModal } from '@/components/ui/UiModal'
 import {
   UI_GLASS_ADAPTIVE_REGION_CLASS,
@@ -13,7 +13,6 @@ import {
 } from '@/components/ui/styleTokens'
 import { resolveImageDisplayUrl } from '@/features/canvas/application/imageData'
 import {
-  RELIGHT_RIM_DIRECTIONS,
   RELIGHT_SMART_PRESETS,
   normalizeRelightSettings,
   type RelightRimDirection,
@@ -23,13 +22,10 @@ import {
 import { importLocalMedia } from '@/services/localMediaImport'
 import { RelightDirectionVisualizer } from './RelightDirectionVisualizer'
 import { RelightLightingControls, type RelightLightingDraft } from './RelightLightingControls'
+import { defaultRimDirection, RIM_DIRECTION_LABELS } from './relightRimLightState'
 import { buildRelightEditorDraft } from './relightEditorDraft'
 import type { CanvasSpecialEditorSurfaceProps } from './specialEditorRegistry'
 
-const RIM_LABELS: Record<RelightRimDirection, string> = {
-  off: '关闭', left: '左', right: '右', top: '上', 'top-left': '左上',
-  'top-right': '右上', bottom: '下', 'bottom-left': '左下', 'bottom-right': '右下',
-}
 const SMART_LABELS: Record<RelightSmartPreset, string> = {
   'natural-studio': '自然影棚', 'soft-window': '柔和窗光', 'golden-hour': '黄金时刻',
   overcast: '阴天柔光', 'hard-studio': '硬光影棚', moonlight: '月光夜景',
@@ -90,11 +86,16 @@ export function RelightWorkbench({
   const { t } = useTranslation()
   const [lightingDraft, setLightingDraft] = useState<RelightLightingDraft | null>(null)
   const lighting = lightingDraft ?? settings.manual
+  const lastRimDirection = useRef<RelightRimDirection>(settings.manual.rimDirection)
   const updateSettings = (next: RelightSettingsV1): void => {
     onSettingsChange(normalizeRelightSettings(next))
   }
   const patchManual = (patch: Partial<RelightSettingsV1['manual']>): void => {
     updateSettings({ ...settings, manual: { ...settings.manual, ...patch } })
+  }
+  const changeRimDirection = (rimDirection: RelightRimDirection): void => {
+    if (rimDirection !== 'off') lastRimDirection.current = rimDirection
+    patchManual({ rimDirection })
   }
   const patchSmart = (patch: Partial<RelightSettingsV1['smart']>): void => {
     updateSettings({ ...settings, smart: { ...settings.smart, ...patch } })
@@ -122,6 +123,8 @@ export function RelightWorkbench({
               direction={settings.manual.keyDirection}
               brightness={lighting.brightness}
               colorPreset={lighting.colorPreset}
+              rimDirection={settings.manual.rimDirection}
+              onRimDirectionChange={changeRimDirection}
               sourceImage={sourceImageUrl}
               sourceAlt={t('node.relightGeneration.sourceAlt')}
               onDirectionChange={(keyDirection) => patchManual({ keyDirection })}
@@ -165,14 +168,19 @@ export function RelightWorkbench({
                 onCommit={patchManual}
               />
               <div className="flex items-center justify-between gap-3">
-                <FieldTitle tooltip="在主体边缘增加光线，方向用于引导生成效果。">轮廓光</FieldTitle>
-                <Dropdown
-                  ariaLabel="轮廓光"
-                  className="w-36"
-                  value={settings.manual.rimDirection}
-                  options={RELIGHT_RIM_DIRECTIONS.map((value) => ({ value, label: RIM_LABELS[value] }))}
-                  onSelect={(rimDirection) => patchManual({ rimDirection })}
-                />
+                <FieldTitle tooltip="开启后拖动小光点选择轮廓光方向。它用于勾勒主体边缘，主光方向仍可独立调整；实际效果由模型生成。">轮廓光</FieldTitle>
+                <div className="flex items-center gap-3">
+                  {settings.manual.rimDirection !== 'off' ? (
+                    <span className="text-xs text-text-soft">{RIM_DIRECTION_LABELS[settings.manual.rimDirection]}</span>
+                  ) : null}
+                  <UiSwitch aria-label="轮廓光" checked={settings.manual.rimDirection !== 'off'}
+                    onCheckedChange={(enabled) => {
+                      if (!enabled) lastRimDirection.current = settings.manual.rimDirection
+                      changeRimDirection(enabled
+                        ? lastRimDirection.current === 'off' ? defaultRimDirection(settings.manual.keyDirection) : lastRimDirection.current
+                        : 'off')
+                    }} />
+                </div>
               </div>
               <section className="space-y-2">
                 <FieldTitle tooltip="补充需要保留的细节或希望达到的光照效果。">补充要求</FieldTitle>

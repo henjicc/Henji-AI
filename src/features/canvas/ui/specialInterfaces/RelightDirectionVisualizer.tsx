@@ -16,7 +16,8 @@ import {
   UI_TEXT_META_CLASS,
   UI_TEXT_LABEL_CLASS,
 } from '@/components/ui/styleTokens'
-import type { RelightBrightness, RelightColorPreset, RelightKeyDirection } from '@/features/canvas/capabilities/relightPolicy'
+import type { RelightBrightness, RelightColorPreset, RelightKeyDirection, RelightRimDirection } from '@/features/canvas/capabilities/relightPolicy'
+import { RelightRimLight } from './RelightRimLight'
 import {
   RELIGHT_DIRECTION_LABELS,
   RELIGHT_DIRECTION_ORDER,
@@ -55,6 +56,8 @@ interface RelightDirectionVisualizerProps {
   direction: RelightKeyDirection
   brightness?: RelightBrightness
   colorPreset?: RelightColorPreset
+  rimDirection?: RelightRimDirection
+  onRimDirectionChange?: (direction: RelightRimDirection) => void
   sourceImage: string | null
   sourceAlt: string
   onDirectionChange: (direction: RelightKeyDirection) => void
@@ -64,11 +67,14 @@ export function RelightDirectionVisualizer({
   direction,
   brightness = 0,
   colorPreset = 'neutral',
+  rimDirection = 'off',
+  onRimDirectionChange,
   sourceImage,
   sourceAlt,
   onDirectionChange,
 }: RelightDirectionVisualizerProps): JSX.Element {
   const gradientId = useId().replace(/:/g, '')
+  const stageRef = useRef<HTMLDivElement>(null)
   const lightColor = UI_LIGHTING_COLORS[colorPreset]
   const intensity = (brightness + 3) / 5
   const [view, setView] = useState<RelightVisualizerView>('perspective')
@@ -169,24 +175,9 @@ export function RelightDirectionVisualizer({
 
       <div className="flex min-h-0 flex-1 items-center justify-center [container-type:size]">
       <div
-        role="slider"
-        tabIndex={0}
-        aria-label="主光方向"
-        aria-valuemin={0}
-        aria-valuemax={RELIGHT_DIRECTION_ORDER.length - 1}
-        aria-valuenow={RELIGHT_DIRECTION_ORDER.indexOf(direction)}
-        aria-valuetext={RELIGHT_DIRECTION_LABELS[direction]}
-        data-relight-direction-control="true"
-        data-relight-direction={direction}
-        data-relight-brightness={brightness}
-        data-relight-color={colorPreset}
+        ref={stageRef}
         style={{ width: 'min(100cqw, 100cqh)', height: 'min(100cqw, 100cqh)' }}
-        className={`relative shrink-0 touch-none select-none overflow-hidden rounded-lg text-veil-subtle ${UI_FIELD_FOCUS_CLASS} ${dragging ? 'cursor-grabbing' : 'cursor-grab'}`}
-        onKeyDown={handleKeyDown}
-        onPointerDown={handlePointerDown}
-        onPointerMove={handlePointerMove}
-        onPointerUp={finishPointer}
-        onPointerCancel={finishPointer}
+        className="relative shrink-0 select-none overflow-hidden rounded-lg text-veil-subtle"
       >
         {/* icon-token-allow：球面网格、光束与拖拽灯位由当前参数实时生成，是交互数据图形而非图标。 */}
         <svg className="pointer-events-none absolute inset-0 h-full w-full" viewBox="0 0 100 100" aria-hidden="true">
@@ -253,6 +244,20 @@ export function RelightDirectionVisualizer({
           <circle cx={visualPoint.x} cy={visualPoint.y} r="3.2" className="fill-app stroke-veil-soft" strokeWidth="0.4" />
           <circle cx={visualPoint.x} cy={visualPoint.y} r="2.8" fill={`url(#${gradientId}-lamp)`} opacity={0.45 + intensity * 0.55} />
         </svg>
+        <div
+          role="slider" tabIndex={0} aria-label="主光方向"
+          aria-valuemin={0} aria-valuemax={RELIGHT_DIRECTION_ORDER.length - 1}
+          aria-valuenow={RELIGHT_DIRECTION_ORDER.indexOf(direction)} aria-valuetext={RELIGHT_DIRECTION_LABELS[direction]}
+          data-relight-direction-control="true" data-relight-direction={direction}
+          data-relight-brightness={brightness} data-relight-color={colorPreset}
+          className={`absolute inset-0 z-raised touch-none rounded-lg ${UI_FIELD_FOCUS_CLASS} ${dragging ? 'cursor-grabbing' : 'cursor-grab'}`}
+          onKeyDown={handleKeyDown} onPointerDown={handlePointerDown} onPointerMove={handlePointerMove}
+          onPointerUp={finishPointer} onPointerCancel={finishPointer}
+        />
+        {rimDirection !== 'off' && onRimDirectionChange ? (
+          <RelightRimLight direction={rimDirection} view={view} lightColor={lightColor} intensity={intensity}
+            stageRef={stageRef} onChange={onRimDirectionChange} />
+        ) : null}
       </div>
 
       </div>
@@ -274,7 +279,9 @@ export function RelightDirectionVisualizer({
           )
         })}
       </div>
-      <p className={`${UI_TEXT_META_CLASS} shrink-0 text-center`}>拖动光点或选择方向，调整主光位置</p>
+      <p className={`${UI_TEXT_META_CLASS} shrink-0 text-center`}>
+        {rimDirection === 'off' ? '拖动光点或选择方向，调整主光位置' : '大光点调主光，小光点调轮廓光'}
+      </p>
     </section>
   )
 }

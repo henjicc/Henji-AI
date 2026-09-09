@@ -15,6 +15,23 @@ const models = [falIcLightV2Model, falGptImage2Model].map((runtime) => (
 ))
 
 describe('图片打光编辑器草稿', () => {
+  it('轮廓光只改变提示词意图，不改变主光的官方方向字段，关闭后撤回请求', () => {
+    const settings = normalizeRelightSettings({
+      ...DEFAULT_RELIGHT_SETTINGS,
+      manual: { ...DEFAULT_RELIGHT_SETTINGS.manual, keyDirection: 'right', rimDirection: 'top-left' },
+    })
+    const enabled = buildRelightEditorDraft({}, settings, models)
+    expect(enabled.params).toMatchObject({ falIcLightV2InitialLatent: 'Right' })
+    expect(enabled.prompt).toContain('rim light from the top-left')
+    expect(enabled.prompt).toContain('keep it secondary to the key light')
+    const disabled = buildRelightEditorDraft({}, {
+      ...settings, manual: { ...settings.manual, rimDirection: 'off' },
+    }, models)
+    expect(disabled.params).toEqual(enabled.params)
+    expect(disabled.prompt).toContain('no additional rim light request')
+    expect(disabled.prompt).not.toContain('rim light from the top-left')
+  })
+
   it('确认前把设置、路由、提示词和模型参数写入同一草稿', () => {
     const settings = normalizeRelightSettings({
       ...DEFAULT_RELIGHT_SETTINGS,
