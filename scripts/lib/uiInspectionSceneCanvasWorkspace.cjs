@@ -540,9 +540,12 @@ function attachUiInspectionCanvasWorkspace(context) {
     await page.mouse.move(resizeHandle.x + resizeHandle.width / 2, resizeHandle.y + resizeHandle.height / 2)
     await node.evaluate(element => {
       element.__resizeSamples = []
+      element.__previewMutations = 0
+      element.__previewObserver = new MutationObserver(records => { element.__previewMutations += records.length })
+      element.__previewObserver.observe(element.querySelector('[data-outpaint-stage]'), { attributes: true, subtree: true })
       const sample = () => {
         const rect = element.getBoundingClientRect()
-        element.__resizeSamples.push({ width: rect.width, height: rect.height })
+        element.__resizeSamples.push({ width: rect.width, height: rect.height, time: performance.now() })
         element.__resizeFrame = requestAnimationFrame(sample)
       }
       sample()
@@ -568,8 +571,11 @@ function attachUiInspectionCanvasWorkspace(context) {
     await page.waitForTimeout(150)
     const resizeSamples = await node.evaluate(element => {
       cancelAnimationFrame(element.__resizeFrame)
+      element.__previewObserver.disconnect()
       return element.__resizeSamples
     })
+    const intervals = resizeSamples.slice(1).map((sample, index) => sample.time - resizeSamples[index].time).sort((a, b) => a - b)
+    console.log('[outpaint-resize]', JSON.stringify({ frames: intervals.length, p95Ms: intervals[Math.floor(intervals.length * 0.95)], previewMutations: await node.evaluate(element => element.__previewMutations) }))
     for (let index = 1; index < resizeSamples.length; index++) {
       if (resizeSamples[index].width < resizeSamples[index - 1].width - 1
         || resizeSamples[index].height < resizeSamples[index - 1].height - 1) throw new Error('向外缩放时节点出现尺寸回跳闪烁')
@@ -615,7 +621,78 @@ function attachUiInspectionCanvasWorkspace(context) {
       const after = await geometry()
       if (Math.abs(after.image.x - during.image.x) > 1) throw new Error('极限状态拖动松手后图片跳变')
     }
+    // 回归：先缩小输出框，再把图片缩到最小，之后仍能扩至整个工作面。
+    const small = await geometry()
+    for (const [handle, x, y] of [['nw', small.image.x - 8, small.image.y - 8], ['se', small.image.x + small.image.width + 8, small.image.y + small.image.height + 8]]) {
+      const point = await stage.locator(`[data-crop-handle="${handle}"]`).boundingBox()
+      await page.mouse.move(point.x + point.width / 2, point.y + point.height / 2)
+      await page.mouse.down()
+      await page.mouse.move(x, y, { steps: 10 })
+      await page.mouse.up()
+    }
+    const tiny = await geometry()
+    await page.mouse.move(tiny.image.x + tiny.image.width / 2, tiny.image.y + tiny.image.height / 2)
+    for (let i = 0; i < 20; i++) await page.mouse.wheel(0, 100)
+    await page.waitForTimeout(200)
+    for (const [handle, x, y] of [['nw', stageBox.x - 100, stageBox.y - 100], ['se', stageBox.x + stageBox.width + 100, stageBox.y + stageBox.height + 100]]) {
+      const point = await stage.locator(`[data-crop-handle="${handle}"]`).boundingBox()
+      await page.mouse.move(point.x + point.width / 2, point.y + point.height / 2)
+      await page.mouse.down()
+      await page.mouse.move(x, y, { steps: 10 })
+      await page.mouse.up()
+    }
+    const filled = await geometry()
+    for (const key of ['x', 'y', 'width', 'height']) {
+      if (Math.abs(filled.frame[key] - stageBox[key]) > 2) throw new Error(`小框缩图后无法拉满：${key}`)
+    }
     await shell.click({ position: { x: 8, y: 8 } })
+    if (process.env.OUTPAINT_RESIZE_BENCH === '1') {
+      const { dispatch, releasePointer } = require('./canvasPanInput.cjs')
+      const session = await page.context().newCDPSession(page)
+      await session.send('Performance.enable')
+      try {
+        for (let round = 0; round < 4; round++) {
+          const box = await node.locator('.react-flow__resize-control.bottom.right').last().boundingBox()
+          const start = { x: box.x + box.width / 2, y: box.y + box.height / 2 }
+          const beforeBox = await node.boundingBox()
+          await session.send('Input.dispatchMouseEvent', { type: 'mousePressed', ...start, button: 'left', buttons: 1, clickCount: 1 })
+          await node.evaluate(element => {
+            element.__resizeSamples = []
+            element.__previewMutations = 0
+            element.__previewObserver.observe(element.querySelector('[data-outpaint-stage]'), { attributes: true, subtree: true })
+            const sample = time => { element.__resizeSamples.push(time); element.__resizeFrame = requestAnimationFrame(sample) }
+            element.__resizeFrame = requestAnimationFrame(sample)
+          })
+          const before = await session.send('Performance.getMetrics')
+          if (round === 0) { await session.send('Profiler.enable'); await session.send('Profiler.start') }
+          const begin = performance.now()
+          const distance = round % 2 ? -60 : 60
+          while (performance.now() - begin < 1000) {
+            const delta = distance * Math.min(1, (performance.now() - begin) / 1000)
+            dispatch(session, { type: 'mouseMoved', x: start.x + delta, y: start.y + delta, button: 'left', buttons: 1 })
+            await new Promise(resolve => setTimeout(resolve, 8))
+          }
+          await releasePointer(session, { x: start.x + distance, y: start.y + distance })
+          const after = await session.send('Performance.getMetrics')
+          if (round === 0) {
+            const { profile } = await session.send('Profiler.stop')
+            const parents = new Map(profile.nodes.flatMap(item => (item.children ?? []).map(id => [id, item])))
+            console.log('[outpaint-resize-cpu]', JSON.stringify(profile.nodes.filter(item => item.hitCount).sort((a, b) => b.hitCount - a.hitCount).slice(0, 12).map(item => ({ hits: item.hitCount, frame: item.callFrame, parent: parents.get(item.id)?.callFrame, ancestor: parents.get(parents.get(item.id)?.id)?.callFrame }))))
+          }
+          const sample = await node.evaluate(element => {
+            cancelAnimationFrame(element.__resizeFrame)
+            element.__previewObserver.disconnect()
+            const intervals = element.__resizeSamples.slice(1).map((time, index) => time - element.__resizeSamples[index]).sort((a, b) => a - b)
+            return { frames: intervals.length, p95Ms: intervals[Math.floor(intervals.length * 0.95)], previewMutations: element.__previewMutations }
+          })
+          const afterBox = await node.boundingBox()
+          if (Math.abs(afterBox.width - beforeBox.width) < 20) throw new Error('连续缩放性能测试未命中节点手柄')
+          if (sample.previewMutations || !sample.frames) throw new Error('连续缩放触发预览更新或没有有效帧')
+          const delta = name => (after.metrics.find(item => item.name === name).value - before.metrics.find(item => item.name === name).value) * 1000
+          console.log('[outpaint-continuous-resize]', JSON.stringify({ round, ...sample, taskMs: delta('TaskDuration'), scriptMs: delta('ScriptDuration'), layoutMs: delta('LayoutDuration') }))
+        }
+      } finally { await session.detach() }
+    }
     await settlePage(page)
   }
 

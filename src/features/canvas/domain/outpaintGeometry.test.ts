@@ -1,9 +1,23 @@
 import { model } from '@henjicc/ai-sdk/tool-models/fal/outpaint'
 import { describe, expect, it } from 'vitest'
-import { createOutpaintScene, scaleOutpaintScene, resizeOutpaintFrame, moveOutpaintImage, translateOutpaintImage, zoomOutpaintImage, outpaintSceneToMargins, marginsToRect, rectToMargins, resolveOutpaintMargins, resolveOutpaintRequestParams } from './outpaintGeometry'
+import { createOutpaintScene, scaleOutpaintScene, resizeOutpaintScene, resizeOutpaintFrame, moveOutpaintImage, translateOutpaintImage, zoomOutpaintImage, outpaintSceneToMargins, marginsToRect, rectToMargins, resolveOutpaintMargins, resolveOutpaintRequestParams } from './outpaintGeometry'
 
 describe('扩图框与请求参数', () => {
   const image = { x: 300, y: 400, width: 1000, height: 1500 }
+  it.each([{ width: 800, height: 1200 }, { width: 1600, height: 800 }])('小框内缩到最小后仍可拉满四边，实际留白合法 %o', source => {
+    const viewport = { width: 600 * source.width / source.height, height: 600 }
+    let scene = createOutpaintScene(source, viewport, resolveOutpaintMargins({}, source, 700), 700)
+    for (let i = 0; i < 40; i++) scene = { ...scene, image: zoomOutpaintImage(scene, 100, source, 700) }
+    const full = resizeOutpaintScene({ x: 0, y: 0, ...viewport }, scene.image, source, viewport, 700)
+    expect(full.frame).toEqual({ x: 0, y: 0, ...viewport })
+    expect(full.image.width).toBeGreaterThan(scene.image.width)
+    expect(full.image.width / full.image.height).toBeCloseTo(source.width / source.height)
+    const scale = full.image.width / source.width
+    for (const margin of [full.image.x, full.image.y, viewport.width - full.image.x - full.image.width, viewport.height - full.image.y - full.image.height]) {
+      expect(margin / scale).toBeGreaterThanOrEqual(-1e-8)
+      expect(margin / scale).toBeLessThanOrEqual(700 + 1e-8)
+    }
+  })
   it.each([{ dx: 20, dy: 0 }, { dx: -20, dy: 0 }, { dx: 0, dy: 20 }, { dx: 0, dy: -20 }])('最大留白后仍可拖动，最小等比放大且接口留白合法 %o', ({ dx, dy }) => {
     const source = { width: 1000, height: 1500 }
     const frame = { x: 0, y: 0, width: 480, height: 580 }

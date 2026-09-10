@@ -42,6 +42,17 @@ export function resizeOutpaintFrame(rect: MarkCropRect, image: MarkCropRect, sou
   return { x, y, width: right - x, height: bottom - y }
 }
 
+/** 工作面四边始终可达；图片过小时最小等比放大，不能截断请求留白伪装成合法构图。 */
+export function resizeOutpaintScene(rect: MarkCropRect, image: MarkCropRect, source: OutpaintImageSize, viewport: OutpaintImageSize, maximum: number): OutpaintScene {
+  const x = clamp(rect.x, 0, image.x)
+  const y = clamp(rect.y, 0, image.y)
+  const right = clamp(rect.x + rect.width, image.x + image.width, viewport.width)
+  const bottom = clamp(rect.y + rect.height, image.y + image.height, viewport.height)
+  const frame = { x, y, width: right - x, height: bottom - y }
+  const fitted = translateOutpaintImage(image, frame, source, maximum)
+  return { frame: resizeOutpaintFrame(frame, fitted, source, viewport, maximum), image: fitted }
+}
+
 /** 图片在固定框内移动；保留完整原图，四边留白不超过接口上限。 */
 export function moveOutpaintImage(image: MarkCropRect, frame: MarkCropRect, source: OutpaintImageSize, maximum: number): MarkCropRect {
   const margin = maximum * image.width / source.width

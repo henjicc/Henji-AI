@@ -6,7 +6,9 @@ import type { ModelDefinition, ParamDef } from '@/core/types';
 
 import type { CanvasNode } from '../domain/canvasNodes';
 import { getCanvasNodeDefinition } from '../domain/nodeRegistry';
-import type { RowMediaKind } from '../domain/socketTypes';
+import { MEDIA_PARAM_ID, MODEL_PARAM_ID, PROMPT_PARAM_ID, type RowMediaKind } from '../domain/socketTypes';
+
+const RESERVED_PARAM_IDS = new Set([MODEL_PARAM_ID, PROMPT_PARAM_ID, ...Object.values(MEDIA_PARAM_ID)]);
 
 export interface VisibleSchemaParamRows {
   visibleParams: ParamDef[];
@@ -56,6 +58,8 @@ export function getSchemaMediaParamKind(param: ParamDef | undefined): RowMediaKi
 }
 
 export function findParamForTargetNode(targetNode: CanvasNode, paramId: string): ParamDef | undefined {
+  // 通用端口与模型 schema 属于不同命名空间，不能在每次画布状态变化时扫描所有模型。
+  if (RESERVED_PARAM_IDS.has(paramId)) return undefined;
   const modelId = (targetNode.data as { modelId?: DynamicValue }).modelId;
   if (typeof modelId === 'string' && modelId) {
     const storedParam = registry.getSchema(modelId).find((item) => item.id === paramId);

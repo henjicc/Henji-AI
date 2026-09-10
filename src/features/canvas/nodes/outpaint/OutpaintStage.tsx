@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { UiError, UiLoading } from '@/components/ui'
 import { resolveImageDisplayUrl } from '@/services/imageSource'
 import { CropOverlayBox } from '@/features/imageMark/editor/CropOverlayBox'
-import { createOutpaintScene, scaleOutpaintScene, translateOutpaintImage, outpaintSceneToMargins, resizeOutpaintFrame, resolveOutpaintMargins, zoomOutpaintImage, type OutpaintImageSize, type OutpaintMargins, type OutpaintScene } from '../../domain/outpaintGeometry'
+import { createOutpaintScene, translateOutpaintImage, outpaintSceneToMargins, resizeOutpaintScene, resolveOutpaintMargins, zoomOutpaintImage, type OutpaintImageSize, type OutpaintMargins, type OutpaintScene } from '../../domain/outpaintGeometry'
 
 interface Props {
   source: string
@@ -16,29 +16,20 @@ interface Props {
 export const OutpaintStage = memo(function OutpaintStage({ source, params, maximum, onCommit, onSourceAspectRatio }: Props) {
   const { t } = useTranslation()
   const host = useRef<HTMLDivElement>(null)
-  const [viewport, setViewport] = useState({ width: 0, height: 0 })
   const [image, setImage] = useState<OutpaintImageSize | null>(null)
+  // 固定逻辑工作面；节点缩放只由 CSS 整体变换，不测量、不重排内部图框。
+  const viewport = { width: image ? 600 * image.width / image.height : 600, height: 600 }
   const [failed, setFailed] = useState(false)
   type Snapshot = { scene: OutpaintScene; paramsKey: string; viewport: OutpaintImageSize }
   const [draft, setDraft] = useState<Snapshot | null>(null)
   const baseline = useRef<Snapshot | null>(null)
   const committedKey = useRef('')
   const wheelTimer = useRef<ReturnType<typeof setTimeout>>()
-  useLayoutEffect(() => {
-    const element = host.current
-    if (!element) return
-    const observer = new ResizeObserver(([entry]) => {
-      const { width, height } = entry.contentRect
-      if (width > 0 && height > 0) setViewport(current => current.width === width && current.height === height ? current : { width, height })
-    })
-    observer.observe(element)
-    return () => observer.disconnect()
-  }, [])
   const saved = image ? resolveOutpaintMargins(params, image, maximum) : null
   const paramsKey = JSON.stringify(saved)
   const snapshot = draft && (draft.paramsKey === paramsKey || committedKey.current === paramsKey)
     ? draft : baseline.current?.paramsKey === paramsKey ? baseline.current : null
-  const scene = snapshot ? scaleOutpaintScene(snapshot.scene, snapshot.viewport, viewport)
+  const scene = snapshot ? snapshot.scene
     : image && saved && viewport.width > 0 && viewport.height > 0 ? createOutpaintScene(image, viewport, saved, maximum) : null
   useLayoutEffect(() => {
     if (scene && baseline.current?.paramsKey !== paramsKey) baseline.current = { scene, paramsKey, viewport }
@@ -81,9 +72,10 @@ export const OutpaintStage = memo(function OutpaintStage({ source, params, maxim
     }
   }, [])
   return (
-    <div ref={host} className="nowheel relative min-h-0 w-full flex-1 overflow-hidden" data-outpaint-stage
+    <div ref={host} className="nowheel relative min-h-0 w-full flex-1 overflow-hidden" data-outpaint-stage style={{ containerType: 'size' }}
       onMouseLeave={() => { if (wheelTimer.current) commitRef.current?.() }}>
       {failed ? <UiError message={t('node.outpaint.loadFailed')} /> : !image && <UiLoading />}
+      <div className="absolute left-0 top-0 origin-top-left" style={{ width: viewport.width, height: viewport.height, transform: `scale(calc(100cqw / ${viewport.width}px))` }}>
       {scene && <div className="pointer-events-none absolute image-editor-transparency-grid"
         style={{ left: scene.frame.x, top: scene.frame.y, width: scene.frame.width, height: scene.frame.height }} />}
       <img src={resolveImageDisplayUrl(source)} alt="" draggable={false}
@@ -103,13 +95,15 @@ export const OutpaintStage = memo(function OutpaintStage({ source, params, maxim
         ratio={null} appearance="expand"
         constrainRect={(rect, handle) => handle === 'move'
           ? translateOutpaintImage(rect, latestScene.current!.frame, image, maximum)
-          : resizeOutpaintFrame(rect, latestScene.current!.image, image, viewport, maximum)}
+          : resizeOutpaintScene(rect, latestScene.current!.image, image, viewport, maximum).frame}
         onChange={(rect, handle) => {
           clearTimeout(wheelTimer.current)
           wheelTimer.current = undefined
-          update({ ...latestScene.current!, [handle === 'move' ? 'image' : 'frame']: rect })
+          update(handle === 'move' ? { ...latestScene.current!, image: rect }
+            : resizeOutpaintScene(rect, latestScene.current!.image, image, viewport, maximum))
         }}
         onCommit={() => commitRef.current?.()} />}
+      </div>
     </div>
   )
 })
