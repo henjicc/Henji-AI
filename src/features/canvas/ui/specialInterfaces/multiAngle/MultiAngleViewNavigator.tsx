@@ -1,4 +1,4 @@
-import { Fragment, memo, useMemo } from 'react'
+import { memo, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { UiButton } from '@/components/ui'
 import type { MultiAngleDiscretePreset } from '@/features/canvas/capabilities/multiAnglePolicy'
@@ -30,32 +30,27 @@ export const MultiAngleViewNavigator = memo(function MultiAngleViewNavigator({
             && baseline + 1 > box.top && baseline - 3 < box.bottom)) ?? candidates[0]
         if (!occluded) labelBoxes.push({ left: labelX - labelWidth / 2, right: labelX + labelWidth / 2, top: labelY - 3, bottom: labelY + 1 })
         return (
-          <Fragment key={view.preset}>
+          <g key={view.preset} className="group/direction">
+          <circle cx={x} cy={y} r={size / 2} opacity={opacity}
+            data-multi-angle-direction-dot={view.preset} visibility={occluded ? 'hidden' : 'visible'}
+            aria-hidden="true" className={`pointer-events-none ${active ? 'fill-accent' : 'fill-text-muted group-hover/direction:fill-text group-focus-within/direction:fill-text'}`} />
           <foreignObject x={x - 3} y={y - 3} width="6" height="6"
             visibility={occluded ? 'hidden' : 'visible'} data-direction-depth={depth}>
             <UiButton
               type="button" variant="plain" aria-label={label} aria-pressed={active} title={label}
               tabIndex={occluded ? -1 : 0}
               data-multi-angle-direction={view.preset}
-              className="group/direction pointer-events-auto !flex !h-full !w-full !rounded-full !border-0 !bg-transparent !p-0"
+              className="pointer-events-auto !flex !h-full !w-full !rounded-full !border-0 !bg-transparent !p-0"
               onPointerDown={event => { if (!active) event.stopPropagation() }}
               onKeyDown={event => event.stopPropagation()}
               onClick={event => { event.stopPropagation(); onSelect(view.preset) }}
-            >
-              <span aria-hidden="true"
-                className={`relative block rounded-full bg-gradient-to-br group-hover/direction:brightness-125 ${active
-                  ? 'from-text via-accent to-accent'
-                  : 'from-text via-text-muted to-bg-dark'}`}
-                style={{ width: `${size / 6 * 100}%`, height: `${size / 6 * 100}%`, opacity }}>
-                <span className="absolute left-1/4 top-1/4 h-1/4 w-1/4 rounded-full bg-text/70" />
-              </span>
-            </UiButton>
+            />
           </foreignObject>
           <text x={labelX} y={labelY} fontSize="3" textAnchor="middle" aria-hidden="true"
             data-multi-angle-direction-label={view.preset} visibility={occluded ? 'hidden' : 'visible'}
             className={`pointer-events-none stroke-panel ${active ? 'fill-text font-medium' : 'fill-text-soft'}`}
             strokeWidth="0.8" strokeLinejoin="round" paintOrder="stroke">{label}</text>
-          </Fragment>
+          </g>
         )
       })}
     </g>

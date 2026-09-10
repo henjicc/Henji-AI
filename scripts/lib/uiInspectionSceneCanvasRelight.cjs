@@ -255,7 +255,7 @@ function attachUiInspectionCanvasRelight(context) {
       if (await editor.getByText('源图', { exact: true }).count()) throw new Error('已连接图片时仍重复显示源图行')
       const layout = await editor.evaluate(element => {
         const panel = element.lastElementChild
-        const titles = [...element.querySelectorAll('[data-multi-angle-profile-options] button > span > span:first-child')]
+        const titles = [...element.querySelectorAll('[data-multi-angle-profile-options] button > span')]
         return {
           inspectorWidth: panel.getBoundingClientRect().width / element.getBoundingClientRect().width,
           titlesFit: titles.length === 3 && titles.every(title => {
@@ -303,7 +303,13 @@ function attachUiInspectionCanvasRelight(context) {
     if (JSON.stringify(rotatedTextures) !== JSON.stringify([...edgeTextures].sort())) throw new Error('旋转时边缘贴图发生重复生成')
 
     await writeFile('.ui-tour/canvas-multi-angle-image-block.png', await captureInspectionPage(electronApp, page))
-    await editor.getByRole('button', { name: /完整方位/ }).click()
+    const profileOptions = editor.locator('[data-multi-angle-profile-options] button')
+    const profileLabels = await profileOptions.allTextContents()
+    if (JSON.stringify(profileLabels) !== JSON.stringify(['FLUX.2', 'Qwen 2511', '预设角度'])) throw new Error(`控制方式名称或顺序不符：${profileLabels}`)
+    const profileSizes = await profileOptions.evaluateAll(buttons => buttons.map(button => ({ height: parseFloat(getComputedStyle(button).height), fits: button.scrollWidth <= button.clientWidth })))
+    // Electron zoom can report 38 CSS px as 37.9977; allow only sub-layout-pixel rounding.
+    if (profileSizes.some(size => Math.abs(size.height - 38) > 0.01 || !size.fits)) throw new Error(`控制方式不是紧凑单行：${JSON.stringify(profileSizes)}`)
+    await editor.getByRole('button', { name: '预设角度', exact: true }).click()
     const slots = editor.locator('[data-multi-angle-output-slots] button')
     const directions = editor.locator('[data-multi-angle-direction-options]')
     await directions.getByRole('button', { name: '左侧面', exact: true }).click()
@@ -345,6 +351,11 @@ function attachUiInspectionCanvasRelight(context) {
       return { background: style.backgroundColor, border: style.borderTopWidth }
     }))
     if (pointSurfaces.some(style => style.background !== 'rgba(0, 0, 0, 0)' || style.border !== '0px')) throw new Error('方位点仍有圆形按钮底或边框')
+    const dotSizes = await editor.locator('[data-multi-angle-direction-dot]:visible').evaluateAll(dots => dots.map(dot => {
+      const box = dot.getBoundingClientRect()
+      return { width: box.width, height: box.height, filter: getComputedStyle(dot).filter }
+    }))
+    if (dotSizes.length < 3 || dotSizes.some(dot => Math.abs(dot.width - dot.height) > 0.05 || dot.filter !== 'none')) throw new Error(`方位点不是无滤镜正圆：${JSON.stringify(dotSizes)}`)
     await editor.getByRole('button', { name: '移除当前视图', exact: true }).click()
     await directions.getByRole('button', { name: '正面', exact: true }).click()
     await waitForPose('data-block-azimuth', 0)
@@ -417,7 +428,7 @@ function attachUiInspectionCanvasRelight(context) {
     const reopenedEditor = page.locator(`[data-multi-angle-node-id="${nodeId}"] [data-multi-angle-workbench="true"]`)
     await reopenedEditor.waitFor({ state: 'visible', timeout: 12000 })
     await reopenedEditor.locator('[data-multi-angle-direction-options]').getByRole('button', { name: /^顶视$/ }).waitFor({ state: 'visible', timeout: 8000 })
-    await reopenedEditor.getByRole('button', { name: /连续控制/ }).click()
+    await reopenedEditor.getByRole('button', { name: 'Qwen 2511', exact: true }).click()
     const reopenedCameraControl = reopenedEditor.locator('[data-multi-angle-camera-control="true"][data-multi-angle-profile="continuous"]')
     await reopenedCameraControl.waitFor({ state: 'visible', timeout: 8000 })
     const reopenedBounds = await reopenedCameraControl.boundingBox()

@@ -10,6 +10,7 @@ import {
   UiRangeInput,
 } from '@/components/ui'
 import {
+  UI_FIELD_CONTROL_HEIGHT_SM_CLASS,
   UI_GLASS_ADAPTIVE_REGION_CLASS,
   UI_GLASS_ADAPTIVE_SURFACE_CLASS,
   UI_TEXT_LABEL_CLASS,
@@ -217,26 +218,29 @@ export function MultiAngleWorkbench({
               <UiOptionButton
                 type="button"
                 variant="flat"
-                active={config.controlProfile === 'continuous-v1'}
-                onClick={() => selectProfile('continuous-v1')}
+                active={config.controlProfile === 'flux-native-v1'}
+                className={`${UI_FIELD_CONTROL_HEIGHT_SM_CLASS} min-w-0 justify-center !px-2 !py-0`}
+                onClick={() => selectProfile('flux-native-v1')}
               >
-                <span className="flex flex-col"><span className="whitespace-nowrap text-sm font-medium">{t('node.multiAngleEditor.profiles.continuous.title')}</span><span className="text-xs text-text-soft">{t('node.multiAngleEditor.profiles.continuous.subtitle')}</span></span>
+                <span className="whitespace-nowrap text-sm font-medium">{t('node.multiAngleEditor.profiles.flux.title')}</span>
               </UiOptionButton>
               <UiOptionButton
                 type="button"
                 variant="flat"
-                active={config.controlProfile === 'flux-native-v1'}
-                onClick={() => selectProfile('flux-native-v1')}
+                active={config.controlProfile === 'continuous-v1'}
+                className={`${UI_FIELD_CONTROL_HEIGHT_SM_CLASS} min-w-0 justify-center !px-2 !py-0`}
+                onClick={() => selectProfile('continuous-v1')}
               >
-                <span className="flex flex-col"><span className="whitespace-nowrap text-sm font-medium">{t('node.multiAngleEditor.profiles.flux.title')}</span><span className="text-xs text-text-soft">{t('node.multiAngleEditor.profiles.flux.subtitle')}</span></span>
+                <span className="whitespace-nowrap text-sm font-medium">{t('node.multiAngleEditor.profiles.continuous.title')}</span>
               </UiOptionButton>
               <UiOptionButton
                 type="button"
                 variant="flat"
                 active={config.controlProfile === 'discrete-v1'}
+                className={`${UI_FIELD_CONTROL_HEIGHT_SM_CLASS} min-w-0 justify-center !px-2 !py-0`}
                 onClick={() => selectProfile('discrete-v1')}
               >
-                <span className="flex flex-col"><span className="whitespace-nowrap text-sm font-medium">{t('node.multiAngleEditor.profiles.discrete.title')}</span><span className="text-xs text-text-soft">{t('node.multiAngleEditor.profiles.discrete.subtitle')}</span></span>
+                <span className="whitespace-nowrap text-sm font-medium">{t('node.multiAngleEditor.profiles.discrete.title')}</span>
               </UiOptionButton>
             </div>
           </section>

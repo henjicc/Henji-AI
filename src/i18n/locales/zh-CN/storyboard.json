@@ -420,9 +420,9 @@
       "disclaimer": "可视轨道只编辑模型控制量，不代表真实焦距、物理角度或空间重建精度。",
       "controlMode": "控制方式",
       "profiles": {
-        "continuous": { "title": "连续控制", "subtitle": "模型控制量" },
-        "flux": { "title": "FLUX 原生", "subtitle": "0–360°" },
-        "discrete": { "title": "完整方位", "subtitle": "九档吸附" }
+        "continuous": { "title": "Qwen 2511" },
+        "flux": { "title": "FLUX.2" },
+        "discrete": { "title": "预设角度" }
       },
       "outputViews": "输出视图 · {{count}}/{{max}}",
       "removeView": "移除当前视图",

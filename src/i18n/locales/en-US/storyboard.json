@@ -420,9 +420,9 @@
       "disclaimer": "The visual orbit edits model controls only; it does not represent physical focal length, exact camera angles, or spatial reconstruction accuracy.",
       "controlMode": "Control mode",
       "profiles": {
-        "continuous": { "title": "Continuous", "subtitle": "Model controls" },
-        "flux": { "title": "FLUX Native", "subtitle": "0–360°" },
-        "discrete": { "title": "Full Directions", "subtitle": "Nine-way snapping" }
+        "continuous": { "title": "Qwen 2511" },
+        "flux": { "title": "FLUX.2" },
+        "discrete": { "title": "Preset angles" }
       },
       "outputViews": "Output views · {{count}}/{{max}}",
       "removeView": "Remove current view",
