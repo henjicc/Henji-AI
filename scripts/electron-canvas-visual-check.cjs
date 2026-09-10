@@ -88,7 +88,7 @@ async function applyConfig(page, name) {
       document.head.appendChild(style)
     }
     // 截图判定只关心静态外观；禁用动画与过渡，排除流动连线和 hover 退场的时序噪声。
-    style.textContent = `${css}\n*{animation:none!important;transition:none!important;caret-color:transparent!important;}\n.canvas-processing-edge__flow{display:none!important;}`
+    style.textContent = `${css}\n*{animation:none!important;transition:none!important;caret-color:transparent!important;}\n.canvas-edge-flow-pulse{display:none!important;}`
     for (const media of document.querySelectorAll('video,audio')) media.pause()
   }, { styleId: STYLE_ID, css: config.css })
   await sleep(CAPTURE_SETTLE_MS)

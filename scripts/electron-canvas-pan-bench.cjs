@@ -29,6 +29,8 @@
 const fs = require('node:fs')
 const path = require('node:path')
 const { launchElectronApp, waitForApp } = require('./lib/electronLaunch.cjs')
+const { installEdgeFlowBench, applyEdgeFlowBench, readEdgeFlowBench, verifyEdgeFlowBench } = require('./lib/canvasEdgeFlowBench.cjs')
+const { captureInspectionPage } = require('./lib/uiInspectionCapture.cjs')
 const {
   createPanDiagnostics,
   installPageDiagnostics,
@@ -80,6 +82,9 @@ const SWEEP_SCREEN_DISTANCE = (SWEEP_MS / SWEEP_INTERVAL_MS) * SWEEP_STEP_PX
  */
 const CONFIGS = {
   off: '',
+  'flow-none': '',
+  'flow-pulse': '',
+  'flow-legacy': '@keyframes bench-edge-flow{from{stroke-dashoffset:0}to{stroke-dashoffset:-36}}.bench-legacy-edge-flow{animation:bench-edge-flow .9s linear infinite}.canvas-viewport-moving .bench-legacy-edge-flow{animation-play-state:paused}',
   paintdisabled: '.canvas-node-paint-frame{contain:none!important;}.react-flow__node{contain:none!important;overflow-clip-margin:0!important;}',
   hidenodes: '.react-flow__node{visibility:hidden !important;}',
   hidewaveforms: '.react-flow__node-audioUploadNode .nodrag.nowheel>svg.block,.react-flow__node-audioGenNode .nodrag.nowheel>svg.block{display:none!important;}',
@@ -91,6 +96,7 @@ const CONFIG_SET = (process.env.BENCH_SET || 'off,hidenodes')
   .split(',')
   .map((name) => name.trim())
   .filter(Boolean)
+const EDGE_FLOW_BENCH = CONFIG_SET.some((name) => name.startsWith('flow-'))
 
 function resolveConfigCss(name) {
   if (CONFIGS[name] !== undefined) return CONFIGS[name]
@@ -111,6 +117,7 @@ async function applyConfig(page, name) {
     }
     element.textContent = styleText
   }, { styleId: STYLE_ID, styleText: css })
+  if (EDGE_FLOW_BENCH) await applyEdgeFlowBench(page, name)
   await sleep(120)
 }
 
@@ -298,7 +305,7 @@ async function main() {
     throw new Error('BENCH_ZOOM 必须是正数')
   }
 
-  const app = await launchElectronApp({ mainEntry: MAIN_ENTRY, cwd: ROOT, skipOnboarding: true })
+  const app = await launchElectronApp({ mainEntry: MAIN_ENTRY, cwd: ROOT, skipOnboarding: true, useElectronApi: EDGE_FLOW_BENCH })
   const page = app.page
   let fixture = null
   let session = null
@@ -329,7 +336,9 @@ async function main() {
     })
 
     await openFixtureProject(page, fixture.projectName, fixture.nodeCount)
+    if (EDGE_FLOW_BENCH) await installEdgeFlowBench(page, ROOT)
     const environment = await collectEnvironment(page, session)
+    console.log(`基准已打开：${fixture.nodeCount} 节点 / ${fixture.edgeCount} 连线`)
 
     const grab = await findPanePoint(page, { preferRatioX: 0.86, preferRatioY: 0.5 })
     if (!grab) throw new Error('找不到落在 .react-flow__pane 上的抓取点')
@@ -360,9 +369,12 @@ async function main() {
     }
 
     const results = {}
+    const idleResults = {}
     for (const name of CONFIG_SET) results[name] = []
+    for (const name of CONFIG_SET) idleResults[name] = []
     const resetFailures = []
     let diagnosticSoak = null
+    let flowVerification = null
 
     // 同一次启动内交替采样：A/B/A/B…，避免「第一个配置永远最慢」的预热假象
     for (let rep = 0; rep < REPS; rep += 1) {
@@ -380,6 +392,12 @@ async function main() {
           if (!recovered.ok) {
             throw new Error(`配置 ${name} 第 ${rep + 1} 轮无法恢复统一起点`)
           }
+          if (EDGE_FLOW_BENCH) await applyConfig(page, name)
+        }
+        if (EDGE_FLOW_BENCH && diagnostics) {
+          const idleStart = await diagnostics.startRound()
+          await sleep(1000)
+          idleResults[name].push({ diagnostics: await diagnostics.endRound(idleStart), flow: await readEdgeFlowBench(page) })
         }
         const diagnosticStart = diagnostics ? await diagnostics.startRound() : null
         const forward = await sweep(page, session, { ...sweepOptions, measure: true })
@@ -396,8 +414,18 @@ async function main() {
         })
         const reset = await resetViewport(page, session, startViewport)
         if (!reset.ok) resetFailures.push({ rep: rep + 1, config: name, reset })
+        if (EDGE_FLOW_BENCH && rep === 0) {
+          fs.mkdirSync(OUT_DIR, { recursive: true })
+          fs.writeFileSync(path.join(OUT_DIR, `${name}.png`), await captureInspectionPage(app.app, page))
+        }
+        console.log(`${name} ${rep + 1}/${REPS}: ${forward.fps} FPS, p95 ${forward.p95Ms}ms, valid=${forward.valid}`)
         await sleep(200)
       }
+    }
+    if (EDGE_FLOW_BENCH) {
+      await applyConfig(page, 'flow-pulse')
+      try { flowVerification = await verifyEdgeFlowBench(page, session) }
+      catch (error) { flowVerification = { error: error.message } }
     }
     await applyConfig(page, 'off')
 
@@ -421,7 +449,7 @@ async function main() {
     for (const name of CONFIG_SET) summary[name] = summarize(results[name])
 
     const output = {
-      ok: true,
+      ok: !flowVerification?.error,
       generatedAt: new Date().toISOString(),
       launchMode: app.mode,
       params: {
@@ -451,6 +479,8 @@ async function main() {
       resetFailures,
       diagnosticSoak,
       summary,
+      flowVerification,
+      idleResults: EDGE_FLOW_BENCH ? idleResults : undefined,
       rounds: results,
     }
 
@@ -458,8 +488,9 @@ async function main() {
     const outFile = path.join(OUT_DIR, `pan-bench-${Date.now()}.json`)
     fs.writeFileSync(outFile, JSON.stringify(output, null, 2), 'utf8')
 
-    console.log(JSON.stringify({ ...output, rounds: undefined }, null, 2))
+    console.log(JSON.stringify({ ...output, rounds: undefined, idleResults: undefined }, null, 2))
     console.log(`\n完整数据：${path.relative(ROOT, outFile)}`)
+    if (flowVerification?.error) throw new Error(flowVerification.error)
   } finally {
     if (fixture) {
       // 回到项目列表再删，避免正在打开的项目被自动保存重新写回

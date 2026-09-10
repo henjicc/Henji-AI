@@ -204,33 +204,13 @@
   cursor: grabbing;
 }
 
-@keyframes canvas-edge-flow {
-  from {
-    stroke-dashoffset: 0;
-  }
-
-  to {
-    stroke-dashoffset: -36;
-  }
-}
-
-.canvas-processing-edge__flow {
-  animation: canvas-edge-flow 0.9s linear infinite;
-}
-
-/* 平移/缩放手势期间暂停流动动画。
-   stroke-dashoffset 不是合成器可加速属性，浏览器每帧都要在主线程重绘这条 SVG，
-   而边层就在 .react-flow__viewport 内；动画每帧把该层弄脏，会额外触发 SVG 重绘，
-   表现为"有节点在生成时拖画布慢半拍"。手势期间暂停后可减少无关绘制，
-   手势结束动画从暂停处继续（不重置进度，视觉上无跳变）。
-
-   这条挂在 .canvas-viewport-moving，平移和缩放都不需要同时刷新这条装饰动画。 */
-.canvas-viewport-moving .canvas-processing-edge__flow {
-  animation-play-state: paused;
+.canvas-edge-flow-pulse {
+  /* 光晕只画一次，播放仅更新 transform/opacity；不提升整个节点或视口的光栅层。 */
+  box-shadow: 0 0 5px rgb(var(--accent-rgb) / 0.8);
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .canvas-processing-edge__flow {
-    animation: none;
+  .canvas-edge-flow-pulse {
+    visibility: hidden;
   }
 }

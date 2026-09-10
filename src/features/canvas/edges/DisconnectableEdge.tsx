@@ -11,6 +11,7 @@ import { getNodeIndexById } from '@/features/canvas/domain/connectionIndex';
 import { getNodeDefinition } from '@/features/canvas/domain/nodeRegistry';
 import { UiIconButton } from '@/components/ui';
 import { useCanvasStore } from '@/stores/canvasStore';
+import { EdgeFlowPulse } from './EdgeFlowPulse';
 
 export const DisconnectableEdge = memo(function DisconnectableEdge(props: EdgeProps) {
   const {
@@ -50,18 +51,6 @@ export const DisconnectableEdge = memo(function DisconnectableEdge(props: EdgePr
 
   return (
     <>
-      {isProcessingEdge && (
-        <path
-          d={edgePath}
-          fill="none"
-          stroke="rgb(var(--accent-rgb) / 1)"
-          strokeWidth={selected ? 2.5 : 2.1}
-          strokeLinecap="round"
-          strokeDasharray="8 10"
-          className="canvas-processing-edge__flow"
-          style={{ pointerEvents: 'none' }}
-        />
-      )}
       <BaseEdge
         id={id}
         path={edgePath}
@@ -72,6 +61,7 @@ export const DisconnectableEdge = memo(function DisconnectableEdge(props: EdgePr
           ...style,
         }}
       />
+      {isProcessingEdge && <EdgeFlowPulse path={edgePath} edgeId={id} />}
       {selected && (
         <EdgeLabelRenderer>
           <UiIconButton
