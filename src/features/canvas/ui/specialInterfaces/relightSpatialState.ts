@@ -33,6 +33,21 @@ export function projectSpatialPoint(point: SpatialPoint, view: RelightVisualizer
     z: Math.sin(pitch) * point.y + Math.cos(pitch) * z }
 }
 
+/** Continuous pointer preview on the sphere; only release uses the discrete API stops. */
+export function spatialPointAtPointer(x: number, y: number, view: RelightVisualizerView, depth: number, radius = 1): SpatialPoint {
+  const yaw = view === 'front' ? 0 : 0.65
+  const pitch = view === 'front' ? 0 : 0.32
+  const cameraX = (x - 50) / 41
+  const cameraY = (50 - y) / 41
+  const scale = Math.max(1, Math.hypot(cameraX, cameraY) / radius)
+  const px = cameraX / scale; const py = cameraY / scale
+  const pz = (depth < 0 ? -1 : 1) * Math.sqrt(Math.max(0, radius * radius - px * px - py * py))
+  const worldY = Math.cos(pitch) * py + Math.sin(pitch) * pz
+  const yawZ = -Math.sin(pitch) * py + Math.cos(pitch) * pz
+  return { x: Math.cos(yaw) * px + Math.sin(yaw) * yawZ, y: worldY,
+    z: -Math.sin(yaw) * px + Math.cos(yaw) * yawZ }
+}
+
 export function mainDirectionForPose(pose: LightPose): RelightKeyDirection {
   const p = lightPosition(pose)
   return RELIGHT_DIRECTION_ORDER.reduce((best, direction) => {

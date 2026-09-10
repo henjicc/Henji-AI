@@ -52,15 +52,15 @@ export function describeLocalizedMultiAngleCamera(
   if (view.kind === 'discrete') return translateMultiAngleViewLabel(t, view, index)
   if (view.kind === 'flux') {
     return t(`${PREFIX}.camera.flux`, {
-      horizontal: view.horizontalAngleDeg,
-      vertical: view.verticalAngleDeg,
+      horizontal: Math.round(view.horizontalAngleDeg),
+      vertical: Math.round(view.verticalAngleDeg),
       zoom: view.zoom,
     })
   }
   const yaw = view.yawControlDeg > 0
-    ? t(`${PREFIX}.camera.orbitLeft`, { value: view.yawControlDeg })
+    ? t(`${PREFIX}.camera.orbitLeft`, { value: Math.round(view.yawControlDeg) })
     : view.yawControlDeg < 0
-      ? t(`${PREFIX}.camera.orbitRight`, { value: Math.abs(view.yawControlDeg) })
+      ? t(`${PREFIX}.camera.orbitRight`, { value: Math.round(Math.abs(view.yawControlDeg)) })
       : t(`${PREFIX}.camera.front`)
   return `${yaw} · ${describeLocalizedMultiAngleVertical(t, view.verticalControl)} · ${describeLocalizedMultiAngleProximity(t, view.proximity)}`
 }

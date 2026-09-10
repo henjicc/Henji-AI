@@ -6,7 +6,7 @@ import { RELIGHT_DIRECTION_LABELS, RELIGHT_DIRECTION_ORDER, type RelightVisualiz
 import { RIM_DIRECTION_LABELS, RIM_DIRECTION_ORDER } from './relightRimLightState'
 import { RelightSpatialScene } from './RelightSpatialScene'
 import { snapLightAtPoint, lightPosition, mainDirectionForPose, poseForMain, poseForRim,
-  projectSpatialPoint, rimDirectionForPose, type RelightSpatialState } from './relightSpatialState'
+  projectSpatialPoint, spatialPointAtPointer, rimDirectionForPose, type LightPose, type RelightSpatialState } from './relightSpatialState'
 
 interface Props {
   direction: RelightKeyDirection
@@ -26,7 +26,7 @@ export function RelightDirectionVisualizer({ direction, brightness = 0, colorPre
   const [poses, setPoses] = useState(() => ({ main: poseForMain(direction), rim: poseForRim(rimDirection) }))
   const posesRef = useRef(poses)
   const previous = useRef({ direction, rimDirection })
-  const drag = useRef<{ id: number; lamp: 'main' | 'rim'; left: number; top: number; size: number; start: RelightSpatialState } | null>(null)
+  const drag = useRef<{ id: number; lamp: 'main' | 'rim'; left: number; top: number; size: number; start: RelightSpatialState; target: LightPose; depth: number } | null>(null)
   const [dragging, setDragging] = useState(false)
   const setPosition = (next: RelightSpatialState): void => { posesRef.current = next; setPoses(next) }
 
@@ -55,8 +55,11 @@ export function RelightDirectionVisualizer({ direction, brightness = 0, colorPre
   const move = (event: PointerEvent<HTMLDivElement>): void => {
     const active = drag.current
     if (!active || active.id !== event.pointerId) return
-    const pose = snapLightAtPoint((event.clientX - active.left) / active.size * 100,
-      (event.clientY - active.top) / active.size * 100, active.lamp, view)
+    const x = (event.clientX - active.left) / active.size * 100
+    const y = (event.clientY - active.top) / active.size * 100
+    active.target = snapLightAtPoint(x, y, active.lamp, view)
+    const point = spatialPointAtPointer(x, y, view, active.depth)
+    const pose = { azimuth: Math.atan2(point.x, point.z), elevation: Math.asin(Math.max(-1, Math.min(1, point.y))) }
     const old = posesRef.current[active.lamp]
     if (old.azimuth !== pose.azimuth || old.elevation !== pose.elevation)
       setPosition({ ...posesRef.current, [active.lamp]: pose })
@@ -64,8 +67,8 @@ export function RelightDirectionVisualizer({ direction, brightness = 0, colorPre
   const control = (lamp: 'main' | 'rim'): JSX.Element => {
     const isMain = lamp === 'main'
     const point = projectSpatialPoint(lightPosition(poses[lamp]), view)
-    const currentMain = mainDirectionForPose(poses.main)
-    const currentRim = rimDirectionForPose(poses.rim)
+    const currentMain = mainDirectionForPose(drag.current?.lamp === 'main' ? drag.current.target : poses.main)
+    const currentRim = rimDirectionForPose(drag.current?.lamp === 'rim' ? drag.current.target : poses.rim)
     return <div key={lamp} role="slider" tabIndex={0} aria-label={isMain ? '主光方向' : '轮廓光方向'}
       aria-valuemin={0} aria-valuemax={isMain ? 4 : 7}
       aria-valuenow={isMain ? RELIGHT_DIRECTION_ORDER.indexOf(currentMain) : RIM_DIRECTION_ORDER.indexOf(currentRim)}
@@ -82,14 +85,14 @@ export function RelightDirectionVisualizer({ direction, brightness = 0, colorPre
         event.preventDefault(); event.stopPropagation()
         const bounds = stageRef.current?.getBoundingClientRect()
         drag.current = { id: event.pointerId, lamp, left: bounds?.left ?? 0, top: bounds?.top ?? 0,
-          size: Math.max(bounds?.width ?? 1, 1), start: posesRef.current }
+          size: Math.max(bounds?.width ?? 1, 1), start: posesRef.current, target: posesRef.current[lamp], depth: point.z }
         event.currentTarget.setPointerCapture(event.pointerId)
         setDragging(true)
       }} onPointerMove={move}
       onPointerUp={event => {
         const active = drag.current
         if (!active || active.id !== event.pointerId) return
-        const next = posesRef.current
+        const next = { ...posesRef.current, [lamp]: active.target }
         drag.current = null; setDragging(false)
         if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId)
         commit(next, lamp)
@@ -123,7 +126,8 @@ export function RelightDirectionVisualizer({ direction, brightness = 0, colorPre
       <div ref={stageRef} style={{ width: 'min(100cqw, 100cqh)', height: 'min(100cqw, 100cqh)' }}
         className="relative shrink-0 select-none overflow-hidden rounded-lg text-veil-subtle">
         <RelightSpatialScene main={poses.main} rim={rimDirection === 'off' ? null : poses.rim} view={view}
-          activeLamp={dragging ? drag.current?.lamp : undefined} mainEnabled={(mainDirectionForPose(poses.main)) !== 'none'}
+          activeLamp={dragging ? drag.current?.lamp : undefined} snapTarget={drag.current?.target}
+          mainEnabled={drag.current?.lamp === 'main' || mainDirectionForPose(poses.main) !== 'none'}
           color={UI_LIGHTING_COLORS[colorPreset]} intensity={(brightness + 3) / 5} sourceImage={sourceImage} sourceAlt={sourceAlt} />
         {control('main')}
         {rimDirection !== 'off' && onRimDirectionChange ? control('rim') : null}

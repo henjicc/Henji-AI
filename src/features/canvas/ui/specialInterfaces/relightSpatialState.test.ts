@@ -1,9 +1,23 @@
 import { RELIGHT_KEY_DIRECTIONS, RELIGHT_RIM_DIRECTIONS } from '@/features/canvas/capabilities/relightPolicy'
 import { describe, expect, it } from 'vitest'
 import { imagePlaneSize, lightPosition, mainDirectionForPose, poseForMain, poseForRim,
-  projectSpatialPoint, rimDirectionForPose, snapLightAtPoint } from './relightSpatialState'
+  projectSpatialPoint, spatialPointAtPointer, rimDirectionForPose, snapLightAtPoint } from './relightSpatialState'
 
 describe('打光三维空间', () => {
+  it('球内指针连续投影回原位置，球外仅限制边界，前后半球均无离散量化', () => {
+    for (const view of ['front', 'perspective'] as const) for (const depth of [-1, 1]) {
+      for (const x of [50, 61.125, 61.25, 75.6]) {
+        const point = spatialPointAtPointer(x, 57.123, view, depth)
+        const screen = projectSpatialPoint(point, view)
+        expect(screen.x).toBeCloseTo(x, 8)
+        expect(screen.y).toBeCloseTo(57.123, 8)
+        expect(Math.sign(screen.z)).toBe(depth)
+        expect(Math.hypot(point.x, point.y, point.z)).toBeCloseTo(1)
+      }
+      const outside = spatialPointAtPointer(180, -150, view, depth)
+      expect(Math.hypot(outside.x, outside.y, outside.z)).toBeCloseTo(1)
+    }
+  })
   it('所有有效灯位在两种视图中均能命中自身，主光在前、轮廓光在后', () => {
     for (const view of ['front', 'perspective'] as const) {
       for (const direction of RELIGHT_KEY_DIRECTIONS) {

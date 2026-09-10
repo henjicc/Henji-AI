@@ -14,10 +14,11 @@ interface Props {
   sourceImage: string | null
   sourceAlt: string
   activeLamp?: 'main' | 'rim'
+  snapTarget?: LightPose
   mainEnabled?: boolean
 }
 
-export function RelightSpatialScene({ main, rim, view, color, intensity, sourceImage, sourceAlt, activeLamp, mainEnabled = true }: Props): JSX.Element {
+export function RelightSpatialScene({ main, rim, view, color, intensity, sourceImage, sourceAlt, activeLamp, snapTarget, mainEnabled = true }: Props): JSX.Element {
   const id = useId().replace(/:/g, '')
   const [imageSize, setImageSize] = useState({ source: '', aspect: 1 })
   const project = (p: SpatialPoint): SpatialPoint => projectSpatialPoint(p, view)
@@ -91,7 +92,7 @@ export function RelightSpatialScene({ main, rim, view, color, intensity, sourceI
       {(activeLamp === 'rim' ? RIM_DIRECTION_ORDER.map(direction => ({ pose: poseForRim(direction), label: RIM_DIRECTION_LABELS[direction] }))
         : RELIGHT_DIRECTION_ORDER.map(direction => ({ pose: poseForMain(direction), label: RELIGHT_DIRECTION_LABELS[direction] }))).map(({ pose, label }) => {
         const point = project(lightPosition(pose))
-        const current = activeLamp === 'rim' ? rim : main
+        const current = snapTarget
         const active = Boolean(activeLamp && current && pose.azimuth === current.azimuth && pose.elevation === current.elevation)
         return <g key={label} data-light-stop={label} data-snap-active={active}>
           <circle cx={point.x} cy={point.y} r={active ? 4 : 0.65} fill="none"

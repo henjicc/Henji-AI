@@ -4,13 +4,15 @@ import { CANVAS_GRID_ALT_HEX, CANVAS_TEXT_HEX } from '@/core/theme/colorTokens'
 import { MULTI_ANGLE_DISCRETE_VIEW_PRESETS, type MultiAngleViewV1 } from '@/features/canvas/capabilities/multiAnglePolicy'
 import { MULTI_ANGLE_ORBIT_PATHS, multiAngleMarkerPosition, projectMultiAnglePoint } from './multiAngleOrbitGeometry'
 import { imagePlateGeometry } from '../relightSpatialState'
+import { snapContinuousCamera, snapFluxCamera } from './multiAngleCameraVisualizerState'
 
-export const MultiAngleOrbitScene = memo(function MultiAngleOrbitScene({ views, selectedViewId, sourceImage, sourceAlt = '', dragging = false }: {
+export const MultiAngleOrbitScene = memo(function MultiAngleOrbitScene({ views, selectedViewId, sourceImage, sourceAlt = '', dragging = false, previewPosition }: {
   views: MultiAngleViewV1[]
   selectedViewId: string
   sourceImage?: string | null
   sourceAlt?: string
   dragging?: boolean
+  previewPosition?: [number, number, number] | null
 }): JSX.Element {
   const { t } = useTranslation()
   const [imageSize, setImageSize] = useState({ source: '', aspect: 1 })
@@ -19,15 +21,20 @@ export const MultiAngleOrbitScene = memo(function MultiAngleOrbitScene({ views, 
     return { x: p.x, y: p.y, z: -p.depth }
   })
   const selected = views.find(view => view.viewId === selectedViewId)
+  const target = selected?.kind === 'continuous' ? { ...selected, ...snapContinuousCamera(selected) }
+    : selected?.kind === 'flux' ? { ...selected, ...snapFluxCamera(selected) } : selected
+  const targetPoint = target ? projectMultiAnglePoint(multiAngleMarkerPosition(target)) : null
   const stops = useMemo(() => {
     if (!selected) return []
     if (selected.kind === 'discrete') return MULTI_ANGLE_DISCRETE_VIEW_PRESETS.map(item => item.view)
     if (selected.kind === 'continuous') return [-90, -45, 0, 45, 90].map(yawControlDeg => ({ ...selected, yawControlDeg }))
     return [0, 45, 90, 135, 180, 225, 270, 315].map(horizontalAngleDeg => ({ ...selected, horizontalAngleDeg }))
   }, [selected])
-  const markers = useMemo(() => views.map(view => ({ viewId: view.viewId,
-    position: multiAngleMarkerPosition(view), ...projectMultiAnglePoint(multiAngleMarkerPosition(view)) })).sort((a, b) => b.depth - a.depth), [views])
-  const marker = (point: typeof markers[number]): JSX.Element => <g key={point.viewId} data-camera-depth={point.position[2] < 0 ? 'back' : 'front'}>
+  const markers = useMemo(() => views.map(view => {
+    const position = view.viewId === selectedViewId && previewPosition ? previewPosition : multiAngleMarkerPosition(view)
+    return { viewId: view.viewId, position, ...projectMultiAnglePoint(position) }
+  }).sort((a, b) => b.depth - a.depth), [views, selectedViewId, previewPosition])
+  const marker = (point: typeof markers[number]): JSX.Element => <g key={point.viewId} data-camera-selected={point.viewId === selectedViewId} data-camera-depth={point.position[2] < 0 ? 'back' : 'front'}>
     {point.viewId === selectedViewId && <path d={`M${point.x},${point.y} L50,50`} className="stroke-accent" strokeWidth="0.4"
       strokeDasharray={point.position[2] < 0 ? '1.2 1.2' : undefined} opacity="0.55" />}
     <circle cx={point.x} cy={point.y} r={0.075 * point.scale * (point.viewId === selectedViewId ? 1.35 : 0.85)}
@@ -52,9 +59,10 @@ export const MultiAngleOrbitScene = memo(function MultiAngleOrbitScene({ views, 
       </g>
       {markers.filter(point => point.position[2] >= 0).map(marker)}
       {stops.map((stop, index) => {
-        const p = projectMultiAnglePoint(multiAngleMarkerPosition(stop))
-        const current = markers.find(point => point.viewId === selectedViewId)
-        const active = dragging && current && Math.hypot(current.x - p.x, current.y - p.y) < 0.1
+        const snappedStop = stop.kind === 'continuous' ? { ...stop, verticalControl: target?.kind === 'continuous' ? target.verticalControl : stop.verticalControl }
+          : stop.kind === 'flux' ? { ...stop, verticalAngleDeg: target?.kind === 'flux' ? target.verticalAngleDeg : stop.verticalAngleDeg } : stop
+        const p = projectMultiAnglePoint(multiAngleMarkerPosition(snappedStop))
+        const active = dragging && targetPoint && Math.hypot(targetPoint.x - p.x, targetPoint.y - p.y) < 0.1
         return <g key={index} data-camera-stop={stop.kind === 'discrete' ? stop.preset : index} data-snap-active={Boolean(active)}>
           <circle cx={p.x} cy={p.y} r={active ? 3.8 : 0.6} fill="none" className={active ? 'stroke-accent' : 'stroke-veil-soft'} strokeWidth={active ? 0.45 : 0.25} />
           {active && <text x={p.x} y={p.y - 5} fontSize="2.8" textAnchor="middle" className="fill-text-dark">{stop.kind === 'discrete'

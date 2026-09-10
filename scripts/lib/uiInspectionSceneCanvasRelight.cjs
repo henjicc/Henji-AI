@@ -281,10 +281,16 @@ function attachUiInspectionCanvasRelight(context) {
       const stage = await cameraControl.boundingBox()
       await page.mouse.move(stage.x + stage.width / 2, stage.y + stage.height / 2)
       await page.mouse.down()
-      await page.mouse.move(stop.x + stop.width / 2, stop.y + stop.height / 2, { steps: 10 })
+      const pointer = { x: stop.x + stop.width / 2 + 5, y: stop.y + stop.height / 2 + 5 }
+      await page.mouse.move(pointer.x, pointer.y, { steps: 10 })
       if (await editor.locator(`[data-camera-stop="${preset}"][data-snap-active="true"]`).count() !== 1) throw new Error('镜头落点没有高亮')
+      const marker = editor.locator('[data-camera-selected="true"] circle')
+      const preview = await marker.boundingBox()
+      if (Math.abs(preview.x + preview.width / 2 - pointer.x) > 1 || Math.abs(preview.y + preview.height / 2 - pointer.y) > 1) throw new Error('镜头拖动没有连续跟随指针')
       await writeFile(`.ui-tour/canvas-multi-angle-snap-${preset}.png`, await captureInspectionPage(electronApp, page))
       await page.mouse.up()
+      const snapped = await marker.boundingBox()
+      if (Math.abs(snapped.x + snapped.width / 2 - stop.x - stop.width / 2) > 1 || Math.abs(snapped.y + snapped.height / 2 - stop.y - stop.height / 2) > 1) throw new Error('镜头松手没有吸附到高亮落点')
     }
     await page.locator(`[data-multi-angle-node-id="${nodeId}"][data-multi-angle-profile="discrete-v1"]`)
       .waitFor({ state: 'visible', timeout: 8000 })

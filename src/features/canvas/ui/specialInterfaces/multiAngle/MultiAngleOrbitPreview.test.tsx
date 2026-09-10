@@ -25,11 +25,26 @@ describe('多角度局部吸附预览', () => {
         clientX: kind === 'discrete' ? p.x * 2 : 150, clientY: kind === 'discrete' ? p.y * 2 : 50 })
     }
     move(1)
+    const marker = (): number[] => {
+      const circle = container.querySelector('[data-camera-depth] circle')!
+      return ['cx', 'cy'].map(key => Number(circle.getAttribute(key)))
+    }
+    const before = marker()
+    fireEvent.pointerMove(control, { pointerId: 1,
+      clientX: kind === 'discrete' ? p.x * 2 + 1 : 151,
+      clientY: kind === 'discrete' ? p.y * 2 + 1 : 51 })
+    expect(marker()).not.toEqual(before)
+    if (kind === 'discrete') {
+      expect(marker()[0]).toBeCloseTo(p.x + 0.5)
+      expect(marker()[1]).toBeCloseTo(p.y + 0.5)
+    }
     expect(callback).not.toHaveBeenCalled()
     expect(container.querySelector('[data-snap-active="true"]')).not.toBeNull()
     fireEvent.pointerUp(control, { pointerId: 1 })
     expect(callback).toHaveBeenCalledTimes(1)
     if (kind === 'discrete') expect(callback).toHaveBeenCalledWith('back')
+    if (kind === 'continuous') expect(callback).toHaveBeenCalledWith({ yawControlDeg: 0, verticalControl: -0.5 })
+    if (kind === 'flux') expect(callback).toHaveBeenCalledWith({ horizontalAngleDeg: 90, verticalAngleDeg: 15 })
     move(2)
     fireEvent.pointerCancel(control, { pointerId: 2 })
     expect(callback).toHaveBeenCalledTimes(1)

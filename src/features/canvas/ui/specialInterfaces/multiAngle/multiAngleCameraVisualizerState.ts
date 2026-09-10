@@ -65,8 +65,8 @@ export function continuousCameraFromDrag(
   const height = Math.max(metrics.height, 1)
   return {
     // 模型的正向水平控制对应镜头向画面左侧环绕。
-    yawControlDeg: clamp(softSnap(quantize(origin.yawControlDeg - ((clientX - origin.clientX) / width) * 180, 1), 45, 3), YAW_MIN, YAW_MAX),
-    verticalControl: clamp(softSnap(quantize(origin.verticalControl + ((clientY - origin.clientY) / height) * 2, 0.05), 0.5, 0.06), VERTICAL_MIN, VERTICAL_MAX),
+    yawControlDeg: clamp(origin.yawControlDeg - ((clientX - origin.clientX) / width) * 180, YAW_MIN, YAW_MAX),
+    verticalControl: clamp(origin.verticalControl + ((clientY - origin.clientY) / height) * 2, VERTICAL_MIN, VERTICAL_MAX),
   }
 }
 
@@ -86,16 +86,27 @@ export function fluxCameraFromDrag(
   const height = Math.max(metrics.height, 1)
   return {
     horizontalAngleDeg: clamp(
-      softSnap(quantize(origin.horizontalAngleDeg + ((clientX - origin.clientX) / width) * 360, 1), 45, 3),
+      origin.horizontalAngleDeg + ((clientX - origin.clientX) / width) * 360,
       FLUX_HORIZONTAL_MIN,
       FLUX_HORIZONTAL_MAX,
     ),
     verticalAngleDeg: clamp(
-      softSnap(quantize(origin.verticalAngleDeg - ((clientY - origin.clientY) / height) * 60, 1), 15, 2),
+      origin.verticalAngleDeg - ((clientY - origin.clientY) / height) * 60,
       FLUX_VERTICAL_MIN,
       FLUX_VERTICAL_MAX,
     ),
   }
+}
+
+/** Continuous models keep fine control; common-angle attraction and API precision apply only on release. */
+export function snapContinuousCamera(view: Pick<MultiAngleContinuousViewV1, 'yawControlDeg' | 'verticalControl'>): Pick<MultiAngleContinuousViewV1, 'yawControlDeg' | 'verticalControl'> {
+  return { yawControlDeg: clamp(softSnap(quantize(view.yawControlDeg, 1), 45, 3), YAW_MIN, YAW_MAX),
+    verticalControl: clamp(softSnap(quantize(view.verticalControl, 0.05), 0.5, 0.06), VERTICAL_MIN, VERTICAL_MAX) }
+}
+
+export function snapFluxCamera(view: Pick<MultiAngleFluxViewV1, 'horizontalAngleDeg' | 'verticalAngleDeg'>): Pick<MultiAngleFluxViewV1, 'horizontalAngleDeg' | 'verticalAngleDeg'> {
+  return { horizontalAngleDeg: clamp(softSnap(quantize(view.horizontalAngleDeg, 1), 45, 3), FLUX_HORIZONTAL_MIN, FLUX_HORIZONTAL_MAX),
+    verticalAngleDeg: clamp(softSnap(quantize(view.verticalAngleDeg, 1), 15, 2), FLUX_VERTICAL_MIN, FLUX_VERTICAL_MAX) }
 }
 
 export function fluxZoomFromWheel(zoom: number, deltaY: number): number {

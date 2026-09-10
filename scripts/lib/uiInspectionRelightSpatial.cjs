@@ -53,11 +53,17 @@ async function verifyRelightSpatial(page, editor, electronApp) {
   const stop = await editor.locator('[data-light-stop="右侧"] circle').boundingBox()
   await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2)
   await page.mouse.down()
-  await page.mouse.move(stop.x + stop.width / 2, stop.y + stop.height / 2, { steps: 10 })
+  const pointer = { x: stop.x + stop.width / 2 + box.width * 0.035, y: stop.y + stop.height / 2 + box.height * 0.015 }
+  await page.mouse.move(pointer.x, pointer.y, { steps: 10 })
   if (await main.getAttribute('data-relight-direction') !== 'right') throw new Error('可见吸附点与实际灯位不一致')
   if (await editor.locator('[data-light-stop="右侧"][data-snap-active="true"]').count() !== 1) throw new Error('拖动缺少吸附高亮')
+  const lamp = editor.locator('[data-relight-light="main"] circle').last()
+  const preview = await lamp.boundingBox()
+  if (Math.abs(preview.x + preview.width / 2 - pointer.x) > 1 || Math.abs(preview.y + preview.height / 2 - pointer.y) > 1) throw new Error('拖动中的光点没有连续跟随指针')
   await writeFile('.ui-tour/canvas-relight-snap.png', await captureInspectionPage(electronApp, page))
   await page.mouse.up()
+  const snapped = await lamp.boundingBox()
+  if (Math.abs(snapped.x + snapped.width / 2 - stop.x - stop.width / 2) > 1 || Math.abs(snapped.y + snapped.height / 2 - stop.y - stop.height / 2) > 1) throw new Error('松手后光点没有对齐高亮落点')
   await main.evaluate(element => element.blur())
   await writeFile('.ui-tour/canvas-relight-spatial.png', await captureInspectionPage(electronApp, page))
   return { mainZ: await main.getAttribute('data-light-z'), rimZ: await editor.getByRole('slider', { name: '轮廓光方向' }).getAttribute('data-light-z') }
