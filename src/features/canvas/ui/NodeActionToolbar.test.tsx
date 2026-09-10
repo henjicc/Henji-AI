@@ -55,3 +55,20 @@ describe('工具栏复制结果反馈', () => {
     expect(publish).toHaveBeenCalledWith('canvas/toast', expect.objectContaining({ type: 'error', message: expect.stringContaining('剪贴板不可写入') }))
   })
 })
+
+vi.mock('@/commands/assetLibrary', () => ({ checkAssetPaths: vi.fn(async () => [false]) }))
+import { checkAssetPaths } from '@/commands/assetLibrary'
+it('位置、选中和无关数据变化不重复查询资产，媒体变化才查询', async () => {
+  const node = { id: 'drag-media', type: 'uploadNode', position: { x: 0, y: 0 }, data: { imageUrl: 'D:/fixture/a.jpg', aspectRatio: '2:3' } } as CanvasNode
+  const view = render(<NodeActionToolbar node={node} />)
+  await act(async () => {})
+  expect(checkAssetPaths).toHaveBeenCalledTimes(1)
+  for (let x = 1; x <= 60; x++) await act(async () => {
+    view.rerender(<NodeActionToolbar node={{ ...node, position: { x, y: 0 }, dragging: true }} />)
+  })
+  await act(async () => view.rerender(<NodeActionToolbar node={{ ...node, data: { ...node.data, displayName: '新名称' } }} />))
+  expect(checkAssetPaths).toHaveBeenCalledTimes(1)
+  await act(async () => view.rerender(<NodeActionToolbar node={{ ...node, data: { ...node.data, imageUrl: 'D:/fixture/b.jpg' } }} />))
+  expect(checkAssetPaths).toHaveBeenCalledTimes(2)
+  expect(checkAssetPaths).toHaveBeenLastCalledWith(['D:/fixture/b.jpg'])
+})

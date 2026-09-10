@@ -16,6 +16,8 @@ export function createAssetGroupRenderGraph(
   edges: CanvasEdge[],
 ): AssetGroupRenderGraph {
   const assetGroups = nodes.filter(isAssetGroupNode);
+  // 普通画布拖动只改变 nodes；保留原 edges 引用，避免让 ReactFlow 重建连线状态。
+  if (assetGroups.length === 0) return { nodes, edges };
   const groupIds = new Set(assetGroups.map((group) => group.id));
   const renderNodes = nodes.map((node) => {
     if (!node.parentId || !groupIds.has(node.parentId)) return node;

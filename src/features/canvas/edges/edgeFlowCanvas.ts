@@ -1,3 +1,5 @@
+import { getEdgeFlowPathBounds } from './edgeFlowPathBounds';
+
 interface FlowPath {
   path: Path2D;
   left: number;
@@ -56,6 +58,13 @@ export class EdgeFlowCanvas {
   get size() { return this.paths.size; }
 
   add(key: Element, path: string): void {
+    const bounds = getEdgeFlowPathBounds(path);
+    if (bounds) {
+      this.paths.set(key, { path: new Path2D(path), ...bounds });
+      this.lastDraw = -Infinity;
+      this.schedule();
+      return;
+    }
     // SVG 只作为脱离 DOM 的几何采样器，播放时不读取路径或节点几何。
     const sampler = document.createElementNS('http://www.w3.org/2000/svg', 'path');
     sampler.setAttribute('d', path);

@@ -5,6 +5,8 @@ const {
   createExistingMultiLayerIsolatedCpuSceneDefinition,
 } = require('./uiInspectionExistingMultiLayerFixture.cjs')
 
+const { createNodeDragPerformanceScene } = require('./uiInspectionNodeDragPerformance.cjs')
+
 const { createLayerControlsScene } = require('./uiInspectionLayerControls.cjs')
 
 function createCanvasScenes(context) {
@@ -41,6 +43,7 @@ function createCanvasScenes(context) {
 
   return [
     createLayerControlsScene(context),
+    ...[createNodeDragPerformanceScene(context)].filter(Boolean),
     { id: 'canvas-projects', surface: '画布', name: '画布-项目列表', setup: setupCanvas },
     {
       id: 'canvas-image-capability-toolbar',

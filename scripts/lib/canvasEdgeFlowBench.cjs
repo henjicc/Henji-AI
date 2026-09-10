@@ -5,10 +5,16 @@ const { build } = require('esbuild')
 const { execFileSync } = require('node:child_process')
 
 // 复用正式动画入口；只合成“这些现有连线正在运行”的视觉负载，不启动付费生成任务。
-async function installEdgeFlowBench(page, root) {
+async function installEdgeFlowBench(page, root, { sourceRevision } = {}) {
   const bundle = await build({
     entryPoints: [path.join(root, 'src/features/canvas/edges/edgeFlowAnimation.ts')],
     bundle: true, write: false, format: 'iife', globalName: '__edgeFlowRuntime', platform: 'browser',
+    plugins: sourceRevision ? [{ name: 'committed-flow-runtime', setup(builder) {
+      builder.onLoad({ filter: /edgeFlow(Animation|Canvas)\.ts$/ }, args => ({
+        contents: execFileSync('git', ['show', `${sourceRevision}:${path.relative(root, args.path).replaceAll('\\', '/')}`], { cwd: root, encoding: 'utf8' }),
+        loader: 'ts',
+      }))
+    } }] : [],
   })
   await page.addScriptTag({ content: bundle.outputFiles[0].text })
   if ((process.env.BENCH_SET || '').split(',').includes('flow-dot')) {

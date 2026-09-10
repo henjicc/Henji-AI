@@ -105,3 +105,17 @@ describe('共享流动虚线层', () => {
     expect(disconnect).toHaveBeenCalledTimes(1);
   });
 });
+
+it('只有一条流动连线时，60次端点更新保留画布、观察器与唯一帧循环', () => {
+  const view = render(<Scene second={false} />)
+  const canvas = view.container.querySelector('canvas')
+  for (let x = 1; x <= 60; x++) {
+    view.rerender(<Scene path={`M${x},100L320,100`} second={false} />)
+    expect(view.container.querySelector('canvas')).toBe(canvas)
+    expect(frames.size).toBe(1)
+  }
+  expect(disconnect).not.toHaveBeenCalled()
+  view.unmount()
+  expect(disconnect).toHaveBeenCalledTimes(1)
+  expect(frames.size).toBe(0)
+})

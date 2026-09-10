@@ -23,6 +23,14 @@ import {
 } from './assetGroupGraph';
 import { createAssetGroupRenderGraph } from './assetGroupRenderGraph';
 
+it('没有素材组的拖动投影保留节点和连线引用', () => {
+  const nodes: CanvasNode[] = [];
+  const edges: CanvasEdge[] = [];
+  const projected = createAssetGroupRenderGraph(nodes, edges);
+  expect(projected.nodes).toBe(nodes);
+  expect(projected.edges).toBe(edges);
+});
+
 const MODEL_ID = 'asset-group-model';
 const MULTI_IMAGE_MODEL_ID = 'asset-group-multi-image-model';
 const model: ModelDefinition = {

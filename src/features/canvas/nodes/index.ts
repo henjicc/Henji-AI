@@ -1,4 +1,5 @@
-import { createElement, type ReactNode } from 'react';
+import { createElement, memo, type ReactNode } from 'react';
+import { areNodeContentPropsEqual } from './shared/nodeContentProps';
 import type { NodeTypes } from '@xyflow/react';
 
 import {
@@ -64,7 +65,7 @@ function withNodePaintFrame<TProps extends object>(
     );
   };
   WrappedNode.displayName = `withNodePaintFrame(${Component.displayName ?? Component.name ?? 'Node'})`;
-  return WrappedNode;
+  return memo<TProps>(WrappedNode, areNodeContentPropsEqual);
 }
 
 export const nodeTypes: NodeTypes = {

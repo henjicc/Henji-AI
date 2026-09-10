@@ -126,21 +126,20 @@ export const NodeActionToolbar = memo(({ node }: NodeActionToolbarProps) => {
     return null;
   }, [node]);
   const canHandleImage = Boolean(imageSource);
-  const assetMedia = useMemo((): { filePath: string; mediaType: 'image' | 'video' | 'audio' } | null => {
-    const candidate = isCameraStage
+  const assetCandidate = isCameraStage
       ? ((node.data.outputKind ?? 'image') === 'video' ? node.data.videoUrl : node.data.imageUrl)
       : isVideoMediaNode(node)
         ? node.data.videoUrl
         : isAudioMediaNode(node)
           ? node.data.audioUrl
           : imageSource;
-    const filePath = resolveLocalAssetPath(candidate);
-    if (!filePath) return null;
-    const mediaType = isCameraStage
+  const assetMediaType: 'image' | 'video' | 'audio' = isCameraStage
       ? ((node.data.outputKind ?? 'image') === 'video' ? 'video' : 'image')
       : isVideoMediaNode(node) ? 'video' : isAudioMediaNode(node) ? 'audio' : 'image';
-    return { filePath, mediaType };
-  }, [imageSource, isCameraStage, node]);
+  const assetMedia = useMemo(() => {
+    const filePath = resolveLocalAssetPath(assetCandidate);
+    return filePath ? { filePath, mediaType: assetMediaType } : null;
+  }, [assetCandidate, assetMediaType]);
   const [assetCollected, setAssetCollected] = useState(false);
   useEffect(() => {
     let cancelled = false;
