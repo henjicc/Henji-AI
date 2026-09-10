@@ -4,32 +4,44 @@ export const OUTPAINT_FIELDS = ['expandLeft', 'expandRight', 'expandTop', 'expan
 export type OutpaintMargins = Record<typeof OUTPAINT_FIELDS[number], number>
 export interface OutpaintImageSize { width: number; height: number }
 
-/** 平移保持输出尺寸，只分配已有留白；撞到原图或单边上限即停止。 */
-export function constrainOutpaintRect(rect: MarkCropRect, image: MarkCropRect, maximum: number, moving: boolean): MarkCropRect {
-  if (!moving) return marginsToRect(rectToMargins(rect, image, maximum), image)
+/** 平移只分配已有留白；拉边和移动都不能超出 API 与当前显示范围。 */
+export function constrainOutpaintRect(rect: MarkCropRect, image: MarkCropRect, maximum: number, moving: boolean, visible = { x: maximum, y: maximum }): MarkCropRect {
+  const horizontal = Math.max(0, Math.min(maximum, visible.x))
+  const vertical = Math.max(0, Math.min(maximum, visible.y))
+  if (!moving) {
+    const margins = rectToMargins(rect, image, maximum)
+    return marginsToRect({
+      expandLeft: Math.min(margins.expandLeft, Math.floor(horizontal)),
+      expandRight: Math.min(margins.expandRight, Math.floor(horizontal)),
+      expandTop: Math.min(margins.expandTop, Math.floor(vertical)),
+      expandBottom: Math.min(margins.expandBottom, Math.floor(vertical)),
+    }, image)
+  }
   return {
     ...rect,
-    x: Math.max(image.x - Math.min(maximum, rect.width - image.width), Math.min(image.x, image.x + image.width + maximum - rect.width, rect.x)),
-    y: Math.max(image.y - Math.min(maximum, rect.height - image.height), Math.min(image.y, image.y + image.height + maximum - rect.height, rect.y)),
+    x: Math.max(image.x - Math.min(horizontal, rect.width - image.width), Math.min(image.x, image.x + image.width + horizontal - rect.width, rect.x)),
+    y: Math.max(image.y - Math.min(vertical, rect.height - image.height), Math.min(image.y, image.y + image.height + vertical - rect.height, rect.y)),
   }
 }
 
-export interface OutpaintView { scale: number; x: number; y: number }
-
-/** 只适配节点内部：按输出尺寸缩放，位置仅在超出安全边缘时调整。 */
-export function fitOutpaintView(rect: MarkCropRect, image: OutpaintImageSize, viewport: OutpaintImageSize, previous?: OutpaintView): OutpaintView {
-  const width = Math.max(1, viewport.width - 48)
-  const height = Math.max(1, viewport.height - 64)
-  const scale = Math.max(0.001, Math.min(width / Math.max(image.width * 1.5, rect.width), height / Math.max(image.height * 1.5, rect.height)))
-  const x = previous ? viewport.width / 2 + (previous.x - viewport.width / 2) * scale / previous.scale : (viewport.width - image.width * scale) / 2
-  const y = previous ? viewport.height / 2 + (previous.y - viewport.height / 2) * scale / previous.scale : (viewport.height - image.height * scale) / 2
-  return {
-    scale,
-    x: Math.max(24 - rect.x * scale, Math.min(viewport.width - 24 - (rect.x + rect.width) * scale, x)),
-    y: Math.max(24 - rect.y * scale, Math.min(viewport.height - 40 - (rect.y + rect.height) * scale, y)),
-  }
+/** 显示比例仅由原图、接口上限、容器尺寸和用户滚轮决定，与当前扩图框无关。 */
+export function fitOutpaintView(image: OutpaintImageSize, viewport: OutpaintImageSize, maximum: number, zoom = 1) {
+  const scale = Math.max(0.001, Math.min(
+    Math.max(1, viewport.width - 48) / (image.width + maximum * 2),
+    Math.max(1, viewport.height - 64) / (image.height + maximum * 2),
+  ) * zoom)
+  return { scale, x: (viewport.width - image.width * scale) / 2, y: (viewport.height - 16 - image.height * scale) / 2 }
 }
 
+/** 滚轮放大到完整扩图框贴边为止，不改变扩图像素或裁掉已有框。 */
+export function zoomOutpaintView(zoom: number, delta: number, image: OutpaintImageSize, margins: OutpaintMargins, viewport: OutpaintImageSize, maximum: number) {
+  const base = fitOutpaintView(image, viewport, maximum).scale
+  const limit = Math.min(
+    Math.max(1, viewport.width - 48) / (image.width + 2 * Math.max(margins.expandLeft, margins.expandRight)) / base,
+    Math.max(1, viewport.height - 64) / (image.height + 2 * Math.max(margins.expandTop, margins.expandBottom)) / base,
+  )
+  return Math.max(0.25, Math.min(limit, zoom * Math.exp(-Math.max(-100, Math.min(100, delta)) * 0.002)))
+}
 export function resolveOutpaintMargins(
   params: Record<string, unknown>, image: OutpaintImageSize, maximum: number,
 ): OutpaintMargins {

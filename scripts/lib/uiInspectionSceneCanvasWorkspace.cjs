@@ -474,6 +474,7 @@ function attachUiInspectionCanvasWorkspace(context) {
     await page.mouse.down()
     await page.mouse.move(bottom.x + bottom.width / 2, bottom.y + bottom.height / 2 + 300, { steps: 20 })
     const expanded = await geometry()
+    if (Math.abs(expanded.image.width - reopened.image.width) > 1) throw new Error('拖动扩图框触发了自动缩放')
     const stageBox = await stage.boundingBox()
     if (expanded.frame.y < stageBox.y || expanded.frame.y + expanded.frame.height > stageBox.y + stageBox.height) {
       throw new Error('拖动期间扩图框超出工作面，未实时适配')
@@ -491,6 +492,20 @@ function attachUiInspectionCanvasWorkspace(context) {
       throw new Error('扩图框平移改变了比例或输出尺寸')
     }
     await page.mouse.up()
+    const beforeWheel = await geometry()
+    const flowTransform = await page.locator('.react-flow__viewport').getAttribute('style')
+    await page.mouse.move(stageBox.x + stageBox.width / 2, stageBox.y + stageBox.height / 2)
+    await page.mouse.wheel(0, 100)
+    await page.waitForTimeout(100)
+    const zoomedOut = await geometry()
+    if (zoomedOut.image.width >= beforeWheel.image.width - 1) throw new Error('滚轮未缩小扩图工作面')
+    if (Math.abs(zoomedOut.frame.width / zoomedOut.image.width - beforeWheel.frame.width / beforeWheel.image.width) > 0.01) {
+      throw new Error('滚轮改变了实际输出构图')
+    }
+    if (await page.locator('.react-flow__viewport').getAttribute('style') !== flowTransform) throw new Error('扩图滚轮影响了整个画布')
+    await page.mouse.wheel(0, -100)
+    await page.waitForTimeout(100)
+    if (Math.abs((await geometry()).image.width - beforeWheel.image.width) > 1) throw new Error('滚轮放大未恢复查看倍率')
     await shell.click({ position: { x: 8, y: 8 } })
     await settlePage(page)
   }

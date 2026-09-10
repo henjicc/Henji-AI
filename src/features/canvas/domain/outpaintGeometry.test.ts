@@ -1,6 +1,6 @@
 import { model } from '@henjicc/ai-sdk/tool-models/fal/outpaint'
 import { describe, expect, it } from 'vitest'
-import { constrainOutpaintRect, fitOutpaintView, marginsToRect, rectToMargins, resolveOutpaintMargins, resolveOutpaintRequestParams } from './outpaintGeometry'
+import { constrainOutpaintRect, fitOutpaintView, zoomOutpaintView, marginsToRect, rectToMargins, resolveOutpaintMargins, resolveOutpaintRequestParams } from './outpaintGeometry'
 
 describe('扩图框与请求参数', () => {
   const image = { x: 300, y: 400, width: 1000, height: 1500 }
@@ -14,15 +14,26 @@ describe('扩图框与请求参数', () => {
       expect(margins.expandTop + margins.expandBottom).toBe(1000)
     }
   })
-  it('实时适配扩大后的框，平移不缩放，重复适配不会在松手时跳变', () => {
+  it('固定显示范围容纳接口最大扩图，滚轮只改变查看倍率', () => {
     const size = { width: 1000, height: 1500 }
     const viewport = { width: 600, height: 500 }
-    const rect = { x: -600, y: -600, width: 2200, height: 2700 }
-    const view = fitOutpaintView(rect, size, viewport)
-    expect(rect.x * view.scale + view.x).toBeGreaterThanOrEqual(23.999)
-    expect((rect.y + rect.height) * view.scale + view.y).toBeLessThanOrEqual(460.001)
-    expect(fitOutpaintView(rect, size, viewport, view)).toEqual(view)
-    expect(fitOutpaintView({ ...rect, x: -500 }, size, viewport, view).scale).toBe(view.scale)
+    const view = fitOutpaintView(size, viewport, 700)
+    expect(-700 * view.scale + view.x).toBeGreaterThanOrEqual(24)
+    expect((size.height + 700) * view.scale + view.y).toBeLessThanOrEqual(460.001)
+    const margins = resolveOutpaintMargins({}, size, 700)
+    const zoom = zoomOutpaintView(1, -100, size, margins, viewport, 700)
+    expect(zoom).toBeGreaterThan(1)
+    expect(fitOutpaintView(size, viewport, 700, zoom).scale).toBeGreaterThan(view.scale)
+    expect(zoomOutpaintView(zoom, 100, size, margins, viewport, 700)).toBeCloseTo(1)
+    const maxZoom = zoomOutpaintView(100, 0, size, margins, viewport, 700)
+    const enlarged = fitOutpaintView(size, viewport, 700, maxZoom)
+    expect((size.height + margins.expandBottom) * enlarged.scale + enlarged.y).toBeLessThanOrEqual(460.001)
+  })
+  it('放大查看后拉边受显示边缘限制，平移也不越界或改变尺寸', () => {
+    const visible = { x: 150, y: 200 }
+    const resized = constrainOutpaintRect({ x: -999, y: -999, width: 9999, height: 9999 }, image, 700, false, visible)
+    expect(resized).toEqual({ x: 150, y: 200, width: 1300, height: 1900 })
+    expect(constrainOutpaintRect({ ...resized, x: -9999, y: -9999 }, image, 700, true, visible)).toEqual(resized)
   })
   it('初始宽高等比例扩展 20%，四边像素不会和 zoom out 叠加', () => {
     const margins = resolveOutpaintMargins({}, image, 700)
