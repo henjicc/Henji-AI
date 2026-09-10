@@ -266,7 +266,7 @@ function attachUiInspectionCanvasRelight(context) {
           }),
         }
       })
-      if (layout.inspectorWidth < 0.45 || !layout.titlesFit) throw new Error(`多角度参数区仍过窄：${JSON.stringify(layout)}`)
+      if (layout.inspectorWidth < 0.39 || layout.inspectorWidth > 0.53 || !layout.titlesFit) throw new Error(`多角度参数区比例或标题布局异常：${JSON.stringify(layout)}`)
     }
     await verifyInspectorLayout()
     const multiAngleNode = shell.locator('xpath=ancestor::*[contains(@class,"react-flow__node")][1]')

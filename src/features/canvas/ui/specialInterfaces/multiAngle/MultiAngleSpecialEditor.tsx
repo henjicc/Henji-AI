@@ -198,7 +198,7 @@ export function MultiAngleWorkbench({
   return (
       <div
         data-multi-angle-workbench="true"
-        className="grid min-h-0 min-w-0 flex-1 grid-cols-[minmax(0,1fr)_minmax(400px,1fr)]"
+        className="grid min-h-0 min-w-0 flex-1 grid-cols-[minmax(0,1.5fr)_minmax(320px,1fr)]"
       >
         <div className={`flex min-h-0 items-center justify-center ${embedded ? 'p-2' : 'p-4'}`}>
           <div className={`relative flex h-full w-full items-center justify-center overflow-hidden rounded-xl ${embedded ? 'bg-bg-dark/45' : `border border-veil-subtle ${UI_GLASS_ADAPTIVE_SURFACE_CLASS}`}`}>
