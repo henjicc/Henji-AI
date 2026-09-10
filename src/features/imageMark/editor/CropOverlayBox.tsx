@@ -19,7 +19,9 @@ interface CropOverlayBoxProps {
   onChange: (rect: MarkCropRect) => void;
   onCommit: () => void;
   /** 扩图等工作面提供自己的边界规则，默认仍为图片内裁剪。 */
-  constrainRect?: (rect: MarkCropRect) => MarkCropRect;
+  constrainRect?: (rect: MarkCropRect, handle: HandleType) => MarkCropRect;
+  /** 图片坐标原点在工作面上的显示偏移。 */
+  offset?: { x: number; y: number };
   appearance?: 'crop' | 'expand';
 }
 
@@ -69,6 +71,7 @@ export function CropOverlayBox({
   onChange,
   onCommit,
   constrainRect,
+  offset,
   appearance = 'crop',
 }: CropOverlayBoxProps): JSX.Element {
   const [activeHandle, setActiveHandle] = useState<HandleType | null>(null);
@@ -136,9 +139,15 @@ export function CropOverlayBox({
       if (props.ratio && activeHandle !== 'move') {
         next = applyRatio(next, props.ratio, activeHandle);
       }
-      props.onChange(props.constrainRect
-        ? props.constrainRect(next)
-        : clampCropRect(next, props.imageWidth, props.imageHeight, MIN_CROP_IMAGE_PX));
+      const constrained = props.constrainRect
+        ? props.constrainRect(next, activeHandle)
+        : clampCropRect(next, props.imageWidth, props.imageHeight, MIN_CROP_IMAGE_PX);
+      // 扩图视图可能实时缩放；只换算本次指针增量，避免新比例重新放大整个手势。
+      if (appearance === 'expand') {
+        startRectRef.current = constrained;
+        startPosRef.current = { x: event.clientX, y: event.clientY };
+      }
+      props.onChange(constrained);
     };
 
     const handleMouseUp = () => {
@@ -152,10 +161,10 @@ export function CropOverlayBox({
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
     };
-  }, [activeHandle]);
+  }, [activeHandle, appearance]);
 
-  const left = crop.x * scale;
-  const top = crop.y * scale;
+  const left = crop.x * scale + (offset?.x ?? 0);
+  const top = crop.y * scale + (offset?.y ?? 0);
   const width = crop.width * scale;
   const height = crop.height * scale;
 

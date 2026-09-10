@@ -4,6 +4,32 @@ export const OUTPAINT_FIELDS = ['expandLeft', 'expandRight', 'expandTop', 'expan
 export type OutpaintMargins = Record<typeof OUTPAINT_FIELDS[number], number>
 export interface OutpaintImageSize { width: number; height: number }
 
+/** 平移保持输出尺寸，只分配已有留白；撞到原图或单边上限即停止。 */
+export function constrainOutpaintRect(rect: MarkCropRect, image: MarkCropRect, maximum: number, moving: boolean): MarkCropRect {
+  if (!moving) return marginsToRect(rectToMargins(rect, image, maximum), image)
+  return {
+    ...rect,
+    x: Math.max(image.x - Math.min(maximum, rect.width - image.width), Math.min(image.x, image.x + image.width + maximum - rect.width, rect.x)),
+    y: Math.max(image.y - Math.min(maximum, rect.height - image.height), Math.min(image.y, image.y + image.height + maximum - rect.height, rect.y)),
+  }
+}
+
+export interface OutpaintView { scale: number; x: number; y: number }
+
+/** 只适配节点内部：按输出尺寸缩放，位置仅在超出安全边缘时调整。 */
+export function fitOutpaintView(rect: MarkCropRect, image: OutpaintImageSize, viewport: OutpaintImageSize, previous?: OutpaintView): OutpaintView {
+  const width = Math.max(1, viewport.width - 48)
+  const height = Math.max(1, viewport.height - 64)
+  const scale = Math.max(0.001, Math.min(width / Math.max(image.width * 1.5, rect.width), height / Math.max(image.height * 1.5, rect.height)))
+  const x = previous ? viewport.width / 2 + (previous.x - viewport.width / 2) * scale / previous.scale : (viewport.width - image.width * scale) / 2
+  const y = previous ? viewport.height / 2 + (previous.y - viewport.height / 2) * scale / previous.scale : (viewport.height - image.height * scale) / 2
+  return {
+    scale,
+    x: Math.max(24 - rect.x * scale, Math.min(viewport.width - 24 - (rect.x + rect.width) * scale, x)),
+    y: Math.max(24 - rect.y * scale, Math.min(viewport.height - 40 - (rect.y + rect.height) * scale, y)),
+  }
+}
+
 export function resolveOutpaintMargins(
   params: Record<string, unknown>, image: OutpaintImageSize, maximum: number,
 ): OutpaintMargins {

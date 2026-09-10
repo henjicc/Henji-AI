@@ -469,6 +469,28 @@ function attachUiInspectionCanvasWorkspace(context) {
     if (Math.abs(reopened.frame.width / reopened.image.width - (1600 + params.expandRight) / 1600) > 0.02) {
       throw new Error('重新打开后扩图框与保存参数不一致')
     }
+    const bottom = await stage.locator('[data-crop-handle="s"]').boundingBox()
+    await page.mouse.move(bottom.x + bottom.width / 2, bottom.y + bottom.height / 2)
+    await page.mouse.down()
+    await page.mouse.move(bottom.x + bottom.width / 2, bottom.y + bottom.height / 2 + 300, { steps: 20 })
+    const expanded = await geometry()
+    const stageBox = await stage.boundingBox()
+    if (expanded.frame.y < stageBox.y || expanded.frame.y + expanded.frame.height > stageBox.y + stageBox.height) {
+      throw new Error('拖动期间扩图框超出工作面，未实时适配')
+    }
+    await page.mouse.up()
+    const released = await geometry()
+    for (const key of ['x', 'y', 'width', 'height']) {
+      if (Math.abs(expanded.frame[key] - released.frame[key]) > 1) throw new Error('扩图松手后位置或缩放跳变')
+    }
+    await page.mouse.move(released.frame.x + released.frame.width / 2, released.frame.y + released.frame.height / 2)
+    await page.mouse.down()
+    await page.mouse.move(released.frame.x + released.frame.width / 2 - 250, released.frame.y + released.frame.height / 2, { steps: 20 })
+    const moved = await geometry()
+    if (Math.abs(moved.image.width - released.image.width) > 1 || Math.abs(moved.frame.width - released.frame.width) > 1) {
+      throw new Error('扩图框平移改变了比例或输出尺寸')
+    }
+    await page.mouse.up()
     await shell.click({ position: { x: 8, y: 8 } })
     await settlePage(page)
   }

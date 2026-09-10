@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { UiError, UiLoading } from '@/components/ui'
 import { resolveImageDisplayUrl } from '@/services/imageSource'
 import { CropOverlayBox } from '@/features/imageMark/editor/CropOverlayBox'
-import { marginsToRect, rectToMargins, resolveOutpaintMargins, type OutpaintImageSize, type OutpaintMargins } from '../../domain/outpaintGeometry'
+import { constrainOutpaintRect, fitOutpaintView, marginsToRect, rectToMargins, resolveOutpaintMargins, type OutpaintImageSize, type OutpaintMargins, type OutpaintView } from '../../domain/outpaintGeometry'
 
 interface Props {
   source: string
@@ -31,36 +31,31 @@ export const OutpaintStage = memo(function OutpaintStage({ source, params, maxim
     return () => observer.disconnect()
   }, [])
   const saved = image ? resolveOutpaintMargins(params, image, maximum) : null
-  // 只在保存或节点尺寸改变时重新适配；拖动过程中比例固定，避免框追着指针缩放。
-  const scale = image && saved ? Math.max(0.001, Math.min(
-    (viewport.width - 48) / (image.width + 2 * Math.max(saved.expandLeft, saved.expandRight, image.width * 0.25)),
-    (viewport.height - 48) / (image.height + 2 * Math.max(saved.expandTop, saved.expandBottom, image.height * 0.25)),
-  )) : 1
-  const imageRect = image ? {
-    x: (viewport.width / scale - image.width) / 2,
-    y: (viewport.height / scale - image.height) / 2,
-    ...image,
-  } : null
+  const imageRect = image ? { x: 0, y: 0, ...image } : null
   const margins = draft ?? saved
   const crop = margins && imageRect ? marginsToRect(margins, imageRect) : null
+  const viewRef = useRef<OutpaintView | undefined>()
+  const view = crop && image ? fitOutpaintView(crop, image, viewport, viewRef.current) : { scale: 1, x: 0, y: 0 }
+  useLayoutEffect(() => { if (crop) viewRef.current = view })
+  const { scale } = view
   return (
     <div ref={host} className="relative min-h-0 w-full flex-1 overflow-hidden" data-outpaint-stage>
       {failed ? <UiError message={t('node.outpaint.loadFailed')} /> : !image && <UiLoading />}
       {crop && <div className="pointer-events-none absolute image-editor-transparency-grid"
-        style={{ left: crop.x * scale, top: crop.y * scale, width: crop.width * scale, height: crop.height * scale }} />}
+        style={{ left: crop.x * scale + view.x, top: crop.y * scale + view.y, width: crop.width * scale, height: crop.height * scale }} />}
       <img
         src={resolveImageDisplayUrl(source)} alt="" draggable={false}
         className="pointer-events-none absolute select-none"
-        style={imageRect ? { left: imageRect.x * scale, top: imageRect.y * scale, width: imageRect.width * scale, height: imageRect.height * scale } : { visibility: 'hidden' }}
+        style={imageRect ? { left: view.x, top: view.y, width: imageRect.width * scale, height: imageRect.height * scale } : { visibility: 'hidden' }}
         onLoad={event => { setImage({ width: event.currentTarget.naturalWidth, height: event.currentTarget.naturalHeight }); setFailed(false) }}
         onError={() => setFailed(true)}
       />
       {!failed && imageRect && crop && <>
         <CropOverlayBox
           displayWidth={viewport.width} displayHeight={viewport.height} scale={scale}
-          crop={crop} imageWidth={viewport.width / scale} imageHeight={viewport.height / scale}
+          crop={crop} offset={view} imageWidth={viewport.width / scale} imageHeight={viewport.height / scale}
           ratio={null} appearance="expand"
-          constrainRect={rect => marginsToRect(rectToMargins(rect, imageRect, maximum), imageRect)}
+          constrainRect={(rect, handle) => constrainOutpaintRect(rect, imageRect, maximum, handle === 'move')}
           onChange={rect => {
             const next = rectToMargins(rect, imageRect, maximum)
             draftRef.current = next

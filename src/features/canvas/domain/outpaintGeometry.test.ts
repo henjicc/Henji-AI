@@ -1,9 +1,29 @@
 import { model } from '@henjicc/ai-sdk/tool-models/fal/outpaint'
 import { describe, expect, it } from 'vitest'
-import { marginsToRect, rectToMargins, resolveOutpaintMargins, resolveOutpaintRequestParams } from './outpaintGeometry'
+import { constrainOutpaintRect, fitOutpaintView, marginsToRect, rectToMargins, resolveOutpaintMargins, resolveOutpaintRequestParams } from './outpaintGeometry'
 
 describe('扩图框与请求参数', () => {
   const image = { x: 300, y: 400, width: 1000, height: 1500 }
+  it('平移撞到四边后停止，不改变框的尺寸，也遵守单边上限', () => {
+    for (const x of [-9999, 9999]) for (const y of [-9999, 9999]) {
+      const rect = constrainOutpaintRect({ x, y, width: 2000, height: 2500 }, image, 700, true)
+      expect(rect.width).toBe(2000)
+      expect(rect.height).toBe(2500)
+      const margins = rectToMargins(rect, image, 700)
+      expect(margins.expandLeft + margins.expandRight).toBe(1000)
+      expect(margins.expandTop + margins.expandBottom).toBe(1000)
+    }
+  })
+  it('实时适配扩大后的框，平移不缩放，重复适配不会在松手时跳变', () => {
+    const size = { width: 1000, height: 1500 }
+    const viewport = { width: 600, height: 500 }
+    const rect = { x: -600, y: -600, width: 2200, height: 2700 }
+    const view = fitOutpaintView(rect, size, viewport)
+    expect(rect.x * view.scale + view.x).toBeGreaterThanOrEqual(23.999)
+    expect((rect.y + rect.height) * view.scale + view.y).toBeLessThanOrEqual(460.001)
+    expect(fitOutpaintView(rect, size, viewport, view)).toEqual(view)
+    expect(fitOutpaintView({ ...rect, x: -500 }, size, viewport, view).scale).toBe(view.scale)
+  })
   it('初始宽高等比例扩展 20%，四边像素不会和 zoom out 叠加', () => {
     const margins = resolveOutpaintMargins({}, image, 700)
     expect(margins).toEqual({ expandLeft: 100, expandRight: 100, expandTop: 150, expandBottom: 150 })
