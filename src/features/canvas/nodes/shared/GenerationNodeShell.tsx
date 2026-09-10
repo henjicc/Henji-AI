@@ -105,7 +105,7 @@ export const GenerationNodeShell = memo(({
   workbenchStage,
   workbenchMediaInput,
   minWidth = 320,
-  minHeight = 160,
+  minHeight = showPromptInput ? 160 : 0,
   maxWidth = 1400,
   maxHeight = 1000,
 }: GenerationNodeShellProps) => {

@@ -3,8 +3,8 @@ import { useLayoutEffect, useRef, useState, type RefObject } from 'react'
 export const GENERATION_PROMPT_MIN_HEIGHT_PX = 100
 
 // GenerationNodeShell 当前的纵向固定占位：根节点 p-2（16px）+ 上下边框（2px）
-// + 提示词区与参数区之间的 gap-1.5（6px）。长提示词正文不参与这个计算。
-const GENERATION_NODE_FIXED_VERTICAL_SPACE_PX = 24
+// 提示词区存在时另加参数区间距 gap-1.5（6px）。长提示词正文不参与这个计算。
+const GENERATION_NODE_FIXED_VERTICAL_SPACE_PX = 18
 const GENERATION_NODE_MINIMUM_HEIGHT_CSS_VAR = '--generation-node-min-height'
 
 interface GenerationNodeMinimumHeightResult {
@@ -27,7 +27,7 @@ export function resolveGenerationNodeMinimumHeight(
 
   return Math.max(
     safeConfiguredMinimum,
-    (showPromptInput ? GENERATION_PROMPT_MIN_HEIGHT_PX : 0)
+    (showPromptInput ? GENERATION_PROMPT_MIN_HEIGHT_PX + 6 : 0)
       + GENERATION_NODE_FIXED_VERTICAL_SPACE_PX
       + safeInputRowsHeight,
   )

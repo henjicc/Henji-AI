@@ -18,7 +18,15 @@ describe('resolveGenerationNodeMinimumHeight', () => {
   })
 
   it('无提示词工具不为隐藏编辑器预留空白', () => {
-    expect(resolveGenerationNodeMinimumHeight(160, 200, false)).toBe(224)
+    expect(resolveGenerationNodeMinimumHeight(0, 200, false)).toBe(218)
+  })
+
+  it('参数减少后自动收紧，旧测量高度不继续撑大默认节点', () => {
+    expect(resolveGenerationNodeMinimumHeight(0, 86, false)).toBe(104)
+    expect(resolveGenerationNodeMinimumHeight(0, 40, false)).toBe(58)
+    expect(resolveGenerationNodeManualDimension(160, 104, false)).toBeNull()
+    expect(resolveGenerationNodeManualDimension(220, 104, true)).toBe(220)
+    expect(resolveGenerationNodeMinimumHeight(300, 86, false)).toBe(300)
   })
 
   it('过滤无效测量值并向上取整，避免亚像素裁切', () => {
