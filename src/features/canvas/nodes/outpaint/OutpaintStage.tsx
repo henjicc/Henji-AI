@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { UiError, UiLoading } from '@/components/ui'
 import { resolveImageDisplayUrl } from '@/services/imageSource'
 import { CropOverlayBox } from '@/features/imageMark/editor/CropOverlayBox'
-import { createOutpaintScene, translateOutpaintImage, outpaintSceneToMargins, resizeOutpaintScene, resolveOutpaintMargins, zoomOutpaintImage, type OutpaintImageSize, type OutpaintMargins, type OutpaintScene } from '../../domain/outpaintGeometry'
+import { createOutpaintScene, moveOutpaintImage, outpaintSceneToMargins, resizeOutpaintScene, resolveOutpaintMargins, zoomOutpaintImage, type OutpaintImageSize, type OutpaintMargins, type OutpaintScene } from '../../domain/outpaintGeometry'
 
 interface Props {
   source: string
@@ -57,7 +57,9 @@ export const OutpaintStage = memo(function OutpaintStage({ source, params, maxim
     const current = latestScene.current
     if (!image || !current || event.buttons) return
     const delta = event.deltaY * (event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? viewport.height : 1)
-    update({ ...current, image: zoomOutpaintImage(current, delta, image, maximum) })
+    const nextImage = zoomOutpaintImage(current, delta, image, maximum, { x: 0, y: 0, ...viewport })
+    if (Math.abs(nextImage.width - current.image.width) < 1e-7) return
+    update({ ...current, image: nextImage })
     clearTimeout(wheelTimer.current)
     wheelTimer.current = setTimeout(() => commitRef.current?.(), 150)
   }
@@ -94,7 +96,7 @@ export const OutpaintStage = memo(function OutpaintStage({ source, params, maxim
         crop={scene.frame} moveTarget={scene.image} imageWidth={viewport.width} imageHeight={viewport.height}
         ratio={null} appearance="expand"
         constrainRect={(rect, handle) => handle === 'move'
-          ? translateOutpaintImage(rect, latestScene.current!.frame, image, maximum)
+          ? moveOutpaintImage(rect, latestScene.current!.frame, image, maximum, { x: 0, y: 0, ...viewport })
           : resizeOutpaintScene(rect, latestScene.current!.image, image, viewport, maximum).frame}
         onChange={(rect, handle) => {
           clearTimeout(wheelTimer.current)

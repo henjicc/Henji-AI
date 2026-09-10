@@ -42,52 +42,40 @@ export function resizeOutpaintFrame(rect: MarkCropRect, image: MarkCropRect, sou
   return { x, y, width: right - x, height: bottom - y }
 }
 
-/** 工作面四边始终可达；图片过小时最小等比放大，不能截断请求留白伪装成合法构图。 */
+/** 拉框只改变输出范围，不再替用户调整图片尺寸。 */
 export function resizeOutpaintScene(rect: MarkCropRect, image: MarkCropRect, source: OutpaintImageSize, viewport: OutpaintImageSize, maximum: number): OutpaintScene {
-  const x = clamp(rect.x, 0, image.x)
-  const y = clamp(rect.y, 0, image.y)
-  const right = clamp(rect.x + rect.width, image.x + image.width, viewport.width)
-  const bottom = clamp(rect.y + rect.height, image.y + image.height, viewport.height)
-  const frame = { x, y, width: right - x, height: bottom - y }
-  const fitted = translateOutpaintImage(image, frame, source, maximum)
-  return { frame: resizeOutpaintFrame(frame, fitted, source, viewport, maximum), image: fitted }
+  return { frame: resizeOutpaintFrame(rect, image, source, viewport, maximum), image }
 }
 
-/** 图片在固定框内移动；保留完整原图，四边留白不超过接口上限。 */
-export function moveOutpaintImage(image: MarkCropRect, frame: MarkCropRect, source: OutpaintImageSize, maximum: number): MarkCropRect {
+/** 平移只夹住位置；为最大工作面保留合法留白，不自动缩放图片。 */
+export function moveOutpaintImage(image: MarkCropRect, frame: MarkCropRect, source: OutpaintImageSize, maximum: number, workspace = frame): MarkCropRect {
   const margin = maximum * image.width / source.width
   return { ...image,
-    x: clamp(image.x, Math.max(frame.x, frame.x + frame.width - image.width - margin), Math.min(frame.x + frame.width - image.width, frame.x + margin)),
-    y: clamp(image.y, Math.max(frame.y, frame.y + frame.height - image.height - margin), Math.min(frame.y + frame.height - image.height, frame.y + margin)),
+    x: clamp(image.x, Math.max(frame.x, workspace.x + workspace.width - image.width - margin), Math.min(frame.x + frame.width - image.width, workspace.x + margin)),
+    y: clamp(image.y, Math.max(frame.y, workspace.y + workspace.height - image.height - margin), Math.min(frame.y + frame.height - image.height, workspace.y + margin)),
   }
 }
 
-/** 双侧留白达到上限时，以最小等比放大释放平移空间，输出框保持不动。 */
-export function translateOutpaintImage(image: MarkCropRect, frame: MarkCropRect, source: OutpaintImageSize, maximum: number): MarkCropRect {
-  const centerX = clamp(image.x + image.width / 2, frame.x + image.width / 2, frame.x + frame.width - image.width / 2)
-  const centerY = clamp(image.y + image.height / 2, frame.y + image.height / 2, frame.y + frame.height - image.height / 2)
-  const scale = Math.min(
-    Math.min(frame.width / source.width, frame.height / source.height),
-    Math.max(image.width / source.width,
-      (centerX - frame.x) / (source.width / 2 + maximum),
-      (frame.x + frame.width - centerX) / (source.width / 2 + maximum),
-      (centerY - frame.y) / (source.height / 2 + maximum),
-      (frame.y + frame.height - centerY) / (source.height / 2 + maximum)),
-  )
-  const width = source.width * scale
-  const height = source.height * scale
-  return moveOutpaintImage({ x: centerX - width / 2, y: centerY - height / 2, width, height }, frame, source, maximum)
-}
-
-/** 滚轮只改变图片的等比尺寸，框保持原位；极限由完整原图与 API 留白共同决定。 */
-export function zoomOutpaintImage(scene: OutpaintScene, delta: number, source: OutpaintImageSize, maximum: number): MarkCropRect {
+/** 缩小限制提前按完整工作面和图片中心计算；滚轮不再附带平移或反向放大。 */
+export function zoomOutpaintImage(scene: OutpaintScene, delta: number, source: OutpaintImageSize, maximum: number, workspace = scene.frame): MarkCropRect {
   const { image, frame } = scene
-  const minimum = Math.max(frame.width / (source.width + 2 * maximum), frame.height / (source.height + 2 * maximum))
-  const maximumScale = Math.min(frame.width / source.width, frame.height / source.height)
-  const scale = clamp(image.width / source.width * Math.exp(-clamp(delta, -100, 100) * 0.002), minimum, maximumScale)
+  const centerX = image.x + image.width / 2
+  const centerY = image.y + image.height / 2
+  const minimum = Math.max(
+    (centerX - workspace.x) / (source.width / 2 + maximum),
+    (workspace.x + workspace.width - centerX) / (source.width / 2 + maximum),
+    (centerY - workspace.y) / (source.height / 2 + maximum),
+    (workspace.y + workspace.height - centerY) / (source.height / 2 + maximum),
+  )
+  const maximumScale = Math.min(
+    2 * Math.min(centerX - frame.x, frame.x + frame.width - centerX) / source.width,
+    2 * Math.min(centerY - frame.y, frame.y + frame.height - centerY) / source.height,
+  )
+  const currentScale = image.width / source.width
+  const scale = clamp(currentScale * Math.exp(-clamp(delta, -100, 100) * 0.002), Math.min(currentScale, minimum), Math.max(currentScale, maximumScale))
   const width = source.width * scale
   const height = source.height * scale
-  return moveOutpaintImage({ x: image.x + (image.width - width) / 2, y: image.y + (image.height - height) / 2, width, height }, frame, source, maximum)
+  return { x: centerX - width / 2, y: centerY - height / 2, width, height }
 }
 
 export function outpaintSceneToMargins(scene: OutpaintScene, source: OutpaintImageSize, maximum: number): OutpaintMargins {

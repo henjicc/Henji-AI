@@ -1,16 +1,37 @@
 import { model } from '@henjicc/ai-sdk/tool-models/fal/outpaint'
 import { describe, expect, it } from 'vitest'
-import { createOutpaintScene, scaleOutpaintScene, resizeOutpaintScene, resizeOutpaintFrame, moveOutpaintImage, translateOutpaintImage, zoomOutpaintImage, outpaintSceneToMargins, marginsToRect, rectToMargins, resolveOutpaintMargins, resolveOutpaintRequestParams } from './outpaintGeometry'
+import { createOutpaintScene, scaleOutpaintScene, resizeOutpaintScene, resizeOutpaintFrame, moveOutpaintImage, zoomOutpaintImage, outpaintSceneToMargins, marginsToRect, rectToMargins, resolveOutpaintMargins, resolveOutpaintRequestParams } from './outpaintGeometry'
 
 describe('扩图框与请求参数', () => {
   const image = { x: 300, y: 400, width: 1000, height: 1500 }
+  it('滚轮最小值随工作面等比变化，缩小保持中心，限位后不再变化', () => {
+    const source = { width: 1000, height: 1500 }
+    const initial = { frame: { x: 0, y: 0, width: 400, height: 600 }, image: { x: 70, y: 90, width: 240, height: 360 } }
+    const minimums = []
+    for (const factor of [1, 0.5, 2]) {
+      const size = { width: 400 * factor, height: 600 * factor }
+      let scene = scaleOutpaintScene(initial, initial.frame, size)
+      const center = { x: scene.image.x + scene.image.width / 2, y: scene.image.y + scene.image.height / 2 }
+      for (let i = 0; i < 50; i++) {
+        const next = zoomOutpaintImage(scene, 100, source, 700, { x: 0, y: 0, ...size })
+        expect(next.width).toBeLessThanOrEqual(scene.image.width + 1e-8)
+        expect(next.x + next.width / 2).toBeCloseTo(center.x)
+        expect(next.y + next.height / 2).toBeCloseTo(center.y)
+        scene = { ...scene, image: next }
+      }
+      expect(zoomOutpaintImage(scene, 100, source, 700, { x: 0, y: 0, ...size })).toEqual(scene.image)
+      minimums.push(scene.image.width / factor)
+    }
+    expect(minimums[1]).toBeCloseTo(minimums[0])
+    expect(minimums[2]).toBeCloseTo(minimums[0])
+  })
   it.each([{ width: 800, height: 1200 }, { width: 1600, height: 800 }])('小框内缩到最小后仍可拉满四边，实际留白合法 %o', source => {
     const viewport = { width: 600 * source.width / source.height, height: 600 }
     let scene = createOutpaintScene(source, viewport, resolveOutpaintMargins({}, source, 700), 700)
-    for (let i = 0; i < 40; i++) scene = { ...scene, image: zoomOutpaintImage(scene, 100, source, 700) }
+    for (let i = 0; i < 40; i++) scene = { ...scene, image: zoomOutpaintImage(scene, 100, source, 700, { x: 0, y: 0, ...viewport }) }
     const full = resizeOutpaintScene({ x: 0, y: 0, ...viewport }, scene.image, source, viewport, 700)
     expect(full.frame).toEqual({ x: 0, y: 0, ...viewport })
-    expect(full.image.width).toBeGreaterThan(scene.image.width)
+    expect(full.image).toEqual(scene.image)
     expect(full.image.width / full.image.height).toBeCloseTo(source.width / source.height)
     const scale = full.image.width / source.width
     for (const margin of [full.image.x, full.image.y, viewport.width - full.image.x - full.image.width, viewport.height - full.image.y - full.image.height]) {
@@ -18,15 +39,15 @@ describe('扩图框与请求参数', () => {
       expect(margin / scale).toBeLessThanOrEqual(700 + 1e-8)
     }
   })
-  it.each([{ dx: 20, dy: 0 }, { dx: -20, dy: 0 }, { dx: 0, dy: 20 }, { dx: 0, dy: -20 }])('最大留白后仍可拖动，最小等比放大且接口留白合法 %o', ({ dx, dy }) => {
+  it.each([{ dx: 20, dy: 0 }, { dx: -20, dy: 0 }, { dx: 0, dy: 20 }, { dx: 0, dy: -20 }])('最小尺寸时平移在边界停止，不放大且接口留白合法 %o', ({ dx, dy }) => {
     const source = { width: 1000, height: 1500 }
     const frame = { x: 0, y: 0, width: 480, height: 580 }
     const initial = { x: 140, y: 140, width: 200, height: 300 }
-    const moved = translateOutpaintImage({ ...initial, x: initial.x + dx, y: initial.y + dy }, frame, source, 700)
-    expect(moved.x + moved.width / 2).toBeCloseTo(initial.x + initial.width / 2 + dx)
-    expect(moved.y + moved.height / 2).toBeCloseTo(initial.y + initial.height / 2 + dy)
+    const moved = moveOutpaintImage({ ...initial, x: initial.x + dx, y: initial.y + dy }, frame, source, 700)
+    expect(moved.x).toBe(initial.x)
+    expect(moved.y).toBe(initial.y)
     expect(moved.width / moved.height).toBeCloseTo(source.width / source.height)
-    expect(moved.width).toBeGreaterThan(initial.width)
+    expect(moved.width).toBe(initial.width)
     const scale = moved.width / source.width
     const margins = [moved.x, moved.y, frame.width - moved.x - moved.width, frame.height - moved.y - moved.height].map(value => value / scale)
     expect(margins.every(value => value >= -1e-8 && value <= 700 + 1e-8)).toBe(true)
@@ -36,8 +57,8 @@ describe('扩图框与请求参数', () => {
     const source = { width: 1000, height: 1500 }
     const frame = { x: 0, y: 0, width: 480, height: 580 }
     const initial = { x: 100, y: 100, width: 300, height: 450 }
-    expect(translateOutpaintImage(initial, frame, source, 700)).toEqual(initial)
-    const moved = translateOutpaintImage({ ...initial, x: 9999, y: 9999 }, frame, source, 700)
+    expect(moveOutpaintImage(initial, frame, source, 700)).toEqual(initial)
+    const moved = moveOutpaintImage({ ...initial, x: 9999, y: 9999 }, frame, source, 700)
     expect(moved.width).toBe(initial.width)
     expect(moved.height).toBe(initial.height)
     expect(moved.x + moved.width).toBeCloseTo(frame.width)

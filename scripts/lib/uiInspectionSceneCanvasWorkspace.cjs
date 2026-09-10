@@ -501,14 +501,19 @@ function attachUiInspectionCanvasWorkspace(context) {
     await page.mouse.wheel(0, 100)
     await page.waitForTimeout(100)
     const zoomedOut = await geometry()
-    if (zoomedOut.image.width >= beforeWheel.image.width - 1) throw new Error('滚轮未缩小扩图工作面')
+    if (zoomedOut.image.width > beforeWheel.image.width + 1) throw new Error('缩小滚轮反而放大图片')
     for (const key of ['x', 'y', 'width', 'height']) {
       if (Math.abs(zoomedOut.frame[key] - beforeWheel.frame[key]) > 1) throw new Error('滚轮移动或缩放了输出框')
     }
     if (await page.locator('.react-flow__viewport').getAttribute('style') !== flowTransform) throw new Error('扩图滚轮影响了整个画布')
     await page.mouse.wheel(0, -100)
     await page.waitForTimeout(100)
-    if (Math.abs((await geometry()).image.width - beforeWheel.image.width) > 1) throw new Error('滚轮放大未恢复查看倍率')
+    const zoomedIn = await geometry()
+    if (zoomedIn.image.width < zoomedOut.image.width - 1) throw new Error('放大滚轮反而缩小图片')
+    for (const value of [zoomedOut, zoomedIn]) {
+      if (Math.abs(value.image.x + value.image.width / 2 - beforeWheel.image.x - beforeWheel.image.width / 2) > 1
+        || Math.abs(value.image.y + value.image.height / 2 - beforeWheel.image.y - beforeWheel.image.height / 2) > 1) throw new Error('滚轮缩放附带图片平移')
+    }
     if (await stage.getByText(/\d+\s*×\s*\d+/).count()) throw new Error('扩图仍显示多余分辨率文字')
     const current = await geometry()
     const centerX = current.frame.x + current.frame.width / 2
@@ -611,7 +616,7 @@ function attachUiInspectionCanvasWorkspace(context) {
       await page.mouse.down()
       await page.mouse.move(x + dx, y, { steps: 6 })
       const during = await geometry()
-      if (Math.abs(during.image.x + during.image.width / 2 - x - dx) > 1) throw new Error('图片缩到最小后无法拖动')
+      if (Math.abs(during.image.width - before.image.width) > 1 || Math.abs(during.image.height - before.image.height) > 1) throw new Error('最小尺寸平移时自动缩放图片')
       for (const key of ['x', 'y', 'width', 'height']) {
         if (Math.abs(during.frame[key] - before.frame[key]) > 1) throw new Error('极限状态移动图片改变了输出框')
       }
@@ -634,6 +639,10 @@ function attachUiInspectionCanvasWorkspace(context) {
     await page.mouse.move(tiny.image.x + tiny.image.width / 2, tiny.image.y + tiny.image.height / 2)
     for (let i = 0; i < 20; i++) await page.mouse.wheel(0, 100)
     await page.waitForTimeout(200)
+    const limited = await geometry()
+    await page.mouse.wheel(0, 100)
+    await page.waitForTimeout(180)
+    if (Math.abs((await geometry()).image.width - limited.image.width) > 1) throw new Error('达到滚轮下限后仍在缩小')
     for (const [handle, x, y] of [['nw', stageBox.x - 100, stageBox.y - 100], ['se', stageBox.x + stageBox.width + 100, stageBox.y + stageBox.height + 100]]) {
       const point = await stage.locator(`[data-crop-handle="${handle}"]`).boundingBox()
       await page.mouse.move(point.x + point.width / 2, point.y + point.height / 2)
@@ -642,6 +651,7 @@ function attachUiInspectionCanvasWorkspace(context) {
       await page.mouse.up()
     }
     const filled = await geometry()
+    if (Math.abs(filled.image.width - limited.image.width) > 1) throw new Error('拉框触发图片自动放大')
     for (const key of ['x', 'y', 'width', 'height']) {
       if (Math.abs(filled.frame[key] - stageBox[key]) > 2) throw new Error(`小框缩图后无法拉满：${key}`)
     }
