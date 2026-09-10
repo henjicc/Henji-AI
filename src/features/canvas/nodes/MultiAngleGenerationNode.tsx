@@ -140,7 +140,6 @@ export const MultiAngleGenerationNode = memo(({
     areMediaOutputListsEqual,
   )
   const inlineSources = data.mediaInputs?.image ?? []
-  const hasInputImage = incomingSourceMedia.length > 0
   const sourceImages = incomingSourceMedia.length > 0
     ? incomingSourceMedia.map((item) => item.url)
     : inlineSources.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
@@ -287,7 +286,7 @@ export const MultiAngleGenerationNode = memo(({
           config={config}
           sourceImage={sourceImage}
           embedded
-          sourceControl={!hasInputImage && (
+          sourceControl={!sourceImage && (
             <MediaInputRow
               showHandle={false}
               nodeId={id}
@@ -305,7 +304,7 @@ export const MultiAngleGenerationNode = memo(({
             buildMultiAngleEditorDraft(data, nextConfig),
           )}
         />
-  ), [config, data, hasInputImage, id, sourceImage, t, updateNodeData])
+  ), [config, data, id, sourceImage, t, updateNodeData])
 
   return (
     <ToolWorkbenchNodeFrame

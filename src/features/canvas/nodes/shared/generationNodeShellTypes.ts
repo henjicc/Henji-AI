@@ -62,7 +62,7 @@ export interface GenerationNodeShellProps {
   layoutMode?: 'stacked' | 'workbench'
   /** 工作台的专属交互；省略时使用紧凑参数布局，不重复预览源媒体。 */
   workbenchStage?: ReactNode | ((context: GenerationNodeWorkbenchContext) => ReactNode)
-  /** 工作面直接编辑的媒体，输入端口放在节点外缘，参数行保留缩略图与上传。 */
+  /** 工作面直接展示并编辑的媒体，输入端口放在节点外缘；单图已有内容时不重复渲染媒体参数行，空输入保留上传入口。 */
   workbenchMediaInput?: RowMediaKind
   minWidth?: number
   minHeight?: number

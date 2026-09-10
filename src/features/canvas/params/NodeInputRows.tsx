@@ -110,8 +110,11 @@ export function NodeInputRows({
         ),
         constraint: mediaConstraints[kind],
       }))
-      .filter((row) => row.max > 0),
-    [acceptedMediaKinds, limits, maxMediaCounts, mediaConstraints]
+      .filter((row) => row.max > 0)
+      // 单张原图已由工作面展示，参数区不重复呈现；空输入与多图仍保留媒体行。
+      .filter((row) => !(row.kind === 'image' && externalMediaHandle === 'image'
+        && row.max === 1 && incomingImages?.length === 1)),
+    [acceptedMediaKinds, limits, maxMediaCounts, mediaConstraints, externalMediaHandle, incomingImages?.length]
   );
 
   const visibleSchema = useMemo(

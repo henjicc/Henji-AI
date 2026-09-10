@@ -451,6 +451,7 @@ function attachUiInspectionCanvasWorkspace(context) {
     if (Math.abs(clamped.frame.x - clamped.image.x) > 2) throw new Error('扩图向内拖动裁掉了原图')
     const shell = stage.locator('xpath=ancestor::*[@data-generation-node-id]')
     const nodeId = await shell.getAttribute('data-generation-node-id')
+    if (await shell.getByText('图片', { exact: true }).count()) throw new Error('已有扩图工作面时仍重复显示图片输入行')
     await page.locator('.react-flow__node[data-id="__ui_panorama_source"]').click()
     if (!await stage.isVisible()) throw new Error('取消选中后扩图工作面丢失')
     await page.getByRole('button', { name: /返回项目|Back to Projects/ }).click()

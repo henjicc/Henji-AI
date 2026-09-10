@@ -278,14 +278,13 @@ export const RelightGenerationNode = memo(({
   const priceParams = useMemo(() => ({ ...route.params, images: sourceImage
     ? [sourceImage, ...(settings.lightingMode === 'smart' ? settings.smart.lightingReferenceImages : [])] : [] }),
   [route.params, settings.lightingMode, settings.smart.lightingReferenceImages, sourceImage])
-  const hasIncomingSource = incomingSourceMedia.length > 0
   // Selection updates the frame only; retain the workbench instance and its local view state.
   const workbench = useMemo(() => (
         <RelightWorkbench
           settings={settings}
           sourceImage={sourceImage}
           embedded
-          sourceControl={settings.lightingMode === 'manual' && !hasIncomingSource ? (
+          sourceControl={settings.lightingMode === 'manual' && !sourceImage ? (
             <MediaInputRow
               showHandle={false}
               nodeId={id}
@@ -303,7 +302,7 @@ export const RelightGenerationNode = memo(({
             buildRelightEditorDraft(data, nextSettings),
           )}
         />
-  ), [data, id, settings, sourceImage, hasIncomingSource, t, updateNodeData])
+  ), [data, id, settings, sourceImage, t, updateNodeData])
 
   return (
     <ToolWorkbenchNodeFrame
