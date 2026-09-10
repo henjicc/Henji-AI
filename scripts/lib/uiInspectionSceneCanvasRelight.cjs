@@ -259,6 +259,10 @@ function attachUiInspectionCanvasRelight(context) {
     if (await editor.getByText(/不代表真实焦距/).count()) throw new Error('图片工作面仍显示旧轨道说明')
     if (await editor.locator('[data-multi-angle-image-block] circle, [data-multi-angle-image-block] text, [data-multi-angle-image-block] path').count()) throw new Error('图片工作面仍有轨道或标记')
     if (await editor.locator('[data-block-face]').count() !== 6) throw new Error('图片块缺少三维侧面')
+    await editor.locator('[data-block-texture="left"]').waitFor({ state: 'attached', timeout: 8000 })
+    if (await editor.locator('[data-block-texture]').count() !== 5) throw new Error('图片块缺少边缘延伸贴图')
+    const edgeTextures = await editor.locator('[data-block-texture]').evaluateAll(elements => elements.map(element => element.getAttribute('href')))
+    if (edgeTextures.some(url => !url?.startsWith('data:image/png;'))) throw new Error('图片块边缘没有预先烘焙')
     if (await editor.locator('textarea, [contenteditable="true"]').count()) throw new Error('角度编辑器不应显示提示词')
 
     const cameraControl = editor.locator('[data-multi-angle-camera-control="true"]')
@@ -276,6 +280,8 @@ function attachUiInspectionCanvasRelight(context) {
     if (!(draggedCamera.yaw < initialYaw) || !(draggedCamera.vertical < 0)) {
       throw new Error(`多角度镜头拖拽未同步模型控制量：${JSON.stringify(draggedCamera)}`)
     }
+    const rotatedTextures = await editor.locator('[data-block-texture]').evaluateAll(elements => elements.map(element => element.getAttribute('href')).sort())
+    if (JSON.stringify(rotatedTextures) !== JSON.stringify([...edgeTextures].sort())) throw new Error('旋转时边缘贴图发生重复生成')
 
     await writeFile('.ui-tour/canvas-multi-angle-image-block.png', await captureInspectionPage(electronApp, page))
     await editor.getByRole('button', { name: /完整方位/ }).click()

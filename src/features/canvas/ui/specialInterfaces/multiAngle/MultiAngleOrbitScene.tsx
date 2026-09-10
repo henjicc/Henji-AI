@@ -1,6 +1,10 @@
-import { memo, useMemo, useState } from 'react'
+import { memo, useMemo, useRef, useState } from 'react'
+import { createLogger } from '@/core/logging'
 import type { MultiAngleViewV1 } from '@/features/canvas/capabilities/multiAnglePolicy'
 import { imageBlockGeometry, multiAngleOrientation, type MultiAngleOrientation } from './multiAngleOrbitGeometry'
+import { bakeImageBlockTextures, type ImageBlockTextures } from './imageBlockTextures'
+
+const logger = createLogger('features.canvas.multiAngle')
 
 export const MultiAngleOrbitScene = memo(function MultiAngleOrbitScene({ views, selectedViewId, sourceImage, sourceAlt = '', previewOrientation }: {
   views: MultiAngleViewV1[]
@@ -9,22 +13,36 @@ export const MultiAngleOrbitScene = memo(function MultiAngleOrbitScene({ views, 
   sourceAlt?: string
   previewOrientation?: MultiAngleOrientation | null
 }): JSX.Element {
-  const [imageSize, setImageSize] = useState({ source: '', aspect: 1 })
+  const [imageSize, setImageSize] = useState<{ source: string; aspect: number; textures: ImageBlockTextures | null }>({ source: '', aspect: 1, textures: null })
+  const bakedSource = useRef('')
+  const [corsFallback, setCorsFallback] = useState('')
   const selected = views.find(view => view.viewId === selectedViewId) ?? views[0]
   const pose = previewOrientation ?? (selected ? multiAngleOrientation(selected) : { azimuth: 0, elevation: 0 })
   const zoom = selected?.kind === 'continuous' ? selected.proximity : selected?.kind === 'flux' ? selected.zoom : 5
   const aspect = imageSize.source === sourceImage ? imageSize.aspect : 1
+  const textures = imageSize.source === sourceImage ? imageSize.textures : null
   const block = useMemo(() => imageBlockGeometry(aspect, { azimuth: pose.azimuth, elevation: pose.elevation }, zoom), [aspect, pose.azimuth, pose.elevation, zoom])
   return (
-    // icon-token-allow：六个面由视角数据投影；仅在角度变化时更新，不创建 GPU 上下文或刷新循环。
+    // icon-token-allow：六个面由视角数据投影，边缘贴图载入时烘焙；不创建 WebGL 上下文或刷新循环。
     <svg viewBox="0 0 100 100" className="pointer-events-none absolute inset-0 h-full w-full" aria-hidden="true"
       data-multi-angle-image-block="true" data-block-azimuth={pose.azimuth} data-block-elevation={pose.elevation} data-image-aspect={aspect}>
       {block.faces.map(face => <g key={face.name} data-block-face={face.name} visibility={face.visible ? 'visible' : 'hidden'}>
         <polygon points={face.points} className={`${face.name === 'top' ? 'fill-text-muted' : face.name === 'bottom' ? 'fill-surface-dark' : face.name === 'back' ? 'fill-layer' : 'fill-panel'} stroke-veil-soft`} strokeWidth="0.3" strokeLinejoin="round" />
+        {face.name !== 'front' && textures && <image data-block-texture={face.name} href={textures[face.name]}
+          width="1" height="1" preserveAspectRatio="none" transform={face.textureMatrix} opacity={face.name === 'bottom' ? 0.65 : face.name === 'back' ? 0.8 : 0.9} />}
         {face.name === 'front' && sourceImage && <foreignObject transform={block.matrix} width={block.width} height={block.height}>
-          <img src={sourceImage} alt={sourceAlt} draggable={false} className="block h-full w-full" onLoad={event => {
+          <img src={sourceImage} crossOrigin={corsFallback !== sourceImage && /^(?:https?:|asset:|henji-media:)/i.test(sourceImage) ? 'anonymous' : undefined} alt={sourceAlt} draggable={false} className="block h-full w-full"
+            onError={event => { if (event.currentTarget.crossOrigin) setCorsFallback(sourceImage) }} onLoad={event => {
             const image = event.currentTarget
-            if (image.naturalWidth && image.naturalHeight) setImageSize({ source: sourceImage, aspect: image.naturalWidth / image.naturalHeight })
+            if (!image.naturalWidth || !image.naturalHeight || bakedSource.current === sourceImage) return
+            bakedSource.current = sourceImage
+            let nextTextures: ImageBlockTextures | null = null
+            try {
+              nextTextures = bakeImageBlockTextures(image)
+            } catch (error) {
+              logger.warn('图片块边缘贴图生成失败，保留基础面色', { event: 'multi_angle.edge_texture.failed', error })
+            }
+            setImageSize({ source: sourceImage, aspect: image.naturalWidth / image.naturalHeight, textures: nextTextures })
           }} />
         </foreignObject>}
       </g>)}

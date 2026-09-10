@@ -1,6 +1,7 @@
 import type { MultiAngleViewV1, MultiAngleDiscretePreset } from '@/features/canvas/capabilities/multiAnglePolicy'
 
 export interface MultiAngleOrientation { azimuth: number; elevation: number }
+export type ImageBlockFace = 'front' | 'back' | 'left' | 'right' | 'top' | 'bottom'
 type Point3 = readonly [number, number, number]
 
 const PRESET_ORIENTATIONS: Record<MultiAngleDiscretePreset, MultiAngleOrientation> = {
@@ -39,7 +40,7 @@ export function imageBlockGeometry(aspect: number, pose: MultiAngleOrientation, 
   const depth = Math.min(width, height) * 0.5
   const x = width / 2; const y = height / 2; const z = depth / 2
   const project = (p: Point3): Point3 => { const r = rotateImageBlock(p, pose); return [50 + r[0], 50 - r[1], r[2]] }
-  const definitions: { name: string; normal: Point3; corners: Point3[] }[] = [
+  const definitions: { name: ImageBlockFace; normal: Point3; corners: Point3[] }[] = [
     { name: 'front', normal: [0, 0, 1], corners: [[-x, y, z], [x, y, z], [x, -y, z], [-x, -y, z]] },
     { name: 'back', normal: [0, 0, -1], corners: [[x, y, -z], [-x, y, -z], [-x, -y, -z], [x, -y, -z]] },
     { name: 'left', normal: [-1, 0, 0], corners: [[-x, y, -z], [-x, y, z], [-x, -y, z], [-x, -y, -z]] },
@@ -51,6 +52,7 @@ export function imageBlockGeometry(aspect: number, pose: MultiAngleOrientation, 
     const points = face.corners.map(project)
     return { name: face.name, visible: rotateImageBlock(face.normal, pose)[2] > 0.00001,
       depth: points.reduce((sum, p) => sum + p[2], 0) / 4,
+      textureMatrix: `matrix(${points[1][0] - points[0][0]} ${points[1][1] - points[0][1]} ${points[3][0] - points[0][0]} ${points[3][1] - points[0][1]} ${points[0][0]} ${points[0][1]})`,
       points: points.map(p => `${p[0]},${p[1]}`).join(' ') }
   }).sort((a, b) => a.depth - b.depth)
   const origin = project([-x, y, z]); const right = project([x, y, z]); const bottom = project([-x, -y, z])
