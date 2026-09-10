@@ -18,6 +18,9 @@ interface CropOverlayBoxProps {
   ratio: number | null;
   onChange: (rect: MarkCropRect) => void;
   onCommit: () => void;
+  /** 扩图等工作面提供自己的边界规则，默认仍为图片内裁剪。 */
+  constrainRect?: (rect: MarkCropRect) => MarkCropRect;
+  appearance?: 'crop' | 'expand';
 }
 
 const MIN_CROP_IMAGE_PX = 16;
@@ -65,20 +68,27 @@ export function CropOverlayBox({
   ratio,
   onChange,
   onCommit,
+  constrainRect,
+  appearance = 'crop',
 }: CropOverlayBoxProps): JSX.Element {
   const [activeHandle, setActiveHandle] = useState<HandleType | null>(null);
+  const screenScaleRef = useRef(1);
+  const overlayRef = useRef<HTMLDivElement>(null);
   const startPosRef = useRef({ x: 0, y: 0 });
   const startRectRef = useRef<MarkCropRect>(crop);
-  const latestPropsRef = useRef({ ratio, scale, imageWidth, imageHeight, onChange, onCommit });
-  latestPropsRef.current = { ratio, scale, imageWidth, imageHeight, onChange, onCommit };
+  const latestPropsRef = useRef({ ratio, scale, imageWidth, imageHeight, onChange, onCommit, constrainRect });
+  latestPropsRef.current = { ratio, scale, imageWidth, imageHeight, onChange, onCommit, constrainRect };
 
   const beginGesture = useCallback((event: React.MouseEvent, type: HandleType) => {
     event.preventDefault();
     event.stopPropagation();
+    if (event.button !== 0) return;
+    screenScaleRef.current = overlayRef.current
+      ? overlayRef.current.getBoundingClientRect().width / Math.max(1, displayWidth) : 1;
     setActiveHandle(type);
     startPosRef.current = { x: event.clientX, y: event.clientY };
     startRectRef.current = { ...crop };
-  }, [crop]);
+  }, [crop, displayWidth]);
 
   useEffect(() => {
     if (!activeHandle) {
@@ -87,8 +97,8 @@ export function CropOverlayBox({
 
     const handleMouseMove = (event: MouseEvent) => {
       const props = latestPropsRef.current;
-      const dx = (event.clientX - startPosRef.current.x) / Math.max(props.scale, 0.0001);
-      const dy = (event.clientY - startPosRef.current.y) / Math.max(props.scale, 0.0001);
+      const dx = (event.clientX - startPosRef.current.x) / Math.max(props.scale * screenScaleRef.current, 0.0001);
+      const dy = (event.clientY - startPosRef.current.y) / Math.max(props.scale * screenScaleRef.current, 0.0001);
       const start = startRectRef.current;
       let next: MarkCropRect = { ...start };
 
@@ -126,7 +136,9 @@ export function CropOverlayBox({
       if (props.ratio && activeHandle !== 'move') {
         next = applyRatio(next, props.ratio, activeHandle);
       }
-      props.onChange(clampCropRect(next, props.imageWidth, props.imageHeight, MIN_CROP_IMAGE_PX));
+      props.onChange(props.constrainRect
+        ? props.constrainRect(next)
+        : clampCropRect(next, props.imageWidth, props.imageHeight, MIN_CROP_IMAGE_PX));
     };
 
     const handleMouseUp = () => {
@@ -148,7 +160,7 @@ export function CropOverlayBox({
   const height = crop.height * scale;
 
   return (
-    <div className="absolute inset-0 z-10" style={{ width: displayWidth, height: displayHeight }}>
+    <div ref={overlayRef} className="absolute inset-0 z-raised" style={{ width: displayWidth, height: displayHeight }}>
       {/* 四向遮罩 */}
       <div className="absolute left-0 right-0 top-0 bg-black/60" style={{ height: Math.max(0, top) }} />
       <div
@@ -167,7 +179,7 @@ export function CropOverlayBox({
       {/* 裁剪框 */}
       <div
         data-crop-frame
-        className="absolute border-2 border-white/90"
+        className={`absolute border-2 ${appearance === 'expand' ? 'border-accent' : 'border-white/90'}`}
         style={{ left, top, width, height, cursor: 'move' }}
         onMouseDown={(event) => beginGesture(event, 'move')}
       >
@@ -181,7 +193,7 @@ export function CropOverlayBox({
           <div
             key={handle.type}
             data-crop-handle={handle.type}
-            className={`absolute h-2.5 w-2.5 rounded-sm border border-black/40 bg-white ${handle.className}`}
+            className={`absolute h-2.5 w-2.5 border ${appearance === 'expand' ? 'rounded-hairline border-accent bg-text-dark' : 'rounded-sm border-black/40 bg-white'} ${handle.className} before:absolute before:-inset-2 before:content-['']`}
             style={{ cursor: handle.cursor }}
             onMouseDown={(event) => beginGesture(event, handle.type)}
           />

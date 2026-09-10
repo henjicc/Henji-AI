@@ -47,6 +47,7 @@ const generationUiSchema = z.object({
   promptMode: z.enum(['required', 'optional', 'hidden']),
   modelMode: z.enum(['selectable', 'locked']),
   layoutMode: z.enum(['stacked', 'workbench']).optional(),
+  workbenchEditor: z.enum(['outpaint']).optional(),
   excludeParamIds: z.array(z.string().min(1).max(120)).max(40),
   promptMaxCharacters: z.number().int().positive().max(32 * 1024).optional(),
 }).strict()

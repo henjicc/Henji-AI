@@ -247,6 +247,7 @@
     }
   },
   "node": {
+    "outpaint": { "promptPlaceholder": "Describe what to add around the image (optional)", "chooseSource": "Choose a source image", "loadFailed": "Could not load the source image. Check that it is still available." },
     "missing": "Missing node",
     "missingDescription": "This feature or model is unavailable. Its data and connections are preserved. Delete this node or replace it with another.",
     "menuTitle": "Add Node",

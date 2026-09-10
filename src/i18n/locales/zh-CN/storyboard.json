@@ -247,6 +247,7 @@
     }
   },
   "node": {
+    "outpaint": { "promptPlaceholder": "描述希望补画的内容（可选）", "chooseSource": "请选择一张原图", "loadFailed": "原图加载失败，请检查图片是否仍然可用。" },
     "missing": "节点缺失",
     "missingDescription": "此功能或模型已不可用。原节点和连线已保留，可删除此节点或用其他节点替换。",
     "menuTitle": "添加节点",

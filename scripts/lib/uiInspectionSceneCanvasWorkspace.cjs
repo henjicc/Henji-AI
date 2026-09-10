@@ -416,12 +416,68 @@ function attachUiInspectionCanvasWorkspace(context) {
     await settlePage(page, 250)
   }
 
+  async function setupCanvasOutpaint(page) {
+    const { projectId } = await seedAndOpenCanvasPanoramaProject(page)
+    await page.locator('.react-flow__node[data-id="__ui_panorama_source"]').click()
+    await page.locator('[data-image-capability-more="true"]:visible').click()
+    await page.locator('[data-image-capability-id="image.outpaint"]:visible').click()
+    const stage = page.locator('[data-outpaint-stage]')
+    await stage.waitFor({ state: 'visible', timeout: 12000 })
+    await stage.locator('[data-crop-frame]').waitFor({ state: 'visible' })
+    const geometry = async () => stage.evaluate(element => {
+      const image = element.querySelector('img').getBoundingClientRect()
+      const frame = element.querySelector('[data-crop-frame]').getBoundingClientRect()
+      return { image: { x: image.x, y: image.y, width: image.width, height: image.height },
+        frame: { x: frame.x, y: frame.y, width: frame.width, height: frame.height } }
+    })
+    const initial = await geometry()
+    if (Math.abs(initial.frame.width / initial.image.width - 1.2) > 0.02
+      || Math.abs(initial.frame.height / initial.image.height - 1.2) > 0.02) {
+      throw new Error(`扩图默认框不是原图的 120%：${JSON.stringify(initial)}`)
+    }
+    const right = await stage.locator('[data-crop-handle="e"]').boundingBox()
+    await page.mouse.move(right.x + right.width / 2, right.y + right.height / 2)
+    await page.mouse.down()
+    await page.mouse.move(right.x + right.width / 2 + 20, right.y + right.height / 2, { steps: 10 })
+    const during = await geometry()
+    if (Math.abs(during.frame.width - initial.frame.width - 20) > 2) throw new Error('画布缩放下扩图框未跟随指针')
+    await page.mouse.up()
+    const left = await stage.locator('[data-crop-handle="w"]').boundingBox()
+    await page.mouse.move(left.x + left.width / 2, left.y + left.height / 2)
+    await page.mouse.down()
+    await page.mouse.move(left.x + left.width / 2 + 100, left.y + left.height / 2, { steps: 10 })
+    await page.mouse.up()
+    const clamped = await geometry()
+    if (Math.abs(clamped.frame.x - clamped.image.x) > 2) throw new Error('扩图向内拖动裁掉了原图')
+    const shell = stage.locator('xpath=ancestor::*[@data-generation-node-id]')
+    const nodeId = await shell.getAttribute('data-generation-node-id')
+    await page.locator('.react-flow__node[data-id="__ui_panorama_source"]').click()
+    if (!await stage.isVisible()) throw new Error('取消选中后扩图工作面丢失')
+    await page.getByRole('button', { name: /返回项目|Back to Projects/ }).click()
+    await settlePage(page)
+    const params = await page.evaluate(async ({ projectId, nodeId }) => {
+      const record = await window.henjiNative.storyboardProjects.getProjectRecord(projectId)
+      return JSON.parse(record.nodesJson).find(node => node.id === nodeId).data.params
+    }, { projectId, nodeId })
+    if (params.expandLeft !== 0 || params.expandRight <= 160 || params.zoomOutPercentage !== 0) {
+      throw new Error(`扩图参数保存错误：${JSON.stringify(params)}`)
+    }
+    await page.locator(`[data-project-id="${projectId}"]:visible`).click()
+    await stage.locator('[data-crop-frame]').waitFor({ state: 'visible' })
+    const reopened = await geometry()
+    if (Math.abs(reopened.frame.width / reopened.image.width - (1600 + params.expandRight) / 1600) > 0.02) {
+      throw new Error('重新打开后扩图框与保存参数不一致')
+    }
+    await shell.click({ position: { x: 8, y: 8 } })
+    await settlePage(page)
+  }
+
   async function setupCanvasParameterTools(page) {
     await seedAndOpenCanvasPanoramaProject(page)
     const source = page.locator('.react-flow__node[data-id="__ui_panorama_source"]')
     const capabilities = [
       'image.panorama', 'image.upscale',
-      'image.preset-relight', 'image.outpaint',
+      'image.preset-relight',
       'image.photo-restoration', 'image.background-removal',
       'image.layer-separation',
     ]
@@ -514,6 +570,7 @@ function attachUiInspectionCanvasWorkspace(context) {
     setupCanvasImageCapabilityToolbar,
     setupCanvasPanoramaToolbar,
     setupCanvasParameterTools,
+    setupCanvasOutpaint,
     setupCanvasToolbarBoundary,
   })
 }

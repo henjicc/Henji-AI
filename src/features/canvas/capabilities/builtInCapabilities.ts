@@ -124,6 +124,7 @@ export const builtInCanvasImageCapabilities: readonly CanvasImageCapabilityDefin
     icon: 'panorama',
     order: 23,
     modelId: 'fal-image-apps-v2-outpaint',
+    workbenchEditor: 'outpaint',
     promptMode: 'optional',
     promptMaxCharacters: 500,
   }),

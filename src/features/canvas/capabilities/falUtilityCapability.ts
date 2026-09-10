@@ -18,6 +18,7 @@ export function createFalUtilityCapability(options: {
   modelId: string
   promptMode?: 'optional' | 'hidden'
   promptMaxCharacters?: number
+  workbenchEditor?: 'outpaint'
 }): CanvasImageCapabilityDefinition {
   return {
     id: options.id,
@@ -28,7 +29,7 @@ export function createFalUtilityCapability(options: {
     icon: options.icon,
     order: options.order,
     source: IMAGE_SOURCE,
-    node: { kind: 'standard-generation', editor: 'standard' },
+    node: { kind: options.workbenchEditor ? 'special-generation' : 'standard-generation', editor: 'standard' },
     implementation: {
       status: 'implemented',
       execution: {
@@ -37,11 +38,12 @@ export function createFalUtilityCapability(options: {
         useLocalizedDisplayName: true,
         initialData: {
           modelId: options.modelId,
-          params: {},
+          params: options.workbenchEditor ? { zoomOutPercentage: 0 } : {},
           generationUi: {
             promptMode: options.promptMode ?? 'hidden',
             modelMode: 'locked',
-            layoutMode: 'stacked',
+            layoutMode: options.workbenchEditor ? 'workbench' : 'stacked',
+            ...(options.workbenchEditor ? { workbenchEditor: options.workbenchEditor } : {}),
             excludeParamIds: ['image'],
             ...(options.promptMaxCharacters
               ? { promptMaxCharacters: options.promptMaxCharacters }

@@ -305,11 +305,12 @@ describe('画布图片能力应用服务', () => {
       data: {
         displayName,
         modelId,
-        params: {},
+        params: capabilityId === CANVAS_IMAGE_CAPABILITY_IDS.outpaint ? { zoomOutPercentage: 0 } : {},
         generationUi: {
           promptMode,
           modelMode: 'locked',
-          layoutMode: 'stacked',
+          layoutMode: capabilityId === CANVAS_IMAGE_CAPABILITY_IDS.outpaint ? 'workbench' : 'stacked',
+          ...(capabilityId === CANVAS_IMAGE_CAPABILITY_IDS.outpaint ? { workbenchEditor: 'outpaint' } : {}),
           excludeParamIds: ['image'],
           ...(promptMaxCharacters ? { promptMaxCharacters } : {}),
         },

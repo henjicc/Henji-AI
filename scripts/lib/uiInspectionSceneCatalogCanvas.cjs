@@ -16,6 +16,7 @@ function createCanvasScenes(context) {
     setupCanvasImageCapabilityToolbar,
     setupCanvasPanoramaToolbar,
     setupCanvasParameterTools,
+    setupCanvasOutpaint,
     setupCanvasToolbarBoundary,
     setupCanvasRelightEditor,
     setupCanvasMultiAngleEditor,
@@ -63,6 +64,9 @@ function createCanvasScenes(context) {
       writesUserData: true,
       name: '画布-工具栏四边避让与收纳',
       setup: setupCanvasToolbarBoundary,
+    },
+    {
+      id: 'canvas-outpaint', surface: '画布', name: '画布-智能扩图工作面', writesUserData: true, setup: setupCanvasOutpaint,
     },
     {
       id: 'canvas-parameter-tools',
