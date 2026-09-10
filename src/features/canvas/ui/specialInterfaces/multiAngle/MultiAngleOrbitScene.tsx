@@ -1,17 +1,19 @@
 import { memo, useMemo, useRef, useState } from 'react'
 import { createLogger } from '@/core/logging'
-import type { MultiAngleViewV1 } from '@/features/canvas/capabilities/multiAnglePolicy'
+import type { MultiAngleViewV1, MultiAngleDiscretePreset } from '@/features/canvas/capabilities/multiAnglePolicy'
+import { MultiAngleViewNavigator } from './MultiAngleViewNavigator'
 import { imageBlockGeometry, multiAngleOrientation, type MultiAngleOrientation } from './multiAngleOrbitGeometry'
 import { bakeImageBlockTextures, type ImageBlockTextures } from './imageBlockTextures'
 
 const logger = createLogger('features.canvas.multiAngle')
 
-export const MultiAngleOrbitScene = memo(function MultiAngleOrbitScene({ views, selectedViewId, sourceImage, sourceAlt = '', previewOrientation }: {
+export const MultiAngleOrbitScene = memo(function MultiAngleOrbitScene({ views, selectedViewId, sourceImage, sourceAlt = '', previewOrientation, onDiscretePresetChange }: {
   views: MultiAngleViewV1[]
   selectedViewId: string
   sourceImage?: string | null
   sourceAlt?: string
   previewOrientation?: MultiAngleOrientation | null
+  onDiscretePresetChange?: (preset: MultiAngleDiscretePreset) => void
 }): JSX.Element {
   const [imageSize, setImageSize] = useState<{ source: string; aspect: number; textures: ImageBlockTextures | null }>({ source: '', aspect: 1, textures: null })
   const bakedSource = useRef('')
@@ -24,7 +26,7 @@ export const MultiAngleOrbitScene = memo(function MultiAngleOrbitScene({ views, 
   const block = useMemo(() => imageBlockGeometry(aspect, { azimuth: pose.azimuth, elevation: pose.elevation }, zoom), [aspect, pose.azimuth, pose.elevation, zoom])
   return (
     // icon-token-allow：六个面由视角数据投影，边缘贴图载入时烘焙；不创建 WebGL 上下文或刷新循环。
-    <svg viewBox="0 0 100 100" className="pointer-events-none absolute inset-0 h-full w-full" aria-hidden="true"
+    <svg viewBox="0 0 100 100" className="pointer-events-none absolute inset-0 h-full w-full" aria-hidden={onDiscretePresetChange ? undefined : true}
       data-multi-angle-image-block="true" data-block-azimuth={pose.azimuth} data-block-elevation={pose.elevation} data-image-aspect={aspect}>
       {block.faces.map(face => <g key={face.name} data-block-face={face.name} visibility={face.visible ? 'visible' : 'hidden'}>
         <polygon points={face.points} className={`${face.name === 'top' ? 'fill-text-muted' : face.name === 'bottom' ? 'fill-surface-dark' : face.name === 'back' ? 'fill-layer' : 'fill-panel'} stroke-veil-soft`} strokeWidth="0.3" strokeLinejoin="round" />
@@ -46,6 +48,9 @@ export const MultiAngleOrbitScene = memo(function MultiAngleOrbitScene({ views, 
           }} />
         </foreignObject>}
       </g>)}
+      {selected?.kind === 'discrete' && onDiscretePresetChange && (
+        <MultiAngleViewNavigator selectedPreset={selected.preset} onSelect={onDiscretePresetChange} block={block} pose={pose} />
+      )}
     </svg>
   )
 })

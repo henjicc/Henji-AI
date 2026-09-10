@@ -1,4 +1,4 @@
-import type { MultiAngleViewV1, MultiAngleDiscretePreset } from '@/features/canvas/capabilities/multiAnglePolicy'
+import { MULTI_ANGLE_DISCRETE_VIEW_PRESETS, type MultiAngleViewV1, type MultiAngleDiscretePreset } from '@/features/canvas/capabilities/multiAnglePolicy'
 
 export interface MultiAngleOrientation { azimuth: number; elevation: number }
 export type ImageBlockFace = 'front' | 'back' | 'left' | 'right' | 'top' | 'bottom'
@@ -33,6 +33,46 @@ export function rotateImageBlock(point: Point3, pose: MultiAngleOrientation): Po
     Math.sin(pitch) * point[1] + Math.cos(pitch) * z]
 }
 
+/** Test the ray from a world-space marker toward the viewer against the actual image block. */
+function occludedByBlock(point: Point3, towardCamera: Point3, halfSize: Point3): boolean {
+  let enter = 0
+  let leave = Infinity
+  for (let axis = 0; axis < 3; axis++) {
+    const direction = towardCamera[axis]
+    if (Math.abs(direction) < 0.000001) {
+      if (Math.abs(point[axis]) > halfSize[axis]) return false
+      continue
+    }
+    const a = (-halfSize[axis] - point[axis]) / direction
+    const b = (halfSize[axis] - point[axis]) / direction
+    enter = Math.max(enter, Math.min(a, b))
+    leave = Math.min(leave, Math.max(a, b))
+    if (leave < enter) return false
+  }
+  return leave > 0.000001
+}
+
+export function multiAngleDirectionGeometry(
+  block: { width: number; height: number; depth: number },
+  pose: MultiAngleOrientation,
+) {
+  const towardCamera = orientationVector(pose)
+  const points = MULTI_ANGLE_DISCRETE_VIEW_PRESETS.map(({ view }) => {
+    const vector = orientationVector(multiAngleOrientation(view))
+    const point: Point3 = [vector[0] * 43, vector[1] * 43, vector[2] * 43]
+    const [x, y, depth] = rotateImageBlock(point, pose)
+    return { view, x: 50 + x, y: 50 - y, depth,
+      size: 2.1 + depth / 100,
+      opacity: 0.65 + depth / 140,
+      occluded: occludedByBlock(point, towardCamera, [block.width / 2, block.height / 2, block.depth / 2]),
+    }
+  }).sort((a, b) => a.depth - b.depth)
+  // Antipodal markers can project to the same spot. Only the nearer sphere is actionable.
+  return points.map(point => ({ ...point, occluded: point.occluded || points.some(other =>
+    !other.occluded && other.depth > point.depth + 0.000001
+      && Math.hypot(other.x - point.x, other.y - point.y) < other.size / 2) }))
+}
+
 export function imageBlockGeometry(aspect: number, pose: MultiAngleOrientation, zoom = 5) {
   const ratio = Number.isFinite(aspect) && aspect > 0 ? aspect : 1
   const extent = 64 + Math.max(0, Math.min(10, zoom)) * 0.8
@@ -56,5 +96,5 @@ export function imageBlockGeometry(aspect: number, pose: MultiAngleOrientation, 
       points: points.map(p => `${p[0]},${p[1]}`).join(' ') }
   }).sort((a, b) => a.depth - b.depth)
   const origin = project([-x, y, z]); const right = project([x, y, z]); const bottom = project([-x, -y, z])
-  return { width, height, faces, matrix: `matrix(${(right[0] - origin[0]) / width} ${(right[1] - origin[1]) / width} ${(bottom[0] - origin[0]) / height} ${(bottom[1] - origin[1]) / height} ${origin[0]} ${origin[1]})` }
+  return { width, height, depth, faces, matrix: `matrix(${(right[0] - origin[0]) / width} ${(right[1] - origin[1]) / width} ${(bottom[0] - origin[0]) / height} ${(bottom[1] - origin[1]) / height} ${origin[0]} ${origin[1]})` }
 }

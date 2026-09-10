@@ -314,31 +314,38 @@ function attachUiInspectionCanvasRelight(context) {
     if (!(await slots.nth(0).textContent()).includes('左侧面') || !(await slots.nth(1).textContent()).includes('右三分之四')) throw new Error('导航点没有仅修改当前输出')
     await page.mouse.move(20, 120)
     await page.waitForTimeout(250)
-    const visibleDirectionLabels = await editor.locator('[data-multi-angle-direction] > span:last-child').evaluateAll(elements =>
-      elements.filter(element => getComputedStyle(element).visibility === 'visible').length)
-    if (visibleDirectionLabels !== 1) throw new Error('未悬浮时应仅显示当前方位名称')
+    if ((await editor.locator('[data-multi-angle-navigator]').textContent()).trim()) throw new Error('三维方位点不应显示常驻文字')
     await writeFile('.ui-tour/canvas-multi-angle-direction-navigator.png', await captureInspectionPage(electronApp, page))
-    const navigationTargets = await editor.locator('[data-multi-angle-direction]').evaluateAll(elements => elements.map(element => {
+    const navigationTargets = await editor.locator('[data-multi-angle-direction]:visible').evaluateAll(elements => elements.map(element => {
       const box = element.getBoundingClientRect()
       const target = document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2)
-      return element === target || element.contains(target)
+      return { direction: element.getAttribute('data-multi-angle-direction'), hit: element === target || element.contains(target), target: target?.outerHTML.slice(0, 250), visibility: getComputedStyle(element).visibility, box: box.toJSON(), parent: element.parentElement.getBoundingClientRect().toJSON() }
     }))
-    if (navigationTargets.length !== 9 || navigationTargets.some(hit => !hit)) throw new Error('九个方位点存在被遮挡或无法命中')
+    if (navigationTargets.length < 3 || navigationTargets.some(item => !item.hit)) throw new Error(`可见方位点存在无法命中：${JSON.stringify(navigationTargets)}`)
+    const pointSurfaces = await editor.locator('[data-multi-angle-direction]:visible').evaluateAll(elements => elements.map(element => {
+      const style = getComputedStyle(element)
+      return { background: style.backgroundColor, border: style.borderTopWidth }
+    }))
+    if (pointSurfaces.some(style => style.background !== 'rgba(0, 0, 0, 0)' || style.border !== '0px')) throw new Error('方位点仍有圆形按钮底或边框')
     await editor.getByRole('button', { name: '移除当前视图', exact: true }).click()
     await directions.getByRole('button', { name: '正面', exact: true }).click()
     for (const preset of ['back', 'top_down']) {
       const stage = await cameraControl.boundingBox()
       const block = editor.locator('[data-multi-angle-image-block]')
+      const frontMarker = editor.locator('[data-multi-angle-direction="front"]').locator('..')
+      const originalMarkerX = Number(await frontMarker.getAttribute('x'))
       const start = { x: stage.x + stage.width * 0.25, y: stage.y + stage.height * 0.25 }
       await page.mouse.move(start.x, start.y)
       await page.mouse.down()
       await page.mouse.move(start.x + (preset === 'back' ? stage.width * 0.49 : 0), start.y + (preset === 'top_down' ? stage.height * 0.49 : 0), { steps: 12 })
       const value = Number(await block.getAttribute(preset === 'back' ? 'data-block-azimuth' : 'data-block-elevation'))
       if (Math.abs(value - (preset === 'back' ? -176.4 : 88.2)) > 0.1) throw new Error('图片块拖动时提前吸附或角度不跟手')
+      if (preset === 'back' && Math.abs(Number(await frontMarker.getAttribute('x')) - originalMarkerX) < 0.1) throw new Error('方位点没有随图片块旋转')
       await writeFile(`.ui-tour/canvas-multi-angle-rotate-${preset}.png`, await captureInspectionPage(electronApp, page))
       await page.mouse.up()
       const snapped = Number(await block.getAttribute(preset === 'back' ? 'data-block-azimuth' : 'data-block-elevation'))
       if (snapped !== (preset === 'back' ? 180 : 90)) throw new Error('图片块松手未匹配正确视角')
+      if (preset === 'back' && await frontMarker.getAttribute('visibility') !== 'hidden') throw new Error('背面视角没有遮挡正面方位点')
       if (await editor.locator(`[data-block-face="${preset === 'back' ? 'back' : 'top'}"][visibility="visible"]`).count() !== 1) throw new Error('图片块可见面与视角不一致')
     }
     await page.locator(`[data-multi-angle-node-id="${nodeId}"][data-multi-angle-profile="discrete-v1"]`)

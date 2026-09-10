@@ -18,6 +18,8 @@ describe('直接转动图片块', () => {
     const orientation = (): string => container.querySelector('svg')!.getAttribute('data-block-azimuth')!
     const original = orientation()
     const image = container.querySelector('img')!
+    const frontPoint = container.querySelector('[data-multi-angle-direction="front"]')?.parentElement
+    const pointOrigin = frontPoint?.getAttribute('x')
     const move = (id: number): void => {
       fireEvent.pointerDown(control, { pointerId: id, button: 0, clientX: 100, clientY: 100 })
       for (let i = 0; i < 60; i++) fireEvent.pointerMove(control, { pointerId: id,
@@ -27,6 +29,11 @@ describe('直接转动图片块', () => {
     const before = orientation()
     fireEvent.pointerMove(control, { pointerId: 1, clientX: kind === 'discrete' ? 199 : 51, clientY: kind === 'discrete' ? 100 : 151 })
     expect(orientation()).not.toBe(before)
+    if (kind === 'discrete') {
+      expect(frontPoint?.getAttribute('x')).not.toBe(pointOrigin)
+      expect(frontPoint?.getAttribute('visibility')).toBe('hidden')
+      expect(control.textContent).toBe('')
+    }
     expect(container.querySelector('img')).toBe(image)
     expect(callback).not.toHaveBeenCalled()
     expect(container.querySelector('[data-multi-angle-navigator]') !== null).toBe(kind === 'discrete')

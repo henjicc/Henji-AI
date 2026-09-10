@@ -2,7 +2,7 @@
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { MultiAngleOrbitScene } from './MultiAngleOrbitScene'
-import { imageBlockGeometry, multiAngleOrientation, orientationVector, rotateImageBlock } from './multiAngleOrbitGeometry'
+import { imageBlockGeometry, multiAngleDirectionGeometry, multiAngleOrientation, orientationVector, rotateImageBlock } from './multiAngleOrbitGeometry'
 import { MULTI_ANGLE_DISCRETE_VIEW_PRESETS } from '@/features/canvas/capabilities/multiAnglePolicy'
 import { bakeImageBlockTextures } from './imageBlockTextures'
 
@@ -12,6 +12,29 @@ vi.mock('./imageBlockTextures', () => ({ bakeImageBlockTextures: vi.fn(() => ({
 
 afterEach(cleanup)
 describe('多角度图片块', () => {
+  it('方位点与图片块共用三维姿态，前后遮挡随旋转反转，远处点更小', () => {
+    for (const aspect of [0.5, 1, 2]) {
+      const frontPose = { azimuth: 0, elevation: 0 }
+      const front = multiAngleDirectionGeometry(imageBlockGeometry(aspect, frontPose), frontPose)
+      const frontPoint = front.find(point => point.view.preset === 'front')!
+      const backPoint = front.find(point => point.view.preset === 'back')!
+      expect(frontPoint).toMatchObject({ x: 50, y: 50, occluded: false })
+      expect(backPoint.occluded).toBe(true)
+      expect(frontPoint.size).toBeGreaterThan(backPoint.size)
+      const backPose = { azimuth: 180, elevation: 0 }
+      const back = multiAngleDirectionGeometry(imageBlockGeometry(aspect, backPose), backPose)
+      expect(back.find(point => point.view.preset === 'front')!.occluded).toBe(true)
+      expect(back.find(point => point.view.preset === 'back')!.occluded).toBe(false)
+      const pose = { azimuth: 37, elevation: 23 }
+      const oblique = multiAngleDirectionGeometry(imageBlockGeometry(aspect, pose), pose)
+      expect(oblique.find(point => point.view.preset === 'front')!.x).not.toBe(frontPoint.x)
+      expect(oblique.find(point => point.view.preset === 'front')!.y).not.toBe(frontPoint.y)
+      for (const point of oblique) {
+        expect(point.x).toBeGreaterThan(3); expect(point.x).toBeLessThan(97)
+        expect(point.y).toBeGreaterThan(3); expect(point.y).toBeLessThan(97)
+      }
+    }
+  })
   it('视角与图片块可见面一致，旋转保留比例且不越过工作面', () => {
     const expected: Record<string, string[]> = { front: ['front'], back: ['back'], left_side: ['left'], right_side: ['right'], top_down: ['top'], bottom_up: ['bottom'], birds_eye: ['left', 'top', 'front'], three_quarter_left: ['left', 'front'], three_quarter_right: ['right', 'front'] }
     for (const { view } of MULTI_ANGLE_DISCRETE_VIEW_PRESETS) {
@@ -57,9 +80,10 @@ describe('多角度图片块', () => {
     const getContext = vi.spyOn(HTMLCanvasElement.prototype, 'getContext')
     const raf = vi.spyOn(window, 'requestAnimationFrame')
     const views = MULTI_ANGLE_DISCRETE_VIEW_PRESETS.map(preset => preset.view)
-    const { container } = render(<>{Array.from({ length: 24 }, (_, index) => <MultiAngleOrbitScene key={index} views={views} selectedViewId={views[0].viewId} />)}</>)
+    const { container } = render(<>{Array.from({ length: 24 }, (_, index) => <MultiAngleOrbitScene key={index} views={views} selectedViewId={views[0].viewId} onDiscretePresetChange={vi.fn()} />)}</>)
     expect(container.querySelectorAll('[data-block-face]')).toHaveLength(24 * 6)
     expect(container.querySelectorAll('circle, text, path, canvas')).toHaveLength(0)
+    expect(container.querySelectorAll('[data-multi-angle-direction]')).toHaveLength(24 * 9)
     expect(getContext).not.toHaveBeenCalled()
     expect(raf).not.toHaveBeenCalled()
     getContext.mockRestore(); raf.mockRestore()
