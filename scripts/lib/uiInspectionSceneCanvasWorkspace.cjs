@@ -553,6 +553,41 @@ function attachUiInspectionCanvasWorkspace(context) {
     const inspectorWidth = await shell.locator('aside').evaluate(element => element.getBoundingClientRect().width / element.offsetWidth * 200)
     const inspector = await shell.locator('aside').boundingBox()
     if (Math.abs(inspector.width - inspectorWidth) > 1) throw new Error('扩图参数区未保持紧凑固定宽度')
+    for (const dx of [12, -12, 12]) {
+      const before = await geometry()
+      const x = before.image.x + before.image.width / 2
+      const y = before.image.y + before.image.height / 2
+      await page.mouse.move(x, y)
+      await page.mouse.down()
+      await page.mouse.move(x + dx, y, { steps: 6 })
+      const during = await geometry()
+      if (Math.abs(during.image.x - before.image.x - dx) > 1) throw new Error(`节点缩放后图片拖动失效：${JSON.stringify({ before, during, dx })}`)
+      await page.mouse.up()
+      await page.waitForTimeout(200)
+      const after = await geometry()
+      if (Math.abs(after.image.x - during.image.x) > 1) throw new Error('图片拖动松手后被旧构图覆盖')
+    }
+    await page.mouse.move(stageBox.x + stageBox.width / 2, stageBox.y + stageBox.height / 2)
+    for (let index = 0; index < 20; index++) await page.mouse.wheel(0, 100)
+    await page.waitForTimeout(250)
+    for (const dx of [12, -24]) {
+      const before = await geometry()
+      const x = before.image.x + before.image.width / 2
+      const y = before.image.y + before.image.height / 2
+      await page.mouse.move(x, y)
+      await page.mouse.down()
+      await page.mouse.move(x + dx, y, { steps: 6 })
+      const during = await geometry()
+      if (Math.abs(during.image.x + during.image.width / 2 - x - dx) > 1) throw new Error('图片缩到最小后无法拖动')
+      for (const key of ['x', 'y', 'width', 'height']) {
+        if (Math.abs(during.frame[key] - before.frame[key]) > 1) throw new Error('极限状态移动图片改变了输出框')
+      }
+      if (Math.abs(during.image.width / during.image.height - 2 / 3) > 0.001) throw new Error('极限状态移动图片改变了宽高比')
+      await page.mouse.up()
+      await page.waitForTimeout(200)
+      const after = await geometry()
+      if (Math.abs(after.image.x - during.image.x) > 1) throw new Error('极限状态拖动松手后图片跳变')
+    }
     await shell.click({ position: { x: 8, y: 8 } })
     await settlePage(page)
   }

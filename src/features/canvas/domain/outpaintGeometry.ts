@@ -51,6 +51,23 @@ export function moveOutpaintImage(image: MarkCropRect, frame: MarkCropRect, sour
   }
 }
 
+/** 双侧留白达到上限时，以最小等比放大释放平移空间，输出框保持不动。 */
+export function translateOutpaintImage(image: MarkCropRect, frame: MarkCropRect, source: OutpaintImageSize, maximum: number): MarkCropRect {
+  const centerX = clamp(image.x + image.width / 2, frame.x + image.width / 2, frame.x + frame.width - image.width / 2)
+  const centerY = clamp(image.y + image.height / 2, frame.y + image.height / 2, frame.y + frame.height - image.height / 2)
+  const scale = Math.min(
+    Math.min(frame.width / source.width, frame.height / source.height),
+    Math.max(image.width / source.width,
+      (centerX - frame.x) / (source.width / 2 + maximum),
+      (frame.x + frame.width - centerX) / (source.width / 2 + maximum),
+      (centerY - frame.y) / (source.height / 2 + maximum),
+      (frame.y + frame.height - centerY) / (source.height / 2 + maximum)),
+  )
+  const width = source.width * scale
+  const height = source.height * scale
+  return moveOutpaintImage({ x: centerX - width / 2, y: centerY - height / 2, width, height }, frame, source, maximum)
+}
+
 /** 滚轮只改变图片的等比尺寸，框保持原位；极限由完整原图与 API 留白共同决定。 */
 export function zoomOutpaintImage(scene: OutpaintScene, delta: number, source: OutpaintImageSize, maximum: number): MarkCropRect {
   const { image, frame } = scene

@@ -1,9 +1,34 @@
 import { model } from '@henjicc/ai-sdk/tool-models/fal/outpaint'
 import { describe, expect, it } from 'vitest'
-import { createOutpaintScene, scaleOutpaintScene, resizeOutpaintFrame, moveOutpaintImage, zoomOutpaintImage, outpaintSceneToMargins, marginsToRect, rectToMargins, resolveOutpaintMargins, resolveOutpaintRequestParams } from './outpaintGeometry'
+import { createOutpaintScene, scaleOutpaintScene, resizeOutpaintFrame, moveOutpaintImage, translateOutpaintImage, zoomOutpaintImage, outpaintSceneToMargins, marginsToRect, rectToMargins, resolveOutpaintMargins, resolveOutpaintRequestParams } from './outpaintGeometry'
 
 describe('扩图框与请求参数', () => {
   const image = { x: 300, y: 400, width: 1000, height: 1500 }
+  it.each([{ dx: 20, dy: 0 }, { dx: -20, dy: 0 }, { dx: 0, dy: 20 }, { dx: 0, dy: -20 }])('最大留白后仍可拖动，最小等比放大且接口留白合法 %o', ({ dx, dy }) => {
+    const source = { width: 1000, height: 1500 }
+    const frame = { x: 0, y: 0, width: 480, height: 580 }
+    const initial = { x: 140, y: 140, width: 200, height: 300 }
+    const moved = translateOutpaintImage({ ...initial, x: initial.x + dx, y: initial.y + dy }, frame, source, 700)
+    expect(moved.x + moved.width / 2).toBeCloseTo(initial.x + initial.width / 2 + dx)
+    expect(moved.y + moved.height / 2).toBeCloseTo(initial.y + initial.height / 2 + dy)
+    expect(moved.width / moved.height).toBeCloseTo(source.width / source.height)
+    expect(moved.width).toBeGreaterThan(initial.width)
+    const scale = moved.width / source.width
+    const margins = [moved.x, moved.y, frame.width - moved.x - moved.width, frame.height - moved.y - moved.height].map(value => value / scale)
+    expect(margins.every(value => value >= -1e-8 && value <= 700 + 1e-8)).toBe(true)
+    expect(Math.max(...margins)).toBeCloseTo(700)
+  })
+  it('普通图片平移不改变尺寸，碰到图片边界时停止', () => {
+    const source = { width: 1000, height: 1500 }
+    const frame = { x: 0, y: 0, width: 480, height: 580 }
+    const initial = { x: 100, y: 100, width: 300, height: 450 }
+    expect(translateOutpaintImage(initial, frame, source, 700)).toEqual(initial)
+    const moved = translateOutpaintImage({ ...initial, x: 9999, y: 9999 }, frame, source, 700)
+    expect(moved.width).toBe(initial.width)
+    expect(moved.height).toBe(initial.height)
+    expect(moved.x + moved.width).toBeCloseTo(frame.width)
+    expect(moved.y + moved.height).toBeCloseTo(frame.height)
+  })
   it('节点任意方向改变大小时，框与图片共用等比变换且输出参数不变', () => {
     const source = { width: 1000, height: 1500 }
     const viewport = { width: 600, height: 500 }

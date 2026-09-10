@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { UiError, UiLoading } from '@/components/ui'
 import { resolveImageDisplayUrl } from '@/services/imageSource'
 import { CropOverlayBox } from '@/features/imageMark/editor/CropOverlayBox'
-import { createOutpaintScene, scaleOutpaintScene, moveOutpaintImage, outpaintSceneToMargins, resizeOutpaintFrame, resolveOutpaintMargins, zoomOutpaintImage, type OutpaintImageSize, type OutpaintMargins, type OutpaintScene } from '../../domain/outpaintGeometry'
+import { createOutpaintScene, scaleOutpaintScene, translateOutpaintImage, outpaintSceneToMargins, resizeOutpaintFrame, resolveOutpaintMargins, zoomOutpaintImage, type OutpaintImageSize, type OutpaintMargins, type OutpaintScene } from '../../domain/outpaintGeometry'
 
 interface Props {
   source: string
@@ -100,7 +100,7 @@ export const OutpaintStage = memo(function OutpaintStage({ source, params, maxim
         crop={scene.frame} moveTarget={scene.image} imageWidth={viewport.width} imageHeight={viewport.height}
         ratio={null} appearance="expand"
         constrainRect={(rect, handle) => handle === 'move'
-          ? moveOutpaintImage(rect, latestScene.current!.frame, image, maximum)
+          ? translateOutpaintImage(rect, latestScene.current!.frame, image, maximum)
           : resizeOutpaintFrame(rect, latestScene.current!.image, image, viewport, maximum)}
         onChange={(rect, handle) => {
           clearTimeout(wheelTimer.current)
