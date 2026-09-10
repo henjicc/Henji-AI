@@ -1,7 +1,6 @@
 import { model as outpaintModel } from '@henjicc/ai-sdk/tool-models/fal/outpaint'
 import { model as photoRestorationModel } from '@henjicc/ai-sdk/tool-models/fal/photo-restoration'
 import { model as pixelcutBackgroundRemovalModel } from '@henjicc/ai-sdk/tool-models/fal/pixelcut-background-removal'
-import { model as productPhotographyModel } from '@henjicc/ai-sdk/tool-models/fal/product-photography'
 import { model as relightingModel } from '@henjicc/ai-sdk/tool-models/fal/relighting'
 
 import { composeModelDefinition } from '@/core/composeModelDefinition'
@@ -82,15 +81,6 @@ const outpaintPresentation: ModelPresentation = {
   },
 }
 
-const productPhotographyPresentation: ModelPresentation = {
-  sourceImageFraming: { aspectParamId: 'aspectRatio' },
-  meta: { name: { zh: 'FAL 商品摄影', en: 'FAL Product Photography' } },
-  params: {
-    image: { ...imageParam, name: { zh: '商品图', en: 'Product image' } },
-    aspectRatio: { name: { zh: '输出比例', en: 'Output ratio' }, aspectRatioDisplay },
-  },
-}
-
 const photoRestorationPresentation: ModelPresentation = {
   sourceImageFraming: { aspectParamId: 'aspectRatio' },
   meta: { name: { zh: 'FAL 照片修复', en: 'FAL Photo Restoration' } },
@@ -111,7 +101,6 @@ const backgroundRemovalPresentation: ModelPresentation = {
 export const FAL_IMAGE_UTILITY_EXECUTION_MODELS: readonly ModelDefinition[] = [
   composeModelDefinition(relightingModel, relightingPresentation),
   composeModelDefinition(outpaintModel, outpaintPresentation),
-  composeModelDefinition(productPhotographyModel, productPhotographyPresentation),
   composeModelDefinition(photoRestorationModel, photoRestorationPresentation),
   composeModelDefinition(pixelcutBackgroundRemovalModel, backgroundRemovalPresentation),
 ]

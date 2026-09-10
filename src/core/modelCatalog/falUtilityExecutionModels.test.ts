@@ -7,7 +7,7 @@ import {
 } from './falUtilityExecutionModels'
 
 describe('Fal 图片实用工具宿主展示', () => {
-  it('三个固定比例单图工具隐藏自动画幅，其余工具不启用裁剪', () => {
+  it('两个固定比例单图工具隐藏自动画幅，其余工具不启用裁剪', () => {
     for (const model of FAL_IMAGE_UTILITY_EXECUTION_MODELS) {
       const aspect = model.params.find((param) => param.id === 'aspectRatio')
       if (aspect) {
@@ -18,9 +18,9 @@ describe('Fal 图片实用工具宿主展示', () => {
       }
     }
   })
-  it('完整组合五个隐藏工具的模型与参数展示', () => {
-    expect(FAL_IMAGE_UTILITY_EXECUTION_MODELS).toHaveLength(5)
-    expect(new Set(FAL_IMAGE_UTILITY_EXECUTION_MODELS.map((model) => model.meta.id)).size).toBe(5)
+  it('完整组合四个隐藏工具的模型与参数展示', () => {
+    expect(FAL_IMAGE_UTILITY_EXECUTION_MODELS).toHaveLength(4)
+    expect(new Set(FAL_IMAGE_UTILITY_EXECUTION_MODELS.map((model) => model.meta.id)).size).toBe(4)
 
     for (const model of FAL_IMAGE_UTILITY_EXECUTION_MODELS) {
       expect(model.meta.provider, model.meta.id).toBe('fal')
@@ -42,6 +42,7 @@ describe('Fal 图片实用工具宿主展示', () => {
         : model.inputLimits
       return limits?.images?.exact === 1
     })).toBe(true)
+    expect(getFalImageUtilityExecutionModel('fal-image-apps-v2-product-photography')).toBeUndefined()
     expect(getFalImageUtilityExecutionModel('fal-control-light')).toBeUndefined()
     expect(getFalImageUtilityExecutionModel('fal-ai-gpt-image-2')).toBeUndefined()
   })

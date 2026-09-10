@@ -91,11 +91,10 @@ function attachUiInspectionCanvasWorkspace(context) {
   }
 
   async function setupCanvasImageCapabilityToolbar(page) {
-    const expectedCapabilityCount = 13
+    const expectedCapabilityCount = 12
     const expectedFalUtilityIds = [
       'image.preset-relight',
       'image.outpaint',
-      'image.product-photography',
       'image.photo-restoration',
       'image.background-removal',
     ]
@@ -322,7 +321,7 @@ function attachUiInspectionCanvasWorkspace(context) {
     await page.locator('[data-image-capability-more="true"]').click()
     await assertInside('[data-panel-placement]')
     const capabilities = await page.locator('[data-image-capability-id]').count()
-    if (capabilities !== 15) throw new Error(`收纳后功能丢失：${capabilities}`)
+    if (capabilities !== 12) throw new Error(`收纳后功能丢失：${capabilities}`)
     await page.keyboard.press('Escape')
     await settlePage(page, 250)
     await page.locator('[data-node-toolbar-panel]').getByRole('button', { name: /^(下载|Download)$/i }).click()
@@ -367,7 +366,7 @@ function attachUiInspectionCanvasWorkspace(context) {
     const capabilities = [
       'image.panorama', 'image.upscale',
       'image.preset-relight', 'image.outpaint',
-      'image.product-photography', 'image.photo-restoration', 'image.background-removal',
+      'image.photo-restoration', 'image.background-removal',
       'image.layer-separation',
     ]
     for (const capabilityId of capabilities) {

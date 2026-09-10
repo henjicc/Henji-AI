@@ -212,10 +212,6 @@
         "title": "Outpaint",
         "description": "Extend any side of the canvas or zoom out and fill the surroundings"
       },
-      "productPhotography": {
-        "title": "Product Photography",
-        "description": "Turn a single product image into a professional product photo"
-      },
       "photoRestoration": {
         "title": "Photo Restoration",
         "description": "Enhance resolution, repair colors, and remove scratches from old photos"

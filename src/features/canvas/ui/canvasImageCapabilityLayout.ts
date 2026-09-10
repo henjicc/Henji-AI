@@ -29,7 +29,6 @@ const CAPABILITY_TOOLBAR_PRIORITY: Readonly<Record<CanvasImageCapabilityId, numb
   'image.grid-split': 90,
   'image.preset-relight': 100,
   'image.outpaint': 120,
-  'image.product-photography': 130,
   'image.photo-restoration': 140,
   'image.background-removal': 150,
 }

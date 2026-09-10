@@ -11,7 +11,7 @@ const imageInfo = (width: number, height: number, orientation: number | null = n
   source, width, height, orientation, fileName: 'portrait.png', extension: 'png',
   hasAlpha: false, fileSizeBytes: 1024, createdAt: null, modifiedAt: null,
 })
-const tools = ['relighting', 'photo-restoration', 'product-photography']
+const tools = ['relighting', 'photo-restoration']
 const model = (name = 'relighting') => getFalImageUtilityExecutionModel(`fal-image-apps-v2-${name}`)!
 
 beforeEach(() => {
@@ -28,7 +28,7 @@ describe('单图处理按源图匹配画幅', () => {
     expect(cropImageSource).toHaveBeenCalledWith({ source, aspectRatio: '3:4' })
     expect(result.params).toMatchObject({ images: [cropped], uploadedFilePaths: [cropped], image: [cropped], aspectRatio: '3:4' })
     expect(await model(name).request!.builder!(result.params)).toMatchObject({
-      [name === 'product-photography' ? 'product_image_url' : 'image_url']: cropped,
+      image_url: cropped,
       aspect_ratio: { ratio: '3:4' },
     })
     expect(original).toEqual({ images: [source], uploadedFilePaths: [source], image: [source], aspectRatio: '1:1' })

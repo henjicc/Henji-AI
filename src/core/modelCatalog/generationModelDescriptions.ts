@@ -44,7 +44,6 @@ export const GENERATION_MODEL_DESCRIPTIONS = {
   'ideogram-upscale': { zh: '', en: '' },
   'image-apps-v2-outpaint': { zh: 'FAL 智能扩图工具，可按四个方向指定像素扩展，或整体缩小原画面并补全四周内容。', en: 'A FAL outpainting tool with per-side expansion and zoom-out controls.' },
   'image-apps-v2-photo-restoration': { zh: 'FAL 老照片修复工具，可增强清晰度、校正颜色并去除划痕，适合扫描照片和受损影像。', en: 'A FAL photo restoration tool for resolution enhancement, color repair, and scratch removal.' },
-  'image-apps-v2-product-photography': { zh: 'FAL 商品摄影工具，可基于抠图或商品原图生成更完整的商业棚拍背景与构图。', en: 'A FAL product photography tool for turning product cutouts into commercial studio compositions.' },
   'image-apps-v2-relighting': { zh: 'FAL 预设重打光工具，提供自然光、棚拍光、逆光、霓虹等多种灯光风格，适合快速统一画面光照。', en: 'A FAL preset relighting tool with natural, studio, backlight, neon, and other lighting styles.' },
   'perspective-change': { zh: '离散方位视角调整工具，可将主体转换为正面、侧面、背面、俯视、仰视或三分之四等目标视角。', en: 'A discrete perspective tool for front, side, rear, top, bottom, and three-quarter views.' },
   'pixelcut-background-removal': { zh: '基于 Pixelcut 的 FAL 背景移除工具，可提取前景主体并输出透明背景图片。', en: 'A Pixelcut-powered FAL background removal tool that returns a transparent foreground image.' },

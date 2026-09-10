@@ -128,15 +128,6 @@ export const builtInCanvasImageCapabilities: readonly CanvasImageCapabilityDefin
     promptMaxCharacters: 500,
   }),
   createFalUtilityCapability({
-    id: CANVAS_IMAGE_CAPABILITY_IDS.productPhotography,
-    titleKey: 'imageCapabilities.items.productPhotography.title',
-    descriptionKey: 'imageCapabilities.items.productPhotography.description',
-    group: 'generation',
-    icon: 'photoEnhance',
-    order: 24,
-    modelId: 'fal-image-apps-v2-product-photography',
-  }),
-  createFalUtilityCapability({
     id: CANVAS_IMAGE_CAPABILITY_IDS.photoRestoration,
     titleKey: 'imageCapabilities.items.photoRestoration.title',
     descriptionKey: 'imageCapabilities.items.photoRestoration.description',

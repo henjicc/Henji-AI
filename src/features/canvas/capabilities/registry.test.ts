@@ -49,12 +49,12 @@ describe('画布图片能力注册表', () => {
     },
   };
 
-  it('登记十三项唯一、稳定且可序列化的能力', () => {
+  it('登记十二项唯一、稳定且可序列化的能力', () => {
     const definitions = getRegisteredCanvasImageCapabilities();
     const expectedIds = Object.values(CANVAS_IMAGE_CAPABILITY_IDS);
 
-    expect(definitions).toHaveLength(13);
-    expect(new Set(definitions.map((definition) => definition.id)).size).toBe(13);
+    expect(definitions).toHaveLength(12);
+    expect(new Set(definitions.map((definition) => definition.id)).size).toBe(12);
     expect(definitions.map((definition) => definition.id)).toEqual(expectedIds);
     expect(JSON.parse(JSON.stringify(definitions))).toEqual(definitions);
     expect(definitions.every((definition) => (
@@ -81,7 +81,6 @@ describe('画布图片能力注册表', () => {
         CANVAS_IMAGE_CAPABILITY_IDS.relight,
         CANVAS_IMAGE_CAPABILITY_IDS.presetRelight,
         CANVAS_IMAGE_CAPABILITY_IDS.outpaint,
-        CANVAS_IMAGE_CAPABILITY_IDS.productPhotography,
         CANVAS_IMAGE_CAPABILITY_IDS.photoRestoration,
         CANVAS_IMAGE_CAPABILITY_IDS.backgroundRemoval,
         CANVAS_IMAGE_CAPABILITY_IDS.multiAngle,
@@ -98,7 +97,6 @@ describe('画布图片能力注册表', () => {
       CANVAS_IMAGE_CAPABILITY_IDS.relight,
       CANVAS_IMAGE_CAPABILITY_IDS.presetRelight,
       CANVAS_IMAGE_CAPABILITY_IDS.outpaint,
-      CANVAS_IMAGE_CAPABILITY_IDS.productPhotography,
       CANVAS_IMAGE_CAPABILITY_IDS.photoRestoration,
       CANVAS_IMAGE_CAPABILITY_IDS.backgroundRemoval,
       CANVAS_IMAGE_CAPABILITY_IDS.multiAngle,
@@ -142,7 +140,6 @@ describe('画布图片能力注册表', () => {
       CANVAS_IMAGE_CAPABILITY_IDS.relight,
       CANVAS_IMAGE_CAPABILITY_IDS.presetRelight,
       CANVAS_IMAGE_CAPABILITY_IDS.outpaint,
-      CANVAS_IMAGE_CAPABILITY_IDS.productPhotography,
       CANVAS_IMAGE_CAPABILITY_IDS.photoRestoration,
       CANVAS_IMAGE_CAPABILITY_IDS.backgroundRemoval,
       CANVAS_IMAGE_CAPABILITY_IDS.nineGrid,
@@ -161,7 +158,6 @@ describe('画布图片能力注册表', () => {
       CANVAS_IMAGE_CAPABILITY_IDS.relight,
       CANVAS_IMAGE_CAPABILITY_IDS.presetRelight,
       CANVAS_IMAGE_CAPABILITY_IDS.outpaint,
-      CANVAS_IMAGE_CAPABILITY_IDS.productPhotography,
       CANVAS_IMAGE_CAPABILITY_IDS.photoRestoration,
       CANVAS_IMAGE_CAPABILITY_IDS.backgroundRemoval,
       CANVAS_IMAGE_CAPABILITY_IDS.multiAngle,
