@@ -36,9 +36,12 @@ test('报告必须覆盖唯一清单且每项真执行，不硬编码历史用�
 function launchFixture(source, options = {}) {
   let directory
   const promise = runNativePersistence({ executable: process.execPath, root: ROOT, testFiles: FILES,
-    timeoutMs: 2000, graceMs: 250,
+    timeoutMs: 2000,
     createArguments: (file) => ['-e', source, file, JSON.stringify(report())],
-    onDirectory: (value) => { directory = value }, ...options })
+    onDirectory: (value) => { directory = value }, ...options,
+    // Windows must launch taskkill; match the production cleanup allowance.
+    // The fixture timeout remains short, and process/cleanup assertions remain mandatory.
+    graceMs: process.platform === 'win32' ? Math.max(options.graceMs ?? 250, 2000) : options.graceMs ?? 250 })
   return { promise, directory: () => directory }
 }
 
@@ -72,6 +75,22 @@ test('stdout/stderr只保留有界尾部且不挤掉异常退出原因', async (
     assert.ok(Buffer.byteLength(error.message) <= OUTPUT_LIMIT_BYTES + 1)
     return true
   })
+})
+
+test('非零退出保留JSON报告内的断言失败，清理后仍能定位根因', async () => {
+  const fixture = launchFixture(`
+    const report = JSON.parse(process.argv[2]); report.success = false;
+    report.testResults[0].assertionResults[0].status = 'failed';
+    report.testResults[0].assertionResults[0].failureMessages = ['expected original record to remain unchanged'];
+    require('node:fs').writeFileSync(process.argv[1], JSON.stringify(report)); process.exit(1);
+  `)
+  await assert.rejects(fixture.promise, (error) => {
+    assert.match(error.message, /code=1/)
+    assert.match(error.message, /fixture-a.test.ts真实结果/)
+    assert.match(error.message, /expected original record to remain unchanged/)
+    return true
+  })
+  assert.equal(fs.existsSync(fixture.directory()), false)
 })
 
 test('报告已生成但子进程挂住不能提前报绿，超时结束后才清理目录', async () => {

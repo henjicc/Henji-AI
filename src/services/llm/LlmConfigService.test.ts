@@ -109,12 +109,12 @@ describe('normalizeLlmConfig', () => {
     expect(legacy.agentProfiles[0].observer).toBeUndefined()
   })
 
-  it('为存量 DeepSeek V4 配置迁移模型固有上下文能力', () => {
+  it('为官方 Flash 和聚合渠道 V4 配置补齐模型固有上下文能力', () => {
     const defaults = normalizeLlmConfig(null)
     const config = normalizeLlmConfig({
       ...defaults,
       models: defaults.models.map(model => (
-        model.modelId.includes('deepseek-v4')
+        model.providerId === 'deepseek' || model.modelId.includes('deepseek-v4')
           ? {
               ...model,
               capabilities: { ...model.capabilities, contextWindow: null, maxOutputTokens: null },
@@ -122,8 +122,12 @@ describe('normalizeLlmConfig', () => {
           : model
       )),
     })
-    const deepSeekModels = config.models.filter(model => model.modelId.includes('deepseek-v4'))
-    expect(deepSeekModels).toHaveLength(4)
+    const deepSeekModels = config.models.filter(model => model.providerId === 'deepseek' || model.modelId.includes('deepseek-v4'))
+    expect(deepSeekModels.map(model => [model.providerId, model.modelId])).toEqual([
+      ['ppio', 'deepseek/deepseek-v4-pro'],
+      ['ppio', 'deepseek/deepseek-v4-flash'],
+      ['deepseek', 'deepseek-flash'],
+    ])
     expect(deepSeekModels.every(model => (
       model.capabilities.contextWindow === DEEPSEEK_V4_CONTEXT_WINDOW
       && model.capabilities.maxOutputTokens === DEEPSEEK_V4_MAX_OUTPUT_TOKENS
@@ -172,7 +176,7 @@ describe('normalizeLlmConfig', () => {
   it('预制模型自动迁移到确认过的首选协议，且不继承存量手工协议', () => {
     const defaults = normalizeLlmConfig(null)
     expect(defaults.models.find(model => (
-      model.providerId === 'deepseek' && model.modelId === 'deepseek-v4-pro'
+      model.providerId === 'deepseek' && model.modelId === 'deepseek-flash'
     ))?.apiProtocol).toBe('openai-responses')
     expect(defaults.models.find(model => (
       model.providerId === 'ppio' && model.modelId === 'deepseek/deepseek-v4-pro'
@@ -183,7 +187,7 @@ describe('normalizeLlmConfig', () => {
       models: defaults.models.map(model => ({ ...model, apiProtocol: 'openai-compatible' })),
     })
     expect(legacy.models.find(model => (
-      model.providerId === 'deepseek' && model.modelId === 'deepseek-v4-pro'
+      model.providerId === 'deepseek' && model.modelId === 'deepseek-flash'
     ))?.apiProtocol).toBe('openai-responses')
   })
 

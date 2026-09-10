@@ -29,7 +29,7 @@ vi.mock('@/hooks/useI18n', () => ({
 
 const unitPriceModel: ModelDefinition = {
   meta: {
-    id: 'unit-price-test', canonicalModelId: 'control-light', provider: 'fal', type: 'image',
+    id: 'unit-price-test', canonicalModelId: 'image-apps-v2-relighting', provider: 'fal', type: 'image',
     name: { zh: '单位价测试', en: 'Unit price test' }, tags: [],
   },
   inputLimits: { images: { max: 1 }, videos: { max: 0 }, audios: { max: 0 } },
@@ -48,7 +48,7 @@ const unitPriceModel: ModelDefinition = {
 
 const mediaPriceModel: ModelDefinition = {
   meta: {
-    id: 'media-price-test', canonicalModelId: 'control-light', provider: 'fal', type: 'image',
+    id: 'media-price-test', canonicalModelId: 'image-apps-v2-relighting', provider: 'fal', type: 'image',
     name: { zh: '媒体价格测试', en: 'Media price test' }, tags: [],
   },
   inputLimits: { images: { min: 1, max: 1 }, videos: { max: 0 }, audios: { max: 0 } },

@@ -41,11 +41,15 @@ describe('渲染层与主进程共用媒体引用字段规则', () => {
     expect(() => parseCanvasProjectRecord(invalid, resolveCanvasNodeMediaSchema)).toThrow()
   })
 
-  it('未知模型在两端都明确拒绝，而不是将未解码引用再次回存', () => {
+  it('下线模型在两端均保留不透明参数与媒体池，不把缺少schema当成工程损坏', () => {
     const record = { nodesJson: JSON.stringify([{ id: 'n', type: 'generator', position: { x: 0, y: 0 },
       data: { modelId: 'unknown', params: { image: '__img_ref__:0' } } }]), edgesJson: '[]',
       viewportJson: '{"x":0,"y":0,"zoom":1}', historyJson: '{"past":[],"future":[],"imagePool":["/photo.png"]}' }
-    expect(() => validateStoryboardProjectRecord(record)).toThrow()
-    expect(() => parseCanvasProjectRecord(record, resolveCanvasNodeMediaSchema)).toThrow()
+    expect(() => validateStoryboardProjectRecord(record)).not.toThrow()
+    const main = parseCanvasProjectRecord(record, resolveStoryboardProjectMediaSchema)
+    const renderer = parseCanvasProjectRecord(record, resolveCanvasNodeMediaSchema)
+    expect(renderer).toEqual(main)
+    expect(main.nodes[0].data).toEqual({ modelId: 'unknown', params: { image: '__img_ref__:0' } })
+    expect(main.imagePool).toEqual(['/photo.png'])
   })
 })

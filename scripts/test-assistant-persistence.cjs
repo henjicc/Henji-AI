@@ -138,7 +138,16 @@ async function runNativePersistence({
       if (signal?.aborted) onAbort()
     })
     const result = await within(Promise.race([state.completion, interrupted]), timeoutMs, '原生 SQLite 验证超时')
-    if (result.code !== 0 || result.signal) throw new Error(`原生 SQLite 子进程异常退出：code=${result.code}, signal=${result.signal}`)
+    if (result.code !== 0 || result.signal) {
+      // Vitest JSON reporter puts assertion failures in the report, not stderr.
+      // Capture diagnostics before cleanup, while preserving the nonzero exit as failure.
+      let details = ''
+      if (fs.existsSync(reportPath) && fs.statSync(reportPath).size <= REPORT_LIMIT_BYTES) {
+        try { details = reportFailureDetails(JSON.parse(fs.readFileSync(reportPath, 'utf8'))) }
+        catch { /* A missing/malformed report must never mask the exit failure. */ }
+      }
+      throw new Error(`原生 SQLite 子进程异常退出：code=${result.code}, signal=${result.signal}\n${details}`)
+    }
     if (process.platform !== 'win32' && groupAlive(child.pid)) throw new Error('原生 SQLite 主进程退出后仍有存活子进程')
     const bytes = fs.statSync(reportPath).size
     if (bytes > REPORT_LIMIT_BYTES) throw new Error('原生 SQLite 报告超过16MiB，拒绝读取')

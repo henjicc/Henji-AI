@@ -70,13 +70,24 @@ describe.skipIf(!process.versions.electron)('正式工程服务与临时真实SQ
     expect(getStoryboardProject('protected')?.viewportJson).toBe('{"x":3,"y":4,"zoom":2}')
   })
 
-  it('坏媒体池引用和未知模型不回存，普通同名提示词可以', () => {
+  it('已知媒体字段的坏池引用不回存，普通同名提示词可以', () => {
     const n = { id: 'n', type: 'uploadNode', position: { x: 0, y: 0 }, data: { prompt: '__img_ref__:999' } }
     upsertStoryboardProject({ ...record(), nodesJson: JSON.stringify([n]), nodeCount: 1 })
     const before = getStoryboardProject('protected')
-    for (const data of [{ imageUrl: '__img_ref__:999' }, { modelId: 'unknown', params: { image: '__img_ref__:0' } }]) {
+    for (const data of [{ imageUrl: '__img_ref__:999' }, { videoUrl: '__img_ref__:0' }]) {
       expect(() => upsertStoryboardProject({ ...record(), nodesJson: JSON.stringify([{ ...n, data }]) })).toThrow(CanvasProjectRecordError)
     }
     expect(getStoryboardProject('protected')).toEqual(before)
+  })
+
+  it('下线模型的不透明参数和原媒体池在真实数据库中完整保留', () => {
+    const data = { modelId: 'unknown', params: { image: '__img_ref__:0', prompt: '__img_ref__:999' } }
+    const saved = { ...record(), nodeCount: 1,
+      nodesJson: JSON.stringify([{ id: 'n', type: 'generator', position: { x: 0, y: 0 }, data }]),
+      historyJson: '{"past":[],"future":[],"imagePool":["/photo.png"]}' }
+    upsertStoryboardProject(saved)
+    expect(getStoryboardProject('protected')).toMatchObject({ nodesJson: saved.nodesJson, historyJson: saved.historyJson })
+    updateStoryboardProjectViewport('protected', '{"x":3,"y":4,"zoom":2}')
+    expect(getStoryboardProject('protected')).toMatchObject({ nodesJson: saved.nodesJson, historyJson: saved.historyJson })
   })
 })
