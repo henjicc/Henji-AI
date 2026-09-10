@@ -121,6 +121,9 @@ export interface ModelPresentation {
   /** 参数的纯展示编排（可选），只重排已有扁平参数，不改变参数 ID/值结构/请求字段 */
   paramPresentation?: ModelParamPresentation
 
+  /** 宿主单图处理策略；比例候选仍取 SDK schema，不在展示层复制。 */
+  sourceImageFraming?: { aspectParamId: string }
+
   /** 参数联动规则（可选） */
   linkages?: Linkage[]
 }

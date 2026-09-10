@@ -1,4 +1,4 @@
-import type { DropdownParamDef, I18nText, ParamDef, RadioParamDef } from '@/core/types'
+import type { AspectRatioParamDef, DropdownParamDef, I18nText, ParamDef, RadioParamDef } from '@/core/types'
 import { getI18nText } from '@/core/types'
 
 export interface ChoiceOptionDescriptor {
@@ -45,8 +45,8 @@ const RATIO_ALIASES: Record<string, string> = {
   landscape_21_9: '21:9',
 }
 
-function isChoiceParam(param: ParamDef): param is DropdownParamDef | RadioParamDef {
-  return param.type === 'dropdown' || param.type === 'radio'
+function isChoiceParam(param: ParamDef): param is DropdownParamDef | RadioParamDef | AspectRatioParamDef {
+  return param.type === 'dropdown' || param.type === 'radio' || param.type === 'aspect-ratio'
 }
 
 function toChoiceDescriptor(param: ParamDef): ChoiceParamDescriptor | null {
@@ -54,7 +54,7 @@ function toChoiceDescriptor(param: ParamDef): ChoiceParamDescriptor | null {
     return null
   }
 
-  const rawOptions = (param as DropdownParamDef | RadioParamDef).options
+  const rawOptions = param.options
   if (!Array.isArray(rawOptions) || rawOptions.length === 0) {
     return null
   }
@@ -379,4 +379,18 @@ export function resolveClosestAspectValue(
   }
 
   return best.optionValue
+}
+
+/** 保留面积为 min(候选/原图, 原图/候选)，对数距离能保证横竖互换后的裁剪选择对称。 */
+export function resolveLeastCropAspectValue(
+  param: ChoiceParamDescriptor,
+  targetRatio: number,
+): string | number | null {
+  if (!Number.isFinite(targetRatio) || targetRatio <= 0) return null
+  const candidates = toAspectValueCandidates(param).filter((candidate) => candidate.ratio > 0)
+  const best = candidates.reduce<AspectValueCandidate | undefined>((current, candidate) => (
+    !current || Math.abs(Math.log(candidate.ratio / targetRatio)) < Math.abs(Math.log(current.ratio / targetRatio))
+      ? candidate : current
+  ), undefined)
+  return best?.optionValue ?? null
 }

@@ -74,10 +74,11 @@ export async function cropImageSource(payload: CropImageSourcePayloadDto): Promi
   const { bytes } = await resolveSourceBytes(payload.source)
   const sharp = await loadSharp()
   const meta = await sharp(bytes).metadata()
-  const width = Math.max(1, meta.width ?? 1)
-  const height = Math.max(1, meta.height ?? 1)
+  const swapsAxes = meta.orientation !== undefined && meta.orientation >= 5 && meta.orientation <= 8
+  const width = Math.max(1, (swapsAxes ? meta.height : meta.width) ?? 1)
+  const height = Math.max(1, (swapsAxes ? meta.width : meta.height) ?? 1)
   const region = resolveCropRegion(payload, width, height)
-  const output = await sharp(bytes).extract(region).png().toBuffer()
+  const output = await sharp(bytes).rotate().extract(region).png().toBuffer()
   return persistImageBytes(output, 'png')
 }
 

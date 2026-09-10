@@ -25,6 +25,7 @@ const imageParam = {
 } as const
 
 const relightingPresentation: ModelPresentation = {
+  sourceImageFraming: { aspectParamId: 'aspectRatio' },
   meta: { name: { zh: 'FAL 预设重打光', en: 'FAL Preset Relighting' } },
   params: {
     image: imageParam,
@@ -95,6 +96,7 @@ const outpaintPresentation: ModelPresentation = {
 }
 
 const productPhotographyPresentation: ModelPresentation = {
+  sourceImageFraming: { aspectParamId: 'aspectRatio' },
   meta: { name: { zh: 'FAL 商品摄影', en: 'FAL Product Photography' } },
   params: {
     image: { ...imageParam, name: { zh: '商品图', en: 'Product image' } },
@@ -103,6 +105,7 @@ const productPhotographyPresentation: ModelPresentation = {
 }
 
 const photoRestorationPresentation: ModelPresentation = {
+  sourceImageFraming: { aspectParamId: 'aspectRatio' },
   meta: { name: { zh: 'FAL 照片修复', en: 'FAL Photo Restoration' } },
   params: {
     image: { ...imageParam, name: { zh: '旧照片', en: 'Old photo' } },

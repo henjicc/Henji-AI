@@ -1,4 +1,4 @@
-import { readImageInfo } from '@/commands/image'
+import { cropImageSource, readImageInfo } from '@/commands/image'
 import { compressVideoToFit, trimVideoSource } from '@/commands/video'
 import { createLogger } from '@/core/logging'
 import type { ModelDefinition } from '@/core/types'
@@ -8,6 +8,7 @@ import {
   getAspectChoiceParams,
   isSmartAspectValue,
   resolveClosestAspectValue,
+  resolveLeastCropAspectValue,
 } from '@/core/params/ratioResolution'
 import { UploadService } from '@/services/upload/UploadService'
 import { resolveGenerationVideoSources } from './generationVideoDurations'
@@ -68,8 +69,9 @@ function isStringArray(value: DynamicValue): value is string[] {
   return Array.isArray(value) && value.every((item) => typeof item === 'string')
 }
 
-function getFirstImageSource(params: DynamicValueMap): string | null {
-  const candidates: DynamicValue[] = [params.images, params.uploadedFilePaths]
+function getFirstImageSource(params: DynamicValueMap, model: ModelDefinition): string | null {
+  const candidates: DynamicValue[] = [params.uploadedFilePaths, params.images, params.uploadedImages,
+    ...model.params.filter((param) => param.type === 'image-upload').map((param) => params[param.id])]
   for (const candidate of candidates) {
     if (!isStringArray(candidate)) {
       continue
@@ -255,11 +257,12 @@ function resolveChoiceSmartAspectValues(
   }
 }
 
-async function readImageRatio(imageSource: string): Promise<number | null> {
+async function readSourceImageInfo(imageSource: string): Promise<{ width: number; height: number } | null> {
   try {
     const info = await readImageInfo(imageSource)
-    if (info.width > 0 && info.height > 0) {
-      return info.width / info.height
+    if (Number.isFinite(info.width) && Number.isFinite(info.height) && info.width > 0 && info.height > 0) {
+      const swapsAxes = info.orientation !== null && info.orientation >= 5 && info.orientation <= 8
+      return swapsAxes ? { width: info.height, height: info.width } : info
     }
     return null
   } catch {
@@ -270,11 +273,13 @@ async function readImageRatio(imageSource: string): Promise<number | null> {
 export async function normalizeSmartAspectParams(
   model: ModelDefinition,
   params: DynamicValueMap,
+  requestId?: string,
 ): Promise<SmartAspectNormalizationResult> {
   const nextParams: DynamicValueMap = { ...params }
-  const firstImageSource = getFirstImageSource(nextParams)
+  const firstImageSource = getFirstImageSource(nextParams, model)
   const hasImageInput = typeof firstImageSource === 'string' && firstImageSource.trim().length > 0
-  const imageRatio = firstImageSource ? await readImageRatio(firstImageSource) : null
+  const info = firstImageSource ? await readSourceImageInfo(firstImageSource) : null
+  const imageRatio = info ? info.width / info.height : null
   const hasReferenceImage = imageRatio !== null && Number.isFinite(imageRatio) && imageRatio > 0
   const targetRatio = hasReferenceImage ? imageRatio : 1
 
@@ -285,6 +290,52 @@ export async function normalizeSmartAspectParams(
   }
 
   const report = resolveChoiceSmartAspectValues(model, nextParams, hasReferenceImage, targetRatio)
+
+  if (model.sourceImageFraming) {
+    const context = { requestId, modelId: model.meta.id, providerId: model.meta.provider }
+    logger.info('匹配源图画幅', { ...context, event: 'generation.source_framing.start' })
+    try {
+      if (!firstImageSource || !info || !hasReferenceImage) {
+        throw new Error('无法读取输入图片尺寸，请重新选择图片后重试，避免按错误比例生成。')
+      }
+      const param = getAspectChoiceParams(model.params)
+        .find((choice) => choice.id === model.sourceImageFraming?.aspectParamId)
+      const matched = param ? resolveLeastCropAspectValue(param, targetRatio) : null
+      if (!param || typeof matched !== 'string' || !/^\d+:\d+$/.test(matched)) {
+        throw new Error('当前模型缺少可匹配的输出比例，无法保持输入图片比例。')
+      }
+      const [width, height] = matched.split(':').map(Number)
+      const outputRatio = width / height
+      // 一像素内的舍入误差无需重编码；其余情况只裁剪，不改变像素的横纵比例。
+      const cropped = Math.abs(targetRatio - outputRatio) > 1 / info.height
+      const preparedSource = cropped
+        ? await cropImageSource({ source: firstImageSource, aspectRatio: matched })
+        : firstImageSource
+      const imageKeys = new Set(['uploadedFilePaths', 'images', 'uploadedImages',
+        ...model.params.filter((entry) => entry.type === 'image-upload').map((entry) => entry.id)])
+      for (const key of imageKeys) {
+        const value = nextParams[key]
+        if (isStringArray(value)) {
+          nextParams[key] = value.map((source) => source === firstImageSource ? preparedSource : source)
+        }
+      }
+      // 即使旧工程保存了一个固定比例，也必须依据这次的源图重新匹配。
+      nextParams[param.id] = matched
+      if (param.apiField) nextParams[param.apiField] = matched
+      nextParams.__firstImageRatio = outputRatio
+      report.adjustments = report.adjustments.filter((entry) => entry.paramId !== param.id)
+      report.adjustments.push({ paramId: param.id, apiField: param.apiField,
+        from: typeof params[param.id] === 'string' ? params[param.id] as string : undefined,
+        to: matched, reason: 'reference-image' })
+      report.unresolvedParamIds = report.unresolvedParamIds.filter((id) => id !== param.id)
+      logger.info('源图画幅匹配完成', { ...context, event: 'generation.source_framing.completed',
+        context: { sourceWidth: info.width, sourceHeight: info.height, aspectRatio: matched, cropped,
+          retainedArea: Math.min(targetRatio / outputRatio, outputRatio / targetRatio) } })
+    } catch (error) {
+      logger.error('源图画幅匹配失败', error, { ...context, event: 'generation.source_framing.failed' })
+      throw error
+    }
+  }
 
   return {
     params: nextParams,

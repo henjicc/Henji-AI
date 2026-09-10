@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import type {
+  AspectRatioParamDef,
   CompositePanelDef,
   DropdownParamDef,
   FileUploadParamDef,
@@ -155,7 +156,7 @@ function CompactAspectRatioControl({
   value,
   onChange,
   disabled,
-}: { param: DropdownParamDef | RadioParamDef; value: DynamicValue; onChange: (value: DynamicValue) => void; disabled?: boolean }) {
+}: { param: DropdownParamDef | RadioParamDef | AspectRatioParamDef; value: DynamicValue; onChange: (value: DynamicValue) => void; disabled?: boolean }) {
   const { i18n } = useTranslation();
   const smartOption = useMemo(
     () => param.options.find((option) => isSmartAspectValue(option.value)),
@@ -398,6 +399,8 @@ export function NodeParamControl({ param, value, onChange, allValues, onParamCha
           disabled={disabled}
         />
       );
+    case 'aspect-ratio':
+      return <CompactAspectRatioControl param={param} value={value} onChange={onChange} disabled={disabled} />;
     case 'dropdown':
     case 'radio':
       if (isAspectRatioChoiceParam(param)) {

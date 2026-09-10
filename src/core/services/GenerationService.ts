@@ -110,7 +110,7 @@ export class GenerationService {
         : null
       progressTracker?.start()
 
-      const normalized = await normalizeSmartAspectParams(model, sourceParams)
+      const normalized = await normalizeSmartAspectParams(model, sourceParams, requestId)
       const paramsWithCompressedVideo = await compressFirstVideoIfNeeded(model, normalized.params)
       const paramsWithTrimmedVideo = await trimFirstVideoIfSelected(paramsWithCompressedVideo)
       const paramsWithVideoDuration = await attachVideoDurations(paramsWithTrimmedVideo)

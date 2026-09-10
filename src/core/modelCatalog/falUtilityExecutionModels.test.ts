@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { isParamVisible } from '@/components/params/paramVisibility'
 
 import {
   FAL_IMAGE_UTILITY_EXECUTION_MODELS,
@@ -6,6 +7,17 @@ import {
 } from './falUtilityExecutionModels'
 
 describe('Fal 图片实用工具宿主展示', () => {
+  it('三个固定比例单图工具隐藏自动画幅，其余工具不启用裁剪', () => {
+    for (const model of FAL_IMAGE_UTILITY_EXECUTION_MODELS) {
+      const aspect = model.params.find((param) => param.id === 'aspectRatio')
+      if (aspect) {
+        expect(model.sourceImageFraming).toEqual({ aspectParamId: aspect.id })
+        expect(isParamVisible(aspect, { aspectRatio: '1:1' }, null)).toBe(false)
+      } else {
+        expect(model.sourceImageFraming).toBeUndefined()
+      }
+    }
+  })
   it('完整组合六个隐藏工具的模型与参数展示', () => {
     expect(FAL_IMAGE_UTILITY_EXECUTION_MODELS).toHaveLength(6)
     expect(new Set(FAL_IMAGE_UTILITY_EXECUTION_MODELS.map((model) => model.meta.id)).size).toBe(6)

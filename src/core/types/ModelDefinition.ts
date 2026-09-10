@@ -438,6 +438,9 @@ export interface ModelDefinition {
    */
   paramPresentation?: ModelParamPresentation
 
+  /** 单图处理的产品策略：按源图匹配该比例参数并最小裁剪，用户无需选择输出画幅。 */
+  sourceImageFraming?: { aspectParamId: string }
+
   /**
    * 参数联动规则（可选）
    *

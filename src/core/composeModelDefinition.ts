@@ -258,7 +258,12 @@ export function composeModelDefinition(
   runtime: ModelRuntimeDefinition,
   presentation: ModelPresentation
 ): ModelDefinition {
-  const params = runtime.params.map((param) => composeParam(param, presentation.params))
+  const params = runtime.params.map((param) => {
+    const composed = composeParam(param, presentation.params)
+    return param.id === presentation.sourceImageFraming?.aspectParamId
+      ? { ...composed, visible: { condition: () => false } }
+      : composed
+  })
 
   const meta: ModelMeta = {
     id: runtime.meta.id,
@@ -283,6 +288,7 @@ export function composeModelDefinition(
     meta,
     params,
     paramPresentation: presentation.paramPresentation,
+    sourceImageFraming: presentation.sourceImageFraming,
     linkages: presentation.linkages,
     requirements: runtime.requirements as GenerationRequirement[] | undefined,
     inputLimits: runtime.inputLimits as InputLimits | undefined,
