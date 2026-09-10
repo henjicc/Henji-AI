@@ -1,7 +1,9 @@
+import { multiAngleMarkerPosition, projectMultiAnglePoint } from './multiAngleOrbitGeometry'
 import { describe, expect, it } from 'vitest'
 
 import {
   MULTI_ANGLE_CONTINUOUS_PRESETS,
+  MULTI_ANGLE_DISCRETE_VIEW_PRESETS,
   MULTI_ANGLE_FLUX_PRESETS,
 } from '@/features/canvas/capabilities/multiAnglePolicy'
 import {
@@ -16,6 +18,14 @@ import {
 } from './multiAngleCameraVisualizerState'
 
 describe('多角度镜头可视化状态', () => {
+  it('常用角度附近轻吸附，离开吸附区仍能细调', () => {
+    const origin = { clientX: 0, clientY: 0, yawControlDeg: 0, verticalControl: 0 }
+    expect(continuousCameraFromDrag(origin, 43, 0, { width: 180, height: 200 }).yawControlDeg).toBe(-45)
+    expect(continuousCameraFromDrag(origin, 38, 0, { width: 180, height: 200 }).yawControlDeg).toBe(-38)
+    const flux = { clientX: 0, clientY: 0, horizontalAngleDeg: 0, verticalAngleDeg: 0 }
+    expect(fluxCameraFromDrag(flux, 43, -14, { width: 360, height: 60 })).toEqual({ horizontalAngleDeg: 45, verticalAngleDeg: 15 })
+    expect(fluxCameraFromDrag(flux, 38, -10, { width: 360, height: 60 })).toEqual({ horizontalAngleDeg: 38, verticalAngleDeg: 10 })
+  })
   it('将相对拖拽映射到模型真实水平和垂直控制量', () => {
     expect(continuousCameraFromDrag({
       clientX: 100,
@@ -48,10 +58,15 @@ describe('多角度镜头可视化状态', () => {
   })
 
   it('完整方位会吸附到离指针最近的模型预设', () => {
-    const metrics = { left: 0, top: 0, width: 200, height: 200 }
-    expect(discretePresetFromPoint(0, 100, metrics)).toBe('left_side')
-    expect(discretePresetFromPoint(100, 0, metrics)).toBe('top_down')
-    expect(discretePresetFromPoint(200, 150, metrics)).toBe('three_quarter_right')
+    for (const [width, height] of [[200, 200], [400, 200], [200, 400]]) {
+      const size = Math.min(width, height)
+      const metrics = { left: 25, top: 30, width, height }
+      for (const { view } of MULTI_ANGLE_DISCRETE_VIEW_PRESETS) {
+        const p = projectMultiAnglePoint(multiAngleMarkerPosition(view))
+        expect(discretePresetFromPoint(25 + (width - size) / 2 + p.x * size / 100,
+          30 + (height - size) / 2 + p.y * size / 100, metrics)).toBe(view.preset)
+      }
+    }
   })
 
   it('用用户可理解的方位和景别描述连续参数', () => {

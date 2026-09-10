@@ -276,7 +276,16 @@ function attachUiInspectionCanvasRelight(context) {
     }
 
     await editor.getByRole('button', { name: /完整方位/ }).click()
-    await editor.getByRole('button', { name: /^顶视$/ }).click()
+    for (const preset of ['back', 'top_down']) {
+      const stop = await editor.locator(`[data-camera-stop="${preset}"] circle`).boundingBox()
+      const stage = await cameraControl.boundingBox()
+      await page.mouse.move(stage.x + stage.width / 2, stage.y + stage.height / 2)
+      await page.mouse.down()
+      await page.mouse.move(stop.x + stop.width / 2, stop.y + stop.height / 2, { steps: 10 })
+      if (await editor.locator(`[data-camera-stop="${preset}"][data-snap-active="true"]`).count() !== 1) throw new Error('镜头落点没有高亮')
+      await writeFile(`.ui-tour/canvas-multi-angle-snap-${preset}.png`, await captureInspectionPage(electronApp, page))
+      await page.mouse.up()
+    }
     await page.locator(`[data-multi-angle-node-id="${nodeId}"][data-multi-angle-profile="discrete-v1"]`)
       .waitFor({ state: 'visible', timeout: 8000 })
 
@@ -309,7 +318,7 @@ function attachUiInspectionCanvasRelight(context) {
       || persisted.capabilityId !== 'image.multi-angle'
       || persisted.modelId !== 'fal-perspective-change'
       || persisted.profile !== 'discrete-v1'
-      || persisted.viewCount !== 5
+      || persisted.viewCount !== 4
       || !persisted.hasTopDown
       || persisted.hasPrompt
       || persisted.manuallyResized !== true

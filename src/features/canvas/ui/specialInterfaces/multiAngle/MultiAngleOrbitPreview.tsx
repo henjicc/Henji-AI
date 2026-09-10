@@ -10,11 +10,12 @@ import {
 import { useTranslation } from 'react-i18next'
 
 import { UI_FIELD_FOCUS_CLASS } from '@/components/ui/styleTokens'
-import type {
-  MultiAngleContinuousViewV1,
-  MultiAngleDiscretePreset,
-  MultiAngleFluxViewV1,
-  MultiAngleViewV1,
+import {
+  MULTI_ANGLE_DISCRETE_VIEW_PRESETS,
+  type MultiAngleContinuousViewV1,
+  type MultiAngleDiscretePreset,
+  type MultiAngleFluxViewV1,
+  type MultiAngleViewV1,
 } from '@/features/canvas/capabilities/multiAnglePolicy'
 import { MultiAngleOrbitScene } from './MultiAngleOrbitScene'
 import {
@@ -36,21 +37,25 @@ export function MultiAngleOrbitPreview({
   onContinuousChange,
   onDiscretePresetChange,
   onFluxChange,
+  sourceImage,
+  sourceAlt,
 }: {
   views: MultiAngleViewV1[]
   selectedViewId: string
   onContinuousChange: (patch: Partial<MultiAngleContinuousViewV1>) => void
   onDiscretePresetChange: (preset: MultiAngleDiscretePreset) => void
   onFluxChange: (patch: Partial<MultiAngleFluxViewV1>) => void
+  sourceImage?: string | null
+  sourceAlt?: string
 }): JSX.Element {
   const { t } = useTranslation()
   const selected = views.find((view) => view.viewId === selectedViewId) ?? views[0]
   const [dragging, setDragging] = useState(false)
-  const [transientView, setTransientView] = useState<MultiAngleContinuousViewV1 | MultiAngleFluxViewV1 | null>(null)
+  const [transientView, setTransientView] = useState<MultiAngleViewV1 | null>(null)
   const activePointerId = useRef<number | null>(null)
   const continuousDragOrigin = useRef<MultiAngleCameraDragOrigin | null>(null)
   const fluxDragOrigin = useRef<MultiAngleFluxCameraDragOrigin | null>(null)
-  const transientViewRef = useRef<MultiAngleContinuousViewV1 | MultiAngleFluxViewV1 | null>(null)
+  const transientViewRef = useRef<MultiAngleViewV1 | null>(null)
   const lastEmitted = useRef('')
   const visualSelected = transientView?.viewId === selected?.viewId ? transientView : selected
   const visualViews = useMemo(() => transientView
@@ -95,14 +100,18 @@ export function MultiAngleOrbitPreview({
     if (!selected || selected.kind !== 'discrete') return
     const bounds = event.currentTarget.getBoundingClientRect()
     const preset = discretePresetFromPoint(event.clientX, event.clientY, bounds)
-    if (preset === lastEmitted.current) return
-    lastEmitted.current = preset
-    onDiscretePresetChange(preset)
+    if (transientViewRef.current?.kind === 'discrete' && transientViewRef.current.preset === preset) return
+    const definition = MULTI_ANGLE_DISCRETE_VIEW_PRESETS.find(item => item.view.preset === preset)
+    if (!definition) return
+    const next = { ...definition.view, viewId: selected.viewId }
+    transientViewRef.current = next
+    setTransientView(next)
   }
 
   const handlePointerDown = (event: PointerEvent<HTMLDivElement>): void => {
     if (event.button !== 0 || !selected) return
     event.preventDefault()
+    event.stopPropagation()
     activePointerId.current = event.pointerId
     event.currentTarget.setPointerCapture(event.pointerId)
     setDragging(true)
@@ -160,16 +169,16 @@ export function MultiAngleOrbitPreview({
 
   const finishPointer = (event: PointerEvent<HTMLDivElement>): void => {
     if (activePointerId.current !== event.pointerId) return
-    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
-      event.currentTarget.releasePointerCapture(event.pointerId)
-    }
     activePointerId.current = null
     continuousDragOrigin.current = null
     fluxDragOrigin.current = null
     setDragging(false)
     const committed = transientViewRef.current
     transientViewRef.current = null
-    if (committed?.kind === 'continuous') {
+    if (committed?.kind === 'discrete' && committed.preset !== lastEmitted.current) {
+      lastEmitted.current = committed.preset
+      onDiscretePresetChange(committed.preset)
+    } else if (committed?.kind === 'continuous') {
       emitContinuous({
         yawControlDeg: committed.yawControlDeg,
         verticalControl: committed.verticalControl,
@@ -180,6 +189,16 @@ export function MultiAngleOrbitPreview({
         verticalAngleDeg: committed.verticalAngleDeg,
       })
     }
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId)
+  }
+
+  const cancelPointer = (): void => {
+    activePointerId.current = null
+    continuousDragOrigin.current = null
+    fluxDragOrigin.current = null
+    transientViewRef.current = null
+    setTransientView(null)
+    setDragging(false)
   }
 
   const handleWheel = (event: WheelEvent<HTMLDivElement>): void => {
@@ -193,7 +212,17 @@ export function MultiAngleOrbitPreview({
   }
 
   const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>): void => {
-    if (!selected || selected.kind === 'discrete') return
+    if (event.key === 'Escape') { event.preventDefault(); cancelPointer(); return }
+    if (!selected) return
+    if (selected.kind === 'discrete') {
+      if (!['Home', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key)) return
+      event.preventDefault(); event.stopPropagation()
+      const index = MULTI_ANGLE_DISCRETE_VIEW_PRESETS.findIndex(item => item.view.preset === selected.preset)
+      const delta = event.key === 'ArrowLeft' || event.key === 'ArrowUp' ? -1 : 1
+      const count = MULTI_ANGLE_DISCRETE_VIEW_PRESETS.length
+      onDiscretePresetChange(MULTI_ANGLE_DISCRETE_VIEW_PRESETS[event.key === 'Home' ? 0 : (index + delta + count) % count].view.preset)
+      return
+    }
     if (selected.kind === 'continuous') {
       const patch = continuousCameraFromKey(selected, event.key)
       if (!patch) return
@@ -232,22 +261,25 @@ export function MultiAngleOrbitPreview({
           : undefined}
       data-multi-angle-proximity={visualSelected?.kind === 'continuous' ? visualSelected.proximity : undefined}
       data-multi-angle-zoom={visualSelected?.kind === 'flux' ? visualSelected.zoom : undefined}
-      className={`absolute inset-0 touch-none select-none overflow-hidden rounded-xl ${UI_FIELD_FOCUS_CLASS} ${dragging ? 'cursor-grabbing ring-1 ring-accent/50' : 'cursor-grab'}`}
+      className={`absolute inset-0 touch-none select-none overflow-hidden rounded-xl ${dragging ? '' : UI_FIELD_FOCUS_CLASS} ${dragging ? 'cursor-grabbing ring-1 ring-accent/50' : 'cursor-grab'}`}
       onKeyDown={handleKeyDown}
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={finishPointer}
-      onPointerCancel={finishPointer}
+      onPointerCancel={cancelPointer}
+      onLostPointerCapture={cancelPointer}
       onWheel={handleWheel}
     >
-      <MultiAngleOrbitScene views={visualViews} selectedViewId={selectedViewId} />
+      <MultiAngleOrbitScene views={visualViews} selectedViewId={selectedViewId} sourceImage={sourceImage} sourceAlt={sourceAlt} dragging={dragging} />
 
-      <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-3xs font-medium uppercase tracking-wide text-text-muted">{t('node.multiAngleEditor.orbit.left')}</span>
-      <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-3xs font-medium uppercase tracking-wide text-text-muted">{t('node.multiAngleEditor.orbit.right')}</span>
-      <span className="pointer-events-none absolute left-1/2 top-3 -translate-x-1/2 text-3xs font-medium tracking-wide text-text-muted">{t('node.multiAngleEditor.orbit.high')}</span>
-      {visualSelected?.kind !== 'flux' && (
-        <span className="pointer-events-none absolute bottom-12 left-1/2 -translate-x-1/2 text-3xs font-medium tracking-wide text-text-muted">{t('node.multiAngleEditor.orbit.low')}</span>
-      )}
+      <div className="pointer-events-none absolute left-3 right-3 top-3 rounded-lg px-3 py-2">
+        <p className="truncate text-xs font-medium text-text">{visualSelected
+          ? describeLocalizedMultiAngleCamera(t, visualSelected, Math.max(views.findIndex(view => view.viewId === visualSelected.viewId), 0))
+          : t('node.multiAngleEditor.noSelection')}</p>
+        <p className="mt-0.5 text-3xs text-text-muted">{visualSelected?.kind === 'continuous'
+          ? t('node.multiAngleEditor.hints.continuous')
+          : visualSelected?.kind === 'flux' ? t('node.multiAngleEditor.hints.flux') : t('node.multiAngleEditor.hints.discrete')}</p>
+      </div>
     </div>
   )
 }

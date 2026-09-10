@@ -1,31 +1,23 @@
 import type { MultiAngleViewV1, MultiAngleDiscretePreset } from '@/features/canvas/capabilities/multiAnglePolicy'
+import { projectSpatialPoint, spatialOrbitPaths } from '../relightSpatialState'
 
 type Point3 = readonly [number, number, number]
-const CAMERA: Point3 = [3.8, 2.5, 4.5]
-const distance = Math.hypot(...CAMERA)
-const forward = CAMERA.map(value => value / distance)
-const horizontal = Math.hypot(CAMERA[0], CAMERA[2])
-const right = [CAMERA[2] / horizontal, 0, -CAMERA[0] / horizontal]
-const up = [forward[1] * right[2], forward[2] * right[0] - forward[0] * right[2], -forward[1] * right[0]]
-const focalLength = 50 / Math.tan(24 * Math.PI / 180)
 
-/** Same 48° camera and world coordinates as the orbit editor, without a GPU context. */
+/** Lighting and orbit share a camera: image front is +Z, rear is -Z. */
 export function projectMultiAnglePoint(point: Point3): { x: number; y: number; scale: number; depth: number } {
-  const dot = (axis: number[]): number => axis.reduce((sum, value, index) => sum + value * point[index], 0)
-  const depth = distance - dot(forward)
-  const scale = focalLength / depth
-  return { x: 50 + dot(right) * scale, y: 50 - dot(up) * scale, scale, depth }
+  const p = projectSpatialPoint({ x: point[0] * 0.59, y: point[1] * 0.59, z: point[2] * 0.59 }, 'perspective')
+  return { x: p.x, y: p.y, scale: 24 * (1 + p.z * 0.15), depth: -p.z }
 }
 
-function orbitPath(radius: number, vertical: boolean): string {
-  const points = Array.from({ length: 97 }, (_, index) => {
+function orbitPath(radius: number, vertical: boolean): { front: string; back: string } {
+  return spatialOrbitPaths(Array.from({ length: 97 }, (_, index) => {
     const angle = index * Math.PI / 48
-    const point = projectMultiAnglePoint(vertical
-      ? [0, Math.sin(angle) * radius, Math.cos(angle) * radius]
-      : [Math.cos(angle) * radius, 0, Math.sin(angle) * radius])
-    return `${index === 0 ? 'M' : 'L'}${point.x},${point.y}`
+    return vertical ? { x: 0, y: Math.sin(angle) * radius, z: Math.cos(angle) * radius }
+      : { x: Math.cos(angle) * radius, y: 0, z: Math.sin(angle) * radius }
+  }), point => {
+    const p = projectMultiAnglePoint([point.x, point.y, point.z])
+    return { x: p.x, y: p.y, z: -p.depth }
   })
-  return points.join(' ') + ' Z'
 }
 
 export const MULTI_ANGLE_ORBIT_PATHS = [orbitPath(1.55, false), orbitPath(1.2, true)]

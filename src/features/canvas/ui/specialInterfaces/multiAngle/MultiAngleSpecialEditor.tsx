@@ -1,5 +1,5 @@
 import { useMemo, useState, type ReactNode } from 'react'
-import { Aperture, Camera, Plus, Trash2 } from 'lucide-react'
+import { Aperture, Plus, Trash2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
 import {
@@ -36,7 +36,6 @@ import type { CanvasSpecialEditorSurfaceProps } from '../specialEditorRegistry'
 import { buildMultiAngleEditorDraft } from './multiAngleEditorState'
 import { MultiAngleOrbitPreview } from './MultiAngleOrbitPreview'
 import {
-  describeLocalizedMultiAngleCamera,
   describeLocalizedMultiAngleProximity,
   describeLocalizedMultiAngleVertical,
   translateMultiAngleViewLabel,
@@ -203,35 +202,15 @@ export function MultiAngleWorkbench({
       >
         <div className={`flex min-h-0 items-center justify-center ${embedded ? 'p-2' : 'p-4'}`}>
           <div className={`relative flex h-full w-full items-center justify-center overflow-hidden rounded-xl ${embedded ? 'bg-bg-dark/45' : `border border-veil-subtle ${UI_GLASS_ADAPTIVE_SURFACE_CLASS}`}`}>
-            {sourceImage ? (
-              <img src={resolveImageDisplayUrl(sourceImage)} alt={t('node.multiAngleEditor.sourceAlt')} className="max-h-[76%] max-w-[76%] object-contain" />
-            ) : (
-              <div className="flex flex-col items-center gap-2 text-text-muted">
-                <Camera className="h-8 w-8" />
-                <p className="text-sm">{t('node.multiAngleEditor.sourceRequired')}</p>
-              </div>
-            )}
             <MultiAngleOrbitPreview
+              sourceImage={sourceImage ? resolveImageDisplayUrl(sourceImage) : null}
+              sourceAlt={t('node.multiAngleEditor.sourceAlt')}
               views={config.views}
               selectedViewId={selected?.viewId ?? ''}
               onContinuousChange={patchContinuous}
               onDiscretePresetChange={chooseDiscretePreset}
               onFluxChange={patchFlux}
             />
-            <div className="pointer-events-none absolute left-3 right-3 top-3 z-sticky rounded-lg bg-overlay px-3 py-2">
-              <p className="truncate text-xs font-medium text-text">{selected
-                ? describeLocalizedMultiAngleCamera(
-                    t,
-                    selected,
-                    Math.max(config.views.findIndex((view) => view.viewId === selected.viewId), 0),
-                  )
-                : t('node.multiAngleEditor.noSelection')}</p>
-              <p className="mt-0.5 text-3xs text-text-muted">{selected?.kind === 'continuous'
-                ? t('node.multiAngleEditor.hints.continuous')
-                : selected?.kind === 'flux'
-                  ? t('node.multiAngleEditor.hints.flux')
-                  : t('node.multiAngleEditor.hints.discrete')}</p>
-            </div>
             <div className="pointer-events-none absolute bottom-3 left-3 right-3 z-sticky rounded-lg bg-overlay px-3 py-2 text-xs text-text-soft">
               {t('node.multiAngleEditor.disclaimer')}
             </div>

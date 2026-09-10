@@ -67,6 +67,8 @@ describe('打光方向可视化控件', () => {
 
     fireEvent.pointerDown(control, { button: 0, pointerId: 1, clientX: 100, clientY: 100 })
     fireEvent.pointerMove(control, { pointerId: 1, clientX: 184, clientY: 100 })
+    expect(onDirectionChange).not.toHaveBeenCalled()
+    expect(document.querySelector('[data-light-stop="右侧"][data-snap-active="true"]')).not.toBeNull()
     fireEvent.pointerUp(control, { pointerId: 1, clientX: 184, clientY: 100 })
 
     expect(onDirectionChange).toHaveBeenCalledTimes(1)

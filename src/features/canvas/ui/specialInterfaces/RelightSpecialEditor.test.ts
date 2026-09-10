@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import {
   DEFAULT_RELIGHT_SETTINGS,
+  RELIGHT_MANUAL_TEMPLATE_VERSION,
   normalizeRelightSettings,
 } from '@/features/canvas/capabilities/relightPolicy'
 import { buildRelightEditorDraft } from './relightEditorDraft'
@@ -44,7 +45,7 @@ describe('图片打光编辑器草稿', () => {
     const draft = buildRelightEditorDraft({ mediaInputs: { image: ['source.png'] } }, settings, models)
     expect(draft).toMatchObject({
       modelId: 'fal-ai-ic-light-v2',
-      promptTemplateVersion: 'relight-manual-iclight-v1',
+      promptTemplateVersion: RELIGHT_MANUAL_TEMPLATE_VERSION,
       params: { falIcLightV2InitialLatent: 'Right' },
       lightingReferenceImages: [],
       relightSettings: settings,

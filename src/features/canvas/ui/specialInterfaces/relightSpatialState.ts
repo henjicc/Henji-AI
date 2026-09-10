@@ -1,6 +1,6 @@
 import type { RelightKeyDirection, RelightRimDirection } from '@/features/canvas/capabilities/relightPolicy'
-import { relightDirectionFromPoint, type RelightVisualizerView } from './relightDirectionVisualizerState'
-import { rimAngleForDirection, rimDirectionFromAngle } from './relightRimLightState'
+import { RELIGHT_DIRECTION_ORDER, type RelightVisualizerView } from './relightDirectionVisualizerState'
+import { RIM_DIRECTION_ORDER, rimAngleForDirection, rimDirectionFromAngle } from './relightRimLightState'
 
 export interface LightPose { azimuth: number; elevation: number }
 export interface RelightSpatialState { main: LightPose; rim: LightPose }
@@ -23,32 +23,49 @@ export function poseForRim(direction: RelightRimDirection): LightPose {
   return { azimuth: Math.atan2(x, -0.6), elevation: Math.asin(y) }
 }
 
-export function readSpatialState(value: unknown, main: RelightKeyDirection, rim: RelightRimDirection): RelightSpatialState {
-  const state = value as Partial<RelightSpatialState> | null
-  const valid = (pose: LightPose | undefined): pose is LightPose => Boolean(pose &&
-    Number.isFinite(pose.azimuth) && Number.isFinite(pose.elevation) && Math.abs(pose.elevation) <= Math.PI / 2)
-  return { main: valid(state?.main) && mainDirectionForPose(state.main) === main ? state.main : poseForMain(main),
-    rim: valid(state?.rim) && (rim === 'off' || rimDirectionForPose(state.rim) === rim) ? state.rim : poseForRim(rim) }
-}
-
 /** The image is the XY plane. Both lamps and every grid line use this same orthographic camera. */
 export function projectSpatialPoint(point: SpatialPoint, view: RelightVisualizerView): SpatialPoint {
-  const yaw = view === 'front' ? 0 : 0.48
-  const pitch = view === 'front' ? 0 : 0.16
+  const yaw = view === 'front' ? 0 : 0.65
+  const pitch = view === 'front' ? 0 : 0.32
   const x = Math.cos(yaw) * point.x - Math.sin(yaw) * point.z
   const z = Math.sin(yaw) * point.x + Math.cos(yaw) * point.z
   return { x: 50 + x * 41, y: 50 - (Math.cos(pitch) * point.y - Math.sin(pitch) * z) * 41,
     z: Math.sin(pitch) * point.y + Math.cos(pitch) * z }
 }
 
-export function dragLightPose(pose: LightPose, dx: number, dy: number): LightPose {
-  return { azimuth: pose.azimuth + dx * Math.PI * 2,
-    elevation: Math.max(-1.45, Math.min(1.45, pose.elevation - dy * Math.PI)) }
-}
-
 export function mainDirectionForPose(pose: LightPose): RelightKeyDirection {
   const p = lightPosition(pose)
-  return relightDirectionFromPoint({ x: p.x, y: -p.y })
+  return RELIGHT_DIRECTION_ORDER.reduce((best, direction) => {
+    const distance = (key: RelightKeyDirection): number => {
+      const target = lightPosition(poseForMain(key))
+      return Math.hypot(p.x - target.x, p.y - target.y, p.z - target.z)
+    }
+    return distance(direction) < distance(best) ? direction : best
+  })
+}
+
+/** Hit targets and visible stops use exactly the same projection, including the rear rim ring. */
+export function snapLightAtPoint(x: number, y: number, lamp: 'main' | 'rim', view: RelightVisualizerView): LightPose {
+  const candidates = lamp === 'main' ? RELIGHT_DIRECTION_ORDER.map(poseForMain) : RIM_DIRECTION_ORDER.map(poseForRim)
+  return candidates.reduce((best, pose) => {
+    const distance = (candidate: LightPose): number => {
+      const p = projectSpatialPoint(lightPosition(candidate), view)
+      return Math.hypot(p.x - x, p.y - y)
+    }
+    return distance(pose) < distance(best) ? pose : best
+  })
+}
+
+/** Thin image plate shared by lighting and camera previews; no DOM or rendering lifecycle. */
+export function imagePlateGeometry(aspect: number, project: (p: SpatialPoint) => SpatialPoint): { sides: string[]; matrix: string; width: number; height: number } {
+  const { width, height } = imagePlaneSize(aspect)
+  const corners = [{ x: -width / 2, y: height / 2, z: 0 }, { x: width / 2, y: height / 2, z: 0 },
+    { x: width / 2, y: -height / 2, z: 0 }, { x: -width / 2, y: -height / 2, z: 0 }]
+  const points = (values: SpatialPoint[]): string => values.map(p => { const s = project(p); return `${s.x},${s.y}` }).join(' ')
+  const origin = project({ x: 0, y: 0, z: 0 })
+  const x = project({ x: 1, y: 0, z: 0 }); const y = project({ x: 0, y: -1, z: 0 })
+  return { width, height, matrix: `matrix(${(x.x - origin.x) / 100} ${(x.y - origin.y) / 100} ${(y.x - origin.x) / 100} ${(y.y - origin.y) / 100} ${origin.x} ${origin.y})`,
+    sides: corners.map((a, i) => { const b = corners[(i + 1) % 4]; return points([a, b, { ...b, z: -0.045 }, { ...a, z: -0.045 }]) }) }
 }
 
 export function rimDirectionForPose(pose: LightPose): Exclude<RelightRimDirection, 'off'> {
@@ -60,6 +77,28 @@ export function imagePlaneSize(aspect: number): { width: number; height: number 
   const safeAspect = Number.isFinite(aspect) && aspect > 0 ? aspect : 1
   return { width: Math.min(0.88, 0.88 * safeAspect), height: Math.min(0.88, 0.88 / safeAspect) }
 }
+
+/** Static ring geometry, split into near/far halves so rear arcs can be drawn faint and dashed. */
+export function spatialOrbitPaths(points: SpatialPoint[], project: (p: SpatialPoint) => SpatialPoint): { front: string; back: string } {
+  let front = ''; let back = ''; let previous: SpatialPoint | undefined
+  let wasFront: boolean | undefined
+  for (const point of points) {
+    const p = project(point); const near = p.z >= 0
+    const segment = !previous ? `M${p.x},${p.y}` : near !== wasFront
+      ? `M${previous.x},${previous.y} L${p.x},${p.y}` : `L${p.x},${p.y}`
+    if (near) front += segment; else back += segment
+    previous = p; wasFront = near
+  }
+  return { front, back }
+}
+
+export const RELIGHT_SPATIAL_GUIDES = Object.fromEntries((['front', 'perspective'] as const).map(view => [view,
+  [0, 1, 2].map(axis => spatialOrbitPaths(Array.from({ length: 97 }, (_, i) => {
+    const a = i * Math.PI / 48
+    return axis === 0 ? { x: Math.cos(a), y: 0, z: Math.sin(a) }
+      : axis === 1 ? { x: 0, y: Math.cos(a), z: Math.sin(a) } : { x: Math.cos(a), y: Math.sin(a), z: 0 }
+  }), point => projectSpatialPoint(point, view)))
+])) as Record<RelightVisualizerView, { front: string; back: string }[]>
 
 /** Silhouette of a projected cone; one fill avoids seams between translucent triangles. */
 export function projectedConeOutline(points: SpatialPoint[], view: RelightVisualizerView): string {

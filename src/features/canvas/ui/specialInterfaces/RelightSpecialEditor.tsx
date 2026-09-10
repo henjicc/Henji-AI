@@ -23,7 +23,6 @@ import { importLocalMedia } from '@/services/localMediaImport'
 import { RelightDirectionVisualizer } from './RelightDirectionVisualizer'
 import { RelightLightingControls, type RelightLightingDraft } from './RelightLightingControls'
 import { defaultRimDirection } from './relightRimLightState'
-import type { RelightSpatialState } from './relightSpatialState'
 import { buildRelightEditorDraft } from './relightEditorDraft'
 import type { CanvasSpecialEditorSurfaceProps } from './specialEditorRegistry'
 
@@ -72,8 +71,7 @@ function FieldTitle({ children, tooltip }: { children: string; tooltip: string }
 interface RelightWorkbenchProps {
   settings: RelightSettingsV1
   sourceImage: string | null
-  onSettingsChange: (settings: RelightSettingsV1, spatialState?: RelightSpatialState) => void
-  spatialState?: unknown
+  onSettingsChange: (settings: RelightSettingsV1) => void
   sourceControl?: ReactNode
   embedded?: boolean
 }
@@ -82,7 +80,6 @@ export function RelightWorkbench({
   settings,
   sourceImage,
   onSettingsChange,
-  spatialState,
   sourceControl,
   embedded = false,
 }: RelightWorkbenchProps): JSX.Element {
@@ -131,11 +128,7 @@ export function RelightWorkbench({
               sourceImage={sourceImageUrl}
               sourceAlt={t('node.relightGeneration.sourceAlt')}
               onDirectionChange={(keyDirection) => patchManual({ keyDirection })}
-              spatialState={spatialState}
-              onSpatialCommit={(next, keyDirection, rimDirection) => {
-                if (rimDirection !== 'off') lastRimDirection.current = rimDirection
-                onSettingsChange(normalizeRelightSettings({ ...settings, manual: { ...settings.manual, keyDirection, rimDirection } }), next)
-              }}
+
             />
           </div>
         )}
@@ -281,9 +274,7 @@ export default function RelightSpecialEditor({
       <RelightWorkbench
         settings={settings}
         sourceImage={sourceImage}
-        spatialState={session.draftState.relightSpatialState}
-        onSettingsChange={(next, spatial) => onDraftChange({ ...buildRelightEditorDraft(session.draftState, next),
-          ...(spatial ? { relightSpatialState: spatial } : {}) })}
+        onSettingsChange={next => onDraftChange(buildRelightEditorDraft(session.draftState, next))}
       />
     </UiModal>
   )

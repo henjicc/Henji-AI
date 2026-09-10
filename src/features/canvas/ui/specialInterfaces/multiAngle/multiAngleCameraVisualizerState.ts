@@ -5,6 +5,7 @@ import {
   type MultiAngleFluxViewV1,
   type MultiAngleViewV1,
 } from '@/features/canvas/capabilities/multiAnglePolicy'
+import { multiAngleMarkerPosition, projectMultiAnglePoint } from './multiAngleOrbitGeometry'
 
 export interface MultiAngleCameraDragOrigin {
   clientX: number
@@ -49,6 +50,11 @@ function quantize(value: number, step: number): number {
   return Number((Math.round(value / step) * step).toFixed(precision))
 }
 
+function softSnap(value: number, step: number, tolerance: number): number {
+  const nearest = quantize(value, step)
+  return Math.abs(nearest - value) <= tolerance ? nearest : value
+}
+
 export function continuousCameraFromDrag(
   origin: MultiAngleCameraDragOrigin,
   clientX: number,
@@ -59,8 +65,8 @@ export function continuousCameraFromDrag(
   const height = Math.max(metrics.height, 1)
   return {
     // 模型的正向水平控制对应镜头向画面左侧环绕。
-    yawControlDeg: clamp(quantize(origin.yawControlDeg - ((clientX - origin.clientX) / width) * 180, 1), YAW_MIN, YAW_MAX),
-    verticalControl: clamp(quantize(origin.verticalControl + ((clientY - origin.clientY) / height) * 2, 0.05), VERTICAL_MIN, VERTICAL_MAX),
+    yawControlDeg: clamp(softSnap(quantize(origin.yawControlDeg - ((clientX - origin.clientX) / width) * 180, 1), 45, 3), YAW_MIN, YAW_MAX),
+    verticalControl: clamp(softSnap(quantize(origin.verticalControl + ((clientY - origin.clientY) / height) * 2, 0.05), 0.5, 0.06), VERTICAL_MIN, VERTICAL_MAX),
   }
 }
 
@@ -80,12 +86,12 @@ export function fluxCameraFromDrag(
   const height = Math.max(metrics.height, 1)
   return {
     horizontalAngleDeg: clamp(
-      quantize(origin.horizontalAngleDeg + ((clientX - origin.clientX) / width) * 360, 1),
+      softSnap(quantize(origin.horizontalAngleDeg + ((clientX - origin.clientX) / width) * 360, 1), 45, 3),
       FLUX_HORIZONTAL_MIN,
       FLUX_HORIZONTAL_MAX,
     ),
     verticalAngleDeg: clamp(
-      quantize(origin.verticalAngleDeg - ((clientY - origin.clientY) / height) * 60, 1),
+      softSnap(quantize(origin.verticalAngleDeg - ((clientY - origin.clientY) / height) * 60, 1), 15, 2),
       FLUX_VERTICAL_MIN,
       FLUX_VERTICAL_MAX,
     ),
@@ -139,16 +145,16 @@ export function discretePresetFromPoint(
   clientY: number,
   metrics: MultiAngleStageMetrics,
 ): MultiAngleDiscretePreset {
-  const halfWidth = Math.max(metrics.width / 2, 1)
-  const halfHeight = Math.max(metrics.height / 2, 1)
+  const size = Math.max(Math.min(metrics.width, metrics.height), 1)
   const point = {
-    x: clamp((clientX - metrics.left - halfWidth) / halfWidth, -1, 1),
-    y: clamp((clientY - metrics.top - halfHeight) / halfHeight, -1, 1),
+    x: (clientX - metrics.left - (metrics.width - size) / 2) / size * 100,
+    y: (clientY - metrics.top - (metrics.height - size) / 2) / size * 100,
   }
   let closest = MULTI_ANGLE_DISCRETE_VIEW_PRESETS[0]
   let closestDistance = Number.POSITIVE_INFINITY
   for (const preset of MULTI_ANGLE_DISCRETE_VIEW_PRESETS) {
-    const distance = Math.hypot(point.x - preset.visual.x, point.y - preset.visual.y)
+    const stop = projectMultiAnglePoint(multiAngleMarkerPosition(preset.view))
+    const distance = Math.hypot(point.x - stop.x, point.y - stop.y)
     if (distance < closestDistance) {
       closest = preset
       closestDistance = distance

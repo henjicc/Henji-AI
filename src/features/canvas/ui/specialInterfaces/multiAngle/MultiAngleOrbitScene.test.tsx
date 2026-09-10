@@ -9,7 +9,7 @@ afterEach(cleanup)
 describe('多角度轻量轨道', () => {
   it('相机朝向投影中心，保留方位与远近缩放', () => {
     const center = projectMultiAnglePoint([0, 0, 0])
-    const towardCamera = projectMultiAnglePoint([0.38, 0.25, 0.45])
+    const towardCamera = projectMultiAnglePoint([Math.sin(0.65) * Math.cos(0.32), Math.sin(0.32), Math.cos(0.65) * Math.cos(0.32)])
     expect(center.x).toBe(50)
     expect(center.y).toBe(50)
     expect(towardCamera.x).toBeCloseTo(50)
@@ -29,7 +29,7 @@ describe('多角度轻量轨道', () => {
     const views = MULTI_ANGLE_DISCRETE_VIEW_PRESETS.map(preset => preset.view)
     const { container } = render(<>{Array.from({ length: 24 }, (_, index) => <MultiAngleOrbitScene key={index} views={views} selectedViewId={views[0].viewId} />)}</>)
     expect(container.querySelectorAll('svg')).toHaveLength(24)
-    expect(container.querySelectorAll('circle')).toHaveLength(24 * views.length)
+    expect(container.querySelectorAll('[data-camera-depth] circle')).toHaveLength(24 * views.length)
     expect(getContext).not.toHaveBeenCalled()
     expect(raf).not.toHaveBeenCalled()
     getContext.mockRestore()

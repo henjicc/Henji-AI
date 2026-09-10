@@ -283,7 +283,6 @@ export const RelightGenerationNode = memo(({
   const workbench = useMemo(() => (
         <RelightWorkbench
           settings={settings}
-          spatialState={data.relightSpatialState}
           sourceImage={sourceImage}
           embedded
           sourceControl={settings.lightingMode === 'manual' && !hasIncomingSource ? (
@@ -299,9 +298,9 @@ export const RelightGenerationNode = memo(({
               })}
             />
           ) : undefined}
-          onSettingsChange={(nextSettings, spatial) => updateNodeData(
+          onSettingsChange={(nextSettings) => updateNodeData(
             id,
-            { ...buildRelightEditorDraft(data, nextSettings), ...(spatial ? { relightSpatialState: spatial } : {}) },
+            buildRelightEditorDraft(data, nextSettings),
           )}
         />
   ), [data, id, settings, sourceImage, hasIncomingSource, t, updateNodeData])
