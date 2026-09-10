@@ -1,17 +1,32 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { MultiAngleOrbitScene } from './MultiAngleOrbitScene'
 import { imageBlockGeometry, multiAngleDirectionGeometry, multiAngleOrientation, orientationVector, rotateImageBlock } from './multiAngleOrbitGeometry'
 import { MULTI_ANGLE_DISCRETE_VIEW_PRESETS } from '@/features/canvas/capabilities/multiAnglePolicy'
-import { bakeImageBlockTextures } from './imageBlockTextures'
+import { getImageBlockAppearance, type ImageBlockAppearance } from './imageBlockTextureCache'
 
-vi.mock('./imageBlockTextures', () => ({ bakeImageBlockTextures: vi.fn(() => ({
+vi.mock('./imageBlockTextureCache', () => ({ peekImageBlockAppearance: vi.fn(), getImageBlockAppearance: vi.fn(async () => ({ aspect: 0.5, textures: {
   top: 'top.png', bottom: 'bottom.png', left: 'left.png', right: 'right.png', back: 'back.png',
-})) }))
+} })) }))
 
 afterEach(cleanup)
 describe('多角度图片块', () => {
+  it('换图后到达的旧贴图不能覆盖新图', async () => {
+    let finishOld!: (value: ImageBlockAppearance) => void
+    vi.mocked(getImageBlockAppearance).mockImplementationOnce(() => new Promise(resolve => { finishOld = resolve }))
+    const views = [MULTI_ANGLE_DISCRETE_VIEW_PRESETS[0].view]
+    const { container, rerender } = render(<MultiAngleOrbitScene views={views} selectedViewId={views[0].viewId} sourceImage="old.png" />)
+    const image = container.querySelector('img')!
+    Object.defineProperties(image, { naturalWidth: { value: 300 }, naturalHeight: { value: 600 } })
+    fireEvent.load(image)
+    rerender(<MultiAngleOrbitScene views={views} selectedViewId={views[0].viewId} sourceImage="new.png" />)
+    fireEvent.load(image)
+    await waitFor(() => expect(container.querySelector('[data-block-texture="back"]')).not.toBeNull())
+    await act(async () => finishOld({ aspect: 2, textures: { left: 'old', right: 'old', top: 'old', bottom: 'old', back: 'old' } }))
+    expect(container.querySelector('[data-block-texture="back"]')!.getAttribute('href')).toBe('back.png')
+    expect(container.querySelector('svg')!.getAttribute('data-image-aspect')).toBe('0.5')
+  })
   it('方位点与图片块共用三维姿态，前后遮挡随旋转反转，远处点更小', () => {
     for (const aspect of [0.5, 1, 2]) {
       const frontPose = { azimuth: 0, elevation: 0 }
@@ -53,15 +68,15 @@ describe('多角度图片块', () => {
       }
     }
   })
-  it('旋转到背面保留同一图片实例与真实宽高比，不显示镜像正面', () => {
-    vi.mocked(bakeImageBlockTextures).mockClear()
+  it('异步贴图到位后旋转保留图片实例与比例，换图不沿用旧贴图', async () => {
+    vi.mocked(getImageBlockAppearance).mockClear()
     const views = MULTI_ANGLE_DISCRETE_VIEW_PRESETS.map(p => p.view)
     const { container, rerender } = render(<MultiAngleOrbitScene views={views} selectedViewId={views[0].viewId} sourceImage="test.png" />)
     const image = container.querySelector('img')!
     Object.defineProperties(image, { naturalWidth: { value: 300 }, naturalHeight: { value: 600 } })
     fireEvent.load(image)
-    expect(bakeImageBlockTextures).toHaveBeenCalledTimes(1)
-    expect(container.querySelectorAll('[data-block-texture]')).toHaveLength(5)
+    expect(getImageBlockAppearance).toHaveBeenCalledTimes(1)
+    await waitFor(() => expect(container.querySelectorAll('[data-block-texture]')).toHaveLength(5))
     const back = views.find(view => view.preset === 'back')!
     rerender(<MultiAngleOrbitScene views={views} selectedViewId={back.viewId} sourceImage="test.png" />)
     expect(container.querySelector('img')).toBe(image)
@@ -69,12 +84,12 @@ describe('多角度图片块', () => {
     expect(container.querySelector('[data-block-face="front"]')!.getAttribute('visibility')).toBe('hidden')
     expect(container.querySelector('[data-block-face="back"]')!.getAttribute('visibility')).toBe('visible')
     for (let angle = 0; angle < 60; angle++) rerender(<MultiAngleOrbitScene views={views} selectedViewId={back.viewId} sourceImage="test.png" previewOrientation={{ azimuth: angle, elevation: angle / 2 }} />)
-    fireEvent.load(image)
-    expect(bakeImageBlockTextures).toHaveBeenCalledTimes(1)
+    expect(getImageBlockAppearance).toHaveBeenCalledTimes(1)
     rerender(<MultiAngleOrbitScene views={views} selectedViewId={back.viewId} sourceImage="replacement.png" />)
     expect(container.querySelectorAll('[data-block-texture]')).toHaveLength(0)
     fireEvent.load(image)
-    expect(bakeImageBlockTextures).toHaveBeenCalledTimes(2)
+    expect(getImageBlockAppearance).toHaveBeenCalledTimes(2)
+    await waitFor(() => expect(container.querySelectorAll('[data-block-texture]')).toHaveLength(5))
   })
   it('多节点静态展示只保留六个面，不创建 GPU 上下文或启动刷新循环', () => {
     const getContext = vi.spyOn(HTMLCanvasElement.prototype, 'getContext')

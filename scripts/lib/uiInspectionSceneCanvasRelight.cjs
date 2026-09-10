@@ -11,6 +11,7 @@ function attachUiInspectionCanvasRelight(context) {
     clickCanvasCapabilityAction,
     resizeCanvasNodeAndAssertHitBox,
     seedAndOpenCanvasPanoramaProject,
+    openWorkspace,
   } = context
 
   async function assertWorkbenchImageInput(shell) {
@@ -381,6 +382,8 @@ function attachUiInspectionCanvasRelight(context) {
     }
     await page.locator(`[data-multi-angle-node-id="${nodeId}"][data-multi-angle-profile="discrete-v1"]`)
       .waitFor({ state: 'visible', timeout: 8000 })
+    await editor.locator('[data-block-texture="back"]').waitFor({ state: 'attached', timeout: 8000 })
+    const cachedBack = await editor.locator('[data-block-texture="back"]').getAttribute('href')
 
     await page.waitForTimeout(900)
     await page.getByRole('button', { name: /返回项目|Back to Projects/ }).click()
@@ -421,12 +424,26 @@ function attachUiInspectionCanvasRelight(context) {
       throw new Error(`多角度保存语义或连线丢失：${JSON.stringify(persisted)}`)
     }
 
+    // Drop renderer memory to prove the persisted cache survives reopening the application surface.
+    await page.addInitScript(() => {
+      window.__multiAngleTextureEncodes = 0
+      const encode = HTMLCanvasElement.prototype.toDataURL
+      HTMLCanvasElement.prototype.toDataURL = function (...args) {
+        if (this.width === 64 && this.height === 64) window.__multiAngleTextureEncodes++
+        return encode.apply(this, args)
+      }
+    })
+    await page.reload()
+    await openWorkspace(page, 'canvas')
     await page.locator(`[data-project-id="${projectId}"]:visible`).click()
     const reopened = page.locator(`[data-multi-angle-node-id="${nodeId}"][data-multi-angle-profile="discrete-v1"]`)
     await reopened.waitFor({ state: 'visible', timeout: 12000 })
     await reopened.click()
     const reopenedEditor = page.locator(`[data-multi-angle-node-id="${nodeId}"] [data-multi-angle-workbench="true"]`)
     await reopenedEditor.waitFor({ state: 'visible', timeout: 12000 })
+    await reopenedEditor.locator('[data-block-texture="back"]').waitFor({ state: 'attached', timeout: 8000 })
+    if (await reopenedEditor.locator('[data-block-texture="back"]').getAttribute('href') !== cachedBack
+      || await page.evaluate(() => window.__multiAngleTextureEncodes) !== 0) throw new Error('重新加载工程未复用持久贴图缓存')
     await reopenedEditor.locator('[data-multi-angle-direction-options]').getByRole('button', { name: /^顶视$/ }).waitFor({ state: 'visible', timeout: 8000 })
     await reopenedEditor.getByRole('button', { name: 'Qwen 2511', exact: true }).click()
     const reopenedCameraControl = reopenedEditor.locator('[data-multi-angle-camera-control="true"][data-multi-angle-profile="continuous"]')

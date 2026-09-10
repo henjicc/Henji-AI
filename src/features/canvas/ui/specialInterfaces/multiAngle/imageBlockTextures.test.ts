@@ -15,21 +15,20 @@ describe('图片块边缘延伸贴图', () => {
       }
     }
   })
-  it('背面仅融合边缘颜色，中心主体变化不会被复制到背面', () => {
+  it('背面完整镜像主图，保留中间主体与上下顺序', () => {
     const source = new Uint8ClampedArray(5 * 5 * 4)
-    for (let i = 0; i < source.length; i += 4) source.set([210, 100, 40, 255], i)
-    const before = edgeTexturePixels(source, 5, 5, 'back')
-    source.set([0, 255, 255, 255], (2 * 5 + 2) * 4)
-    expect(edgeTexturePixels(source, 5, 5, 'back')).toEqual(before)
-    expect([...before.slice(0, 4)]).toEqual([210, 100, 40, 255])
+    for (let y = 0; y < 5; y++) for (let x = 0; x < 5; x++) source.set([x * 40, y * 40, 90, 255], (y * 5 + x) * 4)
+    const output = edgeTexturePixels(source, 5, 5, 'back', 5)
+    for (let y = 0; y < 5; y++) for (let x = 0; x < 5; x++) {
+      expect([...output.slice((y * 5 + x) * 4, (y * 5 + x) * 4 + 4)]).toEqual([(4 - x) * 40, y * 40, 90, 255])
+    }
   })
   it('透明边缘不产生混色黑边', () => {
     const source = new Uint8ClampedArray(3 * 3 * 4)
     source.set([255, 80, 20, 255], (0 * 3 + 1) * 4)
     const output = edgeTexturePixels(source, 3, 3, 'back', 3)
     const center = [...output.slice(16, 20)]
-    expect(center.slice(0, 3)).toEqual([255, 80, 20])
-    expect(center[3]).toBeGreaterThan(0)
-    expect(center[3]).toBeLessThan(255)
+    expect(center).toEqual([0, 0, 0, 0])
+    expect([...output.slice(4, 8)]).toEqual([255, 80, 20, 255])
   })
 })
