@@ -161,7 +161,7 @@ export function createDefaultAgentModelProfile(now = new Date().toISOString()): 
   return {
     id: DEFAULT_AGENT_PROFILE_ID,
     name: '默认智能助手',
-    primary: { providerId: DEFAULT_PPIO_PROVIDER_ID, modelId: DEFAULT_PPIO_MODEL_ID },
+    primary: { providerId: DEFAULT_DEEPSEEK_PROVIDER_ID, modelId: DEFAULT_DEEPSEEK_MODEL_ID },
     settings: {
       timeoutMs: 60_000,
       maxRetries: 3,
@@ -279,8 +279,7 @@ export function createBuiltInLlmModels(): LlmModelConfig[] {
     ppio(DEFAULT_PPIO_MODEL_ID, 'DeepSeek V4 Flash'),
     ppio('xiaomimimo/mimo-v2.5-pro', 'MiMo-V2.5-Pro'),
     ppio('moonshotai/kimi-k2.6', 'Kimi K2.6'),
-    deepseek(DEFAULT_DEEPSEEK_MODEL_ID, 'DeepSeek V4 Flash'),
-    deepseek('deepseek-v4-pro', 'DeepSeek V4 Pro'),
+    deepseek(DEFAULT_DEEPSEEK_MODEL_ID, 'DeepSeek V4.1 Flash'),
   ]
 }
 

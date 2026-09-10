@@ -166,6 +166,8 @@ describe('createProviderFromPreset / createModelsFromPreset', () => {
   it('按供应商与具体模型的交集自动选择协议，不让聚合网关误继承原厂能力', () => {
     const deepseekPreset = findLlmProviderPreset('deepseek')!
     const deepseek = createModelsFromPreset(deepseekPreset, createProviderFromPreset(deepseekPreset))
+    expect(deepseek.map(model => model.modelId)).toEqual(['deepseek-flash'])
+    expect(deepseek[0].capabilities).toMatchObject({ image: true, contextWindow: 1_000_000, maxOutputTokens: 384_000 })
     expect(deepseek.every(model => model.apiProtocol === 'openai-responses')).toBe(true)
 
     const ppioPreset = findLlmProviderPreset('ppio')!

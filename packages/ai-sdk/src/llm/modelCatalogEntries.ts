@@ -33,6 +33,22 @@ export const LLM_MODEL_CATALOG_ENTRIES: readonly LlmModelCatalogEntry[] = [
 
   // ---------------- DeepSeek ----------------
   {
+    id: 'deepseek-flash',
+    displayName: 'DeepSeek V4.1 Flash',
+    vendor: 'DeepSeek',
+    input: { image: true, video: false, audio: false },
+    toolCall: true,
+    parallelTools: false,
+    structuredOutputMode: 'json',
+    reasoning: true,
+    sampling: true,
+    contextWindow: 1_000_000,
+    maxOutputTokens: 384_000,
+    apiProtocols: ['openai-responses', 'openai-compatible'],
+    note: '支持图片理解；思考模式下 temperature 无效、top_p 下限为 0.95，非思考模式 top_p 固定为 1。',
+    docs: 'docs/llm-adaptation/供应商/DeepSeek.md',
+  },
+  {
     id: 'deepseek-v4-flash',
     displayName: 'DeepSeek V4 Flash',
     vendor: 'DeepSeek',

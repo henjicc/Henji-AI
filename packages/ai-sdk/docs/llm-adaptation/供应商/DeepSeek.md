@@ -1,6 +1,18 @@
 # DeepSeek
 
-> 核对时间：2026-08-26。信息来源见文末「原始链接索引」，均无需登录。
+> 核对时间：2026-09-11。以中文官方文档为准，英文页面尚有更新滞后。
+
+## 2026-09-11 更新（覆盖下方历史资料中的旧模型和能力说明）
+
+- 官方默认与预设唯一推荐模型改为 `deepseek-flash`（DeepSeek V4.1 Flash），原生文本、图片输入，1M 上下文、384K 最大输出。Chat Completions 和 Responses 均支持图片；项目继续默认 Responses。
+- 旧 `deepseek-v4-flash`、`deepseek-v4-flash-vision-exp` 已由官方转发到新版。`deepseek-v4-pro` 将于北京时间 2026-09-14 12:00 转由新版承接。项目不再推荐这些旧名字，也不把聚合供应商的旧 ID 当作新版别名。
+- 新版价格（人民币/百万 token，闲时 / 工作日高峰）：缓存命中输入 0.02 / 0.04，未命中输入 1 / 2，输出 4 / 8。高峰为北京时间工作日 09:00–12:00、14:00–18:00。
+- 思考默认开启，默认 high；正式档位 low/high/max，兼容 minimal→low、medium/xhigh→high、ultra→max。Responses 用 reasoning.effort，none 关闭。思考时 temperature 无效，top_p 生效但下限 0.95；非思考 top_p 固定 1。
+- Responses 为无状态 API，必须回传完整历史；text.format 支持 json_schema。当前仅支持 function 工具，内置工具会被忽略，不能再据旧资料宣称 web_search 可用。SDK 本次只更新目录与默认选型，不新增内置工具或协议分支。
+- 图片支持 JPEG/PNG/GIF/WebP；请求体最多 48 MiB，单图内联/URL 32 MiB，file_id 64 MiB，最多 600 张；总大小不含 file_id 64 MiB、包含时 200 MiB。Chat 图片仅 user；Responses 支持 user/developer 和工具结果，system/assistant 图片返回 400。SDK 沿用已实现的 URL/内联图片通道，不新增 Files 上传能力。
+- 官方来源：[模型与价格](https://api-docs.deepseek.com/zh-cn/quick_start/pricing/)、[图片理解](https://api-docs.deepseek.com/zh-cn/guides/vision/)、[思考模式](https://api-docs.deepseek.com/zh-cn/guides/thinking_mode/)、[Responses API](https://api-docs.deepseek.com/zh-cn/api/create-response/)。
+
+以下为 2026-08-26 历史采集记录；冲突字段以本节为准。
 
 ## 1. 摘要
 

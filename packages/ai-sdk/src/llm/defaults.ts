@@ -12,7 +12,7 @@ import type { LlmCapabilities, LlmReasoningConfig, LlmReasoningEffort } from './
  */
 export const DEFAULT_DEEPSEEK_PROVIDER_ID = 'deepseek'
 export const DEFAULT_DEEPSEEK_BASE_URL = 'https://api.deepseek.com'
-export const DEFAULT_DEEPSEEK_MODEL_ID = 'deepseek-v4-flash'
+export const DEFAULT_DEEPSEEK_MODEL_ID = 'deepseek-flash'
 export const DEFAULT_PPIO_PROVIDER_ID = 'ppio'
 export const DEFAULT_PPIO_BASE_URL = 'https://api.ppio.com/openai'
 export const DEFAULT_PPIO_MODEL_ID = 'deepseek/deepseek-v4-flash'
