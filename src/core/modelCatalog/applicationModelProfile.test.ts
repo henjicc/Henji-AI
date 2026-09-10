@@ -85,7 +85,7 @@ describe('Henji-AI 显式模型选择', () => {
       expect(client.catalog.get('fal-flux-pro-erase')).toBeDefined()
       expect(client.catalog.get('fal-image-apps-v2-relighting')).toBeDefined()
       expect(client.catalog.get('fal-pixelcut-background-removal')).toBeDefined()
-      expect(client.catalog.get('fal-qwen-image-edit-2509-multiple-angles')).toBeDefined()
+      expect(client.catalog.get('fal-qwen-image-edit-2511-multiple-angles')).toBeDefined()
       expect(client.catalog.get('fal-perspective-change')).toBeDefined()
       expect(client.catalog.get('fal-flux-2-multiple-angles')).toBeDefined()
 

@@ -75,7 +75,7 @@ describe('统一模型能力画像与筛选', () => {
 
   it('Fal 多角度工具只声明媒体输入，不误报 text', () => {
     expectPromptlessModels(falMultiAnglePack.models, [
-      'fal-qwen-image-edit-2509-multiple-angles',
+      'fal-qwen-image-edit-2511-multiple-angles',
       'fal-perspective-change',
       'fal-flux-2-multiple-angles',
     ])
@@ -168,7 +168,7 @@ describe('统一模型能力画像与筛选', () => {
     }
 
     expect(new Set(discovery.search({ features: 'multi-angle' }).map((item) => item.id))).toEqual(new Set([
-      'fal-qwen-image-edit-2509-multiple-angles',
+      'fal-qwen-image-edit-2511-multiple-angles',
       'fal-perspective-change',
       'fal-flux-2-multiple-angles',
     ]))

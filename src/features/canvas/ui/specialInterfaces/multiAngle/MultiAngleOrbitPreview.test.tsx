@@ -33,7 +33,7 @@ describe('直接转动图片块', () => {
     fireEvent.pointerUp(control, { pointerId: 1 })
     expect(callback).toHaveBeenCalledTimes(1)
     if (kind === 'discrete') expect(callback).toHaveBeenCalledWith('back')
-    if (kind === 'continuous') expect(callback).toHaveBeenCalledWith({ yawControlDeg: 0, verticalControl: -0.5 })
+    if (kind === 'continuous') expect(callback).toHaveBeenCalledWith({ yawControlDeg: 0, elevationDeg: 30 })
     if (kind === 'flux') expect(callback).toHaveBeenCalledWith({ horizontalAngleDeg: 90, verticalAngleDeg: 15 })
     move(2)
     fireEvent.pointerCancel(control, { pointerId: 2 })

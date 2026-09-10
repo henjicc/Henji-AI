@@ -296,7 +296,7 @@ function attachUiInspectionCanvasRelight(context) {
       yaw: Number(element.getAttribute('data-multi-angle-yaw')),
       vertical: Number(element.getAttribute('data-multi-angle-vertical')),
     }))
-    if (!(draggedCamera.yaw < initialYaw) || !(draggedCamera.vertical < 0)) {
+    if (!(draggedCamera.yaw < initialYaw) || !(draggedCamera.vertical > 0)) {
       throw new Error(`多角度镜头拖拽未同步模型控制量：${JSON.stringify(draggedCamera)}`)
     }
     const rotatedTextures = await editor.locator('[data-block-texture]').evaluateAll(elements => elements.map(element => element.getAttribute('href')).sort())

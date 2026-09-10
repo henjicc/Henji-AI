@@ -73,7 +73,7 @@ const expectedToolModelPacks = new Set([
   'photo-restoration.ts',
   'pixelcut-background-removal.ts',
   'product-photography.ts',
-  'qwen-image-edit-2509-multiple-angles.ts',
+  'qwen-image-edit-2511-multiple-angles.ts',
   'relighting.ts',
 ])
 if (modelFiles.length !== 105 || generatedModelPacks.length !== 105) {
@@ -242,7 +242,7 @@ const falUtilityPack = bundle('FalImageUtilityToolPack', [
 
 const singleMultiAngle = bundle('FalMultipleAngles', [
   "import { createModularGenerationClient } from './generation/core'",
-  "import { pack } from './packs/tool-models/fal/qwen-image-edit-2509-multiple-angles'",
+  "import { pack } from './packs/tool-models/fal/qwen-image-edit-2511-multiple-angles'",
   'export { createModularGenerationClient, pack }',
 ].join('\n'), (inputs) => {
   const ordinaryModels = inputs.filter((input) => modelPattern.test(`/${input}`))
@@ -252,7 +252,7 @@ const singleMultiAngle = bundle('FalMultipleAngles', [
     ordinaryModels.length !== 0
     || tools.length !== 1
     || !multiAngleModelPattern.test(`/${tools[0]}`)
-    || !tools[0].endsWith('/qwen-image-edit-2509-multiple-angles.model.ts')
+    || !tools[0].endsWith('/qwen-image-edit-2511-multiple-angles.model.ts')
   ) {
     fail(`单 Fal 多角度工具静态图异常：ordinary=${ordinaryModels.length}, tools=${tools.join(',')}`)
   }

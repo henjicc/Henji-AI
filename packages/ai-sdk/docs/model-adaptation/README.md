@@ -14,7 +14,7 @@
 
 - 消除：[Flux Pro Erase](Flux-Pro-Erase/Flux-Pro-Erase_Fal.md)、[Bria Eraser](Bria-Eraser/Bria-Eraser_Fal.md)、[Finegrain Eraser](Finegrain-Eraser/Finegrain-Eraser_Fal.md)。
 - 图片实用工具：[Image Apps v2 重打光](Image-Apps-v2-重打光/Image-Apps-v2-重打光_Fal.md)、[ControlLight](ControlLight/ControlLight_Fal.md)、[Image Apps v2 扩图](Image-Apps-v2-扩图/Image-Apps-v2-扩图_Fal.md)、[Image Apps v2 商品摄影](Image-Apps-v2-商品摄影/Image-Apps-v2-商品摄影_Fal.md)、[Image Apps v2 照片修复](Image-Apps-v2-照片修复/Image-Apps-v2-照片修复_Fal.md)、[Pixelcut 背景移除](Pixelcut-背景移除/Pixelcut-背景移除_Fal.md)。
-- 多角度：[Qwen Image Edit 2509 多角度](Qwen-Image-Edit-2509-多角度/Qwen-Image-Edit-2509-多角度_Fal.md)、[透视变换](透视变换/透视变换_Fal.md)、[FLUX 2 多角度](FLUX-2-多角度/FLUX-2-多角度_Fal.md)。
+- 多角度：[Qwen Image Edit 2511 多角度](Qwen-Image-Edit-2511-多角度/Qwen-Image-Edit-2511-多角度_Fal.md)、[透视变换](透视变换/透视变换_Fal.md)、[FLUX 2 多角度](FLUX-2-多角度/FLUX-2-多角度_Fal.md)。
 
 工具均复用 Fal 队列、上传与结果解析；它们是独立的按需 SDK 入口，不是新的执行内核。Henji-AI 运行客户端显式装载三个 pack，但普通模型选择器仍固定为 105 个默认模型：六个图片实用工具通过图片能力菜单创建固定模型节点，三个多角度工具由专用多角度节点选择，消除工具保留给后续遮罩能力接入。真实质量、延迟和账单仍待获得付费授权后验证。
 
@@ -176,7 +176,7 @@ Grsai 暂未在此表出现：其站内「Veo API」旧版文档给出了 `veo3.
 | Flux Pro Erase | `fal-ai/flux-pro/v1/erase` | `tool-models/fal/flux-pro-erase` |
 | Bria Eraser | `fal-ai/bria/eraser` | `tool-models/fal/bria-eraser` |
 | Finegrain Eraser (Mask) | `fal-ai/finegrain-eraser/mask` | `tool-models/fal/finegrain-eraser` |
-| Qwen Image Edit 2509 多角度 | `fal-ai/qwen-image-edit-2509-lora-gallery/multiple-angles` | `@henjicc/ai-sdk/tool-models/fal/qwen-image-edit-2509-multiple-angles` |
+| Qwen Image Edit 2511 多角度 | `fal-ai/qwen-image-edit-2511-multiple-angles` | `@henjicc/ai-sdk/tool-models/fal/qwen-image-edit-2511-multiple-angles` |
 | 透视变换 | `fal-ai/image-apps-v2/perspective` | `@henjicc/ai-sdk/tool-models/fal/perspective-change` |
 | Image Apps v2 重打光 | `fal-ai/image-apps-v2/relighting` | `tool-models/fal/relighting` |
 | ControlLight | `fal-ai/control-light` | `tool-models/fal/control-light` |

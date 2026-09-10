@@ -194,7 +194,7 @@ console.log(utilities.map((item) => item.id))
 
 - 消除：`tool-models/fal/flux-pro-erase`、`tool-models/fal/bria-eraser`、`tool-models/fal/finegrain-eraser`。
 - 图片实用工具：`tool-models/fal/relighting`、`tool-models/fal/control-light`、`tool-models/fal/outpaint`、`tool-models/fal/product-photography`、`tool-models/fal/photo-restoration`、`tool-models/fal/pixelcut-background-removal`。
-- 多角度：`tool-models/fal/qwen-image-edit-2509-multiple-angles`、`tool-models/fal/perspective-change`、`tool-models/fal/flux-2-multiple-angles`。
+- 多角度：`tool-models/fal/qwen-image-edit-2511-multiple-angles`、`tool-models/fal/perspective-change`、`tool-models/fal/flux-2-multiple-angles`。
 
 每个单模型入口只导出 `model`、`provider` 与完整 `pack`。三个聚合包只携带各自 3 / 6 / 3 个工具模型、Fal adapter 和 Fal CDN 上传，不携带其余 105 模型或 LLM。能力筛选与分发是两层：`search()` 只过滤已经导入的候选，不会让已经进入 bundle 的代码自动消失；缩小包体仍必须显式选择单模型/provider/collection pack。
 

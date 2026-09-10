@@ -173,7 +173,7 @@ describe('generationOutputApplicationService 图层栈', () => {
       ...multiAngle.outputs[0].descriptor,
       semantic: { kind: 'camera-view', resultKind: 'image', label: '左侧面' },
       profile: { id: 'continuous-v1', precision: 'learned-native' },
-      angle: { control: { yawControlDeg: 90, verticalControl: 0 } },
+      angle: { control: { yawControlDeg: 90, elevationDeg: 0 } },
     };
     const result = await commit(multiAngle, 'multi-angle-completion');
     const first = useCanvasStore.getState().nodes.find((node) => node.id === result.resultNodeIds[0]);

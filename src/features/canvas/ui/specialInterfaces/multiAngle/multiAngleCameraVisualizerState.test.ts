@@ -22,11 +22,11 @@ import {
 
 describe('多角度镜头可视化状态', () => {
   it('拖动保留连续小数，只有松手才吸附常用角度或按 API 精度提交', () => {
-    const origin = { clientX: 0, clientY: 0, yawControlDeg: 0, verticalControl: 0 }
+    const origin = { clientX: 0, clientY: 0, yawControlDeg: 0, elevationDeg: 0 }
     const preview = continuousCameraFromDrag(origin, 43.125, 1.23, { width: 180, height: 200 })
     expect(preview.yawControlDeg).toBeCloseTo(43.125)
-    expect(preview.verticalControl).toBeCloseTo(-0.0123)
-    expect(snapContinuousCamera(preview)).toEqual({ yawControlDeg: 45, verticalControl: 0 })
+    expect(preview.elevationDeg).toBeCloseTo(0.738)
+    expect(snapContinuousCamera(preview)).toEqual({ yawControlDeg: 45, elevationDeg: 0 })
     expect(continuousCameraFromDrag(origin, 38, 0, { width: 180, height: 200 }).yawControlDeg).toBe(38)
     const flux = { clientX: 0, clientY: 0, horizontalAngleDeg: 0, verticalAngleDeg: 0 }
     const fluxPreview = fluxCameraFromDrag(flux, -43.125, 14.25, { width: 360, height: 60 })
@@ -40,27 +40,27 @@ describe('多角度镜头可视化状态', () => {
       clientX: 100,
       clientY: 100,
       yawControlDeg: 0,
-      verticalControl: 0,
+      elevationDeg: 0,
     }, 150, 50, { width: 200, height: 200 })).toEqual({
       yawControlDeg: 45,
-      verticalControl: 0.5,
+      elevationDeg: -30,
     })
 
     expect(continuousCameraFromDrag({
       clientX: 100,
       clientY: 100,
       yawControlDeg: 80,
-      verticalControl: 0.9,
+      elevationDeg: 55,
     }, 300, 300, { width: 200, height: 200 })).toEqual({
-      yawControlDeg: 90,
-      verticalControl: -1,
+      yawControlDeg: -100,
+      elevationDeg: 90,
     })
   })
 
   it('用方向键调整角度，并用滚轮调整景别', () => {
     const view = MULTI_ANGLE_CONTINUOUS_PRESETS[0].view
     expect(continuousCameraFromKey(view, 'ArrowLeft')).toEqual({ yawControlDeg: 60 })
-    expect(continuousCameraFromKey(view, 'ArrowUp')).toEqual({ verticalControl: -0.15 })
+    expect(continuousCameraFromKey(view, 'ArrowUp')).toEqual({ elevationDeg: 5 })
     expect(continuousCameraFromKey(view, 'Escape')).toBeNull()
     expect(proximityFromWheel(5, -10)).toBe(5.5)
     expect(proximityFromWheel(0, 10)).toBe(0)
@@ -82,9 +82,9 @@ describe('多角度镜头可视化状态', () => {
     expect(describeMultiAngleCamera({
       ...MULTI_ANGLE_CONTINUOUS_PRESETS[0].view,
       yawControlDeg: -45,
-      verticalControl: -0.6,
+      elevationDeg: 60,
       proximity: 7,
-    })).toBe('右环绕 45° · 高位 60% · 近景')
+    })).toBe('右环绕 45° · 俯视 60° · 近景')
   })
 
   it('FLUX 拖拽、键盘与滚轮只编辑原生 0–360/0–60/0–10 控制量', () => {

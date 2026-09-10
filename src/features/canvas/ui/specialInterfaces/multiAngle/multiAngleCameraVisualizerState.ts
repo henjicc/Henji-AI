@@ -11,7 +11,7 @@ export interface MultiAngleCameraDragOrigin {
   clientX: number
   clientY: number
   yawControlDeg: number
-  verticalControl: number
+  elevationDeg: number
 }
 
 export interface MultiAngleFluxCameraDragOrigin {
@@ -28,10 +28,10 @@ export interface MultiAngleStageMetrics {
   height: number
 }
 
-const YAW_MIN = -90
-const YAW_MAX = 90
-const VERTICAL_MIN = -1
-const VERTICAL_MAX = 1
+const YAW_MIN = -180
+const YAW_MAX = 180
+const VERTICAL_MIN = -30
+const VERTICAL_MAX = 90
 const PROXIMITY_MIN = 0
 const PROXIMITY_MAX = 10
 const FLUX_HORIZONTAL_MIN = 0
@@ -60,13 +60,13 @@ export function continuousCameraFromDrag(
   clientX: number,
   clientY: number,
   metrics: Pick<MultiAngleStageMetrics, 'width' | 'height'>,
-): Pick<MultiAngleContinuousViewV1, 'yawControlDeg' | 'verticalControl'> {
+): Pick<MultiAngleContinuousViewV1, 'yawControlDeg' | 'elevationDeg'> {
   const width = Math.max(metrics.width, 1)
   const height = Math.max(metrics.height, 1)
   return {
     // 直接转动图片块：向右拖露出左侧，向下拖露出顶部。
-    yawControlDeg: clamp(origin.yawControlDeg + ((clientX - origin.clientX) / width) * 180, YAW_MIN, YAW_MAX),
-    verticalControl: clamp(origin.verticalControl - ((clientY - origin.clientY) / height) * 2, VERTICAL_MIN, VERTICAL_MAX),
+    yawControlDeg: ((origin.yawControlDeg + ((clientX - origin.clientX) / width) * 180 + 180) % 360 + 360) % 360 - 180,
+    elevationDeg: clamp(origin.elevationDeg + ((clientY - origin.clientY) / height) * 120, VERTICAL_MIN, VERTICAL_MAX),
   }
 }
 
@@ -99,9 +99,9 @@ export function fluxCameraFromDrag(
 }
 
 /** Continuous models keep fine control; common-angle attraction and API precision apply only on release. */
-export function snapContinuousCamera(view: Pick<MultiAngleContinuousViewV1, 'yawControlDeg' | 'verticalControl'>): Pick<MultiAngleContinuousViewV1, 'yawControlDeg' | 'verticalControl'> {
+export function snapContinuousCamera(view: Pick<MultiAngleContinuousViewV1, 'yawControlDeg' | 'elevationDeg'>): Pick<MultiAngleContinuousViewV1, 'yawControlDeg' | 'elevationDeg'> {
   return { yawControlDeg: clamp(softSnap(quantize(view.yawControlDeg, 1), 45, 3), YAW_MIN, YAW_MAX),
-    verticalControl: clamp(softSnap(quantize(view.verticalControl, 0.05), 0.5, 0.06), VERTICAL_MIN, VERTICAL_MAX) }
+    elevationDeg: clamp(softSnap(quantize(view.elevationDeg, 1), 30, 3), VERTICAL_MIN, VERTICAL_MAX) }
 }
 
 export function snapFluxCamera(view: Pick<MultiAngleFluxViewV1, 'horizontalAngleDeg' | 'verticalAngleDeg'>): Pick<MultiAngleFluxViewV1, 'horizontalAngleDeg' | 'verticalAngleDeg'> {
@@ -121,11 +121,11 @@ export function continuousCameraFromKey(
 ): Partial<MultiAngleContinuousViewV1> | null {
   if (key === 'ArrowLeft') return { yawControlDeg: clamp(view.yawControlDeg + 15, YAW_MIN, YAW_MAX) }
   if (key === 'ArrowRight') return { yawControlDeg: clamp(view.yawControlDeg - 15, YAW_MIN, YAW_MAX) }
-  if (key === 'ArrowUp') return { verticalControl: clamp(quantize(view.verticalControl - 0.15, 0.05), VERTICAL_MIN, VERTICAL_MAX) }
-  if (key === 'ArrowDown') return { verticalControl: clamp(quantize(view.verticalControl + 0.15, 0.05), VERTICAL_MIN, VERTICAL_MAX) }
+  if (key === 'ArrowUp') return { elevationDeg: clamp(view.elevationDeg + 5, VERTICAL_MIN, VERTICAL_MAX) }
+  if (key === 'ArrowDown') return { elevationDeg: clamp(view.elevationDeg - 5, VERTICAL_MIN, VERTICAL_MAX) }
   if (key === 'PageUp') return { proximity: clamp(view.proximity + 0.5, PROXIMITY_MIN, PROXIMITY_MAX) }
   if (key === 'PageDown') return { proximity: clamp(view.proximity - 0.5, PROXIMITY_MIN, PROXIMITY_MAX) }
-  if (key === 'Home') return { yawControlDeg: 0, verticalControl: 0, proximity: 0 }
+  if (key === 'Home') return { yawControlDeg: 0, elevationDeg: 0, proximity: 5 }
   return null
 }
 
@@ -169,8 +169,8 @@ export function discretePresetForOrientation(pose: MultiAngleOrientation): Multi
 }
 
 export function describeMultiAngleVertical(value: number): string {
-  if (value <= -0.05) return `高位 ${Math.round(Math.abs(value) * 100)}%`
-  if (value >= 0.05) return `低位 ${Math.round(value * 100)}%`
+  if (value > 0) return `俯视 ${Math.round(value)}°`
+  if (value < 0) return `仰视 ${Math.round(Math.abs(value))}°`
   return '水平'
 }
 
@@ -190,5 +190,5 @@ export function describeMultiAngleCamera(view: MultiAngleViewV1): string {
   const yaw = view.yawControlDeg > 0 ? `左环绕 ${view.yawControlDeg}°`
     : view.yawControlDeg < 0 ? `右环绕 ${Math.abs(view.yawControlDeg)}°`
       : '正面'
-  return `${yaw} · ${describeMultiAngleVertical(view.verticalControl)} · ${describeMultiAngleProximity(view.proximity)}`
+  return `${yaw} · ${describeMultiAngleVertical(view.elevationDeg)} · ${describeMultiAngleProximity(view.proximity)}`
 }

@@ -48,7 +48,7 @@ export const GENERATION_MODEL_DESCRIPTIONS = {
   'image-apps-v2-relighting': { zh: 'FAL 预设重打光工具，提供自然光、棚拍光、逆光、霓虹等多种灯光风格，适合快速统一画面光照。', en: 'A FAL preset relighting tool with natural, studio, backlight, neon, and other lighting styles.' },
   'perspective-change': { zh: '离散方位视角调整工具，可将主体转换为正面、侧面、背面、俯视、仰视或三分之四等目标视角。', en: 'A discrete perspective tool for front, side, rear, top, bottom, and three-quarter views.' },
   'pixelcut-background-removal': { zh: '基于 Pixelcut 的 FAL 背景移除工具，可提取前景主体并输出透明背景图片。', en: 'A Pixelcut-powered FAL background removal tool that returns a transparent foreground image.' },
-  'qwen-image-edit-2509-multiple-angles': { zh: '基于 Qwen Image Edit 的连续多角度工具，可控制水平旋转、垂直视角、前后移动和广角倾向。', en: 'A Qwen Image Edit camera-angle tool with rotation, elevation, forward motion, and wide-angle controls.' },
+  'qwen-image-edit-2511-multiple-angles': { zh: '基于 Qwen Image Edit 2511 的多角度工具，支持完整水平环绕、仰视、俯视和景别缩放。', en: 'A Qwen Image Edit 2511 camera-angle tool with full horizontal rotation, low/high angles, and zoom controls.' },
   'z-image': { zh: '6B 开放权重完整模型，兼顾写实画质、风格多样性、中英文字渲染和提示遵循；生成自由度较高，推理速度慢于蒸馏版 Turbo。', en: '' },
   'z-image-turbo': { zh: 'Z-Image 的蒸馏加速版，少量采样步数即可生成，显存要求较低并保留较好的写实及双语文字能力；适合高频本地出图。', en: '' },
 

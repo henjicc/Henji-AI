@@ -225,7 +225,7 @@ describe('migrateUpscaleGenerationData', () => {
 });
 
 describe('migrateMultiAngleGenerationData', () => {
-  it('保存重开后迁移旧角度字段、恢复隐藏模型并限制单张源图', () => {
+  it('保存重开后恢复 2511 角度、隐藏模型并限制单张源图', () => {
     const data: DynamicValueMap = {
       capabilityId: 'broken',
       prompt: '不应保留',
@@ -233,7 +233,7 @@ describe('migrateMultiAngleGenerationData', () => {
       params: { prompt: '不应发送' },
       mediaInputs: { image: ['first.png', 'second.png'] },
       multiAngleConfig: {
-        views: [{ id: 'legacy', label: '旧角度', azimuth: 40, elevation: 0.2 }],
+        views: [{ viewId: 'saved', label: '角度', yawControlDeg: 40, elevationDeg: -20 }],
       },
     };
 
@@ -243,13 +243,13 @@ describe('migrateMultiAngleGenerationData', () => {
       capabilityId: 'image.multi-angle',
       prompt: '',
       params: {},
-      modelId: 'fal-qwen-image-edit-2509-multiple-angles',
+      modelId: 'fal-qwen-image-edit-2511-multiple-angles',
       mediaInputs: { image: ['first.png'] },
       multiAngleConfig: {
         version: 1,
         controlProfile: 'continuous-v1',
         concurrency: 2,
-        views: [{ viewId: 'legacy', yawControlDeg: 40, verticalControl: 0.2 }],
+        views: [{ viewId: 'saved', yawControlDeg: 40, elevationDeg: -20 }],
       },
       multiAngleResultPlaceholderId: null,
     });

@@ -14,7 +14,7 @@ const PRESET_ORIENTATIONS: Record<MultiAngleDiscretePreset, MultiAngleOrientatio
 
 /** Camera direction in source-image space: +Z is the source front, +Y is above. */
 export function multiAngleOrientation(view: MultiAngleViewV1): MultiAngleOrientation {
-  if (view.kind === 'continuous') return { azimuth: -view.yawControlDeg, elevation: -view.verticalControl * 45 }
+  if (view.kind === 'continuous') return { azimuth: -view.yawControlDeg, elevation: view.elevationDeg }
   if (view.kind === 'flux') return { azimuth: view.horizontalAngleDeg, elevation: view.verticalAngleDeg }
   return PRESET_ORIENTATIONS[view.preset]
 }

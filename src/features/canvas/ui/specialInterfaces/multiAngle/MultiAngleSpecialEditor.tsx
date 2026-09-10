@@ -8,7 +8,6 @@ import {
   UiModal,
   UiOptionButton,
   UiRangeInput,
-  UiSwitch,
 } from '@/components/ui'
 import {
   UI_GLASS_ADAPTIVE_REGION_CLASS,
@@ -276,13 +275,9 @@ export function MultiAngleWorkbench({
           {selected?.kind === 'continuous' ? (
             <section className="mt-5 space-y-4">
               <h3 className={UI_TEXT_SECTION_CLASS}>{t('node.multiAngleEditor.currentContinuous')}</h3>
-              <RangeField label={t('node.multiAngleEditor.horizontalOrbit')} value={selected.yawControlDeg} min={-90} max={90} step={1} suffix="°" onChange={(value) => patchContinuous({ yawControlDeg: value })} />
-              <RangeField label={t('node.multiAngleEditor.verticalPitch')} value={selected.verticalControl} min={-1} max={1} step={0.05} suffix="" valueText={describeLocalizedMultiAngleVertical(t, selected.verticalControl)} onChange={(value) => patchContinuous({ verticalControl: value })} />
+              <RangeField label={t('node.multiAngleEditor.horizontalOrbit')} value={selected.yawControlDeg} min={-180} max={180} step={1} suffix="°" onChange={(value) => patchContinuous({ yawControlDeg: value })} />
+              <RangeField label={t('node.multiAngleEditor.verticalPitch')} value={selected.elevationDeg} min={-30} max={90} step={1} suffix="" valueText={describeLocalizedMultiAngleVertical(t, selected.elevationDeg)} onChange={(value) => patchContinuous({ elevationDeg: value })} />
               <RangeField label={t('node.multiAngleEditor.shotZoom')} value={selected.proximity} min={0} max={10} step={0.5} suffix="" valueText={describeLocalizedMultiAngleProximity(t, selected.proximity)} onChange={(value) => patchContinuous({ proximity: value })} />
-              <div className="flex items-center justify-between gap-3">
-                <span className={UI_TEXT_LABEL_CLASS}>{t('node.multiAngleEditor.wideAngle')}</span>
-                <UiSwitch checked={selected.wideAngle} onCheckedChange={(checked) => patchContinuous({ wideAngle: checked })} />
-              </div>
             </section>
           ) : selected?.kind === 'flux' ? (
             <section className="mt-5 space-y-4">

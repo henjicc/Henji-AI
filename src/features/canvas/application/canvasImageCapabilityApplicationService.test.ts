@@ -346,7 +346,7 @@ describe('画布图片能力应用服务', () => {
     expect(multiAngleNode?.data).toMatchObject({
       displayName: '多角度视图',
       capabilityId: 'image.multi-angle',
-      modelId: 'fal-qwen-image-edit-2509-multiple-angles',
+      modelId: 'fal-qwen-image-edit-2511-multiple-angles',
       prompt: '',
       params: {},
       multiAngleConfig: {

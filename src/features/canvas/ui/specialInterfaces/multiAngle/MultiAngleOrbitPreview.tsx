@@ -71,7 +71,7 @@ export function MultiAngleOrbitPreview({
 
   useEffect(() => {
     if (selected?.kind === 'continuous') {
-      lastEmitted.current = `${selected.yawControlDeg}/${selected.verticalControl}/${selected.proximity}`
+      lastEmitted.current = `${selected.yawControlDeg}/${selected.elevationDeg}/${selected.proximity}`
     } else if (selected?.kind === 'flux') {
       lastEmitted.current = `${selected.horizontalAngleDeg}/${selected.verticalAngleDeg}/${selected.zoom}`
     } else {
@@ -88,7 +88,7 @@ export function MultiAngleOrbitPreview({
   const emitContinuous = (patch: Partial<MultiAngleContinuousViewV1>): void => {
     if (!selected || selected.kind !== 'continuous') return
     const next = { ...selected, ...patch }
-    const signature = `${next.yawControlDeg}/${next.verticalControl}/${next.proximity}`
+    const signature = `${next.yawControlDeg}/${next.elevationDeg}/${next.proximity}`
     if (signature === lastEmitted.current) return
     lastEmitted.current = signature
     onContinuousChange(patch)
@@ -132,7 +132,7 @@ export function MultiAngleOrbitPreview({
         clientX: event.clientX,
         clientY: event.clientY,
         yawControlDeg: selected.yawControlDeg,
-        verticalControl: selected.verticalControl,
+        elevationDeg: selected.elevationDeg,
       }
       return
     }
@@ -265,7 +265,7 @@ export function MultiAngleOrbitPreview({
       data-multi-angle-yaw={visualSelected?.kind === 'continuous' ? visualSelected.yawControlDeg : undefined}
       data-multi-angle-horizontal={visualSelected?.kind === 'flux' ? visualSelected.horizontalAngleDeg : undefined}
       data-multi-angle-vertical={visualSelected?.kind === 'continuous'
-        ? visualSelected.verticalControl
+        ? visualSelected.elevationDeg
         : visualSelected?.kind === 'flux'
           ? visualSelected.verticalAngleDeg
           : undefined}

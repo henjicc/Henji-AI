@@ -27,11 +27,11 @@ export function translateMultiAngleViewLabel(
 }
 
 export function describeLocalizedMultiAngleVertical(t: TFunction, value: number): string {
-  if (value <= -0.05) {
-    return t(`${PREFIX}.camera.highPercent`, { value: Math.round(Math.abs(value) * 100) })
+  if (value > 0) {
+    return t(`${PREFIX}.camera.highDegrees`, { value: Math.round(Math.abs(value)) })
   }
-  if (value >= 0.05) {
-    return t(`${PREFIX}.camera.lowPercent`, { value: Math.round(value * 100) })
+  if (value < 0) {
+    return t(`${PREFIX}.camera.lowDegrees`, { value: Math.round(Math.abs(value)) })
   }
   return t(`${PREFIX}.camera.level`)
 }
@@ -62,7 +62,7 @@ export function describeLocalizedMultiAngleCamera(
     : view.yawControlDeg < 0
       ? t(`${PREFIX}.camera.orbitRight`, { value: Math.round(Math.abs(view.yawControlDeg)) })
       : t(`${PREFIX}.camera.front`)
-  return `${yaw} · ${describeLocalizedMultiAngleVertical(t, view.verticalControl)} · ${describeLocalizedMultiAngleProximity(t, view.proximity)}`
+  return `${yaw} · ${describeLocalizedMultiAngleVertical(t, view.elevationDeg)} · ${describeLocalizedMultiAngleProximity(t, view.proximity)}`
 }
 
 export function summarizeLocalizedMultiAngleConfig(

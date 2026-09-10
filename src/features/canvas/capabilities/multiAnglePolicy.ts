@@ -10,8 +10,8 @@ export const MULTI_ANGLE_PROFILES = ['continuous-v1', 'discrete-v1', 'flux-nativ
 export type MultiAngleControlProfile = (typeof MULTI_ANGLE_PROFILES)[number]
 export type MultiAngleControlPrecision = 'learned-native' | 'discrete-native' | 'numeric-native'
 
-export const MULTI_ANGLE_CONTINUOUS_MODEL_ID = 'fal-qwen-image-edit-2509-multiple-angles'
-export const MULTI_ANGLE_CONTINUOUS_ENDPOINT_ID = 'fal-ai/qwen-image-edit-2509-lora-gallery/multiple-angles'
+export const MULTI_ANGLE_CONTINUOUS_MODEL_ID = 'fal-qwen-image-edit-2511-multiple-angles'
+export const MULTI_ANGLE_CONTINUOUS_ENDPOINT_ID = 'fal-ai/qwen-image-edit-2511-multiple-angles'
 export const MULTI_ANGLE_DISCRETE_MODEL_ID = 'fal-perspective-change'
 export const MULTI_ANGLE_DISCRETE_ENDPOINT_ID = 'fal-ai/image-apps-v2/perspective'
 export const MULTI_ANGLE_FLUX_MODEL_ID = 'fal-flux-2-multiple-angles'
@@ -29,9 +29,8 @@ export interface MultiAngleContinuousViewV1 {
   label: string
   presetId: string
   yawControlDeg: number
-  verticalControl: number
+  elevationDeg: number
   proximity: number
-  wideAngle: boolean
 }
 
 export interface MultiAngleDiscreteViewV1 {
@@ -71,12 +70,12 @@ export interface MultiAngleViewPreset<TView extends MultiAngleViewV1 = MultiAngl
 }
 
 export const MULTI_ANGLE_CONTINUOUS_PRESETS: readonly MultiAngleViewPreset<MultiAngleContinuousViewV1>[] = [
-  continuousPreset('three-quarter-left', '左三分之四', 45, 0, 0, false, -0.62, 0),
-  continuousPreset('three-quarter-right', '右三分之四', -45, 0, 0, false, 0.62, 0),
-  continuousPreset('left-side', '左侧面', 90, 0, 0, false, -1, 0),
-  continuousPreset('right-side', '右侧面', -90, 0, 0, false, 1, 0),
-  continuousPreset('top-oblique', '高位斜俯', 0, -0.6, 0, false, 0, -0.72),
-  continuousPreset('bottom-oblique', '低位斜仰', 0, 0.6, 0, false, 0, 0.72),
+  continuousPreset('three-quarter-left', '左三分之四', 45, 0, 5, -0.62, 0),
+  continuousPreset('three-quarter-right', '右三分之四', -45, 0, 5, 0.62, 0),
+  continuousPreset('left-side', '左侧面', 90, 0, 5, -1, 0),
+  continuousPreset('right-side', '右侧面', -90, 0, 5, 1, 0),
+  continuousPreset('top-oblique', '高位斜俯', 0, 60, 5, 0, -0.72),
+  continuousPreset('bottom-oblique', '低位斜仰', 0, -30, 5, 0, 0.72),
 ] as const
 
 export const MULTI_ANGLE_FLUX_PRESETS: readonly MultiAngleViewPreset<MultiAngleFluxViewV1>[] = [
@@ -130,9 +129,8 @@ function continuousPreset(
   id: string,
   label: string,
   yawControlDeg: number,
-  verticalControl: number,
+  elevationDeg: number,
   proximity: number,
-  wideAngle: boolean,
   x: number,
   y: number,
 ): MultiAngleViewPreset<MultiAngleContinuousViewV1> {
@@ -146,9 +144,8 @@ function continuousPreset(
       label,
       presetId: id,
       yawControlDeg,
-      verticalControl,
+      elevationDeg,
       proximity,
-      wideAngle,
     },
   }
 }
@@ -212,16 +209,14 @@ function stringValue(value: unknown, fallback: string): string {
 function normalizeContinuousView(value: unknown, index: number): MultiAngleContinuousViewV1 {
   const raw = value && typeof value === 'object' ? value as Record<string, unknown> : {}
   const fallback = MULTI_ANGLE_CONTINUOUS_PRESETS[index % MULTI_ANGLE_CONTINUOUS_PRESETS.length].view
-  const legacyShot = raw.shotSize === 'close-up' ? 7 : raw.shotSize === 'near' ? 3 : 0
   return {
     viewId: stringValue(raw.viewId ?? raw.id, fallback.viewId),
     kind: 'continuous',
     label: stringValue(raw.label, fallback.label),
     presetId: stringValue(raw.presetId ?? raw.viewPreset, fallback.presetId),
-    yawControlDeg: numberInRange(raw.yawControlDeg ?? raw.azimuth, -90, 90, fallback.yawControlDeg),
-    verticalControl: numberInRange(raw.verticalControl ?? raw.elevation, -1, 1, fallback.verticalControl),
-    proximity: numberInRange(raw.proximity ?? legacyShot, 0, 10, fallback.proximity),
-    wideAngle: raw.wideAngle === true,
+    yawControlDeg: numberInRange(raw.yawControlDeg, -180, 180, fallback.yawControlDeg),
+    elevationDeg: numberInRange(raw.elevationDeg, -30, 90, fallback.elevationDeg),
+    proximity: numberInRange(raw.proximity, 0, 10, fallback.proximity),
   }
 }
 
@@ -310,7 +305,7 @@ export function validateMultiAngleConfig(value: unknown): MultiAngleConfigV1 {
       throw new Error('FLUX 原生档结果组不能混入其他控制视图')
     }
     const signature = view.kind === 'continuous'
-      ? `${view.yawControlDeg}/${view.verticalControl}/${view.proximity}/${view.wideAngle}`
+      ? `${view.yawControlDeg === 180 ? -180 : view.yawControlDeg}/${view.elevationDeg}/${view.proximity}`
       : view.kind === 'discrete'
         ? view.preset
         : `${view.horizontalAngleDeg === 360 ? 0 : view.horizontalAngleDeg}/${view.verticalAngleDeg}/${view.zoom}`
@@ -366,10 +361,10 @@ function createMultiAngleViewParams(view: MultiAngleViewV1, source: string): Dyn
   if (view.kind === 'continuous') {
     return {
       image: [source],
-      rotateRightLeft: view.yawControlDeg,
-      verticalAngle: view.verticalControl,
-      moveForward: view.proximity,
-      wideAngleLens: view.wideAngle,
+      // 预览左转为正；Fal 方位角右转为正，归一化到 0–360°。
+      horizontalAngle: (-view.yawControlDeg + 360) % 360,
+      verticalAngle: view.elevationDeg,
+      zoom: view.proximity,
     }
   }
   if (view.kind === 'discrete') {

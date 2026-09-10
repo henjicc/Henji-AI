@@ -1,19 +1,18 @@
 import { model as flux2MultipleAnglesModel } from '@henjicc/ai-sdk/tool-models/fal/flux-2-multiple-angles'
 import { model as perspectiveChangeModel } from '@henjicc/ai-sdk/tool-models/fal/perspective-change'
-import { model as qwenMultipleAnglesModel } from '@henjicc/ai-sdk/tool-models/fal/qwen-image-edit-2509-multiple-angles'
+import { model as qwenMultipleAnglesModel } from '@henjicc/ai-sdk/tool-models/fal/qwen-image-edit-2511-multiple-angles'
 
 import { composeModelDefinition } from '@/core/composeModelDefinition'
 import type { ModelDefinition } from '@/core/types'
 import type { ModelPresentation } from '@/core/types/ModelPresentation'
 
 const continuousPresentation: ModelPresentation = {
-  meta: { name: { zh: '连续多角度', en: 'Continuous Multi-angle' } },
+  meta: { name: { zh: 'Qwen 2511 多角度', en: 'Qwen 2511 Multiple Angles' } },
   params: {
     image: { name: { zh: '源图', en: 'Source image' } },
-    rotateRightLeft: { name: { zh: '水平模型控制', en: 'Horizontal model control' } },
-    verticalAngle: { name: { zh: '垂直模型控制', en: 'Vertical model control' } },
-    moveForward: { name: { zh: '向前移动', en: 'Move forward' } },
-    wideAngleLens: { name: { zh: '广角倾向', en: 'Wide-angle tendency' } },
+    horizontalAngle: { name: { zh: '水平角度', en: 'Horizontal angle' } },
+    verticalAngle: { name: { zh: '垂直角度', en: 'Vertical angle' } },
+    zoom: { name: { zh: '景别缩放', en: 'Zoom' } },
   },
 }
 

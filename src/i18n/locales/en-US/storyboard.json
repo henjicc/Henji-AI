@@ -440,8 +440,8 @@
       "profileNote": "Each control profile supports up to {{max}} independent requests; Qwen, full-direction, and native FLUX outputs are never mixed in one result group.",
       "summary": "{{profile}} · {{count}} views",
       "camera": {
-        "highPercent": "High {{value}}%",
-        "lowPercent": "Low {{value}}%",
+        "highDegrees": "Looking down {{value}}°",
+        "lowDegrees": "Looking up {{value}}°",
         "level": "Level",
         "panorama": "Panorama",
         "longShot": "Long shot",

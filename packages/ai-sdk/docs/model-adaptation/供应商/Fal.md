@@ -2,7 +2,7 @@
 
 | 项目 | 内容 |
 |---|---|
-| 最后更新 | 2026-08-29 |
+| 最后更新 | 2026-09-10 |
 | 供应商类型 | 模型 API 平台 + Serverless |
 | 项目内 `providerId` | `fal` |
 | 直连 Base URL | `https://fal.run` |
@@ -151,7 +151,7 @@ curl "https://api.fal.ai/v1/account/billing?expand=credits" \
 `pixelcut/background-removal`。
 
 `@henjicc/ai-sdk/tool-packs/fal-multi-angle-tools` 提供 3 个多角度端点：
-`fal-ai/qwen-image-edit-2509-lora-gallery/multiple-angles`、`fal-ai/image-apps-v2/perspective`、
+`fal-ai/qwen-image-edit-2511-multiple-angles`、`fal-ai/image-apps-v2/perspective`、
 `fal-ai/flux-2-lora-gallery/multiple-angles`。
 
 三个 pack 都复用本文件的队列、结果解析和 Fal CDN 上传，不进入默认 105 模型目录，也不进入普通 Fal provider pack。它们只是静态分发集合，执行仍走同一生成客户端。完整字段与价格见对应单模型文档。

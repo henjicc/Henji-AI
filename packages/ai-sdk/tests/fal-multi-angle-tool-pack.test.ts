@@ -13,10 +13,13 @@ interface Fixture {
   submit: JsonObject
   status: JsonObject
   result: JsonObject
+  officialInputSchema?: {
+    properties: Record<string, { minimum?: number; maximum?: number; default?: unknown }>
+  }
 }
 
 const fixtures = Object.fromEntries([
-  'qwen-image-edit-2509-multiple-angles',
+  'qwen-image-edit-2511-multiple-angles',
   'perspective-change',
   'flux-2-multiple-angles',
 ].map((name) => [
@@ -67,9 +70,31 @@ function fixtureRuntime(fixture: Fixture, builtRequests: JsonObject[]) {
 }
 
 describe('Fal 多角度按需工具 pack', () => {
+  it('2511 请求对照原样官方 schema，缺省与仰视/顶视不退回 2509 单位', () => {
+    const model = models[0]
+    const official = fixtures['qwen-image-edit-2511-multiple-angles'].officialInputSchema!.properties
+    const defaults = model.request.builder({ image: ['source.png'] })
+    for (const [field, value] of Object.entries(defaults)) {
+      expect(official, field).toHaveProperty(field)
+      if (typeof value === 'number') {
+        expect(value, field).toBeGreaterThanOrEqual(official[field].minimum ?? -Infinity)
+        expect(value, field).toBeLessThanOrEqual(official[field].maximum ?? Infinity)
+        expect(value, `${field} default`).toBe(official[field].default)
+      }
+    }
+    expect(model.endpoints).toBe('fal-ai/qwen-image-edit-2511-multiple-angles')
+    for (const elevation of [-30, 0, 90]) {
+      expect(model.request.builder({ image: ['source.png'], verticalAngle: elevation }))
+        .toMatchObject({ vertical_angle: elevation, num_images: 1 })
+    }
+    expect(model.params.map(p => p.id)).toEqual(['image', 'horizontalAngle', 'verticalAngle', 'zoom'])
+    expect(defaults).not.toHaveProperty('rotate_right_left')
+    expect(defaults).not.toHaveProperty('move_forward')
+    expect(defaults).not.toHaveProperty('wide_angle_lens')
+  })
   it('不进入默认 catalog，三个 profile 独立分发且都没有提示词参数', () => {
     expect(models.map((model) => model.meta.id)).toEqual([
-      'fal-qwen-image-edit-2509-multiple-angles',
+      'fal-qwen-image-edit-2511-multiple-angles',
       'fal-perspective-change',
       'fal-flux-2-multiple-angles',
     ])
@@ -106,25 +131,24 @@ describe('Fal 多角度按需工具 pack', () => {
     const body = model.request.builder({
       image: ['uxp://source'],
       __firstImageRatio: 1,
-      rotateRightLeft: 120,
-      verticalAngle: -2,
-      moveForward: 20,
+      horizontalAngle: 450,
+      verticalAngle: -50,
+      zoom: 20,
       wideAngleLens: true,
       prompt: '这个字段不应进入请求',
     })
     expect(body).toEqual({
       image_urls: ['uxp://source'],
       image_size: { width: 1024, height: 1024 },
-      rotate_right_left: 90,
-      vertical_angle: -1,
-      move_forward: 10,
-      wide_angle_lens: true,
+      horizontal_angle: 360,
+      vertical_angle: -30,
+      zoom: 10,
       num_images: 1,
-      guidance_scale: 1,
-      num_inference_steps: 6,
+      guidance_scale: 4.5,
+      num_inference_steps: 28,
       acceleration: 'regular',
       enable_safety_checker: true,
-      lora_scale: 1.25,
+      lora_scale: 1,
     })
     expect(model.pricing?.calculator?.({})).toBe(0.035)
   })
@@ -214,8 +238,8 @@ describe('Fal 多角度按需工具 pack', () => {
   })
 
   it.each([
-    ['qwen-image-edit-2509-multiple-angles', 'fal-qwen-image-edit-2509-multiple-angles', {
-      uploadedFilePaths: ['uxp://source'], rotateRightLeft: 45, verticalAngle: 0, moveForward: 0, wideAngleLens: false,
+    ['qwen-image-edit-2511-multiple-angles', 'fal-qwen-image-edit-2511-multiple-angles', {
+      uploadedFilePaths: ['uxp://source'], horizontalAngle: 315, verticalAngle: -30, zoom: 5,
     }],
     ['perspective-change', 'fal-perspective-change', { images: ['uxp://source'], targetPerspective: 'back' }],
     ['flux-2-multiple-angles', 'fal-flux-2-multiple-angles', {

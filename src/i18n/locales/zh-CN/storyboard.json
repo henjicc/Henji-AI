@@ -440,8 +440,8 @@
       "profileNote": "每个控制档最多 {{max}} 次独立请求；Qwen、完整方位与 FLUX 原生档不会混在同一个结果组。",
       "summary": "{{profile}} · {{count}} 个视图",
       "camera": {
-        "highPercent": "高位 {{value}}%",
-        "lowPercent": "低位 {{value}}%",
+        "highDegrees": "俯视 {{value}}°",
+        "lowDegrees": "仰视 {{value}}°",
         "level": "水平",
         "panorama": "全景",
         "longShot": "远景",

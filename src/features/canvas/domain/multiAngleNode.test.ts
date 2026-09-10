@@ -26,7 +26,7 @@ describe('多角度节点定义', () => {
     const data = canvasNodeDefinitions[CANVAS_NODE_TYPES.multiAngleGen].createDefaultData()
     expect(data).toMatchObject({
       capabilityId: 'image.multi-angle',
-      modelId: 'fal-qwen-image-edit-2509-multiple-angles',
+      modelId: 'fal-qwen-image-edit-2511-multiple-angles',
       prompt: '',
       params: {},
       multiAngleConfig: {

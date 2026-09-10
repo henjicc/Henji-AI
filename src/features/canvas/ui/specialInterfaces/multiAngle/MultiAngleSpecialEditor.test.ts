@@ -29,18 +29,18 @@ describe('多角度编辑器草稿', () => {
     })
   })
 
-  it('迁移旧相机字段后写入版本化连续控制契约', () => {
+  it('按度数写入 2511 连续控制契约', () => {
     const draft = buildMultiAngleEditorDraft({}, {
-      views: [{ id: 'legacy', label: '旧视图', azimuth: 30, elevation: -0.5, shotSize: 'close-up' }],
+      views: [{ viewId: 'angle', label: '视图', yawControlDeg: 30, elevationDeg: -30, proximity: 7 }],
     })
     expect(draft.multiAngleConfig).toMatchObject({
       version: 1,
       controlProfile: 'continuous-v1',
       concurrency: 2,
       views: [{
-        viewId: 'legacy',
+        viewId: 'angle',
         yawControlDeg: 30,
-        verticalControl: -0.5,
+        elevationDeg: -30,
         proximity: 7,
       }],
     })
