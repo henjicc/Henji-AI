@@ -60,6 +60,18 @@ describe('canvasExecutionService', () => {
     useCanvasStore.getState().setCanvasData([], [], { past: [], future: [] })
   })
 
+  it('缺失节点以及依赖缺失节点的运行在调用执行器前拒绝', async () => {
+    const unavailable = node('missing', 'removedNode' as CanvasNode['type']);
+    const root = node('root', CANVAS_NODE_TYPES.imageEdit);
+    useCanvasStore.getState().setCanvasData([unavailable, root], [edge('missing', 'root')]);
+    const run = vi.fn(async () => completed());
+    registerRoot('missing', run);
+    registerRoot('root', run);
+    await expect(runCanvasNode('missing')).rejects.toThrow('缺失');
+    await expect(runCanvasNode('root')).rejects.toThrow('缺失');
+    expect(run).not.toHaveBeenCalled();
+  });
+
   it('按执行器的运行时契约校验跨进程任务签名而不是退化为节点 data', async () => {
     useCanvasStore.getState().setCanvasData([
       node('image', CANVAS_NODE_TYPES.imageEdit, { prompt: '节点里的旧文本不参与运行时签名' }),

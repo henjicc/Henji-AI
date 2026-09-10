@@ -247,6 +247,8 @@
     }
   },
   "node": {
+    "missing": "节点缺失",
+    "missingDescription": "此功能或模型已不可用。原节点和连线已保留，可删除此节点或用其他节点替换。",
     "menuTitle": "添加节点",
     "menuSections": {
       "media": "媒体与生成",

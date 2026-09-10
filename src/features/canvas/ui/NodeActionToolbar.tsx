@@ -1,3 +1,4 @@
+import { isCanvasNodeUnavailable } from '../domain/nodeAvailability';
 import { useNodeToolbarBoundary } from './useNodeToolbarBoundary'
 import { reportCanvasOperationFailure } from '@/features/canvas/application/canvasOperationFeedback';
 import { createLogger } from '@/core/logging'
@@ -83,7 +84,7 @@ export const NodeActionToolbar = memo(({ node }: NodeActionToolbarProps) => {
   const isStoryboardSplit = isStoryboardSplitNode(node);
   const canCopyStoryboardText = isStoryboardGen || isStoryboardSplit;
   const nodeDefinition = getNodeDefinition(node.type);
-  const canTriggerGeneration = Boolean(nodeDefinition.capabilities.toolbarGenerate);
+  const canTriggerGeneration = Boolean(nodeDefinition.capabilities.toolbarGenerate) && !isCanvasNodeUnavailable(node);
   const imageCapabilityActions = useMemo(
     () => resolveCanvasImageCapabilityActionsForSourceNode(node),
     [node],

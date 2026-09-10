@@ -1,3 +1,4 @@
+import { isCanvasNodeUnavailable } from '../domain/nodeAvailability'
 import type { CanvasEdge, CanvasNode } from '../domain/canvasNodes'
 import {
   getAuthoritativeIncomingEdge,
@@ -126,6 +127,7 @@ function resolveNearestExecutableSources(
     visited.add(sourceId)
     const source = nodeById.get(sourceId)
     if (!source) throw new Error(`画布依赖节点不存在：${sourceId}`)
+    if (isCanvasNodeUnavailable(source)) throw new Error('上游节点的功能或模型已缺失，请替换节点或断开连线')
     const definition = getCanvasNodeDefinition(source.type)
 
     if (definition?.executionKind === 'text-display') {

@@ -1,3 +1,4 @@
+import { isCanvasNodeUnavailable } from '@/features/canvas/domain/nodeAvailability';
 import {
   CANVAS_NODE_TYPES,
   DEFAULT_ASPECT_RATIO,
@@ -24,7 +25,6 @@ import {
   migrateMultiAngleGenerationData,
   migratePanoramaGenerationData,
   migratePanoramaViewerData,
-  migrateRetiredPortraitTextureData,
   migrateRelightGenerationData,
   migrateStoryboardGenerationData,
   migrateUpscaleGenerationData,
@@ -62,10 +62,15 @@ export function normalizeEdgesWithNodes(rawEdges: CanvasEdge[], nodes: CanvasNod
       if (!sourceNode || !targetNode) {
         return false;
       }
-      return nodeHasSourceHandle(sourceNode.type) && nodeHasTargetHandle(targetNode.type);
+      return (isCanvasNodeUnavailable(sourceNode) || nodeHasSourceHandle(sourceNode.type))
+        && (isCanvasNodeUnavailable(targetNode) || nodeHasTargetHandle(targetNode.type));
     })
     .map((edge) => {
       const targetNode = nodeMap.get(edge.target) as CanvasNode;
+      const sourceNode = nodeMap.get(edge.source) as CanvasNode;
+      if (isCanvasNodeUnavailable(sourceNode) || isCanvasNodeUnavailable(targetNode)) {
+        return { ...edge, type: edge.type ?? 'disconnectableEdge' };
+      }
       const rawTargetHandle =
         normalizeHandleId((edge as CanvasEdge & { targetHandle?: DynamicValue }).targetHandle) ?? 'target';
       return {
@@ -81,13 +86,8 @@ export function normalizeEdgesWithNodes(rawEdges: CanvasEdge[], nodes: CanvasNod
 export function normalizeNodes(rawNodes: CanvasNode[]): CanvasNode[] {
   return rawNodes
     .map((node) => {
-      const isRetiredPortraitTexture = String(node.type) === 'portraitTextureGenNode';
-      const normalizedType = isRetiredPortraitTexture
-        ? CANVAS_NODE_TYPES.imageEdit
-        : node.type as CanvasNodeType;
-      if (!Object.values(CANVAS_NODE_TYPES).includes(normalizedType)) {
-        return null;
-      }
+      if (isCanvasNodeUnavailable(node)) return node;
+      const normalizedType = node.type as CanvasNodeType;
 
       const definition = nodeCatalog.getDefinition(normalizedType);
       const mergedData = {
@@ -95,9 +95,6 @@ export function normalizeNodes(rawNodes: CanvasNode[]): CanvasNode[] {
         ...(node.data as Partial<CanvasNodeData>),
       } as CanvasNodeData;
 
-      if (isRetiredPortraitTexture) {
-        migrateRetiredPortraitTextureData(mergedData as DynamicValueMap);
-      }
 
       if (normalizedType === CANVAS_NODE_TYPES.storyboardSplit) {
         const frames = (mergedData as { frames?: StoryboardFrameItem[] }).frames ?? [];

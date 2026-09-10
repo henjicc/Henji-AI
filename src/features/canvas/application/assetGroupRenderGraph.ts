@@ -1,3 +1,4 @@
+import { isCanvasNodeUnavailable } from '../domain/nodeAvailability';
 import type { CanvasEdge, CanvasNode } from '../domain/canvasNodes';
 import { isAssetGroupNode } from '../domain/canvasNodes';
 import { summarizeAssetGroupBinding } from './assetGroupGraph';
@@ -15,6 +16,7 @@ export function createAssetGroupRenderGraph(
   nodes: CanvasNode[],
   edges: CanvasEdge[],
 ): AssetGroupRenderGraph {
+  nodes = projectUnavailableNodes(nodes);
   const assetGroups = nodes.filter(isAssetGroupNode);
   // 普通画布拖动只改变 nodes；保留原 edges 引用，避免让 ReactFlow 重建连线状态。
   if (assetGroups.length === 0) return { nodes, edges };
@@ -61,4 +63,20 @@ export function createAssetGroupRenderGraph(
       ...bundleEdges,
     ],
   };
+}
+
+const missingProjectionCache = new WeakMap<CanvasNode, CanvasNode>();
+function projectUnavailableNodes(nodes: CanvasNode[]): CanvasNode[] {
+  let changed = false;
+  const projected = nodes.map((node) => {
+    if (!isCanvasNodeUnavailable(node)) return node;
+    changed = true;
+    let projectedNode = missingProjectionCache.get(node);
+    if (!projectedNode) {
+      projectedNode = { ...node, type: 'missingNode' as CanvasNode['type'] };
+      missingProjectionCache.set(node, projectedNode);
+    }
+    return projectedNode;
+  });
+  return changed ? projected : nodes;
 }

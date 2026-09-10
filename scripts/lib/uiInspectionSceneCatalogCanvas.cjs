@@ -12,6 +12,7 @@ const { createLayerControlsScene } = require('./uiInspectionLayerControls.cjs')
 function createCanvasScenes(context) {
   const {
     setupCanvas,
+    setupCanvasMissingNodes,
     setupCanvasImageCapabilityToolbar,
     setupCanvasPanoramaToolbar,
     setupCanvasParameterTools,
@@ -45,6 +46,10 @@ function createCanvasScenes(context) {
     createLayerControlsScene(context),
     ...[createNodeDragPerformanceScene(context)].filter(Boolean),
     { id: 'canvas-projects', surface: '画布', name: '画布-项目列表', setup: setupCanvas },
+    {
+      id: 'canvas-missing-nodes', surface: '画布', name: '画布-缺失节点工程恢复', writesUserData: true,
+      setup: setupCanvasMissingNodes,
+    },
     {
       id: 'canvas-image-capability-toolbar',
       surface: '画布',

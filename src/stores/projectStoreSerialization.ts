@@ -23,6 +23,8 @@ export interface Project extends ProjectSummary {
   edges: CanvasEdge[];
   viewport: Viewport;
   history: CanvasHistoryState;
+  /** 保留缺失模型中无法识别的参数引用，原池索引不得重新编号。 */
+  imagePool?: string[];
 }
 
 type PersistedProject = Project & {
@@ -101,8 +103,11 @@ function trimHistoryForPersistence(history: CanvasHistoryState): CanvasHistorySt
 }
 
 function encodeProject(project: Project): PersistedProject {
-  const imagePool: string[] = [];
-  const imageIndexMap = new Map<string, number>();
+  const hasOpaqueParams = [project.nodes, ...project.history.past.map((snapshot) => snapshot.nodes),
+    ...project.history.future.map((snapshot) => snapshot.nodes)].some((nodes) => nodes.some(({ data }) =>
+      typeof data.modelId === 'string' && data.params !== undefined && !resolveCanvasNodeMediaSchema(data.modelId)));
+  const imagePool: string[] = hasOpaqueParams ? [...(project.imagePool ?? [])] : [];
+  const imageIndexMap = new Map(imagePool.map((value, index) => [value, index]));
   const encode = (imageUrl: string | null | undefined) =>
     encodeImageReference(imageUrl, imagePool, imageIndexMap);
   const resetRuntimeState = (nodes: CanvasNode[]): CanvasNode[] => nodes.map((node) => {

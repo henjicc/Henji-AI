@@ -69,8 +69,8 @@ describe('工程当前格式的失败关闭校验', () => {
         [derivedMediaStateKey('image')]: { sourceRef: '/image.png' } } })
   })
 
-  it('未知模型媒体schema不能让未解码引用再次回存', () => {
-    expect(() => parseCanvasProjectRecord(record({ modelId: 'unknown', params: { image: '__img_ref__:0' } }), schema))
-      .toThrow(CanvasProjectRecordError)
+  it('模型下线不等于工程损坏，未知参数保持不透明', () => {
+    const data = { modelId: 'unknown', params: { image: '__img_ref__:0', prompt: '__img_ref__:999' } }
+    expect(parseCanvasProjectRecord(record(data), schema).nodes[0].data).toEqual(data)
   })
 })

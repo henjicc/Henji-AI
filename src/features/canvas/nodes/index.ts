@@ -1,3 +1,4 @@
+import { MissingNode } from './MissingNode';
 import { createElement, memo, type ReactNode } from 'react';
 import { areNodeContentPropsEqual } from './shared/nodeContentProps';
 import type { NodeTypes } from '@xyflow/react';
@@ -69,6 +70,7 @@ function withNodePaintFrame<TProps extends object>(
 }
 
 export const nodeTypes: NodeTypes = {
+  missingNode: withNodePaintFrame(MissingNode),
   universalUploadNode: withNodePaintFrame(UniversalUploadNode),
   exportImageNode: withNodePaintFrame(ImageNode),
   groupNode: withNodePaintFrame(GroupNode),

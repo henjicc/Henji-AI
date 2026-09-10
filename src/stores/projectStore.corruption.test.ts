@@ -67,6 +67,39 @@ describe('损坏工程不得替换有效工程或未保存现场', () => {
     expect(value.history.past[0].nodes[0].data.imageUrl).toBe('/photo.png')
   })
 
+  it('缺失模型和未知类型工程能打开，保存重开保留节点、连线、历史与未知媒体池', async () => {
+    const store = useProjectStore.getState()
+    const id = await store.createProject('missing')
+    const native = window.henjiNative!.storyboardProjects
+    const original = (await native.getProjectRecord(id))!
+    await store.closeProject()
+    const nodes = [
+      { id: 'retired', type: 'imageNode', position: { x: 10, y: 20 }, width: 420, height: 240,
+        data: { displayName: '商品摄影', capabilityId: 'image.product-photography', modelId: 'removed-model',
+          params: { image: '__img_ref__:0', prompt: '__img_ref__:999', nested: { untouched: true } } } },
+      { id: 'unknown', type: 'removedCustomNode', position: { x: 500, y: 20 }, data: { displayName: '缺失插件', custom: [1, 2] } },
+    ]
+    const edges = [{ id: 'e', source: 'retired', target: 'unknown', sourceHandle: 'custom-output', targetHandle: 'custom-input', type: 'disconnectableEdge' }]
+    await native.upsertProjectRecord({ ...original, nodesJson: JSON.stringify(nodes), edgesJson: JSON.stringify(edges),
+      historyJson: JSON.stringify({ past: [{ nodes, edges }], future: [], imagePool: ['/original.png'] }) })
+    store.openProject(id)
+    await vi.waitFor(() => expect(useProjectStore.getState().currentProjectId).toBe(id))
+    const opened = useProjectStore.getState().currentProject!
+    useCanvasStore.getState().setCanvasData(opened.nodes, opened.edges, opened.history)
+    expect(useProjectStore.getState().openError).toBeNull()
+    expect(useCanvasStore.getState().nodes).toEqual(nodes)
+    expect(useCanvasStore.getState().edges).toEqual(edges)
+    await store.closeProject()
+    store.openProject(id)
+    await vi.waitFor(() => expect(useProjectStore.getState().currentProjectId).toBe(id))
+    const reopened = useProjectStore.getState().currentProject!
+    useCanvasStore.getState().setCanvasData(reopened.nodes, reopened.edges, reopened.history)
+    expect(useCanvasStore.getState().nodes).toEqual(nodes)
+    expect(useCanvasStore.getState().history.past[0].nodes).toEqual(nodes)
+    expect(useProjectStore.getState().currentProject?.imagePool).toEqual(['/original.png'])
+    await store.closeProject()
+  })
+
   it('成功新建或关闭后清除上次打开失败，不留下过期提示', async () => {
     useProjectStore.setState({ openError: 'project.openFailed' })
     await useProjectStore.getState().createProject('new')

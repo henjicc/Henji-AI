@@ -90,6 +90,62 @@ function attachUiInspectionCanvasWorkspace(context) {
     return { panoramaSource, projectId }
   }
 
+  async function setupCanvasMissingNodes(page) {
+    const { projectId } = await seedAndOpenCanvasPanoramaProject(page)
+    await page.getByRole('button', { name: /返回项目|Back to Projects/ }).click()
+    await settlePage(page)
+    await page.evaluate(async (id) => {
+      const record = await window.henjiNative.storyboardProjects.getProjectRecord(id)
+      const source = JSON.parse(record.nodesJson)[0]
+      const pool = JSON.parse(record.historyJson).imagePool
+      for (const key of ['imageUrl', 'previewImageUrl']) {
+        if (source.data[key]?.startsWith('__img_ref__:')) source.data[key] = pool[Number(source.data[key].slice(12))]
+      }
+      source.position = { x: 40, y: 120 }
+      source.width = 240; source.height = 120
+      source.style = { width: 240, height: 120 }; source.measured = { width: 240, height: 120 }
+      const nodes = [source, {
+        id: '__missing_model', type: 'imageNode', position: { x: 360, y: 100 }, width: 320, height: 200,
+        style: { width: 320, height: 200 }, data: { displayName: '商品摄影', modelId: 'removed-product-model',
+          capabilityId: 'image.product-photography', params: { image: '__img_ref__:0', prompt: '保留原参数' } },
+      }, {
+        id: '__missing_type', type: 'removedExtensionNode', position: { x: 760, y: 100 }, width: 320, height: 200,
+        style: { width: 320, height: 200 }, data: { displayName: '缺失的扩展节点', originalSettings: { value: 42 } },
+      }]
+      const edges = [
+        { id: '__missing_input', source: source.id, target: '__missing_model', sourceHandle: 'source', targetHandle: 'param:__image', type: 'disconnectableEdge' },
+        { id: '__missing_output', source: '__missing_model', target: '__missing_type', sourceHandle: 'custom', targetHandle: 'custom', type: 'disconnectableEdge' },
+      ]
+      await window.henjiNative.storyboardProjects.upsertProjectRecord({ ...record, nodeCount: nodes.length,
+        nodesJson: JSON.stringify(nodes), edgesJson: JSON.stringify(edges), viewportJson: JSON.stringify({ x: 40, y: 100, zoom: 0.9 }),
+        historyJson: JSON.stringify({ past: [{ nodes, edges }], future: [], imagePool: [source.data.imageUrl] }) })
+    }, projectId)
+    await page.reload()
+    await setupCanvas(page)
+    const card = page.locator(`[data-project-id="${projectId}"]:visible`)
+    await card.waitFor({ state: 'visible', timeout: 15000 })
+    await card.click()
+    await page.locator('[data-missing-node="true"]').first().waitFor({ state: 'visible', timeout: 15000 })
+    await page.locator('[data-missing-node="true"]').first().getByText('节点缺失', { exact: true }).waitFor({ state: 'visible' })
+    if (await page.locator('[data-missing-node="true"]').count() !== 2) throw new Error('缺失节点未完整显示')
+    if (await page.locator('.react-flow__edge').count() !== 2) throw new Error('缺失节点的原连线丢失')
+    await page.locator('.react-flow__node[data-id="__missing_model"]').click()
+    if (await page.locator('[data-node-toolbar-panel]').getByRole('button', { name: /^生成$/ }).filter({ visible: true }).count()) throw new Error('缺失节点仍然允许生成')
+    await page.getByRole('button', { name: /返回项目|Back to Projects/ }).click()
+    await settlePage(page)
+    const preserved = await page.evaluate(async (id) => {
+      const record = await window.henjiNative.storyboardProjects.getProjectRecord(id)
+      const nodes = JSON.parse(record.nodesJson)
+      return nodes.find((node) => node.id === '__missing_type').type === 'removedExtensionNode'
+        && nodes.find((node) => node.id === '__missing_model').data.params.image === '__img_ref__:0'
+        && JSON.parse(record.historyJson).imagePool.length >= 1
+    }, projectId)
+    if (!preserved) throw new Error('占位渲染覆盖了原工程数据')
+    await page.locator(`[data-project-id="${projectId}"]:visible`).click()
+    await page.locator('[data-missing-node="true"]').first().waitFor({ state: 'visible' })
+    await settlePage(page)
+  }
+
   async function setupCanvasImageCapabilityToolbar(page) {
     const expectedCapabilityCount = 12
     const expectedFalUtilityIds = [
@@ -454,6 +510,7 @@ function attachUiInspectionCanvasWorkspace(context) {
     setupSettings,
     setupCanvas,
     seedAndOpenCanvasPanoramaProject,
+    setupCanvasMissingNodes,
     setupCanvasImageCapabilityToolbar,
     setupCanvasPanoramaToolbar,
     setupCanvasParameterTools,

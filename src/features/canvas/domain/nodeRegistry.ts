@@ -34,8 +34,16 @@ export type {
   NodeMenuSection,
 } from './nodeRegistryContracts';
 
+const unavailableNodeDefinition: CanvasNodeDefinition = {
+  type: 'missingNode' as CanvasNodeType,
+  menuLabelKey: 'node.missing', menuIcon: 'imageGeneration', visibleInMenu: false,
+  capabilities: { toolbar: true, promptInput: false, toolbarImageCapabilities: false },
+  connectivity: { sourceHandle: true, targetHandle: true, connectMenu: { fromSource: false, fromTarget: false } },
+  createDefaultData: () => ({} as CanvasNodeData),
+};
+
 export function getNodeDefinition(type: CanvasNodeType): CanvasNodeDefinition {
-  return canvasNodeDefinitions[type];
+  return canvasNodeDefinitions[type] ?? unavailableNodeDefinition;
 }
 
 /**
@@ -73,11 +81,11 @@ export function getMenuNodeDefinitions(): CanvasNodeDefinition[] {
 }
 
 export function nodeHasSourceHandle(type: CanvasNodeType): boolean {
-  return canvasNodeDefinitions[type].connectivity.sourceHandle;
+  return getNodeDefinition(type).connectivity.sourceHandle;
 }
 
 export function nodeHasTargetHandle(type: CanvasNodeType): boolean {
-  return canvasNodeDefinitions[type].connectivity.targetHandle;
+  return getNodeDefinition(type).connectivity.targetHandle;
 }
 
 export function getConnectMenuNodeTypes(
@@ -147,7 +155,7 @@ export function resolveNodeSourceMediaKind(
   sourceData: CanvasNodeData,
   sourceHandle?: string | null,
 ): MediaPortKind | undefined {
-  const definition = canvasNodeDefinitions[sourceType]
+  const definition = getNodeDefinition(sourceType)
   const lockedKind = (sourceData as { lockedMediaKind?: DynamicValue }).lockedMediaKind
   const normalizedSourceHandle = sourceHandle ?? 'source'
   if (

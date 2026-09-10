@@ -24,7 +24,7 @@ export interface ParsedCanvasProjectRecord extends ProjectGraph {
 
 /** 错误只携带字段和原因，绝不携带 JSON 原文或解析器可能包含原文的 cause。 */
 export class CanvasProjectRecordError extends Error {
-  constructor(readonly field: ProjectRecordField, readonly reason: 'syntax' | 'structure' | 'media-reference' | 'unknown-model') {
+  constructor(readonly field: ProjectRecordField, readonly reason: 'syntax' | 'structure' | 'media-reference') {
     super('工程数据无法安全读取，原内容未被修改。请重试打开，或从有效项目包导入为新工程。')
     this.name = 'CanvasProjectRecordError'
   }
@@ -71,9 +71,6 @@ function validateGraph(nodes: unknown, edges: unknown, nodeField: ProjectRecordF
     ids.add(node.id)
     if (node.data.params !== undefined && !object(node.data.params)) {
       return invalid(nodeField)
-    }
-    if (text(node.data.modelId) && node.data.params !== undefined && !resolveSchema(node.data.modelId)) {
-      return invalid(nodeField, 'unknown-model')
     }
     mapCanvasNodeMediaReferences(node.data, (value) => decodeCanvasProjectImageReference(value, pool, nodeField), resolveSchema)
   }

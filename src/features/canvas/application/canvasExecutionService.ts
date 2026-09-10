@@ -1,3 +1,4 @@
+import { isCanvasNodeUnavailable } from '../domain/nodeAvailability'
 import { createLogger } from '@/core/logging'
 import { useCanvasStore } from '@/stores/canvasStore'
 import {
@@ -377,6 +378,8 @@ async function executeCanvasRun(rootNodeId: string): Promise<CanvasRunResult> {
   const runControl: CanvasRunControl = { failure: null }
   try {
     const initial = useCanvasStore.getState()
+    const root = initial.nodes.find((node) => node.id === rootNodeId)
+    if (root && isCanvasNodeUnavailable(root)) throw new Error('节点的功能或模型已缺失，请删除或替换此节点')
     if (!executors.has(rootNodeId)) throw new Error(`节点执行器尚未就绪：${rootNodeId}`)
     const plan = createCanvasExecutionPlan(
       rootNodeId,

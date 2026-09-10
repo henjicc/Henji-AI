@@ -1,3 +1,4 @@
+import { createAssetGroupRenderGraph } from '@/features/canvas/application/assetGroupRenderGraph';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { createPlainTextPromptDocument } from '@/core/inputs/promptDocument';
@@ -30,28 +31,30 @@ function legacyPortraitNode(displayName = '人像质感'): CanvasNode {
 
 afterEach(() => useCanvasStore.getState().clearCanvas());
 
-describe('下线人像质感节点兼容', () => {
-  it('专属节点不再注册，旧节点转换为普通图片生成并保留用户数据', () => {
+describe('缺失节点保留', () => {
+  it('专属节点不再注册，旧节点原样保留而不改造成其他功能', () => {
     expect(Object.keys(canvasNodeDefinitions)).not.toContain('portraitTextureGenNode');
     const original = legacyPortraitNode();
     const before = structuredClone(original);
     const [node] = normalizeNodes([original]);
-    expect(node).toMatchObject({
-      id: original.id, type: CANVAS_NODE_TYPES.imageEdit,
-      position: original.position, width: 480, height: 360, style: original.style,
-      data: {
-        modelId: 'kie-gpt-image-2', prompt: original.data.prompt,
-        promptDocument: original.data.promptDocument, params: original.data.params,
-        mediaInputs: original.data.mediaInputs, isSizeManuallyAdjusted: true,
-      },
-    });
-    for (const key of ['capabilityId', 'promptTemplateVersion', 'fixedSemanticParams',
-      'portraitTextureSettings', 'portraitTextureRouteReasons']) {
-      expect(node.data).not.toHaveProperty(key);
-    }
-    expect(node.data.displayName).not.toBe('人像质感');
+    expect(node).toEqual(original);
     expect(original).toEqual(before);
     expect(normalizeNodes([node])).toEqual([node]);
+  });
+
+  it('缺失仅投影到视图，普通节点引用和原始数据不变，重复投影复用节点', () => {
+    const original = legacyPortraitNode();
+    const healthy = canvasNodeFactory.createNode(CANVAS_NODE_TYPES.upload, { x: 0, y: 0 });
+    const normalNodes = [healthy];
+    expect(createAssetGroupRenderGraph(normalNodes, []).nodes).toBe(normalNodes);
+    const nodes = [healthy, original];
+    const first = createAssetGroupRenderGraph(nodes, []);
+    const second = createAssetGroupRenderGraph(nodes, []);
+    expect(first.nodes[0]).toBe(healthy);
+    expect(first.nodes[1]).toBe(second.nodes[1]);
+    expect(first.nodes[1].type).toBe('missingNode');
+    expect(first.nodes[1].data).toBe(original.data);
+    expect(original.type).toBe('portraitTextureGenNode');
   });
 
   it('保留自定义标题', () => {
@@ -79,13 +82,13 @@ describe('下线人像质感节点兼容', () => {
     const assertGraph = () => {
       const state = useCanvasStore.getState();
       expect(state.nodes).toHaveLength(3);
-      expect(state.nodes.find(({ id }) => id === legacy.id)?.type).toBe(CANVAS_NODE_TYPES.imageEdit);
+      expect(state.nodes.find(({ id }) => id === legacy.id)?.type).toBe(legacy.type);
       expect(state.nodes.find(({ id }) => id === result.id)?.data.imageUrl).toBe('saved-result.png');
       expect(state.edges).toEqual(edges.map((edge) => ({ ...edge, type: 'disconnectableEdge' })));
     };
     assertGraph();
     for (const snapshot of [...useCanvasStore.getState().history.past, ...useCanvasStore.getState().history.future]) {
-      expect(snapshot.nodes.find(({ id }) => id === legacy.id)?.type).toBe(CANVAS_NODE_TYPES.imageEdit);
+      expect(snapshot.nodes.find(({ id }) => id === legacy.id)?.type).toBe(legacy.type);
     }
     useCanvasStore.getState().undo();
     assertGraph();

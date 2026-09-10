@@ -44,21 +44,6 @@ import {
 } from '../capabilities/layerSeparationPolicy';
 import { CANVAS_IMAGE_CAPABILITY_IDS } from '../capabilities/types';
 import { validateLayerStackDocument, type LayerStackDocumentV1 } from './layerStack';
-import { CANVAS_NODE_TYPES } from './canvasNodeConstants';
-import { DEFAULT_NODE_DISPLAY_NAME } from './nodeDisplay';
-
-/** 下线旧人像质感节点时保留普通生成数据，不重新编译提示词或改选模型。 */
-export function migrateRetiredPortraitTextureData(data: DynamicValueMap): void {
-  for (const key of [
-    'capabilityId', 'promptTemplateVersion', 'fixedSemanticParams',
-    'portraitTextureSettings', 'portraitTextureRouteReasons',
-  ]) {
-    delete data[key];
-  }
-  if (data.displayName === '人像质感' || data.displayName === 'Portrait Texture') {
-    data.displayName = DEFAULT_NODE_DISPLAY_NAME[CANVAS_NODE_TYPES.imageEdit];
-  }
-}
 
 /** 恢复全景节点被旧工程或损坏数据覆盖的能力固定语义。 */
 export function migratePanoramaGenerationData(data: DynamicValueMap): void {
