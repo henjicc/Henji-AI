@@ -285,7 +285,6 @@ describe('画布图片能力应用服务', () => {
 
   it.each([
     [CANVAS_IMAGE_CAPABILITY_IDS.presetRelight, 'fal-image-apps-v2-relighting', '预设重打光', 'hidden', undefined],
-    [CANVAS_IMAGE_CAPABILITY_IDS.lowLightEnhancement, 'fal-control-light', '暗光增强', 'hidden', undefined],
     [CANVAS_IMAGE_CAPABILITY_IDS.outpaint, 'fal-image-apps-v2-outpaint', '智能扩图', 'optional', 500],
     [CANVAS_IMAGE_CAPABILITY_IDS.productPhotography, 'fal-image-apps-v2-product-photography', '商品摄影', 'hidden', undefined],
     [CANVAS_IMAGE_CAPABILITY_IDS.photoRestoration, 'fal-image-apps-v2-photo-restoration', '照片修复', 'hidden', undefined],

@@ -117,15 +117,6 @@ export const builtInCanvasImageCapabilities: readonly CanvasImageCapabilityDefin
     modelId: 'fal-image-apps-v2-relighting',
   }),
   createFalUtilityCapability({
-    id: CANVAS_IMAGE_CAPABILITY_IDS.lowLightEnhancement,
-    titleKey: 'imageCapabilities.items.lowLightEnhancement.title',
-    descriptionKey: 'imageCapabilities.items.lowLightEnhancement.description',
-    group: 'enhancement',
-    icon: 'relight',
-    order: 22,
-    modelId: 'fal-control-light',
-  }),
-  createFalUtilityCapability({
     id: CANVAS_IMAGE_CAPABILITY_IDS.outpaint,
     titleKey: 'imageCapabilities.items.outpaint.title',
     descriptionKey: 'imageCapabilities.items.outpaint.description',

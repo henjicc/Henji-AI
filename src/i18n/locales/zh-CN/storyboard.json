@@ -208,10 +208,6 @@
         "title": "预设重打光",
         "description": "使用 FAL 的 18 种官方灯光风格快速重塑画面光照"
       },
-      "lowLightEnhancement": {
-        "title": "暗光增强",
-        "description": "提亮低照度图片，同时尽量保留原有画面结构"
-      },
       "outpaint": {
         "title": "智能扩图",
         "description": "按四个方向扩展画布，或缩小原图并自动补全周围内容"

@@ -13,7 +13,6 @@ import type { I18nText } from '../types/I18nText'
  */
 export const GENERATION_MODEL_DESCRIPTIONS = {
   // 图片模型
-  'control-light': { zh: 'FAL 专用暗光增强工具，可在尽量保留主体和构图的前提下提升低照度画面的可见度与光照层次。', en: 'A FAL low-light enhancement tool that brightens dark images while preserving their subject and composition.' },
   'flux-1-krea-dev': { zh: 'Krea 与 Black Forest Labs 联合推出的 12B 开放权重模型，强调自然写实、设计感和较少的“AI 油亮感”；兼容 FLUX.1 Dev 生态，适合本地部署与微调。', en: '' },
   'flux-2-multiple-angles': { zh: '基于 FLUX.2 的连续镜头角度调整工具，可分别控制水平角度、垂直角度和缩放，适合商品与主体视角探索。', en: 'A FLUX.2 camera-angle tool with continuous horizontal, vertical, and zoom controls.' },
   'gpt-image-2': { zh: '推荐使用！OpenAI 高端通用图像生成与编辑模型，文字排版、多语言、提示遵循和参考图保真表现突出，适合复杂商业视觉、海报及高精度修改。', en: '' },

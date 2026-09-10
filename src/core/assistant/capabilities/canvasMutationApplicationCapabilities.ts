@@ -87,7 +87,7 @@ const applyCanvasImageCapability = defineApplicationCapability({
   domain: 'canvas',
   aliases: [
     '使用图片工具', '应用图片能力', 'apply canvas image capability',
-    '高清放大', '图片超分', '图片打光 重打光', '暗光增强', '智能扩图',
+    '高清放大', '图片超分', '图片打光 重打光', '智能扩图',
     '商品摄影', '照片修复', '背景移除 移除背景', '多角度视图 调整镜头角度',
     '九宫格', '局部重绘', '图层拆分', '全景图',
     'upscale relight outpaint remove background background removal multi-angle',

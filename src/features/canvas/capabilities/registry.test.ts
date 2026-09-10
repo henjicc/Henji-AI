@@ -49,12 +49,12 @@ describe('画布图片能力注册表', () => {
     },
   };
 
-  it('登记十四项唯一、稳定且可序列化的能力', () => {
+  it('登记十三项唯一、稳定且可序列化的能力', () => {
     const definitions = getRegisteredCanvasImageCapabilities();
     const expectedIds = Object.values(CANVAS_IMAGE_CAPABILITY_IDS);
 
-    expect(definitions).toHaveLength(14);
-    expect(new Set(definitions.map((definition) => definition.id)).size).toBe(14);
+    expect(definitions).toHaveLength(13);
+    expect(new Set(definitions.map((definition) => definition.id)).size).toBe(13);
     expect(definitions.map((definition) => definition.id)).toEqual(expectedIds);
     expect(JSON.parse(JSON.stringify(definitions))).toEqual(definitions);
     expect(definitions.every((definition) => (
@@ -80,7 +80,6 @@ describe('画布图片能力注册表', () => {
         CANVAS_IMAGE_CAPABILITY_IDS.panorama,
         CANVAS_IMAGE_CAPABILITY_IDS.relight,
         CANVAS_IMAGE_CAPABILITY_IDS.presetRelight,
-        CANVAS_IMAGE_CAPABILITY_IDS.lowLightEnhancement,
         CANVAS_IMAGE_CAPABILITY_IDS.outpaint,
         CANVAS_IMAGE_CAPABILITY_IDS.productPhotography,
         CANVAS_IMAGE_CAPABILITY_IDS.photoRestoration,
@@ -98,7 +97,6 @@ describe('画布图片能力注册表', () => {
       CANVAS_IMAGE_CAPABILITY_IDS.panorama,
       CANVAS_IMAGE_CAPABILITY_IDS.relight,
       CANVAS_IMAGE_CAPABILITY_IDS.presetRelight,
-      CANVAS_IMAGE_CAPABILITY_IDS.lowLightEnhancement,
       CANVAS_IMAGE_CAPABILITY_IDS.outpaint,
       CANVAS_IMAGE_CAPABILITY_IDS.productPhotography,
       CANVAS_IMAGE_CAPABILITY_IDS.photoRestoration,
@@ -122,6 +120,8 @@ describe('画布图片能力注册表', () => {
 
     expect(ASSISTANT_CANVAS_IMAGE_CAPABILITY_IDS).toEqual(assistantEligibleIds);
     expect(ASSISTANT_CANVAS_IMAGE_CAPABILITY_IDS).not.toContain(CANVAS_IMAGE_CAPABILITY_IDS.gridSplit);
+    expect(ASSISTANT_CANVAS_IMAGE_CAPABILITY_IDS).not.toContain('image.low-light-enhancement');
+    expect(getRegisteredCanvasImageCapabilities().map(({ id }) => id)).not.toContain('image.low-light-enhancement');
     expect(ASSISTANT_CANVAS_IMAGE_CAPABILITY_IDS).not.toContain('image.portrait-texture');
     expect(getRegisteredCanvasImageCapabilities().map(({ id }) => id)).not.toContain('image.portrait-texture');
   });
@@ -141,7 +141,6 @@ describe('画布图片能力注册表', () => {
       CANVAS_IMAGE_CAPABILITY_IDS.panorama,
       CANVAS_IMAGE_CAPABILITY_IDS.relight,
       CANVAS_IMAGE_CAPABILITY_IDS.presetRelight,
-      CANVAS_IMAGE_CAPABILITY_IDS.lowLightEnhancement,
       CANVAS_IMAGE_CAPABILITY_IDS.outpaint,
       CANVAS_IMAGE_CAPABILITY_IDS.productPhotography,
       CANVAS_IMAGE_CAPABILITY_IDS.photoRestoration,
@@ -161,7 +160,6 @@ describe('画布图片能力注册表', () => {
       CANVAS_IMAGE_CAPABILITY_IDS.panorama,
       CANVAS_IMAGE_CAPABILITY_IDS.relight,
       CANVAS_IMAGE_CAPABILITY_IDS.presetRelight,
-      CANVAS_IMAGE_CAPABILITY_IDS.lowLightEnhancement,
       CANVAS_IMAGE_CAPABILITY_IDS.outpaint,
       CANVAS_IMAGE_CAPABILITY_IDS.productPhotography,
       CANVAS_IMAGE_CAPABILITY_IDS.photoRestoration,

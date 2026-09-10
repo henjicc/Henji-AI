@@ -91,10 +91,9 @@ function attachUiInspectionCanvasWorkspace(context) {
   }
 
   async function setupCanvasImageCapabilityToolbar(page) {
-    const expectedCapabilityCount = 15
+    const expectedCapabilityCount = 13
     const expectedFalUtilityIds = [
       'image.preset-relight',
-      'image.low-light-enhancement',
       'image.outpaint',
       'image.product-photography',
       'image.photo-restoration',
@@ -367,7 +366,7 @@ function attachUiInspectionCanvasWorkspace(context) {
     const source = page.locator('.react-flow__node[data-id="__ui_panorama_source"]')
     const capabilities = [
       'image.panorama', 'image.upscale',
-      'image.preset-relight', 'image.low-light-enhancement', 'image.outpaint',
+      'image.preset-relight', 'image.outpaint',
       'image.product-photography', 'image.photo-restoration', 'image.background-removal',
       'image.layer-separation',
     ]

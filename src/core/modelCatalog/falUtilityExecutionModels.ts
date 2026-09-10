@@ -1,4 +1,3 @@
-import { model as controlLightModel } from '@henjicc/ai-sdk/tool-models/fal/control-light'
 import { model as outpaintModel } from '@henjicc/ai-sdk/tool-models/fal/outpaint'
 import { model as photoRestorationModel } from '@henjicc/ai-sdk/tool-models/fal/photo-restoration'
 import { model as pixelcutBackgroundRemovalModel } from '@henjicc/ai-sdk/tool-models/fal/pixelcut-background-removal'
@@ -59,18 +58,6 @@ const relightingPresentation: ModelPresentation = {
   },
 }
 
-const controlLightPresentation: ModelPresentation = {
-  meta: { name: { zh: 'FAL 暗光增强', en: 'FAL Low-light Enhancement' } },
-  params: {
-    image: imageParam,
-    lightingLevel: {
-      name: { zh: '提亮强度', en: 'Lighting level' },
-      tooltip: { zh: '控制暗部提亮幅度，0 保持原光照，1 为最强。', en: 'Controls low-light enhancement from 0 to 1.' },
-      showInput: true,
-    },
-  },
-}
-
 const outpaintPresentation: ModelPresentation = {
   meta: { name: { zh: 'FAL 智能扩图', en: 'FAL Outpaint' } },
   params: {
@@ -123,7 +110,6 @@ const backgroundRemovalPresentation: ModelPresentation = {
 
 export const FAL_IMAGE_UTILITY_EXECUTION_MODELS: readonly ModelDefinition[] = [
   composeModelDefinition(relightingModel, relightingPresentation),
-  composeModelDefinition(controlLightModel, controlLightPresentation),
   composeModelDefinition(outpaintModel, outpaintPresentation),
   composeModelDefinition(productPhotographyModel, productPhotographyPresentation),
   composeModelDefinition(photoRestorationModel, photoRestorationPresentation),
