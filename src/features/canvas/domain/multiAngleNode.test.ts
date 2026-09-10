@@ -35,6 +35,6 @@ describe('多角度节点定义', () => {
         concurrency: 2,
       },
     })
-    expect((data as DynamicValueMap).multiAngleConfig.views).toHaveLength(4)
+    expect((data as DynamicValueMap).multiAngleConfig.views).toHaveLength(1)
   })
 })

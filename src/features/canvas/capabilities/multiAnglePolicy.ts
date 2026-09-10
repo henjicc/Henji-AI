@@ -3,7 +3,7 @@ import type { CanvasGenerationOutputBatchContractV1 } from '../domain/generation
 export const MULTI_ANGLE_CONTRACT_VERSION = 1 as const
 export const MULTI_ANGLE_BATCH_VERSION = 1 as const
 export const MULTI_ANGLE_CONCURRENCY = 2 as const
-export const MULTI_ANGLE_DEFAULT_VIEW_COUNT = 4 as const
+export const MULTI_ANGLE_DEFAULT_VIEW_COUNT = 1 as const
 export const MULTI_ANGLE_MAX_VIEW_COUNT = 6 as const
 
 export const MULTI_ANGLE_PROFILES = ['continuous-v1', 'discrete-v1', 'flux-native-v1'] as const
@@ -421,8 +421,8 @@ export function createMultiAngleCommitContract(
   }
   return {
     version: 1,
-    strategy: ordered.length === 1 ? 'single' : 'assetGroup',
-    resultKind: ordered.length === 1 ? 'image' : 'image-group',
+    strategy: ordered.length === 1 ? 'single' : 'independent',
+    resultKind: 'image',
     expectedOutputCount: ordered.length,
     outputs: ordered.map((item) => ({
       source: item.mediaUrl,

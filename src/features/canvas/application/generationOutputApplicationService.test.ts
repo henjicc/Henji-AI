@@ -21,6 +21,7 @@ import {
 import type { RowMediaKind } from '../domain/socketTypes';
 import { bindAssetGroupGraph } from './assetGroupGraph';
 import { createAssetGroupRenderGraph } from './assetGroupRenderGraph';
+import { createDefaultMultiAngleConfig, createMultiAngleBatchPlan, createMultiAngleCommitContract, MULTI_ANGLE_CONTINUOUS_PRESETS } from '../capabilities/multiAnglePolicy';
 import { canvasNodeFactory } from './canvasServices';
 import {
   commitCanvasGenerationOutputs,
@@ -148,6 +149,28 @@ describe('generationOutputApplicationService', () => {
     registry.clear();
     registry.register(multiImageModel);
     setupCanvas();
+  });
+
+  it.each([1, 4])('多角度 %i 个视图落为独立图片，保留顺序、角度和各自连线', async (count) => {
+    const config = createDefaultMultiAngleConfig();
+    config.views = MULTI_ANGLE_CONTINUOUS_PRESETS.slice(0, count).map(preset => ({ ...preset.view }));
+    const plan = createMultiAngleBatchPlan(config, 'source.png');
+    const value = createMultiAngleCommitContract(plan.map(item => ({
+      plan: item, mediaUrl: `result-${item.order + 1}`, providerRequestId: `req-${item.order}`,
+    })).reverse());
+    const result = await commit(value, `multi-angle-${count}`);
+    const canvas = useCanvasStore.getState();
+    expect(result.groupNodeId).toBeNull();
+    expect(result.resultNodeIds).toHaveLength(count);
+    expect(canvas.nodes.some(node => node.type === CANVAS_NODE_TYPES.assetGroup)).toBe(false);
+    result.resultNodeIds.forEach((id, index) => {
+      const node = canvas.nodes.find(item => item.id === id)!;
+      expect(node.type).toBe(CANVAS_NODE_TYPES.exportImage);
+      expect(node.parentId).toBeFalsy();
+      expect(node.hidden).toBeFalsy();
+      expect(node.data.generationOutputDescriptor).toMatchObject({ order: index, angle: { control: plan[index].cameraControl } });
+      expect(canvas.edges.some(edge => edge.source === 'source-node' && edge.target === id)).toBe(true);
+    });
   });
 
   it('图已提交但存储拒绝时保留节点引用的媒体；相同完成键只重试写盘', async () => {

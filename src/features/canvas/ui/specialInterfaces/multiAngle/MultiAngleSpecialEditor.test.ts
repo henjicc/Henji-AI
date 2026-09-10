@@ -60,7 +60,7 @@ describe('多角度编辑器草稿', () => {
         concurrency: 2,
       },
     })
-    expect((draft.multiAngleConfig as { views: DynamicValueMap[] }).views).toHaveLength(4)
+    expect((draft.multiAngleConfig as { views: DynamicValueMap[] }).views).toHaveLength(1)
     expect((draft.multiAngleConfig as { views: DynamicValueMap[] }).views[0]).toMatchObject({
       kind: 'flux',
       horizontalAngleDeg: 0,

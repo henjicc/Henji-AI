@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  MULTI_ANGLE_CONTINUOUS_PRESETS,
   MULTI_ANGLE_FLUX_ENDPOINT_ID,
   MULTI_ANGLE_FLUX_MODEL_ID,
   createDefaultMultiAngleConfig,
@@ -8,12 +9,14 @@ import {
 } from '../capabilities/multiAnglePolicy'
 import { executeMultiAngleBatch } from './multiAngleBatchService'
 
+function fourViewConfig() { return { ...createDefaultMultiAngleConfig(), views: MULTI_ANGLE_CONTINUOUS_PRESETS.slice(0, 4).map(preset => ({ ...preset.view })) } }
+
 describe('多角度批次执行服务', () => {
-  it('默认 4 视图最多并发 2，结果仍保持计划顺序', async () => {
+  it('显式增加 4 视图最多并发 2，结果仍保持计划顺序', async () => {
     let active = 0
     let maxActive = 0
     const result = await executeMultiAngleBatch({
-      config: createDefaultMultiAngleConfig(),
+      config: fourViewConfig(),
       sourceImage: 'source.png',
       createBatchId: () => 'batch-4',
       execute: async (plan, context) => {
@@ -32,8 +35,8 @@ describe('多角度批次执行服务', () => {
   })
 
   it('支持 6 视图且仍固定并发 2', async () => {
-    const config = createDefaultMultiAngleConfig()
-    const extra = createDefaultMultiAngleConfig().views.slice(0, 2).map((view, index) => ({
+    const config = fourViewConfig()
+    const extra = fourViewConfig().views.slice(0, 2).map((view, index) => ({
       ...view,
       viewId: `extra-${index}`,
       label: `额外 ${index}`,
@@ -96,7 +99,7 @@ describe('多角度批次执行服务', () => {
   it('部分失败不产生完整输出，重试仅请求失败项并保留成功项', async () => {
     const firstCalls: number[] = []
     const first = await executeMultiAngleBatch({
-      config: createDefaultMultiAngleConfig(),
+      config: fourViewConfig(),
       sourceImage: 'source.png',
       createBatchId: () => 'retry-batch',
       execute: async (plan, context) => {
@@ -112,7 +115,7 @@ describe('多角度批次执行服务', () => {
 
     const retryCalls: number[] = []
     const retry = await executeMultiAngleBatch({
-      config: createDefaultMultiAngleConfig(),
+      config: fourViewConfig(),
       sourceImage: 'source.png',
       previous: first.snapshot,
       execute: async (plan, context) => {
@@ -130,7 +133,7 @@ describe('多角度批次执行服务', () => {
 
   it('来源图或视图计划改变时不复用旧成功项', async () => {
     const first = await executeMultiAngleBatch({
-      config: createDefaultMultiAngleConfig(),
+      config: fourViewConfig(),
       sourceImage: 'source-a.png',
       createBatchId: () => 'old-batch',
       execute: async (plan, context) => {
@@ -140,7 +143,7 @@ describe('多角度批次执行服务', () => {
     })
     const calls: number[] = []
     const second = await executeMultiAngleBatch({
-      config: createDefaultMultiAngleConfig(),
+      config: fourViewConfig(),
       sourceImage: 'source-b.png',
       previous: first.snapshot,
       createBatchId: () => 'new-batch',
@@ -155,7 +158,7 @@ describe('多角度批次执行服务', () => {
   })
 
   it('保存重开后恢复仍在供应商队列中的请求，不重复提交计费请求', async () => {
-    const config = createDefaultMultiAngleConfig()
+    const config = fourViewConfig()
     const first = await executeMultiAngleBatch({
       config,
       sourceImage: 'source.png',
@@ -198,7 +201,7 @@ describe('多角度批次执行服务', () => {
     const cancelled: string[] = []
     let calls = 0
     const result = await executeMultiAngleBatch({
-      config: createDefaultMultiAngleConfig(),
+      config: fourViewConfig(),
       sourceImage: 'source.png',
       signal: controller.signal,
       cancelTask: async (requestId) => { cancelled.push(requestId) },

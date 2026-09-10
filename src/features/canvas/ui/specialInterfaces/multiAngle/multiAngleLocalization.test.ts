@@ -24,7 +24,7 @@ describe('multi-angle localization', () => {
       'Horizontal 0° · Vertical 0° · Zoom 5',
     )
     expect(summarizeLocalizedMultiAngleConfig(i18n.t, config)).toBe(
-      'FLUX Native · 4 views',
+      'FLUX Native · 1 views',
     )
   })
 })

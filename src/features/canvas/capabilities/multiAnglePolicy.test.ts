@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest'
+import { model as qwenModel } from '@henjicc/ai-sdk/tool-models/fal/qwen-image-edit-2509-multiple-angles'
+import { imageBlockGeometry, multiAngleOrientation } from '../ui/specialInterfaces/multiAngle/multiAngleOrbitGeometry'
 
 import {
   MULTI_ANGLE_CONTINUOUS_ENDPOINT_ID,
+  MULTI_ANGLE_CONTINUOUS_PRESETS,
   MULTI_ANGLE_CONTINUOUS_MODEL_ID,
   MULTI_ANGLE_DISCRETE_ENDPOINT_ID,
   MULTI_ANGLE_DISCRETE_MODEL_ID,
@@ -15,13 +18,16 @@ import {
 } from './multiAnglePolicy'
 
 describe('多角度版本化参数契约', () => {
-  it('默认为连续档 4 视图、并发 2，且不存在提示词字段', () => {
+  it('三个控制档默认只提交一个视图，且不存在提示词字段', () => {
     const config = createDefaultMultiAngleConfig()
     expect(config).toMatchObject({ version: 1, controlProfile: 'continuous-v1', concurrency: 2 })
     expect(config.views.map((view) => view.label)).toEqual([
-      '左三分之四', '右三分之四', '左侧面', '右侧面',
+      '左三分之四',
     ])
     expect(JSON.stringify(config)).not.toContain('prompt')
+    for (const profile of ['continuous-v1', 'discrete-v1', 'flux-native-v1'] as const) {
+      expect(createMultiAngleBatchPlan(createDefaultMultiAngleConfig(profile), 'source.png')).toHaveLength(1)
+    }
   })
 
   it('迁移旧 id/azimuth/elevation/shotSize 并在唯一入口夹紧模型控制范围', () => {
@@ -73,7 +79,7 @@ describe('多角度版本化参数契约', () => {
   it('拒绝未知版本、超过 6 视图、重复编号与重复控制', () => {
     expect(() => normalizeMultiAngleConfig({ version: 2 })).toThrow(/不支持/)
     const base = createDefaultMultiAngleConfig()
-    expect(() => validateMultiAngleConfig({ ...base, views: [...base.views, ...base.views] })).toThrow(/1 到 6/)
+    expect(() => validateMultiAngleConfig({ ...base, views: Array(7).fill(base.views[0]) })).toThrow(/1 到 6/)
     expect(() => validateMultiAngleConfig({ ...base, views: [base.views[0], base.views[0]] })).toThrow(/编号重复/)
     expect(() => validateMultiAngleConfig({
       ...base,
@@ -164,8 +170,8 @@ describe('多角度版本化参数契约', () => {
     })
   })
 
-  it('完整输出按用户顺序生成 4.1 image-group 描述，不按完成时间', () => {
-    const plan = createMultiAngleBatchPlan(createDefaultMultiAngleConfig(), 'source.png')
+  it('显式增加的四个视图按用户顺序独立输出，不按完成时间分组', () => {
+    const plan = createMultiAngleBatchPlan({ ...createDefaultMultiAngleConfig(), views: MULTI_ANGLE_CONTINUOUS_PRESETS.slice(0, 4).map(p => p.view) }, 'source.png')
     const contract = createMultiAngleCommitContract([
       { plan: plan[3], mediaUrl: 'd.png', providerRequestId: 'req-d' },
       { plan: plan[0], mediaUrl: 'a.png', providerRequestId: 'req-a' },
@@ -173,8 +179,8 @@ describe('多角度版本化参数契约', () => {
       { plan: plan[1], mediaUrl: 'b.png', providerRequestId: 'req-b' },
     ])
     expect(contract).toMatchObject({
-      strategy: 'assetGroup',
-      resultKind: 'image-group',
+      strategy: 'independent',
+      resultKind: 'image',
       expectedOutputCount: 4,
     })
     expect(contract.outputs.map((item) => item.source)).toEqual(['a.png', 'b.png', 'c.png', 'd.png'])
@@ -192,7 +198,20 @@ describe('多角度版本化参数契约', () => {
     const discrete = createMultiAngleBatchPlan(createDefaultMultiAngleConfig('discrete-v1'), 'source.png')
     expect(() => createMultiAngleCommitContract([
       { plan: continuous[0], mediaUrl: 'a.png', providerRequestId: 'a' },
-      { plan: discrete[1], mediaUrl: 'b.png', providerRequestId: 'b' },
+      { plan: { ...discrete[0], order: 1 }, mediaUrl: 'b.png', providerRequestId: 'b' },
     ])).toThrow(/顺序不连续或混用/)
+  })
+
+  it('截图中的右侧仰拍预览与最终 Fal 请求一致，且只请求一张', () => {
+    const view = { ...MULTI_ANGLE_CONTINUOUS_PRESETS[0].view, yawControlDeg: -23, verticalControl: 0.9 }
+    const config = { ...createDefaultMultiAngleConfig(), views: [view] }
+    const pose = multiAngleOrientation(view)
+    expect(pose.azimuth).toBe(23)
+    expect(pose.elevation).toBeLessThan(0)
+    expect(imageBlockGeometry(0.5, pose).faces.filter(face => face.visible).map(face => face.name).sort()).toEqual(['bottom', 'front', 'right'])
+    const [plan] = createMultiAngleBatchPlan(config, 'https://example.com/source.png')
+    const request = qwenModel.request!.builder!(plan.params)
+    expect(request).toMatchObject({ rotate_right_left: -23, vertical_angle: 0.9, num_images: 1 })
+    expect(createMultiAngleCommitContract([{ plan, mediaUrl: 'out.png', providerRequestId: 'req' }])).toMatchObject({ strategy: 'single', resultKind: 'image', expectedOutputCount: 1 })
   })
 })

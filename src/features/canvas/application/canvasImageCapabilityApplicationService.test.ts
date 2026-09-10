@@ -355,7 +355,7 @@ describe('画布图片能力应用服务', () => {
         concurrency: 2,
       },
     })
-    expect((multiAngleNode?.data as DynamicValueMap).multiAngleConfig.views).toHaveLength(4)
+    expect((multiAngleNode?.data as DynamicValueMap).multiAngleConfig.views).toHaveLength(1)
     expect(useCanvasStore.getState().edges).toEqual([
       expect.objectContaining({
         source: sourceNodeId,

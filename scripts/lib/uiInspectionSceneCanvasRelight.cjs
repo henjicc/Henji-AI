@@ -332,7 +332,7 @@ function attachUiInspectionCanvasRelight(context) {
       || persisted.capabilityId !== 'image.multi-angle'
       || persisted.modelId !== 'fal-perspective-change'
       || persisted.profile !== 'discrete-v1'
-      || persisted.viewCount !== 4
+      || persisted.viewCount !== 1
       || !persisted.hasTopDown
       || persisted.hasPrompt
       || persisted.manuallyResized !== true
