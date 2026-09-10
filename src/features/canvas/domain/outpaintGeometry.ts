@@ -7,6 +7,23 @@ export interface OutpaintImageSize { width: number; height: number }
 export interface OutpaintScene { frame: MarkCropRect; image: MarkCropRect }
 const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value))
 
+export const OUTPAINT_NODE_LAYOUT = { inspectorWidth: 200, minWidth: 720, minHeight: 400, maxWidth: 1400, maxHeight: 1000 } as const
+
+/** 节点外壳 border + p-2 各占 9px；检查器固定宽，主工作面按手势起点等比缩放。 */
+export function resizeOutpaintNode(start: OutpaintImageSize, requested: OutpaintImageSize): OutpaintImageSize {
+  const horizontalInset = OUTPAINT_NODE_LAYOUT.inspectorWidth + 18
+  const verticalInset = 18
+  const width = start.width - horizontalInset
+  const height = start.height - verticalInset
+  const scaleX = (requested.width - horizontalInset) / width
+  const scaleY = (requested.height - verticalInset) / height
+  const desired = Math.abs(scaleX - 1) >= Math.abs(scaleY - 1) ? scaleX : scaleY
+  const scale = clamp(desired,
+    Math.max((OUTPAINT_NODE_LAYOUT.minWidth - horizontalInset) / width, (OUTPAINT_NODE_LAYOUT.minHeight - verticalInset) / height),
+    Math.min((OUTPAINT_NODE_LAYOUT.maxWidth - horizontalInset) / width, (OUTPAINT_NODE_LAYOUT.maxHeight - verticalInset) / height))
+  return { width: width * scale + horizontalInset, height: height * scale + verticalInset }
+}
+
 /** 容器变化只变换同一份构图，不从取整后的请求参数重新创建画面。 */
 export function scaleOutpaintScene(scene: OutpaintScene, from: OutpaintImageSize, to: OutpaintImageSize): OutpaintScene {
   const scale = Math.min(to.width / from.width, to.height / from.height)

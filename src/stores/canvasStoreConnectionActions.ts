@@ -32,6 +32,7 @@ import {
 import { useSettingsStore } from '@/stores/settingsStore';
 import { useCanvasGenerationProgressStore } from '@/stores/canvasGenerationProgressStore';
 import { useCanvasTextStreamStore } from '@/stores/canvasTextStreamStore';
+import { resizeOutpaintNode, OUTPAINT_NODE_LAYOUT } from '@/features/canvas/domain/outpaintGeometry';
 import {
   reconcileAssetGroupGraph,
 } from '@/features/canvas/application/assetGroupGraph';
@@ -64,6 +65,19 @@ export function createCanvasConnectionActions(
   return {
   onNodesChange: (changes) => {
     set((state) => {
+      changes = changes.map(change => {
+        if (change.type !== 'dimensions' || change.resizing === undefined || !change.dimensions) return change;
+        const node = state.nodes.find(candidate => candidate.id === change.id);
+        const ui = node?.data.generationUi;
+        if (node?.type !== CANVAS_NODE_TYPES.imageEdit || !ui || typeof ui !== 'object'
+          || !('workbenchEditor' in ui) || ui.workbenchEditor !== 'outpaint') return change;
+        const start = state.dragHistorySnapshot?.nodes.find(candidate => candidate.id === node.id) ?? node;
+        const dimensions = resizeOutpaintNode({
+          width: start.width ?? start.measured?.width ?? OUTPAINT_NODE_LAYOUT.minWidth,
+          height: start.height ?? start.measured?.height ?? OUTPAINT_NODE_LAYOUT.minHeight,
+        }, change.dimensions);
+        return { ...change, dimensions, setAttributes: true };
+      });
       const resizedNodeIds = new Set(
         changes
           .filter(

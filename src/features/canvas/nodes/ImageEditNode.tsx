@@ -18,7 +18,7 @@ import {
 } from '@/features/canvas/nodes/shared/GenerationNodeShell';
 import { useCanvasStore } from '@/stores/canvasStore';
 import { OutpaintStage } from './outpaint/OutpaintStage';
-import { OUTPAINT_FIELDS, resolveOutpaintRequestParams, type OutpaintMargins } from '../domain/outpaintGeometry';
+import { OUTPAINT_FIELDS, OUTPAINT_NODE_LAYOUT, resolveOutpaintRequestParams, type OutpaintMargins } from '../domain/outpaintGeometry';
 import { ICON_NODE_IMAGE_GENERATION } from '@/core/theme/icons';
 
 const ImageGenerationIcon = ICON_NODE_IMAGE_GENERATION;
@@ -135,10 +135,10 @@ export const ImageEditNode = memo(({ id, data, selected, width, height }: ImageE
       excludeParamIds={isOutpaint ? [...generationUi.excludeParamIds, ...OUTPAINT_FIELDS, 'zoomOutPercentage'] : generationUi.excludeParamIds}
       prepareRuntimeParams={prepareRuntimeParams}
       layoutMode={generationUi.layoutMode}
-      minWidth={isOutpaint ? 720 : undefined}
-      minHeight={isOutpaint ? 400 : undefined}
+      minWidth={isOutpaint ? OUTPAINT_NODE_LAYOUT.minWidth : undefined}
+      minHeight={isOutpaint ? OUTPAINT_NODE_LAYOUT.minHeight : undefined}
       workbenchMediaInput={isOutpaint ? 'image' : undefined}
-      workbenchInspectorWidth={isOutpaint ? 200 : undefined}
+      workbenchInspectorWidth={isOutpaint ? OUTPAINT_NODE_LAYOUT.inspectorWidth : undefined}
       workbenchStage={isOutpaint ? ({ images }) => images[0] ? (
         <OutpaintStage key={images[0]} source={images[0]} params={data.params ?? {}} maximum={maximum} onCommit={commitMargins} />
       ) : <UiEmpty title={t('node.outpaint.chooseSource')} /> : undefined}

@@ -548,6 +548,10 @@ function attachUiInspectionCanvasWorkspace(context) {
       }
       const offset = (resized.image.x - resized.frame.x) / resized.image.width
       if (Math.abs(offset - (beforeResize.image.x - beforeResize.frame.x) / beforeResize.image.width) > 0.01) throw new Error('改变节点尺寸时图片相对位置跳变')
+      for (const key of ['x', 'y', 'width', 'height']) {
+        if (Math.abs(resized.frame[key] - stageBox[key]) > 2) throw new Error(`节点缩放后满幅扩图框不再贴边：${key}`)
+      }
+      if (Math.abs(stageBox.width / stageBox.height - resizeViewport.width / resizeViewport.height) > 0.002) throw new Error('扩图工作面比例随节点缩放变化')
     }
     await page.mouse.up()
     const inspectorWidth = await shell.locator('aside').evaluate(element => element.getBoundingClientRect().width / element.offsetWidth * 200)

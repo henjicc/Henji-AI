@@ -20,6 +20,36 @@ beforeEach(() => {
 });
 
 describe('画布工具节点尺寸跟踪', () => {
+  it('扩图缩放锁定工作面比例，结束、撤销和重做保持同一构图尺寸', () => {
+    const node = { ...canvasNodeFactory.createNode(CANVAS_NODE_TYPES.imageEdit, { x: 40, y: 60 }),
+      width: 720, height: 400, style: { width: 720, height: 400 },
+      data: { generationUi: { layoutMode: 'workbench', workbenchEditor: 'outpaint' } } };
+    useCanvasStore.getState().setCanvasData([node], []);
+    const resize = (width: number, height: number, resizing: boolean) => useCanvasStore.getState().onNodesChange([
+      { id: node.id, type: 'dimensions', dimensions: { width, height }, resizing, setAttributes: true },
+    ]);
+    const check = () => {
+      const current = useCanvasStore.getState().nodes[0];
+      expect((current.width! - 218) / (current.height! - 18)).toBeCloseTo(502 / 382, 8);
+      expect(current.style?.width).toBeCloseTo(current.width!);
+      expect(current.style?.height).toBeCloseTo(current.height!);
+      return current;
+    };
+    resize(820, 400, true);
+    check();
+    resize(900, 430, true);
+    const during = check();
+    resize(900, 430, false);
+    expect(check().measured).toEqual(during.measured);
+    useCanvasStore.getState().undo();
+    expect(useCanvasStore.getState().nodes[0]).toMatchObject({ width: 720, height: 400 });
+    useCanvasStore.getState().redo();
+    check();
+    resize(900, 650, true);
+    check();
+    resize(900, 650, false);
+    check();
+  });
   it.each(TOOL_GENERATION_NODE_TYPES)('%s 缩放结束后锁定真实尺寸', (type) => {
     const node = { ...canvasNodeFactory.createNode(type, { x: 40, y: 60 }), style: { width: 680, height: 360 } };
     useCanvasStore.getState().setCanvasData([node], []);
