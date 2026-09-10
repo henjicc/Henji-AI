@@ -69,7 +69,7 @@ npm run assistant:live:suite -- --only camera --skip-generation
 4. **禁止跨层导入**：组件 ✗→ 主进程/provider 实现；主进程 ✗→ `components/`；模型 ✗→ `services/`/`components/`。桥梁只用 `core/`、`commands/`、`platform/`。
 5. **领域与线程分离**：可复用业务逻辑放正式领域服务或独立核心模块，不堆在组件里。主进程协调 I/O、权限与生命周期；CPU 重计算放 Worker/utility process，适合并行的像素计算按实测选择 GPU，不因“属于业务”就阻塞主进程。
 6. **文件职责**：不设统一行数门槛。按职责内聚、依赖边界和可验证性判断是否拆分；行数只提示需要审查，不单独阻断改动。拆分应减少理解和修改成本，不为凑行数引入无关重构、机械碎片或压缩代码。具体判断见 [architecture.md](docs/rules/architecture.md#文件体积与职责)。
-7. **SDK 开发与公共消费边界**：Henji-AI 是 `@henjicc/ai-sdk` 的唯一主开发仓库与首发验证宿主，仓内通过 `packages/ai-sdk` workspace 源码开发、构建和验证；Henji-AI 之外的项目一律从公共 npm registry 安装已经发布的精确版本，禁止使用 `workspace:`、`file:`、Git URL、GitHub Packages、源码复制或其他旁路。消费方需要尚未发布的能力时，必须先回到本仓库实现并完成首发验证，经维护者对该次正式发布明确授权后发布，再升级消费项目。合并代码不等于获得发布授权。详细门槛只维护在 [文档采集手册.md](packages/ai-sdk/docs/model-adaptation/文档采集手册.md)。
+7. **SDK 开发与公共消费边界**：Henji-AI 是 `@henjicc/ai-sdk` 的唯一主开发仓库与首发验证宿主，仓内通过 `packages/ai-sdk` workspace 源码开发、构建和验证；Henji-AI 之外的项目一律从公共 npm registry 安装已经发布的精确版本，禁止使用 `workspace:`、`file:`、Git URL、GitHub Packages、源码复制或其他旁路。SDK 的一组完整功能或修复完成并通过发布门禁后，Agent 应自主升级版本并发布到公共 npm，无需逐次请求用户确认；这项持续授权不免除破坏性变更的消费者核查与迁移要求。消费方需要尚未发布的能力时，必须先回到本仓库实现、完成首发验证并发布，再按实际影响升级消费项目。仅痕迹AI界面、规则或文档改动不触发 SDK 发布。详细门槛只维护在 [文档采集手册.md](packages/ai-sdk/docs/model-adaptation/文档采集手册.md)。
 8. **SDK 故障先判归属**：升级后报错先对照公共 DTO 并做同版本 SDK 最小直调；合法输入在 SDK 内失败或请求偏离官方契约才修 SDK，`null`/错类型、序列化、凭据、transport、媒体、取消和宿主生命周期问题修消费项目。`field?: T` 只允许省略或 `T`，不自动允许 `null`。完整矩阵见 [model-adaptation.md](docs/rules/model-adaptation.md#sdk-故障归属与修复位置)。
 
 ## 全局禁止事项
