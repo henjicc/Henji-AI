@@ -9,7 +9,7 @@ import {
 
 describe('generationModelDescriptions', () => {
   it('所有供应商模型都引用已登记的通用模型标识', () => {
-    expect(catalog).toHaveLength(105)
+    expect(catalog).toHaveLength(109)
     for (const model of catalog) {
       expect(model.meta.canonicalModelId, model.meta.id).toBeTruthy()
       expect(hasGenerationModelDescription(model.meta.canonicalModelId), model.meta.id).toBe(true)
@@ -24,6 +24,7 @@ describe('generationModelDescriptions', () => {
 
   it('所有通用模型都有描述登记，新增模型允许保留待确认占位', () => {
     const pendingDescriptions = new Set([
+      'gpt-image-2.5',
       'topaz-transparent-upscale',
       'seedvr2-image-upscale',
       'bria-creative-upscale',
