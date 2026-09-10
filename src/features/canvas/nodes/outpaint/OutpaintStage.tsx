@@ -10,9 +10,10 @@ interface Props {
   params: Record<string, unknown>
   maximum: number
   onCommit: (margins: OutpaintMargins) => void
+  onSourceAspectRatio: (aspect: number) => void
 }
 
-export const OutpaintStage = memo(function OutpaintStage({ source, params, maximum, onCommit }: Props) {
+export const OutpaintStage = memo(function OutpaintStage({ source, params, maximum, onCommit, onSourceAspectRatio }: Props) {
   const { t } = useTranslation()
   const host = useRef<HTMLDivElement>(null)
   const [viewport, setViewport] = useState({ width: 0, height: 0 })
@@ -92,6 +93,7 @@ export const OutpaintStage = memo(function OutpaintStage({ source, params, maxim
           const width = event.currentTarget.naturalWidth
           const height = event.currentTarget.naturalHeight
           setImage({ width, height })
+          onSourceAspectRatio(width / height)
           setFailed(false)
         }}
         onError={() => setFailed(true)} />

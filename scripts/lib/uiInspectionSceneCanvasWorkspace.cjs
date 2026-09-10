@@ -431,6 +431,8 @@ function attachUiInspectionCanvasWorkspace(context) {
         frame: { x: frame.x, y: frame.y, width: frame.width, height: frame.height } }
     })
     const initial = await geometry()
+    const sourceStage = await stage.boundingBox()
+    if (Math.abs(sourceStage.width / sourceStage.height - 2 / 3) > 0.002) throw new Error('扩图工作面没有使用源图宽高比')
     if (Math.abs(initial.frame.width / initial.image.width - 1.2) > 0.02
       || Math.abs(initial.frame.height / initial.image.height - 1.2) > 0.02) {
       throw new Error(`扩图默认框不是原图的 120%：${JSON.stringify(initial)}`)
@@ -536,9 +538,18 @@ function attachUiInspectionCanvasWorkspace(context) {
     await node.click({ position: { x: 24, y: 4 } })
     const resizeHandle = await node.locator('.react-flow__resize-control.bottom.right').last().boundingBox()
     await page.mouse.move(resizeHandle.x + resizeHandle.width / 2, resizeHandle.y + resizeHandle.height / 2)
+    await node.evaluate(element => {
+      element.__resizeSamples = []
+      const sample = () => {
+        const rect = element.getBoundingClientRect()
+        element.__resizeSamples.push({ width: rect.width, height: rect.height })
+        element.__resizeFrame = requestAnimationFrame(sample)
+      }
+      sample()
+    })
     await page.mouse.down()
-    for (const step of [1, 2, 3]) {
-      await page.mouse.move(resizeHandle.x + resizeHandle.width / 2 + step * 20, resizeHandle.y + resizeHandle.height / 2 + step * 8)
+    for (const step of Array.from({ length: 12 }, (_, index) => index + 1)) {
+      await page.mouse.move(resizeHandle.x + resizeHandle.width / 2 + step * 5, resizeHandle.y + resizeHandle.height / 2 + step * 2)
       await page.waitForTimeout(50)
       const resized = await geometry()
       stageBox = await stage.boundingBox()
@@ -554,9 +565,21 @@ function attachUiInspectionCanvasWorkspace(context) {
       if (Math.abs(stageBox.width / stageBox.height - resizeViewport.width / resizeViewport.height) > 0.002) throw new Error('扩图工作面比例随节点缩放变化')
     }
     await page.mouse.up()
-    const inspectorWidth = await shell.locator('aside').evaluate(element => element.getBoundingClientRect().width / element.offsetWidth * 200)
-    const inspector = await shell.locator('aside').boundingBox()
-    if (Math.abs(inspector.width - inspectorWidth) > 1) throw new Error('扩图参数区未保持紧凑固定宽度')
+    await page.waitForTimeout(150)
+    const resizeSamples = await node.evaluate(element => {
+      cancelAnimationFrame(element.__resizeFrame)
+      return element.__resizeSamples
+    })
+    for (let index = 1; index < resizeSamples.length; index++) {
+      if (resizeSamples[index].width < resizeSamples[index - 1].width - 1
+        || resizeSamples[index].height < resizeSamples[index - 1].height - 1) throw new Error('向外缩放时节点出现尺寸回跳闪烁')
+    }
+    const shellBounds = await shell.boundingBox()
+    const nodeBounds = await node.boundingBox()
+    const inspectorBounds = await shell.locator('aside').boundingBox()
+    if (Math.abs(shellBounds.width - nodeBounds.width) > 1 || inspectorBounds.x + inspectorBounds.width > nodeBounds.x + nodeBounds.width + 1) {
+      throw new Error(`扩图节点外框裁切内容：${JSON.stringify({ shellBounds, nodeBounds, inspectorBounds })}`)
+    }
     for (const dx of [12, -12, 12]) {
       const before = await geometry()
       const x = before.image.x + before.image.width / 2

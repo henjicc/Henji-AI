@@ -5,6 +5,7 @@ type NodeResizeHandleProps = {
   minHeight?: number;
   maxWidth?: number;
   maxHeight?: number;
+  keepAspectRatio?: boolean;
 };
 
 const DEFAULT_MIN_WIDTH = 160;
@@ -17,9 +18,11 @@ export function NodeResizeHandle({
   minHeight = DEFAULT_MIN_HEIGHT,
   maxWidth = DEFAULT_MAX_WIDTH,
   maxHeight = DEFAULT_MAX_HEIGHT,
+  keepAspectRatio = false,
 }: NodeResizeHandleProps) {
   return (
     <NodeResizeControl
+      keepAspectRatio={keepAspectRatio}
       minWidth={minWidth}
       minHeight={minHeight}
       maxWidth={maxWidth}

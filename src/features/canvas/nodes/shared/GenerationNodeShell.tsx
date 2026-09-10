@@ -105,6 +105,7 @@ export const GenerationNodeShell = memo(({
   workbenchStage,
   workbenchMediaInput,
   workbenchInspectorWidth,
+  workbenchStageAspectRatio,
   minWidth = 320,
   minHeight = showPromptInput ? 160 : 0,
   maxWidth = 1400,
@@ -268,8 +269,9 @@ export const GenerationNodeShell = memo(({
   );
   // 旧工程仍可能声明 workbench；只有真实交互工作面才展开双栏。
   const resolvedLayoutMode = layoutMode === 'workbench' && workbenchStage != null ? 'workbench' : 'stacked';
-  const resolvedMinWidth = resolvedLayoutMode === 'workbench' ? Math.max(640, minWidth) : minWidth;
-  const resolvedMinHeight = resolvedLayoutMode === 'workbench' ? Math.max(300, minHeight) : minHeight;
+  const useDefaultWorkbenchMinimum = resolvedLayoutMode === 'workbench' && !workbenchStageAspectRatio;
+  const resolvedMinWidth = useDefaultWorkbenchMinimum ? Math.max(640, minWidth) : minWidth;
+  const resolvedMinHeight = useDefaultWorkbenchMinimum ? Math.max(300, minHeight) : minHeight;
   const {
     rootRef,
     inputRowsRef,
@@ -442,7 +444,9 @@ export const GenerationNodeShell = memo(({
 
       {resolvedLayoutMode === 'workbench' ? (
         <div className="canvas-node-lod-detail grid min-h-0 min-w-0 flex-1 grid-cols-[minmax(0,1.35fr)_minmax(240px,0.65fr)] overflow-hidden rounded-lg bg-bg-dark/45"
-          style={workbenchInspectorWidth ? { gridTemplateColumns: `minmax(0,1fr) ${workbenchInspectorWidth}px` } : undefined}>
+          style={workbenchStageAspectRatio
+            ? { gridTemplateColumns: `${Math.max(1, resolvedHeight - 18) * workbenchStageAspectRatio}px minmax(0,1fr)` }
+            : workbenchInspectorWidth ? { gridTemplateColumns: `minmax(0,1fr) ${workbenchInspectorWidth}px` } : undefined}>
           <main className="nodrag nowheel flex min-h-0 min-w-0 overflow-hidden">
             {resolvedWorkbenchStage}
           </main>
@@ -474,6 +478,7 @@ export const GenerationNodeShell = memo(({
         style={{ background: getSocketColor(modelType.toUpperCase()), right: 0, top: '50%', transform: 'translate(50%, -50%)' }}
       />
       <NodeResizeHandle
+        keepAspectRatio={Boolean(workbenchStageAspectRatio)}
         minWidth={resolvedMinWidth}
         minHeight={resolvedMinimumHeight}
         maxWidth={maxWidth}

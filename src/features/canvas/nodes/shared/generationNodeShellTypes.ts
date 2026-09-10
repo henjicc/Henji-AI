@@ -66,6 +66,8 @@ export interface GenerationNodeShellProps {
   workbenchMediaInput?: RowMediaKind
   /** 简单工具面板的紧凑宽度，工作面占据其余空间。 */
   workbenchInspectorWidth?: number
+  /** 主工作面保持源图比例；节点使用原生等比缩放，检查器承接其余宽度。 */
+  workbenchStageAspectRatio?: number
   minWidth?: number
   minHeight?: number
   maxWidth?: number
