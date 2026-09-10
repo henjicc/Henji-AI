@@ -18,6 +18,7 @@ import {
   type MultiAngleViewV1,
 } from '@/features/canvas/capabilities/multiAnglePolicy'
 import { MultiAngleOrbitScene } from './MultiAngleOrbitScene'
+import { useMultiAngleTransition } from './useMultiAngleTransition'
 import { multiAngleOrientation, type MultiAngleOrientation } from './multiAngleOrbitGeometry'
 import {
   continuousCameraFromDrag,
@@ -68,6 +69,10 @@ export function MultiAngleOrbitPreview({
   const visualViews = useMemo(() => transientView
     ? views.map((view) => view.viewId === transientView.viewId ? transientView : view)
     : views, [transientView, views])
+  const displayedPose = useMultiAngleTransition(
+    previewOrientation ?? (visualSelected ? multiAngleOrientation(visualSelected) : { azimuth: 0, elevation: 0 }),
+    selected?.kind === 'discrete' && !dragging,
+  )
 
   useEffect(() => {
     if (selected?.kind === 'continuous') {
@@ -124,7 +129,8 @@ export function MultiAngleOrbitPreview({
     event.stopPropagation()
     activePointerId.current = event.pointerId
     dragStage.current = { metrics: event.currentTarget.getBoundingClientRect(),
-      origin: { ...multiAngleOrientation(selected), clientX: event.clientX, clientY: event.clientY } }
+      origin: { ...displayedPose, clientX: event.clientX, clientY: event.clientY } }
+    if (selected.kind === 'discrete') setPreviewOrientation(displayedPose)
     event.currentTarget.setPointerCapture(event.pointerId)
     setDragging(true)
     if (selected.kind === 'continuous') {
@@ -281,7 +287,7 @@ export function MultiAngleOrbitPreview({
       onWheel={handleWheel}
     >
       <MultiAngleOrbitScene views={visualViews} selectedViewId={selectedViewId} sourceImage={sourceImage} sourceAlt={sourceAlt}
-        previewOrientation={previewOrientation} onDiscretePresetChange={onDiscretePresetChange} />
+        previewOrientation={displayedPose} onDiscretePresetChange={onDiscretePresetChange} />
     </div>
   )
 }

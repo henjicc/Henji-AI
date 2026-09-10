@@ -1,12 +1,12 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { MULTI_ANGLE_DISCRETE_VIEW_PRESETS, MULTI_ANGLE_CONTINUOUS_PRESETS, MULTI_ANGLE_FLUX_PRESETS } from '@/features/canvas/capabilities/multiAnglePolicy'
 import { MultiAngleOrbitPreview } from './MultiAngleOrbitPreview'
 
 afterEach(cleanup)
 describe('直接转动图片块', () => {
-  it.each(['discrete', 'continuous', 'flux'] as const)('%s 连续旋转图片，松手提交对应视角一次，取消恢复', kind => {
+  it.each(['discrete', 'continuous', 'flux'] as const)('%s 连续旋转图片，松手提交对应视角一次，取消恢复', async kind => {
     const selected = (kind === 'discrete' ? MULTI_ANGLE_DISCRETE_VIEW_PRESETS : kind === 'continuous' ? MULTI_ANGLE_CONTINUOUS_PRESETS : MULTI_ANGLE_FLUX_PRESETS)[0].view
     const onDiscrete = vi.fn(); const onContinuous = vi.fn(); const onFlux = vi.fn()
     const { container } = render(<MultiAngleOrbitPreview views={[selected]} selectedViewId={selected.viewId} sourceImage="photo.png"
@@ -32,7 +32,7 @@ describe('直接转动图片块', () => {
     if (kind === 'discrete') {
       expect(frontPoint?.getAttribute('x')).not.toBe(pointOrigin)
       expect(frontPoint?.getAttribute('visibility')).toBe('hidden')
-      expect(control.textContent).toBe('')
+      expect(container.querySelectorAll('[data-multi-angle-direction-label]')).toHaveLength(9)
     }
     expect(container.querySelector('img')).toBe(image)
     expect(callback).not.toHaveBeenCalled()
@@ -45,6 +45,6 @@ describe('直接转动图片块', () => {
     move(2)
     fireEvent.pointerCancel(control, { pointerId: 2 })
     expect(callback).toHaveBeenCalledTimes(1)
-    expect(orientation()).toBe(original)
+    await waitFor(() => expect(orientation()).toBe(original))
   })
 })

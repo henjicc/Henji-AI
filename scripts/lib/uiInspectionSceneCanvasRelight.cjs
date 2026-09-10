@@ -310,11 +310,29 @@ function attachUiInspectionCanvasRelight(context) {
     if (await slots.count() !== 1 || !(await slots.first().textContent()).includes('左侧面')) throw new Error('设置方位意外新增输出')
     await editor.getByRole('button', { name: '添加视图', exact: true }).click()
     if (await slots.count() !== 2 || await slots.nth(1).getAttribute('aria-pressed') !== 'true') throw new Error('新增视图未自动选中')
-    await editor.locator('[data-multi-angle-direction="three_quarter_right"]').click()
+    const waitForPose = async (attribute, expected) => page.waitForFunction(({ targetNodeId, attribute, expected }) =>
+      Number(document.querySelector(`[data-multi-angle-node-id="${targetNodeId}"] [data-multi-angle-image-block]`)?.getAttribute(attribute)) === expected,
+    { targetNodeId: nodeId, attribute, expected }, { timeout: 2000 })
+    await waitForPose('data-block-azimuth', 0)
+    const intermediateYaw = await editor.locator('[data-multi-angle-direction="three_quarter_right"]').evaluate(button => {
+      button.click()
+      return new Promise(resolve => {
+        let frames = 0
+        const sample = () => {
+          const yaw = Number(button.closest('[data-multi-angle-image-block]').getAttribute('data-block-azimuth'))
+          if (yaw !== 0 || ++frames >= 12) resolve(yaw)
+          else requestAnimationFrame(sample)
+        }
+        requestAnimationFrame(sample)
+      })
+    })
+    if (!(intermediateYaw > 0 && intermediateYaw < 45)) throw new Error(`方位切换没有连续过渡：${intermediateYaw}`)
+    await waitForPose('data-block-azimuth', 45)
     if (!(await slots.nth(0).textContent()).includes('左侧面') || !(await slots.nth(1).textContent()).includes('右三分之四')) throw new Error('导航点没有仅修改当前输出')
     await page.mouse.move(20, 120)
     await page.waitForTimeout(250)
-    if ((await editor.locator('[data-multi-angle-navigator]').textContent()).trim()) throw new Error('三维方位点不应显示常驻文字')
+    const labels = editor.locator('[data-multi-angle-direction-label]:visible')
+    if (await labels.count() < 3 || (await labels.allTextContents()).some(label => !label.trim())) throw new Error('可见方位点缺少名称')
     await writeFile('.ui-tour/canvas-multi-angle-direction-navigator.png', await captureInspectionPage(electronApp, page))
     const navigationTargets = await editor.locator('[data-multi-angle-direction]:visible').evaluateAll(elements => elements.map(element => {
       const box = element.getBoundingClientRect()
@@ -329,6 +347,7 @@ function attachUiInspectionCanvasRelight(context) {
     if (pointSurfaces.some(style => style.background !== 'rgba(0, 0, 0, 0)' || style.border !== '0px')) throw new Error('方位点仍有圆形按钮底或边框')
     await editor.getByRole('button', { name: '移除当前视图', exact: true }).click()
     await directions.getByRole('button', { name: '正面', exact: true }).click()
+    await waitForPose('data-block-azimuth', 0)
     for (const preset of ['back', 'top_down']) {
       const stage = await cameraControl.boundingBox()
       const block = editor.locator('[data-multi-angle-image-block]')
@@ -343,6 +362,7 @@ function attachUiInspectionCanvasRelight(context) {
       if (preset === 'back' && Math.abs(Number(await frontMarker.getAttribute('x')) - originalMarkerX) < 0.1) throw new Error('方位点没有随图片块旋转')
       await writeFile(`.ui-tour/canvas-multi-angle-rotate-${preset}.png`, await captureInspectionPage(electronApp, page))
       await page.mouse.up()
+      await waitForPose(preset === 'back' ? 'data-block-azimuth' : 'data-block-elevation', preset === 'back' ? 180 : 90)
       const snapped = Number(await block.getAttribute(preset === 'back' ? 'data-block-azimuth' : 'data-block-elevation'))
       if (snapped !== (preset === 'back' ? 180 : 90)) throw new Error('图片块松手未匹配正确视角')
       if (preset === 'back' && await frontMarker.getAttribute('visibility') !== 'hidden') throw new Error('背面视角没有遮挡正面方位点')
