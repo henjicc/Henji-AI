@@ -252,6 +252,25 @@ function attachUiInspectionCanvasRelight(context) {
 
     const editor = page.locator(`[data-multi-angle-node-id="${nodeId}"] [data-multi-angle-workbench="true"]`)
     await editor.waitFor({ state: 'visible', timeout: 12000 })
+    const verifyOptionConsistency = async () => {
+      const sizes = await editor.locator('[data-multi-angle-profile-options] button, [data-multi-angle-output-slots] button, [data-multi-angle-direction-options] button').evaluateAll(buttons => buttons.map(button => {
+        const style = getComputedStyle(button)
+        const label = getComputedStyle(button.querySelector('span') ?? button)
+        return {
+          text: button.textContent,
+          height: parseFloat(style.height),
+          typography: [label.fontSize, label.fontWeight, label.lineHeight].join('/'),
+          padding: [style.paddingTop, style.paddingRight, style.paddingBottom, style.paddingLeft].join('/'),
+          fits: button.scrollWidth <= button.clientWidth,
+        }
+      }))
+      const reference = sizes[0]
+      // Allow only sub-layout-pixel rounding from Electron zoom.
+      if (!reference || sizes.some(size => Math.abs(size.height - 38) > 0.01
+        || size.typography !== reference.typography || size.padding !== reference.padding || !size.fits)) {
+        throw new Error(`多角度同层级选项尺寸或排版不一致：${JSON.stringify(sizes)}`)
+      }
+    }
     const verifyInspectorLayout = async () => {
       if (await editor.getByText('源图', { exact: true }).count()) throw new Error('已连接图片时仍重复显示源图行')
       const layout = await editor.evaluate(element => {
@@ -268,6 +287,7 @@ function attachUiInspectionCanvasRelight(context) {
         }
       })
       if (layout.inspectorWidth < 0.39 || layout.inspectorWidth > 0.53 || !layout.titlesFit) throw new Error(`多角度参数区比例或标题布局异常：${JSON.stringify(layout)}`)
+      await verifyOptionConsistency()
     }
     await verifyInspectorLayout()
     const multiAngleNode = shell.locator('xpath=ancestor::*[contains(@class,"react-flow__node")][1]')
@@ -307,10 +327,8 @@ function attachUiInspectionCanvasRelight(context) {
     const profileOptions = editor.locator('[data-multi-angle-profile-options] button')
     const profileLabels = await profileOptions.allTextContents()
     if (JSON.stringify(profileLabels) !== JSON.stringify(['FLUX.2', 'Qwen 2511', '预设角度'])) throw new Error(`控制方式名称或顺序不符：${profileLabels}`)
-    const profileSizes = await profileOptions.evaluateAll(buttons => buttons.map(button => ({ height: parseFloat(getComputedStyle(button).height), fits: button.scrollWidth <= button.clientWidth })))
-    // Electron zoom can report 38 CSS px as 37.9977; allow only sub-layout-pixel rounding.
-    if (profileSizes.some(size => Math.abs(size.height - 38) > 0.01 || !size.fits)) throw new Error(`控制方式不是紧凑单行：${JSON.stringify(profileSizes)}`)
     await editor.getByRole('button', { name: '预设角度', exact: true }).click()
+    await verifyOptionConsistency()
     const slots = editor.locator('[data-multi-angle-output-slots] button')
     const directions = editor.locator('[data-multi-angle-direction-options]')
     await directions.getByRole('button', { name: '左侧面', exact: true }).click()
@@ -336,6 +354,7 @@ function attachUiInspectionCanvasRelight(context) {
     if (!(intermediateYaw > 0 && intermediateYaw < 45)) throw new Error(`方位切换没有连续过渡：${intermediateYaw}`)
     await waitForPose('data-block-azimuth', 45)
     if (!(await slots.nth(0).textContent()).includes('左侧面') || !(await slots.nth(1).textContent()).includes('右三分之四')) throw new Error('导航点没有仅修改当前输出')
+    await verifyOptionConsistency()
     await page.mouse.move(20, 120)
     await page.waitForTimeout(250)
     const labels = editor.locator('[data-multi-angle-direction-label]:visible')
@@ -441,6 +460,7 @@ function attachUiInspectionCanvasRelight(context) {
     await reopened.click()
     const reopenedEditor = page.locator(`[data-multi-angle-node-id="${nodeId}"] [data-multi-angle-workbench="true"]`)
     await reopenedEditor.waitFor({ state: 'visible', timeout: 12000 })
+    await verifyOptionConsistency()
     await reopenedEditor.locator('[data-block-texture="back"]').waitFor({ state: 'attached', timeout: 8000 })
     if (await reopenedEditor.locator('[data-block-texture="back"]').getAttribute('href') !== cachedBack
       || await page.evaluate(() => window.__multiAngleTextureEncodes) !== 0) throw new Error('重新加载工程未复用持久贴图缓存')

@@ -41,6 +41,9 @@ import {
   translateMultiAngleViewLabel,
 } from './multiAngleLocalization'
 
+// 同层级的三组选项共用尺寸，避免子元素字号与默认 padding 各自漂移。
+const OPTION_CLASS = `${UI_FIELD_CONTROL_HEIGHT_SM_CLASS} min-w-0 justify-center !px-2 !py-0 text-sm font-medium`
+
 function sourceImageFromState(state: Readonly<DynamicValueMap>): string | null {
   if (typeof state.sourceImageUrl === 'string' && state.sourceImageUrl.trim()) return state.sourceImageUrl
   const mediaInputs = state.mediaInputs && typeof state.mediaInputs === 'object'
@@ -219,28 +222,28 @@ export function MultiAngleWorkbench({
                 type="button"
                 variant="flat"
                 active={config.controlProfile === 'flux-native-v1'}
-                className={`${UI_FIELD_CONTROL_HEIGHT_SM_CLASS} min-w-0 justify-center !px-2 !py-0`}
+                className={OPTION_CLASS}
                 onClick={() => selectProfile('flux-native-v1')}
               >
-                <span className="whitespace-nowrap text-sm font-medium">{t('node.multiAngleEditor.profiles.flux.title')}</span>
+                <span className="whitespace-nowrap">{t('node.multiAngleEditor.profiles.flux.title')}</span>
               </UiOptionButton>
               <UiOptionButton
                 type="button"
                 variant="flat"
                 active={config.controlProfile === 'continuous-v1'}
-                className={`${UI_FIELD_CONTROL_HEIGHT_SM_CLASS} min-w-0 justify-center !px-2 !py-0`}
+                className={OPTION_CLASS}
                 onClick={() => selectProfile('continuous-v1')}
               >
-                <span className="whitespace-nowrap text-sm font-medium">{t('node.multiAngleEditor.profiles.continuous.title')}</span>
+                <span className="whitespace-nowrap">{t('node.multiAngleEditor.profiles.continuous.title')}</span>
               </UiOptionButton>
               <UiOptionButton
                 type="button"
                 variant="flat"
                 active={config.controlProfile === 'discrete-v1'}
-                className={`${UI_FIELD_CONTROL_HEIGHT_SM_CLASS} min-w-0 justify-center !px-2 !py-0`}
+                className={OPTION_CLASS}
                 onClick={() => selectProfile('discrete-v1')}
               >
-                <span className="whitespace-nowrap text-sm font-medium">{t('node.multiAngleEditor.profiles.discrete.title')}</span>
+                <span className="whitespace-nowrap">{t('node.multiAngleEditor.profiles.discrete.title')}</span>
               </UiOptionButton>
             </div>
           </section>
@@ -265,9 +268,11 @@ export function MultiAngleWorkbench({
                   variant="flat"
                   active={view.viewId === selected?.viewId}
                   aria-pressed={view.viewId === selected?.viewId}
+                  className={OPTION_CLASS}
+                  title={`${index + 1}. ${translateMultiAngleViewLabel(t, view, index)}`}
                   onClick={() => setSelectedViewId(view.viewId)}
                 >
-                  <span className="truncate text-xs">{index + 1}. {translateMultiAngleViewLabel(t, view, index)}</span>
+                  <span className="truncate">{index + 1}. {translateMultiAngleViewLabel(t, view, index)}</span>
                 </UiOptionButton>
               ))}
             </div>
@@ -300,10 +305,10 @@ export function MultiAngleWorkbench({
                       variant="flat"
                       active={active}
                       aria-pressed={active}
-                      className="justify-center px-1 text-xs"
+                      className={OPTION_CLASS}
                       onClick={() => chooseDiscretePreset(preset.view.preset)}
                     >
-                      {translateMultiAngleViewLabel(t, preset.view)}
+                      <span className="truncate">{translateMultiAngleViewLabel(t, preset.view)}</span>
                     </UiOptionButton>
                   )
                 })}
