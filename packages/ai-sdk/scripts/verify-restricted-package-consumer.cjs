@@ -124,7 +124,29 @@ function evaluate(context, artifact, globalName) {
 }
 
 async function verify() {
+  // Installed-package entry points must load without Node or text codecs.
+  // Execution is covered by the capability contract tests; this probes isolation.
   const packageId = installPackage()
+  for (const kind of ['embedding', 'rerank']) {
+    for (const provider of ['siliconflow', 'bailian', 'ppio', 'bigmodel', ...(kind === 'embedding' ? ['volcengine'] : [])]) {
+      const artifact = bundle(`${provider}${kind}`, `@henjicc/ai-sdk/capabilities/${kind}/${provider}`, 'Retrieval', ['/dist/llm/', '/dist/catalog/', '/dist/generation'])
+      const exports = evaluate(restrictedContext(), artifact, 'Retrieval')
+      const factory = Object.entries(exports).find(([name]) => name.startsWith('create'))?.[1]
+      if (typeof factory !== 'function') fail(`${provider}/${kind} 缺工厂导出`)
+      const module = factory(provider === 'bailian' ? { baseUrl: 'https://workspace.example' } : {})
+      const result = await module.execute(kind === 'embedding' ? { texts: ['test'] } : { query: 'q', documents: ['test'] }, {
+        requestId: 'restricted-retrieval', signal: new AbortController().signal, emit: async () => {},
+        runtime: {
+          credentials: { get: async () => 'fixture-key' },
+          transport: { fetch: async () => new Response(JSON.stringify(kind === 'embedding'
+            ? { data: provider === 'volcengine' ? { embedding: [1] } : [{ index: 0, embedding: [1] }] }
+            : provider === 'bailian' ? { output: { results: [{ index: 0, relevance_score: 1 }] } } : { results: [{ index: 0, relevance_score: 1 }] })) },
+          logger: { info() {}, warn() {}, error() {} }, tracer: { startSpan: () => ({ end() {} }) },
+        },
+      })
+      if (!(result.embeddings?.length === 1 || result.results?.length === 1)) fail(`${provider}/${kind} 受限宿主执行失败`)
+    }
+  }
   const gptImage25 = []
   for (const provider of ['apimart', 'kie', 'fal', 'grsai']) {
     const artifact = bundle(`Gpt25${provider}`, `@henjicc/ai-sdk/models/${provider}/gpt-image-2.5`, 'Gpt25', ['/dist/llm/', '/dist/capabilities/', '/dist/catalog/index.js'])

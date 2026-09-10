@@ -2,6 +2,8 @@
 
 ## 0.3.0 - 2026-09-11
 
+- 新增按需文本 Embedding/Rerank 能力：硅基流动、百炼、派欧云、智谱两类入口，以及火山方舟单条文本向量入口；统一向量索引、重排分数、用量与取消，通过宿主 transport/credentials 执行。火山 VikingDB 重排不在本轮范围。
+
 - 新增 GPT Image 2.5 的 APIMart、KIE、Fal、Grsai 模型及按需入口，默认生成目录从 105 扩展至 109；保留 GPT Image 2 及现有参数和入口。
 - DeepSeek 官方默认与唯一推荐模型更新为 `deepseek-flash`（V4.1 Flash），登记图片理解、1M 上下文和 384K 输出，默认使用 Responses；聚合渠道旧模型保持独立。
 - 根据供应商分别支持 Flare / Sunburst、官方 / Ext 渠道、1K–4K、质量、透明背景、多图和 Fal 遮罩编辑；不支持的组合在构建请求时明确拒绝。

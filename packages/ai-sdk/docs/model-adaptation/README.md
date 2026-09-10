@@ -20,6 +20,24 @@
 
 ## 一、目录结构约定
 
+### 文本 Embedding / Rerank（2026-09-11）
+
+SDK 使用独立 `capabilities/embedding/<provider>` 与 `capabilities/rerank/<provider>` 入口，显式注册到能力客户端和发现目录，不混入图片生成目录。
+
+| 供应商 | Embedding | Rerank | 协议资料 |
+|---|---|---|---|
+| 硅基流动 | Qwen3 8B/4B/0.6B、BGE-M3 | Qwen3 8B/4B/0.6B、BGE v2 M3 | [供应商资料](供应商/硅基流动.md) |
+| 百炼 | Qwen3.7、Qwen3.7 Flash、v4 | Qwen3.7、Qwen3、GTE v2 | [供应商资料](供应商/百炼.md) |
+| 派欧云 | BGE-M3 | BGE v2 M3 | [供应商资料](供应商/派欧云.md) |
+| 智谱 | embedding-3 | rerank | 见下方官方依据 |
+| 火山方舟 | Doubao Embedding Vision 251215（文本单条） | VikingDB 独立服务暂未适配 | [供应商资料](供应商/火山引擎.md) |
+
+智谱直接依据：[Embedding API](https://docs.bigmodel.cn/api-reference/模型-api/文本嵌入)、[Embedding-3 模型](https://docs.bigmodel.cn/cn/guide/models/embedding/embedding-3)、[Rerank API](https://docs.bigmodel.cn/api-reference/模型-api/文本重排序)、[公开价格](https://bigmodel.cn/pricing)。国内根地址 `https://open.bigmodel.cn`，Bearer。Embedding POST `/api/paas/v4/embeddings`，model=embedding-3，input 字符串数组，最多 64 条，dimensions=256/512/1024/2048；返回 data 数组的 index/embedding。字段表限制每条 3072 tokens，概述 8K 表述存在冲突，不用字符数猜 token 限制。Rerank POST `/api/paas/v4/rerank`，model=rerank，query/documents/top_n；最多 128 条，每条及 query 最多 4096 字符；返回 results 的 index/relevance_score。省略 top_n 返回全部；SDK 显式 topN 必须为正整数，超出候选数裁到候选数。文本从原输入索引回填。Embedding 公开价 0.5 元/百万 tokens，Rerank 搜索可见官方价格 0.8 元/百万 tokens，价格页运行时需要 JavaScript，实际账单以控制台为准。
+
+共同验证边界：非流式单次 HTTP；空结果、缺失/重复/越界索引、非数值向量/分数不当作成功。向量维度必须一致；显式要求维度必须匹配。HTTP 错误、JSON 错误、供应商 error/code、取消和超时均失败；不自动重试付费 POST，不记录原文或凭据。未做真实付费验证。
+
+其他现有供应商也进行了检索核对：[APIMart 官方 AnythingLLM 指南](https://docs.apimart.ai/cn/integrations/chat/anythingllm) 提及 text-embedding-3-small/large，但本轮未取到独立端点字段表与价格，保留待核验；[魔搭 API 推理介绍](https://modelscope.cn/docs/model-service/API-Inference/intro) 本次无法读取正文，模型仓库存在权重不等于托管 API 已开放。Groq、DeepSeek、Fal、KIE、Grsai 的公开入口搜索未获得足以适配这两类能力的完整契约，不据此断言平台不支持。
+
 ```
 docs/model-adaptation/
 ├── README.md                      # 本文件：总清单 + 索引

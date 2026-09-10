@@ -162,6 +162,61 @@
       "types": "./dist/discovery/index.d.ts",
       "import": "./dist/discovery/index.js",
       "default": "./dist/discovery/index.js"
+    },
+    "./capabilities/embedding": {
+      "types": "./dist/capabilities/embedding/index.d.ts",
+      "import": "./dist/capabilities/embedding/index.js",
+      "default": "./dist/capabilities/embedding/index.js"
+    },
+    "./capabilities/embedding/siliconflow": {
+      "types": "./dist/capabilities/embedding/siliconflow.d.ts",
+      "import": "./dist/capabilities/embedding/siliconflow.js",
+      "default": "./dist/capabilities/embedding/siliconflow.js"
+    },
+    "./capabilities/embedding/bailian": {
+      "types": "./dist/capabilities/embedding/bailian.d.ts",
+      "import": "./dist/capabilities/embedding/bailian.js",
+      "default": "./dist/capabilities/embedding/bailian.js"
+    },
+    "./capabilities/embedding/ppio": {
+      "types": "./dist/capabilities/embedding/ppio.d.ts",
+      "import": "./dist/capabilities/embedding/ppio.js",
+      "default": "./dist/capabilities/embedding/ppio.js"
+    },
+    "./capabilities/embedding/bigmodel": {
+      "types": "./dist/capabilities/embedding/bigmodel.d.ts",
+      "import": "./dist/capabilities/embedding/bigmodel.js",
+      "default": "./dist/capabilities/embedding/bigmodel.js"
+    },
+    "./capabilities/embedding/volcengine": {
+      "types": "./dist/capabilities/embedding/volcengine.d.ts",
+      "import": "./dist/capabilities/embedding/volcengine.js",
+      "default": "./dist/capabilities/embedding/volcengine.js"
+    },
+    "./capabilities/rerank": {
+      "types": "./dist/capabilities/rerank/index.d.ts",
+      "import": "./dist/capabilities/rerank/index.js",
+      "default": "./dist/capabilities/rerank/index.js"
+    },
+    "./capabilities/rerank/siliconflow": {
+      "types": "./dist/capabilities/rerank/siliconflow.d.ts",
+      "import": "./dist/capabilities/rerank/siliconflow.js",
+      "default": "./dist/capabilities/rerank/siliconflow.js"
+    },
+    "./capabilities/rerank/bailian": {
+      "types": "./dist/capabilities/rerank/bailian.d.ts",
+      "import": "./dist/capabilities/rerank/bailian.js",
+      "default": "./dist/capabilities/rerank/bailian.js"
+    },
+    "./capabilities/rerank/ppio": {
+      "types": "./dist/capabilities/rerank/ppio.d.ts",
+      "import": "./dist/capabilities/rerank/ppio.js",
+      "default": "./dist/capabilities/rerank/ppio.js"
+    },
+    "./capabilities/rerank/bigmodel": {
+      "types": "./dist/capabilities/rerank/bigmodel.d.ts",
+      "import": "./dist/capabilities/rerank/bigmodel.js",
+      "default": "./dist/capabilities/rerank/bigmodel.js"
     }
   },
   "files": [

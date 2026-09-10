@@ -6,7 +6,32 @@
 
 ## 5 分钟快速开始
 
-SDK `0.3.0` 公开发布在 npm，无需配置 registry 或访问令牌：
+### 文本向量与重排序
+
+通过 `capabilities/embedding/<provider>` 和 `capabilities/rerank/<provider>` 按需导入。硅基流动、百炼、派欧云和智谱支持两类能力；火山目前支持单条文本向量。模型清单与限制见 [检索适配资料](docs/model-adaptation/README.md#文本-embedding--rerank2026-09-11)。输入仅支持文本；不自动切块、重试或合并多次付费请求。
+
+```ts
+import { createCapabilityClient } from '@henjicc/ai-sdk/capabilities'
+import { createSiliconflowEmbeddingModule } from '@henjicc/ai-sdk/capabilities/embedding/siliconflow'
+import { createSiliconflowRerankModule } from '@henjicc/ai-sdk/capabilities/rerank/siliconflow'
+
+// runtime.credentials.get(scope, credentialId) 须支持 embedding / rerank，
+// 默认 credentialId 是供应商 ID（例如 siliconflow）。其余宿主能力见下文。
+const retrieval = createCapabilityClient({ runtime })
+try {
+  const embedding = retrieval.register(createSiliconflowEmbeddingModule())
+  const rerank = retrieval.register(createSiliconflowRerankModule())
+  const vectors = await embedding.execute({ texts: ['向量检索', '图片编辑'] })
+  const ranked = await rerank.execute({ query: '知识库搜索', documents: ['向量检索', '图片编辑'], topN: 1 })
+  // vectors.embeddings: { index, vector }[]；ranked.results: { index, score, document }[]
+} finally {
+  await retrieval.dispose()
+}
+```
+
+百炼工厂必须传 `baseUrl` 为实际地域/工作空间的 API 根地址，不包含端点路径。其他供应商可以覆盖根地址与 `credentialId`；SDK 不自动切换地域或账号。不同模型的向量不能混用；切换模型通常需要重建向量索引。Rerank 分数仅在本次请求内比较。
+
+SDK `0.3.0` 为当前源码的候选版本，完成发布门禁后从公共 npm 安装，无需配置 registry 或访问令牌（2026-09-11 核对，公共最新版本仍为 0.2.8，尚不含上述检索能力）：
 
 ```bash
 npm install @henjicc/ai-sdk@0.3.0

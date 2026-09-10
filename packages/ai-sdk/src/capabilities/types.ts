@@ -7,6 +7,8 @@ export type CapabilityKind =
   | 'chat'
   | 'speech-recognition'
   | 'translation'
+  | 'embedding'
+  | 'rerank'
   | ExtensibleString
 
 export type CapabilityContentKind =

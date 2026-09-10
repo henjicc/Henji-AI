@@ -41,6 +41,17 @@ describe('published package exports', () => {
       './capabilities/translation/bailian',
       './capabilities/realtime',
       './discovery',
+      './capabilities/embedding',
+      './capabilities/embedding/siliconflow',
+      './capabilities/embedding/bailian',
+      './capabilities/embedding/ppio',
+      './capabilities/embedding/bigmodel',
+      './capabilities/embedding/volcengine',
+      './capabilities/rerank',
+      './capabilities/rerank/siliconflow',
+      './capabilities/rerank/bailian',
+      './capabilities/rerank/ppio',
+      './capabilities/rerank/bigmodel',
     ])
     for (const conditions of Object.values(manifest.exports)) {
       expect(conditions).not.toHaveProperty('development')
