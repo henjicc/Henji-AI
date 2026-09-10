@@ -295,6 +295,7 @@ async function verify() {
       '@henjicc/ai-sdk/generation',
       '@henjicc/ai-sdk/generation/core',
       '@henjicc/ai-sdk/models/kie/z-image',
+      ...['apimart', 'kie', 'fal', 'grsai'].map(provider => `@henjicc/ai-sdk/models/${provider}/gpt-image-2.5`),
       '@henjicc/ai-sdk/provider-adapters/kie',
       '@henjicc/ai-sdk/provider-packs/kie',
       '@henjicc/ai-sdk/catalog',
