@@ -1,4 +1,4 @@
-import { multiAngleMarkerPosition, projectMultiAnglePoint } from './multiAngleOrbitGeometry'
+import { multiAngleOrientation } from './multiAngleOrbitGeometry'
 import { describe, expect, it } from 'vitest'
 
 import {
@@ -10,7 +10,8 @@ import {
   continuousCameraFromDrag,
   continuousCameraFromKey,
   describeMultiAngleCamera,
-  discretePresetFromPoint,
+  discretePresetForOrientation,
+  discreteOrientationFromDrag,
   fluxCameraFromDrag,
   fluxCameraFromKey,
   fluxZoomFromWheel,
@@ -23,16 +24,16 @@ describe('多角度镜头可视化状态', () => {
   it('拖动保留连续小数，只有松手才吸附常用角度或按 API 精度提交', () => {
     const origin = { clientX: 0, clientY: 0, yawControlDeg: 0, verticalControl: 0 }
     const preview = continuousCameraFromDrag(origin, 43.125, 1.23, { width: 180, height: 200 })
-    expect(preview.yawControlDeg).toBeCloseTo(-43.125)
-    expect(preview.verticalControl).toBeCloseTo(0.0123)
-    expect(snapContinuousCamera(preview)).toEqual({ yawControlDeg: -45, verticalControl: 0 })
-    expect(continuousCameraFromDrag(origin, 38, 0, { width: 180, height: 200 }).yawControlDeg).toBe(-38)
+    expect(preview.yawControlDeg).toBeCloseTo(43.125)
+    expect(preview.verticalControl).toBeCloseTo(-0.0123)
+    expect(snapContinuousCamera(preview)).toEqual({ yawControlDeg: 45, verticalControl: 0 })
+    expect(continuousCameraFromDrag(origin, 38, 0, { width: 180, height: 200 }).yawControlDeg).toBe(38)
     const flux = { clientX: 0, clientY: 0, horizontalAngleDeg: 0, verticalAngleDeg: 0 }
-    const fluxPreview = fluxCameraFromDrag(flux, 43.125, -14.25, { width: 360, height: 60 })
+    const fluxPreview = fluxCameraFromDrag(flux, -43.125, 14.25, { width: 360, height: 60 })
     expect(fluxPreview.horizontalAngleDeg).toBeCloseTo(43.125)
     expect(fluxPreview.verticalAngleDeg).toBeCloseTo(14.25)
     expect(snapFluxCamera(fluxPreview)).toEqual({ horizontalAngleDeg: 45, verticalAngleDeg: 15 })
-    expect(fluxCameraFromDrag(flux, 38, -10, { width: 360, height: 60 })).toEqual({ horizontalAngleDeg: 38, verticalAngleDeg: 10 })
+    expect(fluxCameraFromDrag(flux, -38, 10, { width: 360, height: 60 })).toEqual({ horizontalAngleDeg: 38, verticalAngleDeg: 10 })
   })
   it('将相对拖拽映射到模型真实水平和垂直控制量', () => {
     expect(continuousCameraFromDrag({
@@ -41,8 +42,8 @@ describe('多角度镜头可视化状态', () => {
       yawControlDeg: 0,
       verticalControl: 0,
     }, 150, 50, { width: 200, height: 200 })).toEqual({
-      yawControlDeg: -45,
-      verticalControl: -0.5,
+      yawControlDeg: 45,
+      verticalControl: 0.5,
     })
 
     expect(continuousCameraFromDrag({
@@ -50,9 +51,9 @@ describe('多角度镜头可视化状态', () => {
       clientY: 100,
       yawControlDeg: 80,
       verticalControl: 0.9,
-    }, 0, 300, { width: 200, height: 200 })).toEqual({
+    }, 300, 300, { width: 200, height: 200 })).toEqual({
       yawControlDeg: 90,
-      verticalControl: 1,
+      verticalControl: -1,
     })
   })
 
@@ -65,16 +66,16 @@ describe('多角度镜头可视化状态', () => {
     expect(proximityFromWheel(0, 10)).toBe(0)
   })
 
-  it('完整方位会吸附到离指针最近的模型预设', () => {
-    for (const [width, height] of [[200, 200], [400, 200], [200, 400]]) {
-      const size = Math.min(width, height)
-      const metrics = { left: 25, top: 30, width, height }
-      for (const { view } of MULTI_ANGLE_DISCRETE_VIEW_PRESETS) {
-        const p = projectMultiAnglePoint(multiAngleMarkerPosition(view))
-        expect(discretePresetFromPoint(25 + (width - size) / 2 + p.x * size / 100,
-          30 + (height - size) / 2 + p.y * size / 100, metrics)).toBe(view.preset)
-      }
+  it('完整方位在三维方向上找最近预设，跨越前后时连续旋转', () => {
+    for (const { view } of MULTI_ANGLE_DISCRETE_VIEW_PRESETS) {
+      const pose = multiAngleOrientation(view)
+      expect(discretePresetForOrientation(pose)).toBe(view.preset)
+      expect(discretePresetForOrientation({ ...pose, azimuth: pose.azimuth + 360 })).toBe(view.preset)
     }
+    const origin = { azimuth: 0, elevation: 0, clientX: 0, clientY: 0 }
+    const pose = discreteOrientationFromDrag(origin, 99.125, 0, { width: 200, height: 200 })
+    expect(pose.azimuth).toBeCloseTo(-178.425)
+    expect(discretePresetForOrientation(pose)).toBe('back')
   })
 
   it('用用户可理解的方位和景别描述连续参数', () => {
@@ -92,7 +93,7 @@ describe('多角度镜头可视化状态', () => {
       clientY: 100,
       horizontalAngleDeg: 0,
       verticalAngleDeg: 0,
-    }, 150, 50, { width: 200, height: 200 })).toEqual({
+    }, 50, 150, { width: 200, height: 200 })).toEqual({
       horizontalAngleDeg: 90,
       verticalAngleDeg: 15,
     })
@@ -101,8 +102,8 @@ describe('多角度镜头可视化状态', () => {
       clientY: 100,
       horizontalAngleDeg: 350,
       verticalAngleDeg: 55,
-    }, 300, -100, { width: 200, height: 200 })).toEqual({
-      horizontalAngleDeg: 360,
+    }, 300, 300, { width: 200, height: 200 })).toEqual({
+      horizontalAngleDeg: 350,
       verticalAngleDeg: 60,
     })
 

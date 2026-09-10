@@ -454,8 +454,8 @@
         "flux": "Horizontal {{horizontal}}° · Vertical {{vertical}}° · Zoom {{zoom}}"
       },
       "orbit": {
-        "ariaLabel": "Camera direction control",
-        "roleDescription": "Draggable camera orbit",
+        "ariaLabel": "Image viewpoint control",
+        "roleDescription": "Draggable image block rotation",
         "left": "Left",
         "right": "Right",
         "high": "High",

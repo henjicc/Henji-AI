@@ -1,5 +1,5 @@
 import { useMemo, useState, type ReactNode } from 'react'
-import { Aperture, Plus, Trash2 } from 'lucide-react'
+import { Plus, Trash2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
 import {
@@ -211,9 +211,6 @@ export function MultiAngleWorkbench({
               onDiscretePresetChange={chooseDiscretePreset}
               onFluxChange={patchFlux}
             />
-            <div className="pointer-events-none absolute bottom-3 left-3 right-3 z-sticky rounded-lg bg-overlay px-3 py-2 text-xs text-text-soft">
-              {t('node.multiAngleEditor.disclaimer')}
-            </div>
           </div>
         </div>
 
@@ -326,10 +323,6 @@ export function MultiAngleWorkbench({
             </section>
           )}
 
-          <div className="mt-5 flex items-start gap-2 rounded-lg bg-layer px-3 py-2 text-xs text-text-soft">
-            <Aperture className="mt-0.5 h-4 w-4 shrink-0" />
-            <span>{t('node.multiAngleEditor.profileNote', { max: MULTI_ANGLE_MAX_VIEW_COUNT })}</span>
-          </div>
         </div>
       </div>
   )

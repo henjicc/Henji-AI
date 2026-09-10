@@ -18,12 +18,12 @@ import {
   type MultiAngleViewV1,
 } from '@/features/canvas/capabilities/multiAnglePolicy'
 import { MultiAngleOrbitScene } from './MultiAngleOrbitScene'
-import { spatialPointAtPointer } from '../relightSpatialState'
-import { multiAngleMarkerPosition, projectMultiAnglePoint } from './multiAngleOrbitGeometry'
+import { multiAngleOrientation, type MultiAngleOrientation } from './multiAngleOrbitGeometry'
 import {
   continuousCameraFromDrag,
   continuousCameraFromKey,
-  discretePresetFromPoint,
+  discreteOrientationFromDrag,
+  discretePresetForOrientation,
   fluxCameraFromDrag,
   fluxCameraFromKey,
   fluxZoomFromWheel,
@@ -57,8 +57,8 @@ export function MultiAngleOrbitPreview({
   const selected = views.find((view) => view.viewId === selectedViewId) ?? views[0]
   const [dragging, setDragging] = useState(false)
   const [transientView, setTransientView] = useState<MultiAngleViewV1 | null>(null)
-  const [previewPosition, setPreviewPosition] = useState<[number, number, number] | null>(null)
-  const dragStage = useRef<{ metrics: MultiAngleStageMetrics; depth: number } | null>(null)
+  const [previewOrientation, setPreviewOrientation] = useState<MultiAngleOrientation | null>(null)
+  const dragStage = useRef<{ metrics: MultiAngleStageMetrics; origin: MultiAngleOrientation & { clientX: number; clientY: number } } | null>(null)
   const activePointerId = useRef<number | null>(null)
   const continuousDragOrigin = useRef<MultiAngleCameraDragOrigin | null>(null)
   const fluxDragOrigin = useRef<MultiAngleFluxCameraDragOrigin | null>(null)
@@ -107,13 +107,9 @@ export function MultiAngleOrbitPreview({
     if (!selected || selected.kind !== 'discrete') return
     const stage = dragStage.current
     if (!stage) return
-    const bounds = stage.metrics
-    const size = Math.max(Math.min(bounds.width, bounds.height), 1)
-    const x = (event.clientX - bounds.left - (bounds.width - size) / 2) / size * 100
-    const y = (event.clientY - bounds.top - (bounds.height - size) / 2) / size * 100
-    const point = spatialPointAtPointer(x, y, 'perspective', stage.depth, 1.55 * 0.59)
-    setPreviewPosition([point.x / 0.59, point.y / 0.59, point.z / 0.59])
-    const preset = discretePresetFromPoint(event.clientX, event.clientY, bounds)
+    const pose = discreteOrientationFromDrag(stage.origin, event.clientX, event.clientY, stage.metrics)
+    setPreviewOrientation(pose)
+    const preset = discretePresetForOrientation(pose)
     if (transientViewRef.current?.kind === 'discrete' && transientViewRef.current.preset === preset) return
     const definition = MULTI_ANGLE_DISCRETE_VIEW_PRESETS.find(item => item.view.preset === preset)
     if (!definition) return
@@ -128,7 +124,7 @@ export function MultiAngleOrbitPreview({
     event.stopPropagation()
     activePointerId.current = event.pointerId
     dragStage.current = { metrics: event.currentTarget.getBoundingClientRect(),
-      depth: -projectMultiAnglePoint(multiAngleMarkerPosition(selected)).depth }
+      origin: { ...multiAngleOrientation(selected), clientX: event.clientX, clientY: event.clientY } }
     event.currentTarget.setPointerCapture(event.pointerId)
     setDragging(true)
     if (selected.kind === 'continuous') {
@@ -149,7 +145,6 @@ export function MultiAngleOrbitPreview({
       }
       return
     }
-    emitDiscrete(event)
   }
 
   const handlePointerMove = (event: PointerEvent<HTMLDivElement>): void => {
@@ -190,7 +185,7 @@ export function MultiAngleOrbitPreview({
     continuousDragOrigin.current = null
     fluxDragOrigin.current = null
     dragStage.current = null
-    setPreviewPosition(null)
+    setPreviewOrientation(null)
     setDragging(false)
     const committed = transientViewRef.current
     transientViewRef.current = null
@@ -211,7 +206,7 @@ export function MultiAngleOrbitPreview({
     fluxDragOrigin.current = null
     transientViewRef.current = null
     dragStage.current = null
-    setPreviewPosition(null)
+    setPreviewOrientation(null)
     setTransientView(null)
     setDragging(false)
   }
@@ -264,7 +259,7 @@ export function MultiAngleOrbitPreview({
             Math.max(views.findIndex((view) => view.viewId === visualSelected.viewId), 0),
           )
         : t('node.multiAngleEditor.noSelection')}
-      data-multi-angle-orbit="demand"
+      data-multi-angle-orbit="image-block"
       data-multi-angle-camera-control="true"
       data-multi-angle-profile={visualSelected?.kind ?? 'none'}
       data-multi-angle-yaw={visualSelected?.kind === 'continuous' ? visualSelected.yawControlDeg : undefined}
@@ -286,16 +281,7 @@ export function MultiAngleOrbitPreview({
       onWheel={handleWheel}
     >
       <MultiAngleOrbitScene views={visualViews} selectedViewId={selectedViewId} sourceImage={sourceImage} sourceAlt={sourceAlt}
-        dragging={dragging} previewPosition={previewPosition} />
-
-      <div className="pointer-events-none absolute left-3 right-3 top-3 rounded-lg px-3 py-2">
-        <p className="truncate text-xs font-medium text-text">{visualSelected
-          ? describeLocalizedMultiAngleCamera(t, visualSelected, Math.max(views.findIndex(view => view.viewId === visualSelected.viewId), 0))
-          : t('node.multiAngleEditor.noSelection')}</p>
-        <p className="mt-0.5 text-3xs text-text-muted">{visualSelected?.kind === 'continuous'
-          ? t('node.multiAngleEditor.hints.continuous')
-          : visualSelected?.kind === 'flux' ? t('node.multiAngleEditor.hints.flux') : t('node.multiAngleEditor.hints.discrete')}</p>
-      </div>
+        previewOrientation={previewOrientation} />
     </div>
   )
 }

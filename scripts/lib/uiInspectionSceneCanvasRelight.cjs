@@ -254,9 +254,11 @@ function attachUiInspectionCanvasRelight(context) {
     const multiAngleNode = shell.locator('xpath=ancestor::*[contains(@class,"react-flow__node")][1]')
     await resizeCanvasNodeAndAssertHitBox(page, multiAngleNode, shell, '多角度节点')
     await verifyWorkbenchSelection(page, shell, sourceNode, editor, electronApp, 'multi-angle-initial')
-    await editor.locator('[data-multi-angle-orbit="demand"] svg').waitFor({ state: 'visible', timeout: 12000 })
+    await editor.locator('[data-multi-angle-image-block="true"]').waitFor({ state: 'visible', timeout: 12000 })
     if (await editor.locator('canvas').count() !== 0) throw new Error('多角度轨道不应为闲置节点分配 Canvas / GPU 上下文')
-    await editor.getByText(/不代表真实焦距/).waitFor({ state: 'visible', timeout: 8000 })
+    if (await editor.getByText(/不代表真实焦距/).count()) throw new Error('图片工作面仍显示旧轨道说明')
+    if (await editor.locator('[data-multi-angle-image-block] circle, [data-multi-angle-image-block] text, [data-multi-angle-image-block] path').count()) throw new Error('图片工作面仍有轨道或标记')
+    if (await editor.locator('[data-block-face]').count() !== 6) throw new Error('图片块缺少三维侧面')
     if (await editor.locator('textarea, [contenteditable="true"]').count()) throw new Error('角度编辑器不应显示提示词')
 
     const cameraControl = editor.locator('[data-multi-angle-camera-control="true"]')
@@ -265,7 +267,7 @@ function attachUiInspectionCanvasRelight(context) {
     const initialYaw = Number(await cameraControl.getAttribute('data-multi-angle-yaw'))
     await page.mouse.move(cameraBounds.x + cameraBounds.width / 2, cameraBounds.y + cameraBounds.height / 2)
     await page.mouse.down()
-    await page.mouse.move(cameraBounds.x + cameraBounds.width / 2 + 80, cameraBounds.y + cameraBounds.height / 2 - 60, { steps: 8 })
+    await page.mouse.move(cameraBounds.x + cameraBounds.width * 0.4, cameraBounds.y + cameraBounds.height * 0.6, { steps: 8 })
     await page.mouse.up()
     const draggedCamera = await cameraControl.evaluate((element) => ({
       yaw: Number(element.getAttribute('data-multi-angle-yaw')),
@@ -275,22 +277,22 @@ function attachUiInspectionCanvasRelight(context) {
       throw new Error(`多角度镜头拖拽未同步模型控制量：${JSON.stringify(draggedCamera)}`)
     }
 
+    await writeFile('.ui-tour/canvas-multi-angle-image-block.png', await captureInspectionPage(electronApp, page))
     await editor.getByRole('button', { name: /完整方位/ }).click()
     for (const preset of ['back', 'top_down']) {
-      const stop = await editor.locator(`[data-camera-stop="${preset}"] circle`).boundingBox()
       const stage = await cameraControl.boundingBox()
-      await page.mouse.move(stage.x + stage.width / 2, stage.y + stage.height / 2)
+      const block = editor.locator('[data-multi-angle-image-block]')
+      const start = { x: stage.x + stage.width * 0.25, y: stage.y + stage.height * 0.25 }
+      await page.mouse.move(start.x, start.y)
       await page.mouse.down()
-      const pointer = { x: stop.x + stop.width / 2 + 5, y: stop.y + stop.height / 2 + 5 }
-      await page.mouse.move(pointer.x, pointer.y, { steps: 10 })
-      if (await editor.locator(`[data-camera-stop="${preset}"][data-snap-active="true"]`).count() !== 1) throw new Error('镜头落点没有高亮')
-      const marker = editor.locator('[data-camera-selected="true"] circle')
-      const preview = await marker.boundingBox()
-      if (Math.abs(preview.x + preview.width / 2 - pointer.x) > 1 || Math.abs(preview.y + preview.height / 2 - pointer.y) > 1) throw new Error('镜头拖动没有连续跟随指针')
-      await writeFile(`.ui-tour/canvas-multi-angle-snap-${preset}.png`, await captureInspectionPage(electronApp, page))
+      await page.mouse.move(start.x + (preset === 'back' ? stage.width * 0.49 : 0), start.y + (preset === 'top_down' ? stage.height * 0.49 : 0), { steps: 12 })
+      const value = Number(await block.getAttribute(preset === 'back' ? 'data-block-azimuth' : 'data-block-elevation'))
+      if (Math.abs(value - (preset === 'back' ? -176.4 : 88.2)) > 0.1) throw new Error('图片块拖动时提前吸附或角度不跟手')
+      await writeFile(`.ui-tour/canvas-multi-angle-rotate-${preset}.png`, await captureInspectionPage(electronApp, page))
       await page.mouse.up()
-      const snapped = await marker.boundingBox()
-      if (Math.abs(snapped.x + snapped.width / 2 - stop.x - stop.width / 2) > 1 || Math.abs(snapped.y + snapped.height / 2 - stop.y - stop.height / 2) > 1) throw new Error('镜头松手没有吸附到高亮落点')
+      const snapped = Number(await block.getAttribute(preset === 'back' ? 'data-block-azimuth' : 'data-block-elevation'))
+      if (snapped !== (preset === 'back' ? 180 : 90)) throw new Error('图片块松手未匹配正确视角')
+      if (await editor.locator(`[data-block-face="${preset === 'back' ? 'back' : 'top'}"][visibility="visible"]`).count() !== 1) throw new Error('图片块可见面与视角不一致')
     }
     await page.locator(`[data-multi-angle-node-id="${nodeId}"][data-multi-angle-profile="discrete-v1"]`)
       .waitFor({ state: 'visible', timeout: 8000 })

@@ -1,57 +1,58 @@
 import type { MultiAngleViewV1, MultiAngleDiscretePreset } from '@/features/canvas/capabilities/multiAnglePolicy'
-import { projectSpatialPoint, spatialOrbitPaths } from '../relightSpatialState'
 
+export interface MultiAngleOrientation { azimuth: number; elevation: number }
 type Point3 = readonly [number, number, number]
 
-/** Lighting and orbit share a camera: image front is +Z, rear is -Z. */
-export function projectMultiAnglePoint(point: Point3): { x: number; y: number; scale: number; depth: number } {
-  const p = projectSpatialPoint({ x: point[0] * 0.59, y: point[1] * 0.59, z: point[2] * 0.59 }, 'perspective')
-  return { x: p.x, y: p.y, scale: 24 * (1 + p.z * 0.15), depth: -p.z }
+const PRESET_ORIENTATIONS: Record<MultiAngleDiscretePreset, MultiAngleOrientation> = {
+  front: { azimuth: 0, elevation: 0 }, left_side: { azimuth: -90, elevation: 0 },
+  right_side: { azimuth: 90, elevation: 0 }, back: { azimuth: 180, elevation: 0 },
+  top_down: { azimuth: 0, elevation: 90 }, bottom_up: { azimuth: 0, elevation: -90 },
+  birds_eye: { azimuth: -30, elevation: 60 },
+  three_quarter_left: { azimuth: -45, elevation: 0 }, three_quarter_right: { azimuth: 45, elevation: 0 },
 }
 
-function orbitPath(radius: number, vertical: boolean): { front: string; back: string } {
-  return spatialOrbitPaths(Array.from({ length: 97 }, (_, index) => {
-    const angle = index * Math.PI / 48
-    return vertical ? { x: 0, y: Math.sin(angle) * radius, z: Math.cos(angle) * radius }
-      : { x: Math.cos(angle) * radius, y: 0, z: Math.sin(angle) * radius }
-  }), point => {
-    const p = projectMultiAnglePoint([point.x, point.y, point.z])
-    return { x: p.x, y: p.y, z: -p.depth }
-  })
+/** Camera direction in source-image space: +Z is the source front, +Y is above. */
+export function multiAngleOrientation(view: MultiAngleViewV1): MultiAngleOrientation {
+  if (view.kind === 'continuous') return { azimuth: -view.yawControlDeg, elevation: -view.verticalControl * 45 }
+  if (view.kind === 'flux') return { azimuth: view.horizontalAngleDeg, elevation: view.verticalAngleDeg }
+  return PRESET_ORIENTATIONS[view.preset]
 }
 
-export const MULTI_ANGLE_ORBIT_PATHS = [orbitPath(1.55, false), orbitPath(1.2, true)]
+export function orientationVector(pose: MultiAngleOrientation): Point3 {
+  const yaw = pose.azimuth * Math.PI / 180; const pitch = pose.elevation * Math.PI / 180
+  return [Math.sin(yaw) * Math.cos(pitch), Math.sin(pitch), Math.cos(yaw) * Math.cos(pitch)]
+}
 
-export function multiAngleMarkerPosition(view: MultiAngleViewV1): [number, number, number] {
-  if (view.kind === 'continuous') {
-    const yaw = (view.yawControlDeg / 180) * Math.PI
-    const radius = 1.62 - view.proximity * 0.052
-    return [
-      -Math.sin(yaw) * radius,
-      -view.verticalControl * 0.95,
-      Math.cos(yaw) * radius,
-    ]
-  }
-  if (view.kind === 'flux') {
-    const horizontal = (view.horizontalAngleDeg / 180) * Math.PI
-    const vertical = (view.verticalAngleDeg / 180) * Math.PI
-    const radius = 1.62 - view.zoom * 0.052
-    return [
-      Math.sin(horizontal) * Math.cos(vertical) * radius,
-      Math.sin(vertical) * radius,
-      Math.cos(horizontal) * Math.cos(vertical) * radius,
-    ]
-  }
-  const positions: Record<MultiAngleDiscretePreset, [number, number, number]> = {
-    front: [0, 0, 1.55],
-    left_side: [-1.55, 0, 0],
-    right_side: [1.55, 0, 0],
-    back: [0, 0, -1.55],
-    top_down: [0, 1.4, 0],
-    bottom_up: [0, -1.4, 0],
-    birds_eye: [-0.5, 1.25, 0.85],
-    three_quarter_left: [-1.08, 0, 1.08],
-    three_quarter_right: [1.08, 0, 1.08],
-  }
-  return positions[view.preset]
+/** Inverse camera rotation makes the visible image-block face match the requested view. */
+export function rotateImageBlock(point: Point3, pose: MultiAngleOrientation): Point3 {
+  const yaw = pose.azimuth * Math.PI / 180; const pitch = pose.elevation * Math.PI / 180
+  const x = Math.cos(yaw) * point[0] - Math.sin(yaw) * point[2]
+  const z = Math.sin(yaw) * point[0] + Math.cos(yaw) * point[2]
+  return [x, Math.cos(pitch) * point[1] - Math.sin(pitch) * z,
+    Math.sin(pitch) * point[1] + Math.cos(pitch) * z]
+}
+
+export function imageBlockGeometry(aspect: number, pose: MultiAngleOrientation, zoom = 5) {
+  const ratio = Number.isFinite(aspect) && aspect > 0 ? aspect : 1
+  const extent = 64 + Math.max(0, Math.min(10, zoom)) * 0.8
+  const width = Math.min(extent, extent * ratio); const height = Math.min(extent, extent / ratio)
+  const depth = Math.min(width, height) * 0.5
+  const x = width / 2; const y = height / 2; const z = depth / 2
+  const project = (p: Point3): Point3 => { const r = rotateImageBlock(p, pose); return [50 + r[0], 50 - r[1], r[2]] }
+  const definitions: { name: string; normal: Point3; corners: Point3[] }[] = [
+    { name: 'front', normal: [0, 0, 1], corners: [[-x, y, z], [x, y, z], [x, -y, z], [-x, -y, z]] },
+    { name: 'back', normal: [0, 0, -1], corners: [[x, y, -z], [-x, y, -z], [-x, -y, -z], [x, -y, -z]] },
+    { name: 'left', normal: [-1, 0, 0], corners: [[-x, y, -z], [-x, y, z], [-x, -y, z], [-x, -y, -z]] },
+    { name: 'right', normal: [1, 0, 0], corners: [[x, y, z], [x, y, -z], [x, -y, -z], [x, -y, z]] },
+    { name: 'top', normal: [0, 1, 0], corners: [[-x, y, -z], [x, y, -z], [x, y, z], [-x, y, z]] },
+    { name: 'bottom', normal: [0, -1, 0], corners: [[-x, -y, z], [x, -y, z], [x, -y, -z], [-x, -y, -z]] },
+  ]
+  const faces = definitions.map(face => {
+    const points = face.corners.map(project)
+    return { name: face.name, visible: rotateImageBlock(face.normal, pose)[2] > 0.00001,
+      depth: points.reduce((sum, p) => sum + p[2], 0) / 4,
+      points: points.map(p => `${p[0]},${p[1]}`).join(' ') }
+  }).sort((a, b) => a.depth - b.depth)
+  const origin = project([-x, y, z]); const right = project([x, y, z]); const bottom = project([-x, -y, z])
+  return { width, height, faces, matrix: `matrix(${(right[0] - origin[0]) / width} ${(right[1] - origin[1]) / width} ${(bottom[0] - origin[0]) / height} ${(bottom[1] - origin[1]) / height} ${origin[0]} ${origin[1]})` }
 }

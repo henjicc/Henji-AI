@@ -5,7 +5,7 @@ import {
   type MultiAngleFluxViewV1,
   type MultiAngleViewV1,
 } from '@/features/canvas/capabilities/multiAnglePolicy'
-import { multiAngleMarkerPosition, projectMultiAnglePoint } from './multiAngleOrbitGeometry'
+import { multiAngleOrientation, orientationVector, type MultiAngleOrientation } from './multiAngleOrbitGeometry'
 
 export interface MultiAngleCameraDragOrigin {
   clientX: number
@@ -64,9 +64,9 @@ export function continuousCameraFromDrag(
   const width = Math.max(metrics.width, 1)
   const height = Math.max(metrics.height, 1)
   return {
-    // 模型的正向水平控制对应镜头向画面左侧环绕。
-    yawControlDeg: clamp(origin.yawControlDeg - ((clientX - origin.clientX) / width) * 180, YAW_MIN, YAW_MAX),
-    verticalControl: clamp(origin.verticalControl + ((clientY - origin.clientY) / height) * 2, VERTICAL_MIN, VERTICAL_MAX),
+    // 直接转动图片块：向右拖露出左侧，向下拖露出顶部。
+    yawControlDeg: clamp(origin.yawControlDeg + ((clientX - origin.clientX) / width) * 180, YAW_MIN, YAW_MAX),
+    verticalControl: clamp(origin.verticalControl - ((clientY - origin.clientY) / height) * 2, VERTICAL_MIN, VERTICAL_MAX),
   }
 }
 
@@ -86,12 +86,12 @@ export function fluxCameraFromDrag(
   const height = Math.max(metrics.height, 1)
   return {
     horizontalAngleDeg: clamp(
-      origin.horizontalAngleDeg + ((clientX - origin.clientX) / width) * 360,
+      ((origin.horizontalAngleDeg - ((clientX - origin.clientX) / width) * 360) % 360 + 360) % 360,
       FLUX_HORIZONTAL_MIN,
       FLUX_HORIZONTAL_MAX,
     ),
     verticalAngleDeg: clamp(
-      origin.verticalAngleDeg - ((clientY - origin.clientY) / height) * 60,
+      origin.verticalAngleDeg + ((clientY - origin.clientY) / height) * 60,
       FLUX_VERTICAL_MIN,
       FLUX_VERTICAL_MAX,
     ),
@@ -151,25 +151,19 @@ export function fluxCameraFromKey(
   return null
 }
 
-export function discretePresetFromPoint(
-  clientX: number,
-  clientY: number,
-  metrics: MultiAngleStageMetrics,
-): MultiAngleDiscretePreset {
-  const size = Math.max(Math.min(metrics.width, metrics.height), 1)
-  const point = {
-    x: (clientX - metrics.left - (metrics.width - size) / 2) / size * 100,
-    y: (clientY - metrics.top - (metrics.height - size) / 2) / size * 100,
-  }
+export function discreteOrientationFromDrag(origin: MultiAngleOrientation & { clientX: number; clientY: number }, clientX: number, clientY: number, metrics: Pick<MultiAngleStageMetrics, 'width' | 'height'>): MultiAngleOrientation {
+  return { azimuth: origin.azimuth - (clientX - origin.clientX) / Math.max(metrics.width, 1) * 360,
+    elevation: clamp(origin.elevation + (clientY - origin.clientY) / Math.max(metrics.height, 1) * 180, -90, 90) }
+}
+
+export function discretePresetForOrientation(pose: MultiAngleOrientation): MultiAngleDiscretePreset {
+  const vector = orientationVector(pose)
   let closest = MULTI_ANGLE_DISCRETE_VIEW_PRESETS[0]
-  let closestDistance = Number.POSITIVE_INFINITY
+  let score = -Infinity
   for (const preset of MULTI_ANGLE_DISCRETE_VIEW_PRESETS) {
-    const stop = projectMultiAnglePoint(multiAngleMarkerPosition(preset.view))
-    const distance = Math.hypot(point.x - stop.x, point.y - stop.y)
-    if (distance < closestDistance) {
-      closest = preset
-      closestDistance = distance
-    }
+    const target = orientationVector(multiAngleOrientation(preset.view))
+    const dot = vector[0] * target[0] + vector[1] * target[1] + vector[2] * target[2]
+    if (dot > score) { closest = preset; score = dot }
   }
   return closest.view.preset
 }

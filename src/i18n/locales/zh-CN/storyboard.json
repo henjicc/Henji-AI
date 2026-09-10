@@ -454,8 +454,8 @@
         "flux": "水平 {{horizontal}}° · 垂直 {{vertical}}° · Zoom {{zoom}}"
       },
       "orbit": {
-        "ariaLabel": "镜头方位控制",
-        "roleDescription": "可拖拽镜头轨道",
+        "ariaLabel": "图片视角控制",
+        "roleDescription": "可拖拽旋转的图片块",
         "left": "左",
         "right": "右",
         "high": "高位",
