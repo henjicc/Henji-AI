@@ -76,7 +76,7 @@ const expectedToolModelPacks = new Set([
   'qwen-image-edit-2511-multiple-angles.ts',
   'relighting.ts',
 ])
-if (modelFiles.length !== 105 || generatedModelPacks.length !== 105) {
+if (modelFiles.length !== 109 || generatedModelPacks.length !== 109) {
   fail(`单模型导出不完整：catalog=${modelFiles.length}, packs=${generatedModelPacks.length}`)
 }
 if (generatedProviderAdapters.length !== providerDirectories.length || generatedProviderPacks.length !== providerDirectories.length) {
@@ -158,7 +158,7 @@ const kiePack = bundle('KieProviderPack', [
 ].join('\n'), (inputs) => {
   const models = inputs.filter((input) => modelPattern.test(`/${input}`))
   const providers = inputs.filter((input) => providerPattern.test(`/${input}`))
-  if (models.length !== 27 || models.some((input) => !input.includes('/catalog/kie/'))) {
+  if (models.length !== 28 || models.some((input) => !input.includes('/catalog/kie/'))) {
     fail(`KIE provider pack 模型图异常：count=${models.length}`)
   }
   if (providers.length !== 1 || !providers[0].endsWith('/providers/kie.ts')) {
@@ -282,8 +282,8 @@ const defaultGeneration = bundle('DefaultGeneration', [
 ].join('\n'), (inputs) => {
   const models = inputs.filter((input) => modelPattern.test(`/${input}`))
   const tools = inputs.filter((input) => anyToolModelPattern.test(`/${input}`))
-  if (models.length !== 105 || tools.length !== 0) {
-    fail(`默认generation目录不再严格105或误入工具：models=${models.length}, tools=${tools.length}`)
+  if (models.length !== 109 || tools.length !== 0) {
+    fail(`默认generation目录不再严格109或误入工具：models=${models.length}, tools=${tools.length}`)
   }
 })
 

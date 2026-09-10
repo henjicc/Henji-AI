@@ -72,7 +72,7 @@ function collectCatalogConditions(): Array<{
 }
 
 describe('catalog consumer contract', () => {
-  it('锁定真实 105 catalog 的 RuntimeParamDef type、数量与实际字段集合', () => {
+  it('锁定真实 109 catalog 的 RuntimeParamDef type、数量与实际字段集合', () => {
     const rows = new Map<string, { count: number; fields: Set<string> }>()
     for (const model of catalog) {
       for (const param of model.params) {
@@ -92,7 +92,7 @@ describe('catalog consumer contract', () => {
         fields: ['default', 'id', 'order', 'type', 'valueType'],
       },
       dropdown: {
-        count: 298,
+        count: 317,
         fields: ['apiField', 'default', 'id', 'options', 'order', 'required', 'transferKey', 'type', 'valueType', 'visible'],
       },
       'file-upload': {
@@ -100,15 +100,15 @@ describe('catalog consumer contract', () => {
         fields: ['accept', 'default', 'id', 'maxCount', 'maxSize', 'order', 'type', 'valueType'],
       },
       'image-upload': {
-        count: 5,
+        count: 6,
         fields: ['accept', 'default', 'format', 'id', 'maxCount', 'maxSize', 'order', 'type', 'valueType', 'visible'],
       },
       number: {
-        count: 83,
+        count: 85,
         fields: ['apiField', 'default', 'id', 'max', 'min', 'order', 'step', 'transferKey', 'type', 'valueType', 'visible'],
       },
       switch: {
-        count: 92,
+        count: 93,
         fields: ['apiField', 'default', 'id', 'order', 'transferKey', 'type', 'valueType', 'visible'],
       },
       text: {
@@ -122,12 +122,12 @@ describe('catalog consumer contract', () => {
     })
   })
 
-  it('client.catalog 的 6 个公开查询函数直接消费真实 105 catalog', () => {
+  it('client.catalog 的 6 个公开查询函数直接消费真实 109 catalog', () => {
     const client = createAIClient({ runtime })
     try {
-      expect(client.catalog.listByType('image')).toHaveLength(55)
+      expect(client.catalog.listByType('image')).toHaveLength(59)
       expect(client.catalog.listByType('video')).toHaveLength(49)
-      expect(client.catalog.listByProvider('fal')).toHaveLength(37)
+      expect(client.catalog.listByProvider('fal')).toHaveLength(38)
       expect(client.catalog.listByProvider('volcengine')).toHaveLength(2)
       expect(client.catalog.listByTag('voice-cloning').map((model) => model.meta.id))
         .toEqual(['ppio-minimax-speech'])
@@ -150,14 +150,14 @@ describe('catalog consumer contract', () => {
     }
   })
 
-  it('编译并执行真实 catalog 的全部 159 条显隐/inputLimits/requirement 条件', () => {
+  it('编译并执行真实 catalog 的全部 170 条显隐/inputLimits/requirement 条件', () => {
     const conditions = collectCatalogConditions()
     const stringConditions = conditions.filter((item) => typeof item.condition === 'string')
     const functionConditions = conditions.filter((item) => typeof item.condition === 'function')
 
-    expect(conditions).toHaveLength(164)
+    expect(conditions).toHaveLength(170)
     expect(stringConditions).toHaveLength(119)
-    expect(functionConditions).toHaveLength(45)
+    expect(functionConditions).toHaveLength(51)
 
     for (const { modelId, condition } of conditions) {
       if (typeof condition === 'string') expect(() => compileRuntimeCondition(condition)).not.toThrow()

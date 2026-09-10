@@ -20,8 +20,8 @@ const optionalFalTools = [
 const generationModels = [...catalog, ...optionalFalTools]
 
 describe('统一模型能力画像与筛选', () => {
-  it('105默认+12可选generation逐项派生合法画像', () => {
-    expect(catalog).toHaveLength(105)
+  it('109默认+12可选generation逐项派生合法画像', () => {
+    expect(catalog).toHaveLength(109)
     expect(falErasePack.models).toHaveLength(3)
     expect(falImageUtilityPack.models).toHaveLength(6)
     expect(falMultiAnglePack.models).toHaveLength(3)

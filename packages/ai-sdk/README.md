@@ -1,15 +1,15 @@
 # @henjicc/ai-sdk
 
-痕迹AI 的多供应商模型 SDK：内含 8 个生成供应商、105 个图片/视频/音频模型，以及
-7 家 LLM 供应商预设（加上派欧云聚合入口共 8 个预设项）和 15 个按需 ASR 模型。另有 12 个 FAL 图片工具使用独立按需入口，不进入默认 105 模型目录。预制 LLM 会按供应商与具体模型自动选择 Responses API 或 Chat Completions，宿主不需要暴露逐模型协议设置。SDK 负责目录、请求构建、媒体预处理、
+痕迹AI 的多供应商模型 SDK：内含 8 个生成供应商、109 个图片/视频/音频模型，以及
+7 家 LLM 供应商预设（加上派欧云聚合入口共 8 个预设项）和 15 个按需 ASR 模型。另有 12 个 FAL 图片工具使用独立按需入口，不进入默认 109 模型目录。预制 LLM 会按供应商与具体模型自动选择 Responses API 或 Chat Completions，宿主不需要暴露逐模型协议设置。SDK 负责目录、请求构建、媒体预处理、
 供应商调用、轮询、SSE 与错误归一化；宿主只需注入网络、凭据、媒体读取和日志。
 
 ## 5 分钟快速开始
 
-SDK `0.2.8` 公开发布在 npm，无需配置 registry 或访问令牌：
+SDK `0.3.0` 公开发布在 npm，无需配置 registry 或访问令牌：
 
 ```bash
-npm install @henjicc/ai-sdk@0.2.8
+npm install @henjicc/ai-sdk@0.3.0
 ```
 
 然后提供 4 个宿主能力（`Transport` / `CredentialStore` / `MediaReader` / `Logger`），创建客户端：
@@ -106,11 +106,11 @@ LLM 预设默认使用 SDK 维护的官方地址，并按具体模型选择 Chat
 SDK 源码不得依赖 `@/`、`node:`、Electron、`import.meta.glob`、`eval`/`new Function`/`node:vm`；
 `npm run check:sdk` 会守住这些边界。Photoshop/受限宿主只做生成时应从
 `@henjicc/ai-sdk/generation` 导入 `createGenerationClient`；该入口不静态带入 LLM、Vercel AI SDK、
-Node 内置模块或 Fal 官方客户端，发布门禁会把它打成 IIFE 并在无网络生命周期中核对 105 个模型。
+Node 内置模块或 Fal 官方客户端，发布门禁会把它打成 IIFE 并在无网络生命周期中核对 109 个模型。
 
 ## 按需装配生成模型
 
-`@henjicc/ai-sdk/generation` 是兼容入口，默认始终装入 105 个模型。真正需要缩小 Photoshop/Tauri
+`@henjicc/ai-sdk/generation` 是兼容入口，默认始终装入 109 个模型。真正需要缩小 Photoshop/Tauri
 包体时，从不含任何内置 catalog/provider 的 `generation/core` 创建模块化客户端，并只导入完整 pack：
 
 ```ts
@@ -123,12 +123,12 @@ console.log(client.catalog.list().map((model) => model.meta.id)) // ['kie-z-imag
 
 完整单模型 pack 同时携带该模型的唯一真实 schema、provider adapter 与 provider-scoped 媒体预处理/
 上传策略；宿主不需要知道内部上传模块。`@henjicc/ai-sdk/provider-packs/kie` 可一次装入 KIE 的全部
-27 个模型；`provider-adapters/kie` 只装入 KIE 执行与上传策略、不装任何模型。所有 105 个单模型路径和
+28 个模型；`provider-adapters/kie` 只装入 KIE 执行与上传策略、不装任何模型。所有 109 个单模型路径和
 8 个供应商路径由 catalog 生成器自动产出并由 bundle 门禁穷举，新增模型不会靠手工维护 exports。
 
 每个 `models/<provider>/<model>` 子路径也导出名为 `model` 的低层定义，供目录分析或高级自定义组合；
 直接传裸 `model` 而不传同文件的 `pack` 不保证媒体上传或供应商执行完整，普通宿主应使用 `pack`。
-包根 `createAIClient` 仍默认 105 模型；若确实需要根 client 的 chat 与按需生成共存，可显式传：
+包根 `createAIClient` 仍默认 109 模型；若确实需要根 client 的 chat 与按需生成共存，可显式传：
 
 ```ts
 const client = createAIClient({
@@ -161,7 +161,7 @@ cancelLlmChatTask('chat-1')
 
 ### 可选模型分发包与统一能力筛选
 
-当前 12 个 FAL 图片工具不会混入默认 105 模型。宿主可选择单个完整工具模型 pack，也可按用户任务装入三个聚合包：
+当前 12 个 FAL 图片工具不会混入默认 109 模型。宿主可选择单个完整工具模型 pack，也可按用户任务装入三个聚合包：
 
 - `tool-packs/fal-image-edit-tools`：3 个消除工具。
 - `tool-packs/fal-image-utility-tools`：6 个重打光、暗光增强、扩图、商品摄影、照片修复和背景移除工具。
@@ -196,9 +196,9 @@ console.log(utilities.map((item) => item.id))
 - 图片实用工具：`tool-models/fal/relighting`、`tool-models/fal/control-light`、`tool-models/fal/outpaint`、`tool-models/fal/product-photography`、`tool-models/fal/photo-restoration`、`tool-models/fal/pixelcut-background-removal`。
 - 多角度：`tool-models/fal/qwen-image-edit-2511-multiple-angles`、`tool-models/fal/perspective-change`、`tool-models/fal/flux-2-multiple-angles`。
 
-每个单模型入口只导出 `model`、`provider` 与完整 `pack`。三个聚合包只携带各自 3 / 6 / 3 个工具模型、Fal adapter 和 Fal CDN 上传，不携带其余 105 模型或 LLM。能力筛选与分发是两层：`search()` 只过滤已经导入的候选，不会让已经进入 bundle 的代码自动消失；缩小包体仍必须显式选择单模型/provider/collection pack。
+每个单模型入口只导出 `model`、`provider` 与完整 `pack`。三个聚合包只携带各自 3 / 6 / 3 个工具模型、Fal adapter 和 Fal CDN 上传，不携带其余 109 模型或 LLM。能力筛选与分发是两层：`search()` 只过滤已经导入的候选，不会让已经进入 bundle 的代码自动消失；缩小包体仍必须显式选择单模型/provider/collection pack。
 
-Henji-AI 在执行层按需装入工具 pack，但普通模型选择器、`@henjicc/ai-sdk/generation` 与默认能力发现仍只展示 105 个主目录模型。
+Henji-AI 在执行层按需装入工具 pack，但普通模型选择器、`@henjicc/ai-sdk/generation` 与默认能力发现仍只展示 109 个主目录模型。
 
 ## 两类模型的公共边界
 
@@ -246,16 +246,16 @@ SDK 统一处理媒体来源优先级、首个/求和聚合、固定倍率和参
 
 ### 参数类型 → 控件
 
-以下 13 种是 `RuntimeParamDef` 的完整公开联合；括号内是当前真实 105 catalog 的出现数量。未出现不代表
+以下 13 种是 `RuntimeParamDef` 的完整公开联合；括号内是当前真实 109 catalog 的出现数量。未出现不代表
 类型无效，而是当前目录没有对应模型。
 
-| type | 105 catalog | 消费方控件 | 关键运行时字段 |
+| type | 109 catalog | 消费方控件 | 关键运行时字段 |
 |---|---:|---|---|
-| `dropdown` | 298 | 下拉选择 | `options[].value`、`default`、`required?` |
-| `switch` | 92 | 布尔开关 | `default` |
-| `number` | 83 | 数值输入/步进器 | `min?`、`max?`、`step?`、`default` |
+| `dropdown` | 317 | 下拉选择 | `options[].value`、`default`、`required?` |
+| `switch` | 93 | 布尔开关 | `default` |
+| `number` | 85 | 数值输入/步进器 | `min?`、`max?`、`step?`、`default` |
 | `text` | 7 | 单行文本 | `maxLength?`、`default` |
-| `image-upload` | 5 | 图片上传 | `maxCount?`、`accept?`、`maxSize?`、`format?` |
+| `image-upload` | 6 | 图片上传 | `maxCount?`、`accept?`、`maxSize?`、`format?` |
 | `composite` | 4 | 宿主自定义组件钩子 | `valueType?`、`default`；panel/config 不在 SDK |
 | `textarea` | 3 | 多行文本 | `maxLength?`、`default` |
 | `file-upload` | 1 | 文件上传 | `maxCount?`、`accept?`、`maxSize?` |
@@ -266,7 +266,7 @@ SDK 统一处理媒体来源优先级、首个/求和聚合、固定倍率和参
 | `aspect-ratio` | 0 | 比例选择 | `options[].value` |
 
 所有参数共有 `id`、`type`、`order`、`default`，并可带 `required`、`valueType`、API 映射、
-`transferKey`、`visible`、`disabled`。实际 105 catalog 的字段集合与数量由
+`transferKey`、`visible`、`disabled`。实际 109 catalog 的字段集合与数量由
 `packages/ai-sdk/tests/catalog-consumer-contract.test.ts` 穷举锁定，不以旧 ParamDef 文件或示例推断。
 
 ### 条件与媒体输入
@@ -365,7 +365,7 @@ features 与原始 tags。顶层查询维度默认 AND，也可设 `mode: 'any'`
 调用方随后交给对应执行 handle；SDK 不提供一个掩盖协议差异的通用 `generate()`。
 
 能力画像是运行时选择层，不是打包器。`createModelCapabilityDiscovery({ generationPacks: [...] })` 只会看
-传入的 pack；它既不会隐式导入默认 105，也不会从 bundle 删除已导入代码。真正的按需分发仍以 import
+传入的 pack；它既不会隐式导入默认 109，也不会从 bundle 删除已导入代码。真正的按需分发仍以 import
 单模型/provider/collection pack 为边界。
 
 ### ASR/OCR 等开放能力

@@ -1,0 +1,102 @@
+{
+  "source": {
+    "url": "https://qmy27nhsd9.apifox.cn/452409577e0.md",
+    "capturedAt": "2026-09-10",
+    "kind": "official-literal",
+    "loginRequired": false,
+    "notes": "Official schemas and literal JSON examples; documentation-only x-* metadata omitted. Not a paid request log."
+  },
+  "responses": {
+    "200": {
+      "description": "",
+      "content": {
+        "application/json": {
+          "schema": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "title": "任务id"
+              },
+              "status": {
+                "type": "string",
+                "title": "状态",
+                "description": "任务状态\nrunning  (进行中)\nviolation  (违规)\nsucceeded (生成成功)\nfailed (任务失败)\n"
+              },
+              "results": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "url": {
+                      "type": "string",
+                      "title": "图片/视频链接"
+                    }
+                  }
+                }
+              },
+              "progress": {
+                "type": "integer",
+                "title": "进度",
+                "description": "0~100"
+              },
+              "error": {
+                "type": "string",
+                "title": "报错信息"
+              }
+            },
+            "required": [
+              "id",
+              "status"
+            ]
+          },
+          "example": {
+            "id": "14-5f3cf761-a4bb-486a-8016-77f490998f80",
+            "status": "succeeded",
+            "results": [
+              {
+                "url": "https://file1.aitohumanize.com/file/fcdd2d07449d438d9d69d450f5626976.png"
+              }
+            ]
+          }
+        }
+      },
+      "headers": {}
+    },
+    "400": {
+      "description": "",
+      "content": {
+        "application/json": {
+          "schema": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "status": {
+                "type": "string",
+                "title": "状态",
+                "description": "状态\nviolation（违规）\nfailed（失败）"
+              },
+              "error": {
+                "type": "string",
+                "title": "报错信息"
+              }
+            },
+            "required": [
+              "id",
+              "status",
+              "error"
+            ]
+          },
+          "example": {
+            "id": "12-1f771fbf-f23a-4b89-a7d0-a98ba9862edb",
+            "status": "failed",
+            "error": "generate failed"
+          }
+        }
+      },
+      "headers": {}
+    }
+  }
+}

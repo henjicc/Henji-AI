@@ -1,0 +1,39 @@
+{
+  "source": {
+    "url": "https://fal.ai/models/openai/gpt-image-2.5/sunburst/edit/llms.txt",
+    "capturedAt": "2026-09-10",
+    "kind": "official-literal",
+    "loginRequired": false,
+    "notes": "Official schemas and literal JSON examples; documentation-only x-* metadata omitted. Not a paid request log."
+  },
+  "examples": [
+    {
+      "prompt": "Same workers, same beam, same lunch boxes - but they're all on their phones now. One is taking a selfie. One is on a call looking annoyed. Same danger, new priorities. A hard hat has AirPods.",
+      "image_urls": [
+        "https://v3b.fal.media/files/b/0a8691af/9Se_1_VX1wzTjjTOpWbs9_bb39c2eb-1a41-4749-b1d0-cf134abc8bbf.png"
+      ]
+    },
+    {
+      "prompt": "Same workers, same beam, same lunch boxes - but they're all on their phones now. One is taking a selfie. One is on a call looking annoyed. Same danger, new priorities. A hard hat has AirPods.",
+      "image_urls": [
+        "https://v3b.fal.media/files/b/0a8691af/9Se_1_VX1wzTjjTOpWbs9_bb39c2eb-1a41-4749-b1d0-cf134abc8bbf.png"
+      ],
+      "image_size": "auto",
+      "background": "auto",
+      "quality": "high",
+      "num_images": 1,
+      "output_format": "png"
+    },
+    {
+      "images": [
+        {
+          "file_name": "yUt7tifLSbg1WzWWgfj2o.png",
+          "width": 1024,
+          "height": 1024,
+          "content_type": "image/png",
+          "url": "https://v3b.fal.media/files/b/0a8691b0/yUt7tifLSbg1WzWWgfj2o.png"
+        }
+      ]
+    }
+  ]
+}

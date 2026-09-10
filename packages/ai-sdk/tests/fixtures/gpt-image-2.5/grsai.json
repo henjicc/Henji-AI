@@ -1,0 +1,148 @@
+{
+  "source": {
+    "url": "https://qmy27nhsd9.apifox.cn/452409160e0.md",
+    "capturedAt": "2026-09-10",
+    "kind": "official-literal",
+    "loginRequired": false,
+    "notes": "Official schemas and literal JSON examples; documentation-only x-* metadata omitted. Not a paid request log."
+  },
+  "requestSchema": {
+    "type": "object",
+    "properties": {
+      "model": {
+        "type": "string",
+        "title": "模型名称",
+        "description": "支持以下模型\ngpt-image-2\ngpt-image-2-vip\ngpt-image-2.5\ngpt-image-2.5-flare\ngpt-image-2.5-sunburst"
+      },
+      "prompt": {
+        "type": "string",
+        "title": "提示词"
+      },
+      "images": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        },
+        "title": "参考图",
+        "description": "支持base64与url链接"
+      },
+      "aspectRatio": {
+        "type": "string",
+        "title": "比例",
+        "description": "分辨率参数说明\n  gpt-image-2/gpt-image-2.5：支持比例（如 \"16:9\"）或1K像素值（如 \"1024x1024\"）\n  gpt-image-2-vip/gpt-image-2.5-flare/gpt-image-2.5-sunburst：支持1-4K像素值（如 \"1024x1024\"、\"2048x2048\"），不支持比例\n\n自定义像素值约束（仅限 vip 模型）\n   最大边长必须小于或等于3840px\n   两条边都必须是16的倍数\n   长边与短边之比不得超过 3:1\n   总像素数必须至少为 655,360且不得超过 8,294,400\n\n\n gpt-image-2-vip/gpt-image-2.5-flare/gpt-image-2.5-sunburst比例参考（1K、2K、4K）：\nauto\n1:1：1024x1024、2048x2048、2880x2880\n16:9：1280x720、2048x1152、3840x2160\n9:16：720x1280、1152x2048、2160x3840\n4:3：1152x864、2304x1728、3264x2448\n3:4：864x1152、1728x2304、2448x3264\n3:2：1536x1024、2048x1360、3504x2336\n2:3：1024x1536、1360x2048、2336x3504\n5:4：1120x896、2240x1792、3200x2560\n4:5：896x1120、1792x2240、2560x3200\n21:9：1456x624、2912x1248、3840x1648\n9:21：624x1456、1248x2912、1648x3840\n1:3：688x2048、1280x3840\n3:1：2048x688、3840x1280\n2:1：1536x768、3072x1536、3840x1920\n1:2：768x1536、1536x3072、1920x3840\n\n gpt-image-2比例参考：\nauto\n1:1：1024x1024\n16:9：1672 x941\n9:16：941x1672 \n4:3：1443x1090\n3:4：1090x1443\n3:2：1536x1024\n2:3：1024x1536\n5:4：1408x1120\n4:5：1120x1408\n21:9：1920x832\n9:21：832x1920\n1:2：896x1792\n2:1：1792x896"
+      },
+      "replyType": {
+        "type": "string",
+        "title": "回复类型",
+        "description": "支持参数\njson（返回json）\nstream（返回stream）\nasync（异步轮询）\n异步生成结果查询接口：https://qmy27nhsd9.apifox.cn/452409577e0"
+      },
+      "quality": {
+        "type": "string",
+        "title": "质量",
+        "description": "支持以下质量选项: \n\"auto\"\n\"low\"\n\"medium\"\n\"high\"\n\"xhigh\"\n\"max\"\n(请根据模型支持情况进行选择)\ngpt-image-2: auto\ngpt-image-2.5: auto\ngpt-image-2-vip: medium\ngpt-image-2.5-flare: low、medium、high\ngpt-image-2.5-sunburst: low、medium、high、xhigh、max"
+      },
+      "background": {
+        "type": "string",
+        "title": "背景参数",
+        "description": "可选参数：transparent\n以下模型支持该参数：\ngpt-image-2-vip\ngpt-image-2.5-flare \ngpt-image-2.5-sunburst"
+      }
+    },
+    "required": [
+      "model",
+      "prompt"
+    ]
+  },
+  "responses": {
+    "200": {
+      "description": "",
+      "content": {
+        "application/json": {
+          "schema": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "title": "任务id"
+              },
+              "status": {
+                "type": "string",
+                "title": "状态",
+                "description": "任务状态\nrunning  (进行中)\nviolation  (违规)\nsucceeded (生成成功)\nfailed (任务失败)\n"
+              },
+              "results": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "url": {
+                      "type": "string",
+                      "title": "图片/视频链接"
+                    }
+                  }
+                }
+              },
+              "progress": {
+                "type": "integer",
+                "title": "进度",
+                "description": "0~100"
+              },
+              "error": {
+                "type": "string",
+                "title": "报错信息"
+              }
+            },
+            "required": [
+              "id",
+              "status"
+            ]
+          },
+          "example": {
+            "id": "14-5f3cf761-a4bb-486a-8016-77f490998f80",
+            "status": "succeeded",
+            "results": [
+              {
+                "url": "https://file1.aitohumanize.com/file/fcdd2d07449d438d9d69d450f5626976.png"
+              }
+            ]
+          }
+        }
+      },
+      "headers": {}
+    },
+    "400": {
+      "description": "",
+      "content": {
+        "application/json": {
+          "schema": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "status": {
+                "type": "string",
+                "title": "状态",
+                "description": "状态\nviolation（违规）\nfailed（失败）"
+              },
+              "error": {
+                "type": "string",
+                "title": "报错信息"
+              }
+            },
+            "required": [
+              "id",
+              "status",
+              "error"
+            ]
+          },
+          "example": {
+            "id": "12-1f771fbf-f23a-4b89-a7d0-a98ba9862edb",
+            "status": "failed",
+            "error": "generate failed"
+          }
+        }
+      },
+      "headers": {}
+    }
+  }
+}

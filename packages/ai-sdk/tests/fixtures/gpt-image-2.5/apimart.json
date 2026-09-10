@@ -1,0 +1,99 @@
+{
+  "source": {
+    "url": "https://docs.apimart.ai/en/api-reference/images/gpt-image-2.5/generation.md",
+    "capturedAt": "2026-09-10",
+    "kind": "official-literal",
+    "loginRequired": false,
+    "notes": "Official schemas and literal JSON examples; documentation-only x-* metadata omitted. Not a paid request log."
+  },
+  "examples": [
+    {
+      "code": 200,
+      "data": [
+        {
+          "status": "submitted",
+          "task_id": "task_01KXXXXXXXXXXXXXXX"
+        }
+      ]
+    },
+    {
+      "error": {
+        "code": 400,
+        "message": "Invalid request parameters",
+        "type": "invalid_request_error"
+      }
+    },
+    {
+      "error": {
+        "code": 401,
+        "message": "Authentication failed. Check your API key.",
+        "type": "authentication_error"
+      }
+    },
+    {
+      "error": {
+        "code": 402,
+        "message": "Insufficient account balance",
+        "type": "payment_required"
+      }
+    },
+    {
+      "error": {
+        "code": 429,
+        "message": "Too many requests. Try again later.",
+        "type": "rate_limit_error"
+      }
+    },
+    {
+      "model": "gpt-image-2.5-flare",
+      "prompt": "a sky garden in a futuristic city, morning mist, architectural photography",
+      "size": "16:9",
+      "resolution": "2k",
+      "quality": "high",
+      "n": 1
+    },
+    {
+      "model": "gpt-image-2.5-sunburst",
+      "prompt": "preserve the product and package text, replace the background with a soft off-white studio, and add a natural shadow",
+      "image_urls": [
+        "https://example.com/product.png"
+      ],
+      "resolution": "2k",
+      "quality": "xhigh"
+    },
+    {
+      "model": "gpt-image-2.5-flare",
+      "prompt": "e-commerce product photo of white sneakers, complete subject, transparent background",
+      "size": "1:1",
+      "resolution": "2k",
+      "quality": "high",
+      "background": "transparent",
+      "output_format": "png"
+    },
+    {
+      "code": 200,
+      "data": {
+        "id": "task_01KXXXXXXXXXXXXXXX",
+        "status": "completed",
+        "progress": 100,
+        "cost": 0.01325,
+        "credits_cost": 0.1325,
+        "result": {
+          "images": [
+            {
+              "url": [
+                "https://upload.apimart.ai/f/image/example.png"
+              ],
+              "expires_at": 1789000000
+            }
+          ]
+        },
+        "usage": {
+          "input_tokens": 16,
+          "output_tokens": 439,
+          "total_tokens": 455
+        }
+      }
+    }
+  ]
+}

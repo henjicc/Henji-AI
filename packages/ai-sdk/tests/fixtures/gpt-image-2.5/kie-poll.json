@@ -1,0 +1,286 @@
+{
+  "source": {
+    "url": "https://docs.kie.ai/market/common/get-task-detail.md",
+    "capturedAt": "2026-09-10",
+    "kind": "official-literal",
+    "loginRequired": false,
+    "notes": "Official schemas and literal JSON examples; documentation-only x-* metadata omitted. Not a paid request log."
+  },
+  "responses": {
+    "200": {
+      "description": "Request successful",
+      "content": {
+        "application/json": {
+          "schema": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/response%20not%20with%20recordId"
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "data": {
+                    "type": "object",
+                    "description": "The task data object containing all task information",
+                    "properties": {
+                      "taskId": {
+                        "type": "string",
+                        "description": "The unique identifier for this task",
+                        "examples": [
+                          "task_12345678"
+                        ]
+                      },
+                      "model": {
+                        "type": "string",
+                        "description": "The model used for this task (e.g., grok-imagine/text-to-image, seedream-4.0, kling-1.0)",
+                        "examples": [
+                          "grok-imagine/text-to-image"
+                        ]
+                      },
+                      "state": {
+                        "type": "string",
+                        "description": "Current state of the task",
+                        "enum": [
+                          "waiting",
+                          "queuing",
+                          "generating",
+                          "success",
+                          "fail"
+                        ],
+                        "examples": [
+                          "success"
+                        ]
+                      },
+                      "param": {
+                        "type": "string",
+                        "description": "JSON string containing the original request parameters used to create the task",
+                        "examples": [
+                          "{\"model\":\"grok-imagine/text-to-image\",\"callBackUrl\":\"https://your-domain.com/api/callback\",\"input\":{\"prompt\":\"Cinematic portrait...\",\"aspect_ratio\":\"3:2\"}}"
+                        ]
+                      },
+                      "resultJson": {
+                        "type": "string",
+                        "examples": [
+                          "{\"resultUrls\":[\"https://example.com/generated-content.jpg\"]}",
+                          "{\"resultObject\":{\"subject_status\":1}}",
+                          "{\"resultObject\":{\"mask_urls\":[\"https://example.com/mask_1\", \"https://example.com/mask_2\"]}}"
+                        ],
+                        "description": "A JSON string containing the generated URL. Only exists if the status is \"success\".\n\nDepending on `outputMediaType`, the structure is as follows:\n- For images/media/videos: {resultUrls: []}\n- If using Seedance 2 or Seedance 2 Fast with `return_last_frame` enabled: {resultUrls: [], firstFrameUrl: [], lastFrameUrl: []}\n- For text output: {resultObject: {}}\n\nFor OmniHuman series models:\n- OmniHuman 1.5 Subject Detection (subject detection model): response structure is {resultObject: {mask_urls: [\"url1\", \"url2\", ...]}}, returning a list of mask image URLs corresponding to the detected subjects. The URLs returned by this model are valid for 1 hour.\n- OmniHuman 1.5 Human Identification (human identification model): response structure is {resultObject: {subject_status: 1}}, where `subject_status` means 0 = no subject detected, 1 = subject detected, indicating whether a human subject is detected in the image."
+                      },
+                      "failCode": {
+                        "type": "string",
+                        "description": "Error code if the task failed. Empty string if successful",
+                        "examples": [
+                          ""
+                        ]
+                      },
+                      "failMsg": {
+                        "type": "string",
+                        "description": "Error message if the task failed. Empty string if successful",
+                        "examples": [
+                          ""
+                        ]
+                      },
+                      "costTime": {
+                        "type": "integer",
+                        "format": "int64",
+                        "description": "Processing time in milliseconds (available when successful)",
+                        "examples": [
+                          15000
+                        ]
+                      },
+                      "completeTime": {
+                        "type": "integer",
+                        "format": "int64",
+                        "description": "Completion timestamp (Unix timestamp in milliseconds)",
+                        "examples": [
+                          1698765432000
+                        ]
+                      },
+                      "createTime": {
+                        "type": "integer",
+                        "format": "int64",
+                        "description": "Creation timestamp (Unix timestamp in milliseconds)",
+                        "examples": [
+                          1698765400000
+                        ]
+                      },
+                      "updateTime": {
+                        "type": "integer",
+                        "format": "int64",
+                        "description": "Update timestamp (Unix timestamp in milliseconds)",
+                        "examples": [
+                          1698765432000
+                        ]
+                      },
+                      "progress": {
+                        "type": "integer",
+                        "description": "Generation progress (0-100). Only returned when model is sora2 or sora2 pro.",
+                        "minimum": 0,
+                        "maximum": 100,
+                        "examples": [
+                          45
+                        ]
+                      },
+                      "creditsConsumed": {
+                        "type": "number",
+                        "description": "Credit consumption details for this task, indicating the actual number of credits deducted during task execution."
+                      }
+                    }
+                  }
+                }
+              }
+            ]
+          },
+          "example": {
+            "code": 505,
+            "msg": "success",
+            "data": {
+              "taskId": "task_12345678",
+              "model": "grok-imagine/text-to-image",
+              "state": "success",
+              "param": "{\"model\":\"grok-imagine/text-to-image\",\"callBackUrl\":\"https://your-domain.com/api/callback\",\"input\":{\"prompt\":\"Cinematic portrait...\",\"aspect_ratio\":\"3:2\"}}",
+              "resultJson": "{\"resultUrls\":[\"https://example.com/generated-content.jpg\"]}",
+              "failCode": "",
+              "failMsg": "",
+              "costTime": 15000,
+              "completeTime": 1698765432000,
+              "createTime": 1698765400000,
+              "updateTime": 1698765432000,
+              "progress": 45,
+              "creditsConsumed": 50
+            }
+          }
+        }
+      },
+      "headers": {}
+    },
+    "400": {
+      "description": "Bad Request - Missing or invalid taskId parameter",
+      "content": {
+        "application/json": {
+          "schema": {
+            "$ref": "#/components/schemas/response%20not%20with%20recordId"
+          },
+          "example": {
+            "code": 400,
+            "msg": "taskId parameter is required"
+          }
+        }
+      },
+      "headers": {}
+    },
+    "401": {
+      "description": "Unauthorized - Invalid or missing API key",
+      "content": {
+        "application/json": {
+          "schema": {
+            "$ref": "#/components/schemas/response%20not%20with%20recordId"
+          },
+          "example": {
+            "code": 401,
+            "msg": "Unauthorized"
+          }
+        }
+      },
+      "headers": {}
+    },
+    "404": {
+      "description": "Task Not Found - The specified taskId does not exist",
+      "content": {
+        "application/json": {
+          "schema": {
+            "$ref": "#/components/schemas/response%20not%20with%20recordId"
+          },
+          "example": {
+            "code": 404,
+            "msg": "Task not found"
+          }
+        }
+      },
+      "headers": {}
+    },
+    "422": {
+      "description": "",
+      "content": {
+        "application/json": {
+          "schema": {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "integer"
+              },
+              "msg": {
+                "type": "string"
+              },
+              "data": {
+                "type": "null"
+              }
+            },
+            "required": [
+              "code",
+              "msg",
+              "data"
+            ]
+          },
+          "example": {
+            "code": 422,
+            "msg": "recordInfo is null",
+            "data": null
+          }
+        }
+      },
+      "headers": {}
+    },
+    "429": {
+      "description": "Rate Limited - Too many requests",
+      "content": {
+        "application/json": {
+          "schema": {
+            "$ref": "#/components/schemas/response%20not%20with%20recordId"
+          },
+          "example": {
+            "code": 429,
+            "msg": "Rate limit exceeded"
+          }
+        }
+      },
+      "headers": {}
+    },
+    "500": {
+      "description": "request failed",
+      "content": {
+        "application/json": {
+          "schema": {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "integer",
+                "description": "Response status code\n\n- **200**: Success - Request has been processed successfully\n- **401**: Unauthorized - Authentication credentials are missing or invalid\n- **402**: Insufficient Credits - Account does not have enough credits to perform the operation\n- **404**: Not Found - The requested resource or endpoint does not exist\n- **408**: Upstream is currently experiencing service issues. No result has been returned for over 10 minutes.\n- **422**: Validation Error - The request parameters failed validation checks\n- **429**: Rate Limited - Request limit has been exceeded for this resource\n- **455**: Service Unavailable - System is currently undergoing maintenance\n- **500**: Server Error - An unexpected error occurred while processing the request\n- **501**: Generation Failed - Content generation task failed\n- **505**: Feature Disabled - The requested feature is currently disabled"
+              },
+              "msg": {
+                "type": "string",
+                "description": "Response message, error description when failed"
+              },
+              "data": {
+                "type": "object",
+                "properties": {}
+              }
+            },
+            "required": [
+              "code",
+              "msg",
+              "data"
+            ]
+          },
+          "example": {
+            "code": 500,
+            "msg": "Server Error - An unexpected error occurred while processing the request",
+            "data": null
+          }
+        }
+      },
+      "headers": {}
+    }
+  }
+}

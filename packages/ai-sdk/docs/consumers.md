@@ -3,13 +3,15 @@
 本清单是 `@henjicc/ai-sdk` 消费方的唯一维护入口，用于 SDK 发布后的跨仓升级协调。
 绝对路径仅描述当前开发机上的仓库位置，不进入 SDK 运行时代码、发布包或用户配置。
 
-最后核对日期：2026-09-01
+最后核对日期：2026-09-10
 
 当前 SDK 版本：`0.2.8`（已发布到公共 npm）
 
 - tarball：`https://registry.npmjs.org/@henjicc/ai-sdk/-/ai-sdk-0.2.8.tgz`
 - shasum：`71ba4c98c7f93a5ea1b434f2a5dded82e7d73223`
 - integrity：`sha512-QJBuHiXKsIKXMBA96/sxQDAvGTZwoNBr2ER0bxjApgbx0zHRkYUKZtB0r/tZkT5OvZx5vlPsEbepcWdNWO/KeA==`
+
+待发布更新：`0.3.0` 新增四家 GPT Image 2.5 pack，保留所有旧入口与旧模型；Henji-AI workspace 与三个仓内示例已锁定候选版本。SDK 全量 798 项测试、宿主参数联动与类型检查已通过，正式 npm 发布/匿名回装待完成。外部 `henji-ai-ps` / `say-it` 保持已发布版本；本次未改变其原有模型、公共 DTO 或宿主协议，不要求机械升级。当前 Windows 工作区未定位到清单中的两份外部仓库，未声称外部宿主验收。
 
 ## 判定口径
 

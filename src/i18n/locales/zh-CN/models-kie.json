@@ -134,6 +134,9 @@
       "meta": {
         "name": "Z-Image Turbo"
       }
+    },
+    "kie-gpt-image-2.5": {
+      "meta": { "name": "GPT Image 2.5" }
     }
   }
 }

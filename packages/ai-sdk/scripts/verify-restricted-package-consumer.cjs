@@ -4,7 +4,7 @@ const fs = require('fs')
 const os = require('os')
 const path = require('path')
 const vm = require('vm')
-const { spawnSync } = require('child_process')
+const { spawnSync } = require('./spawn-command.cjs')
 const { buildSync } = require('esbuild')
 
 const packageRoot = path.resolve(__dirname, '..')
@@ -125,6 +125,17 @@ function evaluate(context, artifact, globalName) {
 
 async function verify() {
   const packageId = installPackage()
+  const gptImage25 = []
+  for (const provider of ['apimart', 'kie', 'fal', 'grsai']) {
+    const artifact = bundle(`Gpt25${provider}`, `@henjicc/ai-sdk/models/${provider}/gpt-image-2.5`, 'Gpt25', ['/dist/llm/', '/dist/capabilities/', '/dist/catalog/index.js'])
+    const { model, pack } = evaluate(restrictedContext(), artifact, 'Gpt25')
+    if (pack.models.length !== 1 || model.meta.canonicalModelId !== 'gpt-image-2.5') fail(`${provider} 未按需导入新模型`)
+    for (const variant of ['flare', 'sunburst']) {
+      const body = await model.request.builder({ prompt: 'A photo', gpt25Variant: variant })
+      if (body.prompt !== 'A photo' && body.input?.prompt !== 'A photo') fail(`${provider} 请求构建失败`)
+    }
+    gptImage25.push({ provider, bytes: artifact.bytes, modules: artifact.inputs.length })
+  }
   const commonForbidden = ['/dist/generation', '/dist/catalog/']
   const asr = bundle(
     'BailianAsr',
@@ -344,6 +355,7 @@ async function verify() {
 
   console.log(`✔ 受限宿主发布包门禁通过：${JSON.stringify({
     packageId,
+    gptImage25,
     textEncoder: false,
     textDecoder: false,
     asr: { models: 5, bytes: asr.bytes, modules: asr.inputs.length },

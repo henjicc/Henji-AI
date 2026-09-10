@@ -1,0 +1,33 @@
+{
+  "source": {
+    "url": "https://fal.ai/models/openai/gpt-image-2.5/sunburst/text-to-image/llms.txt",
+    "capturedAt": "2026-09-10",
+    "kind": "official-literal",
+    "loginRequired": false,
+    "notes": "Official schemas and literal JSON examples; documentation-only x-* metadata omitted. Not a paid request log."
+  },
+  "examples": [
+    {
+      "prompt": "create a realistic image taken with iphone at these coordinates 41°43′32″N 49°56′49″W 15 April 1912"
+    },
+    {
+      "prompt": "create a realistic image taken with iphone at these coordinates 41°43′32″N 49°56′49″W 15 April 1912",
+      "image_size": "landscape_4_3",
+      "background": "auto",
+      "quality": "high",
+      "num_images": 1,
+      "output_format": "png"
+    },
+    {
+      "images": [
+        {
+          "file_name": "EnWrO3XWjPE0nxBDpaQrj.png",
+          "width": 1024,
+          "height": 1024,
+          "content_type": "image/png",
+          "url": "https://v3b.fal.media/files/b/0a869129/EnWrO3XWjPE0nxBDpaQrj.png"
+        }
+      ]
+    }
+  ]
+}

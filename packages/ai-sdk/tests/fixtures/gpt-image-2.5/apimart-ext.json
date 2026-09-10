@@ -1,0 +1,104 @@
+{
+  "source": {
+    "url": "https://docs.apimart.ai/en/api-reference/images/gpt-image-2.5-ext/generation.md",
+    "capturedAt": "2026-09-10",
+    "kind": "official-literal",
+    "loginRequired": false,
+    "notes": "Official schemas and literal JSON examples; documentation-only x-* metadata omitted. Not a paid request log."
+  },
+  "examples": [
+    {
+      "code": 202,
+      "request_id": "req_example",
+      "data": {
+        "id": "task_01EXAMPLE",
+        "object": "generation.task",
+        "type": "image",
+        "status": "pending",
+        "progress": 0,
+        "poll_url": "/v1/tasks/task_01EXAMPLE"
+      }
+    },
+    {
+      "code": 200,
+      "data": [
+        {
+          "status": "submitted",
+          "task_id": "task_01EXAMPLE"
+        }
+      ]
+    },
+    {
+      "error": {
+        "message": "n must be an integer between 1 and 4",
+        "type": "invalid_request_error",
+        "param": "",
+        "code": "invalid_request_error"
+      }
+    },
+    {
+      "model": "gpt-image-2.5-ext",
+      "version": "flare",
+      "prompt": "A sky garden in a futuristic city, early morning mist, architectural photography",
+      "size": "16:9",
+      "resolution": "2K",
+      "n": 1
+    },
+    {
+      "model": "gpt-image-2.5-ext",
+      "version": "sunburst",
+      "prompt": "Preserve the product and packaging text, replace the background with a soft off-white studio setting, and add a natural cast shadow",
+      "size": "1:1",
+      "resolution": "2K",
+      "n": 1,
+      "image_urls": [
+        "https://example.com/product.png"
+      ]
+    },
+    {
+      "model": "gpt-image-2.5-ext",
+      "version": "sunburst",
+      "prompt": "Use the product in the first image as the subject, take inspiration from the setting in the second image, and create a landscape advertisement",
+      "size": "16:9",
+      "resolution": "2K",
+      "n": 2,
+      "image_urls": [
+        "https://example.com/product.png",
+        "https://example.com/set.jpg"
+      ]
+    },
+    {
+      "model": "gpt-image-2.5-ext",
+      "version": "flare",
+      "prompt": "A minimalist key visual for a product launch, choosing a suitable aspect ratio based on the image content",
+      "size": "auto",
+      "resolution": "4K",
+      "n": 1
+    },
+    {
+      "code": 200,
+      "data": {
+        "id": "task_01EXAMPLE",
+        "status": "completed",
+        "progress": 100,
+        "created": 1788912000,
+        "completed": 1788912045,
+        "actual_time": 45,
+        "estimated_time": 300,
+        "cost": 0.2,
+        "credits_cost": 2,
+        "result": {
+          "images": [
+            {
+              "url": [
+                "https://example.com/output-1.png",
+                "https://example.com/output-2.png"
+              ],
+              "expires_at": 1788998445
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

@@ -36,9 +36,9 @@ describe('modular generation client', () => {
     client.dispose()
   })
 
-  it('KIE provider pack 只装配 KIE 的 27 个模型', () => {
+  it('KIE provider pack 只装配 KIE 的 28 个模型', () => {
     const client = createModularGenerationClient({ runtime: runtime(), packs: [kiePack] })
-    expect(client.catalog.list()).toHaveLength(27)
+    expect(client.catalog.list()).toHaveLength(28)
     expect(new Set(client.catalog.list().map((model) => model.meta.provider))).toEqual(new Set(['kie']))
     expect(client.providers.list()).toEqual(['kie'])
     client.dispose()

@@ -1,0 +1,278 @@
+{
+  "source": {
+    "url": "https://docs.kie.ai/market/gpt/gpt-image-2-5-flare-image-to-image.md",
+    "capturedAt": "2026-09-10",
+    "kind": "official-literal",
+    "loginRequired": false,
+    "notes": "Official schemas and literal JSON examples; documentation-only x-* metadata omitted. Not a paid request log."
+  },
+  "requestSchema": {
+    "type": "object",
+    "required": [
+      "model",
+      "input"
+    ],
+    "properties": {
+      "model": {
+        "type": "string",
+        "enum": [
+          "gpt-image-2-5-flare-image-to-image"
+        ],
+        "default": "gpt-image-2-5-flare-image-to-image",
+        "description": "The model name used for generation. This field is required. This endpoint must use the `gpt-image-2-5-flare-image-to-image` model.",
+        "examples": [
+          "gpt-image-2-5-flare-image-to-image"
+        ]
+      },
+      "callBackUrl": {
+        "type": "string",
+        "format": "uri",
+        "description": "Callback URL for task completion notifications. Optional parameter. If provided, the system will send a POST request to this URL when the task completes, whether it succeeds or fails. If omitted, no callback notification will be sent.",
+        "examples": [
+          "https://your-domain.com/api/callback"
+        ]
+      },
+      "input": {
+        "type": "object",
+        "description": "Input parameters for the image-to-image task.",
+        "required": [
+          "prompt",
+          "input_urls"
+        ],
+        "properties": {
+          "prompt": {
+            "type": "string",
+            "description": "Text prompts, up to 20,000 characters.",
+            "examples": [
+              "Transform this product image into a premium e-commerce poster style."
+            ]
+          },
+          "input_urls": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uri"
+            },
+            "description": "Array of input image URLs.",
+            "examples": [
+              [
+                "https://example.com/"
+              ]
+            ],
+            "maxItems": 16
+          },
+          "aspect_ratio": {
+            "type": "string",
+            "description": "The aspect ratio of the generated image is set to auto by default. The 27:16, 16:27, 9:8 and 8:9 aspect ratios support 1K only. 2K and 4K are available for other aspect ratios.",
+            "enum": [
+              "auto",
+              "1:1",
+              "3:2",
+              "2:3",
+              "4:3",
+              "3:4",
+              "16:9",
+              "9:16",
+              "21:9",
+              "27:16",
+              "16:27",
+              "9:8",
+              "8:9"
+            ]
+          },
+          "resolution": {
+            "type": "string",
+            "enum": [
+              "1K",
+              "2K",
+              "4K"
+            ],
+            "description": "Image resolution"
+          },
+          "background": {
+            "type": "string",
+            "enum": [
+              "transparent",
+              "opaque",
+              "auto"
+            ],
+            "description": "Image background "
+          }
+        }
+      }
+    }
+  },
+  "responses": {
+    "200": {
+      "description": "Request successful",
+      "content": {
+        "application/json": {
+          "schema": {
+            "allOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "code": {
+                    "type": "integer",
+                    "description": "Response Status Codes\n\n200: Success - The request was successfully processed.\n\n401: Unauthorized - Insufficient or invalid authentication credentials.\n\n402: Insufficient Quota - The account has insufficient quota to perform this operation.\n\n404: Not Found - The requested resource or interface does not exist.\n\n422: Validation Error - The request parameters failed the validation check.\n\n429: Request Restricted - The request frequency limit for this resource has been exceeded.\n\n433: Request Limit - The subkey usage exceeded the limit.\n\n455: Service Unavailable - The system is currently under maintenance.\n\n500: Server Error - An unexpected error occurred while processing the request.\n\n501: Generation Failed - The content generation task failed.\n\n505: Feature Disabled - The requested feature is currently disabled.",
+                    "enum": [
+                      200,
+                      401,
+                      402,
+                      404,
+                      422,
+                      429,
+                      433,
+                      455,
+                      500,
+                      501,
+                      505
+                    ]
+                  },
+                  "msg": {
+                    "type": "string",
+                    "description": "Response message, error description upon failure",
+                    "examples": [
+                      "success"
+                    ]
+                  },
+                  "data": {
+                    "type": "object",
+                    "required": [
+                      "taskId"
+                    ],
+                    "properties": {
+                      "taskId": {
+                        "type": "string",
+                        "description": "The task ID can be used with the \"Get Task Details\" endpoint to query the task status.",
+                        "examples": [
+                          "dc1928bfcbc77cb6c85f3359a9c718b3"
+                        ]
+                      }
+                    }
+                  }
+                },
+                "required": [
+                  "data"
+                ]
+              }
+            ]
+          },
+          "example": {
+            "code": 200,
+            "msg": "success",
+            "data": {
+              "taskId": "task_gptimage_1765180586443"
+            }
+          }
+        }
+      },
+      "headers": {}
+    }
+  },
+  "callbacks": {
+    "onImageGenerated": {
+      "{$request.body#/callBackUrl}": {
+        "post": {
+          "summary": "Image Generation Callback",
+          "description": "When the image generation task is completed, the system sends the result to your callback URL via a POST request.",
+          "requestBody": {
+            "required": true,
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "integer",
+                      "description": "Status code\n\n- **200**: Success - Image generation task completed successfully\n- **400**: Invalid request parameters or content violates policy\n- **500**: Internal error. Please try again later.\n- **501**: Failed - Image generation task failed",
+                      "enum": [
+                        200,
+                        400,
+                        500,
+                        501
+                      ]
+                    },
+                    "msg": {
+                      "type": "string",
+                      "description": "Status message",
+                      "example": "Playground task completed successfully."
+                    },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "completeTime": {
+                          "type": "integer",
+                          "format": "int64",
+                          "description": "Task completion time, represented as a Unix timestamp in milliseconds",
+                          "example": 1786433042000
+                        },
+                        "costTime": {
+                          "type": "integer",
+                          "description": "Task duration in seconds",
+                          "example": 78
+                        },
+                        "createTime": {
+                          "type": "integer",
+                          "format": "int64",
+                          "description": "Task creation time, represented as a Unix timestamp in milliseconds",
+                          "example": 1786432963000
+                        },
+                        "creditsConsumed": {
+                          "type": "number",
+                          "format": "double",
+                          "description": "Number of credits consumed by the task",
+                          "example": 3
+                        },
+                        "model": {
+                          "type": "string",
+                          "description": "Image editing model used for the task",
+                          "example": "gpt-image-2-5-flare-image-to-image"
+                        },
+                        "param": {
+                          "type": "string",
+                          "description": "Parameters submitted when creating the task, in JSON string format",
+                          "example": "{\"input\":\"{\\\"aspect_ratio\\\":\\\"auto\\\",\\\"prompt\\\":\\\"take a photo with Sam Altman in the conference room\\\",\\\"input_urls\\\":[\\\"https://static.aiquickdraw.com/tools/example/1776782793756_wrogXTdd.png\\\"]}\",\"callBackUrl\":\"https://webhook.uutool.cn/5f723555-ec59-4b8f-8feb-bed810982785\",\"model\":\"gpt-image-2-5-flare-image-to-image\"}"
+                        },
+                        "resultJson": {
+                          "type": "string",
+                          "description": "Image generation result in JSON string format. resultUrls contains the list of generated image URLs.",
+                          "example": "{\"resultUrls\":[\"https://tempfile.aiquickdraw.com/images/chatgpt/file_000000008b8481f7a0a8618ee2d10b84.png\"]}"
+                        },
+                        "state": {
+                          "type": "string",
+                          "description": "Task status",
+                          "enum": [
+                            "success",
+                            "fail"
+                          ],
+                          "example": "success"
+                        },
+                        "taskId": {
+                          "type": "string",
+                          "description": "Task ID",
+                          "example": "3fd37da5c726d0c8b1278f391906ac82"
+                        },
+                        "updateTime": {
+                          "type": "integer",
+                          "format": "int64",
+                          "description": "Last task update time, represented as a Unix timestamp in milliseconds",
+                          "example": 1786433042000
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "responses": {
+            "200": {
+              "description": "Callback received successfully"
+            }
+          }
+        }
+      }
+    }
+  }
+}

@@ -4,7 +4,7 @@ const fs = require('fs')
 const os = require('os')
 const path = require('path')
 const { pathToFileURL } = require('url')
-const { spawnSync } = require('child_process')
+const { spawnSync } = require('./spawn-command.cjs')
 
 const packageRoot = path.resolve(__dirname, '..')
 const repositoryRoot = path.resolve(packageRoot, '..', '..')
@@ -53,6 +53,7 @@ async function verify() {
     "import '@henjicc/ai-sdk/generation'",
     "import '@henjicc/ai-sdk/generation/core'",
     "import '@henjicc/ai-sdk/models/kie/z-image'",
+    ...['apimart', 'kie', 'fal', 'grsai'].map(provider => `import '@henjicc/ai-sdk/models/${provider}/gpt-image-2.5'`),
     "import '@henjicc/ai-sdk/provider-adapters/kie'",
     "import '@henjicc/ai-sdk/provider-packs/kie'",
     "import '@henjicc/ai-sdk/catalog'",

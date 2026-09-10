@@ -2,7 +2,7 @@
 
 const fs = require('fs')
 const path = require('path')
-const { spawnSync } = require('child_process')
+const { spawnSync } = require('./spawn-command.cjs')
 
 const packageRoot = path.resolve(__dirname, '..')
 const repositoryRoot = path.resolve(packageRoot, '..', '..')
@@ -106,7 +106,7 @@ for (const entry of patternEntries) {
   }
 }
 
-if (manifest.name !== '@henjicc/ai-sdk' || manifest.version !== '0.2.8') {
+if (manifest.name !== '@henjicc/ai-sdk' || manifest.version !== '0.3.0') {
   fail(`发布坐标不匹配：${manifest.name}@${manifest.version}`)
 }
 if (manifest.publishConfig?.registry !== 'https://registry.npmjs.org/') {

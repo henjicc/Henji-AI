@@ -89,11 +89,11 @@ const client = api.createGenerationClient({
   },
 })
 const modelCount = client.catalog.list().length
-if (modelCount !== 105) fail(`catalog 数量不是 105：${modelCount}`)
+if (modelCount !== 109) fail(`catalog 数量不是 109：${modelCount}`)
 client.dispose()
 if (networkCalls !== 0) fail(`import/create/catalog/dispose 触发 ${networkCalls} 次网络请求`)
 
 console.log(
   `✔ generation IIFE 门禁通过（${code.length} bytes，${Object.keys(result.metafile.inputs).length} modules，` +
-  `105 models，networkCalls=0，风险计数=0）`
+  `109 models，networkCalls=0，风险计数=0）`
 )

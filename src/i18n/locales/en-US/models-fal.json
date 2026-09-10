@@ -120,6 +120,9 @@
       "meta": {
         "name": "Z-Image Turbo"
       }
+    },
+    "fal-ai-gpt-image-2.5": {
+      "meta": { "name": "GPT Image 2.5" }
     }
   }
 }
