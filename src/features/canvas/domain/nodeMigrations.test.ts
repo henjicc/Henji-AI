@@ -2,6 +2,7 @@
 
 import { beforeAll, describe, expect, it } from 'vitest';
 import { loadRealModelsIntoRegistry } from '@/tests/loadRealModels';
+import { RELIGHT_MANUAL_TEMPLATE_VERSION } from '../capabilities/relightPolicy';
 
 import { CANVAS_NODE_TYPES } from './canvasNodes';
 import {
@@ -164,7 +165,7 @@ describe('migrateRelightGenerationData', () => {
     expect(data).toMatchObject({
       capabilityId: 'image.relight',
       modelId: 'fal-ai-ic-light-v2',
-      promptTemplateVersion: 'relight-manual-iclight-v1',
+      promptTemplateVersion: RELIGHT_MANUAL_TEMPLATE_VERSION,
       params: { falIcLightV2InitialLatent: 'Bottom' },
       mediaInputs: { image: ['source.png'] },
       lightingReferenceImages: [],
