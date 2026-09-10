@@ -198,7 +198,7 @@ export function MultiAngleWorkbench({
   return (
       <div
         data-multi-angle-workbench="true"
-        className="grid min-h-0 min-w-0 flex-1 grid-cols-[minmax(0,1.3fr)_minmax(250px,0.7fr)]"
+        className="grid min-h-0 min-w-0 flex-1 grid-cols-[minmax(0,1fr)_minmax(400px,1fr)]"
       >
         <div className={`flex min-h-0 items-center justify-center ${embedded ? 'p-2' : 'p-4'}`}>
           <div className={`relative flex h-full w-full items-center justify-center overflow-hidden rounded-xl ${embedded ? 'bg-bg-dark/45' : `border border-veil-subtle ${UI_GLASS_ADAPTIVE_SURFACE_CLASS}`}`}>
@@ -218,14 +218,14 @@ export function MultiAngleWorkbench({
           {sourceControl ? <div className="mb-3">{sourceControl}</div> : null}
           <section className="space-y-3">
             <h3 className={UI_TEXT_SECTION_CLASS}>{t('node.multiAngleEditor.controlMode')}</h3>
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-3 gap-2" data-multi-angle-profile-options="true">
               <UiOptionButton
                 type="button"
                 variant="flat"
                 active={config.controlProfile === 'continuous-v1'}
                 onClick={() => selectProfile('continuous-v1')}
               >
-                <span className="flex flex-col"><span className="text-sm font-medium">{t('node.multiAngleEditor.profiles.continuous.title')}</span><span className="text-xs text-text-soft">{t('node.multiAngleEditor.profiles.continuous.subtitle')}</span></span>
+                <span className="flex flex-col"><span className="whitespace-nowrap text-sm font-medium">{t('node.multiAngleEditor.profiles.continuous.title')}</span><span className="text-xs text-text-soft">{t('node.multiAngleEditor.profiles.continuous.subtitle')}</span></span>
               </UiOptionButton>
               <UiOptionButton
                 type="button"
@@ -233,7 +233,7 @@ export function MultiAngleWorkbench({
                 active={config.controlProfile === 'flux-native-v1'}
                 onClick={() => selectProfile('flux-native-v1')}
               >
-                <span className="flex flex-col"><span className="text-sm font-medium">{t('node.multiAngleEditor.profiles.flux.title')}</span><span className="text-xs text-text-soft">{t('node.multiAngleEditor.profiles.flux.subtitle')}</span></span>
+                <span className="flex flex-col"><span className="whitespace-nowrap text-sm font-medium">{t('node.multiAngleEditor.profiles.flux.title')}</span><span className="text-xs text-text-soft">{t('node.multiAngleEditor.profiles.flux.subtitle')}</span></span>
               </UiOptionButton>
               <UiOptionButton
                 type="button"
@@ -241,7 +241,7 @@ export function MultiAngleWorkbench({
                 active={config.controlProfile === 'discrete-v1'}
                 onClick={() => selectProfile('discrete-v1')}
               >
-                <span className="flex flex-col"><span className="text-sm font-medium">{t('node.multiAngleEditor.profiles.discrete.title')}</span><span className="text-xs text-text-soft">{t('node.multiAngleEditor.profiles.discrete.subtitle')}</span></span>
+                <span className="flex flex-col"><span className="whitespace-nowrap text-sm font-medium">{t('node.multiAngleEditor.profiles.discrete.title')}</span><span className="text-xs text-text-soft">{t('node.multiAngleEditor.profiles.discrete.subtitle')}</span></span>
               </UiOptionButton>
             </div>
           </section>

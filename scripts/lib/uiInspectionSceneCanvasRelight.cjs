@@ -251,8 +251,27 @@ function attachUiInspectionCanvasRelight(context) {
 
     const editor = page.locator(`[data-multi-angle-node-id="${nodeId}"] [data-multi-angle-workbench="true"]`)
     await editor.waitFor({ state: 'visible', timeout: 12000 })
+    const verifyInspectorLayout = async () => {
+      if (await editor.getByText('源图', { exact: true }).count()) throw new Error('已连接图片时仍重复显示源图行')
+      const layout = await editor.evaluate(element => {
+        const panel = element.lastElementChild
+        const titles = [...element.querySelectorAll('[data-multi-angle-profile-options] button > span > span:first-child')]
+        return {
+          inspectorWidth: panel.getBoundingClientRect().width / element.getBoundingClientRect().width,
+          titlesFit: titles.length === 3 && titles.every(title => {
+            const button = title.closest('button').getBoundingClientRect()
+            const text = title.getBoundingClientRect()
+            return text.left >= button.left && text.right <= button.right
+              && title.getClientRects().length === 1
+          }),
+        }
+      })
+      if (layout.inspectorWidth < 0.45 || !layout.titlesFit) throw new Error(`多角度参数区仍过窄：${JSON.stringify(layout)}`)
+    }
+    await verifyInspectorLayout()
     const multiAngleNode = shell.locator('xpath=ancestor::*[contains(@class,"react-flow__node")][1]')
     await resizeCanvasNodeAndAssertHitBox(page, multiAngleNode, shell, '多角度节点')
+    await verifyInspectorLayout()
     await verifyWorkbenchSelection(page, shell, sourceNode, editor, electronApp, 'multi-angle-initial')
     await editor.locator('[data-multi-angle-image-block="true"]').waitFor({ state: 'visible', timeout: 12000 })
     if (await editor.locator('canvas').count() !== 0) throw new Error('多角度轨道不应为闲置节点分配 Canvas / GPU 上下文')
