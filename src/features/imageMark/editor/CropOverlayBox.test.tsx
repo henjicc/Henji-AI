@@ -5,6 +5,19 @@ import { CropOverlayBox } from './CropOverlayBox'
 
 afterEach(cleanup)
 describe('共享裁剪框的缩放与扩图约束', () => {
+  it('扩图拖动使用独立图片对象，框保持原位', () => {
+    const onChange = vi.fn()
+    const view = render(<CropOverlayBox displayWidth={500} displayHeight={500} scale={1}
+      crop={{ x: 0, y: 0, width: 500, height: 500 }} moveTarget={{ x: 100, y: 100, width: 200, height: 200 }}
+      imageWidth={500} imageHeight={500} ratio={null} appearance="expand" constrainRect={rect => rect}
+      onChange={onChange} onCommit={vi.fn()} />)
+    vi.spyOn(view.container.firstElementChild as HTMLElement, 'getBoundingClientRect').mockReturnValue({ width: 500 } as DOMRect)
+    fireEvent.mouseDown(view.container.querySelector('[data-crop-frame]')!, { clientX: 150, clientY: 150 })
+    fireEvent.mouseMove(window, { clientX: 180, clientY: 160 })
+    expect(onChange).toHaveBeenLastCalledWith({ x: 130, y: 110, width: 200, height: 200 }, 'move')
+    expect((view.container.querySelector('[data-crop-frame]') as HTMLElement).style.width).toBe('500px')
+    fireEvent.mouseUp(window)
+  })
   it('扩图实时缩放后使用新比例换算增量，静止指针不会重复扩张', () => {
     const onChange = vi.fn()
     const props = { displayWidth: 500, displayHeight: 500, scale: 1,
@@ -31,7 +44,7 @@ describe('共享裁剪框的缩放与扩图约束', () => {
     vi.spyOn(overlay, 'getBoundingClientRect').mockReturnValue({ width: 500 * zoom } as DOMRect)
     fireEvent.mouseDown(view.container.querySelector('[data-crop-handle="e"]')!, { clientX: 100, clientY: 100 })
     fireEvent.mouseMove(window, { clientX: 100 + 50 * zoom, clientY: 100 })
-    expect(onChange).toHaveBeenLastCalledWith({ x: 100, y: 100, width: 300, height: 200 })
+    expect(onChange).toHaveBeenLastCalledWith({ x: 100, y: 100, width: 300, height: 200 }, 'e')
     expect(onCommit).not.toHaveBeenCalled()
     fireEvent.mouseUp(window)
     expect(onCommit).toHaveBeenCalledTimes(1)

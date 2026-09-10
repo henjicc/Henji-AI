@@ -23,7 +23,7 @@ function attachUiInspectionCanvasWorkspace(context) {
     await waitForPageHeader(page)
   }
 
-  async function seedAndOpenCanvasPanoramaProject(page, toolbarBoundary = false) {
+  async function seedAndOpenCanvasPanoramaProject(page, toolbarBoundary = false, portrait = false) {
     await setupCanvas(page)
     if (await page.locator('.react-flow').count()) {
       await page.getByRole('button', { name: /返回项目|Back to Projects/ }).click()
@@ -34,17 +34,17 @@ function attachUiInspectionCanvasWorkspace(context) {
     await projectCard.waitFor({ state: 'visible', timeout: 12000 })
     const projectId = await projectCard.getAttribute('data-project-id')
     if (!projectId) throw new Error('全景查看器场景找不到专用画布工程')
-    const panoramaSource = await page.evaluate(async () => {
+    const panoramaSource = await page.evaluate(async (portrait) => {
       const canvas = document.createElement('canvas')
-      canvas.width = 1600
-      canvas.height = 800
+      canvas.width = portrait ? 800 : 1600
+      canvas.height = portrait ? 1200 : 800
       const context = canvas.getContext('2d')
       if (!context) throw new Error('全景场景无法创建本地 PNG')
       const sky = context.createLinearGradient(0, 0, 0, 800)
       sky.addColorStop(0, 'rgb(24,84,156)')
       sky.addColorStop(1, 'rgb(250,180,100)')
       context.fillStyle = sky
-      context.fillRect(0, 0, 1600, 800)
+      context.fillRect(0, 0, canvas.width, canvas.height)
       context.fillStyle = 'rgb(32,75,72)'
       context.fillRect(0, 500, 1600, 300)
       context.fillStyle = 'rgb(24,48,58)'
@@ -61,7 +61,7 @@ function attachUiInspectionCanvasWorkspace(context) {
         new Uint8Array(await blob.arrayBuffer()),
         'png'
       )
-    })
+    }, portrait)
     const nodes = [{
       id: '__ui_panorama_source', type: 'uploadNode', position: { x: 100, y: 80 },
       width: 420, height: 210, measured: { width: 420, height: 210 }, style: { width: 420, height: 210 },
@@ -417,7 +417,7 @@ function attachUiInspectionCanvasWorkspace(context) {
   }
 
   async function setupCanvasOutpaint(page) {
-    const { projectId } = await seedAndOpenCanvasPanoramaProject(page)
+    const { projectId } = await seedAndOpenCanvasPanoramaProject(page, false, true)
     await page.locator('.react-flow__node[data-id="__ui_panorama_source"]').click()
     await page.locator('[data-image-capability-more="true"]:visible').click()
     await page.locator('[data-image-capability-id="image.outpaint"]:visible').click()
@@ -460,13 +460,13 @@ function attachUiInspectionCanvasWorkspace(context) {
       const record = await window.henjiNative.storyboardProjects.getProjectRecord(projectId)
       return JSON.parse(record.nodesJson).find(node => node.id === nodeId).data.params
     }, { projectId, nodeId })
-    if (params.expandLeft !== 0 || params.expandRight <= 160 || params.zoomOutPercentage !== 0) {
+    if (params.expandLeft !== 0 || params.expandRight <= 80 || params.zoomOutPercentage !== 0) {
       throw new Error(`扩图参数保存错误：${JSON.stringify(params)}`)
     }
     await page.locator(`[data-project-id="${projectId}"]:visible`).click()
     await stage.locator('[data-crop-frame]').waitFor({ state: 'visible' })
     const reopened = await geometry()
-    if (Math.abs(reopened.frame.width / reopened.image.width - (1600 + params.expandRight) / 1600) > 0.02) {
+    if (Math.abs(reopened.frame.width / reopened.image.width - (800 + params.expandRight) / 800) > 0.02) {
       throw new Error('重新打开后扩图框与保存参数不一致')
     }
     const bottom = await stage.locator('[data-crop-handle="s"]').boundingBox()
@@ -486,11 +486,12 @@ function attachUiInspectionCanvasWorkspace(context) {
     }
     await page.mouse.move(released.frame.x + released.frame.width / 2, released.frame.y + released.frame.height / 2)
     await page.mouse.down()
-    await page.mouse.move(released.frame.x + released.frame.width / 2 - 250, released.frame.y + released.frame.height / 2, { steps: 20 })
+    await page.mouse.move(released.frame.x + released.frame.width / 2 + 100, released.frame.y + released.frame.height / 2, { steps: 20 })
     const moved = await geometry()
     if (Math.abs(moved.image.width - released.image.width) > 1 || Math.abs(moved.frame.width - released.frame.width) > 1) {
       throw new Error('扩图框平移改变了比例或输出尺寸')
     }
+    if (Math.abs(moved.frame.x - released.frame.x) > 1 || moved.image.x <= released.image.x + 1) throw new Error('拖动未移动图片或错误移动了框')
     await page.mouse.up()
     const beforeWheel = await geometry()
     const flowTransform = await page.locator('.react-flow__viewport').getAttribute('style')
@@ -499,13 +500,33 @@ function attachUiInspectionCanvasWorkspace(context) {
     await page.waitForTimeout(100)
     const zoomedOut = await geometry()
     if (zoomedOut.image.width >= beforeWheel.image.width - 1) throw new Error('滚轮未缩小扩图工作面')
-    if (Math.abs(zoomedOut.frame.width / zoomedOut.image.width - beforeWheel.frame.width / beforeWheel.image.width) > 0.01) {
-      throw new Error('滚轮改变了实际输出构图')
+    for (const key of ['x', 'y', 'width', 'height']) {
+      if (Math.abs(zoomedOut.frame[key] - beforeWheel.frame[key]) > 1) throw new Error('滚轮移动或缩放了输出框')
     }
     if (await page.locator('.react-flow__viewport').getAttribute('style') !== flowTransform) throw new Error('扩图滚轮影响了整个画布')
     await page.mouse.wheel(0, -100)
     await page.waitForTimeout(100)
     if (Math.abs((await geometry()).image.width - beforeWheel.image.width) > 1) throw new Error('滚轮放大未恢复查看倍率')
+    if (await stage.getByText(/\d+\s*×\s*\d+/).count()) throw new Error('扩图仍显示多余分辨率文字')
+    const current = await geometry()
+    const centerX = current.frame.x + current.frame.width / 2
+    const centerY = current.frame.y + current.frame.height / 2
+    await page.mouse.move(centerX, centerY)
+    await page.mouse.down()
+    await page.mouse.move(centerX + stageBox.x + stageBox.width / 2 - current.image.x - current.image.width / 2,
+      centerY + stageBox.y + stageBox.height / 2 - current.image.y - current.image.height / 2, { steps: 10 })
+    await page.mouse.up()
+    for (const [handle, x, y] of [['nw', stageBox.x - 100, stageBox.y - 100], ['se', stageBox.x + stageBox.width + 100, stageBox.y + stageBox.height + 100]]) {
+      const point = await stage.locator(`[data-crop-handle="${handle}"]`).boundingBox()
+      await page.mouse.move(point.x + point.width / 2, point.y + point.height / 2)
+      await page.mouse.down()
+      await page.mouse.move(x, y, { steps: 10 })
+      await page.mouse.up()
+    }
+    const maximum = await geometry()
+    for (const key of ['x', 'y', 'width', 'height']) {
+      if (Math.abs(maximum.frame[key] - stageBox[key]) > 2) throw new Error(`最大框仍有工作面空档 ${key}: ${JSON.stringify({ maximum, stageBox })}`)
+    }
     await shell.click({ position: { x: 8, y: 8 } })
     await settlePage(page)
   }

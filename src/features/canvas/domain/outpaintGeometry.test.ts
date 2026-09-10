@@ -1,39 +1,42 @@
 import { model } from '@henjicc/ai-sdk/tool-models/fal/outpaint'
 import { describe, expect, it } from 'vitest'
-import { constrainOutpaintRect, fitOutpaintView, zoomOutpaintView, marginsToRect, rectToMargins, resolveOutpaintMargins, resolveOutpaintRequestParams } from './outpaintGeometry'
+import { createOutpaintScene, resizeOutpaintFrame, moveOutpaintImage, zoomOutpaintImage, outpaintSceneToMargins, marginsToRect, rectToMargins, resolveOutpaintMargins, resolveOutpaintRequestParams } from './outpaintGeometry'
 
 describe('扩图框与请求参数', () => {
   const image = { x: 300, y: 400, width: 1000, height: 1500 }
-  it('平移撞到四边后停止，不改变框的尺寸，也遵守单边上限', () => {
-    for (const x of [-9999, 9999]) for (const y of [-9999, 9999]) {
-      const rect = constrainOutpaintRect({ x, y, width: 2000, height: 2500 }, image, 700, true)
-      expect(rect.width).toBe(2000)
-      expect(rect.height).toBe(2500)
-      const margins = rectToMargins(rect, image, 700)
-      expect(margins.expandLeft + margins.expandRight).toBe(1000)
-      expect(margins.expandTop + margins.expandBottom).toBe(1000)
-    }
-  })
-  it('固定显示范围容纳接口最大扩图，滚轮只改变查看倍率', () => {
-    const size = { width: 1000, height: 1500 }
+  it.each([{ width: 1000, height: 1500 }, { width: 1600, height: 800 }])('最大框贴满工作面，拉边不移动或缩放图片 %o', source => {
     const viewport = { width: 600, height: 500 }
-    const view = fitOutpaintView(size, viewport, 700)
-    expect(-700 * view.scale + view.x).toBeGreaterThanOrEqual(24)
-    expect((size.height + 700) * view.scale + view.y).toBeLessThanOrEqual(460.001)
-    const margins = resolveOutpaintMargins({}, size, 700)
-    const zoom = zoomOutpaintView(1, -100, size, margins, viewport, 700)
-    expect(zoom).toBeGreaterThan(1)
-    expect(fitOutpaintView(size, viewport, 700, zoom).scale).toBeGreaterThan(view.scale)
-    expect(zoomOutpaintView(zoom, 100, size, margins, viewport, 700)).toBeCloseTo(1)
-    const maxZoom = zoomOutpaintView(100, 0, size, margins, viewport, 700)
-    const enlarged = fitOutpaintView(size, viewport, 700, maxZoom)
-    expect((size.height + margins.expandBottom) * enlarged.scale + enlarged.y).toBeLessThanOrEqual(460.001)
+    const scene = createOutpaintScene(source, viewport, resolveOutpaintMargins({}, source, 700), 700)
+    const frame = resizeOutpaintFrame({ x: -9999, y: -9999, width: 99999, height: 99999 }, scene.image, source, viewport, 700)
+    expect(frame).toEqual({ x: 0, y: 0, ...viewport })
+    const margins = outpaintSceneToMargins({ ...scene, frame }, source, 700)
+    expect(Object.values(margins).every(value => value >= 0 && value <= 700)).toBe(true)
   })
-  it('放大查看后拉边受显示边缘限制，平移也不越界或改变尺寸', () => {
-    const visible = { x: 150, y: 200 }
-    const resized = constrainOutpaintRect({ x: -999, y: -999, width: 9999, height: 9999 }, image, 700, false, visible)
-    expect(resized).toEqual({ x: 150, y: 200, width: 1300, height: 1900 })
-    expect(constrainOutpaintRect({ ...resized, x: -9999, y: -9999 }, image, 700, true, visible)).toEqual(resized)
+  it('移动的是图片，固定框不变，碰到边界停止', () => {
+    const source = { width: 1000, height: 1500 }
+    const scene = createOutpaintScene(source, { width: 600, height: 500 }, resolveOutpaintMargins({}, source, 700), 700)
+    const moved = moveOutpaintImage({ ...scene.image, x: -9999, y: 9999 }, scene.frame, source, 700)
+    expect(moved.width).toBe(scene.image.width)
+    expect(moved.x).toBe(scene.frame.x)
+    expect(moved.y + moved.height).toBeCloseTo(scene.frame.y + scene.frame.height)
+    const margins = outpaintSceneToMargins({ ...scene, image: moved }, source, 700)
+    expect(margins.expandLeft).toBe(0)
+    expect(margins.expandBottom).toBe(0)
+  })
+  it('滚轮改变图片与留白比例，API 参数与保存重开构图一致', () => {
+    const source = { width: 1000, height: 1500 }
+    const viewport = { width: 600, height: 500 }
+    const scene = createOutpaintScene(source, viewport, resolveOutpaintMargins({}, source, 700), 700)
+    const smaller = zoomOutpaintImage(scene, 100, source, 700)
+    expect(smaller.width).toBeLessThan(scene.image.width)
+    expect(smaller.width / smaller.height).toBeCloseTo(source.width / source.height)
+    const margins = outpaintSceneToMargins({ ...scene, image: smaller }, source, 700)
+    expect(margins.expandLeft).toBeGreaterThan(100)
+    const restored = createOutpaintScene(source, viewport, margins, 700)
+    expect(restored.frame.width / restored.image.width).toBeCloseTo(scene.frame.width / smaller.width, 2)
+    let current = { ...scene, image: smaller }
+    for (let index = 0; index < 100; index++) current = { ...current, image: zoomOutpaintImage(current, 100, source, 700) }
+    expect(Object.values(outpaintSceneToMargins(current, source, 700)).every(value => value <= 700)).toBe(true)
   })
   it('初始宽高等比例扩展 20%，四边像素不会和 zoom out 叠加', () => {
     const margins = resolveOutpaintMargins({}, image, 700)

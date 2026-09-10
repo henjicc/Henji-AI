@@ -104,6 +104,7 @@ export const GenerationNodeShell = memo(({
   layoutMode = 'stacked',
   workbenchStage,
   workbenchMediaInput,
+  workbenchAspectRatio,
   minWidth = 320,
   minHeight = showPromptInput ? 160 : 0,
   maxWidth = 1400,
@@ -440,8 +441,10 @@ export const GenerationNodeShell = memo(({
       <NodeLodPlaceholder title={resolvedTitle} icon={icon ?? <Sparkles className="h-6 w-6" />} />
 
       {resolvedLayoutMode === 'workbench' ? (
-        <div className="canvas-node-lod-detail grid min-h-0 min-w-0 flex-1 grid-cols-[minmax(0,1.35fr)_minmax(240px,0.65fr)] overflow-hidden rounded-lg bg-bg-dark/45">
-          <main className="nodrag nowheel flex min-h-0 min-w-0 overflow-hidden">
+        <div className="canvas-node-lod-detail grid min-h-0 min-w-0 flex-1 grid-cols-[minmax(0,1.35fr)_minmax(240px,0.65fr)] overflow-hidden rounded-lg bg-bg-dark/45"
+          style={workbenchAspectRatio ? { containerType: 'size', gridTemplateColumns: 'auto minmax(240px,1fr)' } : undefined}>
+          <main className="nodrag nowheel flex min-h-0 min-w-0 overflow-hidden"
+            style={workbenchAspectRatio ? { width: `calc(100cqh * ${workbenchAspectRatio})`, maxWidth: 'calc(100cqw - 240px)' } : undefined}>
             {resolvedWorkbenchStage}
           </main>
           <aside className="nodrag nowheel flex min-h-0 min-w-0 flex-col gap-1.5 overflow-y-auto border-l border-veil-subtle p-2">

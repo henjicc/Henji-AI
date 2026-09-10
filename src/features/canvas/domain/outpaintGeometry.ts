@@ -4,43 +4,59 @@ export const OUTPAINT_FIELDS = ['expandLeft', 'expandRight', 'expandTop', 'expan
 export type OutpaintMargins = Record<typeof OUTPAINT_FIELDS[number], number>
 export interface OutpaintImageSize { width: number; height: number }
 
-/** 平移只分配已有留白；拉边和移动都不能超出 API 与当前显示范围。 */
-export function constrainOutpaintRect(rect: MarkCropRect, image: MarkCropRect, maximum: number, moving: boolean, visible = { x: maximum, y: maximum }): MarkCropRect {
-  const horizontal = Math.max(0, Math.min(maximum, visible.x))
-  const vertical = Math.max(0, Math.min(maximum, visible.y))
-  if (!moving) {
-    const margins = rectToMargins(rect, image, maximum)
-    return marginsToRect({
-      expandLeft: Math.min(margins.expandLeft, Math.floor(horizontal)),
-      expandRight: Math.min(margins.expandRight, Math.floor(horizontal)),
-      expandTop: Math.min(margins.expandTop, Math.floor(vertical)),
-      expandBottom: Math.min(margins.expandBottom, Math.floor(vertical)),
-    }, image)
-  }
-  return {
-    ...rect,
-    x: Math.max(image.x - Math.min(horizontal, rect.width - image.width), Math.min(image.x, image.x + image.width + horizontal - rect.width, rect.x)),
-    y: Math.max(image.y - Math.min(vertical, rect.height - image.height), Math.min(image.y, image.y + image.height + vertical - rect.height, rect.y)),
-  }
-}
+export interface OutpaintScene { frame: MarkCropRect; image: MarkCropRect }
+const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value))
 
-/** 显示比例仅由原图、接口上限、容器尺寸和用户滚轮决定，与当前扩图框无关。 */
-export function fitOutpaintView(image: OutpaintImageSize, viewport: OutpaintImageSize, maximum: number, zoom = 1) {
-  const scale = Math.max(0.001, Math.min(
-    Math.max(1, viewport.width - 48) / (image.width + maximum * 2),
-    Math.max(1, viewport.height - 64) / (image.height + maximum * 2),
-  ) * zoom)
-  return { scale, x: (viewport.width - image.width * scale) / 2, y: (viewport.height - 16 - image.height * scale) / 2 }
-}
-
-/** 滚轮放大到完整扩图框贴边为止，不改变扩图像素或裁掉已有框。 */
-export function zoomOutpaintView(zoom: number, delta: number, image: OutpaintImageSize, margins: OutpaintMargins, viewport: OutpaintImageSize, maximum: number) {
-  const base = fitOutpaintView(image, viewport, maximum).scale
-  const limit = Math.min(
-    Math.max(1, viewport.width - 48) / (image.width + 2 * Math.max(margins.expandLeft, margins.expandRight)) / base,
-    Math.max(1, viewport.height - 64) / (image.height + 2 * Math.max(margins.expandTop, margins.expandBottom)) / base,
+export function createOutpaintScene(source: OutpaintImageSize, viewport: OutpaintImageSize, margins: OutpaintMargins, maximum: number): OutpaintScene {
+  const scale = Math.min(
+    Math.max(viewport.width / (source.width + 2 * maximum), viewport.height / (source.height + 2 * maximum)),
+    viewport.width / (source.width + margins.expandLeft + margins.expandRight),
+    viewport.height / (source.height + margins.expandTop + margins.expandBottom),
   )
-  return Math.max(0.25, Math.min(limit, zoom * Math.exp(-Math.max(-100, Math.min(100, delta)) * 0.002)))
+  const frameWidth = (source.width + margins.expandLeft + margins.expandRight) * scale
+  const frameHeight = (source.height + margins.expandTop + margins.expandBottom) * scale
+  const frame = {
+    x: clamp((viewport.width - source.width * scale) / 2 - margins.expandLeft * scale, 0, viewport.width - frameWidth),
+    y: clamp((viewport.height - source.height * scale) / 2 - margins.expandTop * scale, 0, viewport.height - frameHeight),
+    width: frameWidth, height: frameHeight,
+  }
+  return { frame, image: { x: frame.x + margins.expandLeft * scale, y: frame.y + margins.expandTop * scale, width: source.width * scale, height: source.height * scale } }
+}
+
+/** 拉边只改输出框，既包含原图，也不越过工作面和 API 边界。 */
+export function resizeOutpaintFrame(rect: MarkCropRect, image: MarkCropRect, source: OutpaintImageSize, viewport: OutpaintImageSize, maximum: number): MarkCropRect {
+  const margin = maximum * image.width / source.width
+  const x = clamp(rect.x, Math.max(0, image.x - margin), image.x)
+  const y = clamp(rect.y, Math.max(0, image.y - margin), image.y)
+  const right = clamp(rect.x + rect.width, image.x + image.width, Math.min(viewport.width, image.x + image.width + margin))
+  const bottom = clamp(rect.y + rect.height, image.y + image.height, Math.min(viewport.height, image.y + image.height + margin))
+  return { x, y, width: right - x, height: bottom - y }
+}
+
+/** 图片在固定框内移动；保留完整原图，四边留白不超过接口上限。 */
+export function moveOutpaintImage(image: MarkCropRect, frame: MarkCropRect, source: OutpaintImageSize, maximum: number): MarkCropRect {
+  const margin = maximum * image.width / source.width
+  return { ...image,
+    x: clamp(image.x, Math.max(frame.x, frame.x + frame.width - image.width - margin), Math.min(frame.x + frame.width - image.width, frame.x + margin)),
+    y: clamp(image.y, Math.max(frame.y, frame.y + frame.height - image.height - margin), Math.min(frame.y + frame.height - image.height, frame.y + margin)),
+  }
+}
+
+/** 滚轮只改变图片的等比尺寸，框保持原位；极限由完整原图与 API 留白共同决定。 */
+export function zoomOutpaintImage(scene: OutpaintScene, delta: number, source: OutpaintImageSize, maximum: number): MarkCropRect {
+  const { image, frame } = scene
+  const minimum = Math.max(frame.width / (source.width + 2 * maximum), frame.height / (source.height + 2 * maximum))
+  const maximumScale = Math.min(frame.width / source.width, frame.height / source.height)
+  const scale = clamp(image.width / source.width * Math.exp(-clamp(delta, -100, 100) * 0.002), minimum, maximumScale)
+  const width = source.width * scale
+  const height = source.height * scale
+  return moveOutpaintImage({ x: image.x + (image.width - width) / 2, y: image.y + (image.height - height) / 2, width, height }, frame, source, maximum)
+}
+
+export function outpaintSceneToMargins(scene: OutpaintScene, source: OutpaintImageSize, maximum: number): OutpaintMargins {
+  const scale = scene.image.width / source.width
+  const normalize = (rect: MarkCropRect) => ({ x: rect.x / scale, y: rect.y / scale, width: rect.width / scale, height: rect.height / scale })
+  return rectToMargins(normalize(scene.frame), normalize(scene.image), maximum)
 }
 export function resolveOutpaintMargins(
   params: Record<string, unknown>, image: OutpaintImageSize, maximum: number,

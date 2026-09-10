@@ -64,6 +64,8 @@ export interface GenerationNodeShellProps {
   workbenchStage?: ReactNode | ((context: GenerationNodeWorkbenchContext) => ReactNode)
   /** 工作面直接展示并编辑的媒体，输入端口放在节点外缘；单图已有内容时不重复渲染媒体参数行，空输入保留上传入口。 */
   workbenchMediaInput?: RowMediaKind
+  /** 优先按工作面的内容比例分配宽度，避免竖图两侧的无效预留区域。 */
+  workbenchAspectRatio?: number
   minWidth?: number
   minHeight?: number
   maxWidth?: number

@@ -16,7 +16,9 @@ interface CropOverlayBoxProps {
   imageHeight: number;
   /** 宽高比约束,null 为自由 */
   ratio: number | null;
-  onChange: (rect: MarkCropRect) => void;
+  onChange: (rect: MarkCropRect, handle: HandleType) => void;
+  /** 框内拖动的独立对象，例如扩图中的原图；拉边仍编辑 crop。 */
+  moveTarget?: MarkCropRect;
   onCommit: () => void;
   /** 扩图等工作面提供自己的边界规则，默认仍为图片内裁剪。 */
   constrainRect?: (rect: MarkCropRect, handle: HandleType) => MarkCropRect;
@@ -69,6 +71,7 @@ export function CropOverlayBox({
   imageHeight,
   ratio,
   onChange,
+  moveTarget,
   onCommit,
   constrainRect,
   offset,
@@ -90,8 +93,8 @@ export function CropOverlayBox({
       ? overlayRef.current.getBoundingClientRect().width / Math.max(1, displayWidth) : 1;
     setActiveHandle(type);
     startPosRef.current = { x: event.clientX, y: event.clientY };
-    startRectRef.current = { ...crop };
-  }, [crop, displayWidth]);
+    startRectRef.current = { ...(type === 'move' && moveTarget ? moveTarget : crop) };
+  }, [crop, displayWidth, moveTarget]);
 
   useEffect(() => {
     if (!activeHandle) {
@@ -147,7 +150,7 @@ export function CropOverlayBox({
         startRectRef.current = constrained;
         startPosRef.current = { x: event.clientX, y: event.clientY };
       }
-      props.onChange(constrained);
+      props.onChange(constrained, activeHandle);
     };
 
     const handleMouseUp = () => {
@@ -202,8 +205,11 @@ export function CropOverlayBox({
           <div
             key={handle.type}
             data-crop-handle={handle.type}
-            className={`absolute h-2.5 w-2.5 border ${appearance === 'expand' ? 'rounded-hairline border-accent bg-text-dark' : 'rounded-sm border-black/40 bg-white'} ${handle.className} before:absolute before:-inset-2 before:content-['']`}
-            style={{ cursor: handle.cursor }}
+            className={`absolute h-2.5 w-2.5 border ${appearance === 'expand' ? 'rounded-hairline border-accent bg-text-dark' : `rounded-sm border-black/40 bg-white ${handle.className}`} before:absolute before:-inset-2 before:content-['']`}
+            style={{ cursor: handle.cursor, ...(appearance === 'expand' ? {
+              left: handle.type.includes('w') ? 0 : handle.type.includes('e') ? 'calc(100% - 10px)' : 'calc(50% - 5px)',
+              top: handle.type.includes('n') ? 0 : handle.type.includes('s') ? 'calc(100% - 10px)' : 'calc(50% - 5px)',
+            } : {}) }}
             onMouseDown={(event) => beginGesture(event, handle.type)}
           />
         ))}
