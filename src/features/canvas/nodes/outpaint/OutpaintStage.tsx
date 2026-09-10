@@ -3,23 +3,24 @@ import { useTranslation } from 'react-i18next'
 import { UiError, UiLoading } from '@/components/ui'
 import { resolveImageDisplayUrl } from '@/services/imageSource'
 import { CropOverlayBox } from '@/features/imageMark/editor/CropOverlayBox'
-import { createOutpaintScene, moveOutpaintImage, outpaintSceneToMargins, resizeOutpaintFrame, resolveOutpaintMargins, zoomOutpaintImage, type OutpaintImageSize, type OutpaintMargins, type OutpaintScene } from '../../domain/outpaintGeometry'
+import { createOutpaintScene, scaleOutpaintScene, moveOutpaintImage, outpaintSceneToMargins, resizeOutpaintFrame, resolveOutpaintMargins, zoomOutpaintImage, type OutpaintImageSize, type OutpaintMargins, type OutpaintScene } from '../../domain/outpaintGeometry'
 
 interface Props {
   source: string
   params: Record<string, unknown>
   maximum: number
   onCommit: (margins: OutpaintMargins) => void
-  onAspectRatio: (ratio: number) => void
 }
 
-export const OutpaintStage = memo(function OutpaintStage({ source, params, maximum, onCommit, onAspectRatio }: Props) {
+export const OutpaintStage = memo(function OutpaintStage({ source, params, maximum, onCommit }: Props) {
   const { t } = useTranslation()
   const host = useRef<HTMLDivElement>(null)
-  const [viewport, setViewport] = useState({ width: 400, height: 350 })
+  const [viewport, setViewport] = useState({ width: 0, height: 0 })
   const [image, setImage] = useState<OutpaintImageSize | null>(null)
   const [failed, setFailed] = useState(false)
-  const [draft, setDraft] = useState<{ scene: OutpaintScene; paramsKey: string; sizeKey: string } | null>(null)
+  type Snapshot = { scene: OutpaintScene; paramsKey: string; viewport: OutpaintImageSize }
+  const [draft, setDraft] = useState<Snapshot | null>(null)
+  const baseline = useRef<Snapshot | null>(null)
   const committedKey = useRef('')
   const wheelTimer = useRef<ReturnType<typeof setTimeout>>()
   useLayoutEffect(() => {
@@ -34,14 +35,18 @@ export const OutpaintStage = memo(function OutpaintStage({ source, params, maxim
   }, [])
   const saved = image ? resolveOutpaintMargins(params, image, maximum) : null
   const paramsKey = JSON.stringify(saved)
-  const sizeKey = `${viewport.width}:${viewport.height}`
-  const scene = draft && draft.sizeKey === sizeKey && (draft.paramsKey === paramsKey || committedKey.current === paramsKey)
-    ? draft.scene : image && saved ? createOutpaintScene(image, viewport, saved, maximum) : null
+  const snapshot = draft && (draft.paramsKey === paramsKey || committedKey.current === paramsKey)
+    ? draft : baseline.current?.paramsKey === paramsKey ? baseline.current : null
+  const scene = snapshot ? scaleOutpaintScene(snapshot.scene, snapshot.viewport, viewport)
+    : image && saved && viewport.width > 0 && viewport.height > 0 ? createOutpaintScene(image, viewport, saved, maximum) : null
+  useLayoutEffect(() => {
+    if (scene && baseline.current?.paramsKey !== paramsKey) baseline.current = { scene, paramsKey, viewport }
+  })
   const latestScene = useRef(scene)
   latestScene.current = scene
   const update = (next: OutpaintScene) => {
     latestScene.current = next
-    setDraft({ scene: next, paramsKey, sizeKey })
+    setDraft({ scene: next, paramsKey, viewport })
   }
   const commitRef = useRef<() => void>()
   commitRef.current = () => {
@@ -87,7 +92,6 @@ export const OutpaintStage = memo(function OutpaintStage({ source, params, maxim
           const width = event.currentTarget.naturalWidth
           const height = event.currentTarget.naturalHeight
           setImage({ width, height })
-          onAspectRatio((width + maximum * 2) / (height + maximum * 2))
           setFailed(false)
         }}
         onError={() => setFailed(true)} />

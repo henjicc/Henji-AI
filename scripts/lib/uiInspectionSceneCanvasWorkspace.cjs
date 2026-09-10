@@ -475,7 +475,7 @@ function attachUiInspectionCanvasWorkspace(context) {
     await page.mouse.move(bottom.x + bottom.width / 2, bottom.y + bottom.height / 2 + 300, { steps: 20 })
     const expanded = await geometry()
     if (Math.abs(expanded.image.width - reopened.image.width) > 1) throw new Error('拖动扩图框触发了自动缩放')
-    const stageBox = await stage.boundingBox()
+    let stageBox = await stage.boundingBox()
     if (expanded.frame.y < stageBox.y || expanded.frame.y + expanded.frame.height > stageBox.y + stageBox.height) {
       throw new Error('拖动期间扩图框超出工作面，未实时适配')
     }
@@ -527,6 +527,32 @@ function attachUiInspectionCanvasWorkspace(context) {
     for (const key of ['x', 'y', 'width', 'height']) {
       if (Math.abs(maximum.frame[key] - stageBox[key]) > 2) throw new Error(`最大框仍有工作面空档 ${key}: ${JSON.stringify({ maximum, stageBox })}`)
     }
+    await page.mouse.move(stageBox.x + stageBox.width / 2, stageBox.y + stageBox.height / 2)
+    await page.mouse.wheel(0, -100)
+    await page.waitForTimeout(100)
+    const beforeResize = await geometry()
+    const resizeViewport = await stage.boundingBox()
+    const node = page.locator(`.react-flow__node[data-id="${nodeId}"]`)
+    await node.click({ position: { x: 24, y: 4 } })
+    const resizeHandle = await node.locator('.react-flow__resize-control.bottom.right').last().boundingBox()
+    await page.mouse.move(resizeHandle.x + resizeHandle.width / 2, resizeHandle.y + resizeHandle.height / 2)
+    await page.mouse.down()
+    for (const step of [1, 2, 3]) {
+      await page.mouse.move(resizeHandle.x + resizeHandle.width / 2 + step * 20, resizeHandle.y + resizeHandle.height / 2 + step * 8)
+      await page.waitForTimeout(50)
+      const resized = await geometry()
+      stageBox = await stage.boundingBox()
+      const scale = Math.min(stageBox.width / resizeViewport.width, stageBox.height / resizeViewport.height)
+      if (Math.abs(resized.image.width - beforeResize.image.width * scale) > 1 || Math.abs(resized.frame.width - beforeResize.frame.width * scale) > 1) {
+        throw new Error('改变节点尺寸时没有对图片和框执行统一等比缩放')
+      }
+      const offset = (resized.image.x - resized.frame.x) / resized.image.width
+      if (Math.abs(offset - (beforeResize.image.x - beforeResize.frame.x) / beforeResize.image.width) > 0.01) throw new Error('改变节点尺寸时图片相对位置跳变')
+    }
+    await page.mouse.up()
+    const inspectorWidth = await shell.locator('aside').evaluate(element => element.getBoundingClientRect().width / element.offsetWidth * 200)
+    const inspector = await shell.locator('aside').boundingBox()
+    if (Math.abs(inspector.width - inspectorWidth) > 1) throw new Error('扩图参数区未保持紧凑固定宽度')
     await shell.click({ position: { x: 8, y: 8 } })
     await settlePage(page)
   }

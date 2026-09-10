@@ -1,9 +1,24 @@
 import { model } from '@henjicc/ai-sdk/tool-models/fal/outpaint'
 import { describe, expect, it } from 'vitest'
-import { createOutpaintScene, resizeOutpaintFrame, moveOutpaintImage, zoomOutpaintImage, outpaintSceneToMargins, marginsToRect, rectToMargins, resolveOutpaintMargins, resolveOutpaintRequestParams } from './outpaintGeometry'
+import { createOutpaintScene, scaleOutpaintScene, resizeOutpaintFrame, moveOutpaintImage, zoomOutpaintImage, outpaintSceneToMargins, marginsToRect, rectToMargins, resolveOutpaintMargins, resolveOutpaintRequestParams } from './outpaintGeometry'
 
 describe('扩图框与请求参数', () => {
   const image = { x: 300, y: 400, width: 1000, height: 1500 }
+  it('节点任意方向改变大小时，框与图片共用等比变换且输出参数不变', () => {
+    const source = { width: 1000, height: 1500 }
+    const viewport = { width: 600, height: 500 }
+    const initial = createOutpaintScene(source, viewport, resolveOutpaintMargins({}, source, 700), 700)
+    const scene = { ...initial, image: zoomOutpaintImage(initial, 100, source, 700) }
+    const margins = outpaintSceneToMargins(scene, source, 700)
+    for (const target of [{ width: 900, height: 550 }, { width: 350, height: 700 }, viewport]) {
+      const resized = scaleOutpaintScene(scene, viewport, target)
+      expect(resized.frame.width / resized.frame.height).toBeCloseTo(scene.frame.width / scene.frame.height)
+      expect(resized.image.width / resized.image.height).toBeCloseTo(source.width / source.height)
+      expect((resized.image.x - resized.frame.x) / resized.frame.width).toBeCloseTo((scene.image.x - scene.frame.x) / scene.frame.width)
+      expect(outpaintSceneToMargins(resized, source, 700)).toEqual(margins)
+    }
+    expect(scaleOutpaintScene(scene, viewport, viewport)).toEqual(scene)
+  })
   it.each([{ width: 1000, height: 1500 }, { width: 1600, height: 800 }])('最大框贴满工作面，拉边不移动或缩放图片 %o', source => {
     const viewport = { width: 600, height: 500 }
     const scene = createOutpaintScene(source, viewport, resolveOutpaintMargins({}, source, 700), 700)

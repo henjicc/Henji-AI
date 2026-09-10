@@ -104,7 +104,7 @@ export const GenerationNodeShell = memo(({
   layoutMode = 'stacked',
   workbenchStage,
   workbenchMediaInput,
-  workbenchAspectRatio,
+  workbenchInspectorWidth,
   minWidth = 320,
   minHeight = showPromptInput ? 160 : 0,
   maxWidth = 1400,
@@ -442,9 +442,8 @@ export const GenerationNodeShell = memo(({
 
       {resolvedLayoutMode === 'workbench' ? (
         <div className="canvas-node-lod-detail grid min-h-0 min-w-0 flex-1 grid-cols-[minmax(0,1.35fr)_minmax(240px,0.65fr)] overflow-hidden rounded-lg bg-bg-dark/45"
-          style={workbenchAspectRatio ? { containerType: 'size', gridTemplateColumns: 'auto minmax(240px,1fr)' } : undefined}>
-          <main className="nodrag nowheel flex min-h-0 min-w-0 overflow-hidden"
-            style={workbenchAspectRatio ? { width: `calc(100cqh * ${workbenchAspectRatio})`, maxWidth: 'calc(100cqw - 240px)' } : undefined}>
+          style={workbenchInspectorWidth ? { gridTemplateColumns: `minmax(0,1fr) ${workbenchInspectorWidth}px` } : undefined}>
+          <main className="nodrag nowheel flex min-h-0 min-w-0 overflow-hidden">
             {resolvedWorkbenchStage}
           </main>
           <aside className="nodrag nowheel flex min-h-0 min-w-0 flex-col gap-1.5 overflow-y-auto border-l border-veil-subtle p-2">

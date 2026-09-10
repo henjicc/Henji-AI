@@ -7,6 +7,15 @@ export interface OutpaintImageSize { width: number; height: number }
 export interface OutpaintScene { frame: MarkCropRect; image: MarkCropRect }
 const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value))
 
+/** 容器变化只变换同一份构图，不从取整后的请求参数重新创建画面。 */
+export function scaleOutpaintScene(scene: OutpaintScene, from: OutpaintImageSize, to: OutpaintImageSize): OutpaintScene {
+  const scale = Math.min(to.width / from.width, to.height / from.height)
+  const x = (to.width - from.width * scale) / 2
+  const y = (to.height - from.height * scale) / 2
+  const transform = (rect: MarkCropRect) => ({ x: rect.x * scale + x, y: rect.y * scale + y, width: rect.width * scale, height: rect.height * scale })
+  return { frame: transform(scene.frame), image: transform(scene.image) }
+}
+
 export function createOutpaintScene(source: OutpaintImageSize, viewport: OutpaintImageSize, margins: OutpaintMargins, maximum: number): OutpaintScene {
   const scale = Math.min(
     Math.max(viewport.width / (source.width + 2 * maximum), viewport.height / (source.height + 2 * maximum)),

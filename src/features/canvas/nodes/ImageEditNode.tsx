@@ -1,4 +1,4 @@
-import { memo, useCallback, useState } from 'react';
+import { memo, useCallback } from 'react';
 import type { NodeProps } from '@xyflow/react';
 import { useTranslation } from 'react-i18next';
 
@@ -70,7 +70,6 @@ export const ImageEditNode = memo(({ id, data, selected, width, height }: ImageE
   const { t } = useTranslation();
   const generationUi = resolveGenerationUi(data);
   const isOutpaint = generationUi.workbenchEditor === 'outpaint';
-  const [outpaintAspectRatio, setOutpaintAspectRatio] = useState<number>();
   const expansionParam = registry.getModel(data.modelId ?? '')?.params.find(param => param.id === 'expandLeft');
   const maximum = expansionParam && 'max' in expansionParam && typeof expansionParam.max === 'number' ? expansionParam.max : 0;
   const commitMargins = useCallback((margins: OutpaintMargins) => {
@@ -139,9 +138,9 @@ export const ImageEditNode = memo(({ id, data, selected, width, height }: ImageE
       minWidth={isOutpaint ? 720 : undefined}
       minHeight={isOutpaint ? 400 : undefined}
       workbenchMediaInput={isOutpaint ? 'image' : undefined}
-      workbenchAspectRatio={isOutpaint ? outpaintAspectRatio : undefined}
+      workbenchInspectorWidth={isOutpaint ? 200 : undefined}
       workbenchStage={isOutpaint ? ({ images }) => images[0] ? (
-        <OutpaintStage key={images[0]} source={images[0]} params={data.params ?? {}} maximum={maximum} onCommit={commitMargins} onAspectRatio={setOutpaintAspectRatio} />
+        <OutpaintStage key={images[0]} source={images[0]} params={data.params ?? {}} maximum={maximum} onCommit={commitMargins} />
       ) : <UiEmpty title={t('node.outpaint.chooseSource')} /> : undefined}
     />
   );
