@@ -29,7 +29,7 @@ describe('直接转动图片块', () => {
     expect(orientation()).not.toBe(before)
     expect(container.querySelector('img')).toBe(image)
     expect(callback).not.toHaveBeenCalled()
-    expect(control.textContent).toBe('')
+    expect(container.querySelector('[data-multi-angle-navigator]') !== null).toBe(kind === 'discrete')
     fireEvent.pointerUp(control, { pointerId: 1 })
     expect(callback).toHaveBeenCalledTimes(1)
     if (kind === 'discrete') expect(callback).toHaveBeenCalledWith('back')

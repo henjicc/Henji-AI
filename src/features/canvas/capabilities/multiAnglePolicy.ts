@@ -309,7 +309,8 @@ export function validateMultiAngleConfig(value: unknown): MultiAngleConfigV1 {
       : view.kind === 'discrete'
         ? view.preset
         : `${view.horizontalAngleDeg === 360 ? 0 : view.horizontalAngleDeg}/${view.verticalAngleDeg}/${view.zoom}`
-    if (controls.has(signature)) throw new Error(`多角度视图控制重复：${view.label}`)
+    // Discrete output slots are independent: changing one must never select or mutate another.
+    if (view.kind !== 'discrete' && controls.has(signature)) throw new Error(`多角度视图控制重复：${view.label}`)
     controls.add(signature)
   }
   return config

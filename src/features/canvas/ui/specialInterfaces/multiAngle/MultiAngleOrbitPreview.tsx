@@ -1,5 +1,6 @@
 import {
   useEffect,
+  useCallback,
   useMemo,
   useRef,
   useState,
@@ -18,6 +19,7 @@ import {
   type MultiAngleViewV1,
 } from '@/features/canvas/capabilities/multiAnglePolicy'
 import { MultiAngleOrbitScene } from './MultiAngleOrbitScene'
+import { MultiAngleViewNavigator } from './MultiAngleViewNavigator'
 import { multiAngleOrientation, type MultiAngleOrientation } from './multiAngleOrbitGeometry'
 import {
   continuousCameraFromDrag,
@@ -68,6 +70,9 @@ export function MultiAngleOrbitPreview({
   const visualViews = useMemo(() => transientView
     ? views.map((view) => view.viewId === transientView.viewId ? transientView : view)
     : views, [transientView, views])
+  const selectDirection = useCallback((preset: MultiAngleDiscretePreset): void => {
+    onDiscretePresetChange(preset)
+  }, [onDiscretePresetChange])
 
   useEffect(() => {
     if (selected?.kind === 'continuous') {
@@ -282,6 +287,9 @@ export function MultiAngleOrbitPreview({
     >
       <MultiAngleOrbitScene views={visualViews} selectedViewId={selectedViewId} sourceImage={sourceImage} sourceAlt={sourceAlt}
         previewOrientation={previewOrientation} />
+      {visualSelected?.kind === 'discrete' && (
+        <MultiAngleViewNavigator selectedPreset={visualSelected.preset} onSelect={selectDirection} />
+      )}
     </div>
   )
 }

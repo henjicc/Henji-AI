@@ -74,8 +74,11 @@ function nextUnusedView(config: MultiAngleConfigV1): MultiAngleViewV1 | null {
     : config.controlProfile === 'discrete-v1'
       ? MULTI_ANGLE_DISCRETE_VIEW_PRESETS
       : MULTI_ANGLE_FLUX_PRESETS
-  const used = new Set(config.views.map((view) => view.viewId))
-  const preset = presets.find((item) => !used.has(item.view.viewId))
+  const controls = (view: MultiAngleViewV1): string => view.kind === 'discrete' ? view.preset
+    : view.kind === 'continuous' ? `${view.yawControlDeg === 180 ? -180 : view.yawControlDeg}/${view.elevationDeg}/${view.proximity}`
+      : `${view.horizontalAngleDeg === 360 ? 0 : view.horizontalAngleDeg}/${view.verticalAngleDeg}/${view.zoom}`
+  const used = new Set(config.views.map(controls))
+  const preset = presets.find((item) => !used.has(controls(item.view)))
   return preset ? { ...preset.view } : null
 }
 
@@ -142,6 +145,7 @@ export function MultiAngleWorkbench({
     }
   }
   const selectProfile = (profile: MultiAngleControlProfile): void => {
+    if (profile === config.controlProfile) return
     const next = switchProfile(profile)
     setSelectedViewId(next.views[0]?.viewId ?? '')
     updateConfig(next)
@@ -149,6 +153,7 @@ export function MultiAngleWorkbench({
   const addView = (): void => {
     const next = nextUnusedView(config)
     if (!next || config.views.length >= MULTI_ANGLE_MAX_VIEW_COUNT) return
+    next.viewId = crypto.randomUUID()
     updateConfig({ ...config, views: [...config.views, next] })
     setSelectedViewId(next.viewId)
   }
@@ -170,19 +175,10 @@ export function MultiAngleWorkbench({
   }
   const chooseDiscretePreset = (preset: MultiAngleDiscretePreset): void => {
     if (!selected || selected.kind !== 'discrete') return
-    const existing = config.views.find((view) => view.kind === 'discrete' && view.preset === preset)
-    if (existing) {
-      setSelectedViewId(existing.viewId)
-      return
-    }
+    if (selected.preset === preset) return
     const definition = MULTI_ANGLE_DISCRETE_VIEW_PRESETS.find((item) => item.view.preset === preset)
     if (!definition) return
-    const next = { ...definition.view }
-    updateConfig({
-      ...config,
-      views: config.views.map((view) => view.viewId === selected.viewId ? next : view),
-    })
-    setSelectedViewId(next.viewId)
+    updateConfig(replaceView(config, { ...definition.view, viewId: selected.viewId }))
   }
   const patchFlux = (patch: Partial<MultiAngleFluxViewV1>): void => {
     if (!selected || selected.kind !== 'flux') return
@@ -252,18 +248,19 @@ export function MultiAngleWorkbench({
                 <UiIconButton type="button" appearance="hover-only" showBorder={false} aria-label={t('node.multiAngleEditor.removeView')} disabled={config.views.length <= 1} onClick={removeSelected}>
                   <Trash2 className="h-4 w-4" />
                 </UiIconButton>
-                <UiIconButton type="button" appearance="hover-only" showBorder={false} aria-label={t('node.multiAngleEditor.addView')} disabled={!nextUnusedView(config)} onClick={addView}>
+                <UiIconButton type="button" appearance="hover-only" showBorder={false} aria-label={t('node.multiAngleEditor.addView')} disabled={config.views.length >= MULTI_ANGLE_MAX_VIEW_COUNT || !nextUnusedView(config)} onClick={addView}>
                   <Plus className="h-4 w-4" />
                 </UiIconButton>
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-2 gap-2" data-multi-angle-output-slots="true">
               {config.views.map((view, index) => (
                 <UiOptionButton
                   key={view.viewId}
                   type="button"
                   variant="flat"
                   active={view.viewId === selected?.viewId}
+                  aria-pressed={view.viewId === selected?.viewId}
                   onClick={() => setSelectedViewId(view.viewId)}
                 >
                   <span className="truncate text-xs">{index + 1}. {translateMultiAngleViewLabel(t, view, index)}</span>
@@ -289,26 +286,18 @@ export function MultiAngleWorkbench({
           ) : (
             <section className="mt-5 space-y-3">
               <h3 className={UI_TEXT_SECTION_CLASS}>{t('node.multiAngleEditor.discretePresets')}</h3>
-              <div className="grid grid-cols-3 gap-2">
+              <div className="grid grid-cols-3 gap-2" data-multi-angle-direction-options="true">
                 {MULTI_ANGLE_DISCRETE_VIEW_PRESETS.map((preset) => {
-                  const active = config.views.some((view) => view.kind === 'discrete' && view.preset === preset.view.preset)
+                  const active = selected?.kind === 'discrete' && selected.preset === preset.view.preset
                   return (
                     <UiOptionButton
                       key={preset.id}
                       type="button"
                       variant="flat"
                       active={active}
+                      aria-pressed={active}
                       className="justify-center px-1 text-xs"
-                      onClick={() => {
-                        if (active) {
-                          const current = config.views.find((view) => view.kind === 'discrete' && view.preset === preset.view.preset)
-                          if (current) setSelectedViewId(current.viewId)
-                          return
-                        }
-                        if (config.views.length >= MULTI_ANGLE_MAX_VIEW_COUNT) return
-                        updateConfig({ ...config, views: [...config.views, { ...preset.view }] })
-                        setSelectedViewId(preset.view.viewId)
-                      }}
+                      onClick={() => chooseDiscretePreset(preset.view.preset)}
                     >
                       {translateMultiAngleViewLabel(t, preset.view)}
                     </UiOptionButton>
