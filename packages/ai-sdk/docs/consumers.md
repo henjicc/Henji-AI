@@ -3,15 +3,17 @@
 本清单是 `@henjicc/ai-sdk` 消费方的唯一维护入口，用于 SDK 发布后的跨仓升级协调。
 绝对路径仅描述当前开发机上的仓库位置，不进入 SDK 运行时代码、发布包或用户配置。
 
-最后核对日期：2026-09-10
+最后核对日期：2026-09-11
 
-当前 SDK 版本：`0.2.8`（已发布到公共 npm）
+当前 SDK 版本：`0.3.0`（已发布到公共 npm）
 
-- tarball：`https://registry.npmjs.org/@henjicc/ai-sdk/-/ai-sdk-0.2.8.tgz`
-- shasum：`71ba4c98c7f93a5ea1b434f2a5dded82e7d73223`
-- integrity：`sha512-QJBuHiXKsIKXMBA96/sxQDAvGTZwoNBr2ER0bxjApgbx0zHRkYUKZtB0r/tZkT5OvZx5vlPsEbepcWdNWO/KeA==`
+- tarball：`https://registry.npmjs.org/@henjicc/ai-sdk/-/ai-sdk-0.3.0.tgz`
+- shasum：`ca5b7f0fd42f2e61b2332ae1b60bcfd445b5c28f`
+- integrity：`sha512-xcSFIYJucpNH6JBgVnXvHPnj+SCjPtmq7e2yD77+DniaH16K9disqF0NaUTvj5BmenGqtcmxYRx4aN5NdY4Yng==`
 
-待发布更新：`0.3.0` 新增四家 GPT Image 2.5 pack，保留所有旧入口与旧模型；Henji-AI workspace 与三个仓内示例已锁定候选版本。SDK 全量 798 项测试、宿主参数联动与类型检查已通过，正式 npm 发布/匿名回装待完成。外部 `henji-ai-ps` / `say-it` 保持已发布版本；本次未改变其原有模型、公共 DTO 或宿主协议，不要求机械升级。当前 Windows 工作区未定位到清单中的两份外部仓库，未声称外部宿主验收。
+`0.3.0` 已发布：新增四家 GPT Image 2.5 pack、五家文本 embedding / 四家 rerank，DeepSeek 官方默认模型更新为 `deepseek-flash`。发布提交 `a2dc5bc4` 的必需 CI 门禁全部通过（运行 `34532267703`），SDK 全量 839 项测试和候选包回装通过。正式包已在隔离 npm 配置、无用户令牌的仓外环境从公共 npm 安装，标准 Vite 48 个入口与受限宿主验证通过；正式包校验值与候选包一致。未运行真实付费模型请求。
+
+Henji-AI workspace 与三个仓内示例 manifest 均锁定 `0.3.0`；下表原有示例运行记录仅代表 `0.2.8` 历史证据，本次未完成三个示例的独立全套回装复验。`say-it` 已在 `D:/VibeCode/说吧` 定位，仍锁定公共 npm `0.2.8`，实际按需使用 ASR、translation 与 LLM modules，未使用本次新增检索能力或 DeepSeek 官方预设，无需机械升级；未运行其真实宿主验收。`henji-ai-ps` 的下表路径为另一台开发机记录，本机未定位该路径，不声称本次完成外部升级。
 
 ## 判定口径
 
