@@ -83,6 +83,7 @@ const SWEEP_SCREEN_DISTANCE = (SWEEP_MS / SWEEP_INTERVAL_MS) * SWEEP_STEP_PX
 const CONFIGS = {
   off: '',
   'flow-none': '',
+  'flow-dot': '.canvas-edge-flow-pulse{box-shadow:0 0 5px rgb(var(--accent-rgb) / 0.8)}',
   'flow-pulse': '',
   'flow-legacy': '@keyframes bench-edge-flow{from{stroke-dashoffset:0}to{stroke-dashoffset:-36}}.bench-legacy-edge-flow{animation:bench-edge-flow .9s linear infinite}.canvas-viewport-moving .bench-legacy-edge-flow{animation-play-state:paused}',
   paintdisabled: '.canvas-node-paint-frame{contain:none!important;}.react-flow__node{contain:none!important;overflow-clip-margin:0!important;}',
@@ -449,7 +450,7 @@ async function main() {
     for (const name of CONFIG_SET) summary[name] = summarize(results[name])
 
     const output = {
-      ok: !flowVerification?.error,
+      ok: !flowVerification?.error && CONFIG_SET.every((name) => summary[name].validRounds > 0),
       generatedAt: new Date().toISOString(),
       launchMode: app.mode,
       params: {
@@ -491,6 +492,7 @@ async function main() {
     console.log(JSON.stringify({ ...output, rounds: undefined, idleResults: undefined }, null, 2))
     console.log(`\n完整数据：${path.relative(ROOT, outFile)}`)
     if (flowVerification?.error) throw new Error(flowVerification.error)
+    if (!output.ok) throw new Error('至少一个配置没有有效的平移样本，不能用于性能结论')
   } finally {
     if (fixture) {
       // 回到项目列表再删，避免正在打开的项目被自动保存重新写回

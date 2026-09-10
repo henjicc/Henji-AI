@@ -23,7 +23,8 @@ async function findPanePoint(page, { preferRatioX = 0.86, preferRatioY = 0.5 } =
         if (element.closest('.react-flow__minimap')) continue
         if (element.closest('.react-flow__controls')) continue
         if (element.closest('.react-flow__panel')) continue
-        if (!element.closest('.react-flow__pane')) continue
+        // 连线 SVG 也在 pane 内，但带 nopan，会吞掉起始拖动。
+        if (!element.classList.contains('react-flow__pane')) continue
         return { x, y }
       }
     }

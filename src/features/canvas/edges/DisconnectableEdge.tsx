@@ -44,7 +44,7 @@ export const DisconnectableEdge = memo(function DisconnectableEdge(props: EdgePr
     [sourceX, sourceY, sourcePosition, targetX, targetY, targetPosition]
   );
 
-  const processingStroke = useMemo(() => 'rgb(var(--accent-rgb) / 0.94)', []);
+  const processingStroke = useMemo(() => 'rgb(var(--accent-rgb) / 0.25)', []);
   const baseStrokeWidth = isProcessingEdge
     ? (selected ? 2.7 : 2.2)
     : (selected ? 2.4 : 1.9);

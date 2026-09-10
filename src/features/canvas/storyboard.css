@@ -204,13 +204,8 @@
   cursor: grabbing;
 }
 
-.canvas-edge-flow-pulse {
-  /* 光晕只画一次，播放仅更新 transform/opacity；不提升整个节点或视口的光栅层。 */
-  box-shadow: 0 0 5px rgb(var(--accent-rgb) / 0.8);
-}
-
 @media (prefers-reduced-motion: reduce) {
-  .canvas-edge-flow-pulse {
+  .canvas-edge-flow-layer {
     visibility: hidden;
   }
 }

@@ -256,6 +256,11 @@ async function sweep(page, session, {
   })
   if (!flowRect) throw new Error('未找到 .react-flow 容器')
 
+  // selectionOnDrag 下左键默认框选；明确激活平移，不能依赖上一次复位残留的按键状态。
+  await session.send('Input.dispatchKeyEvent', {
+    type: 'keyDown', key: ' ', code: 'Space', windowsVirtualKeyCode: 32, nativeVirtualKeyCode: 32,
+  })
+  await sleep(30)
   const margin = 60
   const samplePromise = measure ? startFrameSampler(page, durationMs) : null
 
@@ -299,6 +304,9 @@ async function sweep(page, session, {
   // 最终松手必须 await：前面的 move 为了保持输入频率没有逐个等待，如果这里也不等，
   // 下一次复位可能在 CDP 输入队列尚未结束时再次按下，d3-zoom 会停在拖动状态。
   await releasePointer(session, { x, y })
+  await session.send('Input.dispatchKeyEvent', {
+    type: 'keyUp', key: ' ', code: 'Space', windowsVirtualKeyCode: 32, nativeVirtualKeyCode: 32,
+  })
   await sleep(30)
 
   if (!measure) {
