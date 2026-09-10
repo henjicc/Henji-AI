@@ -51,7 +51,7 @@ const CAPABILITY_ICON_MAP: Record<CanvasImageCapabilityIconKey, LucideIcon> = {
   multiAngle: ICON_NODE_CAMERA_STAGE,
   nineGrid: ICON_STORYBOARD,
   upscale: ICON_UPSCALE,
-  portraitTexture: ICON_TOOL_IMAGE_EDIT,
+  photoEnhance: ICON_TOOL_IMAGE_EDIT,
   elementEdit: ICON_TOOL_IMAGE_EDIT,
   layerSeparation: ICON_NODE_ASSET_GROUP,
   gridSplit: ICON_STORYBOARD,

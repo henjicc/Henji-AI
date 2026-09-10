@@ -2,7 +2,6 @@ import {
   PANORAMA_REFERENCE_TEMPLATE_VERSION,
   PANORAMA_TEXT_TEMPLATE_VERSION,
 } from './panoramaPolicy';
-import { PORTRAIT_TEXTURE_TEMPLATE_VERSION } from './portraitTexturePolicy';
 import { ELEMENT_EDIT_PROMPT_TEMPLATE_VERSION } from './elementEditPolicy';
 import type { CanvasImageCapabilityPromptPolicy } from './types';
 
@@ -45,8 +44,6 @@ ${userPrompt}
 const PROMPT_TEMPLATES: Readonly<Record<string, CanvasPromptTemplate>> = {
   [PANORAMA_TEXT_TEMPLATE_VERSION]: PANORAMA_TEXT_TEMPLATE,
   [PANORAMA_REFERENCE_TEMPLATE_VERSION]: PANORAMA_REFERENCE_TEMPLATE,
-  // 人像质感模块已经按版本编译完整隐藏提示词；通用能力层只登记版本，不重复包裹。
-  [PORTRAIT_TEXTURE_TEMPLATE_VERSION]: (compiledPrompt) => compiledPrompt,
   // 局部重绘只固定裁剪/回贴语义；用户提示词原样交给所选图片编辑模型。
   [ELEMENT_EDIT_PROMPT_TEMPLATE_VERSION]: (userPrompt) => userPrompt,
 };

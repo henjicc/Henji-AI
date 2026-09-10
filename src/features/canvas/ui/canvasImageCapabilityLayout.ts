@@ -25,7 +25,6 @@ const CAPABILITY_TOOLBAR_PRIORITY: Readonly<Record<CanvasImageCapabilityId, numb
   'image.panorama': 40,
   'image.multi-angle': 50,
   'image.nine-grid': 60,
-  'image.portrait-texture': 70,
   'image.layer-separation': 80,
   'image.grid-split': 90,
   'image.preset-relight': 100,

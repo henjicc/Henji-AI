@@ -297,12 +297,6 @@ test('高清放大有独立的工具条、节点与保存重开场景', () => {
   assert.equal(scene.writesUserData, true)
 })
 
-test('人像质感有独立的工具条、节点、诚实文案与保存重开场景', () => {
-  const scene = UI_INSPECTION_SCENES.find((candidate) => candidate.id === 'canvas-portrait-texture-node')
-  assert.ok(scene)
-  assert.equal(scene.writesUserData, true)
-})
-
 test('多图层图片文档有完整编辑、实时保存与关闭重开的真实场景', () => {
   const scene = UI_INSPECTION_SCENES.find(
     (candidate) => candidate.id === 'canvas-multi-layer-document-editor'

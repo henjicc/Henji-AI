@@ -7,7 +7,6 @@ export const CANVAS_NODE_TYPES = {
   relightGen: 'relightGenNode',
   multiAngleGen: 'multiAngleGenNode',
   upscaleGen: 'upscaleGenNode',
-  portraitTextureGen: 'portraitTextureGenNode',
   elementEditGen: 'elementEditGenNode',
   layerSeparationGen: 'layerSeparationGenNode',
   layerStackResult: 'layerStackResultNode',

@@ -17,7 +17,6 @@ import {
   layerSeparationGenerationNodeDefinition,
   layerStackResultNodeDefinition,
   multiAngleGenerationNodeDefinition,
-  portraitTextureGenerationNodeDefinition,
   relightGenerationNodeDefinition,
   upscaleGenerationNodeDefinition,
 } from './nodeRegistryCapabilityDefinitions';
@@ -55,7 +54,6 @@ export const canvasNodeDefinitions: Record<CanvasNodeType, CanvasNodeDefinition>
   [CANVAS_NODE_TYPES.relightGen]: relightGenerationNodeDefinition,
   [CANVAS_NODE_TYPES.multiAngleGen]: multiAngleGenerationNodeDefinition,
   [CANVAS_NODE_TYPES.upscaleGen]: upscaleGenerationNodeDefinition,
-  [CANVAS_NODE_TYPES.portraitTextureGen]: portraitTextureGenerationNodeDefinition,
   [CANVAS_NODE_TYPES.elementEditGen]: elementEditGenerationNodeDefinition,
   [CANVAS_NODE_TYPES.layerSeparationGen]: layerSeparationGenerationNodeDefinition,
   [CANVAS_NODE_TYPES.layerStackResult]: layerStackResultNodeDefinition,

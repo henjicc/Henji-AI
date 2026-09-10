@@ -16,7 +16,6 @@ import type {
   MultiAngleGenerationNodeData,
   PanoramaGenerationNodeData,
   PanoramaViewerNodeData,
-  PortraitTextureGenerationNodeData,
   StoryboardFrameItem,
   StoryboardGenNodeData,
   StoryboardSplitNodeData,
@@ -46,7 +45,6 @@ export type CanvasNodeData =
   | PanoramaViewerNodeData
   | MultiAngleGenerationNodeData
   | UpscaleGenerationNodeData
-  | PortraitTextureGenerationNodeData
   | ElementEditGenerationNodeData
   | LayerSeparationGenerationNodeData
   | LayerStackResultNodeData

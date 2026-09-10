@@ -13,7 +13,6 @@ export const CANVAS_IMAGE_CAPABILITY_IDS = {
   multiAngle: 'image.multi-angle',
   nineGrid: 'image.nine-grid',
   upscale: 'image.upscale',
-  portraitTexture: 'image.portrait-texture',
   elementEdit: 'image.element-edit',
   layerSeparation: 'image.layer-separation',
   gridSplit: 'image.grid-split',
@@ -35,7 +34,6 @@ export const ASSISTANT_CANVAS_IMAGE_CAPABILITY_IDS = [
   CANVAS_IMAGE_CAPABILITY_IDS.multiAngle,
   CANVAS_IMAGE_CAPABILITY_IDS.nineGrid,
   CANVAS_IMAGE_CAPABILITY_IDS.upscale,
-  CANVAS_IMAGE_CAPABILITY_IDS.portraitTexture,
   CANVAS_IMAGE_CAPABILITY_IDS.elementEdit,
   CANVAS_IMAGE_CAPABILITY_IDS.layerSeparation,
 ] as const

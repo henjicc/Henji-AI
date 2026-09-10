@@ -268,7 +268,7 @@ describe('画布图片能力应用服务', () => {
     expect(relightNode?.data).toMatchObject({
       displayName: '图片打光',
       capabilityId: 'image.relight',
-      promptTemplateVersion: 'relight-manual-iclight-v1',
+      promptTemplateVersion: 'relight-manual-iclight-v2',
       relightSettings: {
         relightContractVersion: 1,
         lightingMode: 'manual',
@@ -413,33 +413,6 @@ describe('画布图片能力应用服务', () => {
       expect.objectContaining({
         source: sourceNodeId,
         target: upscaleNode?.id,
-        targetHandle: 'param:__image',
-      }),
-    ])
-  })
-
-  it('人像质感能力创建版本化保守编辑节点并连接唯一源图', async () => {
-    const execute = createCanvasImageCapabilityExecutor()
-    const result = await execute(sourceNodeId, CANVAS_IMAGE_CAPABILITY_IDS.portraitTexture)
-    expect(result).toMatchObject({ kind: 'canvas-node', capabilityId: 'image.portrait-texture' })
-    const portraitNode = useCanvasStore.getState().nodes.find(
-      (node) => node.type === CANVAS_NODE_TYPES.portraitTextureGen,
-    )
-    expect(portraitNode?.data).toMatchObject({
-      displayName: '人像质感',
-      capabilityId: 'image.portrait-texture',
-      modelId: 'fal-ai-gpt-image-2',
-      promptTemplateVersion: 'portrait-texture-gpt-image-2-v1',
-      portraitTextureSettings: {
-        portraitTextureContractVersion: 1,
-        preset: 'natural-detail',
-        strength: 'subtle',
-      },
-    })
-    expect(useCanvasStore.getState().edges).toEqual([
-      expect.objectContaining({
-        source: sourceNodeId,
-        target: portraitNode?.id,
         targetHandle: 'param:__image',
       }),
     ])

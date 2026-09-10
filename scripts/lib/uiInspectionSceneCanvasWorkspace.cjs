@@ -366,7 +366,7 @@ function attachUiInspectionCanvasWorkspace(context) {
     await seedAndOpenCanvasPanoramaProject(page)
     const source = page.locator('.react-flow__node[data-id="__ui_panorama_source"]')
     const capabilities = [
-      'image.panorama', 'image.upscale', 'image.portrait-texture',
+      'image.panorama', 'image.upscale',
       'image.preset-relight', 'image.low-light-enhancement', 'image.outpaint',
       'image.product-photography', 'image.photo-restoration', 'image.background-removal',
       'image.layer-separation',

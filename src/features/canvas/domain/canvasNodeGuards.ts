@@ -18,7 +18,6 @@ import type {
   MultiAngleGenerationNodeData,
   PanoramaGenerationNodeData,
   PanoramaViewerNodeData,
-  PortraitTextureGenerationNodeData,
   StoryboardGenNodeData,
   StoryboardSplitNodeData,
   TextAnnotationNodeData,
@@ -59,12 +58,6 @@ export function isUpscaleGenerationNode(
   node: CanvasNode | null | undefined
 ): node is Node<UpscaleGenerationNodeData, typeof CANVAS_NODE_TYPES.upscaleGen> {
   return node?.type === CANVAS_NODE_TYPES.upscaleGen;
-}
-
-export function isPortraitTextureGenerationNode(
-  node: CanvasNode | null | undefined
-): node is Node<PortraitTextureGenerationNodeData, typeof CANVAS_NODE_TYPES.portraitTextureGen> {
-  return node?.type === CANVAS_NODE_TYPES.portraitTextureGen;
 }
 
 export function isElementEditGenerationNode(

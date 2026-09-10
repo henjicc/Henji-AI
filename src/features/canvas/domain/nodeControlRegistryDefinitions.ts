@@ -281,19 +281,6 @@ export const nodeControlConfigs: CanvasNodeControlConfig[] = [
     requiresModelSchema: false,
   },
   {
-    nodeType: CANVAS_NODE_TYPES.portraitTextureGen,
-    title: '人像质感节点',
-    description: '创建受控的保守人像质感编辑节点；预设、强度与身份保护约束由版本化契约维护。',
-    aliases: ['人像修图节点', '人像质感调节节点'],
-    dataSchema: imageGenerationNodeDataSchema,
-    aiDataSchema: {
-      type: 'object',
-      properties: { displayName: { type: 'string', maxLength: 120 } },
-      additionalProperties: false,
-    },
-    requiresModelSchema: false,
-  },
-  {
     nodeType: CANVAS_NODE_TYPES.elementEditGen,
     title: '局部重绘节点',
     description: '创建先裁剪蒙版区域、调用任意图片编辑模型、配准后回贴原图的局部重绘节点。',

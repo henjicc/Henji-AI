@@ -24,7 +24,7 @@ import {
   migrateMultiAngleGenerationData,
   migratePanoramaGenerationData,
   migratePanoramaViewerData,
-  migratePortraitTextureGenerationData,
+  migrateRetiredPortraitTextureData,
   migrateRelightGenerationData,
   migrateStoryboardGenerationData,
   migrateUpscaleGenerationData,
@@ -81,16 +81,23 @@ export function normalizeEdgesWithNodes(rawEdges: CanvasEdge[], nodes: CanvasNod
 export function normalizeNodes(rawNodes: CanvasNode[]): CanvasNode[] {
   return rawNodes
     .map((node) => {
-      if (!Object.values(CANVAS_NODE_TYPES).includes(node.type as CanvasNodeType)) {
+      const isRetiredPortraitTexture = String(node.type) === 'portraitTextureGenNode';
+      const normalizedType = isRetiredPortraitTexture
+        ? CANVAS_NODE_TYPES.imageEdit
+        : node.type as CanvasNodeType;
+      if (!Object.values(CANVAS_NODE_TYPES).includes(normalizedType)) {
         return null;
       }
 
-      const normalizedType = node.type as CanvasNodeType;
       const definition = nodeCatalog.getDefinition(normalizedType);
       const mergedData = {
         ...definition.createDefaultData(),
         ...(node.data as Partial<CanvasNodeData>),
       } as CanvasNodeData;
+
+      if (isRetiredPortraitTexture) {
+        migrateRetiredPortraitTextureData(mergedData as DynamicValueMap);
+      }
 
       if (normalizedType === CANVAS_NODE_TYPES.storyboardSplit) {
         const frames = (mergedData as { frames?: StoryboardFrameItem[] }).frames ?? [];
@@ -137,7 +144,6 @@ export function normalizeNodes(rawNodes: CanvasNode[]): CanvasNode[] {
         || normalizedType === CANVAS_NODE_TYPES.panoramaGen
         || normalizedType === CANVAS_NODE_TYPES.relightGen
         || normalizedType === CANVAS_NODE_TYPES.upscaleGen
-        || normalizedType === CANVAS_NODE_TYPES.portraitTextureGen
         || normalizedType === CANVAS_NODE_TYPES.elementEditGen
         || normalizedType === CANVAS_NODE_TYPES.layerSeparationGen
         || normalizedType === CANVAS_NODE_TYPES.storyboardGen
@@ -151,7 +157,6 @@ export function normalizeNodes(rawNodes: CanvasNode[]): CanvasNode[] {
         || normalizedType === CANVAS_NODE_TYPES.relightGen
         || normalizedType === CANVAS_NODE_TYPES.multiAngleGen
         || normalizedType === CANVAS_NODE_TYPES.upscaleGen
-        || normalizedType === CANVAS_NODE_TYPES.portraitTextureGen
         || normalizedType === CANVAS_NODE_TYPES.elementEditGen
         || normalizedType === CANVAS_NODE_TYPES.layerSeparationGen
         || normalizedType === CANVAS_NODE_TYPES.videoGen
@@ -175,10 +180,6 @@ export function normalizeNodes(rawNodes: CanvasNode[]): CanvasNode[] {
 
       if (normalizedType === CANVAS_NODE_TYPES.upscaleGen) {
         migrateUpscaleGenerationData(mergedData as DynamicValueMap);
-      }
-
-      if (normalizedType === CANVAS_NODE_TYPES.portraitTextureGen) {
-        migratePortraitTextureGenerationData(mergedData as DynamicValueMap);
       }
 
       if (normalizedType === CANVAS_NODE_TYPES.elementEditGen) {

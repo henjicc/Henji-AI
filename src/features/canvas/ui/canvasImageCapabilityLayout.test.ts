@@ -77,7 +77,6 @@ describe('图片能力工具条响应式容量', () => {
     CANVAS_NODE_TYPES.panoramaGen,
     CANVAS_NODE_TYPES.relightGen,
     CANVAS_NODE_TYPES.upscaleGen,
-    CANVAS_NODE_TYPES.portraitTextureGen,
     CANVAS_NODE_TYPES.elementEditGen,
     CANVAS_NODE_TYPES.storyboardGen,
     CANVAS_NODE_TYPES.multiAngleGen,

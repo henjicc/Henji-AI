@@ -240,10 +240,6 @@
         "title": "高清放大",
         "description": "提升图片分辨率并尽量保留原始内容"
       },
-      "portraitTexture": {
-        "title": "人像质感",
-        "description": "由生成模型近似调整质感与影调，不做人脸检测或身份识别"
-      },
       "elementEdit": {
         "title": "局部重绘",
         "description": "裁剪并放大蒙版区域，调用任意图片编辑模型后对齐贴回原图"
@@ -280,7 +276,6 @@
       "relightGeneration": "图片打光",
       "multiAngleGeneration": "多角度视图",
       "upscaleGeneration": "高清放大",
-      "portraitTextureGeneration": "人像质感",
       "elementEditGeneration": "局部重绘",
       "layerSeparationGeneration": "图层拆分",
       "layerStackResult": "多图层图片文档",
@@ -502,14 +497,6 @@
       "resultTitle": "高清结果",
       "promptPlaceholder": "高清放大不需要提示词",
       "workbenchSummary": "在右侧选择放大方式与倍率"
-    },
-    "portraitTextureGeneration": {
-      "promptRequired": "人像质感使用受控预设，不需要单独填写提示词",
-      "apiKeyRequired": "请先配置所选 GPT Image 2 供应商的 API Key",
-      "resultTitle": "人像质感结果",
-      "promptPlaceholder": "补充要求请使用节点中的受控入口",
-      "workbenchSummary": "保留人物结构，集中调整皮肤与细节质感",
-      "approximation": "模型近似 · 未做人脸检测 · 不保证身份稳定"
     },
     "elementEditGeneration": {
       "promptRequired": "请描述需要如何修改选区",

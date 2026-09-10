@@ -19,12 +19,6 @@ import {
   createDefaultMultiAngleConfig,
 } from '../capabilities/multiAnglePolicy';
 import {
-  DEFAULT_PORTRAIT_TEXTURE_SETTINGS,
-  PORTRAIT_TEXTURE_DEFAULT_MODEL_ID,
-  PORTRAIT_TEXTURE_TEMPLATE_VERSION,
-  preparePortraitTextureRoute,
-} from '../capabilities/portraitTexturePolicy';
-import {
   DEFAULT_RELIGHT_SETTINGS,
   prepareRelightRoute,
 } from '../capabilities/relightPolicy';
@@ -45,7 +39,6 @@ import {
   type LayerSeparationGenerationNodeData,
   type LayerStackResultNodeData,
   type MultiAngleGenerationNodeData,
-  type PortraitTextureGenerationNodeData,
   type UpscaleGenerationNodeData,
 } from './canvasNodes';
 import { DEFAULT_NODE_DISPLAY_NAME } from './nodeDisplay';
@@ -227,64 +220,6 @@ export const upscaleGenerationNodeDefinition: CanvasNodeDefinition<UpscaleGenera
   },
   getOutputs: imageOutputsFromData,
   createDefaultData: createUpscaleGenerationDefaultData,
-};
-
-function createPortraitTextureGenerationDefaultData(): PortraitTextureGenerationNodeData {
-  const settings = { ...DEFAULT_PORTRAIT_TEXTURE_SETTINGS };
-  const route = preparePortraitTextureRoute(
-    settings,
-    registry.getModelsByType('image'),
-    PORTRAIT_TEXTURE_DEFAULT_MODEL_ID,
-  );
-  return {
-    displayName: DEFAULT_NODE_DISPLAY_NAME[CANVAS_NODE_TYPES.portraitTextureGen],
-    imageUrl: null,
-    previewImageUrl: null,
-    aspectRatio: DEFAULT_ASPECT_RATIO,
-    isSizeManuallyAdjusted: false,
-    prompt: route.prompt,
-    modelId: route.model?.meta.id ?? PORTRAIT_TEXTURE_DEFAULT_MODEL_ID,
-    params: route.params,
-    mediaInputs: {},
-    isGenerating: false,
-    generationStartedAt: null,
-    generationDurationMs: undefined,
-    capabilityId: CANVAS_IMAGE_CAPABILITY_IDS.portraitTexture,
-    promptTemplateVersion: PORTRAIT_TEXTURE_TEMPLATE_VERSION,
-    fixedSemanticParams: { portraitTextureContractVersion: 1 },
-    portraitTextureSettings: settings as unknown as DynamicValueMap,
-    portraitTextureRouteReasons: route.reasons,
-  };
-}
-
-export const portraitTextureGenerationNodeDefinition: CanvasNodeDefinition<PortraitTextureGenerationNodeData> = {
-  type: CANVAS_NODE_TYPES.portraitTextureGen,
-  menuLabelKey: 'node.menu.portraitTextureGeneration',
-  menuIcon: 'imageGeneration',
-  visibleInMenu: false,
-  executionKind: 'standard-generation',
-  capabilities: {
-    toolbar: true,
-    promptInput: false,
-    toolbarGenerate: true,
-  },
-  connectivity: {
-    sourceHandle: true,
-    targetHandle: true,
-    connectMenu: { fromSource: true, fromTarget: false },
-    targetHandleMode: 'rows',
-  },
-  media: { kind: 'image', role: 'generator' },
-  ports: {
-    source: { emits: 'image' },
-    target: { accepts: ['image'] },
-  },
-  generation: {
-    modelType: 'image',
-    resultNodeType: CANVAS_NODE_TYPES.exportImage,
-  },
-  getOutputs: imageOutputsFromData,
-  createDefaultData: createPortraitTextureGenerationDefaultData,
 };
 
 function createElementEditGenerationDefaultData(): ElementEditGenerationNodeData {

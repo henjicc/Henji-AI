@@ -15,10 +15,6 @@ import {
   NINE_GRID_PROMPT_TEMPLATE_VERSION,
 } from './nineGridPolicy';
 import {
-  PORTRAIT_TEXTURE_MODEL_POLICY,
-  PORTRAIT_TEXTURE_TEMPLATE_VERSION,
-} from './portraitTexturePolicy';
-import {
   ELEMENT_EDIT_FIXED_SEMANTIC_PARAMS,
   ELEMENT_EDIT_MODEL_POLICY,
   ELEMENT_EDIT_PROMPT_TEMPLATE_VERSION,
@@ -145,7 +141,7 @@ export const builtInCanvasImageCapabilities: readonly CanvasImageCapabilityDefin
     titleKey: 'imageCapabilities.items.productPhotography.title',
     descriptionKey: 'imageCapabilities.items.productPhotography.description',
     group: 'generation',
-    icon: 'portraitTexture',
+    icon: 'photoEnhance',
     order: 24,
     modelId: 'fal-image-apps-v2-product-photography',
   }),
@@ -154,7 +150,7 @@ export const builtInCanvasImageCapabilities: readonly CanvasImageCapabilityDefin
     titleKey: 'imageCapabilities.items.photoRestoration.title',
     descriptionKey: 'imageCapabilities.items.photoRestoration.description',
     group: 'enhancement',
-    icon: 'portraitTexture',
+    icon: 'photoEnhance',
     order: 25,
     modelId: 'fal-image-apps-v2-photo-restoration',
   }),
@@ -298,41 +294,6 @@ export const builtInCanvasImageCapabilities: readonly CanvasImageCapabilityDefin
         'upscaleResemblance',
         'upscaleDetail',
       ],
-    },
-    outputPolicy: {
-      resultKind: 'image',
-      count: { mode: 'single' },
-      postProcess: 'none',
-      failureMode: 'single-result',
-    },
-  },
-  {
-    id: CANVAS_IMAGE_CAPABILITY_IDS.portraitTexture,
-    titleKey: 'imageCapabilities.items.portraitTexture.title',
-    descriptionKey: 'imageCapabilities.items.portraitTexture.description',
-    group: 'enhancement',
-    groupLabelKey: 'imageCapabilities.groups.enhancement',
-    icon: 'portraitTexture',
-    order: 60,
-    source: IMAGE_SOURCE,
-    node: { kind: 'standard-generation', editor: 'standard' },
-    implementation: {
-      status: 'implemented',
-      execution: {
-        kind: 'canvas-node',
-        nodeType: CANVAS_NODE_TYPES.portraitTextureGen,
-      },
-    },
-    availability: {
-      releaseStage: 'experimental',
-      defaultEnabled: true,
-      unavailableReasonKey: 'imageCapabilities.unavailable.experimental',
-    },
-    modelPolicy: PORTRAIT_TEXTURE_MODEL_POLICY,
-    promptPolicy: {
-      hiddenTemplateVersion: PORTRAIT_TEXTURE_TEMPLATE_VERSION,
-      fixedSemanticParams: { portraitTextureContractVersion: 1 },
-      visibleParameterKeys: [],
     },
     outputPolicy: {
       resultKind: 'image',

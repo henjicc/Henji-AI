@@ -49,12 +49,12 @@ describe('画布图片能力注册表', () => {
     },
   };
 
-  it('登记十五项唯一、稳定且可序列化的能力', () => {
+  it('登记十四项唯一、稳定且可序列化的能力', () => {
     const definitions = getRegisteredCanvasImageCapabilities();
     const expectedIds = Object.values(CANVAS_IMAGE_CAPABILITY_IDS);
 
-    expect(definitions).toHaveLength(15);
-    expect(new Set(definitions.map((definition) => definition.id)).size).toBe(15);
+    expect(definitions).toHaveLength(14);
+    expect(new Set(definitions.map((definition) => definition.id)).size).toBe(14);
     expect(definitions.map((definition) => definition.id)).toEqual(expectedIds);
     expect(JSON.parse(JSON.stringify(definitions))).toEqual(definitions);
     expect(definitions.every((definition) => (
@@ -88,7 +88,6 @@ describe('画布图片能力注册表', () => {
         CANVAS_IMAGE_CAPABILITY_IDS.multiAngle,
         CANVAS_IMAGE_CAPABILITY_IDS.nineGrid,
         CANVAS_IMAGE_CAPABILITY_IDS.upscale,
-        CANVAS_IMAGE_CAPABILITY_IDS.portraitTexture,
         CANVAS_IMAGE_CAPABILITY_IDS.elementEdit,
         CANVAS_IMAGE_CAPABILITY_IDS.layerSeparation,
         CANVAS_IMAGE_CAPABILITY_IDS.gridSplit,
@@ -107,7 +106,6 @@ describe('画布图片能力注册表', () => {
       CANVAS_IMAGE_CAPABILITY_IDS.multiAngle,
       CANVAS_IMAGE_CAPABILITY_IDS.nineGrid,
       CANVAS_IMAGE_CAPABILITY_IDS.upscale,
-      CANVAS_IMAGE_CAPABILITY_IDS.portraitTexture,
       CANVAS_IMAGE_CAPABILITY_IDS.elementEdit,
       CANVAS_IMAGE_CAPABILITY_IDS.layerSeparation,
     ]);
@@ -124,6 +122,8 @@ describe('画布图片能力注册表', () => {
 
     expect(ASSISTANT_CANVAS_IMAGE_CAPABILITY_IDS).toEqual(assistantEligibleIds);
     expect(ASSISTANT_CANVAS_IMAGE_CAPABILITY_IDS).not.toContain(CANVAS_IMAGE_CAPABILITY_IDS.gridSplit);
+    expect(ASSISTANT_CANVAS_IMAGE_CAPABILITY_IDS).not.toContain('image.portrait-texture');
+    expect(getRegisteredCanvasImageCapabilities().map(({ id }) => id)).not.toContain('image.portrait-texture');
   });
 
   it('按媒体类型、发布状态和实现状态筛选同一注册源', () => {
@@ -169,7 +169,6 @@ describe('画布图片能力注册表', () => {
       CANVAS_IMAGE_CAPABILITY_IDS.multiAngle,
       CANVAS_IMAGE_CAPABILITY_IDS.nineGrid,
       CANVAS_IMAGE_CAPABILITY_IDS.upscale,
-      CANVAS_IMAGE_CAPABILITY_IDS.portraitTexture,
       CANVAS_IMAGE_CAPABILITY_IDS.elementEdit,
       CANVAS_IMAGE_CAPABILITY_IDS.layerSeparation,
     ]);

@@ -240,10 +240,6 @@
         "title": "Upscale",
         "description": "Increase resolution while preserving the original content"
       },
-      "portraitTexture": {
-        "title": "Portrait Texture",
-        "description": "Approximate finish and tone with a generative model, without face detection or identity recognition"
-      },
       "elementEdit": {
         "title": "Local Redraw",
         "description": "Crop and enlarge the masked area, edit it with any image-editing model, then align and composite it back"
@@ -280,7 +276,6 @@
       "relightGeneration": "Image Relighting",
       "multiAngleGeneration": "Multi-angle Views",
       "upscaleGeneration": "Upscale",
-      "portraitTextureGeneration": "Portrait Texture",
       "elementEditGeneration": "Local Redraw",
       "layerSeparationGeneration": "Layer Separation",
       "layerStackResult": "Multi-layer Image Document",
@@ -502,14 +497,6 @@
       "resultTitle": "Upscaled Result",
       "promptPlaceholder": "Upscaling does not require a prompt",
       "workbenchSummary": "Choose the upscale method and scale on the right"
-    },
-    "portraitTextureGeneration": {
-      "promptRequired": "Portrait texture uses controlled presets and does not require a separate prompt",
-      "apiKeyRequired": "Configure the selected GPT Image 2 provider API key first",
-      "resultTitle": "Portrait Texture Result",
-      "promptPlaceholder": "Use the controlled additional-request field in the node",
-      "workbenchSummary": "Preserve the portrait structure while refining skin and detail texture",
-      "approximation": "Model approximation · No face detection · Identity is not guaranteed"
     },
     "elementEditGeneration": {
       "promptRequired": "Describe how the selected area should change",

@@ -17,7 +17,6 @@ import { RelightGenerationNode } from './RelightGenerationNode';
 import { MultiAngleGenerationNode } from './MultiAngleGenerationNode';
 import { UpscaleGenerationNode } from './UpscaleGenerationNode';
 import { ElementEditGenerationNode } from './ElementEditGenerationNode';
-import { PortraitTextureGenerationNode } from './PortraitTextureGenerationNode';
 import { LayerSeparationGenerationNode } from './LayerSeparationGenerationNode';
 import { LayerStackResultNode } from './LayerStackResultNode';
 import { ImageNode } from './ImageNode';
@@ -79,7 +78,6 @@ export const nodeTypes: NodeTypes = {
   relightGenNode: withNodePaintFrame(RelightGenerationNode, { bottom: 60 }),
   multiAngleGenNode: withNodePaintFrame(MultiAngleGenerationNode, { bottom: 60 }),
   upscaleGenNode: withNodePaintFrame(UpscaleGenerationNode, { bottom: 60 }),
-  portraitTextureGenNode: withNodePaintFrame(PortraitTextureGenerationNode, { bottom: 60 }),
   elementEditGenNode: withNodePaintFrame(ElementEditGenerationNode, { bottom: 60 }),
   layerSeparationGenNode: withNodePaintFrame(LayerSeparationGenerationNode, { bottom: 60 }),
   layerStackResultNode: withNodePaintFrame(LayerStackResultNode),
@@ -116,7 +114,6 @@ export {
   MultiAngleGenerationNode,
   UpscaleGenerationNode,
   ElementEditGenerationNode,
-  PortraitTextureGenerationNode,
   LayerSeparationGenerationNode,
   LayerStackResultNode,
   ImageNode,

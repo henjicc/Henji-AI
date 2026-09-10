@@ -244,14 +244,6 @@ export interface UpscaleGenerationNodeData extends ImageEditNodeData {
   fixedSemanticParams: DynamicValueMap;
 }
 
-export interface PortraitTextureGenerationNodeData extends ImageEditNodeData {
-  capabilityId: 'image.portrait-texture';
-  promptTemplateVersion: 'portrait-texture-gpt-image-2-v1';
-  fixedSemanticParams: DynamicValueMap;
-  portraitTextureSettings: DynamicValueMap;
-  portraitTextureRouteReasons?: string[];
-}
-
 export interface ElementEditGenerationNodeData extends ImageEditNodeData {
   capabilityId: 'image.element-edit';
   promptTemplateVersion: 'local-redraw-crop-v2';

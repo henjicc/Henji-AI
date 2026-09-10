@@ -11,7 +11,6 @@ const TOOL_GENERATION_NODE_TYPES: readonly CanvasNodeType[] = [
   CANVAS_NODE_TYPES.relightGen,
   CANVAS_NODE_TYPES.multiAngleGen,
   CANVAS_NODE_TYPES.upscaleGen,
-  CANVAS_NODE_TYPES.portraitTextureGen,
   CANVAS_NODE_TYPES.elementEditGen,
   CANVAS_NODE_TYPES.layerSeparationGen,
 ];

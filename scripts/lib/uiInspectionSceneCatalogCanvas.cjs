@@ -17,7 +17,6 @@ function createCanvasScenes(context) {
     setupCanvasRelightEditor,
     setupCanvasMultiAngleEditor,
     setupCanvasUpscaleNode,
-    setupCanvasPortraitTextureNode,
     setupCanvasElementEditNode,
     setupCanvasMultiLayerDocumentEditor,
     setupCanvasGpuFiveLayerPerformance,
@@ -98,13 +97,6 @@ function createCanvasScenes(context) {
       writesUserData: true,
       name: '画布-高清放大节点与保存重开',
       setup: setupCanvasUpscaleNode,
-    },
-    {
-      id: 'canvas-portrait-texture-node',
-      surface: '画布',
-      writesUserData: true,
-      name: '画布-人像质感节点与保存重开',
-      setup: setupCanvasPortraitTextureNode,
     },
     {
       id: 'canvas-element-edit-node',

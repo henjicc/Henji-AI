@@ -25,7 +25,7 @@ export type CanvasImageCapabilityIconKey =
   | 'multiAngle'
   | 'nineGrid'
   | 'upscale'
-  | 'portraitTexture'
+  | 'photoEnhance'
   | 'elementEdit'
   | 'layerSeparation'
   | 'gridSplit';
