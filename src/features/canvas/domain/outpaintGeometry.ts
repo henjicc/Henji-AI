@@ -7,6 +7,11 @@ export interface OutpaintImageSize { width: number; height: number }
 export interface OutpaintScene { frame: MarkCropRect; image: MarkCropRect }
 const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value))
 
+/** 全部留白集中在任意一边仍合法，因此最小尺寸不随图片位置改变。 */
+function minimumMovableScale(source: OutpaintImageSize, viewport: OutpaintImageSize, maximum: number): number {
+  return Math.max(viewport.width / (source.width + maximum), viewport.height / (source.height + maximum))
+}
+
 /** 容器变化只变换同一份构图，不从取整后的请求参数重新创建画面。 */
 export function scaleOutpaintScene(scene: OutpaintScene, from: OutpaintImageSize, to: OutpaintImageSize): OutpaintScene {
   const scale = Math.min(to.width / from.width, to.height / from.height)
@@ -17,11 +22,12 @@ export function scaleOutpaintScene(scene: OutpaintScene, from: OutpaintImageSize
 }
 
 export function createOutpaintScene(source: OutpaintImageSize, viewport: OutpaintImageSize, margins: OutpaintMargins, maximum: number): OutpaintScene {
-  const scale = Math.min(
-    Math.max(viewport.width / (source.width + 2 * maximum), viewport.height / (source.height + 2 * maximum)),
+  const fitScale = Math.min(
     viewport.width / (source.width + margins.expandLeft + margins.expandRight),
     viewport.height / (source.height + margins.expandTop + margins.expandBottom),
   )
+  // 初始构图保留缩小余地；已有明确留白仍以完整展示其构图为准。
+  const scale = Math.min(fitScale, (minimumMovableScale(source, viewport, maximum) + fitScale) / 2)
   const frameWidth = (source.width + margins.expandLeft + margins.expandRight) * scale
   const frameHeight = (source.height + margins.expandTop + margins.expandBottom) * scale
   const frame = {
@@ -56,17 +62,12 @@ export function moveOutpaintImage(image: MarkCropRect, frame: MarkCropRect, sour
   }
 }
 
-/** 缩小限制提前按完整工作面和图片中心计算；滚轮不再附带平移或反向放大。 */
+/** 缩小限制按完整工作面计算，始终保留四边移动空间；滚轮不附带平移或反向放大。 */
 export function zoomOutpaintImage(scene: OutpaintScene, delta: number, source: OutpaintImageSize, maximum: number, workspace = scene.frame): MarkCropRect {
   const { image, frame } = scene
   const centerX = image.x + image.width / 2
   const centerY = image.y + image.height / 2
-  const minimum = Math.max(
-    (centerX - workspace.x) / (source.width / 2 + maximum),
-    (workspace.x + workspace.width - centerX) / (source.width / 2 + maximum),
-    (centerY - workspace.y) / (source.height / 2 + maximum),
-    (workspace.y + workspace.height - centerY) / (source.height / 2 + maximum),
-  )
+  const minimum = minimumMovableScale(source, workspace, maximum)
   const maximumScale = Math.min(
     2 * Math.min(centerX - frame.x, frame.x + frame.width - centerX) / source.width,
     2 * Math.min(centerY - frame.y, frame.y + frame.height - centerY) / source.height,
@@ -86,7 +87,8 @@ export function outpaintSceneToMargins(scene: OutpaintScene, source: OutpaintIma
 export function resolveOutpaintMargins(
   params: Record<string, unknown>, image: OutpaintImageSize, maximum: number,
 ): OutpaintMargins {
-  const ratio = Math.min(0.1, maximum / image.width, maximum / image.height)
+  // 大图也为缩小留出余地：初始两侧留白之和最多使用单边预算的一半。
+  const ratio = Math.min(0.1, maximum / (4 * image.width), maximum / (4 * image.height))
   const defaults = [image.width * ratio, image.width * ratio, image.height * ratio, image.height * ratio]
   return Object.fromEntries(OUTPAINT_FIELDS.map((key, index) => [key,
     Math.round(Math.max(0, Math.min(maximum,

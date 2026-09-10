@@ -438,11 +438,13 @@ function attachUiInspectionCanvasWorkspace(context) {
       throw new Error(`扩图默认框不是原图的 120%：${JSON.stringify(initial)}`)
     }
     const right = await stage.locator('[data-crop-handle="e"]').boundingBox()
+    const outward = Math.min(20, (sourceStage.x + sourceStage.width - initial.frame.x - initial.frame.width) / 2)
+    if (outward < 1) throw new Error('初始扩图框没有保留向外调整空间')
     await page.mouse.move(right.x + right.width / 2, right.y + right.height / 2)
     await page.mouse.down()
-    await page.mouse.move(right.x + right.width / 2 + 20, right.y + right.height / 2, { steps: 10 })
+    await page.mouse.move(right.x + right.width / 2 + outward, right.y + right.height / 2, { steps: 10 })
     const during = await geometry()
-    if (Math.abs(during.frame.width - initial.frame.width - 20) > 2) throw new Error('画布缩放下扩图框未跟随指针')
+    if (Math.abs(during.frame.width - initial.frame.width - outward) > 2) throw new Error('画布缩放下扩图框未跟随指针')
     await page.mouse.up()
     const left = await stage.locator('[data-crop-handle="w"]').boundingBox()
     await page.mouse.move(left.x + left.width / 2, left.y + left.height / 2)
@@ -599,7 +601,8 @@ function attachUiInspectionCanvasWorkspace(context) {
       await page.mouse.down()
       await page.mouse.move(x + dx, y, { steps: 6 })
       const during = await geometry()
-      if (Math.abs(during.image.x - before.image.x - dx) > 1) throw new Error(`节点缩放后图片拖动失效：${JSON.stringify({ before, during, dx })}`)
+      const expectedX = Math.max(before.frame.x, Math.min(before.frame.x + before.frame.width - before.image.width, before.image.x + dx))
+      if (Math.abs(during.image.x - expectedX) > 1) throw new Error(`节点缩放后图片拖动失效：${JSON.stringify({ before, during, dx, expectedX })}`)
       await page.mouse.up()
       await page.waitForTimeout(200)
       const after = await geometry()
@@ -608,15 +611,18 @@ function attachUiInspectionCanvasWorkspace(context) {
     await page.mouse.move(stageBox.x + stageBox.width / 2, stageBox.y + stageBox.height / 2)
     for (let index = 0; index < 20; index++) await page.mouse.wheel(0, 100)
     await page.waitForTimeout(250)
-    for (const dx of [12, -24]) {
+    for (const [dx, dy] of [[-2000, -2000], [2000, -2000], [2000, 2000], [-2000, 2000]]) {
       const before = await geometry()
       const x = before.image.x + before.image.width / 2
       const y = before.image.y + before.image.height / 2
       await page.mouse.move(x, y)
       await page.mouse.down()
-      await page.mouse.move(x + dx, y, { steps: 6 })
+      await page.mouse.move(x + Math.sign(dx) * before.frame.width, y + Math.sign(dy) * before.frame.height, { steps: 6 })
       const during = await geometry()
       if (Math.abs(during.image.width - before.image.width) > 1 || Math.abs(during.image.height - before.image.height) > 1) throw new Error('最小尺寸平移时自动缩放图片')
+      const expectedX = dx < 0 ? before.frame.x : before.frame.x + before.frame.width - before.image.width
+      const expectedY = dy < 0 ? before.frame.y : before.frame.y + before.frame.height - before.image.height
+      if (Math.abs(during.image.x - expectedX) > 1 || Math.abs(during.image.y - expectedY) > 1) throw new Error(`最小尺寸图片无法贴齐四角：${JSON.stringify({ during, expectedX, expectedY })}`)
       for (const key of ['x', 'y', 'width', 'height']) {
         if (Math.abs(during.frame[key] - before.frame[key]) > 1) throw new Error('极限状态移动图片改变了输出框')
       }
