@@ -13,6 +13,7 @@ import { serializeError } from './runner-results'
 import type { AgentStateMachine } from './state-machine'
 import { reduceAgentWorkingSummary } from './working-summary'
 import { agentObservedEffectSchema, type AgentObservedEffect } from '../../../../../src/core/assistant/observedEffect'
+import type { ExecutionFactsProjection } from '../../../../../src/core/assistant/executionFacts'
 
 const logger = createMainLogger('main.agent_runtime')
 
@@ -75,23 +76,31 @@ export class AgentRunnerLifecycle {
   recordExecutionEffects(effects: AgentObservedEffect[]): void {
     if (this.options.state.executionOutcome.status !== 'pending' || effects.length === 0) return
     const merged = [...this.options.state.executionOutcome.effects, ...effects]
-    if (merged.length > 512) {
-      throw new Error('[EXECUTION_EFFECT_LIMIT_EXCEEDED] 执行回执超过 512 条，无法安全封存')
-    }
     this.options.state.executionOutcome = {
       ...this.options.state.executionOutcome,
       effects: merged.map((effect) => agentObservedEffectSchema.parse(effect)),
     }
   }
 
+  recordExecutionProjection(projection: ExecutionFactsProjection): void {
+    this.options.state.executionOutcome = {
+      ...this.options.state.executionOutcome,
+      effects: projection.effects,
+      facts: projection.facts,
+      verificationSummary: { summary: projection.summary, evidence: projection.evidence },
+    }
+    if (this.options.state.workingSummary) this.options.state.workingSummary.executionFacts = projection.facts
+  }
+
   sealExecution(input: { effects: AgentObservedEffect[]; summary: string; evidence: string[] }): void {
     if (this.options.state.executionOutcome.status === 'sealed_success') return
     const sealedAt = new Date().toISOString()
     this.options.state.executionOutcome = {
+      ...this.options.state.executionOutcome,
       status: 'sealed_success', effects: input.effects,
       verificationSummary: { summary: input.summary, evidence: input.evidence }, sealedAt,
     }
-    this.emit({ type: 'ExecutionOutcomeSealed', ...input })
+    this.emit({ type: 'ExecutionOutcomeSealed', ...input, facts: this.options.state.executionOutcome.facts })
   }
 
   completeWithWarning(finalText: string, error: unknown): void {
@@ -119,8 +128,11 @@ export class AgentRunnerLifecycle {
     }
     const serialized = serializeError(error)
     this.options.state.executionOutcome = {
-      status: 'failed', effects: [],
-      verificationSummary: { summary: serialized.message, evidence: [] },
+      ...this.options.state.executionOutcome,
+      status: 'failed',
+      verificationSummary: this.options.state.executionOutcome.facts
+        ? this.options.state.executionOutcome.verificationSummary
+        : { summary: serialized.message, evidence: this.options.state.executionOutcome.verificationSummary.evidence },
     }
     this.options.state.error = serialized
     this.transition('failed', serialized.code)

@@ -14,6 +14,7 @@ export const runHenjiScriptInputSchema = z.object({
   language: z.literal(HENJI_SCRIPT_LANGUAGE),
   summary: z.string().trim().min(1).max(300),
   source: z.string().min(1).max(32 * 1024),
+  repairsScriptRunRef: z.string().min(1).max(500).optional().describe('仅修正明确未进入执行的 parse/compile/preflight 失败时，填写原回执 scriptRunRef；部分执行必须走原操作恢复。'),
 }).strict()
 
 const scriptSourceLocationSchema = z.object({

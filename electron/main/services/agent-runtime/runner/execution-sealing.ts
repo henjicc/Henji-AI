@@ -26,7 +26,7 @@ export function executionSealingBlocker(input: {
   if (input.effectCount === 0) return '没有可封存的应用写入事实。'
   if (input.summary?.activeStep) return '仍有执行中的工具步骤。'
   if ((input.summary?.pendingApprovals.length ?? 0) > 0) return '仍有待处理的审批。'
-  if (input.summary?.recovery.mode !== 'none') return input.summary?.recovery.reason || '恢复检查尚未完成。'
+  if (input.summary?.recovery.mode !== 'none' && !input.summary?.executionFacts) return input.summary?.recovery.reason || '恢复检查尚未完成。'
   return null
 }
 

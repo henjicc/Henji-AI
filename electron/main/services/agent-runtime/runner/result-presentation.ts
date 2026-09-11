@@ -5,9 +5,25 @@ import { taskPolicyForbiddenEffects, type TaskExecutionPolicy } from '../../../.
 import type { AgentToolGateway } from '../tools/gateway'
 import type { HostContextSnapshot } from '../../../../../src/core/assistant/hostContracts'
 import type { AgentApprovalMode } from '../../../../../src/core/assistant/runtimeContracts'
+import type { AgentRunState } from '../../../../../src/core/assistant/events'
 
 /** 结果只取正式已验证回执；未解决脚本不能被最后一次读取掩盖。 */
-export function chooseResultToPresent(observations: readonly AgentToolObservation[]) {
+export function chooseResultToPresent(observations: readonly AgentToolObservation[], outcome?: AgentRunState['executionOutcome']) {
+  if (outcome?.facts) {
+    if (observations.some((observation) => observation.effects?.some((effect) => effect.effect === 'navigate'))) return null
+    const removed = new Set<string>()
+    for (const effect of [...outcome.effects].reverse()) {
+      if (effect.effect === 'delete') {
+        effect.targetRefs.forEach((ref) => removed.add(`${ref.kind}\0${ref.id}`))
+        continue
+      }
+      if (!effect.verified || ['observe', 'navigate'].includes(effect.effect)) continue
+      const ref = [...effect.targetRefs].reverse().find((target) => !removed.has(`${target.kind}\0${target.id}`)
+        && !outcome.facts!.unresolved.some((issue) => issue.targets.some((value) => value.kind === target.kind && value.id === target.id)))
+      if (ref) return { ref, propertyIds: effect.propertyIds }
+    }
+    return null
+  }
   const effects = observations.flatMap((observation) => {
     const script = ['run_henji_script', 'resume_henji_script'].includes(observation.source.toolName)
       ? runHenjiScriptOutputSchema.safeParse(observation.output) : null
@@ -32,12 +48,13 @@ export function chooseResultToPresent(observations: readonly AgentToolObservatio
 export async function presentConfirmedResult(input: {
   runId: string; threadId: string; approvalMode: AgentApprovalMode; signal: AbortSignal
   observations: readonly AgentToolObservation[]; policy: TaskExecutionPolicy
+  outcome?: AgentRunState['executionOutcome']
   gateway: AgentToolGateway; getHost: () => HostContextSnapshot | null
   markAttempted: () => void
 }): Promise<void> {
   if (input.policy.resultPresented || taskPolicyForbiddenEffects(input.policy).has('navigate')) return
   if (!input.getHost()?.navigation || !input.policy.navigationBaseline) return
-  const target = chooseResultToPresent(input.observations)
+  const target = chooseResultToPresent(input.observations, input.outcome)
   if (!target) return
   input.markAttempted()
   const request = {

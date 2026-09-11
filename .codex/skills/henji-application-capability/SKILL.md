@@ -61,6 +61,8 @@ sceneField('sky_color', '天空颜色', COLOR, {
 
 ### 2. 定义原生能力
 
+- 整轮验证、历史与结果展示从正式操作记录投影；封存事实不等于全部验证通过，失败或取消也不得丢弃实际修改。原问题只由精确关联的恢复关闭；`repairsScriptRunRef` 仅用于确认未进入执行的原脚本，不得用于覆盖部分执行或未知结果。
+
 - 实体、属性和集合 CRUD 在 Application Control 反射注册表中声明，由通用 `app.entities` API 投影；不得为它们再写同义的专用能力。
 - 只有无法用 CRUD 表达的算法操作，才在 `src/core/assistant/` 的领域能力模块中声明 `ApplicationCapabilityDefinition` 并注册到统一目录，由 `app.action` 调用。
 - 使用稳定、小写的能力 ID；版本从 1 开始，破坏性契约变化才升级版本。
@@ -155,4 +157,3 @@ sceneField('sky_color', '天空颜色', COLOR, {
 - 新代码没有旧 command/query 兼容路径。
 - 新代码没有任意 Store Patch、任意脚本执行或 Application API 核心跨层导入。
 - 权限、revision、日志、引用和成功证据均有自动化验证。
-

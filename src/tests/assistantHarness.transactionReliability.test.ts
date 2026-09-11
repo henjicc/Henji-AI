@@ -68,7 +68,8 @@ it('附着图片 name trim 后正式脚本保留双域事实和撤销，仍为 p
   expect(facts.effects?.map((effect) => effect.entityType)).toEqual(expect.arrayContaining(['image_edit.layer', 'canvas.node']))
   expect(event.error.message).toContain('不要重复')
   // 任务级 seal 只记录已发生事实，并不把失败操作变成成功；保留意见必须保留。
-  expect(result.state.executionOutcome.verificationSummary.summary).toContain('未收敛')
+  expect(result.state.executionOutcome.facts).toMatchObject({ completion: 'partial', verificationStatus: 'failed' })
+  expect(result.state.executionOutcome.facts?.unresolved.length).toBeGreaterThan(0)
   const changed = result.state.executionOutcome.effects.filter((effect) => effect.effect === 'update')
   expect(changed.map((effect) => effect.entityTypes[0])).toEqual(expect.arrayContaining(['image_edit.layer', 'canvas.node']))
   expect(changed.every((effect) => !effect.verified)).toBe(true)

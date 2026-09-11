@@ -229,9 +229,9 @@ describe('AgentRunner', () => {
     expect(state).toMatchObject({ status: 'completed' })
     expect(state.executionOutcome).toMatchObject({
       status: 'sealed_success',
-      effects: [expect.objectContaining({
+      effects: expect.arrayContaining([expect.objectContaining({
         effect: 'execute', targetRefs: [{ kind: 'generation.task', id: 'task-1' }],
-      })],
+      })]),
     })
     expect(events.some((event) => event.type === 'ExecutionOutcomeSealed')).toBe(true)
     expect(events.some((event) => event.type === 'ToolFailed')).toBe(false)

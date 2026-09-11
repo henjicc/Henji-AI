@@ -49,6 +49,20 @@ function runState(workingSummary = createAgentWorkingSummary('处理复杂任务
 }
 
 describe('agentRunViewReducer', () => {
+  it('历史展示优先使用最新持久化事实，旧通过事件不能覆盖待核对操作', () => {
+    const current = runState()
+    current.status = 'cancelled'
+    current.executionOutcome.facts = { completion: 'needs_check', verificationStatus: 'pending',
+      resultRefs: [{ kind: 'canvas.node', id: 'A' }], unresolved: [{ operationId: 'original', conditionId: 'persistence',
+        state: 'needs_check', summary: '保存结果待核对', targets: [{ kind: 'canvas.node', id: 'A' }] }] }
+    current.executionOutcome.verificationSummary = { summary: '保存结果待核对', evidence: [] }
+    const previous = event<Extract<AgentEvent, { type: 'VerificationCompleted' }>>({ type: 'VerificationCompleted', sequence: 1,
+      passed: true, summary: '早期验证通过', evidence: [] })
+    const presentation = selectExecutionPresentation(current, [previous])
+    expect(presentation.verification).toMatchObject({ passed: false, summary: '保存结果待核对' })
+    expect(presentation.nextAction).toContain('核对')
+    expect(presentation.nextAction).not.toContain('验证通过')
+  })
   it('按 eventId 去重并按 sequence 重排重放事件', () => {
     const second = event<Extract<AgentEvent, { type: 'PlanUpdated' }>>({
       type: 'PlanUpdated', explicitUserIntent: true, sequence: 2, intent: 'diagnose', summary: '诊断错误', toolDomains: ['diagnostics'],

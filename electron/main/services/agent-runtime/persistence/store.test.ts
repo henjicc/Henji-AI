@@ -202,6 +202,34 @@ describeWithElectronSqlite('AgentPersistenceStore', () => {
       operations: { execute: async (command) => store.operations.execute(command) } })
   }
 
+  it('脚本修正显式关联未执行的原尝试；无关成功、部分执行和伪造引用均不能关闭原失败', async () => {
+    await expect(new AgentOperationCoordinator().prepare({ ...operationIntent(), repairsScriptRunRef: 'unavailable' })).rejects.toThrow('持久化记录')
+    store.createRun('run-1', request(), state())
+    const prepareScript = (key: string, repairsScriptRunRef?: string) => operationRecordSchema.parse(store.operations.execute({ action: 'prepare', intent: {
+      ...operationIntent(), key, toolCallId: key, toolName: 'run_henji_script', container: true, businessMutation: false, repairsScriptRunRef,
+    } }))
+    const original = prepareScript('original')
+    store.operations.execute({ action: 'dispatch', runId: 'run-1', operationId: original.operationId })
+    store.operations.recordOutput(original.operationId, { scriptRunRef: 'script:original', status: 'failed',
+      error: { phase: 'compile' }, verification: { passed: false } })
+    const unrelated = prepareScript('unrelated')
+    store.operations.execute({ action: 'dispatch', runId: 'run-1', operationId: unrelated.operationId })
+    store.operations.recordOutput(unrelated.operationId, { scriptRunRef: 'script:unrelated', status: 'completed', verification: { passed: true } })
+    expect(store.loadState('run-1')?.executionOutcome.facts?.unresolved).toHaveLength(1)
+    expect(() => prepareScript('forged', 'script:missing')).toThrow('SCRIPT_REPAIR_UNSAFE')
+    const corrected = prepareScript('corrected', 'script:original')
+    expect(corrected.repairsOperationId).toBe(original.operationId)
+    store.operations.execute({ action: 'dispatch', runId: 'run-1', operationId: corrected.operationId })
+    store.operations.recordOutput(corrected.operationId, { scriptRunRef: 'script:corrected', status: 'completed', verification: { passed: true } })
+    expect(store.loadState('run-1')?.executionOutcome.facts?.unresolved).toEqual([])
+
+    const partial = prepareScript('partial')
+    store.operations.execute({ action: 'dispatch', runId: 'run-1', operationId: partial.operationId })
+    store.operations.recordOutput(partial.operationId, { scriptRunRef: 'script:partial', status: 'partial', error: { phase: 'execute' }, verification: { passed: false } })
+    expect(() => prepareScript('unsafe', 'script:partial')).toThrow('SCRIPT_REPAIR_UNSAFE')
+    expect(store.loadState('run-1')?.executionOutcome.facts?.unresolved).toMatchObject([{ operationId: partial.operationId }])
+  })
+
   it('保存恢复必须关联原操作并取得新的精确领域回执；成功摘要、其他对象保存均不能关闭缺口', async () => {
     store.createRun('run-1', request(), state())
     const target = { kind: 'canvas.project', id: 'A' }
@@ -332,6 +360,31 @@ describeWithElectronSqlite('AgentPersistenceStore', () => {
     store = new AgentPersistenceStore(database)
     store.operations.execute({ action: 'fail', runId: 'run-1', operationId: prepared.operationId, state: 'unknown', error: 'event disconnected', effects: [] })
     expect(store.operations.get(prepared.operationId)).toMatchObject({ state: 'completed', output: { saved: true } })
+  })
+
+  it('终态后迟到回执仍投影到历史结果；保存旧状态不能擦除事实，精确验证才关闭缺口', () => {
+    store.createRun('run-1', request(), state())
+    const prepared = operationRecordSchema.parse(store.operations.execute({ action: 'prepare', intent: operationIntent() }))
+    store.operations.execute({ action: 'dispatch', runId: 'run-1', operationId: prepared.operationId })
+    store.operations.execute({ action: 'fail', runId: 'run-1', operationId: prepared.operationId, state: 'unknown', error: 'timeout', effects: [] })
+    store.saveState(state('cancelled'))
+    const effect = { effect: 'update' as const, entityTypes: ['canvas.node'], propertyIds: [],
+      targetRefs: operationIntent().targets, count: 1, verified: false, evidence: [] }
+    store.operations.recordOutput(prepared.operationId, { saved: true }, [effect])
+    store = new AgentPersistenceStore(database)
+    store.saveState({ ...state('cancelled'), workingSummary: createAgentWorkingSummary('修改 A') })
+    const restored = store.loadState('run-1')!
+    expect(restored.status).toBe('cancelled')
+    expect(restored.executionOutcome).toMatchObject({ effects: [effect],
+      facts: { completion: 'needs_check', resultRefs: operationIntent().targets,
+        unresolved: [{ operationId: prepared.operationId, conditionId: 'formal_result' }] } })
+    expect(restored.workingSummary?.executionFacts).toEqual(restored.executionOutcome.facts)
+    store.operations.execute({ action: 'verify', runId: 'run-1', verification: {
+      operationId: prepared.operationId, conditionId: 'formal_result', targets: operationIntent().targets,
+      status: 'passed', evidence: ['原目标正式回读'], verifiedAt: new Date().toISOString(),
+    } })
+    expect(store.loadState('run-1')?.executionOutcome).toMatchObject({ effects: [{ ...effect, verified: true }],
+      facts: { completion: 'completed', verificationStatus: 'passed', unresolved: [] } })
   })
 
   it('主进程领取尝试后拒绝重复传输；仅确认未执行才允许新尝试并保留授权历史', () => {

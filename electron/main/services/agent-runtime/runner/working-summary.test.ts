@@ -71,7 +71,7 @@ describe('Agent 工作摘要', () => {
    * 验证未通过的记录必须能被后来的一次通过清掉——unresolvedItems 非空会让 executionSealingBlocker
    * 拒绝封存，清不掉就等于整次运行再也封存不了。回收靠固定前缀，不靠匹配那句话的内容。
    */
-  it('后续验证通过时清除上一次验证失败留下的未收敛项', () => {
+  it('后续验证通过缺少操作关联时保留上一次验证失败', () => {
     let summary = createAgentWorkingSummary('播放动画')
     summary = reduceAgentWorkingSummary(summary, event({
       type: 'VerificationCompleted', passed: false,
@@ -85,7 +85,7 @@ describe('Agent 工作摘要', () => {
       type: 'VerificationCompleted', passed: true,
       summary: '脚本逐步验证通过。', evidence: ['playback:playing=true'],
     }), null)
-    expect(summary.unresolvedItems).toEqual([])
+    expect(summary.unresolvedItems).toEqual([`${VERIFICATION_FAILURE_PREFIX}播放状态没有读回 playing=true。`])
   })
 
   it('同一写入口后续成功不能清除未关联原操作的失败与恢复状态', () => {

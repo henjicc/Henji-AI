@@ -48,6 +48,7 @@ import { AgentThreadTitleStore } from './thread-title-store'
 import { AgentThreadDeletionStore } from './thread-deletion-store'
 import { AgentOperationStore } from './operation-store'
 import { projectLegacyRunState } from './legacy-state'
+import { projectExecutionFacts } from '../../../../../src/core/assistant/executionFacts'
 
 const logger = createMainLogger('main.agent_persistence')
 const terminalStatuses = new Set(['completed', 'completed_with_warning', 'budget_exhausted', 'failed', 'cancelled', 'waiting_external'])
@@ -186,6 +187,7 @@ export class AgentPersistenceStore {
   }
 
   saveState(state: AgentRunState): void {
+    state = this.projectOperationFacts(state)
     this.database.prepare(`
       UPDATE agent_runs
       SET state_json = ?, status = ?, checkpoint_version = ?,
@@ -487,10 +489,23 @@ export class AgentPersistenceStore {
   private readCompatibleState(row: RunRow): AgentRunState {
     const raw = parseJson(row.state_json)
     const parsed = agentRunStateSchema.safeParse(raw)
-    if (parsed.success && row.operation_history_version !== 0) return parsed.data
+    if (parsed.success && row.operation_history_version !== 0) return this.projectOperationFacts(parsed.data)
     this.database.prepare("UPDATE agent_runs SET recovery_status = 'recovery_required' WHERE run_id = ?").run(row.run_id)
     return projectLegacyRunState(raw, { runId: row.run_id, threadId: row.thread_id, goal: row.goal,
       createdAt: row.created_at, updatedAt: row.updated_at })
+  }
+
+  projectOperationFacts(state: AgentRunState): AgentRunState {
+    const result = this.operations.execute({ action: 'list', runId: state.runId })
+    // 兼容尚无操作日志的记录，不能用空投影覆盖旧版本保存的实际修改。
+    if (!Array.isArray(result) || !result.length) return state
+    const projection = projectExecutionFacts(result)
+    return {
+      ...state,
+      executionOutcome: { ...state.executionOutcome, effects: projection.effects, facts: projection.facts,
+        verificationSummary: { summary: projection.summary, evidence: projection.evidence } },
+      workingSummary: state.workingSummary ? { ...state.workingSummary, executionFacts: projection.facts } : undefined,
+    }
   }
 
   private moveToRecoveryRequired(
@@ -504,9 +519,9 @@ export class AgentPersistenceStore {
       return this.readCompatibleState(row)
     }
     if (row.recovery_status === 'recovery_required' && row.status === 'failed') {
-      return agentRunStateSchema.parse(parseJson(row.state_json))
+      return this.projectOperationFacts(agentRunStateSchema.parse(parseJson(row.state_json)))
     }
-    const previous = agentRunStateSchema.parse(parseJson(row.state_json))
+    const previous = this.projectOperationFacts(agentRunStateSchema.parse(parseJson(row.state_json)))
     const now = new Date().toISOString()
     const sequence = previous.sequence + 1
     const error = {

@@ -23,7 +23,10 @@ export class AgentOperationCoordinator {
   }
 
   async prepare(intent: OperationIntent): Promise<OperationRecord | null> {
-    if (!this.persistence) return null
+    if (!this.persistence) {
+      if (intent.repairsScriptRunRef) throw new AgentToolGatewayError('CONFLICT', '缺少原脚本的持久化记录，不能确认安全修正。', true, 'user_action')
+      return null
+    }
     const records = !intent.readOnly && !intent.container && intent.businessMutation !== false ? await this.list(intent.runId) : []
     const original = records.find((item) => item.state === 'partial' && item.transaction?.persistence?.recovery.capabilityId === intent.toolName
       && !item.verifications.some((verification) => verification.conditionId === 'persistence' && verification.status === 'passed')

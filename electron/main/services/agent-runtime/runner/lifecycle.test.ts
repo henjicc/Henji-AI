@@ -30,6 +30,23 @@ function fixture() {
 }
 
 describe('AgentRunnerLifecycle 执行与说明终态分离', () => {
+  it.each(['failed', 'budget_exhausted', 'cancelled'] as const)('终态 %s 保留实际修改和未核对目标', (terminal) => {
+    const { lifecycle, state } = fixture()
+    const effect = { effect: 'update' as const, entityTypes: ['canvas.node'], propertyIds: [],
+      targetRefs: [{ kind: 'canvas.node', id: 'A' }], count: 1, verified: false, evidence: [] }
+    lifecycle.recordExecutionProjection({ effects: [effect], passed: false, summary: '保存仍待核对。', evidence: [],
+      facts: { completion: 'needs_check', verificationStatus: 'pending', resultRefs: effect.targetRefs,
+        unresolved: [{ operationId: 'original', conditionId: 'persistence', state: 'needs_check', summary: '保存仍待核对。', targets: effect.targetRefs }] } })
+    if (terminal === 'failed') lifecycle.fail(new Error('disconnected'))
+    else if (terminal === 'budget_exhausted') lifecycle.exhaustBudget('MAX_TURNS', new Error('limit'))
+    else { lifecycle.transition('cancelled'); lifecycle.finishTerminal() }
+    expect(state.status).toBe(terminal)
+    expect(state.executionOutcome.effects).toEqual([effect])
+    expect(state.executionOutcome.facts?.unresolved).toHaveLength(1)
+    expect(state.executionOutcome.verificationSummary.summary).toBe('保存仍待核对。')
+    expect(state.workingSummary?.executionFacts).toEqual(state.executionOutcome.facts)
+  })
+
   it('执行过程中持续保存强类型回执，供外部等待续跑继承', () => {
     const { lifecycle, state } = fixture()
     lifecycle.recordExecutionEffects([{

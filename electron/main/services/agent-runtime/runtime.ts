@@ -268,7 +268,7 @@ export class AgentRuntimeService {
     const live = this.runs.get(runId)
     if (live) {
       this.requireRebindableRun(owner, runId)
-      return live.state
+      return this.persistence.projectOperationFacts(live.state)
     }
     const persisted = this.persistence.loadState(runId)
     if (!persisted) throw new Error('[run_not_found] 运行不存在')
@@ -279,7 +279,7 @@ export class AgentRuntimeService {
     const live = this.runs.get(runId)
     if (live) {
       const record = this.requireRebindableRun(owner, runId)
-      return agentRunSnapshotSchema.parse({ state: record.state, events: record.events,
+      return agentRunSnapshotSchema.parse({ state: this.persistence.projectOperationFacts(record.state), events: record.events,
         operations: projectOperationSnapshots(this.persistence.operations.execute({ action: 'list', runId }) as OperationRecord[]),
       })
     }
@@ -429,6 +429,7 @@ export class AgentRuntimeService {
   }
 
   private commitControlState(runId: string, state: AgentRunState): AgentRunState {
+    state = this.persistence.projectOperationFacts(state)
     this.updateState(runId, state)
     this.persistence.saveState(state)
     return state
@@ -450,6 +451,7 @@ export class AgentRuntimeService {
   }
 
   private onTerminal(runId: string, state: AgentRunState): void {
+    state = this.persistence.projectOperationFacts(state)
     const record = this.runs.get(runId)
     const terminalOwner = record ? webContents.fromId(record.ownerWebContentsId) : null
     const terminalRequest = state.status === 'budget_exhausted'
@@ -617,7 +619,7 @@ export class AgentRuntimeService {
 
   private updateState(runId: string, state: AgentRunState): void {
     const record = this.runs.get(runId)
-    if (record) record.state = state
+    if (record) record.state = this.persistence.projectOperationFacts(state)
   }
 
   private notifyRunEventListeners(runId: string, event: AgentEvent): void {

@@ -126,9 +126,15 @@ function applyEventToRunState(state: AgentRunState, event: AgentEvent): AgentRun
       next.currentStepId = null
       next.currentToolCallId = null
       break
+    case 'VerificationCompleted':
+      next.executionOutcome = { ...next.executionOutcome, facts: event.facts ?? next.executionOutcome.facts,
+        verificationSummary: { summary: event.summary, evidence: event.evidence } }
+      break
     case 'ExecutionOutcomeSealed':
       next.executionOutcome = {
+        ...next.executionOutcome,
         status: 'sealed_success', effects: event.effects,
+        facts: event.facts ?? next.executionOutcome.facts,
         verificationSummary: { summary: event.summary, evidence: event.evidence },
         sealedAt: event.occurredAt,
       }
@@ -369,7 +375,7 @@ export function selectModelPublicUpdates(events: AgentEvent[]): AgentModelPublic
 export interface AgentExecutionPresentation {
   summary: NonNullable<AgentRunState['workingSummary']> | null
   artifactRefs: string[]
-  verification: Extract<AgentEvent, { type: 'VerificationCompleted' }> | null
+  verification: Pick<Extract<AgentEvent, { type: 'VerificationCompleted' }>, 'passed' | 'summary' | 'evidence' | 'facts'> | null
   clarification: Extract<AgentEvent, { type: 'ClarificationRequired' }> | null
   lastCompaction: Extract<AgentEvent, { type: 'ContextCompacted' }> | null
   retrying: Extract<AgentEvent, { type: 'ModelRetrying' }> | null
@@ -397,6 +403,11 @@ export function selectExecutionPresentation(
     if (verification && clarification && lastCompaction && retrying) break
   }
   const summary = state?.workingSummary ?? null
+  const facts = state?.executionOutcome.facts
+  if (facts && state) verification = {
+    passed: facts.verificationStatus === 'passed' || facts.verificationStatus === 'not_required',
+    ...state.executionOutcome.verificationSummary, facts,
+  }
   if (state && state.status !== 'waiting_user') clarification = null
   let nextAction = '正在理解目标并准备下一步。'
   if (clarification) nextAction = clarification.question
@@ -427,6 +438,16 @@ export function selectExecutionPresentation(
       : '本次运行无法继续，请查看错误原因并补充所需信息。'
   } else if (summary?.completedSteps.length) {
     nextAction = '正在核对最新观察并决定下一步。'
+  }
+  if (facts && state && ['completed', 'completed_with_warning', 'failed', 'cancelled', 'budget_exhausted'].includes(state.status)) {
+    nextAction = facts.completion === 'needs_check' ? '实际结果已保留，仍有操作需要核对后才能继续。'
+      : facts.completion === 'partial' ? '部分操作已完成，请查看保留的结果和未完成事项。'
+        : facts.completion === 'not_executed' ? '请求的操作尚未执行完成，可查看原因后继续。'
+          : state.status === 'failed' ? '本次运行未完成，已发生的操作结果仍会保留。'
+            : state.status === 'cancelled' ? '任务已取消，已发生的操作结果仍会保留。'
+              : state.status === 'budget_exhausted' ? '当前执行段已停止，已发生的操作结果仍会保留。'
+          : facts.verificationStatus === 'not_required' ? '本次查询已结束，请查看助手结论。'
+            : '已执行的操作均已验证，请查看结果。'
   }
   return {
     summary,

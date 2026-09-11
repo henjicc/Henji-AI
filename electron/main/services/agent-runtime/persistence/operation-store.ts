@@ -90,7 +90,23 @@ export class AgentOperationStore {
         }
         const now = new Date().toISOString()
         const operationId = randomUUID()
+        let repairsOperationId: string | undefined
+        if (intent.repairsScriptRunRef) {
+          const records = this.execute({ action: 'list', runId: intent.runId }) as OperationRecord[]
+          const original = records.find((item) => item.container && item.output && typeof item.output === 'object'
+            && Reflect.get(item.output, 'scriptRunRef') === intent.repairsScriptRunRef)
+          const output = original?.output && typeof original.output === 'object' ? original.output : null
+          const error = output ? Reflect.get(output, 'error') as { phase?: unknown } | null : null
+          if (!intent.container || intent.toolName !== 'run_henji_script' || !original || original.state !== 'completed'
+            || Reflect.get(output!, 'status') !== 'failed' || !['parse', 'compile', 'preflight'].includes(String(error?.phase))
+            || original.effects.length || original.persistenceReceipts.length || original.externalCalls.length
+            || records.some((item) => item.parentToolCallId === original.toolCallId)) {
+            throw new Error('[SCRIPT_REPAIR_UNSAFE] 仅可关联原任务中确认未进入执行的脚本；已执行或未知操作必须先核对')
+          }
+          repairsOperationId = original.operationId
+        }
         return this.save({ ...intent, ...owner, schemaVersion: 'operation-record/v1', operationId,
+          repairsOperationId,
           attempt: 1, attempts: [], persistenceReceipts: [], persistenceIntents: [], externalCalls: [], verificationPlans: [], state: 'prepared', createdAt: now, updatedAt: now, effects: [],
           verifications: intent.readOnly || intent.businessMutation === false ? [] : [{ operationId, conditionId: 'formal_result',
             targets: intent.verificationTargets ?? intent.targets, status: 'pending', evidence: [], verifiedAt: now }] })

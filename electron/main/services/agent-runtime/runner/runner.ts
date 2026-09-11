@@ -181,6 +181,8 @@ export class AgentRunner {
     this.completionCoordinator = new AgentCompletionCoordinator({
       runId: options.runId,
       emit: (event) => this.emit(event),
+      onProjection: (projection) => this.lifecycle.recordExecutionProjection(projection),
+      inheritedEffects: this.state.executionOutcome.effects,
     })
     this.pauseController = new AgentPauseController({
       getStatus: () => this.machine.status,
@@ -663,6 +665,7 @@ export class AgentRunner {
           currentSnapshot = authoritativeContext.host
           context = authoritativeContext.context
           if (authoritativeContext.terminalError) {
+            await this.refreshExecutionFacts()
             this.lifecycle.fail(authoritativeContext.terminalError)
             return
           }
@@ -709,7 +712,8 @@ export class AgentRunner {
             ),
             flushConversation: () => this.conversationJournal.flush(),
             appendGuidance: (content) => this.conversationJournal.appendEphemeral({ role: 'user', content }),
-            saveAfter: () => {
+            saveAfter: async () => {
+              await this.refreshExecutionFacts()
               this.syncLeaseCheckpoint()
               return this.savePointCoordinator.save('after_tools', turnSnapshot)
             },
@@ -733,6 +737,8 @@ export class AgentRunner {
           alreadyGuided: this.finalResponseGuided,
         })
         if (!finalText) {
+          if (await this.currentMessageConsumer.pull() > 0) continue
+          this.completionCoordinator.evaluate(this.observations, await this.options.dependencies.gateway.listOperations(this.options.runId))
           this.sealExecutionIfEligible()
           if (this.state.executionOutcome.status === 'sealed_success') {
             this.setPhase('completed')
@@ -744,7 +750,7 @@ export class AgentRunner {
           continue
         }
         this.setPhase('verifying')
-        this.completionCoordinator.evaluate(this.observations)
+        this.completionCoordinator.evaluate(this.observations, await this.options.dependencies.gateway.listOperations(this.options.runId))
         if (await this.currentMessageConsumer.pull() > 0) continue
         this.syncNavigationPolicy()
         const policy = this.state.workingSummary?.taskPolicy
@@ -754,6 +760,7 @@ export class AgentRunner {
               runId: this.options.runId, threadId: this.options.request.threadId,
               approvalMode: this.options.request.approvalMode, signal: this.abortController.signal,
               observations: this.observations, policy, gateway: this.options.dependencies.gateway,
+              outcome: this.state.executionOutcome,
               getHost: () => this.options.dependencies.getHostContext(this.options.runId),
               markAttempted: () => {
                 const attempted = { ...policy, resultPresented: true }
@@ -847,14 +854,17 @@ export class AgentRunner {
     const caveat = sealingCaveat(this.state.workingSummary)
     this.lifecycle.sealExecution({
       effects,
-      summary: sealingSummary(effects) + (caveat ? `${caveat}` : ''),
-      evidence: [...new Set(effects.flatMap((effect) => effect.evidence))].slice(0, 24),
+      summary: this.state.executionOutcome.facts ? this.state.executionOutcome.verificationSummary.summary
+        : (sealingSummary(effects) + (caveat ? `${caveat}` : '')).slice(0, 2000),
+      evidence: this.state.executionOutcome.facts ? this.state.executionOutcome.verificationSummary.evidence
+        : [...new Set(effects.flatMap((effect) => effect.evidence))].slice(0, 24),
     })
   }
   private async fail(error: unknown): Promise<void> {
     this.approvalCoordinator.cancel(); await this.terminalApprovalCleanup.run()
     if (this.machine.status !== 'cancelled') {
       this.setTerminalPhase('blocked')
+      await this.refreshExecutionFacts()
       this.lifecycle.fail(error)
     }
   }
@@ -862,9 +872,19 @@ export class AgentRunner {
     this.approvalCoordinator.cancel(); await this.terminalApprovalCleanup.run()
     if (this.machine.status !== 'cancelled') {
       this.setTerminalPhase('continuing', '当前执行段预算耗尽，正在保存并判断是否自动续跑')
+      await this.refreshExecutionFacts()
       this.lifecycle.exhaustBudget(error.code, error)
     }
   }
+  private async refreshExecutionFacts(): Promise<void> {
+    try {
+      this.completionCoordinator.project(this.observations, await this.options.dependencies.gateway.listOperations(this.options.runId))
+    } catch (error) {
+      // 终态落盘失败不能覆盖已有回执；主进程仍会从持久化操作记录重新投影。
+      logger.error('刷新执行事实失败，保留已有回执', { event: 'agent_runtime.execution_projection.failed', requestId: this.options.runId, error })
+    }
+  }
+
   private setPhase(phase: AgentRunPhase, detail?: string): void {
     if (this.currentPhase === phase) return
     const previous = this.currentPhase

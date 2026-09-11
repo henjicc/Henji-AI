@@ -4,6 +4,7 @@ import { chooseResultToPresent, presentConfirmedResult } from './result-presenta
 import type { AgentToolGateway } from '../tools/gateway'
 import { contextSnapshot } from '../context/context-test-fixtures'
 import { bindTaskExecutionPolicy } from '../context/task-execution-policy'
+import type { AgentRunState } from '../../../../../src/core/assistant/events'
 
 function observed(id: string, effect: 'update' | 'observe' | 'navigate' = 'update'): AgentToolObservation {
   return {
@@ -15,6 +16,19 @@ function observed(id: string, effect: 'update' | 'observe' | 'navigate' = 'updat
 }
 
 describe('confirmed result presentation', () => {
+  it('跨运行汇总选择已确认结果，跳过待核对或后来删除的对象，并保留其他结果入口', () => {
+    const outcome: AgentRunState['executionOutcome'] = { status: 'pending',
+      effects: [...observed('A').effects!, ...observed('B').effects!], verificationSummary: { summary: '', evidence: [] },
+      facts: { completion: 'needs_check', verificationStatus: 'pending', resultRefs: [{ kind: 'canvas.project', id: 'A' }, { kind: 'canvas.project', id: 'B' }],
+        unresolved: [{ operationId: 'B', conditionId: 'persistence', state: 'needs_check', summary: '保存未确认', targets: [{ kind: 'canvas.project', id: 'B' }] }] } }
+    expect(chooseResultToPresent([], outcome)?.ref.id).toBe('A')
+    outcome.facts!.unresolved = []
+    expect(chooseResultToPresent([], outcome)?.ref.id).toBe('B')
+    outcome.effects.push({ ...observed('B').effects![0], effect: 'delete' })
+    expect(chooseResultToPresent([], outcome)?.ref.id).toBe('A')
+    expect(outcome.facts!.resultRefs).toHaveLength(2)
+    expect(chooseResultToPresent([observed('A', 'navigate')], outcome)).toBeNull()
+  })
   it('多个业务结果只选择最后一个，后续读取不改变结果选择，已显式导航不重复展示', () => {
     expect(chooseResultToPresent([observed('A'), observed('B'), observed('C', 'observe')]))
       .toEqual({ ref: { kind: 'canvas.project', id: 'B' }, propertyIds: [] })

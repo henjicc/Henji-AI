@@ -8,6 +8,7 @@ import { agentWorkingSummarySchema } from './workingContext'
 import { agentObservedEffectSchema } from './observedEffect'
 import { applicationTransactionFailureFactsSchema } from './applicationTransactionFailureFacts'
 import { taskExecutionPolicySchema } from './taskExecutionPolicy'
+import { executionFactsSchema } from './executionFacts'
 
 export const AGENT_EVENT_SCHEMA_VERSION = 'agent-event/v2' as const
 
@@ -103,7 +104,8 @@ export const agentRunStateSchema = z.object({
   error: serializedAgentErrorSchema.nullable(),
   executionOutcome: z.object({
     status: z.enum(['pending', 'sealed_success', 'failed']),
-    effects: z.array(agentObservedEffectSchema).max(512),
+    effects: z.array(agentObservedEffectSchema),
+    facts: executionFactsSchema.optional(),
     verificationSummary: z.object({
       summary: z.string().max(2_000),
       evidence: z.array(z.string().max(500)).max(24),
@@ -365,6 +367,7 @@ const artifactOffloadedEventSchema = z.object({
 const verificationCompletedEventSchema = z.object({
   ...eventBase,
   type: z.literal('VerificationCompleted'),
+  facts: executionFactsSchema.optional(),
   passed: z.boolean(),
   summary: z.string().min(1).max(500),
   evidence: z.array(z.string().min(1).max(500)).max(8),
@@ -419,7 +422,8 @@ const runCompletedEventSchema = z.object({
 const executionOutcomeSealedEventSchema = z.object({
   ...eventBase,
   type: z.literal('ExecutionOutcomeSealed'),
-  effects: z.array(agentObservedEffectSchema).max(512),
+  effects: z.array(agentObservedEffectSchema),
+  facts: executionFactsSchema.optional(),
   summary: z.string().min(1).max(2_000),
   evidence: z.array(z.string().min(1).max(500)).max(24),
 }).strict()

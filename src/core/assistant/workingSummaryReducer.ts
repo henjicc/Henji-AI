@@ -10,7 +10,7 @@ import {
   type AgentWorkingSummary,
 } from './workingContext'
 
-/** 验证未通过留下的未收敛项前缀；通过时按它精确回收，不靠匹配文案内容。 */
+/** 旧事件的验证提示前缀；不能凭后续无关联成功删除。 */
 export const VERIFICATION_FAILURE_PREFIX = '验证未通过：'
 
 function appendBounded<T>(items: T[], value: T, limit: number): T[] {
@@ -166,7 +166,7 @@ export function reduceAgentWorkingSummary(
       failedSteps: appendBounded(next.failedSteps, step, 10),
       unresolvedItems: step.readOnly === true
         ? next.unresolvedItems
-        : appendBounded(next.unresolvedItems, `${event.toolName} 未收敛：${event.error.code}`, 10),
+        : [...new Set([...next.unresolvedItems, `${event.toolName} 未收敛：${event.error.code}`])],
       recovery: unknownWrite ? {
         mode: 'verify_before_write',
         reason: `${event.toolName} 的写入副作用未知，恢复后必须先查询真实状态。`,
@@ -195,6 +195,7 @@ export function reduceAgentWorkingSummary(
   } else if (event.type === 'VerificationCompleted') {
     next = {
       ...next,
+      executionFacts: event.facts ?? next.executionFacts,
       evidence: event.passed
         ? appendBounded(next.evidence, {
             source: 'completion_verifier',
@@ -203,25 +204,15 @@ export function reduceAgentWorkingSummary(
             observedAt: event.occurredAt,
           }, 12)
         : next.evidence,
-      /*
-       * 验证未通过留下的未收敛项，必须能被后来的一次通过验证清掉。
-       *
-       * 它不只是展示：`executionSealingBlocker` 见到非空 unresolvedItems 就拒绝封存。一条永远
-       * 清不掉的旧记录等于整次运行再也封存不了。这里靠固定前缀标记出处——旧实现是拿正则去猜
-       * 那句话长什么样（`/任务图仍有 \d+ 个 Facet 未结算/`），文案一改就失灵。
-       */
-      unresolvedItems: event.passed
-        ? next.unresolvedItems.filter((item) => !item.startsWith(VERIFICATION_FAILURE_PREFIX))
-        : appendBounded(
-            next.unresolvedItems,
-            `${VERIFICATION_FAILURE_PREFIX}${event.summary}`,
-            10
-          ),
+      // 新结论来自操作汇总；旧事件没有精确关联，不能因一次无关成功删除历史缺口。
+      unresolvedItems: event.facts || event.passed
+        ? next.unresolvedItems
+        : [...new Set([...next.unresolvedItems, `${VERIFICATION_FAILURE_PREFIX}${event.summary}`])],
     }
   } else if (event.type === 'ClarificationRequired') {
     next = {
       ...next,
-      unresolvedItems: appendBounded(next.unresolvedItems, event.reason, 10),
+      unresolvedItems: [...new Set([...next.unresolvedItems, event.reason])],
       recovery: {
         mode: 'await_user',
         reason: event.question,

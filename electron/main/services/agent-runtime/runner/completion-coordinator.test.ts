@@ -54,7 +54,6 @@ describe('AgentCompletionCoordinator', () => {
     expect(events).toEqual([expect.objectContaining({
       type: 'VerificationCompleted',
       passed: true,
-      summary: 'Henji Script 已执行并通过 4 项正式验证。',
       evidence: ['s1:read-back:asset.library', 's2:created-read-back:1'],
     })])
   })
@@ -80,7 +79,7 @@ describe('AgentCompletionCoordinator', () => {
     expect(events).toEqual([expect.objectContaining({
       type: 'VerificationCompleted',
       passed: false,
-      summary: '脚本未通过完整验证。',
+      facts: expect.objectContaining({ verificationStatus: 'failed' }),
     })])
   })
 
@@ -98,7 +97,7 @@ describe('AgentCompletionCoordinator', () => {
     })])
   })
 
-  it('多次脚本执行时以最后一次的正式结论为准', () => {
+  it('多次脚本执行时无关成功不能覆盖前序失败', () => {
     const { coordinator, events } = createCoordinator()
     coordinator.evaluate([
       scriptObservation({ passed: false, summary: '第一段脚本预检失败。', evidence: [] }),
@@ -106,8 +105,8 @@ describe('AgentCompletionCoordinator', () => {
     ])
 
     expect(events).toEqual([expect.objectContaining({
-      passed: true,
-      summary: '修正后的脚本已通过 2 项正式验证。',
+      passed: false,
+      facts: expect.objectContaining({ unresolved: [expect.objectContaining({ conditionId: 'script_result' })] }),
     })])
   })
 })

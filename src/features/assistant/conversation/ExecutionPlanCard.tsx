@@ -34,6 +34,13 @@ function planStatusLabel(
   if (runStatus === 'paused') return '已暂停'
   if (runStatus === 'cancelled') return '已取消'
   if (runStatus === 'failed') return '受阻'
+  const facts = presentation.verification?.facts
+  if (facts && ['completed', 'completed_with_warning', 'budget_exhausted'].includes(runStatus)) {
+    if (facts.completion === 'needs_check') return '待核对'
+    if (facts.completion === 'partial') return '部分完成'
+    if (facts.completion === 'not_executed') return '未执行完成'
+    if (facts.verificationStatus === 'not_required') return '已结束'
+  }
   if (runStatus === 'completed_with_warning') return '已完成，有提示'
   if (presentation.summary && presentation.summary.recovery.mode !== 'none') return '恢复中'
   if (presentation.verification?.passed) return '已验证'
@@ -118,7 +125,9 @@ export function ExecutionPlanCard({
             <div className="mt-2 flex items-start gap-1.5">
               <ClipboardCheck className={`mt-0.5 h-3 w-3 shrink-0 ${verification.passed ? 'text-success' : 'text-warning'}`} />
               <div className="min-w-0">
-                <span className="font-medium text-text-dark">{verification.passed ? '验证通过：' : '验证未通过：'}</span>
+                <span className="font-medium text-text-dark">{verification.facts?.verificationStatus === 'pending' ? '仍待核对：'
+                  : verification.facts?.verificationStatus === 'not_required' ? '执行记录：'
+                    : verification.passed ? '验证通过：' : '验证未通过：'}</span>
                 <span className="break-words">{verification.summary}</span>
               </div>
             </div>

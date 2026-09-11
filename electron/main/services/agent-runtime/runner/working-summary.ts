@@ -6,10 +6,6 @@ import {
 
 export { reduceAgentWorkingSummary } from '../../../../../src/core/assistant/workingSummaryReducer'
 
-function appendBounded<T>(items: T[], value: T, limit: number): T[] {
-  return [...items, value].slice(-limit)
-}
-
 export function assessInterruptedWorkingSummary(
   current: AgentWorkingSummary
 ): AgentWorkingSummary {
@@ -18,7 +14,7 @@ export function assessInterruptedWorkingSummary(
     return agentWorkingSummarySchema.parse({
       ...current,
       pendingApprovals: [],
-      unresolvedItems: appendBounded(current.unresolvedItems, '重启前的审批已经失效，需要重新规划。', 10),
+      unresolvedItems: [...new Set([...current.unresolvedItems, '重启前的审批已经失效，需要重新规划。'])],
       recovery: {
         mode: 'await_user',
         reason: '应用退出时仍有待审批操作；旧审批不可复用。',
@@ -33,11 +29,7 @@ export function assessInterruptedWorkingSummary(
     const readOnly = current.activeStep.readOnly === true
     return agentWorkingSummarySchema.parse({
       ...current,
-      unresolvedItems: appendBounded(
-        current.unresolvedItems,
-        `${current.activeStep.toolName ?? '活动步骤'} 在退出时未收敛。`,
-        10
-      ),
+      unresolvedItems: [...new Set([...current.unresolvedItems, `${current.activeStep.toolName ?? '活动步骤'} 在退出时未收敛。`])],
       recovery: {
         mode: readOnly ? 'resume_read_only' : 'verify_before_write',
         reason: readOnly
@@ -69,8 +61,7 @@ export function markWorkingSummaryRecoveryVerified(
   return agentWorkingSummarySchema.parse({
     ...current,
     unresolvedItems: current.unresolvedItems.filter((item) => (
-      !item.includes('未收敛')
-      && !item.startsWith('恢复时宿主作用域已变化：')
+      current.recovery.mode !== 'resume_read_only' || !item.startsWith('恢复时宿主作用域已变化：')
     )),
     recovery: {
       mode: 'none',

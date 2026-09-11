@@ -96,7 +96,7 @@ describe('设置域的读改验回环', () => {
     expect(policy).toMatchObject({ policy: { intent: 'read_only', sources: [{ quote: goal }] } })
     expect(result.events.some((event) => event.type === 'ToolFailed'
       && event.toolName === 'run_henji_script' && event.error.message.includes('禁止')), JSON.stringify(result.toolCalls)).toBe(true)
-    expect(result.state.executionOutcome?.effects ?? []).toEqual([])
+    expect(result.state.executionOutcome.effects.every((effect) => effect.effect === 'observe')).toBe(true)
   })
 
   it('一次脚本内改主题色调再读回验证，zustand 真相源随之变化', async () => {

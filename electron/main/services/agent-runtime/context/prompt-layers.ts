@@ -182,6 +182,7 @@ function planState(input: AgentContextBuildInput): Record<string, unknown> {
           toolDomains: input.route.toolDomains,
         },
     unresolvedItems: summary?.unresolvedItems ?? [],
+    executionFacts: summary?.executionFacts,
     recovery: summary?.recovery,
     taskPolicy: summary?.taskPolicy,
     planVersion: summary?.planVersion,

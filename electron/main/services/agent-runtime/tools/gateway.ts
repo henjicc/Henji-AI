@@ -381,6 +381,8 @@ export class AgentToolGateway {
           requiresMainClaim: definition.requiresMainClaim,
           businessMutation: operationEffects(definition, executableInput).some((effect) => isMutatingEffect({ effect })),
           container: ['run_henji_script', 'resume_henji_script'].includes(definition.name),
+          repairsScriptRunRef: definition.name === 'run_henji_script' && typeof executableInput === 'object' && executableInput !== null
+            && typeof Reflect.get(executableInput, 'repairsScriptRunRef') === 'string' ? Reflect.get(executableInput, 'repairsScriptRunRef') as string : undefined,
           targets: operationTargetRefs(executableInput), targetBindings: definition.targetIds(executableInput),
           verificationTargets: operationVerificationTargets(definition.name, executableInput),
           expectedRevisions,
@@ -509,4 +511,3 @@ export class AgentToolGateway {
     )
   }
 }
-
