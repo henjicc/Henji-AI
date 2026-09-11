@@ -72,6 +72,21 @@ function collectCatalogConditions(): Array<{
 }
 
 describe('catalog consumer contract', () => {
+  it('输出模态与能力标签一致，参考图编辑不能标记为参考生视频', () => {
+    const videoOnlyTags = ['text-to-video', 'image-to-video', 'video-to-video', 'reference-mode', 'start-end-frame', 'supports-video-editing']
+    for (const model of catalog) {
+      if (model.meta.type !== 'video') {
+        expect((model.meta.tags ?? []).filter(tag => videoOnlyTags.includes(tag)), model.meta.id).toEqual([])
+      }
+    }
+    for (const id of ['kie-gpt-image-2', 'kie-gpt-image-2.5']) {
+      const model = catalog.find(candidate => candidate.meta.id === id)
+      expect(model?.meta.type).toBe('image')
+      expect(model?.meta.tags).toEqual(expect.arrayContaining(['text-to-image', 'image-to-image', 'supports-image-editing', 'supports-multi-image']))
+    }
+    expect(catalog.filter(model => model.meta.tags?.includes('reference-mode')).length).toBeGreaterThan(0)
+  })
+
   it('锁定真实 109 catalog 的 RuntimeParamDef type、数量与实际字段集合', () => {
     const rows = new Map<string, { count: number; fields: Set<string> }>()
     for (const model of catalog) {

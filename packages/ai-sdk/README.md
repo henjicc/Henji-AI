@@ -48,10 +48,10 @@ try {
 
 百炼工厂必须传 `baseUrl` 为实际地域/工作空间的 API 根地址，不包含端点路径。其他供应商可以覆盖根地址与 `credentialId`；SDK 不自动切换地域或账号。不同模型的向量不能混用；切换模型通常需要重建向量索引。Rerank 分数仅在本次请求内比较。
 
-SDK `0.4.0` 的正式分发渠道为公共 npm，无需配置 registry 或访问令牌：
+SDK `0.4.1` 的正式分发渠道为公共 npm，无需配置 registry 或访问令牌：
 
 ```bash
-npm install @henjicc/ai-sdk@0.4.0
+npm install @henjicc/ai-sdk@0.4.1
 ```
 
 然后提供 4 个宿主能力（`Transport` / `CredentialStore` / `MediaReader` / `Logger`），创建客户端：

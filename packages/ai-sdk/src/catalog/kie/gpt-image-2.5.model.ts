@@ -7,7 +7,7 @@ export const kieGptImage25Model = defineModel({
   meta: {
     id: 'kie-gpt-image-2.5', canonicalModelId: 'gpt-image-2.5', seriesId: 'gpt-image', seriesRank: 2.5,
     provider: 'kie', type: 'image',
-    tags: ['text-to-image', 'image-to-image', 'supports-image-editing', 'supports-multi-image', 'reference-mode', 'supports-4k', 'provider-kie'],
+    tags: ['text-to-image', 'image-to-image', 'supports-image-editing', 'supports-multi-image', 'supports-4k', 'provider-kie'],
   },
   inputLimits: { images: { max: 16 }, videos: { max: 0 } },
   params: [

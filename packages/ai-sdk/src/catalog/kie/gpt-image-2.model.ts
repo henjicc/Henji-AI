@@ -12,7 +12,6 @@ export const kieGptImage2Model = defineModel({
             'image-to-image',
             'supports-image-editing',
             'supports-multi-image',
-            'reference-mode',
             'supports-4k',
             'provider-kie'
         ],
