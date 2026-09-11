@@ -63,7 +63,7 @@ function compareVersions(v1: string, v2: string): boolean {
  */
 export function getCurrentVersion(): string {
   // 与 package.json 的 version 保持一致
-  return '2.0.0'
+  return '2.0.0-beta.1'
 }
 
 function mapElectronUpdaterResult(result: UpdaterCheckResult): UpdateCheckResult {
