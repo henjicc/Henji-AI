@@ -121,8 +121,8 @@ export class LinkageEngine {
       return []
     }
 
-    // 只有 dropdown 和 radio 有 options
-    if (paramDef.type !== 'dropdown' && paramDef.type !== 'radio') {
+    // 三种选项控件使用相同的动态合法值约束。
+    if (paramDef.type !== 'dropdown' && paramDef.type !== 'radio' && paramDef.type !== 'aspect-ratio') {
       return []
     }
 

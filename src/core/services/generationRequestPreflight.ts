@@ -201,11 +201,13 @@ export interface SmartAspectNormalizationResult {
 
 function getAvailableAspectParams(model: ModelDefinition, params: DynamicValueMap) {
   const engine = new LinkageEngine(model.linkages ?? [])
+  const current = { ...params }
+  for (const definition of model.params) {
+    if (current[definition.id] === undefined) current[definition.id] = definition.default
+  }
   return getAspectChoiceParams(model.params).map(param => {
-    const definition = model.params.find(candidate => candidate.id === param.id)
-    if (definition?.type !== 'dropdown' && definition?.type !== 'radio') return param
-    const allowed = engine.getFilteredOptions(param.id, params, model.params)
-    return { ...param, options: param.options.filter(option => allowed.some(candidate => candidate.value === option.value)) }
+    const allowed = engine.getFilteredOptions(param.id, current, model.params)
+    return { ...param, options: param.options.filter(option => allowed.some(candidate => candidate.value === option.value && !candidate.disabled)) }
   })
 }
 
@@ -224,7 +226,7 @@ function resolveChoiceSmartAspectValues(
   for (const aspectParam of aspectParams) {
     const currentValue = params[aspectParam.id] ?? (
       aspectParam.apiField ? params[aspectParam.apiField] : undefined
-    )
+    ) ?? aspectParam.defaultValue
 
     if (!isSmartAspectValue(currentValue)) {
       continue
@@ -259,7 +261,7 @@ function resolveChoiceSmartAspectValues(
       continue
     }
 
-    unresolvedParamIds.push(aspectParam.id)
+    throw new Error('当前模型和参数组合没有可用的图片比例，请调整分辨率、版本或渠道后重试。')
   }
 
   return {

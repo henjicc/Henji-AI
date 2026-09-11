@@ -13,6 +13,8 @@ describe('模型宽高比候选提取', () => {
       default: 'smart',
       options: [
         { value: 'smart', label: { zh: '智能', en: 'Smart' } },
+        { value: 'auto', label: '智能（默认 16:9）' },
+        { value: '27:16', label: '27:16', disabled: true },
         { value: 'portrait_4_3', label: { zh: '竖版 3:4', en: 'Portrait 3:4' } },
         { value: '4:5', label: '4:5' },
         { value: '1:1', label: '1:1' },

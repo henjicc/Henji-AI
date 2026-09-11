@@ -5,6 +5,7 @@ import { normalizeSmartAspectParams } from './generationRequestPreflight'
 import { catalog } from '@henjicc/ai-sdk'
 import { composeModelDefinition } from '@/core/composeModelDefinition'
 import { gptImage25Presentation } from '@/models/presentation/gpt-image-2.5'
+import type { ModelDefinition } from '@/core/types'
 
 vi.mock('@/commands/image', () => ({ readImageInfo: vi.fn(), cropImageSource: vi.fn() }))
 
@@ -24,6 +25,78 @@ beforeEach(() => {
 })
 
 describe('智能比例遵守当前分辨率与渠道约束', () => {
+  const definitionFor = (id: string) => composeModelDefinition(
+    catalog.find(entry => entry.meta.id === id)!, gptImage25Presentation[id],
+  )
+
+  it('省略参数时也按模型默认分辨率和默认智能比例计算', async () => {
+    vi.mocked(readImageInfo).mockResolvedValue(imageInfo(1600, 1000))
+    const result = await normalizeSmartAspectParams(definitionFor('kie-gpt-image-2.5'), { images: [source] })
+    expect(result.params.gpt25AspectRatio).toBe('27:16')
+  })
+
+  it.each(['dropdown', 'radio', 'aspect-ratio'] as const)('%s 只能返回当前合法候选；空候选停止，不退回原始列表', async type => {
+    const constrained: ModelDefinition = {
+      ...definitionFor('kie-gpt-image-2.5'),
+      params: [{ id: 'aspectRatio', type, order: 1, name: '比例', default: 'smart', options: [
+        { value: 'smart', label: '智能' }, { value: '1:1', label: '1:1' }, { value: '3:2', label: '3:2' },
+      ] }],
+      linkages: [{ trigger: 'mode', target: 'aspectRatio', effect: 'filterOptions',
+        filter: (mode, options) => options.filter(option => option.value === 'smart' || (mode === 'valid' && option.value === '3:2')) }],
+    }
+    const result = await normalizeSmartAspectParams(constrained, { mode: 'valid' })
+    // 没有参考图时也不能回退到已被过滤掉的 1:1。
+    expect(result.params.aspectRatio).toBe('3:2')
+    await expect(normalizeSmartAspectParams(constrained, { mode: 'unavailable' })).rejects.toThrow('没有可用的图片比例')
+  })
+
+  it('连续修改分辨率、版本和提示词后仍保留智能选择，每次提交使用当前约束', async () => {
+    const definition = definitionFor('kie-gpt-image-2.5')
+    const saved = { prompt: 'first', images: [source], gpt25Variant: 'flare', gpt25Resolution: '1K', gpt25AspectRatio: 'smart' }
+    vi.mocked(readImageInfo).mockResolvedValue(imageInfo(1600, 1000))
+    const first = await normalizeSmartAspectParams(definition, saved)
+    expect(first.params.gpt25AspectRatio).toBe('27:16')
+    expect(saved.gpt25AspectRatio).toBe('smart')
+
+    saved.prompt = 'edited prompt'
+    saved.gpt25Resolution = '2K'
+    saved.gpt25Variant = 'sunburst'
+    // 参数编辑本身没有触发额外媒体读取；到生成提交才重新匹配。
+    expect(readImageInfo).toHaveBeenCalledTimes(1)
+    const second = await normalizeSmartAspectParams(definition, saved)
+    expect(second.params).toMatchObject({ prompt: 'edited prompt', gpt25AspectRatio: '3:2' })
+    expect(first.params.gpt25AspectRatio).toBe('27:16')
+    expect(saved.gpt25AspectRatio).toBe('smart')
+
+    saved.gpt25Resolution = '1K'
+    expect((await normalizeSmartAspectParams(definition, saved)).params.gpt25AspectRatio).toBe('27:16')
+  })
+
+  it('切换模型或渠道后不复用上个模型算出的比例', async () => {
+    vi.mocked(readImageInfo).mockResolvedValue(imageInfo(3000, 1000))
+    const saved = { images: [source], gpt25AspectRatio: 'smart', gpt25Resolution: '1K' }
+    expect((await normalizeSmartAspectParams(definitionFor('fal-ai-gpt-image-2.5'), saved)).params.gpt25AspectRatio).toBe('3:1')
+    const apimart = definitionFor('apimart-gpt-image-2.5')
+    expect((await normalizeSmartAspectParams(apimart, { ...saved, gpt25Channel: 'ext' })).params.gpt25AspectRatio).toBe('21:9')
+    expect((await normalizeSmartAspectParams(apimart, { ...saved, gpt25Channel: 'official' })).params.gpt25AspectRatio).toBe('3:1')
+    expect(saved.gpt25AspectRatio).toBe('smart')
+  })
+
+  it('替换、同路径编辑或移除参考图都会重新匹配，不信任旧的尺寸提示', async () => {
+    const definition = definitionFor('kie-gpt-image-2.5')
+    const saved = { images: [source], gpt25AspectRatio: 'smart', gpt25Resolution: '2K', __firstImageRatio: 99 }
+    vi.mocked(readImageInfo).mockResolvedValue(imageInfo(1600, 1000))
+    expect((await normalizeSmartAspectParams(definition, saved)).params.gpt25AspectRatio).toBe('3:2')
+    vi.mocked(readImageInfo).mockResolvedValue(imageInfo(1000, 1600))
+    expect((await normalizeSmartAspectParams(definition, saved)).params.gpt25AspectRatio).toBe('2:3')
+    vi.mocked(readImageInfo).mockResolvedValue(imageInfo(900, 1600))
+    expect((await normalizeSmartAspectParams(definition, { ...saved, images: ['replacement.png'] })).params.gpt25AspectRatio).toBe('9:16')
+    const empty = await normalizeSmartAspectParams(definition, { ...saved, images: [] })
+    expect(empty.params.gpt25AspectRatio).toBe('1:1')
+    expect(empty.params).not.toHaveProperty('__firstImageRatio')
+    expect(readImageInfo).toHaveBeenCalledTimes(3)
+  })
+
   it.each(['flare', 'sunburst'].flatMap(variant => ['1K', '2K', '4K'].map(resolution => [variant, resolution])))('KIE %s %s 按当前合法比例匹配参考图', async (variant, resolution) => {
     const id = 'kie-gpt-image-2.5'
     const runtime = catalog.find(entry => entry.meta.id === id)!

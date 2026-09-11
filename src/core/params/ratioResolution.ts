@@ -329,6 +329,7 @@ interface AspectValueCandidate {
 
 function toAspectValueCandidates(param: ChoiceParamDescriptor): AspectValueCandidate[] {
   return param.options.reduce<AspectValueCandidate[]>((acc, option) => {
+    if (option.disabled || isSmartAspectValue(option.value)) return acc
     const ratioFromValue = parseRatioFromRaw(option.value)
     if (ratioFromValue !== null) {
       acc.push({ optionValue: option.value, ratio: ratioFromValue })
