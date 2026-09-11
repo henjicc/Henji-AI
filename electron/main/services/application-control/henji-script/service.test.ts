@@ -14,6 +14,8 @@ import { decideToolAuthorization } from '../../agent-runtime/tools/approval-poli
 import { AgentToolRegistry } from '../../agent-runtime/tools/registry'
 import type { AgentToolExecuteRequest } from '../../agent-runtime/tools/types'
 import { HenjiScriptService } from './service'
+import { AgentRunMetrics } from '../../agent-runtime/runner/budget'
+import { toolProgressEvidence } from '../../agent-runtime/tools/progress-evidence'
 
 function context(): HostContextSnapshot {
   return {
@@ -176,6 +178,34 @@ async function run(source: string, version = 7) {
 }
 
 describe('HenjiScriptService', () => {
+  it('正式脚本的新编号和宿主 revision 不计进展，实际修改后允许复验', async () => {
+    const current = fixture()
+    const budget = new AgentRunMetrics({ maxNoProgressTurns: 2, maxRepeatedToolCalls: null })
+    const execute = async (source = "await app.entities.read({ kind: 'test.entity', id: 'entity-1' });") => {
+      current.host.revision += 1
+      const output = await current.service.execute({ language: HENJI_SCRIPT_LANGUAGE, summary: '读取状态', source }, {
+        runId: 'progress-run', threadId: 'progress-thread', toolCallId: `parent-${current.host.revision}`,
+        signal: new AbortController().signal, gateway: current.gateway as never, getHostContext: () => current.host,
+      })
+      expect(output.status).toBe('completed')
+      return output
+    }
+    const record = (output: Awaited<ReturnType<typeof execute>>) => budget.recordProgress(toolProgressEvidence({
+      source: { toolName: 'run_henji_script', toolVersion: 1, toolCallId: output.scriptRunRef },
+      trust: 'untrusted_observation', dataClasses: ['C1'], summary: '读取状态', output, effects: output.effects,
+    }))
+    const first = await execute()
+    const second = await execute()
+    expect(first.scriptRunRef).not.toBe(second.scriptRunRef)
+    expect(first.progressEvidence).toEqual(second.progressEvidence)
+    record(first)
+    record(second)
+    expect(() => record(second)).toThrow(/没有产生新进展/)
+    const modified = await execute("await app.entities.update({ kind: 'test.entity', id: 'entity-1' }, { 'test.entity.value': 2 });")
+    expect(() => record(modified)).not.toThrow()
+    expect(() => record(first)).not.toThrow()
+  })
+
   it('用户禁止的 Effect 在首次 Gateway 调用前被脚本预检拒绝', async () => {
     const current = fixture(7, ['hidden_test_action'])
     current.registry.register(createBackendCapabilityTool(

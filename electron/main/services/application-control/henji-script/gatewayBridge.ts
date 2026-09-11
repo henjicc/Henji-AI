@@ -7,6 +7,8 @@ import type { AgentToolRegistry } from '../../agent-runtime/tools/registry'
 import type { HenjiScriptApiLease } from '../../agent-runtime/context/script-api-lease'
 import { HenjiScriptError, type HenjiAssertInstruction, type HenjiCallInstruction } from './types'
 import { collectRefs, fullRef, isRecord, requiredScopes, revisions } from './runtime-values'
+import type { ProgressEvidence } from '../../../../../src/core/assistant/progress'
+import { businessResultFingerprint } from '../../agent-runtime/tools/progress-evidence'
 
 function refKey(ref: ApplicationRef): string { return ref.kind + '\u0000' + ref.id }
 
@@ -21,6 +23,7 @@ export interface ScriptExecutionContext {
   revisionCursor?: Partial<HostScopeRevisions>
   /** 导航型能力可能在返回后触发界面挂载；仅允许这些已声明作用域做一次正式重读收敛。 */
   pendingNavigationScopes?: Set<string>
+  progressEvidence?: ProgressEvidence[]
 }
 
 export interface HenjiScriptServiceOptions {
@@ -163,6 +166,21 @@ export class HenjiScriptGatewayBridge {
       throw new HenjiScriptError('SCRIPT_STEP_FAILED', 'execute', `${toolName} 需要脚本外审批`, instruction.location, instruction.stepId)
     }
     this.absorbScopeRevisions(result.observation.output, context)
+    if (context.progressEvidence) {
+      const evidence: ProgressEvidence = {
+        kind: definition.readOnly ? 'observation' : 'mutation', subject: toolName,
+        fingerprint: businessResultFingerprint(toolName, result.observation.output),
+      }
+      if (!context.progressEvidence.some((item) => item.subject === evidence.subject && item.fingerprint === evidence.fingerprint)) {
+        if (context.progressEvidence.length < 128) context.progressEvidence.push(evidence)
+        else {
+          // 保持契约有界，但不能丢弃较长脚本最后发生的业务变化。
+          const tail = context.progressEvidence[127]
+          tail.fingerprint = businessResultFingerprint('script-progress-overflow', [tail, evidence])
+          if (evidence.kind === 'mutation') tail.kind = 'mutation'
+        }
+      }
+    }
     if (definition.capability?.control.impacts.some((impact) => impact.effect === 'navigate')) {
       context.pendingNavigationScopes ??= new Set<string>()
       for (const scope of required) context.pendingNavigationScopes.add(scope)

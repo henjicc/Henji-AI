@@ -6,6 +6,7 @@ import { henjiScriptCheckpointSchema } from '../externalWait'
 import { agentObservedEffectSchema } from '../observedEffect'
 import { applicationTransactionFailureFactsSchema } from '../applicationTransactionFailureFacts'
 import { defineApplicationCapability } from './defineApplicationCapability'
+import { progressEvidenceSchema } from '../progress'
 
 export const HENJI_SCRIPT_LANGUAGE = 'henji-ts/v1' as const
 
@@ -53,6 +54,8 @@ export const runHenjiScriptOutputSchema = z.object({
   steps: z.array(henjiScriptStepReceiptSchema).max(128),
   resultRefs: z.array(applicationRefSchema).max(128),
   effects: z.array(agentObservedEffectSchema).max(512),
+  /** 运行时预算使用，历史投影不传回模型。 */
+  progressEvidence: z.array(progressEvidenceSchema).max(128).optional(),
   verification: z.object({
     passed: z.boolean(),
     summary: z.string().max(2_000),

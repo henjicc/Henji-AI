@@ -392,6 +392,7 @@ export class HenjiScriptService extends HenjiScriptGatewayBridge {
       ok: status === 'completed' || status === 'waiting_external', status, scriptRunRef,
       steps: state.receipts, resultRefs: [...state.refs.values()].slice(0, 128),
       effects: state.effects.slice(0, 512),
+      progressEvidence: context.progressEvidence ?? [],
       verification: {
         passed: status === 'completed',
         summary: status === 'completed'
@@ -422,6 +423,7 @@ export class HenjiScriptService extends HenjiScriptGatewayBridge {
         ...context,
         revisionCursor: { ...(context.getHostContext(context.runId)?.scopeRevisions ?? {}) },
         pendingNavigationScopes: new Set<string>(),
+        progressEvidence: [],
       }
       const lease = this.options.getLease(context.runId)
       if (!lease) {
@@ -454,6 +456,7 @@ export class HenjiScriptService extends HenjiScriptGatewayBridge {
       ...context,
       revisionCursor: { ...(context.getHostContext(context.runId)?.scopeRevisions ?? {}) },
       pendingNavigationScopes: new Set<string>(),
+      progressEvidence: [],
     }
     const checkpoint = henjiScriptCheckpointSchema.parse(rawCheckpoint)
     const { continuationDigest, ...base } = checkpoint

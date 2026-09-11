@@ -14,6 +14,7 @@ import {
 } from './tool-call-scheduler'
 import { observationFailure } from './runner-results'
 import { createMainLogger } from '../../logging'
+import type { ProgressEvidence } from '../../../../../src/core/assistant/progress'
 
 const logger = createMainLogger('main.agent_runtime')
 
@@ -30,7 +31,7 @@ interface AgentToolExecutionCoordinatorOptions {
   waitIfPaused: () => Promise<void>
   throwIfCancelled: () => void
   recordToolCall: (signature: string, write: boolean) => void
-  recordProgress: (signature: string) => void
+  recordProgress: (signature: string | ProgressEvidence) => void
   recordFailure: () => void
   recordSuccess: () => void
   setActiveToolCall: (toolCallId: string | null) => void

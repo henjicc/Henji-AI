@@ -21,6 +21,8 @@ import {
 import { compileActionGroups, type CompiledActionGroup } from './action-plan-compiler'
 import { AgentStopPolicyExceededError } from './budget'
 import { failureObservedEffects } from '../../../../../src/core/assistant/applicationTransactionFailureFacts'
+import type { ProgressEvidence } from '../../../../../src/core/assistant/progress'
+import { toolProgressEvidence } from '../tools/progress-evidence'
 
 type ApprovalDecision = 'approve' | 'reject' | 'expired'
 
@@ -56,7 +58,7 @@ export interface AgentToolCallSchedulerOptions {
   waitIfPaused: () => Promise<void>
   throwIfCancelled: () => void
   recordToolCall: (signature: string, write: boolean) => void
-  recordProgress: (signature: string) => void
+  recordProgress: (signature: string | ProgressEvidence) => void
   recordFailure?: () => void
   recordSuccess?: () => void
   setActiveToolCall: (toolCallId: string | null) => void
@@ -450,9 +452,7 @@ export class AgentToolCallScheduler {
     if (discovered.length > 0) {
       this.options.onDiscoveredTools(outcome.call.toolCallId, discovered)
     }
-    this.options.recordProgress(
-      `${outcome.call.toolName}:${digestJson(outcome.observation.output)}`
-    )
+    this.options.recordProgress(toolProgressEvidence(outcome.observation))
     this.options.emit({
       type: 'ToolCompleted',
       toolCallId: outcome.call.toolCallId,

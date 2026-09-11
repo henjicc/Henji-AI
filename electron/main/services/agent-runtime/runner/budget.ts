@@ -1,4 +1,5 @@
 import type { ModelStepUsage } from '@henjicc/ai-sdk'
+import type { ProgressEvidence } from '../../../../../src/core/assistant/progress'
 import {
   agentBudgetConfigSchema,
   type AgentBudgetConfig,
@@ -88,7 +89,8 @@ export class AgentRunMetrics {
   private knownCostUsd: number | null = null
   private consecutiveFailures = 0
   private noProgressTurns = 0
-  private lastProgressMarker: string | null = null
+  private readonly phaseObservations = new Set<string>()
+  private lastMutationMarker: string | null = null
   private readonly reportedSoftLimits = new Set<AgentBudgetSoftLimitCode>()
 
   constructor(config: AgentStopPolicy = {}) {
@@ -155,16 +157,24 @@ export class AgentRunMetrics {
     this.reportedSoftLimits.delete('SOFT_CONSECUTIVE_FAILURES')
   }
 
-  recordProgress(marker: string): void {
-    if (marker === this.lastProgressMarker) this.noProgressTurns += 1
+  recordProgress(evidence: string | ProgressEvidence): void {
+    const marker = typeof evidence === 'string' ? evidence : `${evidence.subject}:${evidence.fingerprint}`
+    const mutation = typeof evidence !== 'string' && evidence.kind !== 'observation'
+    const seen = this.phaseObservations
+    if (mutation ? this.lastMutationMarker === marker : seen.has(marker)) this.noProgressTurns += 1
     else {
+      if (mutation) {
+        this.phaseObservations.clear()
+        this.lastMutationMarker = marker
+      } else seen.add(marker)
+      // 集合只持有指纹；保持有界，窗口足以覆盖运行预算内的短循环。
+      if (seen.size > 256) seen.delete(seen.values().next().value as string)
       this.noProgressTurns = 0
       this.lastToolSignature = null
       this.repeatedToolCalls = 0
       this.reportedSoftLimits.delete('SOFT_NO_PROGRESS_TURNS')
       this.reportedSoftLimits.delete('SOFT_REPEATED_TOOL_CALLS')
     }
-    this.lastProgressMarker = marker
     if (
       this.config.maxNoProgressTurns !== null
       && this.noProgressTurns >= this.config.maxNoProgressTurns
