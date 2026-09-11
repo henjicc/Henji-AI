@@ -1,3 +1,4 @@
+import { withTaskPolicyModel } from '../context/task-policy-test-fixture'
 import { describe, expect, it, vi } from 'vitest'
 
 import type { AgentRunState } from '../../../../../src/core/assistant/events'
@@ -120,7 +121,7 @@ describe('AgentRunner 语义压缩与 overflow 恢复', () => {
       runId: 'run-compaction', request: request(16_000), conversationHistory: history,
       conversationHistorySequences: history.map((_, index) => index + 1),
       dependencies: {
-        registry, gateway, getHostContext: hostContext, runModelStep,
+        registry, gateway, getHostContext: hostContext, runModelStep: withTaskPolicyModel(runModelStep),
         cancelModelStep: vi.fn(), appendSessionCompaction, onTerminal: terminalResolve,
       },
     }).start()
@@ -154,7 +155,7 @@ describe('AgentRunner 语义压缩与 overflow 恢复', () => {
       runId: 'run-overflow', request: request(32_000), conversationHistory: history,
       conversationHistorySequences: history.map((_, index) => index + 1),
       dependencies: {
-        registry, gateway, getHostContext: hostContext, runModelStep,
+        registry, gateway, getHostContext: hostContext, runModelStep: withTaskPolicyModel(runModelStep),
         cancelModelStep: vi.fn(), appendSessionCompaction: async () => undefined,
         onTerminal: terminalResolve,
       },
@@ -185,7 +186,7 @@ describe('AgentRunner 语义压缩与 overflow 恢复', () => {
       runId: 'run-compaction-fallback', request: request(16_000), conversationHistory: history,
       conversationHistorySequences: history.map((_, index) => index + 1),
       dependencies: {
-        registry, gateway, getHostContext: hostContext, runModelStep,
+        registry, gateway, getHostContext: hostContext, runModelStep: withTaskPolicyModel(runModelStep),
         cancelModelStep: vi.fn(), appendSessionCompaction, onTerminal: terminalResolve,
       },
     }).start()
@@ -214,7 +215,7 @@ describe('AgentRunner 语义压缩与 overflow 恢复', () => {
       runId: 'run-overflow-twice', request: request(32_000), conversationHistory: history,
       conversationHistorySequences: history.map((_, index) => index + 1),
       dependencies: {
-        registry, gateway, getHostContext: hostContext, runModelStep,
+        registry, gateway, getHostContext: hostContext, runModelStep: withTaskPolicyModel(runModelStep),
         cancelModelStep: vi.fn(), appendSessionCompaction: async () => undefined,
         onTerminal: terminalResolve,
       },

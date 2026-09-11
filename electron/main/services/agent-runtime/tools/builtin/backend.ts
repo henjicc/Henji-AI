@@ -58,7 +58,7 @@ export function createBackendBuiltinTools(
        */
       outputLimitProfile: 'schema',
       execute: async (input, context) => {
-        const discovered = discoveryCatalog.discover(context.runId, input, context.hostContext)
+        const discovered = discoveryCatalog.discover(context.runId, input, context.hostContext, context.taskPolicy)
         if (!invokeFrontend) return discovered
         const description = requireFrontendSuccess(await invokeFrontend({
           kind: 'capability',

@@ -95,7 +95,7 @@ export function registerGenerationCapabilityHandlers(
     const parsed = parseCapabilityInput<{
       workspaceId: 'generation' | 'nodes' | 'tools' | 'assets'
     }>('switch_workspace', input)
-    switchWorkspace(parsed.workspaceId)
+    switchWorkspace(parsed.workspaceId, 'assistant')
     return { workspace: parsed.workspaceId }
   })
 

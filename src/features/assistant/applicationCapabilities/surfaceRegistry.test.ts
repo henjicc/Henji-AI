@@ -7,11 +7,15 @@ const mocks = vi.hoisted(() => ({
   openCanvasProjectFromAgent: vi.fn(),
   selectAssetFromAgent: vi.fn(),
   openCameraStageProject: vi.fn(),
+  readCanvasProjectSnapshot: vi.fn(),
 }))
 
 vi.mock('@/features/canvas/application/canvasApplicationService', () => ({
   focusCanvasNode: mocks.focusCanvasNodeFromAgent,
   openCanvasProject: mocks.openCanvasProjectFromAgent,
+}))
+vi.mock('@/features/canvas/application/canvasQueryService', () => ({
+  readCanvasProjectSnapshot: mocks.readCanvasProjectSnapshot,
 }))
 vi.mock('@/features/assets/application/assetApplicationService', () => ({
   assetApplicationService: { select: mocks.selectAssetFromAgent },
@@ -82,6 +86,7 @@ describe('application surface registry', () => {
   })
 
   it('定位画布节点时自动打开目标项目和工作区后再聚焦节点', async () => {
+    mocks.readCanvasProjectSnapshot.mockResolvedValue({ nodes: [{ id: 'node-1' }], edges: [] })
     mocks.openCanvasProjectFromAgent.mockResolvedValue({ projectId: 'project-2' })
     mocks.focusCanvasNodeFromAgent.mockResolvedValue({
       projectId: 'project-2',

@@ -53,6 +53,7 @@ import {
   createHenjiScriptTools,
 } from '../../electron/main/services/agent-runtime/henji-script/tools'
 import type { AgentIntent } from '../../electron/main/services/agent-runtime/context/types'
+import type { TaskPolicyInterpretation } from '@/core/assistant/taskExecutionPolicy'
 
 /** 注册链路的规模下限。跌破说明注册本身出问题了，剧本会在一个空目录上假绿。 */
 const MIN_REGISTERED_TOOLS = 60
@@ -69,12 +70,15 @@ export interface AssistantHarnessOptions {
   steps: HarnessModelStep[]
   /** 路由步骤返回的意图；默认 general。路由不是本层的被测对象，直接给定。 */
   intent?: AgentIntent
+  /** 仅替换语义模型的输出；来源绑定、发现、预检和 Gateway 均走生产代码。 */
+  policyInterpretation?: Pick<TaskPolicyInterpretation, 'intent' | 'forbiddenEffects' | 'navigationRequested' | 'clarification'>
   approvalMode?: AgentStartRunRequest['approvalMode']
   runId?: string
   threadId?: string
   /** 覆盖宿主快照。默认用真实 `createHostContextSnapshot()`，只在需要特定视图态时传。 */
   getHostContext?: () => HostContextSnapshot
   timeoutMs?: number
+  onEvent?: (event: AgentEvent) => void
 }
 
 export interface HarnessToolCall {
@@ -373,6 +377,15 @@ export async function runAssistantHarness(
       getHostContext: () => getHostContext(),
       artifactStore,
       runModelStep: async (input, emit) => {
+        if (input.stepId.startsWith('task-policy:')) {
+          const response = routerResult(input, options.intent ?? 'general')
+          response.structuredOutput = {
+            intent: 'modify', forbiddenEffects: [], navigationRequested: false, clarification: '',
+            ...options.policyInterpretation,
+            sources: [{ messageId: `goal:${runId}`, quote: options.goal }],
+          }
+          return response
+        }
         if (input.stepId.startsWith('router:')) {
           return routerResult(input, options.intent ?? 'general')
         }
@@ -384,6 +397,7 @@ export async function runAssistantHarness(
       cancelModelStep: () => {},
       onEvent: (event) => {
         events.push(event)
+        options.onEvent?.(event)
         if (event.type === 'ToolCompleted') {
           toolCalls.push({ toolName: event.toolName, ok: true, summary: event.summary })
         }

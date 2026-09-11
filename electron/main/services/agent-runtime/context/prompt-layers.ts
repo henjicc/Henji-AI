@@ -183,6 +183,7 @@ function planState(input: AgentContextBuildInput): Record<string, unknown> {
         },
     unresolvedItems: summary?.unresolvedItems ?? [],
     recovery: summary?.recovery,
+    taskPolicy: summary?.taskPolicy,
     planVersion: summary?.planVersion,
     activeStep: summary?.activeStep,
     pendingApprovals: summary?.pendingApprovals,

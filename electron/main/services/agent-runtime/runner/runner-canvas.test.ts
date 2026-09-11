@@ -1,3 +1,4 @@
+import { withTaskPolicyModel } from '../context/task-policy-test-fixture'
 import { z } from 'zod'
 import { describe, expect, it, vi } from 'vitest'
 
@@ -255,7 +256,7 @@ describe('AgentRunner canvas batch', () => {
         registry,
         gateway,
         getHostContext: () => context,
-        runModelStep: vi.fn(async (input: ModelStepInput) => {
+        runModelStep: withTaskPolicyModel(vi.fn(async (input: ModelStepInput) => {
           if (input.stepId.startsWith('router:')) {
             return {
               ...stepResult(input, 3),
@@ -293,7 +294,7 @@ describe('AgentRunner canvas batch', () => {
           }
           modelCall += 1
           return stepResult(input, modelCall)
-        }),
+        })),
         cancelModelStep: vi.fn(),
         onEvent: (event) => events.push(event),
         onTerminal: resolveTerminal,

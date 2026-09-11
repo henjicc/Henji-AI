@@ -4,6 +4,9 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import { loadRealModelsIntoRegistry } from '@/tests/loadRealModels'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { changeLanguage, getCurrentLanguage } from '@/utils/language'
+import { useUiStore } from '@/stores/uiStore'
+import { useNavigationStore, switchWorkspace } from '@/stores/navigationStore'
+import { createHostContextSnapshot, retainHostContextTracking } from '@/features/assistant/hostContext/hostContext'
 
 import { runAssistantHarness } from './assistantRuntimeHarness'
 
@@ -20,17 +23,80 @@ import { runAssistantHarness } from './assistantRuntimeHarness'
 describe('设置域的读改验回环', () => {
   let originalLanguage: ReturnType<typeof getCurrentLanguage>
   let originalTone: ReturnType<typeof useSettingsStore.getState>['themeTonePreset']
+  let originalUi: ReturnType<typeof useUiStore.getState>
+  let originalNavigation: ReturnType<typeof useNavigationStore.getState>
 
   beforeAll(async () => { await loadRealModelsIntoRegistry() })
 
   beforeEach(() => {
     originalLanguage = getCurrentLanguage()
     originalTone = useSettingsStore.getState().themeTonePreset
+    originalUi = useUiStore.getState()
+    originalNavigation = useNavigationStore.getState()
+    useUiStore.setState({ isSettingsOpen: false, settingsTarget: null })
   })
 
   afterEach(() => {
     changeLanguage(originalLanguage)
     useSettingsStore.getState().setThemeTonePreset(originalTone)
+    useUiStore.setState(originalUi)
+    useNavigationStore.setState(originalNavigation)
+  })
+
+  it.each([false, true])('修改结果默认自动展示；用户切页接管=%s 时遵循接管状态', async (takeover) => {
+    const target = originalTone === 'warm' ? 'cool' : 'warm'
+    const release = retainHostContextTracking()
+    try {
+      const result = await runAssistantHarness({
+        goal: `把界面色调改成 ${target}`, intent: 'settings',
+        getHostContext: () => createHostContextSnapshot(),
+        onEvent: (event) => {
+          if (takeover && event.type === 'ToolCompleted' && event.toolName === 'run_henji_script') {
+            switchWorkspace(useNavigationStore.getState().activeWorkspace === 'tools' ? 'generation' : 'tools')
+          }
+        },
+        steps: [
+          { actions: [{ type: 'tool_call', toolCall: { toolCallId: 'discover', toolName: 'discover_application_capabilities', dynamic: false,
+            input: { queries: ['界面色调'], domains: ['settings'], entityTypes: ['settings.registry'], writes: true } } }] },
+          { actions: [{ type: 'tool_call', toolCall: { toolCallId: 'write', toolName: 'run_henji_script', dynamic: false,
+            input: { language: 'henji-ts/v1', summary: '修改色调', source:
+              `await app.entities.update({ kind: 'settings.registry', id: 'singleton' }, { 'interface.theme_tone': '${target}' });` } } }] },
+          { actions: [{ type: 'text', value: '已修改。' }] },
+        ],
+      })
+      expect(result.state.status, JSON.stringify(result.state.presentationOutcome)).toBe('completed')
+      expect(useSettingsStore.getState().themeTonePreset).toBe(target)
+      expect(useUiStore.getState().isSettingsOpen, JSON.stringify({ outcome: result.state.executionOutcome, policy: result.state.workingSummary?.taskPolicy })).toBe(!takeover)
+      expect(result.state.workingSummary?.taskPolicy?.navigationTakenOver).toBe(takeover)
+    } finally { release() }
+  })
+
+  it('真实用户查询经过策略解释、发现及脚本预检，full_access 也不能把它变成写入', async () => {
+    const goal = '只查询当前界面色调，不要修改任何设置，也不要切页。'
+    const target = originalTone === 'warm' ? 'cool' : 'warm'
+    const result = await runAssistantHarness({
+      goal, intent: 'settings', approvalMode: 'full_access',
+      // 替身位于语义模型输出边界，未向 lease 或 Gateway 注入禁止动作。
+      policyInterpretation: { intent: 'read_only', forbiddenEffects: ['navigate'], navigationRequested: false, clarification: '' },
+      steps: [
+        { actions: [{ type: 'tool_call', toolCall: {
+          toolCallId: 'discover-read', toolName: 'discover_application_capabilities', dynamic: false,
+          input: { queries: ['界面色调'], domains: ['settings'], entityTypes: ['settings.registry'], writes: true },
+        } }] },
+        { actions: [{ type: 'tool_call', toolCall: {
+          toolCallId: 'incorrect-write', toolName: 'run_henji_script', dynamic: false,
+          input: { language: 'henji-ts/v1', summary: '误写设置', source:
+            `await app.entities.update({ kind: 'settings.registry', id: 'singleton' }, { 'interface.theme_tone': '${target}' });` },
+        } }] },
+        { actions: [{ type: 'text', value: '修改未执行。' }] },
+      ],
+    })
+    expect(useSettingsStore.getState().themeTonePreset).toBe(originalTone)
+    const policy = result.events.find((event) => event.type === 'TaskPolicyUpdated')
+    expect(policy).toMatchObject({ policy: { intent: 'read_only', sources: [{ quote: goal }] } })
+    expect(result.events.some((event) => event.type === 'ToolFailed'
+      && event.toolName === 'run_henji_script' && event.error.message.includes('禁止')), JSON.stringify(result.toolCalls)).toBe(true)
+    expect(result.state.executionOutcome?.effects ?? []).toEqual([])
   })
 
   it('一次脚本内改主题色调再读回验证，zustand 真相源随之变化', async () => {

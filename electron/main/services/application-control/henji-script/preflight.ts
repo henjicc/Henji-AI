@@ -256,7 +256,7 @@ export class HenjiScriptPreflight {
     return { instructions, planDigest: digest(instructions) }
   }
 
-  private assertForbiddenEffects(
+  assertForbiddenEffects(
     instructions: readonly HenjiInstruction[],
     lease: HenjiScriptApiLease,
   ): void {

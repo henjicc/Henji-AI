@@ -14,6 +14,7 @@ import type { AgentApprovalMode } from '../../../../../src/core/assistant/runtim
 import type { ModelStepTool } from '@henjicc/ai-sdk'
 import type { ApplicationCapabilityDefinition } from '../../../../../src/core/assistant/applicationCapabilities'
 import type { ToolOutputLimitProfile } from './security'
+import type { TaskExecutionPolicy } from '../../../../../src/core/assistant/taskExecutionPolicy'
 
 export interface AgentToolRetryPolicy {
   maxRetries: number
@@ -37,6 +38,7 @@ export interface AgentToolExecutionContext {
   toolCallId: string
   signal: AbortSignal
   hostContext: HostContextSnapshot | null
+  taskPolicy?: TaskExecutionPolicy
 }
 
 export type AgentToolAuthorizationSource =

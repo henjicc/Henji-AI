@@ -1,3 +1,4 @@
+import { withTaskPolicyModel } from '../context/task-policy-test-fixture'
 import { describe, expect, it, vi } from 'vitest'
 
 import { AGENT_CONTRACT_VERSION, type HostContextSnapshot } from '../../../../../src/core/assistant/hostContracts'
@@ -191,7 +192,7 @@ describe('ask_user 澄清通道', () => {
       dependencies: {
         registry, gateway: createRuntime(registry), getHostContext: hostContext,
         appendSavePoint: savePoints.append,
-        runModelStep: async (input) => {
+        runModelStep: withTaskPolicyModel(async (input) => {
           if (isRouterCall(input)) return routerDecision(input)
           step += 1
           if (step === 1) {
@@ -202,7 +203,7 @@ describe('ask_user 澄清通道', () => {
             text: '已按你选择的素材库完成改名。',
             responseMessages: [{ role: 'assistant', content: '已按你选择的素材库完成改名。' }],
           })
-        },
+        }),
         cancelModelStep: vi.fn(),
         onEvent: (event) => {
           events.push(event)
@@ -268,7 +269,7 @@ describe('ask_user 澄清通道', () => {
       runId: 'ask-run-2', request: runRequest('把参考图素材库改个名字'),
       dependencies: {
         registry, gateway: createRuntime(registry), getHostContext: hostContext,
-        runModelStep: async (input) => {
+        runModelStep: withTaskPolicyModel(async (input) => {
           if (isRouterCall(input)) return routerDecision(input)
           step += 1
           if (step === 1) return askUserStep(input)
@@ -277,7 +278,7 @@ describe('ask_user 澄清通道', () => {
             text: '已按你选择的素材库完成改名。',
             responseMessages: [{ role: 'assistant', content: '已按你选择的素材库完成改名。' }],
           })
-        },
+        }),
         cancelModelStep: vi.fn(),
         onEvent: (event) => {
           if (event.type === 'ClarificationRequired' && event.waitId) clarificationResolve(event.waitId)
@@ -316,10 +317,10 @@ describe('ask_user 澄清通道', () => {
       runId: 'ask-run-3', request: runRequest('随便聊聊你能做什么'),
       dependencies: {
         registry, gateway: createRuntime(registry), getHostContext: hostContext,
-        runModelStep: async (input) => result(input, {
+        runModelStep: withTaskPolicyModel(async (input) => result(input, {
           text: chatty,
           responseMessages: [{ role: 'assistant', content: chatty }],
-        }),
+        })),
         cancelModelStep: vi.fn(),
         onEvent: (event) => events.push(event),
         onTerminal: terminalResolve,

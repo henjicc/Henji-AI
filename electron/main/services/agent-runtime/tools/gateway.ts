@@ -13,6 +13,8 @@ import { decideToolAuthorization } from './approval-policy'
 import { AgentIdempotencyLedger } from './idempotency'
 import { buildPermissionAuditTemplate } from './permission-audit'
 import { AgentToolRegistry } from './registry'
+import type { TaskExecutionPolicy } from '../../../../../src/core/assistant/taskExecutionPolicy'
+import { assertTaskPolicyAllows } from './task-policy-guard'
 import {
   TOOL_INPUT_LIMITS,
   INTERNAL_CHECKPOINT_INPUT_LIMITS,
@@ -87,6 +89,22 @@ export class AgentToolGateway {
   private readonly approvalCoordinator: AgentApprovalCoordinator
   private readonly locks = new Set<string>()
   private readonly executionCounts = new Map<string, number>()
+  private readonly taskPolicies = new Map<string, TaskExecutionPolicy>()
+  private readonly beforeOperations = new Map<string, () => Promise<void>>()
+
+  setTaskExecutionPolicy(runId: string, policy: TaskExecutionPolicy): void {
+    this.taskPolicies.set(runId, structuredClone(policy))
+  }
+
+  getTaskExecutionPolicy(runId: string): TaskExecutionPolicy | undefined {
+    const policy = this.taskPolicies.get(runId)
+    return policy ? structuredClone(policy) : undefined
+  }
+
+  setBeforeOperation(runId: string, callback: (() => Promise<void>) | null): void {
+    if (callback) this.beforeOperations.set(runId, callback)
+    else this.beforeOperations.delete(runId)
+  }
 
   constructor(private readonly options: AgentToolGatewayOptions) {
     this.ledger = options.idempotency ?? new AgentIdempotencyLedger()
@@ -123,6 +141,7 @@ export class AgentToolGateway {
 
     try {
       throwIfAborted(request.signal)
+      await this.beforeOperations.get(request.runId)?.()
       const context = this.options.getHostContext(request.runId)
       const normalizedInput = inputWithAuthoritativeRevision(
         definition,
@@ -134,12 +153,14 @@ export class AgentToolGateway {
         : TOOL_INPUT_LIMITS
       assertJsonWithinLimits(normalizedInput, inputLimits)
       const initialInput = definition.inputSchema.parse(normalizedInput)
+      assertTaskPolicyAllows(this.taskPolicies.get(request.runId), definition, initialInput)
       const executionContext = {
         runId: request.runId,
         threadId: request.threadId,
         toolCallId: request.toolCallId,
         signal: request.signal,
         hostContext: context,
+        taskPolicy: this.getTaskExecutionPolicy(request.runId),
       }
       const rawPreview = definition.preview
         ? await definition.preview(initialInput, executionContext)
@@ -162,7 +183,9 @@ export class AgentToolGateway {
         readOnly: definition.readOnly,
         destructive: definition.destructive,
         dataClasses: preview.dataClasses,
-        explicitUserIntent: request.explicitUserIntent,
+        explicitUserIntent: this.taskPolicies.has(request.runId)
+          ? ['modify', 'navigate'].includes(this.taskPolicies.get(request.runId)!.intent)
+          : request.explicitUserIntent,
       })
       const auditTemplate = buildPermissionAuditTemplate({
         runId: request.runId,
@@ -279,6 +302,8 @@ export class AgentToolGateway {
         throw new AgentToolGatewayError('INVALID_INPUT', '工具最终参数在校验过程中发生变化')
       }
       assertApprovalPreviewTargets(definition, executableInput, preview)
+      await this.beforeOperations.get(request.runId)?.()
+      assertTaskPolicyAllows(this.taskPolicies.get(request.runId), definition, executableInput)
       throwIfAborted(request.signal)
 
       const executionCountKey = `${request.runId}:${definition.name}`

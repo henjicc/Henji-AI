@@ -184,7 +184,7 @@ describe('画布批量写入的结果级回归', () => {
 
     const conflicts = result.toolCalls.filter((call) => call.errorCode === 'CONFLICT')
     expect(conflicts, `出现 revision 冲突：${JSON.stringify(conflicts)}`).toEqual([])
-    expect(result.state.status, JSON.stringify(result.state.error)).toBe('completed')
+    expect(result.state.status, JSON.stringify({ presentation: result.state.presentationOutcome, effects: result.state.executionOutcome.effects })).toBe('completed')
     expect(useProjectStore.getState().currentProject?.nodes.length).toBe(2)
   })
 })

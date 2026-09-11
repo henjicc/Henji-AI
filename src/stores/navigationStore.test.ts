@@ -16,6 +16,8 @@ describe('navigationStore', () => {
       activeWorkspace: 'generation',
       activeToolId: null,
       revision: 0,
+      userNavigationRevision: 0,
+      lastNavigationSource: 'system',
     })
     useAssetLibraryStore.setState({
       view: 'closed',
@@ -85,5 +87,18 @@ describe('navigationStore', () => {
       activeToolId: 'cameraStage',
       revision: 1,
     })
+  })
+
+  it('助手导航不构成用户接管，手动切页和浮层操作会保留接管记录', () => {
+    switchWorkspace('nodes', 'assistant')
+    selectToolboxTool('cameraStage', 'assistant')
+    expect(useNavigationStore.getState().userNavigationRevision).toBe(0)
+    switchWorkspace('tools')
+    const takenOver = useNavigationStore.getState().userNavigationRevision
+    expect(takenOver).toBe(1)
+    switchWorkspace('generation', 'assistant')
+    expect(useNavigationStore.getState().userNavigationRevision).toBe(takenOver)
+    openAssetLibrary('floating')
+    expect(useNavigationStore.getState().userNavigationRevision).toBeGreaterThan(takenOver)
   })
 })

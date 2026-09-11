@@ -14,6 +14,10 @@ import {
 
 import { assetApplicationService } from '@/features/assets/application/assetApplicationService'
 import type { CapabilityExecutionContext } from './handlerTypes'
+import { listApplicationSettingDefinitions } from '@/features/settings/application-control/settingsApplicationService'
+import { resolveSettingsSurfaceId } from '@/features/navigation/application/surfaceCatalog'
+import { resolveCanvasChildRef } from '@/features/canvas/application/canvasReflection'
+import { readCanvasProjectSnapshot } from '@/features/canvas/application/canvasQueryService'
 
 export type { ApplicationSurfaceDefinition } from '@/features/navigation/application'
 export { listApplicationSurfaces }
@@ -24,7 +28,7 @@ export function openApplicationSurface(
   surfaceId: string,
   correlation: SurfaceLogContext = {}
 ): Record<string, unknown> {
-  openSurface(surfaceId, correlation)
+  openSurface(surfaceId, { ...correlation, source: 'assistant' })
   return { surfaceId }
 }
 
@@ -32,15 +36,25 @@ export function closeApplicationSurface(
   surfaceId?: string,
   correlation: SurfaceLogContext = {}
 ): Record<string, unknown> {
-  const result = closeSurface(surfaceId, correlation)
+  const result = closeSurface(surfaceId, { ...correlation, source: 'assistant' })
   return { ...result, closedSurfaceId: result.surfaceId === 'none' ? null : result.surfaceId }
 }
 
 export async function focusApplicationEntity(
   ref: ApplicationRef,
   signal: AbortSignal,
-  correlation: SurfaceLogContext = {}
+  correlation: SurfaceLogContext = {},
+  propertyIds: readonly string[] = [],
+  presentation: 'surface' | 'focus' = 'focus',
 ): Promise<Record<string, unknown>> {
+  if (ref.kind === 'settings.registry') {
+    if (ref.id !== 'singleton') throw new Error('NOT_FOUND')
+    const definitions = listApplicationSettingDefinitions()
+    const setting = [...propertyIds].reverse().map((id) => definitions.find((item) => item.id === id)).find(Boolean)
+    const surfaceId = setting ? resolveSettingsSurfaceId(setting.target.tab, setting.target.sectionId) : 'settings.general'
+    if (!surfaceId) throw new Error('SURFACE_NOT_FOUND')
+    return { ref, ...openApplicationSurface(surfaceId, correlation) }
+  }
   if (ref.kind === 'generation.record' || ref.kind === 'generation.result') {
     return { ref, ...openApplicationSurface('workspace.generation', correlation) }
   }
@@ -52,14 +66,14 @@ export async function focusApplicationEntity(
     await openCanvasProject(ref.id, signal)
     return { ref, ...openApplicationSurface('workspace.canvas', correlation) }
   }
-  if (ref.kind === 'canvas.node') {
-    const separator = ref.id.indexOf(':')
-    if (separator < 1) throw new Error('INVALID_INPUT')
-    const projectId = ref.id.slice(0, separator)
-    const nodeId = ref.id.slice(separator + 1)
+  if (ref.kind === 'canvas.node' || ref.kind === 'canvas.edge') {
+    const { projectId, childId } = resolveCanvasChildRef(ref, ref.kind)
+    const project = await readCanvasProjectSnapshot(projectId)
+    const items = ref.kind === 'canvas.node' ? project.nodes : project.edges
+    if (!items.some((item) => item.id === childId)) throw new Error('NOT_FOUND')
     await openCanvasProject(projectId, signal)
     const surface = openApplicationSurface('workspace.canvas', correlation)
-    await focusCanvasNode(projectId, nodeId, signal)
+    if (ref.kind === 'canvas.node' && presentation === 'focus') await focusCanvasNode(projectId, childId, signal)
     return { ref, ...surface }
   }
   if (ref.kind.startsWith('camera_stage.')) {

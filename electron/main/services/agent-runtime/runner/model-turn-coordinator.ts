@@ -7,9 +7,12 @@ import {
   buildPrimaryModelTraceMetadata,
   runPrimaryAgentModelStep,
   runRouterModelClassification,
+  runTaskPolicyInterpretation,
 } from './model-execution'
 import type { AgentRuntimeModelSet } from './models'
 import type { AgentModelStepExecutor } from './types'
+import type { TaskExecutionPolicy } from '../../../../../src/core/assistant/taskExecutionPolicy'
+import { bindTaskExecutionPolicy, type TaskPolicyUserMessage } from '../context/task-execution-policy'
 
 const logger = createMainLogger('main.agent_runtime')
 
@@ -26,6 +29,19 @@ interface AgentModelTurnCoordinatorOptions {
 
 export class AgentModelTurnCoordinator {
   constructor(private readonly options: AgentModelTurnCoordinatorOptions) {}
+
+  async interpretTaskPolicy(messages: readonly TaskPolicyUserMessage[], signal: AbortSignal, previous?: TaskExecutionPolicy): Promise<TaskExecutionPolicy> {
+    this.options.throwIfCancelled()
+    this.options.setCurrentModelRequestId(`${this.options.runId}:task-policy:${(previous?.version ?? 0) + 1}`)
+    try {
+      const result = await runTaskPolicyInterpretation({
+        runId: this.options.runId, messages, previous, signal,
+        model: this.options.models.router, runModelStep: this.options.runModelStep,
+      })
+      this.options.recordUsage(result.usage)
+      return bindTaskExecutionPolicy(result.decision, messages, previous)
+    } finally { this.options.setCurrentModelRequestId(null) }
+  }
 
   async classify(
     goal: string,

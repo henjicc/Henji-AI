@@ -203,7 +203,7 @@ function deterministicRoute(
       intent: 'read_generation',
       toolDomains: ['generation', 'image_edit', 'catalog'],
       reason: '当前生成页面中的相对指代锚定生成历史',
-      explicitUserIntent: true,
+      explicitUserIntent: false,
     }
   }
   if (
@@ -214,7 +214,7 @@ function deterministicRoute(
       intent: 'settings',
       toolDomains: ['settings', 'navigation', 'catalog'],
       reason: '识别为应用设置查询或修改',
-      explicitUserIntent: true,
+      explicitUserIntent: false,
     }
   }
   if (/(?:图片编辑|矩形标注|文字标注|裁剪图片|旋转图片)/i.test(normalized)) {
@@ -222,7 +222,7 @@ function deterministicRoute(
       intent: 'image_edit',
       toolDomains: ['image_edit', 'generation', 'assets', 'catalog'],
       reason: '识别为图片编辑任务',
-      explicitUserIntent: true,
+      explicitUserIntent: false,
     }
   }
   const matches = deterministicRules.filter((rule) => rule.matches(goal))
@@ -238,7 +238,7 @@ function deterministicRoute(
     reason: `命中确定性 ${match.intent} 规则`,
     // 能力概览规则（intent=general，toolDomains 为空）只是回答"你能做什么"，不是应用任务，
     // 不发放 R1 写工具的自动放行位；其余确定性规则都命中了一个具体动作。
-    explicitUserIntent: match.intent !== 'general',
+    explicitUserIntent: false,
   }
 }
 
@@ -288,7 +288,7 @@ export class AgentIntentRouter {
           ),
           reason: selectReason(classified.reason, classified.intent),
           // 路由模型判成 general 说明它没识别出具体应用任务；此时不发放 R1 写工具的自动放行位。
-          explicitUserIntent: classified.intent !== 'general',
+          explicitUserIntent: false,
         }
         const widened = widen(decision)
         this.logDecision(runId, widened)

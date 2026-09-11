@@ -27,6 +27,7 @@ import type { AgentToolRegistry } from '../tools/registry'
 import { selectLeaseableToolNames } from './tool-activation'
 import { rememberHenjiScriptApiLease } from './script-api-lease'
 import { HENJI_RECIPE_REGISTRY } from '../../application-control/henji-script/recipes'
+import { taskPolicyForbiddenEffects, type TaskExecutionPolicy } from '../../../../../src/core/assistant/taskExecutionPolicy'
 
 /**
  * Facet 点名了实体时，被放宽进来的域最多补几个租约。
@@ -226,11 +227,14 @@ export class AgentCapabilityDiscoveryCatalog {
   discover(
     runId: string,
     rawInput: ApplicationCapabilityDiscoveryInput,
-    context: HostContextSnapshot | null
+    context: HostContextSnapshot | null,
+    policy?: TaskExecutionPolicy,
   ): ApplicationCapabilityDiscoveryOutput {
     const input = applicationCapabilityDiscoveryInputSchema.parse(rawInput)
+    const forbiddenEffects = policy ? [...taskPolicyForbiddenEffects(policy)] : []
     const fingerprint = digest({
       input,
+      forbiddenEffects,
       catalogRevision: context?.catalogRevision ?? null,
       availableCapabilities: [...(context?.availableCapabilities ?? [])].sort(),
     })
@@ -315,7 +319,7 @@ export class AgentCapabilityDiscoveryCatalog {
       scriptApi: {
         language: 'henji-ts/v1',
         entryTool: 'run_henji_script',
-        forbiddenEffects: [],
+        forbiddenEffects,
         rules: [...HENJI_SCRIPT_LANGUAGE_RULES],
         entities: {
           methods: ['list', 'read', 'create', 'update', 'remove'],

@@ -10,6 +10,9 @@ import type { AgentContextBuilder } from '../context/builder'
 import { AGENT_INTENTS, AGENT_TOOL_DOMAINS } from '../context/types'
 import type { AgentRuntimeModel } from './models'
 import type { AgentModelStepExecutor } from './types'
+import { z } from 'zod'
+import { taskPolicyInterpretationSchema, type TaskExecutionPolicy } from '../../../../../src/core/assistant/taskExecutionPolicy'
+import { TASK_POLICY_INTERPRETER_PROMPT, type TaskPolicyUserMessage } from '../context/task-execution-policy'
 
 interface RouterModelExecutionInput {
   runId: string
@@ -88,7 +91,7 @@ export function buildPrimaryModelTraceMetadata(
   }
 }
 
-function parseJsonObjectText(text: string): unknown {
+export function parseJsonObjectText(text: string): unknown {
   const trimmed = text.trim()
   if (!trimmed) return null
   const fenced = /^```(?:json)?\s*([\s\S]*?)\s*```$/i.exec(trimmed)?.[1] ?? trimmed
@@ -100,6 +103,31 @@ function parseJsonObjectText(text: string): unknown {
   } catch {
     return null
   }
+}
+
+export async function runTaskPolicyInterpretation(input: {
+  runId: string
+  messages: readonly TaskPolicyUserMessage[]
+  previous?: TaskExecutionPolicy
+  model: AgentRuntimeModel
+  runModelStep: AgentModelStepExecutor
+  signal: AbortSignal
+}): Promise<RouterModelClassificationResult> {
+  const stepId = `task-policy:${(input.previous?.version ?? 0) + 1}`
+  const result = await input.runModelStep({
+    requestId: `${input.runId}:${stepId}`, runId: input.runId, stepId,
+    providerId: input.model.providerId, modelId: input.model.modelId,
+    adapter: input.model.adapter, apiProtocol: input.model.apiProtocol, baseUrl: input.model.baseUrl,
+    system: TASK_POLICY_INTERPRETER_PROMPT,
+    messages: [{ role: 'user', content: JSON.stringify({ messages: input.messages, previous: input.previous ?? null }) }],
+    output: { mode: 'object', name: 'task_execution_policy', schema: z.toJSONSchema(taskPolicyInterpretationSchema, { target: 'draft-7' }) },
+    capabilities: input.model.capabilities, reasoning: input.model.reasoning,
+    settings: input.model.settings, pricing: input.model.pricing,
+    trace: { kind: 'router', contextWindowBudget: input.model.limits.contextWindow, maxOutputTokens: input.model.settings.maxOutputTokens },
+  }, () => undefined)
+  if (input.signal.aborted) throw new Error('[task_cancelled] task policy cancelled')
+  if (result.finishReason !== 'stop') throw new Error('[MODEL_OUTPUT_INCOMPLETE] 任务策略解释未完整结束，尚未授权操作')
+  return { decision: result.structuredOutput ?? parseJsonObjectText(result.text), usage: result.usage }
 }
 
 export async function runRouterModelClassification(

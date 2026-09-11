@@ -2,6 +2,7 @@ import { z } from 'zod'
 
 import { hostScopeRevisionsSchema } from './hostContracts'
 import { AGENT_DISCOVERY_LEASE_TOOL_LIMIT } from './toolBudget'
+import { taskExecutionPolicySchema } from './taskExecutionPolicy'
 
 export const AGENT_WORKING_SUMMARY_VERSION = 'agent-working-summary/v1' as const
 
@@ -63,6 +64,8 @@ export type AgentWorkingRecovery = z.infer<typeof agentWorkingRecoverySchema>
 
 export const agentWorkingSummarySchema = z.object({
   version: z.literal(AGENT_WORKING_SUMMARY_VERSION),
+  /** 旧任务缺失时不得从领域路由恢复写授权，继续前重新解释真实用户输入。 */
+  taskPolicy: taskExecutionPolicySchema.optional(),
   goal: z.string().min(1).max(32 * 1024),
   route: z.object({
     intent: z.string().min(1).max(100),

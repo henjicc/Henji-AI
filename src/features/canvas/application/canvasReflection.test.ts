@@ -9,7 +9,7 @@ import { useProjectStore, type Project } from '@/stores/projectStore'
 
 import { CanvasNodeMutationExecutor } from './canvasMutationExecutor'
 import { CanvasProjectMutationExecutor } from './canvasProjectMutationExecutor'
-import { CANVAS_ENTITY_TYPES, createCanvasReflectionRegistrations } from './canvasReflection'
+import { CANVAS_ENTITY_TYPES, createCanvasReflectionRegistrations, resolveCanvasChildRef } from './canvasReflection'
 import * as canvasMutationService from './canvasMutationService'
 
 // 双路径清单 DP-08：通用节点属性写入必须委托画布领域服务。
@@ -81,6 +81,15 @@ describe('canvas reflection and mutation', () => {
     expect(snapshot?.properties).toMatchObject({
       [`${CANVAS_ENTITY_TYPES.node}.node_type`]: CANVAS_NODE_TYPES.textAnnotation,
     })
+  })
+
+  it('裸连线 ID 中的冒号不被误认成工程前缀', () => {
+    const id = 'edge-source-target-param:__prompt'
+    useCanvasStore.setState({ edges: [{ id, source: nodeId, target: 'node-2' }] })
+    expect(resolveCanvasChildRef({ kind: CANVAS_ENTITY_TYPES.edge, id }, CANVAS_ENTITY_TYPES.edge))
+      .toEqual({ projectId, childId: id })
+    expect(resolveCanvasChildRef({ kind: CANVAS_ENTITY_TYPES.edge, id: `${projectId}:${id}` }, CANVAS_ENTITY_TYPES.edge))
+      .toEqual({ projectId, childId: id })
   })
 
   it('当前工程里没有这个子 id 时照旧拒绝', async () => {

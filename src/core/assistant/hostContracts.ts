@@ -23,6 +23,10 @@ export const hostContextSnapshotSchema = z.object({
   revision: z.number().int().nonnegative(),
   scopeRevisions: hostScopeRevisionsSchema,
   catalogRevision: z.number().int().nonnegative().optional(),
+  navigation: z.object({
+    userRevision: z.number().int().nonnegative(),
+    source: z.enum(['user', 'assistant', 'system']),
+  }).strict().optional(),
   surface: z.object({
     id: z.string().min(1).max(120),
     kind: z.enum(['workspace', 'tool', 'settings', 'overlay']),

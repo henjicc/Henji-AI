@@ -1,3 +1,4 @@
+import { withTaskPolicyModel } from '../context/task-policy-test-fixture'
 import { z } from 'zod'
 import { describe, expect, it, vi } from 'vitest'
 
@@ -218,7 +219,7 @@ describe('AgentRunner terminal approval cleanup', () => {
         registry,
         gateway,
         getHostContext: () => context,
-        runModelStep,
+        runModelStep: withTaskPolicyModel(runModelStep),
         cancelModelStep: vi.fn(),
         onEvent: (event: AgentEvent) => {
           if (failureAt === '事件' && event.type === 'ApprovalRequired') {

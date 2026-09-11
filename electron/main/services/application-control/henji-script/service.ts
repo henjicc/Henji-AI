@@ -27,6 +27,7 @@ import {
   serializable,
 } from './runtime-values'
 import { HenjiScriptPreflight } from './preflight'
+import { taskPolicyForbiddenEffects } from '../../../../../src/core/assistant/taskExecutionPolicy'
 
 /** 引用在本段脚本内的稳定键。 */
 function refKey(ref: ApplicationRef): string {
@@ -425,7 +426,12 @@ export class HenjiScriptService extends HenjiScriptGatewayBridge {
         pendingNavigationScopes: new Set<string>(),
         progressEvidence: [],
       }
-      const lease = this.options.getLease(context.runId)
+      const discoveredLease = this.options.getLease(context.runId)
+      const policy = context.gateway.getTaskExecutionPolicy?.(context.runId)
+      const lease = discoveredLease && {
+        ...discoveredLease,
+        forbiddenEffects: policy ? taskPolicyForbiddenEffects(policy) : discoveredLease.forbiddenEffects,
+      }
       if (!lease) {
         /*
          * 只说"没有租约"等于把死路指给模型：它既不知道租约是怎么来的，也不知道还能不能补。
@@ -464,6 +470,11 @@ export class HenjiScriptService extends HenjiScriptGatewayBridge {
       throw new HenjiScriptError('SCRIPT_PLAN_REJECTED', 'preflight', '脚本断点摘要不匹配，拒绝续跑')
     }
     const state = this.stateFromCheckpoint(checkpoint)
+    const policy = context.gateway.getTaskExecutionPolicy?.(context.runId)
+    if (policy) this.preflight.assertForbiddenEffects(checkpoint.remainingInstructions as unknown as HenjiInstruction[], {
+      actions: new Set(), recipes: new Set(), entityTypes: new Set(), propertyIds: new Set(), propertyDefinitions: new Map(),
+      forbiddenEffects: taskPolicyForbiddenEffects(policy),
+    })
     const inheritedEffectCount = state.effects.length
     if (observedStatus !== 'success') {
       const failure = new HenjiScriptError(

@@ -7,7 +7,7 @@ import type {
   AgentRunStatus,
 } from '../../../../../src/core/assistant/events'
 import type { AgentToolObservation } from '../../../../../src/core/assistant/toolContracts'
-import type { ModelStepMessage } from '@henjicc/ai-sdk'
+import type { ModelStepMessage, ModelStepToolCall } from '@henjicc/ai-sdk'
 import type { HostContextSnapshot } from '../../../../../src/core/assistant/hostContracts'
 import { AgentArtifactStore } from '../context/offload'
 import { AgentContextBuilder } from '../context/builder'
@@ -73,6 +73,8 @@ import {
   type AgentToolDomain,
 } from '../context/types'
 import { deriveThreadContinuation } from '../context/thread-continuation'
+import { unverifiedRecoveryPolicy, type TaskPolicyUserMessage } from '../context/task-execution-policy'
+import { presentConfirmedResult } from './result-presentation'
 const logger = createMainLogger('main.agent_runtime')
 
 function isAgentIntent(value: string): value is AgentIntent {
@@ -128,6 +130,7 @@ export class AgentRunner {
   private readonly threadTitleCoordinator: AgentThreadTitleCoordinator
   /** 模型本轮显式调用 ask_user 留下的待提问内容；消费后立即清空。 */
   private pendingUserQuestion: PendingUserQuestion | null = null
+  private policyQuestion: ModelStepToolCall | null = null
   /** "没有工具证据"的指引本次运行只下发一次，避免同一句话反复顶回去空烧回合。 */
   private finalResponseGuided = false
   private currentModelRequestId: string | null = null
@@ -325,6 +328,12 @@ export class AgentRunner {
       tools: this.toolExecutionCoordinator,
       savePoints: this.savePointCoordinator,
     })
+    this.currentMessageConsumer.onMessages((messages) => this.updateTaskPolicy(messages))
+    options.dependencies.gateway.setBeforeOperation(options.runId, async () => {
+      await this.currentMessageConsumer.pull()
+      this.syncNavigationPolicy()
+      this.throwIfCancelled()
+    })
   }
   start(): AgentRunState {
     if (this.started) return this.getState()
@@ -415,6 +424,40 @@ export class AgentRunner {
     this.throwIfCancelled()
     if (!answer) throw new Error('[CLARIFICATION_CANCELLED] 澄清等待已取消')
     this.conversationJournal.appendEphemeral({ role: 'user', content: answer })
+    await this.updateTaskPolicy([{ messageId: `clarification:${waitId}`, content: answer }])
+  }
+
+  private async updateTaskPolicy(messages: TaskPolicyUserMessage[]): Promise<void> {
+    const before = this.options.dependencies.getHostContext(this.options.runId)
+    const policy = await this.modelTurnCoordinator.interpretTaskPolicy(
+      messages, this.abortController.signal, this.state.workingSummary?.taskPolicy,
+    )
+    const host = policy.navigationRequested ? this.options.dependencies.getHostContext(this.options.runId) : before
+    if (host?.navigation && (policy.navigationRequested || !policy.navigationBaseline)) {
+      policy.navigationBaseline = { rendererSessionId: host.rendererSessionId, userRevision: host.navigation.userRevision }
+    }
+    this.options.dependencies.gateway.setTaskExecutionPolicy(this.options.runId, policy)
+    this.emit({ type: 'TaskPolicyUpdated', policy })
+    this.policyQuestion = policy.intent === 'ambiguous' ? {
+      toolName: 'ask_user', toolCallId: `task-policy-question:${policy.version}`, dynamic: false,
+      input: { question: policy.clarification || '你希望我只查看，还是修改应用数据？', reason: '需要明确本次任务允许的操作范围。' },
+    } : null
+  }
+
+  private syncNavigationPolicy(): void {
+    const policy = this.state.workingSummary?.taskPolicy
+    const host = this.options.dependencies.getHostContext(this.options.runId)
+    if (!policy || !host?.navigation) return
+    const baseline = policy.navigationBaseline
+    if (baseline?.rendererSessionId === host.rendererSessionId && baseline.userRevision === host.navigation.userRevision) return
+    const next = {
+      ...policy,
+      navigationTakenOver: policy.navigationTakenOver || (baseline?.rendererSessionId === host.rendererSessionId
+        && host.navigation.userRevision > baseline.userRevision),
+      navigationBaseline: { rendererSessionId: host.rendererSessionId, userRevision: host.navigation.userRevision },
+    }
+    this.options.dependencies.gateway.setTaskExecutionPolicy(this.options.runId, next)
+    this.emit({ type: 'TaskPolicyUpdated', policy: next })
   }
 
   respondClarification(waitId: string, content: string): AgentRunState {
@@ -432,6 +475,13 @@ export class AgentRunner {
     try {
       const snapshot = this.requireContext()
       this.setPhase('planning')
+      const recoveredPolicy = this.options.recoveryContext?.taskPolicy
+      if (recoveredPolicy) this.options.dependencies.gateway.setTaskExecutionPolicy(this.options.runId, recoveredPolicy)
+      else if (this.options.recoveryContext || this.options.request.externalContinuation || this.options.budgetContinuation) {
+        const policy = unverifiedRecoveryPolicy()
+        this.options.dependencies.gateway.setTaskExecutionPolicy(this.options.runId, policy)
+        this.emit({ type: 'TaskPolicyUpdated', policy })
+      } else await this.updateTaskPolicy([{ messageId: `goal:${this.options.runId}`, content: this.options.request.goal }])
       const recoveredRoute = this.options.recoveryContext?.route
       const route = recoveredRoute
         ? restoreAgentRoute(structuredClone(recoveredRoute))
@@ -588,6 +638,13 @@ export class AgentRunner {
         })
         let { context } = preparedTurn
         const turnSnapshot = preparedTurn.snapshot
+        if (this.policyQuestion) {
+          const question = this.policyQuestion
+          this.policyQuestion = null
+          await this.toolExecutionCoordinator.execute([question], route, currentSnapshot.scopeRevisions, new Set(['ask_user']))
+          await this.waitForUserAnswer(turnSnapshot)
+          continue
+        }
         const authoritativeContext = await this.externalContinuation.queryAuthoritativeStatus({
           snapshot: turnSnapshot,
           route,
@@ -683,9 +740,34 @@ export class AgentRunner {
           continue
         }
         this.setPhase('verifying')
-        this.sealExecutionIfEligible()
         this.completionCoordinator.evaluate(this.observations)
         if (await this.currentMessageConsumer.pull() > 0) continue
+        this.syncNavigationPolicy()
+        const policy = this.state.workingSummary?.taskPolicy
+        if (policy) {
+          try {
+            await presentConfirmedResult({
+              runId: this.options.runId, threadId: this.options.request.threadId,
+              approvalMode: this.options.request.approvalMode, signal: this.abortController.signal,
+              observations: this.observations, policy, gateway: this.options.dependencies.gateway,
+              getHost: () => this.options.dependencies.getHostContext(this.options.runId),
+              markAttempted: () => {
+                const attempted = { ...policy, resultPresented: true }
+                this.options.dependencies.gateway.setTaskExecutionPolicy(this.options.runId, attempted)
+                this.emit({ type: 'TaskPolicyUpdated', policy: attempted })
+              },
+            })
+          } catch (error) {
+            this.throwIfCancelled()
+            if (this.state.workingSummary?.taskPolicy?.version !== policy.version) continue
+            this.sealExecutionIfEligible()
+            this.lifecycle.completeWithWarning(`${finalText}\n\n结果已保留，但未能自动打开结果页面。`, error)
+            return
+          }
+        }
+        if (await this.currentMessageConsumer.pull() > 0
+          || (policy && this.state.workingSummary?.taskPolicy?.version !== policy.version)) continue
+        this.sealExecutionIfEligible()
         this.complete(finalText)
       }
     } catch (error) {
@@ -704,6 +786,8 @@ export class AgentRunner {
         }
         await this.fail(terminalError)
       }
+    } finally {
+      this.options.dependencies.gateway.setBeforeOperation(this.options.runId, null)
     }
   }
   private requireContext(): HostContextSnapshot {

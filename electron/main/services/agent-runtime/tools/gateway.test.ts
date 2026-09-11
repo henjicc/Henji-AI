@@ -9,6 +9,7 @@ import { AgentToolGateway, AgentToolGatewayError } from './gateway'
 import { AgentToolRegistry } from './registry'
 import type { AgentToolDefinition } from './types'
 import { createFrontendApplicationCapabilityTools } from './builtin/frontend-capabilities'
+import { bindTaskExecutionPolicy } from '../context/task-execution-policy'
 
 function createContext(): HostContextSnapshot {
   return {
@@ -138,6 +139,26 @@ function request(
 }
 
 describe('AgentToolGateway', () => {
+  it('审批完成前收到新的只读限制时，旧的待执行调用不能写入', async () => {
+    const { gateway, calls } = createGateway('R1')
+    const original = bindTaskExecutionPolicy({
+      intent: 'modify', forbiddenEffects: [], navigationRequested: false, clarification: '',
+      sources: [{ messageId: 'user-1', quote: '修改设置' }],
+    }, [{ messageId: 'user-1', content: '修改设置' }])
+    gateway.setTaskExecutionPolicy('run-1', original)
+    let boundaries = 0
+    gateway.setBeforeOperation('run-1', async () => {
+      boundaries += 1
+      if (boundaries === 2) gateway.setTaskExecutionPolicy('run-1', bindTaskExecutionPolicy({
+        intent: 'read_only', forbiddenEffects: [], navigationRequested: false, clarification: '',
+        sources: [{ messageId: 'user-2', quote: '先只查询，不要改' }],
+      }, [{ messageId: 'user-2', content: '先只查询，不要改' }], original))
+    })
+    await expect(gateway.execute(request({ value: 'late-write' }, undefined, 'full_access'))).rejects.toThrow(/ask_user|按用户限制/)
+    expect(calls).toEqual([])
+    expect(boundaries).toBe(2)
+  })
+
   it('隐藏的宿主断点可使用专用深度边界，模型可见工具不能冒用', async () => {
     const registry = new AgentToolRegistry()
     const definition = (name: string, modelVisible: boolean) => defineAgentTool({

@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 
 import type { SettingsNavigationTarget } from '@/core/types/settingsNavigation'
+import { useNavigationStore, type NavigationSource } from '@/stores/navigationStore'
 
 /**
  * 全局 UI 开关状态（不持久化）。
@@ -15,18 +16,24 @@ interface UiState {
   isSettingsOpen: boolean
   /** 本次打开设置要定位到的位置；null 表示用设置面板自己的默认分节 */
   settingsTarget: SettingsNavigationTarget | null
-  openSettings: (target?: SettingsNavigationTarget) => void
-  closeSettings: () => void
+  openSettings: (target?: SettingsNavigationTarget, source?: NavigationSource) => void
+  closeSettings: (source?: NavigationSource) => void
 }
 
 export const useUiStore = create<UiState>((set) => ({
   isSettingsOpen: false,
   settingsTarget: null,
-  openSettings: (target) => set({ isSettingsOpen: true, settingsTarget: target ?? null }),
-  closeSettings: () => set({ isSettingsOpen: false, settingsTarget: null }),
+  openSettings: (target, source = 'user') => {
+    useNavigationStore.getState().recordNavigation(source)
+    set({ isSettingsOpen: true, settingsTarget: target ?? null })
+  },
+  closeSettings: (source = 'user') => {
+    useNavigationStore.getState().recordNavigation(source)
+    set({ isSettingsOpen: false, settingsTarget: null })
+  },
 }))
 
 /** 非 React 环境（服务层、事件回调）打开设置的入口 */
-export function openSettingsPanel(target?: SettingsNavigationTarget): void {
-  useUiStore.getState().openSettings(target)
+export function openSettingsPanel(target?: SettingsNavigationTarget, source: NavigationSource = 'user'): void {
+  useUiStore.getState().openSettings(target, source)
 }

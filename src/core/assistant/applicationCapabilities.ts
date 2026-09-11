@@ -55,7 +55,7 @@ export const applicationCapabilityDescriptorSchema = z.object({
   requiredScopes: z.array(z.string().min(1).max(120)).max(16),
   availability: z.array(z.string().min(1).max(300)).max(12),
   prerequisites: z.array(z.string().min(1).max(500)).max(12),
-  acceptsRefs: z.array(z.string().min(1).max(80)).max(12),
+  acceptsRefs: z.array(z.string().min(1).max(80)).max(32),
   producesRefs: z.array(z.string().min(1).max(80)).max(12),
   successEvidence: z.array(z.string().min(1).max(500)).min(1).max(12),
   failureRecovery: z.array(z.string().min(1).max(500)).min(1).max(12),

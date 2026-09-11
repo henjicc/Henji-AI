@@ -113,7 +113,9 @@ export function reduceAgentWorkingSummary(
   const summary = current ?? createAgentWorkingSummary('未记录目标')
   let next: AgentWorkingSummary = { ...summary, scopeRevisions, updatedAt: event.occurredAt }
 
-  if (event.type === 'PlanUpdated') {
+  if (event.type === 'TaskPolicyUpdated') {
+    next = { ...next, taskPolicy: event.policy }
+  } else if (event.type === 'PlanUpdated') {
     next = {
       ...next,
       route: {

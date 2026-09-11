@@ -7,6 +7,7 @@ import {
   selectToolboxTool,
   switchWorkspace,
   useNavigationStore,
+  type NavigationSource,
 } from '@/stores/navigationStore'
 import { openSettingsPanel, useUiStore } from '@/stores/uiStore'
 
@@ -19,6 +20,7 @@ import {
 export interface SurfaceNavigationCorrelation {
   requestId?: string
   taskId?: string
+  source?: NavigationSource
 }
 
 export interface SurfaceNavigationResult {
@@ -76,12 +78,12 @@ export function openApplicationSurface(
   })
   try {
     if (surface.settingsTarget) {
-      openSettingsPanel(surface.settingsTarget)
+      openSettingsPanel(surface.settingsTarget, correlation.source)
     } else if (surface.id === 'overlay.assets') {
-      openAssetLibrary('floating')
+      openAssetLibrary('floating', correlation.source)
     } else {
-      if (surface.workspace) switchWorkspace(surface.workspace)
-      if (surface.toolId) selectToolboxTool(surface.toolId)
+      if (surface.workspace) switchWorkspace(surface.workspace, correlation.source)
+      if (surface.toolId) selectToolboxTool(surface.toolId, correlation.source)
     }
     if (!isApplicationSurfaceActive(surface)) throw new Error('SURFACE_NOT_OPEN')
     const result = {
@@ -114,11 +116,11 @@ export function closeApplicationSurface(
   })
   try {
     if (targetId.startsWith('settings.')) {
-      useUiStore.getState().closeSettings()
+      useUiStore.getState().closeSettings(correlation.source)
     } else if (targetId === 'overlay.assets' || targetId === 'workspace.assets') {
-      closeAssetLibrary()
+      closeAssetLibrary(correlation.source)
     } else if (targetId.startsWith('tool.')) {
-      selectToolboxTool(null)
+      selectToolboxTool(null, correlation.source)
     }
     const result = {
       surfaceId: targetId,

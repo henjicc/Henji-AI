@@ -1,3 +1,4 @@
+import { withTaskPolicyModel } from '../context/task-policy-test-fixture'
 import { z } from 'zod'
 import { describe, expect, it, vi } from 'vitest'
 
@@ -253,7 +254,7 @@ async function runScenario(
       registry,
       gateway,
       getHostContext: hostContext,
-      runModelStep,
+      runModelStep: withTaskPolicyModel(runModelStep),
       cancelModelStep: vi.fn(),
       onEvent: (event) => events.push(event),
       onTerminal: resolveTerminal,
@@ -361,7 +362,7 @@ describe('AgentRunner 模型输出完整性', () => {
         registry,
         gateway,
         getHostContext: hostContext,
-        runModelStep,
+        runModelStep: withTaskPolicyModel(runModelStep),
         cancelModelStep,
       },
     })

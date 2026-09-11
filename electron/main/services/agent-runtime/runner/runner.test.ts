@@ -1,3 +1,4 @@
+import { withTaskPolicyModel } from '../context/task-policy-test-fixture'
 import { z } from 'zod'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
@@ -209,14 +210,14 @@ describe('AgentRunner', () => {
       runId: 'continuation-run', request, recoveryContext,
       dependencies: {
         registry, gateway, getHostContext: hostContext,
-        runModelStep: async (input) => {
+        runModelStep: withTaskPolicyModel(async (input) => {
           // 续跑的说明回合仍然带着工具。封存点前移之后不再在模型请求前撤掉工具——
           // 模型如果发现事情没做完，得有出口；重复提交由 assertNoResubmit 单独拦。
           return result(input, {
             text: '图片生成已经完成，权威任务状态为成功。',
             responseMessages: [{ role: 'assistant', content: '图片生成已经完成，权威任务状态为成功。' }],
           })
-        },
+        }),
         cancelModelStep: vi.fn(), onEvent: (event) => events.push(event), onTerminal: terminalResolve,
       },
     })
@@ -296,7 +297,7 @@ describe('AgentRunner', () => {
     const runner = new AgentRunner({
       runId: 'failed-continuation-run', request, recoveryContext,
       dependencies: {
-        registry, gateway, getHostContext: hostContext, runModelStep,
+        registry, gateway, getHostContext: hostContext, runModelStep: withTaskPolicyModel(runModelStep),
         cancelModelStep: vi.fn(), onEvent: (event) => events.push(event), onTerminal: terminalResolve,
       },
     })
@@ -380,7 +381,7 @@ describe('AgentRunner', () => {
       runId: 'program-presentation-run',
       request: runRequest('把界面主题设置改成测试值'),
       dependencies: {
-        registry, gateway, getHostContext: hostContext, runModelStep,
+        registry, gateway, getHostContext: hostContext, runModelStep: withTaskPolicyModel(runModelStep),
         cancelModelStep: vi.fn(), onEvent: (event) => programEvents.push(event), onTerminal: terminalResolve,
       },
     })
@@ -431,7 +432,7 @@ describe('AgentRunner', () => {
         registry,
         gateway,
         getHostContext: hostContext,
-        runModelStep,
+        runModelStep: withTaskPolicyModel(runModelStep),
         cancelModelStep: vi.fn(),
         onEvent: (event) => events.push(event),
         onTerminal: terminalResolve,
@@ -552,7 +553,7 @@ describe('AgentRunner', () => {
         registry,
         gateway,
         getHostContext: hostContext,
-        runModelStep,
+        runModelStep: withTaskPolicyModel(runModelStep),
         cancelModelStep: vi.fn(),
         onTerminal: terminalResolve,
       },
@@ -590,7 +591,7 @@ describe('AgentRunner', () => {
       runId: 'run-auth-failure',
       request: runRequest('回答问题'),
       dependencies: {
-        registry, gateway, getHostContext: hostContext, runModelStep,
+        registry, gateway, getHostContext: hostContext, runModelStep: withTaskPolicyModel(runModelStep),
         cancelModelStep: vi.fn(), onEvent: (event) => events.push(event),
         onTerminal: terminalResolve,
       },
@@ -650,7 +651,7 @@ describe('AgentRunner', () => {
         registry,
         gateway,
         getHostContext: hostContext,
-        runModelStep,
+        runModelStep: withTaskPolicyModel(runModelStep),
         cancelModelStep: vi.fn(),
         onEvent: (event) => {
           if (event.type !== 'ClarificationRequired') return
@@ -711,7 +712,7 @@ describe('AgentRunner', () => {
         registry,
         gateway,
         getHostContext: hostContext,
-        runModelStep,
+        runModelStep: withTaskPolicyModel(runModelStep),
         cancelModelStep: vi.fn(),
         consumeCurrentTaskMessages: async () => {
           consumeCalls += 1
@@ -852,7 +853,7 @@ describe('AgentRunner', () => {
         registry,
         gateway,
         getHostContext: hostContext,
-        runModelStep,
+        runModelStep: withTaskPolicyModel(runModelStep),
         cancelModelStep: vi.fn(),
         onEvent: (event) => {
           if (event.type === 'ApprovalRequired') {
@@ -892,14 +893,14 @@ describe('AgentRunner', () => {
         registry,
         gateway,
         getHostContext: hostContext,
-        runModelStep: () => new Promise(() => undefined),
+        runModelStep: withTaskPolicyModel(() => new Promise(() => undefined)),
         cancelModelStep,
       },
     })
     runner.start()
     const state = runner.cancel('测试取消')
     expect(state.status).toBe('cancelled')
-    expect(cancelModelStep).toHaveBeenCalledWith(expect.stringContaining('run-cancel:router:'))
+    expect(cancelModelStep).toHaveBeenCalledWith('run-cancel:task-policy:1')
   })
 
   it('cancelAndWait 立即进入取消状态，但会等待运行终止审计完成', async () => {
@@ -919,7 +920,7 @@ describe('AgentRunner', () => {
         registry,
         gateway,
         getHostContext: hostContext,
-        runModelStep: () => new Promise(() => undefined),
+        runModelStep: withTaskPolicyModel(() => new Promise(() => undefined)),
         cancelModelStep: vi.fn(),
       },
     })
@@ -954,7 +955,7 @@ describe('AgentRunner', () => {
         registry,
         gateway,
         getHostContext: hostContext,
-        runModelStep: () => new Promise(() => undefined),
+        runModelStep: withTaskPolicyModel(() => new Promise(() => undefined)),
         cancelModelStep: vi.fn(),
       },
     })
@@ -1002,7 +1003,7 @@ describe('AgentRunner', () => {
         registry,
         gateway,
         getHostContext: hostContext,
-        runModelStep,
+        runModelStep: withTaskPolicyModel(runModelStep),
         cancelModelStep,
         onEvent: (event) => {
           if (event.type === 'ModelDelta' || cancelModelStep.mock.calls.length > 0) {
@@ -1049,7 +1050,7 @@ describe('AgentRunner', () => {
         registry,
         gateway,
         getHostContext: hostContext,
-        runModelStep,
+        runModelStep: withTaskPolicyModel(runModelStep),
         cancelModelStep: vi.fn(),
         onEvent: (event) => {
           if (event.type === 'VerificationCompleted') {

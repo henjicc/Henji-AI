@@ -10,7 +10,7 @@ describe('AgentIntentRouter', () => {
     const result = await new AgentIntentRouter(classifier).route(
       'run-1', '切换到素材库工作区', contextSnapshot(), new AbortController().signal
     )
-    expect(result).toMatchObject({ intent: 'navigate', explicitUserIntent: true })
+    expect(result).toMatchObject({ intent: 'navigate', explicitUserIntent: false })
     expect(classifier).not.toHaveBeenCalled()
   })
 
@@ -22,7 +22,7 @@ describe('AgentIntentRouter', () => {
       contextSnapshot(),
       new AbortController().signal,
     )
-    expect(result).toMatchObject({ intent: 'settings', explicitUserIntent: true })
+    expect(result).toMatchObject({ intent: 'settings', explicitUserIntent: false })
     expect(classifier).not.toHaveBeenCalled()
   })
 
@@ -35,7 +35,7 @@ describe('AgentIntentRouter', () => {
       new AbortController().signal,
     )
 
-    expect(result).toMatchObject({ intent: 'settings', explicitUserIntent: true })
+    expect(result).toMatchObject({ intent: 'settings', explicitUserIntent: false })
     expect(classifier).not.toHaveBeenCalled()
   })
 
@@ -63,9 +63,7 @@ describe('AgentIntentRouter', () => {
   /*
    * 授权门禁：explicitUserIntent 是权限位，不是分类标签。
    *
-   * 它唯一的消费方是 approval-policy —— assistant_decides 模式下只有它为真才自动放行 R1
-   * 非只读非破坏性工具。以前这个语义靠 `intent !== 'general'` 现场推断，intent 取值一演化
-   * 就会静默改变每次运行的授权范围。这里把「路由没识别出任务 → 不自动放行写工具」钉死。
+   * 路由只提供领域建议，不能发放 R1 写授权；写入意图由独立任务策略解释并在 Gateway 复核。
    */
   it('路由没识别出具体任务时不发放写工具自动放行位', async () => {
     const failed = await new AgentIntentRouter(async () => { throw new Error('offline') }).route(
@@ -83,17 +81,17 @@ describe('AgentIntentRouter', () => {
     expect(overview.explicitUserIntent).toBe(false)
   })
 
-  it('识别出具体应用任务时才自动放行 R1 写工具', async () => {
+  it('识别出具体领域仍不能发放 R1 写授权', async () => {
     const result = await new AgentIntentRouter(async () => {
       throw new Error('不应调用分类器')
     }).route(
       'run-auth-settings', '把界面主题改成深色', contextSnapshot(), new AbortController().signal
     )
-    expect(result.explicitUserIntent).toBe(true)
+    expect(result.explicitUserIntent).toBe(false)
     expect(decideToolAuthorization({
       mode: 'assistant_decides', risk: 'R1', readOnly: false, destructive: false,
       dataClasses: ['C1'], explicitUserIntent: result.explicitUserIntent,
-    })).toBe('auto_allowed')
+    })).toBe('approval_required')
   })
 
   it('明显的画布与定位组合请求走确定性规则，不调用路由模型', async () => {
@@ -102,7 +100,7 @@ describe('AgentIntentRouter', () => {
       candidateIntents: ['canvas', 'navigate'],
       toolDomains: ['canvas', 'navigation'],
       reason: '用户要求编排多个画布节点',
-      explicitUserIntent: true,
+      explicitUserIntent: false,
       taskFacets: [{
         facetId: 'canvas_structure', domain: 'canvas', goal: '创建两个画布节点并连接',
         targetEntityTypes: ['canvas.node', 'canvas.edge'], observationKinds: ['entity_state'],
@@ -131,7 +129,7 @@ describe('AgentIntentRouter', () => {
     )
     expect(result).toMatchObject({
       intent: 'canvas',
-      explicitUserIntent: true,
+      explicitUserIntent: false,
       toolDomains: ['canvas', 'navigation'],
     })
     expect(classifier).not.toHaveBeenCalled()
@@ -147,7 +145,7 @@ describe('AgentIntentRouter', () => {
     )
     expect(result).toMatchObject({
       intent: 'camera_stage',
-      explicitUserIntent: true,
+      explicitUserIntent: false,
     })
     expect(result.toolDomains).toEqual(expect.arrayContaining([
       'toolbox', 'camera_stage', 'navigation',
@@ -159,7 +157,7 @@ describe('AgentIntentRouter', () => {
     const classifier = vi.fn().mockResolvedValue({
       intent: 'user_instructions',
       reason: '用户要求长期保存供应商偏好',
-      explicitUserIntent: true,
+      explicitUserIntent: false,
     })
     const result = await new AgentIntentRouter(classifier).route(
       'run-preferences',
@@ -169,7 +167,7 @@ describe('AgentIntentRouter', () => {
     )
     expect(result).toMatchObject({
       intent: 'user_instructions',
-      explicitUserIntent: true,
+      explicitUserIntent: false,
       toolDomains: ['user_instructions'],
     })
     expect(classifier).toHaveBeenCalledOnce()
@@ -195,7 +193,7 @@ describe('AgentIntentRouter', () => {
     )
     expect(result).toMatchObject({
       intent: 'generate',
-      explicitUserIntent: true,
+      explicitUserIntent: false,
       toolDomains: ['models', 'generation', 'navigation'],
     })
     expect(classifier).not.toHaveBeenCalled()
@@ -209,7 +207,7 @@ describe('AgentIntentRouter', () => {
       contextSnapshot(),
       new AbortController().signal
     )
-    expect(result).toMatchObject({ intent: 'generate', explicitUserIntent: true })
+    expect(result).toMatchObject({ intent: 'generate', explicitUserIntent: false })
     expect(classifier).not.toHaveBeenCalled()
   })
 
@@ -220,7 +218,7 @@ describe('AgentIntentRouter', () => {
       '生成一张西湖图片，等待完成并确认结果已经进入正式生成历史',
       contextSnapshot(), new AbortController().signal
     )
-    expect(result).toMatchObject({ intent: 'generate', explicitUserIntent: true })
+    expect(result).toMatchObject({ intent: 'generate', explicitUserIntent: false })
     expect(classifier).not.toHaveBeenCalled()
   })
 
@@ -232,7 +230,7 @@ describe('AgentIntentRouter', () => {
     )
     expect(result).toMatchObject({
       intent: 'assets',toolDomains: expect.arrayContaining(['assets']),
-      explicitUserIntent: true,
+      explicitUserIntent: false,
     })
     expect(classifier).not.toHaveBeenCalled()
 
@@ -240,7 +238,7 @@ describe('AgentIntentRouter', () => {
       'run-create-collection', '创建素材集合：在 asset.catalog:default 下新增一项 asset.library',
       contextSnapshot(), new AbortController().signal
     )
-    expect(collection).toMatchObject({ intent: 'assets', explicitUserIntent: true })
+    expect(collection).toMatchObject({ intent: 'assets', explicitUserIntent: false })
   })
 
   /*
@@ -253,7 +251,7 @@ describe('AgentIntentRouter', () => {
       '把主题切换为另一个合法值，读回后恢复原值并再次确认',
       contextSnapshot(), new AbortController().signal
     )
-    expect(result).toMatchObject({ intent: 'settings', explicitUserIntent: true })
+    expect(result).toMatchObject({ intent: 'settings', explicitUserIntent: false })
     expect(result.toolDomains).toEqual(expect.arrayContaining(['settings']))
   })
 
@@ -263,14 +261,14 @@ describe('AgentIntentRouter', () => {
       candidateIntents: [],
       toolDomains: { workspace: 'generation', mediaType: 'image' },
       reason: '用户请求创建图片生成任务',
-      explicitUserIntent: true,
+      explicitUserIntent: false,
     }))
     const result = await router.route(
       'run-malformed-router-output', '创建一张图片', contextSnapshot(), new AbortController().signal
     )
     expect(result).toMatchObject({
       intent: 'generate',
-      explicitUserIntent: true,
+      explicitUserIntent: false,
       toolDomains: ['models', 'generation', 'navigation'],
     })
   })
@@ -281,7 +279,7 @@ describe('AgentIntentRouter', () => {
       candidateIntents: ['assets'],
       toolDomains: ['catalog', 'assets'],
       reason: '用户希望生成照片',
-      explicitUserIntent: true,
+      explicitUserIntent: false,
     }))
     const result = await router.route(
       'run-router-policy', '帮我完成这个视觉需求', contextSnapshot(), new AbortController().signal
@@ -289,7 +287,7 @@ describe('AgentIntentRouter', () => {
     // candidateIntents 已删（零消费方）；模型能否越权只看最终 toolDomains 是不是本地白名单推导的。
     expect(result).toMatchObject({
       intent: 'generate',
-      explicitUserIntent: true,
+      explicitUserIntent: false,
       toolDomains: ['models', 'generation', 'navigation', 'assets', 'catalog'],
     })
   })

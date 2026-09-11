@@ -126,19 +126,19 @@ function childRef(kind: typeof CANVAS_ENTITY_TYPES.node | typeof CANVAS_ENTITY_T
  * 歧义时必须拒绝"（docs/rules/assistant-capability.md），这里就是那条规则的落点：只有一个工程
  * 里存在这个子 ID 时补全它，出现在多个工程里则照旧拒绝。
  */
-function splitChildRef(ref: ApplicationRef, expected: CanvasEntityType): { projectId: string; childId: string } {
+export function resolveCanvasChildRef(ref: ApplicationRef, expected: CanvasEntityType): { projectId: string; childId: string } {
   if (ref.kind !== expected) throw new Error('NOT_FOUND')
+  // 连线的裸 ID 也可能包含冒号；先匹配当前工程中的完整 ID，再解释稳定引用。
+  const projectId = useProjectStore.getState().currentProjectId
+  const canvas = useCanvasStore.getState()
+  const children = expected === CANVAS_ENTITY_TYPES.edge ? canvas.edges : canvas.nodes
+  if (projectId && children.some((child) => child.id === ref.id)) return { projectId, childId: ref.id }
   const separator = ref.id.indexOf(':')
   if (separator >= 1) {
     return { projectId: ref.id.slice(0, separator), childId: ref.id.slice(separator + 1) }
   }
   // 只在**当前打开的工程**里补全：助手的写入本来就发生在这个工程上，跨工程扫描既慢又可能歧义。
-  const projectId = useProjectStore.getState().currentProjectId
-  if (!projectId) throw new Error('NOT_FOUND')
-  const canvas = useCanvasStore.getState()
-  const children = expected === CANVAS_ENTITY_TYPES.edge ? canvas.edges : canvas.nodes
-  if (!children.some((child) => child.id === ref.id)) throw new Error('NOT_FOUND')
-  return { projectId, childId: ref.id }
+  throw new Error('NOT_FOUND')
 }
 
 function revisionOf(updatedAt: number): number {
@@ -177,7 +177,7 @@ class CanvasReflectionProvider implements ApplicationEntityProvider {
 
   async readEntity(ref: ApplicationRef, request: { propertyIds?: string[] }) {
     const properties = await this.readProperties(ref)
-    const projectId = this.entityType === CANVAS_ENTITY_TYPES.project ? ref.id : splitChildRef(ref, this.entityType).projectId
+    const projectId = this.entityType === CANVAS_ENTITY_TYPES.project ? ref.id : resolveCanvasChildRef(ref, this.entityType).projectId
     const snapshot = await readCanvasProjectSnapshot(projectId)
     return {
       ref,
@@ -225,7 +225,7 @@ class CanvasReflectionProvider implements ApplicationEntityProvider {
         [`${this.entityType}.edge_count`]: project.edges.length,
       }
     }
-    const { projectId, childId } = splitChildRef(ref, this.entityType)
+    const { projectId, childId } = resolveCanvasChildRef(ref, this.entityType)
     const project = await readCanvasProjectSnapshot(projectId)
     if (this.entityType === CANVAS_ENTITY_TYPES.node) {
       const node = project.nodes.find((item) => item.id === childId)

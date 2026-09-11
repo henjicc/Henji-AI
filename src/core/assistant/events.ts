@@ -7,6 +7,7 @@ import { modelProviderErrorCategorySchema } from '@henjicc/ai-sdk'
 import { agentWorkingSummarySchema } from './workingContext'
 import { agentObservedEffectSchema } from './observedEffect'
 import { applicationTransactionFailureFactsSchema } from './applicationTransactionFailureFacts'
+import { taskExecutionPolicySchema } from './taskExecutionPolicy'
 
 export const AGENT_EVENT_SCHEMA_VERSION = 'agent-event/v2' as const
 
@@ -222,6 +223,12 @@ const modelCompletedEventSchema = z.object({
   /** 仅保存模型实际产生、可向用户展示的文本；不包含 reasoning。 */
   displayText: z.string().min(1).max(2_000).optional(),
   usage: modelStepUsageSchema,
+}).strict()
+
+const taskPolicyUpdatedEventSchema = z.object({
+  ...eventBase,
+  type: z.literal('TaskPolicyUpdated'),
+  policy: taskExecutionPolicySchema,
 }).strict()
 
 const planUpdatedEventSchema = z.object({
@@ -448,6 +455,7 @@ export const agentEventSchema = z.discriminatedUnion('type', [
   modelRetryingEventSchema,
   modelCompletedEventSchema,
   planUpdatedEventSchema,
+  taskPolicyUpdatedEventSchema,
   toolRequestedEventSchema,
   toolStartedEventSchema,
   toolCompletedEventSchema,

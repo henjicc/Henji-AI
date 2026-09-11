@@ -11,6 +11,7 @@ export const NAVIGATION_STORE_LEDGER: ApplicationStoreActionLedger<ActionName> =
   storeId: 'navigationStore',
   title: '工作区导航',
   entries: {
+    recordNavigation: { kind: 'excluded', category: 'view_state', reason: '记录正式导航的发起来源，供任务接管判断使用；不能作为模型可调用的业务动作。' },
     /*
      * setActiveWorkspace/setActiveToolId 是内部 setter，真正的用户/助手入口是
      * switchWorkspace()/selectToolboxTool() 这两个包装函数（它们还联动素材库视图）。

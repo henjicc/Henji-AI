@@ -63,7 +63,7 @@ export function registerToolboxCapabilityHandlers(
       return { toolId: parsed.toolId, ...openApplicationSurface(surfaceId, context) }
     }
     // 关闭工具只回工具箱首页，不抢占用户当前所在工作区。
-    selectToolboxTool(null)
+    selectToolboxTool(null, 'assistant')
     return { toolId: parsed.toolId, surfaceId: null }
   })
 

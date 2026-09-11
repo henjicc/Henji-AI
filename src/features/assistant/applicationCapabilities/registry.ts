@@ -154,7 +154,7 @@ function registerBuiltins(): void {
   })
   registry.registerHandler(focusApplicationEntityCapability.id, async (input, context) => {
     const parsed = focusApplicationEntityCapability.inputSchema.parse(input)
-    return await focusApplicationEntity(parsed.ref, context.signal, context)
+    return await focusApplicationEntity(parsed.ref, context.signal, context, parsed.propertyIds, parsed.presentation)
   })
   // 通用反射能力：领域注册了实体和属性，助手就能读改增删，不必再为每个动作写专用能力
   for (const capability of APPLICATION_REFLECTION_APPLICATION_CAPABILITIES) {

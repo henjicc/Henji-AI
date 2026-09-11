@@ -271,6 +271,7 @@ export function createHostContextSnapshot(uiReady = true): HostContextSnapshot {
     revision,
     scopeRevisions: getHostScopeRevisions(),
     catalogRevision,
+    navigation: { userRevision: navigation.userNavigationRevision, source: navigation.lastNavigationSource },
     surface,
     workspace: {
       id: navigation.activeWorkspace,

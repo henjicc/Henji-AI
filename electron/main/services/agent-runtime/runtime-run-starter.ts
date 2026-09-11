@@ -77,7 +77,7 @@ export async function startRuntimeRun(
     options.request,
     initialState,
     options.parentRunId,
-    { appendUserMessage: !options.budgetContinuation }
+    { appendUserMessage: !options.budgetContinuation && !options.request.externalContinuation }
   )
   try {
     const projection = options.persistence.projectConversation(options.request.threadId, runId)

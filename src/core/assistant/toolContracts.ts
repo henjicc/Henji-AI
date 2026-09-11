@@ -110,7 +110,7 @@ export const agentToolCatalogEntrySchema = z.object({
   supportsPreview: z.boolean(),
   supportsUndo: z.boolean(),
   dataClasses: z.array(agentDataClassSchema).min(1).max(4),
-  acceptsRefs: z.array(z.string().min(1).max(80)).max(12),
+  acceptsRefs: z.array(z.string().min(1).max(80)).max(32),
   producesRefs: z.array(z.string().min(1).max(80)).max(12),
   availability: z.array(z.string().min(1).max(300)).max(12),
   concurrencyKey: z.string().min(1).max(120),

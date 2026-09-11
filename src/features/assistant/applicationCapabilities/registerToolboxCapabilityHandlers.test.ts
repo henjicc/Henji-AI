@@ -172,7 +172,7 @@ describe('toolbox capability handlers', () => {
     expect(mocks.openApplicationSurface).toHaveBeenCalledWith('tool.camera_stage', context)
 
     const closed = await handler?.({ toolId: null }, context)
-    expect(mocks.selectToolboxTool).toHaveBeenCalledWith(null)
+    expect(mocks.selectToolboxTool).toHaveBeenCalledWith(null, 'assistant')
     expect(closed).toEqual({ toolId: null, surfaceId: null })
   })
 
