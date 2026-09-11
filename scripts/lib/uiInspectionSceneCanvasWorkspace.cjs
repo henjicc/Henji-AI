@@ -424,6 +424,7 @@ function attachUiInspectionCanvasWorkspace(context) {
     const stage = page.locator('[data-outpaint-stage]')
     await stage.waitFor({ state: 'visible', timeout: 12000 })
     await stage.locator('[data-crop-frame]').waitFor({ state: 'visible' })
+    await stage.locator('[data-outpaint-preview="ready"]').waitFor({ state: 'visible' })
     const geometry = async () => stage.evaluate(element => {
       const image = element.querySelector('img').getBoundingClientRect()
       const frame = element.querySelector('[data-crop-frame]').getBoundingClientRect()
@@ -444,7 +445,7 @@ function attachUiInspectionCanvasWorkspace(context) {
     await page.mouse.down()
     await page.mouse.move(right.x + right.width / 2 + outward, right.y + right.height / 2, { steps: 10 })
     const during = await geometry()
-    if (Math.abs(during.frame.width - initial.frame.width - outward) > 2) throw new Error('画布缩放下扩图框未跟随指针')
+    if (Math.abs(during.frame.width - initial.frame.width - outward) > 2) throw new Error(`画布缩放下扩图框未跟随指针：${JSON.stringify({ initial, during, outward, sourceStage, right })}`)
     await page.mouse.up()
     const left = await stage.locator('[data-crop-handle="w"]').boundingBox()
     await page.mouse.move(left.x + left.width / 2, left.y + left.height / 2)
@@ -668,6 +669,14 @@ function attachUiInspectionCanvasWorkspace(context) {
       await session.send('Performance.enable')
       try {
         for (let round = 0; round < 4; round++) {
+          const previewEnabled = round === 0 || round === 3
+          await stage.evaluate((element, enabled) => {
+            const preview = element.querySelector('[data-outpaint-preview]')
+            preview.style.visibility = enabled ? '' : 'hidden'
+            const image = element.querySelector('img')
+            if (!image.dataset.originalMask) image.dataset.originalMask = image.style.maskImage
+            image.style.maskImage = enabled ? image.dataset.originalMask : 'none'
+          }, previewEnabled)
           const box = await node.locator('.react-flow__resize-control.bottom.right').last().boundingBox()
           const start = { x: box.x + box.width / 2, y: box.y + box.height / 2 }
           const beforeBox = await node.boundingBox()
@@ -680,7 +689,6 @@ function attachUiInspectionCanvasWorkspace(context) {
             element.__resizeFrame = requestAnimationFrame(sample)
           })
           const before = await session.send('Performance.getMetrics')
-          if (round === 0) { await session.send('Profiler.enable'); await session.send('Profiler.start') }
           const begin = performance.now()
           const distance = round % 2 ? -60 : 60
           while (performance.now() - begin < 1000) {
@@ -690,11 +698,6 @@ function attachUiInspectionCanvasWorkspace(context) {
           }
           await releasePointer(session, { x: start.x + distance, y: start.y + distance })
           const after = await session.send('Performance.getMetrics')
-          if (round === 0) {
-            const { profile } = await session.send('Profiler.stop')
-            const parents = new Map(profile.nodes.flatMap(item => (item.children ?? []).map(id => [id, item])))
-            console.log('[outpaint-resize-cpu]', JSON.stringify(profile.nodes.filter(item => item.hitCount).sort((a, b) => b.hitCount - a.hitCount).slice(0, 12).map(item => ({ hits: item.hitCount, frame: item.callFrame, parent: parents.get(item.id)?.callFrame, ancestor: parents.get(parents.get(item.id)?.id)?.callFrame }))))
-          }
           const sample = await node.evaluate(element => {
             cancelAnimationFrame(element.__resizeFrame)
             element.__previewObserver.disconnect()
@@ -705,9 +708,16 @@ function attachUiInspectionCanvasWorkspace(context) {
           if (Math.abs(afterBox.width - beforeBox.width) < 20) throw new Error('连续缩放性能测试未命中节点手柄')
           if (sample.previewMutations || !sample.frames) throw new Error('连续缩放触发预览更新或没有有效帧')
           const delta = name => (after.metrics.find(item => item.name === name).value - before.metrics.find(item => item.name === name).value) * 1000
-          console.log('[outpaint-continuous-resize]', JSON.stringify({ round, ...sample, taskMs: delta('TaskDuration'), scriptMs: delta('ScriptDuration'), layoutMs: delta('LayoutDuration') }))
+          console.log('[outpaint-continuous-resize]', JSON.stringify({ round, previewEnabled, ...sample, taskMs: delta('TaskDuration'), scriptMs: delta('ScriptDuration'), layoutMs: delta('LayoutDuration') }))
         }
-      } finally { await session.detach() }
+      } finally {
+        await stage.evaluate(element => {
+          element.querySelector('[data-outpaint-preview]').style.visibility = ''
+          const image = element.querySelector('img')
+          image.style.maskImage = image.dataset.originalMask
+        })
+        await session.detach()
+      }
     }
     await settlePage(page)
   }

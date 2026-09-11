@@ -4,6 +4,8 @@ import {
 } from '@/core/theme/colorTokens';
 
 export const UI_COLOR_ACCENT_BORDER_CLASS = 'border-brand-500';
+/** Alpha masks only: soften the source edge over an already blurred outpaint preview. */
+export const UI_OUTPAINT_FEATHER_MASK = `linear-gradient(to right, transparent, ${WHITE_HEX} 12%, ${WHITE_HEX} 88%, transparent), linear-gradient(to bottom, transparent, ${WHITE_HEX} 12%, ${WHITE_HEX} 88%, transparent)`;
 export const UI_COLOR_ACCENT_BG_CLASS = 'bg-accent';
 /**
  * 承载白字的实心强调底。
