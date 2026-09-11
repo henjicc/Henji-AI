@@ -17,7 +17,7 @@ describe('canvasStore resolveUploadPlaceholder', () => {
     })
   })
 
-  it('保留节点身份和用户标题，清除测量尺寸，并可一次撤销回空上传节点', () => {
+  it('保留节点身份和用户标题，按统一面积初始化，并可一次撤销回空上传节点', () => {
     const nodeId = useCanvasStore.getState().addNode(
       CANVAS_NODE_TYPES.universalUpload,
       { x: 120, y: 80 },
@@ -60,10 +60,9 @@ describe('canvasStore resolveUploadPlaceholder', () => {
       },
     })
     expect(resolved?.measured).toBeUndefined()
-    expect(resolved?.width).toBeUndefined()
-    expect(resolved?.height).toBeUndefined()
-    expect(resolved?.style?.width).toBeUndefined()
-    expect(resolved?.style?.height).toBeUndefined()
+    expect(resolved?.width).toBe(427)
+    expect(resolved?.height).toBe(240)
+    expect(resolved?.style).toMatchObject({ width: 427, height: 240 })
 
     expect(useCanvasStore.getState().undo()).toBe(true)
     expect(useCanvasStore.getState().nodes.find((node) => node.id === nodeId)).toMatchObject({

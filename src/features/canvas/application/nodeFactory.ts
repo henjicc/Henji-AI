@@ -2,6 +2,7 @@ import type { XYPosition } from '@xyflow/react';
 
 import type { CanvasNode, CanvasNodeData, CanvasNodeType } from '../domain/canvasNodes';
 import type { IdGenerator, NodeCatalog, NodeFactory } from './ports';
+import { resolveUploadNodeDefaultSize } from './uploadNodeSizing';
 
 export class CanvasNodeFactory implements NodeFactory {
   constructor(
@@ -19,12 +20,14 @@ export class CanvasNodeFactory implements NodeFactory {
       ...definition.createDefaultData(),
       ...data,
     } as CanvasNodeData;
+    const size = resolveUploadNodeDefaultSize(type, nodeData);
 
     return {
       id: this.idGenerator.next(),
       type,
       position,
       data: nodeData,
+      ...(size ? { ...size, style: size } : {}),
     };
   }
 }

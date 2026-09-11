@@ -16,12 +16,13 @@ import {
   resolveMinEdgeFittedSize,
   resolveResizeMinConstraintsByAspect,
 } from '@/features/canvas/application/imageNodeSizing';
+import { resolveUploadNodeSize } from '@/features/canvas/application/uploadNodeSizing';
 import { resolveImageDisplayUrl } from '@/features/canvas/application/imageData';
 import { canvasEventBus } from '@/features/canvas/application/canvasServices';
 import { getMainPortConnectionFlags } from '@/features/canvas/domain/connectionIndex';
 import { importCanvasMediaFile } from '@/features/canvas/application/mediaImport';
 import { ICON_NODE_VIDEO_GENERATION, ICON_NODE_VIDEO_UPLOAD } from '@/core/theme/icons';
-import { resolveNodeDisplayName } from '@/features/canvas/domain/nodeDisplay';
+import { isNodeUsingDefaultDisplayName, resolveNodeDisplayName } from '@/features/canvas/domain/nodeDisplay';
 import { NodeHeader, NODE_HEADER_FLOATING_POSITION_CLASS } from '@/features/canvas/ui/NodeHeader';
 import { NodeResizeHandle } from '@/features/canvas/ui/NodeResizeHandle';
 import {
@@ -37,6 +38,7 @@ import { NodeGenerationError } from '@/features/canvas/nodes/shared/NodeGenerati
 import { useMediaMicroLod } from '@/features/canvas/nodes/shared/useCanvasContentLod';
 import { useMicroThumbnail } from '@/features/canvas/nodes/shared/useMicroThumbnail';
 import { useCanvasStore } from '@/stores/canvasStore';
+import { useSettingsStore } from '@/stores/settingsStore';
 import { UiIconButton, UiInput } from '@/components/ui';
 import { VideoViewerModal } from '@/components/mediaViewer/VideoViewerModal';
 import { CanvasNodeImage } from '@/features/canvas/ui/CanvasNodeImage';
@@ -65,6 +67,7 @@ export const VideoNode = memo(({ id, data, selected, type, width, height }: Vide
   const updateNodeInternals = useUpdateNodeInternals();
   const setSelectedNode = useCanvasStore((state) => state.setSelectedNode);
   const updateNodeData = useCanvasStore((state) => state.updateNodeData);
+  const useUploadFilenameAsNodeTitle = useSettingsStore((state) => state.useUploadFilenameAsNodeTitle);
   const hasTargetConnections = useCanvasStore(
     (state) => getMainPortConnectionFlags(state.edges).get(id)?.hasMainTarget ?? false
   );
@@ -80,7 +83,7 @@ export const VideoNode = memo(({ id, data, selected, type, width, height }: Vide
   const generationError = typeof data.generationError === 'string' ? data.generationError : null;
 
   const resolvedAspectRatio = data.aspectRatio || DEFAULT_ASPECT_RATIO;
-  const compactSize = resolveMinEdgeFittedSize(resolvedAspectRatio, {
+  const compactSize = isUploadVariant ? resolveUploadNodeSize(resolvedAspectRatio) : resolveMinEdgeFittedSize(resolvedAspectRatio, {
     minWidth: EXPORT_RESULT_NODE_MIN_WIDTH,
     minHeight: EXPORT_RESULT_NODE_MIN_HEIGHT,
   });
@@ -95,10 +98,12 @@ export const VideoNode = memo(({ id, data, selected, type, width, height }: Vide
     updateNodeInternals(id);
   }, [id, resolvedWidth, resolvedHeight, updateNodeInternals]);
 
-  const resolvedTitle = useMemo(
-    () => resolveNodeDisplayName(type as CanvasNodeType, data),
-    [data, type]
-  );
+  const resolvedTitle = useMemo(() => {
+    const nodeType = type as CanvasNodeType;
+    return isUploadVariant && useUploadFilenameAsNodeTitle && data.sourceFileName
+      && isNodeUsingDefaultDisplayName(nodeType, data)
+      ? data.sourceFileName : resolveNodeDisplayName(nodeType, data);
+  }, [data, type, isUploadVariant, useUploadFilenameAsNodeTitle]);
 
   const videoSource = useMemo(
     () => (data.videoUrl ? resolveImageDisplayUrl(data.videoUrl) : null),
@@ -145,6 +150,7 @@ export const VideoNode = memo(({ id, data, selected, type, width, height }: Vide
 
   const handleDrop = useCallback(async (event: DragEvent<HTMLElement>) => {
     event.preventDefault();
+    event.stopPropagation();
     const file = event.dataTransfer.files?.[0];
     if (!file || resolveMediaFileKind(file) !== 'video') {
       return;

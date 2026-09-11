@@ -14,6 +14,8 @@ import { canvasEventBus } from '@/features/canvas/application/canvasServices';
 import { getMainPortConnectionFlags } from '@/features/canvas/domain/connectionIndex';
 import { isNodeUsingDefaultDisplayName, resolveNodeDisplayName } from '@/features/canvas/domain/nodeDisplay';
 import { NodeHeader, NODE_HEADER_FLOATING_POSITION_CLASS } from '@/features/canvas/ui/NodeHeader';
+import { NodeResizeHandle } from '@/features/canvas/ui/NodeResizeHandle';
+import { resolveUploadNodeSize, UPLOAD_AUDIO_ASPECT_RATIO } from '@/features/canvas/application/uploadNodeSizing';
 import {
   NODE_GENERATION_ERROR_BORDER_CLASS,
   NODE_IDLE_BORDER_CLASS,
@@ -29,6 +31,7 @@ import { useAudioWaveform } from '@/hooks/useAudioWaveform';
 import { importCanvasMediaFile } from '@/features/canvas/application/mediaImport';
 import { ICON_NODE_AUDIO_GENERATION, ICON_NODE_AUDIO_UPLOAD } from '@/core/theme/icons';
 import { useCanvasStore } from '@/stores/canvasStore';
+import { useSettingsStore } from '@/stores/settingsStore';
 import { UiIconButton, UiInput } from '@/components/ui';
 import { AudioViewerModal } from '@/components/mediaViewer/AudioViewerModal';
 import Waveform from '@/components/Waveform';
@@ -49,10 +52,11 @@ const AUDIO_WAVEFORM_WIDTH = AUDIO_NODE_WIDTH - 24;
 const AUDIO_WAVEFORM_HEIGHT = 44;
 
 /** 音频节点：服务于结果音频与上传音频，卡片式展示 + 懒挂载播放 */
-export const AudioNode = memo(({ id, data, selected, type }: AudioNodeProps) => {
+export const AudioNode = memo(({ id, data, selected, type, width, height }: AudioNodeProps) => {
   const { t } = useTranslation();
   const setSelectedNode = useCanvasStore((state) => state.setSelectedNode);
   const updateNodeData = useCanvasStore((state) => state.updateNodeData);
+  const useUploadFilenameAsNodeTitle = useSettingsStore((state) => state.useUploadFilenameAsNodeTitle);
   const hasTargetConnections = useCanvasStore(
     (state) => getMainPortConnectionFlags(state.edges).get(id)?.hasMainTarget ?? false
   );
@@ -68,23 +72,29 @@ export const AudioNode = memo(({ id, data, selected, type }: AudioNodeProps) => 
   const [isViewerOpen, setIsViewerOpen] = useState(false);
 
   const isUploadVariant = type === CANVAS_NODE_TYPES.audioUpload;
+  const defaultSize = resolveUploadNodeSize(UPLOAD_AUDIO_ASPECT_RATIO);
+  const resolvedWidth = isUploadVariant ? width || defaultSize.width : AUDIO_NODE_WIDTH;
+  const resolvedHeight = isUploadVariant ? height || defaultSize.height : AUDIO_NODE_HEIGHT;
+  const waveformWidth = isUploadVariant ? resolvedWidth - 26 : AUDIO_WAVEFORM_WIDTH;
+  const waveformHeight = isUploadVariant ? Math.max(44, resolvedHeight - 54) : AUDIO_WAVEFORM_HEIGHT;
   const { isGenerating, progress, transitionDurationMs } = useGenerationProgressDisplay(id, data);
   const generationError = typeof data.generationError === 'string' ? data.generationError : null;
 
   const resolvedTitle = useMemo(() => {
     const nodeType = type as CanvasNodeType;
     const sourceFileName = typeof data.sourceFileName === 'string' ? data.sourceFileName.trim() : '';
-    if (isUploadVariant && sourceFileName && isNodeUsingDefaultDisplayName(nodeType, data)) {
+    if (isUploadVariant && useUploadFilenameAsNodeTitle && sourceFileName && isNodeUsingDefaultDisplayName(nodeType, data)) {
       return sourceFileName;
     }
     return resolveNodeDisplayName(nodeType, data);
-  }, [data, isUploadVariant, type]);
+  }, [data, isUploadVariant, type, useUploadFilenameAsNodeTitle]);
   const audioSource = useMemo(
     () => (data.audioUrl ? resolveImageDisplayUrl(data.audioUrl) : null),
     [data.audioUrl]
   );
   const { waveform, waveDuration } = useAudioWaveform(audioSource ?? '', undefined, {
-    width: AUDIO_WAVEFORM_WIDTH,
+    // 采样精度固定，拖动尺寸时只重排波形，避免重复读取/解码音频。
+    width: isUploadVariant ? defaultSize.width - 26 : AUDIO_WAVEFORM_WIDTH,
     compact: true,
     duration: data.durationSec ?? undefined,
   });
@@ -194,6 +204,7 @@ export const AudioNode = memo(({ id, data, selected, type }: AudioNodeProps) => 
 
   const handleDrop = useCallback(async (event: DragEvent<HTMLElement>) => {
     event.preventDefault();
+    event.stopPropagation();
     const file = event.dataTransfer.files?.[0];
     if (!file || resolveMediaFileKind(file) !== 'audio') {
       return;
@@ -233,7 +244,7 @@ export const AudioNode = memo(({ id, data, selected, type }: AudioNodeProps) => 
             ? NODE_SELECTED_BORDER_CLASS
             : NODE_IDLE_BORDER_CLASS}
       `}
-      style={{ width: AUDIO_NODE_WIDTH, height: AUDIO_NODE_HEIGHT }}
+      style={{ width: resolvedWidth, height: resolvedHeight }}
       onClick={handleNodeClick}
       onDoubleClick={(event) => {
         if (!data.audioUrl) {
@@ -259,13 +270,13 @@ export const AudioNode = memo(({ id, data, selected, type }: AudioNodeProps) => 
 
       <div className="relative flex h-full w-full overflow-hidden rounded-[var(--node-radius)] bg-bg-dark px-3 py-2">
         {generationError ? null : data.audioUrl ? (
-          <div className="flex min-w-0 flex-1 flex-col gap-1">
-            <div className="nodrag nowheel" style={{ height: AUDIO_WAVEFORM_HEIGHT }}>
+          <div className="flex min-w-0 flex-1 flex-col justify-between gap-1">
+            <div className="nodrag nowheel" style={{ height: waveformHeight }}>
               {waveform ? (
                 <Waveform
                   samples={waveform}
-                  width={AUDIO_WAVEFORM_WIDTH}
-                  height={AUDIO_WAVEFORM_HEIGHT}
+                  width={waveformWidth}
+                  height={waveformHeight}
                   progress={waveformProgress}
                   duration={effectiveDuration}
                   onSeekStart={seekToRatio}
@@ -383,6 +394,7 @@ export const AudioNode = memo(({ id, data, selected, type }: AudioNodeProps) => 
         className={`${NODE_PORT_NODE_CLASS} ${hasSourceConnections ? NODE_PORT_VISIBLE_CLASS : ''}`}
         style={{ background: getSocketColor('AUDIO'), right: 0, top: '50%', transform: 'translate(50%, -50%)' }}
       />
+      {isUploadVariant && <NodeResizeHandle minWidth={280} minHeight={120} />}
     </div>
   );
 });

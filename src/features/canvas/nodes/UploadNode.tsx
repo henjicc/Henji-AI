@@ -23,9 +23,9 @@ import {
   type UploadImageNodeData,
 } from '@/features/canvas/domain/canvasNodes';
 import {
-  resolveMinEdgeFittedSize,
   resolveResizeMinConstraintsByAspect,
 } from '@/features/canvas/application/imageNodeSizing';
+import { resolveUploadNodeSize } from '@/features/canvas/application/uploadNodeSizing';
 import { getMainPortConnectionFlags } from '@/features/canvas/domain/connectionIndex';
 import {
   isNodeUsingDefaultDisplayName,
@@ -93,10 +93,7 @@ export const UploadNode = memo(({ id, data, selected, width, height }: UploadNod
   } | null>(null);
   const [transientPreviewUrl, setTransientPreviewUrl] = useState<string | null>(null);
   const resolvedAspectRatio = data.aspectRatio || '1:1';
-  const compactSize = resolveMinEdgeFittedSize(resolvedAspectRatio, {
-    minWidth: EXPORT_RESULT_NODE_MIN_WIDTH,
-    minHeight: EXPORT_RESULT_NODE_MIN_HEIGHT,
-  });
+  const compactSize = resolveUploadNodeSize(resolvedAspectRatio);
   const resolvedWidth = resolveNodeDimension(width, compactSize.width);
   const resolvedHeight = resolveNodeDimension(height, compactSize.height);
   const resizeConstraints = resolveResizeMinConstraintsByAspect(resolvedAspectRatio, {
@@ -251,6 +248,7 @@ export const UploadNode = memo(({ id, data, selected, width, height }: UploadNod
   const handleDrop = useCallback(
     async (event: DragEvent<HTMLElement>) => {
       event.preventDefault();
+      event.stopPropagation();
       const file = event.dataTransfer.files?.[0];
       if (!file || resolveMediaFileKind(file) !== 'image') {
         return;
@@ -340,6 +338,8 @@ export const UploadNode = memo(({ id, data, selected, width, height }: UploadNod
       `}
       style={{ width: resolvedWidth, height: resolvedHeight }}
       onClick={handleNodeClick}
+      onDrop={handleDrop}
+      onDragOver={(event) => { event.preventDefault(); event.stopPropagation(); }}
     >
       <NodeHeader
         className={NODE_HEADER_FLOATING_POSITION_CLASS}
@@ -364,8 +364,6 @@ export const UploadNode = memo(({ id, data, selected, width, height }: UploadNod
       ) : (
         <label
           className="block h-full w-full overflow-hidden rounded-[var(--node-radius)] bg-bg-dark"
-          onDrop={handleDrop}
-          onDragOver={(event) => event.preventDefault()}
         >
           <div className="flex h-full w-full cursor-pointer flex-col items-center justify-center gap-2 text-text-muted/85">
             <ImageUploadIcon className="h-7 w-7 opacity-60" />

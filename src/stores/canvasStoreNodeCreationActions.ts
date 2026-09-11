@@ -297,15 +297,6 @@ export function createCanvasNodeCreationActions(
       previewImageUrl: previewImageUrl ?? null,
       aspectRatio: resolvedAspectRatio,
     });
-    const derivedSize = resolveGeneratedImageNodeDimensions(resolvedAspectRatio);
-    node.width = derivedSize.width;
-    node.height = derivedSize.height;
-    node.style = {
-      ...(node.style ?? {}),
-      width: derivedSize.width,
-      height: derivedSize.height,
-    };
-
     set({
       nodes: [...state.nodes, node],
       selectedNodeId: node.id,

@@ -16,10 +16,10 @@ import {
 import { getCanvasNodeDefinition } from '@/features/canvas/domain/nodeRegistry';
 import {
   ensureAtLeastOneMinEdge,
-  resolveAdaptiveAutoFitSize,
   resolveMinEdgeFittedSize,
   resolveSizeInsideTargetBox,
 } from '@/features/canvas/application/imageNodeSizing';
+import { isUploadNodeType, resolveUploadNodeSize } from '@/features/canvas/application/uploadNodeSizing';
 import { getNodeIndexById } from '@/features/canvas/domain/connectionIndex';
 import { CANVAS_BG_HEX, CANVAS_TEXT_HEX } from '@/core/theme/colorTokens';
 import type {
@@ -92,6 +92,7 @@ export function isMediaAutoResizableType(type: CanvasNodeType): boolean {
 
 export function isManualSizeTrackingNodeType(type: CanvasNodeType): boolean {
   return isMediaAutoResizableType(type)
+    || isUploadNodeType(type)
     || getCanvasNodeDefinition(type)?.executionKind === 'standard-generation';
 }
 
@@ -186,8 +187,8 @@ export function resolveDerivedAspectRatio(
 /**
  * node 为补丁应用前的原始节点，mergedData 为已合并的新数据。
  * 上传类节点（图片/视频）每次内容变化都会重新计算尺寸：
- * - 首次上传内容为空 -> 参考尺寸退化为最小尺寸，结果即为最小可拖拽尺寸
- * - 重新上传已有内容 -> 参考尺寸取节点当前尺寸，按新比例自适应贴合，不低于最小可拖拽尺寸
+ * - 首次上传使用统一展示面积，与直接创建带媒体的节点一致
+ * - 替换素材保留当前展示面积，避免横竖切换时反复向内收缩
  * 其余类型（AI 编辑结果、导出结果）维持原有“手动调整后锁定”行为。
  */
 export function maybeApplyMediaAutoResize(
@@ -245,11 +246,14 @@ export function maybeApplyMediaAutoResize(
   if (isAdaptiveUploadType) {
     const previousContentUrl = previousData.imageUrl ?? previousData.videoUrl;
     const hadExistingContent = typeof previousContentUrl === 'string' && previousContentUrl.trim().length > 0;
-    const baseConstraints = { minWidth: EXPORT_RESULT_NODE_MIN_WIDTH, minHeight: EXPORT_RESULT_NODE_MIN_HEIGHT };
-    const referenceSize = hadExistingContent
-      ? getNodeSize(node)
-      : { width: baseConstraints.minWidth, height: baseConstraints.minHeight };
-    nextSize = resolveAdaptiveAutoFitSize(nextAspectRatio, referenceSize, baseConstraints);
+    // 显式尺寸优先于尚未刷新的 DOM 测量，连续比例探测/落盘补丁不能取回旧盒子。
+    const referenceSize = hadExistingContent || nextData.isSizeManuallyAdjusted
+      ? { width: node.width ?? getNodeSize(node).width, height: node.height ?? getNodeSize(node).height }
+      : undefined;
+    if (referenceSize && previousData.aspectRatio === nextAspectRatio) {
+      return { ...node, data: mergedData };
+    }
+    nextSize = resolveUploadNodeSize(nextAspectRatio, referenceSize);
   } else {
     nextSize = node.type === CANVAS_NODE_TYPES.exportImage || node.type === CANVAS_NODE_TYPES.exportVideo
       ? resolveAutoImageNodeDimensions(nextAspectRatio, {

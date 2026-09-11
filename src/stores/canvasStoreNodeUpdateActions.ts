@@ -11,6 +11,7 @@ import {
 } from '@/features/canvas/domain/canvasNodes';
 import { findStaleParamEdgeIds } from '@/features/canvas/application/graphValueResolver';
 import { nodeCatalog } from '@/features/canvas/application/nodeCatalog';
+import { resolveUploadNodeDefaultSize } from '@/features/canvas/application/uploadNodeSizing';
 import { DEFAULT_NODE_DISPLAY_NAME } from '@/features/canvas/domain/nodeDisplay';
 import { reconcileAssetGroupGraph } from '@/features/canvas/application/assetGroupGraph';
 import { applyRelightModeLayout } from '@/features/canvas/domain/relightNodeLayout';
@@ -136,15 +137,16 @@ export function createCanvasNodeUpdateActions(
       const nextStyle = { ...(currentNode.style ?? {}) };
       delete nextStyle.width;
       delete nextStyle.height;
+      const size = resolveUploadNodeDefaultSize(resolution.type, nextData);
 
       const nextNode: CanvasNode = {
         ...currentNode,
         type: resolution.type,
         data: nextData,
         measured: undefined,
-        width: undefined,
-        height: undefined,
-        style: nextStyle,
+        width: size?.width,
+        height: size?.height,
+        style: { ...nextStyle, ...size },
       };
       const nextNodes = [...state.nodes];
       nextNodes[targetIndex] = nextNode;

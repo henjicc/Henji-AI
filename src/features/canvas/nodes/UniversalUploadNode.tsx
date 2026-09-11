@@ -18,7 +18,14 @@ import { canvasEventBus } from '@/features/canvas/application/canvasServices'
 import {
   CANVAS_NODE_TYPES,
   type UniversalUploadNodeData,
+  type UploadImageNodeData,
+  type VideoMediaNodeData,
+  type AudioMediaNodeData,
 } from '@/features/canvas/domain/canvasNodes'
+import { resolveUploadNodeSize } from '@/features/canvas/application/uploadNodeSizing'
+import { UploadNode } from './UploadNode'
+import { VideoNode } from './VideoNode'
+import { AudioNode } from './AudioNode'
 import { resolveNodeDisplayName } from '@/features/canvas/domain/nodeDisplay'
 import { getSocketColor, type RowMediaKind } from '@/features/canvas/domain/socketTypes'
 import { NodeHeader, NODE_HEADER_FLOATING_POSITION_CLASS } from '@/features/canvas/ui/NodeHeader'
@@ -52,7 +59,7 @@ type UniversalUploadNodeProps = NodeProps & {
   selected?: boolean
 }
 
-export const UniversalUploadNode = memo(({ id, data, selected }: UniversalUploadNodeProps) => {
+const EmptyUploadNode = memo(({ id, data, selected, width, height }: UniversalUploadNodeProps) => {
   const { t } = useTranslation()
   const inputRef = useRef<HTMLInputElement>(null)
   const [isImporting, setIsImporting] = useState(false)
@@ -65,6 +72,7 @@ export const UniversalUploadNode = memo(({ id, data, selected }: UniversalUpload
   const lockedKind = data.lockedMediaKind ?? null
   const BodyIcon = lockedKind ? MEDIA_UPLOAD_ICON[lockedKind] : UniversalUploadIcon
   const accept = lockedKind ? `${lockedKind}/*` : 'image/*,video/*,audio/*'
+  const defaultSize = resolveUploadNodeSize('1:1')
 
   const processFile = useCallback(async (file: File) => {
     const validation = validateCanvasMediaFile(file, lockedKind)
@@ -127,9 +135,10 @@ export const UniversalUploadNode = memo(({ id, data, selected }: UniversalUpload
 
   return (
     <div
-      className={`group relative aspect-square w-[240px] overflow-visible rounded-[var(--node-radius)] border bg-surface-dark/85 transition-colors duration-150 ${
+      className={`group relative overflow-visible rounded-[var(--node-radius)] border bg-surface-dark/85 transition-colors duration-150 ${
         selected ? NODE_SELECTED_BORDER_CLASS : NODE_IDLE_BORDER_CLASS
       }`}
+      style={{ width: width || defaultSize.width, height: height || defaultSize.height }}
       onClick={() => {
         setSelectedNode(id)
         if (!isImporting) {
@@ -192,4 +201,19 @@ export const UniversalUploadNode = memo(({ id, data, selected }: UniversalUpload
   )
 })
 
+EmptyUploadNode.displayName = 'EmptyUploadNode'
+
+/** 统一上传节点入口；沿用媒体类型标识以兼容已有工程、连线和媒体工具。 */
+export const UniversalUploadNode = memo((props: NodeProps) => {
+  switch (props.type) {
+    case CANVAS_NODE_TYPES.upload:
+      return <UploadNode {...props} data={props.data as UploadImageNodeData} />
+    case CANVAS_NODE_TYPES.videoUpload:
+      return <VideoNode {...props} data={props.data as VideoMediaNodeData} />
+    case CANVAS_NODE_TYPES.audioUpload:
+      return <AudioNode {...props} data={props.data as AudioMediaNodeData} />
+    default:
+      return <EmptyUploadNode {...props} data={props.data as UniversalUploadNodeData} />
+  }
+})
 UniversalUploadNode.displayName = 'UniversalUploadNode'
