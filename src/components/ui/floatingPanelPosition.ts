@@ -24,6 +24,8 @@ interface ResolveFloatingPanelPositionOptions {
 export interface FloatingPanelPosition {
   placement: FloatingPanelPlacement
   top: number
+  /** 向上展开时用底边锚定，内容高度变化不能改变与触发器的间距。 */
+  bottom?: number
   left: number
   width: number
   maxHeight: number
@@ -74,5 +76,6 @@ export function resolveFloatingPanelPosition({
     ? Math.max(viewportTop, anchor.top - gap - visibleHeight)
     : anchor.bottom + gap
 
-  return { placement, top, left, width, maxHeight }
+  const bottom = placement === 'above' ? viewportHeight - anchor.top + gap : undefined
+  return { placement, top, bottom, left, width, maxHeight }
 }

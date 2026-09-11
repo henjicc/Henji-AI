@@ -285,7 +285,8 @@ export default function PanelTrigger(props: PanelTriggerProps): React.ReactEleme
           className={`${UI_TRIGGER_PANEL_CLASS} ${panelClassName || ''} flex flex-col ${closing ? 'animate-scale-out' : 'animate-scale-in'}`}
           style={{
             position: 'fixed',
-            top: pos.top,
+            top: pos.placement === 'above' ? undefined : pos.top,
+            bottom: pos.bottom,
             left: pos.left,
             width: pos.width,
             maxHeight: pos.maxHeight,

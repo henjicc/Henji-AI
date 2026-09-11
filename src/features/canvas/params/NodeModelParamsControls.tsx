@@ -405,7 +405,8 @@ export const NodeModelParamsControls = memo(({
           }`}
           style={modelPanelPosition ? {
             left: modelPanelPosition.left,
-            top: modelPanelPosition.top,
+            top: modelPanelPosition.placement === 'above' ? undefined : modelPanelPosition.top,
+            bottom: modelPanelPosition.bottom,
             width: modelPanelPosition.width,
             // 首帧先按自然高度测量，再应用视口约束；否则靠近顶部时会把受限高度
             // 当成自然高度，面板无法可靠切换到下方。
@@ -448,7 +449,8 @@ export const NodeModelParamsControls = memo(({
           }`}
           style={paramsPanelPosition ? {
             left: paramsPanelPosition.left,
-            top: paramsPanelPosition.top,
+            top: paramsPanelPosition.placement === 'above' ? undefined : paramsPanelPosition.top,
+            bottom: paramsPanelPosition.bottom,
             width: paramsPanelPosition.width,
             maxHeight: paramsPanelPosition.maxHeight,
             overflowY: 'auto',

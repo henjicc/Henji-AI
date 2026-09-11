@@ -1,5 +1,5 @@
 import { useCallback, useRef, type MouseEvent as ReactMouseEvent } from 'react'
-import type { Connection, NodeChange } from '@xyflow/react'
+import type { Connection, NodeChange, NodePositionChange } from '@xyflow/react'
 import { useCanvasStore } from '@/stores/canvasStore'
 import { useProjectStore } from '@/stores/projectStore'
 import {
@@ -21,6 +21,10 @@ import {
 import { reconcileAssetGroupGraph } from '@/features/canvas/application/assetGroupGraph'
 import { resetDuplicatedCanvasExecutionData } from '@/features/canvas/application/canvasDuplicationExecutionState'
 import { commitCanvasNodeDuplication } from '@/features/canvas/application/canvasMutationService'
+import { reportCanvasOperationFailure } from '@/features/canvas/application/canvasOperationFeedback'
+import { createLogger } from '@/core/logging'
+
+const logger = createLogger('features.canvas.duplication')
 
 interface UseCanvasDuplicationParams {
   nodes: CanvasNode[]
@@ -48,7 +52,10 @@ export function useCanvasDuplication(params: UseCanvasDuplicationParams) {
   const pasteIterationRef = useRef(0)
   const altDragCopyRef = useRef<{
     sourceNodeIds: string[]
-    startPositions: Map<string, { x: number; y: number }>
+    idMap: Map<string, string> | null
+    positions: Map<string, NodePositionChange>
+    stopped: boolean
+    settled: boolean
   } | null>(null)
 
   const duplicateNodes = useCallback(
@@ -123,14 +130,19 @@ export function useCanvasDuplication(params: UseCanvasDuplicationParams) {
           projectId,
           sourceNodeId: sourceNode.id,
           data: { ...(data as DynamicValueMap) },
-          createNode: (forkedData) => addNode(
+          createNode: (forkedData) => {
+            if (useProjectStore.getState().currentProjectId !== projectId) {
+              throw new Error('画布项目已切换，已取消节点复制')
+            }
+            return addNode(
             sourceNode.type as CanvasNodeType,
             {
               x: sourceNode.position.x + chosenOffset.x + offsetStep * 8,
               y: sourceNode.position.y + chosenOffset.y + offsetStep * 6,
             },
             forkedData,
-          ),
+            )
+          },
         })
         idMap.set(sourceNode.id, nextNodeId)
         sizeMap.set(nextNodeId, getNodeSize(sourceNode))
@@ -242,80 +254,105 @@ export function useCanvasDuplication(params: UseCanvasDuplicationParams) {
         altDragCopyRef.current = null
         return
       }
-      const startPositions = new Map<string, { x: number; y: number }>()
+      const positions = new Map<string, NodePositionChange>()
       for (const sourceNodeId of sourceNodeIds) {
         const sourceNode = nodes.find((item) => item.id === sourceNodeId)
         if (!sourceNode) continue
-        startPositions.set(sourceNodeId, {
-          x: sourceNode.position.x,
-          y: sourceNode.position.y,
+        positions.set(sourceNodeId, {
+          id: sourceNodeId,
+          type: 'position',
+          position: { ...sourceNode.position },
+          dragging: true,
         })
       }
-      if (startPositions.size === 0) {
+      if (positions.size === 0) {
         altDragCopyRef.current = null
         return
       }
 
-      altDragCopyRef.current = {
+      const session = {
         sourceNodeIds,
-        startPositions,
+        positions,
+        idMap: null as Map<string, string> | null,
+        stopped: false,
+        settled: false,
       }
+      altDragCopyRef.current = session
+      logger.info('开始拖拽复制节点', { event: 'canvas.node.alt_duplicate.start', context: { sourceNodeIds } })
+      // ReactFlow 持有原节点的拖动会话；在 onNodesChange 中转发给副本，
+      // 原节点与其外部连线始终留在原位。文档异步 fork 期间只缓存最新位移。
+      void duplicateNodes(sourceNodeIds, {
+        explicitOffset: { x: 0, y: 0 },
+        disableOffsetIteration: true,
+        suppressSelect: true,
+        suppressPersist: true,
+      }).then((result) => {
+        if (!result) return
+        session.idMap = result.idMap
+        const changes: NodeChange<CanvasNode>[] = []
+        for (const [sourceId, change] of session.positions) {
+          const copiedId = result.idMap.get(sourceId)
+          if (copiedId) changes.push({ ...change, id: copiedId, dragging: !session.stopped })
+        }
+        if (altDragCopyRef.current === session) {
+          const copiedIds = new Set(sourceNodeIds.map((id) => result.idMap.get(id)))
+          for (const current of useCanvasStore.getState().nodes) {
+            if (current.selected || copiedIds.has(current.id)) {
+              changes.push({ id: current.id, type: 'select', selected: copiedIds.has(current.id) })
+            }
+          }
+        }
+        if (changes.length) applyNodesChange(changes)
+        if (session.stopped) scheduleCanvasPersist(0)
+        logger.info('拖拽副本已创建', { event: 'canvas.node.alt_duplicate.completed', context: { sourceNodeIds } })
+      }).catch((error: unknown) => {
+        logger.error('拖拽复制节点失败', error, { event: 'canvas.node.alt_duplicate.failed' })
+        reportCanvasOperationFailure(error)
+      }).finally(() => {
+        session.settled = true
+        if (session.stopped && altDragCopyRef.current === session) altDragCopyRef.current = null
+      })
     },
-    [nodes, selectedNodeIds]
+    [applyNodesChange, duplicateNodes, nodes, scheduleCanvasPersist, selectedNodeIds]
   )
 
-  const handleNodeDrag = useCallback(
-    (_event: ReactMouseEvent, _node: CanvasNode) => {
-      // 异步 fork 在拖拽释放后提交；拖动阶段保留 ReactFlow 的原节点预览。
+  const routeDuplicationChanges = useCallback(
+    (changes: NodeChange<CanvasNode>[]): NodeChange<CanvasNode>[] => {
+      const session = altDragCopyRef.current
+      if (!session) return changes
+      return changes.flatMap((change): NodeChange<CanvasNode>[] => {
+        if (change.type !== 'position' || !session.positions.has(change.id)) return [change]
+        session.positions.set(change.id, { ...session.positions.get(change.id), ...change })
+        const copiedId = session.idMap?.get(change.id)
+        return copiedId ? [{ ...change, id: copiedId }] : []
+      })
     },
     []
   )
 
   const handleNodeDragStop = useCallback(
-    (_event: ReactMouseEvent, node: CanvasNode) => {
-      const altCopyState = altDragCopyRef.current
-      if (!altCopyState) return
-      altDragCopyRef.current = null
-
-      const startPosition = altCopyState.startPositions.get(node.id)
-      if (!startPosition) return
-
-      const offset = {
-        x: node.position.x - startPosition.x,
-        y: node.position.y - startPosition.y,
+    (_event: ReactMouseEvent, _node: CanvasNode): boolean => {
+      const session = altDragCopyRef.current
+      if (!session) return false
+      session.stopped = true
+      if (session.settled) {
+        const copiedIds = new Set(session.idMap?.values())
+        const finalChanges: NodeChange<CanvasNode>[] = useCanvasStore.getState().nodes
+          .filter((node) => copiedIds.has(node.id) && node.dragging)
+          .map((node) => ({ id: node.id, type: 'position', position: node.position, dragging: false }))
+        if (finalChanges.length) applyNodesChange(finalChanges)
+        altDragCopyRef.current = null
+        scheduleCanvasPersist(0)
       }
-
-      const restoreSourceChanges = altCopyState.sourceNodeIds
-        .map((sourceId) => {
-          const sourceStart = altCopyState.startPositions.get(sourceId)
-          if (!sourceStart) return null
-          return {
-            id: sourceId,
-            type: 'position' as const,
-            position: sourceStart,
-            dragging: false,
-          }
-        })
-        .filter((change): change is {
-          id: string
-          type: 'position'
-          position: { x: number; y: number }
-          dragging: false
-        } => Boolean(change))
-
-      if (restoreSourceChanges.length > 0) applyNodesChange(restoreSourceChanges)
-      void duplicateNodes(altCopyState.sourceNodeIds, {
-        explicitOffset: offset,
-        disableOffsetIteration: true,
-      })
+      return true
     },
-    [applyNodesChange, duplicateNodes]
+    [applyNodesChange, scheduleCanvasPersist]
   )
 
   return {
     duplicateNodes,
     handleNodeDragStart,
-    handleNodeDrag,
+    routeDuplicationChanges,
     handleNodeDragStop
   }
 }

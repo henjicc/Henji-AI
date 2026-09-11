@@ -11,7 +11,7 @@ interface UseCanvasAssetGroupsInput {
   edges: CanvasEdge[];
   selectedNodeId: string | null;
   selectedNodeIds: string[];
-  onNodeDragStop: (event: ReactMouseEvent, node: CanvasNode) => void;
+  onNodeDragStop: (event: ReactMouseEvent, node: CanvasNode) => boolean;
   addToAssetGroup: (groupId: string, memberIds: string[]) => void;
 }
 
@@ -43,7 +43,7 @@ export function useCanvasAssetGroups(input: UseCanvasAssetGroupsInput) {
   }, [activeGroupId, nodes, selectedNodeId]);
 
   const handleDragStop = useCallback((event: ReactMouseEvent, node: CanvasNode) => {
-    onNodeDragStop(event, node);
+    if (onNodeDragStop(event, node)) return;
     if (event.altKey || isAssetGroupNode(node) || !resolveAssetGroupMemberKind(node)) return;
     const draggedElement = wrapperRef.current?.querySelector<HTMLElement>(`.react-flow__node[data-id="${node.id}"]`);
     const rect = draggedElement?.getBoundingClientRect();

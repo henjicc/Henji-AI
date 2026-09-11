@@ -64,7 +64,7 @@ export function NodeDownloadMenu({
       variant="glass"
       className={`fixed z-dropdown ui-scrollbar overflow-y-auto overscroll-contain p-2 transition-opacity duration-150 ${isVisible ? 'opacity-100' : 'opacity-0'}`}
       data-node-download-menu
-      style={{ left: position?.left, top: position?.top, width: position?.width ?? 280, maxHeight: position?.maxHeight, visibility: position ? 'visible' : 'hidden' }}
+      style={{ left: position?.left, top: position?.placement === 'above' ? undefined : position?.top, bottom: position?.bottom, width: position?.width ?? 280, maxHeight: position?.maxHeight, visibility: position ? 'visible' : 'hidden' }}
     >
       <UiOptionButton
         type="button"

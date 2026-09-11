@@ -171,51 +171,6 @@ export function Canvas() {
   }), [reactFlowInstance, setSelectedNode]);
 
 
-  const handleNodesChange = useCallback(
-    (changes: NodeChange<CanvasNode>[]) => {
-      applyNodesChange(changes);
-
-      const hasDragMove = changes.some(
-        (change) =>
-          change.type === 'position' &&
-          'dragging' in change &&
-          Boolean(change.dragging)
-      );
-      const hasDragEnd = changes.some(
-        (change) =>
-          change.type === 'position' &&
-          'dragging' in change &&
-          change.dragging === false
-      );
-      const hasResizeMove = changes.some(
-        (change) =>
-          change.type === 'dimensions' &&
-          'resizing' in change &&
-          Boolean(change.resizing)
-      );
-      const hasResizeEnd = changes.some(
-        (change) =>
-          change.type === 'dimensions' &&
-          'resizing' in change &&
-          change.resizing === false
-      );
-      const hasInteractionMove = hasDragMove || hasResizeMove;
-      const hasInteractionEnd = hasDragEnd || hasResizeEnd;
-
-      if (hasInteractionMove) {
-        return;
-      }
-
-      if (hasInteractionEnd) {
-        scheduleCanvasPersist(0);
-        return;
-      }
-
-      scheduleCanvasPersist();
-    },
-    [applyNodesChange, scheduleCanvasPersist]
-  );
-
   const handleEdgesChange = useCallback(
     (changes: EdgeChange<CanvasEdge>[]) => {
       applyEdgesChange(changes);
@@ -319,7 +274,7 @@ export function Canvas() {
     return { nodeId: null, kinds: [] as Array<'image' | 'video' | 'audio'> };
   }, [nodes, selectedNodeIds]);
 
-  const { duplicateNodes, handleNodeDragStart, handleNodeDrag, handleNodeDragStop } = useCanvasDuplication({
+  const { duplicateNodes, handleNodeDragStart, routeDuplicationChanges, handleNodeDragStop } = useCanvasDuplication({
     nodes,
     edges,
     selectedNodeIds,
@@ -329,6 +284,53 @@ export function Canvas() {
     setSelectedNode,
     scheduleCanvasPersist,
   });
+
+  const handleNodesChange = useCallback(
+    (changes: NodeChange<CanvasNode>[]) => {
+      changes = routeDuplicationChanges(changes);
+      if (changes.length === 0) return;
+      applyNodesChange(changes);
+
+      const hasDragMove = changes.some(
+        (change) =>
+          change.type === 'position' &&
+          'dragging' in change &&
+          Boolean(change.dragging)
+      );
+      const hasDragEnd = changes.some(
+        (change) =>
+          change.type === 'position' &&
+          'dragging' in change &&
+          change.dragging === false
+      );
+      const hasResizeMove = changes.some(
+        (change) =>
+          change.type === 'dimensions' &&
+          'resizing' in change &&
+          Boolean(change.resizing)
+      );
+      const hasResizeEnd = changes.some(
+        (change) =>
+          change.type === 'dimensions' &&
+          'resizing' in change &&
+          change.resizing === false
+      );
+      const hasInteractionMove = hasDragMove || hasResizeMove;
+      const hasInteractionEnd = hasDragEnd || hasResizeEnd;
+
+      if (hasInteractionMove) {
+        return;
+      }
+
+      if (hasInteractionEnd) {
+        scheduleCanvasPersist(0);
+        return;
+      }
+
+      scheduleCanvasPersist();
+    },
+    [applyNodesChange, routeDuplicationChanges, scheduleCanvasPersist]
+  );
 
   const {
     activeGroupId,
@@ -429,8 +431,13 @@ export function Canvas() {
         onConnectStart={handleConnectStart}
         onConnectEnd={handleConnectEnd}
         onNodeDragStart={handleNodeDragStart}
-        onNodeDrag={handleNodeDrag}
         onNodeDragStop={handleCanvasNodeDragStop}
+        onSelectionDragStart={(event, draggedNodes) => {
+          if (draggedNodes[0]) handleNodeDragStart(event, draggedNodes[0]);
+        }}
+        onSelectionDragStop={(event, draggedNodes) => {
+          if (draggedNodes[0]) handleCanvasNodeDragStop(event, draggedNodes[0]);
+        }}
         onPaneClick={(event) => {
           closeAssetGroup();
           handlePaneClick(event);

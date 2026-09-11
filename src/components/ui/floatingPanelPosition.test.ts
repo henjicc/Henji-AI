@@ -45,6 +45,17 @@ describe('resolveFloatingPanelPosition', () => {
     expect(position.left).toBe(12)
     expect(position.width).toBe(320)
   })
+
+  it('向上展开的底边不依赖历史高度或筛选后的内容高度', () => {
+    const options = { ...baseOptions, anchor: { ...baseOptions.anchor, top: 700, bottom: 740 } }
+    for (const panelHeight of [900, 500, 120]) {
+      const position = resolveFloatingPanelPosition({ ...options, panelHeight })
+      expect(position.placement).toBe('above')
+      expect(position.bottom).toBe(108)
+      expect(options.viewportHeight - position.bottom! + options.gap).toBe(options.anchor.top)
+    }
+    expect(resolveFloatingPanelPosition(baseOptions).bottom).toBeUndefined()
+  })
 })
 
 it('画布内菜单避开侧栏并按宿主范围限制宽高', () => {
