@@ -3,6 +3,7 @@ import { compressVideoToFit, trimVideoSource } from '@/commands/video'
 import { createLogger } from '@/core/logging'
 import type { ModelDefinition } from '@/core/types'
 import { resolveInputLimits } from '@/core/inputs/inputLimits'
+import { LinkageEngine } from '@/core/linkage/LinkageEngine'
 import {
   findSquareAspectValue,
   getAspectChoiceParams,
@@ -198,13 +199,24 @@ export interface SmartAspectNormalizationResult {
   }
 }
 
+function getAvailableAspectParams(model: ModelDefinition, params: DynamicValueMap) {
+  const engine = new LinkageEngine(model.linkages ?? [])
+  return getAspectChoiceParams(model.params).map(param => {
+    const definition = model.params.find(candidate => candidate.id === param.id)
+    if (definition?.type !== 'dropdown' && definition?.type !== 'radio') return param
+    const allowed = engine.getFilteredOptions(param.id, params, model.params)
+    return { ...param, options: param.options.filter(option => allowed.some(candidate => candidate.value === option.value)) }
+  })
+}
+
 function resolveChoiceSmartAspectValues(
   model: ModelDefinition,
   params: DynamicValueMap,
   hasReferenceImage: boolean,
   targetRatio: number,
 ): SmartAspectResolutionReport {
-  const aspectParams = getAspectChoiceParams(model.params)
+  // 提交时和菜单使用同一份联动约束，避免智能匹配重新选中已隐藏的比例。
+  const aspectParams = getAvailableAspectParams(model, params)
   const adjustments: SmartAspectAdjustment[] = []
   const unresolvedParamIds: string[] = []
   let totalSmartParams = 0
@@ -298,7 +310,7 @@ export async function normalizeSmartAspectParams(
       if (!firstImageSource || !info || !hasReferenceImage) {
         throw new Error('无法读取输入图片尺寸，请重新选择图片后重试，避免按错误比例生成。')
       }
-      const param = getAspectChoiceParams(model.params)
+      const param = getAvailableAspectParams(model, nextParams)
         .find((choice) => choice.id === model.sourceImageFraming?.aspectParamId)
       const matched = param ? resolveLeastCropAspectValue(param, targetRatio) : null
       if (!param || typeof matched !== 'string' || !/^\d+:\d+$/.test(matched)) {

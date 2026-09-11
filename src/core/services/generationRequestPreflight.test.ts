@@ -2,6 +2,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { cropImageSource, readImageInfo } from '@/commands/image'
 import { getFalImageUtilityExecutionModel } from '@/core/modelCatalog/falUtilityExecutionModels'
 import { normalizeSmartAspectParams } from './generationRequestPreflight'
+import { catalog } from '@henjicc/ai-sdk'
+import { composeModelDefinition } from '@/core/composeModelDefinition'
+import { gptImage25Presentation } from '@/models/presentation/gpt-image-2.5'
 
 vi.mock('@/commands/image', () => ({ readImageInfo: vi.fn(), cropImageSource: vi.fn() }))
 
@@ -18,6 +21,34 @@ beforeEach(() => {
   vi.resetAllMocks()
   vi.mocked(readImageInfo).mockResolvedValue(imageInfo(853, 1280))
   vi.mocked(cropImageSource).mockResolvedValue(cropped)
+})
+
+describe('智能比例遵守当前分辨率与渠道约束', () => {
+  it.each(['flare', 'sunburst'].flatMap(variant => ['1K', '2K', '4K'].map(resolution => [variant, resolution])))('KIE %s %s 按当前合法比例匹配参考图', async (variant, resolution) => {
+    const id = 'kie-gpt-image-2.5'
+    const runtime = catalog.find(entry => entry.meta.id === id)!
+    const definition = composeModelDefinition(runtime, gptImage25Presentation[id])
+    vi.mocked(readImageInfo).mockResolvedValue(imageInfo(1600, 1000))
+    const result = await normalizeSmartAspectParams(definition, {
+      prompt: 'fixture', images: [source], gpt25Variant: variant,
+      gpt25Resolution: resolution, gpt25AspectRatio: 'smart',
+    })
+    const ratio = resolution === '1K' ? '27:16' : '3:2'
+    expect(result.params.gpt25AspectRatio).toBe(ratio)
+    expect(await runtime.request!.builder!(result.params)).toMatchObject({ input: { aspect_ratio: ratio, resolution } })
+    expect(cropImageSource).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    ['apimart-gpt-image-2.5', { gpt25Channel: 'ext' }, 3, '21:9'],
+    ['grsai-gpt-image-2.5', { gpt25Variant: 'sunburst', gpt25Resolution: '2K' }, 1 / 3, '9:21'],
+  ] as const)('%s 同样排除渠道或分辨率禁用的比例', async (id, changes, ratio, expected) => {
+    const runtime = catalog.find(entry => entry.meta.id === id)!
+    const definition = composeModelDefinition(runtime, gptImage25Presentation[id])
+    vi.mocked(readImageInfo).mockResolvedValue(imageInfo(ratio * 1200, 1200))
+    const result = await normalizeSmartAspectParams(definition, { images: [source], gpt25AspectRatio: 'smart', ...changes })
+    expect(result.params.gpt25AspectRatio).toBe(expected)
+  })
 })
 
 describe('单图处理按源图匹配画幅', () => {
