@@ -5,19 +5,19 @@
 
 最后核对日期：2026-09-11
 
-当前 SDK 版本：`0.3.0`（已发布到公共 npm）
+当前 SDK 版本：`0.4.0`（已发布到公共 npm）
 
-待发布 `0.4.0`：新增硅基流动聊天预设与分类模型发现，提交 `a678dab6` 已推送，必需 CI `34565921443` 全部通过。SDK 861 项测试、宿主配置 15 项测试、类型构建、49 个公开入口及受限宿主候选包回装通过；未执行真实付费推理。移除服务端分类参数的断牙验证使 4 项测试失败，恢复后全量通过。
+`0.4.0`：新增硅基流动聊天预设与分类模型发现，提交 `a678dab6` 已推送，必需 CI `34565921443` 全部通过。SDK 861 项测试、宿主配置 15 项测试、类型构建、49 个公开入口及受限宿主候选包回装通过；未执行真实付费推理。移除服务端分类参数的断牙验证使 4 项测试失败，恢复后全量通过。
 
-候选包 shasum 为 `29a267d8a9f8375ac08b5af94569939473ab6a17`，已提交 npm 官方 staged publish（`e64ef7e4-a2d2-4858-a6ac-bb05c7243e82`），等待账号网页二次验证，尚未宣布公开可安装。仓内 workspace 与三个示例 manifest 已锁定 `0.4.0`；现有外部消费者未新增硅基流动聊天使用，暂不升级。正式发布后还需核对候选包一致性并完成匿名回装。
+账号网页二次验证已完成，正式包与候选包校验值一致。已在仓外隔离 npm 配置并移除令牌环境变量，从公共 npm 匿名安装精确版本：Node ESM、严格 TypeScript、Vite 49 个入口及无 TextEncoder/TextDecoder 的受限宿主验证通过，包含硅基流动动态模型发现。仓内 workspace 与三个示例 manifest 已锁定 `0.4.0`；现有外部消费者未新增硅基流动聊天使用，暂不升级。
 
-- tarball：`https://registry.npmjs.org/@henjicc/ai-sdk/-/ai-sdk-0.3.0.tgz`
-- shasum：`ca5b7f0fd42f2e61b2332ae1b60bcfd445b5c28f`
-- integrity：`sha512-xcSFIYJucpNH6JBgVnXvHPnj+SCjPtmq7e2yD77+DniaH16K9disqF0NaUTvj5BmenGqtcmxYRx4aN5NdY4Yng==`
+- tarball：`https://registry.npmjs.org/@henjicc/ai-sdk/-/ai-sdk-0.4.0.tgz`
+- shasum：`29a267d8a9f8375ac08b5af94569939473ab6a17`
+- integrity：`sha512-4D2gHakuo7Fhhh3a987qrObqJd78k8mIhXPL9dgE3A5uywBi4ebHj7U4XVLUcbjv/HO34wH/+8kFlE5JMOGD0g==`
 
 `0.3.0` 已发布：新增四家 GPT Image 2.5 pack、五家文本 embedding / 四家 rerank，DeepSeek 官方默认模型更新为 `deepseek-flash`。发布提交 `a2dc5bc4` 的必需 CI 门禁全部通过（运行 `34532267703`），SDK 全量 839 项测试和候选包回装通过。正式包已在隔离 npm 配置、无用户令牌的仓外环境从公共 npm 安装，标准 Vite 48 个入口与受限宿主验证通过；正式包校验值与候选包一致。未运行真实付费模型请求。
 
-Henji-AI workspace 与三个仓内示例 manifest 均锁定 `0.3.0`；下表原有示例运行记录仅代表 `0.2.8` 历史证据，本次未完成三个示例的独立全套回装复验。`say-it` 已在 `D:/VibeCode/说吧` 定位，仍锁定公共 npm `0.2.8`，实际按需使用 ASR、translation 与 LLM modules，未使用本次新增检索能力或 DeepSeek 官方预设，无需机械升级；未运行其真实宿主验收。`henji-ai-ps` 的下表路径为另一台开发机记录，本机未定位该路径，不声称本次完成外部升级。
+Henji-AI workspace 与三个仓内示例 manifest 均锁定 `0.4.0`；下表原有示例运行记录仅代表 `0.2.8` 历史证据，本次未完成三个示例的独立全套回装复验。`say-it` 已在 `D:/VibeCode/说吧` 定位，仍锁定公共 npm `0.2.8`，实际按需使用 ASR、translation 与 LLM modules，未使用本次新增硅基流动聊天能力，无需机械升级；未运行其真实宿主验收。`henji-ai-ps` 的下表路径为另一台开发机记录，本机未定位该路径，不声称本次完成外部升级。
 
 ## 判定口径
 
