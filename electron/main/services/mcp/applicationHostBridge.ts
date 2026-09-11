@@ -1,5 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import type { LocalHostRegistration, LocalHostReply, LocalHostRequest, LocalTool } from '../../../../src/core/application-control/localHostContracts'
+import type { McpOperationCoordinator } from './operationCoordinator'
+import type { OperationRecord } from './operationStore'
 
 export interface LocalHostTransport { send(channel: string, payload: unknown): void }
 type Pending = { callerId: string; sessionId: string; resolve(value: Record<string, unknown>): void; reject(error: Error): void; cleanup(): void }
@@ -8,7 +10,8 @@ export class ApplicationHostBridge {
   private host: { registration: LocalHostRegistration; transport: LocalHostTransport } | undefined
   private pending = new Map<string, Pending>()
   private generation = -1
-  constructor(private readonly assertAuthorized: (callerId: string) => void) {}
+  constructor(private readonly assertAuthorized: (callerId: string) => void, private readonly operations?: McpOperationCoordinator) {}
+  get sessionId(): string { return this.host?.registration.sessionId ?? '' }
   get ready(): boolean { return this.host?.registration.ready === true }
   tools(): LocalTool[] { return this.ready ? this.host!.registration.tools : [] }
   register(registration: LocalHostRegistration, transport: LocalHostTransport): void {
@@ -23,6 +26,7 @@ export class ApplicationHostBridge {
   }
   cancelPending(): void {
     for (const [id, pending] of this.pending) {
+      this.operations?.interrupted(id, pending.sessionId)
       this.host?.transport.send('mcp:host:cancel', id)
       pending.reject(new Error('应用页面正在重新连接，请稍后重试。'))
       pending.cleanup()
@@ -32,6 +36,7 @@ export class ApplicationHostBridge {
   revoke(callerId: string): void {
     this.host?.transport.send('mcp:host:revoke', callerId)
     for (const [id, pending] of this.pending) if (pending.callerId === callerId) {
+      this.operations?.interrupted(id, pending.sessionId)
       this.host?.transport.send('mcp:host:cancel', id)
       pending.reject(new Error('连接授权已撤销。'))
       pending.cleanup()
@@ -39,6 +44,8 @@ export class ApplicationHostBridge {
     }
   }
   complete(reply: LocalHostReply): void {
+    // 即使 HTTP 已断线/授权已撤销，已发生的执行事实仍须入账；不再向撤销者披露。
+    this.operations?.complete(reply)
     const pending = this.pending.get(reply.requestId)
     if (!pending || pending.sessionId !== reply.sessionId || this.host?.registration.sessionId !== reply.sessionId) return
     try { this.assertAuthorized(pending.callerId); pending.resolve(reply.result) }
@@ -46,7 +53,8 @@ export class ApplicationHostBridge {
     pending.cleanup()
     this.pending.delete(reply.requestId)
   }
-  execute(callerId: string, capabilityId: LocalHostRequest['capabilityId'], input: Record<string, unknown>, signal: AbortSignal): Promise<Record<string, unknown>> {
+  execute(callerId: string, capabilityId: LocalHostRequest['capabilityId'], input: Record<string, unknown>, signal: AbortSignal,
+    options: { operation?: OperationRecord; allowWrites?: boolean; allowDestructive?: boolean } = {}): Promise<Record<string, unknown>> {
     this.assertAuthorized(callerId)
     if (!this.ready || !this.host) return Promise.reject(new Error('应用尚未就绪，请稍后重试。'))
     if (signal.aborted) return Promise.reject(new Error('请求已取消。'))
@@ -55,6 +63,7 @@ export class ApplicationHostBridge {
     const requestId = randomUUID()
     return new Promise((resolve, reject) => {
       const cancel = (): void => {
+        this.operations?.interrupted(requestId, host.registration.sessionId)
         host.transport.send('mcp:host:cancel', requestId)
         this.pending.get(requestId)?.cleanup()
         this.pending.delete(requestId)
@@ -65,8 +74,12 @@ export class ApplicationHostBridge {
       this.pending.set(requestId, { callerId, sessionId: host.registration.sessionId, resolve, reject, cleanup: () => { clearTimeout(timer); signal.removeEventListener('abort', cancel) } })
       try {
         this.assertAuthorized(callerId)
-        host.transport.send('mcp:host:request', { requestId, sessionId: host.registration.sessionId, callerId, capabilityId, input } satisfies LocalHostRequest)
+        if (options.operation) this.operations?.dispatched(options.operation, requestId, host.registration.sessionId)
+        host.transport.send('mcp:host:request', { requestId, sessionId: host.registration.sessionId, callerId, capabilityId, input,
+          allowWrites: options.allowWrites, allowDestructive: options.allowDestructive, expectedRevisions: options.operation?.expectedRevisions,
+          recoveryVerification: options.operation?.recoveryVerification } satisfies LocalHostRequest)
       } catch (error) {
+        this.operations?.interrupted(requestId, host.registration.sessionId)
         this.pending.get(requestId)?.cleanup()
         this.pending.delete(requestId)
         reject(error)

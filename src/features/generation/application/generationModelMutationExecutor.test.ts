@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { ApplicationExecutionContext } from '@/core/application-control'
 import { registry } from '@/core/ModelRegistry'
@@ -47,8 +47,17 @@ describe('4.4：generation.model.hidden 属性写入执行器', () => {
   })
 
   afterEach(() => {
+    vi.restoreAllMocks()
     registry.clear()
     saveHiddenModels(new Set())
+  })
+  it('同步保存拒绝时模型可见性与正式存储保持原值', async () => {
+    const { setModelHidden } = await import('./generationModelFields')
+    const previous = localStorage.getItem('hidden_models')
+    vi.spyOn(Storage.prototype, 'setItem').mockImplementationOnce(() => { throw new Error('DISK_FULL') })
+    expect(() => setModelHidden(modelKey, true)).toThrow('DISK_FULL')
+    expect(localStorage.getItem('hidden_models')).toBe(previous)
+    expect(getHiddenModels().has(modelKey)).toBe(false)
   })
 
   it('通用反射读取能看到 hidden 属性且默认可见', async () => {

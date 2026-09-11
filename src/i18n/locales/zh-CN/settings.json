@@ -1,5 +1,5 @@
 {
-  "mcp": { "loading": "正在读取连接设置…", "enable": "允许外部智能体连接", "readOnly": "授权的连接可读取应用内容，有效期为 30 天。目前不允许修改或生成；应用重启后需要重新启用。", "port": "连接端口", "name": "连接名称", "namePlaceholder": "例如：Codex", "authorize": "授权读取", "copy": "复制连接配置", "revoke": "撤销" },
+  "mcp": { "loading": "正在读取连接设置…", "enable": "允许外部智能体连接", "readOnly": "连接授权有效期为 30 天；应用重启后需要重新启用。", "port": "连接端口", "name": "连接名称", "namePlaceholder": "例如：Codex", "authorize": "创建授权", "copy": "复制连接配置", "revoke": "撤销", "allowWrites": "允许新连接修改内容", "allowDelete": "允许新连接删除内容", "writeScope": "可修改设置、模型显示、素材和画布；不包含付费生成。", "accessRead": "仅查询", "accessWrite": "可修改", "accessDelete": "可修改和删除" },
   "title": "设置",
   "language": "语言",
   "theme": "主题",

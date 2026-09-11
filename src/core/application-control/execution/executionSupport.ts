@@ -1,7 +1,7 @@
 import type { ApplicationChangePlan, ApplicationPlannedStep, ApplicationEffectReceipt, ApplicationTransactionMode, ApplicationEvidence } from '../transactions'
 import type { ApplicationReflectionRegistry } from '../registry'
 import { assertCollectionOperationAvailable } from './availability'
-import { ApplicationExecutionProgressFailure } from './persistence'
+import { ApplicationExecutionProgressFailure, ApplicationPersistenceBoundaryFailure } from './persistence'
 import type { ApplicationMutationExecutor, ApplicationCollectionExecutor, ApplicationSemanticOperationExecutor, ApplicationControlExecutionDependencies, ApplicationExecutionContext, ApplicationCompletedStepResult, ApplicationStepExecutionResult } from './types'
 import { resolveUndoExpectedAbsentMutations } from './undoRevisionProbe'
 
@@ -466,6 +466,12 @@ export class ApplicationExecutionSupport {
       }
       return { completed }
     } catch (error) {
+      if (error instanceof ApplicationPersistenceBoundaryFailure) {
+        // 失败的单步已发生部分修改；保留其正式事实，不能降成零步骤失败或重放。
+        const offset = completed.length
+        throw new ApplicationPersistenceBoundaryFailure(error.failure, [...completed, ...error.completed], undefined,
+          error.receipts, [...completed.map((_, index) => index), ...error.completedStepIndexes.map((index) => offset + index)])
+      }
       const original = error instanceof Error ? error.message : String(error)
       const executionFailure = (message: string, compensated: number[] = []) =>
         new ApplicationExecutionProgressFailure(message, completed, compensated, error)

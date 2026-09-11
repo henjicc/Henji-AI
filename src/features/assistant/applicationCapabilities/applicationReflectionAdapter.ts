@@ -258,7 +258,7 @@ function toPlannedStep(
   }
 }
 
-import { ApplicationTransactionFailure } from '@/core/application-control/execution/transactionFailure'
+import { ApplicationTransactionFailure, ApplicationPreflightFailure } from '@/core/application-control/execution/transactionFailure'
 
 function completedTransaction(
   result: ApplicationTransactionResult
@@ -437,7 +437,7 @@ export const applicationReflectionHandlers = {
         if (change.kind === 'remove_items') change.targets.forEach(assertCompleteRef)
       }
     })
-    const baselines = await captureMutationBaselines(changes, appContext)
+    const baselines = await captureMutationBaselines(changes, appContext).catch((error) => { throw new ApplicationPreflightFailure(error) })
     const execute = async (revisions: Record<string, number>, attempt: number) => {
       const plan = await engine.plan({
         summary: input.summary,
@@ -445,7 +445,7 @@ export const applicationReflectionHandlers = {
         // 而这里的 changes 是跨实体、跨动词的组合。
         transactionMode: 'compensatable',
         steps: changes.map((change) => toPlannedStep(change, revisions)),
-      }, appContext)
+      }, appContext).catch((error) => { throw new ApplicationPreflightFailure(error) })
       return engine.commit({
         planRef: plan.planRef,
         expectedRevisions: revisions,
@@ -473,6 +473,7 @@ export const applicationReflectionHandlers = {
     return {
       status: 'completed' as const,
       transactionRef: result.transactionRef,
+      verification: result.verification,
       resultingRevisions: result.resultingRevisions,
       resultRefs: result.resultRefs as unknown as Array<Record<string, unknown>>,
       effects: result.effects as unknown as Array<Record<string, unknown>>,

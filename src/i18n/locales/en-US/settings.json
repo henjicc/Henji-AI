@@ -1,5 +1,5 @@
 {
-  "mcp": { "loading": "Loading connections…", "enable": "Allow external agents", "readOnly": "Authorized connections can read app content for 30 days. Changes and generation are not allowed yet. Enable again after restarting the app.", "port": "Connection port", "name": "Connection name", "namePlaceholder": "For example: Codex", "authorize": "Authorize reading", "copy": "Copy connection config", "revoke": "Revoke" },
+  "mcp": { "loading": "Loading connections…", "enable": "Allow external agents", "readOnly": "Connections expire after 30 days. Enable again after restarting the app.", "port": "Connection port", "name": "Connection name", "namePlaceholder": "For example: Codex", "authorize": "Create authorization", "copy": "Copy connection config", "revoke": "Revoke", "allowWrites": "Allow changes for the new connection", "allowDelete": "Allow deletion for the new connection", "writeScope": "Settings, model visibility, assets and canvas only. Paid generation is excluded.", "accessRead": "Read only", "accessWrite": "Can modify", "accessDelete": "Can modify and delete" },
   "title": "Settings",
   "language": "Language",
   "theme": "Theme",

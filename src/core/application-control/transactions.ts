@@ -258,6 +258,7 @@ export const applicationTransactionResultSchema = z.discriminatedUnion('status',
       uncompensatedStepIndexes: z.array(z.number().int().nonnegative()).max(256),
     }).strict().optional(),
     verification: applicationVerificationResultSchema.optional(),
+    recoveryVerification: z.object({ conditions: z.array(applicationVerificationConditionSchema).max(256), evidence: z.array(applicationEvidenceSchema).max(256) }).optional(),
   }).strict(),
 ])
 export type ApplicationTransactionResult = z.infer<typeof applicationTransactionResultSchema>

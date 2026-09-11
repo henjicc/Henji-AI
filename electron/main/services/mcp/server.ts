@@ -6,6 +6,8 @@ import { CallToolRequestSchema, ListToolsRequestSchema, isInitializeRequest, typ
 import { MCP_READ_CAPABILITY_IDS } from '../../../../src/core/application-control/localHostContracts'
 import type { McpConnections } from './connections'
 import type { ApplicationHostBridge } from './applicationHostBridge'
+import type { McpOperationCoordinator } from './operationCoordinator'
+import { z } from 'zod'
 
 type Session = { callerId: string; server: Server; transport: StreamableHTTPServerTransport; touched: number }
 const MAX_BODY = 256 * 1024
@@ -16,7 +18,7 @@ export class LocalMcpServer {
   private sessions = new Map<string, Session>()
   private active = 0
   private port = 0
-  constructor(private readonly connections: McpConnections, private readonly host: ApplicationHostBridge, private readonly onError: (error: unknown) => void = () => {}) {}
+  constructor(private readonly connections: McpConnections, private readonly host: ApplicationHostBridge, private readonly onError: (error: unknown) => void = () => {}, private readonly operations?: McpOperationCoordinator) {}
   get listening(): boolean { return this.http?.listening === true }
   get listeningPort(): number { return this.port }
   async start(port: number): Promise<void> {
@@ -103,14 +105,53 @@ export class LocalMcpServer {
     server.setRequestHandler(ListToolsRequestSchema, async () => {
       this.connections.assertActive(callerId)
       if (!this.host.ready) throw new Error('应用尚未就绪，请稍后重试。')
-      return { tools: this.host.tools().map((tool): Tool => ({ name: tool.id, title: tool.title, description: tool.description, inputSchema: { ...tool.inputSchema, type: 'object' }, annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false } })) }
+      const access = this.connections.access(callerId)
+      const tools = this.host.tools().filter((tool) => tool.id !== 'retry_canvas_project_save' && (tool.id !== 'change_application_entities' || (access.allowWrites && this.operations))).map((tool): Tool => {
+        const write = tool.id === 'change_application_entities'
+        const schema = { ...tool.inputSchema }
+        if (write) {
+          const properties = { ...schema.properties as Record<string, unknown> }
+          delete properties.expectedRevisions
+          properties.operationId = { type: 'string', format: 'uuid', description: '调用前生成并保存的逻辑操作标识；丢响应后复用此值查询，不得重新生成重放。' }
+          properties.baselineIds = { type: 'array', items: { type: 'string', format: 'uuid' }, minItems: 1, maxItems: 32 }
+          schema.properties = properties
+          schema.required = [...(schema.required as string[] ?? []).filter((key) => key !== 'expectedRevisions'), 'operationId', 'baselineIds']
+        }
+        return { name: tool.id, title: tool.title, description: tool.description, inputSchema: { ...schema, type: 'object' }, annotations: { readOnlyHint: !write, destructiveHint: write, openWorldHint: false } }
+      })
+      if (this.operations && access.allowWrites) tools.push({ name: 'get_application_operation', description: '读取本连接操作的持久事实；未知状态不会重放修改。', inputSchema: { type: 'object', properties: { operationId: { type: 'string', format: 'uuid' } }, required: ['operationId'], additionalProperties: false }, annotations: { readOnlyHint: true } })
+      if (this.operations && access.allowWrites) tools.push({ name: 'retry_application_operation_save', description: '按原操作记录仅重试保存并核对原条件；不会重放业务修改，必须保留原编辑会话。', inputSchema: { type: 'object', properties: { operationId: { type: 'string', format: 'uuid' }, originalOperationId: { type: 'string', format: 'uuid' } }, required: ['operationId', 'originalOperationId'], additionalProperties: false }, annotations: { readOnlyHint: false, destructiveHint: false } })
+      return { tools }
     })
     server.setRequestHandler(CallToolRequestSchema, async (request, extra) => {
       this.connections.assertActive(callerId)
+      if (request.params.name === 'get_application_operation' && this.operations) {
+        const { operationId } = z.object({ operationId: z.string().uuid() }).strict().parse(request.params.arguments)
+        const operation = this.operations.store.get(operationId, callerId)
+        const result = operation ? this.operations.result(operation) : { ok: false, executionState: 'not_found', message: '未找到已登记操作；这不是业务未执行的证明。' }
+        return { isError: result.ok !== true, structuredContent: result, content: [{ type: 'text', text: JSON.stringify(result) }] }
+      }
+      if (['change_application_entities', 'retry_application_operation_save'].includes(request.params.name) && this.operations) {
+        try {
+          const access = this.connections.access(callerId)
+          const operation = request.params.name === 'retry_application_operation_save'
+            ? this.operations.prepareSaveRecovery(callerId, request.params.arguments ?? {}, this.host.sessionId, access)
+            : this.operations.prepare(callerId, request.params.arguments ?? {}, this.host.sessionId, access)
+          if (operation.state === 'prepared') {
+            this.connections.assertActive(callerId)
+            try { await this.host.execute(callerId, operation.capabilityId ?? 'change_application_entities', operation.input, extra.signal, { operation, ...access }) } catch { /* 持久操作状态决定结果，等待失败不能覆盖事实。 */ }
+          }
+          this.connections.assertActive(callerId)
+          const result = this.operations.result(this.operations.store.get(operation.operationId, callerId)!)
+          return { isError: result.ok !== true, structuredContent: result, content: [{ type: 'text', text: JSON.stringify(result) }] }
+        } catch (error) { return { isError: true, content: [{ type: 'text', text: error instanceof Error ? error.message : '写入未完成。' }] } }
+      }
       const id = MCP_READ_CAPABILITY_IDS.find((value) => value === request.params.name)
       if (!id) return { isError: true, content: [{ type: 'text', text: '此连接只允许读取。请用 tools/list 查看可用工具。' }] }
       try {
-        const result = await this.host.execute(callerId, id, request.params.arguments ?? {}, extra.signal)
+        const sessionId = this.host.sessionId
+        const raw = await this.host.execute(callerId, id, request.params.arguments ?? {}, extra.signal, this.connections.access(callerId))
+        const result = this.operations ? this.operations.rememberRead(callerId, raw, sessionId) : raw
         this.connections.assertActive(callerId)
         const text = JSON.stringify(result)
         if (Buffer.byteLength(text) > MAX_RESULT) throw new Error('读取结果过大，请缩小字段或分页读取。')

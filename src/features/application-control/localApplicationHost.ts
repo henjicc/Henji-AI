@@ -1,7 +1,9 @@
 import { z } from 'zod'
 import { createApplicationCallerGrant, revokeApplicationCallerGrant, type ApplicationCallerGrant } from '@/core/application-control/callerContext'
-import { localHostRequestSchema, MCP_READ_CAPABILITY_IDS, MCP_READ_PERMISSIONS, type McpPlatform, type LocalTool } from '@/core/application-control/localHostContracts'
+import { localHostRequestSchema, MCP_CAPABILITY_IDS, MCP_READ_CAPABILITY_IDS, MCP_READ_PERMISSIONS, MCP_WRITE_PERMISSIONS, type McpPlatform, type LocalTool } from '@/core/application-control/localHostContracts'
 import { createLogger } from '@/core/logging'
+import { applicationCallerAccess } from '@/core/application-control/callerContext'
+import { getApplicationControlExecutionEngine } from '@/features/assistant/applicationCapabilities/applicationControlRegistry'
 import { createApplicationCapabilitySession, listApplicationCapabilities } from './applicationCapabilityService'
 
 const logger = createLogger('features.application_control.host')
@@ -13,7 +15,7 @@ export function attachLocalApplicationHost(platform: McpPlatform, ready: boolean
   const grants = new Map<string, ApplicationCallerGrant>()
   const active = new Map<string, AbortController>()
   let disposed = false
-  const definitions = listApplicationCapabilities().filter((definition) => MCP_READ_CAPABILITY_IDS.some((id) => id === definition.id) && definition.readOnly)
+  const definitions = listApplicationCapabilities().filter((definition) => MCP_CAPABILITY_IDS.some((id) => id === definition.id))
   const tools = definitions.map((definition): LocalTool => ({
     id: definition.id as LocalTool['id'], version: definition.version, title: definition.title, description: definition.description,
     inputSchema: z.toJSONSchema(definition.inputSchema, { io: 'input' }),
@@ -21,33 +23,38 @@ export function attachLocalApplicationHost(platform: McpPlatform, ready: boolean
   const unsubscribeRequest = platform.onRequest((raw) => {
     const request = localHostRequestSchema.safeParse(raw)
     if (!request.success || request.data.sessionId !== sessionId || disposed) return
-    const { requestId, callerId, capabilityId, input } = request.data
+    const { requestId, callerId, capabilityId, input, allowWrites = false, allowDestructive = false, expectedRevisions } = request.data
+    const readOnly = MCP_READ_CAPABILITY_IDS.some((id) => id === capabilityId)
+    const action = readOnly ? 'read' : 'write'
     const controller = new AbortController()
     active.set(requestId, controller)
     const execute = async (): Promise<void> => {
-      logger.info('开始读取应用内容', { event: 'mcp.read.start', context: { requestId, capabilityId } })
+      logger.info(readOnly ? '开始读取应用内容' : '开始修改应用内容', { event: `mcp.${action}.start`, context: { requestId, capabilityId } })
       let result: Record<string, unknown>
       try {
         if (!ready) throw new Error('应用尚未就绪，请稍后重试。')
-        let grant = grants.get(callerId)
-        if (!grant) {
-          grant = createApplicationCallerGrant({ callerId, capabilityIds: [...MCP_READ_CAPABILITY_IDS], permissions: [...MCP_READ_PERMISSIONS], allowWrites: false, allowDestructive: false })
-          grants.set(callerId, grant)
-        }
+        const grant = createApplicationCallerGrant({ callerId, capabilityIds: allowWrites ? [...MCP_CAPABILITY_IDS] : [...MCP_READ_CAPABILITY_IDS], permissions: [...MCP_READ_PERMISSIONS, ...(allowWrites ? MCP_WRITE_PERMISSIONS : [])], allowWrites, allowDestructive })
+        grants.set(requestId, grant)
         const definition = definitions.find((item) => item.id === capabilityId)
         if (!definition) throw new Error('此读取工具不可用，请重新连接。')
-        result = await createApplicationCapabilitySession(grant).execute({ id: capabilityId, version: definition.version, input }, { requestId, signal: controller.signal })
-        logger.info('应用读取结束', { event: 'mcp.read.completed', context: { requestId, ok: result.ok } })
+        result = await createApplicationCapabilitySession(grant).execute({ id: capabilityId, version: definition.version, input, expectedRevisions }, { requestId, signal: controller.signal })
+        if (result.ok === true && request.data.recoveryVerification) {
+          const proof = request.data.recoveryVerification
+          const verification = await getApplicationControlExecutionEngine().verifyRecovery(proof.conditions, proof.evidence, applicationCallerAccess(grant, requestId, controller.signal))
+            .catch(() => ({ verified: false, evidence: [], unmetConditions: ['保存已确认，但原操作验证尚未完成。'], checkedAt: new Date().toISOString() }))
+          result = { ...result, data: { ...result.data as Record<string, unknown>, verification } }
+        }
+        logger.info(readOnly ? '应用读取结束' : '应用修改结束', { event: `mcp.${action}.completed`, context: { requestId, ok: result.ok } })
       } catch (error) {
-        result = { ok: false, error: { code: 'APPLICATION_READ_FAILED', message: error instanceof Error ? error.message : '应用读取失败。' } }
-        logger.warn('应用读取未完成', { event: 'mcp.read.failed', context: { requestId } })
+        result = { ok: false, error: { code: 'APPLICATION_EXECUTION_FAILED', message: error instanceof Error ? error.message : '应用操作失败。' } }
+        logger.warn('应用操作未完成', { event: `mcp.${action}.failed`, context: { requestId } })
       }
-      if (!disposed && !controller.signal.aborted) await platform.complete({ sessionId, requestId, result })
+      if (!MCP_READ_CAPABILITY_IDS.some((id) => id === capabilityId) || (!disposed && !controller.signal.aborted)) await platform.complete({ sessionId, requestId, result })
     }
-    void execute().catch((error) => logger.error('发送读取结果失败', error, { event: 'mcp.read.reply.failed' })).finally(() => active.delete(requestId))
+    void execute().catch((error) => logger.error('发送操作结果失败', error, { event: `mcp.${action}.reply.failed` })).finally(() => { active.delete(requestId); grants.delete(requestId) })
   })
   const unsubscribeCancel = platform.onCancel((id) => active.get(id)?.abort())
-  const unsubscribeRevoke = platform.onRevoke((id) => { const grant = grants.get(id); if (grant) revokeApplicationCallerGrant(grant); grants.delete(id) })
+  const unsubscribeRevoke = platform.onRevoke((id) => { for (const [key, grant] of grants) if (grant.callerId === id) { revokeApplicationCallerGrant(grant); grants.delete(key) } })
   void platform.registerHost({ sessionId, generation, ready, tools }).catch((error) => logger.error('连接应用宿主失败', error, { event: 'mcp.host.register.failed' }))
   return () => {
     disposed = true

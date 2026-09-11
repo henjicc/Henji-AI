@@ -26,7 +26,7 @@ import { createLogger } from '@/core/logging'
 import { CanvasApplicationError } from '@/features/canvas/application/canvasApplicationService'
 import { MultiLayerDocumentNodeApplicationError } from '@/features/canvas/application/multiLayerDocumentNodeApplicationService'
 import { ZodError } from 'zod'
-import { ApplicationTransactionFailure } from '@/core/application-control/execution/transactionFailure'
+import { ApplicationTransactionFailure, ApplicationPreflightFailure } from '@/core/application-control/execution/transactionFailure'
 import { transactionFailureFacts } from '@/core/assistant/applicationTransactionFailureFacts'
 import { ApplicationPersistenceFailure } from '@/core/application-control/execution/persistence'
 import { assertApplicationCapabilityAllowed } from '@/core/application-control/callerContext'
@@ -228,6 +228,7 @@ function describeSchemaIssues(error: ZodError): string {
 }
 
 function toFailure(error: unknown): ApplicationCapabilityResult {
+  if (error instanceof ApplicationPreflightFailure) return { ok: false, error: { code: 'INVALID_INPUT', message: error.message, recoverable: true, details: { execution: { notExecuted: true } } } }
   if (error instanceof ApplicationTransactionFailure) {
     const transaction = transactionFailureFacts(error.result)
     return { ok: false, error: { code: error.result.code === 'CONFLICT' ? 'CONFLICT' : 'CAPABILITY_REJECTED', message: error.message,
@@ -338,6 +339,11 @@ export async function executeApplicationCapabilityResult(
     capabilityId: invocation.id,
   })
   try {
+    const definition = BUILTIN_APPLICATION_CAPABILITY_REGISTRY.get(invocation.id)
+    if (definition) {
+      const parsed = definition.inputSchema.safeParse(invocation.input)
+      if (!parsed.success) throw new ApplicationPreflightFailure(parsed.error)
+    }
     const data = await registry.execute(invocation, context)
     const snapshot = createHostContextSnapshot()
     logger.info('capability.execute.completed', {

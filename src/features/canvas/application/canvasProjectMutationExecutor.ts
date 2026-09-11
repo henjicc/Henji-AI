@@ -6,6 +6,7 @@ import type {
 } from '@/core/application-control'
 import { applyWriterTable, propertyOperations, writableProperties } from '@/core/application-control'
 import { createLogger } from '@/core/logging'
+import { ApplicationPersistenceBoundaryFailure, ApplicationPersistenceFailure } from '@/core/application-control/execution/persistence'
 import { useProjectStore } from '@/stores/projectStore'
 
 import { CANVAS_PROJECT_WRITERS as WRITERS } from './canvasFields'
@@ -37,7 +38,22 @@ export class CanvasProjectMutationExecutor implements ApplicationMutationExecuto
   async apply(step: MutationStep): Promise<ApplicationCompletedStepResult> {
     const projectId = step.target.id
     const previousName = useProjectStore.getState().projects.find((project) => project.id === projectId)?.name ?? ''
-    await applyWriterTable(WRITERS, projectId, step.mutations)
+    try {
+      await applyWriterTable(WRITERS, projectId, step.mutations)
+    } catch (error) {
+      const state = useProjectStore.getState()
+      const actualName = state.projects.find((project) => project.id === projectId)?.name
+      if (actualName !== undefined && actualName !== previousName && state.persistenceErrors[projectId]) {
+        const ref = { kind: this.entityType, id: projectId, revision: this.revision() }
+        throw new ApplicationPersistenceBoundaryFailure(new ApplicationPersistenceFailure(
+          '画布工程名称已修改，但保存未确认；请只重试原工程保存。', {
+            memoryState: 'modified', persistenceState: 'unconfirmed', stage: 'document',
+            recovery: { capabilityId: state.currentProjectId === projectId ? 'retry_canvas_project_save' : 'read_application_entity', target: ref, replayMutation: false },
+          }, error), [{ status: 'completed', resultingRevisions: { canvas: this.revision() }, directRefs: [ref],
+          evidence: [{ kind: 'property_value', target: ref, fact: '画布工程名称已修改，保存尚未确认。', data: actualName, capturedAt: new Date().toISOString() }] }])
+      }
+      throw error
+    }
     const revision = this.revision()
     logger.info('画布工程属性写入完成', {
       event: 'canvas.project_mutation.apply.completed', projectId,
