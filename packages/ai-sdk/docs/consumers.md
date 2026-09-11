@@ -5,11 +5,14 @@
 
 最后核对日期：2026-09-11
 
-当前 SDK 版本：`0.4.1`（候选版本，CI 已通过，待 npm 账号双重验证后发布）
+当前 SDK 版本：`0.4.1`（已发布到公共 npm）
 
 `0.4.1`：修复 KIE GPT Image 2 / 2.5 的视频参考误标签，图片生成、编辑、多图输入及请求契约保持不变。109 个生成模型的跨模态视频标签检查、67 项定向测试、SDK 862 项全量测试、可移植性、类型构建及仓外公开入口/受限宿主回装通过。外部消费者登记版本为 `0.2.8`：say-it 不使用图片模型，不受影响；henji-ai-ps 的 KIE GPT Image 2 标签消费情况需在该项目可访问时核实，尚未升级。
 
-修复提交 `ef2be83f` 的必需 CI `34575686946` 已全部通过。固定候选包 shasum 为 `32b8dd00f3e320822999b626b8e95a50b6a8ff2f`，同一候选包的 Node ESM、严格 TypeScript、49 个 Vite 入口及受限宿主回装通过；npm 发布返回 E403，要求账号双重验证，尚未完成公共发布与匿名安装验证。
+修复提交 `ef2be83f` 的必需 CI `34575686946` 已全部通过。正式包与固定候选包 shasum 一致：`32b8dd00f3e320822999b626b8e95a50b6a8ff2f`。发布后在仓外隔离 npm 配置并移除令牌环境变量，已从公共 npm 匿名安装精确版本；Node ESM、严格 TypeScript、49 个 Vite 入口及无 TextEncoder/TextDecoder 的受限宿主验证通过。仓内 workspace 与三个示例 manifest 已锁定 `0.4.1`；未执行真实付费生成或外部消费项目升级。
+
+- `0.4.1` tarball：`https://registry.npmjs.org/@henjicc/ai-sdk/-/ai-sdk-0.4.1.tgz`
+- `0.4.1` integrity：`sha512-HtOoOlJWGR6m15wIvqI2VMJFk+ijHntXl2oZAqEA6Ri12gWqaa3JhPthisTj+epO7GwGcuGX4gW3a8qIDd4vAw==`
 
 `0.4.0`：新增硅基流动聊天预设与分类模型发现，提交 `a678dab6` 已推送，必需 CI `34565921443` 全部通过。SDK 861 项测试、宿主配置 15 项测试、类型构建、49 个公开入口及受限宿主候选包回装通过；未执行真实付费推理。移除服务端分类参数的断牙验证使 4 项测试失败，恢复后全量通过。
 
