@@ -5,6 +5,13 @@ description: 为 Henji-AI 新增、修改或迁移应用能力，并完成智能
 
 # 痕迹AI 应用能力适配
 
+## 当前适用范围（2026-09-12）
+
+本轮产品方向为外部智能体能力开放，MCP 是最高优先级。保留旧助手源码及历史，默认隐藏入口；不以旧助手行为兼容作为 MCP 交付门槛。领域服务、业务数据、权限、并发、保存及结果真实性约束继续适用于所有调用方。
+
+MCP 通过 `src/features/application-control/applicationCapabilityService.ts` 调用唯一能力注册与领域执行器。授权由可信宿主创建，不能从工具输入提取；不需要助手会话、模型请求、Henji Script 或发现租约。本文中脚本、配方、模型预算、租约、提示词及助手终态规则只适用于保留的自研助手，不约束 MCP 协议。
+
+
 把应用功能注册成智能助手可按需发现、受控执行、能够验证的原生能力，不新增兼容工具路径。实体与属性以 Application Control 反射注册表为唯一真相源；无法用 CRUD 表达的算法操作以 `ApplicationCapabilityDefinition` 为唯一真相源；两个以上应用操作由 `run_henji_script@1` 解析为同一 Application Control 执行内核，不再建立第二套编排协议。
 
 ## 执行流程
@@ -154,4 +161,3 @@ sceneField('sky_color', '天空颜色', COLOR, {
 - 新代码没有旧 command/query 兼容路径。
 - 新代码没有任意 Store Patch、任意脚本执行或 Application API 核心跨层导入。
 - 权限、revision、日志、引用和成功证据均有自动化验证。
-

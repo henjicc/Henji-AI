@@ -29,6 +29,7 @@ import { ZodError } from 'zod'
 import { ApplicationTransactionFailure } from '@/core/application-control/execution/transactionFailure'
 import { transactionFailureFacts } from '@/core/assistant/applicationTransactionFailureFacts'
 import { ApplicationPersistenceFailure } from '@/core/application-control/execution/persistence'
+import { assertApplicationCapabilityAllowed } from '@/core/application-control/callerContext'
 
 import { APPLICATION_REFLECTION_APPLICATION_CAPABILITIES } from '@/core/assistant/capabilities/applicationReflectionApplicationCapabilities'
 
@@ -91,9 +92,14 @@ class RendererApplicationCapabilityRegistry implements ApplicationCapabilityHand
     const definition = this.definitions.get(invocation.id)
     const handler = this.handlers.get(invocation.id)
     if (!definition || !handler) throw new Error('NOT_FOUND')
+    if (context.signal.aborted) throw new Error('ABORTED')
+    if (context.callerGrant) assertApplicationCapabilityAllowed(context.callerGrant, definition)
     if (definition.version !== invocation.version) throw new Error('VERSION_MISMATCH')
     const before = createHostContextSnapshot()
-    for (const [scope, expected] of Object.entries(invocation.expectedRevisions ?? {})) {
+    // 通用事务的基线来自领域反射读取，由事务引擎核对；不能拿助手宿主计数代替它。
+    const revisions = context.callerGrant && invocation.id === 'change_application_entities'
+      ? {} : invocation.expectedRevisions ?? {}
+    for (const [scope, expected] of Object.entries(revisions)) {
       if (before.scopeRevisions[scope] !== expected) throw new Error('CONFLICT')
     }
     const input = definition.inputSchema.parse(invocation.input)
@@ -232,6 +238,13 @@ function toFailure(error: unknown): ApplicationCapabilityResult {
       recoverable: true, details: { persistence: error.facts } } }
   }
   const message = error instanceof Error ? error.message : String(error)
+  if (message === 'PERMISSION_DENIED' || message.startsWith('PROPERTY_NOT_WRITABLE:')) {
+    return { ok: false, error: {
+      code: 'CAPABILITY_REJECTED',
+      message: `${message}：当前连接无所需权限或属性不可写，请读取属性可用性并在应用中核对连接授权。`,
+      recoverable: true,
+    } }
+  }
   if (error instanceof CanvasApplicationError) {
     return {
       ok: false,
