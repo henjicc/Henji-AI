@@ -55,7 +55,7 @@ export class ApplicationExecutionFailureSupport extends ApplicationExecutionSupp
     const compensated = /^COMPENSATED_FAILURE:([^:]*):/.exec(message)
     if (compensated) {
       const indexes = compensated[1] ? compensated[1].split(',').map(Number) : []
-      return failure('EXECUTION_FAILED', `事务执行失败，已完成步骤均已补偿，应用状态未改变。${failureCause(message)}`, true, {
+      return failure('EXECUTION_FAILED', `事务执行失败，已完成步骤均已补偿，失败步骤仍需核对。${failureCause(message)}`, true, {
         transactionRef,
         partial: { completedStepIndexes: indexes, compensatedStepIndexes: indexes, uncompensatedStepIndexes: [] },
       })
@@ -64,11 +64,9 @@ export class ApplicationExecutionFailureSupport extends ApplicationExecutionSupp
     if (partial) {
       const count = Number(partial[1])
       const indexes = Array.from({ length: count }, (_, index) => index)
-      // 零步完成时**不能**说"部分步骤已完成且未补偿、不可重试"。这句话曾经无视 count 硬写
-      // 出来：单步事务失败时一步都没写，调用方却被告知应用已被改动且不可重试。实测中模型
-      // 就是读到这句之后按规则停止了所有后续写入——它的行为是对的，是这条报告在骗它。
+      // 缺少完成回执不证明尚未执行；失败步骤可能在修改后、返回回执前中断。
       if (count === 0) {
-        return failure('EXECUTION_FAILED', `事务执行失败，没有任何步骤被提交，应用状态未改变。${failureCause(message)}`, true, {
+        return failure('EXECUTION_FAILED', `事务执行失败，没有步骤返回完成回执，执行情况需要核对。${failureCause(message)}`, true, {
           transactionRef,
           partial: { completedStepIndexes: [], compensatedStepIndexes: [], uncompensatedStepIndexes: [] },
         })
@@ -121,8 +119,8 @@ export class ApplicationExecutionFailureSupport extends ApplicationExecutionSupp
     if (error instanceof ApplicationExecutionProgressFailure) {
       const indexes = error.completedStepIndexes
       const uncompensated = indexes.filter((index) => !error.compensatedStepIndexes.includes(index))
-      const state = indexes.length === 0 ? '没有任何步骤被提交，应用状态未改变。'
-        : uncompensated.length === 0 ? '已完成步骤均已补偿。' : '仍有已执行的步骤未补偿，请先检查当前内容，不要重复已执行的步骤。'
+      const state = indexes.length === 0 ? '没有步骤返回完成回执，执行情况需要核对。'
+        : uncompensated.length === 0 ? '已完成步骤均已补偿，失败步骤仍需核对。' : '仍有已执行的步骤未补偿，请先检查当前内容，不要重复已执行的步骤。'
       return failure('EXECUTION_FAILED', `操作未完整完成：${error.message}。${state}`.slice(0, 2000), uncompensated.length === 0, {
         transactionRef, partial: { completedStepIndexes: indexes, compensatedStepIndexes: error.compensatedStepIndexes,
           uncompensatedStepIndexes: uncompensated },

@@ -55,6 +55,7 @@ export const agentPendingApprovalSummarySchema = z.object({
 }).strict()
 
 export const agentWorkingRecoverySchema = z.object({
+  toolCallId: z.string().min(1).optional(),
   mode: z.enum(['none', 'resume_read_only', 'verify_before_write', 'await_user']),
   reason: z.string().max(1_000),
   toolName: z.string().min(1).max(200).nullable(),
@@ -80,7 +81,8 @@ export const agentWorkingSummarySchema = z.object({
   failedSteps: z.array(agentWorkingStepSchema).max(10),
   evidence: z.array(agentWorkingEvidenceSchema).max(12),
   pendingApprovals: z.array(agentPendingApprovalSummarySchema).max(4),
-  unresolvedItems: z.array(z.string().min(1).max(1_000)).max(10),
+  // 未解决事实不能因摘要窗口或历史迁移而丢失；模型投影另行控制体积。
+  unresolvedItems: z.array(z.string().min(1).max(1_000)),
   scopeRevisions: hostScopeRevisionsSchema.nullable(),
   artifactRefs: z.array(z.string().min(1).max(500)).max(12),
   attachmentRefs: z.array(z.string().regex(/^asset:[^\s]+$/)).max(8).default([]),

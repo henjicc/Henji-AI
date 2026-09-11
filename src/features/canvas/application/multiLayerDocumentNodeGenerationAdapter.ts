@@ -85,7 +85,7 @@ export function createLayerStackV3DocumentId(nodeId: string, stackId: string): s
 }
 
 export async function createLayerStackV3Projection(
-  input: { nodeId: string; document: LayerStackDocumentV1; signal?: AbortSignal },
+  input: { nodeId: string; document: LayerStackDocumentV1; signal?: AbortSignal; operationId?: string },
   dependencies: GenerationDocumentPortDependencies = {},
 ): Promise<MultiLayerDocumentNodeProjection> {
   const documentId = createLayerStackV3DocumentId(input.nodeId, input.document.stackId)
@@ -110,6 +110,8 @@ export async function createLayerStackV3Projection(
   const repository = dependencies.repository ?? new ImageEditorV3CommandRepository()
   try {
     const reference = await repository.save(imported.document, {
+      operationCorrelation: input.operationId ? { operationId: input.operationId, boundaryId: crypto.randomUUID(),
+        targets: [{ kind: 'image_edit.document', id: `v3:${encodeURIComponent(documentId)}` }] } : undefined,
       expectedRevision: 0,
       previewRef: null,
       history: history.createSnapshot(),
@@ -203,6 +205,7 @@ const generationApplicationService = createMultiLayerDocumentNodeApplicationServ
 
 /** 新生成链路必须经过 1.1 冻结的唯一业务服务，不直接调用 V3 仓库。 */
 export function createMultiLayerDocumentFromLayerStack(input: {
+  operationId?: string
   nodeId: string
   document: LayerStackDocumentV1
   signal?: AbortSignal
@@ -247,6 +250,7 @@ export function markMultiLayerDocumentReleaseCandidate(input: {
 
 /** 编辑器 flush 后只通过 1.1 唯一 application 服务完成整图物化与原节点 CAS。 */
 export function saveMultiLayerDocumentAfterEditing(input: {
+  operationCorrelation?: import('@/core/application-control/persistenceCorrelation').ApplicationPersistenceCorrelation
   projectId: string
   nodeId: string
   data: LayerStackResultNodeData

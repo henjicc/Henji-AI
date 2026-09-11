@@ -77,6 +77,7 @@ export interface MultiLayerDocumentExportRaster {
 /** 宿主文档、资源与像素能力的窄端口；不暴露主进程仓库对象。 */
 export interface MultiLayerDocumentNodePort {
   createFromLayerStack(input: {
+    operationId?: string
     nodeId: string
     document: LayerStackDocumentV1
     signal?: AbortSignal
@@ -122,6 +123,7 @@ export interface MultiLayerDocumentNodePort {
 /** 画布事务的窄端口；实现者负责节点原位投影或新建普通图片节点。 */
 export interface MultiLayerDocumentNodeCanvasPort {
   commitMaterializedProjection(input: {
+    operationCorrelation?: import('@/core/application-control/persistenceCorrelation').ApplicationPersistenceCorrelation
     projectId: string
     nodeId: string
     expectedSession: ImageEditSessionReferenceV3
@@ -149,6 +151,7 @@ export interface MultiLayerDocumentNodeCanvasPort {
 
 export interface MultiLayerDocumentNodeApplicationService {
   createFromLayerStack(input: {
+    operationId?: string
     nodeId: string
     document: LayerStackDocumentV1
     signal?: AbortSignal
@@ -165,6 +168,7 @@ export interface MultiLayerDocumentNodeApplicationService {
     signal?: AbortSignal
   }): Promise<MultiLayerDocumentNodeProjection>
   saveMaterializedProjection(input: {
+    operationCorrelation?: import('@/core/application-control/persistenceCorrelation').ApplicationPersistenceCorrelation
     projectId: string
     nodeId: string
     data: LayerStackResultNodeData

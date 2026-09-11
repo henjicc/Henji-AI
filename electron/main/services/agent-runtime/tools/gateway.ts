@@ -2,7 +2,6 @@ import { createMainLogger } from '../../logging'
 import type { AgentPermissionAuditFact } from '../../../../../src/core/assistant/permissionAudit'
 import {
   agentToolGatewayResultSchema,
-  agentToolObservationSchema,
   agentToolPreviewSchema,
   type AgentToolGatewayResult,
 } from '../../../../../src/core/assistant/toolContracts'
@@ -14,18 +13,21 @@ import { AgentIdempotencyLedger } from './idempotency'
 import { buildPermissionAuditTemplate } from './permission-audit'
 import { AgentToolRegistry } from './registry'
 import type { TaskExecutionPolicy } from '../../../../../src/core/assistant/taskExecutionPolicy'
-import { assertTaskPolicyAllows } from './task-policy-guard'
+import { assertTaskPolicyAllows, operationEffects } from './task-policy-guard'
+import { isMutatingEffect } from '../../../../../src/core/assistant/observedEffect'
 import {
   TOOL_INPUT_LIMITS,
   INTERNAL_CHECKPOINT_INPUT_LIMITS,
   TOOL_PREVIEW_LIMITS,
   assertJsonWithinLimits,
   digestJson,
-  resolveOutputLimits,
-  summarizeSafeText,
 } from './security'
 import type { AgentToolExecuteRequest } from './types'
 import type { AgentToolDefinition } from './types'
+import type { OperationPersistence, OperationRecord } from '../../../../../src/core/assistant/operations'
+import { AgentOperationCoordinator, operationTargetRefs, operationVerificationTargets } from './operation-coordinator'
+import { createToolObservation } from './observation'
+import type { HenjiScriptCheckpoint } from '../../../../../src/core/assistant/externalWait'
 import {
   AgentToolGatewayError,
   assertOutputDataClassesCovered,
@@ -52,6 +54,7 @@ export interface AgentToolGatewayOptions {
   approvals?: AgentApprovalManager
   idempotency?: AgentIdempotencyLedger
   appendPermissionAudit: (fact: AgentPermissionAuditFact) => Promise<void>
+  operations?: OperationPersistence
 }
 
 function inputWithAuthoritativeRevision(
@@ -91,6 +94,16 @@ export class AgentToolGateway {
   private readonly executionCounts = new Map<string, number>()
   private readonly taskPolicies = new Map<string, TaskExecutionPolicy>()
   private readonly beforeOperations = new Map<string, () => Promise<void>>()
+  private readonly operations: AgentOperationCoordinator
+
+  hasDurableOperations(): boolean { return Boolean(this.options.operations) }
+  listOperations(runId: string): Promise<OperationRecord[]> { return this.operations.list(runId) }
+  async saveOperationCheckpoint(runId: string, operationId: string, checkpoint: HenjiScriptCheckpoint): Promise<void> {
+    await this.options.operations?.execute({ action: 'checkpoint', runId, operationId, checkpoint })
+  }
+  verifyOperation(runId: string, key: string, targets: OperationRecord['targets'], passed: boolean, evidence: string[]): Promise<void> {
+    return this.operations.verify(runId, key, targets, passed, evidence)
+  }
 
   setTaskExecutionPolicy(runId: string, policy: TaskExecutionPolicy): void {
     this.taskPolicies.set(runId, structuredClone(policy))
@@ -107,6 +120,7 @@ export class AgentToolGateway {
   }
 
   constructor(private readonly options: AgentToolGatewayOptions) {
+    this.operations = new AgentOperationCoordinator(options.operations)
     this.ledger = options.idempotency ?? new AgentIdempotencyLedger()
     this.approvalCoordinator = new AgentApprovalCoordinator(
       options.appendPermissionAudit,
@@ -210,7 +224,7 @@ export class AgentToolGateway {
           expectedRevisions,
         }
         : null
-      const existing = this.ledger.lookup(ledgerKey, inputDigest)
+      const existing = this.options.operations ? null : this.ledger.lookup(ledgerKey, inputDigest)
 
       if (consumeInput && (!existing || preview.dataClasses.includes('C2'))) {
         await this.approvalCoordinator.assertConsumable(auditTemplate, consumeInput)
@@ -318,7 +332,7 @@ export class AgentToolGateway {
         )
       }
 
-      const begun = this.ledger.begin(ledgerKey, inputDigest, authorizationDigest)
+      const begun = this.options.operations ? { status: 'started' as const } : this.ledger.begin(ledgerKey, inputDigest, authorizationDigest)
       if (begun.status === 'cached') {
         if (begun.authorizationDigest !== authorizationDigest) {
           throw new AgentToolGatewayError('CONFLICT', '并发缓存结果的授权摘要不一致')
@@ -355,40 +369,46 @@ export class AgentToolGateway {
 
       const linked = createLinkedController(request.signal, definition.timeoutMs)
       let executionCommitted = false
+      let operation: OperationRecord | null = null
       try {
-        const output = await executeToolWithRetry(
+        operation = ['discover_application_capabilities', 'search_application_capabilities', 'read_application_schemas', 'read_agent_artifact'].includes(definition.name)
+          ? null : await this.operations.prepare({
+          runId: request.runId, threadId: request.threadId,
+          key: request.operationKey ?? ledgerKey, toolCallId: request.toolCallId, toolName: definition.name, toolVersion: definition.version,
+          parentToolCallId: request.parentToolCallId, inputDigest, authorizationDigest,
+          policyVersion: this.taskPolicies.get(request.runId)?.version,
+          readOnly: definition.readOnly,
+          requiresMainClaim: definition.requiresMainClaim,
+          businessMutation: operationEffects(definition, executableInput).some((effect) => isMutatingEffect({ effect })),
+          container: ['run_henji_script', 'resume_henji_script'].includes(definition.name),
+          targets: operationTargetRefs(executableInput), targetBindings: definition.targetIds(executableInput),
+          verificationTargets: operationVerificationTargets(definition.name, executableInput),
+          expectedRevisions,
+        })
+        // 持久化准备期间可能收到新限制；派发是本次操作的执行边界。
+        await this.beforeOperations.get(request.runId)?.()
+        assertTaskPolicyAllows(this.taskPolicies.get(request.runId), definition, executableInput)
+        throwIfAborted(request.signal)
+        operation = await this.operations.dispatch(request.runId, operation, this.taskPolicies.get(request.runId)?.version, authorizationDigest)
+        const output = operation?.state === 'completed' ? operation.output : await executeToolWithRetry(
           definition,
           executableInput,
-          { ...executionContext, signal: linked.controller.signal, hostContext: latestContext }
+          { ...executionContext, operationId: operation?.operationId, signal: linked.controller.signal, hostContext: latestContext }
         )
-        throwIfAborted(linked.controller.signal)
-        assertJsonWithinLimits(output, resolveOutputLimits(definition.outputLimitProfile))
-        const parsedOutput = definition.outputSchema.parse(output)
+        // 已返回的结果先验证并落盘；等待取消不能抹掉实际完成的操作。
+        const observation = operation?.state === 'completed' && operation.observation
+          ? operation.observation
+          : createToolObservation(definition, executableInput, output, operation?.toolCallId ?? request.toolCallId)
+        const parsedOutput = observation.output
         if (
           definition.maxCallsPerRun !== undefined
           && definition.countsTowardCallLimit?.(parsedOutput) === false
         ) {
           this.executionCounts.set(executionCountKey, executionCount)
         }
-        const dataClasses = definition.dataClasses(parsedOutput)
-        if (dataClasses.includes('C3')) {
-          throw new AgentToolGatewayError('PERMISSION_DENIED', '工具结果包含 C3 秘密数据，禁止进入 Agent 上下文')
-        }
+        const dataClasses = observation.dataClasses
         assertOutputDataClassesCovered(preview, dataClasses)
-        const effects = definition.resolveObservedEffects
-          ? definition.resolveObservedEffects(executableInput, parsedOutput)
-          : definition.capability?.resolveObservedEffects
-            ? definition.capability.resolveObservedEffects(executableInput, parsedOutput)
-            : []
-        const observation = agentToolObservationSchema.parse({
-          source: { toolName: definition.name, toolVersion: definition.version, toolCallId: request.toolCallId },
-          trust: 'untrusted_observation',
-          dataClasses,
-          summary: summarizeSafeText(definition.summarize(parsedOutput)),
-          output: parsedOutput,
-          effects,
-          undo: definition.undo?.(parsedOutput),
-        })
+        await this.operations.complete(request.runId, operation, observation)
         this.ledger.succeed(ledgerKey, observation)
         executionCommitted = true
         await this.approvalCoordinator.record({
@@ -407,7 +427,7 @@ export class AgentToolGateway {
           taskId: request.toolCallId,
           context: { toolName: definition.name, durationMs: Date.now() - startedAt, cached: false },
         })
-        return agentToolGatewayResultSchema.parse({ status: 'completed', observation, cached: false })
+        return agentToolGatewayResultSchema.parse({ status: 'completed', observation, cached: operation?.state === 'completed' })
       } catch (error) {
         if (!executionCommitted && definition.maxCallsPerRun !== undefined) {
           this.executionCounts.set(executionCountKey, executionCount)
@@ -416,6 +436,7 @@ export class AgentToolGateway {
           if (!definition.readOnly && linked.controller.signal.aborted) this.ledger.markUnknown(ledgerKey)
           else this.ledger.fail(ledgerKey)
           const executionError = toGatewayError(error, request.input)
+          await this.operations.fail(request.runId, operation, executionError)
           await this.approvalCoordinator.record({
             template: auditTemplate,
             approvalId: request.approvalId,

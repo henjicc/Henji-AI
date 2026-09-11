@@ -19,12 +19,14 @@ export interface HenjiProviderKeyStatus {
 }
 
 export interface HenjiAiGenerateRequest {
+  operationId?: string
   modelId: string
   params: Record<string, unknown>
   requestId?: string
 }
 
 export interface HenjiAiContinuePollingRequest {
+  operationId?: string
   modelId: string
   taskId: string
   params?: Record<string, unknown>

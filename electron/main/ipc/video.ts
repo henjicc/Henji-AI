@@ -21,6 +21,7 @@ import type {
   VideoInfoResultDto,
 } from '../services/video/types'
 import { parseRecord, parseStringField, registerIpcHandler } from './registry'
+import { assertCameraStageOutputOwner, cameraStageOutputFileDigest, prepareCameraStageOutput } from '../services/camera-stage-render'
 
 export function registerVideoIpc(): void {
   registerIpcHandler<string, VideoInfoResultDto>('video:readVideoInfo', (input) => parseStringField(input, 'source'), (source) => {
@@ -72,7 +73,18 @@ export function registerVideoIpc(): void {
   registerIpcHandler<FinishVideoFrameExportPayloadDto, VideoFrameExportResultDto>(
     'video:finishFrameExport',
     parseFinishFrameExportPayload,
-    (payload) => finishVideoFrameExport(payload)
+    (payload, event) => {
+      const requestId = payload.cameraStageRequestId
+      if (!requestId) return finishVideoFrameExport(payload)
+      assertCameraStageOutputOwner(requestId, event.sender.id, 'video')
+      if (payload.targetPath) throw new Error('后台渲染只能保存到应用媒体目录')
+      return finishVideoFrameExport(payload, async (result, sourcePath) => {
+        const digest = await cameraStageOutputFileDigest(sourcePath)
+        prepareCameraStageOutput(requestId, event.sender.id, {
+          kind: 'video', ...result, mediaUrl: `henji-media://local/${encodeURIComponent(result.mediaPath)}`,
+        }, digest)
+      })
+    }
   )
   registerIpcHandler<string, void>(
     'video:cancelFrameExport',
@@ -174,6 +186,7 @@ function parseFinishFrameExportPayload(input: unknown): FinishVideoFrameExportPa
   return {
     sessionId: readString(record, 'sessionId'),
     targetPath,
+    cameraStageRequestId: record.cameraStageRequestId === undefined ? undefined : readString(record, 'cameraStageRequestId'),
   }
 }
 

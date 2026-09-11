@@ -46,9 +46,11 @@ import { AgentSavePointStore } from './save-point-store'
 import { AgentExternalWaitStore } from './external-wait-store'
 import { AgentThreadTitleStore } from './thread-title-store'
 import { AgentThreadDeletionStore } from './thread-deletion-store'
+import { AgentOperationStore } from './operation-store'
+import { projectLegacyRunState } from './legacy-state'
 
 const logger = createMainLogger('main.agent_persistence')
-const terminalStatuses = new Set(['completed', 'budget_exhausted', 'failed', 'cancelled', 'waiting_external'])
+const terminalStatuses = new Set(['completed', 'completed_with_warning', 'budget_exhausted', 'failed', 'cancelled', 'waiting_external'])
 const FALLBACK_THREAD_TITLE_MAX_CHARS = 24
 
 interface RunRow {
@@ -61,6 +63,7 @@ interface RunRow {
   checkpoint_version: string
   checkpoint_json: string
   recovery_status: 'none' | 'recovery_required' | 'retried'
+  operation_history_version: number
   parent_run_id: string | null
   created_at: number
   updated_at: number
@@ -103,6 +106,7 @@ export class AgentPersistenceStore {
   readonly externalWait: AgentExternalWaitStore
   readonly threadTitles: AgentThreadTitleStore
   readonly threadDeletion: AgentThreadDeletionStore
+  readonly operations: AgentOperationStore
 
   constructor(private readonly database: Database.Database) {
     this.eventStore = new AgentEventStore(database)
@@ -112,6 +116,7 @@ export class AgentPersistenceStore {
     this.externalWait = new AgentExternalWaitStore(database)
     this.threadTitles = new AgentThreadTitleStore(database)
     this.threadDeletion = new AgentThreadDeletionStore(database)
+    this.operations = new AgentOperationStore(database)
   }
 
   createRun(
@@ -119,11 +124,16 @@ export class AgentPersistenceStore {
     request: AgentStartRunRequest,
     state: AgentRunState,
     parentRunId: string | null = null,
-    options: { appendUserMessage?: boolean } = {}
+    options: { appendUserMessage?: boolean; newLogicalTask?: boolean } = {}
   ): void {
     const now = Date.now()
     const requestForStorage = storedRequest(request)
     this.database.transaction(() => {
+      if (parentRunId) {
+        const parent = this.database.prepare('SELECT thread_id FROM agent_runs WHERE run_id = ?')
+          .get(parentRunId) as { thread_id: string } | undefined
+        if (parent?.thread_id !== request.threadId) throw new Error('[OPERATION_OWNER_INVALID] 续接运行必须属于原会话')
+      }
       this.database.prepare(`
         INSERT INTO agent_threads(thread_id, title, created_at, updated_at, last_run_id)
         VALUES (?, ?, ?, ?, ?)
@@ -135,8 +145,8 @@ export class AgentPersistenceStore {
         INSERT INTO agent_runs(
           run_id, thread_id, goal, request_json, state_json, status,
           checkpoint_version, checkpoint_json, recovery_status,
-          parent_run_id, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'none', ?, ?, ?)
+          parent_run_id, created_at, updated_at, logical_task_id
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'none', ?, ?, ?, ?)
       `).run(
         runId,
         request.threadId,
@@ -148,7 +158,8 @@ export class AgentPersistenceStore {
         checkpointJson(state),
         parentRunId,
         now,
-        now
+        now,
+        parentRunId && !options.newLogicalTask ? this.operations.logicalTaskId(parentRunId) : runId
       )
       if (options.appendUserMessage !== false) {
         this.database.prepare(`
@@ -386,12 +397,15 @@ export class AgentPersistenceStore {
         '保存的任务检查点版本与当前应用不兼容；为避免错误重放，需要由用户确认后重新运行'
       )
     }
-    return agentRunStateSchema.parse(parseJson(row.state_json))
+    return this.readCompatibleState(row)
   }
 
   loadRequest(runId: string): StoredAgentRunRequest | null {
     const row = this.getRunRow(runId)
-    return row ? storedAgentRunRequestSchema.parse(parseJson(row.request_json)) : null
+    if (!row) return null
+    const parsed = storedAgentRunRequestSchema.safeParse(parseJson(row.request_json))
+    if (!parsed.success) throw new Error('[LEGACY_REQUEST_REQUIRES_REVIEW] 历史请求与当前执行协议不兼容，请核对已有结果后明确后续任务；不会重放旧请求。')
+    return parsed.data
   }
 
   loadEvents(runId: string): AgentEvent[] {
@@ -411,17 +425,20 @@ export class AgentPersistenceStore {
       : this.database.prepare(`
           SELECT * FROM agent_runs ORDER BY updated_at DESC LIMIT ?
         `).all(safeLimit)) as RunRow[]
-    return rows.map((row) => agentRunSummarySchema.parse({
+    return rows.map((row) => {
+      const state = this.readCompatibleState(row)
+      const recoveryStatus = state.error?.code === 'CHECKPOINT_VERSION_MISMATCH' ? 'recovery_required' : row.recovery_status
+      return agentRunSummarySchema.parse({
       runId: row.run_id,
       threadId: row.thread_id,
       goal: row.goal,
-      status: row.status,
-      recoveryStatus: row.recovery_status,
+      status: state.status,
+      recoveryStatus,
       parentRunId: row.parent_run_id,
       createdAt: toIso(row.created_at),
       updatedAt: toIso(row.updated_at),
-      canRetry: row.recovery_status === 'recovery_required' || terminalStatuses.has(row.status),
-    }))
+      canRetry: recoveryStatus === 'recovery_required' || terminalStatuses.has(state.status),
+    }) })
   }
 
   markRetried(runId: string): void {
@@ -467,11 +484,25 @@ export class AgentPersistenceStore {
     return (this.database.prepare('SELECT * FROM agent_runs WHERE run_id = ?').get(runId) as RunRow | undefined) ?? null
   }
 
+  private readCompatibleState(row: RunRow): AgentRunState {
+    const raw = parseJson(row.state_json)
+    const parsed = agentRunStateSchema.safeParse(raw)
+    if (parsed.success && row.operation_history_version !== 0) return parsed.data
+    this.database.prepare("UPDATE agent_runs SET recovery_status = 'recovery_required' WHERE run_id = ?").run(row.run_id)
+    return projectLegacyRunState(raw, { runId: row.run_id, threadId: row.thread_id, goal: row.goal,
+      createdAt: row.created_at, updatedAt: row.updated_at })
+  }
+
   private moveToRecoveryRequired(
     row: RunRow,
     code: 'RECOVERY_REQUIRED' | 'CHECKPOINT_VERSION_MISMATCH',
     message: string
   ): AgentRunState {
+    if (row.operation_history_version === 0 || !agentRunStateSchema.safeParse(parseJson(row.state_json)).success) {
+      // 不用兼容投影覆盖原始运行，避免丢掉尚不能解释的历史事实。
+      this.database.prepare("UPDATE agent_runs SET status = 'failed', recovery_status = 'recovery_required' WHERE run_id = ?").run(row.run_id)
+      return this.readCompatibleState(row)
+    }
     if (row.recovery_status === 'recovery_required' && row.status === 'failed') {
       return agentRunStateSchema.parse(parseJson(row.state_json))
     }

@@ -22,11 +22,11 @@ export async function listCanvasProjects(): Promise<ProjectSummary[]> {
   return useProjectStore.getState().projects.map((project) => ({ ...project }))
 }
 
-export async function createCanvasProject(name: string): Promise<Record<string, unknown>> {
+export async function createCanvasProject(name: string, context?: { operationId?: string }): Promise<Record<string, unknown>> {
   await ensureProjectsHydrated()
   const normalized = name.trim()
   if (!normalized) throw new CanvasApplicationError('INVALID_INPUT', '画布项目名称不能为空', true)
-  const projectId = await useProjectStore.getState().createProject(normalized)
+  const projectId = await useProjectStore.getState().createProject(normalized, context)
   const project = useProjectStore.getState().currentProject
   useCanvasStore.getState().setCanvasData(project?.nodes ?? [], project?.edges ?? [], project?.history)
   useCanvasStore.getState().setViewportState(project?.viewport ?? EMPTY_VIEWPORT)
@@ -49,16 +49,16 @@ export async function closeCanvasProject(projectId: string): Promise<Record<stri
   return { projectId, status: 'closed' }
 }
 
-export async function renameCanvasProject(projectId: string, name: string): Promise<Record<string, unknown>> {
+export async function renameCanvasProject(projectId: string, name: string, context?: { operationId?: string }): Promise<Record<string, unknown>> {
   await ensureProjectsHydrated()
   requireProjectSummary(projectId)
   const normalized = name.trim()
   if (!normalized) throw new CanvasApplicationError('INVALID_INPUT', '画布项目名称不能为空', true)
-  await useProjectStore.getState().renameProject(projectId, normalized)
+  await useProjectStore.getState().renameProject(projectId, normalized, context)
   return { projectId, name: normalized }
 }
 
-export async function deleteCanvasProject(projectId: string): Promise<Record<string, unknown>> {
+export async function deleteCanvasProject(projectId: string, context?: { operationId?: string }): Promise<Record<string, unknown>> {
   await ensureProjectsHydrated()
   requireProjectSummary(projectId)
   const store = useProjectStore.getState()
@@ -68,7 +68,7 @@ export async function deleteCanvasProject(projectId: string): Promise<Record<str
     useCanvasStore.getState().setCanvasData([], [], { past: [], future: [] })
     useCanvasStore.getState().setViewportState(EMPTY_VIEWPORT)
   }
-  await useProjectStore.getState().deleteProject(projectId)
+  await useProjectStore.getState().deleteProject(projectId, context)
   return { projectId, status: 'deleted', wasCurrent }
 }
 

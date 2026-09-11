@@ -248,7 +248,7 @@ export function createMultiLayerDocumentProjectionCanvasPort(
           true,
         )
       }
-      await confirmCanvasPersistence(input.projectId)
+      await confirmCanvasPersistence(input.projectId, { operationCorrelation: input.operationCorrelation })
 
       const replacedSources: Array<string | null> = [
         replacedImageUrl,

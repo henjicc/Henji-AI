@@ -88,7 +88,7 @@ describe('Agent 工作摘要', () => {
     expect(summary.unresolvedItems).toEqual([])
   })
 
-  it('同一写入口后续成功时清除旧失败与恢复状态', () => {
+  it('同一写入口后续成功不能清除未关联原操作的失败与恢复状态', () => {
     let summary = createAgentWorkingSummary('批量修改素材')
     summary = reduceAgentWorkingSummary(summary, event({
       type: 'ToolRequested', toolCallId: 'call-failed', toolName: 'run_henji_script',
@@ -110,8 +110,8 @@ describe('Agent 工作摘要', () => {
       summary: '脚本执行和正式验证均已完成。', resultReferences: { scriptRunRef: 'script-1' },
     }), null)
 
-    expect(summary.unresolvedItems).toEqual([])
-    expect(summary.recovery.mode).toBe('none')
+    expect(summary.unresolvedItems).toEqual([expect.stringContaining('run_henji_script 未收敛')])
+    expect(summary.recovery).toMatchObject({ mode: 'verify_before_write', toolCallId: 'call-failed' })
   })
 
   /*

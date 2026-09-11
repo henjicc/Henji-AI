@@ -42,7 +42,8 @@ describe('cameraStageCapabilityAdapter 后台创建工程', () => {
   })
 
   it('只落库并返回稳定引用，不切换当前 3D 编辑会话', async () => {
-    await expect(createCameraStageProject('后台工程')).resolves.toMatchObject({
+    const context = { operationId: 'create-operation', signal: new AbortController().signal }
+    await expect(createCameraStageProject('后台工程', context)).resolves.toMatchObject({
       projectId: 'project-created',
       name: '后台工程',
       defaultCameraId: 'camera-default',
@@ -54,7 +55,7 @@ describe('cameraStageCapabilityAdapter 后台创建工程', () => {
       ],
       baseRevision: 7,
     })
-    expect(mocks.createStoredProject).toHaveBeenCalledWith('后台工程')
+    expect(mocks.createStoredProject).toHaveBeenCalledWith('后台工程', context)
     expect(mocks.setAppView).not.toHaveBeenCalled()
     expect(mocks.notifyHostScopeChanged).toHaveBeenCalledWith('toolbox')
   })

@@ -181,7 +181,7 @@ describe('多图层文档生成适配器', () => {
     }))
 
     const projection = await createLayerStackV3Projection(
-      { nodeId: 'placeholder', document: layerStackDocument() },
+      { nodeId: 'placeholder', document: layerStackDocument(), operationId: 'original-generation' },
       {
         importDocument: importDocument as never,
         repository: { save } as never,
@@ -194,7 +194,10 @@ describe('多图层文档生成适配器', () => {
     }))
     expect(save).toHaveBeenCalledWith(
       expect.objectContaining({ id: expectedDocumentId, layers: [expect.objectContaining({ type: 'raster' })] }),
-      expect.objectContaining({ expectedRevision: 0, previewRef: null }),
+      expect.objectContaining({ expectedRevision: 0, previewRef: null, operationCorrelation: {
+        operationId: 'original-generation', boundaryId: expect.any(String),
+        targets: [{ kind: 'image_edit.document', id: `v3:${encodeURIComponent(expectedDocumentId)}` }],
+      } }),
     )
     expect(projection).toEqual({
       imageEditSession: {

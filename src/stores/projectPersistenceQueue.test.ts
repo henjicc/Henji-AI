@@ -14,6 +14,24 @@ function deferred(): { promise: Promise<void>; resolve: () => void } {
 }
 
 describe('projectPersistenceQueue', () => {
+  it('保存关联保留自己的快照，自动保存合并不能改写关联目标', async () => {
+    const writes: Array<{ version: number; receipt?: string }> = []
+    const queue = createProjectPersistenceQueue<Snapshot, string>({
+      getProjectId: (project) => project.id,
+      upsertProject: async (project, receipt) => { writes.push({ version: project.version, receipt }) },
+      updateViewport: vi.fn(), deleteProject: vi.fn(), onBackgroundError: vi.fn(),
+    })
+    const release = queue.pauseProject('p1')
+    const first = queue.flushProject({ id: 'p1', version: 1 }, 'operation-A')
+    queue.queueProject({ id: 'p1', version: 2 })
+    const second = queue.flushProject({ id: 'p1', version: 3 }, 'operation-B')
+    queue.queueProject({ id: 'p1', version: 4 })
+    release()
+    await Promise.all([first, second])
+    await vi.waitFor(() => expect(writes).toEqual([
+      { version: 1, receipt: 'operation-A' }, { version: 3, receipt: 'operation-B' }, { version: 4, receipt: undefined },
+    ]))
+  })
   it('显式 flush 等待旧自动保存后写入最终快照', async () => {
     const first = deferred()
     const writes: number[] = []
@@ -85,7 +103,7 @@ describe('projectPersistenceQueue', () => {
     first.resolve()
     await deleting
     expect(upsertProject).toHaveBeenCalledTimes(1)
-    expect(deleteProject).toHaveBeenCalledWith('p1')
+    expect(deleteProject).toHaveBeenCalledWith('p1', undefined)
   })
 
   it('显式写入失败会向调用方抛出，不能伪装成功', async () => {

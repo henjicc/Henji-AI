@@ -52,6 +52,16 @@ describe('asset application service', () => {
     useAssetLibraryStore.getState().setSelectedAsset(null)
   })
 
+  it('每个保存边界绑定原操作和素材目标，不把领域上下文当作业务入参', async () => {
+    await assetApplicationService.replaceTags(asset.id, ['主角'], { operationId: 'operation' })
+    await assetApplicationService.replaceTags(asset.id, ['主角'], { operationId: 'operation' })
+    const first = commands.setAssetTags.mock.calls[0]?.[2]
+    const second = commands.setAssetTags.mock.calls[1]?.[2]
+    expect(first).toEqual({ operationId: 'operation', boundaryId: expect.any(String), targets: [{ kind: 'asset', id: asset.id }] })
+    expect(second.operationId).toBe(first.operationId)
+    expect(second.boundaryId).not.toBe(first.boundaryId)
+  })
+
   it('查询和详情只返回稳定媒体引用，不暴露本地路径', async () => {
     const page = await assetApplicationService.query({ page: 1, pageSize: 20 })
     const detail = await assetApplicationService.read(asset.id)
@@ -70,6 +80,6 @@ describe('asset application service', () => {
       tags: ['主角'],
       revision: 3,
     })
-    expect(commands.setAssetTags).toHaveBeenCalledWith(asset.id, ['主角'])
+    expect(commands.setAssetTags).toHaveBeenCalledWith(asset.id, ['主角'], undefined)
   })
 })

@@ -20,7 +20,7 @@ function mapAsset(row: AssetRow): AssetDto {
 }
 function getAsset(id: string): AssetDto { const row = getDb().prepare('SELECT * FROM assets WHERE id = ?').get(id) as AssetRow | undefined; if (!row) throw new Error('资产不存在'); return mapAsset(row) }
 
-export function createAsset(input: CreateAssetRequest): AssetDto {
+export function createAsset(input: CreateAssetRequest, options: { inspect?: boolean } = {}): AssetDto {
   const filePath = normalizeAssetPath(input.filePath)
   const now = Date.now()
   logger.info('开始登记资产', { event: 'asset.create.start', context: { mediaType: input.mediaType, source: input.source } })
@@ -36,7 +36,9 @@ export function createAsset(input: CreateAssetRequest): AssetDto {
     const result = transaction()
     const asset = { ...getAsset(result.id), wasExisting: result.wasExisting }
     logger.info('资产登记完成', { event: 'asset.create.completed', context: { assetId: asset.id } })
-    void inspectAsset(asset.id)
+    if (options.inspect !== false) void inspectAsset(asset.id).catch((error: unknown) => {
+      logger.error('资产登记后检查失败', { event: 'asset.create.inspect.failed', error, context: { assetId: asset.id } })
+    })
     return asset
   } catch (error) {
     logger.error('资产登记失败', { event: 'asset.create.failed', error })

@@ -29,7 +29,7 @@ export function createElectronImage(): ImagePlatform {
     readPanoramaImageMetadata: (source) => getNativeImage().readPanoramaImageMetadata(source),
     embedPanoramaImageMetadata: (source) => getNativeImage().embedPanoramaImageMetadata(source),
     loadImage: (filePath) => getNativeImage().loadImage(filePath),
-    persistImageSource: (source) => getNativeImage().persistImageSource(source),
+    persistImageSource: (source, renderContext) => getNativeImage().persistImageSource(source, renderContext),
     persistImageSourceTracked: (source) => getNativeImage().persistImageSourceTracked(source),
     persistImageBinary: (bytes, extension) => getNativeImage().persistImageBinary(bytes, extension),
     saveImageSourceToDownloads: (source, suggestedFileName) => getNativeImage().saveImageSourceToDownloads(source, suggestedFileName),

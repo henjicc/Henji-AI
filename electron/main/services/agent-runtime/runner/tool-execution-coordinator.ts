@@ -123,7 +123,8 @@ export class AgentToolExecutionCoordinator {
        * 会重新经过 Gateway。
        */
       executionGuard: (call) => {
-        if (call.toolName === 'resume_henji_script') return null
+        if (call.toolName === 'resume_henji_script'
+          || (call.toolName === 'run_henji_script' && this.options.gateway.hasDurableOperations())) return null
         const recoveryReason = this.options.recoveryGuard.validate(call)
         return recoveryReason ? rejectGuard(call, recoveryReason) : null
       },

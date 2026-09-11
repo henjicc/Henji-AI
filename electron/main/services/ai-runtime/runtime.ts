@@ -63,10 +63,10 @@ export function getProviderKeyStatus(): ProviderKeyStatusDto[] {
 }
 
 export async function generate(
-  request: AiGenerateRequestDto
+  request: AiGenerateRequestDto,
+  observer?: { onProviderResponse: (response: Awaited<ReturnType<typeof sdkAIClient.generate>>) => void },
 ): Promise<AiGenerateResponseDto> {
   const requestId = resolveRequestId(request)
-  let ownedMediaPaths: string[] = []
   logger.info('后端开始生成', {
     event: 'ai_runtime.generate.start',
     requestId,
@@ -91,6 +91,7 @@ export async function generate(
         })
       },
     })
+    observer?.onProviderResponse(providerResult)
     const info = requireRequestInfo(requestInfo)
     const trace = buildGenerateTrace(
       request.modelId,
@@ -101,12 +102,7 @@ export async function generate(
       info.requestBody,
       providerResult.metadata
     )
-    const persistedMedia = providerResult.status === 'completed'
-      ? await saveMediaPaths(providerResult.url, { requestId, modelId: request.modelId, taskId: providerResult.taskId })
-      : { filePath: undefined, createdFilePaths: [] }
-    const { filePath, createdFilePaths } = persistedMedia
-    ownedMediaPaths = createdFilePaths
-    const structuredOutput = materializeStructuredOutput(providerResult.structuredOutput, filePath)
+    const response = await persistGeneratedResponse({ ...request, requestId }, { ...providerResult, trace })
 
     logger.info('后端生成响应', {
       event: 'generation.runtime.response_json',
@@ -128,19 +124,8 @@ export async function generate(
       context: { status: providerResult.status, taskId: providerResult.taskId },
     })
 
-    const response = {
-      status: providerResult.status,
-      url: providerResult.url,
-      filePath,
-      createdFilePaths,
-      taskId: providerResult.taskId,
-      metadata: providerResult.metadata,
-      structuredOutput,
-      trace,
-    }
     return response
   } catch (error) {
-    await rollbackCreatedMedia(ownedMediaPaths)
     logger.error('后端生成失败', {
       event: 'ai_runtime.generate.failed',
       requestId,
@@ -151,12 +136,27 @@ export async function generate(
   }
 }
 
+/** 复用正式结果落盘路径，仅处理已有供应商回执，从不提交生成或重新付费。 */
+export async function persistGeneratedResponse(request: Pick<AiGenerateRequestDto, 'modelId'> & { requestId: string },
+  response: AiGenerateResponseDto): Promise<AiGenerateResponseDto> {
+  if (response.status !== 'completed') return response
+  let ownedMediaPaths: string[] = []
+  try {
+    const persisted = await saveMediaPaths(response.url, { requestId: request.requestId, modelId: request.modelId, taskId: response.taskId })
+    ownedMediaPaths = persisted.createdFilePaths
+    return { ...response, ...persisted, structuredOutput: materializeStructuredOutput(response.structuredOutput, persisted.filePath) }
+  } catch (error) {
+    await rollbackCreatedMedia(ownedMediaPaths)
+    throw error
+  }
+}
+
 export async function continuePolling(
-  request: AiContinuePollingRequestDto
+  request: AiContinuePollingRequestDto,
+  observer?: { onProviderResponse: (response: AiGenerateResponseDto) => void },
 ): Promise<AiGenerateResponseDto> {
   const requestId = request.requestId?.trim() || `continue-${request.modelId}-${Date.now()}`
   const taskId = request.taskId.trim()
-  let ownedMediaPaths: string[] = []
   logger.info('后端开始轮询', {
     event: 'ai_runtime.poll.start',
     requestId,
@@ -183,6 +183,7 @@ export async function continuePolling(
         })
       },
     })
+    observer?.onProviderResponse(providerResult)
     const info = requireRequestInfo(requestInfo)
     const trace = buildContinuePollingTrace(
       request.modelId,
@@ -205,26 +206,19 @@ export async function continuePolling(
         responseBody: trace.responseBody,
       },
     })
-    const { filePath, createdFilePaths } = await saveMediaPaths(providerResult.url, { requestId, modelId: request.modelId, taskId })
-    ownedMediaPaths = createdFilePaths
-    const structuredOutput = materializeStructuredOutput(providerResult.structuredOutput, filePath)
-    const responseResult = {
-      status: providerResult.status,
-      url: providerResult.url,
-      filePath,
-      createdFilePaths,
-      taskId: providerResult.taskId,
-      metadata: providerResult.metadata,
-      structuredOutput,
-      trace,
+    const responseResult = await persistGeneratedResponse({ modelId: request.modelId, requestId }, { ...providerResult, trace })
+    if (responseResult.status === 'completed') {
+      try {
+        savePendingResult(taskId, {
+          url: responseResult.url, filePath: responseResult.filePath, createdFilePaths: responseResult.createdFilePaths,
+          metadata: responseResult.metadata, structuredOutput: responseResult.structuredOutput,
+        })
+      } catch (error) {
+        logger.warn('轮询结果已保存，缓存回执暂未完成', {
+          event: 'ai_runtime.poll.receipt_cache.failed', requestId, taskId, error: toLogError(error),
+        })
+      }
     }
-    savePendingResult(taskId, {
-      url: providerResult.url,
-      filePath,
-      createdFilePaths,
-      metadata: providerResult.metadata,
-      structuredOutput,
-    })
     logger.info('后端轮询结果', {
       event: 'ai_runtime.poll.result',
       requestId,
@@ -235,7 +229,6 @@ export async function continuePolling(
     })
     return responseResult
   } catch (error) {
-    await rollbackCreatedMedia(ownedMediaPaths)
     logger.error('后端轮询失败', {
       event: 'ai_runtime.poll.failed',
       requestId,

@@ -1,3 +1,4 @@
+import type { ApplicationExecutionContext } from '@/core/application-control'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({
@@ -28,6 +29,8 @@ import {
   resetAssetMutationUndoStateForTests,
 } from './assetMutationExecutor'
 
+const context: ApplicationExecutionContext = { requestId: 'request', operationId: 'operation', exposure: 'assistant',
+  permissions: new Set(['assets:write']), acceptedDataClasses: new Set(['C1']) }
 describe('素材属性写入执行器', () => {
   let revision = 0
   const executor = new AssetMutationExecutor({
@@ -79,10 +82,10 @@ describe('素材属性写入执行器', () => {
     const result = await executor.apply(step([
       { propertyId: 'asset.display_name', operation: 'set', value: '新名称' },
       { propertyId: 'asset.tags', operation: 'set', value: ['风景', '夜景'] },
-    ]))
+    ]), context)
 
-    expect(mocks.rename).toHaveBeenCalledWith('asset-1', '新名称')
-    expect(mocks.replaceTags).toHaveBeenCalledWith('asset-1', ['风景', '夜景'])
+    expect(mocks.rename).toHaveBeenCalledWith('asset-1', '新名称', expect.objectContaining({ operationId: 'operation' }))
+    expect(mocks.replaceTags).toHaveBeenCalledWith('asset-1', ['风景', '夜景'], expect.objectContaining({ operationId: 'operation' }))
     expect(mocks.state).toMatchObject({ displayName: '新名称', tags: ['风景', '夜景'] })
     expect(result.resultingRevisions.assets).toBe(1)
   })
@@ -91,9 +94,9 @@ describe('素材属性写入执行器', () => {
     await executor.apply(step([
       { propertyId: 'asset.library_refs', operation: 'append', value: { kind: 'asset.library', id: 'lib-1' } },
       { propertyId: 'asset.library_refs', operation: 'remove', value: 'lib-old' },
-    ]))
-    expect(mocks.addToLibrary).toHaveBeenCalledWith('lib-1', 'asset-1')
-    expect(mocks.removeFromLibrary).toHaveBeenCalledWith('lib-old', 'asset-1')
+    ]), context)
+    expect(mocks.addToLibrary).toHaveBeenCalledWith('lib-1', 'asset-1', expect.objectContaining({ operationId: 'operation' }))
+    expect(mocks.removeFromLibrary).toHaveBeenCalledWith('lib-old', 'asset-1', expect.objectContaining({ operationId: 'operation' }))
     expect(mocks.state.libraryIds).toEqual(['lib-1'])
   })
 
@@ -105,7 +108,7 @@ describe('素材属性写入执行器', () => {
       { propertyId: 'asset.media_ref', operation: 'set', value: 'x' },
       // 不可写属性的错误码全项目统一成 PROPERTY_NOT_WRITABLE:<propertyId>，
       // 不再每个领域一个前缀——引擎按这一个码归类，模型也只需认一个。
-    ]))).rejects.toThrow('PROPERTY_NOT_WRITABLE:asset.media_ref')
+    ]), context)).rejects.toThrow('PROPERTY_NOT_WRITABLE:asset.media_ref')
 
     expect(mocks.state).toEqual({
       displayName: '旧名称',
@@ -119,9 +122,10 @@ describe('素材属性写入执行器', () => {
       { propertyId: 'asset.display_name', operation: 'set', value: '新名称' },
       { propertyId: 'asset.tags', operation: 'set', value: ['新'] },
       { propertyId: 'asset.library_refs', operation: 'append', value: 'lib-new' },
-    ]))
+    ]), context)
 
-    await executor.undo(String(result.undoToken))
+    await executor.undo(String(result.undoToken), { ...context, operationId: 'undo-operation' })
+    expect(mocks.rename).toHaveBeenLastCalledWith('asset-1', '旧名称', expect.objectContaining({ operationId: 'undo-operation' }))
     expect(mocks.state).toEqual({
       displayName: '旧名称',
       tags: ['旧'],
@@ -133,6 +137,6 @@ describe('素材属性写入执行器', () => {
   it('集合归属不支持 set，错误信息给出替代做法', async () => {
     await expect(executor.apply(step([
       { propertyId: 'asset.library_refs', operation: 'set', value: [] },
-    ]))).rejects.toThrow(/只支持 append \/ remove/)
+    ]), context)).rejects.toThrow(/只支持 append \/ remove/)
   })
 })

@@ -1,4 +1,6 @@
 import type { ImageEditSessionReferenceV3 } from '@/core/imageEdit/v3/sessionReference'
+import type { ApplicationPersistenceCorrelation } from '@/core/application-control/persistenceCorrelation'
+import { v4 as uuidv4 } from 'uuid'
 import { ApplicationPersistenceFailure } from '@/core/application-control/execution/persistence'
 import type { ImageEditPersistenceHostV3, ImageEditPersistenceProjectionV3 } from '@/features/imageEdit/v3/application/imageEditPersistenceOwner'
 import { useCanvasStore } from '@/stores/canvasStore'
@@ -39,22 +41,24 @@ export function createMultiLayerDocumentPersistenceConfirmation(input: {
         ? 'image_edit.document.node_projection_confirmation' : 'image_edit.document.node_projection' } }],
     resultingRevisions: currentRevisions(),
   })
-  let pending: { node: ReturnType<typeof currentNode>; session: ImageEditSessionReferenceV3 } | null = null
+  let pending: { node: ReturnType<typeof currentNode>; session: ImageEditSessionReferenceV3; operationCorrelation?: ApplicationPersistenceCorrelation } | null = null
   return {
     projection,
-    async confirm(session: ImageEditSessionReferenceV3): Promise<ImageEditPersistenceProjectionV3> {
+    async confirm(session: ImageEditSessionReferenceV3, context?: { operationId?: string }): Promise<ImageEditPersistenceProjectionV3> {
       if (session.documentRef !== input.documentRef) throw new Error('图片保存确认不能切换文档')
       const before = currentNode()
+      const operationCorrelation: ApplicationPersistenceCorrelation | undefined = context?.operationId
+        ? { operationId: context.operationId, boundaryId: uuidv4(), targets: [{ kind: 'canvas.node', id: `${input.projectId}:${input.nodeId}` }] } : undefined
       try {
         if (pending && pending.node === before && pending.session.revision === session.revision) {
-          await confirmCanvasPersistence(input.projectId)
+          await confirmCanvasPersistence(input.projectId, { operationCorrelation: pending.operationCorrelation })
           const result = receipt(pending.session, true)
           pending = null
           return result
         }
         pending = null
         const result = await saveProjection({
-          ...input, data: before.data, session,
+          ...input, data: before.data, session, operationCorrelation,
         })
         return receipt(result.imageEditSession)
       } catch (error) {
@@ -62,7 +66,7 @@ export function createMultiLayerDocumentPersistenceConfirmation(input: {
           const node = currentNode()
           const installed = node.data.imageEditSession!
           if (node !== before && installed.documentRef === session.documentRef && installed.revision === session.revision) {
-            pending = { node, session: installed }
+            pending = { node, session: installed, operationCorrelation }
           }
           const actual = pending?.node === node ? receipt(pending.session) : undefined
           throw new ApplicationPersistenceFailure(

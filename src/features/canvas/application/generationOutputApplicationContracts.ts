@@ -40,6 +40,7 @@ export interface CommitCanvasGenerationOutputsInput {
   preparedLayerStack?: LayerStackDocumentV1
   /** 测试可注入；生产必须经过 1.1 的多图层文档 application 服务。 */
   createLayerStackDocument?: (input: {
+    operationId?: string
     nodeId: string
     document: LayerStackDocumentV1
   }) => Promise<MultiLayerDocumentNodeProjection>

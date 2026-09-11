@@ -112,7 +112,9 @@ export class CanvasNodeMutationExecutor implements ApplicationMutationExecutor {
       if (!isCanvasMutationCheckpointCurrent(checkpoint)) throw new CanvasTransactionConflictError(projectId)
       const applied = useCanvasStore.getState()
       before.afterFingerprint = fingerprint(applied.nodes, applied.edges)
-      const completion = confirmCanvasPersistence(projectId)
+      const completion = confirmCanvasPersistence(projectId, { operationCorrelation: context.operationId ? {
+        operationId: context.operationId, boundaryId: uuidv4(), targets: steps.map((step) => step.target),
+      } : undefined })
       releasePersistence()
       await completion
     } catch (error) {

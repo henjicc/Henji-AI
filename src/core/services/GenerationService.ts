@@ -49,6 +49,7 @@ import {
 export type ProviderFactory = never
 
 export interface GenerationExecutionOptions {
+  operationId?: string
   progressSource?: 'generation' | 'canvas'
   requestId?: string
 }
@@ -131,6 +132,7 @@ export class GenerationService {
         modelId,
         params: runtimeParams,
         requestId,
+        ...(options.operationId ? { operationId: options.operationId } : {}),
       })
       recordRuntimeTrace(modelId, runtimeParams, response.trace)
 
@@ -283,6 +285,7 @@ export class GenerationService {
       })
 
       const response = await aiContinuePolling({
+        operationId: options.operationId,
         modelId,
         taskId,
         params: runtimeParams,

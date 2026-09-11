@@ -1,8 +1,18 @@
 export type CameraStageRenderResolutionPreset = '720p' | '1080p'
 export type CameraStageRenderOutputKind = 'image' | 'video'
 
+/** 隐藏渲染宿主在既有媒体保存入口绑定原任务，不接受输出路径。 */
+export interface CameraStageImagePersistenceContext {
+  requestId: string
+  width: number
+  height: number
+  aspectRatio: string
+  selectedTimeSec: number
+}
+
 export interface CameraStageRenderRequest {
   requestId: string
+  operationId?: string
   canvasProjectId: string
   nodeId: string
   cameraStageProjectId: string

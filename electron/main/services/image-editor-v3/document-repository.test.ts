@@ -11,6 +11,7 @@ import {
   createImageEditRasterLayerV3,
 } from '../../../../src/core/imageEdit/v3/documentFactory'
 import type { ImageEditDocumentV3 } from '../../../../src/core/imageEdit/v3/documentTypes'
+import type { ApplicationPersistenceReceiptRecord } from '../../../../src/core/application-control/persistenceCorrelation'
 
 import { writeBufferAtomically } from './atomic-file'
 import {
@@ -39,6 +40,46 @@ function documentAt(documentId: string, revision: number, marker = ''): ImageEdi
 }
 
 describe('ImageEditDocumentRepository', () => {
+  it('文件已落盘但回执移交失败时，重启可按原文件关联恢复，后续普通保存才清理已确认回执', async () => {
+    const prepared: ApplicationPersistenceReceiptRecord[] = []
+    const confirmed: ApplicationPersistenceReceiptRecord[] = []
+    const correlation = { operationId: 'operation', boundaryId: 'save-boundary', targets: [{ kind: 'image_edit.document', id: 'v3:atomic' }] }
+    const first = new ImageEditDocumentRepository(rootDir, { confirmOperationReceipt: () => { throw new Error('主进程记录中断') } })
+    await first.create({ documentId: 'atomic', document: documentAt('atomic', 0) })
+    await expect(first.save({ documentId: 'atomic', expectedRevision: 0, document: documentAt('atomic', 1, 'saved'),
+      resourceRefs: [], operationCorrelation: correlation, prepareOperationReceipt: (receipt) => prepared.push(receipt) }))
+      .rejects.toThrow('主进程记录中断')
+    const restarted = new ImageEditDocumentRepository(rootDir, { confirmOperationReceipt: (receipt) => confirmed.push(receipt) })
+    const actual = await restarted.load('atomic')
+    expect(actual.revision).toBe(1)
+    expect(actual.pendingOperationReceipts).toEqual(prepared)
+    expect(prepared[0]).toMatchObject({ ...correlation, storageTarget: { kind: 'image_edit.document', id: 'v3:atomic', revision: 1 } })
+    restarted.confirmPendingOperations(actual)
+    expect(confirmed).toEqual(prepared)
+    await restarted.save({ documentId: 'atomic', expectedRevision: 1, document: documentAt('atomic', 2, 'manual'), resourceRefs: [] })
+    expect((await restarted.load('atomic')).pendingOperationReceipts).toEqual([])
+    const fork = await restarted.fork({ sourceDocumentRef: 'image-edit-v3:atomic', expectedRevision: 2, targetDocumentId: 'copy' })
+    expect(fork.pendingOperationReceipts).toBeUndefined()
+  })
+
+  it('原子文件替换失败时不能制造保存事实，准备回执也不能被误认为成功', async () => {
+    const prepared: ApplicationPersistenceReceiptRecord[] = []
+    const confirmed: ApplicationPersistenceReceiptRecord[] = []
+    await new ImageEditDocumentRepository(rootDir).create({ documentId: 'failed', document: documentAt('failed', 0) })
+    const repository = new ImageEditDocumentRepository(rootDir, {
+      writeAtomically: async () => { throw new Error('受控拒写') },
+      confirmOperationReceipt: (receipt) => confirmed.push(receipt),
+    })
+    await expect(repository.save({ documentId: 'failed', expectedRevision: 0, document: documentAt('failed', 1), resourceRefs: [],
+      operationCorrelation: { operationId: 'operation', boundaryId: 'boundary', targets: [{ kind: 'image_edit.document', id: 'v3:failed' }] },
+      prepareOperationReceipt: (receipt) => prepared.push(receipt),
+    })).rejects.toThrow('受控拒写')
+    expect(prepared).toHaveLength(1)
+    expect(confirmed).toEqual([])
+    const actual = await repository.load('failed')
+    expect(actual.revision).toBe(0)
+    expect(actual.pendingOperationReceipts).toBeUndefined()
+  })
   it('从精确 revision fork 独立文档，后续编辑互不影响', async () => {
     const repository = new ImageEditDocumentRepository(rootDir)
     await repository.create({

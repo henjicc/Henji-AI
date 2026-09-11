@@ -1,3 +1,4 @@
+import type { ApplicationPersistenceCorrelation } from '../../core/application-control/persistenceCorrelation'
 export type AssetMediaType = 'image' | 'video' | 'audio'
 export type AssetSource = 'generated' | 'canvas' | 'camera-stage' | 'imported' | 'external'
 export type AssetInspectionStatus = 'pending' | 'ready' | 'missing' | 'failed'
@@ -8,9 +9,9 @@ export interface CreateAssetInput { filePath: string; mediaType: AssetMediaType;
 export interface AssetQueryInput { mediaType?: AssetMediaType; libraryId?: string; tag?: string; keyword?: string; page?: number; pageSize?: number; sort?: 'created' | 'recent' }
 export interface AssetPage { items: AssetRecord[]; total: number; page: number; pageSize: number }
 export interface AssetLibraryPlatform {
-  createAsset(input: CreateAssetInput): Promise<AssetRecord>
-  updateAsset(id: string, name: string): Promise<AssetRecord>
-  deleteAsset(id: string): Promise<void>
+  createAsset(input: CreateAssetInput, operationCorrelation?: ApplicationPersistenceCorrelation): Promise<AssetRecord>
+  updateAsset(id: string, name: string, operationCorrelation?: ApplicationPersistenceCorrelation): Promise<AssetRecord>
+  deleteAsset(id: string, operationCorrelation?: ApplicationPersistenceCorrelation): Promise<void>
   queryAssets(input: AssetQueryInput): Promise<AssetPage>
   touchAsset(id: string): Promise<void>
   checkPaths(filePaths: string[]): Promise<boolean[]>
@@ -19,13 +20,13 @@ export interface AssetLibraryPlatform {
   relocateAsset(id: string, filePath: string): Promise<AssetRecord>
   listLibraries(): Promise<AssetLibraryRecord[]>
   inspectLibrary(id: string): Promise<AssetLibrarySnapshot>
-  createLibrary(name: string): Promise<AssetLibraryRecord>
-  renameLibrary(id: string, name: string): Promise<AssetLibraryRecord>
-  deleteLibrary(id: string): Promise<void>
-  restoreLibrary(snapshot: AssetLibrarySnapshot): Promise<AssetLibraryRecord>
-  addToLibrary(libraryId: string, assetId: string): Promise<void>
-  removeFromLibrary(libraryId: string, assetId: string): Promise<void>
+  createLibrary(name: string, operationCorrelation?: ApplicationPersistenceCorrelation): Promise<AssetLibraryRecord>
+  renameLibrary(id: string, name: string, operationCorrelation?: ApplicationPersistenceCorrelation): Promise<AssetLibraryRecord>
+  deleteLibrary(id: string, operationCorrelation?: ApplicationPersistenceCorrelation): Promise<void>
+  restoreLibrary(snapshot: AssetLibrarySnapshot, operationCorrelation?: ApplicationPersistenceCorrelation): Promise<AssetLibraryRecord>
+  addToLibrary(libraryId: string, assetId: string, operationCorrelation?: ApplicationPersistenceCorrelation): Promise<void>
+  removeFromLibrary(libraryId: string, assetId: string, operationCorrelation?: ApplicationPersistenceCorrelation): Promise<void>
   listTags(): Promise<string[]>
-  setAssetTags(assetId: string, tags: string[]): Promise<AssetRecord>
+  setAssetTags(assetId: string, tags: string[], operationCorrelation?: ApplicationPersistenceCorrelation): Promise<AssetRecord>
   rebaseDataRoot(oldRoot: string, newRoot: string): Promise<number>
 }

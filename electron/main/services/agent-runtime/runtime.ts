@@ -1,4 +1,5 @@
 import { webContents, type WebContents } from 'electron'
+import { operationCommandSchema, projectOperationSnapshots, type OperationRecord, type OperationRecovery } from '../../../../src/core/assistant/operations'
 
 import {
   agentRunSnapshotSchema,
@@ -35,7 +36,10 @@ import {
   agentMemoryRetrievalQuerySchema,
   type AgentMemoryRetrievalResult,
 } from '../../../../src/core/assistant/memory'
-import { getAssistantHostContext } from '../assistant/frontend-tool-bridge'
+import { getAssistantHostContext, configureAssistantOperationReceipts } from '../assistant/frontend-tool-bridge'
+import { requireFrontendSuccess } from './tools/builtin/frontend-utils'
+import { failureObservedEffects } from '../../../../src/core/assistant/applicationTransactionFailureFacts'
+import { toGatewayError } from './tools/gateway-support'
 import { getDb } from '../db'
 import { getLlmProviderApiKey } from '../keystore'
 import { getAgentMemoryStore } from '../assistant/memory'
@@ -76,6 +80,7 @@ export class AgentRuntimeService {
   private readonly runs = new Map<string, AgentRunRecord>()
   private readonly activeByThread = new Map<string, string>()
   private readonly eventListeners = new Map<string, Set<AgentRunEventListener>>()
+  private readonly disposeOperationReceipts: () => void
   private readonly persistence = new AgentPersistenceStore(getDb())
   private readonly permissionAudit = new AgentPermissionAuditStore(getDb())
   private readonly agentTraceStore = getAgentTraceStore()
@@ -90,9 +95,10 @@ export class AgentRuntimeService {
     }
   )
   private readonly manager = new AgentRuntimeManager({
+    executeOperation: (payload) => this.persistence.operations.execute(operationCommandSchema.parse(payload)),
     getModelApiKey: getLlmProviderApiKey,
     executeTool: (payload, signal) => executeAgentToolInMain(
-      payload, signal, this.registry, (runId) => this.runs.get(runId)
+      payload, signal, this.registry, (runId) => this.runs.get(runId), this.persistence.operations
     ),
     saveArtifact: (payload) => this.saveArtifact(payload),
     describeArtifact: (payload) => this.describeArtifact(payload),
@@ -144,8 +150,8 @@ export class AgentRuntimeService {
     persistence: this.persistence,
     manager: this.manager,
     commitControlState: (runId, state) => this.commitControlState(runId, state),
-    startContinuation: (owner, request, parentRunId, recoveryContext) => (
-      this.startRunWithParent(owner, request, parentRunId, recoveryContext)
+    startContinuation: (owner, request, parentRunId) => (
+      this.startRunWithParent(owner, request, parentRunId, undefined, undefined, undefined, true)
     ),
     hasActiveThread: (threadId) => this.activeByThread.has(threadId),
   })
@@ -156,7 +162,33 @@ export class AgentRuntimeService {
       this.startRunWithParent(owner, request, parentRunId, recoveryContext)
     ),
   })
-  constructor() { this.persistence.markInterruptedRuns() }
+  constructor() {
+    this.persistence.markInterruptedRuns()
+    this.persistence.operations.markInterrupted()
+    this.disposeOperationReceipts = configureAssistantOperationReceipts({
+      bind: (binding) => this.persistence.operations.bindTransport(binding),
+      getBinding: (callId) => this.persistence.operations.getTransport(callId),
+      prepare: (binding, preparation) => this.persistence.operations.recordExecutionPreparation(binding.operationId, preparation, binding.webContentsId),
+      record: (binding, result) => {
+        const operation = this.persistence.operations.get(binding.operationId)
+        const definition = operation ? this.registry.get(operation.toolName) : null
+        if (!operation || !definition) throw new Error('OPERATION_OWNER_INVALID')
+        if (result.ok) {
+          const output = definition.outputSchema.parse(result.data)
+          if (definition.dataClasses(output).includes('C3')) throw new Error('PERMISSION_DENIED')
+          this.persistence.operations.recordOutput(operation.operationId, output, result.effects)
+        } else {
+          try { requireFrontendSuccess(result) } catch (error) {
+            const failure = toGatewayError(error)
+            const effects = failure.transaction ? failureObservedEffects(failure.transaction) : []
+            this.persistence.operations.execute({ action: 'fail', runId: binding.runId, operationId: binding.operationId,
+              state: operation.readOnly || failure.transaction?.executionState === 'not_started' ? 'not_executed' : effects.length || failure.transaction?.persistence ? 'partial' : 'unknown',
+              error: failure.message.slice(0, 2000), transaction: failure.transaction, effects })
+          }
+        }
+      },
+    })
+  }
 
   async startRun(owner: WebContents, request: AgentStartRunRequest): Promise<AgentStartRunResult> {
     return this.startRunWithParent(owner, request, null, undefined) }
@@ -165,10 +197,12 @@ export class AgentRuntimeService {
     request: AgentStartRunRequest,
     parentRunId: string | null,
     recoveryContext: AgentWorkingSummary | undefined,
-    budgetContinuation?: AgentBudgetContinuation
+    budgetContinuation?: AgentBudgetContinuation,
+    operationRecovery?: OperationRecovery,
+    newLogicalTask = false,
   ): Promise<AgentStartRunResult> {
     return startRuntimeRun({
-      owner, request, parentRunId, recoveryContext, budgetContinuation,
+      owner, request, parentRunId, recoveryContext, budgetContinuation, operationRecovery, newLogicalTask,
       runs: this.runs,
       activeByThread: this.activeByThread,
       persistence: this.persistence,
@@ -245,13 +279,16 @@ export class AgentRuntimeService {
     const live = this.runs.get(runId)
     if (live) {
       const record = this.requireRebindableRun(owner, runId)
-      return agentRunSnapshotSchema.parse({ state: record.state, events: record.events })
+      return agentRunSnapshotSchema.parse({ state: record.state, events: record.events,
+        operations: projectOperationSnapshots(this.persistence.operations.execute({ action: 'list', runId }) as OperationRecord[]),
+      })
     }
     const state = this.persistence.loadState(runId)
     if (!state) throw new Error('[run_not_found] 运行不存在')
     return agentRunSnapshotSchema.parse({
       state,
       events: this.persistence.loadEvents(runId),
+      operations: projectOperationSnapshots(this.persistence.operations.execute({ action: 'list', runId }) as OperationRecord[]),
     })
   }
 
@@ -379,7 +416,8 @@ export class AgentRuntimeService {
     const result = await this.startRunWithParent(owner, {
       ...request,
       userInstructions,
-    }, runId, previous.workingSummary)
+    }, runId, previous.status === 'completed' ? undefined : previous.workingSummary, undefined,
+    previous.status === 'completed' ? undefined : this.persistence.operations.recoverableScript(runId), previous.status === 'completed')
     this.persistence.markRetried(runId)
     return result
   }
@@ -387,6 +425,7 @@ export class AgentRuntimeService {
   async dispose(): Promise<void> {
     this.externalWait.dispose()
     await this.manager.dispose()
+    this.disposeOperationReceipts()
   }
 
   private commitControlState(runId: string, state: AgentRunState): AgentRunState {

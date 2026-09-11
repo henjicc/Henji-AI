@@ -181,6 +181,7 @@ export async function runCanvasTransaction(
   operationCount: number,
   execute: CanvasAtomicExecutor,
   logContext: Record<string, unknown> = {},
+  executionContext?: { operationId?: string },
 ): Promise<{ appliedOperations: Record<string, unknown>[]; undoRef: string }> {
   requireCurrentCanvasProject(projectId)
   const canvas = useCanvasStore.getState()
@@ -251,7 +252,20 @@ export async function runCanvasTransaction(
     dragHistorySnapshot: null,
     activeHistoryGroup: null,
   })
-  const completion = confirmCanvasPersistence(projectId)
+  const changedRefs = <T extends { id: string }>(kind: string, before: T[], current: T[]) => {
+    const previous = new Map(before.map((item) => [item.id, item]))
+    const next = new Map(current.map((item) => [item.id, item]))
+    return [...new Set([...previous.keys(), ...next.keys()])]
+      .filter((id) => previous.get(id) !== next.get(id))
+      .map((id) => ({ kind, id: `${projectId}:${id}` }))
+  }
+  const operationCorrelation = executionContext?.operationId ? {
+    operationId: executionContext.operationId, boundaryId: uuidv4(), targets: [
+      ...changedRefs('canvas.node', beforeNodes, after.nodes),
+      ...changedRefs('canvas.edge', beforeEdges, after.edges),
+    ],
+  } : undefined
+  const completion = confirmCanvasPersistence(projectId, { operationCorrelation })
   releasePersistence()
   await completion
   for (const effect of persistenceEffects) {
@@ -287,6 +301,7 @@ export async function applyCanvasOperationsAtomically(
   projectId: string,
   operations: CanvasBatchOperation[],
   logContext: Record<string, unknown> = {},
+  executionContext?: { operationId?: string },
 ): Promise<{ appliedOperations: Record<string, unknown>[]; undoRef: string }> {
   return await runCanvasTransaction(projectId, operations.length, async (options) => {
     const results: Record<string, unknown>[] = []
@@ -298,7 +313,7 @@ export async function applyCanvasOperationsAtomically(
       })
     }
     return results
-  }, logContext)
+  }, logContext, executionContext)
 }
 
 export async function commitCanvasBatch(planRef: string): Promise<Record<string, unknown>> {

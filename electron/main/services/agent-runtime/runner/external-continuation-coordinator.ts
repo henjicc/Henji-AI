@@ -16,6 +16,7 @@ const QUERY_TOOL = 'get_generation_task'
 const FORBIDDEN_TOOL = 'create_visible_generation_task'
 
 interface AgentExternalContinuationCoordinatorOptions {
+  operationRecovery?: import('../../../../../src/core/assistant/operations').OperationRecovery
   continuation?: AgentExternalContinuation
   registry: AgentToolRegistry
   tools: AgentToolExecutionCoordinator
@@ -105,7 +106,20 @@ export class AgentExternalContinuationCoordinator {
     terminalError?: Error
   } | null> {
     const continuation = this.options.continuation
-    if (!continuation || this.queried) return null
+    if (this.queried) return null
+    if (!continuation) {
+      const recovery = this.options.operationRecovery
+      if (!recovery) return null
+      this.queried = true
+      await this.options.savePoints.save('before_tools', input.snapshot)
+      await this.options.tools.execute([{
+        toolCallId: `recovery:${recovery.sourceOperationId}:resume-script`,
+        toolName: RESUME_HENJI_SCRIPT_TOOL, input: { checkpoint: recovery.checkpoint }, dynamic: false,
+      }], input.route, {}, new Set([...input.activeToolNames, RESUME_HENJI_SCRIPT_TOOL]), new Set([RESUME_HENJI_SCRIPT_TOOL]))
+      await this.options.savePoints.save('after_tools', input.snapshot)
+      const host = input.refreshHost()
+      return { host, context: input.rebuild(host) }
+    }
     this.queried = true
     const call: ModelStepToolCall = {
       toolCallId: `external:${continuation.waitId}:query`,

@@ -33,14 +33,14 @@ export function resolveLocalAssetPath(source: string | null | undefined): string
   return value
 }
 
-export async function addMediaReferenceToLibrary(input: CollectMediaReferenceInput): Promise<AssetRecord> {
+export async function addMediaReferenceToLibrary(input: CollectMediaReferenceInput, context?: { operationId?: string }): Promise<AssetRecord> {
   const filePath = input.filePath.trim()
   if (!filePath || /^(blob:|data:|https?:)/i.test(filePath)) {
     throw new Error('只能收录已落盘的本地媒体文件')
   }
   logger.info('开始收录资产', { event: 'asset.collection.start', mediaType: input.mediaType, source: input.source })
   try {
-    const asset = await createAsset({ ...input, filePath })
+    const asset = await createAsset({ ...input, filePath }, context?.operationId ? { operationId: context.operationId, boundaryId: crypto.randomUUID(), targets: [] } : undefined)
     logger.info('资产收录完成', { event: 'asset.collection.completed', assetId: asset.id, mediaType: asset.mediaType })
     return asset
   } catch (cause) {

@@ -8,6 +8,14 @@ import type {
 } from '../reflection'
 import type { ApplicationDataClass } from '../identifiers'
 
+/** 正式实体读取确认目标不存在；不同于资源缺失、权限失败或网络失败。 */
+export class ApplicationEntityNotFoundError extends Error {
+  constructor(readonly target: ApplicationRef, message: string) {
+    super(message)
+    this.name = 'ApplicationEntityNotFoundError'
+  }
+}
+
 export interface ApplicationControlAccessContext {
   exposure: ApplicationExposure
   permissions: ReadonlySet<string>

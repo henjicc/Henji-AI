@@ -1,8 +1,11 @@
 import { BrowserWindow, powerSaveBlocker, webContents } from 'electron'
 import path from 'node:path'
+import { createHash } from 'node:crypto'
+import { createReadStream } from 'node:fs'
 import { APP_WINDOW_BACKGROUND_HEX } from '../../../src/core/theme/colorTokens'
 import { cleanupAllVideoFrameExports } from './video/frame-export'
 import { createMainLogger } from './logging/main-logger'
+import { createCameraStageRenderTaskPersistence } from './camera-stage-render-task-store'
 import {
   CameraStageRenderTaskRegistry,
   type CameraStageRenderEventDto,
@@ -11,6 +14,7 @@ import {
   type CameraStageRenderTaskScopeDto,
   type CameraStageRenderTaskSnapshotDto,
 } from './camera-stage-render-task-registry'
+import type { CameraStageRenderResult } from '../../../src/platform/contracts/cameraStageRender'
 
 export type {
   CameraStageRenderEventDto,
@@ -25,7 +29,7 @@ interface QueuedRenderTask extends CameraStageRenderRequestDto {
 }
 
 const logger = createMainLogger('main.camera-stage-render')
-const taskRegistry = new CameraStageRenderTaskRegistry()
+const taskRegistry = new CameraStageRenderTaskRegistry(createCameraStageRenderTaskPersistence())
 const queue: QueuedRenderTask[] = []
 let workerWindow: BrowserWindow | null = null
 let workerReady = false
@@ -231,18 +235,48 @@ export function startCameraStageRenderTask(
   return registration
 }
 
-export function getCameraStageRenderTask(
+export async function getCameraStageRenderTask(
   scope: CameraStageRenderTaskScopeDto,
   ownerWebContentsId: number,
-): CameraStageRenderTaskSnapshotDto | null {
+): Promise<CameraStageRenderTaskSnapshotDto | null> {
+  await taskRegistry.reconcileOutput(scope, ownerWebContentsId, matchesOutputFile)
   return taskRegistry.require(scope, ownerWebContentsId)
 }
 
-export function listCameraStageRenderTasks(
+export async function listCameraStageRenderTasks(
   canvasProjectId: string,
   ownerWebContentsId: number,
-): CameraStageRenderTaskSnapshotDto[] {
+): Promise<CameraStageRenderTaskSnapshotDto[]> {
+  for (const task of taskRegistry.list(canvasProjectId, ownerWebContentsId)) {
+    await taskRegistry.reconcileOutput(task, ownerWebContentsId, matchesOutputFile)
+  }
   return taskRegistry.list(canvasProjectId, ownerWebContentsId)
+}
+
+export async function cameraStageOutputFileDigest(filePath: string): Promise<string> {
+  const hash = createHash('sha256')
+  for await (const chunk of createReadStream(filePath)) hash.update(chunk)
+  return hash.digest('hex')
+}
+
+async function matchesOutputFile(filePath: string, digest: string): Promise<boolean> {
+  try { return await cameraStageOutputFileDigest(filePath) === digest }
+  catch (error) {
+    logger.warn('渲染结果文件尚无法核对', { event: 'camera_stage.background_render.output_check_failed', error })
+    return false
+  }
+}
+
+/** 只能由正在执行该任务的隐藏窗口绑定输出；主窗口不能冒认渲染结果。 */
+export function prepareCameraStageOutput(requestId: string, senderWebContentsId: number,
+  result: CameraStageRenderResult, digest: string): void {
+  assertCameraStageOutputOwner(requestId, senderWebContentsId, result.kind)
+  taskRegistry.prepareOutput(requestId, result, digest)
+}
+
+export function assertCameraStageOutputOwner(requestId: string, senderWebContentsId: number, kind: 'image' | 'video'): void {
+  if (!workerWindow || workerWindow.isDestroyed() || workerWindow.webContents.id !== senderWebContentsId
+    || activeTask?.requestId !== requestId || activeTask.outputKind !== kind) throw new Error('RENDER_OUTPUT_OWNER_INVALID')
 }
 
 export function acknowledgeCameraStageRenderTask(
@@ -339,7 +373,17 @@ export function handleCameraStageRenderWorkerEvent(
 export function closeCameraStageRenderWindow(): void {
   clearWorkerReadyTimer()
   clearActiveTaskTimer()
-  queue.splice(0, queue.length)
+  const interrupted = queue.splice(0, queue.length)
+  if (activeTask) interrupted.push(activeTask)
+  for (const task of interrupted) {
+    try {
+      taskRegistry.applyEvent({ type: 'cancelled', requestId: task.requestId, nodeId: task.nodeId })
+    } catch (error) {
+      // 即使保存失败也必须停止渲染；原来的在途记录在重启核对时保持中断，不会再次执行。
+      logger.error('保存渲染中断状态失败', { event: 'camera_stage.background_render.interruption_save_failed',
+        requestId: task.requestId, context: { message: error instanceof Error ? error.message : String(error) } })
+    }
+  }
   taskRegistry.clear()
   activeTask = null
   stopPowerSaveBlocker()

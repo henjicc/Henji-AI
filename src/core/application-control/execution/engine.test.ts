@@ -2,6 +2,27 @@ import { describe, expect, it, vi } from 'vitest'
 import { createFixture, createEngine, context, mutationStep, collectionStep, removalStep } from './engineTestFixture'
 
 describe('ApplicationControlExecutionEngine', () => {
+  it('正式验证条件必须先确认保存；登记失败时领域状态仍未执行', async () => {
+    const fixture = createFixture()
+    const { engine, executor } = createEngine(fixture)
+    const plan = await engine.plan({ summary: '更新原对象', transactionMode: 'atomic', steps: [mutationStep('one', 6)] }, context())
+    const recordExecutionPreparation = vi.fn(async () => { throw new Error('验证条件尚未保存，请恢复宿主连接') })
+    const input = { planRef: plan.planRef, expectedRevisions: { 'sample.scope': 0 }, idempotencyKey: 'prepare-failure-key' }
+    expect(await engine.commit(input, { ...context(), recordExecutionPreparation }))
+      .toMatchObject({ status: 'failed', executionState: 'not_started' })
+    expect(executor.applyCount).toBe(0)
+    expect(fixture.values.get('one')).toBe(2)
+    expect(recordExecutionPreparation).toHaveBeenCalledWith(expect.objectContaining({ planRef: plan.planRef,
+      conditions: plan.verificationConditions }))
+    const second = await engine.plan({ summary: '恢复后修改', transactionMode: 'atomic', steps: [mutationStep('one', 6)] }, context())
+    const order: string[] = []
+    const result = await engine.commit({ ...input, planRef: second.planRef, idempotencyKey: 'prepare-success-key' }, {
+      ...context(), recordExecutionPreparation: async () => { expect(fixture.values.get('one')).toBe(2); order.push('saved') },
+    })
+    expect(order).toEqual(['saved'])
+    expect(result.status).toBe('completed')
+    expect(fixture.values.get('one')).toBe(6)
+  })
   it('把 ref_list 的整体 set 在计划阶段编译为最小 append/remove 差异', async () => {
     const fixture = createFixture()
     const { engine, executor } = createEngine(fixture)
@@ -82,6 +103,7 @@ describe('ApplicationControlExecutionEngine', () => {
     }, context())
     expect(conflict.status).toBe('failed')
     expect(conflict.status === 'failed' && conflict.code).toBe('CONFLICT')
+    expect(conflict).toMatchObject({ executionState: 'not_started' })
     expect(executor.applyCount).toBe(0)
   })
 
@@ -97,8 +119,28 @@ describe('ApplicationControlExecutionEngine', () => {
       idempotencyKey: 'idempotency-permission-01',
     }, context(['sample:read']))
     expect(denied.status === 'failed' && denied.code).toBe('PERMISSION_DENIED')
+    expect(denied).toMatchObject({ executionState: 'not_started' })
     expect(executor.applyCount).toBe(0)
     expect(fixture.values.get('one')).toBe(2)
+  })
+
+  it('执行器先修改后抛错时，零完成回执不能声明未执行，也不能重用计划再次修改', async () => {
+    const fixture = createFixture()
+    const { engine, executor } = createEngine(fixture)
+    const apply = vi.spyOn(executor, 'apply').mockImplementation(async () => {
+      fixture.values.set('one', 6)
+      throw new Error('修改已发生，但回执中断')
+    })
+    const plan = await engine.plan({ summary: '检查未知写入', transactionMode: 'compensatable',
+      steps: [mutationStep('one', 6)] }, context())
+    const request = { planRef: plan.planRef, expectedRevisions: { 'sample.scope': 0 }, idempotencyKey: 'unknown-before-receipt-1' }
+    const result = await engine.commit(request, context())
+    expect(fixture.values.get('one')).toBe(6)
+    expect(result).toMatchObject({ status: 'failed', partial: { completedStepIndexes: [] } })
+    expect(result).not.toHaveProperty('executionState')
+    expect(result.status === 'failed' && result.message).toContain('需要核对')
+    await engine.commit({ ...request, idempotencyKey: 'unknown-before-receipt-2' }, context())
+    expect(apply).toHaveBeenCalledTimes(1)
   })
 
   it('提交具备幂等、结构化验证和可逆撤销', async () => {

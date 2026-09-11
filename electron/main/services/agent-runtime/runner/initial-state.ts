@@ -14,7 +14,7 @@ import {
 
 export function createInitialAgentRunState(
   runId: string,
-  request: AgentStartRunRequest,
+  request: Pick<AgentStartRunRequest, 'threadId' | 'goal' | 'budget' | 'attachments' | 'externalContinuation'>,
   previousWorkingSummary?: AgentWorkingSummary
 ): AgentRunState {
   const now = new Date().toISOString()

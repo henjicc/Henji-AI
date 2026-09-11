@@ -24,9 +24,9 @@ export async function loadImage(filePath: string): Promise<string> {
   return `data:${mimeFromExtension(path.extname(localPath))};base64,${bytes.toString('base64')}`
 }
 
-export async function persistImageSource(source: string): Promise<string> {
+export async function persistImageSource(source: string, beforeWrite?: (filePath: string, bytes: Buffer) => void): Promise<string> {
   const { bytes, extension } = await resolveSourceBytes(source)
-  return persistImageBytes(bytes, extension)
+  return persistImageBytes(bytes, extension, beforeWrite)
 }
 
 export async function persistImageSourceTracked(

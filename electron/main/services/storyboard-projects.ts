@@ -165,7 +165,7 @@ export function renameStoryboardProject(projectId: string, name: string, updated
   })
 }
 
-export async function deleteStoryboardProject(projectId: string): Promise<void> {
+export async function deleteStoryboardProject(projectId: string, commit: (write: () => void) => void = (write) => write()): Promise<void> {
   await clearProjectCover('canvas', projectId)
-  getDb().prepare('DELETE FROM storyboard_projects WHERE id = ?').run(projectId)
+  commit(() => { getDb().prepare('DELETE FROM storyboard_projects WHERE id = ?').run(projectId) })
 }

@@ -39,6 +39,7 @@ export interface AgentToolExecutionContext {
   signal: AbortSignal
   hostContext: HostContextSnapshot | null
   taskPolicy?: TaskExecutionPolicy
+  operationId?: string
 }
 
 export type AgentToolAuthorizationSource =
@@ -49,6 +50,8 @@ export type AgentToolAuthorizationSource =
   | 'approved_action_group'
 
 export interface AgentToolDefinition<TInput = unknown, TOutput = unknown> {
+  /** 仅由主进程代理注册器声明；未领取即未进入业务执行器。 */
+  requiresMainClaim?: boolean
   /** 应用宿主能力必须提供；运行时内部工具可以直接使用 Agent 工具契约。 */
   capability?: ApplicationCapabilityDefinition<TInput, TOutput>
   /** false 表示仅供运行时确定性续跑调用，绝不进入模型目录或工具 schema。 */
@@ -101,6 +104,8 @@ export interface AgentToolDefinition<TInput = unknown, TOutput = unknown> {
 }
 
 export interface AgentToolExecuteRequest {
+  /** 仅受控脚本设置；确定性续跑跨 run 复用原操作键。 */
+  operationKey?: string
   runId: string
   threadId: string
   toolCallId: string

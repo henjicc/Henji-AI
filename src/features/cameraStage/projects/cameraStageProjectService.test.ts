@@ -109,13 +109,22 @@ describe('cameraStageProjectService 工程写入串行化', () => {
       appView: 'list',
     })
 
-    const created = await createStoredCameraStageProject('  后台工程  ')
+    const created = await createStoredCameraStageProject('  后台工程  ', { operationId: 'create-operation' })
 
     const saved = commandMocks.upsertRecord.mock.calls.at(-1)?.[0]
     expect(saved).toBeDefined()
     if (!saved) throw new Error('未写入工程')
     const scene = deserializeScene(saved.sceneJson)
     expect(saved).toMatchObject({ id: created.id, name: '后台工程', objectCount: 1 })
+    expect(saved.operationCorrelation).toEqual({
+      operationId: 'create-operation',
+      boundaryId: expect.any(String),
+      targets: [
+        { kind: 'camera_stage.project', id: created.id },
+        { kind: 'camera_stage.camera', id: `${created.id}:${created.defaultCameraId}` },
+        { kind: 'camera_stage.state_keyframe', id: `${created.id}:${created.defaultStateKeyframeId}` },
+      ],
+    })
     expect(scene.objects).toHaveLength(1)
     expect(scene.objects[0]).toMatchObject({ id: created.defaultCameraId, type: 'camera', name: '摄像机01' })
     expect(scene.activeCameraId).toBe(created.defaultCameraId)
@@ -147,13 +156,16 @@ describe('cameraStageProjectService 工程写入串行化', () => {
 
     const saving = saveProjectDraft(createDraft(projectId), false)
     await vi.waitFor(() => expect(commandMocks.upsertRecord).toHaveBeenCalledTimes(1))
-    const deleting = deleteProject(projectId)
+    const deleting = deleteProject(projectId, { operationId: 'delete-operation' })
     await Promise.resolve()
     expect(commandMocks.deleteRecord).not.toHaveBeenCalledWith(projectId)
 
     finishSave?.()
     await Promise.all([saving, deleting])
-    expect(commandMocks.deleteRecord).toHaveBeenCalledWith(projectId)
+    expect(commandMocks.deleteRecord).toHaveBeenCalledWith(projectId, {
+      operationId: 'delete-operation', boundaryId: expect.any(String),
+      targets: [{ kind: 'camera_stage.project', id: projectId }],
+    })
 
     await saveProjectDraft(createDraft(projectId), false)
     expect(commandMocks.upsertRecord).toHaveBeenCalledTimes(1)

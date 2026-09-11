@@ -139,6 +139,7 @@ function createResultGroupGraph(input: {
 
 export async function commitCanvasGenerationOutputs(
   input: CommitCanvasGenerationOutputsInput,
+  context?: { operationId?: string },
 ): Promise<CommitCanvasGenerationOutputsResult> {
   const ordered = validateGenerationOutputBatchContract(input.contract);
   const projectId = requireCurrentProjectId();
@@ -149,7 +150,12 @@ export async function commitCanvasGenerationOutputs(
   const completionId = input.completionId?.trim() || `generation-output:${input.placeholderNodeId}`;
   const existing = findExistingCommit(completionId, input.resultNodeType);
   if (existing) {
-    if (hasUnconfirmedCanvasProjectSnapshot(projectId)) await confirmCanvasPersistence(projectId);
+    if (hasUnconfirmedCanvasProjectSnapshot(projectId) || context?.operationId) await confirmCanvasPersistence(projectId, {
+      operationCorrelation: context?.operationId ? { operationId: context.operationId, boundaryId: crypto.randomUUID(),
+        targets: [...existing.resultNodeIds, ...(existing.groupNodeId ? [existing.groupNodeId] : [])]
+          .map((id) => ({ kind: 'canvas.node', id: `${projectId}:${id}` })),
+      } : undefined,
+    });
     return {
       projectId,
       completionId,
@@ -160,7 +166,7 @@ export async function commitCanvasGenerationOutputs(
   }
 
   if (input.contract.strategy === 'layer-stack') {
-    return await commitPreparedLayerStack({ ...input, completionId, ordered, projectId });
+    return await commitPreparedLayerStack({ ...input, completionId, ordered, projectId }, context);
   }
 
   const before = useCanvasStore.getState();
@@ -321,6 +327,7 @@ export async function commitCanvasGenerationOutputs(
         }];
       }),
       { completionId, strategy: input.contract.strategy },
+      context,
     );
     const operation = result.appliedOperations[0];
     const resultNodeIds = Array.isArray(operation?.resultNodeIds)

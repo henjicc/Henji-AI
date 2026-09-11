@@ -133,13 +133,15 @@ async function commitFailingPlan(fail: () => never) {
 }
 
 describe('事务失败报告', () => {
-  it('零步提交时如实说明应用未改变，且允许重试', async () => {
+  it('零完成回执时报告需要核对，不把缺少回执当作应用未改变', async () => {
     const result = await commitFailingPlan(() => {
       throw new Error('TARGET_OBJECT_NOT_FOUND：targetObjectId «立方体» 不是本场景中的对象 id')
     })
     expect(result.status).toBe('failed')
     if (result.status !== 'failed') return
-    expect(result.message).toContain('未改变')
+    expect(result.message).toContain('需要核对')
+    expect(result.message).not.toContain('未改变')
+    expect(result).not.toHaveProperty('executionState')
     expect(result.message).not.toContain('部分步骤已完成')
     expect(result.recoverable).toBe(true)
     expect(result.partial?.uncompensatedStepIndexes ?? []).toEqual([])

@@ -72,7 +72,7 @@ export async function runImageEditPersistedOperationV3<T>(
     try { return await execute(context) }
     finally { owner.acceptCurrent() }
   }
-  const batch = owner.begin()
+  const batch = owner.begin(context)
   const batchContext: ApplicationExecutionContext = {
     ...(context ?? { requestId: 'image-edit-direct', exposure: 'local_adapter',
       permissions: new Set<string>(), acceptedDataClasses: new Set(['C0', 'C1'] as const) }),

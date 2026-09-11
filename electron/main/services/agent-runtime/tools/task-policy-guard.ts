@@ -4,7 +4,7 @@ import {
 import type { AgentToolDefinition } from './types'
 import { AgentToolGatewayError } from './gateway-support'
 
-function operationEffects(definition: AgentToolDefinition, input: unknown): TaskPolicyEffect[] {
+export function operationEffects(definition: AgentToolDefinition, input: unknown): TaskPolicyEffect[] {
   // 解释器本身不修改业务，其每一步均回到此 Gateway；预检另校验整段展开后的 IR。
   if (['run_henji_script', 'resume_henji_script', 'ask_user'].includes(definition.name)) return []
   if (definition.name === 'change_application_entities' && input && typeof input === 'object' && 'changes' in input

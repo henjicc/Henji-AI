@@ -34,6 +34,7 @@ const NO_CLOSE_CONTINUATION = async (): Promise<void> => undefined
 export interface MultiLayerDocumentEditorCloseResult {
   nodeId: string
   session: ImageEditSessionReferenceV3
+  operationId?: string
 }
 
 export type MultiLayerDocumentEditorCloseContinuation = (
@@ -69,7 +70,8 @@ export function MultiLayerDocumentEditorDialog({
   const [exporting, setExporting] = useState(false)
   const [exportFailed, setExportFailed] = useState(false)
   const currentProjectId = useProjectStore((state) => state.currentProjectId)
-  const confirmPersistence = useCallback((session: ImageEditSessionReferenceV3) => onCloseReady({ nodeId: node.id, session }), [node.id, onCloseReady])
+  const confirmPersistence = useCallback((session: ImageEditSessionReferenceV3, context?: { operationId?: string }) =>
+    onCloseReady({ nodeId: node.id, session, ...(context?.operationId ? { operationId: context.operationId } : {}) }), [node.id, onCloseReady])
   const selectedLayerIds = useImageEditorSessionStoreV3((state) => (
     editorContext ? state.sessions[editorContext.sessionId]?.selectedLayerIds ?? EMPTY_LAYER_IDS : EMPTY_LAYER_IDS
   ))

@@ -107,8 +107,7 @@ export function parseCameraStageRenderTaskRef(
 }
 
 function requestIdFor(context: CapabilityExecutionContext): string {
-  // frontend host 的 requestId 是整次 runId；toolCallId 才是一次能力调用的稳定身份。
-  return `camera-stage-capability:${context.taskId ?? crypto.randomUUID()}`
+  return `camera-stage-capability:${context.operationId ?? context.taskId ?? crypto.randomUUID()}`
 }
 
 function requireCurrentTarget(input: RenderTargetInput): {
@@ -318,6 +317,7 @@ export async function renderCameraStageOutput(
 
   const task = await startCameraStageNodeRender(target.nodeId, input.outputKind, {
     requestId,
+    operationId: context.operationId,
     resolutionPreset: input.resolutionPreset,
     selectedTimeSec: target.selectedTimeSec,
     expectedOwner: {

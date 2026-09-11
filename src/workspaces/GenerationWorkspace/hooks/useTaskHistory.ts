@@ -85,9 +85,11 @@ async function mapHistoryRecordToTask(record: HistoryRecord, dataRoot: string): 
   const safeParams: DynamicValueMap = isRecord(rawParams) ? rawParams : {}
   const resultUrlFromParams = typeof safeParams['__resultUrl'] === 'string' ? safeParams['__resultUrl'] : undefined
   const dimensionsFromParams = typeof safeParams['__dimensions'] === 'string' ? safeParams['__dimensions'] : undefined
+  const operationId = typeof safeParams['__operationId'] === 'string' ? safeParams['__operationId'] : undefined
   const paramsForTaskOptions: DynamicValueMap = { ...safeParams }
   delete paramsForTaskOptions['__resultUrl']
   delete paramsForTaskOptions['__dimensions']
+  delete paramsForTaskOptions['__operationId']
 
   const uploadedFilePathsRaw = safeParams['uploadedFilePaths']
   const uploadedVideoFilePathsRaw = safeParams['uploadedVideoFilePaths']
@@ -161,6 +163,7 @@ async function mapHistoryRecordToTask(record: HistoryRecord, dataRoot: string): 
 
   return {
     id: record.id,
+    ...(operationId ? { operationId } : {}),
     createdAt,
     type: record.type,
     prompt: record.prompt ?? '',
@@ -309,6 +312,8 @@ export function useSaveTaskHistory({ tasks, isTasksLoaded, isInitialLoadRef }: U
           if (task.result?.url) {
             optionsCopy['__resultUrl'] = task.result.url
           }
+          delete optionsCopy['__operationId']
+          if (task.operationId) optionsCopy['__operationId'] = task.operationId
           if (task.dimensions) {
             optionsCopy['__dimensions'] = task.dimensions
           }

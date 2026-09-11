@@ -211,6 +211,8 @@ export function validateHenjiImagePackageManifest(value: unknown): HenjiImagePac
     ids.add(resource.resourceId)
   }
   const document = validateImageEditDocumentEnvelope(value.document)
+  // 本机执行记录不属于可移植业务文档，导入也不能把包内元数据当作本机执行证据。
+  delete document.pendingOperationReceipts
   const externalSources = parseExternalSources(value.externalSources)
   const externalIds = new Set<ResourceId>()
   for (const source of externalSources ?? []) {

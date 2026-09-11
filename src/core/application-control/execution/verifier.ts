@@ -1,4 +1,5 @@
 import type { ApplicationReflectionRegistry } from '../registry'
+import { ApplicationEntityNotFoundError } from '../registry/types'
 import type {
   ApplicationEvidence,
   ApplicationVerificationCondition,
@@ -36,7 +37,8 @@ export class ApplicationTransactionVerifier {
     conditions: ApplicationVerificationCondition[],
     executionEvidence: ApplicationEvidence[],
     context: ApplicationExecutionContext,
-    now: Date
+    now: Date,
+    minimumRevisions: Record<string, number> = {},
   ): Promise<ApplicationVerificationResult> {
     const evidence: ApplicationEvidence[] = []
     const unmetConditions: string[] = []
@@ -61,6 +63,21 @@ export class ApplicationTransactionVerifier {
       try {
         const propertyIds = condition.kind === 'property_equals' ? [condition.propertyId] : undefined
         const snapshot = await this.registry.readEntity(condition.target, propertyIds, context)
+        if (snapshot.ref.kind !== condition.target.kind || snapshot.ref.id !== condition.target.id) {
+          unmetConditions.push(`读取结果不属于验证目标：${condition.target.kind}/${condition.target.id}`)
+          continue
+        }
+        const requiredScopes = new Set([
+          ...(this.registry.getEntity(condition.target.kind)?.revisionScopes ?? []),
+          ...(condition.kind === 'property_equals' ? this.registry.getProperty(condition.propertyId)?.revisionScopes ?? [] : []),
+        ])
+        if (!Number.isFinite(Date.parse(snapshot.capturedAt)) || Date.parse(snapshot.capturedAt) < now.getTime()
+          || [...requiredScopes].some((scope) => snapshot.revisions[scope] === undefined || snapshot.revisions[scope] < (minimumRevisions[scope] ?? 0))
+          || Object.entries(snapshot.revisions).some(([scope, revision]) => revision < (minimumRevisions[scope] ?? 0))
+          || (condition.target.revision !== undefined && (snapshot.ref.revision === undefined || snapshot.ref.revision < condition.target.revision))) {
+          unmetConditions.push(`读取结果早于本次验证或执行版本：${condition.target.kind}/${condition.target.id}`)
+          continue
+        }
         if (condition.kind === 'entity_absent') {
           unmetConditions.push(`目标实体仍然存在：${condition.target.kind}/${condition.target.id}`)
           continue
@@ -88,8 +105,8 @@ export class ApplicationTransactionVerifier {
         }
       } catch (error) {
         if (condition.kind === 'entity_absent') {
-          const message = error instanceof Error ? error.message : String(error)
-          if (/(?:^|[_:])NOT_FOUND(?::|$)|ENTITY_NOT_FOUND/i.test(message)) {
+          if (error instanceof ApplicationEntityNotFoundError
+            && error.target.kind === condition.target.kind && error.target.id === condition.target.id) {
             evidence.push({
               kind: 'operation_result',
               target: condition.target,

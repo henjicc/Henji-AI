@@ -2,6 +2,7 @@ import type Database from 'better-sqlite3'
 
 import {
   agentEventSchema,
+  agentRunStateSchema,
   type AgentEvent,
   type AgentRunState,
 } from '../../../../../src/core/assistant/events'
@@ -60,13 +61,22 @@ export function buildAgentRunEventsPage(
   })
 }
 
-function parseStoredEvent(row: EventRow): AgentEvent {
-  return agentEventSchema.parse(JSON.parse(row.event_json) as unknown)
-}
-
 /** SQLite 中只保存已经分配连续 sequence 的耐久事件。原始模型 delta 在上游先合并。 */
 export class AgentEventStore {
   constructor(private readonly database: Database.Database) {}
+
+  private readCompatibleEvents(runId: string, rows: EventRow[]): AgentEvent[] {
+    const parsed = rows.map((row) => agentEventSchema.safeParse(JSON.parse(row.event_json) as unknown))
+    if (parsed.some((result) => !result.success)) {
+      const run = this.database.prepare('SELECT state_json FROM agent_runs WHERE run_id = ?').get(runId) as { state_json: string } | undefined
+      // 历史未知事件保留原文，由分页缺口转入兼容状态快照；当前协议损坏仍明确报错。
+      if (!run || agentRunStateSchema.safeParse(JSON.parse(run.state_json)).success) {
+        const failure = parsed.find((result) => !result.success)
+        if (failure && !failure.success) throw failure.error
+      }
+    }
+    return parsed.flatMap((result) => result.success ? [result.data] : [])
+  }
 
   append(event: AgentEvent): void {
     this.database.prepare(`
@@ -94,7 +104,7 @@ export class AgentEventStore {
       )
       ORDER BY sequence ASC
     `).all(runId, safeLimit) as EventRow[]
-    return rows.map(parseStoredEvent)
+    return this.readCompatibleEvents(runId, rows)
   }
 
   loadAfter(runId: string, afterSequence: number, limit: number): AgentStoredEventPage {
@@ -113,7 +123,7 @@ export class AgentEventStore {
       WHERE run_id = ?
     `).get(runId) as EventBoundsRow
     return {
-      events: rows.map(parseStoredEvent),
+      events: this.readCompatibleEvents(runId, rows),
       oldestSequence: bounds.oldest_sequence,
       latestSequence: bounds.latest_sequence ?? 0,
     }

@@ -32,6 +32,23 @@ function persistenceAt(revision: number): ImageEditPersistenceSnapshotV3 {
 }
 
 describe('ImageMarkV3PersistenceQueue', () => {
+  it('保存失败后保留原操作快照，后续手动修改不能替换它或借用其关联', async () => {
+    const save = vi.fn().mockRejectedValueOnce(new Error('disk unavailable')).mockImplementation(async (document: ImageEditDocumentV3) => ({
+      documentId: document.id, revision: document.revision, previewRef: null,
+    }))
+    const queue = new ImageMarkV3PersistenceQueue({ repository: { save },
+      initialReference: { documentId: 'toolbox-document', revision: 0, previewRef: null }, initialHistory: historyAt(0) })
+    const correlation = { operationId: 'operation', boundaryId: 'original-save', targets: [{ kind: 'image_edit.document', id: 'v3:toolbox-document' }] }
+    queue.enqueue(persistenceAt(1), correlation)
+    await expect(queue.flush()).rejects.toThrow('disk unavailable')
+    queue.enqueue(persistenceAt(2))
+    queue.enqueue(persistenceAt(3))
+    await queue.flush()
+    expect(save.mock.calls.map(([document]) => document.revision)).toEqual([1, 1, 3])
+    expect(save.mock.calls[1][1]).toMatchObject({ expectedRevision: 0, operationCorrelation: correlation })
+    expect(save.mock.calls[2][1]).toMatchObject({ expectedRevision: 1 })
+    expect(save.mock.calls[2][1].operationCorrelation).toBeUndefined()
+  })
   it('合并中间 revision，只保存最新文档', async () => {
     const save = vi.fn(async (document: ImageEditDocumentV3) => ({
       documentId: document.id,

@@ -46,6 +46,15 @@ import type {
   StoryboardImageMetadataDto,
 } from '../services/image/types'
 import { parseRecord, parseStringField, registerIpcHandler } from './registry'
+import { createHash } from 'node:crypto'
+import { z } from 'zod'
+import { assertCameraStageOutputOwner, prepareCameraStageOutput } from '../services/camera-stage-render'
+
+const imagePersistenceRequestSchema = z.object({ source: z.string(), renderContext: z.object({
+  requestId: z.string().min(1).max(500), width: z.number().int().positive().max(16384),
+  height: z.number().int().positive().max(16384), aspectRatio: z.string().min(1).max(32),
+  selectedTimeSec: z.number().finite().nonnegative(),
+}).strict().optional() }).strict()
 import {
   readBytes,
   readImageFit,
@@ -152,7 +161,16 @@ export function registerImageIpc(): void {
     return embedPanoramaImageMetadata(source)
   })
   registerIpcHandler<string, string>('image:loadImage', (input) => parseStringField(input, 'filePath'), (filePath) => loadImage(filePath))
-  registerIpcHandler<string, string>('image:persistImageSource', (input) => parseStringField(input, 'source'), (source) => persistImageSource(source))
+  registerIpcHandler('image:persistImageSource', (input) => imagePersistenceRequestSchema.parse(input), ({ source, renderContext }, event) => {
+    if (!renderContext) return persistImageSource(source)
+    assertCameraStageOutputOwner(renderContext.requestId, event.sender.id, 'image')
+    return persistImageSource(source, (mediaPath, bytes) => {
+      prepareCameraStageOutput(renderContext.requestId, event.sender.id, {
+        kind: 'image', mediaPath, savedPath: mediaPath, mediaUrl: `henji-media://local/${encodeURIComponent(mediaPath)}`,
+        width: renderContext.width, height: renderContext.height, aspectRatio: renderContext.aspectRatio, selectedTimeSec: renderContext.selectedTimeSec,
+      }, createHash('sha256').update(bytes).digest('hex'))
+    })
+  })
   registerIpcHandler<string, Awaited<ReturnType<typeof persistImageSourceTracked>>>('image:persistImageSourceTracked', (input) => parseStringField(input, 'source'), (source) => persistImageSourceTracked(source))
   registerIpcHandler<BinaryPayload, string>('image:persistImageBinary', parseBinaryPayload, ({ bytes, extension }) => persistImageBinary(bytes, extension))
   registerIpcHandler<SaveSuggestedPayload, string>('image:saveImageSourceToDownloads', parseSaveSuggestedPayload, ({ source, suggestedFileName }) => {

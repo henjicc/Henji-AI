@@ -15,6 +15,8 @@ import {
   startCameraStageRenderTask,
 } from '../services/camera-stage-render'
 import { parseRecord, parseStringField, parseVoid, registerIpcHandler } from './registry'
+import { assertTrustedMainRenderer } from '../security/main-renderer'
+import { z } from 'zod'
 
 function parseRenderRequest(input: unknown): CameraStageRenderRequestDto {
   const record = parseRecord(input)
@@ -38,7 +40,9 @@ function parseRenderRequest(input: unknown): CameraStageRenderRequestDto {
   if (selectedTimeSec !== undefined && (!Number.isFinite(selectedTimeSec) || selectedTimeSec < 0)) {
     throw new Error('Expected non-negative render selectedTimeSec')
   }
-  return { requestId, nodeId, canvasProjectId, cameraStageProjectId, resolutionPreset, outputKind, selectedTimeSec }
+  const operationId = z.string().uuid().optional().parse(record.operationId)
+  return { requestId, nodeId, canvasProjectId, cameraStageProjectId, resolutionPreset, outputKind, selectedTimeSec,
+    ...(operationId ? { operationId } : {}) }
 }
 
 function parseTaskScope(input: unknown): CameraStageRenderTaskScopeDto {
@@ -114,26 +118,31 @@ export function registerCameraStageRenderIpc(): void {
     'cameraStageRender:start',
     parseRenderRequest,
     (request, event) => startCameraStageRenderTask(request, event.sender.id),
+    assertTrustedMainRenderer,
   )
   registerIpcHandler<CameraStageRenderTaskScopeDto, CameraStageRenderTaskSnapshotDto | null>(
     'cameraStageRender:get',
     parseTaskScope,
     (scope, event) => getCameraStageRenderTask(scope, event.sender.id),
+    assertTrustedMainRenderer,
   )
   registerIpcHandler<{ canvasProjectId: string }, CameraStageRenderTaskSnapshotDto[]>(
     'cameraStageRender:list',
     (input) => ({ canvasProjectId: parseStringField(input, 'canvasProjectId') }),
     ({ canvasProjectId }, event) => listCameraStageRenderTasks(canvasProjectId, event.sender.id),
+    assertTrustedMainRenderer,
   )
   registerIpcHandler<CameraStageRenderTaskScopeDto, void>(
     'cameraStageRender:cancel',
     parseTaskScope,
     (scope, event) => cancelCameraStageRenderTask(scope, event.sender.id),
+    assertTrustedMainRenderer,
   )
   registerIpcHandler<CameraStageRenderTaskScopeDto, void>(
     'cameraStageRender:acknowledge',
     parseTaskScope,
     (scope, event) => acknowledgeCameraStageRenderTask(scope, event.sender.id),
+    assertTrustedMainRenderer,
   )
   registerIpcHandler<void, void>(
     'cameraStageRender:workerReady',

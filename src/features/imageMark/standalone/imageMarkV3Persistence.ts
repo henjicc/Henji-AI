@@ -4,6 +4,12 @@ import type {
   ImageEditPersistenceSnapshotV3,
 } from '@/core/imageEdit/v3/serviceContracts'
 import type { ImageEditCommandHistorySnapshotV3 } from '@/core/imageEdit/v3/commandHistoryCodec'
+import type { ApplicationPersistenceCorrelation } from '@/core/application-control/persistenceCorrelation'
+
+interface PendingSave {
+  snapshot: ImageEditPersistenceSnapshotV3
+  operationCorrelation?: ApplicationPersistenceCorrelation
+}
 
 export type ImageMarkV3PersistenceStatus =
   | { kind: 'idle'; reference: ImageEditDocumentReferenceV3 }
@@ -22,7 +28,7 @@ interface ImageMarkV3PersistenceOptions {
  * 仍由 ImageEditorV3CommandRepository 和主进程仓库负责。
  */
 export class ImageMarkV3PersistenceQueue {
-  private pending: ImageEditPersistenceSnapshotV3 | null = null
+  private pending: PendingSave[] = []
   private inFlight: Promise<ImageEditDocumentReferenceV3> | null = null
   private reference: ImageEditDocumentReferenceV3
   private persistedHistory: string
@@ -48,7 +54,7 @@ export class ImageMarkV3PersistenceQueue {
     this.options.onStatusChange?.({ kind: 'idle', reference })
   }
 
-  enqueue(snapshot: ImageEditPersistenceSnapshotV3): void {
+  enqueue(snapshot: ImageEditPersistenceSnapshotV3, operationCorrelation?: ApplicationPersistenceCorrelation): void {
     const { document, history } = snapshot
     if (document.id !== this.reference.documentId) {
       throw new Error('图片编辑保存队列不能切换文档')
@@ -57,9 +63,17 @@ export class ImageMarkV3PersistenceQueue {
       throw new Error('图片编辑历史头与文档不匹配')
     }
     const historyJson = JSON.stringify(history)
-    if (document.revision < this.reference.revision
-      || (document.revision === this.reference.revision && historyJson === this.persistedHistory)) return
-    if (!this.pending || document.revision >= this.pending.document.revision) this.pending = snapshot
+    if (!operationCorrelation && (document.revision < this.reference.revision
+      || (document.revision === this.reference.revision && historyJson === this.persistedHistory))) return
+    const existing = operationCorrelation && this.pending.find((item) => item.operationCorrelation?.operationId === operationCorrelation.operationId
+      && item.operationCorrelation.boundaryId === operationCorrelation.boundaryId)
+    if (existing) {
+      if (JSON.stringify(existing.snapshot) !== JSON.stringify(snapshot)) throw new Error('原保存关联不能绑定新的图片修改')
+      return
+    }
+    const last = this.pending.at(-1)
+    if (last && !last.operationCorrelation && document.revision >= last.snapshot.document.revision) this.pending.pop()
+    if (!last || operationCorrelation || document.revision >= last.snapshot.document.revision) this.pending.push({ snapshot, operationCorrelation })
   }
 
   /** 暂停自动写入；同一文档不允许两个业务批次交错。 */
@@ -87,7 +101,7 @@ export class ImageMarkV3PersistenceQueue {
     }
     if (this.inFlight) {
       await this.inFlight
-      return this.pending ? this.flush(token) : this.reference
+      return this.pending.length ? this.flush(token) : this.reference
     }
     this.inFlight = this.drain(token)
     try {
@@ -98,27 +112,27 @@ export class ImageMarkV3PersistenceQueue {
   }
 
   private async drain(token?: symbol): Promise<ImageEditDocumentReferenceV3> {
-    while (this.pending && (!this.pauseToken || this.pauseToken === token)) {
-      const snapshot = this.pending
+    while (this.pending.length && (!this.pauseToken || this.pauseToken === token)) {
+      const pending = this.pending.shift()!
+      const { snapshot, operationCorrelation } = pending
       const { document, history } = snapshot
-      this.pending = null
       const historyJson = JSON.stringify(history)
-      if (document.revision < this.reference.revision
-        || (document.revision === this.reference.revision && historyJson === this.persistedHistory)) continue
+      if (!operationCorrelation && (document.revision < this.reference.revision
+        || (document.revision === this.reference.revision && historyJson === this.persistedHistory))) continue
       this.options.onStatusChange?.({ kind: 'saving', reference: this.reference })
       try {
+        if (document.revision < this.reference.revision) throw new Error('原操作保存版本已过期，请核对原文档，不要重新执行修改')
         this.reference = await this.options.repository.save(document, {
           expectedRevision: this.reference.revision,
           previewRef: null,
           history,
+          ...(operationCorrelation ? { operationCorrelation } : {}),
         })
         this.persistedHistory = historyJson
         this.options.onStatusChange?.({ kind: 'idle', reference: this.reference })
       } catch (error) {
-        const queuedAfterFailure = this.pending as ImageEditPersistenceSnapshotV3 | null
-        if (!queuedAfterFailure || document.revision > queuedAfterFailure.document.revision) {
-          this.pending = snapshot
-        }
+        const queuedAfterFailure = this.pending.at(0)
+        if (operationCorrelation || !queuedAfterFailure || document.revision > queuedAfterFailure.snapshot.document.revision) this.pending.unshift(pending)
         this.options.onStatusChange?.({ kind: 'failed', reference: this.reference, error })
         throw error
       }

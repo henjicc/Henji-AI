@@ -192,6 +192,7 @@ export async function appendVideoFrameExport(
 
 export async function finishVideoFrameExport(
   payload: FinishVideoFrameExportPayloadDto,
+  beforePersist?: (result: VideoFrameExportResultDto, sourcePath: string) => Promise<void>,
 ): Promise<VideoFrameExportResultDto> {
   const session = getSession(payload.sessionId)
   try {
@@ -202,6 +203,9 @@ export async function finishVideoFrameExport(
     session.child.stdin.end()
     await session.completion
     const mediaPath = path.join(getUploadsDir(), `${session.fileNameStem}-${session.id}.mp4`)
+    await beforePersist?.({ mediaPath, savedPath: payload.targetPath ?? mediaPath,
+      durationSeconds: session.frameCount / session.fps, frameCount: session.frameCount,
+      width: session.width, height: session.height }, session.outputPath)
     await moveCompletedOutputToUploads(session.outputPath, mediaPath, session.id)
     const savedPath = payload.targetPath
       ? await copyToTarget(mediaPath, payload.targetPath)

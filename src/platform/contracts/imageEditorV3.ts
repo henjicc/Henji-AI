@@ -304,6 +304,7 @@ export interface ImageEditorV3Platform {
     documentRef: ImageEditorV3DocumentRef
   }): Promise<ImageEditorV3DocumentSnapshot | null>
   saveDocument(request: {
+    operationCorrelation?: import('../../core/application-control/persistenceCorrelation').ApplicationPersistenceCorrelation
     requestId: string
     document: ImageEditDocumentV3
     expectedRevision: number

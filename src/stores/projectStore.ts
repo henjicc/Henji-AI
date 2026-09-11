@@ -18,6 +18,7 @@ import {
   upsertProjectRecord,
 } from '@/commands/projectState';
 import { createProjectPersistenceQueue } from './projectPersistenceQueue';
+import type { ApplicationPersistenceCorrelation } from '@/core/application-control/persistenceCorrelation';
 
 import { fromProjectRecord, toProjectRecord, toProjectSummary, type Project, type ProjectSummary } from './projectStoreSerialization';
 export { decodeProjectRecord, encodeProjectAsRecord } from './projectStoreSerialization';
@@ -81,10 +82,10 @@ let reportBackgroundPersistenceError: (operation: 'save' | 'viewport', error: un
   logger.error(`Failed to persist project ${operation}`, error)
 }
 
-const persistenceQueue = createProjectPersistenceQueue<Project>({
+const persistenceQueue = createProjectPersistenceQueue<Project, ApplicationPersistenceCorrelation>({
   getProjectId: (project) => project.id,
-  upsertProject: async (project) => {
-    await upsertProjectRecord(toProjectRecord(project))
+  upsertProject: async (project, correlation) => {
+    await upsertProjectRecord(toProjectRecord(project), correlation)
     setProjectPersistenceError(project.id, null)
   },
   updateViewport: updateProjectViewportRecord,
@@ -112,9 +113,9 @@ interface ProjectState {
   persistenceErrors: Record<string, string>;
 
   hydrate: () => Promise<void>;
-  createProject: (name: string) => Promise<string>;
-  deleteProject: (id: string) => Promise<void>;
-  renameProject: (id: string, name: string) => Promise<void>;
+  createProject: (name: string, context?: { operationId?: string }) => Promise<string>;
+  deleteProject: (id: string, context?: { operationId?: string }) => Promise<void>;
+  renameProject: (id: string, name: string, context?: { operationId?: string }) => Promise<void>;
   setProjectCover: (id: string, coverPath: string | null) => void;
   openProject: (id: string) => void;
   closeProject: () => Promise<void>;
@@ -165,7 +166,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     }
   },
 
-  createProject: async (name) => {
+  createProject: async (name, context) => {
     const id = uuidv4();
     const now = Date.now();
     const project: Project = {
@@ -182,7 +183,8 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     };
 
     try {
-      await persistenceQueue.flushProject(project)
+      await persistenceQueue.flushProject(project, context?.operationId ? { operationId: context.operationId,
+        boundaryId: uuidv4(), targets: [{ kind: 'canvas.project', id }] } : undefined)
     } catch (error) {
       logger.error('Failed to create project record', error)
       setProjectPersistenceError(id, 'project.persistenceFailed')
@@ -199,9 +201,10 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     return id;
   },
 
-  deleteProject: async (id) => {
+  deleteProject: async (id, context) => {
     try {
-      await persistenceQueue.deleteProject(id)
+      await persistenceQueue.deleteProject(id, context?.operationId ? { operationId: context.operationId,
+        boundaryId: uuidv4(), targets: [{ kind: 'canvas.project', id }] } : undefined)
     } catch (error) {
       logger.error('Failed to delete project record', error)
       setProjectPersistenceError(id, 'project.persistenceFailed')
@@ -217,7 +220,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     }));
   },
 
-  renameProject: async (id, name) => {
+  renameProject: async (id, name, context) => {
     const now = Date.now();
     const currentProject = get().currentProject
     const nextCurrentProject = currentProject?.id === id
@@ -234,8 +237,10 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     }))
 
     try {
-      if (nextCurrentProject) await persistenceQueue.flushProject(nextCurrentProject)
-      else await renameProjectRecord(id, name, now)
+      const correlation = context?.operationId ? { operationId: context.operationId,
+        boundaryId: uuidv4(), targets: [{ kind: 'canvas.project', id }] } : undefined
+      if (nextCurrentProject) await persistenceQueue.flushProject(nextCurrentProject, correlation)
+      else await renameProjectRecord(id, name, now, correlation)
     } catch (error) {
       logger.error('Failed to rename project record', error)
       setProjectPersistenceError(id, 'project.persistenceFailed')
@@ -462,11 +467,11 @@ export function hasUnconfirmedCanvasProjectSnapshot(projectId: string): boolean 
   return persistenceQueue.getUnsavedProject(projectId) !== undefined
 }
 
-export async function flushCanvasProjectSnapshot(projectId: string): Promise<void> {
+export async function flushCanvasProjectSnapshot(projectId: string, correlation?: ApplicationPersistenceCorrelation): Promise<void> {
   const project = useProjectStore.getState().currentProject
   if (!project || project.id !== projectId) throw new Error('当前画布项目已切换，请返回原项目后重试保存')
   try {
-    await persistenceQueue.flushProject(project)
+    await persistenceQueue.flushProject(project, correlation)
     setProjectPersistenceError(projectId, null)
   } catch (error) {
     setProjectPersistenceError(projectId, 'project.persistenceFailed')

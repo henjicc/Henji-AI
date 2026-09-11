@@ -1,6 +1,8 @@
 import { z } from 'zod'
+import { applicationExecutionPreparationSchema } from '../application-control/transactions'
 
 import { applicationCapabilityInvocationSchema } from './applicationCapabilities'
+import { agentObservedEffectSchema } from './observedEffect'
 
 export const AGENT_CONTRACT_VERSION = 'agent-contract/v2' as const
 export const LEGACY_AGENT_CONTRACT_VERSION = 'agent-contract/v1' as const
@@ -117,6 +119,7 @@ export type HostErrorCode = z.infer<typeof hostErrorCodeSchema>
 export const applicationCapabilityResultSchema = z.discriminatedUnion('ok', [
   z.object({
     ok: z.literal(true),
+    effects: z.array(agentObservedEffectSchema).max(512).optional(),
     data: z.record(z.string(), z.unknown()),
     resultingRevision: z.number().int().nonnegative(),
     resultingScopeRevisions: hostScopeRevisionsSchema,
@@ -140,6 +143,7 @@ export const frontendToolOperationSchema = z.object({
 export type FrontendToolOperation = z.infer<typeof frontendToolOperationSchema>
 
 export const frontendToolRequestSchema = z.object({
+  operationId: z.string().min(1).optional(),
   schemaVersion: z.literal(AGENT_CONTRACT_VERSION),
   runId: z.string().min(1),
   toolCallId: z.string().min(1),
@@ -151,6 +155,7 @@ export const frontendToolRequestSchema = z.object({
 export type FrontendToolRequest = z.infer<typeof frontendToolRequestSchema>
 
 export const frontendToolAcknowledgementSchema = z.object({
+  executionPreparation: applicationExecutionPreparationSchema.optional(),
   schemaVersion: z.literal(AGENT_CONTRACT_VERSION),
   callId: z.string().min(1),
   rendererSessionId: z.string().min(1),

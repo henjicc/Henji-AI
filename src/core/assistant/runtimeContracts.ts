@@ -5,6 +5,7 @@ import { modelStepCapabilitiesSchema } from '@henjicc/ai-sdk'
 import { llmApiProtocolSchema } from '@henjicc/ai-sdk'
 import { agentExternalContinuationSchema } from './externalWait'
 import { agentAttachmentsSchema } from './attachments'
+import { operationSnapshotSchema } from './operations'
 
 export const AGENT_RUNTIME_SCHEMA_VERSION = 'agent-runtime/v2' as const
 export const agentApprovalModeSchema = z.enum(['ask', 'assistant_decides', 'full_access'])
@@ -157,6 +158,7 @@ export type AgentStartRunResult = z.infer<typeof agentStartRunResultSchema>
 export const agentRunSnapshotSchema = z.object({
   state: agentRunStateSchema,
   events: z.array(agentEventSchema).max(2_000),
+  operations: z.array(operationSnapshotSchema).optional(),
 }).strict()
 export type AgentRunSnapshot = z.infer<typeof agentRunSnapshotSchema>
 

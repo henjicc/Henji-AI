@@ -3,6 +3,7 @@ import { v4 as uuidv4 } from 'uuid'
 import type {
   ApplicationCompletedStepResult,
   ApplicationEvidence,
+  ApplicationExecutionContext,
   ApplicationMutationExecutor,
   ApplicationPlannedStep,
 } from '@/core/application-control'
@@ -41,13 +42,14 @@ async function restoreSnapshot(
   assetId: string,
   snapshot: AssetMutationSnapshot,
   propertyIds: ReadonlySet<string>,
+  context?: ApplicationExecutionContext,
 ): Promise<void> {
   const failures: unknown[] = []
   if (propertyIds.has(DISPLAY_NAME_PROPERTY)) {
-    try { await assetApplicationService.rename(assetId, snapshot.displayName) } catch (error) { failures.push(error) }
+    try { await assetApplicationService.rename(assetId, snapshot.displayName, context) } catch (error) { failures.push(error) }
   }
   if (propertyIds.has(TAGS_PROPERTY)) {
-    try { await assetApplicationService.replaceTags(assetId, snapshot.tags) } catch (error) { failures.push(error) }
+    try { await assetApplicationService.replaceTags(assetId, snapshot.tags, context) } catch (error) { failures.push(error) }
   }
   if (propertyIds.has(LIBRARY_REFS_PROPERTY)) {
     try {
@@ -55,10 +57,10 @@ async function restoreSnapshot(
       const beforeIds = new Set(snapshot.libraryIds)
       const currentIds = new Set(current.libraryIds)
       for (const id of currentIds) {
-        if (!beforeIds.has(id)) await assetApplicationService.removeFromLibrary(id, assetId)
+        if (!beforeIds.has(id)) await assetApplicationService.removeFromLibrary(id, assetId, context)
       }
       for (const id of beforeIds) {
-        if (!currentIds.has(id)) await assetApplicationService.addToLibrary(id, assetId)
+        if (!currentIds.has(id)) await assetApplicationService.addToLibrary(id, assetId, context)
       }
     } catch (error) {
       failures.push(error)
@@ -78,7 +80,7 @@ export class AssetMutationExecutor implements ApplicationMutationExecutor {
 
   constructor(private readonly dependencies: AssetMutationDependencies) {}
 
-  async apply(step: MutationStep): Promise<ApplicationCompletedStepResult> {
+  async apply(step: MutationStep, context?: ApplicationExecutionContext): Promise<ApplicationCompletedStepResult> {
     const assetId = step.target.id
     const before = await assetApplicationService.readMutationSnapshot(assetId)
     logger.info('素材属性写入开始', {
@@ -87,10 +89,10 @@ export class AssetMutationExecutor implements ApplicationMutationExecutor {
     })
     const applied = new Set<string>()
     try {
-      await applyWriterTable(WRITERS, { assetId, applied }, step.mutations)
+      await applyWriterTable(WRITERS, { assetId, applied, operationId: context?.operationId }, step.mutations)
     } catch (error) {
       try {
-        await restoreSnapshot(assetId, before, applied)
+        await restoreSnapshot(assetId, before, applied, context)
       } catch (rollbackError) {
         logger.error('素材属性回滚失败', rollbackError, {
           event: 'asset.mutation.rollback.failed', assetId, appliedCount: applied.size,
@@ -125,15 +127,15 @@ export class AssetMutationExecutor implements ApplicationMutationExecutor {
     }
   }
 
-  async compensate(_step: MutationStep, result: ApplicationCompletedStepResult): Promise<ApplicationEvidence[]> {
+  async compensate(_step: MutationStep, result: ApplicationCompletedStepResult, context?: ApplicationExecutionContext): Promise<ApplicationEvidence[]> {
     if (!result.undoToken) return []
-    return (await this.undo(result.undoToken)).evidence
+    return (await this.undo(result.undoToken, context)).evidence
   }
 
-  async undo(undoToken: string): Promise<ApplicationCompletedStepResult> {
+  async undo(undoToken: string, context?: ApplicationExecutionContext): Promise<ApplicationCompletedStepResult> {
     const record = undoRecords.get(undoToken)
     if (!record) throw new Error('ASSET_UNDO_NOT_FOUND：素材撤销引用不存在或已使用。')
-    await restoreSnapshot(record.assetId, record.snapshot, new Set(record.propertyIds))
+    await restoreSnapshot(record.assetId, record.snapshot, new Set(record.propertyIds), context)
     undoRecords.delete(undoToken)
     this.dependencies.bumpRevision()
     const revision = this.dependencies.readRevision()

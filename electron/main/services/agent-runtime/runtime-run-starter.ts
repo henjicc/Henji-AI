@@ -16,6 +16,7 @@ import type { AgentPersistenceStore } from './persistence/store'
 import { createInitialAgentRunState } from './runner/initial-state'
 import { prepareWorkingSummaryForRetry } from './runner/working-summary'
 import { validateAgentRunAttachments } from './runner/attachment-context'
+import type { OperationRecovery } from '../../../../src/core/assistant/operations'
 
 export interface AgentRunRecord {
   ownerWebContentsId: number
@@ -31,6 +32,8 @@ interface RuntimeRunStarterOptions {
   parentRunId: string | null
   recoveryContext: AgentWorkingSummary | undefined
   budgetContinuation?: AgentBudgetContinuation
+  operationRecovery?: OperationRecovery
+  newLogicalTask?: boolean
   runs: Map<string, AgentRunRecord>
   activeByThread: Map<string, string>
   persistence: AgentPersistenceStore
@@ -77,7 +80,8 @@ export async function startRuntimeRun(
     options.request,
     initialState,
     options.parentRunId,
-    { appendUserMessage: !options.budgetContinuation && !options.request.externalContinuation }
+    { appendUserMessage: !options.budgetContinuation && !options.request.externalContinuation && !options.operationRecovery,
+      newLogicalTask: options.newLogicalTask }
   )
   try {
     const projection = options.persistence.projectConversation(options.request.threadId, runId)
@@ -94,7 +98,8 @@ export async function startRuntimeRun(
       projection.messages,
       projection.sourceSequences,
       preparedRecoveryContext,
-      options.budgetContinuation
+      options.budgetContinuation,
+      options.operationRecovery,
     )
     const record = options.runs.get(runId)
     if (record) record.state = state

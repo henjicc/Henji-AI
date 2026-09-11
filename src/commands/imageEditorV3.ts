@@ -338,6 +338,7 @@ export class ImageEditorV3CommandRepository implements ImageEditDocumentReposito
     const requestId = createImageEditorV3RequestId('document-save')
     const saved = await saveImageEditorV3Document({
       requestId,
+      ...(options.operationCorrelation ? { operationCorrelation: options.operationCorrelation } : {}),
       document,
       expectedRevision: options.expectedRevision,
       history: options.history ?? null,

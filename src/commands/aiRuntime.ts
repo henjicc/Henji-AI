@@ -10,12 +10,14 @@ export interface ProviderKeyStatusDto {
 export type { ProviderConnectionTestResultDto } from '@/platform/contracts/aiRuntime'
 
 export interface AiGenerateRequestDto {
+  operationId?: string
   modelId: string
   params: DynamicValueMap
   requestId?: string
 }
 
 export interface AiContinuePollingRequestDto {
+  operationId?: string
   modelId: string
   taskId: string
   params?: DynamicValueMap

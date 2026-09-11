@@ -167,7 +167,8 @@ export function useTaskGeneration({
     modelId: string,
     input: string,
     options: GeneratorOptions,
-    onProgress?: GenerationProgressCallback
+    onProgress?: GenerationProgressCallback,
+    execution?: { requestId: string; operationId?: string },
   ): Promise<DynamicValue> => {
     const generationService = GenerationService.getInstance()
     const params: DynamicValueMap = {
@@ -177,7 +178,7 @@ export function useTaskGeneration({
     }
 
     try {
-      return await generationService.generate(modelId, params, onProgress)
+      return await generationService.generate(modelId, params, onProgress, execution)
     } catch (error) {
       throw new Error(maybeToUserMessage(error))
     }
@@ -220,7 +221,7 @@ export function useTaskGeneration({
         updateProgress(taskId, next)
       }
 
-      const result = await generateWithService(task.model, task.prompt, options, handleProgress)
+      const result = await generateWithService(task.model, task.prompt, options, handleProgress, { requestId: taskId, operationId: task.operationId })
       const resultObj: DynamicValueMap = isRecord(result) ? result : {}
       const metadata = resultObj['metadata']
       const normalizedResultTaskId = typeof resultObj['taskId'] === 'string'

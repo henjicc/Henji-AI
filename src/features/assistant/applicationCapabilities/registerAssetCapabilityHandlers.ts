@@ -49,7 +49,7 @@ export function registerAssetCapabilityHandlers(
       assetId: string
       tags: string[]
     }>('set_asset_tags', input)
-    return await assetApplicationService.replaceTags(parsed.assetId, parsed.tags)
+    return await assetApplicationService.replaceTags(parsed.assetId, parsed.tags, context)
   })
 
   configureAssetMutationDependencies({
@@ -64,7 +64,7 @@ export function registerAssetCapabilityHandlers(
       libraryId: string
       assetId: string
     }>('add_asset_to_library', input)
-    return await assetApplicationService.addToLibrary(parsed.libraryId, parsed.assetId)
+    return await assetApplicationService.addToLibrary(parsed.libraryId, parsed.assetId, context)
   })
 
   registrar.registerHandler('remove_asset_from_library', async (input, context) => {
@@ -73,12 +73,12 @@ export function registerAssetCapabilityHandlers(
       libraryId: string
       assetId: string
     }>('remove_asset_from_library', input)
-    return await assetApplicationService.removeFromLibrary(parsed.libraryId, parsed.assetId)
+    return await assetApplicationService.removeFromLibrary(parsed.libraryId, parsed.assetId, context)
   })
 
   registrar.registerHandler('delete_asset', async (input, context) => {
     throwIfCapabilityAborted(context.signal)
     const parsed = parseCapabilityInput<{ assetId: string }>('delete_asset', input)
-    return await assetApplicationService.delete(parsed.assetId)
+    return await assetApplicationService.delete(parsed.assetId, context)
   })
 }

@@ -157,6 +157,14 @@ export const applicationVerificationConditionSchema = z.discriminatedUnion('kind
 ])
 export type ApplicationVerificationCondition = z.infer<typeof applicationVerificationConditionSchema>
 
+/** 执行前的验证契约快照，不包含业务文档或任务图。只沿宿主内部回执通道传递。 */
+export const applicationExecutionPreparationSchema = z.object({
+  planRef: applicationOpaqueRefSchema,
+  conditions: z.array(applicationVerificationConditionSchema).max(256),
+  preparedAt: z.string().datetime(),
+}).strict()
+export type ApplicationExecutionPreparation = z.infer<typeof applicationExecutionPreparationSchema>
+
 export const applicationTransactionModeSchema = z.enum([
   'atomic',
   'compensatable',
@@ -234,6 +242,8 @@ export const applicationTransactionResultSchema = z.discriminatedUnion('status',
   }).strict(),
   z.object({
     status: z.literal('failed'),
+    /** 仅执行器尚未被调用时声明；完成步骤为零不等于没有发生写入。 */
+    executionState: z.literal('not_started').optional(),
     transactionRef: applicationOpaqueRefSchema.optional(),
     code: z.enum(['INVALID_PLAN', 'CONFLICT', 'NOT_FOUND', 'NOT_AVAILABLE', 'PERMISSION_DENIED', 'CANCELLED', 'EXECUTION_FAILED', 'VERIFICATION_FAILED']),
     message: z.string().min(1).max(2_000),

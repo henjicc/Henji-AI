@@ -5,15 +5,17 @@ import { agentObservedEffectSchema, type AgentObservedEffect } from './observedE
 /** 失败通道只携带已经发生的事务事实；没有属性值、文档、任意 details 或异常栈。 */
 export const applicationTransactionFailureFactsSchema = applicationTransactionResultSchema.options[3].pick({
   transactionRef: true, code: true, currentRevisions: true, resultRefs: true,
-  effects: true, undoRef: true, partial: true, persistence: true,
-}).extend({ replayMutation: z.literal(false) }).strict()
+  effects: true, undoRef: true, partial: true, persistence: true, executionState: true,
+}).extend({ replayMutation: z.literal(false) }).strict().refine((facts) => !facts.executionState
+  || (!facts.effects?.length && !facts.partial?.completedStepIndexes.length && !facts.persistence),
+'尚未开始的操作不能同时声明已发生的修改或待保存事实')
 export type ApplicationTransactionFailureFacts = z.infer<typeof applicationTransactionFailureFactsSchema>
 
 export function transactionFailureFacts(result: Extract<ApplicationTransactionResult, { status: 'failed' }>): ApplicationTransactionFailureFacts | undefined {
-  if (!result.persistence && !result.effects?.length && !result.partial?.completedStepIndexes.length) return undefined
-  const { transactionRef, code, currentRevisions, resultRefs, effects, undoRef, partial, persistence } = result
+  if (!result.executionState && !result.persistence && !result.effects?.length && !result.partial?.completedStepIndexes.length) return undefined
+  const { transactionRef, code, currentRevisions, resultRefs, effects, undoRef, partial, persistence, executionState } = result
   return applicationTransactionFailureFactsSchema.parse({ transactionRef, code, currentRevisions, resultRefs,
-    effects, undoRef, partial, persistence, replayMutation: false })
+    effects, undoRef, partial, persistence, executionState, replayMutation: false })
 }
 
 /** 类型化的传输错误；只允许合法的有界事实跨越既有进程边界。 */

@@ -7,6 +7,8 @@ import {
   upsertStoryboardProjectRecord,
 } from '@/commands/storyboardProjects';
 
+import type { ApplicationPersistenceCorrelation } from '@/core/application-control/persistenceCorrelation';
+
 export interface ProjectSummaryRecord {
   id: string;
   name: string;
@@ -44,9 +46,10 @@ export async function getProjectRecord(projectId: string): Promise<ProjectRecord
   return await getStoryboardProjectRecord(projectId);
 }
 
-export async function upsertProjectRecord(record: ProjectRecord): Promise<void> {
+export async function upsertProjectRecord(record: ProjectRecord, operationCorrelation?: ApplicationPersistenceCorrelation): Promise<void> {
   await upsertStoryboardProjectRecord({
     ...record,
+    ...(operationCorrelation ? { operationCorrelation } : {}),
     createdAt: normalizeTimestamp(record.createdAt),
     updatedAt: normalizeTimestamp(record.updatedAt),
     nodeCount: Math.max(0, Number(record.nodeCount || 0)),
@@ -63,11 +66,12 @@ export async function updateProjectViewportRecord(
 export async function renameProjectRecord(
   projectId: string,
   name: string,
-  updatedAt: number
+  updatedAt: number,
+  operationCorrelation?: ApplicationPersistenceCorrelation,
 ): Promise<void> {
-  await renameStoryboardProjectRecord(projectId, name, normalizeTimestamp(updatedAt));
+  await renameStoryboardProjectRecord(projectId, name, normalizeTimestamp(updatedAt), operationCorrelation);
 }
 
-export async function deleteProjectRecord(projectId: string): Promise<void> {
-  await deleteStoryboardProjectRecord(projectId);
+export async function deleteProjectRecord(projectId: string, operationCorrelation?: ApplicationPersistenceCorrelation): Promise<void> {
+  await deleteStoryboardProjectRecord(projectId, operationCorrelation);
 }

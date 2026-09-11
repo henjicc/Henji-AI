@@ -287,7 +287,7 @@ export async function executeToolWithRetry(
   input: unknown,
   context: Parameters<AgentToolDefinition['execute']>[1]
 ): Promise<unknown> {
-  const retries = definition.readOnly || definition.idempotent
+  const retries = definition.readOnly
     ? definition.retryPolicy.maxRetries
     : 0
   for (let attempt = 0; attempt <= retries; attempt += 1) {

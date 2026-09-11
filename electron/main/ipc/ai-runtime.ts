@@ -1,7 +1,5 @@
 import {
   cancelRuntimeTask,
-  continuePolling,
-  generate,
   getEstimate,
   getProviderKeyStatus,
   parseJsonObject,
@@ -23,21 +21,28 @@ import {
 } from '@henjicc/ai-sdk'
 import { sdkRuntimeContext } from '../services/ai-runtime/sdk-runtime'
 import { parseRecord, parseStringField, parseVoid, registerIpcHandler } from './registry'
+import { executeGenerationOperation, continueGenerationOperation } from '../services/assistant/generation-operation'
 
-function parseGenerateRequest(input: unknown): AiGenerateRequestDto {
+type CorrelatedPollingRequest = AiContinuePollingRequestDto & { operationId?: string }
+
+type CorrelatedGenerateRequest = AiGenerateRequestDto & { operationId?: string }
+
+function parseGenerateRequest(input: unknown): CorrelatedGenerateRequest {
   const record = parseRecord(input)
   return {
     modelId: readString(record, 'modelId'),
     params: parseJsonObject(record.params ?? {}, 'params'),
     requestId: readOptionalString(record, 'requestId'),
+    operationId: readOptionalString(record, 'operationId'),
   }
 }
 
-function parseContinuePollingRequest(input: unknown): AiContinuePollingRequestDto {
+function parseContinuePollingRequest(input: unknown): CorrelatedPollingRequest {
   const record = parseRecord(input)
   return {
     modelId: readString(record, 'modelId'),
     taskId: readString(record, 'taskId'),
+    operationId: readOptionalString(record, 'operationId'),
     params: record.params === undefined ? undefined : parseJsonObject(record.params, 'params'),
     requestId: readOptionalString(record, 'requestId'),
   }
@@ -73,12 +78,12 @@ export function registerAiRuntimeIpc(): void {
     (providerId) => testProviderConnection(providerId, sdkRuntimeContext)
   )
 
-  registerIpcHandler<AiGenerateRequestDto, AiGenerateResponseDto>('ai:generate', parseGenerateRequest, async (request) => {
-    return await generate(request)
+  registerIpcHandler<CorrelatedGenerateRequest, AiGenerateResponseDto>('ai:generate', parseGenerateRequest, async ({ operationId, ...request }, event) => {
+    return await executeGenerationOperation(request, operationId, event.sender.id)
   })
 
-  registerIpcHandler<AiContinuePollingRequestDto, AiGenerateResponseDto>('ai:continuePolling', parseContinuePollingRequest, async (request) => {
-    return await continuePolling(request)
+  registerIpcHandler<CorrelatedPollingRequest, AiGenerateResponseDto>('ai:continuePolling', parseContinuePollingRequest, async ({ operationId, ...request }, event) => {
+    return await continueGenerationOperation(request, operationId, event.sender.id)
   })
 
   registerIpcHandler<string, void>('ai:cancelTask', (input) => parseStringField(input, 'taskId'), (taskId) => {

@@ -1,5 +1,6 @@
 import type { Readable } from 'node:stream'
 import type { ImageEditCommandHistorySnapshotV3 } from '../../../../src/core/imageEdit/v3/commandHistoryCodec'
+import type { ApplicationPersistenceReceiptRecord } from '../../../../src/core/application-control/persistenceCorrelation'
 
 import type { SourceExifOrientation } from './source-orientation'
 
@@ -26,6 +27,8 @@ export interface ImageEditDocumentEnvelope {
   history?: ImageEditCommandHistorySnapshotV3
   resourceRefs: ResourceId[]
   previewRef?: ResourceId
+  /** 本机未移交给执行记录的原子保存回执，导出与 fork 不携带。 */
+  pendingOperationReceipts?: ApplicationPersistenceReceiptRecord[]
 }
 
 export interface ImageEditProjectReference {

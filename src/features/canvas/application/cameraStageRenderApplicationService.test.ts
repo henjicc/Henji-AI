@@ -146,12 +146,17 @@ describe('cameraStageRenderApplicationService', () => {
     (mocks.nodes[0].data as Record<string, unknown>).projectId = null;
     mocks.createProject.mockResolvedValue({ id: 'stage-created' });
 
-    await startCameraStageNodeRender('node-1', 'image');
+    const operationId = '00000000-0000-4000-8000-000000000001';
+    await startCameraStageNodeRender('node-1', 'image', { operationId });
 
-    expect(mocks.createProject).toHaveBeenCalledWith('镜头');
+    expect(mocks.createProject).toHaveBeenCalledWith('镜头', { operationId });
     expect(mocks.start).toHaveBeenCalledWith(expect.objectContaining({
       cameraStageProjectId: 'stage-created',
+      operationId,
     }));
+    expect(mocks.confirm).toHaveBeenCalledWith('canvas-1', { operationCorrelation: expect.objectContaining({ operationId,
+      targets: [{ kind: 'canvas.node', id: 'canvas-1:node-1' }],
+    }) });
   });
 
   it('rejects a stale assistant owner before writing or submitting to another canvas', async () => {
@@ -222,13 +227,18 @@ describe('cameraStageRenderApplicationService', () => {
     const order: string[] = [];
     mocks.confirm.mockImplementation(async () => { order.push('persist'); });
     mocks.acknowledge.mockImplementation(async () => { order.push('ack'); });
-    await applyCameraStageRenderTask(task());
-    await applyCameraStageRenderTask(task());
+    const correlatedTask = { ...task(), operationId: 'original-operation' };
+    await applyCameraStageRenderTask(correlatedTask);
+    await applyCameraStageRenderTask(correlatedTask);
     expect(mocks.commit).toHaveBeenCalledTimes(1);
     expect(mocks.commit).toHaveBeenCalledWith(expect.objectContaining({
       completionId: 'camera-stage-render:request-1',
       resultNodeData: expect.objectContaining({ cameraStageRenderReceipt: descriptor() }),
-    }));
+    }), correlatedTask);
+    expect(mocks.collect).toHaveBeenCalledWith(expect.objectContaining({ requestId: 'request-1' }), correlatedTask);
+    expect(mocks.confirm).toHaveBeenCalledWith('canvas-1', { operationCorrelation: expect.objectContaining({
+      operationId: 'original-operation', targets: [{ kind: 'canvas.node', id: 'canvas-1:node-1' }],
+    }) });
     expect(order).toEqual(['persist', 'ack', 'persist', 'ack']);
     expect((mocks.nodes[0].data as Record<string, unknown>).imageUrl).toBe('managed://image.png');
   });
@@ -257,7 +267,7 @@ describe('cameraStageRenderApplicationService', () => {
       imageRenderError: expect.stringContaining('已中断'),
     });
     expect(mocks.start).not.toHaveBeenCalled();
-    expect(mocks.confirm).toHaveBeenCalledWith('canvas-1');
+    expect(mocks.confirm).toHaveBeenCalledWith('canvas-1', { operationCorrelation: undefined });
   });
 
   it('coalesces concurrent starts and does not let reconcile interrupt a request being registered', async () => {

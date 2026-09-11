@@ -25,7 +25,7 @@ export async function commitPreparedLayerStack(input: CommitCanvasGenerationOutp
   completionId: string;
   ordered: CanvasGenerationOutputItem[];
   projectId: string;
-}): Promise<CommitCanvasGenerationOutputsResult> {
+}, context?: { operationId?: string }): Promise<CommitCanvasGenerationOutputsResult> {
   if (!input.preparedLayerStack) {
     throw new GenerationOutputApplicationError('INVALID_INPUT', '图层栈必须先完成下载、像素验证与合成');
   }
@@ -77,7 +77,7 @@ export async function commitPreparedLayerStack(input: CommitCanvasGenerationOutp
     }
     const createDocument = input.createLayerStackDocument ?? createMultiLayerDocumentFromLayerStack;
     // 创建一旦开始就完成到可补偿边界；之后再观察取消并按精确 revision 删除。
-    projection = await createDocument({ nodeId: placeholderNodeId, document });
+    projection = await createDocument({ nodeId: placeholderNodeId, document, ...(context?.operationId ? { operationId: context.operationId } : {}) });
     if (input.signal?.aborted) {
       throw new GenerationOutputApplicationError('CONFLICT', '图层栈提交已取消');
     }
@@ -117,7 +117,7 @@ export async function commitPreparedLayerStack(input: CommitCanvasGenerationOutp
         resultNodeIds: [placeholderNodeId],
         groupNodeId: null,
       }];
-    }), { completionId: input.completionId, strategy: 'layer-stack' });
+    }), { completionId: input.completionId, strategy: 'layer-stack' }, context);
     if (transaction.appliedOperations.length !== 1) {
       throw new GenerationOutputApplicationError('CONFLICT', '图层栈事务未完整应用');
     }

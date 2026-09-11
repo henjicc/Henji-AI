@@ -82,6 +82,20 @@ describe('GenerationWorkspace 缓存续查媒体所有权', () => {
     })
   })
 
+  it('助手任务通过原操作续查，显示处理失败也保留已关联的实际结果', async () => {
+    mocks.continuePolling.mockResolvedValue({ url: 'https://media.example.test/result.png', filePath: '/data/Media/result.png',
+      createdFilePaths: ['/data/Media/result.png'] })
+    mocks.normalizeMediaResultForDesktop.mockRejectedValue(new Error('显示处理失败'))
+    await continuePollingTask({
+      task: { ...createTask(), operationId: 'original-operation' }, genericGenerateFailed: '生成失败',
+      notify: vi.fn(), updateTask: vi.fn(), updateProgress: vi.fn(), toUserMessage: () => '显示处理失败',
+    })
+    expect(mocks.consumePendingResult).not.toHaveBeenCalled()
+    expect(mocks.continuePolling).toHaveBeenCalledWith('model-a', 'server-task-1', expect.objectContaining({ prompt: '猫' }),
+      expect.any(Function), { requestId: 'task-1', operationId: 'original-operation' })
+    expect(mocks.releaseManagedGenerationMedia).not.toHaveBeenCalled()
+  })
+
   it('命中 pending 缓存后把新建文件随成功结果转移给任务', async () => {
     mocks.consumePendingResult.mockResolvedValue({
       url: 'https://media.example.test/result.png',

@@ -52,7 +52,7 @@ import { flushImageEditHostPersistenceV3 } from '@/features/imageEdit/v3/applica
 import type { ImageEditPersistenceHostV3, ImageEditPersistenceProjectionV3 } from '@/features/imageEdit/v3/application/imageEditPersistenceOwner'
 
 interface CanvasEditToolEditorV3HostProps extends VisualToolEditorProps {
-  onPersistenceConfirmed?: (session: ImageEditSessionReferenceV3) => Promise<ImageEditPersistenceProjectionV3 | void>
+  onPersistenceConfirmed?: (session: ImageEditSessionReferenceV3, context?: { operationId?: string }) => Promise<ImageEditPersistenceProjectionV3 | void>
   persistenceProjection?: ImageEditPersistenceHostV3['projection']
   beforePrepare?: (signal: AbortSignal) => Promise<ImageEditSessionReferenceV3>
   onLifecycleChange?: (lifecycle: CanvasEditToolEditorV3Lifecycle | null) => void
@@ -110,11 +110,11 @@ export function CanvasEditToolEditorV3Host({
   const persistenceHost = useMemo(() => ({
     getQueue: () => persistenceRef.current,
     projection: persistenceProjection,
-    confirmProjection: onPersistenceConfirmed ? async (reference: ImageEditDocumentReferenceV3) => {
+    confirmProjection: onPersistenceConfirmed ? async (reference: ImageEditDocumentReferenceV3, context?: { operationId?: string }) => {
       projectionUnconfirmedRef.current = true
       onExecutionReadyChangeRef.current?.(false)
       try {
-        const result = await onPersistenceConfirmed(createCanvasEditV3SessionReference(sourceImageUrl, reference))
+        const result = await onPersistenceConfirmed(createCanvasEditV3SessionReference(sourceImageUrl, reference), context)
         projectionUnconfirmedRef.current = false
         setProjectionFailure(null)
         const current = persistenceSnapshotRef.current?.document

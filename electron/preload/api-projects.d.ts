@@ -95,15 +95,17 @@ export interface HenjiStoryboardProjectRecord extends HenjiStoryboardProjectSumm
   historyJson: string
 }
 
-export type HenjiStoryboardProjectWrite = Omit<HenjiStoryboardProjectRecord, 'coverPath'>
+export type HenjiStoryboardProjectWrite = Omit<HenjiStoryboardProjectRecord, 'coverPath'> & {
+  operationCorrelation?: import('../../src/core/application-control/persistenceCorrelation').ApplicationPersistenceCorrelation
+}
 
 export interface HenjiStoryboardProjectsApi {
   listProjectSummaries(): Promise<HenjiStoryboardProjectSummary[]>
   getProjectRecord(projectId: string): Promise<HenjiStoryboardProjectRecord | null>
   upsertProjectRecord(record: HenjiStoryboardProjectWrite): Promise<void>
   updateProjectViewportRecord(projectId: string, viewportJson: string): Promise<void>
-  renameProjectRecord(projectId: string, name: string, updatedAt: number): Promise<void>
-  deleteProjectRecord(projectId: string): Promise<void>
+  renameProjectRecord(projectId: string, name: string, updatedAt: number, operationCorrelation?: import('../../src/core/application-control/persistenceCorrelation').ApplicationPersistenceCorrelation): Promise<void>
+  deleteProjectRecord(projectId: string, operationCorrelation?: import('../../src/core/application-control/persistenceCorrelation').ApplicationPersistenceCorrelation): Promise<void>
 }
 
 export interface HenjiCameraStageProjectSummary {
@@ -119,7 +121,9 @@ export interface HenjiCameraStageProjectRecord extends HenjiCameraStageProjectSu
   sceneJson: string
 }
 
-export type HenjiCameraStageProjectWrite = Omit<HenjiCameraStageProjectRecord, 'coverPath'>
+export type HenjiCameraStageProjectWrite = Omit<HenjiCameraStageProjectRecord, 'coverPath'> & {
+  operationCorrelation?: import('../../src/core/application-control/persistenceCorrelation').ApplicationPersistenceCorrelation
+}
 
 export type HenjiProjectCoverScope = 'canvas' | 'camera-stage'
 export type HenjiProjectCoverSourceKind = 'image' | 'video'
@@ -148,8 +152,8 @@ export interface HenjiCameraStageProjectsApi {
   listProjectSummaries(): Promise<HenjiCameraStageProjectSummary[]>
   getProjectRecord(projectId: string): Promise<HenjiCameraStageProjectRecord | null>
   upsertProjectRecord(record: HenjiCameraStageProjectWrite): Promise<void>
-  renameProjectRecord(projectId: string, name: string, updatedAt: number): Promise<void>
-  deleteProjectRecord(projectId: string): Promise<void>
+  renameProjectRecord(projectId: string, name: string, updatedAt: number, operationCorrelation?: import('../../src/core/application-control/persistenceCorrelation').ApplicationPersistenceCorrelation): Promise<void>
+  deleteProjectRecord(projectId: string, operationCorrelation?: import('../../src/core/application-control/persistenceCorrelation').ApplicationPersistenceCorrelation): Promise<void>
 }
 
 export type HenjiCameraStageRenderResolutionPreset = CameraStageRenderResolutionPreset

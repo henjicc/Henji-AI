@@ -2,6 +2,7 @@ import type {
   ApplicationCollectionExecutor,
   ApplicationCompletedStepResult,
   ApplicationEvidence,
+  ApplicationExecutionContext,
   ApplicationPlannedStep,
   ApplicationRef,
   JsonValue,
@@ -61,7 +62,7 @@ export class CanvasCollectionExecutor implements ApplicationCollectionExecutor {
     private readonly dependencies: CanvasCollectionDependencies,
   ) {}
 
-  async apply(step: CollectionStep): Promise<ApplicationCompletedStepResult> {
+  async apply(step: CollectionStep, context?: ApplicationExecutionContext): Promise<ApplicationCompletedStepResult> {
     const projectId = step.parent.id.includes(':')
       ? step.parent.id.slice(0, step.parent.id.indexOf(':'))
       : step.parent.id
@@ -70,7 +71,7 @@ export class CanvasCollectionExecutor implements ApplicationCollectionExecutor {
     const beforeEdges = new Set(useCanvasStore.getState().edges.map((item) => item.id))
     const { appliedOperations, undoRef } = await applyCanvasOperationsAtomically(projectId, operations, {
       source: 'application_collection', entityType: this.entityType,
-    })
+    }, context)
     this.dependencies.bumpRevision()
     const revision = this.dependencies.readRevision()
     const resultRefs = appliedOperations.flatMap((result) => {

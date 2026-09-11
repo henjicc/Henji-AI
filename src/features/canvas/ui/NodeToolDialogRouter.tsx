@@ -82,7 +82,7 @@ export function NodeToolDialogRouter(): JSX.Element {
       throw new Error('多图层文档关闭上下文已失效')
     }
     if (!documentConfirmation) throw new Error('图片文档保存宿主尚未就绪')
-    return documentConfirmation.confirm(result.session)
+    return documentConfirmation.confirm(result.session, result.operationId ? { operationId: result.operationId } : undefined)
   }, [displayDocumentContext, documentConfirmation])
 
   return (

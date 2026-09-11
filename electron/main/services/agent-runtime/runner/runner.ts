@@ -323,6 +323,7 @@ export class AgentRunner {
       onWaiting: () => this.setPhase('waiting_external'),
     })
     this.externalContinuation = new AgentExternalContinuationCoordinator({
+      operationRecovery: options.operationRecovery,
       continuation: options.request.externalContinuation,
       registry: options.dependencies.registry,
       tools: this.toolExecutionCoordinator,
@@ -331,6 +332,9 @@ export class AgentRunner {
     this.currentMessageConsumer.onMessages((messages) => this.updateTaskPolicy(messages))
     options.dependencies.gateway.setBeforeOperation(options.runId, async () => {
       await this.currentMessageConsumer.pull()
+      if (this.recoveryGuard.reconcile(await options.dependencies.gateway.listOperations(options.runId)) && this.state.workingSummary) {
+        this.state.workingSummary = markWorkingSummaryRecoveryVerified(this.state.workingSummary)
+      }
       this.syncNavigationPolicy()
       this.throwIfCancelled()
     })

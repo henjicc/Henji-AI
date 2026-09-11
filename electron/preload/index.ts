@@ -188,18 +188,18 @@ const storyboardProjectsApi: HenjiStoryboardProjectsApi = {
   upsertProjectRecord: (record) => nativeInvoke('storyboardProjects:upsert', record),
   updateProjectViewportRecord: (projectId, viewportJson) =>
     nativeInvoke('storyboardProjects:updateViewport', { projectId, viewportJson }),
-  renameProjectRecord: (projectId, name, updatedAt) =>
-    nativeInvoke('storyboardProjects:rename', { projectId, name, updatedAt }),
-  deleteProjectRecord: (projectId) => nativeInvoke('storyboardProjects:delete', { projectId }),
+  renameProjectRecord: (projectId, name, updatedAt, operationCorrelation) =>
+    nativeInvoke('storyboardProjects:rename', { projectId, name, updatedAt, operationCorrelation }),
+  deleteProjectRecord: (projectId, operationCorrelation) => nativeInvoke('storyboardProjects:delete', { projectId, operationCorrelation }),
 }
 
 const cameraStageProjectsApi: HenjiCameraStageProjectsApi = {
   listProjectSummaries: () => nativeInvoke('cameraStageProjects:list'),
   getProjectRecord: (projectId) => nativeInvoke('cameraStageProjects:get', { projectId }),
   upsertProjectRecord: (record) => nativeInvoke('cameraStageProjects:upsert', record),
-  renameProjectRecord: (projectId, name, updatedAt) =>
-    nativeInvoke('cameraStageProjects:rename', { projectId, name, updatedAt }),
-  deleteProjectRecord: (projectId) => nativeInvoke('cameraStageProjects:delete', { projectId }),
+  renameProjectRecord: (projectId, name, updatedAt, operationCorrelation) =>
+    nativeInvoke('cameraStageProjects:rename', { projectId, name, updatedAt, operationCorrelation }),
+  deleteProjectRecord: (projectId, operationCorrelation) => nativeInvoke('cameraStageProjects:delete', { projectId, operationCorrelation }),
 }
 
 const projectCoversApi: HenjiProjectCoversApi = {
@@ -369,9 +369,9 @@ const imageEditorV3Api = createImageEditorV3Api(
 )
 
 const assetLibraryApi: HenjiAssetLibraryApi = {
-  createAsset: (input) => nativeInvoke('assetLibrary:createAsset', input),
-  updateAsset: (id, name) => nativeInvoke('assetLibrary:updateAsset', { id, name }),
-  deleteAsset: (id) => nativeInvoke('assetLibrary:deleteAsset', { id }),
+  createAsset: (input, operationCorrelation) => nativeInvoke('assetLibrary:createAsset', { ...input, operationCorrelation }),
+  updateAsset: (id, name, operationCorrelation) => nativeInvoke('assetLibrary:updateAsset', { id, name, operationCorrelation }),
+  deleteAsset: (id, operationCorrelation) => nativeInvoke('assetLibrary:deleteAsset', { id, operationCorrelation }),
   queryAssets: (input) => nativeInvoke('assetLibrary:queryAssets', input),
   touchAsset: (id) => nativeInvoke('assetLibrary:touchAsset', { id }),
   checkPaths: (filePaths) => nativeInvoke('assetLibrary:checkPaths', { filePaths }),
@@ -380,14 +380,14 @@ const assetLibraryApi: HenjiAssetLibraryApi = {
   relocateAsset: (id, filePath) => nativeInvoke('assetLibrary:relocateAsset', { id, filePath }),
   listLibraries: () => nativeInvoke('assetLibrary:listLibraries'),
   inspectLibrary: (id) => nativeInvoke('assetLibrary:inspectLibrary', { id }),
-  createLibrary: (name) => nativeInvoke('assetLibrary:createLibrary', { name }),
-  renameLibrary: (id, name) => nativeInvoke('assetLibrary:renameLibrary', { id, name }),
-  deleteLibrary: (id) => nativeInvoke('assetLibrary:deleteLibrary', { id }),
-  restoreLibrary: (snapshot) => nativeInvoke('assetLibrary:restoreLibrary', snapshot),
-  addToLibrary: (libraryId, assetId) => nativeInvoke('assetLibrary:addToLibrary', { libraryId, assetId }),
-  removeFromLibrary: (libraryId, assetId) => nativeInvoke('assetLibrary:removeFromLibrary', { libraryId, assetId }),
+  createLibrary: (name, operationCorrelation) => nativeInvoke('assetLibrary:createLibrary', { name, operationCorrelation }),
+  renameLibrary: (id, name, operationCorrelation) => nativeInvoke('assetLibrary:renameLibrary', { id, name, operationCorrelation }),
+  deleteLibrary: (id, operationCorrelation) => nativeInvoke('assetLibrary:deleteLibrary', { id, operationCorrelation }),
+  restoreLibrary: (snapshot, operationCorrelation) => nativeInvoke('assetLibrary:restoreLibrary', { ...snapshot, operationCorrelation }),
+  addToLibrary: (libraryId, assetId, operationCorrelation) => nativeInvoke('assetLibrary:addToLibrary', { libraryId, assetId, operationCorrelation }),
+  removeFromLibrary: (libraryId, assetId, operationCorrelation) => nativeInvoke('assetLibrary:removeFromLibrary', { libraryId, assetId, operationCorrelation }),
   listTags: () => nativeInvoke('assetLibrary:listTags'),
-  setAssetTags: (assetId, tags) => nativeInvoke('assetLibrary:setAssetTags', { assetId, tags }),
+  setAssetTags: (assetId, tags, operationCorrelation) => nativeInvoke('assetLibrary:setAssetTags', { assetId, tags, operationCorrelation }),
   rebaseDataRoot: (oldRoot, newRoot) => nativeInvoke('assetLibrary:rebaseDataRoot', { oldRoot, newRoot }),
 }
 

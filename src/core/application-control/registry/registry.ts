@@ -5,6 +5,7 @@ import {
   type ApplicationSchemaRef,
   type JsonValue,
 } from '../identifiers'
+import { ApplicationEntityNotFoundError } from './types'
 import {
   applicationEntitySnapshotSchema,
   applicationCollectionAvailabilitySchema,
@@ -293,8 +294,12 @@ export class ApplicationReflectionRegistry {
       raw = await this.requireProvider(entity.id).readEntity(ref, { propertyIds: allowed })
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
-      if (!/NOT_FOUND/.test(message)) throw error
-      throw new Error(
+      if (error instanceof ApplicationEntityNotFoundError) {
+        if (error.target.kind !== ref.kind || error.target.id !== ref.id) throw new Error('ENTITY_LOOKUP_TARGET_MISMATCH')
+        throw error
+      }
+      if (message !== 'NOT_FOUND') throw error
+      throw new ApplicationEntityNotFoundError(ref,
         `ENTITY_NOT_FOUND:${entity.id}:${ref.id}（收到的引用 {"kind":"${ref.kind}","id":"${ref.id}"} `
         + '在当前状态里找不到。稳定 id 请用 list_application_entities 或对应的观察能力取原值，'
         + '不要自己拼接或截断——多数实体的 id 带父级前缀）'

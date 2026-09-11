@@ -151,6 +151,20 @@ describe('generationOutputApplicationService', () => {
     setupCanvas();
   });
 
+  it('重连后复用原输出节点，只补保存确认并携带原操作，不再处理媒体', async () => {
+    const input = { sourceNodeId: 'source-node', placeholderNodeId: 'placeholder-node',
+      resultNodeType: CANVAS_NODE_TYPES.exportImage, contract: contract(1), completionId: 'correlated-completion',
+      persistOutput: vi.fn(async (_mediaType: RowMediaKind, source: string) => imagePatch(source)),
+    };
+    const first = await commitCanvasGenerationOutputs(input, { operationId: 'original-operation' });
+    const second = await commitCanvasGenerationOutputs(input, { operationId: 'original-operation' });
+    expect(second).toMatchObject({ resultNodeIds: first.resultNodeIds, idempotent: true });
+    expect(input.persistOutput).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(upsertProjectRecord).mock.calls.at(-1)?.[1]).toMatchObject({
+      operationId: 'original-operation', targets: [{ kind: 'canvas.node', id: `${projectId}:${first.resultNodeIds[0]}` }],
+    });
+  });
+
   it.each([1, 4])('多角度 %i 个视图落为独立图片，保留顺序、角度和各自连线', async (count) => {
     const config = createDefaultMultiAngleConfig();
     config.views = MULTI_ANGLE_CONTINUOUS_PRESETS.slice(0, count).map(preset => ({ ...preset.view }));

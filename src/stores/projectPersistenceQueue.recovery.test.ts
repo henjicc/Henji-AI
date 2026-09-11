@@ -48,7 +48,7 @@ describe('项目持久化确认与恢复', () => {
     await expect(f.queue.deleteProject('a')).rejects.toThrow('readonly')
     expect(f.queue.getUnsavedProject('a')).toEqual({ id: 'a', version: 2 })
     await f.queue.flushProject({ id: 'a', version: 3 })
-    expect(f.upsertProject).toHaveBeenLastCalledWith({ id: 'a', version: 3 })
+    expect(f.upsertProject).toHaveBeenLastCalledWith({ id: 'a', version: 3 }, undefined)
     await f.queue.deleteProject('a')
     f.queue.queueProject({ id: 'a', version: 1 }, { immediate: true })
     f.queue.queueViewport('a', 'old', { immediate: true })
@@ -66,7 +66,7 @@ describe('项目持久化确认与恢复', () => {
     release()
     await confirmed
     expect(f.upsertProject).toHaveBeenCalledTimes(1)
-    expect(f.upsertProject).toHaveBeenCalledWith({ id: 'a', version: 3 })
+    expect(f.upsertProject).toHaveBeenCalledWith({ id: 'a', version: 3 }, undefined)
   })
 
   it('删除期间的新编辑在删除拒绝后仍为最新待保存快照', async () => {
@@ -81,7 +81,7 @@ describe('项目持久化确认与恢复', () => {
     expect(f.queue.getUnsavedProject('a')).toEqual({ id: 'a', version: 2 })
     await f.queue.flushProject(f.queue.getUnsavedProject('a')!)
     expect(f.upsertProject).toHaveBeenCalledTimes(1)
-    expect(f.upsertProject).toHaveBeenCalledWith({ id: 'a', version: 2 })
+    expect(f.upsertProject).toHaveBeenCalledWith({ id: 'a', version: 2 }, undefined)
   })
 
   it('确认捕获的版本不等待随后持续编辑', async () => {

@@ -1,4 +1,5 @@
 import Database from 'better-sqlite3'
+import { z } from 'zod'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 import {
@@ -15,6 +16,13 @@ import {
 } from '../../../../../src/core/assistant/runtimeContracts'
 import { runAgentSchemaMigrations } from './migrations'
 import { AgentPersistenceStore } from './store'
+import { operationRecordSchema, type OperationIntent } from '../../../../../src/core/assistant/operations'
+import { AgentOperationCoordinator } from '../tools/operation-coordinator'
+import { agentToolObservationSchema } from '../../../../../src/core/assistant/toolContracts'
+import { AgentToolGateway } from '../tools/gateway'
+import { AgentToolRegistry } from '../tools/registry'
+import { defineAgentTool } from '../tools/define-tool'
+import { contextSnapshot } from '../context/context-test-fixtures'
 import { AgentEventStream } from '../runner/event-stream'
 import {
   agentWorkingSummarySchema,
@@ -169,6 +177,296 @@ describeWithElectronSqlite('AgentPersistenceStore', () => {
 
   afterEach(() => {
     database.close()
+  })
+
+  function operationIntent(): OperationIntent {
+    return { runId: 'run-1', threadId: 'thread-1', key: 'script:step-1', toolCallId: 'step-1',
+      toolName: 'change_application_entities', toolVersion: 1, inputDigest: 'a'.repeat(64),
+      authorizationDigest: 'b'.repeat(64), readOnly: false, container: false,
+      targets: [{ kind: 'canvas.node', id: 'project:A' }], targetBindings: { node: 'project:A' }, expectedRevisions: { canvas: 1 } }
+  }
+
+  function durableGateway(write: () => Promise<{ id: string }>) {
+    const registry = new AgentToolRegistry()
+    for (const readOnly of [true, false]) registry.register(defineAgentTool({
+      name: readOnly ? 'read_item' : 'write_item', version: 1, title: '测试操作', description: '操作持久化边界测试',
+      category: 'test', side: 'backend', risk: readOnly ? 'R0' : 'R1', permission: 'test:execute',
+      readOnly, destructive: false, openWorld: false, idempotent: false, timeoutMs: 1000,
+      retryPolicy: { maxRetries: 0, baseDelayMs: 0 }, supportsPreview: false, supportsUndo: false, requiredContext: [],
+      inputSchema: z.object({ id: z.string() }), outputSchema: z.object({ id: z.string() }),
+      aiInputSchema: { type: 'object', properties: { id: { type: 'string' } }, required: ['id'], additionalProperties: false },
+      execute: async (input) => readOnly ? input : write(), concurrencyKey: () => 'test',
+      targetIds: (input) => ({ item: input.id }), dataClasses: () => ['C1'], summarize: () => '完成',
+    }))
+    return new AgentToolGateway({ registry, getHostContext: contextSnapshot, appendPermissionAudit: async () => {},
+      operations: { execute: async (command) => store.operations.execute(command) } })
+  }
+
+  it('保存恢复必须关联原操作并取得新的精确领域回执；成功摘要、其他对象保存均不能关闭缺口', async () => {
+    store.createRun('run-1', request(), state())
+    const target = { kind: 'canvas.project', id: 'A' }
+    const original = operationRecordSchema.parse(store.operations.execute({ action: 'prepare', intent: operationIntent() }))
+    store.operations.execute({ action: 'dispatch', runId: 'run-1', operationId: original.operationId })
+    store.operations.claimExecution('run-1', original.operationId)
+    store.operations.execute({ action: 'fail', runId: 'run-1', operationId: original.operationId, state: 'partial', effects: [], error: '保存失败',
+      transaction: { code: 'EXECUTION_FAILED', replayMutation: false,
+        persistence: { memoryState: 'modified', persistenceState: 'unconfirmed', stage: 'document',
+          recovery: { capabilityId: 'retry_canvas_project_save', target, replayMutation: false } } } })
+    const coordinator = new AgentOperationCoordinator({ execute: async (command) => store.operations.execute(command) })
+    const intent = { ...operationIntent(), key: 'recovery', toolName: 'retry_canvas_project_save', targets: [target] }
+    await expect(coordinator.prepare({ ...intent, key: 'wrong', targets: [{ ...target, id: 'B' }] })).rejects.toThrow('未核对的写入')
+    const recovery = await coordinator.prepare(intent)
+    expect(recovery).toMatchObject({ recoveryOfOperationId: original.operationId })
+    const dispatched = await coordinator.dispatch('run-1', recovery)
+    store.operations.claimExecution('run-1', dispatched!.operationId)
+    const observation = agentToolObservationSchema.parse({
+      source: { toolName: intent.toolName, toolVersion: 1, toolCallId: intent.toolCallId }, trust: 'untrusted_observation',
+      dataClasses: ['C1'], summary: '保存成功', output: { status: 'persisted', ref: target }, effects: [],
+    })
+    await coordinator.complete('run-1', dispatched, observation)
+    const resolved = () => store.operations.get(original.operationId)?.verifications.some((item) => item.conditionId === 'persistence' && item.status === 'passed')
+    expect(resolved()).toBe(false)
+    database.transaction(() => store.operations.recordPersistence({ operationId: dispatched!.operationId, boundaryId: 'wrong-save',
+      targets: [{ ...target, id: 'B' }] }, { ...target, id: 'B' }, 'c'.repeat(64)))()
+    await coordinator.complete('run-1', dispatched, observation)
+    expect(resolved()).toBe(false)
+    database.transaction(() => store.operations.recordPersistence({ operationId: dispatched!.operationId, boundaryId: 'actual-save',
+      targets: [target] }, target, 'd'.repeat(64)))()
+    await coordinator.complete('run-1', dispatched, observation)
+    expect(resolved()).toBe(true)
+    expect(store.operations.get(original.operationId)?.verifications.find((item) => item.conditionId === 'formal_result')?.status).toBe('pending')
+  })
+
+  it('重启只将有主进程领取契约且从未领取的派发认定为未执行，已领取或旧记录保持待核对', () => {
+    store.createRun('run-1', request(), state())
+    const make = (key: string, requiresMainClaim?: boolean) => {
+      const op = operationRecordSchema.parse(store.operations.execute({ action: 'prepare', intent: {
+        ...operationIntent(), key, requiresMainClaim,
+      } }))
+      store.operations.execute({ action: 'dispatch', runId: 'run-1', operationId: op.operationId })
+      return op
+    }
+    const pending = make('not-claimed', true)
+    const claimed = make('claimed', true)
+    const legacy = make('legacy')
+    store.operations.claimExecution('run-1', claimed.operationId)
+    const restarted = new AgentPersistenceStore(database).operations
+    restarted.markInterrupted()
+    expect(restarted.get(pending.operationId)?.state).toBe('not_executed')
+    expect(restarted.get(claimed.operationId)?.state).toBe('unknown')
+    expect(restarted.get(legacy.operationId)?.state).toBe('unknown')
+    expect(restarted.execute({ action: 'dispatch', runId: 'run-1', operationId: pending.operationId,
+      policyVersion: 2, authorizationDigest: 'c'.repeat(64) })).toMatchObject({ attempt: 2, policyVersion: 2 })
+    expect(() => restarted.execute({ action: 'dispatch', runId: 'run-1', operationId: claimed.operationId })).toThrow('OPERATION_REPLAY_BLOCKED')
+  })
+
+  it('续跑复用逻辑操作，任务后的新请求保留会话关联但拥有独立操作身份', () => {
+    store.createRun('run-1', request(), state())
+    const original = operationRecordSchema.parse(store.operations.execute({ action: 'prepare', intent: operationIntent() }))
+    store.createRun('continued', request(), { ...state(), runId: 'continued' }, 'run-1', { appendUserMessage: false })
+    const continued = store.operations.execute({ action: 'prepare', intent: { ...operationIntent(), runId: 'continued' } })
+    expect(continued).toMatchObject({ operationId: original.operationId, logicalTaskId: 'run-1' })
+    store.createRun('new-task', request(), { ...state(), runId: 'new-task' }, 'continued', { newLogicalTask: true })
+    const next = operationRecordSchema.parse(store.operations.execute({ action: 'prepare', intent: { ...operationIntent(), runId: 'new-task' } }))
+    expect(next.operationId).not.toBe(original.operationId)
+    expect(next.logicalTaskId).toBe('new-task')
+    expect(store.operations.owns('new-task', original.operationId)).toBe(false)
+    store.createRun('new-task-resume', request(), { ...state(), runId: 'new-task-resume' }, 'new-task')
+    expect(new AgentPersistenceStore(database).operations.execute({ action: 'list', runId: 'new-task-resume' }))
+      .toMatchObject([{ operationId: next.operationId }])
+    expect(() => store.createRun('wrong-thread', { ...request(), threadId: 'other' }, { ...state(), runId: 'wrong-thread', threadId: 'other' }, 'run-1', { newLogicalTask: true }))
+      .toThrow('OPERATION_OWNER_INVALID')
+    expect(store.loadState('wrong-thread')).toBeNull()
+  })
+
+  it('正式 Gateway 重建后读取原回执，取消等待不丢失已返回修改，也不重放写入', async () => {
+    store.createRun('run-1', request(), state())
+    const controller = new AbortController()
+    let calls = 0
+    const write = async () => {
+      calls++
+      expect(store.operations.execute({ action: 'list', runId: 'run-1' })).toMatchObject([{ state: 'dispatched' }])
+      controller.abort()
+      return { id: 'A' }
+    }
+    const input = { runId: 'run-1', threadId: 'thread-1', toolCallId: 'write-A', toolName: 'write_item', operationKey: 'logical-write-A',
+      input: { id: 'A' }, signal: controller.signal, approvalMode: 'full_access' as const, explicitUserIntent: true }
+    expect(await durableGateway(write).execute(input)).toMatchObject({ status: 'completed', observation: { output: { id: 'A' } } })
+    store = new AgentPersistenceStore(database)
+    expect(await durableGateway(write).execute({ ...input, toolCallId: 'reconnected-call', signal: new AbortController().signal }))
+      .toMatchObject({ status: 'completed', cached: true, observation: { source: { toolCallId: 'write-A' } } })
+    expect(calls).toBe(1)
+  })
+
+  it('正式 Gateway 中写 A 超时后读 B 不能解除未知操作保护', async () => {
+    store.createRun('run-1', request(), state())
+    let writes = 0
+    const gateway = durableGateway(async () => { writes++; throw new Error('TIMEOUT') })
+    const call = { runId: 'run-1', threadId: 'thread-1', toolCallId: 'write-A', toolName: 'write_item',
+      input: { id: 'A' }, signal: new AbortController().signal, approvalMode: 'full_access' as const, explicitUserIntent: true }
+    await expect(gateway.execute(call)).rejects.toThrow()
+    expect(await gateway.execute({ ...call, toolCallId: 'read-B', toolName: 'read_item', input: { id: 'B' } })).toMatchObject({ status: 'completed' })
+    await expect(gateway.execute({ ...call, toolCallId: 'new-write' })).rejects.toThrow('未核对的写入')
+    expect(writes).toBe(1)
+  })
+
+  it('派发前持久化操作身份，重建 store 后复用原身份且不重复派发', () => {
+    store.createRun('run-1', request(), state())
+    const prepared = operationRecordSchema.parse(store.operations.execute({ action: 'prepare', intent: operationIntent() }))
+    store = new AgentPersistenceStore(database)
+    expect(store.operations.execute({ action: 'prepare', intent: operationIntent() })).toMatchObject({ operationId: prepared.operationId, state: 'prepared' })
+    store.operations.execute({ action: 'dispatch', runId: 'run-1', operationId: prepared.operationId })
+    store.operations.markInterrupted()
+    expect(store.operations.get(prepared.operationId)?.state).toBe('unknown')
+    expect(() => store.operations.execute({ action: 'dispatch', runId: 'run-1', operationId: prepared.operationId })).toThrow('OPERATION_REPLAY_BLOCKED')
+    expect(() => store.operations.execute({ action: 'prepare', intent: { ...operationIntent(), inputDigest: 'c'.repeat(64) } })).toThrow('OPERATION_CONFLICT')
+    expect(store.loadState('run-1')?.runId).toBe('run-1')
+  })
+
+  it('业务回执先落盘；超时、重启及事件发送失败不能覆盖实际结果', () => {
+    store.createRun('run-1', request(), state())
+    const prepared = operationRecordSchema.parse(store.operations.execute({ action: 'prepare', intent: operationIntent() }))
+    store.operations.execute({ action: 'dispatch', runId: 'run-1', operationId: prepared.operationId })
+    store.operations.execute({ action: 'fail', runId: 'run-1', operationId: prepared.operationId, state: 'unknown', error: 'timeout', effects: [] })
+    store.operations.recordOutput(prepared.operationId, { saved: true })
+    store = new AgentPersistenceStore(database)
+    store.operations.execute({ action: 'fail', runId: 'run-1', operationId: prepared.operationId, state: 'unknown', error: 'event disconnected', effects: [] })
+    expect(store.operations.get(prepared.operationId)).toMatchObject({ state: 'completed', output: { saved: true } })
+  })
+
+  it('主进程领取尝试后拒绝重复传输；仅确认未执行才允许新尝试并保留授权历史', () => {
+    store.createRun('run-1', request(), state())
+    const prepared = operationRecordSchema.parse(store.operations.execute({ action: 'prepare', intent: operationIntent() }))
+    expect(() => store.operations.recordOutput(prepared.operationId, { saved: true })).toThrow('尚未派发')
+    store.operations.execute({ action: 'dispatch', runId: 'run-1', operationId: prepared.operationId })
+    store.operations.claimExecution('run-1', prepared.operationId)
+    expect(() => new AgentPersistenceStore(database).operations.claimExecution('run-1', prepared.operationId)).toThrow('OPERATION_REPLAY_BLOCKED')
+    store.operations.execute({ action: 'fail', runId: 'run-1', operationId: prepared.operationId, state: 'not_executed', error: '执行器入口确认未开始', effects: [] })
+    store.operations.execute({ action: 'dispatch', runId: 'run-1', operationId: prepared.operationId, authorizationDigest: 'd'.repeat(64), policyVersion: 2 })
+    store.operations.claimExecution('run-1', prepared.operationId)
+    expect(store.operations.get(prepared.operationId)).toMatchObject({ attempt: 2,
+      executionClaim: { attempt: 2 }, attempts: [{ attempt: 1 }, { attempt: 2, policyVersion: 2, authorizationDigest: 'd'.repeat(64) }] })
+  })
+
+  it('领域保存与操作关联同事务提交，重建后能找回无最终回执的实际目标', () => {
+    store.createRun('run-1', request(), state())
+    const prepared = operationRecordSchema.parse(store.operations.execute({ action: 'prepare', intent: operationIntent() }))
+    store.operations.execute({ action: 'dispatch', runId: 'run-1', operationId: prepared.operationId })
+    store.operations.claimExecution('run-1', prepared.operationId)
+    const correlation = { operationId: prepared.operationId, boundaryId: 'save-1',
+      targets: [{ kind: 'canvas.node', id: 'project:created' }] }
+    const target = { kind: 'canvas.project', id: 'project' }
+    database.exec('CREATE TABLE business_snapshot (value TEXT)')
+    expect(() => store.operations.recordPersistence(correlation, target, 'c'.repeat(64))).toThrow('NOT_ATOMIC')
+    expect(() => database.transaction(() => {
+      database.prepare('INSERT INTO business_snapshot(value) VALUES (?)').run('created')
+      store.operations.recordPersistence(correlation, target, 'c'.repeat(64))
+      throw new Error('before commit')
+    })()).toThrow('before commit')
+    expect(database.prepare('SELECT * FROM business_snapshot').all()).toEqual([])
+    expect(store.operations.get(prepared.operationId)?.persistenceReceipts).toEqual([])
+    database.transaction(() => {
+      database.prepare('INSERT INTO business_snapshot(value) VALUES (?)').run('created')
+      store.operations.recordPersistence(correlation, target, 'c'.repeat(64))
+    })()
+    store = new AgentPersistenceStore(database)
+    store.operations.markInterrupted()
+    expect(store.operations.get(prepared.operationId)).toMatchObject({ state: 'unknown',
+      persistenceReceipts: [{ targets: correlation.targets, storageTarget: target }] })
+    expect(() => database.transaction(() => store.operations.recordPersistence(correlation, target, 'd'.repeat(64)))())
+      .toThrow('OPERATION_PERSISTENCE_CONFLICT')
+    expect(database.prepare('SELECT * FROM business_snapshot').all()).toEqual([{ value: 'created' }])
+  })
+
+  it('同域其他对象的验证不能绑定到原操作，核对记录不改变未知执行事实', () => {
+    store.createRun('run-1', request(), state())
+    const prepared = operationRecordSchema.parse(store.operations.execute({ action: 'prepare', intent: operationIntent() }))
+    const verification = { operationId: prepared.operationId, conditionId: 'saved',
+      targets: [{ kind: 'canvas.node', id: 'project:B' }], status: 'passed' as const,
+      evidence: ['B is saved'], verifiedAt: new Date().toISOString() }
+    expect(() => store.operations.execute({ action: 'verify', runId: 'run-1', verification })).toThrow('OPERATION_VERIFICATION_MISMATCH')
+    expect(store.operations.get(prepared.operationId)?.verifications).toMatchObject([{ status: 'pending', targets: [{ id: 'project:A' }] }])
+  })
+
+  it('文件保存意图只定位原文件，只有匹配的原子文件回执才补充保存事实', () => {
+    store.createRun('run-1', request(), state())
+    const prepared = operationRecordSchema.parse(store.operations.execute({ action: 'prepare', intent: operationIntent() }))
+    store.operations.execute({ action: 'dispatch', runId: 'run-1', operationId: prepared.operationId })
+    store.operations.claimExecution('run-1', prepared.operationId)
+    store.operations.bindTransport({ operationId: prepared.operationId, callId: 'file-save', runId: 'run-1',
+      toolCallId: prepared.toolCallId, idempotencyKey: prepared.key, webContentsId: 5, rendererSessionId: 'original' })
+    const correlation = { operationId: prepared.operationId, boundaryId: 'file-boundary', targets: [{ kind: 'image_edit.document', id: 'v3:original' }] }
+    const target = { kind: 'image_edit.document', id: 'v3:original', revision: 2 }
+    store.operations.prepareFilePersistence(correlation, target, 'c'.repeat(64), 5)
+    const restarted = new AgentPersistenceStore(database).operations
+    restarted.markInterrupted()
+    expect(restarted.get(prepared.operationId)).toMatchObject({ state: 'unknown', persistenceReceipts: [],
+      persistenceIntents: [{ storageTarget: target }] })
+    const receipt = { ...correlation, storageTarget: target, digest: 'c'.repeat(64), persistedAt: new Date().toISOString() }
+    expect(() => restarted.confirmFilePersistence({ ...receipt, digest: 'd'.repeat(64) })).toThrow('OPERATION_PERSISTENCE_CONFLICT')
+    expect(() => restarted.confirmFilePersistence({ ...receipt, storageTarget: { ...target, id: 'v3:other' } })).toThrow('OPERATION_PERSISTENCE_CONFLICT')
+    restarted.confirmFilePersistence(receipt)
+    restarted.confirmFilePersistence(receipt)
+    expect(restarted.get(prepared.operationId)?.persistenceReceipts).toHaveLength(1)
+    expect(restarted.get(prepared.operationId)?.state).toBe('unknown')
+    expect(() => restarted.execute({ action: 'fail', runId: 'run-1', operationId: prepared.operationId,
+      state: 'not_executed', error: '不能覆盖实际保存', effects: [] })).toThrow('OPERATION_FACT_CONFLICT')
+  })
+
+  it('失败验证不能缩减原目标集合；读取来源 B 也不能代替被修改目标 A', () => {
+    store.createRun('run-1', request(), state())
+    const target = { kind: 'canvas.node', id: 'project:A' }
+    const source = { kind: 'canvas.node', id: 'project:B' }
+    const prepared = operationRecordSchema.parse(store.operations.execute({ action: 'prepare',
+      intent: { ...operationIntent(), targets: [target, source], verificationTargets: [target] } }))
+    store.operations.execute({ action: 'verify', runId: 'run-1', verification: {
+      operationId: prepared.operationId, conditionId: 'formal_result', targets: [], status: 'failed',
+      evidence: ['读取失败'], verifiedAt: new Date().toISOString(),
+    } })
+    expect(store.operations.get(prepared.operationId)?.verifications[0].targets).toEqual([target])
+    expect(() => store.operations.execute({ action: 'verify', runId: 'run-1', verification: {
+      operationId: prepared.operationId, conditionId: 'formal_result', targets: [source], status: 'passed',
+      evidence: ['B 可以读取'], verifiedAt: new Date().toISOString(),
+    } })).toThrow('OPERATION_VERIFICATION_INCOMPLETE')
+  })
+
+  it('旧尝试和过期核对不能覆盖当前验证；未执行的操作不能通过', () => {
+    store.createRun('run-1', request(), state())
+    const prepared = operationRecordSchema.parse(store.operations.execute({ action: 'prepare', intent: operationIntent() }))
+    const verification = { operationId: prepared.operationId, conditionId: 'formal_result', targets: prepared.targets,
+      status: 'passed' as const, evidence: ['原对象状态已核对'], verifiedAt: new Date().toISOString() }
+    expect(() => store.operations.execute({ action: 'verify', runId: 'run-1', verification })).toThrow('OPERATION_VERIFICATION_NOT_EXECUTED')
+    store.operations.execute({ action: 'dispatch', runId: 'run-1', operationId: prepared.operationId })
+    expect(() => store.operations.execute({ action: 'verify', runId: 'run-1', verification: {
+      ...verification, verifiedAt: new Date(Date.parse(prepared.createdAt) - 1).toISOString(),
+    } })).toThrow('OPERATION_VERIFICATION_STALE')
+    const latest = new Date(Date.now() + 1_000).toISOString()
+    store.operations.execute({ action: 'verify', runId: 'run-1', verification: { ...verification, status: 'failed', verifiedAt: latest } })
+    expect(() => store.operations.execute({ action: 'verify', runId: 'run-1', verification: {
+      ...verification, verifiedAt: new Date().toISOString(),
+    } })).toThrow('OPERATION_VERIFICATION_STALE')
+    expect(store.operations.get(prepared.operationId)?.verifications[0].status).toBe('failed')
+  })
+
+  it('执行前验证计划绑定原操作，重启保留目标与属性条件且拒绝篡改', () => {
+    store.createRun('run-1', request(), state())
+    const prepared = operationRecordSchema.parse(store.operations.execute({ action: 'prepare', intent: operationIntent() }))
+    store.operations.execute({ action: 'dispatch', runId: 'run-1', operationId: prepared.operationId })
+    store.operations.claimExecution('run-1', prepared.operationId)
+    store.operations.bindTransport({ operationId: prepared.operationId, callId: 'preparation', runId: 'run-1',
+      toolCallId: prepared.toolCallId, idempotencyKey: prepared.key, webContentsId: 5, rendererSessionId: 'original' })
+    const preparation = { planRef: 'plan:12345678901234567890', preparedAt: new Date().toISOString(),
+      conditions: [{ kind: 'property_equals' as const, target: { kind: 'canvas.node', id: 'project:A' },
+        propertyId: 'canvas.node.display_name', expected: '用户指定结果' }] }
+    expect(() => store.operations.recordExecutionPreparation(prepared.operationId, preparation, 6)).toThrow('OPERATION_OWNER_INVALID')
+    store.operations.recordExecutionPreparation(prepared.operationId, preparation, 5)
+    store = new AgentPersistenceStore(database)
+    expect(store.operations.get(prepared.operationId)?.verificationPlans).toEqual([preparation])
+    expect(() => store.operations.recordExecutionPreparation(prepared.operationId, { ...preparation,
+      conditions: [{ ...preparation.conditions[0], expected: '改为另一个值' }] }, 5)).toThrow('OPERATION_VERIFICATION_PLAN_CONFLICT')
+    store.operations.markInterrupted()
+    expect(() => store.operations.recordExecutionPreparation(prepared.operationId, { ...preparation,
+      planRef: 'plan:23456789012345678901' }, 5)).toThrow('OPERATION_VERIFICATION_PLAN_CLOSED')
   })
 
   it('保存并恢复运行、事件、请求与大结果引用', () => {
@@ -536,7 +834,7 @@ describeWithElectronSqlite('AgentPersistenceStore', () => {
     })
   })
 
-  it('migration 11 清除旧运行态但保留可见对话、记忆与业务工程', () => {
+  it('migration 11 保留旧运行、对话、记忆关联与业务工程', () => {
     store.createRun('run-1', request(), state('completed'))
     database.prepare(`
       INSERT INTO agent_messages(message_id, thread_id, run_id, role, content, created_at)
@@ -561,23 +859,24 @@ describeWithElectronSqlite('AgentPersistenceStore', () => {
 
     runAgentSchemaMigrations(database)
 
-    expect(database.prepare('SELECT COUNT(*) AS count FROM agent_runs').get()).toEqual({ count: 0 })
+    expect(database.prepare('SELECT COUNT(*) AS count FROM agent_runs').get()).toEqual({ count: 1 })
     expect(database.prepare(`
       SELECT role, content, run_id FROM agent_messages
       WHERE message_id IN ('message-user', 'message-assistant', 'message-internal')
       ORDER BY created_at
     `).all()).toEqual([
-      { role: 'user', content: '旧问题', run_id: null },
-      { role: 'assistant', content: '旧回答', run_id: null },
+      { role: 'user', content: '旧问题', run_id: 'run-1' },
+      { role: 'assistant', content: '旧回答', run_id: 'run-1' },
+      { role: 'system_event', content: '内部事件', run_id: 'run-1' },
     ])
     expect(database.prepare(`
       SELECT content, source_run_id FROM agent_memories WHERE memory_id = 'memory-1'
-    `).get()).toEqual({ content: '保留的记忆', source_run_id: null })
+    `).get()).toEqual({ content: '保留的记忆', source_run_id: 'run-1' })
     expect(database.prepare('SELECT * FROM camera_stage_projects_test_sentinel').get())
       .toEqual({ project_id: 'project-1', payload: 'state-keyframes' })
     expect(database.prepare(`
       SELECT last_run_id FROM agent_threads WHERE thread_id = 'thread-1'
-    `).get()).toEqual({ last_run_id: null })
+    `).get()).toEqual({ last_run_id: 'run-1' })
   })
 
   it('v6 数据库增量迁移保存 waiting_external 运行且重启不误判为中断', () => {

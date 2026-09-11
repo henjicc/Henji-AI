@@ -36,3 +36,10 @@ it('256个合法引用映射到有界观察时不丢后半段引用', () => {
   expect(observations.flatMap((item) => item.targetRefs)).toEqual(refs)
   expect(observations.every((item) => item.verified === false)).toBe(true)
 })
+
+it('只接受正式未执行声明，拒绝它与实际修改事实互相矛盾', () => {
+  const notStarted = transactionFailureFacts({ status: 'failed', code: 'CONFLICT', message: '预检冲突',
+    recoverable: true, executionState: 'not_started' })
+  expect(notStarted).toMatchObject({ executionState: 'not_started' })
+  expect(applicationTransactionFailureFactsSchema.safeParse({ ...facts, executionState: 'not_started' }).success).toBe(false)
+})

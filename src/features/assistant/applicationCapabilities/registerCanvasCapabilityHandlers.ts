@@ -144,7 +144,7 @@ export function registerCanvasCapabilityHandlers(
   registrar.registerHandler('create_canvas_project', async (input, context) => {
     throwIfCapabilityAborted(context.signal)
     const parsed = parseCapabilityInput<{ name: string }>('create_canvas_project', input)
-    return await createCanvasProject(parsed.name)
+    return await createCanvasProject(parsed.name, context)
   })
 
   registrar.registerHandler('close_canvas_project', async (input, context) => {
@@ -159,13 +159,13 @@ export function registerCanvasCapabilityHandlers(
       'rename_canvas_project',
       input
     )
-    return await renameCanvasProject(parsed.projectId, parsed.name)
+    return await renameCanvasProject(parsed.projectId, parsed.name, context)
   })
 
   registrar.registerHandler('delete_canvas_project', async (input, context) => {
     throwIfCapabilityAborted(context.signal)
     const parsed = parseCapabilityInput<ProjectInput>('delete_canvas_project', input)
-    return await deleteCanvasProject(parsed.projectId)
+    return await deleteCanvasProject(parsed.projectId, context)
   })
 
   registrar.registerHandler('get_canvas_project', (input) => {

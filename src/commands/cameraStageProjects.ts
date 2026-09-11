@@ -1,4 +1,5 @@
 import { getPlatform } from '@/platform'
+import type { ApplicationPersistenceCorrelation } from '@/core/application-control/persistenceCorrelation'
 import type {
   CameraStageProjectPlatformRecord,
   CameraStageProjectPlatformSummary,
@@ -25,10 +26,11 @@ export async function renameCameraStageProjectRecord(
   projectId: string,
   name: string,
   updatedAt: number,
+  operationCorrelation?: ApplicationPersistenceCorrelation,
 ): Promise<void> {
-  await getPlatform().cameraStageProjects.renameProjectRecord(projectId, name, updatedAt)
+  await getPlatform().cameraStageProjects.renameProjectRecord(projectId, name, updatedAt, operationCorrelation)
 }
 
-export async function deleteCameraStageProjectRecord(projectId: string): Promise<void> {
-  await getPlatform().cameraStageProjects.deleteProjectRecord(projectId)
+export async function deleteCameraStageProjectRecord(projectId: string, operationCorrelation?: ApplicationPersistenceCorrelation): Promise<void> {
+  await getPlatform().cameraStageProjects.deleteProjectRecord(projectId, operationCorrelation)
 }

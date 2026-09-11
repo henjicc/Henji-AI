@@ -80,7 +80,7 @@ async function rollback(projectId: string, undoToken: string, event: string): Pr
 
 export const cameraStageStateKeyframeService = {
   /** 批量新建状态关键帧；同一批次里落在同一帧的两项会像人工操作一样合并为一个时间点。 */
-  async createStateKeyframes(projectId: string, inputs: CameraStageStateKeyframeCreateInput[]): Promise<{
+  async createStateKeyframes(projectId: string, inputs: CameraStageStateKeyframeCreateInput[], context?: { operationId?: string }): Promise<{
     projectId: string
     stateKeyframeIds: string[]
     undoToken: string
@@ -120,7 +120,7 @@ export const cameraStageStateKeyframeService = {
         }
         stateKeyframeIds.push(stateKeyframeId)
       }
-      await saveCurrentProject()
+      await saveCurrentProject(context, stateKeyframeIds.map((id) => ({ kind: 'camera_stage.state_keyframe', id: `${projectId}:${id}` })))
       logger.info('三维状态关键帧批量新建完成', {
         event: 'camera_stage.state_keyframe.create.completed', projectId, stateKeyframeCount: stateKeyframeIds.length,
       })
@@ -132,7 +132,7 @@ export const cameraStageStateKeyframeService = {
     }
   },
 
-  async removeStateKeyframes(projectId: string, stateKeyframeIds: string[]): Promise<{
+  async removeStateKeyframes(projectId: string, stateKeyframeIds: string[], context?: { operationId?: string }): Promise<{
     projectId: string
     removedCount: number
     undoToken: string
@@ -147,7 +147,7 @@ export const cameraStageStateKeyframeService = {
     try {
       if (stateKeyframeIds.length === 1) state.removeStateKeyframe(stateKeyframeIds[0])
       else state.removeStateKeyframes(stateKeyframeIds)
-      await saveCurrentProject()
+      await saveCurrentProject(context, stateKeyframeIds.map((id) => ({ kind: 'camera_stage.state_keyframe', id: `${projectId}:${id}` })))
       return { projectId, removedCount: stateKeyframeIds.length, undoToken }
     } catch (error) {
       await rollback(projectId, undoToken, 'camera_stage.state_keyframe.remove.rollback_failed')

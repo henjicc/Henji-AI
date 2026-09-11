@@ -37,8 +37,10 @@ describe('图片编辑结果只能同步回原文档节点', () => {
     expect(useCanvasStore.getState().nodes).toBe(before)
     useProjectStore.setState({ currentProjectId: 'project' })
     useCanvasStore.setState({ nodes: [node] })
-    await expect(confirmation.confirm(session)).resolves.toMatchObject({ reference: { documentId: 'saved-document', revision: 1 } })
+    await expect(confirmation.confirm(session, { operationId: 'image-operation' })).resolves.toMatchObject({ reference: { documentId: 'saved-document', revision: 1 } })
     expect(saveProjection).toHaveBeenCalledOnce()
-    expect(saveProjection).toHaveBeenCalledWith(expect.objectContaining({ nodeId: 'original', session }))
+    expect(saveProjection).toHaveBeenCalledWith(expect.objectContaining({ nodeId: 'original', session,
+      operationCorrelation: { operationId: 'image-operation', boundaryId: expect.any(String),
+        targets: [{ kind: 'canvas.node', id: 'project:original' }] } }))
   })
 })

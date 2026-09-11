@@ -156,6 +156,15 @@ export function initializeSchema(conn: Database.Database): void {
     CREATE INDEX IF NOT EXISTS idx_camera_stage_projects_updated_at
       ON camera_stage_projects(updated_at DESC);
 
+    CREATE TABLE IF NOT EXISTS camera_stage_render_tasks (
+      request_id TEXT PRIMARY KEY,
+      canvas_project_id TEXT NOT NULL,
+      record_json TEXT NOT NULL,
+      acknowledged_at INTEGER
+    );
+    CREATE INDEX IF NOT EXISTS idx_camera_stage_render_tasks_project
+      ON camera_stage_render_tasks(canvas_project_id, acknowledged_at);
+
     CREATE TABLE IF NOT EXISTS canvas_projects (
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL,

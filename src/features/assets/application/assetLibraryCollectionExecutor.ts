@@ -4,6 +4,7 @@ import type {
   ApplicationCollectionExecutor,
   ApplicationCompletedStepResult,
   ApplicationEvidence,
+  ApplicationExecutionContext,
   ApplicationPlannedStep,
   JsonValue,
 } from '@/core/application-control'
@@ -31,12 +32,12 @@ function libraryName(value: JsonValue | undefined): string {
   return normalized
 }
 
-async function rollbackCreated(libraryIds: string[]): Promise<void> {
-  for (const libraryId of [...libraryIds].reverse()) await assetApplicationService.deleteLibrary(libraryId)
+async function rollbackCreated(libraryIds: string[], context?: ApplicationExecutionContext): Promise<void> {
+  for (const libraryId of [...libraryIds].reverse()) await assetApplicationService.deleteLibrary(libraryId, context)
 }
 
-async function rollbackRemoved(snapshots: AssetLibrarySnapshot[]): Promise<void> {
-  for (const snapshot of [...snapshots].reverse()) await assetApplicationService.restoreLibrary(snapshot)
+async function rollbackRemoved(snapshots: AssetLibrarySnapshot[], context?: ApplicationExecutionContext): Promise<void> {
+  for (const snapshot of [...snapshots].reverse()) await assetApplicationService.restoreLibrary(snapshot, context)
 }
 
 /** 素材集合的创建/删除执行器；删除前保存集合及成员关系，补偿时按原稳定 ID 原子恢复。 */
@@ -49,7 +50,7 @@ export class AssetLibraryCollectionExecutor implements ApplicationCollectionExec
     bumpRevision: () => void
   }) {}
 
-  async apply(step: CollectionStep): Promise<ApplicationCompletedStepResult> {
+  async apply(step: CollectionStep, context?: ApplicationExecutionContext): Promise<ApplicationCompletedStepResult> {
     if (step.parent.kind !== ASSET_ENTITY_TYPES.catalog || step.parent.id !== 'default') {
       throw new Error('ASSET_CATALOG_REF_INVALID：素材集合只能在 asset.catalog/default 下增删。')
     }
@@ -61,7 +62,7 @@ export class AssetLibraryCollectionExecutor implements ApplicationCollectionExec
     try {
       if (step.operation.kind === 'create') {
         for (const item of step.operation.items) {
-          created.push(await assetApplicationService.createLibrary(libraryName(item.properties[NAME_PROPERTY])))
+          created.push(await assetApplicationService.createLibrary(libraryName(item.properties[NAME_PROPERTY]), context))
         }
       } else {
         if (step.operation.targets.some((target) => target.kind !== ASSET_ENTITY_TYPES.library)) {
@@ -71,14 +72,14 @@ export class AssetLibraryCollectionExecutor implements ApplicationCollectionExec
           step.operation.targets.map((target) => assetApplicationService.inspectLibrary(target.id))
         )
         for (const snapshot of snapshots) {
-          await assetApplicationService.deleteLibrary(snapshot.id)
+          await assetApplicationService.deleteLibrary(snapshot.id, context)
           removed.push(snapshot)
         }
       }
     } catch (error) {
       try {
-        if (created.length > 0) await rollbackCreated(created.map((item) => String(item.id)))
-        if (removed.length > 0) await rollbackRemoved(removed)
+        if (created.length > 0) await rollbackCreated(created.map((item) => String(item.id)), context)
+        if (removed.length > 0) await rollbackRemoved(removed, context)
       } catch (rollbackError) {
         logger.error('素材集合写入回滚失败', rollbackError, {
           event: 'asset.library_collection.rollback.failed', operation: step.operation.kind,
@@ -123,16 +124,16 @@ export class AssetLibraryCollectionExecutor implements ApplicationCollectionExec
     }
   }
 
-  async compensate(_step: CollectionStep, result: ApplicationCompletedStepResult): Promise<ApplicationEvidence[]> {
+  async compensate(_step: CollectionStep, result: ApplicationCompletedStepResult, context?: ApplicationExecutionContext): Promise<ApplicationEvidence[]> {
     if (!result.undoToken) return []
-    return (await this.undo(result.undoToken)).evidence
+    return (await this.undo(result.undoToken, context)).evidence
   }
 
-  async undo(undoToken: string): Promise<ApplicationCompletedStepResult> {
+  async undo(undoToken: string, context?: ApplicationExecutionContext): Promise<ApplicationCompletedStepResult> {
     const record = undoRecords.get(undoToken)
     if (!record) throw new Error('ASSET_LIBRARY_COLLECTION_UNDO_NOT_FOUND')
-    if (record.kind === 'create') await rollbackCreated(record.libraryIds)
-    else await rollbackRemoved(record.snapshots)
+    if (record.kind === 'create') await rollbackCreated(record.libraryIds, context)
+    else await rollbackRemoved(record.snapshots, context)
     undoRecords.delete(undoToken)
     this.dependencies.bumpRevision()
     const revision = this.dependencies.readRevision()

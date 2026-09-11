@@ -15,6 +15,7 @@ export const artifactPayloadSchema = z.object({
 }).strict()
 
 export const toolExecutionPayloadSchema = z.object({
+  operationId: z.string().min(1).optional(),
   runId: z.string().min(1),
   threadId: z.string().min(1),
   toolCallId: z.string().min(1),

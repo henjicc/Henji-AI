@@ -265,7 +265,7 @@ export interface ImagePlatform {
   readPanoramaImageMetadata(source: string): Promise<PanoramaMetadataReadResult>
   embedPanoramaImageMetadata(source: string): Promise<PanoramaMetadataEmbedResult>
   loadImage(filePath: string): Promise<string>
-  persistImageSource(source: string): Promise<string>
+  persistImageSource(source: string, renderContext?: import('./cameraStageRender').CameraStageImagePersistenceContext): Promise<string>
   persistImageSourceTracked(source: string): Promise<PersistImageSourceTrackedResult>
   persistImageBinary(bytes: Uint8Array, extension: string): Promise<string>
   saveImageSourceToDownloads(source: string, suggestedFileName?: string): Promise<string>

@@ -1,6 +1,6 @@
-import { HenjiScriptGatewayBridge, type ScriptExecutionContext, type HenjiScriptServiceOptions } from './gatewayBridge'
+import { HenjiScriptGatewayBridge, scriptOperationKey, type ScriptExecutionContext, type HenjiScriptServiceOptions } from './gatewayBridge'
 import { failureObservedEffects } from '../../../../../src/core/assistant/applicationTransactionFailureFacts'
-import { randomUUID } from 'node:crypto'
+import { createHash } from 'node:crypto'
 
 import type { ApplicationRef } from '../../../../../src/core/application-control'
 import type {
@@ -172,6 +172,7 @@ export class HenjiScriptService extends HenjiScriptGatewayBridge {
       resultRefs: [...state.refs.values()].slice(0, 128),
       effects: state.effects.slice(0, 512), steps: state.receipts.slice(0, 128),
       verificationState: { evidence: state.verificationEvidence.slice(0, 128) },
+      removedRefs: [...state.removed].map((key) => { const split = key.indexOf('\u0000'); return { kind: key.slice(0, split), id: key.slice(split + 1) } }),
     }
     const checkpoint = henjiScriptCheckpointSchema.parse({
       ...base,
@@ -189,7 +190,7 @@ export class HenjiScriptService extends HenjiScriptGatewayBridge {
       parents: new Map(checkpoint.parents.map(({ ref, parent }) => [`${ref.kind}\u0000${ref.id}`, parent])),
       refs: new Map(checkpoint.resultRefs.map((ref) => [`${ref.kind}\u0000${ref.id}`, ref])),
       effects: [...checkpoint.effects], receipts: [...checkpoint.steps],
-      verificationEvidence: [...checkpoint.verificationState.evidence], submittedTasks: [], removed: new Set(),
+      verificationEvidence: [...checkpoint.verificationState.evidence], submittedTasks: [], removed: new Set((checkpoint.removedRefs ?? []).map(refKey)),
     }
   }
 
@@ -202,8 +203,12 @@ export class HenjiScriptService extends HenjiScriptGatewayBridge {
     lease: HenjiScriptApiLease | null,
   ): Promise<{ failure: HenjiScriptError | null; checkpoint: HenjiScriptCheckpoint | null }> {
     const queue = [...instructions]
+    let verifyingWrite: { key: string; refs: ApplicationRef[] } | null = null
     try {
       while (queue.length > 0) {
+        verifyingWrite = null
+        if (context.operationId) await context.gateway.saveOperationCheckpoint(context.runId, context.operationId,
+          this.createCheckpoint(state, scriptRunRef, planDigest, queue))
         const instruction = queue.shift() as HenjiInstruction
         if (context.signal.aborted) throw new HenjiScriptError('SCRIPT_STEP_FAILED', 'execute', '脚本已取消', instruction.location, instruction.stepId)
         if (instruction.kind === 'branch') {
@@ -261,7 +266,7 @@ export class HenjiScriptService extends HenjiScriptGatewayBridge {
          * 最后一段脚本失败，8 个真实写入全部没能封存。
          *
          * 这里让"读一个本段刚删掉的引用"返回 null，`app.assert.absent(...)` 就能自然收尾。
-         * 不是放宽校验：`entities.remove` 的 verifyEntityCall 刚刚已经 list 过一遍、确认它真的
+         * 不是放宽校验：`entities.remove` 的 verifyEntityCall 刚刚已经按原引用读取、确认它真的
          * 不在了，本段脚本内这条信息是权威的。没删过的引用照旧硬报错。
          */
         const readingRemovedRef = instruction.api === 'entities.read'
@@ -269,10 +274,15 @@ export class HenjiScriptService extends HenjiScriptGatewayBridge {
         const result = readingRemovedRef
           ? { output: null, effects: [], summary: '该引用已在本段脚本中删除并经正式状态源确认不存在。' }
           : await this.gatewayCall(toolName, input, instruction, scriptRunRef, context)
+        result.effects.forEach((effect) => state.effects.push(effect))
         if (readingRemovedRef) {
           state.verificationEvidence.push(`${instruction.stepId}:absence-confirmed`)
         }
         const calledDefinition = this.options.registry.get(toolName)
+        if (!readingRemovedRef && calledDefinition?.readOnly === false) verifyingWrite = {
+          key: scriptOperationKey(scriptRunRef, instruction.stepId, toolName),
+          refs: result.effects.flatMap((effect) => effect.targetRefs),
+        }
         const verificationContract = calledDefinition?.capability?.verificationContract
         if (verificationContract?.kind === 'effect_receipt') {
           const worldEffects = result.effects.filter((effect) => (
@@ -286,7 +296,7 @@ export class HenjiScriptService extends HenjiScriptGatewayBridge {
             )
           }
           if (verificationContract.requireVerifiedEffects
-            && !worldEffects.some((effect) => effect.verified)) {
+            && (worldEffects.length === 0 || !worldEffects.every((effect) => effect.verified))) {
             throw new HenjiScriptError(
               'SCRIPT_VERIFICATION_FAILED', 'verify',
               `${toolName} 的 Effect Receipt 尚未通过正式状态验证`,
@@ -294,7 +304,6 @@ export class HenjiScriptService extends HenjiScriptGatewayBridge {
             )
           }
         }
-        result.effects.forEach((effect) => state.effects.push(effect))
         const stepRefs = new Map<string, ApplicationRef>()
         collectRefs(result.output, stepRefs)
         for (const effect of result.effects) {
@@ -336,15 +345,21 @@ export class HenjiScriptService extends HenjiScriptGatewayBridge {
             state.submittedTasks.push({ toolName: task.toolName, taskId: task.taskId, status: task.status })
           }
         }
-        if (result.effects.some((effect) => effect.verified)) {
+        const verificationStart = state.verificationEvidence.length
+        const worldEffects = result.effects.filter((effect) => !['observe', 'navigate'].includes(effect.effect))
+        if (worldEffects.length > 0 && worldEffects.every((effect) => effect.verified)) {
           state.verificationEvidence.push(`${instruction.stepId}:${toolName}:verified-effect`)
-        } else if (instruction.api.startsWith('entities.') && instruction.api !== 'entities.list') {
+        } else if (['entities.create', 'entities.update', 'entities.remove'].includes(instruction.api)) {
           await this.verifyEntityCall(
             instruction, args, result.output, result.effects, scriptRunRef, context,
             state.verificationEvidence, state.effects, state.removed,
           )
         } else if (this.options.registry.get(toolName)?.readOnly === true) {
           state.verificationEvidence.push(`${instruction.stepId}:${toolName}:formal-read`)
+        }
+        if (!readingRemovedRef && calledDefinition?.readOnly === false && state.verificationEvidence.length > verificationStart) {
+          await context.gateway.verifyOperation?.(context.runId, scriptOperationKey(scriptRunRef, instruction.stepId, toolName),
+            result.effects.flatMap((effect) => effect.targetRefs), true, state.verificationEvidence.slice(verificationStart))
         }
         state.receipts.push({
           stepId: instruction.stepId, api: instruction.api,
@@ -356,8 +371,12 @@ export class HenjiScriptService extends HenjiScriptGatewayBridge {
           return { failure: null, checkpoint: this.createCheckpoint(state, scriptRunRef, planDigest, queue) }
         }
       }
+      if (context.operationId) await context.gateway.saveOperationCheckpoint(context.runId, context.operationId,
+        this.createCheckpoint(state, scriptRunRef, planDigest, []))
       return { failure: null, checkpoint: null }
     } catch (error) {
+      if (verifyingWrite) await context.gateway.verifyOperation?.(context.runId, verifyingWrite.key,
+        verifyingWrite.refs, false, [error instanceof Error ? error.message.slice(0, 1000) : '正式结果验证失败'])
       if (error instanceof HenjiScriptError && error.transaction) {
         const effects = failureObservedEffects(error.transaction)
         state.effects.push(...effects)
@@ -414,7 +433,7 @@ export class HenjiScriptService extends HenjiScriptGatewayBridge {
   }
 
   async execute(raw: RunHenjiScriptInput, context: ScriptExecutionContext): Promise<RunHenjiScriptOutput> {
-    const scriptRunRef = `henji-script:${randomUUID()}`
+    const scriptRunRef = `henji-script:${createHash('sha256').update(`${context.runId}\0${context.toolCallId}`).digest('hex')}`
     const state: ScriptRuntimeState = {
       values: new Map(), parents: new Map(), refs: new Map(), effects: [], receipts: [],
       verificationEvidence: [], submittedTasks: [], removed: new Set(),
@@ -455,7 +474,7 @@ export class HenjiScriptService extends HenjiScriptGatewayBridge {
 
   async resume(
     rawCheckpoint: HenjiScriptCheckpoint,
-    observedStatus: 'success' | 'error' | 'cancelled' | 'timeout',
+    observedStatus: 'success' | 'error' | 'cancelled' | 'timeout' | undefined,
     context: ScriptExecutionContext,
   ): Promise<RunHenjiScriptOutput> {
     const executionContext: ScriptExecutionContext = {
@@ -476,7 +495,7 @@ export class HenjiScriptService extends HenjiScriptGatewayBridge {
       forbiddenEffects: taskPolicyForbiddenEffects(policy),
     })
     const inheritedEffectCount = state.effects.length
-    if (observedStatus !== 'success') {
+    if (observedStatus !== undefined && observedStatus !== 'success') {
       const failure = new HenjiScriptError(
         'SCRIPT_STEP_FAILED', 'execute', `外部生成以 ${observedStatus} 结束，后续写入未执行`, null,
       )

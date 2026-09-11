@@ -6,6 +6,10 @@ import type {
 import { getMainWindow } from '../window'
 import { isTrustedMainRendererUrl } from '../security/main-renderer-url'
 import { createMainLogger } from '../services/logging'
+import { AgentOperationStore } from '../services/agent-runtime/persistence/operation-store'
+import { getDb } from '../services/db'
+import { imageEditPersistenceDigest } from '../services/image-editor-v3/document-repository'
+import type { ApplicationPersistenceReceiptRecord } from '../../../src/core/application-control/persistenceCorrelation'
 import {
   ContentAddressedResourceStore,
   createImageEditSourceFingerprint,
@@ -82,7 +86,9 @@ function getRuntime(): ImageEditorV3Runtime {
   if (runtime) return runtime
   const paths = getImageEditorV3StoragePaths()
   const resources = new ContentAddressedResourceStore(paths.resourcesDir)
-  const documents = new ImageEditDocumentRepository(paths.documentsDir)
+  const documents = new ImageEditDocumentRepository(paths.documentsDir, {
+    confirmOperationReceipt: (receipt) => new AgentOperationStore(getDb()).confirmFilePersistence(receipt),
+  })
   const sources = new SharpSourceProvider(resources)
   const rasterExports = new RasterExportSessionManager(documents, resources)
   runtime = {
@@ -230,8 +236,19 @@ async function runRequest<T>(
   }
 }
 
-async function saveDocument(payload: SaveDocumentPayload): Promise<Record<string, unknown>> {
+async function saveDocument(payload: SaveDocumentPayload, senderId: number): Promise<Record<string, unknown>> {
   const services = getRuntime()
+  const operationCorrelation = payload.operationCorrelation
+  const operations = operationCorrelation ? new AgentOperationStore(getDb()) : undefined
+  if (operationCorrelation) {
+    operations!.assertPersistenceOwner(operationCorrelation.operationId, senderId)
+    const prefix = `v3:${encodeURIComponent(payload.documentId)}`
+    if (operationCorrelation.targets.some((ref) => (!ref.kind.startsWith('image_edit.') && ref.kind !== 'image_mark.annotation')
+      || (ref.id !== prefix && !ref.id.startsWith(`${prefix}:`)))) throw new Error('OPERATION_PERSISTENCE_TARGET_INVALID')
+  }
+  const prepareOperationReceipt = operations ? (receipt: ApplicationPersistenceReceiptRecord) => operations.prepareFilePersistence(
+    { operationId: receipt.operationId, boundaryId: receipt.boundaryId, targets: receipt.targets },
+    receipt.storageTarget, receipt.digest, senderId) : undefined
   const refs = [...new Set([...payload.resourceRefs, ...(payload.previewRef ? [payload.previewRef] : [])])]
   // 校验资源存在后必须一直持有 lease，直到文档引用已原子落盘。否则 GC 可以在
   // `has()` 和 repository.save() 之间删除刚导入但尚未被文档引用的对象。
@@ -245,11 +262,23 @@ async function saveDocument(payload: SaveDocumentPayload): Promise<Record<string
       if (!isNotFound(error)) throw error
       current = null
     }
+    if (current) {
+      services.documents.confirmPendingOperations(current)
+      const confirmed = operationCorrelation && operations!.get(operationCorrelation.operationId)?.persistenceReceipts
+        .find((receipt) => receipt.boundaryId === operationCorrelation.boundaryId)
+      if (confirmed) {
+        if (confirmed.digest !== imageEditPersistenceDigest(payload) || confirmed.digest !== imageEditPersistenceDigest(current)) {
+          throw new Error('OPERATION_PERSISTENCE_CONFLICT')
+        }
+        return toReference(current)
+      }
+    }
     if (!current) {
       if (payload.expectedRevision !== 0) {
         throw new DocumentRevisionConflictError(payload.documentId, payload.expectedRevision, 0)
       }
       const created = await services.documents.create({
+        operationCorrelation, prepareOperationReceipt,
         documentId: payload.documentId,
         revision: payload.revision,
         document: payload.document,
@@ -264,12 +293,13 @@ async function saveDocument(payload: SaveDocumentPayload): Promise<Record<string
         && JSON.stringify(current.history) === JSON.stringify(payload.history)
         && JSON.stringify(current.resourceRefs) === JSON.stringify(payload.resourceRefs)
         && current.previewRef === payload.previewRef
-      if (unchanged) return toReference(current)
+      if (unchanged && !operationCorrelation) return toReference(current)
       if (JSON.stringify(current.document) !== JSON.stringify(payload.document)) {
         throw new Error('Document content changed without advancing revision')
       }
     }
     const saved = await services.documents.save({
+      operationCorrelation, prepareOperationReceipt,
       documentId: payload.documentId,
       expectedRevision: payload.expectedRevision,
       nextRevision: payload.revision,
@@ -298,6 +328,7 @@ export function registerImageEditorV3Ipc(): void {
       throwIfAborted(signal)
       try {
         const document = await getRuntime().documents.load(payload.documentRef)
+        getRuntime().documents.confirmPendingOperations(document)
         await assertHistoryResourceSizes(document.history)
         return await toSnapshot(document, signal)
       }
@@ -307,7 +338,7 @@ export function registerImageEditorV3Ipc(): void {
   registerIpcHandler('imageEditorV3:document:save', parseImageEditorV3SavePayload, (payload, event) => (
     runRequest('document.save', payload.requestId, event.sender.id, (signal) => {
       throwIfAborted(signal)
-      return saveDocument(payload)
+      return saveDocument(payload, event.sender.id)
     })
   ), guard)
   registerIpcHandler(

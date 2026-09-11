@@ -107,21 +107,29 @@ describe('图片编辑唯一保存宿主', () => {
     expect(first.owner.ownsQueue(second.queue)).toBe(false)
   })
 
-  it('文档落盘后投影失败，重试只执行投影并回灌同版本权威预览', async () => {
+  it.each(['document', 'projection'])('%s 保存失败释放批次后，重试保留原操作关联且不重复编辑', async (stage) => {
     const { bus, queue, write, add } = setup()
-    const projection = vi.fn().mockRejectedValueOnce(new Error('预览不可写')).mockResolvedValue({
+    const projection = vi.fn().mockResolvedValue({
       reference: { documentId: 'owned', revision: 1, previewRef: 'sha256:preview' },
       effects: [], resultingRevisions: { canvas: 4 },
     })
+    if (stage === 'projection') projection.mockRejectedValueOnce(new Error('预览不可写'))
+    else write.mockRejectedValueOnce(new Error('文档不可写'))
     const owner = new ImageEditPersistenceOwnerV3('owned', queue, () => bus.getPersistenceSnapshot(), projection)
+    const batch = owner.begin({ exposure: 'assistant', requestId: 'original-request', operationId: 'original-operation',
+      permissions: new Set(['image_edit:read', 'image_edit:write']), acceptedDataClasses: new Set(['C0', 'C1']) })
     add('one')
-    await expect(owner.confirm(true)).rejects.toMatchObject({ facts: { stage: 'projection' } })
+    owner.acceptCurrent()
+    await expect(batch.confirm()).rejects.toMatchObject({ facts: { stage } })
+    batch.release()
     await expect(owner.confirm()).resolves.toMatchObject({ revision: 1, previewRef: 'sha256:preview' })
-    expect(write).toHaveBeenCalledTimes(1)
-    expect(projection).toHaveBeenCalledTimes(2)
+    expect(write).toHaveBeenCalledTimes(stage === 'document' ? 2 : 1)
+    expect(write.mock.calls.every((call) => call[1]?.operationCorrelation?.operationId === 'original-operation')).toBe(true)
+    expect(projection).toHaveBeenCalledTimes(stage === 'projection' ? 2 : 1)
+    expect(projection.mock.calls.every((call) => call[1]?.operationId === 'original-operation')).toBe(true)
     expect(bus.getSnapshot().document.revision).toBe(1)
     await owner.confirm(true)
-    expect(projection).toHaveBeenCalledTimes(2)
+    expect(projection).toHaveBeenCalledTimes(stage === 'projection' ? 2 : 1)
   })
 
   it('低版本物化结果不能替换已经保存的新版本引用', async () => {

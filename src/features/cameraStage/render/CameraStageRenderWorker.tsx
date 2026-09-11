@@ -153,6 +153,7 @@ export default function CameraStageRenderWorker(): JSX.Element {
             activeCamera.aspectRatio.ratio,
             request.requestId,
             request.resolutionPreset === '1080p' ? 1080 : 720,
+            { aspectRatio: activeCamera.aspectRatio.preset, selectedTimeSec },
           )
           if (disposed) return
           if (cancelRef.current) {
@@ -204,6 +205,7 @@ export default function CameraStageRenderWorker(): JSX.Element {
           },
         })
         const result = await exportCameraStageVideo({
+          cameraStageRequestId: request.requestId,
           projectName: exportState.currentProjectName,
           cameraRatio: firstRenderCamera.aspectRatio.ratio,
           renderCameraCount: renderCameras.length,

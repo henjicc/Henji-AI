@@ -130,7 +130,7 @@ export class CameraStageMutationExecutor implements ApplicationMutationExecutor 
         : directOnlyEffectContract()
   }
 
-  async apply(step: MutationStep): Promise<ApplicationCompletedStepResult> {
+  async apply(step: MutationStep, context?: ApplicationExecutionContext): Promise<ApplicationCompletedStepResult> {
     if (step.entityType !== this.entityType || step.target.kind !== this.entityType) throw new Error('NOT_FOUND')
     const recordsAutomaticStateKeyframe = isAutomaticStateKeyframeMutation(step)
     const projectId = recordsAutomaticStateKeyframe ? childTarget(step.target.id).projectId : null
@@ -139,7 +139,7 @@ export class CameraStageMutationExecutor implements ApplicationMutationExecutor 
         ? useCameraStageStore.getState().stateKeyframes.map((item) => item.id)
         : [],
     )
-    const undoToken = await this.applyMutations(step)
+    const undoToken = await this.applyMutations(step, context)
     this.dependencies.bumpRevision()
     const revision = this.dependencies.readRevision()
     const automatic = projectId
@@ -181,32 +181,32 @@ export class CameraStageMutationExecutor implements ApplicationMutationExecutor 
     }
   }
 
-  private async applyMutations(step: MutationStep): Promise<string> {
-    if (this.entityType === CAMERA_STAGE_ENTITY_TYPES.project) return await this.applyProject(step)
-    if (this.entityType === CAMERA_STAGE_ENTITY_TYPES.scene) return await this.applyScene(step)
-    if (this.entityType === CAMERA_STAGE_ENTITY_TYPES.object || this.entityType === CAMERA_STAGE_ENTITY_TYPES.camera) return await this.applyObject(step)
-    if (this.entityType === CAMERA_STAGE_ENTITY_TYPES.stateKeyframe) return await this.applyStateKeyframe(step)
+  private async applyMutations(step: MutationStep, context?: ApplicationExecutionContext): Promise<string> {
+    if (this.entityType === CAMERA_STAGE_ENTITY_TYPES.project) return await this.applyProject(step, context)
+    if (this.entityType === CAMERA_STAGE_ENTITY_TYPES.scene) return await this.applyScene(step, context)
+    if (this.entityType === CAMERA_STAGE_ENTITY_TYPES.object || this.entityType === CAMERA_STAGE_ENTITY_TYPES.camera) return await this.applyObject(step, context)
+    if (this.entityType === CAMERA_STAGE_ENTITY_TYPES.stateKeyframe) return await this.applyStateKeyframe(step, context)
     if (this.entityType === CAMERA_STAGE_ENTITY_TYPES.playback) return await this.applyPlayback(step)
-    if (this.entityType === CAMERA_STAGE_ENTITY_TYPES.trajectory) return await this.applyTrajectory(step)
+    if (this.entityType === CAMERA_STAGE_ENTITY_TYPES.trajectory) return await this.applyTrajectory(step, context)
     throw new Error('NOT_FOUND')
   }
 
-  private async applyProject(step: MutationStep): Promise<string> {
+  private async applyProject(step: MutationStep, context?: ApplicationExecutionContext): Promise<string> {
     const projectId = step.target.id
     await cameraStageApplicationService.openProject(projectId)
     const undoToken = captureCameraStageUndo(projectId)
     const draft: CameraStageProjectDraft = { projectId }
     await applyWriterTable(CAMERA_STAGE_PROJECT_WRITERS, draft, step.mutations)
-    if (draft.rename !== undefined) await cameraStageApplicationService.renameProject(projectId, draft.rename)
+    if (draft.rename !== undefined) await cameraStageApplicationService.renameProject(projectId, draft.rename, context)
     return undoToken
   }
 
-  private async applyScene(step: MutationStep): Promise<string> {
+  private async applyScene(step: MutationStep, context?: ApplicationExecutionContext): Promise<string> {
     const projectId = step.target.id
     await cameraStageApplicationService.openProject(projectId)
     const undoToken = captureCameraStageUndo(projectId)
     await applyWriterTable(CAMERA_STAGE_SCENE_WRITERS, useCameraStageStore.getState(), step.mutations)
-    await saveCurrentProject()
+    await saveCurrentProject(context, [step.target])
     return undoToken
   }
 
@@ -215,7 +215,7 @@ export class CameraStageMutationExecutor implements ApplicationMutationExecutor 
    * 语义完全不同的 store 路径（见 cameraStageObjectFields.ts 顶部注释），一批写入里混用
    * 会让其中一种语义悄悄失效，所以在提交前拒绝，而不是二选一静默丢弃另一半。
    */
-  private async applyObject(step: MutationStep): Promise<string> {
+  private async applyObject(step: MutationStep, context?: ApplicationExecutionContext): Promise<string> {
     const { projectId, childId: objectId } = childTarget(step.target.id)
     const snapshot = await cameraStageApplicationService.readSnapshot(projectId)
     const current = snapshot.objects.find((object) => object.id === objectId)
@@ -242,19 +242,19 @@ export class CameraStageMutationExecutor implements ApplicationMutationExecutor 
       )
     }
     if (hasAnimatable) {
-      return (await cameraStageApplicationService.updateAnimatableProperties(projectId, objectId, draft.animatable)).undoToken
+      return (await cameraStageApplicationService.updateAnimatableProperties(projectId, objectId, draft.animatable, context)).undoToken
     }
     if (hasPosePreset) {
-      return (await cameraStageApplicationService.applyObjectPosePreset(projectId, objectId, draft.posePresetId!)).undoToken
+      return (await cameraStageApplicationService.applyObjectPosePreset(projectId, objectId, draft.posePresetId!, context)).undoToken
     }
-    return (await cameraStageApplicationService.updateObject(projectId, objectId, draft.update)).undoToken
+    return (await cameraStageApplicationService.updateObject(projectId, objectId, draft.update, context)).undoToken
   }
 
-  private async applyStateKeyframe(step: MutationStep): Promise<string> {
+  private async applyStateKeyframe(step: MutationStep, context?: ApplicationExecutionContext): Promise<string> {
     const { projectId, childId: stateKeyframeId } = childTarget(step.target.id)
     const draft: CameraStageStateKeyframeDraft = {}
     await applyWriterTable(CAMERA_STAGE_STATE_KEYFRAME_WRITERS, draft, step.mutations)
-    return (await cameraStageApplicationService.updateStateKeyframe(projectId, stateKeyframeId, draft)).undoToken
+    return (await cameraStageApplicationService.updateStateKeyframe(projectId, stateKeyframeId, draft, context)).undoToken
   }
 
   private async applyPlayback(step: MutationStep): Promise<string> {
@@ -270,7 +270,7 @@ export class CameraStageMutationExecutor implements ApplicationMutationExecutor 
   }
 
   /** 轨迹稳定引用形如 `projectId:stateKeyframeId:objectId`（`allRefs()` 里 `childRef` 拼的 `${stateKeyframeId}:${objectId}`）。 */
-  private async applyTrajectory(step: MutationStep): Promise<string> {
+  private async applyTrajectory(step: MutationStep, context?: ApplicationExecutionContext): Promise<string> {
     const { projectId, childId } = childTarget(step.target.id)
     const separator = childId.indexOf(':')
     if (separator < 1) throw new Error('NOT_FOUND')
@@ -288,7 +288,7 @@ export class CameraStageMutationExecutor implements ApplicationMutationExecutor 
       path: draft.pathTouched ? draft.path : undefined,
       startPosition: draft.startPosition,
       endPosition: draft.endPosition,
-    })).undoToken
+    }, context)).undoToken
   }
 }
 
@@ -334,8 +334,8 @@ export class CameraStageMotionOperationExecutor implements ApplicationSemanticOp
     return { toolbox: this.dependencies.readRevision() }
   }
 
-  async execute(input: JsonValue, _context: ApplicationExecutionContext): Promise<ApplicationCompletedStepResult> {
-    const result = await applyCameraStageMotion(motionInputSchema.parse(input))
+  async execute(input: JsonValue, context: ApplicationExecutionContext): Promise<ApplicationCompletedStepResult> {
+    const result = await applyCameraStageMotion(motionInputSchema.parse(input), context)
     this.dependencies.bumpRevision()
     const revision = this.dependencies.readRevision()
     return {

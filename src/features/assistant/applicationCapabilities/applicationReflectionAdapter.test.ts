@@ -328,7 +328,7 @@ describe('应用反射通用能力适配器', () => {
       })
     mocks.plan.mockResolvedValueOnce({ planRef: 'plan-stale' }).mockResolvedValueOnce({ planRef: 'plan-refreshed' })
     mocks.commit
-      .mockResolvedValueOnce({ status: 'failed', code: 'CONFLICT', message: '状态变化', recoverable: true })
+      .mockResolvedValueOnce({ status: 'failed', code: 'CONFLICT', executionState: 'not_started', message: '状态变化', recoverable: true })
       .mockResolvedValueOnce({
         status: 'completed', transactionRef: 'transaction-refreshed', resultingRevisions: { toolbox: 3 },
         resultRefs: [], effects: [], evidence: [],
@@ -356,7 +356,7 @@ describe('应用反射通用能力适配器', () => {
     })
     mocks.plan.mockResolvedValueOnce({ planRef: 'plan-stale' }).mockResolvedValueOnce({ planRef: 'plan-refreshed' })
     mocks.commit
-      .mockResolvedValueOnce({ status: 'failed', code: 'CONFLICT', message: '集合 revision 变化', recoverable: true })
+      .mockResolvedValueOnce({ status: 'failed', code: 'CONFLICT', executionState: 'not_started', message: '集合 revision 变化', recoverable: true })
       .mockResolvedValueOnce({
         status: 'completed', transactionRef: 'transaction-refreshed', resultingRevisions: { toolbox: 8 },
         resultRefs: [], effects: [], evidence: [],
@@ -375,6 +375,18 @@ describe('应用反射通用能力适配器', () => {
     }), expect.any(Object))
   })
 
+  it('零完成步骤且执行情况未知的冲突不能自动重试', async () => {
+    mocks.plan.mockResolvedValueOnce({ planRef: 'plan-unknown' })
+    mocks.commit.mockResolvedValueOnce({ status: 'failed', code: 'CONFLICT', message: '执行状态未知', recoverable: true,
+      partial: { completedStepIndexes: [], compensatedStepIndexes: [], uncompensatedStepIndexes: [] } })
+    const before = mocks.commit.mock.calls.length
+    await expect(applicationReflectionHandlers.changeEntities({ summary: '不能重复创建',
+      changes: [{ kind: 'create_items', parent: { kind: 'sample.parent', id: 'parent-1' },
+        entityType: 'sample.item', items: [{ properties: { value: 2 } }] }],
+    }, context)).rejects.toThrow('执行状态未知')
+    expect(mocks.commit).toHaveBeenCalledTimes(before + 1)
+  })
+
   it('revision 刷新时目标属性已变化则停止且不覆盖', async () => {
     mocks.readEntity
       .mockResolvedValueOnce({
@@ -386,7 +398,7 @@ describe('应用反射通用能力适配器', () => {
         properties: { 'sample.item.value': 9 }, revisions: { toolbox: 2 }, capturedAt: new Date().toISOString(),
       })
     mocks.plan.mockResolvedValueOnce({ planRef: 'plan-concurrent' })
-    mocks.commit.mockResolvedValueOnce({ status: 'failed', code: 'CONFLICT', message: '状态变化', recoverable: true })
+    mocks.commit.mockResolvedValueOnce({ status: 'failed', code: 'CONFLICT', executionState: 'not_started', message: '状态变化', recoverable: true })
     const commitCalls = mocks.commit.mock.calls.length
 
     await expect(applicationReflectionHandlers.changeEntities({

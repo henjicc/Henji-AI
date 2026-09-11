@@ -53,6 +53,6 @@ export async function createAttachedImageEditPersistenceFixture() {
   const queue = new ImageMarkV3PersistenceQueue({ repository, initialReference: initial, initialHistory: bus.getPersistenceSnapshot().history })
   const dispose = registerImageEditV3LiveSession('attached-session', bus, { getQueue: () => queue,
     projection: confirmation.projection,
-    confirmProjection: (reference) => confirmation.confirm(createCanvasEditV3SessionReference(initialSession.sourceUrl, reference)) })
+    confirmProjection: (reference, context) => confirmation.confirm(createCanvasEditV3SessionReference(initialSession.sourceUrl, reference), context) })
   return { bus, projectId, document, queue, confirmation, materialize, dispose }
 }

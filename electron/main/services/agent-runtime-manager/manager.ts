@@ -15,6 +15,7 @@ import type {
 } from '../../../../src/core/assistant/runtimeContracts'
 import type { AgentMemoryContextEntry } from '../../../../src/core/assistant/memory'
 import type { AgentWorkingSummary } from '../../../../src/core/assistant/workingContext'
+import type { OperationRecovery } from '../../../../src/core/assistant/operations'
 import type { ModelStepMessage } from '@henjicc/ai-sdk'
 import type {
   AgentTraceCompleteInput,
@@ -56,6 +57,7 @@ interface AgentRuntimeManagerOptions {
   completeAgentTrace: (payload: AgentTraceCompleteInput) => void
   failAgentTrace: (payload: AgentTraceFailInput) => void
   appendPermissionAudit: (payload: unknown) => unknown
+  executeOperation?: (payload: unknown) => unknown
   appendSessionInternal: (payload: unknown) => unknown
   appendSessionCompaction: (payload: unknown) => unknown
   appendSavePoint: (payload: unknown) => unknown
@@ -98,7 +100,8 @@ export class AgentRuntimeManager {
     conversationHistory: ModelStepMessage[],
     conversationHistorySequences: number[],
     recoveryContext?: AgentWorkingSummary,
-    budgetContinuation?: AgentBudgetContinuation
+    budgetContinuation?: AgentBudgetContinuation,
+    operationRecovery?: OperationRecovery,
   ): Promise<AgentRunState> {
     this.activeRunIds.add(runId)
     try {
@@ -111,6 +114,7 @@ export class AgentRuntimeManager {
         conversationHistorySequences,
         recoveryContext,
         budgetContinuation,
+        operationRecovery,
       }, 15_000)
       return agentRunStateSchema.parse(result)
     } catch (error) {
@@ -373,6 +377,9 @@ export class AgentRuntimeManager {
       } else if (operation === 'agent_trace.fail') {
         this.options.failAgentTrace(payload as AgentTraceFailInput)
         data = { saved: true }
+      } else if (operation === 'operation.execute') {
+        if (!this.options.executeOperation) throw new Error('OPERATION_PERSISTENCE_UNAVAILABLE')
+        data = this.options.executeOperation(payload)
       } else if (operation === 'permission_audit.append') {
         data = this.options.appendPermissionAudit(payload)
       } else if (operation === 'memory.retrieve') {

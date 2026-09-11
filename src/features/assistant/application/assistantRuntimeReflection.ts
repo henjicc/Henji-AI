@@ -56,6 +56,7 @@ function property(
 }
 
 const ARTIFACT_REFS_VALUE = schemaRef('property', 'assistant.run.artifact_refs.value')
+const OPERATIONS_VALUE = schemaRef('property', 'assistant.run.operations.value')
 const ERROR_VALUE = schemaRef('property', 'assistant.run.error.value')
 
 const properties: Record<AssistantRuntimeEntityType, ApplicationPropertyDescriptor[]> = {
@@ -68,6 +69,7 @@ const properties: Record<AssistantRuntimeEntityType, ApplicationPropertyDescript
     property(ASSISTANT_RUNTIME_ENTITY_TYPES.run, 'resumable', '可恢复', { kind: 'boolean' }),
     property(ASSISTANT_RUNTIME_ENTITY_TYPES.run, 'retryable', '可重试', { kind: 'boolean' }),
     property(ASSISTANT_RUNTIME_ENTITY_TYPES.run, 'artifact_refs', '产物引用', { kind: 'json', schemaRef: ARTIFACT_REFS_VALUE }),
+    property(ASSISTANT_RUNTIME_ENTITY_TYPES.run, 'operations', '实际操作与待核对结果', { kind: 'json', schemaRef: OPERATIONS_VALUE }),
     property(ASSISTANT_RUNTIME_ENTITY_TYPES.run, 'error', '错误摘要', { kind: 'json', schemaRef: ERROR_VALUE }, true),
   ],
   [ASSISTANT_RUNTIME_ENTITY_TYPES.artifact]: [
@@ -87,6 +89,7 @@ function runValues(run: AssistantRunApplicationSnapshot): Record<string, JsonVal
     'assistant.run.resumable': run.resumable,
     'assistant.run.retryable': run.retryable,
     'assistant.run.artifact_refs': run.artifactRefs.map((id) => ({ kind: ASSISTANT_RUNTIME_ENTITY_TYPES.artifact, id })),
+    'assistant.run.operations': JSON.parse(JSON.stringify(run.operations)) as JsonValue,
     'assistant.run.error': run.error ? JSON.parse(JSON.stringify(run.error)) as JsonValue : null,
   }
 }
@@ -182,6 +185,7 @@ export function createAssistantRuntimeReflectionRegistrations(): ApplicationEnti
     provider: new AssistantRuntimeReflectionProvider(entityType),
     schemaDocuments: entityType === ASSISTANT_RUNTIME_ENTITY_TYPES.run ? [
       { ref: ARTIFACT_REFS_VALUE, value: { type: 'array', items: { type: 'object' } } as JsonValue },
+      { ref: OPERATIONS_VALUE, value: { type: 'array', items: { type: 'object' } } as JsonValue },
       { ref: ERROR_VALUE, value: { type: ['object', 'null'] } as JsonValue },
     ] : [],
   }))

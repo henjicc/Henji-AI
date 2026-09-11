@@ -32,6 +32,7 @@ function executionContext(context: CapabilityExecutionContext) {
     permissions,
     acceptedDataClasses: new Set(['C1'] as const),
     requestId: context.requestId ?? `camera-stage-${Date.now()}`,
+    operationId: context.operationId,
     signal: context.signal,
   }
 }
@@ -144,8 +145,8 @@ export async function openCameraStageProject(projectId: string): Promise<Record<
   return { ...result, baseRevision: baseRevision() }
 }
 
-export async function createCameraStageProject(name: string): Promise<Record<string, unknown>> {
-  const created = await createStoredCameraStageProject(name)
+export async function createCameraStageProject(name: string, context?: CapabilityExecutionContext): Promise<Record<string, unknown>> {
+  const created = await createStoredCameraStageProject(name, context)
   notifyHostScopeChanged('toolbox')
   const {
     id: projectId,
@@ -180,9 +181,9 @@ export async function renameCameraStageProject(input: { projectId: string; name:
   }, context)
 }
 
-export async function deleteCameraStageProject(input: { projectId: string; baseRevision: number }): Promise<Record<string, unknown>> {
+export async function deleteCameraStageProject(input: { projectId: string; baseRevision: number }, context?: CapabilityExecutionContext): Promise<Record<string, unknown>> {
   assertBaseRevision(input.baseRevision)
-  const result = await cameraStageApplicationService.deleteProject(input.projectId)
+  const result = await cameraStageApplicationService.deleteProject(input.projectId, context)
   notifyHostScopeChanged('toolbox')
   return { ...result, baseRevision: baseRevision() }
 }
@@ -192,16 +193,16 @@ export async function placeCameraStageObject(input: Record<string, unknown> & { 
   return await executeOperation('place_camera_stage_object', operationInput as JsonValue, revision, context, '三维场景对象已按复用与空间约束处理。')
 }
 
-export async function duplicateCameraStageObject(input: { projectId: string; objectId: string; baseRevision: number }): Promise<Record<string, unknown>> {
+export async function duplicateCameraStageObject(input: { projectId: string; objectId: string; baseRevision: number }, context?: CapabilityExecutionContext): Promise<Record<string, unknown>> {
   assertBaseRevision(input.baseRevision)
-  const result = await cameraStageApplicationService.duplicateObject(input.projectId, input.objectId)
+  const result = await cameraStageApplicationService.duplicateObject(input.projectId, input.objectId, context)
   notifyHostScopeChanged('toolbox')
   return { projectId: result.projectId, objectId: result.objectId, duplicatedFromObjectId: result.duplicatedFromObjectId, undoRef: result.undoToken, baseRevision: baseRevision() }
 }
 
-export async function deleteCameraStageObject(input: { projectId: string; objectId: string; baseRevision: number }): Promise<Record<string, unknown>> {
+export async function deleteCameraStageObject(input: { projectId: string; objectId: string; baseRevision: number }, context?: CapabilityExecutionContext): Promise<Record<string, unknown>> {
   assertBaseRevision(input.baseRevision)
-  const result = await cameraStageApplicationService.deleteObject(input.projectId, input.objectId)
+  const result = await cameraStageApplicationService.deleteObject(input.projectId, input.objectId, context)
   notifyHostScopeChanged('toolbox')
   return { ...result, baseRevision: baseRevision() }
 }

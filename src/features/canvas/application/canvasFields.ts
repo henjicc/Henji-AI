@@ -61,17 +61,17 @@ function canvasDescriptor(
 }
 
 /** 写入目标只有工程 id——改名直接落到领域服务，没有需要累积的中间态。 */
-export const PROJECT_FIELDS: ApplicationFieldDefinition<{ name: string }, string>[] = [
+export const PROJECT_FIELDS: ApplicationFieldDefinition<{ name: string }, { projectId: string; operationId?: string }>[] = [
   {
     propertyId: `${PROJECT_ENTITY_TYPE}.name`,
     descriptor: canvasDescriptor(PROJECT_ENTITY_TYPE, 'name', '项目名称', { kind: 'string', minLength: 1, maxLength: 120 }),
     read: (project) => project.name,
     writer: {
-      async write(projectId, mutation) {
+      async write(draft, mutation) {
         if (typeof mutation.value !== 'string' || mutation.value.trim() === '') {
           throw new Error('CANVAS_PROJECT_NAME_INVALID：工程名必须是非空字符串。')
         }
-        await renameCanvasProject(projectId, mutation.value)
+        await renameCanvasProject(draft.projectId, mutation.value, draft)
       },
     },
     storeActions: [],

@@ -54,6 +54,7 @@ export async function resolveCameraStageAssetTarget(target: CameraStageAssetTarg
 
 export async function collectCameraStageAsset(
   input: CameraStageAssetCollectionInput,
+  context?: { operationId?: string },
 ): Promise<AssetRecord | null> {
   if (!input.target.enabled) return null
   try {
@@ -63,7 +64,7 @@ export async function collectCameraStageAsset(
       source: 'camera-stage',
       displayName: input.displayName,
       libraryIds: input.target.libraryId ? [input.target.libraryId] : undefined,
-    })
+    }, context)
     logger.info('3D 导出已收录到资产库', {
       event: 'camera_stage.asset_collection.completed',
       requestId: input.requestId,

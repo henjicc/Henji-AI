@@ -61,7 +61,7 @@ export class CameraStagePlacementOperationExecutor implements ApplicationSemanti
     return { toolbox: this.dependencies.readRevision() }
   }
 
-  async execute(input: JsonValue, _context: ApplicationExecutionContext): Promise<ApplicationCompletedStepResult> {
+  async execute(input: JsonValue, context: ApplicationExecutionContext): Promise<ApplicationCompletedStepResult> {
     const parsed = cameraStagePlacementInputSchema.parse(input)
     const result = await cameraStageApplicationService.placeObject({
       projectId: parsed.projectId,
@@ -74,7 +74,7 @@ export class CameraStagePlacementOperationExecutor implements ApplicationSemanti
         reusePolicy: parsed.reusePolicy,
       },
       placement: parsed.placement,
-    })
+    }, context)
     this.dependencies.bumpRevision()
     const revision = this.dependencies.readRevision()
     const entityType = result.objectType === 'camera'

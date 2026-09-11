@@ -10,6 +10,7 @@ import { applyCanvasOperationsAtomically, runCanvasTransaction } from './canvasB
 import { confirmCanvasPersistence, runPersistedCanvasUndo } from './canvasPersistenceService'
 import { commitCanvasSpecialEditor, openCanvasSpecialEditor } from './specialEditorApplicationService'
 import { useCanvasSpecialEditorController } from './specialEditorController'
+import type { StoryboardProjectPlatformWrite } from '@/platform/contracts/storyboardProjects'
 
 describe('共享画布保存完成屏障', () => {
   let projectId: string
@@ -54,6 +55,18 @@ describe('共享画布保存完成屏障', () => {
     const record = (await getProjectRecord(projectId))!
     expect(JSON.parse(record.nodesJson)).toHaveLength(2)
     expect(JSON.parse(record.historyJson).past).toHaveLength(1)
+  })
+
+  it('正式批事务将原操作身份和实际新增引用附在同一原生保存请求', async () => {
+    const save = vi.spyOn(window.henjiNative!.storyboardProjects, 'upsertProjectRecord')
+    await applyCanvasOperationsAtomically(projectId, [
+      { kind: 'add_node', nodeType: CANVAS_NODE_TYPES.upload, placement: { mode: 'viewport_center' } },
+    ], {}, { operationId: 'operation-created-node' })
+    expect(save).toHaveBeenCalledTimes(1)
+    const saved = save.mock.calls[0][0] as StoryboardProjectPlatformWrite
+    expect(saved.operationCorrelation).toMatchObject({ operationId: 'operation-created-node',
+      targets: [{ kind: 'canvas.node', id: `${projectId}:${useCanvasStore.getState().nodes[0].id}` }] })
+    expect(JSON.parse(saved.nodesJson)).toHaveLength(1)
   })
 
   it('旧工程迟到保存失败不误归属新工程，返回后恢复未保存快照再重试', async () => {

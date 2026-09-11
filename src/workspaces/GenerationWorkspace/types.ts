@@ -27,6 +27,7 @@ export interface GeneratorOptions extends DynamicValueMap {
 }
 
 export interface GenerationTask {
+  operationId?: string
   id: string
   createdAt: Date
   type: MediaType

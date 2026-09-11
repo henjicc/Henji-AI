@@ -30,14 +30,14 @@ export class ApplicationPersistenceFailure extends Error {
 }
 
 export interface ApplicationPersistenceBatch {
-  confirm(): Promise<ApplicationPersistenceReceipt | void>
+  confirm(targets?: readonly ApplicationRef[]): Promise<ApplicationPersistenceReceipt | void>
   release(): void
 }
 
 export interface ApplicationPersistenceParticipant {
   readonly key: string
   readonly persistenceEffects?: readonly ApplicationCascadeEffectDeclaration[]
-  begin(): ApplicationPersistenceBatch
+  begin(context?: ApplicationExecutionContext): ApplicationPersistenceBatch
 }
 
 export type ApplicationPersistenceResolver = (
@@ -98,8 +98,8 @@ export async function withApplicationPersistenceBoundary<T>(input: {
     receipts.push(receipt)
     input.onReceipt?.(receipt)
   }
-  const confirm = async (key: string, batch: ApplicationPersistenceBatch): Promise<void> => {
-    try { acceptReceipt(key, await batch.confirm()) }
+  const confirm = async (key: string, batch: ApplicationPersistenceBatch, completed: ApplicationCompletedStepResult[]): Promise<void> => {
+    try { acceptReceipt(key, await batch.confirm(completed.flatMap((step) => step.directRefs))) }
     catch (error) {
       if (error instanceof ApplicationPersistenceFailure) acceptReceipt(key, error.receipt)
       throw error
@@ -107,7 +107,7 @@ export async function withApplicationPersistenceBoundary<T>(input: {
   }
   try {
     for (const participant of input.participants) {
-      if (!batches.has(participant.key)) batches.set(participant.key, participant.begin())
+      if (!batches.has(participant.key)) batches.set(participant.key, participant.begin(input.context))
     }
     const context = { ...input.context, persistenceScopes: new Set(batches.keys()) }
     let result: T
@@ -116,7 +116,7 @@ export async function withApplicationPersistenceBoundary<T>(input: {
     } catch (error) {
       // 业务补偿结束后也确认其最终快照，不能只撤内存就宣称磁盘已恢复。
       for (const [key, batch] of batches) {
-        try { await confirm(key, batch) }
+        try { await confirm(key, batch, error instanceof ApplicationExecutionProgressFailure ? error.completed : []) }
         catch (failure) {
           if (failure instanceof ApplicationPersistenceFailure) {
             const progress = error instanceof ApplicationExecutionProgressFailure ? error : undefined
@@ -128,7 +128,7 @@ export async function withApplicationPersistenceBoundary<T>(input: {
       throw error
     }
     try {
-      for (const [key, batch] of batches) await confirm(key, batch)
+      for (const [key, batch] of batches) await confirm(key, batch, input.completed(result))
     } catch (failure) {
       if (failure instanceof ApplicationPersistenceFailure) {
         throw new ApplicationPersistenceBoundaryFailure(failure, input.completed(result), undefined, receipts, input.completedIndexes?.(result))

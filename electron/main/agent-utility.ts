@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto'
+import { operationRecordSchema } from '../../src/core/assistant/operations'
 import { z } from 'zod'
 
 import {
@@ -159,6 +160,11 @@ const proxyRegistries = createUtilityProxyRegistries({
 })
 const registry = proxyRegistries.registry
 const gateway = new AgentToolGateway({
+  operations: { execute: async (command) => {
+    const value = await rpc('operation.execute', command)
+    if (value === null) return null
+    return Array.isArray(value) ? operationRecordSchema.array().parse(value) : operationRecordSchema.parse(value)
+  } },
   registry,
   getHostContext: (runId) => hostContexts.get(runId) ?? null,
   appendPermissionAudit,
@@ -406,6 +412,7 @@ async function handleStart(payload: unknown): Promise<AgentRunState> {
     conversationHistory: parsed.conversationHistory,
     conversationHistorySequences: parsed.conversationHistorySequences,
     recoveryContext: parsed.recoveryContext,
+    operationRecovery: parsed.operationRecovery,
     budgetContinuation: parsed.budgetContinuation,
     dependencies: {
       registry,

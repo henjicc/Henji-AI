@@ -29,6 +29,23 @@ describe('受管生成媒体释放边界', () => {
     fs.rmSync(mocks.root, { recursive: true, force: true })
   })
 
+  it('正式图片保存先登记精确路径再写文件，登记失败不产生文件，已有文件也核对原关联', () => {
+    const bytes = Buffer.from('render-output')
+    let originalPath = ''
+    expect(() => persistImageBytes(bytes, 'png', (filePath) => {
+      originalPath = filePath
+      expect(fs.existsSync(filePath)).toBe(false)
+      throw new Error('登记失败')
+    })).toThrow('登记失败')
+    expect(fs.existsSync(originalPath)).toBe(false)
+    const prepare = vi.fn()
+    expect(persistImageBytes(bytes, 'png', prepare)).toBe(originalPath)
+    expect(prepare).toHaveBeenCalledWith(originalPath, bytes)
+    expect(fs.readFileSync(originalPath)).toEqual(bytes)
+    persistImageBytes(bytes, 'png', prepare)
+    expect(prepare).toHaveBeenCalledTimes(2)
+  })
+
   it('通用生成回滚只删除 Uploads 与 Media 内的目标', () => {
     const upload = path.join(mocks.root, 'Uploads', 'image.png')
     const media = path.join(mocks.root, 'Media', 'video.mp4')

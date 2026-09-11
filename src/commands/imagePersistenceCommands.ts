@@ -45,11 +45,11 @@ export async function loadImage(filePath: string): Promise<string> {
   return await fileToDataUrl(normalizeLocalPath(filePath));
 }
 
-export async function persistImageSource(source: string): Promise<string> {
+export async function persistImageSource(source: string, renderContext?: import('@/platform/contracts/cameraStageRender').CameraStageImagePersistenceContext): Promise<string> {
   const startedAt = performance.now();
   if (isNativeImageRuntime()) {
     try {
-      return await getPlatform().image.persistImageSource(source);
+      return await getPlatform().image.persistImageSource(source, renderContext);
     } catch (error) {
       throwNativeImageFailure('persistImageSource', startedAt, error, {
         sourceKind: sourceKindForLog(source),
@@ -57,6 +57,7 @@ export async function persistImageSource(source: string): Promise<string> {
     }
   }
 
+  if (renderContext) throw new Error('三维后台输出需要正式桌面保存能力');
   if (isLikelyLocalPath(source)) {
     return normalizeLocalPath(source);
   }

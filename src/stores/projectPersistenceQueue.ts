@@ -1,32 +1,32 @@
-interface ProjectPersistenceQueueOptions<TProject> {
+interface ProjectPersistenceQueueOptions<TProject, TReceipt> {
   getProjectId: (project: TProject) => string
-  upsertProject: (project: TProject) => Promise<void>
+  upsertProject: (project: TProject, receipt?: TReceipt) => Promise<void>
   updateViewport: (projectId: string, viewportJson: string) => Promise<void>
-  deleteProject: (projectId: string) => Promise<void>
+  deleteProject: (projectId: string, receipt?: TReceipt) => Promise<void>
   onBackgroundError: (operation: 'save' | 'viewport', error: unknown, projectId: string) => void
 }
 
 interface QueueOptions { immediate?: boolean; debounceMs?: number }
-export interface ProjectPersistenceQueue<TProject> {
+export interface ProjectPersistenceQueue<TProject, TReceipt = never> {
   queueProject: (project: TProject, options?: QueueOptions) => void
-  flushProject: (project: TProject) => Promise<void>
+  flushProject: (project: TProject, receipt?: TReceipt) => Promise<void>
   queueViewport: (projectId: string, viewportJson: string, options?: QueueOptions) => void
   clearViewport: (projectId: string) => void
-  deleteProject: (projectId: string) => Promise<void>
+  deleteProject: (projectId: string, receipt?: TReceipt) => Promise<void>
   pauseProject: (projectId: string) => () => void
   getUnsavedProject: (projectId: string) => TProject | undefined
 }
 
-type Write<T> = { generation: number } & (
-  | { kind: 'save'; project: T }
+type Write<T, R> = { generation: number } & (
+  | { kind: 'save'; project: T; receipt?: R }
   | { kind: 'viewport'; value: string }
 )
 interface Waiter { generation: number; resolve: () => void; reject: (error: unknown) => void }
-interface State<T> {
+interface State<T, R> {
   generation: number
-  pending: Write<T>[]
+  pending: Write<T, R>[]
   active: boolean
-  activeWrite?: Write<T>
+  activeWrite?: Write<T, R>
   deleting: boolean
   deleted: boolean
   pauses: number
@@ -36,11 +36,11 @@ interface State<T> {
 }
 
 /** 同项目只有一个 writer；完成屏障确认捕获的代次，失败保留最新快照供重试。 */
-export function createProjectPersistenceQueue<TProject>(
-  options: ProjectPersistenceQueueOptions<TProject>,
-): ProjectPersistenceQueue<TProject> {
-  const states = new Map<string, State<TProject>>()
-  const stateFor = (id: string): State<TProject> => {
+export function createProjectPersistenceQueue<TProject, TReceipt = never>(
+  options: ProjectPersistenceQueueOptions<TProject, TReceipt>,
+): ProjectPersistenceQueue<TProject, TReceipt> {
+  const states = new Map<string, State<TProject, TReceipt>>()
+  const stateFor = (id: string): State<TProject, TReceipt> => {
     let state = states.get(id)
     if (!state) {
       state = { generation: 0, pending: [], active: false, deleting: false, deleted: false,
@@ -49,11 +49,11 @@ export function createProjectPersistenceQueue<TProject>(
     }
     return state
   }
-  const cancelTimer = (state: State<TProject>): void => {
+  const cancelTimer = (state: State<TProject, TReceipt>): void => {
     if (state.timer) clearTimeout(state.timer)
     state.timer = undefined
   }
-  const pump = (id: string, state: State<TProject>): void => {
+  const pump = (id: string, state: State<TProject, TReceipt>): void => {
     if (state.active || state.deleting || state.deleted || state.pauses || state.pending.length === 0) return
     cancelTimer(state)
     const write = state.pending.shift()!
@@ -63,7 +63,7 @@ export function createProjectPersistenceQueue<TProject>(
     let failure: unknown
     let completed: Waiter[] = []
     void Promise.resolve().then(() => write.kind === 'save'
-      ? options.upsertProject(write.project)
+      ? options.upsertProject(write.project, write.receipt)
       : options.updateViewport(id, write.value)).then(() => {
       completed = state.waiters.filter((waiter) => waiter.generation <= write.generation)
       state.waiters = state.waiters.filter((waiter) => waiter.generation > write.generation)
@@ -71,7 +71,7 @@ export function createProjectPersistenceQueue<TProject>(
       failed = true
       failure = error
       // 后来的整工程快照覆盖本次失败；仅有视口更新不能代替丢失的工程内容。
-      if (!state.pending.some((pending) => pending.kind === 'save'
+      if ((write.kind === 'save' && write.receipt !== undefined) || !state.pending.some((pending) => pending.kind === 'save'
         || (write.kind === 'viewport' && pending.kind === 'viewport'))) state.pending.unshift(write)
       completed = state.waiters.splice(0)
       options.onBackgroundError(write.kind, error, id)
@@ -85,17 +85,19 @@ export function createProjectPersistenceQueue<TProject>(
       if (!failed) pump(id, state)
     })
   }
-  const schedule = (id: string, state: State<TProject>, delay: number): void => {
+  const schedule = (id: string, state: State<TProject, TReceipt>, delay: number): void => {
     cancelTimer(state)
     if (delay <= 0) pump(id, state)
     else state.timer = setTimeout(() => { state.timer = undefined; pump(id, state) }, delay)
   }
-  const acceptProject = (project: TProject, allowDeleting = false): { id: string; state: State<TProject>; generation: number } => {
+  const acceptProject = (project: TProject, allowDeleting = false, receipt?: TReceipt): { id: string; state: State<TProject, TReceipt>; generation: number } => {
     const id = options.getProjectId(project)
     const state = stateFor(id)
     if ((state.deleting && !allowDeleting) || state.deleted) throw new Error('项目正在删除或已经删除，不能保存，请检查项目状态')
     const generation = ++state.generation
-    state.pending = [{ kind: 'save', project, generation }]
+    // 显式执行关联绑定捕获时的快照；自动保存合并不能把它嫁接到后来的编辑。
+    state.pending = [...state.pending.filter((write) => write.kind === 'save' && write.receipt !== undefined),
+      { kind: 'save', project, generation, ...(receipt !== undefined ? { receipt } : {}) }]
     return { id, state, generation }
   }
   const queueProject = (project: TProject, queueOptions?: QueueOptions): void => {
@@ -104,8 +106,8 @@ export function createProjectPersistenceQueue<TProject>(
     const { id, state } = acceptProject(project, true)
     schedule(id, state, queueOptions?.immediate ? 0 : (queueOptions?.debounceMs ?? 260))
   }
-  const flushProject = async (project: TProject): Promise<void> => {
-    const { id, state, generation } = acceptProject(project)
+  const flushProject = async (project: TProject, receipt?: TReceipt): Promise<void> => {
+    const { id, state, generation } = acceptProject(project, false, receipt)
     const promise = new Promise<void>((resolve, reject) => state.waiters.push({ generation, resolve, reject }))
     schedule(id, state, 0)
     return promise
@@ -133,7 +135,7 @@ export function createProjectPersistenceQueue<TProject>(
       pump(id, state)
     }
   }
-  const deleteProject = async (id: string): Promise<void> => {
+  const deleteProject = async (id: string, receipt?: TReceipt): Promise<void> => {
     const state = stateFor(id)
     if (state.deleting) throw new Error('项目正在删除')
     state.deleting = true
@@ -141,7 +143,7 @@ export function createProjectPersistenceQueue<TProject>(
     const deleted = new Error('项目已进入删除流程，未完成的保存已取消')
     try {
       if (state.active) await new Promise<void>((resolve) => state.settled.add(resolve))
-      await options.deleteProject(id)
+      await options.deleteProject(id, receipt)
       state.pending = []
       state.deleted = true
       state.waiters.splice(0).forEach((waiter) => waiter.reject(deleted))

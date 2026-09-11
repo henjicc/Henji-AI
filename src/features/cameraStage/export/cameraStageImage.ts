@@ -81,6 +81,7 @@ export async function exportCameraStageImage(
   cameraRatio: number,
   requestId: string = crypto.randomUUID(),
   shortEdge = 720,
+  outputContext?: { aspectRatio: string; selectedTimeSec: number },
 ): Promise<CameraStageImageExportResult> {
   logger.info('3D 镜头静态帧持久化开始', {
     event: 'camera_stage.image_persist.start',
@@ -88,7 +89,9 @@ export async function exportCameraStageImage(
   })
   try {
     const captured = await captureCameraStageImageDataUrl(capture, cameraRatio, requestId, shortEdge)
-    const persisted = await persistSceneScreenshot(captured.dataUrl)
+    const persisted = await persistSceneScreenshot(captured.dataUrl, outputContext ? {
+      requestId, width: captured.width, height: captured.height, ...outputContext,
+    } : undefined)
     logger.info('3D 镜头静态帧持久化完成', {
       event: 'camera_stage.image_persist.completed',
       requestId,

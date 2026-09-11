@@ -17,6 +17,7 @@ const mainToolResponseSchema = z.object({
 }).strict()
 
 interface UtilityMainToolContext {
+  operationId?: string
   runId: string
   toolCallId: string
   signal: AbortSignal
@@ -24,6 +25,7 @@ interface UtilityMainToolContext {
 
 interface UtilityProxyRegistryOptions {
   executeMainTool: (payload: {
+    operationId?: string
     runId: string
     threadId: string
     toolCallId: string
@@ -59,6 +61,7 @@ export function createUtilityProxyRegistries(
       runId: context.runId,
       threadId,
       toolCallId: context.toolCallId,
+      operationId: context.operationId,
       toolName,
       input,
     }, context.signal))
@@ -93,6 +96,7 @@ export function createUtilityProxyRegistries(
   for (const definition of source.allDefinitions()) {
     const proxied: AgentToolDefinition = {
       ...definition,
+      requiresMainClaim: !localToolNames.has(definition.name),
       execute: localToolNames.has(definition.name)
         ? definition.execute
         : async (input, context) => (

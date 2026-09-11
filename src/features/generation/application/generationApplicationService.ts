@@ -155,13 +155,14 @@ export const generationApplicationService = {
     return prepareGenerationTask(input)
   },
 
-  async submit(input: GenerationPreparationInput): Promise<{ taskId: string; status: 'submitted'; taskRef: { kind: 'generation.task'; id: string } }> {
+  async submit(input: GenerationPreparationInput, context?: { operationId?: string }): Promise<{ taskId: string; status: 'submitted'; taskRef: { kind: 'generation.task'; id: string } }> {
     const preparation = prepareGenerationTask(input)
     const taskId = await runVisibleGenerationTaskCommand({
       input: input.prompt,
       model: input.modelId,
       type: input.mediaType,
       options: preparation.options as DynamicValue,
+      ...(context?.operationId ? { operationId: context.operationId } : {}),
     })
     if (!taskId) {
       throw new GenerationPreparationError('INVALID_INPUT', '生成任务未创建，请检查输入和当前模式')

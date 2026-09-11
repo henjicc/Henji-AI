@@ -11,6 +11,7 @@ import type {
   ApplicationUndoRequest,
   ApplicationVerificationCondition,
   ApplicationVerificationResult,
+  ApplicationExecutionPreparation,
 } from '../transactions'
 import type { ApplicationControlAccessContext } from '../registry'
 import type { ApplicationRef, JsonValue } from '../identifiers'
@@ -29,6 +30,9 @@ export interface ApplicationPlanRequest {
 
 export interface ApplicationExecutionContext extends ApplicationControlAccessContext {
   requestId: string
+  /** 正式网关在首次派发前持久化的逻辑操作身份；不能从业务输入提取。 */
+  operationId?: string
+  recordExecutionPreparation?: (preparation: ApplicationExecutionPreparation) => Promise<void>
   signal?: AbortSignal
   /** 仅由事务引擎创建；领域单步入口据此复用本批次，不逐字段确认。 */
   persistenceScopes?: ReadonlySet<string>

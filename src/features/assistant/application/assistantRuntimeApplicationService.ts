@@ -1,10 +1,10 @@
+import type { OperationSnapshot } from '@/core/assistant/operations'
 import type { AgentRunState } from '@/core/assistant/events'
 import type { AgentRunSummary } from '@/core/assistant/persistence'
 import type { AgentStartRunRequest } from '@/core/assistant/runtimeContracts'
 import {
   cancelAgentRun,
   getAgentRunSnapshot,
-  getAgentRunState,
   listAgentRuns,
   pauseAgentRun,
   resumeAgentRun,
@@ -32,6 +32,7 @@ export interface AssistantRunApplicationSnapshot {
   resumable: boolean
   retryable: boolean
   artifactRefs: string[]
+  operations: OperationSnapshot[]
   error: AgentRunState['error']
   updatedAt: string
   evidence: {
@@ -44,7 +45,7 @@ function artifactRefs(state: AgentRunState): string[] {
   return [...new Set(state.workingSummary?.artifactRefs ?? [])]
 }
 
-export function toAssistantRunApplicationSnapshot(state: AgentRunState): AssistantRunApplicationSnapshot {
+export function toAssistantRunApplicationSnapshot(state: AgentRunState, operations: OperationSnapshot[] = []): AssistantRunApplicationSnapshot {
   return {
     runRef: { kind: 'assistant.run', id: state.runId },
     runId: state.runId,
@@ -56,6 +57,7 @@ export function toAssistantRunApplicationSnapshot(state: AgentRunState): Assista
     resumable: state.status === 'paused',
     retryable: state.status === 'failed' || state.status === 'cancelled',
     artifactRefs: artifactRefs(state),
+    operations,
     error: state.error,
     updatedAt: state.updatedAt,
     evidence: {
@@ -70,13 +72,14 @@ export async function listAssistantRunSummaries(threadId?: string, limit = 30): 
 }
 
 export async function readAssistantRun(runId: string): Promise<AssistantRunApplicationSnapshot> {
-  return toAssistantRunApplicationSnapshot(await getAgentRunState(runId))
+  const snapshot = await getAgentRunSnapshot(runId)
+  return toAssistantRunApplicationSnapshot(snapshot.state, snapshot.operations)
 }
 
 export async function readAssistantRunWithEvents(runId: string) {
   const snapshot = await getAgentRunSnapshot(runId)
   return {
-    run: toAssistantRunApplicationSnapshot(snapshot.state),
+    run: toAssistantRunApplicationSnapshot(snapshot.state, snapshot.operations),
     events: snapshot.events,
   }
 }

@@ -55,6 +55,7 @@ export interface AppendVideoFrameExportPayloadDto {
 }
 
 export interface FinishVideoFrameExportPayloadDto {
+  cameraStageRequestId?: string
   sessionId: string
   targetPath?: string
 }

@@ -63,7 +63,7 @@ export async function continuePollingTask({
     updateProgress(task.id, currentProgress)
 
     // 先查缓存结果（主进程轮询完成但渲染层已重载的场景）
-    const cached = await window.henjiNative?.ai.consumePendingResult(serverTaskId)
+    const cached = task.operationId ? undefined : await window.henjiNative?.ai.consumePendingResult(serverTaskId)
     let resultObj: DynamicValueMap
     if (cached) {
       logger.info('[Workspace] 命中缓存轮询结果，跳过重新轮询', { taskId: task.id, serverTaskId })
@@ -87,7 +87,7 @@ export async function continuePollingTask({
         prompt: task.prompt,
         text: task.prompt,
         ...options,
-      }, handleProgress)
+      }, handleProgress, { requestId: task.id, operationId: task.operationId })
       createdFilePaths = normalizeCreatedFilePaths(result.createdFilePaths)
       resultObj = {
         url: result.url,
@@ -148,7 +148,7 @@ export async function continuePollingTask({
     })
     useGenerationTaskProgressStore.getState().clearProgress(task.id)
   } finally {
-    if (!ownershipTransferred && createdFilePaths.length > 0) {
+    if (!ownershipTransferred && !task.operationId && createdFilePaths.length > 0) {
       await getPlatform().image.releaseManagedGenerationMedia(createdFilePaths).catch((releaseError) => {
         logger.error('[Workspace] 续查结果媒体回滚失败', releaseError, {
           event: 'generation_workspace.polling.media_rollback.failed',

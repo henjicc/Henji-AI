@@ -8,7 +8,7 @@ import { applicationTransactionFailureFactsSchema, ApplicationTransactionFactsEr
 
 export type FrontendToolInvoker = (
   operation: FrontendToolOperation,
-  context: { runId: string; toolCallId: string; signal: AbortSignal }
+  context: { runId: string; toolCallId: string; signal: AbortSignal; operationId?: string }
 ) => Promise<ApplicationCapabilityResult>
 
 export function eraseToolDefinition<TInput, TOutput>(

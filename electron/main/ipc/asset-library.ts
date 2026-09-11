@@ -1,3 +1,8 @@
+import type { ApplicationRef } from '../../../src/core/application-control/identifiers'
+import { applicationPersistenceCorrelationSchema, type ApplicationPersistenceCorrelation } from '../../../src/core/application-control/persistenceCorrelation'
+import { AgentOperationStore } from '../services/agent-runtime/persistence/operation-store'
+import { getDb } from '../services/db'
+import { digestJson } from '../services/agent-runtime/tools/security'
 import { parseRecord, parseStringField, parseVoid, registerIpcHandler } from './registry'
 import { addAssetToLibrary, checkAssetPaths, createAsset, createLibrary, deleteAsset, deleteLibrary, inspectAsset, inspectAssets, inspectLibrary, listLibraries, listTags, queryAssets, rebaseAssetDataRoot, relocateAsset, removeAssetFromLibrary, renameLibrary, restoreLibrary, setAssetTags, touchAsset, updateAsset } from '../services/asset-library'
 import type { AssetLibrarySnapshotDto, AssetMediaType, AssetQuery, AssetSource, CreateAssetRequest } from '../services/asset-library/types'
@@ -34,11 +39,49 @@ function parseLibrarySnapshot(input: unknown): AssetLibrarySnapshotDto {
   }
 }
 
+
+function correlated<T>(parse: (input: unknown) => T) {
+  return (input: unknown): { value: T; operationCorrelation?: ApplicationPersistenceCorrelation } => {
+    const record = parseRecord(input)
+    return { value: parse(input), ...(record.operationCorrelation === undefined ? {} : {
+      operationCorrelation: applicationPersistenceCorrelationSchema.parse(record.operationCorrelation),
+    }) }
+  }
+}
+
+/** 复用原领域 SQL；新建的稳定引用由实际写入结果产生，与保存回执共用事务。 */
+function persistAssetWrite<T, R>(action: string, input: { value: T; operationCorrelation?: ApplicationPersistenceCorrelation },
+  webContentsId: number, write: (value: T) => R, targets: (result: R) => ApplicationRef[]): R {
+  if (!input.operationCorrelation) return write(input.value)
+  const correlation = input.operationCorrelation
+  const database = getDb()
+  const operations = new AgentOperationStore(database)
+  operations.assertPersistenceOwner(correlation.operationId, webContentsId)
+  return database.transaction(() => {
+    const result = write(input.value)
+    const actualTargets = targets(result)
+    if (correlation.targets.some((ref) => !actualTargets.some((target) => target.kind === ref.kind && target.id === ref.id))) {
+      throw new Error('OPERATION_PERSISTENCE_TARGET_INVALID:保存关联与实际素材目标不符')
+    }
+    if (!actualTargets[0]) throw new Error('OPERATION_PERSISTENCE_TARGET_MISSING')
+    operations.recordPersistence({ ...correlation, targets: actualTargets }, actualTargets[0], digestJson({ action, input: input.value }))
+    return result
+  }).immediate()
+}
+
 export function registerAssetLibraryIpc(): void {
   logger.info('开始注册资产库 IPC', { event: 'asset_library.ipc.register.start' })
-  registerIpcHandler('assetLibrary:createAsset', parseCreate, createAsset)
-  registerIpcHandler('assetLibrary:updateAsset', parseName, ({ id, name }) => updateAsset({ id, displayName: name }))
-  registerIpcHandler('assetLibrary:deleteAsset', (input) => parseStringField(input, 'id'), deleteAsset)
+  registerIpcHandler('assetLibrary:createAsset', correlated(parseCreate), (input, event) => {
+    const asset = persistAssetWrite('createAsset', input, event.sender.id, (value) => createAsset(value, { inspect: false }),
+      (created) => [{ kind: 'asset', id: created.id }])
+    // 必须在外层 SQLite 提交后启动异步检查，避免回滚后继续处理不存在的资产。
+    void inspectAsset(asset.id).catch((error: unknown) => logger.error('资产登记后检查失败', {
+      event: 'asset.create.inspect.failed', error, context: { assetId: asset.id },
+    }))
+    return asset
+  })
+  registerIpcHandler('assetLibrary:updateAsset', correlated(parseName), (input, event) => persistAssetWrite('updateAsset', input, event.sender.id, ({ id, name }) => updateAsset({ id, displayName: name }), (asset) => [{ kind: 'asset', id: asset.id }]))
+  registerIpcHandler('assetLibrary:deleteAsset', correlated((input) => parseStringField(input, 'id')), (input, event) => persistAssetWrite('deleteAsset', input, event.sender.id, deleteAsset, () => [{ kind: 'asset', id: input.value }]))
   registerIpcHandler('assetLibrary:queryAssets', parseQuery, queryAssets)
   registerIpcHandler('assetLibrary:touchAsset', (input) => parseStringField(input, 'id'), touchAsset)
   registerIpcHandler('assetLibrary:checkPaths', parseFilePaths, checkAssetPaths)
@@ -47,14 +90,14 @@ export function registerAssetLibraryIpc(): void {
   registerIpcHandler('assetLibrary:relocateAsset', (input) => { const record = parseRecord(input); return { id: requiredString(record, 'id'), filePath: requiredString(record, 'filePath') } }, ({ id, filePath }) => relocateAsset(id, filePath))
   registerIpcHandler('assetLibrary:listLibraries', parseVoid, listLibraries)
   registerIpcHandler('assetLibrary:inspectLibrary', (input) => parseStringField(input, 'id'), inspectLibrary)
-  registerIpcHandler('assetLibrary:createLibrary', (input) => parseStringField(input, 'name'), createLibrary)
-  registerIpcHandler('assetLibrary:renameLibrary', parseName, ({ id, name }) => renameLibrary(id, name))
-  registerIpcHandler('assetLibrary:deleteLibrary', (input) => parseStringField(input, 'id'), deleteLibrary)
-  registerIpcHandler('assetLibrary:restoreLibrary', parseLibrarySnapshot, restoreLibrary)
-  registerIpcHandler('assetLibrary:addToLibrary', parsePair, ({ libraryId, assetId }) => addAssetToLibrary(libraryId, assetId))
-  registerIpcHandler('assetLibrary:removeFromLibrary', parsePair, ({ libraryId, assetId }) => removeAssetFromLibrary(libraryId, assetId))
+  registerIpcHandler('assetLibrary:createLibrary', correlated((input) => parseStringField(input, 'name')), (input, event) => persistAssetWrite('createLibrary', input, event.sender.id, createLibrary, (library) => [{ kind: 'asset.library', id: library.id }]))
+  registerIpcHandler('assetLibrary:renameLibrary', correlated(parseName), (input, event) => persistAssetWrite('renameLibrary', input, event.sender.id, ({ id, name }) => renameLibrary(id, name), (library) => [{ kind: 'asset.library', id: library.id }]))
+  registerIpcHandler('assetLibrary:deleteLibrary', correlated((input) => parseStringField(input, 'id')), (input, event) => persistAssetWrite('deleteLibrary', input, event.sender.id, deleteLibrary, () => [{ kind: 'asset.library', id: input.value }]))
+  registerIpcHandler('assetLibrary:restoreLibrary', correlated(parseLibrarySnapshot), (input, event) => persistAssetWrite('restoreLibrary', input, event.sender.id, restoreLibrary, (library) => [{ kind: 'asset.library', id: library.id }]))
+  registerIpcHandler('assetLibrary:addToLibrary', correlated(parsePair), (input, event) => persistAssetWrite('addToLibrary', input, event.sender.id, ({ libraryId, assetId }) => addAssetToLibrary(libraryId, assetId), () => [{ kind: 'asset', id: input.value.assetId }]))
+  registerIpcHandler('assetLibrary:removeFromLibrary', correlated(parsePair), (input, event) => persistAssetWrite('removeFromLibrary', input, event.sender.id, ({ libraryId, assetId }) => removeAssetFromLibrary(libraryId, assetId), () => [{ kind: 'asset', id: input.value.assetId }]))
   registerIpcHandler('assetLibrary:listTags', parseVoid, listTags)
-  registerIpcHandler('assetLibrary:setAssetTags', parseAssetTags, ({ assetId, tags }) => setAssetTags(assetId, tags))
+  registerIpcHandler('assetLibrary:setAssetTags', correlated(parseAssetTags), (input, event) => persistAssetWrite('setAssetTags', input, event.sender.id, ({ assetId, tags }) => setAssetTags(assetId, tags), (asset) => [{ kind: 'asset', id: asset.id }]))
   registerIpcHandler('assetLibrary:rebaseDataRoot', (input) => { const record = parseRecord(input); return { oldRoot: requiredString(record, 'oldRoot'), newRoot: requiredString(record, 'newRoot') } }, ({ oldRoot, newRoot }) => rebaseAssetDataRoot(oldRoot, newRoot))
   logger.info('资产库 IPC 注册完成', {
     event: 'asset_library.ipc.register.completed',

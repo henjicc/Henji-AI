@@ -8,6 +8,7 @@ import {
   type ApplicationTransactionResult,
   type ApplicationUndoRequest,
 } from '../transactions'
+import { ApplicationTransactionFailure } from './transactionFailure'
 import type { ApplicationReflectionRegistry } from '../registry'
 import { ApplicationExecutionPlanStore } from './planStore'
 import { ApplicationPlanBuilder } from './planner'
@@ -150,9 +151,14 @@ export class ApplicationControlExecutionEngine extends ApplicationExecutionFailu
     request: ApplicationPlanRequest,
     context: ApplicationExecutionContext
   ): Promise<ApplicationChangePlan> {
-    const plan = await this.planner.build(request, context)
-    this.store.savePlan(plan)
-    return plan
+    try {
+      const plan = await this.planner.build(request, context)
+      this.store.savePlan(plan)
+      return plan
+    } catch (error) {
+      throw new ApplicationTransactionFailure({ status: 'failed', code: 'INVALID_PLAN', executionState: 'not_started',
+        message: (error instanceof Error ? error.message : String(error)).slice(0, 2000), recoverable: true })
+    }
   }
 
   async commit(
@@ -172,18 +178,19 @@ export class ApplicationControlExecutionEngine extends ApplicationExecutionFailu
       const idempotent = this.store.getIdempotent(request.idempotencyKey, request.planRef)
       if (idempotent) return idempotent
     } catch {
-      return failure('INVALID_PLAN', '幂等键已用于其他计划。', false)
+      return failure('INVALID_PLAN', '幂等键已用于其他计划。', false, { executionState: 'not_started' })
     }
     const stored = this.store.getPlan(request.planRef)
-    if (!stored || stored.committed) return failure('INVALID_PLAN', '计划不存在或已经提交。', false)
+    if (!stored || stored.committed) return failure('INVALID_PLAN', '计划不存在或已经提交。', false, { executionState: 'not_started' })
     if (new Date(stored.plan.expiresAt).getTime() <= this.now().getTime()) {
-      return failure('INVALID_PLAN', '计划已过期，请重新读取状态并规划。', true)
+      return failure('INVALID_PLAN', '计划已过期，请重新读取状态并规划。', true, { executionState: 'not_started' })
     }
     const approvalFailure = this.checkApproval(stored.plan, request)
     if (approvalFailure) return approvalFailure
     const transactionRef = this.createOpaqueRef('transaction')
     const expected = planRevisions(stored.plan)
     const persistenceReceipts: ApplicationPersistenceReceipt[] = []
+    let executionStarted = false
     try {
       assertExpectedRevisions(expected, request.expectedRevisions)
       const current = await this.readCurrentRevisions(stored.plan.steps, context)
@@ -194,10 +201,16 @@ export class ApplicationControlExecutionEngine extends ApplicationExecutionFailu
       const checked = await this.readCurrentRevisions(stored.plan.steps, context)
       assertExpectedRevisions(expected, checked)
       assertOwnership(Object.keys(checked))
+      await context.recordExecutionPreparation?.({ planRef: stored.plan.planRef,
+        conditions: stored.plan.verificationConditions, preparedAt: this.now().toISOString() })
+      assertOwnership()
       const execution = await withApplicationPersistenceBoundary({
         participants: this.resolvePersistenceParticipants?.(stored.plan.steps, context) ?? [],
         context,
-        execute: (batchContext) => this.executePlan(stored.plan, batchContext),
+        execute: (batchContext) => {
+          executionStarted = true
+          return this.executePlan(stored.plan, batchContext)
+        },
         completed: (result) => result.completed,
         onReceipt: (receipt) => persistenceReceipts.push(receipt),
       })
@@ -228,7 +241,7 @@ export class ApplicationControlExecutionEngine extends ApplicationExecutionFailu
       const undoRef = this.createUndoRef(stored.plan.steps, execution.completed)
       this.store.markCommitted(stored.plan.planRef)
       // 从此处起业务已执行；验证器抛错也不能再进入“零步失败”或允许重放的分支。
-      const verification = await this.verifier.verify(stored.plan.verificationConditions, evidence, context, this.now())
+      const verification = await this.verifier.verify(stored.plan.verificationConditions, evidence, context, this.now(), resultingRevisions)
         .catch(() => ({ verified: false, evidence: [],
           unmetConditions: ['无法完成提交后的正式状态验证，请先读取当前内容，不要重复已执行的修改。'], checkedAt: this.now().toISOString() }))
       if (evidence.length === 0) {
@@ -272,9 +285,9 @@ export class ApplicationControlExecutionEngine extends ApplicationExecutionFailu
       this.store.saveIdempotent(request.idempotencyKey, request.planRef, result)
       return result
     } catch (error) {
-      if (error instanceof ApplicationPersistenceBoundaryFailure
-        || (error instanceof ApplicationExecutionProgressFailure && error.completed.length > 0)) this.store.markCommitted(stored.plan.planRef)
+      if (executionStarted) this.store.markCommitted(stored.plan.planRef)
       const result = await this.handleExecutionFailure(error, stored.plan, transactionRef, context, persistenceReceipts)
+      if (!executionStarted && result.status === 'failed') result.executionState = 'not_started'
       this.store.saveIdempotent(request.idempotencyKey, request.planRef, result)
       return result
     }
@@ -371,6 +384,7 @@ export class ApplicationControlExecutionEngine extends ApplicationExecutionFailu
     context: ApplicationExecutionContext, execute: (assertOwnership: (scopes?: string[]) => void) => Promise<ApplicationTransactionResult>,
     readRevisions: ((steps: ApplicationPlannedStep[]) => Promise<Record<string, number>>)
       = (currentSteps) => this.readCurrentRevisions(currentSteps, context)) {
+    let executionEntered = false
     try {
       const participants = this.resolvePersistenceParticipants?.(steps, context) ?? []
       const scopes = () => [...this.affectedScopes(steps), ...participants.flatMap((owner) =>
@@ -388,18 +402,22 @@ export class ApplicationControlExecutionEngine extends ApplicationExecutionFailu
       }
       return await this.scopeGuard.run([
         ...[...heldScopes].map((scope) => `scope:${scope}`), `operation:${operationRef}`, `idempotency:${idempotencyKey}`,
-      ], context.signal, () => execute(assertOwnership))
-    } catch (error) { return this.toFailure(error) }
+      ], context.signal, () => { executionEntered = true; return execute(assertOwnership) })
+    } catch (error) {
+      const result = this.toFailure(error)
+      if (!executionEntered && result.status === 'failed') result.executionState = 'not_started'
+      return result
+    }
   }
 
   private checkApproval(
     plan: ApplicationChangePlan,
     request: ApplicationCommitRequest
   ): ApplicationTransactionResult | undefined {
-    if (plan.risk === 'R4') return failure('PERMISSION_DENIED', '该计划风险等级禁止执行。', false)
+    if (plan.risk === 'R4') return failure('PERMISSION_DENIED', '该计划风险等级禁止执行。', false, { executionState: 'not_started' })
     if (!plan.requiresApproval) return undefined
     if (!request.approvedRisk || RISK_RANK[request.approvedRisk] < RISK_RANK[plan.risk]) {
-      return failure('PERMISSION_DENIED', '计划需要匹配风险等级的明确批准。', true)
+      return failure('PERMISSION_DENIED', '计划需要匹配风险等级的明确批准。', true, { executionState: 'not_started' })
     }
     return undefined
   }

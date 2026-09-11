@@ -64,7 +64,7 @@ vi.mock('./trace', () => ({
   })),
 }))
 
-import { continuePolling, generate } from './runtime'
+import { continuePolling, generate, persistGeneratedResponse } from './runtime'
 
 const request = {
   modelId: 'fal-ai-z-image-turbo',
@@ -150,6 +150,20 @@ describe('ai-runtime continuePolling 日志闭环', () => {
     })
   })
 
+  it('先移交供应商回执再保存；保存失败后的恢复只下载原结果，不重新生成', async () => {
+    mockCompletedGenerateResult()
+    const receipts: unknown[] = []
+    mocks.saveMediaFromUrlTracked.mockImplementationOnce(async () => {
+      expect(receipts).toHaveLength(1)
+      throw new Error('保存中断')
+    })
+    await expect(generate(request, { onProviderResponse: (response) => receipts.push(response) })).rejects.toThrow('保存中断')
+    await expect(persistGeneratedResponse(request, receipts[0] as Awaited<ReturnType<typeof generate>>))
+      .resolves.toMatchObject({ status: 'completed', filePath: '/tmp/result.png' })
+    expect(mocks.generate).toHaveBeenCalledTimes(1)
+    expect(mocks.saveMediaFromUrlTracked).toHaveBeenCalledTimes(2)
+  })
+
   it('成功链路记录 start/result，并使用规范化 taskId 保存 pending 结果', async () => {
     mockCompletedProviderResult()
 
@@ -193,20 +207,20 @@ describe('ai-runtime continuePolling 日志闭环', () => {
     })
   })
 
-  it('落盘后的 pending 保存失败也记录 failed，首个异常保持原样抛出', async () => {
+  it('媒体落盘后的缓存失败保留正式结果，不把已生成媒体删除或改报业务失败', async () => {
     mockCompletedProviderResult()
     const failure = new Error('pending store unavailable')
     mocks.savePendingResult.mockImplementation(() => {
       throw failure
     })
 
-    await expect(continuePolling(request)).rejects.toBe(failure)
+    await expect(continuePolling(request)).resolves.toMatchObject({ status: 'completed', filePath: '/tmp/result.png' })
 
-    expect(mocks.releaseSavedMediaFileLease).toHaveBeenCalledWith('/tmp/result.png')
-    expect(mocks.logger.error).toHaveBeenCalledWith(
-      '后端轮询失败',
+    expect(mocks.releaseSavedMediaFileLease).not.toHaveBeenCalled()
+    expect(mocks.logger.warn).toHaveBeenCalledWith(
+      '轮询结果已保存，缓存回执暂未完成',
       expect.objectContaining({
-        event: 'ai_runtime.poll.failed',
+        event: 'ai_runtime.poll.receipt_cache.failed',
         taskId: 'task-1',
         error: expect.objectContaining({ message: 'pending store unavailable' }),
       }),

@@ -1,4 +1,5 @@
 import path from 'node:path'
+import { applicationPersistenceCorrelationSchema } from '../../../src/core/application-control/persistenceCorrelation'
 
 import {
   IMAGE_EDIT_BRUSH_TILE_MAX_RAW_BYTES_V3,
@@ -45,6 +46,7 @@ export interface ForkDocumentPayload extends BasePayload {
   targetDocumentRef: string
 }
 export interface SaveDocumentPayload extends BasePayload {
+  operationCorrelation?: import('../../../src/core/application-control/persistenceCorrelation').ApplicationPersistenceCorrelation
   documentId: string
   revision: number
   document: unknown
@@ -313,6 +315,9 @@ export function parseImageEditorV3SavePayload(input: unknown): SaveDocumentPaylo
   }
   return {
     requestId: readRequestId(record),
+    ...(record.operationCorrelation !== undefined ? {
+      operationCorrelation: applicationPersistenceCorrelationSchema.parse(record.operationCorrelation),
+    } : {}),
     ...normalized,
     expectedRevision,
     history,

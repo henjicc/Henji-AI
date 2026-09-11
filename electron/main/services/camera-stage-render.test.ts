@@ -71,6 +71,19 @@ vi.mock('./video/frame-export', () => ({
   cleanupAllVideoFrameExports: mocks.cleanupAllVideoFrameExports,
 }))
 
+vi.mock('./camera-stage-render-task-store', () => ({
+  createCameraStageRenderTaskPersistence: () => {
+    const records = new Map<string, import('./camera-stage-render-task-registry').CameraStageRenderTaskRecord>()
+    return {
+      get: (id: string) => structuredClone(records.get(id) ?? null),
+      list: (project: string) => structuredClone([...records.values()].filter((record) => record.canvasProjectId === project)),
+      save: (record: import('./camera-stage-render-task-registry').CameraStageRenderTaskRecord) => {
+        records.set(record.requestId, structuredClone(record))
+      },
+    }
+  },
+}))
+
 vi.mock('./logging/main-logger', () => ({
   createMainLogger: () => ({
     info: vi.fn(),

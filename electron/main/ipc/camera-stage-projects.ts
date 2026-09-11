@@ -9,9 +9,16 @@ import {
   type CameraStageProjectWriteDto,
 } from '../services/camera-stage-projects'
 import { parseRecord, parseStringField, parseVoid, registerIpcHandler } from './registry'
+import { applicationPersistenceCorrelationSchema, type ApplicationPersistenceCorrelation } from '../../../src/core/application-control/persistenceCorrelation'
+import { getDb } from '../services/db'
+import { AgentOperationStore } from '../services/agent-runtime/persistence/operation-store'
+import { digestJson } from '../services/agent-runtime/tools/security'
+
+type CorrelatedProjectWrite = CameraStageProjectWriteDto & { operationCorrelation?: ApplicationPersistenceCorrelation }
 
 interface ProjectIdPayload {
   projectId: string
+  operationCorrelation?: ApplicationPersistenceCorrelation
 }
 
 interface RenamePayload extends ProjectIdPayload {
@@ -19,7 +26,7 @@ interface RenamePayload extends ProjectIdPayload {
   updatedAt: number
 }
 
-function parseProjectRecord(input: unknown): CameraStageProjectWriteDto {
+function parseProjectRecord(input: unknown): CorrelatedProjectWrite {
   const record = parseRecord(input)
   const id = record.id
   const name = record.name
@@ -45,11 +52,16 @@ function parseProjectRecord(input: unknown): CameraStageProjectWriteDto {
     updatedAt,
     objectCount,
     sceneJson,
+    ...(record.operationCorrelation !== undefined ? {
+      operationCorrelation: applicationPersistenceCorrelationSchema.parse(record.operationCorrelation),
+    } : {}),
   }
 }
 
 function parseProjectIdPayload(input: unknown): ProjectIdPayload {
-  return { projectId: parseStringField(input, 'projectId') }
+  const record = parseRecord(input)
+  return { projectId: parseStringField(input, 'projectId'), ...(record.operationCorrelation !== undefined
+    ? { operationCorrelation: applicationPersistenceCorrelationSchema.parse(record.operationCorrelation) } : {}) }
 }
 
 function parseRenamePayload(input: unknown): RenamePayload {
@@ -63,7 +75,14 @@ function parseRenamePayload(input: unknown): RenamePayload {
   if (typeof name !== 'string' || name.trim().length === 0) {
     throw new Error('Expected non-empty project name')
   }
-  return { projectId, name: name.trim(), updatedAt }
+  return { ...parseProjectIdPayload(input), projectId, name: name.trim(), updatedAt }
+}
+
+function assertProjectTargets(correlation: ApplicationPersistenceCorrelation, projectId: string): void {
+  if (correlation.targets.some((ref) => !ref.kind.startsWith('camera_stage.')
+    || (ref.id !== projectId && !ref.id.startsWith(`${projectId}:`)))) {
+    throw new Error('[OPERATION_PERSISTENCE_TARGET_INVALID] 保存关联必须属于原三维工程')
+  }
 }
 
 export function registerCameraStageProjectsIpc(): void {
@@ -77,25 +96,38 @@ export function registerCameraStageProjectsIpc(): void {
     parseProjectIdPayload,
     ({ projectId }) => getCameraStageProject(projectId),
   )
-  registerIpcHandler<CameraStageProjectWriteDto, void>(
+  registerIpcHandler<CorrelatedProjectWrite, void>(
     'cameraStageProjects:upsert',
     parseProjectRecord,
-    (record) => {
-      upsertCameraStageProject(record)
+    (input, event) => {
+      const { operationCorrelation, ...record } = input
+      if (!operationCorrelation) { upsertCameraStageProject(record); return }
+      assertProjectTargets(operationCorrelation, record.id)
+      new AgentOperationStore(getDb()).commitPersistence(operationCorrelation, { kind: 'camera_stage.project', id: record.id },
+        event.sender.id, digestJson(record), () => upsertCameraStageProject(record))
     },
   )
   registerIpcHandler<RenamePayload, void>(
     'cameraStageProjects:rename',
     parseRenamePayload,
-    ({ projectId, name, updatedAt }) => {
-      renameCameraStageProject(projectId, name, updatedAt)
+    ({ projectId, name, updatedAt, operationCorrelation }, event) => {
+      const write = () => renameCameraStageProject(projectId, name, updatedAt)
+      if (!operationCorrelation) { write(); return }
+      assertProjectTargets(operationCorrelation, projectId)
+      new AgentOperationStore(getDb()).commitPersistence(operationCorrelation, { kind: 'camera_stage.project', id: projectId },
+        event.sender.id, digestJson({ action: 'rename', projectId, name, updatedAt }), write)
     },
   )
   registerIpcHandler<ProjectIdPayload, void>(
     'cameraStageProjects:delete',
     parseProjectIdPayload,
-    async ({ projectId }) => {
-      await deleteCameraStageProject(projectId)
+    async ({ projectId, operationCorrelation }, event) => {
+      if (!operationCorrelation) { await deleteCameraStageProject(projectId); return }
+      assertProjectTargets(operationCorrelation, projectId)
+      const operations = new AgentOperationStore(getDb())
+      operations.assertPersistenceOwner(operationCorrelation.operationId, event.sender.id)
+      await deleteCameraStageProject(projectId, (write) => operations.commitPersistence(operationCorrelation,
+        { kind: 'camera_stage.project', id: projectId }, event.sender.id, digestJson({ action: 'delete', projectId }), write))
     },
   )
 }

@@ -128,7 +128,7 @@ function applyStateKeyframeMotion(
   }
 }
 
-export async function applyCameraStageMotion(input: CameraStageMotionInput): Promise<CameraStageMotionResult> {
+export async function applyCameraStageMotion(input: CameraStageMotionInput, context?: { operationId?: string }): Promise<CameraStageMotionResult> {
   logger.info('三维运镜应用开始', {
     event: 'camera_stage.motion.apply.start',
     projectId: input.projectId,
@@ -144,7 +144,10 @@ export async function applyCameraStageMotion(input: CameraStageMotionInput): Pro
     const target = resolveTarget(input)
     const undoToken = captureCameraStageUndo(input.projectId)
     const applied = applyStateKeyframeMotion(input, camera, target)
-    await saveCurrentProject()
+    await saveCurrentProject(context, [
+      { kind: 'camera_stage.camera', id: `${input.projectId}:${camera.id}` },
+      ...applied.affectedStateKeyframeIds.map((id) => ({ kind: 'camera_stage.state_keyframe', id: `${input.projectId}:${id}` })),
+    ])
     const result: CameraStageMotionResult = {
       projectId: input.projectId,
       cameraId: camera.id,

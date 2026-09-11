@@ -1,4 +1,5 @@
 import { getPlatform } from '@/platform'
+import type { ApplicationPersistenceCorrelation } from '@/core/application-control/persistenceCorrelation'
 import type {
   StoryboardProjectPlatformRecord,
   StoryboardProjectPlatformSummary,
@@ -27,11 +28,12 @@ export async function updateStoryboardProjectViewportRecord(
 export async function renameStoryboardProjectRecord(
   projectId: string,
   name: string,
-  updatedAt: number
+  updatedAt: number,
+  operationCorrelation?: ApplicationPersistenceCorrelation,
 ): Promise<void> {
-  await getPlatform().storyboardProjects.renameProjectRecord(projectId, name, updatedAt)
+  await getPlatform().storyboardProjects.renameProjectRecord(projectId, name, updatedAt, operationCorrelation)
 }
 
-export async function deleteStoryboardProjectRecord(projectId: string): Promise<void> {
-  await getPlatform().storyboardProjects.deleteProjectRecord(projectId)
+export async function deleteStoryboardProjectRecord(projectId: string, operationCorrelation?: ApplicationPersistenceCorrelation): Promise<void> {
+  await getPlatform().storyboardProjects.deleteProjectRecord(projectId, operationCorrelation)
 }

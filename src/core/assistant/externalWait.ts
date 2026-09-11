@@ -94,6 +94,7 @@ export const henjiScriptCheckpointSchema = z.object({
   effects: z.array(agentObservedEffectSchema).max(512),
   steps: z.array(checkpointStepReceiptSchema).max(128),
   verificationState: z.object({ evidence: z.array(z.string().max(500)).max(128) }).strict(),
+  removedRefs: z.array(applicationRefSchema).max(128).optional(),
 }).strict()
 export type HenjiScriptCheckpoint = z.infer<typeof henjiScriptCheckpointSchema>
 

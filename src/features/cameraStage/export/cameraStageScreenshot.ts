@@ -33,8 +33,8 @@ export interface CameraStageFrameResult {
 }
 
 /** 仅持久化为应用媒体，供画布节点消费；不会触发系统保存对话框。 */
-export async function persistSceneScreenshot(dataUrl: string): Promise<CameraStageFrameResult> {
-  const persistedPath = await persistImageSource(dataUrl)
+export async function persistSceneScreenshot(dataUrl: string, renderContext?: import('@/platform/contracts/cameraStageRender').CameraStageImagePersistenceContext): Promise<CameraStageFrameResult> {
+  const persistedPath = await persistImageSource(dataUrl, renderContext)
   return { mediaUrl: toDisplaySrc(persistedPath), mediaPath: persistedPath }
 }
 

@@ -25,6 +25,7 @@ export interface CameraStageVideoExportResult {
 }
 
 export interface CameraStageVideoExportOptions {
+  cameraStageRequestId?: string
   projectName: string
   cameraRatio: number
   /** 本次导出会实际参与渲染的机位数量（由导出入口按渲染机位时间表统计） */
@@ -149,7 +150,7 @@ export async function exportCameraStageVideo(
     throwIfCancelled(options)
     renderingComplete = true
     options.onProgress({ phase: 'encoding', doneFrames: 0, totalFrames: frameCount })
-    const result = await finishVideoFrameExport({ sessionId, targetPath: targetPath ?? undefined })
+    const result = await finishVideoFrameExport({ sessionId, targetPath: targetPath ?? undefined, cameraStageRequestId: options.cameraStageRequestId })
     sessionId = null
     options.onSession(null)
     logger.info('离屏视频导出完成', {

@@ -63,8 +63,8 @@ export function getDebugDir(category: string): string {
   return debugDir
 }
 
-export function persistImageBytes(bytes: Buffer, extension: string | undefined): string {
-  return persistContentAddressedImage(bytes, extension).filePath
+export function persistImageBytes(bytes: Buffer, extension: string | undefined, beforeWrite?: (filePath: string, bytes: Buffer) => void): string {
+  return persistContentAddressedImage(bytes, extension, beforeWrite).filePath
 }
 
 export interface PersistedImageBytes {
@@ -81,12 +81,14 @@ interface ContentAddressedImageResult {
 function persistContentAddressedImage(
   bytes: Buffer,
   extension: string | undefined,
+  beforeWrite?: (filePath: string, bytes: Buffer) => void,
 ): ContentAddressedImageResult {
   if (bytes.length === 0) throw new Error('Image bytes are empty')
   const digest = crypto.createHash('md5').update(bytes).digest('hex')
   const ext = normalizeExtension(extension)
   const filePath = path.join(getUploadsDir(), `${digest}.${ext}`)
   const created = !fs.existsSync(filePath)
+  beforeWrite?.(filePath, bytes)
   if (created) fs.writeFileSync(filePath, bytes)
   return { filePath, created }
 }

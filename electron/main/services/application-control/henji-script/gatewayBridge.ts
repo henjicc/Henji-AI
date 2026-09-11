@@ -1,4 +1,5 @@
 import { isDeepStrictEqual } from 'node:util'
+import { createHash } from 'node:crypto'
 import type { ApplicationRef } from '../../../../../src/core/application-control'
 import type { HostContextSnapshot, HostScopeRevisions } from '../../../../../src/core/assistant/hostContracts'
 import type { AgentObservedEffect } from '../../../../../src/core/assistant/observedEffect'
@@ -12,7 +13,12 @@ import { businessResultFingerprint } from '../../agent-runtime/tools/progress-ev
 
 function refKey(ref: ApplicationRef): string { return ref.kind + '\u0000' + ref.id }
 
+export function scriptOperationKey(scriptRunRef: string, stepId: string, toolName: string): string {
+  return `script-operation:${createHash('sha256').update(`${scriptRunRef}\0${stepId}\0${toolName}`).digest('hex')}`
+}
+
 export interface ScriptExecutionContext {
+  operationId?: string
   runId: string
   threadId: string
   toolCallId: string
@@ -151,6 +157,11 @@ export class HenjiScriptGatewayBridge {
     const result = await context.gateway.execute({
       runId: context.runId, threadId: context.threadId,
       toolCallId: `script:${scriptRunRef}:${instruction.stepId}:${toolName}`,
+      operationKey: definition.readOnly
+        ? scriptOperationKey(`${scriptRunRef}:read:${businessResultFingerprint('read-context', {
+          runId: context.runId, rendererSessionId: context.getHostContext(context.runId)?.rendererSessionId, expectedRevisions,
+        })}`, instruction.stepId, toolName)
+        : scriptOperationKey(scriptRunRef, instruction.stepId, toolName),
       toolName, input,
       expectedRevisions,
       approvalMode: 'full_access', explicitUserIntent: true,
@@ -236,9 +247,21 @@ export class HenjiScriptGatewayBridge {
     /** remove 成功并读回确认后登记；同段脚本内再读这个引用即视为已确认不存在。 */
     removedRefs?: Set<string>,
   ): Promise<void> {
+    const assertReadTarget = (output: unknown, ref: ApplicationRef, startedAt: number): void => {
+      const value = isRecord(output) ? output : {}
+      const actual = isRecord(value.ref) ? value.ref : {}
+      const revisions = isRecord(value.revisions) ? value.revisions : {}
+      if (actual.kind !== ref.kind || actual.id !== ref.id
+        || typeof value.capturedAt !== 'string' || !Number.isFinite(Date.parse(value.capturedAt)) || Date.parse(value.capturedAt) < startedAt
+        || Object.entries(revisions).some(([scope, revision]) => typeof revision !== 'number'
+          || revision < (context.revisionCursor?.[scope] ?? 0))) {
+        throw new HenjiScriptError('SCRIPT_VERIFICATION_FAILED', 'verify', '正式回读没有确认原目标的当前版本', instruction.location, instruction.stepId)
+      }
+    }
     if (instruction.api === 'entities.update') {
       const ref = fullRef(args[0], instruction.location)
       const expected = isRecord(args[1]) ? args[1] : {}
+      const startedAt = Date.now()
       const read = await this.gatewayCall('read_application_entity', {
         ref, propertyIds: Object.keys(expected),
       }, instruction, `${scriptRunRef}:verify`, context)
@@ -248,11 +271,14 @@ export class HenjiScriptGatewayBridge {
       if (mismatch) {
         throw new HenjiScriptError('SCRIPT_VERIFICATION_FAILED', 'verify', `属性 ${mismatch[0]} 未从正式状态源读回目标值`, instruction.location, instruction.stepId)
       }
+      assertReadTarget(read.output, ref, startedAt)
       evidence.push(`${instruction.stepId}:read-back:${ref.kind}`)
       return
     }
     if (instruction.api === 'entities.create') {
       const created = new Map<string, ApplicationRef>()
+      const options = isRecord(args[1]) ? args[1] : {}
+      const expected = isRecord(options.properties) ? options.properties : {}
       for (const effect of observedEffects) {
         if (effect.effect !== 'create') continue
         for (const ref of effect.targetRefs) created.set(`${ref.kind}\u0000${ref.id}`, ref)
@@ -262,25 +288,33 @@ export class HenjiScriptGatewayBridge {
         throw new HenjiScriptError('SCRIPT_VERIFICATION_FAILED', 'verify', '创建结果没有完整稳定引用', instruction.location, instruction.stepId)
       }
       for (const ref of created.values()) {
+        const expectedProperties = ref.kind === args[0] ? expected : {}
+        const startedAt = Date.now()
         const read = await this.gatewayCall(
-          'read_application_entity', { ref, propertyIds: [] }, instruction,
+          'read_application_entity', { ref, propertyIds: Object.keys(expectedProperties) }, instruction,
           `${scriptRunRef}:verify:${ref.kind}:${ref.id}`, context,
         )
         effectLedger.push(...read.effects)
+        const properties = isRecord(read.output) && isRecord(read.output.properties) ? read.output.properties : {}
+        const mismatch = Object.entries(expectedProperties).find(([key, value]) => !isDeepStrictEqual(properties[key], value))
+        if (mismatch) throw new HenjiScriptError('SCRIPT_VERIFICATION_FAILED', 'verify',
+          `创建后的属性 ${mismatch[0]} 未从正式状态源读回目标值`, instruction.location, instruction.stepId)
+        assertReadTarget(read.output, ref, startedAt)
       }
       evidence.push(`${instruction.stepId}:created-read-back:${created.size}`)
       return
     }
     if (instruction.api === 'entities.remove') {
       const ref = fullRef(args[0], instruction.location)
-      const listed = await this.gatewayCall('list_application_entities', { entityType: ref.kind, limit: 200 }, instruction, `${scriptRunRef}:verify`, context)
-      effectLedger.push(...listed.effects)
-      const listedRefs = isRecord(listed.output) && Array.isArray(listed.output.refs) ? listed.output.refs : []
-      if (listedRefs.some((candidate) => isRecord(candidate) && candidate.kind === ref.kind && candidate.id === ref.id)) {
-        throw new HenjiScriptError('SCRIPT_VERIFICATION_FAILED', 'verify', '删除后实体仍存在', instruction.location, instruction.stepId)
+      try {
+        await this.gatewayCall('read_application_entity', { ref, propertyIds: [] }, instruction, `${scriptRunRef}:verify`, context)
+      } catch (error) {
+        if (!(error instanceof AgentToolGatewayError) || error.code !== 'NOT_FOUND') throw error
+        evidence.push(`${instruction.stepId}:absence-read-back:${ref.kind}`)
+        removedRefs?.add(refKey(ref))
+        return
       }
-      evidence.push(`${instruction.stepId}:absence-read-back:${ref.kind}`)
-      removedRefs?.add(refKey(ref))
+      throw new HenjiScriptError('SCRIPT_VERIFICATION_FAILED', 'verify', '删除后实体仍存在', instruction.location, instruction.stepId)
     }
   }
 }

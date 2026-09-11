@@ -1,3 +1,4 @@
+import type { ApplicationPersistenceCorrelation } from '../../src/core/application-control/persistenceCorrelation'
 import type {
   AgentTraceCaptureMode,
   AgentTraceDetailResult,
@@ -275,9 +276,9 @@ export interface HenjiCreateAssetInput { filePath: string; mediaType: HenjiAsset
 export interface HenjiAssetQueryInput { mediaType?: HenjiAssetMediaType; libraryId?: string; tag?: string; keyword?: string; page?: number; pageSize?: number; sort?: 'created' | 'recent' }
 export interface HenjiAssetPage { items: HenjiAssetRecord[]; total: number; page: number; pageSize: number }
 export interface HenjiAssetLibraryApi {
-  createAsset(input: HenjiCreateAssetInput): Promise<HenjiAssetRecord>
-  updateAsset(id: string, name: string): Promise<HenjiAssetRecord>
-  deleteAsset(id: string): Promise<void>
+  createAsset(input: HenjiCreateAssetInput, operationCorrelation?: ApplicationPersistenceCorrelation): Promise<HenjiAssetRecord>
+  updateAsset(id: string, name: string, operationCorrelation?: ApplicationPersistenceCorrelation): Promise<HenjiAssetRecord>
+  deleteAsset(id: string, operationCorrelation?: ApplicationPersistenceCorrelation): Promise<void>
   queryAssets(input: HenjiAssetQueryInput): Promise<HenjiAssetPage>
   touchAsset(id: string): Promise<void>
   checkPaths(filePaths: string[]): Promise<boolean[]>
@@ -286,13 +287,13 @@ export interface HenjiAssetLibraryApi {
   relocateAsset(id: string, filePath: string): Promise<HenjiAssetRecord>
   listLibraries(): Promise<HenjiAssetLibraryRecord[]>
   inspectLibrary(id: string): Promise<HenjiAssetLibrarySnapshot>
-  createLibrary(name: string): Promise<HenjiAssetLibraryRecord>
-  renameLibrary(id: string, name: string): Promise<HenjiAssetLibraryRecord>
-  deleteLibrary(id: string): Promise<void>
-  restoreLibrary(snapshot: HenjiAssetLibrarySnapshot): Promise<HenjiAssetLibraryRecord>
-  addToLibrary(libraryId: string, assetId: string): Promise<void>
-  removeFromLibrary(libraryId: string, assetId: string): Promise<void>
+  createLibrary(name: string, operationCorrelation?: ApplicationPersistenceCorrelation): Promise<HenjiAssetLibraryRecord>
+  renameLibrary(id: string, name: string, operationCorrelation?: ApplicationPersistenceCorrelation): Promise<HenjiAssetLibraryRecord>
+  deleteLibrary(id: string, operationCorrelation?: ApplicationPersistenceCorrelation): Promise<void>
+  restoreLibrary(snapshot: HenjiAssetLibrarySnapshot, operationCorrelation?: ApplicationPersistenceCorrelation): Promise<HenjiAssetLibraryRecord>
+  addToLibrary(libraryId: string, assetId: string, operationCorrelation?: ApplicationPersistenceCorrelation): Promise<void>
+  removeFromLibrary(libraryId: string, assetId: string, operationCorrelation?: ApplicationPersistenceCorrelation): Promise<void>
   listTags(): Promise<string[]>
-  setAssetTags(assetId: string, tags: string[]): Promise<HenjiAssetRecord>
+  setAssetTags(assetId: string, tags: string[], operationCorrelation?: ApplicationPersistenceCorrelation): Promise<HenjiAssetRecord>
   rebaseDataRoot(oldRoot: string, newRoot: string): Promise<number>
 }

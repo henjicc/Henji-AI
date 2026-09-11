@@ -67,6 +67,7 @@ export interface AgentRunnerDependencies {
 }
 
 export interface AgentRunnerOptions {
+  operationRecovery?: import('../../../../../src/core/assistant/operations').OperationRecovery
   runId: string
   request: AgentStartRunRequest
   memoryContext?: AgentMemoryContextEntry[]

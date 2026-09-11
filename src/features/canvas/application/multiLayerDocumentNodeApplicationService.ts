@@ -329,6 +329,7 @@ export function createMultiLayerDocumentNodeApplicationService(
               )
             }
             await dependencies.canvasPort.commitMaterializedProjection({
+              operationCorrelation: input.operationCorrelation,
               projectId: input.projectId,
               nodeId: input.nodeId,
               expectedSession: previous,

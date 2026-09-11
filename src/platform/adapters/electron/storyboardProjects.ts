@@ -28,8 +28,8 @@ export function createElectronStoryboardProjects(): StoryboardProjectsPlatform {
     upsertProjectRecord: (record: StoryboardProjectPlatformWrite) => getNativeStoryboardProjects().upsertProjectRecord(record),
     updateProjectViewportRecord: (projectId: string, viewportJson: string) =>
       getNativeStoryboardProjects().updateProjectViewportRecord(projectId, viewportJson),
-    renameProjectRecord: (projectId: string, name: string, updatedAt: number) =>
-      getNativeStoryboardProjects().renameProjectRecord(projectId, name, updatedAt),
-    deleteProjectRecord: (projectId: string) => getNativeStoryboardProjects().deleteProjectRecord(projectId),
+    renameProjectRecord: (projectId, name, updatedAt, operationCorrelation) =>
+      getNativeStoryboardProjects().renameProjectRecord(projectId, name, updatedAt, operationCorrelation),
+    deleteProjectRecord: (projectId, operationCorrelation) => getNativeStoryboardProjects().deleteProjectRecord(projectId, operationCorrelation),
   }
 }

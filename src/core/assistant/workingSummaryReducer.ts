@@ -130,7 +130,6 @@ export function reduceAgentWorkingSummary(
     next = { ...next, activeStep: currentStep(event) }
   } else if (event.type === 'ToolCompleted') {
     const step = completeActiveStep(next, event)
-    const recoveredTool = next.recovery.toolName === event.toolName
     next = {
       ...next,
       activeStep: null,
@@ -141,13 +140,8 @@ export function reduceAgentWorkingSummary(
         references: event.resultReferences ?? {},
         observedAt: event.occurredAt,
       }, 12),
-      unresolvedItems: next.unresolvedItems.filter((item) => !item.includes(event.toolName)),
-      recovery: recoveredTool ? {
-        mode: 'none',
-        reason: `${event.toolName} 已在后续调用中成功完成。`,
-        toolName: null,
-        toolCategory: null,
-      } : next.recovery,
+      unresolvedItems: next.unresolvedItems,
+      recovery: next.recovery,
     }
   } else if (event.type === 'ToolFailed') {
     const step = failActiveStep(next, event)
@@ -178,6 +172,7 @@ export function reduceAgentWorkingSummary(
         reason: `${event.toolName} 的写入副作用未知，恢复后必须先查询真实状态。`,
         toolName: event.toolName,
         toolCategory: step.toolCategory,
+        toolCallId: event.toolCallId,
       } : next.recovery,
     }
   } else if (event.type === 'ApprovalRequired') {

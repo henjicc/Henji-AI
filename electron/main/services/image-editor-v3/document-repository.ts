@@ -20,6 +20,8 @@ import {
   normalizePersistedImageEditHistoryV3,
 } from './history-persistence'
 import type { ImageEditCommandHistorySnapshotV3 } from '../../../../src/core/imageEdit/v3/commandHistoryCodec'
+import { applicationPersistenceReceiptSchema, type ApplicationPersistenceCorrelation,
+  type ApplicationPersistenceReceiptRecord } from '../../../../src/core/application-control/persistenceCorrelation'
 
 const DOCUMENT_ID_PATTERN = /^[A-Za-z0-9_-]{1,128}$/
 const MAX_DOCUMENT_BYTES = 64 * 1024 * 1024
@@ -39,6 +41,8 @@ export class DocumentRevisionConflictError extends Error {
 }
 
 export interface CreateDocumentRequest {
+  operationCorrelation?: ApplicationPersistenceCorrelation
+  prepareOperationReceipt?: (receipt: ApplicationPersistenceReceiptRecord) => void
   documentId?: string
   revision?: number
   document: unknown
@@ -49,6 +53,8 @@ export interface CreateDocumentRequest {
 }
 
 export interface SaveDocumentRequest {
+  operationCorrelation?: ApplicationPersistenceCorrelation
+  prepareOperationReceipt?: (receipt: ApplicationPersistenceReceiptRecord) => void
   documentId: string
   expectedRevision: number
   /** 合并多条命令后允许 revision 跳跃，但必须严格大于磁盘 revision。 */
@@ -70,6 +76,7 @@ export interface ForkDocumentRequest {
 export interface DocumentRepositoryDependencies {
   writeAtomically?: (targetPath: string, content: Uint8Array) => Promise<void>
   maxDocumentBytes?: number
+  confirmOperationReceipt?: (receipt: ApplicationPersistenceReceiptRecord) => void
 }
 
 function validateDocumentId(documentId: string): string {
@@ -94,7 +101,7 @@ export function validateImageEditDocumentEnvelope(value: unknown): ImageEditDocu
   if (!isRecord(value)) throw new Error('Invalid image edit document: expected object')
   const allowedKeys = new Set([
     'format', 'formatVersion', 'documentId', 'revision', 'createdAt', 'updatedAt',
-    'document', 'history', 'resourceRefs', 'previewRef',
+    'document', 'history', 'resourceRefs', 'previewRef', 'pendingOperationReceipts',
   ])
   if (Object.keys(value).some((key) => !allowedKeys.has(key))) {
     throw new Error('Invalid image edit document: unknown field')
@@ -147,11 +154,20 @@ export function validateImageEditDocumentEnvelope(value: unknown): ImageEditDocu
     ...(history ? { history } : {}),
     resourceRefs: refs,
     previewRef: normalizedPreviewRef,
+    ...(value.pendingOperationReceipts !== undefined ? {
+      pendingOperationReceipts: applicationPersistenceReceiptSchema.array().max(256).parse(value.pendingOperationReceipts),
+    } : {}),
   }
 }
 
 function serializeEnvelope(envelope: ImageEditDocumentEnvelope): Buffer {
   return Buffer.from(`${JSON.stringify(envelope)}\n`, 'utf8')
+}
+
+/** 绑定实际内容，排除更新时间和回执自身；保存重试可核对相同内容而不重复业务命令。 */
+export function imageEditPersistenceDigest(input: Pick<ImageEditDocumentEnvelope, 'document' | 'history' | 'resourceRefs' | 'previewRef'>): string {
+  return crypto.createHash('sha256').update(JSON.stringify({ document: input.document, history: input.history,
+    resourceRefs: [...input.resourceRefs].sort(), previewRef: input.previewRef })).digest('hex')
 }
 
 export function toDocumentRef(documentId: string): string {
@@ -180,7 +196,7 @@ export class ImageEditDocumentRepository {
 
   constructor(
     readonly rootDir: string,
-    dependencies: DocumentRepositoryDependencies = {},
+    private readonly dependencies: DocumentRepositoryDependencies = {},
   ) {
     this.writeAtomically = dependencies.writeAtomically ?? writeBufferAtomically
     this.maxDocumentBytes = dependencies.maxDocumentBytes ?? MAX_DOCUMENT_BYTES
@@ -232,7 +248,9 @@ export class ImageEditDocumentRepository {
         envelope.previewRef,
         envelope.history,
       )
+      this.attachOperationReceipt(envelope, request)
       await this.persist(envelope, 'create')
+      this.confirmPendingOperations(envelope)
       return envelope
     }))
   }
@@ -255,6 +273,7 @@ export class ImageEditDocumentRepository {
     const documentId = validateDocumentId(request.documentId)
     return this.executor.run(documentId, () => this.withDocumentLock(documentId, async () => {
       const current = await this.load(documentId)
+      const remainingReceipts = this.confirmPendingOperations(current)
       if (current.revision !== request.expectedRevision) {
         throw new DocumentRevisionConflictError(documentId, request.expectedRevision, current.revision)
       }
@@ -290,10 +309,45 @@ export class ImageEditDocumentRepository {
           history,
         ),
         previewRef: request.previewRef,
+        pendingOperationReceipts: remainingReceipts,
       }
+      this.attachOperationReceipt(envelope, request)
       await this.persist(envelope, 'save')
+      this.confirmPendingOperations(envelope)
       return envelope
     }))
+  }
+
+  /** 只移交原子文件已有的事实；调用失败时文件保持原样，下一次读取仍可核对。 */
+  confirmPendingOperations(envelope: ImageEditDocumentEnvelope): ApplicationPersistenceReceiptRecord[] {
+    const receipts = envelope.pendingOperationReceipts ?? []
+    for (const receipt of receipts) {
+      if (receipt.storageTarget.kind !== 'image_edit.document'
+        || receipt.storageTarget.id !== `v3:${encodeURIComponent(envelope.documentId)}`
+        || receipt.storageTarget.revision === undefined || receipt.storageTarget.revision > envelope.revision) {
+        throw new Error('OPERATION_PERSISTENCE_TARGET_INVALID')
+      }
+    }
+    if (!this.dependencies.confirmOperationReceipt) return receipts
+    for (const receipt of receipts) this.dependencies.confirmOperationReceipt(receipt)
+    return []
+  }
+
+  private attachOperationReceipt(envelope: ImageEditDocumentEnvelope, request: Pick<CreateDocumentRequest, 'operationCorrelation' | 'prepareOperationReceipt'>): void {
+    if (!request.operationCorrelation) return
+    const receipt = applicationPersistenceReceiptSchema.parse({ ...request.operationCorrelation,
+      persistedAt: new Date().toISOString(),
+      storageTarget: { kind: 'image_edit.document', id: `v3:${encodeURIComponent(envelope.documentId)}`, revision: envelope.revision },
+      digest: imageEditPersistenceDigest(envelope),
+    })
+    const receipts = envelope.pendingOperationReceipts ?? []
+    const existing = receipts.find((item) => item.operationId === receipt.operationId && item.boundaryId === receipt.boundaryId)
+    if (existing && (existing.digest !== receipt.digest || JSON.stringify(existing.targets) !== JSON.stringify(receipt.targets))) {
+      throw new Error('OPERATION_PERSISTENCE_CONFLICT')
+    }
+    if (!existing && receipts.length >= 256) throw new Error('图片文档有未确认的保存记录，请先核对后再继续保存')
+    request.prepareOperationReceipt?.(existing ?? receipt)
+    envelope.pendingOperationReceipts = existing ? receipts : [...receipts, receipt]
   }
 
   /**

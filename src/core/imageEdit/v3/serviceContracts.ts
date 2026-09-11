@@ -22,6 +22,7 @@ export interface ImageEditPersistenceSnapshotV3 {
 }
 
 export interface ImageEditSaveDocumentOptionsV3 {
+  operationCorrelation?: import('../../application-control/persistenceCorrelation').ApplicationPersistenceCorrelation;
   expectedRevision: number;
   previewRef?: string | null;
   history?: ImageEditCommandHistorySnapshotV3 | null;

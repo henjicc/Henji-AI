@@ -1,6 +1,7 @@
 import { createLogger } from '@/core/logging'
 import { useCanvasStore } from '@/stores/canvasStore'
 import { flushCanvasProjectSnapshot, useProjectStore } from '@/stores/projectStore'
+import type { ApplicationPersistenceCorrelation } from '@/core/application-control/persistenceCorrelation'
 
 const logger = createLogger('features.canvas.persistence')
 
@@ -12,6 +13,7 @@ export interface CanvasMutationCheckpoint {
   conflicted: boolean
 }
 export interface CanvasCommitOptions {
+  operationCorrelation?: ApplicationPersistenceCorrelation
   deferCommit?: boolean
   checkpoint?: CanvasMutationCheckpoint
   /** 批事务最终持久化成功后才允许触发的外部副作用；回滚或写盘失败时不会执行。 */
@@ -112,7 +114,7 @@ export async function confirmCanvasPersistence(
   persistCanvasState()
   logger.debug('画布保存确认开始', { event: 'canvas.persistence.confirm.start', projectId })
   try {
-    await flushCanvasProjectSnapshot(projectId)
+    await flushCanvasProjectSnapshot(projectId, options.operationCorrelation)
     logger.info('画布保存确认完成', { event: 'canvas.persistence.confirm.completed', projectId })
   } catch (error) {
     logger.error('画布保存尚未确认', error, { event: 'canvas.persistence.confirm.failed', projectId })

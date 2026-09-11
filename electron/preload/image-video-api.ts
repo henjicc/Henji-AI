@@ -29,7 +29,7 @@ export function createImageVideoApis(nativeInvoke: NativeInvoke): {
     readPanoramaImageMetadata: (source) => nativeInvoke('image:readPanoramaImageMetadata', { source }),
     embedPanoramaImageMetadata: (source) => nativeInvoke('image:embedPanoramaImageMetadata', { source }),
     loadImage: (filePath) => nativeInvoke('image:loadImage', { filePath }),
-    persistImageSource: (source) => nativeInvoke('image:persistImageSource', { source }),
+    persistImageSource: (source, renderContext) => nativeInvoke('image:persistImageSource', { source, renderContext }),
     persistImageSourceTracked: (source) => nativeInvoke('image:persistImageSourceTracked', { source }),
     persistImageBinary: (bytes, extension) => nativeInvoke('image:persistImageBinary', { bytes, extension }),
     saveImageSourceToDownloads: (source, suggestedFileName) => nativeInvoke('image:saveImageSourceToDownloads', { source, suggestedFileName }),

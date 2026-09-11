@@ -49,6 +49,24 @@ function createCoordinator(
 }
 
 describe('AgentExternalContinuationCoordinator', () => {
+  it('用户继续普通断点时调用唯一续跑入口，不伪造外部生成成功状态', async () => {
+    const execute = vi.fn().mockResolvedValue(undefined)
+    const coordinator = new AgentExternalContinuationCoordinator({
+      operationRecovery: { sourceOperationId: 'original-operation', checkpoint: checkpoint() },
+      registry: {} as AgentToolRegistry, tools: { execute } as unknown as AgentToolExecutionCoordinator,
+      savePoints: { save: vi.fn() } as unknown as AgentSavePointCoordinator,
+    })
+    const emit = vi.fn()
+    coordinator.emitResumed(emit)
+    expect(emit).not.toHaveBeenCalled()
+    const input = { snapshot: {} as never, route: {} as never, scopeRevisions: {} as never,
+      activeToolNames: [], refreshHost: () => ({} as never), rebuild: () => ({} as never) }
+    await coordinator.queryAuthoritativeStatus(input)
+    await coordinator.queryAuthoritativeStatus(input)
+    expect(execute).toHaveBeenCalledTimes(1)
+    expect(execute.mock.calls[0][0]).toEqual([{ toolCallId: 'recovery:original-operation:resume-script',
+      toolName: 'resume_henji_script', input: { checkpoint: checkpoint() }, dynamic: false }])
+  })
   it('模型续接前只执行一次权威任务查询', async () => {
     const { coordinator, execute, save } = createCoordinator()
     const rebuilt = { messages: [] } as unknown as AgentContextBuildResult

@@ -99,7 +99,7 @@ async function buildManifest(
     packageFormat: HENJI_IMAGE_PACKAGE_FORMAT,
     packageVersion: HENJI_IMAGE_PACKAGE_VERSION,
     createdAt: (request.now ?? new Date()).toISOString(),
-    document: request.document,
+    document: { ...request.document, pendingOperationReceipts: undefined },
     resources: records,
     thumbnail,
     externalSources: request.externalSources,

@@ -1,3 +1,4 @@
+import { ApplicationEntityNotFoundError } from '@/core/application-control/registry'
 import {
   closeApplicationSurfaceCapability,
   focusApplicationEntityCapability,
@@ -222,6 +223,8 @@ function describeSchemaIssues(error: ZodError): string {
 }
 
 function toFailure(error: unknown): ApplicationCapabilityResult {
+  if (error instanceof ApplicationEntityNotFoundError) return { ok: false,
+    error: { code: 'NOT_FOUND', message: error.message, recoverable: true } }
   if (error instanceof ApplicationTransactionFailure) {
     const transaction = transactionFailureFacts(error.result)
     return { ok: false, error: { code: error.result.code === 'CONFLICT' ? 'CONFLICT' : 'CAPABILITY_REJECTED', message: error.message,
@@ -337,6 +340,7 @@ export async function executeApplicationCapabilityResult(
     return {
       ok: true,
       data,
+      effects: BUILTIN_APPLICATION_CAPABILITY_REGISTRY.get(invocation.id)?.resolveObservedEffects?.(invocation.input, data) ?? [],
       resultingRevision: snapshot.revision,
       resultingScopeRevisions: snapshot.scopeRevisions,
     }

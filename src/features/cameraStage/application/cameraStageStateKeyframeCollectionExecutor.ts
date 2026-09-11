@@ -2,6 +2,7 @@ import type {
   ApplicationCollectionExecutor,
   ApplicationCompletedStepResult,
   ApplicationEvidence,
+  ApplicationExecutionContext,
   ApplicationPlannedStep,
   ApplicationRef,
   JsonValue,
@@ -77,7 +78,7 @@ export class CameraStageStateKeyframeCollectionExecutor implements ApplicationCo
 
   constructor(private readonly dependencies: CameraStageControlExecutorDependencies) {}
 
-  async apply(step: CollectionStep): Promise<ApplicationCompletedStepResult> {
+  async apply(step: CollectionStep, context?: ApplicationExecutionContext): Promise<ApplicationCompletedStepResult> {
     const projectId = step.parent.id.includes(':') ? step.parent.id.slice(0, step.parent.id.indexOf(':')) : step.parent.id
     if (step.operation.kind === 'create') {
       const inputs: CameraStageStateKeyframeCreateInput[] = step.operation.items.map((item) => ({
@@ -88,11 +89,11 @@ export class CameraStageStateKeyframeCollectionExecutor implements ApplicationCo
         hold: optionalNumberValue(property(item.properties, 'hold'), 'HOLD'),
         transitionDuration: optionalNumberValue(property(item.properties, 'transition_duration'), 'TRANSITION_DURATION'),
       }))
-      const result = await cameraStageStateKeyframeService.createStateKeyframes(projectId, inputs)
+      const result = await cameraStageStateKeyframeService.createStateKeyframes(projectId, inputs, context)
       return this.completed(projectId, result.undoToken, result.stateKeyframeIds, `已新建 ${result.stateKeyframeIds.length} 张状态关键帧。`)
     }
     const targets = step.operation.targets.map((target) => childStateKeyframeId(target))
-    const result = await cameraStageStateKeyframeService.removeStateKeyframes(projectId, targets)
+    const result = await cameraStageStateKeyframeService.removeStateKeyframes(projectId, targets, context)
     return this.completed(projectId, result.undoToken, targets, `已删除 ${result.removedCount} 张状态关键帧。`)
   }
 

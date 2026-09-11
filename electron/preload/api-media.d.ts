@@ -221,7 +221,7 @@ export interface HenjiImageApi {
   readPanoramaImageMetadata(source: string): Promise<HenjiImagePanoramaMetadataReadResult>
   embedPanoramaImageMetadata(source: string): Promise<HenjiImagePanoramaMetadataEmbedResult>
   loadImage(filePath: string): Promise<string>
-  persistImageSource(source: string): Promise<string>
+  persistImageSource(source: string, renderContext?: import('../../src/platform/contracts/cameraStageRender').CameraStageImagePersistenceContext): Promise<string>
   persistImageSourceTracked(source: string): Promise<HenjiImagePersistSourceTrackedResult>
   persistImageBinary(bytes: Uint8Array, extension: string): Promise<string>
   saveImageSourceToDownloads(source: string, suggestedFileName?: string): Promise<string>
@@ -288,6 +288,7 @@ export interface HenjiVideoAppendFrameExportPayload {
 }
 
 export interface HenjiVideoFinishFrameExportPayload {
+  cameraStageRequestId?: string
   sessionId: string
   targetPath?: string
 }

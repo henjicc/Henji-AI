@@ -89,7 +89,7 @@ export function registerToolboxCapabilityHandlers(
   registrar.registerHandler('create_camera_stage_project', async (input, context) => {
     throwIfCapabilityAborted(context.signal)
     const parsed = parseCapabilityInput<{ name: string }>('create_camera_stage_project', input)
-    return await createCameraStageProject(parsed.name)
+    return await createCameraStageProject(parsed.name, context)
   })
 
   registrar.registerHandler('rename_camera_stage_project', async (input, context) => {
@@ -104,7 +104,7 @@ export function registerToolboxCapabilityHandlers(
   registrar.registerHandler('delete_camera_stage_project', async (input, context) => {
     throwIfCapabilityAborted(context.signal)
     const parsed = parseCapabilityInput<ProjectInput & { baseRevision: number }>('delete_camera_stage_project', input)
-    return await deleteCameraStageProject(parsed)
+    return await deleteCameraStageProject(parsed, context)
   })
 
   registrar.registerHandler('place_camera_stage_object', async (input, context) => {
@@ -119,13 +119,13 @@ export function registerToolboxCapabilityHandlers(
       'duplicate_camera_stage_object',
       input
     )
-    return await duplicateCameraStageObject(parsed)
+    return await duplicateCameraStageObject(parsed, context)
   })
 
   registrar.registerHandler('delete_camera_stage_object', async (input, context) => {
     throwIfCapabilityAborted(context.signal)
     const parsed = parseCapabilityInput<CameraObjectInput & { baseRevision: number }>('delete_camera_stage_object', input)
-    return await deleteCameraStageObject(parsed)
+    return await deleteCameraStageObject(parsed, context)
   })
 
   registrar.registerHandler('update_camera_stage_object', async (input, context) => {

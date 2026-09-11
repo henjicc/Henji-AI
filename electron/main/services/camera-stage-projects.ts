@@ -105,16 +105,17 @@ export function upsertCameraStageProject(record: CameraStageProjectWriteDto): vo
 }
 
 export function renameCameraStageProject(projectId: string, name: string, updatedAt: number): void {
-  getDb()
+  const result = getDb()
     .prepare(
       `UPDATE camera_stage_projects
        SET name = ?, updated_at = ?
        WHERE id = ?`,
     )
     .run(name, normalizeTimestamp(updatedAt), projectId)
+  if (!result.changes) throw new Error('NOT_FOUND')
 }
 
-export async function deleteCameraStageProject(projectId: string): Promise<void> {
+export async function deleteCameraStageProject(projectId: string, commit: (write: () => void) => void = (write) => write()): Promise<void> {
   await clearProjectCover('camera-stage', projectId)
-  getDb().prepare('DELETE FROM camera_stage_projects WHERE id = ?').run(projectId)
+  commit(() => { getDb().prepare('DELETE FROM camera_stage_projects WHERE id = ?').run(projectId) })
 }

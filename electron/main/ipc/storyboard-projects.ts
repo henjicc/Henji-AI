@@ -10,9 +10,16 @@ import {
   type StoryboardProjectWriteDto,
 } from '../services/storyboard-projects'
 import { parseRecord, parseStringField, parseVoid, registerIpcHandler } from './registry'
+import { applicationPersistenceCorrelationSchema, type ApplicationPersistenceCorrelation } from '../../../src/core/application-control/persistenceCorrelation'
+import { getDb } from '../services/db'
+import { AgentOperationStore } from '../services/agent-runtime/persistence/operation-store'
+import { digestJson } from '../services/agent-runtime/tools/security'
+
+type CorrelatedProjectWrite = StoryboardProjectWriteDto & { operationCorrelation?: ApplicationPersistenceCorrelation }
 
 interface ProjectIdPayload {
   projectId: string
+  operationCorrelation?: ApplicationPersistenceCorrelation
 }
 
 interface ViewportPayload extends ProjectIdPayload {
@@ -24,7 +31,7 @@ interface RenamePayload extends ProjectIdPayload {
   updatedAt: number
 }
 
-function parseProjectRecord(input: unknown): StoryboardProjectWriteDto {
+function parseProjectRecord(input: unknown): CorrelatedProjectWrite {
   const record = parseRecord(input)
   const id = record.id
   const name = record.name
@@ -65,11 +72,16 @@ function parseProjectRecord(input: unknown): StoryboardProjectWriteDto {
     edgesJson,
     viewportJson,
     historyJson,
+    ...(record.operationCorrelation !== undefined ? {
+      operationCorrelation: applicationPersistenceCorrelationSchema.parse(record.operationCorrelation),
+    } : {}),
   }
 }
 
 function parseProjectIdPayload(input: unknown): ProjectIdPayload {
-  return { projectId: parseStringField(input, 'projectId') }
+  const record = parseRecord(input)
+  return { projectId: parseStringField(input, 'projectId'),
+    ...(record.operationCorrelation !== undefined ? { operationCorrelation: applicationPersistenceCorrelationSchema.parse(record.operationCorrelation) } : {}) }
 }
 
 function parseViewportPayload(input: unknown): ViewportPayload {
@@ -96,7 +108,14 @@ function parseRenamePayload(input: unknown): RenamePayload {
   if (typeof name !== 'string' || name.trim().length === 0) {
     throw new Error('Expected non-empty project name')
   }
-  return { projectId, name: name.trim(), updatedAt }
+  return { ...parseProjectIdPayload(input), projectId, name: name.trim(), updatedAt }
+}
+
+function requireProjectCorrelation(projectId: string, correlation: ApplicationPersistenceCorrelation): void {
+  if (correlation.targets.some((ref) => !(
+    (ref.kind === 'canvas.project' && ref.id === projectId)
+    || (['canvas.node', 'canvas.edge'].includes(ref.kind) && ref.id.startsWith(`${projectId}:`))
+  ))) throw new Error('[OPERATION_PERSISTENCE_TARGET_INVALID] 保存关联必须属于原画布工程')
 }
 
 export function registerStoryboardProjectsIpc(): void {
@@ -104,16 +123,30 @@ export function registerStoryboardProjectsIpc(): void {
   registerIpcHandler<ProjectIdPayload, StoryboardProjectRecordDto | null>('storyboardProjects:get', parseProjectIdPayload, ({ projectId }) => {
     return getStoryboardProject(projectId)
   })
-  registerIpcHandler<StoryboardProjectWriteDto, void>('storyboardProjects:upsert', parseProjectRecord, (record) => {
-    upsertStoryboardProject(record)
+  registerIpcHandler<CorrelatedProjectWrite, void>('storyboardProjects:upsert', parseProjectRecord, (input, event) => {
+    const { operationCorrelation, ...record } = input
+    if (!operationCorrelation) { upsertStoryboardProject(record); return }
+    const database = getDb()
+    const operations = new AgentOperationStore(database)
+    requireProjectCorrelation(record.id, operationCorrelation)
+    operations.commitPersistence(operationCorrelation, { kind: 'canvas.project', id: record.id }, event.sender.id,
+      digestJson(record), () => upsertStoryboardProject(record))
   })
   registerIpcHandler<ViewportPayload, void>('storyboardProjects:updateViewport', parseViewportPayload, ({ projectId, viewportJson }) => {
     updateStoryboardProjectViewport(projectId, viewportJson)
   })
-  registerIpcHandler<RenamePayload, void>('storyboardProjects:rename', parseRenamePayload, ({ projectId, name, updatedAt }) => {
-    renameStoryboardProject(projectId, name, updatedAt)
+  registerIpcHandler<RenamePayload, void>('storyboardProjects:rename', parseRenamePayload, ({ projectId, name, updatedAt, operationCorrelation }, event) => {
+    if (!operationCorrelation) { renameStoryboardProject(projectId, name, updatedAt); return }
+    requireProjectCorrelation(projectId, operationCorrelation)
+    new AgentOperationStore(getDb()).commitPersistence(operationCorrelation, { kind: 'canvas.project', id: projectId }, event.sender.id,
+      digestJson({ projectId, name, updatedAt }), () => renameStoryboardProject(projectId, name, updatedAt))
   })
-  registerIpcHandler<ProjectIdPayload, void>('storyboardProjects:delete', parseProjectIdPayload, async ({ projectId }) => {
-    await deleteStoryboardProject(projectId)
+  registerIpcHandler<ProjectIdPayload, void>('storyboardProjects:delete', parseProjectIdPayload, async ({ projectId, operationCorrelation }, event) => {
+    if (!operationCorrelation) { await deleteStoryboardProject(projectId); return }
+    requireProjectCorrelation(projectId, operationCorrelation)
+    const operations = new AgentOperationStore(getDb())
+    operations.assertPersistenceOwner(operationCorrelation.operationId, event.sender.id)
+    await deleteStoryboardProject(projectId, (write) => operations.commitPersistence(operationCorrelation,
+      { kind: 'canvas.project', id: projectId }, event.sender.id, digestJson({ projectId, deleted: true }), write))
   })
 }

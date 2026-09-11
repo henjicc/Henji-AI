@@ -23,6 +23,7 @@ export function assessInterruptedWorkingSummary(
         mode: 'await_user',
         reason: '应用退出时仍有待审批操作；旧审批不可复用。',
         toolName: current.activeStep?.toolName ?? null,
+        toolCallId: current.activeStep?.stepId ?? null,
         toolCategory: current.activeStep?.toolCategory ?? null,
       },
       updatedAt: now,
@@ -43,6 +44,7 @@ export function assessInterruptedWorkingSummary(
           ? '未完成步骤为只读操作，可在用户重试后重新查询。'
           : '未完成步骤可能有写入副作用，恢复后必须先查询真实状态。',
         toolName: current.activeStep.toolName,
+        toolCallId: current.activeStep.stepId,
         toolCategory: current.activeStep.toolCategory,
       },
       activeStep: null,
@@ -72,7 +74,7 @@ export function markWorkingSummaryRecoveryVerified(
     )),
     recovery: {
       mode: 'none',
-      reason: '已通过同领域只读工具重新确认状态。',
+      reason: '已核对原操作回执及其绑定目标的全部验证条件。',
       toolName: null,
       toolCategory: null,
     },

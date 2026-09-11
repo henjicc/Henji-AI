@@ -22,8 +22,12 @@ const NATIVE_TEST_FILES = [
   'electron/main/services/agent-runtime/persistence/session-store.test.ts',
   'electron/main/services/agent-runtime/persistence/external-wait-store.test.ts',
   'electron/main/services/assistant/memory-store.test.ts',
+  'electron/main/services/assistant/generation-operation.storage.test.ts',
+  'electron/main/services/camera-stage-render-task-store.storage.test.ts',
   'electron/main/services/logging/agent-trace-store.test.ts',
   'electron/main/services/storyboard-projects.storage.test.ts',
+  'electron/main/services/camera-stage-projects.storage.test.ts',
+  'electron/main/services/asset-library/persistence.storage.test.ts',
   'src/stores/projectPersistenceQueue.storage.test.ts',
 ]
 const ALL_TEST_PATTERNS = ['src/**/*.test.{ts,tsx}', 'electron/**/*.test.ts', 'packages/*/**/*.test.ts']

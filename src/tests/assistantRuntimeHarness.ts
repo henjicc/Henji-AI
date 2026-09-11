@@ -168,6 +168,7 @@ function createFrontendInvoker(
       signal: context.signal,
       requestId: context.runId,
       taskId: context.toolCallId,
+      ...(context.operationId ? { operationId: context.operationId } : {}),
     })
     // 生产里渲染层把执行后的宿主快照随响应一起推回主进程；这里在同一时机刷新缓存。
     refreshHostContext()

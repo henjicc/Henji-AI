@@ -443,33 +443,8 @@ const migrations: SchemaMigration[] = [
   },
   {
     version: 11,
-    name: 'agent-runtime-v2-fresh-runs',
-    up: (database) => {
-      database.exec(`
-        PRAGMA defer_foreign_keys = ON;
-
-        DELETE FROM agent_messages WHERE role = 'system_event';
-        DELETE FROM agent_session_entries
-        WHERE kind NOT IN ('user_message', 'assistant_message');
-        DELETE FROM agent_generation_status_events;
-
-        UPDATE agent_session_entries SET parent_entry_id = NULL;
-        UPDATE agent_threads SET last_run_id = NULL;
-        DELETE FROM agent_runs;
-
-        WITH ordered AS (
-          SELECT entry_id,
-                 LAG(entry_id) OVER (PARTITION BY thread_id ORDER BY sequence ASC) AS previous_id
-          FROM agent_session_entries
-          WHERE kind IN ('user_message', 'assistant_message')
-        )
-        UPDATE agent_session_entries
-        SET parent_entry_id = (
-          SELECT ordered.previous_id FROM ordered
-          WHERE ordered.entry_id = agent_session_entries.entry_id
-        ), run_id = NULL;
-      `)
-    },
+    name: 'agent-runtime-v2-preserve-runs',
+    up: markLegacyRunsForReview,
   },
   {
     version: 12,
@@ -483,48 +458,49 @@ const migrations: SchemaMigration[] = [
   },
   {
     version: 13,
-    name: 'agent-task-graph-removed-fresh-runs',
-    /*
-     * 任务图/Facet/结算/Effect Ledger 整体删除，历史运行记录随之无法反序列化。
-     *
-     * 保存点里存着 `route.taskGraph` 与 `effectLedger`，新 schema 已经不认这两个字段；而
-     * `store.ts` 的版本检查条件是「版本不匹配**且**状态非终态」——已完成/失败/取消的历史运行
-     * 被排除在外，会直奔 `agentRunStateSchema.parse` 然后抛。**光撞 checkpoint 版本号救不了它们**，
-     * 必须真的删掉运行记录。
-     *
-     * 删的是运行记录，不是对话：用户的提问和助手的回复逐条保留，只把父子链重建成连续的。
-     * 业务数据（三维工程、画布、素材库、设置）在别的表里，本迁移一个字节都不碰。
-     */
-    up: (database) => {
-      database.exec(`
-        PRAGMA defer_foreign_keys = ON;
-
-        DELETE FROM agent_messages WHERE role = 'system_event';
-        DELETE FROM agent_session_entries
-        WHERE kind NOT IN ('user_message', 'assistant_message');
-        DELETE FROM agent_generation_status_events;
-
-        UPDATE agent_session_entries SET parent_entry_id = NULL;
-        UPDATE agent_threads SET last_run_id = NULL;
-        DELETE FROM agent_runs;
-
-        WITH ordered AS (
-          SELECT entry_id,
-                 LAG(entry_id) OVER (PARTITION BY thread_id ORDER BY sequence ASC) AS previous_id
-          FROM agent_session_entries
-          WHERE kind IN ('user_message', 'assistant_message')
-        )
-        UPDATE agent_session_entries
-        SET parent_entry_id = (
-          SELECT ordered.previous_id FROM ordered
-          WHERE ordered.entry_id = agent_session_entries.entry_id
-        ), run_id = NULL;
-      `)
-    },
+    name: 'agent-task-graph-removed-preserve-runs',
+    up: markLegacyRunsForReview,
   },
 ]
 
-export function runAgentSchemaMigrations(database: Database.Database): void {
+migrations.push({
+  version: 14,
+  name: 'durable-assistant-operation-facts',
+  up: (database) => {
+    // 已有 v13 状态即使能通过当前 schema，也没有派发前操作证据。
+    database.exec(`ALTER TABLE agent_runs ADD COLUMN operation_history_version INTEGER NOT NULL DEFAULT 1;
+      ALTER TABLE agent_runs ADD COLUMN logical_task_id TEXT;
+      UPDATE agent_runs SET operation_history_version = 0, logical_task_id = run_id;`)
+    markLegacyRunsForReview(database)
+    database.exec(`CREATE TABLE agent_operations (
+      operation_id TEXT PRIMARY KEY,
+      logical_task_id TEXT NOT NULL REFERENCES agent_runs(run_id) ON DELETE CASCADE,
+      run_id TEXT NOT NULL REFERENCES agent_runs(run_id) ON DELETE CASCADE,
+      operation_key TEXT NOT NULL,
+      state TEXT NOT NULL,
+      record_json TEXT NOT NULL,
+      UNIQUE(logical_task_id, operation_key)
+    );
+    CREATE INDEX agent_operations_task_state ON agent_operations(logical_task_id, state);
+    CREATE TABLE agent_operation_transports (
+      call_id TEXT PRIMARY KEY,
+      operation_id TEXT NOT NULL REFERENCES agent_operations(operation_id) ON DELETE CASCADE,
+      binding_json TEXT NOT NULL
+    );`)
+  },
+})
+
+/** 原始历史只读保留；旧任务不能因协议升级自动恢复模型或业务修改。 */
+function markLegacyRunsForReview(database: Database.Database): void {
+  database.exec(`
+    UPDATE agent_runs SET recovery_status = 'recovery_required';
+    UPDATE agent_external_waits SET status = 'cancelled',
+      error = '旧任务缺少精确恢复证据，需要核对后继续'
+      WHERE status IN ('active', 'claimed');
+  `)
+}
+
+export function runAgentSchemaMigrations(database: Database.Database, targetVersion = AGENT_SCHEMA_VERSION): void {
   database.exec(`
     CREATE TABLE IF NOT EXISTS app_schema_migrations (
       version INTEGER PRIMARY KEY,
@@ -537,7 +513,7 @@ export function runAgentSchemaMigrations(database: Database.Database): void {
       .map((row) => Number((row as { version: number }).version))
   )
   for (const migration of migrations) {
-    if (applied.has(migration.version)) continue
+    if (applied.has(migration.version) || migration.version > targetVersion) continue
     database.transaction(() => {
       migration.up(database)
       database.prepare(`

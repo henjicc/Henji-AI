@@ -38,6 +38,7 @@ import {
 const logger = createLogger('workspaces.GenerationWorkspace.application.visibleGenerationTask')
 
 export interface VisibleGenerationTaskInput {
+  operationId?: string
   input: string
   model: string
   type: MediaType
@@ -364,7 +365,7 @@ export async function createVisibleGenerationTask(
     })
   }
 
-  const taskId = createTaskId()
+  const taskId = input.operationId ? `task-${input.operationId}` : createTaskId()
   const imageEditStates = (isStringArray(options.images) ? options.images : []).reduce<Record<string, ImageEditSessionData>>((acc, url, index) => {
     const state = dependencies.imageEditStates.get(url)
     if (state) acc[String(index)] = state
@@ -386,6 +387,7 @@ export async function createVisibleGenerationTask(
 
   const task: GenerationTask = {
     id: taskId,
+    ...(input.operationId ? { operationId: input.operationId } : {}),
     createdAt: new Date(),
     type,
     prompt,

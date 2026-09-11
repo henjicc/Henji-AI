@@ -2,8 +2,10 @@ import type { AgentToolObservation } from '../../../../../src/core/assistant/too
 import type { AgentWorkingSummary } from '../../../../../src/core/assistant/workingContext'
 import type { ModelStepToolCall } from '@henjicc/ai-sdk'
 import type { AgentToolRegistry } from '../tools/registry'
+import type { OperationRecord } from '../../../../../src/core/assistant/operations'
 
 interface RecoveryGuardState {
+  toolCallId: string | null
   toolName: string | null
   toolCategory: string | null
   entityTypes: string[]
@@ -28,13 +30,6 @@ function inputModelId(call: ModelStepToolCall): string | null {
   return typeof modelId === 'string' && modelId.length > 0 ? modelId : null
 }
 
-function observationSucceeded(observation: AgentToolObservation): boolean {
-  if (!observation.output || typeof observation.output !== 'object' || Array.isArray(observation.output)) {
-    return true
-  }
-  return Reflect.get(observation.output, 'ok') !== false
-}
-
 export class AgentRecoveryWriteGuard {
   private state: RecoveryGuardState | null
   private sameModelParameterRecovery: SameModelParameterRecoveryState | null = null
@@ -46,6 +41,7 @@ export class AgentRecoveryWriteGuard {
     this.state = summary?.recovery.mode === 'verify_before_write'
       ? {
           toolName: summary.recovery.toolName,
+          toolCallId: summary.recovery.toolCallId ?? null,
           toolCategory: summary.recovery.toolCategory,
           entityTypes: [],
         }
@@ -60,7 +56,7 @@ export class AgentRecoveryWriteGuard {
       const entityType = asRecord(change)?.entityType
       return typeof entityType === 'string' ? [entityType] : []
     })
-    this.state = { toolName: call.toolName, toolCategory, entityTypes: [...new Set(entityTypes)] }
+    this.state = { toolName: call.toolName, toolCallId: call.toolCallId, toolCategory, entityTypes: [...new Set(entityTypes)] }
   }
 
   validate(call: ModelStepToolCall): string | null {
@@ -71,22 +67,23 @@ export class AgentRecoveryWriteGuard {
     if (!definition || definition.readOnly) return null
     return [
       `恢复检查尚未完成，禁止执行写工具 ${call.toolName}。`,
-      this.state.toolCategory
-        ? `请先调用 ${this.state.toolCategory} 领域的只读状态工具确认上次操作是否生效。`
-        : '请先调用同一业务领域的只读状态工具确认上次操作是否生效。',
+      '请核对原操作的正式回执及目标验证条件。同域其他对象或目录读取不能解除保护。',
     ].join('')
   }
 
-  consumeVerification(call: ModelStepToolCall, observation: AgentToolObservation): boolean {
-    if (!this.state || !observationSucceeded(observation)) return false
-    const definition = this.registry.get(call.toolName)
-    if (!definition?.readOnly) return false
-    const observedEntityTypes = new Set((observation.effects ?? []).flatMap((effect) => effect.entityTypes))
-    const verifiesAffectedEntity = this.state.entityTypes.length > 0
-      && this.state.entityTypes.some((entityType) => observedEntityTypes.has(entityType))
-    if (this.state.toolCategory
-      && definition.category !== this.state.toolCategory
-      && !verifiesAffectedEntity) return false
+  consumeVerification(_call: ModelStepToolCall, _observation: AgentToolObservation): boolean {
+    // 普通读取没有原操作关联，不能证明未知调用是否执行。
+    return false
+  }
+
+  reconcile(records: readonly OperationRecord[]): boolean {
+    if (!this.state?.toolCallId) return false
+    const original = records.find((record) => record.toolCallId === this.state?.toolCallId)
+    if (!original) return false
+    if (!original.container && original.businessMutation === false) { this.state = null; return true }
+    const affected = original.container ? records.filter((record) => record.parentToolCallId === original.toolCallId && !record.readOnly && record.businessMutation !== false) : [original]
+    if (!affected.length || affected.some((record) => record.state !== 'completed'
+      || !record.verifications.length || record.verifications.some((verification) => verification.status !== 'passed'))) return false
     this.state = null
     return true
   }

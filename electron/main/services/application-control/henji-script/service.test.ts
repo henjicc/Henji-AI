@@ -16,6 +16,8 @@ import type { AgentToolExecuteRequest } from '../../agent-runtime/tools/types'
 import { HenjiScriptService } from './service'
 import { AgentRunMetrics } from '../../agent-runtime/runner/budget'
 import { toolProgressEvidence } from '../../agent-runtime/tools/progress-evidence'
+import { AgentToolGatewayError } from '../../agent-runtime/tools/gateway'
+import type { HenjiScriptCheckpoint } from '../../../../../src/core/assistant/externalWait'
 
 function context(): HostContextSnapshot {
   return {
@@ -75,6 +77,7 @@ function fixture(version = 7, extraActions: string[] = []) {
   const host = context()
   const calls: AgentToolExecuteRequest[] = []
   let value = 0
+  let removed = false
   const gateway = {
     execute: async (request: AgentToolExecuteRequest): Promise<AgentToolGatewayResult> => {
       calls.push(request)
@@ -84,6 +87,11 @@ function fixture(version = 7, extraActions: string[] = []) {
         const change = (request.input as { changes: Array<Record<string, unknown>> }).changes[0] ?? {}
         const effect = change.kind === 'create_items' ? 'create'
           : change.kind === 'remove_items' ? 'delete' : 'update'
+        if (effect === 'delete') removed = true
+        if (effect === 'create') {
+          removed = false
+          value = Number((change.items as Array<{ properties: Record<string, unknown> }>)[0].properties['test.entity.value'])
+        }
         if (change.kind === 'set_properties') {
           value = Number((change.properties as Record<string, unknown>)['test.entity.value'])
         }
@@ -100,6 +108,7 @@ function fixture(version = 7, extraActions: string[] = []) {
           targetRefs: [{ kind: 'test.entity', id: 'entity-1' }], count: 1, verified: false, evidence: [],
         }]
       } else if (request.toolName === 'read_application_entity') {
+        if (removed) throw new AgentToolGatewayError('NOT_FOUND', '原实体已经删除')
         output = {
           ref: { kind: 'test.entity', id: 'entity-1' }, entityType: 'test.entity',
           properties: { 'test.entity.value': value }, capturedAt: new Date().toISOString(), revisions: { toolbox: 2 },
@@ -442,9 +451,57 @@ describe('HenjiScriptService', () => {
       'describe_application_entities', 'list_application_entities',
       'change_application_entities', 'read_application_entity',
       'change_application_entities', 'read_application_entity',
-      'change_application_entities', 'list_application_entities',
+      'change_application_entities', 'read_application_entity',
     ])
-    expect(output.effects.filter((effect) => effect.effect === 'observe')).toHaveLength(3)
+    expect(output.effects.filter((effect) => effect.effect === 'observe')).toHaveLength(2)
+  })
+
+  it('创建引用存在但属性不符时保留实际 Effect 并标记原操作验证失败', async () => {
+    const current = fixture()
+    const execute = current.gateway.execute
+    const verified: unknown[][] = []
+    const gateway = { ...current.gateway, verifyOperation: async (...args: unknown[]) => { verified.push(args) },
+      execute: async (request: AgentToolExecuteRequest) => {
+        const result = await execute(request)
+        if (request.toolName === 'read_application_entity' && result.status === 'completed') {
+          result.observation.output = { ref: { kind: 'test.entity', id: 'entity-1' }, properties: { 'test.entity.value': 99 } }
+        }
+        return result
+      } }
+    const output = await current.service.execute({ language: HENJI_SCRIPT_LANGUAGE, summary: '核对创建',
+      source: "await app.entities.create('test.entity', { properties: { 'test.entity.value': 1 } });" }, {
+      runId: 'run-script', threadId: 'thread-script', toolCallId: 'parent-script',
+      signal: new AbortController().signal, gateway: gateway as never, getHostContext: () => current.host,
+    })
+    expect(output).toMatchObject({ status: 'partial', verification: { passed: false },
+      effects: expect.arrayContaining([expect.objectContaining({ effect: 'create' })]) })
+    expect(verified).toHaveLength(1)
+    expect(verified[0][2]).toEqual([{ kind: 'test.entity', id: 'entity-1' }])
+    expect(verified[0][3]).toBe(false)
+  })
+
+  it.each(['other-target', 'stale-result'])('脚本回读 %s 不能解除原写入的验证缺口', async (failure) => {
+    const current = fixture()
+    const execute = current.gateway.execute
+    const gateway = { ...current.gateway, execute: async (request: AgentToolExecuteRequest) => {
+      const result = await execute(request)
+      if (request.toolName === 'read_application_entity' && result.status === 'completed') {
+        const output = result.observation.output as Record<string, unknown>
+        result.observation.output = { ...output,
+          ...(failure === 'other-target' ? { ref: { kind: 'test.entity', id: 'other' } }
+            : { capturedAt: '2000-01-01T00:00:00.000Z' }),
+        }
+      }
+      return result
+    } }
+    const output = await current.service.execute({ language: HENJI_SCRIPT_LANGUAGE, summary: '精确回读',
+      source: "await app.entities.create('test.entity', { properties: { 'test.entity.value': 1 } });" }, {
+      runId: 'run-script', threadId: 'thread-script', toolCallId: 'parent-script',
+      signal: new AbortController().signal, gateway: gateway as never, getHostContext: () => current.host,
+    })
+    expect(output).toMatchObject({ status: 'partial', verification: { passed: false },
+      error: { message: expect.stringContaining('原目标的当前版本') },
+      effects: expect.arrayContaining([expect.objectContaining({ effect: 'create' })]) })
   })
 
   it('跨脚本完整引用删除时由宿主解析唯一父上下文', async () => {
@@ -455,7 +512,7 @@ describe('HenjiScriptService', () => {
     expect(output).toMatchObject({ status: 'completed', verification: { passed: true } })
     expect(calls.map((call) => call.toolName)).toEqual([
       'describe_application_entities', 'list_application_entities',
-      'change_application_entities', 'list_application_entities',
+      'change_application_entities', 'read_application_entity',
     ])
   })
 
@@ -467,7 +524,7 @@ describe('HenjiScriptService', () => {
    * 在"照做"和"脚本能跑"之间二选一——实测素材库那次它选了照做，最后一段失败，8 个真实写入全部
    * 没能封存。
    *
-   * 放行的依据是事实而不是宽容：remove 的 verifyEntityCall 刚 list 过一遍确认它真的不在了。
+   * 放行的依据是原引用的正式 NOT_FOUND；目录首屏缺少目标不再作为删除证据。
    */
   it('删除后再读同一个引用返回 null，可以直接断言 absent', async () => {
     const { output, calls } = await run(`
@@ -479,7 +536,7 @@ describe('HenjiScriptService', () => {
 
     expect(output).toMatchObject({ status: 'completed', verification: { passed: true } })
     // 关键：删除后的那次 read 不再打到网关，因为 remove 的读回验证已经确认过不存在
-    expect(calls.filter((call) => call.toolName === 'read_application_entity')).toHaveLength(0)
+    expect(calls.filter((call) => call.toolName === 'read_application_entity')).toHaveLength(1)
     expect(output.verification.evidence).toEqual(
       expect.arrayContaining([expect.stringContaining('absence-confirmed')])
     )
@@ -726,6 +783,34 @@ describe('HenjiScriptService', () => {
     expect(current.calls.map((call) => call.toolName)).toEqual([
       'prepare_generation_task', 'create_visible_generation_task', 'get_generation_task',
     ])
+  })
+
+  it('普通操作边界中断后复用已保存 IR，只执行剩余步骤', async () => {
+    const current = fixture()
+    const controller = new AbortController()
+    const saved: HenjiScriptCheckpoint[] = []
+    const gateway = { ...current.gateway,
+      saveOperationCheckpoint: async (_runId: string, _operationId: string, checkpoint: HenjiScriptCheckpoint) => {
+        saved.push(checkpoint)
+        if (checkpoint.steps.length === 1) controller.abort()
+      },
+    }
+    const context = { operationId: 'original-script', runId: 'run-script', threadId: 'thread-script',
+      toolCallId: 'parent-script', signal: controller.signal, gateway: gateway as never, getHostContext: () => current.host }
+    const interrupted = await current.service.execute({ language: HENJI_SCRIPT_LANGUAGE, summary: '顺序修改后中断',
+      source: `await app.entities.update({ kind: 'test.entity', id: 'entity-1' }, { 'test.entity.value': 2 });
+        await app.entities.update({ kind: 'test.entity', id: 'entity-1' }, { 'test.entity.value': 3 });`,
+    }, context)
+    expect(interrupted.status).toBe('partial')
+    expect(current.calls.filter((call) => call.toolName === 'change_application_entities')).toHaveLength(1)
+    const checkpoint = saved.at(-1)!
+    expect(checkpoint.remainingInstructions).toHaveLength(1)
+    const resumed = await current.service.resume(checkpoint, undefined, {
+      ...context, operationId: 'resumed-script', runId: 'child-run', signal: new AbortController().signal,
+    })
+    expect(resumed).toMatchObject({ status: 'completed', verification: { passed: true } })
+    expect(current.calls.filter((call) => call.toolName === 'change_application_entities')).toHaveLength(2)
+    expect(saved.at(-1)?.remainingInstructions).toEqual([])
   })
 
   it('缺少声明的前序能力时在首次写入前拒绝', async () => {

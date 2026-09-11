@@ -29,6 +29,8 @@ function executionContext(context: CapabilityExecutionContext) {
     ]),
     acceptedDataClasses: new Set(['C0', 'C1'] as const),
     requestId: context.requestId ?? `application-reflection-${Date.now()}`,
+    operationId: context.operationId,
+    recordExecutionPreparation: context.recordExecutionPreparation,
     signal: context.signal,
   }
 }
@@ -454,7 +456,7 @@ export const applicationReflectionHandlers = {
       rawResult = await execute(refreshed, 1)
     }
     if (rawResult.status === 'failed' && rawResult.code === 'CONFLICT'
-      && (!rawResult.partial || rawResult.partial.completedStepIndexes.length === 0)) {
+      && rawResult.executionState === 'not_started') {
       const refreshed = await refreshedRevisionsIfTargetsUnchanged(baselines, changes, appContext)
       if (!refreshed) throw new Error('CONFLICT:目标属性已在刷新期间变化，请重新读取并规划。')
       rawResult = await execute(refreshed, 1)

@@ -3,6 +3,7 @@ import { v4 as uuidv4 } from 'uuid'
 import type {
   ApplicationCompletedStepResult,
   ApplicationEvidence,
+  ApplicationExecutionContext,
   ApplicationMutationExecutor,
   ApplicationPlannedStep,
 } from '@/core/application-control'
@@ -30,7 +31,7 @@ export class AssetLibraryMutationExecutor implements ApplicationMutationExecutor
     bumpRevision: () => void
   }) {}
 
-  async apply(step: MutationStep): Promise<ApplicationCompletedStepResult> {
+  async apply(step: MutationStep, context?: ApplicationExecutionContext): Promise<ApplicationCompletedStepResult> {
     const libraryId = step.target.id
     const library = (await assetApplicationService.listLibraries()).find((item) => item.id === libraryId)
     if (!library) throw new Error('ASSET_LIBRARY_NOT_FOUND：素材集合不存在。')
@@ -39,9 +40,9 @@ export class AssetLibraryMutationExecutor implements ApplicationMutationExecutor
       event: 'asset.library_mutation.apply.start', libraryId,
     })
     try {
-      await applyWriterTable(WRITERS, libraryId, step.mutations)
+      await applyWriterTable(WRITERS, { libraryId, operationId: context?.operationId }, step.mutations)
     } catch (error) {
-      await assetApplicationService.renameLibrary(libraryId, previousName)
+      await assetApplicationService.renameLibrary(libraryId, previousName, context)
       logger.error('素材集合属性写入失败', error, {
         event: 'asset.library_mutation.apply.failed', libraryId,
       })
@@ -69,15 +70,15 @@ export class AssetLibraryMutationExecutor implements ApplicationMutationExecutor
     }
   }
 
-  async compensate(_step: MutationStep, result: ApplicationCompletedStepResult): Promise<ApplicationEvidence[]> {
+  async compensate(_step: MutationStep, result: ApplicationCompletedStepResult, context?: ApplicationExecutionContext): Promise<ApplicationEvidence[]> {
     if (!result.undoToken) return []
-    return (await this.undo(result.undoToken)).evidence
+    return (await this.undo(result.undoToken, context)).evidence
   }
 
-  async undo(undoToken: string): Promise<ApplicationCompletedStepResult> {
+  async undo(undoToken: string, context?: ApplicationExecutionContext): Promise<ApplicationCompletedStepResult> {
     const record = undoRecords.get(undoToken)
     if (!record) throw new Error('ASSET_LIBRARY_UNDO_NOT_FOUND：素材集合撤销引用不存在或已使用。')
-    await assetApplicationService.renameLibrary(record.libraryId, record.name)
+    await assetApplicationService.renameLibrary(record.libraryId, record.name, context)
     undoRecords.delete(undoToken)
     this.dependencies.bumpRevision()
     const revision = this.dependencies.readRevision()

@@ -22,8 +22,8 @@ export function createElectronCameraStageProjects(): CameraStageProjectsPlatform
     },
     upsertProjectRecord: (record: CameraStageProjectPlatformWrite) =>
       getNativeCameraStageProjects().upsertProjectRecord(record),
-    renameProjectRecord: (projectId: string, name: string, updatedAt: number) =>
-      getNativeCameraStageProjects().renameProjectRecord(projectId, name, updatedAt),
-    deleteProjectRecord: (projectId: string) => getNativeCameraStageProjects().deleteProjectRecord(projectId),
+    renameProjectRecord: (projectId, name, updatedAt, operationCorrelation) =>
+      getNativeCameraStageProjects().renameProjectRecord(projectId, name, updatedAt, operationCorrelation),
+    deleteProjectRecord: (projectId, operationCorrelation) => getNativeCameraStageProjects().deleteProjectRecord(projectId, operationCorrelation),
   }
 }

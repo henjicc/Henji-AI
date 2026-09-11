@@ -1,6 +1,7 @@
 import type {
   ApplicationCompletedStepResult,
   ApplicationEvidence,
+  ApplicationExecutionContext,
   ApplicationMutationExecutor,
   ApplicationPlannedStep,
 } from '@/core/application-control'
@@ -34,10 +35,10 @@ export class CanvasProjectMutationExecutor implements ApplicationMutationExecuto
   readonly writableProperties = writableProperties(WRITERS)
   readonly propertyOperations = propertyOperations(WRITERS)
 
-  async apply(step: MutationStep): Promise<ApplicationCompletedStepResult> {
+  async apply(step: MutationStep, context?: ApplicationExecutionContext): Promise<ApplicationCompletedStepResult> {
     const projectId = step.target.id
     const previousName = useProjectStore.getState().projects.find((project) => project.id === projectId)?.name ?? ''
-    await applyWriterTable(WRITERS, projectId, step.mutations)
+    await applyWriterTable(WRITERS, { projectId, operationId: context?.operationId }, step.mutations)
     const revision = this.revision()
     logger.info('画布工程属性写入完成', {
       event: 'canvas.project_mutation.apply.completed', projectId,
@@ -57,18 +58,18 @@ export class CanvasProjectMutationExecutor implements ApplicationMutationExecuto
     }
   }
 
-  async compensate(_step: MutationStep, result: ApplicationCompletedStepResult): Promise<ApplicationEvidence[]> {
+  async compensate(_step: MutationStep, result: ApplicationCompletedStepResult, context?: ApplicationExecutionContext): Promise<ApplicationEvidence[]> {
     if (!result.undoToken) return []
-    return (await this.undo(result.undoToken)).evidence
+    return (await this.undo(result.undoToken, context)).evidence
   }
 
-  async undo(undoToken: string): Promise<ApplicationCompletedStepResult> {
+  async undo(undoToken: string, context?: ApplicationExecutionContext): Promise<ApplicationCompletedStepResult> {
     if (!undoToken.startsWith(UNDO_PREFIX)) throw new Error('CANVAS_PROJECT_UNDO_INVALID')
     const parsed = JSON.parse(undoToken.slice(UNDO_PREFIX.length)) as Record<string, unknown>
     const projectId = typeof parsed.projectId === 'string' ? parsed.projectId : ''
     const previousName = typeof parsed.previousName === 'string' ? parsed.previousName : ''
     if (!projectId || !previousName) throw new Error('CANVAS_PROJECT_UNDO_INVALID')
-    await renameCanvasProject(projectId, previousName)
+    await renameCanvasProject(projectId, previousName, context)
     const revision = this.revision()
     return {
       status: 'completed',

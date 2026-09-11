@@ -8,6 +8,7 @@ import {
 } from '../../src/core/assistant/runtimeContracts'
 import { agentWorkingSummarySchema } from '../../src/core/assistant/workingContext'
 import { modelStepMessageSchema } from '@henjicc/ai-sdk'
+import { operationRecoverySchema } from '../../src/core/assistant/operations'
 
 export const agentUtilityStartPayloadSchema = z.object({
   runId: z.string().min(1),
@@ -18,4 +19,5 @@ export const agentUtilityStartPayloadSchema = z.object({
   conversationHistorySequences: z.array(z.number().int().positive()).max(1_000).default([]),
   recoveryContext: agentWorkingSummarySchema.optional(),
   budgetContinuation: agentBudgetContinuationSchema.optional(),
+  operationRecovery: operationRecoverySchema.optional(),
 }).strict()

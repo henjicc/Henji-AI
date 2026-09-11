@@ -55,6 +55,7 @@ function assetDescriptor(entityType: string, suffix: string, title: string, valu
  */
 export interface AssetWriteDraft {
   readonly assetId: string
+  readonly operationId?: string
   readonly applied: Set<string>
 }
 
@@ -104,7 +105,7 @@ export const ASSET_FIELDS: ApplicationFieldDefinition<Record<string, unknown>, A
     read: (asset) => String(asset.displayName),
     writer: {
       async write(draft, mutation) {
-        await assetApplicationService.rename(draft.assetId, displayName(mutation.value))
+        await assetApplicationService.rename(draft.assetId, displayName(mutation.value), draft)
         draft.applied.add(mutation.propertyId)
       },
     },
@@ -125,7 +126,7 @@ export const ASSET_FIELDS: ApplicationFieldDefinition<Record<string, unknown>, A
     read: (asset) => asJson(asset.tags ?? []),
     writer: {
       async write(draft, mutation) {
-        await assetApplicationService.replaceTags(draft.assetId, tagList(mutation.value))
+        await assetApplicationService.replaceTags(draft.assetId, tagList(mutation.value), draft)
         draft.applied.add(mutation.propertyId)
       },
     },
@@ -141,8 +142,8 @@ export const ASSET_FIELDS: ApplicationFieldDefinition<Record<string, unknown>, A
       operations: ['append', 'remove'],
       async write(draft, mutation) {
         const id = libraryRefId(mutation.value)
-        if (mutation.operation === 'append') await assetApplicationService.addToLibrary(id, draft.assetId)
-        else await assetApplicationService.removeFromLibrary(id, draft.assetId)
+        if (mutation.operation === 'append') await assetApplicationService.addToLibrary(id, draft.assetId, draft)
+        else await assetApplicationService.removeFromLibrary(id, draft.assetId, draft)
         draft.applied.add(mutation.propertyId)
       },
     },
@@ -151,17 +152,17 @@ export const ASSET_FIELDS: ApplicationFieldDefinition<Record<string, unknown>, A
 ]
 
 /** 素材集合改名：写入目标只有集合 id，改名直接落到领域服务，没有需要累积的中间态。 */
-export const LIBRARY_FIELDS: ApplicationFieldDefinition<Record<string, unknown>, string>[] = [
+export const LIBRARY_FIELDS: ApplicationFieldDefinition<Record<string, unknown>, { libraryId: string; operationId?: string }>[] = [
   {
     propertyId: `${LIBRARY_ENTITY_TYPE}.name`,
     descriptor: assetDescriptor(LIBRARY_ENTITY_TYPE, 'name', '集合名称', { kind: 'string', minLength: 1, maxLength: 200 }),
     read: (library) => String(library.name),
     writer: {
-      async write(libraryId, mutation) {
+      async write(draft, mutation) {
         if (typeof mutation.value !== 'string' || mutation.value.trim() === '') {
           throw new Error('ASSET_LIBRARY_NAME_INVALID：素材集合名称必须是非空字符串。')
         }
-        await assetApplicationService.renameLibrary(libraryId, mutation.value)
+        await assetApplicationService.renameLibrary(draft.libraryId, mutation.value, draft)
       },
     },
     storeActions: [],

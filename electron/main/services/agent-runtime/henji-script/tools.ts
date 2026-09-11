@@ -21,7 +21,7 @@ export const RESUME_HENJI_SCRIPT_TOOL = 'resume_henji_script'
 
 const resumeHenjiScriptInputSchema = z.object({
   checkpoint: henjiScriptCheckpointSchema,
-  observedStatus: z.enum(['success', 'error', 'cancelled', 'timeout']),
+  observedStatus: z.enum(['success', 'error', 'cancelled', 'timeout']).optional(),
 }).strict()
 
 export function createHenjiScriptTools(
@@ -31,6 +31,7 @@ export function createHenjiScriptTools(
     outputLimitProfile: 'checkpoint',
     preview: (input) => dependencies.service.preview(input),
     execute: async (input, context) => dependencies.service.execute(input, {
+      operationId: context.operationId,
       runId: context.runId,
       threadId: context.threadId,
       toolCallId: context.toolCallId,
@@ -52,6 +53,7 @@ export function createHenjiScriptTools(
     outputLimitProfile: 'checkpoint',
     aiInputSchema: { type: 'object', properties: {}, additionalProperties: false },
     execute: async (input, context) => dependencies.service.resume(input.checkpoint, input.observedStatus, {
+      operationId: context.operationId,
       runId: context.runId, threadId: context.threadId, toolCallId: context.toolCallId,
       signal: context.signal, gateway: dependencies.gateway,
       getHostContext: dependencies.getHostContext,

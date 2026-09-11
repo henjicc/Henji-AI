@@ -6,7 +6,7 @@ import type { AgentToolRegistry } from '../tools/registry'
 import { AgentRecoveryWriteGuard } from './recovery-guard'
 
 describe('AgentRecoveryWriteGuard', () => {
-  it('只接受同领域成功只读观察解除写保护', () => {
+  it('历史记录缺少原操作关联，同领域成功读取也不能解除写保护', () => {
     const summary = {
       ...createAgentWorkingSummary('恢复生成任务'),
       recovery: {
@@ -43,11 +43,11 @@ describe('AgentRecoveryWriteGuard', () => {
     expect(guard.validate(writeCall)).toContain('恢复检查尚未完成')
     expect(guard.consumeVerification({
       toolCallId: 'read', toolName: 'read_task', input: {}, dynamic: false,
-    }, observation)).toBe(true)
-    expect(guard.validate(writeCall)).toBeNull()
+    }, observation)).toBe(false)
+    expect(guard.validate(writeCall)).toContain('恢复检查尚未完成')
   })
 
-  it('同一运行内的通用写失败后，可由命中受影响实体的领域读取解除保护', () => {
+  it('同一运行内写 A 后读 B 或同类实体目录不能解除保护', () => {
     const definitions = new Map([
       ['change_application_entities', { readOnly: false, category: 'application' }],
       ['get_asset', { readOnly: true, category: 'assets' }],
@@ -57,14 +57,14 @@ describe('AgentRecoveryWriteGuard', () => {
     const guard = new AgentRecoveryWriteGuard(undefined, registry)
     const failedWrite = {
       toolCallId: 'write', toolName: 'change_application_entities', dynamic: false,
-      input: { changes: [{ kind: 'set_properties', entityType: 'asset', properties: {} }] },
+      input: { changes: [{ kind: 'set_properties', entityType: 'asset', target: { kind: 'asset', id: 'A' }, properties: { name: 'new' } }] },
     }
     guard.activateUnknownWrite(failedWrite, 'application')
     const observation: AgentToolObservation = {
       source: { toolName: 'get_asset', toolVersion: 1, toolCallId: 'read-asset' },
       trust: 'untrusted_observation', dataClasses: ['C1'], summary: '素材已读取', output: { asset: {} },
       effects: [{
-        effect: 'observe', entityTypes: ['asset'], propertyIds: [], targetRefs: [],
+        effect: 'observe', entityTypes: ['asset'], propertyIds: [], targetRefs: [{ kind: 'asset', id: 'B' }],
         count: 1, verified: true, evidence: ['asset:verified'],
       }],
     }
@@ -74,7 +74,8 @@ describe('AgentRecoveryWriteGuard', () => {
     }, { ...observation, effects: [{ ...observation.effects![0], entityTypes: ['canvas.node'] }] })).toBe(false)
     expect(guard.consumeVerification({
       toolCallId: 'read-asset', toolName: 'get_asset', input: {}, dynamic: false,
-    }, observation)).toBe(true)
+    }, observation)).toBe(false)
+    expect(guard.validate(failedWrite)).toContain('恢复检查尚未完成')
   })
 
   it('供应商参数错误后只允许修正原模型并提交一次', () => {

@@ -1,5 +1,6 @@
 import { v4 as uuidv4 } from 'uuid'
 import { createLogger } from '@/core/logging'
+import type { ApplicationRef } from '@/core/application-control'
 import {
   deleteCameraStageProjectRecord,
   getCameraStageProjectRecord,
@@ -133,13 +134,19 @@ export async function saveProjectDraft(
 }
 
 /** 保存当前场景为工程；新场景自动生成 id，返回保存后的工程标识 */
-export async function saveCurrentProject(): Promise<SavedProjectInfo> {
-  return await saveProjectDraft(createCurrentProjectDraft())
+export async function saveCurrentProject(context?: { operationId?: string }, targets?: ApplicationRef[]): Promise<SavedProjectInfo> {
+  const draft = createCurrentProjectDraft()
+  if (context?.operationId) draft.record.operationCorrelation = {
+    operationId: context.operationId, boundaryId: uuidv4(),
+    targets: targets ?? [{ kind: 'camera_stage.project', id: draft.id }],
+  }
+  return await saveProjectDraft(draft)
 }
 
 /** 创建并持久化默认工程，但不绑定或重置当前编辑器会话。 */
 export async function createStoredCameraStageProject(
   name: string = CAMERA_STAGE_DEFAULT_PROJECT_NAME,
+  context?: { operationId?: string },
 ): Promise<CreatedCameraStageProjectInfo> {
   const id = uuidv4()
   const now = Date.now()
@@ -157,6 +164,13 @@ export async function createStoredCameraStageProject(
       updatedAt: now,
       objectCount: snapshot.objects.length,
       sceneJson,
+      ...(context?.operationId ? { operationCorrelation: {
+        operationId: context.operationId, boundaryId: uuidv4(), targets: [
+          { kind: 'camera_stage.project', id },
+          { kind: 'camera_stage.camera', id: `${id}:${snapshot.defaultCameraId}` },
+          { kind: 'camera_stage.state_keyframe', id: `${id}:${snapshot.defaultStateKeyframeId}` },
+        ],
+      } } : {}),
     },
   }, false)
   return {
@@ -171,6 +185,7 @@ export async function createStoredCameraStageProject(
 export async function applyProjectEnvironmentImage(
   projectId: string,
   environmentImageUrl: string | null,
+  context?: { operationId?: string },
 ): Promise<void> {
   logger.info('同步 3D 全景环境开始', {
     event: 'camera_stage.project.environment_sync.start',
@@ -182,7 +197,7 @@ export async function applyProjectEnvironmentImage(
     if (currentState.currentProjectId === projectId) {
       if (currentState.sceneSettings.sky.environmentImageUrl !== environmentImageUrl) {
         currentState.setSceneEnvironmentImageUrl(environmentImageUrl)
-        await saveCurrentProject()
+        await saveCurrentProject(context)
       }
     } else {
       const record = await getCameraStageProjectRecord(projectId)
@@ -206,7 +221,10 @@ export async function applyProjectEnvironmentImage(
           stateKeyframes: snapshot.stateKeyframes,
         })
         await enqueueProjectMutation(projectId, async () => {
-          await upsertCameraStageProjectRecord({ ...record, sceneJson, updatedAt: Date.now() })
+          await upsertCameraStageProjectRecord({ ...record, sceneJson, updatedAt: Date.now(),
+            ...(context?.operationId ? { operationCorrelation: { operationId: context.operationId,
+              boundaryId: uuidv4(), targets: [{ kind: 'camera_stage.project' as const, id: projectId }] } } : {}),
+          })
         })
       }
     }
@@ -324,20 +342,24 @@ export async function readProjectSnapshot(projectId: string): Promise<CameraStag
   }
 }
 
-export async function renameProject(projectId: string, name: string): Promise<void> {
+export async function renameProject(projectId: string, name: string, context?: { operationId?: string }): Promise<void> {
   const trimmed = name.trim() || CAMERA_STAGE_DEFAULT_PROJECT_NAME
-  await renameCameraStageProjectRecord(projectId, trimmed, Date.now())
+  const correlation = context?.operationId ? { operationId: context.operationId, boundaryId: uuidv4(),
+    targets: [{ kind: 'camera_stage.project', id: projectId }] } : undefined
+  await enqueueProjectMutation(projectId, async () => renameCameraStageProjectRecord(projectId, trimmed, Date.now(), correlation))
   const state = useCameraStageStore.getState()
   if (state.currentProjectId === projectId) {
     state.bindProject(projectId, trimmed)
   }
 }
 
-export async function deleteProject(projectId: string): Promise<void> {
+export async function deleteProject(projectId: string, context?: { operationId?: string }): Promise<void> {
   deletedProjectIds.add(projectId)
   logger.info('删除运镜工程开始', { event: 'camera_stage.project.delete.start', projectId })
   try {
-    await enqueueProjectMutation(projectId, async () => deleteCameraStageProjectRecord(projectId))
+    const correlation = context?.operationId ? { operationId: context.operationId, boundaryId: uuidv4(),
+      targets: [{ kind: 'camera_stage.project', id: projectId }] } : undefined
+    await enqueueProjectMutation(projectId, async () => deleteCameraStageProjectRecord(projectId, correlation))
     logger.info('删除运镜工程完成', { event: 'camera_stage.project.delete.completed', projectId })
   } catch (error) {
     deletedProjectIds.delete(projectId)
