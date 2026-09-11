@@ -6,7 +6,7 @@ import { createLogger } from '@/core/logging'
 import { resolveImageDisplayUrl } from '@/services/imageSource'
 import { CropOverlayBox } from '@/features/imageMark/editor/CropOverlayBox'
 import { createOutpaintScene, moveOutpaintImage, outpaintSceneToMargins, resizeOutpaintScene, resolveOutpaintMargins, zoomOutpaintImage, type OutpaintImageSize, type OutpaintMargins, type OutpaintScene } from '../../domain/outpaintGeometry'
-import { getOutpaintPreview, OUTPAINT_PREVIEW_SLICE } from './outpaintPreviewTexture'
+import { getOutpaintPreview } from './outpaintPreviewTexture'
 
 const logger = createLogger('features.canvas.outpaint')
 
@@ -89,17 +89,17 @@ export const OutpaintStage = memo(function OutpaintStage({ source, params, maxim
       onMouseLeave={() => { if (wheelTimer.current) commitRef.current?.() }}>
       {failed ? <UiError message={t('node.outpaint.loadFailed')} /> : !image && <UiLoading />}
       <div className="absolute left-0 top-0 origin-top-left" style={{ width: viewport.width, height: viewport.height, transform: `scale(calc(100cqw / ${viewport.width}px))` }}>
-      {scene && <div className={`pointer-events-none absolute ${texture ? 'border-solid border-transparent' : 'image-editor-transparency-grid'}`}
+      {scene && <div className={`pointer-events-none absolute overflow-hidden ${texture ? '' : 'image-editor-transparency-grid'}`}
         data-outpaint-preview={texture ? 'ready' : 'pending'}
-        style={{ left: scene.frame.x, top: scene.frame.y, width: scene.frame.width, height: scene.frame.height,
-          ...(texture ? {
-            borderTopWidth: Math.max(0, scene.image.y - scene.frame.y),
-            borderRightWidth: Math.max(0, scene.frame.x + scene.frame.width - scene.image.x - scene.image.width),
-            borderBottomWidth: Math.max(0, scene.frame.y + scene.frame.height - scene.image.y - scene.image.height),
-            borderLeftWidth: Math.max(0, scene.image.x - scene.frame.x),
-            borderImageSource: `url("${texture}")`, borderImageSlice: `${OUTPAINT_PREVIEW_SLICE} fill`, borderImageRepeat: 'stretch',
-          } : {}),
+        style={{ left: scene.frame.x, top: scene.frame.y, width: scene.frame.width, height: scene.frame.height }}>
+        {texture && image && <div className="absolute" style={{
+          left: scene.image.x - scene.frame.x - maximum * scene.image.width / image.width,
+          top: scene.image.y - scene.frame.y - maximum * scene.image.height / image.height,
+          width: scene.image.width * (1 + 2 * maximum / image.width),
+          height: scene.image.height * (1 + 2 * maximum / image.height),
+          backgroundImage: `url("${texture}")`, backgroundSize: '100% 100%',
         }} />}
+      </div>}
       <img src={displaySource} crossOrigin={corsFallback !== displaySource && /^(?:https?:|asset:|henji-media:)/i.test(displaySource) ? 'anonymous' : undefined} alt="" draggable={false}
         className="pointer-events-none absolute select-none"
         style={scene ? { left: scene.image.x, top: scene.image.y, width: scene.image.width, height: scene.image.height,
@@ -112,7 +112,7 @@ export const OutpaintStage = memo(function OutpaintStage({ source, params, maxim
           onSourceAspectRatio(width / height)
           setFailed(false)
           const ticket = ++previewTicket.current
-          void getOutpaintPreview(event.currentTarget).then(value => {
+          void getOutpaintPreview(event.currentTarget, maximum).then(value => {
             if (ticket === previewTicket.current) setPreview({ source, texture: value })
           }).catch(error => {
             if (ticket === previewTicket.current) logger.warn('扩图边缘预览失败，保留透明区域提示', { event: 'outpaint.preview.failed', error })

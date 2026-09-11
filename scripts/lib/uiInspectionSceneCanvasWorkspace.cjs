@@ -425,6 +425,7 @@ function attachUiInspectionCanvasWorkspace(context) {
     await stage.waitFor({ state: 'visible', timeout: 12000 })
     await stage.locator('[data-crop-frame]').waitFor({ state: 'visible' })
     await stage.locator('[data-outpaint-preview="ready"]').waitFor({ state: 'visible' })
+    await settlePage(page)
     const geometry = async () => stage.evaluate(element => {
       const image = element.querySelector('img').getBoundingClientRect()
       const frame = element.querySelector('[data-crop-frame]').getBoundingClientRect()
