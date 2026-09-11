@@ -11,6 +11,7 @@ import { ApplicationHostBridge } from '../../../electron/main/services/mcp/appli
 import { McpOperationStore } from '../../../electron/main/services/mcp/operationStore'
 import { McpOperationCoordinator } from '../../../electron/main/services/mcp/operationCoordinator'
 import type { McpPlatform, LocalHostRequest } from '@/core/application-control/localHostContracts'
+if (!process.versions.electron) throw new Error('本测试必须由正式 Electron SQLite 原生运行器执行，不能跳过原生边界。')
 const { JSDOM } = createRequire(import.meta.url)('jsdom') as { JSDOM: new (html: string, options: { url: string }) => { window: Window } }
 
 it('真实 MCP 写入经过授权、SQLite操作账本、正式Session及设置保存；预检拒绝不会永久锁死目标', async () => {

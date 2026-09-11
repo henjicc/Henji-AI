@@ -9,6 +9,8 @@ import { McpOperationCoordinator } from './operationCoordinator'
 import { ApplicationHostBridge } from './applicationHostBridge'
 import type { LocalHostRequest } from '../../../../src/core/application-control/localHostContracts'
 
+if (!process.versions.electron) throw new Error('本测试必须由正式 Electron SQLite 原生运行器执行，不能跳过原生边界。')
+
 const opened: Database.Database[] = []
 afterEach(() => { for (const db of opened.splice(0)) db.close() })
 function fixture(): { db: Database.Database; store: McpOperationStore; coordinator: McpOperationCoordinator; callerId: string; sessionId: string; baseline: string } {
