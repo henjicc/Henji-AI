@@ -15,12 +15,10 @@ import {
 import {
   ensurePathWritable,
   extensionToMime,
-  imageCmdWarn,
   isDataUrl,
   isLikelyLocalPath,
   isNativeImageRuntime,
   mimeToExtension,
-  normalizeErrorMessage,
   normalizeLocalPath,
   normalizeSourceKey,
   persistBytes,
@@ -258,23 +256,9 @@ export async function saveImageSourceToAppDebugDir(
 
 export async function copyImageSourceToClipboard(source: string): Promise<void> {
   const startedAt = performance.now();
-  try {
-    await getPlatform().clipboard.writeImageFromSource(source);
-    return;
-  } catch (error) {
-    if (!isNativeImageRuntime()) {
-      imageCmdWarn('copyImageSourceToClipboard native-unavailable -> web fallback', {
-        runtime: 'web',
-        error: normalizeErrorMessage(error),
-      });
-    }
-  }
-
-  const localPath = await persistImageSource(source);
-
   if (isNativeImageRuntime()) {
     try {
-      await getPlatform().clipboard.writeImageFromPath(localPath);
+      await getPlatform().clipboard.writeImageFromSource(source);
       return;
     } catch (error) {
       throwNativeImageFailure('copyImageSourceToClipboard', startedAt, error, {
@@ -283,6 +267,7 @@ export async function copyImageSourceToClipboard(source: string): Promise<void> 
     }
   }
 
+  const localPath = await persistImageSource(source);
   const dataUrl = await sourceToDataUrl(localPath);
   const blob = await (await fetch(dataUrl)).blob();
   if (!('clipboard' in navigator) || typeof ClipboardItem === 'undefined') {

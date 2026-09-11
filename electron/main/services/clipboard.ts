@@ -3,6 +3,9 @@ import fs from 'node:fs/promises'
 import path from 'node:path'
 import { resolveSourceBytes } from './image/source'
 import { loadSharp } from './image/sharp-loader'
+import { createMainLogger } from './logging/main-logger'
+
+const logger = createMainLogger('main.clipboard')
 
 export interface ClipboardFileEntryDto {
   path: string
@@ -143,22 +146,47 @@ export async function readClipboardImage(): Promise<ClipboardImageDto | null> {
 }
 
 export async function writeImageFromPath(filePath: string): Promise<void> {
-  const sharp = await loadSharp()
-  const pngBytes = await sharp(await fs.readFile(filePath)).png().toBuffer()
-  const image = nativeImage.createFromBuffer(pngBytes)
-  if (image.isEmpty()) {
-    throw new Error('Failed to decode image for clipboard')
-  }
-  clipboard.writeImage(image)
+  await writeClipboardImage(() => fs.readFile(filePath), 'path')
 }
 
 export async function writeImageFromSource(source: string): Promise<void> {
-  const { bytes } = await resolveSourceBytes(source)
-  const sharp = await loadSharp()
-  const pngBytes = await sharp(bytes).png().toBuffer()
-  const image = nativeImage.createFromBuffer(pngBytes)
-  if (image.isEmpty()) {
-    throw new Error('Failed to decode image source for clipboard')
+  await writeClipboardImage(async () => (await resolveSourceBytes(source)).bytes, 'source')
+}
+
+async function writeClipboardImage(readBytes: () => Promise<Buffer>, inputKind: string): Promise<void> {
+  const startedAt = performance.now()
+  let stage = 'read'
+  const context: Record<string, string | number> = { inputKind }
+  logger.info('开始复制图片', { event: 'clipboard.image_write.start', context: { ...context } })
+  try {
+    const bytes = await readBytes()
+    context.sourceBytes = bytes.length
+    stage = 'decode'
+    const sharp = await loadSharp()
+    const pngBytes = await sharp(bytes).png().toBuffer()
+    context.pngBytes = pngBytes.length
+    stage = 'native_image'
+    logger.info('图片转换完成，开始创建剪贴板位图', {
+      event: 'clipboard.image_write.prepared', context: { ...context },
+    })
+    const image = nativeImage.createFromBuffer(pngBytes)
+    if (image.isEmpty()) throw new Error('Failed to decode image for clipboard')
+    const size = image.getSize()
+    context.width = size.width
+    context.height = size.height
+    stage = 'write'
+    logger.info('图片已解码，开始写入系统剪贴板', {
+      event: 'clipboard.image_write.decoded', context: { ...context, rssBytes: process.memoryUsage().rss },
+    })
+    clipboard.writeImage(image)
+    logger.info('图片复制完成', {
+      event: 'clipboard.image_write.completed', context: { ...context, durationMs: Math.round(performance.now() - startedAt) },
+    })
+  } catch (error) {
+    logger.error('图片复制失败', {
+      event: 'clipboard.image_write.failed', error,
+      context: { ...context, stage, durationMs: Math.round(performance.now() - startedAt) },
+    })
+    throw error
   }
-  clipboard.writeImage(image)
 }

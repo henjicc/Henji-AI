@@ -1,4 +1,5 @@
 const { createWindowStartupScene } = require('./uiInspectionSceneWindowStartup.cjs')
+const { createClipboardImageScene } = require('./uiInspectionSceneClipboardImage.cjs')
 
 function createSupportScenes(context) {
   const {
@@ -10,6 +11,7 @@ function createSupportScenes(context) {
 
   return [
     createWindowStartupScene(),
+    createClipboardImageScene(context),
     { id: 'assets-home', surface: '资产库', name: '资产库-首页', setup: setupAssets },
     {
       id: 'assets-search-focus',
