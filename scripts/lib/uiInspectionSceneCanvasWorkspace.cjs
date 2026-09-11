@@ -464,9 +464,9 @@ function attachUiInspectionCanvasWorkspace(context) {
     await settlePage(page)
     const params = await page.evaluate(async ({ projectId, nodeId }) => {
       const record = await window.henjiNative.storyboardProjects.getProjectRecord(projectId)
-      return JSON.parse(record.nodesJson).find(node => node.id === nodeId).data.params
+      return JSON.parse(record.nodesJson).find(node => node.id === nodeId).data.outpaintMargins
     }, { projectId, nodeId })
-    if (params.expandLeft !== 0 || params.expandRight <= 80 || params.zoomOutPercentage !== 0) {
+    if (params.expandLeft !== 0 || params.expandRight <= 80) {
       throw new Error(`扩图参数保存错误：${JSON.stringify(params)}`)
     }
     await page.locator(`[data-project-id="${projectId}"]:visible`).click()
@@ -721,6 +721,18 @@ function attachUiInspectionCanvasWorkspace(context) {
       }
     }
     await settlePage(page)
+    const beforeModelChange = await geometry()
+    await shell.getByText('模型', { exact: true }).locator('..').getByRole('button').click()
+    await page.locator('[data-model-list-scroll-region]:visible').getByRole('button').filter({ hasText: 'GPT Image 2' }).first().click()
+    await settlePage(page)
+    if (!/gpt-image-2/.test(await shell.getAttribute('data-generation-node-model-id'))) throw new Error('扩图未切换到编辑模型')
+    if (await shell.getByText(/^(宽高比|比例|Aspect Ratio)$/i).count()) throw new Error('扩图不应暴露比例设置')
+    if (await shell.getByText('图片', { exact: true }).count()) throw new Error('编辑模型重复显示扩图原图输入')
+    await shell.getByText(/^(分辨率|Resolution)$/i).waitFor({ state: 'visible' })
+    const afterModelChange = await geometry()
+    for (const part of ['image', 'frame']) for (const key of ['x', 'y', 'width', 'height']) {
+      if (Math.abs(beforeModelChange[part][key] - afterModelChange[part][key]) > 1) throw new Error('切换模型重置了扩图构图')
+    }
   }
 
   async function setupCanvasParameterTools(page) {

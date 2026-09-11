@@ -2,7 +2,7 @@ import { webcrypto } from 'node:crypto'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const fixture = vi.hoisted(() => ({ pixels: new Uint8ClampedArray(64 * 64 * 4) }))
-vi.mock('../../ui/specialInterfaces/multiAngle/imageBlockTextures', () => ({ sampleImageBlock: () => fixture.pixels }))
+vi.mock('../ui/specialInterfaces/multiAngle/imageBlockTextures', () => ({ sampleImageBlock: () => fixture.pixels }))
 vi.mock('@/core/logging', () => ({ createLogger: () => ({ debug: vi.fn() }) }))
 
 describe('扩图模糊预览缓存', () => {

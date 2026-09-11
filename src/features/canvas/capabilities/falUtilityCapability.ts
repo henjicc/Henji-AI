@@ -41,7 +41,7 @@ export function createFalUtilityCapability(options: {
           params: options.workbenchEditor ? { zoomOutPercentage: 0 } : {},
           generationUi: {
             promptMode: options.promptMode ?? 'hidden',
-            modelMode: 'locked',
+            modelMode: options.workbenchEditor ? 'selectable' : 'locked',
             layoutMode: options.workbenchEditor ? 'workbench' : 'stacked',
             ...(options.workbenchEditor ? { workbenchEditor: options.workbenchEditor } : {}),
             excludeParamIds: ['image'],
@@ -57,15 +57,18 @@ export function createFalUtilityCapability(options: {
       defaultEnabled: true,
       unavailableReasonKey: null,
     },
-    modelPolicy: { mode: 'not-applicable' },
+    modelPolicy: options.workbenchEditor
+      ? { mode: 'node-schema', requiredTags: ['image-to-image'], additionalModelIds: [options.modelId] }
+      : { mode: 'not-applicable' },
     promptPolicy: {
       hiddenTemplateVersion: null,
       fixedSemanticParams: {},
       visibleParameterKeys: [],
+      ...(options.workbenchEditor ? { showAllModelParameters: true } : {}),
     },
     outputPolicy: {
       resultKind: 'image',
-      count: { mode: 'single' },
+      count: options.workbenchEditor ? { mode: 'dynamic', minCount: 1, maxCount: 64 } : { mode: 'single' },
       postProcess: 'none',
       failureMode: 'single-result',
     },

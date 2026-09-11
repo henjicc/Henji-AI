@@ -40,6 +40,7 @@ import {
   getConnectedParamIds,
 } from '@/features/canvas/application/graphValueResolver';
 import { transferModelParamOverridesBetweenModels } from '@/core/params/modelParamTransfer';
+import { getAspectChoiceParams } from '@/core/params/ratioResolution';
 import { NodeInputRows } from '@/features/canvas/params/NodeInputRows';
 import { useNodeModelParams } from '@/features/canvas/params/useNodeModelParams';
 import { registry } from '@/core/ModelRegistry';
@@ -97,6 +98,7 @@ export const GenerationNodeShell = memo(({
   promptMaxCharacters,
   showModelInput = true,
   excludeParamIds,
+  hideAspectRatio = false,
   prepareRuntimeParams,
   prepareGenerationRequest,
   commitGenerationResult,
@@ -105,6 +107,7 @@ export const GenerationNodeShell = memo(({
   workbenchStage,
   workbenchMediaInput,
   workbenchInspectorWidth,
+  workbenchPromptLast = false,
   workbenchStageAspectRatio,
   minWidth = 320,
   minHeight = showPromptInput ? 160 : 0,
@@ -237,8 +240,9 @@ export const GenerationNodeShell = memo(({
     );
   }, [capability, effectiveModel]);
   const excludedSchemaParamIds = useMemo(
-    () => [...new Set([...PROMPT_PARAM_IDS, ...(excludeParamIds ?? [])])],
-    [excludeParamIds],
+    () => [...new Set([...PROMPT_PARAM_IDS, ...(excludeParamIds ?? []),
+      ...(hideAspectRatio ? getAspectChoiceParams(schema).map(param => param.id) : [])])],
+    [excludeParamIds, hideAspectRatio, schema],
   );
 
   const handleModelChange = useCallback((nextModelId: string) => {
@@ -306,7 +310,7 @@ export const GenerationNodeShell = memo(({
     : null;
   const capabilityReferenceImageMax = capability?.modelPolicy.mode === 'verified-families'
     ? capability.modelPolicy.semanticRequirements.referenceImages?.max
-    : undefined;
+    : workbenchInputHandle === 'image' ? capability?.source.maxCount : undefined;
 
   useEffect(() => {
     if (!capability) return;
@@ -451,8 +455,8 @@ export const GenerationNodeShell = memo(({
             {resolvedWorkbenchStage}
           </main>
           <aside className="nodrag nowheel flex min-h-0 min-w-0 flex-col gap-1.5 overflow-y-auto border-l border-veil-subtle p-2">
-            {promptEditor}
-            {inputRows}
+            {workbenchPromptLast ? inputRows : promptEditor}
+            {workbenchPromptLast ? promptEditor : inputRows}
           </aside>
         </div>
       ) : (

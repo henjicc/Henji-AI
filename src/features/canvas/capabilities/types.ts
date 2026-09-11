@@ -108,6 +108,8 @@ export type CanvasImageCapabilityModelPolicy =
       /** 模型仍由复用节点的 schema 选择器管理，能力只声明不可放宽的标签。 */
       mode: 'node-schema';
       requiredTags: readonly ModelTag[];
+      /** 仅在此能力选择器中追加的专用模型，不加入普通模型目录。 */
+      additionalModelIds?: readonly string[];
     }
   | {
       mode: 'verified-families';

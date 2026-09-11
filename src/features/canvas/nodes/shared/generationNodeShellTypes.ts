@@ -44,6 +44,8 @@ export interface GenerationNodeShellProps {
   showModelInput?: boolean
   /** 已由主媒体行或能力面板承载、不应重复呈现的 schema 参数。 */
   excludeParamIds?: readonly string[]
+  /** 构图工具在提交时自动匹配画幅，参数区不提供比例覆盖。 */
+  hideAspectRatio?: boolean
   /** 在供应商配置/上传/计费前执行的本地预检，可补充仅供运行时使用的隐藏参数。 */
   prepareRuntimeParams?: (
     context: GenerationNodeRuntimePreparationContext,
@@ -66,6 +68,8 @@ export interface GenerationNodeShellProps {
   workbenchMediaInput?: RowMediaKind
   /** 简单工具面板的紧凑宽度，工作面占据其余空间。 */
   workbenchInspectorWidth?: number
+  /** 参数优先，补充要求在末尾占用剩余空间。 */
+  workbenchPromptLast?: boolean
   /** 主工作面保持源图比例；节点使用原生等比缩放，检查器承接其余宽度。 */
   workbenchStageAspectRatio?: number
   minWidth?: number

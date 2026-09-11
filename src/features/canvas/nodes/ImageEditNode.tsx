@@ -18,7 +18,10 @@ import {
 } from '@/features/canvas/nodes/shared/GenerationNodeShell';
 import { useCanvasStore } from '@/stores/canvasStore';
 import { OutpaintStage } from './outpaint/OutpaintStage';
-import { OUTPAINT_FIELDS, resolveOutpaintRequestParams, type OutpaintMargins } from '../domain/outpaintGeometry';
+import { OUTPAINT_FIELDS, type OutpaintMargins } from '../domain/outpaintGeometry';
+import { CANVAS_IMAGE_CAPABILITY_IDS } from '../capabilities';
+import { OUTPAINT_WORKSPACE_MAXIMUM, readOutpaintComposition, resolveOutpaintModelParams } from '../domain/outpaintModelParams';
+import { prepareOutpaintGeneration } from '../application/outpaintGenerationPreparation';
 import { resolveOutpaintNodeLayout } from '../domain/outpaintNodeLayout';
 import { ICON_NODE_IMAGE_GENERATION } from '@/core/theme/icons';
 
@@ -77,24 +80,25 @@ export const ImageEditNode = memo(({ id, data, selected, width, height }: ImageE
   const onSourceAspectRatio = useCallback((next: number) => {
     useCanvasStore.getState().updateNodeData(id, { outpaintSourceAspectRatio: next }, { skipHistory: true });
   }, [id]);
-  const expansionParam = registry.getModel(data.modelId ?? '')?.params.find(param => param.id === 'expandLeft');
-  const maximum = expansionParam && 'max' in expansionParam && typeof expansionParam.max === 'number' ? expansionParam.max : 0;
+  const maximum = OUTPAINT_WORKSPACE_MAXIMUM;
   const commitMargins = useCallback((margins: OutpaintMargins) => {
     const store = useCanvasStore.getState();
-    const current = store.nodes.find(node => node.id === id);
-    store.updateNodeData(id, { params: { ...current?.data.params, ...margins, zoomOutPercentage: 0 } });
+    store.updateNodeData(id, { outpaintMargins: margins });
   }, [id]);
   const prepareRuntimeParams = useCallback(async ({
     images,
     modelId,
     data: runtimeData,
+    params,
   }: {
     images: string[];
     modelId: string;
     data: CanvasNodeData;
+    params: DynamicValueMap;
   }): Promise<DynamicValueMap> => {
     const model = registry.getModel(modelId);
     if (!model) return {};
+    if (isOutpaint && images.length !== 1) throw new Error(t('node.outpaint.chooseSource'));
     const constraint = resolveGenerationMediaInputConstraints(
       model.params,
       generationUi.excludeParamIds,
@@ -117,10 +121,10 @@ export const ImageEditNode = memo(({ id, data, selected, width, height }: ImageE
     }
     if (isOutpaint && images[0]) {
       const image = await readImageInfo(images[0]);
-      return resolveOutpaintRequestParams(runtimeData.params ?? {}, image, maximum);
+      return resolveOutpaintModelParams(model, params, image, readOutpaintComposition(runtimeData)).params;
     }
     return {};
-  }, [generationUi.excludeParamIds, isOutpaint, maximum, t]);
+  }, [generationUi.excludeParamIds, isOutpaint, t]);
   return (
     <GenerationNodeShell
       id={id}
@@ -135,20 +139,24 @@ export const ImageEditNode = memo(({ id, data, selected, width, height }: ImageE
       apiKeyRequiredKey="node.imageEdit.apiKeyRequired"
       resultTitleKey="node.imageEdit.resultTitle"
       resultNodeExtraData={{ resultKind: 'generic' }}
+      capabilityId={isOutpaint ? CANVAS_IMAGE_CAPABILITY_IDS.outpaint : undefined}
       showPromptInput={generationUi.promptMode !== 'hidden'}
       requirePrompt={generationUi.promptMode === 'required'}
-      promptMaxCharacters={generationUi.promptMaxCharacters}
-      showModelInput={generationUi.modelMode !== 'locked'}
+      promptMaxCharacters={isOutpaint ? undefined : generationUi.promptMaxCharacters}
+      showModelInput={isOutpaint || generationUi.modelMode !== 'locked'}
+      hideAspectRatio={isOutpaint}
       excludeParamIds={isOutpaint ? [...generationUi.excludeParamIds, ...OUTPAINT_FIELDS, 'zoomOutPercentage'] : generationUi.excludeParamIds}
       prepareRuntimeParams={prepareRuntimeParams}
+      prepareGenerationRequest={isOutpaint ? prepareOutpaintGeneration : undefined}
       layoutMode={generationUi.layoutMode}
       minWidth={isOutpaint ? outpaintLayout.minWidth : undefined}
       minHeight={isOutpaint ? outpaintLayout.minHeight : undefined}
       workbenchMediaInput={isOutpaint ? 'image' : undefined}
       workbenchInspectorWidth={isOutpaint ? 200 : undefined}
+      workbenchPromptLast={isOutpaint}
       workbenchStageAspectRatio={isOutpaint ? aspect : undefined}
       workbenchStage={isOutpaint ? ({ images }) => images[0] ? (
-        <OutpaintStage key={`${images[0]}:${aspect}`} source={images[0]} params={data.params ?? {}} maximum={maximum} onCommit={commitMargins} onSourceAspectRatio={onSourceAspectRatio} />
+        <OutpaintStage key={`${images[0]}:${aspect}`} source={images[0]} params={readOutpaintComposition(data)} maximum={maximum} onCommit={commitMargins} onSourceAspectRatio={onSourceAspectRatio} />
       ) : <UiEmpty title={t('node.outpaint.chooseSource')} /> : undefined}
     />
   );

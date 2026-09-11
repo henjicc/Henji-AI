@@ -1,5 +1,5 @@
 import { createLogger } from '@/core/logging'
-import { sampleImageBlock } from '../../ui/specialInterfaces/multiAngle/imageBlockTextures'
+import { sampleImageBlock } from '../ui/specialInterfaces/multiAngle/imageBlockTextures'
 
 const logger = createLogger('features.canvas.outpaint')
 const cache = new Map<string, string>()

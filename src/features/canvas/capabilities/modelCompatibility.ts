@@ -1,4 +1,5 @@
 import { analyzeRatioResolutionParams } from '@/core/params/ratioResolution';
+import { registry } from '@/core/ModelRegistry';
 import type { ModelDefinition, ParamDef } from '@/core/types';
 import { getI18nText } from '@/core/types';
 import type {
@@ -357,6 +358,9 @@ export function mapCanvasCapabilityModelParams(
   }
 
   if (policy.mode === 'node-schema') {
+    if (policy.additionalModelIds?.includes(model.meta.id)) {
+      return { compatible: true, params: { ...getModelDefaults(model), ...currentParams }, reasons: [] };
+    }
     const reasons = policy.requiredTags
       .filter((tag) => !model.meta.tags?.includes(tag))
       .map((tag): CanvasModelCompatibilityReason => ({
@@ -444,7 +448,10 @@ export function resolveCanvasCapabilityModelCandidates(
       rejected: [],
     };
   }
-  const results = models.map((model) => ({ model, ...mapCanvasCapabilityModelParams(model, policy) }));
+  const additional = policy.mode === 'node-schema'
+    ? (policy.additionalModelIds ?? []).flatMap((id) => registry.getModel(id) ?? []) : [];
+  const candidates = [...new Map([...models, ...additional].map((model) => [model.meta.id, model])).values()];
+  const results = candidates.map((model) => ({ model, ...mapCanvasCapabilityModelParams(model, policy) }));
   return {
     candidates: results.filter((result) => result.compatible),
     rejected: results.filter((result) => !result.compatible),

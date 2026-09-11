@@ -308,7 +308,7 @@ describe('画布图片能力应用服务', () => {
         params: capabilityId === CANVAS_IMAGE_CAPABILITY_IDS.outpaint ? { zoomOutPercentage: 0 } : {},
         generationUi: {
           promptMode,
-          modelMode: 'locked',
+          modelMode: capabilityId === CANVAS_IMAGE_CAPABILITY_IDS.outpaint ? 'selectable' : 'locked',
           layoutMode: capabilityId === CANVAS_IMAGE_CAPABILITY_IDS.outpaint ? 'workbench' : 'stacked',
           ...(capabilityId === CANVAS_IMAGE_CAPABILITY_IDS.outpaint ? { workbenchEditor: 'outpaint' } : {}),
           excludeParamIds: ['image'],

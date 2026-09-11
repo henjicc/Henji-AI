@@ -6,7 +6,7 @@ import { createLogger } from '@/core/logging'
 import { resolveImageDisplayUrl } from '@/services/imageSource'
 import { CropOverlayBox } from '@/features/imageMark/editor/CropOverlayBox'
 import { createOutpaintScene, moveOutpaintImage, outpaintSceneToMargins, resizeOutpaintScene, resolveOutpaintMargins, zoomOutpaintImage, type OutpaintImageSize, type OutpaintMargins, type OutpaintScene } from '../../domain/outpaintGeometry'
-import { getOutpaintPreview } from './outpaintPreviewTexture'
+import { getOutpaintPreview } from '../../application/outpaintPreviewTexture'
 
 const logger = createLogger('features.canvas.outpaint')
 
