@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
-import { afterEach, describe, expect, it } from 'vitest'
-import { createApplicationCallerGrant, revokeApplicationCallerGrant } from '@/core/application-control/callerContext'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { applicationCallerAccess, createApplicationCallerGrant, revokeApplicationCallerGrant } from '@/core/application-control/callerContext'
+import { SettingsMutationExecutor } from '@/features/settings/application-control/settingsMutationExecutor'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { getSettingsRegistryRevision } from '@/features/settings/application-control/settingsApplicationService'
 import { getApplicationReflectionRegistry } from '@/features/assistant/applicationCapabilities/applicationControlRegistry'
@@ -56,11 +57,38 @@ describe('独立应用调用入口', () => {
   })
 
   it('有能力写权限但缺少属性权限时由事务内核再次拒绝', async () => {
-    const session = createApplicationCapabilitySession(grant(['application:read', 'application:write', 'settings:read'], true))
-    const result = await session.execute(write('warm'), request('deny-property'))
-    expect(result.ok).toBe(false)
-    if (!result.ok) expect(result.error.message).toMatch(/PERMISSION_DENIED|权限/)
-    expect(useSettingsStore.getState().themeTonePreset).toBe(originalTone)
+    const permissions = ['application:read', 'application:write', 'settings:read']
+    const deniedGrant = grant(permissions, true)
+    const apply = vi.spyOn(SettingsMutationExecutor.prototype, 'applyAtomic')
+    const dispose = retainHostContextTracking()
+    const target = originalTone === 'warm' ? 'cool' : 'warm'
+    const before = localStorage.getItem('settings-storage')
+    try {
+      const registry = getApplicationReflectionRegistry()
+      const availability = await registry.getPropertyAvailability(read.input.ref, read.input.propertyIds,
+        applicationCallerAccess(deniedGrant, 'deny-property', request('deny-property').signal))
+      expect(availability[0]).toMatchObject({ readable: true, writable: false, blocks: expect.arrayContaining([{ kind: 'permission' }]) })
+      const result = await createApplicationCapabilitySession(deniedGrant).execute(write(target), request('deny-property'))
+      expect(result.ok).toBe(false)
+      if (!result.ok) {
+        expect(result.error.message).toBe('PROPERTY_NOT_WRITABLE:interface.theme_tone')
+        expect(result.error.details).toMatchObject({ execution: { notExecuted: true } })
+      }
+      expect(apply).not.toHaveBeenCalled()
+      expect(useSettingsStore.getState().themeTonePreset).toBe(originalTone)
+      expect(localStorage.getItem('settings-storage')).toBe(before)
+
+      // 唯一授权差异为属性所需的 settings:write；相同目标和值必须可通过原执行器。
+      const allowedGrant = grant([...permissions, 'settings:write'], true)
+      const allowed = await registry.getPropertyAvailability(read.input.ref, read.input.propertyIds,
+        applicationCallerAccess(allowedGrant, 'allow-property', request('allow-property').signal))
+      expect(allowed[0].writable).toBe(true)
+      const accepted = await createApplicationCapabilitySession(allowedGrant).execute(write(target), request('allow-property'))
+      expect(accepted.ok, JSON.stringify(accepted)).toBe(true)
+      expect(apply).toHaveBeenCalledTimes(1)
+      expect(useSettingsStore.getState().themeTonePreset).toBe(target)
+      expect(JSON.parse(localStorage.getItem('settings-storage') ?? '{}').state.themeTonePreset).toBe(target)
+    } finally { apply.mockRestore(); dispose() }
   })
 
   it('对象克隆和已撤销的授权均不可执行', async () => {
