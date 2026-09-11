@@ -1,4 +1,5 @@
 import { useEffect } from 'react'
+import { getMcpConnectionService } from '@/commands/mcp'
 
 import {
   acknowledgeFrontendTool,
@@ -35,6 +36,14 @@ const loadApplicationCapabilityRegistry = (): Promise<typeof import('@/features/
 const completedLimit = 300
 
 export function useApplicationHost(uiReady: boolean): void {
+  useEffect(() => {
+    let disposed = false
+    let detach: (() => void) | undefined
+    void import('./localApplicationHost').then(({ attachLocalApplicationHost }) => {
+      if (!disposed) detach = attachLocalApplicationHost(getMcpConnectionService(), uiReady)
+    }).catch((error) => logger.error('初始化外部连接宿主失败', error, { event: 'mcp.host.initialize.failed' }))
+    return () => { disposed = true; detach?.() }
+  }, [uiReady])
   useEffect(() => registerVisibleGenerationStatusReporter(reportGenerationTaskStatus), [])
   useEffect(() => {
     const disposeTracking = retainHostContextTracking()

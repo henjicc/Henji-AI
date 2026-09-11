@@ -2,7 +2,7 @@ export const APPLICATION_SURFACE_IDS = [
   'workspace.generation', 'workspace.canvas', 'workspace.tools', 'workspace.assets',
   'tool.image_edit', 'tool.camera_stage',
   'settings.general', 'settings.general.basic', 'settings.general.onboarding', 'settings.storage', 'settings.providers_models', 'settings.upload',
-  'settings.general.behavior', 'settings.general.maintenance',
+  'settings.general.behavior', 'settings.general.maintenance', 'settings.general.mcp',
   'settings.models.assistant', 'settings.assistant_preferences', 'settings.assistant_skills',
   'settings.models.alias', 'settings.interface', 'settings.interface.layout', 'settings.interface.theme',
   'settings.interface.assets', 'settings.interface.canvas', 'overlay.assets',

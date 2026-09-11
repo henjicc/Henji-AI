@@ -84,6 +84,7 @@
   },
   "dependencies": {
     "@henjicc/ai-sdk": "0.4.1",
+    "@modelcontextprotocol/sdk": "1.30.0",
     "@react-three/drei": "^9.122.0",
     "@react-three/fiber": "^8.18.0",
     "@tiptap/core": "^3.28.0",

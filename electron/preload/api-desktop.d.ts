@@ -108,6 +108,7 @@ export interface HenjiClipboardImage {
 }
 
 export interface HenjiClipboardApi {
+  writeText(text: string): Promise<void>
   readClipboardFiles(): Promise<HenjiClipboardFileEntry[]>
   readText(): Promise<string>
   readImage(): Promise<HenjiClipboardImage | null>

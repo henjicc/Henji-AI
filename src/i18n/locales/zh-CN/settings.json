@@ -1,4 +1,5 @@
 {
+  "mcp": { "loading": "正在读取连接设置…", "enable": "允许外部智能体连接", "readOnly": "授权的连接可读取应用内容，有效期为 30 天。目前不允许修改或生成；应用重启后需要重新启用。", "port": "连接端口", "name": "连接名称", "namePlaceholder": "例如：Codex", "authorize": "授权读取", "copy": "复制连接配置", "revoke": "撤销" },
   "title": "设置",
   "language": "语言",
   "theme": "主题",
@@ -8,6 +9,7 @@
     "general-storage": "数据与下载",
     "general-behavior": "行为与并发",
     "general-maintenance": "更新维护",
+    "general-mcp": "外部智能体连接",
     "models-providers": "供应商与模型",
     "models-assistant": "助手模型",
     "models-upload": "上传策略",

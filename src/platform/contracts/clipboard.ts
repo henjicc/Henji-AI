@@ -14,6 +14,7 @@ export interface ClipboardImage {
 export interface ClipboardPlatform {
   readClipboardFiles(): Promise<ClipboardFileEntry[]>
   readText(): Promise<string>
+  writeText(text: string): Promise<void>
   /** 剪贴板里没有图片时返回 null */
   readImage(): Promise<ClipboardImage | null>
   writeImageFromPath(filePath: string): Promise<void>

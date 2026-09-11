@@ -1,4 +1,5 @@
 {
+  "mcp": { "loading": "Loading connections…", "enable": "Allow external agents", "readOnly": "Authorized connections can read app content for 30 days. Changes and generation are not allowed yet. Enable again after restarting the app.", "port": "Connection port", "name": "Connection name", "namePlaceholder": "For example: Codex", "authorize": "Authorize reading", "copy": "Copy connection config", "revoke": "Revoke" },
   "title": "Settings",
   "language": "Language",
   "theme": "Theme",
@@ -8,6 +9,7 @@
     "general-storage": "Data & Downloads",
     "general-behavior": "Behavior & Concurrency",
     "general-maintenance": "Updates",
+    "general-mcp": "External agent connections",
     "models-providers": "Providers & Models",
     "models-assistant": "Assistant Models",
     "models-upload": "Upload Strategy",

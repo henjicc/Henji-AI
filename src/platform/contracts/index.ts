@@ -20,8 +20,10 @@ import type { LoggingPlatform } from './logging'
 import type { UpdaterPlatform } from './updater'
 import type { AssetLibraryPlatform } from './assetLibrary'
 import type { AssistantPlatform } from './assistant'
+import type { McpPlatform } from '@/core/application-control/localHostContracts'
 
 export interface PlatformRuntime {
+  mcp: McpPlatform
   aiRuntime: AiRuntimePlatform
   llmRuntime: LlmRuntimePlatform
   db: DbPlatform
