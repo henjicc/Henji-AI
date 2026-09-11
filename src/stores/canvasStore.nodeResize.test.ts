@@ -5,6 +5,8 @@ import { CANVAS_NODE_TYPES, type CanvasNodeType } from '@/features/canvas/domain
 import { useCanvasStore } from './canvasStore';
 import { normalizeNodes } from './canvasStoreNormalization';
 import { DEFAULT_RELIGHT_SETTINGS, type RelightMode } from '@/features/canvas/capabilities/relightPolicy';
+import { canvasNodeDefinitions } from '@/features/canvas/domain/nodeRegistry';
+import { resolveGenerationNodeManualDimension } from '@/features/canvas/nodes/shared/useGenerationNodeMinimumHeight';
 
 const TOOL_GENERATION_NODE_TYPES: readonly CanvasNodeType[] = [
   CANVAS_NODE_TYPES.panoramaGen,
@@ -20,6 +22,39 @@ beforeEach(() => {
 });
 
 describe('画布工具节点尺寸跟踪', () => {
+  it.each(Object.values(canvasNodeDefinitions)
+    .filter((definition) => definition.executionKind === 'standard-generation')
+    .map((definition) => definition.type))('%s 第一次拖动中立即采用手动尺寸，撤销恢复自动尺寸', (type) => {
+    const node = canvasNodeFactory.createNode(type, { x: 40, y: 60 });
+    useCanvasStore.getState().setCanvasData([node], []);
+    const current = () => useCanvasStore.getState().nodes[0];
+
+    // 内容 ResizeObserver 的测量不代表用户调整，必须继续允许自动收紧。
+    useCanvasStore.getState().onNodesChange([
+      { id: node.id, type: 'dimensions', dimensions: { width: 720, height: 420 } },
+    ]);
+    expect(current().data.isSizeManuallyAdjusted).not.toBe(true);
+    const initial = current();
+    for (const dimensions of [{ width: 820, height: 520 }, { width: 900, height: 580 }]) {
+      useCanvasStore.getState().onNodesChange([
+        { id: node.id, type: 'dimensions', dimensions, resizing: true, setAttributes: true },
+      ]);
+      const resized = current();
+      expect(resized.data.isSizeManuallyAdjusted).toBe(true);
+      expect(resolveGenerationNodeManualDimension(resized.width, 320, resized.data.isSizeManuallyAdjusted === true)).toBe(dimensions.width);
+      expect(resolveGenerationNodeManualDimension(resized.height, 160, resized.data.isSizeManuallyAdjusted === true)).toBe(dimensions.height);
+    }
+    // ReactFlow 的释放事件只取消 resizing，不一定再次携带 dimensions。
+    useCanvasStore.getState().onNodesChange([{ id: node.id, type: 'dimensions', resizing: false }]);
+    expect(current()).toMatchObject({ width: 900, height: 580, resizing: false });
+    useCanvasStore.getState().undo();
+    expect(current().data.isSizeManuallyAdjusted).toBe(initial.data.isSizeManuallyAdjusted);
+    expect(current().width).toBe(initial.width);
+    expect(current().height).toBe(initial.height);
+    useCanvasStore.getState().redo();
+    expect(current()).toMatchObject({ width: 900, height: 580, data: { isSizeManuallyAdjusted: true } });
+  });
+
   it.each([2 / 3, 3 / 2, 1])('扩图按源图比例 %s 初始化，之后不改写控件的手势尺寸', aspect => {
     const node = { ...canvasNodeFactory.createNode(CANVAS_NODE_TYPES.imageEdit, { x: 40, y: 60 }),
       data: { generationUi: { layoutMode: 'workbench', workbenchEditor: 'outpaint' } } };

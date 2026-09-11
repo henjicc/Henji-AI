@@ -141,8 +141,15 @@ function attachUiInspectionCommon(context) {
 
     await page.mouse.move(handleCenterX, handleCenterY)
     await page.mouse.down()
-    await page.mouse.move(handleCenterX + 56, handleCenterY + 40, { steps: 8 })
-    await page.mouse.up()
+    try {
+      await page.mouse.move(handleCenterX + 56, handleCenterY + 40, { steps: 8 })
+      const duringRoot = await visibleRoot.boundingBox()
+      if (!duringRoot || duringRoot.width <= beforeRoot.width + 8 || duringRoot.height <= beforeRoot.height + 8) {
+        throw new Error(`${label} 首次拖动中未实时改变可见尺寸：${JSON.stringify({ beforeRoot, duringRoot })}`)
+      }
+    } finally {
+      await page.mouse.up()
+    }
     await page.waitForTimeout(260)
 
     const afterNode = await node.boundingBox()

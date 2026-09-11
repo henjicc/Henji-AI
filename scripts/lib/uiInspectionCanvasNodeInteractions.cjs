@@ -88,4 +88,49 @@ function createCanvasNodeInteractionsScene(context) {
   }
 }
 
-module.exports = { createCanvasNodeInteractionsScene }
+function createCanvasFirstResizeScene(context) {
+  return {
+    id: 'canvas-first-resize', surface: '画布', name: '画布-节点首次缩放', writesUserData: true,
+    async setup(page, app) {
+      const { projectId } = await context.seedAndOpenCanvasPanoramaProject(page)
+      await page.getByRole('button', { name: /返回项目|Back to Projects/ }).click()
+      await page.locator(`[data-project-id="${projectId}"]:visible`).waitFor()
+      const types = ['imageNode', 'videoGenNode', 'audioGenNode', 'upscaleGenNode']
+      await page.evaluate(async ({ projectId, types }) => {
+        const nodes = types.map((type, index) => ({
+          id: `resize-${type}`, type,
+          position: { x: 80 + (index % 2) * 680, y: 80 + Math.floor(index / 2) * 750 },
+          data: { prompt: '第一次缩放应立即生效', isSizeManuallyAdjusted: false },
+        }))
+        await window.henjiNative.db.execute(
+          'UPDATE storyboard_projects SET node_count = ?, nodes_json = ?, edges_json = ?, viewport_json = ?, history_json = ? WHERE id = ?',
+          [nodes.length, JSON.stringify(nodes), '[]', JSON.stringify({ x: 90, y: 40, zoom: 0.65 }), JSON.stringify({ past: [], future: [], imagePool: [] }), projectId])
+      }, { projectId, types })
+      await page.locator(`[data-project-id="${projectId}"]:visible`).click()
+      const resizedBoxes = []
+      for (const type of types) {
+        const node = page.locator(`.react-flow__node[data-id="resize-${type}"]`)
+        const root = node.locator('[data-generation-node-id]')
+        await root.waitFor()
+        await context.resizeCanvasNodeAndAssertHitBox(page, node, root, type)
+        const box = await root.boundingBox()
+        resizedBoxes.push({ type, width: box.width, height: box.height })
+      }
+      await page.locator('.react-flow__pane').click({ position: { x: 20, y: 400 } })
+      await writeFile('.ui-tour/canvas-first-resize.png', await captureInspectionPage(app, page))
+      await page.getByRole('button', { name: /返回项目|Back to Projects/ }).click()
+      await page.locator(`[data-project-id="${projectId}"]:visible`).waitFor()
+      await page.locator(`[data-project-id="${projectId}"]:visible`).click()
+      for (const expected of resizedBoxes) {
+        const root = page.locator(`[data-generation-node-id="resize-${expected.type}"]`)
+        await root.waitFor()
+        const actual = await root.boundingBox()
+        if (Math.abs(actual.width - expected.width) > 2 || Math.abs(actual.height - expected.height) > 2) {
+          throw new Error(`首次缩放保存重开后尺寸改变：${JSON.stringify({ expected, actual })}`)
+        }
+      }
+    },
+  }
+}
+
+module.exports = { createCanvasNodeInteractionsScene, createCanvasFirstResizeScene }

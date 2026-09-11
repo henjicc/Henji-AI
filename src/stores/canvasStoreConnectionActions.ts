@@ -70,7 +70,9 @@ export function createCanvasConnectionActions(
             (change): change is NodeChange<CanvasNode> & { id: string } =>
               change.type === 'dimensions'
               && 'resizing' in change
-              && change.resizing === false
+              // 首次有效拖动就切换为手动尺寸；等到松手才标记，会让节点壳在
+              // 整个第一次手势中忽略 width/height，并被内容测量覆盖回自动尺寸。
+              && (change.resizing === false || (change.resizing === true && Boolean(change.dimensions)))
               && typeof change.id === 'string'
           )
           .map((change) => change.id)

@@ -6,7 +6,7 @@ const {
 } = require('./uiInspectionExistingMultiLayerFixture.cjs')
 
 const { createNodeDragPerformanceScene } = require('./uiInspectionNodeDragPerformance.cjs')
-const { createCanvasNodeInteractionsScene } = require('./uiInspectionCanvasNodeInteractions.cjs')
+const { createCanvasNodeInteractionsScene, createCanvasFirstResizeScene } = require('./uiInspectionCanvasNodeInteractions.cjs')
 
 const { createLayerControlsScene } = require('./uiInspectionLayerControls.cjs')
 
@@ -46,6 +46,7 @@ function createCanvasScenes(context) {
 
   return [
     createCanvasNodeInteractionsScene(context),
+    createCanvasFirstResizeScene(context),
     createLayerControlsScene(context),
     ...[createNodeDragPerformanceScene(context)].filter(Boolean),
     { id: 'canvas-projects', surface: '画布', name: '画布-项目列表', setup: setupCanvas },
