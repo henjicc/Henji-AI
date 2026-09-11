@@ -1,10 +1,27 @@
 # @henjicc/ai-sdk
 
 痕迹AI 的多供应商模型 SDK：内含 8 个生成供应商、109 个图片/视频/音频模型，以及
-7 家 LLM 供应商预设（加上派欧云聚合入口共 8 个预设项）和 15 个按需 ASR 模型。另有 12 个 FAL 图片工具使用独立按需入口，不进入默认 109 模型目录。预制 LLM 会按供应商与具体模型自动选择 Responses API 或 Chat Completions，宿主不需要暴露逐模型协议设置。SDK 负责目录、请求构建、媒体预处理、
+10 个 LLM 供应商预设和 15 个按需 ASR 模型。另有 12 个 FAL 图片工具使用独立按需入口，不进入默认 109 模型目录。预制 LLM 会按供应商与具体模型自动选择 Responses API 或 Chat Completions，宿主不需要暴露逐模型协议设置。SDK 负责目录、请求构建、媒体预处理、
 供应商调用、轮询、SSE 与错误归一化；宿主只需注入网络、凭据、媒体读取和日志。
 
 ## 5 分钟快速开始
+
+### 硅基流动聊天与实时模型列表
+
+`llm/siliconflow` 提供四个推荐预设（DeepSeek V4 Flash、GLM-5.3、Kimi K2.7 Code、Qwen3.8-27B），并通过官方 `GET /v1/models` 获取账号当前可用模型，不受预设名单限制。
+
+```ts
+import { discoverSiliconflowModels, runSiliconflowChatStream } from '@henjicc/ai-sdk/llm/siliconflow'
+
+const models = await discoverSiliconflowModels(runtime, { modelType: 'chat' })
+// modelType 也支持 embedding / reranker；分别读取 llm / embedding / rerank 凭据。
+const result = await runSiliconflowChatStream({
+  modelId: 'deepseek-ai/DeepSeek-V4-Flash',
+  messages: [{ role: 'user', content: '你好' }],
+}, 'chat-1', event => console.log(event), runtime)
+```
+
+动态列表不提供完整能力或价格，缺失的上下文与输出限制保持 `null`。新模型可直接传入 `modelId`；宿主按官方资料提供能力配置。硅基流动的 V4 Flash 与 DeepSeek 官方默认 `deepseek-flash`（V4.1）不同，全局默认不变。详见[硅基流动适配资料](docs/model-adaptation/供应商/硅基流动.md)。
 
 ### 文本向量与重排序
 
@@ -31,10 +48,10 @@ try {
 
 百炼工厂必须传 `baseUrl` 为实际地域/工作空间的 API 根地址，不包含端点路径。其他供应商可以覆盖根地址与 `credentialId`；SDK 不自动切换地域或账号。不同模型的向量不能混用；切换模型通常需要重建向量索引。Rerank 分数仅在本次请求内比较。
 
-SDK `0.3.0` 的正式分发渠道为公共 npm，无需配置 registry 或访问令牌：
+SDK `0.4.0` 的正式分发渠道为公共 npm，无需配置 registry 或访问令牌：
 
 ```bash
-npm install @henjicc/ai-sdk@0.3.0
+npm install @henjicc/ai-sdk@0.4.0
 ```
 
 然后提供 4 个宿主能力（`Transport` / `CredentialStore` / `MediaReader` / `Logger`），创建客户端：

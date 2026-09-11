@@ -7,10 +7,11 @@ import {
 } from './defaults'
 import { findLlmModelCatalogEntry, modelSupportsLlmApiProtocol } from './modelCatalog'
 import { GROQ_PROVIDER_PRESET } from './groq/preset'
+import { SILICONFLOW_PROVIDER_PRESET } from './siliconflow/preset'
 import { createBigmodelProvider } from './bigmodel/preset'
 import { BIGMODEL_ENDPOINT_PROFILE_FAMILY } from './bigmodel/profiles'
 import type { LlmApiProtocol } from './providerProtocol'
-import type { LlmModelConfig, LlmProviderConfig, LlmReasoningEffort } from './types'
+import type { LlmCapabilities, LlmModelConfig, LlmProviderConfig, LlmReasoningEffort } from './types'
 import { findProviderMetadata } from '../providers/metadata'
 
 function providerMetadata(providerId: string): NonNullable<ReturnType<typeof findProviderMetadata>> {
@@ -41,6 +42,8 @@ export interface LlmProviderPreset {
   reasoningConfigurable: boolean
   /** 添加该供应商时一并建好的推荐模型，能力按内置目录自动标注 */
   modelIds: readonly string[]
+  /** 托管供应商已核验的能力覆盖；不能把原厂能力无条件套给聚合接口。 */
+  modelCapabilities?: Readonly<Record<string, Partial<LlmCapabilities>>>
   /** 这家供应商已确认可走 Responses 的具体模型；未列出的模型继续走 Chat Completions。 */
   responsesModelIds?: readonly string[]
   websiteUrl: string
@@ -52,6 +55,7 @@ export interface LlmProviderPreset {
 
 export const LLM_PROVIDER_PRESETS: readonly LlmProviderPreset[] = [
   GROQ_PROVIDER_PRESET,
+  SILICONFLOW_PROVIDER_PRESET,
   {
     providerId: DEFAULT_PPIO_PROVIDER_ID,
     displayName: '派欧云',
@@ -217,6 +221,7 @@ export function createProviderFromPreset(
   }
   return {
     providerId: options.providerId ?? preset.providerId,
+    ...(preset.providerId === 'siliconflow' ? { providerFamilyId: preset.providerId } : {}),
     credentialId: options.providerId ?? preset.providerId,
     setup: {
       kind: 'preset',
@@ -256,7 +261,7 @@ export function createModelsFromPreset(
       adapter: provider.adapter,
       apiProtocol: resolvePresetModelApiProtocol(preset, modelId, provider.endpointProfile),
       baseUrl: provider.baseUrl,
-      capabilities: createLlmCapabilitiesForModel(modelId),
+      capabilities: { ...createLlmCapabilitiesForModel(modelId), ...preset.modelCapabilities?.[modelId] },
       catalogId: entry?.id,
       enabled: true,
     }

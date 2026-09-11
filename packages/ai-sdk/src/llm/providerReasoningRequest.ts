@@ -38,9 +38,18 @@ function pickEffort(
   return picked
 }
 
-type ReasoningBodyBuilder = (reasoning: LlmReasoningConfig) => Record<string, unknown>
+type ReasoningBodyBuilder = (reasoning: LlmReasoningConfig, body: Record<string, unknown>) => Record<string, unknown>
 
 const PROVIDER_REASONING_BODY: Readonly<Record<string, ReasoningBodyBuilder>> = {
+  // 硅基流动的思考开关与原厂不同；强度字段只发送给端点文档明确列举的模型。
+  siliconflow: (reasoning, body) => ({
+    enable_thinking: reasoning.enabled,
+    ...(reasoning.enabled && typeof body.model === 'string' && [
+      'deepseek-ai/deepseek-v4-flash', 'pro/deepseek-ai/deepseek-v4', 'pro/zai-org/glm-5.2',
+    ].includes(body.model.toLowerCase())
+      ? { reasoning_effort: reasoning.effort === 'xhigh' || reasoning.effort === 'max' ? 'max' : 'high' }
+      : {}),
+  }),
   // DeepSeek：官方要求 thinking 与 reasoning_effort 同时传；文档没有列举离散档位，
   // 沿用此前 SDK 路径已有的 high / max 两档映射。
   deepseek: reasoning => (reasoning.enabled
@@ -121,5 +130,9 @@ export function applyProviderReasoningRequestBody(
   if (!reasoning) return body
   const key = resolveReasoningKey(providerId, adapter)
   const build = key ? PROVIDER_REASONING_BODY[key] : defaultReasoningBody
-  return { ...body, ...build(reasoning) }
+  if (key === 'siliconflow') {
+    const { thinking: _thinking, reasoning_effort: _effort, ...clean } = body
+    return { ...clean, ...build(reasoning, clean) }
+  }
+  return { ...body, ...build(reasoning, body) }
 }

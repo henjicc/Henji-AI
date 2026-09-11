@@ -1,0 +1,22 @@
+{
+  "kind": "capability",
+  "source": {
+    "models": "https://api-docs.siliconflow.cn/docs/api/models-get",
+    "chat": "https://api-docs.siliconflow.cn/docs/api/chat-completions-post",
+    "capturedAt": "2026-09-11",
+    "loginRequired": false,
+    "modelsAndFirstChunk": "official-literal: Models 200 与 Chat Streaming 首帧，未补字段",
+    "continuation": "official-field-derived: 依据 delta/content/reasoning_content/tool_calls/usage 与 DONE 契约构造，不是真实请求日志；工具名/参数来自官方 Function 示例，增量切分为测试构造"
+  },
+  "models": {"object":"list","data":[{"id":"deepseek-ai/DeepSeek-V4-Flash","object":"model","created":0,"owned_by":""}]},
+  "firstChunk": {"id":"019bdaabd0514ee04b65607601e48651","object":"chat.completion.chunk","created":1768900251,"model":"deepseek-ai/DeepSeek-V4-Flash","choices":[{"index":0,"delta":{"content":"","reasoning_content":null,"role":"assistant"},"finish_reason":null}],"system_fingerprint":"","usage":{"prompt_tokens":15,"completion_tokens":0,"total_tokens":15}},
+  "continuation": [
+    {"choices":[{"index":0,"delta":{"reasoning_content":"分析"},"finish_reason":null}]},
+    {"choices":[{"index":0,"delta":{"content":"完成"},"finish_reason":null}]},
+    {"choices":[{"index":0,"delta":{},"finish_reason":"stop"}],"usage":{"prompt_tokens":15,"completion_tokens":4,"total_tokens":19,"completion_tokens_details":{"reasoning_tokens":2},"prompt_tokens_details":{"cached_tokens":0}}}
+  ],
+  "tools": [
+    {"choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"id":"fixture-tool","type":"function","function":{"name":"get_current_weather","arguments":"{\"location\":"}}]},"finish_reason":null}]},
+    {"choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"function":{"arguments":"\"Boston, MA\"}"}}]},"finish_reason":"tool_calls"}]}
+  ]
+}

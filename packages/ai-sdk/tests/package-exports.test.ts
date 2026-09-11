@@ -25,6 +25,7 @@ describe('published package exports', () => {
       './pricing',
       './llm',
       './llm/streaming',
+      './llm/siliconflow',
       './llm/groq',
       './llm/bigmodel',
       './llm/modules',

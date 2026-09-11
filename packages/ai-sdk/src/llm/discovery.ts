@@ -34,6 +34,8 @@ interface RawDiscoveredModel {
 }
 
 export interface DiscoverModelsOptions {
+  /** 硅基流动的服务端模型分类；其他供应商不接受此选项。 */
+  modelType?: 'chat' | 'embedding' | 'reranker'
   providerFamilyId?: string
   endpointProfile?: string
   credentialId?: string
@@ -62,6 +64,7 @@ function optionalPositiveInteger(...values: unknown[]): number | null {
 }
 
 export function parseDiscoveredModel(item: RawDiscoveredModel): DiscoveredModelItem | null {
+  if (!item || typeof item !== 'object' || Array.isArray(item)) return null
   const modelId = optionalText(item.id)
   if (!modelId) return null
   return {
@@ -97,11 +100,18 @@ export async function discoverModels(
     credentialId: options.credentialId,
     baseUrl,
   })
-  const apiKey = await runtime.credentials.get('llm', identity.credentialId)
-  if (options.requireCredential && !apiKey) {
+  const siliconflow = identity.providerFamilyId === 'siliconflow'
+  if (options.modelType !== undefined && (!siliconflow || !['chat', 'embedding', 'reranker'].includes(options.modelType))) {
+    throw new Error('modelType 仅支持硅基流动 chat / embedding / reranker')
+  }
+  const modelType = options.modelType ?? 'chat'
+  const scope = siliconflow && modelType !== 'chat' ? (modelType === 'reranker' ? 'rerank' : 'embedding') : 'llm'
+  const apiKey = await runtime.credentials.get(scope, identity.credentialId)
+  if ((options.requireCredential || siliconflow) && !apiKey) {
     throw new Error(`[api_key_missing] LLM provider "${providerId}" API key is not configured.`)
   }
-  const url = resolveModelsEndpoint(identity.baseUrl ?? baseUrl)
+  const endpoint = resolveModelsEndpoint(identity.baseUrl ?? baseUrl)
+  const url = siliconflow ? `${endpoint}?sub_type=${modelType}` : endpoint
   const headers: Record<string, string> = { Accept: 'application/json' }
   if (apiKey) {
     headers.Authorization = `Bearer ${apiKey}`
@@ -116,9 +126,10 @@ export async function discoverModels(
       signal: deadline.signal,
     })
     if (!response.ok) throw new Error(`获取模型列表失败: ${response.status}`)
-    const data = await response.json() as { data?: RawDiscoveredModel[] }
-    return (data.data ?? [])
-      .filter(item => !options.activeOnly || item.active !== false)
+    const data = await response.json() as { data?: RawDiscoveredModel[] } | null
+    if (!data || !Array.isArray(data.data)) throw new Error('获取模型列表失败: 无效的 data 数组')
+    return data.data
+      .filter(item => !options.activeOnly || item?.active !== false)
       .map(parseDiscoveredModel)
       .filter((item): item is DiscoveredModelItem => item !== null)
   } catch (error) {

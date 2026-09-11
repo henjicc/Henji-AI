@@ -59,6 +59,7 @@ const requiredEntries = [
   './pricing',
   './llm',
   './llm/streaming',
+  './llm/siliconflow',
   './llm/groq',
   './llm/bigmodel',
   './llm/modules',
@@ -106,7 +107,7 @@ for (const entry of patternEntries) {
   }
 }
 
-if (manifest.name !== '@henjicc/ai-sdk' || manifest.version !== '0.3.0') {
+if (manifest.name !== '@henjicc/ai-sdk' || manifest.version !== '0.4.0') {
   fail(`发布坐标不匹配：${manifest.name}@${manifest.version}`)
 }
 if (manifest.publishConfig?.registry !== 'https://registry.npmjs.org/') {

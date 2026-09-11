@@ -1,6 +1,6 @@
 {
   "name": "@henjicc/ai-sdk",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "痕迹AI 多供应商模型适配 SDK",
   "license": "Apache-2.0",
   "repository": {
@@ -82,6 +82,11 @@
       "types": "./dist/llm/streaming/index.d.ts",
       "import": "./dist/llm/streaming/index.js",
       "default": "./dist/llm/streaming/index.js"
+    },
+    "./llm/siliconflow": {
+      "types": "./dist/llm/siliconflow/index.d.ts",
+      "import": "./dist/llm/siliconflow/index.js",
+      "default": "./dist/llm/siliconflow/index.js"
     },
     "./llm/groq": {
       "types": "./dist/llm/groq/index.d.ts",

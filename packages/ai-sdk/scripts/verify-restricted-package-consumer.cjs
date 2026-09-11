@@ -236,6 +236,12 @@ async function verify() {
     'HenjiPackedGroq',
     [...commonForbidden, '/dist/capabilities/'],
   )
+  const siliconflow = bundle(
+    'Siliconflow',
+    '@henjicc/ai-sdk/llm/siliconflow',
+    'HenjiPackedSiliconflow',
+    [...commonForbidden, '/dist/capabilities/'],
+  )
   const bigmodel = bundle(
     'Bigmodel',
     '@henjicc/ai-sdk/llm/bigmodel',
@@ -266,6 +272,16 @@ async function verify() {
   const translationApi = evaluate(context, translation, 'HenjiPackedBailianTranslation')
   const groqApi = evaluate(context, groq, 'HenjiPackedGroq')
   const bigmodelApi = evaluate(context, bigmodel, 'HenjiPackedBigmodel')
+  const siliconflowApi = evaluate(context, siliconflow, 'HenjiPackedSiliconflow')
+  const discovered = await siliconflowApi.discoverSiliconflowModels({
+    credentials: { get: () => 'fixture-key' },
+    transport: { fetch: async (url) => {
+      if (url !== 'https://api.siliconflow.cn/v1/models?sub_type=chat') fail('硅基流动未使用聊天筛选')
+      return new Response(JSON.stringify({ data: [{ id: 'future/model' }] }))
+    } },
+  })
+  if (discovered[0]?.modelId !== 'future/model') fail('硅基流动丢失动态模型')
+  if (siliconflowApi.createSiliconflowChatRequest({ messages: [] }).providerFamilyId !== 'siliconflow') fail('硅基流动协议族丢失')
   const llmModuleApi = evaluate(context, llmModules, 'HenjiPackedLlmModules')
 
   if (asrApi.bailianNonRealtimeAsrPresets.length !== 5) fail('非实时 ASR 不是 5 个')

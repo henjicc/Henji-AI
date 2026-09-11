@@ -14,6 +14,22 @@ import type { LlmModelCatalogEntry } from './modelCatalog'
  * 否则用户会得到"勾了但发过去没反应"的静默失效。
  */
 export const LLM_MODEL_CATALOG_ENTRIES: readonly LlmModelCatalogEntry[] = [
+  // 硅基流动模型页与 Chat VLM 契约；未确认的视频字段和输出上限不猜测。
+  ...[
+    { id: 'kimi-k2.7-code', displayName: 'Kimi K2.7 Code', vendor: 'Moonshot' },
+    { id: 'qwen3.8-27b', displayName: 'Qwen3.8-27B', vendor: 'Qwen' },
+  ].map(model => ({
+    ...model,
+    input: { image: true, video: false, audio: false },
+    toolCall: true,
+    parallelTools: false,
+    structuredOutputMode: 'json' as const,
+    reasoning: true,
+    sampling: true,
+    contextWindow: 262_144,
+    maxOutputTokens: null,
+    docs: 'docs/model-adaptation/供应商/硅基流动.md',
+  })),
   // ---------------- OpenAI GPT-OSS（Groq 托管） ----------------
   {
     id: 'gpt-oss-20b',
