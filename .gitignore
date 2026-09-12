@@ -126,6 +126,7 @@ nul
 .ui-tour/
 .mcp-clients/
 .mcp-restart/
+.mcp-paid/
 .pan-bench/
 .canvas-visual/
 /.starter-kit/

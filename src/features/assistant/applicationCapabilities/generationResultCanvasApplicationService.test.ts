@@ -13,7 +13,7 @@ vi.mock('@/features/canvas/application/canvasApplicationService', () => ({
 }))
 
 vi.mock('@/features/canvas/application/canvasProjectRuntime', () => ({ withCanvasProjectRuntime: async (_id: string, execute: (runtime: unknown) => Promise<unknown>) => execute({}) }))
-vi.mock('@/features/canvas/application/canvasBatchService', () => ({ runCanvasTransaction: async (_id: string, _count: number, execute: (options: unknown) => Promise<unknown>) => ({ appliedOperations: await execute({}) }) }))
+vi.mock('@/features/canvas/application/canvasBatchService', () => ({ runCanvasTransaction: async (_id: string, _count: number, execute: (options: unknown) => Promise<unknown>) => ({ appliedOperations: await execute({}), undoRef: 'batch-undo-1' }) }))
 vi.mock('@/features/canvas/application/canvasQueryService', () => ({ readPersistedCanvasProjectSnapshot: async () => ({ nodes: [{ id: 'node-1' }] }) }))
 import { addGenerationResultToCanvas } from './generationResultCanvasApplicationService'
 
@@ -42,6 +42,7 @@ describe('generation result canvas bridge', () => {
       data: expect.objectContaining({ imageUrl: 'C:/managed-generation/result-1.png' }),
     }), {})
     expect(result).toMatchObject({
+      undoRef: 'batch-undo-1',
       resultRef: { kind: 'generation.result', id: 'task-1' },
       nodeRef: { kind: 'canvas.node', id: 'canvas-1:node-1' },
     })

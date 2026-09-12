@@ -47,6 +47,127 @@ function createMcpDomainScenes({ setupSettings, canvasFixtureProjectId, REFERENC
   }
 
   return [{
+    id: 'mcp-camera-render', surface: '设置', name: '外部连接-三维渲染结果', writesUserData: true,
+    setup: async (page) => {
+      await setupSettings(page)
+      const projectId = crypto.randomUUID()
+      const stageId = crypto.randomUUID()
+      const nodeId = 'mcp-camera'
+      await page.evaluate(async ({ projectId, stageId, nodeId, sceneJson }) => {
+        const now = Date.now()
+        await window.henjiNative.cameraStageProjects.upsertProjectRecord({ id: stageId, name: 'MCP三维输出夹具',
+          createdAt: now, updatedAt: now, objectCount: 3, sceneJson })
+        const node = { id: nodeId, type: 'cameraStageNode', position: { x: 0, y: 0 },
+          width: 480, height: 320, data: { projectId: stageId, displayName: 'MCP镜头',
+            selectedTimeSec: 0.25, aspectRatio: '16:9', mediaInputs: {}, environmentImageUrl: null,
+            renderTask: null, imageExporting: false, videoExporting: false, outputKind: 'image' } }
+        await window.henjiNative.storyboardProjects.upsertProjectRecord({ id: projectId, name: 'MCP三维后台画布',
+          createdAt: now, updatedAt: now, nodeCount: 1, nodesJson: JSON.stringify([node]), edgesJson: '[]',
+          viewportJson: '{"x":0,"y":0,"zoom":1}', historyJson: '{"past":[],"future":[],"imagePool":[]}' })
+      }, { projectId, stageId, nodeId, sceneJson: JSON.stringify(createPlaybackFixture()) })
+      const identity = await authorizeMcpConnection(page, { name: '三维渲染验收', allowWrites: true, allowDestructive: true })
+      const client = await connectMcpClient(identity.config, 'Henji camera render Reality')
+      try {
+        const projectRef = { kind: 'canvas.project', id: projectId }
+        const nodeRef = { kind: 'canvas.node', id: `${projectId}:${nodeId}` }
+        const reads = []
+        for (const ref of [projectRef, nodeRef]) reads.push(await callTool(client, 'read_application_entity', { ref, propertyIds: [] }))
+        const args = operationEnvelope(reads, { projectRef, nodeRef, outputKind: 'image', resolutionPreset: '720p', selectedTimeSec: 0.25 })
+        const submitted = await callTool(client, 'render_camera_stage_output', args)
+        const taskRef = submitted.result.data.taskRef
+        let observation
+        for (const deadline = Date.now() + 60000; Date.now() < deadline;) {
+          observation = (await callTool(client, 'get_camera_stage_render_task', { taskRef })).data
+          if (['completed', 'failed', 'cancelled', 'interrupted'].includes(observation.status)) break
+          await page.waitForTimeout(250)
+        }
+        assert.equal(observation?.status, 'completed', JSON.stringify(observation))
+        assert.equal(observation.resultRefs.length, 1)
+        const finalRead = await callTool(client, 'get_camera_stage_render_task', { taskRef })
+        assert.ok(finalRead.baselineId, '任务查询必须提供取消所需的原读取凭据')
+        const cancelled = await callTool(client, 'cancel_camera_stage_render_task', operationEnvelope([finalRead], { taskRef }))
+        assert.equal(cancelled.executionState, 'completed', JSON.stringify(cancelled))
+        assert.equal(cancelled.result.data.status, 'completed', '取消已完成任务必须保留结果')
+        const media = await readAllMedia(client, observation.resultRefs[0])
+        assert.ok(media.bytes.length > 4096)
+        assert.ok(media.mimeType.startsWith('image/'))
+        assert.deepEqual(await callTool(client, 'render_camera_stage_output', args), submitted)
+        const stored = await page.evaluate((id) => window.henjiNative.storyboardProjects.getProjectRecord(id), projectId)
+        const results = JSON.parse(stored.nodesJson).filter((node) => node.type === 'exportImageNode')
+        assert.equal(results.length, 1, '重传不得创建第二个渲染结果')
+        assert.equal(observation.resultRefs[0].id, `${projectId}:${results[0].id}`)
+      } finally {
+        await client.close()
+        await disableMcp(page)
+      }
+      await returnToSettings(page)
+    },
+  }, {
+    id: 'mcp-generation-canvas', surface: '设置', name: '外部连接-生成结果落图', writesUserData: true,
+    setup: async (page) => {
+      await setupSettings(page)
+      const historyId = crypto.randomUUID()
+      const projectId = crypto.randomUUID()
+      const mediaPath = path.join(await page.evaluate(() => window.henjiNative.paths.appLocalDataDir()), 'Uploads', `${historyId}.png`)
+      const bytes = await fsp.readFile(REFERENCE_FIXTURE_IMAGE)
+      await fsp.mkdir(path.dirname(mediaPath), { recursive: true })
+      await fsp.writeFile(mediaPath, bytes)
+      let client
+      try {
+        // 只植入已完成结果，不调用供应商；重载后由正式生成历史加载器恢复它。
+        await page.evaluate(async ({ historyId, projectId, mediaPath }) => {
+          await window.henjiNative.db.execute('INSERT INTO history (id,provider_id,model_id,type,prompt,params,file_path,status) VALUES (?,?,?,?,?,?,?,?)',
+            [historyId, 'kie', 'kie-z-image', 'image', 'MCP落图夹具', '{}', mediaPath, 'success'])
+          const now = Date.now()
+          await window.henjiNative.storyboardProjects.upsertProjectRecord({ id: projectId, name: 'MCP结果后台画布',
+            createdAt: now, updatedAt: now, nodeCount: 0, nodesJson: '[]', edgesJson: '[]',
+            viewportJson: '{"x":0,"y":0,"zoom":1}', historyJson: '{"past":[],"future":[],"imagePool":[]}' })
+        }, { historyId, projectId, mediaPath })
+        await page.reload()
+        await setupSettings(page)
+        const identity = await authorizeMcpConnection(page, { name: `结果落图-${historyId}`, allowWrites: true })
+        client = await connectMcpClient(identity.config, 'Henji generation canvas Reality')
+        const projectRef = { kind: 'canvas.project', id: projectId }
+        const resultRef = { kind: 'generation.result', id: historyId }
+        const baseline = async (ref) => callTool(client, 'read_application_entity', { ref, propertyIds: [] })
+        const before = await baseline(projectRef)
+        const result = await baseline(resultRef)
+        // 制造真实过期：仅改夹具工程，旧基线必须未执行，不能污染为 unknown。
+        await page.evaluate(async (id) => {
+          const record = await window.henjiNative.storyboardProjects.getProjectRecord(id)
+          await window.henjiNative.storyboardProjects.upsertProjectRecord({ ...record, updatedAt: record.updatedAt + 1000 })
+        }, projectId)
+        const stale = operationEnvelope([before, result], { projectId, resultRef, placement: { mode: 'absolute', x: 0, y: 0 } })
+        const refused = await client.callTool({ name: 'add_generation_result_to_canvas', arguments: stale })
+        assert.equal(refused.isError, true)
+        assert.equal(refused.structuredContent.executionState, 'not_executed', JSON.stringify(refused))
+        assert.ok(refused.structuredContent.result.error.message.includes('重新读取'))
+        const args = operationEnvelope([await baseline(projectRef), await baseline(resultRef)], {
+          projectId, resultRef, placement: { mode: 'absolute', x: 0, y: 0 },
+        })
+        const placed = await callTool(client, 'add_generation_result_to_canvas', args)
+        assert.equal(placed.executionState, 'completed', JSON.stringify(placed))
+        assert.equal(placed.verificationState, 'verified', JSON.stringify(placed))
+        assert.ok(placed.result.data.undoRef.startsWith('canvas-batch-undo:'))
+        assert.deepEqual(await callTool(client, 'add_generation_result_to_canvas', args), placed)
+        const stored = await page.evaluate((id) => window.henjiNative.storyboardProjects.getProjectRecord(id), projectId)
+        const nodes = JSON.parse(stored.nodesJson)
+        assert.equal(nodes.length, 1)
+        assert.equal(placed.result.data.nodeRef.id, `${projectId}:${nodes[0].id}`)
+        const media = await readAllMedia(client, placed.result.data.nodeRef)
+        assert.equal(crypto.createHash('sha256').update(media.bytes).digest('hex'), crypto.createHash('sha256').update(bytes).digest('hex'))
+      } finally {
+        if (client) await client.close()
+        await page.evaluate(async ({ historyId, projectId }) => {
+          await window.henjiNative.storyboardProjects.deleteProjectRecord(projectId)
+          await window.henjiNative.db.execute('DELETE FROM history WHERE id = ?', [historyId])
+        }, { historyId, projectId })
+        await fsp.rm(mediaPath, { force: true })
+        await disableMcp(page)
+      }
+      await returnToSettings(page)
+    },
+  }, {
     id: 'mcp-domain-media', surface: '设置', name: '外部连接-领域边界与媒体获取', writesUserData: true,
     setup: async (page) => {
       await setupSettings(page)

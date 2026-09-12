@@ -34,7 +34,8 @@ export class McpOperationCoordinator {
     const data = object(result.data)
     const revisions = z.record(z.string(), z.number().int().nonnegative()).safeParse(data.revisions)
     const refs = z.array(refSchema).safeParse(data.ref ? [data.ref] : data.refs ?? [data.taskRef, object(data.task).taskRef].filter(Boolean))
-    if (!revisions.success || !refs.success || !refs.data.length || !Object.keys(revisions.data).length) return result
+    // 无可编辑实体版本的任务读取仍需绑定原任务与宿主会话；空版本集不等于没有读取事实。
+    if (!revisions.success || !refs.success || !refs.data.length) return result
     const baseline = this.store.baseline(callerId, refs.data, revisions.data, sessionId)
     return { ...result, baselineId: baseline.id }
   }

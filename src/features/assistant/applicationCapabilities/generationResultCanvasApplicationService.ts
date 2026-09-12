@@ -40,6 +40,7 @@ export async function addGenerationResultToCanvas(input: {
   const verified = persisted.nodes.some((node) => node.id === created.nodeId)
   return {
     ...created,
+    undoRef: transaction.undoRef,
     resultRef: input.resultRef,
     mediaType: result.mediaType,
     nodeRef: { kind: 'canvas.node', id: `${input.projectId}:${String(created.nodeId)}` },

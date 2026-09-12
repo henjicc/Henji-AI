@@ -113,6 +113,7 @@ const getRenderTask = defineApplicationCapability({
   outputSchema: capabilityOutputSchema({
     taskRef: cameraStageRenderTaskRefSchema,
     status: renderTaskStatusSchema,
+    revisions: z.record(z.string(), z.number().int().nonnegative()),
     phase: z.enum(['preparing', 'rendering', 'encoding']).nullable(),
     progress: z.number().min(0).max(1),
     outputKind: z.enum(['image', 'video']),

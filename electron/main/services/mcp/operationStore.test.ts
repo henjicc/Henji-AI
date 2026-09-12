@@ -29,6 +29,19 @@ function input(baselineId: string): Record<string, unknown> {
 }
 
 describe('MCP 原生操作记录与恢复', () => {
+  it('无版本的任务读取仍绑定原目标与宿主会话，不能以其他任务或旧会话取消', () => {
+    const f = fixture()
+    const taskRef = { kind: 'camera_stage.render_task', id: 'immutable-task' }
+    const read = f.coordinator.rememberRead(f.callerId, { ok: true, data: { taskRef, revisions: {} } }, f.sessionId)
+    expect(read.baselineId).toEqual(expect.any(String))
+    const args = { operationId: randomUUID(), baselineIds: [read.baselineId], taskRef }
+    const allowed = { allowWrites: true, allowDestructive: true }
+    const record = f.coordinator.prepare(f.callerId, args, f.sessionId, allowed, 'cancel_camera_stage_render_task')
+    expect(record.expectedRevisions).toEqual({})
+    expect(record.targetRefs).toContainEqual(taskRef)
+    expect(() => f.coordinator.prepare(f.callerId, { ...args, operationId: randomUUID(), taskRef: { ...taskRef, id: 'other' } }, f.sessionId, allowed, 'cancel_camera_stage_render_task')).toThrow('BASELINE_TARGET_MISMATCH')
+    expect(() => f.coordinator.prepare(f.callerId, { ...args, operationId: randomUUID() }, randomUUID(), allowed, 'cancel_camera_stage_render_task')).toThrow('BASELINE_EXPIRED')
+  })
   it('桥接等待取消后仍持久记录迟到回执，重载后的其他回执不能替代', async () => {
     const f = fixture()
     const record = f.coordinator.prepare(f.callerId, input(f.baseline), f.sessionId, access)

@@ -339,7 +339,8 @@ export async function renderCameraStageOutput(
 export async function getCameraStageRenderTask(
   taskRef: ApplicationRef & { kind: 'camera_stage.render_task' },
 ): Promise<Record<string, unknown>> {
-  return { ...await observe(parseCameraStageRenderTaskRef(taskRef)) }
+  // 取消按不可变任务身份与实时状态核对，不依赖不断变化的渲染进度版本。
+  return { ...await observe(parseCameraStageRenderTaskRef(taskRef)), revisions: {} }
 }
 
 export async function cancelCameraStageRenderTask(
@@ -348,12 +349,12 @@ export async function cancelCameraStageRenderTask(
   const identity = parseCameraStageRenderTaskRef(taskRef)
   const observation = await observe(identity)
   if (observation.status !== 'queued' && observation.status !== 'running') {
-    return { taskRef, status: observation.status, resultRefs: observation.resultRefs }
+    return observedCancellationReply(taskRef, observation)
   }
   const live = await readLiveTask(identity)
   if (!live || (live.status !== 'queued' && live.status !== 'running')) {
     const latest = await observe(identity)
-    return { taskRef, status: latest.status, resultRefs: latest.resultRefs }
+    return observedCancellationReply(taskRef, latest)
   }
   await cancelCameraStageNodeRenderTask({
     requestId: identity.requestId,
@@ -362,4 +363,9 @@ export async function cancelCameraStageRenderTask(
   })
   const confirmed = await readLiveTask(identity)
   return { taskRef, status: 'cancellation_requested', resultRefs: [], verification: { verified: confirmed?.status === 'cancelled', condition: '原输出任务取消状态已确认', target: taskRef } }
+}
+
+function observedCancellationReply(taskRef: ApplicationRef & { kind: 'camera_stage.render_task' }, observation: RenderTaskObservation): Record<string, unknown> {
+  return { taskRef, status: observation.status, resultRefs: observation.resultRefs,
+    verification: { verified: true, condition: '原任务状态已回读，本次无需发送取消或删除结果', target: taskRef } }
 }

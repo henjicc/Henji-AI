@@ -30,7 +30,8 @@ import { ZodError } from 'zod'
 import { ApplicationTransactionFailure, ApplicationPreflightFailure } from '@/core/application-control/execution/transactionFailure'
 import { transactionFailureFacts } from '@/core/assistant/applicationTransactionFailureFacts'
 import { ApplicationPersistenceFailure } from '@/core/application-control/execution/persistence'
-import { assertApplicationCapabilityAllowed } from '@/core/application-control/callerContext'
+import { applicationCallerAccess, assertApplicationCapabilityAllowed } from '@/core/application-control/callerContext'
+import { getApplicationReflectionRegistry } from './applicationControlRegistry'
 
 import { APPLICATION_REFLECTION_APPLICATION_CAPABILITIES } from '@/core/assistant/capabilities/applicationReflectionApplicationCapabilities'
 
@@ -96,14 +97,39 @@ class RendererApplicationCapabilityRegistry implements ApplicationCapabilityHand
     if (context.signal.aborted) throw new Error('ABORTED')
     if (context.callerGrant) assertApplicationCapabilityAllowed(context.callerGrant, definition)
     if (definition.version !== invocation.version) throw new Error('VERSION_MISMATCH')
-    const before = createHostContextSnapshot()
-    // 通用事务的基线来自领域反射读取，由事务引擎核对；不能拿助手宿主计数代替它。
-    const revisions = context.callerGrant && invocation.id === 'change_application_entities'
-      ? {} : invocation.expectedRevisions ?? {}
-    for (const [scope, expected] of Object.entries(revisions)) {
-      if (before.scopeRevisions[scope] !== expected) throw new Error('CONFLICT')
-    }
     const input = definition.inputSchema.parse(invocation.input)
+    if (context.callerGrant && definition.resolveOperationTargets && !definition.readOnly) {
+      // 外部基线来自实体反射；语义操作也必须从相同目标读取，不能比较助手界面计数。
+      // 通用事务由引擎在持锁后核对，保留其原有原子预检。
+      try {
+        const targets = definition.resolveOperationTargets(input)
+        if (!targets?.length) throw new Error('INVALID_INPUT:此操作缺少正式目标声明，无法核对读取基线。')
+        const access = applicationCallerAccess(context.callerGrant, context.requestId ?? 'renderer', context.signal)
+        const expected = invocation.expectedRevisions ?? {}
+        const observed = new Set<string>()
+        for (const ref of targets) {
+          // 不可变任务引用不一定是反射实体。无 revision scope 的操作由领域处理器
+          // 核对任务身份和实时状态；MCP 仍必须绑定该任务的原读取凭据及宿主会话。
+          if (!getApplicationReflectionRegistry().getEntity(ref.kind) && definition.requiredScopes.length === 0) continue
+          const snapshot = await getApplicationReflectionRegistry().readEntity(ref, [], access)
+          for (const [scope, current] of Object.entries(snapshot.revisions)) {
+            observed.add(scope)
+            if (expected[scope] !== current) {
+              throw new Error(`CONFLICT:${ref.kind} 的 ${scope} 数据已变化或缺少基线，请重新读取原目标后再试。`)
+            }
+          }
+        }
+        if (Object.keys(expected).some((scope) => !observed.has(scope))) {
+          throw new Error('CONFLICT:基线包含无关作用域，请只使用原目标的最新读取结果。')
+        }
+        if (context.signal.aborted) throw new Error('ABORTED')
+      } catch (error) { throw new ApplicationPreflightFailure(error) }
+    } else if (!(context.callerGrant && invocation.id === 'change_application_entities')) {
+      const before = createHostContextSnapshot()
+      for (const [scope, expected] of Object.entries(invocation.expectedRevisions ?? {})) {
+        if (before.scopeRevisions[scope] !== expected) throw new Error('CONFLICT')
+      }
+    }
     const inputRecord = input && typeof input === 'object' && !Array.isArray(input)
       ? input as Record<string, unknown>
       : null
@@ -230,7 +256,7 @@ function describeSchemaIssues(error: ZodError): string {
 
 function toFailure(error: unknown): ApplicationCapabilityResult {
   if (error instanceof CanvasPersistenceError && error.transactionFacts) return toFailure(new ApplicationTransactionFailure(error.transactionFacts))
-  if (error instanceof ApplicationPreflightFailure) return { ok: false, error: { code: 'INVALID_INPUT', message: error.message, recoverable: true, details: { execution: { notExecuted: true } } } }
+  if (error instanceof ApplicationPreflightFailure) return { ok: false, error: { code: error.message.startsWith('CONFLICT:') ? 'CONFLICT' : 'INVALID_INPUT', message: error.message, recoverable: true, details: { execution: { notExecuted: true } } } }
   if (error instanceof ApplicationTransactionFailure) {
     const transaction = transactionFailureFacts(error.result)
     return { ok: false, error: { code: error.result.code === 'CONFLICT' ? 'CONFLICT' : 'CAPABILITY_REJECTED', message: error.message,

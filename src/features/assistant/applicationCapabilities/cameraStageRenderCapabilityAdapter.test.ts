@@ -334,6 +334,7 @@ describe('cameraStageRenderCapabilityAdapter', () => {
 
     await expect(cancelCameraStageRenderTask(createCameraStageRenderTaskRef(identity))).resolves.toMatchObject({
       status: 'awaiting_persistence',
+      verification: { verified: true, condition: expect.stringContaining('无需发送取消') },
     })
     expect(mocks.cancel).not.toHaveBeenCalled()
   })
