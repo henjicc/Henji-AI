@@ -95,6 +95,15 @@ describe('MCP 原生操作记录与恢复', () => {
     expect(() => f.coordinator.prepare(f.callerId, { ...args, operationId: randomUUID(), prompt: '第三张' }, f.sessionId, { ...access, allowPaid: true }, 'create_visible_generation_task')).toThrow('RECOVERY_REQUIRED')
   })
 
+  it('早期没有 capabilityId 的未知追加记录也不能换标识重放', () => {
+    const f = fixture()
+    const args = { operationId: randomUUID(), changes: [{ kind: 'create_items', entityType: 'canvas.node',
+      parent: { kind: 'canvas.project', id: 'legacy-project' }, items: [{ properties: { 'canvas.node.node_type': 'uploadNode' } }] }] }
+    const record = f.coordinator.prepare(f.callerId, args, f.sessionId, access)
+    f.store.save({ ...record, capabilityId: undefined, state: 'unknown' })
+    expect(() => f.coordinator.prepare(f.callerId, { ...args, operationId: randomUUID() }, f.sessionId, access)).toThrow(record.operationId)
+  })
+
   it('完整工具派发自动准备生成，保存提交事实并去重，高费用不会进入写宿主', async () => {
     const f = fixture()
     const host = new ApplicationHostBridge(() => undefined, f.coordinator)

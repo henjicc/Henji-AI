@@ -119,7 +119,7 @@ export class McpOperationCoordinator {
     const currentAccess = operationAccess({ operationId, capabilityId, input, targetRefs: writeRefs ?? refs })
     for (const unresolved of this.store.unresolved()) {
       const previousAccess = operationAccess(unresolved)
-      const sameUnknownRequest = unresolved.state === 'unknown' && unresolved.capabilityId === capabilityId
+      const sameUnknownRequest = unresolved.state === 'unknown' && (unresolved.capabilityId ?? 'change_application_entities') === capabilityId
         && operationDigest(unresolved.input) === operationDigest(input)
       const overlaps = [...currentAccess].some(([key, mode]) => {
         const previousMode = previousAccess.get(key)
