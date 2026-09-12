@@ -40,6 +40,10 @@ describe('对外工具目录的投影与授权过滤', () => {
     }
     expect(names(WRITE)).toContain('apply_canvas_image_capability')
     expect(names(READ_ONLY)).not.toContain('apply_canvas_image_capability')
+    for (const id of ['create_image_edit_preview', 'commit_image_edit']) {
+      expect(names(WRITE)).toContain(id)
+      expect(names(READ_ONLY)).not.toContain(id)
+    }
   })
   /**
    * 验收线：**工具 schema 与领域约束同源**。

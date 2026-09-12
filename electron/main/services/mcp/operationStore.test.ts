@@ -31,6 +31,23 @@ function input(baselineId: string): Record<string, unknown> {
 }
 
 describe('MCP 原生操作记录与恢复', () => {
+  it('编辑预览读取同一素材不互锁，未知创建不能重放，保存锁定被消费的预览', () => {
+    const f = fixture()
+    const raw = { operationId: randomUUID(), sourceRef: { kind: 'asset', id: 'source-image' }, operations: [{ kind: 'flip_h' }] }
+    const first = f.coordinator.prepare(f.callerId, raw, f.sessionId, access, 'create_image_edit_preview')
+    expect(first.targetRefs).toEqual([{ kind: 'image_edit.preview', id: `pending:${raw.operationId}` }])
+    const requestId = randomUUID()
+    f.coordinator.dispatched(first, requestId, f.sessionId)
+    expect(f.coordinator.prepare(f.callerId, { ...raw, operationId: randomUUID(), operations: [{ kind: 'rotate_cw', degrees: 90 }] },
+      f.sessionId, access, 'create_image_edit_preview').state).toBe('prepared')
+    f.coordinator.interrupted(requestId, f.sessionId)
+    expect(() => f.coordinator.prepare(f.callerId, { ...raw, operationId: randomUUID() }, f.sessionId, access, 'create_image_edit_preview')).toThrow(first.operationId)
+    const commit = f.coordinator.prepare(f.callerId, { operationId: randomUUID(), previewRef: 'preview-existing' }, f.sessionId, access, 'commit_image_edit')
+    expect(commit.targetRefs).toEqual([{ kind: 'image_edit.preview', id: 'preview-existing' }])
+    f.coordinator.dispatched(commit, randomUUID(), f.sessionId)
+    expect(() => f.coordinator.prepare(f.callerId, { operationId: randomUUID(), previewRef: 'preview-existing', displayName: '另一个名字' },
+      f.sessionId, access, 'commit_image_edit')).toThrow(commit.operationId)
+  })
   it('生成历史中的未知请求即使写入独立任务，也不能换操作标识重放', () => {
     const f = fixture()
     const raw = { operationId: randomUUID(), modelId: 'fixture', prompt: '原请求', mediaType: 'image', destination: { mode: 'history' } }

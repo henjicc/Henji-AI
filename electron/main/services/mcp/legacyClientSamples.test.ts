@@ -24,6 +24,13 @@ import { MCP_CAPABILITY_IDS, type LocalHostRequest, type LocalTool } from '../..
 type Sample = { era: string; tool: string; arguments: Record<string, unknown> }
 
 const LEGACY_SAMPLES: Sample[] = [
+  { era: '图片编辑闭环', tool: 'create_image_edit_preview', arguments: {
+    operationId: '2f6d2a4c-3d1b-4d5a-9f3a-1b2c3d4e5f60', sourceRef: { kind: 'asset', id: 'source-image' },
+    operations: [{ kind: 'rotate_cw', degrees: 90 }],
+  } },
+  { era: '图片编辑闭环', tool: 'commit_image_edit', arguments: {
+    operationId: '3f6d2a4c-3d1b-4d5a-9f3a-1b2c3d4e5f60', previewRef: 'image-edit-preview:fixture', displayName: '旋转图片',
+  } },
   { era: '图片能力节点编排', tool: 'apply_canvas_image_capability', arguments: {
     operationId: '2f6d2a4c-3d1b-4d5a-9f3a-1b2c3d4e5f60',
     projectId: 'project-1', sourceNodeId: 'image-1', capabilityId: 'image.background-removal',
