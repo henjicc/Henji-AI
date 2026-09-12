@@ -6,6 +6,15 @@ const path = require('node:path')
 function createEmbeddedAgentScenes(context) {
   return [{ id: 'embedded-agent', surface: '助手', name: '内置助手-对话工具停止与恢复', writesUserData: true,
     setup: async (page) => {
+      const waitSnapshot = async (predicate) => {
+        const deadline = Date.now() + 15000
+        while (Date.now() < deadline) {
+          const value = await page.evaluate(() => window.henjiNative.embeddedAgent.snapshot())
+          if (predicate(value)) return value
+          await new Promise(resolve => setTimeout(resolve, 50))
+        }
+        throw new Error('助手状态未在时限内到达预期')
+      }
       const requests = []
       let waiting = false
       const server = createServer(async (request, response) => {
@@ -34,10 +43,17 @@ function createEmbeddedAgentScenes(context) {
           const image = { ...model, modelId: 'fixture-image', displayName: '图片验收模型', capabilities: { ...model.capabilities, image: true } }
           const media = { ...model, modelId: 'fixture-media', displayName: '媒体验收模型', capabilities: { ...model.capabilities, image: true, video: true, audio: true } }
           await window.henjiNative.llm.commitProviderSettings({ provider, seedModels: [model, image, media], baselineConfig, credential: { kind: 'set', apiKey: 'reality-fixture-key' } })
+          const config = await window.henjiNative.llm.readConfig()
+          config.agentProfiles = [{ id: 'pi-fixture-profile', name: '验收助手', primary: { providerId: 'pi-reality', modelId: 'fixture' },
+            settings: { timeoutMs: 60000, maxRetries: 0, maxOutputTokens: 1024, contextWindowBudget: 32768 },
+            verifications: [], createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }]
+          config.selectedAgentProfileId = 'pi-fixture-profile'
+          await window.henjiNative.llm.writeConfig(config)
         }, `http://127.0.0.1:${server.address().port}/v1`)
         await page.keyboard.press('Control+Shift+A')
         const panel = page.getByRole('complementary', { name: '智能助手' })
         await panel.waitFor()
+        assert.equal(await panel.getByRole('button', { name: '助手模型', exact: true }).count(), 0)
         assert.ok((await page.getByRole('button', { name: '助手操作权限', exact: true }).textContent()).includes('允许修改、删除和付费生成'))
         await page.evaluate(async () => { const state = await window.henjiNative.mcp.status(); await window.henjiNative.mcp.configure({ enabled: false, port: state.port }) })
         await page.getByRole('button', { name: '助手操作权限', exact: true }).click()
@@ -46,6 +62,7 @@ function createEmbeddedAgentScenes(context) {
         await panel.waitFor()
         assert.ok((await page.getByRole('button', { name: '助手操作权限', exact: true }).textContent()).includes('仅查看'))
         const editor = page.getByRole('textbox', { name: '向智能助手描述任务' })
+        console.log('[embedded-agent] 读取主题', await page.evaluate(() => window.henjiNative.embeddedAgent.models()))
         await editor.fill('验收读取主题')
         await page.getByRole('button', { name: '发送', exact: true }).click()
         await panel.getByText('已读取当前主题设置。', { exact: true }).waitFor({ timeout: 60000 })
@@ -73,7 +90,26 @@ function createEmbeddedAgentScenes(context) {
         waiting = true
         await page.getByRole('textbox', { name: '向智能助手描述任务' }).fill('验收停止')
         await page.getByRole('button', { name: '发送', exact: true }).click()
-        await page.waitForFunction(async () => (await window.henjiNative.embeddedAgent.snapshot()).busy)
+        await waitSnapshot(value => value.busy)
+        await page.waitForFunction(() => document.querySelector('[aria-label="向智能助手描述任务"]').textContent === '')
+        await editor.fill('等待队列消息')
+        await page.getByRole('button', { name: '等待发送', exact: true }).click()
+        await waitSnapshot(value => value.pendingMessages.some(item => item.text === '等待队列消息'))
+        await page.screenshot({ path: path.resolve('.ui-tour/embedded-agent-queue.png') })
+        assert.equal(await editor.textContent(), '')
+        await page.getByRole('button', { name: '发送方式', exact: true }).click()
+        await page.getByRole('option', { name: '打断', exact: true }).click()
+        await editor.fill('优先插入消息')
+        waiting = false
+        await page.getByRole('button', { name: '打断发送', exact: true }).click()
+        await waitSnapshot(value => !value.busy && value.messages.some(item => item.role === 'user' && item.text === '等待队列消息'))
+        const ordered = (await page.evaluate(() => window.henjiNative.embeddedAgent.snapshot())).messages.filter(item => item.role === 'user').map(item => item.text)
+        assert.deepEqual(ordered.slice(-3), ['验收停止', '优先插入消息', '等待队列消息'])
+        waiting = true
+        console.log('[embedded-agent] 等待与打断')
+        await editor.fill('单独停止')
+        await page.getByRole('button', { name: '发送', exact: true }).click()
+        await waitSnapshot(value => value.busy)
         await page.getByRole('button', { name: '停止', exact: true }).click()
         await page.getByRole('button', { name: '发送', exact: true }).waitFor({ timeout: 15000 })
         assert.equal((await page.evaluate(() => window.henjiNative.embeddedAgent.snapshot())).busy, false)
@@ -82,9 +118,17 @@ function createEmbeddedAgentScenes(context) {
         waiting = false
         assert.equal(await page.getByRole('button', { name: /^添加图片/ }).count(), 0, '文本模型不能展示上传入口')
         const selectModel = async (name) => {
-          await page.getByRole('button', { name: '助手模型', exact: true }).click()
-          await page.getByRole('option', { name: `${name} · 隔离验收`, exact: true }).click()
-          await page.getByRole('option', { name: `${name} · 隔离验收`, exact: true }).waitFor({ state: 'detached' })
+          console.log('[embedded-agent] 设置主模型', name)
+          await page.evaluate(async name => {
+            const config = await window.henjiNative.llm.readConfig()
+            const model = config.models.find(item => item.displayName === name)
+            config.agentProfiles = config.agentProfiles.map(profile => ({ ...profile, primary: { providerId: model.providerId, modelId: model.modelId } }))
+            await window.henjiNative.llm.writeConfig(config)
+          }, name)
+          await page.getByRole('button', { name: /^(设置|Settings)$/i }).click()
+          await page.getByRole('dialog', { name: /设置|Settings/i }).waitFor()
+          await page.keyboard.press('Escape')
+          await panel.waitFor()
         }
         await selectModel('图片验收模型')
         await page.getByRole('button', { name: '添加图片', exact: true }).waitFor()

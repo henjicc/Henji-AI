@@ -38,6 +38,7 @@ interface AssistantComposerProps {
   controls?: ReactNode
   onCancel?: () => void
   onImportingChange?: (value: boolean) => void
+  sendLabel?: string
 }
 
 const approvalModeOptions: Array<{ value: AgentApprovalMode; label: string }> = [
@@ -65,6 +66,7 @@ export function AssistantComposer({
   controls,
   onCancel,
   onImportingChange,
+  sendLabel,
 }: AssistantComposerProps): JSX.Element {
   const inputRef = useRef<HTMLInputElement>(null)
   const [attachmentError, setAttachmentError] = useState<string | null>(null)
@@ -227,8 +229,8 @@ export function AssistantComposer({
         editorShellClassName="!rounded-xl !border-border-dark bg-surface-dark"
         editorClassName={`max-h-32 min-h-[72px] px-3 py-2.5 ${UI_TEXT_BODY_CLASS}`}
       />
-      <div className="mt-2 flex items-center justify-between gap-3">
-        <div className="flex min-w-0 items-center gap-2">
+      <div className="mt-2 flex flex-wrap items-center justify-between gap-3">
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
           {inputModalities.length > 0 ? <UiIconButton
             type="button"
             aria-label={attachmentLabel}
@@ -265,7 +267,9 @@ export function AssistantComposer({
           />
           </>}
         </div>
-        {busy && onCancel ? <UiButton size="sm" onClick={onCancel}><Square className="mr-1 h-3 w-3" />停止</UiButton> : <UiButton
+        <div className="ml-auto flex shrink-0 items-center gap-2">
+        {busy && onCancel ? <UiButton size="sm" onClick={onCancel} title={sendLabel ? '停止当前回复，等待中的消息将继续发送' : '停止当前回复'}><Square className="mr-1 h-3 w-3" />停止</UiButton> : null}
+        {(!busy || !onCancel || sendLabel) ? <UiButton
           type="button"
           size="sm"
           variant="primary"
@@ -274,8 +278,9 @@ export function AssistantComposer({
           className="gap-1.5"
         >
           {submitting ? <Square className="h-3.5 w-3.5" /> : <Send className="h-3.5 w-3.5" />}
-          {importing ? '导入中' : submitting ? '提交中' : '发送'}
-        </UiButton>}
+          {importing ? '导入中' : submitting ? '提交中' : sendLabel ?? '发送'}
+        </UiButton> : null}
+        </div>
       </div>
     </div>
   )

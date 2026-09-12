@@ -20,7 +20,7 @@ export function EmbeddedConversation(): JSX.Element {
   const state = useEmbeddedAgent()
   const [document, setDocument] = useState(createEmptyPromptDocument)
   const [models, setModels] = useState<EmbeddedAgentModel[]>([])
-  const [selection, setSelection] = useState('')
+  const [delivery, setDelivery] = useState<'wait' | 'interrupt'>('wait')
   const access = useAssistantUiStore(store => store.embeddedAccess)
   const setAccess = useAssistantUiStore(store => store.setEmbeddedAccess)
   const [submitting, setSubmitting] = useState(false)
@@ -29,13 +29,13 @@ export function EmbeddedConversation(): JSX.Element {
   const endRef = useRef<HTMLDivElement>(null)
   const previousSession = useRef(state.sessionId)
   const settingsOpen = useUiStore((store) => store.isSettingsOpen)
-  const selectedModel = models.find((model) => JSON.stringify([model.providerId, model.modelId]) === selection) ?? models[0]
+  const selectedModel = models[0]
   useEffect(() => {
     let disposed = false
     void getPlatform().embeddedAgent.models().then((items) => { if (!disposed) setModels(items) }, reportEmbeddedAgentError)
     return () => { disposed = true }
   }, [settingsOpen])
-  useEffect(() => { endRef.current?.scrollIntoView({ block: 'end' }) }, [state.messages, state.activity])
+  useEffect(() => { endRef.current?.scrollIntoView({ block: 'end' }) }, [state.messages, state.activity, state.pendingMessages])
   const busy = submitting || state.busy
   useEffect(() => {
     if (previousSession.current && previousSession.current !== state.sessionId && !busy) {
@@ -44,12 +44,15 @@ export function EmbeddedConversation(): JSX.Element {
     previousSession.current = state.sessionId
   }, [state.sessionId, busy])
   const send = (text: string, submittedAttachments: AgentAttachment[]): void => {
-    if (!text || !selectedModel || busy) return
+    if (!text || !selectedModel || submitting) return
     setSubmitting(true)
+    const sentDocument = document
+    const sentAttachments = attachments
+    setDocument(createEmptyPromptDocument()); setAttachments([])
     const context = createHostContextSnapshot()
     void getPlatform().embeddedAgent.prompt({ text, model: { providerId: selectedModel.providerId, modelId: selectedModel.modelId }, access,
-      context: JSON.stringify({ workspace: context.workspace, project: context.project, surface: context.surface }), attachments: submittedAttachments })
-      .then(() => { setDocument(createEmptyPromptDocument()); setAttachments([]) }, reportEmbeddedAgentError)
+      context: JSON.stringify({ workspace: context.workspace, project: context.project, surface: context.surface }), attachments: submittedAttachments, delivery })
+      .catch(error => { setDocument(sentDocument); setAttachments(sentAttachments); reportEmbeddedAgentError(error) })
       .finally(() => setSubmitting(false))
   }
   return <div className="flex min-h-0 min-w-0 flex-1 flex-col">
@@ -63,20 +66,21 @@ export function EmbeddedConversation(): JSX.Element {
         {message.attachments?.length ? <AssistantMessageAttachments attachments={message.attachments} /> : null}
       </div>)}
       {state.activity ? <p role="status" className="py-2 text-sm text-text-muted">{state.activity}</p> : null}
+      {state.pendingMessages?.map(message => <div key={message.id} className="mb-3 text-sm text-text-muted"><p>{message.error ? `发送未完成：${message.error}` : '等待发送'}</p><AssistantMarkdown>{message.text}</AssistantMarkdown>
+        {message.attachments?.length ? <AssistantMessageAttachments attachments={message.attachments} /> : null}</div>)}
       <div ref={endRef} />
     </div>
     <div className="space-y-2 px-3 pt-3">
       {state.error ? <UiError message={state.error} size="xs" /> : null}
       {models.length === 0 ? <UiButton size="sm" onClick={() => useUiStore.getState().openSettings({ tab: 'models', sectionId: 'models-assistant' })}>设置可调用工具的模型</UiButton> : null}
-      <Dropdown value={selectedModel ? JSON.stringify([selectedModel.providerId, selectedModel.modelId]) : ''}
-        options={models.map((model) => ({ value: JSON.stringify([model.providerId, model.modelId]), label: model.name }))}
-        onSelect={setSelection} ariaLabel="助手模型" display={selectedModel?.name ?? '请选择模型'} disabled={busy || importing || !models.length} />
     </div>
     <AssistantComposer key={state.sessionId ?? 'new'} value={document} onChange={setDocument} onSubmit={send} attachments={attachments} onAttachmentsChange={setAttachments}
-      inputModalities={selectedModel?.inputModalities ?? []} attachmentsDisabled={busy || !selectedModel} disabled={busy || !selectedModel}
-      busy={busy} submitting={busy} waitingForAnswer={false} messageMode="current_task" onMessageModeChange={() => {}}
+      inputModalities={selectedModel?.inputModalities ?? []} attachmentsDisabled={submitting || !selectedModel} disabled={submitting || !selectedModel}
+      busy={busy} submitting={submitting} waitingForAnswer={false} messageMode="current_task" onMessageModeChange={() => {}}
       approvalMode="assistant_decides" onApprovalModeChange={() => {}} onImportingChange={setImporting}
       onCancel={() => { void getPlatform().embeddedAgent.cancel().catch(reportEmbeddedAgentError) }}
-      controls={<Dropdown value={access} options={accessOptions} onSelect={setAccess} disabled={busy} ariaLabel="助手操作权限" appearance="text" className="min-w-0" />} />
+      sendLabel={busy ? delivery === 'wait' ? '等待发送' : '打断发送' : '发送'}
+      controls={<><Dropdown value={access} options={accessOptions} onSelect={setAccess} disabled={busy || importing} ariaLabel="助手操作权限" appearance="text" className="min-w-0" />
+        {busy ? <Dropdown value={delivery} options={[{ value: 'wait', label: '等待' }, { value: 'interrupt', label: '打断' }]} onSelect={setDelivery} ariaLabel="发送方式" appearance="text" /> : null}</>} />
   </div>
 }

@@ -7,6 +7,7 @@ export const embeddedAgentPromptSchema = z.object({
   access: z.enum(['read', 'write', 'full']),
   context: z.string().max(16000),
   attachments: agentAttachmentsSchema.optional(),
+  delivery: z.enum(['wait', 'interrupt']).optional(),
 }).strict()
 export type EmbeddedAgentPrompt = z.infer<typeof embeddedAgentPromptSchema>
 export interface EmbeddedAgentMessage { id: string; role: 'user' | 'assistant'; text: string; attachments?: AgentAttachment[] }
@@ -16,6 +17,7 @@ export interface EmbeddedAgentSnapshot {
   messages: EmbeddedAgentMessage[]
   activity: string | null
   error: string | null
+  pendingMessages?: Array<{ id: string; text: string; attachments?: AgentAttachment[]; error?: string }>
 }
 export interface EmbeddedAgentSession { id: string; title: string; updatedAt: string }
 export interface EmbeddedAgentModel { providerId: string; modelId: string; name: string; inputModalities: AgentAttachment['modality'][] }

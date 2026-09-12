@@ -12,7 +12,13 @@ async function configuredModels() {
   })
 }
 export async function listEmbeddedModels(): Promise<EmbeddedAgentModel[]> {
-  return (await configuredModels()).map(({ model, provider }) => ({ providerId: model.providerId, modelId: model.modelId, name: `${model.displayName} · ${provider.displayName}`,
+  const config = await createProviderSettingsFileStorage().readConfig()
+  const profile = config?.agentProfiles.find(item => item.id === config.selectedAgentProfileId) ?? config?.agentProfiles[0]
+  const entries = await configuredModels()
+  const selected = profile?.primary.modelId && profile.primary.providerId
+    ? entries.filter(({ model }) => model.modelId === profile.primary.modelId && model.providerId === profile.primary.providerId)
+    : entries.slice(0, 1)
+  return selected.map(({ model, provider }) => ({ providerId: model.providerId, modelId: model.modelId, name: `${model.displayName} · ${provider.displayName}`,
     inputModalities: (['image', 'video', 'audio'] as const).filter((type) => model.capabilities[type]) }))
 }
 export async function resolveEmbeddedModel(selection: { providerId: string; modelId: string }): Promise<EmbeddedModel> {

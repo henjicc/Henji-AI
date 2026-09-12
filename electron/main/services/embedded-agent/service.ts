@@ -32,7 +32,13 @@ export class EmbeddedAgentService {
   private changing = false
   private cancelled = false
   private preparation?: AbortController
-  snapshot(): EmbeddedAgentSnapshot { return { ...this.state, busy: this.running || this.state.busy } }
+  private queue: Array<{ id: string; input: EmbeddedAgentPrompt }> = []
+  private draining = false
+  private failedMessages: NonNullable<EmbeddedAgentSnapshot['pendingMessages']> = []
+  private cancelling?: Promise<void>
+  private disposed = false
+  snapshot(): EmbeddedAgentSnapshot { return { ...this.state, busy: this.draining || this.running || this.state.busy,
+    pendingMessages: [...this.failedMessages, ...this.queue.map(({ id, input }) => ({ id, text: input.text, attachments: input.attachments }))] } }
   private publish(value: EmbeddedAgentSnapshot): void {
     this.state = value
     const window = getMainWindow()
@@ -90,7 +96,36 @@ export class EmbeddedAgentService {
     try { await this.initializing } finally { this.initializing = undefined }
   }
   async prompt(input: EmbeddedAgentPrompt): Promise<void> {
-    if (this.running || this.changing) throw new Error('助手正在处理请求，请稍后重试。')
+    if (this.disposed) throw new Error('助手已关闭。')
+    if (this.changing) throw new Error('正在切换对话，请稍后发送。')
+    const entry = { id: randomUUID(), input }
+    if (input.delivery === 'interrupt') this.queue.unshift(entry)
+    else this.queue.push(entry)
+    logger.info('内置助手消息已加入等待列表', { event: 'embedded_agent.message.queued', context: { delivery: input.delivery ?? 'wait', count: this.queue.length } })
+    this.publish(this.state)
+    if (input.delivery === 'interrupt' && this.running) {
+      // 停止当前官方 Pi 请求；等待它退出后才配置下一条，工具回执仍按原操作记账。
+      void this.cancel().catch(error => logger.error('停止内置助手失败', { event: 'embedded_agent.cancel.failed', error }))
+    }
+    void this.drain()
+  }
+  private async drain(): Promise<void> {
+    if (this.draining) return
+    this.draining = true
+    try {
+      while (this.queue.length && !this.disposed) {
+        await this.cancelling?.catch(() => {})
+        if (this.disposed) break
+        const entry = this.queue.shift()!
+        try { await this.runPrompt(entry.input) } catch (error) {
+          // 异步接收后不能将失败消息丢回已编辑的输入框，保留原文和附件供用户恢复。
+          this.failedMessages.push({ id: entry.id, text: entry.input.text, attachments: entry.input.attachments,
+            error: error instanceof Error ? error.message : '助手请求失败。' })
+        }
+      }
+    } finally { this.draining = false; this.publish(this.state) }
+  }
+  private async runPrompt(input: EmbeddedAgentPrompt): Promise<void> {
     this.running = true; this.cancelled = false
     this.preparation = new AbortController()
     this.publish({ ...this.state, error: null, activity: '正在准备…' })
@@ -106,22 +141,32 @@ export class EmbeddedAgentService {
         if (this.state.error) throw new Error(this.state.error)
       }
     } catch (error) {
+      if (this.cancelled) return
       logger.error('内置助手请求失败', { event: 'embedded_agent.request.failed', error })
       this.publish({ ...this.state, error: error instanceof Error ? error.message : '助手请求失败。' })
       throw error
     } finally { this.preparation = undefined; this.client?.close(); this.client = undefined; this.running = false; this.publish({ ...this.state, busy: false, activity: null }) }
   }
   async cancel(): Promise<void> {
+    if (this.cancelling) return this.cancelling
     this.cancelled = true
     this.preparation?.abort()
     for (const controller of this.toolControllers.values()) controller.abort()
-    if (this.child) await this.send({ action: 'cancel' })
+    if (this.child) {
+      this.cancelling = this.send({ action: 'cancel' }).then(() => {})
+      try { await this.cancelling } finally { this.cancelling = undefined }
+    }
   }
   async navigate(command: Extract<EngineCommand, { action: 'open' | 'new' | 'sessions' | 'snapshot' | 'cancel' }>): Promise<unknown> {
-    if (this.running || this.changing) throw new Error('请先等待当前操作结束或停止回复。')
+    if (this.draining || this.running || this.changing) throw new Error('请先等待当前操作结束或停止回复。')
     this.changing = true
-    try { await this.ensureReady(); return await this.send(command) }
+    try {
+      await this.ensureReady()
+      const result = await this.send(command)
+      if (command.action === 'new' || command.action === 'open') { this.failedMessages = []; this.publish(this.state) }
+      return result
+    }
     finally { this.changing = false }
   }
-  dispose(): void { this.child?.kill() }
+  dispose(): void { this.disposed = true; this.queue = []; this.cancelled = true; this.preparation?.abort(); this.child?.kill() }
 }
