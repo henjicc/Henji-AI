@@ -51,7 +51,7 @@ async function fixture(capabilities: Partial<LlmModelConfig['capabilities']> = {
   const address = server.address()
   if (!address || typeof address === 'string') throw new Error('missing port')
   const events: EngineEvent[] = []
-  const tool = vi.fn(async () => ({ ok: true, name: '项目' }))
+  const tool = vi.fn(async (): Promise<unknown> => ({ ok: true, name: '项目' }))
   const engine = new PiEngine((event) => { events.push(structuredClone(event)) }, tool)
   cleanup.push(() => engine.dispose())
   await engine.command({ action: 'initialize', input: directory })
@@ -61,6 +61,18 @@ async function fixture(capabilities: Partial<LlmModelConfig['capabilities']> = {
   return { engine, requests, events, tool, directory, configuration, setMode: (value: typeof mode) => { mode = value } }
 }
 describe('Pi official SDK engine', () => {
+  it('MCP 拒绝写入被官方 SDK 保存为工具错误，模型收到单份恢复事实', async () => {
+    const f = await fixture()
+    const result = { ok: false, executionState: 'not_executed', message: '请读取项目列表后选择现有项目' }
+    f.tool.mockResolvedValue({ isError: true, structuredContent: result, content: [{ type: 'text', text: JSON.stringify(result) }] })
+    await f.engine.command({ action: 'prompt', input: { text: '读取项目', context: '' } })
+    const reply = f.requests.at(-1)!.messages.find(message => message.role === 'tool')
+    expect(reply?.content).toBe(JSON.stringify(result))
+    const files = await fs.readdir(path.join(f.directory, 'sessions'), { recursive: true })
+    const records = (await Promise.all(files.filter(file => file.endsWith('.jsonl')).map(file => fs.readFile(path.join(f.directory, 'sessions', file), 'utf8'))))
+      .flatMap(text => text.trim().split('\n').map(line => JSON.parse(line) as { message?: { role: string; isError?: boolean } }))
+    expect(records.find(record => record.message?.role === 'toolResult')?.message?.isError).toBe(true)
+  })
   it('每次请求只有一份系统设定，相同宿主上下文不在多轮历史中重复堆叠', async () => {
     const f = await fixture()
     const context = '{"surface":"canvas","project":"original"}'
