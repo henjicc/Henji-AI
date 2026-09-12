@@ -56,7 +56,10 @@ describe('原生生成提交事实', () => {
     coordinator.dispatched(original, 'request', 'host')
     coordinator.interrupted('request', 'host')
     expect(coordinator.prepare('caller', input, 'host', access, 'create_visible_generation_task').state).toBe('unknown')
-    const fresh = coordinator.prepare('caller', { ...input, operationId: crypto.randomUUID() }, 'host', access, 'create_visible_generation_task')
+    expect(() => coordinator.prepare('caller', { ...input, operationId: crypto.randomUUID() },
+      'host', access, 'create_visible_generation_task')).toThrow('RECOVERY_REQUIRED')
+    const fresh = coordinator.prepare('caller', { ...input, prompt: 'another independent image', operationId: crypto.randomUUID() },
+      'host', access, 'create_visible_generation_task')
     expect(fresh.state).toBe('prepared')
     expect(fresh.targetRefs).not.toEqual(original.targetRefs)
     expect(() => coordinator.prepare('caller', { ...input, operationId: crypto.randomUUID() }, 'host', { ...access, allowPaid: false }, 'create_visible_generation_task')).toThrow('PERMISSION_DENIED')
