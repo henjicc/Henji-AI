@@ -9,6 +9,7 @@ import { getAssistantUserInstructions } from '../assistant/user-instructions'
 import { createMainLogger } from '../logging'
 import { resolveEmbeddedModel } from './models'
 import type { EngineCommand, EngineEvent } from './contracts'
+import { prepareEmbeddedAttachments } from './attachments'
 
 const logger = createMainLogger('main.embedded_agent')
 const SYSTEM_INSTRUCTIONS = `你是痕迹 AI 内置助手。使用中文，帮助用户完成当前应用中的创作和管理任务。
@@ -28,6 +29,7 @@ export class EmbeddedAgentService {
   private running = false
   private changing = false
   private cancelled = false
+  private preparation?: AbortController
   snapshot(): EmbeddedAgentSnapshot { return { ...this.state, busy: this.running || this.state.busy } }
   private publish(value: EmbeddedAgentSnapshot): void {
     this.state = value
@@ -88,25 +90,28 @@ export class EmbeddedAgentService {
   async prompt(input: EmbeddedAgentPrompt): Promise<void> {
     if (this.running || this.changing) throw new Error('助手正在处理请求，请稍后重试。')
     this.running = true; this.cancelled = false
+    this.preparation = new AbortController()
     this.publish({ ...this.state, error: null, activity: '正在准备…' })
     try {
       await this.ensureReady()
       const [model, instructions] = await Promise.all([resolveEmbeddedModel(input.model), getAssistantUserInstructions()])
+      const attachments = await prepareEmbeddedAttachments(input.attachments ?? [], model, this.preparation.signal)
       if (this.cancelled) return
       this.client = createEmbeddedApplicationClient(this.state.sessionId!, { allowWrites: input.access !== 'read', allowPaid: input.access === 'full', allowDestructive: input.access === 'full' })
       await this.send({ action: 'configure', input: { directory: path.join(getAppLocalDataDir(), 'assistant', 'pi'), model, tools: this.client.catalog(), instructions: `${SYSTEM_INSTRUCTIONS}\n\n用户指令：\n${instructions.content}` } })
       if (!this.cancelled) {
-        await this.send({ action: 'prompt', input: { text: input.text, context: input.context } })
+        await this.send({ action: 'prompt', input: { text: input.text, context: input.context, attachments } })
         if (this.state.error) throw new Error(this.state.error)
       }
     } catch (error) {
       logger.error('内置助手请求失败', { event: 'embedded_agent.request.failed', error })
       this.publish({ ...this.state, error: error instanceof Error ? error.message : '助手请求失败。' })
       throw error
-    } finally { this.client?.close(); this.client = undefined; this.running = false; this.publish({ ...this.state, busy: false, activity: null }) }
+    } finally { this.preparation = undefined; this.client?.close(); this.client = undefined; this.running = false; this.publish({ ...this.state, busy: false, activity: null }) }
   }
   async cancel(): Promise<void> {
     this.cancelled = true
+    this.preparation?.abort()
     for (const controller of this.toolControllers.values()) controller.abort()
     if (this.child) await this.send({ action: 'cancel' })
   }

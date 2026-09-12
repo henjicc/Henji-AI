@@ -12,7 +12,8 @@ async function configuredModels() {
   })
 }
 export async function listEmbeddedModels(): Promise<EmbeddedAgentModel[]> {
-  return (await configuredModels()).map(({ model, provider }) => ({ providerId: model.providerId, modelId: model.modelId, name: `${model.displayName} · ${provider.displayName}` }))
+  return (await configuredModels()).map(({ model, provider }) => ({ providerId: model.providerId, modelId: model.modelId, name: `${model.displayName} · ${provider.displayName}`,
+    inputModalities: (['image', 'video', 'audio'] as const).filter((type) => model.capabilities[type]) }))
 }
 export async function resolveEmbeddedModel(selection: { providerId: string; modelId: string }): Promise<EmbeddedModel> {
   const entry = (await configuredModels()).find(({ model }) => model.providerId === selection.providerId && model.modelId === selection.modelId)

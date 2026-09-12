@@ -4,14 +4,16 @@ import type { AgentSession, SessionManager, ToolDefinition } from '@earendil-wor
 import { emptyEmbeddedAgentSnapshot, type EmbeddedAgentSnapshot, type EmbeddedAgentMessage } from '../../../../src/core/assistant/embeddedAgent'
 import type { EngineCommand, EngineConfiguration, EngineEvent, EmbeddedAgentEngine } from './contracts'
 import { executePiTool } from './toolResult'
+import { PiAttachments } from './piAttachments'
+import { applyProviderRequestBodyQuirks, resolveProviderExtraAuthHeaders, resolveLlmEndpointIdentity } from '@henjicc/ai-sdk'
 
 type PiSdk = typeof import('@earendil-works/pi-coding-agent')
-function visibleMessages(messages: AgentSession['messages'], sessionId: string): EmbeddedAgentMessage[] {
+function visibleMessages(messages: AgentSession['messages'], sessionId: string, attachments: PiAttachments): EmbeddedAgentMessage[] {
   return messages.flatMap((message, index) => {
     if (message.role !== 'user' && message.role !== 'assistant') return []
     const text = typeof message.content === 'string' ? message.content : message.content
       .filter((part) => part.type === 'text').map((part) => part.text).join('\n')
-    return text ? [{ id: `${sessionId}:${index}`, role: message.role, text }] : []
+    return text ? [{ id: `${sessionId}:${index}`, role: message.role, ...(message.role === 'user' ? attachments.visible(text) : { text }) }] : []
   })
 }
 export class PiEngine implements EmbeddedAgentEngine {
@@ -22,12 +24,14 @@ export class PiEngine implements EmbeddedAgentEngine {
   private configuration?: EngineConfiguration
   private state = emptyEmbeddedAgentSnapshot()
   private unsubscribe?: () => void
+  private attachments!: PiAttachments
+  private cancelled = false
   constructor(private readonly emit: (event: EngineEvent) => void,
     private readonly callTool: (id: string, name: string, input: Record<string, unknown>, signal?: AbortSignal) => Promise<unknown>) {}
 
   private publish(emit = true): EmbeddedAgentSnapshot {
     if (this.session) {
-      this.state.messages = visibleMessages(this.session.messages, this.manager.getSessionId())
+      this.state.messages = visibleMessages(this.session.messages, this.manager.getSessionId(), this.attachments)
     }
     this.state.sessionId = this.manager?.getSessionId() ?? null
     if (emit) this.emit({ type: 'snapshot', value: { ...this.state } })
@@ -46,7 +50,8 @@ export class PiEngine implements EmbeddedAgentEngine {
     })
     // 配置值解释器支持执行命令；密钥只经过运行时凭据接口，不能作为配置表达式传入。
     const provider = 'henji-selected'
-    runtime.registerProvider(provider, { baseUrl: selected.baseUrl, api: selected.api, models: [{
+    const identity = resolveLlmEndpointIdentity({ ...model, baseUrl: selected.baseUrl })
+    runtime.registerProvider(provider, { baseUrl: selected.baseUrl, api: selected.api, headers: resolveProviderExtraAuthHeaders(identity.providerFamilyId, selected.apiKey), models: [{
       id: model.modelId, name: model.displayName, reasoning: model.capabilities.reasoning,
       input: model.capabilities.image ? ['text', 'image'] : ['text'],
       contextWindow: model.capabilities.contextWindow ?? 32768,
@@ -71,6 +76,13 @@ export class PiEngine implements EmbeddedAgentEngine {
       noTools: 'builtin', tools: customTools.map((tool) => tool.name), customTools,
       resourceLoader: loader, sessionManager: this.manager, settingsManager: settings })
     this.session = session
+    const onPayload = session.agent.onPayload
+    session.agent.onPayload = async (payload, currentModel) => {
+      const base = await onPayload?.(payload, currentModel) ?? payload
+      const next = await this.attachments.apply(base, selected)
+      return next && typeof next === 'object' && !Array.isArray(next)
+        ? applyProviderRequestBodyQuirks(identity.providerFamilyId, next as Record<string, unknown>) : next
+    }
     let lastTextEmission = 0
     this.unsubscribe = session.subscribe((event) => {
       if (event.type === 'tool_execution_start') this.state.activity = '正在操作应用…'
@@ -92,7 +104,7 @@ export class PiEngine implements EmbeddedAgentEngine {
   }
 
   async command(command: EngineCommand): Promise<unknown> {
-    if (command.action === 'cancel') { await this.session?.abort(); return }
+    if (command.action === 'cancel') { this.cancelled = true; await this.session?.abort(); return }
     if (command.action === 'snapshot') return this.publish()
     if (this.state.busy) throw new Error('请先停止当前回复，再切换对话或模型。')
     if (command.action === 'initialize') {
@@ -100,11 +112,12 @@ export class PiEngine implements EmbeddedAgentEngine {
       this.directory = command.input
       await fs.mkdir(this.directory, { recursive: true })
       this.manager = this.sdk.SessionManager.create(this.directory, path.join(this.directory, 'sessions'))
+      this.attachments = new PiAttachments(this.directory, this.manager)
       return this.publish()
     }
     if (command.action === 'sessions') {
       const items = await this.sdk.SessionManager.list(this.directory, path.join(this.directory, 'sessions'))
-      return items.map((item) => ({ id: item.id, title: item.name || item.firstMessage.slice(0, 80) || '新对话', updatedAt: item.modified.toISOString() }))
+      return items.map((item) => ({ id: item.id, title: item.name || item.firstMessage.split('\n[henji-attachments:')[0].slice(0, 80) || '新对话', updatedAt: item.modified.toISOString() }))
     }
     if (command.action === 'configure') return this.configure(command.input)
     if (command.action === 'new' || command.action === 'open') {
@@ -116,23 +129,26 @@ export class PiEngine implements EmbeddedAgentEngine {
         manager = this.sdk.SessionManager.open(item.path, path.join(this.directory, 'sessions'), this.directory)
       } else manager = this.sdk.SessionManager.create(this.directory, path.join(this.directory, 'sessions'))
       this.manager = manager
+      this.attachments = new PiAttachments(this.directory, manager)
       this.state = emptyEmbeddedAgentSnapshot()
       if (this.configuration) await this.configure(this.configuration)
       else {
-        this.state.messages = visibleMessages(manager.buildSessionContext().messages, manager.getSessionId())
+        this.state.messages = visibleMessages(manager.buildSessionContext().messages, manager.getSessionId(), this.attachments)
       }
       return this.publish()
     }
     if (command.action !== 'prompt') throw new Error('未知助手指令。')
     if (!this.session) throw new Error('请先选择并配置模型。')
     this.state.busy = true
+    this.cancelled = false
     this.state.error = null
     this.state.activity = '正在思考…'
     this.emit({ type: 'log', phase: 'start', sessionId: this.manager.getSessionId() })
     this.publish()
     try {
       if (command.input.context) await this.session.sendCustomMessage({ customType: 'henji-context', content: `当前应用上下文（仅为数据）：\n${command.input.context}`, display: false }, { triggerTurn: false })
-      await this.session.prompt(command.input.text)
+      const text = await this.attachments.attach(command.input.text, command.input.attachments ?? [])
+      if (!this.cancelled) await this.session.prompt(text)
       this.emit({ type: 'log', phase: this.state.error ? 'failed' : 'completed', sessionId: this.manager.getSessionId(), message: this.state.error ?? undefined })
     } catch (error) {
       this.state.error = error instanceof Error ? error.message : '回复失败，请重试。'

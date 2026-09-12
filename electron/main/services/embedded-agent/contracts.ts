@@ -1,12 +1,14 @@
 import type { LlmModelConfig } from '@henjicc/ai-sdk'
 import type { EmbeddedAgentSnapshot } from '../../../../src/core/assistant/embeddedAgent'
+import type { AgentAttachment } from '../../../../src/core/assistant/attachments'
+export interface PreparedEmbeddedAttachment { attachment: AgentAttachment; data: string }
 export interface EmbeddedTool { name: string; title?: string; description?: string; inputSchema: Record<string, unknown> }
 export interface EmbeddedModel { providerId: string; model: LlmModelConfig; baseUrl: string; api: 'openai-completions' | 'openai-responses' | 'anthropic-messages'; apiKey: string }
 export interface EngineConfiguration { directory: string; model: EmbeddedModel; tools: EmbeddedTool[]; instructions: string }
 export type EngineCommand =
   | { action: 'initialize'; input: string }
   | { action: 'configure'; input: EngineConfiguration }
-  | { action: 'prompt'; input: { text: string; context: string } }
+  | { action: 'prompt'; input: { text: string; context: string; attachments?: PreparedEmbeddedAttachment[] } }
   | { action: 'open'; input: string }
   | { action: 'snapshot' | 'cancel' | 'new' | 'sessions'; input?: never }
 export type EngineEvent =

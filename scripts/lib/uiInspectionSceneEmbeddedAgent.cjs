@@ -1,5 +1,6 @@
 const assert = require('node:assert/strict')
 const { createServer } = require('node:http')
+const path = require('node:path')
 
 // 官方 Pi + 真实 utility process / preload / 应用工具；只用本地模型响应替身，不访问外部模型。
 function createEmbeddedAgentScenes() {
@@ -30,7 +31,9 @@ function createEmbeddedAgentScenes() {
           const model = { providerId: provider.providerId, modelId: 'fixture', displayName: '隔离验收模型', adapter: provider.adapter, baseUrl, enabled: true,
             capabilities: { text: true, image: false, video: false, audio: false, streaming: true, toolCall: true, parallelTools: false,
               jsonOutput: false, structuredOutputMode: 'none', reasoning: false, sampling: true, contextWindow: 32768, maxOutputTokens: 1024, usage: true } }
-          await window.henjiNative.llm.commitProviderSettings({ provider, seedModels: [model], baselineConfig, credential: { kind: 'set', apiKey: 'reality-fixture-key' } })
+          const image = { ...model, modelId: 'fixture-image', displayName: '图片验收模型', capabilities: { ...model.capabilities, image: true } }
+          const media = { ...model, modelId: 'fixture-media', displayName: '媒体验收模型', capabilities: { ...model.capabilities, image: true, video: true, audio: true } }
+          await window.henjiNative.llm.commitProviderSettings({ provider, seedModels: [model, image, media], baselineConfig, credential: { kind: 'set', apiKey: 'reality-fixture-key' } })
         }, `http://127.0.0.1:${server.address().port}/v1`)
         await page.keyboard.press('Control+Shift+A')
         const panel = page.getByRole('complementary', { name: '智能助手' })
@@ -71,6 +74,50 @@ function createEmbeddedAgentScenes() {
         assert.equal((await page.evaluate(() => window.henjiNative.embeddedAgent.snapshot())).busy, false)
         await page.getByRole('button', { name: '新建对话', exact: true }).click()
         await page.getByText('从当前工作开始', { exact: true }).waitFor()
+        waiting = false
+        assert.equal(await page.getByRole('button', { name: /^添加图片/ }).count(), 0, '文本模型不能展示上传入口')
+        const selectModel = async (name) => {
+          await page.getByRole('button', { name: '助手模型', exact: true }).click()
+          await page.getByRole('option', { name: `${name} · 隔离验收`, exact: true }).click()
+          await page.getByRole('option', { name: `${name} · 隔离验收`, exact: true }).waitFor({ state: 'detached' })
+        }
+        await selectModel('图片验收模型')
+        await page.getByRole('button', { name: '添加图片', exact: true }).waitFor()
+        assert.equal(await page.getByLabel('聊天附件', { exact: true }).getAttribute('accept'), '.png,.jpg,.jpeg,.webp,.gif')
+        await page.getByLabel('聊天附件', { exact: true }).setInputFiles(path.resolve('resources/icons/icon.png'))
+        await page.getByRole('button', { name: '移除 icon.png', exact: true }).waitFor()
+        await selectModel('隔离验收模型')
+        await page.getByText('当前模型无法读取部分附件，请移除这些附件或切换模型。', { exact: true }).waitFor()
+        assert.equal(await page.getByRole('button', { name: '发送', exact: true }).isDisabled(), true)
+        await selectModel('图片验收模型')
+        await page.getByRole('button', { name: '移除 icon.png', exact: true }).click()
+        // 正式内部拖拽协议，复用刚保存的素材，不能再次上传复制同一份数据。
+        const assetsBefore = await page.evaluate(() => window.henjiNative.assetLibrary.queryAssets({ keyword: 'icon.png' }))
+        const asset = assetsBefore.items[0]
+        assert.ok(asset)
+        await page.getByLabel('聊天输入区', { exact: true }).evaluate((element, asset) => {
+          const transfer = new DataTransfer()
+          transfer.setData('application/x-henji-drag-data', JSON.stringify({ type: 'image', imageUrl: asset.displayUrl, filePath: asset.filePath, sourceType: 'asset', assetId: asset.id, displayName: asset.displayName }))
+          element.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: transfer }))
+        }, asset)
+        await page.getByRole('button', { name: '移除 icon.png', exact: true }).waitFor()
+        const assetsAfter = await page.evaluate(() => window.henjiNative.assetLibrary.queryAssets({ keyword: 'icon.png' }))
+        assert.equal(assetsAfter.total, assetsBefore.total)
+        const requestStart = requests.length
+        await page.getByRole('button', { name: '发送', exact: true }).click()
+        await page.getByRole('button', { name: '发送', exact: true }).waitFor({ timeout: 60000 })
+        assert.ok(requests.length > requestStart)
+        const user = requests[requestStart].messages.find((message) => message.role === 'user' && Array.isArray(message.content) && message.content.some((part) => part.type === 'image_url'))
+        assert.ok(user, '图片必须实际到达模型请求')
+        assert.ok(user.content.find((part) => part.type === 'image_url').image_url.url.startsWith('data:image/png;base64,'))
+        const snapshot = await page.evaluate(() => window.henjiNative.embeddedAgent.snapshot())
+        assert.equal(snapshot.error, null)
+        assert.equal(snapshot.messages[0].attachments[0].mediaRef, `asset:${asset.id}`)
+        await page.reload()
+        await panel.getByRole('img', { name: 'icon.png', exact: true }).waitFor()
+        await selectModel('媒体验收模型')
+        await page.getByRole('button', { name: '添加图片、视频、音频', exact: true }).waitFor()
+        assert.equal(await page.getByLabel('聊天附件', { exact: true }).getAttribute('accept'), '.png,.jpg,.jpeg,.webp,.gif,.mp4,.webm,.mov,.mp3,.wav')
       } finally { server.closeAllConnections(); await new Promise((resolve) => server.close(resolve)) }
     },
   }]
