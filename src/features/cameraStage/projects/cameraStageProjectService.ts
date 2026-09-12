@@ -1,3 +1,4 @@
+import { readAfterCameraStageProjectExecution } from '../application/cameraStageProjectExecution'
 import { v4 as uuidv4 } from 'uuid'
 import { createLogger } from '@/core/logging'
 import {
@@ -274,7 +275,7 @@ export async function loadProjectIntoScene(
   projectId: string,
   options: { updateSession?: boolean } = {},
 ): Promise<boolean> {
-  const record = await getCameraStageProjectRecord(projectId)
+  const record = await readAfterCameraStageProjectExecution(projectId, () => getCameraStageProjectRecord(projectId))
   if (!record || !isCurrentCameraStageScene(record.sceneJson)) {
     return false
   }

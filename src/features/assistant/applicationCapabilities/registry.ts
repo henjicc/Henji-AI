@@ -1,3 +1,4 @@
+import { CanvasPersistenceError, CanvasTransactionRolledBackError } from '@/features/canvas/application/canvasPersistenceService'
 import {
   closeApplicationSurfaceCapability,
   focusApplicationEntityCapability,
@@ -26,9 +27,11 @@ import { createLogger } from '@/core/logging'
 import { CanvasApplicationError } from '@/features/canvas/application/canvasApplicationService'
 import { MultiLayerDocumentNodeApplicationError } from '@/features/canvas/application/multiLayerDocumentNodeApplicationService'
 import { ZodError } from 'zod'
-import { ApplicationTransactionFailure } from '@/core/application-control/execution/transactionFailure'
+import { ApplicationTransactionFailure, ApplicationPreflightFailure } from '@/core/application-control/execution/transactionFailure'
 import { transactionFailureFacts } from '@/core/assistant/applicationTransactionFailureFacts'
 import { ApplicationPersistenceFailure } from '@/core/application-control/execution/persistence'
+import { applicationCallerAccess, assertApplicationCapabilityAllowed } from '@/core/application-control/callerContext'
+import { getApplicationReflectionRegistry } from './applicationControlRegistry'
 
 import { APPLICATION_REFLECTION_APPLICATION_CAPABILITIES } from '@/core/assistant/capabilities/applicationReflectionApplicationCapabilities'
 
@@ -91,12 +94,45 @@ class RendererApplicationCapabilityRegistry implements ApplicationCapabilityHand
     const definition = this.definitions.get(invocation.id)
     const handler = this.handlers.get(invocation.id)
     if (!definition || !handler) throw new Error('NOT_FOUND')
+    if (context.signal.aborted) throw new Error('ABORTED')
+    if (context.callerGrant) assertApplicationCapabilityAllowed(context.callerGrant, definition)
     if (definition.version !== invocation.version) throw new Error('VERSION_MISMATCH')
-    const before = createHostContextSnapshot()
-    for (const [scope, expected] of Object.entries(invocation.expectedRevisions ?? {})) {
-      if (before.scopeRevisions[scope] !== expected) throw new Error('CONFLICT')
-    }
     const input = definition.inputSchema.parse(invocation.input)
+    if (context.callerGrant && definition.resolveOperationTargets && !definition.readOnly) {
+      // 外部基线来自实体反射；语义操作也必须从相同目标读取，不能比较助手界面计数。
+      // 通用事务由引擎在持锁后核对，保留其原有原子预检。
+      try {
+        const targets = definition.resolveOperationTargets(input)
+        if (!targets?.length) throw new Error('INVALID_INPUT:此操作缺少正式目标声明，无法核对读取基线。')
+        const access = applicationCallerAccess(context.callerGrant, context.requestId ?? 'renderer', context.signal)
+        const expected = invocation.expectedRevisions ?? {}
+        const automatic = invocation.expectedRevisions === undefined && !definition.destructive
+        const observed = new Set<string>()
+        for (const ref of targets) {
+          // 不可变任务引用不一定是反射实体。无 revision scope 的操作由领域处理器
+          // 核对任务身份和实时状态；MCP 仍必须绑定该任务的原读取凭据及宿主会话。
+          if (!getApplicationReflectionRegistry().getEntity(ref.kind) && definition.requiredScopes.length === 0) continue
+          const snapshot = await getApplicationReflectionRegistry().readEntity(ref, [], access)
+          for (const [scope, current] of Object.entries(snapshot.revisions)) {
+            observed.add(scope)
+            if (automatic) expected[scope] = current
+            else if (expected[scope] !== current) {
+              throw new Error(`CONFLICT:${ref.kind} 的 ${scope} 数据已变化或缺少基线，请重新读取原目标后再试。`)
+            }
+          }
+        }
+        if (Object.keys(expected).some((scope) => !observed.has(scope))) {
+          throw new Error(`CONFLICT:基线包含无关作用域，本操作只需要 ${JSON.stringify([...observed])}。普通操作可省略 baselineIds 由应用自动核对；严格写入请只提供原目标的读取。`)
+        }
+        invocation.expectedRevisions = expected
+        if (context.signal.aborted) throw new Error('ABORTED')
+      } catch (error) { throw new ApplicationPreflightFailure(error) }
+    } else if (!(context.callerGrant && invocation.id === 'change_application_entities')) {
+      const before = createHostContextSnapshot()
+      for (const [scope, expected] of Object.entries(invocation.expectedRevisions ?? {})) {
+        if (before.scopeRevisions[scope] !== expected) throw new Error('CONFLICT')
+      }
+    }
     const inputRecord = input && typeof input === 'object' && !Array.isArray(input)
       ? input as Record<string, unknown>
       : null
@@ -109,7 +145,7 @@ class RendererApplicationCapabilityRegistry implements ApplicationCapabilityHand
     }
     const result = await handler(input, {
       ...context,
-      expectedRevisions: invocation.expectedRevisions ?? {},
+      expectedRevisions: invocation.expectedRevisions,
     })
     const snapshot = createHostContextSnapshot()
     const enriched = {
@@ -222,6 +258,12 @@ function describeSchemaIssues(error: ZodError): string {
 }
 
 function toFailure(error: unknown): ApplicationCapabilityResult {
+  if (error instanceof CanvasTransactionRolledBackError) {
+    const failure = toFailure(error.cause)
+    if (!failure.ok) return { ...failure, error: { ...failure.error, details: { execution: { rolledBack: true } } } }
+  }
+  if (error instanceof CanvasPersistenceError && error.transactionFacts) return toFailure(new ApplicationTransactionFailure(error.transactionFacts))
+  if (error instanceof ApplicationPreflightFailure) return { ok: false, error: { code: error.message.startsWith('CONFLICT:') ? 'CONFLICT' : 'INVALID_INPUT', message: error.message, recoverable: true, details: { execution: { notExecuted: true } } } }
   if (error instanceof ApplicationTransactionFailure) {
     const transaction = transactionFailureFacts(error.result)
     return { ok: false, error: { code: error.result.code === 'CONFLICT' ? 'CONFLICT' : 'CAPABILITY_REJECTED', message: error.message,
@@ -232,6 +274,13 @@ function toFailure(error: unknown): ApplicationCapabilityResult {
       recoverable: true, details: { persistence: error.facts } } }
   }
   const message = error instanceof Error ? error.message : String(error)
+  if (message === 'PERMISSION_DENIED' || message.startsWith('PROPERTY_NOT_WRITABLE:')) {
+    return { ok: false, error: {
+      code: 'CAPABILITY_REJECTED',
+      message: `${message}：当前连接无所需权限或属性不可写，请读取属性可用性并在应用中核对连接授权。`,
+      recoverable: true,
+    } }
+  }
   if (error instanceof CanvasApplicationError) {
     return {
       ok: false,
@@ -325,6 +374,11 @@ export async function executeApplicationCapabilityResult(
     capabilityId: invocation.id,
   })
   try {
+    const definition = BUILTIN_APPLICATION_CAPABILITY_REGISTRY.get(invocation.id)
+    if (definition) {
+      const parsed = definition.inputSchema.safeParse(invocation.input)
+      if (!parsed.success) throw new ApplicationPreflightFailure(parsed.error)
+    }
     const data = await registry.execute(invocation, context)
     const snapshot = createHostContextSnapshot()
     logger.info('capability.execute.completed', {
@@ -341,7 +395,14 @@ export async function executeApplicationCapabilityResult(
       resultingScopeRevisions: snapshot.scopeRevisions,
     }
   } catch (error) {
-    logger.error('capability.execute.failed', error, {
+    /*
+     * 预检失败是调用方可以自己改正的拒绝：参数写错、基线过期、乐观并发落败。
+     * 外部智能体接进来之后这类拒绝就是正常流量，记成 error 会让用户的错误日志被别人的
+     * 重试刷满，也会让任何覆盖并发契约的验收永远变红。**只降日志级别，返回给调用方的
+     * 失败事实一个字都没变**，未预期的执行异常仍然是 error。
+     */
+    const level = error instanceof ApplicationPreflightFailure ? 'warn' : 'error'
+    logger[level]('capability.execute.failed', error, {
       event: 'assistant.capability.execute.failed',
       requestId: context.requestId,
       taskId: context.taskId,

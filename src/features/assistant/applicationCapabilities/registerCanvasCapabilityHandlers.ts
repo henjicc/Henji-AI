@@ -214,7 +214,7 @@ export function registerCanvasCapabilityHandlers(
     throwIfCapabilityAborted(context.signal)
     const parsed = parseCapabilityInput<ProjectInput & {
       resultRef: { kind: 'generation.result'; id: string }
-      placement: CanvasNodePlacement
+      placement?: CanvasNodePlacement
     }>('add_generation_result_to_canvas', input)
     return addGenerationResultToCanvas(parsed)
   })

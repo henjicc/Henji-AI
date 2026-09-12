@@ -25,7 +25,7 @@ export async function commitPanoramaViewSnapshot(input: {
     if (!projectId || project.currentProject?.id !== projectId) {
       throw new Error('当前画布项目不可用');
     }
-    await runCanvasTransaction(projectId, 2, async (options) => runCanvasMutationStage(options, () => {
+    await runCanvasTransaction(projectId, 2, (options) => runCanvasMutationStage(options, () => {
       const canvas = useCanvasStore.getState();
       const sourceNode = canvas.nodes.find((node) => node.id === input.sourceNodeId);
       if (!sourceNode || sourceNode.type !== CANVAS_NODE_TYPES.panoramaViewer) {

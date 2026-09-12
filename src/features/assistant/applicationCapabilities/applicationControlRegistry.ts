@@ -107,7 +107,19 @@ function registerAll(
 ): void {
   for (const registration of registrations) {
     try {
-      target.register(registration)
+      // 应用公共领域共用原声明；助手运行、记忆与诊断不对本地适配器开放。
+      const expose = <T extends { exposures: Array<'ui' | 'assistant' | 'local_adapter'> }>(value: T): T => (
+        label === 'assistant_runtime'
+          ? { ...value, exposures: value.exposures.filter((exposure) => exposure !== 'local_adapter') }
+          : value.exposures.includes('assistant')
+            ? { ...value, exposures: [...new Set([...value.exposures, 'local_adapter' as const])] }
+            : value
+      )
+      target.register({
+        ...registration,
+        entity: expose(registration.entity),
+        properties: registration.properties.map(expose),
+      })
     } catch (error) {
       const entityId = registration.entity?.id ?? '(未知实体)'
       throw new Error(

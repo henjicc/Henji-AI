@@ -1,13 +1,13 @@
-import { BrainCircuit, GripHorizontal, History, MessageSquarePlus, Sparkles, X } from 'lucide-react'
+import { GripHorizontal, History, MessageSquarePlus, Sparkles, X } from 'lucide-react'
 import { useState, type CSSProperties, type KeyboardEvent, type RefObject } from 'react'
 
 import { UI_COLOR_ACCENT_TEXT_CLASS, UI_PANEL_SURFACE_CLASS, UI_TEXT_LABEL_CLASS, UiIconButton } from '@/components/ui'
 import { useDialogTransition } from '@/components/ui/useDialogTransition'
 import { UI_DIALOG_TRANSITION_MS } from '@/components/ui/motion'
 
-import { AssistantConversation } from './conversation/AssistantConversation'
-import { AssistantRunHistory } from './history/AssistantRunHistory'
-import { AssistantMemoryPanel } from './memory/AssistantMemoryPanel'
+import { EmbeddedConversation } from './embedded/EmbeddedConversation'
+import { EmbeddedHistory } from './embedded/EmbeddedHistory'
+import { newEmbeddedConversation, useEmbeddedAgent } from './embedded/controller'
 import { useAssistantPanelInteraction } from './hooks/useAssistantPanelInteraction'
 import { useAssistantUiStore, type AssistantDockMode } from './store/assistantUiStore'
 
@@ -41,8 +41,8 @@ interface AssistantSidebarProps {
 }
 
 export function AssistantSidebar({ workspaceRef }: AssistantSidebarProps): JSX.Element {
-  const [contentView, setContentView] = useState<'conversation' | 'history' | 'memory'>('conversation')
-  const [conversationVersion, setConversationVersion] = useState(0)
+  const [contentView, setContentView] = useState<'conversation' | 'history'>('conversation')
+  const embedded = useEmbeddedAgent()
   const open = useAssistantUiStore((state) => state.open)
   const mode = useAssistantUiStore((state) => state.mode)
   const position = useAssistantUiStore((state) => state.floatingPosition)
@@ -51,8 +51,6 @@ export function AssistantSidebar({ workspaceRef }: AssistantSidebarProps): JSX.E
   const setMode = useAssistantUiStore((state) => state.setMode)
   const setFloatingPosition = useAssistantUiStore((state) => state.setFloatingPosition)
   const setSize = useAssistantUiStore((state) => state.setSize)
-  const startNewConversation = useAssistantUiStore((state) => state.startNewConversation)
-  const threadId = useAssistantUiStore((state) => state.threadId)
   const { shouldRender, isVisible } = useDialogTransition(open, UI_DIALOG_TRANSITION_MS)
   const interaction = useAssistantPanelInteraction({
     enabled: open,
@@ -106,6 +104,7 @@ export function AssistantSidebar({ workspaceRef }: AssistantSidebarProps): JSX.E
         style={positionStyle}
       >
       <aside
+        data-application-surface-id="overlay.assistant"
         aria-label="智能助手"
         aria-hidden={!open}
         className={`relative flex h-full min-h-0 w-full flex-col overflow-hidden ${UI_PANEL_SURFACE_CLASS} transition-[opacity,transform] duration-200 ease-out ${
@@ -146,10 +145,10 @@ export function AssistantSidebar({ workspaceRef }: AssistantSidebarProps): JSX.E
                 showBorder={false}
                 appearance="hover-only"
                 onClick={() => {
-                  startNewConversation()
-                  setConversationVersion((version) => version + 1)
+                  void newEmbeddedConversation()
                   setContentView('conversation')
                 }}
+                disabled={embedded.busy}
                 title="新建对话"
                 aria-label="新建对话"
                 className={HEADER_ICON_BUTTON_CLASS}
@@ -170,21 +169,6 @@ export function AssistantSidebar({ workspaceRef }: AssistantSidebarProps): JSX.E
                 className={HEADER_ICON_BUTTON_CLASS}
               >
                 <History className="h-4 w-4" />
-              </UiIconButton>
-              <UiIconButton
-                type="button"
-                showBorder={false}
-                appearance="hover-only"
-                active={contentView === 'memory'}
-                aria-pressed={contentView === 'memory'}
-                onClick={() => setContentView((view) => (
-                  view === 'memory' ? 'conversation' : 'memory'
-                ))}
-                title={contentView === 'memory' ? '返回当前对话' : '助手记忆'}
-                aria-label={contentView === 'memory' ? '返回当前对话' : '助手记忆'}
-                className={HEADER_ICON_BUTTON_CLASS}
-              >
-                <BrainCircuit className="h-4 w-4" />
               </UiIconButton>
             </div>
 
@@ -210,18 +194,17 @@ export function AssistantSidebar({ workspaceRef }: AssistantSidebarProps): JSX.E
           aria-hidden={contentView !== 'conversation'}
           className={contentView === 'conversation' ? 'flex min-h-0 min-w-0 flex-1 overflow-hidden' : 'hidden'}
         >
-          <AssistantConversation key={`${conversationVersion}:${threadId}`} />
+          <EmbeddedConversation />
         </div>
         <div
           aria-hidden={contentView !== 'history'}
           className={contentView === 'history' ? 'flex min-h-0 min-w-0 flex-1 overflow-hidden' : 'hidden'}
         >
-          <AssistantRunHistory
+          <EmbeddedHistory
             visible={contentView === 'history'}
-            onOpenConversation={() => setContentView('conversation')}
+            onOpen={() => setContentView('conversation')}
           />
         </div>
-        {contentView === 'memory' ? <AssistantMemoryPanel /> : null}
 
         {mode === 'left' || mode === 'right' ? (
           <div

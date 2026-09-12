@@ -118,7 +118,7 @@ function taskProperties(task: GenerationTaskStatusSnapshot): Record<string, Json
     'generation.task.model_ref': { kind: GENERATION_ENTITY_TYPES.model, id: task.modelId },
     'generation.task.status': status,
     'generation.task.progress': task.progress,
-    'generation.task.cancellable': active,
+    'generation.task.cancellable': task.cancellable ?? active,
     'generation.task.waiting_external': active,
     'generation.task.result_ref': task.resultAvailable ? { kind: GENERATION_ENTITY_TYPES.result, id: task.taskId } : null,
     'generation.task.error_message': task.errorMessage,

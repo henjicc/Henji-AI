@@ -16,6 +16,7 @@ export const ASSISTANT_UI_STORE_LEDGER: ApplicationStoreActionLedger<ActionName>
   storeId: 'assistantUiStore',
   title: '助手自身面板',
   entries: {
+    setEmbeddedAccess: { kind: 'excluded', category: 'user_only', reason: '内置助手的操作授权由用户在可信界面选择，助手不能修改自己的授权。' },
     setOpen: { kind: 'excluded', category: 'view_state', reason: CHROME_REASON },
     toggleOpen: { kind: 'excluded', category: 'view_state', reason: CHROME_REASON },
     setMode: { kind: 'excluded', category: 'view_state', reason: CHROME_REASON },

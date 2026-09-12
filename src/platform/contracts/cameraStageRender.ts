@@ -70,6 +70,7 @@ export interface CameraStageRenderTaskScope {
 }
 
 export interface CameraStageRenderTaskSnapshot extends CameraStageRenderRequest {
+  acknowledgedAt?: number
   status: CameraStageRenderTaskStatus
   phase: 'preparing' | 'rendering' | 'encoding' | null
   progress: number

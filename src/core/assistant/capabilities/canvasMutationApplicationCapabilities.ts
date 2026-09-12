@@ -83,7 +83,7 @@ const applyCanvasImageCapability = defineApplicationCapability({
   id: 'apply_canvas_image_capability',
   version: 1,
   title: '应用画布图片能力',
-  description: '对明确的图片来源节点应用已登记的画布图片能力，原子创建受控节点和连线。',
+  description: '对明确的图片来源节点应用已登记的画布图片能力，原子创建受控节点和连线；本操作只创建节点，不提交生成，也不代表图片处理完成。',
   domain: 'canvas',
   aliases: [
     '使用图片工具', '应用图片能力', 'apply canvas image capability',
@@ -122,6 +122,12 @@ const applyCanvasImageCapability = defineApplicationCapability({
   }),
   concurrencyKey: 'canvas',
   resolveConcurrencyKey: (input) => `canvas:${input.projectId}`,
+  resolveOperationTargets: (input) => [
+    { kind: 'canvas.project', id: input.projectId },
+    { kind: 'canvas.node', id: `${input.projectId}:${input.sourceNodeId}` },
+  ],
+  resolveOperationWriteTargets: (input) => [{ kind: 'canvas.project', id: input.projectId }],
+  resolveOperationAppendTargets: (input) => [{ kind: 'canvas.project', id: input.projectId }],
   resolveTargetIds: (input) => target(input.projectId, {
     sourceNodeId: input.sourceNodeId,
     capabilityId: input.capabilityId,
@@ -138,7 +144,7 @@ const applyCanvasImageCapability = defineApplicationCapability({
   },
   successEvidence: ['返回实际创建的节点、连线与单次事务撤销引用。'],
   failureRecovery: [
-    '先用 get_canvas_project / get_canvas_node 确认 sourceNodeId 已产出已落地图片；capabilityId 只能从本能力输入 schema 的枚举中选择。',
+    '用 read_application_entity 读取 canvas.node 引用（id 为 projectId:sourceNodeId），确认来源已有图片；capabilityId 只能从本能力输入 schema 的枚举中选择。',
   ],
   resolveObservedEffects: (_input, output) => [
     {
@@ -201,9 +207,12 @@ const addAssetToCanvas = defineApplicationCapability({
 
 const addGenerationResultToCanvas = defineApplicationCapability({
   id: 'add_generation_result_to_canvas',
+  resolveOperationTargets: (input) => [{ kind: 'canvas.project', id: input.projectId }, input.resultRef],
+  resolveOperationWriteTargets: (input) => [{ kind: 'canvas.project', id: input.projectId }],
+  resolveOperationAppendTargets: (input) => [{ kind: 'canvas.project', id: input.projectId }],
   version: 1,
   title: '把生成结果放入画布',
-  description: '按稳定 generation.result 引用把已成功生成的媒体直接落成画布源节点，不要求先导入素材库。',
+  description: '按稳定 generation.result 引用把已成功生成的媒体直接放入原画布项目，不要求先导入素材库。优先使用用户发起任务时的项目和选中节点；有原选中节点时传 right_of_node，明确指定的位置优先。省略 placement 时，在目标为当前项目的情况下默认放到当前选中节点右侧，否则放到视口中心。',
   domain: 'canvas',
   aliases: ['把生成结果放入画布', '生成图片加入画布', 'add generation result to canvas'],
   readOnly: false,
@@ -226,7 +235,7 @@ const addGenerationResultToCanvas = defineApplicationCapability({
       kind: z.literal('generation.result'),
       id: z.string().min(1),
     }).strict(),
-    placement: canvasNodePlacementSchema,
+    placement: canvasNodePlacementSchema.optional(),
   }).strict(),
   outputSchema: capabilityOutputSchema({
     projectId: z.string(),

@@ -152,6 +152,8 @@ npx vitest run
 | 精确逻辑 | `unit --test <文件>` | 正式代码与精确输入，不启动应用 |
 | 运行时集成 | `integration` | 真注册表、真 Gateway、真解释器、真执行器；只替换进程边界 |
 | 界面操作 | `ui` / `ui-audit` | 真实 Electron、真实 DOM/WebGL、Playwright 操作、截图/规则与运行时证据 |
+| 退出重启 | `restart` | 同一份隔离资料目录跑两次完整 Electron 启动，覆盖渲染层重载证明不了的主进程启动恢复 |
+| 外部客户端 | `clients` | 真实外部 Agent 命令行接到真实应用；官方 SDK Client 与测试库只算协议证据，不算这一层 |
 | 外部真机 | `live` | 真实模型、网络、API 密钥、付费请求与业务数据 |
 
 数据模式与副作用必须彼此独立：
@@ -167,8 +169,12 @@ npm run test:reality -- --suite unit --test src/features/example.test.ts
 npm run test:reality -- --suite integration
 npm run test:reality -- --build --suite ui --only 3D --size 1440x900
 npm run test:reality -- --build --suite ui --only 设置 --size 960x640
+npm run test:reality -- --build --suite restart
+npm run test:reality -- --suite clients --only claude
 npm run test:reality -- --build --suite live --profile real --allow-paid --allow-writes --only camera
 ```
+
+`restart` 与 `clients` 都不产生付费请求，也不碰真实资料目录。`clients` 在模型侧不可用（额度、登录、版本）时**不判失败**——那不是应用的问题——但必须显式打印任务级未取证；把那条绿线读成「真实 Agent 已验收」是错的。
 
 UI 真实性测试不能只证明“脚本点完了”或“截图生成了”。每个场景同时订阅浏览器 `console error` / `pageerror`，并通过应用正式 logging 查询接口用 `afterTimestamp + level + limit` 截取该场景之后的结构化错误与警告。错误进入失败判据，警告进入 `evidence.json` 供诊断。**不要让测试脚本直接读取整份日志文件**：日志文件仍是唯一持久化来源，主进程接口负责流式过滤、限量和脱敏，脚本只消费窄结果；只有日志 IPC/查询服务本身坏掉时，才把直接读文件作为救援路径。
 
@@ -219,6 +225,10 @@ npm run check:model-i18n
 ```
 
 再运行改动模型、参数转换或请求构建的精确/相关测试；默认不跑全量 Vitest。
+
+### 应用能力与智能助手
+
+MCP 应用执行链用正式协议／直接调用入口、统一注册表、领域执行器及状态源验证，不要求经过旧助手模型、脚本或租约。`check:assistant-capabilities` 名称保留，其中结构、属性写入覆盖及业务不变量仍为共享门禁；助手运行、提示词与终态专项仅在实际改动这些行为时执行。不得为绕过 MCP 失败而关闭共享安全检查。
 
 ### 智能助手能力
 

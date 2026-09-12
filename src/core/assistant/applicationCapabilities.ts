@@ -88,6 +88,11 @@ export interface ApplicationCapabilityDefinition<TInput = unknown, TOutput = unk
   resolveRequiredScopes?(input: TInput): HostScope[]
   resolveConcurrencyKey?(input: TInput): string
   resolveTargetIds?(input: TInput): Record<string, string>
+  /** 派发前绑定的正式目标，供独立调用方持久记录和基线核对。 */
+  resolveOperationTargets?(input: TInput): Array<{ kind: string; id: string }>
+  resolveOperationWriteTargets?(input: TInput, operationId: string): Array<{ kind: string; id: string }>
+  /** 仅向集合追加独立对象的容器；追加之间兼容，覆盖、删除与保存失败仍互斥。 */
+  resolveOperationAppendTargets?(input: TInput): Array<{ kind: string; id: string }>
   resolveDataClasses?(output: TOutput): AgentDataClass[]
   summarize?(output: TOutput): string
   /**
@@ -159,6 +164,9 @@ const NON_DESCRIPTOR_KEYS = [
   'resolveRequiredScopes',
   'resolveConcurrencyKey',
   'resolveTargetIds',
+  'resolveOperationTargets',
+  'resolveOperationWriteTargets',
+  'resolveOperationAppendTargets',
   'resolveDataClasses',
   'summarize',
   'projectForHistory',

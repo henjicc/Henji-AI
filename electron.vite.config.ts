@@ -10,9 +10,10 @@ export default defineConfig({
     build: {
       outDir: 'out/main',
       rollupOptions: {
-        external: ['better-sqlite3', 'ffmpeg-ffprobe-static'],
+        external: ['better-sqlite3', 'ffmpeg-ffprobe-static', '@earendil-works/pi-coding-agent'],
         input: {
           index: resolve(__dirname, 'electron/main/index.ts'),
+          'pi-agent-utility': resolve(__dirname, 'electron/main/pi-agent-utility.ts'),
           'agent-utility': resolve(__dirname, 'electron/main/agent-utility.ts'),
           'image-registration-worker': resolve(__dirname, 'electron/main/image-registration-worker.ts'),
         },

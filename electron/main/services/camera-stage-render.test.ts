@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
     webContents: { id: number }
   } | null,
   nextWebContentsId: 100,
+  persistedTasks: [] as Array<{ requestId: string }>,
 }))
 
 vi.mock('electron', () => {
@@ -67,6 +68,19 @@ vi.mock('electron', () => {
   }
 })
 
+// 任务落盘由 camera-stage-render-task-registry.test.ts 与原生测试覆盖；
+// 本文件只验证渲染工作器生命周期，不打开真实 SQLite。
+vi.mock('./camera-stage-render-task-storage', () => ({
+  cameraStageRenderTaskStorage: {
+    load: () => mocks.persistedTasks,
+    save: (task: { requestId: string }) => {
+      const index = mocks.persistedTasks.findIndex((item) => item.requestId === task.requestId)
+      if (index >= 0) mocks.persistedTasks[index] = task
+      else mocks.persistedTasks.push(task)
+    },
+  },
+}))
+
 vi.mock('./video/frame-export', () => ({
   cleanupAllVideoFrameExports: mocks.cleanupAllVideoFrameExports,
 }))
@@ -100,6 +114,7 @@ describe('camera stage background render recovery', () => {
     mocks.ownerSend.mockClear()
     mocks.workerSend.mockClear()
     mocks.currentWindow = null
+    mocks.persistedTasks.length = 0
   })
 
   it('fails an image task and recycles the worker after prolonged inactivity', async () => {

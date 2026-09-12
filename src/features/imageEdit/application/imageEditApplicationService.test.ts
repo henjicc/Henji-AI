@@ -159,6 +159,7 @@ describe('image edit application service', () => {
       previewRef: preview.previewRef,
       assetId: 'asset-edited',
       status: 'committed',
+      resultRefs: [{ kind: 'asset', id: 'asset-edited' }],
     })
     await expect(commitImageEdit(String(preview.previewRef))).rejects.toThrow('NOT_FOUND')
   })

@@ -93,7 +93,7 @@ export async function commitImageEdit(previewRef: string, displayName?: string):
       previewRef,
       assetId: asset.id,
     })
-    return { previewRef, assetId: asset.id, status: 'committed' }
+    return { previewRef, assetId: asset.id, status: 'committed', resultRefs: [{ kind: 'asset', id: asset.id }] }
   } catch (error) {
     logger.error('图片编辑提交失败', error, {
       event: 'image_edit.preview.commit.failed',

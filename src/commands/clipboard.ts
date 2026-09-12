@@ -4,6 +4,8 @@ import { getPlatform } from '@/platform/runtime'
 
 const logger = createLogger('commands.clipboard')
 
+export async function writeClipboardText(text: string): Promise<void> { await getPlatform().clipboard.writeText(text) }
+
 /**
  * 主动从剪贴板取一张图片（截图位图或复制的图片文件都覆盖）。
  *

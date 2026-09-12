@@ -1,5 +1,12 @@
 # 智能助手应用能力覆盖
 
+## 当前适用范围（2026-09-12）
+
+产品同时提供外部 MCP 连接与内置 Pi 助手。内置入口使用官方 Pi SDK 和独立运行进程，旧自研助手源码及历史保留，但不再作为默认聊天运行时。领域服务、业务数据、权限、并发、保存及结果真实性约束继续适用于所有调用方。
+
+MCP 通过 `src/features/application-control/applicationCapabilityService.ts` 调用唯一能力注册与领域执行器。授权由可信宿主创建，不能从工具输入提取；不需要助手会话、模型请求、Henji Script 或发现租约。本文中脚本、配方、模型预算、租约、提示词及助手终态规则只适用于保留的自研助手，不约束 MCP 协议与 Pi 的推理循环；两者共用受控应用工具入口。
+
+
 > 读取时机：新增或修改工作区、页面、浮层、工具箱工具、设置项、用户可查询数据、业务操作、稳定引用、权限、宿主上下文或能力搜索。
 >
 > **这些场景必须同时读 skill `henji-application-capability`**（含 schema 字段、注册模式、迁移步骤与示例代码）。本文件只是硬约束清单。
@@ -9,6 +16,8 @@
 所有向助手开放的功能必须以 `ApplicationCapabilityDefinition` 作为 schema、权限、风险、数据等级、引用、可用条件、并发规则、成功证据和失败恢复的唯一元数据源。
 
 AI 输入 schema 顶层必须设置 `additionalProperties: false`。禁止 `patch`、`storePatch`、`executeScript`、`script`、`code` 等任意 Store Patch 或脚本执行字段；需要新增参数时先扩展正式领域 schema/注册表。
+
+**一次声明、多入口投影。** 同一份领域声明同时服务界面、自研助手与外部智能体（MCP）：工具参数由能力定义的 Zod 输入投影，域与实体的可读可写面由反射注册表的 `exposures`／`requiredPermissions.write`／`collectionWrite`／`writeExclusion.reason` 派生。**禁止在 `electron/main/services/mcp/**` 维护任何业务字段表、实体类型清单或前缀白名单**；那里只允许协议层自身的参数与信封。新增一个已登记的业务实体或属性后，外部调用方应立刻可用，不需要回到协议层登记。对外工具名、必填参数与错误码按 `EXTERNAL_CONTRACT_VERSION` 的弃用规则演进，破坏性变更必须先升主版本并保留旧调用样本。展开做法见 skill `henji-application-capability` 第 0.5 节。
 
 ## 覆盖判断不可跳过
 

@@ -33,7 +33,7 @@ type SettingsTab = SettingsTabId
  * 不会再出现两边对不上、或者内容区根本没有标题的情况。
  */
 const SECTION_MAP: Record<SettingsTab, string[]> = {
-  general: ['general-basic', 'general-onboarding', 'general-storage', 'general-behavior', 'general-maintenance'],
+  general: ['general-basic', 'general-onboarding', 'general-storage', 'general-behavior', 'general-maintenance', 'general-mcp'],
   models: ['models-providers', 'models-assistant', 'models-upload', 'models-alias'],
   assistant: ['assistant-preferences', 'assistant-skills'],
   interface: ['interface-layout', 'interface-assets', 'interface-canvas', 'interface-theme'],

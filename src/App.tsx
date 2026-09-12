@@ -1,3 +1,4 @@
+import { GenerationLifecycleProvider } from '@/features/generation/application/GenerationLifecycleProvider'
 import { createLogger } from '@/core/logging'
 import React, { Suspense, lazy, useState, useEffect } from 'react'
 import WindowControls from './components/WindowControls'
@@ -27,9 +28,8 @@ import {
   switchWorkspace,
   useNavigationStore,
 } from '@/stores/navigationStore'
-import { useAssistantHostBridge } from '@/features/assistant/frontendTools/useAssistantHostBridge'
-import { toggleAssistant, useAssistantUiStore } from '@/features/assistant/store/assistantUiStore'
-import { openAssistantForDiagnosis } from '@/features/assistant/diagnostics/openAssistantDiagnosis'
+import { useApplicationHost } from '@/features/application-control/useApplicationHost'
+import { useAssistantUiStore } from '@/features/assistant/store/assistantUiStore'
 import { UI_DURATION, uiTransition } from '@/components/ui/motion'
 import { prefetchWhenIdle } from '@/utils/idlePrefetch'
 import { onboardingManager } from '@/features/onboarding/application/onboardingManager'
@@ -67,10 +67,10 @@ const AssetLibraryFloatingPanel = lazy(() =>
  * 这段时间界面上什么都不出现，观感就是「点了没反应，卡一下才弹出来」——首次打开慢、
  * 之后每次都正常，就是这个原因（毛玻璃不背这个锅：它每次打开都要重画，不会只卡第一次）。
  *
- * 所以在启动之后的空闲时间把这三块 chunk 先取回来，用户真正点击时 import() 直接命中缓存。
- * 顺序按点击概率排：设置 > 资产面板 > 助手。
+ * 所以在启动之后的空闲时间把这两块 chunk 先取回来，用户真正点击时 import() 直接命中缓存。
+ * 顺序按点击概率排：设置 > 资产面板；助手入口当前隐藏，不预取。
  */
-const overlayPrefetchOrder = [loadSettingsModal, loadAssetLibraryFloatingPanel, loadAssistantSidebar]
+const overlayPrefetchOrder = [loadSettingsModal, loadAssetLibraryFloatingPanel]
 
 /*
  * dev 下 Vite 是收到请求才逐个转译的，预取会往队列里压几百个模块。工作区的预取排在
@@ -102,7 +102,7 @@ const App: React.FC = () => {
   useDevToolsShortcut()
   useLogWindowShortcut()
   const [isReady, setIsReady] = useState(false)
-  useAssistantHostBridge(isReady)
+  useApplicationHost(isReady)
   const activeWorkspace = useNavigationStore((state) => state.activeWorkspace)
   // 设置面板开关提到 uiStore：错误弹窗的「去设置」可能从任意深度的组件触发
   const isSettingsOpen = useUiStore((state) => state.isSettingsOpen)
@@ -119,6 +119,17 @@ const App: React.FC = () => {
   const assistantOpen = useAssistantUiStore((state) => state.open)
   const assistantMode = useAssistantUiStore((state) => state.mode)
   const assistantSize = useAssistantUiStore((state) => state.size)
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent): void => {
+      if (event.ctrlKey && event.shiftKey && event.key.toLowerCase() === 'a') {
+        event.preventDefault()
+        const state = useAssistantUiStore.getState()
+        state.setOpen(!state.open)
+      }
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [])
   const assistantWorkspaceRef = React.useRef<HTMLDivElement>(null)
   // 懒加载浮层的「装载闩」：打开过一次就一直挂着，避免每次开关都重新触发 Suspense
   const [assistantMounted, setAssistantMounted] = useState(false)
@@ -170,15 +181,6 @@ const App: React.FC = () => {
   useEffect(() => {
     if (assetView === 'floating') setAssetPanelMounted(true)
   }, [assetView])
-  useEffect(() => {
-    const handleAssistantShortcut = (event: KeyboardEvent): void => {
-      if (!(event.ctrlKey || event.metaKey) || !event.shiftKey || event.key.toLowerCase() !== 'a') return
-      event.preventDefault()
-      toggleAssistant()
-    }
-    window.addEventListener('keydown', handleAssistantShortcut)
-    return () => window.removeEventListener('keydown', handleAssistantShortcut)
-  }, [])
   useEffect(() => {
     let closing = false
     return getPlatform().window.onCloseRequested(() => {
@@ -259,6 +261,7 @@ const App: React.FC = () => {
 
   return (
     <NotificationProvider>
+      <GenerationLifecycleProvider>
       <CameraStageRenderLifecycleHost />
       <div
         className="h-screen min-h-screen bg-app text-white flex flex-col relative overflow-hidden"
@@ -276,7 +279,8 @@ const App: React.FC = () => {
           onOpenSettings={() => openSettings()}
           onPrefetchSettings={prefetchSettingsModal}
           assistantOpen={assistantOpen}
-          onAssistantClick={toggleAssistant}
+          onAssistantClick={() => useAssistantUiStore.getState().setOpen(!assistantOpen)}
+
         />
 
         {/* 工作区容器 */}
@@ -301,10 +305,11 @@ const App: React.FC = () => {
           {isSettingsOpen && <SettingsModal onClose={closeSettings} target={settingsTarget} />}
         </Suspense>
         <LargeUploadChoiceDialog />
-        <GlobalAlertDialog onAskAssistant={openAssistantForDiagnosis} />
+        <GlobalAlertDialog />
         <OnboardingHints />
         <OnboardingModal />
       </div>
+      </GenerationLifecycleProvider>
     </NotificationProvider>
   )
 }

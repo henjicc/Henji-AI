@@ -1,6 +1,7 @@
 import { createLogger } from '@/core/logging'
 import { useCanvasStore } from '@/stores/canvasStore'
 import { flushCanvasProjectSnapshot, useProjectStore } from '@/stores/projectStore'
+import type { ApplicationTransactionResult } from '@/core/application-control/transactions'
 
 const logger = createLogger('features.canvas.persistence')
 
@@ -10,6 +11,13 @@ export interface CanvasMutationCheckpoint {
   edges: unknown
   history: unknown
   conflicted: boolean
+  runtime?: CanvasTransactionRuntime
+}
+export interface CanvasTransactionRuntime {
+  store: typeof useCanvasStore
+  isCurrent: () => boolean
+  persist: () => Promise<void>
+  pause: () => () => void
 }
 export interface CanvasCommitOptions {
   deferCommit?: boolean
@@ -40,14 +48,22 @@ export class CanvasTransactionConflictError extends Error {
   }
 }
 
-export function createCanvasMutationCheckpoint(projectId: string): CanvasMutationCheckpoint {
-  const { nodes, edges, history } = useCanvasStore.getState()
-  return { projectId, nodes, edges, history, conflicted: false }
+/** 原画布快照已恢复且保存确认；区别于未派发和仍有未保存修改。 */
+export class CanvasTransactionRolledBackError extends Error {
+  constructor(readonly cause: unknown) {
+    super(cause instanceof Error ? cause.message : String(cause))
+    this.name = 'CanvasTransactionRolledBackError'
+  }
+}
+
+export function createCanvasMutationCheckpoint(projectId: string, runtime?: CanvasTransactionRuntime): CanvasMutationCheckpoint {
+  const { nodes, edges, history } = (runtime?.store ?? useCanvasStore).getState()
+  return { projectId, nodes, edges, history, conflicted: false, runtime }
 }
 
 export function isCanvasMutationCheckpointCurrent(checkpoint: CanvasMutationCheckpoint): boolean {
-  const canvas = useCanvasStore.getState()
-  return !checkpoint.conflicted && useProjectStore.getState().currentProjectId === checkpoint.projectId
+  const canvas = (checkpoint.runtime?.store ?? useCanvasStore).getState()
+  return !checkpoint.conflicted && (checkpoint.runtime ? checkpoint.runtime.isCurrent() : useProjectStore.getState().currentProjectId === checkpoint.projectId)
     && canvas.nodes === checkpoint.nodes && canvas.edges === checkpoint.edges && canvas.history === checkpoint.history
 }
 
@@ -65,7 +81,7 @@ export function runCanvasMutationStage<T>(options: CanvasCommitOptions, mutate: 
   try { return mutate() }
   finally {
     if (options.checkpoint) {
-      const { nodes, edges, history } = useCanvasStore.getState()
+      const { nodes, edges, history } = (options.checkpoint.runtime?.store ?? useCanvasStore).getState()
       Object.assign(options.checkpoint, { nodes, edges, history })
     }
   }
@@ -76,6 +92,7 @@ export function retainsCanvasMutation(error: unknown): boolean {
 }
 
 export class CanvasPersistenceError extends Error {
+  transactionFacts?: Extract<ApplicationTransactionResult, { status: 'failed' }>
   readonly code = 'PERSISTENCE_FAILED'
   readonly retryable = true
   readonly recovery = { capabilityId: 'retry_canvas_project_save', replayMutation: false }
@@ -101,7 +118,7 @@ export async function confirmCanvasPersistence(
 ): Promise<void> {
   if (options.deferCommit) {
     if (options.checkpoint) {
-      const { nodes, edges, history } = useCanvasStore.getState()
+      const { nodes, edges, history } = (options.checkpoint.runtime?.store ?? useCanvasStore).getState()
       Object.assign(options.checkpoint, { nodes, edges, history })
     }
     return

@@ -30,6 +30,7 @@ export interface ImageEditPersistenceHostV3 {
 }
 
 export class ImageEditPersistenceOwnerV3 implements ApplicationPersistenceParticipant {
+  readonly ownerId = crypto.randomUUID()
   readonly key: string
   private active = true
   private confirming: Promise<ImageEditDocumentReferenceV3> | null = null
@@ -152,7 +153,7 @@ export class ImageEditPersistenceOwnerV3 implements ApplicationPersistencePartic
       throw new ApplicationPersistenceFailure(
         '当前图片编辑内容已保留，但保存未确认。请重试保存，不要重复修改、新增、删除或撤销操作。',
         { memoryState: 'modified', persistenceState: 'unconfirmed', stage,
-          recovery: { capabilityId: 'retry_image_edit_document_save',
+          recovery: { capabilityId: 'retry_image_edit_document_save', ownerId: this.ownerId,
             target: { kind: 'image_edit.document', id: `v3:${encodeURIComponent(this.documentId)}` }, replayMutation: false } },
         cause,
         cause instanceof ApplicationPersistenceFailure ? cause.receipt : this.receipt,

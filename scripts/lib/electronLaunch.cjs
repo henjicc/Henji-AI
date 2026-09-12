@@ -209,6 +209,18 @@ function assertBuildFreshness(mainEntry) {
   )
 }
 
+/**
+ * `reuseUserDataDir` 让调用方自带一个隔离资料目录，使同一份数据可以跨两次启动。
+ * 「应用完整退出重启」只能这样取证：每次启动都新建临时目录的话，第二次看到的是空数据，
+ * 得到的必然是一个毫无意义的绿灯。由调用方持有的目录**不由这里回收**。
+ *
+ * `appPath` 让调用方改用应用目录（而不是主入口文件）作为 Electron 的 app path。
+ * 这一条只有一个用途，但很要命：直接 `electron out/main/index.cjs` 时 Electron 解析不到
+ * `package.json`，`app.getName()` 退回默认值，userData 变成 `…/Roaming/Electron`，
+ * **safeStorage 于是用另一把密钥**——用户真实的供应商凭据全部解不开，日志里刷出一片
+ * `keystore.decrypt.failed`，看上去像"这台机器的密钥坏了"。真实凭据必须可用的验收
+ * （付费闭环）一律传 `appPath: 仓库根目录`，让应用保持自己的身份与 userData。
+ */
 async function launchElectronApp({
   mainEntry,
   cwd,
@@ -217,10 +229,14 @@ async function launchElectronApp({
   useElectronApi = false,
   skipOnboarding = false,
   extraArgs = [],
+  reuseUserDataDir = null,
+  appPath = null,
 } = {}) {
   assertBuildFreshness(mainEntry)
-  const userDataDir = isolateUserData ? createIsolatedUserDataDir() : null
-  const launchArgs = userDataDir ? [`--user-data-dir=${userDataDir}`, mainEntry] : [mainEntry]
+  const userDataDir = reuseUserDataDir ?? (isolateUserData ? createIsolatedUserDataDir() : null)
+  const ownedUserDataDir = reuseUserDataDir ? null : userDataDir
+  const entryArg = appPath ?? mainEntry
+  const launchArgs = userDataDir ? [`--user-data-dir=${userDataDir}`, entryArg] : [entryArg]
   launchArgs.push(...extraArgs)
   // LOCALAPPDATA/APPDATA 只在 Windows 上决定数据目录；macOS / Linux 走
   // app.getPath('appData')，必须由主进程按 HENJI_ISOLATED_APP_DATA 重定向，
@@ -269,12 +285,12 @@ async function launchElectronApp({
             ])
             await stopElectronChild(child)
           } finally {
-            await cleanupIsolatedUserDataDir(userDataDir)
+            await cleanupIsolatedUserDataDir(ownedUserDataDir)
           }
         },
       }
     } catch (error) {
-      await cleanupIsolatedUserDataDir(userDataDir)
+      await cleanupIsolatedUserDataDir(ownedUserDataDir)
       throw error
     }
   }
@@ -323,7 +339,7 @@ async function launchElectronApp({
         }
         await browser.close().catch(() => undefined)
         await stopElectronChild(child)
-        await cleanupIsolatedUserDataDir(userDataDir)
+        await cleanupIsolatedUserDataDir(ownedUserDataDir)
       },
     }
   } catch (error) {
@@ -331,7 +347,7 @@ async function launchElectronApp({
       await browser.close().catch(() => undefined)
     }
     await stopElectronChild(child)
-    await cleanupIsolatedUserDataDir(userDataDir)
+    await cleanupIsolatedUserDataDir(ownedUserDataDir)
     const output = processOutput.trim()
     throw new Error(output ? `${error.message}\nElectron process output:\n${output}` : error.message, {
       cause: error,
@@ -356,4 +372,6 @@ module.exports = {
   waitForApp,
   assert,
   createElectronEnv,
+  createIsolatedUserDataDir,
+  cleanupIsolatedUserDataDir,
 }

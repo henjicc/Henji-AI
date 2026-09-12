@@ -91,8 +91,9 @@ export function assertImageEditPersistenceCurrentV3(documentId: string): void {
   requireImageEditPersistenceOwnerV3(documentId).assertCurrent()
 }
 
-export async function retryImageEditDocumentSaveV3(documentId: string) {
+export async function retryImageEditDocumentSaveV3(documentId: string, expectedOwnerId?: string) {
   const owner = requireImageEditPersistenceOwnerV3(documentId)
+  if (expectedOwnerId && owner.ownerId !== expectedOwnerId) throw new Error('RECOVERY_SESSION_LOST:原图片编辑保存宿主已被替换，请从原画布文档核对结果，不能借用其他宿主重试。')
   const reference = await owner.confirm(true)
   return { reference, receipt: owner.getConfirmationReceipt() }
 }

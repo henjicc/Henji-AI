@@ -27,6 +27,9 @@
     "close": "关闭"
   },
   "canvas": {
+    "setNodeDefaults": "设置默认值",
+    "nodeDefaultsSaved": "已设为新建同类节点的默认参数",
+    "nodeDefaultsFailed": "默认参数保存失败，请重试",
     "addImage": "添加图片",
     "splitStoryboard": "切割",
     "generate": "生成",

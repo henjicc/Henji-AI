@@ -1,5 +1,13 @@
+import { applicationGenerationTaskId } from '../../application-control/operationIdentity'
 import { z } from 'zod'
 import { applicationSchemaRefSchema } from '../../application-control'
+import { canvasNodePlacementSchema } from './canvasMutationApplicationCapabilities'
+
+export const generationDestinationSchema = z.discriminatedUnion('mode', [
+  z.object({ mode: z.literal('history') }).strict(),
+  z.object({ mode: z.literal('canvas'), projectId: z.string().min(1), sourceNodeIds: z.array(z.string().min(1)).max(16).default([]), placement: canvasNodePlacementSchema.optional() }).strict(),
+])
+export type GenerationDestination = z.infer<typeof generationDestinationSchema>
 
 import type { ApplicationCapabilityDefinition } from '../applicationCapabilities'
 import {
@@ -166,6 +174,7 @@ const prepareGenerationTask = defineApplicationCapability({
     prompt: z.string().max(32 * 1024).optional(),
     mediaType: z.enum(['image', 'video', 'audio']).optional(),
     params: z.record(z.string(), z.unknown()).optional(),
+    destination: generationDestinationSchema.optional(),
   }).strict(),
   outputSchema: capabilityOutputSchema({
     preparation: z.object({
@@ -184,19 +193,24 @@ const prepareGenerationTask = defineApplicationCapability({
 
 const createVisibleGenerationTask = defineApplicationCapability({
   id: 'create_visible_generation_task',
+  resolveOperationWriteTargets: (input, operationId) => [{ kind: 'generation.task', id: applicationGenerationTaskId(operationId) },
+    ...(input.destination?.mode === 'canvas' ? [{ kind: 'canvas.project', id: input.destination.projectId }] : [])],
+  resolveOperationAppendTargets: (input) => input.destination?.mode === 'canvas' ? [{ kind: 'canvas.project', id: input.destination.projectId }] : [],
+  resolveOperationTargets: (input) => { if (!input.modelId || typeof input.prompt !== 'string' || !input.mediaType) throw new Error('INVALID_INPUT:外部提交必须明确指定已读取的模型、提示词和媒体类型'); return [{ kind: 'generation.model', id: input.modelId }] },
   version: 1,
   title: '创建可见生成任务',
-  description: '在生成工作区创建用户可见的图片、视频或音频生成任务；省略的字段用当前生成草稿'
+  description: '创建用户可见的图片、视频或音频生成任务。画布任务使用 destination={mode:"canvas",...}，提供原 projectId 和参考 sourceNodeIds，应用先创建生成节点与连线再执行，结果自动连接在生成节点旁；不要再调用放入画布造成重复。明确只在历史中生成时使用 destination={mode:"history"}。省略 destination 默认当前画布优先。省略的字段用当前生成草稿'
     + '（generation.draft）补全，让助手能像人一样先逐步搭建输入（写提示词、选模型、上传媒体）'
-    + '再提交，而不必每次一次性传全部参数。',
+    + '再提交，而不必每次一次性传全部参数。通过应用工具提交时省略 baselineIds，宿主自动准备并核对费用；'
+    + '参考素材可放入 params.uploadedImages / uploadedVideos / uploadedAudios，元素使用 {kind:"asset",id:"素材 ID"}。',
   domain: 'generation',
   aliases: ['生成图片', '生成视频', '生成音频', 'create generation'],
   readOnly: false,
   // 它确实新建了一条 generation.task；只声明 execute 会让「创建一个生成任务」的 Facet 永远
   // 对不上账，模型明明提交成功了，任务图却停在未结算。
   control: capabilityControl('execute', ['generation.task'], {
-    revisionScopes: ['generation'], verificationRequired: false, resultState: 'submitted',
-    alsoImpacts: [{ effect: 'create', entityTypes: ['generation.task'] }],
+    revisionScopes: ['generation', 'canvas'], verificationRequired: false, resultState: 'submitted',
+    alsoImpacts: [{ effect: 'create', entityTypes: ['generation.task', 'canvas.node', 'canvas.edge'] }],
   }),
   risk: 'R2',
   dataClasses: ['C1'],
@@ -208,8 +222,8 @@ const createVisibleGenerationTask = defineApplicationCapability({
   supportsUndo: false,
   completionKind: 'submitted',
   requiredScopes: ['generation'],
-  acceptsRefs: ['generation.model', 'generation.draft', 'asset'],
-  producesRefs: ['generation.task'],
+  acceptsRefs: ['generation.model', 'generation.draft', 'asset', 'canvas.project', 'canvas.node'],
+  producesRefs: ['generation.task', 'canvas.node', 'canvas.edge'],
   successEvidence: [
     '返回稳定 taskId、submitted 状态和最新 generation revision。',
     '该结果只证明任务已提交；生成完成必须由后续状态证据确认。',
@@ -220,6 +234,7 @@ const createVisibleGenerationTask = defineApplicationCapability({
     prompt: z.string().max(32 * 1024).optional(),
     mediaType: z.enum(['image', 'video', 'audio']).optional(),
     params: z.record(z.string(), z.unknown()).optional(),
+    destination: generationDestinationSchema.optional(),
   }).strict(),
   outputSchema: capabilityOutputSchema({
     taskId: z.string().min(1),
@@ -304,6 +319,7 @@ const getGenerationTask = defineApplicationCapability({
 
 const cancelGenerationTask = defineApplicationCapability({
   id: 'cancel_generation_task',
+  resolveOperationTargets: (input) => [{ kind: 'generation.task', id: input.taskId }],
   version: 1,
   title: '取消生成任务',
   description: '取消明确任务引用对应的可取消生成任务。',

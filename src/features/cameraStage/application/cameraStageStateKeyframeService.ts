@@ -3,8 +3,7 @@ import { CAMERA_STAGE_NAME_MAX_LENGTH } from '@/core/assistant/capabilities/came
 
 import type { StageObject } from '../domain/sceneTypes'
 import type { StageStateKeyframe } from '../domain/stateKeyframeTypes'
-import { loadProjectIntoScene, saveCurrentProject } from '../projects/cameraStageProjectService'
-import { useCameraStageStore } from '../store/cameraStageStore'
+import { cameraStageProjectStore, ensureCameraStageProjectRuntime, saveCameraStageProjectRuntime, bindCameraStageProjectOperation } from './cameraStageProjectRuntime'
 import { captureCameraStageUndo, restoreCameraStageUndo } from './cameraStageUndo'
 
 const logger = createLogger('features.cameraStage.application')
@@ -29,8 +28,7 @@ export interface CameraStageStateKeyframeCreateInput {
 }
 
 async function ensureProjectLoaded(projectId: string): Promise<void> {
-  if (useCameraStageStore.getState().currentProjectId === projectId) return
-  if (!await loadProjectIntoScene(projectId)) throw new Error(`PROJECT_NOT_FOUND:${projectId}`)
+  await ensureCameraStageProjectRuntime(projectId)
 }
 
 /** 纯输入校验，必须在任何写入之前跑完——写到一半才发现参数不对，留下的残局比失败本身更难收拾。 */
@@ -78,7 +76,7 @@ async function rollback(projectId: string, undoToken: string, event: string): Pr
   }
 }
 
-export const cameraStageStateKeyframeService = {
+const implementation = {
   /** 批量新建状态关键帧；同一批次里落在同一帧的两项会像人工操作一样合并为一个时间点。 */
   async createStateKeyframes(projectId: string, inputs: CameraStageStateKeyframeCreateInput[]): Promise<{
     projectId: string
@@ -89,13 +87,13 @@ export const cameraStageStateKeyframeService = {
       event: 'camera_stage.state_keyframe.create.start', projectId, stateKeyframeCount: inputs.length,
     })
     await ensureProjectLoaded(projectId)
-    const before = useCameraStageStore.getState()
+    const before = cameraStageProjectStore(projectId).getState()
     assertStateKeyframeInputsValid(inputs, before.objects)
     const undoToken = captureCameraStageUndo(projectId)
     try {
       const stateKeyframeIds: string[] = []
       for (const input of inputs) {
-        const state = useCameraStageStore.getState()
+        const state = cameraStageProjectStore(projectId).getState()
         /*
          * seek 是对的，别改成 setPlaybackTime。
          *
@@ -109,7 +107,7 @@ export const cameraStageStateKeyframeService = {
          */
         state.seek(input.time)
         state.addStateKeyframe()
-        const after = useCameraStageStore.getState()
+        const after = cameraStageProjectStore(projectId).getState()
         const stateKeyframeId = after.selectedStateKeyframeId
         if (!stateKeyframeId) throw new Error('CAPABILITY_REJECTED')
         if (input.name !== undefined) after.updateStateKeyframeName(stateKeyframeId, resolveUniqueStateKeyframeName(after.stateKeyframes, input.name, stateKeyframeId))
@@ -120,7 +118,7 @@ export const cameraStageStateKeyframeService = {
         }
         stateKeyframeIds.push(stateKeyframeId)
       }
-      await saveCurrentProject()
+      await saveCameraStageProjectRuntime(projectId)
       logger.info('三维状态关键帧批量新建完成', {
         event: 'camera_stage.state_keyframe.create.completed', projectId, stateKeyframeCount: stateKeyframeIds.length,
       })
@@ -138,7 +136,7 @@ export const cameraStageStateKeyframeService = {
     undoToken: string
   }> {
     await ensureProjectLoaded(projectId)
-    const state = useCameraStageStore.getState()
+    const state = cameraStageProjectStore(projectId).getState()
     const missing = stateKeyframeIds.filter((id) => !state.stateKeyframes.some((stateKeyframe) => stateKeyframe.id === id))
     if (missing.length > 0) {
       throw new Error(`STATE_KEYFRAME_NOT_FOUND：${missing.join('、')} 不是本工程中的状态关键帧 id，先观察场景再删除。`)
@@ -147,7 +145,7 @@ export const cameraStageStateKeyframeService = {
     try {
       if (stateKeyframeIds.length === 1) state.removeStateKeyframe(stateKeyframeIds[0])
       else state.removeStateKeyframes(stateKeyframeIds)
-      await saveCurrentProject()
+      await saveCameraStageProjectRuntime(projectId)
       return { projectId, removedCount: stateKeyframeIds.length, undoToken }
     } catch (error) {
       await rollback(projectId, undoToken, 'camera_stage.state_keyframe.remove.rollback_failed')
@@ -155,4 +153,9 @@ export const cameraStageStateKeyframeService = {
       throw error
     }
   },
+}
+
+export const cameraStageStateKeyframeService = {
+  createStateKeyframes: bindCameraStageProjectOperation(implementation.createStateKeyframes, (projectId) => projectId),
+  removeStateKeyframes: bindCameraStageProjectOperation(implementation.removeStateKeyframes, (projectId) => projectId),
 }

@@ -57,6 +57,19 @@ function yieldForProjectLoadingPaint(): Promise<void> {
 }
 
 const VIEWPORT_EPSILON = 0.001;
+const backgroundExecutions = new Map<string, Promise<void>>();
+const backgroundExecutionVersions = new Map<string, number>();
+
+export function holdCanvasProjectBackgroundExecution(projectId: string): () => void {
+  let release!: () => void;
+  const barrier = new Promise<void>((resolve) => { release = resolve; });
+  backgroundExecutions.set(projectId, barrier);
+  backgroundExecutionVersions.set(projectId, (backgroundExecutionVersions.get(projectId) ?? 0) + 1);
+  return () => {
+    if (backgroundExecutions.get(projectId) === barrier) backgroundExecutions.delete(projectId);
+    release();
+  };
+}
 
 function hasViewportMeaningfulDelta(current: Viewport, next: Viewport): boolean {
   return (
@@ -264,18 +277,26 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       try {
         await yieldForProjectLoadingPaint();
         if (reqSeq !== openProjectRequestSeq) return;
-        const unsaved = persistenceQueue.getUnsavedProject(id);
-        const record = unsaved ? null : await getProjectRecord(id);
+        let project: Project | null = null;
+        while (reqSeq === openProjectRequestSeq) {
+          await backgroundExecutions.get(id);
+          const version = backgroundExecutionVersions.get(id);
+          const unsaved = persistenceQueue.getUnsavedProject(id);
+          const record = unsaved ? null : await getProjectRecord(id);
+          // 慢读开始后可能有后台写入：等待原执行结束后重新读，不能装载旧快照。
+          if (backgroundExecutions.has(id) || version !== backgroundExecutionVersions.get(id)) continue;
+          project = unsaved ?? (record ? fromProjectRecord(record) : null);
+          break;
+        }
         if (reqSeq !== openProjectRequestSeq) {
           return;
         }
-        if (!record && !unsaved) {
+        if (!project) {
           logger.warn('工程记录不存在', { event: 'project.open.failed', context: { projectId: id } });
           set({ isOpeningProject: false, openError: 'project.openFailed' });
           return;
         }
 
-        const project = unsaved ?? fromProjectRecord(record!);
         set((state) => ({
           currentProjectId: id,
           currentProject: project,
@@ -462,8 +483,26 @@ export function hasUnconfirmedCanvasProjectSnapshot(projectId: string): boolean 
   return persistenceQueue.getUnsavedProject(projectId) !== undefined
 }
 
+/** 后台领域操作也写入同一保存队列，打开工程时可恢复尚未落盘的原快照。 */
+export async function persistBackgroundCanvasProject(project: Project): Promise<void> {
+  persistenceQueue.queueProject(project)
+  try {
+    await persistenceQueue.flushProject(project)
+    setProjectPersistenceError(project.id, null)
+    useProjectStore.setState((state) => ({ projects: updateProjectSummary(state.projects, project) }))
+  } catch (error) {
+    setProjectPersistenceError(project.id, 'project.persistenceFailed')
+    throw error
+  }
+}
+
+export function readUnconfirmedCanvasProject(projectId: string): Project | undefined {
+  return persistenceQueue.getUnsavedProject(projectId)
+}
+
 export async function flushCanvasProjectSnapshot(projectId: string): Promise<void> {
-  const project = useProjectStore.getState().currentProject
+  const current = useProjectStore.getState().currentProject
+  const project = current?.id === projectId ? current : persistenceQueue.getUnsavedProject(projectId)
   if (!project || project.id !== projectId) throw new Error('当前画布项目已切换，请返回原项目后重试保存')
   try {
     await persistenceQueue.flushProject(project)

@@ -5,6 +5,7 @@ const DEFAULT_TIMEOUT_MS = 10 * 60 * 1_000
 const MAX_TIMEOUT_MS = 60 * 60 * 1_000
 
 export interface AssistantCliOptions {
+  engine?: 'legacy' | 'pi'
   goal: string
   approvalMode: AgentApprovalMode
   captureMode: AgentTraceCaptureMode
@@ -63,6 +64,7 @@ export function parseAssistantCliArguments(argv: string[] = process.argv.slice(1
   let requireVerifiedWrite = false
   let timeoutMs = DEFAULT_TIMEOUT_MS
   let threadId: string | undefined
+  let engine: AssistantCliOptions['engine']
 
   for (let index = 0; index < argv.length; index += 1) {
     const argument = argv[index]
@@ -73,6 +75,13 @@ export function parseAssistantCliArguments(argv: string[] = process.argv.slice(1
         goal = requireValue(argv, index, argument).trim()
         index += 1
         break
+      case '--engine': {
+        const value = requireValue(argv, index, argument)
+        if (value !== 'pi' && value !== 'legacy') throw new Error('参数 --engine 仅支持 pi 或 legacy')
+        engine = value
+        index += 1
+        break
+      }
       case '--approval':
         approvalMode = parseApprovalMode(requireValue(argv, index, argument))
         index += 1
@@ -112,7 +121,7 @@ export function parseAssistantCliArguments(argv: string[] = process.argv.slice(1
 
   return {
     goal, approvalMode, captureMode, printTrace, awaitGeneration, visible,
-    requireVerifiedWrite, timeoutMs, ...(threadId ? { threadId } : {}),
+    requireVerifiedWrite, timeoutMs, ...(threadId ? { threadId } : {}), ...(engine ? { engine } : {}),
   }
 }
 
@@ -121,6 +130,7 @@ export function formatAssistantCliHelp(): string {
     '用法：npm run assistant:cli -- --goal "任务描述" [选项]',
     '',
     '选项：',
+    '  --engine <pi|legacy>                            运行引擎，默认 legacy；pi 使用当前内置助手',
     '  --approval <ask|assistant_decides|full_access>  审批策略，默认 assistant_decides',
     '  --trace <summary|detailed>                      追踪捕获级别，默认 summary',
     '  --print-trace                                   在运行结束后输出已脱敏的详细追踪',

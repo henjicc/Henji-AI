@@ -5,6 +5,13 @@ description: 为 Henji-AI 新增、修改或迁移应用能力，并完成智能
 
 # 痕迹AI 应用能力适配
 
+## 当前适用范围（2026-09-12）
+
+本轮产品方向为外部智能体能力开放，MCP 是最高优先级。保留旧助手源码及历史，默认隐藏入口；不以旧助手行为兼容作为 MCP 交付门槛。领域服务、业务数据、权限、并发、保存及结果真实性约束继续适用于所有调用方。
+
+MCP 通过 `src/features/application-control/applicationCapabilityService.ts` 调用唯一能力注册与领域执行器。授权由可信宿主创建，不能从工具输入提取；不需要助手会话、模型请求、Henji Script 或发现租约。本文中脚本、配方、模型预算、租约、提示词及助手终态规则只适用于保留的自研助手，不约束 MCP 协议。
+
+
 把应用功能注册成智能助手可按需发现、受控执行、能够验证的原生能力，不新增兼容工具路径。实体与属性以 Application Control 反射注册表为唯一真相源；无法用 CRUD 表达的算法操作以 `ApplicationCapabilityDefinition` 为唯一真相源；两个以上应用操作由 `run_henji_script@1` 解析为同一 Application Control 执行内核，不再建立第二套编排协议。
 
 ## 执行流程
@@ -49,6 +56,30 @@ sceneField('sky_color', '天空颜色', COLOR, {
 ```
 
 一条声明用 `fieldDescriptors()` / `fieldReadValues()` / `fieldWriterTable()` / `fieldLedgerEntries()` 派生出描述符、读取映射、写入表项、账本条目四样东西，四个消费方各取所需。字段定义按领域收在 `<领域>Fields.ts`（如 `cameraStageSceneFields.ts`、`canvasFields.ts`、`assetFields.ts`），领域内部再包一层 `<领域>Field()` 薄封装填好该领域固定的 entityType、权限、revision scope。同一个 store 动作被多个字段共用时（如 `updateObject` 一次改 name/visible/color/character_variant 四个属性），`fieldLedgerEntries()` 按声明顺序把它们累进同一条账本绑定。禁止再分别手写这四处——统一定义之后漏一条是整条从四处一起消失，会被 `storeActionCoverage` 门禁当场抓到，而不是像以前那样只漏两处却全绿。
+
+### 0.5 一次声明、多入口投影
+
+同一份领域声明现在同时服务三个入口：应用界面、保留的自研助手、**外部智能体（MCP）**。新增能力时只写一次声明，三个入口各自投影；**任何一处出现第二份业务字段表都算缺陷**。
+
+| 要让外部智能体看到的东西 | 唯一声明处 | 谁来投影 |
+|---|---|---|
+| 工具名、参数、必填项 | `ApplicationCapabilityDefinition` 的 Zod `inputSchema` | `localApplicationHost.ts` 用 `z.toJSONSchema` 投影，随宿主注册送到主进程 |
+| 哪些域／实体可读可写 | 反射注册表的 `exposures`、`requiredPermissions.write`、`collectionWrite` | `src/features/application-control/externalCapabilityInventory.ts` |
+| 有意只读及其原因 | 实体的 `writeExclusion.reason` | 同上，投影成外部契约里的 `readOnlyReason` |
+| 通用读改增删的公开写入范围 | 同上派生结果 | 随注册跨进程送达，`operationCoordinator` 直接消费 |
+| 写入的并发与幂等信封 | 协议层固定的 `operationId` + `baselineIds` | `electron/main/services/mcp/toolCatalog.ts` 统一注入 |
+
+由此得到几条硬要求：
+
+- **不要在 `electron/main/services/mcp/**` 写任何业务字段、实体类型或属性清单。** 那里只允许协议层自身的参数（操作标识、分块偏移、契约发现），业务参数一律从能力定义投影。前缀白名单尤其禁止——它和领域声明是两份真相，新增写域时必然漂移。
+- **新增一个对外工具**只有两步：把能力 ID 加进 `src/core/application-control/localHostContracts.ts` 的 `MCP_READ_CAPABILITY_IDS` / `MCP_WRITE_CAPABILITY_IDS`，并补上它需要的权限常量。参数表、目录展示、权限过滤、写入信封都自动跟上。
+- **新增一个已登记的业务实体或属性**，外部立刻可读可写，不需要回到 MCP 侧登记任何东西。做不到就说明有人加了第二份表。
+- **有意只读必须写 `writeExclusion.reason`**。它是"未完成"和"有意排除"在机器上唯一的区分方式，并且会原样出现在外部契约里，成为调用方改道的依据。不接受"暂时不需要"这类无法验证的表述。
+- **对外契约有版本和弃用规则**（`EXTERNAL_CONTRACT_VERSION` 等常量集中在 `localHostContracts.ts`）：同一主版本内不删工具名、不加必填参数、不改已公布错误码含义，新增字段一律可选。公布新工具或新参数时，往 `electron/main/services/mcp/legacyClientSamples.test.ts` 补一条调用样本，破坏性改动会在那里当场变红。
+- **参数错误必须点名字段**。基础工具要能被直接调用并拿到具体错误；把校验失败和业务失败收敛成同一句兜底文案，等于逼调用方猜。
+- **不能假设客户端支持高级扩展**。发现、读取、修改、查任务、取结果五步必须都走普通 tools 调用：通知改成轮询查询工具，资源读取保留工具入口，审批留在痕迹 AI 内完成。降级不得放宽授权边界。
+
+守这几条的门禁：`electron/main/services/mcp/toolCatalog.test.ts`（schema 同源与授权过滤）、`src/features/application-control/externalCapabilityInventory.test.ts`（八个业务写域与只读原因）、`legacyClientSamples.test.ts`（旧调用样本）、`collectionCoverage.test.ts`（每个实体要么能写要么写明原因）。
 
 ### 1. 判断能力边界
 
@@ -148,10 +179,11 @@ sceneField('sky_color', '天空颜色', COLOR, {
 - 声明 `collectionWrite` 的实体类型都注册了 `ApplicationCollectionExecutor`，由覆盖测试拦截。
 - 每个 provider 都实现动态集合可用性；模式限制可在 describe 阶段看见，并由事务引擎统一执行。
 - 每个实体都有 mutation/collection 执行器或非敷衍的 `writeExclusion.reason`；新增实体后运行 `npm run check:assistant-capabilities`。
-- Application Control 反射注册表是实体、属性和集合 CRUD 的唯一元数据源；`ApplicationCapabilityDefinition` 是算法操作的唯一元数据源；`scriptApi` 只能投影两者，不能成为第三份手写 schema。
+- Application Control 反射注册表是实体、属性和集合 CRUD 的唯一元数据源；`ApplicationCapabilityDefinition` 是算法操作的唯一元数据源；`scriptApi` 与 MCP 工具目录都只能投影两者，不能成为第三份手写 schema。
+- 新增已登记的业务实体或属性后，外部智能体无需任何 MCP 侧改动即可读写；有意只读的实体带得住 `writeExclusion.reason`。
+- 对外工具名、必填参数和错误码的变化按 `EXTERNAL_CONTRACT_VERSION` 的弃用规则处理，并有旧调用样本回放。
 - 正式业务服务是唯一业务执行源。
 - 普通界面不显示开发性解释。
 - 新代码没有旧 command/query 兼容路径。
 - 新代码没有任意 Store Patch、任意脚本执行或 Application API 核心跨层导入。
 - 权限、revision、日志、引用和成功证据均有自动化验证。
-

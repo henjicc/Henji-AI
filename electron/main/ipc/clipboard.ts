@@ -2,6 +2,7 @@ import {
   readClipboardFiles,
   readClipboardImage,
   readClipboardText,
+  writeClipboardText,
   writeImageFromPath,
   writeImageFromSource,
   type ClipboardFileEntryDto,
@@ -10,6 +11,7 @@ import {
 import { parseStringField, parseVoid, registerIpcHandler } from './registry'
 
 export function registerClipboardIpc(): void {
+  registerIpcHandler('clipboard:writeText', (input) => parseStringField(input, 'text'), (text) => writeClipboardText(text))
   registerIpcHandler<void, ClipboardFileEntryDto[]>('clipboard:readFiles', parseVoid, () => readClipboardFiles())
   registerIpcHandler<void, string>('clipboard:readText', parseVoid, () => readClipboardText())
   registerIpcHandler<void, ClipboardImageDto | null>('clipboard:readImage', parseVoid, () => readClipboardImage())

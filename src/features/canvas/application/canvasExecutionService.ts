@@ -68,10 +68,12 @@ class CanvasRunCancelledBeforeExecutionError extends Error {
 
 interface CanvasRunControl {
   failure: unknown | null
+  assertCurrent?: () => void
 }
 
 const logger = createLogger('features.canvas.execution')
 const executors = new Map<string, CanvasRegisteredExecutor>()
+const taskExecutors = new Map<string, CanvasRegisteredExecutor>()
 const activeNodeRuns = new Map<string, ActiveNodeRun>()
 let processingLimiter = createCanvasExecutionLimiter(4)
 let generationLimiter = createCanvasExecutionLimiter(2)
@@ -108,8 +110,21 @@ export function registerCanvasNodeExecutor(
   }
 }
 
+/** 任务持有执行器直到业务结束，页面挂载/卸载不能替换在途执行器。 */
+export function retainCanvasTaskExecutor(projectId: string, nodeId: string, executor: CanvasRegisteredExecutor): () => void {
+  const key = activeNodeKey(projectId, nodeId)
+  if (taskExecutors.has(key)) throw new Error('此节点已有任务执行器，不能重复接管')
+  taskExecutors.set(key, executor)
+  return () => { if (taskExecutors.get(key) === executor) taskExecutors.delete(key) }
+}
+
+function getExecutor(nodeId: string): CanvasRegisteredExecutor | undefined {
+  return taskExecutors.get(activeNodeKey(useProjectStore.getState().currentProjectId, nodeId)) ?? executors.get(nodeId)
+}
+function hasExecutor(nodeId: string): boolean { return getExecutor(nodeId) !== undefined }
+
 function getDependencyMode(nodeId: string): CanvasDependencyMode {
-  const executor = executors.get(nodeId)
+  const executor = getExecutor(nodeId)
   if (!executor) return 'missing'
   return executor.dependency?.mode === 'auto' ? 'auto' : 'boundary'
 }
@@ -140,7 +155,7 @@ function createExecutorInputSignature(
 }
 
 async function resolveCurrentInputSignature(nodeId: string): Promise<string> {
-  const executor = executors.get(nodeId)
+  const executor = getExecutor(nodeId)
   if (!executor) throw new Error(`节点执行器尚未就绪：${nodeId}`)
   const extras = await executor.getInputSignatureExtras?.()
   const snapshot = useCanvasStore.getState()
@@ -206,11 +221,11 @@ async function executeRegisteredNode(
     const canvas = useCanvasStore.getState()
     const node = getNodeIndexById(canvas.nodes).get(nodeId)
     if (!node) throw new Error(`画布执行节点不存在：${nodeId}`)
-    const executor = executors.get(nodeId)
+    const executor = getExecutor(nodeId)
     if (!executor) throw new Error(`节点执行器尚未就绪：${nodeId}`)
     assertExecutorMatchesNode(node, executor)
     const extras = await executor.getInputSignatureExtras?.()
-    if (executors.get(nodeId) !== executor) continue
+    if (getExecutor(nodeId) !== executor) continue
     const latestCanvas = useCanvasStore.getState()
     const latestNode = getNodeIndexById(latestCanvas.nodes).get(nodeId)
     if (!latestNode) throw new Error(`画布执行节点不存在：${nodeId}`)
@@ -257,9 +272,10 @@ async function executeRegisteredNode(
       ...baseContext,
       inputSignature,
       assertCurrent: async () => {
+        runControl.assertCurrent?.()
         assertProjectContext(baseContext.projectId)
         if (
-          executors.get(nodeId) !== executor
+          getExecutor(nodeId) !== executor
           || await resolveCurrentInputSignature(nodeId) !== inputSignature
         ) throw new CanvasInputChangedBeforeExecutionError()
         await assertDependenciesCurrent()
@@ -274,7 +290,7 @@ async function executeRegisteredNode(
         if (runControl.failure !== null) {
           throw new CanvasRunCancelledBeforeExecutionError(context.runId, runControl.failure)
         }
-        if (executors.get(nodeId) !== executor) {
+        if (getExecutor(nodeId) !== executor) {
           throw new CanvasInputChangedBeforeExecutionError()
         }
         await executor.preflight?.(context)
@@ -335,7 +351,7 @@ async function findGuaranteedReusableDependencies(
 
     const beforeExtras = useCanvasStore.getState()
     const node = getNodeIndexById(beforeExtras.nodes).get(nodeId)
-    const executor = executors.get(nodeId)
+    const executor = getExecutor(nodeId)
     if (
       !node
       || !executor
@@ -343,7 +359,7 @@ async function findGuaranteedReusableDependencies(
       || activeNodeRuns.has(activeNodeKey(projectId, nodeId))
     ) continue
     const extras = await executor.getInputSignatureExtras?.()
-    if (executors.get(nodeId) !== executor) continue
+    if (getExecutor(nodeId) !== executor) continue
     const snapshot = useCanvasStore.getState()
     const nodeById = getNodeIndexById(snapshot.nodes)
     const latestNode = nodeById.get(nodeId)
@@ -366,7 +382,7 @@ async function findGuaranteedReusableDependencies(
   return reusable
 }
 
-async function executeCanvasRun(rootNodeId: string): Promise<CanvasRunResult> {
+async function executeCanvasRun(rootNodeId: string, assertCurrent?: () => void): Promise<CanvasRunResult> {
   const runId = createRunId()
   const projectId = useProjectStore.getState().currentProjectId
   const startedAt = Date.now()
@@ -375,19 +391,19 @@ async function executeCanvasRun(rootNodeId: string): Promise<CanvasRunResult> {
   })
 
   const outcomeByNodeId = new Map<string, NodeRunOutcome>()
-  const runControl: CanvasRunControl = { failure: null }
+  const runControl: CanvasRunControl = { failure: null, assertCurrent }
   try {
     const initial = useCanvasStore.getState()
     const root = initial.nodes.find((node) => node.id === rootNodeId)
     if (root && isCanvasNodeUnavailable(root)) throw new Error('节点的功能或模型已缺失，请删除或替换此节点')
-    if (!executors.has(rootNodeId)) throw new Error(`节点执行器尚未就绪：${rootNodeId}`)
+    if (!hasExecutor(rootNodeId)) throw new Error(`节点执行器尚未就绪：${rootNodeId}`)
     const plan = createCanvasExecutionPlan(
       rootNodeId,
       initial.nodes,
       initial.edges,
       getDependencyMode,
     )
-    const rootExecutor = executors.get(rootNodeId)
+    const rootExecutor = getExecutor(rootNodeId)
     if (!rootExecutor) throw new Error(`节点执行器尚未就绪：${rootNodeId}`)
     await rootExecutor.preflightBeforeDependencies?.({
       runId,
@@ -402,7 +418,7 @@ async function executeCanvasRun(rootNodeId: string): Promise<CanvasRunResult> {
       projectId,
     )
     for (const nodeId of plan.dependencyNodeIds) {
-      const executor = executors.get(nodeId)
+      const executor = getExecutor(nodeId)
       if (!executor) throw new Error(`节点执行器尚未就绪：${nodeId}`)
       if (!executor.preflightBeforeDependencies || guaranteedReusable.has(nodeId)) continue
       await executor.preflightBeforeDependencies({
@@ -414,7 +430,7 @@ async function executeCanvasRun(rootNodeId: string): Promise<CanvasRunResult> {
     }
     const taskByNodeId = new Map<string, Promise<NodeRunOutcome>>()
     for (const nodeId of plan.orderedNodeIds) {
-      const executor = executors.get(nodeId)
+      const executor = getExecutor(nodeId)
       if (!executor) throw new Error(`节点执行器尚未就绪：${nodeId}`)
       const predecessorTasks = (plan.predecessorIdsByNode.get(nodeId) ?? [])
         .map((predecessorId) => taskByNodeId.get(predecessorId))
@@ -474,12 +490,16 @@ async function executeCanvasRun(rootNodeId: string): Promise<CanvasRunResult> {
   }
 }
 
-export function runCanvasNode(rootNodeId: string): Promise<CanvasRunResult> {
-  return executeCanvasRun(rootNodeId)
+export function runCanvasNode(rootNodeId: string, assertCurrent?: () => void): Promise<CanvasRunResult> {
+  return executeCanvasRun(rootNodeId, assertCurrent)
 }
+
+/** 新节点完成 React 挂载前，调用方可等待正式执行器就绪。 */
+export function isCanvasNodeExecutorReady(nodeId: string): boolean { return hasExecutor(nodeId) }
 
 export function resetCanvasExecutionServiceForTests(): void {
   executors.clear()
+  taskExecutors.clear()
   activeNodeRuns.clear()
   processingLimiter = createCanvasExecutionLimiter(4)
   generationLimiter = createCanvasExecutionLimiter(2)

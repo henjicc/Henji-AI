@@ -18,7 +18,7 @@ vi.mock('@/features/generation/application/generationApplicationService', () => 
     cancelTask: vi.fn(),
   },
 }))
-vi.mock('@/stores/navigationStore', () => ({ switchWorkspace: vi.fn() }))
+vi.mock('@/stores/navigationStore', () => ({ switchWorkspace: vi.fn(), useNavigationStore: { getState: () => ({ activeWorkspace: 'generation' }) } }))
 
 import { registry } from '@/core/ModelRegistry'
 import type { ModelDefinition } from '@/core/types'
@@ -150,14 +150,14 @@ describe('generation capability handlers（5.4：放宽提交）', () => {
     await expect(handler({}, context)).rejects.toThrow(/INVALID_INPUT/)
   })
 
-  it('prepare_generation_task 同样按草稿补全省略字段', () => {
+  it('prepare_generation_task 同样按草稿补全省略字段', async () => {
     useGenerationDraftStore.getState().patchField('selectedModel', testModel.meta.id)
     useGenerationDraftStore.getState().patchField('selectedProvider', testModel.meta.provider)
     useGenerationDraftStore.getState().setLegacyInput('准备阶段的草稿提示词')
 
     const handler = registeredHandlers().get('prepare_generation_task')
     if (!handler) throw new Error('HANDLER_NOT_FOUND')
-    handler({}, context)
+    await handler({}, context)
 
     const prepared = mocks.prepare.mock.calls[0][0]
     expect(prepared.modelId).toBe(testModel.meta.id)

@@ -42,6 +42,7 @@ export interface VisibleGenerationTaskInput {
   model: string
   type: MediaType
   options?: DynamicValue
+  operationId?: string
 }
 
 export interface VisibleGenerationTaskMessages {
@@ -50,7 +51,7 @@ export interface VisibleGenerationTaskMessages {
 }
 
 export interface VisibleGenerationTaskDependencies {
-  appendTask: (task: GenerationTask) => void
+  appendTask: (task: GenerationTask) => void | Promise<void>
   updateTask: (taskId: string, updates: Partial<GenerationTask>) => void
   executeTask: (taskId: string, task: GenerationTask) => Promise<void>
   setGenerating: (isGenerating: boolean) => void
@@ -364,7 +365,7 @@ export async function createVisibleGenerationTask(
     })
   }
 
-  const taskId = createTaskId()
+  const taskId = input.operationId ?? createTaskId()
   const imageEditStates = (isStringArray(options.images) ? options.images : []).reduce<Record<string, ImageEditSessionData>>((acc, url, index) => {
     const state = dependencies.imageEditStates.get(url)
     if (state) acc[String(index)] = state
@@ -400,7 +401,7 @@ export async function createVisibleGenerationTask(
     uploadedAudioFilePaths: taskAudioPaths,
     options,
   }
-  dependencies.appendTask(task)
+  await dependencies.appendTask(task)
   publishVisibleGenerationTaskStatus({ taskId, status: 'pending' })
   logger.info('可见生成任务已创建', { event: 'visible_generation.task.created', taskId, modelId: model, providerId, mediaType: type })
 

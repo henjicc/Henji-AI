@@ -29,6 +29,8 @@ import { registerSystemIpc } from './ipc/system'
 import { registerUpdaterIpc } from './ipc/updater'
 import { registerVideoIpc } from './ipc/video'
 import { registerWindowIpc } from './ipc/window'
+import { registerEmbeddedAgentIpc, disposeEmbeddedAgent } from './ipc/embedded-agent'
+import { registerMcpIpc, disposeMcp } from './ipc/mcp'
 import { configureChromiumDevelopmentCache } from './chromium-development-cache'
 import { configureWebGpuRuntime, registerWebGpuDiagnostics } from './webgpu-runtime'
 import { registerMediaProtocolHandler, registerMediaProtocolScheme, restoreAllowedMediaRoots } from './protocol'
@@ -112,6 +114,8 @@ app.whenReady().then(() => {
   registerUpdaterIpc()
   registerVideoIpc()
   registerWindowIpc()
+  registerMcpIpc()
+  registerEmbeddedAgentIpc()
   initializeUpdater()
   void runLogRetention()
   // 后台预热 APIMart 域名连通性，不阻塞启动；没配置 Key 的用户没有意义，跳过。
@@ -172,6 +176,8 @@ app.on('window-all-closed', () => {
 })
 
 app.on('before-quit', () => {
+  disposeEmbeddedAgent()
+  void disposeMcp()
   void disposeAgentRuntimeService()
   void disposeImageEditorV3Ipc()
 })

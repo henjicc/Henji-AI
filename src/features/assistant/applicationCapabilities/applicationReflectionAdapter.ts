@@ -9,6 +9,7 @@ import {
   getApplicationReflectionRegistry,
 } from './applicationControlRegistry'
 import type { CapabilityExecutionContext } from './handlerTypes'
+import { applicationCallerAccess } from '@/core/application-control/callerContext'
 
 /**
  * 反射层通用能力的执行适配器。
@@ -19,6 +20,10 @@ import type { CapabilityExecutionContext } from './handlerTypes'
  */
 
 function executionContext(context: CapabilityExecutionContext) {
+  if (context.callerGrant) {
+    if (!context.requestId) throw new Error('INVALID_INPUT:宿主必须提供操作请求标识。')
+    return applicationCallerAccess(context.callerGrant, context.requestId, context.signal)
+  }
   const registry = getApplicationReflectionRegistry()
   return {
     exposure: 'assistant' as const,
@@ -253,7 +258,7 @@ function toPlannedStep(
   }
 }
 
-import { ApplicationTransactionFailure } from '@/core/application-control/execution/transactionFailure'
+import { ApplicationTransactionFailure, ApplicationPreflightFailure } from '@/core/application-control/execution/transactionFailure'
 
 function completedTransaction(
   result: ApplicationTransactionResult
@@ -296,9 +301,11 @@ function describedEntity(entity: Record<string, unknown>): Record<string, unknow
   }
 }
 
-function describedProperty(property: Record<string, unknown>): Record<string, unknown> {
+function describedProperty(property: Record<string, unknown>, context?: CapabilityExecutionContext): Record<string, unknown> {
   const permissions = property.requiredPermissions as { write?: string[] } | undefined
   const writable = (permissions?.write?.length ?? 0) > 0
+    && (!context?.callerGrant || (context.callerGrant.allowWrites
+      && permissions?.write?.every((permission) => context.callerGrant?.permissions.includes(permission))))
   const operations = writable
     ? getApplicationControlExecutionEngine().getAcceptedPropertyOperations(
         property.entityType as string,
@@ -337,6 +344,7 @@ export const applicationReflectionHandlers = {
     }, accessContext)
     const entities = description.entities as unknown as Array<Record<string, unknown>>
     const refs = input.refs ?? []
+    if (context.callerGrant) refs.forEach(assertCompleteRef)
     const propertyAvailability = await Promise.all(refs.map(async (ref) => {
       const propertyIds = registry.listProperties(ref.kind).map((property) => property.id)
       const availability = await registry.getPropertyAvailability(ref, propertyIds, accessContext)
@@ -370,7 +378,7 @@ export const applicationReflectionHandlers = {
       })))).flat()
     return {
       entities: entities.map(describedEntity),
-      properties: (description.properties as unknown as Array<Record<string, unknown>>).map(describedProperty),
+      properties: (description.properties as unknown as Array<Record<string, unknown>>).map((property) => describedProperty(property, context)),
       propertyAvailability,
       collectionAvailability,
     }
@@ -400,6 +408,7 @@ export const applicationReflectionHandlers = {
     input: { ref: { kind: string; id: string }; propertyIds: string[] },
     context: CapabilityExecutionContext
   ) {
+    if (context.callerGrant) assertCompleteRef(input.ref)
     const snapshot = await getApplicationReflectionRegistry().readEntity(
       input.ref,
       input.propertyIds,
@@ -418,9 +427,9 @@ export const applicationReflectionHandlers = {
   async changeEntities(input: ChangeInput, context: CapabilityExecutionContext) {
     const engine = getApplicationControlExecutionEngine()
     const appContext = executionContext(context)
-    const expected = context.expectedRevisions ?? {}
+    let expected = context.expectedRevisions ?? {}
     const sessionKey = context.requestId ?? 'renderer'
-    const changes = input.changes.map((change) => normalizeChangeRefs(sessionKey, change))
+    const changes = context.callerGrant ? input.changes : input.changes.map((change) => normalizeChangeRefs(sessionKey, change))
     changes.forEach((change) => {
       if (change.kind === 'set_properties' || change.kind === 'mutate_properties') assertCompleteRef(change.target)
       else {
@@ -428,7 +437,13 @@ export const applicationReflectionHandlers = {
         if (change.kind === 'remove_items') change.targets.forEach(assertCompleteRef)
       }
     })
-    const baselines = await captureMutationBaselines(changes, appContext)
+    const baselines = await captureMutationBaselines(changes, appContext).catch((error) => { throw new ApplicationPreflightFailure(error) })
+    if (context.callerGrant && context.expectedRevisions === undefined) {
+      if (changes.some((change) => change.kind === 'remove_items')) throw new ApplicationPreflightFailure(new Error('BASELINE_REQUIRED:删除前请读取目标并提供 baselineIds。'))
+      const current = await refreshedRevisionsIfTargetsUnchanged(baselines, changes, appContext)
+      if (!current) throw new ApplicationPreflightFailure(new Error('CONFLICT:目标正在变化，请稍后重试。'))
+      expected = current
+    }
     const execute = async (revisions: Record<string, number>, attempt: number) => {
       const plan = await engine.plan({
         summary: input.summary,
@@ -436,7 +451,7 @@ export const applicationReflectionHandlers = {
         // 而这里的 changes 是跨实体、跨动词的组合。
         transactionMode: 'compensatable',
         steps: changes.map((change) => toPlannedStep(change, revisions)),
-      }, appContext)
+      }, appContext).catch((error) => { throw new ApplicationPreflightFailure(error) })
       return engine.commit({
         planRef: plan.planRef,
         expectedRevisions: revisions,
@@ -448,12 +463,13 @@ export const applicationReflectionHandlers = {
     try {
       rawResult = await execute(expected, 0)
     } catch (error) {
+      if (context.callerGrant) throw error
       if (!(error instanceof Error) || !error.message.includes('REVISION_CONFLICT')) throw error
       const refreshed = await refreshedRevisionsIfTargetsUnchanged(baselines, changes, appContext)
       if (!refreshed) throw new Error('CONFLICT:目标属性已在刷新期间变化，请重新读取并规划。')
       rawResult = await execute(refreshed, 1)
     }
-    if (rawResult.status === 'failed' && rawResult.code === 'CONFLICT'
+    if (!context.callerGrant && rawResult.status === 'failed' && rawResult.code === 'CONFLICT'
       && (!rawResult.partial || rawResult.partial.completedStepIndexes.length === 0)) {
       const refreshed = await refreshedRevisionsIfTargetsUnchanged(baselines, changes, appContext)
       if (!refreshed) throw new Error('CONFLICT:目标属性已在刷新期间变化，请重新读取并规划。')
@@ -463,6 +479,7 @@ export const applicationReflectionHandlers = {
     return {
       status: 'completed' as const,
       transactionRef: result.transactionRef,
+      verification: result.verification,
       resultingRevisions: result.resultingRevisions,
       resultRefs: result.resultRefs as unknown as Array<Record<string, unknown>>,
       effects: result.effects as unknown as Array<Record<string, unknown>>,

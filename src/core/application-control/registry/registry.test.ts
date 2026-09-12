@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
 import type {
   ApplicationEntityProvider,
@@ -196,6 +196,21 @@ const multiProvider: ApplicationEntityProvider = {
 }
 
 describe('ApplicationReflectionRegistry', () => {
+  it('不可见实体在读取和动态可用性之前拒绝，不调用私有提供者', async () => {
+    const registry = new ApplicationReflectionRegistry(catalogVersion)
+    const read = vi.fn(provider.readEntity)
+    const availability = vi.fn(provider.getPropertyAvailability)
+    const collection = vi.fn(provider.getCollectionAvailability)
+    registry.register({ ...registration(), provider: { ...provider, readEntity: read, getPropertyAvailability: availability, getCollectionAvailability: collection } })
+    const access = { ...assistantContext, exposure: 'local_adapter' as const }
+    const target = { kind: 'sample.item', id: 'one' }
+    await expect(registry.readEntity(target, [], access)).rejects.toThrow('PERMISSION_DENIED')
+    await expect(registry.getPropertyAvailability(target, [], access)).rejects.toThrow('PERMISSION_DENIED')
+    await expect(registry.getCollectionAvailability({ kind: 'sample.parent', id: 'root' }, 'sample.item', access)).rejects.toThrow('PERMISSION_DENIED')
+    expect(read).not.toHaveBeenCalled(); expect(availability).not.toHaveBeenCalled(); expect(collection).not.toHaveBeenCalled()
+    await expect(registry.readEntity(target, [], { ...assistantContext, acceptedDataClasses: new Set(['C0'] as const) })).rejects.toThrow('PERMISSION_DENIED')
+    expect(read).not.toHaveBeenCalled()
+  })
   it('按领域、实体和权限返回唯一属性元数据与 schemaRef', () => {
     const registry = new ApplicationReflectionRegistry(catalogVersion)
     registry.register(registration())

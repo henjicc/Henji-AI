@@ -3,15 +3,9 @@ import type { NodeProps } from '@xyflow/react';
 import { useTranslation } from 'react-i18next';
 
 import { UiEmpty } from '@/components/ui';
-import { readImageInfo } from '@/commands/image';
-import { registry } from '@/core/ModelRegistry';
-import { CANVAS_NODE_TYPES, type ImageEditNodeData, type CanvasNodeData } from '@/features/canvas/domain/canvasNodes';
-import {
-  formatAcceptedMediaTypes,
-  GenerationMediaInputConstraintError,
-  resolveGenerationMediaInputConstraints,
-  validateGenerationImageInputs,
-} from '@/features/canvas/application/generationMediaInputConstraints';
+import { CANVAS_NODE_TYPES, type ImageEditNodeData } from '@/features/canvas/domain/canvasNodes';
+import { prepareImageEditNodeRuntime } from '../application/imageEditNodePreparation';
+import type { GenerationNodeRuntimePreparationContext } from './shared/generationNodeExecutionTypes';
 import {
   GenerationNodeShell,
   type GenerationNodeShellData,
@@ -20,7 +14,7 @@ import { useCanvasStore } from '@/stores/canvasStore';
 import { OutpaintStage } from './outpaint/OutpaintStage';
 import { OUTPAINT_FIELDS, type OutpaintMargins } from '../domain/outpaintGeometry';
 import { CANVAS_IMAGE_CAPABILITY_IDS } from '../capabilities';
-import { OUTPAINT_WORKSPACE_MAXIMUM, readOutpaintComposition, resolveOutpaintModelParams } from '../domain/outpaintModelParams';
+import { OUTPAINT_WORKSPACE_MAXIMUM, readOutpaintComposition } from '../domain/outpaintModelParams';
 import { prepareOutpaintGeneration } from '../application/outpaintGenerationPreparation';
 import { resolveOutpaintNodeLayout } from '../domain/outpaintNodeLayout';
 import { ICON_NODE_IMAGE_GENERATION } from '@/core/theme/icons';
@@ -85,46 +79,9 @@ export const ImageEditNode = memo(({ id, data, selected, width, height }: ImageE
     const store = useCanvasStore.getState();
     store.updateNodeData(id, { outpaintMargins: margins });
   }, [id]);
-  const prepareRuntimeParams = useCallback(async ({
-    images,
-    modelId,
-    data: runtimeData,
-    params,
-  }: {
-    images: string[];
-    modelId: string;
-    data: CanvasNodeData;
-    params: DynamicValueMap;
-  }): Promise<DynamicValueMap> => {
-    const model = registry.getModel(modelId);
-    if (!model) return {};
-    if (isOutpaint && images.length !== 1) throw new Error(t('node.outpaint.chooseSource'));
-    const constraint = resolveGenerationMediaInputConstraints(
-      model.params,
-      generationUi.excludeParamIds,
-    ).image;
-    try {
-      await validateGenerationImageInputs(images, constraint, readImageInfo);
-    } catch (error) {
-      if (!(error instanceof GenerationMediaInputConstraintError)) throw error;
-      if (error.code === 'too-large') {
-        throw new Error(t('node.mediaRow.maxSizeExceeded', {
-          max: Math.max(0.1, (constraint?.maxSizeBytes ?? 0) / 1024 / 1024).toFixed(1),
-        }));
-      }
-      if (error.code === 'unreadable') {
-        throw new Error(t('node.mediaRow.constraintReadFailed'));
-      }
-      throw new Error(t('node.mediaRow.unsupportedFormat', {
-        formats: formatAcceptedMediaTypes(constraint?.accept ?? []),
-      }));
-    }
-    if (isOutpaint && images[0]) {
-      const image = await readImageInfo(images[0]);
-      return resolveOutpaintModelParams(model, params, image, readOutpaintComposition(runtimeData)).params;
-    }
-    return {};
-  }, [generationUi.excludeParamIds, isOutpaint, t]);
+  const prepareRuntimeParams = useCallback((context: GenerationNodeRuntimePreparationContext) =>
+    prepareImageEditNodeRuntime(context, { isOutpaint, excludeParamIds: generationUi.excludeParamIds, t }),
+  [generationUi.excludeParamIds, isOutpaint, t]);
   return (
     <GenerationNodeShell
       id={id}

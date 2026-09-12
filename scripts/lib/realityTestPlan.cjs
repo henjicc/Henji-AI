@@ -1,6 +1,12 @@
 const path = require('node:path')
 
-const SUITES = Object.freeze(['unit', 'integration', 'ui', 'ui-audit', 'live'])
+/*
+ * `restart` 与 `clients` 是 3.2 补的两层真实性证据，都要真实 Electron 运行产物：
+ * - restart：同一份隔离资料目录跑两次完整启动，覆盖渲染层重载证明不了的启动恢复；
+ * - clients：把真实外部 Agent 命令行接到真实应用上，协议测试客户端不能冒充这一层。
+ * 两者都不产生付费请求，也不碰用户真实资料目录。
+ */
+const SUITES = Object.freeze(['unit', 'integration', 'ui', 'ui-audit', 'restart', 'clients', 'live'])
 
 function readValue(argv, index, option) {
   const value = argv[index + 1]
@@ -71,7 +77,7 @@ function uiArgs(options) {
 
 function buildRealityTestPlan(options, root) {
   const plans = []
-  const needsElectronArtifact = options.suites.some((suite) => ['ui', 'ui-audit', 'live'].includes(suite))
+  const needsElectronArtifact = options.suites.some((suite) => ['ui', 'ui-audit', 'restart', 'clients', 'live'].includes(suite))
   if (options.build && needsElectronArtifact) {
     plans.push({
       label: '生成最新 Electron 运行产物',
@@ -90,6 +96,15 @@ function buildRealityTestPlan(options, root) {
         command: process.execPath,
         args: [path.join(root, 'scripts', suite === 'ui' ? 'ui-tour.cjs' : 'ui-visual-audit.cjs'), ...uiArgs(options)],
       })
+    } else if (suite === 'restart') {
+      const args = [path.join(root, 'scripts/mcp-restart-check.cjs')]
+      if (options.outDir) args.push('--out', options.outDir)
+      plans.push({ label: '应用完整退出重启后的外部连接事实核对', command: process.execPath, args })
+    } else if (suite === 'clients') {
+      const args = [path.join(root, 'scripts/mcp-external-client-check.cjs')]
+      for (const value of options.only) args.push('--client', value)
+      if (options.outDir) args.push('--out', options.outDir)
+      plans.push({ label: '真实外部 Agent 客户端接入验收', command: process.execPath, args })
     } else if (suite === 'live') {
       const args = [path.join(root, 'scripts/run-assistant-live-suite.cjs')]
       for (const value of options.only) args.push('--only', value)

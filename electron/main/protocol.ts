@@ -45,7 +45,7 @@ function getBaseLocalDataDir(): string {
   return path.join(app.getPath('appData'), APP_IDENTIFIER)
 }
 
-function inferMimeFromPath(targetPath: string): string {
+export function inferMimeFromPath(targetPath: string): string {
   const lower = targetPath.toLowerCase()
   if (lower.endsWith('.png')) return 'image/png'
   if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) return 'image/jpeg'

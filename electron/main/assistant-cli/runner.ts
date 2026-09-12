@@ -30,6 +30,7 @@ import {
 } from './arguments'
 import { waitForExternalContinuation, waitForSubmittedGenerationTasks } from './generation-wait'
 import { evaluateAssistantCliAcceptance } from './acceptance'
+import { runEmbeddedCli } from './embedded-runner'
 
 const logger = createMainLogger('main.assistant_cli')
 const HOST_READY_TIMEOUT_MS = 30_000
@@ -286,6 +287,11 @@ async function run(options: AssistantCliOptions, owner: WebContents): Promise<nu
 
 export async function runAssistantCli(owner: WebContents, options: AssistantCliOptions): Promise<number> {
   try {
+    if (options.engine === 'pi') {
+      await waitForHostContext(owner, HOST_READY_TIMEOUT_MS)
+      const context = getAssistantHostContext(owner.id)!
+      return await runEmbeddedCli(options, JSON.stringify({ workspace: context.workspace, project: context.project, surface: context.surface }), writeRecord)
+    }
     return await run(options, owner)
   } catch (error) {
     writeError('命令行助手运行失败', error)

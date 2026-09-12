@@ -13,6 +13,10 @@ const mocks = vi.hoisted(() => ({
   releaseManagedGenerationMedia: vi.fn(),
 }))
 
+vi.mock('@/commands/aiRuntime', () => ({ aiReadSavedResult: mocks.consumePendingResult }))
+
+vi.mock('./useTaskHistory', () => ({ awaitGenerationTaskPersistence: vi.fn().mockResolvedValue(undefined) }))
+
 vi.mock('@/core/services/GenerationService', () => ({
   GenerationService: {
     getInstance: () => ({ continuePolling: mocks.continuePolling }),

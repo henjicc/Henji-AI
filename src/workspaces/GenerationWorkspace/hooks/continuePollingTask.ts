@@ -1,3 +1,5 @@
+import { aiReadSavedResult } from '@/commands/aiRuntime'
+import { awaitGenerationTaskPersistence } from './useTaskHistory'
 import { createLogger } from '@/core/logging'
 import { GenerationService } from '@/core/services/GenerationService'
 import { getMediaDimensions, getMediaDurationFormatted } from '@/utils/mediaDimensions'
@@ -47,6 +49,10 @@ export async function continuePollingTask({
     return
   }
 
+  const saveUpdate = async (updates: Partial<GenerationTask>): Promise<void> => {
+    updateTask(task.id, updates)
+    await awaitGenerationTaskPersistence(task.id)
+  }
   let createdFilePaths: string[] = []
   let ownershipTransferred = false
   try {
@@ -56,14 +62,14 @@ export async function continuePollingTask({
     if (task.uploadedVideoFilePaths) options.uploadedVideoFilePaths = task.uploadedVideoFilePaths
     if (task.images) options.images = task.images
 
-    updateTask(task.id, { status: 'generating', error: undefined, serverTaskId })
+    await saveUpdate({ status: 'generating', error: undefined, serverTaskId })
     // 进度地板优先取瞬态 store 中的现值（进度已不再写进 task），回退到 task 快照
     const storedProgress = useGenerationTaskProgressStore.getState().progress[task.id]
     let currentProgress = Math.max(1, storedProgress ?? task.progress ?? 0)
     updateProgress(task.id, currentProgress)
 
     // 先查缓存结果（主进程轮询完成但渲染层已重载的场景）
-    const cached = await window.henjiNative?.ai.consumePendingResult(serverTaskId)
+    const cached = await aiReadSavedResult(serverTaskId)
     let resultObj: DynamicValueMap
     if (cached) {
       logger.info('[Workspace] 命中缓存轮询结果，跳过重新轮询', { taskId: task.id, serverTaskId })
@@ -120,7 +126,8 @@ export async function continuePollingTask({
 
     updateProgress(task.id, 100)
     await new Promise((r) => setTimeout(r, resolveProgressSettleDelayMs(currentProgress)))
-    updateTask(task.id, {
+    ownershipTransferred = true
+    await saveUpdate({
       status: 'success',
       progress: 100,
       dimensions: dimensions ?? undefined,
@@ -141,7 +148,7 @@ export async function continuePollingTask({
   } catch (error) {
     logger.error('[Workspace] 继续轮询失败', error)
     const errorMessage = toUserMessage(error) || genericGenerateFailed
-    updateTask(task.id, {
+    await saveUpdate({
       status: 'error',
       error: errorMessage,
       serverTaskId: extractServerTaskIdFromErrorMessage(errorMessage) ?? serverTaskId,
