@@ -82,7 +82,7 @@ export async function commitPreparedLayerStack(input: CommitCanvasGenerationOutp
       throw new GenerationOutputApplicationError('CONFLICT', '图层栈提交已取消');
     }
     const committedProjection = projection;
-    const transaction = await runCanvasTransaction(input.projectId, 1, async (options) => runCanvasMutationStage(options, () => {
+    const transaction = await runCanvasTransaction(input.projectId, 1, (options) => runCanvasMutationStage(options, () => {
       const latest = useCanvasStore.getState();
       const latestPlaceholder = latest.nodes.find((node) => node.id === placeholderNodeId);
       if (!latestPlaceholder || latestPlaceholder.type !== input.resultNodeType) {

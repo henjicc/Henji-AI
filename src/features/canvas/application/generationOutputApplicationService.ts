@@ -254,7 +254,7 @@ export async function commitCanvasGenerationOutputs(
     const result = await runCanvasTransaction(
       projectId,
       ordered.length + (input.contract.strategy === 'assetGroup' ? 1 : 0),
-      async (options) => runCanvasMutationStage(options, () => {
+      (options) => runCanvasMutationStage(options, () => {
         const resultNodeIds: string[] = [];
         const appendLabel = ordered.length > 1;
         const firstData = createCompletedNodeData(

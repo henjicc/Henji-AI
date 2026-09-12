@@ -63,7 +63,7 @@ export function createMultiLayerDocumentExportCanvasPort(): MultiLayerDocumentEx
       try {
         let nodeId = ''
         let edgeId = ''
-        const transaction = await runCanvasTransaction(input.projectId, 2, async (options) => runCanvasMutationStage(options, () => {
+        const transaction = await runCanvasTransaction(input.projectId, 2, (options) => runCanvasMutationStage(options, () => {
           const canvas = useCanvasStore.getState()
           if (!canvas.nodes.some((node) => node.id === input.sourceNodeId)) {
             throw new MultiLayerDocumentNodeApplicationError(

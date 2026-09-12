@@ -1,4 +1,5 @@
 import { registry } from '@/core/ModelRegistry'
+import i18n from '@/i18n'
 import { createLogger } from '@/core/logging'
 import type { GenerationDestination } from '@/core/assistant/capabilities/generationApplicationCapabilities'
 import type { GenerationPreparationInput } from '@/features/generation/application/generationPreparationService'
@@ -6,10 +7,12 @@ import { databaseService } from '@/services/database/DatabaseService'
 import { useCanvasStore } from '@/stores/canvasStore'
 import { useProjectStore } from '@/stores/projectStore'
 import { useCanvasGenerationProgressStore } from '@/stores/canvasGenerationProgressStore'
-import { CANVAS_NODE_TYPES } from '../domain/canvasNodes'
+import { CANVAS_NODE_TYPES, type CanvasNodeType } from '../domain/canvasNodes'
 import { stageControlledCanvasNode, stageCanvasConnection, requireCurrentCanvasProject } from './canvasApplicationService'
 import { runCanvasTransaction } from './canvasBatchService'
-import { isCanvasNodeExecutorReady, runCanvasNode } from './canvasExecutionService'
+import { retainCanvasTaskExecutor, runCanvasNode } from './canvasExecutionService'
+import { createGenerationNodeExecutor } from './generationNodeExecutor'
+import { prepareImageEditNodeRuntime } from './imageEditNodePreparation'
 import { confirmCanvasPersistence, runCanvasMutationStage } from './canvasPersistenceService'
 import { readPersistedCanvasProjectSnapshot } from './canvasQueryService'
 import { getGraphNodeMediaOutputs } from './graphOutputResolver'
@@ -88,14 +91,19 @@ export async function submitCanvasGenerationTask(input: GenerationPreparationInp
     resultAvailable, errorCode: null, errorMessage, cancellable: false,
   })
   publish('pending')
+  const definition = getCanvasNodeDefinition(nodeType)!
+  const acceptedKinds = definition.ports?.target?.accepts ?? []
+  const releaseExecutor = retainCanvasTaskExecutor(destination.projectId, nodeId, createGenerationNodeExecutor(() => ({
+    nodeId, modelType: input.mediaType, resultNodeType: definition.generation!.resultNodeType as CanvasNodeType,
+    acceptedKinds, acceptedMediaKinds: (['image', 'video', 'audio'] as const).filter(kind => acceptedKinds.includes(kind)),
+    capability: null, showModelInput: true, requirePrompt: true,
+    promptRequiredKey: 'node.imageEdit.promptRequired', apiKeyRequiredKey: 'node.imageEdit.apiKeyRequired', resultTitleKey: definition.menuLabelKey,
+    setPromptInvalid: () => undefined, t: i18n.t.bind(i18n),
+    ...(input.mediaType === 'image' ? { resultNodeExtraData: { resultKind: 'generic' },
+      prepareRuntimeParams: context => prepareImageEditNodeRuntime(context, { isOutpaint: false, excludeParamIds: [], t: i18n.t.bind(i18n) }) } : {}),
+  })))
   logger.info('画布生成已创建节点与连线', { event: 'canvas.generationTask.start', taskId, projectId: destination.projectId, nodeId })
   void (async () => {
-    const deadline = Date.now() + 10000
-    while (!isCanvasNodeExecutorReady(nodeId)) {
-      requireCurrentCanvasProject(destination.projectId)
-      if (Date.now() >= deadline) throw new Error('生成节点尚未就绪，节点和参数已保留，可在画布中重试。')
-      await new Promise(resolve => setTimeout(resolve, 50))
-    }
     await databaseService.updateHistory(taskId, { status: 'generating' })
     publish('generating')
     assertCurrent()
@@ -113,7 +121,7 @@ export async function submitCanvasGenerationTask(input: GenerationPreparationInp
     logger.error('画布生成失败', error, { event: 'canvas.generationTask.failed', taskId })
     await databaseService.updateHistory(taskId, { status: 'error', errorMessage: error instanceof Error ? error.message : '画布生成失败' })
   }).catch(error => logger.error('画布生成状态保存失败', error, { event: 'canvas.generationTask.save_failed', taskId }))
-    .finally(() => activeTasks.delete(taskId))
+    .finally(() => { activeTasks.delete(taskId); releaseExecutor() })
   return { taskId, status: 'submitted', taskRef: { kind: 'generation.task', id: taskId },
     nodeRef: { kind: 'canvas.node', id: `${destination.projectId}:${nodeId}` },
     verification: { verified: true, condition: '生成节点、连线及任务已持久保存，后续进度在原画布中显示' } }
