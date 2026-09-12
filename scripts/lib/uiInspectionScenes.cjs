@@ -61,7 +61,7 @@ function createUiInspectionScenes({ canvasFixtureProjectId, settlePage }) {
   attachUiInspectionSupport(context)
 
   return Object.freeze([
-    ...createEmbeddedAgentScenes(),
+    ...createEmbeddedAgentScenes(context),
     ...createMcpScenes(context),
     ...createMcpDomainScenes(context),
     ...createGenerationSettingsScenes(context),

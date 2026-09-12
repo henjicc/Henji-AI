@@ -4,7 +4,10 @@ import { reportCanvasOperationFailure } from '@/features/canvas/application/canv
 import { createLogger } from '@/core/logging'
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { NodeToolbar as ReactFlowNodeToolbar } from '@xyflow/react';
-import { Copy, Crop, Download, FolderCheck, FolderPlus, Image, PenLine, RefreshCw, Scissors, Sparkles, Trash2, Unlink2, Video } from 'lucide-react';
+import { Copy, Crop, Download, FolderCheck, FolderPlus, GripVertical, Image, PenLine, RefreshCw, Scissors, Sparkles, Trash2, Unlink2, Video } from 'lucide-react';
+import { getCanvasMediaTransfers } from '../application/canvasMediaTransfer'
+import { writeHenjiDragData, setCompactDragPreview } from '@/contexts/dragDataTransfer'
+import { resolveImageDisplayUrl } from '@/services/imageSource'
 import { useTranslation } from 'react-i18next';
 
 const logger = createLogger('features.canvas.ui.NodeActionToolbar')
@@ -76,6 +79,7 @@ const toolIconMap: Record<ToolIconKey, typeof Crop> = {
 };
 
 export const NodeActionToolbar = memo(({ node }: NodeActionToolbarProps) => {
+  const mediaTransfers = getCanvasMediaTransfers(node, useCanvasStore.getState().nodes)
   const toolbarPanelRef = useNodeToolbarBoundary(node.id)
   const { t } = useTranslation();
   const isImageEdit = isImageEditNode(node);
@@ -277,6 +281,22 @@ export const NodeActionToolbar = memo(({ node }: NodeActionToolbarProps) => {
     >
       {/* 工具条浮在画布/图片节点之上，背后是用户内容而非纯色 UI，走玻璃材质 */}
       <UiPanel ref={toolbarPanelRef} variant="glass" data-node-toolbar-panel className="ui-scrollbar flex w-max items-center gap-1 overflow-x-auto p-1 [&>*]:shrink-0">
+        {mediaTransfers.map((item, index) => <UiChipButton
+          key={item.id}
+          draggable
+          aria-label={`拖动素材 ${item.label}`}
+          title={`拖到助手输入框添加${item.label}`}
+          className={`nodrag nopan h-8 cursor-grab ${NODE_TOOLBAR_BUTTON_RADIUS_CLASS} px-2.5 text-xs ${NODE_TOOLBAR_NEUTRAL_BUTTON_CLASS}`}
+          onPointerDown={event => event.stopPropagation()}
+          onMouseDown={event => event.stopPropagation()}
+          onClick={event => event.stopPropagation()}
+          onDragStart={event => {
+            event.stopPropagation()
+            event.dataTransfer.effectAllowed = 'copy'
+            writeHenjiDragData(event.dataTransfer, item.data)
+            if (item.data.type === 'image') setCompactDragPreview(event.dataTransfer, resolveImageDisplayUrl(item.data.thumbnailUrl || item.data.imageUrl))
+          }}
+        ><GripVertical className="h-3.5 w-3.5" />拖动素材{mediaTransfers.length > 1 ? ` ${index + 1}` : ''}</UiChipButton>)}
         {canTriggerGeneration && (
           <UiChipButton
             key="node-generate"

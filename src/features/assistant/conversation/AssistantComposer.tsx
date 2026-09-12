@@ -13,6 +13,10 @@ import { ALL_ATTACHMENT_MODALITIES, importAssistantAttachment, importDroppedAssi
 import { readHenjiDragData, HENJI_DRAG_DATA_MIME, type HenjiDragTransferData } from '@/contexts/dragDataTransfer'
 import { useDragDrop } from '@/contexts/DragDropContext'
 import { createLogger } from '@/core/logging'
+import { useCanvasStore } from '@/stores/canvasStore'
+import { useNavigationStore } from '@/stores/navigationStore'
+import { getSelectedCanvasMediaTransfers } from '@/features/canvas/application/canvasMediaTransfer'
+import { resolveImageDisplayUrl } from '@/services/imageSource'
 const logger = createLogger('features.assistant.attachments')
 
 interface AssistantComposerProps {
@@ -121,6 +125,23 @@ export function AssistantComposer({
     onSubmit(text || '请分析我附加的媒体。', attachments.map(item => item.attachment))
   }, [attachments, disabled, onSubmit, submitting, unavailable, value])
 
+  const selectedMedia = () => useNavigationStore.getState().activeWorkspace === 'nodes'
+    ? getSelectedCanvasMediaTransfers(useCanvasStore.getState().nodes, inputModalities) : []
+
+  const changeDocument = (next: PromptDocumentV1): void => {
+    const media = selectedMedia()
+    const sources: HenjiDragTransferData[] = []
+    // 此处的 @ 是添加附件的快捷入口；落下普通名称，附件仍由统一草稿管理。
+    const content = next.content.map(paragraph => ({ ...paragraph, content: paragraph.content?.map(item => {
+      if (item.type !== 'mediaReference') return item
+      const source = media.find(candidate => candidate.id === item.attrs.resourceId)
+      if (source) sources.push(source.data)
+      return { type: 'text' as const, text: `@${item.attrs.fallbackLabel} ` }
+    }) }))
+    onChange({ ...next, content })
+    if (sources.length) void addSources(sources)
+  }
+
   const onDrop = useCallback((event: DragEvent<HTMLDivElement>): void => {
     const internal = readHenjiDragData(event.dataTransfer)
     if (!internal && event.dataTransfer.files.length === 0) return
@@ -186,14 +207,19 @@ export function AssistantComposer({
       {unavailable ? <UiError size="xs" message="当前模型无法读取部分附件，请移除这些附件或切换模型。" className="mb-2" /> : null}
       <PromptEditor
         mode="edit"
-        preset="plain"
+        preset="media-references"
+        suggestionContainer={'[data-application-surface-id="overlay.assistant"]'}
+        getReferenceSuggestions={query => attachmentsDisabled || importingRef.current ? [] : selectedMedia()
+          .filter(item => item.label.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()))
+          .map(item => ({ resourceId: item.id, mediaType: item.data.type, label: item.label, sourceNodeId: item.nodeId,
+            thumbnailSrc: item.data.type === 'image' ? resolveImageDisplayUrl(item.data.thumbnailUrl || item.data.imageUrl) : undefined }))}
         layout="fill-scroll"
         value={value}
-        onChange={onChange}
+        onChange={changeDocument}
         ariaLabel="向智能助手描述任务"
         placeholder={waitingForAnswer
           ? '回答助手刚才的问题…'
-          : busy ? '可补充当前任务，或安排任务结束后继续…' : '描述目标，或粘贴错误信息…'}
+          : busy ? '可补充当前任务，或安排任务结束后继续…' : inputModalities.length ? '描述目标，输入 @ 添加选中节点的素材…' : '描述目标，或粘贴错误信息…'}
         disabled={submitting}
         maxCharacters={32 * 1024}
         submitShortcut="enter"

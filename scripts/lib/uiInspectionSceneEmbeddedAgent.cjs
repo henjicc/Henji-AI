@@ -3,7 +3,7 @@ const { createServer } = require('node:http')
 const path = require('node:path')
 
 // 官方 Pi + 真实 utility process / preload / 应用工具；只用本地模型响应替身，不访问外部模型。
-function createEmbeddedAgentScenes() {
+function createEmbeddedAgentScenes(context) {
   return [{ id: 'embedded-agent', surface: '助手', name: '内置助手-对话工具停止与恢复', writesUserData: true,
     setup: async (page) => {
       const requests = []
@@ -118,6 +118,33 @@ function createEmbeddedAgentScenes() {
         await selectModel('媒体验收模型')
         await page.getByRole('button', { name: '添加图片、视频、音频', exact: true }).waitFor()
         assert.equal(await page.getByLabel('聊天附件', { exact: true }).getAttribute('accept'), '.png,.jpg,.jpeg,.webp,.gif,.mp4,.webm,.mov,.mp3,.wav')
+        await context.seedAndOpenCanvasPanoramaProject(page)
+        if (!await panel.isVisible()) await page.keyboard.press('Control+Shift+A')
+        await selectModel('图片验收模型')
+        const node = page.locator('.react-flow__node[data-id="__ui_panorama_source"]')
+        await node.click()
+        await editor.fill('@')
+        const candidate = page.getByRole('option', { name: '本地全景参考图', exact: true })
+        await candidate.waitFor()
+        assert.equal(await page.getByRole('listbox', { name: '媒体引用候选' }).getByRole('option').count(), 1)
+        await candidate.click()
+        const remove = panel.getByRole('button', { name: '移除 本地全景参考图', exact: true })
+        await remove.waitFor()
+        await remove.click()
+        await editor.fill('')
+        const positionBefore = await node.getAttribute('style')
+        await page.getByRole('button', { name: '拖动素材 本地全景参考图', exact: true }).dragTo(page.getByLabel('聊天输入区', { exact: true }))
+        await remove.waitFor()
+        assert.equal(await node.getAttribute('style'), positionBefore, '素材拖出不能移动节点')
+        await remove.click()
+        const bounds = await node.boundingBox()
+        await page.mouse.move(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2)
+        await page.mouse.down()
+        await page.mouse.move(bounds.x + bounds.width / 2 + 35, bounds.y + bounds.height / 2 + 20, { steps: 12 })
+        await page.mouse.up()
+        assert.notEqual(await node.getAttribute('style'), positionBefore, '节点原有移动仍应生效')
+        await editor.fill('@')
+        await candidate.waitFor()
       } finally { server.closeAllConnections(); await new Promise((resolve) => server.close(resolve)) }
     },
   }]
