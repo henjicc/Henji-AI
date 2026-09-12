@@ -124,10 +124,10 @@ export class EmbeddedAgentService {
     })()
     try { await this.initializing } finally { this.initializing = undefined }
   }
-  async prompt(input: EmbeddedAgentPrompt): Promise<void> {
+  async prompt(input: EmbeddedAgentPrompt, requestId = randomUUID()): Promise<void> {
     if (this.disposed) throw new Error('助手已关闭。')
     if (this.changing) throw new Error('正在切换对话，请稍后发送。')
-    const entry = { id: randomUUID(), input }
+    const entry = { id: requestId, input }
     if (input.delivery === 'interrupt') this.queue.unshift(entry)
     else this.queue.push(entry)
     logger.info('内置助手消息已加入等待列表', { event: 'embedded_agent.message.queued', requestId: entry.id, context: { delivery: input.delivery ?? 'wait', count: this.queue.length } })
