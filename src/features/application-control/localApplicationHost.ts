@@ -5,6 +5,7 @@ import { createLogger } from '@/core/logging'
 import { applicationCallerAccess } from '@/core/application-control/callerContext'
 import { getApplicationControlExecutionEngine } from '@/features/assistant/applicationCapabilities/applicationControlRegistry'
 import { createApplicationCapabilitySession, listApplicationCapabilities } from './applicationCapabilityService'
+import { buildExternalCapabilityInventory } from './externalCapabilityInventory'
 
 const logger = createLogger('features.application_control.host')
 
@@ -20,6 +21,8 @@ export function attachLocalApplicationHost(platform: McpPlatform, ready: boolean
     id: definition.id as LocalTool['id'], version: definition.version, title: definition.title, description: definition.description,
     inputSchema: z.toJSONSchema(definition.inputSchema, { io: 'input' }),
   }))
+  // 按域发现与通用写入范围都从真实反射声明派生；宿主注册是它唯一的对外出口。
+  const domains = buildExternalCapabilityInventory()
   const unsubscribeRequest = platform.onRequest((raw) => {
     const request = localHostRequestSchema.safeParse(raw)
     if (!request.success || request.data.sessionId !== sessionId || disposed) return
@@ -56,12 +59,12 @@ export function attachLocalApplicationHost(platform: McpPlatform, ready: boolean
   })
   const unsubscribeCancel = platform.onCancel((id) => active.get(id)?.abort())
   const unsubscribeRevoke = platform.onRevoke((id) => { for (const [key, grant] of grants) if (grant.callerId === id) { revokeApplicationCallerGrant(grant); grants.delete(key) } })
-  void platform.registerHost({ sessionId, generation, ready, tools }).catch((error) => logger.error('连接应用宿主失败', error, { event: 'mcp.host.register.failed' }))
+  void platform.registerHost({ sessionId, generation, ready, tools, domains }).catch((error) => logger.error('连接应用宿主失败', error, { event: 'mcp.host.register.failed' }))
   return () => {
     disposed = true
     unsubscribeRequest(); unsubscribeCancel(); unsubscribeRevoke()
     for (const controller of active.values()) controller.abort()
     for (const grant of grants.values()) revokeApplicationCallerGrant(grant)
-    void platform.registerHost({ sessionId, generation, ready: false, tools: [] }).catch((error) => logger.error('断开应用宿主失败', error, { event: 'mcp.host.disconnect.failed' }))
+    void platform.registerHost({ sessionId, generation, ready: false, tools: [], domains: [] }).catch((error) => logger.error('断开应用宿主失败', error, { event: 'mcp.host.disconnect.failed' }))
   }
 }

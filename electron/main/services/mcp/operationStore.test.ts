@@ -17,7 +17,8 @@ function fixture(): { db: Database.Database; store: McpOperationStore; coordinat
   const db = new Database(':memory:'); opened.push(db)
   db.exec("CREATE TABLE existing_business(id TEXT PRIMARY KEY, value TEXT); INSERT INTO existing_business VALUES('old','keep');")
   const store = new McpOperationStore(db)
-  const coordinator = new McpOperationCoordinator(store)
+  // 公开写入范围由宿主从反射注册表派生后送来；原生用例显式给出本用例涉及的实体。
+  const coordinator = new McpOperationCoordinator(store, undefined, () => new Set(['settings.registry', 'canvas.project']))
   const callerId = randomUUID(); const sessionId = randomUUID()
   const baseline = store.baseline(callerId, [{ kind: 'settings.registry', id: 'singleton' }], { settings: 1 }, sessionId).id
   return { db, store, coordinator, callerId, sessionId, baseline }

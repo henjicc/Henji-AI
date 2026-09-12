@@ -5,7 +5,6 @@ import { McpOperationStore, operationDigest, type OperationRecord } from './oper
 
 const refSchema = z.object({ kind: z.string(), id: z.string() }).passthrough()
 const envelopeSchema = z.object({ operationId: z.string().uuid(), baselineIds: z.array(z.string().uuid()).min(1).max(32) })
-const writableDomain = (type: string): boolean => type === 'settings.registry' || type.startsWith('generation.') || type === 'asset' || ['asset.', 'canvas.', 'camera_stage.', 'image_edit.', 'image_mark.'].some((prefix) => type.startsWith(prefix))
 const object = (value: unknown): Record<string, unknown> => value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {}
 
 function resultRefs(value: unknown): Array<{ kind: string; id: string }> {
@@ -17,7 +16,13 @@ function resultRefs(value: unknown): Array<{ kind: string; id: string }> {
 
 /** 业务事实独立于 HTTP 等待；读取不会关闭任何写操作的未知/部分状态。 */
 export class McpOperationCoordinator {
-  constructor(readonly store: McpOperationStore, private readonly recoverPersisted?: (record: OperationRecord) => OperationRecord | undefined) {
+  /**
+   * `writableEntityTypes` 是公开业务写入范围，由渲染宿主从反射注册表派生后经注册送来
+   * （见 externalCapabilityInventory.ts）。这里**不保留任何前缀白名单兜底**：没拿到派生结果就
+   * 一个实体都不放行，"忘了派生"只会变成拒绝，不会变成放行。
+   */
+  constructor(readonly store: McpOperationStore, private readonly recoverPersisted?: (record: OperationRecord) => OperationRecord | undefined,
+    private readonly writableEntityTypes: () => ReadonlySet<string> = () => new Set()) {
     store.recoverInterrupted()
     for (const record of store.unresolved()) {
       const recovered = recoverPersisted?.(record)
@@ -58,8 +63,9 @@ export class McpOperationCoordinator {
       writeRefs = definition.resolveOperationWriteTargets?.(parsed, operationId)
     } else {
     const changes = z.array(z.object({ kind: z.string(), entityType: z.string() }).passthrough()).min(1).max(32).parse(input.changes)
+    const writable = this.writableEntityTypes()
     for (const change of changes) {
-      if (!writableDomain(change.entityType)) throw new Error('PERMISSION_DENIED:实体不属于公开业务写入范围。')
+      if (!writable.has(change.entityType)) throw new Error(`PERMISSION_DENIED:实体 ${change.entityType} 不属于公开业务写入范围；用 describe_application_contract 查看可写实体，用 describe_application_entities 查看只读原因。`)
       if (change.kind === 'remove_items' && !access.allowDestructive) throw new Error('PERMISSION_DENIED:此连接没有删除授权。')
       if (change.kind === 'set_properties' || change.kind === 'mutate_properties') refs.push(refSchema.parse(change.target))
       else {

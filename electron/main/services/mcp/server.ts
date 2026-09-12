@@ -2,8 +2,9 @@ import { createServer, type IncomingMessage, type ServerResponse, type Server as
 import { randomUUID } from 'node:crypto'
 import { Server } from '@modelcontextprotocol/sdk/server/index.js'
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js'
-import { CallToolRequestSchema, ListToolsRequestSchema, isInitializeRequest, type Tool } from '@modelcontextprotocol/sdk/types.js'
-import { MCP_READ_CAPABILITY_IDS, MCP_WRITE_CAPABILITY_IDS } from '../../../../src/core/application-control/localHostContracts'
+import { CallToolRequestSchema, ListToolsRequestSchema, isInitializeRequest } from '@modelcontextprotocol/sdk/types.js'
+import { EXTERNAL_LIMITS, EXTERNAL_SERVER_INFO, MCP_READ_CAPABILITY_IDS, MCP_WRITE_CAPABILITY_IDS } from '../../../../src/core/application-control/localHostContracts'
+import { buildApplicationContract, buildMcpToolCatalog, describeContractInputSchema, invalidInputMessage, readMediaInputSchema } from './toolCatalog'
 import type { McpConnections } from './connections'
 import type { ApplicationHostBridge } from './applicationHostBridge'
 import type { McpOperationCoordinator } from './operationCoordinator'
@@ -11,8 +12,8 @@ import { z } from 'zod'
 import { readMcpMediaResource, McpMediaResourceError } from './mediaResources'
 
 type Session = { callerId: string; server: Server; transport: StreamableHTTPServerTransport; touched: number }
-const MAX_BODY = 256 * 1024
-const MAX_RESULT = 2 * 1024 * 1024
+const MAX_BODY = EXTERNAL_LIMITS.requestBytes
+const MAX_RESULT = EXTERNAL_LIMITS.resultBytes
 
 export class LocalMcpServer {
   private http: HttpServer | undefined
@@ -95,8 +96,13 @@ export class LocalMcpServer {
       await session.transport.handleRequest(request, response, body)
     } finally { this.active-- }
   }
+  private catalog(callerId: string) {
+    this.connections.assertActive(callerId)
+    if (!this.host.ready) throw new Error('应用尚未就绪，请稍后重试。')
+    return buildMcpToolCatalog({ tools: this.host.tools(), access: this.connections.access(callerId), operationsEnabled: Boolean(this.operations) })
+  }
   private createSession(callerId: string): Session {
-    const server = new Server({ name: 'henji', version: '1.0.0' }, { capabilities: { tools: {} } })
+    const server = new Server({ ...EXTERNAL_SERVER_INFO }, { capabilities: { tools: {} } })
     const transport = new StreamableHTTPServerTransport({
       sessionIdGenerator: randomUUID, enableJsonResponse: true,
       onsessioninitialized: (id) => { this.sessions.set(id, session) },
@@ -104,44 +110,38 @@ export class LocalMcpServer {
     })
     const session: Session = { callerId, server, transport, touched: Date.now() }
     server.setRequestHandler(ListToolsRequestSchema, async () => {
-      this.connections.assertActive(callerId)
-      if (!this.host.ready) throw new Error('应用尚未就绪，请稍后重试。')
-      const access = this.connections.access(callerId)
-      const tools = this.host.tools().filter((tool) => !['retry_canvas_project_save', 'retry_image_edit_document_save'].includes(tool.id) && (tool.id !== 'create_visible_generation_task' || access.allowPaid) && (!MCP_WRITE_CAPABILITY_IDS.some((id) => id === tool.id) || (access.allowWrites && this.operations))).map((tool): Tool => {
-        const write = MCP_WRITE_CAPABILITY_IDS.some((id) => id === tool.id)
-        const schema = { ...tool.inputSchema }
-        if (write) {
-          const properties = { ...schema.properties as Record<string, unknown> }
-          delete properties.expectedRevisions
-          properties.operationId = { type: 'string', format: 'uuid', description: '调用前生成并保存的逻辑操作标识；丢响应后复用此值查询，不得重新生成重放。' }
-          properties.baselineIds = { type: 'array', items: { type: 'string', format: 'uuid' }, minItems: 1, maxItems: 32 }
-          schema.properties = properties
-          schema.required = [...(schema.required as string[] ?? []).filter((key) => key !== 'expectedRevisions'), 'operationId', 'baselineIds']
-          if (tool.id === 'create_visible_generation_task') schema.required = [...new Set([...schema.required as string[], 'modelId', 'prompt', 'mediaType'])]
-        }
-        return { name: tool.id, title: tool.title, description: tool.description, inputSchema: { ...schema, type: 'object' }, annotations: { readOnlyHint: !write, destructiveHint: write, openWorldHint: false } }
-      })
-      if (this.operations && access.allowWrites) tools.push({ name: 'get_application_operation', description: '读取本连接操作的持久事实；未知状态不会重放修改。', inputSchema: { type: 'object', properties: { operationId: { type: 'string', format: 'uuid' } }, required: ['operationId'], additionalProperties: false }, annotations: { readOnlyHint: true } })
-      if (this.operations && access.allowWrites) tools.push({ name: 'retry_application_operation_save', description: '按原操作记录仅重试保存并核对原条件；不会重放业务修改，必须保留原编辑会话。', inputSchema: { type: 'object', properties: { operationId: { type: 'string', format: 'uuid' }, originalOperationId: { type: 'string', format: 'uuid' } }, required: ['operationId', 'originalOperationId'], additionalProperties: false }, annotations: { readOnlyHint: false, destructiveHint: false } })
-      tools.push({ name: 'read_application_media', description: '按稳定结果引用分块读取已落盘媒体。outputIndex 为结果或节点关联媒体（含输入、预览）去重后的顺序，从零开始。每块最多 256 KiB；不接受文件路径或网址。', inputSchema: { type: 'object', properties: { ref: { type: 'object', properties: { kind: { type: 'string', enum: ['generation.result', 'asset', 'canvas.node'] }, id: { type: 'string' } }, required: ['kind', 'id'], additionalProperties: false }, outputIndex: { type: 'integer', minimum: 0 }, offset: { type: 'integer', minimum: 0 }, length: { type: 'integer', minimum: 1, maximum: 262144 } }, required: ['ref'], additionalProperties: false }, annotations: { readOnlyHint: true, openWorldHint: false } })
-      return { tools }
+      // 每次列举都按当前注册重新投影：渲染层重载、重新注册或撤销后再次 tools/list 就是最新目录。
+      return { tools: this.catalog(callerId).tools }
     })
     server.setRequestHandler(CallToolRequestSchema, async (request, extra) => {
       this.connections.assertActive(callerId)
+      if (request.params.name === 'describe_application_contract') {
+        try {
+          const { domains } = describeContractInputSchema.parse(request.params.arguments ?? {})
+          const data = buildApplicationContract({ domains: this.host.domains(), access: this.connections.access(callerId), catalog: this.catalog(callerId), port: this.port, requestedDomains: domains })
+          const result = { ok: true, data }
+          // 与其余工具保持同一约定：成功显式给出 isError:false，调用方不必区分 undefined 与 false。
+          return { isError: false, structuredContent: result, content: [{ type: 'text', text: JSON.stringify(result) }] }
+        } catch (error) {
+          return { isError: true, content: [{ type: 'text', text: invalidInputMessage(error) ?? (error instanceof Error ? error.message : '契约发现失败，请稍后重试。') }] }
+        }
+      }
       if (request.params.name === 'read_application_media') {
         try {
-          const input = z.object({ ref: z.object({ kind: z.enum(['generation.result', 'asset', 'canvas.node']), id: z.string().min(1).max(512) }).strict(), outputIndex: z.number().int().nonnegative().optional(), offset: z.number().int().nonnegative().optional(), length: z.number().int().min(1).max(262144).optional() }).strict().parse(request.params.arguments)
+          const input = readMediaInputSchema.parse(request.params.arguments)
           const result = await readMcpMediaResource(input)
           this.connections.assertActive(callerId)
-          return { structuredContent: result, content: [{ type: 'text', text: JSON.stringify(result) }] }
+          return { isError: false, structuredContent: result, content: [{ type: 'text', text: JSON.stringify(result) }] }
         } catch (error) {
-          const message = error instanceof McpMediaResourceError ? `${error.code}:${error.message}` : '媒体读取失败，请检查引用和分块参数。'
+          // 参数错误点名字段；业务失败仍然脱敏，不回传本地路径。
+          const message = invalidInputMessage(error) ?? (error instanceof McpMediaResourceError ? `${error.code}:${error.message}` : '媒体读取失败，请稍后重试。')
           return { isError: true, content: [{ type: 'text', text: message }] }
         }
       }
       if (request.params.name === 'get_application_operation' && this.operations) {
-        const { operationId } = z.object({ operationId: z.string().uuid() }).strict().parse(request.params.arguments)
-        const operation = this.operations.store.get(operationId, callerId)
+        const parsed = z.object({ operationId: z.string().uuid() }).strict().safeParse(request.params.arguments)
+        if (!parsed.success) return { isError: true, content: [{ type: 'text', text: invalidInputMessage(parsed.error)! }] }
+        const operation = this.operations.store.get(parsed.data.operationId, callerId)
         const result = operation ? this.operations.result(operation) : { ok: false, executionState: 'not_found', message: '未找到已登记操作；这不是业务未执行的证明。' }
         return { isError: result.ok !== true, structuredContent: result, content: [{ type: 'text', text: JSON.stringify(result) }] }
       }
@@ -158,7 +158,7 @@ export class LocalMcpServer {
           this.connections.assertActive(callerId)
           const result = this.operations.result(this.operations.store.get(operation.operationId, callerId)!)
           return { isError: result.ok !== true, structuredContent: result, content: [{ type: 'text', text: JSON.stringify(result) }] }
-        } catch (error) { return { isError: true, content: [{ type: 'text', text: error instanceof Error ? error.message : '写入未完成。' }] } }
+        } catch (error) { return { isError: true, content: [{ type: 'text', text: invalidInputMessage(error) ?? (error instanceof Error ? error.message : '写入未完成。') }] } }
       }
       const id = MCP_READ_CAPABILITY_IDS.find((value) => value === request.params.name)
       if (!id) return { isError: true, content: [{ type: 'text', text: '此连接只允许读取。请用 tools/list 查看可用工具。' }] }

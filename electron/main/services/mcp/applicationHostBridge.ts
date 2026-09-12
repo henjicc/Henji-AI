@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto'
-import type { LocalHostRegistration, LocalHostReply, LocalHostRequest, LocalTool } from '../../../../src/core/application-control/localHostContracts'
+import { externalWritableEntityTypes, type LocalDomainSurface, type LocalHostRegistration, type LocalHostRegistrationInput, type LocalHostReply, type LocalHostRequest, type LocalTool } from '../../../../src/core/application-control/localHostContracts'
 import type { McpOperationCoordinator } from './operationCoordinator'
 import type { OperationRecord } from './operationStore'
 
@@ -14,8 +14,17 @@ export class ApplicationHostBridge {
   get sessionId(): string { return this.host?.registration.sessionId ?? '' }
   get ready(): boolean { return this.host?.registration.ready === true }
   tools(): LocalTool[] { return this.ready ? this.host!.registration.tools : [] }
-  register(registration: LocalHostRegistration, transport: LocalHostTransport): void {
-    if (registration.generation < this.generation) return
+  /** 按域发现的数据面；由渲染宿主从反射注册表派生后随注册送来，主进程不维护第二份。 */
+  domains(): LocalDomainSurface[] { return this.ready ? this.host!.registration.domains : [] }
+  /**
+   * 公开业务写入范围。宿主没有送来派生结果时返回空集——**失败方向是拒绝**，
+   * 不退回任何前缀白名单，否则"忘了派生"会静默变成"放行全部"。
+   */
+  writableEntityTypes(): ReadonlySet<string> { return new Set(externalWritableEntityTypes(this.domains())) }
+  register(input: LocalHostRegistrationInput, transport: LocalHostTransport): void {
+    if (input.generation < this.generation) return
+    // 旧形状的注册（没有 domains）仍然接受：只是没有按域发现，也一个实体都不放行通用写入。
+    const registration = { ...input, domains: input.domains ?? [] } as LocalHostRegistration
     this.generation = registration.generation
     if (this.host?.registration.sessionId !== registration.sessionId || !registration.ready) this.disconnect()
     this.host = { registration, transport }

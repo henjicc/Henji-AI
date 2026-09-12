@@ -31,7 +31,7 @@ function trusted(event: IpcMainInvokeEvent): void {
 function status(): McpStatus { return { enabled: server.listening, ready: host.ready, port: configuredPort, connections: connections.list() } }
 
 export function registerMcpIpc(): void {
-  const operations = new McpOperationCoordinator(new McpOperationStore(getDb()), (record) => recoverPersistedGenerationOperation(getDb(), record))
+  const operations = new McpOperationCoordinator(new McpOperationStore(getDb()), (record) => recoverPersistedGenerationOperation(getDb(), record), () => host.writableEntityTypes())
   host = new ApplicationHostBridge((id) => connections.assertActive(id), operations)
   server = new LocalMcpServer(connections, host, (error) => logger.error('外部连接请求失败', { event: 'mcp.request.failed', error }), operations)
   registerIpcHandler('mcp:status', parseVoid, status, trusted)

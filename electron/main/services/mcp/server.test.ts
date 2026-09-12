@@ -7,11 +7,11 @@ import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/
 import { LocalMcpServer } from './server'
 import { McpConnections } from './connections'
 import { ApplicationHostBridge } from './applicationHostBridge'
-import type { LocalHostRequest } from '../../../../src/core/application-control/localHostContracts'
+import { EXTERNAL_CONTRACT_VERSION, EXTERNAL_PROTOCOL_VERSIONS, type LocalHostRequest } from '../../../../src/core/application-control/localHostContracts'
 
 const closers: Array<() => Promise<void>> = []
 afterEach(async () => { for (const close of closers.reverse()) await close(); closers.length = 0 })
-async function fixture(options: { ready?: boolean; pending?: boolean } = {}) {
+async function fixture(options: { ready?: boolean; pending?: boolean; result?: Record<string, unknown> } = {}) {
   let saved: string | null = null
   let now = Date.now()
   const connections = new McpConnections({ read: () => saved, write: (value) => { saved = value } }, () => now)
@@ -26,7 +26,7 @@ async function fixture(options: { ready?: boolean; pending?: boolean } = {}) {
       if (channel !== 'mcp:host:request') return
       const request = payload as LocalHostRequest
       calls.push(request)
-      if (!options.pending) host.complete({ requestId: request.requestId, sessionId: request.sessionId, result: { ok: true, data: { name: '隔离工程' } } })
+      if (!options.pending) host.complete({ requestId: request.requestId, sessionId: request.sessionId, result: options.result ?? { ok: true, data: { name: '隔离工程' } } })
     },
   })
   const server = new LocalMcpServer(connections, host)
@@ -55,8 +55,11 @@ describe('本地 MCP 协议与边界', () => {
   it('真实握手、发现、调用；关闭再开启不丢失根宿主', async () => {
     const f = await fixture()
     const a = await f.connect()
-    // 只读连接：宿主登记的读取工具 + 服务自带的媒体读取；写工具一个都不出现。
-    expect((await a.client.listTools()).tools.map((tool) => tool.name)).toEqual(['read_application_entity', 'read_application_media'])
+    // 只读连接：宿主登记的读取工具 + 服务自带的协议工具；写工具一个都不出现。
+    // 按语义断言而不是数量，扩容目录不会误报，权限泄漏仍然必红。
+    const readOnlyTools = (await a.client.listTools()).tools
+    expect(readOnlyTools.map((tool) => tool.name)).toEqual(expect.arrayContaining(['read_application_entity', 'read_application_media', 'describe_application_contract']))
+    expect(readOnlyTools.filter((tool) => tool.annotations?.readOnlyHint !== true)).toEqual([])
     expect((await a.client.callTool({ name: 'read_application_entity', arguments: {} })).structuredContent).toEqual({ ok: true, data: { name: '隔离工程' } })
     expect((await a.client.callTool({ name: 'change_application_entities', arguments: {} })).isError).toBe(true)
     expect(f.calls).toHaveLength(1)
@@ -65,7 +68,7 @@ describe('本地 MCP 协议与边界', () => {
     await expect(fetch(f.url())).rejects.toThrow()
     await f.server.start(0)
     const b = await f.connect()
-    expect((await b.client.listTools()).tools).toHaveLength(2)
+    expect((await b.client.listTools()).tools.map((tool) => tool.name)).toEqual(readOnlyTools.map((tool) => tool.name))
     expect((await b.client.callTool({ name: 'read_application_entity', arguments: {} })).isError).toBe(false)
   })
   it('匿名、网页来源、伪造 Host、超大正文均在宿主前拒绝', async () => {
@@ -126,6 +129,78 @@ describe('本地 MCP 协议与边界', () => {
     f.host.register({ sessionId: randomUUID(), generation: 2, ready: false, tools: [] }, { send: () => {} })
     expect(f.host.ready).toBe(true)
   })
+  /**
+   * 兼容矩阵的下边界：**声明外的协议版本不能把客户端挡在门外**。
+   *
+   * 规范要求服务端在不认识请求版本时回落到自己支持的版本，由客户端决定是否继续；如果哪天
+   * 变成直接报错，旧客户端会在握手阶段全部掉线，而这属于对外破坏性变更，必须被这条盯住。
+   */
+  it('声明外与畸形协议版本回落到本服务最新版本，不在握手阶段失败', async () => {
+    const f = await fixture()
+    const handshake = async (protocolVersion: string): Promise<string> => {
+      const response = await fetch(f.url(), { method: 'POST', headers: { Authorization: `Bearer ${f.connections.token(f.first.id)}`, 'Content-Type': 'application/json', Accept: 'application/json, text/event-stream' }, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion, capabilities: {}, clientInfo: { name: '兼容探针', version: '1' } } }) })
+      expect(response.status, protocolVersion).toBe(200)
+      return (await response.json() as { result: { protocolVersion: string } }).result.protocolVersion
+    }
+    // 未来版本与畸形字符串都回落到声明矩阵里的最新版本。
+    expect(await handshake('2099-01-01')).toBe(EXTERNAL_PROTOCOL_VERSIONS[0])
+    expect(await handshake('nonsense')).toBe(EXTERNAL_PROTOCOL_VERSIONS[0])
+    // SDK 还接受比回归矩阵更旧的 2024-11-05：协商结果要么是请求版本，要么是矩阵最新版本。
+    expect([...EXTERNAL_PROTOCOL_VERSIONS, '2024-11-05']).toContain(await handshake('2024-11-05'))
+  })
+
+  it('契约发现按授权档回答，并说明缺席与被拒的区别', async () => {
+    const f = await fixture()
+    // 宿主登记了写工具，但本连接只有读授权：写工具应当"缺席且说明缺哪一档"。
+    f.host.register({ sessionId: randomUUID(), generation: 9, ready: true, tools: [
+      { id: 'read_application_entity', version: 1, title: '读取', description: '读取实体', inputSchema: { type: 'object', properties: {}, additionalProperties: false } },
+      { id: 'change_application_entities', version: 2, title: '修改', description: '修改实体', inputSchema: { type: 'object', properties: {}, additionalProperties: false } },
+    ] }, { send: () => {} })
+    const a = await f.connect()
+    const result = await a.client.callTool({ name: 'describe_application_contract', arguments: {} })
+    expect(result.isError, JSON.stringify(result)).toBe(false)
+    const data = (result.structuredContent as { data: Record<string, unknown> }).data
+    expect((data.contract as { externalContractVersion: string }).externalContractVersion).toBe(EXTERNAL_CONTRACT_VERSION)
+    expect((data.contract as { transport: { url: string } }).transport.url).toBe(`http://127.0.0.1:${f.server.listeningPort}/mcp`)
+    const access = data.access as { write: boolean; hiddenTools: Array<{ name: string; requires: string }>; note: string }
+    expect(access.write).toBe(false)
+    expect(access.hiddenTools.map((item) => item.name)).toContain('change_application_entities')
+    expect(access.note).toContain('PERMISSION_DENIED')
+    // 缺席的工具直接点名调用：得到的是拒绝，而不是"没有这个能力"。
+    const denied = await a.client.callTool({ name: 'change_application_entities', arguments: {} })
+    expect(denied.isError).toBe(true)
+    expect(f.calls).toHaveLength(0)
+  })
+
+  it('目录随宿主重新注册刷新，不依赖 listChanged 通知', async () => {
+    const f = await fixture()
+    const a = await f.connect()
+    expect((await a.client.listTools()).tools.map((tool) => tool.name)).toContain('read_application_entity')
+    f.host.register({ sessionId: randomUUID(), generation: 5, ready: true, tools: [{ id: 'list_application_entities', version: 1, title: '列出', description: '列出实例', inputSchema: { type: 'object', properties: {}, additionalProperties: false } }] }, { send: () => {} })
+    const refreshed = (await a.client.listTools()).tools.map((tool) => tool.name)
+    expect(refreshed).toContain('list_application_entities')
+    expect(refreshed).not.toContain('read_application_entity')
+    // 服务端没有声明 listChanged；只支持普通工具调用的客户端重新列举即可拿到最新目录。
+    expect(a.client.getServerCapabilities()?.tools).toEqual({})
+  })
+
+  it('协议工具拒绝未知字段并指名字段，超限结果不落到调用方', async () => {
+    const unknownField = await (await fixture()).connect()
+    const rejected = await unknownField.client.callTool({ name: 'read_application_media', arguments: { ref: { kind: 'asset', id: 'x' }, unexpected: 1 } })
+    expect(rejected.isError).toBe(true)
+    expect(JSON.stringify(rejected)).toContain('unexpected')
+    // 协议自身的 _meta 不属于工具参数，不能被严格校验误伤。
+    const meta = await unknownField.client.callTool({ name: 'describe_application_contract', arguments: {}, _meta: { progressToken: 'p1' } })
+    expect(meta.isError, JSON.stringify(meta)).toBe(false)
+
+    const oversized = await fixture({ result: { ok: true, data: { blob: 'x'.repeat(3 * 1024 * 1024) } } })
+    const b = await oversized.connect()
+    const big = await b.client.callTool({ name: 'read_application_entity', arguments: {} })
+    expect(big.isError).toBe(true)
+    expect(JSON.stringify(big)).not.toContain('xxxxxxxxxx')
+    expect(JSON.stringify(big)).toContain('分页')
+  })
+
   it('客户端取消通过真实协议中止宿主等待', async () => {
     const f = await fixture({ pending: true })
     const a = await f.connect()

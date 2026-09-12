@@ -3,7 +3,7 @@ const { Client } = require('@modelcontextprotocol/sdk/client/index.js')
 const { StreamableHTTPClientTransport } = require('@modelcontextprotocol/sdk/client/streamableHttp.js')
 
 // 只读连接必须始终看得到的读取工具，以及任何情况下都不得出现在只读清单里的写入工具。
-const REQUIRED_READ_TOOLS = ['describe_application_entities', 'list_application_entities', 'read_application_entity', 'read_application_media']
+const REQUIRED_READ_TOOLS = ['describe_application_contract', 'describe_application_entities', 'list_application_entities', 'read_application_entity', 'read_application_media']
 const WRITE_TOOLS = ['change_application_entities', 'create_visible_generation_task', 'cancel_generation_task',
   'render_camera_stage_output', 'cancel_camera_stage_render_task', 'add_generation_result_to_canvas',
   'get_application_operation', 'retry_application_operation_save']
@@ -215,6 +215,17 @@ function createMcpScenes({ setupSettings, canvasFixtureProjectId }) {
           assert.ok(tools.includes(required), `写入连接缺少工具 ${required}：${tools.join('、')}`)
         }
         assert.equal(tools.includes('create_visible_generation_task'), false, '未授权付费的连接不得看到付费生成工具')
+        /*
+         * 按域发现要经过真实 preload／IPC 才算数：域清单在渲染层从反射注册表派生，随宿主注册
+         * 跨进程送到 MCP 服务。这里核对八个业务写域确实到达了外部契约，并且缺席的付费工具
+         * 说得出缺哪一档——"清单里没有"不能被读成"应用没有这个能力"。
+         */
+        const contract = await call('describe_application_contract', {})
+        const writableDomains = contract.data.domains.filter((domain) => domain.writable).map((domain) => domain.id).sort()
+        assert.deepEqual(writableDomains, ['assets', 'camera_stage', 'canvas', 'generation', 'image_edit', 'image_mark', 'models', 'settings'], JSON.stringify(writableDomains))
+        assert.equal(contract.data.domains.some((domain) => domain.id === 'assistant_runtime'), false, '助手内部运行目录不得出现在外部契约')
+        assert.deepEqual(contract.data.access.hiddenTools.map((item) => item.name), ['create_visible_generation_task'], JSON.stringify(contract.data.access.hiddenTools))
+        assert.equal(contract.data.access.hiddenTools[0].tier, 'paid')
         // 未授权付费时直接点名调用也必须被拒；拒绝发生在派发之前，不产生供应商请求。
         const paid = await client.callTool({ name: 'create_visible_generation_task', arguments: { operationId: require('node:crypto').randomUUID(), baselineIds: [require('node:crypto').randomUUID()], modelId: 'fixture', prompt: '不应发出', mediaType: 'image' } }).catch((error) => ({ isError: true, thrown: String(error) }))
         assert.equal(paid.isError, true, JSON.stringify(paid))
