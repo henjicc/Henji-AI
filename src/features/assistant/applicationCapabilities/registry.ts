@@ -1,4 +1,4 @@
-import { CanvasPersistenceError } from '@/features/canvas/application/canvasPersistenceService'
+import { CanvasPersistenceError, CanvasTransactionRolledBackError } from '@/features/canvas/application/canvasPersistenceService'
 import {
   closeApplicationSurfaceCapability,
   focusApplicationEntityCapability,
@@ -258,6 +258,10 @@ function describeSchemaIssues(error: ZodError): string {
 }
 
 function toFailure(error: unknown): ApplicationCapabilityResult {
+  if (error instanceof CanvasTransactionRolledBackError) {
+    const failure = toFailure(error.cause)
+    if (!failure.ok) return { ...failure, error: { ...failure.error, details: { execution: { rolledBack: true } } } }
+  }
   if (error instanceof CanvasPersistenceError && error.transactionFacts) return toFailure(new ApplicationTransactionFailure(error.transactionFacts))
   if (error instanceof ApplicationPreflightFailure) return { ok: false, error: { code: error.message.startsWith('CONFLICT:') ? 'CONFLICT' : 'INVALID_INPUT', message: error.message, recoverable: true, details: { execution: { notExecuted: true } } } }
   if (error instanceof ApplicationTransactionFailure) {

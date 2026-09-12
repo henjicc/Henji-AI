@@ -56,6 +56,42 @@ it('先持久创建标准节点和参考连线，再调用画布执行器并回�
   expect(records.get(taskId)?.filePath).toBe('C:/result.png')
 })
 
+it('原生成仍在等待结果时可连续新增五个请求，节点与参考连线立即持久化', async () => {
+  let release!: () => void
+  const waiting = new Promise<void>(resolve => { release = resolve })
+  const taskIds: string[] = []
+  const nodeIds: string[] = []
+  const unregister: Array<() => void> = []
+  try {
+    for (let index = 0; index < 5; index++) {
+      const taskId = crypto.randomUUID()
+      const destination = { mode: 'canvas' as const, projectId, sourceNodeIds: ['reference'] }
+      const input = { modelId: 'canvas-task-fixture', mediaType: 'image' as const, prompt: `第 ${index} 张`, options: {} }
+      input.options = resolveCanvasGenerationOptions(input, destination)
+      const submitted = await submitCanvasGenerationTask(input, destination, taskId)
+      const nodeId = submitted.nodeRef.id.slice(projectId.length + 1)
+      taskIds.push(taskId); nodeIds.push(nodeId)
+      unregister.push(registerCanvasNodeExecutor(nodeId, { kind: 'standard-generation', dependency: { mode: 'auto', outputMode: 'result-nodes' }, run: async () => {
+        await waiting
+        const resultId = useCanvasStore.getState().addNode(CANVAS_NODE_TYPES.exportImage, { x: 500, y: index * 400 }, {
+          imageUrl: `C:/result-${index}.png`, generationSourceNodeId: nodeId, generationOutputCommitId: `commit-${index}`,
+          generationOutputDescriptor: { outputId: `output-${index}`, order: 0 },
+        })
+        return { status: 'completed', resultNodeIds: [resultId] }
+      } }))
+      if (index === 0) await vi.waitFor(() => expect(records.get(taskId)?.status).toBe('generating'))
+    }
+    const saved = await readPersistedCanvasProjectSnapshot(projectId)
+    expect(saved.nodes.filter(node => nodeIds.includes(node.id))).toHaveLength(5)
+    expect(saved.edges.filter(edge => edge.source === 'reference' && nodeIds.includes(edge.target))).toHaveLength(5)
+    expect(taskIds.every(id => records.get(id)?.status !== 'success')).toBe(true)
+    release()
+    await vi.waitFor(() => expect(taskIds.map(id => records.get(id)?.status)).toEqual(Array(5).fill('success')))
+    const completed = await readPersistedCanvasProjectSnapshot(projectId)
+    expect(completed.nodes.filter(node => node.data.generationSourceNodeId && nodeIds.includes(String(node.data.generationSourceNodeId)))).toHaveLength(5)
+  } finally { release(); unregister.forEach(dispose => dispose()) }
+})
+
 it('节点创建后切换项目不会在别的项目执行或重新付费', async () => {
   const taskId = crypto.randomUUID()
   await submitCanvasGenerationTask({ modelId: 'canvas-task-fixture', mediaType: 'image', prompt: '图', options: {} }, { mode: 'canvas', projectId, sourceNodeIds: [] }, taskId)

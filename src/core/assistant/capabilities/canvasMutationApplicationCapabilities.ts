@@ -202,6 +202,8 @@ const addAssetToCanvas = defineApplicationCapability({
 const addGenerationResultToCanvas = defineApplicationCapability({
   id: 'add_generation_result_to_canvas',
   resolveOperationTargets: (input) => [{ kind: 'canvas.project', id: input.projectId }, input.resultRef],
+  resolveOperationWriteTargets: (input) => [{ kind: 'canvas.project', id: input.projectId }],
+  resolveOperationAppendTargets: (input) => [{ kind: 'canvas.project', id: input.projectId }],
   version: 1,
   title: '把生成结果放入画布',
   description: '按稳定 generation.result 引用把已成功生成的媒体直接放入原画布项目，不要求先导入素材库。优先使用用户发起任务时的项目和选中节点；有原选中节点时传 right_of_node，明确指定的位置优先。省略 placement 时，在目标为当前项目的情况下默认放到当前选中节点右侧，否则放到视口中心。',

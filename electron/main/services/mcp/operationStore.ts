@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto'
 export { operationDigest } from '../application-control/operationDigest'
 import type Database from 'better-sqlite3'
 
-export type OperationState = 'prepared' | 'executing' | 'completed' | 'not_executed' | 'partial' | 'unknown'
+export type OperationState = 'prepared' | 'executing' | 'completed' | 'not_executed' | 'rolled_back' | 'partial' | 'unknown'
 export interface OperationRecord {
   operationId: string
   callerId: string

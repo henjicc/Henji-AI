@@ -48,6 +48,14 @@ export class CanvasTransactionConflictError extends Error {
   }
 }
 
+/** 原画布快照已恢复且保存确认；区别于未派发和仍有未保存修改。 */
+export class CanvasTransactionRolledBackError extends Error {
+  constructor(readonly cause: unknown) {
+    super(cause instanceof Error ? cause.message : String(cause))
+    this.name = 'CanvasTransactionRolledBackError'
+  }
+}
+
 export function createCanvasMutationCheckpoint(projectId: string, runtime?: CanvasTransactionRuntime): CanvasMutationCheckpoint {
   const { nodes, edges, history } = (runtime?.store ?? useCanvasStore).getState()
   return { projectId, nodes, edges, history, conflicted: false, runtime }

@@ -1,4 +1,6 @@
 import { v4 as uuidv4 } from 'uuid'
+import { ZodError } from 'zod'
+import { ApplicationPreflightFailure } from '@/core/application-control/execution/transactionFailure'
 
 import type { CanvasBatchOperation } from '@/core/assistant/capabilities/canvasBatchApplicationCapabilities'
 import { createLogger } from '@/core/logging'
@@ -49,7 +51,7 @@ interface CanvasBatchUndo extends CanvasUndoPersistenceState {
 const plans = new Map<string, CanvasBatchPlan>()
 const undos = new Map<string, CanvasBatchUndo>()
 import { pauseCanvasProjectPersistence } from '@/stores/projectStore'
-import { confirmCanvasPersistence, runPersistedCanvasUndo, createCanvasMutationCheckpoint, isCanvasMutationCheckpointCurrent, assertCanvasCommitContext, CanvasTransactionConflictError, CanvasPersistenceError, type CanvasCommitOptions, type CanvasUndoPersistenceState, type CanvasTransactionRuntime } from './canvasPersistenceService'
+import { confirmCanvasPersistence, runPersistedCanvasUndo, createCanvasMutationCheckpoint, isCanvasMutationCheckpointCurrent, assertCanvasCommitContext, CanvasTransactionConflictError, CanvasTransactionRolledBackError, CanvasPersistenceError, type CanvasCommitOptions, type CanvasUndoPersistenceState, type CanvasTransactionRuntime } from './canvasPersistenceService'
 const PLAN_TTL_MS = 15 * 60_000
 const logger = createLogger('features.canvas.batch')
 
@@ -215,15 +217,19 @@ export async function runCanvasTransaction(
       releasePersistence()
       throw new CanvasTransactionConflictError(projectId, error)
     }
+    // 只有事务仍保持原始快照的参数校验失败，才有证据认定未写入。
+    // 已修改后失败、外部并发冲突、回滚保存失败均不得伪装成“未执行”。
+    const rejectedBeforeMutation = error instanceof ZodError
+      && checkpoint.nodes === beforeNodes && checkpoint.edges === beforeEdges && checkpoint.history === beforeHistory
     store.getState().setCanvasData(beforeNodes, beforeEdges, beforeHistory)
     store.getState().setSelectedNode(beforeSelectedNodeId)
     const recovery = persist()
     releasePersistence()
     await recovery
-    logger.error('画布批量写入失败', error, {
+    logger[rejectedBeforeMutation ? 'warn' : 'error']('画布批量写入失败', error, {
       event: 'canvas.batch.apply.failed', projectId, operationCount, ...logContext,
     })
-    throw error
+    throw rejectedBeforeMutation ? new ApplicationPreflightFailure(error) : new CanvasTransactionRolledBackError(error)
   }
 
   if (!isCanvasMutationCheckpointCurrent(checkpoint)) {

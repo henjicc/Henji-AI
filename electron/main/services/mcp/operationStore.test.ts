@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto'
 import { unlinkSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { McpOperationStore } from './operationStore'
 import { McpOperationCoordinator } from './operationCoordinator'
 import { ApplicationHostBridge } from './applicationHostBridge'
@@ -20,7 +20,7 @@ function fixture(): { db: Database.Database; store: McpOperationStore; coordinat
   db.exec("CREATE TABLE existing_business(id TEXT PRIMARY KEY, value TEXT); INSERT INTO existing_business VALUES('old','keep');")
   const store = new McpOperationStore(db)
   // 公开写入范围由宿主从反射注册表派生后送来；原生用例显式给出本用例涉及的实体。
-  const coordinator = new McpOperationCoordinator(store, undefined, () => new Set(['settings.registry', 'canvas.project']))
+  const coordinator = new McpOperationCoordinator(store, undefined, () => new Set(['settings.registry', 'canvas.project', 'canvas.node']))
   const callerId = randomUUID(); const sessionId = randomUUID()
   const baseline = store.baseline(callerId, [{ kind: 'settings.registry', id: 'singleton' }], { settings: 1 }, sessionId).id
   return { db, store, coordinator, callerId, sessionId, baseline }
@@ -31,6 +31,70 @@ function input(baselineId: string): Record<string, unknown> {
 }
 
 describe('MCP 原生操作记录与恢复', () => {
+  it('有明确完整回滚事实才结束占用，未知错误和保存失败不冒充回滚', () => {
+    for (const [details, expected] of [
+      [{ execution: { rolledBack: true } }, 'rolled_back'],
+      [{ transaction: { partial: { completedStepIndexes: [0], compensatedStepIndexes: [0], uncompensatedStepIndexes: [] } } }, 'rolled_back'],
+      [{ transaction: { partial: { completedStepIndexes: [0], compensatedStepIndexes: [], uncompensatedStepIndexes: [0] } } }, 'unknown'],
+      [{ execution: { rolledBack: true }, persistence: {} }, 'partial'],
+    ] as const) {
+      const f = fixture()
+      const record = f.coordinator.prepare(f.callerId, input(f.baseline), f.sessionId, access)
+      const requestId = randomUUID(); f.coordinator.dispatched(record, requestId, f.sessionId)
+      f.coordinator.complete({ requestId, sessionId: f.sessionId, result: { ok: false, error: { details } } })
+      expect(f.store.get(record.operationId, f.callerId)?.state).toBe(expected)
+      expect(f.store.unresolved().length).toBe(expected === 'rolled_back' ? 0 : 1)
+    }
+  })
+  it('旧结果导入未知记录不锁住同一画布的独立新增；五个生成可同时登记派发', async () => {
+    const f = fixture()
+    const project = { kind: 'canvas.project', id: 'user-project' }
+    const old = { operationId: randomUUID(), callerId: randomUUID(), inputDigest: 'legacy', state: 'unknown' as const,
+      capabilityId: 'add_generation_result_to_canvas' as const, input: { projectId: project.id, resultRef: { kind: 'generation.result', id: 'old-result' } },
+      targetRefs: [project, { kind: 'generation.result', id: 'old-result' }],
+      result: { ok: false, error: { code: 'INVALID_INPUT', message: 'sourceFileName: Too big' } } }
+    f.store.save(old)
+    const pending: LocalHostRequest[] = []
+    const host = new ApplicationHostBridge(() => undefined, f.coordinator)
+    host.register({ sessionId: f.sessionId, generation: 1, ready: true, tools: [] }, { send(channel, value) {
+      if (channel !== 'mcp:host:request') return
+      const request = value as LocalHostRequest
+      if (request.capabilityId === 'prepare_generation_task') host.complete({ sessionId: f.sessionId, requestId: request.requestId,
+        result: { ok: true, data: { preparation: { priceEstimate: { comparableCnyAmount: 0.34 } } } } })
+      else pending.push(request)
+    } })
+    const dispatcher = new ApplicationToolDispatcher({ assertActive() {}, access: () => ({ ...access, allowPaid: true }) }, host, f.coordinator)
+    const calls = Array.from({ length: 5 }, (_, index) => dispatcher.call(f.callerId, 'create_visible_generation_task', {
+      operationId: randomUUID(), modelId: 'fixture', prompt: `新请求 ${index}`, mediaType: 'image',
+      destination: { mode: 'canvas', projectId: project.id, sourceNodeIds: ['reference'] },
+    }, new AbortController().signal))
+    await vi.waitFor(() => expect(pending).toHaveLength(5))
+    for (const request of pending) host.complete({ sessionId: f.sessionId, requestId: request.requestId,
+      result: { ok: true, data: { taskId: request.operationId, verification: { verified: true } } } })
+    for (const reply of await Promise.all(calls)) expect(reply.structuredContent).toMatchObject({ executionState: 'completed' })
+    expect(f.store.get(old.operationId, old.callerId)).toEqual(old)
+  })
+
+  it('集合追加兼容独立追加，但删除、覆盖、保存失败和未知请求换标识仍拒绝', () => {
+    const f = fixture()
+    const project = { kind: 'canvas.project', id: 'project' }
+    const args = { operationId: randomUUID(), modelId: 'fixture', prompt: '第一张', mediaType: 'image', destination: { mode: 'canvas', projectId: project.id } }
+    const first = f.coordinator.prepare(f.callerId, args, f.sessionId, { ...access, allowPaid: true }, 'create_visible_generation_task')
+    f.coordinator.dispatched(first, randomUUID(), f.sessionId)
+    const create = { operationId: randomUUID(), changes: [{ kind: 'create_items', entityType: 'canvas.node', parent: project, items: [{ properties: { 'canvas.node.node_type': 'uploadNode' } }] }] }
+    const append = f.coordinator.prepare(f.callerId, create, f.sessionId, access)
+    f.coordinator.dispatched(append, randomUUID(), f.sessionId)
+    expect(f.coordinator.prepare(f.callerId, { ...args, operationId: randomUUID(), prompt: '第二张' }, f.sessionId, { ...access, allowPaid: true }, 'create_visible_generation_task').state).toBe('prepared')
+    expect(() => f.coordinator.prepare(f.callerId, { operationId: randomUUID(), changes: [{ kind: 'set_properties', entityType: project.kind, target: project, properties: { 'canvas.project.name': '改名' } }] }, f.sessionId, access)).toThrow(first.operationId)
+    const baseline = f.store.baseline(f.callerId, [project, { kind: 'canvas.node', id: 'project:node' }], { canvas: 1 }, f.sessionId)
+    expect(() => f.coordinator.prepare(f.callerId, { operationId: randomUUID(), baselineIds: [baseline.id], changes: [{ kind: 'remove_items', entityType: 'canvas.node', parent: project, targets: [{ kind: 'canvas.node', id: 'project:node' }] }] }, f.sessionId, { ...access, allowDestructive: true })).toThrow('RECOVERY_REQUIRED')
+    const active = f.store.get(first.operationId, f.callerId)!
+    f.store.save({ ...active, state: 'unknown' })
+    expect(() => f.coordinator.prepare(f.callerId, { ...args, operationId: randomUUID() }, f.sessionId, { ...access, allowPaid: true }, 'create_visible_generation_task')).toThrow('RECOVERY_REQUIRED')
+    f.store.save({ ...active, state: 'partial', result: { ok: false, error: { details: { persistence: {} } } } })
+    expect(() => f.coordinator.prepare(f.callerId, { ...args, operationId: randomUUID(), prompt: '第三张' }, f.sessionId, { ...access, allowPaid: true }, 'create_visible_generation_task')).toThrow('RECOVERY_REQUIRED')
+  })
+
   it('完整工具派发自动准备生成，保存提交事实并去重，高费用不会进入写宿主', async () => {
     const f = fixture()
     const host = new ApplicationHostBridge(() => undefined, f.coordinator)

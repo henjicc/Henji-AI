@@ -14,6 +14,42 @@ function resultRefs(value: unknown): Array<{ kind: string; id: string }> {
   return parsed.success ? [{ kind: parsed.data.kind, id: parsed.data.id }] : Object.values(value).flatMap(resultRefs)
 }
 
+type TargetRecord = Pick<OperationRecord, 'operationId' | 'capabilityId' | 'input' | 'targetRefs'>
+const refKey = (ref: { kind: string; id: string }): string => `${ref.kind}:${ref.id}`
+
+/** 读依赖、集合追加和覆盖写入不是同一种冲突；旧账本也从同一能力声明解析。 */
+function operationAccess(record: TargetRecord): Map<string, 'append' | 'write'> {
+  const targets = new Map<string, 'append' | 'write'>()
+  const add = (value: unknown, mode: 'append' | 'write'): void => {
+    const parsed = refSchema.safeParse(value)
+    if (parsed.success && targets.get(refKey(parsed.data)) !== 'write') targets.set(refKey(parsed.data), mode)
+  }
+  if (!record.capabilityId || record.capabilityId === 'change_application_entities') {
+    for (const value of Array.isArray(record.input.changes) ? record.input.changes : []) {
+      const change = object(value)
+      add(change.target, 'write')
+      add(change.parent, change.kind === 'create_items' ? 'append' : 'write')
+      for (const target of Array.isArray(change.targets) ? change.targets : []) add(target, 'write')
+    }
+    for (const ref of record.targetRefs ?? []) if (!targets.has(refKey(ref))) add(ref, 'write')
+    return targets
+  }
+  const definition = BUILTIN_APPLICATION_CAPABILITY_REGISTRY.get(record.capabilityId)
+  const parsed = definition?.inputSchema.safeParse(record.input)
+  if (!definition || !parsed?.success) {
+    for (const ref of record.targetRefs ?? []) add(ref, 'write')
+    return targets
+  }
+  const reads = definition.resolveOperationTargets?.(parsed.data) ?? []
+  const writes = definition.resolveOperationWriteTargets?.(parsed.data, record.operationId) ?? reads
+  const appends = new Set((definition.resolveOperationAppendTargets?.(parsed.data) ?? []).map(refKey))
+  for (const ref of writes) add(ref, appends.has(refKey(ref)) ? 'append' : 'write')
+  // 回执里的实际新增对象仍受保护；不能把原本只读的模型/参考素材升级为锁。
+  const readKeys = new Set(reads.map(refKey))
+  for (const ref of record.targetRefs ?? []) if (!targets.has(refKey(ref)) && !readKeys.has(refKey(ref))) add(ref, 'write')
+  return targets
+}
+
 /** 业务事实独立于 HTTP 等待；读取不会关闭任何写操作的未知/部分状态。 */
 export class McpOperationCoordinator {
   /**
@@ -80,17 +116,19 @@ export class McpOperationCoordinator {
     }
     if (destructive && !baselineIds.length) throw new Error(`BASELINE_REQUIRED:删除操作需要先核对目标。请用 read_application_entity 读取 ${JSON.stringify(refs)}，再提交返回的 baselineIds。`)
     const baselines = baselineIds.map((id) => this.store.readBaseline(id, callerId))
-    const keys = new Set((writeRefs ?? refs).map((ref) => `${ref.kind}:${ref.id}`))
+    const currentAccess = operationAccess({ operationId, capabilityId, input, targetRefs: writeRefs ?? refs })
     for (const unresolved of this.store.unresolved()) {
-      const changes = Array.isArray(unresolved.input.changes) ? unresolved.input.changes : []
-      const overlaps = (unresolved.targetRefs ?? []).some((ref) => keys.has(`${ref.kind}:${ref.id}`)) || changes.some((value) => {
-        const change = object(value)
-        return [change.target, change.parent, ...(Array.isArray(change.targets) ? change.targets : [])].some((candidate) => {
-          const parsed = refSchema.safeParse(candidate)
-          return parsed.success && keys.has(`${parsed.data.kind}:${parsed.data.id}`)
-        })
+      const previousAccess = operationAccess(unresolved)
+      const sameUnknownRequest = unresolved.state === 'unknown' && unresolved.capabilityId === capabilityId
+        && operationDigest(unresolved.input) === operationDigest(input)
+      const overlaps = [...currentAccess].some(([key, mode]) => {
+        const previousMode = previousAccess.get(key)
+        return previousMode !== undefined && !(mode === 'append' && previousMode === 'append'
+          && unresolved.state !== 'partial' && !sameUnknownRequest)
       })
-      if (overlaps) throw new Error('RECOVERY_REQUIRED:原目标存在尚未核对或保存的操作，请先查询原操作并恢复；新标识不能绕过保护。')
+      if (overlaps) throw new Error(`RECOVERY_REQUIRED:本次修改与尚未核对或保存的操作涉及同一目标。${unresolved.callerId === callerId
+        ? `请用 get_application_operation 查询 operationId=${unresolved.operationId}；不要查询本次尚未登记的新标识。`
+        : '原操作属于另一连接，请在应用中核对对应目标。'}独立追加可并行，覆盖、删除、保存失败或重复未知请求不能绕过保护。`)
     }
     if (baselines.some((baseline) => baseline.sessionId !== sessionId)) throw new Error('BASELINE_EXPIRED:应用宿主已重载，请重新读取目标。')
     const missing = refs.filter((ref) => !baselines.some((baseline) => baseline.refs.some((item) => item.kind === ref.kind && item.id === ref.id)))
@@ -115,7 +153,12 @@ export class McpOperationCoordinator {
     const partial = object(transaction.partial)
     const changed = Array.isArray(transaction.effects) && transaction.effects.length > 0
     const cleanFailure = object(details.execution).notExecuted === true || (Array.isArray(partial.completedStepIndexes) && partial.completedStepIndexes.length === 0 && !transaction.persistence)
-    const state = reply.result.ok === true ? 'completed' : changed || transaction.persistence || details.persistence ? 'partial' : cleanFailure ? 'not_executed' : 'unknown'
+    const completed = Array.isArray(partial.completedStepIndexes) ? partial.completedStepIndexes : []
+    const compensated = Array.isArray(partial.compensatedStepIndexes) ? partial.compensatedStepIndexes : []
+    const rolledBack = object(details.execution).rolledBack === true || (completed.length > 0
+      && completed.every(index => compensated.includes(index)) && Array.isArray(partial.uncompensatedStepIndexes) && partial.uncompensatedStepIndexes.length === 0)
+    const state = reply.result.ok === true ? 'completed' : changed || transaction.persistence || details.persistence ? 'partial'
+      : rolledBack ? 'rolled_back' : cleanFailure ? 'not_executed' : 'unknown'
     const verified = object(object(reply.result.data).verification).verified === true
     this.store.save({ ...record, state, targetRefs: [...record.targetRefs ?? [], ...resultRefs(reply.result)], verificationState: verified ? 'verified' : 'unresolved', result: reply.result })
     if (record.recoveryOf && reply.result.ok === true) {

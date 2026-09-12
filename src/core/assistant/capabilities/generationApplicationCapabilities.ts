@@ -195,6 +195,7 @@ const createVisibleGenerationTask = defineApplicationCapability({
   id: 'create_visible_generation_task',
   resolveOperationWriteTargets: (input, operationId) => [{ kind: 'generation.task', id: applicationGenerationTaskId(operationId) },
     ...(input.destination?.mode === 'canvas' ? [{ kind: 'canvas.project', id: input.destination.projectId }] : [])],
+  resolveOperationAppendTargets: (input) => input.destination?.mode === 'canvas' ? [{ kind: 'canvas.project', id: input.destination.projectId }] : [],
   resolveOperationTargets: (input) => { if (!input.modelId || typeof input.prompt !== 'string' || !input.mediaType) throw new Error('INVALID_INPUT:外部提交必须明确指定已读取的模型、提示词和媒体类型'); return [{ kind: 'generation.model', id: input.modelId }] },
   version: 1,
   title: '创建可见生成任务',
