@@ -5,6 +5,7 @@ const mocks = vi.hoisted(() => ({
   generate: vi.fn(),
   continuePolling: vi.fn(),
   consumePendingResult: vi.fn(),
+  recoverSavedGenerationResult: vi.fn(),
   llmChatStream: vi.fn(),
   llmModelStep: vi.fn(),
 }))
@@ -30,6 +31,7 @@ vi.mock('../services/ai-runtime/runtime', () => ({
     return value
   },
   recordSample: vi.fn(),
+  recoverSavedGenerationResult: mocks.recoverSavedGenerationResult,
 }))
 
 vi.mock('../services/ai-runtime/pending-results', () => ({
@@ -142,6 +144,24 @@ describe('AI/LLM IPC 契约', () => {
       { serverTaskId: 'server-task' },
     )).resolves.toEqual({ ok: true, data: cached })
     expect(mocks.consumePendingResult).toHaveBeenCalledWith('server-task')
+  })
+
+  it('ai:consumePendingResult 优先返回已落库回执，不回落到内存缓存', async () => {
+    const persisted = {
+      url: 'https://example.com/persisted.png',
+      filePath: '/managed/persisted.png',
+      createdFilePaths: ['/managed/persisted.png'],
+      status: 'completed',
+    }
+    mocks.recoverSavedGenerationResult.mockResolvedValue(persisted)
+    mocks.consumePendingResult.mockReturnValue({ url: 'https://example.com/cached.png' })
+
+    await expect(handler('ai:consumePendingResult')(
+      { sender: { send: vi.fn() } },
+      { serverTaskId: 'server-task' },
+    )).resolves.toEqual({ ok: true, data: persisted })
+    expect(mocks.recoverSavedGenerationResult).toHaveBeenCalledWith('server-task')
+    expect(mocks.consumePendingResult).not.toHaveBeenCalled()
   })
 
   it('llm:chatStream 保留完整 request payload 与 streamId 事件包络', async () => {
