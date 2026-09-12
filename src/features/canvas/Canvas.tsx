@@ -1,4 +1,5 @@
 import { reportCanvasOperationFailure } from '@/features/canvas/application/canvasOperationFeedback';
+import { useNodeParameterContextMenu } from './hooks/useNodeParameterContextMenu';
 import {
   type MouseEvent as ReactMouseEvent,
   useCallback,
@@ -410,6 +411,7 @@ export function Canvas() {
     connectAssetGroup: handleBindAssetGroup,
   });
   const assetDrop = useCanvasAssetDrop({ reactFlowInstance, addNode, schedulePersist: scheduleCanvasPersist });
+  const { onNodeContextMenu, hideNodeContextMenu, nodeContextMenu } = useNodeParameterContextMenu(closeNodeMenu);
   // 低倍率内容 LOD：只在跨越阈值时翻转一次 class，节点正文的显隐全部由 CSS 承担
   const isContentLodLow = useCanvasContentLod();
 
@@ -442,10 +444,12 @@ export function Canvas() {
           if (draggedNodes[0]) handleCanvasNodeDragStop(event, draggedNodes[0]);
         }}
         onPaneClick={(event) => {
+          hideNodeContextMenu();
           closeAssetGroup();
           handlePaneClick(event);
         }}
         onPaneContextMenu={handlePaneContextMenu}
+        onNodeContextMenu={onNodeContextMenu}
         onMoveStart={handleMoveStart}
         onMoveEnd={handleMoveEnd}
         nodeTypes={nodeTypes}
@@ -474,6 +478,7 @@ export function Canvas() {
       </ReactFlow>
 
       <NodeToolDialogRouter />
+      {nodeContextMenu}
       <CameraStageNodeDialog />
       <CanvasConnectionToast toast={connectionToast} />
       {activeGroupId && (

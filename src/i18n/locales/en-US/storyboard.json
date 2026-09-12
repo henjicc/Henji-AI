@@ -27,6 +27,9 @@
     "close": "Close"
   },
   "canvas": {
+    "setNodeDefaults": "Set as defaults",
+    "nodeDefaultsSaved": "Parameters saved for new nodes of this type",
+    "nodeDefaultsFailed": "Could not save default parameters. Please try again.",
     "addImage": "Add Image",
     "splitStoryboard": "Split Storyboard",
     "generate": "Generate",

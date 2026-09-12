@@ -74,6 +74,11 @@ function createRelightGenerationDefaultData(): ImageEditNodeData {
 }
 
 export const relightGenerationNodeDefinition: CanvasNodeDefinition<ImageEditNodeData> = {
+  defaultParameterFields: [
+    'relightSettings.lightingMode', 'relightSettings.manual.keyDirection',
+    'relightSettings.manual.brightness', 'relightSettings.manual.colorPreset',
+    'relightSettings.manual.rimDirection', 'relightSettings.smart.preset',
+  ],
   type: CANVAS_NODE_TYPES.relightGen,
   menuLabelKey: 'node.menu.relightGeneration',
   menuIcon: 'imageGeneration',
@@ -125,6 +130,7 @@ function createMultiAngleGenerationDefaultData(): MultiAngleGenerationNodeData {
 }
 
 export const multiAngleGenerationNodeDefinition: CanvasNodeDefinition<MultiAngleGenerationNodeData> = {
+  defaultParameterFields: ['multiAngleConfig'],
   type: CANVAS_NODE_TYPES.multiAngleGen,
   menuLabelKey: 'node.menu.multiAngleGeneration',
   menuIcon: 'imageGeneration',
@@ -255,6 +261,7 @@ function createElementEditGenerationDefaultData(): ElementEditGenerationNodeData
 }
 
 export const elementEditGenerationNodeDefinition: CanvasNodeDefinition<ElementEditGenerationNodeData> = {
+  defaultParameterFields: ['localRedrawSettings'],
   type: CANVAS_NODE_TYPES.elementEditGen,
   menuLabelKey: 'node.menu.elementEditGeneration',
   menuIcon: 'imageGeneration',
