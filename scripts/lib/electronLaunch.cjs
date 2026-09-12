@@ -209,6 +209,11 @@ function assertBuildFreshness(mainEntry) {
   )
 }
 
+/**
+ * `reuseUserDataDir` 让调用方自带一个隔离资料目录，使同一份数据可以跨两次启动。
+ * 「应用完整退出重启」只能这样取证：每次启动都新建临时目录的话，第二次看到的是空数据，
+ * 得到的必然是一个毫无意义的绿灯。由调用方持有的目录**不由这里回收**。
+ */
 async function launchElectronApp({
   mainEntry,
   cwd,
@@ -217,9 +222,11 @@ async function launchElectronApp({
   useElectronApi = false,
   skipOnboarding = false,
   extraArgs = [],
+  reuseUserDataDir = null,
 } = {}) {
   assertBuildFreshness(mainEntry)
-  const userDataDir = isolateUserData ? createIsolatedUserDataDir() : null
+  const userDataDir = reuseUserDataDir ?? (isolateUserData ? createIsolatedUserDataDir() : null)
+  const ownedUserDataDir = reuseUserDataDir ? null : userDataDir
   const launchArgs = userDataDir ? [`--user-data-dir=${userDataDir}`, mainEntry] : [mainEntry]
   launchArgs.push(...extraArgs)
   // LOCALAPPDATA/APPDATA 只在 Windows 上决定数据目录；macOS / Linux 走
@@ -269,12 +276,12 @@ async function launchElectronApp({
             ])
             await stopElectronChild(child)
           } finally {
-            await cleanupIsolatedUserDataDir(userDataDir)
+            await cleanupIsolatedUserDataDir(ownedUserDataDir)
           }
         },
       }
     } catch (error) {
-      await cleanupIsolatedUserDataDir(userDataDir)
+      await cleanupIsolatedUserDataDir(ownedUserDataDir)
       throw error
     }
   }
@@ -323,7 +330,7 @@ async function launchElectronApp({
         }
         await browser.close().catch(() => undefined)
         await stopElectronChild(child)
-        await cleanupIsolatedUserDataDir(userDataDir)
+        await cleanupIsolatedUserDataDir(ownedUserDataDir)
       },
     }
   } catch (error) {
@@ -331,7 +338,7 @@ async function launchElectronApp({
       await browser.close().catch(() => undefined)
     }
     await stopElectronChild(child)
-    await cleanupIsolatedUserDataDir(userDataDir)
+    await cleanupIsolatedUserDataDir(ownedUserDataDir)
     const output = processOutput.trim()
     throw new Error(output ? `${error.message}\nElectron process output:\n${output}` : error.message, {
       cause: error,
@@ -356,4 +363,6 @@ module.exports = {
   waitForApp,
   assert,
   createElectronEnv,
+  createIsolatedUserDataDir,
+  cleanupIsolatedUserDataDir,
 }

@@ -362,7 +362,14 @@ export async function executeApplicationCapabilityResult(
       resultingScopeRevisions: snapshot.scopeRevisions,
     }
   } catch (error) {
-    logger.error('capability.execute.failed', error, {
+    /*
+     * 预检失败是调用方可以自己改正的拒绝：参数写错、基线过期、乐观并发落败。
+     * 外部智能体接进来之后这类拒绝就是正常流量，记成 error 会让用户的错误日志被别人的
+     * 重试刷满，也会让任何覆盖并发契约的验收永远变红。**只降日志级别，返回给调用方的
+     * 失败事实一个字都没变**，未预期的执行异常仍然是 error。
+     */
+    const level = error instanceof ApplicationPreflightFailure ? 'warn' : 'error'
+    logger[level]('capability.execute.failed', error, {
       event: 'assistant.capability.execute.failed',
       requestId: context.requestId,
       taskId: context.taskId,

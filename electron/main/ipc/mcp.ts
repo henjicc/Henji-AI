@@ -33,7 +33,8 @@ function status(): McpStatus { return { enabled: server.listening, ready: host.r
 export function registerMcpIpc(): void {
   const operations = new McpOperationCoordinator(new McpOperationStore(getDb()), (record) => recoverPersistedGenerationOperation(getDb(), record), () => host.writableEntityTypes())
   host = new ApplicationHostBridge((id) => connections.assertActive(id), operations)
-  server = new LocalMcpServer(connections, host, (error) => logger.error('外部连接请求失败', { event: 'mcp.request.failed', error }), operations)
+  server = new LocalMcpServer(connections, host, (error) => logger.error('外部连接请求失败', { event: 'mcp.request.failed', error }), operations,
+    (info) => logger.info('外部客户端已建立协议会话', { event: 'mcp.session.opened', context: { callerId: info.callerId, clientName: info.client?.name, clientVersion: info.client?.version } }))
   registerIpcHandler('mcp:status', parseVoid, status, trusted)
   registerIpcHandler('mcp:configure', (value) => z.object({ enabled: z.boolean(), port: z.number().int().min(1024).max(65535) }).strict().parse(value), async (input) => {
     if (changing) throw new Error('连接设置正在保存，请稍后重试。')

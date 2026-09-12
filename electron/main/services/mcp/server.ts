@@ -20,7 +20,14 @@ export class LocalMcpServer {
   private sessions = new Map<string, Session>()
   private active = 0
   private port = 0
-  constructor(private readonly connections: McpConnections, private readonly host: ApplicationHostBridge, private readonly onError: (error: unknown) => void = () => {}, private readonly operations?: McpOperationCoordinator) {}
+  /**
+   * `onSession` 是"到底有没有客户端真的连上来"的唯一可观察出口。
+   * 在此之前，握手成功与配置写对了完全不可区分：外部客户端的配置回显里也会出现同一个
+   * url 和令牌变量名，误读成"已连接"。现在由服务端在 initialize 完成后记账，
+   * 并带上客户端自报的名称与版本（只作记录，不参与任何授权判断）。
+   */
+  constructor(private readonly connections: McpConnections, private readonly host: ApplicationHostBridge, private readonly onError: (error: unknown) => void = () => {}, private readonly operations?: McpOperationCoordinator,
+    private readonly onSession: (info: { callerId: string; client?: { name: string; version: string } }) => void = () => {}) {}
   get listening(): boolean { return this.http?.listening === true }
   get listeningPort(): number { return this.port }
   async start(port: number): Promise<void> {
@@ -105,7 +112,15 @@ export class LocalMcpServer {
     const server = new Server({ ...EXTERNAL_SERVER_INFO }, { capabilities: { tools: {} } })
     const transport = new StreamableHTTPServerTransport({
       sessionIdGenerator: randomUUID, enableJsonResponse: true,
-      onsessioninitialized: (id) => { this.sessions.set(id, session) },
+      onsessioninitialized: (id) => {
+        this.sessions.set(id, session)
+        // 传输层在把 initialize 交给协议层之前就回调这里，此刻还读不到客户端自报身份；
+        // 推迟一轮再读，拿不到就如实记未知，不为了好看而猜。
+        setImmediate(() => {
+          const client = server.getClientVersion()
+          this.onSession({ callerId, client: client ? { name: String(client.name), version: String(client.version) } : undefined })
+        })
+      },
       onsessionclosed: (id) => { this.sessions.delete(id) },
     })
     const session: Session = { callerId, server, transport, touched: Date.now() }
