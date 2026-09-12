@@ -31,6 +31,19 @@ function input(baselineId: string): Record<string, unknown> {
 }
 
 describe('MCP 原生操作记录与恢复', () => {
+  it('生成历史中的未知请求即使写入独立任务，也不能换操作标识重放', () => {
+    const f = fixture()
+    const raw = { operationId: randomUUID(), modelId: 'fixture', prompt: '原请求', mediaType: 'image', destination: { mode: 'history' } }
+    const first = f.coordinator.prepare(f.callerId, raw, f.sessionId, { ...access, allowPaid: true }, 'create_visible_generation_task')
+    const requestId = randomUUID()
+    f.coordinator.dispatched(first, requestId, f.sessionId)
+    f.coordinator.interrupted(requestId, f.sessionId)
+    expect(() => f.coordinator.prepare(f.callerId, { ...raw, operationId: randomUUID() }, f.sessionId,
+      { ...access, allowPaid: true }, 'create_visible_generation_task')).toThrow(first.operationId)
+    const independent = f.coordinator.prepare(f.callerId, { ...raw, operationId: randomUUID(), prompt: '独立的新请求' }, f.sessionId,
+      { ...access, allowPaid: true }, 'create_visible_generation_task')
+    expect(independent.state).toBe('prepared')
+  })
   it('图片能力只锁追加目标，读取同一参考节点的独立工具可以连续派发', () => {
     const f = fixture()
     const raw = { operationId: randomUUID(), projectId: 'image-project', sourceNodeId: 'image-source', capabilityId: 'image.background-removal' }

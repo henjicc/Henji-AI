@@ -126,7 +126,7 @@ export class McpOperationCoordinator {
         return previousMode !== undefined && !(mode === 'append' && previousMode === 'append'
           && unresolved.state !== 'partial' && !sameUnknownRequest)
       })
-      if (overlaps) throw new Error(`RECOVERY_REQUIRED:本次修改与尚未核对或保存的操作涉及同一目标。${unresolved.callerId === callerId
+      if (sameUnknownRequest || overlaps) throw new Error(`RECOVERY_REQUIRED:${sameUnknownRequest ? '相同请求的执行结果尚未核实，不能更换操作标识再次提交。' : '本次修改与尚未核对或保存的操作涉及同一目标。'}${unresolved.callerId === callerId
         ? `请用 get_application_operation 查询 operationId=${unresolved.operationId}；不要查询本次尚未登记的新标识。`
         : '原操作属于另一连接，请在应用中核对对应目标。'}独立追加可并行，覆盖、删除、保存失败或重复未知请求不能绕过保护。`)
     }
