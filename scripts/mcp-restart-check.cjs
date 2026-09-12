@@ -4,7 +4,7 @@
  * 这是 2.2 与 3.1 都明确留给 3.2 的取证缺口：之前只有「渲染层重载」的证据，
  * 而重载不会走主进程的启动恢复。这里真的把整个 Electron 进程关掉，再用**同一份**
  * 隔离资料目录启动第二次，核对：
- *   1. 服务默认关闭，重启不自动对外监听；
+ *   1. 重启恢复此前保存的服务开关、端口和新连接权限；
  *   2. 令牌仍然有效，连接不需要重新授权；
  *   3. 已完成操作的事实与业务存储都还在，没有被重启抹掉；
  *   4. 中断留下的未知操作仍然阻断同目标，新标识绕不过去；
@@ -83,7 +83,7 @@ async function main() {
         const state = await window.henjiNative.mcp.status()
         if (state.port !== targetPort) {
           await window.henjiNative.mcp.configure({ enabled: false, port: state.port })
-          await window.henjiNative.mcp.configure({ enabled: true, port: targetPort })
+          await window.henjiNative.mcp.configure({ enabled: true, port: targetPort, defaultAccess: { allowWrites: true, allowDestructive: false, allowPaid: false } })
         }
       }, port)
       await waitMcpReady(first.page)
@@ -130,7 +130,9 @@ async function main() {
     try {
       const status = await second.page.evaluate(() => window.henjiNative.mcp.status())
       evidence.secondRun.status = { enabled: status.enabled, connections: status.connections.length }
-      assert.equal(status.enabled, false, '应用重启后外部连接服务不得自动监听')
+      assert.equal(status.enabled, true, '应用重启后应恢复之前启用的连接服务')
+      assert.equal(status.port, port)
+      assert.deepEqual(status.defaultAccess, { allowWrites: true, allowDestructive: false, allowPaid: false })
       assert.ok(status.connections.some((connection) => connection.id === connectionId), '重启后原授权连接丢失，客户端将被迫重新授权')
       assert.equal(await readProjectName(second.page), renamed, '重启后业务存储里的写入结果丢失')
 

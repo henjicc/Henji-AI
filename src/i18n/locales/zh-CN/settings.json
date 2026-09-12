@@ -1,5 +1,5 @@
 {
-  "mcp": { "loading": "正在读取连接设置…", "enable": "允许外部智能体连接", "readOnly": "连接授权有效期为 30 天；应用重启后需要重新启用。", "port": "连接端口", "name": "连接名称", "namePlaceholder": "例如：Codex", "authorize": "创建授权", "copy": "复制连接配置", "revoke": "撤销", "allowWrites": "允许新连接修改内容", "allowDelete": "允许新连接删除内容", "writeScope": "可修改设置、模型显示、素材和画布；不包含付费生成。", "accessRead": "仅查询", "accessWrite": "可修改", "accessDelete": "可修改和删除", "allowPaid": "允许新连接付费生成", "paidScope": "允许使用已配置供应商生成图片、视频和音频，费用由供应商收取。", "accessPaid": "可付费生成" },
+  "mcp": { "loading": "正在读取连接设置…", "enable": "允许外部智能体连接", "readOnly": "连接授权有效期为 30 天；开关、端口和新连接权限会保存，重启后恢复。内置助手使用聊天框中的操作权限。", "port": "连接端口", "name": "连接名称", "namePlaceholder": "例如：Codex", "authorize": "创建授权", "copy": "复制连接配置", "revoke": "撤销", "allowWrites": "允许新连接修改内容", "allowDelete": "允许新连接删除内容", "writeScope": "可修改设置、模型显示、素材和画布；不包含付费生成。", "accessRead": "仅查询", "accessWrite": "可修改", "accessDelete": "可修改和删除", "allowPaid": "允许新连接付费生成", "paidScope": "允许使用已配置供应商生成图片、视频和音频，费用由供应商收取。", "accessPaid": "可付费生成" },
   "title": "设置",
   "language": "语言",
   "theme": "主题",

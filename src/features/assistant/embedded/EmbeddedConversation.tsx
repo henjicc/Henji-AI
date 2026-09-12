@@ -4,6 +4,7 @@ import { createEmptyPromptDocument } from '@/core/inputs/promptDocument'
 import type { EmbeddedAgentModel, EmbeddedAgentPrompt } from '@/core/assistant/embeddedAgent'
 import { getPlatform } from '@/platform/runtime'
 import { useUiStore } from '@/stores/uiStore'
+import { useAssistantUiStore } from '../store/assistantUiStore'
 import { createHostContextSnapshot } from '../hostContext/hostContext'
 import { AssistantMarkdown } from '../conversation/AssistantMarkdown'
 import { reportEmbeddedAgentError, useEmbeddedAgent } from './controller'
@@ -20,7 +21,8 @@ export function EmbeddedConversation(): JSX.Element {
   const [document, setDocument] = useState(createEmptyPromptDocument)
   const [models, setModels] = useState<EmbeddedAgentModel[]>([])
   const [selection, setSelection] = useState('')
-  const [access, setAccess] = useState<EmbeddedAgentPrompt['access']>('write')
+  const access = useAssistantUiStore(store => store.embeddedAccess)
+  const setAccess = useAssistantUiStore(store => store.setEmbeddedAccess)
   const [submitting, setSubmitting] = useState(false)
   const [attachments, setAttachments] = useState<AssistantAttachmentDraft[]>([])
   const [importing, setImporting] = useState(false)

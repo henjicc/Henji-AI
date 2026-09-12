@@ -10,7 +10,7 @@ const MAX_RESULT = EXTERNAL_LIMITS.resultBytes
 export class ApplicationToolDispatcher {
   constructor(private readonly connections: { assertActive(id: string): void; access(id: string): McpAccess },
     private readonly host: ApplicationHostBridge, private readonly operations?: McpOperationCoordinator,
-    private readonly port = 0) {}
+    private readonly port = 0, private readonly callerKind: 'external' | 'embedded' = 'external') {}
   catalog(callerId: string) {
     this.connections.assertActive(callerId)
     if (!this.host.ready) throw new Error('应用尚未就绪，请稍后重试。')
@@ -21,7 +21,7 @@ export class ApplicationToolDispatcher {
       if (name === 'describe_application_contract') {
         try {
           const { domains } = describeContractInputSchema.parse(args ?? {})
-          const data = buildApplicationContract({ domains: this.host.domains(), access: this.connections.access(callerId), catalog: this.catalog(callerId), port: this.port, requestedDomains: domains })
+          const data = buildApplicationContract({ domains: this.host.domains(), access: this.connections.access(callerId), catalog: this.catalog(callerId), port: this.port, requestedDomains: domains, callerKind: this.callerKind })
           const result = { ok: true, data }
           // 与其余工具保持同一约定：成功显式给出 isError:false，调用方不必区分 undefined 与 false。
           return { isError: false, structuredContent: result, content: [{ type: 'text', text: JSON.stringify(result) }] }

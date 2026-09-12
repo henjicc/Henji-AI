@@ -152,4 +152,10 @@ describe('契约发现的投影', () => {
     const contract = buildApplicationContract({ domains, access: PAID, catalog: catalog(PAID), port: 43821, requestedDomains: domains.map((domain) => domain.id) })
     expect(Buffer.byteLength(JSON.stringify(contract))).toBeLessThan(64 * 1024)
   })
+  it('内置助手契约指向对话权限，不让用户创建 MCP 连接；全权限可发现付费生成', () => {
+    const contract = buildApplicationContract({ domains, access: PAID, catalog: catalog(PAID), port: 0, requestedDomains: [], callerKind: 'embedded' })
+    expect(contract.contract).toMatchObject({ transport: { kind: 'embedded', requiresExternalConnection: false } })
+    expect(contract.access).toMatchObject({ paid: true, destructive: true, note: expect.stringContaining('助手操作权限') })
+    expect(contract.tools).toEqual(expect.arrayContaining([expect.objectContaining({ name: 'create_visible_generation_task' })]))
+  })
 })

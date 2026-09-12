@@ -9,6 +9,11 @@ const WRITE_TOOLS = ['change_application_entities', 'create_visible_generation_t
   'get_application_operation', 'retry_application_operation_save']
 
 function createMcpScenes({ setupSettings, canvasFixtureProjectId }) {
+  const setSwitch = async (page, index, value) => {
+    const control = page.locator('#general-mcp').getByRole('switch').nth(index)
+    if ((await control.getAttribute('aria-checked')) !== String(value)) await control.click()
+    await page.waitForFunction(({ index, value }) => document.querySelectorAll('#general-mcp [role="switch"]')[index]?.getAttribute('aria-checked') === String(value), { index, value })
+  }
   const waitReady = async (page) => {
     const deadline = Date.now() + 15000
     while (Date.now() < deadline) {
@@ -28,9 +33,15 @@ function createMcpScenes({ setupSettings, canvasFixtureProjectId }) {
       await setupSettings(page)
       await page.getByRole('button', { name: '外部智能体连接', exact: true }).click()
       const initial = await page.evaluate(() => window.henjiNative.mcp.status())
-      assert.equal(initial.enabled, false)
+      assert.deepEqual(initial.defaultAccess, { allowWrites: true, allowDestructive: true, allowPaid: true })
       const section = page.locator('#general-mcp')
-      await section.getByRole('switch').first().click()
+      if (!initial.enabled) await section.getByRole('switch').first().click()
+      await setSwitch(page, 1, false)
+      await page.keyboard.press('Escape')
+      await page.getByRole('dialog', { name: /设置|Settings/ }).waitFor({ state: 'hidden' })
+      await setupSettings(page)
+      await page.getByRole('button', { name: '外部智能体连接', exact: true }).click()
+      assert.equal(await section.getByRole('switch').nth(1).isChecked(), false)
       await section.getByPlaceholder('例如：Codex').fill('协议验收客户端')
       await section.getByRole('button', { name: '创建授权' }).click()
       await section.getByRole('button', { name: '复制连接配置' }).waitFor()
@@ -92,9 +103,9 @@ function createMcpScenes({ setupSettings, canvasFixtureProjectId }) {
       await setupSettings(page)
       await page.getByRole('button', { name: '外部智能体连接', exact: true }).click()
       const section = page.locator('#general-mcp')
-      await section.getByRole('switch').nth(0).click()
-      await section.getByRole('switch').nth(1).click()
-      await section.getByRole('switch').nth(2).click()
+      await setSwitch(page, 0, true)
+      await setSwitch(page, 1, true)
+      await setSwitch(page, 2, true)
       await section.getByPlaceholder('例如：Codex').fill('受控写入验收')
       await section.getByRole('button', { name: '创建授权' }).click()
       await waitReady(page)
@@ -183,8 +194,10 @@ function createMcpScenes({ setupSettings, canvasFixtureProjectId }) {
       await page.getByRole('button', { name: '外部智能体连接', exact: true }).click()
       const section = page.locator('#general-mcp')
       // 只开「修改」，不开删除、不开付费生成：本场景禁止任何供应商请求。
-      await section.getByRole('switch').nth(0).click()
-      await section.getByRole('switch').nth(1).click()
+      await setSwitch(page, 0, true)
+      await setSwitch(page, 1, true)
+      await setSwitch(page, 2, false)
+      await setSwitch(page, 3, false)
       await section.getByPlaceholder('例如：Codex').fill('后台跨域验收')
       await section.getByRole('button', { name: '创建授权' }).click()
       await waitReady(page)

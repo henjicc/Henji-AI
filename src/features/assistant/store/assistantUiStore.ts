@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 
 import type { AgentApprovalMode } from '@/core/assistant/runtimeContracts'
+import type { EmbeddedAgentPrompt } from '@/core/assistant/embeddedAgent'
 
 export type AssistantDockMode = 'left' | 'right' | 'floating'
 
@@ -25,6 +26,8 @@ interface AssistantUiState {
   currentGoal: string
   pendingGoal: string | null
   approvalMode: AgentApprovalMode
+  embeddedAccess: EmbeddedAgentPrompt['access']
+  setEmbeddedAccess: (access: EmbeddedAgentPrompt['access']) => void
   setOpen: (open: boolean) => void
   toggleOpen: () => void
   setMode: (mode: AssistantDockMode) => void
@@ -51,6 +54,8 @@ export const useAssistantUiStore = create<AssistantUiState>()(
       currentGoal: '',
       pendingGoal: null,
       approvalMode: 'assistant_decides',
+      embeddedAccess: 'full',
+      setEmbeddedAccess: (embeddedAccess) => set({ embeddedAccess }),
       setOpen: (open) => set({ open }),
       toggleOpen: () => set((state) => ({ open: !state.open })),
       setMode: (mode) => set({ mode }),
@@ -84,6 +89,7 @@ export const useAssistantUiStore = create<AssistantUiState>()(
         activeRunId: state.activeRunId,
         currentGoal: state.currentGoal,
         approvalMode: state.approvalMode,
+        embeddedAccess: state.embeddedAccess,
       }),
     }
   )

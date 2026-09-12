@@ -176,6 +176,7 @@ const WORKFLOWS = [
 ]
 
 export function buildApplicationContract(input: {
+  callerKind?: 'external' | 'embedded'
   domains: readonly LocalDomainSurface[]
   access: McpAccess
   catalog: McpToolCatalog
@@ -190,7 +191,7 @@ export function buildApplicationContract(input: {
       server: EXTERNAL_SERVER_INFO,
       protocolVersions: [...EXTERNAL_PROTOCOL_VERSIONS],
       sdkVersion: EXTERNAL_SDK_VERSION,
-      transport: { kind: 'streamable-http', url: `http://127.0.0.1:${input.port}/mcp`, authorization: 'Bearer <连接令牌>', json: true, serverSentEvents: false, listChangedNotifications: false },
+      transport: input.callerKind === 'embedded' ? { kind: 'embedded', authorization: '助手对话中的操作权限', requiresExternalConnection: false } : { kind: 'streamable-http', url: `http://127.0.0.1:${input.port}/mcp`, authorization: 'Bearer <连接令牌>', json: true, serverSentEvents: false, listChangedNotifications: false },
       limits: EXTERNAL_LIMITS,
       deprecationPolicy: EXTERNAL_DEPRECATION_POLICY,
     },
@@ -198,7 +199,9 @@ export function buildApplicationContract(input: {
       read: true, write: input.access.allowWrites, destructive: input.access.allowDestructive, paid: input.access.allowPaid,
       hiddenTools: input.catalog.hidden,
       excludedTools: EXCLUDED_TOOLS.map((excluded) => ({ ...excluded })),
-      note: '工具不在 tools/list 里 = 本连接缺对应授权档，应用本身仍有该能力；工具在清单里而调用返回 PERMISSION_DENIED = 授权够了但这次目标不允许。删除授权不影响工具是否出现，只在调用含 remove_items 或破坏性能力时校验。授权只能在痕迹 AI 的设置里调整，调整范围需要新建连接。',
+      note: input.callerKind === 'embedded'
+        ? '你是内置助手，操作权限来自当前对话输入框的「助手操作权限」。权限不足时请用户在此选择「允许修改、删除和付费生成」，下一轮生效。不需要开启 MCP 服务或新建外部连接，外部智能体连接设置不会改变你的权限。仅执行用户请求范围内的操作。'
+        : '工具不在 tools/list 里 = 本连接缺对应授权档，应用本身仍有该能力；工具在清单里而调用返回 PERMISSION_DENIED = 授权够了但这次目标不允许。删除授权不影响工具是否出现，只在调用含 remove_items 或破坏性能力时校验。授权只能在痕迹 AI 的设置里调整，调整范围需要新建连接。',
     },
     domains: input.domains.map((domain) => ({
       id: domain.id, readable: domain.readable, writable: domain.writable,

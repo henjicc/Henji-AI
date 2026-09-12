@@ -81,10 +81,14 @@ export const EXTERNAL_LIMITS = {
 export const EXTERNAL_DEPRECATION_POLICY = '同一 externalContractVersion 主版本内不删除工具名、不新增必填参数、不改变已公布错误码含义；新增字段一律可选。破坏性变更提升主版本，并在至少一个次版本内保留旧工具名并在 description 标注弃用。'
 
 export interface McpConnectionInfo { id: string; name: string; expiresAt: number; allowWrites?: boolean; allowDestructive?: boolean; allowPaid?: boolean }
-export interface McpStatus { enabled: boolean; ready: boolean; port: number; connections: McpConnectionInfo[] }
+export const mcpDefaultAccessSchema = z.object({ allowWrites: z.boolean(), allowDestructive: z.boolean(), allowPaid: z.boolean() }).strict()
+export const mcpPreferencesSchema = z.object({ enabled: z.boolean(), port: z.number().int().min(1024).max(65535), defaultAccess: mcpDefaultAccessSchema }).strict()
+export type McpPreferences = z.infer<typeof mcpPreferencesSchema>
+export const DEFAULT_MCP_PREFERENCES: McpPreferences = { enabled: true, port: 43821, defaultAccess: { allowWrites: true, allowDestructive: true, allowPaid: true } }
+export interface McpStatus { enabled: boolean; ready: boolean; port: number; connections: McpConnectionInfo[]; defaultAccess?: McpPreferences['defaultAccess'] }
 export interface McpPlatform {
   status(): Promise<McpStatus>
-  configure(input: { enabled: boolean; port: number }): Promise<McpStatus>
+  configure(input: { enabled: boolean; port: number; defaultAccess?: McpPreferences['defaultAccess'] }): Promise<McpStatus>
   authorize(input: { name: string; allowWrites?: boolean; allowDestructive?: boolean; allowPaid?: boolean }): Promise<McpConnectionInfo>
   revoke(input: { id: string }): Promise<void>
   connectionConfig(input: { id: string }): Promise<string>
