@@ -427,7 +427,7 @@ export const applicationReflectionHandlers = {
   async changeEntities(input: ChangeInput, context: CapabilityExecutionContext) {
     const engine = getApplicationControlExecutionEngine()
     const appContext = executionContext(context)
-    const expected = context.expectedRevisions ?? {}
+    let expected = context.expectedRevisions ?? {}
     const sessionKey = context.requestId ?? 'renderer'
     const changes = context.callerGrant ? input.changes : input.changes.map((change) => normalizeChangeRefs(sessionKey, change))
     changes.forEach((change) => {
@@ -438,6 +438,12 @@ export const applicationReflectionHandlers = {
       }
     })
     const baselines = await captureMutationBaselines(changes, appContext).catch((error) => { throw new ApplicationPreflightFailure(error) })
+    if (context.callerGrant && context.expectedRevisions === undefined) {
+      if (changes.some((change) => change.kind === 'remove_items')) throw new ApplicationPreflightFailure(new Error('BASELINE_REQUIRED:删除前请读取目标并提供 baselineIds。'))
+      const current = await refreshedRevisionsIfTargetsUnchanged(baselines, changes, appContext)
+      if (!current) throw new ApplicationPreflightFailure(new Error('CONFLICT:目标正在变化，请稍后重试。'))
+      expected = current
+    }
     const execute = async (revisions: Record<string, number>, attempt: number) => {
       const plan = await engine.plan({
         summary: input.summary,

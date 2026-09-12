@@ -29,6 +29,13 @@ const write = (value: string) => ({ id: 'change_application_entities', version: 
   } })
 
 describe('独立应用调用入口', () => {
+  it('普通修改省略基线时自动读取当前状态，仍经正式事务写入', async () => {
+    const session = createApplicationCapabilitySession(grant(['application:read', 'application:write', 'settings:read', 'settings:write'], true))
+    const target = originalTone === 'warm' ? 'cool' : 'warm'
+    const result = await session.execute({ ...write(target), expectedRevisions: undefined }, request('automatic-tone'))
+    expect(result.ok, JSON.stringify(result)).toBe(true)
+    expect(useSettingsStore.getState().themeTonePreset).toBe(target)
+  })
   it('不需要助手运行或脚本即可通过正式注册表读取', async () => {
     const result = await createApplicationCapabilitySession(grant()).execute(read, request('read'))
     expect(result.ok).toBe(true)

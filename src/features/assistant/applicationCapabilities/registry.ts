@@ -106,6 +106,7 @@ class RendererApplicationCapabilityRegistry implements ApplicationCapabilityHand
         if (!targets?.length) throw new Error('INVALID_INPUT:此操作缺少正式目标声明，无法核对读取基线。')
         const access = applicationCallerAccess(context.callerGrant, context.requestId ?? 'renderer', context.signal)
         const expected = invocation.expectedRevisions ?? {}
+        const automatic = invocation.expectedRevisions === undefined && !definition.destructive
         const observed = new Set<string>()
         for (const ref of targets) {
           // 不可变任务引用不一定是反射实体。无 revision scope 的操作由领域处理器
@@ -114,14 +115,16 @@ class RendererApplicationCapabilityRegistry implements ApplicationCapabilityHand
           const snapshot = await getApplicationReflectionRegistry().readEntity(ref, [], access)
           for (const [scope, current] of Object.entries(snapshot.revisions)) {
             observed.add(scope)
-            if (expected[scope] !== current) {
+            if (automatic) expected[scope] = current
+            else if (expected[scope] !== current) {
               throw new Error(`CONFLICT:${ref.kind} 的 ${scope} 数据已变化或缺少基线，请重新读取原目标后再试。`)
             }
           }
         }
         if (Object.keys(expected).some((scope) => !observed.has(scope))) {
-          throw new Error('CONFLICT:基线包含无关作用域，请只使用原目标的最新读取结果。')
+          throw new Error(`CONFLICT:基线包含无关作用域，本操作只需要 ${JSON.stringify([...observed])}。普通操作可省略 baselineIds 由应用自动核对；严格写入请只提供原目标的读取。`)
         }
+        invocation.expectedRevisions = expected
         if (context.signal.aborted) throw new Error('ABORTED')
       } catch (error) { throw new ApplicationPreflightFailure(error) }
     } else if (!(context.callerGrant && invocation.id === 'change_application_entities')) {
@@ -142,7 +145,7 @@ class RendererApplicationCapabilityRegistry implements ApplicationCapabilityHand
     }
     const result = await handler(input, {
       ...context,
-      expectedRevisions: invocation.expectedRevisions ?? {},
+      expectedRevisions: invocation.expectedRevisions,
     })
     const snapshot = createHostContextSnapshot()
     const enriched = {

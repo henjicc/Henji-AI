@@ -4,7 +4,10 @@ import { buildApplicationContract, buildMcpToolCatalog, describeContractInputSch
 import { readMcpMediaResource, McpMediaResourceError } from './mediaResources'
 import type { ApplicationHostBridge } from './applicationHostBridge'
 import type { McpOperationCoordinator } from './operationCoordinator'
+import { reserveGenerationBudget } from './generationBudget'
+import { createMainLogger } from '../logging'
 const MAX_RESULT = EXTERNAL_LIMITS.resultBytes
+const logger = createMainLogger('main.mcp')
 
 /** 协议与内置 Agent 共用的受控执行入口；调用者身份仅由宿主提供。 */
 export class ApplicationToolDispatcher {
@@ -56,7 +59,23 @@ export class ApplicationToolDispatcher {
             : this.operations.prepare(callerId, args ?? {}, this.host.sessionId, access, MCP_WRITE_CAPABILITY_IDS.find((id) => id === name))
           if (operation.state === 'prepared') {
             this.connections.assertActive(callerId)
-            try { await this.host.execute(callerId, operation.capabilityId ?? 'change_application_entities', operation.input, signal, { operation, ...access }) } catch { /* 持久操作状态决定结果，等待失败不能覆盖事实。 */ }
+            if (operation.capabilityId === 'create_visible_generation_task') {
+              try {
+                logger.info('检查生成参数与费用', { event: 'mcp.generation_preflight.start', requestId: operation.operationId })
+                const preparation = await this.host.execute(callerId, 'prepare_generation_task', operation.input, signal, access)
+                this.connections.assertActive(callerId)
+                if (signal.aborted) throw new Error('操作已取消。')
+                reserveGenerationBudget(this.operations.store, operation, preparation)
+                logger.info('生成参数与费用检查通过', { event: 'mcp.generation_preflight.completed', requestId: operation.operationId, context: { estimatedCny: this.operations.store.get(operation.operationId, callerId)?.generationEstimate?.cny } })
+              } catch (error) {
+                const message = error instanceof Error ? error.message : '生成准备失败。'
+                logger.warn('生成提交前检查未通过', { event: 'mcp.generation_preflight.failed', requestId: operation.operationId, error })
+                if (this.operations.store.get(operation.operationId, callerId)?.state === 'prepared') this.operations.store.save({ ...operation, state: 'not_executed', result: { ok: false, error: { code: 'GENERATION_PREFLIGHT_REJECTED', message, details: { execution: { notExecuted: true } } } } })
+              }
+            }
+            if (this.operations.store.get(operation.operationId, callerId)?.state === 'prepared') {
+              try { await this.host.execute(callerId, operation.capabilityId ?? 'change_application_entities', operation.input, signal, { operation, ...access }) } catch { /* 持久操作状态决定结果，等待失败不能覆盖事实。 */ }
+            }
           }
           this.connections.assertActive(callerId)
           const result = this.operations.result(this.operations.store.get(operation.operationId, callerId)!)

@@ -5,6 +5,7 @@ import {
 } from '@/components/MediaGenerator/promptState'
 import { toLegacyPromptString } from '@/core/inputs/promptDocument'
 import { generationApplicationService } from '@/features/generation/application/generationApplicationService'
+import { resolveGenerationMediaReferences } from '@/features/generation/application/generationMediaReferences'
 import { useGenerationDraftStore } from '@/features/generation/store/generationDraftStore'
 import { switchWorkspace } from '@/stores/navigationStore'
 import { isBuiltinModelType } from '@/core/modelSortOrder'
@@ -148,17 +149,22 @@ export function registerGenerationCapabilityHandlers(
     }
   })
 
-  registrar.registerHandler('prepare_generation_task', (input) => {
+  registrar.registerHandler('prepare_generation_task', async (input) => {
     const parsed = parseCapabilityInput<GenerationInput>('prepare_generation_task', input)
+    const resolved = resolveGenerationInput(parsed)
+    resolved.options = await resolveGenerationMediaReferences(resolved.options ?? {})
     return {
-      preparation: generationApplicationService.prepare(resolveGenerationInput(parsed)),
+      preparation: generationApplicationService.prepare(resolved),
     }
   })
 
   registrar.registerHandler('create_visible_generation_task', async (input, context) => {
     throwIfCapabilityAborted(context.signal)
     const parsed = parseCapabilityInput<GenerationInput>('create_visible_generation_task', input)
-    return await generationApplicationService.submit(resolveGenerationInput(parsed), context.callerGrant && context.requestId ? applicationGenerationTaskId(context.requestId) : context.requestId)
+    const resolved = resolveGenerationInput(parsed)
+    resolved.options = await resolveGenerationMediaReferences(resolved.options ?? {})
+    throwIfCapabilityAborted(context.signal)
+    return await generationApplicationService.submit(resolved, context.callerGrant && context.requestId ? applicationGenerationTaskId(context.requestId) : context.requestId)
   })
 
   registrar.registerHandler('get_generation_task', (input) => {

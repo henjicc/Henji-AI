@@ -8,6 +8,8 @@ import { McpOperationStore } from './operationStore'
 import { McpOperationCoordinator } from './operationCoordinator'
 import { ApplicationHostBridge } from './applicationHostBridge'
 import type { LocalHostRequest } from '../../../../src/core/application-control/localHostContracts'
+import { reserveGenerationBudget } from './generationBudget'
+import { ApplicationToolDispatcher } from './applicationToolDispatcher'
 
 if (!process.versions.electron) throw new Error('本测试必须由正式 Electron SQLite 原生运行器执行，不能跳过原生边界。')
 
@@ -29,6 +31,69 @@ function input(baselineId: string): Record<string, unknown> {
 }
 
 describe('MCP 原生操作记录与恢复', () => {
+  it('完整工具派发自动准备生成，保存提交事实并去重，高费用不会进入写宿主', async () => {
+    const f = fixture()
+    const host = new ApplicationHostBridge(() => undefined, f.coordinator)
+    const seen: string[] = []
+    let cny = 1
+    host.register({ sessionId: f.sessionId, generation: 1, ready: true, tools: [] }, { send(channel, value) {
+      if (channel !== 'mcp:host:request') return
+      const request = value as LocalHostRequest
+      seen.push(request.capabilityId)
+      const result = request.capabilityId === 'prepare_generation_task'
+        ? { ok: true, data: { preparation: { priceEstimate: { comparableCnyAmount: cny } } } }
+        : { ok: true, data: { taskId: 'created-task', status: 'submitted', verification: { verified: true } } }
+      host.complete({ sessionId: f.sessionId, requestId: request.requestId, result })
+    } })
+    const dispatcher = new ApplicationToolDispatcher({ assertActive() {}, access: () => ({ allowWrites: true, allowDestructive: false, allowPaid: true }) }, host, f.coordinator)
+    const args = { operationId: randomUUID(), modelId: 'fixture', prompt: '普通生成', mediaType: 'image' }
+    const result = await dispatcher.call(f.callerId, 'create_visible_generation_task', args, new AbortController().signal)
+    expect(result.structuredContent).toMatchObject({ ok: true, executionState: 'completed' })
+    expect(seen).toEqual(['prepare_generation_task', 'create_visible_generation_task'])
+    expect(await dispatcher.call(f.callerId, 'create_visible_generation_task', args, new AbortController().signal)).toEqual(result)
+    expect(seen).toHaveLength(2)
+    cny = 100
+    const refused = await dispatcher.call(f.callerId, 'create_visible_generation_task', { ...args, operationId: randomUUID() }, new AbortController().signal)
+    expect(refused.structuredContent).toMatchObject({ ok: false, executionState: 'not_executed' })
+    expect(seen).toEqual(['prepare_generation_task', 'create_visible_generation_task', 'prepare_generation_task'])
+  })
+  it('普通修改与生成不要求基线，删除仍绑定读取，未知操作仍禁止重放', () => {
+    const f = fixture()
+    const args = input(f.baseline); delete args.baselineIds
+    const write = f.coordinator.prepare(f.callerId, args, f.sessionId, access)
+    expect(write.expectedRevisions).toBeUndefined()
+    f.coordinator.dispatched(write, randomUUID(), f.sessionId)
+    expect(() => f.coordinator.prepare(f.callerId, { ...args, operationId: randomUUID() }, f.sessionId, access)).toThrow('RECOVERY_REQUIRED')
+    expect(() => f.coordinator.prepare(f.callerId, { operationId: randomUUID(), changes: [{ kind: 'remove_items', entityType: 'canvas.project', parent: { kind: 'canvas.project', id: 'parent' }, targets: [{ kind: 'canvas.project', id: 'target' }] }] }, f.sessionId, { allowWrites: true, allowDestructive: true })).toThrow('BASELINE_REQUIRED')
+    const generated = f.coordinator.prepare(f.callerId, { operationId: randomUUID(), modelId: 'fixture', prompt: '生成图片', mediaType: 'image' }, f.sessionId, { ...access, allowPaid: true }, 'create_visible_generation_task')
+    expect(generated.expectedRevisions).toBeUndefined()
+  })
+
+  it('五次低价生成放行，高费用与累计费用在提交前拦截，重开账本仍保留预算', () => {
+    const f = fixture()
+    const reserve = (amount: unknown) => {
+      const record = f.coordinator.prepare(f.callerId, { operationId: randomUUID(), modelId: 'fixture', prompt: '预算测试', mediaType: 'image' }, f.sessionId, { ...access, allowPaid: true }, 'create_visible_generation_task')
+      reserveGenerationBudget(f.store, record, { ok: true, data: { preparation: { priceEstimate: { comparableCnyAmount: amount } } } })
+      return record
+    }
+    for (let i = 0; i < 5; i++) reserve(1)
+    expect(new McpOperationStore(f.db).generationSpendSince(Date.now() - 600_000)).toBe(5)
+    expect(() => reserve(51)).toThrow('超出自动生成额度')
+    expect(() => reserve(46)).toThrow('超出自动生成额度')
+    expect(() => reserve(null)).toThrow('费用暂不可估算')
+    const record = reserve(2)
+    reserveGenerationBudget(f.store, record, { ok: true, data: { preparation: { priceEstimate: { comparableCnyAmount: 2 } } } })
+    expect(f.store.generationSpendSince(Date.now() - 600_000)).toBe(7)
+    f.store.save({ ...record, state: 'not_executed' })
+    expect(f.store.generationSpendSince(Date.now() - 600_000)).toBe(5)
+  })
+  it('尚未提交的过期预留必须重新核对当下费用，不能复用旧额度', () => {
+    const f = fixture()
+    const record = f.store.prepare({ operationId: randomUUID(), callerId: f.callerId, inputDigest: 'expired', input: {}, state: 'prepared', generationEstimate: { cny: 1, reservedAt: Date.now() - 700_000 } })
+    expect(() => reserveGenerationBudget(f.store, record, { ok: true, data: { preparation: { priceEstimate: { comparableCnyAmount: 51 } } } })).toThrow('超出自动生成额度')
+    reserveGenerationBudget(f.store, record, { ok: true, data: { preparation: { priceEstimate: { comparableCnyAmount: 2 } } } })
+    expect(f.store.generationSpendSince(Date.now() - 600_000)).toBe(2)
+  })
   it('无版本的任务读取仍绑定原目标与宿主会话，不能以其他任务或旧会话取消', () => {
     const f = fixture()
     const taskRef = { kind: 'camera_stage.render_task', id: 'immutable-task' }

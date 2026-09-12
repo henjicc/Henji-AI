@@ -8,7 +8,8 @@ export interface OperationRecord {
   callerId: string
   inputDigest: string
   input: Record<string, unknown>
-  expectedRevisions: Record<string, number>
+  expectedRevisions?: Record<string, number>
+  generationEstimate?: { cny: number; reservedAt: number }
   state: OperationState
   verificationState?: 'verified' | 'unresolved'
   recoveryOf?: string
@@ -61,6 +62,14 @@ export class McpOperationStore {
   }
   unresolved(): OperationRecord[] {
     return (this.db.prepare("SELECT record_json FROM application_operations WHERE state IN ('executing','unknown','partial')").all() as Array<{ record_json: string }>).map((row) => JSON.parse(row.record_json) as OperationRecord)
+  }
+  /** 持久预算按所有 Agent 共用的窗口统计，换会话或重启不会重置。 */
+  generationSpendSince(since: number): number {
+    const rows = this.db.prepare("SELECT record_json FROM application_operations WHERE state != 'not_executed' AND updated_at >= ?").all(since) as Array<{ record_json: string }>
+    return rows.reduce((sum, row) => {
+      const estimate = (JSON.parse(row.record_json) as OperationRecord).generationEstimate
+      return sum + (estimate && estimate.reservedAt >= since ? estimate.cny : 0)
+    }, 0)
   }
   prepare(record: OperationRecord): OperationRecord {
     return this.db.transaction(() => {

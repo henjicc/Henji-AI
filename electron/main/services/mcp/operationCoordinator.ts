@@ -4,7 +4,7 @@ import type { LocalHostReply } from '../../../../src/core/application-control/lo
 import { McpOperationStore, operationDigest, type OperationRecord } from './operationStore'
 
 const refSchema = z.object({ kind: z.string(), id: z.string() }).passthrough()
-const envelopeSchema = z.object({ operationId: z.string().uuid(), baselineIds: z.array(z.string().uuid()).min(1).max(32) })
+const envelopeSchema = z.object({ operationId: z.string().uuid(), baselineIds: z.array(z.string().uuid()).max(32).default([]) })
 const object = (value: unknown): Record<string, unknown> => value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {}
 
 function resultRefs(value: unknown): Array<{ kind: string; id: string }> {
@@ -53,12 +53,14 @@ export class McpOperationCoordinator {
     }
     if (!access.allowWrites) throw new Error('PERMISSION_DENIED:请在应用内授权修改。')
     const refs: Array<{ kind: string; id: string }> = []
+    let destructive = false
     let writeRefs: Array<{ kind: string; id: string }> | undefined
     if (capabilityId !== 'change_application_entities') {
       const definition = BUILTIN_APPLICATION_CAPABILITY_REGISTRY.get(capabilityId ?? '')
       if (!definition?.resolveOperationTargets || definition.readOnly) throw new Error('PERMISSION_DENIED:此能力尚未登记持久目标绑定。')
       if (capabilityId === 'create_visible_generation_task' && !access.allowPaid) throw new Error('PERMISSION_DENIED:此连接没有付费生成授权。')
       if (definition.destructive && !access.allowDestructive) throw new Error('PERMISSION_DENIED:此连接没有删除授权。')
+      destructive = definition.destructive
       const parsed = definition.inputSchema.parse(input)
       refs.push(...definition.resolveOperationTargets(parsed))
       writeRefs = definition.resolveOperationWriteTargets?.(parsed, operationId)
@@ -66,6 +68,7 @@ export class McpOperationCoordinator {
     const changes = z.array(z.object({ kind: z.string(), entityType: z.string() }).passthrough()).min(1).max(32).parse(input.changes)
     const writable = this.writableEntityTypes()
     for (const change of changes) {
+      destructive ||= change.kind === 'remove_items'
       if (!writable.has(change.entityType)) throw new Error(`PERMISSION_DENIED:实体 ${change.entityType} 不属于公开业务写入范围；用 describe_application_contract 查看可写实体，用 describe_application_entities 查看只读原因。`)
       if (change.kind === 'remove_items' && !access.allowDestructive) throw new Error('PERMISSION_DENIED:此连接没有删除授权。')
       if (change.kind === 'set_properties' || change.kind === 'mutate_properties') refs.push(refSchema.parse(change.target))
@@ -75,6 +78,7 @@ export class McpOperationCoordinator {
       }
     }
     }
+    if (destructive && !baselineIds.length) throw new Error(`BASELINE_REQUIRED:删除操作需要先核对目标。请用 read_application_entity 读取 ${JSON.stringify(refs)}，再提交返回的 baselineIds。`)
     const baselines = baselineIds.map((id) => this.store.readBaseline(id, callerId))
     const keys = new Set((writeRefs ?? refs).map((ref) => `${ref.kind}:${ref.id}`))
     for (const unresolved of this.store.unresolved()) {
@@ -89,13 +93,14 @@ export class McpOperationCoordinator {
       if (overlaps) throw new Error('RECOVERY_REQUIRED:原目标存在尚未核对或保存的操作，请先查询原操作并恢复；新标识不能绕过保护。')
     }
     if (baselines.some((baseline) => baseline.sessionId !== sessionId)) throw new Error('BASELINE_EXPIRED:应用宿主已重载，请重新读取目标。')
-    if (refs.some((ref) => !baselines.some((baseline) => baseline.refs.some((item) => item.kind === ref.kind && item.id === ref.id)))) throw new Error('BASELINE_TARGET_MISMATCH:必须先读取每个原目标及集合父对象，其他对象的读取不能替代。')
+    const missing = refs.filter((ref) => !baselines.some((baseline) => baseline.refs.some((item) => item.kind === ref.kind && item.id === ref.id)))
+    if (baselines.length && missing.length) throw new Error(`BASELINE_TARGET_MISMATCH:缺少 ${JSON.stringify(missing)} 的读取。普通操作可省略 baselineIds 由应用自动核对；删除操作请先用 read_application_entity 读取以上目标。`)
     const expectedRevisions: Record<string, number> = {}
     for (const baseline of baselines) for (const [scope, revision] of Object.entries(baseline.revisions)) {
-      if (scope in expectedRevisions && expectedRevisions[scope] !== revision) throw new Error('BASELINE_CONFLICT:读取基线不一致，请重新读取相关目标。')
+      if (scope in expectedRevisions && expectedRevisions[scope] !== revision) throw new Error(`BASELINE_CONFLICT:${scope} 的读取基线不一致。普通操作可省略 baselineIds 由应用自动核对；严格写入请重新读取相关目标。`)
       expectedRevisions[scope] = revision
     }
-    return this.store.prepare({ operationId, callerId, inputDigest: digest, input, expectedRevisions, state: 'prepared', capabilityId, targetRefs: writeRefs ?? refs })
+    return this.store.prepare({ operationId, callerId, inputDigest: digest, input, expectedRevisions: baselines.length ? expectedRevisions : undefined, state: 'prepared', capabilityId, targetRefs: writeRefs ?? refs })
   }
   dispatched(record: OperationRecord, requestId: string, sessionId: string): void { this.store.claim(record, requestId, sessionId) }
   interrupted(requestId: string, sessionId: string): void {

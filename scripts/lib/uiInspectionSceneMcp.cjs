@@ -123,7 +123,7 @@ function createMcpScenes({ setupSettings, canvasFixtureProjectId }) {
       }
       const read = (ref, propertyIds) => call('read_application_entity', { ref, propertyIds })
       const change = async (changes, reads) => {
-        const args = { operationId: require('node:crypto').randomUUID(), baselineIds: reads.map((item) => item.baselineId), summary: '隔离验收修改', changes }
+        const args = { operationId: require('node:crypto').randomUUID(), ...(changes.some(change => change.kind === 'remove_items') ? { baselineIds: reads.map((item) => item.baselineId) } : {}), summary: '隔离验收修改', changes }
         const result = await call('change_application_entities', args)
         assert.equal(result.executionState, 'completed', JSON.stringify(result))
         assert.equal(result.verificationState, 'verified', JSON.stringify(result))
@@ -173,6 +173,9 @@ function createMcpScenes({ setupSettings, canvasFixtureProjectId }) {
         assert.equal(stored.project.name, 'MCP已保存画布')
         const freshCatalog = await call('list_application_entities', { entityType: 'asset.catalog', limit: 1 })
         const freshLibrary = await read(libraryRef, ['asset.library.name'])
+        const unboundDelete = await client.callTool({ name: 'change_application_entities', arguments: { operationId: require('node:crypto').randomUUID(), summary: '删除必须核对', changes: [{ kind: 'remove_items', entityType: 'asset.library', parent: catalogRef, targets: [libraryRef] }] } })
+        assert.equal(unboundDelete.isError, true)
+        assert.equal((await page.evaluate(() => window.henjiNative.assetLibrary.listLibraries())).some(item => item.id === libraryRef.id), true)
         await change([{ kind: 'remove_items', entityType: 'asset.library', parent: catalogRef, targets: [libraryRef] }], [freshCatalog, freshLibrary])
         const remaining = await page.evaluate(() => window.henjiNative.assetLibrary.listLibraries())
         assert.equal(remaining.some((item) => String(item.id) === String(libraryRef.id)), false)

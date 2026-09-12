@@ -191,7 +191,8 @@ const createVisibleGenerationTask = defineApplicationCapability({
   title: '创建可见生成任务',
   description: '在生成工作区创建用户可见的图片、视频或音频生成任务；省略的字段用当前生成草稿'
     + '（generation.draft）补全，让助手能像人一样先逐步搭建输入（写提示词、选模型、上传媒体）'
-    + '再提交，而不必每次一次性传全部参数。',
+    + '再提交，而不必每次一次性传全部参数。通过应用工具提交时省略 baselineIds，宿主自动准备并核对费用；'
+    + '参考素材可放入 params.uploadedImages / uploadedVideos / uploadedAudios，元素使用 {kind:"asset",id:"素材 ID"}。',
   domain: 'generation',
   aliases: ['生成图片', '生成视频', '生成音频', 'create generation'],
   readOnly: false,

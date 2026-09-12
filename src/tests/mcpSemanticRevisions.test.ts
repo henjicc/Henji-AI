@@ -7,6 +7,8 @@ import { registerVisibleGenerationTaskHandler } from '@/workspaces/GenerationWor
 import { upsertProjectRecord } from '@/commands/projectState'
 import { readPersistedCanvasProjectSnapshot } from '@/features/canvas/application/canvasQueryService'
 import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from './harnessNativeStorage'
+import { registry } from '@/core/ModelRegistry'
+import { databaseService } from '@/services/database/DatabaseService'
 
 const task: GenerationTaskStatusSnapshot = { taskId: 'mcp-revision-task', status: 'generating', progress: 10,
   modelId: 'fixture', mediaType: 'image', resultAvailable: false, errorCode: null, errorMessage: null }
@@ -18,7 +20,7 @@ beforeEach(() => {
   dispose = registerVisibleGenerationTaskHandler({ create: async () => null, get: () => task,
     getResult: () => ({ taskId: task.taskId, mediaType: 'image', url: 'C:/fixture/result.png', prompt: '夹具' }), list: () => [task], cancel })
 })
-afterEach(() => { dispose(); replaceGenerationTaskStatusSnapshots([]); uninstallHarnessNativeStorage(); vi.clearAllMocks() })
+afterEach(() => { dispose(); replaceGenerationTaskStatusSnapshots([]); uninstallHarnessNativeStorage(); vi.restoreAllMocks(); vi.clearAllMocks() })
 const request = () => ({ requestId: crypto.randomUUID(), signal: new AbortController().signal })
 function client() {
   return createApplicationCapabilitySession(createApplicationCallerGrant({ callerId: 'mcp-revisions',
@@ -41,6 +43,30 @@ it('外部语义操作使用正式实体读取的版本，不与助手界面计�
   expect(result.ok, JSON.stringify(result)).toBe(true)
   expect(cancel).toHaveBeenCalledTimes(1)
   expect(cancel).toHaveBeenCalledWith(task.taskId, '验收取消')
+})
+
+it('不可撤销的任务取消仍需核对原任务，不能省略基线', async () => {
+  const result = await client().execute(invocation(undefined), request())
+  expect(result.ok).toBe(false)
+  expect(cancel).not.toHaveBeenCalled()
+})
+
+it('无需读取模型基线即可通过正式注册表、参数准备与领域提交创建任务', async () => {
+  registry.register({ meta: { id: 'mcp-submit-fixture', canonicalModelId: 'nano-banana', provider: 'fixture', type: 'image', name: { zh: '提交验收', en: 'Submit fixture' } },
+    params: [], endpoints: '/fixture', inputLimits: { images: { max: 1 }, videos: { max: 0 }, audios: { max: 0 } },
+    pricing: { currency: '$', fixed: 0.03 }, request: { builder: (params) => params } })
+  const create = vi.fn(async () => 'submitted-fixture')
+  dispose()
+  dispose = registerVisibleGenerationTaskHandler({ create, get: () => null, getResult: () => null, list: () => [], cancel })
+  vi.spyOn(databaseService, 'getHistoryById').mockResolvedValue(null)
+  const session = createApplicationCapabilitySession(createApplicationCallerGrant({ callerId: 'submit', allowWrites: true, allowDestructive: false,
+    capabilityIds: listApplicationCapabilities().map((entry) => entry.id), permissions: ['application:read', 'models:read', 'generation:read', 'generation:create'] }))
+  const result = await session.execute({ id: 'create_visible_generation_task', version: 1,
+    input: { modelId: 'mcp-submit-fixture', prompt: '生成快递员', mediaType: 'image', params: {} } }, request())
+  expect(result.ok, JSON.stringify(result)).toBe(true)
+  expect(create).toHaveBeenCalledTimes(1)
+  expect(create).toHaveBeenCalledWith(expect.objectContaining({ model: 'mcp-submit-fixture', input: '生成快递员', type: 'image' }))
+  if (result.ok) expect(result.data).toMatchObject({ taskId: 'submitted-fixture', status: 'submitted' })
 })
 
 it('任务状态变更使旧基线失效，明确标为未执行；重新读取后可取消', async () => {

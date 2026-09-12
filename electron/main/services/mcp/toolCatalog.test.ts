@@ -60,12 +60,13 @@ describe('对外工具目录的投影与授权过滤', () => {
     }
   })
 
-  it('operationId 与 baselineIds 信封对每个写入工具都必填，expectedRevisions 一律不对外', () => {
+  it('operationId 必填、普通操作基线可省略，expectedRevisions 一律不对外', () => {
     const listed = catalog(PAID).tools.filter((tool) => MCP_WRITE_CAPABILITY_IDS.some((id) => id === tool.name))
     expect(listed.map((tool) => tool.name).sort()).toEqual([...MCP_WRITE_CAPABILITY_IDS].sort())
     for (const tool of listed) {
       const required = tool.inputSchema.required as string[]
-      expect(required, tool.name).toEqual(expect.arrayContaining(['operationId', 'baselineIds']))
+      expect(required, tool.name).toContain('operationId')
+      expect(required, tool.name).not.toContain('baselineIds')
       expect(required, tool.name).not.toContain('expectedRevisions')
       expect(Object.keys(tool.inputSchema.properties as object), tool.name).not.toContain('expectedRevisions')
       expect(tool.annotations?.readOnlyHint, tool.name).toBe(false)

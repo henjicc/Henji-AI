@@ -98,7 +98,7 @@ describe('旧调用样本仍然有效', () => {
   it('付费生成工具的必填项与首发一致', () => {
     const tool = catalog.tools.find((item) => item.name === 'create_visible_generation_task')!
     expect([...(tool.inputSchema.required as string[])].sort())
-      .toEqual(['baselineIds', 'mediaType', 'modelId', 'operationId', 'prompt'])
+      .toEqual(['mediaType', 'modelId', 'operationId', 'prompt'])
   })
 
   it('1.2 形状的只读客户端在当前服务上照常跑通，多出来的字段不影响它', async () => {

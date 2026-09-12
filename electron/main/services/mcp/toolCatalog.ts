@@ -6,6 +6,8 @@ import {
   type LocalDomainSurface, type LocalTool,
 } from '../../../../src/core/application-control/localHostContracts'
 import { APPLICATION_CAPABILITY_CATALOG_VERSION } from '../../../../src/core/assistant/applicationCapabilities'
+import { BUILTIN_APPLICATION_CAPABILITY_REGISTRY } from '../../../../src/core/assistant/builtinApplicationCapabilityRegistry'
+import { GENERATION_BUDGET } from './generationBudget'
 
 /**
  * 对外目录的唯一投影处。
@@ -28,7 +30,7 @@ export interface McpAccess { allowWrites: boolean; allowDestructive: boolean; al
 
 /** 协议信封：所有写工具共用，不只是 change_application_entities。 */
 const OPERATION_ID_FIELD = { type: 'string', format: 'uuid', description: '调用前生成并保存的逻辑操作标识；丢响应后复用此值查询，不得重新生成重放。' }
-const BASELINE_IDS_FIELD = { type: 'array', items: { type: 'string', format: 'uuid' }, minItems: 1, maxItems: 32, description: '每个写入目标（含集合父对象）在本次读取中返回的 baselineId；其他对象的读取不能替代。' }
+const BASELINE_IDS_FIELD = { type: 'array', items: { type: 'string', format: 'uuid' }, maxItems: 32, description: '普通修改、新增和生成可省略，由应用自动核对当前目标。删除时必须提供每个目标及集合父对象读取返回的 baselineId。需要严格按旧状态修改时也可显式提供，仅包含相关目标。' }
 
 export interface ProtocolToolSpec {
   name: string
@@ -119,13 +121,13 @@ function capabilityTool(tool: LocalTool): Tool {
     properties.operationId = OPERATION_ID_FIELD
     properties.baselineIds = BASELINE_IDS_FIELD
     schema.properties = properties
-    schema.required = [...(schema.required as string[] ?? []).filter((key) => key !== 'expectedRevisions'), 'operationId', 'baselineIds']
+    schema.required = [...(schema.required as string[] ?? []).filter((key) => key !== 'expectedRevisions'), 'operationId']
     if (tool.id === 'create_visible_generation_task') schema.required = [...new Set([...schema.required as string[], 'modelId', 'prompt', 'mediaType'])]
   }
   return {
     name: tool.id, title: tool.title, description: tool.description,
     inputSchema: { ...schema, type: 'object' },
-    annotations: { readOnlyHint: !write, destructiveHint: write, openWorldHint: false },
+    annotations: { readOnlyHint: !write, destructiveHint: tool.id === 'change_application_entities' || Boolean(BUILTIN_APPLICATION_CAPABILITY_REGISTRY.get(tool.id)?.destructive), openWorldHint: false },
   }
 }
 
@@ -166,13 +168,14 @@ export function buildMcpToolCatalog(input: { tools: readonly LocalTool[]; access
 
 const WORKFLOWS = [
   '发现：describe_application_contract → describe_application_entities（按域过滤）→ list_application_entities（cursor/limit 分页，where 按属性等值定位）。',
-  '读取：read_application_entity 返回 properties、revisions 与 baselineId；写入前必须逐个读到每个目标与集合父对象。',
-  '修改：把 operationId（客户端生成的 UUID）与 baselineIds 连同业务参数传给写工具；不要传 expectedRevisions。同一 operationId 重传返回原事实，不会重复执行。',
+  '读取：按任务需要读取实体，获取真实引用和属性；普通操作不需要额外读取来拼接基线。删除前才必须逐个读取目标与集合父对象。',
+  '修改：把 operationId（客户端生成的 UUID）连同业务参数传给写工具。普通操作省略 baselineIds，由应用自动核对；删除或要求严格按旧状态写入时提供相关 baselineIds。不要传 expectedRevisions。同一 operationId 重传返回原事实，不会重复执行。',
   '查任务：生成用 get_generation_task，三维渲染用 get_camera_stage_render_task，写操作事实用 get_application_operation；服务不推送通知，轮询这三个查询即可，不需要客户端支持通知扩展。',
   '取结果：媒体用 read_application_media 按 offset 分块读到 eof；不支持富媒体的客户端只消费 totalBytes／eof／错误码也能理解状态并继续。',
   '失败恢复：执行状态 unknown 时禁止换标识重试，用原 operationId 查询；partial 且账本登记了仅保存恢复入口时调 retry_application_operation_save，它不会重放业务修改。',
   '前置条件：写入被会话挡住时，对目标 ref 调 describe_application_entities，propertyAvailability 的 reasons 与 recoveries 就是声明层给出的前置条件和恢复入口。',
   '审批与授权：一律在痕迹 AI 内完成，协议侧没有提权通道；客户端自报权限、名称或"已批准"无效。',
+  `费用：普通少量生成直接执行；应用提交前自动估价，所有 Agent 最近 ${GENERATION_BUDGET.windowMs / 60_000} 分钟共享 ¥${GENERATION_BUDGET.cny} 自动生成额度。超过或无法估价时停止，不要换标识连续尝试；向用户说明费用，可由用户在生成页提交。`,
 ]
 
 export function buildApplicationContract(input: {
@@ -212,6 +215,7 @@ export function buildApplicationContract(input: {
     tools: input.catalog.tools.map((tool) => ({
       name: tool.name, tier: toolTier(tool.name), readOnly: tool.annotations?.readOnlyHint === true,
       envelope: MCP_WRITE_CAPABILITY_IDS.some((id) => id === tool.name) ? 'operationId+baselineIds' : 'none',
+      ...(MCP_WRITE_CAPABILITY_IDS.some((id) => id === tool.name) ? { baselinePolicy: '普通操作可省略 baselineIds，破坏性操作必填。' } : {}),
     })),
     workflows: WORKFLOWS,
   }
