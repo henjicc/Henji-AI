@@ -1,3 +1,5 @@
+import { ApplicationPreflightFailure } from '@/core/application-control/execution/transactionFailure'
+import { aiReadSavedResult } from '@/commands/aiRuntime'
 import { createLogger } from '@/core/logging'
 import type React from 'react'
 import { useCallback, useEffect } from 'react'
@@ -83,6 +85,23 @@ async function mapHistoryRecordToTask(record: HistoryRecord, dataRoot: string): 
   const createdAt = parseHistoryTimestamp(record.createdAt)
   const rawParams: DynamicValue = record.params
   const safeParams: DynamicValueMap = isRecord(rawParams) ? rawParams : {}
+  // 只读取原请求回执；同步完成直接恢复结果，绝不伪造供应商任务号。
+  if (!record.taskId && !record.filePath && !safeParams['__resultUrl'] && ['pending', 'queued', 'generating'].includes(record.status)) {
+    const recovered = await aiReadSavedResult(record.id).catch((error: unknown) => {
+      logger.warn('原生成结果仍待保存，保留历史状态', { event: 'generation.history.recovery_pending', taskId: record.id, error })
+      return null
+    })
+    if (recovered?.status === 'completed' && recovered.url && recovered.filePath) {
+      safeParams['__resultUrl'] = recovered.url
+      record = { ...record, status: 'completed', params: safeParams as HistoryRecord['params'],
+        filePath: recovered.filePath ? (await convertPathString(recovered.filePath, dataRoot, true)) ?? null : null,
+        taskId: recovered.taskId ?? null }
+      await databaseService.updateHistory(record.id, record)
+    } else if (recovered?.taskId) {
+      record = { ...record, taskId: recovered.taskId }
+      await databaseService.updateHistory(record.id, { taskId: recovered.taskId })
+    }
+  }
   const resultUrlFromParams = typeof safeParams['__resultUrl'] === 'string' ? safeParams['__resultUrl'] : undefined
   const dimensionsFromParams = typeof safeParams['__dimensions'] === 'string' ? safeParams['__dimensions'] : undefined
   const paramsForTaskOptions: DynamicValueMap = { ...safeParams }
@@ -265,77 +284,12 @@ export function useSaveTaskHistory({ tasks, isTasksLoaded, isInitialLoadRef }: U
 
     const saveHistory = async (): Promise<void> => {
       try {
-        const dataRoot = await getDataRoot()
-
         const tasksToSave = tasks.filter((t) =>
           ['success', 'error', 'pending', 'queued', 'generating'].includes(t.status)
         )
 
-        const allRecords = await databaseService.getHistory()
-        const taskIdSet = new Set(tasksToSave.map((t) => t.id))
-        const recordMap = new Map(allRecords.map((r) => [r.id, r]))
 
-        for (const record of allRecords) {
-          if (!taskIdSet.has(record.id)) {
-            await databaseService.deleteHistory(record.id)
-          }
-        }
-
-        for (const task of tasksToSave) {
-          const optionsCopy: DynamicValueMap = { ...(task.options ?? {}) }
-          deleteKeys(optionsCopy, [
-            'images',
-            'image_url',
-            'uploadedImages',
-            'videos',
-            'video_url',
-            'uploadedVideos',
-            'video',
-          ])
-
-          const relativeFilePath = task.result?.filePath
-            ? (await convertPathString(task.result.filePath, dataRoot, true)) ?? null
-            : null
-
-          if (task.uploadedFilePaths?.length) {
-            optionsCopy['uploadedFilePaths'] = await convertPathArray(task.uploadedFilePaths, dataRoot, true)
-          }
-          if (task.uploadedVideoFilePaths?.length) {
-            optionsCopy['uploadedVideoFilePaths'] = await convertPathArray(task.uploadedVideoFilePaths, dataRoot, true)
-          }
-          if (task.uploadedAudioFilePaths?.length) {
-            optionsCopy['uploadedAudioFilePaths'] = await convertPathArray(task.uploadedAudioFilePaths, dataRoot, true)
-          }
-          if (task.result?.url) {
-            optionsCopy['__resultUrl'] = task.result.url
-          }
-          if (task.dimensions) {
-            optionsCopy['__dimensions'] = task.dimensions
-          }
-
-          const historyRecord: Omit<HistoryRecord, 'createdAt' | 'updatedAt'> = {
-            id: task.id,
-            providerId: task.provider ?? '',
-            modelId: task.model,
-            type: task.type,
-            prompt: task.prompt,
-            params: optionsCopy as DynamicValue as HistoryRecord['params'],
-            filePath: relativeFilePath,
-            taskId: task.serverTaskId ?? null,
-            status: task.status,
-            errorMessage: task.error ?? null,
-            cost: null,
-            duration: null,
-          }
-
-          if (recordMap.has(task.id)) {
-            await databaseService.updateHistory(task.id, historyRecord)
-          } else {
-            await databaseService.insertHistory(historyRecord)
-          }
-        }
-
-        logger.info('[Workspace] 历史记录保存完成', { count: tasksToSave.length })
+        logger.info('[Workspace] 历史缩略图更新', { count: tasksToSave.length })
 
         // Generate thumbnails for image results in background
         ;(async () => {
@@ -366,4 +320,93 @@ export function useSaveTaskHistory({ tasks, isTasksLoaded, isInitialLoadRef }: U
 
     return () => clearTimeout(timer)
   }, [isInitialLoadRef, isTasksLoaded, tasks])
+}
+
+/** 原历史映射的唯一保存入口，调用者可等待真正落盘。 */
+let historySaveTail: Promise<void> = Promise.resolve()
+const taskSaves = new Map<string, Promise<void>>()
+
+/** 等待状态入口已经合并的最新任务保存，不能用执行开始时的快照覆盖并发编辑。 */
+export function awaitGenerationTaskPersistence(id: string): Promise<void> {
+  return taskSaves.get(id) ?? Promise.resolve()
+}
+const deletedTaskIds = new Set<string>()
+
+export function persistGenerationTask(task: GenerationTask): Promise<void> {
+  const save = historySaveTail.then(() => deletedTaskIds.has(task.id) ? undefined : writeGenerationTask(task))
+  taskSaves.set(task.id, save)
+  historySaveTail = save.catch(() => undefined)
+  return save
+}
+
+export function createPersistedGenerationTask(task: GenerationTask): Promise<void> {
+  const save = historySaveTail.then(() => writeGenerationTask(task, true))
+  taskSaves.set(task.id, save)
+  historySaveTail = save.catch(() => undefined)
+  return save
+}
+
+async function writeGenerationTask(task: GenerationTask, createOnly = false): Promise<void> {
+  if (!isDesktop()) return
+  const dataRoot = await getDataRoot()
+  const optionsCopy: DynamicValueMap = { ...(task.options ?? {}) }
+  deleteKeys(optionsCopy, [
+    'images',
+    'image_url',
+    'uploadedImages',
+    'videos',
+    'video_url',
+    'uploadedVideos',
+    'video',
+  ])
+
+  const relativeFilePath = task.result?.filePath
+    ? (await convertPathString(task.result.filePath, dataRoot, true)) ?? null
+    : null
+
+  if (task.uploadedFilePaths?.length) {
+    optionsCopy['uploadedFilePaths'] = await convertPathArray(task.uploadedFilePaths, dataRoot, true)
+  }
+  if (task.uploadedVideoFilePaths?.length) {
+    optionsCopy['uploadedVideoFilePaths'] = await convertPathArray(task.uploadedVideoFilePaths, dataRoot, true)
+  }
+  if (task.uploadedAudioFilePaths?.length) {
+    optionsCopy['uploadedAudioFilePaths'] = await convertPathArray(task.uploadedAudioFilePaths, dataRoot, true)
+  }
+  if (task.result?.url) {
+    optionsCopy['__resultUrl'] = task.result.url
+  }
+  if (task.dimensions) {
+    optionsCopy['__dimensions'] = task.dimensions
+  }
+
+  const historyRecord: Omit<HistoryRecord, 'createdAt' | 'updatedAt'> = {
+    id: task.id,
+    providerId: task.provider ?? '',
+    modelId: task.model,
+    type: task.type,
+    prompt: task.prompt,
+    params: optionsCopy as DynamicValue as HistoryRecord['params'],
+    filePath: relativeFilePath,
+    taskId: task.serverTaskId ?? null,
+    status: task.status,
+    errorMessage: task.error ?? null,
+    cost: null,
+    duration: null,
+  }
+
+  if (await databaseService.getHistoryById(task.id)) {
+    if (createOnly) throw new ApplicationPreflightFailure('GENERATION_ID_COLLISION:原任务标识已存在，本次未创建或修改历史记录')
+    await databaseService.updateHistory(task.id, historyRecord)
+  } else {
+    await databaseService.insertHistory(historyRecord)
+  }
+}
+
+export function deletePersistedGenerationTask(id: string): Promise<void> {
+  deletedTaskIds.add(id)
+  const save = historySaveTail.then(async () => { if (isDesktop()) await databaseService.deleteHistory(id) })
+  taskSaves.set(id, save)
+  historySaveTail = save.catch(() => undefined)
+  return save
 }

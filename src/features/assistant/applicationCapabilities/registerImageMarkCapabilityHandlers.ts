@@ -10,9 +10,9 @@ export function registerImageMarkCapabilityHandlers(
 ): void {
   registrar.registerHandler('retry_image_edit_document_save', async (input, context) => {
     throwIfCapabilityAborted(context.signal)
-    const { documentRef } = parseCapabilityInput<{ documentRef: { kind: 'image_edit.document'; id: string } }>(
+    const { documentRef, expectedOwnerId } = parseCapabilityInput<{ documentRef: { kind: 'image_edit.document'; id: string }; expectedOwnerId?: string }>(
       'retry_image_edit_document_save', input)
-    const saved = await retryImageEditDocumentSaveV3(splitImageEditV3DocumentRef(documentRef).documentId)
+    const saved = await retryImageEditDocumentSaveV3(splitImageEditV3DocumentRef(documentRef).documentId, expectedOwnerId)
     return { ref: documentRef, status: 'persisted', effects: saved.receipt?.effects ?? [],
       resultingRevisions: saved.receipt?.resultingRevisions ?? {} }
   })

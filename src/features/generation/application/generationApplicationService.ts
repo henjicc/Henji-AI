@@ -1,6 +1,7 @@
 import { normalizeGenerationTaskStatus } from '@/core/assistant/externalWait'
 import { registry } from '@/core/ModelRegistry'
 import { generationService } from '@/core/services/GenerationService'
+import { databaseService } from '@/services/database/DatabaseService'
 import {
   cancelVisibleGenerationTask,
   getVisibleGenerationTask,
@@ -155,18 +156,22 @@ export const generationApplicationService = {
     return prepareGenerationTask(input)
   },
 
-  async submit(input: GenerationPreparationInput): Promise<{ taskId: string; status: 'submitted'; taskRef: { kind: 'generation.task'; id: string } }> {
+  async submit(input: GenerationPreparationInput, operationId?: string) {
     const preparation = prepareGenerationTask(input)
     const taskId = await runVisibleGenerationTaskCommand({
       input: input.prompt,
       model: input.modelId,
       type: input.mediaType,
       options: preparation.options as DynamicValue,
+      operationId,
     })
     if (!taskId) {
       throw new GenerationPreparationError('INVALID_INPUT', '生成任务未创建，请检查输入和当前模式')
     }
-    return { taskId, status: 'submitted', taskRef: { kind: 'generation.task', id: taskId } }
+    const saved = await databaseService.getHistoryById(taskId)
+    const verified = saved?.modelId === input.modelId && saved.prompt === input.prompt
+    return { taskId, status: 'submitted', taskRef: { kind: 'generation.task', id: taskId },
+      verification: { verified, condition: '原任务已经持久登记；生成完成状态由该任务继续查询', target: { kind: 'generation.task', id: taskId } } }
   },
 
   listTasks(): GenerationTaskSnapshot[] {

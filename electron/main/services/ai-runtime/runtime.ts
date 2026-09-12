@@ -1,3 +1,4 @@
+import { claimGenerationSubmission, completeGenerationSubmission, readGenerationSubmission, readGenerationSubmissionStage } from './generation-submissions'
 import {
   AiRuntimeError,
   type AIClientGenerationRequestInfo,
@@ -62,10 +63,36 @@ export function getProviderKeyStatus(): ProviderKeyStatusDto[] {
   return Array.from(byProvider.entries()).map(([providerId, configured]) => ({ providerId, configured }))
 }
 
+const activeGenerationSubmissions = new Set<string>()
+
+/** 只完成已收到供应商结果的媒体保存，不会再次调用 SDK 生成。 */
+export async function recoverSavedGenerationResult(requestId: string): Promise<AiGenerateResponseDto | null> {
+  const response = readGenerationSubmission(requestId)
+  if (!response) return null
+  const stage = readGenerationSubmissionStage(requestId)
+  if (stage?.phase === 'completed') return response
+  if (activeGenerationSubmissions.has(requestId)) throw new Error('GENERATION_IN_PROGRESS:原生成还在保存，请稍后查询')
+  if (!stage?.modelId) throw new Error('GENERATION_RECOVERY_REQUIRED:旧回执缺少精确保存信息，请核对原任务')
+  activeGenerationSubmissions.add(requestId)
+  try {
+    const media = response.filePath ? { filePath: response.filePath, createdFilePaths: response.createdFilePaths ?? [] }
+      : response.status === 'completed' ? await saveMediaPaths(response.url, { requestId, modelId: stage.modelId, taskId: response.taskId })
+      : { filePath: undefined, createdFilePaths: [] }
+    const saved = { ...response, ...media }
+    completeGenerationSubmission(requestId, saved, 'media')
+    const completed = { ...saved, structuredOutput: materializeStructuredOutput(saved.structuredOutput, saved.filePath) }
+    completeGenerationSubmission(requestId, completed)
+    return completed
+  } finally { activeGenerationSubmissions.delete(requestId) }
+}
+
 export async function generate(
   request: AiGenerateRequestDto
 ): Promise<AiGenerateResponseDto> {
   const requestId = resolveRequestId(request)
+  const previous = claimGenerationSubmission(requestId, request)
+  if (previous) return await recoverSavedGenerationResult(requestId) ?? previous
+  activeGenerationSubmissions.add(requestId)
   let ownedMediaPaths: string[] = []
   logger.info('后端开始生成', {
     event: 'ai_runtime.generate.start',
@@ -91,6 +118,8 @@ export async function generate(
         })
       },
     })
+    // 先封存供应商真实回执；媒体转换或日志后续失败不抹去已提交结果。
+    completeGenerationSubmission(requestId, providerResult, 'provider')
     const info = requireRequestInfo(requestInfo)
     const trace = buildGenerateTrace(
       request.modelId,
@@ -106,6 +135,7 @@ export async function generate(
       : { filePath: undefined, createdFilePaths: [] }
     const { filePath, createdFilePaths } = persistedMedia
     ownedMediaPaths = createdFilePaths
+    completeGenerationSubmission(requestId, { ...providerResult, filePath, createdFilePaths }, 'media')
     const structuredOutput = materializeStructuredOutput(providerResult.structuredOutput, filePath)
 
     logger.info('后端生成响应', {
@@ -138,9 +168,11 @@ export async function generate(
       structuredOutput,
       trace,
     }
+    completeGenerationSubmission(requestId, response)
     return response
   } catch (error) {
-    await rollbackCreatedMedia(ownedMediaPaths)
+    // 已产生媒体属于原提交；不删除已经落盘的真实供应商结果。
+    logger.warn('生成收尾失败，保留原提交结果', { event: 'ai_runtime.generate.recovery_required', requestId, context: { retainedMediaCount: ownedMediaPaths.length } })
     logger.error('后端生成失败', {
       event: 'ai_runtime.generate.failed',
       requestId,
@@ -148,7 +180,7 @@ export async function generate(
       error: toLogError(error),
     })
     throw error
-  }
+  } finally { activeGenerationSubmissions.delete(requestId) }
 }
 
 export async function continuePolling(

@@ -219,14 +219,19 @@ function loops(): WriteLoop[] {
       property: 'camera_stage.project.name',
       value: `'${LOOP_NONCE}-三维改名'`,
       assertTruthSource: async () => {
-        expect(useCameraStageStore.getState().currentProjectName).toBe(`${LOOP_NONCE}-三维改名`)
         /*
-         * 还要盯持久化那一份。三维改名同时写 store 和工程记录，而脚本回读只看得到 store
-         * （工程已打开时 `readDomainSnapshot` 直接返回 store），持久化那半边没有任何东西盯着：
+         * 盯持久化那一份。三维改名写的是工程记录，而脚本回读在工程已打开时只看得到 store
+         * （`readDomainSnapshot` 直接返回 store），持久化那半边没有任何东西盯着：
          * 存储层的 rename 是一条裸 UPDATE，id 传错就是静默零行，回读照样绿。
          */
         const persisted = await getPlatform().cameraStageProjects.listProjectSummaries()
         expect(persisted.map((project) => project.name)).toContain(`${LOOP_NONCE}-三维改名`)
+        /*
+         * 还要盯「写入没有顺手把目标切成当前工程」。以前 applyProject 先 openProject 再改名，
+         * 于是任何一次后台改名都会把用户正在编辑的场景替换掉；现在后台工程用独立实例执行，
+         * 未打开的工程改完仍然不进编辑器。这条断言防止该行为被悄悄改回去。
+         */
+        expect(useCameraStageStore.getState().currentProjectName).not.toBe(`${LOOP_NONCE}-三维改名`)
       },
     },
   ]

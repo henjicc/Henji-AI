@@ -1,3 +1,4 @@
+import { GenerationLifecycleProvider } from '@/features/generation/application/GenerationLifecycleProvider'
 import { createLogger } from '@/core/logging'
 import React, { Suspense, lazy, useState, useEffect } from 'react'
 import WindowControls from './components/WindowControls'
@@ -249,6 +250,7 @@ const App: React.FC = () => {
 
   return (
     <NotificationProvider>
+      <GenerationLifecycleProvider>
       <CameraStageRenderLifecycleHost />
       <div
         className="h-screen min-h-screen bg-app text-white flex flex-col relative overflow-hidden"
@@ -295,6 +297,7 @@ const App: React.FC = () => {
         <OnboardingHints />
         <OnboardingModal />
       </div>
+      </GenerationLifecycleProvider>
     </NotificationProvider>
   )
 }

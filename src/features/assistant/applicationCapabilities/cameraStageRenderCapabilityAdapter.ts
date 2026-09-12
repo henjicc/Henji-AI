@@ -4,14 +4,12 @@ import {
   readCameraStageNodeRenderTask,
   startCameraStageNodeRender,
 } from '@/features/canvas/application/cameraStageRenderApplicationService'
-import { readPersistedCanvasProjectSnapshot } from '@/features/canvas/application/canvasQueryService'
+import { readPersistedCanvasProjectSnapshot, readCanvasProjectSnapshot } from '@/features/canvas/application/canvasQueryService'
 import { CANVAS_NODE_TYPES, isCameraStageNode } from '@/features/canvas/domain/canvasNodes'
 import type {
   CameraStageRenderRequest,
   CameraStageRenderTaskSnapshot,
 } from '@/platform/contracts/cameraStageRender'
-import { useCanvasStore } from '@/stores/canvasStore'
-import { useProjectStore } from '@/stores/projectStore'
 
 import type { CapabilityExecutionContext } from './handlerTypes'
 
@@ -111,22 +109,19 @@ function requestIdFor(context: CapabilityExecutionContext): string {
   return `camera-stage-capability:${context.taskId ?? crypto.randomUUID()}`
 }
 
-function requireCurrentTarget(input: RenderTargetInput): {
+async function requireCurrentTarget(input: RenderTargetInput): Promise<{
   nodeId: string
   cameraStageProjectId: string | null
   selectedTimeSec: number | undefined
-} {
+}> {
   const projectId = input.projectRef.id
   const prefix = `${projectId}:`
   if (!input.nodeRef.id.startsWith(prefix) || input.nodeRef.id.length === prefix.length) {
     throw new Error(`INVALID_INPUT:nodeRef 必须是项目 ${projectId} 下的完整稳定引用`)
   }
-  const project = useProjectStore.getState()
-  if (project.currentProjectId !== projectId || project.currentProject?.id !== projectId) {
-    throw new Error('CONFLICT:目标画布项目当前未打开')
-  }
+  const project = await readCanvasProjectSnapshot(projectId)
   const nodeId = input.nodeRef.id.slice(prefix.length)
-  const node = useCanvasStore.getState().nodes.find((candidate) => candidate.id === nodeId)
+  const node = project.nodes.find((candidate) => candidate.id === nodeId)
   if (!node || !isCameraStageNode(node)) throw new Error('INVALID_INPUT:目标节点不是 3D 镜头参考节点')
   return {
     nodeId,
@@ -137,11 +132,11 @@ function requireCurrentTarget(input: RenderTargetInput): {
   }
 }
 
-function requireUnchangedTarget(
+async function requireUnchangedTarget(
   input: RenderTargetInput,
-  expected: ReturnType<typeof requireCurrentTarget>,
-): void {
-  const current = requireCurrentTarget(input)
+  expected: Awaited<ReturnType<typeof requireCurrentTarget>>,
+): Promise<void> {
+  const current = await requireCurrentTarget(input)
   if (current.nodeId !== expected.nodeId
     || current.cameraStageProjectId !== expected.cameraStageProjectId
     || current.selectedTimeSec !== expected.selectedTimeSec) {
@@ -286,7 +281,7 @@ export async function renderCameraStageOutput(
   input: RenderTargetInput,
   context: CapabilityExecutionContext,
 ): Promise<Record<string, unknown>> {
-  const target = requireCurrentTarget(input)
+  const target = await requireCurrentTarget(input)
   const requestId = requestIdFor(context)
   const requestedIdentity: RenderTaskIdentity = {
     version: 1,
@@ -301,7 +296,7 @@ export async function renderCameraStageOutput(
   // 在创建后台工程和提交主进程任务前拒绝无法形成合法稳定引用的输入。
   createCameraStageRenderTaskRef(requestedIdentity)
   const existing = await readPersistedCompletion(input.projectRef.id, requestId)
-  requireUnchangedTarget(input, target)
+  await requireUnchangedTarget(input, target)
   if (existing) {
     const expected = target.cameraStageProjectId
       ? requestedIdentity
@@ -313,7 +308,7 @@ export async function renderCameraStageOutput(
       )
     }
     const taskRef = createCameraStageRenderTaskRef(existing.identity)
-    return { taskRef, status: 'submitted', resultRefs: [taskRef] }
+    return { taskRef, status: 'submitted', resultRefs: [taskRef], verification: { verified: true, condition: '原输出完成回执已从持久画布核对', target: taskRef } }
   }
 
   const task = await startCameraStageNodeRender(target.nodeId, input.outputKind, {
@@ -337,7 +332,8 @@ export async function renderCameraStageOutput(
     )
   }
   const taskRef = createCameraStageRenderTaskRef(submittedIdentity)
-  return { taskRef, status: 'submitted', resultRefs: [taskRef] }
+  const confirmed = await readLiveTask(submittedIdentity)
+  return { taskRef, status: 'submitted', resultRefs: [taskRef], verification: { verified: Boolean(confirmed), condition: '原输出请求已在主进程登记，渲染完成后需继续查询结果', target: taskRef } }
 }
 
 export async function getCameraStageRenderTask(
@@ -364,5 +360,6 @@ export async function cancelCameraStageRenderTask(
     canvasProjectId: identity.canvasProjectId,
     nodeId: identity.nodeId,
   })
-  return { taskRef, status: 'cancellation_requested', resultRefs: [] }
+  const confirmed = await readLiveTask(identity)
+  return { taskRef, status: 'cancellation_requested', resultRefs: [], verification: { verified: confirmed?.status === 'cancelled', condition: '原输出任务取消状态已确认', target: taskRef } }
 }

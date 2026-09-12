@@ -201,6 +201,7 @@ const addAssetToCanvas = defineApplicationCapability({
 
 const addGenerationResultToCanvas = defineApplicationCapability({
   id: 'add_generation_result_to_canvas',
+  resolveOperationTargets: (input) => [{ kind: 'canvas.project', id: input.projectId }, input.resultRef],
   version: 1,
   title: '把生成结果放入画布',
   description: '按稳定 generation.result 引用把已成功生成的媒体直接落成画布源节点，不要求先导入素材库。',

@@ -2,6 +2,7 @@ import { BrowserWindow, powerSaveBlocker, webContents } from 'electron'
 import path from 'node:path'
 import { APP_WINDOW_BACKGROUND_HEX } from '../../../src/core/theme/colorTokens'
 import { cleanupAllVideoFrameExports } from './video/frame-export'
+import { cameraStageRenderTaskStorage } from './camera-stage-render-task-storage'
 import { createMainLogger } from './logging/main-logger'
 import {
   CameraStageRenderTaskRegistry,
@@ -25,7 +26,7 @@ interface QueuedRenderTask extends CameraStageRenderRequestDto {
 }
 
 const logger = createMainLogger('main.camera-stage-render')
-const taskRegistry = new CameraStageRenderTaskRegistry()
+const taskRegistry = new CameraStageRenderTaskRegistry(cameraStageRenderTaskStorage)
 const queue: QueuedRenderTask[] = []
 let workerWindow: BrowserWindow | null = null
 let workerReady = false

@@ -1,3 +1,4 @@
+import { CanvasPersistenceError } from '@/features/canvas/application/canvasPersistenceService'
 import {
   closeApplicationSurfaceCapability,
   focusApplicationEntityCapability,
@@ -228,6 +229,7 @@ function describeSchemaIssues(error: ZodError): string {
 }
 
 function toFailure(error: unknown): ApplicationCapabilityResult {
+  if (error instanceof CanvasPersistenceError && error.transactionFacts) return toFailure(new ApplicationTransactionFailure(error.transactionFacts))
   if (error instanceof ApplicationPreflightFailure) return { ok: false, error: { code: 'INVALID_INPUT', message: error.message, recoverable: true, details: { execution: { notExecuted: true } } } }
   if (error instanceof ApplicationTransactionFailure) {
     const transaction = transactionFailureFacts(error.result)

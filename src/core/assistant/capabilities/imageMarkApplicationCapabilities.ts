@@ -93,7 +93,7 @@ export const IMAGE_MARK_APPLICATION_CAPABILITIES = [
     successEvidence: ['当前文档和必要的节点投影已由同一宿主完成持久化确认，编辑命令未重放。'],
     failureRecovery: ['保留当前内容，只重试保存；原编辑器已关闭时先从原文档节点重新打开并核对。'],
     inputSchema: z.object({ documentRef: z.object({ kind: z.literal('image_edit.document'),
-      id: z.string().startsWith('v3:').min(4) }).strict() }).strict(),
+      id: z.string().startsWith('v3:').min(4) }).strict(), expectedOwnerId: z.string().uuid().optional() }).strict(),
     outputSchema: capabilityOutputSchema({ ref: z.object({ kind: z.literal('image_edit.document'),
       id: z.string().min(1) }).strict(), status: z.literal('persisted'),
       effects: z.array(applicationEffectReceiptSchema), resultingRevisions: z.record(z.string(), z.number().int().nonnegative()) }),

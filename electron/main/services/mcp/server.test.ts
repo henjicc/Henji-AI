@@ -55,7 +55,8 @@ describe('本地 MCP 协议与边界', () => {
   it('真实握手、发现、调用；关闭再开启不丢失根宿主', async () => {
     const f = await fixture()
     const a = await f.connect()
-    expect((await a.client.listTools()).tools.map((tool) => tool.name)).toEqual(['read_application_entity'])
+    // 只读连接：宿主登记的读取工具 + 服务自带的媒体读取；写工具一个都不出现。
+    expect((await a.client.listTools()).tools.map((tool) => tool.name)).toEqual(['read_application_entity', 'read_application_media'])
     expect((await a.client.callTool({ name: 'read_application_entity', arguments: {} })).structuredContent).toEqual({ ok: true, data: { name: '隔离工程' } })
     expect((await a.client.callTool({ name: 'change_application_entities', arguments: {} })).isError).toBe(true)
     expect(f.calls).toHaveLength(1)
@@ -64,7 +65,7 @@ describe('本地 MCP 协议与边界', () => {
     await expect(fetch(f.url())).rejects.toThrow()
     await f.server.start(0)
     const b = await f.connect()
-    expect((await b.client.listTools()).tools).toHaveLength(1)
+    expect((await b.client.listTools()).tools).toHaveLength(2)
     expect((await b.client.callTool({ name: 'read_application_entity', arguments: {} })).isError).toBe(false)
   })
   it('匿名、网页来源、伪造 Host、超大正文均在宿主前拒绝', async () => {

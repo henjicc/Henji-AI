@@ -25,6 +25,8 @@ const renderTaskStatusSchema = z.enum([
 
 const renderOutput = defineApplicationCapability({
   id: CAMERA_STAGE_RENDER_CAPABILITY_ID,
+  resolveOperationTargets: (input) => [input.projectRef, input.nodeRef],
+  resolveOperationWriteTargets: (input) => [input.nodeRef],
   version: 1,
   title: '输出 3D 镜头结果',
   description: '从明确画布中的 3D 镜头节点启动后台图片或视频输出；离开画布后任务仍继续。',
@@ -128,6 +130,7 @@ const getRenderTask = defineApplicationCapability({
 
 const cancelRenderTask = defineApplicationCapability({
   id: CANCEL_CAMERA_STAGE_RENDER_TASK_CAPABILITY_ID,
+  resolveOperationTargets: (input) => [input.taskRef],
   version: 1,
   title: '取消 3D 镜头输出任务',
   description: '取消明确任务引用对应的仍在排队或运行的 3D 镜头输出任务。',

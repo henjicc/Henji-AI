@@ -6,6 +6,7 @@ import {
   getProviderKeyStatus,
   parseJsonObject,
   recordSample,
+  recoverSavedGenerationResult,
 } from '../services/ai-runtime/runtime'
 import { consumePendingResult } from '../services/ai-runtime/pending-results'
 import type { PendingResultPayload } from '../services/ai-runtime/pending-results'
@@ -100,7 +101,7 @@ export function registerAiRuntimeIpc(): void {
   registerIpcHandler<string, PendingResultPayload | null>(
     'ai:consumePendingResult',
     (input) => parseStringField(input, 'serverTaskId'),
-    (serverTaskId) => consumePendingResult(serverTaskId)
+    async (serverTaskId) => await recoverSavedGenerationResult(serverTaskId) ?? consumePendingResult(serverTaskId)
   )
 }
 

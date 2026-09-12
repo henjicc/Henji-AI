@@ -3,11 +3,12 @@ import { randomUUID } from 'node:crypto'
 import { Server } from '@modelcontextprotocol/sdk/server/index.js'
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js'
 import { CallToolRequestSchema, ListToolsRequestSchema, isInitializeRequest, type Tool } from '@modelcontextprotocol/sdk/types.js'
-import { MCP_READ_CAPABILITY_IDS } from '../../../../src/core/application-control/localHostContracts'
+import { MCP_READ_CAPABILITY_IDS, MCP_WRITE_CAPABILITY_IDS } from '../../../../src/core/application-control/localHostContracts'
 import type { McpConnections } from './connections'
 import type { ApplicationHostBridge } from './applicationHostBridge'
 import type { McpOperationCoordinator } from './operationCoordinator'
 import { z } from 'zod'
+import { readMcpMediaResource, McpMediaResourceError } from './mediaResources'
 
 type Session = { callerId: string; server: Server; transport: StreamableHTTPServerTransport; touched: number }
 const MAX_BODY = 256 * 1024
@@ -106,8 +107,8 @@ export class LocalMcpServer {
       this.connections.assertActive(callerId)
       if (!this.host.ready) throw new Error('应用尚未就绪，请稍后重试。')
       const access = this.connections.access(callerId)
-      const tools = this.host.tools().filter((tool) => tool.id !== 'retry_canvas_project_save' && (tool.id !== 'change_application_entities' || (access.allowWrites && this.operations))).map((tool): Tool => {
-        const write = tool.id === 'change_application_entities'
+      const tools = this.host.tools().filter((tool) => !['retry_canvas_project_save', 'retry_image_edit_document_save'].includes(tool.id) && (tool.id !== 'create_visible_generation_task' || access.allowPaid) && (!MCP_WRITE_CAPABILITY_IDS.some((id) => id === tool.id) || (access.allowWrites && this.operations))).map((tool): Tool => {
+        const write = MCP_WRITE_CAPABILITY_IDS.some((id) => id === tool.id)
         const schema = { ...tool.inputSchema }
         if (write) {
           const properties = { ...schema.properties as Record<string, unknown> }
@@ -116,27 +117,40 @@ export class LocalMcpServer {
           properties.baselineIds = { type: 'array', items: { type: 'string', format: 'uuid' }, minItems: 1, maxItems: 32 }
           schema.properties = properties
           schema.required = [...(schema.required as string[] ?? []).filter((key) => key !== 'expectedRevisions'), 'operationId', 'baselineIds']
+          if (tool.id === 'create_visible_generation_task') schema.required = [...new Set([...schema.required as string[], 'modelId', 'prompt', 'mediaType'])]
         }
         return { name: tool.id, title: tool.title, description: tool.description, inputSchema: { ...schema, type: 'object' }, annotations: { readOnlyHint: !write, destructiveHint: write, openWorldHint: false } }
       })
       if (this.operations && access.allowWrites) tools.push({ name: 'get_application_operation', description: '读取本连接操作的持久事实；未知状态不会重放修改。', inputSchema: { type: 'object', properties: { operationId: { type: 'string', format: 'uuid' } }, required: ['operationId'], additionalProperties: false }, annotations: { readOnlyHint: true } })
       if (this.operations && access.allowWrites) tools.push({ name: 'retry_application_operation_save', description: '按原操作记录仅重试保存并核对原条件；不会重放业务修改，必须保留原编辑会话。', inputSchema: { type: 'object', properties: { operationId: { type: 'string', format: 'uuid' }, originalOperationId: { type: 'string', format: 'uuid' } }, required: ['operationId', 'originalOperationId'], additionalProperties: false }, annotations: { readOnlyHint: false, destructiveHint: false } })
+      tools.push({ name: 'read_application_media', description: '按稳定结果引用分块读取已落盘媒体。outputIndex 为结果或节点关联媒体（含输入、预览）去重后的顺序，从零开始。每块最多 256 KiB；不接受文件路径或网址。', inputSchema: { type: 'object', properties: { ref: { type: 'object', properties: { kind: { type: 'string', enum: ['generation.result', 'asset', 'canvas.node'] }, id: { type: 'string' } }, required: ['kind', 'id'], additionalProperties: false }, outputIndex: { type: 'integer', minimum: 0 }, offset: { type: 'integer', minimum: 0 }, length: { type: 'integer', minimum: 1, maximum: 262144 } }, required: ['ref'], additionalProperties: false }, annotations: { readOnlyHint: true, openWorldHint: false } })
       return { tools }
     })
     server.setRequestHandler(CallToolRequestSchema, async (request, extra) => {
       this.connections.assertActive(callerId)
+      if (request.params.name === 'read_application_media') {
+        try {
+          const input = z.object({ ref: z.object({ kind: z.enum(['generation.result', 'asset', 'canvas.node']), id: z.string().min(1).max(512) }).strict(), outputIndex: z.number().int().nonnegative().optional(), offset: z.number().int().nonnegative().optional(), length: z.number().int().min(1).max(262144).optional() }).strict().parse(request.params.arguments)
+          const result = await readMcpMediaResource(input)
+          this.connections.assertActive(callerId)
+          return { structuredContent: result, content: [{ type: 'text', text: JSON.stringify(result) }] }
+        } catch (error) {
+          const message = error instanceof McpMediaResourceError ? `${error.code}:${error.message}` : '媒体读取失败，请检查引用和分块参数。'
+          return { isError: true, content: [{ type: 'text', text: message }] }
+        }
+      }
       if (request.params.name === 'get_application_operation' && this.operations) {
         const { operationId } = z.object({ operationId: z.string().uuid() }).strict().parse(request.params.arguments)
         const operation = this.operations.store.get(operationId, callerId)
         const result = operation ? this.operations.result(operation) : { ok: false, executionState: 'not_found', message: '未找到已登记操作；这不是业务未执行的证明。' }
         return { isError: result.ok !== true, structuredContent: result, content: [{ type: 'text', text: JSON.stringify(result) }] }
       }
-      if (['change_application_entities', 'retry_application_operation_save'].includes(request.params.name) && this.operations) {
+      if ([...MCP_WRITE_CAPABILITY_IDS, 'retry_application_operation_save'].some((id) => id === request.params.name) && this.operations) {
         try {
           const access = this.connections.access(callerId)
           const operation = request.params.name === 'retry_application_operation_save'
             ? this.operations.prepareSaveRecovery(callerId, request.params.arguments ?? {}, this.host.sessionId, access)
-            : this.operations.prepare(callerId, request.params.arguments ?? {}, this.host.sessionId, access)
+            : this.operations.prepare(callerId, request.params.arguments ?? {}, this.host.sessionId, access, MCP_WRITE_CAPABILITY_IDS.find((id) => id === request.params.name))
           if (operation.state === 'prepared') {
             this.connections.assertActive(callerId)
             try { await this.host.execute(callerId, operation.capabilityId ?? 'change_application_entities', operation.input, extra.signal, { operation, ...access }) } catch { /* 持久操作状态决定结果，等待失败不能覆盖事实。 */ }

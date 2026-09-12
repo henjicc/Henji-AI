@@ -23,7 +23,7 @@ export function attachLocalApplicationHost(platform: McpPlatform, ready: boolean
   const unsubscribeRequest = platform.onRequest((raw) => {
     const request = localHostRequestSchema.safeParse(raw)
     if (!request.success || request.data.sessionId !== sessionId || disposed) return
-    const { requestId, callerId, capabilityId, input, allowWrites = false, allowDestructive = false, expectedRevisions } = request.data
+    const { requestId, callerId, capabilityId, input, allowWrites = false, allowDestructive = false, allowPaid = false, expectedRevisions } = request.data
     const readOnly = MCP_READ_CAPABILITY_IDS.some((id) => id === capabilityId)
     const action = readOnly ? 'read' : 'write'
     const controller = new AbortController()
@@ -32,12 +32,13 @@ export function attachLocalApplicationHost(platform: McpPlatform, ready: boolean
       logger.info(readOnly ? '开始读取应用内容' : '开始修改应用内容', { event: `mcp.${action}.start`, context: { requestId, capabilityId } })
       let result: Record<string, unknown>
       try {
+        if (capabilityId === 'create_visible_generation_task' && !allowPaid) throw new Error('此连接没有付费生成授权。')
         if (!ready) throw new Error('应用尚未就绪，请稍后重试。')
         const grant = createApplicationCallerGrant({ callerId, capabilityIds: allowWrites ? [...MCP_CAPABILITY_IDS] : [...MCP_READ_CAPABILITY_IDS], permissions: [...MCP_READ_PERMISSIONS, ...(allowWrites ? MCP_WRITE_PERMISSIONS : [])], allowWrites, allowDestructive })
         grants.set(requestId, grant)
         const definition = definitions.find((item) => item.id === capabilityId)
         if (!definition) throw new Error('此读取工具不可用，请重新连接。')
-        result = await createApplicationCapabilitySession(grant).execute({ id: capabilityId, version: definition.version, input, expectedRevisions }, { requestId, signal: controller.signal })
+        result = await createApplicationCapabilitySession(grant).execute({ id: capabilityId, version: definition.version, input, expectedRevisions }, { requestId: request.data.operationId ?? requestId, signal: controller.signal })
         if (result.ok === true && request.data.recoveryVerification) {
           const proof = request.data.recoveryVerification
           const verification = await getApplicationControlExecutionEngine().verifyRecovery(proof.conditions, proof.evidence, applicationCallerAccess(grant, requestId, controller.signal))

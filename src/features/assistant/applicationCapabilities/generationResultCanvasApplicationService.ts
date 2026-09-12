@@ -5,6 +5,9 @@ import {
   type CanvasMediaSourcePayload,
 } from '@/features/canvas/application/assetMediaAssignment'
 import { addTrustedMediaCanvasNode } from '@/features/canvas/application/canvasApplicationService'
+import { withCanvasProjectRuntime } from '@/features/canvas/application/canvasProjectRuntime'
+import { runCanvasTransaction } from '@/features/canvas/application/canvasBatchService'
+import { readPersistedCanvasProjectSnapshot } from '@/features/canvas/application/canvasQueryService'
 import { getVisibleGenerationTaskResult } from '@/workspaces/GenerationWorkspace/application/visibleGenerationTaskCommand'
 
 /**
@@ -26,16 +29,20 @@ export async function addGenerationResultToCanvas(input: {
     filePath: result.filePath ?? result.url,
     displayName: result.prompt,
   }
-  const created = await addTrustedMediaCanvasNode({
+  const transaction = await withCanvasProjectRuntime(input.projectId, (runtime) => runCanvasTransaction(input.projectId, 1, async (options) => [await addTrustedMediaCanvasNode({
     projectId: input.projectId,
     nodeType: mediaSourceNodeType(result.mediaType),
     placement: input.placement,
     data: mediaSourceNodeData(payload),
-  })
+  }, options)], {}, runtime))
+  const created = transaction.appliedOperations[0]
+  const persisted = await readPersistedCanvasProjectSnapshot(input.projectId)
+  const verified = persisted.nodes.some((node) => node.id === created.nodeId)
   return {
     ...created,
     resultRef: input.resultRef,
     mediaType: result.mediaType,
-    nodeRef: { kind: 'canvas.node', id: String(created.nodeId) },
+    nodeRef: { kind: 'canvas.node', id: `${input.projectId}:${String(created.nodeId)}` },
+    verification: { verified, condition: '原画布中的新增结果节点已回读确认' },
   }
 }

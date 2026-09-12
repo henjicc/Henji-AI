@@ -1,3 +1,4 @@
+import { applicationGenerationTaskId } from '../../application-control/operationIdentity'
 import { z } from 'zod'
 import { applicationSchemaRefSchema } from '../../application-control'
 
@@ -184,6 +185,8 @@ const prepareGenerationTask = defineApplicationCapability({
 
 const createVisibleGenerationTask = defineApplicationCapability({
   id: 'create_visible_generation_task',
+  resolveOperationWriteTargets: (_input, operationId) => [{ kind: 'generation.task', id: applicationGenerationTaskId(operationId) }],
+  resolveOperationTargets: (input) => { if (!input.modelId || typeof input.prompt !== 'string' || !input.mediaType) throw new Error('INVALID_INPUT:外部提交必须明确指定已读取的模型、提示词和媒体类型'); return [{ kind: 'generation.model', id: input.modelId }] },
   version: 1,
   title: '创建可见生成任务',
   description: '在生成工作区创建用户可见的图片、视频或音频生成任务；省略的字段用当前生成草稿'
@@ -304,6 +307,7 @@ const getGenerationTask = defineApplicationCapability({
 
 const cancelGenerationTask = defineApplicationCapability({
   id: 'cancel_generation_task',
+  resolveOperationTargets: (input) => [{ kind: 'generation.task', id: input.taskId }],
   version: 1,
   title: '取消生成任务',
   description: '取消明确任务引用对应的可取消生成任务。',

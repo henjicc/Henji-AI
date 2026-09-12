@@ -54,7 +54,7 @@ export class ApplicationHostBridge {
     this.pending.delete(reply.requestId)
   }
   execute(callerId: string, capabilityId: LocalHostRequest['capabilityId'], input: Record<string, unknown>, signal: AbortSignal,
-    options: { operation?: OperationRecord; allowWrites?: boolean; allowDestructive?: boolean } = {}): Promise<Record<string, unknown>> {
+    options: { operation?: OperationRecord; allowWrites?: boolean; allowDestructive?: boolean; allowPaid?: boolean } = {}): Promise<Record<string, unknown>> {
     this.assertAuthorized(callerId)
     if (!this.ready || !this.host) return Promise.reject(new Error('应用尚未就绪，请稍后重试。'))
     if (signal.aborted) return Promise.reject(new Error('请求已取消。'))
@@ -76,7 +76,7 @@ export class ApplicationHostBridge {
         this.assertAuthorized(callerId)
         if (options.operation) this.operations?.dispatched(options.operation, requestId, host.registration.sessionId)
         host.transport.send('mcp:host:request', { requestId, sessionId: host.registration.sessionId, callerId, capabilityId, input,
-          allowWrites: options.allowWrites, allowDestructive: options.allowDestructive, expectedRevisions: options.operation?.expectedRevisions,
+          allowWrites: options.allowWrites, allowDestructive: options.allowDestructive, allowPaid: options.allowPaid, operationId: options.operation?.operationId, expectedRevisions: options.operation?.expectedRevisions,
           recoveryVerification: options.operation?.recoveryVerification } satisfies LocalHostRequest)
       } catch (error) {
         this.operations?.interrupted(requestId, host.registration.sessionId)

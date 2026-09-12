@@ -9,6 +9,7 @@ import { ApplicationHostBridge } from '../services/mcp/applicationHostBridge'
 import { LocalMcpServer } from '../services/mcp/server'
 import { McpOperationStore } from '../services/mcp/operationStore'
 import { McpOperationCoordinator } from '../services/mcp/operationCoordinator'
+import { recoverPersistedGenerationOperation } from '../services/mcp/persistedOperationRecovery'
 import { getDb } from '../services/db'
 import { parseVoid, registerIpcHandler } from './registry'
 
@@ -30,7 +31,7 @@ function trusted(event: IpcMainInvokeEvent): void {
 function status(): McpStatus { return { enabled: server.listening, ready: host.ready, port: configuredPort, connections: connections.list() } }
 
 export function registerMcpIpc(): void {
-  const operations = new McpOperationCoordinator(new McpOperationStore(getDb()))
+  const operations = new McpOperationCoordinator(new McpOperationStore(getDb()), (record) => recoverPersistedGenerationOperation(getDb(), record))
   host = new ApplicationHostBridge((id) => connections.assertActive(id), operations)
   server = new LocalMcpServer(connections, host, (error) => logger.error('外部连接请求失败', { event: 'mcp.request.failed', error }), operations)
   registerIpcHandler('mcp:status', parseVoid, status, trusted)
@@ -52,7 +53,7 @@ export function registerMcpIpc(): void {
     }
     finally { changing = false }
   }, trusted)
-  registerIpcHandler('mcp:authorize', (value) => z.object({ name: z.string().trim().min(1).max(80), allowWrites: z.boolean().optional(), allowDestructive: z.boolean().optional() }).strict().parse(value), (input) => {
+  registerIpcHandler('mcp:authorize', (value) => z.object({ name: z.string().trim().min(1).max(80), allowWrites: z.boolean().optional(), allowDestructive: z.boolean().optional(), allowPaid: z.boolean().optional() }).strict().parse(value), (input) => {
     const connection = connections.create(input.name, input)
     logger.info('已授权只读连接', { event: 'mcp.authorize.completed', context: { callerId: connection.id } })
     return connection

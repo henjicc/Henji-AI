@@ -48,6 +48,14 @@ vi.mock('./canvasPersistenceService', () => ({
   confirmCanvasPersistence: mocks.confirm,
   runCanvasMutationStage: (_options: unknown, mutation: () => unknown) => mutation(),
 }));
+vi.mock('./canvasProjectRuntime', () => ({
+  withCanvasProjectRuntime: async (projectId: string, execute: (runtime: unknown) => Promise<unknown>) => execute({
+    store: { getState: () => ({ nodes: mocks.nodes, updateNodeData: mocks.updateNodeData }) },
+    isCurrent: () => mocks.projectState.currentProjectId === projectId,
+    persist: () => mocks.confirm(projectId),
+    pause: () => () => undefined,
+  }),
+}));
 vi.mock('./generationOutputApplicationService', () => ({ commitCanvasGenerationOutputs: mocks.commit }));
 
 import {
@@ -159,7 +167,7 @@ describe('cameraStageRenderApplicationService', () => {
 
     await expect(startCameraStageNodeRender('node-1', 'image', {
       expectedOwner: { canvasProjectId: 'canvas-1', cameraStageProjectId: 'stage-1' },
-    })).rejects.toThrow('目标画布项目已经切换');
+    })).rejects.toThrow('当前画布项目已切换');
 
     expect(mocks.updateNodeData).not.toHaveBeenCalled();
     expect(mocks.start).not.toHaveBeenCalled();
@@ -228,7 +236,7 @@ describe('cameraStageRenderApplicationService', () => {
     expect(mocks.commit).toHaveBeenCalledWith(expect.objectContaining({
       completionId: 'camera-stage-render:request-1',
       resultNodeData: expect.objectContaining({ cameraStageRenderReceipt: descriptor() }),
-    }));
+    }), expect.objectContaining({ projectId: 'canvas-1' }));
     expect(order).toEqual(['persist', 'ack', 'persist', 'ack']);
     expect((mocks.nodes[0].data as Record<string, unknown>).imageUrl).toBe('managed://image.png');
   });

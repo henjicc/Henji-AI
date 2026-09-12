@@ -1,3 +1,4 @@
+import { applicationGenerationTaskId } from '@/core/application-control/operationIdentity'
 import { registry } from '@/core/ModelRegistry'
 import {
   createMediaGeneratorPromptReferences,
@@ -157,7 +158,7 @@ export function registerGenerationCapabilityHandlers(
   registrar.registerHandler('create_visible_generation_task', async (input, context) => {
     throwIfCapabilityAborted(context.signal)
     const parsed = parseCapabilityInput<GenerationInput>('create_visible_generation_task', input)
-    return await generationApplicationService.submit(resolveGenerationInput(parsed))
+    return await generationApplicationService.submit(resolveGenerationInput(parsed), context.callerGrant && context.requestId ? applicationGenerationTaskId(context.requestId) : context.requestId)
   })
 
   registrar.registerHandler('get_generation_task', (input) => {

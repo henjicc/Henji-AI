@@ -17,7 +17,7 @@ import type { RowMediaKind } from '../domain/socketTypes';
 import { persistGenerationResult } from '../generation/mediaResultPersist';
 import { createAssetGroupGraph, updateAssetGroupDataGraph } from './assetGroupGraph';
 import { runCanvasTransaction } from './canvasBatchService';
-import { runCanvasMutationStage, retainsCanvasMutation, confirmCanvasPersistence } from './canvasPersistenceService';
+import { runCanvasMutationStage, retainsCanvasMutation, confirmCanvasPersistence, type CanvasTransactionRuntime } from './canvasPersistenceService';
 import { hasUnconfirmedCanvasProjectSnapshot } from '@/stores/projectStore';
 import { requireCurrentCanvasProject } from './canvasApplicationService';
 import { canvasNodeFactory } from './canvasServices';
@@ -59,8 +59,9 @@ function validatePersistedMediaPatch(mediaType: RowMediaKind, patch: DynamicValu
 function findExistingCommit(
   completionId: string,
   resultNodeType: CanvasNodeType,
+  store = useCanvasStore,
 ): { resultNodeIds: string[]; groupNodeId: string | null } | null {
-  const canvas = useCanvasStore.getState();
+  const canvas = store.getState();
   const members = canvas.nodes
     .filter((node) => node.type === resultNodeType && node.data.generationOutputCommitId === completionId)
     .sort((left, right) => {
@@ -108,8 +109,8 @@ function createResultGroupGraph(input: {
   title: string;
   descriptors: CanvasGenerationOutputDescriptorV1[];
   resultKind: 'image-group' | 'media-group';
-}): { groupId: string } {
-  const canvas = useCanvasStore.getState();
+}, store = useCanvasStore): { groupId: string } {
+  const canvas = store.getState();
   const group = canvasNodeFactory.createNode(CANVAS_NODE_TYPES.assetGroup, { x: 0, y: 0 }, {
     displayName: input.title,
     memberOrder: [],
@@ -133,23 +134,29 @@ function createResultGroupGraph(input: {
   if (!reordered) {
     throw new GenerationOutputApplicationError('CONFLICT', '无法保存结果组成员顺序');
   }
-  useCanvasStore.getState().commitAssetGroupGraph(reordered, group.id);
+  store.getState().commitAssetGroupGraph(reordered, group.id);
   return { groupId: group.id };
 }
 
 export async function commitCanvasGenerationOutputs(
   input: CommitCanvasGenerationOutputsInput,
+  context?: { projectId: string; runtime: CanvasTransactionRuntime },
 ): Promise<CommitCanvasGenerationOutputsResult> {
   const ordered = validateGenerationOutputBatchContract(input.contract);
-  const projectId = requireCurrentProjectId();
-  requireCurrentCanvasProject(projectId);
+  const projectId = context?.projectId ?? requireCurrentProjectId();
+  const store = context?.runtime.store ?? useCanvasStore;
+  const assertContext = (): void => {
+    if (!context) requireCurrentCanvasProject(projectId);
+    else if (!context.runtime.isCurrent()) throw new GenerationOutputApplicationError('CONFLICT', '原画布执行实例已经变化');
+  };
+  assertContext();
   if (!input.placeholderNodeId && !input.completionId?.trim()) {
     throw new GenerationOutputApplicationError('INVALID_INPUT', '无占位节点的结果提交必须提供稳定完成键');
   }
   const completionId = input.completionId?.trim() || `generation-output:${input.placeholderNodeId}`;
-  const existing = findExistingCommit(completionId, input.resultNodeType);
+  const existing = findExistingCommit(completionId, input.resultNodeType, store);
   if (existing) {
-    if (hasUnconfirmedCanvasProjectSnapshot(projectId)) await confirmCanvasPersistence(projectId);
+    if (hasUnconfirmedCanvasProjectSnapshot(projectId)) await (context ? context.runtime.persist() : confirmCanvasPersistence(projectId));
     return {
       projectId,
       completionId,
@@ -160,10 +167,11 @@ export async function commitCanvasGenerationOutputs(
   }
 
   if (input.contract.strategy === 'layer-stack') {
+    if (context) throw new GenerationOutputApplicationError('UNSUPPORTED_STRATEGY', '图层文档需要原编辑会话');
     return await commitPreparedLayerStack({ ...input, completionId, ordered, projectId });
   }
 
-  const before = useCanvasStore.getState();
+  const before = store.getState();
   const sourceNode = input.sourceNodeId
     ? before.nodes.find((node) => node.id === input.sourceNodeId)
     : null;
@@ -234,8 +242,8 @@ export async function commitCanvasGenerationOutputs(
       return patch;
     });
 
-    requireCurrentCanvasProject(projectId);
-    const latest = useCanvasStore.getState();
+    assertContext();
+    const latest = store.getState();
     if (
       (input.sourceNodeId && !latest.nodes.some((node) => node.id === input.sourceNodeId))
       || (input.placeholderNodeId && !latest.nodes.some((node) => node.id === input.placeholderNodeId))
@@ -256,21 +264,21 @@ export async function commitCanvasGenerationOutputs(
           completionId,
           appendLabel,
         );
-        const firstNodeId = input.placeholderNodeId ?? useCanvasStore.getState().addNode(
+        const firstNodeId = input.placeholderNodeId ?? store.getState().addNode(
           input.resultNodeType,
           placeholder.position,
           firstData,
         );
         if (input.placeholderNodeId) {
-          useCanvasStore.getState().updateNodeData(input.placeholderNodeId, firstData);
+          store.getState().updateNodeData(input.placeholderNodeId, firstData);
         }
         if (input.sourceNodeId) {
-          useCanvasStore.getState().addEdge(input.sourceNodeId, firstNodeId);
+          store.getState().addEdge(input.sourceNodeId, firstNodeId);
         }
         resultNodeIds.push(firstNodeId);
 
         for (let index = 1; index < ordered.length; index += 1) {
-          const canvas = useCanvasStore.getState();
+          const canvas = store.getState();
           // 素材组成员完成后都会隐藏在组内；预先把它们叠放在首项位置，避免隐藏成员的
           // 临时散列坐标把保存重开后的 fitView 边界撑大。独立输出仍保持逐项避让布局。
           const position = input.contract.strategy === 'assetGroup'
@@ -293,7 +301,7 @@ export async function commitCanvasGenerationOutputs(
             ),
           );
           if (input.sourceNodeId) {
-            useCanvasStore.getState().addEdge(input.sourceNodeId, nodeId);
+            store.getState().addEdge(input.sourceNodeId, nodeId);
           }
           resultNodeIds.push(nodeId);
         }
@@ -308,9 +316,9 @@ export async function commitCanvasGenerationOutputs(
             title: groupTitle,
             descriptors: ordered.map((item) => item.descriptor),
             resultKind: input.contract.resultKind === 'image-group' ? 'image-group' : 'media-group',
-          }).groupId;
+          }, store).groupId;
         } else {
-          useCanvasStore.getState().setSelectedNode(resultNodeIds.at(-1) ?? null);
+          store.getState().setSelectedNode(resultNodeIds.at(-1) ?? null);
         }
 
         return [{
@@ -321,6 +329,7 @@ export async function commitCanvasGenerationOutputs(
         }];
       }),
       { completionId, strategy: input.contract.strategy },
+      context?.runtime,
     );
     const operation = result.appliedOperations[0];
     const resultNodeIds = Array.isArray(operation?.resultNodeIds)

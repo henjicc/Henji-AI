@@ -15,6 +15,7 @@ export default function McpSection(): React.JSX.Element {
   const [config, setConfig] = useState('')
   const [port, setPort] = useState(43821)
   const [allowWrites, setAllowWrites] = useState(false)
+  const [allowPaid, setAllowPaid] = useState(false)
   const [allowDestructive, setAllowDestructive] = useState(false)
   const refresh = async (): Promise<void> => { const next = await getMcpConnectionService().status(); setStatus(next); setPort(next.port) }
   useEffect(() => { void refresh().catch((cause) => setError(String(cause))) }, [])
@@ -35,18 +36,21 @@ export default function McpSection(): React.JSX.Element {
       <UiFormRow label={t('mcp.name')}>
         <div className="flex items-center gap-2">
           <UiInput className="min-w-0 flex-1" value={name} onChange={(event) => setName(event.target.value)} maxLength={80} placeholder={t('mcp.namePlaceholder')} />
-          <UiButton className="shrink-0 whitespace-nowrap" variant="primary" disabled={busy || !name.trim()} onClick={() => void act(async () => { await getMcpConnectionService().authorize({ name, allowWrites, allowDestructive }); setName(''); setAllowWrites(false); setAllowDestructive(false) })}>{t('mcp.authorize')}</UiButton>
+          <UiButton className="shrink-0 whitespace-nowrap" variant="primary" disabled={busy || !name.trim()} onClick={() => void act(async () => { await getMcpConnectionService().authorize({ name, allowWrites, allowDestructive, allowPaid }); setName(''); setAllowWrites(false); setAllowDestructive(false); setAllowPaid(false) })}>{t('mcp.authorize')}</UiButton>
         </div>
       </UiFormRow>
       <UiFormRow label={t('mcp.allowWrites')} inline info={t('mcp.writeScope')}>
-        <UiSwitch checked={allowWrites} disabled={busy} onCheckedChange={(value) => { setAllowWrites(value); if (!value) setAllowDestructive(false) }} />
+        <UiSwitch checked={allowWrites} disabled={busy} onCheckedChange={(value) => { setAllowWrites(value); if (!value) { setAllowDestructive(false); setAllowPaid(false) } }} />
       </UiFormRow>
       <UiFormRow label={t('mcp.allowDelete')} inline>
         <UiSwitch checked={allowDestructive} disabled={busy || !allowWrites} onCheckedChange={setAllowDestructive} />
       </UiFormRow>
+      <UiFormRow label={t('mcp.allowPaid')} inline info={t('mcp.paidScope')}>
+        <UiSwitch checked={allowPaid} disabled={busy || !allowWrites} onCheckedChange={setAllowPaid} />
+      </UiFormRow>
       {status.connections.map((connection) => <UiFormRow key={connection.id} label={connection.name} inline>
         <div className="flex items-center gap-2">
-          <span className="text-xs text-text-muted">{t(connection.allowDestructive ? 'mcp.accessDelete' : connection.allowWrites ? 'mcp.accessWrite' : 'mcp.accessRead')}</span>
+          <span className="text-xs text-text-muted">{[t(connection.allowDestructive ? 'mcp.accessDelete' : connection.allowWrites ? 'mcp.accessWrite' : 'mcp.accessRead'), ...(connection.allowPaid ? [t('mcp.accessPaid')] : [])].join(' · ')}</span>
           <UiButton variant="ghost" disabled={busy} onClick={() => void act(async () => {
             const value = await getMcpConnectionService().connectionConfig({ id: connection.id })
             setConfig(value)

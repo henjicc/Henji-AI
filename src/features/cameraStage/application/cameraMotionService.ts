@@ -2,8 +2,7 @@ import { createLogger } from '@/core/logging'
 
 import type { StageCameraObject, StageVec3 } from '../domain/sceneTypes'
 import type { StageCameraMovePreset, StageSpeedPreset } from '../domain/stateKeyframeTypes'
-import { saveCurrentProject, loadProjectIntoScene } from '../projects/cameraStageProjectService'
-import { useCameraStageStore } from '../store/cameraStageStore'
+import { cameraStageProjectStore, ensureCameraStageProjectRuntime, saveCameraStageProjectRuntime, bindCameraStageProjectOperation } from './cameraStageProjectRuntime'
 import { captureCameraStageUndo } from './cameraStageUndo'
 
 const logger = createLogger('features.cameraStage.camera_motion')
@@ -44,7 +43,7 @@ function requireFiniteVec3(value: StageVec3): StageVec3 {
 }
 
 function resolveTarget(input: CameraStageMotionInput): { point: StageVec3; objectId: string | null } {
-  const state = useCameraStageStore.getState()
+  const state = cameraStageProjectStore(input.projectId).getState()
   if (input.targetObjectId) {
     const target = state.objects.find((object) => object.id === input.targetObjectId)
     if (!target || target.type === 'camera') throw new Error('NOT_FOUND')
@@ -62,8 +61,7 @@ function resolveTarget(input: CameraStageMotionInput): { point: StageVec3; objec
 }
 
 async function ensureLoaded(projectId: string): Promise<void> {
-  if (useCameraStageStore.getState().currentProjectId === projectId) return
-  if (!await loadProjectIntoScene(projectId)) throw new Error('NOT_FOUND')
+  await ensureCameraStageProjectRuntime(projectId)
 }
 
 function applyStateKeyframeMotion(
@@ -71,19 +69,19 @@ function applyStateKeyframeMotion(
   camera: StageCameraObject,
   target: { point: StageVec3; objectId: string | null },
 ): Omit<CameraStageMotionResult, 'projectId' | 'cameraId' | 'targetObjectId' | 'moveKind' | 'undoToken'> {
-  let state = useCameraStageStore.getState()
+  let state = cameraStageProjectStore(input.projectId).getState()
   const startStateKeyframe = input.startStateKeyframeId
     ? state.stateKeyframes.find((stateKeyframe) => stateKeyframe.id === input.startStateKeyframeId)
     : state.stateKeyframes.find((stateKeyframe) => stateKeyframe.id === state.selectedStateKeyframeId) ?? state.stateKeyframes[0]
   if (!startStateKeyframe) throw new Error('NOT_AVAILABLE')
   state.selectStateKeyframe(startStateKeyframe.id)
-  state = useCameraStageStore.getState()
+  state = cameraStageProjectStore(input.projectId).getState()
   state.updateObject(camera.id, {
     lookAt: target.objectId
       ? { mode: 'object', objectId: target.objectId, fallbackTarget: target.point }
       : { mode: 'manual', target: target.point },
   })
-  state = useCameraStageStore.getState()
+  state = cameraStageProjectStore(input.projectId).getState()
   state.captureIntoSelectedStateKeyframe([camera.id])
 
   const startIndex = state.stateKeyframes.findIndex((stateKeyframe) => stateKeyframe.id === startStateKeyframe.id)
@@ -95,8 +93,8 @@ function applyStateKeyframeMotion(
   }
   if (!endStateKeyframe) {
     state.seek(startStateKeyframe.time + input.duration)
-    useCameraStageStore.getState().addStateKeyframe()
-    state = useCameraStageStore.getState()
+    cameraStageProjectStore(input.projectId).getState().addStateKeyframe()
+    state = cameraStageProjectStore(input.projectId).getState()
     endStateKeyframe = state.stateKeyframes.find((stateKeyframe) => stateKeyframe.id === state.selectedStateKeyframeId)
   }
   if (!endStateKeyframe) throw new Error('CAPABILITY_REJECTED')
@@ -108,7 +106,7 @@ function applyStateKeyframeMotion(
     perObject: { [camera.id]: { speedPreset: input.speed } },
   })
   state.applyCameraPathPreset(startStateKeyframe.id, camera.id, input.move)
-  const updated = useCameraStageStore.getState()
+  const updated = cameraStageProjectStore(input.projectId).getState()
   const updatedStart = updated.stateKeyframes.find((stateKeyframe) => stateKeyframe.id === startStateKeyframe.id)
   const updatedEnd = updated.stateKeyframes.find((stateKeyframe) => stateKeyframe.id === endStateKeyframe?.id)
   const path = updatedStart?.transition.perObject[camera.id]?.spatialPath
@@ -128,7 +126,7 @@ function applyStateKeyframeMotion(
   }
 }
 
-export async function applyCameraStageMotion(input: CameraStageMotionInput): Promise<CameraStageMotionResult> {
+async function applyCameraStageMotionInternal(input: CameraStageMotionInput): Promise<CameraStageMotionResult> {
   logger.info('三维运镜应用开始', {
     event: 'camera_stage.motion.apply.start',
     projectId: input.projectId,
@@ -138,13 +136,13 @@ export async function applyCameraStageMotion(input: CameraStageMotionInput): Pro
   try {
     if (!Number.isFinite(input.duration) || input.duration <= 0 || input.duration > 3_600) throw new Error('INVALID_TIME_RANGE')
     await ensureLoaded(input.projectId)
-    const state = useCameraStageStore.getState()
+    const state = cameraStageProjectStore(input.projectId).getState()
     const camera = state.objects.find((object): object is StageCameraObject => object.id === input.cameraId && object.type === 'camera')
     if (!camera) throw new Error('NOT_FOUND')
     const target = resolveTarget(input)
     const undoToken = captureCameraStageUndo(input.projectId)
     const applied = applyStateKeyframeMotion(input, camera, target)
-    await saveCurrentProject()
+    await saveCameraStageProjectRuntime(input.projectId)
     const result: CameraStageMotionResult = {
       projectId: input.projectId,
       cameraId: camera.id,
@@ -171,3 +169,5 @@ export async function applyCameraStageMotion(input: CameraStageMotionInput): Pro
     throw error
   }
 }
+
+export const applyCameraStageMotion = bindCameraStageProjectOperation(applyCameraStageMotionInternal, (input) => input.projectId)

@@ -12,6 +12,9 @@ vi.mock('@/features/canvas/application/canvasApplicationService', () => ({
   addTrustedMediaCanvasNode: mocks.addTrustedMediaCanvasNode,
 }))
 
+vi.mock('@/features/canvas/application/canvasProjectRuntime', () => ({ withCanvasProjectRuntime: async (_id: string, execute: (runtime: unknown) => Promise<unknown>) => execute({}) }))
+vi.mock('@/features/canvas/application/canvasBatchService', () => ({ runCanvasTransaction: async (_id: string, _count: number, execute: (options: unknown) => Promise<unknown>) => ({ appliedOperations: await execute({}) }) }))
+vi.mock('@/features/canvas/application/canvasQueryService', () => ({ readPersistedCanvasProjectSnapshot: async () => ({ nodes: [{ id: 'node-1' }] }) }))
 import { addGenerationResultToCanvas } from './generationResultCanvasApplicationService'
 
 describe('generation result canvas bridge', () => {
@@ -37,10 +40,10 @@ describe('generation result canvas bridge', () => {
       projectId: 'canvas-1', nodeType: 'uploadNode',
       placement: { mode: 'absolute', x: 320, y: 180 },
       data: expect.objectContaining({ imageUrl: 'C:/managed-generation/result-1.png' }),
-    }))
+    }), {})
     expect(result).toMatchObject({
       resultRef: { kind: 'generation.result', id: 'task-1' },
-      nodeRef: { kind: 'canvas.node', id: 'node-1' },
+      nodeRef: { kind: 'canvas.node', id: 'canvas-1:node-1' },
     })
     expect(result).not.toHaveProperty('filePath')
     expect(result).not.toHaveProperty('url')

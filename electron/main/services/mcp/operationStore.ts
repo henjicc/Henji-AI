@@ -1,4 +1,5 @@
-import { createHash, randomUUID } from 'node:crypto'
+import { randomUUID } from 'node:crypto'
+export { operationDigest } from '../application-control/operationDigest'
 import type Database from 'better-sqlite3'
 
 export type OperationState = 'prepared' | 'executing' | 'completed' | 'not_executed' | 'partial' | 'unknown'
@@ -11,7 +12,8 @@ export interface OperationRecord {
   state: OperationState
   verificationState?: 'verified' | 'unresolved'
   recoveryOf?: string
-  capabilityId?: 'change_application_entities' | 'retry_canvas_project_save'
+  capabilityId?: import('../../../../src/core/application-control/localHostContracts').LocalHostRequest['capabilityId']
+  targetRefs?: Array<{ kind: string; id: string }>
   recoveryVerification?: import('../../../../src/core/application-control/localHostContracts').LocalHostRequest['recoveryVerification']
   recoveryResult?: Record<string, unknown>
   requestId?: string
@@ -40,12 +42,6 @@ export function migrateMcpOperations(db: Database.Database): void {
   })()
 }
 
-function canonical(value: unknown): string {
-  if (Array.isArray(value)) return `[${value.map(canonical).join(',')}]`
-  if (value && typeof value === 'object') return `{${Object.entries(value).sort(([a], [b]) => a.localeCompare(b)).map(([key, item]) => `${JSON.stringify(key)}:${canonical(item)}`).join(',')}}`
-  return JSON.stringify(value)
-}
-export function operationDigest(value: unknown): string { return createHash('sha256').update(canonical(value)).digest('hex') }
 
 export class McpOperationStore {
   constructor(private readonly db: Database.Database) { migrateMcpOperations(db) }

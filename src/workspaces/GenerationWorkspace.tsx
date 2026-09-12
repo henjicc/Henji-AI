@@ -1,3 +1,4 @@
+import { useGenerationLifecycleContext } from '@/features/generation/application/generationLifecycle'
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { toDisplaySrc } from '@/platform/desktopApi'
 import MediaGenerator from '@/components/MediaGenerator'
@@ -10,7 +11,6 @@ import { useContextMenu } from '@/hooks/useContextMenu'
 import { useI18n } from '@/hooks/useI18n'
 import { useOnboardingState } from '@/features/onboarding/application/useOnboardingState'
 import { getModelDisplayName } from '@/utils/modelHelpers'
-import type { ImageEditSessionData } from '@/core/imageEdit'
 import { FloatingInputPanel } from './GenerationWorkspace/components/FloatingInputPanel'
 import { NotificationToast } from './GenerationWorkspace/components/NotificationToast'
 import { ClearHistoryDialog } from './GenerationWorkspace/components/ClearHistoryDialog'
@@ -19,17 +19,11 @@ import { VideoViewerModal } from '@/components/mediaViewer/VideoViewerModal'
 import { AudioViewerModal } from '@/components/mediaViewer/AudioViewerModal'
 import { TaskList } from './GenerationWorkspace/components/TaskList'
 import { useBottomPanel } from './GenerationWorkspace/hooks/useBottomPanel'
-import { useDataDirectoryInit } from './GenerationWorkspace/hooks/useDataDirectoryInit'
-import { useLoadTaskHistory, useSaveTaskHistory } from './GenerationWorkspace/hooks/useTaskHistory'
 import { useMediaFileActions } from './GenerationWorkspace/hooks/useMediaFileActions'
 import { useTaskCleanup } from './GenerationWorkspace/hooks/useTaskCleanup'
-import { useTaskGeneration } from './GenerationWorkspace/hooks/useTaskGeneration'
 import { useTaskReplay } from './GenerationWorkspace/hooks/useTaskReplay'
-import { useTaskState } from './GenerationWorkspace/hooks/useTaskState'
 import { useGenerationTaskProgressStore } from '@/stores/generationTaskProgressStore'
-import { useAutoResumePolling } from './GenerationWorkspace/hooks/useAutoResumePolling'
 import { useTestModeShortcuts } from './GenerationWorkspace/hooks/useTestModeShortcuts'
-import { useToast } from './GenerationWorkspace/hooks/useToast'
 import { useUpdateCheck } from './GenerationWorkspace/hooks/useUpdateCheck'
 import { useGenerationHistoryFiltering } from './GenerationWorkspace/hooks/useGenerationHistoryFiltering'
 import { useGenerationAutoScroll } from './GenerationWorkspace/hooks/useGenerationAutoScroll'
@@ -45,18 +39,9 @@ const clearGenerationTaskProgress = (taskId: string): void =>
 
 const GenerationWorkspace: React.FC = () => {
   const { t } = useI18n()
-  useDataDirectoryInit()
-  const {
-    tasks,
-    setTasks,
-    updateTask,
-    updateProgress,
-    rememberResultImageDimensions,
-  } = useTaskState()
-  const [isTasksLoaded, setIsTasksLoaded] = useState(false)
-  const isInitialLoadRef = useRef(true)
-  useLoadTaskHistory({ setTasks, setIsTasksLoaded, isInitialLoadRef })
-  useSaveTaskHistory({ tasks, isTasksLoaded, isInitialLoadRef })
+  const { tasks, setTasks, rememberResultImageDimensions, isTasksLoaded, isGenerating,
+    handleGenerate, handleContinuePolling, imageEditStatesRef, setUploadedImagesRef,
+    setUploadedFilePathsRef, notification, notificationVisible, notify } = useGenerationLifecycleContext()
   const {
     filterKeyword,
     filterProviderId,
@@ -80,7 +65,6 @@ const GenerationWorkspace: React.FC = () => {
     mediaFilterOptions,
     handleProviderFilterChange,
   } = useGenerationHistoryFiltering(tasks)
-  const { notification, visible: notificationVisible, show: notify } = useToast()
   const mediaActionMessages = useMemo(() => {
     return {
       downloadSuccess: t('ui:workspace.toast.downloadSuccess'),
@@ -100,34 +84,6 @@ const GenerationWorkspace: React.FC = () => {
     tasks,
     setTasks,
     clearTaskProgress: clearGenerationTaskProgress,
-  })
-  const imageEditStatesRef = useRef<Map<string, ImageEditSessionData>>(new Map())
-  const setUploadedImagesRef = useRef<React.Dispatch<React.SetStateAction<string[]>> | null>(null)
-  const setUploadedFilePathsRef = useRef<React.Dispatch<React.SetStateAction<string[]>> | null>(null)
-  const generationMessages = useMemo(() => {
-    return {
-      testModeIntercepted: t('ui:workspace.toast.testModeIntercepted'),
-      missingInput: t('ui:alerts.missingInput.message'),
-      genericGenerateFailed: t('ui:workspace.toast.generateFailed'),
-      providerKeyRequiredTitle: t('common:providerKeyRequired.title'),
-      providerKeyRequiredMessage: t('common:providerKeyRequired.message'),
-    }
-  }, [t])
-  const { isGenerating, handleGenerate, handleContinuePolling } = useTaskGeneration({
-    tasks,
-    setTasks,
-    updateTask,
-    updateProgress,
-    notify,
-    messages: generationMessages,
-    imageEditStatesRef,
-    setUploadedImagesRef,
-    setUploadedFilePathsRef,
-  })
-  useAutoResumePolling({
-    tasks,
-    isTasksLoaded,
-    handleContinuePolling,
   })
   const { handleRegenerate, handleReedit } = useTaskReplay({
     handleGenerate,

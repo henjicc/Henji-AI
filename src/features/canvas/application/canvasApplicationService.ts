@@ -154,8 +154,8 @@ export function rememberCanvasUndo(projectId: string, operation: string): string
   return token
 }
 
-function resolveNodePosition(placement: CanvasNodePlacement): { x: number; y: number } {
-  const canvas = useCanvasStore.getState()
+function resolveNodePosition(placement: CanvasNodePlacement, store = useCanvasStore): { x: number; y: number } {
+  const canvas = store.getState()
   if (placement.mode === 'absolute') return { x: placement.x, y: placement.y }
   if (placement.mode === 'right_of_node') {
     if (!canvas.nodes.some((node) => node.id === placement.anchorNodeId)) {
@@ -269,12 +269,14 @@ export async function addTrustedMediaCanvasNode(input: {
   placement: CanvasNodePlacement
   data: Record<string, unknown>
 }, options: CanvasCommitOptions = {}): Promise<Record<string, unknown>> {
-  requireCurrentCanvasProject(input.projectId)
+  const runtime = options.checkpoint?.runtime
+  const store = runtime?.store ?? useCanvasStore
+  if (!runtime) requireCurrentCanvasProject(input.projectId)
   assertCanvasCommitContext(input.projectId, options)
   const parsed = parseTrustedMediaNodeData(input.nodeType, input.data)
-  const position = resolveNodePosition(input.placement)
-  const nodeId = useCanvasStore.getState().addNode(parsed.nodeType, position, parsed.data)
-  const undoRef = rememberCanvasUndo(input.projectId, 'add_node')
+  const position = resolveNodePosition(input.placement, store)
+  const nodeId = runCanvasMutationStage(options, () => store.getState().addNode(parsed.nodeType, position, parsed.data))
+  const undoRef = options.deferCommit ? undefined : rememberCanvasUndo(input.projectId, 'add_node')
   await confirmCanvasPersistence(input.projectId, options)
   return { projectId: input.projectId, nodeId, nodeType: parsed.nodeType, position, undoRef }
 }
