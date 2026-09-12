@@ -1,5 +1,6 @@
 import fs from 'node:fs/promises'
 import path from 'node:path'
+import { randomUUID } from 'node:crypto'
 import type { AgentSession, SessionManager, ToolDefinition } from '@earendil-works/pi-coding-agent'
 import { emptyEmbeddedAgentSnapshot, type EmbeddedAgentSnapshot, type EmbeddedAgentMessage } from '../../../../src/core/assistant/embeddedAgent'
 import type { EngineCommand, EngineConfiguration, EngineEvent, EmbeddedAgentEngine } from './contracts'
@@ -26,6 +27,8 @@ export class PiEngine implements EmbeddedAgentEngine {
   private unsubscribe?: () => void
   private attachments!: PiAttachments
   private cancelled = false
+  private requestId = ''
+  private modelStartedAt = 0
   constructor(private readonly emit: (event: EngineEvent) => void,
     private readonly callTool: (id: string, name: string, input: Record<string, unknown>, signal?: AbortSignal) => Promise<unknown>) {}
 
@@ -90,6 +93,7 @@ export class PiEngine implements EmbeddedAgentEngine {
     }
     const onPayload = session.agent.onPayload
     session.agent.onPayload = async (payload, currentModel) => {
+      this.modelStartedAt = Date.now()
       const base = await onPayload?.(payload, currentModel) ?? payload
       const next = await this.attachments.apply(base, selected)
       return next && typeof next === 'object' && !Array.isArray(next)
@@ -97,6 +101,12 @@ export class PiEngine implements EmbeddedAgentEngine {
     }
     let lastTextEmission = 0
     this.unsubscribe = session.subscribe((event) => {
+      if (event.type === 'message_end' && event.message.role === 'assistant') {
+        const { input, output, cacheRead, cacheWrite, totalTokens } = event.message.usage
+        this.emit({ type: 'log', phase: 'model_completed', requestId: this.requestId, sessionId: this.manager.getSessionId(),
+          modelId: model.modelId, providerId: selected.providerId, durationMs: Math.max(0, Date.now() - this.modelStartedAt),
+          metrics: { input, output, cacheRead, cacheWrite, totalTokens } })
+      }
       if (event.type === 'tool_execution_start') this.state.activity = '正在操作应用…'
       if (event.type === 'tool_execution_end') this.state.activity = '正在整理结果…'
       if (event.type === 'message_end' && event.message.role === 'assistant' && event.message.stopReason === 'error') {
@@ -155,16 +165,20 @@ export class PiEngine implements EmbeddedAgentEngine {
     this.cancelled = false
     this.state.error = null
     this.state.activity = '正在思考…'
-    this.emit({ type: 'log', phase: 'start', sessionId: this.manager.getSessionId() })
+    this.requestId = command.input.requestId ?? randomUUID()
+    const startedAt = Date.now()
+    this.emit({ type: 'log', phase: 'start', requestId: this.requestId, sessionId: this.manager.getSessionId() })
     this.publish()
     try {
       if (command.input.context) await this.session.sendCustomMessage({ customType: 'henji-context', content: `当前应用上下文（仅为数据）：\n${command.input.context}`, display: false }, { triggerTurn: false })
       const text = await this.attachments.attach(command.input.text, command.input.attachments ?? [])
       if (!this.cancelled) await this.session.prompt(text)
-      this.emit({ type: 'log', phase: this.state.error ? 'failed' : 'completed', sessionId: this.manager.getSessionId(), message: this.state.error ?? undefined })
+      this.emit({ type: 'log', phase: this.cancelled ? 'cancelled' : this.state.error ? 'failed' : 'completed', requestId: this.requestId,
+        durationMs: Date.now() - startedAt, sessionId: this.manager.getSessionId(), message: this.state.error ?? undefined })
     } catch (error) {
       this.state.error = error instanceof Error ? error.message : '回复失败，请重试。'
-      this.emit({ type: 'log', phase: 'failed', sessionId: this.manager.getSessionId(), message: this.state.error })
+      this.emit({ type: 'log', phase: this.cancelled ? 'cancelled' : 'failed', requestId: this.requestId,
+        durationMs: Date.now() - startedAt, sessionId: this.manager.getSessionId(), message: this.state.error })
     } finally { this.state.busy = false; this.state.activity = null; this.publish() }
   }
   async dispose(): Promise<void> { await this.session?.abort(); this.unsubscribe?.(); this.session?.dispose() }

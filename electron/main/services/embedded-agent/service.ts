@@ -50,6 +50,7 @@ export class EmbeddedAgentService {
   private cancelling?: Promise<void>
   private disposed = false
   private originContext?: string
+  private requestId?: string
   snapshot(): EmbeddedAgentSnapshot { return { ...this.state, busy: this.draining || this.running || this.state.busy,
     pendingMessages: [...this.failedMessages, ...this.queue.map(({ id, input }) => ({ id, text: input.text, attachments: input.attachments }))] } }
   private publish(value: EmbeddedAgentSnapshot): void {
@@ -83,12 +84,27 @@ export class EmbeddedAgentService {
           const controller = new AbortController()
           this.toolControllers.set(message.id, controller)
           const client = this.cancelled ? undefined : this.client
+          const requestId = this.requestId
+          const startedAt = Date.now()
+          const context = { sessionId: this.state.sessionId, toolCallId: message.id, toolName: message.name,
+            operationId: typeof message.input.operationId === 'string' ? message.input.operationId : undefined }
+          logger.info('内置助手开始调用工具', { event: 'embedded_agent.tool.start', requestId, context })
           void (client ? client.call(message.name, withGenerationOrigin(message.name, message.input, this.originContext), controller.signal) : Promise.reject(new Error('操作未获授权')))
-            .then((value) => child.postMessage({ type: 'toolResult', id: message.id, value }),
-              (error: unknown) => child.postMessage({ type: 'toolResult', id: message.id, error: error instanceof Error ? error.message : '操作失败' }))
+            .then((value) => {
+              const failed = typeof value === 'object' && value !== null && 'isError' in value && value.isError === true
+              const fields = { event: `embedded_agent.tool.${failed ? 'failed' : 'completed'}`, requestId, context: { ...context, durationMs: Date.now() - startedAt } }
+              if (failed) logger.error('内置助手工具返回失败', fields)
+              else logger.info('内置助手工具调用完成', fields)
+              child.postMessage({ type: 'toolResult', id: message.id, value })
+            }, (error: unknown) => {
+              logger.error('内置助手工具调用异常', { event: 'embedded_agent.tool.failed', requestId, context: { ...context, durationMs: Date.now() - startedAt }, error })
+              child.postMessage({ type: 'toolResult', id: message.id, error: error instanceof Error ? error.message : '操作失败' })
+            })
             .finally(() => this.toolControllers.delete(message.id))
         } else if (message.type === 'log') {
-          const fields = { event: `embedded_agent.turn.${message.phase}`, context: { sessionId: message.sessionId }, ...(message.message ? { error: new Error(message.message) } : {}) }
+          const fields = { event: `embedded_agent.turn.${message.phase}`, requestId: message.requestId, modelId: message.modelId, providerId: message.providerId,
+            context: { sessionId: message.sessionId, durationMs: message.durationMs, metrics: message.metrics },
+            ...(message.message ? { error: new Error(message.message) } : {}) }
           if (message.phase === 'failed') logger.error('内置助手回复失败', fields); else logger.info('内置助手回复状态', fields)
         }
       })
@@ -114,7 +130,7 @@ export class EmbeddedAgentService {
     const entry = { id: randomUUID(), input }
     if (input.delivery === 'interrupt') this.queue.unshift(entry)
     else this.queue.push(entry)
-    logger.info('内置助手消息已加入等待列表', { event: 'embedded_agent.message.queued', context: { delivery: input.delivery ?? 'wait', count: this.queue.length } })
+    logger.info('内置助手消息已加入等待列表', { event: 'embedded_agent.message.queued', requestId: entry.id, context: { delivery: input.delivery ?? 'wait', count: this.queue.length } })
     this.publish(this.state)
     if (input.delivery === 'interrupt' && this.running) {
       // 停止当前官方 Pi 请求；等待它退出后才配置下一条，工具回执仍按原操作记账。
@@ -130,7 +146,7 @@ export class EmbeddedAgentService {
         await this.cancelling?.catch(() => {})
         if (this.disposed) break
         const entry = this.queue.shift()!
-        try { await this.runPrompt(entry.input) } catch (error) {
+        try { await this.runPrompt(entry.input, entry.id) } catch (error) {
           // 异步接收后不能将失败消息丢回已编辑的输入框，保留原文和附件供用户恢复。
           this.failedMessages.push({ id: entry.id, text: entry.input.text, attachments: entry.input.attachments,
             error: error instanceof Error ? error.message : '助手请求失败。' })
@@ -138,8 +154,9 @@ export class EmbeddedAgentService {
       }
     } finally { this.draining = false; this.publish(this.state) }
   }
-  private async runPrompt(input: EmbeddedAgentPrompt): Promise<void> {
+  private async runPrompt(input: EmbeddedAgentPrompt, requestId: string): Promise<void> {
     this.originContext = input.context
+    this.requestId = requestId
     this.running = true; this.cancelled = false
     this.preparation = new AbortController()
     this.publish({ ...this.state, error: null, activity: '正在准备…' })
@@ -151,12 +168,12 @@ export class EmbeddedAgentService {
       this.client = createEmbeddedApplicationClient(this.state.sessionId!, { allowWrites: input.access !== 'read', allowPaid: input.access === 'full', allowDestructive: input.access === 'full' })
       await this.send({ action: 'configure', input: { directory: path.join(getAppLocalDataDir(), 'assistant', 'pi'), model, tools: this.client.catalog(), instructions: `${SYSTEM_INSTRUCTIONS}\n\n用户指令：\n${instructions.content}` } })
       if (!this.cancelled) {
-        await this.send({ action: 'prompt', input: { text: input.text, context: input.context, attachments } })
+        await this.send({ action: 'prompt', input: { text: input.text, context: input.context, requestId, attachments } })
         if (this.state.error) throw new Error(this.state.error)
       }
     } catch (error) {
       if (this.cancelled) return
-      logger.error('内置助手请求失败', { event: 'embedded_agent.request.failed', error })
+      logger.error('内置助手请求失败', { event: 'embedded_agent.request.failed', requestId, error })
       this.publish({ ...this.state, error: error instanceof Error ? error.message : '助手请求失败。' })
       throw error
     } finally { this.preparation = undefined; this.client?.close(); this.client = undefined; this.running = false; this.publish({ ...this.state, busy: false, activity: null }) }

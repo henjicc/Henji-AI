@@ -34,7 +34,7 @@ async function fixture(capabilities: Partial<LlmModelConfig['capabilities']> = {
         { type: 'response.content_part.added', output_index: 0, content_index: 0, item_id: item.id, part: { type: 'output_text', text: '', annotations: [] } },
         { type: 'response.output_text.delta', output_index: 0, content_index: 0, item_id: item.id, delta: '已经读取图片。' },
         { type: 'response.output_item.done', output_index: 0, item },
-        { type: 'response.completed', response: { id: 'resp_fixture', model: 'fixture', status: 'completed', output: [item], usage: { input_tokens: 100, output_tokens: 10, total_tokens: 110 } } },
+        { type: 'response.completed', response: { id: 'resp_fixture', model: 'fixture', status: 'completed', output: [item], usage: { input_tokens: 100, output_tokens: 10, total_tokens: 110, input_tokens_details: { cached_tokens: 30 } } } },
       ]
       for (const event of events) response.write(`event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`)
       response.end()
@@ -61,6 +61,22 @@ async function fixture(capabilities: Partial<LlmModelConfig['capabilities']> = {
   return { engine, requests, events, tool, directory, configuration, setMode: (value: typeof mode) => { mode = value } }
 }
 describe('Pi official SDK engine', () => {
+  it('记录每轮供应商实际用量和缓存读取，并沿用宿主消息关联标识', async () => {
+    const f = await fixture({}, 'openai-responses')
+    await f.engine.command({ action: 'prompt', input: { text: '第一轮', context: '', requestId: 'request-first' } })
+    await f.engine.command({ action: 'prompt', input: { text: '第二轮', context: '', requestId: 'request-second' } })
+    for (const requestId of ['request-first', 'request-second']) {
+      const logs = f.events.filter(event => event.type === 'log' && event.requestId === requestId)
+      expect(logs).toEqual([
+        expect.objectContaining({ phase: 'start' }),
+        expect.objectContaining({ phase: 'model_completed', modelId: 'fixture', providerId: 'test', durationMs: expect.any(Number),
+          metrics: { input: 70, output: 10, cacheRead: 30, cacheWrite: 0, totalTokens: 110 } }),
+        expect.objectContaining({ phase: 'completed', durationMs: expect.any(Number) }),
+      ])
+      expect(JSON.stringify(logs)).not.toContain('fixture-key')
+      expect(JSON.stringify(logs)).not.toContain('第一轮')
+    }
+  })
   it('MCP 拒绝写入被官方 SDK 保存为工具错误，模型收到单份恢复事实', async () => {
     const f = await fixture()
     const result = { ok: false, executionState: 'not_executed', message: '请读取项目列表后选择现有项目' }
@@ -178,5 +194,6 @@ describe('Pi official SDK engine', () => {
     await f.engine.command({ action: 'cancel' })
     await promise
     expect(await f.engine.command({ action: 'snapshot' })).toMatchObject({ busy: false })
+    expect(f.events.filter(event => event.type === 'log').at(-1)).toMatchObject({ phase: 'cancelled' })
   }, 30000)
 })

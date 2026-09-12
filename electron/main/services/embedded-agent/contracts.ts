@@ -8,14 +8,15 @@ export interface EngineConfiguration { directory: string; model: EmbeddedModel; 
 export type EngineCommand =
   | { action: 'initialize'; input: string }
   | { action: 'configure'; input: EngineConfiguration }
-  | { action: 'prompt'; input: { text: string; context: string; attachments?: PreparedEmbeddedAttachment[] } }
+  | { action: 'prompt'; input: { text: string; context: string; requestId?: string; attachments?: PreparedEmbeddedAttachment[] } }
   | { action: 'open'; input: string }
   | { action: 'snapshot' | 'cancel' | 'new' | 'sessions'; input?: never }
 export type EngineEvent =
   | { type: 'snapshot'; value: EmbeddedAgentSnapshot }
   | { type: 'tool'; id: string; name: string; input: Record<string, unknown> }
   | { type: 'toolCancel'; id: string }
-  | { type: 'log'; phase: 'start' | 'completed' | 'failed'; sessionId: string | null; message?: string }
+  | { type: 'log'; phase: 'start' | 'completed' | 'failed' | 'cancelled' | 'model_completed'; sessionId: string | null; requestId: string; message?: string;
+      durationMs?: number; modelId?: string; providerId?: string; metrics?: { input: number; output: number; cacheRead: number; cacheWrite: number; totalTokens: number } }
 export interface EmbeddedAgentEngine {
   command(command: EngineCommand): Promise<unknown>
   dispose(): Promise<void>

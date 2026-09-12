@@ -3,13 +3,13 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { EmbeddedAgentPrompt } from '../../../../src/core/assistant/embeddedAgent'
 import type { EngineCommand } from './contracts'
 
-const mocks = vi.hoisted(() => ({ fork: vi.fn(), resolveModel: vi.fn(), prepare: vi.fn(), close: vi.fn() }))
+const mocks = vi.hoisted(() => ({ fork: vi.fn(), resolveModel: vi.fn(), prepare: vi.fn(), close: vi.fn(), call: vi.fn(), info: vi.fn(), error: vi.fn() }))
 vi.mock('electron', () => ({ utilityProcess: { fork: mocks.fork } }))
-vi.mock('../../ipc/mcp', () => ({ createEmbeddedApplicationClient: () => ({ catalog: () => [], close: mocks.close }) }))
+vi.mock('../../ipc/mcp', () => ({ createEmbeddedApplicationClient: () => ({ catalog: () => [], close: mocks.close, call: mocks.call }) }))
 vi.mock('../system', () => ({ getAppLocalDataDir: () => '/fixture' }))
 vi.mock('../../window', () => ({ getMainWindow: () => undefined }))
 vi.mock('../assistant/user-instructions', () => ({ getAssistantUserInstructions: async () => ({ content: '' }) }))
-vi.mock('../logging', () => ({ createMainLogger: () => ({ info: vi.fn(), error: vi.fn() }) }))
+vi.mock('../logging', () => ({ createMainLogger: () => ({ info: mocks.info, error: mocks.error }) }))
 vi.mock('./models', () => ({ resolveEmbeddedModel: mocks.resolveModel }))
 vi.mock('./attachments', () => ({ prepareEmbeddedAttachments: mocks.prepare }))
 import { EmbeddedAgentService, withGenerationOrigin } from './service'
@@ -42,11 +42,31 @@ function setup() {
   const send = (text: string, delivery: EmbeddedAgentPrompt['delivery'] = 'wait') => service.prompt({ text, delivery,
     model: { providerId: 'test', modelId: 'fixture' }, access: 'read', context: '' })
   const finish = () => { if (active) { reply(active); active = undefined } }
-  return { service, send, prompts, finish, finishCancel: () => { finish(); if (cancelId) { reply(cancelId); cancelId = undefined } } }
+  return { service, send, prompts, finish, child, finishCancel: () => { finish(); if (cancelId) { reply(cancelId); cancelId = undefined } } }
 }
 afterEach(() => { vi.clearAllMocks() })
 
 describe('内置助手消息调度', () => {
+  it('工具失败日志关联原消息和操作，不记录工具输入正文', async () => {
+    const f = setup()
+    await f.send('消息正文不进日志')
+    await vi.waitFor(() => expect(f.prompts).toHaveLength(1))
+    const queued = mocks.info.mock.calls.find(call => call[1].event === 'embedded_agent.message.queued')![1] as { requestId: string }
+    mocks.call.mockResolvedValue({ isError: true, content: [{ type: 'text', text: '拒绝' }] })
+    // 工具回执不经过本测试的 command 替身。
+    const postMessage = f.child.postMessage
+    f.child.postMessage = vi.fn()
+    f.child.emit('message', { type: 'tool', id: 'tool-call', name: 'change_application_entities', input: { operationId: 'operation-original', secret: '不可记录的输入' } })
+    await vi.waitFor(() => expect(mocks.error).toHaveBeenCalledWith('内置助手工具返回失败', expect.objectContaining({
+      event: 'embedded_agent.tool.failed', requestId: queued.requestId,
+      context: expect.objectContaining({ toolCallId: 'tool-call', operationId: 'operation-original' }),
+    })))
+    expect(JSON.stringify([...mocks.info.mock.calls, ...mocks.error.mock.calls])).not.toContain('不可记录的输入')
+    f.child.postMessage = postMessage
+    f.finish()
+    await vi.waitFor(() => expect(f.service.snapshot().busy).toBe(false))
+    f.service.dispose()
+  })
   it('退出时不启动等待消息或重新创建运行进程', async () => {
     const f = setup()
     await f.send('当前消息')
