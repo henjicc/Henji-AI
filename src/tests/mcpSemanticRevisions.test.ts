@@ -14,6 +14,7 @@ import { useCanvasStore } from '@/stores/canvasStore'
 import { useProjectStore } from '@/stores/projectStore'
 import { loadRealModelsIntoRegistry } from './loadRealModels'
 import { CANVAS_NODE_TYPES } from '@/features/canvas/domain/canvasNodes'
+import { addCanvasNode } from '@/features/canvas/application/canvasApplicationService'
 
 const task: GenerationTaskStatusSnapshot = { taskId: 'mcp-revision-task', status: 'generating', progress: 10,
   modelId: 'fixture', mediaType: 'image', resultAvailable: false, errorCode: null, errorMessage: null }
@@ -42,7 +43,7 @@ async function baseline(session: ReturnType<typeof client>) {
 const invocation = (expectedRevisions: unknown) => ({ id: 'cancel_generation_task', version: 1,
   expectedRevisions, input: { taskId: task.taskId, reason: '验收取消' } })
 
-it('MCP 实际授权目录可创建图片能力节点与连线，并从原工程存储回读', async () => {
+it('MCP 实际授权可发现、创建和配置图片节点，并从原工程存储回读', async () => {
   await loadRealModelsIntoRegistry()
   const projectId = 'mcp-image-capability'
   const source = { id: 'source-image', type: CANVAS_NODE_TYPES.upload, position: { x: 80, y: 120 },
@@ -67,8 +68,62 @@ it('MCP 实际授权目录可创建图片能力节点与连线，并从原工程
     expect(persisted.edges).toEqual([expect.objectContaining({ source: source.id, target: result.data.nodeId })])
     expect(persisted.nodes.find((node) => node.id === result.data.nodeId)?.position.x).toBeGreaterThan(source.position.x)
     const read = await session.execute({ id: 'read_application_entity', version: 1,
-      input: { ref: { kind: 'canvas.node', id: `${projectId}:${result.data.nodeId}` }, propertyIds: [] } }, request())
+      input: { ref: { kind: 'canvas.node', id: `${projectId}:${result.data.nodeId}` },
+        propertyIds: ['canvas.node.generation_schema'] } }, request())
     expect(read.ok, JSON.stringify(read)).toBe(true)
+    if (!read.ok) throw new Error('节点读取失败')
+    const properties = read.data.properties as Record<string, unknown>
+    expect(properties['canvas.node.generation_schema']).toMatchObject({ modelLocked: true,
+      model: { meta: { id: 'fal-pixelcut-background-removal' } } })
+    const ref = { kind: 'canvas.node', id: `${projectId}:${result.data.nodeId}` }
+    const described = await session.execute({ id: 'describe_application_entities', version: 1,
+      input: { entityTypes: ['canvas.node'], refs: [ref] } }, request())
+    expect(described.ok, JSON.stringify(described)).toBe(true)
+    if (!described.ok) throw new Error('节点属性发现失败')
+    expect(described.data.propertyAvailability).toEqual([expect.objectContaining({ ref,
+      properties: expect.arrayContaining([expect.objectContaining({ propertyId: 'canvas.node.generation_config', writable: true })]),
+    })])
+    const changeConfig = (value: unknown, target = ref) => session.execute({ id: 'change_application_entities', version: 2,
+      input: { summary: '配置画布图片节点', changes: [{ kind: 'set_properties', entityType: 'canvas.node',
+        target, properties: { 'canvas.node.generation_config': value } }] } }, request())
+    const config = { prompt: '保留人物轮廓', modelId: 'fal-pixelcut-background-removal', params: {} }
+    const configured = await changeConfig(config)
+    expect(configured.ok, JSON.stringify(configured)).toBe(true)
+    const configuredSnapshot = await readPersistedCanvasProjectSnapshot(projectId)
+    expect(configuredSnapshot.nodes.find((node) => node.id === result.data.nodeId)?.data)
+      .toMatchObject({ prompt: '保留人物轮廓', modelId: 'fal-pixelcut-background-removal', params: {} })
+    expect(configuredSnapshot.edges).toEqual(persisted.edges)
+    for (const invalid of [{ modelId: 'fal-image-apps-v2-outpaint' }, { params: { nonexistent: 1 } }, { generationUi: {} }]) {
+      const refused = await changeConfig({ ...config, ...invalid })
+      expect(refused.ok, JSON.stringify(refused)).toBe(false)
+      const after = await readPersistedCanvasProjectSnapshot(projectId)
+      expect(after.nodes).toEqual(configuredSnapshot.nodes)
+      expect(after.edges).toEqual(configuredSnapshot.edges)
+    }
+    const afterRead = await session.execute({ id: 'read_application_entity', version: 1,
+      input: { ref, propertyIds: ['canvas.node.generation_config'] } }, request())
+    expect(afterRead).toMatchObject({ ok: true, data: { properties: {
+      'canvas.node.generation_config': { prompt: '保留人物轮廓', modelId: 'fal-pixelcut-background-removal', params: {} },
+    } } })
+    for (const modelId of ['config-model-one', 'config-model-two']) {
+      registry.register({ meta: { id: modelId, canonicalModelId: 'nano-banana', provider: 'fixture', type: 'image',
+        name: { zh: modelId, en: modelId } }, params: [{ id: modelId, type: 'dropdown', valueType: 'string',
+        order: 1, name: { zh: '质量', en: 'Quality' }, default: 'standard',
+        options: [{ value: 'standard', label: '标准' }, { value: 'high', label: '高' }] }],
+      endpoints: '/fixture', pricing: { currency: '$', fixed: 0.03 }, request: { builder: (params) => params } })
+    }
+    const normalNode = await addCanvasNode({ projectId, nodeType: CANVAS_NODE_TYPES.imageEdit,
+      placement: { mode: 'viewport_center' }, data: { modelId: 'config-model-one', params: { 'config-model-one': 'standard' } } })
+    const normalRef = { kind: 'canvas.node', id: `${projectId}:${normalNode.nodeId}` }
+    const switchedConfig = { prompt: '普通节点', modelId: 'config-model-two', params: { 'config-model-two': 'high' } }
+    const switched = await changeConfig(switchedConfig, normalRef)
+    expect(switched.ok, JSON.stringify(switched)).toBe(true)
+    expect((await readPersistedCanvasProjectSnapshot(projectId)).nodes.find((node) => node.id === normalNode.nodeId)?.data)
+      .toMatchObject(switchedConfig)
+    const invalidOption = await changeConfig({ ...switchedConfig, params: { 'config-model-two': 'invalid' } }, normalRef)
+    expect(invalidOption.ok, JSON.stringify(invalidOption)).toBe(false)
+    expect((await readPersistedCanvasProjectSnapshot(projectId)).nodes.find((node) => node.id === normalNode.nodeId)?.data)
+      .toMatchObject(switchedConfig)
   } finally {
     useCanvasStore.setState(previousCanvas, true)
     useProjectStore.setState(previousProject, true)

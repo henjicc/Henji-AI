@@ -12,7 +12,6 @@ import {
 } from '../domain/canvasNodes'
 import { isEditableLayerStackResultNode } from '../domain/canvasNodeGuards'
 import {
-  extractCanvasNodeData,
   extractCanvasNodeDataForDuplication,
   listCanvasNodeDataKeys,
   parseCanvasSpecialEditorData,
@@ -38,6 +37,9 @@ import {
   runAfterCanvasPersistence,
   type CanvasCommitOptions,
 } from './canvasPersistenceService'
+import {
+  validateCanvasNodeDataPatch, validateCanvasNodeGenerationConfig, type CanvasNodeGenerationConfig,
+} from './canvasNodeGenerationConfig'
 const logger = createLogger('features.canvas.canvas_mutation')
 
 interface CanvasNodePatch {
@@ -54,6 +56,7 @@ export interface CanvasStoryboardFramePatch {
 
 export interface CanvasNodePropertyPatch {
   nodeId: string
+  generationConfig?: CanvasNodeGenerationConfig
   displayName?: string
   position?: { x: number; y: number }
   storyboardFrames?: CanvasStoryboardFramePatch[]
@@ -93,11 +96,13 @@ export async function applyCanvasNodePropertyPatches(
     if (patch.position && ![patch.position.x, patch.position.y].every(Number.isFinite)) {
       throw new CanvasApplicationError('INVALID_INPUT', '画布节点位置必须是有限数值')
     }
+    const data: Partial<CanvasNodeData> = patch.generationConfig
+      ? validateCanvasNodeGenerationConfig(requireNode(projectId, patch.nodeId), patch.generationConfig)
+      : {}
+    if (patch.displayName !== undefined) data.displayName = patch.displayName.trim()
     return {
       nodeId: patch.nodeId,
-      ...(patch.displayName !== undefined
-        ? { data: { displayName: patch.displayName.trim() } }
-        : {}),
+      data,
       ...(patch.position ? { position: patch.position } : {}),
     }
   })
@@ -254,31 +259,7 @@ export async function updateCanvasNode(input: {
   data: Record<string, unknown>
 }, options: CanvasCommitOptions = {}): Promise<Record<string, unknown>> {
   const node = requireNode(input.projectId, input.nodeId)
-  const generationUi = node.data.generationUi
-  const isLockedModel = Boolean(
-    generationUi
-    && typeof generationUi === 'object'
-    && !Array.isArray(generationUi)
-    && (generationUi as Record<string, unknown>).modelMode === 'locked',
-  )
-  if (
-    isLockedModel
-    && typeof input.data.modelId === 'string'
-    && input.data.modelId !== node.data.modelId
-  ) {
-    throw new CanvasApplicationError(
-      'CAPABILITY_REJECTED',
-      '固定图片工具的模型由能力契约锁定，不能通过通用节点更新修改；请重新应用目标画布图片能力。',
-      true,
-      { nodeId: node.id, modelId: node.data.modelId },
-    )
-  }
-  const safeData = extractCanvasNodeData(
-    node.type,
-    input.data,
-    node.data as Record<string, unknown>,
-    isLockedModel,
-  )
+  const safeData = validateCanvasNodeDataPatch(node, input.data)
   const canvas = useCanvasStore.getState()
   const beforeDepth = canvas.history.past.length
   await applyCanvasNodePatches(input.projectId, [{ nodeId: node.id, data: safeData }], options)

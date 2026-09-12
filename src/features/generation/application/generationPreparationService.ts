@@ -268,6 +268,10 @@ function schemaDigest(modelId: string, params: ParamDef[]): string {
 
 export function getGenerationModelSchemaRef(modelId: string) {
   const model = requireDiscoverableGenerationModel(modelId)
+  return modelSchemaRef(model)
+}
+
+function modelSchemaRef(model: ModelDefinition) {
   return {
     catalogVersion: APPLICATION_CAPABILITY_CATALOG_VERSION,
     kind: 'operation' as const,
@@ -367,9 +371,14 @@ export function searchGenerationModels(input: GenerationModelSearchInput): Array
 
 export function getGenerationModelSchema(modelId: string): Record<string, unknown> {
   const model = requireDiscoverableGenerationModel(modelId)
+  return describeGenerationModel(model)
+}
+
+/** 已由调用领域确定可使用的模型；只序列化公开参数，不改变模型的发现或执行权限。 */
+export function describeGenerationModel(model: ModelDefinition): Record<string, unknown> {
   return {
     schemaVersion: 'generation-model-schema/v2',
-    schemaRef: getGenerationModelSchemaRef(model.meta.id),
+    schemaRef: modelSchemaRef(model),
     meta: {
       id: model.meta.id,
       canonicalModelId: model.meta.canonicalModelId,

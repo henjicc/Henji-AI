@@ -13,6 +13,9 @@ import type { CanvasNode } from '@/stores/canvasStore'
 import { isAssetGroupNode, isStoryboardSplitNode } from '../domain/canvasNodes'
 import type { CanvasNodePropertyPatch, CanvasStoryboardFramePatch } from './canvasMutationService'
 import { renameCanvasProject } from './canvasProjectService'
+import {
+  canvasNodeGenerationConfigSchema, readCanvasNodeGenerationConfig, readCanvasNodeGenerationSchema,
+} from './canvasNodeGenerationConfig'
 
 /*
  * 画布工程与节点的可写属性统一定义——1.3 迁移（project.name 1 + node.display_name/position 2），
@@ -118,6 +121,21 @@ const storyboardFramePatchSchema = z.object({
 
 const assetGroupMemberOrderSchema = z.array(z.string().min(1)).max(200)
 
+function generationJsonValue(suffix: string): Extract<ApplicationPropertyValue, { kind: 'json' }> {
+  const id = `${NODE_ENTITY_TYPE}.${suffix}.value`
+  return { kind: 'json', schemaRef: {
+    catalogVersion: APPLICATION_CAPABILITY_CATALOG_VERSION, kind: 'property', id,
+    version: 1, digest: digest(`property:${id}`),
+  } }
+}
+
+const GENERATION_CONFIG_VALUE = generationJsonValue('generation_config')
+const GENERATION_SCHEMA_VALUE = generationJsonValue('generation_schema')
+export const CANVAS_NODE_SCHEMA_DOCUMENTS = [
+  { ref: GENERATION_CONFIG_VALUE.schemaRef, value: z.toJSONSchema(canvasNodeGenerationConfigSchema) as JsonValue },
+  { ref: GENERATION_SCHEMA_VALUE.schemaRef, value: z.toJSONSchema(z.record(z.string(), z.unknown()).nullable()) as JsonValue },
+]
+
 function parseStoryboardFramePatches(raw: JsonValue | undefined): CanvasStoryboardFramePatch[] {
   return z.array(storyboardFramePatchSchema).min(1).max(200).parse(raw)
 }
@@ -126,6 +144,29 @@ function parseStoryboardFramePatches(raw: JsonValue | undefined): CanvasStoryboa
 export const NODE_FIELDS: ApplicationFieldDefinition<
   CanvasNode, CanvasNodePropertyPatch, 'updateNodePosition' | 'updateStoryboardFrame' | 'reorderStoryboardFrame'
 >[] = [
+  {
+    propertyId: `${NODE_ENTITY_TYPE}.generation_config`,
+    descriptor: canvasDescriptor(NODE_ENTITY_TYPE, 'generation_config', '生成配置',
+      GENERATION_CONFIG_VALUE,
+      '仅生成节点支持。整体写入 {prompt: 字符串, modelId: 非空模型 ID, params: 参数对象}，三个字段均必填。'
+      + '先读取 generation_schema 获取当前模型参数及锁定约束；引用素材通过画布连线提供。修改配置不会提交付费生成。', true),
+    read: readCanvasNodeGenerationConfig,
+    writer: { write(patch, mutation) {
+      patch.generationConfig = canvasNodeGenerationConfigSchema.parse(mutation.value)
+    } },
+    storeActions: [],
+  },
+  {
+    propertyId: `${NODE_ENTITY_TYPE}.generation_schema`,
+    descriptor: {
+      ...canvasDescriptor(NODE_ENTITY_TYPE, 'generation_schema', '生成配置说明',
+        GENERATION_SCHEMA_VALUE, '当前节点的生成模型参数、配置字段和模型锁定约束；非生成节点返回 null。', true),
+      requiredPermissions: { read: ['canvas:read'], write: [] },
+      readOnlyReason: '由节点类型与当前模型目录共同确定。',
+    },
+    read: readCanvasNodeGenerationSchema,
+    storeActions: [],
+  },
   {
     propertyId: `${NODE_ENTITY_TYPE}.display_name`,
     descriptor: canvasDescriptor(NODE_ENTITY_TYPE, 'display_name', '节点标题', { kind: 'string', minLength: 1, maxLength: 120 }),
