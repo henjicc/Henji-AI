@@ -33,6 +33,7 @@ import { areStringListsEqual } from '@/features/canvas/application/graphMediaRes
 import { DEFAULT_VIEWPORT } from './canvasUtils';
 import { useCanvasContentLod } from './nodes/shared/useCanvasContentLod';
 import { useCanvasDuplication } from './hooks/useCanvasDuplication';
+import { useCanvasMediaDrag } from './hooks/useCanvasMediaDrag';
 import { useCanvasNodeMenu } from './hooks/useCanvasNodeMenu';
 import { useCanvasNodeFocusTracking, useFocusedCanvasNodeId } from './hooks/useCanvasNodeFocus';
 import { useCanvasResumePolling } from './hooks/useCanvasResumePolling';
@@ -93,6 +94,7 @@ export function Canvas() {
   const { t } = useTranslation();
   const reactFlowInstance = useReactFlow<CanvasNode, CanvasEdge>();
   const wrapperRef = useRef<HTMLDivElement>(null);
+  const handleMediaDrag = useCanvasMediaDrag();
   const { prepareGlassGesture, clearGlassGesture } = useCanvasGlassPerformance(wrapperRef);
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [connectionToast, setConnectionToast] = useState<CanvasToastState | null>(null);
@@ -416,6 +418,7 @@ export function Canvas() {
   return (
     <div
       ref={wrapperRef}
+      onMouseDownCapture={handleMediaDrag}
       data-application-observation-region="canvas.viewport_observer"
       className={`relative h-full w-full ${isContentLodLow ? 'canvas-lod-low' : ''}`}
       onDragOver={assetDrop.onDragOver}
