@@ -18,7 +18,7 @@ beforeEach(() => {
   installHarnessNativeStorage()
   replaceGenerationTaskStatusSnapshots([task])
   dispose = registerVisibleGenerationTaskHandler({ create: async () => null, get: () => task,
-    getResult: () => ({ taskId: task.taskId, mediaType: 'image', url: 'C:/fixture/result.png', prompt: '夹具' }), list: () => [task], cancel })
+    getResult: () => ({ taskId: task.taskId, mediaType: 'image', url: 'C:/fixture/result.png', prompt: '长提示词不应成为超长文件名。'.repeat(80) }), list: () => [task], cancel })
 })
 afterEach(() => { dispose(); replaceGenerationTaskStatusSnapshots([]); uninstallHarnessNativeStorage(); vi.restoreAllMocks(); vi.clearAllMocks() })
 const request = () => ({ requestId: crypto.randomUUID(), signal: new AbortController().signal })
@@ -102,6 +102,7 @@ it('生成结果与后台画布各用原读取版本，创建节点后从正式�
   const { nodes } = await readPersistedCanvasProjectSnapshot(projectId)
   expect(nodes).toHaveLength(1)
   expect(nodes[0].data.imageUrl).toBe('C:/fixture/result.png')
+  expect(String(nodes[0].data.sourceFileName).length).toBeLessThanOrEqual(120)
   if (result.ok) expect(result.data).toMatchObject({ nodeRef: { kind: 'canvas.node', id: `${projectId}:${nodes[0].id}` },
     verification: { verified: true } })
 })

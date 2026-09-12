@@ -9,6 +9,8 @@ import { withCanvasProjectRuntime } from '@/features/canvas/application/canvasPr
 import { runCanvasTransaction } from '@/features/canvas/application/canvasBatchService'
 import { readPersistedCanvasProjectSnapshot } from '@/features/canvas/application/canvasQueryService'
 import { getVisibleGenerationTaskResult } from '@/workspaces/GenerationWorkspace/application/visibleGenerationTaskCommand'
+import { useProjectStore } from '@/stores/projectStore'
+import { useCanvasStore } from '@/stores/canvasStore'
 
 /**
  * 组合生成与画布两个领域的窄桥梁。模型只传稳定 generation.result 引用；媒体路径由宿主内部
@@ -17,7 +19,7 @@ import { getVisibleGenerationTaskResult } from '@/workspaces/GenerationWorkspace
 export async function addGenerationResultToCanvas(input: {
   projectId: string
   resultRef: { kind: 'generation.result'; id: string }
-  placement: CanvasNodePlacement
+  placement?: CanvasNodePlacement
 }): Promise<Record<string, unknown>> {
   const result = getVisibleGenerationTaskResult(input.resultRef.id)
   if (!result) throw new Error('GENERATION_RESULT_NOT_AVAILABLE')
@@ -27,12 +29,17 @@ export async function addGenerationResultToCanvas(input: {
     sourceType: 'history',
     imageUrl: result.url,
     filePath: result.filePath ?? result.url,
-    displayName: result.prompt,
+    displayName: result.prompt.trim().replace(/\s+/g, ' ').slice(0, 120) || '生成结果',
   }
+  const selectedNodeId = useProjectStore.getState().currentProjectId === input.projectId
+    ? useCanvasStore.getState().selectedNodeId : null
+  const placement = input.placement ?? (selectedNodeId
+    ? { mode: 'right_of_node' as const, anchorNodeId: selectedNodeId }
+    : { mode: 'viewport_center' as const })
   const transaction = await withCanvasProjectRuntime(input.projectId, (runtime) => runCanvasTransaction(input.projectId, 1, async (options) => [await addTrustedMediaCanvasNode({
     projectId: input.projectId,
     nodeType: mediaSourceNodeType(result.mediaType),
-    placement: input.placement,
+    placement,
     data: mediaSourceNodeData(payload),
   }, options)], {}, runtime))
   const created = transaction.appliedOperations[0]

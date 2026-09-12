@@ -5,7 +5,7 @@ const path = require('node:path')
 // 官方 Pi + 真实 utility process / preload / 应用工具；只用本地模型响应替身，不访问外部模型。
 function createEmbeddedAgentScenes(context) {
   return [{ id: 'embedded-agent', surface: '助手', name: '内置助手-对话工具停止与恢复', writesUserData: true,
-    setup: async (page) => {
+    setup: async (page, app, { capture }) => {
       const waitSnapshot = async (predicate) => {
         const deadline = Date.now() + 15000
         while (Date.now() < deadline) {
@@ -17,6 +17,7 @@ function createEmbeddedAgentScenes(context) {
       }
       const requests = []
       let waiting = false
+      let canvasGeneration = false
       const server = createServer(async (request, response) => {
         const chunks = []
         for await (const chunk of request) chunks.push(Buffer.from(chunk))
@@ -25,7 +26,8 @@ function createEmbeddedAgentScenes(context) {
         response.writeHead(200, { 'Content-Type': 'text/event-stream' }); response.flushHeaders()
         if (waiting) return
         const called = body.messages.some((message) => message.role === 'tool')
-        const delta = called ? { content: '已读取当前主题设置。' } : { tool_calls: [{ index: 0, id: 'call_read_theme', type: 'function',
+        const delta = canvasGeneration ? (called ? { content: '画布生成任务已提交。' } : { tool_calls: [{ index: 0, id: 'call_canvas_generation', type: 'function',
+          function: { name: 'create_visible_generation_task', arguments: JSON.stringify({ operationId: require('node:crypto').randomUUID(), modelId: 'kie-gpt-image-2.5', prompt: '画布节点生成验收', mediaType: 'image', params: {} }) } }] }) : called ? { content: '已读取当前主题设置。' } : { tool_calls: [{ index: 0, id: 'call_read_theme', type: 'function',
           function: { name: 'read_application_entity', arguments: JSON.stringify({ ref: { kind: 'settings.registry', id: 'singleton' }, propertyIds: ['interface.theme_tone'] }) } }] }
         for (const item of [{ delta, finish_reason: null }, { delta: {}, finish_reason: called ? 'stop' : 'tool_calls' }]) {
           response.write(`data: ${JSON.stringify({ id: 'fixture-reply', object: 'chat.completion.chunk', created: 1, model: 'fixture', choices: [{ index: 0, ...item }] })}\n\n`)
@@ -54,13 +56,13 @@ function createEmbeddedAgentScenes(context) {
         const panel = page.getByRole('complementary', { name: '智能助手' })
         await panel.waitFor()
         assert.equal(await panel.getByRole('button', { name: '助手模型', exact: true }).count(), 0)
-        assert.ok((await page.getByRole('button', { name: '助手操作权限', exact: true }).textContent()).includes('允许修改、删除和付费生成'))
+        assert.ok((await page.getByRole('button', { name: '助手操作权限', exact: true }).textContent()).includes('完全访问'))
         await page.evaluate(async () => { const state = await window.henjiNative.mcp.status(); await window.henjiNative.mcp.configure({ enabled: false, port: state.port }) })
         await page.getByRole('button', { name: '助手操作权限', exact: true }).click()
-        await page.getByRole('option', { name: '仅查看', exact: true }).click()
+        await page.getByRole('option', { name: '只读访问', exact: true }).click()
         await page.reload()
         await panel.waitFor()
-        assert.ok((await page.getByRole('button', { name: '助手操作权限', exact: true }).textContent()).includes('仅查看'))
+        assert.ok((await page.getByRole('button', { name: '助手操作权限', exact: true }).textContent()).includes('只读访问'))
         const editor = page.getByRole('textbox', { name: '向智能助手描述任务' })
         console.log('[embedded-agent] 读取主题', await page.evaluate(() => window.henjiNative.embeddedAgent.models()))
         await editor.fill('验收读取主题')
@@ -153,12 +155,13 @@ function createEmbeddedAgentScenes(context) {
         const assetsAfter = await page.evaluate(() => window.henjiNative.assetLibrary.queryAssets({ keyword: 'icon.png' }))
         assert.equal(assetsAfter.total, assetsBefore.total)
         await page.getByRole('button', { name: '助手操作权限', exact: true }).click()
-        await page.getByRole('option', { name: '允许修改、删除和付费生成', exact: true }).click()
+        await page.getByRole('option', { name: '完全访问', exact: true }).click()
         const requestStart = requests.length
         await page.getByRole('button', { name: '发送', exact: true }).click()
         await page.getByRole('button', { name: '发送', exact: true }).waitFor({ timeout: 60000 })
         assert.ok(requests.length > requestStart)
         assert.ok(requests[requestStart].tools.some(tool => tool.function.name === 'create_visible_generation_task'), '开放权限后生成工具必须送到模型')
+        console.log('[embedded-agent] 首轮工具数量与定义字符数', requests[requestStart].tools.length, JSON.stringify(requests[requestStart].tools).length)
         const user = requests[requestStart].messages.find((message) => message.role === 'user' && Array.isArray(message.content) && message.content.some((part) => part.type === 'image_url'))
         assert.ok(user, '图片必须实际到达模型请求')
         assert.ok(user.content.find((part) => part.type === 'image_url').image_url.url.startsWith('data:image/png;base64,'))
@@ -205,6 +208,53 @@ function createEmbeddedAgentScenes(context) {
         assert.notEqual(await node.getAttribute('style'), positionBefore, '节点原有移动仍应生效')
         await editor.fill('@')
         await candidate.waitFor()
+        // 生成替身只放在 IPC 之后；真实助手工具、参数准备、标准节点挂载、请求构建与结果提交全部照常走。
+        await app.evaluate(({ ipcMain }, resultPath) => {
+          ipcMain.removeHandler('ai:generate')
+          ipcMain.handle('ai:generate', async (_event, request) => {
+            globalThis.__canvasGenerationRequest = request
+            await new Promise(resolve => { globalThis.__finishCanvasGeneration = resolve })
+            return { ok: true, data: { status: 'completed', url: resultPath, filePath: resultPath } }
+          })
+        }, path.resolve('resources/icons/icon.png'))
+        await page.evaluate(() => window.henjiNative.ai.setProviderApiKey('kie', 'isolated-generation-fixture'))
+        await page.reload()
+        const { projectId } = await context.seedAndOpenCanvasPanoramaProject(page)
+        if (!await panel.isVisible()) await page.keyboard.press('Control+Shift+A')
+        await page.getByRole('button', { name: '新建对话', exact: true }).click()
+        await panel.getByText('从当前工作开始', { exact: true }).waitFor()
+        await page.locator('.react-flow__node[data-id="__ui_panorama_source"]').click()
+        canvasGeneration = true
+        await editor.fill('画布生成验收：在选中参考图旁生成图片')
+        await page.getByRole('button', { name: '发送', exact: true }).click()
+        const deadline = Date.now() + 20000
+        while (!await app.evaluate(() => Boolean(globalThis.__canvasGenerationRequest))) {
+          if (Date.now() > deadline) throw new Error('标准画布节点未发出生成请求：' + JSON.stringify(await page.evaluate(() => window.henjiNative.embeddedAgent.snapshot())))
+          await new Promise(resolve => setTimeout(resolve, 100))
+        }
+        const generatedRequest = await app.evaluate(() => globalThis.__canvasGenerationRequest)
+        assert.equal(generatedRequest.modelId, 'kie-gpt-image-2.5')
+        assert.equal(generatedRequest.params.images.length, 1, '同一参考图的连线与本地引用不能重复发送')
+        await capture('canvas-generating')
+        await app.evaluate(() => globalThis.__finishCanvasGeneration())
+        let persisted
+        const resultDeadline = Date.now() + 15000
+        do {
+          persisted = await page.evaluate(async id => {
+            const record = await window.henjiNative.storyboardProjects.getProjectRecord(id)
+            return { nodes: JSON.parse(record.nodesJson), edges: JSON.parse(record.edgesJson) }
+          }, projectId)
+          if (persisted.nodes.some(item => item.data.generationSourceNodeId && item.data.imageUrl && !item.data.isGenerating)) break
+          if (Date.now() > resultDeadline) throw new Error('画布生成结果未保存')
+          await new Promise(resolve => setTimeout(resolve, 100))
+        } while (true)
+        const generator = persisted.nodes.find(item => item.type === 'imageNode' && item.data.prompt === '画布节点生成验收')
+        assert.ok(generator, '必须保留真实的标准生成节点')
+        assert.ok(persisted.edges.some(edge => edge.source === '__ui_panorama_source' && edge.target === generator.id), '参考图必须连接生成节点')
+        const result = persisted.nodes.find(item => item.data.generationSourceNodeId === generator.id && item.data.imageUrl)
+        assert.ok(result)
+        assert.ok(persisted.edges.some(edge => edge.source === generator.id && edge.target === result.id), '结果必须连在生成节点后')
+        await capture('canvas-completed')
       } finally { server.closeAllConnections(); await new Promise((resolve) => server.close(resolve)) }
     },
   }]

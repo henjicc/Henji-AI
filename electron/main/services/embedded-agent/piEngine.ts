@@ -76,6 +76,18 @@ export class PiEngine implements EmbeddedAgentEngine {
       noTools: 'builtin', tools: customTools.map((tool) => tool.name), customTools,
       resourceLoader: loader, sessionManager: this.manager, settingsManager: settings })
     this.session = session
+    const transformContext = session.agent.transformContext
+    session.agent.transformContext = async (messages, signal) => {
+      const transformed = await transformContext?.(messages, signal) ?? messages
+      let previousContext: string | undefined
+      return transformed.filter(message => {
+        if (message.role !== 'custom' || message.customType !== 'henji-context') return true
+        const content = JSON.stringify(message.content)
+        if (content === previousContext) return false
+        previousContext = content
+        return true
+      })
+    }
     const onPayload = session.agent.onPayload
     session.agent.onPayload = async (payload, currentModel) => {
       const base = await onPayload?.(payload, currentModel) ?? payload

@@ -61,6 +61,18 @@ async function fixture(capabilities: Partial<LlmModelConfig['capabilities']> = {
   return { engine, requests, events, tool, directory, configuration, setMode: (value: typeof mode) => { mode = value } }
 }
 describe('Pi official SDK engine', () => {
+  it('每次请求只有一份系统设定，相同宿主上下文不在多轮历史中重复堆叠', async () => {
+    const f = await fixture()
+    const context = '{"surface":"canvas","project":"original"}'
+    await f.engine.command({ action: 'prompt', input: { text: '第一条', context } })
+    await f.engine.command({ action: 'configure', input: f.configuration })
+    await f.engine.command({ action: 'prompt', input: { text: '第二条', context } })
+    const request = f.requests.at(-1)!
+    expect(request.messages.filter(message => message.role === 'system')).toHaveLength(1)
+    expect(JSON.stringify(request).split('当前应用上下文').length - 1).toBe(1)
+    await f.engine.command({ action: 'prompt', input: { text: '第三条', context: '{"surface":"settings"}' } })
+    expect(JSON.stringify(f.requests.at(-1)).split('当前应用上下文').length - 1).toBe(2)
+  })
   it('DeepSeek 使用的 Responses 链路发送原生图片并在重启续聊时恢复内容', async () => {
     const f = await fixture({ image: true }, 'openai-responses')
     const attachment = { schemaVersion: 'agent-attachment/v1' as const, mediaRef: 'asset:image', modality: 'image' as const, mimeType: 'image/png', sizeBytes: 5,

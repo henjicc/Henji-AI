@@ -68,6 +68,7 @@ class CanvasRunCancelledBeforeExecutionError extends Error {
 
 interface CanvasRunControl {
   failure: unknown | null
+  assertCurrent?: () => void
 }
 
 const logger = createLogger('features.canvas.execution')
@@ -257,6 +258,7 @@ async function executeRegisteredNode(
       ...baseContext,
       inputSignature,
       assertCurrent: async () => {
+        runControl.assertCurrent?.()
         assertProjectContext(baseContext.projectId)
         if (
           executors.get(nodeId) !== executor
@@ -366,7 +368,7 @@ async function findGuaranteedReusableDependencies(
   return reusable
 }
 
-async function executeCanvasRun(rootNodeId: string): Promise<CanvasRunResult> {
+async function executeCanvasRun(rootNodeId: string, assertCurrent?: () => void): Promise<CanvasRunResult> {
   const runId = createRunId()
   const projectId = useProjectStore.getState().currentProjectId
   const startedAt = Date.now()
@@ -375,7 +377,7 @@ async function executeCanvasRun(rootNodeId: string): Promise<CanvasRunResult> {
   })
 
   const outcomeByNodeId = new Map<string, NodeRunOutcome>()
-  const runControl: CanvasRunControl = { failure: null }
+  const runControl: CanvasRunControl = { failure: null, assertCurrent }
   try {
     const initial = useCanvasStore.getState()
     const root = initial.nodes.find((node) => node.id === rootNodeId)
@@ -474,9 +476,12 @@ async function executeCanvasRun(rootNodeId: string): Promise<CanvasRunResult> {
   }
 }
 
-export function runCanvasNode(rootNodeId: string): Promise<CanvasRunResult> {
-  return executeCanvasRun(rootNodeId)
+export function runCanvasNode(rootNodeId: string, assertCurrent?: () => void): Promise<CanvasRunResult> {
+  return executeCanvasRun(rootNodeId, assertCurrent)
 }
+
+/** 新节点完成 React 挂载前，调用方可等待正式执行器就绪。 */
+export function isCanvasNodeExecutorReady(nodeId: string): boolean { return executors.has(nodeId) }
 
 export function resetCanvasExecutionServiceForTests(): void {
   executors.clear()

@@ -12,7 +12,16 @@ vi.mock('../assistant/user-instructions', () => ({ getAssistantUserInstructions:
 vi.mock('../logging', () => ({ createMainLogger: () => ({ info: vi.fn(), error: vi.fn() }) }))
 vi.mock('./models', () => ({ resolveEmbeddedModel: mocks.resolveModel }))
 vi.mock('./attachments', () => ({ prepareEmbeddedAttachments: mocks.prepare }))
-import { EmbeddedAgentService } from './service'
+import { EmbeddedAgentService, withGenerationOrigin } from './service'
+
+it('默认生成落点固定为消息原项目，明确目标优先，非画布不借用后台项目', () => {
+  const context = JSON.stringify({ workspace: { id: 'nodes' }, project: { id: 'original', selectedNodeId: 'reference' } })
+  expect(withGenerationOrigin('create_visible_generation_task', { prompt: '图' }, context)).toMatchObject({ destination: { mode: 'canvas', projectId: 'original', sourceNodeIds: ['reference'] } })
+  const explicit = { destination: { mode: 'history' } }
+  expect(withGenerationOrigin('create_visible_generation_task', explicit, context)).toBe(explicit)
+  expect(withGenerationOrigin('prepare_generation_task', {}, JSON.stringify({ workspace: { id: 'tools' }, project: { id: 'background' } }))).toEqual({ destination: { mode: 'history' } })
+  expect(withGenerationOrigin('read_application_entity', {}, context)).toEqual({})
+})
 
 function setup() {
   const child = new EventEmitter() as EventEmitter & { postMessage: (value: { id: string; command: EngineCommand }) => void; kill: () => void }

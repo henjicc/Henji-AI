@@ -18,7 +18,7 @@ vi.mock('@/features/generation/application/generationApplicationService', () => 
     cancelTask: vi.fn(),
   },
 }))
-vi.mock('@/stores/navigationStore', () => ({ switchWorkspace: vi.fn() }))
+vi.mock('@/stores/navigationStore', () => ({ switchWorkspace: vi.fn(), useNavigationStore: { getState: () => ({ activeWorkspace: 'generation' }) } }))
 
 import { registry } from '@/core/ModelRegistry'
 import type { ModelDefinition } from '@/core/types'

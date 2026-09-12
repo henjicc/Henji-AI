@@ -7,7 +7,10 @@ import { toLegacyPromptString } from '@/core/inputs/promptDocument'
 import { generationApplicationService } from '@/features/generation/application/generationApplicationService'
 import { resolveGenerationMediaReferences } from '@/features/generation/application/generationMediaReferences'
 import { useGenerationDraftStore } from '@/features/generation/store/generationDraftStore'
-import { switchWorkspace } from '@/stores/navigationStore'
+import { switchWorkspace, useNavigationStore } from '@/stores/navigationStore'
+import { useProjectStore } from '@/stores/projectStore'
+import { useCanvasStore } from '@/stores/canvasStore'
+import type { GenerationDestination } from '@/core/assistant/capabilities/generationApplicationCapabilities'
 import { isBuiltinModelType } from '@/core/modelSortOrder'
 
 import type { ApplicationCapabilityHandlerRegistrar } from './handlerTypes'
@@ -28,6 +31,26 @@ interface GenerationInput {
   prompt?: string
   mediaType?: 'image' | 'video' | 'audio'
   params?: Record<string, unknown>
+  destination?: GenerationDestination
+}
+
+function generationDestination(input: GenerationInput): GenerationDestination {
+  if (input.destination) return input.destination
+  const projectId = useProjectStore.getState().currentProjectId
+  const selectedNodeId = useCanvasStore.getState().selectedNodeId
+  return useNavigationStore.getState().activeWorkspace === 'nodes' && projectId
+    ? { mode: 'canvas', projectId, sourceNodeIds: selectedNodeId ? [selectedNodeId] : [] }
+    : { mode: 'history' }
+}
+
+async function prepareInput(parsed: GenerationInput, destination = generationDestination(parsed)): Promise<ResolvedGenerationInput> {
+  const resolved = resolveGenerationInput(parsed)
+  resolved.options = await resolveGenerationMediaReferences(resolved.options ?? {})
+  if (destination.mode === 'canvas') {
+    const { resolveCanvasGenerationOptions } = await import('@/features/canvas/application/canvasGenerationTaskService')
+    resolved.options = resolveCanvasGenerationOptions(resolved, destination)
+  }
+  return resolved
 }
 
 interface ResolveGenerationModelInput {
@@ -151,8 +174,7 @@ export function registerGenerationCapabilityHandlers(
 
   registrar.registerHandler('prepare_generation_task', async (input) => {
     const parsed = parseCapabilityInput<GenerationInput>('prepare_generation_task', input)
-    const resolved = resolveGenerationInput(parsed)
-    resolved.options = await resolveGenerationMediaReferences(resolved.options ?? {})
+    const resolved = await prepareInput(parsed)
     return {
       preparation: generationApplicationService.prepare(resolved),
     }
@@ -161,14 +183,23 @@ export function registerGenerationCapabilityHandlers(
   registrar.registerHandler('create_visible_generation_task', async (input, context) => {
     throwIfCapabilityAborted(context.signal)
     const parsed = parseCapabilityInput<GenerationInput>('create_visible_generation_task', input)
-    const resolved = resolveGenerationInput(parsed)
-    resolved.options = await resolveGenerationMediaReferences(resolved.options ?? {})
+    const destination = generationDestination(parsed)
+    const resolved = await prepareInput(parsed, destination)
     throwIfCapabilityAborted(context.signal)
+    if (destination.mode === 'canvas') {
+      const { submitCanvasGenerationTask } = await import('@/features/canvas/application/canvasGenerationTaskService')
+      const preparation = generationApplicationService.prepare(resolved)
+      return submitCanvasGenerationTask({ ...resolved, options: preparation.options as Record<string, unknown> }, destination,
+        applicationGenerationTaskId(context.requestId ?? crypto.randomUUID()))
+    }
     return await generationApplicationService.submit(resolved, context.callerGrant && context.requestId ? applicationGenerationTaskId(context.requestId) : context.requestId)
   })
 
-  registrar.registerHandler('get_generation_task', (input) => {
+  registrar.registerHandler('get_generation_task', async (input) => {
     const parsed = parseCapabilityInput<{ taskId: string }>('get_generation_task', input)
+    const { getCanvasGenerationTask } = await import('@/features/canvas/application/canvasGenerationTaskService')
+    const canvasTask = await getCanvasGenerationTask(parsed.taskId)
+    if (canvasTask) return { task: canvasTask }
     return { task: generationApplicationService.getTask(parsed.taskId) }
   })
 
