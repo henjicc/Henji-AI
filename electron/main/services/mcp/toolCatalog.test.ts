@@ -33,6 +33,14 @@ const domains: LocalDomainSurface[] = [
 ]
 
 describe('对外工具目录的投影与授权过滤', () => {
+  it('公开语义写入均有持久目标声明，创建图片能力节点无需付费权限', () => {
+    for (const id of MCP_WRITE_CAPABILITY_IDS) {
+      if (id === 'change_application_entities') continue
+      expect(BUILTIN_APPLICATION_CAPABILITY_REGISTRY.get(id)?.resolveOperationTargets, id).toBeTypeOf('function')
+    }
+    expect(names(WRITE)).toContain('apply_canvas_image_capability')
+    expect(names(READ_ONLY)).not.toContain('apply_canvas_image_capability')
+  })
   /**
    * 验收线：**工具 schema 与领域约束同源**。
    *

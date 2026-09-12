@@ -2,7 +2,7 @@ import { z } from 'zod'
 import { applicationVerificationConditionSchema, applicationEvidenceSchema } from './transactions'
 
 export const MCP_READ_CAPABILITY_IDS = ['describe_application_entities', 'list_application_entities', 'read_application_entity', 'search_models', 'get_model_schema', 'prepare_generation_task', 'get_generation_task', 'get_camera_stage_render_task'] as const
-export const MCP_WRITE_CAPABILITY_IDS = ['change_application_entities', 'create_visible_generation_task', 'cancel_generation_task', 'render_camera_stage_output', 'cancel_camera_stage_render_task', 'add_generation_result_to_canvas'] as const
+export const MCP_WRITE_CAPABILITY_IDS = ['change_application_entities', 'create_visible_generation_task', 'cancel_generation_task', 'render_camera_stage_output', 'cancel_camera_stage_render_task', 'add_generation_result_to_canvas', 'apply_canvas_image_capability'] as const
 export const MCP_CAPABILITY_IDS = [...MCP_READ_CAPABILITY_IDS, ...MCP_WRITE_CAPABILITY_IDS, 'retry_canvas_project_save', 'retry_image_edit_document_save'] as const
 export const MCP_WRITE_PERMISSIONS = ['application:write', 'settings:write', 'models:write', 'model_catalog:write', 'assets:write', 'canvas:write', 'canvas:project_write', 'generation:write', 'generation:create', 'generation:cancel', 'camera_stage:write', 'image_edit:write', 'image_mark:write'] as const
 export const MCP_READ_PERMISSIONS = ['application:read', 'settings:read', 'models:read', 'model_catalog:read', 'assets:read', 'canvas:read', 'generation:read', 'generation:prepare', 'image_edit:read', 'image_mark:read', 'camera_stage:read', 'toolbox:read', 'navigation:read', 'storyboard:read'] as const

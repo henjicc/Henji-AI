@@ -9,6 +9,11 @@ import { readPersistedCanvasProjectSnapshot } from '@/features/canvas/applicatio
 import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from './harnessNativeStorage'
 import { registry } from '@/core/ModelRegistry'
 import { databaseService } from '@/services/database/DatabaseService'
+import { MCP_CAPABILITY_IDS, MCP_READ_PERMISSIONS, MCP_WRITE_PERMISSIONS } from '@/core/application-control/localHostContracts'
+import { useCanvasStore } from '@/stores/canvasStore'
+import { useProjectStore } from '@/stores/projectStore'
+import { loadRealModelsIntoRegistry } from './loadRealModels'
+import { CANVAS_NODE_TYPES } from '@/features/canvas/domain/canvasNodes'
 
 const task: GenerationTaskStatusSnapshot = { taskId: 'mcp-revision-task', status: 'generating', progress: 10,
   modelId: 'fixture', mediaType: 'image', resultAvailable: false, errorCode: null, errorMessage: null }
@@ -36,6 +41,39 @@ async function baseline(session: ReturnType<typeof client>) {
 }
 const invocation = (expectedRevisions: unknown) => ({ id: 'cancel_generation_task', version: 1,
   expectedRevisions, input: { taskId: task.taskId, reason: '验收取消' } })
+
+it('MCP 实际授权目录可创建图片能力节点与连线，并从原工程存储回读', async () => {
+  await loadRealModelsIntoRegistry()
+  const projectId = 'mcp-image-capability'
+  const source = { id: 'source-image', type: CANVAS_NODE_TYPES.upload, position: { x: 80, y: 120 },
+    data: { imageUrl: 'managed-source.png', aspectRatio: '1:1' } }
+  const previousCanvas = useCanvasStore.getState()
+  const previousProject = useProjectStore.getState()
+  try {
+    const project = { id: projectId, name: '图片工具验收', createdAt: 1, updatedAt: 1, nodeCount: 1,
+      coverPath: null, nodes: [source], edges: [], viewport: { x: 0, y: 0, zoom: 1 }, history: { past: [], future: [] } }
+    useCanvasStore.getState().setCanvasData([source], [], project.history)
+    useProjectStore.setState({ currentProjectId: projectId, currentProject: project, projects: [project], isHydrated: true })
+    const session = createApplicationCapabilitySession(createApplicationCallerGrant({ callerId: 'mcp-image-tools',
+      capabilityIds: [...MCP_CAPABILITY_IDS], allowWrites: true, allowDestructive: false,
+      permissions: [...MCP_READ_PERMISSIONS, ...MCP_WRITE_PERMISSIONS] }))
+    expect(session.list().map((definition) => definition.id)).toContain('apply_canvas_image_capability')
+    const result = await session.execute({ id: 'apply_canvas_image_capability', version: 1,
+      input: { projectId, sourceNodeId: source.id, capabilityId: 'image.background-removal' } }, request())
+    expect(result.ok, JSON.stringify(result)).toBe(true)
+    if (!result.ok) throw new Error('图片能力创建失败')
+    const persisted = await readPersistedCanvasProjectSnapshot(projectId)
+    expect(persisted.nodes).toHaveLength(2)
+    expect(persisted.edges).toEqual([expect.objectContaining({ source: source.id, target: result.data.nodeId })])
+    expect(persisted.nodes.find((node) => node.id === result.data.nodeId)?.position.x).toBeGreaterThan(source.position.x)
+    const read = await session.execute({ id: 'read_application_entity', version: 1,
+      input: { ref: { kind: 'canvas.node', id: `${projectId}:${result.data.nodeId}` }, propertyIds: [] } }, request())
+    expect(read.ok, JSON.stringify(read)).toBe(true)
+  } finally {
+    useCanvasStore.setState(previousCanvas, true)
+    useProjectStore.setState(previousProject, true)
+  }
+})
 
 it('外部语义操作使用正式实体读取的版本，不与助手界面计数比较', async () => {
   const session = client()

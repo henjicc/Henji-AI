@@ -24,6 +24,10 @@ import { MCP_CAPABILITY_IDS, type LocalHostRequest, type LocalTool } from '../..
 type Sample = { era: string; tool: string; arguments: Record<string, unknown> }
 
 const LEGACY_SAMPLES: Sample[] = [
+  { era: '图片能力节点编排', tool: 'apply_canvas_image_capability', arguments: {
+    operationId: '2f6d2a4c-3d1b-4d5a-9f3a-1b2c3d4e5f60',
+    projectId: 'project-1', sourceNodeId: 'image-1', capabilityId: 'image.background-removal',
+  } },
   { era: '1.2 只读首版', tool: 'describe_application_entities', arguments: {} },
   { era: '1.2 只读首版', tool: 'describe_application_entities', arguments: { domains: ['settings'] } },
   { era: '1.2 只读首版', tool: 'list_application_entities', arguments: { entityType: 'canvas.project' } },

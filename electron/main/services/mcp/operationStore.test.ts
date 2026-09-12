@@ -31,6 +31,16 @@ function input(baselineId: string): Record<string, unknown> {
 }
 
 describe('MCP 原生操作记录与恢复', () => {
+  it('图片能力只锁追加目标，读取同一参考节点的独立工具可以连续派发', () => {
+    const f = fixture()
+    const raw = { operationId: randomUUID(), projectId: 'image-project', sourceNodeId: 'image-source', capabilityId: 'image.background-removal' }
+    const first = f.coordinator.prepare(f.callerId, raw, f.sessionId, access, 'apply_canvas_image_capability')
+    expect(first.targetRefs).toEqual([{ kind: 'canvas.project', id: raw.projectId }])
+    f.coordinator.dispatched(first, randomUUID(), f.sessionId)
+    const second = f.coordinator.prepare(f.callerId, { ...raw, operationId: randomUUID(), capabilityId: 'image.upscale' }, f.sessionId, access, 'apply_canvas_image_capability')
+    f.coordinator.dispatched(second, randomUUID(), f.sessionId)
+    expect(f.store.unresolved().map((record) => record.state)).toEqual(['executing', 'executing'])
+  })
   it('有明确完整回滚事实才结束占用，未知错误和保存失败不冒充回滚', () => {
     for (const [details, expected] of [
       [{ execution: { rolledBack: true } }, 'rolled_back'],
