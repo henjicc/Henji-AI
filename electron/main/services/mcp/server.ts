@@ -43,7 +43,7 @@ export class LocalMcpServer {
   async stop(): Promise<void> {
     const http = this.http
     this.http = undefined
-    for (const callerId of new Set([...this.sessions.values()].map((session) => session.callerId))) this.host.revoke(callerId)
+    this.host.cancelPending(new Set([...this.sessions.values()].map((session) => session.callerId)))
     await Promise.all([...this.sessions.values()].map((session) => session.server.close()))
     this.sessions.clear()
     if (http) await new Promise<void>((resolve) => { http.close(() => resolve()); http.closeAllConnections() })

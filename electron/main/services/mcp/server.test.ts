@@ -44,6 +44,20 @@ async function fixture(options: { ready?: boolean; pending?: boolean; result?: R
 }
 
 describe('本地 MCP 协议与边界', () => {
+  it('关闭 MCP 只取消自己的请求，不中断共享宿主的内置调用', async () => {
+    const f = await fixture({ pending: true })
+    const external = await f.connect()
+    const reading = external.client.callTool({ name: 'read_application_entity', arguments: {} }).catch(() => ({ isError: true }))
+    await vi.waitFor(() => expect(f.calls).toHaveLength(1))
+    const embedded = f.host.execute(f.second.id, 'read_application_entity', {}, new AbortController().signal)
+    const embeddedRequest = f.calls[1]
+    await f.server.stop()
+    expect((await reading).isError).toBe(true)
+    expect(f.cancellations).toContain(f.calls[0].requestId)
+    expect(f.cancellations).not.toContain(embeddedRequest.requestId)
+    f.host.complete({ ...embeddedRequest, result: { ok: true, data: { name: '内置读取继续完成' } } })
+    await expect(embedded).resolves.toMatchObject({ ok: true, data: { name: '内置读取继续完成' } })
+  })
   it('SDK协商支持的当前与旧协议，返回标准初始化结果', async () => {
     const f = await fixture()
     for (const protocolVersion of ['2025-11-25', '2025-06-18', '2025-03-26']) {

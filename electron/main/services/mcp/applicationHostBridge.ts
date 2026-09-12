@@ -33,14 +33,15 @@ export class ApplicationHostBridge {
     this.cancelPending()
     this.host = undefined
   }
-  cancelPending(): void {
+  cancelPending(callerIds?: ReadonlySet<string>): void {
     for (const [id, pending] of this.pending) {
+      if (callerIds && !callerIds.has(pending.callerId)) continue
       this.operations?.interrupted(id, pending.sessionId)
       this.host?.transport.send('mcp:host:cancel', id)
       pending.reject(new Error('应用页面正在重新连接，请稍后重试。'))
       pending.cleanup()
+      this.pending.delete(id)
     }
-    this.pending.clear()
   }
   revoke(callerId: string): void {
     this.host?.transport.send('mcp:host:revoke', callerId)
