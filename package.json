@@ -83,6 +83,7 @@
     "llm:verify": "node scripts/verify-llm-model.cjs"
   },
   "dependencies": {
+    "@earendil-works/pi-coding-agent": "0.85.1",
     "@henjicc/ai-sdk": "0.4.1",
     "@modelcontextprotocol/sdk": "1.30.0",
     "@react-three/drei": "^9.122.0",

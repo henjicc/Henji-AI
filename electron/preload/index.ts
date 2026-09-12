@@ -47,6 +47,7 @@ import {
 } from '../../src/core/assistant/runtimeContracts'
 import { createImageVideoApis } from './image-video-api'
 import { createImageEditorV3Api } from './image-editor-v3-api'
+import { createEmbeddedAgentApi } from './embedded-agent-api'
 import { createMcpApi } from './mcp-api'
 
 type IpcResultEnvelope<T> =
@@ -469,6 +470,7 @@ const updaterApi: HenjiUpdaterApi = {
 }
 
 const api: HenjiNativeApi = {
+  embeddedAgent: createEmbeddedAgentApi(nativeInvoke),
   mcp: createMcpApi(nativeInvoke),
   runtimeInfo: {
     uiInspectionActive: process.env['HENJI_UI_INSPECTION_ALLOW_OVERSIZE'] === '1',

@@ -27,6 +27,7 @@ const { createGpuBudgetScenes } = require('./uiInspectionSceneCatalogGpuBudget.c
 const { createGpuAnnotationScenes } = require('./uiInspectionSceneCatalogGpuAnnotation.cjs')
 const { createSupportScenes } = require('./uiInspectionSceneCatalogSupport.cjs')
 const { createMcpScenes } = require('./uiInspectionSceneMcp.cjs')
+const { createEmbeddedAgentScenes } = require('./uiInspectionSceneEmbeddedAgent.cjs')
 const { createMcpDomainScenes } = require('./uiInspectionSceneMcpDomains.cjs')
 
 const TAB_NAMES = Object.freeze({
@@ -60,6 +61,7 @@ function createUiInspectionScenes({ canvasFixtureProjectId, settlePage }) {
   attachUiInspectionSupport(context)
 
   return Object.freeze([
+    ...createEmbeddedAgentScenes(),
     ...createMcpScenes(context),
     ...createMcpDomainScenes(context),
     ...createGenerationSettingsScenes(context),

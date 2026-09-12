@@ -3,17 +3,15 @@ import { randomUUID } from 'node:crypto'
 import { Server } from '@modelcontextprotocol/sdk/server/index.js'
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js'
 import { CallToolRequestSchema, ListToolsRequestSchema, isInitializeRequest } from '@modelcontextprotocol/sdk/types.js'
-import { EXTERNAL_LIMITS, EXTERNAL_SERVER_INFO, MCP_READ_CAPABILITY_IDS, MCP_WRITE_CAPABILITY_IDS } from '../../../../src/core/application-control/localHostContracts'
-import { buildApplicationContract, buildMcpToolCatalog, describeContractInputSchema, invalidInputMessage, readMediaInputSchema } from './toolCatalog'
+import { EXTERNAL_LIMITS, EXTERNAL_SERVER_INFO } from '../../../../src/core/application-control/localHostContracts'
+import { buildMcpToolCatalog } from './toolCatalog'
 import type { McpConnections } from './connections'
 import type { ApplicationHostBridge } from './applicationHostBridge'
 import type { McpOperationCoordinator } from './operationCoordinator'
-import { z } from 'zod'
-import { readMcpMediaResource, McpMediaResourceError } from './mediaResources'
+import { ApplicationToolDispatcher } from './applicationToolDispatcher'
 
 type Session = { callerId: string; server: Server; transport: StreamableHTTPServerTransport; touched: number }
 const MAX_BODY = EXTERNAL_LIMITS.requestBytes
-const MAX_RESULT = EXTERNAL_LIMITS.resultBytes
 
 export class LocalMcpServer {
   private http: HttpServer | undefined
@@ -45,7 +43,7 @@ export class LocalMcpServer {
   async stop(): Promise<void> {
     const http = this.http
     this.http = undefined
-    this.host.cancelPending()
+    for (const callerId of new Set([...this.sessions.values()].map((session) => session.callerId))) this.host.revoke(callerId)
     await Promise.all([...this.sessions.values()].map((session) => session.server.close()))
     this.sessions.clear()
     if (http) await new Promise<void>((resolve) => { http.close(() => resolve()); http.closeAllConnections() })
@@ -128,65 +126,10 @@ export class LocalMcpServer {
       // 每次列举都按当前注册重新投影：渲染层重载、重新注册或撤销后再次 tools/list 就是最新目录。
       return { tools: this.catalog(callerId).tools }
     })
-    server.setRequestHandler(CallToolRequestSchema, async (request, extra) => {
-      this.connections.assertActive(callerId)
-      if (request.params.name === 'describe_application_contract') {
-        try {
-          const { domains } = describeContractInputSchema.parse(request.params.arguments ?? {})
-          const data = buildApplicationContract({ domains: this.host.domains(), access: this.connections.access(callerId), catalog: this.catalog(callerId), port: this.port, requestedDomains: domains })
-          const result = { ok: true, data }
-          // 与其余工具保持同一约定：成功显式给出 isError:false，调用方不必区分 undefined 与 false。
-          return { isError: false, structuredContent: result, content: [{ type: 'text', text: JSON.stringify(result) }] }
-        } catch (error) {
-          return { isError: true, content: [{ type: 'text', text: invalidInputMessage(error) ?? (error instanceof Error ? error.message : '契约发现失败，请稍后重试。') }] }
-        }
-      }
-      if (request.params.name === 'read_application_media') {
-        try {
-          const input = readMediaInputSchema.parse(request.params.arguments)
-          const result = await readMcpMediaResource(input)
-          this.connections.assertActive(callerId)
-          return { isError: false, structuredContent: result, content: [{ type: 'text', text: JSON.stringify(result) }] }
-        } catch (error) {
-          // 参数错误点名字段；业务失败仍然脱敏，不回传本地路径。
-          const message = invalidInputMessage(error) ?? (error instanceof McpMediaResourceError ? `${error.code}:${error.message}` : '媒体读取失败，请稍后重试。')
-          return { isError: true, content: [{ type: 'text', text: message }] }
-        }
-      }
-      if (request.params.name === 'get_application_operation' && this.operations) {
-        const parsed = z.object({ operationId: z.string().uuid() }).strict().safeParse(request.params.arguments)
-        if (!parsed.success) return { isError: true, content: [{ type: 'text', text: invalidInputMessage(parsed.error)! }] }
-        const operation = this.operations.store.get(parsed.data.operationId, callerId)
-        const result = operation ? this.operations.result(operation) : { ok: false, executionState: 'not_found', message: '未找到已登记操作；这不是业务未执行的证明。' }
-        return { isError: result.ok !== true, structuredContent: result, content: [{ type: 'text', text: JSON.stringify(result) }] }
-      }
-      if ([...MCP_WRITE_CAPABILITY_IDS, 'retry_application_operation_save'].some((id) => id === request.params.name) && this.operations) {
-        try {
-          const access = this.connections.access(callerId)
-          const operation = request.params.name === 'retry_application_operation_save'
-            ? this.operations.prepareSaveRecovery(callerId, request.params.arguments ?? {}, this.host.sessionId, access)
-            : this.operations.prepare(callerId, request.params.arguments ?? {}, this.host.sessionId, access, MCP_WRITE_CAPABILITY_IDS.find((id) => id === request.params.name))
-          if (operation.state === 'prepared') {
-            this.connections.assertActive(callerId)
-            try { await this.host.execute(callerId, operation.capabilityId ?? 'change_application_entities', operation.input, extra.signal, { operation, ...access }) } catch { /* 持久操作状态决定结果，等待失败不能覆盖事实。 */ }
-          }
-          this.connections.assertActive(callerId)
-          const result = this.operations.result(this.operations.store.get(operation.operationId, callerId)!)
-          return { isError: result.ok !== true, structuredContent: result, content: [{ type: 'text', text: JSON.stringify(result) }] }
-        } catch (error) { return { isError: true, content: [{ type: 'text', text: invalidInputMessage(error) ?? (error instanceof Error ? error.message : '写入未完成。') }] } }
-      }
-      const id = MCP_READ_CAPABILITY_IDS.find((value) => value === request.params.name)
-      if (!id) return { isError: true, content: [{ type: 'text', text: '此连接只允许读取。请用 tools/list 查看可用工具。' }] }
-      try {
-        const sessionId = this.host.sessionId
-        const raw = await this.host.execute(callerId, id, request.params.arguments ?? {}, extra.signal, this.connections.access(callerId))
-        const result = this.operations ? this.operations.rememberRead(callerId, raw, sessionId) : raw
-        this.connections.assertActive(callerId)
-        const text = JSON.stringify(result)
-        if (Buffer.byteLength(text) > MAX_RESULT) throw new Error('读取结果过大，请缩小字段或分页读取。')
-        return { isError: result.ok !== true, structuredContent: result, content: [{ type: 'text', text }] }
-      } catch (error) { return { isError: true, content: [{ type: 'text', text: error instanceof Error ? error.message : '应用读取失败，请稍后重试。' }] } }
-    })
+    const dispatcher = new ApplicationToolDispatcher(this.connections, this.host, this.operations, this.port)
+    server.setRequestHandler(CallToolRequestSchema, (request, extra) =>
+      dispatcher.call(callerId, request.params.name, request.params.arguments, extra.signal))
+
     return session
   }
 }

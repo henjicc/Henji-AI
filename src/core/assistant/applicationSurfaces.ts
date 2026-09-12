@@ -5,7 +5,7 @@ export const APPLICATION_SURFACE_IDS = [
   'settings.general.behavior', 'settings.general.maintenance', 'settings.general.mcp',
   'settings.models.assistant', 'settings.assistant_preferences', 'settings.assistant_skills',
   'settings.models.alias', 'settings.interface', 'settings.interface.layout', 'settings.interface.theme',
-  'settings.interface.assets', 'settings.interface.canvas', 'overlay.assets',
+  'settings.interface.assets', 'settings.interface.canvas', 'overlay.assets', 'overlay.assistant',
 ] as const
 
 export type ApplicationSurfaceId = (typeof APPLICATION_SURFACE_IDS)[number]
@@ -57,6 +57,7 @@ const SPECIALIZED_REGION_SURFACES: readonly string[] = [
 // 助手偏好分区含用户指令编辑器和会带出本地路径的状态行，用户可能在其中写入凭据；
 // 文本链路的脱敏管不到截图，因此与密钥、存储路径同等对待。
 const SENSITIVE_SURFACES: readonly string[] = [
+  'overlay.assistant',
   'settings.providers_models', 'settings.storage', 'settings.assistant_preferences',
 ]
 

@@ -116,9 +116,20 @@ const App: React.FC = () => {
   const assetTriggerEdge = useSettingsStore((state) => state.assetTriggerEdge)
   const assetEdgeDelayMs = useSettingsStore((state) => state.assetEdgeDelayMs)
   const assetDragEdgeDelayMs = useSettingsStore((state) => state.assetDragEdgeDelayMs)
-  const assistantOpen = false
+  const assistantOpen = useAssistantUiStore((state) => state.open)
   const assistantMode = useAssistantUiStore((state) => state.mode)
   const assistantSize = useAssistantUiStore((state) => state.size)
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent): void => {
+      if (event.ctrlKey && event.shiftKey && event.key.toLowerCase() === 'a') {
+        event.preventDefault()
+        const state = useAssistantUiStore.getState()
+        state.setOpen(!state.open)
+      }
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [])
   const assistantWorkspaceRef = React.useRef<HTMLDivElement>(null)
   // 懒加载浮层的「装载闩」：打开过一次就一直挂着，避免每次开关都重新触发 Suspense
   const [assistantMounted, setAssistantMounted] = useState(false)
@@ -268,6 +279,7 @@ const App: React.FC = () => {
           onOpenSettings={() => openSettings()}
           onPrefetchSettings={prefetchSettingsModal}
           assistantOpen={assistantOpen}
+          onAssistantClick={() => useAssistantUiStore.getState().setOpen(!assistantOpen)}
 
         />
 

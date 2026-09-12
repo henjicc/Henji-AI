@@ -57,6 +57,7 @@ function observationPolicy(surfaceId: ApplicationSurfaceId): ApplicationSurfaceD
 }
 
 const surfaceDefinitions = [
+  { id: 'overlay.assistant', kind: 'overlay', ...immediate },
   { id: 'workspace.generation', kind: 'workspace', workspace: 'generation', ...immediate },
   {
     id: 'workspace.canvas', kind: 'workspace', workspace: 'nodes', ...immediate,
