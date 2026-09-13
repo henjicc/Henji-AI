@@ -311,7 +311,7 @@ it('取消续查后保存停止状态，不自动恢复；明确恢复仍获取�
   expect(GenerationService.getInstance().generate).not.toHaveBeenCalled()
 })
 
-it('离开原项目后 MCP 仍可取消续查，停止状态保存到原项目且不重复生成', async () => {
+it.each([false, true])('离开原项目后 MCP 仍可取消续查（后台启动 %s）', async startInBackground => {
   const { taskId, resultId } = await restoredTask({ serverTaskId: 'background-original-task', serverTaskModelId: 'canvas-task-fixture' })
   const polling = vi.spyOn(GenerationService.getInstance(), 'continuePolling').mockImplementation(async (_model, _task, _params, _progress, options) => {
     await new Promise<void>((_resolve, reject) => options!.signal!.addEventListener('abort', () => reject(new Error('停止后台续查')), { once: true }))
@@ -319,9 +319,10 @@ it('离开原项目后 MCP 仍可取消续查，停止状态保存到原项目�
   })
   const execute = taskControlSession()
   const input = (await getCanvasGenerationTask(taskId))!.resumeInput as Record<string, unknown>
+  let otherProject = startInBackground ? await useProjectStore.getState().createProject('后台启动续查') : null
   expect(await execute('resume_canvas_generation_task', input)).toMatchObject({ ok: true })
   await vi.waitFor(() => expect(polling).toHaveBeenCalledTimes(1))
-  const otherProject = await useProjectStore.getState().createProject('后台续查时的当前项目')
+  otherProject ??= await useProjectStore.getState().createProject('后台续查时的当前项目')
   expect(await getCanvasGenerationTask(taskId)).toMatchObject({ cancellable: true })
   expect(await execute('cancel_generation_task', { taskId, reason: '停止后台任务' })).toMatchObject({ ok: true })
   await vi.waitFor(async () => {
@@ -335,6 +336,25 @@ it('离开原项目后 MCP 仍可取消续查，停止状态保存到原项目�
   expect(resumeCanvasProjectGeneration(projectId)).toBe(0)
   expect(polling).toHaveBeenCalledTimes(1)
   expect(GenerationService.getInstance().generate).not.toHaveBeenCalled()
+})
+
+it('在其他项目中恢复标准任务，只续查原任务并保存原项目结果', async () => {
+  const { taskId, resultId } = await restoredTask({ serverTaskId: 'offscreen-original', serverTaskModelId: 'canvas-task-fixture' })
+  const input = (await getCanvasGenerationTask(taskId))!.resumeInput as Record<string, unknown>
+  const otherProject = await useProjectStore.getState().createProject('恢复时保留的页面')
+  const polling = vi.spyOn(GenerationService.getInstance(), 'continuePolling').mockResolvedValue({
+    status: 'completed', url: 'C:/offscreen-resumed.png', filePath: 'C:/offscreen-resumed.png',
+  })
+  const execute = taskControlSession()
+  expect(await execute('resume_canvas_generation_task', input)).toMatchObject({ ok: true })
+  await vi.waitFor(async () => expect(await getCanvasGenerationTask(taskId)).toMatchObject({ status: 'success', resultAvailable: true }))
+  const saved = await readPersistedCanvasProjectSnapshot(projectId)
+  expect(saved.nodes.find(node => node.id === resultId)?.data).toMatchObject({ isGenerating: false, imageUrl: 'C:/offscreen-resumed.png' })
+  expect(polling).toHaveBeenCalledTimes(1)
+  expect(polling.mock.calls[0]?.[1]).toBe('offscreen-original')
+  expect(GenerationService.getInstance().generate).not.toHaveBeenCalled()
+  expect(useProjectStore.getState().currentProjectId).toBe(otherProject)
+  expect(useCanvasStore.getState().nodes).toHaveLength(0)
 })
 
 it.each([false, true])('续查失败对账并保留原任务，明确恢复后完成且不重复付费（后台 %s）', async background => {

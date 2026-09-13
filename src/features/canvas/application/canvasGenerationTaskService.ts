@@ -25,7 +25,7 @@ import { publishCanvasGenerationTaskStatus } from '@/features/generation/applica
 import { normalizeGenerationTaskStatus } from '@/core/assistant/externalWait'
 import { readResumableServerTask } from '../domain/resumableTask'
 import { isCanvasGenerationTaskActive, hasCanvasGenerationResumeLease } from '../generation/activeGenerationTasks'
-import { resumeCanvasProjectGeneration, getCanvasResumeControllers } from './canvasResumePollingService'
+import { resumeCanvasGenerationInProject, getCanvasResumeControllers } from './canvasResumePollingService'
 import { CANVAS_GENERATION_CANCELLED_MESSAGE } from '../domain/generationFailure'
 
 type CanvasDestination = Extract<GenerationDestination, { mode: 'canvas' }>
@@ -343,8 +343,7 @@ export async function resumeCanvasGenerationTask(input: CanvasGenerationResumeIn
   let started = 0
   if (!task.waitingExternal) {
     if (signal?.aborted) return reject('恢复请求在开始前已取消。')
-    try { requireCurrentCanvasProject(input.projectId) } catch { return reject('请先打开任务的原画布项目，再续查原任务。') }
-    started = resumeCanvasProjectGeneration(input.projectId, selected, { retryFailed: true })
+    started = await resumeCanvasGenerationInProject(input.projectId, selected)
     if (started && ['cancelled', 'error', 'timeout'].includes(String(task.status))) await databaseService.updateHistory(input.taskId, { status: 'pending', errorMessage: null })
   }
   const current = await getCanvasGenerationTask(input.taskId)

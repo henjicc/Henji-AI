@@ -42,7 +42,6 @@ import {
   STORYBOARD_GENERATION_RESUME_CONTEXT_FIELD,
 } from './storyboardGenerationOutputService';
 import { withCanvasProjectRuntime } from './canvasProjectRuntime';
-import { confirmCanvasPersistence } from './canvasPersistenceService';
 
 const logger = createLogger('features.canvas.resumePolling');
 const resumeControls = new Map<symbol, { taskId: string; controller: AbortController }>();
@@ -63,7 +62,19 @@ export function resumeCanvasProjectGeneration(
   projectId: string, nodeIds?: ReadonlySet<string>, options: { retryFailed?: boolean } = {},
 ): number {
   if (useProjectStore.getState().currentProjectId !== projectId) return 0;
-  const { nodes, updateNodeData } = useCanvasStore.getState();
+  return startCanvasProjectResume(projectId, nodeIds, options, useCanvasStore);
+}
+
+export async function resumeCanvasGenerationInProject(projectId: string, nodeIds: ReadonlySet<string>): Promise<number> {
+  return withCanvasProjectRuntime(projectId, async runtime =>
+    startCanvasProjectResume(projectId, nodeIds, { retryFailed: true }, runtime.store));
+}
+
+function startCanvasProjectResume(
+  projectId: string, nodeIds: ReadonlySet<string> | undefined, options: { retryFailed?: boolean },
+  store: typeof useCanvasStore,
+): number {
+  const { nodes, edges, updateNodeData } = store.getState();
   let started = 0;
   const setNodeGenerationProgress = useCanvasGenerationProgressStore.getState().setProgress;
   for (const node of nodes) {
@@ -92,12 +103,13 @@ export function resumeCanvasProjectGeneration(
     const backgroundCompletion = node.data.resultKind !== 'layer-stack'
       && sourceCapability?.outputPolicy.resultKind !== 'layer-stack'
       && sourceCapability?.outputPolicy.postProcess !== 'local-redraw-composite';
+    if (!backgroundCompletion && useProjectStore.getState().currentProjectId !== projectId) continue;
     const persistedSourceNodeId = typeof node.data.generationSourceNodeId === 'string'
       && node.data.generationSourceNodeId.trim().length > 0
       ? node.data.generationSourceNodeId
       : undefined;
     const sourceNodeId = persistedSourceNodeId
-      ?? useCanvasStore.getState().edges.find((edge) => edge.target === node.id)?.source;
+      ?? edges.find((edge) => edge.target === node.id)?.source;
 
     const resumeLease = acquireCanvasGenerationResumeLease(projectId, task.taskId);
     if (!resumeLease) continue;
@@ -238,8 +250,7 @@ async function resumeNodeTask(input: ResumeNodeTaskInput): Promise<void> {
 
   try {
     if (!isContextCurrent()) return;
-    useCanvasStore.getState().updateNodeData(nodeId, { isGenerating: true, generationError: null, generationCancelled: false });
-    if (backgroundCompletion) await confirmCanvasPersistence(projectId);
+    await updateNodeData(nodeId, { isGenerating: true, generationError: null, generationCancelled: false });
     const localRedrawContext = sourceCapability?.outputPolicy.postProcess === 'local-redraw-composite'
       ? parseLocalRedrawContext(resultNodeData[LOCAL_REDRAW_CONTEXT_FIELD])
       : null;
