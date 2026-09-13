@@ -1,4 +1,4 @@
-import type { AiGenerateResponseDto } from '@henjicc/ai-sdk'
+import { AiRuntimeError, type AiGenerateResponseDto } from '@henjicc/ai-sdk'
 const submissions = vi.hoisted(() => new Map<string, { response: AiGenerateResponseDto; phase: string }>())
 vi.mock('./generation-submissions', () => ({
   claimGenerationSubmission: (id: string) => submissions.get(id)?.response ?? null,
@@ -135,6 +135,16 @@ function mockCompletedGenerateResult(): void {
 }
 
 describe('ai-runtime continuePolling 日志闭环', () => {
+  it.each(['generate', 'continuePolling'] as const)('%s 保留供应商端点诊断并关联原请求', async phase => {
+    const details = { submissionState: 'not_sent', attempts: [{ host: 'api.apib.ai', code: 'ECONNRESET', stage: 'before_send', durationMs: 10 }] }
+    const failure = new AiRuntimeError('provider_network_error', '连接失败', details)
+    mocks[phase].mockRejectedValueOnce(failure)
+    const input = { ...request, requestId: `diagnostic-${phase}` }
+    await expect(phase === 'generate' ? generate(input) : continuePolling(input)).rejects.toBe(failure)
+    expect(mocks.logger.error).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({
+      requestId: input.requestId, error: expect.objectContaining({ code: 'provider_network_error', details }),
+    }))
+  })
   beforeEach(() => {
     vi.clearAllMocks()
     submissions.clear()

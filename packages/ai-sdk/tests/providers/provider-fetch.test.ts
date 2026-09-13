@@ -12,6 +12,66 @@ function networkError(code: string): TypeError {
 }
 
 describe('fetchProvider', () => {
+  // Node 官方 TLS onConnectEnd 错误形状；嵌套 TypeError 来自 fetch，测试 transport 为合成负例。
+  // https://github.com/nodejs/node/blob/v24.0.0/lib/_tls_wrap.js#L1573-L1585
+  const beforeTls = () => new TypeError('fetch failed', { cause: Object.assign(
+    new Error('Client network socket disconnected before secure TLS connection was established'), { code: 'ECONNRESET' }) })
+
+  it('TLS 尚未建立的 POST 可以依次切换全部备用端点，成功后仅记住该端点', async () => {
+    const fetchMock = vi.fn().mockRejectedValueOnce(beforeTls()).mockRejectedValueOnce(beforeTls())
+      .mockRejectedValueOnce(beforeTls()).mockResolvedValueOnce(new Response('{}'))
+    const reached = vi.fn()
+    await fetchProvider('APIMart', 'https://a.test/create', { method: 'POST', body: '{}' }, {
+      transport: fakeRuntimeContext(fetchMock).transport, retryPreconnectOnce: true,
+      fallbackEndpoints: ['https://b.test/create', 'https://c.test/create', 'https://d.test/create'], onEndpointReached: reached,
+    })
+    expect(fetchMock.mock.calls.map(([url]) => url)).toEqual(['https://a.test/create', 'https://b.test/create', 'https://c.test/create', 'https://d.test/create'])
+    expect(reached.mock.calls).toEqual([['https://d.test/create']])
+  })
+
+  it.each(['POST', 'PATCH', 'DELETE'])('普通 ECONNRESET 不允许重放 %s，并保留脱敏的未知提交诊断', async method => {
+    const fetchMock = vi.fn().mockRejectedValue(networkError('ECONNRESET'))
+    const error = await fetchProvider('APIMart', 'https://a.test/private-task?key=secret', { method, body: 'private-prompt' }, {
+      transport: fakeRuntimeContext(fetchMock).transport, retryPreconnectOnce: true, fallbackEndpoints: ['https://b.test/create'],
+    }).catch(error => error)
+    expect(fetchMock).toHaveBeenCalledOnce()
+    expect(error.details).toMatchObject({ submissionState: 'unknown', attempts: [{ host: 'a.test', code: 'ECONNRESET', stage: 'unknown' }] })
+    expect(JSON.stringify(error)).not.toMatch(/secret|private-task|private-prompt/)
+  })
+
+  it.each(['GET', 'HEAD'])('%s 查询断线可安全换备用地址', async method => {
+    const response = new Response('{}')
+    const fetchMock = vi.fn().mockRejectedValueOnce(networkError('ECONNRESET')).mockResolvedValueOnce(response)
+    await expect(fetchProvider('APIMart', 'https://a.test/query', { method }, {
+      transport: fakeRuntimeContext(fetchMock).transport, retryPreconnectOnce: true, fallbackEndpoints: ['https://b.test/query'],
+    })).resolves.toBe(response)
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+  })
+
+  it('所有 TLS 前尝试失败时保留完整端点顺序和未发送状态', async () => {
+    const fetchMock = vi.fn().mockRejectedValue(beforeTls())
+    const error = await fetchProvider('APIMart', 'https://a.test/create', { method: 'POST' }, {
+      transport: fakeRuntimeContext(fetchMock).transport, retryPreconnectOnce: true, fallbackEndpoints: ['https://b.test/create'],
+    }).catch(error => error)
+    expect(error.details).toMatchObject({ submissionState: 'not_sent', attempts: [
+      { host: 'a.test', code: 'ECONNRESET', stage: 'before_send' },
+      { host: 'b.test', code: 'ECONNRESET', stage: 'before_send' },
+      { host: 'b.test', code: 'ECONNRESET', stage: 'before_send' },
+    ] })
+  })
+
+  it('退避期间取消不发出第二次请求', async () => {
+    const controller = new AbortController()
+    const fetchMock = vi.fn().mockRejectedValue(beforeTls())
+    const result = fetchProvider('KIE', 'https://a.test/create', { method: 'POST', signal: controller.signal }, {
+      transport: fakeRuntimeContext(fetchMock).transport, retryPreconnectOnce: true,
+    })
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledOnce())
+    await new Promise(resolve => setTimeout(resolve, 0))
+    controller.abort(new Error('cancelled during backoff'))
+    await expect(result).rejects.toThrow('cancelled during backoff')
+    expect(fetchMock).toHaveBeenCalledOnce()
+  })
   it('仅对能证明尚未建立连接的故障重试一次', async () => {
     const response = new Response('{}', { status: 200 })
     const fetchMock = vi.fn()

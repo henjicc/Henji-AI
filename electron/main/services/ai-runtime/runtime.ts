@@ -44,6 +44,7 @@ function toLogError(error: unknown): unknown {
     : undefined
   return {
     name: error.name,
+    ...(error instanceof AiRuntimeError && error.details ? { details: error.details } : {}),
     message: error.message,
     stack: error.stack,
     code: error instanceof AiRuntimeError ? error.code : undefined,

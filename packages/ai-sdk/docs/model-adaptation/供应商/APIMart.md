@@ -2,7 +2,7 @@
 
 | 项目 | 内容 |
 |---|---|
-| 最后更新 | 2026-08-28 |
+| 最后更新 | 2026-09-13 |
 | 供应商类型 | 聚合中转（非模型原厂） |
 | 项目内 providerId | `apimart` |
 | 主域名 | `apimart.ai`（海外主站） |
@@ -11,6 +11,8 @@
 | 任务模型 | 异步为主（提交拿 `task_id` → 轮询 / Webhook） |
 | 文档可见性 | 公开，无需登录 |
 | 价格可见性 | 公开，无需登录 |
+
+2026-09-13 网络恢复修复：提交请求仅在连接尚未建立时重试或切换线路；新增识别 Node `ECONNRESET` 且底层错误严格为 `Client network socket disconnected before secure TLS connection was established` 的 TLS 前断线。普通 `read ECONNRESET` / socket 断开仍不能重放提交。GET/HEAD 查询遇到连接重置可切换备用线路，不修改任务状态。最终错误 `details` 提供仅含域名、错误码、阶段、耗时的尝试序列及 `submissionState`，不记录请求路径、密钥和正文。TLS 阶段判据依据 [Node 官方实现](https://github.com/nodejs/node/blob/v24.0.0/lib/_tls_wrap.js#L1573-L1585)（公开，无需登录），其他边界为本 SDK 的保守策略，未改变供应商 API 契约。
 
 ## 1. 端点
 

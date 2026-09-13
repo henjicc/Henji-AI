@@ -51,6 +51,10 @@ export function describeNetworkFailure(error: unknown): NetworkFailure {
 export function shouldRetry(error: unknown, mode: RetryMode = 'request'): boolean {
   if (mode === 'safe-preconnect') {
     return SAFE_PRECONNECT_RETRY_CODES.has(describeNetworkFailure(error).code.toUpperCase())
+      // Node TLS onConnectEnd 在 secureConnect 之前产生此错误；普通 read ECONNRESET 不提供同等证据。
+      // 来源：https://github.com/nodejs/node/blob/v24.0.0/lib/_tls_wrap.js#L1573-L1585
+      || errorChain(error).some(record => providerCode(record)?.toUpperCase() === 'ECONNRESET'
+        && record.message === 'Client network socket disconnected before secure TLS connection was established')
   }
   const structuredRetryable = readStructuredRetryable(error)
   if (structuredRetryable !== undefined) return structuredRetryable
