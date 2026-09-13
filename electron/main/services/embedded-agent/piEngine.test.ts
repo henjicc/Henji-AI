@@ -80,6 +80,24 @@ function applicationCatalog(allowWrites = true) {
 }
 
 describe('Pi official SDK engine', () => {
+  it('正式 Pi 等待工具未返回时不请求模型，任务返回后自动继续', async () => {
+    const f = await fixture()
+    await f.engine.command({ action: 'configure', input: { ...f.configuration, tools: applicationCatalog().tools } })
+    f.setToolPlan([{ name: 'load_application_tools', arguments: { task: 'generation' } },
+      { name: 'wait_generation_task', arguments: { taskId: 'existing-task' } }])
+    let release!: (value: unknown) => void
+    f.tool.mockImplementation(() => new Promise(resolve => { release = resolve }))
+    const running = f.engine.command({ action: 'prompt', input: { text: '等待原任务', context: '{"surface":{"id":"workspace.generation"}}' } })
+    await vi.waitFor(() => expect(f.tool).toHaveBeenCalledTimes(1))
+    const count = f.requests.length
+    await new Promise(resolve => setTimeout(resolve, 100))
+    expect(f.requests).toHaveLength(count)
+    release({ task: { status: 'completed', taskId: 'existing-task' }, waitReason: 'terminal' })
+    await running
+    expect(f.requests).toHaveLength(count + 1)
+    expect(f.tool).toHaveBeenCalledTimes(1)
+  })
+
   it('技能主文件和图片指南经多轮工具调用逐步进入请求，视频正文不进入图片任务', async () => {
     const f = await fixture()
     const definition = loadAssistantSkillCapability
@@ -164,7 +182,7 @@ describe('Pi official SDK engine', () => {
     const names = (index: number) => f.requests.at(index)!.tools.map(tool => tool.function.name)
     expect(names(0)).toHaveLength(6)
     expect(names(0)).not.toContain('get_model_schema')
-    expect(names(1)).toEqual(expect.arrayContaining(['get_model_schema', 'prepare_generation_task', 'create_visible_generation_task', 'get_generation_task']))
+    expect(names(1)).toEqual(expect.arrayContaining(['get_model_schema', 'prepare_generation_task', 'create_visible_generation_task', 'wait_generation_task']))
     expect(names(1)).not.toContain('render_camera_stage_output')
     expect(f.tool).toHaveBeenCalledTimes(1)
     expect(f.tool.mock.calls[0]).toMatchObject([expect.any(String), 'get_model_schema', { modelId: 'fixture-model' }, expect.any(AbortSignal)])

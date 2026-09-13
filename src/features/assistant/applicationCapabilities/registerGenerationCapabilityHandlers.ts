@@ -1,3 +1,4 @@
+import { waitForGenerationTask } from '@/features/generation/application/waitForGenerationTask'
 import { applicationGenerationTaskId } from '@/core/application-control/operationIdentity'
 import { registry } from '@/core/ModelRegistry'
 import {
@@ -198,10 +199,12 @@ export function registerGenerationCapabilityHandlers(
 
   registrar.registerHandler('get_generation_task', async (input) => {
     const parsed = parseCapabilityInput<{ taskId: string }>('get_generation_task', input)
-    const { getCanvasGenerationTask } = await import('@/features/canvas/application/canvasGenerationTaskService')
-    const canvasTask = await getCanvasGenerationTask(parsed.taskId)
-    if (canvasTask) return { task: canvasTask }
-    return { task: generationApplicationService.getTask(parsed.taskId) }
+    return { task: await readGenerationTask(parsed.taskId) }
+  })
+
+  registrar.registerHandler('wait_generation_task', async (input, context) => {
+    const parsed = parseCapabilityInput<{ taskId: string }>('wait_generation_task', input)
+    return waitForGenerationTask(() => readGenerationTask(parsed.taskId), context.signal)
   })
 
   registrar.registerHandler('cancel_generation_task', async (input, context) => {
@@ -231,4 +234,9 @@ export function registerGenerationCapabilityHandlers(
     const { resumeCanvasGenerationTask } = await import('@/features/canvas/application/canvasGenerationTaskService')
     return resumeCanvasGenerationTask(parsed, context.signal)
   })
+}
+
+async function readGenerationTask(taskId: string): Promise<Record<string, unknown>> {
+  const { getCanvasGenerationTask } = await import('@/features/canvas/application/canvasGenerationTaskService')
+  return await getCanvasGenerationTask(taskId) ?? { ...generationApplicationService.getTask(taskId) }
 }

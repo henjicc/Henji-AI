@@ -1,3 +1,4 @@
+import { BUILTIN_APPLICATION_CAPABILITIES } from '../../../../src/core/assistant/builtinApplicationCapabilityRegistry'
 import { randomUUID } from 'node:crypto'
 import { externalWritableEntityTypes, type LocalDomainSurface, type LocalHostRegistration, type LocalHostRegistrationInput, type LocalHostReply, type LocalHostRequest, type LocalTool } from '../../../../src/core/application-control/localHostContracts'
 import type { McpOperationCoordinator } from './operationCoordinator'
@@ -79,7 +80,7 @@ export class ApplicationHostBridge {
         this.pending.delete(requestId)
         reject(new Error('读取已取消或等待超时，请重新查询。'))
       }
-      const timer = setTimeout(cancel, 30_000)
+      const timer = setTimeout(cancel, Math.max(30_000, (BUILTIN_APPLICATION_CAPABILITIES.find(item => item.id === capabilityId)?.timeoutMs ?? 0) + 1_000))
       signal.addEventListener('abort', cancel, { once: true })
       this.pending.set(requestId, { callerId, sessionId: host.registration.sessionId, resolve, reject, cleanup: () => { clearTimeout(timer); signal.removeEventListener('abort', cancel) } })
       try {

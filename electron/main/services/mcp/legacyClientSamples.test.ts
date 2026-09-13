@@ -68,6 +68,7 @@ const LEGACY_SAMPLES: Sample[] = [
       changes: [{ kind: 'remove_items', entityType: 'canvas.node', parent: { kind: 'canvas.project', id: 'project-1' }, targets: [{ kind: 'canvas.node', id: 'project-1:node-1' }] }],
     },
   },
+  { era: '自动等待', tool: 'wait_generation_task', arguments: { taskId: 'f1e2d3c4-b5a6-4978-8899-aabbccddeeff' } },
   { era: '2.2 后台任务', tool: 'get_generation_task', arguments: { taskId: 'f1e2d3c4-b5a6-4978-8899-aabbccddeeff' } },
   { era: '2.2 后台任务', tool: 'get_camera_stage_render_task', arguments: { taskRef: { kind: 'camera_stage.render_task', id: 'render-1' } } },
 ]

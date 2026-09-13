@@ -1,3 +1,4 @@
+import { assistantErrorMessage } from '@/core/assistant/assistantErrorPresentation'
 import { useEffect, useRef, useState } from 'react'
 import { Dropdown, UiButton, UiError, UiLoading } from '@/components/ui'
 import { createEmptyPromptDocument } from '@/core/inputs/promptDocument'
@@ -70,11 +71,11 @@ export function EmbeddedConversation(): JSX.Element {
         ? <EmbeddedUserMessage message={optimistic} /> : null}
       {busy ? <div aria-label="助手正在回复"><UiLoading size="xs" className="!items-start !py-1 motion-reduce:[&>div]:animate-none" /></div> : null}
       {state.pendingMessages?.map(message => <div key={message.id} className="space-y-2"><EmbeddedUserMessage message={message} />
-        <p className="text-right text-xs text-text-muted">{message.error ? `发送未完成：${message.error}` : '等待发送'}</p></div>)}
+        <p className="text-right text-xs text-text-muted">{message.error ? `发送未完成：${assistantErrorMessage(message.error)}` : '等待发送'}</p></div>)}
       </div>
     </div>
     <div className="space-y-2 px-3 pt-3">
-      {state.error ? <UiError message={state.error} size="xs" /> : null}
+      {state.error ? <UiError message={assistantErrorMessage(state.error)} size="xs" /> : null}
       {models.length === 0 ? <UiButton size="sm" onClick={() => useUiStore.getState().openSettings({ tab: 'models', sectionId: 'models-assistant' })}>设置可调用工具的模型</UiButton> : null}
     </div>
     <AssistantComposer key={state.sessionId ?? 'new'} value={document} onChange={setDocument} onSubmit={send} attachments={attachments} onAttachmentsChange={setAttachments}

@@ -330,6 +330,51 @@ const getGenerationTask = defineApplicationCapability({
   summarize: (output) => `生成任务状态：${String(output.task.status ?? 'unknown')}。`,
 })
 
+const waitGenerationTask = defineApplicationCapability({
+  id: 'wait_generation_task',
+  version: 1,
+  title: '等待生成结果',
+  description: '默认在提交后调用。持续等待已有任务成功、失败或需要恢复才返回；等待不取消生成、不重复提交。极长任务返回 still_running 时继续等待同一 taskId。用户主动询问即时进度才使用 get_generation_task。',
+  domain: 'generation',
+  aliases: ['等待生成', '等待结果', 'wait generation task'],
+  readOnly: true,
+  control: capabilityControl('observe', ['generation.task', 'generation.result']),
+  risk: 'R0',
+  dataClasses: ['C1'],
+  permission: 'generation:read',
+  idempotent: true,
+  destructive: false,
+  timeoutMs: 10 * 60_000,
+  supportsPreview: false,
+  supportsUndo: false,
+  requiredScopes: ['generation'],
+  acceptsRefs: ['generation.task'],
+  producesRefs: ['generation.task', 'generation.result'],
+  inputSchema: z.object({ taskId: z.string().min(1) }).strict(),
+  outputSchema: capabilityOutputSchema({
+    task: z.record(z.string(), z.unknown()),
+    waitReason: z.enum(['terminal', 'recovery_required', 'still_running']),
+  }),
+  concurrencyKey: 'generation',
+  resolveConcurrencyKey: (input) => `generation:${input.taskId}`,
+  resolveTargetIds: (input) => ({ taskId: input.taskId }),
+  resolveObservedEffects: (input, output) => {
+    const status = typeof output.task.status === 'string' ? output.task.status : 'unknown'
+    const terminal = ['success', 'completed', 'error', 'failed', 'cancelled', 'canceled'].includes(status)
+    return [{
+      effect: 'observe',
+      entityTypes: ['generation.task', ...(status === 'success' || status === 'completed'
+        ? ['generation.result'] : [])],
+      propertyIds: [],
+      targetRefs: [{ kind: 'generation.task', id: input.taskId }],
+      count: 1,
+      verified: terminal,
+      evidence: [],
+    }]
+  },
+  summarize: (output) => `生成任务状态：${String(output.task.status ?? 'unknown')}。`,
+})
+
 const cancelGenerationTask = defineApplicationCapability({
   id: 'cancel_generation_task',
   resolveOperationTargets: (input) => [{ kind: 'generation.task', id: input.taskId }],
@@ -434,6 +479,7 @@ export const GENERATION_APPLICATION_CAPABILITIES: ApplicationCapabilityDefinitio
   prepareGenerationTask,
   createVisibleGenerationTask,
   getGenerationTask,
+  waitGenerationTask,
   cancelGenerationTask,
   resumeCanvasGenerationTask,
   prepareCanvasNodeGeneration,
