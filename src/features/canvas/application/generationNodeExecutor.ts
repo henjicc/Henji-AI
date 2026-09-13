@@ -99,12 +99,23 @@ export interface GenerationNodeExecutionOptions {
 /** UI 与后台调用共享的生成执行器；读取最新配置，不依赖 React 挂载。 */
 export function createGenerationNodeExecutor(readOptions: (store?: typeof useCanvasStore) => GenerationNodeExecutionOptions) {
   const readRuntime = (store = useCanvasStore) => resolveGenerationNodeRuntime(readOptions(store), store)
+  const readExecutionInputs = async (execution: CanvasNodeExecutionContext) => {
+    const projectId = execution.projectId
+    if (!projectId) throw new Error('当前没有可执行生成的画布项目')
+    return withCanvasProjectRuntime(projectId, async target => {
+      const current = readOptions(target.store)
+      if (current.commitGenerationResult && !isCanvasProjectContextCurrent(projectId)) {
+        throw new Error('此生成需要在原画布完成合成，请返回原项目')
+      }
+      return { current, runtime: resolveGenerationNodeRuntime(current, target.store) }
+    })
+  }
 
   const prepareRuntimeValues = async (
     values: DynamicValueMap,
     runtime: ReturnType<typeof resolveGenerationNodeRuntime>,
+    current: GenerationNodeExecutionOptions,
   ): Promise<DynamicValueMap> => {
-    const current = readOptions()
     if (!current.prepareRuntimeParams) return values
     return {
       ...values,
@@ -123,8 +134,8 @@ export function createGenerationNodeExecutor(readOptions: (store?: typeof useCan
     currentParams: DynamicValueMap,
     userPrompt: string,
     runtime: ReturnType<typeof resolveGenerationNodeRuntime>,
+    current: GenerationNodeExecutionOptions,
   ) => {
-    const current = readOptions()
     if (!current.capability) return null
     if (!runtime.model) throw new Error(current.t('modelPicker.noCompatibleModels'))
     const preparation = prepareCanvasCapabilityGeneration({
@@ -140,19 +151,12 @@ export function createGenerationNodeExecutor(readOptions: (store?: typeof useCan
     return preparation
   }
 
-  const prepareExecution = async (execution: CanvasNodeExecutionContext) => {
-    const current = readOptions()
-    if (
-      execution.projectId
-      && useProjectStore.getState().currentProjectId !== execution.projectId
-    ) {
-      throw new Error('画布项目已切换，本次生成已停止')
-    }
-    const runtime = readRuntime()
+  const prepareExecution = async (execution: CanvasNodeExecutionContext, inputs?: Awaited<ReturnType<typeof readExecutionInputs>>) => {
+    const { current, runtime } = inputs ?? await readExecutionInputs(execution)
     const values = await prepareRuntimeValues({
       ...runtime.modelParamValues,
       ...runtime.injectedValues,
-    }, runtime)
+    }, runtime, current)
     const promptInput = resolveGenerationPromptInput(
       runtime.model,
       values,
@@ -164,7 +168,7 @@ export function createGenerationNodeExecutor(readOptions: (store?: typeof useCan
       throw new Error(current.t(current.promptRequiredKey))
     }
     current.setPromptInvalid(false)
-    const capabilityPreparation = prepareCapability(values, promptInput.prompt, runtime)
+    const capabilityPreparation = prepareCapability(values, promptInput.prompt, runtime, current)
     ensureGenerationProviderConfigured(runtime.providerKeyConfigured, {
       title: current.t('common:providerKeyRequired.title'),
       message: current.t('common:providerKeyRequired.message'),
@@ -207,7 +211,8 @@ export function createGenerationNodeExecutor(readOptions: (store?: typeof useCan
   const handleGenerate = async (
     execution: CanvasNodeExecutionContext,
   ): Promise<CanvasNodeExecutionResult> => {
-    const current = readOptions()
+    const inputs = await readExecutionInputs(execution)
+    const current = inputs.current
     const ownership: GenerationNodeResourceOwnership = {
       modelType: current.modelType,
       requestPreparation: null,
@@ -221,7 +226,7 @@ export function createGenerationNodeExecutor(readOptions: (store?: typeof useCan
         if (!generationProjectId) throw new Error('当前没有可执行生成的画布项目')
         const backgroundCompletion = !current.commitGenerationResult
         const isProjectCurrent = (): boolean => isCanvasProjectContextCurrent(generationProjectId)
-        const prepared = await prepareExecution(execution)
+        const prepared = await prepareExecution(execution, inputs)
         const { runtime, promptInput, capabilityPreparation, generationParams } = prepared
         ownership.requestPreparation = current.prepareGenerationRequest
           ? await current.prepareGenerationRequest({

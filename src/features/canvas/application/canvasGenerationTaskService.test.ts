@@ -12,7 +12,7 @@ import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from '@/te
 import { readGenerationTaskStatusSnapshot, replaceGenerationTaskStatusSnapshots } from '@/features/generation/application/generationTaskStatusRegistry'
 import { CANVAS_NODE_TYPES } from '../domain/canvasNodes'
 import { getCanvasGenerationTask, resolveCanvasGenerationOptions, submitCanvasGenerationTask, prepareCanvasNodeGeneration, submitCanvasNodeGeneration } from './canvasGenerationTaskService'
-import { registerCanvasNodeExecutor, resetCanvasExecutionServiceForTests } from './canvasExecutionService'
+import { registerCanvasNodeExecutor, resetCanvasExecutionServiceForTests, isCanvasNodeRunActive } from './canvasExecutionService'
 import { readPersistedCanvasProjectSnapshot } from './canvasQueryService'
 import { confirmCanvasPersistence } from './canvasPersistenceService'
 import { commitCanvasGenerationOutputs } from './generationOutputApplicationService'
@@ -518,7 +518,8 @@ it('旧任务不能把同来源节点上另一次生成的结果认成自己的�
   expect(records.get(taskId)?.status).toBe('pending')
 })
 
-it('原生成仍在等待结果时可连续新增五个请求，节点与参考连线立即持久化', async () => {
+it.each(['foreground', 'background', 'cancel-queued'] as const)('五个请求保持独立执行、排队和原项目归属（%s）', async mode => {
+  const background = mode !== 'foreground'
   let release!: () => void
   const waiting = new Promise<void>(resolve => { release = resolve })
   const taskIds: string[] = []
@@ -544,10 +545,20 @@ it('原生成仍在等待结果时可连续新增五个请求，节点与参考�
     expect(saved.edges.filter(edge => edge.source === 'reference' && nodeIds.includes(edge.target))).toHaveLength(5)
     expect(taskIds.every(id => records.get(id)?.status !== 'success')).toBe(true)
     expect(generate.mock.calls.length).toBeLessThanOrEqual(2)
+    await vi.waitFor(() => expect(nodeIds.every(id => isCanvasNodeRunActive(projectId, id))).toBe(true))
+    const otherProject = background ? await useProjectStore.getState().createProject('队列期间的另一个项目') : null
+    if (mode === 'cancel-queued') {
+      expect(await taskControlSession()('cancel_generation_task', { taskId: taskIds[4], reason: '取消队尾任务' })).toMatchObject({ ok: true })
+    }
     release()
-    await vi.waitFor(() => expect(taskIds.map(id => records.get(id)?.status), JSON.stringify([...records.values()].map(record => ({ status: record.status, error: record.errorMessage })))).toEqual(Array(5).fill('success')))
+    await vi.waitFor(() => expect(taskIds.map(id => records.get(id)?.status), JSON.stringify([...records.values()].map(record => ({ status: record.status, error: record.errorMessage })))).toEqual(taskIds.map((_id, index) => mode === 'cancel-queued' && index === 4 ? 'cancelled' : 'success')))
     const completed = await readPersistedCanvasProjectSnapshot(projectId)
-    expect(completed.nodes.filter(node => node.data.generationSourceNodeId && nodeIds.includes(String(node.data.generationSourceNodeId)))).toHaveLength(5)
+    expect(completed.nodes.filter(node => node.data.generationSourceNodeId && nodeIds.includes(String(node.data.generationSourceNodeId)))).toHaveLength(mode === 'cancel-queued' ? 4 : 5)
+    expect(generate).toHaveBeenCalledTimes(mode === 'cancel-queued' ? 4 : 5)
+    if (background) {
+      expect(useProjectStore.getState().currentProjectId).toBe(otherProject)
+      expect(useCanvasStore.getState().nodes).toHaveLength(0)
+    }
   } finally { release() }
 })
 

@@ -308,7 +308,7 @@ async function executeRegisteredNode(
         if (runControl.failure !== null) {
           throw new CanvasRunCancelledBeforeExecutionError(context.runId, runControl.failure)
         }
-        if (getExecutor(nodeId) !== executor) {
+        if (getExecutor(nodeId) !== executor && !(backgroundCompletion && taskExecutors.get(key) === executor)) {
           throw new CanvasInputChangedBeforeExecutionError()
         }
         await executor.preflight?.(context)
