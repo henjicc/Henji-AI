@@ -5,7 +5,7 @@ import { createApplicationCapabilitySession, listApplicationCapabilities } from 
 import { replaceGenerationTaskStatusSnapshots, type GenerationTaskStatusSnapshot } from '@/features/generation/application/generationTaskStatusRegistry'
 import { registerVisibleGenerationTaskHandler } from '@/workspaces/GenerationWorkspace/application/visibleGenerationTaskCommand'
 import { upsertProjectRecord } from '@/commands/projectState'
-import { readPersistedCanvasProjectSnapshot } from '@/features/canvas/application/canvasQueryService'
+import { getCanvasNode, getCanvasProject, readPersistedCanvasProjectSnapshot } from '@/features/canvas/application/canvasQueryService'
 import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from './harnessNativeStorage'
 import { registry } from '@/core/ModelRegistry'
 import { databaseService } from '@/services/database/DatabaseService'
@@ -64,6 +64,11 @@ it('创作文本经 MCP 保存后新会话按需读回，局部返修保留其�
       coverPath: null, nodes, edges, viewport: { x: 0, y: 0, zoom: 1 }, history: { past: [], future: [] } }
     useCanvasStore.getState().setCanvasData(nodes, edges, project.history)
     useProjectStore.setState({ currentProjectId: projectId, currentProject: project, projects: [project], isHydrated: true })
+    const overview = await getCanvasProject(projectId)
+    expect(JSON.stringify(overview)).not.toContain('原始说明')
+    expect(JSON.stringify(overview)).not.toContain('小林穿灰色外套')
+    expect(overview.nodes).toEqual(expect.arrayContaining([expect.objectContaining({ data: expect.objectContaining({ displayName: 'character' }) })]))
+    expect(await getCanvasNode(projectId, 'character')).toMatchObject({ node: { data: { content: '小林穿灰色外套' } } })
     const change = await creativeClient().execute({ id: 'change_application_entities', version: 2,
       input: { summary: '修改第一镜头说明', changes: [{ kind: 'set_properties', entityType: 'canvas.node',
         target: ref('shot-one'), properties: { 'canvas.node.text_content': '镜头一：小林在门口停下，手握信封。' } }] } }, request())
