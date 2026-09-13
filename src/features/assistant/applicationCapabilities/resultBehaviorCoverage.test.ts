@@ -25,6 +25,10 @@ const RESULT_SCENARIOS: Record<string, Scenario[]> = {
     { file: 'src/features/canvas/application/canvasReflection.test.ts', title: '原子更新节点标题与位置并可整体撤销' },
     { file: 'src/features/canvas/application/canvasApplicationService.test.ts', title: '按目录 schema 添加、确定性布局、合法连接并逐步撤销' },
   ],
+  memory: [
+    { file: 'src/features/assistant/application/sharedMemoryReflection.test.ts', title: '共享记忆通过正式通用事务保存和清空' },
+    { file: 'src/features/assistant/application/sharedMemoryReflection.test.ts', title: '关闭记忆后通用事务不保存' },
+  ],
   generation: [
     { file: 'src/features/generation/application/generationModelMutationExecutor.test.ts', title: '通过统一计划提交把模型隐藏，值真的落到 hidden_models，且可撤销' },
     { file: 'src/features/generation/application/generationDraftMutationExecutor.test.ts', title: '助手写提示词、换模型，草稿真的变了，且可撤销' },
@@ -47,6 +51,7 @@ const RESULT_SCENARIOS: Record<string, Scenario[]> = {
 }
 
 const RESULT_SCENARIO_BASELINE: Record<keyof typeof RESULT_SCENARIOS, number> = {
+  memory: 2,
   settings: 2,
   assets: 3,
   canvas: 2,

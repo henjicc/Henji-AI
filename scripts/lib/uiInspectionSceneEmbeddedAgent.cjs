@@ -63,6 +63,20 @@ function createEmbeddedAgentScenes(context) {
         await page.keyboard.press('Control+Shift+A')
         const panel = page.getByRole('complementary', { name: '智能助手' })
         await panel.waitFor()
+        const memoryIdentity = await authorizeMcpConnection(page, { name: '共享记忆验收', allowWrites: true })
+        const memoryClient = await connectMcpClient(memoryIdentity.config, 'Shared memory fixture')
+        try {
+          await callTool(memoryClient, 'read_application_entity', { ref: { kind: 'assistant.shared_memory', id: 'singleton' } })
+          await callTool(memoryClient, 'change_application_entities', { operationId: require('node:crypto').randomUUID(), summary: '保存明确偏好',
+            changes: [{ kind: 'set_properties', entityType: 'assistant.shared_memory', target: { kind: 'assistant.shared_memory', id: 'singleton' },
+              properties: { 'assistant.shared_memory.content': '用户偏好水墨质感。' } }] })
+          const saved = await page.evaluate(() => window.henjiNative.assistant.getSharedMemory())
+          assert.equal(saved.content, '用户偏好水墨质感。')
+        } finally { await memoryClient.close() }
+        await panel.getByRole('button', { name: '助手记忆', exact: true }).click()
+        await panel.getByText('用户偏好水墨质感。', { exact: true }).waitFor()
+        await capture('shared-memory')
+        await panel.getByRole('button', { name: '助手记忆', exact: true }).click()
         assert.equal(await panel.getByRole('button', { name: '助手模型', exact: true }).count(), 0)
         assert.ok((await page.getByRole('button', { name: '助手操作权限', exact: true }).textContent()).includes('完全访问'))
         await page.evaluate(async () => { const state = await window.henjiNative.mcp.status(); await window.henjiNative.mcp.configure({ enabled: false, port: state.port }) })
@@ -79,6 +93,7 @@ function createEmbeddedAgentScenes(context) {
         assert.equal(await panel.getByText('正在准备…', { exact: true }).count(), 0)
         await panel.getByRole('button', { name: '正在思考', exact: true }).waitFor({ timeout: 60000 })
         assert.equal(await panel.getByText('先查看当前主题，再核对设置。', { exact: true }).count(), 0)
+        assert.ok(JSON.stringify(requests[0].messages).includes('用户偏好水墨质感。'))
         await capture('conversation-thinking')
         await panel.getByRole('button', { name: '正在思考', exact: true }).click()
         await panel.getByText('先查看当前主题，再核对设置。', { exact: true }).waitFor()

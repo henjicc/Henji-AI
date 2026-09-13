@@ -1,4 +1,5 @@
-import { GripHorizontal, History, MessageSquarePlus, Sparkles, X } from 'lucide-react'
+import { AssistantMemoryPanel } from './memory/AssistantMemoryPanel'
+import { BrainCircuit, GripHorizontal, History, MessageSquarePlus, Sparkles, X } from 'lucide-react'
 import { useState, type CSSProperties, type KeyboardEvent, type RefObject } from 'react'
 
 import { UI_COLOR_ACCENT_TEXT_CLASS, UI_PANEL_SURFACE_CLASS, UI_TEXT_LABEL_CLASS, UiIconButton } from '@/components/ui'
@@ -41,7 +42,7 @@ interface AssistantSidebarProps {
 }
 
 export function AssistantSidebar({ workspaceRef }: AssistantSidebarProps): JSX.Element {
-  const [contentView, setContentView] = useState<'conversation' | 'history'>('conversation')
+  const [contentView, setContentView] = useState<'conversation' | 'history' | 'memory'>('conversation')
   const embedded = useEmbeddedAgent()
   const open = useAssistantUiStore((state) => state.open)
   const mode = useAssistantUiStore((state) => state.mode)
@@ -170,6 +171,11 @@ export function AssistantSidebar({ workspaceRef }: AssistantSidebarProps): JSX.E
               >
                 <History className="h-4 w-4" />
               </UiIconButton>
+              <UiIconButton type="button" showBorder={false} appearance="hover-only" active={contentView === 'memory'}
+                onClick={() => setContentView(view => view === 'memory' ? 'conversation' : 'memory')}
+                title={contentView === 'memory' ? '返回当前对话' : '助手记忆'} aria-label="助手记忆" className={HEADER_ICON_BUTTON_CLASS}>
+                <BrainCircuit className="h-4 w-4" />
+              </UiIconButton>
             </div>
 
             {/* 停靠态不放关闭：它正好落在窗口关闭按钮的正下方，两个 X 叠在一条竖线上很容易误点。
@@ -190,6 +196,7 @@ export function AssistantSidebar({ workspaceRef }: AssistantSidebarProps): JSX.E
             ) : null}
           </div>
         </header>
+        {contentView === 'memory' ? <AssistantMemoryPanel /> : null}
         <div
           aria-hidden={contentView !== 'conversation'}
           className={contentView === 'conversation' ? 'flex min-h-0 min-w-0 flex-1 overflow-hidden' : 'hidden'}

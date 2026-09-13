@@ -1,3 +1,4 @@
+import { sharedMemoryUpdateSchema } from '../../../src/core/assistant/memory'
 import { BrowserWindow, type IpcMainInvokeEvent } from 'electron'
 
 import {
@@ -128,6 +129,8 @@ export function registerAssistantIpc(): void {
     },
     assertTrustedAssistantRenderer
   )
+  registerIpcHandler('assistant:memory:getShared', parseVoid, () => getAgentMemoryStore().getSharedMemory(), assertTrustedAssistantRenderer)
+  registerIpcHandler('assistant:memory:updateShared', input => sharedMemoryUpdateSchema.parse(input), input => getAgentMemoryStore().updateSharedMemory(input), assertTrustedAssistantRenderer)
   registerIpcHandler(
     'assistant:memory:getState',
     parseVoid,

@@ -1,3 +1,4 @@
+import { createSharedMemoryRegistration, SharedMemoryExecutor } from '../application/sharedMemoryReflection'
 import {
   ApplicationControlExecutionEngine,
   ApplicationReflectionRegistry,
@@ -132,6 +133,7 @@ function registerAll(
 export function getApplicationReflectionRegistry(): ApplicationReflectionRegistry {
   if (registry) return registry
   const next = new ApplicationReflectionRegistry(APPLICATION_CAPABILITY_CATALOG_VERSION)
+  registerAll(next, 'shared_memory', [createSharedMemoryRegistration()])
   registerAll(next, 'settings', [createSettingsReflectionRegistration()])
   registerAll(next, 'assets', createAssetReflectionRegistrations(
     () => assetMutationDependencies.readRevision()
@@ -188,6 +190,7 @@ export function getApplicationControlExecutionEngine(): ApplicationControlExecut
       (operation === 'create' ? creators : removers).get(entityType) ?? []
     ),
   })
+  next.registerMutationExecutor(new SharedMemoryExecutor())
   next.registerMutationExecutor(new SettingsMutationExecutor())
   next.registerMutationExecutor(new CanvasNodeMutationExecutor())
   next.registerMutationExecutor(new CanvasProjectMutationExecutor())

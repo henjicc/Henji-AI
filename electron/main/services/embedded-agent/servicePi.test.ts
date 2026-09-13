@@ -1,3 +1,4 @@
+vi.mock('../assistant/memory', () => ({ getAgentMemoryStore: () => ({ getSharedMemory: () => ({ content: '', enabled: false, revision: 1 }) }) }))
 vi.mock('./skills', () => ({ embeddedSkillCatalog: async () => ({ tools: [], instructions: '' }), callEmbeddedSkill: vi.fn() }))
 import { EventEmitter } from 'node:events'
 import { randomUUID } from 'node:crypto'

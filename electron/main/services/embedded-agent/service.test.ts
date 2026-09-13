@@ -1,10 +1,11 @@
+vi.mock('../assistant/memory', () => ({ getAgentMemoryStore: () => ({ getSharedMemory: mocks.memory }) }))
 vi.mock('./skills', () => ({ embeddedSkillCatalog: mocks.skills, callEmbeddedSkill: mocks.loadSkill }))
 import { EventEmitter } from 'node:events'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { EmbeddedAgentPrompt } from '../../../../src/core/assistant/embeddedAgent'
 import type { EngineCommand } from './contracts'
 
-const mocks = vi.hoisted(() => ({ skills: vi.fn(), loadSkill: vi.fn(), fork: vi.fn(), resolveModel: vi.fn(), prepare: vi.fn(), close: vi.fn(), call: vi.fn(), info: vi.fn(), error: vi.fn() }))
+const mocks = vi.hoisted(() => ({ memory: vi.fn(() => ({ content: '', enabled: false, revision: 1 })), skills: vi.fn(), loadSkill: vi.fn(), fork: vi.fn(), resolveModel: vi.fn(), prepare: vi.fn(), close: vi.fn(), call: vi.fn(), info: vi.fn(), error: vi.fn() }))
 vi.mock('electron', () => ({ utilityProcess: { fork: mocks.fork } }))
 vi.mock('../../ipc/mcp', () => ({ createEmbeddedApplicationClient: () => ({ catalog: () => [], close: mocks.close, call: mocks.call }) }))
 vi.mock('../system', () => ({ getAppLocalDataDir: () => '/fixture' }))
@@ -80,6 +81,25 @@ function setup() {
 afterEach(() => { vi.clearAllMocks() })
 
 describe('内置助手消息调度', () => {
+  it('每条消息读取最新共享记忆，关闭后不注入正文', async () => {
+    const f = setup()
+    const calls = vi.spyOn(f.child, 'postMessage')
+    mocks.memory.mockReturnValue({ content: '偏好水墨', enabled: true, revision: 2 })
+    await f.send('第一条')
+    await vi.waitFor(() => expect(f.prompts).toHaveLength(1))
+    const prompts = () => calls.mock.calls.flatMap(([value]) => value.command.action === 'prompt' ? [value.command.input.context] : [])
+    expect(JSON.parse(prompts()[0]).sharedMemory.content).toBe('偏好水墨')
+    f.finish()
+    await vi.waitFor(() => expect(f.service.snapshot().busy).toBe(false))
+    mocks.memory.mockReturnValue({ content: '偏好水墨', enabled: false, revision: 3 })
+    await f.send('第二条')
+    await vi.waitFor(() => expect(f.prompts).toHaveLength(2))
+    expect(JSON.parse(prompts()[1]).sharedMemory).toEqual({ enabled: false })
+    f.finish()
+    await f.service.dispose()
+    mocks.memory.mockReturnValue({ content: '', enabled: false, revision: 1 })
+  })
+
   it('准备期间停止保留用户气泡，不把尚未发送的消息丢弃', async () => {
     const f = setup()
     let resolveModel!: (value: object) => void

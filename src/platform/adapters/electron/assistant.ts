@@ -20,6 +20,8 @@ export function createElectronAssistant(): AssistantPlatform {
     uninstallSkill: (name) => getNativeAssistant().uninstallSkill(name),
     setSkillEnabled: (update) => getNativeAssistant().setSkillEnabled(update),
     openSkillsDirectory: () => getNativeAssistant().openSkillsDirectory(),
+    getSharedMemory: () => getNativeAssistant().getSharedMemory(),
+    updateSharedMemory: update => getNativeAssistant().updateSharedMemory(update),
     getMemoryState: () => getNativeAssistant().getMemoryState(),
     updateMemorySettings: (update) => getNativeAssistant().updateMemorySettings(update),
     updateMemory: (update) => getNativeAssistant().updateMemory(update),
