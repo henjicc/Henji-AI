@@ -184,8 +184,8 @@ export async function commitCanvasGenerationOutputs(
   }
 
   if (input.contract.strategy === 'layer-stack') {
-    if (context) throw new GenerationOutputApplicationError('UNSUPPORTED_STRATEGY', '图层文档需要原编辑会话');
-    return await commitPreparedLayerStack({ ...input, completionId, ordered, projectId });
+    return await commitPreparedLayerStack({ ...input, completionId, ordered, projectId },
+      context ? { runtime: context.runtime, assertCurrent: assertContext } : undefined);
   }
 
   const before = store.getState();

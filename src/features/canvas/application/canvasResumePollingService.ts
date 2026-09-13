@@ -74,7 +74,7 @@ function startCanvasProjectResume(
   projectId: string, nodeIds: ReadonlySet<string> | undefined, options: { retryFailed?: boolean },
   store: typeof useCanvasStore,
 ): number {
-  const { nodes, edges, updateNodeData } = store.getState();
+  const { nodes, edges } = store.getState();
   let started = 0;
   const setNodeGenerationProgress = useCanvasGenerationProgressStore.getState().setProgress;
   for (const node of nodes) {
@@ -100,10 +100,6 @@ function startCanvasProjectResume(
     const sourceCapability = sourceCapabilityId
       ? getRegisteredCanvasImageCapabilities().find(({ id }) => id === sourceCapabilityId)
       : undefined;
-    const backgroundCompletion = node.data.resultKind !== 'layer-stack'
-      && sourceCapability?.outputPolicy.resultKind !== 'layer-stack'
-      && sourceCapability?.outputPolicy.postProcess !== 'local-redraw-composite';
-    if (!backgroundCompletion && useProjectStore.getState().currentProjectId !== projectId) continue;
     const persistedSourceNodeId = typeof node.data.generationSourceNodeId === 'string'
       && node.data.generationSourceNodeId.trim().length > 0
       ? node.data.generationSourceNodeId
@@ -118,13 +114,6 @@ function startCanvasProjectResume(
       resumeControls.set(resumeLease, { taskId: node.data.generationTaskId, controller });
     }
     started += 1;
-    const unsubscribeProject = useProjectStore.subscribe((state, previous) => {
-      if (!backgroundCompletion && previous.currentProjectId === projectId && state.currentProjectId !== projectId) {
-        releaseCanvasGenerationResumeLease(projectId, task.taskId, resumeLease);
-        resumeControls.delete(resumeLease);
-        unsubscribeProject();
-      }
-    });
     logger.info('[CanvasResume] 恢复未完成的异步生成', {
       event: 'canvas.resume_polling.start',
       taskId: task.taskId,
@@ -143,20 +132,15 @@ function startCanvasProjectResume(
       taskId: task.taskId,
       modelId: task.modelId,
       sourceCapability,
-      backgroundCompletion,
-      updateNodeData: backgroundCompletion ? (id, patch) => withCanvasProjectRuntime(projectId, async runtime => {
+      updateNodeData: (id, patch) => withCanvasProjectRuntime(projectId, async runtime => {
         if (!isCanvasGenerationResumeLeaseCurrent(projectId, task.taskId, resumeLease)) return;
         runtime.store.getState().updateNodeData(id, patch);
         await runtime.persist();
-      }) : updateNodeData,
+      }),
       setNodeGenerationProgress,
-      isContextCurrent: () => (
-        (backgroundCompletion || useProjectStore.getState().currentProjectId === projectId)
-        && isCanvasGenerationResumeLeaseCurrent(projectId, task.taskId, resumeLease)
-      ),
+      isContextCurrent: () => isCanvasGenerationResumeLeaseCurrent(projectId, task.taskId, resumeLease),
       releaseLease: () => {
         resumeControls.delete(resumeLease);
-        unsubscribeProject();
         releaseCanvasGenerationResumeLease(projectId, task.taskId, resumeLease);
       },
     });
@@ -175,7 +159,6 @@ interface ResumeNodeTaskInput {
   taskId: string;
   modelId: string;
   sourceCapability?: CanvasImageCapabilityDefinition;
-  backgroundCompletion: boolean;
   updateNodeData: (id: string, patch: Parameters<ReturnType<typeof useCanvasStore.getState>['updateNodeData']>[1]) => void | Promise<void>;
   setNodeGenerationProgress: ReturnType<
     typeof useCanvasGenerationProgressStore.getState
@@ -234,16 +217,13 @@ async function resumeNodeTask(input: ResumeNodeTaskInput): Promise<void> {
     taskId,
     modelId,
     sourceCapability,
-    backgroundCompletion,
     updateNodeData,
     setNodeGenerationProgress,
     isContextCurrent,
     releaseLease,
   } = input;
   let createdFilePaths: string[] = [];
-  const commitOutputs = backgroundCompletion
-    ? (value: Parameters<typeof commitCanvasGenerationOutputs>[0]) => commitCanvasGenerationOutputsInProject(projectId, value)
-    : commitCanvasGenerationOutputs;
+  const commitOutputs = (value: Parameters<typeof commitCanvasGenerationOutputs>[0]) => commitCanvasGenerationOutputsInProject(projectId, value);
   const publish = (resultNodeIds: string[], source = sourceNodeId) => publishResumedExecution({
     projectId, isContextCurrent, sourceNodeId: source, resultNodeData, resultNodeIds,
   });
@@ -304,6 +284,7 @@ async function resumeNodeTask(input: ResumeNodeTaskInput): Promise<void> {
     if (sourceCapability?.outputPolicy.postProcess === 'local-redraw-composite') {
       if (!localRedrawContext) throw new Error('局部重绘恢复缺少裁剪上下文');
       const committed = await commitLocalRedrawGeneration({
+        projectId, signal,
         sourceNodeId,
         placeholderNodeId: nodeId,
         resultNodeType,
@@ -323,7 +304,6 @@ async function resumeNodeTask(input: ResumeNodeTaskInput): Promise<void> {
     }
 
     if (result.structuredOutput?.kind === 'layer-stack' || resultNodeData.resultKind === 'layer-stack') {
-      if (useProjectStore.getState().currentProjectId !== projectId) throw new Error('此结构化结果需要在原画布继续处理，请返回原项目续查。');
       const persistedSourceNodeId = typeof resultNodeData.generationSourceNodeId === 'string'
         && resultNodeData.generationSourceNodeId.trim().length > 0
         ? resultNodeData.generationSourceNodeId
@@ -342,6 +322,7 @@ async function resumeNodeTask(input: ResumeNodeTaskInput): Promise<void> {
         throw new Error('图层拆分恢复缺少来源节点、源图或模型信息');
       }
       const committed = await commitLayerSeparationGeneration({
+        projectId, signal,
         sourceNodeId: resolvedSourceNodeId,
         placeholderNodeId: nodeId,
         resultNodeType,

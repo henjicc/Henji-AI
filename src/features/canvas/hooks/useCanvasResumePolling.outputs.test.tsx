@@ -441,6 +441,8 @@ describe('useCanvasResumePolling 结构化结果恢复', () => {
     renderHook(() => useCanvasResumePolling());
 
     await waitFor(() => expect(generationMocks.commitLayerSeparationGeneration).toHaveBeenCalledWith(expect.objectContaining({
+      projectId: 'resume-project',
+      signal: expect.any(AbortSignal),
       sourceNodeId: source.id,
       placeholderNodeId: result.id,
       sourceImage: '/managed/source.png',

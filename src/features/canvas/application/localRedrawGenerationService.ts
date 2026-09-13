@@ -2,7 +2,8 @@ import { composeLocalRedraw, type LocalRedrawContext } from '@/commands/image'
 import type { CanvasGenerationOutput } from '@/features/canvas/generation/runGeneration'
 import type { CanvasNodeType } from '@/features/canvas/domain/canvasNodes'
 import { createDefaultGenerationOutputItems } from '@/features/canvas/domain/generationOutputs'
-import { commitCanvasGenerationOutputs } from './generationOutputApplicationService'
+import { useProjectStore } from '@/stores/projectStore'
+import { commitCanvasGenerationOutputsInProject } from './generationOutputApplicationService'
 
 export const LOCAL_REDRAW_CONTEXT_FIELD = 'generationLocalRedrawContext'
 
@@ -15,6 +16,8 @@ export function parseLocalRedrawContext(value: unknown): LocalRedrawContext | nu
 }
 
 interface CommitLocalRedrawGenerationInput {
+  projectId?: string
+  signal?: AbortSignal
   sourceNodeId?: string
   placeholderNodeId: string
   resultNodeType: CanvasNodeType
@@ -27,10 +30,15 @@ export async function commitLocalRedrawGeneration(input: CommitLocalRedrawGenera
   resultNodeIds: string[]
   idempotent?: boolean
 }> {
+  input.signal?.throwIfAborted()
+  const projectId = input.projectId ?? useProjectStore.getState().currentProjectId
+  if (!projectId) throw new Error('未找到局部重绘的原画布项目')
   const generatedSource = input.result.outputs[0] ?? input.result.primary
   if (!generatedSource) throw new Error('局部重绘模型没有返回图片')
   const composed = await composeLocalRedraw({ generatedSource, context: input.context })
-  return await commitCanvasGenerationOutputs({
+  input.signal?.throwIfAborted()
+  return await commitCanvasGenerationOutputsInProject(projectId, {
+    signal: input.signal,
     sourceNodeId: input.sourceNodeId,
     placeholderNodeId: input.placeholderNodeId,
     resultNodeType: input.resultNodeType,

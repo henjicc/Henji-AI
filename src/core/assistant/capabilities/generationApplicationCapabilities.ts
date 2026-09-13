@@ -376,7 +376,7 @@ const cancelGenerationTask = defineApplicationCapability({
 
 const resumeCanvasGenerationTask = defineApplicationCapability({
   id: 'resume_canvas_generation_task', version: 1, title: '续查原画布生成任务',
-  description: '使用 get_generation_task 返回的 resumeInput 续查原供应商任务，保存到原画布节点；不会重新提交生成。标准结果可在后台恢复，图层或局部重绘合成需打开原画布项目。',
+  description: '使用 get_generation_task 返回的 resumeInput 续查原供应商任务，保存到原画布节点；不会重新提交生成。标准结果、图层拆分和已有裁剪上下文的局部重绘均可在后台恢复，无需切换当前页面。',
   domain: 'generation', aliases: ['恢复画布任务', '继续获取生成结果', 'resume canvas generation'],
   readOnly: false, risk: 'R1', dataClasses: ['C1'], permission: 'canvas:write',
   control: capabilityControl('execute', ['generation.task', 'canvas.node'], { revisionScopes: ['generation', 'canvas'] }),
