@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { z } from 'zod'
 import { buildApplicationContract, buildMcpToolCatalog, EXCLUDED_TOOLS, PROTOCOL_TOOL_SPECS, toolTier } from './toolCatalog'
 import { BUILTIN_APPLICATION_CAPABILITY_REGISTRY } from '../../../../src/core/assistant/builtinApplicationCapabilityRegistry'
@@ -33,6 +33,29 @@ const domains: LocalDomainSurface[] = [
 ]
 
 describe('对外工具目录的投影与授权过滤', () => {
+  it('新增付费入口只需领域声明，目录自动要求付费授权', () => {
+    const original = BUILTIN_APPLICATION_CAPABILITY_REGISTRY.get.bind(BUILTIN_APPLICATION_CAPABILITY_REGISTRY)
+    const spy = vi.spyOn(BUILTIN_APPLICATION_CAPABILITY_REGISTRY, 'get').mockImplementation(id => {
+      const value = original(id)
+      return id === 'apply_canvas_image_capability' && value ? { ...value, paidGenerationPreparation: 'prepare_generation_task' } : value
+    })
+    try {
+      expect(toolTier('apply_canvas_image_capability')).toBe('paid')
+      expect(names(WRITE)).not.toContain('apply_canvas_image_capability')
+      expect(names(PAID)).toContain('apply_canvas_image_capability')
+    } finally { spy.mockRestore() }
+  })
+  it('所有公开生成创建能力都有可调用的只读费用准备入口', () => {
+    for (const id of MCP_WRITE_CAPABILITY_IDS) {
+      const definition = BUILTIN_APPLICATION_CAPABILITY_REGISTRY.get(id)!
+      if (definition.control.impacts.some(impact => impact.effect === 'create' && impact.entityTypes.includes('generation.task'))) {
+        expect(definition.paidGenerationPreparation, id).toBeTruthy()
+      }
+      if (!definition.paidGenerationPreparation) continue
+      expect(MCP_READ_CAPABILITY_IDS, id).toContain(definition.paidGenerationPreparation)
+      expect(BUILTIN_APPLICATION_CAPABILITY_REGISTRY.get(definition.paidGenerationPreparation)?.readOnly, id).toBe(true)
+    }
+  })
   it('公开语义写入均有持久目标声明，创建图片能力节点无需付费权限', () => {
     for (const id of MCP_WRITE_CAPABILITY_IDS) {
       if (id === 'change_application_entities') continue

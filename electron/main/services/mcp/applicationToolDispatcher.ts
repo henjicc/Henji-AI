@@ -6,6 +6,7 @@ import type { ApplicationHostBridge } from './applicationHostBridge'
 import type { McpOperationCoordinator } from './operationCoordinator'
 import { reserveGenerationBudget } from './generationBudget'
 import { createMainLogger } from '../logging'
+import { BUILTIN_APPLICATION_CAPABILITY_REGISTRY } from '../../../../src/core/assistant/builtinApplicationCapabilityRegistry'
 const MAX_RESULT = EXTERNAL_LIMITS.resultBytes
 const logger = createMainLogger('main.mcp')
 
@@ -59,10 +60,13 @@ export class ApplicationToolDispatcher {
             : this.operations.prepare(callerId, args ?? {}, this.host.sessionId, access, MCP_WRITE_CAPABILITY_IDS.find((id) => id === name))
           if (operation.state === 'prepared') {
             this.connections.assertActive(callerId)
-            if (operation.capabilityId === 'create_visible_generation_task') {
+            const preparationId = BUILTIN_APPLICATION_CAPABILITY_REGISTRY.get(operation.capabilityId ?? '')?.paidGenerationPreparation
+            if (preparationId) {
               try {
+                const preparationCapability = MCP_READ_CAPABILITY_IDS.find(id => id === preparationId)
+                if (!preparationCapability) throw new Error('付费生成的准备入口尚未向当前连接开放。')
                 logger.info('检查生成参数与费用', { event: 'mcp.generation_preflight.start', requestId: operation.operationId })
-                const preparation = await this.host.execute(callerId, 'prepare_generation_task', operation.input, signal, access)
+                const preparation = await this.host.execute(callerId, preparationCapability, operation.input, signal, access)
                 this.connections.assertActive(callerId)
                 if (signal.aborted) throw new Error('操作已取消。')
                 reserveGenerationBudget(this.operations.store, operation, preparation)

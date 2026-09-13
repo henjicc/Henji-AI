@@ -237,6 +237,7 @@ const createVisibleGenerationTask = defineApplicationCapability({
     '该结果只证明任务已提交；生成完成必须由后续状态证据确认。',
   ],
   executionPrerequisites: ['prepare_generation_task'],
+  paidGenerationPreparation: 'prepare_generation_task',
   inputSchema: z.object({
     modelId: z.string().min(1).optional(),
     prompt: z.string().max(32 * 1024).optional(),

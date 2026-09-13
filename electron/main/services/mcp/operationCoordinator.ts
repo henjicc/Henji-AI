@@ -94,7 +94,7 @@ export class McpOperationCoordinator {
     if (capabilityId !== 'change_application_entities') {
       const definition = BUILTIN_APPLICATION_CAPABILITY_REGISTRY.get(capabilityId ?? '')
       if (!definition?.resolveOperationTargets || definition.readOnly) throw new Error('PERMISSION_DENIED:此能力尚未登记持久目标绑定。')
-      if (capabilityId === 'create_visible_generation_task' && !access.allowPaid) throw new Error('PERMISSION_DENIED:此连接没有付费生成授权。')
+      if (definition.paidGenerationPreparation && !access.allowPaid) throw new Error('PERMISSION_DENIED:此连接没有付费生成授权。')
       if (definition.destructive && !access.allowDestructive) throw new Error('PERMISSION_DENIED:此连接没有删除授权。')
       destructive = definition.destructive
       const parsed = definition.inputSchema.parse(input)

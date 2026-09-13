@@ -10,6 +10,7 @@ import { ApplicationHostBridge } from './applicationHostBridge'
 import type { LocalHostRequest } from '../../../../src/core/application-control/localHostContracts'
 import { reserveGenerationBudget } from './generationBudget'
 import { ApplicationToolDispatcher } from './applicationToolDispatcher'
+import { BUILTIN_APPLICATION_CAPABILITY_REGISTRY } from '../../../../src/core/assistant/builtinApplicationCapabilityRegistry'
 
 if (!process.versions.electron) throw new Error('本测试必须由正式 Electron SQLite 原生运行器执行，不能跳过原生边界。')
 
@@ -31,6 +32,34 @@ function input(baselineId: string): Record<string, unknown> {
 }
 
 describe('MCP 原生操作记录与恢复', () => {
+  it.each([1, 51])('按声明派生新付费入口的授权与预算，估价 %s 元', async amount => {
+    const original = BUILTIN_APPLICATION_CAPABILITY_REGISTRY.get.bind(BUILTIN_APPLICATION_CAPABILITY_REGISTRY)
+    const spy = vi.spyOn(BUILTIN_APPLICATION_CAPABILITY_REGISTRY, 'get').mockImplementation(id => {
+      const value = original(id)
+      return id === 'apply_canvas_image_capability' && value ? { ...value, paidGenerationPreparation: 'get_model_schema' } : value
+    })
+    try {
+      const f = fixture()
+      const raw = { operationId: randomUUID(), projectId: 'project', sourceNodeId: 'source', capabilityId: 'image.upscale' }
+      expect(() => f.coordinator.prepare(f.callerId, raw, f.sessionId, access, 'apply_canvas_image_capability')).toThrow('付费生成授权')
+      const calls: LocalHostRequest[] = []
+      const host = new ApplicationHostBridge(() => undefined, f.coordinator)
+      host.register({ sessionId: f.sessionId, generation: 1, ready: true, tools: [] }, { send(channel, value) {
+        if (channel !== 'mcp:host:request') return
+        const request = value as LocalHostRequest
+        calls.push(request)
+        host.complete({ sessionId: f.sessionId, requestId: request.requestId, result: { ok: true, data:
+          request.capabilityId === 'get_model_schema' ? { preparation: { priceEstimate: { comparableCnyAmount: amount } } }
+            : { nodeId: 'result', verification: { verified: true } } } })
+      } })
+      const dispatcher = new ApplicationToolDispatcher({ assertActive() {}, access: () => ({ ...access, allowPaid: true }) }, host, f.coordinator)
+      const result = await dispatcher.call(f.callerId, 'apply_canvas_image_capability', raw, new AbortController().signal)
+      expect(calls.map(call => call.capabilityId)).toEqual(amount <= 50 ? ['get_model_schema', 'apply_canvas_image_capability'] : ['get_model_schema'])
+      expect(result.isError).toBe(amount > 50)
+      expect(f.store.get(raw.operationId, f.callerId)?.state).toBe(amount <= 50 ? 'completed' : 'not_executed')
+      if (amount <= 50) expect(f.store.get(raw.operationId, f.callerId)?.generationEstimate?.cny).toBe(amount)
+    } finally { spy.mockRestore() }
+  })
   it('续查只占用原任务和节点，不要求付费权限，也不锁住同项目其他任务', () => {
     const f = fixture()
     const raw = { operationId: randomUUID(), taskId: 'task-a', projectId: 'project', sourceNodeId: 'source-a', resultNodeIds: ['result-a'] }

@@ -129,6 +129,8 @@ export interface ApplicationCapabilityDefinition<TInput = unknown, TOutput = unk
    * 放在“校验生成参数”之前；普通直接工具调用仍由各自现有守卫负责。
    */
   executionPrerequisites?: string[]
+  /** 付费生成的正式准备能力；MCP／Pi 从声明派生授权与预算预留，不接受调用方自报价。 */
+  paidGenerationPreparation?: string
   /**
    * 算法型写能力的机器可执行验证下限。注册表会拒绝缺失该契约的写能力；
    * 文本 successEvidence 不能替代它。
@@ -172,6 +174,7 @@ const NON_DESCRIPTOR_KEYS = [
   'projectForHistory',
   'inputExamples',
   'executionPrerequisites',
+  'paidGenerationPreparation',
   'verificationContract',
   'countsTowardCallLimit',
   'preview',
@@ -209,6 +212,10 @@ export class ApplicationCapabilityRegistry {
     if (aiInputSchema.additionalProperties !== false) {
       throw new Error(`应用能力 AI schema 必须拒绝未声明字段：${definition.id}`)
     }
+    if (definition.paidGenerationPreparation !== undefined && (
+      definition.readOnly || !definition.paidGenerationPreparation.trim()
+      || !definition.executionPrerequisites?.includes(definition.paidGenerationPreparation)
+    )) throw new Error(`付费生成必须声明正式准备前置能力：${definition.id}`)
     const properties = aiInputSchema.properties
     if (properties && typeof properties === 'object') {
       const forbiddenInputs = ['patch', 'storePatch', 'executeScript', 'script', 'code', 'source']

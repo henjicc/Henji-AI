@@ -94,7 +94,7 @@ export const EXCLUDED_TOOLS = [
 ] as const
 
 export function toolTier(name: string): ToolTier {
-  if (name === 'create_visible_generation_task') return 'paid'
+  if (BUILTIN_APPLICATION_CAPABILITY_REGISTRY.get(name)?.paidGenerationPreparation) return 'paid'
   if (MCP_WRITE_CAPABILITY_IDS.some((id) => id === name)) return 'write'
   if (MCP_READ_CAPABILITY_IDS.some((id) => id === name)) return 'read'
   return PROTOCOL_TOOL_SPECS.find((spec) => spec.name === name)?.tier ?? 'read'
