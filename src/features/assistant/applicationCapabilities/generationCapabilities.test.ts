@@ -24,7 +24,7 @@ const {
   getStoredImageEditPreview: vi.fn(),
 }))
 
-vi.mock('@/services/database', () => ({ databaseService: database }))
+vi.mock('@/services/database/DatabaseService', () => ({ databaseService: database }))
 vi.mock('@/commands/image', () => ({ readImageInfo }))
 vi.mock('@/utils/dataPath', () => ({ getDataRoot, convertPathString }))
 vi.mock('@/features/imageEdit/store/imageEditorHandoffStore', () => ({
@@ -97,6 +97,13 @@ describe('generation application capabilities', () => {
     expect(JSON.stringify(result)).not.toContain('Media/generated.png')
   })
 
+  it('冷读取初始化失败明确返回错误，不冒充没有生成结果', async () => {
+    database.init.mockRejectedValueOnce(new Error('历史数据库不可用'))
+    const provider = createGenerationReflectionRegistrations().find(item => item.entity.id === GENERATION_ENTITY_TYPES.result)!.provider!
+    await expect(provider.readEntity({ kind: GENERATION_ENTITY_TYPES.result, id: 'cold-result' }, {})).rejects.toThrow('历史数据库不可用')
+    expect(database.getHistoryById).not.toHaveBeenCalled()
+  })
+
   it('生成历史返回的 generation.record 引用可通过通用反射读取', async () => {
     const history = await listGenerationHistory({ mediaType: 'image', status: 'success', limit: 10 })
     const ref = history.records[0]?.ref
@@ -132,6 +139,8 @@ describe('generation application capabilities', () => {
       item.entity.id === GENERATION_ENTITY_TYPES.result
     ))
     if (!resultRegistration?.provider) throw new Error('GENERATION_RESULT_PROVIDER_MISSING')
+    database.getHistoryById.mockClear()
+    database.init.mockClear()
     await expect(resultRegistration.provider.readEntity(resultRef as {
       kind: typeof GENERATION_ENTITY_TYPES.result
       id: string
@@ -144,6 +153,8 @@ describe('generation application capabilities', () => {
         'generation.result.media_ref': resultRef,
       },
     })
+    expect(database.getHistoryById).toHaveBeenCalledTimes(1)
+    expect(database.init.mock.invocationCallOrder[0]).toBeLessThan(database.getHistoryById.mock.invocationCallOrder[0])
     expect(JSON.stringify(recordSnapshot)).not.toContain('Media/generated.png')
   })
 

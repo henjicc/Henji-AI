@@ -191,13 +191,17 @@ class GenerationReflectionProvider implements ApplicationEntityProvider {
       return { values: fieldReadValues(GENERATION_MODEL_FIELDS, source), revision: getGenerationModelsRevision() }
     }
     let task = readGenerationTaskStatusSnapshot(id)
+    let record: HistoryRecord | null | undefined
     if (!task || task.origin === 'canvas') {
-      const { getCanvasGenerationTask } = await import('@/features/canvas/application/canvasGenerationTaskService')
-      if (await getCanvasGenerationTask(id)) task = readGenerationTaskStatusSnapshot(id)
+      await databaseService.init()
+      record = await databaseService.getHistoryById(id)
+      // 普通历史结果不加载画布运行时；仅带画布身份的记录需要恢复任务事实。
+      if (record?.params.__canvasGeneration) {
+        const { getCanvasGenerationTask } = await import('@/features/canvas/application/canvasGenerationTaskService')
+        if (await getCanvasGenerationTask(id)) task = readGenerationTaskStatusSnapshot(id)
+      }
     }
     if (!task && this.entityType === GENERATION_ENTITY_TYPES.result) {
-      await databaseService.init()
-      const record = await databaseService.getHistoryById(id)
       if (!record || !historyHasResult(record)) throw new Error('NOT_FOUND')
       return { values: {
         'generation.result.task_ref': null,

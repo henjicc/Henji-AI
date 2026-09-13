@@ -39,6 +39,7 @@ beforeEach(async () => {
   vi.spyOn(GenerationService.getInstance(), 'getProgressEstimate').mockResolvedValue(null)
   vi.spyOn(GenerationService.getInstance(), 'generate').mockResolvedValue({ status: 'completed', url: 'C:/result.png', filePath: 'C:/result.png' })
   vi.spyOn(databaseService, 'getHistoryById').mockImplementation(async id => records.get(id) ?? null)
+  vi.spyOn(databaseService, 'init').mockResolvedValue()
   vi.spyOn(databaseService, 'insertHistory').mockImplementation(async row => { records.set(row.id, { ...row, createdAt: 'now', updatedAt: 'now' }) })
   vi.spyOn(databaseService, 'updateHistory').mockImplementation(async (id, patch) => { Object.assign(records.get(id)!, patch) })
   registry.register({ meta: { id: 'canvas-task-fixture', canonicalModelId: 'nano-banana', provider: 'fixture', type: 'image', name: { zh: '测试', en: 'Test' } }, params: [], endpoints: '/fixture',

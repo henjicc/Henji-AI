@@ -149,6 +149,7 @@ export async function submitCanvasGenerationTask(input: GenerationPreparationInp
 }
 
 export async function getCanvasGenerationTask(taskId: string): Promise<Record<string, unknown> | null> {
+  await databaseService.init()
   const record = await databaseService.getHistoryById(taskId)
   const value = record?.params[marker]
   if (!record || !value || typeof value !== 'object' || Array.isArray(value)) return null

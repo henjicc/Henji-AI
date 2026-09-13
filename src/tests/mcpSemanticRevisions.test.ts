@@ -22,6 +22,8 @@ const cancel = vi.fn(async () => ({ taskId: task.taskId, status: 'cancelled' }))
 let dispose: () => void
 beforeEach(() => {
   installHarnessNativeStorage()
+  vi.spyOn(databaseService, 'init').mockResolvedValue()
+  vi.spyOn(databaseService, 'getHistoryById').mockResolvedValue(null)
   replaceGenerationTaskStatusSnapshots([task])
   dispose = registerVisibleGenerationTaskHandler({ create: async () => null, get: () => task,
     getResult: () => ({ taskId: task.taskId, mediaType: 'image', url: 'C:/fixture/result.png', prompt: '长提示词不应成为超长文件名。'.repeat(80) }), list: () => [task], cancel })
