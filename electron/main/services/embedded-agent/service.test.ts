@@ -1,9 +1,10 @@
+vi.mock('./skills', () => ({ embeddedSkillCatalog: mocks.skills, callEmbeddedSkill: mocks.loadSkill }))
 import { EventEmitter } from 'node:events'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { EmbeddedAgentPrompt } from '../../../../src/core/assistant/embeddedAgent'
 import type { EngineCommand } from './contracts'
 
-const mocks = vi.hoisted(() => ({ fork: vi.fn(), resolveModel: vi.fn(), prepare: vi.fn(), close: vi.fn(), call: vi.fn(), info: vi.fn(), error: vi.fn() }))
+const mocks = vi.hoisted(() => ({ skills: vi.fn(), loadSkill: vi.fn(), fork: vi.fn(), resolveModel: vi.fn(), prepare: vi.fn(), close: vi.fn(), call: vi.fn(), info: vi.fn(), error: vi.fn() }))
 vi.mock('electron', () => ({ utilityProcess: { fork: mocks.fork } }))
 vi.mock('../../ipc/mcp', () => ({ createEmbeddedApplicationClient: () => ({ catalog: () => [], close: mocks.close, call: mocks.call }) }))
 vi.mock('../system', () => ({ getAppLocalDataDir: () => '/fixture' }))
@@ -55,6 +56,7 @@ it('已有生成结果导入沿用原选中对象或原视口，显式落点与�
 })
 
 function setup() {
+  mocks.skills.mockResolvedValue({ tools: [], instructions: '' })
   const child = new EventEmitter() as EventEmitter & { postMessage: (value: { id: string; command: EngineCommand }) => void; kill: () => void }
   const prompts: string[] = []
   let active: string | undefined
@@ -78,6 +80,27 @@ function setup() {
 afterEach(() => { vi.clearAllMocks() })
 
 describe('内置助手消息调度', () => {
+  it('主进程注入技能索引并把读取交给正式技能入口，不调用应用写入工具', async () => {
+    const f = setup()
+    mocks.skills.mockResolvedValue({ tools: [{ name: 'load_assistant_skill', inputSchema: {} }], instructions: 'skills_index: prompt-optimization' })
+    const post = vi.spyOn(f.child, 'postMessage')
+    await f.send('优化提示词')
+    await vi.waitFor(() => expect(f.prompts).toHaveLength(1))
+    const config = post.mock.calls.map(([value]) => value.command).find(command => command.action === 'configure')
+    expect(config).toMatchObject({ input: { tools: [{ name: 'load_assistant_skill' }], instructions: expect.stringContaining('skills_index: prompt-optimization') } })
+    const original = f.child.postMessage
+    f.child.postMessage = vi.fn()
+    mocks.loadSkill.mockResolvedValue({ isError: false, structuredContent: { content: '技能正文' } })
+    f.child.emit('message', { type: 'tool', id: 'skill', name: 'load_assistant_skill', input: { name: 'prompt-optimization', reason: '图片' } })
+    await vi.waitFor(() => expect(f.child.postMessage).toHaveBeenCalledWith(expect.objectContaining({ type: 'toolResult', id: 'skill' })))
+    expect(mocks.loadSkill).toHaveBeenCalledWith({ name: 'prompt-optimization', reason: '图片' }, expect.any(AbortSignal))
+    expect(mocks.call).not.toHaveBeenCalled()
+    f.child.postMessage = original
+    f.finish()
+    await vi.waitFor(() => expect(f.service.snapshot().busy).toBe(false))
+    f.service.dispose()
+  })
+
   it('工具失败日志关联原消息和操作，不记录工具输入正文', async () => {
     const f = setup()
     await f.send('消息正文不进日志')

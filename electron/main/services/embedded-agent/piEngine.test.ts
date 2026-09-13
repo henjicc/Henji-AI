@@ -10,6 +10,8 @@ import { z } from 'zod'
 import { buildMcpToolCatalog } from '../mcp/toolCatalog'
 import { MCP_CAPABILITY_IDS } from '../../../../src/core/application-control/localHostContracts'
 import { BUILTIN_APPLICATION_CAPABILITY_REGISTRY } from '../../../../src/core/assistant/builtinApplicationCapabilityRegistry'
+import { loadAssistantSkillCapability } from '../../../../src/core/assistant/capabilities/assistantSkillApplicationCapabilities'
+import { loadAssistantSkillFrom } from '../assistant/skills/registry'
 
 const model: LlmModelConfig = { providerId: 'test', modelId: 'fixture', displayName: 'Fixture', adapter: 'openai-compatible', enabled: true,
   capabilities: { text: true, image: false, video: false, audio: false, streaming: true, toolCall: true, parallelTools: false,
@@ -78,6 +80,33 @@ function applicationCatalog(allowWrites = true) {
 }
 
 describe('Pi official SDK engine', () => {
+  it('技能主文件和图片指南经多轮工具调用逐步进入请求，视频正文不进入图片任务', async () => {
+    const f = await fixture()
+    const definition = loadAssistantSkillCapability
+    const tools = [...applicationCatalog().tools, { name: definition.id, description: definition.description,
+      inputSchema: z.toJSONSchema(definition.inputSchema, { io: 'input' }) as Record<string, unknown> }]
+    await f.engine.command({ action: 'configure', input: { ...f.configuration, tools,
+      instructions: '可用技能：prompt-optimization。需要时调用 load_assistant_skill，再按需读取参考。' } })
+    f.tool.mockImplementation(async (...args: unknown[]) => {
+      expect(args[1]).toBe('load_assistant_skill')
+      const input = definition.inputSchema.parse(args[2])
+      return loadAssistantSkillFrom({ builtinDir: path.resolve('resources/assistant-skills'), userDir: '', disabledNames: [] }, input.name, input.path)
+    })
+    f.setToolPlan([
+      { name: 'load_assistant_skill', arguments: { name: 'prompt-optimization', reason: '生成图片' } },
+      { name: 'load_assistant_skill', arguments: { name: 'prompt-optimization', path: 'references/image.md', reason: '图片指导' } },
+    ])
+    await f.engine.command({ action: 'prompt', input: { text: '生成一张图片', context: '{"surface":{"id":"workspace.canvas"}}' } })
+    expect(f.requests).toHaveLength(3)
+    expect(f.requests[0].tools.some(tool => tool.function.name === 'load_assistant_skill')).toBe(true)
+    expect(JSON.stringify(f.requests[0])).not.toContain('最小必要修改')
+    expect(JSON.stringify(f.requests[1])).toContain('references/image.md')
+    expect(JSON.stringify(f.requests[1])).not.toContain('图片表达一个视觉状态')
+    expect(JSON.stringify(f.requests[2])).toContain('图片表达一个视觉状态')
+    expect(JSON.stringify(f.requests)).not.toContain('视频表达状态随时间的变化')
+    expect(f.requests[2].tools.some(tool => tool.function.name === 'create_visible_generation_task')).toBe(false)
+  })
+
   it('完整授权目录按需披露后首轮体积缩减，续轮相同宿主信息只携带一份', async () => {
     const f = await fixture({}, 'openai-responses')
     const catalog = applicationCatalog()

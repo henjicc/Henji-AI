@@ -1,3 +1,4 @@
+import { embeddedSkillCatalog, callEmbeddedSkill } from './skills'
 import { utilityProcess, type UtilityProcess } from 'electron'
 import path from 'node:path'
 import { randomUUID } from 'node:crypto'
@@ -103,7 +104,7 @@ export class EmbeddedAgentService {
           const context = { sessionId: this.state.sessionId, toolCallId: message.id, toolName: message.name,
             operationId: typeof message.input.operationId === 'string' ? message.input.operationId : undefined }
           logger.info('内置助手开始调用工具', { event: 'embedded_agent.tool.start', requestId, context })
-          void (client ? client.call(message.name, withGenerationOrigin(message.name, message.input, this.originContext), controller.signal) : Promise.reject(new Error('操作未获授权')))
+          void (client ? (message.name === 'load_assistant_skill' ? callEmbeddedSkill(message.input, controller.signal) : client.call(message.name, withGenerationOrigin(message.name, message.input, this.originContext), controller.signal)) : Promise.reject(new Error('操作未获授权')))
             .then((value) => {
               const failed = typeof value === 'object' && value !== null && 'isError' in value && value.isError === true
               const fields = { event: `embedded_agent.tool.${failed ? 'failed' : 'completed'}`, requestId, context: { ...context, durationMs: Date.now() - startedAt } }
@@ -176,11 +177,11 @@ export class EmbeddedAgentService {
     this.publish({ ...this.state, error: null, activity: '正在准备…' })
     try {
       await this.ensureReady()
-      const [model, instructions] = await Promise.all([resolveEmbeddedModel(input.model), getAssistantUserInstructions()])
+      const [model, instructions, skills] = await Promise.all([resolveEmbeddedModel(input.model), getAssistantUserInstructions(), embeddedSkillCatalog()])
       const attachments = await prepareEmbeddedAttachments(input.attachments ?? [], model, this.preparation.signal)
       if (this.cancelled) return
       this.client = createEmbeddedApplicationClient(this.state.sessionId!, { allowWrites: input.access !== 'read', allowPaid: input.access === 'full', allowDestructive: input.access === 'full' })
-      await this.send({ action: 'configure', input: { directory: path.join(getAppLocalDataDir(), 'assistant', 'pi'), model, tools: this.client.catalog(), instructions: `${SYSTEM_INSTRUCTIONS}\n\n用户指令：\n${instructions.content}` } })
+      await this.send({ action: 'configure', input: { directory: path.join(getAppLocalDataDir(), 'assistant', 'pi'), model, tools: [...this.client.catalog(), ...skills.tools], instructions: `${SYSTEM_INSTRUCTIONS}${skills.instructions}\n\n用户指令：\n${instructions.content}` } })
       if (!this.cancelled) {
         await this.send({ action: 'prompt', input: { text: input.text, context: input.context, requestId, attachments } })
         if (this.state.error) throw new Error(this.state.error)

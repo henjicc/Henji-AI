@@ -1,5 +1,5 @@
 // 只决定披露时机和流程提示；schema、权限及执行来自正式 MCP 目录。
-export const basicTools = new Set(['describe_application_entities', 'list_application_entities', 'read_application_entity', 'change_application_entities'])
+export const basicTools = new Set(['load_assistant_skill', 'describe_application_entities', 'list_application_entities', 'read_application_entity', 'change_application_entities'])
 const modelTools = ['resolve_generation_model', 'search_models', 'get_model_schema']
 const taskTools = ['get_generation_task', 'cancel_generation_task', 'get_application_operation']
 export const taskProfiles = {
