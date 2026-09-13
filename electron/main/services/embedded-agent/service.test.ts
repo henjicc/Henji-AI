@@ -23,6 +23,19 @@ it('默认生成落点固定为消息原项目，明确目标优先，非画布�
   expect(withGenerationOrigin('read_application_entity', {}, context)).toEqual({})
 })
 
+it.each(['prepare_generation_task', 'create_visible_generation_task'])('%s 未选中节点时使用发送时的位置，选中和明确目标仍优先', name => {
+  const origin = { workspace: { id: 'nodes' }, project: { id: 'original', viewportNodePosition: { x: 90, y: -20 } } }
+  expect(withGenerationOrigin(name, {}, JSON.stringify(origin))).toMatchObject({
+    destination: { projectId: 'original', sourceNodeIds: [], placement: { mode: 'absolute', x: 90, y: -20 } },
+  })
+  expect(withGenerationOrigin(name, {}, JSON.stringify({ ...origin, project: { ...origin.project, selectedNodeId: 'anchor' } })))
+    .toEqual({ destination: { mode: 'canvas', projectId: 'original', sourceNodeIds: ['anchor'] } })
+  const explicit = { destination: { mode: 'canvas', projectId: 'specified', sourceNodeIds: [], placement: { mode: 'absolute', x: 1, y: 2 } } }
+  expect(withGenerationOrigin(name, explicit, JSON.stringify(origin))).toBe(explicit)
+  expect(withGenerationOrigin(name, {}, JSON.stringify({ ...origin, project: { ...origin.project, viewportNodePosition: { x: null, y: 4 } } })))
+    .toEqual({ destination: { mode: 'canvas', projectId: 'original', sourceNodeIds: [] } })
+})
+
 function setup() {
   const child = new EventEmitter() as EventEmitter & { postMessage: (value: { id: string; command: EngineCommand }) => void; kill: () => void }
   const prompts: string[] = []

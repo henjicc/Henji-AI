@@ -1,4 +1,5 @@
 import { EventEmitter } from 'node:events'
+import { randomUUID } from 'node:crypto'
 import { createServer } from 'node:http'
 import fs from 'node:fs/promises'
 import os from 'node:os'
@@ -100,9 +101,10 @@ it.each(['model', 'tool'] as const)('宿主调度经官方 Pi SDK 在 %s 阶段�
   mocks.fork.mockReturnValue(child)
   const service = new EmbeddedAgentService()
   cleanup.push(() => { finishOriginal(); finishInserted(); service.dispose() })
-  const send = (text: string, project: string, delivery: EmbeddedAgentPrompt['delivery'] = 'wait') => service.prompt({ text, delivery,
+  const requestIds = { original: randomUUID(), waiting: randomUUID(), inserted: randomUUID() }
+  const send = (text: string, project: keyof typeof requestIds, delivery: EmbeddedAgentPrompt['delivery'] = 'wait') => service.prompt({ text, delivery,
     model: { providerId: 'test', modelId: 'fixture' }, access: 'full',
-    context: JSON.stringify({ workspace: { id: 'nodes' }, project: { id: project, selectedNodeId: `${project}-reference` } }) }, `request-${project}`)
+    context: JSON.stringify({ workspace: { id: 'nodes' }, project: { id: project, selectedNodeId: `${project}-reference` } }) }, requestIds[project])
   await send('原请求', 'original')
   await vi.waitFor(() => expect(requests).toEqual(['原请求']), { timeout: 15000 })
   const originalCalls = stage === 'tool' ? 1 : 0
@@ -120,7 +122,7 @@ it.each(['model', 'tool'] as const)('宿主调度经官方 Pi SDK 在 %s 阶段�
   else {
     expect(originalSignal?.aborted).toBe(true)
     finishOriginal()
-    await vi.waitFor(() => expect(mocks.info).toHaveBeenCalledWith('内置助手工具调用完成', expect.objectContaining({ requestId: 'request-original' })))
+    await vi.waitFor(() => expect(mocks.info).toHaveBeenCalledWith('内置助手工具调用完成', expect.objectContaining({ requestId: requestIds.original })))
     expect(calls[0]).toMatchObject({ prompt: '原请求', destination: { projectId: 'original', sourceNodeIds: ['original-reference'] } })
   }
   expect(calls.slice(originalCalls)).toEqual([
@@ -131,6 +133,6 @@ it.each(['model', 'tool'] as const)('宿主调度经官方 Pi SDK 在 %s 阶段�
   expect(service.snapshot().error).toBeNull()
   expect(service.snapshot().messages.filter(message => message.role === 'user').map(message => message.text)).toEqual(['原请求', '插入消息', '等待消息'])
   expect(close).toHaveBeenCalledTimes(3)
-  expect(mocks.info).toHaveBeenCalledWith('内置助手回复状态', expect.objectContaining({ event: 'embedded_agent.turn.cancelled', requestId: 'request-original' }))
-  expect(mocks.info).toHaveBeenCalledWith('内置助手工具调用完成', expect.objectContaining({ requestId: 'request-waiting' }))
+  expect(mocks.info).toHaveBeenCalledWith('内置助手回复状态', expect.objectContaining({ event: 'embedded_agent.turn.cancelled', requestId: requestIds.original }))
+  expect(mocks.info).toHaveBeenCalledWith('内置助手工具调用完成', expect.objectContaining({ requestId: requestIds.waiting }))
 }, 30000)

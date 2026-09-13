@@ -87,6 +87,20 @@ it('无需挂载节点即可生成，页面中途挂载不会替换任务执行�
   expect(useCanvasStore.getState().nodes.find(item => item.data.generationSourceNodeId === node.id)?.data.generationTaskId).toBe(taskId)
 })
 
+it('原视口位置固定后，移动画布仍将生成节点和持久结果放在原落点', async () => {
+  const taskId = crypto.randomUUID()
+  useCanvasStore.setState({ currentViewport: { x: 900, y: 600, zoom: 1 } })
+  const result = await submitCanvasGenerationTask({ modelId: 'canvas-task-fixture', mediaType: 'image', prompt: '原视口生成' },
+    { mode: 'canvas', projectId, sourceNodeIds: [], placement: { mode: 'absolute', x: 90, y: -20 } }, taskId)
+  await vi.waitFor(() => expect(records.get(taskId)?.status).toBe('success'))
+  const saved = await readPersistedCanvasProjectSnapshot(projectId)
+  const source = saved.nodes.find(node => `${projectId}:${node.id}` === result.nodeRef.id)!
+  expect(source.position).toEqual({ x: 90, y: -20 })
+  const output = saved.nodes.find(node => node.data.generationTaskId === taskId)!
+  expect(saved.edges).toEqual(expect.arrayContaining([expect.objectContaining({ source: source.id, target: output.id })]))
+  expect(output.data.imageUrl).toBe('C:/result.png')
+})
+
 async function restoredTask(extra: Record<string, unknown> = {}, version = 2) {
   const taskId = crypto.randomUUID()
   const nodeId = `source-${taskId}`

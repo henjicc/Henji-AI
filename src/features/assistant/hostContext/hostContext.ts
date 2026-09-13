@@ -8,6 +8,7 @@ import {
 import { BUILTIN_APPLICATION_CAPABILITY_REGISTRY } from '@/core/assistant/builtinApplicationCapabilityRegistry'
 import { useAssetLibraryStore } from '@/features/assets/store/assetLibraryStore'
 import { useCanvasStore } from '@/stores/canvasStore'
+import { resolveNodePosition } from '@/features/canvas/application/canvasApplicationService'
 import { useNavigationStore } from '@/stores/navigationStore'
 import { useProjectStore } from '@/stores/projectStore'
 import { useSettingsStore } from '@/stores/settingsStore'
@@ -279,6 +280,8 @@ export function createHostContextSnapshot(uiReady = true): HostContextSnapshot {
     project: {
       id: project.currentProjectId,
       selectedNodeId: canvas.selectedNodeId,
+      ...(navigation.activeWorkspace === 'nodes' && project.currentProjectId && !canvas.selectedNodeId
+        ? { viewportNodePosition: resolveNodePosition({ mode: 'viewport_center' }) } : {}),
     },
     generation: { commandReady: generationReady },
     assets: {

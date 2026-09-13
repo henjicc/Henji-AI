@@ -151,7 +151,7 @@ export function rememberCanvasUndo(projectId: string, operation: string): string
   return token
 }
 
-function resolveNodePosition(placement: CanvasNodePlacement, store = useCanvasStore): { x: number; y: number } {
+export function resolveNodePosition(placement: CanvasNodePlacement, store = useCanvasStore): { x: number; y: number } {
   const canvas = store.getState()
   if (placement.mode === 'absolute') return { x: placement.x, y: placement.y }
   if (placement.mode === 'right_of_node') {

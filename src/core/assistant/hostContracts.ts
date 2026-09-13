@@ -36,6 +36,7 @@ export const hostContextSnapshotSchema = z.object({
   project: z.object({
     id: z.string().min(1).nullable(),
     selectedNodeId: z.string().min(1).nullable(),
+    viewportNodePosition: z.object({ x: z.number().finite(), y: z.number().finite() }).strict().optional(),
   }),
   generation: z.object({
     commandReady: z.boolean(),
