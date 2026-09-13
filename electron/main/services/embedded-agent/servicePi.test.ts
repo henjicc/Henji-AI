@@ -104,7 +104,7 @@ it.each(['model', 'tool'] as const)('宿主调度经官方 Pi SDK 在 %s 阶段�
   const requestIds = { original: randomUUID(), waiting: randomUUID(), inserted: randomUUID() }
   const send = (text: string, project: keyof typeof requestIds, delivery: EmbeddedAgentPrompt['delivery'] = 'wait') => service.prompt({ text, delivery,
     model: { providerId: 'test', modelId: 'fixture' }, access: 'full',
-    context: JSON.stringify({ workspace: { id: 'nodes' }, project: { id: project, selectedNodeId: `${project}-reference` } }) }, requestIds[project])
+    context: JSON.stringify({ workspace: { id: 'nodes' }, project: { id: project, selectedNodeId: `${project}-reference`, selectedNodeIsReference: project !== 'waiting' } }) }, requestIds[project])
   await send('原请求', 'original')
   await vi.waitFor(() => expect(requests).toEqual(['原请求']), { timeout: 15000 })
   const originalCalls = stage === 'tool' ? 1 : 0
@@ -127,7 +127,7 @@ it.each(['model', 'tool'] as const)('宿主调度经官方 Pi SDK 在 %s 阶段�
   }
   expect(calls.slice(originalCalls)).toEqual([
     { prompt: '插入消息', destination: { mode: 'canvas', projectId: 'inserted', sourceNodeIds: ['inserted-reference'] } },
-    { prompt: '等待消息', destination: { mode: 'canvas', projectId: 'waiting', sourceNodeIds: ['waiting-reference'] } },
+    { prompt: '等待消息', destination: { mode: 'canvas', projectId: 'waiting', sourceNodeIds: [], placement: { mode: 'right_of_node', anchorNodeId: 'waiting-reference' } } },
   ])
   expect(requests).toEqual(['原请求', '插入消息', '插入消息', '等待消息', '等待消息'])
   expect(service.snapshot().error).toBeNull()

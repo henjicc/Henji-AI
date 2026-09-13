@@ -30,6 +30,8 @@ it.each(['prepare_generation_task', 'create_visible_generation_task'])('%s æœªé€
   })
   expect(withGenerationOrigin(name, {}, JSON.stringify({ ...origin, project: { ...origin.project, selectedNodeId: 'anchor' } })))
     .toEqual({ destination: { mode: 'canvas', projectId: 'original', sourceNodeIds: ['anchor'] } })
+  expect(withGenerationOrigin(name, {}, JSON.stringify({ ...origin, project: { ...origin.project, selectedNodeId: 'anchor', selectedNodeIsReference: false } })))
+    .toEqual({ destination: { mode: 'canvas', projectId: 'original', sourceNodeIds: [], placement: { mode: 'right_of_node', anchorNodeId: 'anchor' } } })
   const explicit = { destination: { mode: 'canvas', projectId: 'specified', sourceNodeIds: [], placement: { mode: 'absolute', x: 1, y: 2 } } }
   expect(withGenerationOrigin(name, explicit, JSON.stringify(origin))).toBe(explicit)
   expect(withGenerationOrigin(name, {}, JSON.stringify({ ...origin, project: { ...origin.project, viewportNodePosition: { x: null, y: 4 } } })))

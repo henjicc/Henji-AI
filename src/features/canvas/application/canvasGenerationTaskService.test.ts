@@ -101,6 +101,21 @@ it('原视口位置固定后，移动画布仍将生成节点和持久结果放�
   expect(output.data.imageUrl).toBe('C:/result.png')
 })
 
+it('选中生成节点仅作为布局锚点时，新任务独立执行，不重新生成锚点或强加参考连线', async () => {
+  const anchorId = useCanvasStore.getState().addNode(CANVAS_NODE_TYPES.imageEdit, { x: 100, y: 200 }, { prompt: '不可重放的旧请求' })
+  const taskId = crypto.randomUUID()
+  const result = await submitCanvasGenerationTask({ modelId: 'canvas-task-fixture', mediaType: 'image', prompt: '独立生成' },
+    { mode: 'canvas', projectId, sourceNodeIds: [], placement: { mode: 'right_of_node', anchorNodeId: anchorId } }, taskId)
+  await vi.waitFor(() => expect(records.get(taskId)?.status).toBe('success'))
+  const saved = await readPersistedCanvasProjectSnapshot(projectId)
+  const source = saved.nodes.find(node => `${projectId}:${node.id}` === result.nodeRef.id)!
+  expect(source.position.x).toBeGreaterThan(100)
+  expect(saved.edges.some(edge => edge.source === anchorId && edge.target === source.id)).toBe(false)
+  expect(GenerationService.getInstance().generate).toHaveBeenCalledTimes(1)
+  expect(GenerationService.getInstance().generate).toHaveBeenCalledWith('canvas-task-fixture',
+    expect.objectContaining({ prompt: '独立生成' }), expect.any(Function), expect.any(Object))
+})
+
 async function restoredTask(extra: Record<string, unknown> = {}, version = 2) {
   const taskId = crypto.randomUUID()
   const nodeId = `source-${taskId}`

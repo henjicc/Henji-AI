@@ -15,15 +15,18 @@ const logger = createMainLogger('main.embedded_agent')
 /** 在工具预算和幂等登记之前固定默认落点；显式目标始终由用户任务决定。 */
 export function withGenerationOrigin(name: string, input: Record<string, unknown>, context?: string): Record<string, unknown> {
   if (!['create_visible_generation_task', 'prepare_generation_task'].includes(name) || input.destination !== undefined || !context) return input
-  let origin: { workspace?: { id?: string }; project?: { id?: string; selectedNodeId?: string; viewportNodePosition?: { x: number; y: number } } }
+  let origin: { workspace?: { id?: string }; project?: { id?: string; selectedNodeId?: string; selectedNodeIsReference?: boolean; viewportNodePosition?: { x: number; y: number } } }
   try { origin = JSON.parse(context) } catch { return input }
   const projectId = origin?.project?.id
   const selectedNodeId = origin?.project?.selectedNodeId
   const position = origin?.project?.viewportNodePosition
-  const placement = !selectedNodeId && position && Number.isFinite(position.x) && Number.isFinite(position.y)
-    ? { mode: 'absolute', x: position.x, y: position.y } : undefined
+  const sourceNodeIds = selectedNodeId && origin.project?.selectedNodeIsReference !== false ? [selectedNodeId] : []
+  const placement = selectedNodeId && !sourceNodeIds.length
+    ? { mode: 'right_of_node', anchorNodeId: selectedNodeId }
+    : !selectedNodeId && position && Number.isFinite(position.x) && Number.isFinite(position.y)
+      ? { mode: 'absolute', x: position.x, y: position.y } : undefined
   return { ...input, destination: origin?.workspace?.id === 'nodes' && projectId
-    ? { mode: 'canvas', projectId, sourceNodeIds: selectedNodeId ? [selectedNodeId] : [], ...(placement ? { placement } : {}) }
+    ? { mode: 'canvas', projectId, sourceNodeIds, ...(placement ? { placement } : {}) }
     : { mode: 'history' } }
 }
 const SYSTEM_INSTRUCTIONS = `你是痕迹 AI 内置助手。使用中文，帮助用户完成当前应用中的创作和管理任务。
