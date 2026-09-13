@@ -45,6 +45,57 @@ async function baseline(session: ReturnType<typeof client>) {
 const invocation = (expectedRevisions: unknown) => ({ id: 'cancel_generation_task', version: 1,
   expectedRevisions, input: { taskId: task.taskId, reason: '验收取消' } })
 
+it('创作文本经 MCP 保存后新会话按需读回，局部返修保留其他镜头和依赖', async () => {
+  const creativeClient = () => createApplicationCapabilitySession(createApplicationCallerGrant({
+    callerId: 'mcp-drama', capabilityIds: [...MCP_CAPABILITY_IDS], allowWrites: true, allowDestructive: false,
+    permissions: [...MCP_READ_PERMISSIONS, ...MCP_WRITE_PERMISSIONS],
+  }))
+  const projectId = 'mcp-drama-resume'
+  const nodes = ['character', 'shot-one', 'shot-two'].map((id, index) => ({
+    id, type: CANVAS_NODE_TYPES.textAnnotation, position: { x: index * 300, y: 0 },
+    data: { displayName: id, content: id === 'character' ? '小林穿灰色外套' : `${id} 原始说明` },
+  }))
+  const edges = [{ id: 'character-to-shot', source: 'character', target: 'shot-one' }]
+  const previousCanvas = useCanvasStore.getState()
+  const previousProject = useProjectStore.getState()
+  const ref = (id: string) => ({ kind: 'canvas.node', id: `${projectId}:${id}` })
+  try {
+    const project = { id: projectId, name: '创作续做', createdAt: 1, updatedAt: 1, nodeCount: nodes.length,
+      coverPath: null, nodes, edges, viewport: { x: 0, y: 0, zoom: 1 }, history: { past: [], future: [] } }
+    useCanvasStore.getState().setCanvasData(nodes, edges, project.history)
+    useProjectStore.setState({ currentProjectId: projectId, currentProject: project, projects: [project], isHydrated: true })
+    const change = await creativeClient().execute({ id: 'change_application_entities', version: 2,
+      input: { summary: '修改第一镜头说明', changes: [{ kind: 'set_properties', entityType: 'canvas.node',
+        target: ref('shot-one'), properties: { 'canvas.node.text_content': '镜头一：小林在门口停下，手握信封。' } }] } }, request())
+    expect(change.ok, JSON.stringify(change)).toBe(true)
+    const saved = await readPersistedCanvasProjectSnapshot(projectId)
+    expect(saved.nodes.find(node => node.id === 'shot-one')?.data.content).toBe('镜头一：小林在门口停下，手握信封。')
+    expect(saved.nodes.find(node => node.id === 'shot-two')?.data.content).toBe('shot-two 原始说明')
+    expect(saved.nodes.find(node => node.id === 'character')?.data.content).toBe('小林穿灰色外套')
+    expect(saved.edges).toMatchObject(edges)
+
+    // 清除活动画布和当前工程，强制新调用方经过持久化读取，而不是使用原会话内存。
+    useCanvasStore.getState().setCanvasData([], [], { past: [], future: [] })
+    useProjectStore.setState({ currentProjectId: null, currentProject: null })
+    const resumed = creativeClient()
+    const read = await resumed.execute({ id: 'read_application_entity', version: 1,
+      input: { ref: ref('shot-one'), propertyIds: ['canvas.node.text_content'] } }, request())
+    expect(read).toMatchObject({ ok: true, data: { properties: {
+      'canvas.node.text_content': '镜头一：小林在门口停下，手握信封。',
+    } } })
+    expect(JSON.stringify(read)).not.toContain('shot-two 原始说明')
+    const dependency = await resumed.execute({ id: 'read_application_entity', version: 1,
+      input: { ref: { kind: 'canvas.edge', id: `${projectId}:character-to-shot` },
+        propertyIds: ['canvas.edge.source_ref', 'canvas.edge.target_ref'] } }, request())
+    expect(dependency).toMatchObject({ ok: true, data: { properties: {
+      'canvas.edge.source_ref': ref('character'), 'canvas.edge.target_ref': ref('shot-one'),
+    } } })
+  } finally {
+    useCanvasStore.setState(previousCanvas, true)
+    useProjectStore.setState(previousProject, true)
+  }
+})
+
 it('MCP 实际授权可发现、创建和配置图片节点，并从原工程存储回读', async () => {
   await loadRealModelsIntoRegistry()
   const projectId = 'mcp-image-capability'
