@@ -282,6 +282,32 @@ it('取消续查后保存停止状态，不自动恢复；明确恢复仍获取�
   expect(GenerationService.getInstance().generate).not.toHaveBeenCalled()
 })
 
+it('离开原项目后 MCP 仍可取消续查，停止状态保存到原项目且不重复生成', async () => {
+  const { taskId, resultId } = await restoredTask({ serverTaskId: 'background-original-task', serverTaskModelId: 'canvas-task-fixture' })
+  const polling = vi.spyOn(GenerationService.getInstance(), 'continuePolling').mockImplementation(async (_model, _task, _params, _progress, options) => {
+    await new Promise<void>((_resolve, reject) => options!.signal!.addEventListener('abort', () => reject(new Error('停止后台续查')), { once: true }))
+    throw new Error('unreachable')
+  })
+  const execute = taskControlSession()
+  const input = (await getCanvasGenerationTask(taskId))!.resumeInput as Record<string, unknown>
+  expect(await execute('resume_canvas_generation_task', input)).toMatchObject({ ok: true })
+  await vi.waitFor(() => expect(polling).toHaveBeenCalledTimes(1))
+  const otherProject = await useProjectStore.getState().createProject('后台续查时的当前项目')
+  expect(await getCanvasGenerationTask(taskId)).toMatchObject({ cancellable: true })
+  expect(await execute('cancel_generation_task', { taskId, reason: '停止后台任务' })).toMatchObject({ ok: true })
+  await vi.waitFor(async () => {
+    const saved = await readPersistedCanvasProjectSnapshot(projectId)
+    expect(saved.nodes.find(node => node.id === resultId)?.data).toMatchObject({ generationCancelled: true, isGenerating: false, serverTaskId: 'background-original-task' })
+  })
+  expect(await getCanvasGenerationTask(taskId)).toMatchObject({ status: 'cancelled', resultAvailable: false, cancellable: false })
+  expect(useProjectStore.getState().currentProjectId).toBe(otherProject)
+  expect(useCanvasStore.getState().nodes).toHaveLength(0)
+  await openCanvasProject(projectId, new AbortController().signal)
+  expect(resumeCanvasProjectGeneration(projectId)).toBe(0)
+  expect(polling).toHaveBeenCalledTimes(1)
+  expect(GenerationService.getInstance().generate).not.toHaveBeenCalled()
+})
+
 it('MCP 使用原任务返回的恢复参数续查，错误目标不执行，重复请求不重复轮询', async () => {
   const { taskId } = await restoredTask({ serverTaskId: 'original-provider-task', serverTaskModelId: 'canvas-task-fixture' })
   let release!: () => void

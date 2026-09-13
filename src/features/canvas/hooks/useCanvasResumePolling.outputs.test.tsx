@@ -471,7 +471,7 @@ describe('useCanvasResumePolling 结构化结果恢复', () => {
       .toEqual(['/managed/composite.png']);
   });
 
-  it('A 项目续查时切到 B 再返回 A 会重新恢复，旧回调不污染新会话', async () => {
+  it('A 项目续查时切到 B 再返回 A 沿用原任务，不重新发起续查', async () => {
     generationMocks.resumeCanvasGeneration.mockImplementation(() => new Promise(() => undefined));
     renderHook(() => useCanvasResumePolling());
     await waitFor(() => expect(generationMocks.resumeCanvasGeneration).toHaveBeenCalledTimes(1));
@@ -490,7 +490,7 @@ describe('useCanvasResumePolling 结构化结果恢复', () => {
       useProjectStore.setState({ currentProjectId: projectA.id, currentProject: projectA });
     });
 
-    await waitFor(() => expect(generationMocks.resumeCanvasGeneration).toHaveBeenCalledTimes(2));
+    expect(generationMocks.resumeCanvasGeneration).toHaveBeenCalledTimes(1);
     expect(useCanvasStore.getState().nodes[0]?.data.serverTaskId).toBe('panorama-task');
   });
 });

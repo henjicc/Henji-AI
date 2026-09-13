@@ -19,6 +19,7 @@ import {
 } from '../generation/activeGenerationTasks';
 import { useCanvasResumePolling } from './useCanvasResumePolling';
 import { resumeCanvasProjectGeneration } from '../application/canvasResumePollingService';
+import { openCanvasProject } from '../application/canvasApplicationService';
 
 const generationMocks = vi.hoisted(() => ({
   resumeCanvasGeneration: vi.fn(),
@@ -161,7 +162,7 @@ describe('useCanvasResumePolling 异步结果恢复', () => {
     const originalNodeId = useCanvasStore.getState().nodes[0].id;
     resumeCanvasProjectGeneration('resume-project', new Set([originalNodeId]));
     resumeCanvasProjectGeneration('resume-project', new Set([originalNodeId]));
-    expect(generationMocks.resumeCanvasGeneration).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(generationMocks.resumeCanvasGeneration).toHaveBeenCalledTimes(1));
     expect(generationMocks.resumeCanvasGeneration).toHaveBeenCalledWith(expect.objectContaining({ taskId: 'panorama-task' }));
     finish({ outputs: ['remote-result'], primary: 'remote-result' });
     await waitFor(() => expect(useCanvasStore.getState().nodes.find((node) => node.id === originalNodeId)?.data)
@@ -173,21 +174,26 @@ describe('useCanvasResumePolling 异步结果恢复', () => {
       .toMatchObject({ imageUrl: 'managed-service-result.png', isGenerating: false });
   });
 
-  it('无界面时切换项目同样撤销旧续查的写入资格，返回后可接管原任务', async () => {
+  it('切换项目后继续原续查并保存原项目，返回不重复请求也不污染当前画布', async () => {
     const completions: Array<(value: { outputs: string[]; primary: string }) => void> = [];
     generationMocks.resumeCanvasGeneration.mockImplementation(() => new Promise((resolve) => { completions.push(resolve); }));
     generationMocks.persistGenerationResult.mockResolvedValue({
       imageUrl: 'managed-new-owner.png', previewImageUrl: 'managed-new-owner.png', aspectRatio: '2:1',
     });
     resumeCanvasProjectGeneration('resume-project');
-    useProjectStore.setState({ currentProjectId: 'other-project' });
-    useProjectStore.setState({ currentProjectId: 'resume-project' });
+    await waitFor(() => expect(completions).toHaveLength(1));
+    const otherProject = await useProjectStore.getState().createProject('另一个项目');
+    expect(useCanvasStore.getState().nodes).toHaveLength(0);
+    completions[0]({ outputs: ['new-result'], primary: 'new-result' });
+    await waitFor(async () => {
+      const record = await getProjectRecord('resume-project');
+      expect(fromProjectRecord(record!).nodes[0].data.imageUrl).toBe('managed-new-owner.png');
+    });
+    expect(useProjectStore.getState().currentProjectId).toBe(otherProject);
+    expect(useCanvasStore.getState().nodes).toHaveLength(0);
+    await openCanvasProject('resume-project', new AbortController().signal);
     resumeCanvasProjectGeneration('resume-project');
-    expect(completions).toHaveLength(2);
-    completions[1]({ outputs: ['new-result'], primary: 'new-result' });
-    await waitFor(() => expect(useCanvasStore.getState().nodes[0].data.imageUrl).toBe('managed-new-owner.png'));
-    completions[0]({ outputs: ['old-result'], primary: 'old-result' });
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(completions).toHaveLength(1);
     expect(generationMocks.persistGenerationResult).toHaveBeenCalledTimes(1);
     expect(useCanvasStore.getState().nodes[0].data.imageUrl).toBe('managed-new-owner.png');
   });

@@ -25,6 +25,7 @@ import {
 } from '../generation/activeGenerationTasks';
 import {
   commitCanvasGenerationOutputs,
+  commitCanvasGenerationOutputsInProject,
   resolveGenerationOutputStrategy,
 } from './generationOutputApplicationService';
 import { isCanvasNodeInputSignatureCurrent } from './canvasExecutionService';
@@ -40,6 +41,8 @@ import {
   prepareStoryboardGenerationOutputContract,
   STORYBOARD_GENERATION_RESUME_CONTEXT_FIELD,
 } from './storyboardGenerationOutputService';
+import { withCanvasProjectRuntime } from './canvasProjectRuntime';
+import { confirmCanvasPersistence } from './canvasPersistenceService';
 
 const logger = createLogger('features.canvas.resumePolling');
 const resumeControls = new Map<symbol, { taskId: string; controller: AbortController }>();
@@ -86,6 +89,9 @@ export function resumeCanvasProjectGeneration(
     const sourceCapability = sourceCapabilityId
       ? getRegisteredCanvasImageCapabilities().find(({ id }) => id === sourceCapabilityId)
       : undefined;
+    const backgroundCompletion = node.data.resultKind !== 'layer-stack'
+      && sourceCapability?.outputPolicy.resultKind !== 'layer-stack'
+      && sourceCapability?.outputPolicy.postProcess !== 'local-redraw-composite';
     const persistedSourceNodeId = typeof node.data.generationSourceNodeId === 'string'
       && node.data.generationSourceNodeId.trim().length > 0
       ? node.data.generationSourceNodeId
@@ -101,7 +107,7 @@ export function resumeCanvasProjectGeneration(
     }
     started += 1;
     const unsubscribeProject = useProjectStore.subscribe((state, previous) => {
-      if (previous.currentProjectId === projectId && state.currentProjectId !== projectId) {
+      if (!backgroundCompletion && previous.currentProjectId === projectId && state.currentProjectId !== projectId) {
         releaseCanvasGenerationResumeLease(projectId, task.taskId, resumeLease);
         resumeControls.delete(resumeLease);
         unsubscribeProject();
@@ -125,10 +131,15 @@ export function resumeCanvasProjectGeneration(
       taskId: task.taskId,
       modelId: task.modelId,
       sourceCapability,
-      updateNodeData,
+      backgroundCompletion,
+      updateNodeData: backgroundCompletion ? (id, patch) => withCanvasProjectRuntime(projectId, async runtime => {
+        if (!isCanvasGenerationResumeLeaseCurrent(projectId, task.taskId, resumeLease)) return;
+        runtime.store.getState().updateNodeData(id, patch);
+        await runtime.persist();
+      }) : updateNodeData,
       setNodeGenerationProgress,
       isContextCurrent: () => (
-        useProjectStore.getState().currentProjectId === projectId
+        (backgroundCompletion || useProjectStore.getState().currentProjectId === projectId)
         && isCanvasGenerationResumeLeaseCurrent(projectId, task.taskId, resumeLease)
       ),
       releaseLease: () => {
@@ -152,7 +163,8 @@ interface ResumeNodeTaskInput {
   taskId: string;
   modelId: string;
   sourceCapability?: CanvasImageCapabilityDefinition;
-  updateNodeData: ReturnType<typeof useCanvasStore.getState>['updateNodeData'];
+  backgroundCompletion: boolean;
+  updateNodeData: (id: string, patch: Parameters<ReturnType<typeof useCanvasStore.getState>['updateNodeData']>[1]) => void | Promise<void>;
   setNodeGenerationProgress: ReturnType<
     typeof useCanvasGenerationProgressStore.getState
   >['setProgress'];
@@ -161,13 +173,16 @@ interface ResumeNodeTaskInput {
 }
 
 async function publishResumedExecution(input: {
+  projectId: string;
+  isContextCurrent: () => boolean;
   sourceNodeId?: string;
   resultNodeData: DynamicValueMap;
   resultNodeIds: string[];
 }): Promise<void> {
   const inputSignature = input.resultNodeData.generationInputSignature;
   if (
-    !input.sourceNodeId
+    !input.isContextCurrent() || useProjectStore.getState().currentProjectId !== input.projectId
+    || !input.sourceNodeId
     || typeof inputSignature !== 'string'
     || inputSignature.length === 0
     || !useCanvasStore.getState().nodes.some((node) => node.id === input.sourceNodeId)
@@ -180,6 +195,7 @@ async function publishResumedExecution(input: {
       });
       return;
     }
+    if (!input.isContextCurrent() || useProjectStore.getState().currentProjectId !== input.projectId) return;
     publishCanvasSuccessfulExecution({
       sourceNodeId: input.sourceNodeId,
       inputSignature,
@@ -206,16 +222,24 @@ async function resumeNodeTask(input: ResumeNodeTaskInput): Promise<void> {
     taskId,
     modelId,
     sourceCapability,
+    backgroundCompletion,
     updateNodeData,
     setNodeGenerationProgress,
     isContextCurrent,
     releaseLease,
   } = input;
   let createdFilePaths: string[] = [];
+  const commitOutputs = backgroundCompletion
+    ? (value: Parameters<typeof commitCanvasGenerationOutputs>[0]) => commitCanvasGenerationOutputsInProject(projectId, value)
+    : commitCanvasGenerationOutputs;
+  const publish = (resultNodeIds: string[], source = sourceNodeId) => publishResumedExecution({
+    projectId, isContextCurrent, sourceNodeId: source, resultNodeData, resultNodeIds,
+  });
 
   try {
     if (!isContextCurrent()) return;
-    updateNodeData(nodeId, { isGenerating: true, generationError: null, generationCancelled: false });
+    useCanvasStore.getState().updateNodeData(nodeId, { isGenerating: true, generationError: null, generationCancelled: false });
+    if (backgroundCompletion) await confirmCanvasPersistence(projectId);
     const localRedrawContext = sourceCapability?.outputPolicy.postProcess === 'local-redraw-composite'
       ? parseLocalRedrawContext(resultNodeData[LOCAL_REDRAW_CONTEXT_FIELD])
       : null;
@@ -247,7 +271,7 @@ async function resumeNodeTask(input: ResumeNodeTaskInput): Promise<void> {
       });
       signal.throwIfAborted();
       if (!isContextCurrent()) return;
-      const committed = await commitCanvasGenerationOutputs({
+      const committed = await commitOutputs({
         sourceNodeId,
         placeholderNodeId: nodeId,
         resultNodeType,
@@ -256,7 +280,7 @@ async function resumeNodeTask(input: ResumeNodeTaskInput): Promise<void> {
         groupTitle: `${String(resultNodeData.displayName ?? '分镜输出')} · ${contract.outputs.length}`,
       });
       if (!isContextCurrent()) return;
-      await publishResumedExecution({ sourceNodeId, resultNodeData, resultNodeIds: committed.resultNodeIds });
+      await publish(committed.resultNodeIds);
       logger.info('[CanvasResume] 分镜生成恢复完成', {
         event: 'canvas.resume_polling.storyboard.completed',
         taskId,
@@ -277,7 +301,7 @@ async function resumeNodeTask(input: ResumeNodeTaskInput): Promise<void> {
         result: { ...result, outputs: resultOutputs },
       });
       if (!isContextCurrent()) return;
-      await publishResumedExecution({ sourceNodeId, resultNodeData, resultNodeIds: committed.resultNodeIds });
+      await publish(committed.resultNodeIds);
       logger.info('[CanvasResume] 局部重绘恢复完成', {
         event: 'canvas.resume_polling.local_redraw.completed',
         taskId,
@@ -288,6 +312,7 @@ async function resumeNodeTask(input: ResumeNodeTaskInput): Promise<void> {
     }
 
     if (result.structuredOutput?.kind === 'layer-stack' || resultNodeData.resultKind === 'layer-stack') {
+      if (useProjectStore.getState().currentProjectId !== projectId) throw new Error('此结构化结果需要在原画布继续处理，请返回原项目续查。');
       const persistedSourceNodeId = typeof resultNodeData.generationSourceNodeId === 'string'
         && resultNodeData.generationSourceNodeId.trim().length > 0
         ? resultNodeData.generationSourceNodeId
@@ -316,11 +341,7 @@ async function resumeNodeTask(input: ResumeNodeTaskInput): Promise<void> {
         result: { ...result, outputs: resultOutputs },
       });
       if (!isContextCurrent()) return;
-      await publishResumedExecution({
-        sourceNodeId: resolvedSourceNodeId,
-        resultNodeData,
-        resultNodeIds: committed.resultNodeIds,
-      });
+      await publish(committed.resultNodeIds, resolvedSourceNodeId);
       logger.info('[CanvasResume] 结构化图层生成恢复完成', {
         event: 'canvas.resume_polling.layer_stack.completed',
         taskId,
@@ -339,7 +360,7 @@ async function resumeNodeTask(input: ResumeNodeTaskInput): Promise<void> {
     const batchResultKind = strategy === 'assetGroup'
       ? mediaType === 'image' ? 'image-group' : 'media-group'
       : memberResultKind;
-    const committed = await commitCanvasGenerationOutputs({
+    const committed = await commitOutputs({
       sourceNodeId,
       placeholderNodeId: nodeId,
       resultNodeType,
@@ -372,7 +393,7 @@ async function resumeNodeTask(input: ResumeNodeTaskInput): Promise<void> {
         : undefined,
     });
     if (!isContextCurrent()) return;
-    await publishResumedExecution({ sourceNodeId, resultNodeData, resultNodeIds: committed.resultNodeIds });
+    await publish(committed.resultNodeIds);
     logger.info('[CanvasResume] 异步生成恢复完成', {
       event: 'canvas.resume_polling.completed',
       taskId,
@@ -382,8 +403,14 @@ async function resumeNodeTask(input: ResumeNodeTaskInput): Promise<void> {
   } catch (error) {
     if (!isContextCurrent()) return;
     const message = error instanceof Error ? error.message : String(error);
-    updateNodeData(nodeId, signal.aborted ? createCanvasGenerationCancelledPatch()
-      : createCanvasGenerationFailurePatch(error, resultNodeData.resultKind));
+    try {
+      await updateNodeData(nodeId, signal.aborted ? createCanvasGenerationCancelledPatch()
+        : createCanvasGenerationFailurePatch(error, resultNodeData.resultKind));
+    } catch (saveError) {
+      logger.error('[CanvasResume] 续查状态保存未确认', saveError, {
+        event: 'canvas.resume_polling.state_save_failed', taskId, modelId, context: { nodeId },
+      });
+    }
     if (signal.aborted) logger.info('[CanvasResume] 原任务续查已停止', {
       event: 'canvas.resume_polling.cancelled', taskId, modelId, context: { nodeId },
     });
@@ -405,7 +432,7 @@ async function resumeNodeTask(input: ResumeNodeTaskInput): Promise<void> {
           });
         });
       }
-      if (isContextCurrent() && useProjectStore.getState().currentProjectId === projectId) {
+      if (isContextCurrent()) {
         setNodeGenerationProgress(nodeId, null);
       }
     } finally {
