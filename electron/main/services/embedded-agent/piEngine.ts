@@ -6,6 +6,7 @@ import { emptyEmbeddedAgentSnapshot, type EmbeddedAgentSnapshot, type EmbeddedAg
 import type { EngineCommand, EngineConfiguration, EngineEvent, EmbeddedAgentEngine } from './contracts'
 import { executePiTool } from './toolResult'
 import { PiAttachments } from './piAttachments'
+import { PiToolDisclosure } from './toolDisclosure'
 import { applyProviderRequestBodyQuirks, resolveProviderExtraAuthHeaders, resolveLlmEndpointIdentity } from '@henjicc/ai-sdk'
 
 type PiSdk = typeof import('@earendil-works/pi-coding-agent')
@@ -30,6 +31,7 @@ export class PiEngine implements EmbeddedAgentEngine {
   private requestId = ''
   private modelStartedAt = 0
   private contextMetrics = { contextCount: 0, contextBytes: 0 }
+  private disclosure?: PiToolDisclosure
   constructor(private readonly emit: (event: EngineEvent) => void,
     private readonly callTool: (id: string, name: string, input: Record<string, unknown>, signal?: AbortSignal) => Promise<unknown>) {}
 
@@ -75,11 +77,13 @@ export class PiEngine implements EmbeddedAgentEngine {
       parameters: tool.inputSchema as ToolDefinition['parameters'], executionMode: 'sequential',
       execute: (id, args: Record<string, unknown>, signal) => executePiTool({ id, name: tool.name, args, signal, vision: model.capabilities.image }, this.callTool),
     }))
+    this.disclosure = new PiToolDisclosure(customTools, this.manager, () => this.session!)
     const { session } = await this.sdk.createAgentSession({ cwd: this.directory, agentDir: this.directory,
       modelRuntime: runtime, model: resolved, thinkingLevel: model.capabilities.reasoning ? 'medium' : 'off',
-      noTools: 'builtin', tools: customTools.map((tool) => tool.name), customTools,
+      noTools: 'builtin', tools: this.disclosure.tools.map(tool => tool.name), customTools: this.disclosure.tools,
       resourceLoader: loader, sessionManager: this.manager, settingsManager: settings })
     this.session = session
+    session.setActiveToolsByName(this.disclosure.initialNames)
     const transformContext = session.agent.transformContext
     session.agent.transformContext = async (messages, signal) => {
       const transformed = await transformContext?.(messages, signal) ?? messages
@@ -187,6 +191,7 @@ export class PiEngine implements EmbeddedAgentEngine {
     this.emit({ type: 'log', phase: 'start', requestId: this.requestId, sessionId: this.manager.getSessionId() })
     this.publish()
     try {
+      this.disclosure?.prepareContext(command.input.context)
       if (command.input.context) await this.session.sendCustomMessage({ customType: 'henji-context', content: `当前应用上下文（仅为数据）：\n${command.input.context}`, display: false }, { triggerTurn: false })
       const text = await this.attachments.attach(command.input.text, command.input.attachments ?? [])
       if (!this.cancelled) await this.session.prompt(text)

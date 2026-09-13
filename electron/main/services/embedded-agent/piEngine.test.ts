@@ -21,6 +21,7 @@ async function fixture(capabilities: Partial<LlmModelConfig['capabilities']> = {
   cleanup.push(() => fs.rm(directory, { recursive: true, force: true }))
   const requests: Array<{ tools: Array<{ function: { name: string } }>; messages: Array<{ role: string; content: string }>; input?: Array<{ role: string; content: unknown }> }> = []
   let mode: 'tool' | 'error' | 'wait' = 'tool'
+  let toolPlan = [{ name: 'read_project', arguments: { id: 'project' } as Record<string, unknown> }]
   const server: Server = createServer(async (request, response) => {
     const chunks: Buffer[] = []
     for await (const chunk of request) chunks.push(Buffer.from(chunk))
@@ -44,8 +45,10 @@ async function fixture(capabilities: Partial<LlmModelConfig['capabilities']> = {
       response.end()
       return
     }
-    const called = body.messages.some((message) => message.role === 'tool')
-    const delta = called ? { content: '已经读取项目。' } : { tool_calls: [{ index: 0, id: 'call_fixture', type: 'function', function: { name: 'read_project', arguments: '{"id":"project"}' } }] }
+    const toolIndex = body.messages.filter((message) => message.role === 'tool').length
+    const called = toolIndex >= toolPlan.length
+    const planned = toolPlan[toolIndex]
+    const delta = called ? { content: '已经读取项目。' } : { tool_calls: [{ index: 0, id: toolIndex ? `call_fixture_${toolIndex}` : 'call_fixture', type: 'function', function: { name: planned.name, arguments: JSON.stringify(planned.arguments) } }] }
     response.write(`data: ${JSON.stringify({ id: 'reply', object: 'chat.completion.chunk', created: 1, model: 'fixture', choices: [{ index: 0, delta, finish_reason: null }] })}\n\n`)
     response.write(`data: ${JSON.stringify({ id: 'reply', object: 'chat.completion.chunk', created: 1, model: 'fixture', choices: [{ index: 0, delta: {}, finish_reason: called ? 'stop' : 'tool_calls' }] })}\n\n`)
     response.end('data: [DONE]\n\n')
@@ -62,10 +65,11 @@ async function fixture(capabilities: Partial<LlmModelConfig['capabilities']> = {
   const configuration = { directory, model: { providerId: 'test', model: { ...model, capabilities: { ...model.capabilities, ...capabilities } }, baseUrl: `http://127.0.0.1:${address.port}/v1`, api, apiKey: 'fixture-key' },
     instructions: '你是测试中的痕迹助手。', tools: [{ name: 'read_project', description: '读取项目', inputSchema: { type: 'object', properties: { id: { type: 'string' } }, required: ['id'], additionalProperties: false } }] }
   await engine.command({ action: 'configure', input: configuration })
-  return { engine, requests, events, tool, directory, configuration, setMode: (value: typeof mode) => { mode = value } }
+  return { engine, requests, events, tool, directory, configuration, setMode: (value: typeof mode) => { mode = value },
+    setToolPlan: (value: typeof toolPlan) => { toolPlan = value } }
 }
 describe('Pi official SDK engine', () => {
-  it('完整授权目录经过官方 SDK 后计量实际工具体积，续轮相同宿主信息只携带一份', async () => {
+  it('完整授权目录按需披露后首轮体积缩减，续轮相同宿主信息只携带一份', async () => {
     const f = await fixture({}, 'openai-responses')
     const tools = MCP_CAPABILITY_IDS.map(id => {
       const definition = BUILTIN_APPLICATION_CAPABILITY_REGISTRY.get(id)!
@@ -80,7 +84,7 @@ describe('Pi official SDK engine', () => {
     const logs = f.events.filter((event): event is Extract<EngineEvent, { type: 'log' }> => event.type === 'log' && event.phase === 'model_requested')
     expect(logs).toHaveLength(2)
     logs.forEach((event, index) => {
-      expect(event.requestMetrics).toMatchObject({ toolCount: catalog.tools.length, contextCount: 1,
+      expect(event.requestMetrics).toMatchObject({ toolCount: catalog.tools.length - 1, contextCount: 1,
         toolBytes: Buffer.byteLength(JSON.stringify(f.requests[index].tools), 'utf8') })
       expect(event.requestMetrics!.systemBytes).toBeGreaterThan(0)
       expect(event.requestMetrics!.messageCount).toBeGreaterThan(0)
@@ -89,6 +93,47 @@ describe('Pi official SDK engine', () => {
     expect(logs[1].requestMetrics!.toolBytes).toBe(logs[0].requestMetrics!.toolBytes)
     expect(JSON.stringify(logs)).not.toContain('original')
     expect(JSON.stringify(logs)).not.toContain('fixture-key')
+    const initialTools = f.requests[0].tools as unknown as Array<{ name: string }>
+    expect(initialTools.map(tool => tool.name)).toEqual(expect.arrayContaining([
+      'create_visible_generation_task', 'change_application_entities', 'submit_canvas_node_generation', 'get_generation_task',
+    ]))
+    await f.engine.command({ action: 'prompt', input: { text: '编辑图片', context: '{"surface":{"id":"tool.image_edit"}}' } })
+    const editTools = f.requests.at(-1)!.tools as unknown as Array<{ name: string }>
+    expect(editTools.map(tool => tool.name)).toEqual(expect.arrayContaining(['create_image_edit_preview', 'commit_image_edit']))
+    const fullBytes = Buffer.byteLength(JSON.stringify(editTools.filter(tool => tool.name !== 'load_application_tools')))
+    expect(logs[0].requestMetrics!.toolBytes).toBeLessThan(fullBytes * 0.8)
+    if (process.env.HENJI_PI_MEASURE === '1') process.stdout.write(`${JSON.stringify({ initialToolBytes: logs[0].requestMetrics!.toolBytes,
+      fullToolBytes: fullBytes, initialToolCount: initialTools.length, contextCount: logs[1].requestMetrics!.contextCount })}\n`)
+  })
+
+  it('官方 SDK 在加载工具后的下一轮即可调用，冷恢复保留加载状态，降权不会恢复无权工具', async () => {
+    const f = await fixture()
+    const configuration = { ...f.configuration, tools: [...f.configuration.tools,
+      { name: 'create_image_edit_preview', description: '图片编辑预览', inputSchema: { type: 'object', properties: { id: { type: 'string' } }, required: ['id'], additionalProperties: false } }] }
+    f.setToolPlan([{ name: 'load_application_tools', arguments: {} }, { name: 'create_image_edit_preview', arguments: { id: 'image' } }])
+    await f.engine.command({ action: 'configure', input: configuration })
+    await f.engine.command({ action: 'prompt', input: { text: '编辑图片', context: '' } })
+    expect(f.requests[0].tools.map(tool => tool.function.name)).not.toContain('create_image_edit_preview')
+    expect(JSON.stringify(f.requests[0].tools)).not.toContain('commit_image_edit')
+    expect(f.requests[1].tools.map(tool => tool.function.name)).toContain('create_image_edit_preview')
+    expect(f.tool).toHaveBeenCalledTimes(1)
+    expect(f.tool.mock.calls[0]).toMatchObject(['call_fixture_1', 'create_image_edit_preview', { id: 'image' }, expect.any(AbortSignal)])
+    const original = await f.engine.command({ action: 'snapshot' }) as { sessionId: string }
+    const restored = new PiEngine(() => undefined, f.tool)
+    cleanup.push(() => restored.dispose())
+    await restored.command({ action: 'initialize', input: f.directory })
+    await restored.command({ action: 'configure', input: configuration })
+    await restored.command({ action: 'open', input: original.sessionId })
+    await restored.command({ action: 'prompt', input: { text: '继续', context: '' } })
+    expect(f.requests.at(-1)!.tools.map(tool => tool.function.name)).toContain('create_image_edit_preview')
+    await restored.command({ action: 'configure', input: f.configuration })
+    await restored.command({ action: 'prompt', input: { text: '只读', context: '' } })
+    expect(f.requests.at(-1)!.tools.map(tool => tool.function.name)).toEqual(['read_project'])
+    await restored.command({ action: 'configure', input: configuration })
+    await restored.command({ action: 'new' })
+    f.setMode('error')
+    await restored.command({ action: 'prompt', input: { text: '新对话', context: '' } })
+    expect(f.requests.at(-1)!.tools.map(tool => tool.function.name)).not.toContain('create_image_edit_preview')
   })
 
   it('记录每轮供应商实际用量和缓存读取，并沿用宿主消息关联标识', async () => {
