@@ -1,16 +1,16 @@
 import { useEffect, useRef, useState } from 'react'
-import { Dropdown, UiButton, UiError } from '@/components/ui'
+import { Dropdown, UiButton, UiError, UiLoading } from '@/components/ui'
 import { createEmptyPromptDocument } from '@/core/inputs/promptDocument'
 import type { EmbeddedAgentModel, EmbeddedAgentPrompt } from '@/core/assistant/embeddedAgent'
 import { getPlatform } from '@/platform/runtime'
 import { useUiStore } from '@/stores/uiStore'
 import { useAssistantUiStore } from '../store/assistantUiStore'
 import { createHostContextSnapshot } from '../hostContext/hostContext'
-import { AssistantMarkdown } from '../conversation/AssistantMarkdown'
+import { EmbeddedTranscript, EmbeddedUserMessage } from './EmbeddedTranscript'
+import { useConversationAutoScroll } from '../conversation/useConversationAutoScroll'
 import { reportEmbeddedAgentError, useEmbeddedAgent } from './controller'
 import type { AgentAttachment } from '@/core/assistant/attachments'
 import { AssistantComposer } from '../conversation/AssistantComposer'
-import { AssistantMessageAttachments } from '../conversation/AssistantMessageAttachments'
 import type { AssistantAttachmentDraft } from '../conversation/assistantAttachments'
 
 const accessOptions: Array<{ value: EmbeddedAgentPrompt['access']; label: string }> = [
@@ -26,7 +26,8 @@ export function EmbeddedConversation(): JSX.Element {
   const [submitting, setSubmitting] = useState(false)
   const [attachments, setAttachments] = useState<AssistantAttachmentDraft[]>([])
   const [importing, setImporting] = useState(false)
-  const endRef = useRef<HTMLDivElement>(null)
+  const scroll = useConversationAutoScroll(state.sessionId)
+  const [optimistic, setOptimistic] = useState<{ id: string; text: string; attachments: AgentAttachment[] } | null>(null)
   const previousSession = useRef(state.sessionId)
   const settingsOpen = useUiStore((store) => store.isSettingsOpen)
   const selectedModel = models[0]
@@ -35,7 +36,6 @@ export function EmbeddedConversation(): JSX.Element {
     void getPlatform().embeddedAgent.models().then((items) => { if (!disposed) setModels(items) }, reportEmbeddedAgentError)
     return () => { disposed = true }
   }, [settingsOpen])
-  useEffect(() => { endRef.current?.scrollIntoView({ block: 'end' }) }, [state.messages, state.activity, state.pendingMessages])
   const busy = submitting || state.busy
   useEffect(() => {
     if (previousSession.current && previousSession.current !== state.sessionId && !busy) {
@@ -46,29 +46,32 @@ export function EmbeddedConversation(): JSX.Element {
   const send = (text: string, submittedAttachments: AgentAttachment[]): void => {
     if (!text || !selectedModel || submitting) return
     setSubmitting(true)
+    const clientMessageId = crypto.randomUUID()
+    setOptimistic({ id: clientMessageId, text, attachments: submittedAttachments })
+    scroll.scrollToBottom()
     const sentDocument = document
     const sentAttachments = attachments
     setDocument(createEmptyPromptDocument()); setAttachments([])
     const context = createHostContextSnapshot()
-    void getPlatform().embeddedAgent.prompt({ text, model: { providerId: selectedModel.providerId, modelId: selectedModel.modelId }, access,
+    void getPlatform().embeddedAgent.prompt({ text, clientMessageId, model: { providerId: selectedModel.providerId, modelId: selectedModel.modelId }, access,
       context: JSON.stringify({ workspace: context.workspace, project: context.project, surface: context.surface }), attachments: submittedAttachments, delivery })
       .catch(error => { setDocument(sentDocument); setAttachments(sentAttachments); reportEmbeddedAgentError(error) })
-      .finally(() => setSubmitting(false))
+      .finally(() => { setOptimistic(null); setSubmitting(false) })
   }
   return <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-    <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3" role="log" aria-label="助手对话">
-      {!state.messages.length ? <div className="space-y-2 py-8 text-sm text-text-muted">
+    <div ref={scroll.viewportRef} onScroll={scroll.onScroll} onWheel={scroll.onWheel} onKeyDown={scroll.onKeyDown} className="ui-scrollbar min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-4 py-4" role="log" aria-label="助手对话">
+      <div ref={scroll.contentRef} className="space-y-6">
+      {!state.messages.length && !state.sendingMessage && !optimistic && !state.pendingMessages?.length ? <div className="space-y-2 py-8 text-sm text-text-muted">
         <p className="font-medium text-text-dark">从当前工作开始</p>
         <p>可以让我查看项目、调整参数，或帮你安排创作任务。</p>
-      </div> : state.messages.map((message) => <div key={message.id} className="mb-5 min-w-0">
-        <div className="mb-1 text-xs text-text-muted">{message.role === 'user' ? '你' : '助手'}</div>
-        <AssistantMarkdown>{message.text}</AssistantMarkdown>
-        {message.attachments?.length ? <AssistantMessageAttachments attachments={message.attachments} /> : null}
-      </div>)}
-      {state.activity ? <p role="status" className="py-2 text-sm text-text-muted">{state.activity}</p> : null}
-      {state.pendingMessages?.map(message => <div key={message.id} className="mb-3 text-sm text-text-muted"><p>{message.error ? `发送未完成：${message.error}` : '等待发送'}</p><AssistantMarkdown>{message.text}</AssistantMarkdown>
-        {message.attachments?.length ? <AssistantMessageAttachments attachments={message.attachments} /> : null}</div>)}
-      <div ref={endRef} />
+      </div> : <EmbeddedTranscript messages={state.messages} onToggle={scroll.suspendFollowing} />}
+      {state.sendingMessage ? <EmbeddedUserMessage message={state.sendingMessage} /> : null}
+      {optimistic && state.sendingMessage?.id !== optimistic.id && !state.pendingMessages?.some(message => message.id === optimistic.id)
+        ? <EmbeddedUserMessage message={optimistic} /> : null}
+      {busy ? <div aria-label="助手正在回复"><UiLoading size="xs" className="!items-start !py-1 motion-reduce:[&>div]:animate-none" /></div> : null}
+      {state.pendingMessages?.map(message => <div key={message.id} className="space-y-2"><EmbeddedUserMessage message={message} />
+        <p className="text-right text-xs text-text-muted">{message.error ? `发送未完成：${message.error}` : '等待发送'}</p></div>)}
+      </div>
     </div>
     <div className="space-y-2 px-3 pt-3">
       {state.error ? <UiError message={state.error} size="xs" /> : null}

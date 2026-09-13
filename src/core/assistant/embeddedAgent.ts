@@ -8,15 +8,17 @@ export const embeddedAgentPromptSchema = z.object({
   context: z.string().max(16000),
   attachments: agentAttachmentsSchema.optional(),
   delivery: z.enum(['wait', 'interrupt']).optional(),
+  clientMessageId: z.string().uuid().optional(),
 }).strict()
 export type EmbeddedAgentPrompt = z.infer<typeof embeddedAgentPromptSchema>
-export interface EmbeddedAgentMessage { id: string; role: 'user' | 'assistant'; text: string; attachments?: AgentAttachment[] }
+export interface EmbeddedAgentMessage { id: string; role: 'user' | 'assistant'; text: string; attachments?: AgentAttachment[]; kind?: 'process' | 'answer' | 'tool'; status?: 'running' | 'completed' | 'failed' }
 export interface EmbeddedAgentSnapshot {
   sessionId: string | null
   busy: boolean
   messages: EmbeddedAgentMessage[]
   activity: string | null
   error: string | null
+  sendingMessage?: { id: string; text: string; attachments?: AgentAttachment[] }
   pendingMessages?: Array<{ id: string; text: string; attachments?: AgentAttachment[]; error?: string }>
 }
 export interface EmbeddedAgentSession { id: string; title: string; updatedAt: string }

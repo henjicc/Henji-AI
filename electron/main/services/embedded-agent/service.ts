@@ -66,7 +66,10 @@ export class EmbeddedAgentService {
   private disposed = false
   private originContext?: string
   private requestId?: string
+  private sending?: { id: string; input: EmbeddedAgentPrompt; userCount: number }
   snapshot(): EmbeddedAgentSnapshot { return { ...this.state, busy: this.draining || this.running || this.state.busy,
+    sendingMessage: this.sending && this.state.messages.filter(message => message.role === 'user').length <= this.sending.userCount
+      ? { id: this.sending.id, text: this.sending.input.text, attachments: this.sending.input.attachments } : undefined,
     pendingMessages: [...this.failedMessages, ...this.queue.map(({ id, input }) => ({ id, text: input.text, attachments: input.attachments }))] } }
   private publish(value: EmbeddedAgentSnapshot): void {
     this.state = value
@@ -139,7 +142,7 @@ export class EmbeddedAgentService {
     })()
     try { await this.initializing } finally { this.initializing = undefined }
   }
-  async prompt(input: EmbeddedAgentPrompt, requestId = randomUUID()): Promise<void> {
+  async prompt(input: EmbeddedAgentPrompt, requestId = input.clientMessageId ?? randomUUID()): Promise<void> {
     if (this.disposed) throw new Error('助手已关闭。')
     if (this.changing) throw new Error('正在切换对话，请稍后发送。')
     const entry = { id: requestId, input }
@@ -161,15 +164,19 @@ export class EmbeddedAgentService {
         await this.cancelling?.catch(() => {})
         if (this.disposed) break
         const entry = this.queue.shift()!
+        const userCount = this.state.messages.filter(message => message.role === 'user').length
         try { await this.runPrompt(entry.input, entry.id) } catch (error) {
           // 异步接收后不能将失败消息丢回已编辑的输入框，保留原文和附件供用户恢复。
-          this.failedMessages.push({ id: entry.id, text: entry.input.text, attachments: entry.input.attachments,
-            error: error instanceof Error ? error.message : '助手请求失败。' })
+          if (this.state.messages.filter(message => message.role === 'user').length <= userCount) {
+            this.failedMessages.push({ id: entry.id, text: entry.input.text, attachments: entry.input.attachments,
+              error: error instanceof Error ? error.message : '助手请求失败。' })
+          }
         }
       }
     } finally { this.draining = false; this.publish(this.state) }
   }
   private async runPrompt(input: EmbeddedAgentPrompt, requestId: string): Promise<void> {
+    this.sending = { id: requestId, input, userCount: this.state.messages.filter(message => message.role === 'user').length }
     this.originContext = input.context
     this.requestId = requestId
     this.running = true; this.cancelled = false
@@ -191,7 +198,13 @@ export class EmbeddedAgentService {
       logger.error('内置助手请求失败', { event: 'embedded_agent.request.failed', requestId, error })
       this.publish({ ...this.state, error: error instanceof Error ? error.message : '助手请求失败。' })
       throw error
-    } finally { this.preparation = undefined; this.client?.close(); this.client = undefined; this.running = false; this.publish({ ...this.state, busy: false, activity: null }) }
+    } finally {
+      if (this.cancelled && this.sending && this.state.messages.filter(message => message.role === 'user').length <= this.sending.userCount) {
+        this.failedMessages.push({ id: requestId, text: input.text, attachments: input.attachments, error: '已停止发送' })
+      }
+      this.sending = undefined; this.preparation = undefined; this.client?.close(); this.client = undefined; this.running = false
+      this.publish({ ...this.state, busy: false, activity: null })
+    }
   }
   async cancel(): Promise<void> {
     if (this.cancelling) return this.cancelling

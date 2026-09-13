@@ -5,7 +5,8 @@ const { authorizeMcpConnection, connectMcpClient, callTool } = require('./uiInsp
 
 // 官方 Pi + 真实 utility process / preload / 应用工具；只用本地模型响应替身，不访问外部模型。
 function createEmbeddedAgentScenes(context) {
-  return [{ id: 'embedded-agent', surface: '助手', name: '内置助手-对话工具停止与恢复', writesUserData: true,
+  const scene = (conversationOnly) => ({ id: conversationOnly ? 'embedded-agent-conversation' : 'embedded-agent', surface: '助手',
+    name: conversationOnly ? '内置助手-消息过程与结论' : '内置助手-对话工具停止与恢复', writesUserData: true,
     setup: async (page, app, { capture }) => {
       const waitSnapshot = async (predicate) => {
         const deadline = Date.now() + 15000
@@ -19,6 +20,8 @@ function createEmbeddedAgentScenes(context) {
       const requests = []
       let waiting = false
       let canvasGeneration = false
+      let releaseFirst
+      let releaseAnswer
       const server = createServer(async (request, response) => {
         const chunks = []
         for await (const chunk of request) chunks.push(Buffer.from(chunk))
@@ -26,6 +29,10 @@ function createEmbeddedAgentScenes(context) {
         requests.push(body)
         response.writeHead(200, { 'Content-Type': 'text/event-stream' }); response.flushHeaders()
         if (waiting) return
+        if (requests.length === 1) {
+          response.write(`data: ${JSON.stringify({ id: 'fixture-thinking', object: 'chat.completion.chunk', created: 1, model: 'fixture', choices: [{ index: 0, delta: { reasoning_content: '先查看当前主题，再核对设置。' }, finish_reason: null }] })}\n\n`)
+          await new Promise(resolve => { releaseFirst = resolve })
+        } else if (requests.length === 2) await new Promise(resolve => { releaseAnswer = resolve })
         const called = body.messages.some((message) => message.role === 'tool')
         const delta = canvasGeneration ? (called ? { content: '画布生成任务已提交。' } : { tool_calls: [{ index: 0, id: 'call_canvas_generation', type: 'function',
           function: { name: 'create_visible_generation_task', arguments: JSON.stringify({ operationId: require('node:crypto').randomUUID(), modelId: 'kie-gpt-image-2.5', prompt: '画布节点生成验收', mediaType: 'image', params: {} }) } }] }) : called ? { content: '已读取当前主题设置。' } : { tool_calls: [{ index: 0, id: 'call_read_theme', type: 'function',
@@ -68,7 +75,21 @@ function createEmbeddedAgentScenes(context) {
         console.log('[embedded-agent] 读取主题', await page.evaluate(() => window.henjiNative.embeddedAgent.models()))
         await editor.fill('验收读取主题')
         await page.getByRole('button', { name: '发送', exact: true }).click()
+        await panel.locator('[data-embedded-user-message]').getByText('验收读取主题', { exact: true }).waitFor()
+        assert.equal(await panel.getByText('正在准备…', { exact: true }).count(), 0)
+        await panel.getByText('先查看当前主题，再核对设置。', { exact: true }).waitFor({ timeout: 60000 })
+        await capture('conversation-thinking')
+        releaseFirst()
+        await waitSnapshot(value => typeof releaseAnswer === 'function' && value.messages.some(message => message.kind === 'tool' && message.status === 'completed'))
+        await capture('conversation-tools')
+        assert.equal(typeof releaseAnswer, 'function')
+        releaseAnswer()
         await panel.getByText('已读取当前主题设置。', { exact: true }).waitFor({ timeout: 60000 })
+        assert.equal(await panel.locator('[data-embedded-process]').count(), 0)
+        await capture('conversation-answer')
+        await panel.getByRole('button', { name: '查看过程', exact: true }).click()
+        await panel.getByText('先查看当前主题，再核对设置。', { exact: true }).waitFor()
+        await panel.getByRole('button', { name: '查看过程', exact: true }).click()
         await page.getByRole('button', { name: '发送', exact: true }).waitFor()
         assert.equal(requests.length, 2)
         assert.ok(requests[0].tools.some((tool) => tool.function.name === 'read_application_entity'))
@@ -117,6 +138,8 @@ function createEmbeddedAgentScenes(context) {
         await page.getByRole('button', { name: '停止', exact: true }).click()
         await page.getByRole('button', { name: '发送', exact: true }).waitFor({ timeout: 15000 })
         assert.equal((await page.evaluate(() => window.henjiNative.embeddedAgent.snapshot())).busy, false)
+        await panel.getByText('单独停止', { exact: true }).waitFor()
+        if (conversationOnly) return
         await page.getByRole('button', { name: '新建对话', exact: true }).click()
         await page.getByText('从当前工作开始', { exact: true }).waitFor()
         waiting = false
@@ -321,6 +344,7 @@ function createEmbeddedAgentScenes(context) {
         } finally { await client.close() }
       } finally { server.closeAllConnections(); await new Promise((resolve) => server.close(resolve)) }
     },
-  }]
+  })
+  return [scene(false), scene(true)]
 }
 module.exports = { createEmbeddedAgentScenes }

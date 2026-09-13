@@ -2,7 +2,8 @@ import fs from 'node:fs/promises'
 import path from 'node:path'
 import { randomUUID } from 'node:crypto'
 import type { AgentSession, SessionManager, ToolDefinition } from '@earendil-works/pi-coding-agent'
-import { emptyEmbeddedAgentSnapshot, type EmbeddedAgentSnapshot, type EmbeddedAgentMessage } from '../../../../src/core/assistant/embeddedAgent'
+import { emptyEmbeddedAgentSnapshot, type EmbeddedAgentSnapshot } from '../../../../src/core/assistant/embeddedAgent'
+import { visibleMessages } from './messagePresentation'
 import type { EngineCommand, EngineConfiguration, EngineEvent, EmbeddedAgentEngine } from './contracts'
 import { executePiTool } from './toolResult'
 import { PiAttachments } from './piAttachments'
@@ -10,14 +11,6 @@ import { PiToolDisclosure } from './toolDisclosure'
 import { applyProviderRequestBodyQuirks, resolveProviderExtraAuthHeaders, resolveLlmEndpointIdentity } from '@henjicc/ai-sdk'
 
 type PiSdk = typeof import('@earendil-works/pi-coding-agent')
-function visibleMessages(messages: AgentSession['messages'], sessionId: string, attachments: PiAttachments): EmbeddedAgentMessage[] {
-  return messages.flatMap((message, index) => {
-    if (message.role !== 'user' && message.role !== 'assistant') return []
-    const text = typeof message.content === 'string' ? message.content : message.content
-      .filter((part) => part.type === 'text').map((part) => part.text).join('\n')
-    return text ? [{ id: `${sessionId}:${index}`, role: message.role, ...(message.role === 'user' ? attachments.visible(text) : { text }) }] : []
-  })
-}
 export class PiEngine implements EmbeddedAgentEngine {
   private sdk!: PiSdk
   private directory = ''
@@ -32,12 +25,13 @@ export class PiEngine implements EmbeddedAgentEngine {
   private modelStartedAt = 0
   private contextMetrics = { contextCount: 0, contextBytes: 0 }
   private disclosure?: PiToolDisclosure
+  private toolTitles = new Map<string, string>()
   constructor(private readonly emit: (event: EngineEvent) => void,
     private readonly callTool: (id: string, name: string, input: Record<string, unknown>, signal?: AbortSignal) => Promise<unknown>) {}
 
   private publish(emit = true): EmbeddedAgentSnapshot {
     if (this.session) {
-      this.state.messages = visibleMessages(this.session.messages, this.manager.getSessionId(), this.attachments)
+      this.state.messages = visibleMessages(this.session.messages, this.manager.getSessionId(), this.attachments, this.toolTitles)
     }
     this.state.sessionId = this.manager?.getSessionId() ?? null
     if (emit) this.emit({ type: 'snapshot', value: { ...this.state } })
@@ -78,6 +72,7 @@ export class PiEngine implements EmbeddedAgentEngine {
       execute: (id, args: Record<string, unknown>, signal) => executePiTool({ id, name: tool.name, args, signal, vision: model.capabilities.image }, this.callTool),
     }))
     this.disclosure = new PiToolDisclosure(customTools, this.manager, () => this.session!)
+    this.toolTitles = new Map(this.disclosure.tools.map(tool => [tool.name, tool.label]))
     const { session } = await this.sdk.createAgentSession({ cwd: this.directory, agentDir: this.directory,
       modelRuntime: runtime, model: resolved, thinkingLevel: model.capabilities.reasoning ? 'medium' : 'off',
       noTools: 'builtin', tools: this.disclosure.tools.map(tool => tool.name), customTools: this.disclosure.tools,
@@ -133,14 +128,14 @@ export class PiEngine implements EmbeddedAgentEngine {
       if (event.type === 'message_end' && event.message.role === 'assistant' && event.message.stopReason === 'error') {
         this.state.error = event.message.errorMessage ?? '模型请求失败，请检查配置后重试。'
       }
-      if (event.type === 'message_update' && event.message.role === 'assistant' && event.assistantMessageEvent.type === 'text_delta') {
+      if (event.type === 'message_update' && event.message.role === 'assistant'
+        && ['text_delta', 'thinking_delta'].includes(event.assistantMessageEvent.type)) {
         // Pi 在流式期间尚未把当前消息加入 session.messages。
         if (Date.now() - lastTextEmission < 40) return
         lastTextEmission = Date.now()
         this.publish(false)
-        const text = event.message.content.filter((part) => part.type === 'text').map((part) => part.text).join('\n')
-        this.emit({ type: 'snapshot', value: { ...this.state, messages: [...this.state.messages,
-          { id: `${this.manager.getSessionId()}:stream`, role: 'assistant', text }] } })
+        this.emit({ type: 'snapshot', value: { ...this.state, messages: visibleMessages(
+          [...this.session!.messages, { ...event.message, stopReason: 'toolUse' }], this.manager.getSessionId(), this.attachments, this.toolTitles) } })
       } else if (event.type === 'message_start' || event.type === 'message_end' || event.type === 'tool_execution_start' || event.type === 'tool_execution_end') this.publish()
     })
     this.publish()
@@ -176,7 +171,7 @@ export class PiEngine implements EmbeddedAgentEngine {
       this.state = emptyEmbeddedAgentSnapshot()
       if (this.configuration) await this.configure(this.configuration)
       else {
-        this.state.messages = visibleMessages(manager.buildSessionContext().messages, manager.getSessionId(), this.attachments)
+        this.state.messages = visibleMessages(manager.buildSessionContext().messages, manager.getSessionId(), this.attachments, this.toolTitles)
       }
       return this.publish()
     }

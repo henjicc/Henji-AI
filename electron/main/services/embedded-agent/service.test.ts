@@ -80,6 +80,37 @@ function setup() {
 afterEach(() => { vi.clearAllMocks() })
 
 describe('内置助手消息调度', () => {
+  it('准备期间停止保留用户气泡，不把尚未发送的消息丢弃', async () => {
+    const f = setup()
+    let resolveModel!: (value: object) => void
+    mocks.resolveModel.mockImplementationOnce(() => new Promise(resolve => { resolveModel = resolve }))
+    await f.send('立即停止')
+    await vi.waitFor(() => expect(resolveModel).toBeTypeOf('function'))
+    const cancel = f.service.cancel()
+    resolveModel({})
+    f.finishCancel()
+    await cancel
+    await vi.waitFor(() => expect(f.service.snapshot().busy).toBe(false))
+    expect(f.service.snapshot().pendingMessages).toEqual([expect.objectContaining({ text: '立即停止', error: '已停止发送' })])
+    expect(f.prompts).toEqual([])
+    f.service.dispose()
+  })
+  it('冷启动准备期间保留当前消息，正式用户消息到达后不重复展示', async () => {
+    const f = setup()
+    let resolveModel!: (value: object) => void
+    mocks.resolveModel.mockImplementationOnce(() => new Promise(resolve => { resolveModel = resolve }))
+    await f.send('立即看到气泡')
+    await vi.waitFor(() => expect(resolveModel).toBeTypeOf('function'))
+    expect(f.service.snapshot().sendingMessage?.text).toBe('立即看到气泡')
+    resolveModel({})
+    await vi.waitFor(() => expect(f.prompts).toHaveLength(1))
+    f.child.emit('message', { type: 'snapshot', value: { sessionId: 'session', busy: true, activity: null, error: null,
+      messages: [{ id: 'user', role: 'user', text: '立即看到气泡' }] } })
+    expect(f.service.snapshot().sendingMessage).toBeUndefined()
+    f.finish()
+    await vi.waitFor(() => expect(f.service.snapshot().busy).toBe(false))
+    f.service.dispose()
+  })
   it('主进程注入技能索引并把读取交给正式技能入口，不调用应用写入工具', async () => {
     const f = setup()
     mocks.skills.mockResolvedValue({ tools: [{ name: 'load_assistant_skill', inputSchema: {} }], instructions: 'skills_index: prompt-optimization' })
