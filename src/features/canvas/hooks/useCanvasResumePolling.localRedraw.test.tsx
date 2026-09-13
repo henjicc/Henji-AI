@@ -224,8 +224,8 @@ describe('useCanvasResumePolling 局部重绘恢复', () => {
       isGenerating: false,
       generationStartedAt: null,
       generationError: '局部重绘恢复缺少裁剪上下文',
-      serverTaskId: null,
-      serverTaskModelId: null,
+      serverTaskId: 'local-redraw-task',
+      serverTaskModelId: 'apimart-gpt-image-2',
     }));
     expect(generationMocks.composeLocalRedraw).not.toHaveBeenCalled();
     expect(generationMocks.persistGenerationResult).not.toHaveBeenCalled();

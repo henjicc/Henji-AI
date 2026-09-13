@@ -267,9 +267,21 @@ export async function getCanvasGenerationTask(taskId: string): Promise<Record<st
     await databaseService.updateHistory(taskId, { status: 'cancelled', errorMessage: CANVAS_GENERATION_CANCELLED_MESSAGE })
     record.status = 'cancelled'; record.errorMessage = CANVAS_GENERATION_CANCELLED_MESSAGE; recordedStatus = 'cancelled'
   }
+  // 已保存的本地失败用于任务对账；保留原供应商标识，不把续查失败解释为重新生成许可。
+  const failedResults = savedResults.filter(node => !node.data.isGenerating && !node.data.generationCancelled
+    && typeof node.data.generationError === 'string' && node.data.generationError.trim()
+    && readResumableServerTask(node.data as DynamicValueMap))
+  if (version === 2 && !hasActiveWork && ['pending', 'queued', 'generating'].includes(recordedStatus ?? '')
+    && failedResults.length > 0 && failedResults.length === savedResults.length
+    && resultNodes.every(node => !node.data.isGenerating && savedResults.some(saved => saved.id === node.id
+      && saved.data.generationError === node.data.generationError))) {
+    const errorMessage = [...new Set(failedResults.map(node => String(node.data.generationError)))].join('\n')
+    await databaseService.updateHistory(taskId, { status: 'error', errorMessage })
+    record.status = 'error'; record.errorMessage = errorMessage; recordedStatus = 'error'
+  }
   // 仅从本任务带身份的、完整持久化的原子输出修复历史。旧无身份结果不能冒认。
   const completedOutputs = version === 2 ? completedTaskOutputPaths(savedNodes, taskId, nodeId) : []
-  if (!hasActiveWork && ['pending', 'queued', 'generating'].includes(recordedStatus ?? '') && completedOutputs.length > 0) {
+  if (!hasActiveWork && ['pending', 'queued', 'generating', 'error', 'timeout'].includes(recordedStatus ?? '') && completedOutputs.length > 0) {
     const filePath = completedOutputs.join('|||')
     await databaseService.updateHistory(taskId, { status: 'success', filePath, errorMessage: null })
     record.status = 'success'; record.filePath = filePath; record.errorMessage = null
@@ -333,7 +345,7 @@ export async function resumeCanvasGenerationTask(input: CanvasGenerationResumeIn
     if (signal?.aborted) return reject('恢复请求在开始前已取消。')
     try { requireCurrentCanvasProject(input.projectId) } catch { return reject('请先打开任务的原画布项目，再续查原任务。') }
     started = resumeCanvasProjectGeneration(input.projectId, selected, { retryFailed: true })
-    if (started && task.status === 'cancelled') await databaseService.updateHistory(input.taskId, { status: 'pending', errorMessage: null })
+    if (started && ['cancelled', 'error', 'timeout'].includes(String(task.status))) await databaseService.updateHistory(input.taskId, { status: 'pending', errorMessage: null })
   }
   const current = await getCanvasGenerationTask(input.taskId)
   if (!current) throw new Error('恢复期间原任务已不存在。')

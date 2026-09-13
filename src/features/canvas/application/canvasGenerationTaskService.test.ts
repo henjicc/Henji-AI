@@ -322,6 +322,52 @@ it('离开原项目后 MCP 仍可取消续查，停止状态保存到原项目�
   expect(GenerationService.getInstance().generate).not.toHaveBeenCalled()
 })
 
+it.each([false, true])('续查失败对账并保留原任务，明确恢复后完成且不重复付费（后台 %s）', async background => {
+  const { taskId, resultId } = await restoredTask({ serverTaskId: 'retry-original-task', serverTaskModelId: 'canvas-task-fixture' })
+  let fail!: () => void
+  const pending = new Promise<void>(resolve => { fail = resolve })
+  const polling = vi.spyOn(GenerationService.getInstance(), 'continuePolling').mockImplementationOnce(async () => {
+    await pending
+    throw new Error('原任务结果下载暂时中断')
+  }).mockResolvedValue({ status: 'completed', url: 'C:/retry-original.png', filePath: 'C:/retry-original.png' })
+  const execute = taskControlSession()
+  const input = (await getCanvasGenerationTask(taskId))!.resumeInput as Record<string, unknown>
+  expect(await execute('resume_canvas_generation_task', input)).toMatchObject({ ok: true })
+  await vi.waitFor(() => expect(polling).toHaveBeenCalledTimes(1))
+  if (background) await useProjectStore.getState().createProject('续查失败时的其他项目')
+  fail()
+  await vi.waitFor(async () => expect(await getCanvasGenerationTask(taskId)).toMatchObject({ status: 'error',
+    errorMessage: expect.stringContaining('原任务结果下载暂时中断'), resumeInput: input, waitingExternal: false, resultAvailable: false }))
+  expect(records.get(taskId)?.status).toBe('error')
+  const saved = await readPersistedCanvasProjectSnapshot(projectId)
+  expect(saved.nodes.find(node => node.id === resultId)?.data).toMatchObject({ serverTaskId: 'retry-original-task', isGenerating: false })
+  await openCanvasProject(projectId, new AbortController().signal)
+  expect(resumeCanvasProjectGeneration(projectId)).toBe(0)
+  expect(polling).toHaveBeenCalledTimes(1)
+  expect(await execute('resume_canvas_generation_task', input)).toMatchObject({ ok: true })
+  await vi.waitFor(async () => expect(await getCanvasGenerationTask(taskId)).toMatchObject({ status: 'success', resultAvailable: true, errorMessage: null }))
+  expect(records.get(taskId)?.filePath).toBe('C:/retry-original.png')
+  expect(polling.mock.calls.map(call => call[1])).toEqual(['retry-original-task', 'retry-original-task'])
+  expect(GenerationService.getInstance().generate).not.toHaveBeenCalled()
+})
+
+it('界面正式恢复入口完成后也清除已对账的旧错误，历史保存失败不会冒充已同步', async () => {
+  const { taskId } = await restoredTask({ isGenerating: false, generationError: '下载中断',
+    serverTaskId: 'ui-original-task', serverTaskModelId: 'canvas-task-fixture' })
+  vi.mocked(databaseService.updateHistory).mockRejectedValueOnce(new Error('历史暂不可写'))
+  await expect(getCanvasGenerationTask(taskId)).rejects.toThrow('历史暂不可写')
+  expect(records.get(taskId)?.status).toBe('pending')
+  expect(await getCanvasGenerationTask(taskId)).toMatchObject({ status: 'error', errorMessage: '下载中断' })
+  const polling = vi.spyOn(GenerationService.getInstance(), 'continuePolling').mockResolvedValue({
+    status: 'completed', url: 'C:/ui-recovered.png', filePath: 'C:/ui-recovered.png',
+  })
+  expect(resumeCanvasProjectGeneration(projectId, undefined, { retryFailed: true })).toBe(1)
+  await vi.waitFor(async () => expect(await getCanvasGenerationTask(taskId)).toMatchObject({ status: 'success', errorMessage: null, resultAvailable: true }))
+  expect(records.get(taskId)).toMatchObject({ status: 'success', errorMessage: null, filePath: 'C:/ui-recovered.png' })
+  expect(polling).toHaveBeenCalledTimes(1)
+  expect(GenerationService.getInstance().generate).not.toHaveBeenCalled()
+})
+
 it('MCP 使用原任务返回的恢复参数续查，错误目标不执行，重复请求不重复轮询', async () => {
   const { taskId } = await restoredTask({ serverTaskId: 'original-provider-task', serverTaskModelId: 'canvas-task-fixture' })
   let release!: () => void
@@ -396,8 +442,8 @@ it('残留生成标记不是活动任务；没有供应商标识时报告结果�
 it('有原供应商标识的下载失败仍可续查', async () => {
   const retryable = await restoredTask({ isGenerating: false, generationError: '下载失败', resultKind: 'layer-stack',
     serverTaskId: 'download-task', serverTaskModelId: 'canvas-task-fixture' })
-  expect(await getCanvasGenerationTask(retryable.taskId)).toMatchObject({ status: 'pending', resumeInput: { taskId: retryable.taskId } })
-  expect(records.get(retryable.taskId)?.status).toBe('pending')
+  expect(await getCanvasGenerationTask(retryable.taskId)).toMatchObject({ status: 'error', errorMessage: '下载失败', resumeInput: { taskId: retryable.taskId } })
+  expect(records.get(retryable.taskId)?.status).toBe('error')
   expect(GenerationService.getInstance().generate).not.toHaveBeenCalled()
 })
 

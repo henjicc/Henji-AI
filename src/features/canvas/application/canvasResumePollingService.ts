@@ -73,8 +73,8 @@ export function resumeCanvasProjectGeneration(
       !task
       || isCanvasGenerationTaskActive(task.taskId)
       || (!options.retryFailed && node.data.generationCancelled === true)
-      // 已显示下载失败的结果等待用户明确续取，避免节点更新触发无限重试。
-      || (!options.retryFailed && node.data.resultKind === 'layer-stack' && Boolean(node.data.generationError))
+      // 失败续查保留原任务，只在明确请求时重取，避免节点更新触发无限重试。
+      || (!options.retryFailed && Boolean(node.data.generationError))
     ) {
       continue;
     }
@@ -405,7 +405,8 @@ async function resumeNodeTask(input: ResumeNodeTaskInput): Promise<void> {
     const message = error instanceof Error ? error.message : String(error);
     try {
       await updateNodeData(nodeId, signal.aborted ? createCanvasGenerationCancelledPatch()
-        : createCanvasGenerationFailurePatch(error, resultNodeData.resultKind));
+        : { ...createCanvasGenerationFailurePatch(error, resultNodeData.resultKind),
+          serverTaskId: taskId, serverTaskModelId: modelId });
     } catch (saveError) {
       logger.error('[CanvasResume] 续查状态保存未确认', saveError, {
         event: 'canvas.resume_polling.state_save_failed', taskId, modelId, context: { nodeId },

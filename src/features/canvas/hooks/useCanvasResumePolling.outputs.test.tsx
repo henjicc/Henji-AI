@@ -359,10 +359,10 @@ describe('useCanvasResumePolling 结构化结果恢复', () => {
         resultKind: 'panorama',
         isGenerating: false,
         generationStartedAt: null,
-        serverTaskId: null,
-        serverTaskModelId: null,
       });
       expect(data?.generationError).toContain('2:1');
+      expect(data?.serverTaskId).toBe('panorama-task');
+      expect(data?.serverTaskModelId).toBe('apimart-gpt-image-2');
     });
     await waitFor(() => expect(platformMocks.releaseManagedGenerationMedia).toHaveBeenCalledWith([
       '/data/Media/invalid-panorama.png',
