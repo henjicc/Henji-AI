@@ -23,6 +23,7 @@ const { authorizeMcpConnection, callTool, connectMcpClient, expectToolRefusal, o
 const ROOT = path.resolve(__dirname, '..')
 const MAIN_ENTRY = path.join(ROOT, 'out/main/index.cjs')
 const FIXTURE_PROJECT_ID = '__mcp_restart_canvas_fixture__'
+const CREATIVE_PROJECT_ID = '__mcp_restart_creative_fixture__'
 
 function parseArgs(argv) {
   const options = { outDir: '.mcp-restart' }
@@ -44,10 +45,19 @@ async function launch(userDataDir) {
 }
 
 async function seedCanvasFixture(page, name, tasks) {
-  await page.evaluate(async ({ projectId, projectName, tasks, mediaPath }) => {
+  await page.evaluate(async ({ projectId, creativeProjectId, projectName, tasks, mediaPath }) => {
     const now = Date.now()
     const nodes = []
     const edges = []
+    const creativeNodes = ['character', 'shot-one', 'shot-two'].map((id, index) => ({
+      id, type: 'textAnnotationNode', position: { x: 800, y: index * 200 },
+      data: { displayName: id, content: id === 'character' ? '角色：灰色外套' : `${id}：原始说明` },
+    }))
+    await window.henjiNative.storyboardProjects.upsertProjectRecord({
+      id: creativeProjectId, name: '创作续做', createdAt: now, updatedAt: now, nodeCount: creativeNodes.length,
+      nodesJson: JSON.stringify(creativeNodes), edgesJson: '[]', viewportJson: JSON.stringify({ x: 0, y: 0, zoom: 1 }),
+      historyJson: JSON.stringify({ past: [], future: [], imagePool: [] }),
+    })
     for (const [kind, taskId] of Object.entries(tasks)) {
       const nodeId = `source-${taskId}`
       const resultId = `result-${taskId}`
@@ -67,7 +77,7 @@ async function seedCanvasFixture(page, name, tasks) {
       nodesJson: JSON.stringify(nodes), edgesJson: JSON.stringify(edges), viewportJson: JSON.stringify({ x: 0, y: 0, zoom: 1 }),
       historyJson: JSON.stringify({ past: [], future: [], imagePool: [] }),
     })
-  }, { projectId: FIXTURE_PROJECT_ID, projectName: name, tasks, mediaPath: path.join(ROOT, 'resources/icons/32x32.png') })
+  }, { projectId: FIXTURE_PROJECT_ID, creativeProjectId: CREATIVE_PROJECT_ID, projectName: name, tasks, mediaPath: path.join(ROOT, 'resources/icons/32x32.png') })
 }
 
 const readHistoryCount = (page) => page.evaluate(async () => (await window.henjiNative.db.select('SELECT COUNT(*) AS total FROM history'))[0].total)
@@ -123,6 +133,16 @@ async function main() {
         evidence.firstRun.storedName = await readProjectName(first.page)
         evidence.firstRun.historyAfter = await readHistoryCount(first.page)
         assert.equal(evidence.firstRun.storedName, renamed, '重启前的写入没有落到正式存储')
+        await callTool(client, 'open_canvas_project', operationEnvelope([], { projectId: CREATIVE_PROJECT_ID }))
+        const shotRef = { kind: 'canvas.node', id: `${CREATIVE_PROJECT_ID}:shot-one` }
+        const shot = await callTool(client, 'read_application_entity', { ref: shotRef, propertyIds: ['canvas.node.text_content'] })
+        const creative = await callTool(client, 'change_application_entities', operationEnvelope([shot], {
+          summary: '保存第一镜头创作说明', changes: [{ kind: 'set_properties', entityType: 'canvas.node', target: shotRef,
+            properties: { 'canvas.node.text_content': '镜头一：转身，手握信封。' } }],
+        }))
+        assert.equal(creative.executionState, 'completed', JSON.stringify(creative))
+        evidence.firstRun.creativeSaved = true
+        assert.equal((await callTool(client, 'read_application_entity', { ref: shotRef, propertyIds: ['canvas.node.text_content'] })).data.properties['canvas.node.text_content'], '镜头一：转身，手握信封。')
 
         // 造一条"连接丢失"的未解决操作：占住渲染层主线程，客户端先超时。
         const catalog = await callTool(client, 'list_application_entities', { entityType: 'asset.catalog', limit: 1 })
@@ -173,6 +193,28 @@ async function main() {
       await waitMcpReady(second.page)
       const client = await connectMcpClient({ url: `http://127.0.0.1:${port}/mcp`, headers: { Authorization: token } }, 'Henji restart second')
       try {
+        const readCreative = (id) => callTool(client, 'read_application_entity', {
+          ref: { kind: 'canvas.node', id: `${CREATIVE_PROJECT_ID}:${id}` }, propertyIds: ['canvas.node.text_content'],
+        })
+        const shot = await readCreative('shot-one')
+        assert.equal(shot.data.properties['canvas.node.text_content'], '镜头一：转身，手握信封。')
+        await callTool(client, 'open_canvas_project', operationEnvelope([], { projectId: CREATIVE_PROJECT_ID }))
+        const repaired = await callTool(client, 'change_application_entities', operationEnvelope([shot], {
+          summary: '局部修改第一镜头', changes: [{ kind: 'set_properties', entityType: 'canvas.node',
+            target: { kind: 'canvas.node', id: `${CREATIVE_PROJECT_ID}:shot-one` },
+            properties: { 'canvas.node.text_content': '镜头一：保持站立，仅转头。' } }],
+        }))
+        assert.equal(repaired.executionState, 'completed', JSON.stringify(repaired))
+        assert.equal((await readCreative('shot-one')).data.properties['canvas.node.text_content'], '镜头一：保持站立，仅转头。')
+        assert.equal((await readCreative('shot-two')).data.properties['canvas.node.text_content'], 'shot-two：原始说明')
+        assert.equal((await readCreative('character')).data.properties['canvas.node.text_content'], '角色：灰色外套')
+        const dependency = await callTool(client, 'read_application_entity', {
+          ref: { kind: 'canvas.edge', id: `${FIXTURE_PROJECT_ID}:edge-${generationTasks.completed}` },
+          propertyIds: ['canvas.edge.source_ref', 'canvas.edge.target_ref'],
+        })
+        assert.equal(dependency.data.properties['canvas.edge.source_ref'].id, `${FIXTURE_PROJECT_ID}:source-${generationTasks.completed}`)
+        assert.equal(dependency.data.properties['canvas.edge.target_ref'].id, `${FIXTURE_PROJECT_ID}:result-${generationTasks.completed}`)
+        evidence.secondRun.creativeResumedAndLocallyRepaired = true
         evidence.secondRun.generation = {}
         for (const [kind, taskId] of Object.entries(generationTasks)) {
           const result = await callTool(client, 'get_generation_task', { taskId })
