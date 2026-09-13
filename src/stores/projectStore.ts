@@ -71,6 +71,13 @@ export function holdCanvasProjectBackgroundExecution(projectId: string): () => v
   };
 }
 
+/** 在发布当前项目之前装载同一画布，后台能力无需等待 React 挂载。 */
+function restoreProjectCanvas(project: Project): void {
+  const canvas = useCanvasStore.getState();
+  canvas.setCanvasData(project.nodes, project.edges, project.history);
+  canvas.setViewportState(project.viewport ?? DEFAULT_VIEWPORT);
+}
+
 function hasViewportMeaningfulDelta(current: Viewport, next: Viewport): boolean {
   return (
     Math.abs(current.x - next.x) > VIEWPORT_EPSILON ||
@@ -201,6 +208,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       setProjectPersistenceError(id, 'project.persistenceFailed')
       throw error
     }
+    restoreProjectCanvas(project);
     set((state) => ({
       projects: [{ ...project }, ...state.projects],
       currentProjectId: id,
@@ -297,6 +305,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
           return;
         }
 
+        restoreProjectCanvas(project);
         set((state) => ({
           currentProjectId: id,
           currentProject: project,

@@ -35,6 +35,24 @@ async function output(id: string, completionId: string) {
 
 describe('跨工程画布使用原事务与落图服务', () => {
   beforeEach(() => { disk.records.clear(); disk.write.mockReset(); disk.write.mockResolvedValue(undefined); disk.read.mockReset(); disk.read.mockImplementation(async (id: string) => disk.records.get(id)) })
+  it('新建和打开项目发布时画布已经同步，订阅者不会读到上一个项目的节点', async () => {
+    const a = project('publish-a'); const b = project('publish-b')
+    disk.records.set(b.id, encodeProjectAsRecord(b))
+    useProjectStore.setState({ isHydrated: true, projects: [a, b], currentProjectId: a.id, currentProject: a })
+    useCanvasStore.getState().setCanvasData(a.nodes, a.edges, a.history)
+    const observed: { id: string | null; nodeIds: string[] }[] = []
+    const unsubscribe = useProjectStore.subscribe((state, previous) => {
+      if (state.currentProjectId !== previous.currentProjectId) observed.push({ id: state.currentProjectId,
+        nodeIds: useCanvasStore.getState().nodes.map(node => node.id) })
+    })
+    try {
+      const created = await useProjectStore.getState().createProject('empty')
+      expect(observed).toEqual([{ id: created, nodeIds: [] }])
+      useProjectStore.getState().openProject(b.id)
+      await vi.waitFor(() => expect(useProjectStore.getState().currentProjectId).toBe(b.id))
+      expect(observed[1]).toEqual({ id: b.id, nodeIds: [b.nodes[0].id] })
+    } finally { unsubscribe() }
+  })
   it('落图准备期间离开原项目，重新获取后台实例只提交一次，不改当前画布', async () => {
     const a = project('commit-a'); const b = project('commit-b')
     disk.records.set(a.id, encodeProjectAsRecord(a)); disk.records.set(b.id, encodeProjectAsRecord(b))
@@ -101,6 +119,10 @@ describe('跨工程画布使用原事务与落图服务', () => {
     await background
     await vi.waitFor(() => expect(useProjectStore.getState().currentProjectId).toBe(b.id))
     expect(useProjectStore.getState().currentProject?.nodes[0].data.displayName).toBe('后台完成')
+    expect(useCanvasStore.getState().nodes[0].data.displayName).toBe('后台完成')
+    await output(b.id, 'after-open')
+    expect(decodeProjectRecord(disk.records.get(b.id)!).nodes).toHaveLength(2)
+    expect(useCanvasStore.getState().nodes.some(node => node.id === a.nodes[0].id)).toBe(false)
   })
   it('打开工程先开始慢读，后台随后写入完成，旧读返回后必须重读新版本', async () => {
     const a = project('slow-a')
@@ -120,6 +142,7 @@ describe('跨工程画布使用原事务与落图服务', () => {
     returnOld(oldRecord)
     await vi.waitFor(() => expect(useProjectStore.getState().currentProjectId).toBe(b.id))
     expect(useProjectStore.getState().currentProject?.nodes[0].data.displayName).toBe('新持久版本')
+    expect(useCanvasStore.getState().nodes[0].data.displayName).toBe('新持久版本')
     expect(disk.read).toHaveBeenCalledTimes(3)
   })
 })

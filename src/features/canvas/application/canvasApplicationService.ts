@@ -130,9 +130,6 @@ export async function openCanvasProject(
   if (!project || project.id !== projectId) {
     throw new CanvasApplicationError('PROJECT_NOT_FOUND', '画布项目无法打开', true, { projectId })
   }
-  const canvas = useCanvasStore.getState()
-  canvas.setCanvasData(project.nodes, project.edges, project.history)
-  canvas.setViewportState(project.viewport)
   logger.info('画布项目打开完成', { event: 'canvas.project.open.completed', projectId })
   return { projectId }
 }
