@@ -12,7 +12,9 @@ import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from '@/te
 import { readGenerationTaskStatusSnapshot, replaceGenerationTaskStatusSnapshots } from '@/features/generation/application/generationTaskStatusRegistry'
 import { CANVAS_NODE_TYPES } from '../domain/canvasNodes'
 import { getCanvasGenerationTask, resolveCanvasGenerationOptions, submitCanvasGenerationTask, prepareCanvasNodeGeneration, submitCanvasNodeGeneration } from './canvasGenerationTaskService'
-import { registerCanvasNodeExecutor, resetCanvasExecutionServiceForTests, isCanvasNodeRunActive } from './canvasExecutionService'
+import { registerCanvasNodeExecutor, resetCanvasExecutionServiceForTests, isCanvasNodeRunActive, runCanvasNode } from './canvasExecutionService'
+import { createGenerationNodeExecutor } from './generationNodeExecutor'
+import { readCanvasGenerationNodeProfile } from './canvasGenerationNodeProfile'
 import { readPersistedCanvasProjectSnapshot } from './canvasQueryService'
 import { confirmCanvasPersistence } from './canvasPersistenceService'
 import { commitCanvasGenerationOutputs } from './generationOutputApplicationService'
@@ -254,6 +256,39 @@ it('新建节点后登记失败保留已创建节点事实，不冒充整次操�
   expect(saved.nodes.filter(node => node.type === CANVAS_NODE_TYPES.imageEdit)).toHaveLength(1)
   expect(records.size).toBe(0)
   expect(GenerationService.getInstance().generate).not.toHaveBeenCalled()
+})
+
+it.each([false, true])('界面直接执行登记同一份任务，MCP 可查询和取消（取消 %s）', async cancel => {
+  const nodeId = useCanvasStore.getState().addNode(CANVAS_NODE_TYPES.imageEdit, { x: 400, y: 0 },
+    { modelId: 'canvas-task-fixture', prompt: '界面直接生成', params: {} })
+  registerCanvasNodeExecutor(nodeId, createGenerationNodeExecutor(store => readCanvasGenerationNodeProfile(nodeId, store)))
+  let release!: () => void
+  const waiting = new Promise<void>(resolve => { release = resolve })
+  const generate = vi.mocked(GenerationService.getInstance().generate).mockImplementation(async () => {
+    await waiting
+    return { status: 'completed', url: 'C:/ui-task.png', filePath: 'C:/ui-task.png' }
+  })
+  const running = runCanvasNode(nodeId)
+  const outcome = running.then(() => 'success', () => 'cancelled')
+  try {
+  await vi.waitFor(() => expect(generate).toHaveBeenCalledTimes(1))
+  expect(records.size).toBe(1)
+  const taskId = [...records.keys()][0]
+  const execute = taskControlSession()
+  expect(await execute('get_generation_task', { taskId })).toMatchObject({ ok: true, data: { task: { waitingExternal: true, cancellable: true } } })
+  await expect(submitCanvasNodeGeneration({ projectId, nodeId, inputSignature: (await prepareCanvasNodeGeneration({ projectId, nodeId })).submitInput.inputSignature }, crypto.randomUUID())).rejects.toThrow('此节点已有')
+  const otherProject = await useProjectStore.getState().createProject('界面生成后的其他项目')
+  if (cancel) expect(await execute('cancel_generation_task', { taskId, reason: '停止界面任务' })).toMatchObject({ ok: true })
+  release()
+  expect(await outcome).toBe(cancel ? 'cancelled' : 'success')
+  expect(await getCanvasGenerationTask(taskId)).toMatchObject({ status: cancel ? 'cancelled' : 'success', resultAvailable: !cancel, cancellable: false })
+  const saved = await readPersistedCanvasProjectSnapshot(projectId)
+  expect(saved.nodes.filter(node => node.data.generationTaskId === taskId)).toHaveLength(1)
+  expect(records.size).toBe(1)
+  expect(generate).toHaveBeenCalledTimes(1)
+  expect(useProjectStore.getState().currentProjectId).toBe(otherProject)
+  expect(useCanvasStore.getState().nodes).toHaveLength(0)
+  } finally { release(); await outcome }
 })
 
 it('MCP 取消一个原任务不影响并行请求，迟到输出不冒充成功', async () => {

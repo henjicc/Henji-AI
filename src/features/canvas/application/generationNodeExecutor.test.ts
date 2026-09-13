@@ -3,6 +3,8 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import i18n from '@/i18n'
 import { registry } from '@/core/ModelRegistry'
 import { GenerationService } from '@/core/services/GenerationService'
+import { databaseService } from '@/services/database/DatabaseService'
+import type { HistoryRecord } from '@/services/database'
 import { useCanvasStore } from '@/stores/canvasStore'
 import { useProjectStore } from '@/stores/projectStore'
 import { useSettingsStore } from '@/stores/settingsStore'
@@ -12,7 +14,7 @@ import { createGenerationNodeExecutor, type GenerationNodeExecutionOptions } fro
 import { registerCanvasNodeExecutor, resetCanvasExecutionServiceForTests, runCanvasNode } from './canvasExecutionService'
 import { readPersistedCanvasProjectSnapshot } from './canvasQueryService'
 
-// 只替换媒体 I/O；参数准备、图执行、结果编排及工程保存均走正式服务。
+// 媒体 I/O 与历史存储使用替身；任务登记、图执行、结果编排及工程保存走正式服务。
 vi.mock('./imageData', async (original) => ({
   ...await original<typeof import('./imageData')>(),
   persistImageLocally: vi.fn(async (url: string) => url),
@@ -22,6 +24,11 @@ let projectId: string
 let nodeId: string
 let options: GenerationNodeExecutionOptions
 beforeEach(async () => {
+  const records = new Map<string, HistoryRecord>()
+  vi.spyOn(databaseService, 'init').mockResolvedValue()
+  vi.spyOn(databaseService, 'getHistoryById').mockImplementation(async id => records.get(id) ?? null)
+  vi.spyOn(databaseService, 'insertHistory').mockImplementation(async row => { records.set(row.id, { ...row, createdAt: 'now', updatedAt: 'now' }) })
+  vi.spyOn(databaseService, 'updateHistory').mockImplementation(async (id, patch) => { Object.assign(records.get(id)!, patch) })
   installHarnessNativeStorage()
   resetCanvasExecutionServiceForTests()
   registry.register({ meta: { id: 'executor-fixture', canonicalModelId: 'nano-banana', provider: 'fixture', type: 'image', name: { zh: '执行器测试', en: 'Executor' } },

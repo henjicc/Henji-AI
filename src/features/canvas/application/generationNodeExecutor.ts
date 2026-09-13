@@ -43,6 +43,8 @@ import { useCanvasGenerationProgressStore } from '@/stores/canvasGenerationProgr
 import { useCanvasStore } from '@/stores/canvasStore'
 import { useProjectStore } from '@/stores/projectStore'
 import { withCanvasProjectRuntime } from './canvasProjectRuntime'
+import { createCanvasGenerationTaskRecord, canvasGenerationTaskControls } from './canvasGenerationTaskRecord'
+import { retainCanvasTaskExecutor } from './canvasExecutionService'
 import { confirmCanvasPersistence } from './canvasPersistenceService'
 
 import {
@@ -211,8 +213,9 @@ export function createGenerationNodeExecutor(readOptions: (store?: typeof useCan
 
   const handleGenerate = async (
     execution: CanvasNodeExecutionContext,
+    inputs: Awaited<ReturnType<typeof readExecutionInputs>>,
+    preparedInput?: Awaited<ReturnType<typeof prepareExecution>>,
   ): Promise<CanvasNodeExecutionResult> => {
-    const inputs = await readExecutionInputs(execution)
     const current = inputs.current
     const ownership: GenerationNodeResourceOwnership = {
       modelType: current.modelType,
@@ -227,7 +230,7 @@ export function createGenerationNodeExecutor(readOptions: (store?: typeof useCan
         if (!generationProjectId) throw new Error('当前没有可执行生成的画布项目')
         const backgroundCompletion = !current.commitGenerationResult
         const isProjectCurrent = (): boolean => isCanvasProjectContextCurrent(generationProjectId)
-        const prepared = await prepareExecution(execution, inputs)
+        const prepared = preparedInput ?? await prepareExecution(execution, inputs)
         const { runtime, promptInput, capabilityPreparation, generationParams } = prepared
         ownership.requestPreparation = current.prepareGenerationRequest
           ? await current.prepareGenerationRequest({
@@ -430,6 +433,36 @@ export function createGenerationNodeExecutor(readOptions: (store?: typeof useCan
     })
   }
 
+  const handleTrackedGenerate = async (execution: CanvasNodeExecutionContext): Promise<CanvasNodeExecutionResult> => {
+    const inputs = await readExecutionInputs(execution)
+    const current = inputs.current
+    if (current.commitGenerationResult || (current.requestId && canvasGenerationTaskControls.has(current.requestId))) {
+      return handleGenerate(execution, inputs)
+    }
+    const prepared = await prepareExecution(execution, inputs)
+    const projectId = execution.projectId
+    if (!projectId) throw new Error('当前没有可执行生成的画布项目')
+    const taskId = crypto.randomUUID()
+    const controller = new AbortController()
+    const abort = () => controller.abort(current.signal?.reason)
+    if (current.signal?.aborted) abort()
+    current.signal?.addEventListener('abort', abort, { once: true })
+    const extra = current.resultNodeExtraData
+    let release: (() => void) | undefined
+    try {
+      const record = await createCanvasGenerationTaskRecord({ modelId: prepared.runtime.modelId, mediaType: current.modelType,
+        prompt: prepared.promptInput.prompt, options: prepared.generationParams }, projectId, current.nodeId, taskId, controller)
+      release = retainCanvasTaskExecutor(projectId, current.nodeId, registeredExecutor)
+      return await record.run(() => handleGenerate(execution, { ...inputs, current: {
+        ...current, requestId: taskId, signal: controller.signal,
+        resultNodeExtraData: data => ({ ...(typeof extra === 'function' ? extra(data) : extra), generationTaskId: taskId }),
+      } }, prepared))
+    } finally {
+      release?.()
+      current.signal?.removeEventListener('abort', abort)
+    }
+  }
+
   const executor: CanvasRegisteredExecutor = {
     kind: 'standard-generation',
     dependency: { mode: 'auto', outputMode: 'result-nodes' },
@@ -437,7 +470,8 @@ export function createGenerationNodeExecutor(readOptions: (store?: typeof useCan
     getInputSignatureExtras: store => createGenerationNodeRuntimeSignaturePayload(readRuntime(store)),
     supportsBackgroundCompletion: store => !readOptions(store).commitGenerationResult,
     preflightBeforeDependencies,
-    run: handleGenerate,
+    run: handleTrackedGenerate,
   }
-  return { ...executor, prepare: prepareExecution }
+  const registeredExecutor = { ...executor, prepare: prepareExecution }
+  return registeredExecutor
 }

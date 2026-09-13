@@ -8,7 +8,7 @@ import { databaseService } from '@/services/database/DatabaseService'
 import { useCanvasStore } from '@/stores/canvasStore'
 import { useProjectStore } from '@/stores/projectStore'
 import { useCanvasGenerationProgressStore } from '@/stores/canvasGenerationProgressStore'
-import { CANVAS_NODE_TYPES, type CanvasNode } from '../domain/canvasNodes'
+import { CANVAS_NODE_TYPES } from '../domain/canvasNodes'
 import { stageControlledCanvasNode, stageCanvasConnection, requireCurrentCanvasProject, CanvasApplicationError } from './canvasApplicationService'
 import { runCanvasTransaction } from './canvasBatchService'
 import { retainCanvasTaskExecutor, runCanvasNode, isCanvasNodeRunActive } from './canvasExecutionService'
@@ -26,22 +26,14 @@ import { normalizeGenerationTaskStatus } from '@/core/assistant/externalWait'
 import { readResumableServerTask } from '../domain/resumableTask'
 import { isCanvasGenerationTaskActive, hasCanvasGenerationResumeLease } from '../generation/activeGenerationTasks'
 import { resumeCanvasGenerationInProject, getCanvasResumeControllers } from './canvasResumePollingService'
+import { createCanvasGenerationTaskRecord, completedTaskOutputPaths, canvasGenerationTaskControls as activeTasks,
+  canvasGenerationNodeTasks as activeNodeTasks, CANVAS_GENERATION_TASK_MARKER as marker } from './canvasGenerationTaskRecord'
 import { CANVAS_GENERATION_CANCELLED_MESSAGE } from '../domain/generationFailure'
 
 type CanvasDestination = Extract<GenerationDestination, { mode: 'canvas' }>
 const logger = createLogger('features.canvas.generationTask')
-const activeTasks = new Map<string, AbortController>()
-const activeNodeTasks = new Map<string, string>()
-const marker = '__canvasGeneration'
 
-function completedTaskOutputPaths(nodes: CanvasNode[], taskId: string, sourceNodeId: string): string[] {
-  const owned = nodes.filter(node => node.data.generationTaskId === taskId && node.data.generationSourceNodeId === sourceNodeId)
-  if (!owned.length || owned.some(node => node.data.isGenerating === true || node.data.generationError
-    || typeof node.data.generationOutputCommitId !== 'string')) return []
-  const index = new Map(nodes.map(node => [node.id, node]))
-  const outputs = owned.flatMap(node => getGraphNodeMediaOutputs(node, index))
-  return outputs.length >= owned.length ? outputs.map(output => output.url) : []
-}
+
 
 function readNodeInputSignature(projectId: string, nodeId: string, store?: typeof useCanvasStore): string {
   if (!store) requireCurrentCanvasProject(projectId)
@@ -156,16 +148,18 @@ async function startCanvasGenerationTask(input: GenerationPreparationInput, dest
   if (isCanvasNodeRunActive(destination.projectId, nodeId)) throw new ApplicationPreflightFailure('此节点正在执行，请等待原节点完成；其他节点可以独立生成。')
   activeNodeTasks.set(key, taskId)
   try {
-    return await registerCanvasGenerationTask(input, destination, nodeId, taskId, inputFingerprint, () => activeNodeTasks.delete(key))
+    return await registerCanvasGenerationTask(input, destination, nodeId, taskId, inputFingerprint, () => {
+      if (activeNodeTasks.get(key) === taskId) activeNodeTasks.delete(key)
+    })
   } catch (error) {
-    activeNodeTasks.delete(key)
+    if (activeNodeTasks.get(key) === taskId) activeNodeTasks.delete(key)
     throw error
   }
 }
 
 async function registerCanvasGenerationTask(input: GenerationPreparationInput, destination: CanvasDestination,
   nodeId: string, taskId: string, inputFingerprint: (store?: typeof useCanvasStore) => string, releaseNode: () => void) {
-  const { model, fingerprint } = await (async () => {
+  const { fingerprint } = await (async () => {
     const fingerprint = inputFingerprint()
     await databaseService.init()
     if (await databaseService.getHistoryById(taskId)) throw new Error(`此任务已经登记，请查询原任务 ${taskId}。`)
@@ -179,16 +173,7 @@ async function registerCanvasGenerationTask(input: GenerationPreparationInput, d
     controller.signal.throwIfAborted()
     if (inputFingerprint(store) !== fingerprint) throw new Error('节点输入已更改，请重新提交以核对生成参数和费用。')
   }
-  const metadata = { version: 2, projectId: destination.projectId, nodeId }
-  await databaseService.insertHistory({ id: taskId, modelId: input.modelId, providerId: model.meta.provider, type: input.mediaType,
-    prompt: input.prompt, params: { ...input.options, [marker]: metadata }, filePath: null, taskId: null,
-    status: 'pending', errorMessage: null, cost: null, duration: null })
-  activeTasks.set(taskId, controller)
-  const publish = (status: string, resultAvailable = false, errorMessage: string | null = null): void => publishCanvasGenerationTaskStatus({
-    taskId, status, progress: resultAvailable ? 100 : 0, modelId: input.modelId, mediaType: input.mediaType,
-    resultAvailable, errorCode: null, errorMessage, cancellable: ['pending', 'queued', 'generating'].includes(status) && !controller.signal.aborted,
-  })
-  publish('pending')
+  const record = await createCanvasGenerationTaskRecord(input, destination.projectId, nodeId, taskId, controller)
   const releaseExecutor = retainCanvasTaskExecutor(destination.projectId, nodeId, createGenerationNodeExecutor(store => {
     const profile = readCanvasGenerationNodeProfile(nodeId, store)
     const extra = profile.resultNodeExtraData
@@ -196,42 +181,9 @@ async function registerCanvasGenerationTask(input: GenerationPreparationInput, d
       resultNodeExtraData: data => ({ ...(typeof extra === 'function' ? extra(data) : extra), generationTaskId: taskId }) }
   }))
   logger.info('画布生成已创建节点与连线', { event: 'canvas.generationTask.start', taskId, projectId: destination.projectId, nodeId })
-  void (async () => {
-    await databaseService.updateHistory(taskId, { status: 'generating' })
-    publish('generating')
-    const completed = await runCanvasNode(nodeId, assertCurrent, destination.projectId)
-    const snapshot = await readPersistedCanvasProjectSnapshot(destination.projectId)
-    const index = new Map(snapshot.nodes.map(node => [node.id, node]))
-    const outputs = snapshot.nodes.filter(node => completed.resultNodeIds.includes(node.id) && node.data.generationTaskId === taskId)
-      .flatMap(node => getGraphNodeMediaOutputs(node, index))
-    if (!outputs.length) throw new Error('生成结束但结果尚未保存，请在原画布检查。')
-    await databaseService.updateHistory(taskId, { status: 'success', filePath: outputs[0].url })
-    publish('success', true)
-    logger.info('画布生成结果已保存', { event: 'canvas.generationTask.completed', taskId, nodeId })
-  })().catch(async (error: unknown) => {
-    const persisted = await readPersistedCanvasProjectSnapshot(destination.projectId).catch((readError: unknown) => {
-      if (readError instanceof Error && readError.message === 'PROJECT_NOT_FOUND') return null
-      throw readError
-    })
-    const completedOutputs = completedTaskOutputPaths(persisted?.nodes ?? [], taskId, nodeId)
-    if (completedOutputs.length) {
-      await databaseService.updateHistory(taskId, { status: 'success', filePath: completedOutputs.join('|||'), errorMessage: null })
-      publish('success', true)
-      logger.warn('生成结果已保存，后续执行信息未能完整发布', { event: 'canvas.generationTask.publication_incomplete', requestId: taskId,
-        taskId, reason: error instanceof Error ? error.message : String(error) })
-      return
-    }
-    if (controller.signal.aborted) logger.info('原画布任务已停止本地执行', { event: 'canvas.generationTask.cancelled', requestId: taskId, taskId })
-    else logger.error('画布生成失败', error, { event: 'canvas.generationTask.failed', requestId: taskId, taskId })
-    const canResume = persisted?.nodes.some(node => node.data.generationTaskId === taskId
-      && readResumableServerTask(node.data as DynamicValueMap))
-    const status = controller.signal.aborted ? 'cancelled' : canResume ? 'pending' : 'error'
-    const message = controller.signal.aborted ? CANVAS_GENERATION_CANCELLED_MESSAGE
-      : error instanceof Error ? error.message : '画布生成失败'
-    publish(status, false, message)
-    await databaseService.updateHistory(taskId, { status, errorMessage: message })
-  }).catch(error => logger.error('画布生成状态保存失败', error, { event: 'canvas.generationTask.save_failed', taskId }))
-    .finally(() => { activeTasks.delete(taskId); releaseExecutor(); releaseNode() })
+  void record.run(() => runCanvasNode(nodeId, assertCurrent, destination.projectId))
+    .catch(error => logger.error('画布生成结束时存在失败', error, { event: 'canvas.generationTask.run_failed', taskId }))
+    .finally(() => { releaseExecutor(); releaseNode() })
   return { taskId, status: 'submitted', taskRef: { kind: 'generation.task', id: taskId },
     nodeRef: { kind: 'canvas.node', id: `${destination.projectId}:${nodeId}` },
     verification: { verified: true, condition: '生成节点、连线及任务已持久保存，后续进度在原画布中显示' } }
