@@ -43,13 +43,14 @@ function completedTaskOutputPaths(nodes: CanvasNode[], taskId: string, sourceNod
   return outputs.length >= owned.length ? outputs.map(output => output.url) : []
 }
 
-function readNodeInputSignature(projectId: string, nodeId: string): string {
-  requireCurrentCanvasProject(projectId)
-  const profile = readCanvasGenerationNodeProfile(nodeId)
-  const runtime = resolveGenerationNodeRuntime(profile)
+function readNodeInputSignature(projectId: string, nodeId: string, store?: typeof useCanvasStore): string {
+  if (!store) requireCurrentCanvasProject(projectId)
+  const targetStore = store ?? useCanvasStore
+  const profile = readCanvasGenerationNodeProfile(nodeId, targetStore)
+  const runtime = resolveGenerationNodeRuntime(profile, targetStore)
   return createCanvasExecutionValueSignature({ ...createGenerationNodeRuntimeSignaturePayload(runtime),
     generationUi: runtime.data.generationUi, nodeId, projectId,
-    edges: useCanvasStore.getState().edges.filter(edge => edge.target === nodeId)
+    edges: targetStore.getState().edges.filter(edge => edge.target === nodeId)
       .map(edge => ({ source: edge.source, sourceHandle: edge.sourceHandle, targetHandle: edge.targetHandle })) })
 }
 
@@ -83,8 +84,8 @@ export async function submitCanvasNodeGeneration(input: CanvasNodeGenerationInpu
   const options = preparation.options as Record<string, unknown>
   return startCanvasGenerationTask({ modelId: String(preparation.modelId), mediaType: profile.modelType,
     prompt: String(options.prompt ?? ''), options }, { mode: 'canvas', projectId: input.projectId, sourceNodeIds: [] },
-  input.nodeId, taskId, () => {
-    const current = readNodeInputSignature(input.projectId, input.nodeId)
+  input.nodeId, taskId, store => {
+    const current = readNodeInputSignature(input.projectId, input.nodeId, store)
     if (current !== input.inputSignature) throw new Error('节点输入已更改，请重新准备生成参数和费用。')
     return current
   })
@@ -135,7 +136,7 @@ export async function submitCanvasGenerationTask(input: GenerationPreparationInp
     return [created, ...connections]
   })
   const nodeId = String(transaction.appliedOperations[0].nodeId)
-  const inputFingerprint = () => readNodeInputSignature(destination.projectId, nodeId)
+  const inputFingerprint = (store?: typeof useCanvasStore) => readNodeInputSignature(destination.projectId, nodeId, store)
   return startCanvasGenerationTask(input, destination, nodeId, taskId, inputFingerprint).catch(error => {
     // 此入口已经创建并保存节点，后续登记失败不能冒充整个操作尚未执行。
     if (error instanceof ApplicationPreflightFailure || error instanceof CanvasApplicationError) {
@@ -147,7 +148,7 @@ export async function submitCanvasGenerationTask(input: GenerationPreparationInp
 }
 
 async function startCanvasGenerationTask(input: GenerationPreparationInput, destination: CanvasDestination,
-  nodeId: string, taskId: string, inputFingerprint: () => string) {
+  nodeId: string, taskId: string, inputFingerprint: (store?: typeof useCanvasStore) => string) {
   const key = `${destination.projectId}:${nodeId}`
   const existingTaskId = activeNodeTasks.get(key)
   if (existingTaskId) throw new CanvasApplicationError('INVALID_INPUT', '此节点已有正在执行的任务，请查询原任务；其他节点可以独立生成。', true,
@@ -163,7 +164,7 @@ async function startCanvasGenerationTask(input: GenerationPreparationInput, dest
 }
 
 async function registerCanvasGenerationTask(input: GenerationPreparationInput, destination: CanvasDestination,
-  nodeId: string, taskId: string, inputFingerprint: () => string, releaseNode: () => void) {
+  nodeId: string, taskId: string, inputFingerprint: (store?: typeof useCanvasStore) => string, releaseNode: () => void) {
   const { model, fingerprint } = await (async () => {
     const fingerprint = inputFingerprint()
     await databaseService.init()
@@ -174,9 +175,9 @@ async function registerCanvasGenerationTask(input: GenerationPreparationInput, d
     return { model, fingerprint }
   })().catch(error => { throw new ApplicationPreflightFailure(error) })
   const controller = new AbortController()
-  const assertCurrent = (): void => {
+  const assertCurrent = (store?: typeof useCanvasStore): void => {
     controller.signal.throwIfAborted()
-    if (inputFingerprint() !== fingerprint) throw new Error('节点输入已更改，请重新提交以核对生成参数和费用。')
+    if (inputFingerprint(store) !== fingerprint) throw new Error('节点输入已更改，请重新提交以核对生成参数和费用。')
   }
   const metadata = { version: 2, projectId: destination.projectId, nodeId }
   await databaseService.insertHistory({ id: taskId, modelId: input.modelId, providerId: model.meta.provider, type: input.mediaType,

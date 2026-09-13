@@ -29,6 +29,7 @@ beforeEach(async () => {
     inputLimits: { images: { max: 1 }, videos: { max: 0 }, audios: { max: 0 } }, pricing: { currency: '$', fixed: 0.01 } })
   useSettingsStore.setState({ providerKeyStatus: { ...useSettingsStore.getState().providerKeyStatus, fixture: true } })
   vi.spyOn(GenerationService.getInstance(), 'getProgressEstimate').mockResolvedValue(null)
+  await useProjectStore.getState().hydrate()
   projectId = await useProjectStore.getState().createProject('无页面执行器测试')
   const canvas = useCanvasStore.getState()
   const reference = canvas.addNode(CANVAS_NODE_TYPES.upload, { x: 0, y: 0 }, { imageUrl: 'C:/reference.png' })

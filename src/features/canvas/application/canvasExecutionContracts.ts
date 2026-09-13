@@ -14,7 +14,7 @@ export interface CanvasNodePreflightContext {
 export interface CanvasNodeExecutionContext extends CanvasNodePreflightContext {
   inputSignature: string
   /** 异步准备完成后、真正发起付费请求前必须调用。 */
-  assertCurrent: () => Promise<void>
+  assertCurrent: (store?: typeof useCanvasStore) => Promise<void>
 }
 
 export interface CanvasNodeExecutionResult {

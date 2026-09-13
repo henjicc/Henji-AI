@@ -253,47 +253,62 @@ export function createGenerationNodeExecutor(readOptions: (store?: typeof useCan
             ? { videos: requestInputs.videos, uploadedVideoFilePaths: requestInputs.videos }
             : {}),
         })
-        if (!isProjectCurrent()) throw new Error('画布项目已切换，本次生成已停止')
+        if (!backgroundCompletion && !isProjectCurrent()) throw new Error('画布项目已切换，本次生成已停止')
         await execution.assertCurrent()
 
-        const canvas = useCanvasStore.getState()
         const generationStartedAt = Date.now()
-        const resultNodeId = canvas.addNode(
-          current.resultNodeType,
-          canvas.findNodePosition(
-            current.nodeId,
-            EXPORT_RESULT_NODE_DEFAULT_WIDTH,
-            EXPORT_RESULT_NODE_LAYOUT_HEIGHT,
-          ),
-          {
-            isGenerating: true,
-            generationStartedAt,
-            generationDurationMs: estimate?.durationMs ?? DEFAULT_GENERATION_DURATION_MS,
-            displayName: buildResultNodeTitle(promptInput.prompt, current.t(current.resultTitleKey)),
-            generationSourceNodeId: current.nodeId,
-            generationInputSignature: execution.inputSignature,
-            generationProviderId: runtime.model?.meta.provider ?? null,
-            generationInputImages: [...runtime.images],
-            generationInputVideos: [...runtime.videos],
-            generationInputAudios: [...runtime.audios],
-            ...resultNodeExtraData,
-            ...(capabilityPreparation?.resultNodeData ?? {}),
-            ...resultNodeData,
-          },
-        )
-        canvas.addEdge(current.nodeId, resultNodeId)
+        const createResultNode = (store: typeof useCanvasStore) => {
+          const canvas = store.getState()
+          const id = canvas.addNode(
+            current.resultNodeType,
+            canvas.findNodePosition(
+              current.nodeId,
+              EXPORT_RESULT_NODE_DEFAULT_WIDTH,
+              EXPORT_RESULT_NODE_LAYOUT_HEIGHT,
+            ),
+            {
+              isGenerating: true,
+              generationStartedAt,
+              generationDurationMs: estimate?.durationMs ?? DEFAULT_GENERATION_DURATION_MS,
+              displayName: buildResultNodeTitle(promptInput.prompt, current.t(current.resultTitleKey)),
+              generationSourceNodeId: current.nodeId,
+              generationInputSignature: execution.inputSignature,
+              generationProviderId: runtime.model?.meta.provider ?? null,
+              generationInputImages: [...runtime.images],
+              generationInputVideos: [...runtime.videos],
+              generationInputAudios: [...runtime.audios],
+              ...resultNodeExtraData,
+              ...(capabilityPreparation?.resultNodeData ?? {}),
+              ...resultNodeData,
+            },
+          )
+          canvas.addEdge(current.nodeId, id)
+          return id
+        }
+        let resultNodeId = ''
+        let taskLifecycle: ReturnType<typeof createCanvasGenerationTaskLifecycle> | undefined
         const setProgress = useCanvasGenerationProgressStore.getState().setProgress
-        const taskLifecycle = createCanvasGenerationTaskLifecycle(
-          backgroundCompletion ? () => true : isProjectCurrent,
-          (taskId) => backgroundCompletion ? withCanvasProjectRuntime(generationProjectId, async target => {
-            target.store.getState().updateNodeData(resultNodeId, { serverTaskId: taskId, serverTaskModelId: runtime.modelId })
-            await target.persist()
-          }) : useCanvasStore.getState().updateNodeData(resultNodeId, { serverTaskId: taskId, serverTaskModelId: runtime.modelId }),
-        )
-
         try {
+          resultNodeId = backgroundCompletion
+            ? await withCanvasProjectRuntime(generationProjectId, async target => {
+              await execution.assertCurrent(target.store)
+              if (!target.isCurrent()) throw new Error('原项目实例已变化，请重新核对任务。')
+              const id = createResultNode(target.store)
+              resultNodeId = id
+              await target.persist()
+              return id
+            })
+            : createResultNode(useCanvasStore)
+          taskLifecycle = createCanvasGenerationTaskLifecycle(
+            backgroundCompletion ? () => true : isProjectCurrent,
+            (taskId) => backgroundCompletion ? withCanvasProjectRuntime(generationProjectId, async target => {
+              target.store.getState().updateNodeData(resultNodeId, { serverTaskId: taskId, serverTaskModelId: runtime.modelId })
+              await target.persist()
+            }) : useCanvasStore.getState().updateNodeData(resultNodeId, { serverTaskId: taskId, serverTaskModelId: runtime.modelId }),
+          )
+
           // 原占位节点必须先落盘；供应商响应晚于页面切换时仍有稳定接收位置。
-          await confirmCanvasPersistence(generationProjectId)
+          if (!backgroundCompletion) await confirmCanvasPersistence(generationProjectId)
           const result = await runCanvasGeneration({
             modelId: runtime.modelId,
             requestId: requestPreparation?.requestId ?? current.requestId,
@@ -378,22 +393,22 @@ export function createGenerationNodeExecutor(readOptions: (store?: typeof useCan
           })
           return { status: 'completed', resultNodeIds: committed.resultNodeIds }
         } catch (error) {
-          if (backgroundCompletion) {
+          if (backgroundCompletion && resultNodeId) {
             await withCanvasProjectRuntime(generationProjectId, async target => {
               target.store.getState().updateNodeData(resultNodeId, current.signal?.aborted
                 ? createCanvasGenerationCancelledPatch()
                 : createCanvasGenerationFailurePatch(error, current.capability?.outputPolicy.resultKind))
               await target.persist()
             })
-          } else if (isProjectCurrent()) {
+          } else if (resultNodeId && isProjectCurrent()) {
             useCanvasStore.getState().updateNodeData(resultNodeId, current.signal?.aborted
               ? createCanvasGenerationCancelledPatch()
               : createCanvasGenerationFailurePatch(error, current.capability?.outputPolicy.resultKind))
           }
           throw error
         } finally {
-          taskLifecycle.release()
-          if (backgroundCompletion || isProjectCurrent()) setProgress(resultNodeId, null)
+          taskLifecycle?.release()
+          if (resultNodeId && (backgroundCompletion || isProjectCurrent())) setProgress(resultNodeId, null)
         }
       },
       release: async (filePaths) => {

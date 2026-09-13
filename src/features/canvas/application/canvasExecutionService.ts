@@ -69,7 +69,7 @@ class CanvasRunCancelledBeforeExecutionError extends Error {
 
 interface CanvasRunControl {
   failure: unknown | null
-  assertCurrent?: () => void
+  assertCurrent?: (store?: typeof useCanvasStore) => void
 }
 
 const logger = createLogger('features.canvas.execution')
@@ -273,7 +273,23 @@ async function executeRegisteredNode(
     const context: CanvasNodeExecutionContext = {
       ...baseContext,
       inputSignature,
-      assertCurrent: async () => {
+      assertCurrent: async (store) => {
+        const assertInStore = async (targetStore: typeof useCanvasStore) => {
+          runControl.assertCurrent?.(targetStore)
+          const extras = await executor.getInputSignatureExtras?.(targetStore)
+          const state = targetStore.getState()
+          if (createExecutorInputSignature(nodeId, executor, state.nodes, state.edges, extras) !== inputSignature) {
+            throw new CanvasInputChangedBeforeExecutionError()
+          }
+          await assertDependenciesCurrent(targetStore)
+        }
+        if (backgroundCompletion && baseContext.projectId) {
+          if (store) return assertInStore(store)
+          return withCanvasProjectRuntime(baseContext.projectId, async runtime => {
+            await assertInStore(runtime.store)
+            if (!runtime.isCurrent()) throw new Error('原项目实例已变化，请重新核对任务。')
+          })
+        }
         runControl.assertCurrent?.()
         assertProjectContext(baseContext.projectId)
         if (
@@ -398,7 +414,7 @@ async function findGuaranteedReusableDependencies(
   return reusable
 }
 
-async function executeCanvasRun(rootNodeId: string, assertCurrent?: () => void): Promise<CanvasRunResult> {
+async function executeCanvasRun(rootNodeId: string, assertCurrent?: (store?: typeof useCanvasStore) => void): Promise<CanvasRunResult> {
   const runId = createRunId()
   const projectId = useProjectStore.getState().currentProjectId
   const startedAt = Date.now()
@@ -514,7 +530,7 @@ async function executeCanvasRun(rootNodeId: string, assertCurrent?: () => void):
   }
 }
 
-export function runCanvasNode(rootNodeId: string, assertCurrent?: () => void): Promise<CanvasRunResult> {
+export function runCanvasNode(rootNodeId: string, assertCurrent?: (store?: typeof useCanvasStore) => void): Promise<CanvasRunResult> {
   return executeCanvasRun(rootNodeId, assertCurrent)
 }
 
