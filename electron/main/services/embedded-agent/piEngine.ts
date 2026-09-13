@@ -23,6 +23,8 @@ export class PiEngine implements EmbeddedAgentEngine {
   private cancelled = false
   private requestId = ''
   private modelStartedAt = 0
+  private usageTotals = this.emptyUsage()
+  private emptyUsage() { return { requests: 0, usageResponses: 0, input: 0, output: 0, cacheRead: 0, cacheWrite: 0, toolResults: 0, toolTextBytes: 0, largestToolTextBytes: 0, toolTextByName: {} as Record<string, { calls: number; bytes: number; maxBytes: number }> } }
   private contextMetrics = { contextCount: 0, contextBytes: 0 }
   private disclosure?: PiToolDisclosure
   private toolTitles = new Map<string, string>()
@@ -97,6 +99,7 @@ export class PiEngine implements EmbeddedAgentEngine {
     const onPayload = session.agent.onPayload
     session.agent.onPayload = async (payload, currentModel) => {
       this.modelStartedAt = Date.now()
+      this.usageTotals.requests++
       const base = await onPayload?.(payload, currentModel) ?? payload
       const next = await this.attachments.apply(base, selected)
       const finalPayload = next && typeof next === 'object' && !Array.isArray(next)
@@ -119,12 +122,25 @@ export class PiEngine implements EmbeddedAgentEngine {
     this.unsubscribe = session.subscribe((event) => {
       if (event.type === 'message_end' && event.message.role === 'assistant') {
         const { input, output, cacheRead, cacheWrite, totalTokens } = event.message.usage
+        if (totalTokens > 0) this.usageTotals.usageResponses++
+        this.usageTotals.input += input
+        this.usageTotals.output += output
+        this.usageTotals.cacheRead += cacheRead
+        this.usageTotals.cacheWrite += cacheWrite
         this.emit({ type: 'log', phase: 'model_completed', requestId: this.requestId, sessionId: this.manager.getSessionId(),
           modelId: model.modelId, providerId: selected.providerId, durationMs: Math.max(0, Date.now() - this.modelStartedAt),
           metrics: { input, output, cacheRead, cacheWrite, totalTokens } })
       }
       if (event.type === 'tool_execution_start') this.state.activity = '正在操作应用…'
-      if (event.type === 'tool_execution_end') this.state.activity = '正在整理结果…'
+      if (event.type === 'tool_execution_end') {
+        this.state.activity = '正在整理结果…'
+        const textBytes = Buffer.byteLength(JSON.stringify(event.result?.content?.filter((part: { type: string }) => part.type === 'text') ?? []), 'utf8')
+        const previous = this.usageTotals.toolTextByName[event.toolName] ?? { calls: 0, bytes: 0, maxBytes: 0 }
+        this.usageTotals.toolTextByName[event.toolName] = { calls: previous.calls + 1, bytes: previous.bytes + textBytes, maxBytes: Math.max(previous.maxBytes, textBytes) }
+        this.usageTotals.toolResults++
+        this.usageTotals.toolTextBytes += textBytes
+        this.usageTotals.largestToolTextBytes = Math.max(this.usageTotals.largestToolTextBytes, textBytes)
+      }
       if (event.type === 'message_end' && event.message.role === 'assistant' && event.message.stopReason === 'error') {
         this.state.error = event.message.errorMessage ?? '模型请求失败，请检查配置后重试。'
       }
@@ -182,6 +198,7 @@ export class PiEngine implements EmbeddedAgentEngine {
     this.state.error = null
     this.state.activity = '正在思考…'
     this.requestId = command.input.requestId ?? randomUUID()
+    this.usageTotals = this.emptyUsage()
     const startedAt = Date.now()
     this.emit({ type: 'log', phase: 'start', requestId: this.requestId, sessionId: this.manager.getSessionId() })
     this.publish()
@@ -196,7 +213,12 @@ export class PiEngine implements EmbeddedAgentEngine {
       this.state.error = error instanceof Error ? error.message : '回复失败，请重试。'
       this.emit({ type: 'log', phase: this.cancelled ? 'cancelled' : 'failed', requestId: this.requestId,
         durationMs: Date.now() - startedAt, sessionId: this.manager.getSessionId(), message: this.state.error })
-    } finally { this.state.busy = false; this.state.activity = null; this.publish() }
+    } finally {
+      const totalInput = this.usageTotals.input + this.usageTotals.cacheRead + this.usageTotals.cacheWrite
+      this.emit({ type: 'log', phase: 'usage_summary', requestId: this.requestId, sessionId: this.manager.getSessionId(),
+        providerId: this.configuration?.model.providerId, modelId: this.configuration?.model.model.modelId,
+        summary: { ...this.usageTotals, cacheHitRate: totalInput > 0 ? this.usageTotals.cacheRead / totalInput : null } })
+      this.state.busy = false; this.state.activity = null; this.publish() }
   }
   async dispose(): Promise<void> { await this.session?.abort(); this.unsubscribe?.(); this.session?.dispose() }
 }

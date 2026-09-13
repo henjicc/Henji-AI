@@ -46,7 +46,7 @@ export class PiToolDisclosure {
         }) }], details: {} }
       },
     }
-    this.tools = this.deferred.length ? [...tools, loader] : tools
+    this.tools = [...(this.deferred.length ? [...tools, loader] : tools)].sort((a, b) => a.name < b.name ? -1 : a.name > b.name ? 1 : 0)
     this.initialNames = this.namesForScope()
   }
 
@@ -72,7 +72,8 @@ export class PiToolDisclosure {
     const active = session.getActiveToolNames()
     if (selected.some(name => !active.includes(name))) {
       this.remember(this.scope, selected)
-      session.setActiveToolsByName([...new Set([...active, ...selected])])
+      const enabled = new Set([...active, ...selected])
+      session.setActiveToolsByName(this.tools.filter(tool => enabled.has(tool.name)).map(tool => tool.name))
       this.manager.appendCustomEntry(entryType, { scope: this.scope, names: selected })
     }
     return selected

@@ -15,8 +15,9 @@ export type EngineEvent =
   | { type: 'snapshot'; value: EmbeddedAgentSnapshot }
   | { type: 'tool'; id: string; name: string; input: Record<string, unknown> }
   | { type: 'toolCancel'; id: string }
-  | { type: 'log'; phase: 'start' | 'completed' | 'failed' | 'cancelled' | 'model_requested' | 'model_completed'; sessionId: string | null; requestId: string; message?: string;
+  | { type: 'log'; phase: 'start' | 'completed' | 'failed' | 'cancelled' | 'model_requested' | 'model_completed' | 'usage_summary'; sessionId: string | null; requestId: string; message?: string;
       requestMetrics?: { toolCount: number; toolBytes: number; systemBytes: number; messageCount: number; contextCount: number; contextBytes: number };
+      summary?: { requests: number; usageResponses: number; input: number; output: number; cacheRead: number; cacheWrite: number; cacheHitRate: number | null; toolResults: number; toolTextBytes: number; largestToolTextBytes: number; toolTextByName: Record<string, { calls: number; bytes: number; maxBytes: number }> };
       durationMs?: number; modelId?: string; providerId?: string; metrics?: { input: number; output: number; cacheRead: number; cacheWrite: number; totalTokens: number } }
 export interface EmbeddedAgentEngine {
   command(command: EngineCommand): Promise<unknown>

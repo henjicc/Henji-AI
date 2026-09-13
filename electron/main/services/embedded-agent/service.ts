@@ -121,7 +121,7 @@ export class EmbeddedAgentService {
             .finally(() => this.toolControllers.delete(message.id))
         } else if (message.type === 'log') {
           const fields = { event: `embedded_agent.turn.${message.phase}`, requestId: message.requestId, modelId: message.modelId, providerId: message.providerId,
-            context: { sessionId: message.sessionId, durationMs: message.durationMs, metrics: message.metrics, requestMetrics: message.requestMetrics },
+            context: { sessionId: message.sessionId, durationMs: message.durationMs, metrics: message.metrics, requestMetrics: message.requestMetrics, summary: message.summary },
             ...(message.message ? { error: new Error(message.message) } : {}) }
           if (message.phase === 'failed') logger.error('内置助手回复失败', fields); else logger.info('内置助手回复状态', fields)
         }

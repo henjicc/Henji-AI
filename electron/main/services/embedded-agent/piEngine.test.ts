@@ -23,6 +23,7 @@ async function fixture(capabilities: Partial<LlmModelConfig['capabilities']> = {
   cleanup.push(() => fs.rm(directory, { recursive: true, force: true }))
   const requests: Array<{ tools: Array<{ function: { name: string } }>; messages: Array<{ role: string; content: string }>; input?: Array<{ role: string; content: unknown }> }> = []
   let mode: 'tool' | 'error' | 'wait' = 'tool'
+  let usage: Record<string, unknown> | undefined
   let toolPlan = [{ name: 'read_project', arguments: { id: 'project' } as Record<string, unknown> }]
   const server: Server = createServer(async (request, response) => {
     const chunks: Buffer[] = []
@@ -53,6 +54,7 @@ async function fixture(capabilities: Partial<LlmModelConfig['capabilities']> = {
     const delta = called ? { content: '已经读取项目。' } : { tool_calls: [{ index: 0, id: toolIndex ? `call_fixture_${toolIndex}` : 'call_fixture', type: 'function', function: { name: planned.name, arguments: JSON.stringify(planned.arguments) } }] }
     response.write(`data: ${JSON.stringify({ id: 'reply', object: 'chat.completion.chunk', created: 1, model: 'fixture', choices: [{ index: 0, delta, finish_reason: null }] })}\n\n`)
     response.write(`data: ${JSON.stringify({ id: 'reply', object: 'chat.completion.chunk', created: 1, model: 'fixture', choices: [{ index: 0, delta: {}, finish_reason: called ? 'stop' : 'tool_calls' }] })}\n\n`)
+    if (usage) response.write(`data: ${JSON.stringify({ choices: [], usage })}\n\n`)
     response.end('data: [DONE]\n\n')
   })
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
@@ -67,7 +69,7 @@ async function fixture(capabilities: Partial<LlmModelConfig['capabilities']> = {
   const configuration = { directory, model: { providerId: 'test', model: { ...model, capabilities: { ...model.capabilities, ...capabilities } }, baseUrl: `http://127.0.0.1:${address.port}/v1`, api, apiKey: 'fixture-key' },
     instructions: '你是测试中的痕迹助手。', tools: [{ name: 'read_project', description: '读取项目', inputSchema: { type: 'object', properties: { id: { type: 'string' } }, required: ['id'], additionalProperties: false } }] }
   await engine.command({ action: 'configure', input: configuration })
-  return { engine, requests, events, tool, directory, configuration, setMode: (value: typeof mode) => { mode = value },
+  return { engine, requests, events, tool, directory, configuration, setUsage: (value: Record<string, unknown>) => { usage = value }, setMode: (value: typeof mode) => { mode = value },
     setToolPlan: (value: typeof toolPlan) => { toolPlan = value } }
 }
 function applicationCatalog(allowWrites = true) {
@@ -80,6 +82,31 @@ function applicationCatalog(allowWrites = true) {
 }
 
 describe('Pi official SDK engine', () => {
+  it('DeepSeek 用量按输入 token 加权汇总，失败仍输出汇总', async () => {
+    const f = await fixture()
+    f.setUsage({ prompt_tokens: 1000, completion_tokens: 20, total_tokens: 1020, prompt_cache_hit_tokens: 900, prompt_cache_miss_tokens: 100 })
+    await f.engine.command({ action: 'prompt', input: { text: '读取', context: '' } })
+    expect(f.events).toContainEqual(expect.objectContaining({ type: 'log', phase: 'usage_summary', summary: expect.objectContaining({
+      requests: 2, usageResponses: 2, input: 200, cacheRead: 1800, output: 40, cacheHitRate: 0.9,
+    }) }))
+    f.setMode('error')
+    await f.engine.command({ action: 'prompt', input: { text: '再试', context: '' } })
+    expect(f.events.at(-2)).toMatchObject({ type: 'log', phase: 'usage_summary', summary: { requests: 1, usageResponses: 0, cacheHitRate: null } })
+  })
+
+  it('按用户任务汇总用量与回执体积，不泄露内容，下一任务重新计数', async () => {
+    const f = await fixture()
+    f.tool.mockResolvedValue({ secret: 'private-tool-text' })
+    await f.engine.command({ action: 'prompt', input: { text: '读取', context: '' } })
+    const summaries = () => f.events.filter((event): event is Extract<EngineEvent, { type: 'log' }> => event.type === 'log' && event.phase === 'usage_summary')
+    expect(summaries()).toHaveLength(1)
+    expect(summaries()[0].summary).toMatchObject({ requests: 2, toolResults: 1, cacheHitRate: null,
+      toolTextByName: { read_project: { calls: 1, bytes: expect.any(Number), maxBytes: expect.any(Number) } } })
+    expect(JSON.stringify(summaries())).not.toContain('private-tool-text')
+    await f.engine.command({ action: 'prompt', input: { text: '继续', context: '' } })
+    expect(summaries()[1].summary).toMatchObject({ requests: 1, toolResults: 0, toolTextByName: {} })
+  })
+
   it('正式 Pi 等待工具未返回时不请求模型，任务返回后自动继续', async () => {
     const f = await fixture()
     await f.engine.command({ action: 'configure', input: { ...f.configuration, tools: applicationCatalog().tools } })
@@ -184,6 +211,8 @@ describe('Pi official SDK engine', () => {
     expect(names(0)).not.toContain('get_model_schema')
     expect(names(1)).toEqual(expect.arrayContaining(['get_model_schema', 'prepare_generation_task', 'create_visible_generation_task', 'wait_generation_task']))
     expect(names(1)).not.toContain('render_camera_stage_output')
+    expect(names(1)).toEqual([...names(1)].sort())
+    const loadedTools = f.requests[1].tools
     expect(f.tool).toHaveBeenCalledTimes(1)
     expect(f.tool.mock.calls[0]).toMatchObject([expect.any(String), 'get_model_schema', { modelId: 'fixture-model' }, expect.any(AbortSignal)])
     expect(f.requests).toHaveLength(3)
@@ -193,6 +222,7 @@ describe('Pi official SDK engine', () => {
     expect(names(-1)).not.toContain('create_visible_generation_task')
     await f.engine.command({ action: 'prompt', input: { text: '继续画布任务', context: canvas } })
     expect(names(-1)).toContain('create_visible_generation_task')
+    expect(f.requests.at(-1)!.tools).toEqual(loadedTools)
     const snapshot = await f.engine.command({ action: 'snapshot' }) as { sessionId: string }
     const restored = new PiEngine(() => undefined, f.tool)
     cleanup.push(() => restored.dispose())
@@ -201,6 +231,7 @@ describe('Pi official SDK engine', () => {
     await restored.command({ action: 'open', input: snapshot.sessionId })
     await restored.command({ action: 'prompt', input: { text: '继续', context: canvas } })
     expect(names(-1)).toContain('create_visible_generation_task')
+    expect(f.requests.at(-1)!.tools).toEqual(loadedTools)
     await restored.command({ action: 'configure', input: { ...configuration, tools: applicationCatalog(false).tools } })
     await restored.command({ action: 'prompt', input: { text: '只读', context: canvas } })
     expect(names(-1)).not.toContain('create_visible_generation_task')
@@ -252,6 +283,7 @@ describe('Pi official SDK engine', () => {
         expect.objectContaining({ phase: 'model_completed', modelId: 'fixture', providerId: 'test', durationMs: expect.any(Number),
           metrics: { input: 70, output: 10, cacheRead: 30, cacheWrite: 0, totalTokens: 110 } }),
         expect.objectContaining({ phase: 'completed', durationMs: expect.any(Number) }),
+        expect.objectContaining({ phase: 'usage_summary', summary: expect.objectContaining({ requests: 1, cacheHitRate: 0.3 }) }),
       ])
       expect(JSON.stringify(logs)).not.toContain('fixture-key')
       expect(JSON.stringify(logs)).not.toContain('第一轮')
@@ -374,6 +406,6 @@ describe('Pi official SDK engine', () => {
     await f.engine.command({ action: 'cancel' })
     await promise
     expect(await f.engine.command({ action: 'snapshot' })).toMatchObject({ busy: false })
-    expect(f.events.filter(event => event.type === 'log').at(-1)).toMatchObject({ phase: 'cancelled' })
+    expect(f.events.filter(event => event.type === 'log' && event.phase !== 'usage_summary').at(-1)).toMatchObject({ phase: 'cancelled' })
   }, 30000)
 })
