@@ -8,7 +8,7 @@
  *   2. 令牌仍然有效，连接不需要重新授权；
  *   3. 已完成操作的事实与业务存储都还在，没有被重启抹掉；
  *   4. 未知原请求换标识仍不能重放，独立追加可以继续；
- *   5. 全程没有任何供应商请求：生成历史一条不增。
+ *   5. 重启后可区分待续查、未知和已保存结果；仅注入存储样本，不调用供应商。
  *
  * 用法：node scripts/mcp-restart-check.cjs [--out .mcp-restart]
  */
@@ -43,15 +43,31 @@ async function launch(userDataDir) {
   return app
 }
 
-async function seedCanvasFixture(page, name) {
-  await page.evaluate(async ({ projectId, projectName }) => {
+async function seedCanvasFixture(page, name, tasks) {
+  await page.evaluate(async ({ projectId, projectName, tasks, mediaPath }) => {
     const now = Date.now()
+    const nodes = []
+    const edges = []
+    for (const [kind, taskId] of Object.entries(tasks)) {
+      const nodeId = `source-${taskId}`
+      const resultId = `result-${taskId}`
+      const modelId = 'restart-storage-fixture'
+      nodes.push({ id: nodeId, type: 'imageNode', position: { x: 0, y: nodes.length * 120 }, data: { modelId, prompt: '重启存储样本' } })
+      nodes.push({ id: resultId, type: 'exportImageNode', position: { x: 400, y: nodes.length * 120 }, data: {
+        generationTaskId: taskId, generationSourceNodeId: nodeId, isGenerating: kind !== 'completed',
+        ...(kind === 'resumable' ? { serverTaskId: `server-${taskId}`, serverTaskModelId: modelId } : {}),
+        ...(kind === 'completed' ? { imageUrl: mediaPath, generationOutputCommitId: `commit-${taskId}` } : {}),
+      } })
+      edges.push({ id: `edge-${taskId}`, source: nodeId, target: resultId })
+      await window.henjiNative.db.execute('INSERT INTO history (id,provider_id,model_id,type,prompt,params,file_path,status) VALUES (?,?,?,?,?,?,?,?)',
+        [taskId, 'fixture', modelId, 'image', '重启存储样本', JSON.stringify({ __canvasGeneration: { version: 2, projectId, nodeId } }), null, 'pending'])
+    }
     await window.henjiNative.storyboardProjects.upsertProjectRecord({
-      id: projectId, name: projectName, createdAt: now, updatedAt: now, nodeCount: 0,
-      nodesJson: '[]', edgesJson: '[]', viewportJson: JSON.stringify({ x: 0, y: 0, zoom: 1 }),
+      id: projectId, name: projectName, createdAt: now, updatedAt: now, nodeCount: nodes.length,
+      nodesJson: JSON.stringify(nodes), edgesJson: JSON.stringify(edges), viewportJson: JSON.stringify({ x: 0, y: 0, zoom: 1 }),
       historyJson: JSON.stringify({ past: [], future: [], imagePool: [] }),
     })
-  }, { projectId: FIXTURE_PROJECT_ID, projectName: name })
+  }, { projectId: FIXTURE_PROJECT_ID, projectName: name, tasks, mediaPath: path.join(ROOT, 'resources/icons/32x32.png') })
 }
 
 const readHistoryCount = (page) => page.evaluate(async () => (await window.henjiNative.db.select('SELECT COUNT(*) AS total FROM history'))[0].total)
@@ -66,6 +82,7 @@ async function main() {
   const evidence = { userDataDir, port, firstRun: {}, secondRun: {} }
   const nonce = `n${Math.random().toString(36).slice(2, 8)}`
   const renamed = `MCP重启前已保存-${nonce}`
+  const generationTasks = { resumable: randomUUID(), unknown: randomUUID(), completed: randomUUID() }
   let connectionId = null
   let token = null
   let completedOperationId = null
@@ -77,7 +94,7 @@ async function main() {
     const first = await launch(userDataDir)
     let debuggerSession = null
     try {
-      await seedCanvasFixture(first.page, 'MCP重启夹具')
+      await seedCanvasFixture(first.page, 'MCP重启夹具', generationTasks)
       evidence.firstRun.historyBefore = await readHistoryCount(first.page)
       const identity = await authorizeMcpConnection(first.page, { name: `重启验收-${nonce}`, allowWrites: true })
       connectionId = identity.id
@@ -156,6 +173,30 @@ async function main() {
       await waitMcpReady(second.page)
       const client = await connectMcpClient({ url: `http://127.0.0.1:${port}/mcp`, headers: { Authorization: token } }, 'Henji restart second')
       try {
+        evidence.secondRun.generation = {}
+        for (const [kind, taskId] of Object.entries(generationTasks)) {
+          const result = await callTool(client, 'get_generation_task', { taskId })
+          const task = result.data?.task
+          assert.ok(task, `缺少原生成任务事实：${JSON.stringify(result)}`)
+          assert.equal(task.waitingExternal, false, '重启后不能冒称本地任务仍在执行')
+          assert.equal(task.cancellable, false, '无本地执行时不能冒称可以取消')
+          if (kind === 'resumable') {
+            assert.equal(task.status, 'pending')
+            assert.deepEqual(task.resumeInput, { taskId, projectId: FIXTURE_PROJECT_ID, sourceNodeId: `source-${taskId}`, resultNodeIds: [`result-${taskId}`] })
+          } else if (kind === 'unknown') {
+            assert.equal(task.errorCode, 'GENERATION_OUTCOME_UNKNOWN')
+            assert.equal(task.resumeInput, null)
+            assert.equal(task.resultAvailable, false)
+          } else {
+            assert.equal(task.status, 'success')
+            assert.equal(task.resultAvailable, true)
+          }
+          evidence.secondRun.generation[kind] = { status: task.status, resultAvailable: task.resultAvailable, errorCode: task.errorCode }
+        }
+        const stored = await second.page.evaluate(ids => window.henjiNative.db.select('SELECT id,status,file_path FROM history WHERE id IN (?,?,?)', Object.values(ids)), generationTasks)
+        assert.equal(stored.find(row => row.id === generationTasks.unknown)?.status, 'pending', '未知记录不能被查询改写成已失败或可重放')
+        assert.equal(stored.find(row => row.id === generationTasks.completed)?.status, 'success', '已保存结果必须真实修复历史状态')
+        assert.equal(stored.find(row => row.id === generationTasks.completed)?.file_path, path.join(ROOT, 'resources/icons/32x32.png'))
         // 已完成操作：重启后仍然是同一条事实，不需要重新执行。
         const completedFact = await callTool(client, 'get_application_operation', { operationId: completedOperationId })
         evidence.secondRun.completed = { executionState: completedFact.executionState, verificationState: completedFact.verificationState }
