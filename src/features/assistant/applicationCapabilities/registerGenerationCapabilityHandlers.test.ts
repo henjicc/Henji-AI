@@ -25,6 +25,7 @@ vi.mock('@/features/generation/application/generationApplicationService', () => 
 vi.mock('@/stores/navigationStore', () => ({ switchWorkspace: vi.fn(), useNavigationStore: { getState: () => ({ activeWorkspace: 'generation' }) } }))
 
 import { registry } from '@/core/ModelRegistry'
+import { modelDefaultsManager } from '@/features/settings/modelDefaultsManager'
 import type { ModelDefinition } from '@/core/types'
 import { useGenerationDraftStore } from '@/features/generation/store/generationDraftStore'
 import { createEmptyGenerationDraft } from '@/features/generation/domain/generationDraft'
@@ -76,7 +77,18 @@ describe('generation capability handlers（5.4：放宽提交）', () => {
   })
 
   afterEach(() => {
+    vi.restoreAllMocks()
     registry.clear()
+  })
+
+  it.each(['prepare_generation_task', 'create_visible_generation_task'])('%s 新任务省略模型时读取当前默认，而不是旧草稿', async name => {
+    const currentDefault = { ...testModel, meta: { ...testModel.meta, id: 'current-default' } }
+    registry.register(currentDefault)
+    useGenerationDraftStore.getState().patchField('selectedModel', testModel.meta.id)
+    const resolveDefault = vi.spyOn(modelDefaultsManager, 'resolveModelId').mockReturnValue(currentDefault.meta.id)
+    await registeredHandlers().get(name)!({ mediaType: 'image', prompt: '新图', params: {} }, context)
+    expect(resolveDefault).toHaveBeenCalledWith('image')
+    expect((name === 'prepare_generation_task' ? mocks.prepare : mocks.submit).mock.calls[0][0].modelId).toBe(currentDefault.meta.id)
   })
 
   it.each(['prepare_generation_task', 'create_visible_generation_task'])('%s 通过正式解析器复用历史结果', async name => {

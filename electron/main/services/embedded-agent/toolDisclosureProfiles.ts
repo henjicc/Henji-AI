@@ -1,16 +1,16 @@
 // 只决定披露时机和流程提示；schema、权限及执行来自正式 MCP 目录。
 export const basicTools = new Set(['describe_application_entities', 'list_application_entities', 'read_application_entity', 'change_application_entities'])
-const modelTools = ['search_models', 'get_model_schema']
+const modelTools = ['resolve_generation_model', 'search_models', 'get_model_schema']
 const taskTools = ['get_generation_task', 'cancel_generation_task', 'get_application_operation']
 export const taskProfiles = {
   canvas_generation: {
     tools: [...modelTools, ...taskTools, 'get_canvas_node_schema', 'prepare_generation_task', 'create_visible_generation_task',
       'prepare_canvas_node_generation', 'submit_canvas_node_generation', 'resume_canvas_generation_task'],
-    guidance: '画布生成：需要选型才搜索模型，选定后一次读取该模型参数。新生成用 prepare_generation_task → create_visible_generation_task，destination 为原画布；应用会创建标准节点并连接参考图，在原画布呈现参数、进度和结果。位置优先级：明确位置、原选中节点旁、原视口空位，不默认留在生成历史。已有节点用 prepare_canvas_node_generation → submit_canvas_node_generation。提交后按返回任务查询，不重复提交；终态停止查询，未完成时如实报告。',
+    guidance: '画布新生成：未指定模型时先 resolve_generation_model 读取最新默认模型与供应商，不把搜索排序或旧草稿当用户偏好；明确指定模型时遵循用户要求。选定后读取参数，再 prepare_generation_task → create_visible_generation_task，destination 为原画布；应用创建节点与参考连线，结果落在旁侧。位置优先级：明确位置、原选中节点旁、原视口空位。已有节点用 prepare_canvas_node_generation → submit_canvas_node_generation，保留节点模型。按返回任务查询，终态停止，不重复提交。',
   },
   generation: {
     tools: [...modelTools, ...taskTools, 'prepare_generation_task', 'create_visible_generation_task'],
-    guidance: '生成页：选定模型后一次读取参数，准备后提交生成；按返回任务查询，终态停止，不重复提交。明确指定的画布目标仍优先。',
+    guidance: '生成页新任务：未指定模型时先 resolve_generation_model 读取最新默认模型与供应商；用户明确要求沿用当前草稿时读取草稿模型。选定后读取参数，准备后提交；按返回任务查询，终态停止，不重复提交。明确指定的画布目标仍优先。',
   },
   canvas_nodes: {
     tools: ['search_canvas_node_types', 'get_canvas_node_schema', 'get_canvas_node', 'duplicate_canvas_node', 'group_canvas_nodes', 'ungroup_canvas_node'],

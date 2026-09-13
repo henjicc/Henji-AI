@@ -1,3 +1,4 @@
+import { readGenerationConcurrency, subscribeGenerationConcurrency } from '@/core/settings/generationConcurrency'
 import { isCanvasNodeUnavailable } from '../domain/nodeAvailability'
 import { createLogger } from '@/core/logging'
 import { useCanvasStore } from '@/stores/canvasStore'
@@ -78,7 +79,8 @@ const executors = new Map<string, CanvasRegisteredExecutor>()
 const taskExecutors = new Map<string, CanvasRegisteredExecutor>()
 const activeNodeRuns = new Map<string, ActiveNodeRun>()
 let processingLimiter = createCanvasExecutionLimiter(4)
-let generationLimiter = createCanvasExecutionLimiter(2)
+let generationLimiter = createCanvasExecutionLimiter(readGenerationConcurrency())
+subscribeGenerationConcurrency(value => generationLimiter.setMaxConcurrency(value))
 
 function getExecutionPhase(kind: CanvasRegisteredExecutor['kind']): CanvasNodeExecutionPhase {
   return kind === 'text-processing' ? 'processing' : 'generating'
@@ -566,7 +568,7 @@ export function resetCanvasExecutionServiceForTests(): void {
   taskExecutors.clear()
   activeNodeRuns.clear()
   processingLimiter = createCanvasExecutionLimiter(4)
-  generationLimiter = createCanvasExecutionLimiter(2)
+  generationLimiter = createCanvasExecutionLimiter(readGenerationConcurrency())
   resetCanvasExecutionReachabilityForTests()
   useCanvasExecutionStateStore.getState().resetNodeExecutions()
 }

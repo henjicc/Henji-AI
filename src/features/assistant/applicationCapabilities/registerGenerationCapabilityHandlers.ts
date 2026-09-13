@@ -12,6 +12,7 @@ import { useProjectStore } from '@/stores/projectStore'
 import { useCanvasStore } from '@/stores/canvasStore'
 import type { CanvasGenerationResumeInput, CanvasNodeGenerationInput, GenerationDestination } from '@/core/assistant/capabilities/generationApplicationCapabilities'
 import { isBuiltinModelType } from '@/core/modelSortOrder'
+import { modelDefaultsManager } from '@/features/settings/modelDefaultsManager'
 
 import type { ApplicationCapabilityHandlerRegistrar } from './handlerTypes'
 import { parseCapabilityInput, throwIfCapabilityAborted } from './handlerUtils'
@@ -81,7 +82,7 @@ interface ResolvedGenerationInput {
 function resolveGenerationInput(input: GenerationInput): ResolvedGenerationInput {
   const draft = useGenerationDraftStore.getState().draft
 
-  const modelId = input.modelId ?? draft.selectedModel
+  const modelId = input.modelId ?? (input.mediaType ? modelDefaultsManager.resolveModelId(input.mediaType) : draft.selectedModel)
   if (!modelId) throw new Error('INVALID_INPUT:未提供 modelId，且当前生成草稿未选中模型')
 
   const prompt = input.prompt ?? toLegacyPromptString(draft.promptDocument, {

@@ -3,6 +3,28 @@ import { describe, expect, it } from 'vitest'
 import { createCanvasExecutionLimiter } from './canvasExecutionLimiter'
 
 describe('canvasExecutionLimiter', () => {
+  it('调高立即启动等待项，调低不会取消执行中的任务或提前放行', async () => {
+    const limiter = createCanvasExecutionLimiter(1)
+    const started: number[] = []
+    const release: Array<() => void> = []
+    const tasks = [0, 1, 2].map(id => limiter.run(async () => {
+      started.push(id)
+      await new Promise<void>(resolve => { release[id] = resolve })
+    }))
+    await Promise.resolve()
+    expect(started).toEqual([0])
+    limiter.setMaxConcurrency(2)
+    await Promise.resolve(); await Promise.resolve()
+    expect(started).toEqual([0, 1])
+    limiter.setMaxConcurrency(1)
+    release[0](); await tasks[0]
+    expect(started).toEqual([0, 1])
+    release[1](); await tasks[1]
+    await Promise.resolve()
+    expect(started).toEqual([0, 1, 2])
+    release[2](); await Promise.all(tasks)
+  })
+
   it('排队取消立即返回并移除等待项，不占用或释放其他任务的名额', async () => {
     const limiter = createCanvasExecutionLimiter(1)
     const started: string[] = []
