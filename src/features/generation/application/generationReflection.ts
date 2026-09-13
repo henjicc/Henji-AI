@@ -119,7 +119,7 @@ function taskProperties(task: GenerationTaskStatusSnapshot): Record<string, Json
     'generation.task.status': status,
     'generation.task.progress': task.progress,
     'generation.task.cancellable': task.cancellable ?? active,
-    'generation.task.waiting_external': active,
+    'generation.task.waiting_external': task.waitingExternal ?? active,
     'generation.task.result_ref': task.resultAvailable ? { kind: GENERATION_ENTITY_TYPES.result, id: task.taskId } : null,
     'generation.task.error_message': task.errorMessage,
   }
@@ -190,7 +190,11 @@ class GenerationReflectionProvider implements ApplicationEntityProvider {
       const source: GenerationModelFieldSource = { modelId: id, meta: schema.meta as Record<string, unknown>, schemaRef: schema.schemaRef }
       return { values: fieldReadValues(GENERATION_MODEL_FIELDS, source), revision: getGenerationModelsRevision() }
     }
-    const task = readGenerationTaskStatusSnapshot(id)
+    let task = readGenerationTaskStatusSnapshot(id)
+    if (!task || task.origin === 'canvas') {
+      const { getCanvasGenerationTask } = await import('@/features/canvas/application/canvasGenerationTaskService')
+      if (await getCanvasGenerationTask(id)) task = readGenerationTaskStatusSnapshot(id)
+    }
     if (!task && this.entityType === GENERATION_ENTITY_TYPES.result) {
       await databaseService.init()
       const record = await databaseService.getHistoryById(id)

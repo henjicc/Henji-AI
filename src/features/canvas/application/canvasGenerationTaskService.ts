@@ -18,6 +18,9 @@ import { readPersistedCanvasProjectSnapshot } from './canvasQueryService'
 import { getGraphNodeMediaOutputs } from './graphOutputResolver'
 import { getCanvasNodeDefinition } from '../domain/nodeRegistry'
 import { publishCanvasGenerationTaskStatus } from '@/features/generation/application/generationTaskStatusRegistry'
+import { normalizeGenerationTaskStatus } from '@/core/assistant/externalWait'
+import { readResumableServerTask } from '../domain/resumableTask'
+import { isCanvasGenerationTaskActive, hasCanvasGenerationResumeLease } from '../generation/activeGenerationTasks'
 
 type CanvasDestination = Extract<GenerationDestination, { mode: 'canvas' }>
 const logger = createLogger('features.canvas.generationTask')
@@ -81,7 +84,7 @@ export async function submitCanvasGenerationTask(input: GenerationPreparationInp
   }
   const fingerprint = inputFingerprint()
   const assertCurrent = (): void => { if (inputFingerprint() !== fingerprint) throw new Error('节点输入已更改，请重新提交以核对生成参数和费用。') }
-  const metadata = { projectId: destination.projectId, nodeId }
+  const metadata = { version: 2, projectId: destination.projectId, nodeId }
   await databaseService.insertHistory({ id: taskId, modelId: input.modelId, providerId: model.meta.provider, type: input.mediaType,
     prompt: input.prompt, params: { ...input.options, [marker]: metadata }, filePath: null, taskId: null,
     status: 'pending', errorMessage: null, cost: null, duration: null })
@@ -99,7 +102,8 @@ export async function submitCanvasGenerationTask(input: GenerationPreparationInp
     capability: null, showModelInput: true, requirePrompt: true,
     promptRequiredKey: 'node.imageEdit.promptRequired', apiKeyRequiredKey: 'node.imageEdit.apiKeyRequired', resultTitleKey: definition.menuLabelKey,
     setPromptInvalid: () => undefined, t: i18n.t.bind(i18n),
-    ...(input.mediaType === 'image' ? { resultNodeExtraData: { resultKind: 'generic' },
+    resultNodeExtraData: { generationTaskId: taskId, ...(input.mediaType === 'image' ? { resultKind: 'generic' } : {}) },
+    ...(input.mediaType === 'image' ? {
       prepareRuntimeParams: context => prepareImageEditNodeRuntime(context, { isOutpaint: false, excludeParamIds: [], t: i18n.t.bind(i18n) }) } : {}),
   })))
   logger.info('画布生成已创建节点与连线', { event: 'canvas.generationTask.start', taskId, projectId: destination.projectId, nodeId })
@@ -117,9 +121,17 @@ export async function submitCanvasGenerationTask(input: GenerationPreparationInp
     publish('success', true)
     logger.info('画布生成结果已保存', { event: 'canvas.generationTask.completed', taskId, nodeId })
   })().catch(async (error: unknown) => {
-    publish('error', false, error instanceof Error ? error.message : '画布生成失败')
     logger.error('画布生成失败', error, { event: 'canvas.generationTask.failed', taskId })
-    await databaseService.updateHistory(taskId, { status: 'error', errorMessage: error instanceof Error ? error.message : '画布生成失败' })
+    const persisted = await readPersistedCanvasProjectSnapshot(destination.projectId).catch((readError: unknown) => {
+      if (readError instanceof Error && readError.message === 'PROJECT_NOT_FOUND') return null
+      throw readError
+    })
+    const canResume = persisted?.nodes.some(node => node.data.generationTaskId === taskId
+      && readResumableServerTask(node.data as DynamicValueMap))
+    const status = canResume ? 'pending' : 'error'
+    const message = error instanceof Error ? error.message : '画布生成失败'
+    publish(status, false, message)
+    await databaseService.updateHistory(taskId, { status, errorMessage: message })
   }).catch(error => logger.error('画布生成状态保存失败', error, { event: 'canvas.generationTask.save_failed', taskId }))
     .finally(() => { activeTasks.delete(taskId); releaseExecutor() })
   return { taskId, status: 'submitted', taskRef: { kind: 'generation.task', id: taskId },
@@ -131,22 +143,52 @@ export async function getCanvasGenerationTask(taskId: string): Promise<Record<st
   const record = await databaseService.getHistoryById(taskId)
   const value = record?.params[marker]
   if (!record || !value || typeof value !== 'object' || Array.isArray(value)) return null
-  const { projectId, nodeId } = value as Record<string, unknown>
+  const { projectId, nodeId, version } = value as Record<string, unknown>
   if (typeof projectId !== 'string' || typeof nodeId !== 'string') return null
-  const snapshot = await readPersistedCanvasProjectSnapshot(projectId)
-  const nodes = useProjectStore.getState().currentProjectId === projectId ? useCanvasStore.getState().nodes : snapshot.nodes
-  const node = nodes.find(item => item.id === nodeId)
-  const outputs = node ? getGraphNodeMediaOutputs(node, new Map(nodes.map(item => [item.id, item]))) : []
-  const resultNodes = nodes.filter(item => (item.data as DynamicValueMap).generationSourceNodeId === nodeId)
-  const waitingExternal = activeTasks.has(taskId) || resultNodes.some(item => item.data.isGenerating === true)
-  const status = outputs.length ? 'success' : waitingExternal ? 'generating' : 'error'
+  const snapshot = await readPersistedCanvasProjectSnapshot(projectId).catch((error: unknown) => {
+    if (error instanceof Error && error.message === 'PROJECT_NOT_FOUND') return null
+    throw error
+  })
+  const savedNodes = snapshot?.nodes ?? []
+  const nodes = useProjectStore.getState().currentProjectId === projectId ? useCanvasStore.getState().nodes : savedNodes
+  const ownsResult = (node: (typeof nodes)[number]): boolean => node.data.generationSourceNodeId === nodeId
+    && (version === 2 ? node.data.generationTaskId === taskId : node.data.generationTaskId === undefined)
+  const resultNodes = nodes.filter(ownsResult)
+  const savedResults = savedNodes.filter(ownsResult)
+  const savedIndex = new Map(savedNodes.map(node => [node.id, node]))
+  const outputs = savedResults.flatMap(node => getGraphNodeMediaOutputs(node, savedIndex))
+  const resumable = resultNodes.flatMap(node => {
+    const task = readResumableServerTask(node.data as DynamicValueMap)
+    return task ? [task] : []
+  })
+  const hasActiveWork = activeTasks.has(taskId) || resumable.some(task =>
+    isCanvasGenerationTaskActive(task.taskId) || hasCanvasGenerationResumeLease(projectId, task.taskId))
+  let recordedStatus = normalizeGenerationTaskStatus(record.status)
+  // 仅从本任务带身份的、完整持久化的原子输出修复历史。旧无身份结果不能冒认。
+  if (!hasActiveWork && version === 2 && ['pending', 'queued', 'generating'].includes(recordedStatus ?? '') && savedResults.length > 0
+    && outputs.length >= savedResults.length && savedResults.every(node =>
+      node.data.isGenerating !== true && !node.data.generationError && typeof node.data.generationOutputCommitId === 'string')) {
+    const filePath = outputs.map(output => output.url).join('|||')
+    await databaseService.updateHistory(taskId, { status: 'success', filePath, errorMessage: null })
+    record.status = 'success'; record.filePath = filePath; record.errorMessage = null
+    recordedStatus = 'success'
+    logger.info('原画布任务已按保存结果对账', { event: 'canvas.generationTask.reconciled', taskId, projectId, nodeId })
+  }
+  const resultAvailable = recordedStatus === 'success' && Boolean(record.filePath)
+  const waitingExternal = !resultAvailable && hasActiveWork
+  const status = resultAvailable ? 'success' : waitingExternal ? 'generating'
+    : recordedStatus === 'error' || recordedStatus === 'timeout' ? recordedStatus
+      : resumable.length ? 'pending' : 'error'
   const progressState = useCanvasGenerationProgressStore.getState()
   const progress = status === 'success' ? 100 : Math.max(0, ...resultNodes.map(item => (progressState.progress[item.id] ?? 0) * 100))
-  const errorMessage = status === 'error' ? record.errorMessage ?? '原画布任务未完成，请检查原生成节点；不会自动重复提交。' : null
+  const errorCode = status === 'error' && !record.errorMessage ? 'GENERATION_OUTCOME_UNKNOWN' : null
+  const errorMessage = status === 'error' || status === 'timeout'
+    ? record.errorMessage ?? '原画布任务的执行结果尚未核实；当前没有活动执行，不能据此重新提交生成。'
+    : status === 'pending' ? '原供应商任务已登记，等待续查；不会重新提交生成。' : null
   publishCanvasGenerationTaskStatus({ taskId, status, progress, modelId: record.modelId, mediaType: record.type,
-    resultAvailable: outputs.length > 0, cancellable: false, errorCode: null, errorMessage })
+    resultAvailable, cancellable: false, waitingExternal, errorCode, errorMessage })
   return { taskId, status, normalizedStatus: status, progress, modelId: record.modelId, mediaType: record.type,
-    resultAvailable: outputs.length > 0, cancellable: false, waitingExternal, errorMessage,
+    resultAvailable, cancellable: false, waitingExternal, errorCode, errorMessage,
     taskRef: { kind: 'generation.task', id: taskId }, nodeRef: { kind: 'canvas.node', id: `${projectId}:${nodeId}` },
     resultRefs: resultNodes.map(item => ({ kind: 'canvas.node', id: `${projectId}:${item.id}` })) }
 }

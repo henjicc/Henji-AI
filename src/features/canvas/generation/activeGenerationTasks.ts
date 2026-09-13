@@ -19,6 +19,10 @@ export function isCanvasGenerationTaskActive(taskId: string): boolean {
   return activeTaskIds.has(taskId)
 }
 
+export function hasCanvasGenerationResumeLease(projectId: string, taskId: string): boolean {
+  return resumeTaskLeasesByProject.get(projectId.trim())?.has(taskId.trim()) ?? false
+}
+
 /**
  * 为恢复续查获取跨组件实例的独占租约。
  *
