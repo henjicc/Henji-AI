@@ -1,0 +1,11 @@
+Henji-AI prompt guidance combines user-provided reference material with independently rewritten, model-agnostic guidance informed by:
+
+Replicate prompt-images skill:
+https://github.com/replicate/skills/blob/2f36e415965ae63baa1c9f6635888092bcd771d3/skills/prompt-images/SKILL.md
+Apache-2.0; Copyright 2025 Replicate, Inc.; see LICENSE.replicate. Relevant principles: explicit subjects and edit scope, preserved attributes, text layout and character consistency. No API scripts, brand parameters or mandatory prompt expansion are included.
+
+OpenAI Sora 2 prompting guide:
+https://github.com/openai/openai-cookbook/blob/9aad95f0aa4f8e12991ef9b9201df28747860bfc/examples/sora/sora2_prompting_guide.ipynb
+MIT; see LICENSE.openai. Relevant principles: concrete action beats, coherent camera motion and reference-image continuity. Model-specific duration, resolution and provider controls are not generalized.
+
+This notice and license files are attribution metadata, not skill instructions and are not included in the assistant skill index or reference loading route.
