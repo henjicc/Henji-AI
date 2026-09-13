@@ -12,6 +12,15 @@ import { MCP_CAPABILITY_IDS } from '../../../../src/core/application-control/loc
 import { BUILTIN_APPLICATION_CAPABILITY_REGISTRY } from '../../../../src/core/assistant/builtinApplicationCapabilityRegistry'
 import { loadAssistantSkillCapability } from '../../../../src/core/assistant/capabilities/assistantSkillApplicationCapabilities'
 import { loadAssistantSkillFrom } from '../assistant/skills/registry'
+vi.mock('../assistant/skills/registry', async importOriginal => {
+  const actual = await importOriginal<typeof import('../assistant/skills/registry')>()
+  const dirs = () => ({ builtinDir: path.resolve('resources/assistant-skills'), userDir: '', disabledNames: [] })
+  return { ...actual,
+    listEnabledAssistantSkills: async () => (await actual.scanAssistantSkills(dirs())).skills.filter(skill => skill.enabled),
+    loadAssistantSkill: (name: string, relativePath?: string) => actual.loadAssistantSkillFrom(dirs(), name, relativePath),
+  }
+})
+import { embeddedSkillCatalog, callEmbeddedSkill } from './skills'
 
 const model: LlmModelConfig = { providerId: 'test', modelId: 'fixture', displayName: 'Fixture', adapter: 'openai-compatible', enabled: true,
   capabilities: { text: true, image: false, video: false, audio: false, streaming: true, toolCall: true, parallelTools: false,
@@ -139,7 +148,7 @@ describe('Pi official SDK engine', () => {
     const tools = [...applicationCatalog().tools, { name: definition.id, description: definition.description,
       inputSchema: z.toJSONSchema(definition.inputSchema, { io: 'input' }) as Record<string, unknown> }]
     await f.engine.command({ action: 'configure', input: { ...f.configuration, tools,
-      instructions: '可用技能：prompt-optimization。需要时调用 load_assistant_skill，再按需读取参考。' } })
+      instructions: (await embeddedSkillCatalog()).instructions } })
     f.tool.mockImplementation(async (...args: unknown[]) => {
       expect(args[1]).toBe('load_assistant_skill')
       const input = definition.inputSchema.parse(args[2])
@@ -160,13 +169,47 @@ describe('Pi official SDK engine', () => {
     expect(f.requests[2].tools.some(tool => tool.function.name === 'create_visible_generation_task')).toBe(false)
   })
 
+  it('短剧跨轮逐阶段读取，已加载的主文件和正文在上下文中复用', async () => {
+    const f = await fixture()
+    const catalog = await embeddedSkillCatalog()
+    await f.engine.command({ action: 'configure', input: { ...f.configuration,
+      tools: [...applicationCatalog().tools, ...catalog.tools], instructions: catalog.instructions } })
+    f.tool.mockImplementation(async (...args: unknown[]) => {
+      expect(args[1]).toBe('load_assistant_skill')
+      return callEmbeddedSkill(loadAssistantSkillCapability.inputSchema.parse(args[2]), new AbortController().signal)
+    })
+    const main = { name: 'load_assistant_skill', arguments: { name: 'short-drama', reason: '组织短剧工程' } }
+    const script = { name: 'load_assistant_skill', arguments: { name: 'short-drama', path: 'references/script.md', reason: '拆解当前剧本' } }
+    const production = { name: 'load_assistant_skill', arguments: { name: 'short-drama', path: 'references/production.md', reason: '进入素材生产阶段' } }
+    f.setToolPlan([main, script])
+    await f.engine.command({ action: 'prompt', input: { text: '先拆解这段短剧，保存制作计划', context: '' } })
+    expect(f.requests).toHaveLength(3)
+    expect(JSON.stringify(f.requests[0])).not.toContain('references/script.md')
+    expect(JSON.stringify(f.requests[1])).not.toContain('对白与动作共用时长')
+    expect(JSON.stringify(f.requests[2])).toContain('对白与动作共用时长')
+    expect(JSON.stringify(f.requests)).not.toContain('每镜只准备实际需要的参考')
+
+    f.setToolPlan([main, script, production])
+    await f.engine.command({ action: 'prompt', input: { text: '按刚才的计划继续准备素材', context: '' } })
+    expect(f.requests).toHaveLength(5)
+    expect(f.tool).toHaveBeenCalledTimes(3)
+    const final = f.requests[4]
+    const text = JSON.stringify(final)
+    expect(text).toContain('每镜只准备实际需要的参考')
+    expect(text.split('对白与动作共用时长')).toHaveLength(2)
+    expect(text).not.toContain('对白保留原文和语言')
+    expect(final.messages.filter(message => message.role === 'tool')).toHaveLength(3)
+    expect(final.tools.some(tool => tool.function.name === 'create_visible_generation_task')).toBe(false)
+    expect(Buffer.byteLength(JSON.stringify(f.requests[0]))).toBeLessThan(Buffer.byteLength(text))
+  })
+
   it('普通查询不调用技能时，已登记的技能正文不会自动进入请求', async () => {
     const f = await fixture()
     const definition = loadAssistantSkillCapability
     await f.engine.command({ action: 'configure', input: { ...f.configuration,
       tools: [...f.configuration.tools, { name: definition.id, description: definition.description,
         inputSchema: z.toJSONSchema(definition.inputSchema, { io: 'input' }) as Record<string, unknown> }],
-      instructions: 'skills_index: prompt-optimization：图片或视频创作时按需加载。',
+      instructions: (await embeddedSkillCatalog()).instructions,
     } })
     await f.engine.command({ action: 'prompt', input: { text: '读取当前项目', context: '' } })
     expect(f.tool.mock.calls.every(call => (call as unknown[])[1] === 'read_project')).toBe(true)
