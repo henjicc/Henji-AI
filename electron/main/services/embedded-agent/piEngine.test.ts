@@ -125,7 +125,12 @@ describe('Pi official SDK engine', () => {
     expect(f.tool).toHaveBeenCalledTimes(1)
   })
 
-  it('技能主文件和图片指南经多轮工具调用逐步进入请求，视频正文不进入图片任务', async () => {
+  it.each([
+    ['references/image.md', '图片表达一个视觉状态', '视频表达状态随时间的变化'],
+    ['references/video.md', '视频表达状态随时间的变化', '图片表达一个视觉状态'],
+    ['references/image-edit.md', '最小必要修改', '## 标记和坐标定位'],
+    ['references/video-extension.md', '## 延长与连接', '## 声音、对白与文字'],
+  ])('按需读取 %s，实际请求不含无关模块且不激活生成工具', async (reference, included, excluded) => {
     const f = await fixture()
     const definition = loadAssistantSkillCapability
     const tools = [...applicationCatalog().tools, { name: definition.id, description: definition.description,
@@ -139,17 +144,31 @@ describe('Pi official SDK engine', () => {
     })
     f.setToolPlan([
       { name: 'load_assistant_skill', arguments: { name: 'prompt-optimization', reason: '生成图片' } },
-      { name: 'load_assistant_skill', arguments: { name: 'prompt-optimization', path: 'references/image.md', reason: '图片指导' } },
+      { name: 'load_assistant_skill', arguments: { name: 'prompt-optimization', path: reference, reason: '当前操作指导' } },
     ])
     await f.engine.command({ action: 'prompt', input: { text: '生成一张图片', context: '{"surface":{"id":"workspace.canvas"}}' } })
     expect(f.requests).toHaveLength(3)
     expect(f.requests[0].tools.some(tool => tool.function.name === 'load_assistant_skill')).toBe(true)
     expect(JSON.stringify(f.requests[0])).not.toContain('最小必要修改')
     expect(JSON.stringify(f.requests[1])).toContain('references/image.md')
-    expect(JSON.stringify(f.requests[1])).not.toContain('图片表达一个视觉状态')
-    expect(JSON.stringify(f.requests[2])).toContain('图片表达一个视觉状态')
-    expect(JSON.stringify(f.requests)).not.toContain('视频表达状态随时间的变化')
+    expect(JSON.stringify(f.requests[1])).not.toContain(included)
+    expect(JSON.stringify(f.requests[2])).toContain(included)
+    expect(JSON.stringify(f.requests)).not.toContain(excluded)
     expect(f.requests[2].tools.some(tool => tool.function.name === 'create_visible_generation_task')).toBe(false)
+  })
+
+  it('普通查询不调用技能时，已登记的技能正文不会自动进入请求', async () => {
+    const f = await fixture()
+    const definition = loadAssistantSkillCapability
+    await f.engine.command({ action: 'configure', input: { ...f.configuration,
+      tools: [...f.configuration.tools, { name: definition.id, description: definition.description,
+        inputSchema: z.toJSONSchema(definition.inputSchema, { io: 'input' }) as Record<string, unknown> }],
+      instructions: 'skills_index: prompt-optimization：图片或视频创作时按需加载。',
+    } })
+    await f.engine.command({ action: 'prompt', input: { text: '读取当前项目', context: '' } })
+    expect(f.tool.mock.calls.every(call => (call as unknown[])[1] === 'read_project')).toBe(true)
+    expect(JSON.stringify(f.requests)).not.toContain('references/image.md')
+    expect(JSON.stringify(f.requests)).not.toContain('图片表达一个视觉状态')
   })
 
   it('完整授权目录按需披露后首轮体积缩减，续轮相同宿主信息只携带一份', async () => {
