@@ -64,7 +64,7 @@ export function EmbeddedConversation(): JSX.Element {
       {!state.messages.length && !state.sendingMessage && !optimistic && !state.pendingMessages?.length ? <div className="space-y-2 py-8 text-sm text-text-muted">
         <p className="font-medium text-text-dark">从当前工作开始</p>
         <p>可以让我查看项目、调整参数，或帮你安排创作任务。</p>
-      </div> : <EmbeddedTranscript messages={state.messages} onToggle={scroll.suspendFollowing} />}
+      </div> : <EmbeddedTranscript messages={state.messages} busy={state.busy} onToggle={scroll.suspendFollowing} />}
       {state.sendingMessage ? <EmbeddedUserMessage message={state.sendingMessage} /> : null}
       {optimistic && state.sendingMessage?.id !== optimistic.id && !state.pendingMessages?.some(message => message.id === optimistic.id)
         ? <EmbeddedUserMessage message={optimistic} /> : null}

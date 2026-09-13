@@ -12,7 +12,9 @@ const process: EmbeddedAgentMessage[] = [
 ]
 it('过程实时可见，最终回答出现后自动收起，仍可主动展开', () => {
   const toggle = vi.fn()
-  const view = render(<EmbeddedTranscript messages={process} onToggle={toggle} />)
+  const view = render(<EmbeddedTranscript messages={process} busy onToggle={toggle} />)
+  expect(screen.queryByText('先核对参考图。')).toBeNull()
+  fireEvent.click(screen.getByRole('button', { name: '正在思考' }))
   expect(screen.getByText('先核对参考图。')).toBeTruthy()
   expect(screen.getByText('读取参考图')).toBeTruthy()
   expect(view.container.querySelector('[data-embedded-user-message]')?.className).toContain('justify-end')
@@ -20,7 +22,19 @@ it('过程实时可见，最终回答出现后自动收起，仍可主动展开'
   expect(screen.queryByText('先核对参考图。')).toBeNull()
   expect(screen.getByText('图片已生成。')).toBeTruthy()
   fireEvent.click(screen.getByRole('button', { name: '查看过程' }))
-  expect(toggle).toHaveBeenCalledOnce()
+  expect(toggle).toHaveBeenCalledTimes(2)
+  expect(screen.getByText('读取参考图')).toBeTruthy()
+})
+it('跨思考段落合并重复工具，保留失败状态，下一轮独立展示', () => {
+  const messages: EmbeddedAgentMessage[] = [...process,
+    { id: 'more', role: 'assistant', kind: 'process', text: '继续等待。' },
+    { id: 'repeat', role: 'assistant', kind: 'tool', text: '读取参考图', status: 'failed' },
+    { id: 'repeat2', role: 'assistant', kind: 'tool', text: '读取参考图', status: 'completed' }]
+  const view = render(<EmbeddedTranscript messages={messages} busy onToggle={() => {}} />)
+  expect(screen.getAllByText('读取参考图 · 未完成')).toHaveLength(1)
+  expect(screen.queryByText('继续等待。')).toBeNull()
+  view.rerender(<EmbeddedTranscript messages={[...messages, { id: 'user2', role: 'user', text: '下一轮' },
+    { id: 'tool2', role: 'assistant', kind: 'tool', text: '读取参考图', status: 'completed' }]} onToggle={() => {}} />)
   expect(screen.getByText('读取参考图')).toBeTruthy()
 })
 it('历史默认折叠，后续失败或停止的过程仍可见，不冒充最终结论', () => {
