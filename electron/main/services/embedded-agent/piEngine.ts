@@ -29,6 +29,7 @@ export class PiEngine implements EmbeddedAgentEngine {
   private cancelled = false
   private requestId = ''
   private modelStartedAt = 0
+  private contextMetrics = { contextCount: 0, contextBytes: 0 }
   constructor(private readonly emit: (event: EngineEvent) => void,
     private readonly callTool: (id: string, name: string, input: Record<string, unknown>, signal?: AbortSignal) => Promise<unknown>) {}
 
@@ -83,21 +84,37 @@ export class PiEngine implements EmbeddedAgentEngine {
     session.agent.transformContext = async (messages, signal) => {
       const transformed = await transformContext?.(messages, signal) ?? messages
       let previousContext: string | undefined
-      return transformed.filter(message => {
+      const filtered = transformed.filter(message => {
         if (message.role !== 'custom' || message.customType !== 'henji-context') return true
         const content = JSON.stringify(message.content)
         if (content === previousContext) return false
         previousContext = content
         return true
       })
+      const contexts = filtered.flatMap(message => message.role === 'custom' && message.customType === 'henji-context' ? [message.content] : [])
+      this.contextMetrics = { contextCount: contexts.length, contextBytes: Buffer.byteLength(JSON.stringify(contexts), 'utf8') }
+      return filtered
     }
     const onPayload = session.agent.onPayload
     session.agent.onPayload = async (payload, currentModel) => {
       this.modelStartedAt = Date.now()
       const base = await onPayload?.(payload, currentModel) ?? payload
       const next = await this.attachments.apply(base, selected)
-      return next && typeof next === 'object' && !Array.isArray(next)
+      const finalPayload = next && typeof next === 'object' && !Array.isArray(next)
         ? applyProviderRequestBodyQuirks(identity.providerFamilyId, next as Record<string, unknown>) : next
+      if (finalPayload && typeof finalPayload === 'object' && !Array.isArray(finalPayload)) {
+        const body = finalPayload as Record<string, unknown>
+        const messages = Array.isArray(body.messages) ? body.messages : Array.isArray(body.input) ? body.input : []
+        const system = body.system ?? body.instructions ?? messages.filter(message => message && typeof message === 'object'
+          && ['system', 'developer'].includes(String((message as Record<string, unknown>).role)))
+        const requestTools = Array.isArray(body.tools) ? body.tools : []
+        // 只记录尺寸，不复制聊天正文、附件、工具参数或凭据到日志。
+        this.emit({ type: 'log', phase: 'model_requested', requestId: this.requestId, sessionId: this.manager.getSessionId(),
+          modelId: model.modelId, providerId: selected.providerId,
+          requestMetrics: { toolCount: requestTools.length, toolBytes: Buffer.byteLength(JSON.stringify(requestTools), 'utf8'),
+            systemBytes: Buffer.byteLength(JSON.stringify(system), 'utf8'), messageCount: messages.length, ...this.contextMetrics } })
+      }
+      return finalPayload
     }
     let lastTextEmission = 0
     this.unsubscribe = session.subscribe((event) => {

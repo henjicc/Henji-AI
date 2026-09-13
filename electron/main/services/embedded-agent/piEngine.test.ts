@@ -6,6 +6,10 @@ import path from 'node:path'
 import type { LlmModelConfig } from '@henjicc/ai-sdk'
 import { PiEngine } from './piEngine'
 import type { EngineEvent } from './contracts'
+import { z } from 'zod'
+import { buildMcpToolCatalog } from '../mcp/toolCatalog'
+import { MCP_CAPABILITY_IDS } from '../../../../src/core/application-control/localHostContracts'
+import { BUILTIN_APPLICATION_CAPABILITY_REGISTRY } from '../../../../src/core/assistant/builtinApplicationCapabilityRegistry'
 
 const model: LlmModelConfig = { providerId: 'test', modelId: 'fixture', displayName: 'Fixture', adapter: 'openai-compatible', enabled: true,
   capabilities: { text: true, image: false, video: false, audio: false, streaming: true, toolCall: true, parallelTools: false,
@@ -61,6 +65,32 @@ async function fixture(capabilities: Partial<LlmModelConfig['capabilities']> = {
   return { engine, requests, events, tool, directory, configuration, setMode: (value: typeof mode) => { mode = value } }
 }
 describe('Pi official SDK engine', () => {
+  it('完整授权目录经过官方 SDK 后计量实际工具体积，续轮相同宿主信息只携带一份', async () => {
+    const f = await fixture({}, 'openai-responses')
+    const tools = MCP_CAPABILITY_IDS.map(id => {
+      const definition = BUILTIN_APPLICATION_CAPABILITY_REGISTRY.get(id)!
+      return { id, version: definition.version, title: definition.title, description: definition.description,
+        inputSchema: z.toJSONSchema(definition.inputSchema, { io: 'input' }) as Record<string, unknown> }
+    })
+    const catalog = buildMcpToolCatalog({ tools, access: { allowWrites: true, allowDestructive: true, allowPaid: true }, operationsEnabled: true })
+    await f.engine.command({ action: 'configure', input: { ...f.configuration, tools: catalog.tools } })
+    const context = '{"surface":"canvas","project":"original"}'
+    await f.engine.command({ action: 'prompt', input: { text: '第一轮', context, requestId: 'measure-first' } })
+    await f.engine.command({ action: 'prompt', input: { text: '第二轮', context, requestId: 'measure-second' } })
+    const logs = f.events.filter((event): event is Extract<EngineEvent, { type: 'log' }> => event.type === 'log' && event.phase === 'model_requested')
+    expect(logs).toHaveLength(2)
+    logs.forEach((event, index) => {
+      expect(event.requestMetrics).toMatchObject({ toolCount: catalog.tools.length, contextCount: 1,
+        toolBytes: Buffer.byteLength(JSON.stringify(f.requests[index].tools), 'utf8') })
+      expect(event.requestMetrics!.systemBytes).toBeGreaterThan(0)
+      expect(event.requestMetrics!.messageCount).toBeGreaterThan(0)
+    })
+    expect(logs[1].requestMetrics!.contextBytes).toBe(logs[0].requestMetrics!.contextBytes)
+    expect(logs[1].requestMetrics!.toolBytes).toBe(logs[0].requestMetrics!.toolBytes)
+    expect(JSON.stringify(logs)).not.toContain('original')
+    expect(JSON.stringify(logs)).not.toContain('fixture-key')
+  })
+
   it('记录每轮供应商实际用量和缓存读取，并沿用宿主消息关联标识', async () => {
     const f = await fixture({}, 'openai-responses')
     await f.engine.command({ action: 'prompt', input: { text: '第一轮', context: '', requestId: 'request-first' } })
@@ -69,6 +99,7 @@ describe('Pi official SDK engine', () => {
       const logs = f.events.filter(event => event.type === 'log' && event.requestId === requestId)
       expect(logs).toEqual([
         expect.objectContaining({ phase: 'start' }),
+        expect.objectContaining({ phase: 'model_requested', requestMetrics: expect.objectContaining({ toolCount: 1, toolBytes: expect.any(Number) }) }),
         expect.objectContaining({ phase: 'model_completed', modelId: 'fixture', providerId: 'test', durationMs: expect.any(Number),
           metrics: { input: 70, output: 10, cacheRead: 30, cacheWrite: 0, totalTokens: 110 } }),
         expect.objectContaining({ phase: 'completed', durationMs: expect.any(Number) }),
