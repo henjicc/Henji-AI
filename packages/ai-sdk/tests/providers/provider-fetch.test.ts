@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { fetchProvider } from '../../src/providers/provider-fetch'
 import { fakeRuntimeContext } from './test-helpers'
@@ -12,6 +12,7 @@ function networkError(code: string): TypeError {
 }
 
 describe('fetchProvider', () => {
+  afterEach(() => vi.useRealTimers())
   // Node 官方 TLS onConnectEnd 错误形状；嵌套 TypeError 来自 fetch，测试 transport 为合成负例。
   // https://github.com/nodejs/node/blob/v24.0.0/lib/_tls_wrap.js#L1573-L1585
   const beforeTls = () => new TypeError('fetch failed', { cause: Object.assign(
@@ -49,12 +50,17 @@ describe('fetchProvider', () => {
   })
 
   it('所有 TLS 前尝试失败时保留完整端点顺序和未发送状态', async () => {
+    vi.useFakeTimers()
     const fetchMock = vi.fn().mockRejectedValue(beforeTls())
-    const error = await fetchProvider('APIMart', 'https://a.test/create', { method: 'POST' }, {
+    const result = fetchProvider('APIMart', 'https://a.test/create', { method: 'POST' }, {
       transport: fakeRuntimeContext(fetchMock).transport, retryPreconnectOnce: true, fallbackEndpoints: ['https://b.test/create'],
     }).catch(error => error)
+    await vi.runAllTimersAsync()
+    const error = await result
     expect(error.details).toMatchObject({ submissionState: 'not_sent', attempts: [
       { host: 'a.test', code: 'ECONNRESET', stage: 'before_send' },
+      { host: 'b.test', code: 'ECONNRESET', stage: 'before_send' },
+      { host: 'b.test', code: 'ECONNRESET', stage: 'before_send' },
       { host: 'b.test', code: 'ECONNRESET', stage: 'before_send' },
       { host: 'b.test', code: 'ECONNRESET', stage: 'before_send' },
     ] })
@@ -72,7 +78,7 @@ describe('fetchProvider', () => {
     await expect(result).rejects.toThrow('cancelled during backoff')
     expect(fetchMock).toHaveBeenCalledOnce()
   })
-  it('仅对能证明尚未建立连接的故障重试一次', async () => {
+  it('仅对能证明尚未建立连接的故障自动退避恢复', async () => {
     const response = new Response('{}', { status: 200 })
     const fetchMock = vi.fn()
       .mockRejectedValueOnce(networkError('UND_ERR_CONNECT_TIMEOUT'))
@@ -86,6 +92,29 @@ describe('fetchProvider', () => {
     )
 
     expect(result).toBe(response)
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+  })
+
+  it('按 1、3、8 秒退避，恢复后只返回一次成功提交', async () => {
+    vi.useFakeTimers()
+    const times: number[] = []
+    const fetchMock = vi.fn(async () => { times.push(Date.now()); if (times.length < 4) throw beforeTls(); return new Response('{}') })
+    const result = fetchProvider('KIE', 'https://a.test/create', { method: 'POST', body: '{}' }, {
+      transport: fakeRuntimeContext(fetchMock).transport, retryPreconnectOnce: true,
+    })
+    await vi.runAllTimersAsync()
+    expect((await result).status).toBe(200)
+    expect(times.map(time => time - times[0])).toEqual([0, 1000, 4000, 12000])
+  })
+
+  it('发送前失败后遇到未知提交状态必须停止，不能继续剩余退避', async () => {
+    vi.useFakeTimers()
+    const fetchMock = vi.fn().mockRejectedValueOnce(beforeTls()).mockRejectedValue(networkError('ECONNRESET'))
+    const result = fetchProvider('KIE', 'https://a.test/create', { method: 'POST' }, {
+      transport: fakeRuntimeContext(fetchMock).transport, retryPreconnectOnce: true,
+    }).catch(error => error)
+    await vi.runAllTimersAsync()
+    expect((await result).details.submissionState).toBe('unknown')
     expect(fetchMock).toHaveBeenCalledTimes(2)
   })
 

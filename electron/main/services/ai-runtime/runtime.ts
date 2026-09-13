@@ -1,3 +1,4 @@
+import { networkRequestContext } from './network-transport'
 import { claimGenerationSubmission, completeGenerationSubmission, readGenerationSubmission, readGenerationSubmissionStage } from './generation-submissions'
 import {
   AiRuntimeError,
@@ -103,7 +104,7 @@ export async function generate(
 
   try {
     let requestInfo: AIClientGenerationRequestInfo | undefined
-    const providerResult = await sdkAIClient.generate({ ...request, requestId }, {
+    const providerResult = await networkRequestContext.run({ requestId, modelId: request.modelId }, () => sdkAIClient.generate({ ...request, requestId }, {
       onRequestBuilt: (info) => {
         requestInfo = info
         logger.info('后端发起生成请求', {
@@ -118,7 +119,7 @@ export async function generate(
           },
         })
       },
-    })
+    }))
     // 先封存供应商真实回执；媒体转换或日志后续失败不抹去已提交结果。
     completeGenerationSubmission(requestId, providerResult, 'provider')
     const info = requireRequestInfo(requestInfo)
@@ -199,7 +200,7 @@ export async function continuePolling(
 
   try {
     let requestInfo: AIClientGenerationRequestInfo | undefined
-    const providerResult = await sdkAIClient.continuePolling({ ...request, requestId }, {
+    const providerResult = await networkRequestContext.run({ requestId, modelId: request.modelId }, () => sdkAIClient.continuePolling({ ...request, requestId }, {
       onRequestBuilt: (info) => {
         requestInfo = info
         logger.info('后端发起轮询请求', {
@@ -215,7 +216,7 @@ export async function continuePolling(
           },
         })
       },
-    })
+    }))
     const info = requireRequestInfo(requestInfo)
     const trace = buildContinuePollingTrace(
       request.modelId,

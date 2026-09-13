@@ -49,16 +49,21 @@ export async function fetchProvider(
       if (canRetry && index < endpoints.length - 1) continue
 
       if (options.retryPreconnectOnce && canRetry) {
-        await new Promise<void>((resolve) => setTimeout(resolve, 250))
-        if (init.signal?.aborted) throw init.signal.reason ?? new Error('Request aborted')
-        const retryStartedAt = Date.now()
-        try {
-          const response = await options.transport.fetch(endpoints[index], init)
-          options.onEndpointReached?.(endpoints[index])
-          return response
-        } catch (retryError) {
-          if (isAbort(retryError, init.signal ?? undefined)) throw retryError
-          lastFailure = recordFailure(retryError, endpoints[index], retryStartedAt)
+        // 保留内部兼容开关名；采用有界退避，每次失败重新核对是否仍可安全重放。
+        for (const delay of [1000, 3000, 8000]) {
+          await waitForRetry(delay, init.signal ?? undefined)
+          const retryStartedAt = Date.now()
+          try {
+            const response = await options.transport.fetch(endpoints[index], init)
+            options.onEndpointReached?.(endpoints[index])
+            return response
+          } catch (retryError) {
+            if (isAbort(retryError, init.signal ?? undefined)) throw retryError
+            lastFailure = recordFailure(retryError, endpoints[index], retryStartedAt)
+            const safe = shouldRetry(retryError, 'safe-preconnect')
+              || (readOnly && ['ECONNRESET', 'UND_ERR_SOCKET', 'ETIMEDOUT'].includes(lastFailure.code.toUpperCase()))
+            if (!safe) break
+          }
         }
       }
       break
@@ -71,4 +76,15 @@ export async function fetchProvider(
     `${provider} 网络连接失败（${failure.code}），${!readOnly && attempts.at(-1)?.stage === 'unknown' ? '提交结果尚不确定，请先核对任务状态，勿重复提交' : '请检查网络后重试'}`,
     { provider, method, attempts, submissionState: readOnly ? 'read_only' : attempts.at(-1)?.stage === 'before_send' ? 'not_sent' : 'unknown' }
   )
+}
+
+/** 取消立即清理计时器与监听器，不等退避结束。 */
+function waitForRetry(ms: number, signal?: AbortSignal): Promise<void> {
+  signal?.throwIfAborted()
+  return new Promise((resolve, reject) => {
+    const finish = () => { signal?.removeEventListener('abort', abort); resolve() }
+    const timer = setTimeout(finish, ms)
+    const abort = () => { clearTimeout(timer); signal?.removeEventListener('abort', abort); reject(signal?.reason ?? new Error('Request aborted')) }
+    signal?.addEventListener('abort', abort, { once: true })
+  })
 }

@@ -19,6 +19,7 @@ import {
 import { createHenjiAIClient } from '../../../../src/core/modelCatalog/applicationModelProfile'
 import { getAiProviderApiKey, getKey, getLlmProviderApiKey } from '../keystore'
 import { createMainLogger } from '../logging'
+import { createDiagnosticTransport } from './network-transport'
 
 /**
  * `packages/ai-sdk/src/runtime/*` 定义的 5 个宿主契约接口的 Electron 实现，聚合成一个
@@ -42,9 +43,7 @@ import { createMainLogger } from '../logging'
  * 迁移成包在 `Transport` 外层的 SDK 内部包装函数），`Transport` 实现本身只需要老实地
  * 发请求、老实地把失败 throw 出去。
  */
-export const electronTransport: Transport = {
-  fetch: (url, init) => fetch(url, init),
-}
+export const electronTransport: Transport = createDiagnosticTransport((url, init) => fetch(url, init))
 
 // ---------------------------------------------------------------------------
 // CredentialStore
