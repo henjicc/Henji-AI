@@ -7,7 +7,7 @@
  *   1. 重启恢复此前保存的服务开关、端口和新连接权限；
  *   2. 令牌仍然有效，连接不需要重新授权；
  *   3. 已完成操作的事实与业务存储都还在，没有被重启抹掉；
- *   4. 中断留下的未知操作仍然阻断同目标，新标识绕不过去；
+ *   4. 未知原请求换标识仍不能重放，独立追加可以继续；
  *   5. 全程没有任何供应商请求：生成历史一条不增。
  *
  * 用法：node scripts/mcp-restart-check.cjs [--out .mcp-restart]
@@ -16,6 +16,7 @@ const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const path = require('node:path')
 const { randomUUID } = require('node:crypto')
+const { once } = require('node:events')
 const { launchElectronApp, waitForApp, createIsolatedUserDataDir, cleanupIsolatedUserDataDir } = require('./lib/electronLaunch.cjs')
 const { authorizeMcpConnection, callTool, connectMcpClient, expectToolRefusal, operationEnvelope, waitMcpReady } = require('./lib/uiInspectionMcpClient.cjs')
 
@@ -69,10 +70,12 @@ async function main() {
   let token = null
   let completedOperationId = null
   let interruptedOperationId = null
+  let interruptedRequest = null
 
   try {
     // ——— 第一次启动：建立连接、留下一条已完成操作与一条被中断的操作 ———
     const first = await launch(userDataDir)
+    let debuggerSession = null
     try {
       await seedCanvasFixture(first.page, 'MCP重启夹具')
       evidence.firstRun.historyBefore = await readHistoryCount(first.page)
@@ -100,6 +103,9 @@ async function main() {
         assert.equal(applied.executionState, 'completed', JSON.stringify(applied))
         completedOperationId = completed.operationId
         evidence.firstRun.completed = { executionState: applied.executionState, verificationState: applied.verificationState }
+        evidence.firstRun.storedName = await readProjectName(first.page)
+        evidence.firstRun.historyAfter = await readHistoryCount(first.page)
+        assert.equal(evidence.firstRun.storedName, renamed, '重启前的写入没有落到正式存储')
 
         // 造一条"连接丢失"的未解决操作：占住渲染层主线程，客户端先超时。
         const catalog = await callTool(client, 'list_application_entities', { entityType: 'asset.catalog', limit: 1 })
@@ -109,20 +115,30 @@ async function main() {
           changes: [{ kind: 'create_items', entityType: 'asset.library', parent: catalog.data.refs[0], items: [{ properties: { 'asset.library.name': `MCP重启中断-${nonce}` } }] }],
         })
         interruptedOperationId = interrupted.operationId
-        void first.page.evaluate(() => { const end = Date.now() + 4000; while (Date.now() < end) { /* 占住渲染层 */ } })
-        await first.page.waitForTimeout(120)
+        interruptedRequest = interrupted
+        debuggerSession = await first.page.context().newCDPSession(first.page)
+        await debuggerSession.send('Debugger.enable')
+        const paused = once(debuggerSession, 'Debugger.paused', { signal: AbortSignal.timeout(10000) })
+        void debuggerSession.send('Runtime.evaluate', { expression: 'debugger;' }).catch(() => undefined)
+        await paused
+        evidence.firstRun.rendererPaused = true
+        console.log('已暂停隔离渲染线程，提交待中断操作。')
         await client.callTool({ name: 'change_application_entities', arguments: interrupted }, undefined, { timeout: 500 }).catch(() => undefined)
         // 未解决的操作本来就以 isError 回应，这里只取状态本身，不把"被拒绝"当成查询失败。
-        const beforeExit = await client.callTool({ name: 'get_application_operation', arguments: { operationId: interrupted.operationId } })
+        const beforeExit = await client.callTool({ name: 'get_application_operation', arguments: { operationId: interrupted.operationId } }, undefined, { timeout: 5000 })
         evidence.firstRun.interruptedFactBeforeExit = beforeExit.structuredContent?.executionState ?? null
-        assert.ok(['unknown', 'executing', 'completed', 'partial', 'not_executed'].includes(evidence.firstRun.interruptedFactBeforeExit),
-          `中断后的账本状态不在已知集合里：${JSON.stringify(beforeExit.structuredContent)}`)
+        assert.ok(['unknown', 'executing'].includes(evidence.firstRun.interruptedFactBeforeExit),
+          `崩溃前必须实际存在未解决的在途操作：${JSON.stringify(beforeExit.structuredContent)}`)
+        // 隔离应用立即退出，不触发窗口正常关闭等待；暂停的渲染层无法抢先提交迟到回执。
+        await first.app.evaluate(({ app }) => { app.exit(0) }).catch(() => undefined)
+        evidence.firstRun.forcedExit = true
+        console.log('已中断隔离进程，重新启动核对恢复事实。')
       } finally { await client.close().catch(() => undefined) }
-      evidence.firstRun.storedName = await readProjectName(first.page)
-      evidence.firstRun.historyAfter = await readHistoryCount(first.page)
-      assert.equal(evidence.firstRun.storedName, renamed, '重启前的写入没有落到正式存储')
     } finally {
-      await first.close()
+      if (!evidence.firstRun.forcedExit) {
+        await debuggerSession?.send('Debugger.resume').catch(() => undefined)
+        await first.close()
+      }
     }
 
     // ——— 第二次启动：同一份资料目录，整个进程是新的 ———
@@ -145,29 +161,34 @@ async function main() {
         evidence.secondRun.completed = { executionState: completedFact.executionState, verificationState: completedFact.verificationState }
         assert.equal(completedFact.executionState, 'completed', JSON.stringify(completedFact))
 
-        // 被中断的操作：重启把在途状态收敛成未知，**未知必须继续阻断**，不能变成"没发生过"。
+        // 未知原请求不能变成“没发生过”；独立追加则不应被它锁住。
         const interruptedRaw = await client.callTool({ name: 'get_application_operation', arguments: { operationId: interruptedOperationId } })
         const interruptedFact = interruptedRaw.structuredContent ?? {}
         evidence.secondRun.interrupted = interruptedFact.executionState
-        /*
-         * 迟到回执的判据不是"停在哪个状态"，而是账本与业务存储必须自洽，并且**绝不出现第二份结果**。
-         * 新建集合用唯一名字：重复执行会变成两条，藏不住。
-         */
+        assert.equal(interruptedFact.executionState, 'unknown', '在途崩溃操作必须保持未知，不能丢失或冒称完成')
         const libraries = await second.page.evaluate((name) => window.henjiNative.assetLibrary.listLibraries()
           .then((items) => items.filter((item) => item.name === name).length), `MCP重启中断-${nonce}`)
         evidence.secondRun.interruptedResultCount = libraries
-        if (interruptedFact.executionState === 'completed') assert.equal(libraries, 1, '迟到回执确认完成，却没有恰好一份结果')
-        if (interruptedFact.executionState === 'not_executed') assert.equal(libraries, 0, '声明未执行却已经写入了业务存储')
-        assert.ok(libraries <= 1, `重启恢复造成了重复业务写入：${libraries} 份`)
-        if (interruptedFact.executionState === 'unknown' || interruptedFact.executionState === 'partial') {
+        assert.equal(libraries, 0, '暂停的原请求不应在重启后自动写入')
+        {
           const catalog = await callTool(client, 'list_application_entities', { entityType: 'asset.catalog', limit: 1 })
           const catalogRead = await callTool(client, 'read_application_entity', { ref: catalog.data.refs[0], propertyIds: [] })
-          const blocked = await expectToolRefusal(client, 'change_application_entities', operationEnvelope([catalogRead], {
-            summary: '重启后对未解决目标的新请求',
-            changes: [{ kind: 'create_items', entityType: 'asset.library', parent: catalog.data.refs[0], items: [{ properties: { 'asset.library.name': `MCP重启越过-${nonce}` } }] }],
-          }))
+          const blocked = await expectToolRefusal(client, 'change_application_entities', {
+            ...interruptedRequest, operationId: randomUUID(), baselineIds: [],
+          })
           assert.ok(/RECOVERY_REQUIRED/.test(blocked), `重启后未解决操作没有继续阻断：${blocked}`)
-          evidence.secondRun.blockedNewOperation = true
+          evidence.secondRun.blockedOriginalReplay = true
+          const independentName = `MCP重启独立追加-${nonce}`
+          const independentInput = operationEnvelope([catalogRead], {
+            summary: '重启后的独立追加',
+            changes: [{ kind: 'create_items', entityType: 'asset.library', parent: catalog.data.refs[0], items: [{ properties: { 'asset.library.name': independentName } }] }],
+          })
+          const independent = await callTool(client, 'change_application_entities', independentInput)
+          assert.equal(independent.executionState, 'completed', JSON.stringify(independent))
+          const independentCount = await second.page.evaluate(name => window.henjiNative.assetLibrary.listLibraries()
+            .then(items => items.filter(item => item.name === name).length), independentName)
+          assert.equal(independentCount, 1, '独立追加必须恰好保存一份结果')
+          evidence.secondRun.independentAppendCount = independentCount
         }
 
         // 同一份令牌、同一个 operationId 重传：只拿回原事实，不会再写一次。
