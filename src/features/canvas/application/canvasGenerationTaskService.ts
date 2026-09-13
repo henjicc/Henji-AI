@@ -242,7 +242,8 @@ export async function getCanvasGenerationTask(taskId: string): Promise<Record<st
   }
   const resultAvailable = recordedStatus === 'success' && Boolean(record.filePath)
   const waitingExternal = !resultAvailable && hasActiveWork
-  const status = resultAvailable ? 'success' : waitingExternal ? 'generating'
+  const activeStatus = activeTasks.has(taskId) && recordedStatus === 'queued' ? 'queued' : 'generating'
+  const status = resultAvailable ? 'success' : waitingExternal ? activeStatus
     : recordedStatus === 'error' || recordedStatus === 'timeout' || recordedStatus === 'cancelled' ? recordedStatus
       : resumable.length ? 'pending' : 'error'
   const progressState = useCanvasGenerationProgressStore.getState()
@@ -251,7 +252,7 @@ export async function getCanvasGenerationTask(taskId: string): Promise<Record<st
   const errorMessage = status === 'error' || status === 'timeout' || status === 'cancelled'
     ? record.errorMessage ?? '原画布任务的执行结果尚未核实；当前没有活动执行，不能据此重新提交生成。'
     : status === 'pending' ? '原供应商任务已登记，等待续查；不会重新提交生成。' : null
-  const controllers = [activeTasks.get(taskId), ...getCanvasResumeControllers(taskId)].filter((value): value is AbortController => Boolean(value))
+  const controllers = [activeTasks.get(taskId)?.controller, ...getCanvasResumeControllers(taskId)].filter((value): value is AbortController => Boolean(value))
   const cancellable = !resultAvailable && controllers.some(controller => !controller.signal.aborted)
   publishCanvasGenerationTaskStatus({ taskId, status, progress, modelId: record.modelId, mediaType: record.type,
     resultAvailable, cancellable, waitingExternal, errorCode, errorMessage })
@@ -269,7 +270,7 @@ export async function cancelCanvasGenerationTask(taskId: string): Promise<Record
   const task = await getCanvasGenerationTask(taskId)
   if (!task) return null
   if (task.resultAvailable || task.status === 'cancelled') return { taskId, status: task.status }
-  const controllers = [activeTasks.get(taskId), ...getCanvasResumeControllers(taskId)].filter((value): value is AbortController => Boolean(value))
+  const controllers = [activeTasks.get(taskId)?.controller, ...getCanvasResumeControllers(taskId)].filter((value): value is AbortController => Boolean(value))
   if (!controllers.length) throw new CanvasApplicationError('INVALID_INPUT', '原画布任务当前没有可停止的本地执行。', true, { execution: { notExecuted: true } })
   controllers.forEach(controller => controller.abort(new Error('本地任务已停止')))
   logger.info('已请求停止原画布任务', { event: 'canvas.generationTask.cancel_requested', requestId: taskId, taskId })

@@ -11,7 +11,7 @@ import { getGraphNodeMediaOutputs } from './graphOutputResolver'
 import type { CanvasNodeExecutionResult } from './canvasExecutionContracts'
 
 const logger = createLogger('features.canvas.generationTask')
-export const canvasGenerationTaskControls = new Map<string, AbortController>()
+export const canvasGenerationTaskControls = new Map<string, { controller: AbortController; start: () => Promise<void> }>()
 export const canvasGenerationNodeTasks = new Map<string, string>()
 export const CANVAS_GENERATION_TASK_MARKER = '__canvasGeneration'
 
@@ -43,18 +43,26 @@ export async function createCanvasGenerationTaskRecord(input: GenerationPreparat
     if (canvasGenerationNodeTasks.get(nodeKey) === taskId) canvasGenerationNodeTasks.delete(nodeKey)
     throw error
   }
-  canvasGenerationTaskControls.set(taskId, controller)
   logger.info('画布生成任务已登记', { event: 'canvas.generationTask.registered', requestId: taskId, taskId, projectId, nodeId })
   const publish = (status: string, resultAvailable = false, errorMessage: string | null = null) => publishCanvasGenerationTaskStatus({
     taskId, status, progress: resultAvailable ? 100 : 0, modelId: input.modelId, mediaType: input.mediaType,
     resultAvailable, errorCode: null, errorMessage, cancellable: ['pending', 'queued', 'generating'].includes(status) && !controller.signal.aborted,
   })
+  const start = async () => {
+    controller.signal.throwIfAborted()
+    await databaseService.updateHistory(taskId, { status: 'generating' })
+    publish('generating')
+    logger.info('画布生成开始执行', { event: 'canvas.generationTask.executing', requestId: taskId, taskId, projectId, nodeId })
+  }
+  canvasGenerationTaskControls.set(taskId, { controller, start })
   publish('pending')
   return {
+    start,
     async run(execute: () => Promise<{ resultNodeIds: string[] }>): Promise<CanvasNodeExecutionResult> {
       try {
-        await databaseService.updateHistory(taskId, { status: 'generating' })
-        publish('generating')
+        await databaseService.updateHistory(taskId, { status: 'queued' })
+        publish('queued')
+        logger.info('画布生成等待执行名额', { event: 'canvas.generationTask.queued', requestId: taskId, taskId, projectId, nodeId })
         controller.signal.throwIfAborted()
         const completed = await execute()
         const snapshot = await readPersistedCanvasProjectSnapshot(projectId)

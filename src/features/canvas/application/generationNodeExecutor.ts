@@ -46,6 +46,7 @@ import { withCanvasProjectRuntime } from './canvasProjectRuntime'
 import { createCanvasGenerationTaskRecord, canvasGenerationTaskControls } from './canvasGenerationTaskRecord'
 import { retainCanvasTaskExecutor } from './canvasExecutionService'
 import { confirmCanvasPersistence } from './canvasPersistenceService'
+import type { CanvasNodeExecutionScheduler } from './canvasExecutionContracts'
 
 import {
   DEFAULT_GENERATION_DURATION_MS,
@@ -433,12 +434,18 @@ export function createGenerationNodeExecutor(readOptions: (store?: typeof useCan
     })
   }
 
-  const handleTrackedGenerate = async (execution: CanvasNodeExecutionContext): Promise<CanvasNodeExecutionResult> => {
+  const handleTrackedGenerate = async (execution: CanvasNodeExecutionContext,
+    schedule: CanvasNodeExecutionScheduler = operation => operation()): Promise<CanvasNodeExecutionResult> => {
     const inputs = await readExecutionInputs(execution)
     const current = inputs.current
-    if (current.commitGenerationResult || (current.requestId && canvasGenerationTaskControls.has(current.requestId))) {
-      return handleGenerate(execution, inputs)
+    if (current.commitGenerationResult) {
+      return schedule(() => handleGenerate(execution, inputs), current.signal)
     }
+    const activeTask = current.requestId ? canvasGenerationTaskControls.get(current.requestId) : undefined
+    if (activeTask) return schedule(async () => {
+      await activeTask.start()
+      return handleGenerate(execution, inputs)
+    }, activeTask.controller.signal)
     const prepared = await prepareExecution(execution, inputs)
     const projectId = execution.projectId
     if (!projectId) throw new Error('当前没有可执行生成的画布项目')
@@ -453,10 +460,13 @@ export function createGenerationNodeExecutor(readOptions: (store?: typeof useCan
       const record = await createCanvasGenerationTaskRecord({ modelId: prepared.runtime.modelId, mediaType: current.modelType,
         prompt: prepared.promptInput.prompt, options: prepared.generationParams }, projectId, current.nodeId, taskId, controller)
       release = retainCanvasTaskExecutor(projectId, current.nodeId, registeredExecutor)
-      return await record.run(() => handleGenerate(execution, { ...inputs, current: {
-        ...current, requestId: taskId, signal: controller.signal,
-        resultNodeExtraData: data => ({ ...(typeof extra === 'function' ? extra(data) : extra), generationTaskId: taskId }),
-      } }, prepared))
+      return await record.run(() => schedule(async () => {
+        await record.start()
+        return handleGenerate(execution, { ...inputs, current: {
+          ...current, requestId: taskId, signal: controller.signal,
+          resultNodeExtraData: data => ({ ...(typeof extra === 'function' ? extra(data) : extra), generationTaskId: taskId }),
+        } }, prepared)
+      }, controller.signal))
     } finally {
       release?.()
       current.signal?.removeEventListener('abort', abort)
@@ -471,6 +481,7 @@ export function createGenerationNodeExecutor(readOptions: (store?: typeof useCan
     supportsBackgroundCompletion: store => !readOptions(store).commitGenerationResult,
     preflightBeforeDependencies,
     run: handleTrackedGenerate,
+    runQueued: handleTrackedGenerate,
   }
   const registeredExecutor = { ...executor, prepare: prepareExecution }
   return registeredExecutor

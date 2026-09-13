@@ -291,6 +291,45 @@ it.each([false, true])('界面直接执行登记同一份任务，MCP 可查询�
   } finally { release(); await outcome }
 })
 
+it.each([false, true])('界面五个请求入队即登记，卸载页面后继续执行或立即取消队尾（取消 %s）', async cancel => {
+  const canvas = useCanvasStore.getState()
+  const nodes = Array.from({ length: 5 }, (_, index) => canvas.addNode(CANVAS_NODE_TYPES.imageEdit, { x: 400, y: index * 250 },
+    { modelId: 'canvas-task-fixture', prompt: `界面排队-${index}`, params: {} }))
+  const unregister = nodes.map(nodeId => registerCanvasNodeExecutor(nodeId,
+    createGenerationNodeExecutor(store => readCanvasGenerationNodeProfile(nodeId, store))))
+  let release!: () => void
+  const gate = new Promise<void>(resolve => { release = resolve })
+  const generate = vi.mocked(GenerationService.getInstance().generate).mockImplementation(async () => {
+    await gate
+    return { status: 'completed', url: 'C:/ui-queued.png', filePath: 'C:/ui-queued.png' }
+  })
+  const outcomes = nodes.map(nodeId => runCanvasNode(nodeId).then(() => 'success', () => 'cancelled'))
+  try {
+    await vi.waitFor(() => expect(generate).toHaveBeenCalledTimes(2))
+    await vi.waitFor(() => expect(records.size).toBe(5))
+    const tail = [...records.values()].find(row => row.prompt === '界面排队-4')!
+    expect(tail.status).toBe('queued')
+    const execute = taskControlSession()
+    expect(await execute('get_generation_task', { taskId: tail.id })).toMatchObject({ ok: true,
+      data: { task: { status: 'queued', waitingExternal: true, cancellable: true } } })
+    unregister.forEach(dispose => dispose())
+    const otherProject = await useProjectStore.getState().createProject('排队时切到其他项目')
+    if (cancel) {
+      expect(await execute('cancel_generation_task', { taskId: tail.id, reason: '停止排队任务' })).toMatchObject({ ok: true })
+      await vi.waitFor(() => expect(records.get(tail.id)?.status).toBe('cancelled'))
+      expect(generate).toHaveBeenCalledTimes(2)
+    }
+    release()
+    expect(await Promise.all(outcomes)).toEqual(['success', 'success', 'success', 'success', cancel ? 'cancelled' : 'success'])
+    expect(generate).toHaveBeenCalledTimes(cancel ? 4 : 5)
+    expect(records.size).toBe(5)
+    const saved = await readPersistedCanvasProjectSnapshot(projectId)
+    expect(saved.nodes.filter(node => node.data.generationTaskId)).toHaveLength(cancel ? 4 : 5)
+    expect(useProjectStore.getState().currentProjectId).toBe(otherProject)
+    expect(useCanvasStore.getState().nodes).toHaveLength(0)
+  } finally { release(); await Promise.all(outcomes); unregister.forEach(dispose => dispose()) }
+})
+
 it('MCP 取消一个原任务不影响并行请求，迟到输出不冒充成功', async () => {
   let release!: () => void
   const pending = new Promise<void>(resolve => { release = resolve })
@@ -581,9 +620,12 @@ it.each(['foreground', 'background', 'cancel-queued'] as const)('五个请求保
     expect(taskIds.every(id => records.get(id)?.status !== 'success')).toBe(true)
     expect(generate.mock.calls.length).toBeLessThanOrEqual(2)
     await vi.waitFor(() => expect(nodeIds.every(id => isCanvasNodeRunActive(projectId, id))).toBe(true))
+    expect(await getCanvasGenerationTask(taskIds[4])).toMatchObject({ status: 'queued', waitingExternal: true, cancellable: true })
     const otherProject = background ? await useProjectStore.getState().createProject('队列期间的另一个项目') : null
     if (mode === 'cancel-queued') {
       expect(await taskControlSession()('cancel_generation_task', { taskId: taskIds[4], reason: '取消队尾任务' })).toMatchObject({ ok: true })
+      await vi.waitFor(() => expect(records.get(taskIds[4])?.status).toBe('cancelled'))
+      expect(generate).toHaveBeenCalledTimes(2)
     }
     release()
     await vi.waitFor(() => expect(taskIds.map(id => records.get(id)?.status), JSON.stringify([...records.values()].map(record => ({ status: record.status, error: record.errorMessage })))).toEqual(taskIds.map((_id, index) => mode === 'cancel-queued' && index === 4 ? 'cancelled' : 'success')))

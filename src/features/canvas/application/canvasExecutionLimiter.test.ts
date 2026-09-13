@@ -3,6 +3,39 @@ import { describe, expect, it } from 'vitest'
 import { createCanvasExecutionLimiter } from './canvasExecutionLimiter'
 
 describe('canvasExecutionLimiter', () => {
+  it('排队取消立即返回并移除等待项，不占用或释放其他任务的名额', async () => {
+    const limiter = createCanvasExecutionLimiter(1)
+    const started: string[] = []
+    let release!: () => void
+    const gate = new Promise<void>(resolve => { release = resolve })
+    const first = limiter.run(async () => { started.push('first'); await gate })
+    const controller = new AbortController()
+    const cancelled = limiter.run(async () => { started.push('cancelled') }, controller.signal)
+    const last = limiter.run(async () => { started.push('last') })
+    try {
+      controller.abort(new Error('停止队列'))
+      await expect(cancelled).rejects.toThrow('停止队列')
+      expect(started).toEqual(['first'])
+    } finally { release(); await Promise.allSettled([first, cancelled, last]) }
+    expect(started).toEqual(['first', 'last'])
+  })
+
+  it('移交名额后才取消仍不调用业务，名额继续传给后续任务', async () => {
+    const limiter = createCanvasExecutionLimiter(1)
+    const controller = new AbortController()
+    const started: string[] = []
+    let release!: () => void
+    const gate = new Promise<void>(resolve => { release = resolve })
+    const first = limiter.run(async () => { await gate })
+    const second = limiter.run(async () => { started.push('second') }, controller.signal)
+    const third = limiter.run(async () => { started.push('third') })
+    const cancellation = first.then(() => controller.abort(new Error('移交时取消')))
+    release()
+    await expect(second).rejects.toThrow('移交时取消')
+    await Promise.all([first, third, cancellation])
+    expect(started).toEqual(['third'])
+  })
+
   it('max=1 时把 permit 直接移交给队首，不让插队微任务并发启动', async () => {
     const limiter = createCanvasExecutionLimiter(1)
     const started: string[] = []

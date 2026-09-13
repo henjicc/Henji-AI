@@ -19,6 +19,7 @@ import {
 import type {
   CanvasNodeExecutionContext,
   CanvasNodeExecutionResult,
+  CanvasNodeExecutionScheduler,
   CanvasRegisteredExecutor,
   CanvasRunResult,
 } from './canvasExecutionContracts'
@@ -303,7 +304,7 @@ async function executeRegisteredNode(
         await assertDependenciesCurrent()
       },
     }
-    const promise = getExecutionLimiter(executor.kind).run(async () => {
+    const schedule: CanvasNodeExecutionScheduler = (operation, signal) => getExecutionLimiter(executor.kind).run(async () => {
       useCanvasExecutionStateStore.getState().beginNodeExecution(nodeId, {
         runId: context.runId,
         phase: getExecutionPhase(executor.kind),
@@ -320,7 +321,7 @@ async function executeRegisteredNode(
           throw new CanvasRunCancelledBeforeExecutionError(context.runId, runControl.failure)
         }
         await context.assertCurrent()
-        const result = await executor.run(context)
+        const result = await operation()
         if (backgroundCompletion && baseContext.projectId) {
           await withCanvasProjectRuntime(baseContext.projectId, async runtime => {
             const extras = await executor.getInputSignatureExtras?.(runtime.store)
@@ -357,7 +358,8 @@ async function executeRegisteredNode(
       } finally {
         useCanvasExecutionStateStore.getState().endNodeExecution(nodeId, context.runId)
       }
-    })
+    }, signal)
+    const promise = executor.runQueued ? executor.runQueued(context, schedule) : schedule(() => executor.run(context))
     activeNodeRuns.set(key, { inputSignature, promise })
     try {
       return { result: await promise, joined: false, inputSignature }

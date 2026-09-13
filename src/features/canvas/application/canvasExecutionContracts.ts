@@ -23,6 +23,10 @@ export interface CanvasNodeExecutionResult {
   resultNodeIds: string[]
 }
 
+export type CanvasNodeExecutionScheduler = (
+  operation: () => Promise<CanvasNodeExecutionResult>, signal?: AbortSignal,
+) => Promise<CanvasNodeExecutionResult>
+
 export interface CanvasRegisteredExecutor {
   kind: Exclude<CanvasNodeExecutionKind, 'text-display'>
   dependency?: {
@@ -37,6 +41,8 @@ export interface CanvasRegisteredExecutor {
   /** 结果能够通过原项目的业务存储提交，不依赖当前页面。 */
   supportsBackgroundCompletion?: (store?: typeof useCanvasStore) => boolean
   isCachedOutputValid?: (node: CanvasNode) => boolean
+  /** 在等待执行名额之前持有任务；实际业务仍必须通过 schedule 进入共用执行队列。 */
+  runQueued?: (context: CanvasNodeExecutionContext, schedule: CanvasNodeExecutionScheduler) => Promise<CanvasNodeExecutionResult>
   run: (context: CanvasNodeExecutionContext) => Promise<CanvasNodeExecutionResult>
 }
 
