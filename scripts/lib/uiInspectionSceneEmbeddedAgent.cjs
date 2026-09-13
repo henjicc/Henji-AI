@@ -75,8 +75,9 @@ function createEmbeddedAgentScenes(context) {
           assert.equal(requests[0].tools.some((tool) => tool.function.name === name), false, `只读助手不应获得 ${name}`)
         }
         const toolResult = JSON.parse(requests[1].messages.find((message) => message.role === 'tool').content)
-        assert.equal(toolResult.isError, false, JSON.stringify(toolResult))
-        assert.equal(toolResult.structuredContent.ok, true, JSON.stringify(toolResult))
+        assert.equal(toolResult.ok, true, JSON.stringify(toolResult))
+        assert.equal(typeof toolResult.data.properties['interface.theme_tone'], 'string', JSON.stringify(toolResult))
+        assert.equal(Object.hasOwn(toolResult, 'structuredContent'), false, 'Pi 回执不应重复携带 MCP 镜像')
         assert.equal((await page.evaluate(() => window.henjiNative.mcp.status())).enabled, false)
         const before = await page.evaluate(() => window.henjiNative.embeddedAgent.snapshot())
         assert.equal(before.error, null)
