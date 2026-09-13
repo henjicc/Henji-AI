@@ -24,6 +24,10 @@ import { MCP_CAPABILITY_IDS, type LocalHostRequest, type LocalTool } from '../..
 type Sample = { era: string; tool: string; arguments: Record<string, unknown> }
 
 const LEGACY_SAMPLES: Sample[] = [
+  { era: '原图片工具节点执行', tool: 'prepare_canvas_node_generation', arguments: { projectId: 'project-1', nodeId: 'tool-1' } },
+  { era: '原图片工具节点执行', tool: 'submit_canvas_node_generation', arguments: {
+    operationId: '5f6d2a4c-3d1b-4d5a-9f3a-1b2c3d4e5f60', projectId: 'project-1', nodeId: 'tool-1', inputSignature: 'canvas-input-v2-fixture',
+  } },
   { era: '画布原任务续查', tool: 'resume_canvas_generation_task', arguments: {
     operationId: '4f6d2a4c-3d1b-4d5a-9f3a-1b2c3d4e5f60', taskId: 'original-task',
     projectId: 'project-1', sourceNodeId: 'generator-1', resultNodeIds: ['result-1'],

@@ -442,6 +442,12 @@ function validateDynamicConstraints(
 
 export function prepareGenerationTask(input: GenerationPreparationInput): Record<string, unknown> {
   const model = requireDiscoverableGenerationModel(input.modelId)
+  return prepareGenerationModelInput(input, model)
+}
+
+/** 画布从已验证的节点解析模型；通用入口仍只允许公开模型。 */
+export function prepareGenerationModelInput(input: GenerationPreparationInput, model: ModelDefinition): Record<string, unknown> {
+  if (model.meta.id !== input.modelId) throw new GenerationPreparationError('INVALID_INPUT', '准备模型与节点模型不一致')
   if (model.meta.type !== input.mediaType) {
     throw new GenerationPreparationError('INVALID_INPUT', '生成媒体类型与模型能力不匹配', {
       modelId: input.modelId,

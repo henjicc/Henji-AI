@@ -494,6 +494,10 @@ export function runCanvasNode(rootNodeId: string, assertCurrent?: () => void): P
   return executeCanvasRun(rootNodeId, assertCurrent)
 }
 
+export function isCanvasNodeRunActive(projectId: string, nodeId: string): boolean {
+  return activeNodeRuns.has(activeNodeKey(projectId, nodeId))
+}
+
 /** 新节点完成 React 挂载前，调用方可等待正式执行器就绪。 */
 export function isCanvasNodeExecutorReady(nodeId: string): boolean { return hasExecutor(nodeId) }
 

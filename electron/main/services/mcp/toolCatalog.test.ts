@@ -120,7 +120,8 @@ describe('对外工具目录的投影与授权过滤', () => {
     // 改权限：写工具出现，付费工具仍然缺席，并且缺席原因写明缺付费档而不是缺修改档。
     expect(names(WRITE)).toEqual(expect.arrayContaining(['change_application_entities', 'get_application_operation', 'retry_application_operation_save']))
     expect(names(WRITE)).not.toContain('create_visible_generation_task')
-    expect(catalog(WRITE).hidden).toEqual([{ name: 'create_visible_generation_task', tier: 'paid', requires: '本连接未获「允许付费生成」授权' }])
+    expect(catalog(WRITE).hidden).toEqual(['create_visible_generation_task', 'submit_canvas_node_generation']
+      .map(name => ({ name, tier: 'paid', requires: '本连接未获「允许付费生成」授权' })))
     expect(names(PAID)).toContain('create_visible_generation_task')
     expect(catalog(PAID).hidden).toEqual([])
   })
@@ -173,7 +174,7 @@ describe('契约发现的投影', () => {
     expect((contract.contract as { transport: { url: string } }).transport.url).toBe('http://127.0.0.1:43821/mcp')
     const access = contract.access as { paid: boolean; note: string; hiddenTools: Array<{ name: string }>; excludedTools: Array<{ reason: string }> }
     expect(access.paid).toBe(false)
-    expect(access.hiddenTools.map((item) => item.name)).toEqual(['create_visible_generation_task'])
+    expect(access.hiddenTools.map((item) => item.name)).toEqual(['create_visible_generation_task', 'submit_canvas_node_generation'])
     expect(access.note).toContain('PERMISSION_DENIED')
     expect(access.excludedTools).toHaveLength(EXCLUDED_TOOLS.length)
     expect(access.excludedTools.every((item) => item.reason.length > 10)).toBe(true)

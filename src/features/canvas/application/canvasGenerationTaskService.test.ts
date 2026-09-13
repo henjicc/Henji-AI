@@ -10,7 +10,7 @@ import { useCanvasStore } from '@/stores/canvasStore'
 import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from '@/tests/harnessNativeStorage'
 import { readGenerationTaskStatusSnapshot, replaceGenerationTaskStatusSnapshots } from '@/features/generation/application/generationTaskStatusRegistry'
 import { CANVAS_NODE_TYPES } from '../domain/canvasNodes'
-import { getCanvasGenerationTask, resolveCanvasGenerationOptions, submitCanvasGenerationTask } from './canvasGenerationTaskService'
+import { getCanvasGenerationTask, resolveCanvasGenerationOptions, submitCanvasGenerationTask, prepareCanvasNodeGeneration, submitCanvasNodeGeneration } from './canvasGenerationTaskService'
 import { registerCanvasNodeExecutor, resetCanvasExecutionServiceForTests } from './canvasExecutionService'
 import { readPersistedCanvasProjectSnapshot } from './canvasQueryService'
 import { confirmCanvasPersistence } from './canvasPersistenceService'
@@ -21,6 +21,10 @@ import { createApplicationCallerGrant } from '@/core/application-control/callerC
 import { MCP_CAPABILITY_IDS, MCP_READ_PERMISSIONS, MCP_WRITE_PERMISSIONS } from '@/core/application-control/localHostContracts'
 import { createApplicationCapabilitySession } from '@/features/application-control/applicationCapabilityService'
 import { resumeCanvasProjectGeneration } from './canvasResumePollingService'
+import { loadRealModelsIntoRegistry } from '@/tests/loadRealModels'
+import * as imageCommands from '@/commands/image'
+import { CANVAS_IMAGE_CAPABILITY_IDS } from '../capabilities'
+import { prepareNodeImage } from './imageData'
 vi.mock('./imageData', async (original) => ({
   ...await original<typeof import('./imageData')>(),
   persistImageLocally: vi.fn(async (url: string) => url),
@@ -115,6 +119,111 @@ function taskControlSession() {
       { requestId: crypto.randomUUID(), signal: new AbortController().signal })
   }
 }
+
+it.each([CANVAS_IMAGE_CAPABILITY_IDS.backgroundRemoval, CANVAS_IMAGE_CAPABILITY_IDS.photoRestoration,
+  CANVAS_IMAGE_CAPABILITY_IDS.presetRelight, CANVAS_IMAGE_CAPABILITY_IDS.outpaint, CANVAS_IMAGE_CAPABILITY_IDS.upscale, CANVAS_IMAGE_CAPABILITY_IDS.panorama])(
+  'MCP 图片工具 %s 从创建配置到原节点生成、持久结果查询闭环，无需 React 挂载', async capabilityId => {
+  await loadRealModelsIntoRegistry()
+  vi.spyOn(imageCommands, 'readImageInfo').mockResolvedValue({ source: 'C:/reference.png', fileName: 'reference.png', extension: 'png',
+    width: 1024, height: 1024, orientation: null, hasAlpha: false, fileSizeBytes: 1024, createdAt: null, modifiedAt: null })
+  if (capabilityId === CANVAS_IMAGE_CAPABILITY_IDS.panorama) vi.mocked(prepareNodeImage).mockImplementation(async url => ({
+    imageUrl: url, previewImageUrl: url, aspectRatio: '2:1', createdFilePaths: [],
+  }))
+  useSettingsStore.setState({ providerKeyStatus: { ...useSettingsStore.getState().providerKeyStatus, fal: true } })
+  const execute = taskControlSession()
+  const created = await execute('apply_canvas_image_capability', { projectId, sourceNodeId: 'reference', capabilityId })
+  expect(created, JSON.stringify(created)).toMatchObject({ ok: true })
+  if (!created.ok) throw new Error('节点创建失败')
+  const nodeId = String(created.data.nodeId)
+  const selectedModel = registry.getModel(String(useCanvasStore.getState().nodes.find(node => node.id === nodeId)?.data.modelId))!
+  expect(selectedModel).toBeDefined()
+  useSettingsStore.setState({ providerKeyStatus: { ...useSettingsStore.getState().providerKeyStatus, [selectedModel.meta.provider]: true } })
+  const ref = { kind: 'canvas.node', id: `${projectId}:${nodeId}` }
+  const configuration = await execute('read_application_entity', { ref, propertyIds: ['canvas.node.generation_schema', 'canvas.node.generation_config'] })
+  expect(configuration, JSON.stringify(configuration)).toMatchObject({ ok: true })
+  const prepared = await execute('prepare_canvas_node_generation', { projectId, nodeId })
+  expect(prepared, JSON.stringify(prepared)).toMatchObject({ ok: true })
+  if (!prepared.ok) throw new Error('节点准备失败')
+  const modelId = String((prepared.data.preparation as Record<string, unknown>).modelId)
+  const generate = vi.mocked(GenerationService.getInstance().generate)
+  expect(generate).not.toHaveBeenCalled()
+  const result = await execute('submit_canvas_node_generation', prepared.data.submitInput as Record<string, unknown>)
+  expect(result, JSON.stringify(result)).toMatchObject({ ok: true, data: { status: 'submitted' } })
+  if (!result.ok) throw new Error('节点提交失败')
+  const taskId = String(result.data.taskId)
+  await vi.waitFor(() => expect(records.get(taskId)?.status).toBe('success'))
+  expect(generate).toHaveBeenCalledTimes(1)
+  expect(generate).toHaveBeenCalledWith(modelId, expect.objectContaining({ images: ['C:/reference.png'] }), expect.any(Function), expect.any(Object))
+  const saved = await readPersistedCanvasProjectSnapshot(projectId)
+  const sourceNode = saved.nodes.find(node => node.id === nodeId)!
+  expect(saved.nodes.filter(node => node.type === sourceNode.type)).toHaveLength(1)
+  const output = saved.nodes.find(node => node.data.generationTaskId === taskId)!
+  expect(output.data).toMatchObject({ generationSourceNodeId: nodeId, imageUrl: 'C:/result.png', isGenerating: false })
+  expect(saved.edges).toEqual(expect.arrayContaining([
+    expect.objectContaining({ source: 'reference', target: nodeId }), expect.objectContaining({ source: nodeId, target: output.id }),
+  ]))
+  expect(await execute('get_generation_task', { taskId })).toMatchObject({ ok: true, data: { task: { status: 'success', resultAvailable: true } } })
+})
+
+it('原节点准备后改输入必须重新估价，同节点运行中不重复登记，其他节点不受影响', async () => {
+  const canvas = useCanvasStore.getState()
+  const nodeId = canvas.addNode(CANVAS_NODE_TYPES.imageEdit, { x: 400, y: 0 }, { modelId: 'canvas-task-fixture', prompt: '第一张', params: {} })
+  const execute = taskControlSession()
+  const prepared = await execute('prepare_canvas_node_generation', { projectId, nodeId })
+  expect(prepared, JSON.stringify(prepared)).toMatchObject({ ok: true })
+  if (!prepared.ok) throw new Error('准备失败')
+  canvas.updateNodeData(nodeId, { prompt: '修改后的任务' })
+  const stale = await execute('submit_canvas_node_generation', prepared.data.submitInput as Record<string, unknown>)
+  expect(stale).toMatchObject({ ok: false, error: { details: { execution: { notExecuted: true } } } })
+  expect(records.size).toBe(0)
+  expect(GenerationService.getInstance().generate).not.toHaveBeenCalled()
+  const updated = await execute('prepare_canvas_node_generation', { projectId, nodeId })
+  if (!updated.ok) throw new Error(JSON.stringify(updated))
+  let release!: () => void
+  const pending = new Promise<void>(resolve => { release = resolve })
+  vi.mocked(GenerationService.getInstance().generate).mockImplementation(async () => {
+    await pending
+    return { status: 'completed', url: 'C:/current.png', filePath: 'C:/current.png' }
+  })
+  const accepted = await execute('submit_canvas_node_generation', updated.data.submitInput as Record<string, unknown>)
+  expect(accepted).toMatchObject({ ok: true })
+  await vi.waitFor(() => expect(GenerationService.getInstance().generate).toHaveBeenCalledTimes(1))
+  expect(await execute('submit_canvas_node_generation', updated.data.submitInput as Record<string, unknown>)).toMatchObject({ ok: false })
+  expect(records.size).toBe(1)
+  const otherTask = crypto.randomUUID()
+  await submitCanvasGenerationTask({ modelId: 'canvas-task-fixture', mediaType: 'image', prompt: '独立请求' }, { mode: 'canvas', projectId, sourceNodeIds: [] }, otherTask)
+  await vi.waitFor(() => expect(GenerationService.getInstance().generate).toHaveBeenCalledTimes(2))
+  release()
+  await vi.waitFor(() => expect([...records.values()].map(record => record.status)).toEqual(['success', 'success']))
+})
+
+it('准备阶段取消不登记任务，新增未估价上游连线也不能触发额外生成', async () => {
+  const canvas = useCanvasStore.getState()
+  const nodeId = canvas.addNode(CANVAS_NODE_TYPES.imageEdit, { x: 400, y: 0 }, { modelId: 'canvas-task-fixture', prompt: '目标', params: {} })
+  const { submitInput } = await prepareCanvasNodeGeneration({ projectId, nodeId })
+  const controller = new AbortController()
+  const pending = submitCanvasNodeGeneration(submitInput, crypto.randomUUID(), controller.signal)
+  controller.abort()
+  await expect(pending).rejects.toThrow()
+  expect(records.size).toBe(0)
+  const upstream = canvas.addNode(CANVAS_NODE_TYPES.imageEdit, { x: 0, y: 0 }, { modelId: 'canvas-task-fixture', prompt: '额外生成', params: {} })
+  canvas.addEdge(upstream, nodeId)
+  await expect(submitCanvasNodeGeneration(submitInput, crypto.randomUUID())).rejects.toThrow('节点输入已改变')
+  await expect(prepareCanvasNodeGeneration({ projectId, nodeId })).rejects.toThrow('额外上游生成')
+  expect(records.size).toBe(0)
+  expect(GenerationService.getInstance().generate).not.toHaveBeenCalled()
+})
+
+it('新建节点后登记失败保留已创建节点事实，不冒充整次操作未执行', async () => {
+  vi.mocked(databaseService.getHistoryById).mockResolvedValueOnce(null).mockRejectedValueOnce(new Error('历史存储读取失败'))
+  await expect(submitCanvasGenerationTask({ modelId: 'canvas-task-fixture', mediaType: 'image', prompt: '新建后登记' },
+    { mode: 'canvas', projectId, sourceNodeIds: [] }, crypto.randomUUID()))
+    .rejects.toMatchObject({ details: { nodeRef: { kind: 'canvas.node' } } })
+  const saved = await readPersistedCanvasProjectSnapshot(projectId)
+  expect(saved.nodes.filter(node => node.type === CANVAS_NODE_TYPES.imageEdit)).toHaveLength(1)
+  expect(records.size).toBe(0)
+  expect(GenerationService.getInstance().generate).not.toHaveBeenCalled()
+})
 
 it('MCP 取消一个原任务不影响并行请求，迟到输出不冒充成功', async () => {
   let release!: () => void

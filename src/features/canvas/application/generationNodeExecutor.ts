@@ -94,7 +94,7 @@ export interface GenerationNodeExecutionOptions {
 }
 
 /** UI 与后台调用共享的生成执行器；读取最新配置，不依赖 React 挂载。 */
-export function createGenerationNodeExecutor(readOptions: () => GenerationNodeExecutionOptions): CanvasRegisteredExecutor {
+export function createGenerationNodeExecutor(readOptions: () => GenerationNodeExecutionOptions) {
   const readRuntime = () => resolveGenerationNodeRuntime({
     nodeId: readOptions().nodeId,
     modelType: readOptions().modelType,
@@ -174,7 +174,13 @@ export function createGenerationNodeExecutor(readOptions: () => GenerationNodeEx
       message: current.t('common:providerKeyRequired.message'),
       error: current.t(current.apiKeyRequiredKey),
     })
-    return { runtime, values, promptInput, capabilityPreparation }
+    const prompt = capabilityPreparation?.prompt ?? promptInput.prompt
+    const generationParams: DynamicValueMap = {
+      ...(capabilityPreparation?.params ?? values), prompt, text: prompt,
+      ...(typeof runtime.data.videoTrimStart === 'number' ? { uploadedVideoTrimStart: runtime.data.videoTrimStart } : {}),
+      ...(typeof runtime.data.videoTrimEnd === 'number' ? { uploadedVideoTrimEnd: runtime.data.videoTrimEnd } : {}),
+    }
+    return { runtime, values, promptInput, capabilityPreparation, generationParams }
   }
 
   const preflightBeforeDependencies = (execution: CanvasNodePreflightContext) => {
@@ -219,19 +225,7 @@ export function createGenerationNodeExecutor(readOptions: () => GenerationNodeEx
         if (!generationProjectId) throw new Error('当前没有可执行生成的画布项目')
         const isProjectCurrent = (): boolean => isCanvasProjectContextCurrent(generationProjectId)
         const prepared = await prepareExecution(execution)
-        const { runtime, promptInput, capabilityPreparation } = prepared
-        const prompt = capabilityPreparation?.prompt ?? promptInput.prompt
-        const generationParams: DynamicValueMap = {
-          ...(capabilityPreparation?.params ?? prepared.values),
-          prompt,
-          text: prompt,
-          ...(typeof runtime.data.videoTrimStart === 'number'
-            ? { uploadedVideoTrimStart: runtime.data.videoTrimStart }
-            : {}),
-          ...(typeof runtime.data.videoTrimEnd === 'number'
-            ? { uploadedVideoTrimEnd: runtime.data.videoTrimEnd }
-            : {}),
-        }
+        const { runtime, promptInput, capabilityPreparation, generationParams } = prepared
         ownership.requestPreparation = current.prepareGenerationRequest
           ? await current.prepareGenerationRequest({
               data: runtime.data,
@@ -406,7 +400,7 @@ export function createGenerationNodeExecutor(readOptions: () => GenerationNodeEx
     })
   }
 
-  return {
+  const executor: CanvasRegisteredExecutor = {
     kind: 'standard-generation',
     dependency: { mode: 'auto', outputMode: 'result-nodes' },
     inputSignatureScope: 'runtime',
@@ -414,4 +408,5 @@ export function createGenerationNodeExecutor(readOptions: () => GenerationNodeEx
     preflightBeforeDependencies,
     run: handleGenerate,
   }
+  return { ...executor, prepare: prepareExecution }
 }

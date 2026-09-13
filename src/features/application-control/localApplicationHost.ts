@@ -35,7 +35,7 @@ export function attachLocalApplicationHost(platform: McpPlatform, ready: boolean
       logger.info(readOnly ? '开始读取应用内容' : '开始修改应用内容', { event: `mcp.${action}.start`, context: { requestId, capabilityId } })
       let result: Record<string, unknown>
       try {
-        if (capabilityId === 'create_visible_generation_task' && !allowPaid) throw new Error('此连接没有付费生成授权。')
+        if (definitions.find(item => item.id === capabilityId)?.paidGenerationPreparation && !allowPaid) throw new Error('此连接没有付费生成授权。')
         if (!ready) throw new Error('应用尚未就绪，请稍后重试。')
         const grant = createApplicationCallerGrant({ callerId, capabilityIds: allowWrites ? [...MCP_CAPABILITY_IDS] : [...MCP_READ_CAPABILITY_IDS], permissions: [...MCP_READ_PERMISSIONS, ...(allowWrites ? MCP_WRITE_PERMISSIONS : [])], allowWrites, allowDestructive })
         grants.set(requestId, grant)

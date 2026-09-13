@@ -17,6 +17,12 @@ export const canvasGenerationResumeInputSchema = z.object({
 }).strict()
 export type CanvasGenerationResumeInput = z.infer<typeof canvasGenerationResumeInputSchema>
 
+const canvasNodeGenerationInputSchema = z.object({
+  projectId: z.string().min(1), nodeId: z.string().min(1),
+  inputSignature: z.string().min(1).optional(),
+}).strict()
+export type CanvasNodeGenerationInput = z.infer<typeof canvasNodeGenerationInputSchema>
+
 import type { ApplicationCapabilityDefinition } from '../applicationCapabilities'
 import {
   capabilityControl,
@@ -387,6 +393,41 @@ const resumeCanvasGenerationTask = defineApplicationCapability({
   summarize: (output) => `原画布任务状态：${output.status}，未重新提交生成。`,
 })
 
+const prepareCanvasNodeGeneration = defineApplicationCapability({
+  id: 'prepare_canvas_node_generation', version: 1, title: '准备原节点生成',
+  description: '读取原画布标准生成节点的实际模型、参数和参考素材并估价，包括固定模型的抠图、放大等图片工具。配置使用 canvas.node.generation_config；返回 submitInput 可直接用于 submit_canvas_node_generation。',
+  domain: 'generation', aliases: ['准备图片工具', '节点生成估价'], readOnly: true,
+  control: capabilityControl('observe', ['canvas.node', 'generation.preparation']),
+  risk: 'R0', dataClasses: ['C1'], permission: 'generation:prepare', idempotent: true, destructive: false,
+  timeoutMs: 30_000, supportsPreview: false, supportsUndo: false, requiredScopes: [],
+  acceptsRefs: ['canvas.node'], producesRefs: ['generation.preparation'],
+  inputSchema: canvasNodeGenerationInputSchema,
+  outputSchema: capabilityOutputSchema({ preparation: z.record(z.string(), z.unknown()), submitInput: canvasNodeGenerationInputSchema }),
+  concurrencyKey: 'generation_prepare', resolveConcurrencyKey: input => `generation_prepare:${input.projectId}:${input.nodeId}`,
+  summarize: () => '原节点输入与费用已准备，可以提交生成。',
+})
+
+const submitCanvasNodeGeneration = defineApplicationCapability({
+  id: 'submit_canvas_node_generation', version: 1, title: '执行原画布生成节点',
+  description: '使用 prepare_canvas_node_generation 返回的 submitInput 执行已配置的原节点，保留参考连线，结果自动放在节点旁。包括标准图片、视频、音频节点及固定模型图片工具；返回任务号后用 get_generation_task 查询。',
+  domain: 'generation', aliases: ['运行图片工具', '执行生成节点'], readOnly: false,
+  control: capabilityControl('execute', ['generation.task', 'canvas.node'], { revisionScopes: ['generation', 'canvas'], verificationRequired: false, resultState: 'submitted',
+    alsoImpacts: [{ effect: 'create', entityTypes: ['generation.task', 'canvas.node', 'canvas.edge'] }] }),
+  risk: 'R2', dataClasses: ['C1'], permission: 'generation:create', idempotent: true, destructive: false,
+  timeoutMs: 60_000, supportsPreview: false, supportsUndo: false, completionKind: 'submitted', requiredScopes: ['canvas', 'generation'],
+  acceptsRefs: ['canvas.node'], producesRefs: ['generation.task', 'canvas.node'],
+  executionPrerequisites: ['prepare_canvas_node_generation'], paidGenerationPreparation: 'prepare_canvas_node_generation',
+  inputSchema: canvasNodeGenerationInputSchema.extend({ inputSignature: z.string().min(1) }),
+  outputSchema: capabilityOutputSchema({ taskId: z.string().min(1), status: z.literal('submitted') }),
+  concurrencyKey: 'generation', resolveConcurrencyKey: input => `generation:${input.projectId}:${input.nodeId}`,
+  resolveTargetIds: input => ({ projectId: input.projectId, nodeId: input.nodeId }),
+  resolveOperationTargets: input => [{ kind: 'canvas.node', id: `${input.projectId}:${input.nodeId}` }],
+  resolveOperationWriteTargets: (input, operationId) => [{ kind: 'canvas.node', id: `${input.projectId}:${input.nodeId}` },
+    { kind: 'generation.task', id: applicationGenerationTaskId(operationId) }, { kind: 'canvas.project', id: input.projectId }],
+  resolveOperationAppendTargets: input => [{ kind: 'canvas.project', id: input.projectId }],
+  summarize: output => `原节点任务 ${output.taskId} 已提交，完成情况请查询任务。`,
+})
+
 export const GENERATION_APPLICATION_CAPABILITIES: ApplicationCapabilityDefinition[] = [
   switchWorkspace,
   searchModels,
@@ -397,4 +438,6 @@ export const GENERATION_APPLICATION_CAPABILITIES: ApplicationCapabilityDefinitio
   getGenerationTask,
   cancelGenerationTask,
   resumeCanvasGenerationTask,
+  prepareCanvasNodeGeneration,
+  submitCanvasNodeGeneration,
 ]

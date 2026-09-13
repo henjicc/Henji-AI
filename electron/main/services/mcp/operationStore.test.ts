@@ -32,6 +32,38 @@ function input(baselineId: string): Record<string, unknown> {
 }
 
 describe('MCP 原生操作记录与恢复', () => {
+  it.each([1, 51])('原节点提交实际入口先准备并检查预算，估价 %s 元', async amount => {
+    const f = fixture()
+    const raw = { operationId: randomUUID(), projectId: 'project', nodeId: 'tool', inputSignature: 'canvas-input-fixture' }
+    expect(() => f.coordinator.prepare(f.callerId, raw, f.sessionId, access, 'submit_canvas_node_generation')).toThrow('付费生成授权')
+    const calls: LocalHostRequest[] = []
+    const host = new ApplicationHostBridge(() => undefined, f.coordinator)
+    host.register({ sessionId: f.sessionId, generation: 1, ready: true, tools: [] }, { send(channel, value) {
+      if (channel !== 'mcp:host:request') return
+      const request = value as LocalHostRequest
+      calls.push(request)
+      host.complete({ sessionId: f.sessionId, requestId: request.requestId, result: { ok: true, data:
+        request.capabilityId === 'prepare_canvas_node_generation' ? { preparation: { priceEstimate: { comparableCnyAmount: amount } } }
+          : { taskId: 'generated-task', status: 'submitted', verification: { verified: true } } } })
+    } })
+    const dispatcher = new ApplicationToolDispatcher({ assertActive() {}, access: () => ({ ...access, allowPaid: true }) }, host, f.coordinator)
+    const result = await dispatcher.call(f.callerId, 'submit_canvas_node_generation', raw, new AbortController().signal)
+    expect(calls.map(call => call.capabilityId)).toEqual(amount <= 50 ? ['prepare_canvas_node_generation', 'submit_canvas_node_generation'] : ['prepare_canvas_node_generation'])
+    expect(calls[0].input).toMatchObject({ inputSignature: raw.inputSignature })
+    expect(result.isError).toBe(amount > 50)
+    expect(f.store.get(raw.operationId, f.callerId)?.state).toBe(amount <= 50 ? 'completed' : 'not_executed')
+  })
+  it('执行原节点只保护本节点，同项目其他节点继续追加，未知原请求不重放', () => {
+    const f = fixture()
+    const paid = { ...access, allowPaid: true }
+    const raw = { operationId: randomUUID(), projectId: 'project', nodeId: 'first', inputSignature: 'original-input' }
+    const first = f.coordinator.prepare(f.callerId, raw, f.sessionId, paid, 'submit_canvas_node_generation')
+    const requestId = randomUUID()
+    f.coordinator.dispatched(first, requestId, f.sessionId)
+    f.coordinator.interrupted(requestId, f.sessionId)
+    expect(f.coordinator.prepare(f.callerId, { ...raw, operationId: randomUUID(), nodeId: 'second' }, f.sessionId, paid, 'submit_canvas_node_generation').state).toBe('prepared')
+    expect(() => f.coordinator.prepare(f.callerId, { ...raw, operationId: randomUUID() }, f.sessionId, paid, 'submit_canvas_node_generation')).toThrow(first.operationId)
+  })
   it.each([1, 51])('按声明派生新付费入口的授权与预算，估价 %s 元', async amount => {
     const original = BUILTIN_APPLICATION_CAPABILITY_REGISTRY.get.bind(BUILTIN_APPLICATION_CAPABILITY_REGISTRY)
     const spy = vi.spyOn(BUILTIN_APPLICATION_CAPABILITY_REGISTRY, 'get').mockImplementation(id => {

@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 
 import { UiEmpty } from '@/components/ui';
 import { CANVAS_NODE_TYPES, type ImageEditNodeData } from '@/features/canvas/domain/canvasNodes';
-import { prepareImageEditNodeRuntime } from '../application/imageEditNodePreparation';
+import { prepareImageEditNodeRuntime, resolveImageEditGenerationUi } from '../application/imageEditNodePreparation';
 import type { GenerationNodeRuntimePreparationContext } from './shared/generationNodeExecutionTypes';
 import {
   GenerationNodeShell,
@@ -27,46 +27,9 @@ type ImageEditNodeProps = NodeProps & {
   selected?: boolean;
 };
 
-interface ImageEditGenerationUi {
-  promptMode: 'required' | 'optional' | 'hidden';
-  modelMode: 'selectable' | 'locked';
-  layoutMode: 'stacked' | 'workbench';
-  excludeParamIds: readonly string[];
-  promptMaxCharacters?: number;
-  workbenchEditor?: 'outpaint';
-}
-
-const DEFAULT_GENERATION_UI: ImageEditGenerationUi = {
-  promptMode: 'required',
-  modelMode: 'selectable',
-  layoutMode: 'stacked',
-  excludeParamIds: [],
-};
-
-function resolveGenerationUi(data: ImageEditNodeData): ImageEditGenerationUi {
-  const value = (data as ImageEditNodeData & { generationUi?: unknown }).generationUi;
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return DEFAULT_GENERATION_UI;
-  const raw = value as Record<string, unknown>;
-  const promptMode = raw.promptMode === 'hidden' || raw.promptMode === 'optional'
-    ? raw.promptMode
-    : 'required';
-  const modelMode = raw.modelMode === 'locked' ? 'locked' : 'selectable';
-  const layoutMode = raw.layoutMode === 'workbench' ? 'workbench' : 'stacked';
-  const excludeParamIds = Array.isArray(raw.excludeParamIds)
-    ? raw.excludeParamIds.filter((item): item is string => typeof item === 'string')
-    : [];
-  const promptMaxCharacters = typeof raw.promptMaxCharacters === 'number'
-    && Number.isInteger(raw.promptMaxCharacters)
-    && raw.promptMaxCharacters > 0
-      ? raw.promptMaxCharacters
-      : undefined;
-  return { promptMode, modelMode, layoutMode, excludeParamIds, promptMaxCharacters,
-    workbenchEditor: raw.workbenchEditor === 'outpaint' ? 'outpaint' : undefined };
-}
-
 export const ImageEditNode = memo(({ id, data, selected, width, height }: ImageEditNodeProps) => {
   const { t } = useTranslation();
-  const generationUi = resolveGenerationUi(data);
+  const generationUi = resolveImageEditGenerationUi(data);
   const isOutpaint = generationUi.workbenchEditor === 'outpaint';
   const aspect = typeof data.outpaintSourceAspectRatio === 'number' && data.outpaintSourceAspectRatio > 0
     ? data.outpaintSourceAspectRatio : undefined;

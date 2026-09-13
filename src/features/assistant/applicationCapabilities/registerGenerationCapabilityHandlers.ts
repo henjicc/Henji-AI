@@ -10,7 +10,7 @@ import { useGenerationDraftStore } from '@/features/generation/store/generationD
 import { switchWorkspace, useNavigationStore } from '@/stores/navigationStore'
 import { useProjectStore } from '@/stores/projectStore'
 import { useCanvasStore } from '@/stores/canvasStore'
-import type { CanvasGenerationResumeInput, GenerationDestination } from '@/core/assistant/capabilities/generationApplicationCapabilities'
+import type { CanvasGenerationResumeInput, CanvasNodeGenerationInput, GenerationDestination } from '@/core/assistant/capabilities/generationApplicationCapabilities'
 import { isBuiltinModelType } from '@/core/modelSortOrder'
 
 import type { ApplicationCapabilityHandlerRegistrar } from './handlerTypes'
@@ -211,6 +211,18 @@ export function registerGenerationCapabilityHandlers(
     }>('cancel_generation_task', input)
     const { cancelCanvasGenerationTask } = await import('@/features/canvas/application/canvasGenerationTaskService')
     return await cancelCanvasGenerationTask(parsed.taskId) ?? await generationApplicationService.cancelTask(parsed.taskId, parsed.reason)
+  })
+
+  registrar.registerHandler('prepare_canvas_node_generation', async input => {
+    const parsed = parseCapabilityInput<CanvasNodeGenerationInput>('prepare_canvas_node_generation', input)
+    const { prepareCanvasNodeGeneration } = await import('@/features/canvas/application/canvasGenerationTaskService')
+    return prepareCanvasNodeGeneration(parsed)
+  })
+  registrar.registerHandler('submit_canvas_node_generation', async (input, context) => {
+    throwIfCapabilityAborted(context.signal)
+    const parsed = parseCapabilityInput<CanvasNodeGenerationInput & { inputSignature: string }>('submit_canvas_node_generation', input)
+    const { submitCanvasNodeGeneration } = await import('@/features/canvas/application/canvasGenerationTaskService')
+    return submitCanvasNodeGeneration(parsed, applicationGenerationTaskId(context.requestId ?? crypto.randomUUID()), context.signal)
   })
   registrar.registerHandler('resume_canvas_generation_task', async (input, context) => {
     throwIfCapabilityAborted(context.signal)
