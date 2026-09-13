@@ -19,6 +19,7 @@ function normalizeHistoryStatus(status: HistoryRecord['status']): TaskStatus {
   if (status === 'completed') return 'success'
   if (status === 'failed') return 'error'
   if (status === 'timeout') return 'error'
+  if (status === 'cancelled') return 'error'
   return status
 }
 

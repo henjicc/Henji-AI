@@ -21,11 +21,12 @@ import { publishCanvasGenerationTaskStatus } from '@/features/generation/applica
 import { normalizeGenerationTaskStatus } from '@/core/assistant/externalWait'
 import { readResumableServerTask } from '../domain/resumableTask'
 import { isCanvasGenerationTaskActive, hasCanvasGenerationResumeLease } from '../generation/activeGenerationTasks'
-import { resumeCanvasProjectGeneration } from './canvasResumePollingService'
+import { resumeCanvasProjectGeneration, getCanvasResumeControllers } from './canvasResumePollingService'
+import { CANVAS_GENERATION_CANCELLED_MESSAGE } from '../domain/generationFailure'
 
 type CanvasDestination = Extract<GenerationDestination, { mode: 'canvas' }>
 const logger = createLogger('features.canvas.generationTask')
-const activeTasks = new Set<string>()
+const activeTasks = new Map<string, AbortController>()
 const marker = '__canvasGeneration'
 
 export function resolveCanvasGenerationOptions(input: GenerationPreparationInput, destination: CanvasDestination): Record<string, unknown> {
@@ -84,21 +85,26 @@ export async function submitCanvasGenerationTask(input: GenerationPreparationInp
       edges: edges.filter(edge => edge.target === nodeId) })
   }
   const fingerprint = inputFingerprint()
-  const assertCurrent = (): void => { if (inputFingerprint() !== fingerprint) throw new Error('节点输入已更改，请重新提交以核对生成参数和费用。') }
+  const controller = new AbortController()
+  const assertCurrent = (): void => {
+    controller.signal.throwIfAborted()
+    if (inputFingerprint() !== fingerprint) throw new Error('节点输入已更改，请重新提交以核对生成参数和费用。')
+  }
   const metadata = { version: 2, projectId: destination.projectId, nodeId }
   await databaseService.insertHistory({ id: taskId, modelId: input.modelId, providerId: model.meta.provider, type: input.mediaType,
     prompt: input.prompt, params: { ...input.options, [marker]: metadata }, filePath: null, taskId: null,
     status: 'pending', errorMessage: null, cost: null, duration: null })
-  activeTasks.add(taskId)
+  activeTasks.set(taskId, controller)
   const publish = (status: string, resultAvailable = false, errorMessage: string | null = null): void => publishCanvasGenerationTaskStatus({
     taskId, status, progress: resultAvailable ? 100 : 0, modelId: input.modelId, mediaType: input.mediaType,
-    resultAvailable, errorCode: null, errorMessage, cancellable: false,
+    resultAvailable, errorCode: null, errorMessage, cancellable: ['pending', 'queued', 'generating'].includes(status) && !controller.signal.aborted,
   })
   publish('pending')
   const definition = getCanvasNodeDefinition(nodeType)!
   const acceptedKinds = definition.ports?.target?.accepts ?? []
   const releaseExecutor = retainCanvasTaskExecutor(destination.projectId, nodeId, createGenerationNodeExecutor(() => ({
-    nodeId, modelType: input.mediaType, resultNodeType: definition.generation!.resultNodeType as CanvasNodeType,
+    nodeId, requestId: taskId, signal: controller.signal,
+    modelType: input.mediaType, resultNodeType: definition.generation!.resultNodeType as CanvasNodeType,
     acceptedKinds, acceptedMediaKinds: (['image', 'video', 'audio'] as const).filter(kind => acceptedKinds.includes(kind)),
     capability: null, showModelInput: true, requirePrompt: true,
     promptRequiredKey: 'node.imageEdit.promptRequired', apiKeyRequiredKey: 'node.imageEdit.apiKeyRequired', resultTitleKey: definition.menuLabelKey,
@@ -122,15 +128,17 @@ export async function submitCanvasGenerationTask(input: GenerationPreparationInp
     publish('success', true)
     logger.info('画布生成结果已保存', { event: 'canvas.generationTask.completed', taskId, nodeId })
   })().catch(async (error: unknown) => {
-    logger.error('画布生成失败', error, { event: 'canvas.generationTask.failed', taskId })
+    if (controller.signal.aborted) logger.info('原画布任务已停止本地执行', { event: 'canvas.generationTask.cancelled', requestId: taskId, taskId })
+    else logger.error('画布生成失败', error, { event: 'canvas.generationTask.failed', requestId: taskId, taskId })
     const persisted = await readPersistedCanvasProjectSnapshot(destination.projectId).catch((readError: unknown) => {
       if (readError instanceof Error && readError.message === 'PROJECT_NOT_FOUND') return null
       throw readError
     })
     const canResume = persisted?.nodes.some(node => node.data.generationTaskId === taskId
       && readResumableServerTask(node.data as DynamicValueMap))
-    const status = canResume ? 'pending' : 'error'
-    const message = error instanceof Error ? error.message : '画布生成失败'
+    const status = controller.signal.aborted ? 'cancelled' : canResume ? 'pending' : 'error'
+    const message = controller.signal.aborted ? CANVAS_GENERATION_CANCELLED_MESSAGE
+      : error instanceof Error ? error.message : '画布生成失败'
     publish(status, false, message)
     await databaseService.updateHistory(taskId, { status, errorMessage: message })
   }).catch(error => logger.error('画布生成状态保存失败', error, { event: 'canvas.generationTask.save_failed', taskId }))
@@ -162,9 +170,15 @@ export async function getCanvasGenerationTask(taskId: string): Promise<Record<st
     const task = readResumableServerTask(node.data as DynamicValueMap)
     return task ? [task] : []
   })
-  const hasActiveWork = activeTasks.has(taskId) || resumable.some(task =>
+  const hasActiveWork = activeTasks.has(taskId) || getCanvasResumeControllers(taskId).length > 0 || resumable.some(task =>
     isCanvasGenerationTaskActive(task.taskId) || hasCanvasGenerationResumeLease(projectId, task.taskId))
   let recordedStatus = normalizeGenerationTaskStatus(record.status)
+  if (!hasActiveWork && savedResults.length > 0 && savedResults.every(node => node.data.generationCancelled === true && !node.data.isGenerating)
+    && resultNodes.every(node => node.data.generationCancelled === true)
+    && ['pending', 'queued', 'generating'].includes(recordedStatus ?? '')) {
+    await databaseService.updateHistory(taskId, { status: 'cancelled', errorMessage: CANVAS_GENERATION_CANCELLED_MESSAGE })
+    record.status = 'cancelled'; record.errorMessage = CANVAS_GENERATION_CANCELLED_MESSAGE; recordedStatus = 'cancelled'
+  }
   // 仅从本任务带身份的、完整持久化的原子输出修复历史。旧无身份结果不能冒认。
   if (!hasActiveWork && version === 2 && ['pending', 'queued', 'generating'].includes(recordedStatus ?? '') && savedResults.length > 0
     && outputs.length >= savedResults.length && savedResults.every(node =>
@@ -178,23 +192,37 @@ export async function getCanvasGenerationTask(taskId: string): Promise<Record<st
   const resultAvailable = recordedStatus === 'success' && Boolean(record.filePath)
   const waitingExternal = !resultAvailable && hasActiveWork
   const status = resultAvailable ? 'success' : waitingExternal ? 'generating'
-    : recordedStatus === 'error' || recordedStatus === 'timeout' ? recordedStatus
+    : recordedStatus === 'error' || recordedStatus === 'timeout' || recordedStatus === 'cancelled' ? recordedStatus
       : resumable.length ? 'pending' : 'error'
   const progressState = useCanvasGenerationProgressStore.getState()
   const progress = status === 'success' ? 100 : Math.max(0, ...resultNodes.map(item => (progressState.progress[item.id] ?? 0) * 100))
   const errorCode = status === 'error' && !record.errorMessage ? 'GENERATION_OUTCOME_UNKNOWN' : null
-  const errorMessage = status === 'error' || status === 'timeout'
+  const errorMessage = status === 'error' || status === 'timeout' || status === 'cancelled'
     ? record.errorMessage ?? '原画布任务的执行结果尚未核实；当前没有活动执行，不能据此重新提交生成。'
     : status === 'pending' ? '原供应商任务已登记，等待续查；不会重新提交生成。' : null
+  const controllers = [activeTasks.get(taskId), ...getCanvasResumeControllers(taskId)].filter((value): value is AbortController => Boolean(value))
+  const cancellable = !resultAvailable && controllers.some(controller => !controller.signal.aborted)
   publishCanvasGenerationTaskStatus({ taskId, status, progress, modelId: record.modelId, mediaType: record.type,
-    resultAvailable, cancellable: false, waitingExternal, errorCode, errorMessage })
+    resultAvailable, cancellable, waitingExternal, errorCode, errorMessage })
   return { taskId, status, normalizedStatus: status, progress, modelId: record.modelId, mediaType: record.type,
-    resultAvailable, cancellable: false, waitingExternal, errorCode, errorMessage,
+    resultAvailable, cancellable, waitingExternal, errorCode, errorMessage,
     resumeInput: !resultAvailable && resumable.length > 0 ? {
       taskId, projectId, sourceNodeId: nodeId, resultNodeIds: resultNodes.map(node => node.id),
     } satisfies CanvasGenerationResumeInput : null,
     taskRef: { kind: 'generation.task', id: taskId }, nodeRef: { kind: 'canvas.node', id: `${projectId}:${nodeId}` },
     resultRefs: resultNodes.map(item => ({ kind: 'canvas.node', id: `${projectId}:${item.id}` })) }
+}
+
+/** 停止本地执行；取消回执不冒充供应商端撤销或费用退回。 */
+export async function cancelCanvasGenerationTask(taskId: string): Promise<Record<string, unknown> | null> {
+  const task = await getCanvasGenerationTask(taskId)
+  if (!task) return null
+  if (task.resultAvailable || task.status === 'cancelled') return { taskId, status: task.status }
+  const controllers = [activeTasks.get(taskId), ...getCanvasResumeControllers(taskId)].filter((value): value is AbortController => Boolean(value))
+  if (!controllers.length) throw new CanvasApplicationError('INVALID_INPUT', '原画布任务当前没有可停止的本地执行。', true, { execution: { notExecuted: true } })
+  controllers.forEach(controller => controller.abort(new Error('本地任务已停止')))
+  logger.info('已请求停止原画布任务', { event: 'canvas.generationTask.cancel_requested', requestId: taskId, taskId })
+  return { taskId, status: 'cancelling' }
 }
 
 export async function resumeCanvasGenerationTask(input: CanvasGenerationResumeInput, signal?: AbortSignal) {
@@ -218,6 +246,7 @@ export async function resumeCanvasGenerationTask(input: CanvasGenerationResumeIn
     if (signal?.aborted) return reject('恢复请求在开始前已取消。')
     try { requireCurrentCanvasProject(input.projectId) } catch { return reject('请先打开任务的原画布项目，再续查原任务。') }
     started = resumeCanvasProjectGeneration(input.projectId, selected, { retryFailed: true })
+    if (started && task.status === 'cancelled') await databaseService.updateHistory(input.taskId, { status: 'pending', errorMessage: null })
   }
   const current = await getCanvasGenerationTask(input.taskId)
   if (!current) throw new Error('恢复期间原任务已不存在。')

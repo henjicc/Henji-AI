@@ -15,7 +15,7 @@ import { getResultNodeMediaType } from '../domain/nodeRegistry';
 import type { CanvasNodeType } from '../domain/canvasNodes';
 import { createDefaultGenerationOutputItems } from '../domain/generationOutputs';
 import { readResumableServerTask } from '../domain/resumableTask';
-import { createCanvasGenerationFailurePatch } from '../domain/generationFailure';
+import { createCanvasGenerationFailurePatch, createCanvasGenerationCancelledPatch } from '../domain/generationFailure';
 import { resumeCanvasGeneration } from '../generation/runGeneration';
 import {
   acquireCanvasGenerationResumeLease,
@@ -42,6 +42,11 @@ import {
 } from './storyboardGenerationOutputService';
 
 const logger = createLogger('features.canvas.resumePolling');
+const resumeControls = new Map<symbol, { taskId: string; controller: AbortController }>();
+
+export function getCanvasResumeControllers(taskId: string): AbortController[] {
+  return [...resumeControls.values()].filter(control => control.taskId === taskId).map(control => control.controller);
+}
 
 /**
  * 应用重启后恢复未完成的异步生成。
@@ -64,6 +69,7 @@ export function resumeCanvasProjectGeneration(
     if (
       !task
       || isCanvasGenerationTaskActive(task.taskId)
+      || (!options.retryFailed && node.data.generationCancelled === true)
       // 已显示下载失败的结果等待用户明确续取，避免节点更新触发无限重试。
       || (!options.retryFailed && node.data.resultKind === 'layer-stack' && Boolean(node.data.generationError))
     ) {
@@ -89,10 +95,15 @@ export function resumeCanvasProjectGeneration(
 
     const resumeLease = acquireCanvasGenerationResumeLease(projectId, task.taskId);
     if (!resumeLease) continue;
+    const controller = new AbortController();
+    if (typeof node.data.generationTaskId === 'string') {
+      resumeControls.set(resumeLease, { taskId: node.data.generationTaskId, controller });
+    }
     started += 1;
     const unsubscribeProject = useProjectStore.subscribe((state, previous) => {
       if (previous.currentProjectId === projectId && state.currentProjectId !== projectId) {
         releaseCanvasGenerationResumeLease(projectId, task.taskId, resumeLease);
+        resumeControls.delete(resumeLease);
         unsubscribeProject();
       }
     });
@@ -105,6 +116,7 @@ export function resumeCanvasProjectGeneration(
 
     void resumeNodeTask({
       projectId,
+      signal: controller.signal,
       nodeId: node.id,
       sourceNodeId,
       resultNodeType: node.type,
@@ -120,6 +132,7 @@ export function resumeCanvasProjectGeneration(
         && isCanvasGenerationResumeLeaseCurrent(projectId, task.taskId, resumeLease)
       ),
       releaseLease: () => {
+        resumeControls.delete(resumeLease);
         unsubscribeProject();
         releaseCanvasGenerationResumeLease(projectId, task.taskId, resumeLease);
       },
@@ -130,6 +143,7 @@ export function resumeCanvasProjectGeneration(
 
 interface ResumeNodeTaskInput {
   projectId: string;
+  signal: AbortSignal;
   nodeId: string;
   sourceNodeId?: string;
   resultNodeType: CanvasNodeType;
@@ -184,6 +198,7 @@ async function resumeNodeTask(input: ResumeNodeTaskInput): Promise<void> {
   const {
     nodeId,
     projectId,
+    signal,
     sourceNodeId,
     resultNodeType,
     resultNodeData,
@@ -200,13 +215,14 @@ async function resumeNodeTask(input: ResumeNodeTaskInput): Promise<void> {
 
   try {
     if (!isContextCurrent()) return;
-    updateNodeData(nodeId, { isGenerating: true, generationError: null });
+    updateNodeData(nodeId, { isGenerating: true, generationError: null, generationCancelled: false });
     const localRedrawContext = sourceCapability?.outputPolicy.postProcess === 'local-redraw-composite'
       ? parseLocalRedrawContext(resultNodeData[LOCAL_REDRAW_CONTEXT_FIELD])
       : null;
     const result = await resumeCanvasGeneration({
       modelId,
-      requestId: localRedrawContext?.requestId,
+      signal,
+      requestId: localRedrawContext?.requestId ?? (typeof resultNodeData.generationTaskId === 'string' ? resultNodeData.generationTaskId : undefined),
       mediaType,
       taskId,
       onProgress: (progress) => {
@@ -214,6 +230,7 @@ async function resumeNodeTask(input: ResumeNodeTaskInput): Promise<void> {
       },
     });
     createdFilePaths = [...new Set(result.createdFilePaths ?? [])];
+    signal.throwIfAborted();
     if (!isContextCurrent()) return;
     // 兼容旧测试替身与旧进程边界只返回 primary 的形状；正式运行时始终优先消费 outputs。
     const resultOutputs = Array.isArray(result.outputs) && result.outputs.length > 0
@@ -228,6 +245,7 @@ async function resumeNodeTask(input: ResumeNodeTaskInput): Promise<void> {
         outputs: resultOutputs,
         context: storyboardContext,
       });
+      signal.throwIfAborted();
       if (!isContextCurrent()) return;
       const committed = await commitCanvasGenerationOutputs({
         sourceNodeId,
@@ -364,8 +382,12 @@ async function resumeNodeTask(input: ResumeNodeTaskInput): Promise<void> {
   } catch (error) {
     if (!isContextCurrent()) return;
     const message = error instanceof Error ? error.message : String(error);
-    updateNodeData(nodeId, createCanvasGenerationFailurePatch(error, resultNodeData.resultKind));
-    logger.error('[CanvasResume] 异步生成恢复失败', error, {
+    updateNodeData(nodeId, signal.aborted ? createCanvasGenerationCancelledPatch()
+      : createCanvasGenerationFailurePatch(error, resultNodeData.resultKind));
+    if (signal.aborted) logger.info('[CanvasResume] 原任务续查已停止', {
+      event: 'canvas.resume_polling.cancelled', taskId, modelId, context: { nodeId },
+    });
+    else logger.error('[CanvasResume] 异步生成恢复失败', error, {
       event: 'canvas.resume_polling.failed',
       taskId,
       modelId,

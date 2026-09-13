@@ -21,6 +21,7 @@ export interface CanvasGenerationUpstream {
 
 export interface CanvasGenerationRequest {
   modelId: string;
+  signal?: AbortSignal;
   /** 贯穿裁剪、模型调用与后处理的稳定链路 ID。 */
   requestId?: string;
   mediaType?: CanvasMediaType;
@@ -42,6 +43,7 @@ export interface CanvasGenerationRequest {
 
 export interface CanvasResumeRequest {
   modelId: string;
+  signal?: AbortSignal;
   requestId?: string;
   mediaType?: CanvasMediaType;
   taskId: string;
@@ -177,9 +179,11 @@ export async function runCanvasGeneration(request: CanvasGenerationRequest): Pro
   }
 
   await request.assertCurrent?.();
+  request.signal?.throwIfAborted();
   let result = await generationService.generate(modelId, params, handleProgress, {
     progressSource: 'canvas',
     requestId: request.requestId,
+    signal: request.signal,
   });
 
   if (result.status === 'pending') {
@@ -188,9 +192,11 @@ export async function runCanvasGeneration(request: CanvasGenerationRequest): Pro
       throw new Error('异步任务缺少 taskId，无法继续轮询');
     }
     request.onTaskId?.(taskId);
+    request.signal?.throwIfAborted();
     result = await generationService.continuePolling(modelId, taskId, params, handleProgress, {
       progressSource: 'canvas',
       requestId: request.requestId,
+      signal: request.signal,
     });
   }
 
@@ -211,7 +217,7 @@ export async function resumeCanvasGeneration(
     request.taskId,
     {},
     createThrottledProgressHandler(request.onProgress),
-    { progressSource: 'canvas', requestId: request.requestId }
+    { progressSource: 'canvas', requestId: request.requestId, signal: request.signal }
   );
   return toGenerationOutput(result);
 }

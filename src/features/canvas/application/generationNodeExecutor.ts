@@ -30,7 +30,7 @@ import {
   type CanvasNodeType,
 } from '@/features/canvas/domain/canvasNodes'
 import { createDefaultGenerationOutputItems } from '@/features/canvas/domain/generationOutputs'
-import { createCanvasGenerationFailurePatch } from '@/features/canvas/domain/generationFailure'
+import { createCanvasGenerationFailurePatch, createCanvasGenerationCancelledPatch } from '@/features/canvas/domain/generationFailure'
 import type { MediaKind } from '@/features/canvas/domain/nodePorts'
 import type { RowMediaKind } from '@/features/canvas/domain/socketTypes'
 import {
@@ -67,6 +67,8 @@ const logger = createLogger('features.canvas.generationExecutor')
 
 export interface GenerationNodeExecutionOptions {
   nodeId: string
+  requestId?: string
+  signal?: AbortSignal
   modelType: BuiltinModelType
   resultNodeType: CanvasNodeType
   acceptedKinds: readonly MediaKind[]
@@ -301,7 +303,8 @@ export function createGenerationNodeExecutor(readOptions: () => GenerationNodeEx
         try {
           const result = await runCanvasGeneration({
             modelId: runtime.modelId,
-            requestId: requestPreparation?.requestId,
+            requestId: requestPreparation?.requestId ?? current.requestId,
+            signal: current.signal,
             mediaType: current.modelType,
             params: requestParams,
             upstream: requestInputs,
@@ -312,6 +315,7 @@ export function createGenerationNodeExecutor(readOptions: () => GenerationNodeEx
             assertCurrent: execution.assertCurrent,
           })
           ownership.generationResult = result
+          current.signal?.throwIfAborted()
           if (!isProjectCurrent()) {
             await taskLifecycle.cancelLatest()
             throw new Error('画布项目已切换，本次生成结果已丢弃')
@@ -379,9 +383,9 @@ export function createGenerationNodeExecutor(readOptions: () => GenerationNodeEx
           return { status: 'completed', resultNodeIds: committed.resultNodeIds }
         } catch (error) {
           if (isProjectCurrent()) {
-            useCanvasStore.getState().updateNodeData(resultNodeId, createCanvasGenerationFailurePatch(
-              error, current.capability?.outputPolicy.resultKind,
-            ))
+            useCanvasStore.getState().updateNodeData(resultNodeId, current.signal?.aborted
+              ? createCanvasGenerationCancelledPatch()
+              : createCanvasGenerationFailurePatch(error, current.capability?.outputPolicy.resultKind))
           }
           throw error
         } finally {

@@ -209,7 +209,8 @@ export function registerGenerationCapabilityHandlers(
       taskId: string
       reason: string
     }>('cancel_generation_task', input)
-    return await generationApplicationService.cancelTask(parsed.taskId, parsed.reason)
+    const { cancelCanvasGenerationTask } = await import('@/features/canvas/application/canvasGenerationTaskService')
+    return await cancelCanvasGenerationTask(parsed.taskId) ?? await generationApplicationService.cancelTask(parsed.taskId, parsed.reason)
   })
   registrar.registerHandler('resume_canvas_generation_task', async (input, context) => {
     throwIfCapabilityAborted(context.signal)

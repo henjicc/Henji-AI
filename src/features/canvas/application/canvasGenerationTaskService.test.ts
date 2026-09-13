@@ -97,6 +97,80 @@ async function restoredTask(extra: Record<string, unknown> = {}, version = 2) {
   return { taskId, nodeId, resultId }
 }
 
+function taskControlSession() {
+  const session = createApplicationCapabilitySession(createApplicationCallerGrant({ callerId: 'canvas-task-control',
+    capabilityIds: [...MCP_CAPABILITY_IDS], permissions: [...MCP_READ_PERMISSIONS, ...MCP_WRITE_PERMISSIONS],
+    allowWrites: true, allowDestructive: true }))
+  return async (id: string, input: Record<string, unknown>) => {
+    let expectedRevisions: Record<string, number> | undefined
+    if (id === 'cancel_generation_task') {
+      const read = await session.execute({ id: 'read_application_entity', version: 1, input: {
+        ref: { kind: 'generation.task', id: input.taskId }, propertyIds: ['generation.task.status'],
+      } }, { requestId: crypto.randomUUID(), signal: new AbortController().signal })
+      if (!read.ok) throw new Error(JSON.stringify(read))
+      expectedRevisions = (read.data as { revisions: Record<string, number> }).revisions
+    }
+    return session.execute({ id, version: 1, input, expectedRevisions },
+      { requestId: crypto.randomUUID(), signal: new AbortController().signal })
+  }
+}
+
+it('MCP 取消一个原任务不影响并行请求，迟到输出不冒充成功', async () => {
+  let release!: () => void
+  const pending = new Promise<void>(resolve => { release = resolve })
+  const signals = new Map<string, AbortSignal>()
+  vi.mocked(GenerationService.getInstance().generate).mockImplementation(async (_model, _params, _progress, options) => {
+    signals.set(options!.requestId!, options!.signal!)
+    await pending
+    return { status: 'completed', url: 'C:/late-output.png', filePath: 'C:/late-output.png' }
+  })
+  const ids = [crypto.randomUUID(), crypto.randomUUID()]
+  for (const id of ids) await submitCanvasGenerationTask({ modelId: 'canvas-task-fixture', mediaType: 'image', prompt: `图-${id}`, options: {} },
+    { mode: 'canvas', projectId, sourceNodeIds: [] }, id)
+  await vi.waitFor(() => expect(signals.size).toBe(2))
+  const execute = taskControlSession()
+  expect(await getCanvasGenerationTask(ids[0])).toMatchObject({ cancellable: true })
+  const cancelled = await execute('cancel_generation_task', { taskId: ids[0], reason: '只停止第一张' })
+  expect(cancelled, JSON.stringify(cancelled)).toMatchObject({ ok: true, data: { status: 'cancelling' } })
+  expect(signals.get(ids[0])!.aborted).toBe(true)
+  expect(signals.get(ids[1])!.aborted).toBe(false)
+  release()
+  await vi.waitFor(() => {
+    expect(records.get(ids[0])?.status).toBe('cancelled')
+    expect(records.get(ids[1])?.status).toBe('success')
+  })
+  expect(await getCanvasGenerationTask(ids[0])).toMatchObject({ status: 'cancelled', resultAvailable: false, cancellable: false })
+  expect(await execute('read_application_entity', { ref: { kind: 'generation.task', id: ids[0] }, propertyIds: ['generation.task.status'] }))
+    .toMatchObject({ ok: true, data: { properties: { 'generation.task.status': 'cancelled' } } })
+  const saved = await readPersistedCanvasProjectSnapshot(projectId)
+  expect(saved.nodes.find(node => node.data.generationTaskId === ids[0])?.data).toMatchObject({ generationCancelled: true, isGenerating: false })
+  expect(saved.nodes.find(node => node.data.generationTaskId === ids[0])?.data.imageUrl).toBeFalsy()
+})
+
+it('取消续查后保存停止状态，不自动恢复；明确恢复仍获取同一供应商任务', async () => {
+  const { taskId, resultId } = await restoredTask({ serverTaskId: 'original-provider-task', serverTaskModelId: 'canvas-task-fixture' })
+  const polling = vi.spyOn(GenerationService.getInstance(), 'continuePolling').mockImplementationOnce(async (_model, _task, _params, _progress, options) => {
+    await new Promise<void>((_resolve, reject) => options!.signal!.addEventListener('abort', () => reject(new Error('本地停止')), { once: true }))
+    throw new Error('unreachable')
+  }).mockResolvedValue({ status: 'completed', url: 'C:/resumed-after-stop.png', filePath: 'C:/resumed-after-stop.png' })
+  const execute = taskControlSession()
+  const input = (await getCanvasGenerationTask(taskId))!.resumeInput as Record<string, unknown>
+  expect(await execute('resume_canvas_generation_task', input)).toMatchObject({ ok: true })
+  expect(await getCanvasGenerationTask(taskId)).toMatchObject({ cancellable: true })
+  const cancelled = await execute('cancel_generation_task', { taskId, reason: '停止续查' })
+  expect(cancelled, JSON.stringify(cancelled)).toMatchObject({ ok: true })
+  await vi.waitFor(() => expect(useCanvasStore.getState().nodes.find(node => node.id === resultId)?.data.generationCancelled).toBe(true))
+  await confirmCanvasPersistence(projectId)
+  expect(await getCanvasGenerationTask(taskId)).toMatchObject({ status: 'cancelled', resultAvailable: false })
+  expect(resumeCanvasProjectGeneration(projectId)).toBe(0)
+  expect(polling).toHaveBeenCalledTimes(1)
+  expect(await execute('resume_canvas_generation_task', input)).toMatchObject({ ok: true })
+  await vi.waitFor(async () => expect(await getCanvasGenerationTask(taskId), JSON.stringify({ record: records.get(taskId), nodes: useCanvasStore.getState().nodes })).toMatchObject({ status: 'success', resultAvailable: true }))
+  expect(polling).toHaveBeenCalledTimes(2)
+  expect(polling.mock.calls.every(call => call[1] === 'original-provider-task')).toBe(true)
+  expect(GenerationService.getInstance().generate).not.toHaveBeenCalled()
+})
+
 it('MCP 使用原任务返回的恢复参数续查，错误目标不执行，重复请求不重复轮询', async () => {
   const { taskId } = await restoredTask({ serverTaskId: 'original-provider-task', serverTaskModelId: 'canvas-task-fixture' })
   let release!: () => void

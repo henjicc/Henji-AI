@@ -18,13 +18,26 @@ vi.mock('@/core/logging', () => ({ createLogger: () => ({ info: vi.fn(), error: 
 vi.mock('@/utils/historyThumbnail', () => ({ getOrCreateHistoryThumbnail: vi.fn(async () => '') }))
 import { databaseService } from '@/services/database/DatabaseService'
 import { useTaskState } from './useTaskState'
-import { awaitGenerationTaskPersistence, createPersistedGenerationTask, deletePersistedGenerationTask, persistGenerationTask, useSaveTaskHistory } from './useTaskHistory'
+import { awaitGenerationTaskPersistence, createPersistedGenerationTask, deletePersistedGenerationTask, persistGenerationTask, useSaveTaskHistory, useLoadTaskHistory } from './useTaskHistory'
 import { applicationGenerationTaskId } from '@/core/application-control/operationIdentity'
 
 function gate() { let release!: () => void; const promise = new Promise<void>((resolve) => { release = resolve }); return { promise, release } }
 function task(id = crypto.randomUUID()): GenerationTask { return { id, createdAt: new Date(), type: 'image', prompt: '保存测试', model: 'model', status: 'queued', options: { size: 'small' } } }
 function saved(id: string) { return storage.rows.get(id) as HistoryRecord | undefined }
 afterEach(() => { cleanup(); storage.beforeWrite = undefined; vi.useRealTimers(); vi.clearAllMocks(); storage.rows.clear(); storage.writes.length = 0 })
+
+it('已停止画布任务加载为非活动历史，保留说明且不重新保存或排队', async () => {
+  const value = task()
+  const record: HistoryRecord = { id: value.id, providerId: 'fixture', modelId: value.model, type: 'image', prompt: value.prompt,
+    params: {}, filePath: null, taskId: null, status: 'cancelled', errorMessage: '本地任务已停止',
+    cost: null, duration: null, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }
+  vi.mocked(databaseService.getHistory).mockResolvedValueOnce([record])
+  const setTasks = vi.fn()
+  renderHook(() => useLoadTaskHistory({ setTasks, setIsTasksLoaded: vi.fn(), isInitialLoadRef: { current: true } }))
+  await vi.waitFor(() => expect(setTasks).toHaveBeenCalledWith([expect.objectContaining({ id: value.id, status: 'error', error: '本地任务已停止' })]))
+  expect(databaseService.updateHistory).not.toHaveBeenCalled()
+  expect(databaseService.insertHistory).not.toHaveBeenCalled()
+})
 
 it('跨任务延迟和旧防抖快照不覆盖后来的成功状态，数据库只按主键读取', async () => {
   vi.useFakeTimers()
