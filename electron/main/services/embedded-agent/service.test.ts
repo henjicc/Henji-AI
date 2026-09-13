@@ -38,6 +38,22 @@ it.each(['prepare_generation_task', 'create_visible_generation_task'])('%s 未�
     .toEqual({ destination: { mode: 'canvas', projectId: 'original', sourceNodeIds: [] } })
 })
 
+it('已有生成结果导入沿用原选中对象或原视口，显式落点与其他项目保持优先', () => {
+  const name = 'add_generation_result_to_canvas'
+  const input = { resultRef: { kind: 'generation.result', id: 'saved' } }
+  const origin = { workspace: { id: 'nodes' }, project: { id: 'original', viewportNodePosition: { x: 90, y: -20 } } }
+  expect(withGenerationOrigin(name, input, JSON.stringify(origin))).toEqual({ ...input, projectId: 'original', placement: { mode: 'absolute', x: 90, y: -20 } })
+  expect(withGenerationOrigin(name, { ...input, projectId: 'original' }, JSON.stringify({ ...origin,
+    project: { ...origin.project, selectedNodeId: 'selected', selectedNodeIsReference: true } })))
+    .toMatchObject({ placement: { mode: 'right_of_node', anchorNodeId: 'selected' } })
+  const explicit = { ...input, projectId: 'original', placement: { mode: 'absolute', x: 1, y: 2 } }
+  expect(withGenerationOrigin(name, explicit, JSON.stringify(origin))).toEqual(explicit)
+  const other = { ...input, projectId: 'another-project' }
+  expect(withGenerationOrigin(name, other, JSON.stringify(origin))).toBe(other)
+  expect(withGenerationOrigin(name, input, JSON.stringify({ ...origin, workspace: { id: 'tools' } }))).toBe(input)
+  expect(withGenerationOrigin(name, input, 'null')).toBe(input)
+})
+
 function setup() {
   const child = new EventEmitter() as EventEmitter & { postMessage: (value: { id: string; command: EngineCommand }) => void; kill: () => void }
   const prompts: string[] = []
