@@ -12,6 +12,7 @@ import {
 import { APPLICATION_CAPABILITY_CATALOG_VERSION } from '@/core/assistant/applicationCapabilities'
 
 import type { CanvasEdge, CanvasNode } from '../domain/canvasNodes'
+import { isTextAnnotationNode } from '../domain/canvasNodes'
 import { CANVAS_NODE_SCHEMA_DOCUMENTS, NODE_FIELDS, PROJECT_FIELDS } from './canvasFields'
 import { useCanvasStore } from '@/stores/canvasStore'
 import { useProjectStore } from '@/stores/projectStore'
@@ -192,6 +193,13 @@ class CanvasReflectionProvider implements ApplicationEntityProvider {
   async getPropertyAvailability(ref: ApplicationRef, propertyIds: string[]) {
     await this.readProperties(ref, [])
     let generationConfigSupported = false
+    let textContentSupported = false
+    if (this.entityType === CANVAS_ENTITY_TYPES.node && propertyIds.includes('canvas.node.text_content')) {
+      const { projectId, childId } = splitChildRef(ref, this.entityType)
+      const snapshot = await readCanvasProjectSnapshot(projectId)
+      const node = snapshot.nodes.find((item) => item.id === childId)
+      textContentSupported = Boolean(node && isTextAnnotationNode(node))
+    }
     if (this.entityType === CANVAS_ENTITY_TYPES.node && propertyIds.includes('canvas.node.generation_config')) {
       const { projectId, childId } = splitChildRef(ref, this.entityType)
       const snapshot = await readCanvasProjectSnapshot(projectId)
@@ -203,7 +211,9 @@ class CanvasReflectionProvider implements ApplicationEntityProvider {
       const descriptor = descriptors.get(propertyId)
       if (!descriptor) throw new Error(`PROPERTY_NOT_FOUND:${propertyId}`)
       const reason = propertyId === 'canvas.node.generation_config' && !generationConfigSupported
-        ? '该节点不是可配置的生成节点。' : descriptor.readOnlyReason
+        ? '该节点不是可配置的生成节点。'
+        : propertyId === 'canvas.node.text_content' && !textContentSupported
+          ? '该节点不是文本节点。' : descriptor.readOnlyReason
       return {
         propertyId,
         readable: true,

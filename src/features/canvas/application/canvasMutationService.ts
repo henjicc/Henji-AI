@@ -6,6 +6,7 @@ import {
   isAssetGroupNode,
   isCameraStageNode,
   isStoryboardSplitNode,
+  isTextAnnotationNode,
   type CanvasNode,
   type CanvasNodeData,
   type StoryboardFrameItem,
@@ -58,6 +59,7 @@ export interface CanvasNodePropertyPatch {
   nodeId: string
   generationConfig?: CanvasNodeGenerationConfig
   displayName?: string
+  textContent?: string
   position?: { x: number; y: number }
   storyboardFrames?: CanvasStoryboardFramePatch[]
   assetGroupMemberOrder?: string[]
@@ -99,6 +101,11 @@ export async function applyCanvasNodePropertyPatches(
     const data: Partial<CanvasNodeData> = patch.generationConfig
       ? validateCanvasNodeGenerationConfig(requireNode(projectId, patch.nodeId), patch.generationConfig)
       : {}
+    if (patch.textContent !== undefined) {
+      const node = requireNode(projectId, patch.nodeId)
+      if (!isTextAnnotationNode(node)) throw new CanvasApplicationError('INVALID_INPUT', '该节点不是文本节点，不能写入文本正文')
+      Object.assign(data, validateCanvasNodeDataPatch(node, { content: patch.textContent }))
+    }
     if (patch.displayName !== undefined) data.displayName = patch.displayName.trim()
     return {
       nodeId: patch.nodeId,

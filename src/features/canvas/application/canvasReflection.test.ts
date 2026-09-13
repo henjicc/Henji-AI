@@ -51,6 +51,49 @@ function project(canvasNode: CanvasNode): Project {
 }
 
 describe('canvas reflection and mutation', () => {
+  it('正文拒绝非文本节点和超长输入，允许清空', async () => {
+    const executor = new CanvasNodeMutationExecutor()
+    const ref = { kind: CANVAS_ENTITY_TYPES.node, id: `${projectId}:${nodeId}` }
+    const write = (value: string) => executor.apply({
+      kind: 'mutation', target: ref, entityType: CANVAS_ENTITY_TYPES.node,
+      expectedRevisions: { canvas: 2 },
+      mutations: [{ propertyId: 'canvas.node.text_content', operation: 'set', value }],
+    }, context)
+    await expect(write('字'.repeat(32769))).rejects.toThrow()
+    expect(useCanvasStore.getState().nodes[0].data.content).toBe('内容')
+    await write('')
+    expect(useCanvasStore.getState().nodes[0].data.content).toBe('')
+    useCanvasStore.getState().setCanvasData([{ ...node(), type: CANVAS_NODE_TYPES.upload }], [], { past: [], future: [] })
+    const provider = createCanvasReflectionRegistrations().find(item => item.entity.id === CANVAS_ENTITY_TYPES.node)!.provider!
+    expect(await provider.getPropertyAvailability(ref, ['canvas.node.text_content'])).toEqual([
+      expect.objectContaining({ writable: false }),
+    ])
+    await expect(write('不应写入')).rejects.toThrow('不是文本节点')
+    expect(useCanvasStore.getState().nodes[0].data.content).toBe('内容')
+  })
+  it('文本正文按属性读写，其他节点保持原样，可撤销且不随摘要读取', async () => {
+    const other = { ...node(), id: 'other', data: { content: '其他镜头' } }
+    useCanvasStore.getState().setCanvasData([node(), other], [], { past: [], future: [] })
+    const executor = new CanvasNodeMutationExecutor()
+    const ref = { kind: CANVAS_ENTITY_TYPES.node, id: `${projectId}:${nodeId}` }
+    const provider = createCanvasReflectionRegistrations().find(item => item.entity.id === CANVAS_ENTITY_TYPES.node)!.provider!
+    const result = await executor.apply({
+      kind: 'mutation', target: ref, entityType: CANVAS_ENTITY_TYPES.node,
+      expectedRevisions: { canvas: 2 },
+      mutations: [
+        { propertyId: 'canvas.node.text_content', operation: 'set', value: '角色：小林。镜头一：在门口停下。' },
+        { propertyId: 'canvas.node.display_name', operation: 'set', value: '第一场' },
+      ],
+    }, context)
+    const read = await provider.readEntity(ref, { propertyIds: ['canvas.node.text_content'] })
+    expect(read.properties['canvas.node.text_content']).toBe('角色：小林。镜头一：在门口停下。')
+    expect(useCanvasStore.getState().nodes[0].data.displayName).toBe('第一场')
+    expect(useCanvasStore.getState().nodes[1].data.content).toBe('其他镜头')
+    const summary = await provider.readEntity(ref, { propertyIds: ['canvas.node.display_name'] })
+    expect(summary.properties).not.toHaveProperty('canvas.node.text_content')
+    await executor.undo(String(result.undoToken), context)
+    expect((await provider.readEntity(ref, { propertyIds: ['canvas.node.text_content'] })).properties['canvas.node.text_content']).toBe('内容')
+  })
   beforeEach(() => {
     vi.restoreAllMocks()
     const canvasNode = node()
@@ -120,6 +163,7 @@ describe('canvas reflection and mutation', () => {
     expect(nodeRegistration?.properties.map((item) => item.id)).toEqual([
       'canvas.node.project_ref',
       'canvas.node.node_type',
+      'canvas.node.text_content',
       'canvas.node.generation_config',
       'canvas.node.generation_schema',
       'canvas.node.display_name',

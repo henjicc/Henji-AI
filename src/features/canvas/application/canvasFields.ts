@@ -10,7 +10,7 @@ import {
 import { APPLICATION_CAPABILITY_CATALOG_VERSION } from '@/core/assistant/applicationCapabilities'
 import type { CanvasNode } from '@/stores/canvasStore'
 
-import { isAssetGroupNode, isStoryboardSplitNode } from '../domain/canvasNodes'
+import { isAssetGroupNode, isStoryboardSplitNode, isTextAnnotationNode } from '../domain/canvasNodes'
 import type { CanvasNodePropertyPatch, CanvasStoryboardFramePatch } from './canvasMutationService'
 import { renameCanvasProject } from './canvasProjectService'
 import {
@@ -144,6 +144,17 @@ function parseStoryboardFramePatches(raw: JsonValue | undefined): CanvasStoryboa
 export const NODE_FIELDS: ApplicationFieldDefinition<
   CanvasNode, CanvasNodePropertyPatch, 'updateNodePosition' | 'updateStoryboardFrame' | 'reorderStoryboardFrame'
 >[] = [
+  {
+    propertyId: `${NODE_ENTITY_TYPE}.text_content`,
+    descriptor: canvasDescriptor(NODE_ENTITY_TYPE, 'text_content', '文本正文',
+      { kind: 'string', maxLength: 32768 },
+      '文本节点的可编辑正文，可保存剧本、角色设定或镜头说明。仅按需读取目标节点，不必读取整个工程；非文本节点返回 null。空字符串清空正文。', true),
+    read: (node) => isTextAnnotationNode(node) ? node.data.content ?? '' : null,
+    writer: { write(patch, mutation) {
+      patch.textContent = z.string().max(32768).parse(mutation.value)
+    } },
+    storeActions: [],
+  },
   {
     propertyId: `${NODE_ENTITY_TYPE}.generation_config`,
     descriptor: canvasDescriptor(NODE_ENTITY_TYPE, 'generation_config', '生成配置',
