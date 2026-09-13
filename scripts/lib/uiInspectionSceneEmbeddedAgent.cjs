@@ -1,6 +1,7 @@
 const assert = require('node:assert/strict')
 const { createServer } = require('node:http')
 const path = require('node:path')
+const { authorizeMcpConnection, connectMcpClient, callTool } = require('./uiInspectionMcpClient.cjs')
 
 // 官方 Pi + 真实 utility process / preload / 应用工具；只用本地模型响应替身，不访问外部模型。
 function createEmbeddedAgentScenes(context) {
@@ -256,6 +257,68 @@ function createEmbeddedAgentScenes(context) {
         assert.ok(result)
         assert.ok(persisted.edges.some(edge => edge.source === generator.id && edge.target === result.id), '结果必须连在生成节点后')
         await capture('canvas-completed')
+        // 真实节点按钮再次生成：验证 UI 与 MCP 读取的是同一份 SQLite 任务。
+        await page.keyboard.press('Control+Shift+A')
+        await page.waitForFunction(async taskId => {
+          const rows = await window.henjiNative.db.select('SELECT status FROM history WHERE id=?', [taskId])
+          return rows[0]?.status === 'success'
+        }, generatedRequest.requestId)
+        await app.evaluate(() => { globalThis.__canvasGenerationRequest = null })
+        const generatorNode = page.locator(`.react-flow__node[data-id="${generator.id}"]`)
+        await generatorNode.click({ position: { x: 3, y: 3 } })
+        await page.locator(`.react-flow__node[data-id="${generator.id}"].selected`).waitFor()
+        await page.locator(`.react-flow__node-toolbar[data-id="${generator.id}"]`).getByRole('button', { name: '生成', exact: true }).click()
+        const uiDeadline = Date.now() + 15000
+        while (!await app.evaluate(() => Boolean(globalThis.__canvasGenerationRequest))) {
+          if (Date.now() > uiDeadline) {
+            await capture('ui-task-stalled')
+            const diagnostics = await page.evaluate(async () => ({
+              history: await window.henjiNative.db.select('SELECT id,status,params FROM history'),
+              logs: await window.henjiNative.logging.queryLogEvents({ date: new Date().toISOString().slice(0, 10), domainPrefix: 'features.canvas', limit: 25 }),
+            }))
+            throw new Error('界面生成按钮没有发出正式请求：' + JSON.stringify(diagnostics))
+          }
+          await page.waitForTimeout(100)
+        }
+        const uiRequest = await app.evaluate(() => globalThis.__canvasGenerationRequest)
+        const uiTaskId = uiRequest.requestId
+        assert.ok(uiTaskId && uiTaskId !== generatedRequest.requestId, '界面新请求必须有独立任务标识')
+        const rows = await page.evaluate(() => window.henjiNative.db.select('SELECT id,status,params FROM history'))
+        assert.equal(rows.filter(row => row.id === uiTaskId).length, 1, '界面生成只能登记一条历史')
+        const storedTask = rows.find(row => row.id === uiTaskId)
+        assert.equal(JSON.parse(storedTask.params).__canvasGeneration.projectId, projectId)
+        assert.equal(JSON.parse(storedTask.params).__canvasGeneration.nodeId, generator.id)
+        const identity = await authorizeMcpConnection(page, { name: '界面任务只读验收' })
+        const client = await connectMcpClient(identity.config, 'Henji UI generation task')
+        try {
+          const pending = await callTool(client, 'get_generation_task', { taskId: uiTaskId })
+          assert.equal(pending.data.task.waitingExternal, true)
+          assert.equal(pending.data.task.cancellable, true)
+          await app.evaluate(() => globalThis.__finishCanvasGeneration())
+          const completedDeadline = Date.now() + 15000
+          let task
+          do {
+            task = (await callTool(client, 'get_generation_task', { taskId: uiTaskId })).data.task
+            if (task.resultAvailable) break
+            if (Date.now() > completedDeadline) throw new Error('界面任务未通过 MCP 确认完成：' + JSON.stringify(task))
+            await page.waitForTimeout(100)
+          } while (true)
+          assert.equal(task.status, 'success')
+          assert.equal(task.cancellable, false)
+          const saved = await page.evaluate(async ({ projectId, taskId }) => {
+            const project = await window.henjiNative.storyboardProjects.getProjectRecord(projectId)
+            const rows = await window.henjiNative.db.select('SELECT status,file_path FROM history WHERE id=?', [taskId])
+            return { history: rows[0], imagePool: JSON.parse(project.historyJson).imagePool,
+              results: JSON.parse(project.nodesJson).filter(node => node.data.generationTaskId === taskId) }
+          }, { projectId, taskId: uiTaskId })
+          assert.equal(saved.history.status, 'success')
+          assert.equal(saved.results.length, 1)
+          const imageRef = saved.results[0].data.imageUrl
+          assert.match(imageRef, /^__img_ref__:\d+$/)
+          assert.equal(saved.imagePool[Number(imageRef.slice('__img_ref__:'.length))], saved.history.file_path)
+          assert.equal(saved.results[0].data.isGenerating, false)
+          await capture('ui-task-completed')
+        } finally { await client.close() }
       } finally { server.closeAllConnections(); await new Promise((resolve) => server.close(resolve)) }
     },
   }]
