@@ -368,6 +368,7 @@ function assert(condition, message) {
 }
 
 module.exports = {
+  assertBuildFreshness,
   launchElectronApp,
   waitForApp,
   assert,

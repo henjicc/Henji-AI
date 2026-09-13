@@ -197,10 +197,12 @@ CI 必须显式运行该门禁；门禁同时验证双端技能同步、旧执�
 只有改动跨越“模型决策 → 工具调用 → 业务落地 → 成功证据”完整链路，且精确测试不足以证明行为时，才无窗口执行真实助手端到端验证：
 
 ```bash
-npm run assistant:cli -- --goal "任务描述" --trace detailed --await-generation
+npm run assistant:cli -- --goal "任务描述"
+# 仅验证旧自研助手时显式选择 legacy
+npm run assistant:cli -- --engine legacy --goal "任务描述" --trace detailed --await-generation
 ```
 
-复用正式助手与工具链，结束时输出 `runId`（可用 `npm run logs:query -- --chain <runId>` 查整条链路）。`--await-generation` 保持同一隐藏宿主并读取本次生成任务的最终状态。`--print-trace` 输出本机已脱敏的详细追踪。**涉及付费或写入操作时，必须由调用者显式确认 `--approval full_access`。**
+普通入口默认 Pi，复用侧栏正式服务，结束时输出 `runId`（可用 `npm run logs:query -- --chain <runId>` 查整条链路）；默认只读，`businessVerified: false` 不冒充业务验收。旧 `assistant:live` 和 `assistant:live:suite` 显式使用 legacy，不能证明 Pi 入口可用。`--await-generation`、`--require-verified-write`、`--print-trace` 仅支持 legacy；Pi 每轮用量和体积进入统一日志。CLI 启动前核对产物新鲜度，过期先执行 `electron:bundle`。**涉及付费或写入操作时，必须由调用者显式确认 `--approval full_access`。**
 
 ## Surface 视觉观察
 

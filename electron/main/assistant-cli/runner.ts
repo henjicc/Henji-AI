@@ -287,7 +287,7 @@ async function run(options: AssistantCliOptions, owner: WebContents): Promise<nu
 
 export async function runAssistantCli(owner: WebContents, options: AssistantCliOptions): Promise<number> {
   try {
-    if (options.engine === 'pi') {
+    if (options.engine !== 'legacy') {
       await waitForHostContext(owner, HOST_READY_TIMEOUT_MS)
       const context = getAssistantHostContext(owner.id)!
       return await runEmbeddedCli(options, JSON.stringify({ workspace: context.workspace, project: context.project, surface: context.surface }), writeRecord)
