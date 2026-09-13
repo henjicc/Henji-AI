@@ -10,7 +10,7 @@ import { useGenerationDraftStore } from '@/features/generation/store/generationD
 import { switchWorkspace, useNavigationStore } from '@/stores/navigationStore'
 import { useProjectStore } from '@/stores/projectStore'
 import { useCanvasStore } from '@/stores/canvasStore'
-import type { GenerationDestination } from '@/core/assistant/capabilities/generationApplicationCapabilities'
+import type { CanvasGenerationResumeInput, GenerationDestination } from '@/core/assistant/capabilities/generationApplicationCapabilities'
 import { isBuiltinModelType } from '@/core/modelSortOrder'
 
 import type { ApplicationCapabilityHandlerRegistrar } from './handlerTypes'
@@ -210,5 +210,11 @@ export function registerGenerationCapabilityHandlers(
       reason: string
     }>('cancel_generation_task', input)
     return await generationApplicationService.cancelTask(parsed.taskId, parsed.reason)
+  })
+  registrar.registerHandler('resume_canvas_generation_task', async (input, context) => {
+    throwIfCapabilityAborted(context.signal)
+    const parsed = parseCapabilityInput<CanvasGenerationResumeInput>('resume_canvas_generation_task', input)
+    const { resumeCanvasGenerationTask } = await import('@/features/canvas/application/canvasGenerationTaskService')
+    return resumeCanvasGenerationTask(parsed, context.signal)
   })
 }

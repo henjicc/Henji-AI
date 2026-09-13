@@ -51,9 +51,12 @@ const logger = createLogger('features.canvas.resumePolling');
  * 这里在画布加载后把这些任务接着轮询到出结果或明确失败为止——与对话模式的
  * useAutoResumePolling 行为对齐。
  */
-export function resumeCanvasProjectGeneration(projectId: string, nodeIds?: ReadonlySet<string>): void {
-  if (useProjectStore.getState().currentProjectId !== projectId) return;
+export function resumeCanvasProjectGeneration(
+  projectId: string, nodeIds?: ReadonlySet<string>, options: { retryFailed?: boolean } = {},
+): number {
+  if (useProjectStore.getState().currentProjectId !== projectId) return 0;
   const { nodes, updateNodeData } = useCanvasStore.getState();
+  let started = 0;
   const setNodeGenerationProgress = useCanvasGenerationProgressStore.getState().setProgress;
   for (const node of nodes) {
     if (nodeIds && !nodeIds.has(node.id)) continue;
@@ -62,7 +65,7 @@ export function resumeCanvasProjectGeneration(projectId: string, nodeIds?: Reado
       !task
       || isCanvasGenerationTaskActive(task.taskId)
       // 已显示下载失败的结果等待用户明确续取，避免节点更新触发无限重试。
-      || (node.data.resultKind === 'layer-stack' && Boolean(node.data.generationError))
+      || (!options.retryFailed && node.data.resultKind === 'layer-stack' && Boolean(node.data.generationError))
     ) {
       continue;
     }
@@ -86,6 +89,7 @@ export function resumeCanvasProjectGeneration(projectId: string, nodeIds?: Reado
 
     const resumeLease = acquireCanvasGenerationResumeLease(projectId, task.taskId);
     if (!resumeLease) continue;
+    started += 1;
     const unsubscribeProject = useProjectStore.subscribe((state, previous) => {
       if (previous.currentProjectId === projectId && state.currentProjectId !== projectId) {
         releaseCanvasGenerationResumeLease(projectId, task.taskId, resumeLease);
@@ -121,6 +125,7 @@ export function resumeCanvasProjectGeneration(projectId: string, nodeIds?: Reado
       },
     });
   }
+  return started;
 }
 
 interface ResumeNodeTaskInput {

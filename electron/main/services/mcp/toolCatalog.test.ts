@@ -44,6 +44,8 @@ describe('对外工具目录的投影与授权过滤', () => {
       expect(names(WRITE)).toContain(id)
       expect(names(READ_ONLY)).not.toContain(id)
     }
+    expect(names(WRITE)).toContain('resume_canvas_generation_task')
+    expect(names(READ_ONLY)).not.toContain('resume_canvas_generation_task')
   })
   /**
    * 验收线：**工具 schema 与领域约束同源**。

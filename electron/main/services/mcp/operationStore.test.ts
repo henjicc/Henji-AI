@@ -31,6 +31,19 @@ function input(baselineId: string): Record<string, unknown> {
 }
 
 describe('MCP 原生操作记录与恢复', () => {
+  it('续查只占用原任务和节点，不要求付费权限，也不锁住同项目其他任务', () => {
+    const f = fixture()
+    const raw = { operationId: randomUUID(), taskId: 'task-a', projectId: 'project', sourceNodeId: 'source-a', resultNodeIds: ['result-a'] }
+    const first = f.coordinator.prepare(f.callerId, raw, f.sessionId, access, 'resume_canvas_generation_task')
+    expect(first.targetRefs).toEqual([
+      { kind: 'generation.task', id: 'task-a' }, { kind: 'canvas.node', id: 'project:source-a' }, { kind: 'canvas.node', id: 'project:result-a' },
+    ])
+    f.coordinator.dispatched(first, randomUUID(), f.sessionId)
+    expect(f.coordinator.prepare(f.callerId, { ...raw, operationId: randomUUID(), taskId: 'task-b', sourceNodeId: 'source-b', resultNodeIds: ['result-b'] },
+      f.sessionId, access, 'resume_canvas_generation_task').state).toBe('prepared')
+    expect(() => f.coordinator.prepare(f.callerId, { ...raw, operationId: randomUUID() },
+      f.sessionId, access, 'resume_canvas_generation_task')).toThrow(first.operationId)
+  })
   it('编辑预览读取同一素材不互锁，未知创建不能重放，保存锁定被消费的预览', () => {
     const f = fixture()
     const raw = { operationId: randomUUID(), sourceRef: { kind: 'asset', id: 'source-image' }, operations: [{ kind: 'flip_h' }] }

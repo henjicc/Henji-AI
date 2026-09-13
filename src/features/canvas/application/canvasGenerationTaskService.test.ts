@@ -18,7 +18,7 @@ import { commitCanvasGenerationOutputs } from './generationOutputApplicationServ
 import { createDefaultGenerationOutputItems } from '../domain/generationOutputs'
 import { acquireCanvasGenerationResumeLease, releaseCanvasGenerationResumeLease } from '../generation/activeGenerationTasks'
 import { createApplicationCallerGrant } from '@/core/application-control/callerContext'
-import { MCP_CAPABILITY_IDS, MCP_READ_PERMISSIONS } from '@/core/application-control/localHostContracts'
+import { MCP_CAPABILITY_IDS, MCP_READ_PERMISSIONS, MCP_WRITE_PERMISSIONS } from '@/core/application-control/localHostContracts'
 import { createApplicationCapabilitySession } from '@/features/application-control/applicationCapabilityService'
 import { resumeCanvasProjectGeneration } from './canvasResumePollingService'
 vi.mock('./imageData', async (original) => ({
@@ -32,6 +32,7 @@ const records = new Map<string, HistoryRecord>()
 beforeEach(async () => {
   replaceGenerationTaskStatusSnapshots([])
   installHarnessNativeStorage()
+  await useProjectStore.getState().hydrate()
   resetCanvasExecutionServiceForTests()
   records.clear()
   useSettingsStore.setState({ providerKeyStatus: { ...useSettingsStore.getState().providerKeyStatus, fixture: true } })
@@ -96,6 +97,38 @@ async function restoredTask(extra: Record<string, unknown> = {}, version = 2) {
   return { taskId, nodeId, resultId }
 }
 
+it('MCP 使用原任务返回的恢复参数续查，错误目标不执行，重复请求不重复轮询', async () => {
+  const { taskId } = await restoredTask({ serverTaskId: 'original-provider-task', serverTaskModelId: 'canvas-task-fixture' })
+  let release!: () => void
+  const pending = new Promise<void>(resolve => { release = resolve })
+  const polling = vi.spyOn(GenerationService.getInstance(), 'continuePolling').mockImplementation(async () => {
+    await pending
+    return { status: 'completed', url: 'C:/mcp-resumed.png', filePath: 'C:/mcp-resumed.png' }
+  })
+  const session = createApplicationCapabilitySession(createApplicationCallerGrant({ callerId: 'resume-original-task',
+    capabilityIds: [...MCP_CAPABILITY_IDS], permissions: [...MCP_READ_PERMISSIONS, ...MCP_WRITE_PERMISSIONS],
+    allowWrites: true, allowDestructive: false }))
+  const execute = (id: string, input: Record<string, unknown>) => session.execute({ id, version: 1, input },
+    { requestId: crypto.randomUUID(), signal: new AbortController().signal })
+  const read = await execute('get_generation_task', { taskId })
+  expect(read.ok).toBe(true)
+  if (!read.ok) throw new Error('原任务读取失败')
+  const task = (read.data as { task: { resumeInput: Record<string, unknown> } }).task
+  const invalid = await execute('resume_canvas_generation_task', { ...task.resumeInput, resultNodeIds: ['wrong-result'] })
+  expect(invalid).toMatchObject({ ok: false, error: { details: { execution: { notExecuted: true } } } })
+  expect(polling).not.toHaveBeenCalled()
+  expect(useProjectStore.getState().currentProjectId).toBe(projectId)
+  expect(useProjectStore.getState().currentProject?.id).toBe(projectId)
+  const resumed = await execute('resume_canvas_generation_task', task.resumeInput)
+  expect(resumed, JSON.stringify(resumed)).toMatchObject({ ok: true })
+  expect(await execute('resume_canvas_generation_task', task.resumeInput)).toMatchObject({ ok: true })
+  expect(polling).toHaveBeenCalledTimes(1)
+  release()
+  await vi.waitFor(async () => expect(await getCanvasGenerationTask(taskId)).toMatchObject({ status: 'success', resultAvailable: true }))
+  expect(records.get(taskId)?.filePath).toBe('C:/mcp-resumed.png')
+  expect(GenerationService.getInstance().generate).not.toHaveBeenCalled()
+})
+
 it('冷启动后通用实体读取按原任务已保存结果恢复历史，后续画布变化不篡改原完成事实', async () => {
   const { taskId, nodeId, resultId } = await restoredTask()
   await commitCanvasGenerationOutputs({ sourceNodeId: nodeId, placeholderNodeId: resultId,
@@ -132,6 +165,14 @@ it('残留生成标记不是活动任务；没有供应商标识时报告结果�
   expect(await getCanvasGenerationTask(taskId)).toMatchObject({ status: 'error', waitingExternal: false,
     resultAvailable: false, errorCode: 'GENERATION_OUTCOME_UNKNOWN' })
   expect(records.get(taskId)?.status).toBe('pending')
+  expect(GenerationService.getInstance().generate).not.toHaveBeenCalled()
+})
+
+it('有原供应商标识的下载失败仍可续查', async () => {
+  const retryable = await restoredTask({ isGenerating: false, generationError: '下载失败', resultKind: 'layer-stack',
+    serverTaskId: 'download-task', serverTaskModelId: 'canvas-task-fixture' })
+  expect(await getCanvasGenerationTask(retryable.taskId)).toMatchObject({ status: 'pending', resumeInput: { taskId: retryable.taskId } })
+  expect(records.get(retryable.taskId)?.status).toBe('pending')
   expect(GenerationService.getInstance().generate).not.toHaveBeenCalled()
 })
 

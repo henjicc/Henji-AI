@@ -9,6 +9,14 @@ export const generationDestinationSchema = z.discriminatedUnion('mode', [
 ])
 export type GenerationDestination = z.infer<typeof generationDestinationSchema>
 
+export const canvasGenerationResumeInputSchema = z.object({
+  taskId: z.string().min(1),
+  projectId: z.string().min(1),
+  sourceNodeId: z.string().min(1),
+  resultNodeIds: z.array(z.string().min(1)).min(1).max(64),
+}).strict()
+export type CanvasGenerationResumeInput = z.infer<typeof canvasGenerationResumeInputSchema>
+
 import type { ApplicationCapabilityDefinition } from '../applicationCapabilities'
 import {
   capabilityControl,
@@ -359,6 +367,25 @@ const cancelGenerationTask = defineApplicationCapability({
   summarize: (output) => `任务 ${output.taskId} 的取消状态为 ${output.status}。`,
 })
 
+const resumeCanvasGenerationTask = defineApplicationCapability({
+  id: 'resume_canvas_generation_task', version: 1, title: '续查原画布生成任务',
+  description: '使用 get_generation_task 返回的 resumeInput 续查原供应商任务，保存到原画布节点；不会重新提交生成。当前需打开原画布项目。',
+  domain: 'generation', aliases: ['恢复画布任务', '继续获取生成结果', 'resume canvas generation'],
+  readOnly: false, risk: 'R1', dataClasses: ['C1'], permission: 'canvas:write',
+  control: capabilityControl('execute', ['generation.task', 'canvas.node'], { revisionScopes: ['generation', 'canvas'] }),
+  idempotent: true, destructive: false, timeoutMs: 10_000, supportsPreview: false, supportsUndo: false,
+  requiredScopes: ['generation', 'canvas'], acceptsRefs: ['generation.task', 'canvas.node'], producesRefs: ['generation.task', 'canvas.node'],
+  inputSchema: canvasGenerationResumeInputSchema,
+  outputSchema: capabilityOutputSchema({ taskId: z.string(), status: z.string(), task: z.record(z.string(), z.unknown()) }),
+  concurrencyKey: 'generation', resolveConcurrencyKey: (input) => `generation:${input.taskId}`,
+  resolveTargetIds: (input) => ({ taskId: input.taskId, projectId: input.projectId, nodeId: input.sourceNodeId }),
+  resolveOperationTargets: (input) => [
+    { kind: 'generation.task', id: input.taskId },
+    ...[input.sourceNodeId, ...input.resultNodeIds].map(id => ({ kind: 'canvas.node', id: `${input.projectId}:${id}` })),
+  ],
+  summarize: (output) => `原画布任务状态：${output.status}，未重新提交生成。`,
+})
+
 export const GENERATION_APPLICATION_CAPABILITIES: ApplicationCapabilityDefinition[] = [
   switchWorkspace,
   searchModels,
@@ -368,4 +395,5 @@ export const GENERATION_APPLICATION_CAPABILITIES: ApplicationCapabilityDefinitio
   createVisibleGenerationTask,
   getGenerationTask,
   cancelGenerationTask,
+  resumeCanvasGenerationTask,
 ]

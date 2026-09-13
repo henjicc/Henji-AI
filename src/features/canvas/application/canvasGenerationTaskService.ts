@@ -1,14 +1,14 @@
 import { registry } from '@/core/ModelRegistry'
 import i18n from '@/i18n'
 import { createLogger } from '@/core/logging'
-import type { GenerationDestination } from '@/core/assistant/capabilities/generationApplicationCapabilities'
+import type { CanvasGenerationResumeInput, GenerationDestination } from '@/core/assistant/capabilities/generationApplicationCapabilities'
 import type { GenerationPreparationInput } from '@/features/generation/application/generationPreparationService'
 import { databaseService } from '@/services/database/DatabaseService'
 import { useCanvasStore } from '@/stores/canvasStore'
 import { useProjectStore } from '@/stores/projectStore'
 import { useCanvasGenerationProgressStore } from '@/stores/canvasGenerationProgressStore'
 import { CANVAS_NODE_TYPES, type CanvasNodeType } from '../domain/canvasNodes'
-import { stageControlledCanvasNode, stageCanvasConnection, requireCurrentCanvasProject } from './canvasApplicationService'
+import { stageControlledCanvasNode, stageCanvasConnection, requireCurrentCanvasProject, CanvasApplicationError } from './canvasApplicationService'
 import { runCanvasTransaction } from './canvasBatchService'
 import { retainCanvasTaskExecutor, runCanvasNode } from './canvasExecutionService'
 import { createGenerationNodeExecutor } from './generationNodeExecutor'
@@ -21,6 +21,7 @@ import { publishCanvasGenerationTaskStatus } from '@/features/generation/applica
 import { normalizeGenerationTaskStatus } from '@/core/assistant/externalWait'
 import { readResumableServerTask } from '../domain/resumableTask'
 import { isCanvasGenerationTaskActive, hasCanvasGenerationResumeLease } from '../generation/activeGenerationTasks'
+import { resumeCanvasProjectGeneration } from './canvasResumePollingService'
 
 type CanvasDestination = Extract<GenerationDestination, { mode: 'canvas' }>
 const logger = createLogger('features.canvas.generationTask')
@@ -189,6 +190,37 @@ export async function getCanvasGenerationTask(taskId: string): Promise<Record<st
     resultAvailable, cancellable: false, waitingExternal, errorCode, errorMessage })
   return { taskId, status, normalizedStatus: status, progress, modelId: record.modelId, mediaType: record.type,
     resultAvailable, cancellable: false, waitingExternal, errorCode, errorMessage,
+    resumeInput: !resultAvailable && resumable.length > 0 ? {
+      taskId, projectId, sourceNodeId: nodeId, resultNodeIds: resultNodes.map(node => node.id),
+    } satisfies CanvasGenerationResumeInput : null,
     taskRef: { kind: 'generation.task', id: taskId }, nodeRef: { kind: 'canvas.node', id: `${projectId}:${nodeId}` },
     resultRefs: resultNodes.map(item => ({ kind: 'canvas.node', id: `${projectId}:${item.id}` })) }
+}
+
+export async function resumeCanvasGenerationTask(input: CanvasGenerationResumeInput, signal?: AbortSignal) {
+  const reject = (message: string): never => { throw new CanvasApplicationError('INVALID_INPUT', message, true, { execution: { notExecuted: true } }) }
+  const task = await getCanvasGenerationTask(input.taskId)
+  if (!task) return reject('原画布任务不存在，请用 get_generation_task 核对任务。')
+  const nodeRef = task.nodeRef as { id: string }
+  if (nodeRef.id !== `${input.projectId}:${input.sourceNodeId}`) {
+    return reject('项目或来源节点与原任务不一致，请使用 get_generation_task 返回的 resumeInput。')
+  }
+  if (task.resultAvailable) return { taskId: input.taskId, status: 'success', task }
+  const expected = task.resumeInput as CanvasGenerationResumeInput | null
+  if (!expected) return reject('原任务没有可续查的供应商任务标识，不能通过恢复入口重新生成。')
+  const selected = new Set(input.resultNodeIds)
+  if (selected.size !== input.resultNodeIds.length || selected.size !== expected.resultNodeIds.length
+    || expected.resultNodeIds.some(id => !selected.has(id))) {
+    return reject('结果节点与原任务不一致，请重新读取 get_generation_task 的 resumeInput。')
+  }
+  let started = 0
+  if (!task.waitingExternal) {
+    if (signal?.aborted) return reject('恢复请求在开始前已取消。')
+    try { requireCurrentCanvasProject(input.projectId) } catch { return reject('请先打开任务的原画布项目，再续查原任务。') }
+    started = resumeCanvasProjectGeneration(input.projectId, selected, { retryFailed: true })
+  }
+  const current = await getCanvasGenerationTask(input.taskId)
+  if (!current) throw new Error('恢复期间原任务已不存在。')
+  if (!started && !current.waitingExternal && !current.resultAvailable) return reject('原任务未能开始续查，请检查原结果节点。')
+  return { taskId: input.taskId, status: String(current.status), task: current }
 }
