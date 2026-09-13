@@ -167,7 +167,7 @@ const prepareGenerationTask = defineApplicationCapability({
   id: 'prepare_generation_task',
   version: 1,
   title: '校验生成参数',
-  description: '在提交前验证模型、媒体类型、必填项、参数范围和联动结果；省略的字段用当前生成草稿（generation.draft）补全。',
+  description: '在提交前验证模型、媒体类型、必填项、参数范围和联动结果；省略的字段用当前生成草稿（generation.draft）补全。params.uploadedImages / uploadedVideos / uploadedAudios 可直接使用生成历史的 resultRef {kind:"generation.result",id:"…"} 或素材库引用 {kind:"asset",id:"…"}，不需要先收藏到素材库。',
   domain: 'generation',
   aliases: ['检查生成参数', '准备生成', 'prepare generation'],
   readOnly: true,
@@ -181,7 +181,7 @@ const prepareGenerationTask = defineApplicationCapability({
   supportsPreview: false,
   supportsUndo: false,
   requiredScopes: [],
-  acceptsRefs: ['generation.model', 'generation.draft'],
+  acceptsRefs: ['generation.model', 'generation.draft', 'generation.result', 'asset'],
   producesRefs: ['generation.preparation'],
   inputSchema: z.object({
     modelId: z.string().min(1).optional(),
@@ -213,10 +213,7 @@ const createVisibleGenerationTask = defineApplicationCapability({
   resolveOperationTargets: (input) => { if (!input.modelId || typeof input.prompt !== 'string' || !input.mediaType) throw new Error('INVALID_INPUT:外部提交必须明确指定已读取的模型、提示词和媒体类型'); return [{ kind: 'generation.model', id: input.modelId }] },
   version: 1,
   title: '创建可见生成任务',
-  description: '创建用户可见的图片、视频或音频生成任务。画布任务使用 destination={mode:"canvas",...}，提供原 projectId 和参考 sourceNodeIds，应用先创建生成节点与连线再执行，结果自动连接在生成节点旁；不要再调用放入画布造成重复。明确只在历史中生成时使用 destination={mode:"history"}。省略 destination 默认当前画布优先。省略的字段用当前生成草稿'
-    + '（generation.draft）补全，让助手能像人一样先逐步搭建输入（写提示词、选模型、上传媒体）'
-    + '再提交，而不必每次一次性传全部参数。通过应用工具提交时省略 baselineIds，宿主自动准备并核对费用；'
-    + '参考素材可放入 params.uploadedImages / uploadedVideos / uploadedAudios，元素使用 {kind:"asset",id:"素材 ID"}。',
+  description: '创建可见图片、视频或音频任务。画布使用 destination={mode:"canvas",projectId,sourceNodeIds}，先创建生成节点与参考连线，结果自动落在节点旁，不要重复放入画布；仅存历史用 {mode:"history"}，省略时当前画布优先。缺省字段用 generation.draft 补全。省略 baselineIds，宿主自动准备并核对费用。params.uploadedImages / uploadedVideos / uploadedAudios 直接接受历史 resultRef {kind:"generation.result",id:"结果 ID"} 或 {kind:"asset",id:"素材 ID"}，无需加入素材库；勿以文字重写代替参考图。',
   domain: 'generation',
   aliases: ['生成图片', '生成视频', '生成音频', 'create generation'],
   readOnly: false,
@@ -236,7 +233,7 @@ const createVisibleGenerationTask = defineApplicationCapability({
   supportsUndo: false,
   completionKind: 'submitted',
   requiredScopes: ['generation'],
-  acceptsRefs: ['generation.model', 'generation.draft', 'asset', 'canvas.project', 'canvas.node'],
+  acceptsRefs: ['generation.model', 'generation.draft', 'generation.result', 'asset', 'canvas.project', 'canvas.node'],
   producesRefs: ['generation.task', 'canvas.node', 'canvas.edge'],
   successEvidence: [
     '返回稳定 taskId、submitted 状态和最新 generation revision。',
