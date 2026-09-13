@@ -562,12 +562,22 @@ it.each(['foreground', 'background', 'cancel-queued'] as const)('五个请求保
   } finally { release() }
 })
 
-it('节点创建后切换项目不会在别的项目执行或重新付费', async () => {
+it.each([false, true])('任务刚登记就切换项目，执行与取消保持原归属（取消 %s）', async cancel => {
   const taskId = crypto.randomUUID()
+  let release!: () => void
+  const waiting = new Promise<void>(resolve => { release = resolve })
+  const update = databaseService.updateHistory
+  vi.mocked(databaseService.updateHistory).mockImplementationOnce(async (...args) => { await waiting; return update(...args) })
   await submitCanvasGenerationTask({ modelId: 'canvas-task-fixture', mediaType: 'image', prompt: '图', options: {} }, { mode: 'canvas', projectId, sourceNodeIds: [] }, taskId)
-  useProjectStore.setState({ currentProjectId: 'other' })
-  await vi.waitFor(() => expect(records.get(taskId)?.status).toBe('error'))
-  expect(records.get(taskId)?.filePath).toBeNull()
+  const otherProject = await useProjectStore.getState().createProject('登记后立即切换')
+  if (cancel) expect(await taskControlSession()('cancel_generation_task', { taskId, reason: '取消刚登记的任务' })).toMatchObject({ ok: true })
+  release()
+  await vi.waitFor(() => expect(records.get(taskId)?.status).toBe(cancel ? 'cancelled' : 'success'))
+  expect(GenerationService.getInstance().generate).toHaveBeenCalledTimes(cancel ? 0 : 1)
+  const saved = await readPersistedCanvasProjectSnapshot(projectId)
+  expect(saved.nodes.filter(node => node.data.generationTaskId === taskId)).toHaveLength(cancel ? 0 : 1)
+  expect(useProjectStore.getState().currentProjectId).toBe(otherProject)
+  expect(useCanvasStore.getState().nodes).toHaveLength(0)
 })
 
 it.each([false, true])('生成前等待估算时切换项目，执行与取消均保持原归属（取消 %s）', async cancel => {

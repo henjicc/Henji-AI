@@ -6,6 +6,7 @@ import type { useCanvasStore } from '@/stores/canvasStore'
 export type CanvasExecutionTrigger = 'direct' | 'dependency'
 
 export interface CanvasNodePreflightContext {
+  store?: typeof useCanvasStore
   runId: string
   projectId: string | null
   trigger: CanvasExecutionTrigger
@@ -34,7 +35,7 @@ export interface CanvasRegisteredExecutor {
   inputSignatureScope?: 'graph' | 'runtime'
   getInputSignatureExtras?: (store?: typeof useCanvasStore) => Promise<unknown> | unknown
   /** 结果能够通过原项目的业务存储提交，不依赖当前页面。 */
-  supportsBackgroundCompletion?: () => boolean
+  supportsBackgroundCompletion?: (store?: typeof useCanvasStore) => boolean
   isCachedOutputValid?: (node: CanvasNode) => boolean
   run: (context: CanvasNodeExecutionContext) => Promise<CanvasNodeExecutionResult>
 }

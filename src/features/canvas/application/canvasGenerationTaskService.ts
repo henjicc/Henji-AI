@@ -199,8 +199,7 @@ async function registerCanvasGenerationTask(input: GenerationPreparationInput, d
   void (async () => {
     await databaseService.updateHistory(taskId, { status: 'generating' })
     publish('generating')
-    assertCurrent()
-    const completed = await runCanvasNode(nodeId, assertCurrent)
+    const completed = await runCanvasNode(nodeId, assertCurrent, destination.projectId)
     const snapshot = await readPersistedCanvasProjectSnapshot(destination.projectId)
     const index = new Map(snapshot.nodes.map(node => [node.id, node]))
     const outputs = snapshot.nodes.filter(node => completed.resultNodeIds.includes(node.id) && node.data.generationTaskId === taskId)

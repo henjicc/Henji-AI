@@ -184,14 +184,15 @@ export function createGenerationNodeExecutor(readOptions: (store?: typeof useCan
   }
 
   const preflightBeforeDependencies = (execution: CanvasNodePreflightContext) => {
-    const current = readOptions()
+    const current = readOptions(execution.store)
     if (
       execution.projectId
       && useProjectStore.getState().currentProjectId !== execution.projectId
+      && (!execution.store || current.commitGenerationResult)
     ) {
       throw new Error('画布项目已切换，本次生成已停止')
     }
-    const runtime = readRuntime()
+    const runtime = readRuntime(execution.store)
     if (current.capability) {
       const compatibleModelIds = new Set(resolveCanvasCapabilityModelCandidates(
         registry.getModelsByType(current.modelType),
@@ -434,7 +435,7 @@ export function createGenerationNodeExecutor(readOptions: (store?: typeof useCan
     dependency: { mode: 'auto', outputMode: 'result-nodes' },
     inputSignatureScope: 'runtime',
     getInputSignatureExtras: store => createGenerationNodeRuntimeSignaturePayload(readRuntime(store)),
-    supportsBackgroundCompletion: () => !readOptions().commitGenerationResult,
+    supportsBackgroundCompletion: store => !readOptions(store).commitGenerationResult,
     preflightBeforeDependencies,
     run: handleGenerate,
   }
