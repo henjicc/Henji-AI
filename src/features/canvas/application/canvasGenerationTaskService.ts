@@ -8,7 +8,7 @@ import { databaseService } from '@/services/database/DatabaseService'
 import { useCanvasStore } from '@/stores/canvasStore'
 import { useProjectStore } from '@/stores/projectStore'
 import { useCanvasGenerationProgressStore } from '@/stores/canvasGenerationProgressStore'
-import { CANVAS_NODE_TYPES } from '../domain/canvasNodes'
+import { CANVAS_NODE_TYPES, type CanvasNode } from '../domain/canvasNodes'
 import { stageControlledCanvasNode, stageCanvasConnection, requireCurrentCanvasProject, CanvasApplicationError } from './canvasApplicationService'
 import { runCanvasTransaction } from './canvasBatchService'
 import { retainCanvasTaskExecutor, runCanvasNode, isCanvasNodeRunActive } from './canvasExecutionService'
@@ -33,6 +33,15 @@ const logger = createLogger('features.canvas.generationTask')
 const activeTasks = new Map<string, AbortController>()
 const activeNodeTasks = new Map<string, string>()
 const marker = '__canvasGeneration'
+
+function completedTaskOutputPaths(nodes: CanvasNode[], taskId: string, sourceNodeId: string): string[] {
+  const owned = nodes.filter(node => node.data.generationTaskId === taskId && node.data.generationSourceNodeId === sourceNodeId)
+  if (!owned.length || owned.some(node => node.data.isGenerating === true || node.data.generationError
+    || typeof node.data.generationOutputCommitId !== 'string')) return []
+  const index = new Map(nodes.map(node => [node.id, node]))
+  const outputs = owned.flatMap(node => getGraphNodeMediaOutputs(node, index))
+  return outputs.length >= owned.length ? outputs.map(output => output.url) : []
+}
 
 function readNodeInputSignature(projectId: string, nodeId: string): string {
   requireCurrentCanvasProject(projectId)
@@ -179,8 +188,8 @@ async function registerCanvasGenerationTask(input: GenerationPreparationInput, d
     resultAvailable, errorCode: null, errorMessage, cancellable: ['pending', 'queued', 'generating'].includes(status) && !controller.signal.aborted,
   })
   publish('pending')
-  const releaseExecutor = retainCanvasTaskExecutor(destination.projectId, nodeId, createGenerationNodeExecutor(() => {
-    const profile = readCanvasGenerationNodeProfile(nodeId)
+  const releaseExecutor = retainCanvasTaskExecutor(destination.projectId, nodeId, createGenerationNodeExecutor(store => {
+    const profile = readCanvasGenerationNodeProfile(nodeId, store)
     const extra = profile.resultNodeExtraData
     return { ...profile, requestId: taskId, signal: controller.signal,
       resultNodeExtraData: data => ({ ...(typeof extra === 'function' ? extra(data) : extra), generationTaskId: taskId }) }
@@ -191,7 +200,6 @@ async function registerCanvasGenerationTask(input: GenerationPreparationInput, d
     publish('generating')
     assertCurrent()
     const completed = await runCanvasNode(nodeId, assertCurrent)
-    await confirmCanvasPersistence(destination.projectId)
     const snapshot = await readPersistedCanvasProjectSnapshot(destination.projectId)
     const index = new Map(snapshot.nodes.map(node => [node.id, node]))
     const outputs = snapshot.nodes.filter(node => completed.resultNodeIds.includes(node.id) && node.data.generationTaskId === taskId)
@@ -201,12 +209,20 @@ async function registerCanvasGenerationTask(input: GenerationPreparationInput, d
     publish('success', true)
     logger.info('画布生成结果已保存', { event: 'canvas.generationTask.completed', taskId, nodeId })
   })().catch(async (error: unknown) => {
-    if (controller.signal.aborted) logger.info('原画布任务已停止本地执行', { event: 'canvas.generationTask.cancelled', requestId: taskId, taskId })
-    else logger.error('画布生成失败', error, { event: 'canvas.generationTask.failed', requestId: taskId, taskId })
     const persisted = await readPersistedCanvasProjectSnapshot(destination.projectId).catch((readError: unknown) => {
       if (readError instanceof Error && readError.message === 'PROJECT_NOT_FOUND') return null
       throw readError
     })
+    const completedOutputs = completedTaskOutputPaths(persisted?.nodes ?? [], taskId, nodeId)
+    if (completedOutputs.length) {
+      await databaseService.updateHistory(taskId, { status: 'success', filePath: completedOutputs.join('|||'), errorMessage: null })
+      publish('success', true)
+      logger.warn('生成结果已保存，后续执行信息未能完整发布', { event: 'canvas.generationTask.publication_incomplete', requestId: taskId,
+        taskId, reason: error instanceof Error ? error.message : String(error) })
+      return
+    }
+    if (controller.signal.aborted) logger.info('原画布任务已停止本地执行', { event: 'canvas.generationTask.cancelled', requestId: taskId, taskId })
+    else logger.error('画布生成失败', error, { event: 'canvas.generationTask.failed', requestId: taskId, taskId })
     const canResume = persisted?.nodes.some(node => node.data.generationTaskId === taskId
       && readResumableServerTask(node.data as DynamicValueMap))
     const status = controller.signal.aborted ? 'cancelled' : canResume ? 'pending' : 'error'
@@ -238,8 +254,6 @@ export async function getCanvasGenerationTask(taskId: string): Promise<Record<st
     && (version === 2 ? node.data.generationTaskId === taskId : node.data.generationTaskId === undefined)
   const resultNodes = nodes.filter(ownsResult)
   const savedResults = savedNodes.filter(ownsResult)
-  const savedIndex = new Map(savedNodes.map(node => [node.id, node]))
-  const outputs = savedResults.flatMap(node => getGraphNodeMediaOutputs(node, savedIndex))
   const resumable = resultNodes.flatMap(node => {
     const task = readResumableServerTask(node.data as DynamicValueMap)
     return task ? [task] : []
@@ -254,10 +268,9 @@ export async function getCanvasGenerationTask(taskId: string): Promise<Record<st
     record.status = 'cancelled'; record.errorMessage = CANVAS_GENERATION_CANCELLED_MESSAGE; recordedStatus = 'cancelled'
   }
   // 仅从本任务带身份的、完整持久化的原子输出修复历史。旧无身份结果不能冒认。
-  if (!hasActiveWork && version === 2 && ['pending', 'queued', 'generating'].includes(recordedStatus ?? '') && savedResults.length > 0
-    && outputs.length >= savedResults.length && savedResults.every(node =>
-      node.data.isGenerating !== true && !node.data.generationError && typeof node.data.generationOutputCommitId === 'string')) {
-    const filePath = outputs.map(output => output.url).join('|||')
+  const completedOutputs = version === 2 ? completedTaskOutputPaths(savedNodes, taskId, nodeId) : []
+  if (!hasActiveWork && ['pending', 'queued', 'generating'].includes(recordedStatus ?? '') && completedOutputs.length > 0) {
+    const filePath = completedOutputs.join('|||')
     await databaseService.updateHistory(taskId, { status: 'success', filePath, errorMessage: null })
     record.status = 'success'; record.filePath = filePath; record.errorMessage = null
     recordedStatus = 'success'
@@ -293,14 +306,14 @@ export async function cancelCanvasGenerationTask(taskId: string): Promise<Record
   if (!task) return null
   if (task.resultAvailable || task.status === 'cancelled') return { taskId, status: task.status }
   const controllers = [activeTasks.get(taskId), ...getCanvasResumeControllers(taskId)].filter((value): value is AbortController => Boolean(value))
-  if (!controllers.length) throw new CanvasApplicationError('INVALID_INPUT', '原画布任务当前没有可停止的本地执行。', true, { execution: true })
+  if (!controllers.length) throw new CanvasApplicationError('INVALID_INPUT', '原画布任务当前没有可停止的本地执行。', true, { execution: { notExecuted: true } })
   controllers.forEach(controller => controller.abort(new Error('本地任务已停止')))
   logger.info('已请求停止原画布任务', { event: 'canvas.generationTask.cancel_requested', requestId: taskId, taskId })
   return { taskId, status: 'cancelling' }
 }
 
 export async function resumeCanvasGenerationTask(input: CanvasGenerationResumeInput, signal?: AbortSignal) {
-  const reject = (message: string): never => { throw new CanvasApplicationError('INVALID_INPUT', message, true, { execution: true }) }
+  const reject = (message: string): never => { throw new CanvasApplicationError('INVALID_INPUT', message, true, { execution: { notExecuted: true } }) }
   const task = await getCanvasGenerationTask(input.taskId)
   if (!task) return reject('原画布任务不存在，请用 get_generation_task 核对任务。')
   const nodeRef = task.nodeRef as { id: string }

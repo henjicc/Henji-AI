@@ -36,7 +36,7 @@ export interface CanvasGenerationRequest {
    * 异步任务创建后立即回调服务端任务 ID。
    * 调用方应把它持久化到结果节点，否则应用中途退出这次生成就再也找不回来了。
    */
-  onTaskId?: (taskId: string) => void;
+  onTaskId?: (taskId: string) => void | Promise<void>;
   /** 本地媒体准备结束后、提交供应商任务前的最后语义门禁。 */
   assertCurrent?: () => Promise<void> | void;
 }
@@ -191,7 +191,7 @@ export async function runCanvasGeneration(request: CanvasGenerationRequest): Pro
     if (!taskId) {
       throw new Error('异步任务缺少 taskId，无法继续轮询');
     }
-    request.onTaskId?.(taskId);
+    await request.onTaskId?.(taskId);
     request.signal?.throwIfAborted();
     result = await generationService.continuePolling(modelId, taskId, params, handleProgress, {
       progressSource: 'canvas',

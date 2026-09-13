@@ -8,6 +8,7 @@ import type { BuiltinModelType } from '@/core/types'
 import { isCanvasProjectContextCurrent } from '@/features/canvas/application/canvasApplicationService'
 import {
   commitCanvasGenerationOutputs,
+  commitCanvasGenerationOutputsInProject,
   resolveGenerationOutputStrategy,
 } from '@/features/canvas/application/generationOutputApplicationService'
 import {
@@ -41,6 +42,8 @@ import { getPlatform } from '@/platform'
 import { useCanvasGenerationProgressStore } from '@/stores/canvasGenerationProgressStore'
 import { useCanvasStore } from '@/stores/canvasStore'
 import { useProjectStore } from '@/stores/projectStore'
+import { withCanvasProjectRuntime } from './canvasProjectRuntime'
+import { confirmCanvasPersistence } from './canvasPersistenceService'
 
 import {
   DEFAULT_GENERATION_DURATION_MS,
@@ -94,15 +97,8 @@ export interface GenerationNodeExecutionOptions {
 }
 
 /** UI 与后台调用共享的生成执行器；读取最新配置，不依赖 React 挂载。 */
-export function createGenerationNodeExecutor(readOptions: () => GenerationNodeExecutionOptions) {
-  const readRuntime = () => resolveGenerationNodeRuntime({
-    nodeId: readOptions().nodeId,
-    modelType: readOptions().modelType,
-    acceptedKinds: readOptions().acceptedKinds,
-    acceptedMediaKinds: readOptions().acceptedMediaKinds,
-    capability: readOptions().capability,
-    showModelInput: readOptions().showModelInput,
-  })
+export function createGenerationNodeExecutor(readOptions: (store?: typeof useCanvasStore) => GenerationNodeExecutionOptions) {
+  const readRuntime = (store = useCanvasStore) => resolveGenerationNodeRuntime(readOptions(store), store)
 
   const prepareRuntimeValues = async (
     values: DynamicValueMap,
@@ -223,6 +219,7 @@ export function createGenerationNodeExecutor(readOptions: () => GenerationNodeEx
       operation: async () => {
         const generationProjectId = execution.projectId
         if (!generationProjectId) throw new Error('当前没有可执行生成的画布项目')
+        const backgroundCompletion = !current.commitGenerationResult
         const isProjectCurrent = (): boolean => isCanvasProjectContextCurrent(generationProjectId)
         const prepared = await prepareExecution(execution)
         const { runtime, promptInput, capabilityPreparation, generationParams } = prepared
@@ -287,14 +284,16 @@ export function createGenerationNodeExecutor(readOptions: () => GenerationNodeEx
         canvas.addEdge(current.nodeId, resultNodeId)
         const setProgress = useCanvasGenerationProgressStore.getState().setProgress
         const taskLifecycle = createCanvasGenerationTaskLifecycle(
-          isProjectCurrent,
-          (taskId) => useCanvasStore.getState().updateNodeData(resultNodeId, {
-            serverTaskId: taskId,
-            serverTaskModelId: runtime.modelId,
-          }),
+          backgroundCompletion ? () => true : isProjectCurrent,
+          (taskId) => backgroundCompletion ? withCanvasProjectRuntime(generationProjectId, async target => {
+            target.store.getState().updateNodeData(resultNodeId, { serverTaskId: taskId, serverTaskModelId: runtime.modelId })
+            await target.persist()
+          }) : useCanvasStore.getState().updateNodeData(resultNodeId, { serverTaskId: taskId, serverTaskModelId: runtime.modelId }),
         )
 
         try {
+          // 原占位节点必须先落盘；供应商响应晚于页面切换时仍有稳定接收位置。
+          await confirmCanvasPersistence(generationProjectId)
           const result = await runCanvasGeneration({
             modelId: runtime.modelId,
             requestId: requestPreparation?.requestId ?? current.requestId,
@@ -303,14 +302,14 @@ export function createGenerationNodeExecutor(readOptions: () => GenerationNodeEx
             params: requestParams,
             upstream: requestInputs,
             onProgress: (progress) => {
-              if (isProjectCurrent()) setProgress(resultNodeId, progress)
+              if (backgroundCompletion || isProjectCurrent()) setProgress(resultNodeId, progress)
             },
             onTaskId: taskLifecycle.onTaskId,
             assertCurrent: execution.assertCurrent,
           })
           ownership.generationResult = result
           current.signal?.throwIfAborted()
-          if (!isProjectCurrent()) {
+          if (!backgroundCompletion && !isProjectCurrent()) {
             await taskLifecycle.cancelLatest()
             throw new Error('画布项目已切换，本次生成结果已丢弃')
           }
@@ -344,7 +343,10 @@ export function createGenerationNodeExecutor(readOptions: () => GenerationNodeEx
           const batchResultKind = strategy === 'assetGroup'
             ? current.modelType === 'image' ? 'image-group' : 'media-group'
             : memberResultKind
-          const committed = await commitCanvasGenerationOutputs({
+          const commit = backgroundCompletion
+            ? (input: Parameters<typeof commitCanvasGenerationOutputs>[0]) => commitCanvasGenerationOutputsInProject(generationProjectId, input)
+            : commitCanvasGenerationOutputs
+          const committed = await commit({
             sourceNodeId: current.nodeId,
             placeholderNodeId: resultNodeId,
             resultNodeType: current.resultNodeType,
@@ -376,7 +378,14 @@ export function createGenerationNodeExecutor(readOptions: () => GenerationNodeEx
           })
           return { status: 'completed', resultNodeIds: committed.resultNodeIds }
         } catch (error) {
-          if (isProjectCurrent()) {
+          if (backgroundCompletion) {
+            await withCanvasProjectRuntime(generationProjectId, async target => {
+              target.store.getState().updateNodeData(resultNodeId, current.signal?.aborted
+                ? createCanvasGenerationCancelledPatch()
+                : createCanvasGenerationFailurePatch(error, current.capability?.outputPolicy.resultKind))
+              await target.persist()
+            })
+          } else if (isProjectCurrent()) {
             useCanvasStore.getState().updateNodeData(resultNodeId, current.signal?.aborted
               ? createCanvasGenerationCancelledPatch()
               : createCanvasGenerationFailurePatch(error, current.capability?.outputPolicy.resultKind))
@@ -384,7 +393,7 @@ export function createGenerationNodeExecutor(readOptions: () => GenerationNodeEx
           throw error
         } finally {
           taskLifecycle.release()
-          if (isProjectCurrent()) setProgress(resultNodeId, null)
+          if (backgroundCompletion || isProjectCurrent()) setProgress(resultNodeId, null)
         }
       },
       release: async (filePaths) => {
@@ -404,7 +413,8 @@ export function createGenerationNodeExecutor(readOptions: () => GenerationNodeEx
     kind: 'standard-generation',
     dependency: { mode: 'auto', outputMode: 'result-nodes' },
     inputSignatureScope: 'runtime',
-    getInputSignatureExtras: () => createGenerationNodeRuntimeSignaturePayload(readRuntime()),
+    getInputSignatureExtras: store => createGenerationNodeRuntimeSignaturePayload(readRuntime(store)),
+    supportsBackgroundCompletion: () => !readOptions().commitGenerationResult,
     preflightBeforeDependencies,
     run: handleGenerate,
   }

@@ -7,7 +7,7 @@ import { CANVAS_NODE_TYPES } from '../domain/canvasNodes'
 import { createDefaultGenerationOutputItems } from '../domain/generationOutputs'
 import { canvasNodeFactory } from './canvasServices'
 import { withCanvasProjectRuntime } from './canvasProjectRuntime'
-import { commitCanvasGenerationOutputs } from './generationOutputApplicationService'
+import { commitCanvasGenerationOutputs, commitCanvasGenerationOutputsInProject } from './generationOutputApplicationService'
 
 const disk = vi.hoisted(() => ({ records: new Map<string, ProjectRecord>(), write: vi.fn(), read: vi.fn() }))
 vi.mock('@/commands/projectState', () => ({
@@ -35,6 +35,32 @@ async function output(id: string, completionId: string) {
 
 describe('跨工程画布使用原事务与落图服务', () => {
   beforeEach(() => { disk.records.clear(); disk.write.mockReset(); disk.write.mockResolvedValue(undefined); disk.read.mockReset(); disk.read.mockImplementation(async (id: string) => disk.records.get(id)) })
+  it('落图准备期间离开原项目，重新获取后台实例只提交一次，不改当前画布', async () => {
+    const a = project('commit-a'); const b = project('commit-b')
+    disk.records.set(a.id, encodeProjectAsRecord(a)); disk.records.set(b.id, encodeProjectAsRecord(b))
+    useProjectStore.setState({ isHydrated: true, projects: [a, b], currentProjectId: a.id, currentProject: a })
+    useCanvasStore.getState().setCanvasData(a.nodes, a.edges, a.history)
+    let release!: () => void
+    const persistOutput = vi.fn(async () => {
+      if (persistOutput.mock.calls.length === 1) await new Promise<void>(resolve => { release = resolve })
+      return { patch: { imageUrl: 'media/result.png' }, createdFilePaths: [] }
+    })
+    const committing = commitCanvasGenerationOutputsInProject(a.id, { sourceNodeId: a.nodes[0].id,
+      resultNodeType: CANVAS_NODE_TYPES.exportImage, completionId: 'origin-completion', persistOutput,
+      contract: { version: 1, strategy: 'single', resultKind: 'image', expectedOutputCount: 1,
+        outputs: createDefaultGenerationOutputItems({ sources: ['media/result.png'], mediaType: 'image', resultKind: 'image', semanticKind: 'generated-media' }) },
+    })
+    await vi.waitFor(() => expect(release).toBeTypeOf('function'))
+    useProjectStore.setState({ currentProjectId: b.id, currentProject: b })
+    useCanvasStore.getState().setCanvasData(b.nodes, b.edges, b.history)
+    const active = useCanvasStore.getState()
+    release()
+    expect((await committing).resultNodeIds).toHaveLength(1)
+    expect(persistOutput).toHaveBeenCalledTimes(2)
+    expect(decodeProjectRecord(disk.records.get(a.id)!).nodes).toHaveLength(2)
+    expect(decodeProjectRecord(disk.records.get(b.id)!).nodes).toHaveLength(1)
+    expect(useCanvasStore.getState()).toBe(active)
+  })
   it('当前 A 时结果只写 B，保存失败保留原快照，重试同完成键不重复节点', async () => {
     const a = project('active-a')
     const b = project('background-b')

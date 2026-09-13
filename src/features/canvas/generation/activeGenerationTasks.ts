@@ -79,12 +79,12 @@ export function releaseCanvasGenerationResumeLeasesForProject(projectId: string)
 /** 统一管理运行中任务的持久化、项目切换取消与恢复续查互斥。 */
 export function createCanvasGenerationTaskLifecycle(
   isContextCurrent: () => boolean,
-  persistTask: (taskId: string) => void,
+  persistTask: (taskId: string) => void | Promise<void>,
 ) {
   let latestTaskId: string | null = null
   const ownedTaskIds = new Set<string>()
   return {
-    onTaskId: (taskId: string): void => {
+    onTaskId: (taskId: string): void | Promise<void> => {
       latestTaskId = taskId
       if (!isContextCurrent()) {
         void GenerationService.getInstance().cancelTask(taskId).catch(() => undefined)
@@ -92,7 +92,7 @@ export function createCanvasGenerationTaskLifecycle(
       }
       markCanvasGenerationTaskActive(taskId)
       ownedTaskIds.add(taskId)
-      persistTask(taskId)
+      return persistTask(taskId)
     },
     cancelLatest: async (): Promise<void> => {
       if (!latestTaskId) return

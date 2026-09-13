@@ -1,6 +1,7 @@
 import type { CanvasNode } from '../domain/canvasNodes'
 import type { CanvasNodeExecutionKind } from '../domain/nodeRegistry'
 import type { CanvasDependencyOutputMode } from './canvasExecutionCache'
+import type { useCanvasStore } from '@/stores/canvasStore'
 
 export type CanvasExecutionTrigger = 'direct' | 'dependency'
 
@@ -31,7 +32,9 @@ export interface CanvasRegisteredExecutor {
   preflightBeforeDependencies?: (context: CanvasNodePreflightContext) => Promise<void> | void
   preflight?: (context: CanvasNodeExecutionContext) => Promise<void> | void
   inputSignatureScope?: 'graph' | 'runtime'
-  getInputSignatureExtras?: () => Promise<unknown> | unknown
+  getInputSignatureExtras?: (store?: typeof useCanvasStore) => Promise<unknown> | unknown
+  /** 结果能够通过原项目的业务存储提交，不依赖当前页面。 */
+  supportsBackgroundCompletion?: () => boolean
   isCachedOutputValid?: (node: CanvasNode) => boolean
   run: (context: CanvasNodeExecutionContext) => Promise<CanvasNodeExecutionResult>
 }

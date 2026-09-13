@@ -37,6 +37,7 @@ import { publishCanvasSuccessfulExecution } from './canvasExecutionPublication'
 import { createCanvasNodeInputSignature } from './canvasExecutionSignature'
 import { resetCanvasExecutionReachabilityForTests } from './canvasExecutionReachability'
 import { isCanvasExecutionOutputRefValid } from './graphOutputResolver'
+import { withCanvasProjectRuntime } from './canvasProjectRuntime'
 
 export { hasReachableNonDisplayConsumer } from './canvasExecutionReachability'
 export type {
@@ -213,7 +214,7 @@ async function executeRegisteredNode(
   nodeId: string,
   baseContext: Omit<CanvasNodeExecutionContext, 'inputSignature' | 'assertCurrent'>,
   runControl: CanvasRunControl,
-  assertDependenciesCurrent: () => Promise<void>,
+  assertDependenciesCurrent: (store?: typeof useCanvasStore) => Promise<void>,
 ): Promise<NodeRunOutcome> {
   for (;;) {
     if (runControl.failure !== null) throw runControl.failure
@@ -257,6 +258,7 @@ async function executeRegisteredNode(
     }
 
     const outputMode = executor.dependency?.outputMode ?? 'inline'
+    const backgroundCompletion = executor.supportsBackgroundCompletion?.() === true
     if (baseContext.trigger === 'dependency') {
       const reused = cachedResult(
         latestNode,
@@ -299,6 +301,20 @@ async function executeRegisteredNode(
         }
         await context.assertCurrent()
         const result = await executor.run(context)
+        if (backgroundCompletion && baseContext.projectId) {
+          await withCanvasProjectRuntime(baseContext.projectId, async runtime => {
+            const extras = await executor.getInputSignatureExtras?.(runtime.store)
+            const state = runtime.store.getState()
+            if (createExecutorInputSignature(nodeId, executor, state.nodes, state.edges, extras) !== inputSignature) {
+              throw new Error('节点运行期间输入已变化；本次结果已保留，请重新运行后再继续下游')
+            }
+            await assertDependenciesCurrent(runtime.store)
+            if (!runtime.isCurrent()) throw new Error('原项目实例在发布结果时发生变化，请查询已保存结果。')
+            publishCanvasSuccessfulExecution({ sourceNodeId: nodeId, inputSignature, outputMode, resultNodeIds: result.resultNodeIds }, runtime.store)
+            await runtime.persist()
+          })
+          return result
+        }
         assertProjectContext(baseContext.projectId)
         if (await resolveCurrentInputSignature(nodeId) !== inputSignature) {
           throw new Error('节点运行期间输入已变化；本次结果已保留，请重新运行后再继续下游')
@@ -429,24 +445,32 @@ async function executeCanvasRun(rootNodeId: string, assertCurrent?: () => void):
       assertProjectContext(projectId)
     }
     const taskByNodeId = new Map<string, Promise<NodeRunOutcome>>()
+    const planExecutors = new Map(plan.orderedNodeIds.map(id => [id, getExecutor(id)]))
     for (const nodeId of plan.orderedNodeIds) {
       const executor = getExecutor(nodeId)
       if (!executor) throw new Error(`节点执行器尚未就绪：${nodeId}`)
       const predecessorTasks = (plan.predecessorIdsByNode.get(nodeId) ?? [])
         .map((predecessorId) => taskByNodeId.get(predecessorId))
         .filter((task): task is Promise<NodeRunOutcome> => Boolean(task))
-      const assertDependenciesCurrent = async (): Promise<void> => {
-        assertCanvasExecutionPlanCurrent(rootNodeId, plan, getDependencyMode)
+      const assertDependenciesCurrent = async (store = useCanvasStore): Promise<void> => {
+        const mode = (id: string): CanvasDependencyMode => {
+          const entry = planExecutors.get(id)
+          return entry ? entry.dependency?.mode === 'auto' ? 'auto' : 'boundary' : 'missing'
+        }
+        assertCanvasExecutionPlanCurrent(rootNodeId, plan, mode, store)
         for (const ancestorId of getCanvasExecutionAncestorIds(plan, nodeId)) {
           const outcome = outcomeByNodeId.get(ancestorId)
+          const ancestor = planExecutors.get(ancestorId)
+          const extras = await ancestor?.getInputSignatureExtras?.(store)
+          const snapshot = store.getState()
           if (
-            !outcome
-            || await resolveCurrentInputSignature(ancestorId) !== outcome.inputSignature
+            !outcome || !ancestor
+            || createExecutorInputSignature(ancestorId, ancestor, snapshot.nodes, snapshot.edges, extras) !== outcome.inputSignature
           ) throw new Error(`上游节点输入已变化，请重新运行：${ancestorId}`)
         }
       }
       const task = Promise.all(predecessorTasks)
-        .then(assertDependenciesCurrent)
+        .then(() => assertDependenciesCurrent())
         .then(() => executeRegisteredNode(nodeId, {
           runId,
           projectId,

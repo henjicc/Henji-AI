@@ -32,8 +32,8 @@ export interface ResolveGenerationNodeRuntimeInput {
 }
 
 /** 始终基于当前 store 快照解析，供依赖刚完成后的同一微任务直接执行。 */
-export function resolveGenerationNodeRuntime(input: ResolveGenerationNodeRuntimeInput) {
-  const canvas = useCanvasStore.getState()
+export function resolveGenerationNodeRuntime(input: ResolveGenerationNodeRuntimeInput, store = useCanvasStore) {
+  const canvas = store.getState()
   const latestNode = canvas.nodes.find((node) => node.id === input.nodeId)
   if (!latestNode) throw new Error(`画布执行节点不存在：${input.nodeId}`)
   const data = latestNode.data as GenerationNodeShellData

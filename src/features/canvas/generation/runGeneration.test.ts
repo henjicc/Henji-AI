@@ -76,6 +76,24 @@ describe('runCanvasGeneration 付费请求门禁', () => {
     )
   })
 
+  it('供应商任务号保存完成后才开始轮询，保存失败不继续轮询', async () => {
+    generate.mockResolvedValue({ status: 'pending', taskId: 'task-persist' })
+    continuePolling.mockResolvedValue({ status: 'completed', filePath: '/managed/result.png' })
+    let release!: () => void
+    const saved = new Promise<void>(resolve => { release = resolve })
+    const onTaskId = vi.fn(async () => { await saved })
+    const running = runCanvasGeneration({ modelId: 'test-model', params: {}, onTaskId })
+    await vi.waitFor(() => expect(onTaskId).toHaveBeenCalledWith('task-persist'))
+    expect(continuePolling).not.toHaveBeenCalled()
+    release()
+    await expect(running).resolves.toMatchObject({ primary: '/managed/result.png' })
+    continuePolling.mockClear()
+    await expect(runCanvasGeneration({ modelId: 'test-model', params: {},
+      onTaskId: async () => { throw new Error('保存失败') },
+    })).rejects.toThrow('保存失败')
+    expect(continuePolling).not.toHaveBeenCalled()
+  })
+
   it('异步轮询继续沿用局部重绘链路 ID', async () => {
     generate.mockResolvedValue({ status: 'pending', taskId: 'task-1' })
     continuePolling.mockResolvedValue({

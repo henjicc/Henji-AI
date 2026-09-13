@@ -11,8 +11,9 @@ export function assertCanvasExecutionPlanCurrent(
   rootNodeId: string,
   expected: CanvasExecutionPlan,
   getDependencyMode: (nodeId: string) => CanvasDependencyMode,
+  store = useCanvasStore,
 ): void {
-  const snapshot = useCanvasStore.getState()
+  const snapshot = store.getState()
   const current = createCanvasExecutionPlan(
     rootNodeId,
     snapshot.nodes,

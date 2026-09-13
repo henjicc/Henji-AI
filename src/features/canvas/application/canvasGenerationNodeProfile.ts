@@ -9,8 +9,8 @@ import { prepareUpscaleNodeRuntime } from './upscaleGenerationPreparation'
 import type { GenerationNodeExecutionOptions } from './generationNodeExecutor'
 
 /** 标准生成节点的无挂载配置；素材准备和扩图处理仍调用界面的正式实现。 */
-export function readCanvasGenerationNodeProfile(nodeId: string): GenerationNodeExecutionOptions {
-  const node = useCanvasStore.getState().nodes.find(item => item.id === nodeId)
+export function readCanvasGenerationNodeProfile(nodeId: string, store = useCanvasStore): GenerationNodeExecutionOptions {
+  const node = store.getState().nodes.find(item => item.id === nodeId)
   const imageCapabilityId = node?.type === CANVAS_NODE_TYPES.upscaleGen ? CANVAS_IMAGE_CAPABILITY_IDS.upscale
     : node?.type === CANVAS_NODE_TYPES.panoramaGen ? CANVAS_IMAGE_CAPABILITY_IDS.panorama : undefined
   const modelType = node?.type === CANVAS_NODE_TYPES.imageEdit || imageCapabilityId ? 'image'

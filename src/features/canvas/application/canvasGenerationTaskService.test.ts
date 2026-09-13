@@ -25,6 +25,7 @@ import { loadRealModelsIntoRegistry } from '@/tests/loadRealModels'
 import * as imageCommands from '@/commands/image'
 import { CANVAS_IMAGE_CAPABILITY_IDS } from '../capabilities'
 import { prepareNodeImage } from './imageData'
+import { openCanvasProject } from './canvasApplicationService'
 vi.mock('./imageData', async (original) => ({
   ...await original<typeof import('./imageData')>(),
   persistImageLocally: vi.fn(async (url: string) => url),
@@ -436,7 +437,7 @@ it('节点创建后切换项目不会在别的项目执行或重新付费', asyn
   expect(records.get(taskId)?.filePath).toBeNull()
 })
 
-it('供应商任务已保存后切换项目，返回可续查原任务并对账成功，不再次生成', async () => {
+it('供应商任务已保存后切换项目，持续轮询并保存原项目，不影响当前项目', async () => {
   vi.mocked(GenerationService.getInstance().generate).mockResolvedValue({ status: 'pending', taskId: 'persisted-provider-task', url: '' })
   let finishOriginal!: (value: { status: 'completed'; url: string; filePath: string }) => void
   const polling = vi.spyOn(GenerationService.getInstance(), 'continuePolling').mockImplementation(() => new Promise(resolve => { finishOriginal = resolve }))
@@ -445,19 +446,96 @@ it('供应商任务已保存后切换项目，返回可续查原任务并对账�
     { mode: 'canvas', projectId, sourceNodeIds: [] }, taskId)
   await vi.waitFor(() => expect(polling).toHaveBeenCalledTimes(1))
   await confirmCanvasPersistence(projectId)
-  useProjectStore.setState({ currentProjectId: 'other' })
+  const otherProject = await useProjectStore.getState().createProject('另一个工作区')
+  await openCanvasProject(otherProject, new AbortController().signal)
+  const currentCanvas = useCanvasStore.getState()
   finishOriginal({ status: 'completed', url: 'C:/original.png', filePath: 'C:/original.png' })
-  await vi.waitFor(() => expect(records.get(taskId)?.errorMessage).toContain('画布项目已切换'))
-  expect(records.get(taskId)?.status).toBe('pending')
-  useProjectStore.setState({ currentProjectId: projectId })
-  polling.mockResolvedValue({ status: 'completed', url: 'C:/resumed.png', filePath: 'C:/resumed.png' })
-  resumeCanvasProjectGeneration(projectId)
-  await vi.waitFor(() => expect(useCanvasStore.getState().nodes.find(node => node.data.generationTaskId === taskId)?.data.imageUrl).toBe('C:/resumed.png'))
+  await vi.waitFor(() => expect(records.get(taskId)?.status, records.get(taskId)?.errorMessage ?? '').toBe('success'))
+  expect(useProjectStore.getState().currentProjectId).toBe(otherProject)
+  expect(useCanvasStore.getState()).toBe(currentCanvas)
+  await openCanvasProject(projectId, new AbortController().signal)
+  expect(useCanvasStore.getState().nodes.find(node => node.data.generationTaskId === taskId)?.data.imageUrl).toBe('C:/original.png')
   await vi.waitFor(async () => expect(await getCanvasGenerationTask(taskId)).toMatchObject({ status: 'success', waitingExternal: false }))
-  expect(records.get(taskId)).toMatchObject({ status: 'success', filePath: 'C:/resumed.png' })
+  expect(records.get(taskId)).toMatchObject({ status: 'success', filePath: 'C:/original.png' })
   expect(GenerationService.getInstance().generate).toHaveBeenCalledTimes(1)
-  expect(polling).toHaveBeenCalledTimes(2)
+  expect(polling).toHaveBeenCalledTimes(1)
   expect(polling.mock.calls.every(call => call[1] === 'persisted-provider-task')).toBe(true)
+})
+
+it('切走后才收到供应商任务号，仍保存原任务并继续获取结果', async () => {
+  let submitted!: () => void
+  vi.mocked(GenerationService.getInstance().generate).mockImplementation(async () => {
+    await new Promise<void>(resolve => { submitted = resolve })
+    return { status: 'pending', taskId: 'late-provider-id', url: '' }
+  })
+  const polling = vi.spyOn(GenerationService.getInstance(), 'continuePolling').mockResolvedValue({ status: 'completed', url: 'C:/late-id.png', filePath: 'C:/late-id.png' })
+  const taskId = crypto.randomUUID()
+  await submitCanvasGenerationTask({ modelId: 'canvas-task-fixture', mediaType: 'image', prompt: '迟到任务号', options: {} },
+    { mode: 'canvas', projectId, sourceNodeIds: [] }, taskId)
+  await vi.waitFor(() => expect(submitted).toBeTypeOf('function'))
+  const otherProject = await useProjectStore.getState().createProject('切走等待')
+  await openCanvasProject(otherProject, new AbortController().signal)
+  submitted()
+  await vi.waitFor(() => expect(records.get(taskId)?.status, records.get(taskId)?.errorMessage ?? '').toBe('success'))
+  expect(polling).toHaveBeenCalledTimes(1)
+  expect(polling.mock.calls[0][1]).toBe('late-provider-id')
+  expect(useProjectStore.getState().currentProjectId).toBe(otherProject)
+  expect(useCanvasStore.getState().nodes).toHaveLength(0)
+  expect((await readPersistedCanvasProjectSnapshot(projectId)).nodes.find(node => node.data.generationTaskId === taskId)?.data.imageUrl).toBe('C:/late-id.png')
+})
+
+it('在其他项目中取消原画布任务，停止状态仍保存到原节点', async () => {
+  vi.mocked(GenerationService.getInstance().generate).mockResolvedValue({ status: 'pending', taskId: 'background-cancel', url: '' })
+  const polling = vi.spyOn(GenerationService.getInstance(), 'continuePolling').mockImplementation(async (_model, _task, _params, _progress, options) => {
+    await new Promise<void>((_resolve, reject) => options!.signal!.addEventListener('abort', () => reject(new Error('停止本地轮询')), { once: true }))
+    throw new Error('unreachable')
+  })
+  const taskId = crypto.randomUUID()
+  await submitCanvasGenerationTask({ modelId: 'canvas-task-fixture', mediaType: 'image', prompt: '后台取消', options: {} },
+    { mode: 'canvas', projectId, sourceNodeIds: [] }, taskId)
+  await vi.waitFor(() => expect(polling).toHaveBeenCalledTimes(1))
+  const otherProject = await useProjectStore.getState().createProject('其他项目')
+  await openCanvasProject(otherProject, new AbortController().signal)
+  const active = useCanvasStore.getState()
+  const execute = taskControlSession()
+  expect(await execute('cancel_generation_task', { taskId, reason: '取消原任务' })).toMatchObject({ ok: true })
+  await vi.waitFor(() => expect(records.get(taskId)?.status).toBe('cancelled'))
+  expect(useCanvasStore.getState()).toBe(active)
+  const saved = await readPersistedCanvasProjectSnapshot(projectId)
+  expect(saved.nodes.find(node => node.data.generationTaskId === taskId)?.data).toMatchObject({
+    generationCancelled: true, isGenerating: false, serverTaskId: 'background-cancel',
+  })
+  expect(await getCanvasGenerationTask(taskId)).toMatchObject({ status: 'cancelled', cancellable: false, resultAvailable: false })
+})
+
+it('生成已经派发后修改输入，原结果保存成功不会被缓存发布校验误报失败', async () => {
+  let release!: () => void
+  const pending = new Promise<void>(resolve => { release = resolve })
+  const generate = vi.mocked(GenerationService.getInstance().generate).mockImplementation(async () => {
+    await pending
+    return { status: 'completed', url: 'C:/original-result.png', filePath: 'C:/original-result.png' }
+  })
+  const taskId = crypto.randomUUID()
+  const submitted = await submitCanvasGenerationTask({ modelId: 'canvas-task-fixture', mediaType: 'image', prompt: '原始描述', options: {} },
+    { mode: 'canvas', projectId, sourceNodeIds: [] }, taskId)
+  await vi.waitFor(() => expect(generate).toHaveBeenCalledTimes(1))
+  const nodeId = submitted.nodeRef.id.slice(projectId.length + 1)
+  useCanvasStore.getState().updateNodeData(nodeId, { prompt: '下次生成的描述' })
+  release()
+  await vi.waitFor(() => expect(records.get(taskId)?.status).toBe('success'))
+  expect(await getCanvasGenerationTask(taskId)).toMatchObject({ status: 'success', resultAvailable: true })
+  const saved = await readPersistedCanvasProjectSnapshot(projectId)
+  expect(saved.nodes.find(node => node.id === nodeId)?.data.prompt).toBe('下次生成的描述')
+  expect(saved.nodes.find(node => node.data.generationTaskId === taskId)?.data).toMatchObject({ imageUrl: 'C:/original-result.png', isGenerating: false })
+  expect(generate).toHaveBeenCalledTimes(1)
+})
+
+it('没有活动执行的旧任务取消明确返回未执行，保留原供应商标识', async () => {
+  const { taskId, resultId } = await restoredTask({ serverTaskId: 'original-server', serverTaskModelId: 'canvas-task-fixture' })
+  const result = await taskControlSession()('cancel_generation_task', { taskId, reason: '停止原任务' })
+  expect(result).toMatchObject({ ok: false, error: { details: { execution: { notExecuted: true } } } })
+  expect(useCanvasStore.getState().nodes.find(node => node.id === resultId)?.data.serverTaskId).toBe('original-server')
+  expect(records.get(taskId)?.status).toBe('pending')
 })
 
 it('提交前用户修改生成参数，原任务不能按未经估价的新输入执行', async () => {
