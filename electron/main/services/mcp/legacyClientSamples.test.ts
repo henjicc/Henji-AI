@@ -24,6 +24,9 @@ import { MCP_CAPABILITY_IDS, type LocalHostRequest, type LocalTool } from '../..
 type Sample = { era: string; tool: string; arguments: Record<string, unknown> }
 
 const LEGACY_SAMPLES: Sample[] = [
+  { era: '媒体直接衔接', tool: 'prepare_generation_task', arguments: { modelId: 'image-model', prompt: '继续编辑', mediaType: 'image', params: { uploadedImages: [{ kind: 'image_edit.preview', id: 'preview' }] } } },
+  { era: '媒体直接衔接', tool: 'add_generation_result_to_canvas', arguments: { operationId: '5f6d2a4c-3d1b-4d5a-9f3a-1b2c3d4e5f60', projectId: 'project', resultRef: { kind: 'image_edit.preview', id: 'preview' } } },
+  { era: '原生成结果入画布', tool: 'add_generation_result_to_canvas', arguments: { operationId: '5f6d2a4c-3d1b-4d5a-9f3a-1b2c3d4e5f60', projectId: 'project', resultRef: { kind: 'generation.result', id: 'saved' } } },
   { era: '原图片工具节点执行', tool: 'prepare_canvas_node_generation', arguments: { projectId: 'project-1', nodeId: 'tool-1' } },
   { era: '原图片工具节点执行', tool: 'submit_canvas_node_generation', arguments: {
     operationId: '5f6d2a4c-3d1b-4d5a-9f3a-1b2c3d4e5f60', projectId: 'project-1', nodeId: 'tool-1', inputSignature: 'canvas-input-v2-fixture',

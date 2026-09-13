@@ -1,8 +1,10 @@
 import { beforeEach, expect, it, vi } from 'vitest'
 import { resolveGenerationMediaReferences } from './generationMediaReferences'
+import { APPLICATION_MEDIA_REFERENCE_KINDS } from '@/core/application-control/mediaReferenceKinds'
 const inspect = vi.hoisted(() => vi.fn())
 const history = vi.hoisted(() => vi.fn())
 const imageInfo = vi.hoisted(() => vi.fn())
+vi.mock('@/features/imageEdit/application/imageEditApplicationService', () => ({ materializeImageEditPreview: async () => 'C:/data/images/result.png' }))
 vi.mock('@/services/database', () => ({ databaseService: { init: vi.fn(), getHistoryById: history } }))
 vi.mock('@/commands/image', () => ({ readImageInfo: imageInfo }))
 vi.mock('@/utils/dataPath', () => ({ getDataRoot: async () => 'C:/data', convertPathString: async (path: string) => path.replace('images/', 'C:/data/images/') }))
@@ -10,6 +12,19 @@ vi.mock('@/commands/assetLibrary', () => ({ inspectAsset: inspect }))
 vi.mock('@/platform/runtime', () => ({ isDesktopRuntime: () => true }))
 vi.mock('@/platform/desktopApi', () => ({ toDisplaySrc: (path: string) => `henji-media://local/${encodeURIComponent(path)}` }))
 beforeEach(() => { inspect.mockReset(); history.mockReset(); imageInfo.mockReset(); imageInfo.mockResolvedValue({ fileName: 'result.png' }) })
+it('每种正式媒体来源都必须有可执行解析样例，新增声明不能只更新工具说明', async () => {
+  const examples: Record<typeof APPLICATION_MEDIA_REFERENCE_KINDS[number], () => void> = {
+    asset: () => { inspect.mockResolvedValue({ mediaType: 'image', filePath: 'C:/data/images/result.png' }) },
+    'generation.result': () => { history.mockResolvedValue({ id: 'result', type: 'image', status: 'success', filePath: 'images/result.png', params: {} }) },
+    'image_edit.preview': () => {},
+  }
+  expect(Object.keys(examples).sort()).toEqual([...APPLICATION_MEDIA_REFERENCE_KINDS].sort())
+  for (const kind of APPLICATION_MEDIA_REFERENCE_KINDS) {
+    examples[kind]()
+    const resolved = await resolveGenerationMediaReferences({ uploadedImages: [{ kind, id: 'result' }] })
+    expect(resolved.uploadedFilePaths, kind).toEqual(['C:/data/images/result.png'])
+  }
+})
 it.each([
   ['uploadedImages', 'images', 'uploadedFilePaths', 'image'],
   ['uploadedVideos', 'videos', 'uploadedVideoFilePaths', 'video'],

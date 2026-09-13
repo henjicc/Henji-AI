@@ -1,8 +1,8 @@
 import { inspectAsset } from '@/commands/assetLibrary'
 import { toFetchableMediaUrl } from '@/services/imageSource'
-import { databaseService } from '@/services/database'
-import { convertPathString, getDataRoot } from '@/utils/dataPath'
-import { resolveReadableGenerationImage } from './generationResultSource'
+import { readGenerationResultMedia } from './generationResultSource'
+import { APPLICATION_MEDIA_REFERENCE_KINDS } from '@/core/application-control/mediaReferenceKinds'
+import { materializeImageEditPreview } from '@/features/imageEdit/application/imageEditApplicationService'
 
 /** 稳定素材引用只在应用边界解析；供应商上传仍由正式生成链路负责。 */
 export async function resolveGenerationMediaReferences(options: Record<string, unknown>): Promise<Record<string, unknown>> {
@@ -18,20 +18,15 @@ export async function resolveGenerationMediaReferences(options: Record<string, u
     const paths = await Promise.all(input.map(async (value: unknown): Promise<string> => {
       if (typeof value === 'string') return value
       const ref = value as { kind?: unknown; id?: unknown } | null
-      if (typeof ref?.id !== 'string' || !ref.id.trim() || !['asset', 'generation.result'].includes(String(ref.kind))) throw new Error(`INVALID_INPUT:${field.uploaded} 接受素材库 {kind:"asset",id:"…"} 或生成历史结果 {kind:"generation.result",id:"…"}，无需先加入素材库。`)
+      if (typeof ref?.id !== 'string' || !ref.id.trim() || !APPLICATION_MEDIA_REFERENCE_KINDS.some(kind => kind === ref.kind)) throw new Error(`INVALID_INPUT:${field.uploaded} 接受 {kind,id}，kind 可为 ${APPLICATION_MEDIA_REFERENCE_KINDS.join('、')}；无需加入素材库。`)
+      if (ref.kind === 'image_edit.preview') {
+        if (field.type !== 'image') throw new Error(`INVALID_INPUT:${field.uploaded} 需要 ${field.type}，编辑预览实际为 image。`)
+        return materializeImageEditPreview(ref.id)
+      }
       if (ref.kind === 'generation.result') {
-        await databaseService.init()
-        const record = await databaseService.getHistoryById(ref.id)
-        if (!record || !['success', 'completed'].includes(record.status)) throw new Error('NOT_FOUND:生成结果不存在或尚未成功，请读取生成历史取得有效 resultRef。')
-        if (record.type !== field.type) throw new Error(`INVALID_INPUT:${field.uploaded} 中的生成结果类型应为 ${field.type}，实际为 ${record.type}。`)
-        if (field.type === 'image') return (await resolveReadableGenerationImage(record)).source
-        const stored = record.filePath || record.params.__resultUrl
-        if (typeof stored !== 'string' || !stored.trim()) throw new Error('NOT_FOUND:生成记录没有可引用的媒体。')
-        const source = stored.split('|||').map(value => value.trim()).filter(Boolean).at(-1)
-        if (!source) throw new Error('NOT_FOUND:生成记录没有可引用的媒体。')
-        const path = await convertPathString(source, await getDataRoot(), false)
-        if (!path) throw new Error('NOT_FOUND:生成记录没有可引用的媒体。')
-        return path
+        const result = await readGenerationResultMedia(ref.id, field.type)
+        if (!result) throw new Error('NOT_FOUND:生成结果不存在，请读取生成历史取得有效 resultRef。')
+        return result.source
       }
       const asset = await inspectAsset(ref.id)
       if (asset.mediaType !== field.type) throw new Error(`INVALID_INPUT:${field.uploaded} 中的素材类型应为 ${field.type}，实际为 ${asset.mediaType}。`)

@@ -3,9 +3,18 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const mocks = vi.hoisted(() => ({
   getResult: vi.fn(),
   addTrustedMediaCanvasNode: vi.fn(),
+  render: vi.fn(),
+  persist: vi.fn(),
+  collect: vi.fn(),
+  history: vi.fn(),
   project: { currentProjectId: 'canvas-1' as string | null },
   canvas: { selectedNodeId: 'selected-1' as string | null },
 }))
+vi.mock('@/services/database', () => ({ databaseService: { init: vi.fn(), getHistoryById: mocks.history } }))
+vi.mock('@/utils/dataPath', () => ({ getDataRoot: async () => 'C:/data', convertPathString: async (value: string) => value }))
+vi.mock('@/commands/image', () => ({ readImageInfo: async () => ({ width: 800, height: 600 }), persistImageSource: mocks.persist }))
+vi.mock('@/features/imageEdit/execution/browserImageEditExecution', () => ({ exportImageEditDocument: mocks.render }))
+vi.mock('@/features/assets/services/assetCollectionService', () => ({ addMediaReferenceToLibrary: mocks.collect }))
 vi.mock('@/stores/projectStore', () => ({ useProjectStore: { getState: () => mocks.project } }))
 vi.mock('@/stores/canvasStore', () => ({ useCanvasStore: { getState: () => mocks.canvas } }))
 
@@ -20,9 +29,39 @@ vi.mock('@/features/canvas/application/canvasProjectRuntime', () => ({ withCanva
 vi.mock('@/features/canvas/application/canvasBatchService', () => ({ runCanvasTransaction: async (_id: string, _count: number, execute: (options: unknown) => Promise<unknown>) => ({ appliedOperations: await execute({}), undoRef: 'batch-undo-1' }) }))
 vi.mock('@/features/canvas/application/canvasQueryService', () => ({ readPersistedCanvasProjectSnapshot: async () => ({ nodes: [{ id: 'node-1' }] }) }))
 import { addGenerationResultToCanvas } from './generationResultCanvasApplicationService'
+import { createImageEditPreview, resetImageEditApplicationStateForTests } from '@/features/imageEdit/application/imageEditApplicationService'
+import { resolveGenerationMediaReferences } from '@/features/generation/application/generationMediaReferences'
 
 describe('generation result canvas bridge', () => {
-  beforeEach(() => { vi.clearAllMocks() })
+  beforeEach(() => { vi.clearAllMocks(); mocks.history.mockResolvedValue(null) })
+
+  it('历史结果不在页面内存中仍能直接放入原项目，不需要先打开生成页', async () => {
+    mocks.history.mockResolvedValue({ id: 'saved', type: 'image', status: 'success', filePath: 'C:/history/result.png', params: {}, prompt: '历史图片' })
+    mocks.getResult.mockImplementationOnce(() => { throw new Error('生成页未挂载') })
+    mocks.addTrustedMediaCanvasNode.mockResolvedValue({ projectId: 'canvas-1', nodeId: 'node-1', nodeType: 'uploadNode' })
+    await addGenerationResultToCanvas({ projectId: 'canvas-1', resultRef: { kind: 'generation.result', id: 'saved' } })
+    expect(mocks.getResult).not.toHaveBeenCalled()
+    mocks.getResult.mockReset()
+    expect(mocks.addTrustedMediaCanvasNode).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ imageUrl: 'C:/history/result.png' }) }), {})
+    expect(mocks.collect).not.toHaveBeenCalled()
+  })
+
+  it('编辑预览直接复用于生成并落回原画布，两步共用合成图且不收藏', async () => {
+    resetImageEditApplicationStateForTests()
+    mocks.render.mockResolvedValue('data:image/png;base64,edited')
+    mocks.persist.mockResolvedValue('C:/managed/edited.png')
+    mocks.addTrustedMediaCanvasNode.mockResolvedValue({ projectId: 'canvas-1', nodeId: 'node-1', nodeType: 'uploadNode' })
+    const preview = await createImageEditPreview({ sourceRef: 'generation.result:source', source: 'C:/original.png', operations: [{ kind: 'rotate_cw', degrees: 90 }] })
+    const ref = { kind: 'image_edit.preview' as const, id: String(preview.previewRef) }
+    const prepared = await resolveGenerationMediaReferences({ uploadedImages: [ref] })
+    const result = await addGenerationResultToCanvas({ projectId: 'canvas-1', resultRef: ref })
+    expect(prepared.uploadedFilePaths).toEqual(['C:/managed/edited.png'])
+    expect(mocks.addTrustedMediaCanvasNode).toHaveBeenCalledWith(expect.objectContaining({ projectId: 'canvas-1', placement: { mode: 'right_of_node', anchorNodeId: 'selected-1' }, data: expect.objectContaining({ imageUrl: 'C:/managed/edited.png' }) }), {})
+    expect(result.verification).toMatchObject({ verified: true })
+    expect(mocks.render).toHaveBeenCalledTimes(1)
+    expect(mocks.collect).not.toHaveBeenCalled()
+    expect(mocks.getResult).not.toHaveBeenCalled()
+  })
 
   it('只凭稳定生成结果引用解析内部媒体，并落成可验证画布节点', async () => {
     mocks.getResult.mockReturnValue({

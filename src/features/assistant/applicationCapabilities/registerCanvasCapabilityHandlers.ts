@@ -213,7 +213,7 @@ export function registerCanvasCapabilityHandlers(
   registrar.registerHandler('add_generation_result_to_canvas', (input, context) => {
     throwIfCapabilityAborted(context.signal)
     const parsed = parseCapabilityInput<ProjectInput & {
-      resultRef: { kind: 'generation.result'; id: string }
+      resultRef: { kind: 'generation.result' | 'image_edit.preview'; id: string }
       placement?: CanvasNodePlacement
     }>('add_generation_result_to_canvas', input)
     return addGenerationResultToCanvas(parsed)

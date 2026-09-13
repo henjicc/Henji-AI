@@ -18,6 +18,35 @@ import {
 
 const logger = createLogger('features.imageEdit.application')
 
+// 同一份预览的准备与提交共用合成结果；弱引用不延长已淘汰预览的生命周期。
+const renderedPreviews = new WeakMap<object, { signature: string; source: Promise<string> }>()
+
+/** 将编辑结果交给其他功能，不收藏、不删除预览，也不覆盖原图。 */
+export async function materializeImageEditPreview(previewRef: string): Promise<string> {
+  const preview = getStoredImageEditPreview(previewRef)
+  if (!preview) throw new Error('NOT_FOUND:编辑预览已失效，请重新读取或创建预览。')
+  const signature = JSON.stringify([preview.source, preview.document])
+  const cached = renderedPreviews.get(preview)
+  if (cached?.signature === signature) return cached.source
+  const document = structuredClone(preview.document)
+  const source = preview.source
+  const pending = (async () => {
+    logger.info('编辑结果准备开始', { event: 'image_edit.preview.materialize.start', previewRef })
+    try {
+      const rendered = await exportImageEditDocument(source, document)
+      const filePath = await persistImageSource(rendered)
+      logger.info('编辑结果准备完成', { event: 'image_edit.preview.materialize.completed', previewRef })
+      return filePath
+    } catch (error) {
+      logger.error('编辑结果准备失败', error, { event: 'image_edit.preview.materialize.failed', previewRef })
+      if (renderedPreviews.get(preview)?.signature === signature) renderedPreviews.delete(preview)
+      throw error
+    }
+  })()
+  renderedPreviews.set(preview, { signature, source: pending })
+  return pending
+}
+
 export async function createImageEditPreview(input: {
   sourceRef: string
   source: string
@@ -79,8 +108,7 @@ export async function commitImageEdit(previewRef: string, displayName?: string):
   try {
     const preview = getStoredImageEditPreview(previewRef)
     if (!preview) throw new Error('NOT_FOUND')
-    const rendered = await exportImageEditDocument(preview.source, preview.document)
-    const filePath = await persistImageSource(rendered)
+    const filePath = await materializeImageEditPreview(previewRef)
     const asset = await addMediaReferenceToLibrary({
       filePath,
       mediaType: 'image',

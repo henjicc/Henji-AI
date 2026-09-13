@@ -1,5 +1,6 @@
 import { applicationGenerationTaskId } from '../../application-control/operationIdentity'
 import { z } from 'zod'
+import { APPLICATION_MEDIA_REFERENCE_GUIDANCE, APPLICATION_MEDIA_REFERENCE_KINDS } from '../../application-control/mediaReferenceKinds'
 import { applicationSchemaRefSchema } from '../../application-control'
 import { canvasNodePlacementSchema } from './canvasMutationApplicationCapabilities'
 
@@ -167,7 +168,7 @@ const prepareGenerationTask = defineApplicationCapability({
   id: 'prepare_generation_task',
   version: 1,
   title: '校验生成参数',
-  description: '在提交前验证模型、媒体类型、必填项、参数范围和联动结果；省略的字段用当前生成草稿（generation.draft）补全。params.uploadedImages / uploadedVideos / uploadedAudios 可直接使用生成历史的 resultRef {kind:"generation.result",id:"…"} 或素材库引用 {kind:"asset",id:"…"}，不需要先收藏到素材库。',
+  description: '在提交前验证模型、媒体类型、必填项、参数范围和联动结果；省略字段用 generation.draft 补全。' + APPLICATION_MEDIA_REFERENCE_GUIDANCE,
   domain: 'generation',
   aliases: ['检查生成参数', '准备生成', 'prepare generation'],
   readOnly: true,
@@ -177,11 +178,11 @@ const prepareGenerationTask = defineApplicationCapability({
   permission: 'generation:prepare',
   idempotent: true,
   destructive: false,
-  timeoutMs: 5_000,
+  timeoutMs: 60_000,
   supportsPreview: false,
   supportsUndo: false,
   requiredScopes: [],
-  acceptsRefs: ['generation.model', 'generation.draft', 'generation.result', 'asset'],
+  acceptsRefs: ['generation.model', 'generation.draft', ...APPLICATION_MEDIA_REFERENCE_KINDS],
   producesRefs: ['generation.preparation'],
   inputSchema: z.object({
     modelId: z.string().min(1).optional(),
@@ -213,7 +214,7 @@ const createVisibleGenerationTask = defineApplicationCapability({
   resolveOperationTargets: (input) => { if (!input.modelId || typeof input.prompt !== 'string' || !input.mediaType) throw new Error('INVALID_INPUT:外部提交必须明确指定已读取的模型、提示词和媒体类型'); return [{ kind: 'generation.model', id: input.modelId }] },
   version: 1,
   title: '创建可见生成任务',
-  description: '创建可见图片、视频或音频任务。画布使用 destination={mode:"canvas",projectId,sourceNodeIds}，先创建生成节点与参考连线，结果自动落在节点旁，不要重复放入画布；仅存历史用 {mode:"history"}，省略时当前画布优先。缺省字段用 generation.draft 补全。省略 baselineIds，宿主自动准备并核对费用。params.uploadedImages / uploadedVideos / uploadedAudios 直接接受历史 resultRef {kind:"generation.result",id:"结果 ID"} 或 {kind:"asset",id:"素材 ID"}，无需加入素材库；勿以文字重写代替参考图。',
+  description: '创建可见图片、视频或音频任务。画布用 destination={mode:"canvas",projectId,sourceNodeIds}，先创建生成节点与连线，结果自动落在旁侧，勿重复放入画布；仅存历史用 {mode:"history"}，默认当前画布优先。缺省字段用 generation.draft 补全。省略 baselineIds，宿主核对费用。' + APPLICATION_MEDIA_REFERENCE_GUIDANCE,
   domain: 'generation',
   aliases: ['生成图片', '生成视频', '生成音频', 'create generation'],
   readOnly: false,
@@ -233,7 +234,7 @@ const createVisibleGenerationTask = defineApplicationCapability({
   supportsUndo: false,
   completionKind: 'submitted',
   requiredScopes: ['generation'],
-  acceptsRefs: ['generation.model', 'generation.draft', 'generation.result', 'asset', 'canvas.project', 'canvas.node'],
+  acceptsRefs: ['generation.model', 'generation.draft', ...APPLICATION_MEDIA_REFERENCE_KINDS, 'canvas.project', 'canvas.node'],
   producesRefs: ['generation.task', 'canvas.node', 'canvas.edge'],
   successEvidence: [
     '返回稳定 taskId、submitted 状态和最新 generation revision。',

@@ -36,6 +36,8 @@ import {
 } from './imageEditApplicationService'
 import { createImageEditReflectionRegistrations, IMAGE_EDIT_ENTITY_TYPES } from './imageEditReflection'
 import { getStoredImageEditPreview } from './imageEditSessionRegistry'
+import { resolveGenerationMediaReferences } from '@/features/generation/application/generationMediaReferences'
+import { materializeImageEditPreview } from './imageEditApplicationService'
 
 describe('image edit application service', () => {
   beforeEach(() => {
@@ -45,6 +47,42 @@ describe('image edit application service', () => {
     dependencies.exportImageEditDocument.mockResolvedValue('data:image/png;base64,edited')
     dependencies.persistImageSource.mockResolvedValue('C:\\managed\\edited.png')
     dependencies.addMediaReferenceToLibrary.mockResolvedValue({ id: 'asset-edited' })
+  })
+
+  it('编辑后直接作为生成参考，实际合成编辑步骤且不收藏、不删除预览', async () => {
+    const result = await createImageEditPreview({ sourceRef: 'generation.result:previous', source: '/original.png', operations: [{ kind: 'rotate_cw', degrees: 90 }] })
+    const previewRef = String(result.previewRef)
+    const input = { uploadedImages: [{ kind: 'image_edit.preview', id: previewRef }] }
+    const [prepared, submitted] = await Promise.all([resolveGenerationMediaReferences(input), resolveGenerationMediaReferences(input)])
+    expect(prepared.uploadedFilePaths).toEqual(['C:\\managed\\edited.png'])
+    expect(submitted).toEqual(prepared)
+    expect(dependencies.exportImageEditDocument).toHaveBeenCalledTimes(1)
+    expect(dependencies.exportImageEditDocument).toHaveBeenCalledWith('/original.png', getStoredImageEditPreview(previewRef)!.document)
+    expect(dependencies.persistImageSource).toHaveBeenCalledWith('data:image/png;base64,edited')
+    expect(dependencies.addMediaReferenceToLibrary).not.toHaveBeenCalled()
+    expect(getStoredImageEditPreview(previewRef)).not.toBeNull()
+    await commitImageEdit(previewRef)
+    expect(dependencies.exportImageEditDocument).toHaveBeenCalledTimes(1)
+    expect(dependencies.addMediaReferenceToLibrary).toHaveBeenCalledTimes(1)
+  })
+
+  it('编辑预览变更后重新合成，失败不缓存为成功且不回退原图', async () => {
+    const result = await createImageEditPreview({ sourceRef: 'asset:source', source: '/original.png', operations: [{ kind: 'rotate_cw', degrees: 90 }] })
+    const ref = String(result.previewRef)
+    dependencies.exportImageEditDocument.mockRejectedValueOnce(new Error('合成失败'))
+    await expect(materializeImageEditPreview(ref)).rejects.toThrow('合成失败')
+    expect(dependencies.persistImageSource).not.toHaveBeenCalled()
+    await materializeImageEditPreview(ref)
+    getStoredImageEditPreview(ref)!.source = '/replacement.png'
+    await materializeImageEditPreview(ref)
+    expect(dependencies.exportImageEditDocument).toHaveBeenCalledTimes(3)
+    expect(dependencies.exportImageEditDocument.mock.calls[2][0]).toBe('/replacement.png')
+  })
+
+  it('编辑预览失效或作为音视频输入时拒绝，不偷偷用原图继续生成', async () => {
+    await expect(resolveGenerationMediaReferences({ uploadedImages: [{ kind: 'image_edit.preview', id: 'missing' }] })).rejects.toThrow('预览已失效')
+    await expect(resolveGenerationMediaReferences({ uploadedVideos: [{ kind: 'image_edit.preview', id: 'missing' }] })).rejects.toThrow('实际为 image')
+    expect(dependencies.exportImageEditDocument).not.toHaveBeenCalled()
   })
 
   it('创建预览后，返回的 image_edit.preview 稳定引用可通过通用 list/read 读取', async () => {

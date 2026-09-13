@@ -27,6 +27,7 @@ import { MCP_CAPABILITY_IDS } from '@/core/application-control/localHostContract
 import { listRendererApplicationCapabilityIds } from '@/features/assistant/applicationCapabilities/registry'
 import { BUILTIN_APPLICATION_CAPABILITY_REGISTRY } from './builtinApplicationCapabilityRegistry'
 import { projectExternalCapabilities } from '@/core/application-control/externalCapabilityPolicy'
+import { APPLICATION_MEDIA_REFERENCE_KINDS } from '@/core/application-control/mediaReferenceKinds'
 
 function createManifest() {
   return createApplicationControlCoverageManifest({
@@ -40,6 +41,17 @@ function createManifest() {
 }
 
 describe('application control coverage', () => {
+  it('媒体来源声明覆盖准备、提交与编辑入口，编辑结果可直接回到画布', () => {
+    for (const id of ['prepare_generation_task', 'create_visible_generation_task', 'create_image_edit_preview']) {
+      const definition = BUILTIN_APPLICATION_CAPABILITY_REGISTRY.get(id)!
+      for (const kind of APPLICATION_MEDIA_REFERENCE_KINDS) expect(definition.acceptsRefs, `${id} 无法消费 ${kind}`).toContain(kind)
+    }
+    const canvas = BUILTIN_APPLICATION_CAPABILITY_REGISTRY.get('add_generation_result_to_canvas')!
+    for (const kind of ['generation.result', 'image_edit.preview']) {
+      expect(canvas.acceptsRefs).toContain(kind)
+      expect(canvas.inputSchema.safeParse({ projectId: 'project', resultRef: { kind, id: 'result' } }).success).toBe(true)
+    }
+  })
   it('新增业务声明自动进入投影，新写操作缺少目标不能静默消失', () => {
     const read = { ...BUILTIN_APPLICATION_CAPABILITY_REGISTRY.get('get_current_application_context')!, id: 'new_feature_read', permission: 'new_feature:read' }
     const write = { ...BUILTIN_APPLICATION_CAPABILITY_REGISTRY.get('create_visible_generation_task')!, id: 'new_feature_write', resolveOperationTargets: undefined }
