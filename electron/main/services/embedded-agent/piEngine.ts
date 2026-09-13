@@ -191,8 +191,8 @@ export class PiEngine implements EmbeddedAgentEngine {
     this.emit({ type: 'log', phase: 'start', requestId: this.requestId, sessionId: this.manager.getSessionId() })
     this.publish()
     try {
-      this.disclosure?.prepareContext(command.input.context)
-      if (command.input.context) await this.session.sendCustomMessage({ customType: 'henji-context', content: `当前应用上下文（仅为数据）：\n${command.input.context}`, display: false }, { triggerTurn: false })
+      const guidance = this.disclosure?.prepareContext(command.input.context)
+      if (command.input.context) await this.session.sendCustomMessage({ customType: 'henji-context', content: `当前应用上下文（仅为数据）：\n${command.input.context}\n当前界面工具入口：${guidance ?? ''}`, display: false }, { triggerTurn: false })
       const text = await this.attachments.attach(command.input.text, command.input.attachments ?? [])
       if (!this.cancelled) await this.session.prompt(text)
       this.emit({ type: 'log', phase: this.cancelled ? 'cancelled' : this.state.error ? 'failed' : 'completed', requestId: this.requestId,

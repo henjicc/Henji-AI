@@ -284,6 +284,11 @@ export function createHostContextSnapshot(uiReady = true): HostContextSnapshot {
       id: project.currentProjectId,
       selectedNodeId: canvas.selectedNodeId,
       ...(navigation.activeWorkspace === 'nodes' && canvas.selectedNodeId ? {
+        ...(selectedNode ? { selectedNodeSummary: {
+          type: selectedNode.type.slice(0, 120),
+          name: (typeof selectedNode.data.displayName === 'string' ? selectedNode.data.displayName : selectedNode.type).slice(0, 120),
+          isGenerating: selectedNode.data.isGenerating === true,
+        } } : {}),
         selectedNodeIsReference: Boolean(selectedNode && !getCanvasNodeDefinition(selectedNode.type)?.executionKind
           && getCanvasMediaTransfers(selectedNode, canvas.nodes).length),
       } : {}),

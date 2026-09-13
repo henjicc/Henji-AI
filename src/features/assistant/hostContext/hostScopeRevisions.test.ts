@@ -90,11 +90,13 @@ describe('宿主作用域 revision', () => {
       expect(createHostContextSnapshot().project.selectedNodeIsReference).toBe(true)
       useCanvasStore.getState().updateNodeData('selected', { isGenerating: true })
       expect(createHostContextSnapshot().project.selectedNodeIsReference).toBe(false)
+      expect(createHostContextSnapshot().project.selectedNodeSummary).toEqual({ type: 'uploadNode', name: 'uploadNode', isGenerating: true })
       useCanvasStore.setState({ nodes: [{ id: 'selected', type: 'imageNode', position: { x: 0, y: 0 }, data: { prompt: '待生成' } }] })
       expect(createHostContextSnapshot().project.selectedNodeIsReference).toBe(false)
       useCanvasStore.setState({ selectedNodeId: null })
       useNavigationStore.setState({ activeWorkspace: 'generation' })
       expect(createHostContextSnapshot().project.viewportNodePosition).toBeUndefined()
+      expect(createHostContextSnapshot().project.selectedNodeSummary).toBeUndefined()
     } finally {
       useCanvasStore.setState(canvas); useProjectStore.setState(project); useNavigationStore.setState(navigation)
     }

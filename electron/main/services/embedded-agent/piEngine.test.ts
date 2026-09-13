@@ -68,17 +68,21 @@ async function fixture(capabilities: Partial<LlmModelConfig['capabilities']> = {
   return { engine, requests, events, tool, directory, configuration, setMode: (value: typeof mode) => { mode = value },
     setToolPlan: (value: typeof toolPlan) => { toolPlan = value } }
 }
-describe('Pi official SDK engine', () => {
-  it('完整授权目录按需披露后首轮体积缩减，续轮相同宿主信息只携带一份', async () => {
-    const f = await fixture({}, 'openai-responses')
+function applicationCatalog(allowWrites = true) {
     const tools = MCP_CAPABILITY_IDS.map(id => {
       const definition = BUILTIN_APPLICATION_CAPABILITY_REGISTRY.get(id)!
       return { id, version: definition.version, title: definition.title, description: definition.description,
         inputSchema: z.toJSONSchema(definition.inputSchema, { io: 'input' }) as Record<string, unknown> }
     })
-    const catalog = buildMcpToolCatalog({ tools, access: { allowWrites: true, allowDestructive: true, allowPaid: true }, operationsEnabled: true })
+    return buildMcpToolCatalog({ tools, access: { allowWrites, allowDestructive: allowWrites, allowPaid: allowWrites }, operationsEnabled: true })
+}
+
+describe('Pi official SDK engine', () => {
+  it('完整授权目录按需披露后首轮体积缩减，续轮相同宿主信息只携带一份', async () => {
+    const f = await fixture({}, 'openai-responses')
+    const catalog = applicationCatalog()
     await f.engine.command({ action: 'configure', input: { ...f.configuration, tools: catalog.tools } })
-    const context = '{"surface":"canvas","project":"original"}'
+    const context = '{"surface":{"id":"workspace.canvas"},"project":{"id":"original"}}'
     await f.engine.command({ action: 'prompt', input: { text: '第一轮', context, requestId: 'measure-first' } })
     await f.engine.command({ action: 'prompt', input: { text: '第二轮', context, requestId: 'measure-second' } })
     const logs = f.events.filter((event): event is Extract<EngineEvent, { type: 'log' }> => event.type === 'log' && event.phase === 'model_requested')
@@ -95,16 +99,65 @@ describe('Pi official SDK engine', () => {
     expect(JSON.stringify(logs)).not.toContain('fixture-key')
     const initialTools = f.requests[0].tools as unknown as Array<{ name: string }>
     expect(initialTools.map(tool => tool.name)).toEqual(expect.arrayContaining([
-      'create_visible_generation_task', 'change_application_entities', 'submit_canvas_node_generation', 'get_generation_task',
+      'get_canvas_project', 'change_application_entities', 'load_application_tools',
     ]))
+    expect(initialTools).toHaveLength(6)
+    expect(initialTools.map(tool => tool.name)).not.toEqual(expect.arrayContaining(['render_camera_stage_output']))
+    expect(initialTools.map(tool => tool.name)).not.toContain('create_visible_generation_task')
+    expect(initialTools.map(tool => tool.name)).not.toContain('get_canvas_node_schema')
     await f.engine.command({ action: 'prompt', input: { text: '编辑图片', context: '{"surface":{"id":"tool.image_edit"}}' } })
     const editTools = f.requests.at(-1)!.tools as unknown as Array<{ name: string }>
-    expect(editTools.map(tool => tool.name)).toEqual(expect.arrayContaining(['create_image_edit_preview', 'commit_image_edit']))
+    expect(editTools.map(tool => tool.name)).not.toContain('get_canvas_project')
+    expect(editTools.map(tool => tool.name)).not.toContain('create_image_edit_preview')
     const fullBytes = Buffer.byteLength(JSON.stringify(catalog.tools))
     expect(initialTools.length).toBeLessThan(catalog.tools.length / 2)
-    expect(logs[0].requestMetrics!.toolBytes).toBeLessThan(fullBytes * 0.8)
+    expect(logs[0].requestMetrics!.toolBytes).toBeLessThan(fullBytes * 0.3)
     if (process.env.HENJI_PI_MEASURE === '1') process.stdout.write(`${JSON.stringify({ initialToolBytes: logs[0].requestMetrics!.toolBytes,
       fullToolBytes: fullBytes, initialToolCount: initialTools.length, contextCount: logs[1].requestMetrics!.contextCount })}\n`)
+    for (const [surface, basic] of [['tool.camera_stage', 'get_camera_stage_project'], ['workspace.generation', 'search_models'], ['settings.general', 'search_application_settings']]) {
+      await f.engine.command({ action: 'prompt', input: { text: '当前页面', context: JSON.stringify({ surface: { id: surface } }) } })
+      const names = (f.requests.at(-1)!.tools as unknown as Array<{ name: string }>).map(tool => tool.name)
+      expect(names).toHaveLength(6)
+      expect(names).toContain(basic)
+      expect(names).not.toContain('get_canvas_project')
+      expect(names).not.toContain('create_visible_generation_task')
+    }
+  })
+
+  it('画布一次加载生成闭环，跨界面不携带旧工具，回到原界面和冷恢复可复用且降权有效', async () => {
+    const f = await fixture()
+    const configuration = { ...f.configuration, tools: applicationCatalog().tools }
+    const canvas = '{"surface":{"id":"workspace.canvas"},"project":{"id":"origin"}}'
+    f.setToolPlan([{ name: 'load_application_tools', arguments: { task: 'canvas_generation' } },
+      { name: 'get_model_schema', arguments: { modelId: 'fixture-model' } }])
+    await f.engine.command({ action: 'configure', input: configuration })
+    await f.engine.command({ action: 'prompt', input: { text: '在这里生成图片', context: canvas } })
+    const names = (index: number) => f.requests.at(index)!.tools.map(tool => tool.function.name)
+    expect(names(0)).toHaveLength(6)
+    expect(names(0)).not.toContain('get_model_schema')
+    expect(names(1)).toEqual(expect.arrayContaining(['get_model_schema', 'prepare_generation_task', 'create_visible_generation_task', 'get_generation_task']))
+    expect(names(1)).not.toContain('render_camera_stage_output')
+    expect(f.tool).toHaveBeenCalledTimes(1)
+    expect(f.tool.mock.calls[0]).toMatchObject([expect.any(String), 'get_model_schema', { modelId: 'fixture-model' }, expect.any(AbortSignal)])
+    expect(f.requests).toHaveLength(3)
+    expect(f.requests[1].messages.find(message => message.role === 'tool')?.content).toContain('原画布')
+    await f.engine.command({ action: 'prompt', input: { text: '查看三维', context: '{"surface":{"id":"tool.camera_stage"}}' } })
+    expect(names(-1)).toContain('get_camera_stage_project')
+    expect(names(-1)).not.toContain('create_visible_generation_task')
+    await f.engine.command({ action: 'prompt', input: { text: '继续画布任务', context: canvas } })
+    expect(names(-1)).toContain('create_visible_generation_task')
+    const snapshot = await f.engine.command({ action: 'snapshot' }) as { sessionId: string }
+    const restored = new PiEngine(() => undefined, f.tool)
+    cleanup.push(() => restored.dispose())
+    await restored.command({ action: 'initialize', input: f.directory })
+    await restored.command({ action: 'configure', input: configuration })
+    await restored.command({ action: 'open', input: snapshot.sessionId })
+    await restored.command({ action: 'prompt', input: { text: '继续', context: canvas } })
+    expect(names(-1)).toContain('create_visible_generation_task')
+    await restored.command({ action: 'configure', input: { ...configuration, tools: applicationCatalog(false).tools } })
+    await restored.command({ action: 'prompt', input: { text: '只读', context: canvas } })
+    expect(names(-1)).not.toContain('create_visible_generation_task')
+    expect(names(-1)).not.toContain('change_application_entities')
   })
 
   it.each([

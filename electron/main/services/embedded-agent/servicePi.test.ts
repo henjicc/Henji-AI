@@ -37,15 +37,17 @@ it.each(['model', 'tool'] as const)('宿主调度经官方 Pi SDK 在 %s 阶段�
   const server = createServer(async (request, response) => {
     const chunks: Buffer[] = []
     for await (const chunk of request) chunks.push(Buffer.from(chunk))
-    const body = JSON.parse(Buffer.concat(chunks).toString()) as { messages: Message[] }
+    const body = JSON.parse(Buffer.concat(chunks).toString()) as { messages: Message[]; tools: Array<{ function: { name: string } }> }
     const userIndex = body.messages.map(message => message.role).lastIndexOf('user')
     const text = textOf(body.messages[userIndex])
     requests.push(text)
     response.writeHead(200, { 'Content-Type': 'text/event-stream' }); response.flushHeaders()
     if (text === '原请求' && stage === 'model') { response.on('close', () => { originalClosed = true }); return }
-    const done = body.messages.slice(userIndex + 1).some(message => message.role === 'tool')
+    const done = body.messages.slice(userIndex + 1).some(message => message.role === 'tool' && textOf(message).includes('accepted'))
+    const loaded = body.tools.some(tool => tool.function.name === 'create_visible_generation_task')
     const delta = done ? { content: '工具已返回。' } : { tool_calls: [{ index: 0, id: `call_${requests.length}`, type: 'function',
-      function: { name: 'create_visible_generation_task', arguments: JSON.stringify({ prompt: text }) } }] }
+      function: loaded ? { name: 'create_visible_generation_task', arguments: JSON.stringify({ prompt: text }) }
+        : { name: 'load_application_tools', arguments: JSON.stringify({ task: 'canvas_generation' }) } }] }
     for (const [value, finish] of [[delta, null], [{}, done ? 'stop' : 'tool_calls']] as const) {
       response.write(`data: ${JSON.stringify({ id: 'reply', object: 'chat.completion.chunk', created: 1, model: 'fixture', choices: [{ index: 0, delta: value, finish_reason: finish }] })}\n\n`)
     }
@@ -106,7 +108,7 @@ it.each(['model', 'tool'] as const)('宿主调度经官方 Pi SDK 在 %s 阶段�
     model: { providerId: 'test', modelId: 'fixture' }, access: 'full',
     context: JSON.stringify({ workspace: { id: 'nodes' }, project: { id: project, selectedNodeId: `${project}-reference`, selectedNodeIsReference: project !== 'waiting' } }) }, requestIds[project])
   await send('原请求', 'original')
-  await vi.waitFor(() => expect(requests).toEqual(['原请求']), { timeout: 15000 })
+  await vi.waitFor(() => expect(requests[0]).toBe('原请求'), { timeout: 15000 })
   const originalCalls = stage === 'tool' ? 1 : 0
   if (originalCalls) await vi.waitFor(() => expect(calls).toHaveLength(1))
   await send('等待消息', 'waiting')
@@ -129,7 +131,9 @@ it.each(['model', 'tool'] as const)('宿主调度经官方 Pi SDK 在 %s 阶段�
     { prompt: '插入消息', destination: { mode: 'canvas', projectId: 'inserted', sourceNodeIds: ['inserted-reference'] } },
     { prompt: '等待消息', destination: { mode: 'canvas', projectId: 'waiting', sourceNodeIds: [], placement: { mode: 'right_of_node', anchorNodeId: 'waiting-reference' } } },
   ])
-  expect(requests).toEqual(['原请求', '插入消息', '插入消息', '等待消息', '等待消息'])
+  expect(requests).toEqual(stage === 'model'
+    ? ['原请求', '插入消息', '插入消息', '插入消息', '等待消息', '等待消息']
+    : ['原请求', '原请求', '插入消息', '插入消息', '等待消息', '等待消息'])
   expect(service.snapshot().error).toBeNull()
   expect(service.snapshot().messages.filter(message => message.role === 'user').map(message => message.text)).toEqual(['原请求', '插入消息', '等待消息'])
   expect(close).toHaveBeenCalledTimes(3)
