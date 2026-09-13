@@ -94,6 +94,7 @@ export const getCurrentApplicationContextCapability = defineCapability({
 
 export const observeApplicationSurfaceCapability = defineCapability({
   id: 'observe_application_surface',
+  external: {"kind": "internal", "reason": "应用像素观察含受保护的 C2 内容；外部通过当前界面结构化状态和受控媒体读取获取内容，不开放无差别截图。"},
   // v2：target 取代 surfaceId，新增 window 整窗观察。
   version: 2,
   title: '观察应用界面',

@@ -31,6 +31,7 @@ function target(projectId: string, extra: Record<string, string> = {}): Record<s
 
 const addCanvasNode = defineApplicationCapability({
   id: 'add_canvas_node',
+  external: { kind: 'delegate', entityType: 'canvas.node', operations: ['create'], reason: '普通数据操作由正式实体描述及 change_application_entities 通用事务承接，不另增同功能工具。' },
   version: 1,
   title: '添加画布节点',
   description: '在明确项目中按确定性布局添加已通过节点结构校验的节点。',
@@ -167,6 +168,9 @@ const applyCanvasImageCapability = defineApplicationCapability({
 
 const addAssetToCanvas = defineApplicationCapability({
   id: 'add_asset_to_canvas',
+  resolveOperationTargets: input => [{ kind: 'canvas.project', id: input.projectId }, { kind: 'asset', id: input.assetId }],
+  resolveOperationWriteTargets: input => [{ kind: 'canvas.project', id: input.projectId }],
+  resolveOperationAppendTargets: input => [{ kind: 'canvas.project', id: input.projectId }],
   version: 1,
   title: '把素材放入画布',
   description: '按稳定素材引用将素材作为受控输入节点放入明确画布项目。',
@@ -262,6 +266,7 @@ const addGenerationResultToCanvas = defineApplicationCapability({
 
 const connectCanvasNodes = defineApplicationCapability({
   id: 'connect_canvas_nodes',
+  external: { kind: 'delegate', entityType: 'canvas.edge', operations: ['create'], reason: '普通数据操作由正式实体描述及 change_application_entities 通用事务承接，不另增同功能工具。' },
   version: 1,
   title: '连接画布节点',
   description: '连接明确的上下游节点，由宿主拒绝不兼容、重复或循环连接。',
@@ -369,6 +374,7 @@ const focusCanvasNode = defineApplicationCapability({
 
 const undoCanvasChange = defineApplicationCapability({
   id: 'undo_canvas_change',
+  resolveOperationTargets: input => [{ kind: 'canvas.project', id: input.projectId }],
   version: 1,
   title: '撤销画布操作',
   description: '使用上一条画布写操作返回的撤销引用进行后进先出撤销。',
@@ -405,6 +411,7 @@ const undoCanvasChange = defineApplicationCapability({
 
 const redoCanvasChange = defineApplicationCapability({
   id: 'redo_canvas_change',
+  resolveOperationTargets: input => [{ kind: 'canvas.project', id: input.projectId }],
   version: 1,
   title: '重做画布操作',
   description: '重做最近一次被撤销的画布写操作。',
@@ -438,6 +445,9 @@ const redoCanvasChange = defineApplicationCapability({
 
 const duplicateCanvasNode = defineApplicationCapability({
   id: 'duplicate_canvas_node',
+  resolveOperationTargets: input => [{ kind: 'canvas.project', id: input.projectId }, { kind: 'canvas.node', id: `${input.projectId}:${input.nodeId}` }],
+  resolveOperationWriteTargets: input => [{ kind: 'canvas.project', id: input.projectId }],
+  resolveOperationAppendTargets: input => [{ kind: 'canvas.project', id: input.projectId }],
   version: 1,
   title: '复制画布节点',
   description: '复制明确节点的安全配置，并按确定性布局放置。',
@@ -478,6 +488,7 @@ const duplicateCanvasNode = defineApplicationCapability({
 
 const updateCanvasNode = defineApplicationCapability({
   id: 'update_canvas_node',
+  external: { kind: 'delegate', entityType: 'canvas.node', operations: ['write'], reason: '普通数据操作由正式实体描述及 change_application_entities 通用事务承接，不另增同功能工具。', propertyIds: ['canvas.node.generation_config', 'canvas.node.display_name', 'canvas.node.position'] },
   version: 1,
   title: '更新画布节点',
   description: '按照节点结构更新明确节点的可编辑数据。',
@@ -524,6 +535,7 @@ const updateCanvasNode = defineApplicationCapability({
 
 const deleteCanvasNodes = defineApplicationCapability({
   id: 'delete_canvas_nodes',
+  external: { kind: 'delegate', entityType: 'canvas.node', operations: ['remove'], reason: '普通数据操作由正式实体描述及 change_application_entities 通用事务承接，不另增同功能工具。' },
   version: 1,
   title: '删除画布节点',
   description: '删除明确的画布节点及关联边，并返回可撤销引用。',
@@ -604,12 +616,14 @@ const selectCanvasNode = defineApplicationCapability({
   resolveTargetIds: (input) => target(input.projectId, { nodeId: input.nodeId ?? '' }),
   summarize: (output) => `当前选中节点：${output.selectedNodeId ?? '无'}。`,
   control: { execution: { mode: 'immediate', cancelable: false, resultState: 'completed' }, impacts: [{
-    effect: 'update', entityTypes: ['canvas.project'], propertyIds: ['canvas.project.selected_node'], revisionScopes: ['canvas'], verificationRequired: false,
+    effect: 'navigate', entityTypes: ['canvas.project'], propertyIds: ['canvas.project.selected_node'], revisionScopes: ['canvas'], verificationRequired: false,
   }] },
 })
 
 const groupCanvasNodes = defineApplicationCapability({
   id: 'group_canvas_nodes',
+  resolveOperationTargets: input => [{ kind: 'canvas.project', id: input.projectId }, ...input.nodeIds.map(id => ({ kind: 'canvas.node', id: `${input.projectId}:${id}` }))],
+  resolveOperationAppendTargets: input => [{ kind: 'canvas.project', id: input.projectId }],
   version: 1,
   title: '组合画布节点',
   description: '把明确的两个或多个节点放入空间组或素材组；默认创建空间组。',
@@ -651,6 +665,7 @@ const groupCanvasNodes = defineApplicationCapability({
 
 const connectAssetGroupToTarget = defineApplicationCapability({
   id: 'connect_asset_group_to_target',
+  resolveOperationTargets: input => [{ kind: 'canvas.node', id: `${input.projectId}:${input.groupNodeId}` }, { kind: 'canvas.node', id: `${input.projectId}:${input.targetNodeId}` }],
   version: 1,
   title: '连接素材组到目标节点',
   description: '为素材组建立持久目标绑定，并按可见媒体接口、容量和成员顺序同步真实独立连线。',
@@ -698,6 +713,7 @@ const connectAssetGroupToTarget = defineApplicationCapability({
 
 const disconnectAssetGroupFromTarget = defineApplicationCapability({
   id: 'disconnect_asset_group_from_target',
+  resolveOperationTargets: input => [{ kind: 'canvas.node', id: `${input.projectId}:${input.groupNodeId}` }, { kind: 'canvas.node', id: `${input.projectId}:${input.targetNodeId}` }],
   version: 1,
   title: '断开素材组目标绑定',
   description: '解除素材组与明确目标节点的绑定，只删除该绑定管理的连线。',
@@ -741,6 +757,7 @@ const disconnectAssetGroupFromTarget = defineApplicationCapability({
 
 const ungroupCanvasNode = defineApplicationCapability({
   id: 'ungroup_canvas_node',
+  resolveOperationTargets: input => [{ kind: 'canvas.project', id: input.projectId }, { kind: 'canvas.node', id: `${input.projectId}:${input.groupNodeId}` }],
   version: 1,
   title: '解散画布节点分组',
   description: '解散明确的组节点，子节点保留在画布上并释放出来。',
@@ -779,6 +796,7 @@ const ungroupCanvasNode = defineApplicationCapability({
 
 const clearCanvas = defineApplicationCapability({
   id: 'clear_canvas',
+  resolveOperationTargets: input => [{ kind: 'canvas.project', id: input.projectId }],
   version: 1,
   title: '清空画布',
   description: '删除明确项目中的全部节点与连线，返回可撤销引用。',
@@ -824,6 +842,7 @@ const clearCanvas = defineApplicationCapability({
 
 const disconnectCanvasEdge = defineApplicationCapability({
   id: 'disconnect_canvas_edge',
+  external: { kind: 'delegate', entityType: 'canvas.edge', operations: ['remove'], reason: '普通数据操作由正式实体描述及 change_application_entities 通用事务承接，不另增同功能工具。' },
   version: 1,
   title: '断开画布连接',
   description: '按明确连接引用断开画布连接。',
@@ -877,6 +896,9 @@ const imageEditExportTargetRefSchema = applicationRefSchema.extend({
 
 const exportImageEditTargetToCanvas = defineApplicationCapability({
   id: EXPORT_IMAGE_EDIT_TARGET_TO_CANVAS_CAPABILITY_ID,
+  resolveOperationTargets: input => [input.projectRef, input.sourceNodeRef, input.targetRef],
+  resolveOperationWriteTargets: input => [input.projectRef],
+  resolveOperationAppendTargets: input => [input.projectRef],
   version: 1,
   title: '导出图片编辑目标到画布',
   description: '把当前多图层图片文档中的单个栅格图层、图层组或标注元素原子导出为普通图片节点并连接来源。',

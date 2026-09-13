@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { ApplicationReflectionRegistry } from '@/core/application-control'
 import { externalWritable, externalWritableEntityTypes } from '@/core/application-control/localHostContracts'
-import { buildExternalCapabilityInventory } from './externalCapabilityInventory'
+import { buildExternalCapabilityInventory, externalReflectionPermissions } from './externalCapabilityInventory'
 
 /**
  * 外部能力清单核对表——**机器执行的那一份**。
@@ -121,6 +121,7 @@ describe('新登记的业务实体自动进入外部能力面', () => {
   })
 
   it('登记实体与属性即刻可写，MCP 侧无需登记', () => {
+    expect(externalReflectionPermissions(registry)).toEqual({ read: ['sample:read'], write: ['sample:write'] })
     const domains = buildExternalCapabilityInventory(registry)
     expect(domains.map((domain) => domain.id)).toEqual(['sample'])
     const widget = domains[0].entities.find((entity) => entity.id === 'sample.widget')!

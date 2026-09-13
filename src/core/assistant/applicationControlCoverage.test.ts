@@ -22,6 +22,11 @@ import { listApplicationSurfaces } from '@/features/assistant/applicationCapabil
 import { getApplicationReflectionRegistry } from '@/features/assistant/applicationCapabilities/applicationControlRegistry'
 import { BUILTIN_APPLICATION_CAPABILITIES } from './builtinApplicationCapabilityRegistry'
 import { createApplicationControlCoverageManifest } from './applicationControlCoverage'
+import { auditExternalCapabilityCoverage } from '@/features/application-control/externalCapabilityCoverage'
+import { MCP_CAPABILITY_IDS } from '@/core/application-control/localHostContracts'
+import { listRendererApplicationCapabilityIds } from '@/features/assistant/applicationCapabilities/registry'
+import { BUILTIN_APPLICATION_CAPABILITY_REGISTRY } from './builtinApplicationCapabilityRegistry'
+import { projectExternalCapabilities } from '@/core/application-control/externalCapabilityPolicy'
 
 function createManifest() {
   return createApplicationControlCoverageManifest({
@@ -35,6 +40,35 @@ function createManifest() {
 }
 
 describe('application control coverage', () => {
+  it('新增业务声明自动进入投影，新写操作缺少目标不能静默消失', () => {
+    const read = { ...BUILTIN_APPLICATION_CAPABILITY_REGISTRY.get('get_current_application_context')!, id: 'new_feature_read', permission: 'new_feature:read' }
+    const write = { ...BUILTIN_APPLICATION_CAPABILITY_REGISTRY.get('create_visible_generation_task')!, id: 'new_feature_write', resolveOperationTargets: undefined }
+    const projected = projectExternalCapabilities([read, write])
+    expect(projected.read.map(definition => definition.id)).toContain(read.id)
+    expect(projected.write.map(definition => definition.id)).toContain(write.id)
+    expect(projected.read[0].permission).toBe('new_feature:read')
+    expect(auditExternalCapabilityCoverage({ definitions: [read, write], handlerIds: [read.id, write.id] }).issues.join('\n')).toContain('new_feature_write: 写操作未绑定实际目标')
+  })
+  it('软件业务能力逐项映射到当前 MCP 或可执行通用实体，不能只检查已发布子集', () => {
+    expect(auditExternalCapabilityCoverage({ publishedIds: MCP_CAPABILITY_IDS }).issues).toEqual([])
+  })
+
+  it.each(['catalog', 'handler', 'target', 'delegate'] as const)('故意断开 %s 后门禁必须指出缺口', kind => {
+    const definitions = BUILTIN_APPLICATION_CAPABILITY_REGISTRY.list()
+    const changed = definitions.map(definition => {
+      if (kind === 'target' && definition.id === 'create_visible_generation_task') return { ...definition, resolveOperationTargets: undefined }
+      if (kind === 'delegate' && definition.id === 'set_asset_tags') return { ...definition, external: {
+        kind: 'delegate' as const, entityType: 'asset', operations: ['write' as const], propertyIds: ['asset.missing'], reason: '用于验证失效字段确实能被覆盖门禁发现。',
+      } }
+      return definition
+    })
+    const audit = auditExternalCapabilityCoverage({ definitions: changed,
+      ...(kind === 'catalog' ? { publishedIds: MCP_CAPABILITY_IDS.filter(id => id !== 'get_current_application_context') } : {}),
+      ...(kind === 'handler' ? { handlerIds: listRendererApplicationCapabilityIds().filter(id => id !== 'get_current_application_context') } : {}),
+    })
+    expect(audit.issues.length).toBeGreaterThan(0)
+    expect(audit.issues.join('\n')).toContain(kind === 'delegate' ? 'asset.missing' : kind === 'target' ? 'create_visible_generation_task' : 'get_current_application_context')
+  })
   it('关键业务能力返回的稳定引用存在同名正式反射实体', () => {
     const reflection = getApplicationReflectionRegistry()
     const description = reflection.describe({}, {

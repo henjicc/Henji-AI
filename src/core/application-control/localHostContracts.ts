@@ -1,11 +1,12 @@
 import { z } from 'zod'
 import { applicationVerificationConditionSchema, applicationEvidenceSchema } from './transactions'
+import { EXTERNAL_APPLICATION_CAPABILITIES } from './externalCapabilityPolicy'
 
-export const MCP_READ_CAPABILITY_IDS = ['describe_application_entities', 'list_application_entities', 'read_application_entity', 'search_models', 'get_model_schema', 'prepare_generation_task', 'get_generation_task', 'get_camera_stage_render_task', 'prepare_canvas_node_generation'] as const
-export const MCP_WRITE_CAPABILITY_IDS = ['change_application_entities', 'create_visible_generation_task', 'cancel_generation_task', 'render_camera_stage_output', 'cancel_camera_stage_render_task', 'add_generation_result_to_canvas', 'apply_canvas_image_capability', 'create_image_edit_preview', 'commit_image_edit', 'resume_canvas_generation_task', 'submit_canvas_node_generation'] as const
-export const MCP_CAPABILITY_IDS = [...MCP_READ_CAPABILITY_IDS, ...MCP_WRITE_CAPABILITY_IDS, 'retry_canvas_project_save', 'retry_image_edit_document_save'] as const
-export const MCP_WRITE_PERMISSIONS = ['application:write', 'settings:write', 'models:write', 'model_catalog:write', 'assets:write', 'canvas:write', 'canvas:project_write', 'generation:write', 'generation:create', 'generation:cancel', 'camera_stage:write', 'image_edit:write', 'image_edit:preview', 'image_edit:commit', 'image_mark:write'] as const
-export const MCP_READ_PERMISSIONS = ['application:read', 'settings:read', 'models:read', 'model_catalog:read', 'assets:read', 'canvas:read', 'generation:read', 'generation:prepare', 'image_edit:read', 'image_mark:read', 'camera_stage:read', 'toolbox:read', 'navigation:read', 'storyboard:read'] as const
+export const MCP_READ_CAPABILITY_IDS = EXTERNAL_APPLICATION_CAPABILITIES.read.map(definition => definition.id)
+export const MCP_WRITE_CAPABILITY_IDS = EXTERNAL_APPLICATION_CAPABILITIES.write.map(definition => definition.id)
+export const MCP_CAPABILITY_IDS = EXTERNAL_APPLICATION_CAPABILITIES.all.map(definition => definition.id)
+export const MCP_WRITE_PERMISSIONS = [...new Set([...EXTERNAL_APPLICATION_CAPABILITIES.write.map(definition => definition.permission), ...['application:write', 'settings:write', 'models:write', 'model_catalog:write', 'assets:write', 'canvas:write', 'canvas:project_write', 'generation:write', 'generation:create', 'generation:cancel', 'camera_stage:write', 'image_edit:write', 'image_edit:preview', 'image_edit:commit', 'image_mark:write']])]
+export const MCP_READ_PERMISSIONS = [...new Set([...EXTERNAL_APPLICATION_CAPABILITIES.read.map(definition => definition.permission), ...['application:read', 'settings:read', 'models:read', 'model_catalog:read', 'assets:read', 'canvas:read', 'generation:read', 'generation:prepare', 'image_edit:read', 'image_mark:read', 'camera_stage:read', 'toolbox:read', 'navigation:read', 'storyboard:read']])]
 export const localHostRequestSchema = z.object({
   requestId: z.string().uuid(), sessionId: z.string().uuid(), callerId: z.string().uuid(),
   capabilityId: z.enum(MCP_CAPABILITY_IDS), input: z.record(z.string(), z.unknown()),
@@ -45,7 +46,7 @@ export const localDomainSurfaceSchema = z.object({
 export type LocalDomainSurface = z.infer<typeof localDomainSurfaceSchema>
 
 export const localHostRegistrationSchema = z.object({
-  sessionId: z.string().uuid(), generation: z.number().nonnegative(), ready: z.boolean(), tools: z.array(localToolSchema).max(32),
+  sessionId: z.string().uuid(), generation: z.number().nonnegative(), ready: z.boolean(), tools: z.array(localToolSchema).max(256),
   // 新增可选字段：旧宿主注册（1.2／2.x 形状）仍然通过校验，只是没有按域发现与派生写入范围。
   domains: z.array(localDomainSurfaceSchema).max(32).default([]),
 }).strict()

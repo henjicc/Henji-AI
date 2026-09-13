@@ -164,6 +164,7 @@ export function collectionWritersByEntityType(
   const effect = operation === 'create' ? 'create' : 'delete'
   const writers = new Map<string, string[]>()
   for (const capability of BUILTIN_APPLICATION_CAPABILITIES) {
+    if (capability.external) continue
     for (const impact of capability.control?.impacts ?? []) {
       if (impact.effect !== effect) continue
       for (const entityType of impact.entityTypes) {

@@ -52,6 +52,28 @@ it('真实 MCP 与 Pi 写入经过授权、SQLite账本、正式Session及设置
   try {
     await server.start(0)
     await client.connect(new StreamableHTTPClientTransport(new URL(`http://127.0.0.1:${server.listeningPort}/mcp`), { requestInit: { headers: { Authorization: `Bearer ${connections.token(identity.id)}` } } }))
+    const published = (await client.listTools()).tools.map(tool => tool.name)
+    expect(published.length).toBeGreaterThan(32)
+    expect(published).toEqual(expect.arrayContaining(['create_canvas_project', 'duplicate_canvas_node', 'open_application_surface']))
+    const navigation = await client.callTool({ name: 'open_application_surface', arguments: { operationId: randomUUID(), surfaceId: 'workspace.canvas' } })
+    expect(navigation.structuredContent, JSON.stringify(navigation)).toMatchObject({ executionState: 'completed' })
+    const { useNavigationStore } = await import('@/stores/navigationStore')
+    expect(useNavigationStore.getState().activeWorkspace).toBe('nodes')
+    const { installHarnessNativeStorage, uninstallHarnessNativeStorage } = await import('@/tests/harnessNativeStorage')
+    installHarnessNativeStorage()
+    try {
+      const { useProjectStore } = await import('@/stores/projectStore')
+      await useProjectStore.getState().hydrate()
+      const createId = randomUUID()
+      const create = { operationId: createId, name: 'MCP 生命周期测试' }
+      const created = await client.callTool({ name: 'create_canvas_project', arguments: create })
+      expect(created.structuredContent, JSON.stringify(created)).toMatchObject({ executionState: 'completed' })
+      const projectId = useProjectStore.getState().currentProjectId
+      expect(projectId).toBeTruthy()
+      expect((await client.callTool({ name: 'create_canvas_project', arguments: create })).structuredContent).toEqual(created.structuredContent)
+      expect(useProjectStore.getState().currentProjectId).toBe(projectId)
+      expect(operations.store.get(createId, identity.id)?.state).toBe('completed')
+    } finally { uninstallHarnessNativeStorage() }
     const ref = { kind: 'settings.registry', id: 'singleton' }
     const read = await client.callTool({ name: 'read_application_entity', arguments: { ref, propertyIds: ['interface.theme_tone'] } })
     const baselineIds = [(read.structuredContent as Record<string, unknown>).baselineId]

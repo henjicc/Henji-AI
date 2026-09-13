@@ -58,10 +58,10 @@ export const applicationPublicControlCoverageSchema = z.object({
   targetEntityType: applicationEntityTypeIdSchema,
   targetPropertyId: applicationPropertyIdSchema.optional(),
   migrationTask: z.string().regex(/^[1-7]\.[1-9][0-9]*$/),
-  status: z.enum(['covered', 'excluded']),
+  status: z.enum(['registered', 'covered', 'excluded']),
   exclusionReason: z.string().min(1).max(1_000).optional(),
 }).strict().refine(
-  (item) => item.status === 'covered' || Boolean(item.exclusionReason),
+  (item) => item.status !== 'excluded' || Boolean(item.exclusionReason),
   { message: '排除项必须说明原因' }
 )
 export type ApplicationPublicControlCoverage = z.infer<typeof applicationPublicControlCoverageSchema>

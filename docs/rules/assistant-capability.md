@@ -19,6 +19,8 @@ AI 输入 schema 顶层必须设置 `additionalProperties: false`。禁止 `patc
 
 **一次声明、多入口投影。** 同一份领域声明同时服务界面、自研助手与外部智能体（MCP）：工具参数由能力定义的 Zod 输入投影，域与实体的可读可写面由反射注册表的 `exposures`／`requiredPermissions.write`／`collectionWrite`／`writeExclusion.reason` 派生。**禁止在 `electron/main/services/mcp/**` 维护任何业务字段表、实体类型清单或前缀白名单**；那里只允许协议层自身的参数与信封。新增一个已登记的业务实体或属性后，外部调用方应立刻可用，不需要回到协议层登记。对外工具名、必填参数与错误码按 `EXTERNAL_CONTRACT_VERSION` 的弃用规则演进，破坏性变更必须先升主版本并保留旧调用样本。展开做法见 skill `henji-application-capability` 第 0.5 节。
 
+MCP 工具集合与基础权限由正式前端能力声明自动派生，不再维护独立 ID 白名单。属性权限由反射注册表派生。普通操作复用通用实体；专用操作必须有正式执行器与目标绑定；内部或委托路径在原声明的 `external` 字段说明。`check:application-control-coverage` 从全部软件能力反向核对 MCP 路由，缺执行器、缺目标、失效委托均失败；与现有属性、集合及 store 动作门禁共同阻止新增功能遗漏。检查通过代表已登记能力的路径完整，不等于每个界面行为都已实测。
+
 ## 覆盖判断不可跳过
 
 每个用户可见的工作区、工具、设置项和数据模块，都必须：

@@ -72,7 +72,9 @@ sceneField('sky_color', '天空颜色', COLOR, {
 由此得到几条硬要求：
 
 - **不要在 `electron/main/services/mcp/**` 写任何业务字段、实体类型或属性清单。** 那里只允许协议层自身的参数（操作标识、分块偏移、契约发现），业务参数一律从能力定义投影。前缀白名单尤其禁止——它和领域声明是两份真相，新增写域时必然漂移。
-- **新增一个对外工具**只有两步：把能力 ID 加进 `src/core/application-control/localHostContracts.ts` 的 `MCP_READ_CAPABILITY_IDS` / `MCP_WRITE_CAPABILITY_IDS`，并补上它需要的权限常量。参数表、目录展示、权限过滤、写入信封都自动跟上。
+- **新增前端业务能力**：在正式能力声明中登记参数、权限和控制影响，并接入正式执行器；MCP 工具集合、权限及参数自动投影，禁止再手写 MCP ID 白名单。语义写入必须声明 `resolveOperationTargets`，创建操作还要用 `resolveOperationWriteTargets` 绑定操作身份；纯导航由注册表统一绑定视图身份。
+- **复用与排除在原声明中登记**：普通读改增删使用通用实体入口；已有专用别名可声明 `external.kind: delegate` 和实际实体、操作及属性，覆盖检查必须证明它们确实开放且可写。内部协议写明 `internal` 原因，保存恢复写明 `recovery` 并仅走原操作账本。不得用排除掩盖缺失的业务执行器。
+- **防遗漏从软件全集检查**：`applicationControlCoverage.test.ts` 核对全部前端能力的 MCP 路由、执行器、目标绑定和委托字段，配合属性、集合、Surface 与 store 动作门禁。新增功能只留在组件里而不登记不算完成；必须加入现有正式注册入口。内置 Pi 默认延迟加载新领域工具，不需要跟着新增一份启用名单。
 - **新增一个已登记的业务实体或属性**，外部立刻可读可写，不需要回到 MCP 侧登记任何东西。做不到就说明有人加了第二份表。
 - **有意只读必须写 `writeExclusion.reason`**。它是"未完成"和"有意排除"在机器上唯一的区分方式，并且会原样出现在外部契约里，成为调用方改道的依据。不接受"暂时不需要"这类无法验证的表述。
 - **对外契约有版本和弃用规则**（`EXTERNAL_CONTRACT_VERSION` 等常量集中在 `localHostContracts.ts`）：同一主版本内不删工具名、不加必填参数、不改已公布错误码含义，新增字段一律可选。公布新工具或新参数时，往 `electron/main/services/mcp/legacyClientSamples.test.ts` 补一条调用样本，破坏性改动会在那里当场变红。

@@ -51,7 +51,10 @@ const openProject = defineApplicationCapability({
 })
 
 const createProject = defineApplicationCapability({
-  id: 'create_camera_stage_project', version: 4, title: '新建 3D 运镜工程',
+  id: 'create_camera_stage_project',
+  resolveOperationTargets: () => [],
+  resolveOperationWriteTargets: (_input, operationId) => [{ kind: 'camera_stage.project', id: `pending:${operationId}` }],
+  version: 4, title: '新建 3D 运镜工程',
   description: '创建带默认摄像机和 0 秒初始状态关键帧的 3D 运镜工程，但不切换当前界面。', domain: 'camera_stage',
   aliases: ['创建 3D 工程', 'new camera stage project'], readOnly: false, risk: 'R1', dataClasses: ['C1'],
   permission: 'camera_stage:write', idempotent: false, destructive: false, timeoutMs: 15_000,
@@ -72,7 +75,9 @@ const createProject = defineApplicationCapability({
 })
 
 const renameProjectCapability = defineApplicationCapability({
-  id: 'rename_camera_stage_project', version: 2, title: '重命名 3D 运镜工程', description: '重命名明确的 3D 运镜工程。',
+  id: 'rename_camera_stage_project',
+  external: { kind: 'delegate', entityType: 'camera_stage.project', operations: ['write'], reason: '普通数据操作由正式实体描述及 change_application_entities 通用事务承接，不另增同功能工具。', propertyIds: ['camera_stage.project.name'] },
+  version: 2, title: '重命名 3D 运镜工程', description: '重命名明确的 3D 运镜工程。',
   domain: 'camera_stage', aliases: ['修改 3D 工程名称', 'rename camera project'], readOnly: false, risk: 'R1', dataClasses: ['C1'],
   permission: 'camera_stage:write', idempotent: true, destructive: false, timeoutMs: 10_000, supportsPreview: false, supportsUndo: true,
   requiredScopes: ['toolbox'], acceptsRefs: ['camera_stage.project'], producesRefs: ['camera_stage.project'],
@@ -85,7 +90,9 @@ const renameProjectCapability = defineApplicationCapability({
 })
 
 const deleteProjectCapability = defineApplicationCapability({
-  id: 'delete_camera_stage_project', version: 2, title: '删除 3D 运镜工程', description: '永久删除明确的 3D 运镜工程及其场景数据。',
+  id: 'delete_camera_stage_project',
+  resolveOperationTargets: input => [{ kind: 'camera_stage.project', id: input.projectId }],
+  version: 2, title: '删除 3D 运镜工程', description: '永久删除明确的 3D 运镜工程及其场景数据。',
   domain: 'camera_stage', aliases: ['永久删除 3D 工程', 'delete camera project'], readOnly: false, risk: 'R3', dataClasses: ['C1'],
   permission: 'camera_stage:delete', idempotent: true, destructive: true, timeoutMs: 15_000, supportsPreview: true, supportsUndo: false,
   requiredScopes: ['toolbox'], acceptsRefs: ['camera_stage.project'],

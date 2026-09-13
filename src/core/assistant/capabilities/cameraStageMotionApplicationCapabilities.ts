@@ -14,7 +14,8 @@ import {
 } from './cameraStageCapabilitySchemas'
 
 const applyCameraMove = defineApplicationCapability({
-  id: 'apply_camera_stage_camera_move', version: 1, title: '应用摄像机语义运镜',
+  id: 'apply_camera_stage_camera_move',
+  resolveOperationTargets: input => [{ kind: 'camera_stage.project', id: input.projectId }], version: 1, title: '应用摄像机语义运镜',
   description: '按摄像机、注视目标、时间、方向、距离和缓动应用环绕、推拉、横移或升降轨迹。', domain: 'camera_stage',
   aliases: ['环绕主体', '推近拉远', '横移镜头', '升降镜头', 'orbit', 'dolly', 'truck', 'crane', 'camera move'],
   readOnly: false, risk: 'R1', dataClasses: ['C1'], permission: 'camera_stage:write', idempotent: true, destructive: false,

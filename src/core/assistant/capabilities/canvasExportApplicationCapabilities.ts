@@ -14,6 +14,8 @@ export type CanvasDownloadDestination = z.infer<typeof canvasDownloadDestination
 
 const downloadCanvasMedia = defineApplicationCapability({
   id: 'download_canvas_media',
+  resolveOperationTargets: input => input.nodeIds.map(id => ({ kind: 'canvas.node', id: `${input.projectId}:${id}` })),
+  resolveOperationWriteTargets: input => [{ kind: 'canvas.export', id: `${input.projectId}:${input.destination.mode}` }],
   version: 1,
   title: '下载画布媒体',
   description: '把明确画布节点中的可下载媒体保存到已配置的快速下载或预设目录，不接受任意路径。',

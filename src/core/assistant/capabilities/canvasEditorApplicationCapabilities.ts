@@ -101,6 +101,8 @@ const openMultiLayerDocumentNodeEditor = defineApplicationCapability({
 
 const retryLayerStackResult = defineApplicationCapability({
   id: RETRY_LAYER_STACK_RESULT_CAPABILITY_ID,
+  resolveOperationTargets: input => [input.projectRef, input.nodeRef],
+  resolveOperationWriteTargets: input => [input.nodeRef],
   version: 1,
   title: '重新获取多图层图片结果',
   description: '重新下载当前画布工程中已生成但下载失败的多图层图片，安全恢复原任务并继续获取结果。不会重新生成图片。',

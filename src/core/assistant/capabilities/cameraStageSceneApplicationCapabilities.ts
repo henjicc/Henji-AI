@@ -28,7 +28,10 @@ const observeScene = defineApplicationCapability({
 })
 
 const placeObject = defineApplicationCapability({
-  id: 'place_camera_stage_object', version: 1, title: '复用或布置 3D 场景对象',
+  id: 'place_camera_stage_object',
+  resolveOperationTargets: input => [{ kind: 'camera_stage.project', id: input.projectId }],
+  resolveOperationAppendTargets: input => input.reusePolicy === 'require_new' ? [{ kind: 'camera_stage.project', id: input.projectId }] : [],
+  version: 1, title: '复用或布置 3D 场景对象',
   description: '先按稳定引用和角色复用已有对象；确需新建时按边界盒与空间关系选择位置。', domain: 'camera_stage',
   aliases: ['添加 3D 物体', '摆放三维对象', '复用默认摄像机', '无冲突布局', 'place 3D object'],
   readOnly: false, risk: 'R1', dataClasses: ['C1'], permission: 'camera_stage:write', idempotent: false, destructive: false,
@@ -67,7 +70,10 @@ const placeObject = defineApplicationCapability({
 })
 
 const duplicateObject = defineApplicationCapability({
-  id: 'duplicate_camera_stage_object', version: 2, title: '复制 3D 场景对象', description: '复制明确对象并保存为具有唯一名称的新对象。',
+  id: 'duplicate_camera_stage_object',
+  resolveOperationTargets: input => [{ kind: 'camera_stage.project', id: input.projectId }],
+  resolveOperationAppendTargets: input => [{ kind: 'camera_stage.project', id: input.projectId }],
+  version: 2, title: '复制 3D 场景对象', description: '复制明确对象并保存为具有唯一名称的新对象。',
   domain: 'camera_stage', aliases: ['复制 3D 物体', 'duplicate camera object'], readOnly: false, risk: 'R1', dataClasses: ['C1'],
   permission: 'camera_stage:write', idempotent: false, destructive: false, timeoutMs: 10_000, supportsPreview: false, supportsUndo: true,
   requiredScopes: ['toolbox'], acceptsRefs: ['camera_stage.project', 'camera_stage.object', 'camera_stage.camera'], producesRefs: ['camera_stage.object', 'camera_stage.camera'],
@@ -80,7 +86,9 @@ const duplicateObject = defineApplicationCapability({
 })
 
 const deleteObject = defineApplicationCapability({
-  id: 'delete_camera_stage_object', version: 2, title: '删除 3D 场景对象', description: '永久删除明确对象并清理相关状态关键帧引用。',
+  id: 'delete_camera_stage_object',
+  resolveOperationTargets: input => [{ kind: 'camera_stage.project', id: input.projectId }],
+  version: 2, title: '删除 3D 场景对象', description: '永久删除明确对象并清理相关状态关键帧引用。',
   domain: 'camera_stage', aliases: ['删除 3D 物体', 'delete camera object'], readOnly: false, risk: 'R3', dataClasses: ['C1'],
   permission: 'camera_stage:delete', idempotent: true, destructive: true, timeoutMs: 10_000, supportsPreview: true, supportsUndo: false,
   requiredScopes: ['toolbox'], acceptsRefs: ['camera_stage.project', 'camera_stage.object', 'camera_stage.camera'],
@@ -94,7 +102,9 @@ const deleteObject = defineApplicationCapability({
 })
 
 const updateObject = defineApplicationCapability({
-  id: 'update_camera_stage_object', version: 2, title: '更新 3D 场景对象',
+  id: 'update_camera_stage_object',
+  external: { kind: 'delegate', entityType: 'camera_stage.object', operations: ['write'], reason: '普通数据操作由正式实体描述及 change_application_entities 通用事务承接，不另增同功能工具。' },
+  version: 2, title: '更新 3D 场景对象',
   description: '只修改 schema 明确列出的对象或摄像机属性，并通过 revision 事务提交。', domain: 'camera_stage',
   aliases: ['修改 3D 物体', '调整摄像机参数', 'update camera object'], readOnly: false, risk: 'R1', dataClasses: ['C1'],
   permission: 'camera_stage:write', idempotent: true, destructive: false, timeoutMs: 15_000, supportsPreview: false, supportsUndo: true,

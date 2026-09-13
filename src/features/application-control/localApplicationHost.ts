@@ -5,7 +5,7 @@ import { createLogger } from '@/core/logging'
 import { applicationCallerAccess } from '@/core/application-control/callerContext'
 import { getApplicationControlExecutionEngine } from '@/features/assistant/applicationCapabilities/applicationControlRegistry'
 import { createApplicationCapabilitySession, listApplicationCapabilities } from './applicationCapabilityService'
-import { buildExternalCapabilityInventory } from './externalCapabilityInventory'
+import { buildExternalCapabilityInventory, externalReflectionPermissions } from './externalCapabilityInventory'
 
 const logger = createLogger('features.application_control.host')
 
@@ -23,6 +23,7 @@ export function attachLocalApplicationHost(platform: McpPlatform, ready: boolean
   }))
   // 按域发现与通用写入范围都从真实反射声明派生；宿主注册是它唯一的对外出口。
   const domains = buildExternalCapabilityInventory()
+  const permissions = externalReflectionPermissions()
   const unsubscribeRequest = platform.onRequest((raw) => {
     const request = localHostRequestSchema.safeParse(raw)
     if (!request.success || request.data.sessionId !== sessionId || disposed) return
@@ -37,7 +38,7 @@ export function attachLocalApplicationHost(platform: McpPlatform, ready: boolean
       try {
         if (definitions.find(item => item.id === capabilityId)?.paidGenerationPreparation && !allowPaid) throw new Error('此连接没有付费生成授权。')
         if (!ready) throw new Error('应用尚未就绪，请稍后重试。')
-        const grant = createApplicationCallerGrant({ callerId, capabilityIds: allowWrites ? [...MCP_CAPABILITY_IDS] : [...MCP_READ_CAPABILITY_IDS], permissions: [...MCP_READ_PERMISSIONS, ...(allowWrites ? MCP_WRITE_PERMISSIONS : [])], allowWrites, allowDestructive })
+        const grant = createApplicationCallerGrant({ callerId, capabilityIds: allowWrites ? [...MCP_CAPABILITY_IDS] : [...MCP_READ_CAPABILITY_IDS], permissions: [...MCP_READ_PERMISSIONS, ...permissions.read, ...(allowWrites ? [...MCP_WRITE_PERMISSIONS, ...permissions.write] : [])], allowWrites, allowDestructive })
         grants.set(requestId, grant)
         const definition = definitions.find((item) => item.id === capabilityId)
         if (!definition) throw new Error('此读取工具不可用，请重新连接。')

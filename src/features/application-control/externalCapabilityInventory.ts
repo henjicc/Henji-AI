@@ -51,3 +51,13 @@ export function buildExternalCapabilityInventory(registry: ApplicationReflection
     }))
     .sort((left, right) => left.id.localeCompare(right.id))
 }
+
+/** 通用动词的领域权限同样来自反射声明，新增属性无需补 MCP 权限名单。 */
+export function externalReflectionPermissions(registry: ApplicationReflectionRegistry = getApplicationReflectionRegistry()) {
+  const description = registry.describe({}, { exposure: 'local_adapter',
+    permissions: new Set(registry.listDeclaredPropertyPermissions()), acceptedDataClasses: new Set(['C0', 'C1']) })
+  return {
+    read: [...new Set(description.properties.flatMap(property => property.requiredPermissions.read))],
+    write: [...new Set(description.properties.flatMap(property => property.requiredPermissions.write))],
+  }
+}

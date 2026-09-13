@@ -9,17 +9,13 @@ import {
 } from '@/core/assistant/applicationCapabilities'
 import { BUILTIN_APPLICATION_CAPABILITY_REGISTRY } from '@/core/assistant/builtinApplicationCapabilityRegistry'
 import { executeApplicationCapabilityResult, listRendererApplicationCapabilityIds } from '@/features/assistant/applicationCapabilities/registry'
-
-const businessDomains = new Set([
-  'application', 'settings', 'models', 'assets', 'canvas', 'generation',
-  'image_edit', 'image_mark', 'camera_stage', 'toolbox', 'navigation', 'storyboard',
-])
+import { isExternalApplicationTool } from '@/core/application-control/externalCapabilityPolicy'
 
 /** 复用唯一注册源；助手内部后端工具不进入应用调用目录。 */
 export function listApplicationCapabilities(): ApplicationCapabilityDefinition[] {
   const registered = new Set(listRendererApplicationCapabilityIds())
   return BUILTIN_APPLICATION_CAPABILITY_REGISTRY.list().filter((definition) => (
-    definition.side === 'frontend' && businessDomains.has(definition.domain)
+    (isExternalApplicationTool(definition) || definition.external?.kind === 'recovery')
     && registered.has(definition.id)
     && definition.dataClasses.every((value) => value === 'C0' || value === 'C1')
   ))

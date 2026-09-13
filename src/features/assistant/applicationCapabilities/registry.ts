@@ -18,6 +18,7 @@ import {
 import { APPLICATION_SURFACE_IDS } from '@/core/assistant/applicationSurfaces'
 import {
   applicationCapabilityInvocationSchema,
+  isNavigationOnlyCapability,
   type ApplicationCapabilityDefinition,
   type ApplicationCapabilityInvocation,
 } from '@/core/assistant/applicationCapabilities'
@@ -103,12 +104,14 @@ class RendererApplicationCapabilityRegistry implements ApplicationCapabilityHand
       // 通用事务由引擎在持锁后核对，保留其原有原子预检。
       try {
         const targets = definition.resolveOperationTargets(input)
-        if (!targets?.length) throw new Error('INVALID_INPUT:此操作缺少正式目标声明，无法核对读取基线。')
+        const writes = definition.resolveOperationWriteTargets?.(input, context.requestId ?? 'renderer')
+        if (!targets?.length && !writes?.length) throw new Error('INVALID_INPUT:此操作缺少正式目标声明，无法核对读取基线。')
         const access = applicationCallerAccess(context.callerGrant, context.requestId ?? 'renderer', context.signal)
         const expected = invocation.expectedRevisions ?? {}
         const automatic = invocation.expectedRevisions === undefined && !definition.destructive
         const observed = new Set<string>()
         for (const ref of targets) {
+          if (ref.kind === 'application.navigation' && isNavigationOnlyCapability(definition)) continue
           // 不可变任务引用不一定是反射实体。无 revision scope 的操作由领域处理器
           // 核对任务身份和实时状态；MCP 仍必须绑定该任务的原读取凭据及宿主会话。
           if (!getApplicationReflectionRegistry().getEntity(ref.kind) && definition.requiredScopes.length === 0) continue

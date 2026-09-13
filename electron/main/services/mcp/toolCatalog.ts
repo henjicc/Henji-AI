@@ -88,10 +88,9 @@ export function invalidInputMessage(error: unknown): string | null {
 }
 
 /** 只能经 retry_application_operation_save 触发的原领域恢复能力；有意不作为独立工具开放。 */
-export const EXCLUDED_TOOLS = [
-  { name: 'retry_canvas_project_save', reason: '仅保存恢复入口，必须绑定原失败操作与原编辑会话，只能由 retry_application_operation_save 按账本触发。' },
-  { name: 'retry_image_edit_document_save', reason: '仅保存恢复入口，必须绑定原失败操作与原图片文档宿主，只能由 retry_application_operation_save 按账本触发。' },
-] as const
+export const EXCLUDED_TOOLS = BUILTIN_APPLICATION_CAPABILITY_REGISTRY.list()
+  .filter(definition => definition.external?.kind === 'recovery')
+  .map(definition => ({ name: definition.id, reason: definition.external!.reason }))
 
 export function toolTier(name: string): ToolTier {
   if (BUILTIN_APPLICATION_CAPABILITY_REGISTRY.get(name)?.paidGenerationPreparation) return 'paid'
@@ -202,6 +201,9 @@ export function buildApplicationContract(input: {
       read: true, write: input.access.allowWrites, destructive: input.access.allowDestructive, paid: input.access.allowPaid,
       hiddenTools: input.catalog.hidden,
       excludedTools: EXCLUDED_TOOLS.map((excluded) => ({ ...excluded })),
+      alternativeRoutes: BUILTIN_APPLICATION_CAPABILITY_REGISTRY.list()
+        .filter(definition => definition.side === 'frontend' && definition.external && requested.has(definition.domain))
+        .map(definition => ({ name: definition.id, ...definition.external })),
       note: input.callerKind === 'embedded'
         ? '你是内置助手，操作权限来自当前对话输入框的「助手操作权限」。权限不足时请用户在此选择「允许修改、删除和付费生成」，下一轮生效。不需要开启 MCP 服务或新建外部连接，外部智能体连接设置不会改变你的权限。仅执行用户请求范围内的操作。'
         : '工具不在 tools/list 里 = 本连接缺对应授权档，应用本身仍有该能力；工具在清单里而调用返回 PERMISSION_DENIED = 授权够了但这次目标不允许。删除授权不影响工具是否出现，只在调用含 remove_items 或破坏性能力时校验。授权只能在痕迹 AI 的设置里调整，调整范围需要新建连接。',

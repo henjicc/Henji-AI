@@ -84,7 +84,7 @@ describe('Pi official SDK engine', () => {
     const logs = f.events.filter((event): event is Extract<EngineEvent, { type: 'log' }> => event.type === 'log' && event.phase === 'model_requested')
     expect(logs).toHaveLength(2)
     logs.forEach((event, index) => {
-      expect(event.requestMetrics).toMatchObject({ toolCount: catalog.tools.length - 1, contextCount: 1,
+      expect(event.requestMetrics).toMatchObject({ toolCount: f.requests[index].tools.length, contextCount: 1,
         toolBytes: Buffer.byteLength(JSON.stringify(f.requests[index].tools), 'utf8') })
       expect(event.requestMetrics!.systemBytes).toBeGreaterThan(0)
       expect(event.requestMetrics!.messageCount).toBeGreaterThan(0)
@@ -100,24 +100,28 @@ describe('Pi official SDK engine', () => {
     await f.engine.command({ action: 'prompt', input: { text: '编辑图片', context: '{"surface":{"id":"tool.image_edit"}}' } })
     const editTools = f.requests.at(-1)!.tools as unknown as Array<{ name: string }>
     expect(editTools.map(tool => tool.name)).toEqual(expect.arrayContaining(['create_image_edit_preview', 'commit_image_edit']))
-    const fullBytes = Buffer.byteLength(JSON.stringify(editTools.filter(tool => tool.name !== 'load_application_tools')))
+    const fullBytes = Buffer.byteLength(JSON.stringify(catalog.tools))
+    expect(initialTools.length).toBeLessThan(catalog.tools.length / 2)
     expect(logs[0].requestMetrics!.toolBytes).toBeLessThan(fullBytes * 0.8)
     if (process.env.HENJI_PI_MEASURE === '1') process.stdout.write(`${JSON.stringify({ initialToolBytes: logs[0].requestMetrics!.toolBytes,
       fullToolBytes: fullBytes, initialToolCount: initialTools.length, contextCount: logs[1].requestMetrics!.contextCount })}\n`)
   })
 
-  it('官方 SDK 在加载工具后的下一轮即可调用，冷恢复保留加载状态，降权不会恢复无权工具', async () => {
+  it.each([
+    { name: 'create_image_edit_preview', arguments: {} },
+    { name: 'duplicate_canvas_node', arguments: { domains: ['canvas'] } },
+  ])('官方 SDK 按需加载 $name 后可调用，冷恢复保留状态且降权不恢复无权工具', async ({ name, arguments: loadArguments }) => {
     const f = await fixture()
     const configuration = { ...f.configuration, tools: [...f.configuration.tools,
-      { name: 'create_image_edit_preview', description: '图片编辑预览', inputSchema: { type: 'object', properties: { id: { type: 'string' } }, required: ['id'], additionalProperties: false } }] }
-    f.setToolPlan([{ name: 'load_application_tools', arguments: {} }, { name: 'create_image_edit_preview', arguments: { id: 'image' } }])
+      { name, description: '待加载业务工具', inputSchema: { type: 'object', properties: { id: { type: 'string' } }, required: ['id'], additionalProperties: false } }] }
+    f.setToolPlan([{ name: 'load_application_tools', arguments: loadArguments }, { name, arguments: { id: 'image' } }])
     await f.engine.command({ action: 'configure', input: configuration })
     await f.engine.command({ action: 'prompt', input: { text: '编辑图片', context: '' } })
-    expect(f.requests[0].tools.map(tool => tool.function.name)).not.toContain('create_image_edit_preview')
+    expect(f.requests[0].tools.map(tool => tool.function.name)).not.toContain(name)
     expect(JSON.stringify(f.requests[0].tools)).not.toContain('commit_image_edit')
-    expect(f.requests[1].tools.map(tool => tool.function.name)).toContain('create_image_edit_preview')
+    expect(f.requests[1].tools.map(tool => tool.function.name)).toContain(name)
     expect(f.tool).toHaveBeenCalledTimes(1)
-    expect(f.tool.mock.calls[0]).toMatchObject(['call_fixture_1', 'create_image_edit_preview', { id: 'image' }, expect.any(AbortSignal)])
+    expect(f.tool.mock.calls[0]).toMatchObject(['call_fixture_1', name, { id: 'image' }, expect.any(AbortSignal)])
     const original = await f.engine.command({ action: 'snapshot' }) as { sessionId: string }
     const restored = new PiEngine(() => undefined, f.tool)
     cleanup.push(() => restored.dispose())
@@ -125,7 +129,7 @@ describe('Pi official SDK engine', () => {
     await restored.command({ action: 'configure', input: configuration })
     await restored.command({ action: 'open', input: original.sessionId })
     await restored.command({ action: 'prompt', input: { text: '继续', context: '' } })
-    expect(f.requests.at(-1)!.tools.map(tool => tool.function.name)).toContain('create_image_edit_preview')
+    expect(f.requests.at(-1)!.tools.map(tool => tool.function.name)).toContain(name)
     await restored.command({ action: 'configure', input: f.configuration })
     await restored.command({ action: 'prompt', input: { text: '只读', context: '' } })
     expect(f.requests.at(-1)!.tools.map(tool => tool.function.name)).toEqual(['read_project'])
@@ -133,7 +137,7 @@ describe('Pi official SDK engine', () => {
     await restored.command({ action: 'new' })
     f.setMode('error')
     await restored.command({ action: 'prompt', input: { text: '新对话', context: '' } })
-    expect(f.requests.at(-1)!.tools.map(tool => tool.function.name)).not.toContain('create_image_edit_preview')
+    expect(f.requests.at(-1)!.tools.map(tool => tool.function.name)).not.toContain(name)
   })
 
   it('记录每轮供应商实际用量和缓存读取，并沿用宿主消息关联标识', async () => {

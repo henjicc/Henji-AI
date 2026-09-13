@@ -66,12 +66,24 @@ export const applicationCapabilityDescriptorSchema = z.object({
   }).strict().optional(),
   maxCallsPerRun: z.number().int().positive().optional(),
   available: z.boolean().default(true),
+  /** 默认公开前端业务能力；已有通用实体入口或内部恢复必须在原声明中说明。 */
+  external: z.discriminatedUnion('kind', [
+    z.object({ kind: z.literal('delegate'), entityType: z.string().min(1),
+      operations: z.array(z.enum(['read', 'write', 'create', 'remove'])).min(1),
+      propertyIds: z.array(z.string().min(1)).optional(), reason: z.string().min(12) }).strict(),
+    z.object({ kind: z.literal('internal'), reason: z.string().min(12) }).strict(),
+    z.object({ kind: z.literal('recovery'), reason: z.string().min(12) }).strict(),
+  ]).optional(),
   control: z.object({
     execution: applicationOperationExecutionSchema,
     impacts: z.array(applicationOperationImpactSchema).min(1).max(32),
   }).strict(),
 }).strict()
 export type ApplicationCapabilityDescriptor = z.infer<typeof applicationCapabilityDescriptorSchema>
+
+export function isNavigationOnlyCapability(definition: Pick<ApplicationCapabilityDescriptor, 'readOnly' | 'control'>): boolean {
+  return !definition.readOnly && definition.control.impacts.every(impact => impact.effect === 'navigate')
+}
 
 export interface ApplicationCapabilityDefinition<TInput = unknown, TOutput = unknown>
   extends Omit<ApplicationCapabilityDescriptor, 'available' | 'control'> {
@@ -243,7 +255,10 @@ export class ApplicationCapabilityRegistry {
     }
     this.definitions.set(
       definition.id,
-      definition as unknown as ApplicationCapabilityDefinition
+      { ...definition, ...(!definition.resolveOperationTargets && isNavigationOnlyCapability(definition) ? {
+        // 视图切换有独立的在途身份，不借用工程写锁；原目标仍由领域导航服务校验。
+        resolveOperationTargets: () => [{ kind: 'application.navigation', id: 'current' }],
+      } : {}) } as unknown as ApplicationCapabilityDefinition
     )
   }
 

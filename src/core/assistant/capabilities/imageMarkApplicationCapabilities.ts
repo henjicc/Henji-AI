@@ -13,6 +13,7 @@ import { applicationEffectReceiptSchema } from '../../application-control/transa
 
 const undoImageMarkChange = defineApplicationCapability({
   id: 'undo_image_mark_change',
+  resolveOperationTargets: input => [{ kind: 'image_mark.document', id: input.sessionId }],
   version: 1,
   title: '撤销标注编辑',
   description: '对指定标注编辑会话执行一次后进先出撤销（画笔、裁剪、旋转等文档级改动都会被计入这一个栈）。',
@@ -46,6 +47,7 @@ const undoImageMarkChange = defineApplicationCapability({
 
 const redoImageMarkChange = defineApplicationCapability({
   id: 'redo_image_mark_change',
+  resolveOperationTargets: input => [{ kind: 'image_mark.document', id: input.sessionId }],
   version: 1,
   title: '重做标注编辑',
   description: '重做指定标注编辑会话最近一次被撤销的文档改动。',
@@ -79,7 +81,9 @@ const redoImageMarkChange = defineApplicationCapability({
 
 export const IMAGE_MARK_APPLICATION_CAPABILITIES = [
   defineApplicationCapability({
-    id: 'retry_image_edit_document_save', version: 1,
+    id: 'retry_image_edit_document_save',
+  external: { kind: 'recovery', reason: '仅保存恢复入口，必须绑定原失败操作与原图片文档宿主，只能由 retry_application_operation_save 按账本触发。' },
+  version: 1,
     title: '重试保存图片编辑文档',
     description: '确认当前图片文档的最新内容已经保存；附着画布节点时同步其正式预览。只重试保存，不重复编辑、添加或撤销命令。',
     domain: 'image_edit', aliases: ['图片编辑保存失败', '重试保存图片', 'retry image document save'],
