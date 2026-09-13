@@ -126,11 +126,14 @@ describe('Pi official SDK engine', () => {
   })
 
   it.each([
-    ['references/image.md', '图片表达一个视觉状态', '视频表达状态随时间的变化'],
-    ['references/video.md', '视频表达状态随时间的变化', '图片表达一个视觉状态'],
-    ['references/image-edit.md', '最小必要修改', '## 标记和坐标定位'],
-    ['references/video-extension.md', '## 延长与连接', '## 声音、对白与文字'],
-  ])('按需读取 %s，实际请求不含无关模块且不激活生成工具', async (reference, included, excluded) => {
+    ['prompt-optimization', 'references/image.md', '图片表达一个视觉状态', '视频表达状态随时间的变化'],
+    ['prompt-optimization', 'references/video.md', '视频表达状态随时间的变化', '图片表达一个视觉状态'],
+    ['prompt-optimization', 'references/image-edit.md', '最小必要修改', '## 标记和坐标定位'],
+    ['prompt-optimization', 'references/video-extension.md', '## 延长与连接', '## 声音、对白与文字'],
+      ['cinematic-director', 'references/blocking.md', '接触动作描述接近', '像幻灯片'],
+    ['cinematic-director', 'references/repair.md', '像幻灯片', '接触动作描述接近'],
+    ['short-drama', 'references/resume.md', '重新读取工程当前状态', '对白保留原文和语言'],
+  ])('按需读取 %s/%s，实际请求不含无关模块且不激活生成工具', async (skill, reference, included, excluded) => {
     const f = await fixture()
     const definition = loadAssistantSkillCapability
     const tools = [...applicationCatalog().tools, { name: definition.id, description: definition.description,
@@ -143,14 +146,14 @@ describe('Pi official SDK engine', () => {
       return loadAssistantSkillFrom({ builtinDir: path.resolve('resources/assistant-skills'), userDir: '', disabledNames: [] }, input.name, input.path)
     })
     f.setToolPlan([
-      { name: 'load_assistant_skill', arguments: { name: 'prompt-optimization', reason: '生成图片' } },
-      { name: 'load_assistant_skill', arguments: { name: 'prompt-optimization', path: reference, reason: '当前操作指导' } },
+      { name: 'load_assistant_skill', arguments: { name: skill, reason: '当前创作任务' } },
+      { name: 'load_assistant_skill', arguments: { name: skill, path: reference, reason: '当前操作指导' } },
     ])
     await f.engine.command({ action: 'prompt', input: { text: '生成一张图片', context: '{"surface":{"id":"workspace.canvas"}}' } })
     expect(f.requests).toHaveLength(3)
     expect(f.requests[0].tools.some(tool => tool.function.name === 'load_assistant_skill')).toBe(true)
     expect(JSON.stringify(f.requests[0])).not.toContain('最小必要修改')
-    expect(JSON.stringify(f.requests[1])).toContain('references/image.md')
+    expect(JSON.stringify(f.requests[1])).toContain(reference)
     expect(JSON.stringify(f.requests[1])).not.toContain(included)
     expect(JSON.stringify(f.requests[2])).toContain(included)
     expect(JSON.stringify(f.requests)).not.toContain(excluded)

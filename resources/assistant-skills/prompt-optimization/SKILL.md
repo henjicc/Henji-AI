@@ -14,6 +14,8 @@ description: 图片或视频提示词编写、生成、参考编辑与延续时�
 | 当前任务 | 读取 |
 | --- | --- |
 | 从零生图或普通参考生图 | [图片基础](references/image.md) |
+| 商品图、产品材质或电商展示 | [商品展示](references/product.md) |
+| 带标题、说明文字的海报 | [文字海报](references/poster.md) |
 | 替换、添加、删除图片内容 | [图片编辑](references/image-edit.md) |
 | 三视图、人物设定或系列组图 | [角色与组图](references/character-sheet.md) |
 | 有真实蒙版、标记或点框定位 | [图像定位](references/image-location.md) |

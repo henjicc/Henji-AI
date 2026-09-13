@@ -229,7 +229,7 @@ describe('scanAssistantSkills', () => {
     expect(manifest.invalid).toEqual([])
     // 不断言顺序：中文名的排序结果依赖 localeCompare 的实现，跨环境不稳定。
     expect(new Set(manifest.skills.map((skill) => skill.name)))
-      .toEqual(new Set(['三维镜头构图', '生成排障', '图片生成', 'prompt-optimization']))
+      .toEqual(new Set(['三维镜头构图', '生成排障', '图片生成', 'prompt-optimization', 'cinematic-director', 'short-drama']))
     expect(manifest.skills.every((skill) => skill.source === 'builtin' && skill.enabled)).toBe(true)
     expect(manifest.skills.every((skill) => skill.description.length > 0)).toBe(true)
   })

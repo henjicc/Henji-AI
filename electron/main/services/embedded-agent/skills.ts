@@ -8,7 +8,7 @@ import { createMainLogger } from '../logging'
 const logger = createMainLogger('main.embedded_agent')
 
 // 旧内置技能依赖保留的自研助手协议，不能未经迁移就注入 Pi。
-const compatibleSkills = new Set(['prompt-optimization'])
+const compatibleSkills = new Set(['prompt-optimization', 'cinematic-director', 'short-drama'])
 export async function embeddedSkillCatalog(): Promise<{ tools: EmbeddedTool[]; instructions: string }> {
   const skills = (await listEnabledAssistantSkills()).filter(skill => compatibleSkills.has(skill.name))
   if (!skills.length) return { tools: [], instructions: '' }
