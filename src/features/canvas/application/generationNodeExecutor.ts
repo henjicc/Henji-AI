@@ -95,6 +95,7 @@ export interface GenerationNodeExecutionOptions {
   commitGenerationResult?: (
     context: GenerationNodeResultCommitContext,
   ) => Promise<GenerationNodeResultCommitResult>
+  supportsBackgroundCompletion?: boolean
   setPromptInvalid: (invalid: boolean) => void
   t: TFunction
 }
@@ -107,7 +108,7 @@ export function createGenerationNodeExecutor(readOptions: (store?: typeof useCan
     if (!projectId) throw new Error('当前没有可执行生成的画布项目')
     return withCanvasProjectRuntime(projectId, async target => {
       const current = readOptions(target.store)
-      if (current.commitGenerationResult && !isCanvasProjectContextCurrent(projectId)) {
+      if (current.commitGenerationResult && !current.supportsBackgroundCompletion && !isCanvasProjectContextCurrent(projectId)) {
         throw new Error('此生成需要在原画布完成合成，请返回原项目')
       }
       return { current, runtime: resolveGenerationNodeRuntime(current, target.store) }
@@ -191,7 +192,7 @@ export function createGenerationNodeExecutor(readOptions: (store?: typeof useCan
     if (
       execution.projectId
       && useProjectStore.getState().currentProjectId !== execution.projectId
-      && (!execution.store || current.commitGenerationResult)
+      && (!execution.store || (current.commitGenerationResult && !current.supportsBackgroundCompletion))
     ) {
       throw new Error('画布项目已切换，本次生成已停止')
     }
@@ -229,7 +230,7 @@ export function createGenerationNodeExecutor(readOptions: (store?: typeof useCan
       operation: async () => {
         const generationProjectId = execution.projectId
         if (!generationProjectId) throw new Error('当前没有可执行生成的画布项目')
-        const backgroundCompletion = !current.commitGenerationResult
+        const backgroundCompletion = !current.commitGenerationResult || current.supportsBackgroundCompletion === true
         const isProjectCurrent = (): boolean => isCanvasProjectContextCurrent(generationProjectId)
         const prepared = preparedInput ?? await prepareExecution(execution, inputs)
         const { runtime, promptInput, capabilityPreparation, generationParams } = prepared
@@ -321,7 +322,7 @@ export function createGenerationNodeExecutor(readOptions: (store?: typeof useCan
           if (!backgroundCompletion) await confirmCanvasPersistence(generationProjectId)
           const result = await runCanvasGeneration({
             modelId: runtime.modelId,
-            requestId: requestPreparation?.requestId ?? current.requestId,
+            requestId: current.requestId ?? requestPreparation?.requestId,
             signal: current.signal,
             mediaType: current.modelType,
             params: requestParams,
@@ -342,6 +343,8 @@ export function createGenerationNodeExecutor(readOptions: (store?: typeof useCan
           const completionId = `generation-output:${resultNodeId}`
           if (current.commitGenerationResult) {
             const committed = await current.commitGenerationResult({
+              projectId: generationProjectId,
+              signal: current.signal,
               sourceNodeId: current.nodeId,
               placeholderNodeId: resultNodeId,
               resultNodeType: current.resultNodeType,
@@ -438,7 +441,7 @@ export function createGenerationNodeExecutor(readOptions: (store?: typeof useCan
     schedule: CanvasNodeExecutionScheduler = operation => operation()): Promise<CanvasNodeExecutionResult> => {
     const inputs = await readExecutionInputs(execution)
     const current = inputs.current
-    if (current.commitGenerationResult) {
+    if (current.commitGenerationResult && !current.supportsBackgroundCompletion) {
       return schedule(() => handleGenerate(execution, inputs), current.signal)
     }
     const activeTask = current.requestId ? canvasGenerationTaskControls.get(current.requestId) : undefined
@@ -478,7 +481,10 @@ export function createGenerationNodeExecutor(readOptions: (store?: typeof useCan
     dependency: { mode: 'auto', outputMode: 'result-nodes' },
     inputSignatureScope: 'runtime',
     getInputSignatureExtras: store => createGenerationNodeRuntimeSignaturePayload(readRuntime(store)),
-    supportsBackgroundCompletion: store => !readOptions(store).commitGenerationResult,
+    supportsBackgroundCompletion: store => {
+      const options = readOptions(store)
+      return !options.commitGenerationResult || options.supportsBackgroundCompletion === true
+    },
     preflightBeforeDependencies,
     run: handleTrackedGenerate,
     runQueued: handleTrackedGenerate,

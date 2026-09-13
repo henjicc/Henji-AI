@@ -1,3 +1,5 @@
+import type { GenerationNodeExecutionOptions } from './generationNodeExecutor';
+import type { GenerationNodeResultCommitContext, GenerationNodeRuntimePreparationContext } from '../nodes/shared/generationNodeExecutionTypes';
 import type { StructuredGenerationLayerStackV1 } from '@henjicc/ai-sdk';
 
 import type { CanvasGenerationOutput } from '@/features/canvas/generation/runGeneration';
@@ -134,3 +136,30 @@ export async function commitLayerSeparationGeneration(
     throw error;
   }
 }
+
+/** 界面与无挂载任务共用结构化图层提交。 */
+export const layerSeparationGenerationExecution = {
+  supportsBackgroundCompletion: true,
+  resultNodeExtraData: { resultKind: 'layer-stack' },
+  prepareRuntimeParams: ({ images }: GenerationNodeRuntimePreparationContext) => {
+    if (images.length !== 1) throw new Error('图层拆分必须且只能提供 1 张源图');
+    return {};
+  },
+  commitGenerationResult: (context: GenerationNodeResultCommitContext) => {
+    const sourceImage = context.inputs.images[0];
+    if (!sourceImage) throw new Error('图层拆分结果缺少源图引用');
+    return commitLayerSeparationGeneration({
+      projectId: context.projectId,
+      signal: context.signal,
+      sourceNodeId: context.sourceNodeId,
+      placeholderNodeId: context.placeholderNodeId,
+      resultNodeType: context.resultNodeType,
+      completionId: context.completionId,
+      sourceImage,
+      providerId: context.providerId,
+      modelId: context.modelId,
+      result: context.result,
+    });
+  },
+
+} satisfies Pick<GenerationNodeExecutionOptions, 'prepareRuntimeParams' | 'commitGenerationResult' | 'supportsBackgroundCompletion' | 'resultNodeExtraData'>;

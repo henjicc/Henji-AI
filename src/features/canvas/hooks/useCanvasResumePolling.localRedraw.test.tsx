@@ -220,7 +220,7 @@ describe('useCanvasResumePolling 局部重绘恢复', () => {
       serverTaskModelId: null,
     }));
     expect(generationMocks.resumeCanvasGeneration).toHaveBeenCalledWith(expect.objectContaining({
-      requestId: context.requestId,
+      requestId: 'local-redraw-record',
       taskId: 'local-redraw-task',
     }));
     expect(generationMocks.composeLocalRedraw).toHaveBeenCalledWith({

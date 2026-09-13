@@ -11,6 +11,8 @@ export interface GenerationNodeRuntimePreparationContext {
 }
 
 export interface GenerationNodeResultCommitContext {
+  projectId: string
+  signal?: AbortSignal
   sourceNodeId: string
   placeholderNodeId: string
   resultNodeType: CanvasNodeType

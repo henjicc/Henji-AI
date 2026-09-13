@@ -6,13 +6,17 @@ import { CANVAS_IMAGE_CAPABILITY_IDS, getCanvasImageCapability } from '../capabi
 import { prepareImageEditNodeRuntime, resolveImageEditGenerationUi } from './imageEditNodePreparation'
 import { prepareOutpaintGeneration } from './outpaintGenerationPreparation'
 import { prepareUpscaleNodeRuntime } from './upscaleGenerationPreparation'
+import { layerSeparationGenerationExecution } from './layerSeparationGenerationService'
+import { localRedrawGenerationExecution } from './localRedrawGenerationService'
 import type { GenerationNodeExecutionOptions } from './generationNodeExecutor'
 
 /** 标准生成节点的无挂载配置；素材准备和扩图处理仍调用界面的正式实现。 */
 export function readCanvasGenerationNodeProfile(nodeId: string, store = useCanvasStore): GenerationNodeExecutionOptions {
   const node = store.getState().nodes.find(item => item.id === nodeId)
   const imageCapabilityId = node?.type === CANVAS_NODE_TYPES.upscaleGen ? CANVAS_IMAGE_CAPABILITY_IDS.upscale
-    : node?.type === CANVAS_NODE_TYPES.panoramaGen ? CANVAS_IMAGE_CAPABILITY_IDS.panorama : undefined
+    : node?.type === CANVAS_NODE_TYPES.panoramaGen ? CANVAS_IMAGE_CAPABILITY_IDS.panorama
+      : node?.type === CANVAS_NODE_TYPES.layerSeparationGen ? CANVAS_IMAGE_CAPABILITY_IDS.layerSeparation
+        : node?.type === CANVAS_NODE_TYPES.elementEditGen ? CANVAS_IMAGE_CAPABILITY_IDS.elementEdit : undefined
   const modelType = node?.type === CANVAS_NODE_TYPES.imageEdit || imageCapabilityId ? 'image'
     : node?.type === CANVAS_NODE_TYPES.videoGen ? 'video'
       : node?.type === CANVAS_NODE_TYPES.audioGen ? 'audio' : null
@@ -28,7 +32,7 @@ export function readCanvasGenerationNodeProfile(nodeId: string, store = useCanva
     capability: isOutpaint ? getCanvasImageCapability(CANVAS_IMAGE_CAPABILITY_IDS.outpaint)
       : imageCapabilityId ? getCanvasImageCapability(imageCapabilityId) : null,
     showModelInput: Boolean(imageCapabilityId) || modelType !== 'image' || isOutpaint || ui.modelMode !== 'locked',
-    requirePrompt: !imageCapabilityId && (modelType !== 'image' || ui.promptMode === 'required'),
+    requirePrompt: node.type === CANVAS_NODE_TYPES.elementEditGen || (!imageCapabilityId && (modelType !== 'image' || ui.promptMode === 'required')),
     promptRequiredKey: 'node.imageEdit.promptRequired', apiKeyRequiredKey: 'node.imageEdit.apiKeyRequired',
     resultTitleKey: definition.menuLabelKey, setPromptInvalid: () => undefined, t,
     ...(modelType === 'image' ? {
@@ -37,5 +41,7 @@ export function readCanvasGenerationNodeProfile(nodeId: string, store = useCanva
         : node.type === CANVAS_NODE_TYPES.imageEdit ? context => prepareImageEditNodeRuntime(context, { isOutpaint, excludeParamIds: ui.excludeParamIds, t }) : undefined,
       prepareGenerationRequest: isOutpaint ? prepareOutpaintGeneration : undefined,
     } : {}),
+    ...(node.type === CANVAS_NODE_TYPES.layerSeparationGen ? layerSeparationGenerationExecution : {}),
+    ...(node.type === CANVAS_NODE_TYPES.elementEditGen ? localRedrawGenerationExecution : {}),
   }
 }

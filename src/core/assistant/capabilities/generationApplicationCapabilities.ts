@@ -395,7 +395,7 @@ const resumeCanvasGenerationTask = defineApplicationCapability({
 
 const prepareCanvasNodeGeneration = defineApplicationCapability({
   id: 'prepare_canvas_node_generation', version: 1, title: '准备原节点生成',
-  description: '读取原画布标准生成节点的实际模型、参数和参考素材并估价，包括固定模型的抠图、放大等图片工具。配置使用 canvas.node.generation_config；返回 submitInput 可直接用于 submit_canvas_node_generation。',
+  description: '读取原画布生成节点的实际模型、参数和参考素材并估价，包括抠图、放大、图层拆分及已绘制蒙版的局部重绘。配置使用 canvas.node.generation_config；返回 submitInput 可直接用于 submit_canvas_node_generation。',
   domain: 'generation', aliases: ['准备图片工具', '节点生成估价'], readOnly: true,
   control: capabilityControl('observe', ['canvas.node', 'generation.preparation']),
   risk: 'R0', dataClasses: ['C1'], permission: 'generation:prepare', idempotent: true, destructive: false,
@@ -409,7 +409,7 @@ const prepareCanvasNodeGeneration = defineApplicationCapability({
 
 const submitCanvasNodeGeneration = defineApplicationCapability({
   id: 'submit_canvas_node_generation', version: 1, title: '执行原画布生成节点',
-  description: '使用 prepare_canvas_node_generation 返回的 submitInput 执行已配置的原节点，保留参考连线，结果自动放在节点旁。包括标准图片、视频、音频节点及固定模型图片工具；返回任务号后用 get_generation_task 查询。',
+  description: '使用 prepare_canvas_node_generation 返回的 submitInput 执行已配置的原节点，保留参考连线，结果自动放在节点旁。支持图片、视频、音频及图层拆分、局部重绘等图片工具；切换页面后仍保存原项目，返回任务号后用 get_generation_task 查询。',
   domain: 'generation', aliases: ['运行图片工具', '执行生成节点'], readOnly: false,
   control: capabilityControl('execute', ['generation.task', 'canvas.node'], { revisionScopes: ['generation', 'canvas'], verificationRequired: false, resultState: 'submitted',
     alsoImpacts: [{ effect: 'create', entityTypes: ['generation.task', 'canvas.node', 'canvas.edge'] }] }),
