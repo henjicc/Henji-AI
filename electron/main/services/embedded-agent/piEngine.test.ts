@@ -141,6 +141,7 @@ describe('Pi official SDK engine', () => {
     ['prompt-optimization', 'references/video-extension.md', '## 延长与连接', '## 声音、对白与文字'],
       ['cinematic-director', 'references/blocking.md', '接触动作描述接近', '像幻灯片'],
     ['cinematic-director', 'references/repair.md', '像幻灯片', '接触动作描述接近'],
+    ['cinematic-director', 'references/canvas-workspace.md', '场景从上到下分区', '接触动作描述接近'],
     ['short-drama', 'references/resume.md', '重新读取工程当前状态', '对白保留原文和语言'],
   ])('按需读取 %s/%s，实际请求不含无关模块且不激活生成工具', async (skill, reference, included, excluded) => {
     const f = await fixture()

@@ -3,6 +3,7 @@ import { useProjectStore, type ProjectSummary } from '@/stores/projectStore'
 
 import { CanvasApplicationError, openCanvasProject } from './canvasApplicationService'
 import { updateCanvasProjectCover } from './canvasProjectCover'
+import { getProjectRecord } from '@/commands/projectState'
 
 const EMPTY_VIEWPORT = { x: 0, y: 0, zoom: 1 }
 
@@ -30,7 +31,12 @@ export async function createCanvasProject(name: string): Promise<Record<string, 
   const project = useProjectStore.getState().currentProject
   useCanvasStore.getState().setCanvasData(project?.nodes ?? [], project?.edges ?? [], project?.history)
   useCanvasStore.getState().setViewportState(project?.viewport ?? EMPTY_VIEWPORT)
-  return { projectId, name: normalized }
+  const saved = await getProjectRecord(projectId)
+  return { projectId, name: normalized, verification: {
+    verified: saved?.id === projectId && saved.name === normalized,
+    condition: '新建画布项目已从持久存储回读确认',
+    target: { kind: 'canvas.project', id: projectId },
+  } }
 }
 
 export async function closeCanvasProject(projectId: string): Promise<Record<string, unknown>> {

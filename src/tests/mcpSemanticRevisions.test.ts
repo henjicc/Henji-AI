@@ -45,6 +45,33 @@ async function baseline(session: ReturnType<typeof client>) {
 const invocation = (expectedRevisions: unknown) => ({ id: 'cancel_generation_task', version: 1,
   expectedRevisions, input: { taskId: task.taskId, reason: '验收取消' } })
 
+it('没有项目时可创建并验证持久化，再打开同一画布项目', async () => {
+  const previousCanvas = useCanvasStore.getState()
+  const previousProject = useProjectStore.getState()
+  const { useNavigationStore } = await import('@/stores/navigationStore')
+  const previousNavigation = useNavigationStore.getState()
+  try {
+    useProjectStore.setState({ currentProjectId: null, currentProject: null, projects: [], isHydrated: true })
+    const session = createApplicationCapabilitySession(createApplicationCallerGrant({
+      callerId: 'mcp-creative-create', capabilityIds: [...MCP_CAPABILITY_IDS], allowWrites: true, allowDestructive: false,
+      permissions: [...MCP_READ_PERMISSIONS, ...MCP_WRITE_PERMISSIONS],
+    }))
+    const created = await session.execute({ id: 'create_canvas_project', version: 2, input: { name: '短剧画布' } }, request())
+    expect(created).toMatchObject({ ok: true, data: { verification: { verified: true } } })
+    if (!created.ok) throw new Error('创建失败')
+    const projectId = String(created.data.projectId)
+    expect((await readPersistedCanvasProjectSnapshot(projectId)).name).toBe('短剧画布')
+    const opened = await session.execute({ id: 'open_canvas_project', version: 2, input: { projectId } }, request())
+    expect(opened).toMatchObject({ ok: true, data: { projectId, surfaceId: 'workspace.canvas', verification: { verified: true } } })
+    expect(useProjectStore.getState().projects).toHaveLength(1)
+    expect(useNavigationStore.getState().activeWorkspace).toBe('nodes')
+  } finally {
+    useCanvasStore.setState(previousCanvas, true)
+    useProjectStore.setState(previousProject, true)
+    useNavigationStore.setState(previousNavigation, true)
+  }
+})
+
 it('创作文本经 MCP 保存后新会话按需读回，局部返修保留其他镜头和依赖', async () => {
   const creativeClient = () => createApplicationCapabilitySession(createApplicationCallerGrant({
     callerId: 'mcp-drama', capabilityIds: [...MCP_CAPABILITY_IDS], allowWrites: true, allowDestructive: false,
