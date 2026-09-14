@@ -1,3 +1,4 @@
+import { cameraStageProjectStore, ensureCameraStageProjectRuntime, saveCameraStageProjectRuntime, bindCameraStageProjectOperation } from './cameraStageProjectRuntime'
 import { createLogger } from '@/core/logging'
 import { CAMERA_STAGE_NAME_MAX_LENGTH } from '@/core/assistant/capabilities/cameraStageCapabilitySchemas'
 
@@ -14,7 +15,6 @@ import {
   loadProjectIntoScene,
   readProjectSnapshot,
   renameProject as renameStoredProject,
-  saveCurrentProject,
   type CameraStageProjectSnapshot,
 } from '../projects/cameraStageProjectService'
 import { compileStateKeyframesToAnimation } from '../domain/stateKeyframeCompiler'
@@ -121,7 +121,7 @@ export function resolveUniqueCameraStageObjectName(
 }
 
 function requireObject(projectId: string, objectId: string): StageObject {
-  const state = useCameraStageStore.getState()
+  const state = cameraStageProjectStore(projectId).getState()
   if (state.currentProjectId !== projectId) throw new Error('STALE_CONTEXT')
   const object = state.objects.find((candidate) => candidate.id === objectId)
   if (!object) throw new Error('NOT_FOUND')
@@ -182,8 +182,7 @@ function validateObjectUpdate(object: StageObject, objects: StageObject[], updat
 }
 
 async function ensureProjectLoaded(projectId: string): Promise<void> {
-  if (useCameraStageStore.getState().currentProjectId === projectId) return
-  if (!await loadProjectIntoScene(projectId)) throw new Error('NOT_FOUND')
+  await ensureCameraStageProjectRuntime(projectId)
 }
 
 /**
@@ -272,7 +271,7 @@ async function readDomainSnapshot(projectId: string): Promise<CameraStageProject
   return snapshot
 }
 
-export const cameraStageApplicationService = {
+const implementation = {
   async listProjects(): Promise<Awaited<ReturnType<typeof listProjects>>> {
     return await listProjects()
   },
@@ -290,8 +289,7 @@ export const cameraStageApplicationService = {
    * 未打开该工程时返回 null，反射层据此不列出这个实体。
    */
   readPlayback(projectId: string): StagePlaybackState | null {
-    const state = useCameraStageStore.getState()
-    return state.currentProjectId === projectId ? { ...state.playback } : null
+    try { return { ...cameraStageProjectStore(projectId).getState().playback } } catch { return null }
   },
 
   /** 播放控制。助手做完动画要能自己预览验证，而不是让用户去点播放。 */
@@ -300,7 +298,7 @@ export const cameraStageApplicationService = {
     update: { playing?: boolean; currentTime?: number; loop?: boolean },
   ): Promise<{ projectId: string; playback: StagePlaybackState }> {
     await ensureProjectLoaded(projectId)
-    const state = useCameraStageStore.getState()
+    const state = cameraStageProjectStore(projectId).getState()
     if (update.currentTime !== undefined) {
       if (!Number.isFinite(update.currentTime) || update.currentTime < 0) throw new Error('INVALID_TIME_RANGE')
       state.seek(update.currentTime)
@@ -311,7 +309,7 @@ export const cameraStageApplicationService = {
       if (update.playing) state.play()
       else state.pause()
     }
-    return { projectId, playback: { ...useCameraStageStore.getState().playback } }
+    return { projectId, playback: { ...cameraStageProjectStore(projectId).getState().playback } }
   },
 
   async createProject(name: string): Promise<{ projectId: string; name: string }> {
@@ -355,7 +353,7 @@ export const cameraStageApplicationService = {
     })
     try {
       await ensureProjectLoaded(input.projectId)
-    const before = useCameraStageStore.getState()
+    const before = cameraStageProjectStore(input.projectId).getState()
     // 纯输入校验必须在任何写入之前做完。`resolveScenePlacement` 内部对不存在的
     // targetObjectId 抛裸 NOT_FOUND，而它在对象创建之后才被调用——结果是对象已经建出来、
     // 停在默认位置，事务却报失败，调用方拿到一个"失败但场景被改了"的状态。
@@ -394,11 +392,11 @@ export const cameraStageApplicationService = {
         if (input.spec.objectType === 'primitive') before.addPrimitive(input.spec.primitiveKind ?? 'box')
         else if (input.spec.objectType === 'character') before.addCharacter()
         else before.addCamera()
-        const createdId = useCameraStageStore.getState().selectedId
-        object = useCameraStageStore.getState().objects.find((candidate) => candidate.id === createdId) ?? null
+        const createdId = cameraStageProjectStore(input.projectId).getState().selectedId
+        object = cameraStageProjectStore(input.projectId).getState().objects.find((candidate) => candidate.id === createdId) ?? null
         if (!object) throw new Error('CAPABILITY_REJECTED')
       }
-      const state = useCameraStageStore.getState()
+      const state = cameraStageProjectStore(input.projectId).getState()
       const layout = resolveScenePlacement(object, state.objects, input.placement)
       const scale = input.placement.dimensions
         ? dimensionsToScale(object, input.placement.dimensions)
@@ -412,7 +410,7 @@ export const cameraStageApplicationService = {
         ? resolveUniqueCameraStageObjectName(state.objects, input.spec.name, object.id)
         : object.name
       state.updateObject(object.id, { name, transform })
-      await saveCurrentProject()
+      await saveCameraStageProjectRuntime(input.projectId)
       const saved = requireObject(input.projectId, object.id)
       logger.info('三维场景对象布置完成', {
         event: 'camera_stage.object.place.completed',
@@ -454,7 +452,7 @@ export const cameraStageApplicationService = {
   async updateObject(projectId: string, objectId: string, update: CameraStageObjectUpdate): Promise<{ projectId: string; objectId: string; updatedKeys: string[]; undoToken: string }> {
     await ensureProjectLoaded(projectId)
     const object = requireObject(projectId, objectId)
-    const state = useCameraStageStore.getState()
+    const state = cameraStageProjectStore(projectId).getState()
     const patch = validateObjectUpdate(object, state.objects, update)
     const undoToken = captureCameraStageUndo(projectId)
     /*
@@ -469,7 +467,7 @@ export const cameraStageApplicationService = {
      * 走能力层的写入改用建模语义。
      */
     state.updateObjectAcrossStateKeyframes(objectId, patch)
-    await saveCurrentProject()
+    await saveCameraStageProjectRuntime(projectId)
     return { projectId, objectId, updatedKeys: Object.keys(patch), undoToken }
   },
 
@@ -499,7 +497,7 @@ export const cameraStageApplicationService = {
       }
     }
     const undoToken = captureCameraStageUndo(projectId)
-    const actions = useCameraStageStore.getState()
+    const actions = cameraStageProjectStore(projectId).getState()
     for (const path of paths) {
       const current = requireObject(projectId, objectId)
       const descriptor = getAnimatablePropByPath(path)!
@@ -514,7 +512,7 @@ export const cameraStageApplicationService = {
         actions.updatePoseJoint(objectId, jointId, next.pose.joints[jointId] ?? { x: 0, y: 0, z: 0 }, [path])
       }
     }
-    await saveCurrentProject()
+    await saveCameraStageProjectRuntime(projectId)
     return { projectId, objectId, updatedPaths: paths, undoToken }
   },
 
@@ -531,14 +529,14 @@ export const cameraStageApplicationService = {
     await ensureProjectLoaded(projectId)
     const object = requireObject(projectId, objectId)
     if (object.type !== 'character') throw new Error('OBJECT_TYPE_MISMATCH：pose_preset 只对角色对象有效。')
-    const state = useCameraStageStore.getState()
+    const state = cameraStageProjectStore(projectId).getState()
     const preset = POSE_PRESETS.find((candidate) => candidate.id === presetId)
     if (!preset) {
       throw new Error(`POSE_PRESET_NOT_FOUND：«${presetId}» 不是已知预设。可用预设：${POSE_PRESETS.map((item) => item.id).join('、')}。`)
     }
     const undoToken = captureCameraStageUndo(projectId)
     state.applyPosePreset(objectId, preset)
-    await saveCurrentProject()
+    await saveCameraStageProjectRuntime(projectId)
     return { projectId, objectId, presetId, undoToken }
   },
 
@@ -559,13 +557,13 @@ export const cameraStageApplicationService = {
     update: { path?: StageSpatialPath; startPosition?: StageVec3; endPosition?: StageVec3 },
   ): Promise<{ projectId: string; stateKeyframeId: string; objectId: string; undoToken: string }> {
     await ensureProjectLoaded(projectId)
-    const state = useCameraStageStore.getState()
+    const state = cameraStageProjectStore(projectId).getState()
     if (!state.stateKeyframes.some((stateKeyframe) => stateKeyframe.id === stateKeyframeId)) throw new Error('NOT_FOUND')
     const undoToken = captureCameraStageUndo(projectId)
     if (update.path !== undefined) state.setStateKeyframeSpatialPath(stateKeyframeId, objectId, markSpatialPathCustom(update.path))
     if (update.startPosition !== undefined) state.setStateKeyframePathAnchor(stateKeyframeId, objectId, 'start', update.startPosition)
     if (update.endPosition !== undefined) state.setStateKeyframePathAnchor(stateKeyframeId, objectId, 'end', update.endPosition)
-    await saveCurrentProject()
+    await saveCameraStageProjectRuntime(projectId)
     return { projectId, stateKeyframeId, objectId, undoToken }
   },
 
@@ -573,24 +571,24 @@ export const cameraStageApplicationService = {
     await ensureProjectLoaded(projectId)
     requireObject(projectId, objectId)
     const undoToken = captureCameraStageUndo(projectId)
-    useCameraStageStore.getState().duplicateObject(objectId)
-    const createdId = useCameraStageStore.getState().selectedId
+    cameraStageProjectStore(projectId).getState().duplicateObject(objectId)
+    const createdId = cameraStageProjectStore(projectId).getState().selectedId
     if (!createdId) throw new Error('CAPABILITY_REJECTED')
-    await saveCurrentProject()
+    await saveCameraStageProjectRuntime(projectId)
     return { projectId, objectId: createdId, duplicatedFromObjectId: objectId, undoToken }
   },
 
   async deleteObject(projectId: string, objectId: string): Promise<{ projectId: string; objectId: string; status: 'deleted' }> {
     await ensureProjectLoaded(projectId)
     requireObject(projectId, objectId)
-    useCameraStageStore.getState().removeObject(objectId)
-    await saveCurrentProject()
+    cameraStageProjectStore(projectId).getState().removeObject(objectId)
+    await saveCameraStageProjectRuntime(projectId)
     return { projectId, objectId, status: 'deleted' }
   },
 
   async updateStateKeyframe(projectId: string, stateKeyframeId: string, update: CameraStageStateKeyframeUpdate): Promise<{ projectId: string; stateKeyframeId: string; status: 'updated'; undoToken: string }> {
     await ensureProjectLoaded(projectId)
-    const state = useCameraStageStore.getState()
+    const state = cameraStageProjectStore(projectId).getState()
     if (!state.stateKeyframes.some((stateKeyframe) => stateKeyframe.id === stateKeyframeId)) throw new Error('NOT_FOUND')
     if (update.cameraId && !state.objects.some((object) => object.id === update.cameraId && object.type === 'camera')) throw new Error('INVALID_REFERENCE')
     if (update.hold !== undefined && (!Number.isFinite(update.hold) || update.hold < 0)) throw new Error('INVALID_TIME_RANGE')
@@ -614,11 +612,24 @@ export const cameraStageApplicationService = {
     if (update.cameraId !== undefined) state.updateStateKeyframeCamera(stateKeyframeId, update.cameraId)
     if (update.captureObjectIds !== undefined) {
       // 只覆盖列出的对象在目标状态关键帧上的快照，不触碰其余对象或其他时间点。
-      const current = useCameraStageStore.getState()
+      const current = cameraStageProjectStore(projectId).getState()
       const stateKeyframes = captureObjectsIntoStateKeyframe(current.stateKeyframes, stateKeyframeId, current.objects, update.captureObjectIds)
-      useCameraStageStore.setState({ stateKeyframes, animation: compileStateKeyframesToAnimation(stateKeyframes, current.objects) })
+      cameraStageProjectStore(projectId).setState({ stateKeyframes, animation: compileStateKeyframesToAnimation(stateKeyframes, current.objects) })
     }
-    await saveCurrentProject()
+    await saveCameraStageProjectRuntime(projectId)
     return { projectId, stateKeyframeId, status: 'updated', undoToken }
   },
+}
+
+export const cameraStageApplicationService = {
+  ...implementation,
+  placeObject: bindCameraStageProjectOperation(implementation.placeObject, (input) => input.projectId),
+  updatePlayback: bindCameraStageProjectOperation(implementation.updatePlayback, (projectId) => projectId),
+  updateObject: bindCameraStageProjectOperation(implementation.updateObject, (projectId) => projectId),
+  updateAnimatableProperties: bindCameraStageProjectOperation(implementation.updateAnimatableProperties, (projectId) => projectId),
+  applyObjectPosePreset: bindCameraStageProjectOperation(implementation.applyObjectPosePreset, (projectId) => projectId),
+  updateTrajectory: bindCameraStageProjectOperation(implementation.updateTrajectory, (projectId) => projectId),
+  duplicateObject: bindCameraStageProjectOperation(implementation.duplicateObject, (projectId) => projectId),
+  deleteObject: bindCameraStageProjectOperation(implementation.deleteObject, (projectId) => projectId),
+  updateStateKeyframe: bindCameraStageProjectOperation(implementation.updateStateKeyframe, (projectId) => projectId),
 }

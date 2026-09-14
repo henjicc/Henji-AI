@@ -155,6 +155,7 @@ export const imageEditNodeDefinition: CanvasNodeDefinition<ImageEditNodeData> = 
 };
 
 export const panoramaViewerNodeDefinition: CanvasNodeDefinition<PanoramaViewerNodeData> = {
+  defaultParameterFields: ['viewMode', 'viewportAspectRatio', 'cameraView'],
   type: CANVAS_NODE_TYPES.panoramaViewer,
   menuLabelKey: 'node.menu.panoramaViewer',
   menuIcon: 'panorama',

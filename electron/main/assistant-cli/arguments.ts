@@ -5,6 +5,7 @@ const DEFAULT_TIMEOUT_MS = 10 * 60 * 1_000
 const MAX_TIMEOUT_MS = 60 * 60 * 1_000
 
 export interface AssistantCliOptions {
+  engine?: 'legacy' | 'pi'
   goal: string
   approvalMode: AgentApprovalMode
   captureMode: AgentTraceCaptureMode
@@ -63,6 +64,7 @@ export function parseAssistantCliArguments(argv: string[] = process.argv.slice(1
   let requireVerifiedWrite = false
   let timeoutMs = DEFAULT_TIMEOUT_MS
   let threadId: string | undefined
+  let engine: AssistantCliOptions['engine'] = 'pi'
 
   for (let index = 0; index < argv.length; index += 1) {
     const argument = argv[index]
@@ -73,6 +75,13 @@ export function parseAssistantCliArguments(argv: string[] = process.argv.slice(1
         goal = requireValue(argv, index, argument).trim()
         index += 1
         break
+      case '--engine': {
+        const value = requireValue(argv, index, argument)
+        if (value !== 'pi' && value !== 'legacy') throw new Error('参数 --engine 仅支持 pi 或 legacy')
+        engine = value
+        index += 1
+        break
+      }
       case '--approval':
         approvalMode = parseApprovalMode(requireValue(argv, index, argument))
         index += 1
@@ -112,7 +121,7 @@ export function parseAssistantCliArguments(argv: string[] = process.argv.slice(1
 
   return {
     goal, approvalMode, captureMode, printTrace, awaitGeneration, visible,
-    requireVerifiedWrite, timeoutMs, ...(threadId ? { threadId } : {}),
+    requireVerifiedWrite, timeoutMs, ...(threadId ? { threadId } : {}), ...(engine ? { engine } : {}),
   }
 }
 
@@ -121,16 +130,18 @@ export function formatAssistantCliHelp(): string {
     '用法：npm run assistant:cli -- --goal "任务描述" [选项]',
     '',
     '选项：',
+    '  --engine <pi|legacy>                            运行引擎，默认 pi；legacy 仅用于旧自研助手',
     '  --approval <ask|assistant_decides|full_access>  审批策略，默认 assistant_decides',
-    '  --trace <summary|detailed>                      追踪捕获级别，默认 summary',
-    '  --print-trace                                   在运行结束后输出已脱敏的详细追踪',
-    '  --await-generation                              保持无窗口宿主并等待本次提交的生成任务结束',
+    '  --trace <summary|detailed>                      legacy 追踪捕获级别；Pi 使用统一 embedded_agent 日志',
+    '  --print-trace                                   legacy：在运行结束后输出已脱敏的详细追踪',
+    '  --await-generation                              legacy：保持宿主并等待本次提交的生成任务结束',
     '  --visible                                       显示真实 Electron 窗口，便于观察执行过程',
-    '  --require-verified-write                        要求至少一项应用写入已封存并通过结构化验证',
+    '  --require-verified-write                        legacy：要求应用写入封存并通过结构化验证',
     '  --timeout <毫秒>                                最长运行时间，默认 600000，最大 3600000',
     '  --thread <标识>                                 指定运行线程标识',
     '  --help                                          显示本帮助',
     '',
-    '输出为 JSONL；详细追踪仅保存在本机，且会包含已脱敏的提示词与模型响应。',
+    '输出为 JSONL。Pi 默认只读，回复完成不代表业务结果验收；用 runId 查询统一日志。',
+    'legacy 详细追踪仅保存在本机，且会包含已脱敏的提示词与模型响应。',
   ].join('\n')
 }

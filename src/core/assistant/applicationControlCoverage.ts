@@ -148,10 +148,10 @@ function surfaceObservation(surfaceId: string): ApplicationSurfaceObservationCov
 }
 
 const publicSource = {
-  setting: ['src/features/settings/application-control/', 'settings.entry', '5.1'],
+  setting: ['src/features/settings/application-control/', 'settings.registry', '5.1'],
   surface: ['src/features/navigation/application/surfaceCatalog.ts', 'application.surface', '5.1'],
-  model: ['packages/ai-sdk/src/catalog/**.model.ts + src/models/presentation/**.presentation.ts', 'model.definition', '5.4'],
-  image_edit_tool: ['src/features/imageEdit/tools/registry.ts', 'image_edit.operation', '5.3'],
+  model: ['packages/ai-sdk/src/catalog/**.model.ts + src/models/presentation/**.presentation.ts', 'generation.model', '5.4'],
+  image_edit_tool: ['src/features/imageEdit/tools/registry.ts', 'image_edit.document', '5.3'],
   camera_stage_property: ['src/features/cameraStage/domain/animatableProps.ts', 'camera_stage.object', '4.1'],
   canvas_node: ['src/features/canvas/domain/nodeRegistry.ts', 'canvas.node', '5.2'],
 } as const
@@ -172,9 +172,10 @@ function publicControls(input: PublicControlInputs): ApplicationPublicControlCov
       id,
       source,
       targetEntityType,
-      targetPropertyId: kind === 'setting' ? `settings.${id}` : undefined,
+      targetPropertyId: kind === 'setting' ? id : undefined,
       migrationTask,
-      status: 'covered' as const,
+      // 注册清点不等于执行验收；可调用性由外部覆盖门禁与结果测试独立核对。
+      status: 'registered' as const,
     }))
   })
 }

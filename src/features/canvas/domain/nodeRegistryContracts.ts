@@ -96,6 +96,8 @@ export interface CanvasNodeDefinition<TData extends CanvasNodeData = CanvasNodeD
   ports?: NodePorts;
   /** 生成类节点的生成规格 */
   generation?: NodeGenerationSpec;
+  /** 可保存为新节点默认参数的 data 字段；不声明输入、结果或运行态。生成节点的 modelId/params 自动按模型 schema 筛选。 */
+  defaultParameterFields?: readonly string[];
   /** 提取该节点对下游的媒体输出（参数为宽类型以保证注册表协变，内部自行收窄） */
   getOutputs?: (data: CanvasNodeData, sourceHandle?: string) => NodeMediaOutput[];
   /** 提取该节点对下游参数端口的标量值输出（数值/源节点专用） */

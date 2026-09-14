@@ -138,7 +138,7 @@ const selectAsset = defineApplicationCapability({
   domain: 'assets',
   aliases: ['选中素材', '定位素材', 'select asset'],
   readOnly: false,
-  control: capabilityControl('update', ['asset'], { revisionScopes: ['assets'] }),
+  control: capabilityControl('navigate', ['asset'], { revisionScopes: ['assets'] }),
   risk: 'R0',
   dataClasses: ['C1'],
   permission: 'assets:selection',
@@ -159,6 +159,7 @@ const selectAsset = defineApplicationCapability({
 
 const setAssetTags = defineApplicationCapability({
   id: 'set_asset_tags',
+  external: { kind: 'delegate', entityType: 'asset', operations: ['write'], reason: '普通数据操作由正式实体描述及 change_application_entities 通用事务承接，不另增同功能工具。', propertyIds: ['asset.tags'] },
   version: 1,
   title: '设置素材标签',
   description: '覆盖明确素材的标签集合，不修改原始文件。',
@@ -200,6 +201,8 @@ function defineAssetLibraryMembershipCapability(
   const adding = status === 'added'
   return defineApplicationCapability({
     id,
+    external: { kind: 'delegate', entityType: 'asset', operations: ['write'], propertyIds: ['asset.library_refs'],
+      reason: '集合成员关系由 asset.library_refs 的 append/remove 与通用实体事务维护。' },
     version: 1,
     title: adding ? '添加素材到集合' : '从集合移除素材',
     description: adding
@@ -243,6 +246,7 @@ function defineAssetLibraryMembershipCapability(
 
 const deleteAsset = defineApplicationCapability({
   id: 'delete_asset',
+  resolveOperationTargets: input => [{ kind: 'asset', id: input.assetId }],
   version: 1,
   title: '删除素材',
   description: '永久删除明确素材记录及其受控文件引用。',

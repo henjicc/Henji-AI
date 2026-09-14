@@ -10,6 +10,10 @@ import { CANVAS_ENTITY_TYPES as ENTITY } from './canvasReflection'
  * 画布是全项目覆盖最好的一块——节点与连线两侧都声明了 collectionWrite，专用能力也齐。
  * 建这份账主要是把剩下的几处缺口钉住，并把大量 ReactFlow 中间态明确排除掉，
  * 免得下一个人误以为它们也该注册。
+ *
+ * 节点菜单「设置默认值」由 NodeParameterDefaults 保存为设备个人偏好，明确不向助手开放：
+ * 它改变用户未来所有工程的新建习惯，超出当前工程编辑权限；助手创建节点仍应显式提供任务参数。
+ * 此动作不修改 canvasStore、当前工程或节点运行状态，不登记为工程属性写入。
  */
 
 type State = ReturnType<typeof useCanvasStore.getState>

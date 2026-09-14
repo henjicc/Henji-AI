@@ -1,8 +1,11 @@
+import { readGenerationSubmission } from './generation-submissions'
 import { getDb } from '../db'
 
 const TTL_MS = 24 * 60 * 60 * 1000
 
 export interface PendingResultPayload {
+  status?: string
+  taskId?: string
   url?: string
   filePath?: string
   createdFilePaths?: string[]
@@ -35,9 +38,9 @@ export function consumePendingResult(serverTaskId: string): PendingResultPayload
     WHERE server_task_id = ? AND completed_at > ?
   `).get(serverTaskId.trim(), cutoff) as PendingResultRow | undefined
 
-  if (!row) return null
+  if (!row) return readGenerationSubmission(serverTaskId)
 
-  db.prepare('DELETE FROM pending_task_results WHERE server_task_id = ?').run(serverTaskId.trim())
+  // 读取不是确认保存；保留回执直到过期清理，重载可再次核对。
 
   try {
     return JSON.parse(row.result_json) as PendingResultPayload

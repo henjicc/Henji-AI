@@ -1,3 +1,4 @@
+import { createSharedMemoryRegistration, SharedMemoryExecutor } from '../application/sharedMemoryReflection'
 import {
   ApplicationControlExecutionEngine,
   ApplicationReflectionRegistry,
@@ -107,7 +108,19 @@ function registerAll(
 ): void {
   for (const registration of registrations) {
     try {
-      target.register(registration)
+      // 应用公共领域共用原声明；助手运行、记忆与诊断不对本地适配器开放。
+      const expose = <T extends { exposures: Array<'ui' | 'assistant' | 'local_adapter'> }>(value: T): T => (
+        label === 'assistant_runtime'
+          ? { ...value, exposures: value.exposures.filter((exposure) => exposure !== 'local_adapter') }
+          : value.exposures.includes('assistant')
+            ? { ...value, exposures: [...new Set([...value.exposures, 'local_adapter' as const])] }
+            : value
+      )
+      target.register({
+        ...registration,
+        entity: expose(registration.entity),
+        properties: registration.properties.map(expose),
+      })
     } catch (error) {
       const entityId = registration.entity?.id ?? '(未知实体)'
       throw new Error(
@@ -120,6 +133,7 @@ function registerAll(
 export function getApplicationReflectionRegistry(): ApplicationReflectionRegistry {
   if (registry) return registry
   const next = new ApplicationReflectionRegistry(APPLICATION_CAPABILITY_CATALOG_VERSION)
+  registerAll(next, 'shared_memory', [createSharedMemoryRegistration()])
   registerAll(next, 'settings', [createSettingsReflectionRegistration()])
   registerAll(next, 'assets', createAssetReflectionRegistrations(
     () => assetMutationDependencies.readRevision()
@@ -152,6 +166,7 @@ export function collectionWritersByEntityType(
   const effect = operation === 'create' ? 'create' : 'delete'
   const writers = new Map<string, string[]>()
   for (const capability of BUILTIN_APPLICATION_CAPABILITIES) {
+    if (capability.external) continue
     for (const impact of capability.control?.impacts ?? []) {
       if (impact.effect !== effect) continue
       for (const entityType of impact.entityTypes) {
@@ -175,6 +190,7 @@ export function getApplicationControlExecutionEngine(): ApplicationControlExecut
       (operation === 'create' ? creators : removers).get(entityType) ?? []
     ),
   })
+  next.registerMutationExecutor(new SharedMemoryExecutor())
   next.registerMutationExecutor(new SettingsMutationExecutor())
   next.registerMutationExecutor(new CanvasNodeMutationExecutor())
   next.registerMutationExecutor(new CanvasProjectMutationExecutor())

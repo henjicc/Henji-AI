@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { applicationVerificationResultSchema } from '../../application-control/transactions'
 
 import type { ApplicationCapabilityDefinition } from '../applicationCapabilities'
 import type { HostScope } from '../hostContracts'
@@ -268,6 +269,7 @@ const changeEntities = defineApplicationCapability({
   outputSchema: capabilityOutputSchema({
     status: z.literal('completed'),
     transactionRef: z.string(),
+    verification: applicationVerificationResultSchema.optional(),
     resultingRevisions: z.record(z.string(), z.number().int().nonnegative()),
     resultRefs: z.array(z.record(z.string(), z.unknown())),
     effects: z.array(z.record(z.string(), z.unknown())),

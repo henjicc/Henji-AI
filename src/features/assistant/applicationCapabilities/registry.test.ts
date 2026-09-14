@@ -42,7 +42,7 @@ describe('application capability handler coverage', () => {
     ]
     expect(new Set(migrated.map((definition) => definition.id)).size).toBe(migrated.length)
     for (const definition of migrated) {
-      expect(BUILTIN_APPLICATION_CAPABILITY_REGISTRY.get(definition.id)).toBe(definition)
+      expect(BUILTIN_APPLICATION_CAPABILITY_REGISTRY.get(definition.id)).toMatchObject(definition)
       expect(definition.permission).not.toBe('')
       expect(definition.successEvidence.length).toBeGreaterThan(0)
       expect(definition.failureRecovery.length).toBeGreaterThan(0)

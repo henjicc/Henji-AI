@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { useCameraStageStore } from '@/features/cameraStage/store/cameraStageStore'
 import { useAssetLibraryStore } from '@/features/assets/store/assetLibraryStore'
 import { useCanvasStore } from '@/stores/canvasStore'
+import { useProjectStore } from '@/stores/projectStore'
 import { useNavigationStore } from '@/stores/navigationStore'
 import { createEmptyImageEditDocument } from '@/core/imageEdit'
 import {
@@ -15,7 +16,7 @@ import { useImageEditSessionStore } from '@/features/imageEdit/store/imageEditSe
 import { ImageEditCommandBusV3 } from '@/features/imageEdit/v3/application/imageEditCommandBus'
 import { registerImageEditV3LiveSession } from '@/features/imageEdit/v3/application/imageEditLiveSessionRegistry'
 
-import { getHostScopeRevisions, retainHostContextTracking } from './hostContext'
+import { createHostContextSnapshot, getHostScopeRevisions, retainHostContextTracking } from './hostContext'
 import { notifyApplicationDomainChanged } from '@/core/application-control/domainChangeSignal'
 
 /**
@@ -65,6 +66,40 @@ describe('宿主作用域 revision', () => {
     expect(after.canvas).toBe(before.canvas)
     expect(after.assets).toBe(before.assets)
     expect(after.surface).toBeGreaterThan(before.surface)
+  })
+
+  it('无选中节点时快照固定原视口落点，后续平移不改变已发送快照且不推进数据基线', () => {
+    const canvas = useCanvasStore.getState()
+    const project = useProjectStore.getState()
+    const navigation = useNavigationStore.getState()
+    try {
+      useNavigationStore.setState({ activeWorkspace: 'nodes' })
+      useProjectStore.setState({ currentProjectId: 'origin-project' })
+      useCanvasStore.setState({ selectedNodeId: null, currentViewport: { x: 100, y: 200, zoom: 2 }, canvasViewportSize: { width: 1000, height: 800 } })
+      const before = getHostScopeRevisions().canvas
+      const sent = createHostContextSnapshot()
+      expect(sent.project.viewportNodePosition).toEqual({ x: 90, y: -20 })
+      useCanvasStore.setState({ currentViewport: { x: 900, y: 600, zoom: 1 } })
+      expect(createHostContextSnapshot().project.viewportNodePosition).toEqual({ x: -510, y: -320 })
+      expect(sent.project.viewportNodePosition).toEqual({ x: 90, y: -20 })
+      expect(getHostScopeRevisions().canvas).toBe(before)
+      useCanvasStore.setState({ selectedNodeId: 'selected' })
+      expect(createHostContextSnapshot().project.viewportNodePosition).toBeUndefined()
+      expect(createHostContextSnapshot().project.selectedNodeIsReference).toBe(false)
+      useCanvasStore.setState({ nodes: [{ id: 'selected', type: 'uploadNode', position: { x: 0, y: 0 }, data: { imageUrl: 'C:/reference.png' } }] })
+      expect(createHostContextSnapshot().project.selectedNodeIsReference).toBe(true)
+      useCanvasStore.getState().updateNodeData('selected', { isGenerating: true })
+      expect(createHostContextSnapshot().project.selectedNodeIsReference).toBe(false)
+      expect(createHostContextSnapshot().project.selectedNodeSummary).toEqual({ type: 'uploadNode', name: 'uploadNode', isGenerating: true })
+      useCanvasStore.setState({ nodes: [{ id: 'selected', type: 'imageNode', position: { x: 0, y: 0 }, data: { prompt: '待生成' } }] })
+      expect(createHostContextSnapshot().project.selectedNodeIsReference).toBe(false)
+      useCanvasStore.setState({ selectedNodeId: null })
+      useNavigationStore.setState({ activeWorkspace: 'generation' })
+      expect(createHostContextSnapshot().project.viewportNodePosition).toBeUndefined()
+      expect(createHostContextSnapshot().project.selectedNodeSummary).toBeUndefined()
+    } finally {
+      useCanvasStore.setState(canvas); useProjectStore.setState(project); useNavigationStore.setState(navigation)
+    }
   })
 
   it('正式素材写入信号推进 assets，而素材库纯界面状态仍不推进', () => {

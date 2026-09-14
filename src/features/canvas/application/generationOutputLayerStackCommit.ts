@@ -10,6 +10,7 @@ import { runCanvasTransaction } from './canvasBatchService';
 import { runCanvasMutationStage, retainsCanvasMutation } from './canvasPersistenceService';
 import {
   GenerationOutputApplicationError,
+  GenerationOutputRollbackError,
   type CommitCanvasGenerationOutputsInput,
   type CommitCanvasGenerationOutputsResult,
 } from './generationOutputApplicationContracts';
@@ -18,6 +19,7 @@ import {
   rollbackCreatedMultiLayerDocument,
 } from './multiLayerDocumentNodeGenerationAdapter';
 import type { MultiLayerDocumentNodeProjection } from './multiLayerDocumentNodeApplicationContracts';
+import type { CanvasTransactionRuntime } from './canvasPersistenceService';
 
 const logger = createLogger('features.canvas.generation-output');
 
@@ -25,7 +27,7 @@ export async function commitPreparedLayerStack(input: CommitCanvasGenerationOutp
   completionId: string;
   ordered: CanvasGenerationOutputItem[];
   projectId: string;
-}): Promise<CommitCanvasGenerationOutputsResult> {
+}, context?: { runtime: CanvasTransactionRuntime; assertCurrent: () => void }): Promise<CommitCanvasGenerationOutputsResult> {
   if (!input.preparedLayerStack) {
     throw new GenerationOutputApplicationError('INVALID_INPUT', '图层栈必须先完成下载、像素验证与合成');
   }
@@ -48,7 +50,8 @@ export async function commitPreparedLayerStack(input: CommitCanvasGenerationOutp
   if (!placeholderNodeId) {
     throw new GenerationOutputApplicationError('INVALID_INPUT', '图层栈提交必须提供结果占位节点');
   }
-  const canvas = useCanvasStore.getState();
+  const store = context?.runtime.store ?? useCanvasStore;
+  const canvas = store.getState();
   const placeholder = canvas.nodes.find((node) => node.id === placeholderNodeId);
   if (!placeholder || placeholder.type !== input.resultNodeType) {
     throw new GenerationOutputApplicationError('NOT_FOUND', '图层栈结果占位节点已不存在');
@@ -78,12 +81,13 @@ export async function commitPreparedLayerStack(input: CommitCanvasGenerationOutp
     const createDocument = input.createLayerStackDocument ?? createMultiLayerDocumentFromLayerStack;
     // 创建一旦开始就完成到可补偿边界；之后再观察取消并按精确 revision 删除。
     projection = await createDocument({ nodeId: placeholderNodeId, document });
+    context?.assertCurrent();
     if (input.signal?.aborted) {
       throw new GenerationOutputApplicationError('CONFLICT', '图层栈提交已取消');
     }
     const committedProjection = projection;
-    const transaction = await runCanvasTransaction(input.projectId, 1, async (options) => runCanvasMutationStage(options, () => {
-      const latest = useCanvasStore.getState();
+    const transaction = await runCanvasTransaction(input.projectId, 1, (options) => runCanvasMutationStage(options, () => {
+      const latest = store.getState();
       const latestPlaceholder = latest.nodes.find((node) => node.id === placeholderNodeId);
       if (!latestPlaceholder || latestPlaceholder.type !== input.resultNodeType) {
         throw new GenerationOutputApplicationError('CONFLICT', '提交前结果占位节点已被删除');
@@ -117,7 +121,7 @@ export async function commitPreparedLayerStack(input: CommitCanvasGenerationOutp
         resultNodeIds: [placeholderNodeId],
         groupNodeId: null,
       }];
-    }), { completionId: input.completionId, strategy: 'layer-stack' });
+    }), { completionId: input.completionId, strategy: 'layer-stack' }, context?.runtime);
     if (transaction.appliedOperations.length !== 1) {
       throw new GenerationOutputApplicationError('CONFLICT', '图层栈事务未完整应用');
     }
@@ -147,12 +151,12 @@ export async function commitPreparedLayerStack(input: CommitCanvasGenerationOutp
       projectId: input.projectId,
       context: { completionId: input.completionId, layerCount: document.layers.length },
     });
-    throw error;
-  } finally {
     if (projection && !ownershipTransferred) {
       const rollbackDocument = input.rollbackLayerStackDocument ?? rollbackCreatedMultiLayerDocument;
+      let rollbackConfirmed = false;
       try {
         const deleted = await rollbackDocument(projection);
+        rollbackConfirmed = deleted;
         if (!deleted) {
           logger.error(
             '图层栈文档补偿未删除目标 revision',
@@ -181,6 +185,8 @@ export async function commitPreparedLayerStack(input: CommitCanvasGenerationOutp
           },
         });
       }
+      if (!rollbackConfirmed) throw new GenerationOutputRollbackError(error);
     }
+    throw error;
   }
 }

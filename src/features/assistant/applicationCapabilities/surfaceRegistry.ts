@@ -24,8 +24,12 @@ export function openApplicationSurface(
   surfaceId: string,
   correlation: SurfaceLogContext = {}
 ): Record<string, unknown> {
-  openSurface(surfaceId, correlation)
-  return { surfaceId }
+  const opened = openSurface(surfaceId, correlation)
+  return { surfaceId, verification: {
+    verified: opened.status === 'opened' || opened.status === 'already_active',
+    condition: '导航服务已回读确认目标页面处于打开状态',
+    target: { kind: 'application.surface', id: surfaceId },
+  } }
 }
 
 export function closeApplicationSurface(

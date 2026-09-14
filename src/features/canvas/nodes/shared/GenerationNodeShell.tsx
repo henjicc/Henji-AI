@@ -102,6 +102,7 @@ export const GenerationNodeShell = memo(({
   prepareRuntimeParams,
   prepareGenerationRequest,
   commitGenerationResult,
+  supportsBackgroundCompletion,
   additionalInputRows,
   layoutMode = 'stacked',
   workbenchStage,
@@ -341,6 +342,7 @@ export const GenerationNodeShell = memo(({
     prepareRuntimeParams,
     prepareGenerationRequest,
     commitGenerationResult,
+    supportsBackgroundCompletion,
     setPromptInvalid,
     t,
   });

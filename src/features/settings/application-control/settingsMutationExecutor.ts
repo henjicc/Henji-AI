@@ -7,6 +7,7 @@ import type {
   ApplicationPlannedStep,
 } from '@/core/application-control'
 import { createLogger } from '@/core/logging'
+import { ApplicationPersistenceBoundaryFailure, ApplicationPersistenceFailure } from '@/core/application-control/execution/persistence'
 
 import { getSettingsRegistryRevision, listApplicationSettingDefinitions } from './settingsApplicationService'
 import { SETTINGS_ENTITY_TYPE } from './settingsReflection'
@@ -115,12 +116,29 @@ export class SettingsMutationExecutor implements ApplicationMutationExecutor {
         cascadedPropertyIds[cascadedPropertyIds.length - 1] = stepCascades
       }
     } catch (error) {
-      for (const stepValues of completed.reverse()) {
-        for (const item of stepValues.reverse()) definitions.get(item.id)?.write(item.before)
+      const restoreErrors: unknown[] = []
+      for (const stepValues of [...completed].reverse()) {
+        for (const item of [...stepValues].reverse()) {
+          try { definitions.get(item.id)?.write(item.before) } catch (failure) { restoreErrors.push(failure) }
+        }
       }
       logger.error('设置事务失败', error, {
         event: 'settings.transaction.apply.failed', requestId: context.requestId,
       })
+      if (restoreErrors.length > 0) {
+        // persist 先改内存再保存；恢复写盘失败时不得把失败步骤计为“未执行”。
+        const revision = getSettingsRegistryRevision()
+        const ref = { kind: this.entityType, id: 'singleton', revision }
+        const partial = completed.map((items): ApplicationCompletedStepResult => ({
+          status: 'completed', resultingRevisions: { settings: revision }, directRefs: [ref],
+          evidence: items.map((item) => ({ kind: 'property_value', target: ref, fact: `设置 ${item.id} 已尝试修改及恢复，保存尚未确认。`,
+            data: definitions.get(item.id)?.read(), capturedAt: new Date().toISOString() })),
+        }))
+        throw new ApplicationPersistenceBoundaryFailure(new ApplicationPersistenceFailure('设置修改后的恢复保存未确认；内存已尽量恢复，磁盘内容需要核对。', {
+          memoryState: completed.some((items) => items.some((item) => JSON.stringify(definitions.get(item.id)?.read()) !== JSON.stringify(item.before))) ? 'modified' : 'preserved', persistenceState: 'unconfirmed', stage: 'projection',
+          recovery: { capabilityId: 'read_application_entity', target: ref, replayMutation: false },
+        }, error), partial)
+      }
       throw error
     }
     const revision = getSettingsRegistryRevision()

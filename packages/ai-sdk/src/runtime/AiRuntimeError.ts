@@ -1,7 +1,7 @@
 export class AiRuntimeError extends Error {
   readonly code: string
 
-  constructor(code: string, message: string) {
+  constructor(code: string, message: string, readonly details?: Readonly<Record<string, unknown>>) {
     super(`[${code}] ${message}`)
     this.name = 'AiRuntimeError'
     this.code = code

@@ -196,7 +196,7 @@ const WindowControls: React.FC<WindowControlsProps> = ({ activeTab = 'generation
           </div>
 
           <div className="absolute right-3 top-1/2 flex -translate-y-1/2 items-center gap-1" style={noDragRegionStyle} data-window-nodrag>
-            <UiIconButton
+            {onAssistantClick && <UiIconButton
               type="button"
               active={assistantOpen}
               showBorder={false}
@@ -206,7 +206,7 @@ const WindowControls: React.FC<WindowControlsProps> = ({ activeTab = 'generation
               title="智能助手"
             >
               <Sparkles className="h-4 w-4" />
-            </UiIconButton>
+            </UiIconButton>}
             <UiIconButton
               type="button"
               showBorder={false}
@@ -241,7 +241,7 @@ const WindowControls: React.FC<WindowControlsProps> = ({ activeTab = 'generation
             style={noDragRegionStyle}
             data-window-nodrag
           >
-            <UiIconButton
+            {onAssistantClick && <UiIconButton
               type="button"
               active={assistantOpen}
               showBorder={false}
@@ -251,7 +251,7 @@ const WindowControls: React.FC<WindowControlsProps> = ({ activeTab = 'generation
               title="智能助手"
             >
               <Sparkles className="h-4 w-4" />
-            </UiIconButton>
+            </UiIconButton>}
             <UiIconButton
               type="button"
               onClick={handleOpenSettings}

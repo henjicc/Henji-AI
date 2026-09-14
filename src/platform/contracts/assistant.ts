@@ -1,3 +1,4 @@
+import type { SharedMemorySnapshot, SharedMemoryUpdate } from '@/core/assistant/memory'
 import type {
   FrontendToolAcknowledgement,
   FrontendToolCancel,
@@ -70,6 +71,8 @@ export interface AssistantPlatform {
   uninstallSkill(name: string): Promise<void>
   setSkillEnabled(update: AssistantSkillEnabledUpdate): Promise<AssistantSkillManifest>
   openSkillsDirectory(): Promise<string>
+  getSharedMemory(): Promise<SharedMemorySnapshot>
+  updateSharedMemory(update: SharedMemoryUpdate): Promise<SharedMemorySnapshot>
   getMemoryState(): Promise<AgentMemoryState>
   updateMemorySettings(update: AgentMemorySettingsUpdate): Promise<AgentMemorySettings>
   updateMemory(update: AgentMemoryUpdate): Promise<AgentMemoryRecord>

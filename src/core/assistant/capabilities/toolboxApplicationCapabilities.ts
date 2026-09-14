@@ -145,6 +145,8 @@ const createImageEditPreview = defineApplicationCapability({
   }),
   concurrencyKey: 'image_edit',
   resolveConcurrencyKey: (input) => `image_edit:${input.sourceRef.kind}:${input.sourceRef.id}`,
+  resolveOperationTargets: (input) => [input.sourceRef],
+  resolveOperationWriteTargets: (_input, operationId) => [{ kind: 'image_edit.preview', id: `pending:${operationId}` }],
   resolveTargetIds: (input) => ({ sourceKind: input.sourceRef.kind, sourceId: input.sourceRef.id }),
   preview: (input) => ({
     title: '创建图片编辑预览',
@@ -199,9 +201,11 @@ const commitImageEdit = defineApplicationCapability({
     previewRef: z.string(),
     assetId: z.string(),
     status: z.literal('committed'),
+    resultRefs: z.array(z.object({ kind: z.literal('asset'), id: z.string().min(1) }).strict()),
   }),
   concurrencyKey: 'image_edit',
   resolveConcurrencyKey: (input) => `image_edit:${input.previewRef}`,
+  resolveOperationTargets: (input) => [{ kind: 'image_edit.preview', id: input.previewRef }],
   resolveTargetIds: (input) => ({ previewRef: input.previewRef }),
   preview: (input) => ({
     title: '保存图片编辑结果',

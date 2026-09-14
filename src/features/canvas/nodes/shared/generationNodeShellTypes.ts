@@ -58,6 +58,8 @@ export interface GenerationNodeShellProps {
   commitGenerationResult?: (
     context: GenerationNodeResultCommitContext,
   ) => Promise<GenerationNodeResultCommitResult>
+  /** 自定义提交器已使用原项目运行时，并支持取消。 */
+  supportsBackgroundCompletion?: boolean
   /** 复用标准生成壳时追加的能力语义行；只放产品设置，不复制模型 schema 参数。 */
   additionalInputRows?: ReactNode
   /** 有直接可视化操作的节点使用 workbench；纯参数处理使用 stacked。 */

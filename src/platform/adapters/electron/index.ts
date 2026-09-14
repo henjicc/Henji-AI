@@ -21,9 +21,13 @@ import { createElectronLogging } from './logging'
 import { createElectronUpdater } from './updater'
 import { createElectronAssetLibrary } from './assetLibrary'
 import { createElectronAssistant } from './assistant'
+import { createElectronEmbeddedAgent } from './embeddedAgent'
+import { createElectronMcp } from './mcp'
 
 export function createElectronPlatform(): PlatformRuntime {
   return {
+    embeddedAgent: createElectronEmbeddedAgent(),
+    mcp: createElectronMcp(),
     aiRuntime: createElectronAiRuntime(),
     llmRuntime: createElectronLlmRuntime(),
     db: createElectronDb(),

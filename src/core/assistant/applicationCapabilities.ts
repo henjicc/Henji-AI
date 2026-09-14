@@ -66,12 +66,24 @@ export const applicationCapabilityDescriptorSchema = z.object({
   }).strict().optional(),
   maxCallsPerRun: z.number().int().positive().optional(),
   available: z.boolean().default(true),
+  /** 默认公开前端业务能力；已有通用实体入口或内部恢复必须在原声明中说明。 */
+  external: z.discriminatedUnion('kind', [
+    z.object({ kind: z.literal('delegate'), entityType: z.string().min(1),
+      operations: z.array(z.enum(['read', 'write', 'create', 'remove'])).min(1),
+      propertyIds: z.array(z.string().min(1)).optional(), reason: z.string().min(12) }).strict(),
+    z.object({ kind: z.literal('internal'), reason: z.string().min(12) }).strict(),
+    z.object({ kind: z.literal('recovery'), reason: z.string().min(12) }).strict(),
+  ]).optional(),
   control: z.object({
     execution: applicationOperationExecutionSchema,
     impacts: z.array(applicationOperationImpactSchema).min(1).max(32),
   }).strict(),
 }).strict()
 export type ApplicationCapabilityDescriptor = z.infer<typeof applicationCapabilityDescriptorSchema>
+
+export function isNavigationOnlyCapability(definition: Pick<ApplicationCapabilityDescriptor, 'readOnly' | 'control'>): boolean {
+  return !definition.readOnly && definition.control.impacts.every(impact => impact.effect === 'navigate')
+}
 
 export interface ApplicationCapabilityDefinition<TInput = unknown, TOutput = unknown>
   extends Omit<ApplicationCapabilityDescriptor, 'available' | 'control'> {
@@ -88,6 +100,11 @@ export interface ApplicationCapabilityDefinition<TInput = unknown, TOutput = unk
   resolveRequiredScopes?(input: TInput): HostScope[]
   resolveConcurrencyKey?(input: TInput): string
   resolveTargetIds?(input: TInput): Record<string, string>
+  /** 派发前绑定的正式目标，供独立调用方持久记录和基线核对。 */
+  resolveOperationTargets?(input: TInput): Array<{ kind: string; id: string }>
+  resolveOperationWriteTargets?(input: TInput, operationId: string): Array<{ kind: string; id: string }>
+  /** 仅向集合追加独立对象的容器；追加之间兼容，覆盖、删除与保存失败仍互斥。 */
+  resolveOperationAppendTargets?(input: TInput): Array<{ kind: string; id: string }>
   resolveDataClasses?(output: TOutput): AgentDataClass[]
   summarize?(output: TOutput): string
   /**
@@ -124,6 +141,8 @@ export interface ApplicationCapabilityDefinition<TInput = unknown, TOutput = unk
    * 放在“校验生成参数”之前；普通直接工具调用仍由各自现有守卫负责。
    */
   executionPrerequisites?: string[]
+  /** 付费生成的正式准备能力；MCP／Pi 从声明派生授权与预算预留，不接受调用方自报价。 */
+  paidGenerationPreparation?: string
   /**
    * 算法型写能力的机器可执行验证下限。注册表会拒绝缺失该契约的写能力；
    * 文本 successEvidence 不能替代它。
@@ -159,11 +178,15 @@ const NON_DESCRIPTOR_KEYS = [
   'resolveRequiredScopes',
   'resolveConcurrencyKey',
   'resolveTargetIds',
+  'resolveOperationTargets',
+  'resolveOperationWriteTargets',
+  'resolveOperationAppendTargets',
   'resolveDataClasses',
   'summarize',
   'projectForHistory',
   'inputExamples',
   'executionPrerequisites',
+  'paidGenerationPreparation',
   'verificationContract',
   'countsTowardCallLimit',
   'preview',
@@ -201,6 +224,10 @@ export class ApplicationCapabilityRegistry {
     if (aiInputSchema.additionalProperties !== false) {
       throw new Error(`应用能力 AI schema 必须拒绝未声明字段：${definition.id}`)
     }
+    if (definition.paidGenerationPreparation !== undefined && (
+      definition.readOnly || !definition.paidGenerationPreparation.trim()
+      || !definition.executionPrerequisites?.includes(definition.paidGenerationPreparation)
+    )) throw new Error(`付费生成必须声明正式准备前置能力：${definition.id}`)
     const properties = aiInputSchema.properties
     if (properties && typeof properties === 'object') {
       const forbiddenInputs = ['patch', 'storePatch', 'executeScript', 'script', 'code', 'source']
@@ -228,7 +255,10 @@ export class ApplicationCapabilityRegistry {
     }
     this.definitions.set(
       definition.id,
-      definition as unknown as ApplicationCapabilityDefinition
+      { ...definition, ...(!definition.resolveOperationTargets && isNavigationOnlyCapability(definition) ? {
+        // 视图切换有独立的在途身份，不借用工程写锁；原目标仍由领域导航服务校验。
+        resolveOperationTargets: () => [{ kind: 'application.navigation', id: 'current' }],
+      } : {}) } as unknown as ApplicationCapabilityDefinition
     )
   }
 

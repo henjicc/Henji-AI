@@ -11,9 +11,9 @@ on:
       - main
   workflow_dispatch:
 
-# 同一分支/标签的重复推送只保留最新一次运行
+# 同一事件下的重复运行只保留最新一次；普通推送不能取消手动安装包构建。
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.ref }}-${{ github.event_name }}
   cancel-in-progress: true
 
 env:

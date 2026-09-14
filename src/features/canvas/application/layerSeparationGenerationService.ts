@@ -1,13 +1,19 @@
+import type { GenerationNodeExecutionOptions } from './generationNodeExecutor';
+import type { GenerationNodeResultCommitContext, GenerationNodeRuntimePreparationContext } from '../nodes/shared/generationNodeExecutionTypes';
 import type { StructuredGenerationLayerStackV1 } from '@henjicc/ai-sdk';
 
 import type { CanvasGenerationOutput } from '@/features/canvas/generation/runGeneration';
 import { getPlatform } from '@/platform/runtime';
+import { useProjectStore } from '@/stores/projectStore';
 
 import type { CanvasNodeType } from '../domain/canvasNodes';
 import type { CanvasGenerationOutputBatchContractV1 } from '../domain/generationOutputs';
 import type { LayerStackDocumentV1 } from '../domain/layerStack';
+import { GenerationOutputRollbackError } from './generationOutputApplicationContracts';
+import { retainsCanvasMutation } from './canvasPersistenceService';
 import {
   commitCanvasGenerationOutputs,
+  commitCanvasGenerationOutputsInProject,
   type CommitCanvasGenerationOutputsResult,
 } from './generationOutputApplicationService';
 import {
@@ -16,6 +22,7 @@ import {
 } from './layerStackApplicationService';
 
 export interface CommitLayerSeparationGenerationInput {
+  projectId?: string;
   sourceNodeId: string;
   placeholderNodeId: string;
   resultNodeType: CanvasNodeType;
@@ -78,6 +85,7 @@ export function createLayerStackGenerationContract(
 export async function commitLayerSeparationGeneration(
   input: CommitLayerSeparationGenerationInput,
 ): Promise<CommitCanvasGenerationOutputsResult> {
+  const projectId = input.projectId ?? useProjectStore.getState().currentProjectId;
   if (input.signal?.aborted) {
     const error = new Error('图层拆分提交已取消');
     error.name = 'AbortError';
@@ -90,6 +98,7 @@ export async function commitLayerSeparationGeneration(
   if (input.result.outputs.length !== structuredOutput.outputs.length) {
     throw new Error(`图层媒体与结构化描述数量不一致：${input.result.outputs.length}/${structuredOutput.outputs.length}`);
   }
+  if (!projectId && !input.commitOutputs) throw new Error('未找到图层拆分的原画布项目');
   const prepareDocument = input.prepareDocument ?? prepareLayerStackDocument;
   const releaseResources = input.releaseResources ?? ((filePaths) => getPlatform().image.releaseLayerStackResources(filePaths));
   let createdFilePaths: string[] = [];
@@ -103,7 +112,10 @@ export async function commitLayerSeparationGeneration(
       modelId: input.modelId,
       onCreatedFilePaths: (filePaths) => { createdFilePaths = [...filePaths]; },
     });
-    const commitOutputs = input.commitOutputs ?? commitCanvasGenerationOutputs;
+    input.signal?.throwIfAborted();
+    const commitOutputs: typeof commitCanvasGenerationOutputs = input.commitOutputs ?? (projectId
+      ? payload => commitCanvasGenerationOutputsInProject(projectId, payload)
+      : commitCanvasGenerationOutputs);
     return await commitOutputs({
       sourceNodeId: input.sourceNodeId,
       placeholderNodeId: input.placeholderNodeId,
@@ -114,7 +126,7 @@ export async function commitLayerSeparationGeneration(
       signal: input.signal,
     });
   } catch (error) {
-    if (createdFilePaths.length > 0) {
+    if (createdFilePaths.length > 0 && !(error instanceof GenerationOutputRollbackError) && !retainsCanvasMutation(error)) {
       try {
         await releaseResources(createdFilePaths);
       } catch {
@@ -124,3 +136,30 @@ export async function commitLayerSeparationGeneration(
     throw error;
   }
 }
+
+/** 界面与无挂载任务共用结构化图层提交。 */
+export const layerSeparationGenerationExecution = {
+  supportsBackgroundCompletion: true,
+  resultNodeExtraData: { resultKind: 'layer-stack' },
+  prepareRuntimeParams: ({ images }: GenerationNodeRuntimePreparationContext) => {
+    if (images.length !== 1) throw new Error('图层拆分必须且只能提供 1 张源图');
+    return {};
+  },
+  commitGenerationResult: (context: GenerationNodeResultCommitContext) => {
+    const sourceImage = context.inputs.images[0];
+    if (!sourceImage) throw new Error('图层拆分结果缺少源图引用');
+    return commitLayerSeparationGeneration({
+      projectId: context.projectId,
+      signal: context.signal,
+      sourceNodeId: context.sourceNodeId,
+      placeholderNodeId: context.placeholderNodeId,
+      resultNodeType: context.resultNodeType,
+      completionId: context.completionId,
+      sourceImage,
+      providerId: context.providerId,
+      modelId: context.modelId,
+      result: context.result,
+    });
+  },
+
+} satisfies Pick<GenerationNodeExecutionOptions, 'prepareRuntimeParams' | 'commitGenerationResult' | 'supportsBackgroundCompletion' | 'resultNodeExtraData'>;

@@ -1,5 +1,12 @@
 # 智能助手应用能力覆盖
 
+## 当前适用范围（2026-09-12）
+
+产品同时提供外部 MCP 连接与内置 Pi 助手。内置入口使用官方 Pi SDK 和独立运行进程，旧自研助手源码及历史保留，但不再作为默认聊天运行时。领域服务、业务数据、权限、并发、保存及结果真实性约束继续适用于所有调用方。
+
+MCP 通过 `src/features/application-control/applicationCapabilityService.ts` 调用唯一能力注册与领域执行器。授权由可信宿主创建，不能从工具输入提取；不需要助手会话、模型请求、Henji Script 或发现租约。本文中脚本、配方、模型预算、租约、提示词及助手终态规则只适用于保留的自研助手，不约束 MCP 协议与 Pi 的推理循环；两者共用受控应用工具入口。
+
+
 > 读取时机：新增或修改工作区、页面、浮层、工具箱工具、设置项、用户可查询数据、业务操作、稳定引用、权限、宿主上下文或能力搜索。
 >
 > **这些场景必须同时读 skill `henji-application-capability`**（含 schema 字段、注册模式、迁移步骤与示例代码）。本文件只是硬约束清单。
@@ -9,6 +16,10 @@
 所有向助手开放的功能必须以 `ApplicationCapabilityDefinition` 作为 schema、权限、风险、数据等级、引用、可用条件、并发规则、成功证据和失败恢复的唯一元数据源。
 
 AI 输入 schema 顶层必须设置 `additionalProperties: false`。禁止 `patch`、`storePatch`、`executeScript`、`script`、`code` 等任意 Store Patch 或脚本执行字段；需要新增参数时先扩展正式领域 schema/注册表。
+
+**一次声明、多入口投影。** 同一份领域声明同时服务界面、自研助手与外部智能体（MCP）：工具参数由能力定义的 Zod 输入投影，域与实体的可读可写面由反射注册表的 `exposures`／`requiredPermissions.write`／`collectionWrite`／`writeExclusion.reason` 派生。**禁止在 `electron/main/services/mcp/**` 维护任何业务字段表、实体类型清单或前缀白名单**；那里只允许协议层自身的参数与信封。新增一个已登记的业务实体或属性后，外部调用方应立刻可用，不需要回到协议层登记。对外工具名、必填参数与错误码按 `EXTERNAL_CONTRACT_VERSION` 的弃用规则演进，破坏性变更必须先升主版本并保留旧调用样本。展开做法见 skill `henji-application-capability` 第 0.5 节。
+
+MCP 工具集合与基础权限由正式前端能力声明自动派生，不再维护独立 ID 白名单。属性权限由反射注册表派生。普通操作复用通用实体；专用操作必须有正式执行器与目标绑定；内部或委托路径在原声明的 `external` 字段说明。`check:application-control-coverage` 从全部软件能力反向核对 MCP 路由，缺执行器、缺目标、失效委托均失败；与现有属性、集合及 store 动作门禁共同阻止新增功能遗漏。检查通过代表已登记能力的路径完整，不等于每个界面行为都已实测。
 
 ## 覆盖判断不可跳过
 
@@ -110,6 +121,7 @@ AI 输入 schema 顶层必须设置 `additionalProperties: false`。禁止 `patc
 - 能力处理器**必须调用正式业务服务**，不得复制业务逻辑
 - 后台可完成的操作，不得为了复用页面组件而强制切换页面
 - 跨模块传递实体必须用 `ApplicationRef` 或 artifact 引用，**不得**向模型暴露原始密钥、本地路径或不受控的大对象
+- 新增内容来源或媒体消费功能时，同时核对“来源 → 下一步操作”，不能只登记单个工具。已有媒体来源清单在 `src/core/application-control/mediaReferenceKinds.ts`；新增来源须补正式解析和逐来源执行样例，准备／提交声明从清单派生。编辑预览必须经过正式合成，不能把原图当编辑结果；引用既有内容不得强制收藏、重上传或打开无关页面。关键连续操作加入现有 `check:application-control-invariants`，从下游实际媒体及正式状态断言结果，禁止仅检查测试标题或成功文字。本文要求不等于所有实体都是媒体；无法直接复用的文档、图层等应注明正式导出路径及对应验证。
 - **不得**以"助手已判断"为理由绕过安全边界
 - **禁止**从能力处理器直接调用 Store `setState` 做任意 Patch；仅允许正式领域服务内部对已声明字段执行确定性状态提交
 - **禁止**在 Application API、能力定义或 Agent Runtime 增加 `eval`、`new Function` 或任意脚本执行入口
@@ -188,10 +200,12 @@ CI 必须显式运行该门禁；门禁同时验证双端技能同步、旧执�
 只有改动跨越“模型决策 → 工具调用 → 业务落地 → 成功证据”完整链路，且精确测试不足以证明行为时，才无窗口执行真实助手端到端验证：
 
 ```bash
-npm run assistant:cli -- --goal "任务描述" --trace detailed --await-generation
+npm run assistant:cli -- --goal "任务描述"
+# 仅验证旧自研助手时显式选择 legacy
+npm run assistant:cli -- --engine legacy --goal "任务描述" --trace detailed --await-generation
 ```
 
-复用正式助手与工具链，结束时输出 `runId`（可用 `npm run logs:query -- --chain <runId>` 查整条链路）。`--await-generation` 保持同一隐藏宿主并读取本次生成任务的最终状态。`--print-trace` 输出本机已脱敏的详细追踪。**涉及付费或写入操作时，必须由调用者显式确认 `--approval full_access`。**
+普通入口默认 Pi，复用侧栏正式服务，结束时输出 `runId`（可用 `npm run logs:query -- --chain <runId>` 查整条链路）；默认只读，`businessVerified: false` 不冒充业务验收。旧 `assistant:live` 和 `assistant:live:suite` 显式使用 legacy，不能证明 Pi 入口可用。`--await-generation`、`--require-verified-write`、`--print-trace` 仅支持 legacy；Pi 每轮用量和体积进入统一日志。CLI 启动前核对产物新鲜度，过期先执行 `electron:bundle`。**涉及付费或写入操作时，必须由调用者显式确认 `--approval full_access`。**
 
 ## Surface 视觉观察
 

@@ -140,7 +140,7 @@ if (scenarios.length === 0) {
 
 function runScenario(scenario) {
   return new Promise((resolve) => {
-    const args = [runner, '--goal', scenario.goal, '--trace', 'detailed',
+    const args = [runner, '--engine', 'legacy', '--goal', scenario.goal, '--trace', 'detailed',
       '--approval', approvalMode, '--timeout', String(timeoutMs)]
     /*
      * 探针是只读的，不能要求已验证写入。
@@ -243,7 +243,7 @@ function summarize(result) {
   }
   if (forbiddenProtocol.length > 0) reasons.push(`出现旧协议：${forbiddenProtocol.join(', ')}`)
   return {
-    scenario: result.scenario.id, passed: reasons.length === 0,
+    engine: 'legacy', scenario: result.scenario.id, passed: reasons.length === 0,
     // mode/domain 进汇总：对照真机成本时要能按交互模式聚合，而不是只看场景 id。
     mode: result.scenario.mode ?? null, domain: result.scenario.domain ?? null,
     probe: Boolean(result.scenario.probeOnly),
@@ -261,7 +261,7 @@ function summarize(result) {
   const summaries = []
   for (const scenario of scenarios) {
     process.stdout.write(`${JSON.stringify({
-      type: 'suite_scenario_started', scenario: scenario.id, mode: scenario.mode ?? null, nonce,
+      type: 'suite_scenario_started', engine: 'legacy', scenario: scenario.id, mode: scenario.mode ?? null, nonce,
     })}\n`)
     const startedAt = Date.now()
     const result = await runScenario(scenario)
@@ -270,7 +270,7 @@ function summarize(result) {
     process.stdout.write(`${JSON.stringify({ type: 'suite_scenario_finished', ...summary })}\n`)
   }
   const passed = summaries.every((summary) => summary.passed)
-  process.stdout.write(`${JSON.stringify({ type: 'suite_finished', passed, nonce, scenarios: summaries })}\n`)
+  process.stdout.write(`${JSON.stringify({ type: 'suite_finished', engine: 'legacy', passed, nonce, scenarios: summaries })}\n`)
   process.exitCode = passed ? 0 : 1
 })().catch((error) => {
   process.stderr.write(`${error instanceof Error ? error.stack : String(error)}\n`)

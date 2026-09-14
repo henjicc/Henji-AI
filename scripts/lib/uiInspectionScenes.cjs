@@ -26,6 +26,10 @@ const { createImageEditorWorkloadScenes } = require('./uiInspectionImageEditorWo
 const { createGpuBudgetScenes } = require('./uiInspectionSceneCatalogGpuBudget.cjs')
 const { createGpuAnnotationScenes } = require('./uiInspectionSceneCatalogGpuAnnotation.cjs')
 const { createSupportScenes } = require('./uiInspectionSceneCatalogSupport.cjs')
+const { createMcpScenes } = require('./uiInspectionSceneMcp.cjs')
+const { createEmbeddedAgentScenes } = require('./uiInspectionSceneEmbeddedAgent.cjs')
+const { createMcpDomainScenes } = require('./uiInspectionSceneMcpDomains.cjs')
+const { createNetworkScenes } = require('./uiInspectionSceneNetwork.cjs')
 
 const TAB_NAMES = Object.freeze({
   generation: /^(生成|Generation)$/i,
@@ -58,6 +62,10 @@ function createUiInspectionScenes({ canvasFixtureProjectId, settlePage }) {
   attachUiInspectionSupport(context)
 
   return Object.freeze([
+    ...createNetworkScenes(),
+    ...createEmbeddedAgentScenes(context),
+    ...createMcpScenes(context),
+    ...createMcpDomainScenes(context),
     ...createGenerationSettingsScenes(context),
     ...createCanvasScenes(context),
     ...createToolboxScenes(context),

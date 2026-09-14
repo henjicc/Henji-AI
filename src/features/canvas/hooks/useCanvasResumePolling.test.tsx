@@ -18,6 +18,8 @@ import {
   releaseCanvasGenerationTaskActive,
 } from '../generation/activeGenerationTasks';
 import { useCanvasResumePolling } from './useCanvasResumePolling';
+import { resumeCanvasProjectGeneration } from '../application/canvasResumePollingService';
+import { openCanvasProject } from '../application/canvasApplicationService';
 
 const generationMocks = vi.hoisted(() => ({
   resumeCanvasGeneration: vi.fn(),
@@ -149,6 +151,51 @@ describe('useCanvasResumePolling 异步结果恢复', () => {
       aspectRatio: '1:1',
     });
     generationMocks.embedStoryboardImageMetadata.mockResolvedValue('/managed/storyboard-metadata.png');
+  });
+
+  it('领域入口无需挂载画布即可续查原任务，重复调用不重放并保存原节点', async () => {
+    let finish!: (value: { outputs: string[]; primary: string }) => void;
+    generationMocks.resumeCanvasGeneration.mockImplementation(() => new Promise((resolve) => { finish = resolve; }));
+    generationMocks.persistGenerationResult.mockResolvedValue({
+      imageUrl: 'managed-service-result.png', previewImageUrl: 'managed-service-preview.png', aspectRatio: '2:1',
+    });
+    const originalNodeId = useCanvasStore.getState().nodes[0].id;
+    resumeCanvasProjectGeneration('resume-project', new Set([originalNodeId]));
+    resumeCanvasProjectGeneration('resume-project', new Set([originalNodeId]));
+    await waitFor(() => expect(generationMocks.resumeCanvasGeneration).toHaveBeenCalledTimes(1));
+    expect(generationMocks.resumeCanvasGeneration).toHaveBeenCalledWith(expect.objectContaining({ taskId: 'panorama-task' }));
+    finish({ outputs: ['remote-result'], primary: 'remote-result' });
+    await waitFor(() => expect(useCanvasStore.getState().nodes.find((node) => node.id === originalNodeId)?.data)
+      .toMatchObject({ imageUrl: 'managed-service-result.png', isGenerating: false }));
+    await flushCanvasProjectSnapshot('resume-project');
+    const persisted = await getProjectRecord('resume-project');
+    expect(persisted).not.toBeNull();
+    expect(fromProjectRecord(persisted!).nodes.find((node) => node.id === originalNodeId)?.data)
+      .toMatchObject({ imageUrl: 'managed-service-result.png', isGenerating: false });
+  });
+
+  it('切换项目后继续原续查并保存原项目，返回不重复请求也不污染当前画布', async () => {
+    const completions: Array<(value: { outputs: string[]; primary: string }) => void> = [];
+    generationMocks.resumeCanvasGeneration.mockImplementation(() => new Promise((resolve) => { completions.push(resolve); }));
+    generationMocks.persistGenerationResult.mockResolvedValue({
+      imageUrl: 'managed-new-owner.png', previewImageUrl: 'managed-new-owner.png', aspectRatio: '2:1',
+    });
+    resumeCanvasProjectGeneration('resume-project');
+    await waitFor(() => expect(completions).toHaveLength(1));
+    const otherProject = await useProjectStore.getState().createProject('另一个项目');
+    expect(useCanvasStore.getState().nodes).toHaveLength(0);
+    completions[0]({ outputs: ['new-result'], primary: 'new-result' });
+    await waitFor(async () => {
+      const record = await getProjectRecord('resume-project');
+      expect(fromProjectRecord(record!).nodes[0].data.imageUrl).toBe('managed-new-owner.png');
+    });
+    expect(useProjectStore.getState().currentProjectId).toBe(otherProject);
+    expect(useCanvasStore.getState().nodes).toHaveLength(0);
+    await openCanvasProject('resume-project', new AbortController().signal);
+    resumeCanvasProjectGeneration('resume-project');
+    expect(completions).toHaveLength(1);
+    expect(generationMocks.persistGenerationResult).toHaveBeenCalledTimes(1);
+    expect(useCanvasStore.getState().nodes[0].data.imageUrl).toBe('managed-new-owner.png');
   });
 
   it('图层下载失败保留原任务并停止自动重试，明确续取后提交同一占位节点', async () => {

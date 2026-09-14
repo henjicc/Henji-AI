@@ -227,7 +227,7 @@ export type CanvasStructureActions = Pick<CanvasState,
   | 'clearCanvas'
 >;
 
-export const useCanvasStore = create<CanvasState>((set, get) => ({
+export const createCanvasStore = () => create<CanvasState>((set, get) => ({
   nodes: [],
   edges: [],
   selectedNodeId: null,
@@ -244,3 +244,5 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   ...createCanvasNodeUpdateActions(set, get),
   ...createCanvasStructureActions(set, get),
 }));
+
+export const useCanvasStore = createCanvasStore();

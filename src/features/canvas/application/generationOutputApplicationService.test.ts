@@ -151,6 +151,22 @@ describe('generationOutputApplicationService', () => {
     setupCanvas();
   });
 
+  it('独立结果同时完成时，同步落图事务不会把彼此追加误判为外部编辑', async () => {
+    const canvas = useCanvasStore.getState();
+    const second = canvas.addNode(CANVAS_NODE_TYPES.exportImage, { x: 840, y: 0 }, { isGenerating: true });
+    canvas.addEdge('source-node', second);
+    const results = await Promise.allSettled(['placeholder-node', second].map((placeholderNodeId, index) =>
+      commitCanvasGenerationOutputs({
+        sourceNodeId: 'source-node', placeholderNodeId, resultNodeType: CANVAS_NODE_TYPES.exportImage,
+        contract: contract(1), completionId: `concurrent-${index}`,
+        persistOutput: async (_mediaType, source) => imagePatch(source),
+      })));
+    expect(results.map(result => result.status)).toEqual(['fulfilled', 'fulfilled']);
+    for (const id of ['placeholder-node', second]) {
+      expect(useCanvasStore.getState().nodes.find(node => node.id === id)?.data).toMatchObject({ isGenerating: false, imageUrl: expect.any(String) });
+    }
+  });
+
   it.each([1, 4])('多角度 %i 个视图落为独立图片，保留顺序、角度和各自连线', async (count) => {
     const config = createDefaultMultiAngleConfig();
     config.views = MULTI_ANGLE_CONTINUOUS_PRESETS.slice(0, count).map(preset => ({ ...preset.view }));

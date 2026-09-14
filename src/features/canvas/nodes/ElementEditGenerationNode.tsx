@@ -2,26 +2,17 @@ import { memo, useCallback, useMemo } from 'react'
 import type { NodeProps } from '@xyflow/react'
 import { useTranslation } from 'react-i18next'
 
-import { prepareLocalRedraw, readImageInfo } from '@/commands/image'
-import { registry } from '@/core/ModelRegistry'
-import { getSupportedAspectRatios } from '@/core/params/ratioResolution'
 import { ICON_TOOL_IMAGE_EDIT } from '@/core/theme/icons'
 import {
   CANVAS_IMAGE_CAPABILITY_IDS,
   normalizeLocalRedrawSettings,
-  prepareElementEditPreflight,
 } from '@/features/canvas/capabilities'
 import {
-  commitLocalRedrawGeneration,
-  LOCAL_REDRAW_CONTEXT_FIELD,
-  parseLocalRedrawContext,
+  localRedrawGenerationExecution,
 } from '@/features/canvas/application/localRedrawGenerationService'
 import { CANVAS_NODE_TYPES, type ElementEditGenerationNodeData } from '@/features/canvas/domain/canvasNodes'
 import {
   GenerationNodeShell,
-  type GenerationNodeRequestPreparation,
-  type GenerationNodeResultCommitContext,
-  type GenerationNodeRuntimePreparationContext,
   type GenerationNodeShellData,
   type GenerationNodeWorkbenchContext,
 } from '@/features/canvas/nodes/shared/GenerationNodeShell'
@@ -49,60 +40,6 @@ export const ElementEditGenerationNode = memo(({
   const { t } = useTranslation()
   const updateNodeData = useCanvasStore((state) => state.updateNodeData)
   const settings = useMemo(() => normalizeLocalRedrawSettings(data.localRedrawSettings), [data.localRedrawSettings])
-
-  const prepareRuntimeParams = useCallback(async ({
-    data: runtimeData,
-    images,
-  }: GenerationNodeRuntimePreparationContext): Promise<DynamicValueMap> => {
-    const latestData = runtimeData as ElementEditGenerationNodeData
-    await prepareElementEditPreflight({
-      images,
-      maskSource: latestData.localRedrawMaskSource,
-      maskDocument: latestData.localRedrawMaskDocument,
-      readImageInfo,
-    })
-    return {}
-  }, [])
-
-  const prepareGenerationRequest = useCallback(async ({
-    data: runtimeData,
-    images,
-    videos,
-    audios,
-    params,
-    modelId,
-  }: GenerationNodeRuntimePreparationContext): Promise<GenerationNodeRequestPreparation> => {
-    const latestData = runtimeData as ElementEditGenerationNodeData
-    const mask = latestData.localRedrawMaskSource
-    if (!mask || !images[0]) throw new Error(t('node.elementEditGeneration.missingInput'))
-    const model = registry.getModel(modelId)
-    const prepared = await prepareLocalRedraw({
-      source: images[0],
-      mask,
-      settings: normalizeLocalRedrawSettings(latestData.localRedrawSettings),
-      preferredAspectRatios: model ? getSupportedAspectRatios(model.params) : undefined,
-    })
-    return {
-      requestId: prepared.context.requestId,
-      createdFilePaths: prepared.createdFilePaths,
-      params,
-      inputs: { images: [prepared.cropSource], videos, audios },
-      resultNodeData: { [LOCAL_REDRAW_CONTEXT_FIELD]: prepared.context as unknown as DynamicValue },
-    }
-  }, [t])
-
-  const commitGenerationResult = useCallback(async (context: GenerationNodeResultCommitContext) => {
-    const localRedrawContext = parseLocalRedrawContext(context.resultNodeData[LOCAL_REDRAW_CONTEXT_FIELD])
-    if (!localRedrawContext) throw new Error(t('node.elementEditGeneration.missingContext'))
-    return await commitLocalRedrawGeneration({
-      sourceNodeId: context.sourceNodeId,
-      placeholderNodeId: context.placeholderNodeId,
-      resultNodeType: context.resultNodeType,
-      completionId: context.completionId,
-      context: localRedrawContext,
-      result: context.result,
-    })
-  }, [t])
 
   const settingsRows = useMemo(() => (
     <LocalRedrawSettingsRows
@@ -158,9 +95,7 @@ export const ElementEditGenerationNode = memo(({
       promptRequiredKey="node.elementEditGeneration.promptRequired"
       apiKeyRequiredKey="node.elementEditGeneration.apiKeyRequired"
       resultTitleKey="node.elementEditGeneration.resultTitle"
-      prepareRuntimeParams={prepareRuntimeParams}
-      prepareGenerationRequest={prepareGenerationRequest}
-      commitGenerationResult={commitGenerationResult}
+      {...localRedrawGenerationExecution}
       additionalInputRows={settingsRows}
       layoutMode="workbench"
       workbenchMediaInput="image"

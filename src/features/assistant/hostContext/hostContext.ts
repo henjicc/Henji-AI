@@ -8,6 +8,9 @@ import {
 import { BUILTIN_APPLICATION_CAPABILITY_REGISTRY } from '@/core/assistant/builtinApplicationCapabilityRegistry'
 import { useAssetLibraryStore } from '@/features/assets/store/assetLibraryStore'
 import { useCanvasStore } from '@/stores/canvasStore'
+import { resolveNodePosition } from '@/features/canvas/application/canvasApplicationService'
+import { getCanvasMediaTransfers } from '@/features/canvas/application/canvasMediaTransfer'
+import { getCanvasNodeDefinition } from '@/features/canvas/domain/nodeRegistry'
 import { useNavigationStore } from '@/stores/navigationStore'
 import { useProjectStore } from '@/stores/projectStore'
 import { useSettingsStore } from '@/stores/settingsStore'
@@ -216,6 +219,7 @@ export function createHostContextSnapshot(uiReady = true): HostContextSnapshot {
   const navigation = useNavigationStore.getState()
   const project = useProjectStore.getState()
   const canvas = useCanvasStore.getState()
+  const selectedNode = canvas.nodes.find(node => node.id === canvas.selectedNodeId)
   const assets = useAssetLibraryStore.getState()
   const generationReady = isVisibleGenerationTaskHandlerReady()
   const ui = useUiStore.getState()
@@ -279,6 +283,17 @@ export function createHostContextSnapshot(uiReady = true): HostContextSnapshot {
     project: {
       id: project.currentProjectId,
       selectedNodeId: canvas.selectedNodeId,
+      ...(navigation.activeWorkspace === 'nodes' && canvas.selectedNodeId ? {
+        ...(selectedNode ? { selectedNodeSummary: {
+          type: selectedNode.type.slice(0, 120),
+          name: (typeof selectedNode.data.displayName === 'string' ? selectedNode.data.displayName : selectedNode.type).slice(0, 120),
+          isGenerating: selectedNode.data.isGenerating === true,
+        } } : {}),
+        selectedNodeIsReference: Boolean(selectedNode && !getCanvasNodeDefinition(selectedNode.type)?.executionKind
+          && getCanvasMediaTransfers(selectedNode, canvas.nodes).length),
+      } : {}),
+      ...(navigation.activeWorkspace === 'nodes' && project.currentProjectId && !canvas.selectedNodeId
+        ? { viewportNodePosition: resolveNodePosition({ mode: 'viewport_center' }) } : {}),
     },
     generation: { commandReady: generationReady },
     assets: {

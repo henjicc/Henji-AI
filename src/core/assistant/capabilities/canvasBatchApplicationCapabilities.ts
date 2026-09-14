@@ -134,6 +134,7 @@ function resolveCanvasBatchEffects(output: {
 
 const planCanvasBatch = defineApplicationCapability({
   id: 'plan_canvas_batch',
+  external: { kind: 'internal', reason: '旧助手专用的预规划协议，外部批量读改增删统一通过 change_application_entities 的同一事务执行。' },
   version: 1,
   title: '规划画布批量操作',
   description: '校验多个画布操作并生成稳定计划引用，不修改画布。',
@@ -174,6 +175,7 @@ const planCanvasBatch = defineApplicationCapability({
 
 const previewCanvasBatch = defineApplicationCapability({
   id: 'preview_canvas_batch',
+  external: { kind: 'internal', reason: '旧助手计划缓存的预览接口，外部批量操作直接使用 change_application_entities 并读取正式实体结果。' },
   version: 1,
   title: '预览画布批量操作',
   description: '读取画布批量计划的步骤、目标和可撤销性，不修改画布。',
@@ -222,6 +224,7 @@ const commitCanvasBatchInputSchema = z.object({
 
 const commitCanvasBatch = defineApplicationCapability({
   id: 'commit_canvas_batch',
+  external: { kind: 'internal', reason: '旧助手计划引用的提交入口，外部统一使用 change_application_entities 提交同一事务，不维护第二套计划协议。' },
   version: 1,
   title: '提交画布批量操作',
   description: '提交已预览的画布批量计划，成功后只生成一个撤销引用。',

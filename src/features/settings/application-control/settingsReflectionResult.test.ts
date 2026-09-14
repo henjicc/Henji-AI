@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { applicationReflectionHandlers } from '@/features/assistant/applicationCapabilities/applicationReflectionAdapter'
 import { registry } from '@/core/ModelRegistry'
@@ -29,6 +29,7 @@ describe('设置的正式反射结果', () => {
   })
 
   afterEach(() => {
+    vi.restoreAllMocks()
     changeLanguage(originalLanguage)
     useSettingsStore.getState().setThemeTonePreset(originalTone)
     useSettingsStore.getState().setUiScaleMode(originalUiScaleMode)
@@ -59,6 +60,33 @@ describe('设置的正式反射结果', () => {
       }],
     }, context(`settings-${id}`))
   }
+  it('同步保存抛错后恢复设置内存，持久值不变', async () => {
+    useSettingsStore.getState().setThemeTonePreset(originalTone)
+    const stored = localStorage.getItem('settings-storage')
+    vi.spyOn(Storage.prototype, 'setItem').mockImplementationOnce(() => { throw new Error('DISK_FULL') })
+    await expect(change('interface.theme_tone', originalTone === 'warm' ? 'cool' : 'warm')).rejects.toThrow()
+    expect(useSettingsStore.getState().themeTonePreset).toBe(originalTone)
+    expect(localStorage.getItem('settings-storage')).toBe(stored)
+  })
+  it('多字段恢复写盘持续失败仍恢复全部内存并保留部分执行及未确认保存事实', async () => {
+    const original = Storage.prototype.setItem
+    let writes = 0
+    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(function (this: Storage, key, value) {
+      writes++
+      if (writes >= 2) throw new Error('DISK_FULL_DURING_ROLLBACK')
+      original.call(this, key, value)
+    })
+    const promise = applicationReflectionHandlers.changeEntities({ summary: '多个设置', changes: [{
+      kind: 'set_properties', target: { kind: 'settings.registry', id: 'singleton' }, entityType: 'settings.registry',
+      properties: { 'interface.theme_tone': originalTone === 'warm' ? 'cool' : 'warm', 'canvas.auto_insert_text_display': !originalAutoInsertTextDisplay },
+    }] }, context('settings-multi-save-failure'))
+    let failure: unknown
+    try { await promise } catch (error) { failure = error }
+    expect(failure).toMatchObject({ result: { status: 'failed', persistence: { persistenceState: 'unconfirmed' }, partial: { completedStepIndexes: [0] } } })
+    expect(useSettingsStore.getState().themeTonePreset).toBe(originalTone)
+    expect(useSettingsStore.getState().autoInsertTextDisplayNode).toBe(originalAutoInsertTextDisplay)
+    expect(writes).toBeGreaterThanOrEqual(4)
+  })
 
   it('素材库边缘触发的公开默认值与新装设置保持关闭', () => {
     const definition = INTERFACE_APPLICATION_SETTING_DEFINITIONS.find(

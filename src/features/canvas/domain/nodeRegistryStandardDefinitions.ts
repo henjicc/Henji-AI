@@ -139,6 +139,7 @@ export const textAnnotationNodeDefinition: CanvasNodeDefinition<TextAnnotationNo
 };
 
 export const textProcessingNodeDefinition: CanvasNodeDefinition<TextProcessingNodeData> = {
+  defaultParameterFields: ['providerId', 'modelId', 'fixedResult'],
   type: CANVAS_NODE_TYPES.textProcessing,
   menuLabelKey: 'node.menu.textProcessing',
   menuIcon: 'textProcessing',
@@ -185,6 +186,7 @@ export const textProcessingNodeDefinition: CanvasNodeDefinition<TextProcessingNo
 };
 
 export const cameraStageNodeDefinition: CanvasNodeDefinition<CameraStageNodeData> = {
+  defaultParameterFields: ['outputKind'],
   type: CANVAS_NODE_TYPES.cameraStage,
   menuLabelKey: 'node.menu.cameraStage',
   menuIcon: 'cameraStage',
@@ -227,6 +229,7 @@ export const cameraStageNodeDefinition: CanvasNodeDefinition<CameraStageNodeData
 };
 
 export const storyboardSplitDefinition: CanvasNodeDefinition<StoryboardSplitNodeData> = {
+  defaultParameterFields: ['gridRows', 'gridCols', 'frameAspectRatio', 'exportOptions'],
   type: CANVAS_NODE_TYPES.storyboardSplit,
   menuLabelKey: 'node.menu.storyboard',
   menuIcon: 'storyboard',
@@ -275,6 +278,7 @@ export const storyboardSplitDefinition: CanvasNodeDefinition<StoryboardSplitNode
 const STORYBOARD_GEN_MODEL_REQUIRED_TAGS: ModelTag[] = ['image-to-image'];
 
 export const storyboardGenNodeDefinition: CanvasNodeDefinition<StoryboardGenNodeData> = {
+  defaultParameterFields: ['gridRows', 'gridCols'],
   type: CANVAS_NODE_TYPES.storyboardGen,
   menuLabelKey: 'node.menu.storyboardGen',
   menuIcon: 'storyboard',

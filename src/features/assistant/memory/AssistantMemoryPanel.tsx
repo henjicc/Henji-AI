@@ -1,3 +1,5 @@
+import { SHARED_MEMORY_ID } from '@/core/assistant/memory'
+import { getPlatform } from '@/platform/runtime'
 import {
   BrainCircuit,
   Check,
@@ -53,6 +55,7 @@ export function AssistantMemoryPanel(): JSX.Element {
   const [busyId, setBusyId] = useState<string | null>(null)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [draft, setDraft] = useState('')
+  const [sharedRevision, setSharedRevision] = useState(0)
   const [clearArmed, setClearArmed] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -60,6 +63,7 @@ export function AssistantMemoryPanel(): JSX.Element {
     setLoading(true)
     setError(null)
     try {
+      setSharedRevision((await getPlatform().assistant.getSharedMemory()).revision)
       setState(await getAgentMemoryState())
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : '读取助手记忆失败')
@@ -119,7 +123,7 @@ export function AssistantMemoryPanel(): JSX.Element {
               <div className="flex items-center justify-between gap-3">
                 <div>
                   <div className={UI_TEXT_LABEL_CLASS}>长期记忆</div>
-                  <div className={`mt-0.5 leading-4 ${UI_TEXT_META_CLASS}`}>默认关闭；只有已确认且与任务相关的少量内容会注入。</div>
+                  <div className={`mt-0.5 leading-4 ${UI_TEXT_META_CLASS}`}>共享摘要会用于后续对话；关闭后停止自动使用和更新。</div>
                 </div>
                 <UiSwitch
                   checked={state.settings.enabled}
@@ -130,7 +134,7 @@ export function AssistantMemoryPanel(): JSX.Element {
                 />
               </div>
               <div className="mt-2 flex items-center justify-between gap-3 border-t border-border-dark pt-2">
-                <span className={UI_TEXT_META_CLASS}>默认过期时间</span>
+                <span className={UI_TEXT_META_CLASS}>历史条目默认保留时间</span>
                 <Dropdown<number>
                   value={state.settings.defaultTtlDays}
                   options={ttlOptions}
@@ -183,13 +187,13 @@ export function AssistantMemoryPanel(): JSX.Element {
                 <div className="flex items-start gap-2">
                   <div className="min-w-0 flex-1">
                     <div className={UI_TEXT_META_CLASS}>
-                      {scopeLabel(memory)} · {memory.kind} · {new Date(memory.createdAt).toLocaleDateString('zh-CN')}
+                      {scopeLabel(memory)} · {{ preference: '偏好', fact: '经验', workflow: '工作习惯' }[memory.kind]} · {new Date(memory.createdAt).toLocaleDateString('zh-CN')}
                     </div>
                     {editingId === memory.memoryId ? (
                       <UiTextArea
                         value={draft}
                         onChange={(event) => setDraft(event.target.value)}
-                        maxLength={1_000}
+                        maxLength={memory.memoryId === SHARED_MEMORY_ID ? 800 : 1_000}
                         rows={3}
                         className="mt-1.5 text-xs"
                       />
@@ -206,7 +210,8 @@ export function AssistantMemoryPanel(): JSX.Element {
                         appearance="hover-only"
                         className="!h-7 !w-7 !rounded-md"
                         onClick={() => void act(memory.memoryId, async () => {
-                          await updateAgentMemoryRecord({ memoryId: memory.memoryId, content: draft })
+                          if (memory.memoryId === SHARED_MEMORY_ID) await getPlatform().assistant.updateSharedMemory({ content: draft, expectedRevision: sharedRevision })
+                          else await updateAgentMemoryRecord({ memoryId: memory.memoryId, content: draft })
                           setEditingId(null)
                         })}
                         disabled={!draft.trim() || busyId !== null}

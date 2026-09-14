@@ -154,6 +154,8 @@ const getCanvasNodeSchema = defineApplicationCapability({
 
 const createCanvasProject = defineApplicationCapability({
   id: 'create_canvas_project',
+  resolveOperationTargets: () => [],
+  resolveOperationWriteTargets: (_input, operationId) => [{ kind: 'canvas.project', id: `pending:${operationId}` }],
   version: 2,
   title: '新建画布项目',
   description: '创建并载入空画布项目数据，但不切换当前界面；用户要求进入或查看时，再调用打开画布项目能力。',
@@ -202,6 +204,9 @@ function defineProjectWrite(
     : z.object({ projectId: z.string().min(1) }).strict()
   return defineApplicationCapability({
     id,
+    ...(withName ? { external: { kind: 'delegate' as const, entityType: 'canvas.project', operations: ['write' as const],
+      propertyIds: ['canvas.project.name'], reason: '工程重命名由 canvas.project.name 与通用实体事务维护。' } } : {}),
+    resolveOperationTargets: input => [{ kind: 'canvas.project', id: input.projectId }],
     version: 1,
     title,
     description,
@@ -240,6 +245,7 @@ function defineProjectWrite(
 
 const deleteCanvasProject = defineApplicationCapability({
   id: 'delete_canvas_project',
+  resolveOperationTargets: input => [{ kind: 'canvas.project', id: input.projectId }],
   version: 1,
   title: '删除画布项目',
   description: '删除明确画布项目及其持久化画布数据。',
@@ -367,7 +373,9 @@ const getCanvasNode = defineApplicationCapability({
 })
 
 const retryCanvasProjectSave = defineApplicationCapability({
-  id: 'retry_canvas_project_save', version: 1,
+  id: 'retry_canvas_project_save',
+  external: { kind: 'recovery', reason: '仅保存恢复入口，必须绑定原失败操作与原编辑会话，只能由 retry_application_operation_save 按账本触发。' },
+  version: 1,
   title: '重试保存画布项目',
   description: '保存当前画布中已发生的修改并等待存储确认，不重复新增、删除、撤销或其他业务操作。',
   domain: 'canvas', aliases: ['重试保存', '画布保存失败', 'retry canvas save'],

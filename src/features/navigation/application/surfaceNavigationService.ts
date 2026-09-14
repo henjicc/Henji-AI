@@ -1,6 +1,7 @@
 import { createLogger } from '@/core/logging'
 import type { SettingsNavigationTarget } from '@/core/types/settingsNavigation'
 import { useAssetLibraryStore } from '@/features/assets/store/assetLibraryStore'
+import { useAssistantUiStore } from '@/features/assistant/store/assistantUiStore'
 import {
   closeAssetLibrary,
   openAssetLibrary,
@@ -38,6 +39,7 @@ function settingsTargetMatches(
 }
 
 export function isApplicationSurfaceActive(surface: ApplicationSurfaceDefinition): boolean {
+  if (surface.id === 'overlay.assistant') return useAssistantUiStore.getState().open
   if (surface.settingsTarget) {
     const ui = useUiStore.getState()
     return ui.isSettingsOpen && settingsTargetMatches(ui.settingsTarget, surface.settingsTarget)
@@ -75,7 +77,9 @@ export function openApplicationSurface(
     event: 'navigation.surface.open.start', ...correlation, surfaceId, openPolicy: surface.openPolicy,
   })
   try {
-    if (surface.settingsTarget) {
+    if (surface.id === 'overlay.assistant') {
+      useAssistantUiStore.getState().setOpen(true)
+    } else if (surface.settingsTarget) {
       openSettingsPanel(surface.settingsTarget)
     } else if (surface.id === 'overlay.assets') {
       openAssetLibrary('floating')
@@ -113,7 +117,9 @@ export function closeApplicationSurface(
     event: 'navigation.surface.close.start', ...correlation, surfaceId: targetId,
   })
   try {
-    if (targetId.startsWith('settings.')) {
+    if (targetId === 'overlay.assistant') {
+      useAssistantUiStore.getState().setOpen(false)
+    } else if (targetId.startsWith('settings.')) {
       useUiStore.getState().closeSettings()
     } else if (targetId === 'overlay.assets' || targetId === 'workspace.assets') {
       closeAssetLibrary()

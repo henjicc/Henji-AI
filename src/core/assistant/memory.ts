@@ -148,3 +148,12 @@ export const agentMemoryRetrievalResultSchema = z.object({
   retrievedAt: z.string().datetime(),
 }).strict()
 export type AgentMemoryRetrievalResult = z.infer<typeof agentMemoryRetrievalResultSchema>
+
+/** 软件级共享摘要，不绑定具体 Agent 或会话。 */
+export const SHARED_MEMORY_ID = 'assistant-shared-summary'
+export const sharedMemoryUpdateSchema = z.object({
+  content: z.string().max(800).refine(value => !value.includes('\0')),
+  expectedRevision: z.number().int().nonnegative(),
+}).strict()
+export type SharedMemoryUpdate = z.infer<typeof sharedMemoryUpdateSchema>
+export interface SharedMemorySnapshot { content: string; enabled: boolean; revision: number }

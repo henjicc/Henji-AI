@@ -53,6 +53,17 @@ function capability(
 }
 
 describe('ApplicationCapabilityRegistry', () => {
+  it('付费准备声明只属于写能力，且必须同时声明执行前置', () => {
+    expect(() => new ApplicationCapabilityRegistry().register({ ...capability('bad_paid'), paidGenerationPreparation: 'prepare_test' }))
+      .toThrow('付费生成必须声明正式准备前置能力')
+    const valid = BUILTIN_APPLICATION_CAPABILITY_REGISTRY.get('create_visible_generation_task')!
+    expect(() => new ApplicationCapabilityRegistry().register({ ...valid, executionPrerequisites: [] }))
+      .toThrow('付费生成必须声明正式准备前置能力')
+    const registry = new ApplicationCapabilityRegistry()
+    registry.register(valid)
+    expect(registry.get(valid.id)?.paidGenerationPreparation).toBe('prepare_generation_task')
+    expect(registry.descriptors()[0]).not.toHaveProperty('paidGenerationPreparation')
+  })
   it('拒绝重复 ID 和版本冲突', () => {
     const registry = new ApplicationCapabilityRegistry()
     registry.register(capability('read_test'))

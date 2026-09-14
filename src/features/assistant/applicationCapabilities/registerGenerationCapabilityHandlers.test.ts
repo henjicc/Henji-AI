@@ -5,7 +5,11 @@ const mocks = vi.hoisted(() => ({
   prepare: vi.fn(),
   submit: vi.fn(),
   resolveModel: vi.fn(),
+  history: vi.fn(),
 }))
+vi.mock('@/services/database', () => ({ databaseService: { init: vi.fn(), getHistoryById: mocks.history } }))
+vi.mock('@/commands/image', () => ({ readImageInfo: async () => ({ fileName: 'result.png' }) }))
+vi.mock('@/utils/dataPath', () => ({ getDataRoot: async () => '/data', convertPathString: async (value: string) => value }))
 
 vi.mock('@/features/generation/application/generationApplicationService', () => ({
   generationApplicationService: {
@@ -18,9 +22,10 @@ vi.mock('@/features/generation/application/generationApplicationService', () => 
     cancelTask: vi.fn(),
   },
 }))
-vi.mock('@/stores/navigationStore', () => ({ switchWorkspace: vi.fn() }))
+vi.mock('@/stores/navigationStore', () => ({ switchWorkspace: vi.fn(), useNavigationStore: { getState: () => ({ activeWorkspace: 'generation' }) } }))
 
 import { registry } from '@/core/ModelRegistry'
+import { modelDefaultsManager } from '@/features/settings/modelDefaultsManager'
 import type { ModelDefinition } from '@/core/types'
 import { useGenerationDraftStore } from '@/features/generation/store/generationDraftStore'
 import { createEmptyGenerationDraft } from '@/features/generation/domain/generationDraft'
@@ -72,7 +77,28 @@ describe('generation capability handlers（5.4：放宽提交）', () => {
   })
 
   afterEach(() => {
+    vi.restoreAllMocks()
     registry.clear()
+  })
+
+  it.each(['prepare_generation_task', 'create_visible_generation_task'])('%s 新任务省略模型时读取当前默认，而不是旧草稿', async name => {
+    const currentDefault = { ...testModel, meta: { ...testModel.meta, id: 'current-default' } }
+    registry.register(currentDefault)
+    useGenerationDraftStore.getState().patchField('selectedModel', testModel.meta.id)
+    const resolveDefault = vi.spyOn(modelDefaultsManager, 'resolveModelId').mockReturnValue(currentDefault.meta.id)
+    await registeredHandlers().get(name)!({ mediaType: 'image', prompt: '新图', params: {} }, context)
+    expect(resolveDefault).toHaveBeenCalledWith('image')
+    expect((name === 'prepare_generation_task' ? mocks.prepare : mocks.submit).mock.calls[0][0].modelId).toBe(currentDefault.meta.id)
+  })
+
+  it.each(['prepare_generation_task', 'create_visible_generation_task'])('%s 通过正式解析器复用历史结果', async name => {
+    mocks.history.mockResolvedValue({ id: 'previous', type: 'image', status: 'success', filePath: '/history/result.png', params: {} })
+    const handler = registeredHandlers().get(name)!
+    await handler({ modelId: testModel.meta.id, prompt: '把上一张改成立体风格', mediaType: 'image', params: { uploadedImages: [{ kind: 'generation.result', id: 'previous' }] } }, context)
+    const operation = name === 'prepare_generation_task' ? mocks.prepare : mocks.submit
+    expect(operation).toHaveBeenCalledTimes(1)
+    expect(operation.mock.calls[0][0].options.uploadedFilePaths).toEqual(['/history/result.png'])
+    expect(mocks.history).toHaveBeenCalledWith('previous')
   })
 
   it('不传任何字段时，提交用的是当前草稿（模型/提示词/已上传媒体）', async () => {
@@ -150,14 +176,14 @@ describe('generation capability handlers（5.4：放宽提交）', () => {
     await expect(handler({}, context)).rejects.toThrow(/INVALID_INPUT/)
   })
 
-  it('prepare_generation_task 同样按草稿补全省略字段', () => {
+  it('prepare_generation_task 同样按草稿补全省略字段', async () => {
     useGenerationDraftStore.getState().patchField('selectedModel', testModel.meta.id)
     useGenerationDraftStore.getState().patchField('selectedProvider', testModel.meta.provider)
     useGenerationDraftStore.getState().setLegacyInput('准备阶段的草稿提示词')
 
     const handler = registeredHandlers().get('prepare_generation_task')
     if (!handler) throw new Error('HANDLER_NOT_FOUND')
-    handler({}, context)
+    await handler({}, context)
 
     const prepared = mocks.prepare.mock.calls[0][0]
     expect(prepared.modelId).toBe(testModel.meta.id)

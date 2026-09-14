@@ -1,4 +1,5 @@
 {
+  "mcp": { "loading": "Loading connections…", "enable": "Allow external agents", "readOnly": "Connections expire after 30 days. The service switch, port and new-connection permissions are saved and restored after restart. The built-in assistant uses the permissions in its chat composer.", "port": "Connection port", "name": "Connection name", "namePlaceholder": "For example: Codex", "authorize": "Create authorization", "copy": "Copy connection config", "revoke": "Revoke", "allowWrites": "Allow changes for the new connection", "allowDelete": "Allow deletion for the new connection", "writeScope": "Settings, model visibility, assets and canvas only. Paid generation is excluded.", "accessRead": "Read only", "accessWrite": "Can modify", "accessDelete": "Can modify and delete", "allowPaid": "Allow paid generation for the new connection", "paidScope": "Allow image, video and audio generation with configured providers. Provider charges apply.", "accessPaid": "Paid generation allowed" },
   "title": "Settings",
   "language": "Language",
   "theme": "Theme",
@@ -8,6 +9,7 @@
     "general-storage": "Data & Downloads",
     "general-behavior": "Behavior & Concurrency",
     "general-maintenance": "Updates",
+    "general-mcp": "External agent connections",
     "models-providers": "Providers & Models",
     "models-assistant": "Assistant Models",
     "models-upload": "Upload Strategy",

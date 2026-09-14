@@ -1,3 +1,4 @@
+import { createPersistedGenerationTask, awaitGenerationTaskPersistence } from './useTaskHistory'
 import { createLogger } from '@/core/logging'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { GenerationService } from '@/core/services/GenerationService'
@@ -45,6 +46,7 @@ export interface UseTaskGenerationMessages {
 }
 
 export interface UseTaskGenerationParams {
+  ready?: boolean
   tasks: GenerationTask[]
   setTasks: React.Dispatch<React.SetStateAction<GenerationTask[]>>
   updateTask: (taskId: string, updates: Partial<GenerationTask>) => void
@@ -136,6 +138,7 @@ async function persistClonedVoiceIfNeeded(
 }
 
 export function useTaskGeneration({
+  ready = true,
   tasks,
   setTasks,
   updateTask,
@@ -167,7 +170,8 @@ export function useTaskGeneration({
     modelId: string,
     input: string,
     options: GeneratorOptions,
-    onProgress?: GenerationProgressCallback
+    onProgress?: GenerationProgressCallback,
+    requestId?: string
   ): Promise<DynamicValue> => {
     const generationService = GenerationService.getInstance()
     const params: DynamicValueMap = {
@@ -177,13 +181,17 @@ export function useTaskGeneration({
     }
 
     try {
-      return await generationService.generate(modelId, params, onProgress)
+      return await generationService.generate(modelId, params, onProgress, { requestId })
     } catch (error) {
       throw new Error(maybeToUserMessage(error))
     }
   }, [])
 
   const executeTask = useCallback(async (taskId: string, task: GenerationTask): Promise<void> => {
+    const saveUpdate = async (updates: Partial<GenerationTask>): Promise<void> => {
+      updateTask(taskId, updates)
+      await awaitGenerationTaskPersistence(taskId)
+    }
     try {
       const options: GeneratorOptions = { ...(task.options ?? {}) }
       if (task.uploadedFilePaths) options.uploadedFilePaths = task.uploadedFilePaths
@@ -209,7 +217,7 @@ export function useTaskGeneration({
         mutableOptions.uploadedAudios = options.audios
       }
 
-      updateTask(taskId, { status: 'generating' })
+      await saveUpdate({ status: 'generating' })
 
       lastProgressRef.current[taskId] = 0
       const handleProgress: GenerationProgressCallback = (status: GenerationProgressStatus) => {
@@ -220,7 +228,7 @@ export function useTaskGeneration({
         updateProgress(taskId, next)
       }
 
-      const result = await generateWithService(task.model, task.prompt, options, handleProgress)
+      const result = await generateWithService(task.model, task.prompt, options, handleProgress, taskId)
       const resultObj: DynamicValueMap = isRecord(result) ? result : {}
       const metadata = resultObj['metadata']
       const normalizedResultTaskId = typeof resultObj['taskId'] === 'string'
@@ -230,7 +238,7 @@ export function useTaskGeneration({
       // 不能让供应商的 request_id 覆盖真正用于轮询的任务 ID。
       const serverTaskId = normalizedResultTaskId ?? extractServerTaskIdFromMetadata(metadata)
       if (serverTaskId) {
-        updateTask(taskId, { serverTaskId })
+        await saveUpdate({ serverTaskId })
       }
       logger.info('[Workspace] 生成响应', { model: task.model, taskId: serverTaskId, metadata })
       try {
@@ -286,7 +294,7 @@ export function useTaskGeneration({
       updateProgress(taskId, 100)
       await new Promise((r) => setTimeout(r, resolveProgressSettleDelayMs(progressBeforeComplete)))
 
-      updateTask(taskId, {
+      await saveUpdate({
         status: 'success',
         progress: 100,
         dimensions: dimensions ?? undefined,
@@ -307,7 +315,7 @@ export function useTaskGeneration({
       if (providerKeyMissing) showProviderKeyRequired()
       const errorMessage = providerKeyMissing ? messages.providerKeyRequiredMessage : rawErrorMessage
       const serverTaskIdFromError = extractServerTaskIdFromErrorMessage(errorMessage)
-      updateTask(taskId, {
+      await saveUpdate({
         status: 'error',
         error: errorMessage,
         ...(serverTaskIdFromError ? { serverTaskId: serverTaskIdFromError } : {}),
@@ -331,8 +339,12 @@ export function useTaskGeneration({
   }, [messages.genericGenerateFailed, notify, updateProgress, updateTask])
 
   const runCreateVisibleTask = useCallback((input: VisibleGenerationTaskInput): Promise<string | null> => (
-    createVisibleGenerationTask(input, {
-      appendTask: (task) => setTasks((previous) => [...previous, task]),
+    ready ? createVisibleGenerationTask(input, {
+      appendTask: async (task) => {
+        await createPersistedGenerationTask(task)
+        tasksRef.current = [...tasksRef.current, task]
+        setTasks((previous) => [...previous, task])
+      },
       updateTask,
       executeTask,
       setGenerating: setIsGenerating,
@@ -343,8 +355,9 @@ export function useTaskGeneration({
       imageEditStates: imageEditStatesRef.current,
       setUploadedImages: (images) => setUploadedImagesRef.current?.(images),
       setUploadedFilePaths: (paths) => setUploadedFilePathsRef.current?.(paths),
-    })
+    }) : Promise.reject(new Error('GENERATION_NOT_READY:生成历史尚未加载完成，请稍后重试'))
   ), [
+    ready,
     executeTask,
     imageEditStatesRef,
     messages,
@@ -405,7 +418,8 @@ export function useTaskGeneration({
       }
       markVisibleGenerationTaskCancelled(taskId, reason)
       updateTask(taskId, { status: 'error', error: reason })
-      return { taskId, status: 'cancelled' }
+      await awaitGenerationTaskPersistence(taskId)
+      return { taskId, status: 'cancelled', verification: { verified: true, condition: '取消已处理且原任务状态保存确认', target: { kind: 'generation.task', id: taskId } } }
     },
   }), [runCreateVisibleTask, updateTask])
 

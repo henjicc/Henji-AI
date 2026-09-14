@@ -41,6 +41,7 @@ function createValueSourceDefinition(
     menuLabelKey: options.menuLabelKey,
     menuIcon: options.menuIcon,
     visibleInMenu: true,
+    defaultParameterFields: options.socketType === 'STRING' ? [] : ['value'],
     menuSection: 'parameters',
     menuOrder: options.menuOrder,
     capabilities: {

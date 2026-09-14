@@ -25,6 +25,7 @@ vi.mock('@/features/canvas/application/cameraStageRenderApplicationService', () 
 }))
 vi.mock('@/features/canvas/application/canvasQueryService', () => ({
   readPersistedCanvasProjectSnapshot: mocks.readPersisted,
+  readCanvasProjectSnapshot: async (id: string) => ({ id, nodes: mocks.nodes }),
 }))
 vi.mock('@/stores/projectStore', () => ({
   useProjectStore: { getState: () => mocks.projectState },
@@ -160,7 +161,7 @@ describe('cameraStageRenderCapabilityAdapter', () => {
     expect(mocks.start).not.toHaveBeenCalled()
   })
 
-  it('does not submit after the owning canvas switches during the persisted-result lookup', async () => {
+  it('keeps the original target when the visible canvas switches during the persisted-result lookup', async () => {
     let finishRead!: () => void
     mocks.readPersisted.mockImplementationOnce(async () => await new Promise((resolve) => {
       finishRead = () => resolve({ id: 'canvas-1', nodes: [] })
@@ -172,8 +173,8 @@ describe('cameraStageRenderCapabilityAdapter', () => {
     mocks.projectState = { currentProjectId: 'canvas-2', currentProject: { id: 'canvas-2' } }
     finishRead()
 
-    await expect(rendering).rejects.toThrow('当前未打开')
-    expect(mocks.start).not.toHaveBeenCalled()
+    await expect(rendering).resolves.toMatchObject({ status: 'submitted' })
+    expect(mocks.start).toHaveBeenCalledWith('stage-node', 'image', expect.objectContaining({ expectedOwner: { canvasProjectId: 'canvas-1', cameraStageProjectId: 'stage-1' } }))
   })
 
   it('does not submit after the source node is rebound during the persisted-result lookup', async () => {
@@ -333,6 +334,7 @@ describe('cameraStageRenderCapabilityAdapter', () => {
 
     await expect(cancelCameraStageRenderTask(createCameraStageRenderTaskRef(identity))).resolves.toMatchObject({
       status: 'awaiting_persistence',
+      verification: { verified: true, condition: expect.stringContaining('无需发送取消') },
     })
     expect(mocks.cancel).not.toHaveBeenCalled()
   })

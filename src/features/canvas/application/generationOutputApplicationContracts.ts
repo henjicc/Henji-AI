@@ -18,6 +18,13 @@ export class GenerationOutputApplicationError extends Error {
   }
 }
 
+/** 原文档可能仍持有文件，禁止自动重新创建或释放它引用的资源。 */
+export class GenerationOutputRollbackError extends GenerationOutputApplicationError {
+  constructor(readonly cause: unknown) {
+    super('CONFLICT', `${cause instanceof Error ? cause.message : '图层提交未完成'}；图层文档回收未确认，已保留文件，请核对原任务后再处理。`)
+  }
+}
+
 export interface CommitCanvasGenerationOutputsInput {
   /** 旧工程可能在任务运行期间删除来源连线；缺省时仍恢复结果，但不补来源边。 */
   sourceNodeId?: string

@@ -1,5 +1,28 @@
+import { applicationGenerationTaskId } from '../../application-control/operationIdentity'
 import { z } from 'zod'
+import { APPLICATION_MEDIA_REFERENCE_GUIDANCE, APPLICATION_MEDIA_REFERENCE_KINDS } from '../../application-control/mediaReferenceKinds'
 import { applicationSchemaRefSchema } from '../../application-control'
+import { canvasNodePlacementSchema } from './canvasMutationApplicationCapabilities'
+
+export const generationDestinationSchema = z.discriminatedUnion('mode', [
+  z.object({ mode: z.literal('history') }).strict(),
+  z.object({ mode: z.literal('canvas'), projectId: z.string().min(1), sourceNodeIds: z.array(z.string().min(1)).max(16).default([]), placement: canvasNodePlacementSchema.optional() }).strict(),
+])
+export type GenerationDestination = z.infer<typeof generationDestinationSchema>
+
+export const canvasGenerationResumeInputSchema = z.object({
+  taskId: z.string().min(1),
+  projectId: z.string().min(1),
+  sourceNodeId: z.string().min(1),
+  resultNodeIds: z.array(z.string().min(1)).min(1).max(64),
+}).strict()
+export type CanvasGenerationResumeInput = z.infer<typeof canvasGenerationResumeInputSchema>
+
+const canvasNodeGenerationInputSchema = z.object({
+  projectId: z.string().min(1), nodeId: z.string().min(1),
+  inputSignature: z.string().min(1).optional(),
+}).strict()
+export type CanvasNodeGenerationInput = z.infer<typeof canvasNodeGenerationInputSchema>
 
 import type { ApplicationCapabilityDefinition } from '../applicationCapabilities'
 import {
@@ -110,7 +133,7 @@ const resolveGenerationModel = defineApplicationCapability({
   id: 'resolve_generation_model',
   version: 1,
   title: '解析可执行生成模型',
-  description: '由宿主根据媒体类型、用户偏好、当前草稿与已配置供应商选择可实际执行的生成模型。',
+  description: '新任务未指定模型时先调用：宿主实时读取默认模型与默认供应商，结合明确偏好及输入兼容性选型。既有节点或明确指定模型保持原选择。',
   domain: 'generation',
   aliases: ['选择可用模型', '解析生成模型', 'resolve generation model'],
   readOnly: true,
@@ -135,7 +158,7 @@ const resolveGenerationModel = defineApplicationCapability({
   outputSchema: capabilityOutputSchema({
     modelId: z.string().min(1),
     providerId: z.string().min(1),
-    selection: z.enum(['requested', 'preferred_provider', 'current_draft', 'configured_fallback']),
+    selection: z.enum(['requested', 'preferred_provider', 'current_draft', 'configured_fallback', 'user_default']),
   }),
   concurrencyKey: 'generation_model_resolution',
   summarize: (output) => `已解析可执行模型 ${output.modelId}（${output.providerId}）。`,
@@ -145,7 +168,7 @@ const prepareGenerationTask = defineApplicationCapability({
   id: 'prepare_generation_task',
   version: 1,
   title: '校验生成参数',
-  description: '在提交前验证模型、媒体类型、必填项、参数范围和联动结果；省略的字段用当前生成草稿（generation.draft）补全。',
+  description: '在提交前验证模型、媒体类型、必填项、参数范围和联动结果；指定媒体类型但省略模型时读取当前默认模型；其余省略字段用 generation.draft 补全。' + APPLICATION_MEDIA_REFERENCE_GUIDANCE,
   domain: 'generation',
   aliases: ['检查生成参数', '准备生成', 'prepare generation'],
   readOnly: true,
@@ -155,17 +178,18 @@ const prepareGenerationTask = defineApplicationCapability({
   permission: 'generation:prepare',
   idempotent: true,
   destructive: false,
-  timeoutMs: 5_000,
+  timeoutMs: 60_000,
   supportsPreview: false,
   supportsUndo: false,
   requiredScopes: [],
-  acceptsRefs: ['generation.model', 'generation.draft'],
+  acceptsRefs: ['generation.model', 'generation.draft', ...APPLICATION_MEDIA_REFERENCE_KINDS],
   producesRefs: ['generation.preparation'],
   inputSchema: z.object({
     modelId: z.string().min(1).optional(),
     prompt: z.string().max(32 * 1024).optional(),
     mediaType: z.enum(['image', 'video', 'audio']).optional(),
     params: z.record(z.string(), z.unknown()).optional(),
+    destination: generationDestinationSchema.optional(),
   }).strict(),
   outputSchema: capabilityOutputSchema({
     preparation: z.object({
@@ -184,19 +208,21 @@ const prepareGenerationTask = defineApplicationCapability({
 
 const createVisibleGenerationTask = defineApplicationCapability({
   id: 'create_visible_generation_task',
+  resolveOperationWriteTargets: (input, operationId) => [{ kind: 'generation.task', id: applicationGenerationTaskId(operationId) },
+    ...(input.destination?.mode === 'canvas' ? [{ kind: 'canvas.project', id: input.destination.projectId }] : [])],
+  resolveOperationAppendTargets: (input) => input.destination?.mode === 'canvas' ? [{ kind: 'canvas.project', id: input.destination.projectId }] : [],
+  resolveOperationTargets: (input) => { if (!input.modelId || typeof input.prompt !== 'string' || !input.mediaType) throw new Error('INVALID_INPUT:外部提交必须明确指定已读取的模型、提示词和媒体类型'); return [{ kind: 'generation.model', id: input.modelId }] },
   version: 1,
   title: '创建可见生成任务',
-  description: '在生成工作区创建用户可见的图片、视频或音频生成任务；省略的字段用当前生成草稿'
-    + '（generation.draft）补全，让助手能像人一样先逐步搭建输入（写提示词、选模型、上传媒体）'
-    + '再提交，而不必每次一次性传全部参数。',
+  description: '创建可见图片、视频或音频任务。画布用 destination={mode:"canvas",projectId,sourceNodeIds}，先创建生成节点与连线，结果自动落在旁侧，勿重复放入画布；仅存历史用 {mode:"history"}，默认当前画布优先。指定媒体类型但省略模型时读取当前默认模型；其余缺省字段用 generation.draft 补全。省略 baselineIds，宿主核对费用。' + APPLICATION_MEDIA_REFERENCE_GUIDANCE,
   domain: 'generation',
   aliases: ['生成图片', '生成视频', '生成音频', 'create generation'],
   readOnly: false,
   // 它确实新建了一条 generation.task；只声明 execute 会让「创建一个生成任务」的 Facet 永远
   // 对不上账，模型明明提交成功了，任务图却停在未结算。
   control: capabilityControl('execute', ['generation.task'], {
-    revisionScopes: ['generation'], verificationRequired: false, resultState: 'submitted',
-    alsoImpacts: [{ effect: 'create', entityTypes: ['generation.task'] }],
+    revisionScopes: ['generation', 'canvas'], verificationRequired: false, resultState: 'submitted',
+    alsoImpacts: [{ effect: 'create', entityTypes: ['generation.task', 'canvas.node', 'canvas.edge'] }],
   }),
   risk: 'R2',
   dataClasses: ['C1'],
@@ -208,18 +234,20 @@ const createVisibleGenerationTask = defineApplicationCapability({
   supportsUndo: false,
   completionKind: 'submitted',
   requiredScopes: ['generation'],
-  acceptsRefs: ['generation.model', 'generation.draft', 'asset'],
-  producesRefs: ['generation.task'],
+  acceptsRefs: ['generation.model', 'generation.draft', ...APPLICATION_MEDIA_REFERENCE_KINDS, 'canvas.project', 'canvas.node'],
+  producesRefs: ['generation.task', 'canvas.node', 'canvas.edge'],
   successEvidence: [
     '返回稳定 taskId、submitted 状态和最新 generation revision。',
     '该结果只证明任务已提交；生成完成必须由后续状态证据确认。',
   ],
   executionPrerequisites: ['prepare_generation_task'],
+  paidGenerationPreparation: 'prepare_generation_task',
   inputSchema: z.object({
     modelId: z.string().min(1).optional(),
     prompt: z.string().max(32 * 1024).optional(),
     mediaType: z.enum(['image', 'video', 'audio']).optional(),
     params: z.record(z.string(), z.unknown()).optional(),
+    destination: generationDestinationSchema.optional(),
   }).strict(),
   outputSchema: capabilityOutputSchema({
     taskId: z.string().min(1),
@@ -302,8 +330,54 @@ const getGenerationTask = defineApplicationCapability({
   summarize: (output) => `生成任务状态：${String(output.task.status ?? 'unknown')}。`,
 })
 
+const waitGenerationTask = defineApplicationCapability({
+  id: 'wait_generation_task',
+  version: 1,
+  title: '等待生成结果',
+  description: '默认在提交后调用。持续等待已有任务成功、失败或需要恢复才返回；等待不取消生成、不重复提交。极长任务返回 still_running 时继续等待同一 taskId。用户主动询问即时进度才使用 get_generation_task。',
+  domain: 'generation',
+  aliases: ['等待生成', '等待结果', 'wait generation task'],
+  readOnly: true,
+  control: capabilityControl('observe', ['generation.task', 'generation.result']),
+  risk: 'R0',
+  dataClasses: ['C1'],
+  permission: 'generation:read',
+  idempotent: true,
+  destructive: false,
+  timeoutMs: 10 * 60_000,
+  supportsPreview: false,
+  supportsUndo: false,
+  requiredScopes: ['generation'],
+  acceptsRefs: ['generation.task'],
+  producesRefs: ['generation.task', 'generation.result'],
+  inputSchema: z.object({ taskId: z.string().min(1) }).strict(),
+  outputSchema: capabilityOutputSchema({
+    task: z.record(z.string(), z.unknown()),
+    waitReason: z.enum(['terminal', 'recovery_required', 'still_running']),
+  }),
+  concurrencyKey: 'generation',
+  resolveConcurrencyKey: (input) => `generation:${input.taskId}`,
+  resolveTargetIds: (input) => ({ taskId: input.taskId }),
+  resolveObservedEffects: (input, output) => {
+    const status = typeof output.task.status === 'string' ? output.task.status : 'unknown'
+    const terminal = ['success', 'completed', 'error', 'failed', 'cancelled', 'canceled'].includes(status)
+    return [{
+      effect: 'observe',
+      entityTypes: ['generation.task', ...(status === 'success' || status === 'completed'
+        ? ['generation.result'] : [])],
+      propertyIds: [],
+      targetRefs: [{ kind: 'generation.task', id: input.taskId }],
+      count: 1,
+      verified: terminal,
+      evidence: [],
+    }]
+  },
+  summarize: (output) => `生成任务状态：${String(output.task.status ?? 'unknown')}。`,
+})
+
 const cancelGenerationTask = defineApplicationCapability({
   id: 'cancel_generation_task',
+  resolveOperationTargets: (input) => [{ kind: 'generation.task', id: input.taskId }],
   version: 1,
   title: '取消生成任务',
   description: '取消明确任务引用对应的可取消生成任务。',
@@ -343,6 +417,60 @@ const cancelGenerationTask = defineApplicationCapability({
   summarize: (output) => `任务 ${output.taskId} 的取消状态为 ${output.status}。`,
 })
 
+const resumeCanvasGenerationTask = defineApplicationCapability({
+  id: 'resume_canvas_generation_task', version: 1, title: '续查原画布生成任务',
+  description: '使用 get_generation_task 返回的 resumeInput 续查原供应商任务，保存到原画布节点；不会重新提交生成。标准结果、图层拆分和已有裁剪上下文的局部重绘均可在后台恢复，无需切换当前页面。',
+  domain: 'generation', aliases: ['恢复画布任务', '继续获取生成结果', 'resume canvas generation'],
+  readOnly: false, risk: 'R1', dataClasses: ['C1'], permission: 'canvas:write',
+  control: capabilityControl('execute', ['generation.task', 'canvas.node'], { revisionScopes: ['generation', 'canvas'] }),
+  idempotent: true, destructive: false, timeoutMs: 10_000, supportsPreview: false, supportsUndo: false,
+  requiredScopes: ['generation', 'canvas'], acceptsRefs: ['generation.task', 'canvas.node'], producesRefs: ['generation.task', 'canvas.node'],
+  inputSchema: canvasGenerationResumeInputSchema,
+  outputSchema: capabilityOutputSchema({ taskId: z.string(), status: z.string(), task: z.record(z.string(), z.unknown()) }),
+  concurrencyKey: 'generation', resolveConcurrencyKey: (input) => `generation:${input.taskId}`,
+  resolveTargetIds: (input) => ({ taskId: input.taskId, projectId: input.projectId, nodeId: input.sourceNodeId }),
+  resolveOperationTargets: (input) => [
+    { kind: 'generation.task', id: input.taskId },
+    ...[input.sourceNodeId, ...input.resultNodeIds].map(id => ({ kind: 'canvas.node', id: `${input.projectId}:${id}` })),
+  ],
+  summarize: (output) => `原画布任务状态：${output.status}，未重新提交生成。`,
+})
+
+const prepareCanvasNodeGeneration = defineApplicationCapability({
+  id: 'prepare_canvas_node_generation', version: 1, title: '准备原节点生成',
+  description: '读取原画布生成节点的实际模型、参数和参考素材并估价，包括抠图、放大、图层拆分及已绘制蒙版的局部重绘。配置使用 canvas.node.generation_config；返回 submitInput 可直接用于 submit_canvas_node_generation。',
+  domain: 'generation', aliases: ['准备图片工具', '节点生成估价'], readOnly: true,
+  control: capabilityControl('observe', ['canvas.node', 'generation.preparation']),
+  risk: 'R0', dataClasses: ['C1'], permission: 'generation:prepare', idempotent: true, destructive: false,
+  timeoutMs: 30_000, supportsPreview: false, supportsUndo: false, requiredScopes: [],
+  acceptsRefs: ['canvas.node'], producesRefs: ['generation.preparation'],
+  inputSchema: canvasNodeGenerationInputSchema,
+  outputSchema: capabilityOutputSchema({ preparation: z.record(z.string(), z.unknown()), submitInput: canvasNodeGenerationInputSchema }),
+  concurrencyKey: 'generation_prepare', resolveConcurrencyKey: input => `generation_prepare:${input.projectId}:${input.nodeId}`,
+  summarize: () => '原节点输入与费用已准备，可以提交生成。',
+})
+
+const submitCanvasNodeGeneration = defineApplicationCapability({
+  id: 'submit_canvas_node_generation', version: 1, title: '执行原画布生成节点',
+  description: '使用 prepare_canvas_node_generation 返回的 submitInput 执行已配置的原节点，保留参考连线，结果自动放在节点旁。支持图片、视频、音频及图层拆分、局部重绘等图片工具；切换页面后仍保存原项目，返回任务号后用 get_generation_task 查询。',
+  domain: 'generation', aliases: ['运行图片工具', '执行生成节点'], readOnly: false,
+  control: capabilityControl('execute', ['generation.task', 'canvas.node'], { revisionScopes: ['generation', 'canvas'], verificationRequired: false, resultState: 'submitted',
+    alsoImpacts: [{ effect: 'create', entityTypes: ['generation.task', 'canvas.node', 'canvas.edge'] }] }),
+  risk: 'R2', dataClasses: ['C1'], permission: 'generation:create', idempotent: true, destructive: false,
+  timeoutMs: 60_000, supportsPreview: false, supportsUndo: false, completionKind: 'submitted', requiredScopes: ['canvas', 'generation'],
+  acceptsRefs: ['canvas.node'], producesRefs: ['generation.task', 'canvas.node'],
+  executionPrerequisites: ['prepare_canvas_node_generation'], paidGenerationPreparation: 'prepare_canvas_node_generation',
+  inputSchema: canvasNodeGenerationInputSchema.extend({ inputSignature: z.string().min(1) }),
+  outputSchema: capabilityOutputSchema({ taskId: z.string().min(1), status: z.literal('submitted') }),
+  concurrencyKey: 'generation', resolveConcurrencyKey: input => `generation:${input.projectId}:${input.nodeId}`,
+  resolveTargetIds: input => ({ projectId: input.projectId, nodeId: input.nodeId }),
+  resolveOperationTargets: input => [{ kind: 'canvas.node', id: `${input.projectId}:${input.nodeId}` }],
+  resolveOperationWriteTargets: (input, operationId) => [{ kind: 'canvas.node', id: `${input.projectId}:${input.nodeId}` },
+    { kind: 'generation.task', id: applicationGenerationTaskId(operationId) }, { kind: 'canvas.project', id: input.projectId }],
+  resolveOperationAppendTargets: input => [{ kind: 'canvas.project', id: input.projectId }],
+  summarize: output => `原节点任务 ${output.taskId} 已提交，完成情况请查询任务。`,
+})
+
 export const GENERATION_APPLICATION_CAPABILITIES: ApplicationCapabilityDefinition[] = [
   switchWorkspace,
   searchModels,
@@ -351,5 +479,9 @@ export const GENERATION_APPLICATION_CAPABILITIES: ApplicationCapabilityDefinitio
   prepareGenerationTask,
   createVisibleGenerationTask,
   getGenerationTask,
+  waitGenerationTask,
   cancelGenerationTask,
+  resumeCanvasGenerationTask,
+  prepareCanvasNodeGeneration,
+  submitCanvasNodeGeneration,
 ]

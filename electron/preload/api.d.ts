@@ -1,4 +1,6 @@
+import type { EmbeddedAgentPlatform } from '../../src/core/assistant/embeddedAgent'
 import type { HenjiAssistantApi } from './api-assistant'
+import type { McpPlatform } from '../../src/core/application-control/localHostContracts'
 import type {
   HenjiCameraStageProjectsApi,
   HenjiCameraStageRenderApi,
@@ -36,6 +38,8 @@ export * from './api-desktop'
 export type { HenjiImageEditorV3Api } from './image-editor-v3-api'
 
 export interface HenjiNativeApi {
+  embeddedAgent: EmbeddedAgentPlatform
+  mcp: McpPlatform
   runtimeInfo: {
     uiInspectionActive: boolean
     uiInspectionGpuInitializationFailure: boolean

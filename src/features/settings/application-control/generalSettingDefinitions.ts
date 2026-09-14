@@ -32,19 +32,19 @@ export const GENERAL_APPLICATION_SETTING_DEFINITIONS: ApplicationSettingDefiniti
   }, () => modelDefaultsManager.getSnapshot().providerId,
   (value) => { modelDefaultsManager.setProvider(value) }),
   storeSetting({
-    id: 'generation.default_image_model', title: '默认图片模型', description: '设置新图片节点默认使用的模型；auto 表示由默认供应商自动选择。',
+    id: 'generation.default_image_model', title: '默认图片模型', description: '设置新图片节点及助手新建生成任务默认使用的模型；auto 表示由默认供应商自动选择。',
     aliases: ['图片默认模型', '默认图像模型', 'default image model'], schema: DEFAULT_MODEL_ID_SCHEMA, defaultValue: 'auto',
     target: { tab: 'general', sectionId: 'general-onboarding' }, requiresReload: false, requiresRestart: false, sensitive: false,
   }, () => modelDefaultsManager.getSnapshot().models.image || 'auto',
   (value) => modelDefaultsManager.setDefaultModel('image', value === 'auto' ? '' : value)),
   storeSetting({
-    id: 'generation.default_video_model', title: '默认视频模型', description: '设置新视频节点默认使用的模型；auto 表示由默认供应商自动选择。',
+    id: 'generation.default_video_model', title: '默认视频模型', description: '设置新视频节点及助手新建生成任务默认使用的模型；auto 表示由默认供应商自动选择。',
     aliases: ['视频默认模型', 'default video model'], schema: DEFAULT_MODEL_ID_SCHEMA, defaultValue: 'auto',
     target: { tab: 'general', sectionId: 'general-onboarding' }, requiresReload: false, requiresRestart: false, sensitive: false,
   }, () => modelDefaultsManager.getSnapshot().models.video || 'auto',
   (value) => modelDefaultsManager.setDefaultModel('video', value === 'auto' ? '' : value)),
   storeSetting({
-    id: 'generation.default_audio_model', title: '默认音频模型', description: '设置新音频节点默认使用的模型；auto 表示由默认供应商自动选择。',
+    id: 'generation.default_audio_model', title: '默认音频模型', description: '设置新音频节点及助手新建生成任务默认使用的模型；auto 表示由默认供应商自动选择。',
     aliases: ['音频默认模型', '声音默认模型', 'default audio model'], schema: DEFAULT_MODEL_ID_SCHEMA, defaultValue: 'auto',
     target: { tab: 'general', sectionId: 'general-onboarding' }, requiresReload: false, requiresRestart: false, sensitive: false,
   }, () => modelDefaultsManager.getSnapshot().models.audio || 'auto',

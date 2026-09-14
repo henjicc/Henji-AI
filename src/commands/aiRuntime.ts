@@ -126,3 +126,8 @@ export async function aiRecordProgressSample(
   ensureDesktopRuntime()
   return await getPlatform().aiRuntime.recordProgressSample(request)
 }
+
+export async function aiReadSavedResult(requestId: string): Promise<import('@/platform/contracts/aiRuntime').AiSavedResult | null> {
+  ensureDesktopRuntime()
+  return getPlatform().aiRuntime.readSavedResult(requestId)
+}

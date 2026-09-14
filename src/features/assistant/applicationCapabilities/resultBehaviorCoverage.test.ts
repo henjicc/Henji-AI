@@ -25,6 +25,10 @@ const RESULT_SCENARIOS: Record<string, Scenario[]> = {
     { file: 'src/features/canvas/application/canvasReflection.test.ts', title: '原子更新节点标题与位置并可整体撤销' },
     { file: 'src/features/canvas/application/canvasApplicationService.test.ts', title: '按目录 schema 添加、确定性布局、合法连接并逐步撤销' },
   ],
+  memory: [
+    { file: 'src/features/assistant/application/sharedMemoryReflection.test.ts', title: '共享记忆通过正式通用事务保存和清空' },
+    { file: 'src/features/assistant/application/sharedMemoryReflection.test.ts', title: '关闭记忆后通用事务不保存' },
+  ],
   generation: [
     { file: 'src/features/generation/application/generationModelMutationExecutor.test.ts', title: '通过统一计划提交把模型隐藏，值真的落到 hidden_models，且可撤销' },
     { file: 'src/features/generation/application/generationDraftMutationExecutor.test.ts', title: '助手写提示词、换模型，草稿真的变了，且可撤销' },
@@ -47,6 +51,7 @@ const RESULT_SCENARIOS: Record<string, Scenario[]> = {
 }
 
 const RESULT_SCENARIO_BASELINE: Record<keyof typeof RESULT_SCENARIOS, number> = {
+  memory: 2,
   settings: 2,
   assets: 3,
   canvas: 2,
@@ -98,5 +103,15 @@ describe('写领域结果级能力覆盖', () => {
         expect(fs.readFileSync(file, 'utf8'), `${domain}: ${scenario.title}`).toContain(`it('${scenario.title}'`)
       }
     }
+  })
+
+  it('关键连续操作必须保留结果断言用例，不能只守单个领域的属性读写', () => {
+    const chains = [
+      ['src/features/assistant/applicationCapabilities/generationResultCanvasApplicationService.test.ts', '编辑预览直接复用于生成并落回原画布，两步共用合成图且不收藏'],
+      ['src/features/imageEdit/application/imageEditApplicationService.test.ts', '编辑后直接作为生成参考，实际合成编辑步骤且不收藏、不删除预览'],
+      ['src/features/canvas/application/canvasGenerationTaskService.test.ts', '原视口位置固定后，移动画布仍将生成节点和持久结果放在原落点'],
+      ['src/features/canvas/application/canvasGenerationTaskService.test.ts', '在其他项目中恢复标准任务，只续查原任务并保存原项目结果'],
+    ]
+    for (const [file, title] of chains) expect(fs.readFileSync(path.resolve(process.cwd(), file), 'utf8'), file).toContain(`it('${title}'`)
   })
 })

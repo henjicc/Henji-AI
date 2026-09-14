@@ -1,10 +1,12 @@
 import type { CanvasNode } from '../domain/canvasNodes'
 import type { CanvasNodeExecutionKind } from '../domain/nodeRegistry'
 import type { CanvasDependencyOutputMode } from './canvasExecutionCache'
+import type { useCanvasStore } from '@/stores/canvasStore'
 
 export type CanvasExecutionTrigger = 'direct' | 'dependency'
 
 export interface CanvasNodePreflightContext {
+  store?: typeof useCanvasStore
   runId: string
   projectId: string | null
   trigger: CanvasExecutionTrigger
@@ -13,13 +15,17 @@ export interface CanvasNodePreflightContext {
 export interface CanvasNodeExecutionContext extends CanvasNodePreflightContext {
   inputSignature: string
   /** 异步准备完成后、真正发起付费请求前必须调用。 */
-  assertCurrent: () => Promise<void>
+  assertCurrent: (store?: typeof useCanvasStore) => Promise<void>
 }
 
 export interface CanvasNodeExecutionResult {
   status: 'completed' | 'reused'
   resultNodeIds: string[]
 }
+
+export type CanvasNodeExecutionScheduler = (
+  operation: () => Promise<CanvasNodeExecutionResult>, signal?: AbortSignal,
+) => Promise<CanvasNodeExecutionResult>
 
 export interface CanvasRegisteredExecutor {
   kind: Exclude<CanvasNodeExecutionKind, 'text-display'>
@@ -31,8 +37,12 @@ export interface CanvasRegisteredExecutor {
   preflightBeforeDependencies?: (context: CanvasNodePreflightContext) => Promise<void> | void
   preflight?: (context: CanvasNodeExecutionContext) => Promise<void> | void
   inputSignatureScope?: 'graph' | 'runtime'
-  getInputSignatureExtras?: () => Promise<unknown> | unknown
+  getInputSignatureExtras?: (store?: typeof useCanvasStore) => Promise<unknown> | unknown
+  /** 结果能够通过原项目的业务存储提交，不依赖当前页面。 */
+  supportsBackgroundCompletion?: (store?: typeof useCanvasStore) => boolean
   isCachedOutputValid?: (node: CanvasNode) => boolean
+  /** 在等待执行名额之前持有任务；实际业务仍必须通过 schedule 进入共用执行队列。 */
+  runQueued?: (context: CanvasNodeExecutionContext, schedule: CanvasNodeExecutionScheduler) => Promise<CanvasNodeExecutionResult>
   run: (context: CanvasNodeExecutionContext) => Promise<CanvasNodeExecutionResult>
 }
 

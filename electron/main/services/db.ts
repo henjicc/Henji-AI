@@ -3,6 +3,7 @@ import path from 'node:path'
 import fs from 'node:fs'
 import Database from 'better-sqlite3'
 import { runAgentSchemaMigrations } from './agent-runtime/persistence/migrations'
+import { migrateMcpOperations } from './mcp/operationStore'
 
 export type SqlBindValue = string | number | boolean | null | Uint8Array
 
@@ -232,6 +233,7 @@ export function initializeSchema(conn: Database.Database): void {
   ensureColumn(conn, 'storyboard_projects', 'cover_path', 'TEXT')
   ensureColumn(conn, 'camera_stage_projects', 'cover_path', 'TEXT')
   runAgentSchemaMigrations(conn)
+  migrateMcpOperations(conn)
 }
 
 /**

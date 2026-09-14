@@ -359,10 +359,10 @@ describe('useCanvasResumePolling 结构化结果恢复', () => {
         resultKind: 'panorama',
         isGenerating: false,
         generationStartedAt: null,
-        serverTaskId: null,
-        serverTaskModelId: null,
       });
       expect(data?.generationError).toContain('2:1');
+      expect(data?.serverTaskId).toBe('panorama-task');
+      expect(data?.serverTaskModelId).toBe('apimart-gpt-image-2');
     });
     await waitFor(() => expect(platformMocks.releaseManagedGenerationMedia).toHaveBeenCalledWith([
       '/data/Media/invalid-panorama.png',
@@ -441,6 +441,8 @@ describe('useCanvasResumePolling 结构化结果恢复', () => {
     renderHook(() => useCanvasResumePolling());
 
     await waitFor(() => expect(generationMocks.commitLayerSeparationGeneration).toHaveBeenCalledWith(expect.objectContaining({
+      projectId: 'resume-project',
+      signal: expect.any(AbortSignal),
       sourceNodeId: source.id,
       placeholderNodeId: result.id,
       sourceImage: '/managed/source.png',
@@ -471,7 +473,7 @@ describe('useCanvasResumePolling 结构化结果恢复', () => {
       .toEqual(['/managed/composite.png']);
   });
 
-  it('A 项目续查时切到 B 再返回 A 会重新恢复，旧回调不污染新会话', async () => {
+  it('A 项目续查时切到 B 再返回 A 沿用原任务，不重新发起续查', async () => {
     generationMocks.resumeCanvasGeneration.mockImplementation(() => new Promise(() => undefined));
     renderHook(() => useCanvasResumePolling());
     await waitFor(() => expect(generationMocks.resumeCanvasGeneration).toHaveBeenCalledTimes(1));
@@ -490,7 +492,7 @@ describe('useCanvasResumePolling 结构化结果恢复', () => {
       useProjectStore.setState({ currentProjectId: projectA.id, currentProject: projectA });
     });
 
-    await waitFor(() => expect(generationMocks.resumeCanvasGeneration).toHaveBeenCalledTimes(2));
+    expect(generationMocks.resumeCanvasGeneration).toHaveBeenCalledTimes(1);
     expect(useCanvasStore.getState().nodes[0]?.data.serverTaskId).toBe('panorama-task');
   });
 });

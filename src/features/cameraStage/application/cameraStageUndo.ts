@@ -1,4 +1,4 @@
-import { saveCurrentProject } from '../projects/cameraStageProjectService'
+import { cameraStageProjectStore, ensureCameraStageProjectRuntime, saveCameraStageProjectRuntime } from './cameraStageProjectRuntime'
 import { useCameraStageStore } from '../store/cameraStageStore'
 
 interface CameraStageUndoSnapshot {
@@ -19,7 +19,7 @@ function undoToken(): string {
 }
 
 export function captureCameraStageUndo(projectId: string): string {
-  const state = useCameraStageStore.getState()
+  const state = cameraStageProjectStore(projectId).getState()
   if (state.currentProjectId !== projectId) throw new Error('STALE_CONTEXT')
   const token = undoToken()
   undoSnapshots.set(token, {
@@ -38,8 +38,9 @@ export function captureCameraStageUndo(projectId: string): string {
 export async function restoreCameraStageUndo(token: string): Promise<{ projectId: string }> {
   const snapshot = undoSnapshots.get(token)
   if (!snapshot) throw new Error('NOT_FOUND')
-  useCameraStageStore.getState().loadSnapshot(snapshot.scene, snapshot.project)
-  await saveCurrentProject()
+  await ensureCameraStageProjectRuntime(snapshot.project.id)
+  cameraStageProjectStore(snapshot.project.id).getState().loadSnapshot(snapshot.scene, snapshot.project)
+  await saveCameraStageProjectRuntime(snapshot.project.id)
   undoSnapshots.delete(token)
   return { projectId: snapshot.project.id }
 }

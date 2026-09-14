@@ -1,4 +1,6 @@
 import { v4 as uuidv4 } from 'uuid'
+import { ZodError } from 'zod'
+import { ApplicationPreflightFailure } from '@/core/application-control/execution/transactionFailure'
 
 import type { CanvasBatchOperation } from '@/core/assistant/capabilities/canvasBatchApplicationCapabilities'
 import { createLogger } from '@/core/logging'
@@ -49,7 +51,7 @@ interface CanvasBatchUndo extends CanvasUndoPersistenceState {
 const plans = new Map<string, CanvasBatchPlan>()
 const undos = new Map<string, CanvasBatchUndo>()
 import { pauseCanvasProjectPersistence } from '@/stores/projectStore'
-import { confirmCanvasPersistence, runPersistedCanvasUndo, createCanvasMutationCheckpoint, isCanvasMutationCheckpointCurrent, assertCanvasCommitContext, CanvasTransactionConflictError, type CanvasCommitOptions, type CanvasUndoPersistenceState } from './canvasPersistenceService'
+import { confirmCanvasPersistence, runPersistedCanvasUndo, createCanvasMutationCheckpoint, isCanvasMutationCheckpointCurrent, assertCanvasCommitContext, CanvasTransactionConflictError, CanvasTransactionRolledBackError, CanvasPersistenceError, type CanvasCommitOptions, type CanvasUndoPersistenceState, type CanvasTransactionRuntime } from './canvasPersistenceService'
 const PLAN_TTL_MS = 15 * 60_000
 const logger = createLogger('features.canvas.batch')
 
@@ -181,9 +183,13 @@ export async function runCanvasTransaction(
   operationCount: number,
   execute: CanvasAtomicExecutor,
   logContext: Record<string, unknown> = {},
+  runtime?: CanvasTransactionRuntime,
 ): Promise<{ appliedOperations: Record<string, unknown>[]; undoRef: string }> {
-  requireCurrentCanvasProject(projectId)
-  const canvas = useCanvasStore.getState()
+  if (runtime ? !runtime.isCurrent() : false) throw new CanvasTransactionConflictError(projectId)
+  if (!runtime) requireCurrentCanvasProject(projectId)
+  const store = runtime?.store ?? useCanvasStore
+  const persist = runtime?.persist ?? (() => confirmCanvasPersistence(projectId))
+  const canvas = store.getState()
   // store 写入遵循不可变更新，撤销历史本身也一直保存节点/连线引用。这里保留事务前引用即可；
   // 深拷贝最多 50 步历史会让一次轻量节点创建随画布体量同步放大，直接阻塞新节点首帧。
   const beforeNodes = canvas.nodes
@@ -194,8 +200,8 @@ export async function runCanvasTransaction(
     event: 'canvas.batch.apply.start', projectId, operationCount, ...logContext,
   })
 
-  const checkpoint = createCanvasMutationCheckpoint(projectId)
-  const releasePersistence = pauseCanvasProjectPersistence(projectId)
+  const checkpoint = createCanvasMutationCheckpoint(projectId, runtime)
+  const releasePersistence = runtime ? runtime.pause() : pauseCanvasProjectPersistence(projectId)
   const persistenceEffects: Array<() => void> = []
   let results: Record<string, unknown>[]
   try {
@@ -211,22 +217,26 @@ export async function runCanvasTransaction(
       releasePersistence()
       throw new CanvasTransactionConflictError(projectId, error)
     }
-    useCanvasStore.getState().setCanvasData(beforeNodes, beforeEdges, beforeHistory)
-    useCanvasStore.getState().setSelectedNode(beforeSelectedNodeId)
-    const recovery = confirmCanvasPersistence(projectId)
+    // 只有事务仍保持原始快照的参数校验失败，才有证据认定未写入。
+    // 已修改后失败、外部并发冲突、回滚保存失败均不得伪装成“未执行”。
+    const rejectedBeforeMutation = error instanceof ZodError
+      && checkpoint.nodes === beforeNodes && checkpoint.edges === beforeEdges && checkpoint.history === beforeHistory
+    store.getState().setCanvasData(beforeNodes, beforeEdges, beforeHistory)
+    store.getState().setSelectedNode(beforeSelectedNodeId)
+    const recovery = persist()
     releasePersistence()
     await recovery
-    logger.error('画布批量写入失败', error, {
+    logger[rejectedBeforeMutation ? 'warn' : 'error']('画布批量写入失败', error, {
       event: 'canvas.batch.apply.failed', projectId, operationCount, ...logContext,
     })
-    throw error
+    throw rejectedBeforeMutation ? new ApplicationPreflightFailure(error) : new CanvasTransactionRolledBackError(error)
   }
 
   if (!isCanvasMutationCheckpointCurrent(checkpoint)) {
     releasePersistence()
     throw new CanvasTransactionConflictError(projectId)
   }
-  const after = useCanvasStore.getState()
+  const after = store.getState()
   const undoRef = `canvas-batch-undo:${uuidv4()}`
   undos.set(undoRef, {
     undoRef,
@@ -246,14 +256,31 @@ export async function runCanvasTransaction(
     future: [],
   }
   // 当前 nodes/edges 已由受控 store 写入生成，无需借用 setCanvasData 再迁移整张画布及全部历史。
-  useCanvasStore.setState({
+  store.setState({
     history: groupedHistory,
     dragHistorySnapshot: null,
     activeHistoryGroup: null,
   })
-  const completion = confirmCanvasPersistence(projectId)
+  const completion = persist()
   releasePersistence()
-  await completion
+  try { await completion }
+  catch (error) {
+    if (error instanceof CanvasPersistenceError) {
+      const oldIds = new Set(beforeNodes.map((node) => node.id))
+      const refs = after.nodes.filter((node) => !oldIds.has(node.id)).map((node) => ({ kind: 'canvas.node', id: `${projectId}:${node.id}` }))
+      error.transactionFacts = {
+        status: 'failed', code: 'EXECUTION_FAILED', message: error.message, recoverable: true,
+        resultRefs: refs,
+        effects: refs.length ? [{ effect: 'create', entityType: 'canvas.node', refs, propertyIds: [], origin: { kind: 'direct' } }] : [],
+        persistence: { memoryState: 'modified', persistenceState: 'unconfirmed', stage: 'projection',
+          recovery: { capabilityId: 'retry_canvas_project_save', target: { kind: 'canvas.project', id: projectId }, replayMutation: false } },
+        partial: { completedStepIndexes: results.map((_, index) => index), compensatedStepIndexes: [], uncompensatedStepIndexes: results.map((_, index) => index) },
+        recoveryVerification: { conditions: refs.map((target) => ({ kind: 'entity_exists', target })),
+          evidence: refs.map((target) => ({ kind: 'entity_state', target, fact: '原事务已创建此结果节点，等待保存确认。', capturedAt: new Date().toISOString() })) },
+      }
+    }
+    throw error
+  }
   for (const effect of persistenceEffects) {
     try {
       effect()

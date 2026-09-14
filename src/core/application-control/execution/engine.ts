@@ -145,6 +145,9 @@ export class ApplicationControlExecutionEngine extends ApplicationExecutionFailu
   registerVerifier(verifier: ApplicationCustomVerifier): void {
     this.verifier.register(verifier)
   }
+  verifyRecovery(conditions: import('../transactions').ApplicationVerificationCondition[], evidence: import('../transactions').ApplicationEvidence[], context: ApplicationExecutionContext): Promise<import('../transactions').ApplicationVerificationResult> {
+    return this.verifier.verify(conditions, evidence, context, this.now())
+  }
 
   async plan(
     request: ApplicationPlanRequest,
@@ -274,7 +277,10 @@ export class ApplicationControlExecutionEngine extends ApplicationExecutionFailu
     } catch (error) {
       if (error instanceof ApplicationPersistenceBoundaryFailure
         || (error instanceof ApplicationExecutionProgressFailure && error.completed.length > 0)) this.store.markCommitted(stored.plan.planRef)
-      const result = await this.handleExecutionFailure(error, stored.plan, transactionRef, context, persistenceReceipts)
+      const failureResult = await this.handleExecutionFailure(error, stored.plan, transactionRef, context, persistenceReceipts)
+      const result = failureResult.status === 'failed' && error instanceof ApplicationPersistenceBoundaryFailure
+        ? { ...failureResult, recoveryVerification: { conditions: stored.plan.verificationConditions, evidence: error.completed.flatMap((item) => item.evidence) } }
+        : failureResult
       this.store.saveIdempotent(request.idempotencyKey, request.planRef, result)
       return result
     }

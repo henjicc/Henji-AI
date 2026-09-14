@@ -9,6 +9,8 @@ import {
   createLayerStackGenerationContract,
 } from './layerSeparationGenerationService';
 import type { PrepareLayerStackDocumentInput } from './layerStackApplicationService';
+import { GenerationOutputRollbackError } from './generationOutputApplicationContracts';
+import { CanvasPersistenceError } from './canvasPersistenceService';
 
 const structuredOutput = {
   version: 1 as const,
@@ -156,7 +158,7 @@ describe('layerSeparationGenerationService', () => {
     expect(prepareDocument).not.toHaveBeenCalled();
   });
 
-  it('画布原子事务失败时只释放本次合成新建的受管文件', async () => {
+  it.each(['rolled-back', 'unconfirmed', 'retained'] as const)('画布事务失败只释放确认未被持有的合成文件（%s）', async mode => {
     const releaseResources = vi.fn(async () => undefined);
     const prepareDocument = vi.fn(async (input: PrepareLayerStackDocumentInput) => {
       input.onCreatedFilePaths?.(['/managed/new-composite.png', '/managed/new-thumb.webp']);
@@ -172,9 +174,14 @@ describe('layerSeparationGenerationService', () => {
       modelId: 'volcengine-seedream-5.0-pro',
       result: { outputs: ['/media/base.jpg', '/media/title.png'], primary: '/media/base.jpg', structuredOutput },
       prepareDocument,
-      commitOutputs: vi.fn(async () => { throw new Error('画布事务失败'); }),
+      commitOutputs: vi.fn(async () => {
+        const cause = new Error('画布事务失败');
+        throw mode === 'unconfirmed' ? new GenerationOutputRollbackError(cause)
+          : mode === 'retained' ? new CanvasPersistenceError('original-project', cause) : cause;
+      }),
       releaseResources,
-    })).rejects.toThrow(/画布事务失败/);
-    expect(releaseResources).toHaveBeenCalledWith(['/managed/new-composite.png', '/managed/new-thumb.webp']);
+    })).rejects.toThrow();
+    if (mode === 'rolled-back') expect(releaseResources).toHaveBeenCalledWith(['/managed/new-composite.png', '/managed/new-thumb.webp']);
+    else expect(releaseResources).not.toHaveBeenCalled();
   });
 });

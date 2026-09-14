@@ -241,8 +241,7 @@ export class ApplicationReflectionRegistry {
     context: ApplicationControlAccessContext,
     projection?: ApplicationEntityListProjection
   ): Promise<ApplicationEntityListResult> {
-    const entity = this.requireEntity(entityType)
-    if (!entity.exposures.includes(context.exposure)) throw new Error('PERMISSION_DENIED')
+    const entity = this.requireVisibleEntity(entityType, context)
     const result = await this.requireProvider(entityType).listEntities(request)
     for (const ref of result.refs) {
       if (ref.kind !== entity.refKind) throw new Error(`INVALID_ENTITY_REF:${ref.kind}`)
@@ -274,7 +273,7 @@ export class ApplicationReflectionRegistry {
     propertyIds: string[] | undefined,
     context: ApplicationControlAccessContext
   ): Promise<ApplicationEntitySnapshot> {
-    const entity = this.requireEntity(ref.kind)
+    const entity = this.requireVisibleEntity(ref.kind, context)
     const requested = propertyIds ?? this.listProperties(entity.id).map((property) => property.id)
     const allowed = requested.filter((propertyId) => this.canReadProperty(
       this.requireProperty(entity.id, propertyId),
@@ -317,7 +316,7 @@ export class ApplicationReflectionRegistry {
     propertyIds: string[],
     context: ApplicationControlAccessContext
   ): Promise<ApplicationPropertyAvailability[]> {
-    const entity = this.requireEntity(ref.kind)
+    const entity = this.requireVisibleEntity(ref.kind, context)
     const descriptors = propertyIds.map((propertyId) => this.requireProperty(entity.id, propertyId))
     const dynamic = new Map((await this.requireProvider(entity.id)
       .getPropertyAvailability(ref, propertyIds))
@@ -358,7 +357,7 @@ export class ApplicationReflectionRegistry {
     entityType: string,
     context: ApplicationControlAccessContext
   ): Promise<ApplicationCollectionAvailability> {
-    const entity = this.requireEntity(entityType)
+    const entity = this.requireVisibleEntity(entityType, context)
     const rule = entity.collectionWrite
     if (!rule) throw new Error(`COLLECTION_WRITE_NOT_DECLARED:${entityType}`)
     const dynamic = applicationCollectionAvailabilitySchema.parse(
@@ -420,6 +419,12 @@ export class ApplicationReflectionRegistry {
   private requireEntity(entityType: string): ApplicationEntityTypeDescriptor {
     const entity = this.entities.get(entityType)
     if (!entity) throw new Error(`ENTITY_TYPE_NOT_FOUND:${entityType}${this.entityTypeSuggestion(entityType)}`)
+    return entity
+  }
+  private requireVisibleEntity(entityType: string, context: ApplicationControlAccessContext): ApplicationEntityTypeDescriptor {
+    const entity = this.requireEntity(entityType)
+    if (!entity.exposures.includes(context.exposure) || !context.acceptedDataClasses.has(entity.dataClass)
+      || (context.exposure === 'assistant' && entity.dataClass === 'C3')) throw new Error('PERMISSION_DENIED')
     return entity
   }
 

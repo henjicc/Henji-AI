@@ -37,7 +37,9 @@ describe('application surface registry', () => {
   it('打开 3D Surface 时同步进入工具箱并选择 3D 编辑器', () => {
     const result = openApplicationSurface('tool.camera_stage')
 
-    expect(result).toEqual({ surfaceId: 'tool.camera_stage' })
+    expect(result).toMatchObject({ surfaceId: 'tool.camera_stage', verification: {
+      verified: true, target: { kind: 'application.surface', id: 'tool.camera_stage' },
+    } })
     expect(useNavigationStore.getState()).toMatchObject({
       activeWorkspace: 'tools',
       activeToolId: 'cameraStage',

@@ -6,6 +6,12 @@ import { AGENT_INPUT_MODALITIES } from '../llm/agentProfiles'
 
 export const AGENT_ATTACHMENT_SCHEMA_VERSION = 'agent-attachment/v1' as const
 export const AGENT_ATTACHMENT_MAX_COUNT = 8
+export const AGENT_ATTACHMENT_FORMATS = { image: '.png,.jpg,.jpeg,.webp,.gif', video: '.mp4,.webm,.mov', audio: '.mp3,.wav' } as const
+export const AGENT_ATTACHMENT_MIME_TYPES: Record<'image' | 'video' | 'audio', readonly string[]> = {
+  image: ['image/png', 'image/jpeg', 'image/webp', 'image/gif'],
+  video: ['video/mp4', 'video/webm', 'video/quicktime'],
+  audio: ['audio/wav', 'audio/x-wav', 'audio/mpeg', 'audio/mp3'],
+}
 export const agentAttachmentModalitySchema = z.enum(AGENT_INPUT_MODALITIES)
 
 export const agentAttachmentSchema = z.object({
@@ -26,7 +32,7 @@ export type AgentAttachment = z.infer<typeof agentAttachmentSchema>
 
 export const agentAttachmentsSchema = z.array(agentAttachmentSchema).max(AGENT_ATTACHMENT_MAX_COUNT)
 
-const MAX_BYTES = {
+export const AGENT_ATTACHMENT_MAX_BYTES = {
   image: 20 * 1024 * 1024,
   video: 100 * 1024 * 1024,
   audio: 25 * 1024 * 1024,
@@ -41,7 +47,7 @@ export function validateAgentAttachmentLimits(attachments: AgentAttachment[]): v
     if (attachment.sourceStatus === 'missing' || attachment.sourceStatus === 'failed') {
       throw new Error(`[assistant_attachment_unavailable] 附件“${attachment.displayName}”当前不可读取`)
     }
-    if (attachment.sizeBytes > MAX_BYTES[attachment.modality]) {
+    if (attachment.sizeBytes > AGENT_ATTACHMENT_MAX_BYTES[attachment.modality]) {
       throw new Error(`[assistant_attachment_too_large] 附件“${attachment.displayName}”超过 ${attachment.modality} 输入大小限制`)
     }
   }

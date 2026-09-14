@@ -227,7 +227,7 @@ function firstCameraId(objects: StageObject[]): string | null {
 
 const initialStateKeyframe = createStateKeyframe([], '关键帧 1')
 
-export const useCameraStageStore = create<CameraStageState>()(
+export const createCameraStageStore = (background = false) => create<CameraStageState>()(
   temporal(
     (set, get) => ({
   objects: [],
@@ -274,7 +274,7 @@ export const useCameraStageStore = create<CameraStageState>()(
       const object = createCameraObject(
         nextName(state.objects, '摄像机'),
         pickDefaultColor(state.objects.length),
-        getDirectorView() ?? undefined,
+        background ? undefined : getDirectorView() ?? undefined,
       )
       // 重要记录 007：已存在其他摄像机时，新摄像机画幅直接继承首摄像机当前值，
       // 不给用户可独立编辑的初始值（画幅一致性从创建时就保证，不依赖导出时再校验）。
@@ -470,8 +470,7 @@ export const useCameraStageStore = create<CameraStageState>()(
 
   newScene: (name) => {
     // 新工程不继承上一次离开时的自由视角（跨工程共享的 localStorage 快照），回到标准正视角度
-    resetDirectorView()
-    resetCameraStagePlaybackRuntime(0, null)
+    if (!background) { resetDirectorView(); resetCameraStagePlaybackRuntime(0, null) }
     set(() => {
       const snapshot = createDefaultCameraStageSceneSnapshot()
       return {
@@ -494,7 +493,7 @@ export const useCameraStageStore = create<CameraStageState>()(
   },
 
   loadSnapshot: (snapshot, project) => {
-    resetCameraStagePlaybackRuntime(0, project.id)
+    if (!background) resetCameraStagePlaybackRuntime(0, project.id)
     set(() => {
       const activeCameraId = isCameraId(snapshot.objects, snapshot.activeCameraId)
         ? snapshot.activeCameraId
@@ -523,7 +522,7 @@ export const useCameraStageStore = create<CameraStageState>()(
 
   ...createStateKeyframeSlice(set),
 
-  ...createPlaybackSlice(set, get, applySampledObjectsSilently),
+  ...createPlaybackSlice(set, get, background ? (time) => set((state) => ({ objects: applyAnimationAtTime(state.objects, state.animation, time) })) : applySampledObjectsSilently, background),
 
   setSceneGroundColor: (color) =>
     set((state) => ({
@@ -806,6 +805,7 @@ export const useCameraStageStore = create<CameraStageState>()(
         a.animation === b.animation &&
         a.stateKeyframes === b.stateKeyframes,
       handleSet: (handleSet) => {
+        if (background) return handleSet
         historyRecord = handleSet
         return (pastState) => {
           if (historySessionActive) {
@@ -821,6 +821,8 @@ export const useCameraStageStore = create<CameraStageState>()(
     },
   ),
 )
+
+export const useCameraStageStore = createCameraStageStore()
 
 /** 清空撤销/重做历史（加载工程、新建场景后调用，避免跨工程回退） */
 export function clearCameraStageHistory(): void {

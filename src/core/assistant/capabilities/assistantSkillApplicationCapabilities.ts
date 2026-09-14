@@ -30,7 +30,7 @@ export const loadAssistantSkillCapability = defineApplicationCapability({
   id: 'load_assistant_skill',
   version: 1,
   title: '加载助手技能',
-  description: '按 skills_index 里的技能名读取该技能的完整操作说明；正文提到 references/ 下的文件时，再用 path 参数读取对应引用文件。',
+  description: '任务匹配 skills_index 适用条件时读取技能主文件，再用 path 读取当前步骤最需要的一份参考。每次只返回一个文件，不递归加载；已在上下文中的适用内容直接复用。',
   domain: 'application',
   aliases: ['加载技能', '读取技能', '技能说明', 'load skill', 'skill'],
   side: 'backend',
