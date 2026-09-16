@@ -1,7 +1,7 @@
 import { app } from 'electron'
 
 import { verifyModelCapabilities } from '../services/llm/sdk/capability-smoke'
-import { loadStoredLlmConfigForCli, saveStoredLlmConfigForCli } from './runner'
+import { loadStoredLlmConfigForCli, saveStoredLlmConfigForCli } from './model-config'
 import type { ModelCapabilitySmokeResult } from '../../../src/core/llm/capabilitySmoke'
 
 /**

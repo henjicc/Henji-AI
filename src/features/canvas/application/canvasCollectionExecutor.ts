@@ -134,10 +134,16 @@ export class CanvasCollectionExecutor implements ApplicationCollectionExecutor {
     if (step.operation.kind === 'create') {
       return step.operation.items.map((item, index) => {
         if (isEdge) {
+          const sourceHandle = property(item.properties, CANVAS_ENTITY_TYPES.edge, 'source_handle')
+          const targetHandle = property(item.properties, CANVAS_ENTITY_TYPES.edge, 'target_handle')
+          if ((sourceHandle !== undefined && typeof sourceHandle !== 'string')
+            || (targetHandle !== undefined && typeof targetHandle !== 'string')) throw new Error('CANVAS_HANDLE_INVALID')
           return {
             kind: 'connect_nodes' as const,
             sourceNodeId: childId(property(item.properties, CANVAS_ENTITY_TYPES.edge, 'source_ref'), `SOURCE_REF[${index}]`),
             targetNodeId: childId(property(item.properties, CANVAS_ENTITY_TYPES.edge, 'target_ref'), `TARGET_REF[${index}]`),
+            ...(sourceHandle === undefined ? {} : { sourceHandle }),
+            ...(targetHandle === undefined ? {} : { targetHandle }),
           }
         }
         const nodeType = property(item.properties, CANVAS_ENTITY_TYPES.node, 'node_type')

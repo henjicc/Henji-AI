@@ -1,7 +1,6 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 
-import type { AgentApprovalMode } from '@/core/assistant/runtimeContracts'
 import type { EmbeddedAgentPrompt } from '@/core/assistant/embeddedAgent'
 
 export type AssistantDockMode = 'left' | 'right' | 'floating'
@@ -21,11 +20,7 @@ interface AssistantUiState {
   mode: AssistantDockMode
   floatingPosition: AssistantPanelPosition
   size: AssistantPanelSize
-  threadId: string
-  activeRunId: string | null
-  currentGoal: string
   pendingGoal: string | null
-  approvalMode: AgentApprovalMode
   embeddedAccess: EmbeddedAgentPrompt['access']
   setEmbeddedAccess: (access: EmbeddedAgentPrompt['access']) => void
   setOpen: (open: boolean) => void
@@ -33,14 +28,9 @@ interface AssistantUiState {
   setMode: (mode: AssistantDockMode) => void
   setFloatingPosition: (position: AssistantPanelPosition) => void
   setSize: (size: AssistantPanelSize) => void
-  setActiveRun: (runId: string | null, goal?: string) => void
-  setThreadId: (threadId: string) => void
-  startNewConversation: () => void
   setPendingGoal: (goal: string | null) => void
-  setApprovalMode: (mode: AgentApprovalMode) => void
 }
 
-const DEFAULT_THREAD_ID = 'assistant-default-thread'
 
 export const useAssistantUiStore = create<AssistantUiState>()(
   persist(
@@ -49,11 +39,7 @@ export const useAssistantUiStore = create<AssistantUiState>()(
       mode: 'right',
       floatingPosition: { x: 720, y: 72 },
       size: { width: 420, height: 680 },
-      threadId: DEFAULT_THREAD_ID,
-      activeRunId: null,
-      currentGoal: '',
       pendingGoal: null,
-      approvalMode: 'assistant_decides',
       embeddedAccess: 'full',
       setEmbeddedAccess: (embeddedAccess) => set({ embeddedAccess }),
       setOpen: (open) => set({ open }),
@@ -61,21 +47,9 @@ export const useAssistantUiStore = create<AssistantUiState>()(
       setMode: (mode) => set({ mode }),
       setFloatingPosition: (floatingPosition) => set({ floatingPosition }),
       setSize: (size) => set({ size }),
-      setActiveRun: (activeRunId, goal) => set((state) => ({
-        activeRunId,
-        currentGoal: goal ?? state.currentGoal,
-      })),
-      setThreadId: (threadId) => set({ threadId }),
-      startNewConversation: () => set({
-        threadId: `assistant-thread-${crypto.randomUUID()}`,
-        activeRunId: null,
-        currentGoal: '',
-        pendingGoal: null,
-      }),
       setPendingGoal: (pendingGoal) => set(pendingGoal
         ? { pendingGoal, open: true }
         : { pendingGoal: null }),
-      setApprovalMode: (approvalMode) => set({ approvalMode }),
     }),
     {
       name: 'henji-assistant-ui',
@@ -85,10 +59,6 @@ export const useAssistantUiStore = create<AssistantUiState>()(
         mode: state.mode,
         floatingPosition: state.floatingPosition,
         size: state.size,
-        threadId: state.threadId,
-        activeRunId: state.activeRunId,
-        currentGoal: state.currentGoal,
-        approvalMode: state.approvalMode,
         embeddedAccess: state.embeddedAccess,
       }),
     }

@@ -22,29 +22,11 @@ export const ASSISTANT_UI_STORE_LEDGER: ApplicationStoreActionLedger<ActionName>
     setMode: { kind: 'excluded', category: 'view_state', reason: CHROME_REASON },
     setFloatingPosition: { kind: 'excluded', category: 'view_state', reason: CHROME_REASON },
     setSize: { kind: 'excluded', category: 'view_state', reason: CHROME_REASON },
-    setThreadId: { kind: 'excluded', category: 'view_state', reason: CHROME_REASON },
-    startNewConversation: { kind: 'excluded', category: 'view_state', reason: CHROME_REASON },
-    setActiveRun: {
-      kind: 'excluded',
-      category: 'derived',
-      reason: '当前运行 id 与目标是 useAgentRun.ts 在运行开始/推进时自动写回的派生投影，'
-        + '供面板展示进度用，不是用户或助手可以独立设置的值。',
-    },
     setPendingGoal: {
       kind: 'excluded',
       category: 'internal',
       reason: '面板打开前暂存的待发送目标文本，是 openAssistantDiagnosis.ts 等内部诊断入口'
         + '排队消息用的中转态，面板挂载后立即消费清空，不是独立动作。',
-    },
-    /*
-     * 审批模式是用户对助手的授权开关（自动执行 / 每步确认等）。助手改它等于自己给自己
-     * 提权，必须永久排除，理由与 4.3 任务文档的要求一致。
-     */
-    setApprovalMode: {
-      kind: 'excluded',
-      category: 'user_only',
-      reason: '审批模式是用户对助手的授权开关，决定助手接下来能不能免确认执行动作；'
-        + '助手改它等于自我提权，只能由用户在设置里操作。',
     },
   },
 }

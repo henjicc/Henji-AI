@@ -80,8 +80,8 @@ export function EmbeddedConversation(): JSX.Element {
     </div>
     <AssistantComposer key={state.sessionId ?? 'new'} value={document} onChange={setDocument} onSubmit={send} attachments={attachments} onAttachmentsChange={setAttachments}
       inputModalities={selectedModel?.inputModalities ?? []} attachmentsDisabled={submitting || !selectedModel} disabled={submitting || !selectedModel}
-      busy={busy} submitting={submitting} waitingForAnswer={false} messageMode="current_task" onMessageModeChange={() => {}}
-      approvalMode="assistant_decides" onApprovalModeChange={() => {}} onImportingChange={setImporting}
+      busy={busy} submitting={submitting}
+      onImportingChange={setImporting}
       onCancel={() => { void getPlatform().embeddedAgent.cancel().catch(reportEmbeddedAgentError) }}
       sendLabel={busy ? delivery === 'wait' ? '等待发送' : '打断发送' : '发送'}
       controls={<><Dropdown value={access} options={accessOptions} onSelect={setAccess} disabled={busy || importing} ariaLabel="助手操作权限" appearance="text" className="min-w-0" buttonClassName="!h-7 !px-2 text-2xs" />

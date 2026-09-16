@@ -1,8 +1,5 @@
 import { expect, it } from 'vitest'
 import { applicationTransactionFailureFactsSchema, failureObservedEffects, transactionFailureFacts } from './applicationTransactionFailureFacts'
-import { requireFrontendSuccess } from '../../../electron/main/services/agent-runtime/tools/builtin/frontend-utils'
-import { toGatewayError } from '../../../electron/main/services/agent-runtime/tools/gateway-support'
-import { serializeError } from '../../../electron/main/services/agent-runtime/runner/runner-results'
 
 const effect = { effect: 'update' as const, entityType: 'image_edit.layer', refs: [{ kind: 'image_edit.layer', id: 'v3:doc:layer' }],
   propertyIds: ['image_edit.layer.name'], origin: { kind: 'direct' as const } }
@@ -10,16 +7,11 @@ const facts = transactionFailureFacts({ status: 'failed', code: 'VERIFICATION_FA
   currentRevisions: { image_edit: 2, canvas: 3 }, effects: [effect], resultRefs: effect.refs, undoRef: 'undo:abcdefghijklmnop',
   partial: { completedStepIndexes: [0], compensatedStepIndexes: [], uncompensatedStepIndexes: [0] } })!
 
-it('合法失败事实经既有前端传输、Gateway 和事件序列化保留，观察永不伪装已验证', () => {
-  let caught: unknown
-  try { requireFrontendSuccess({ ok: false, error: { code: 'CAPABILITY_REJECTED', message: '已修改但验证失败', recoverable: true,
-    details: { transaction: facts, privateDocument: '不能传输' } } }) } catch (error) { caught = error }
-  const gateway = toGatewayError(caught)
-  expect(gateway.retryable).toBe(false)
-  expect(gateway.transaction).toEqual(facts)
-  expect(serializeError(gateway).transaction).toEqual(facts)
-  expect(JSON.stringify(serializeError(gateway))).not.toContain('privateDocument')
-  expect(failureObservedEffects(facts)).toEqual([expect.objectContaining({ verified: false, effect: 'update' })])
+it('事务失败事实经序列化保留实际副作用且不伪装已验证', () => {
+  const transmitted = applicationTransactionFailureFactsSchema.parse(JSON.parse(JSON.stringify(facts)))
+  expect(transmitted).toEqual(facts)
+  expect(transmitted.replayMutation).toBe(false)
+  expect(failureObservedEffects(transmitted)).toEqual([expect.objectContaining({ verified: false, effect: 'update' })])
 })
 
 it('失败DTO拒绝任意 details、属性值、文档和越界数组', () => {

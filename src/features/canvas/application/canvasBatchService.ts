@@ -160,7 +160,8 @@ async function executeOperation(projectId: string, operation: CanvasBatchOperati
     case 'duplicate_node': return duplicateCanvasNode({ projectId, nodeId: operation.nodeId, placement: operation.placement }, options)
     case 'update_node': return updateCanvasNode({ projectId, nodeId: operation.nodeId, data: operation.data }, options)
     case 'delete_nodes': return deleteCanvasNodes(projectId, operation.nodeIds, options)
-    case 'connect_nodes': return connectCanvasNodes({ projectId, sourceNodeId: operation.sourceNodeId, targetNodeId: operation.targetNodeId }, options)
+    case 'connect_nodes': return connectCanvasNodes({ projectId, sourceNodeId: operation.sourceNodeId, targetNodeId: operation.targetNodeId,
+      sourceHandle: operation.sourceHandle, targetHandle: operation.targetHandle }, options)
     case 'disconnect_edge': return disconnectCanvasEdge(projectId, operation.edgeId, options)
     case 'group_nodes': return groupCanvasNodes(projectId, operation.nodeIds, 'spatial', options)
     case 'select_node': {

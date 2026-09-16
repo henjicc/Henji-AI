@@ -20,7 +20,7 @@ import {
   generationStatusEventSchema,
   type GenerationTaskStatus,
   type GenerationStatusEvent,
-} from '@/core/assistant/externalWait'
+} from '@/core/application-control/domains/generation/taskStatus'
 
 import type { GenerationTask, GeneratorOptions, MediaType, ToastNotification } from '../types'
 import { isRecord, isStringArray } from '../utils/typeGuards'

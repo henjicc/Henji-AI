@@ -3,7 +3,7 @@
  *
  * 思考模式下思维链计入输出，加上一次批量工具调用的参数，4096 远远不够——实测同一次运行里
  * 两轮直接 finishReason=length 被截断，各白烧 30 秒以上。这个值只是下限，模型上限更低时仍以
- * 模型为准（见 agent-runtime/runner/models.ts）。
+ * 模型为准（见 electron/main/services/embedded-agent/models.ts）。
  *
  * 放在本文件而不是 defaults.ts：本文件零依赖，主进程可以直接 import；defaults.ts 会经 types.ts
  * 传递到用了 `@/` 别名的模块，而该别名只在渲染层配置，主进程打包会解析失败。

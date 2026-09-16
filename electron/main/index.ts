@@ -3,7 +3,6 @@ import { app, BrowserWindow } from 'electron'
 import path from 'node:path'
 import { warmApiMartEndpointPreference, warmGrsaiEndpointPreference } from '@henjicc/ai-sdk'
 import { registerAiRuntimeIpc } from './ipc/ai-runtime'
-import { registerAgentRuntimeIpc } from './ipc/agent-runtime'
 import { registerAudioIpc } from './ipc/audio'
 import { registerAssetLibraryIpc } from './ipc/asset-library'
 import { registerAssistantIpc } from './ipc/assistant'
@@ -36,7 +35,6 @@ import { configureChromiumDevelopmentCache } from './chromium-development-cache'
 import { configureWebGpuRuntime, registerWebGpuDiagnostics } from './webgpu-runtime'
 import { registerMediaProtocolHandler, registerMediaProtocolScheme, restoreAllowedMediaRoots } from './protocol'
 import { configureMacDockIcon } from './app-icon'
-import { disposeAgentRuntimeService } from './services/agent-runtime/runtime'
 import { sdkRuntimeContext } from './services/ai-runtime/sdk-runtime'
 import { getAiProviderApiKey } from './services/keystore'
 import { runLogRetention } from './services/logging'
@@ -88,7 +86,6 @@ app.whenReady().then(() => {
   registerMediaProtocolHandler()
   restoreAllowedMediaRoots()
   registerAiRuntimeIpc()
-  registerAgentRuntimeIpc()
   registerAudioIpc()
   registerAssetLibraryIpc()
   registerAssistantIpc()
@@ -154,7 +151,6 @@ app.whenReady().then(() => {
       // CLI 必须有确定的进程终点。供应商请求取消后极少数 SDK 会迟迟不释放连接，
       // 不能让已经产出终态的真实验收命令永远挂住。
       await Promise.race([
-        disposeAgentRuntimeService(),
         new Promise<void>((resolve) => { setTimeout(resolve, 5_000) }),
       ])
       app.exit(exitCode)
@@ -180,6 +176,5 @@ app.on('window-all-closed', () => {
 app.on('before-quit', () => {
   disposeEmbeddedAgent()
   void disposeMcp()
-  void disposeAgentRuntimeService()
   void disposeImageEditorV3Ipc()
 })

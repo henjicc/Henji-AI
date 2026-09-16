@@ -6,7 +6,7 @@ const path = require('node:path')
  * - clients：把真实外部 Agent 命令行接到真实应用上，协议测试客户端不能冒充这一层。
  * 两者都不产生付费请求，也不碰用户真实资料目录。
  */
-const SUITES = Object.freeze(['unit', 'integration', 'ui', 'ui-audit', 'restart', 'clients', 'live'])
+const SUITES = Object.freeze(['unit', 'integration', 'ui', 'ui-audit', 'restart', 'clients'])
 
 function readValue(argv, index, option) {
   const value = argv[index + 1]
@@ -58,11 +58,6 @@ function parseRealityTestArgs(argv) {
   if (options.suites.includes('unit') && options.tests.length === 0) {
     throw new Error('unit 层必须用 --test 指定一个或多个精确测试文件')
   }
-  if (options.suites.includes('live')) {
-    if (options.profile !== 'real') throw new Error('live 层必须显式传入 --profile real')
-    if (!options.allowPaid) throw new Error('live 层会产生真实 API 请求，必须显式传入 --allow-paid')
-    if (!options.allowWrites) throw new Error('live 层会写入真实业务数据，必须显式传入 --allow-writes')
-  }
   return options
 }
 
@@ -77,7 +72,7 @@ function uiArgs(options) {
 
 function buildRealityTestPlan(options, root) {
   const plans = []
-  const needsElectronArtifact = options.suites.some((suite) => ['ui', 'ui-audit', 'restart', 'clients', 'live'].includes(suite))
+  const needsElectronArtifact = options.suites.some((suite) => ['ui', 'ui-audit', 'restart', 'clients'].includes(suite))
   if (options.build && needsElectronArtifact) {
     plans.push({
       label: '生成最新 Electron 运行产物',
@@ -89,7 +84,7 @@ function buildRealityTestPlan(options, root) {
     if (suite === 'unit') {
       plans.push({ label: '精确单元测试', command: process.execPath, args: [path.join(root, 'node_modules/vitest/vitest.mjs'), 'run', ...options.tests] })
     } else if (suite === 'integration') {
-      plans.push({ label: '真实助手运行时集成测试', command: process.platform === 'win32' ? 'npm.cmd' : 'npm', args: ['run', 'test:assistant-harness'] })
+      plans.push({ label: '公共应用能力集成测试', command: process.platform === 'win32' ? 'npm.cmd' : 'npm', args: ['run', 'test:application-harness'] })
     } else if (suite === 'ui' || suite === 'ui-audit') {
       plans.push({
         label: suite === 'ui' ? '真实 Electron 界面巡检' : '真实 Electron DOM 规则审计',
@@ -105,13 +100,7 @@ function buildRealityTestPlan(options, root) {
       for (const value of options.only) args.push('--client', value)
       if (options.outDir) args.push('--out', options.outDir)
       plans.push({ label: '真实外部 Agent 客户端接入验收', command: process.execPath, args })
-    } else if (suite === 'live') {
-      const args = [path.join(root, 'scripts/run-assistant-live-suite.cjs')]
-      for (const value of options.only) args.push('--only', value)
-      if (options.probe) args.push('--probe')
-      if (options.skipGeneration) args.push('--skip-generation')
-      if (options.visible) args.push('--visible')
-      plans.push({ label: '真实模型与 API 验收', command: process.execPath, args })
+
     }
   }
   return plans

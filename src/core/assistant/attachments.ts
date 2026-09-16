@@ -1,6 +1,6 @@
 import { z } from 'zod'
 
-import { agentDataClassSchema } from './toolContracts'
+const agentDataClassSchema = z.enum(['C0', 'C1', 'C2', 'C3'])
 import type { ModelStepMessage } from '@henjicc/ai-sdk'
 import { AGENT_INPUT_MODALITIES } from '../llm/agentProfiles'
 

@@ -38,14 +38,8 @@ import type {
   HenjiWindowApi,
   HenjiWindowStatePayload,
 } from './api'
-import type {
-  FrontendToolCancel,
-  FrontendToolRequest,
-} from '../../src/core/application-control/hostContracts'
-import {
-  agentRuntimeEventPayloadSchema,
-  type AgentRuntimeEventPayload,
-} from '../../src/core/assistant/runtimeContracts'
+
+
 import { createImageVideoApis } from './image-video-api'
 import { createImageEditorV3Api } from './image-editor-v3-api'
 import { createEmbeddedAgentApi } from './embedded-agent-api'
@@ -111,44 +105,6 @@ const assistantApi: HenjiAssistantApi = {
   rejectMemoryCandidate: (candidateId) => nativeInvoke('assistant:memory:rejectCandidate', { candidateId }),
   deleteMemory: (memoryId) => nativeInvoke('assistant:memory:delete', { memoryId }),
   clearMemories: (scope) => nativeInvoke('assistant:memory:clear', { scope }),
-  publishHostContext: (snapshot) => nativeInvoke('assistant:publishHostContext', snapshot),
-  acknowledgeFrontendTool: (acknowledgement) => nativeInvoke('assistant:frontendTool:ack', acknowledgement),
-  completeFrontendTool: (result) => nativeInvoke('assistant:frontendTool:result', result),
-  onFrontendToolRequest: (handler) => {
-    const listener = (_event: Electron.IpcRendererEvent, request: FrontendToolRequest): void => handler(request)
-    ipcRenderer.on('assistant:frontendTool:request', listener)
-    return () => ipcRenderer.removeListener('assistant:frontendTool:request', listener)
-  },
-  onFrontendToolCancel: (handler) => {
-    const listener = (_event: Electron.IpcRendererEvent, cancel: FrontendToolCancel): void => handler(cancel)
-    ipcRenderer.on('assistant:frontendTool:cancel', listener)
-    return () => ipcRenderer.removeListener('assistant:frontendTool:cancel', listener)
-  },
-  startRun: (request) => nativeInvoke('assistant:agent:startRun', request),
-  cancelRun: (request) => nativeInvoke('assistant:agent:cancelRun', request),
-  pauseRun: (request) => nativeInvoke('assistant:agent:pauseRun', request),
-  resumeRun: (request) => nativeInvoke('assistant:agent:resumeRun', request),
-  respondApproval: (request) => nativeInvoke('assistant:agent:respondApproval', request),
-  getRunState: (request) => nativeInvoke('assistant:agent:getRunState', request),
-  getRunSnapshot: (request) => nativeInvoke('assistant:agent:getRunSnapshot', request),
-  getRunEvents: (request) => nativeInvoke('assistant:agent:getRunEvents', request),
-  listRuns: (request) => nativeInvoke('assistant:agent:listRuns', request),
-  listThreads: (request) => nativeInvoke('assistant:agent:listThreads', request),
-  deleteThreads: (request) => nativeInvoke('assistant:agent:deleteThreads', request),
-  getTranscript: (request) => nativeInvoke('assistant:agent:getTranscript', request),
-  enqueueMessage: (request) => nativeInvoke('assistant:agent:enqueueMessage', request),
-  cancelQueuedMessage: (request) => nativeInvoke('assistant:agent:cancelQueuedMessage', request),
-  reportGenerationStatus: (request) => nativeInvoke('assistant:agent:reportGenerationStatus', request),
-  cancelExternalWait: (request) => nativeInvoke('assistant:agent:cancelExternalWait', request),
-  retryRun: (request) => nativeInvoke('assistant:agent:retryRun', request),
-  subscribeEvents: (handler) => {
-    const listener = (_event: Electron.IpcRendererEvent, rawPayload: unknown): void => {
-      const payload: AgentRuntimeEventPayload = agentRuntimeEventPayloadSchema.parse(rawPayload)
-      handler(payload)
-    }
-    ipcRenderer.on('assistant:agent:event', listener)
-    return () => ipcRenderer.removeListener('assistant:agent:event', listener)
-  },
 }
 
 function createStreamId(): string {

@@ -1,5 +1,5 @@
 import {
-  AGENT_CONTRACT_VERSION,
+  APPLICATION_HOST_CONTRACT_VERSION,
   hostContextSnapshotSchema,
   type HostContextSnapshot,
   type HostScope,
@@ -36,19 +36,7 @@ const rendererSessionId = typeof crypto !== 'undefined' && 'randomUUID' in crypt
   ? crypto.randomUUID()
   : `renderer-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
 
-/**
- * 宿主发布的乐观并发基线。
- *
- * **每个 provider 自报的 revision scope 都必须出现在这里。** 通用写入的计划器要求调用方为
- * 目标实体的每一个 revision scope 提供期望值（`assertRevisions` 按 `Object.keys(revisions)`
- * 逐个要），而调用方能拿到的只有这份快照——scope 没发布，模型就永远给不出期望值，
- * 那条属性于是"声明可写、实际写不了"，报 `EXPECTED_REVISION_REQUIRED:<scope>` 且没有任何
- * 恢复路径（重试分支只处理 REVISION_CONFLICT）。
- *
- * `generation_draft` 与 `models` 就是这样漏了很久：两个 provider 各自有真实 revision
- * （草稿 store 的 `revision`、模型可见性事件计数），却从没发布出来，于是助手改提示词草稿、
- * 隐藏模型这两条路一直是死的。门禁在 `hostScopeCoverage.test.ts`。
- */
+/** 当前界面上下文的版本摘要；写入以目标实体读取返回的 revisions 为准。 */
 const scopeRevisions: HostScopeRevisions = {
   navigation: 0,
   generation: 0,
@@ -270,7 +258,7 @@ export function createHostContextSnapshot(uiReady = true): HostContextSnapshot {
     .reduce((total, capability) => total + capability.version, applicationCapabilities.length)
 
   return hostContextSnapshotSchema.parse({
-    schemaVersion: AGENT_CONTRACT_VERSION,
+    schemaVersion: APPLICATION_HOST_CONTRACT_VERSION,
     rendererSessionId,
     revision,
     scopeRevisions: getHostScopeRevisions(),

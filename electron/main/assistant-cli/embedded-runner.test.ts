@@ -6,8 +6,8 @@ vi.mock('../services/embedded-agent/service', () => ({ EmbeddedAgentService: cla
 } }))
 import { runEmbeddedCli } from './embedded-runner'
 import type { AssistantCliOptions } from './arguments'
-const options: AssistantCliOptions = { engine: 'pi', goal: '读取项目', approvalMode: 'assistant_decides', captureMode: 'summary',
-  printTrace: false, awaitGeneration: false, visible: false, requireVerifiedWrite: false, timeoutMs: 1000 }
+const options: AssistantCliOptions = { goal: '读取项目', approvalMode: 'assistant_decides', captureMode: 'summary',
+  visible: false, timeoutMs: 1000 }
 beforeEach(() => {
   vi.resetAllMocks()
   mocks.models.mockResolvedValue([{ providerId: 'test', modelId: 'configured' }])
@@ -34,12 +34,5 @@ describe('Pi CLI 正式服务边界', () => {
     expect(await runEmbeddedCli({ ...options, timeoutMs: 0 }, '', vi.fn())).toBe(1)
     expect(mocks.cancel).toHaveBeenCalledOnce()
     expect(mocks.dispose).toHaveBeenCalledTimes(2)
-  })
-  it('不支持的验收选项在调用模型之前拒绝，不能产生假通过', async () => {
-    for (const flags of [{ requireVerifiedWrite: true }, { awaitGeneration: true }]) {
-      await expect(runEmbeddedCli({ ...options, ...flags }, '', vi.fn())).rejects.toThrow('业务结果验收尚未接通')
-    }
-    await expect(runEmbeddedCli({ ...options, printTrace: true }, '', vi.fn())).rejects.toThrow('embedded_agent')
-    expect(mocks.prompt).not.toHaveBeenCalled()
   })
 })

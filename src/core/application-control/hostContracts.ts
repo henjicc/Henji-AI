@@ -1,9 +1,6 @@
 import { z } from 'zod'
 
-import { applicationCapabilityInvocationSchema } from './applicationCapabilities'
-
-export const AGENT_CONTRACT_VERSION = 'agent-contract/v2' as const
-export const LEGACY_AGENT_CONTRACT_VERSION = 'agent-contract/v1' as const
+export const APPLICATION_HOST_CONTRACT_VERSION = 'application-host/v1' as const
 
 export const hostScopeSchema = z.string().regex(/^[a-z][a-z0-9_.-]{1,63}$/)
 export type HostScope = z.infer<typeof hostScopeSchema>
@@ -18,7 +15,7 @@ export const hostScopeRevisionsSchema = z.object({
 export type HostScopeRevisions = z.infer<typeof hostScopeRevisionsSchema>
 
 export const hostContextSnapshotSchema = z.object({
-  schemaVersion: z.literal(AGENT_CONTRACT_VERSION),
+  schemaVersion: z.literal(APPLICATION_HOST_CONTRACT_VERSION),
   rendererSessionId: z.string().min(1),
   revision: z.number().int().nonnegative(),
   scopeRevisions: hostScopeRevisionsSchema,
@@ -71,33 +68,6 @@ export const hostContextSnapshotSchema = z.object({
 })
 export type HostContextSnapshot = z.infer<typeof hostContextSnapshotSchema>
 
-const legacyHostContextSnapshotSchema = hostContextSnapshotSchema
-  .omit({ schemaVersion: true, availableCapabilities: true })
-  .extend({
-    schemaVersion: z.literal(LEGACY_AGENT_CONTRACT_VERSION),
-    availableCommands: z.array(z.string().min(1)).optional(),
-    availableQueries: z.array(z.string().min(1)).optional(),
-  })
-
-export function parseHostContextSnapshot(input: unknown): HostContextSnapshot {
-  const current = hostContextSnapshotSchema.safeParse(input)
-  if (current.success) return current.data
-  const legacy = legacyHostContextSnapshotSchema.parse(input)
-  const {
-    availableCommands,
-    availableQueries,
-    ...snapshot
-  } = legacy
-  return hostContextSnapshotSchema.parse({
-    ...snapshot,
-    schemaVersion: AGENT_CONTRACT_VERSION,
-    availableCapabilities: [...new Set([
-      ...(availableCommands ?? []),
-      ...(availableQueries ?? []),
-    ])],
-  })
-}
-
 export const hostErrorCodeSchema = z.enum([
   'ABORTED',
   'CAPABILITY_NOT_READY',
@@ -133,50 +103,3 @@ export const applicationCapabilityResultSchema = z.discriminatedUnion('ok', [
   }),
 ])
 export type ApplicationCapabilityResult = z.infer<typeof applicationCapabilityResultSchema>
-
-export const frontendToolOperationSchema = z.object({
-  kind: z.literal('capability'),
-  capability: applicationCapabilityInvocationSchema,
-}).strict()
-export type FrontendToolOperation = z.infer<typeof frontendToolOperationSchema>
-
-export const frontendToolRequestSchema = z.object({
-  schemaVersion: z.literal(AGENT_CONTRACT_VERSION),
-  runId: z.string().min(1),
-  toolCallId: z.string().min(1),
-  callId: z.string().min(1),
-  idempotencyKey: z.string().min(1),
-  deadline: z.number().int().positive(),
-  operation: frontendToolOperationSchema,
-})
-export type FrontendToolRequest = z.infer<typeof frontendToolRequestSchema>
-
-export const frontendToolAcknowledgementSchema = z.object({
-  schemaVersion: z.literal(AGENT_CONTRACT_VERSION),
-  callId: z.string().min(1),
-  rendererSessionId: z.string().min(1),
-  acknowledgedAt: z.string().datetime(),
-})
-export type FrontendToolAcknowledgement = z.infer<typeof frontendToolAcknowledgementSchema>
-
-export const frontendToolResultSchema = z.object({
-  schemaVersion: z.literal(AGENT_CONTRACT_VERSION),
-  runId: z.string().min(1),
-  toolCallId: z.string().min(1),
-  callId: z.string().min(1),
-  idempotencyKey: z.string().min(1),
-  rendererSessionId: z.string().min(1),
-  completedAt: z.string().datetime(),
-  result: applicationCapabilityResultSchema,
-})
-export type FrontendToolResult = z.infer<typeof frontendToolResultSchema>
-
-export const frontendToolCancelSchema = z.object({
-  callId: z.string().min(1),
-  reason: z.string().min(1),
-})
-export type FrontendToolCancel = z.infer<typeof frontendToolCancelSchema>
-
-export function getFrontendToolOperationName(operation: FrontendToolOperation): string {
-  return operation.capability.id
-}

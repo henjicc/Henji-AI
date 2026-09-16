@@ -34,6 +34,8 @@ export const canvasBatchOperationSchema = z.discriminatedUnion('kind', [
     kind: z.literal('connect_nodes'),
     sourceNodeId: z.string().min(1),
     targetNodeId: z.string().min(1),
+    sourceHandle: z.string().min(1).max(120).optional(),
+    targetHandle: z.string().min(1).max(120).optional(),
   }).strict(),
   z.object({
     kind: z.literal('disconnect_edge'),

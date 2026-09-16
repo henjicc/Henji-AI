@@ -1,4 +1,4 @@
-import { normalizeGenerationTaskStatus } from '@/core/assistant/externalWait'
+import { normalizeGenerationTaskStatus } from '@/core/application-control/domains/generation/taskStatus'
 import { registry } from '@/core/ModelRegistry'
 import { modelDefaultsManager } from '@/features/settings/modelDefaultsManager'
 import { generationService } from '@/core/services/GenerationService'

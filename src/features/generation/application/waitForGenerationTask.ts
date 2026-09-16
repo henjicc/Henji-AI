@@ -1,4 +1,4 @@
-import { isGenerationTerminalStatus } from '@/core/assistant/externalWait'
+import { isGenerationTerminalStatus } from '@/core/application-control/domains/generation/taskStatus'
 
 /** 等待只观察已有任务，不提交、恢复或取消生成。计时和查询留在宿主，不消耗模型轮次。 */
 export function waitForGenerationTask(

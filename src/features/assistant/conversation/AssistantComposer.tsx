@@ -1,10 +1,8 @@
 import { useCallback, useEffect, useRef, useState, type ClipboardEvent, type DragEvent, type ReactNode } from 'react'
 import { Paperclip, Send, Square, X } from 'lucide-react'
 
-import { Dropdown, PromptEditor, UI_TEXT_BODY_CLASS, UI_TEXT_META_CLASS, UiButton, UiError, UiIconButton, UiInput } from '@/components/ui'
+import { PromptEditor, UI_TEXT_BODY_CLASS, UI_TEXT_META_CLASS, UiButton, UiError, UiIconButton, UiInput } from '@/components/ui'
 import { AGENT_ATTACHMENT_MAX_COUNT, AGENT_ATTACHMENT_FORMATS, type AgentAttachment } from '@/core/assistant/attachments'
-import type { AgentApprovalMode } from '@/core/assistant/runtimeContracts'
-import type { AgentQueuedMessagePayload } from '@/core/assistant/session'
 import {
   toModelPromptText,
   type PromptDocumentV1,
@@ -28,12 +26,7 @@ interface AssistantComposerProps {
   attachmentsDisabled: boolean
   disabled: boolean
   busy: boolean
-  waitingForAnswer: boolean
-  messageMode: AgentQueuedMessagePayload['mode']
-  onMessageModeChange: (mode: AgentQueuedMessagePayload['mode']) => void
   submitting: boolean
-  approvalMode: AgentApprovalMode
-  onApprovalModeChange: (mode: AgentApprovalMode) => void
   inputModalities?: AgentAttachment['modality'][]
   controls?: ReactNode
   onCancel?: () => void
@@ -41,24 +34,13 @@ interface AssistantComposerProps {
   sendLabel?: string
 }
 
-const approvalModeOptions: Array<{ value: AgentApprovalMode; label: string }> = [
-  { value: 'ask', label: '严格确认' },
-  { value: 'assistant_decides', label: '助手判断' },
-  { value: 'full_access', label: '充分访问' },
-]
-
 export function AssistantComposer({
   value,
   onChange,
   onSubmit,
   disabled,
   busy,
-  waitingForAnswer,
-  messageMode,
-  onMessageModeChange,
   submitting,
-  approvalMode,
-  onApprovalModeChange,
   attachments,
   onAttachmentsChange,
   attachmentsDisabled,
@@ -219,9 +201,7 @@ export function AssistantComposer({
         value={value}
         onChange={changeDocument}
         ariaLabel="向智能助手描述任务"
-        placeholder={waitingForAnswer
-          ? '回答助手刚才的问题…'
-          : busy ? '可补充当前任务，或安排任务结束后继续…' : inputModalities.length ? '描述目标，输入 @ 添加选中节点的素材…' : '描述目标，或粘贴错误信息…'}
+        placeholder={busy ? '可补充当前任务，或安排任务结束后继续…' : inputModalities.length ? '描述目标，输入 @ 添加选中节点的素材…' : '描述目标，或粘贴错误信息…'}
         disabled={submitting}
         maxCharacters={32 * 1024}
         submitShortcut="enter"
@@ -240,32 +220,7 @@ export function AssistantComposer({
             disabled={attachmentsDisabled || importing || submitting}
             onClick={() => inputRef.current?.click()}
           ><Paperclip className="h-4 w-4" /></UiIconButton> : null}
-          {controls ?? <>{busy ? (
-            <Dropdown<AgentQueuedMessagePayload['mode']>
-              value={messageMode}
-              options={[
-                ...(waitingForAnswer
-                  ? [{ value: 'clarification' as const, label: '回答当前问题' }]
-                  : [
-                      { value: 'current_task' as const, label: '补充当前任务' },
-                      { value: 'after_task' as const, label: '任务结束后继续' },
-                    ]),
-              ]}
-              onSelect={onMessageModeChange}
-              minWidthStrategy="options"
-              panelWidthStrategy="options"
-              buttonClassName="!h-7 !rounded-lg !px-2 text-2xs"
-            />
-          ) : null}
-          <Dropdown<AgentApprovalMode>
-            value={approvalMode}
-            options={approvalModeOptions}
-            onSelect={onApprovalModeChange}
-            minWidthStrategy="options"
-            panelWidthStrategy="options"
-            buttonClassName="!h-7 !rounded-lg !px-2 text-2xs"
-          />
-          </>}
+          {controls}
         </div>
         <div className="ml-auto flex shrink-0 items-center gap-2">
         {busy && onCancel ? <UiButton size="sm" onClick={onCancel} title={sendLabel ? '停止当前回复，等待中的消息将继续发送' : '停止当前回复'}><Square className="mr-1 h-3 w-3" />停止</UiButton> : null}

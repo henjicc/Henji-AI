@@ -53,7 +53,6 @@ import {
 } from '@/features/generation/application/generationReflection'
 import { GenerationDraftMutationExecutor } from '@/features/generation/application/generationDraftMutationExecutor'
 import { GenerationModelMutationExecutor } from '@/features/generation/application/generationModelMutationExecutor'
-import { createAssistantRuntimeReflectionRegistrations } from '@/features/assistant/application/assistantRuntimeReflection'
 
 let registry: ApplicationReflectionRegistry | undefined
 let executionEngine: ApplicationControlExecutionEngine | undefined
@@ -145,7 +144,6 @@ export function getApplicationReflectionRegistry(): ApplicationReflectionRegistr
   registerAll(next, 'toolbox', [createToolboxReflectionRegistration()])
   registerAll(next, 'generation', createGenerationReflectionRegistrations())
   registerAll(next, 'generation_draft', [createGenerationDraftReflectionRegistration()])
-  registerAll(next, 'assistant_runtime', createAssistantRuntimeReflectionRegistrations())
   registerAll(next, 'camera_stage', createCameraStageReflectionRegistrations(
     () => cameraStageDependencies.readRevision()
   ))

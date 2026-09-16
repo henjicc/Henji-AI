@@ -522,25 +522,4 @@ describe('应用反射通用能力适配器', () => {
     }))
   })
 
-  it('通用写入对所有可写反射领域解析精确 revision 作用域', () => {
-    const capability = APPLICATION_REFLECTION_APPLICATION_CAPABILITIES
-      .find((item) => item.id === 'change_application_entities')
-    if (!capability?.resolveRequiredScopes) throw new Error('CHANGE_REQUIRED_SCOPE_RESOLVER_MISSING')
-    const input = (entityType: string, propertyId: string) => ({
-      summary: `修改 ${entityType}`,
-      changes: [{
-        kind: 'set_properties' as const,
-        target: { kind: entityType, id: 'target-1' }, entityType,
-        properties: { [propertyId]: 'value' },
-      }],
-    })
-    expect(capability.resolveRequiredScopes(input('camera_stage.object', 'camera_stage.object.color') as never))
-      .toEqual(['toolbox'])
-    expect(capability.resolveRequiredScopes(input('canvas.node', 'canvas.node.title') as never))
-      .toEqual(['canvas'])
-    expect(capability.resolveRequiredScopes(input('asset', 'asset.favorite') as never))
-      .toEqual(['assets'])
-    expect(capability.resolveRequiredScopes(input('settings.registry', 'interface.theme_tone') as never))
-      .toEqual(['settings'])
-  })
 })

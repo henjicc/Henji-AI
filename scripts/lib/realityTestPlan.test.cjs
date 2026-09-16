@@ -8,14 +8,8 @@ test('默认不暗中选择昂贵测试层', () => {
   assert.equal(options.profile, 'temporary')
 })
 
-test('live 层要求真实资料、付费和写入三道显式开关', () => {
-  assert.throws(() => parseRealityTestArgs(['--suite', 'live']), /profile real/)
-  assert.throws(() => parseRealityTestArgs(['--suite', 'live', '--profile', 'real']), /allow-paid/)
-  assert.throws(() => parseRealityTestArgs(['--suite', 'live', '--profile', 'real', '--allow-paid']), /allow-writes/)
-  const options = parseRealityTestArgs([
-    '--suite', 'live', '--profile', 'real', '--allow-paid', '--allow-writes', '--only', 'camera',
-  ])
-  assert.deepEqual(options.only, ['camera'])
+test('拒绝已经移除的旧运行时验收入口', () => {
+  assert.throws(() => parseRealityTestArgs(['--suite', 'live']), /未知测试层/)
 })
 
 test('UI 计划把资料模式与写入授权传给既有真实 Electron 执行器', () => {

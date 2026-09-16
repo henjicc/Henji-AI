@@ -1,7 +1,7 @@
 import Database from 'better-sqlite3'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
-import { runAgentSchemaMigrations } from '../agent-runtime/persistence/migrations'
+import { initializeAssistantMemorySchema } from './storageSchema'
 import { AgentMemoryStore } from './memory-store'
 
 const describeWithElectronSqlite = process.versions.electron ? describe : describe.skip
@@ -13,20 +13,7 @@ describeWithElectronSqlite('AgentMemoryStore', () => {
   beforeEach(() => {
     database = new Database(':memory:')
     database.pragma('foreign_keys = ON')
-    runAgentSchemaMigrations(database)
-    const now = Date.now()
-    database.prepare(`
-      INSERT INTO agent_threads(thread_id, title, created_at, updated_at)
-      VALUES ('thread-memory', '记忆测试', ?, ?)
-    `).run(now, now)
-    database.prepare(`
-      INSERT INTO agent_runs(
-        run_id, thread_id, goal, request_json, state_json, status,
-        checkpoint_version, checkpoint_json, recovery_status,
-        parent_run_id, created_at, updated_at
-      ) VALUES ('run-memory', 'thread-memory', '记住偏好', '{}', '{}', 'completed',
-        'agent-checkpoint/v1', '{}', 'none', NULL, ?, ?)
-    `).run(now, now)
+    initializeAssistantMemorySchema(database)
     store = new AgentMemoryStore(database)
   })
 

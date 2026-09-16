@@ -6,10 +6,6 @@ import { randomUUID } from 'node:crypto'
 /** 使用侧栏的正式服务；会话完成不冒充业务结果验收通过。 */
 export async function runEmbeddedCli(options: AssistantCliOptions, context: string,
   write: (record: { type: string; [key: string]: unknown }) => void): Promise<number> {
-  if (options.requireVerifiedWrite || options.awaitGeneration) {
-    throw new Error('Pi 的业务结果验收尚未接通，不能使用 --require-verified-write 或 --await-generation；不要把回复完成视为写入或生成完成。')
-  }
-  if (options.printTrace) throw new Error('Pi 使用统一日志中的 embedded_agent 事件；--print-trace 仅适用于 legacy。')
   const model = (await listEmbeddedModels())[0]
   if (!model) throw new Error('请先在设置中配置可用的助手主模型。')
   const service = new EmbeddedAgentService()

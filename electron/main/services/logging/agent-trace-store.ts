@@ -1,4 +1,5 @@
 import type Database from 'better-sqlite3'
+import { initializeModelTraceSchema } from './traceSchema'
 
 import {
   agentTraceCompleteInputSchema,
@@ -184,13 +185,13 @@ function statusFromRuntime(
 }
 
 export class AgentTraceStore {
-  constructor(private readonly database: Database.Database) {}
+  constructor(private readonly database: Database.Database) { initializeModelTraceSchema(database) }
 
   start(rawInput: AgentTraceStartInput): void {
     const input = agentTraceStartInputSchema.parse(rawInput)
     const now = Date.now()
     this.database.prepare(`
-      INSERT OR REPLACE INTO agent_model_traces(
+      INSERT OR REPLACE INTO application_model_traces(
         trace_id, run_id, request_id, step_id, step_kind, turn,
         provider_id, model_id, status, started_at, completed_at,
         elapsed_ms, finish_reason, usage_json, capture_mode, detail_json,
@@ -226,7 +227,7 @@ export class AgentTraceStore {
     const detailJson = detail ? JSON.stringify(detail) : null
     const identity = this.getIdentity(input.traceId)
     this.database.prepare(`
-      UPDATE agent_model_traces
+      UPDATE application_model_traces
       SET status = 'completed', completed_at = ?, elapsed_ms = ?, finish_reason = ?,
           usage_json = ?, detail_json = ?, detail_bytes = ?, original_detail_bytes = ?,
           detail_truncated = ?, error_json = NULL, updated_at = ?
@@ -261,7 +262,7 @@ export class AgentTraceStore {
     const detailJson = detail ? JSON.stringify(detail) : null
     const identity = this.getIdentity(input.traceId)
     this.database.prepare(`
-      UPDATE agent_model_traces
+      UPDATE application_model_traces
       SET status = ?, completed_at = ?, elapsed_ms = ?, finish_reason = NULL,
           usage_json = ?, detail_json = ?, detail_bytes = ?, original_detail_bytes = ?,
           detail_truncated = ?, error_json = ?, updated_at = ?
@@ -328,8 +329,8 @@ export class AgentTraceStore {
     const where = clauses.length > 0 ? `WHERE ${clauses.join(' AND ')}` : ''
     const rows = this.database.prepare(`
       SELECT t.*, r.thread_id, r.goal, r.status AS run_status
-      FROM agent_model_traces t
-      LEFT JOIN agent_runs r ON r.run_id = t.run_id
+      FROM application_model_traces t
+      LEFT JOIN model_trace_contexts r ON r.run_id = t.run_id
       ${where}
       ORDER BY t.started_at DESC
       LIMIT ?
@@ -389,8 +390,8 @@ export class AgentTraceStore {
   getDetail(traceId: string): AgentTraceDetailResult | null {
     const row = this.database.prepare(`
       SELECT t.*, r.thread_id, r.goal, r.status AS run_status
-      FROM agent_model_traces t
-      LEFT JOIN agent_runs r ON r.run_id = t.run_id
+      FROM application_model_traces t
+      LEFT JOIN model_trace_contexts r ON r.run_id = t.run_id
       WHERE t.trace_id = ?
     `).get(traceId) as TraceRow | undefined
     if (!row) return null
@@ -403,7 +404,7 @@ export class AgentTraceStore {
     const now = Date.now()
     if (!runIds || runIds.length === 0) {
       this.database.prepare(`
-        UPDATE agent_model_traces
+        UPDATE application_model_traces
         SET status = 'interrupted', completed_at = ?,
             elapsed_ms = MAX(0, ? - started_at), updated_at = ?
         WHERE status = 'running'
@@ -412,7 +413,7 @@ export class AgentTraceStore {
     }
     const placeholders = runIds.map(() => '?').join(', ')
     this.database.prepare(`
-      UPDATE agent_model_traces
+      UPDATE application_model_traces
       SET status = 'interrupted', completed_at = ?,
           elapsed_ms = MAX(0, ? - started_at), updated_at = ?
       WHERE status = 'running' AND run_id IN (${placeholders})
@@ -421,7 +422,7 @@ export class AgentTraceStore {
 
   clear(date?: string): void {
     if (!date) {
-      const result = this.database.prepare('DELETE FROM agent_model_traces').run()
+      const result = this.database.prepare('DELETE FROM application_model_traces').run()
       logger.info('助手模型追踪已清空', {
         event: 'agent_trace.records.cleared',
         context: { count: result.changes, scope: 'all' },
@@ -429,7 +430,7 @@ export class AgentTraceStore {
       return
     }
     const { start, end } = localDateRange(date)
-    const result = this.database.prepare('DELETE FROM agent_model_traces WHERE started_at >= ? AND started_at < ?')
+    const result = this.database.prepare('DELETE FROM application_model_traces WHERE started_at >= ? AND started_at < ?')
       .run(start, end)
     logger.info('助手模型追踪已按日期清空', {
       event: 'agent_trace.records.cleared',
@@ -441,21 +442,21 @@ export class AgentTraceStore {
     const cutoff = now - TRACE_RETENTION_MS
     this.database.transaction(() => {
       this.database.prepare(`
-        UPDATE agent_model_traces SET status = 'interrupted', updated_at = ?
+        UPDATE application_model_traces SET status = 'interrupted', updated_at = ?
         WHERE status = 'running' AND started_at < ?
       `).run(now, cutoff)
-      this.database.prepare('DELETE FROM agent_model_traces WHERE started_at < ?').run(cutoff)
+      this.database.prepare('DELETE FROM application_model_traces WHERE started_at < ?').run(cutoff)
       const totalRow = this.database.prepare(
-        'SELECT COALESCE(SUM(detail_bytes), 0) AS total FROM agent_model_traces'
+        'SELECT COALESCE(SUM(detail_bytes), 0) AS total FROM application_model_traces'
       ).get() as { total: number } | undefined
       let total = Number(totalRow?.total ?? 0)
       while (total > TRACE_MAX_TOTAL_BYTES) {
         const oldest = this.database.prepare(`
-          SELECT trace_id, detail_bytes FROM agent_model_traces
+          SELECT trace_id, detail_bytes FROM application_model_traces
           ORDER BY started_at ASC LIMIT 1
         `).get() as { trace_id: string; detail_bytes: number } | undefined
         if (!oldest) break
-        this.database.prepare('DELETE FROM agent_model_traces WHERE trace_id = ?').run(oldest.trace_id)
+        this.database.prepare('DELETE FROM application_model_traces WHERE trace_id = ?').run(oldest.trace_id)
         total -= oldest.detail_bytes
       }
     })()
@@ -464,7 +465,7 @@ export class AgentTraceStore {
   private getIdentity(traceId: string): TraceIdentityRow | undefined {
     return this.database.prepare(`
       SELECT run_id, step_id, provider_id, model_id
-      FROM agent_model_traces
+      FROM application_model_traces
       WHERE trace_id = ?
     `).get(traceId) as TraceIdentityRow | undefined
   }

@@ -10,7 +10,6 @@ import {
 } from '.'
 
 import type { ApplicationDataClass, ApplicationCapabilityPreview, ApplicationUndoReference } from './capabilityMetadata'
-import type { HostScope } from './hostContracts'
 import type { ApplicationObservedEffect } from './observedEffect'
 
 const applicationCapabilityRiskSchema = z.enum(['R0', 'R1', 'R2', 'R3', 'R4'])
@@ -59,7 +58,6 @@ export const applicationCapabilityDescriptorSchema = z.object({
     maxRetries: z.number().int().min(0).max(3),
     baseDelayMs: z.number().int().nonnegative().max(30_000),
   }).strict().optional(),
-  maxCallsPerRun: z.number().int().positive().optional(),
   available: z.boolean().default(true),
   /** 默认公开前端业务能力；已有通用实体入口或内部恢复必须在原声明中说明。 */
   external: z.discriminatedUnion('kind', [
@@ -87,12 +85,6 @@ export interface ApplicationCapabilityDefinition<TInput = unknown, TOutput = unk
   aiInputSchema: Record<string, unknown>
   completionKind?: 'executed' | 'submitted' | 'observed'
   parallelSafe?: boolean
-  /**
-   * 输入决定实际写入领域时，按已通过 schema 的输入解析乐观并发作用域。
-   * 典型场景是通用实体动词：它本身属于 application，但一次调用只会修改
-   * toolbox、canvas、assets 或 settings 中的一个或几个领域。
-   */
-  resolveRequiredScopes?(input: TInput): HostScope[]
   resolveConcurrencyKey?(input: TInput): string
   resolveTargetIds?(input: TInput): Record<string, string>
   /** 派发前绑定的正式目标，供独立调用方持久记录和基线核对。 */
@@ -102,19 +94,6 @@ export interface ApplicationCapabilityDefinition<TInput = unknown, TOutput = unk
   resolveOperationAppendTargets?(input: TInput): Array<{ kind: string; id: string }>
   resolveDataClasses?(output: TOutput): ApplicationDataClass[]
   summarize?(output: TOutput): string
-  /**
-   * 结果写入对话历史时的投影。
-   *
-   * 只影响那条 `role:'tool'` 消息。observation 本体、Effect Ledger、Facet 结算、卸载判定读的
-   * 都是完整 output，不受影响；未声明本钩子的能力按原样内联，行为与声明前逐字节一致。
-   *
-   * 存在的理由：实测一次三维任务里，`discover_application_capabilities` 一条 29.9KB、
-   * `describe_application_entities` 一条 15.5KB，两条就吃掉整次运行对话历史的 58%，而里面
-   * 占大头的是每轮 `tools` 参数已经带过的输入 schema，以及权限、暴露面、数据分级这些由网关
-   * 强制执行、模型压根无法行动的字段。事后再去历史里清理要作废缓存前缀（实测回本需 ~6 轮，
-   * 而一次运行只有 ~13 轮），所以只能在写入前就不放进去。
-   */
-  projectForHistory?(output: TOutput): unknown
   /**
    * 示例调用，渲染进模型看到的工具描述。
    *
@@ -143,11 +122,6 @@ export interface ApplicationCapabilityDefinition<TInput = unknown, TOutput = unk
    * 文本 successEvidence 不能替代它。
    */
   verificationContract?: ApplicationCapabilityVerificationContract
-  /**
-   * 决定一次已返回结构化结果的调用是否消耗 maxCallsPerRun。
-   * 仅用于“零副作用的编译/预检拒绝可安全修正”这类受控入口；默认所有结果都计数。
-   */
-  countsTowardCallLimit?(output: TOutput): boolean
   preview?(input: TInput): ApplicationCapabilityPreview
   createUndo?(output: TOutput): ApplicationUndoReference | undefined
   resolveObservedEffects?(input: TInput, output: TOutput): ApplicationObservedEffect[]
@@ -161,7 +135,7 @@ export interface ApplicationCapabilityDefinition<TInput = unknown, TOutput = unk
  * 定义里**不属于描述符**的键，唯一来源。
  *
  * `applicationCapabilityDescriptorSchema` 是 strict 的，任何没被剥掉的键都会让注册当场抛错。
- * 此前 `register()` 和 `descriptors()` 各写一份解构，新增 `projectForHistory` 和 `inputExamples`
+ * `register()` 和 `descriptors()` 共用剥离规则，新增 `inputExamples` 等字段
  * 时都只改到了其中一处——同一个坑连踩两次。收成一张表，两处共用，就不会再漂移。
  */
 const NON_DESCRIPTOR_KEYS = [
@@ -170,7 +144,6 @@ const NON_DESCRIPTOR_KEYS = [
   'aiInputSchema',
   'completionKind',
   'parallelSafe',
-  'resolveRequiredScopes',
   'resolveConcurrencyKey',
   'resolveTargetIds',
   'resolveOperationTargets',
@@ -178,12 +151,10 @@ const NON_DESCRIPTOR_KEYS = [
   'resolveOperationAppendTargets',
   'resolveDataClasses',
   'summarize',
-  'projectForHistory',
   'inputExamples',
   'executionPrerequisites',
   'paidGenerationPreparation',
   'verificationContract',
-  'countsTowardCallLimit',
   'preview',
   'createUndo',
   'resolveObservedEffects',
@@ -227,7 +198,7 @@ export class ApplicationCapabilityRegistry {
     if (properties && typeof properties === 'object') {
       const forbiddenInputs = ['patch', 'storePatch', 'executeScript', 'script', 'code', 'source']
       const forbidden = forbiddenInputs.find((key) => key in properties)
-      if (forbidden && !(definition.id === 'run_henji_script' && forbidden === 'source')) {
+      if (forbidden) {
         throw new Error(`应用能力禁止任意 Patch 或脚本输入：${definition.id}.${forbidden}`)
       }
     }
@@ -282,4 +253,3 @@ export const applicationCapabilityInvocationSchema = z.object({
   expectedRevisions: z.record(z.string(), z.number().int().nonnegative()).optional(),
 }).strict()
 export type ApplicationCapabilityInvocation = z.infer<typeof applicationCapabilityInvocationSchema>
-

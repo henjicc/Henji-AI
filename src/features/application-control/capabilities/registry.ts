@@ -266,7 +266,12 @@ function toFailure(error: unknown): ApplicationCapabilityResult {
     if (!failure.ok) return { ...failure, error: { ...failure.error, details: { execution: { rolledBack: true } } } }
   }
   if (error instanceof CanvasPersistenceError && error.transactionFacts) return toFailure(new ApplicationTransactionFailure(error.transactionFacts))
-  if (error instanceof ApplicationPreflightFailure) return { ok: false, error: { code: error.message.startsWith('CONFLICT:') ? 'CONFLICT' : 'INVALID_INPUT', message: error.message, recoverable: true, details: { execution: { notExecuted: true } } } }
+  if (error instanceof ApplicationPreflightFailure) {
+    const conflict = /^(?:CONFLICT|REVISION_CONFLICT|PLAN_REVISION_CONFLICT)(?::|$)/.test(error.message)
+    return { ok: false, error: { code: conflict ? 'CONFLICT' : 'INVALID_INPUT',
+      message: conflict ? `目标状态已变化，请重新读取原目标取得版本后再试。${error.message}` : error.message,
+      recoverable: true, details: { execution: { notExecuted: true } } } }
+  }
   if (error instanceof ApplicationTransactionFailure) {
     const transaction = transactionFailureFacts(error.result)
     return { ok: false, error: { code: error.result.code === 'CONFLICT' ? 'CONFLICT' : 'CAPABILITY_REJECTED', message: error.message,

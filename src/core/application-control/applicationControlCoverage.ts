@@ -43,12 +43,6 @@ const domainPlans: Readonly<Record<string, DomainPlan>> = {
   camera_stage: domainPlan('camera_stage', '5.1', 'src/features/cameraStage/application/ 与 projects/cameraStageProjectService.ts', ['camera_stage.project', 'camera_stage.scene', 'camera_stage.object', 'camera_stage.camera', 'camera_stage.state_keyframe', 'camera_stage.trajectory'], ['src/features/cameraStage/application/cameraStageReflection.ts', 'src/features/cameraStage/domain/animatableProps.ts'], 'cameraStage*ApplicationCapabilities.ts', 'observe_camera_stage_scene', ['application.plan', 'application.commit', 'place_camera_stage_object', 'apply_camera_stage_camera_move'], 'operation'),
   toolbox: domainPlan('toolbox', '5.3', 'src/features/toolbox/application/', ['toolbox.tool'], ['src/features/imageEdit/tools/registry.ts'], 'toolboxApplicationCapabilities.ts', 'application.observe', ['toolbox.select'], 'operation'),
   storyboard: domainPlan('storyboard', '5.3', 'src/features/canvas/application/storyboardProjectService.ts', ['storyboard.project', 'storyboard.card'], ['src/features/canvas/application/storyboardReflection.ts'], 'toolboxApplicationCapabilities.ts', 'application.observe', ['storyboard.update'], 'operation'),
-  assistant_runtime: domainPlan('assistant_runtime', '5.4', 'src/features/assistant/application/', ['assistant.run'], ['src/core/assistant/events.ts'], 'assistantRuntimeApplicationService.ts', 'application.observe', ['assistant.start', 'assistant.pause', 'assistant.resume', 'assistant.cancel', 'assistant.retry'], 'runtime'),
-  artifacts: domainPlan('artifacts', '5.4', 'src/features/assistant/application/', ['assistant.artifact'], ['src/core/assistant/artifacts.ts'], 'assistantRuntimeApplicationCapabilities.ts', 'read_agent_artifact', ['read_agent_artifact'], 'runtime'),
-  diagnostics: runtimeDomainPlan('diagnostics', 'query_diagnostic_events'),
-  memory: runtimeDomainPlan('memory', 'list_agent_memories'),
-  user_instructions: runtimeDomainPlan('user_instructions', 'get_user_instructions'),
-  catalog: runtimeDomainPlan('catalog', 'discover_application_capabilities'),
 }
 
 function domainPlan(
@@ -78,20 +72,6 @@ function domainPlan(
     writeTargetIds,
     targetKind,
   }
-}
-
-function runtimeDomainPlan(domain: string, targetId: string): DomainPlan {
-  return domainPlan(
-    domain,
-    '7.1',
-    'electron/main/services/agent-runtime/',
-    [`assistant.${domain}`],
-    ['src/core/assistant/'],
-    'assistantRuntimeApplicationCapabilities.ts',
-    targetId,
-    [targetId],
-    'runtime'
-  )
 }
 
 function surfacesForDomain(domain: string): string[] {

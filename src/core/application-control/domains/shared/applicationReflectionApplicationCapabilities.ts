@@ -2,12 +2,7 @@ import { z } from 'zod'
 import { applicationVerificationResultSchema } from '../../transactions'
 
 import type { ApplicationCapabilityDefinition } from '../../applicationCapabilities'
-import type { HostScope } from '../../hostContracts'
 import { capabilityOutputSchema, defineApplicationCapability } from './defineApplicationCapability'
-import {
-  APPLICATION_REFLECTION_HISTORY_OMITTED_KEYS,
-  omitRecordKeys,
-} from './historyProjection'
 
 /**
  * 反射层的通用能力。**这是"不用逐个适配"的落点。**
@@ -53,19 +48,6 @@ const describeEntities = defineApplicationCapability({
   resolveConcurrencyKey: () => 'application:describe',
   resolveTargetIds: () => ({}),
   summarize: (output) => `返回 ${output.entities.length} 个实体类型、${output.properties.length} 条属性。`,
-  /*
-   * 实体结构文档是运行里第二大的工具结果（实测单条 76KB / 110 条属性）。按字段归因，
-   * `schemaRef` 23.2KB、`requiredPermissions` 5.1KB、`exposures` 3.7KB、`revisionScopes` 1.2KB、
-   * `dataClass` 0.4KB —— 合计 65% 全是模型无法行动的内容：权限与并发由网关强制执行，
-   * 属性 digest 没有任何模型侧用法，而 schemaRef 的 id/version 只是把属性自身抄了一遍。
-   *
-   * 写属性真正需要的是 id、entityType、title、description 和值约束，这些一条不动。
-   */
-  projectForHistory: (output) => ({
-    ...output,
-    entities: omitRecordKeys(output.entities, APPLICATION_REFLECTION_HISTORY_OMITTED_KEYS),
-    properties: omitRecordKeys(output.properties, APPLICATION_REFLECTION_HISTORY_OMITTED_KEYS),
-  }),
   control: { execution: { mode: 'immediate', cancelable: false, resultState: 'observed' }, impacts: [{
     effect: 'observe', entityTypes: [], propertyIds: [], revisionScopes: [], verificationRequired: false,
   }] },
@@ -192,61 +174,6 @@ const changeEntitiesInputSchema = z.object({
   ])).min(1).max(32),
 }).strict()
 
-const GENERIC_MUTATION_SCOPES = ['assets', 'canvas', 'settings', 'toolbox'] as const satisfies readonly HostScope[]
-
-/**
- * entityType → 宿主并发作用域。**漏一条的代价是那个实体彻底写不了。**
- *
- * 漏掉时不会报"没映射"，而是退化成兜底四域，于是计划器要的那个 scope 谁都没给，最终报
- * `EXPECTED_REVISION_REQUIRED:<scope>`——而适配器的重试分支只处理 `REVISION_CONFLICT`，
- * 没有任何恢复路径。属性声明得好好的，模型就是写不进去。
- *
- * 这张表已经漂移过两轮：第一轮是 `application.setting`（一个从未注册过的旧名字，让改设置
- * 认不出 settings 域）；第二轮是 `generation.draft` / `generation.model` / `image_mark.*`
- * 三个域从来没进过表，于是"改提示词草稿""隐藏模型""改标注文档"这三条路对助手一直是死的。
- *
- * 所以现在有门禁盯着它：`hostScopeCoverage.test.ts` 遍历反射注册表里每个可写实体，
- * 要求都能映射到一个**宿主真的发布得出来**的 scope。新增写域漏改这张表会当场变红。
- */
-function mutationScope(identifier: string): HostScope | null {
-  if (identifier === 'asset' || identifier.startsWith('asset.')) return 'assets'
-  if (identifier.startsWith('canvas.')) return 'canvas'
-  // settings.registry 是反射注册表登记的唯一设置实体类型；application.setting 是一个从未注册过
-  // 的旧名字，留着只会让通用写入认不出设置域、拿不到 settings scope。
-  if (identifier === 'settings.registry' || identifier.startsWith('settings.')) return 'settings'
-  if (identifier.startsWith('camera_stage.') || identifier.startsWith('toolbox.')) return 'toolbox'
-  // 生成域的草稿与模型目录各有独立的并发基线，不能并到 generation——那条 scope 由生成任务
-  // 变化推进，一个任务完成就会让草稿写入的基线过期，正是"界面动作推进领域基线"那类坑。
-  if (identifier === 'generation.draft') return 'generation_draft'
-  if (identifier === 'generation.model') return 'models'
-  if (identifier.startsWith('image_mark.')) return 'image_mark'
-  if (identifier.startsWith('image_edit.')) return 'image_edit'
-  return null
-}
-
-/**
- * 作用域由 **entityType** 决定，不由属性 ID 决定。
- *
- * 属性总是属于某个实体，拿它再判一次作用域不会带来新信息，却会凭空造出"未知命名空间"：设置
- * 域的属性 ID 是 `interface.theme_tone`、`general.language` 这种按功能分区的名字，跟实体类型
- * 前缀根本不同名。旧实现把它们也丢进判定，于是每一次改设置都判成未知，退化成锁全部四个域的
- * 并发基线——而这条从来没被测出来，因为用例里写的是编造的 `application.setting.value`。
- */
-function requiredMutationScopes(input: z.infer<typeof changeEntitiesInputSchema>): HostScope[] {
-  const scopes = new Set<HostScope>()
-  let hasUnknownWritableNamespace = false
-  for (const change of input.changes) {
-    const scope = mutationScope(change.entityType)
-    if (scope) scopes.add(scope)
-    else hasUnknownWritableNamespace = true
-  }
-  // 未知命名空间不能退化成“无需并发基线”。用全部已注册的可写反射领域兜底，
-  // 让后续属性/集合校验给出真实错误，同时仍保持 Gateway 的乐观并发边界。
-  return hasUnknownWritableNamespace || scopes.size === 0
-    ? [...GENERIC_MUTATION_SCOPES]
-    : [...scopes]
-}
-
 const changeEntities = defineApplicationCapability({
   id: 'change_application_entities', version: 2, title: '修改应用状态',
   description: '在一次有序事务里设置、清空或增删实体属性值，也可以在集合中新增或删除成员。changes 会按数组顺序执行，后一步能看到前一步刚建立的状态；同一目标的多步常规改动应合并到一次调用。业务失败会尝试补偿；补偿失败、保存未确认或提交后验证失败时保留实际修改与恢复回执，不要重复已执行的步骤。target 必须原样使用 list_application_entities 或读取结果返回的稳定引用，不要截取 ID。属性键用 describe_application_entities 返回的完整属性 ID，也可以只写 entityType 之后的那一段（例如实体为 camera_stage.state_keyframe 时，time 等价于 camera_stage.state_keyframe.time）。',
@@ -255,7 +182,6 @@ const changeEntities = defineApplicationCapability({
   readOnly: false, risk: 'R1', dataClasses: ['C1'], permission: 'application:write',
   idempotent: false, destructive: false, timeoutMs: 30_000, supportsPreview: false, supportsUndo: true,
   requiredScopes: [], acceptsRefs: [], producesRefs: [],
-  resolveRequiredScopes: requiredMutationScopes,
   successEvidence: ['事务返回受影响引用、写入后的并发基线和结构化证据。'],
   failureRecovery: [
     '失败回执包含 transaction 时，先检查其中已发生的修改与恢复动作；replayMutation:false 表示禁止重复原修改，保存失败只重试保存。',

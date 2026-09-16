@@ -1,18 +1,14 @@
-import type { AgentApprovalMode } from '../../../src/core/assistant/runtimeContracts'
+type AssistantCliApprovalMode = 'ask' | 'assistant_decides' | 'full_access'
 import type { AgentTraceCaptureMode } from '../../../src/core/assistant/trace'
 
 const DEFAULT_TIMEOUT_MS = 10 * 60 * 1_000
 const MAX_TIMEOUT_MS = 60 * 60 * 1_000
 
 export interface AssistantCliOptions {
-  engine?: 'legacy' | 'pi'
   goal: string
-  approvalMode: AgentApprovalMode
+  approvalMode: AssistantCliApprovalMode
   captureMode: AgentTraceCaptureMode
-  printTrace: boolean
-  awaitGeneration: boolean
   visible: boolean
-  requireVerifiedWrite: boolean
   timeoutMs: number
   threadId?: string
 }
@@ -29,7 +25,7 @@ function requireValue(args: string[], index: number, name: string): string {
   return value
 }
 
-function parseApprovalMode(value: string): AgentApprovalMode {
+function parseApprovalMode(value: string): AssistantCliApprovalMode {
   if (value === 'ask' || value === 'assistant_decides' || value === 'full_access') return value
   throw new Error('参数 --approval 仅支持 ask、assistant_decides 或 full_access')
 }
@@ -56,15 +52,11 @@ export function parseAssistantCliArguments(argv: string[] = process.argv.slice(1
   if (argv.includes('--help') || argv.includes('-h')) return { help: true }
 
   let goal: string | undefined
-  let approvalMode: AgentApprovalMode = 'assistant_decides'
+  let approvalMode: AssistantCliApprovalMode = 'assistant_decides'
   let captureMode: AgentTraceCaptureMode = 'summary'
-  let printTrace = false
-  let awaitGeneration = false
   let visible = false
-  let requireVerifiedWrite = false
   let timeoutMs = DEFAULT_TIMEOUT_MS
   let threadId: string | undefined
-  let engine: AssistantCliOptions['engine'] = 'pi'
 
   for (let index = 0; index < argv.length; index += 1) {
     const argument = argv[index]
@@ -75,13 +67,6 @@ export function parseAssistantCliArguments(argv: string[] = process.argv.slice(1
         goal = requireValue(argv, index, argument).trim()
         index += 1
         break
-      case '--engine': {
-        const value = requireValue(argv, index, argument)
-        if (value !== 'pi' && value !== 'legacy') throw new Error('参数 --engine 仅支持 pi 或 legacy')
-        engine = value
-        index += 1
-        break
-      }
       case '--approval':
         approvalMode = parseApprovalMode(requireValue(argv, index, argument))
         index += 1
@@ -90,17 +75,8 @@ export function parseAssistantCliArguments(argv: string[] = process.argv.slice(1
         captureMode = parseCaptureMode(requireValue(argv, index, argument))
         index += 1
         break
-      case '--print-trace':
-        printTrace = true
-        break
-      case '--await-generation':
-        awaitGeneration = true
-        break
       case '--visible':
         visible = true
-        break
-      case '--require-verified-write':
-        requireVerifiedWrite = true
         break
       case '--timeout':
         timeoutMs = parseTimeout(requireValue(argv, index, argument))
@@ -120,8 +96,8 @@ export function parseAssistantCliArguments(argv: string[] = process.argv.slice(1
   if (threadId && threadId.length > 200) throw new Error('参数 --thread 不能超过 200 个字符')
 
   return {
-    goal, approvalMode, captureMode, printTrace, awaitGeneration, visible,
-    requireVerifiedWrite, timeoutMs, ...(threadId ? { threadId } : {}), ...(engine ? { engine } : {}),
+    goal, approvalMode, captureMode, visible,
+    timeoutMs, ...(threadId ? { threadId } : {}),
   }
 }
 
@@ -130,18 +106,13 @@ export function formatAssistantCliHelp(): string {
     '用法：npm run assistant:cli -- --goal "任务描述" [选项]',
     '',
     '选项：',
-    '  --engine <pi|legacy>                            运行引擎，默认 pi；legacy 仅用于旧自研助手',
     '  --approval <ask|assistant_decides|full_access>  审批策略，默认 assistant_decides',
-    '  --trace <summary|detailed>                      legacy 追踪捕获级别；Pi 使用统一 embedded_agent 日志',
-    '  --print-trace                                   legacy：在运行结束后输出已脱敏的详细追踪',
-    '  --await-generation                              legacy：保持宿主并等待本次提交的生成任务结束',
+    '  --trace <summary|detailed>                      追踪捕获级别，使用统一日志',
     '  --visible                                       显示真实 Electron 窗口，便于观察执行过程',
-    '  --require-verified-write                        legacy：要求应用写入封存并通过结构化验证',
     '  --timeout <毫秒>                                最长运行时间，默认 600000，最大 3600000',
     '  --thread <标识>                                 指定运行线程标识',
     '  --help                                          显示本帮助',
     '',
     '输出为 JSONL。Pi 默认只读，回复完成不代表业务结果验收；用 runId 查询统一日志。',
-    'legacy 详细追踪仅保存在本机，且会包含已脱敏的提示词与模型响应。',
   ].join('\n')
 }
