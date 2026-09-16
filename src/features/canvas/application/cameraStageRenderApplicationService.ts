@@ -7,6 +7,7 @@ import {
 } from '@/commands/cameraStageRender';
 import { createLogger } from '@/core/logging';
 import { collectCameraStageAsset } from '@/features/assets/services/cameraStageAssetCollection';
+import { leaseCameraStageProjectRuntime } from '@/features/cameraStage/application/cameraStageProjectRuntime';
 import {
   applyProjectEnvironmentImage,
   createStoredCameraStageProject,
@@ -23,7 +24,7 @@ import { createDefaultGenerationOutputItems } from '../domain/generationOutputs'
 import { confirmCanvasPersistence, runCanvasMutationStage, type CanvasTransactionRuntime } from './canvasPersistenceService';
 import { commitCanvasGenerationOutputs } from './generationOutputApplicationService';
 
-import { withCanvasProjectRuntime } from './canvasProjectRuntime';
+import { acquireCanvasProjectRuntime, withCanvasProjectRuntime } from './canvasProjectRuntime';
 
 const logger = createLogger('features.canvas.camera-stage-render');
 const processing = new Set<string>();
@@ -31,6 +32,38 @@ const activeTaskSnapshots = new Map<string, CameraStageRenderTaskSnapshot>();
 const deferredTaskSnapshots = new Map<string, CameraStageRenderTaskSnapshot>();
 const startingNodes = new Set<string>();
 const startingRequests = new Set<string>();
+type RetainedTask = { identity: string; runtime: CanvasTransactionRuntime; release: () => void };
+const retainedTasks = new Map<string, Promise<RetainedTask>>();
+const acknowledgedRequests = new Map<string, string>();
+
+function taskIdentity(task: CameraStageRenderTaskDescriptor | CameraStageRenderTaskSnapshot): string {
+  return JSON.stringify([task.canvasProjectId, task.nodeId, task.cameraStageProjectId, task.outputKind, task.resolutionPreset, task.selectedTimeSec ?? null]);
+}
+
+function retainRenderTask(task: CameraStageRenderTaskDescriptor): Promise<RetainedTask> {
+  const previous = retainedTasks.get(task.requestId);
+  if (previous) return previous.then(owned => {
+    if (owned.identity !== taskIdentity(task)) throw new Error('CONFLICT:三维任务目标或参数已经变化');
+    return owned;
+  });
+  const pending = (async () => {
+    const canvas = await acquireCanvasProjectRuntime(task.canvasProjectId);
+    try {
+      const releaseStage = await leaseCameraStageProjectRuntime(task.cameraStageProjectId);
+      return { identity: taskIdentity(task), runtime: canvas.runtime, release: () => { releaseStage(); canvas.release(); } };
+    } catch (error) { canvas.release(); throw error; }
+  })();
+  retainedTasks.set(task.requestId, pending);
+  void pending.catch(() => { if (retainedTasks.get(task.requestId) === pending) retainedTasks.delete(task.requestId); });
+  return pending;
+}
+
+async function releaseRenderTask(requestId: string): Promise<void> {
+  const retained = retainedTasks.get(requestId);
+  if (!retained) return;
+  retainedTasks.delete(requestId);
+  (await retained).release();
+}
 
 export type CameraStageNodeRenderTaskReference = CameraStageRenderTaskDescriptor;
 export type CameraStageNodeRenderTaskScopeReference = CameraStageRenderTaskScope;
@@ -186,6 +219,17 @@ async function applyCompletedTask(task: CameraStageRenderTaskSnapshot, runtime: 
 }
 
 export async function applyCameraStageRenderTask(task: CameraStageRenderTaskSnapshot): Promise<void> {
+  const confirmed = acknowledgedRequests.get(task.requestId);
+  if (confirmed !== undefined) {
+    if (confirmed !== taskIdentity(task)) throw new Error('CONFLICT:三维任务目标或参数已经变化');
+    return;
+  }
+  const retained = retainedTasks.has(task.requestId) || !isTerminalTask(task)
+    ? retainRenderTask({ version: 1, ...task }) : undefined;
+  if (retained) {
+    await applyTaskInRuntime(task, (await retained).runtime);
+    return;
+  }
   await withCanvasProjectRuntime(task.canvasProjectId, (runtime) => applyTaskInRuntime(task, runtime));
 }
 
@@ -197,6 +241,7 @@ async function applyTaskInRuntime(task: CameraStageRenderTaskSnapshot, runtime: 
   }
   processing.add(task.requestId);
   activeTaskSnapshots.set(task.requestId, task);
+  let acknowledged = false;
   try {
     let node = runtime.store.getState().nodes.find((candidate) => candidate.id === task.nodeId);
     if (!node || !matchesTask(node, task)) {
@@ -210,6 +255,7 @@ async function applyTaskInRuntime(task: CameraStageRenderTaskSnapshot, runtime: 
           await cancelCameraStageRenderCommand(scopeOf(task));
         } else {
           await acknowledgeCameraStageRender(scopeOf(task));
+          acknowledged = true;
         }
         return;
       }
@@ -225,6 +271,7 @@ async function applyTaskInRuntime(task: CameraStageRenderTaskSnapshot, runtime: 
     if (task.status === 'completed') await applyCompletedTask(task, runtime);
     else await persistNodePatch(task.canvasProjectId, task.nodeId, terminalPatch(task), task.requestId, runtime);
     await acknowledgeCameraStageRender(scopeOf(task));
+    acknowledged = true;
   } catch (error) {
     logger.error('3D 后台渲染终态接管失败', error, {
       event: 'canvas.camera_stage.background_render.apply.failed',
@@ -239,6 +286,11 @@ async function applyTaskInRuntime(task: CameraStageRenderTaskSnapshot, runtime: 
     if (deferred) {
       deferredTaskSnapshots.delete(task.requestId);
       await applyTaskInRuntime(deferred, runtime);
+    }
+    if (acknowledged) {
+      acknowledgedRequests.set(task.requestId, taskIdentity(task));
+      if (acknowledgedRequests.size > 1024) acknowledgedRequests.delete(acknowledgedRequests.keys().next().value!);
+      await releaseRenderTask(task.requestId);
     }
   }
 }
@@ -316,6 +368,7 @@ async function startRenderInRuntime(nodeId: string, outputKind: 'image' | 'video
     try {
       await persistNodePatch(canvasProjectId, nodeId, pendingPatch, null, runtime);
       ownedCameraStageProjectId = cameraStageProjectId;
+      await retainRenderTask(task);
       try {
         const registration = await startCameraStageRender(task);
         await applyTaskInRuntime(registration.task, runtime);
@@ -343,12 +396,15 @@ async function startRenderInRuntime(nodeId: string, outputKind: 'image' | 'video
       }
     } catch (error) {
       // 主进程尚未收到请求时，内存中的 pending 不是可恢复任务；明确清理，绝不盲重放。
-      if (!preservePending
-        && (requireCurrentNode(canvasProjectId, nodeId, undefined, runtime).data.renderTask?.requestId ?? null) === task.requestId) {
-        runtime.store.getState().updateNodeData(nodeId, terminalPatch({
-          ...task, status: 'failed', phase: null, progress: 0, result: null,
-          message: error instanceof Error ? error.message : String(error), createdAt: 0, updatedAt: 0,
-        }));
+      if (!preservePending) {
+        const current = runtime.store.getState().nodes.find(candidate => candidate.id === nodeId);
+        if (isCameraStageNode(current) && current.data.renderTask?.requestId === task.requestId) {
+          runtime.store.getState().updateNodeData(nodeId, terminalPatch({
+            ...task, status: 'failed', phase: null, progress: 0, result: null,
+            message: error instanceof Error ? error.message : String(error), createdAt: 0, updatedAt: 0,
+          }));
+        }
+        await releaseRenderTask(task.requestId);
       }
       throw error;
     } finally {
@@ -399,24 +455,26 @@ export async function cancelCameraStageNodeRenderTask(
 }
 
 export async function reconcileCameraStageRenderTasks(canvasProjectId: string): Promise<void> {
-  const project = useProjectStore.getState();
-  const canvasNodeIds = useCanvasStore.getState().nodes.map((node) => node.id).sort();
-  const persistedNodeIds = project.currentProject?.nodes.map((node) => node.id).sort() ?? [];
-  if (project.currentProjectId !== canvasProjectId
-    || project.currentProject?.id !== canvasProjectId
-    || canvasNodeIds.length !== persistedNodeIds.length
-    || canvasNodeIds.some((nodeId, index) => nodeId !== persistedNodeIds[index])) return;
+  await withCanvasProjectRuntime(canvasProjectId, async runtime => {
   const tasks = await listCameraStageRenderTasks(canvasProjectId);
   const byId = new Map(tasks.map((task) => [task.requestId, task]));
-  for (const task of tasks) void applyCameraStageRenderTask(task);
-  for (const node of useCanvasStore.getState().nodes) {
+  for (const task of tasks) await applyCameraStageRenderTask(task);
+  for (const node of runtime.store.getState().nodes) {
     if (!isCameraStageNode(node) || !node.data.renderTask || node.data.renderTask.canvasProjectId !== canvasProjectId) continue;
     if (byId.has(node.data.renderTask.requestId) || startingRequests.has(node.data.renderTask.requestId)) continue;
     await persistNodePatch(canvasProjectId, node.id, {
       ...terminalPatch({ ...node.data.renderTask, status: 'failed', phase: null, progress: 0, result: null,
         message: '上一次 3D 渲染会话已中断，请重新输出', createdAt: 0, updatedAt: 0 }),
-    }, node.data.renderTask.requestId);
+    }, node.data.renderTask.requestId, runtime);
   }
+  });
+}
+
+export async function resetCameraStageRenderTasksForTests(): Promise<void> {
+  await Promise.all([...retainedTasks.keys()].map(releaseRenderTask));
+  processing.clear(); activeTaskSnapshots.clear(); deferredTaskSnapshots.clear();
+  acknowledgedRequests.clear();
+  startingNodes.clear(); startingRequests.clear();
 }
 
 export async function cancelCameraStageNodeTasks(projectId: string, descriptors: CameraStageRenderTaskDescriptor[]): Promise<void> {

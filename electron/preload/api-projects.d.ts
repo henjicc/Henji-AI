@@ -2,6 +2,7 @@ import type {
   CameraStageRenderEvent,
   CameraStageRenderOutputKind,
   CameraStageRenderRequest,
+  CameraStageRenderWorkerJob,
   CameraStageRenderResolutionPreset,
   CameraStageRenderResult,
   CameraStageRenderTaskScope,
@@ -155,6 +156,7 @@ export interface HenjiCameraStageProjectsApi {
 export type HenjiCameraStageRenderResolutionPreset = CameraStageRenderResolutionPreset
 export type HenjiCameraStageRenderOutputKind = CameraStageRenderOutputKind
 export type HenjiCameraStageRenderRequest = CameraStageRenderRequest
+export type HenjiCameraStageRenderWorkerJob = CameraStageRenderWorkerJob
 export type HenjiCameraStageRenderResult = CameraStageRenderResult
 export type HenjiCameraStageRenderEvent = CameraStageRenderEvent
 export type HenjiCameraStageRenderTaskStatus = CameraStageRenderTaskStatus
@@ -164,12 +166,12 @@ export type HenjiCameraStageRenderTaskSnapshot = CameraStageRenderTaskSnapshot
 export interface HenjiCameraStageRenderApi {
   start(request: HenjiCameraStageRenderRequest): Promise<{ task: HenjiCameraStageRenderTaskSnapshot; idempotent: boolean }>
   get(scope: HenjiCameraStageRenderTaskScope): Promise<HenjiCameraStageRenderTaskSnapshot | null>
-  list(canvasProjectId: string): Promise<HenjiCameraStageRenderTaskSnapshot[]>
+  list(canvasProjectId?: string): Promise<HenjiCameraStageRenderTaskSnapshot[]>
   cancel(scope: HenjiCameraStageRenderTaskScope): Promise<void>
   acknowledge(scope: HenjiCameraStageRenderTaskScope): Promise<void>
   onEvent(handler: (event: HenjiCameraStageRenderTaskSnapshot) => void): () => void
   workerReady(): Promise<void>
-  onWorkerJob(handler: (request: HenjiCameraStageRenderRequest) => void): () => void
+  onWorkerJob(handler: (request: HenjiCameraStageRenderWorkerJob) => void): () => void
   onWorkerCancel(handler: (requestId: string) => void): () => void
   reportWorkerEvent(event: HenjiCameraStageRenderEvent): Promise<void>
 }

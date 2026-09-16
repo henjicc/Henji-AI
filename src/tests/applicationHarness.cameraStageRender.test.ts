@@ -1,9 +1,12 @@
 import { setCanvasTestProjectState } from '@/tests/canvasProjectFixture'
+import '@/tests/cameraStageProjectFixture'
 // @vitest-environment jsdom
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 
-import { createStoredCameraStageProject } from '@/features/cameraStage/projects/cameraStageProjectService'
-import { applyCameraStageRenderTask } from '@/features/canvas/application/cameraStageRenderApplicationService'
+import { createStoredCameraStageProject, deleteProject as deleteStageProject, loadProjectIntoScene } from '@/features/cameraStage/projects/cameraStageProjectService'
+import { findCameraStageProjectInstance } from '@/features/cameraStage/application/cameraStageProjectRuntime'
+import { findCanvasProjectInstance } from '@/features/canvas/application/canvasProjectInstances'
+import { applyCameraStageRenderTask, resetCameraStageRenderTasksForTests, startCameraStageNodeRender } from '@/features/canvas/application/cameraStageRenderApplicationService'
 import { createCameraStageRenderTaskRef } from '@/features/cameraStage/application/cameraStageRenderCapabilityAdapter'
 import { confirmCanvasPersistence } from '@/features/canvas/application/canvasPersistenceService'
 import { CANVAS_NODE_TYPES, type CanvasNode } from '@/features/canvas/domain/canvasNodes'
@@ -79,7 +82,8 @@ beforeEach(() => {
   })
 })
 
-afterEach(() => {
+afterEach(async () => {
+  await resetCameraStageRenderTasksForTests()
   runtimes.splice(0).forEach((runtime) => runtime.dispose())
   vi.restoreAllMocks()
   uninstallHarnessNativeStorage()
@@ -148,4 +152,48 @@ it('公共应用入口 共用后台任务完成判据并只取消活动任务', 
   expect(cancelled.status).toBe('cancellation_requested')
   expect((await secondRuntime.requireResult('get_camera_stage_render_task', { taskRef: ref })).status).toBe('cancelled')
   expect(registry.require(secondTask, OWNER_ID)?.status).toBe('cancelled')
+})
+
+it.each(['canvas', 'cameraStage'] as const)('A 页面后台渲染 B，打开 B 不接管任务，删除 %s 等待原结果保存', async deleteTarget => {
+  const registry = new CameraStageRenderTaskRegistry()
+  installTaskRegistryBridge(registry)
+  const stage = await createStoredCameraStageProject('后台 B 场景')
+  const projectId = await useProjectStore.getState().createProject('后台 B 画布')
+  useCanvasStore.getState().setCanvasData([{
+    id: 'camera-node', type: CANVAS_NODE_TYPES.cameraStage, position: { x: 0, y: 0 },
+    data: { ...cameraStageNodeDefinition.createDefaultData(), projectId: stage.id },
+  }], [], { past: [], future: [] })
+  await confirmCanvasPersistence(projectId)
+  const canvasInstance = findCanvasProjectInstance(projectId)!
+  const stageInstance = findCameraStageProjectInstance(stage.id)!
+  const visibleId = await useProjectStore.getState().createProject('用户编辑 A')
+  const descriptor = await startCameraStageNodeRender('camera-node', 'image', {
+    expectedOwner: { canvasProjectId: projectId, cameraStageProjectId: stage.id },
+  })
+  expect(descriptor).not.toBeNull()
+  expect(useProjectStore.getState().currentProjectId).toBe(visibleId)
+  expect(canvasInstance.leases).toBe(1)
+  expect(stageInstance.leases).toBe(1)
+  await loadProjectIntoScene(stage.id)
+  await useProjectStore.getState().openProject(projectId)
+  expect(findCanvasProjectInstance(projectId)).toBe(canvasInstance)
+  expect(findCameraStageProjectInstance(stage.id)).toBe(stageInstance)
+  await useProjectStore.getState().openProject(visibleId)
+  let deleted = false
+  const deleting = (deleteTarget === 'canvas' ? useProjectStore.getState().deleteProject(projectId) : deleteStageProject(stage.id))
+    .then(() => { deleted = true })
+  await Promise.resolve()
+  expect(deleted).toBe(false)
+  const completed = registry.applyEvent({
+    type: 'completed', requestId: descriptor!.requestId, nodeId: 'camera-node',
+    result: { kind: 'image', mediaUrl: 'henji-media://camera-stage/b.png', mediaPath: '/pixel-boundary/b.png',
+      savedPath: '/pixel-boundary/b.png', width: 1280, height: 720, aspectRatio: '16:9', selectedTimeSec: 0 },
+  })
+  await applyCameraStageRenderTask(completed)
+  await deleting
+  expect(canvasInstance.store.getState().nodes.filter(node => node.data.generationOutputCommitId === `camera-stage-render:${descriptor!.requestId}`)).toHaveLength(1)
+  expect(useProjectStore.getState().currentProjectId).toBe(visibleId)
+  expect(registry.require(descriptor!, OWNER_ID)).toBeNull()
+  expect(canvasInstance.leases).toBe(0)
+  expect(stageInstance.leases).toBe(0)
 })

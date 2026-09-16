@@ -1,4 +1,4 @@
-import { onCameraStageRenderEvent } from '@/commands/cameraStageRender';
+import { listCameraStageRenderTasks, onCameraStageRenderEvent } from '@/commands/cameraStageRender';
 import { createLogger } from '@/core/logging';
 import { useCanvasStore } from '@/stores/canvasStore';
 import { useProjectStore } from '@/stores/projectStore';
@@ -25,6 +25,14 @@ export function installCameraStageRenderLifecycleHost(): () => void {
       requestId: task.requestId, nodeId: task.nodeId,
     }));
   });
+  // 先订阅再恢复全部未确认任务，未打开的工程同样接收重启后的结果。
+  void listCameraStageRenderTasks().then(async tasks => {
+    if (disposed) return;
+    const results = await Promise.allSettled(tasks.map(task => applyCameraStageRenderTask(task)));
+    results.forEach((result, index) => {
+      if (result.status === 'rejected') report('恢复三维渲染结果失败', result.reason, { requestId: tasks[index].requestId });
+    });
+  }).catch(error => report('读取三维渲染恢复目录失败', error, {}));
   const start = (nodeId: string, outputKind: 'image' | 'video'): void => {
     void startCameraStageNodeRender(nodeId, outputKind).catch((error) => report('3D 后台渲染启动失败', error, {
       nodeId, outputKind,

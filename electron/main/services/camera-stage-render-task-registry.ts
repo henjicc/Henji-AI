@@ -115,11 +115,11 @@ export class CameraStageRenderTaskRegistry {
     return snapshot(record)
   }
 
-  list(canvasProjectId: string, ownerWebContentsId: number): CameraStageRenderTaskSnapshotDto[] {
+  list(canvasProjectId: string | undefined, ownerWebContentsId: number): CameraStageRenderTaskSnapshotDto[] {
     this.restore()
     return [...this.tasks.values()]
       .filter((record) => (record.ownerWebContentsId === -1 || record.ownerWebContentsId === ownerWebContentsId)
-        && record.canvasProjectId === canvasProjectId && record.acknowledgedAt === undefined)
+        && (canvasProjectId === undefined || record.canvasProjectId === canvasProjectId) && record.acknowledgedAt === undefined)
       .sort((left, right) => left.createdAt - right.createdAt)
       .map(snapshot)
   }

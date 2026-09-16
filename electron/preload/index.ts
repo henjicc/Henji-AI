@@ -9,7 +9,7 @@ import type {
   HenjiAiApi,
   HenjiCameraStageProjectsApi,
   HenjiCameraStageRenderApi,
-  HenjiCameraStageRenderRequest,
+  HenjiCameraStageRenderWorkerJob,
   HenjiCameraStageRenderTaskSnapshot,
   HenjiCanvasProjectsApi,
   HenjiProjectCoversApi,
@@ -368,7 +368,7 @@ const cameraStageRenderApi: HenjiCameraStageRenderApi = {
   },
   workerReady: () => nativeInvoke('cameraStageRender:workerReady'),
   onWorkerJob: (handler) => {
-    const listener = (_event: Electron.IpcRendererEvent, payload: HenjiCameraStageRenderRequest): void => {
+    const listener = (_event: Electron.IpcRendererEvent, payload: HenjiCameraStageRenderWorkerJob): void => {
       handler(payload)
     }
     ipcRenderer.on('cameraStageRender:workerJob', listener)

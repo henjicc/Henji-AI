@@ -78,6 +78,8 @@ describe('CameraStageRenderTaskRegistry', () => {
     registry.register(request({ requestId: 'request-2', canvasProjectId: 'canvas-2' }), 7)
     expect(registry.list('canvas-1', 7).map((task) => task.requestId)).toEqual(['request-1'])
     expect(registry.list('canvas-1', 8)).toEqual([])
+    expect(registry.list(undefined, 7).map(task => task.requestId)).toEqual(['request-1', 'request-2'])
+    expect(registry.list(undefined, 8)).toEqual([])
     expect(() => registry.require({ requestId: 'request-1', canvasProjectId: 'canvas-1', nodeId: 'node-1' }, 8))
       .toThrow('does not belong')
     expect(registry.require({ requestId: 'missing', canvasProjectId: 'canvas-1', nodeId: 'node-1' }, 7)).toBeNull()

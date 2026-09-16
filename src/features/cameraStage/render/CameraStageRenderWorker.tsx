@@ -7,12 +7,12 @@ import {
   reportCameraStageRenderWorkerEvent,
 } from '@/commands/cameraStageRender'
 import { createLogger } from '@/core/logging'
-import type { CameraStageRenderRequest } from '@/platform/contracts/cameraStageRender'
+import type { CameraStageRenderWorkerJob } from '@/platform/contracts/cameraStageRender'
 import { areCameraAspectRatiosConsistent, getCameraObjects } from '../domain/cameraUtils'
 import { buildRenderCameraSchedule } from '../domain/renderCameraSchedule'
 import { exportCameraStageImage } from '../export/cameraStageImage'
 import { exportCameraStageVideo } from '../export/cameraStageVideo'
-import { readProjectSnapshot } from '../projects/cameraStageProjectPersistence'
+import { deserializeScene } from '../domain/sceneSerialization'
 import StageScene from '../scene/StageScene'
 import type { StageCaptureFn } from '../scene/StageCaptureBridge'
 import { attachCameraStageStore, createCameraStageStore, useCameraStageStore } from '../store/cameraStageStore'
@@ -44,7 +44,7 @@ export default function CameraStageRenderWorker(): JSX.Element {
   const captureRef = useRef<StageCaptureFn | null>(null)
   const cancelRef = useRef(false)
   const runningRequestIdRef = useRef<string | null>(null)
-  const [request, setRequest] = useState<CameraStageRenderRequest | null>(null)
+  const [request, setRequest] = useState<CameraStageRenderWorkerJob | null>(null)
   const [sceneRequestId, setSceneRequestId] = useState<string | null>(null)
 
   useEffect(() => {
@@ -93,11 +93,10 @@ export default function CameraStageRenderWorker(): JSX.Element {
           phase: 'preparing',
           progress: 0.02,
         })
-        const snapshot = await readProjectSnapshot(request.cameraStageProjectId)
-        if (!snapshot) throw new Error('未找到需要渲染的 3D 镜头参考工程')
+        const snapshot = deserializeScene(request.sceneJson)
         // 渲染宿主持有任务快照投影，不注册业务实例、不向工程反向保存采样状态。
         const projection = createCameraStageStore()
-        projection.getState().loadSnapshot(snapshot, { id: snapshot.id, name: snapshot.name })
+        projection.getState().loadSnapshot(snapshot, { id: request.cameraStageProjectId, name: '渲染投影' })
         attachCameraStageStore(projection)
         if (cancelRef.current) {
           await reportCameraStageRenderWorkerEvent({
