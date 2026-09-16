@@ -48,7 +48,7 @@ async function prepareInput(parsed: GenerationInput, destination = generationDes
   resolved.options = await resolveGenerationMediaReferences(resolved.options ?? {})
   if (destination.mode === 'canvas') {
     const { resolveCanvasGenerationOptions } = await import('@/features/canvas/application/canvasGenerationTaskService')
-    resolved.options = resolveCanvasGenerationOptions(resolved, destination)
+    resolved.options = await resolveCanvasGenerationOptions(resolved, destination)
   }
   return resolved
 }

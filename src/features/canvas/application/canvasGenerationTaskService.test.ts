@@ -57,6 +57,34 @@ beforeEach(async () => {
 })
 afterEach(() => { replaceGenerationTaskStatusSnapshots([]); resetCanvasExecutionServiceForTests(); registry.unregister('canvas-task-fixture'); vi.restoreAllMocks(); uninstallHarnessNativeStorage() })
 
+it('A 页面准备和提交 B 的生成，打开 B 不重复提交，结果保存到同一实例', async () => {
+  const targetId = projectId
+  const visibleId = await useProjectStore.getState().createProject('正在编辑 A')
+  const visible = useCanvasStore.getState()
+  let finish!: () => void
+  const generate = vi.mocked(GenerationService.getInstance().generate).mockImplementation(async () => {
+    await new Promise<void>(resolve => { finish = resolve })
+    return { status: 'completed', url: 'C:/result.png', filePath: 'C:/result.png' }
+  })
+  const input = { modelId: 'canvas-task-fixture', mediaType: 'image' as const, prompt: '后台 B', options: {} }
+  const destination = { mode: 'canvas' as const, projectId: targetId, sourceNodeIds: ['reference'] }
+  input.options = await resolveCanvasGenerationOptions(input, destination)
+  expect(input.options).toMatchObject({ images: ['C:/reference.png'] })
+  const taskId = crypto.randomUUID()
+  await submitCanvasGenerationTask(input, destination, taskId)
+  await vi.waitFor(() => expect(finish).toBeTypeOf('function'))
+  expect(useProjectStore.getState().currentProjectId).toBe(visibleId)
+  expect(useCanvasStore.getState()).toBe(visible)
+  await openCanvasProject(targetId, new AbortController().signal)
+  finish()
+  await vi.waitFor(() => expect(records.get(taskId)?.status).toBe('success'))
+  expect(generate).toHaveBeenCalledTimes(1)
+  const saved = await readPersistedCanvasProjectSnapshot(targetId)
+  expect(saved.nodes.find(node => node.data.generationTaskId === taskId)?.data.imageUrl).toBe('C:/result.png')
+  expect(useCanvasStore.getState().nodes.find(node => node.data.generationTaskId === taskId)?.data.imageUrl).toBe('C:/result.png')
+  expect((await readPersistedCanvasProjectSnapshot(visibleId)).nodes).toHaveLength(0)
+})
+
 it('无需挂载节点即可生成，页面中途挂载不会替换任务执行器或重复提交', async () => {
   let release!: () => void
   const pending = new Promise<void>(resolve => { release = resolve })
@@ -66,7 +94,7 @@ it('无需挂载节点即可生成，页面中途挂载不会替换任务执行�
   })
   const destination = { mode: 'canvas' as const, projectId, sourceNodeIds: ['reference'] }
   const input = { modelId: 'canvas-task-fixture', mediaType: 'image' as const, prompt: '生成三视图', options: {} }
-  input.options = resolveCanvasGenerationOptions(input, destination)
+  input.options = await resolveCanvasGenerationOptions(input, destination)
   const taskId = crypto.randomUUID()
   const submitted = await submitCanvasGenerationTask(input, destination, taskId)
   const saved = await readPersistedCanvasProjectSnapshot(projectId)
@@ -88,6 +116,24 @@ it('无需挂载节点即可生成，页面中途挂载不会替换任务执行�
   expect(readGenerationTaskStatusSnapshot(taskId)).toMatchObject({ status: 'success', resultAvailable: true })
   expect(records.get(taskId)?.filePath).toBe('C:/result.png')
   expect(useCanvasStore.getState().nodes.find(item => item.data.generationSourceNodeId === node.id)?.data.generationTaskId).toBe(taskId)
+})
+
+it('已有 B 节点的估价与提交读取 B 的配置，不需要切换 A 页面', async () => {
+  const nodeId = useCanvasStore.getState().addNode(CANVAS_NODE_TYPES.imageEdit, { x: 400, y: 0 }, {
+    modelId: 'canvas-task-fixture', prompt: '原 B 配置', params: {},
+  })
+  useCanvasStore.getState().addEdge('reference', nodeId)
+  const visibleId = await useProjectStore.getState().createProject('A')
+  const prepared = await prepareCanvasNodeGeneration({ projectId, nodeId })
+  expect(prepared.preparation.modelId).toBe('canvas-task-fixture')
+  expect(GenerationService.getInstance().generate).not.toHaveBeenCalled()
+  const taskId = crypto.randomUUID()
+  await submitCanvasNodeGeneration(prepared.submitInput, taskId)
+  await vi.waitFor(() => expect(records.get(taskId)?.status).toBe('success'))
+  expect(GenerationService.getInstance().generate).toHaveBeenCalledWith('canvas-task-fixture',
+    expect.objectContaining({ prompt: '原 B 配置', images: ['C:/reference.png'] }), expect.any(Function), expect.any(Object))
+  expect(useProjectStore.getState().currentProjectId).toBe(visibleId)
+  expect(useCanvasStore.getState().nodes).toHaveLength(0)
 })
 
 it('原视口位置固定后，移动画布仍将生成节点和持久结果放在原落点', async () => {
@@ -608,7 +654,7 @@ it.each(['foreground', 'background', 'cancel-queued'] as const)('五个请求保
       const taskId = crypto.randomUUID()
       const destination = { mode: 'canvas' as const, projectId, sourceNodeIds: ['reference'] }
       const input = { modelId: 'canvas-task-fixture', mediaType: 'image' as const, prompt: `第 ${index} 张`, options: {} }
-      input.options = resolveCanvasGenerationOptions(input, destination)
+      input.options = await resolveCanvasGenerationOptions(input, destination)
       const submitted = await submitCanvasGenerationTask(input, destination, taskId)
       const nodeId = submitted.nodeRef.id.slice(projectId.length + 1)
       taskIds.push(taskId); nodeIds.push(nodeId)

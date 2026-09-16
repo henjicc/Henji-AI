@@ -1,3 +1,4 @@
+import { findCanvasProjectInstance, getCanvasProjectInstance, requireCanvasProjectInstance } from './canvasProjectInstances'
 import { registry } from '@/core/ModelRegistry'
 import { ApplicationPreflightFailure } from '@/core/application-control/execution/transactionFailure'
 import { createLogger } from '@/core/logging'
@@ -6,10 +7,9 @@ import type { GenerationPreparationInput } from '@/features/generation/applicati
 import { prepareGenerationModelInput } from '@/features/generation/application/generationPreparationService'
 import { databaseService } from '@/services/database/DatabaseService'
 import { useCanvasStore } from '@/stores/canvasStore'
-import { useProjectStore } from '@/stores/projectStore'
 import { useCanvasGenerationProgressStore } from '@/stores/canvasGenerationProgressStore'
 import { CANVAS_NODE_TYPES } from '../domain/canvasNodes'
-import { stageControlledCanvasNode, stageCanvasConnection, requireCurrentCanvasProject, CanvasApplicationError } from './canvasApplicationService'
+import { stageControlledCanvasNode, stageCanvasConnection, CanvasApplicationError } from './canvasApplicationService'
 import { runCanvasTransaction } from './canvasBatchService'
 import { retainCanvasTaskExecutor, runCanvasNode, isCanvasNodeRunActive } from './canvasExecutionService'
 import { createGenerationNodeExecutor } from './generationNodeExecutor'
@@ -36,8 +36,7 @@ const logger = createLogger('features.canvas.generationTask')
 
 
 function readNodeInputSignature(projectId: string, nodeId: string, store?: typeof useCanvasStore): string {
-  if (!store) requireCurrentCanvasProject(projectId)
-  const targetStore = store ?? useCanvasStore
+  const targetStore = store ?? requireCanvasProjectInstance(projectId).store
   const profile = readCanvasGenerationNodeProfile(nodeId, targetStore)
   const runtime = resolveGenerationNodeRuntime(profile, targetStore)
   return createCanvasExecutionValueSignature({ ...createGenerationNodeRuntimeSignaturePayload(runtime),
@@ -47,19 +46,20 @@ function readNodeInputSignature(projectId: string, nodeId: string, store?: typeo
 }
 
 export async function prepareCanvasNodeGeneration(input: CanvasNodeGenerationInput) {
+  const store = (await getCanvasProjectInstance(input.projectId)).store
   const signature = readNodeInputSignature(input.projectId, input.nodeId)
   if (input.inputSignature && input.inputSignature !== signature) throw new CanvasApplicationError('INVALID_INPUT', '节点输入已改变，请重新调用 prepare_canvas_node_generation 获取当前参数和费用。', true)
-  const canvas = useCanvasStore.getState()
+  const canvas = store.getState()
   const plan = createCanvasExecutionPlan(input.nodeId, canvas.nodes, canvas.edges, () => 'auto')
   if (plan.dependencyNodeIds.length) throw new CanvasApplicationError('INVALID_INPUT', '请连接已完成的结果素材；本次节点估价不包含额外上游生成。', true)
-  const executor = createGenerationNodeExecutor(() => readCanvasGenerationNodeProfile(input.nodeId))
+  const executor = createGenerationNodeExecutor(target => readCanvasGenerationNodeProfile(input.nodeId, target ?? store))
   const prepared = await executor.prepare({ projectId: input.projectId, runId: 'prepare', trigger: 'direct', inputSignature: signature, assertCurrent: async () => undefined })
   if (readNodeInputSignature(input.projectId, input.nodeId) !== signature) throw new CanvasApplicationError('INVALID_INPUT', '准备期间节点输入已改变，请重新准备原节点。', true)
   const { runtime, generationParams } = prepared
   if (!runtime.model) throw new Error('原节点模型不存在。')
   const options = { ...generationParams, images: runtime.images, uploadedFilePaths: runtime.images,
     videos: runtime.videos, uploadedVideoFilePaths: runtime.videos, audios: runtime.audios, uploadedAudioFilePaths: runtime.audios }
-  const resolved: GenerationPreparationInput = { modelId: runtime.modelId, mediaType: readCanvasGenerationNodeProfile(input.nodeId).modelType,
+  const resolved: GenerationPreparationInput = { modelId: runtime.modelId, mediaType: readCanvasGenerationNodeProfile(input.nodeId, store).modelType,
     prompt: String(generationParams.prompt ?? ''), options }
   return { preparation: prepareGenerationModelInput(resolved, runtime.model),
     submitInput: { projectId: input.projectId, nodeId: input.nodeId, inputSignature: signature } }
@@ -72,7 +72,7 @@ export async function submitCanvasNodeGeneration(input: CanvasNodeGenerationInpu
   }).catch(error => { throw new ApplicationPreflightFailure(error) })
   await confirmCanvasPersistence(input.projectId)
   if (signal?.aborted) throw new ApplicationPreflightFailure('任务已在提交前取消。')
-  const profile = readCanvasGenerationNodeProfile(input.nodeId)
+  const profile = readCanvasGenerationNodeProfile(input.nodeId, requireCanvasProjectInstance(input.projectId).store)
   const options = preparation.options as Record<string, unknown>
   return startCanvasGenerationTask({ modelId: String(preparation.modelId), mediaType: profile.modelType,
     prompt: String(options.prompt ?? ''), options }, { mode: 'canvas', projectId: input.projectId, sourceNodeIds: [] },
@@ -83,9 +83,8 @@ export async function submitCanvasNodeGeneration(input: CanvasNodeGenerationInpu
   })
 }
 
-export function resolveCanvasGenerationOptions(input: GenerationPreparationInput, destination: CanvasDestination): Record<string, unknown> {
-  requireCurrentCanvasProject(destination.projectId)
-  const { nodes } = useCanvasStore.getState()
+export async function resolveCanvasGenerationOptions(input: GenerationPreparationInput, destination: CanvasDestination): Promise<Record<string, unknown>> {
+  const { nodes } = (await getCanvasProjectInstance(destination.projectId)).store.getState()
   const index = new Map(nodes.map(node => [node.id, node]))
   const options = { ...input.options }
   for (const sourceId of destination.sourceNodeIds) {
@@ -105,7 +104,7 @@ export function resolveCanvasGenerationOptions(input: GenerationPreparationInput
 }
 
 export async function submitCanvasGenerationTask(input: GenerationPreparationInput, destination: CanvasDestination, taskId: string) {
-  requireCurrentCanvasProject(destination.projectId)
+  const instance = await getCanvasProjectInstance(destination.projectId)
   await databaseService.init()
   if (await databaseService.getHistoryById(taskId)) throw new Error('此生成任务已登记，请查询原任务，不要重新提交。')
   const model = registry.getModel(input.modelId)
@@ -124,7 +123,7 @@ export async function submitCanvasGenerationTask(input: GenerationPreparationInp
     // 媒体由宿主解析；沿用标准节点的本地媒体输入，连线仍由正式图解析器负责。
     const mediaInputs = Object.fromEntries(['image', 'video', 'audio'].map(kind => [kind,
       Array.isArray(input.options?.[`${kind}s`]) ? input.options![`${kind}s`] : []]))
-    runCanvasMutationStage(options, () => useCanvasStore.getState().updateNodeData(nodeId, { mediaInputs }))
+    runCanvasMutationStage(options, () => instance.store.getState().updateNodeData(nodeId, { mediaInputs }))
     return [created, ...connections]
   })
   const nodeId = String(transaction.appliedOperations[0].nodeId)
@@ -201,7 +200,7 @@ export async function getCanvasGenerationTask(taskId: string): Promise<Record<st
     throw error
   })
   const savedNodes = snapshot?.nodes ?? []
-  const nodes = useProjectStore.getState().currentProjectId === projectId ? useCanvasStore.getState().nodes : savedNodes
+  const nodes = findCanvasProjectInstance(projectId)?.store.getState().nodes ?? savedNodes
   const ownsResult = (node: (typeof nodes)[number]): boolean => node.data.generationSourceNodeId === nodeId
     && (version === 2 ? node.data.generationTaskId === taskId : node.data.generationTaskId === undefined)
   const resultNodes = nodes.filter(ownsResult)
