@@ -50,13 +50,15 @@ describe('export_image_edit_target_to_canvas contract', () => {
   )
   const input = {
     projectRef: { kind: 'canvas.project', id: 'project-1' },
-    sourceNodeRef: { kind: 'canvas.node', id: 'document-node' },
+    sourceNodeRef: { kind: 'canvas.node', id: 'project-1:document-node' },
     targetRef: { kind: 'image_edit.layer', id: 'v3:document:raster' },
   }
 
   it('只接受稳定 ApplicationRef，顶层与嵌套对象均拒绝附加字段', () => {
     expect(exportCapability).toBeTruthy()
-    expect(BUILTIN_APPLICATION_CAPABILITY_REGISTRY.get('export_image_edit_target_to_canvas')).toBe(exportCapability)
+    const registered = BUILTIN_APPLICATION_CAPABILITY_REGISTRY.get('export_image_edit_target_to_canvas')
+    expect(registered?.inputSchema).toBe(exportCapability?.inputSchema)
+    expect(registered?.outputSchema).toBe(exportCapability?.outputSchema)
     expect(exportCapability?.inputSchema.safeParse(input).success).toBe(true)
     expect(exportCapability?.inputSchema.safeParse({ ...input, sourceNodeId: 'raw-id' }).success).toBe(false)
     expect(exportCapability?.inputSchema.safeParse({

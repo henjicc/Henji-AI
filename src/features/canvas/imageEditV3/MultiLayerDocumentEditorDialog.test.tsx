@@ -30,13 +30,11 @@ const mocks = vi.hoisted(() => ({
   flush: vi.fn(),
   openAndValidate: vi.fn(),
   exportTarget: vi.fn(),
-  registerSession: vi.fn(() => vi.fn()),
 }))
 
 vi.mock('@/features/canvas/application/multiLayerDocumentNodeGenerationAdapter', () => ({
   openMultiLayerDocumentForEditing: mocks.openAndValidate,
   exportMultiLayerDocumentTargetToCanvas: mocks.exportTarget,
-  registerMultiLayerDocumentExportSession: mocks.registerSession,
 }))
 
 const editorDocument: ImageEditDocumentV3 = {
@@ -101,7 +99,6 @@ describe('MultiLayerDocumentEditorDialog', () => {
       nodeRef: { kind: 'canvas.node', id: 'exported' },
       edgeRef: { kind: 'canvas.edge', id: 'edge-exported' },
     })
-    mocks.registerSession.mockClear()
     useProjectStore.setState({
       currentProjectId: 'project-a',
       currentProject: { id: 'project-a' } as never,
@@ -213,7 +210,7 @@ describe('MultiLayerDocumentEditorDialog', () => {
     expect(mocks.exportTarget).toHaveBeenCalledOnce()
     expect(mocks.exportTarget).toHaveBeenCalledWith(expect.objectContaining({
       projectRef: { kind: 'canvas.project', id: 'project-a' },
-      sourceNodeRef: { kind: 'canvas.node', id: 'multi-layer-node' },
+      sourceNodeRef: { kind: 'canvas.node', id: 'project-a:multi-layer-node' },
       targetRef: expect.objectContaining({ kind: 'image_edit.layer' }),
     }))
     expect(screen.getByRole('dialog')).toBeTruthy()

@@ -138,11 +138,11 @@ describe('多图层文档生成适配器', () => {
     await expect(inspectMultiLayerDocumentSession(
       { session },
       { loadSnapshot },
-    )).resolves.toBe(session)
+    )).resolves.toEqual(session)
     expect(loadSnapshot).toHaveBeenCalledOnce()
   })
 
-  it('拒绝节点引用与权威文档版本不一致', async () => {
+  it('重新打开使用后台已保存的最新文档引用', async () => {
     const document = {
       ...createImageEditDocumentV3({ width: 640, height: 320, documentId: 'authoritative' }),
       revision: 2,
@@ -166,7 +166,7 @@ describe('多图层文档生成适配器', () => {
         resources: [],
         sourceFingerprint: `sha256:${'c'.repeat(64)}` as const,
       })),
-    })).rejects.toThrow('版本与节点记录不一致')
+    })).resolves.toMatchObject({ documentRef: session.documentRef, revision: 2 })
   })
 
   it('使用节点与图层栈稳定身份初始保存 V3，并返回同源节点投影', async () => {

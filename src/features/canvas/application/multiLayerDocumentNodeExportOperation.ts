@@ -104,6 +104,7 @@ export async function exportMultiLayerDocumentRaster(
     const created = await dependencies.canvasPort.createExportedImageNode({
       projectId: input.projectId,
       sourceNodeId: input.sourceNodeId,
+      expectedDocumentRef: session.documentRef,
       target,
       raster,
     })

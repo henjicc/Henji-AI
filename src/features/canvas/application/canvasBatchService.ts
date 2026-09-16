@@ -213,8 +213,13 @@ export async function runCanvasTransaction(
     // 已修改后失败、外部并发冲突、回滚保存失败均不得伪装成“未执行”。
     const rejectedBeforeMutation = error instanceof ZodError
       && checkpoint.nodes === beforeNodes && checkpoint.edges === beforeEdges && checkpoint.history === beforeHistory
+    const view = store.getState()
+    const selectedNodeId = beforeNodes.some((node) => node.id === view.selectedNodeId)
+      ? view.selectedNodeId : beforeSelectedNodeId
+    const activeToolDialog = beforeNodes.some((node) => node.id === view.activeToolDialog?.nodeId)
+      ? view.activeToolDialog : null
     store.getState().setCanvasData(beforeNodes, beforeEdges, beforeHistory)
-    store.getState().setSelectedNode(beforeSelectedNodeId)
+    store.setState({ selectedNodeId, activeToolDialog })
     const recovery = persist()
     releasePersistence()
     await recovery

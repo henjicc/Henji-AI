@@ -142,6 +142,7 @@ export interface MultiLayerDocumentNodeCanvasPort {
   createExportedImageNode(input: {
     projectId: string
     sourceNodeId: string
+    expectedDocumentRef: ImageEditSessionReferenceV3['documentRef']
     target: MultiLayerDocumentExportTarget
     raster: MultiLayerDocumentExportRaster
   }): Promise<{ nodeId: string; edgeId: string; undoRef: string }>

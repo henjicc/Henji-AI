@@ -53,17 +53,6 @@ function throwIfCancelled(signal?: AbortSignal): void {
   }
 }
 
-function sameSession(
-  left: ImageEditSessionReferenceV3,
-  right: ImageEditSessionReferenceV3,
-): boolean {
-  return left.kind === right.kind
-    && left.documentRef === right.documentRef
-    && left.revision === right.revision
-    && left.previewRef === right.previewRef
-    && left.sourceUrl === right.sourceUrl
-}
-
 function editableSession(data: LayerStackResultNodeData): ImageEditSessionReferenceV3 {
   let state
   try {
@@ -221,7 +210,7 @@ export function createMultiLayerDocumentNodeApplicationService(
             session: expected,
             signal: input.signal,
           })
-          if (!sameSession(expected, actual)) {
+          if (expected.kind !== actual.kind || expected.documentRef !== actual.documentRef || actual.revision < expected.revision) {
             throw new MultiLayerDocumentNodeApplicationError(
               'DOCUMENT_CONFLICT',
               '节点保存的文档版本与权威文档不一致',

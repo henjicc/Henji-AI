@@ -901,7 +901,7 @@ const exportImageEditTargetToCanvas = defineApplicationCapability({
   resolveOperationAppendTargets: input => [input.projectRef],
   version: 1,
   title: '导出图片编辑目标到画布',
-  description: '把当前多图层图片文档中的单个栅格图层、图层组或标注元素原子导出为普通图片节点并连接来源。',
+  description: '把指定工程中多图层图片文档的单个栅格图层、图层组或标注元素原子导出为普通图片节点并连接来源，无需打开工程或编辑器。',
   domain: 'image_edit',
   aliases: ['导出图层到画布', '导出元素到画布', 'export layer to canvas', 'export element to canvas'],
   readOnly: false,
@@ -915,7 +915,7 @@ const exportImageEditTargetToCanvas = defineApplicationCapability({
   supportsUndo: true,
   requiredScopes: ['image_edit', 'canvas'],
   parallelSafe: false,
-  availability: ['当前画布项目已打开', '来源节点是可编辑的多图层图片文档', '目标是受支持的稳定图片编辑引用'],
+  availability: ['指定画布工程存在', '来源节点是可编辑的多图层图片文档', '目标是受支持的稳定图片编辑引用'],
   prerequisites: [
     '目标必须是当前文档内唯一明确的 image_edit.layer、image_edit.group 或 image_mark.annotation 稳定引用。',
     '效果层、调整层、浮点精度或 HDR 文档不支持本操作。',
