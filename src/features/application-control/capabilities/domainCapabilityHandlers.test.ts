@@ -29,6 +29,8 @@ const mocks = vi.hoisted(() => ({
   cameraRenderAdapter: {
     cancelCameraStageRenderTask: vi.fn(),
     getCameraStageRenderTask: vi.fn(),
+    waitCameraStageRenderTask: vi.fn(),
+    recoverCameraStageRenderTask: vi.fn(),
     renderCameraStageOutput: vi.fn(),
   },
   selectToolboxTool: vi.fn(),

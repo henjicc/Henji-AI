@@ -1,5 +1,7 @@
 // @vitest-environment jsdom
-import { afterEach, expect, it, vi } from 'vitest'
+import '@/tests/imageEditDocumentFixture'
+import { afterEach, beforeEach, expect, it, vi } from 'vitest'
+import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from '@/tests/harnessNativeStorage'
 import { createImageEditDocumentV3, createImageEditEffectLayerV3 } from '@/core/imageEdit/v3/documentFactory'
 import { getApplicationControlExecutionEngine, getApplicationReflectionRegistry } from '@/features/application-control/capabilities/applicationControlRegistry'
 import { registerPersistedImageEditTestSession } from '@/tests/imageEditPersistenceTestSession'
@@ -8,7 +10,8 @@ import { imageEditV3LayerRef } from './imageEditDocumentRefs'
 import type { ImageEditDocumentV3 } from '@/core/imageEdit/v3/documentTypes'
 
 let dispose: (() => void) | undefined
-afterEach(() => { dispose?.(); vi.restoreAllMocks() })
+beforeEach(installHarnessNativeStorage)
+afterEach(() => { dispose?.(); vi.restoreAllMocks(); uninstallHarnessNativeStorage() })
 const context = { exposure: 'assistant' as const, requestId: 'transaction-scope-test',
   permissions: new Set(['image_edit:read', 'image_edit:write']), acceptedDataClasses: new Set(['C0', 'C1'] as const) }
 async function fixture() {

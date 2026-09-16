@@ -64,14 +64,17 @@ it('真实 MCP 与 Pi 写入经过授权、SQLite账本、正式Session及设置
     try {
       const { useProjectStore } = await import('@/stores/projectStore')
       await useProjectStore.getState().hydrate()
+      const currentProjectId = useProjectStore.getState().currentProjectId
       const createId = randomUUID()
       const create = { operationId: createId, name: 'MCP 生命周期测试' }
       const created = await client.callTool({ name: 'create_canvas_project', arguments: create })
       expect(created.structuredContent, JSON.stringify(created)).toMatchObject({ executionState: 'completed' })
-      const projectId = useProjectStore.getState().currentProjectId
+      const projectId = (created.structuredContent as { result: { data: { projectId: string } } }).result.data.projectId
       expect(projectId).toBeTruthy()
+      const { getProjectRecord } = await import('@/commands/projectState')
+      expect(await getProjectRecord(projectId)).toMatchObject({ id: projectId, name: create.name })
       expect((await client.callTool({ name: 'create_canvas_project', arguments: create })).structuredContent).toEqual(created.structuredContent)
-      expect(useProjectStore.getState().currentProjectId).toBe(projectId)
+      expect(useProjectStore.getState().currentProjectId).toBe(currentProjectId)
       expect(operations.store.get(createId, identity.id)?.state).toBe('completed')
     } finally { uninstallHarnessNativeStorage() }
     const ref = { kind: 'settings.registry', id: 'singleton' }

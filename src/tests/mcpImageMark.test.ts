@@ -5,10 +5,11 @@ import { createApplicationCallerGrant } from '@/core/application-control/callerC
 import { useImageEditSessionStore } from '@/features/imageEdit/store/imageEditSessionStore'
 import { createApplicationCapabilitySession, listApplicationCapabilities } from '@/features/application-control/applicationCapabilityService'
 import { retainHostContextTracking } from '@/features/application-control/hostContext/hostContext'
+import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from './harnessNativeStorage'
 
 let dispose: () => void
-beforeEach(() => { useImageEditSessionStore.setState({ sessions: {}, revision: 0 }); dispose = retainHostContextTracking() })
-afterEach(() => { dispose(); vi.restoreAllMocks(); useImageEditSessionStore.setState({ sessions: {}, revision: 0 }) })
+beforeEach(() => { installHarnessNativeStorage(); useImageEditSessionStore.setState({ sessions: {}, revision: 0 }); dispose = retainHostContextTracking() })
+afterEach(() => { dispose(); vi.restoreAllMocks(); useImageEditSessionStore.setState({ sessions: {}, revision: 0 }); uninstallHarnessNativeStorage() })
 const parent = { kind: 'image_mark.document', id: 'mcp-mark-session' }
 function client(write = true, destructive = true) {
   return createApplicationCapabilitySession(createApplicationCallerGrant({ callerId: 'mcp-mark',

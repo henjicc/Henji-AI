@@ -18,9 +18,12 @@ const input = {
 describe('open_multi_layer_document_node_editor contract', () => {
   it('只接受严格的画布工程和节点稳定引用', () => {
     expect(capability).toBeTruthy()
-    expect(BUILTIN_APPLICATION_CAPABILITY_REGISTRY.get(
+    const registered = BUILTIN_APPLICATION_CAPABILITY_REGISTRY.get(
       OPEN_MULTI_LAYER_DOCUMENT_NODE_EDITOR_CAPABILITY_ID,
-    )).toBe(capability)
+    )
+    expect(registered).toMatchObject(capability!)
+    expect(registered?.inputSchema).toBe(capability?.inputSchema)
+    expect(registered?.outputSchema).toBe(capability?.outputSchema)
     expect(capability?.inputSchema.safeParse(input).success).toBe(true)
     expect(capability?.inputSchema.safeParse({
       ...input,

@@ -1,4 +1,5 @@
 /** @vitest-environment jsdom */
+import '@/tests/canvasProjectFixture'
 
 import { act, cleanup, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -7,6 +8,7 @@ import { CANVAS_NODE_TYPES, type CanvasNode } from '@/features/canvas/domain/can
 import { useCanvasStore } from '@/stores/canvasStore'
 import { useProjectStore } from '@/stores/projectStore'
 import { NodeToolDialogRouter } from './NodeToolDialogRouter'
+import { attachCanvasProject, registerCanvasProjectInstance, requireCanvasProjectInstance } from '@/features/canvas/application/canvasProjectInstances'
 
 const routerMocks = vi.hoisted(() => ({
   saveAfterEditing: vi.fn(),
@@ -50,6 +52,14 @@ function editableNode(): CanvasNode {
   }
 }
 
+function attachProject(id: string) {
+  const instance = registerCanvasProjectInstance({ id, name: id, createdAt: 1, updatedAt: 1,
+    nodeCount: 0, coverPath: null, nodes: [], edges: [], viewport: { x: 0, y: 0, zoom: 1 },
+    history: { past: [], future: [] } })
+  attachCanvasProject(instance)
+  useProjectStore.setState({ currentProjectId: id, currentProject: instance.snapshot() })
+}
+
 describe('NodeToolDialogRouter', () => {
   afterEach(() => {
     cleanup()
@@ -60,7 +70,7 @@ describe('NodeToolDialogRouter', () => {
 
   it('editable-v3 图层节点只进入文档编辑宿主', () => {
     const node = editableNode()
-    useProjectStore.setState({ currentProjectId: 'project-a' })
+    attachProject('project-a')
     useCanvasStore.setState({
       nodes: [node],
       activeToolDialog: { nodeId: node.id, toolType: 'edit' },
@@ -74,7 +84,7 @@ describe('NodeToolDialogRouter', () => {
 
   it('同工程关闭把 flush 精确会话和权威节点交给唯一应用服务', async () => {
     const node = editableNode()
-    useProjectStore.setState({ currentProjectId: 'project-a' })
+    attachProject('project-a')
     useCanvasStore.setState({
       nodes: [node],
       activeToolDialog: { nodeId: node.id, toolType: 'edit' },
@@ -101,29 +111,29 @@ describe('NodeToolDialogRouter', () => {
       documentRef: node.data.imageEditSession?.documentRef,
       data: node.data,
       session: flushedSession,
-    })
+    }, expect.objectContaining({ store: requireCanvasProjectInstance('project-a').store }))
   })
 
-  it('切换工程后旧关闭回调不得借新工程确认，返回原工程后可重试原会话', async () => {
+  it('切换工程后关闭回调仍保存原工程，当前工程与页面保持不变', async () => {
     const node = editableNode()
-    useProjectStore.setState({ currentProjectId: 'project-a' })
+    attachProject('project-a')
     useCanvasStore.setState({ nodes: [node], activeToolDialog: { nodeId: node.id, toolType: 'edit' } })
     render(<NodeToolDialogRouter />)
     const onCloseReady = routerMocks.documentDialogProps?.onCloseReady as (
       result: { nodeId: string; session: Record<string, unknown> }
     ) => Promise<void>
     const flushedSession = { ...node.data.imageEditSession, revision: 2 }
-    useProjectStore.setState({ currentProjectId: 'project-b' })
-    await act(async () => {
-      await expect(onCloseReady({ nodeId: node.id, session: flushedSession })).rejects.toThrow('返回原项目')
-    })
-    expect(routerMocks.saveAfterEditing).not.toHaveBeenCalled()
-    expect(useCanvasStore.getState().nodes[0].data.imageEditSession?.revision).toBe(1)
-    useProjectStore.setState({ currentProjectId: 'project-a' })
+    await act(async () => { attachProject('project-b') })
+    const backgroundStore = requireCanvasProjectInstance('project-a').store
     routerMocks.saveAfterEditing.mockResolvedValueOnce({ imageEditSession: flushedSession })
     await act(() => onCloseReady({ nodeId: node.id, session: flushedSession }))
     expect(routerMocks.saveAfterEditing).toHaveBeenCalledTimes(1)
-    expect(routerMocks.saveAfterEditing).toHaveBeenCalledWith(expect.objectContaining({ projectId: 'project-a', session: flushedSession }))
+    expect(routerMocks.saveAfterEditing).toHaveBeenCalledWith(
+      expect.objectContaining({ projectId: 'project-a', session: flushedSession }),
+      expect.objectContaining({ store: backgroundStore }),
+    )
+    expect(useProjectStore.getState().currentProjectId).toBe('project-b')
+    expect(useCanvasStore.getState().nodes).toEqual([])
   })
 
   it('普通图片和旧 V1 图层节点仍走原工具对话框', () => {
