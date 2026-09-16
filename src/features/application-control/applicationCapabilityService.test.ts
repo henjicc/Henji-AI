@@ -159,7 +159,7 @@ describe('独立应用调用入口', () => {
     expect(result.ok).toBe(true)
     if (result.ok) {
       const entities = result.data.entities as Array<{ id: string }>
-      expect(entities.some((value) => value.id.startsWith('assistant.'))).toBe(false)
+      expect(entities.filter(value => value.id.startsWith('assistant.')).map(value => value.id)).toEqual(['assistant.shared_memory'])
       const properties = result.data.properties as Array<{ id: string; entityType: string }>
       const registry = getApplicationReflectionRegistry()
       expect(properties.every((value) => registry.listProperties(value.entityType)
@@ -172,7 +172,7 @@ describe('独立应用调用入口', () => {
     for (const entityType of ['assistant.run', 'assistant.artifact']) {
       const denied = await session.execute({ id: 'list_application_entities', version: 1, input: { entityType } }, request(`deny-${entityType}`))
       expect(denied.ok).toBe(false)
-      if (!denied.ok) expect(denied.error.message).toContain('权限')
+      if (!denied.ok) expect(denied.error.message).toContain('ENTITY_TYPE_NOT_FOUND')
     }
   })
 

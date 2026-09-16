@@ -1,32 +1,12 @@
-import { CanvasPersistenceError, CanvasTransactionRolledBackError } from '@/features/canvas/application/canvasPersistenceService'
-import {
-  closeApplicationSurfaceCapability,
-  focusApplicationEntityCapability,
-  getCurrentApplicationContextCapability,
-  listGenerationHistoryCapability,
-  openApplicationSurfaceCapability,
-  openImageEditorWithSourceCapability,
-  observeApplicationSurfaceCapability,
-} from '@/core/application-control/builtinApplicationCapabilities'
-import {
-  getApplicationSettingsCapability,
-  searchApplicationSettingsCapability,
-} from '@/core/application-control/domains/settings/settingsApplicationCapabilities'
-import {
-  BUILTIN_APPLICATION_CAPABILITY_REGISTRY,
-} from '@/core/application-control/builtinApplicationCapabilityRegistry'
-import { APPLICATION_SURFACE_IDS } from '@/core/application-control/applicationSurfaces'
-import {
-  applicationCapabilityInvocationSchema,
-  isNavigationOnlyCapability,
-  type ApplicationCapabilityDefinition,
-  type ApplicationCapabilityInvocation,
-} from '@/core/application-control/applicationCapabilities'
+import { APPLICATION_DOMAINS } from '../applicationDomains'
+
+import { BUILTIN_APPLICATION_CAPABILITY_REGISTRY } from '@/core/application-control/builtinApplicationCapabilityRegistry'
+
+import { applicationCapabilityInvocationSchema, isNavigationOnlyCapability, type ApplicationCapabilityDefinition, type ApplicationCapabilityInvocation } from '@/core/application-control/applicationCapabilities'
 import type { ApplicationCapabilityResult } from '@/core/application-control/hostContracts'
-import { GenerationPreparationError } from '@/features/generation/application/generationPreparationService'
+
 import { createLogger } from '@/core/logging'
-import { CanvasApplicationError } from '@/features/canvas/application/canvasApplicationService'
-import { MultiLayerDocumentNodeApplicationError } from '@/features/canvas/application/multiLayerDocumentNodeApplicationService'
+
 import { ZodError } from 'zod'
 import { ApplicationTransactionFailure, ApplicationPreflightFailure } from '@/core/application-control/execution/transactionFailure'
 import { transactionFailureFacts } from '@/core/application-control/applicationTransactionFailureFacts'
@@ -38,31 +18,10 @@ import { APPLICATION_REFLECTION_APPLICATION_CAPABILITIES } from '@/core/applicat
 
 import { applicationReflectionHandlers } from './applicationReflectionAdapter'
 import { createHostContextSnapshot } from '../hostContext/hostContext'
-import { listGenerationHistory, openImageEditorWithSource } from './generationCapabilities'
-import {
-  getApplicationSettings,
-  listApplicationSettingIds,
-  searchApplicationSettings,
-} from './settingsRegistry'
-import {
-  closeApplicationSurface,
-  focusApplicationEntity,
-  openApplicationSurface,
-  listApplicationSurfaces,
-} from './surfaceRegistry'
-import type {
-  ApplicationCapabilityHandlerRegistrar,
-  CapabilityExecutionContext,
-  CapabilityHandler,
-} from './handlerTypes'
-import { registerAssetCapabilityHandlers } from './registerAssetCapabilityHandlers'
-import { registerCanvasCapabilityHandlers } from './registerCanvasCapabilityHandlers'
-import { registerGenerationCapabilityHandlers } from './registerGenerationCapabilityHandlers'
-import { registerImageMarkCapabilityHandlers } from './registerImageMarkCapabilityHandlers'
-import { registerToolboxCapabilityHandlers } from './registerToolboxCapabilityHandlers'
-import { observeApplicationSurface } from './surfaceObservation'
 
-const logger = createLogger('features.assistant.application_capabilities')
+import type { ApplicationCapabilityHandlerRegistrar, CapabilityExecutionContext, CapabilityHandler } from './handlerTypes'
+
+const logger = createLogger('features.application_control.capabilities')
 
 class RendererApplicationCapabilityRegistry implements ApplicationCapabilityHandlerRegistrar {
   private readonly definitions = new Map<string, ApplicationCapabilityDefinition>()
@@ -165,36 +124,6 @@ class RendererApplicationCapabilityRegistry implements ApplicationCapabilityHand
 const registry = new RendererApplicationCapabilityRegistry()
 
 function registerBuiltins(): void {
-  registry.registerHandler(getCurrentApplicationContextCapability.id, () => {
-    const snapshot = createHostContextSnapshot()
-    return {
-      surface: snapshot.surface ?? {
-        id: `workspace.${snapshot.workspace.id}`,
-        kind: 'workspace',
-        focusedRef: null,
-        selectedRefs: [],
-      },
-      catalogRevision: snapshot.catalogRevision ?? 0,
-      ready: snapshot.uiReady,
-      revision: snapshot.revision,
-    }
-  })
-  registry.registerHandler(observeApplicationSurfaceCapability.id, async (input, context) => {
-    const parsed = observeApplicationSurfaceCapability.inputSchema.parse(input)
-    return await observeApplicationSurface(parsed, context.signal)
-  })
-  registry.registerHandler(openApplicationSurfaceCapability.id, (input, context) => {
-    const parsed = openApplicationSurfaceCapability.inputSchema.parse(input)
-    return openApplicationSurface(parsed.surfaceId, context)
-  })
-  registry.registerHandler(closeApplicationSurfaceCapability.id, (input) => {
-    const parsed = closeApplicationSurfaceCapability.inputSchema.parse(input)
-    return closeApplicationSurface(parsed.surfaceId)
-  })
-  registry.registerHandler(focusApplicationEntityCapability.id, async (input, context) => {
-    const parsed = focusApplicationEntityCapability.inputSchema.parse(input)
-    return await focusApplicationEntity(parsed.ref, context.signal, context)
-  })
   // 通用反射能力：领域注册了实体和属性，助手就能读改增删，不必再为每个动作写专用能力
   for (const capability of APPLICATION_REFLECTION_APPLICATION_CAPABILITIES) {
     registry.registerHandler(capability.id, async (input, context) => {
@@ -205,30 +134,10 @@ function registerBuiltins(): void {
       return await applicationReflectionHandlers.changeEntities(parsed, context)
     })
   }
-  registry.registerHandler(searchApplicationSettingsCapability.id, (input) => {
-    const parsed = searchApplicationSettingsCapability.inputSchema.parse(input)
-    return { settings: searchApplicationSettings(parsed.query, parsed.limit) }
-  })
-  registry.registerHandler(getApplicationSettingsCapability.id, (input) => {
-    const parsed = getApplicationSettingsCapability.inputSchema.parse(input)
-    return getApplicationSettings(parsed.ids)
-  })
-  registry.registerHandler(listGenerationHistoryCapability.id, async (input) => {
-    const parsed = listGenerationHistoryCapability.inputSchema.parse(input)
-    return await listGenerationHistory(parsed)
-  })
-  registry.registerHandler(openImageEditorWithSourceCapability.id, async (input, context) => {
-    const parsed = openImageEditorWithSourceCapability.inputSchema.parse(input)
-    return await openImageEditorWithSource(parsed.sourceRef, context)
-  })
 }
 
 registerBuiltins()
-registerGenerationCapabilityHandlers(registry)
-registerAssetCapabilityHandlers(registry)
-registerCanvasCapabilityHandlers(registry)
-registerToolboxCapabilityHandlers(registry)
-registerImageMarkCapabilityHandlers(registry)
+for (const domain of APPLICATION_DOMAINS) domain.registerCapabilities(registry)
 
 const frontendCapabilityCount = BUILTIN_APPLICATION_CAPABILITY_REGISTRY
   .list()
@@ -237,13 +146,7 @@ const frontendCapabilityCount = BUILTIN_APPLICATION_CAPABILITY_REGISTRY
 if (registry.listIds().length !== frontendCapabilityCount) {
   throw new Error('应用能力注册不完整')
 }
-const registeredSurfaceIds = new Set(listApplicationSurfaces().map((surface) => surface.id))
-for (const surfaceId of APPLICATION_SURFACE_IDS) {
-  if (!registeredSurfaceIds.has(surfaceId)) throw new Error(`应用 Surface 未注册：${surfaceId}`)
-}
-if (listApplicationSettingIds().length === 0) {
-  throw new Error('应用设置注册中心为空')
-}
+for (const domain of APPLICATION_DOMAINS) domain.validate?.()
 
 /**
  * 把 Zod 校验失败翻译成调用方能据此自纠的一句话。
@@ -261,11 +164,10 @@ function describeSchemaIssues(error: ZodError): string {
 }
 
 function toFailure(error: unknown): ApplicationCapabilityResult {
-  if (error instanceof CanvasTransactionRolledBackError) {
-    const failure = toFailure(error.cause)
-    if (!failure.ok) return { ...failure, error: { ...failure.error, details: { execution: { rolledBack: true } } } }
+  for (const domain of APPLICATION_DOMAINS) {
+    const failure = domain.failure?.(error, toFailure)
+    if (failure) return failure
   }
-  if (error instanceof CanvasPersistenceError && error.transactionFacts) return toFailure(new ApplicationTransactionFailure(error.transactionFacts))
   if (error instanceof ApplicationPreflightFailure) {
     const conflict = /^(?:CONFLICT|REVISION_CONFLICT|PLAN_REVISION_CONFLICT)(?::|$)/.test(error.message)
     return { ok: false, error: { code: conflict ? 'CONFLICT' : 'INVALID_INPUT',
@@ -288,49 +190,6 @@ function toFailure(error: unknown): ApplicationCapabilityResult {
       message: `${message}：当前连接无所需权限或属性不可写，请读取属性可用性并在应用中核对连接授权。`,
       recoverable: true,
     } }
-  }
-  if (error instanceof CanvasApplicationError) {
-    return {
-      ok: false,
-      error: {
-        code: error.code,
-        message: error.message,
-        recoverable: error.recoverable,
-        details: error.details,
-      },
-    }
-  }
-  if (error instanceof MultiLayerDocumentNodeApplicationError) {
-    const code = error.code === 'INVALID_INPUT' || error.code === 'UNSUPPORTED_EXPORT_TARGET'
-      ? 'INVALID_INPUT'
-      : error.code === 'DOCUMENT_NOT_FOUND'
-        ? 'NOT_FOUND'
-        : error.code === 'DOCUMENT_CONFLICT'
-          ? 'CONFLICT'
-          : error.code === 'CANCELLED'
-            ? 'ABORTED'
-            : error.code === 'MIGRATION_REQUIRED' || error.code === 'INVALID_NODE_STATE'
-              ? 'CAPABILITY_NOT_READY'
-              : 'CAPABILITY_REJECTED'
-    return {
-      ok: false,
-      error: {
-        code,
-        message: error.message,
-        recoverable: error.recoverable,
-      },
-    }
-  }
-  if (error instanceof GenerationPreparationError) {
-    return {
-      ok: false,
-      error: {
-        code: error.code === 'MODEL_NOT_FOUND' ? 'NOT_FOUND' : 'INVALID_INPUT',
-        message: error.message,
-        recoverable: true,
-        details: error.details,
-      },
-    }
   }
   if (error instanceof ZodError) {
     return {
@@ -376,7 +235,7 @@ export async function executeApplicationCapabilityResult(
   context: CapabilityExecutionContext
 ): Promise<ApplicationCapabilityResult> {
   logger.info('capability.execute.start', {
-    event: 'assistant.capability.execute.start',
+    event: 'application.capability.execute.start',
     requestId: context.requestId,
     taskId: context.taskId,
     capabilityId: invocation.id,
@@ -390,7 +249,7 @@ export async function executeApplicationCapabilityResult(
     const data = await registry.execute(invocation, context)
     const snapshot = createHostContextSnapshot()
     logger.info('capability.execute.completed', {
-      event: 'assistant.capability.execute.completed',
+      event: 'application.capability.execute.completed',
       requestId: context.requestId,
       taskId: context.taskId,
       capabilityId: invocation.id,
@@ -411,7 +270,7 @@ export async function executeApplicationCapabilityResult(
      */
     const level = error instanceof ApplicationPreflightFailure ? 'warn' : 'error'
     logger[level]('capability.execute.failed', error, {
-      event: 'assistant.capability.execute.failed',
+      event: 'application.capability.execute.failed',
       requestId: context.requestId,
       taskId: context.taskId,
       capabilityId: invocation.id,

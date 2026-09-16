@@ -1,20 +1,13 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 
-
 import { createStoredCameraStageProject } from '@/features/cameraStage/projects/cameraStageProjectService'
-import {
-  applyCameraStageRenderTask,
-} from '@/features/canvas/application/cameraStageRenderApplicationService'
-import { createCameraStageRenderTaskRef } from '@/features/application-control/capabilities/cameraStageRenderCapabilityAdapter'
+import { applyCameraStageRenderTask } from '@/features/canvas/application/cameraStageRenderApplicationService'
+import { createCameraStageRenderTaskRef } from '@/features/cameraStage/application/cameraStageRenderCapabilityAdapter'
 import { confirmCanvasPersistence } from '@/features/canvas/application/canvasPersistenceService'
 import { CANVAS_NODE_TYPES, type CanvasNode } from '@/features/canvas/domain/canvasNodes'
 import { cameraStageNodeDefinition } from '@/features/canvas/domain/nodeRegistryStandardDefinitions'
-import type {
-  CameraStageRenderEvent,
-  CameraStageRenderPlatform,
-  CameraStageRenderTaskSnapshot,
-} from '@/platform/contracts/cameraStageRender'
+import type { CameraStageRenderEvent, CameraStageRenderPlatform, CameraStageRenderTaskSnapshot } from '@/platform/contracts/cameraStageRender'
 import { useCanvasStore } from '@/stores/canvasStore'
 import { useProjectStore } from '@/stores/projectStore'
 

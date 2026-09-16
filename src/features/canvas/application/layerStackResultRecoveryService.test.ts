@@ -5,7 +5,7 @@ import { resolveLayerStackRecoveryTask } from '../domain/layerStackResultRecover
 import { useCanvasStore } from '@/stores/canvasStore'
 import { useProjectStore, type Project } from '@/stores/projectStore'
 import { retryLayerStackResult } from './layerStackResultRecoveryService'
-import { registerCanvasCapabilityHandlers } from '@/features/application-control/capabilities/registerCanvasCapabilityHandlers'
+import { registerCanvasCapabilityHandlers } from '@/features/canvas/application/registerCanvasCapabilityHandlers'
 import type { CapabilityHandler } from '@/features/application-control/capabilities/handlerTypes'
 import { BUILTIN_APPLICATION_CAPABILITY_REGISTRY } from '@/core/application-control/builtinApplicationCapabilityRegistry'
 

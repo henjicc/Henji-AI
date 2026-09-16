@@ -1,15 +1,12 @@
 // @vitest-environment jsdom
 import { beforeAll, describe, expect, it } from 'vitest'
 
-import type {
-  ApplicationMutationExecutor,
-  ApplicationStoreActionLedger,
-} from '@/core/application-control'
+import type { ApplicationMutationExecutor, ApplicationStoreActionLedger } from '@/core/application-control'
 import { auditStoreActionLedger } from '@/core/application-control'
 import { BUILTIN_APPLICATION_CAPABILITY_REGISTRY } from '@/core/application-control/builtinApplicationCapabilityRegistry'
 import { ASSET_STORE_LEDGER } from '@/features/assets/application/assetStoreLedger'
 import { useAssetLibraryStore } from '@/features/assets/store/assetLibraryStore'
-import { ASSISTANT_UI_STORE_LEDGER } from '@/features/application-control/capabilities/assistantUiStoreLedger'
+import { ASSISTANT_UI_STORE_LEDGER } from '@/features/assistant/application/assistantUiStoreLedger'
 import { useAssistantUiStore } from '@/features/assistant/store/assistantUiStore'
 import { CAMERA_STAGE_SESSION_STORE_LEDGER } from '@/features/cameraStage/application/cameraStageSessionStoreLedger'
 import { CAMERA_STAGE_STORE_LEDGER } from '@/features/cameraStage/application/cameraStageStoreLedger'
@@ -37,12 +34,8 @@ import { IMAGE_EDITOR_UI_STORE_LEDGER } from '@/features/imageEdit/application/i
 import { useImageEditorHandoffStore } from '@/features/imageEdit/store/imageEditorHandoffStore'
 import { useImageEditorUiStore } from '@/features/imageEdit/store/imageEditorUiStore'
 import { useImageEditSessionStore } from '@/features/imageEdit/store/imageEditSessionStore'
-import {
-  IMAGE_EDITOR_INTERACTION_STORE_LEDGER_V3,
-} from '@/features/imageEdit/v3/application/imageEditorInteractionStoreLedger'
-import {
-  IMAGE_EDITOR_SESSION_STORE_LEDGER_V3,
-} from '@/features/imageEdit/v3/application/imageEditorSessionStoreLedger'
+import { IMAGE_EDITOR_INTERACTION_STORE_LEDGER_V3 } from '@/features/imageEdit/v3/application/imageEditorInteractionStoreLedger'
+import { IMAGE_EDITOR_SESSION_STORE_LEDGER_V3 } from '@/features/imageEdit/v3/application/imageEditorSessionStoreLedger'
 import { useImageEditorInteractionStoreV3 } from '@/features/imageEdit/v3/store/imageEditorInteractionStoreV3'
 import { useImageEditorSessionStoreV3 } from '@/features/imageEdit/v3/store/imageEditorSessionStoreV3'
 import { IMAGE_MARK_STORE_LEDGER } from '@/features/imageMark/application/imageMarkStoreLedger'
@@ -69,10 +62,7 @@ import { useThemeStore } from '@/stores/themeStore'
 import { useUiStore } from '@/stores/uiStore'
 import { loadRealModelsIntoRegistry } from '@/tests/loadRealModels'
 
-import {
-  getApplicationControlExecutionEngine,
-  getApplicationReflectionRegistry,
-} from './applicationControlRegistry'
+import { getApplicationControlExecutionEngine, getApplicationReflectionRegistry } from './applicationControlRegistry'
 
 /**
  * 覆盖门禁：**人在界面上能做的每一件事，助手要么也能做，要么账上写明为什么不能。**

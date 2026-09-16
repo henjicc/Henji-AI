@@ -10,15 +10,12 @@ vi.mock('@/i18n', () => ({
 }))
 
 import { catalog } from '@henjicc/ai-sdk'
-import {
-  applicationControlCoverageManifestSchema,
-  applicationPublicControlCoverageSchema,
-} from '.'
+import { applicationControlCoverageManifestSchema, applicationPublicControlCoverageSchema } from '.'
 import { canvasNodeDefinitions } from '@/features/canvas/domain/nodeRegistry'
 import { listAnimatablePropertyPaths } from '@/features/cameraStage/domain/animatableProps'
 import { getImageEditorTools } from '@/features/imageEdit/tools/registry'
-import { listApplicationSettingIds } from '@/features/application-control/capabilities/settingsRegistry'
-import { listApplicationSurfaces } from '@/features/application-control/capabilities/surfaceRegistry'
+import { listApplicationSettingIds } from '@/features/settings/application-control/index'
+import { listApplicationSurfaces } from '@/features/navigation/application/surfaceCapabilityService'
 import { getApplicationReflectionRegistry } from '@/features/application-control/capabilities/applicationControlRegistry'
 import { BUILTIN_APPLICATION_CAPABILITIES } from './builtinApplicationCapabilityRegistry'
 import { createApplicationControlCoverageManifest } from './applicationControlCoverage'

@@ -6,8 +6,8 @@ import { EXTERNAL_APPLICATION_CAPABILITIES } from './externalCapabilityPolicy'
 export const APPLICATION_READ_CAPABILITY_IDS = EXTERNAL_APPLICATION_CAPABILITIES.read.map(definition => definition.id)
 export const APPLICATION_WRITE_CAPABILITY_IDS = EXTERNAL_APPLICATION_CAPABILITIES.write.map(definition => definition.id)
 export const APPLICATION_CAPABILITY_IDS = EXTERNAL_APPLICATION_CAPABILITIES.all.map(definition => definition.id)
-export const APPLICATION_WRITE_PERMISSIONS = [...new Set([...EXTERNAL_APPLICATION_CAPABILITIES.write.map(definition => definition.permission), ...['application:write', 'settings:write', 'models:write', 'model_catalog:write', 'assets:write', 'canvas:write', 'canvas:project_write', 'generation:write', 'generation:create', 'generation:cancel', 'camera_stage:write', 'image_edit:write', 'image_edit:preview', 'image_edit:commit', 'image_mark:write']])]
-export const APPLICATION_READ_PERMISSIONS = [...new Set([...EXTERNAL_APPLICATION_CAPABILITIES.read.map(definition => definition.permission), ...['application:read', 'settings:read', 'models:read', 'model_catalog:read', 'assets:read', 'canvas:read', 'generation:read', 'generation:prepare', 'image_edit:read', 'image_mark:read', 'camera_stage:read', 'toolbox:read', 'navigation:read', 'storyboard:read']])]
+export const APPLICATION_WRITE_PERMISSIONS = [...new Set(EXTERNAL_APPLICATION_CAPABILITIES.write.map(definition => definition.permission))]
+export const APPLICATION_READ_PERMISSIONS = [...new Set(EXTERNAL_APPLICATION_CAPABILITIES.read.map(definition => definition.permission))]
 export const localHostRequestSchema = z.object({
   requestId: z.string().uuid(), rendererEpoch: z.string().uuid(), callerId: z.string().uuid(),
   capabilityId: z.enum(APPLICATION_CAPABILITY_IDS), input: z.record(z.string(), z.unknown()),

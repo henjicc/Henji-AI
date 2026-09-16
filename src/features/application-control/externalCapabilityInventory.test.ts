@@ -10,7 +10,7 @@ import { buildExternalCapabilityInventory, externalReflectionPermissions } from 
  * 写成文档只在有人去读的时候成立，所以边界本身在这里被钉死：八个业务写域必须都可写、有意
  * 只读的域必须带得住理由、助手内部运行目录必须一个都不出现。
  */
-const BUSINESS_WRITE_DOMAINS = ['assets', 'camera_stage', 'canvas', 'generation', 'image_edit', 'image_mark', 'models', 'settings'] as const
+const BUSINESS_WRITE_DOMAINS = ['assets', 'camera_stage', 'canvas', 'generation', 'image_edit', 'image_mark', 'models', 'settings', 'memory'] as const
 const INTENTIONAL_READ_ONLY_DOMAINS = ['storyboard', 'toolbox'] as const
 const NEVER_EXPOSED_DOMAINS = ['assistant_runtime', 'artifacts'] as const
 
@@ -55,7 +55,7 @@ describe('外部能力面派生自真实注册表', () => {
 
   it('助手内部运行目录不透传给外部', () => {
     for (const id of NEVER_EXPOSED_DOMAINS) expect(byId.has(id), `${id} 不应出现在外部能力面`).toBe(false)
-    expect(externalWritableEntityTypes(domains).some((type) => type.startsWith('assistant.'))).toBe(false)
+    expect(externalWritableEntityTypes(domains).filter(type => type.startsWith('assistant.'))).toEqual(['assistant.shared_memory'])
   })
 
   it('公开写入范围与 writeExclusion 声明一致，排除项一个都不放行', () => {

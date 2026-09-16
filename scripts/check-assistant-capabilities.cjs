@@ -141,6 +141,17 @@ for (const protectedRoot of protectedExecutionRoots) {
   }
 }
 
+for (const name of ['registry.ts', 'applicationControlRegistry.ts']) {
+  const file = path.join(root, 'src/features/application-control/capabilities', name)
+  const source = fs.readFileSync(file, 'utf8')
+  if (/from\s+['"]@\/(?:stores\/|features\/(?!application-control\/))/.test(source)) {
+    failures.push(`公共注册器直接依赖业务实现，须从领域模块装配：${name}`)
+  }
+  if (/exposures\.includes\(['"]assistant['"]\)/.test(source)) {
+    failures.push(`公共注册器隐式扩展调用面：${name}`)
+  }
+}
+
 for (const file of walk(path.join(root, 'src', 'core', 'application-control', 'domains'))) {
   if (file.endsWith('.test.ts')) continue
   const relative = path.relative(root, file).replaceAll('\\', '/')
@@ -343,6 +354,11 @@ for (const sectionId of settingsSectionIds) {
 }
 
 const packageJson = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'))
+for (const [name, command] of Object.entries(packageJson.scripts ?? {})) {
+  for (const [testPath] of command.matchAll(/(?:src|electron)\/[\w./-]+\.test\.tsx?/g)) {
+    if (!fs.existsSync(path.join(root, testPath))) failures.push(`测试脚本 ${name} 引用不存在的文件：${testPath}`)
+  }
+}
 for (const scriptName of ['build', 'electron:build']) {
   if (!packageJson.scripts?.[scriptName]?.includes('check:assistant-capabilities')) {
     failures.push(`${scriptName} 未接入智能助手能力门禁`)

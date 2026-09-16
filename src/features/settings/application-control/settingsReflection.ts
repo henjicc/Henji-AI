@@ -1,18 +1,8 @@
-import {
-  type ApplicationEntityProvider,
-  type ApplicationEntityRegistration,
-  type ApplicationPropertyDescriptor,
-  type ApplicationPropertyValue,
-  type ApplicationRef,
-  unrestrictedCollectionAvailability,
-} from '@/core/application-control'
+import { type ApplicationEntityProvider, type ApplicationEntityRegistration, type ApplicationPropertyDescriptor, type ApplicationPropertyValue, type ApplicationRef, unrestrictedCollectionAvailability } from '@/core/application-control'
 import { APPLICATION_CAPABILITY_CATALOG_VERSION } from '@/core/application-control/applicationCapabilities'
 import { z } from 'zod'
 
-import {
-  getSettingsRegistryRevision,
-  listApplicationSettingDefinitions,
-} from './settingsApplicationService'
+import { getSettingsRegistryRevision, listApplicationSettingDefinitions } from './settingsApplicationService'
 import type { ApplicationSettingDefinition } from './types'
 
 export const SETTINGS_ENTITY_TYPE = 'settings.registry'
@@ -57,7 +47,7 @@ function settingProperty(definition: ApplicationSettingDefinition): ApplicationP
     nullable: false,
     defaultValue: definition.defaultValue,
     dataClass: definition.sensitive ? 'C2' : 'C1',
-    exposures: definition.sensitive ? ['ui'] : ['ui', 'assistant'],
+    exposures: definition.sensitive ? ['ui'] : ['ui', 'assistant', 'local_adapter'],
     requiredPermissions: { read: ['settings:read'], write: ['settings:write'] },
     revisionScopes: ['settings'],
     schemaRef: propertySchemaRef(definition.id),
@@ -135,7 +125,7 @@ export function createSettingsReflectionRegistration(): ApplicationEntityRegistr
       description: 'Henji-AI 的可查询、可计划修改设置集合。',
       refKind: SETTINGS_ENTITY_TYPE,
       dataClass: 'C1',
-      exposures: ['ui', 'assistant'],
+      exposures: ['ui', 'assistant', 'local_adapter'],
       parentTypes: [],
       revisionScopes: ['settings'],
       queryCapabilityIds: ['get_application_settings'],

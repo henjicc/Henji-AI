@@ -16,7 +16,7 @@ import { getApplicationReflectionRegistry } from '@/features/application-control
  * 几十 KB 的全属性目录；属性细节仍然由 `describe_application_entities` 按域按需取。
  */
 export function buildExternalCapabilityInventory(registry: ApplicationReflectionRegistry = getApplicationReflectionRegistry()): LocalDomainSurface[] {
-  // 外部调用方一律走 local_adapter 暴露面；助手运行、记忆与诊断在注册阶段已被剥离该暴露。
+  // 调用面来自各领域的显式声明；公共装配不替领域扩展暴露范围。
   const description = registry.describe({}, {
     exposure: 'local_adapter',
     permissions: new Set(['application:read', 'application:write', ...registry.listDeclaredPropertyPermissions()]),

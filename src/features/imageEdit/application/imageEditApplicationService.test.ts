@@ -1,15 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import {
-  getImageEditOperation,
-  IMAGE_EDIT_OPERATION_IDS,
-  imageEditDocumentToMarkDoc,
-  parseImageEditDocument,
-  type DiffusionOperationParams,
-  type VgpuGlowOperationParams,
-} from '@/core/imageEdit'
+import { getImageEditOperation, IMAGE_EDIT_OPERATION_IDS, imageEditDocumentToMarkDoc, parseImageEditDocument, type DiffusionOperationParams, type VgpuGlowOperationParams } from '@/core/imageEdit'
 import { ANNOTATION_DEFAULT_STROKE_HEX } from '@/core/theme/colorTokens'
-import { createImageEditPreviewFromRef } from '@/features/application-control/capabilities/generationCapabilities'
+import { createImageEditPreviewFromRef } from '@/features/imageEdit/application/imageSourceCapabilityService'
 
 const dependencies = vi.hoisted(() => ({
   readImageInfo: vi.fn(),
@@ -29,11 +22,7 @@ vi.mock('@/features/assets/services/assetCollectionService', () => ({
   addMediaReferenceToLibrary: dependencies.addMediaReferenceToLibrary,
 }))
 
-import {
-  commitImageEdit,
-  createImageEditPreview,
-  resetImageEditApplicationStateForTests,
-} from './imageEditApplicationService'
+import { commitImageEdit, createImageEditPreview, resetImageEditApplicationStateForTests } from './imageEditApplicationService'
 import { createImageEditReflectionRegistrations, IMAGE_EDIT_ENTITY_TYPES } from './imageEditReflection'
 import { getStoredImageEditPreview } from './imageEditSessionRegistry'
 import { resolveGenerationMediaReferences } from '@/features/generation/application/generationMediaReferences'
