@@ -14,6 +14,7 @@ import { cameraStageNodeDefinition } from '@/features/canvas/domain/nodeRegistry
 import type { CameraStageRenderEvent, CameraStageRenderPlatform, CameraStageRenderTaskSnapshot } from '@/platform/contracts/cameraStageRender'
 import { useCanvasStore } from '@/stores/canvasStore'
 import { useProjectStore } from '@/stores/projectStore'
+import { getPlatform } from '@/platform/runtime'
 
 import { CameraStageRenderTaskRegistry } from '../../electron/main/services/camera-stage-render-task-registry'
 import { createApplicationHarness } from './applicationHarness'
@@ -174,11 +175,12 @@ it.each(['canvas', 'cameraStage'] as const)('A 页面后台渲染 B，打开 B �
   expect(useProjectStore.getState().currentProjectId).toBe(visibleId)
   expect(canvasInstance.leases).toBe(1)
   expect(stageInstance.leases).toBe(1)
+  const harness = createApplicationHarness(); runtimes.push(harness)
   await loadProjectIntoScene(stage.id)
-  await useProjectStore.getState().openProject(projectId)
+  await harness.requireResult('open_canvas_project', { projectId })
   expect(findCanvasProjectInstance(projectId)).toBe(canvasInstance)
   expect(findCameraStageProjectInstance(stage.id)).toBe(stageInstance)
-  await useProjectStore.getState().openProject(visibleId)
+  await harness.requireResult('open_canvas_project', { projectId: visibleId })
   let deleted = false
   const deleting = (deleteTarget === 'canvas' ? useProjectStore.getState().deleteProject(projectId) : deleteStageProject(stage.id))
     .then(() => { deleted = true })
@@ -196,4 +198,45 @@ it.each(['canvas', 'cameraStage'] as const)('A 页面后台渲染 B，打开 B �
   expect(registry.require(descriptor!, OWNER_ID)).toBeNull()
   expect(canvasInstance.leases).toBe(0)
   expect(stageInstance.leases).toBe(0)
+})
+
+it('后台三维等待和恢复共用原任务，保存失败后重试只落一份结果', async () => {
+  const registry = new CameraStageRenderTaskRegistry()
+  const register = vi.spyOn(registry, 'register')
+  installTaskRegistryBridge(registry)
+  const stage = await createStoredCameraStageProject('恢复原三维')
+  const projectId = await useProjectStore.getState().createProject('后台 B')
+  useCanvasStore.getState().setCanvasData([{
+    id: 'camera-node', type: CANVAS_NODE_TYPES.cameraStage, position: { x: 0, y: 0 },
+    data: { ...cameraStageNodeDefinition.createDefaultData(), projectId: stage.id },
+  }], [], { past: [], future: [] })
+  await confirmCanvasPersistence(projectId)
+  const instance = findCanvasProjectInstance(projectId)!
+  const visibleId = await useProjectStore.getState().createProject('编辑 A')
+  const harness = createApplicationHarness(); runtimes.push(harness)
+  const submitted = await harness.requireResult('render_camera_stage_output', {
+    projectRef: { kind: 'canvas.project', id: projectId }, nodeRef: { kind: 'canvas.node', id: `${projectId}:camera-node` },
+    outputKind: 'image', resolutionPreset: '720p',
+  })
+  const descriptor = instance.store.getState().nodes[0].data.renderTask!
+  registry.applyEvent({ type: 'completed', requestId: descriptor.requestId, nodeId: 'camera-node',
+    result: { kind: 'image', mediaUrl: 'henji-media://camera-stage/recover.png', mediaPath: '/pixel-boundary/recover.png',
+      savedPath: '/pixel-boundary/recover.png', width: 1280, height: 720, aspectRatio: '16:9', selectedTimeSec: 0 },
+  })
+  const input = { taskRef: submitted.taskRef }
+  expect(await harness.requireResult('wait_camera_stage_render_task', input)).toMatchObject({ status: 'awaiting_persistence', waitReason: 'recovery_required' })
+  const io = getPlatform().storyboardProjects
+  const save = vi.spyOn(io, 'upsertProjectRecord').mockRejectedValue(new Error('disk full'))
+  expect(await harness.requireResult('recover_camera_stage_render_task', input)).toMatchObject({ status: 'awaiting_persistence', recoveryAttempted: true })
+  expect(registry.require(descriptor, OWNER_ID)?.status).toBe('completed')
+  expect(instance.leases).toBeGreaterThan(0)
+  save.mockRestore()
+  expect(await harness.requireResult('recover_camera_stage_render_task', input)).toMatchObject({ status: 'completed', recoveryAttempted: true })
+  expect(await harness.requireResult('wait_camera_stage_render_task', input)).toMatchObject({ status: 'completed', waitReason: 'terminal' })
+  expect(await harness.requireResult('recover_camera_stage_render_task', input)).toMatchObject({ status: 'completed', recoveryAttempted: false })
+  expect(instance.store.getState().nodes.filter(node => node.data.generationOutputCommitId === `camera-stage-render:${descriptor.requestId}`)).toHaveLength(1)
+  expect(registry.require(descriptor, OWNER_ID)).toBeNull()
+  expect(instance.leases).toBe(0)
+  expect(useProjectStore.getState().currentProjectId).toBe(visibleId)
+  expect(register).toHaveBeenCalledOnce()
 })

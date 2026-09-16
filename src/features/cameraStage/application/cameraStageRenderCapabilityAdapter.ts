@@ -1,5 +1,7 @@
 import type { ApplicationRef } from '@/core/application-control/index'
-import { cancelCameraStageNodeRenderTask, readCameraStageNodeRenderTask, startCameraStageNodeRender } from '@/features/canvas/application/cameraStageRenderApplicationService'
+import { applyCameraStageRenderTask, cancelCameraStageNodeRenderTask, readCameraStageNodeRenderTask, startCameraStageNodeRender } from '@/features/canvas/application/cameraStageRenderApplicationService'
+import { waitForApplicationTask } from '@/core/application-control/taskWait'
+import { RECOVER_CAMERA_STAGE_RENDER_TASK_CAPABILITY_ID } from '@/core/application-control/domains/cameraStage/cameraStageRenderApplicationCapabilities'
 import { readPersistedCanvasProjectSnapshot, readCanvasProjectSnapshot } from '@/features/canvas/application/canvasQueryService'
 import { CANVAS_NODE_TYPES, isCameraStageNode } from '@/features/canvas/domain/canvasNodes'
 import type { CameraStageRenderRequest, CameraStageRenderTaskSnapshot } from '@/platform/contracts/cameraStageRender'
@@ -333,7 +335,30 @@ export async function getCameraStageRenderTask(
   taskRef: ApplicationRef & { kind: 'camera_stage.render_task' },
 ): Promise<Record<string, unknown>> {
   // 取消按不可变任务身份与实时状态核对，不依赖不断变化的渲染进度版本。
-  return { ...await observe(parseCameraStageRenderTaskRef(taskRef)), revisions: {} }
+  const observation = await observe(parseCameraStageRenderTaskRef(taskRef))
+  return { ...observation, revisions: {}, recovery: observation.status === 'awaiting_persistence'
+    ? { capabilityId: RECOVER_CAMERA_STAGE_RENDER_TASK_CAPABILITY_ID, input: { taskRef } } : null }
+}
+
+export async function waitCameraStageRenderTask(taskRef: ApplicationRef & { kind: 'camera_stage.render_task' }, signal: AbortSignal) {
+  const { task, waitReason } = await waitForApplicationTask(() => getCameraStageRenderTask(taskRef), observation => {
+    if (observation.status === 'awaiting_persistence') return 'recovery_required'
+    if (['completed', 'failed', 'cancelled', 'interrupted'].includes(String(observation.status))) return 'terminal'
+    return undefined
+  }, signal)
+  return { ...task, waitReason }
+}
+
+export async function recoverCameraStageRenderTask(taskRef: ApplicationRef & { kind: 'camera_stage.render_task' }, signal: AbortSignal) {
+  const identity = parseCameraStageRenderTaskRef(taskRef)
+  const task = await readLiveTask(identity)
+  signal.throwIfAborted()
+  const recoveryAttempted = task !== null && ['completed', 'failed', 'cancelled'].includes(task.status)
+  if (recoveryAttempted) await applyCameraStageRenderTask(task!)
+  const observation = await getCameraStageRenderTask(taskRef)
+  return { ...observation, recoveryAttempted, verification: {
+    verified: observation.status !== 'awaiting_persistence', condition: '已查询原渲染任务和持久结果，未重新提交渲染', target: taskRef,
+  } }
 }
 
 export async function cancelCameraStageRenderTask(

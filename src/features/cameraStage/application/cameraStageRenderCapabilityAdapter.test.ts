@@ -1,7 +1,8 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({
   cancel: vi.fn(),
+  apply: vi.fn(),
   read: vi.fn(),
   start: vi.fn(),
   readPersisted: vi.fn(),
@@ -19,6 +20,7 @@ const mocks = vi.hoisted(() => ({
 }))
 
 vi.mock('@/features/canvas/application/cameraStageRenderApplicationService', () => ({
+  applyCameraStageRenderTask: mocks.apply,
   cancelCameraStageNodeRenderTask: mocks.cancel,
   readCameraStageNodeRenderTask: mocks.read,
   startCameraStageNodeRender: mocks.start,
@@ -34,7 +36,7 @@ vi.mock('@/stores/canvasStore', () => ({
   useCanvasStore: { getState: () => ({ nodes: mocks.nodes }) },
 }))
 
-import { cancelCameraStageRenderTask, createCameraStageRenderTaskRef, getCameraStageRenderTask, parseCameraStageRenderTaskRef, renderCameraStageOutput } from '@/features/cameraStage/application/cameraStageRenderCapabilityAdapter'
+import { cancelCameraStageRenderTask, createCameraStageRenderTaskRef, getCameraStageRenderTask, parseCameraStageRenderTaskRef, renderCameraStageOutput, waitCameraStageRenderTask, recoverCameraStageRenderTask } from '@/features/cameraStage/application/cameraStageRenderCapabilityAdapter'
 
 const projectRef = { kind: 'canvas.project' as const, id: 'canvas-1' }
 const nodeRef = { kind: 'canvas.node' as const, id: 'canvas-1:stage-node' }
@@ -72,6 +74,7 @@ function liveTask(status: 'queued' | 'running' | 'completed' | 'failed' | 'cance
 }
 
 describe('cameraStageRenderCapabilityAdapter', () => {
+  afterEach(() => { vi.useRealTimers() })
   beforeEach(() => {
     vi.clearAllMocks()
     mocks.projectState = { currentProjectId: 'canvas-1', currentProject: { id: 'canvas-1' } }
@@ -331,5 +334,32 @@ describe('cameraStageRenderCapabilityAdapter', () => {
       verification: { verified: true, condition: expect.stringContaining('无需发送取消') },
     })
     expect(mocks.cancel).not.toHaveBeenCalled()
+  })
+
+  it('等待任务只观察原任务，取消等待不取消渲染', async () => {
+    vi.useFakeTimers()
+    mocks.read.mockResolvedValue(liveTask('running'))
+    const controller = new AbortController()
+    const waiting = waitCameraStageRenderTask(createCameraStageRenderTaskRef(identity), controller.signal)
+    const rejected = expect(waiting).rejects.toMatchObject({ name: 'AbortError' })
+    await vi.advanceTimersByTimeAsync(2000)
+    controller.abort()
+    await rejected
+    expect(mocks.cancel).not.toHaveBeenCalled()
+    expect(mocks.start).not.toHaveBeenCalled()
+    expect(vi.getTimerCount()).toBe(0)
+  })
+
+  it('待保存任务停止等待并返回正式恢复入口，缺失任务不重新渲染', async () => {
+    const taskRef = createCameraStageRenderTaskRef(identity)
+    mocks.read.mockResolvedValue(liveTask('completed'))
+    expect(await waitCameraStageRenderTask(taskRef, new AbortController().signal)).toMatchObject({
+      status: 'awaiting_persistence', waitReason: 'recovery_required',
+      recovery: { capabilityId: 'recover_camera_stage_render_task', input: { taskRef } },
+    })
+    mocks.read.mockResolvedValue(null)
+    expect(await recoverCameraStageRenderTask(taskRef, new AbortController().signal)).toMatchObject({ status: 'interrupted', recoveryAttempted: false })
+    expect(mocks.apply).not.toHaveBeenCalled()
+    expect(mocks.start).not.toHaveBeenCalled()
   })
 })

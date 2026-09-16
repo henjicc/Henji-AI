@@ -1,14 +1,14 @@
 import { configureCameraStageControlDependencies } from './applicationDomain'
 import { getHostScopeRevisions, notifyHostScopeChanged } from '@/features/application-control/hostContext/hostContext'
 
-import { CAMERA_STAGE_RENDER_CAPABILITY_ID, CANCEL_CAMERA_STAGE_RENDER_TASK_CAPABILITY_ID, GET_CAMERA_STAGE_RENDER_TASK_CAPABILITY_ID } from '@/core/application-control/domains/cameraStage/cameraStageRenderApplicationCapabilities'
+import { CAMERA_STAGE_RENDER_CAPABILITY_ID, CANCEL_CAMERA_STAGE_RENDER_TASK_CAPABILITY_ID, GET_CAMERA_STAGE_RENDER_TASK_CAPABILITY_ID, WAIT_CAMERA_STAGE_RENDER_TASK_CAPABILITY_ID, RECOVER_CAMERA_STAGE_RENDER_TASK_CAPABILITY_ID } from '@/core/application-control/domains/cameraStage/cameraStageRenderApplicationCapabilities'
 
 import type { ApplicationCapabilityHandlerRegistrar } from '@/features/application-control/capabilities/handlerTypes'
 
 import { parseCapabilityInput, throwIfCapabilityAborted } from '@/features/application-control/capabilities/handlerUtils'
 import { openApplicationSurface } from '@/features/navigation/application/surfaceCapabilityService'
 import { applyCameraStageCameraMove, createCameraStageProject, deleteCameraStageObject, deleteCameraStageProject, duplicateCameraStageObject, getCameraStageProject, listCameraStageProjects, observeCameraStageScene, openCameraStageProject, placeCameraStageObject, renameCameraStageProject, updateCameraStageObject, verifyCameraStage } from '@/features/cameraStage/application/cameraStageCapabilityAdapter'
-import { cancelCameraStageRenderTask, getCameraStageRenderTask, renderCameraStageOutput } from '@/features/cameraStage/application/cameraStageRenderCapabilityAdapter'
+import { cancelCameraStageRenderTask, getCameraStageRenderTask, renderCameraStageOutput, waitCameraStageRenderTask, recoverCameraStageRenderTask } from '@/features/cameraStage/application/cameraStageRenderCapabilityAdapter'
 
 interface ProjectInput {
   projectId: string
@@ -129,6 +129,15 @@ export function registerCameraStageCapabilityHandlers(registrar: ApplicationCapa
       input,
     )
     return await cancelCameraStageRenderTask(parsed.taskRef)
+  })
+
+  for (const [id, execute] of [
+    [WAIT_CAMERA_STAGE_RENDER_TASK_CAPABILITY_ID, waitCameraStageRenderTask],
+    [RECOVER_CAMERA_STAGE_RENDER_TASK_CAPABILITY_ID, recoverCameraStageRenderTask],
+  ] as const) registrar.registerHandler(id, async (input, context) => {
+    throwIfCapabilityAborted(context.signal)
+    const parsed = parseCapabilityInput<{ taskRef: Parameters<typeof getCameraStageRenderTask>[0] }>(id, input)
+    return execute(parsed.taskRef, context.signal)
   })
 
 }

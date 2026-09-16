@@ -16,6 +16,7 @@ const cameraStageWrites = BUILTIN_APPLICATION_CAPABILITIES.filter((capability) =
 const renderTaskWriteIds = new Set([
   'render_camera_stage_output',
   'cancel_camera_stage_render_task',
+  'recover_camera_stage_render_task',
 ])
 const cameraStageSceneWrites = cameraStageWrites.filter(
   (capability) => !renderTaskWriteIds.has(capability.id)
@@ -65,6 +66,7 @@ describe('三维写入的 revision 契约', () => {
   it('后台渲染任务以画布目标和稳定 taskRef 防串，不伪装成场景 revision 写入', () => {
     expect(cameraStageRenderTaskWrites.map((capability) => capability.id).sort()).toEqual([
       'cancel_camera_stage_render_task',
+      'recover_camera_stage_render_task',
       'render_camera_stage_output',
     ])
     expect(cameraStageRenderTaskWrites.every((capability) => (
