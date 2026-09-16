@@ -234,8 +234,9 @@ describe('多图层文档节点 application 服务', () => {
       sourceNodeId: 'node-a', targetNodeId: 'node-b', data: nodeData(),
     })
     expect(forked.imageEditSession.documentRef).toBe('image-edit-v3:document-b')
-    await service.markReleaseCandidate({ nodeId: 'node-a', data: nodeData() })
+    await service.markReleaseCandidate({ projectId: 'project-a', nodeId: 'node-a', data: nodeData() })
     expect(documentPort.markReleaseCandidate).toHaveBeenCalledWith({
+      projectId: 'project-a',
       nodeId: 'node-a', session: sourceSession, signal: undefined,
     })
 

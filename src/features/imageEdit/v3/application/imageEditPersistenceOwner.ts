@@ -52,6 +52,7 @@ export class ImageEditPersistenceOwnerV3 implements ApplicationPersistencePartic
     private readonly snapshot: () => ImageEditPersistenceSnapshotV3,
     private confirmProjection?: ImageEditPersistenceHostV3['confirmProjection'],
     public projection?: ImageEditPersistenceHostV3['projection'],
+    private readonly canStart: () => boolean = () => true,
   ) {
     if (queue.getReference().documentId !== documentId) throw new Error('图片编辑保存宿主与文档不匹配')
     this.key = `image-edit-document:${documentId}`
@@ -72,7 +73,7 @@ export class ImageEditPersistenceOwnerV3 implements ApplicationPersistencePartic
   }
 
   assertCurrent(): void {
-    if (!this.active) throw new Error('图片文档实例已释放，请重新读取原文档后重试保存')
+    if (!this.active || !this.canStart()) throw new Error('图片文档实例已释放或正在关闭，请重新读取原文档后重试保存')
     if (this.expectedDocument && this.snapshot().document !== this.expectedDocument) {
       throw new Error('图片编辑期间出现新的编辑，请保留当前内容并重新读取后规划')
     }
@@ -111,6 +112,7 @@ export class ImageEditPersistenceOwnerV3 implements ApplicationPersistencePartic
   /** UI 重试和助手恢复只确认最新快照，从不 dispatch / undo 业务命令。 */
   confirm(includeProjection = this.projectionNeeded): Promise<ImageEditDocumentReferenceV3> {
     if (this.batchConfirmation) return this.batchConfirmation.promise
+    if (!this.canStart()) return Promise.reject(new Error('图片文档正在关闭，不能开始保存'))
     return this.performConfirmation(includeProjection)
   }
 

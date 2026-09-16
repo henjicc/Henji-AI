@@ -9,6 +9,7 @@ import {
   attachImageEditDocumentInstanceV3, getOrCreateImageEditDocumentInstanceV3,
   getOrCreateImageEditPersistenceQueueV3, releaseImageEditDocumentInstanceV3,
   requireImageEditDocumentInstanceV3, saveImageEditDocumentInstanceV3,
+  deleteIdleImageEditDocumentV3, leaseImageEditDocumentInstanceV3,
 } from './imageEditDocumentInstances'
 import { useImageEditorControllerV3 } from '../editor/useImageEditorControllerV3'
 
@@ -29,6 +30,43 @@ function setup(id: string, save?: ImageEditDocumentRepositoryV3['save']) {
 }
 
 describe('图片文档应用实例', () => {
+  it('回收跳过打开的文档、活动任务、脏状态与未确认保存', async () => {
+    const state = setup('retained')
+    const remove = vi.fn(async () => true)
+    const detach = attachImageEditDocumentInstanceV3('retained')
+    expect(await deleteIdleImageEditDocumentV3('retained', 0, remove)).toBe(false)
+    detach()
+    const release = leaseImageEditDocumentInstanceV3('retained')
+    expect(await deleteIdleImageEditDocumentV3('retained', 0, remove)).toBe(false)
+    release()
+    state.rename('保留未保存修改')
+    expect(await deleteIdleImageEditDocumentV3('retained', 1, remove)).toBe(false)
+    await saveImageEditDocumentInstanceV3('retained')
+    expect(remove).not.toHaveBeenCalled()
+    expect(await deleteIdleImageEditDocumentV3('retained', 0, remove)).toBe(false)
+    expect(await deleteIdleImageEditDocumentV3('retained', 1, remove)).toBe(true)
+    expect(() => state.rename('迟到写入')).toThrow('DOCUMENT_RELEASED')
+    expect(() => getOrCreateImageEditDocumentInstanceV3(state.document)).toThrow('DOCUMENT_DELETED')
+  })
+
+  it('删除期间拒绝写入、保存和附着；失败后原实例可继续操作', async () => {
+    const state = setup('deleting')
+    let fail!: (error: Error) => void
+    const pending = deleteIdleImageEditDocumentV3('deleting', 0,
+      () => new Promise<boolean>((_resolve, reject) => { fail = reject }))
+    expect(() => state.rename('迟到命令')).toThrow('DOCUMENT_CLOSING')
+    expect(() => state.instance.bus.undo()).toThrow('DOCUMENT_CLOSING')
+    expect(() => attachImageEditDocumentInstanceV3('deleting')).toThrow('DOCUMENT_CLOSING')
+    await expect(saveImageEditDocumentInstanceV3('deleting')).rejects.toThrow('DOCUMENT_CLOSING')
+    await expect(state.instance.persistenceOwner!.confirm()).rejects.toThrow('正在关闭')
+    fail(new Error('disk busy'))
+    await expect(pending).rejects.toThrow('disk busy')
+    expect(requireImageEditDocumentInstanceV3('deleting')).toBe(state.instance)
+    state.rename('删除失败后继续修改')
+    await saveImageEditDocumentInstanceV3('deleting')
+    expect(state.queue.getReference().revision).toBe(1)
+  })
+
   it('手势预览不进入保存队列，清除历史即使未改文档版本也会保存', async () => {
     vi.useFakeTimers()
     const state = setup('preview')

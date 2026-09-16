@@ -351,7 +351,7 @@ export async function deleteCanvasNodes(projectId: string, nodeIds: string[], op
   }
   void import('./multiLayerDocumentNodeGenerationAdapter').then(({ markMultiLayerDocumentReleaseCandidate }) => (
     Promise.all(removedDocumentNodes.map((node) => (
-      markMultiLayerDocumentReleaseCandidate({ nodeId: node.id, data: node.data })
+      markMultiLayerDocumentReleaseCandidate({ projectId, nodeId: node.id, data: node.data })
     )))
   )).catch((error) => {
     logger.error('删除节点后的文档候选登记失败', error, {
@@ -401,7 +401,7 @@ export async function clearCanvasProject(projectId: string, options: CanvasCommi
   const documentNodes = before.nodes.filter(isEditableLayerStackResultNode)
   void import('./multiLayerDocumentNodeGenerationAdapter').then(({ markMultiLayerDocumentReleaseCandidate }) => (
     Promise.all(documentNodes.map((node) => (
-      markMultiLayerDocumentReleaseCandidate({ nodeId: node.id, data: node.data })
+      markMultiLayerDocumentReleaseCandidate({ projectId, nodeId: node.id, data: node.data })
     )))
   )).catch((error) => {
     logger.error('清空画布后的文档候选登记失败', error, {

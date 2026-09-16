@@ -4,12 +4,15 @@ import { ImageEditCommandHistoryV3 } from '@/core/imageEdit/v3/commandHistory'
 import {
   findImageEditDocumentInstanceV3, getOrCreateImageEditDocumentInstanceV3,
   getOrCreateImageEditPersistenceQueueV3, type ImageEditDocumentInstanceV3,
+  assertImageEditDocumentAvailableV3, leaseImageEditDocumentInstanceV3,
+  requireImageEditDocumentInstanceV3,
 } from './imageEditDocumentInstances'
 
 const loading = new Map<string, Promise<ImageEditDocumentInstanceV3>>()
 
 /** 读取与执行共用同一个实例；并发调用只载入一次，单个等待者取消不取消共享载入。 */
 export async function ensureImageEditDocumentInstanceV3(documentId: string): Promise<ImageEditDocumentInstanceV3> {
+  assertImageEditDocumentAvailableV3(documentId)
   const existing = findImageEditDocumentInstanceV3(documentId)
   if (existing) return existing
   const pending = loading.get(documentId)
@@ -23,6 +26,7 @@ export async function ensureImageEditDocumentInstanceV3(documentId: string): Pro
       throw new Error('NOT_FOUND：图片文档不存在或快照不一致。')
     }
     // IPC 等待期间 UI 可能已经附着；只接纳首次创建的业务实例。
+    assertImageEditDocumentAvailableV3(documentId)
     const installed = findImageEditDocumentInstanceV3(documentId)
     if (installed) return installed
     const history = new ImageEditCommandHistoryV3()
@@ -41,6 +45,13 @@ export async function ensureImageEditDocumentInstanceV3(documentId: string): Pro
   loading.set(documentId, load)
   try { return await load }
   finally { if (loading.get(documentId) === load) loading.delete(documentId) }
+}
+
+export async function withImageEditDocumentInstanceV3<T>(documentId: string, execute: (instance: ImageEditDocumentInstanceV3) => Promise<T>): Promise<T> {
+  if (!findImageEditDocumentInstanceV3(documentId)) await ensureImageEditDocumentInstanceV3(documentId)
+  const release = leaseImageEditDocumentInstanceV3(documentId)
+  try { return await execute(requireImageEditDocumentInstanceV3(documentId)) }
+  finally { release() }
 }
 
 export async function ensureImageEditRefInstanceV3(ref: ApplicationRef): Promise<void> {

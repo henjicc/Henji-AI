@@ -23,6 +23,7 @@ let onChange: (project: Project) => void = () => undefined
 
 export function configureCanvasInstancePersistence(listener: (project: Project) => void): void { onChange = listener }
 export function findCanvasProjectInstance(id: string): CanvasProjectInstance | undefined { return instances.get(id) }
+export function listCanvasProjectInstances(): CanvasProjectInstance[] { return [...instances.values()] }
 export function requireCanvasProjectInstance(id: string): CanvasProjectInstance {
   const instance = instances.get(id)
   if (!instance) throw new Error('PROJECT_NOT_LOADED')

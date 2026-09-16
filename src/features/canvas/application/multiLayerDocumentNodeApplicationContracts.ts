@@ -104,6 +104,7 @@ export interface MultiLayerDocumentNodePort {
     signal?: AbortSignal
   }): Promise<MultiLayerDocumentNodeProjection>
   markReleaseCandidate(input: {
+    projectId: string
     nodeId: string
     session: ImageEditSessionReferenceV3
     signal?: AbortSignal
@@ -180,6 +181,7 @@ export interface MultiLayerDocumentNodeApplicationService {
     signal?: AbortSignal
   }): Promise<MultiLayerDocumentNodeProjection>
   markReleaseCandidate(input: {
+    projectId: string
     nodeId: string
     data: LayerStackResultNodeData
     signal?: AbortSignal

@@ -9,7 +9,7 @@ import { requireCanvasProjectInstance } from '@/features/canvas/application/canv
 import { useCanvasStore } from '@/stores/canvasStore'
 import { useProjectStore } from '@/stores/projectStore'
 import { imageEditV3LayerRef } from '@/features/imageEdit/v3/application/imageEditDocumentRefs'
-import { requireImageEditDocumentInstanceV3 } from '@/features/imageEdit/v3/application/imageEditDocumentInstances'
+import { deleteIdleImageEditDocumentV3, requireImageEditDocumentInstanceV3 } from '@/features/imageEdit/v3/application/imageEditDocumentInstances'
 import { getProjectRecord } from '@/commands/projectState'
 import { CANVAS_NODE_TYPES } from '@/features/canvas/domain/canvasNodes'
 import { createImageEditRasterLayerV3 } from '@/core/imageEdit/v3/documentFactory'
@@ -84,12 +84,17 @@ it('未打开编辑器时从 B 的当前文档导出，正式入口返回可回�
   const state = await setup()
   state.bus.dispatch({ type: 'layer.add', commandId: 'exportable-layer', expectedRevision: 0,
     parentId: null, index: 0, layer: createImageEditRasterLayerV3('raster', '可导出图层') })
-  pixelBoundary.export.mockImplementation(async ({ session }: Parameters<MultiLayerDocumentNodePort['materializeExportTarget']>[0]) => ({
+  const remove = vi.fn(async () => true)
+  pixelBoundary.export.mockImplementation(async ({ session }: Parameters<MultiLayerDocumentNodePort['materializeExportTarget']>[0]) => {
+    expect(requireImageEditDocumentInstanceV3(state.document.id).leases).toBeGreaterThan(0)
+    expect(await deleteIdleImageEditDocumentV3(state.document.id, session.revision, remove)).toBe(false)
+    return {
     imageUrl: 'henji-media://fixture/export.png', previewImageUrl: 'henji-media://fixture/export.png',
     aspectRatio: '1:1', width: 8, height: 8, mediaType: 'image/png', hasAlpha: true, displayName: '可导出图层', ownedFilePaths: [],
     diagnostics: { documentId: state.document.id, revision: session.revision, targetKind: 'raster-layer', targetId: 'raster',
       layerPath: ['raster'], canvasScope: 'document', contentState: 'rendered' },
-  }))
+    }
+  })
   const harness = createApplicationHarness()
   disposals.push(harness.dispose)
   const result = await harness.requireResult('export_image_edit_target_to_canvas', {
@@ -104,4 +109,6 @@ it('未打开编辑器时从 B 的当前文档导出，正式入口返回可回�
   expect(requireCanvasProjectInstance(state.projectId).store.getState().nodes).toHaveLength(2)
   expect(useCanvasStore.getState().nodes).toHaveLength(0)
   expect(state.materialize).not.toHaveBeenCalled()
+  expect(remove).not.toHaveBeenCalled()
+  expect(requireImageEditDocumentInstanceV3(state.document.id).leases).toBe(0)
 })

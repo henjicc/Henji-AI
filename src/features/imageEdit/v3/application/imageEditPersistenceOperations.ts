@@ -4,7 +4,7 @@ import { requireImageEditDocumentInstanceV3 } from './imageEditDocumentInstances
 import { listImageEditDocumentInstancesV3 } from './imageEditDocumentInstances'
 import type { ImageEditPersistenceSnapshotV3 } from '@/core/imageEdit/v3/serviceContracts'
 import type { ImageEditPersistenceQueuePortV3 } from './imageEditPersistenceOwner'
-import { ensureImageEditDocumentInstanceV3 } from './imageEditDocumentLoading'
+import { withImageEditDocumentInstanceV3 } from './imageEditDocumentLoading'
 
 export function requireImageEditPersistenceOwnerV3(documentId: string) {
   const owner = requireImageEditDocumentInstanceV3(documentId).persistenceOwner
@@ -67,26 +67,27 @@ export async function runImageEditPersistedOperationV3<T>(
   context: ApplicationExecutionContext | undefined,
   execute: (context: ApplicationExecutionContext | undefined) => Promise<T>,
 ): Promise<T> {
-  await ensureImageEditDocumentInstanceV3(documentId)
-  const owner = requireImageEditPersistenceOwnerV3(documentId)
-  owner.assertCurrent()
-  if (context?.persistenceScopes?.has(owner.key)) {
-    try { return await execute(context) }
-    finally { owner.acceptCurrent() }
-  }
-  const batch = owner.begin()
-  const batchContext: ApplicationExecutionContext = {
-    ...(context ?? { requestId: 'image-edit-direct', exposure: 'local_adapter',
-      permissions: new Set<string>(), acceptedDataClasses: new Set(['C0', 'C1'] as const) }),
-    persistenceScopes: new Set([owner.key]),
-  }
-  try {
-    let result: T
-    try { result = await execute(batchContext) }
-    catch (error) { await batch.confirm(); throw error }
-    await batch.confirm()
-    return result
-  } finally { batch.release() }
+  return withImageEditDocumentInstanceV3(documentId, async () => {
+    const owner = requireImageEditPersistenceOwnerV3(documentId)
+    owner.assertCurrent()
+    if (context?.persistenceScopes?.has(owner.key)) {
+      try { return await execute(context) }
+      finally { owner.acceptCurrent() }
+    }
+    const batch = owner.begin()
+    const batchContext: ApplicationExecutionContext = {
+      ...(context ?? { requestId: 'image-edit-direct', exposure: 'local_adapter',
+        permissions: new Set<string>(), acceptedDataClasses: new Set(['C0', 'C1'] as const) }),
+      persistenceScopes: new Set([owner.key]),
+    }
+    try {
+      let result: T
+      try { result = await execute(batchContext) }
+      catch (error) { await batch.confirm(); throw error }
+      await batch.confirm()
+      return result
+    } finally { batch.release() }
+  })
 }
 
 export function assertImageEditPersistenceCurrentV3(documentId: string): void {

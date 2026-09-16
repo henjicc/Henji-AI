@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createImageEditDocumentV3, createImageEditRasterLayerV3 } from '@/core/imageEdit/v3/documentFactory'
 import { ImageEditCommandBusV3 } from './imageEditCommandBus'
 import { ensureImageEditDocumentInstanceV3 } from './imageEditDocumentLoading'
-import { getOrCreateImageEditDocumentInstanceV3, listImageEditDocumentInstancesV3 } from './imageEditDocumentInstances'
+import { deleteIdleImageEditDocumentV3, getOrCreateImageEditDocumentInstanceV3, listImageEditDocumentInstancesV3 } from './imageEditDocumentInstances'
 import { ImageEditV3ReflectionProvider } from './imageEditV3Reflection'
 import { imageEditV3LayerRef } from './imageEditDocumentRefs'
 import { runImageEditPersistedOperationV3 } from './imageEditPersistenceOperations'
@@ -33,6 +33,16 @@ beforeEach(() => {
 })
 
 describe('离屏文档读取', () => {
+  it('删除完成后拒绝迟到的磁盘读取，不复活文档实例', async () => {
+    let finish!: (value: ImageEditorV3DocumentSnapshot) => void
+    io.load.mockImplementationOnce(() => new Promise((resolve) => { finish = resolve }))
+    const pending = ensureImageEditDocumentInstanceV3('unopened')
+    expect(await deleteIdleImageEditDocumentV3('unopened', 0, async () => true)).toBe(true)
+    finish(snapshot())
+    await expect(pending).rejects.toThrow('DOCUMENT_DELETED')
+    expect(listImageEditDocumentInstancesV3()).toEqual([])
+  })
+
   it('反射读取未打开文档，并发发现复用一次载入；修改保存无需挂载 React', async () => {
     const provider = new ImageEditV3ReflectionProvider('image_edit.layer')
     const [entity, instance] = await Promise.all([

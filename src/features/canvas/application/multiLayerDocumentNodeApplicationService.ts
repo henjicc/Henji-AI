@@ -262,6 +262,7 @@ export function createMultiLayerDocumentNodeApplicationService(
           } catch (error) {
             if (retainsCanvasMutation(error)) throw error
             await dependencies.documentPort.markReleaseCandidate({
+              projectId: input.projectId,
               nodeId: input.nodeId,
               session: projection.imageEditSession,
               signal: input.signal,
@@ -419,6 +420,7 @@ export function createMultiLayerDocumentNodeApplicationService(
         execute: async () => {
           const session = editableSession(input.data)
           await dependencies.documentPort.markReleaseCandidate({
+            projectId: input.projectId,
             nodeId: input.nodeId,
             session,
             signal: input.signal,

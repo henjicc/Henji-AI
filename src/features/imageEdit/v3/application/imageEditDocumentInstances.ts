@@ -26,6 +26,8 @@ interface OwnedInstance extends ImageEditDocumentInstanceV3 {
 
 const instances = new Map<string, OwnedInstance>()
 const queues = new Map<string, ImageEditPersistenceV3Queue>()
+const deleting = new Set<string>()
+const deleted = new Set<string>()
 const listeners = new Set<() => void>()
 let revision = 0
 
@@ -38,6 +40,7 @@ export function getOrCreateImageEditPersistenceQueueV3(
   options: Omit<ImageEditPersistenceV3Options, 'onStatusChange'>,
 ): ImageEditPersistenceV3Queue {
   const id = options.initialReference.documentId
+  assertImageEditDocumentAvailableV3(id)
   const existing = queues.get(id)
   if (existing) return existing
   const queue = new ImageEditPersistenceV3Queue(options)
@@ -50,6 +53,7 @@ export function findImageEditDocumentInstanceV3(documentId: string): ImageEditDo
 }
 
 export function readImageEditDocumentInstanceV3(documentId: string) {
+  assertImageEditDocumentAvailableV3(documentId)
   const instance = instances.get(documentId)
   if (!instance?.persistenceOwner) return undefined
   const persistence = instance.bus.getPersistenceSnapshot()
@@ -62,6 +66,7 @@ export function readImageEditDocumentInstanceV3(documentId: string) {
 }
 
 export function requireImageEditDocumentInstanceV3(documentId: string): ImageEditDocumentInstanceV3 {
+  assertImageEditDocumentAvailableV3(documentId)
   const instance = instances.get(documentId)
   if (!instance) throw new Error('NOT_FOUND：图片文档尚未加载。')
   return instance
@@ -84,6 +89,7 @@ function installOwner(instance: OwnedInstance, host?: ImageEditPersistenceHostV3
   }
   instance.persistenceOwner = new ImageEditPersistenceOwnerV3(
     instance.documentId, queue, () => instance.bus.getPersistenceSnapshot(), host?.confirmProjection, host?.projection,
+    () => !instance.closing,
   )
 }
 
@@ -100,6 +106,7 @@ function adopt(bus: ImageEditCommandBusV3, host?: ImageEditPersistenceHostV3): O
     timer: null, unsubscribe: () => undefined,
   }
   installOwner(instance, host)
+  bus.setMutationGuard(() => assertImageEditDocumentAvailableV3(documentId))
   instance.unsubscribe = bus.subscribePersistence(() => {
     instance.dirty = true
     instance.revision += 1
@@ -124,6 +131,7 @@ export function getOrCreateImageEditDocumentInstanceV3(
   options: Pick<ImageEditCommandBusOptionsV3, 'historySnapshot' | 'resourceByteSizes'> = {},
   host?: ImageEditPersistenceHostV3,
 ): ImageEditDocumentInstanceV3 {
+  assertImageEditDocumentAvailableV3(document.id)
   const existing = instances.get(document.id)
   if (existing) {
     if (existing.closing) throw new Error('图片文档正在关闭')
@@ -146,6 +154,7 @@ export function attachImageEditDocumentInstanceV3(documentId: string): () => voi
 }
 
 export async function saveImageEditDocumentInstanceV3(documentId: string, includeProjection = false) {
+  assertImageEditDocumentAvailableV3(documentId)
   const instance = instances.get(documentId)
   if (!instance?.persistenceOwner) throw new Error('图片文档没有保存目标')
   if (instance.timer) clearTimeout(instance.timer)
@@ -166,6 +175,41 @@ export function releaseImageEditDocumentInstanceV3(documentId: string): boolean 
     || instance.persistenceOwner?.isBusy() || queues.get(documentId)?.isBusy() || queues.get(documentId)?.isDirty()) return false
   dispose(instance)
   return true
+}
+
+export function assertImageEditDocumentAvailableV3(documentId: string): void {
+  if (deleted.has(documentId)) throw new Error('DOCUMENT_DELETED：图片文档已删除')
+  if (deleting.has(documentId)) throw new Error('DOCUMENT_CLOSING：图片文档正在关闭')
+}
+
+export function leaseImageEditDocumentInstanceV3(documentId: string): () => void {
+  const instance = requireImageEditDocumentInstanceV3(documentId)
+  instance.leases += 1
+  let released = false
+  return () => { if (!released) { released = true; instance.leases -= 1 } }
+}
+
+/** 候选回收不抢占编辑者或任务。删除期间禁止新的载入、附着与写入，失败保留原实例。 */
+export async function deleteIdleImageEditDocumentV3(documentId: string, revision: number, remove: () => Promise<boolean>): Promise<boolean> {
+  if (deleted.has(documentId)) return true
+  if (deleting.has(documentId)) return false
+  const instance = instances.get(documentId)
+  const queue = queues.get(documentId)
+  if (instance && (instance.views || instance.leases || instance.dirty || instance.persistenceOwner?.isBusy()
+    || instance.bus.getSnapshot().document.revision !== revision)) return false
+  if (queue?.isBusy() || queue?.isDirty()) return false
+  deleting.add(documentId)
+  if (instance) instance.closing = true
+  try {
+    if (!await remove()) return false
+    if (instance) dispose(instance)
+    queues.delete(documentId)
+    deleted.add(documentId)
+    return true
+  } finally {
+    deleting.delete(documentId)
+    if (instance) instance.closing = false
+  }
 }
 
 function dispose(instance: OwnedInstance): void {
@@ -189,4 +233,6 @@ export function adoptImageEditDocumentInstanceForTestsV3(
 export function resetImageEditDocumentInstancesForTestsV3(): void {
   for (const instance of instances.values()) dispose(instance)
   queues.clear()
+  deleting.clear()
+  deleted.clear()
 }
