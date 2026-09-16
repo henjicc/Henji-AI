@@ -22,6 +22,7 @@ import { readApplicationMediaResource } from './mediaResources'
 import { McpConnections } from '../mcp/connections'
 import { ApplicationHostBridge } from './applicationHostBridge'
 import { LocalMcpServer } from '../mcp/server'
+import type { LocalHostRequest } from '../../../../src/core/application-control/localHostContracts'
 
 let parent: string
 let file: string
@@ -74,7 +75,14 @@ it('真实SDK客户端读取媒体，缺少凭据和撤销连接后均不能读�
   const connections = new McpConnections({ read: () => null, write: () => {} })
   const connection = connections.create('媒体客户端')
   const bridge = new ApplicationHostBridge((id) => connections.assertActive(id))
-  bridge.register({ rendererEpoch: randomUUID(), attachmentSequence: 1, ready: true, tools: [], domains: [] }, { send: () => { throw new Error('媒体不得转发渲染执行') } })
+  // 此原生用例控制渲染授权边界；文件解析、SQLite 与协议均为正式实现。
+  bridge.register({ rendererEpoch: randomUUID(), attachmentSequence: 1, ready: true, tools: [], domains: [] }, { send: (channel, payload) => {
+    if (channel !== 'application:host:request') return
+    const request = payload as LocalHostRequest
+    expect(request.capabilityId).toBe('read_application_entity')
+    expect(request.input.ref).toEqual({ kind: 'asset', id: 'asset-result' })
+    bridge.complete({ ...request, result: { ok: true, data: { ref: request.input.ref, properties: {} } } })
+  } })
   const server = new LocalMcpServer(connections, bridge)
   const client = new Client({ name: 'native-media', version: '1' }, { versionNegotiation: { mode: { pin: '2026-07-28' } } })
   try {

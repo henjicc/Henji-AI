@@ -1,5 +1,6 @@
 import { toMcpResult } from './resultProjection'
-import { APPLICATION_RESOURCE_TEMPLATES, readApplicationResource } from './resources'
+import { APPLICATION_RESOURCE_TEMPLATES, listApplicationResources, readApplicationResource } from './resources'
+import { ApplicationResourceSubscriptions } from './resourceSubscriptions'
 import { createServer, type IncomingMessage, type ServerResponse, type Server as HttpServer } from 'node:http'
 import { createMcpHandler, Server, type McpHttpHandler, type AuthInfo } from '@modelcontextprotocol/server'
 import { toNodeHandler } from '@modelcontextprotocol/node'
@@ -17,7 +18,7 @@ export class LocalMcpServer {
   private port = 0
   private detach?: () => void
   private authorizationTimer?: ReturnType<typeof setInterval>
-  private resourceUris = new Set<string>()
+  private subscriptions?: ApplicationResourceSubscriptions
   constructor(private readonly connections: McpConnections, private readonly host: ApplicationHostBridge,
     private readonly onError: (error: unknown) => void = () => {}, private readonly operations?: ApplicationOperationCoordinator,
     private readonly onRequest: (info: { callerId: string }) => void = () => {}) {}
@@ -26,6 +27,9 @@ export class LocalMcpServer {
 
   async start(port: number): Promise<void> {
     if (this.http) throw new Error('服务已经启用，请先关闭再更换端口。')
+    const subscriptions = new ApplicationResourceSubscriptions(id => this.connections.assertActive(id),
+      (id, uri, signal) => readApplicationResource(new ApplicationToolDispatcher(this.connections, this.host, this.operations), id, uri, signal))
+    this.subscriptions = subscriptions
     const handler = createMcpHandler(context => {
       const callerId = context.authInfo?.clientId
       if (!callerId) throw new Error('调用者未获授权。')
@@ -34,10 +38,12 @@ export class LocalMcpServer {
       const dispatcher = new ApplicationToolDispatcher(this.connections, this.host, this.operations, this.port)
       server.setRequestHandler('tools/list', async () => ({ tools: dispatcher.catalog(callerId).tools }))
       server.setRequestHandler('resources/templates/list', async () => ({ resourceTemplates: APPLICATION_RESOURCE_TEMPLATES }))
-      server.setRequestHandler('resources/list', async () => ({ resources: [] }))
+      server.setRequestHandler('resources/list', async (request, ctx) => {
+        if (!this.host.ready) throw new Error('CAPABILITY_NOT_READY:应用正在连接，请稍后重新读取资源目录。')
+        return listApplicationResources(dispatcher, callerId, this.host.domains(), request.params?.cursor, ctx.mcpReq.signal)
+      })
       server.setRequestHandler('resources/read', async (request, ctx) => {
         const result = await readApplicationResource(dispatcher, callerId, request.params.uri, ctx.mcpReq.signal)
-        if (this.resourceUris.size < 512) this.resourceUris.add(request.params.uri)
         return result
       })
       server.setRequestHandler('tools/call', async (request, ctx) => {
@@ -45,12 +51,11 @@ export class LocalMcpServer {
         return toMcpResult(result)
       })
       return server
-    }, { legacy: 'reject', onerror: this.onError, maxSubscriptions: 16 })
+    }, { legacy: 'reject', onerror: this.onError, maxSubscriptions: 16, bus: subscriptions })
     this.handler = handler
     this.detach = this.host.onChange(() => {
       handler.notify.toolsChanged()
       handler.notify.resourcesChanged()
-      for (const uri of this.resourceUris) handler.notify.resourceUpdated(uri)
     })
     this.authorizationTimer = setInterval(() => {
       for (const [response, callerId] of this.active) {
@@ -76,7 +81,7 @@ export class LocalMcpServer {
       })
       const address = http.address()
       this.port = address && typeof address !== 'string' ? address.port : port
-    } catch (error) { this.http = undefined; await handler.close(); this.handler = undefined; throw error }
+    } catch (error) { await this.stop(); throw error }
   }
 
   async stop(): Promise<void> {
@@ -85,10 +90,10 @@ export class LocalMcpServer {
     this.detach?.()
     this.detach = undefined
     clearInterval(this.authorizationTimer)
-    this.resourceUris.clear()
     // HTTP 关闭只结束这些请求的等待，不能撤销持久业务操作或内置 Pi。
     await this.handler?.close()
     this.handler = undefined
+    this.subscriptions = undefined
     if (http) await new Promise<void>(resolve => { http.close(() => resolve()); http.closeAllConnections() })
     this.active.clear()
   }
@@ -130,7 +135,16 @@ export class LocalMcpServer {
       this.connections.assertActive(callerId)
       request.auth = { token, clientId: callerId, scopes: [] }
       this.onRequest({ callerId })
-      await dispatch(request, response, body)
+      const controller = new AbortController()
+      response.once('close', () => controller.abort())
+      try {
+        await this.subscriptions!.run(callerId, body, controller.signal, () => dispatch(request, response, body))
+      } catch (error) {
+        if (response.headersSent || response.destroyed) throw error
+        const id = body && typeof body === 'object' && 'id' in body ? body.id : null
+        response.writeHead(200, { 'Content-Type': 'application/json' })
+        response.end(JSON.stringify({ jsonrpc: '2.0', id, error: { code: -32602, message: error instanceof Error ? error.message : '资源订阅未获授权。' } }))
+      }
     } finally { if (response.writableEnded || response.destroyed) this.active.delete(response) }
   }
 }

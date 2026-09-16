@@ -2,6 +2,7 @@ import { canvasStoreAttachment, createCanvasStore } from '@/stores/canvasStore'
 import { fromProjectRecord, type Project } from '@/stores/projectStoreSerialization'
 import { getProjectRecord } from '@/commands/projectState'
 import { assertApplicationWritesAllowed } from '@/core/applicationLifecycle/applicationWriteBarrier'
+import { notifyApplicationDomainChanged } from '@/core/application-control/domainChangeSignal'
 
 export interface CanvasProjectInstance {
   readonly id: string
@@ -53,6 +54,7 @@ export function registerCanvasProjectInstance(project: Project): CanvasProjectIn
     metadata = { ...metadata, updatedAt: Math.max(Date.now(), metadata.updatedAt + 1) }
     instance.revision = metadata.updatedAt
     onChange(snapshot())
+    notifyApplicationDomainChanged('canvas')
   }
   const unsubscribe = store.subscribe((state, previous) => {
     if (state.nodes !== previous.nodes || state.edges !== previous.edges || state.history !== previous.history
@@ -69,6 +71,7 @@ export function registerCanvasProjectInstance(project: Project): CanvasProjectIn
     dispose: unsubscribe,
   }
   instances.set(project.id, instance)
+  notifyApplicationDomainChanged('canvas')
   return instance
 }
 
@@ -126,6 +129,7 @@ export async function closeCanvasProjectInstance(id: string, remove: () => Promi
     await remove()
     instance?.dispose()
     instances.delete(id)
+    notifyApplicationDomainChanged('canvas')
   } finally {
     if (instance) instance.closing = false
     closing.delete(id)

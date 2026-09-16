@@ -8,10 +8,18 @@ import { LocalMcpServer } from './server'
 import { McpConnections } from './connections'
 import { ApplicationHostBridge } from '../application-runtime/applicationHostBridge'
 import { EXTERNAL_CONTRACT_VERSION, EXTERNAL_PROTOCOL_VERSIONS, type LocalHostRequest } from '../../../../src/core/application-control/localHostContracts'
+import { readApplicationMediaResource } from '../application-runtime/mediaResources'
+
+vi.mock('../application-runtime/mediaResources', async importOriginal => ({
+  ...await importOriginal<typeof import('../application-runtime/mediaResources')>(),
+  readApplicationMediaResource: vi.fn(async (_input: unknown, metadataOnly = false) => ({
+    mimeType: 'image/png', totalBytes: 8, base64: metadataOnly ? '' : 'cGljdHVyZQ==', offset: 0, byteLength: metadataOnly ? 0 : 8, eof: !metadataOnly,
+  })),
+}))
 
 const closers: Array<() => Promise<void>> = []
 afterEach(async () => { for (const close of closers.reverse()) await close(); closers.length = 0 })
-async function fixture(options: { ready?: boolean; pending?: boolean; result?: Record<string, unknown> } = {}) {
+async function fixture(options: { ready?: boolean; pending?: boolean; result?: Record<string, unknown>; reply?: (request: LocalHostRequest) => Record<string, unknown> } = {}) {
   let saved: string | null = null
   let now = Date.now()
   const connections = new McpConnections({ read: () => saved, write: (value) => { saved = value } }, () => now)
@@ -20,15 +28,19 @@ async function fixture(options: { ready?: boolean; pending?: boolean; result?: R
   const host = new ApplicationHostBridge((id) => connections.assertActive(id))
   const calls: LocalHostRequest[] = []
   const cancellations: string[] = []
-  host.register({ rendererEpoch: randomUUID(), attachmentSequence: 1, ready: options.ready ?? true, domains: [], tools: [{ id: 'read_application_entity', version: 1, title: '读取', description: '读取实体', inputSchema: { type: 'object', properties: {}, additionalProperties: false } }] }, {
-    send: (channel, payload) => {
+  const registration = { rendererEpoch: randomUUID(), attachmentSequence: 1, ready: options.ready ?? true, domains: [{ id: 'settings', readable: true, writable: true, entities: [{ id: 'settings.registry', title: '设置', writableProperties: 1, creatable: false, removable: false }] }], tools: [] }
+  const transportHost = {
+    send: (channel: string, payload: unknown) => {
       if (channel === 'application:host:cancel') cancellations.push(payload as string)
       if (channel !== 'application:host:request') return
       const request = payload as LocalHostRequest
       calls.push(request)
-      if (!options.pending) host.complete({ requestId: request.requestId, rendererEpoch: request.rendererEpoch, result: options.result ?? { ok: true, data: { ref: { kind: 'settings.registry', id: 'singleton' }, entityType: 'settings.registry', properties: { name: '隔离工程' }, revisions: {}, capturedAt: new Date(0).toISOString(), revision: 0, scopeRevisions: { navigation: 0, generation: 0, canvas: 0, toolbox: 0, assets: 0 } } } })
+      if (!options.pending) host.complete({ requestId: request.requestId, rendererEpoch: request.rendererEpoch, result: options.reply?.(request) ?? options.result ?? (request.capabilityId === 'list_application_entities'
+        ? { ok: true, data: { refs: [{ kind: 'settings.registry', id: 'singleton' }], nextCursor: null, revisions: {} } }
+        : { ok: true, data: { ref: { kind: 'settings.registry', id: 'singleton' }, entityType: 'settings.registry', properties: { name: '隔离工程' }, revisions: {}, capturedAt: new Date(0).toISOString(), revision: 0, scopeRevisions: { navigation: 0, generation: 0, canvas: 0, toolbox: 0, assets: 0 } } }) })
     },
-  })
+  }
+  host.register(registration, transportHost)
   const server = new LocalMcpServer(connections, host)
   await server.start(0)
   closers.push(() => server.stop())
@@ -40,20 +52,84 @@ async function fixture(options: { ready?: boolean; pending?: boolean; result?: R
     await client.connect(transport)
     return { client, transport }
   }
-  return { server, connections, first, second, host, calls, cancellations, url, connect, advance: () => { now += 31 * 86400_000 } }
+  return { server, connections, first, second, host, calls, cancellations, url, connect,
+    change: () => host.register(registration, transportHost), advance: () => { now += 31 * 86400_000 } }
 }
 
 describe('本地 MCP 协议与边界', () => {
+  it('资源目录从正式实体分页派生，私有零缓存且拒绝无效游标', async () => {
+    const f = await fixture({ reply: request => {
+      expect(request.capabilityId).toBe('list_application_entities')
+      expect(request.input.entityType).toBe('settings.registry')
+      const start = request.input.cursor ? Number(request.input.cursor) : 0
+      const end = Math.min(start + Number(request.input.limit), 51)
+      return { ok: true, data: { refs: Array.from({ length: end - start }, (_, index) => ({ kind: 'settings.registry', id: `item-${start + index}` })), nextCursor: end < 51 ? String(end) : null, revisions: {} } }
+    } })
+    const { client } = await f.connect()
+    const first = await client.listResources({ cursor: '' })
+    expect(first.resources).toHaveLength(50)
+    expect(first).toMatchObject({ ttlMs: 0, cacheScope: 'private' })
+    const last = await client.listResources({ cursor: first.nextCursor })
+    expect(last.resources).toEqual([{ uri: 'henji://entity/settings.registry/item-50', name: 'settings.registry:item-50', mimeType: 'application/json' }])
+    expect(last.nextCursor).toBeUndefined()
+    await expect(client.listResources({ cursor: 'invalid' })).rejects.toThrow('INVALID_CURSOR')
+    expect(f.calls).toHaveLength(2)
+  })
+  it('实体和文本资源隐藏本机路径，媒体元信息与分块共用实体授权', async () => {
+    const media = vi.mocked(readApplicationMediaResource)
+    media.mockClear()
+    const f = await fixture({ result: { ok: true, data: { properties: { name: '文档', nested: { source: 'C:\\private\\image.png' } } } } })
+    const { client } = await f.connect()
+    const text = await client.readResource({ uri: 'henji://text/settings.registry/singleton' })
+    expect(text.contents[0]).toMatchObject({ mimeType: 'text/plain' })
+    expect(JSON.stringify(text.contents)).not.toContain('private')
+    const metadata = await client.readResource({ uri: 'henji://media/asset/picture' })
+    expect(JSON.stringify(metadata)).toContain('totalBytes')
+    expect(JSON.stringify(metadata)).not.toContain('base64')
+    expect(media).toHaveBeenLastCalledWith(expect.objectContaining({ ref: { kind: 'asset', id: 'picture' } }), true)
+    expect(f.calls.at(-1)).toMatchObject({ capabilityId: 'read_application_entity', input: { ref: { kind: 'asset', id: 'picture' } } })
+    const denied = await fixture({ result: { ok: false, error: { code: 'PERMISSION_DENIED', message: 'PERMISSION_DENIED:此实体不可读取。' } } })
+    const other = await denied.connect()
+    await expect(other.client.readResource({ uri: 'henji://media/asset/private' })).rejects.toThrow('PERMISSION_DENIED')
+    expect((await other.client.callTool({ name: 'read_application_media', arguments: { ref: { kind: 'asset', id: 'private' } } })).isError).toBe(true)
+    expect(media).toHaveBeenCalledTimes(1)
+  })
+  it('订阅建立和每次资源通知按各自调用者核验，撤销读取后不泄漏事件', async () => {
+    const allowed = new Set<string>()
+    const f = await fixture({ reply: request => allowed.has(request.callerId)
+      ? { ok: true, data: { ref: request.input.ref, properties: { name: '可读' } } }
+      : { ok: false, error: { code: 'PERMISSION_DENIED', message: 'PERMISSION_DENIED:资源不可读取。' } } })
+    allowed.add(f.first.id)
+    const a = await f.connect()
+    const b = await f.connect(f.second.id)
+    const uri = 'henji://entity/settings.registry/singleton'
+    await expect(b.client.listen({ resourceSubscriptions: [uri] })).rejects.toThrow('PERMISSION_DENIED')
+    await expect(a.client.listen({ resourceSubscriptions: ['file:///secret'] })).rejects.toThrow()
+    await expect(a.client.listen({ resourceSubscriptions: Array.from({ length: 129 }, () => uri) })).rejects.toThrow('128')
+    const eventsA: string[] = []; const eventsB: string[] = []
+    a.client.setNotificationHandler('notifications/resources/updated', event => { eventsA.push(event.params.uri) })
+    b.client.setNotificationHandler('notifications/resources/updated', event => { eventsB.push(event.params.uri) })
+    const subA = await a.client.listen({ resourceSubscriptions: [uri] })
+    allowed.add(f.second.id)
+    const subB = await b.client.listen({ resourceSubscriptions: [uri] })
+    allowed.delete(f.first.id)
+    f.change()
+    await vi.waitFor(() => expect(eventsB).toEqual([uri]))
+    expect(eventsA).toEqual([])
+    await subA.close(); await subB.close()
+    const count = f.calls.length
+    f.change()
+    expect(f.calls).toHaveLength(count)
+  })
   it('标准订阅只发送选中的资源更新，关闭与撤销释放流', async () => {
     const f = await fixture()
     const { client } = await f.connect()
     const uri = 'henji://entity/settings.registry/singleton'
-    await client.readResource({ uri })
     const updates: string[] = []
     client.setNotificationHandler('notifications/resources/updated', message => { updates.push(message.params.uri) })
     const subscription = await client.listen({ resourceSubscriptions: [uri] })
     expect(subscription.honoredFilter.resourceSubscriptions).toEqual([uri])
-    f.host.register({ rendererEpoch: randomUUID(), attachmentSequence: 5, ready: true, tools: [], domains: [] }, { send: () => {} })
+    f.change()
     await vi.waitFor(() => expect(updates).toContain(uri))
     await subscription.close()
     expect(await subscription.closed).toBe('local')

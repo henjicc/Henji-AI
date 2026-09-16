@@ -20,6 +20,23 @@ export class ApplicationToolDispatcher {
     this.connections.assertActive(callerId)
     return buildApplicationToolCatalog({ tools: this.host.tools(), access: this.connections.access(callerId), operationsEnabled: Boolean(this.operations) })
   }
+  /** Resources 与分块工具使用相同的领域授权和引用解析。 */
+  async readMedia(callerId: string, args: Record<string, unknown> | undefined, signal: AbortSignal, metadataOnly = false): Promise<ApplicationResult> {
+    this.connections.assertActive(callerId)
+    try {
+      const input = readMediaInputSchema.parse(args)
+      const authorized = await this.call(callerId, 'read_application_entity', { ref: input.ref }, signal)
+      if (!authorized.ok) return authorized
+      if (signal.aborted) return applicationFailure('ABORTED:媒体读取已取消。')
+      const media = await readApplicationMediaResource(input, metadataOnly)
+      this.connections.assertActive(callerId)
+      if (signal.aborted) return applicationFailure('ABORTED:媒体读取已取消。')
+      return { ok: true, data: metadataOnly ? { ref: input.ref, mimeType: media.mimeType, totalBytes: media.totalBytes } : media }
+    } catch (error) {
+      const message = invalidInputMessage(error) ?? (error instanceof ApplicationMediaResourceError ? `${error.code}:${error.message}` : '媒体读取失败，请稍后重试。')
+      return applicationFailure(message)
+    }
+  }
   async call(callerId: string, name: string, args: Record<string, unknown> | undefined, signal: AbortSignal): Promise<ApplicationResult> {
       this.connections.assertActive(callerId)
       if (name === 'describe_application_contract') {
@@ -33,17 +50,7 @@ export class ApplicationToolDispatcher {
         }
       }
       if (name === 'read_application_media') {
-        try {
-          const input = readMediaInputSchema.parse(args)
-          const data = await readApplicationMediaResource(input)
-          const result = { ok: true, data }
-          this.connections.assertActive(callerId)
-          return result
-        } catch (error) {
-          // 参数错误点名字段；业务失败仍然脱敏，不回传本地路径。
-          const message = invalidInputMessage(error) ?? (error instanceof ApplicationMediaResourceError ? `${error.code}:${error.message}` : '媒体读取失败，请稍后重试。')
-          return applicationFailure(message)
-        }
+        return this.readMedia(callerId, args, signal)
       }
       if (name === 'get_application_operation' && this.operations) {
         const parsed = z.object({ operationId: z.string().uuid() }).strict().safeParse(args)

@@ -47,7 +47,7 @@ function sources(ref: z.infer<typeof inputSchema>['ref']): string[] {
 /** 只读取稳定业务引用已保存的本地媒体；连接授权由 MCP 服务在调用前核对。 */
 export async function readApplicationMediaResource(input: {
   ref: { kind: string; id: string }; outputIndex?: number; offset?: number; length?: number
-}): Promise<{ mimeType: string; base64: string; offset: number; byteLength: number; totalBytes: number; eof: boolean }> {
+}, metadataOnly = false): Promise<{ mimeType: string; base64: string; offset: number; byteLength: number; totalBytes: number; eof: boolean }> {
   const parsed = inputSchema.parse(input)
   logger.debug('开始读取关联媒体', { event: 'mcp.media.read.start', context: { kind: parsed.ref.kind } })
   try {
@@ -66,6 +66,7 @@ export async function readApplicationMediaResource(input: {
       const stat = await file.stat()
       if (!stat.isFile()) failure('UNSUPPORTED_MEDIA_TYPE', '媒体不是普通文件。')
       if (parsed.offset > stat.size) failure('MEDIA_RANGE_OUT_OF_BOUNDS', '读取位置超出媒体末尾。')
+      if (metadataOnly) return { mimeType, base64: '', offset: 0, byteLength: 0, totalBytes: stat.size, eof: stat.size === 0 }
       const buffer = Buffer.alloc(Math.min(parsed.length, stat.size - parsed.offset))
       const { bytesRead } = await file.read(buffer, 0, buffer.length, parsed.offset)
       logger.debug('关联媒体读取完成', { event: 'mcp.media.read.completed', context: { kind: parsed.ref.kind, byteLength: bytesRead } })

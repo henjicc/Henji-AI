@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from '@/tests/harnessNativeStorage'
 
 import type { ApplicationControlAccessContext, ApplicationExecutionContext } from '@/core/application-control'
 import {
@@ -33,8 +34,10 @@ const executionContext: ApplicationExecutionContext = {
 
 const disposers: Array<() => void> = []
 
+beforeEach(installHarnessNativeStorage)
 afterEach(() => {
   while (disposers.length > 0) disposers.pop()?.()
+  uninstallHarnessNativeStorage()
 })
 
 async function commitStep(

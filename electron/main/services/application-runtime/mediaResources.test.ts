@@ -21,6 +21,19 @@ afterAll(async () => { await fs.rm(directory, { recursive: true, force: true }) 
 beforeEach(() => { state.rows.clear(); state.project = null })
 
 describe('稳定业务引用的媒体读取', () => {
+  it('媒体元信息读取只检查文件，不读取二进制内容', async () => {
+    const filename = path.join(state.root, 'metadata.png')
+    await fs.writeFile(filename, 'metadata')
+    state.rows.set('asset:metadata', { file_path: filename })
+    const file = await fs.open(filename, 'r')
+    const read = vi.spyOn(file, 'read')
+    const open = vi.spyOn(fs, 'open').mockResolvedValueOnce(file)
+    try {
+      expect(await readApplicationMediaResource({ ref: { kind: 'asset', id: 'metadata' } }, true))
+        .toMatchObject({ mimeType: 'image/png', totalBytes: 8, byteLength: 0, base64: '' })
+      expect(read).not.toHaveBeenCalled()
+    } finally { open.mockRestore() }
+  })
   it.each(['generation.result', 'asset', 'canvas.node'] as const)('读取 %s 正式关联字节、末页及 EOF', async (kind) => {
     const filename = path.join(state.root, `${kind}.mp4`)
     await fs.writeFile(filename, Buffer.from([1, 2, 3, 4, 5]))

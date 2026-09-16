@@ -159,6 +159,11 @@ function startTracking(): () => void {
     subscribeVisibleGenerationTaskChanges(() => bumpScope('generation')),
     subscribeApplicationDomainChanges((scope) => {
       if (scope === 'assets') syncAssetDomainRevision()
+      else {
+        // 未显示的工程也会变化；刷新订阅，但不推进另一个工程的写入基线。
+        revision += 1
+        for (const listener of listeners) listener()
+      }
     }),
     subscribeImageEditDocumentInstancesV3(() => {
       revision += 1

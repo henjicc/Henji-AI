@@ -4,6 +4,7 @@ import { attachCameraStageStore, cameraStageStoreAttachment, createCameraStageSt
 import { readProjectSnapshot, writeCameraStageProject, type CameraStageProjectSnapshot } from '../projects/cameraStageProjectPersistence'
 import { serializeScene } from '../domain/sceneSerialization'
 import { assertApplicationWritesAllowed } from '@/core/applicationLifecycle/applicationWriteBarrier'
+import { notifyApplicationDomainChanged } from '@/core/application-control/domainChangeSignal'
 
 export type CameraStageSaveState = 'idle' | 'saving' | 'saved' | 'error'
 export interface CameraStageProjectInstance {
@@ -55,6 +56,7 @@ export function registerCameraStageProjectInstance(snapshot: CameraStageProjectS
       && state.currentProjectName === previousState.currentProjectName) return
     instance.dirty = true
     instance.revision++
+    notifyApplicationDomainChanged('camera_stage')
     if (instance.timer) clearTimeout(instance.timer)
     if (!instance.closing) instance.timer = setTimeout(() => {
       instance.timer = null
@@ -62,6 +64,7 @@ export function registerCameraStageProjectInstance(snapshot: CameraStageProjectS
     }, 700)
   })
   instances.set(snapshot.id, instance)
+  notifyApplicationDomainChanged('camera_stage')
   return instance
 }
 
@@ -171,6 +174,7 @@ export async function closeCameraStageProjectInstance(projectId: string, remove:
       await saveCameraStageProjectRuntime(projectId)
     }
     await remove()
+    notifyApplicationDomainChanged('camera_stage')
     if (current) {
       if (cameraStageStoreAttachment.getStore() === current.store) attachCameraStageStore(createCameraStageStore())
       current.unsubscribe()
