@@ -1,3 +1,4 @@
+import { releaseCanvasProjectInstance, resetCanvasProjectInstancesForTests } from '@/features/canvas/application/canvasProjectInstances'
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from '@/tests/harnessNativeStorage'
@@ -7,6 +8,7 @@ import { fromProjectRecord, toProjectRecord } from './projectStoreSerialization'
 
 describe('损坏工程不得替换有效工程或未保存现场', () => {
   beforeEach(() => {
+    resetCanvasProjectInstancesForTests()
     installHarnessNativeStorage()
     useProjectStore.setState({ projects: [], currentProject: null, currentProjectId: null,
       openError: null, persistenceError: null, persistenceErrors: {}, isHydrated: true })
@@ -20,6 +22,7 @@ describe('损坏工程不得替换有效工程或未保存现场', () => {
     const native = window.henjiNative!.storyboardProjects
     const original = (await native.getProjectRecord(b))!
     const a = await store.createProject('A')
+    expect(releaseCanvasProjectInstance(b)).toBe(true)
     const before = useProjectStore.getState().currentProject
     const save = vi.spyOn(native, 'upsertProjectRecord')
     const get = vi.spyOn(native, 'getProjectRecord').mockResolvedValueOnce({ ...original, nodesJson: '[broken' })
@@ -73,6 +76,7 @@ describe('损坏工程不得替换有效工程或未保存现场', () => {
     const native = window.henjiNative!.storyboardProjects
     const original = (await native.getProjectRecord(id))!
     await store.closeProject()
+    expect(releaseCanvasProjectInstance(id)).toBe(true)
     const nodes = [
       { id: 'retired', type: 'imageNode', position: { x: 10, y: 20 }, width: 420, height: 240,
         data: { displayName: '商品摄影', capabilityId: 'image.product-photography', modelId: 'removed-model',

@@ -1,3 +1,4 @@
+import { setCanvasTestProjectState } from '@/tests/canvasProjectFixture'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { useCanvasStore } from '@/stores/canvasStore'
 import { useProjectStore } from '@/stores/projectStore'
@@ -13,12 +14,12 @@ const originalCanvas = useCanvasStore.getState()
 const originalProject = useProjectStore.getState()
 afterEach(() => {
   useCanvasStore.setState(originalCanvas)
-  useProjectStore.setState(originalProject)
+  setCanvasTestProjectState(originalProject)
 })
 
 describe('图片编辑结果只能同步回原文档节点', () => {
   it.each(['deleted', 'replaced', 'project-switched'] as const)('%s 时保留保存结果，拒绝覆盖；恢复关联后可重试', async (failure) => {
-    useProjectStore.setState({ currentProjectId: 'project' })
+    setCanvasTestProjectState({ currentProjectId: 'project' })
     const saveProjection = vi.fn(async () => ({ imageEditSession: session,
       imageUrl: 'preview.png', previewImageUrl: 'preview.png', aspectRatio: '1:1' }))
     const confirmation = createMultiLayerDocumentPersistenceConfirmation({
@@ -28,14 +29,14 @@ describe('图片编辑结果只能同步回原文档节点', () => {
       ...session, documentRef: 'image-edit-v3:other-document' as const,
     } } }
     useCanvasStore.setState({ nodes: failure === 'deleted' ? [] : [failure === 'replaced' ? changed : node] })
-    if (failure === 'project-switched') useProjectStore.setState({ currentProjectId: 'other' })
+    if (failure === 'project-switched') setCanvasTestProjectState({ currentProjectId: 'other' })
     const before = useCanvasStore.getState().nodes
     await expect(confirmation.confirm(session)).rejects.toMatchObject({
       code: 'NODE_TARGET_CHANGED', message: expect.stringContaining('恢复原节点及其文档关联后重试同步'),
     })
     expect(saveProjection).not.toHaveBeenCalled()
     expect(useCanvasStore.getState().nodes).toBe(before)
-    useProjectStore.setState({ currentProjectId: 'project' })
+    setCanvasTestProjectState({ currentProjectId: 'project' })
     useCanvasStore.setState({ nodes: [node] })
     await expect(confirmation.confirm(session)).resolves.toMatchObject({ reference: { documentId: 'saved-document', revision: 1 } })
     expect(saveProjection).toHaveBeenCalledOnce()

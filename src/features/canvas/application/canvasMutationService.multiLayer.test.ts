@@ -1,4 +1,5 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { setCanvasTestProjectState } from '@/tests/canvasProjectFixture';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   fork: vi.fn(),
@@ -12,15 +13,11 @@ vi.mock('./multiLayerDocumentNodeGenerationAdapter', () => ({
   rollbackCreatedMultiLayerDocument: mocks.rollback,
 }))
 
-import { useCanvasStore } from '@/stores/canvasStore'
-import { useProjectStore, type Project } from '@/stores/projectStore'
-import { CANVAS_NODE_TYPES, type CanvasNode } from '../domain/canvasNodes'
-import {
-  commitCanvasNodeDuplication,
-  deleteCanvasNodes,
-  duplicateCanvasNode,
-} from './canvasMutationService'
-import { redoCanvasChange, undoCanvasChange } from './canvasApplicationService'
+import { useCanvasStore } from '@/stores/canvasStore';
+import { type Project } from '@/stores/projectStore';
+import { CANVAS_NODE_TYPES, type CanvasNode } from '../domain/canvasNodes';
+import { commitCanvasNodeDuplication, deleteCanvasNodes, duplicateCanvasNode } from './canvasMutationService';
+import { redoCanvasChange, undoCanvasChange } from './canvasApplicationService';
 
 const projectId = 'multi-layer-copy-project'
 const sourceSession = {
@@ -75,7 +72,7 @@ beforeEach(() => {
   }
   useCanvasStore.getState().setCanvasData([source], [], project.history)
   useCanvasStore.setState({ currentViewport: project.viewport, canvasViewportSize: { width: 1200, height: 800 } })
-  useProjectStore.setState({
+  setCanvasTestProjectState({
     projects: [project],
     currentProjectId: projectId,
     currentProject: project,

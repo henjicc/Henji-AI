@@ -1,20 +1,22 @@
+import { setCanvasTestProjectState } from '@/tests/canvasProjectFixture';
 // @vitest-environment jsdom
-import { afterAll, beforeAll, expect, it } from 'vitest'
-import type { ApplicationMutationExecutor, ApplicationRef } from '@/core/application-control'
-import { getApplicationControlExecutionEngine, getApplicationReflectionRegistry } from '@/features/application-control/capabilities/applicationControlRegistry'
-import { createEmptyImageEditDocument, imageEditDocumentToMarkDoc } from '@/core/imageEdit'
-import { createImageEditDocumentV3, createImageEditEffectLayerV3 } from '@/core/imageEdit/v3/documentFactory'
-import { ImageEditCommandBusV3 } from '@/features/imageEdit/v3/application/imageEditCommandBus'
-import { ImageEditorV3CommandRepository } from '@/commands/imageEditorV3'
-import { useImageEditSessionStore } from '@/features/imageEdit/store/imageEditSessionStore'
-import { useSettingsStore } from '@/stores/settingsStore'
-import { useProjectStore } from '@/stores/projectStore'
-import { useCameraStageStore } from '@/features/cameraStage/store/cameraStageStore'
-import { getPlatform } from '@/platform/runtime'
-import { registerPersistedImageEditTestSession } from './imageEditPersistenceTestSession'
-import { loadRealModelsIntoRegistry } from './loadRealModels'
-import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from './harnessNativeStorage'
-import { createApplicationHarness } from './applicationHarness'
+// @vitest-environment jsdom
+import { afterAll, beforeAll, expect, it } from 'vitest';
+import type { ApplicationMutationExecutor, ApplicationRef } from '@/core/application-control';
+import { getApplicationControlExecutionEngine, getApplicationReflectionRegistry } from '@/features/application-control/capabilities/applicationControlRegistry';
+import { createEmptyImageEditDocument, imageEditDocumentToMarkDoc } from '@/core/imageEdit';
+import { createImageEditDocumentV3, createImageEditEffectLayerV3 } from '@/core/imageEdit/v3/documentFactory';
+import { ImageEditCommandBusV3 } from '@/features/imageEdit/v3/application/imageEditCommandBus';
+import { ImageEditorV3CommandRepository } from '@/commands/imageEditorV3';
+import { useImageEditSessionStore } from '@/features/imageEdit/store/imageEditSessionStore';
+import { useSettingsStore } from '@/stores/settingsStore';
+
+import { useCameraStageStore } from '@/features/cameraStage/store/cameraStageStore';
+import { getPlatform } from '@/platform/runtime';
+import { registerPersistedImageEditTestSession } from './imageEditPersistenceTestSession';
+import { loadRealModelsIntoRegistry } from './loadRealModels';
+import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from './harnessNativeStorage';
+import { createApplicationHarness } from './applicationHarness';
 
 beforeAll(async () => { installHarnessNativeStorage(); await loadRealModelsIntoRegistry() })
 afterAll(() => uninstallHarnessNativeStorage())
@@ -28,7 +30,7 @@ it('所有已登记写域均经公共授权入口修改、正式读回并核对�
   const dispose = registerPersistedImageEditTestSession('application-write-loop', bus, new ImageEditorV3CommandRepository())
   useImageEditSessionStore.getState().ensureSession('application-mark-loop', createEmptyImageEditDocument())
   try {
-    useProjectStore.setState({ projects: [], currentProject: null, currentProjectId: null, isHydrated: true })
+    setCanvasTestProjectState({ projects: [], currentProject: null, currentProjectId: null, isHydrated: true })
     const canvas = await app.requireResult('create_canvas_project', { name: '公共画布回环' })
     const camera = await app.requireResult('create_camera_stage_project', { name: '公共三维回环' })
     const library = await app.requireResult('change_application_entities', { summary: '创建素材集合', changes: [{

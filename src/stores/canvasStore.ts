@@ -1,4 +1,5 @@
 import { create, type StoreApi } from 'zustand';
+import { createStoreAttachment } from './storeAttachment';
 import type {
   Connection,
   EdgeChange,
@@ -245,4 +246,5 @@ export const createCanvasStore = () => create<CanvasState>((set, get) => ({
   ...createCanvasStructureActions(set, get),
 }));
 
-export const useCanvasStore = createCanvasStore();
+export const canvasStoreAttachment = createStoreAttachment(createCanvasStore());
+export const useCanvasStore = canvasStoreAttachment.useAttachedStore;

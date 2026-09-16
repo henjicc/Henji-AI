@@ -1,3 +1,4 @@
+import { getCanvasProjectInstance } from './canvasProjectInstances'
 import { useCanvasStore } from '@/stores/canvasStore'
 import { decodeProjectRecord, useProjectStore, type Project, type ProjectSummary } from '@/stores/projectStore'
 import { getProjectRecord } from '@/commands/projectState'
@@ -65,22 +66,7 @@ export async function listCanvasProjectSummaries(): Promise<Record<string, unkno
 }
 
 export async function readCanvasProjectSnapshot(projectId: string): Promise<Project> {
-  const projectStore = useProjectStore.getState()
-  if (!projectStore.isHydrated) await projectStore.hydrate()
-  if (projectStore.currentProject?.id === projectId) {
-    const canvas = useCanvasStore.getState()
-    return {
-      ...projectStore.currentProject,
-      nodes: canvas.nodes,
-      edges: canvas.edges,
-      viewport: canvas.currentViewport,
-      history: canvas.history,
-      nodeCount: canvas.nodes.length,
-    }
-  }
-  const record = await getProjectRecord(projectId)
-  if (!record) throw new Error('PROJECT_NOT_FOUND')
-  return decodeProjectRecord(record)
+  return (await getCanvasProjectInstance(projectId)).snapshot()
 }
 
 /** 只读取已落盘快照；后台任务终态不能用尚未确认的内存投影冒充持久结果。 */

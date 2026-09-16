@@ -1,26 +1,15 @@
-import { v4 as uuidv4 } from 'uuid'
-import { ZodError } from 'zod'
-import { ApplicationPreflightFailure } from '@/core/application-control/execution/transactionFailure'
+import { findCanvasProjectInstance, getCanvasProjectInstance, requireCanvasProjectInstance } from './canvasProjectInstances';
+import { v4 as uuidv4 } from 'uuid';
+import { ZodError } from 'zod';
+import { ApplicationPreflightFailure } from '@/core/application-control/execution/transactionFailure';
 
-import type { CanvasBatchOperation } from '@/core/application-control/domains/canvas/canvasBatchApplicationCapabilities'
-import { createLogger } from '@/core/logging'
-import { useCanvasStore, type CanvasHistoryState, type CanvasNode, type CanvasEdge } from '@/stores/canvasStore'
+import type { CanvasBatchOperation } from '@/core/application-control/domains/canvas/canvasBatchApplicationCapabilities';
+import { createLogger } from '@/core/logging';
+import { type CanvasHistoryState, type CanvasNode, type CanvasEdge } from '@/stores/canvasStore';
 
-import {
-  addCanvasNode,
-  CanvasApplicationError,
-  connectCanvasNodes,
-  requireCurrentCanvasProject,
-} from './canvasApplicationService'
-import {
-  deleteCanvasNodes,
-  disconnectCanvasEdge,
-  duplicateCanvasNode,
-  groupCanvasNodes,
-  selectCanvasNode,
-  updateCanvasNode,
-} from './canvasMutationService'
-import { parseCanvasNodeData } from '../domain/nodeControlRegistry'
+import { addCanvasNode, CanvasApplicationError, connectCanvasNodes } from './canvasApplicationService';
+import { deleteCanvasNodes, disconnectCanvasEdge, duplicateCanvasNode, groupCanvasNodes, selectCanvasNode, updateCanvasNode } from './canvasMutationService';
+import { parseCanvasNodeData } from '../domain/nodeControlRegistry';
 
 interface CanvasBatchPlan {
   planRef: string
@@ -50,8 +39,8 @@ interface CanvasBatchUndo extends CanvasUndoPersistenceState {
 
 const plans = new Map<string, CanvasBatchPlan>()
 const undos = new Map<string, CanvasBatchUndo>()
-import { pauseCanvasProjectPersistence } from '@/stores/projectStore'
-import { confirmCanvasPersistence, runPersistedCanvasUndo, createCanvasMutationCheckpoint, isCanvasMutationCheckpointCurrent, assertCanvasCommitContext, CanvasTransactionConflictError, CanvasTransactionRolledBackError, CanvasPersistenceError, type CanvasCommitOptions, type CanvasUndoPersistenceState, type CanvasTransactionRuntime } from './canvasPersistenceService'
+import { pauseCanvasProjectPersistence } from '@/stores/projectStore';
+import { confirmCanvasPersistence, runPersistedCanvasUndo, createCanvasMutationCheckpoint, isCanvasMutationCheckpointCurrent, assertCanvasCommitContext, CanvasTransactionConflictError, CanvasTransactionRolledBackError, CanvasPersistenceError, type CanvasCommitOptions, type CanvasUndoPersistenceState, type CanvasTransactionRuntime } from './canvasPersistenceService';
 const PLAN_TTL_MS = 15 * 60_000
 const logger = createLogger('features.canvas.batch')
 
@@ -60,44 +49,44 @@ function cleanupExpiredPlans(): void {
   for (const [key, plan] of plans) if (plan.createdAt < threshold || plan.committed) plans.delete(key)
 }
 
-function requireNode(nodeId: string): CanvasNode {
-  const node = useCanvasStore.getState().nodes.find((item) => item.id === nodeId)
+function requireNode(projectId: string, nodeId: string): CanvasNode {
+  const node = requireCanvasProjectInstance(projectId).store.getState().nodes.find((item) => item.id === nodeId)
   if (!node) throw new CanvasApplicationError('NOT_FOUND', `画布节点不存在：${nodeId}`, true, { nodeId })
   return node
 }
 
-function validateOperation(operation: CanvasBatchOperation): void {
+function validateOperation(projectId: string, operation: CanvasBatchOperation): void {
   if (operation.kind === 'add_node') {
     parseCanvasNodeData(operation.nodeType, operation.data)
-    if (operation.placement.mode === 'right_of_node') requireNode(operation.placement.anchorNodeId)
+    if (operation.placement.mode === 'right_of_node') requireNode(projectId, operation.placement.anchorNodeId)
     return
   }
   if (operation.kind === 'duplicate_node') {
-    requireNode(operation.nodeId)
-    if (operation.placement.mode === 'right_of_node') requireNode(operation.placement.anchorNodeId)
+    requireNode(projectId, operation.nodeId)
+    if (operation.placement.mode === 'right_of_node') requireNode(projectId, operation.placement.anchorNodeId)
     return
   }
   if (operation.kind === 'update_node') {
-    const node = requireNode(operation.nodeId)
+    const node = requireNode(projectId, operation.nodeId)
     parseCanvasNodeData(node.type, operation.data)
     return
   }
   if (operation.kind === 'delete_nodes' || operation.kind === 'group_nodes') {
-    for (const nodeId of operation.nodeIds) requireNode(nodeId)
+    for (const nodeId of operation.nodeIds) requireNode(projectId, nodeId)
     return
   }
   if (operation.kind === 'connect_nodes') {
-    requireNode(operation.sourceNodeId)
-    requireNode(operation.targetNodeId)
+    requireNode(projectId, operation.sourceNodeId)
+    requireNode(projectId, operation.targetNodeId)
     return
   }
   if (operation.kind === 'disconnect_edge') {
-    if (!useCanvasStore.getState().edges.some((edge) => edge.id === operation.edgeId)) {
+    if (!requireCanvasProjectInstance(projectId).store.getState().edges.some((edge) => edge.id === operation.edgeId)) {
       throw new CanvasApplicationError('NOT_FOUND', `画布连接不存在：${operation.edgeId}`, true, { edgeId: operation.edgeId })
     }
     return
   }
-  if (operation.nodeId) requireNode(operation.nodeId)
+  if (operation.nodeId) requireNode(projectId, operation.nodeId)
 }
 
 function operationSummary(operation: CanvasBatchOperation, index: number): Record<string, unknown> {
@@ -114,9 +103,9 @@ export function planCanvasBatch(
   canvasRevision: number,
 ): Record<string, unknown> {
   cleanupExpiredPlans()
-  requireCurrentCanvasProject(projectId)
-  operations.forEach(validateOperation)
-  const canvas = useCanvasStore.getState()
+  requireCanvasProjectInstance(projectId)
+  operations.forEach(operation => validateOperation(projectId, operation))
+  const canvas = requireCanvasProjectInstance(projectId).store.getState()
   const planRef = `canvas-plan:${uuidv4()}`
   plans.set(planRef, {
     planRef,
@@ -142,7 +131,7 @@ export function previewCanvasBatch(planRef: string): Record<string, unknown> {
   cleanupExpiredPlans()
   const plan = plans.get(planRef)
   if (!plan) throw new CanvasApplicationError('NOT_FOUND', '画布批量计划不存在或已过期')
-  requireCurrentCanvasProject(plan.projectId)
+  requireCanvasProjectInstance(plan.projectId)
   return {
     planRef: plan.planRef,
     projectId: plan.projectId,
@@ -154,6 +143,7 @@ export function previewCanvasBatch(planRef: string): Record<string, unknown> {
 }
 
 async function executeOperation(projectId: string, operation: CanvasBatchOperation, options: CanvasCommitOptions): Promise<Record<string, unknown>> {
+  if (!findCanvasProjectInstance(projectId)) await getCanvasProjectInstance(projectId)
   assertCanvasCommitContext(projectId, options)
   switch (operation.kind) {
     case 'add_node': return addCanvasNode({ projectId, nodeType: operation.nodeType, placement: operation.placement, data: operation.data }, options)
@@ -186,9 +176,10 @@ export async function runCanvasTransaction(
   logContext: Record<string, unknown> = {},
   runtime?: CanvasTransactionRuntime,
 ): Promise<{ appliedOperations: Record<string, unknown>[]; undoRef: string }> {
+  if (!findCanvasProjectInstance(projectId)) await getCanvasProjectInstance(projectId)
   if (runtime ? !runtime.isCurrent() : false) throw new CanvasTransactionConflictError(projectId)
-  if (!runtime) requireCurrentCanvasProject(projectId)
-  const store = runtime?.store ?? useCanvasStore
+  if (!runtime) requireCanvasProjectInstance(projectId)
+  const store = runtime?.store ?? requireCanvasProjectInstance(projectId).store
   const persist = runtime?.persist ?? (() => confirmCanvasPersistence(projectId))
   const canvas = store.getState()
   // store 写入遵循不可变更新，撤销历史本身也一直保存节点/连线引用。这里保留事务前引用即可；
@@ -316,6 +307,7 @@ export async function applyCanvasOperationsAtomically(
   operations: CanvasBatchOperation[],
   logContext: Record<string, unknown> = {},
 ): Promise<{ appliedOperations: Record<string, unknown>[]; undoRef: string }> {
+  if (!findCanvasProjectInstance(projectId)) await getCanvasProjectInstance(projectId)
   return await runCanvasTransaction(projectId, operations.length, async (options) => {
     const results: Record<string, unknown>[] = []
     for (const [index, operation] of operations.entries()) {
@@ -334,8 +326,8 @@ export async function commitCanvasBatch(planRef: string): Promise<Record<string,
   const plan = plans.get(planRef)
   if (!plan) throw new CanvasApplicationError('NOT_FOUND', '画布批量计划不存在或已过期')
   if (plan.committed) throw new CanvasApplicationError('CONFLICT', '画布批量计划已经提交')
-  requireCurrentCanvasProject(plan.projectId)
-  const canvas = useCanvasStore.getState()
+  if (!findCanvasProjectInstance(plan.projectId)) await getCanvasProjectInstance(plan.projectId)
+  const canvas = requireCanvasProjectInstance(plan.projectId).store.getState()
   if (canvas.nodes !== plan.createdNodes || canvas.edges !== plan.createdEdges) {
     throw new CanvasApplicationError('STALE_CONTEXT', '画布批量计划创建后项目已发生变化，请重新规划', true, {
       planRef,
@@ -360,11 +352,12 @@ export async function commitCanvasBatch(planRef: string): Promise<Record<string,
 }
 
 export async function undoCanvasBatch(projectId: string, undoRef: string): Promise<Record<string, unknown> | null> {
+  if (!findCanvasProjectInstance(projectId)) await getCanvasProjectInstance(projectId)
   const record = undos.get(undoRef)
   if (!record) return null
-  requireCurrentCanvasProject(projectId)
+  requireCanvasProjectInstance(projectId)
   await runPersistedCanvasUndo(projectId, undoRef, () => {
-    const canvas = useCanvasStore.getState()
+    const canvas = requireCanvasProjectInstance(projectId).store.getState()
     if (
       record.projectId !== projectId
       || canvas.nodes !== record.afterNodes

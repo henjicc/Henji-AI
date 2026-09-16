@@ -1,4 +1,5 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { setCanvasTestProjectState } from '@/tests/canvasProjectFixture';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   deleteIfRevision: vi.fn(),
@@ -13,13 +14,9 @@ vi.mock('@/platform/runtime', () => ({
   getPlatform: () => ({ imageEditorV3: { collectGarbage: mocks.collectGarbage } }),
 }))
 
-import { useCanvasStore } from '@/stores/canvasStore'
-import { useProjectStore } from '@/stores/projectStore'
-import {
-  createMultiLayerDocumentLifecyclePort,
-  maintainMultiLayerDocumentReleaseCandidates,
-  resetMultiLayerDocumentLifecycleForTests,
-} from './multiLayerDocumentLifecycleService'
+import { useCanvasStore } from '@/stores/canvasStore';
+
+import { createMultiLayerDocumentLifecyclePort, maintainMultiLayerDocumentReleaseCandidates, resetMultiLayerDocumentLifecycleForTests } from './multiLayerDocumentLifecycleService';
 
 const projectId = 'cleanup-project'
 const session = {
@@ -34,7 +31,7 @@ beforeEach(() => {
   vi.clearAllMocks()
   resetMultiLayerDocumentLifecycleForTests()
   useCanvasStore.getState().setCanvasData([], [], { past: [], future: [] })
-  useProjectStore.setState({
+  setCanvasTestProjectState({
     currentProjectId: projectId,
     currentProject: {
       id: projectId,

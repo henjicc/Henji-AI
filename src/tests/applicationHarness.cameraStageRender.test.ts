@@ -1,3 +1,4 @@
+import { setCanvasTestProjectState } from '@/tests/canvasProjectFixture'
 // @vitest-environment jsdom
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 
@@ -71,7 +72,7 @@ function taskDescriptor(): NonNullable<CanvasNode['data']['renderTask']> {
 beforeEach(() => {
   installHarnessNativeStorage()
   useCanvasStore.getState().setCanvasData([], [], { past: [], future: [] })
-  useProjectStore.setState({
+  setCanvasTestProjectState({
     projects: [], currentProjectId: null, currentProject: null,
     isHydrated: true, isOpeningProject: false, openError: null,
     persistenceError: null, persistenceErrors: {},

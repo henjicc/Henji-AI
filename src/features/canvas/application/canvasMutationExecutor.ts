@@ -1,29 +1,17 @@
-import type {
-  ApplicationCompletedStepResult,
-  ApplicationEvidence,
-  ApplicationExecutionContext,
-  ApplicationMutationExecutor,
-  ApplicationPlannedStep,
-} from '@/core/application-control'
-import { applyWriterTable, propertyOperations, writableProperties } from '@/core/application-control'
-import { createLogger } from '@/core/logging'
-import { useCanvasStore, type CanvasEdge, type CanvasHistoryState, type CanvasNode } from '@/stores/canvasStore'
-import { useProjectStore } from '@/stores/projectStore'
-import { v4 as uuidv4 } from 'uuid'
+import { findCanvasProjectInstance, getCanvasProjectInstance, requireCanvasProjectInstance } from './canvasProjectInstances';
+import type { ApplicationCompletedStepResult, ApplicationEvidence, ApplicationExecutionContext, ApplicationMutationExecutor, ApplicationPlannedStep } from '@/core/application-control';
+import { applyWriterTable, propertyOperations, writableProperties } from '@/core/application-control';
+import { createLogger } from '@/core/logging';
+import { type CanvasEdge, type CanvasHistoryState, type CanvasNode } from '@/stores/canvasStore';
 
-import {
-  CanvasApplicationError,
-  requireCurrentCanvasProject,
-} from './canvasApplicationService'
-import { CANVAS_NODE_WRITERS as WRITERS } from './canvasFields'
-import { applyCanvasNodePropertyPatches, applyStoryboardFramePatches, type CanvasNodePropertyPatch } from './canvasMutationService'
-import { CANVAS_ENTITY_TYPES } from './canvasReflection'
-import { pauseCanvasProjectPersistence } from '@/stores/projectStore'
-import {
-  confirmCanvasPersistence, CanvasPersistenceError, runPersistedCanvasUndo,
-  createCanvasMutationCheckpoint, isCanvasMutationCheckpointCurrent, CanvasTransactionConflictError,
-  type CanvasUndoPersistenceState,
-} from './canvasPersistenceService'
+import { v4 as uuidv4 } from 'uuid';
+
+import { CanvasApplicationError } from './canvasApplicationService';
+import { CANVAS_NODE_WRITERS as WRITERS } from './canvasFields';
+import { applyCanvasNodePropertyPatches, applyStoryboardFramePatches, type CanvasNodePropertyPatch } from './canvasMutationService';
+import { CANVAS_ENTITY_TYPES } from './canvasReflection';
+import { pauseCanvasProjectPersistence } from '@/stores/projectStore';
+import { confirmCanvasPersistence, CanvasPersistenceError, runPersistedCanvasUndo, createCanvasMutationCheckpoint, isCanvasMutationCheckpointCurrent, CanvasTransactionConflictError, type CanvasUndoPersistenceState } from './canvasPersistenceService';
 
 type MutationStep = Extract<ApplicationPlannedStep, { kind: 'mutation' }>
 
@@ -53,8 +41,8 @@ function fingerprint(nodes: CanvasNode[], edges: CanvasEdge[]): string {
   })
 }
 
-function revision(): number {
-  return Math.max(0, Math.trunc(useProjectStore.getState().currentProject?.updatedAt ?? 0))
+function revision(projectId: string): number {
+  return requireCanvasProjectInstance(projectId).snapshot().updatedAt
 }
 
 export class CanvasNodeMutationExecutor implements ApplicationMutationExecutor {
@@ -77,8 +65,8 @@ export class CanvasNodeMutationExecutor implements ApplicationMutationExecutor {
     if (projectIds.size !== 1) throw new CanvasApplicationError('INVALID_INPUT', '画布节点事务不能跨项目')
     const projectId = targets[0]?.projectId
     if (!projectId) throw new CanvasApplicationError('INVALID_INPUT', '画布节点事务为空')
-    requireCurrentCanvasProject(projectId)
-    const canvas = useCanvasStore.getState()
+    if (!findCanvasProjectInstance(projectId)) await getCanvasProjectInstance(projectId)
+    const canvas = requireCanvasProjectInstance(projectId).store.getState()
     const before: CanvasUndoEntry = {
       projectId,
       nodes: structuredClone(canvas.nodes),
@@ -97,7 +85,7 @@ export class CanvasNodeMutationExecutor implements ApplicationMutationExecutor {
     try {
       const patches: CanvasNodePropertyPatch[] = []
       for (const target of targets) {
-        const node = useCanvasStore.getState().nodes.find((item) => item.id === target.nodeId)
+        const node = requireCanvasProjectInstance(projectId).store.getState().nodes.find((item) => item.id === target.nodeId)
         if (!node) throw new CanvasApplicationError('NOT_FOUND', '画布节点不存在', true, { nodeId: target.nodeId })
         const patch: CanvasNodePropertyPatch = { nodeId: target.nodeId }
         await applyWriterTable(WRITERS, patch, target.step.mutations)
@@ -110,7 +98,7 @@ export class CanvasNodeMutationExecutor implements ApplicationMutationExecutor {
         if (patch.storyboardFrames) await applyStoryboardFramePatches(projectId, patch.nodeId, patch.storyboardFrames, options)
       }
       if (!isCanvasMutationCheckpointCurrent(checkpoint)) throw new CanvasTransactionConflictError(projectId)
-      const applied = useCanvasStore.getState()
+      const applied = requireCanvasProjectInstance(projectId).store.getState()
       before.afterFingerprint = fingerprint(applied.nodes, applied.edges)
       const completion = confirmCanvasPersistence(projectId)
       releasePersistence()
@@ -121,7 +109,7 @@ export class CanvasNodeMutationExecutor implements ApplicationMutationExecutor {
         throw new CanvasTransactionConflictError(projectId, error)
       }
       if (!(error instanceof CanvasPersistenceError)) {
-        useCanvasStore.getState().setCanvasData(before.nodes, before.edges, before.history)
+        requireCanvasProjectInstance(projectId).store.getState().setCanvasData(before.nodes, before.edges, before.history)
         const recovery = confirmCanvasPersistence(projectId)
         releasePersistence()
         await recovery
@@ -135,7 +123,7 @@ export class CanvasNodeMutationExecutor implements ApplicationMutationExecutor {
 
     const undoToken = `canvas-control-undo:${uuidv4()}`
     this.undoEntries.set(undoToken, before)
-    const resultingRevision = revision()
+    const resultingRevision = revision(projectId)
     logger.info('画布节点事务完成', {
       event: 'canvas.mutation.apply.completed', requestId: context.requestId,
       projectId, revision: resultingRevision,
@@ -167,20 +155,21 @@ export class CanvasNodeMutationExecutor implements ApplicationMutationExecutor {
   async undo(undoToken: string, context: ApplicationExecutionContext): Promise<ApplicationCompletedStepResult> {
     const entry = this.undoEntries.get(undoToken)
     if (!entry) throw new CanvasApplicationError('NOT_FOUND', '画布撤销引用不存在')
-    requireCurrentCanvasProject(entry.projectId)
+    const projectId = entry.projectId
+    if (!findCanvasProjectInstance(projectId)) await getCanvasProjectInstance(projectId)
     logger.info('画布节点事务撤销开始', {
       event: 'canvas.mutation.undo.start', requestId: context.requestId, projectId: entry.projectId,
     })
     try {
       await runPersistedCanvasUndo(entry.projectId, undoToken, () => {
-        const canvas = useCanvasStore.getState()
+        const canvas = requireCanvasProjectInstance(projectId).store.getState()
         if (fingerprint(canvas.nodes, canvas.edges) !== entry.afterFingerprint) {
           throw new CanvasApplicationError('STALE_CONTEXT', '画布在事务后已变化，撤销引用失效')
         }
         canvas.setCanvasData(entry.nodes, entry.edges, entry.history)
       }, entry)
       this.undoEntries.delete(undoToken)
-      const resultingRevision = revision()
+      const resultingRevision = revision(projectId)
       logger.info('画布节点事务撤销完成', {
         event: 'canvas.mutation.undo.completed', requestId: context.requestId,
         projectId: entry.projectId, revision: resultingRevision,

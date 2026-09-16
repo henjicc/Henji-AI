@@ -1,3 +1,4 @@
+import { setCanvasTestProjectState } from '@/tests/canvasProjectFixture'
 // @vitest-environment jsdom
 import { afterAll, beforeAll, expect, it, vi } from 'vitest'
 import { getProjectRecord } from '@/commands/projectState'
@@ -12,7 +13,7 @@ afterAll(() => { vi.restoreAllMocks(); uninstallHarnessNativeStorage() })
 
 it('正式助手写入遭存储拒绝后通过恢复动作保存同一修改，不重建节点', async () => {
   useCanvasStore.getState().setCanvasData([], [], { past: [], future: [] })
-  useProjectStore.setState({ projects: [], currentProjectId: null, currentProject: null, isHydrated: true })
+  setCanvasTestProjectState({ projects: [], currentProjectId: null, currentProject: null, isHydrated: true })
   const projectId = await useProjectStore.getState().createProject('隔离保存恢复')
   const saves = vi.spyOn(window.henjiNative!.storyboardProjects, 'upsertProjectRecord')
     .mockRejectedValueOnce(new Error('readonly storage'))

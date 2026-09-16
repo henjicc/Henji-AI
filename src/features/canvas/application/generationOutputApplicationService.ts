@@ -36,16 +36,9 @@ class GenerationOutputContextChangedError extends GenerationOutputApplicationErr
   constructor() { super('CONFLICT', '原画布执行实例已经变化'); }
 }
 
-/** 只在实例切换且尚未修改节点时重新获取原项目；完成键继续防止重复落图。 */
+/** Completion remains bound to the same project while its view attaches or detaches. */
 export async function commitCanvasGenerationOutputsInProject(projectId: string, input: CommitCanvasGenerationOutputsInput) {
-  for (let attempt = 0; ; attempt++) {
-    try {
-      return await withCanvasProjectRuntime(projectId, runtime => commitCanvasGenerationOutputs(input, { projectId, runtime }));
-    } catch (error) {
-      if (attempt === 0 && error instanceof GenerationOutputContextChangedError) continue;
-      throw error;
-    }
-  }
+  return withCanvasProjectRuntime(projectId, runtime => commitCanvasGenerationOutputs(input, { projectId, runtime }));
 }
 
 export { GenerationOutputApplicationError } from './generationOutputApplicationContracts';

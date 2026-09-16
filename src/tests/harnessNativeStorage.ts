@@ -206,6 +206,7 @@ const storyboardProjectsStorage = {
 /* ── 装配与安装 ─────────────────────────────────────────────────────────── */
 
 const NAMESPACES: Record<string, object> = {
+  runtimeInfo: { uiInspectionReadOnly: false },
   assetLibrary: assetLibraryStorage,
   cameraStageProjects: cameraStageProjectsStorage,
   storyboardProjects: storyboardProjectsStorage,

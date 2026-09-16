@@ -8,12 +8,6 @@ import type { CanvasDownloadDestination } from '@/core/application-control/domai
 import { CANVAS_NODE_CONTROL_CATALOG_VERSION, getCanvasNodeSchema, searchCanvasNodeTypes } from '@/features/canvas/domain/nodeControlRegistry'
 import { addCanvasNode, connectCanvasNodes, focusCanvasNode, redoCanvasChange, undoCanvasChange } from '@/features/canvas/application/canvasApplicationService'
 import { commitCanvasBatch, planCanvasBatch, previewCanvasBatch } from '@/features/canvas/application/canvasBatchService'
-import { getHostScopeRevisions, notifyHostScopeChanged } from '@/features/application-control/hostContext/hostContext'
-import { configureCanvasCollectionDependencies } from '@/features/canvas/application/applicationDomain'
-
-// 画布集合写入的 revision 依赖由适配器注入，与三维的 configureCameraStageControlDependencies 同理：
-// 注册表本身不 import hostContext，避免把 taskQueue 等浏览器依赖拉进模块图。
-
 import { closeCanvasProject, createCanvasProject, deleteCanvasProject, openCanvasProjectWithSummary, renameCanvasProject } from '@/features/canvas/application/canvasProjectService'
 import { clearCanvasProject, connectAssetGroupToTarget, deleteCanvasNodes, disconnectAssetGroupFromTarget, disconnectCanvasEdge, duplicateCanvasNode, groupCanvasNodes, selectCanvasNode, ungroupCanvasNode, updateCanvasNode } from '@/features/canvas/application/canvasMutationService'
 import { getCanvasNode, getCanvasProject, listCanvasProjectSummaries } from '@/features/canvas/application/canvasQueryService'
@@ -46,10 +40,6 @@ interface AddNodeInput extends ProjectInput {
 export function registerCanvasCapabilityHandlers(
   registrar: ApplicationCapabilityHandlerRegistrar
 ): void {
-  configureCanvasCollectionDependencies({
-    readRevision: () => getHostScopeRevisions().canvas,
-    bumpRevision: () => notifyHostScopeChanged('canvas'),
-  })
   registrar.registerHandler('retry_canvas_project_save', async (input, context) => {
     throwIfCapabilityAborted(context.signal)
     const { projectRef } = parseCapabilityInput<{ projectRef: { kind: 'canvas.project'; id: string } }>(

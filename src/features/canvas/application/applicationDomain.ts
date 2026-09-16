@@ -7,12 +7,9 @@ import { createCanvasReflectionRegistrations, CANVAS_ENTITY_TYPES } from './canv
 import { createStoryboardReflectionRegistrations } from './storyboardReflection'
 import { CanvasNodeMutationExecutor } from './canvasMutationExecutor'
 import { CanvasProjectMutationExecutor } from './canvasProjectMutationExecutor'
-import { CanvasCollectionExecutor, type CanvasCollectionDependencies } from './canvasCollectionExecutor'
+import { CanvasCollectionExecutor } from './canvasCollectionExecutor'
 import { registerCanvasCapabilityHandlers } from './registerCanvasCapabilityHandlers'
 import { registerStoryboardCapabilityHandlers } from './registerStoryboardCapabilityHandlers'
-
-let dependencies: CanvasCollectionDependencies = { readRevision: () => 0, bumpRevision: () => undefined }
-export function configureCanvasCollectionDependencies(value: CanvasCollectionDependencies): void { dependencies = value }
 
 export const canvasApplicationDomain: ApplicationDomainModule = {
   id: 'canvas',
@@ -20,9 +17,7 @@ export const canvasApplicationDomain: ApplicationDomainModule = {
   registerExecutors(engine) {
     engine.registerMutationExecutor(new CanvasNodeMutationExecutor())
     engine.registerMutationExecutor(new CanvasProjectMutationExecutor())
-    for (const entityType of [CANVAS_ENTITY_TYPES.node, CANVAS_ENTITY_TYPES.edge]) engine.registerCollectionExecutor(new CanvasCollectionExecutor(entityType, {
-      readRevision: () => dependencies.readRevision(), bumpRevision: () => dependencies.bumpRevision(),
-    }))
+    for (const entityType of [CANVAS_ENTITY_TYPES.node, CANVAS_ENTITY_TYPES.edge]) engine.registerCollectionExecutor(new CanvasCollectionExecutor(entityType))
   },
   registerCapabilities(registrar) {
     registerCanvasCapabilityHandlers(registrar)

@@ -1,23 +1,15 @@
+import { setCanvasTestProjectState } from '@/tests/canvasProjectFixture';
 // @vitest-environment jsdom
 
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+// @vitest-environment jsdom
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { CANVAS_NODE_TYPES } from '@/features/canvas/domain/canvasNodes'
-import { useCanvasStore } from '@/stores/canvasStore'
-import { useProjectStore, type Project } from '@/stores/projectStore'
-import { useSettingsStore } from '@/stores/settingsStore'
+import { CANVAS_NODE_TYPES } from '@/features/canvas/domain/canvasNodes';
+import { useCanvasStore } from '@/stores/canvasStore';
+import { type Project } from '@/stores/projectStore';
+import { useSettingsStore } from '@/stores/settingsStore';
 
-import {
-  addCanvasNode,
-  addTrustedMediaCanvasNode,
-  connectCanvasNodes,
-  focusCanvasNode,
-  isCanvasProjectContextCurrent,
-  redoCanvasChange,
-  registerCanvasNodeFocusHandler,
-  resetCanvasApplicationStateForTests,
-  undoCanvasChange,
-} from './canvasApplicationService'
+import { addCanvasNode, addTrustedMediaCanvasNode, connectCanvasNodes, focusCanvasNode, isCanvasProjectContextCurrent, redoCanvasChange, registerCanvasNodeFocusHandler, resetCanvasApplicationStateForTests, undoCanvasChange } from './canvasApplicationService';
 
 const projectId = 'project-stage5'
 
@@ -46,7 +38,7 @@ describe('canvas application service', () => {
     })
     useSettingsStore.getState().setAutoInsertTextDisplayNode(false)
     const project = emptyProject()
-    useProjectStore.setState({
+    setCanvasTestProjectState({
       projects: [project],
       currentProjectId: projectId,
       currentProject: project,
@@ -374,7 +366,7 @@ describe('canvas application service', () => {
     await expect(redoCanvasChange(projectId)).rejects.toThrow('当前画布没有可重做操作')
   })
 
-  it('拒绝目录外节点、任意媒体路径和非当前项目', async () => {
+  it('拒绝目录外节点、任意媒体路径和不存在的工程', async () => {
     await expect(addCanvasNode({
       projectId,
       nodeType: 'unknownNode',
@@ -390,7 +382,7 @@ describe('canvas application service', () => {
       projectId: 'other-project',
       nodeType: CANVAS_NODE_TYPES.upload,
       placement: { mode: 'viewport_center' },
-    })).rejects.toThrow(/项目与命令目标不一致/)
+    })).rejects.toThrow()
   })
 
   it('通过画布注册的窄处理器定位节点', async () => {

@@ -1,3 +1,4 @@
+import { findCanvasProjectInstance, getCanvasProjectInstance, requireCanvasProjectInstance } from './canvasProjectInstances'
 import { useCanvasStore } from '@/stores/canvasStore'
 import { createLogger } from '@/core/logging'
 
@@ -67,18 +68,19 @@ export interface CanvasNodePropertyPatch {
 }
 
 function requireNode(projectId: string, nodeId: string): CanvasNode {
-  requireCurrentCanvasProject(projectId)
-  const node = useCanvasStore.getState().nodes.find((item) => item.id === nodeId)
+  requireCanvasProjectInstance(projectId)
+  const node = requireCanvasProjectInstance(projectId).store.getState().nodes.find((item) => item.id === nodeId)
   if (!node) throw new CanvasApplicationError('NOT_FOUND', '画布节点不存在', true, { nodeId })
   return node
 }
 
 /** 画布节点数据/位置写入的共享内核；专用能力与通用属性动词都必须委托这里。 */
 async function applyCanvasNodePatches(projectId: string, patches: CanvasNodePatch[], options: CanvasCommitOptions = {}): Promise<void> {
-  requireCurrentCanvasProject(projectId)
+  if (!findCanvasProjectInstance(projectId)) await getCanvasProjectInstance(projectId)
+  requireCanvasProjectInstance(projectId)
   assertCanvasCommitContext(projectId, options)
   for (const patch of patches) requireNode(projectId, patch.nodeId)
-  const canvas = useCanvasStore.getState()
+  const canvas = requireCanvasProjectInstance(projectId).store.getState()
   for (const patch of patches) {
     if (patch.data && Object.keys(patch.data).length > 0) canvas.updateNodeData(patch.nodeId, patch.data)
     if (patch.position) canvas.updateNodePosition(patch.nodeId, patch.position)
@@ -91,6 +93,7 @@ export async function applyCanvasNodePropertyPatches(
   patches: CanvasNodePropertyPatch[],
   options: CanvasCommitOptions = {},
 ): Promise<void> {
+  if (!findCanvasProjectInstance(projectId)) await getCanvasProjectInstance(projectId)
   const normalized = patches.map((patch) => {
     if (patch.displayName !== undefined && !patch.displayName.trim()) {
       throw new CanvasApplicationError('INVALID_INPUT', '画布节点标题不能为空')
@@ -142,9 +145,10 @@ export async function applyStoryboardFramePatches(
   frames: CanvasStoryboardFramePatch[],
   options: CanvasCommitOptions = {},
 ): Promise<void> {
-  requireCurrentCanvasProject(projectId)
+  if (!findCanvasProjectInstance(projectId)) await getCanvasProjectInstance(projectId)
+  requireCanvasProjectInstance(projectId)
   assertCanvasCommitContext(projectId, options)
-  const node = useCanvasStore.getState().nodes.find((item) => item.id === nodeId)
+  const node = requireCanvasProjectInstance(projectId).store.getState().nodes.find((item) => item.id === nodeId)
   if (!node) throw new CanvasApplicationError('NOT_FOUND', '画布节点不存在', true, { nodeId })
   if (!isStoryboardSplitNode(node)) {
     throw new CanvasApplicationError('INVALID_INPUT', '目标节点不是分镜格子节点，没有 frames 数据', true, { nodeId })
@@ -154,7 +158,7 @@ export async function applyStoryboardFramePatches(
   if (missing.length > 0) {
     throw new CanvasApplicationError('NOT_FOUND', `以下分镜格子 id 不存在：${missing.join('、')}`, true, { nodeId, missing })
   }
-  const canvas = useCanvasStore.getState()
+  const canvas = requireCanvasProjectInstance(projectId).store.getState()
   for (const frame of frames) {
     const patch: Partial<StoryboardFrameItem> = {}
     if (frame.note !== undefined) patch.note = frame.note
@@ -170,6 +174,7 @@ export async function commitCanvasNodeDuplication<T>(input: {
   data: Record<string, unknown>
   createNode: (data: Record<string, unknown>) => T | Promise<T>
 }): Promise<T> {
+  if (!findCanvasProjectInstance(input.projectId)) await getCanvasProjectInstance(input.projectId)
   const source = requireNode(input.projectId, input.sourceNodeId)
   if (!isEditableLayerStackResultNode(source)) return input.createNode(input.data)
 
@@ -212,6 +217,7 @@ export async function duplicateCanvasNode(input: {
   nodeId: string
   placement: CanvasNodePlacement
 }, options: CanvasCommitOptions = {}): Promise<Record<string, unknown>> {
+  if (!findCanvasProjectInstance(input.projectId)) await getCanvasProjectInstance(input.projectId)
   const node = requireNode(input.projectId, input.nodeId)
   const editableDocument = isEditableLayerStackResultNode(node)
   const data = editableDocument
@@ -233,7 +239,7 @@ export async function duplicateCanvasNode(input: {
           data: forkedData,
         }, options)
       }
-      const canvas = useCanvasStore.getState()
+      const canvas = requireCanvasProjectInstance(input.projectId).store.getState()
       const before = {
         nodes: canvas.nodes,
         edges: canvas.edges,
@@ -246,13 +252,13 @@ export async function duplicateCanvasNode(input: {
           placement: input.placement,
         }, { ...options, deferCommit: true })
         const nodeId = String(created.nodeId)
-        useCanvasStore.getState().updateNodeData(nodeId, forkedData, { skipHistory: true })
+        requireCanvasProjectInstance(input.projectId).store.getState().updateNodeData(nodeId, forkedData, { skipHistory: true })
         const undoRef = rememberCanvasUndo(input.projectId, 'duplicate_node')
         await confirmCanvasPersistence(input.projectId, options)
         return { ...created, undoRef }
       } catch (error) {
         if (error instanceof CanvasPersistenceError) throw error
-        useCanvasStore.getState().setCanvasData(before.nodes, before.edges, before.history)
+        requireCanvasProjectInstance(input.projectId).store.getState().setCanvasData(before.nodes, before.edges, before.history)
         throw error
       }
     },
@@ -265,12 +271,13 @@ export async function updateCanvasNode(input: {
   nodeId: string
   data: Record<string, unknown>
 }, options: CanvasCommitOptions = {}): Promise<Record<string, unknown>> {
+  if (!findCanvasProjectInstance(input.projectId)) await getCanvasProjectInstance(input.projectId)
   const node = requireNode(input.projectId, input.nodeId)
   const safeData = validateCanvasNodeDataPatch(node, input.data)
-  const canvas = useCanvasStore.getState()
+  const canvas = requireCanvasProjectInstance(input.projectId).store.getState()
   const beforeDepth = canvas.history.past.length
   await applyCanvasNodePatches(input.projectId, [{ nodeId: node.id, data: safeData }], options)
-  if (useCanvasStore.getState().history.past.length === beforeDepth) {
+  if (requireCanvasProjectInstance(input.projectId).store.getState().history.past.length === beforeDepth) {
     /*
      * 不能只说"没有变化"——调用方无从知道是**值本来就一样**还是**键被悄悄丢掉了**。
      *
@@ -304,6 +311,7 @@ export async function updateCanvasNodeFromSpecialEditor(input: {
   nodeId: string
   data: Record<string, unknown>
 }, options: CanvasCommitOptions = {}): Promise<Record<string, unknown>> {
+  if (!findCanvasProjectInstance(input.projectId)) await getCanvasProjectInstance(input.projectId)
   const node = requireNode(input.projectId, input.nodeId)
   const safeData = parseCanvasSpecialEditorData(node.type, input.data)
   await applyCanvasNodePatches(input.projectId, [{ nodeId: node.id, data: safeData }], options)
@@ -312,9 +320,10 @@ export async function updateCanvasNodeFromSpecialEditor(input: {
 }
 
 export async function deleteCanvasNodes(projectId: string, nodeIds: string[], options: CanvasCommitOptions = {}): Promise<Record<string, unknown>> {
-  requireCurrentCanvasProject(projectId)
+  if (!findCanvasProjectInstance(projectId)) await getCanvasProjectInstance(projectId)
+  requireCanvasProjectInstance(projectId)
   assertCanvasCommitContext(projectId, options)
-  const beforeNodes = useCanvasStore.getState().nodes
+  const beforeNodes = requireCanvasProjectInstance(projectId).store.getState().nodes
   const existing = new Set(beforeNodes.map((node) => node.id))
   const unique = [...new Set(nodeIds)].filter((nodeId) => existing.has(nodeId))
   if (unique.length === 0) throw new CanvasApplicationError('NOT_FOUND', '没有可删除的画布节点', true)
@@ -322,8 +331,8 @@ export async function deleteCanvasNodes(projectId: string, nodeIds: string[], op
     .filter((node) => unique.includes(node.id) && isCameraStageNode(node))
     .flatMap((node) => node.data.renderTask ? [node.data.renderTask] : [])
   if (removedCameraTasks.length > 0) assertCanvasPersistenceEffectRegistration(options)
-  useCanvasStore.getState().deleteNodes(unique)
-  const remainingIds = new Set(useCanvasStore.getState().nodes.map((node) => node.id))
+  requireCanvasProjectInstance(projectId).store.getState().deleteNodes(unique)
+  const remainingIds = new Set(requireCanvasProjectInstance(projectId).store.getState().nodes.map((node) => node.id))
   const removedDocumentNodes = beforeNodes
     .filter(isEditableLayerStackResultNode)
     .filter((node) => !remainingIds.has(node.id))
@@ -362,9 +371,10 @@ export async function deleteCanvasNodes(projectId: string, nodeIds: string[], op
  * 走专用能力，不勉强表达成集合写入。
  */
 export async function clearCanvasProject(projectId: string, options: CanvasCommitOptions = {}): Promise<Record<string, unknown>> {
-  requireCurrentCanvasProject(projectId)
+  if (!findCanvasProjectInstance(projectId)) await getCanvasProjectInstance(projectId)
+  requireCanvasProjectInstance(projectId)
   assertCanvasCommitContext(projectId, options)
-  const before = useCanvasStore.getState()
+  const before = requireCanvasProjectInstance(projectId).store.getState()
   const clearedNodeCount = before.nodes.length
   const clearedEdgeCount = before.edges.length
   if (clearedNodeCount === 0 && clearedEdgeCount === 0) {
@@ -374,7 +384,7 @@ export async function clearCanvasProject(projectId: string, options: CanvasCommi
     .filter(isCameraStageNode)
     .flatMap((node) => node.data.renderTask ? [node.data.renderTask] : [])
   if (removedCameraTasks.length > 0) assertCanvasPersistenceEffectRegistration(options)
-  useCanvasStore.getState().clearCanvas()
+  requireCanvasProjectInstance(projectId).store.getState().clearCanvas()
   const undoRef = rememberCanvasUndo(projectId, 'clear_canvas')
   await confirmCanvasPersistence(projectId, options)
   if (removedCameraTasks.length > 0) {
@@ -415,14 +425,15 @@ export async function groupCanvasNodes(
   nodeIds: string[],
   groupKind: 'spatial' | 'asset' = 'spatial',
   options: CanvasCommitOptions = {}): Promise<Record<string, unknown>> {
-  requireCurrentCanvasProject(projectId)
+  if (!findCanvasProjectInstance(projectId)) await getCanvasProjectInstance(projectId)
+  requireCanvasProjectInstance(projectId)
   assertCanvasCommitContext(projectId, options)
   if (groupKind === 'asset') {
     const result = await createAssetGroup({ projectId, memberIds: nodeIds }, options)
     const undoRef = rememberCanvasUndo(projectId, 'group_asset_nodes')
     return { projectId, groupNodeId: result.groupId, groupKind, accepted: result.accepted, undoRef }
   }
-  const groupNodeId = useCanvasStore.getState().groupNodes(nodeIds)
+  const groupNodeId = requireCanvasProjectInstance(projectId).store.getState().groupNodes(nodeIds)
   if (!groupNodeId) throw new CanvasApplicationError('INVALID_INPUT', '至少需要两个存在且不相互嵌套的节点才能分组', true)
   const undoRef = rememberCanvasUndo(projectId, 'group_nodes')
   await confirmCanvasPersistence(projectId, options)
@@ -436,15 +447,16 @@ export async function groupCanvasNodes(
  * 会产生歧义，所以解散走独立的 `store.ungroupNode`，未重写它的释放/绝对坐标换算逻辑。
  */
 export async function ungroupCanvasNode(projectId: string, groupNodeId: string, options: CanvasCommitOptions = {}): Promise<Record<string, unknown>> {
-  requireCurrentCanvasProject(projectId)
+  if (!findCanvasProjectInstance(projectId)) await getCanvasProjectInstance(projectId)
+  requireCanvasProjectInstance(projectId)
   assertCanvasCommitContext(projectId, options)
-  const candidate = useCanvasStore.getState().nodes.find((node) => node.id === groupNodeId)
+  const candidate = requireCanvasProjectInstance(projectId).store.getState().nodes.find((node) => node.id === groupNodeId)
   if (candidate && isAssetGroupNode(candidate)) {
     await dissolveAssetGroup({ projectId, groupId: groupNodeId }, options)
     const undoRef = rememberCanvasUndo(projectId, 'ungroup_asset_node')
     return { projectId, groupNodeId, undoRef }
   }
-  if (!useCanvasStore.getState().ungroupNode(groupNodeId)) {
+  if (!requireCanvasProjectInstance(projectId).store.getState().ungroupNode(groupNodeId)) {
     throw new CanvasApplicationError('NOT_FOUND', '目标不是可解散的分组节点，或分组内没有子节点', true, { groupNodeId })
   }
   const undoRef = rememberCanvasUndo(projectId, 'ungroup_node')
@@ -457,7 +469,8 @@ export async function connectAssetGroupToTarget(
   groupNodeId: string,
   targetNodeId: string,
   options: CanvasCommitOptions = {}): Promise<Record<string, unknown>> {
-  requireCurrentCanvasProject(projectId)
+  if (!findCanvasProjectInstance(projectId)) await getCanvasProjectInstance(projectId)
+  requireCanvasProjectInstance(projectId)
   assertCanvasCommitContext(projectId, options)
   const status = await bindAssetGroup({ projectId, groupId: groupNodeId, targetNodeId }, options)
   const undoRef = rememberCanvasUndo(projectId, 'connect_asset_group')
@@ -469,7 +482,8 @@ export async function disconnectAssetGroupFromTarget(
   groupNodeId: string,
   targetNodeId: string,
   options: CanvasCommitOptions = {}): Promise<Record<string, unknown>> {
-  requireCurrentCanvasProject(projectId)
+  if (!findCanvasProjectInstance(projectId)) await getCanvasProjectInstance(projectId)
+  requireCanvasProjectInstance(projectId)
   assertCanvasCommitContext(projectId, options)
   await disconnectAssetGroup({ projectId, groupId: groupNodeId, targetNodeId }, options)
   const undoRef = rememberCanvasUndo(projectId, 'disconnect_asset_group')
@@ -477,11 +491,12 @@ export async function disconnectAssetGroupFromTarget(
 }
 
 export async function disconnectCanvasEdge(projectId: string, edgeId: string, options: CanvasCommitOptions = {}): Promise<Record<string, unknown>> {
-  requireCurrentCanvasProject(projectId)
+  if (!findCanvasProjectInstance(projectId)) await getCanvasProjectInstance(projectId)
+  requireCanvasProjectInstance(projectId)
   assertCanvasCommitContext(projectId, options)
-  const edge = useCanvasStore.getState().edges.find((item) => item.id === edgeId)
+  const edge = requireCanvasProjectInstance(projectId).store.getState().edges.find((item) => item.id === edgeId)
   if (!edge) throw new CanvasApplicationError('NOT_FOUND', '画布连接不存在', true, { edgeId })
-  useCanvasStore.getState().deleteEdge(edge.id)
+  requireCanvasProjectInstance(projectId).store.getState().deleteEdge(edge.id)
   const undoRef = rememberCanvasUndo(projectId, 'disconnect_edge')
   await confirmCanvasPersistence(projectId, options)
   return { projectId, edgeId: edge.id, undoRef }

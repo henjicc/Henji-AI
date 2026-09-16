@@ -1,3 +1,4 @@
+import { setCanvasTestProjectState } from '@/tests/canvasProjectFixture'
 // @vitest-environment jsdom
 
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -99,7 +100,7 @@ describe('canvas reflection and mutation', () => {
     const canvasNode = node()
     const currentProject = project(canvasNode)
     useCanvasStore.getState().setCanvasData([canvasNode], [], { past: [], future: [] })
-    useProjectStore.setState({
+    setCanvasTestProjectState({
       projects: [currentProject],
       currentProjectId: projectId,
       currentProject,
@@ -183,11 +184,11 @@ describe('canvas reflection and mutation', () => {
   it('通过通用工程属性执行器改名并撤销包含冒号的旧名称', async () => {
     const oldProject = project(node())
     oldProject.name = '旧:项目名'
-    useProjectStore.setState({
+    setCanvasTestProjectState({
       projects: [oldProject],
       currentProject: oldProject,
       renameProject: async (id, name) => {
-        useProjectStore.setState((state) => ({
+        setCanvasTestProjectState((state) => ({
           projects: state.projects.map((item) => item.id === id ? { ...item, name } : item),
           currentProject: state.currentProject?.id === id ? { ...state.currentProject, name } : state.currentProject,
         }))

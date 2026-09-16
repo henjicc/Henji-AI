@@ -1,3 +1,4 @@
+import { setCanvasTestProjectState } from '@/tests/canvasProjectFixture'
 // @vitest-environment jsdom
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -82,7 +83,7 @@ function setupCanvas(
     targetHandle: 'target',
   }], { past: [], future: [] });
   useCanvasStore.getState().setSelectedNode(source.id);
-  useProjectStore.setState({
+  setCanvasTestProjectState({
     projects: [project],
     currentProjectId: projectId,
     currentProject: project,
@@ -204,7 +205,7 @@ describe('generationOutputApplicationService 图层栈', () => {
       running = operation.then(result => result, error => error);
       await vi.waitFor(() => expect(createLayerStackDocument).toHaveBeenCalledOnce());
       if (mode === 'switch' || uncertain) otherProject = await useProjectStore.getState().createProject('文档保存时切换');
-      if (mode === 'cancel') controller.abort(new Error('停止合成'));
+      if (mode === 'cancel' || uncertain) controller.abort(new Error('停止合成'));
       release();
       if (uncertain) await expect(operation).rejects.toThrow('回收未确认');
       else if (mode === 'cancel') await expect(operation).rejects.toThrow('取消');
@@ -213,8 +214,8 @@ describe('generationOutputApplicationService 图层栈', () => {
       const placeholder = saved.nodes.find(node => node.id === 'placeholder-node')!;
       if (mode === 'cancel' || uncertain) expect(placeholder.data.imageEditSession).toBeUndefined();
       else expect(placeholder.data.imageEditSession).toMatchObject({ documentRef: 'image-edit-v3:layer-stack-document' });
-      expect(createLayerStackDocument).toHaveBeenCalledTimes(mode === 'switch' ? 2 : 1);
-      expect(rollbackLayerStackDocument).toHaveBeenCalledTimes(mode === 'background' ? 0 : 1);
+      expect(createLayerStackDocument).toHaveBeenCalledTimes(1);
+      expect(rollbackLayerStackDocument).toHaveBeenCalledTimes(mode === 'background' || mode === 'switch' ? 0 : 1);
       expect(useProjectStore.getState().currentProjectId).toBe(otherProject);
       expect(useCanvasStore.getState().nodes).toHaveLength(0);
     } finally { release(); await running; }

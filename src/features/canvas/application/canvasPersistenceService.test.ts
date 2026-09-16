@@ -1,3 +1,4 @@
+import { setCanvasTestProjectState } from '@/tests/canvasProjectFixture'
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { getProjectRecord } from '@/commands/projectState'
@@ -16,12 +17,12 @@ describe('共享画布保存完成屏障', () => {
   beforeEach(async () => {
     installHarnessNativeStorage()
     useCanvasStore.getState().setCanvasData([], [], { past: [], future: [] })
-    useProjectStore.setState({ projects: [], currentProject: null, currentProjectId: null, isHydrated: true })
+    setCanvasTestProjectState({ projects: [], currentProject: null, currentProjectId: null, isHydrated: true })
     projectId = await useProjectStore.getState().createProject('隔离保存测试')
   })
   afterEach(() => {
     vi.restoreAllMocks()
-    useProjectStore.setState({ currentProjectId: null, currentProject: null })
+    setCanvasTestProjectState({ currentProjectId: null, currentProject: null })
     uninstallHarnessNativeStorage()
   })
 
@@ -70,10 +71,10 @@ describe('共享画布保存完成屏障', () => {
     await failure
     expect(useProjectStore.getState().persistenceError).toBeNull()
     expect(useProjectStore.getState().persistenceErrors[projectId]).toBe('project.persistenceFailed')
-    await expect(confirmCanvasPersistence(projectId)).rejects.toThrow('返回原项目')
+    await confirmCanvasPersistence(projectId)
     await confirmCanvasPersistence(otherId)
-    expect(useProjectStore.getState().persistenceErrors[projectId]).toBe('project.persistenceFailed')
-    expect(JSON.parse((await getProjectRecord(projectId))!.nodesJson)).toHaveLength(0)
+    expect(useProjectStore.getState().persistenceErrors[projectId]).toBeUndefined()
+    expect(JSON.parse((await getProjectRecord(projectId))!.nodesJson)).toHaveLength(1)
     useProjectStore.getState().openProject(projectId)
     await vi.waitFor(() => expect(useProjectStore.getState().currentProjectId).toBe(projectId))
     const restored = useProjectStore.getState().currentProject!
@@ -144,7 +145,7 @@ describe('共享画布保存完成屏障', () => {
     const owner = {}
     await expect(runPersistedCanvasUndo(projectId, 'expired-after-delete', apply, owner)).rejects.toThrow('保存未确认')
     await useProjectStore.getState().deleteProject(projectId)
-    await expect(runPersistedCanvasUndo(projectId, 'expired-after-delete', apply, owner)).rejects.toThrow('撤销引用已失效')
+    await expect(runPersistedCanvasUndo(projectId, 'expired-after-delete', apply, owner)).rejects.toThrow('PROJECT_NOT_FOUND')
     expect(apply).toHaveBeenCalledTimes(1)
   })
 
@@ -195,7 +196,7 @@ describe('共享画布保存完成屏障', () => {
     await expect(runPersistedCanvasUndo(projectId, 'bounded-0', apply, owners[0])).rejects.toThrow('撤销引用已失效')
     expect(apply).toHaveBeenCalledTimes(205)
     await useProjectStore.getState().deleteProject(projectId)
-    await expect(runPersistedCanvasUndo(projectId, 'bounded-204', apply, owners[204])).rejects.toThrow('撤销引用已失效')
+    await expect(runPersistedCanvasUndo(projectId, 'bounded-204', apply, owners[204])).rejects.toThrow('PROJECT_NOT_FOUND')
     expect(apply).toHaveBeenCalledTimes(205)
   })
 })

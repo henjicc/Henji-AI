@@ -1,3 +1,4 @@
+import { findCanvasProjectInstance, getCanvasProjectInstance, requireCanvasProjectInstance } from './canvasProjectInstances';
 import { v4 as uuidv4 } from 'uuid';
 
 import { createLogger } from '@/core/logging';
@@ -41,24 +42,22 @@ export class AssetGroupApplicationError extends Error {
 }
 
 function requireProject(projectId?: string): string {
-  const project = useProjectStore.getState();
-  const currentId = project.currentProjectId;
-  if (!currentId || !project.currentProject || (projectId && currentId !== projectId)) {
-    throw new AssetGroupApplicationError('NOT_FOUND', '当前画布项目不可用');
-  }
-  return currentId;
+  const id = projectId ?? useProjectStore.getState().currentProjectId;
+  if (!id) throw new AssetGroupApplicationError('NOT_FOUND', '画布工程目标缺失');
+  return id;
 }
 
 async function commit(
+  projectId: string,
   operation: string,
   graph: ReturnType<typeof createAssetGroupGraph>,
   selectedNodeId: string | null | undefined,
   options: CanvasCommitOptions,
 ): Promise<void> {
   if (!graph) throw new AssetGroupApplicationError('INVALID_INPUT', '素材组操作没有可应用的变化');
-  assertCanvasCommitContext(requireProject(), options);
-  useCanvasStore.getState().commitAssetGroupGraph(graph, selectedNodeId);
-  await confirmCanvasPersistence(requireProject(), options);
+  assertCanvasCommitContext(projectId, options);
+  requireCanvasProjectInstance(projectId).store.getState().commitAssetGroupGraph(graph, selectedNodeId);
+  await confirmCanvasPersistence(projectId, options);
   if (!options.deferCommit) logger.info('素材组事务完成', { event: `canvas.asset_group.${operation}.completed`, selectedNodeId });
 }
 
@@ -74,7 +73,8 @@ export async function createAssetGroup(input: {
   disconnectedConnectionCount: number;
 }> {
   const projectId = requireProject(input.projectId);
-  const canvas = useCanvasStore.getState();
+  if (!findCanvasProjectInstance(projectId)) await getCanvasProjectInstance(projectId);
+  const canvas = requireCanvasProjectInstance(projectId).store.getState();
   const groupCount = canvas.nodes.filter(isAssetGroupNode).length;
   const displayName = input.name?.trim() || `素材组 ${groupCount + 1}`;
   const group = canvasNodeFactory.createNode(CANVAS_NODE_TYPES.assetGroup, { x: 0, y: 0 }, {
@@ -101,7 +101,7 @@ export async function createAssetGroup(input: {
       ? graph.edges.filter((edge) => edge.data?.managedByAssetGroup?.groupId === group.id).length
       : 0;
     const disconnectedConnectionCount = created?.data.bindings.length ? 0 : originalOutboundEdges.length;
-    await commit('create', graph, group.id, options);
+    await commit(projectId, 'create', graph, group.id, options);
     logger.info('素材组创建连线策略完成', {
       event: 'canvas.asset_group.create.connection_policy.completed',
       projectId,
@@ -131,31 +131,32 @@ export async function addAssetGroupMembers(input: {
   projectId?: string;
 }, options: CanvasCommitOptions = {}): Promise<{ projectId: string; groupId: string; memberCount: number }> {
   const projectId = requireProject(input.projectId);
-  const canvas = useCanvasStore.getState();
+  if (!findCanvasProjectInstance(projectId)) await getCanvasProjectInstance(projectId);
+  const canvas = requireCanvasProjectInstance(projectId).store.getState();
   const graph = addAssetGroupMembersGraph(canvas.nodes, canvas.edges, input.groupId, input.memberIds);
-  await commit('members.add', graph, input.groupId, options);
+  await commit(projectId, 'members.add', graph, input.groupId, options);
   const groupNode = graph?.nodes.find((node) => node.id === input.groupId);
   const group = groupNode && isAssetGroupNode(groupNode) ? groupNode : undefined;
   return { projectId, groupId: input.groupId, memberCount: group?.data.memberOrder.length ?? 0 };
 }
 
-function requireAssetGroup(groupId: string): CanvasNode {
-  const group = useCanvasStore.getState().nodes.find((node) => node.id === groupId);
+function requireAssetGroup(projectId: string, groupId: string): CanvasNode {
+  const group = requireCanvasProjectInstance(projectId).store.getState().nodes.find((node) => node.id === groupId);
   if (!group || !isAssetGroupNode(group)) {
     throw new AssetGroupApplicationError('NOT_FOUND', '素材组不存在');
   }
   return group;
 }
 
-async function commitNewMembers(groupId: string, newMembers: CanvasNode[], operation: string, options: CanvasCommitOptions): Promise<void> {
-  const canvas = useCanvasStore.getState();
+async function commitNewMembers(projectId: string, groupId: string, newMembers: CanvasNode[], operation: string, options: CanvasCommitOptions): Promise<void> {
+  const canvas = requireCanvasProjectInstance(projectId).store.getState();
   const graph = addAssetGroupMembersGraph(
     [...canvas.nodes, ...newMembers],
     canvas.edges,
     groupId,
     newMembers.map((member) => member.id),
   );
-  await commit(operation, graph, groupId, options);
+  await commit(projectId, operation, graph, groupId, options);
 }
 
 export async function addAssetToAssetGroup(input: {
@@ -164,7 +165,8 @@ export async function addAssetToAssetGroup(input: {
   projectId?: string;
 }, options: CanvasCommitOptions = {}): Promise<{ projectId: string; groupId: string; memberId: string }> {
   const projectId = requireProject(input.projectId);
-  const group = requireAssetGroup(input.groupId);
+  if (!findCanvasProjectInstance(projectId)) await getCanvasProjectInstance(projectId);
+  const group = requireAssetGroup(projectId, input.groupId);
   logger.info('资产加入素材组开始', {
     event: 'canvas.asset_group.asset.add.start',
     projectId,
@@ -177,7 +179,7 @@ export async function addAssetToAssetGroup(input: {
     group.position,
     mediaSourceNodeData(input.asset),
   );
-  await commitNewMembers(input.groupId, [member], 'asset.add', options);
+  await commitNewMembers(projectId, input.groupId, [member], 'asset.add', options);
   return { projectId, groupId: input.groupId, memberId: member.id };
 }
 
@@ -187,7 +189,8 @@ export async function importFilesToAssetGroup(input: {
   projectId?: string;
 }, options: CanvasCommitOptions = {}): Promise<{ projectId: string; groupId: string; added: number; skipped: number; failed: number }> {
   const projectId = requireProject(input.projectId);
-  requireAssetGroup(input.groupId);
+  if (!findCanvasProjectInstance(projectId)) await getCanvasProjectInstance(projectId);
+  requireAssetGroup(projectId, input.groupId);
   const mediaFiles = resolveMediaFiles(input.files);
   const skipped = Math.max(0, input.files.length - mediaFiles.length);
   logger.info('文件加入素材组开始', {
@@ -226,7 +229,7 @@ export async function importFilesToAssetGroup(input: {
   }
 
   try {
-    const group = requireAssetGroup(input.groupId);
+    const group = requireAssetGroup(projectId, input.groupId);
     const useFileName = useSettingsStore.getState().useUploadFilenameAsNodeTitle;
     const members = successful.map(({ file, imported }) => canvasNodeFactory.createNode(
       imported.type,
@@ -236,7 +239,7 @@ export async function importFilesToAssetGroup(input: {
         ...(useFileName ? { displayName: file.name } : {}),
       } as Partial<CanvasNodeData>,
     ));
-    await commitNewMembers(input.groupId, members, 'files.import', options);
+    await commitNewMembers(projectId, input.groupId, members, 'files.import', options);
     logger.info('文件加入素材组完成', {
       event: 'canvas.asset_group.files.import.completed',
       projectId,
@@ -261,9 +264,10 @@ export async function removeAssetGroupMember(input: {
   memberId: string;
   projectId?: string;
 }, options: CanvasCommitOptions = {}): Promise<void> {
-  requireProject(input.projectId);
-  const canvas = useCanvasStore.getState();
-  await commit('members.remove', removeAssetGroupMemberGraph(
+  const projectId = requireProject(input.projectId);
+  if (!findCanvasProjectInstance(projectId)) await getCanvasProjectInstance(projectId);
+  const canvas = requireCanvasProjectInstance(projectId).store.getState();
+  await commit(projectId, 'members.remove', removeAssetGroupMemberGraph(
     canvas.nodes, canvas.edges, input.groupId, input.memberId,
   ), input.groupId, options);
 }
@@ -274,9 +278,10 @@ export async function updateAssetGroup(input: {
   coverMemberId?: string | null;
   projectId?: string;
 }, options: CanvasCommitOptions = {}): Promise<void> {
-  requireProject(input.projectId);
-  const canvas = useCanvasStore.getState();
-  await commit('update', updateAssetGroupDataGraph(canvas.nodes, canvas.edges, input.groupId, {
+  const projectId = requireProject(input.projectId);
+  if (!findCanvasProjectInstance(projectId)) await getCanvasProjectInstance(projectId);
+  const canvas = requireCanvasProjectInstance(projectId).store.getState();
+  await commit(projectId, 'update', updateAssetGroupDataGraph(canvas.nodes, canvas.edges, input.groupId, {
     memberOrder: input.memberOrder,
     coverMemberId: input.coverMemberId,
   }), input.groupId, options);
@@ -287,8 +292,9 @@ export async function bindAssetGroup(input: {
   targetNodeId: string;
   projectId?: string;
 }, options: CanvasCommitOptions = {}): Promise<{ connected: number; pending: number; unsupported: number; excluded: number }> {
-  requireProject(input.projectId);
-  const canvas = useCanvasStore.getState();
+  const projectId = requireProject(input.projectId);
+  if (!findCanvasProjectInstance(projectId)) await getCanvasProjectInstance(projectId);
+  const canvas = requireCanvasProjectInstance(projectId).store.getState();
   const currentNode = canvas.nodes.find((node) => node.id === input.groupId);
   if (!currentNode || !isAssetGroupNode(currentNode)) {
     throw new AssetGroupApplicationError('NOT_FOUND', '素材组不存在');
@@ -298,7 +304,7 @@ export async function bindAssetGroup(input: {
     return summarizeAssetGroupBinding(canvas.nodes, canvas.edges, input.groupId, currentBinding);
   }
   const graph = bindAssetGroupGraph(canvas.nodes, canvas.edges, input.groupId, input.targetNodeId, uuidv4());
-  await commit('binding.create', graph, input.groupId, options);
+  await commit(projectId, 'binding.create', graph, input.groupId, options);
   const groupNode = graph?.nodes.find((node) => node.id === input.groupId);
   const group = groupNode && isAssetGroupNode(groupNode) ? groupNode : undefined;
   const binding = group?.data.bindings.find((item) => item.targetNodeId === input.targetNodeId);
@@ -312,14 +318,15 @@ export async function disconnectAssetGroup(input: {
   targetNodeId: string;
   projectId?: string;
 }, options: CanvasCommitOptions = {}): Promise<void> {
-  requireProject(input.projectId);
-  const canvas = useCanvasStore.getState();
+  const projectId = requireProject(input.projectId);
+  if (!findCanvasProjectInstance(projectId)) await getCanvasProjectInstance(projectId);
+  const canvas = requireCanvasProjectInstance(projectId).store.getState();
   const currentNode = canvas.nodes.find((node) => node.id === input.groupId);
   if (!currentNode || !isAssetGroupNode(currentNode)) {
     throw new AssetGroupApplicationError('NOT_FOUND', '素材组不存在');
   }
   if (!currentNode.data.bindings.some((item) => item.targetNodeId === input.targetNodeId)) return;
-  await commit('binding.remove', disconnectAssetGroupGraph(
+  await commit(projectId, 'binding.remove', disconnectAssetGroupGraph(
     canvas.nodes, canvas.edges, input.groupId, input.targetNodeId,
   ), input.groupId, options);
 }
@@ -331,9 +338,10 @@ export async function setAssetGroupMemberExcluded(input: {
   excluded: boolean;
   projectId?: string;
 }, options: CanvasCommitOptions = {}): Promise<void> {
-  requireProject(input.projectId);
-  const canvas = useCanvasStore.getState();
-  await commit('binding.exclude', setAssetGroupMemberExcludedGraph(
+  const projectId = requireProject(input.projectId);
+  if (!findCanvasProjectInstance(projectId)) await getCanvasProjectInstance(projectId);
+  const canvas = requireCanvasProjectInstance(projectId).store.getState();
+  await commit(projectId, 'binding.exclude', setAssetGroupMemberExcludedGraph(
     canvas.nodes,
     canvas.edges,
     input.groupId,
@@ -348,17 +356,19 @@ export async function restoreAssetGroupBinding(input: {
   bindingId: string;
   projectId?: string;
 }, options: CanvasCommitOptions = {}): Promise<void> {
-  requireProject(input.projectId);
-  const canvas = useCanvasStore.getState();
-  await commit('binding.restore', restoreAssetGroupBindingGraph(
+  const projectId = requireProject(input.projectId);
+  if (!findCanvasProjectInstance(projectId)) await getCanvasProjectInstance(projectId);
+  const canvas = requireCanvasProjectInstance(projectId).store.getState();
+  await commit(projectId, 'binding.restore', restoreAssetGroupBindingGraph(
     canvas.nodes, canvas.edges, input.groupId, input.bindingId,
   ), input.groupId, options);
 }
 
 export async function dissolveAssetGroup(input: { groupId: string; projectId?: string }, options: CanvasCommitOptions = {}): Promise<void> {
-  requireProject(input.projectId);
-  const canvas = useCanvasStore.getState();
-  await commit('dissolve', ungroupAssetGroupGraph(canvas.nodes, canvas.edges, input.groupId), null, options);
+  const projectId = requireProject(input.projectId);
+  if (!findCanvasProjectInstance(projectId)) await getCanvasProjectInstance(projectId);
+  const canvas = requireCanvasProjectInstance(projectId).store.getState();
+  await commit(projectId, 'dissolve', ungroupAssetGroupGraph(canvas.nodes, canvas.edges, input.groupId), null, options);
 }
 
 export function getAssetGroupData(groupId: string): AssetGroupNodeData | null {

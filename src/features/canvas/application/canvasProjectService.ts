@@ -27,10 +27,7 @@ export async function createCanvasProject(name: string): Promise<Record<string, 
   await ensureProjectsHydrated()
   const normalized = name.trim()
   if (!normalized) throw new CanvasApplicationError('INVALID_INPUT', '画布项目名称不能为空', true)
-  const projectId = await useProjectStore.getState().createProject(normalized)
-  const project = useProjectStore.getState().currentProject
-  useCanvasStore.getState().setCanvasData(project?.nodes ?? [], project?.edges ?? [], project?.history)
-  useCanvasStore.getState().setViewportState(project?.viewport ?? EMPTY_VIEWPORT)
+  const projectId = await useProjectStore.getState().createProject(normalized, { attach: false })
   const saved = await getProjectRecord(projectId)
   return { projectId, name: normalized, verification: {
     verified: saved?.id === projectId && saved.name === normalized,

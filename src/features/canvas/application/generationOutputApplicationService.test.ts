@@ -1,5 +1,7 @@
+import { setCanvasTestProjectState } from '@/tests/canvasProjectFixture';
 // @vitest-environment jsdom
 
+// @vitest-environment jsdom
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { registry } from '@/core/ModelRegistry';
@@ -7,26 +9,16 @@ import { upsertProjectRecord } from '@/commands/projectState';
 import type { ModelDefinition } from '@/core/types';
 import { collectAndRewriteMedia, rewritePackagePathsToLocal } from '@/services/projectPackage/collectMediaRefs';
 import { useCanvasStore } from '@/stores/canvasStore';
-import { useProjectStore, type Project } from '@/stores/projectStore';
+import { type Project } from '@/stores/projectStore';
 
-import {
-  CANVAS_NODE_TYPES,
-  isAssetGroupNode,
-  type CanvasNode,
-} from '../domain/canvasNodes';
-import {
-  createDefaultGenerationOutputItems,
-  type CanvasGenerationOutputBatchContractV1,
-} from '../domain/generationOutputs';
+import { CANVAS_NODE_TYPES, isAssetGroupNode, type CanvasNode } from '../domain/canvasNodes';
+import { createDefaultGenerationOutputItems, type CanvasGenerationOutputBatchContractV1 } from '../domain/generationOutputs';
 import type { RowMediaKind } from '../domain/socketTypes';
 import { bindAssetGroupGraph } from './assetGroupGraph';
 import { createAssetGroupRenderGraph } from './assetGroupRenderGraph';
 import { createDefaultMultiAngleConfig, createMultiAngleBatchPlan, createMultiAngleCommitContract, MULTI_ANGLE_CONTINUOUS_PRESETS } from '../capabilities/multiAnglePolicy';
 import { canvasNodeFactory } from './canvasServices';
-import {
-  commitCanvasGenerationOutputs,
-  validateGenerationOutputBatchContract,
-} from './generationOutputApplicationService';
+import { commitCanvasGenerationOutputs, validateGenerationOutputBatchContract } from './generationOutputApplicationService';
 
 const projectId = 'generation-output-project';
 const MODEL_ID = 'generation-output-image-model';
@@ -93,7 +85,7 @@ function setupCanvas(
     targetHandle: 'target',
   }], { past: [], future: [] });
   useCanvasStore.getState().setSelectedNode(source.id);
-  useProjectStore.setState({
+  setCanvasTestProjectState({
     projects: [project],
     currentProjectId: projectId,
     currentProject: project,
@@ -303,7 +295,7 @@ describe('generationOutputApplicationService', () => {
       resultNodeType: CANVAS_NODE_TYPES.exportImage,
       contract: contract(2),
       persistOutput: async (_mediaType, source) => {
-        useProjectStore.setState({ currentProjectId: null, currentProject: null });
+        setCanvasTestProjectState({ currentProjectId: null, currentProject: null });
         return {
           patch: imagePatch(source),
           createdFilePaths: [`/managed/${source.split('/').at(-1)}.png`],

@@ -1,30 +1,18 @@
+import { setCanvasTestProjectState } from '@/tests/canvasProjectFixture';
 // @vitest-environment jsdom
 
-import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
+// @vitest-environment jsdom
+import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { upsertProjectRecord } from '@/commands/projectState'
-import { CANVAS_NODE_TYPES } from '@/features/canvas/domain/canvasNodes'
-import { useCanvasStore } from '@/stores/canvasStore'
-import { useProjectStore, type Project } from '@/stores/projectStore'
-import { loadRealModelsIntoRegistry } from '@/tests/loadRealModels'
+import { upsertProjectRecord } from '@/commands/projectState';
+import { CANVAS_NODE_TYPES } from '@/features/canvas/domain/canvasNodes';
+import { useCanvasStore } from '@/stores/canvasStore';
+import { type Project } from '@/stores/projectStore';
+import { loadRealModelsIntoRegistry } from '@/tests/loadRealModels';
 
-import {
-  addCanvasNode,
-  addControlledCanvasNode,
-  resetCanvasApplicationStateForTests,
-  undoCanvasChange,
-} from './canvasApplicationService'
-import {
-  clearCanvasProject,
-  connectAssetGroupToTarget,
-  disconnectAssetGroupFromTarget,
-  duplicateCanvasNode,
-  deleteCanvasNodes,
-  groupCanvasNodes,
-  ungroupCanvasNode,
-  updateCanvasNode,
-} from './canvasMutationService'
-import { runCanvasTransaction } from './canvasBatchService'
+import { addCanvasNode, addControlledCanvasNode, resetCanvasApplicationStateForTests, undoCanvasChange } from './canvasApplicationService';
+import { clearCanvasProject, connectAssetGroupToTarget, disconnectAssetGroupFromTarget, duplicateCanvasNode, deleteCanvasNodes, groupCanvasNodes, ungroupCanvasNode, updateCanvasNode } from './canvasMutationService';
+import { runCanvasTransaction } from './canvasBatchService';
 
 const cancelCameraStageNodeTasks = vi.hoisted(() => vi.fn(async () => undefined))
 vi.mock('./cameraStageRenderApplicationService', () => ({ cancelCameraStageNodeTasks }))
@@ -73,7 +61,7 @@ describe('画布清空与解散分组', () => {
       canvasViewportSize: { width: 1_200, height: 800 },
     })
     const project = emptyProject()
-    useProjectStore.setState({
+    setCanvasTestProjectState({
       projects: [project],
       currentProjectId: projectId,
       currentProject: project,

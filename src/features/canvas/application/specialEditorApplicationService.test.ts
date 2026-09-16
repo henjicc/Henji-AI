@@ -1,16 +1,16 @@
+import { upsertProjectRecord } from '@/commands/projectState';
+import { setCanvasTestProjectState } from '@/tests/canvasProjectFixture';
 // @vitest-environment jsdom
 
+// @vitest-environment jsdom
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { CANVAS_NODE_TYPES } from '@/features/canvas/domain/canvasNodes';
 import { DEFAULT_RELIGHT_SETTINGS } from '@/features/canvas/capabilities/relightPolicy';
 import { useCanvasStore } from '@/stores/canvasStore';
-import { useProjectStore, type Project } from '@/stores/projectStore';
+import { type Project } from '@/stores/projectStore';
 import { useCanvasSpecialEditorController } from './specialEditorController';
-import {
-  commitCanvasSpecialEditor,
-  openCanvasSpecialEditor,
-} from './specialEditorApplicationService';
+import { commitCanvasSpecialEditor, openCanvasSpecialEditor } from './specialEditorApplicationService';
 
 const projectId = 'special-editor-project';
 
@@ -34,7 +34,7 @@ describe('specialEditorApplicationService', () => {
     useCanvasStore.getState().setCanvasData([], [], { past: [], future: [] });
     useCanvasSpecialEditorController.setState({ session: null });
     const project = emptyProject();
-    useProjectStore.setState({
+    setCanvasTestProjectState({
       projects: [project],
       currentProjectId: projectId,
       currentProject: project,
@@ -63,7 +63,7 @@ describe('specialEditorApplicationService', () => {
     expect(useCanvasStore.getState().nodes.find((node) => node.id === nodeId)?.data.prompt)
       .toBe('已确认的提示词');
     expect(useCanvasSpecialEditorController.getState().session).toBeNull();
-    expect(useProjectStore.getState().saveCurrentProject).toHaveBeenCalled();
+    expect(vi.mocked(upsertProjectRecord)).toHaveBeenCalled();
   });
 
   it('打光编辑器仅通过内部白名单原子写回契约数据', async () => {

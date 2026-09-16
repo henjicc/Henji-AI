@@ -1,10 +1,12 @@
+import { setCanvasTestProjectState } from '@/tests/canvasProjectFixture';
 // @vitest-environment jsdom
 
+// @vitest-environment jsdom
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { AssetDragPayload } from '@/features/assets/drag/assetDragPayload';
 import { useCanvasStore } from '@/stores/canvasStore';
-import { useProjectStore, type Project } from '@/stores/projectStore';
+import { type Project } from '@/stores/projectStore';
 import { useSettingsStore } from '@/stores/settingsStore';
 import { CANVAS_NODE_TYPES, isAssetGroupNode } from '../domain/canvasNodes';
 import { canvasNodeFactory } from './canvasServices';
@@ -45,8 +47,8 @@ describe('assetGroupApplicationService media import', () => {
     group.id = 'group-1';
     useCanvasStore.getState().setCanvasData([group], [], { past: [], future: [] });
     useSettingsStore.setState({ useUploadFilenameAsNodeTitle: true });
-    const project = emptyProject();
-    useProjectStore.setState({
+    const project = { ...emptyProject(), nodes: [group], nodeCount: 1 };
+    setCanvasTestProjectState({
       projects: [project],
       currentProjectId: projectId,
       currentProject: project,

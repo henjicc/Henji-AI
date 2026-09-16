@@ -1,3 +1,5 @@
+import { releaseCanvasProjectInstance } from '@/features/canvas/application/canvasProjectInstances'
+import { setCanvasTestProjectState } from '@/tests/canvasProjectFixture'
 // @vitest-environment jsdom
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { createApplicationCallerGrant } from '@/core/application-control/callerContext'
@@ -51,7 +53,7 @@ it('没有项目时可创建并验证持久化，再打开同一画布项目', a
   const { useNavigationStore } = await import('@/stores/navigationStore')
   const previousNavigation = useNavigationStore.getState()
   try {
-    useProjectStore.setState({ currentProjectId: null, currentProject: null, projects: [], isHydrated: true })
+    setCanvasTestProjectState({ currentProjectId: null, currentProject: null, projects: [], isHydrated: true })
     const session = createApplicationCapabilitySession(createApplicationCallerGrant({
       callerId: 'mcp-creative-create', capabilityIds: [...APPLICATION_CAPABILITY_IDS], allowWrites: true, allowDestructive: false,
       permissions: [...APPLICATION_READ_PERMISSIONS, ...APPLICATION_WRITE_PERMISSIONS],
@@ -67,7 +69,7 @@ it('没有项目时可创建并验证持久化，再打开同一画布项目', a
     expect(useNavigationStore.getState().activeWorkspace).toBe('nodes')
   } finally {
     useCanvasStore.setState(previousCanvas, true)
-    useProjectStore.setState(previousProject, true)
+    setCanvasTestProjectState(previousProject, true)
     useNavigationStore.setState(previousNavigation, true)
   }
 })
@@ -90,7 +92,7 @@ it('创作文本经 MCP 保存后新会话按需读回，局部返修保留其�
     const project = { id: projectId, name: '创作续做', createdAt: 1, updatedAt: 1, nodeCount: nodes.length,
       coverPath: null, nodes, edges, viewport: { x: 0, y: 0, zoom: 1 }, history: { past: [], future: [] } }
     useCanvasStore.getState().setCanvasData(nodes, edges, project.history)
-    useProjectStore.setState({ currentProjectId: projectId, currentProject: project, projects: [project], isHydrated: true })
+    setCanvasTestProjectState({ currentProjectId: projectId, currentProject: project, projects: [project], isHydrated: true })
     const overview = await getCanvasProject(projectId)
     expect(JSON.stringify(overview)).not.toContain('原始说明')
     expect(JSON.stringify(overview)).not.toContain('小林穿灰色外套')
@@ -107,8 +109,8 @@ it('创作文本经 MCP 保存后新会话按需读回，局部返修保留其�
     expect(saved.edges).toMatchObject(edges)
 
     // 清除活动画布和当前工程，强制新调用方经过持久化读取，而不是使用原会话内存。
-    useCanvasStore.getState().setCanvasData([], [], { past: [], future: [] })
-    useProjectStore.setState({ currentProjectId: null, currentProject: null })
+    await useProjectStore.getState().closeProject()
+    expect(releaseCanvasProjectInstance(projectId)).toBe(true)
     const resumed = creativeClient()
     const read = await resumed.execute({ id: 'read_application_entity', version: 1,
       input: { ref: ref('shot-one'), propertyIds: ['canvas.node.text_content'] } }, request())
@@ -124,7 +126,7 @@ it('创作文本经 MCP 保存后新会话按需读回，局部返修保留其�
     } } })
   } finally {
     useCanvasStore.setState(previousCanvas, true)
-    useProjectStore.setState(previousProject, true)
+    setCanvasTestProjectState(previousProject, true)
   }
 })
 
@@ -139,7 +141,7 @@ it('MCP 实际授权可发现、创建和配置图片节点，并从原工程存
     const project = { id: projectId, name: '图片工具验收', createdAt: 1, updatedAt: 1, nodeCount: 1,
       coverPath: null, nodes: [source], edges: [], viewport: { x: 0, y: 0, zoom: 1 }, history: { past: [], future: [] } }
     useCanvasStore.getState().setCanvasData([source], [], project.history)
-    useProjectStore.setState({ currentProjectId: projectId, currentProject: project, projects: [project], isHydrated: true })
+    setCanvasTestProjectState({ currentProjectId: projectId, currentProject: project, projects: [project], isHydrated: true })
     const session = createApplicationCapabilitySession(createApplicationCallerGrant({ callerId: 'mcp-image-tools',
       capabilityIds: [...APPLICATION_CAPABILITY_IDS], allowWrites: true, allowDestructive: false,
       permissions: [...APPLICATION_READ_PERMISSIONS, ...APPLICATION_WRITE_PERMISSIONS] }))
@@ -211,7 +213,7 @@ it('MCP 实际授权可发现、创建和配置图片节点，并从原工程存
       .toMatchObject(switchedConfig)
   } finally {
     useCanvasStore.setState(previousCanvas, true)
-    useProjectStore.setState(previousProject, true)
+    setCanvasTestProjectState(previousProject, true)
   }
 })
 

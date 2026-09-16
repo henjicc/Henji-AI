@@ -1,3 +1,4 @@
+import { findCanvasProjectInstance, getCanvasProjectInstance, requireCanvasProjectInstance } from './canvasProjectInstances'
 import { v4 as uuidv4 } from 'uuid'
 
 import { useCanvasStore } from '@/stores/canvasStore'
@@ -142,7 +143,7 @@ export function rememberCanvasUndo(projectId: string, operation: string): string
     token,
     projectId,
     operation,
-    historyDepth: useCanvasStore.getState().history.past.length,
+    historyDepth: requireCanvasProjectInstance(projectId).store.getState().history.past.length,
   })
   while (undoRecords.size > MAX_UNDO_RECORDS) {
     const oldest = undoRecords.keys().next().value
@@ -209,11 +210,12 @@ export async function addCanvasNode(input: {
   placement: CanvasNodePlacement
   data?: Record<string, unknown>
 }, options: CanvasCommitOptions = {}): Promise<Record<string, unknown>> {
-  requireCurrentCanvasProject(input.projectId)
+  if (!findCanvasProjectInstance(input.projectId)) await getCanvasProjectInstance(input.projectId)
+  requireCanvasProjectInstance(input.projectId)
   assertCanvasCommitContext(input.projectId, options)
   const parsed = parseCanvasNodeData(input.nodeType, input.data)
-  const position = resolveNodePosition(input.placement)
-  const nodeId = useCanvasStore.getState().addNode(parsed.nodeType, position, parsed.data)
+  const position = resolveNodePosition(input.placement, requireCanvasProjectInstance(input.projectId).store)
+  const nodeId = requireCanvasProjectInstance(input.projectId).store.getState().addNode(parsed.nodeType, position, parsed.data)
   const undoRef = rememberCanvasUndo(input.projectId, 'add_node')
   await confirmCanvasPersistence(input.projectId, options)
   return { projectId: input.projectId, nodeId, nodeType: parsed.nodeType, position, undoRef }
@@ -230,12 +232,12 @@ export function stageControlledCanvasNode(input: {
   placement: CanvasNodePlacement
   data?: Record<string, unknown>
 }, options: CanvasCommitOptions = {}): Record<string, unknown> {
-  requireCurrentCanvasProject(input.projectId)
+  requireCanvasProjectInstance(input.projectId)
   assertCanvasCommitContext(input.projectId, options)
   const parsed = parseCanvasControlledNodeData(input.nodeType, input.data)
-  const position = resolveNodePosition(input.placement)
+  const position = resolveNodePosition(input.placement, requireCanvasProjectInstance(input.projectId).store)
   const nodeId = runCanvasMutationStage(options, () =>
-    useCanvasStore.getState().addNode(parsed.nodeType, position, parsed.data),
+    requireCanvasProjectInstance(input.projectId).store.getState().addNode(parsed.nodeType, position, parsed.data),
   )
   const undoRef = options.deferCommit ? undefined : rememberCanvasUndo(input.projectId, 'add_node')
   return {
@@ -251,6 +253,7 @@ export async function addControlledCanvasNode(
   input: Parameters<typeof stageControlledCanvasNode>[0],
   options: CanvasCommitOptions = {},
 ): Promise<Record<string, unknown>> {
+  if (!findCanvasProjectInstance(input.projectId)) await getCanvasProjectInstance(input.projectId)
   const result = stageControlledCanvasNode(input, options)
   await confirmCanvasPersistence(input.projectId, options)
   return result
@@ -266,9 +269,10 @@ export async function addTrustedMediaCanvasNode(input: {
   placement: CanvasNodePlacement
   data: Record<string, unknown>
 }, options: CanvasCommitOptions = {}): Promise<Record<string, unknown>> {
+  if (!findCanvasProjectInstance(input.projectId)) await getCanvasProjectInstance(input.projectId)
   const runtime = options.checkpoint?.runtime
-  const store = runtime?.store ?? useCanvasStore
-  if (!runtime) requireCurrentCanvasProject(input.projectId)
+  const store = runtime?.store ?? requireCanvasProjectInstance(input.projectId).store
+  if (!runtime) requireCanvasProjectInstance(input.projectId)
   assertCanvasCommitContext(input.projectId, options)
   const parsed = parseTrustedMediaNodeData(input.nodeType, input.data)
   const position = resolveNodePosition(input.placement, store)
@@ -286,12 +290,12 @@ export function stageCanvasConnection(input: {
   sourceHandle?: string
   targetHandle?: string
 }, options: CanvasCommitOptions = {}): Record<string, unknown> {
-  requireCurrentCanvasProject(input.projectId)
+  requireCanvasProjectInstance(input.projectId)
   assertCanvasCommitContext(input.projectId, options)
   if (input.sourceNodeId === input.targetNodeId) {
     throw new CanvasApplicationError('INVALID_INPUT', '画布节点不能连接到自身')
   }
-  const canvas = useCanvasStore.getState()
+  const canvas = requireCanvasProjectInstance(input.projectId).store.getState()
   const sourceNode = canvas.nodes.find((node) => node.id === input.sourceNodeId)
   const targetNode = canvas.nodes.find((node) => node.id === input.targetNodeId)
   if (!sourceNode || !targetNode) {
@@ -353,7 +357,7 @@ export function stageCanvasConnection(input: {
     sourceHandle: handles.sourceHandle,
     targetHandle: handles.targetHandle,
   }))
-  const after = useCanvasStore.getState()
+  const after = requireCanvasProjectInstance(input.projectId).store.getState()
   const nodeById = new Map(after.nodes.map((node) => [node.id, node]))
   const directEdge = after.edges.find((item) => isMatchingEdge(
     item, input.sourceNodeId, input.targetNodeId, handles.sourceHandle, handles.targetHandle
@@ -388,23 +392,25 @@ export async function connectCanvasNodes(
   input: Parameters<typeof stageCanvasConnection>[0],
   options: CanvasCommitOptions = {},
 ): Promise<Record<string, unknown>> {
+  if (!findCanvasProjectInstance(input.projectId)) await getCanvasProjectInstance(input.projectId)
   const result = stageCanvasConnection(input, options)
   await confirmCanvasPersistence(input.projectId, options)
   return result
 }
 
 export async function undoCanvasChange(projectId: string, undoRef: string): Promise<Record<string, unknown>> {
+  if (!findCanvasProjectInstance(projectId)) await getCanvasProjectInstance(projectId)
   if (undoRef.startsWith('canvas-batch-undo:')) {
     const result = await undoCanvasBatch(projectId, undoRef)
     if (result) return result
   }
-  requireCurrentCanvasProject(projectId)
+  requireCanvasProjectInstance(projectId)
   const record = undoRecords.get(undoRef)
   if (!record || record.projectId !== projectId) {
     throw new CanvasApplicationError('NOT_FOUND', '画布撤销引用不存在或不属于当前项目')
   }
   await runPersistedCanvasUndo(projectId, undoRef, () => {
-    const canvas = useCanvasStore.getState()
+    const canvas = requireCanvasProjectInstance(projectId).store.getState()
     if (canvas.history.past.length !== record.historyDepth) {
       throw new CanvasApplicationError('STALE_CONTEXT', '画布在该操作后已发生其它变化，旧撤销引用失效')
     }
@@ -422,8 +428,9 @@ export async function undoCanvasChange(projectId: string, undoRef: string): Prom
  * 就等价于"确实存在一个刚被撤销、还没被别的改动覆盖的操作"，不需要额外的引用比对。
  */
 export async function redoCanvasChange(projectId: string): Promise<Record<string, unknown>> {
-  requireCurrentCanvasProject(projectId)
-  if (!useCanvasStore.getState().redo()) {
+  if (!findCanvasProjectInstance(projectId)) await getCanvasProjectInstance(projectId)
+  requireCanvasProjectInstance(projectId)
+  if (!requireCanvasProjectInstance(projectId).store.getState().redo()) {
     throw new CanvasApplicationError('CONFLICT', '当前画布没有可重做操作')
   }
   await confirmCanvasPersistence(projectId)
