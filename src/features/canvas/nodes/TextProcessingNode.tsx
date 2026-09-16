@@ -247,13 +247,7 @@ export const TextProcessingNode = memo(({
     }
   }, [config, id, t])
 
-  useTextProcessingExecution({
-    nodeId: id,
-    choices,
-    promptTemplates,
-    setPromptInvalid,
-    t,
-  })
+  useTextProcessingExecution({ nodeId: id, setPromptInvalid })
 
   return (
     <div

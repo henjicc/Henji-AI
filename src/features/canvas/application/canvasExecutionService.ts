@@ -285,6 +285,7 @@ async function executeRegisteredNode(
       ...baseContext,
       inputSignature,
       assertCurrent: async (store) => {
+        baseContext.signal?.throwIfAborted()
         const assertInStore = async (targetStore: typeof useCanvasStore) => {
           runControl.assertCurrent?.(targetStore)
           const extras = await executor.getInputSignatureExtras?.(targetStore)
@@ -334,7 +335,7 @@ async function executeRegisteredNode(
       } finally {
         useCanvasExecutionStateStore.getState().endNodeExecution(nodeId, context.runId)
       }
-    }, signal)
+    }, signal ?? baseContext.signal)
     const promise = executor.runQueued ? executor.runQueued(context, schedule) : schedule(() => executor.run(context))
     activeNodeRuns.set(key, { inputSignature, promise })
     try {
@@ -398,7 +399,7 @@ async function findGuaranteedReusableDependencies(
 }
 
 async function executeCanvasRun(rootNodeId: string, projectId: string, runtime: CanvasTransactionRuntime,
-  assertCurrent?: (store?: typeof useCanvasStore) => void): Promise<CanvasRunResult> {
+  assertCurrent?: (store?: typeof useCanvasStore) => void, signal?: AbortSignal): Promise<CanvasRunResult> {
   const runId = createRunId()
   const startedAt = Date.now()
   logger.info('画布节点运行开始', {
@@ -408,6 +409,7 @@ async function executeCanvasRun(rootNodeId: string, projectId: string, runtime: 
   const outcomeByNodeId = new Map<string, NodeRunOutcome>()
   const runControl: CanvasRunControl = { failure: null, assertCurrent }
   try {
+    signal?.throwIfAborted()
     const store = runtime.store
     const plan = await (async () => {
       assertCurrent?.(store)
@@ -426,6 +428,7 @@ async function executeCanvasRun(rootNodeId: string, projectId: string, runtime: 
         runId,
         projectId,
         trigger: 'direct',
+        signal,
         runtime,
         store,
       })
@@ -446,6 +449,7 @@ async function executeCanvasRun(rootNodeId: string, projectId: string, runtime: 
         runId,
         projectId,
         trigger: 'dependency',
+        signal,
         store,
         runtime,
       })
@@ -480,6 +484,7 @@ async function executeCanvasRun(rootNodeId: string, projectId: string, runtime: 
         .then(() => executeRegisteredNode(nodeId, {
           runId,
           projectId,
+          signal,
           store,
           runtime,
           trigger: nodeId === rootNodeId ? 'direct' : 'dependency',
@@ -525,9 +530,9 @@ async function executeCanvasRun(rootNodeId: string, projectId: string, runtime: 
 }
 
 export function runCanvasNode(rootNodeId: string, assertCurrent?: (store?: typeof useCanvasStore) => void,
-  projectId = useProjectStore.getState().currentProjectId): Promise<CanvasRunResult> {
+  projectId = useProjectStore.getState().currentProjectId, signal?: AbortSignal): Promise<CanvasRunResult> {
   if (!projectId) return Promise.reject(new Error('当前没有可执行的画布项目'))
-  return withCanvasProjectRuntime(projectId, runtime => executeCanvasRun(rootNodeId, projectId, runtime, assertCurrent))
+  return withCanvasProjectRuntime(projectId, runtime => executeCanvasRun(rootNodeId, projectId, runtime, assertCurrent, signal))
 }
 
 export function isCanvasNodeRunActive(projectId: string, nodeId: string): boolean {

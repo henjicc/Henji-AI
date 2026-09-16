@@ -7,6 +7,7 @@ import type { useCanvasStore } from '@/stores/canvasStore'
 export type CanvasExecutionTrigger = 'direct' | 'dependency'
 
 export interface CanvasNodePreflightContext {
+  signal?: AbortSignal
   runtime?: CanvasTransactionRuntime
   store?: typeof useCanvasStore
   runId: string

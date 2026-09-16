@@ -415,9 +415,10 @@ export function createGenerationNodeExecutor(readOptions: (store?: typeof useCan
     if (!projectId) throw new Error('当前没有可执行生成的画布项目')
     const taskId = crypto.randomUUID()
     const controller = new AbortController()
-    const abort = () => controller.abort(current.signal?.reason)
-    if (current.signal?.aborted) abort()
-    current.signal?.addEventListener('abort', abort, { once: true })
+    const parentSignal = current.signal ?? execution.signal
+    const abort = () => controller.abort(parentSignal?.reason)
+    if (parentSignal?.aborted) abort()
+    parentSignal?.addEventListener('abort', abort, { once: true })
     const extra = current.resultNodeExtraData
     let release: (() => void) | undefined
     try {
@@ -433,7 +434,7 @@ export function createGenerationNodeExecutor(readOptions: (store?: typeof useCan
       }, controller.signal))
     } finally {
       release?.()
-      current.signal?.removeEventListener('abort', abort)
+      parentSignal?.removeEventListener('abort', abort)
     }
   }
 

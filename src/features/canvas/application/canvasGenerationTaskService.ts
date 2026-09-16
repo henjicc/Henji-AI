@@ -180,7 +180,7 @@ async function registerCanvasGenerationTask(input: GenerationPreparationInput, d
       resultNodeExtraData: data => ({ ...(typeof extra === 'function' ? extra(data) : extra), generationTaskId: taskId }) }
   }))
   logger.info('画布生成已创建节点与连线', { event: 'canvas.generationTask.start', taskId, projectId: destination.projectId, nodeId })
-  void record.run(() => runCanvasNode(nodeId, assertCurrent, destination.projectId))
+  void record.run(() => runCanvasNode(nodeId, assertCurrent, destination.projectId, controller.signal))
     .catch(error => logger.error('画布生成结束时存在失败', error, { event: 'canvas.generationTask.run_failed', taskId }))
     .finally(() => { releaseExecutor(); releaseNode() })
   return { taskId, status: 'submitted', taskRef: { kind: 'generation.task', id: taskId },
