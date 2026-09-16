@@ -2,7 +2,6 @@ import { createLogger } from '@/core/logging';
 import { registry } from '@/core/ModelRegistry';
 import { useCanvasGenerationProgressStore } from '@/stores/canvasGenerationProgressStore';
 import { useCanvasStore } from '@/stores/canvasStore';
-import { useProjectStore } from '@/stores/projectStore';
 import { getPlatform } from '@/platform';
 
 import {
@@ -42,6 +41,8 @@ import {
   STORYBOARD_GENERATION_RESUME_CONTEXT_FIELD,
 } from './storyboardGenerationOutputService';
 import { withCanvasProjectRuntime } from './canvasProjectRuntime';
+import { findCanvasProjectInstance } from './canvasProjectInstances';
+import type { CanvasTransactionRuntime } from './canvasPersistenceService';
 
 const logger = createLogger('features.canvas.resumePolling');
 const resumeControls = new Map<symbol, { taskId: string; controller: AbortController }>();
@@ -61,8 +62,9 @@ export function getCanvasResumeControllers(taskId: string): AbortController[] {
 export function resumeCanvasProjectGeneration(
   projectId: string, nodeIds?: ReadonlySet<string>, options: { retryFailed?: boolean } = {},
 ): number {
-  if (useProjectStore.getState().currentProjectId !== projectId) return 0;
-  return startCanvasProjectResume(projectId, nodeIds, options, useCanvasStore);
+  const instance = findCanvasProjectInstance(projectId);
+  if (!instance || instance.closing) return 0;
+  return startCanvasProjectResume(projectId, nodeIds, options, instance.store);
 }
 
 export async function resumeCanvasGenerationInProject(projectId: string, nodeIds: ReadonlySet<string>): Promise<number> {
@@ -121,8 +123,13 @@ function startCanvasProjectResume(
       context: { nodeId: node.id, mediaType },
     });
 
-    void resumeNodeTask({
+    const releaseLease = () => {
+      resumeControls.delete(resumeLease);
+      releaseCanvasGenerationResumeLease(projectId, task.taskId, resumeLease);
+    };
+    void withCanvasProjectRuntime(projectId, runtime => resumeNodeTask({
       projectId,
+      runtime,
       signal: controller.signal,
       nodeId: node.id,
       sourceNodeId,
@@ -132,17 +139,19 @@ function startCanvasProjectResume(
       taskId: task.taskId,
       modelId: task.modelId,
       sourceCapability,
-      updateNodeData: (id, patch) => withCanvasProjectRuntime(projectId, async runtime => {
+      updateNodeData: async (id, patch) => {
         if (!isCanvasGenerationResumeLeaseCurrent(projectId, task.taskId, resumeLease)) return;
         runtime.store.getState().updateNodeData(id, patch);
         await runtime.persist();
-      }),
+      },
       setNodeGenerationProgress,
       isContextCurrent: () => isCanvasGenerationResumeLeaseCurrent(projectId, task.taskId, resumeLease),
-      releaseLease: () => {
-        resumeControls.delete(resumeLease);
-        releaseCanvasGenerationResumeLease(projectId, task.taskId, resumeLease);
-      },
+      releaseLease,
+    })).catch(error => {
+      releaseLease();
+      logger.error('原工程续查无法启动或保存', error, {
+        event: 'canvas.resume_polling.runtime_failed', taskId: task.taskId, context: { projectId, nodeId: node.id },
+      });
     });
   }
   return started;
@@ -150,6 +159,7 @@ function startCanvasProjectResume(
 
 interface ResumeNodeTaskInput {
   projectId: string;
+  runtime: CanvasTransactionRuntime;
   signal: AbortSignal;
   nodeId: string;
   sourceNodeId?: string;
@@ -169,6 +179,7 @@ interface ResumeNodeTaskInput {
 
 async function publishResumedExecution(input: {
   projectId: string;
+  runtime: CanvasTransactionRuntime;
   isContextCurrent: () => boolean;
   sourceNodeId?: string;
   resultNodeData: DynamicValueMap;
@@ -176,27 +187,28 @@ async function publishResumedExecution(input: {
 }): Promise<void> {
   const inputSignature = input.resultNodeData.generationInputSignature;
   if (
-    !input.isContextCurrent() || useProjectStore.getState().currentProjectId !== input.projectId
+    !input.isContextCurrent() || !input.runtime.isCurrent()
     || !input.sourceNodeId
     || typeof inputSignature !== 'string'
     || inputSignature.length === 0
-    || !useCanvasStore.getState().nodes.some((node) => node.id === input.sourceNodeId)
+    || !input.runtime.store.getState().nodes.some((node) => node.id === input.sourceNodeId)
   ) return;
   try {
-    if (!await isCanvasNodeInputSignatureCurrent(input.sourceNodeId, inputSignature)) {
+    if (!await isCanvasNodeInputSignatureCurrent(input.sourceNodeId, inputSignature, input.projectId)) {
       logger.info('[CanvasResume] 来源输入已变化，保留恢复结果但跳过发布', {
         event: 'canvas.resume_polling.publication.skipped_stale',
         context: { sourceNodeId: input.sourceNodeId, resultNodeIds: input.resultNodeIds },
       });
       return;
     }
-    if (!input.isContextCurrent() || useProjectStore.getState().currentProjectId !== input.projectId) return;
+    if (!input.isContextCurrent() || !input.runtime.isCurrent()) return;
     publishCanvasSuccessfulExecution({
       sourceNodeId: input.sourceNodeId,
       inputSignature,
       outputMode: 'result-nodes',
       resultNodeIds: input.resultNodeIds,
-    });
+    }, input.runtime.store);
+    await input.runtime.persist();
   } catch (error) {
     logger.error('[CanvasResume] 恢复结果发布失败', error, {
       event: 'canvas.resume_polling.publication.failed',
@@ -209,6 +221,7 @@ async function resumeNodeTask(input: ResumeNodeTaskInput): Promise<void> {
   const {
     nodeId,
     projectId,
+    runtime,
     signal,
     sourceNodeId,
     resultNodeType,
@@ -223,9 +236,9 @@ async function resumeNodeTask(input: ResumeNodeTaskInput): Promise<void> {
     releaseLease,
   } = input;
   let createdFilePaths: string[] = [];
-  const commitOutputs = (value: Parameters<typeof commitCanvasGenerationOutputs>[0]) => commitCanvasGenerationOutputsInProject(projectId, value);
+  const commitOutputs = (value: Parameters<typeof commitCanvasGenerationOutputs>[0]) => commitCanvasGenerationOutputsInProject(projectId, value, runtime);
   const publish = (resultNodeIds: string[], source = sourceNodeId) => publishResumedExecution({
-    projectId, isContextCurrent, sourceNodeId: source, resultNodeData, resultNodeIds,
+    projectId, runtime, isContextCurrent, sourceNodeId: source, resultNodeData, resultNodeIds,
   });
 
   try {
@@ -247,10 +260,7 @@ async function resumeNodeTask(input: ResumeNodeTaskInput): Promise<void> {
     createdFilePaths = [...new Set(result.createdFilePaths ?? [])];
     signal.throwIfAborted();
     if (!isContextCurrent()) return;
-    // 兼容旧测试替身与旧进程边界只返回 primary 的形状；正式运行时始终优先消费 outputs。
-    const resultOutputs = Array.isArray(result.outputs) && result.outputs.length > 0
-      ? result.outputs
-      : result.primary ? [result.primary] : [];
+    const resultOutputs = result.outputs;
 
     const storyboardContextValue = resultNodeData[STORYBOARD_GENERATION_RESUME_CONTEXT_FIELD];
     if (storyboardContextValue !== undefined && storyboardContextValue !== null) {
@@ -284,7 +294,7 @@ async function resumeNodeTask(input: ResumeNodeTaskInput): Promise<void> {
     if (sourceCapability?.outputPolicy.postProcess === 'local-redraw-composite') {
       if (!localRedrawContext) throw new Error('局部重绘恢复缺少裁剪上下文');
       const committed = await commitLocalRedrawGeneration({
-        projectId, signal,
+        projectId, runtime, signal,
         sourceNodeId,
         placeholderNodeId: nodeId,
         resultNodeType,
@@ -322,7 +332,7 @@ async function resumeNodeTask(input: ResumeNodeTaskInput): Promise<void> {
         throw new Error('图层拆分恢复缺少来源节点、源图或模型信息');
       }
       const committed = await commitLayerSeparationGeneration({
-        projectId, signal,
+        projectId, runtime, signal,
         sourceNodeId: resolvedSourceNodeId,
         placeholderNodeId: nodeId,
         resultNodeType,

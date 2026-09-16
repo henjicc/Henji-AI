@@ -5,6 +5,7 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vite
 import { loadRealModelsIntoRegistry } from '@/tests/loadRealModels';
 
 import { useCanvasGenerationProgressStore } from '@/stores/canvasGenerationProgressStore';
+import { setCanvasTestProjectState } from '@/tests/canvasProjectFixture';
 import { useCanvasStore } from '@/stores/canvasStore';
 import { flushCanvasProjectSnapshot, useProjectStore, type Project } from '@/stores/projectStore';
 
@@ -105,7 +106,7 @@ function setResumeProject(context: DynamicValue): { source: CanvasNode; result: 
     history: { past: [], future: [] },
   };
   useCanvasStore.getState().setCanvasData(nodes, edges, project.history);
-  useProjectStore.setState({
+  setCanvasTestProjectState({
     projects: [project],
     currentProjectId: project.id,
     currentProject: project,

@@ -3,6 +3,7 @@
 import { act, cleanup, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { setCanvasTestProjectState } from '@/tests/canvasProjectFixture';
 import { useCanvasStore } from '@/stores/canvasStore';
 import { useCanvasGenerationProgressStore } from '@/stores/canvasGenerationProgressStore';
 import { flushCanvasProjectSnapshot, useProjectStore, type Project } from '@/stores/projectStore';
@@ -168,7 +169,7 @@ function setResumeProject(nodes: CanvasNode[], edges: Project['edges']): void {
     nodeCount: nodes.length,
     history: { past: [], future: [] },
   };
-  useProjectStore.setState({
+  setCanvasTestProjectState({
     projects: [project],
     currentProjectId: project.id,
     currentProject: project,
@@ -214,14 +215,14 @@ describe('useCanvasResumePolling 结构化结果恢复', () => {
       viewport: { x: 0, y: 0, zoom: 1 },
       history: { past: [], future: [] },
     };
-    useProjectStore.setState({
+    setCanvasTestProjectState({
       projects: [project],
       currentProjectId: project.id,
       currentProject: project,
       isHydrated: true,
       isOpeningProject: false,
     });
-    generationMocks.resumeCanvasGeneration.mockResolvedValue({ primary: 'remote-result' });
+    generationMocks.resumeCanvasGeneration.mockResolvedValue({ primary: 'remote-result', outputs: ['remote-result'] });
     generationMocks.prepareNodeImage.mockResolvedValue({
       imageUrl: '/managed/storyboard-source.png',
       previewImageUrl: '/managed/storyboard-source-preview.png',
@@ -342,6 +343,7 @@ describe('useCanvasResumePolling 结构化结果恢复', () => {
   it('续查结果不是精确2:1时记为失败而不写入媒体', async () => {
     generationMocks.resumeCanvasGeneration.mockResolvedValue({
       primary: 'remote-result',
+      outputs: ['remote-result'],
       createdFilePaths: ['/data/Media/invalid-panorama.png'],
     });
     generationMocks.persistGenerationResult.mockResolvedValue({
@@ -484,12 +486,10 @@ describe('useCanvasResumePolling 结构化结果恢复', () => {
       nodes: [], edges: [], viewport: { x: 0, y: 0, zoom: 1 }, history: { past: [], future: [] },
     };
     await act(async () => {
-      useCanvasStore.getState().setCanvasData([], [], { past: [], future: [] });
-      useProjectStore.setState({ currentProjectId: projectB.id, currentProject: projectB });
+      setCanvasTestProjectState({ currentProjectId: projectB.id, currentProject: projectB });
     });
     await act(async () => {
-      useCanvasStore.getState().setCanvasData(projectA.nodes, projectA.edges, projectA.history);
-      useProjectStore.setState({ currentProjectId: projectA.id, currentProject: projectA });
+      setCanvasTestProjectState({ currentProjectId: projectA.id, currentProject: projectA });
     });
 
     expect(generationMocks.resumeCanvasGeneration).toHaveBeenCalledTimes(1);

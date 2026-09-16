@@ -4,7 +4,7 @@ import { CanvasPersistenceError, type CanvasTransactionRuntime } from './canvasP
 
 /** The lease protects ownership; transaction checkpoints arbitrate edits without holding a network lock. */
 export async function withCanvasProjectRuntime<T>(projectId: string, execute: (runtime: CanvasTransactionRuntime) => Promise<T>): Promise<T> {
-  const instance = await getCanvasProjectInstance(projectId)
+  const instance = findCanvasProjectInstance(projectId) ?? await getCanvasProjectInstance(projectId)
   const release = leaseCanvasProject(instance)
   try {
     return await execute({
