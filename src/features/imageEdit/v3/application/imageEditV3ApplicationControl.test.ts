@@ -10,14 +10,7 @@ import {
 } from '@/core/imageEdit/v3/documentFactory'
 import { createImageEditSparseMaskReferenceV3 } from '@/core/imageEdit/v3/layerTypes'
 import { ImageEditCommandBusV3 } from '@/features/imageEdit/v3/application/imageEditCommandBus'
-import {
-  imageEditV3DocumentRef,
-  imageEditV3GroupRef,
-  imageEditV3LayerRef,
-  imageEditV3MaskRef,
-  imageEditV3ResourceRef,
-  splitImageEditV3LayerRef,
-} from '@/features/imageEdit/v3/application/imageEditLiveSessionRegistry'
+import { imageEditV3DocumentRef, imageEditV3GroupRef, imageEditV3LayerRef, imageEditV3MaskRef, imageEditV3ResourceRef, splitImageEditV3LayerRef } from '@/features/imageEdit/v3/application/imageEditDocumentRefs'
 import { imageMarkRevision } from '@/features/imageMark/application/imageMarkSessionAccess'
 
 import {

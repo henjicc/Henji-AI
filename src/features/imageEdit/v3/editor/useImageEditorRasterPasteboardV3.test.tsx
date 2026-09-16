@@ -1,5 +1,6 @@
 /** @vitest-environment jsdom */
 
+import '@/tests/imageEditDocumentFixture'
 import { createRef } from 'react'
 import { act, cleanup, renderHook, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'

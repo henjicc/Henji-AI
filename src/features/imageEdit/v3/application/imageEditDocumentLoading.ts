@@ -1,0 +1,53 @@
+import { ImageEditorV3CommandRepository, loadImageEditorV3Document } from '@/commands/imageEditorV3'
+import type { ApplicationRef } from '@/core/application-control'
+import { ImageEditCommandHistoryV3 } from '@/core/imageEdit/v3/commandHistory'
+import {
+  findImageEditDocumentInstanceV3, getOrCreateImageEditDocumentInstanceV3,
+  getOrCreateImageEditPersistenceQueueV3, type ImageEditDocumentInstanceV3,
+} from './imageEditDocumentInstances'
+
+const loading = new Map<string, Promise<ImageEditDocumentInstanceV3>>()
+
+/** 读取与执行共用同一个实例；并发调用只载入一次，单个等待者取消不取消共享载入。 */
+export async function ensureImageEditDocumentInstanceV3(documentId: string): Promise<ImageEditDocumentInstanceV3> {
+  const existing = findImageEditDocumentInstanceV3(documentId)
+  if (existing) return existing
+  const pending = loading.get(documentId)
+  if (pending) return pending
+  const load = (async () => {
+    const snapshot = await loadImageEditorV3Document({
+      requestId: `image-edit-load:${crypto.randomUUID()}`,
+      documentRef: `image-edit-v3:${documentId}`,
+    })
+    if (!snapshot || snapshot.document.id !== documentId || snapshot.revision !== snapshot.document.revision) {
+      throw new Error('NOT_FOUND：图片文档不存在或快照不一致。')
+    }
+    // IPC 等待期间 UI 可能已经附着；只接纳首次创建的业务实例。
+    const installed = findImageEditDocumentInstanceV3(documentId)
+    if (installed) return installed
+    const history = new ImageEditCommandHistoryV3()
+    if (snapshot.history) history.restore(snapshot.document, snapshot.history)
+    else history.clear(snapshot.document)
+    const queue = getOrCreateImageEditPersistenceQueueV3({
+      repository: new ImageEditorV3CommandRepository(),
+      initialReference: { documentId, revision: snapshot.revision, previewRef: snapshot.previewRef },
+      initialHistory: history.createSnapshot(),
+    })
+    return getOrCreateImageEditDocumentInstanceV3(snapshot.document, {
+      historySnapshot: history.createSnapshot(),
+      resourceByteSizes: Object.fromEntries(snapshot.resources.map((resource) => [resource.resourceRef, resource.byteLength])),
+    }, { getQueue: () => queue })
+  })()
+  loading.set(documentId, load)
+  try { return await load }
+  finally { if (loading.get(documentId) === load) loading.delete(documentId) }
+}
+
+export async function ensureImageEditRefInstanceV3(ref: ApplicationRef): Promise<void> {
+  if ((!ref.kind.startsWith('image_edit.') && ref.kind !== 'image_mark.annotation') || !ref.id.startsWith('v3:')) {
+    throw new Error('NOT_FOUND')
+  }
+  const id = decodeURIComponent(ref.id.slice(3).split(':')[0])
+  if (!id) throw new Error('NOT_FOUND')
+  await ensureImageEditDocumentInstanceV3(id)
+}

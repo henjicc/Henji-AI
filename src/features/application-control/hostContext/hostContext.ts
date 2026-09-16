@@ -17,10 +17,7 @@ import { useSettingsStore } from '@/stores/settingsStore'
 import { useUiStore } from '@/stores/uiStore'
 import { useCameraStageStore } from '@/features/cameraStage/store/cameraStageStore'
 import { imageMarkRevision } from '@/features/imageMark/application/imageMarkSessionAccess'
-import {
-  getImageEditV3LiveRevision,
-  subscribeImageEditV3LiveSessions,
-} from '@/features/imageEdit/v3/application/imageEditLiveSessionRegistry'
+import { getImageEditDocumentCatalogRevisionV3, subscribeImageEditDocumentInstancesV3 } from '@/features/imageEdit/v3/application/imageEditDocumentInstances'
 import { getGenerationModelsRevision } from '@/features/generation/application/generationModelFields'
 import { useGenerationDraftStore } from '@/features/generation/store/generationDraftStore'
 import {
@@ -78,7 +75,7 @@ function syncPulledRevisions(): void {
   scopeRevisions.generation_draft = useGenerationDraftStore.getState().revision
   scopeRevisions.models = getGenerationModelsRevision()
   scopeRevisions.image_mark = imageMarkRevision()
-  scopeRevisions.image_edit = getImageEditV3LiveRevision()
+  scopeRevisions.image_edit = getImageEditDocumentCatalogRevisionV3()
 }
 
 /**
@@ -163,7 +160,7 @@ function startTracking(): () => void {
     subscribeApplicationDomainChanges((scope) => {
       if (scope === 'assets') syncAssetDomainRevision()
     }),
-    subscribeImageEditV3LiveSessions(() => {
+    subscribeImageEditDocumentInstancesV3(() => {
       revision += 1
       for (const listener of listeners) listener()
     }),

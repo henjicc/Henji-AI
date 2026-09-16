@@ -1,3 +1,4 @@
+import { getOrCreateImageEditPersistenceQueueV3 } from '@/features/imageEdit/v3/application/imageEditDocumentInstances'
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -15,9 +16,9 @@ import {
 } from '@/features/imageEdit/v3/application/imageEditorResourceDescriptorsV3'
 import { ImageEditorV3 } from '@/features/imageEdit/v3/editor'
 import {
-  ImageMarkV3PersistenceQueue,
-  type ImageMarkV3PersistenceStatus,
-} from '@/features/imageMark/standalone/imageMarkV3Persistence'
+  type ImageEditPersistenceV3Queue,
+  type ImageEditPersistenceV3Status,
+} from '@/features/imageEdit/v3/application/imageEditPersistenceQueue'
 import type { VisualToolEditorProps } from '../ui/tool-editors/types'
 import { MultiLayerDocumentNodeApplicationError } from '../application/multiLayerDocumentNodeApplicationContracts'
 import {
@@ -30,7 +31,6 @@ import {
 } from './canvasEditV3Session'
 
 const logger = createLogger('features.canvas.image_edit_v3.host')
-const AUTOSAVE_DELAY_MS = 500
 
 type BootstrapState =
   | { kind: 'loading' }
@@ -106,7 +106,7 @@ export function CanvasEditToolEditorV3Host({
   const [projectionFailure, setProjectionFailure] = useState<'sync' | 'target-changed' | null>(null)
   const projectionUnconfirmedRef = useRef(false)
   const mountedRef = useRef(true)
-  const persistenceRef = useRef<ImageMarkV3PersistenceQueue | null>(null)
+  const persistenceRef = useRef<ImageEditPersistenceV3Queue | null>(null)
   const persistenceHost = useMemo(() => ({
     getQueue: () => persistenceRef.current,
     projection: persistenceProjection,
@@ -128,7 +128,7 @@ export function CanvasEditToolEditorV3Host({
     } : undefined,
   }), [sourceImageUrl, onPersistenceConfirmed, persistenceProjection])
   const persistenceSnapshotRef = useRef<ImageEditPersistenceSnapshotV3 | null>(null)
-  const autosaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
   const interactionRootRef = useRef<HTMLDivElement | null>(null)
 
   const publishReference = useCallback((reference: ImageEditDocumentReferenceV3): void => {
@@ -148,10 +148,6 @@ export function CanvasEditToolEditorV3Host({
   }, [sourceImageUrl])
 
   const flushPending = useCallback(async (): Promise<ImageEditDocumentReferenceV3> => {
-    if (autosaveTimerRef.current) {
-      clearTimeout(autosaveTimerRef.current)
-      autosaveTimerRef.current = null
-    }
     const queue = persistenceRef.current
     const snapshot = persistenceSnapshotRef.current
     if (!queue || !snapshot) throw new Error('画布图片编辑文档尚未准备完成')
@@ -182,7 +178,7 @@ export function CanvasEditToolEditorV3Host({
     )
   }, [])
 
-  const reportPersistenceStatus = useCallback((status: ImageMarkV3PersistenceStatus): void => {
+  const reportPersistenceStatus = useCallback((status: ImageEditPersistenceV3Status): void => {
     if (!mountedRef.current) return
     if (status.kind === 'saving') {
       setSaving(true)
@@ -223,6 +219,9 @@ export function CanvasEditToolEditorV3Host({
     })
   }, [isCurrentReference, publishReference])
 
+  const observedDocumentId = bootstrap.kind === 'ready' ? bootstrap.document.id : null
+  useEffect(() => observedDocumentId ? persistenceRef.current?.subscribe(reportPersistenceStatus) : undefined, [observedDocumentId, reportPersistenceStatus])
+
   useEffect(() => {
     mountedRef.current = true
     return () => {
@@ -261,11 +260,11 @@ export function CanvasEditToolEditorV3Host({
     })().then((prepared) => {
       if (!active) return
       persistenceSnapshotRef.current = prepared.persistence
-      persistenceRef.current = new ImageMarkV3PersistenceQueue({
+      persistenceRef.current = getOrCreateImageEditPersistenceQueueV3({
         repository,
         initialReference: prepared.reference,
         initialHistory: prepared.history,
-        onStatusChange: reportPersistenceStatus,
+
       })
       setBootstrap({
         kind: 'ready',
@@ -314,9 +313,6 @@ export function CanvasEditToolEditorV3Host({
     }
   }, [interactionDisabled])
 
-  useEffect(() => () => {
-    if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current)
-  }, [])
 
   const handleDocumentChange = useCallback((document: ImageEditDocumentV3): void => {
     setBootstrap((current) => current.kind === 'ready'
@@ -343,12 +339,7 @@ export function CanvasEditToolEditorV3Host({
     })
     onExecutionReadyChangeRef.current?.(false)
     setSaveFailed(false)
-    if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current)
-    autosaveTimerRef.current = setTimeout(() => {
-      autosaveTimerRef.current = null
-      void flushPending().catch(() => undefined)
-    }, AUTOSAVE_DELAY_MS)
-  }, [flushPending])
+  }, [])
 
   if (bootstrap.kind === 'loading') {
     return (

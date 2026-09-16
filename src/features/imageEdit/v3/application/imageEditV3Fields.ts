@@ -11,14 +11,7 @@ import {
   type ImageEditLayerV3,
 } from '@/core/imageEdit/v3/layerTypes'
 
-import {
-  imageEditV3DocumentRef,
-  imageEditV3GroupRef,
-  imageEditV3LayerRef,
-  imageEditV3MaskRef,
-  imageEditV3ResourceRef,
-  type ImageEditLiveLayerLocationV3,
-} from './imageEditLiveSessionRegistry'
+import { imageEditV3DocumentRef, imageEditV3GroupRef, imageEditV3LayerRef, imageEditV3MaskRef, imageEditV3ResourceRef, type ImageEditLiveLayerLocationV3 } from './imageEditDocumentRefs'
 
 export const IMAGE_EDIT_V3_ENTITY_TYPES = {
   group: 'image_edit.group',

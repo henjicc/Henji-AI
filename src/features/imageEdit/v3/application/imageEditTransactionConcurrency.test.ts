@@ -4,7 +4,7 @@ import { createImageEditDocumentV3, createImageEditEffectLayerV3 } from '@/core/
 import { getApplicationControlExecutionEngine, getApplicationReflectionRegistry } from '@/features/application-control/capabilities/applicationControlRegistry'
 import { registerPersistedImageEditTestSession } from '@/tests/imageEditPersistenceTestSession'
 import { ImageEditCommandBusV3 } from './imageEditCommandBus'
-import { imageEditV3LayerRef } from './imageEditLiveSessionRegistry'
+import { imageEditV3LayerRef } from './imageEditDocumentRefs'
 import type { ImageEditDocumentV3 } from '@/core/imageEdit/v3/documentTypes'
 
 let dispose: (() => void) | undefined

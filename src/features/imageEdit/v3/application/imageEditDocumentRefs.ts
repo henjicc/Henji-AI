@@ -2,40 +2,13 @@ import type { ApplicationRef } from '@/core/application-control'
 import type { ImageEditDocumentV3 } from '@/core/imageEdit/v3/documentTypes'
 import type { ImageEditGroupLayerV3, ImageEditLayerV3 } from '@/core/imageEdit/v3/layerTypes'
 
-import type { ImageEditCommandBusV3 } from './imageEditCommandBus'
-import { ImageEditPersistenceOwnerV3, type ImageEditPersistenceHostV3 } from './imageEditPersistenceOwner'
-
 const V3_REF_PREFIX = 'v3:'
-
-interface LiveSessionRecordV3 {
-  registrationId: symbol
-  sessionId: string
-  bus: ImageEditCommandBusV3
-  persistenceOwner?: ImageEditPersistenceOwnerV3
-  disposeBusSubscription: () => void
-}
-
-export interface ImageEditLiveSessionV3 {
-  sessionId: string
-  documentId: string
-  bus: ImageEditCommandBusV3
-  persistenceOwner?: ImageEditPersistenceOwnerV3
-}
 
 export interface ImageEditLiveLayerLocationV3 {
   layer: ImageEditLayerV3
   parentId: string | null
   index: number
   ancestors: ImageEditGroupLayerV3[]
-}
-
-const sessionsByDocumentId = new Map<string, LiveSessionRecordV3>()
-const listeners = new Set<() => void>()
-let revision = 0
-
-function emitChange(): void {
-  revision += 1
-  for (const listener of listeners) listener()
 }
 
 function encodePart(value: string): string {
@@ -120,72 +93,6 @@ export function splitImageEditV3AnnotationRef(ref: ApplicationRef): {
 } {
   const [documentId, layerId, annotationId] = parts(ref, 'image_mark.annotation', 3)
   return { documentId, layerId, annotationId }
-}
-
-/**
- * 只登记当前命令总线的轻量句柄。文档与像素始终由总线/资源库持有，这里不复制任何真相。
- */
-export function registerImageEditV3LiveSession(
-  sessionId: string,
-  bus: ImageEditCommandBusV3,
-  persistenceHost?: ImageEditPersistenceHostV3,
-): () => void {
-  const documentId = bus.getSnapshot().document.id
-  const registrationId = Symbol(sessionId)
-  const previous = sessionsByDocumentId.get(documentId)
-  previous?.disposeBusSubscription()
-  previous?.persistenceOwner?.dispose()
-  const queue = persistenceHost?.getQueue()
-  const persistenceOwner = queue ? new ImageEditPersistenceOwnerV3(
-    documentId, queue, () => bus.getPersistenceSnapshot(), persistenceHost?.confirmProjection, persistenceHost?.projection,
-  ) : undefined
-  let lastDocument = bus.getSnapshot().document
-  const disposeBusSubscription = bus.subscribe((snapshot) => {
-    const current = sessionsByDocumentId.get(documentId)
-    if (current?.registrationId !== registrationId || snapshot.document === lastDocument) return
-    lastDocument = snapshot.document
-    emitChange()
-  })
-  sessionsByDocumentId.set(documentId, {
-    registrationId,
-    sessionId,
-    bus,
-    persistenceOwner,
-    disposeBusSubscription,
-  })
-  emitChange()
-  return () => {
-    const current = sessionsByDocumentId.get(documentId)
-    if (current?.registrationId !== registrationId) return
-    current.disposeBusSubscription()
-    current.persistenceOwner?.dispose()
-    sessionsByDocumentId.delete(documentId)
-    emitChange()
-  }
-}
-
-export function listImageEditV3LiveSessions(): ImageEditLiveSessionV3[] {
-  return [...sessionsByDocumentId.entries()].map(([documentId, record]) => ({
-    sessionId: record.sessionId,
-    documentId,
-    bus: record.bus,
-    persistenceOwner: record.persistenceOwner,
-  }))
-}
-
-export function requireImageEditV3LiveSession(documentId: string): ImageEditLiveSessionV3 {
-  const record = sessionsByDocumentId.get(documentId)
-  if (!record) throw new Error('NOT_FOUND：目标 V3 图片文档当前未在编辑器中打开。')
-  return { sessionId: record.sessionId, documentId, bus: record.bus, persistenceOwner: record.persistenceOwner }
-}
-
-export function getImageEditV3LiveRevision(): number {
-  return revision
-}
-
-export function subscribeImageEditV3LiveSessions(listener: () => void): () => void {
-  listeners.add(listener)
-  return () => listeners.delete(listener)
 }
 
 export function findImageEditV3LiveLayer(

@@ -1,6 +1,8 @@
 /** @vitest-environment jsdom */
 
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import '@/tests/imageEditDocumentFixture'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { requireImageEditDocumentInstanceV3 } from '../application/imageEditDocumentInstances'
 import { useState } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -135,8 +137,14 @@ describe('ImageEditorV3 lifecycle guards', () => {
     fireEvent.mouseMove(remountedStage, { buttons: 1, clientX: 120, clientY: 100 })
     expect(remounted.dataset.annotationDrawing).toBe('true')
     rendered.rerender(editor({ ...initial, revision: 1 }))
-    await waitFor(() => expect(remounted.dataset.annotationDrawing).toBe('false'))
+    expect(remounted.dataset.annotationDrawing).toBe('true')
     expect(changes).not.toHaveBeenCalled()
+    act(() => requireImageEditDocumentInstanceV3(initial.id).bus.dispatch({
+      type: 'layer.update-common', commandId: 'external-edit', expectedRevision: 0,
+      layerId: initial.layers[0].id, patch: { opacity: 0.6 },
+    }))
+    await waitFor(() => expect(remounted.dataset.annotationDrawing).toBe('false'))
+    expect(changes).toHaveBeenCalledTimes(1)
   })
 
   it('添加空蒙版只提交一次，切换图层不会把蒙版写到新选择', async () => {

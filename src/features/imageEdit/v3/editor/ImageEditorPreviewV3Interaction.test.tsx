@@ -1,4 +1,5 @@
 /** @vitest-environment jsdom */
+import '@/tests/imageEditDocumentFixture'
 import { cleanup, fireEvent, render, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
@@ -7,7 +8,7 @@ import {
   createImageEditRasterLayerV3,
 } from '@/core/imageEdit/v3/documentFactory'
 import i18n from '@/i18n/config'
-import { requireImageEditV3LiveSession } from '../application/imageEditLiveSessionRegistry'
+import { requireImageEditDocumentInstanceV3 } from '../application/imageEditDocumentInstances'
 import type { ImageEditorManagedPreviewResultV3 } from '../execution/imageEditorPreviewClientV3'
 import { useImageEditorInteractionStoreV3, useImageEditorSessionStoreV3 } from '../store'
 interface ManagedPreviewTestStateV3 {
@@ -298,7 +299,7 @@ describe('ImageEditorPreviewV3 managed frame ownership', () => {
     await waitFor(() => expect(
       Object.values(useImageEditorSessionStoreV3.getState().sessions)[0]?.selectedLayerIds,
     ).toEqual([document.layers[0].id]))
-    const liveSession = requireImageEditV3LiveSession(document.id)
+    const liveSession = requireImageEditDocumentInstanceV3(document.id)
     await waitFor(() => expect(surface.dataset.layerPickingReadyCount).toBe('3'))
     const targetFeedback = layerFrames[1]
     const untouchedFeedback = [layerFrames[0], layerFrames[2]]
@@ -410,7 +411,7 @@ describe('ImageEditorPreviewV3 managed frame ownership', () => {
     await waitFor(() => expect(
       Object.values(useImageEditorSessionStoreV3.getState().sessions)[0]?.selectedLayerIds,
     ).toEqual([document.layers[0].id]))
-    const liveSession = requireImageEditV3LiveSession(document.id)
+    const liveSession = requireImageEditDocumentInstanceV3(document.id)
     fireEvent.pointerDown(surface, {
       pointerId: 51, isPrimary: true, button: 0, clientX: 10, clientY: 10,
     })
@@ -423,7 +424,7 @@ describe('ImageEditorPreviewV3 managed frame ownership', () => {
     if (!publishDraft) throw new Error('多图层移动没有安排草稿帧')
     publishDraft(16)
     expect(Object.keys(liveSession.bus.getSnapshot().previewOverrides)).toEqual([
-      `${liveSession.sessionId}:${document.layers[0].id}:move`,
+      `${Object.keys(useImageEditorSessionStoreV3.getState().sessions)[0]}:${document.layers[0].id}:move`,
     ])
     fireEvent.pointerMove(surface, { pointerId: 51, clientX: 55, clientY: 35 })
     expect(requestFrame).toHaveBeenCalledTimes(2)
@@ -469,7 +470,7 @@ describe('ImageEditorPreviewV3 managed frame ownership', () => {
     await waitFor(() => expect(
       Object.values(useImageEditorSessionStoreV3.getState().sessions)[0]?.selectedLayerIds,
     ).toEqual([document.layers[0].id]))
-    const liveSession = requireImageEditV3LiveSession(document.id)
+    const liveSession = requireImageEditDocumentInstanceV3(document.id)
     fireEvent.pointerDown(surface, {
       pointerId: 71, isPrimary: true, button: 0, clientX: 10, clientY: 10,
     })

@@ -58,6 +58,7 @@ export class ImageEditCommandBusV3 {
   private readonly onPersistentChange?: (snapshot: ImageEditPersistenceSnapshotV3) => void;
   private readonly previewOverrides = new Map<string, ImageEditPreviewOverrideV3>();
   private readonly listeners = new Set<ImageEditCommandBusListenerV3>();
+  private readonly persistenceListeners = new Set<(snapshot: ImageEditPersistenceSnapshotV3) => void>();
   private readonly resourceByteSizes = new Map<string, number>();
 
   constructor(document: ImageEditDocumentV3, options: ImageEditCommandBusOptionsV3 = {}) {
@@ -97,6 +98,15 @@ export class ImageEditCommandBusV3 {
       history: this.history.createSnapshot(),
       retainedResources: this.history.getRetainedResources(),
     };
+  }
+
+  getResourceByteSizes(): Readonly<Record<string, number>> {
+    return Object.fromEntries(this.resourceByteSizes);
+  }
+
+  subscribePersistence(listener: (snapshot: ImageEditPersistenceSnapshotV3) => void): () => void {
+    this.persistenceListeners.add(listener);
+    return () => this.persistenceListeners.delete(listener);
   }
 
   dispatch(command: ImageEditCommandV3): ImageEditDocumentV3 {
@@ -215,6 +225,7 @@ export class ImageEditCommandBusV3 {
     this.repository?.cancelAutosave(this.document.id);
     this.previewOverrides.clear();
     this.listeners.clear();
+    this.persistenceListeners.clear();
   }
 
   private persistChange(expectedRevision: number): void {
@@ -225,6 +236,7 @@ export class ImageEditCommandBusV3 {
       history: snapshot.history,
     });
     this.onPersistentChange?.(snapshot);
+    for (const listener of this.persistenceListeners) listener(snapshot);
   }
 
   private emit(): void {

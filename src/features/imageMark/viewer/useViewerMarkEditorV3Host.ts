@@ -1,3 +1,4 @@
+import { getOrCreateImageEditPersistenceQueueV3 } from '@/features/imageEdit/v3/application/imageEditDocumentInstances'
 import { flushImageEditHostPersistenceV3 } from '@/features/imageEdit/v3/application/imageEditPersistenceOperations'
 import type { ImageEditPersistenceHostV3 } from '@/features/imageEdit/v3/application/imageEditPersistenceOwner'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -29,9 +30,9 @@ import { reconcileImageEditorV3ResourceDescriptors } from '@/features/imageEdit/
 import { resolveImageEditorReadinessReasonV3 } from '@/features/imageEdit/v3/editor/readinessPresentationV3'
 import type { ImageEditorV3DocumentRef } from '@/platform/contracts/imageEditorV3'
 import {
-  ImageMarkV3PersistenceQueue,
-  type ImageMarkV3PersistenceStatus,
-} from '../standalone/imageMarkV3Persistence'
+  type ImageEditPersistenceV3Queue,
+  type ImageEditPersistenceV3Status,
+} from '@/features/imageEdit/v3/application/imageEditPersistenceQueue'
 import {
   createViewerMarkEditorV3Repository,
   createViewerMarkEditorV3SessionReference,
@@ -47,7 +48,6 @@ import {
 } from './viewerMarkEditorV3Materialization'
 
 const logger = createLogger('features.imageMark.viewer_v3_host')
-const AUTOSAVE_DELAY_MS = 500
 
 export interface ViewerMarkEditorV3HostProps {
   imageUrl: string
@@ -82,7 +82,7 @@ export type ViewerMarkEditorV3BootstrapState =
 export interface ViewerMarkEditorV3HostController {
   persistenceHost: ImageEditPersistenceHostV3
   bootstrap: ViewerMarkEditorV3BootstrapState
-  persistenceStatus: ImageMarkV3PersistenceStatus | null
+  persistenceStatus: ImageEditPersistenceV3Status | null
   materialization: ViewerMarkV3MaterializationState | null
   busy: boolean
   outputReadiness: ImageEditorCapabilityReadinessV3
@@ -112,16 +112,16 @@ export function useViewerMarkEditorV3Host(
   onSaveRef.current = props.onSave
   const [bootstrap, setBootstrap] = useState<ViewerMarkEditorV3BootstrapState>({ kind: 'loading' })
   const [bootstrapAttempt, setBootstrapAttempt] = useState(0)
-  const [persistenceStatus, setPersistenceStatus] = useState<ImageMarkV3PersistenceStatus | null>(null)
+  const [persistenceStatus, setPersistenceStatus] = useState<ImageEditPersistenceV3Status | null>(null)
   const [materialization, setMaterialization] = useState<ViewerMarkV3MaterializationState | null>(null)
   const [busy, setBusy] = useState(false)
   const mountedRef = useRef(true)
   const documentIdRef = useRef(createImageEditIdV3('viewer-document'))
   const sourceUrlRef = useRef(imageUrl)
   const persistenceSnapshotRef = useRef<ImageEditPersistenceSnapshotV3 | null>(null)
-  const persistenceRef = useRef<ImageMarkV3PersistenceQueue | null>(null)
+  const persistenceRef = useRef<ImageEditPersistenceV3Queue | null>(null)
   const persistenceHost = useMemo<ImageEditPersistenceHostV3>(() => ({ getQueue: () => persistenceRef.current }), [])
-  const autosaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
   const materializationAbortRef = useRef<AbortController | null>(null)
 
   const publishReference = useCallback((reference: ImageEditDocumentReferenceV3): void => {
@@ -133,7 +133,7 @@ export function useViewerMarkEditorV3Host(
     onSessionChangeRef.current?.(session)
   }, [])
 
-  const reportPersistenceStatus = useCallback((status: ImageMarkV3PersistenceStatus): void => {
+  const reportPersistenceStatus = useCallback((status: ImageEditPersistenceV3Status): void => {
     if (!mountedRef.current) return
     setPersistenceStatus(status)
     if (status.kind === 'saving') {
@@ -162,6 +162,9 @@ export function useViewerMarkEditorV3Host(
       },
     })
   }, [publishReference])
+
+  const observedDocumentId = bootstrap.kind === 'ready' ? bootstrap.document.id : null
+  useEffect(() => observedDocumentId ? persistenceRef.current?.subscribe(reportPersistenceStatus) : undefined, [observedDocumentId, reportPersistenceStatus])
 
   useEffect(() => {
     mountedRef.current = true
@@ -192,11 +195,11 @@ export function useViewerMarkEditorV3Host(
       if (!active) return
       sourceUrlRef.current = prepared.sourceUrl
       persistenceSnapshotRef.current = prepared.persistence
-      persistenceRef.current = new ImageMarkV3PersistenceQueue({
+      persistenceRef.current = getOrCreateImageEditPersistenceQueueV3({
         repository,
         initialReference: prepared.reference,
         initialHistory: prepared.history,
-        onStatusChange: reportPersistenceStatus,
+
       })
       setPersistenceStatus({ kind: 'idle', reference: prepared.reference })
       setBootstrap({
@@ -238,29 +241,12 @@ export function useViewerMarkEditorV3Host(
   }, [bootstrapAttempt, imageUrl, publishReference, reportPersistenceStatus, repository])
 
   const flushPending = useCallback(async (): Promise<ImageEditDocumentReferenceV3> => {
-    if (autosaveTimerRef.current) {
-      clearTimeout(autosaveTimerRef.current)
-      autosaveTimerRef.current = null
-    }
     const queue = persistenceRef.current
     const snapshot = persistenceSnapshotRef.current
     if (!queue || !snapshot) throw new Error('快速编辑文档尚未准备完成')
     return flushImageEditHostPersistenceV3(queue, snapshot)
   }, [])
 
-  useEffect(() => () => {
-    if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current)
-    const queue = persistenceRef.current
-    const snapshot = persistenceSnapshotRef.current
-    if (!queue || !snapshot) return
-    queue.enqueue(snapshot)
-    void queue.flush().catch((error: unknown) => {
-      logger.error('查看器快速编辑退出前保存失败', {
-        event: 'image_editor_v3.viewer.unmount_save.failed',
-        context: { errorName: error instanceof Error ? error.name : 'UnknownError' },
-      })
-    })
-  }, [])
 
   const handleDocumentChange = useCallback((document: ImageEditDocumentV3): void => {
     setBootstrap((current) => current.kind === 'ready'
@@ -282,17 +268,7 @@ export function useViewerMarkEditorV3Host(
           ),
         }
       : current)
-    persistenceRef.current?.enqueue(snapshot)
-    if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current)
-    autosaveTimerRef.current = setTimeout(() => {
-      autosaveTimerRef.current = null
-      void flushPending().catch(() => {
-        if (mountedRef.current) {
-          showNotification(t('imageEditor.v3.viewer.notifications.autosaveFailed'), 'error')
-        }
-      })
-    }, AUTOSAVE_DELAY_MS)
-  }, [flushPending, showNotification, t])
+  }, [])
 
   const outputReadiness = useMemo<ImageEditorCapabilityReadinessV3>(() => (
     bootstrap.kind === 'ready'
@@ -357,15 +333,7 @@ export function useViewerMarkEditorV3Host(
         previewRef: result.previewRef,
       }
       sourceUrlRef.current = result.mediaUrl
-      const persistence = persistenceSnapshotRef.current
-      if (persistence) {
-        persistenceRef.current = new ImageMarkV3PersistenceQueue({
-          repository,
-          initialReference: nextReference,
-          initialHistory: persistence.history,
-          onStatusChange: reportPersistenceStatus,
-        })
-      }
+      persistenceRef.current?.confirmProjectionReference(nextReference)
       setPersistenceStatus({ kind: 'idle', reference: nextReference })
       setBootstrap((current) => current.kind === 'ready'
         ? { ...current, sourceUrl: result.mediaUrl }
@@ -409,8 +377,6 @@ export function useViewerMarkEditorV3Host(
     busy,
     flushPending,
     outputReadiness,
-    reportPersistenceStatus,
-    repository,
     showNotification,
     t,
   ])

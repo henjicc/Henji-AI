@@ -5,7 +5,7 @@ import { getApplicationControlExecutionEngine, getApplicationReflectionRegistry 
 import { useCanvasStore } from '@/stores/canvasStore'
 import { createAttachedImageEditPersistenceFixture } from '@/tests/imageEditAttachedPersistenceFixture'
 import { installHarnessNativeStorage, readHarnessImageEditDocument, uninstallHarnessNativeStorage } from '@/tests/harnessNativeStorage'
-import { imageEditV3LayerRef } from './imageEditLiveSessionRegistry'
+import { imageEditV3LayerRef } from './imageEditDocumentRefs'
 import { retryImageEditDocumentSaveV3 } from './imageEditPersistenceOperations'
 
 let dispose: (() => void) | undefined

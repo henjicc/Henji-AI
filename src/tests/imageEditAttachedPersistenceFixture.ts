@@ -3,8 +3,8 @@ import { ImageEditorV3CommandRepository } from '@/commands/imageEditorV3'
 import { getPlatform } from '@/platform/runtime'
 import { createImageEditDocumentV3, createImageEditEffectLayerV3 } from '@/core/imageEdit/v3/documentFactory'
 import { ImageEditCommandBusV3 } from '@/features/imageEdit/v3/application/imageEditCommandBus'
-import { registerImageEditV3LiveSession } from '@/features/imageEdit/v3/application/imageEditLiveSessionRegistry'
-import { ImageMarkV3PersistenceQueue } from '@/features/imageMark/standalone/imageMarkV3Persistence'
+import { adoptImageEditDocumentInstanceForTestsV3 } from '@/features/imageEdit/v3/application/imageEditDocumentInstances'
+import { ImageEditPersistenceV3Queue } from '@/features/imageEdit/v3/application/imageEditPersistenceQueue'
 import { createMultiLayerDocumentNodeApplicationService } from '@/features/canvas/application/multiLayerDocumentNodeApplicationService'
 import type { MultiLayerDocumentNodePort } from '@/features/canvas/application/multiLayerDocumentNodeApplicationContracts'
 import { createMultiLayerDocumentProjectionCanvasPort } from '@/features/canvas/application/multiLayerDocumentNodeCanvasAdapter'
@@ -50,8 +50,8 @@ export async function createAttachedImageEditPersistenceFixture() {
   const confirmation = createMultiLayerDocumentPersistenceConfirmation({ projectId, nodeId: 'attached-node', documentRef: initialSession.documentRef }, {
     saveProjection: service.saveMaterializedProjection,
   })
-  const queue = new ImageMarkV3PersistenceQueue({ repository, initialReference: initial, initialHistory: bus.getPersistenceSnapshot().history })
-  const dispose = registerImageEditV3LiveSession('attached-session', bus, { getQueue: () => queue,
+  const queue = new ImageEditPersistenceV3Queue({ repository, initialReference: initial, initialHistory: bus.getPersistenceSnapshot().history })
+  const dispose = adoptImageEditDocumentInstanceForTestsV3('attached-session', bus, { getQueue: () => queue,
     projection: confirmation.projection,
     confirmProjection: (reference) => confirmation.confirm(createCanvasEditV3SessionReference(initialSession.sourceUrl, reference)) })
   return { bus, projectId, document, queue, confirmation, materialize, dispose }

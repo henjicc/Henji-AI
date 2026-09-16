@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { createImageEditDocumentV3, createImageEditRasterLayerV3 } from '@/core/imageEdit/v3/documentFactory'
 import type { ImageEditDocumentRepositoryV3 } from '@/core/imageEdit/v3/serviceContracts'
-import { ImageMarkV3PersistenceQueue } from '@/features/imageMark/standalone/imageMarkV3Persistence'
+import { ImageEditPersistenceV3Queue } from '@/features/imageEdit/v3/application/imageEditPersistenceQueue'
 import { ImageEditCommandBusV3 } from './imageEditCommandBus'
 import { ImageEditPersistenceOwnerV3 } from './imageEditPersistenceOwner'
 import { getLogEvents } from '@/core/logging/store'
@@ -9,7 +9,7 @@ import { getLogEvents } from '@/core/logging/store'
 function setup(save?: ImageEditDocumentRepositoryV3['save']) {
   const bus = new ImageEditCommandBusV3(createImageEditDocumentV3({ width: 8, height: 8, documentId: 'owned' }))
   const write = vi.fn(save ?? (async (document) => ({ documentId: document.id, revision: document.revision, previewRef: null })))
-  const queue = new ImageMarkV3PersistenceQueue({ repository: { save: write },
+  const queue = new ImageEditPersistenceV3Queue({ repository: { save: write },
     initialReference: { documentId: 'owned', revision: 0, previewRef: null }, initialHistory: bus.getPersistenceSnapshot().history })
   const owner = new ImageEditPersistenceOwnerV3('owned', queue, () => bus.getPersistenceSnapshot())
   const add = (id: string) => bus.dispatch({ type: 'layer.add', commandId: id,

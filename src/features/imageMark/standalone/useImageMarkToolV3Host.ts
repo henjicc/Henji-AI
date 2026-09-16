@@ -1,3 +1,4 @@
+import { getOrCreateImageEditPersistenceQueueV3, readImageEditDocumentInstanceV3 } from '@/features/imageEdit/v3/application/imageEditDocumentInstances'
 import { flushImageEditHostPersistenceV3 } from '@/features/imageEdit/v3/application/imageEditPersistenceOperations'
 import type { ImageEditPersistenceHostV3 } from '@/features/imageEdit/v3/application/imageEditPersistenceOwner'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -28,9 +29,9 @@ import {
 import type { ImageEditorV3ResourceDescriptor } from '@/platform/contracts/imageEditorV3'
 import type { ImageEditorV3PackageThumbnailSnapshot } from '@/features/imageEdit/v3/editor/types'
 import {
-  ImageMarkV3PersistenceQueue,
-  type ImageMarkV3PersistenceStatus,
-} from './imageMarkV3Persistence'
+  type ImageEditPersistenceV3Queue,
+  type ImageEditPersistenceV3Status,
+} from '@/features/imageEdit/v3/application/imageEditPersistenceQueue'
 import {
   createImageMarkToolV3RequestId,
   useImageMarkToolV3Actions,
@@ -43,7 +44,6 @@ import {
 } from './imageMarkV3Source'
 
 const logger = createLogger('features.imageMark.v3_host')
-const AUTOSAVE_DELAY_MS = 500
 
 export interface ImageMarkToolV3HostProps {
   sourceImageUrl: string
@@ -76,7 +76,7 @@ export type { ImageMarkV3RasterExportUiState } from './useImageMarkToolV3Actions
 export interface ImageMarkToolV3HostController extends ImageMarkToolV3ActionsController {
   bootstrap: ImageMarkV3BootstrapState
   persistenceHost: ImageEditPersistenceHostV3
-  persistenceStatus: ImageMarkV3PersistenceStatus | null
+  persistenceStatus: ImageEditPersistenceV3Status | null
   retryBootstrap: () => void
   flushPending: () => Promise<ImageEditDocumentReferenceV3>
   handleDocumentChange: (document: ImageEditDocumentV3) => void
@@ -99,7 +99,7 @@ export function useImageMarkToolV3Host(
   const repository = useMemo(() => new ImageEditorV3CommandRepository(), [])
   const [bootstrap, setBootstrap] = useState<ImageMarkV3BootstrapState>({ kind: 'loading' })
   const [bootstrapAttempt, setBootstrapAttempt] = useState(0)
-  const [persistenceStatus, setPersistenceStatus] = useState<ImageMarkV3PersistenceStatus | null>(null)
+  const [persistenceStatus, setPersistenceStatus] = useState<ImageEditPersistenceV3Status | null>(null)
   const latestSessionRef = useRef<ImageEditSessionReferenceV3 | null>(initialSession ?? null)
   const latestSessionSourceKeyRef = useRef(sourceSessionKey)
   if (latestSessionSourceKeyRef.current !== sourceSessionKey) {
@@ -112,9 +112,9 @@ export function useImageMarkToolV3Host(
   const sessionSourceUrlRef = useRef(initialSession?.sourceUrl ?? sourceImageUrl)
   const documentIdRef = useRef(createImageEditIdV3('document'))
   const persistenceSnapshotRef = useRef<ImageEditPersistenceSnapshotV3 | null>(null)
-  const persistenceRef = useRef<ImageMarkV3PersistenceQueue | null>(null)
+  const persistenceRef = useRef<ImageEditPersistenceV3Queue | null>(null)
   const persistenceHost = useMemo<ImageEditPersistenceHostV3>(() => ({ getQueue: () => persistenceRef.current }), [])
-  const autosaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
   const packageThumbnailRef = useRef<ImageEditorV3PackageThumbnailSnapshot | null>(null)
 
   useEffect(() => {
@@ -124,9 +124,10 @@ export function useImageMarkToolV3Host(
     }
   }, [])
 
-  const reportPersistenceStatus = useCallback((status: ImageMarkV3PersistenceStatus): void => {
+  const reportPersistenceStatus = useCallback((status: ImageEditPersistenceV3Status): void => {
     if (!mountedRef.current) return
     setPersistenceStatus(status)
+    if (status.kind === 'failed') showNotification(t('imageEditor.v3.host.notifications.autosaveFailed'), 'error')
     if (status.kind === 'idle') {
       const session: ImageEditSessionReferenceV3 = {
         kind: 'image-edit-v3',
@@ -138,7 +139,10 @@ export function useImageMarkToolV3Host(
       latestSessionRef.current = session
       onSessionReferenceChangeRef.current?.(session)
     }
-  }, [])
+  }, [showNotification, t])
+
+  const observedDocumentId = bootstrap.kind === 'ready' ? bootstrap.document.id : null
+  useEffect(() => observedDocumentId ? persistenceRef.current?.subscribe(reportPersistenceStatus) : undefined, [observedDocumentId, reportPersistenceStatus])
 
   useEffect(() => {
     let active = true
@@ -167,7 +171,15 @@ export function useImageMarkToolV3Host(
         let initialPersistence: ImageEditPersistenceSnapshotV3
         let initialReference: ImageEditDocumentReferenceV3
         let resourceDescriptors: ImageEditorV3ResourceDescriptor[]
-        if (sessionToRestore) {
+        const current = sessionToRestore && readImageEditDocumentInstanceV3(sessionToRestore.documentRef.slice('image-edit-v3:'.length))
+        if (current && sessionToRestore) {
+          document = current.document
+          documentIdRef.current = document.id
+          initialPersistence = current.persistence
+          initialReference = current.reference
+          resourceDescriptors = current.resourceDescriptors
+          sessionSourceUrlRef.current = sessionToRestore.sourceUrl
+        } else if (sessionToRestore) {
           const snapshot = await loadImageEditorV3Document({
             requestId: createImageMarkToolV3RequestId('session-restore'),
             documentRef: sessionToRestore.documentRef,
@@ -238,11 +250,11 @@ export function useImageMarkToolV3Host(
           sessionSourceUrlRef.current = managed.mediaUrl
         }
         if (!active) return
-        const queue = new ImageMarkV3PersistenceQueue({
+        const queue = getOrCreateImageEditPersistenceQueueV3({
           repository,
           initialReference,
           initialHistory: initialPersistence.history,
-          onStatusChange: reportPersistenceStatus,
+
         })
         persistenceRef.current = queue
         persistenceSnapshotRef.current = initialPersistence
@@ -288,33 +300,12 @@ export function useImageMarkToolV3Host(
   ])
 
   const flushPending = useCallback(async (): Promise<ImageEditDocumentReferenceV3> => {
-    if (autosaveTimerRef.current) {
-      clearTimeout(autosaveTimerRef.current)
-      autosaveTimerRef.current = null
-    }
     const queue = persistenceRef.current
     const snapshot = persistenceSnapshotRef.current
     if (!queue || !snapshot) throw new Error('图片编辑文档尚未准备完成')
     return flushImageEditHostPersistenceV3(queue, snapshot)
   }, [])
 
-  useEffect(() => () => {
-    if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current)
-    const queue = persistenceRef.current
-    const snapshot = persistenceSnapshotRef.current
-    if (!queue || !snapshot) return
-    queue.enqueue(snapshot)
-    void queue.flush().catch((error: unknown) => {
-      logger.error('图片编辑 V3 工具箱宿主离开前保存失败', error, {
-        event: 'image_editor_v3.toolbox.unmount_save.failed',
-        context: {
-          documentId: snapshot.document.id,
-          revision: snapshot.document.revision,
-          errorName: error instanceof Error ? error.name : 'UnknownError',
-        },
-      })
-    })
-  }, [])
 
   const handleDocumentChange = useCallback((document: ImageEditDocumentV3): void => {
     setBootstrap((current) => current.kind === 'ready'
@@ -338,35 +329,17 @@ export function useImageMarkToolV3Host(
         resourceDescriptors,
       }
     })
-    persistenceRef.current?.enqueue(snapshot)
-    if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current)
-    autosaveTimerRef.current = setTimeout(() => {
-      autosaveTimerRef.current = null
-      void flushPending().catch((error: unknown) => {
-        logger.error('图片编辑 V3 工具箱宿主自动保存失败', error, {
-          event: 'image_editor_v3.toolbox.autosave.failed',
-          context: {
-            documentId: snapshot.document.id,
-            revision: snapshot.document.revision,
-            errorName: error instanceof Error ? error.name : 'UnknownError',
-          },
-        })
-        if (mountedRef.current) {
-          showNotification(t('imageEditor.v3.host.notifications.autosaveFailed'), 'error')
-        }
-      })
-    }, AUTOSAVE_DELAY_MS)
-  }, [flushPending, showNotification, t])
+  }, [])
 
   const handlePackageOpened = useCallback((opened: OpenedImageMarkV3Package): void => {
     packageThumbnailRef.current = null
     documentIdRef.current = opened.document.id
     persistenceSnapshotRef.current = opened.persistence
-    persistenceRef.current = new ImageMarkV3PersistenceQueue({
+    persistenceRef.current = getOrCreateImageEditPersistenceQueueV3({
       repository,
       initialReference: opened.reference,
       initialHistory: opened.history,
-      onStatusChange: reportPersistenceStatus,
+
     })
     setPersistenceStatus({ kind: 'idle', reference: opened.reference })
     setBootstrap({

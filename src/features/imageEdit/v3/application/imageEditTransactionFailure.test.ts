@@ -4,7 +4,7 @@ import { getApplicationControlExecutionEngine, getApplicationReflectionRegistry 
 import { createAttachedImageEditPersistenceFixture } from '@/tests/imageEditAttachedPersistenceFixture'
 import { installHarnessNativeStorage, readHarnessImageEditDocument, uninstallHarnessNativeStorage } from '@/tests/harnessNativeStorage'
 import { getProjectRecord } from '@/commands/projectState'
-import { imageEditV3DocumentRef, imageEditV3LayerRef } from './imageEditLiveSessionRegistry'
+import { imageEditV3DocumentRef, imageEditV3LayerRef } from './imageEditDocumentRefs'
 import type { ApplicationPlannedStep } from '@/core/application-control/transactions'
 
 const disposals: Array<() => void> = []

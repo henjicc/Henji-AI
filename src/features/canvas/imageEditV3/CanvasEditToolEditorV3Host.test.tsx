@@ -1,15 +1,15 @@
 /** @vitest-environment jsdom */
 
+import '@/tests/imageEditDocumentFixture'
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
-import { useEffect, useRef, type ReactNode } from 'react'
+import { useEffect, type ReactNode } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { createImageEditDocumentV3 } from '@/core/imageEdit/v3/documentFactory'
 import type { ImageEditDocumentV3 } from '@/core/imageEdit/v3/documentTypes'
 import type { ImageEditPersistenceSnapshotV3 } from '@/core/imageEdit/v3/serviceContracts'
 import i18n from '@/i18n/config'
-import { ImageEditCommandBusV3 } from '@/features/imageEdit/v3/application/imageEditCommandBus'
-import { registerImageEditV3LiveSession } from '@/features/imageEdit/v3/application/imageEditLiveSessionRegistry'
+import { getOrCreateImageEditDocumentInstanceV3, attachImageEditDocumentInstanceV3 } from '@/features/imageEdit/v3/application/imageEditDocumentInstances'
 import type { ImageEditPersistenceHostV3 } from '@/features/imageEdit/v3/application/imageEditPersistenceOwner'
 import { createImageEditRasterLayerV3 } from '@/core/imageEdit/v3/documentFactory'
 import { MultiLayerDocumentNodeApplicationError } from '../application/multiLayerDocumentNodeApplicationContracts'
@@ -21,7 +21,6 @@ import {
 const mocks = vi.hoisted(() => ({
   prepare: vi.fn(),
   save: vi.fn(),
-  live: false,
 }))
 
 vi.mock('./canvasEditV3Session', async () => {
@@ -63,11 +62,10 @@ vi.mock('@/features/imageEdit/v3/editor', () => ({
     toolbarActions?: ReactNode
     persistenceHost?: ImageEditPersistenceHostV3
   }) => {
-    const bus = useRef(new ImageEditCommandBusV3(document)).current
-    useEffect(() => mocks.live
-      ? registerImageEditV3LiveSession('test-host', bus, persistenceHost) : undefined, [bus, persistenceHost])
+    const instance = getOrCreateImageEditDocumentInstanceV3(document, {}, persistenceHost)
+    const bus = instance.bus
+    useEffect(() => attachImageEditDocumentInstanceV3(document.id), [document.id])
     const edit = (revision: number): void => {
-      if (!mocks.live) { onPersistenceChange(persistence({ ...document, revision })); return }
       bus.dispatch({ type: 'layer.add', commandId: `add-${revision}`,
         expectedRevision: bus.getSnapshot().document.revision, parentId: null, index: 0,
         layer: createImageEditRasterLayerV3(`layer-${revision}`, '测试图层') })
@@ -103,7 +101,6 @@ describe('CanvasEditToolEditorV3Host', () => {
   beforeEach(async () => {
     await i18n.changeLanguage('zh-CN')
     vi.useFakeTimers()
-    mocks.live = false
     mocks.save.mockReset().mockImplementation(async (document: ImageEditDocumentV3) => ({
       documentId: document.id,
       revision: document.revision,
@@ -231,7 +228,7 @@ describe('CanvasEditToolEditorV3Host', () => {
     )
   })
 
-  it('保存期间出现新 revision 时不发布过期引用，并从最新命令重新计时', async () => {
+  it('保存期间出现新 revision 时不发布过期引用，同一确认继续保存最新命令', async () => {
     let resolveFirstSave: ((reference: {
       documentId: string
       revision: number
@@ -272,12 +269,6 @@ describe('CanvasEditToolEditorV3Host', () => {
       resolveFirstSave?.({ documentId: 'canvas-host', revision: 1, previewRef: null })
       await Promise.resolve()
     })
-    expect(onOptionsChange).not.toHaveBeenCalled()
-    expect(onExecutionReadyChange).toHaveBeenLastCalledWith(false)
-
-    await act(async () => { await vi.advanceTimersByTimeAsync(499) })
-    expect(mocks.save).toHaveBeenCalledOnce()
-    await act(async () => { await vi.advanceTimersByTimeAsync(1) })
     expect(mocks.save).toHaveBeenCalledTimes(2)
     expect(JSON.parse(onOptionsChange.mock.calls[0][0].imageEditSession)).toMatchObject({
       revision: 2,
@@ -286,7 +277,6 @@ describe('CanvasEditToolEditorV3Host', () => {
   })
 
   it('节点同步失败只显示一个准确入口；重试成功清除提示且不重复编辑或保存', async () => {
-    mocks.live = true
     const confirm = vi.fn().mockRejectedValueOnce(new Error('预览写入失败')).mockResolvedValue(undefined)
     let lifecycle: CanvasEditToolEditorV3Lifecycle | null = null
     render(<CanvasEditToolEditorV3Host plugin={{} as never} options={{}} sourceImageUrl="source.png"
@@ -305,7 +295,6 @@ describe('CanvasEditToolEditorV3Host', () => {
   })
 
   it('节点变化的提示不会被后续文档落盘清掉，也不会混称文件保存失败', async () => {
-    mocks.live = true
     const confirm = vi.fn().mockRejectedValue(new MultiLayerDocumentNodeApplicationError(
       'NODE_TARGET_CHANGED', '原节点已变化', true))
     let lifecycle: CanvasEditToolEditorV3Lifecycle | null = null

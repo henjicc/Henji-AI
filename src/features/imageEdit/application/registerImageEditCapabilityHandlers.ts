@@ -1,5 +1,5 @@
 import { retryImageEditDocumentSaveV3 } from '@/features/imageEdit/v3/application/imageEditPersistenceOperations'
-import { splitImageEditV3DocumentRef } from '@/features/imageEdit/v3/application/imageEditLiveSessionRegistry'
+import { splitImageEditV3DocumentRef } from '@/features/imageEdit/v3/application/imageEditDocumentRefs'
 import type { ApplicationRef } from '@/core/application-control/applicationCapabilities'
 
 import { commitImageEdit } from '@/features/imageEdit/application/imageEditApplicationService'

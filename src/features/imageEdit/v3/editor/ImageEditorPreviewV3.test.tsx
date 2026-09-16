@@ -1,5 +1,6 @@
 /** @vitest-environment jsdom */
 
+import '@/tests/imageEditDocumentFixture'
 import { StrictMode } from 'react'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -8,7 +9,7 @@ import {
   createImageEditDocumentV3,
 } from '@/core/imageEdit/v3/documentFactory'
 import i18n from '@/i18n/config'
-import { requireImageEditV3LiveSession } from '../application/imageEditLiveSessionRegistry'
+import { requireImageEditDocumentInstanceV3 } from '../application/imageEditDocumentInstances'
 import type { ImageEditorManagedPreviewResultV3 } from '../execution/imageEditorPreviewClientV3'
 import { useImageEditorInteractionStoreV3, useImageEditorSessionStoreV3 } from '../store'
 
@@ -404,7 +405,7 @@ describe('ImageEditorPreviewV3 managed frame ownership', () => {
     if (!zoomIn) throw new Error('移动反馈测试缺少放大按钮')
     fireEvent.click(zoomIn)
     fireEvent.click(zoomIn)
-    const liveSession = requireImageEditV3LiveSession(document.id)
+    const liveSession = requireImageEditDocumentInstanceV3(document.id)
     const verticalSnapGuide = rendered.container.querySelector<HTMLElement>(
       '[data-snap-guide-axis="x"]',
     )

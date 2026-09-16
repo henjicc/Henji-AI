@@ -1,7 +1,10 @@
 /** @vitest-environment jsdom */
 
+import '@/tests/imageEditDocumentFixture'
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
-import { createRef } from 'react'
+import { createRef, useEffect } from 'react'
+import { getOrCreateImageEditDocumentInstanceV3, attachImageEditDocumentInstanceV3 } from '@/features/imageEdit/v3/application/imageEditDocumentInstances'
+import type { ImageEditPersistenceHostV3 } from '@/features/imageEdit/v3/application/imageEditPersistenceOwner'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import {
@@ -19,25 +22,34 @@ import {
 
 const editorProps = vi.hoisted(() => ({ current: null as null | {
   profileId: string
+  document: ImageEditDocumentV3
+  persistenceHost?: ImageEditPersistenceHostV3
   initialSelectedLayerId?: string
   initialToolId?: string
   onPersistenceChange?: (snapshot: ImageEditPersistenceSnapshotV3) => void
 } }))
 
 vi.mock('@/features/imageEdit/v3/editor', () => ({
-  ImageEditorV3: (props: typeof editorProps.current) => {
+  ImageEditorV3: (props: NonNullable<typeof editorProps.current>) => {
     editorProps.current = props
+    const instance = getOrCreateImageEditDocumentInstanceV3(props.document, {}, props.persistenceHost)
+    useEffect(() => attachImageEditDocumentInstanceV3(instance.documentId), [instance.documentId])
+    const edit = (opacity: number) => {
+      instance.bus.dispatch({ type: 'layer.update-common', commandId: crypto.randomUUID(),
+        expectedRevision: instance.bus.getSnapshot().document.revision, layerId: 'mask-target', patch: { opacity } })
+      props.onPersistenceChange?.(instance.bus.getPersistenceSnapshot())
+    }
     return (
       <div data-testid="v3-mask-editor">
         <button
           type="button"
-          onClick={() => props?.onPersistenceChange?.(persistence(1))}
+          onClick={() => edit(0.4)}
         >
           revision 1
         </button>
         <button
           type="button"
-          onClick={() => props?.onPersistenceChange?.(persistence(2))}
+          onClick={() => edit(0.8)}
         >
           revision 2
         </button>
@@ -51,20 +63,6 @@ function document(revision = 0): ImageEditDocumentV3 {
   value.revision = revision
   value.layers = [createImageEditRasterLayerV3('mask-target', '目标')]
   return value
-}
-
-function persistence(revision: number): ImageEditPersistenceSnapshotV3 {
-  return {
-    document: document(revision),
-    history: {
-      version: 1,
-      documentId: 'mask-doc',
-      headRevision: revision,
-      undo: [],
-      redo: [],
-    },
-    retainedResources: [],
-  }
 }
 
 const session: ImageEditSessionReferenceV3 = {
@@ -157,6 +155,7 @@ describe('MaskEditorV3Host', () => {
     )
 
     await screen.findByTestId('v3-mask-editor')
+    onSessionChange.mockClear()
     vi.useFakeTimers()
     fireEvent.click(screen.getByRole('button', { name: 'revision 1' }))
     fireEvent.click(screen.getByRole('button', { name: 'revision 2' }))

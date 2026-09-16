@@ -1,6 +1,6 @@
 import { ImageEditCommandBusV3 } from '@/features/imageEdit/v3/application/imageEditCommandBus'
-import { ImageMarkV3PersistenceQueue } from '@/features/imageMark/standalone/imageMarkV3Persistence'
-import { registerImageEditV3LiveSession } from '@/features/imageEdit/v3/application/imageEditLiveSessionRegistry'
+import { ImageEditPersistenceV3Queue } from '@/features/imageEdit/v3/application/imageEditPersistenceQueue'
+import { adoptImageEditDocumentInstanceForTestsV3 } from '@/features/imageEdit/v3/application/imageEditDocumentInstances'
 import type { ImageEditDocumentRepositoryV3 } from '@/core/imageEdit/v3/serviceContracts'
 
 /** 叶子领域测试的存储端口；正式 L-B 使用 ImageEditorV3CommandRepository + native 存储边界。 */
@@ -12,8 +12,8 @@ export function registerPersistedImageEditTestSession(
   },
 ) {
   const initial = bus.getPersistenceSnapshot()
-  const queue = new ImageMarkV3PersistenceQueue({ repository,
+  const queue = new ImageEditPersistenceV3Queue({ repository,
     initialReference: { documentId: initial.document.id, revision: initial.document.revision, previewRef: null },
     initialHistory: initial.history })
-  return registerImageEditV3LiveSession(sessionId, bus, { getQueue: () => queue })
+  return adoptImageEditDocumentInstanceForTestsV3(sessionId, bus, { getQueue: () => queue })
 }

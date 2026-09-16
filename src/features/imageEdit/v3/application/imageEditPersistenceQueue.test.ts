@@ -7,7 +7,7 @@ import {
 import type { ImageEditDocumentV3 } from '@/core/imageEdit/v3/documentTypes'
 import type { ImageEditPersistenceSnapshotV3 } from '@/core/imageEdit/v3/serviceContracts'
 import type { ImageEditCommandHistorySnapshotV3 } from '@/core/imageEdit/v3/commandHistoryCodec'
-import { ImageMarkV3PersistenceQueue } from './imageMarkV3Persistence'
+import { ImageEditPersistenceV3Queue } from './imageEditPersistenceQueue'
 import { ImageEditCommandBusV3 } from '@/features/imageEdit/v3/application/imageEditCommandBus'
 
 function documentAt(revision: number): ImageEditDocumentV3 {
@@ -31,14 +31,14 @@ function persistenceAt(revision: number): ImageEditPersistenceSnapshotV3 {
   return { document: documentAt(revision), history: historyAt(revision), retainedResources: [] }
 }
 
-describe('ImageMarkV3PersistenceQueue', () => {
+describe('ImageEditPersistenceV3Queue', () => {
   it('合并中间 revision，只保存最新文档', async () => {
     const save = vi.fn(async (document: ImageEditDocumentV3) => ({
       documentId: document.id,
       revision: document.revision,
       previewRef: null,
     }))
-    const queue = new ImageMarkV3PersistenceQueue({
+    const queue = new ImageEditPersistenceV3Queue({
       repository: { save },
       initialReference: { documentId: 'toolbox-document', revision: 0, previewRef: null },
       initialHistory: historyAt(0),
@@ -62,7 +62,7 @@ describe('ImageMarkV3PersistenceQueue', () => {
         revision: document.revision,
         previewRef: null,
       }))
-    const queue = new ImageMarkV3PersistenceQueue({
+    const queue = new ImageEditPersistenceV3Queue({
       repository: { save },
       initialReference: { documentId: 'toolbox-document', revision: 0, previewRef: null },
       initialHistory: historyAt(0),
@@ -79,7 +79,7 @@ describe('ImageMarkV3PersistenceQueue', () => {
   })
 
   it('拒绝把另一个文档混入同一保存队列', () => {
-    const queue = new ImageMarkV3PersistenceQueue({
+    const queue = new ImageEditPersistenceV3Queue({
       repository: { save: vi.fn() },
       initialReference: { documentId: 'toolbox-document', revision: 0, previewRef: null },
       initialHistory: historyAt(0),
@@ -110,7 +110,7 @@ describe('ImageMarkV3PersistenceQueue', () => {
       revision: document.revision,
       previewRef: null,
     }))
-    const queue = new ImageMarkV3PersistenceQueue({
+    const queue = new ImageEditPersistenceV3Queue({
       repository: { save },
       initialReference: {
         documentId: persisted.document.id,

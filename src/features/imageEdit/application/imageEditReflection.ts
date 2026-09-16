@@ -21,7 +21,7 @@ import {
   ImageEditV3ReflectionProvider,
   type ImageEditV3ReflectedEntityType,
 } from '../v3/application/imageEditV3Reflection'
-import { isImageEditV3Ref } from '../v3/application/imageEditLiveSessionRegistry'
+import { isImageEditV3Ref } from '../v3/application/imageEditDocumentRefs'
 
 export const IMAGE_EDIT_ENTITY_TYPES = {
   preview: 'image_edit.preview',

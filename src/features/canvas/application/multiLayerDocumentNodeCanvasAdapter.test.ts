@@ -6,7 +6,7 @@ import { getNodeMediaOutputs } from '../domain/nodeRegistry';
 import { useCanvasStore } from '@/stores/canvasStore';
 import { type Project } from '@/stores/projectStore';
 import { MULTI_LAYER_NODE_PROJECTION_HISTORY_POLICY } from './multiLayerDocumentNodeApplicationContracts';
-import { imageEditV3LayerRef } from '@/features/imageEdit/v3/application/imageEditLiveSessionRegistry';
+import { imageEditV3LayerRef } from '@/features/imageEdit/v3/application/imageEditDocumentRefs';
 import { createMultiLayerDocumentExportCanvasPort, createMultiLayerDocumentProjectionCanvasPort } from './multiLayerDocumentNodeCanvasAdapter';
 
 import { upsertProjectRecord } from '@/commands/projectState';

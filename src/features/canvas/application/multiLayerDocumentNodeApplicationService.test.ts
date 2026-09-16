@@ -1,10 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { CanvasPersistenceError } from './canvasPersistenceService'
 
-import {
-  imageEditV3GroupRef,
-  imageEditV3LayerRef,
-} from '@/features/imageEdit/v3/application/imageEditLiveSessionRegistry'
+import { imageEditV3GroupRef, imageEditV3LayerRef } from '@/features/imageEdit/v3/application/imageEditDocumentRefs'
 
 import type { LayerStackResultNodeData } from '../domain/canvasNodeData'
 import {

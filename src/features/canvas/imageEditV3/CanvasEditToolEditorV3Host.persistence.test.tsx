@@ -1,10 +1,12 @@
 // @vitest-environment jsdom
+import '@/tests/imageEditDocumentFixture'
 import { act, cleanup, render, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { ImageEditorV3CommandRepository } from '@/commands/imageEditorV3'
 import { createImageEditDocumentV3, createImageEditEffectLayerV3 } from '@/core/imageEdit/v3/documentFactory'
 import { getApplicationControlExecutionEngine, getApplicationReflectionRegistry } from '@/features/application-control/capabilities/applicationControlRegistry'
-import { listImageEditV3LiveSessions, imageEditV3LayerRef } from '@/features/imageEdit/v3/application/imageEditLiveSessionRegistry'
+import { listImageEditDocumentInstancesV3 } from '@/features/imageEdit/v3/application/imageEditDocumentInstances'
+import { imageEditV3LayerRef } from '@/features/imageEdit/v3/application/imageEditDocumentRefs'
 import { useImageEditorControllerV3 } from '@/features/imageEdit/v3/editor/useImageEditorControllerV3'
 import type { ImageEditorV3Props } from '@/features/imageEdit/v3/editor/types'
 import { installHarnessNativeStorage, readHarnessImageEditDocument, uninstallHarnessNativeStorage } from '@/tests/harnessNativeStorage'
@@ -34,11 +36,11 @@ it('异步加载完成后实际宿主登记 durable owner，正式反射修改�
   const history = { version: 1 as const, documentId: document.id, headRevision: 0, undo: [], redo: [] }
   const optionsChanged = vi.fn()
   const view = render(<CanvasEditToolEditorV3Host plugin={{} as never} options={{}} sourceImageUrl="source.png" onOptionsChange={optionsChanged} />)
-  expect(listImageEditV3LiveSessions().some((session) => session.documentId === document.id)).toBe(false)
+  expect(listImageEditDocumentInstancesV3().some((session) => session.documentId === document.id)).toBe(false)
   await act(async () => { finish({ sourceUrl: 'source.png', document, history,
     persistence: { document, history, retainedResources: [] }, reference: { documentId: document.id, revision: 0, previewRef: null },
     resourceByteSizes: {}, resourceDescriptors: [] }) })
-  await waitFor(() => expect(listImageEditV3LiveSessions().find((session) => session.documentId === document.id)?.persistenceOwner).toBeDefined())
+  await waitFor(() => expect(listImageEditDocumentInstancesV3().find((session) => session.documentId === document.id)?.persistenceOwner).toBeDefined())
   const context = { requestId: 'host-formal-write', exposure: 'assistant' as const,
     permissions: new Set(['image_edit:read', 'image_edit:write']), acceptedDataClasses: new Set(['C0', 'C1'] as const) }
   const target = imageEditV3LayerRef(document.id, 'layer')
@@ -53,7 +55,7 @@ it('异步加载完成后实际宿主登记 durable owner，正式反射修改�
   expect(result?.status).toBe('completed')
   expect(readHarnessImageEditDocument(document.id)?.document.layers[0].opacity).toBe(0.42)
   if (result?.status === 'completed') expect(result.effects.every((effect) => effect.entityType !== 'canvas.node')).toBe(true)
-  const owner = listImageEditV3LiveSessions().find((session) => session.documentId === document.id)!.persistenceOwner!
+  const owner = listImageEditDocumentInstancesV3().find((session) => session.documentId === document.id)!.persistenceOwner!
   view.unmount()
-  await expect(owner.confirm(true)).rejects.toThrow('保存未确认')
+  await expect(owner.confirm(true)).resolves.toMatchObject({ documentId: document.id, revision: 1 })
 })

@@ -5,23 +5,23 @@ import type {
 } from '@/core/imageEdit/v3/serviceContracts'
 import type { ImageEditCommandHistorySnapshotV3 } from '@/core/imageEdit/v3/commandHistoryCodec'
 
-export type ImageMarkV3PersistenceStatus =
+export type ImageEditPersistenceV3Status =
   | { kind: 'idle'; reference: ImageEditDocumentReferenceV3 }
   | { kind: 'saving'; reference: ImageEditDocumentReferenceV3 }
   | { kind: 'failed'; reference: ImageEditDocumentReferenceV3; error: unknown }
 
-interface ImageMarkV3PersistenceOptions {
+export interface ImageEditPersistenceV3Options {
   repository: Pick<ImageEditDocumentRepositoryV3, 'save'>
   initialReference: ImageEditDocumentReferenceV3
   initialHistory: ImageEditCommandHistorySnapshotV3
-  onStatusChange?: (status: ImageMarkV3PersistenceStatus) => void
+  onStatusChange?: (status: ImageEditPersistenceV3Status) => void
 }
 
 /**
- * 工具箱宿主的 latest-only 保存队列。它只编排宿主生命周期，文档校验、CAS 与原子落盘
+ * 文档实例的 latest-only 保存队列。文档校验、CAS 与原子落盘
  * 仍由 ImageEditorV3CommandRepository 和主进程仓库负责。
  */
-export class ImageMarkV3PersistenceQueue {
+export class ImageEditPersistenceV3Queue {
   private pending: ImageEditPersistenceSnapshotV3 | null = null
   private inFlight: Promise<ImageEditDocumentReferenceV3> | null = null
   private reference: ImageEditDocumentReferenceV3
@@ -29,10 +29,28 @@ export class ImageMarkV3PersistenceQueue {
   private pauseToken: symbol | null = null
   private resumed: Promise<void> | null = null
   private resume: (() => void) | null = null
+  private status: ImageEditPersistenceV3Status
+  private readonly listeners = new Set<(status: ImageEditPersistenceV3Status) => void>()
 
-  constructor(private readonly options: ImageMarkV3PersistenceOptions) {
+  constructor(private readonly options: ImageEditPersistenceV3Options) {
     this.reference = options.initialReference
     this.persistedHistory = JSON.stringify(options.initialHistory)
+    this.status = { kind: 'idle', reference: this.reference }
+  }
+
+  getStatus(): ImageEditPersistenceV3Status { return this.status }
+  isBusy(): boolean { return Boolean(this.inFlight || this.pauseToken) }
+  isDirty(): boolean { return Boolean(this.pending) }
+  subscribe(listener: (status: ImageEditPersistenceV3Status) => void): () => void {
+    this.listeners.add(listener)
+    listener(this.status)
+    return () => this.listeners.delete(listener)
+  }
+
+  private publish(status: ImageEditPersistenceV3Status): void {
+    this.status = status
+    this.options.onStatusChange?.(status)
+    for (const listener of this.listeners) listener(status)
   }
 
   getReference(): ImageEditDocumentReferenceV3 {
@@ -45,7 +63,7 @@ export class ImageMarkV3PersistenceQueue {
       throw new Error('图片文档预览确认与已保存版本不一致')
     }
     this.reference = reference
-    this.options.onStatusChange?.({ kind: 'idle', reference })
+    this.publish({ kind: 'idle', reference })
   }
 
   enqueue(snapshot: ImageEditPersistenceSnapshotV3): void {
@@ -105,7 +123,7 @@ export class ImageMarkV3PersistenceQueue {
       const historyJson = JSON.stringify(history)
       if (document.revision < this.reference.revision
         || (document.revision === this.reference.revision && historyJson === this.persistedHistory)) continue
-      this.options.onStatusChange?.({ kind: 'saving', reference: this.reference })
+      this.publish({ kind: 'saving', reference: this.reference })
       try {
         this.reference = await this.options.repository.save(document, {
           expectedRevision: this.reference.revision,
@@ -113,13 +131,13 @@ export class ImageMarkV3PersistenceQueue {
           history,
         })
         this.persistedHistory = historyJson
-        this.options.onStatusChange?.({ kind: 'idle', reference: this.reference })
+        this.publish({ kind: 'idle', reference: this.reference })
       } catch (error) {
         const queuedAfterFailure = this.pending as ImageEditPersistenceSnapshotV3 | null
         if (!queuedAfterFailure || document.revision > queuedAfterFailure.document.revision) {
           this.pending = snapshot
         }
-        this.options.onStatusChange?.({ kind: 'failed', reference: this.reference, error })
+        this.publish({ kind: 'failed', reference: this.reference, error })
         throw error
       }
     }

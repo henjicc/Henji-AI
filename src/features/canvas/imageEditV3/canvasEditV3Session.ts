@@ -3,6 +3,7 @@ import {
   ingestImageEditorV3Source,
   loadImageEditorV3Document,
 } from '@/commands/imageEditorV3'
+import { readImageEditDocumentInstanceV3 } from '@/features/imageEdit/v3/application/imageEditDocumentInstances'
 import {
   parseImageEditDocument,
   type ImageEditSessionReferenceV3,
@@ -129,6 +130,8 @@ async function loadReferencedSession(
   loadSnapshot: typeof loadImageEditorV3Document,
   signal: AbortSignal | undefined,
 ): Promise<CanvasEditV3PreparedSession> {
+  const current = readImageEditDocumentInstanceV3(documentIdFromRef(session.documentRef))
+  if (current) return { ...current, sourceUrl: session.sourceUrl }
   const snapshot = await loadSnapshot({
     requestId: `image-editor-v3:canvas-edit:load:${createImageEditIdV3('request')}`,
     documentRef: session.documentRef,

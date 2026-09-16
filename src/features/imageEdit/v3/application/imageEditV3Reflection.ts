@@ -12,6 +12,7 @@ import {
   unrestrictedCollectionAvailability,
 } from '@/core/application-control'
 import type { ImageEditDocumentV3 } from '@/core/imageEdit/v3/documentTypes'
+import { ensureImageEditRefInstanceV3 } from './imageEditDocumentLoading'
 import { collectImageEditMaskResourceIdsV3 } from '@/core/imageEdit/v3/layerTypes'
 
 import {
@@ -20,21 +21,8 @@ import {
   IMAGE_EDIT_V3_MASK_FIELDS,
   imageEditV3SchemaRef,
 } from './imageEditV3Fields'
-import {
-  collectImageEditV3LiveLayers,
-  findImageEditV3LiveLayer,
-  getImageEditV3LiveRevision,
-  imageEditV3DocumentRef,
-  imageEditV3GroupRef,
-  imageEditV3LayerRef,
-  imageEditV3MaskRef,
-  imageEditV3ResourceRef,
-  listImageEditV3LiveSessions,
-  requireImageEditV3LiveSession,
-  splitImageEditV3DocumentRef,
-  splitImageEditV3LayerRef,
-  splitImageEditV3ResourceRef,
-} from './imageEditLiveSessionRegistry'
+import { getImageEditDocumentCatalogRevisionV3, listImageEditDocumentInstancesV3, requireImageEditDocumentInstanceV3 } from './imageEditDocumentInstances'
+import { collectImageEditV3LiveLayers, findImageEditV3LiveLayer, imageEditV3DocumentRef, imageEditV3GroupRef, imageEditV3LayerRef, imageEditV3MaskRef, imageEditV3ResourceRef, splitImageEditV3DocumentRef, splitImageEditV3LayerRef, splitImageEditV3ResourceRef } from './imageEditDocumentRefs'
 
 export type ImageEditV3ReflectedEntityType =
   | 'image_edit.document'
@@ -43,7 +31,7 @@ export type ImageEditV3ReflectedEntityType =
   | 'image_edit.mask'
   | 'image_edit.resource'
 
-const READ_ONLY_DOCUMENT = '由当前打开的 V3 编辑器命令总线维护。'
+const READ_ONLY_DOCUMENT = '由图片文档实例的命令总线维护。'
 import { IMAGE_EDIT_PREVIEW_ONLY_REASON, imageEditPersistenceAvailabilityV3, imageEditPersistenceRevisionsV3, imageEditPersistencePermissionsV3 } from './imageEditPersistenceOperations'
 
 function property(
@@ -149,13 +137,13 @@ function paginate(refs: ApplicationRef[], request: ApplicationEntityListRequest)
   return {
     refs: page,
     nextCursor: offset + page.length < refs.length ? String(offset + page.length) : null,
-    revisions: { image_edit: getImageEditV3LiveRevision() },
+    revisions: { image_edit: getImageEditDocumentCatalogRevisionV3() },
   }
 }
 
 function layerSource(ref: ApplicationRef, kind: 'image_edit.layer' | 'image_edit.group' | 'image_edit.mask') {
   const { documentId, layerId } = splitImageEditV3LayerRef(ref, kind)
-  const session = requireImageEditV3LiveSession(documentId)
+  const session = requireImageEditDocumentInstanceV3(documentId)
   const location = findImageEditV3LiveLayer(session.bus.getSnapshot().document, layerId)
   if (!location) throw new Error('NOT_FOUND')
   if (kind === 'image_edit.group' && location.layer.type !== 'group') throw new Error('NOT_FOUND')
@@ -181,13 +169,13 @@ function layerAvailability(
   const descriptors = new Map(IMAGE_EDIT_V3_PROPERTIES[entityType].map((item) => [item.id, item]))
   const ancestorLocked = source.location.ancestors.some((ancestor) => ancestor.locked)
   const layerLocked = source.location.layer.locked
-  const revisions = { image_edit: getImageEditV3LiveRevision(), ...imageEditPersistenceRevisionsV3(ref) }
+  const revisions = { image_edit: getImageEditDocumentCatalogRevisionV3(), ...imageEditPersistenceRevisionsV3(ref) }
   return propertyIds.map((propertyId) => {
     const descriptor = descriptors.get(propertyId)
     if (!descriptor) throw new Error(`PROPERTY_NOT_FOUND:${propertyId}`)
     const reasons: string[] = []
     let writable = !descriptor.readOnlyReason
-    if (writable && !requireImageEditV3LiveSession(source.documentId).persistenceOwner) {
+    if (writable && !requireImageEditDocumentInstanceV3(source.documentId).persistenceOwner) {
       writable = false
       reasons.push(IMAGE_EDIT_PREVIEW_ONLY_REASON)
     }
@@ -226,7 +214,7 @@ export class ImageEditV3ReflectionProvider {
   constructor(readonly entityType: ImageEditV3ReflectedEntityType) {}
 
   async listEntities(request: ApplicationEntityListRequest): Promise<ApplicationEntityListResult> {
-    const refs = listImageEditV3LiveSessions().flatMap(({ documentId, bus }) => {
+    const refs = listImageEditDocumentInstancesV3().flatMap(({ documentId, bus }) => {
       const document = bus.getSnapshot().document
       if (this.entityType === 'image_edit.document') return [imageEditV3DocumentRef(documentId)]
       const locations = collectImageEditV3LiveLayers(document)
@@ -249,11 +237,12 @@ export class ImageEditV3ReflectionProvider {
   }
 
   async readEntity(ref: ApplicationRef, request: { propertyIds?: string[] }): Promise<ApplicationEntitySnapshot> {
-    const revision = getImageEditV3LiveRevision()
+    await ensureImageEditRefInstanceV3(ref)
+    const revision = getImageEditDocumentCatalogRevisionV3()
     let values: Record<string, JsonValue>
     if (this.entityType === 'image_edit.document') {
       const { documentId } = splitImageEditV3DocumentRef(ref)
-      const document = requireImageEditV3LiveSession(documentId).bus.getSnapshot().document
+      const document = requireImageEditDocumentInstanceV3(documentId).bus.getSnapshot().document
       values = {
         'image_edit.document.revision': document.revision,
         'image_edit.document.width': document.geometry.width,
@@ -276,7 +265,7 @@ export class ImageEditV3ReflectionProvider {
       }
     } else {
       const { documentId, resourceId } = splitImageEditV3ResourceRef(ref)
-      const document = requireImageEditV3LiveSession(documentId).bus.getSnapshot().document
+      const document = requireImageEditDocumentInstanceV3(documentId).bus.getSnapshot().document
       const usage = collectResources(document).find((item) => item.resourceId === resourceId)
       if (!usage) throw new Error('NOT_FOUND')
       const locations = collectImageEditV3LiveLayers(document)
@@ -303,6 +292,7 @@ export class ImageEditV3ReflectionProvider {
     ref: ApplicationRef,
     propertyIds: string[],
   ): Promise<ApplicationPropertyAvailability[]> {
+    await ensureImageEditRefInstanceV3(ref)
     if (
       this.entityType === 'image_edit.layer'
       || this.entityType === 'image_edit.group'
@@ -321,13 +311,14 @@ export class ImageEditV3ReflectionProvider {
         writable: false,
         reasons: [descriptor.readOnlyReason ?? READ_ONLY_DOCUMENT],
         requiredPermissions: descriptor.requiredPermissions.read,
-        revisions: { image_edit: getImageEditV3LiveRevision(), ...imageEditPersistenceRevisionsV3(ref) },
+        revisions: { image_edit: getImageEditDocumentCatalogRevisionV3(), ...imageEditPersistenceRevisionsV3(ref) },
       }
     })
   }
 
   async getCollectionAvailability(parent: ApplicationRef): Promise<ApplicationCollectionAvailability> {
-    const revision = { image_edit: getImageEditV3LiveRevision() }
+    await ensureImageEditRefInstanceV3(parent)
+    const revision = { image_edit: getImageEditDocumentCatalogRevisionV3() }
     if (this.entityType !== 'image_edit.layer' && this.entityType !== 'image_edit.group') {
       return unrestrictedCollectionAvailability(this.entityType, parent, revision, ['image_edit:write'])
     }
@@ -337,7 +328,7 @@ export class ImageEditV3ReflectionProvider {
         unrestrictedCollectionAvailability(this.entityType, parent, revision, ['image_edit:write']))
     }
     const source = layerSource(parent, 'image_edit.group')
-    if (!requireImageEditV3LiveSession(source.documentId).persistenceOwner) {
+    if (!requireImageEditDocumentInstanceV3(source.documentId).persistenceOwner) {
       return imageEditPersistenceAvailabilityV3(source.documentId,
         unrestrictedCollectionAvailability(this.entityType, parent, revision, ['image_edit:write']))
     }

@@ -4,6 +4,7 @@ import {
   ingestImageEditorV3Source,
   loadImageEditorV3Document,
 } from '@/commands/imageEditorV3'
+import { readImageEditDocumentInstanceV3 } from '@/features/imageEdit/v3/application/imageEditDocumentInstances'
 import {
   coerceImageEditSession,
   isImageEditSessionReferenceV3,
@@ -121,6 +122,11 @@ async function loadReferencedSession(
   signal: AbortSignal | undefined,
 ): Promise<ViewerMarkEditorV3PreparedSession> {
   const documentId = documentIdFromRef(session.documentRef)
+  const current = readImageEditDocumentInstanceV3(documentId)
+  if (current) {
+    assertQuickProfileAccepts(current.document)
+    return { ...current, sourceUrl: session.sourceUrl }
+  }
   const loaded = await loadSnapshot({
     requestId: createImageEditorV3RequestId('viewer-document-load'),
     documentRef: session.documentRef,

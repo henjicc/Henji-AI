@@ -14,7 +14,7 @@ import {
 } from '@/core/imageEdit/v3/documentFactory'
 import { useImageEditSessionStore } from '@/features/imageEdit/store/imageEditSessionStore'
 import { ImageEditCommandBusV3 } from '@/features/imageEdit/v3/application/imageEditCommandBus'
-import { registerImageEditV3LiveSession } from '@/features/imageEdit/v3/application/imageEditLiveSessionRegistry'
+import { adoptImageEditDocumentInstanceForTestsV3 } from '@/features/imageEdit/v3/application/imageEditDocumentInstances'
 
 import { createHostContextSnapshot, getHostScopeRevisions, retainHostContextTracking } from './hostContext'
 import { notifyApplicationDomainChanged } from '@/core/application-control/domainChangeSignal'
@@ -150,7 +150,7 @@ describe('宿主作用域 revision', () => {
     )]
     const bus = new ImageEditCommandBusV3(document)
     const before = getHostScopeRevisions()
-    const dispose = registerImageEditV3LiveSession('host-scope-v3-session', bus)
+    const dispose = adoptImageEditDocumentInstanceForTestsV3('host-scope-v3-session', bus)
     try {
       const opened = getHostScopeRevisions()
       expect(opened.image_edit).toBe(before.image_edit + 1)

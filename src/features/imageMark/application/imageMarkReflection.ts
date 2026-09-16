@@ -9,16 +9,9 @@ import {
 import { APPLICATION_CAPABILITY_CATALOG_VERSION } from '@/core/application-control/applicationCapabilities'
 import { imageEditDocumentToMarkDoc, type ImageMarkDoc, type MarkItem } from '@/core/imageEdit'
 import { useImageEditSessionStore } from '@/features/imageEdit/store/imageEditSessionStore'
-import {
-  collectImageEditV3LiveLayers,
-  findImageEditV3LiveLayer,
-  imageEditV3AnnotationRef,
-  isImageEditV3Ref,
-  listImageEditV3LiveSessions,
-  requireImageEditV3LiveSession,
-  splitImageEditV3AnnotationRef,
-  splitImageEditV3LayerRef,
-} from '@/features/imageEdit/v3/application/imageEditLiveSessionRegistry'
+import { listImageEditDocumentInstancesV3, requireImageEditDocumentInstanceV3 } from '@/features/imageEdit/v3/application/imageEditDocumentInstances'
+import { collectImageEditV3LiveLayers, findImageEditV3LiveLayer, imageEditV3AnnotationRef, isImageEditV3Ref, splitImageEditV3AnnotationRef, splitImageEditV3LayerRef } from '@/features/imageEdit/v3/application/imageEditDocumentRefs'
+import { ensureImageEditRefInstanceV3 } from '@/features/imageEdit/v3/application/imageEditDocumentLoading'
 
 import { IMAGE_MARK_ANNOTATION_FIELDS, IMAGE_MARK_DOCUMENT_FIELDS, IMAGE_MARK_ENTITY_TYPES } from './imageMarkFields'
 import { annotationRef, imageMarkRevision, requireSessionDocument, splitAnnotationRef } from './imageMarkSessionAccess'
@@ -116,7 +109,7 @@ class ImageMarkAnnotationReflectionProvider implements ApplicationEntityProvider
     const legacyRefs: ApplicationRef[] = Object.entries(sessions).flatMap(([sessionId, record]) =>
       imageEditDocumentToMarkDoc(record.document).items.map((item) => annotationRef(sessionId, item))
     )
-    const liveRefs = listImageEditV3LiveSessions().flatMap(({ documentId, bus }) =>
+    const liveRefs = listImageEditDocumentInstancesV3().flatMap(({ documentId, bus }) =>
       collectImageEditV3LiveLayers(bus.getSnapshot().document).flatMap(({ layer }) =>
         layer.type === 'annotation'
           ? layer.annotations.map((item) => imageEditV3AnnotationRef(documentId, layer.id, item.id))
@@ -131,9 +124,10 @@ class ImageMarkAnnotationReflectionProvider implements ApplicationEntityProvider
   async readEntity(ref: ApplicationRef, request: { propertyIds?: string[] }) {
     if (ref.kind !== this.entityType) throw new Error('NOT_FOUND')
     const item = isImageEditV3Ref(ref)
-      ? (() => {
+      ? await (async () => {
+          await ensureImageEditRefInstanceV3(ref)
           const { documentId, layerId, annotationId } = splitImageEditV3AnnotationRef(ref)
-          const document = requireImageEditV3LiveSession(documentId).bus.getSnapshot().document
+          const document = requireImageEditDocumentInstanceV3(documentId).bus.getSnapshot().document
           const location = findImageEditV3LiveLayer(document, layerId)
           if (!location || location.layer.type !== 'annotation') throw new Error('NOT_FOUND')
           return findAnnotation({ version: 1, orientation: { rotate: 0, mirrored: false }, crop: null, items: location.layer.annotations }, annotationId)
@@ -156,12 +150,13 @@ class ImageMarkAnnotationReflectionProvider implements ApplicationEntityProvider
   async getPropertyAvailability(ref: ApplicationRef, propertyIds: string[]) {
     let stateReason: string | null = null
     if (isImageEditV3Ref(ref)) {
+      await ensureImageEditRefInstanceV3(ref)
       const { documentId, layerId, annotationId } = splitImageEditV3AnnotationRef(ref)
-      const document = requireImageEditV3LiveSession(documentId).bus.getSnapshot().document
+      const document = requireImageEditDocumentInstanceV3(documentId).bus.getSnapshot().document
       const location = findImageEditV3LiveLayer(document, layerId)
       if (!location || location.layer.type !== 'annotation') throw new Error('NOT_FOUND')
       findAnnotation({ version: 1, orientation: { rotate: 0, mirrored: false }, crop: null, items: location.layer.annotations }, annotationId)
-      if (!requireImageEditV3LiveSession(documentId).persistenceOwner) stateReason = IMAGE_EDIT_PREVIEW_ONLY_REASON
+      if (!requireImageEditDocumentInstanceV3(documentId).persistenceOwner) stateReason = IMAGE_EDIT_PREVIEW_ONLY_REASON
       if (location.layer.locked || location.ancestors.some((ancestor) => ancestor.locked)) {
         stateReason = '标注图层或其父组已锁定。'
       }
@@ -189,8 +184,9 @@ class ImageMarkAnnotationReflectionProvider implements ApplicationEntityProvider
 
   async getCollectionAvailability(parent: ApplicationRef) {
     if (parent.kind === 'image_edit.layer' && isImageEditV3Ref(parent)) {
+      await ensureImageEditRefInstanceV3(parent)
       const { documentId, layerId } = splitImageEditV3LayerRef(parent)
-      const document = requireImageEditV3LiveSession(documentId).bus.getSnapshot().document
+      const document = requireImageEditDocumentInstanceV3(documentId).bus.getSnapshot().document
       const location = findImageEditV3LiveLayer(document, layerId)
       if (!location || location.layer.type !== 'annotation') throw new Error('NOT_FOUND')
       const availability = imageEditPersistenceAvailabilityV3(documentId, unrestrictedCollectionAvailability(
@@ -199,7 +195,7 @@ class ImageMarkAnnotationReflectionProvider implements ApplicationEntityProvider
         { image_mark: imageMarkRevision() },
         ['image_mark:write'],
       ))
-      if (!requireImageEditV3LiveSession(documentId).persistenceOwner) return imageEditPersistenceAvailabilityV3(documentId, availability)
+      if (!requireImageEditDocumentInstanceV3(documentId).persistenceOwner) return imageEditPersistenceAvailabilityV3(documentId, availability)
       if (!location.layer.locked && !location.ancestors.some((ancestor) => ancestor.locked)) return availability
       const reason = '标注图层或其父组已锁定。'
       const block = {
