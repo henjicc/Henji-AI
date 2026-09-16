@@ -5,7 +5,7 @@ import { CAMERA_STAGE_NAME_MAX_LENGTH } from '@/core/application-control/domains
 
 import type { StageObject } from '../domain/sceneTypes'
 import type { StageStateKeyframe } from '../domain/stateKeyframeTypes'
-import type { CameraStageProjectSnapshot } from '../projects/cameraStageProjectService'
+import type { CameraStageProjectSnapshot } from '../projects/cameraStageProjectPersistence'
 import type { CameraStageStateKeyframeUpdate } from './cameraStageApplicationService'
 import {
   booleanCodec, enumCodec, nameCodec, numberCodec, refIdCodec, stageDescriptor, stageField,

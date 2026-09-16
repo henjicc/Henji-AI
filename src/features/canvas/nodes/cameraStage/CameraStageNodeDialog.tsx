@@ -11,8 +11,8 @@ import {
   applyProjectEnvironmentImage,
   createNewProject,
   loadProjectIntoScene,
-  saveCurrentProject,
 } from '@/features/cameraStage/projects/cameraStageProjectService';
+import { saveCameraStageProjectRuntime } from '@/features/cameraStage/application/cameraStageProjectRuntime';
 import { createLogger } from '@/core/logging';
 import { useCanvasStore } from '@/stores/canvasStore';
 
@@ -34,17 +34,6 @@ export function CameraStageNodeDialog(): JSX.Element | null {
   const updateNodeData = useCanvasStore((state) => state.updateNodeData);
 
   useEffect(() => canvasEventBus.subscribe('camera-stage/open', ({ nodeId: nextNodeId }) => {
-    const nextNode = useCanvasStore.getState().nodes.find((item) => item.id === nextNodeId);
-    if (isCameraStageNode(nextNode) && (nextNode.data.videoExporting || nextNode.data.imageExporting)) {
-      logger.warn('3D 渲染期间已阻止打开编辑器', {
-        event: 'canvas.camera_stage.open.blocked_rendering',
-        context: {
-          nodeId: nextNodeId,
-          requestId: nextNode.data.imageRenderRequestId ?? nextNode.data.videoRenderRequestId,
-        },
-      });
-      return;
-    }
     setNodeId(nextNodeId);
   }), []);
 
@@ -91,14 +80,14 @@ export function CameraStageNodeDialog(): JSX.Element | null {
   }, [isActiveCameraStageNode, nodeEnvironmentImageUrl, nodeId, nodeProjectId]);
 
   const close = useCallback(() => {
-    void saveCurrentProject().catch((error: unknown) => {
+    if (nodeProjectId) void saveCameraStageProjectRuntime(nodeProjectId).catch((error: unknown) => {
       logger.error('画布 3D 工程保存失败', error, {
         event: 'canvas.camera_stage.save.failed',
         context: { nodeId },
       });
     });
     setNodeId(null);
-  }, [nodeId]);
+  }, [nodeId, nodeProjectId]);
 
   useEffect(() => {
     if (!nodeId) return;

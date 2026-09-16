@@ -1,59 +1,103 @@
-import { createCameraStageStore, useCameraStageStore } from '../store/cameraStageStore'
-import { readProjectSnapshot, saveCurrentProject, saveProjectDraft } from '../projects/cameraStageProjectService'
+import { createStore, type StoreApi } from 'zustand/vanilla'
+import { createLogger } from '@/core/logging'
+import { attachCameraStageStore, cameraStageStoreAttachment, createCameraStageStore, type CameraStageOwnedStore } from '../store/cameraStageStore'
+import { readProjectSnapshot, writeCameraStageProject, type CameraStageProjectSnapshot } from '../projects/cameraStageProjectPersistence'
 import { serializeScene } from '../domain/sceneSerialization'
-import { holdCameraStageProjectExecution } from './cameraStageProjectExecution'
 
-type ProjectStore = typeof useCameraStageStore
-interface Runtime { store: ProjectStore; updatedAt: number; dirty: boolean; unsubscribe: () => void }
-const backgroundProjects = new Map<string, Runtime>()
-const leases = new Map<string, { store: ProjectStore; count: number; release: () => void }>()
+export type CameraStageSaveState = 'idle' | 'saving' | 'saved' | 'error'
+export interface CameraStageProjectInstance {
+  id: string
+  store: CameraStageOwnedStore
+  createdAt: number
+  updatedAt: number
+  revision: number
+  dirty: boolean
+  leases: number
+  closing: boolean
+  status: StoreApi<{ state: CameraStageSaveState; error: string | null }>
+  timer: ReturnType<typeof setTimeout> | null
+  saving: Promise<void> | null
+  unsubscribe: () => void
+  idle: Set<() => void>
+}
 
-/** 当前工程始终使用真实编辑实例，后台工程复用同一 actions 工厂。 */
-export function cameraStageProjectStore(projectId: string): ProjectStore {
-  const leased = leases.get(projectId)
-  if (leased) {
-    const activeId = useCameraStageStore.getState().currentProjectId
-    if ((leased.store === useCameraStageStore && activeId !== projectId)
-      || (leased.store !== useCameraStageStore && activeId === projectId)) {
-      throw new Error('PROJECT_SESSION_CHANGED:原三维执行实例已被界面接管，请核对原工程；未保存内容仍保留。')
-    }
-    return leased.store
+const logger = createLogger('cameraStage.projectInstances')
+const instances = new Map<string, CameraStageProjectInstance>()
+const loading = new Map<string, Promise<void>>()
+const closing = new Map<string, Promise<void>>()
+
+export function findCameraStageProjectInstance(projectId: string): CameraStageProjectInstance | undefined {
+  return instances.get(projectId)
+}
+
+export function registerCameraStageProjectInstance(snapshot: CameraStageProjectSnapshot): CameraStageProjectInstance {
+  const previous = instances.get(snapshot.id)
+  if (previous) return previous
+  const store = createCameraStageStore()
+  store.getState().loadSnapshot(snapshot, { id: snapshot.id, name: snapshot.name })
+  store.temporal.getState().clear()
+  const instance: CameraStageProjectInstance = {
+    id: snapshot.id, store, createdAt: snapshot.createdAt, updatedAt: snapshot.updatedAt,
+    revision: 0, dirty: false, leases: 0, closing: false, timer: null, saving: null,
+    status: createStore(() => ({ state: 'idle' as CameraStageSaveState, error: null as string | null })),
+    unsubscribe: () => undefined, idle: new Set(),
   }
-  if (useCameraStageStore.getState().currentProjectId === projectId && backgroundProjects.get(projectId)?.dirty) {
-    throw new Error('PROJECT_RECOVERY_REQUIRED:原后台工程还有未保存内容，不能用新界面快照覆盖。')
-  }
-  if (useCameraStageStore.getState().currentProjectId === projectId) return useCameraStageStore
-  const runtime = backgroundProjects.get(projectId)
-  if (!runtime) throw new Error('PROJECT_NOT_READY:请先读取原三维工程')
-  return runtime.store
+  instance.unsubscribe = store.subscribe((state, previousState) => {
+    if (state.objects === previousState.objects && state.stateKeyframes === previousState.stateKeyframes
+      && state.sceneSettings === previousState.sceneSettings && state.activeCameraId === previousState.activeCameraId
+      && state.currentProjectName === previousState.currentProjectName) return
+    instance.dirty = true
+    instance.revision++
+    if (instance.timer) clearTimeout(instance.timer)
+    if (!instance.closing) instance.timer = setTimeout(() => {
+      instance.timer = null
+      void saveCameraStageProjectRuntime(instance.id).catch(() => { /* 保存入口已记录错误，脏实例保留供恢复。 */ })
+    }, 700)
+  })
+  instances.set(snapshot.id, instance)
+  return instance
+}
+
+export function cameraStageProjectStore(projectId: string): CameraStageOwnedStore {
+  const instance = instances.get(projectId)
+  if (!instance) throw new Error('PROJECT_NOT_READY:请先读取原三维工程')
+  return instance.store
 }
 
 export async function ensureCameraStageProjectRuntime(projectId: string): Promise<void> {
-  if (leases.has(projectId)) { cameraStageProjectStore(projectId); return }
-  if (useCameraStageStore.getState().currentProjectId === projectId) { cameraStageProjectStore(projectId); return }
-  const snapshot = await readProjectSnapshot(projectId)
-  if (!snapshot) throw new Error('NOT_FOUND')
-  const previous = backgroundProjects.get(projectId)
-  if (previous && (previous.dirty || previous.updatedAt === snapshot.updatedAt)) return
-  previous?.unsubscribe()
-  const store = createCameraStageStore(true)
-  store.getState().loadSnapshot(snapshot, { id: snapshot.id, name: snapshot.name })
-  const runtime: Runtime = { store, updatedAt: snapshot.updatedAt, dirty: false, unsubscribe: () => undefined }
-  runtime.unsubscribe = store.subscribe(() => { runtime.dirty = true })
-  backgroundProjects.set(projectId, runtime)
-  // 只释放已保存且非本次目标的实例；失败内存不能靠缓存清理丢弃。
-  for (const [id, candidate] of backgroundProjects) {
-    if (backgroundProjects.size <= 32) break
-    if (id !== projectId && !candidate.dirty) { candidate.unsubscribe(); backgroundProjects.delete(id) }
+  if (instances.has(projectId)) return
+  if (closing.has(projectId)) throw new Error('PROJECT_CLOSING')
+  let pending = loading.get(projectId)
+  if (!pending) {
+    pending = (async () => {
+      const snapshot = await readProjectSnapshot(projectId)
+      if (!snapshot) throw new Error('NOT_FOUND')
+      registerCameraStageProjectInstance(snapshot)
+    })()
+    loading.set(projectId, pending)
   }
+  try { await pending } finally { if (loading.get(projectId) === pending) loading.delete(projectId) }
+}
+
+export async function attachCameraStageProject(projectId: string): Promise<void> {
+  await ensureCameraStageProjectRuntime(projectId)
+  const instance = instances.get(projectId)!
+  if (instance.closing) throw new Error('PROJECT_CLOSING')
+  attachCameraStageStore(instance.store)
 }
 
 export async function leaseCameraStageProjectRuntime(projectId: string): Promise<() => void> {
-  await ensureCameraStageProjectRuntime(projectId)
-  const current = leases.get(projectId) ?? { store: cameraStageProjectStore(projectId), count: 0, release: holdCameraStageProjectExecution(projectId) }
-  current.count++
-  leases.set(projectId, current)
-  return () => { if (--current.count === 0) { leases.delete(projectId); current.release() } }
+  if (!instances.has(projectId)) await ensureCameraStageProjectRuntime(projectId)
+  const instance = instances.get(projectId)!
+  if (instance.closing || closing.has(projectId)) throw new Error('PROJECT_CLOSING')
+  instance.leases++
+  let released = false
+  return () => {
+    if (released) return
+    released = true
+    instance.leases--
+    if (!instance.leases) for (const listener of instance.idle) listener()
+  }
 }
 
 export function bindCameraStageProjectOperation<Args extends unknown[], Result>(execute: (...args: Args) => Promise<Result>, projectId: (...args: Args) => string): (...args: Args) => Promise<Result> {
@@ -63,15 +107,89 @@ export function bindCameraStageProjectOperation<Args extends unknown[], Result>(
   }
 }
 
+export function readCameraStageProjectInstance(projectId: string): CameraStageProjectSnapshot {
+  const instance = instances.get(projectId)
+  if (!instance) throw new Error('PROJECT_NOT_READY')
+  const state = instance.store.getState()
+  return {
+    id: projectId, name: state.currentProjectName, createdAt: instance.createdAt, updatedAt: instance.updatedAt,
+    objects: state.objects, activeCameraId: state.activeCameraId, animation: state.animation,
+    sceneSettings: state.sceneSettings, stateKeyframes: state.stateKeyframes,
+  }
+}
+
 export async function saveCameraStageProjectRuntime(projectId: string): Promise<void> {
-  const store = cameraStageProjectStore(projectId)
-  if (store === useCameraStageStore) { await saveCurrentProject(); cameraStageProjectStore(projectId); return }
-  const state = store.getState()
-  const now = Date.now()
-  const sceneJson = serializeScene(state)
-  await saveProjectDraft({ id: projectId, name: state.currentProjectName, fingerprint: `${projectId}\u0000${state.currentProjectName}\u0000${sceneJson}`,
-    record: { id: projectId, name: state.currentProjectName, sceneJson, objectCount: state.objects.length, createdAt: now, updatedAt: now } }, false)
-  const runtime = backgroundProjects.get(projectId)
-  if (runtime && store.getState() === state) { runtime.dirty = false; runtime.updatedAt = now }
-  cameraStageProjectStore(projectId)
+  const instance = instances.get(projectId)
+  if (!instance) throw new Error('PROJECT_NOT_READY')
+  if (instance.timer) { clearTimeout(instance.timer); instance.timer = null }
+  if (instance.saving) return instance.saving
+  if (!instance.dirty) return
+  const saving = (async () => {
+    instance.status.setState({ state: 'saving', error: null })
+    try {
+      while (instance.dirty) {
+        const revision = instance.revision
+        const state = instance.store.getState()
+        const updatedAt = Math.max(Date.now(), instance.updatedAt + 1)
+        await writeCameraStageProject({ id: projectId, name: state.currentProjectName, sceneJson: serializeScene(state),
+          objectCount: state.objects.length, createdAt: instance.createdAt, updatedAt })
+        instance.updatedAt = updatedAt
+        if (revision === instance.revision) instance.dirty = false
+      }
+      instance.status.setState({ state: 'saved', error: null })
+    } catch (error) {
+      instance.status.setState({ state: 'error', error: error instanceof Error ? error.message : String(error) })
+      logger.error('三维工程保存失败，保留未保存内容', error, { event: 'camera_stage.project.save.failed', projectId })
+      throw error
+    }
+  })()
+  instance.saving = saving
+  try { await saving } finally { if (instance.saving === saving) instance.saving = null }
+}
+
+export async function closeCameraStageProjectInstance(projectId: string, remove: () => Promise<void>): Promise<void> {
+  const previous = closing.get(projectId)
+  if (previous) return previous
+  const instance = instances.get(projectId)
+  if (instance) instance.closing = true
+  const operation = (async () => {
+    await loading.get(projectId)
+    const current = instances.get(projectId)
+    if (current) {
+      current.closing = true
+      if (current.leases) await new Promise<void>(resolve => current.idle.add(resolve))
+      await saveCameraStageProjectRuntime(projectId)
+    }
+    await remove()
+    if (current) {
+      if (cameraStageStoreAttachment.getStore() === current.store) attachCameraStageStore(createCameraStageStore())
+      current.unsubscribe()
+      if (current.timer) clearTimeout(current.timer)
+      instances.delete(projectId)
+    }
+  })()
+  closing.set(projectId, operation)
+  try { await operation } finally {
+    closing.delete(projectId)
+    const current = instances.get(projectId)
+    if (current) { current.closing = false; current.idle.clear() }
+  }
+}
+
+export function releaseCameraStageProjectInstance(projectId: string): boolean {
+  const instance = instances.get(projectId)
+  if (!instance) return true
+  if (instance.dirty || instance.leases || instance.saving || instance.closing || cameraStageStoreAttachment.getStore() === instance.store) return false
+  instance.unsubscribe()
+  if (instance.timer) clearTimeout(instance.timer)
+  instances.delete(projectId)
+  return true
+}
+
+export function resetCameraStageProjectInstancesForTests(): void {
+  for (const instance of instances.values()) { instance.unsubscribe(); if (instance.timer) clearTimeout(instance.timer) }
+  instances.clear()
+  loading.clear()
+  closing.clear()
+  attachCameraStageStore(createCameraStageStore())
 }

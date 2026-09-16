@@ -1,4 +1,5 @@
-import { cameraStageProjectStore, ensureCameraStageProjectRuntime, saveCameraStageProjectRuntime, bindCameraStageProjectOperation } from './cameraStageProjectRuntime'
+import type { CameraStageProjectSnapshot } from '../projects/cameraStageProjectPersistence'
+import { cameraStageProjectStore, ensureCameraStageProjectRuntime, saveCameraStageProjectRuntime, bindCameraStageProjectOperation, readCameraStageProjectInstance } from './cameraStageProjectRuntime'
 import { createLogger } from '@/core/logging'
 import { CAMERA_STAGE_NAME_MAX_LENGTH } from '@/core/application-control/domains/cameraStage/cameraStageCapabilitySchemas'
 
@@ -9,13 +10,11 @@ import type { StageKeyframeValue, StagePlaybackState } from '../domain/animation
 import { POSE_PRESETS } from '../domain/posePresets.gen'
 import { markSpatialPathCustom } from '../domain/spatialPath'
 import {
-  createNewProject,
+  createStoredCameraStageProject,
   deleteProject as deleteStoredProject,
   listProjects,
   loadProjectIntoScene,
-  readProjectSnapshot,
   renameProject as renameStoredProject,
-  type CameraStageProjectSnapshot,
 } from '../projects/cameraStageProjectService'
 import { compileStateKeyframesToAnimation } from '../domain/stateKeyframeCompiler'
 import { useCameraStageStore } from '../store/cameraStageStore'
@@ -252,23 +251,8 @@ function sceneObservation(snapshot: CameraStageProjectSnapshot): CameraStageScen
 }
 
 async function readDomainSnapshot(projectId: string): Promise<CameraStageProjectSnapshot> {
-  const current = useCameraStageStore.getState()
-  if (current.currentProjectId === projectId) {
-    return {
-      id: projectId,
-      name: current.currentProjectName,
-      createdAt: 0,
-      updatedAt: 0,
-      objects: current.objects,
-      activeCameraId: current.activeCameraId,
-      animation: current.animation,
-      sceneSettings: current.sceneSettings,
-      stateKeyframes: current.stateKeyframes,
-    }
-  }
-  const snapshot = await readProjectSnapshot(projectId)
-  if (!snapshot) throw new Error('NOT_FOUND')
-  return snapshot
+  await ensureCameraStageProjectRuntime(projectId)
+  return readCameraStageProjectInstance(projectId)
 }
 
 const implementation = {
@@ -313,7 +297,7 @@ const implementation = {
   },
 
   async createProject(name: string): Promise<{ projectId: string; name: string }> {
-    const project = await createNewProject(name.trim())
+    const project = await createStoredCameraStageProject(name.trim())
     return { projectId: project.id, name: project.name }
   },
 
@@ -330,7 +314,6 @@ const implementation = {
 
   async deleteProject(projectId: string): Promise<{ projectId: string; status: 'deleted' }> {
     await deleteStoredProject(projectId)
-    if (useCameraStageStore.getState().currentProjectId === projectId) useCameraStageStore.getState().newScene('未命名场景')
     return { projectId, status: 'deleted' }
   },
 

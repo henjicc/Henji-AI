@@ -10,9 +10,7 @@ import { collectCameraStageAsset } from '@/features/assets/services/cameraStageA
 import {
   applyProjectEnvironmentImage,
   createStoredCameraStageProject,
-  saveCurrentProject,
 } from '@/features/cameraStage/projects/cameraStageProjectService';
-import { useCameraStageStore } from '@/features/cameraStage/store/cameraStageStore';
 import type {
   CameraStageRenderTaskScope,
   CameraStageRenderTaskSnapshot,
@@ -284,8 +282,6 @@ async function startRenderInRuntime(nodeId: string, outputKind: 'image' | 'video
     let cameraStageProjectId = node.data.projectId;
     if (!cameraStageProjectId) {
       cameraStageProjectId = (await createStoredCameraStageProject(node.data.displayName || '3D 镜头参考')).id;
-    } else if (useCameraStageStore.getState().currentProjectId === cameraStageProjectId) {
-      await saveCurrentProject();
     }
     const latestNode = requireUnchangedOwner(ownedCameraStageProjectId);
     requireCurrentNode(canvasProjectId, nodeId, null, runtime);

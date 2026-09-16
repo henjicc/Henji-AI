@@ -1,7 +1,8 @@
+import { loadCameraStageTestProject } from '@/tests/cameraStageProjectFixture'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const projectMocks = vi.hoisted(() => ({
-  saveCurrentProject: vi.fn().mockResolvedValue(undefined),
+  writeProject: vi.fn().mockResolvedValue(undefined),
   loadProjectIntoScene: vi.fn().mockResolvedValue(true),
 }))
 
@@ -10,8 +11,9 @@ const reflectionRuntime = vi.hoisted(() => ({
   engine: undefined as unknown,
 }))
 
+vi.mock('@/commands/cameraStageProjects', () => ({ upsertCameraStageProjectRecord: projectMocks.writeProject }))
+
 vi.mock('../projects/cameraStageProjectService', () => ({
-  saveCurrentProject: projectMocks.saveCurrentProject,
   loadProjectIntoScene: projectMocks.loadProjectIntoScene,
 }))
 
@@ -42,7 +44,7 @@ describe('状态关键帧模式动画的正式反射结果', () => {
     const camera = createCameraObject('摄像机01', pickDefaultColor(0))
     const object = createPrimitiveObject('sphere', '浮动球', pickDefaultColor(1))
     objectId = object.id
-    useCameraStageStore.getState().loadSnapshot({
+    loadCameraStageTestProject({
       objects: [camera, object],
       activeCameraId: camera.id,
       animation: createDefaultAnimation(),

@@ -1,12 +1,14 @@
+import { loadCameraStageTestProject } from '@/tests/cameraStageProjectFixture'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({
-  saveCurrentProject: vi.fn().mockResolvedValue(undefined),
+  writeProject: vi.fn().mockResolvedValue(undefined),
   loadProjectIntoScene: vi.fn().mockResolvedValue(true),
 }))
 
+vi.mock('@/commands/cameraStageProjects', () => ({ upsertCameraStageProjectRecord: mocks.writeProject }))
+
 vi.mock('../projects/cameraStageProjectService', () => ({
-  saveCurrentProject: mocks.saveCurrentProject,
   loadProjectIntoScene: mocks.loadProjectIntoScene,
 }))
 
@@ -28,7 +30,7 @@ describe('三维状态关键帧集合写入', () => {
     vi.clearAllMocks()
     const camera = createCameraObject('摄像机01', pickDefaultColor(0))
     const cube = createPrimitiveObject('box', '立方体', pickDefaultColor(1))
-    useCameraStageStore.getState().loadSnapshot({
+    loadCameraStageTestProject({
       objects: [camera, cube],
       activeCameraId: camera.id,
       animation: createDefaultAnimation(),
@@ -106,7 +108,7 @@ describe('三维状态关键帧集合写入', () => {
     const stateKeyframe = useCameraStageStore.getState().stateKeyframes.find((candidate) => candidate.id === result.stateKeyframeIds[0])
     expect(stateKeyframe?.time).toBeCloseTo(1.5, 2)
     expect(stateKeyframe?.name).toBe('开场')
-    expect(mocks.saveCurrentProject).toHaveBeenCalled()
+    expect(mocks.writeProject).toHaveBeenCalled()
   })
 
   it('能批量新建多张状态关键帧，各自落在指定时间点上', async () => {
@@ -128,7 +130,7 @@ describe('三维状态关键帧集合写入', () => {
       { time: 0, cameraId: '不存在的摄像机' },
     ])).rejects.toThrow('STATE_KEYFRAME_CAMERA_NOT_FOUND')
     expect(useCameraStageStore.getState().stateKeyframes).toHaveLength(0)
-    expect(mocks.saveCurrentProject).not.toHaveBeenCalled()
+    expect(mocks.writeProject).not.toHaveBeenCalled()
   })
 
   it('批量新建里有一条非法就整批不写', async () => {
@@ -137,7 +139,7 @@ describe('三维状态关键帧集合写入', () => {
       { time: -1, name: '非法时间' },
     ])).rejects.toThrow('STATE_KEYFRAME_TIME_INVALID')
     expect(useCameraStageStore.getState().stateKeyframes).toHaveLength(0)
-    expect(mocks.saveCurrentProject).not.toHaveBeenCalled()
+    expect(mocks.writeProject).not.toHaveBeenCalled()
   })
 
   it('能删除一张状态关键帧', async () => {

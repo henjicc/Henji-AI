@@ -4,7 +4,7 @@ import { fieldWriterTable, type ApplicationPropertyMutation, type ApplicationRef
 
 import { STAGE_RENDER_STYLE_LABELS, STAGE_RENDER_STYLE_VALUES } from '../domain/renderStyles'
 import type { StageSceneSettings } from '../domain/sceneTypes'
-import type { CameraStageProjectSnapshot } from '../projects/cameraStageProjectService'
+import type { CameraStageProjectSnapshot } from '../projects/cameraStageProjectPersistence'
 import type { useCameraStageStore } from '../store/cameraStageStore'
 import {
   booleanCodec, colorCodec, enumCodec, numberCodec, stageDescriptor, stageField, vector3Codec,

@@ -1,3 +1,5 @@
+import '@/tests/cameraStageProjectFixture'
+import { writeCameraStageProject } from './cameraStageProjectPersistence'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { CameraStageProjectPlatformWrite } from '@/platform/contracts/cameraStageProjects'
 
@@ -26,24 +28,10 @@ import {
   createStoredCameraStageProject,
   deleteProject,
   listProjects,
-  saveProjectDraft,
-  type CameraStageProjectDraft,
 } from './cameraStageProjectService'
 
-function createDraft(id: string): CameraStageProjectDraft {
-  return {
-    id,
-    name: '测试工程',
-    fingerprint: `${id}-fingerprint`,
-    record: {
-      id,
-      name: '测试工程',
-      createdAt: 1,
-      updatedAt: 2,
-      objectCount: 0,
-      sceneJson: '{}',
-    },
-  }
+function createDraft(id: string): CameraStageProjectPlatformWrite {
+  return { id, name: '测试工程', createdAt: 1, updatedAt: 2, objectCount: 0, sceneJson: '{}' }
 }
 
 describe('cameraStageProjectService 工程写入串行化', () => {
@@ -145,7 +133,7 @@ describe('cameraStageProjectService 工程写入串行化', () => {
     }))
     commandMocks.deleteRecord.mockResolvedValue(undefined)
 
-    const saving = saveProjectDraft(createDraft(projectId), false)
+    const saving = writeCameraStageProject(createDraft(projectId))
     await vi.waitFor(() => expect(commandMocks.upsertRecord).toHaveBeenCalledTimes(1))
     const deleting = deleteProject(projectId)
     await Promise.resolve()
@@ -155,7 +143,7 @@ describe('cameraStageProjectService 工程写入串行化', () => {
     await Promise.all([saving, deleting])
     expect(commandMocks.deleteRecord).toHaveBeenCalledWith(projectId)
 
-    await saveProjectDraft(createDraft(projectId), false)
+    await expect(writeCameraStageProject(createDraft(projectId))).rejects.toThrow('PROJECT_DELETED')
     expect(commandMocks.upsertRecord).toHaveBeenCalledTimes(1)
   })
 })

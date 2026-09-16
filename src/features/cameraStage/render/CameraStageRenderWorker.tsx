@@ -12,10 +12,10 @@ import { areCameraAspectRatiosConsistent, getCameraObjects } from '../domain/cam
 import { buildRenderCameraSchedule } from '../domain/renderCameraSchedule'
 import { exportCameraStageImage } from '../export/cameraStageImage'
 import { exportCameraStageVideo } from '../export/cameraStageVideo'
-import { loadProjectIntoScene } from '../projects/cameraStageProjectService'
+import { readProjectSnapshot } from '../projects/cameraStageProjectPersistence'
 import StageScene from '../scene/StageScene'
 import type { StageCaptureFn } from '../scene/StageCaptureBridge'
-import { useCameraStageStore } from '../store/cameraStageStore'
+import { attachCameraStageStore, createCameraStageStore, useCameraStageStore } from '../store/cameraStageStore'
 import {
   assertCameraStageRenderOutputKind,
   assertCameraStageVideoRenderable,
@@ -93,8 +93,12 @@ export default function CameraStageRenderWorker(): JSX.Element {
           phase: 'preparing',
           progress: 0.02,
         })
-        const loaded = await loadProjectIntoScene(request.cameraStageProjectId, { updateSession: false })
-        if (!loaded) throw new Error('未找到需要渲染的 3D 镜头参考工程')
+        const snapshot = await readProjectSnapshot(request.cameraStageProjectId)
+        if (!snapshot) throw new Error('未找到需要渲染的 3D 镜头参考工程')
+        // 渲染宿主持有任务快照投影，不注册业务实例、不向工程反向保存采样状态。
+        const projection = createCameraStageStore()
+        projection.getState().loadSnapshot(snapshot, { id: snapshot.id, name: snapshot.name })
+        attachCameraStageStore(projection)
         if (cancelRef.current) {
           await reportCameraStageRenderWorkerEvent({
             type: 'cancelled',
