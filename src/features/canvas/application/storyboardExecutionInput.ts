@@ -14,13 +14,13 @@ import { resolveNodeModelExecutionParamValues } from '@/features/canvas/params/u
 import { useCanvasStore } from '@/stores/canvasStore'
 import { useSettingsStore } from '@/stores/settingsStore'
 
-import { buildStoryboardPrompt } from './generation'
-import { buildFrameDescriptionDrafts } from './shared'
+import { buildStoryboardPrompt } from './storyboardGeneration'
+import { buildFrameDescriptionDrafts } from '../nodes/storyboardGen/shared'
 
 export const STORYBOARD_IMAGE_EDIT_REQUIRED_TAGS: ModelTag[] = ['image-to-image']
 
-export function resolveStoryboardExecutionInput(nodeId: string) {
-  const canvas = useCanvasStore.getState()
+export function resolveStoryboardExecutionInput(nodeId: string, store = useCanvasStore) {
+  const canvas = store.getState()
   const latestNode = canvas.nodes.find((node) => node.id === nodeId)
   if (!latestNode) throw new Error(`画布执行节点不存在：${nodeId}`)
   const data = latestNode.data as StoryboardGenNodeData

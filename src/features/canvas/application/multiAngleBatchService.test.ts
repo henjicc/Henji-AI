@@ -120,8 +120,8 @@ describe('多角度批次执行服务', () => {
       previous: first.snapshot,
       execute: async (plan, context) => {
         retryCalls.push(plan.order)
-        context.onProviderRequestId(`req-${plan.order}-2`)
-        return { mediaUrl: `${plan.order}-retry.png` }
+        expect(context.resumeProviderRequestId).toBe(`req-${plan.order}-1`)
+        return { mediaUrl: `${plan.order}-retry.png`, providerRequestId: context.resumeProviderRequestId }
       },
     })
     expect(firstCalls).toEqual([0, 1, 2, 3])

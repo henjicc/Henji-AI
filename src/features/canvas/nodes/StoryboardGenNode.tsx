@@ -1,57 +1,47 @@
-import { memo, useCallback, useEffect, useMemo, useState } from 'react'
-import { Handle, Position, useUpdateNodeInternals } from '@xyflow/react'
-import { useTranslation } from 'react-i18next'
-import { ICON_NODE_STORYBOARD } from '@/core/theme/icons'
+import { memo, useCallback, useEffect, useMemo, useState } from 'react';
+import { Handle, Position, useUpdateNodeInternals } from '@xyflow/react';
+import { useTranslation } from 'react-i18next';
+import { useProjectStore } from '@/stores/projectStore';
+import { attachCanvasGenerationFeedback } from '../application/canvasDomainExecutors';
+import { ICON_NODE_STORYBOARD } from '@/core/theme/icons';
 
-import { CANVAS_NODE_TYPES, DEFAULT_ASPECT_RATIO, EXPORT_RESULT_NODE_DEFAULT_WIDTH, EXPORT_RESULT_NODE_LAYOUT_HEIGHT, type StoryboardGenNodeData } from '@/features/canvas/domain/canvasNodes'
-import { EXPORT_RESULT_DISPLAY_NAME, resolveNodeDisplayName } from '@/features/canvas/domain/nodeDisplay'
-import { getDefaultModelId } from '@/features/canvas/domain/defaultModels'
-import { getSocketColor, MODEL_PARAM_ID } from '@/features/canvas/domain/socketTypes'
-import { areMediaOutputListsEqual, collectInputMediaByKind } from '@/features/canvas/application/graphMediaResolver'
-import { areStringSetsEqual, areValueOverridesEqual, collectInputValues, getConnectedParamIds } from '@/features/canvas/application/graphValueResolver'
-import { useStoreWithEqualityFn } from 'zustand/traditional'
-import { useNodeModelParams } from '@/features/canvas/params/useNodeModelParams'
-import { ModelInputRow } from '@/features/canvas/params/ModelInputRow'
-import { MediaInputRow } from '@/features/canvas/params/MediaInputRow'
-import { NodeParamRows } from '@/features/canvas/params/NodeParamRows'
-import { isParamVisible } from '@/components/params/paramVisibility'
-import { resolveInputLimits } from '@/core/inputs/inputLimits'
-import { registry } from '@/core/ModelRegistry'
-import { analyzeRatioResolutionParams } from '@/core/params/ratioResolution'
-import { transferModelParamOverridesBetweenModels } from '@/core/params/modelParamTransfer'
-import { useCanvasGenerationProgressStore } from '@/stores/canvasGenerationProgressStore'
-import { useCanvasStore } from '@/stores/canvasStore'
-import { showAlertDialog } from '@/stores/alertDialogStore'
-import { NodeHeader, NODE_HEADER_FLOATING_POSITION_CLASS } from '@/features/canvas/ui/NodeHeader'
-import { NodeLodPlaceholder } from '@/features/canvas/ui/NodeLodPlaceholder'
-import { NodeResizeHandle } from '@/features/canvas/ui/NodeResizeHandle'
-import { NODE_IDLE_BORDER_CLASS, NODE_PORT_NODE_CLASS, NODE_PORT_VISIBLE_CLASS, NODE_ROW_GAP_CLASS, NODE_SELECTED_BORDER_CLASS } from '@/features/canvas/ui/nodeControlStyles'
-import PriceEstimate from '@/components/ui/PriceEstimate'
-import { STORYBOARD_GEN_ICON_ADJUST, generateFrameId } from '@/features/canvas/nodes/storyboardGen/shared'
-import { computeStoryboardBaseFrameLayout, computeStoryboardFrameLayout } from '@/features/canvas/nodes/storyboardGen/layout'
-import { generateStoryboardImage } from '@/features/canvas/nodes/storyboardGen/generation'
-import {
-  getStoryboardExecutionSignatureExtras,
-  resolveStoryboardExecutionInput,
-  STORYBOARD_IMAGE_EDIT_REQUIRED_TAGS,
-} from '@/features/canvas/nodes/storyboardGen/storyboardExecutionInput'
-import { GenerationService } from '@/core/services/GenerationService'
-import {
-  registerCanvasNodeExecutor,
-  type CanvasNodeExecutionContext,
-  type CanvasNodeExecutionResult,
-  type CanvasNodePreflightContext,
-} from '@/features/canvas/application/canvasExecutionService'
-import { isCanvasProjectContextCurrent } from '@/features/canvas/application/canvasApplicationService'
-import { commitCanvasGenerationOutputs } from '@/features/canvas/application/generationOutputApplicationService'
-import { STORYBOARD_GENERATION_RESUME_CONTEXT_FIELD } from '@/features/canvas/application/storyboardGenerationOutputService'
-import {
-  isNineGridStoryboard,
-  NINE_GRID_PRESET_ID,
-} from '@/features/canvas/capabilities/nineGridPolicy'
-import { StoryboardGridEditor } from '@/features/canvas/nodes/storyboardGen/StoryboardGridEditor'
-import { useStoryboardFramePrompts } from '@/features/canvas/nodes/storyboardGen/useStoryboardFramePrompts'
-import { createCanvasGenerationTaskLifecycle } from '@/features/canvas/generation/activeGenerationTasks'
+import { CANVAS_NODE_TYPES, DEFAULT_ASPECT_RATIO, type StoryboardGenNodeData } from '@/features/canvas/domain/canvasNodes';
+import { resolveNodeDisplayName } from '@/features/canvas/domain/nodeDisplay';
+import { getDefaultModelId } from '@/features/canvas/domain/defaultModels';
+import { getSocketColor, MODEL_PARAM_ID } from '@/features/canvas/domain/socketTypes';
+import { areMediaOutputListsEqual, collectInputMediaByKind } from '@/features/canvas/application/graphMediaResolver';
+import { areStringSetsEqual, areValueOverridesEqual, collectInputValues, getConnectedParamIds } from '@/features/canvas/application/graphValueResolver';
+import { useStoreWithEqualityFn } from 'zustand/traditional';
+import { useNodeModelParams } from '@/features/canvas/params/useNodeModelParams';
+import { ModelInputRow } from '@/features/canvas/params/ModelInputRow';
+import { MediaInputRow } from '@/features/canvas/params/MediaInputRow';
+import { NodeParamRows } from '@/features/canvas/params/NodeParamRows';
+import { isParamVisible } from '@/components/params/paramVisibility';
+import { resolveInputLimits } from '@/core/inputs/inputLimits';
+import { registry } from '@/core/ModelRegistry';
+import { analyzeRatioResolutionParams } from '@/core/params/ratioResolution';
+import { transferModelParamOverridesBetweenModels } from '@/core/params/modelParamTransfer';
+
+import { useCanvasStore } from '@/stores/canvasStore';
+import { showAlertDialog } from '@/stores/alertDialogStore';
+import { NodeHeader, NODE_HEADER_FLOATING_POSITION_CLASS } from '@/features/canvas/ui/NodeHeader';
+import { NodeLodPlaceholder } from '@/features/canvas/ui/NodeLodPlaceholder';
+import { NodeResizeHandle } from '@/features/canvas/ui/NodeResizeHandle';
+import { NODE_IDLE_BORDER_CLASS, NODE_PORT_NODE_CLASS, NODE_PORT_VISIBLE_CLASS, NODE_ROW_GAP_CLASS, NODE_SELECTED_BORDER_CLASS } from '@/features/canvas/ui/nodeControlStyles';
+import PriceEstimate from '@/components/ui/PriceEstimate';
+import { STORYBOARD_GEN_ICON_ADJUST, generateFrameId } from '@/features/canvas/nodes/storyboardGen/shared';
+import { computeStoryboardBaseFrameLayout, computeStoryboardFrameLayout } from '@/features/canvas/nodes/storyboardGen/layout';
+
+import { STORYBOARD_IMAGE_EDIT_REQUIRED_TAGS } from '@/features/canvas/application/storyboardExecutionInput';
+
+
+
+
+
+import { isNineGridStoryboard, NINE_GRID_PRESET_ID } from '@/features/canvas/capabilities/nineGridPolicy';
+import { StoryboardGridEditor } from '@/features/canvas/nodes/storyboardGen/StoryboardGridEditor';
+import { useStoryboardFramePrompts } from '@/features/canvas/nodes/storyboardGen/useStoryboardFramePrompts';
+
 
 const StoryboardIcon = ICON_NODE_STORYBOARD
 
@@ -71,17 +61,18 @@ export const StoryboardGenNode = memo(({ id, data, selected, width, height }: St
   const updateNodeInternals = useUpdateNodeInternals()
   const setSelectedNode = useCanvasStore((state) => state.setSelectedNode)
   const updateNodeData = useCanvasStore((state) => state.updateNodeData)
-  const setNodeGenerationProgress = useCanvasGenerationProgressStore((state) => state.setProgress)
-  const addNode = useCanvasStore((state) => state.addNode)
-  const addEdge = useCanvasStore((state) => state.addEdge)
   const hasSourceConnections = useCanvasStore((state) =>
     state.edges.some((edge) => edge.source === id)
   )
-  const findNodePosition = useCanvasStore((state) => state.findNodePosition)
 
   const nodeData = data as StoryboardGenNodeData
   const nineGridPreset = isNineGridStoryboard(nodeData)
   const [error, setError] = useState<string | null>(null)
+  const projectId = useProjectStore(state => state.currentProjectId)
+  useEffect(() => projectId ? attachCanvasGenerationFeedback(projectId, id, () => undefined, () => showAlertDialog({
+    title: t('common:providerKeyRequired.title'), message: t('common:providerKeyRequired.message'),
+    type: 'info', settingsTarget: { tab: 'models', sectionId: 'models-providers' },
+  }), setError) : undefined, [projectId, id, t])
   const resolvedTitle = useMemo(
     () => resolveNodeDisplayName(CANVAS_NODE_TYPES.storyboardGen, nodeData),
     [nodeData]
@@ -232,159 +223,6 @@ export const StoryboardGenNode = memo(({ id, data, selected, width, height }: St
     }
     updateNodeData(id, { frames: nextFrames })
   }, [id, nodeData.frames, totalFrames, updateNodeData])
-
-  const handleGenerate = useCallback(async (
-    execution: CanvasNodeExecutionContext,
-  ): Promise<CanvasNodeExecutionResult> => {
-    const generationProjectId = execution.projectId
-    if (!generationProjectId) throw new Error('当前没有可执行生成的画布项目')
-    const isGenerationProjectCurrent = (): boolean => (
-      isCanvasProjectContextCurrent(generationProjectId)
-    )
-    const runtime = resolveStoryboardExecutionInput(id)
-    if (
-      !runtime.model
-      || !STORYBOARD_IMAGE_EDIT_REQUIRED_TAGS.every((tag) => runtime.model?.meta.tags?.includes(tag))
-    ) throw new Error('当前模型不支持分镜图生图')
-    const prompt = runtime.prompt
-    if (!prompt) {
-      setError('请填写至少一个分镜内容描述')
-      throw new Error('请填写至少一个分镜内容描述')
-    }
-    if (!runtime.providerConfigured) {
-      showAlertDialog({
-        title: t('common:providerKeyRequired.title'),
-        message: t('common:providerKeyRequired.message'),
-        type: 'info',
-        settingsTarget: { tab: 'models', sectionId: 'models-providers' },
-      })
-      throw new Error(t('common:providerKeyRequired.message'))
-    }
-
-    const generationParams: DynamicValueMap = {
-      ...runtime.paramValues,
-      ...runtime.injectedValues,
-      prompt,
-      text: prompt,
-    }
-    const estimateParams: DynamicValueMap = {
-      ...generationParams,
-      ...(runtime.images.length > 0
-        ? {
-          images: runtime.images,
-          uploadedFilePaths: runtime.images,
-        }
-        : {}),
-    }
-    const estimate = await GenerationService.getInstance().getProgressEstimate(
-      runtime.modelId,
-      estimateParams
-    )
-    if (!isGenerationProjectCurrent()) throw new Error('画布项目已切换，本次生成已停止')
-    await execution.assertCurrent()
-    const generationDurationMs = estimate?.durationMs ?? 60_000
-    const generationStartedAt = Date.now()
-    const newNodePosition = findNodePosition(
-      id,
-      EXPORT_RESULT_NODE_DEFAULT_WIDTH,
-      EXPORT_RESULT_NODE_LAYOUT_HEIGHT
-    )
-    const newNodeId = addNode(CANVAS_NODE_TYPES.exportImage, newNodePosition, {
-      isGenerating: true,
-      generationStartedAt,
-      generationDurationMs,
-      displayName: EXPORT_RESULT_DISPLAY_NAME.storyboardGenOutput,
-      resultKind: 'storyboardGenOutput',
-      generationSourceNodeId: id,
-      generationInputSignature: execution.inputSignature,
-      [STORYBOARD_GENERATION_RESUME_CONTEXT_FIELD]: runtime.resumeContext,
-      prompt: '',
-      modelId: runtime.modelId,
-      params: { ...runtime.paramValues },
-    })
-
-    addEdge(id, newNodeId)
-    setSelectedNode(null)
-    setError(null)
-    const taskLifecycle = createCanvasGenerationTaskLifecycle(
-      isGenerationProjectCurrent,
-      (taskId) => updateNodeData(newNodeId, { serverTaskId: taskId, serverTaskModelId: runtime.modelId }),
-    )
-
-    try {
-      const generated = await generateStoryboardImage({
-        modelId: runtime.modelId,
-        params: generationParams,
-        incomingImages: runtime.images,
-        frameAspectRatioValue: runtime.frameAspectRatio,
-        resumeContext: runtime.resumeContext,
-        gridImageResolution: runtime.gridResolution,
-        onProgress: (progress) => {
-          if (isGenerationProjectCurrent()) setNodeGenerationProgress(newNodeId, progress)
-        },
-        onTaskId: taskLifecycle.onTaskId,
-        assertCurrent: execution.assertCurrent,
-      })
-
-      if (!isGenerationProjectCurrent()) {
-        await taskLifecycle.cancelLatest()
-        throw new Error('画布项目已切换，本次生成结果已丢弃')
-      }
-
-      const committed = await commitCanvasGenerationOutputs({
-        sourceNodeId: id,
-        placeholderNodeId: newNodeId,
-        resultNodeType: CANVAS_NODE_TYPES.exportImage,
-        contract: generated.contract,
-        completionId: `storyboard-grid:${newNodeId}`,
-        groupTitle: `${resolvedTitle} · ${generated.contract.outputs.length}`,
-      })
-      return { status: committed.idempotent ? 'reused' : 'completed', resultNodeIds: committed.resultNodeIds }
-    } catch (generationError) {
-      if (isGenerationProjectCurrent()) {
-        updateNodeData(newNodeId, {
-          isGenerating: false,
-          generationStartedAt: null,
-          generationError:
-            generationError instanceof Error ? generationError.message : '生成失败',
-          serverTaskId: null,
-          serverTaskModelId: null,
-        })
-      }
-      throw generationError
-    } finally {
-      taskLifecycle.release()
-      if (isGenerationProjectCurrent()) setNodeGenerationProgress(newNodeId, null)
-    }
-  }, [addEdge, addNode, findNodePosition, id, resolvedTitle, setNodeGenerationProgress, setSelectedNode, t, updateNodeData])
-
-  const preflightBeforeDependencies = useCallback((execution: CanvasNodePreflightContext) => {
-    if (
-      execution.projectId
-      && !isCanvasProjectContextCurrent(execution.projectId)
-    ) throw new Error('画布项目已切换，本次生成已停止')
-    const runtime = resolveStoryboardExecutionInput(id)
-    if (
-      !runtime.model
-      || !STORYBOARD_IMAGE_EDIT_REQUIRED_TAGS.every((tag) => runtime.model?.meta.tags?.includes(tag))
-    ) throw new Error('当前模型不支持分镜图生图')
-    if (runtime.providerConfigured) return
-    showAlertDialog({
-      title: t('common:providerKeyRequired.title'),
-      message: t('common:providerKeyRequired.message'),
-      type: 'info',
-      settingsTarget: { tab: 'models', sectionId: 'models-providers' },
-    })
-    throw new Error(t('common:providerKeyRequired.message'))
-  }, [id, t])
-
-  useEffect(() => registerCanvasNodeExecutor(id, {
-    kind: 'storyboard-generation',
-    dependency: { mode: 'auto', outputMode: 'result-nodes' },
-    getInputSignatureExtras: getStoryboardExecutionSignatureExtras,
-    preflightBeforeDependencies,
-    run: handleGenerate,
-  }), [handleGenerate, id, preflightBeforeDependencies])
 
   const handleRowChange = useCallback((delta: number): void => {
     if (nineGridPreset) return

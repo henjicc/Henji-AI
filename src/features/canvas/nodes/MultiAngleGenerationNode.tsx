@@ -1,123 +1,37 @@
-import { memo, useCallback, useEffect, useMemo, useRef } from 'react'
-import { type NodeProps } from '@xyflow/react'
-import { Camera } from 'lucide-react'
-import { useStoreWithEqualityFn } from 'zustand/traditional'
-import { useTranslation } from 'react-i18next'
-import { registry } from '@/core/ModelRegistry'
-import { getI18nText } from '@/core/types'
-import PriceEstimate from '@/components/ui/PriceEstimate'
+import { memo, useMemo } from 'react';
+import { type NodeProps } from '@xyflow/react';
+import { Camera } from 'lucide-react';
+import { useStoreWithEqualityFn } from 'zustand/traditional';
+import { useTranslation } from 'react-i18next';
+import { registry } from '@/core/ModelRegistry';
+import { getI18nText } from '@/core/types';
+import PriceEstimate from '@/components/ui/PriceEstimate';
 
-import { GenerationService } from '@/core/services/GenerationService'
-import {
-  areMediaOutputListsEqual,
-  collectInputMediaByKind,
-} from '@/features/canvas/application/graphMediaResolver'
-import { commitCanvasGenerationOutputs } from '@/features/canvas/application/generationOutputApplicationService'
-import { isCanvasProjectContextCurrent } from '@/features/canvas/application/canvasApplicationService'
-import {
-  executeMultiAngleBatch,
-  type MultiAngleBatchSnapshotV1,
-} from '@/features/canvas/application/multiAngleBatchService'
-import {
-  registerCanvasNodeExecutor,
-  type CanvasNodeExecutionContext,
-  type CanvasNodeExecutionResult,
-} from '@/features/canvas/application/canvasExecutionService'
-import {
-  CANVAS_IMAGE_CAPABILITY_IDS,
-} from '@/features/canvas/capabilities/types'
-import {
-  createMultiAngleCommitContract,
-  normalizeMultiAngleConfig,
-  resolveMultiAngleExecutionTarget,
-  type MultiAngleConfigV1,
-} from '@/features/canvas/capabilities/multiAnglePolicy'
-import {
-  CANVAS_NODE_TYPES,
-  EXPORT_RESULT_NODE_DEFAULT_WIDTH,
-  EXPORT_RESULT_NODE_LAYOUT_HEIGHT,
-  type ImageEditNodeData,
-} from '@/features/canvas/domain/canvasNodes'
-import { getMainPortConnectionFlags } from '@/features/canvas/domain/connectionIndex'
-import { runCanvasGeneration, resumeCanvasGeneration } from '@/features/canvas/generation/runGeneration'
-import { MediaInputRow } from '@/features/canvas/params/MediaInputRow'
-import { useCanvasStore } from '@/stores/canvasStore'
-import { useSettingsStore } from '@/stores/settingsStore'
-import { ensureGenerationProviderConfigured } from './shared/generationNodeGuards'
-import {
-  MultiAngleWorkbench,
-} from '@/features/canvas/ui/specialInterfaces/multiAngle/MultiAngleSpecialEditor'
-import { buildMultiAngleEditorDraft } from '@/features/canvas/ui/specialInterfaces/multiAngle/multiAngleEditorState'
-import {
-  ToolWorkbenchNodeFrame,
-} from './shared/ToolWorkbenchNodeFrame'
 
-export interface MultiAngleGenerationNodeData extends ImageEditNodeData {
-  capabilityId: 'image.multi-angle'
-  multiAngleConfig: MultiAngleConfigV1
-  multiAngleBatch?: MultiAngleBatchSnapshotV1 | null
-  multiAngleResultPlaceholderId?: string | null
-  sourceImageUrl?: string | null
-}
+import { areMediaOutputListsEqual, collectInputMediaByKind } from '@/features/canvas/application/graphMediaResolver';
+
+
+
+
+
+import { normalizeMultiAngleConfig, resolveMultiAngleExecutionTarget } from '@/features/canvas/capabilities/multiAnglePolicy';
+
+import { getMainPortConnectionFlags } from '@/features/canvas/domain/connectionIndex';
+
+import { MediaInputRow } from '@/features/canvas/params/MediaInputRow';
+import { useCanvasStore } from '@/stores/canvasStore';
+
+
+import { MultiAngleWorkbench } from '@/features/canvas/ui/specialInterfaces/multiAngle/MultiAngleSpecialEditor';
+import { buildMultiAngleEditorDraft } from '@/features/canvas/ui/specialInterfaces/multiAngle/multiAngleEditorState';
+import { ToolWorkbenchNodeFrame } from './shared/ToolWorkbenchNodeFrame';
+
+import type { MultiAngleGenerationNodeData } from '../application/specialGenerationNodeTypes';
 
 type MultiAngleGenerationNodeProps = NodeProps & {
   id: string
   data: MultiAngleGenerationNodeData
   selected?: boolean
-}
-
-function readSourceImages(nodeId: string, data: MultiAngleGenerationNodeData): string[] {
-  const canvas = useCanvasStore.getState()
-  const incoming = collectInputMediaByKind(nodeId, canvas.nodes, canvas.edges, 'image')
-    .map((item) => item.url)
-  const sources = incoming.length > 0 ? incoming : data.mediaInputs?.image ?? []
-  return sources.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
-}
-
-function requireSingleSource(sources: readonly string[], errorMessage: string): string {
-  if (sources.length !== 1) throw new Error(errorMessage)
-  return sources[0]
-}
-
-function createPlaceholder(
-  sourceNodeId: string,
-  inputSignature: string,
-  data: MultiAngleGenerationNodeData,
-  displayName: string,
-): string {
-  const canvas = useCanvasStore.getState()
-  const config = normalizeMultiAngleConfig(data.multiAngleConfig)
-  const executionTarget = resolveMultiAngleExecutionTarget(config.controlProfile)
-  const previousId = data.multiAngleResultPlaceholderId?.trim()
-  if (previousId && canvas.nodes.some((node) => node.id === previousId && node.type === CANVAS_NODE_TYPES.exportImage)) {
-    canvas.updateNodeData(previousId, {
-      isGenerating: true,
-      generationStartedAt: Date.now(),
-      generationError: null,
-      generationSourceNodeId: sourceNodeId,
-      generationInputSignature: inputSignature,
-    })
-    return previousId
-  }
-  const nodeId = canvas.addNode(
-    CANVAS_NODE_TYPES.exportImage,
-    canvas.findNodePosition(sourceNodeId, EXPORT_RESULT_NODE_DEFAULT_WIDTH, EXPORT_RESULT_NODE_LAYOUT_HEIGHT),
-    {
-      isGenerating: true,
-      generationStartedAt: Date.now(),
-      displayName,
-      resultKind: 'image',
-      sourceCapabilityId: CANVAS_IMAGE_CAPABILITY_IDS.multiAngle,
-      generationSourceNodeId: sourceNodeId,
-      generationInputSignature: inputSignature,
-      generationPrompt: '',
-      generationModelId: executionTarget.modelId,
-      generationMappedParams: { multiAngleConfig: config },
-    },
-  )
-  canvas.addEdge(sourceNodeId, nodeId)
-  canvas.updateNodeData(sourceNodeId, { multiAngleResultPlaceholderId: nodeId })
-  return nodeId
 }
 
 export const MultiAngleGenerationNode = memo(({
@@ -130,7 +44,6 @@ export const MultiAngleGenerationNode = memo(({
   const { t, i18n } = useTranslation()
   const updateNodeData = useCanvasStore((state) => state.updateNodeData)
   const setSelectedNode = useCanvasStore((state) => state.setSelectedNode)
-  const activeControllerRef = useRef<AbortController | null>(null)
   const hasSourceConnections = useCanvasStore(
     (state) => getMainPortConnectionFlags(state.edges).get(id)?.hasMainSource ?? false,
   )
@@ -147,137 +60,6 @@ export const MultiAngleGenerationNode = memo(({
   const priceModel = useMemo(() => registry.getModel(resolveMultiAngleExecutionTarget(config.controlProfile).modelId), [config.controlProfile])
   const priceParams = useMemo(() => data.params ?? {}, [data.params])
 
-
-  const prepareExecution = useCallback(() => {
-    const latest = useCanvasStore.getState().nodes.find((node) => node.id === id)
-    if (!latest) throw new Error(t('node.multiAngleGeneration.errors.nodeMissing', { id }))
-    const latestData = latest.data as MultiAngleGenerationNodeData
-    const latestConfig = normalizeMultiAngleConfig(latestData.multiAngleConfig)
-    const sourceImage = requireSingleSource(
-      readSourceImages(id, latestData),
-      t('node.multiAngleGeneration.errors.singleSource'),
-    )
-    ensureGenerationProviderConfigured(useSettingsStore.getState().providerKeyStatus.fal === true, {
-      title: t('node.multiAngleGeneration.providerRequiredTitle'),
-      message: t('node.multiAngleGeneration.providerRequiredMessage'),
-      error: t('node.multiAngleGeneration.apiKeyRequired'),
-    })
-    return { latestData, latestConfig, sourceImage }
-  }, [id, t])
-
-  const handleGenerate = useCallback(async (
-    execution: CanvasNodeExecutionContext,
-  ): Promise<CanvasNodeExecutionResult> => {
-    const generationProjectId = execution.projectId
-    if (!generationProjectId) throw new Error(t('node.multiAngleGeneration.errors.projectMissing'))
-    const isGenerationProjectCurrent = (): boolean => (
-      isCanvasProjectContextCurrent(generationProjectId)
-    )
-    const prepared = prepareExecution()
-    await execution.assertCurrent()
-    const placeholderNodeId = createPlaceholder(
-      id,
-      execution.inputSignature,
-      prepared.latestData,
-      t('node.multiAngleGeneration.resultTitle'),
-    )
-    const controller = new AbortController()
-    activeControllerRef.current?.abort()
-    activeControllerRef.current = controller
-
-    try {
-      const result = await executeMultiAngleBatch({
-        config: prepared.latestConfig,
-        sourceImage: prepared.sourceImage,
-        previous: prepared.latestData.multiAngleBatch,
-        signal: controller.signal,
-        onSnapshot: (snapshot) => {
-          if (isGenerationProjectCurrent()) updateNodeData(id, { multiAngleBatch: snapshot })
-        },
-        cancelTask: (requestId) => GenerationService.getInstance().cancelTask(requestId),
-        execute: async (plan, context) => {
-          const generated = context.resumeProviderRequestId
-            ? await resumeCanvasGeneration({
-                modelId: plan.modelId,
-                mediaType: 'image',
-                taskId: context.resumeProviderRequestId,
-              })
-            : await runCanvasGeneration({
-                modelId: plan.modelId,
-                mediaType: 'image',
-                params: plan.params,
-                upstream: { images: [prepared.sourceImage] },
-                onTaskId: context.onProviderRequestId,
-                assertCurrent: execution.assertCurrent,
-              })
-          if (generated.outputs.length !== 1) {
-            throw new Error(t('node.multiAngleGeneration.errors.singleOutput', {
-              count: generated.outputs.length,
-            }))
-          }
-          return {
-            mediaUrl: generated.outputs[0],
-            providerRequestId: context.resumeProviderRequestId,
-          }
-        },
-      })
-      if (!isGenerationProjectCurrent()) {
-        controller.abort()
-        throw new Error(t('node.multiAngleGeneration.errors.projectSwitched'))
-      }
-      if (!result.complete) {
-        const error = result.errors.join('; ') || t('node.multiAngleGeneration.errors.batchIncomplete')
-        updateNodeData(placeholderNodeId, {
-          isGenerating: false,
-          generationStartedAt: null,
-          generationError: error,
-        })
-        throw new Error(error)
-      }
-
-      const committed = await commitCanvasGenerationOutputs({
-        sourceNodeId: id,
-        placeholderNodeId,
-        resultNodeType: CANVAS_NODE_TYPES.exportImage,
-        contract: createMultiAngleCommitContract(result.completed),
-        completionId: `multi-angle:${result.snapshot.batchId}`,
-        groupTitle: t('node.multiAngleGeneration.groupTitle', { count: result.completed.length }),
-      })
-      updateNodeData(id, {
-        multiAngleBatch: null,
-        multiAngleResultPlaceholderId: null,
-      })
-      return { status: committed.idempotent ? 'reused' : 'completed', resultNodeIds: committed.resultNodeIds }
-    } catch (error) {
-      if (isGenerationProjectCurrent()) {
-        updateNodeData(placeholderNodeId, {
-          isGenerating: false,
-          generationStartedAt: null,
-          generationError: error instanceof Error
-            ? error.message
-            : t('node.multiAngleGeneration.generationFailed'),
-        })
-      }
-      throw error
-    } finally {
-      if (activeControllerRef.current === controller) activeControllerRef.current = null
-    }
-  }, [id, prepareExecution, t, updateNodeData])
-
-  useEffect(() => registerCanvasNodeExecutor(id, {
-    kind: 'standard-generation',
-    dependency: { mode: 'auto', outputMode: 'result-nodes' },
-    preflightBeforeDependencies: () => ensureGenerationProviderConfigured(
-      useSettingsStore.getState().providerKeyStatus.fal === true,
-      {
-        title: t('node.multiAngleGeneration.providerRequiredTitle'),
-        message: t('node.multiAngleGeneration.providerRequiredMessage'),
-        error: t('node.multiAngleGeneration.apiKeyRequired'),
-      },
-    ),
-    run: handleGenerate,
-  }), [handleGenerate, id, t])
-  useEffect(() => () => activeControllerRef.current?.abort(), [])
 
   const sourceImage = sourceImages[0] ?? null
   // Selection updates the frame only; retain the workbench instance and its local view state.

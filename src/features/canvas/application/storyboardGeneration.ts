@@ -7,7 +7,7 @@ import {
   prepareStoryboardGenerationOutputContract,
   type StoryboardGenerationResumeContextV1,
 } from '@/features/canvas/application/storyboardGenerationOutputService'
-import { generateGridImageDataUrl } from './shared'
+import { generateGridImageDataUrl } from '../nodes/storyboardGen/shared'
 
 interface BuildStoryboardPromptParams {
   nodeData: StoryboardGenNodeData
@@ -18,6 +18,7 @@ interface BuildStoryboardPromptParams {
 }
 
 interface GenerateStoryboardImageParams {
+  signal?: AbortSignal
   modelId: string
   /** schema 参数 + prompt/text 协议键（智能宽高比由 GenerationService 解析） */
   params: DynamicValueMap
@@ -74,6 +75,7 @@ export function buildStoryboardPrompt({
 }
 
 export async function generateStoryboardImage({
+  signal,
   modelId,
   params,
   incomingImages,
@@ -84,6 +86,7 @@ export async function generateStoryboardImage({
   onTaskId,
   assertCurrent,
 }: GenerateStoryboardImageParams): Promise<GeneratedStoryboardImage> {
+  signal?.throwIfAborted()
   const gridImageDataUrl = generateGridImageDataUrl(
     frameAspectRatioValue,
     resumeContext.gridRows,
@@ -93,6 +96,7 @@ export async function generateStoryboardImage({
   const allReferenceImages = [...incomingImages, gridImageDataUrl]
 
   const generated = await runCanvasGeneration({
+    signal,
     modelId,
     params,
     referenceImages: allReferenceImages,
@@ -101,6 +105,7 @@ export async function generateStoryboardImage({
     assertCurrent,
   })
 
+  signal?.throwIfAborted()
   return {
     contract: await prepareStoryboardGenerationOutputContract({
       outputs: generated.outputs,
