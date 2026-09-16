@@ -1,12 +1,12 @@
 import type Database from 'better-sqlite3'
 import type { OperationRecord } from './operationStore'
-import { applicationGenerationTaskId } from '../../../../src/core/application-control/operationIdentity'
+import { applicationGenerationTaskId, applicationInvocationId } from '../../../../src/core/application-control/operationIdentity'
 
 /** 启动和查询仅核对本地正式行，不提交模型请求，也不重新执行创建。 */
 export function recoverPersistedGenerationOperation(db: Database.Database, record: OperationRecord): OperationRecord | undefined {
   if (record.capabilityId !== 'create_visible_generation_task' || !['unknown', 'completed'].includes(record.state)) return undefined
   if (!db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='history'").get()) return undefined
-  const task = db.prepare('SELECT id, model_id, prompt, status, task_id, file_path FROM history WHERE id = ?').get(applicationGenerationTaskId(record.operationId)) as {
+  const task = db.prepare('SELECT id, model_id, prompt, status, task_id, file_path FROM history WHERE id = ?').get(applicationGenerationTaskId(applicationInvocationId(record.callerId, record.operationId))) as {
     id: string; model_id: string; prompt: string; status: string; task_id: string | null; file_path: string | null
   } | undefined
   if (!task) return undefined

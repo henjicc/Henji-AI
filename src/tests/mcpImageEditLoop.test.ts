@@ -2,7 +2,7 @@
 import { afterEach, expect, it, vi } from 'vitest'
 import type { AssetRecord, CreateAssetInput } from '@/platform/contracts/assetLibrary'
 import { createApplicationCallerGrant } from '@/core/application-control/callerContext'
-import { MCP_CAPABILITY_IDS, MCP_READ_PERMISSIONS, MCP_WRITE_PERMISSIONS } from '@/core/application-control/localHostContracts'
+import { APPLICATION_CAPABILITY_IDS, APPLICATION_READ_PERMISSIONS, APPLICATION_WRITE_PERMISSIONS } from '@/core/application-control/localHostContracts'
 import { createApplicationCapabilitySession } from '@/features/application-control/applicationCapabilityService'
 import { createImageEditPreview, resetImageEditApplicationStateForTests } from '@/features/imageEdit/application/imageEditApplicationService'
 import { getStoredImageEditPreview } from '@/features/imageEdit/application/imageEditSessionRegistry'
@@ -35,7 +35,7 @@ it('MCP 授权目录通过正式服务创建、读取并保存编辑预览，原
   const sourceRef = { kind: 'image_edit.preview', id: String(source.previewRef) }
   const original = structuredClone(getStoredImageEditPreview(sourceRef.id))
   const session = createApplicationCapabilitySession(createApplicationCallerGrant({ callerId: 'mcp-edit', allowWrites: true,
-    allowDestructive: false, capabilityIds: [...MCP_CAPABILITY_IDS], permissions: [...MCP_READ_PERMISSIONS, ...MCP_WRITE_PERMISSIONS] }))
+    allowDestructive: false, capabilityIds: [...APPLICATION_CAPABILITY_IDS], permissions: [...APPLICATION_READ_PERMISSIONS, ...APPLICATION_WRITE_PERMISSIONS] }))
   const execute = (id: string, version: number, input: Record<string, unknown>) => session.execute({ id, version, input }, { requestId: crypto.randomUUID(), signal: new AbortController().signal })
   const created = await execute('create_image_edit_preview', 2, { sourceRef, operations: [{ kind: 'rotate_cw', degrees: 90 }] })
   expect(created.ok, JSON.stringify(created)).toBe(true)

@@ -7,8 +7,8 @@ import type { LlmModelConfig } from '@henjicc/ai-sdk'
 import { PiEngine } from './piEngine'
 import type { EngineEvent } from './contracts'
 import { z } from 'zod'
-import { buildMcpToolCatalog } from '../application-runtime/toolCatalog'
-import { MCP_CAPABILITY_IDS } from '../../../../src/core/application-control/localHostContracts'
+import { buildApplicationToolCatalog } from '../application-runtime/toolCatalog'
+import { APPLICATION_CAPABILITY_IDS } from '../../../../src/core/application-control/localHostContracts'
 import { BUILTIN_APPLICATION_CAPABILITY_REGISTRY } from '../../../../src/core/application-control/builtinApplicationCapabilityRegistry'
 import { loadAssistantSkillCapability } from '../../../../src/core/application-control/domains/assistantSkill/assistantSkillApplicationCapabilities'
 import { loadAssistantSkillFrom } from '../assistant/skills/registry'
@@ -82,12 +82,12 @@ async function fixture(capabilities: Partial<LlmModelConfig['capabilities']> = {
     setToolPlan: (value: typeof toolPlan) => { toolPlan = value } }
 }
 function applicationCatalog(allowWrites = true) {
-    const tools = MCP_CAPABILITY_IDS.map(id => {
+    const tools = APPLICATION_CAPABILITY_IDS.map(id => {
       const definition = BUILTIN_APPLICATION_CAPABILITY_REGISTRY.get(id)!
       return { id, version: definition.version, title: definition.title, description: definition.description,
         inputSchema: z.toJSONSchema(definition.inputSchema, { io: 'input' }) as Record<string, unknown> }
     })
-    return buildMcpToolCatalog({ tools, access: { allowWrites, allowDestructive: allowWrites, allowPaid: allowWrites }, operationsEnabled: true })
+    return buildApplicationToolCatalog({ tools, access: { allowWrites, allowDestructive: allowWrites, allowPaid: allowWrites }, operationsEnabled: true })
 }
 
 describe('Pi official SDK engine', () => {

@@ -6,7 +6,7 @@ import { toNodeHandler } from '@modelcontextprotocol/node'
 import { EXTERNAL_LIMITS, EXTERNAL_SERVER_INFO } from '../../../../src/core/application-control/localHostContracts'
 import type { McpConnections } from './connections'
 import type { ApplicationHostBridge } from '../application-runtime/applicationHostBridge'
-import type { McpOperationCoordinator } from '../application-runtime/operationCoordinator'
+import type { ApplicationOperationCoordinator } from '../application-runtime/operationCoordinator'
 import { ApplicationToolDispatcher } from '../application-runtime/applicationToolDispatcher'
 
 /** 无协议会话；授权、任务与持久操作均由应用运行时持有。 */
@@ -19,7 +19,7 @@ export class LocalMcpServer {
   private authorizationTimer?: ReturnType<typeof setInterval>
   private resourceUris = new Set<string>()
   constructor(private readonly connections: McpConnections, private readonly host: ApplicationHostBridge,
-    private readonly onError: (error: unknown) => void = () => {}, private readonly operations?: McpOperationCoordinator,
+    private readonly onError: (error: unknown) => void = () => {}, private readonly operations?: ApplicationOperationCoordinator,
     private readonly onRequest: (info: { callerId: string }) => void = () => {}) {}
   get listening(): boolean { return this.http?.listening === true }
   get listeningPort(): number { return this.port }

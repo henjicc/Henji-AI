@@ -14,7 +14,7 @@ export interface ApplicationResult<T = Record<string, unknown>> {
   ok: boolean
   data?: T
   error?: { code: string; message: string; recoverable?: boolean; details?: unknown }
-  executionState?: 'prepared' | 'executing' | 'completed' | 'not_executed' | 'rolled_back' | 'partial' | 'unknown' | 'not_found'
+  executionState?: 'prepared' | 'preparing' | 'executing' | 'completed' | 'not_executed' | 'rolled_back' | 'partial' | 'unknown' | 'not_found'
   persistence?: { state: 'saved' | 'dirty' | 'not_required' | 'unknown'; recovery?: unknown }
   observedEffects?: ApplicationObservedEffect[]
   taskRef?: { kind: string; id: string }

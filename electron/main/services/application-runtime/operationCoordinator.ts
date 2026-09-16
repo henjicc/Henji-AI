@@ -1,7 +1,8 @@
+import { applicationInvocationId } from '../../../../src/core/application-control/operationIdentity'
 import { BUILTIN_APPLICATION_CAPABILITY_REGISTRY } from '../../../../src/core/application-control/builtinApplicationCapabilityRegistry'
 import { z } from 'zod'
 import type { LocalHostReply } from '../../../../src/core/application-control/localHostContracts'
-import { McpOperationStore, operationDigest, type OperationRecord } from './operationStore'
+import { ApplicationOperationStore, operationDigest, type OperationRecord } from './operationStore'
 
 const refSchema = z.object({ kind: z.string(), id: z.string() }).passthrough()
 const envelopeSchema = z.object({ operationId: z.string().uuid(), baselineIds: z.array(z.string().uuid()).max(32).default([]) })
@@ -14,17 +15,17 @@ function resultRefs(value: unknown): Array<{ kind: string; id: string }> {
   return parsed.success ? [{ kind: parsed.data.kind, id: parsed.data.id }] : Object.values(value).flatMap(resultRefs)
 }
 
-type TargetRecord = Pick<OperationRecord, 'operationId' | 'capabilityId' | 'input' | 'targetRefs'>
+type TargetRecord = Pick<OperationRecord, 'operationId' | 'callerId' | 'capabilityId' | 'input' | 'targetRefs'>
 const refKey = (ref: { kind: string; id: string }): string => `${ref.kind}:${ref.id}`
 
-/** 读依赖、集合追加和覆盖写入不是同一种冲突；旧账本也从同一能力声明解析。 */
+/** 读依赖、集合追加和覆盖写入不是同一种冲突；访问范围从同一能力声明解析。 */
 function operationAccess(record: TargetRecord): Map<string, 'append' | 'write'> {
   const targets = new Map<string, 'append' | 'write'>()
   const add = (value: unknown, mode: 'append' | 'write'): void => {
     const parsed = refSchema.safeParse(value)
     if (parsed.success && targets.get(refKey(parsed.data)) !== 'write') targets.set(refKey(parsed.data), mode)
   }
-  if (!record.capabilityId || record.capabilityId === 'change_application_entities') {
+  if (record.capabilityId === 'change_application_entities') {
     for (const value of Array.isArray(record.input.changes) ? record.input.changes : []) {
       const change = object(value)
       add(change.target, 'write')
@@ -41,7 +42,7 @@ function operationAccess(record: TargetRecord): Map<string, 'append' | 'write'> 
     return targets
   }
   const reads = definition.resolveOperationTargets?.(parsed.data) ?? []
-  const writes = definition.resolveOperationWriteTargets?.(parsed.data, record.operationId) ?? reads
+  const writes = definition.resolveOperationWriteTargets?.(parsed.data, applicationInvocationId(record.callerId, record.operationId)) ?? reads
   const appends = new Set((definition.resolveOperationAppendTargets?.(parsed.data) ?? []).map(refKey))
   for (const ref of writes) add(ref, appends.has(refKey(ref)) ? 'append' : 'write')
   // 回执里的实际新增对象仍受保护；不能把原本只读的模型/参考素材升级为锁。
@@ -51,13 +52,13 @@ function operationAccess(record: TargetRecord): Map<string, 'append' | 'write'> 
 }
 
 /** 业务事实独立于 HTTP 等待；读取不会关闭任何写操作的未知/部分状态。 */
-export class McpOperationCoordinator {
+export class ApplicationOperationCoordinator {
   /**
    * `writableEntityTypes` 是公开业务写入范围，由渲染宿主从反射注册表派生后经注册送来
    * （见 externalCapabilityInventory.ts）。这里**不保留任何前缀白名单兜底**：没拿到派生结果就
    * 一个实体都不放行，"忘了派生"只会变成拒绝，不会变成放行。
    */
-  constructor(readonly store: McpOperationStore, private readonly recoverPersisted?: (record: OperationRecord) => OperationRecord | undefined,
+  constructor(readonly store: ApplicationOperationStore, private readonly recoverPersisted?: (record: OperationRecord) => OperationRecord | undefined,
     private readonly writableEntityTypes: () => ReadonlySet<string> = () => new Set()) {
     store.recoverInterrupted()
     for (const record of store.unresolved()) {
@@ -65,17 +66,17 @@ export class McpOperationCoordinator {
       if (recovered) store.save(recovered)
     }
   }
-  rememberRead(callerId: string, result: Record<string, unknown>, sessionId: string): Record<string, unknown> {
+  rememberRead(callerId: string, result: Record<string, unknown>, rendererEpoch: string): Record<string, unknown> {
     if (result.ok !== true) return result
     const data = object(result.data)
     const revisions = z.record(z.string(), z.number().int().nonnegative()).safeParse(data.revisions)
     const refs = z.array(refSchema).safeParse(data.ref ? [data.ref] : data.refs ?? [data.taskRef, object(data.task).taskRef].filter(Boolean))
     // 无可编辑实体版本的任务读取仍需绑定原任务与宿主会话；空版本集不等于没有读取事实。
     if (!revisions.success || !refs.success || !refs.data.length) return result
-    const baseline = this.store.baseline(callerId, refs.data, revisions.data, sessionId)
+    const baseline = this.store.baseline(callerId, refs.data, revisions.data, rendererEpoch)
     return { ...result, baselineId: baseline.id }
   }
-  prepare(callerId: string, raw: Record<string, unknown>, sessionId: string, access: { allowWrites: boolean; allowDestructive: boolean; allowPaid?: boolean }, capabilityId: OperationRecord['capabilityId'] = 'change_application_entities'): OperationRecord {
+  prepare(callerId: string, raw: Record<string, unknown>, rendererEpoch: string, access: { allowWrites: boolean; allowDestructive: boolean; allowPaid?: boolean }, capabilityId: OperationRecord['capabilityId'] = 'change_application_entities'): OperationRecord {
     const { operationId, baselineIds } = envelopeSchema.parse(raw)
     const input = { ...raw }; delete input.operationId; delete input.baselineIds
     if ('expectedRevisions' in input) throw new Error('INVALID_INPUT:并发基线由 baselineIds 提供。')
@@ -92,14 +93,14 @@ export class McpOperationCoordinator {
     let destructive = false
     let writeRefs: Array<{ kind: string; id: string }> | undefined
     if (capabilityId !== 'change_application_entities') {
-      const definition = BUILTIN_APPLICATION_CAPABILITY_REGISTRY.get(capabilityId ?? '')
+      const definition = BUILTIN_APPLICATION_CAPABILITY_REGISTRY.get(capabilityId)
       if (!definition?.resolveOperationTargets || definition.readOnly) throw new Error('PERMISSION_DENIED:此能力尚未登记持久目标绑定。')
       if (definition.paidGenerationPreparation && !access.allowPaid) throw new Error('PERMISSION_DENIED:此连接没有付费生成授权。')
       if (definition.destructive && !access.allowDestructive) throw new Error('PERMISSION_DENIED:此连接没有删除授权。')
       destructive = definition.destructive
       const parsed = definition.inputSchema.parse(input)
       refs.push(...definition.resolveOperationTargets(parsed))
-      writeRefs = definition.resolveOperationWriteTargets?.(parsed, operationId)
+      writeRefs = definition.resolveOperationWriteTargets?.(parsed, applicationInvocationId(callerId, operationId))
     } else {
     const changes = z.array(z.object({ kind: z.string(), entityType: z.string() }).passthrough()).min(1).max(32).parse(input.changes)
     const writable = this.writableEntityTypes()
@@ -116,10 +117,10 @@ export class McpOperationCoordinator {
     }
     if (destructive && !baselineIds.length) throw new Error(`BASELINE_REQUIRED:删除操作需要先核对目标。请用 read_application_entity 读取 ${JSON.stringify(refs)}，再提交返回的 baselineIds。`)
     const baselines = baselineIds.map((id) => this.store.readBaseline(id, callerId))
-    const currentAccess = operationAccess({ operationId, capabilityId, input, targetRefs: writeRefs ?? refs })
+    const currentAccess = operationAccess({ operationId, callerId, capabilityId, input, targetRefs: writeRefs ?? refs })
     for (const unresolved of this.store.unresolved()) {
       const previousAccess = operationAccess(unresolved)
-      const sameUnknownRequest = unresolved.state === 'unknown' && (unresolved.capabilityId ?? 'change_application_entities') === capabilityId
+      const sameUnknownRequest = unresolved.callerId === callerId && unresolved.state === 'unknown' && unresolved.capabilityId === capabilityId
         && operationDigest(unresolved.input) === operationDigest(input)
       const overlaps = [...currentAccess].some(([key, mode]) => {
         const previousMode = previousAccess.get(key)
@@ -130,7 +131,7 @@ export class McpOperationCoordinator {
         ? `请用 get_application_operation 查询 operationId=${unresolved.operationId}；不要查询本次尚未登记的新标识。`
         : '原操作属于另一连接，请在应用中核对对应目标。'}独立追加可并行，覆盖、删除、保存失败或重复未知请求不能绕过保护。`)
     }
-    if (baselines.some((baseline) => baseline.sessionId !== sessionId)) throw new Error('BASELINE_EXPIRED:应用宿主已重载，请重新读取目标。')
+    if (baselines.some((baseline) => baseline.rendererEpoch !== rendererEpoch)) throw new Error('BASELINE_EXPIRED:应用宿主已重载，请重新读取目标。')
     const missing = refs.filter((ref) => !baselines.some((baseline) => baseline.refs.some((item) => item.kind === ref.kind && item.id === ref.id)))
     if (baselines.length && missing.length) throw new Error(`BASELINE_TARGET_MISMATCH:缺少 ${JSON.stringify(missing)} 的读取。普通操作可省略 baselineIds 由应用自动核对；删除操作请先用 read_application_entity 读取以上目标。`)
     const expectedRevisions: Record<string, number> = {}
@@ -140,13 +141,13 @@ export class McpOperationCoordinator {
     }
     return this.store.prepare({ operationId, callerId, inputDigest: digest, input, expectedRevisions: baselines.length ? expectedRevisions : undefined, state: 'prepared', capabilityId, targetRefs: writeRefs ?? refs })
   }
-  dispatched(record: OperationRecord, requestId: string, sessionId: string): void { this.store.claim(record, requestId, sessionId) }
-  interrupted(requestId: string, sessionId: string): void {
-    const record = this.store.byRequest(requestId, sessionId)
+  dispatched(record: OperationRecord, requestId: string, rendererEpoch: string): void { this.store.claim(record, requestId, rendererEpoch) }
+  interrupted(requestId: string, rendererEpoch: string): void {
+    const record = this.store.byRequest(requestId, rendererEpoch)
     if (record?.state === 'executing') this.store.save({ ...record, state: 'unknown' })
   }
   complete(reply: LocalHostReply): void {
-    const record = this.store.byRequest(reply.requestId, reply.sessionId)
+    const record = this.store.byRequest(reply.requestId, reply.rendererEpoch)
     if (!record || (record.state !== 'executing' && record.state !== 'unknown')) return
     const details = object(object(reply.result.error).details)
     const transaction = object(details.transaction)
@@ -167,7 +168,7 @@ export class McpOperationCoordinator {
         verificationState: verified ? 'verified' : 'unresolved', recoveryResult: reply.result })
     }
   }
-  prepareSaveRecovery(callerId: string, raw: Record<string, unknown>, sessionId: string, access: { allowWrites: boolean }): OperationRecord {
+  prepareSaveRecovery(callerId: string, raw: Record<string, unknown>, rendererEpoch: string, access: { allowWrites: boolean }): OperationRecord {
     const { operationId, originalOperationId } = z.object({ operationId: z.string().uuid(), originalOperationId: z.string().uuid() }).strict().parse(raw)
     if (!access.allowWrites) throw new Error('PERMISSION_DENIED:请在应用内授权修改。')
     const existing = this.store.get(operationId, callerId)
@@ -175,7 +176,7 @@ export class McpOperationCoordinator {
     if (existing && existing.state !== 'prepared') return existing
     const original = this.store.get(originalOperationId, callerId)
     if (!original || original.state !== 'partial') throw new Error('RECOVERY_UNAVAILABLE:原操作没有已确认的保存失败，未知修改不能重放。')
-    if (original.sessionId !== sessionId) throw new Error('RECOVERY_SESSION_LOST:原编辑会话已关闭，未保存的内存不能伪造恢复；请在应用中核对原工程。')
+    if (original.rendererEpoch !== rendererEpoch) throw new Error('RECOVERY_SESSION_LOST:原编辑会话已关闭，未保存的内存不能伪造恢复；请在应用中核对原工程。')
     const transaction = object(object(object(original.result?.error).details).transaction)
     const recovery = object(object(transaction.persistence).recovery)
     const target = refSchema.safeParse(recovery.target)

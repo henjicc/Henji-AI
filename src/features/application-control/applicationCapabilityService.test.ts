@@ -8,7 +8,7 @@ import { getApplicationReflectionRegistry } from '@/features/application-control
 import { retainHostContextTracking } from '@/features/application-control/hostContext/hostContext'
 import { executeApplicationCapabilityResult } from '@/features/application-control/capabilities/registry'
 import { createApplicationCapabilitySession, listApplicationCapabilities } from './applicationCapabilityService'
-import { MCP_READ_PERMISSIONS, MCP_WRITE_PERMISSIONS } from '@/core/application-control/localHostContracts'
+import { APPLICATION_READ_PERMISSIONS, APPLICATION_WRITE_PERMISSIONS } from '@/core/application-control/localHostContracts'
 import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from '@/tests/harnessNativeStorage'
 import { useProjectStore } from '@/stores/projectStore'
 import { useCanvasStore } from '@/stores/canvasStore'
@@ -40,7 +40,7 @@ describe('独立应用调用入口', () => {
     const beforeWorkspace = useNavigationStore.getState().activeWorkspace
     try {
       await useProjectStore.getState().hydrate()
-      const session = createApplicationCapabilitySession(grant([...MCP_READ_PERMISSIONS, ...MCP_WRITE_PERMISSIONS], true))
+      const session = createApplicationCapabilitySession(grant([...APPLICATION_READ_PERMISSIONS, ...APPLICATION_WRITE_PERMISSIONS], true))
       const call = async (id: string, input: Record<string, unknown>) => {
         const definition = session.list().find(item => item.id === id)!
         expect(definition, id).toBeDefined()

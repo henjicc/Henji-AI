@@ -12,10 +12,10 @@ import { decodeCanvasProjectImageReference, parseCanvasProjectRecord } from '../
 import { mapCanvasNodeMediaReferences } from '../../../../src/core/canvas/nodeMediaReferences'
 
 const logger = createMainLogger('main.mcp.media')
-export class McpMediaResourceError extends Error {
-  constructor(readonly code: string, message: string) { super(message); this.name = 'McpMediaResourceError' }
+export class ApplicationMediaResourceError extends Error {
+  constructor(readonly code: string, message: string) { super(message); this.name = 'ApplicationMediaResourceError' }
 }
-function failure(code: string, message: string): never { throw new McpMediaResourceError(code, message) }
+function failure(code: string, message: string): never { throw new ApplicationMediaResourceError(code, message) }
 const inputSchema = z.object({
   ref: z.object({ kind: z.enum(['generation.result', 'asset', 'canvas.node']), id: z.string().min(1).max(512) }).strict(),
   outputIndex: z.number().int().min(0).max(10_000).default(0),
@@ -45,7 +45,7 @@ function sources(ref: z.infer<typeof inputSchema>['ref']): string[] {
 }
 
 /** 只读取稳定业务引用已保存的本地媒体；连接授权由 MCP 服务在调用前核对。 */
-export async function readMcpMediaResource(input: {
+export async function readApplicationMediaResource(input: {
   ref: { kind: string; id: string }; outputIndex?: number; offset?: number; length?: number
 }): Promise<{ mimeType: string; base64: string; offset: number; byteLength: number; totalBytes: number; eof: boolean }> {
   const parsed = inputSchema.parse(input)
@@ -74,7 +74,7 @@ export async function readMcpMediaResource(input: {
   } catch (error) {
     logger.warn('关联媒体读取失败', { event: 'mcp.media.read.failed', context: { kind: parsed.ref.kind } })
     // 文件系统错误可能包含本地路径；不将其透传到外部客户端。
-    if (error instanceof McpMediaResourceError) throw error
-    throw new McpMediaResourceError('MEDIA_READ_FAILED', '媒体读取未完成：请确认原文件仍然存在且原工程数据可正常读取。')
+    if (error instanceof ApplicationMediaResourceError) throw error
+    throw new ApplicationMediaResourceError('MEDIA_READ_FAILED', '媒体读取未完成：请确认原文件仍然存在且原工程数据可正常读取。')
   }
 }

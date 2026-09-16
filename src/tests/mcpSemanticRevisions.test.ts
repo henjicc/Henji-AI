@@ -9,7 +9,7 @@ import { getCanvasNode, getCanvasProject, readPersistedCanvasProjectSnapshot } f
 import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from './harnessNativeStorage'
 import { registry } from '@/core/ModelRegistry'
 import { databaseService } from '@/services/database/DatabaseService'
-import { MCP_CAPABILITY_IDS, MCP_READ_PERMISSIONS, MCP_WRITE_PERMISSIONS } from '@/core/application-control/localHostContracts'
+import { APPLICATION_CAPABILITY_IDS, APPLICATION_READ_PERMISSIONS, APPLICATION_WRITE_PERMISSIONS } from '@/core/application-control/localHostContracts'
 import { useCanvasStore } from '@/stores/canvasStore'
 import { useProjectStore } from '@/stores/projectStore'
 import { loadRealModelsIntoRegistry } from './loadRealModels'
@@ -53,8 +53,8 @@ it('没有项目时可创建并验证持久化，再打开同一画布项目', a
   try {
     useProjectStore.setState({ currentProjectId: null, currentProject: null, projects: [], isHydrated: true })
     const session = createApplicationCapabilitySession(createApplicationCallerGrant({
-      callerId: 'mcp-creative-create', capabilityIds: [...MCP_CAPABILITY_IDS], allowWrites: true, allowDestructive: false,
-      permissions: [...MCP_READ_PERMISSIONS, ...MCP_WRITE_PERMISSIONS],
+      callerId: 'mcp-creative-create', capabilityIds: [...APPLICATION_CAPABILITY_IDS], allowWrites: true, allowDestructive: false,
+      permissions: [...APPLICATION_READ_PERMISSIONS, ...APPLICATION_WRITE_PERMISSIONS],
     }))
     const created = await session.execute({ id: 'create_canvas_project', version: 2, input: { name: '短剧画布' } }, request())
     expect(created).toMatchObject({ ok: true, data: { verification: { verified: true } } })
@@ -74,8 +74,8 @@ it('没有项目时可创建并验证持久化，再打开同一画布项目', a
 
 it('创作文本经 MCP 保存后新会话按需读回，局部返修保留其他镜头和依赖', async () => {
   const creativeClient = () => createApplicationCapabilitySession(createApplicationCallerGrant({
-    callerId: 'mcp-drama', capabilityIds: [...MCP_CAPABILITY_IDS], allowWrites: true, allowDestructive: false,
-    permissions: [...MCP_READ_PERMISSIONS, ...MCP_WRITE_PERMISSIONS],
+    callerId: 'mcp-drama', capabilityIds: [...APPLICATION_CAPABILITY_IDS], allowWrites: true, allowDestructive: false,
+    permissions: [...APPLICATION_READ_PERMISSIONS, ...APPLICATION_WRITE_PERMISSIONS],
   }))
   const projectId = 'mcp-drama-resume'
   const nodes = ['character', 'shot-one', 'shot-two'].map((id, index) => ({
@@ -141,8 +141,8 @@ it('MCP 实际授权可发现、创建和配置图片节点，并从原工程存
     useCanvasStore.getState().setCanvasData([source], [], project.history)
     useProjectStore.setState({ currentProjectId: projectId, currentProject: project, projects: [project], isHydrated: true })
     const session = createApplicationCapabilitySession(createApplicationCallerGrant({ callerId: 'mcp-image-tools',
-      capabilityIds: [...MCP_CAPABILITY_IDS], allowWrites: true, allowDestructive: false,
-      permissions: [...MCP_READ_PERMISSIONS, ...MCP_WRITE_PERMISSIONS] }))
+      capabilityIds: [...APPLICATION_CAPABILITY_IDS], allowWrites: true, allowDestructive: false,
+      permissions: [...APPLICATION_READ_PERMISSIONS, ...APPLICATION_WRITE_PERMISSIONS] }))
     expect(session.list().map((definition) => definition.id)).toContain('apply_canvas_image_capability')
     const result = await session.execute({ id: 'apply_canvas_image_capability', version: 1,
       input: { projectId, sourceNodeId: source.id, capabilityId: 'image.background-removal' } }, request())

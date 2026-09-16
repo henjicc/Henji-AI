@@ -1,24 +1,24 @@
 import { applicationFailure, type ApplicationResult } from '../../../../src/core/application-control/invocation'
 import { z } from 'zod'
-import { EXTERNAL_LIMITS, MCP_READ_CAPABILITY_IDS, MCP_WRITE_CAPABILITY_IDS } from '../../../../src/core/application-control/localHostContracts'
-import { buildApplicationContract, buildMcpToolCatalog, describeContractInputSchema, invalidInputMessage, readMediaInputSchema, type McpAccess } from './toolCatalog'
-import { readMcpMediaResource, McpMediaResourceError } from './mediaResources'
+import { EXTERNAL_LIMITS, APPLICATION_READ_CAPABILITY_IDS, APPLICATION_WRITE_CAPABILITY_IDS } from '../../../../src/core/application-control/localHostContracts'
+import { buildApplicationContract, buildApplicationToolCatalog, describeContractInputSchema, invalidInputMessage, readMediaInputSchema, type ApplicationAccess } from './toolCatalog'
+import { readApplicationMediaResource, ApplicationMediaResourceError } from './mediaResources'
 import type { ApplicationHostBridge } from './applicationHostBridge'
-import type { McpOperationCoordinator } from './operationCoordinator'
+import type { ApplicationOperationCoordinator } from './operationCoordinator'
 import { reserveGenerationBudget } from './generationBudget'
 import { createMainLogger } from '../logging'
 import { BUILTIN_APPLICATION_CAPABILITY_REGISTRY } from '../../../../src/core/application-control/builtinApplicationCapabilityRegistry'
 const MAX_RESULT = EXTERNAL_LIMITS.resultBytes
-const logger = createMainLogger('main.mcp')
+const logger = createMainLogger('main.application_runtime')
 
 /** 协议与内置 Agent 共用的受控执行入口；调用者身份仅由宿主提供。 */
 export class ApplicationToolDispatcher {
-  constructor(private readonly connections: { assertActive(id: string): void; access(id: string): McpAccess },
-    private readonly host: ApplicationHostBridge, private readonly operations?: McpOperationCoordinator,
+  constructor(private readonly connections: { assertActive(id: string): void; access(id: string): ApplicationAccess },
+    private readonly host: ApplicationHostBridge, private readonly operations?: ApplicationOperationCoordinator,
     private readonly port = 0, private readonly callerKind: 'external' | 'embedded' = 'external') {}
   catalog(callerId: string) {
     this.connections.assertActive(callerId)
-    return buildMcpToolCatalog({ tools: this.host.tools(), access: this.connections.access(callerId), operationsEnabled: Boolean(this.operations) })
+    return buildApplicationToolCatalog({ tools: this.host.tools(), access: this.connections.access(callerId), operationsEnabled: Boolean(this.operations) })
   }
   async call(callerId: string, name: string, args: Record<string, unknown> | undefined, signal: AbortSignal): Promise<ApplicationResult> {
       this.connections.assertActive(callerId)
@@ -27,7 +27,6 @@ export class ApplicationToolDispatcher {
           const { domains } = describeContractInputSchema.parse(args ?? {})
           const data = buildApplicationContract({ domains: this.host.domains(), access: this.connections.access(callerId), catalog: this.catalog(callerId), port: this.port, requestedDomains: domains, callerKind: this.callerKind })
           const result = { ok: true, data }
-          // 与其余工具保持同一约定：成功显式给出 isError:false，调用方不必区分 undefined 与 false。
           return result
         } catch (error) {
           return applicationFailure(invalidInputMessage(error) ?? (error instanceof Error ? error.message : '契约发现失败，请稍后重试。'))
@@ -36,13 +35,13 @@ export class ApplicationToolDispatcher {
       if (name === 'read_application_media') {
         try {
           const input = readMediaInputSchema.parse(args)
-          const data = await readMcpMediaResource(input)
+          const data = await readApplicationMediaResource(input)
           const result = { ok: true, data }
           this.connections.assertActive(callerId)
           return result
         } catch (error) {
           // 参数错误点名字段；业务失败仍然脱敏，不回传本地路径。
-          const message = invalidInputMessage(error) ?? (error instanceof McpMediaResourceError ? `${error.code}:${error.message}` : '媒体读取失败，请稍后重试。')
+          const message = invalidInputMessage(error) ?? (error instanceof ApplicationMediaResourceError ? `${error.code}:${error.message}` : '媒体读取失败，请稍后重试。')
           return applicationFailure(message)
         }
       }
@@ -53,33 +52,39 @@ export class ApplicationToolDispatcher {
         const result = operation ? this.operations.result(operation) : { ok: false, executionState: 'not_found', message: '未找到已登记操作；这不是业务未执行的证明。' }
         return { ...result, ok: result.ok === true }
       }
-      if ([...MCP_WRITE_CAPABILITY_IDS, 'retry_application_operation_save'].some((id) => id === name) && this.operations) {
+      if ([...APPLICATION_WRITE_CAPABILITY_IDS, 'retry_application_operation_save'].some((id) => id === name) && this.operations) {
         try {
           const access = this.connections.access(callerId)
           const operation = name === 'retry_application_operation_save'
-            ? this.operations.prepareSaveRecovery(callerId, args ?? {}, this.host.sessionId, access)
-            : this.operations.prepare(callerId, args ?? {}, this.host.sessionId, access, MCP_WRITE_CAPABILITY_IDS.find((id) => id === name))
-          if (operation.state === 'prepared') {
+            ? this.operations.prepareSaveRecovery(callerId, args ?? {}, this.host.rendererEpoch, access)
+            : this.operations.prepare(callerId, args ?? {}, this.host.rendererEpoch, access, APPLICATION_WRITE_CAPABILITY_IDS.find((id) => id === name))
+          if (operation.state === 'prepared' && this.operations.store.beginPreparation(operation)) {
             this.connections.assertActive(callerId)
-            const preparationId = BUILTIN_APPLICATION_CAPABILITY_REGISTRY.get(operation.capabilityId ?? '')?.paidGenerationPreparation
+            const preparationId = BUILTIN_APPLICATION_CAPABILITY_REGISTRY.get(operation.capabilityId)?.paidGenerationPreparation
             if (preparationId) {
               try {
-                const preparationCapability = MCP_READ_CAPABILITY_IDS.find(id => id === preparationId)
+                const preparationCapability = APPLICATION_READ_CAPABILITY_IDS.find(id => id === preparationId)
                 if (!preparationCapability) throw new Error('付费生成的准备入口尚未向当前连接开放。')
-                logger.info('检查生成参数与费用', { event: 'mcp.generation_preflight.start', requestId: operation.operationId })
+                logger.info('检查生成参数与费用', { event: 'application.generation_preflight.start', requestId: operation.operationId })
                 const preparation = await this.host.execute(callerId, preparationCapability, operation.input, signal, access)
                 this.connections.assertActive(callerId)
                 if (signal.aborted) throw new Error('操作已取消。')
                 reserveGenerationBudget(this.operations.store, operation, preparation)
-                logger.info('生成参数与费用检查通过', { event: 'mcp.generation_preflight.completed', requestId: operation.operationId, context: { estimatedCny: this.operations.store.get(operation.operationId, callerId)?.generationEstimate?.cny } })
+                logger.info('生成参数与费用检查通过', { event: 'application.generation_preflight.completed', requestId: operation.operationId, context: { estimatedCny: this.operations.store.get(operation.operationId, callerId)?.generationEstimate?.cny } })
               } catch (error) {
                 const message = error instanceof Error ? error.message : '生成准备失败。'
-                logger.warn('生成提交前检查未通过', { event: 'mcp.generation_preflight.failed', requestId: operation.operationId, error })
-                if (this.operations.store.get(operation.operationId, callerId)?.state === 'prepared') this.operations.store.save({ ...operation, state: 'not_executed', result: { ok: false, error: { code: 'GENERATION_PREFLIGHT_REJECTED', message, details: { execution: { notExecuted: true } } } } })
+                logger.warn('生成提交前检查未通过', { event: 'application.generation_preflight.failed', requestId: operation.operationId, error })
+                if (this.operations.store.get(operation.operationId, callerId)?.state === 'preparing') this.operations.store.save({ ...this.operations.store.get(operation.operationId, callerId)!, state: 'not_executed', result: { ok: false, error: { code: 'GENERATION_PREFLIGHT_REJECTED', message, details: { execution: { notExecuted: true } } } } })
               }
             }
-            if (this.operations.store.get(operation.operationId, callerId)?.state === 'prepared') {
-              try { await this.host.execute(callerId, operation.capabilityId ?? 'change_application_entities', operation.input, signal, { operation, ...access }) } catch { /* 持久操作状态决定结果，等待失败不能覆盖事实。 */ }
+            if (this.operations.store.get(operation.operationId, callerId)?.state === 'preparing') {
+              try { await this.host.execute(callerId, operation.capabilityId, operation.input, signal, { operation, ...access }) } catch (error) {
+                const current = this.operations.store.get(operation.operationId, callerId)!
+                // 尚未派发的宿主拒绝是明确零执行；已派发后的等待失败保留执行事实。
+                if (current.state === 'preparing') this.operations.store.save({ ...current, state: 'not_executed', result: {
+                  ok: false, error: { code: 'DISPATCH_REJECTED', message: error instanceof Error ? error.message : '应用尚未就绪。', details: { execution: { notExecuted: true } } },
+                } })
+              }
             }
           }
           this.connections.assertActive(callerId)
@@ -87,12 +92,12 @@ export class ApplicationToolDispatcher {
           return { ...result, ok: result.ok === true }
         } catch (error) { return applicationFailure(invalidInputMessage(error) ?? (error instanceof Error ? error.message : '写入未完成。')) }
       }
-      const id = MCP_READ_CAPABILITY_IDS.find((value) => value === name)
+      const id = APPLICATION_READ_CAPABILITY_IDS.find((value) => value === name)
       if (!id) return applicationFailure('此连接只允许读取。请用 tools/list 查看可用工具。')
       try {
-        const sessionId = this.host.sessionId
+        const rendererEpoch = this.host.rendererEpoch
         const raw = await this.host.execute(callerId, id, args ?? {}, signal, this.connections.access(callerId))
-        const result = this.operations ? this.operations.rememberRead(callerId, raw, sessionId) : raw
+        const result = this.operations ? this.operations.rememberRead(callerId, raw, rendererEpoch) : raw
         this.connections.assertActive(callerId)
         const text = JSON.stringify(result)
         if (Buffer.byteLength(text) > MAX_RESULT) throw new Error('读取结果过大，请缩小字段或分页读取。')

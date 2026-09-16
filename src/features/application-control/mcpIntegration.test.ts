@@ -6,7 +6,7 @@ import { StreamableHTTPClientTransport } from '@modelcontextprotocol/client'
 import { LocalMcpServer } from '../../../electron/main/services/mcp/server'
 import { McpConnections } from '../../../electron/main/services/mcp/connections'
 import { ApplicationHostBridge } from '../../../electron/main/services/application-runtime/applicationHostBridge'
-import { MCP_WRITE_CAPABILITY_IDS, type ApplicationHostPlatform, type LocalHostRequest } from '@/core/application-control/localHostContracts'
+import { APPLICATION_WRITE_CAPABILITY_IDS, type ApplicationHostPlatform, type LocalHostRequest } from '@/core/application-control/localHostContracts'
 const { JSDOM } = createRequire(import.meta.url)('jsdom') as { JSDOM: new (html: string, options: { url: string }) => { window: Window } }
 
 it('真实 MCP → 中立桥 → Session → 领域注册表读取正式设置，禁止内部实体与写入', async () => {
@@ -37,7 +37,7 @@ it('真实 MCP → 中立桥 → Session → 领域注册表读取正式设置�
     const listed = (await client.listTools()).tools
     expect(listed.map((tool) => tool.name)).toEqual(expect.arrayContaining(['describe_application_entities', 'list_application_entities', 'read_application_entity']))
     expect(listed.filter((tool) => tool.annotations?.readOnlyHint !== true).map((tool) => tool.name)).toEqual([])
-    expect(listed.map((tool) => tool.name).filter((name) => MCP_WRITE_CAPABILITY_IDS.some((id) => id === name))).toEqual([])
+    expect(listed.map((tool) => tool.name).filter((name) => APPLICATION_WRITE_CAPABILITY_IDS.some((id) => id === name))).toEqual([])
     const result = await client.callTool({ name: 'read_application_entity', arguments: { ref: { kind: 'settings.registry', id: 'singleton' }, propertyIds: ['interface.theme_tone'] } })
     expect(result.isError, JSON.stringify(result)).toBe(false)
     expect(result.structuredContent).toMatchObject({ ok: true, data: { properties: { 'interface.theme_tone': useSettingsStore.getState().themeTonePreset } } })

@@ -1,6 +1,6 @@
 import { createApplicationCallerGrant } from '@/core/application-control/callerContext'
 import type { ApplicationRef } from '@/core/application-control'
-import { MCP_READ_PERMISSIONS, MCP_WRITE_PERMISSIONS } from '@/core/application-control/localHostContracts'
+import { APPLICATION_READ_PERMISSIONS, APPLICATION_WRITE_PERMISSIONS } from '@/core/application-control/localHostContracts'
 import { createApplicationCapabilitySession, listApplicationCapabilities } from '@/features/application-control/applicationCapabilityService'
 import { retainHostContextTracking } from '@/features/application-control/hostContext/hostContext'
 import { externalReflectionPermissions } from '@/features/application-control/externalCapabilityInventory'
@@ -12,7 +12,7 @@ export function createApplicationHarness() {
   const reflected = externalReflectionPermissions()
   const session = createApplicationCapabilitySession(createApplicationCallerGrant({
     callerId: crypto.randomUUID(), capabilityIds: definitions.map(item => item.id),
-    permissions: [...MCP_READ_PERMISSIONS, ...MCP_WRITE_PERMISSIONS, ...reflected.read, ...reflected.write], allowWrites: true, allowDestructive: true,
+    permissions: [...APPLICATION_READ_PERMISSIONS, ...APPLICATION_WRITE_PERMISSIONS, ...reflected.read, ...reflected.write], allowWrites: true, allowDestructive: true,
   }))
   const call = (id: string, input: unknown, expectedRevisions?: Record<string, number>) => {
     const definition = definitions.find(item => item.id === id)

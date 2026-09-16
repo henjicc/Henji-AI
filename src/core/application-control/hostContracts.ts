@@ -16,7 +16,7 @@ export type HostScopeRevisions = z.infer<typeof hostScopeRevisionsSchema>
 
 export const hostContextSnapshotSchema = z.object({
   schemaVersion: z.literal(APPLICATION_HOST_CONTRACT_VERSION),
-  rendererSessionId: z.string().min(1),
+  rendererEpoch: z.string().min(1),
   revision: z.number().int().nonnegative(),
   scopeRevisions: hostScopeRevisionsSchema,
   catalogRevision: z.number().int().nonnegative().optional(),

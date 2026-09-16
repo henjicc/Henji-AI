@@ -1,4 +1,4 @@
-import { applicationGenerationTaskId } from '../../../../src/core/application-control/operationIdentity'
+import { applicationGenerationTaskId, applicationInvocationId } from '../../../../src/core/application-control/operationIdentity'
 import Database from 'better-sqlite3'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { AiGenerateRequestDto } from '@henjicc/ai-sdk'
@@ -9,8 +9,8 @@ vi.mock('../db', () => ({ getDb: () => state.db! }))
 import { claimGenerationSubmission, completeGenerationSubmission, readGenerationSubmission } from './generation-submissions'
 import { recoverPersistedGenerationOperation } from '../application-runtime/persistedOperationRecovery'
 import type { OperationRecord } from '../application-runtime/operationStore'
-import { McpOperationStore } from '../application-runtime/operationStore'
-import { McpOperationCoordinator } from '../application-runtime/operationCoordinator'
+import { ApplicationOperationStore } from '../application-runtime/operationStore'
+import { ApplicationOperationCoordinator } from '../application-runtime/operationCoordinator'
 afterEach(() => { state.db?.close(); state.db = null })
 
 describe('原生生成提交事实', () => {
@@ -40,15 +40,15 @@ describe('原生生成提交事实', () => {
       state: 'unknown', inputDigest: 'digest', input: { modelId: 'model', prompt: 'test' }, expectedRevisions: {} }
     state.db.prepare('INSERT INTO history VALUES(?,?,?,?,?,?)').run('other', 'model', 'test', 'completed', null, '/other.png')
     expect(recoverPersistedGenerationOperation(state.db, record)).toBeUndefined()
-    state.db.prepare('INSERT INTO history VALUES(?,?,?,?,?,?)').run(applicationGenerationTaskId('original'), 'model', 'test', 'queued', null, null)
+    state.db.prepare('INSERT INTO history VALUES(?,?,?,?,?,?)').run(applicationGenerationTaskId(applicationInvocationId('client', 'original')), 'model', 'test', 'queued', null, null)
     const recovered = recoverPersistedGenerationOperation(state.db, record)
     expect(recovered).toMatchObject({ state: 'completed', verificationState: 'verified', result: { data: { observedStatus: 'queued', serverTaskId: null } } })
     expect(state.db.prepare("SELECT count(*) AS count FROM sqlite_master WHERE name='generation_submissions'").get()).toEqual({ count: 0 })
   })
   it('未知原创建不得重放，但同模型的独立新业务请求不被只读依赖误封', () => {
     state.db = new Database(':memory:')
-    const store = new McpOperationStore(state.db)
-    const coordinator = new McpOperationCoordinator(store)
+    const store = new ApplicationOperationStore(state.db)
+    const coordinator = new ApplicationOperationCoordinator(store)
     const baseline = store.baseline('caller', [{ kind: 'generation.model', id: 'model' }], { generation: 1 }, 'host')
     const input = { operationId: crypto.randomUUID(), baselineIds: [baseline.id], modelId: 'model', prompt: 'test', mediaType: 'image' }
     const access = { allowWrites: true, allowDestructive: false, allowPaid: true }

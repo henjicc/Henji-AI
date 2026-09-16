@@ -14,8 +14,8 @@ import { StreamableHTTPClientTransport } from '@modelcontextprotocol/client'
 import { LocalMcpServer } from '../../../electron/main/services/mcp/server'
 import { McpConnections } from '../../../electron/main/services/mcp/connections'
 import { ApplicationHostBridge } from '../../../electron/main/services/application-runtime/applicationHostBridge'
-import { McpOperationStore } from '../../../electron/main/services/application-runtime/operationStore'
-import { McpOperationCoordinator } from '../../../electron/main/services/application-runtime/operationCoordinator'
+import { ApplicationOperationStore } from '../../../electron/main/services/application-runtime/operationStore'
+import { ApplicationOperationCoordinator } from '../../../electron/main/services/application-runtime/operationCoordinator'
 import type { ApplicationHostPlatform, LocalHostRequest } from '@/core/application-control/localHostContracts'
 if (!process.versions.electron) throw new Error('本测试必须由正式 Electron SQLite 原生运行器执行，不能跳过原生边界。')
 const { JSDOM } = createRequire(import.meta.url)('jsdom') as { JSDOM: new (html: string, options: { url: string }) => { window: Window } }
@@ -37,7 +37,7 @@ it('真实 MCP 与 Pi 写入经过授权、SQLite账本、正式Session及设置
   const identity = connections.create('受控集成客户端', { allowWrites: true })
   const db = new Database(':memory:')
   // 写入范围经真实宿主注册从反射注册表派生，主进程不再维护 entityType 前缀白名单。
-  const operations = new McpOperationCoordinator(new McpOperationStore(db), undefined, () => bridge.writableEntityTypes())
+  const operations = new ApplicationOperationCoordinator(new ApplicationOperationStore(db), undefined, () => bridge.writableEntityTypes())
   const bridge: ApplicationHostBridge = new ApplicationHostBridge((id) => connections.assertActive(id), operations)
   let handler: (request: LocalHostRequest) => void = () => {}
   const platform: ApplicationHostPlatform = {
@@ -147,12 +147,15 @@ it('真实 MCP 与 Pi 写入经过授权、SQLite账本、正式Session及设置
       if (!address || typeof address === 'string') throw new Error('模型响应替身未启动')
       await engine.command({ action: 'initialize', input: directory })
       await engine.command({ action: 'configure', input: { directory, instructions: '使用应用工具完成设置修改并读取结果。',
-        tools: (await client.listTools()).tools,
+        tools: dispatcher.catalog(identity.id).tools,
         model: { providerId: 'fixture', api: 'openai-completions', apiKey: 'local-fixture', baseUrl: `http://127.0.0.1:${address.port}/v1`,
           model: { providerId: 'fixture', modelId: 'fixture', displayName: 'Fixture', adapter: 'openai-compatible', enabled: true,
             capabilities: { text: true, image: false, video: false, audio: false, streaming: true, toolCall: true, parallelTools: false,
               jsonOutput: false, structuredOutputMode: 'none', reasoning: false, sampling: true, contextWindow: 32768, maxOutputTokens: 1024, usage: false } } },
       } })
+      await client.close()
+      await server.stop()
+      expect(server.listening).toBe(false)
       await engine.command({ action: 'prompt', input: { text: '恢复原主题并读取结果', context: '' } })
       expect(calls).toEqual(plan.map(item => item.name))
       expect(operations.store.get(rejectedId, identity.id)?.state).toBe('not_executed')
@@ -173,3 +176,36 @@ it('真实 MCP 与 Pi 写入经过授权、SQLite账本、正式Session及设置
     }
   } finally { await client.close(); await server.stop(); detach(); db.close(); vi.unstubAllGlobals(); dom.window.close() }
 }, 30_000)
+
+it('关闭现代 HTTP 监听只结束等待，已登记写入仍可完成并从原账本查询', async () => {
+  const connections = new McpConnections({ read: () => null, write: () => {} })
+  const caller = connections.create('断线写入验收', { allowWrites: true })
+  const db = new Database(':memory:')
+  const operations = new ApplicationOperationCoordinator(new ApplicationOperationStore(db), undefined, () => new Set(['settings.registry']))
+  const host = new ApplicationHostBridge(id => connections.assertActive(id), operations)
+  const requests: LocalHostRequest[] = []
+  const channels: string[] = []
+  const rendererEpoch = randomUUID()
+  host.register({ rendererEpoch, attachmentSequence: 1, ready: true, tools: [], domains: [] }, { send(channel, value) {
+    channels.push(channel)
+    if (channel === 'application:host:request') requests.push(value as LocalHostRequest)
+  } })
+  const server = new LocalMcpServer(connections, host, undefined, operations)
+  const client = new Client({ name: '断线验收', version: '1' }, { versionNegotiation: { mode: { pin: '2026-07-28' } } })
+  try {
+    await server.start(0)
+    await client.connect(new StreamableHTTPClientTransport(new URL(`http://127.0.0.1:${server.listeningPort}/mcp`), { requestInit: { headers: { Authorization: `Bearer ${connections.token(caller.id)}` } } }))
+    const operationId = randomUUID()
+    const waiting = client.callTool({ name: 'change_application_entities', arguments: { operationId, summary: '保存修改', changes: [{
+      kind: 'set_properties', entityType: 'settings.registry', target: { kind: 'settings.registry', id: 'singleton' }, properties: { 'interface.theme_tone': 'cool' },
+    }] } }).catch(() => undefined)
+    await vi.waitFor(() => expect(requests).toHaveLength(1))
+    await server.stop()
+    await waiting
+    expect(channels).toEqual(['application:host:request'])
+    expect(operations.store.get(operationId, caller.id)?.state).toBe('executing')
+    host.complete({ rendererEpoch, requestId: requests[0].requestId, result: { ok: true, data: { verification: { verified: true } } } })
+    const direct = new ApplicationToolDispatcher(connections, host, operations)
+    expect(await direct.call(caller.id, 'get_application_operation', { operationId }, new AbortController().signal)).toMatchObject({ executionState: 'completed', verificationState: 'verified' })
+  } finally { await client.close(); await server.stop(); host.disconnect(); db.close() }
+}, 15_000)

@@ -23,7 +23,7 @@ import { getApplicationReflectionRegistry } from '@/features/application-control
 import { BUILTIN_APPLICATION_CAPABILITIES } from './builtinApplicationCapabilityRegistry'
 import { createApplicationControlCoverageManifest } from './applicationControlCoverage'
 import { auditExternalCapabilityCoverage } from '@/features/application-control/externalCapabilityCoverage'
-import { MCP_CAPABILITY_IDS } from '@/core/application-control/localHostContracts'
+import { APPLICATION_CAPABILITY_IDS } from '@/core/application-control/localHostContracts'
 import { listRendererApplicationCapabilityIds } from '@/features/application-control/capabilities/registry'
 import { BUILTIN_APPLICATION_CAPABILITY_REGISTRY } from './builtinApplicationCapabilityRegistry'
 import { projectExternalCapabilities } from '@/core/application-control/externalCapabilityPolicy'
@@ -62,7 +62,7 @@ describe('application control coverage', () => {
     expect(auditExternalCapabilityCoverage({ definitions: [read, write], handlerIds: [read.id, write.id] }).issues.join('\n')).toContain('new_feature_write: 写操作未绑定实际目标')
   })
   it('软件业务能力逐项映射到当前 MCP 或可执行通用实体，不能只检查已发布子集', () => {
-    expect(auditExternalCapabilityCoverage({ publishedIds: MCP_CAPABILITY_IDS }).issues).toEqual([])
+    expect(auditExternalCapabilityCoverage({ publishedIds: APPLICATION_CAPABILITY_IDS }).issues).toEqual([])
   })
 
   it.each(['catalog', 'handler', 'target', 'delegate'] as const)('故意断开 %s 后门禁必须指出缺口', kind => {
@@ -75,7 +75,7 @@ describe('application control coverage', () => {
       return definition
     })
     const audit = auditExternalCapabilityCoverage({ definitions: changed,
-      ...(kind === 'catalog' ? { publishedIds: MCP_CAPABILITY_IDS.filter(id => id !== 'get_current_application_context') } : {}),
+      ...(kind === 'catalog' ? { publishedIds: APPLICATION_CAPABILITY_IDS.filter(id => id !== 'get_current_application_context') } : {}),
       ...(kind === 'handler' ? { handlerIds: listRendererApplicationCapabilityIds().filter(id => id !== 'get_current_application_context') } : {}),
     })
     expect(audit.issues.length).toBeGreaterThan(0)

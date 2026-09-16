@@ -6,7 +6,7 @@ it('等待工具跨过普通调用期限，取消时通知宿主并释放等待'
   vi.useFakeTimers()
   const bridge = new ApplicationHostBridge(() => undefined)
   const send = vi.fn()
-  bridge.register({ sessionId: '00000000-0000-4000-8000-000000000001', generation: 1, ready: true, tools: [], domains: [] }, { send })
+  bridge.register({ rendererEpoch: '00000000-0000-4000-8000-000000000001', attachmentSequence: 1, ready: true, tools: [], domains: [] }, { send })
   const controller = new AbortController()
   const promise = bridge.execute('caller', 'wait_generation_task', { taskId: 'original' }, controller.signal)
   const assertion = expect(promise).rejects.toThrow('取消')

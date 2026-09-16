@@ -19,7 +19,7 @@ describe('application host contracts', () => {
   it('快照同时包含 renderer session、全局与 scope revision', () => {
     const snapshot = hostContextSnapshotSchema.parse({
       schemaVersion: APPLICATION_HOST_CONTRACT_VERSION,
-      rendererSessionId: 'renderer-1',
+      rendererEpoch: 'renderer-1',
       revision: 4,
       scopeRevisions: { navigation: 1, generation: 0, canvas: 2, toolbox: 1, assets: 0 },
       workspace: { id: 'nodes', activeToolId: null },

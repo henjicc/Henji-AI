@@ -1,10 +1,10 @@
 // @vitest-environment node
 import { describe, expect, it, vi } from 'vitest'
 import { z } from 'zod'
-import { buildApplicationContract, buildMcpToolCatalog, EXCLUDED_TOOLS, PROTOCOL_TOOL_SPECS, toolTier } from './toolCatalog'
+import { buildApplicationContract, buildApplicationToolCatalog, EXCLUDED_TOOLS, PROTOCOL_TOOL_SPECS, toolTier } from './toolCatalog'
 import { BUILTIN_APPLICATION_CAPABILITY_REGISTRY } from '../../../../src/core/application-control/builtinApplicationCapabilityRegistry'
 import {
-  EXTERNAL_CONTRACT_VERSION, MCP_CAPABILITY_IDS, MCP_READ_CAPABILITY_IDS, MCP_WRITE_CAPABILITY_IDS,
+  EXTERNAL_CONTRACT_VERSION, APPLICATION_CAPABILITY_IDS, APPLICATION_READ_CAPABILITY_IDS, APPLICATION_WRITE_CAPABILITY_IDS,
   type LocalDomainSurface, type LocalTool,
 } from '../../../../src/core/application-control/localHostContracts'
 
@@ -12,7 +12,7 @@ import {
  * 宿主注册的工具正是渲染层的投影结果；这里用同一段投影重建，保证本测试盯的是真实声明，
  * 而不是测试里另写的一份假 schema。
  */
-const hostTools: LocalTool[] = MCP_CAPABILITY_IDS.map((id) => {
+const hostTools: LocalTool[] = APPLICATION_CAPABILITY_IDS.map((id) => {
   const definition = BUILTIN_APPLICATION_CAPABILITY_REGISTRY.get(id)
   if (!definition) throw new Error(`能力目录缺少对外登记的能力：${id}`)
   return {
@@ -24,7 +24,7 @@ const hostTools: LocalTool[] = MCP_CAPABILITY_IDS.map((id) => {
 const READ_ONLY = { allowWrites: false, allowDestructive: false, allowPaid: false }
 const WRITE = { allowWrites: true, allowDestructive: false, allowPaid: false }
 const PAID = { allowWrites: true, allowDestructive: true, allowPaid: true }
-const catalog = (access: typeof READ_ONLY, operationsEnabled = true) => buildMcpToolCatalog({ tools: hostTools, access, operationsEnabled })
+const catalog = (access: typeof READ_ONLY, operationsEnabled = true) => buildApplicationToolCatalog({ tools: hostTools, access, operationsEnabled })
 const names = (access: typeof READ_ONLY, operationsEnabled = true) => catalog(access, operationsEnabled).tools.map((tool) => tool.name)
 
 const domains: LocalDomainSurface[] = [
@@ -46,18 +46,18 @@ describe('对外工具目录的投影与授权过滤', () => {
     } finally { spy.mockRestore() }
   })
   it('所有公开生成创建能力都有可调用的只读费用准备入口', () => {
-    for (const id of MCP_WRITE_CAPABILITY_IDS) {
+    for (const id of APPLICATION_WRITE_CAPABILITY_IDS) {
       const definition = BUILTIN_APPLICATION_CAPABILITY_REGISTRY.get(id)!
       if (definition.control.impacts.some(impact => impact.effect === 'create' && impact.entityTypes.includes('generation.task'))) {
         expect(definition.paidGenerationPreparation, id).toBeTruthy()
       }
       if (!definition.paidGenerationPreparation) continue
-      expect(MCP_READ_CAPABILITY_IDS, id).toContain(definition.paidGenerationPreparation)
+      expect(APPLICATION_READ_CAPABILITY_IDS, id).toContain(definition.paidGenerationPreparation)
       expect(BUILTIN_APPLICATION_CAPABILITY_REGISTRY.get(definition.paidGenerationPreparation)?.readOnly, id).toBe(true)
     }
   })
   it('公开语义写入均有持久目标声明，创建图片能力节点无需付费权限', () => {
-    for (const id of MCP_WRITE_CAPABILITY_IDS) {
+    for (const id of APPLICATION_WRITE_CAPABILITY_IDS) {
       if (id === 'change_application_entities') continue
       expect(BUILTIN_APPLICATION_CAPABILITY_REGISTRY.get(id)?.resolveOperationTargets, id).toBeTypeOf('function')
     }
@@ -82,7 +82,7 @@ describe('对外工具目录的投影与授权过滤', () => {
       if (EXCLUDED_TOOLS.some((excluded) => excluded.name === tool.id)) continue
       const projected = listed.get(tool.id)
       expect(projected, tool.id).toBeDefined()
-      if (MCP_READ_CAPABILITY_IDS.some((id) => id === tool.id)) {
+      if (APPLICATION_READ_CAPABILITY_IDS.some((id) => id === tool.id)) {
         expect(projected!.inputSchema, tool.id).toEqual({ ...tool.inputSchema, type: 'object' })
         continue
       }
@@ -98,8 +98,8 @@ describe('对外工具目录的投影与授权过滤', () => {
   })
 
   it('operationId 必填、普通操作基线可省略，expectedRevisions 一律不对外', () => {
-    const listed = catalog(PAID).tools.filter((tool) => MCP_WRITE_CAPABILITY_IDS.some((id) => id === tool.name))
-    expect(listed.map((tool) => tool.name).sort()).toEqual([...MCP_WRITE_CAPABILITY_IDS].sort())
+    const listed = catalog(PAID).tools.filter((tool) => APPLICATION_WRITE_CAPABILITY_IDS.some((id) => id === tool.name))
+    expect(listed.map((tool) => tool.name).sort()).toEqual([...APPLICATION_WRITE_CAPABILITY_IDS].sort())
     for (const tool of listed) {
       const required = tool.inputSchema.required as string[]
       expect(required, tool.name).toContain('operationId')
@@ -111,10 +111,10 @@ describe('对外工具目录的投影与授权过滤', () => {
   })
 
   it('目录按授权档过滤，被挡住的工具指名道姓说明缺哪一档', () => {
-    expect(names(READ_ONLY).filter((name) => MCP_WRITE_CAPABILITY_IDS.some((id) => id === name))).toEqual([])
+    expect(names(READ_ONLY).filter((name) => APPLICATION_WRITE_CAPABILITY_IDS.some((id) => id === name))).toEqual([])
     expect(names(READ_ONLY)).not.toContain('get_application_operation')
     expect(catalog(READ_ONLY).hidden.map((item) => item.name).sort())
-      .toEqual([...MCP_WRITE_CAPABILITY_IDS, 'get_application_operation', 'retry_application_operation_save'].sort())
+      .toEqual([...APPLICATION_WRITE_CAPABILITY_IDS, 'get_application_operation', 'retry_application_operation_save'].sort())
     expect(catalog(READ_ONLY).hidden.find((item) => item.name === 'create_visible_generation_task')?.tier).toBe('paid')
 
     // 改权限：写工具出现，付费工具仍然缺席，并且缺席原因写明缺付费档而不是缺修改档。
@@ -134,9 +134,9 @@ describe('对外工具目录的投影与授权过滤', () => {
   })
 
   it('没有操作账本时写入与账本工具整体缺席，只读工具不受影响', () => {
-    expect(names(PAID, false).filter((name) => MCP_WRITE_CAPABILITY_IDS.some((id) => id === name))).toEqual([])
+    expect(names(PAID, false).filter((name) => APPLICATION_WRITE_CAPABILITY_IDS.some((id) => id === name))).toEqual([])
     expect(names(PAID, false)).not.toContain('get_application_operation')
-    expect(names(PAID, false)).toEqual(expect.arrayContaining([...MCP_READ_CAPABILITY_IDS, 'read_application_media', 'describe_application_contract']))
+    expect(names(PAID, false)).toEqual(expect.arrayContaining([...APPLICATION_READ_CAPABILITY_IDS, 'read_application_media', 'describe_application_contract']))
   })
 
   it('协议工具的参数表在服务端只声明一次，目录与解析共用', () => {
@@ -184,7 +184,7 @@ describe('契约发现的投影', () => {
     expect(workflows).toContain('read_application_media')
     expect(workflows).toContain('痕迹 AI')
     expect((contract.tools as Array<{ name: string; envelope: string }>).filter((tool) => tool.envelope === 'operationId+baselineIds').map((tool) => tool.name))
-      .toEqual(names(WRITE).filter((name) => MCP_WRITE_CAPABILITY_IDS.some((id) => id === name)))
+      .toEqual(names(WRITE).filter((name) => APPLICATION_WRITE_CAPABILITY_IDS.some((id) => id === name)))
   })
 
   it('契约本身足够小，不会挤占单次结果上限', () => {

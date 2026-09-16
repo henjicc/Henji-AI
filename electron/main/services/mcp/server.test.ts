@@ -20,13 +20,13 @@ async function fixture(options: { ready?: boolean; pending?: boolean; result?: R
   const host = new ApplicationHostBridge((id) => connections.assertActive(id))
   const calls: LocalHostRequest[] = []
   const cancellations: string[] = []
-  host.register({ sessionId: randomUUID(), generation: 1, ready: options.ready ?? true, tools: [{ id: 'read_application_entity', version: 1, title: '读取', description: '读取实体', inputSchema: { type: 'object', properties: {}, additionalProperties: false } }] }, {
+  host.register({ rendererEpoch: randomUUID(), attachmentSequence: 1, ready: options.ready ?? true, domains: [], tools: [{ id: 'read_application_entity', version: 1, title: '读取', description: '读取实体', inputSchema: { type: 'object', properties: {}, additionalProperties: false } }] }, {
     send: (channel, payload) => {
       if (channel === 'application:host:cancel') cancellations.push(payload as string)
       if (channel !== 'application:host:request') return
       const request = payload as LocalHostRequest
       calls.push(request)
-      if (!options.pending) host.complete({ requestId: request.requestId, sessionId: request.sessionId, result: options.result ?? { ok: true, data: { ref: { kind: 'settings.registry', id: 'singleton' }, entityType: 'settings.registry', properties: { name: '隔离工程' }, revisions: {}, capturedAt: new Date(0).toISOString(), revision: 0, scopeRevisions: { navigation: 0, generation: 0, canvas: 0, toolbox: 0, assets: 0 } } } })
+      if (!options.pending) host.complete({ requestId: request.requestId, rendererEpoch: request.rendererEpoch, result: options.result ?? { ok: true, data: { ref: { kind: 'settings.registry', id: 'singleton' }, entityType: 'settings.registry', properties: { name: '隔离工程' }, revisions: {}, capturedAt: new Date(0).toISOString(), revision: 0, scopeRevisions: { navigation: 0, generation: 0, canvas: 0, toolbox: 0, assets: 0 } } } })
     },
   })
   const server = new LocalMcpServer(connections, host)
@@ -53,7 +53,7 @@ describe('本地 MCP 协议与边界', () => {
     client.setNotificationHandler('notifications/resources/updated', message => { updates.push(message.params.uri) })
     const subscription = await client.listen({ resourceSubscriptions: [uri] })
     expect(subscription.honoredFilter.resourceSubscriptions).toEqual([uri])
-    f.host.register({ sessionId: randomUUID(), generation: 5, ready: true, tools: [] }, { send: () => {} })
+    f.host.register({ rendererEpoch: randomUUID(), attachmentSequence: 5, ready: true, tools: [], domains: [] }, { send: () => {} })
     await vi.waitFor(() => expect(updates).toContain(uri))
     await subscription.close()
     expect(await subscription.closed).toBe('local')
@@ -189,14 +189,14 @@ describe('本地 MCP 协议与边界', () => {
   })
   it('旧宿主注册晚到不能覆盖已经就绪的新代次', async () => {
     const f = await fixture()
-    f.host.register({ sessionId: randomUUID(), generation: 3, ready: true, tools: [] }, { send: () => {} })
-    f.host.register({ sessionId: randomUUID(), generation: 2, ready: false, tools: [] }, { send: () => {} })
+    f.host.register({ rendererEpoch: randomUUID(), attachmentSequence: 3, ready: true, tools: [], domains: [] }, { send: () => {} })
+    f.host.register({ rendererEpoch: randomUUID(), attachmentSequence: 2, ready: false, tools: [], domains: [] }, { send: () => {} })
     expect(f.host.ready).toBe(true)
   })
   it('契约发现按授权档回答，并说明缺席与被拒的区别', async () => {
     const f = await fixture()
     // 宿主登记了写工具，但本连接只有读授权：写工具应当"缺席且说明缺哪一档"。
-    f.host.register({ sessionId: randomUUID(), generation: 9, ready: true, tools: [
+    f.host.register({ rendererEpoch: randomUUID(), attachmentSequence: 9, ready: true, domains: [], tools: [
       { id: 'read_application_entity', version: 1, title: '读取', description: '读取实体', inputSchema: { type: 'object', properties: {}, additionalProperties: false } },
       { id: 'change_application_entities', version: 2, title: '修改', description: '修改实体', inputSchema: { type: 'object', properties: {}, additionalProperties: false } },
     ] }, { send: () => {} })
@@ -220,11 +220,11 @@ describe('本地 MCP 协议与边界', () => {
     const f = await fixture()
     const a = await f.connect()
     expect((await a.client.listTools()).tools.map((tool) => tool.name)).toContain('read_application_entity')
-    f.host.register({ sessionId: randomUUID(), generation: 5, ready: true, tools: [{ id: 'list_application_entities', version: 1, title: '列出', description: '列出实例', inputSchema: { type: 'object', properties: {}, additionalProperties: false } }] }, { send: () => {} })
+    f.host.register({ rendererEpoch: randomUUID(), attachmentSequence: 5, ready: true, domains: [], tools: [{ id: 'list_application_entities', version: 1, title: '列出', description: '列出实例', inputSchema: { type: 'object', properties: {}, additionalProperties: false } }] }, { send: () => {} })
     const refreshed = (await a.client.listTools()).tools.map((tool) => tool.name)
     expect(refreshed).toContain('list_application_entities')
     expect(refreshed).toContain('read_application_entity')
-    // 服务端没有声明 listChanged；只支持普通工具调用的客户端重新列举即可拿到最新目录。
+    // 现代客户端可订阅目录变更。
     expect(a.client.getServerCapabilities()?.tools).toEqual({ listChanged: true })
   })
 

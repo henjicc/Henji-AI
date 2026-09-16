@@ -2,7 +2,7 @@ import { z } from 'zod'
 import type { ApplicationToolDescriptor as Tool } from '../../../../src/core/application-control/capabilityMetadata'
 import {
   EXTERNAL_CONTRACT_VERSION, EXTERNAL_DEPRECATION_POLICY, EXTERNAL_LIMITS, EXTERNAL_PROTOCOL_VERSIONS,
-  EXTERNAL_SDK_VERSION, EXTERNAL_SERVER_INFO, MCP_READ_CAPABILITY_IDS, MCP_WRITE_CAPABILITY_IDS,
+  EXTERNAL_SDK_VERSION, EXTERNAL_SERVER_INFO, APPLICATION_READ_CAPABILITY_IDS, APPLICATION_WRITE_CAPABILITY_IDS,
   type LocalDomainSurface, type LocalTool,
 } from '../../../../src/core/application-control/localHostContracts'
 import { APPLICATION_CAPABILITY_CATALOG_VERSION } from '../../../../src/core/application-control/applicationCapabilities'
@@ -26,10 +26,10 @@ import { GENERATION_BUDGET } from './generationBudget'
  */
 
 export type ToolTier = 'any' | 'read' | 'write' | 'paid'
-export interface McpAccess { allowWrites: boolean; allowDestructive: boolean; allowPaid: boolean }
+export interface ApplicationAccess { allowWrites: boolean; allowDestructive: boolean; allowPaid: boolean }
 
 /** 协议信封：所有写工具共用，不只是 change_application_entities。 */
-const OPERATION_ID_FIELD = { type: 'string', format: 'uuid', description: '调用前生成并保存的逻辑操作标识；丢响应后复用此值查询，不得重新生成重放。' }
+const OPERATION_ID_FIELD = { type: 'string', format: 'uuid', description: '调用者范围内唯一的幂等键；调用前生成并保存，丢响应后复用此值查询，不得重新生成重放。' }
 const BASELINE_IDS_FIELD = { type: 'array', items: { type: 'string', format: 'uuid' }, maxItems: 32, description: '普通修改、新增和生成可省略，由应用自动核对当前目标。删除时必须提供每个目标及集合父对象读取返回的 baselineId。需要严格按旧状态修改时也可显式提供，仅包含相关目标。' }
 
 export interface ProtocolToolSpec {
@@ -94,12 +94,12 @@ export const EXCLUDED_TOOLS = BUILTIN_APPLICATION_CAPABILITY_REGISTRY.list()
 
 export function toolTier(name: string): ToolTier {
   if (BUILTIN_APPLICATION_CAPABILITY_REGISTRY.get(name)?.paidGenerationPreparation) return 'paid'
-  if (MCP_WRITE_CAPABILITY_IDS.some((id) => id === name)) return 'write'
-  if (MCP_READ_CAPABILITY_IDS.some((id) => id === name)) return 'read'
+  if (APPLICATION_WRITE_CAPABILITY_IDS.some((id) => id === name)) return 'write'
+  if (APPLICATION_READ_CAPABILITY_IDS.some((id) => id === name)) return 'read'
   return PROTOCOL_TOOL_SPECS.find((spec) => spec.name === name)?.tier ?? 'read'
 }
 
-function tierGranted(tier: ToolTier, access: McpAccess): boolean {
+function tierGranted(tier: ToolTier, access: ApplicationAccess): boolean {
   if (tier === 'write') return access.allowWrites
   if (tier === 'paid') return access.allowWrites && access.allowPaid
   return true
@@ -112,7 +112,7 @@ const TIER_REQUIREMENT: Record<Exclude<ToolTier, 'any' | 'read'>, string> = {
 
 function capabilityTool(tool: LocalTool): Tool {
   const definition = BUILTIN_APPLICATION_CAPABILITY_REGISTRY.get(tool.id)
-  const write = MCP_WRITE_CAPABILITY_IDS.some((id) => id === tool.id)
+  const write = APPLICATION_WRITE_CAPABILITY_IDS.some((id) => id === tool.id)
   const schema = { ...tool.inputSchema }
   if (write) {
     // 并发基线由 baselineIds 提供；expectedRevisions 是助手时代的内部信封，对外一律不接受。
@@ -135,7 +135,7 @@ function capabilityTool(tool: LocalTool): Tool {
   }
 }
 
-export interface McpToolCatalog {
+export interface ApplicationToolCatalog {
   tools: Tool[]
   hidden: Array<{ name: string; tier: ToolTier; requires: string }>
 }
@@ -144,11 +144,11 @@ export interface McpToolCatalog {
  * 目录按本连接授权过滤，并把被挡住的工具单独记下来。
  *
  * 每次 `tools/list` 都按当前注册重新计算，所以渲染层重载、重新注册或撤销后再次列举就是最新目录；
- * 本服务不声明 `listChanged`，客户端不支持通知时重新列举即可，不需要额外扩展。
+ * MCP 适配器负责变更通知；Pi 与其他调用面直接消费同一目录。
  */
-export function buildMcpToolCatalog(input: { tools: readonly LocalTool[]; access: McpAccess; operationsEnabled: boolean }): McpToolCatalog {
+export function buildApplicationToolCatalog(input: { tools: readonly LocalTool[]; access: ApplicationAccess; operationsEnabled: boolean }): ApplicationToolCatalog {
   const tools: Tool[] = []
-  const hidden: McpToolCatalog['hidden'] = []
+  const hidden: ApplicationToolCatalog['hidden'] = []
   // 缺席永远带理由：静默消失会让调用方把"本次没授权"读成"应用没有这个能力"。
   const consider = (name: string, tier: ToolTier, ledgerBound: boolean, build: () => Tool): void => {
     if (ledgerBound && !input.operationsEnabled) hidden.push({ name, tier, requires: '操作账本不可用，本次连接整体关闭写入' })
@@ -185,8 +185,8 @@ const WORKFLOWS = [
 export function buildApplicationContract(input: {
   callerKind?: 'external' | 'embedded'
   domains: readonly LocalDomainSurface[]
-  access: McpAccess
-  catalog: McpToolCatalog
+  access: ApplicationAccess
+  catalog: ApplicationToolCatalog
   port: number
   requestedDomains: readonly string[]
 }): Record<string, unknown> {
@@ -221,8 +221,8 @@ export function buildApplicationContract(input: {
     })),
     tools: input.catalog.tools.map((tool) => ({
       name: tool.name, tier: toolTier(tool.name), readOnly: tool.annotations?.readOnlyHint === true,
-      envelope: MCP_WRITE_CAPABILITY_IDS.some((id) => id === tool.name) ? 'operationId+baselineIds' : 'none',
-      ...(MCP_WRITE_CAPABILITY_IDS.some((id) => id === tool.name) ? { baselinePolicy: '普通操作可省略 baselineIds，破坏性操作必填。' } : {}),
+      envelope: APPLICATION_WRITE_CAPABILITY_IDS.some((id) => id === tool.name) ? 'operationId+baselineIds' : 'none',
+      ...(APPLICATION_WRITE_CAPABILITY_IDS.some((id) => id === tool.name) ? { baselinePolicy: '普通操作可省略 baselineIds，破坏性操作必填。' } : {}),
     })),
     workflows: WORKFLOWS,
   }

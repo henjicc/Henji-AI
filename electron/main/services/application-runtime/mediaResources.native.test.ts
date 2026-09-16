@@ -18,7 +18,7 @@ vi.mock('../logging', () => ({ createMainLogger: () => ({ debug: vi.fn(), info: 
 import { initializeSchema } from '../db'
 import { upsertStoryboardProject } from '../storyboard-projects'
 import { isPathWithinAllowedMediaRoots } from '../../protocol'
-import { readMcpMediaResource } from './mediaResources'
+import { readApplicationMediaResource } from './mediaResources'
 import { McpConnections } from '../mcp/connections'
 import { ApplicationHostBridge } from './applicationHostBridge'
 import { LocalMcpServer } from '../mcp/server'
@@ -56,17 +56,17 @@ it.each([
   { kind: 'canvas.node', id: 'media-project:media-node' },
 ])('物理SQLite重新打开后，$kind 正式解析返回真实媒体分块', async (ref) => {
   expect(isPathWithinAllowedMediaRoots(file)).toBe(true)
-  const result = await readMcpMediaResource({ ref, offset: 4, length: 5 })
+  const result = await readApplicationMediaResource({ ref, offset: 4, length: 5 })
   expect(result).toEqual({ mimeType: 'image/png', base64: bytes.subarray(4, 9).toString('base64'), offset: 4, byteLength: 5, totalBytes: bytes.length, eof: false })
-  expect(await readMcpMediaResource({ ref, offset: bytes.length })).toMatchObject({ base64: '', byteLength: 0, eof: true })
+  expect(await readApplicationMediaResource({ ref, offset: bytes.length })).toMatchObject({ base64: '', byteLength: 0, eof: true })
 })
 
 it('正式记录未保存和真实媒体根外路径拒绝；读取不自行扩大授权', async () => {
-  await expect(readMcpMediaResource({ ref: { kind: 'generation.result', id: 'not-saved' } })).rejects.toMatchObject({ code: 'MEDIA_NOT_PERSISTED' })
+  await expect(readApplicationMediaResource({ ref: { kind: 'generation.result', id: 'not-saved' } })).rejects.toMatchObject({ code: 'MEDIA_NOT_PERSISTED' })
   const outside = path.join(parent, 'outside.png'); await fs.writeFile(outside, bytes)
   fixture.db!.prepare('INSERT INTO assets (id,media_type,display_name,file_path,source,created_at,updated_at) VALUES (?,?,?,?,?,?,?)').run('outside', 'image', '未授权', outside, 'external', 1, 1)
   expect(isPathWithinAllowedMediaRoots(outside)).toBe(false)
-  await expect(readMcpMediaResource({ ref: { kind: 'asset', id: 'outside' } })).rejects.toMatchObject({ code: 'MEDIA_ACCESS_DENIED' })
+  await expect(readApplicationMediaResource({ ref: { kind: 'asset', id: 'outside' } })).rejects.toMatchObject({ code: 'MEDIA_ACCESS_DENIED' })
   expect(isPathWithinAllowedMediaRoots(outside)).toBe(false)
 })
 
@@ -74,7 +74,7 @@ it('真实SDK客户端读取媒体，缺少凭据和撤销连接后均不能读�
   const connections = new McpConnections({ read: () => null, write: () => {} })
   const connection = connections.create('媒体客户端')
   const bridge = new ApplicationHostBridge((id) => connections.assertActive(id))
-  bridge.register({ sessionId: randomUUID(), generation: 1, ready: true, tools: [] }, { send: () => { throw new Error('媒体不得转发渲染执行') } })
+  bridge.register({ rendererEpoch: randomUUID(), attachmentSequence: 1, ready: true, tools: [], domains: [] }, { send: () => { throw new Error('媒体不得转发渲染执行') } })
   const server = new LocalMcpServer(connections, bridge)
   const client = new Client({ name: 'native-media', version: '1' }, { versionNegotiation: { mode: { pin: '2026-07-28' } } })
   try {

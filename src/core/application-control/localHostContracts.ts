@@ -3,26 +3,26 @@ import type { HostContextSnapshot } from './hostContracts'
 import { applicationVerificationConditionSchema, applicationEvidenceSchema } from './transactions'
 import { EXTERNAL_APPLICATION_CAPABILITIES } from './externalCapabilityPolicy'
 
-export const MCP_READ_CAPABILITY_IDS = EXTERNAL_APPLICATION_CAPABILITIES.read.map(definition => definition.id)
-export const MCP_WRITE_CAPABILITY_IDS = EXTERNAL_APPLICATION_CAPABILITIES.write.map(definition => definition.id)
-export const MCP_CAPABILITY_IDS = EXTERNAL_APPLICATION_CAPABILITIES.all.map(definition => definition.id)
-export const MCP_WRITE_PERMISSIONS = [...new Set([...EXTERNAL_APPLICATION_CAPABILITIES.write.map(definition => definition.permission), ...['application:write', 'settings:write', 'models:write', 'model_catalog:write', 'assets:write', 'canvas:write', 'canvas:project_write', 'generation:write', 'generation:create', 'generation:cancel', 'camera_stage:write', 'image_edit:write', 'image_edit:preview', 'image_edit:commit', 'image_mark:write']])]
-export const MCP_READ_PERMISSIONS = [...new Set([...EXTERNAL_APPLICATION_CAPABILITIES.read.map(definition => definition.permission), ...['application:read', 'settings:read', 'models:read', 'model_catalog:read', 'assets:read', 'canvas:read', 'generation:read', 'generation:prepare', 'image_edit:read', 'image_mark:read', 'camera_stage:read', 'toolbox:read', 'navigation:read', 'storyboard:read']])]
+export const APPLICATION_READ_CAPABILITY_IDS = EXTERNAL_APPLICATION_CAPABILITIES.read.map(definition => definition.id)
+export const APPLICATION_WRITE_CAPABILITY_IDS = EXTERNAL_APPLICATION_CAPABILITIES.write.map(definition => definition.id)
+export const APPLICATION_CAPABILITY_IDS = EXTERNAL_APPLICATION_CAPABILITIES.all.map(definition => definition.id)
+export const APPLICATION_WRITE_PERMISSIONS = [...new Set([...EXTERNAL_APPLICATION_CAPABILITIES.write.map(definition => definition.permission), ...['application:write', 'settings:write', 'models:write', 'model_catalog:write', 'assets:write', 'canvas:write', 'canvas:project_write', 'generation:write', 'generation:create', 'generation:cancel', 'camera_stage:write', 'image_edit:write', 'image_edit:preview', 'image_edit:commit', 'image_mark:write']])]
+export const APPLICATION_READ_PERMISSIONS = [...new Set([...EXTERNAL_APPLICATION_CAPABILITIES.read.map(definition => definition.permission), ...['application:read', 'settings:read', 'models:read', 'model_catalog:read', 'assets:read', 'canvas:read', 'generation:read', 'generation:prepare', 'image_edit:read', 'image_mark:read', 'camera_stage:read', 'toolbox:read', 'navigation:read', 'storyboard:read']])]
 export const localHostRequestSchema = z.object({
-  requestId: z.string().uuid(), sessionId: z.string().uuid(), callerId: z.string().uuid(),
-  capabilityId: z.enum(MCP_CAPABILITY_IDS), input: z.record(z.string(), z.unknown()),
+  requestId: z.string().uuid(), rendererEpoch: z.string().uuid(), callerId: z.string().uuid(),
+  capabilityId: z.enum(APPLICATION_CAPABILITY_IDS), input: z.record(z.string(), z.unknown()),
   allowWrites: z.boolean().optional(), allowDestructive: z.boolean().optional(), allowPaid: z.boolean().optional(), operationId: z.string().uuid().optional(),
   expectedRevisions: z.record(z.string(), z.number()).optional(),
   recoveryVerification: z.object({ conditions: z.array(applicationVerificationConditionSchema).max(256), evidence: z.array(applicationEvidenceSchema).max(256) }).optional(),
 }).strict()
 export type LocalHostRequest = z.infer<typeof localHostRequestSchema>
 export const localHostReplySchema = z.object({
-  requestId: z.string().uuid(), sessionId: z.string().uuid(),
+  requestId: z.string().uuid(), rendererEpoch: z.string().uuid(),
   result: z.record(z.string(), z.unknown()),
 }).strict()
 export type LocalHostReply = z.infer<typeof localHostReplySchema>
 export const localToolSchema = z.object({
-  id: z.enum(MCP_CAPABILITY_IDS), version: z.number().int().positive(),
+  id: z.enum(APPLICATION_CAPABILITY_IDS), version: z.number().int().positive(),
   title: z.string(), description: z.string(), inputSchema: z.record(z.string(), z.unknown()),
 }).strict()
 export type LocalTool = z.infer<typeof localToolSchema>
@@ -47,12 +47,11 @@ export const localDomainSurfaceSchema = z.object({
 export type LocalDomainSurface = z.infer<typeof localDomainSurfaceSchema>
 
 export const localHostRegistrationSchema = z.object({
-  sessionId: z.string().uuid(), generation: z.number().nonnegative(), ready: z.boolean(), tools: z.array(localToolSchema).max(256),
-  // 新增可选字段：旧宿主注册（1.2／2.x 形状）仍然通过校验，只是没有按域发现与派生写入范围。
-  domains: z.array(localDomainSurfaceSchema).max(32).default([]),
+  rendererEpoch: z.string().uuid(), attachmentSequence: z.number().nonnegative(), ready: z.boolean(), tools: z.array(localToolSchema).max(256),
+  domains: z.array(localDomainSurfaceSchema).max(32),
 }).strict()
 export type LocalHostRegistration = z.infer<typeof localHostRegistrationSchema>
-/** 注册方视角：`domains` 可省略，旧形状的宿主注册仍然合法。 */
+/** 可信宿主必须提交完整注册信息。 */
 export type LocalHostRegistrationInput = z.input<typeof localHostRegistrationSchema>
 
 /** 通用读改增删真正能落到这个实体上的条件；`change_application_entities` 的写入范围由它决定。 */

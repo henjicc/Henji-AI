@@ -21,7 +21,7 @@ import { commitCanvasGenerationOutputs } from './generationOutputApplicationServ
 import { createDefaultGenerationOutputItems } from '../domain/generationOutputs'
 import { acquireCanvasGenerationResumeLease, releaseCanvasGenerationResumeLease } from '../generation/activeGenerationTasks'
 import { createApplicationCallerGrant } from '@/core/application-control/callerContext'
-import { MCP_CAPABILITY_IDS, MCP_READ_PERMISSIONS, MCP_WRITE_PERMISSIONS } from '@/core/application-control/localHostContracts'
+import { APPLICATION_CAPABILITY_IDS, APPLICATION_READ_PERMISSIONS, APPLICATION_WRITE_PERMISSIONS } from '@/core/application-control/localHostContracts'
 import { createApplicationCapabilitySession } from '@/features/application-control/applicationCapabilityService'
 import { resumeCanvasProjectGeneration } from './canvasResumePollingService'
 import { loadRealModelsIntoRegistry } from '@/tests/loadRealModels'
@@ -137,7 +137,7 @@ async function restoredTask(extra: Record<string, unknown> = {}, version = 2) {
 
 function taskControlSession() {
   const session = createApplicationCapabilitySession(createApplicationCallerGrant({ callerId: 'canvas-task-control',
-    capabilityIds: [...MCP_CAPABILITY_IDS], permissions: [...MCP_READ_PERMISSIONS, ...MCP_WRITE_PERMISSIONS],
+    capabilityIds: [...APPLICATION_CAPABILITY_IDS], permissions: [...APPLICATION_READ_PERMISSIONS, ...APPLICATION_WRITE_PERMISSIONS],
     allowWrites: true, allowDestructive: true }))
   return async (id: string, input: Record<string, unknown>) => {
     let expectedRevisions: Record<string, number> | undefined
@@ -487,7 +487,7 @@ it('MCP 使用原任务返回的恢复参数续查，错误目标不执行，重
     return { status: 'completed', url: 'C:/mcp-resumed.png', filePath: 'C:/mcp-resumed.png' }
   })
   const session = createApplicationCapabilitySession(createApplicationCallerGrant({ callerId: 'resume-original-task',
-    capabilityIds: [...MCP_CAPABILITY_IDS], permissions: [...MCP_READ_PERMISSIONS, ...MCP_WRITE_PERMISSIONS],
+    capabilityIds: [...APPLICATION_CAPABILITY_IDS], permissions: [...APPLICATION_READ_PERMISSIONS, ...APPLICATION_WRITE_PERMISSIONS],
     allowWrites: true, allowDestructive: false }))
   const execute = (id: string, input: Record<string, unknown>) => session.execute({ id, version: 1, input },
     { requestId: crypto.randomUUID(), signal: new AbortController().signal })
@@ -522,7 +522,7 @@ it('冷启动后通用实体读取按原任务已保存结果恢复历史，后�
   await expect(getCanvasGenerationTask(taskId)).rejects.toThrow('历史保存失败')
   expect(records.get(taskId)?.status).toBe('pending')
   const session = createApplicationCapabilitySession(createApplicationCallerGrant({ callerId: 'read-restored-task',
-    capabilityIds: [...MCP_CAPABILITY_IDS], permissions: [...MCP_READ_PERMISSIONS], allowWrites: false, allowDestructive: false }))
+    capabilityIds: [...APPLICATION_CAPABILITY_IDS], permissions: [...APPLICATION_READ_PERMISSIONS], allowWrites: false, allowDestructive: false }))
   const read = await session.execute({ id: 'read_application_entity', version: 1, input: {
     ref: { kind: 'generation.task', id: taskId }, propertyIds: ['generation.task.status', 'generation.task.waiting_external'],
   } }, { requestId: crypto.randomUUID(), signal: new AbortController().signal })

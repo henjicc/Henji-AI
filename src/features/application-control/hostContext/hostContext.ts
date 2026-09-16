@@ -32,9 +32,7 @@ import {
   subscribeApplicationDomainChanges,
 } from '@/core/application-control/domainChangeSignal'
 
-const rendererSessionId = typeof crypto !== 'undefined' && 'randomUUID' in crypto
-  ? crypto.randomUUID()
-  : `renderer-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
+import { rendererEpoch } from '../rendererIdentity'
 
 /** 当前界面上下文的版本摘要；写入以目标实体读取返回的 revisions 为准。 */
 const scopeRevisions: HostScopeRevisions = {
@@ -199,10 +197,6 @@ export function getHostScopeRevisions(): HostScopeRevisions {
   return { ...scopeRevisions }
 }
 
-export function getRendererSessionId(): string {
-  return rendererSessionId
-}
-
 export function createHostContextSnapshot(uiReady = true): HostContextSnapshot {
   const navigation = useNavigationStore.getState()
   const project = useProjectStore.getState()
@@ -259,7 +253,7 @@ export function createHostContextSnapshot(uiReady = true): HostContextSnapshot {
 
   return hostContextSnapshotSchema.parse({
     schemaVersion: APPLICATION_HOST_CONTRACT_VERSION,
-    rendererSessionId,
+    rendererEpoch,
     revision,
     scopeRevisions: getHostScopeRevisions(),
     catalogRevision,

@@ -1,11 +1,12 @@
+import { applicationInvocationId } from '../../../../src/core/application-control/operationIdentity'
 import Database from 'better-sqlite3'
 import { randomUUID } from 'node:crypto'
 import { unlinkSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { McpOperationStore } from './operationStore'
-import { McpOperationCoordinator } from './operationCoordinator'
+import { ApplicationOperationStore } from './operationStore'
+import { ApplicationOperationCoordinator } from './operationCoordinator'
 import { ApplicationHostBridge } from './applicationHostBridge'
 import type { LocalHostRequest } from '../../../../src/core/application-control/localHostContracts'
 import { reserveGenerationBudget } from './generationBudget'
@@ -16,33 +17,84 @@ if (!process.versions.electron) throw new Error('本测试必须由正式 Electr
 
 const opened: Database.Database[] = []
 afterEach(() => { for (const db of opened.splice(0)) db.close() })
-function fixture(): { db: Database.Database; store: McpOperationStore; coordinator: McpOperationCoordinator; callerId: string; sessionId: string; baseline: string } {
+function fixture(): { db: Database.Database; store: ApplicationOperationStore; coordinator: ApplicationOperationCoordinator; callerId: string; rendererEpoch: string; baseline: string } {
   const db = new Database(':memory:'); opened.push(db)
   db.exec("CREATE TABLE existing_business(id TEXT PRIMARY KEY, value TEXT); INSERT INTO existing_business VALUES('old','keep');")
-  const store = new McpOperationStore(db)
+  const store = new ApplicationOperationStore(db)
   // 公开写入范围由宿主从反射注册表派生后送来；原生用例显式给出本用例涉及的实体。
-  const coordinator = new McpOperationCoordinator(store, undefined, () => new Set(['settings.registry', 'canvas.project', 'canvas.node']))
-  const callerId = randomUUID(); const sessionId = randomUUID()
-  const baseline = store.baseline(callerId, [{ kind: 'settings.registry', id: 'singleton' }], { settings: 1 }, sessionId).id
-  return { db, store, coordinator, callerId, sessionId, baseline }
+  const coordinator = new ApplicationOperationCoordinator(store, undefined, () => new Set(['settings.registry', 'canvas.project', 'canvas.node']))
+  const callerId = randomUUID(); const rendererEpoch = randomUUID()
+  const baseline = store.baseline(callerId, [{ kind: 'settings.registry', id: 'singleton' }], { settings: 1 }, rendererEpoch).id
+  return { db, store, coordinator, callerId, rendererEpoch, baseline }
 }
 const access = { allowWrites: true, allowDestructive: false }
 function input(baselineId: string): Record<string, unknown> {
   return { operationId: randomUUID(), baselineIds: [baselineId], summary: '修改主题', changes: [{ kind: 'set_properties', entityType: 'settings.registry', target: { kind: 'settings.registry', id: 'singleton' }, properties: { 'interface.theme_tone': 'dark' } }] }
 }
 
-describe('MCP 原生操作记录与恢复', () => {
+describe('应用原生操作记录与恢复', () => {
+  it('调用者范围内去重，同键跨调用者生成独立业务身份且不能读取对方回执', () => {
+    const f = fixture()
+    const other = randomUUID()
+    const raw = { operationId: randomUUID(), modelId: 'fixture', prompt: '相同输入', mediaType: 'image' }
+    const paid = { ...access, allowPaid: true }
+    const original = f.coordinator.prepare(f.callerId, raw, f.rendererEpoch, paid, 'create_visible_generation_task')
+    expect(f.store.get(original.operationId, other)).toBeUndefined()
+    f.coordinator.dispatched(original, randomUUID(), f.rendererEpoch)
+    const second = f.coordinator.prepare(other, raw, f.rendererEpoch, paid, 'create_visible_generation_task')
+    expect(second.targetRefs).not.toEqual(original.targetRefs)
+    expect(f.store.get(raw.operationId, f.callerId)?.state).toBe('executing')
+    expect(f.store.get(raw.operationId, other)?.state).toBe('prepared')
+    expect(() => f.coordinator.prepare(f.callerId, { ...raw, prompt: '偷偷替换参数' }, f.rendererEpoch, paid, 'create_visible_generation_task')).toThrow('OPERATION_INPUT_CONFLICT')
+  })
+
+  it('并发相同请求只准备、预留和提交一次，不同调用者的同键互不合并', async () => {
+    const f = fixture()
+    const host = new ApplicationHostBridge(() => undefined, f.coordinator)
+    const pending: LocalHostRequest[] = []
+    host.register({ rendererEpoch: f.rendererEpoch, attachmentSequence: 1, ready: true, tools: [], domains: [] }, { send(channel, value) {
+      if (channel === 'application:host:request') pending.push(value as LocalHostRequest)
+    } })
+    const dispatcher = new ApplicationToolDispatcher({ assertActive() {}, access: () => ({ ...access, allowPaid: true }) }, host, f.coordinator)
+    const raw = { operationId: randomUUID(), modelId: 'fixture', prompt: '只提交一次', mediaType: 'image' }
+    const signal = new AbortController().signal
+    const first = dispatcher.call(f.callerId, 'create_visible_generation_task', raw, signal)
+    const duplicate = await dispatcher.call(f.callerId, 'create_visible_generation_task', raw, signal)
+    expect(duplicate.executionState).toBe('preparing')
+    expect(pending).toHaveLength(1)
+    host.complete({ rendererEpoch: f.rendererEpoch, requestId: pending[0].requestId, result: { ok: true, data: { preparation: { priceEstimate: { comparableCnyAmount: 2 } } } } })
+    await vi.waitFor(() => expect(pending).toHaveLength(2))
+    expect(f.store.generationSpendSince(Date.now() - 600_000)).toBe(2)
+    expect(pending[1].operationId).toBe(applicationInvocationId(f.callerId, raw.operationId))
+    host.complete({ rendererEpoch: f.rendererEpoch, requestId: pending[1].requestId, result: { ok: true, data: { verification: { verified: true } } } })
+    expect(await first).toMatchObject({ executionState: 'completed' })
+    expect(await dispatcher.call(f.callerId, 'create_visible_generation_task', raw, signal)).toMatchObject({ executionState: 'completed' })
+    expect(pending).toHaveLength(2)
+  })
+
+  it('准备期间退出明确未派发，已经派发的退出只标未知，均不自动重放', () => {
+    const f = fixture()
+    const preparing = f.coordinator.prepare(f.callerId, input(f.baseline), f.rendererEpoch, access)
+    expect(f.store.beginPreparation(preparing)).toBe(true)
+    expect(f.store.beginPreparation(preparing)).toBe(false)
+    const started = f.coordinator.prepare(f.callerId, { operationId: randomUUID(), modelId: 'fixture', prompt: '独立请求', mediaType: 'image' }, f.rendererEpoch, { ...access, allowPaid: true }, 'create_visible_generation_task')
+    f.coordinator.dispatched(started, randomUUID(), f.rendererEpoch)
+    f.store.recoverInterrupted()
+    expect(f.store.get(preparing.operationId, f.callerId)).toMatchObject({ state: 'not_executed', result: { error: { details: { execution: { notExecuted: true } } } } })
+    expect(f.store.get(started.operationId, f.callerId)?.state).toBe('unknown')
+  })
+
   it.each([1, 51])('原节点提交实际入口先准备并检查预算，估价 %s 元', async amount => {
     const f = fixture()
     const raw = { operationId: randomUUID(), projectId: 'project', nodeId: 'tool', inputSignature: 'canvas-input-fixture' }
-    expect(() => f.coordinator.prepare(f.callerId, raw, f.sessionId, access, 'submit_canvas_node_generation')).toThrow('付费生成授权')
+    expect(() => f.coordinator.prepare(f.callerId, raw, f.rendererEpoch, access, 'submit_canvas_node_generation')).toThrow('付费生成授权')
     const calls: LocalHostRequest[] = []
     const host = new ApplicationHostBridge(() => undefined, f.coordinator)
-    host.register({ sessionId: f.sessionId, generation: 1, ready: true, tools: [] }, { send(channel, value) {
+    host.register({ rendererEpoch: f.rendererEpoch, attachmentSequence: 1, ready: true, tools: [], domains: [] }, { send(channel, value) {
       if (channel !== 'application:host:request') return
       const request = value as LocalHostRequest
       calls.push(request)
-      host.complete({ sessionId: f.sessionId, requestId: request.requestId, result: { ok: true, data:
+      host.complete({ rendererEpoch: f.rendererEpoch, requestId: request.requestId, result: { ok: true, data:
         request.capabilityId === 'prepare_canvas_node_generation' ? { preparation: { priceEstimate: { comparableCnyAmount: amount } } }
           : { taskId: 'generated-task', status: 'submitted', verification: { verified: true } } } })
     } })
@@ -57,12 +109,12 @@ describe('MCP 原生操作记录与恢复', () => {
     const f = fixture()
     const paid = { ...access, allowPaid: true }
     const raw = { operationId: randomUUID(), projectId: 'project', nodeId: 'first', inputSignature: 'original-input' }
-    const first = f.coordinator.prepare(f.callerId, raw, f.sessionId, paid, 'submit_canvas_node_generation')
+    const first = f.coordinator.prepare(f.callerId, raw, f.rendererEpoch, paid, 'submit_canvas_node_generation')
     const requestId = randomUUID()
-    f.coordinator.dispatched(first, requestId, f.sessionId)
-    f.coordinator.interrupted(requestId, f.sessionId)
-    expect(f.coordinator.prepare(f.callerId, { ...raw, operationId: randomUUID(), nodeId: 'second' }, f.sessionId, paid, 'submit_canvas_node_generation').state).toBe('prepared')
-    expect(() => f.coordinator.prepare(f.callerId, { ...raw, operationId: randomUUID() }, f.sessionId, paid, 'submit_canvas_node_generation')).toThrow(first.operationId)
+    f.coordinator.dispatched(first, requestId, f.rendererEpoch)
+    f.coordinator.interrupted(requestId, f.rendererEpoch)
+    expect(f.coordinator.prepare(f.callerId, { ...raw, operationId: randomUUID(), nodeId: 'second' }, f.rendererEpoch, paid, 'submit_canvas_node_generation').state).toBe('prepared')
+    expect(() => f.coordinator.prepare(f.callerId, { ...raw, operationId: randomUUID() }, f.rendererEpoch, paid, 'submit_canvas_node_generation')).toThrow(first.operationId)
   })
   it.each([1, 51])('按声明派生新付费入口的授权与预算，估价 %s 元', async amount => {
     const original = BUILTIN_APPLICATION_CAPABILITY_REGISTRY.get.bind(BUILTIN_APPLICATION_CAPABILITY_REGISTRY)
@@ -73,14 +125,14 @@ describe('MCP 原生操作记录与恢复', () => {
     try {
       const f = fixture()
       const raw = { operationId: randomUUID(), projectId: 'project', sourceNodeId: 'source', capabilityId: 'image.upscale' }
-      expect(() => f.coordinator.prepare(f.callerId, raw, f.sessionId, access, 'apply_canvas_image_capability')).toThrow('付费生成授权')
+      expect(() => f.coordinator.prepare(f.callerId, raw, f.rendererEpoch, access, 'apply_canvas_image_capability')).toThrow('付费生成授权')
       const calls: LocalHostRequest[] = []
       const host = new ApplicationHostBridge(() => undefined, f.coordinator)
-      host.register({ sessionId: f.sessionId, generation: 1, ready: true, tools: [] }, { send(channel, value) {
+      host.register({ rendererEpoch: f.rendererEpoch, attachmentSequence: 1, ready: true, tools: [], domains: [] }, { send(channel, value) {
         if (channel !== 'application:host:request') return
         const request = value as LocalHostRequest
         calls.push(request)
-        host.complete({ sessionId: f.sessionId, requestId: request.requestId, result: { ok: true, data:
+        host.complete({ rendererEpoch: f.rendererEpoch, requestId: request.requestId, result: { ok: true, data:
           request.capabilityId === 'get_model_schema' ? { preparation: { priceEstimate: { comparableCnyAmount: amount } } }
             : { nodeId: 'result', verification: { verified: true } } } })
       } })
@@ -95,54 +147,54 @@ describe('MCP 原生操作记录与恢复', () => {
   it('续查只占用原任务和节点，不要求付费权限，也不锁住同项目其他任务', () => {
     const f = fixture()
     const raw = { operationId: randomUUID(), taskId: 'task-a', projectId: 'project', sourceNodeId: 'source-a', resultNodeIds: ['result-a'] }
-    const first = f.coordinator.prepare(f.callerId, raw, f.sessionId, access, 'resume_canvas_generation_task')
+    const first = f.coordinator.prepare(f.callerId, raw, f.rendererEpoch, access, 'resume_canvas_generation_task')
     expect(first.targetRefs).toEqual([
       { kind: 'generation.task', id: 'task-a' }, { kind: 'canvas.node', id: 'project:source-a' }, { kind: 'canvas.node', id: 'project:result-a' },
     ])
-    f.coordinator.dispatched(first, randomUUID(), f.sessionId)
+    f.coordinator.dispatched(first, randomUUID(), f.rendererEpoch)
     expect(f.coordinator.prepare(f.callerId, { ...raw, operationId: randomUUID(), taskId: 'task-b', sourceNodeId: 'source-b', resultNodeIds: ['result-b'] },
-      f.sessionId, access, 'resume_canvas_generation_task').state).toBe('prepared')
+      f.rendererEpoch, access, 'resume_canvas_generation_task').state).toBe('prepared')
     expect(() => f.coordinator.prepare(f.callerId, { ...raw, operationId: randomUUID() },
-      f.sessionId, access, 'resume_canvas_generation_task')).toThrow(first.operationId)
+      f.rendererEpoch, access, 'resume_canvas_generation_task')).toThrow(first.operationId)
   })
   it('编辑预览读取同一素材不互锁，未知创建不能重放，保存锁定被消费的预览', () => {
     const f = fixture()
     const raw = { operationId: randomUUID(), sourceRef: { kind: 'asset', id: 'source-image' }, operations: [{ kind: 'flip_h' }] }
-    const first = f.coordinator.prepare(f.callerId, raw, f.sessionId, access, 'create_image_edit_preview')
-    expect(first.targetRefs).toEqual([{ kind: 'image_edit.preview', id: `pending:${raw.operationId}` }])
+    const first = f.coordinator.prepare(f.callerId, raw, f.rendererEpoch, access, 'create_image_edit_preview')
+    expect(first.targetRefs).toEqual([{ kind: 'image_edit.preview', id: `pending:${applicationInvocationId(f.callerId, raw.operationId)}` }])
     const requestId = randomUUID()
-    f.coordinator.dispatched(first, requestId, f.sessionId)
+    f.coordinator.dispatched(first, requestId, f.rendererEpoch)
     expect(f.coordinator.prepare(f.callerId, { ...raw, operationId: randomUUID(), operations: [{ kind: 'rotate_cw', degrees: 90 }] },
-      f.sessionId, access, 'create_image_edit_preview').state).toBe('prepared')
-    f.coordinator.interrupted(requestId, f.sessionId)
-    expect(() => f.coordinator.prepare(f.callerId, { ...raw, operationId: randomUUID() }, f.sessionId, access, 'create_image_edit_preview')).toThrow(first.operationId)
-    const commit = f.coordinator.prepare(f.callerId, { operationId: randomUUID(), previewRef: 'preview-existing' }, f.sessionId, access, 'commit_image_edit')
+      f.rendererEpoch, access, 'create_image_edit_preview').state).toBe('prepared')
+    f.coordinator.interrupted(requestId, f.rendererEpoch)
+    expect(() => f.coordinator.prepare(f.callerId, { ...raw, operationId: randomUUID() }, f.rendererEpoch, access, 'create_image_edit_preview')).toThrow(first.operationId)
+    const commit = f.coordinator.prepare(f.callerId, { operationId: randomUUID(), previewRef: 'preview-existing' }, f.rendererEpoch, access, 'commit_image_edit')
     expect(commit.targetRefs).toEqual([{ kind: 'image_edit.preview', id: 'preview-existing' }])
-    f.coordinator.dispatched(commit, randomUUID(), f.sessionId)
+    f.coordinator.dispatched(commit, randomUUID(), f.rendererEpoch)
     expect(() => f.coordinator.prepare(f.callerId, { operationId: randomUUID(), previewRef: 'preview-existing', displayName: '另一个名字' },
-      f.sessionId, access, 'commit_image_edit')).toThrow(commit.operationId)
+      f.rendererEpoch, access, 'commit_image_edit')).toThrow(commit.operationId)
   })
   it('生成历史中的未知请求即使写入独立任务，也不能换操作标识重放', () => {
     const f = fixture()
     const raw = { operationId: randomUUID(), modelId: 'fixture', prompt: '原请求', mediaType: 'image', destination: { mode: 'history' } }
-    const first = f.coordinator.prepare(f.callerId, raw, f.sessionId, { ...access, allowPaid: true }, 'create_visible_generation_task')
+    const first = f.coordinator.prepare(f.callerId, raw, f.rendererEpoch, { ...access, allowPaid: true }, 'create_visible_generation_task')
     const requestId = randomUUID()
-    f.coordinator.dispatched(first, requestId, f.sessionId)
-    f.coordinator.interrupted(requestId, f.sessionId)
-    expect(() => f.coordinator.prepare(f.callerId, { ...raw, operationId: randomUUID() }, f.sessionId,
+    f.coordinator.dispatched(first, requestId, f.rendererEpoch)
+    f.coordinator.interrupted(requestId, f.rendererEpoch)
+    expect(() => f.coordinator.prepare(f.callerId, { ...raw, operationId: randomUUID() }, f.rendererEpoch,
       { ...access, allowPaid: true }, 'create_visible_generation_task')).toThrow(first.operationId)
-    const independent = f.coordinator.prepare(f.callerId, { ...raw, operationId: randomUUID(), prompt: '独立的新请求' }, f.sessionId,
+    const independent = f.coordinator.prepare(f.callerId, { ...raw, operationId: randomUUID(), prompt: '独立的新请求' }, f.rendererEpoch,
       { ...access, allowPaid: true }, 'create_visible_generation_task')
     expect(independent.state).toBe('prepared')
   })
   it('图片能力只锁追加目标，读取同一参考节点的独立工具可以连续派发', () => {
     const f = fixture()
     const raw = { operationId: randomUUID(), projectId: 'image-project', sourceNodeId: 'image-source', capabilityId: 'image.background-removal' }
-    const first = f.coordinator.prepare(f.callerId, raw, f.sessionId, access, 'apply_canvas_image_capability')
+    const first = f.coordinator.prepare(f.callerId, raw, f.rendererEpoch, access, 'apply_canvas_image_capability')
     expect(first.targetRefs).toEqual([{ kind: 'canvas.project', id: raw.projectId }])
-    f.coordinator.dispatched(first, randomUUID(), f.sessionId)
-    const second = f.coordinator.prepare(f.callerId, { ...raw, operationId: randomUUID(), capabilityId: 'image.upscale' }, f.sessionId, access, 'apply_canvas_image_capability')
-    f.coordinator.dispatched(second, randomUUID(), f.sessionId)
+    f.coordinator.dispatched(first, randomUUID(), f.rendererEpoch)
+    const second = f.coordinator.prepare(f.callerId, { ...raw, operationId: randomUUID(), capabilityId: 'image.upscale' }, f.rendererEpoch, access, 'apply_canvas_image_capability')
+    f.coordinator.dispatched(second, randomUUID(), f.rendererEpoch)
     expect(f.store.unresolved().map((record) => record.state)).toEqual(['executing', 'executing'])
   })
   it('有明确完整回滚事实才结束占用，未知错误和保存失败不冒充回滚', () => {
@@ -153,9 +205,9 @@ describe('MCP 原生操作记录与恢复', () => {
       [{ execution: { rolledBack: true }, persistence: {} }, 'partial'],
     ] as const) {
       const f = fixture()
-      const record = f.coordinator.prepare(f.callerId, input(f.baseline), f.sessionId, access)
-      const requestId = randomUUID(); f.coordinator.dispatched(record, requestId, f.sessionId)
-      f.coordinator.complete({ requestId, sessionId: f.sessionId, result: { ok: false, error: { details } } })
+      const record = f.coordinator.prepare(f.callerId, input(f.baseline), f.rendererEpoch, access)
+      const requestId = randomUUID(); f.coordinator.dispatched(record, requestId, f.rendererEpoch)
+      f.coordinator.complete({ requestId, rendererEpoch: f.rendererEpoch, result: { ok: false, error: { details } } })
       expect(f.store.get(record.operationId, f.callerId)?.state).toBe(expected)
       expect(f.store.unresolved().length).toBe(expected === 'rolled_back' ? 0 : 1)
     }
@@ -170,10 +222,10 @@ describe('MCP 原生操作记录与恢复', () => {
     f.store.save(old)
     const pending: LocalHostRequest[] = []
     const host = new ApplicationHostBridge(() => undefined, f.coordinator)
-    host.register({ sessionId: f.sessionId, generation: 1, ready: true, tools: [] }, { send(channel, value) {
+    host.register({ rendererEpoch: f.rendererEpoch, attachmentSequence: 1, ready: true, tools: [], domains: [] }, { send(channel, value) {
       if (channel !== 'application:host:request') return
       const request = value as LocalHostRequest
-      if (request.capabilityId === 'prepare_generation_task') host.complete({ sessionId: f.sessionId, requestId: request.requestId,
+      if (request.capabilityId === 'prepare_generation_task') host.complete({ rendererEpoch: f.rendererEpoch, requestId: request.requestId,
         result: { ok: true, data: { preparation: { priceEstimate: { comparableCnyAmount: 0.34 } } } } })
       else pending.push(request)
     } })
@@ -183,7 +235,7 @@ describe('MCP 原生操作记录与恢复', () => {
       destination: { mode: 'canvas', projectId: project.id, sourceNodeIds: ['reference'] },
     }, new AbortController().signal))
     await vi.waitFor(() => expect(pending).toHaveLength(5))
-    for (const request of pending) host.complete({ sessionId: f.sessionId, requestId: request.requestId,
+    for (const request of pending) host.complete({ rendererEpoch: f.rendererEpoch, requestId: request.requestId,
       result: { ok: true, data: { taskId: request.operationId, verification: { verified: true } } } })
     for (const reply of await Promise.all(calls)) expect(reply).toMatchObject({ executionState: 'completed' })
     expect(f.store.get(old.operationId, old.callerId)).toEqual(old)
@@ -193,29 +245,20 @@ describe('MCP 原生操作记录与恢复', () => {
     const f = fixture()
     const project = { kind: 'canvas.project', id: 'project' }
     const args = { operationId: randomUUID(), modelId: 'fixture', prompt: '第一张', mediaType: 'image', destination: { mode: 'canvas', projectId: project.id } }
-    const first = f.coordinator.prepare(f.callerId, args, f.sessionId, { ...access, allowPaid: true }, 'create_visible_generation_task')
-    f.coordinator.dispatched(first, randomUUID(), f.sessionId)
+    const first = f.coordinator.prepare(f.callerId, args, f.rendererEpoch, { ...access, allowPaid: true }, 'create_visible_generation_task')
+    f.coordinator.dispatched(first, randomUUID(), f.rendererEpoch)
     const create = { operationId: randomUUID(), changes: [{ kind: 'create_items', entityType: 'canvas.node', parent: project, items: [{ properties: { 'canvas.node.node_type': 'uploadNode' } }] }] }
-    const append = f.coordinator.prepare(f.callerId, create, f.sessionId, access)
-    f.coordinator.dispatched(append, randomUUID(), f.sessionId)
-    expect(f.coordinator.prepare(f.callerId, { ...args, operationId: randomUUID(), prompt: '第二张' }, f.sessionId, { ...access, allowPaid: true }, 'create_visible_generation_task').state).toBe('prepared')
-    expect(() => f.coordinator.prepare(f.callerId, { operationId: randomUUID(), changes: [{ kind: 'set_properties', entityType: project.kind, target: project, properties: { 'canvas.project.name': '改名' } }] }, f.sessionId, access)).toThrow(first.operationId)
-    const baseline = f.store.baseline(f.callerId, [project, { kind: 'canvas.node', id: 'project:node' }], { canvas: 1 }, f.sessionId)
-    expect(() => f.coordinator.prepare(f.callerId, { operationId: randomUUID(), baselineIds: [baseline.id], changes: [{ kind: 'remove_items', entityType: 'canvas.node', parent: project, targets: [{ kind: 'canvas.node', id: 'project:node' }] }] }, f.sessionId, { ...access, allowDestructive: true })).toThrow('RECOVERY_REQUIRED')
+    const append = f.coordinator.prepare(f.callerId, create, f.rendererEpoch, access)
+    f.coordinator.dispatched(append, randomUUID(), f.rendererEpoch)
+    expect(f.coordinator.prepare(f.callerId, { ...args, operationId: randomUUID(), prompt: '第二张' }, f.rendererEpoch, { ...access, allowPaid: true }, 'create_visible_generation_task').state).toBe('prepared')
+    expect(() => f.coordinator.prepare(f.callerId, { operationId: randomUUID(), changes: [{ kind: 'set_properties', entityType: project.kind, target: project, properties: { 'canvas.project.name': '改名' } }] }, f.rendererEpoch, access)).toThrow(first.operationId)
+    const baseline = f.store.baseline(f.callerId, [project, { kind: 'canvas.node', id: 'project:node' }], { canvas: 1 }, f.rendererEpoch)
+    expect(() => f.coordinator.prepare(f.callerId, { operationId: randomUUID(), baselineIds: [baseline.id], changes: [{ kind: 'remove_items', entityType: 'canvas.node', parent: project, targets: [{ kind: 'canvas.node', id: 'project:node' }] }] }, f.rendererEpoch, { ...access, allowDestructive: true })).toThrow('RECOVERY_REQUIRED')
     const active = f.store.get(first.operationId, f.callerId)!
     f.store.save({ ...active, state: 'unknown' })
-    expect(() => f.coordinator.prepare(f.callerId, { ...args, operationId: randomUUID() }, f.sessionId, { ...access, allowPaid: true }, 'create_visible_generation_task')).toThrow('RECOVERY_REQUIRED')
+    expect(() => f.coordinator.prepare(f.callerId, { ...args, operationId: randomUUID() }, f.rendererEpoch, { ...access, allowPaid: true }, 'create_visible_generation_task')).toThrow('RECOVERY_REQUIRED')
     f.store.save({ ...active, state: 'partial', result: { ok: false, error: { details: { persistence: {} } } } })
-    expect(() => f.coordinator.prepare(f.callerId, { ...args, operationId: randomUUID(), prompt: '第三张' }, f.sessionId, { ...access, allowPaid: true }, 'create_visible_generation_task')).toThrow('RECOVERY_REQUIRED')
-  })
-
-  it('早期没有 capabilityId 的未知追加记录也不能换标识重放', () => {
-    const f = fixture()
-    const args = { operationId: randomUUID(), changes: [{ kind: 'create_items', entityType: 'canvas.node',
-      parent: { kind: 'canvas.project', id: 'legacy-project' }, items: [{ properties: { 'canvas.node.node_type': 'uploadNode' } }] }] }
-    const record = f.coordinator.prepare(f.callerId, args, f.sessionId, access)
-    f.store.save({ ...record, capabilityId: undefined, state: 'unknown' })
-    expect(() => f.coordinator.prepare(f.callerId, { ...args, operationId: randomUUID() }, f.sessionId, access)).toThrow(record.operationId)
+    expect(() => f.coordinator.prepare(f.callerId, { ...args, operationId: randomUUID(), prompt: '第三张' }, f.rendererEpoch, { ...access, allowPaid: true }, 'create_visible_generation_task')).toThrow('RECOVERY_REQUIRED')
   })
 
   it('完整工具派发自动准备生成，保存提交事实并去重，高费用不会进入写宿主', async () => {
@@ -223,14 +266,14 @@ describe('MCP 原生操作记录与恢复', () => {
     const host = new ApplicationHostBridge(() => undefined, f.coordinator)
     const seen: string[] = []
     let cny = 1
-    host.register({ sessionId: f.sessionId, generation: 1, ready: true, tools: [] }, { send(channel, value) {
+    host.register({ rendererEpoch: f.rendererEpoch, attachmentSequence: 1, ready: true, tools: [], domains: [] }, { send(channel, value) {
       if (channel !== 'application:host:request') return
       const request = value as LocalHostRequest
       seen.push(request.capabilityId)
       const result = request.capabilityId === 'prepare_generation_task'
         ? { ok: true, data: { preparation: { priceEstimate: { comparableCnyAmount: cny } } } }
         : { ok: true, data: { taskId: 'created-task', status: 'submitted', verification: { verified: true } } }
-      host.complete({ sessionId: f.sessionId, requestId: request.requestId, result })
+      host.complete({ rendererEpoch: f.rendererEpoch, requestId: request.requestId, result })
     } })
     const dispatcher = new ApplicationToolDispatcher({ assertActive() {}, access: () => ({ allowWrites: true, allowDestructive: false, allowPaid: true }) }, host, f.coordinator)
     const args = { operationId: randomUUID(), modelId: 'fixture', prompt: '普通生成', mediaType: 'image' }
@@ -247,24 +290,24 @@ describe('MCP 原生操作记录与恢复', () => {
   it('普通修改与生成不要求基线，删除仍绑定读取，未知操作仍禁止重放', () => {
     const f = fixture()
     const args = input(f.baseline); delete args.baselineIds
-    const write = f.coordinator.prepare(f.callerId, args, f.sessionId, access)
+    const write = f.coordinator.prepare(f.callerId, args, f.rendererEpoch, access)
     expect(write.expectedRevisions).toBeUndefined()
-    f.coordinator.dispatched(write, randomUUID(), f.sessionId)
-    expect(() => f.coordinator.prepare(f.callerId, { ...args, operationId: randomUUID() }, f.sessionId, access)).toThrow('RECOVERY_REQUIRED')
-    expect(() => f.coordinator.prepare(f.callerId, { operationId: randomUUID(), changes: [{ kind: 'remove_items', entityType: 'canvas.project', parent: { kind: 'canvas.project', id: 'parent' }, targets: [{ kind: 'canvas.project', id: 'target' }] }] }, f.sessionId, { allowWrites: true, allowDestructive: true })).toThrow('BASELINE_REQUIRED')
-    const generated = f.coordinator.prepare(f.callerId, { operationId: randomUUID(), modelId: 'fixture', prompt: '生成图片', mediaType: 'image' }, f.sessionId, { ...access, allowPaid: true }, 'create_visible_generation_task')
+    f.coordinator.dispatched(write, randomUUID(), f.rendererEpoch)
+    expect(() => f.coordinator.prepare(f.callerId, { ...args, operationId: randomUUID() }, f.rendererEpoch, access)).toThrow('RECOVERY_REQUIRED')
+    expect(() => f.coordinator.prepare(f.callerId, { operationId: randomUUID(), changes: [{ kind: 'remove_items', entityType: 'canvas.project', parent: { kind: 'canvas.project', id: 'parent' }, targets: [{ kind: 'canvas.project', id: 'target' }] }] }, f.rendererEpoch, { allowWrites: true, allowDestructive: true })).toThrow('BASELINE_REQUIRED')
+    const generated = f.coordinator.prepare(f.callerId, { operationId: randomUUID(), modelId: 'fixture', prompt: '生成图片', mediaType: 'image' }, f.rendererEpoch, { ...access, allowPaid: true }, 'create_visible_generation_task')
     expect(generated.expectedRevisions).toBeUndefined()
   })
 
   it('五次低价生成放行，高费用与累计费用在提交前拦截，重开账本仍保留预算', () => {
     const f = fixture()
     const reserve = (amount: unknown) => {
-      const record = f.coordinator.prepare(f.callerId, { operationId: randomUUID(), modelId: 'fixture', prompt: '预算测试', mediaType: 'image' }, f.sessionId, { ...access, allowPaid: true }, 'create_visible_generation_task')
+      const record = f.coordinator.prepare(f.callerId, { operationId: randomUUID(), modelId: 'fixture', prompt: '预算测试', mediaType: 'image' }, f.rendererEpoch, { ...access, allowPaid: true }, 'create_visible_generation_task')
       reserveGenerationBudget(f.store, record, { ok: true, data: { preparation: { priceEstimate: { comparableCnyAmount: amount } } } })
       return record
     }
     for (let i = 0; i < 5; i++) reserve(1)
-    expect(new McpOperationStore(f.db).generationSpendSince(Date.now() - 600_000)).toBe(5)
+    expect(new ApplicationOperationStore(f.db).generationSpendSince(Date.now() - 600_000)).toBe(5)
     expect(() => reserve(51)).toThrow('超出自动生成额度')
     expect(() => reserve(46)).toThrow('超出自动生成额度')
     expect(() => reserve(null)).toThrow('费用暂不可估算')
@@ -276,7 +319,7 @@ describe('MCP 原生操作记录与恢复', () => {
   })
   it('尚未提交的过期预留必须重新核对当下费用，不能复用旧额度', () => {
     const f = fixture()
-    const record = f.store.prepare({ operationId: randomUUID(), callerId: f.callerId, inputDigest: 'expired', input: {}, state: 'prepared', generationEstimate: { cny: 1, reservedAt: Date.now() - 700_000 } })
+    const record = f.store.prepare({ operationId: randomUUID(), callerId: f.callerId, capabilityId: 'create_visible_generation_task', inputDigest: 'expired', input: {}, state: 'prepared', generationEstimate: { cny: 1, reservedAt: Date.now() - 700_000 } })
     expect(() => reserveGenerationBudget(f.store, record, { ok: true, data: { preparation: { priceEstimate: { comparableCnyAmount: 51 } } } })).toThrow('超出自动生成额度')
     reserveGenerationBudget(f.store, record, { ok: true, data: { preparation: { priceEstimate: { comparableCnyAmount: 2 } } } })
     expect(f.store.generationSpendSince(Date.now() - 600_000)).toBe(2)
@@ -284,33 +327,37 @@ describe('MCP 原生操作记录与恢复', () => {
   it('无版本的任务读取仍绑定原目标与宿主会话，不能以其他任务或旧会话取消', () => {
     const f = fixture()
     const taskRef = { kind: 'camera_stage.render_task', id: 'immutable-task' }
-    const read = f.coordinator.rememberRead(f.callerId, { ok: true, data: { taskRef, revisions: {} } }, f.sessionId)
+    const read = f.coordinator.rememberRead(f.callerId, { ok: true, data: { taskRef, revisions: {} } }, f.rendererEpoch)
     expect(read.baselineId).toEqual(expect.any(String))
     const args = { operationId: randomUUID(), baselineIds: [read.baselineId], taskRef }
     const allowed = { allowWrites: true, allowDestructive: true }
-    const record = f.coordinator.prepare(f.callerId, args, f.sessionId, allowed, 'cancel_camera_stage_render_task')
+    const record = f.coordinator.prepare(f.callerId, args, f.rendererEpoch, allowed, 'cancel_camera_stage_render_task')
     expect(record.expectedRevisions).toEqual({})
     expect(record.targetRefs).toContainEqual(taskRef)
-    expect(() => f.coordinator.prepare(f.callerId, { ...args, operationId: randomUUID(), taskRef: { ...taskRef, id: 'other' } }, f.sessionId, allowed, 'cancel_camera_stage_render_task')).toThrow('BASELINE_TARGET_MISMATCH')
+    expect(() => f.coordinator.prepare(f.callerId, { ...args, operationId: randomUUID(), taskRef: { ...taskRef, id: 'other' } }, f.rendererEpoch, allowed, 'cancel_camera_stage_render_task')).toThrow('BASELINE_TARGET_MISMATCH')
     expect(() => f.coordinator.prepare(f.callerId, { ...args, operationId: randomUUID() }, randomUUID(), allowed, 'cancel_camera_stage_render_task')).toThrow('BASELINE_EXPIRED')
   })
   it('桥接等待取消后仍持久记录迟到回执，重载后的其他回执不能替代', async () => {
     const f = fixture()
-    const record = f.coordinator.prepare(f.callerId, input(f.baseline), f.sessionId, access)
+    const record = f.coordinator.prepare(f.callerId, input(f.baseline), f.rendererEpoch, access)
+    const channels: string[] = []
     let sent: LocalHostRequest | undefined
     const bridge = new ApplicationHostBridge(() => undefined, f.coordinator)
-    bridge.register({ sessionId: f.sessionId, generation: 1, ready: true, tools: [] }, { send(channel, value) { if (channel === 'application:host:request') sent = value as LocalHostRequest } })
+    bridge.register({ rendererEpoch: f.rendererEpoch, attachmentSequence: 1, ready: true, tools: [], domains: [] }, { send(channel, value) { channels.push(channel); if (channel === 'application:host:request') sent = value as LocalHostRequest } })
     const controller = new AbortController()
     const waiting = bridge.execute(f.callerId, 'change_application_entities', record.input, controller.signal, { operation: record, ...access })
     const rejected = expect(waiting).rejects.toThrow('取消')
     controller.abort()
     await rejected
-    expect(f.store.get(record.operationId, f.callerId)?.state).toBe('unknown')
+    expect(channels).toEqual(['application:host:request'])
+    bridge.releaseCaller(f.callerId)
+    expect(channels).toEqual(['application:host:request'])
+    expect(f.store.get(record.operationId, f.callerId)?.state).toBe('executing')
     if (!sent) throw new Error('request missing')
     const result = { ok: true, data: { verification: { verified: true }, effects: [{ target: 'original' }] } }
-    bridge.complete({ sessionId: randomUUID(), requestId: sent.requestId, result })
-    expect(f.store.get(record.operationId, f.callerId)?.state).toBe('unknown')
-    bridge.complete({ sessionId: f.sessionId, requestId: sent.requestId, result })
+    bridge.complete({ rendererEpoch: randomUUID(), requestId: sent.requestId, result })
+    expect(f.store.get(record.operationId, f.callerId)?.state).toBe('executing')
+    bridge.complete({ rendererEpoch: f.rendererEpoch, requestId: sent.requestId, result })
     expect(f.store.get(record.operationId, f.callerId)).toMatchObject({ state: 'completed', verificationState: 'verified', result })
   })
   it('关闭原生数据库再打开保留回执，未返回的在途操作只核对为未知', () => {
@@ -318,54 +365,54 @@ describe('MCP 原生操作记录与恢复', () => {
     const callerId = randomUUID(); const operationId = randomUUID()
     let db = new Database(filename)
     try {
-      const store = new McpOperationStore(db)
-      const record = store.prepare({ operationId, callerId, inputDigest: 'input', input: {}, expectedRevisions: {}, state: 'prepared' })
+      const store = new ApplicationOperationStore(db)
+      const record = store.prepare({ operationId, callerId, capabilityId: 'change_application_entities', inputDigest: 'input', input: {}, expectedRevisions: {}, state: 'prepared' })
       store.claim(record, randomUUID(), randomUUID())
       db.close(); db = new Database(filename)
-      const restored = new McpOperationCoordinator(new McpOperationStore(db))
+      const restored = new ApplicationOperationCoordinator(new ApplicationOperationStore(db))
       expect(restored.store.get(operationId, callerId)?.state).toBe('unknown')
       expect(restored.store.get(operationId, callerId)?.inputDigest).toBe('input')
     } finally { db.close(); unlinkSync(filename) }
   })
-  it('增量迁移保留旧业务，派发前持久登记，原子认领拒绝第二次派发', () => {
+  it('新账本初始化保留已有业务，派发前持久登记，原子认领拒绝第二次派发', () => {
     const f = fixture(); const raw = input(f.baseline)
-    const record = f.coordinator.prepare(f.callerId, raw, f.sessionId, access)
+    const record = f.coordinator.prepare(f.callerId, raw, f.rendererEpoch, access)
     expect(f.store.get(record.operationId, f.callerId)?.state).toBe('prepared')
-    f.coordinator.dispatched(record, randomUUID(), f.sessionId)
-    expect(() => f.coordinator.dispatched(record, randomUUID(), f.sessionId)).toThrow('ALREADY_CLAIMED')
-    const restored = new McpOperationCoordinator(new McpOperationStore(f.db))
+    f.coordinator.dispatched(record, randomUUID(), f.rendererEpoch)
+    expect(() => f.coordinator.dispatched(record, randomUUID(), f.rendererEpoch)).toThrow('ALREADY_CLAIMED')
+    const restored = new ApplicationOperationCoordinator(new ApplicationOperationStore(f.db))
     expect(restored.store.get(record.operationId, f.callerId)?.state).toBe('unknown')
     expect(f.db.prepare('SELECT value FROM existing_business').get()).toEqual({ value: 'keep' })
-    expect(restored.prepare(f.callerId, raw, f.sessionId, access).state).toBe('unknown')
+    expect(restored.prepare(f.callerId, raw, f.rendererEpoch, access).state).toBe('unknown')
   })
   it('操作绑定主体和输入，原目标基线不能用其他对象或旧宿主替代', () => {
     const f = fixture(); const raw = input(f.baseline)
-    const record = f.coordinator.prepare(f.callerId, raw, f.sessionId, access)
-    expect(() => f.coordinator.prepare(randomUUID(), raw, f.sessionId, access)).toThrow('PERMISSION_DENIED')
-    expect(() => f.coordinator.prepare(f.callerId, { ...raw, summary: '不同请求' }, f.sessionId, access)).toThrow('INPUT_CONFLICT')
+    const record = f.coordinator.prepare(f.callerId, raw, f.rendererEpoch, access)
+    expect(() => f.coordinator.prepare(randomUUID(), raw, f.rendererEpoch, access)).toThrow('BASELINE_REQUIRED')
+    expect(() => f.coordinator.prepare(f.callerId, { ...raw, summary: '不同请求' }, f.rendererEpoch, access)).toThrow('INPUT_CONFLICT')
     expect(() => f.coordinator.prepare(f.callerId, input(f.baseline), randomUUID(), access)).toThrow('BASELINE_EXPIRED')
-    const other = f.store.baseline(f.callerId, [{ kind: 'canvas.project', id: 'B' }], { settings: 1 }, f.sessionId)
-    expect(() => f.coordinator.prepare(f.callerId, input(other.id), f.sessionId, access)).toThrow('TARGET_MISMATCH')
+    const other = f.store.baseline(f.callerId, [{ kind: 'canvas.project', id: 'B' }], { settings: 1 }, f.rendererEpoch)
+    expect(() => f.coordinator.prepare(f.callerId, input(other.id), f.rendererEpoch, access)).toThrow('TARGET_MISMATCH')
     expect(f.store.get(record.operationId, f.callerId)?.state).toBe('prepared')
   })
   it('取消及重启未知保留原关联，匹配的迟到回执能收敛，无关读取不能解除', () => {
-    const f = fixture(); const record = f.coordinator.prepare(f.callerId, input(f.baseline), f.sessionId, access)
-    const requestId = randomUUID(); f.coordinator.dispatched(record, requestId, f.sessionId)
-    f.coordinator.interrupted(requestId, f.sessionId)
-    expect(() => f.coordinator.prepare(f.callerId, input(f.baseline), f.sessionId, access)).toThrow('RECOVERY_REQUIRED')
-    f.coordinator.rememberRead(f.callerId, { ok: true, data: { ref: { kind: 'canvas.project', id: 'B' }, revisions: { canvas: 2 } } }, f.sessionId)
-    f.coordinator.complete({ requestId, sessionId: randomUUID(), result: { ok: true } })
+    const f = fixture(); const record = f.coordinator.prepare(f.callerId, input(f.baseline), f.rendererEpoch, access)
+    const requestId = randomUUID(); f.coordinator.dispatched(record, requestId, f.rendererEpoch)
+    f.coordinator.interrupted(requestId, f.rendererEpoch)
+    expect(() => f.coordinator.prepare(f.callerId, input(f.baseline), f.rendererEpoch, access)).toThrow('RECOVERY_REQUIRED')
+    f.coordinator.rememberRead(f.callerId, { ok: true, data: { ref: { kind: 'canvas.project', id: 'B' }, revisions: { canvas: 2 } } }, f.rendererEpoch)
+    f.coordinator.complete({ requestId, rendererEpoch: randomUUID(), result: { ok: true } })
     expect(f.store.get(record.operationId, f.callerId)?.state).toBe('unknown')
-    f.coordinator.complete({ requestId, sessionId: f.sessionId, result: { ok: true, data: { effects: [{ kind: 'update' }], verification: { verified: true } } } })
+    f.coordinator.complete({ requestId, rendererEpoch: f.rendererEpoch, result: { ok: true, data: { effects: [{ kind: 'update' }], verification: { verified: true } } } })
     expect(f.coordinator.result(f.store.get(record.operationId, f.callerId)!)).toMatchObject({ executionState: 'completed', verificationState: 'verified' })
-    expect(new McpOperationStore(f.db).get(record.operationId, f.callerId)?.result?.ok).toBe(true)
+    expect(new ApplicationOperationStore(f.db).get(record.operationId, f.callerId)?.result?.ok).toBe(true)
   })
   it('执行成功不是验证通过，部分事务和独立保存失败保留事实', () => {
     for (const result of [{ ok: true }, { ok: false, error: { details: { persistence: { replayMutation: false } } } }, { ok: false, error: { details: { transaction: { effects: [{ target: 'A' }], partial: { completedStepIndexes: [0] } } } } }]) {
       const f = fixture()
-      const record = f.coordinator.prepare(f.callerId, input(f.baseline), f.sessionId, access)
-      const requestId = randomUUID(); f.coordinator.dispatched(record, requestId, f.sessionId)
-      f.coordinator.complete({ requestId, sessionId: f.sessionId, result })
+      const record = f.coordinator.prepare(f.callerId, input(f.baseline), f.rendererEpoch, access)
+      const requestId = randomUUID(); f.coordinator.dispatched(record, requestId, f.rendererEpoch)
+      f.coordinator.complete({ requestId, rendererEpoch: f.rendererEpoch, result })
       const saved = f.store.get(record.operationId, f.callerId)!
       expect(saved.result).toEqual(result)
       expect(saved.verificationState).toBe('unresolved')
@@ -374,32 +421,32 @@ describe('MCP 原生操作记录与恢复', () => {
   })
   it('正式零步骤失败标记未执行，已有prepared也不能绕过撤销写权限', () => {
     const f = fixture(); const raw = input(f.baseline)
-    const record = f.coordinator.prepare(f.callerId, raw, f.sessionId, access)
-    expect(() => f.coordinator.prepare(f.callerId, raw, f.sessionId, { allowWrites: false, allowDestructive: false })).toThrow('PERMISSION_DENIED')
+    const record = f.coordinator.prepare(f.callerId, raw, f.rendererEpoch, access)
+    expect(() => f.coordinator.prepare(f.callerId, raw, f.rendererEpoch, { allowWrites: false, allowDestructive: false })).toThrow('PERMISSION_DENIED')
     expect(() => f.coordinator.prepare(f.callerId, raw, randomUUID(), access)).toThrow('BASELINE_EXPIRED')
-    const requestId = randomUUID(); f.coordinator.dispatched(record, requestId, f.sessionId)
-    f.coordinator.complete({ requestId, sessionId: f.sessionId, result: { ok: false, error: { details: { transaction: { partial: { completedStepIndexes: [] } } } } } })
+    const requestId = randomUUID(); f.coordinator.dispatched(record, requestId, f.rendererEpoch)
+    f.coordinator.complete({ requestId, rendererEpoch: f.rendererEpoch, result: { ok: false, error: { details: { transaction: { partial: { completedStepIndexes: [] } } } } } })
     expect(f.store.get(record.operationId, f.callerId)?.state).toBe('not_executed')
   })
   it('删除检查实际通用动作，不依赖能力的destructive提示', () => {
     const f = fixture()
-    expect(() => f.coordinator.prepare(f.callerId, { ...input(f.baseline), changes: [{ kind: 'remove_items', entityType: 'asset.library', parent: { kind: 'asset.catalog', id: 'default' }, targets: [{ kind: 'asset.library', id: 'A' }] }] }, f.sessionId, access)).toThrow('没有删除授权')
+    expect(() => f.coordinator.prepare(f.callerId, { ...input(f.baseline), changes: [{ kind: 'remove_items', entityType: 'asset.library', parent: { kind: 'asset.catalog', id: 'default' }, targets: [{ kind: 'asset.library', id: 'A' }] }] }, f.rendererEpoch, access)).toThrow('没有删除授权')
   })
   it('仅保存恢复关联原操作与原会话，验证失败不清除部分事实，验证通过才关闭', () => {
     const f = fixture(); const project = { kind: 'canvas.project', id: 'A' }
-    const baselineId = f.store.baseline(f.callerId, [project], { canvas: 1 }, f.sessionId).id
+    const baselineId = f.store.baseline(f.callerId, [project], { canvas: 1 }, f.rendererEpoch).id
     const raw = { operationId: randomUUID(), baselineIds: [baselineId], summary: '改名', changes: [{ kind: 'set_properties', entityType: project.kind, target: project, properties: { 'canvas.project.name': 'after' } }] }
-    const record = f.coordinator.prepare(f.callerId, raw, f.sessionId, access)
-    const requestId = randomUUID(); f.coordinator.dispatched(record, requestId, f.sessionId)
+    const record = f.coordinator.prepare(f.callerId, raw, f.rendererEpoch, access)
+    const requestId = randomUUID(); f.coordinator.dispatched(record, requestId, f.rendererEpoch)
     const evidence = [{ kind: 'property_value', target: project, fact: '已改名', data: 'after', capturedAt: new Date().toISOString() }]
     const failure = { ok: false, error: { details: { transaction: { effects: [{ target: project }], persistence: { recovery: { capabilityId: 'retry_canvas_project_save', target: project, replayMutation: false } }, recoveryVerification: { conditions: [{ kind: 'property_equals', target: project, propertyId: 'canvas.project.name', expected: 'after' }], evidence } } } } }
-    f.coordinator.complete({ requestId, sessionId: f.sessionId, result: failure })
+    f.coordinator.complete({ requestId, rendererEpoch: f.rendererEpoch, result: failure })
     expect(() => f.coordinator.prepareSaveRecovery(f.callerId, { operationId: randomUUID(), originalOperationId: record.operationId }, randomUUID(), access)).toThrow('SESSION_LOST')
     for (const verified of [false, true]) {
-      const recovery = f.coordinator.prepareSaveRecovery(f.callerId, { operationId: randomUUID(), originalOperationId: record.operationId }, f.sessionId, access)
+      const recovery = f.coordinator.prepareSaveRecovery(f.callerId, { operationId: randomUUID(), originalOperationId: record.operationId }, f.rendererEpoch, access)
       expect(recovery.input).toEqual({ projectRef: project })
-      const saveRequest = randomUUID(); f.coordinator.dispatched(recovery, saveRequest, f.sessionId)
-      f.coordinator.complete({ requestId: saveRequest, sessionId: f.sessionId, result: { ok: true, data: { status: 'persisted', verification: { verified } } } })
+      const saveRequest = randomUUID(); f.coordinator.dispatched(recovery, saveRequest, f.rendererEpoch)
+      f.coordinator.complete({ requestId: saveRequest, rendererEpoch: f.rendererEpoch, result: { ok: true, data: { status: 'persisted', verification: { verified } } } })
       expect(f.store.get(record.operationId, f.callerId)?.state).toBe(verified ? 'completed' : 'partial')
       expect(f.store.get(record.operationId, f.callerId)?.result).toEqual(failure)
     }
