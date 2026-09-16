@@ -2,7 +2,7 @@ import { v4 as uuidv4 } from 'uuid'
 import { ZodError } from 'zod'
 import { ApplicationPreflightFailure } from '@/core/application-control/execution/transactionFailure'
 
-import type { CanvasBatchOperation } from '@/core/assistant/capabilities/canvasBatchApplicationCapabilities'
+import type { CanvasBatchOperation } from '@/core/application-control/domains/canvas/canvasBatchApplicationCapabilities'
 import { createLogger } from '@/core/logging'
 import { useCanvasStore, type CanvasHistoryState, type CanvasNode, type CanvasEdge } from '@/stores/canvasStore'
 

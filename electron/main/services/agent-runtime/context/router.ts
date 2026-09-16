@@ -1,7 +1,7 @@
 import { z } from 'zod'
 
 import { createMainLogger } from '../../logging'
-import type { HostContextSnapshot } from '../../../../../src/core/assistant/hostContracts'
+import type { HostContextSnapshot } from '../../../../../src/core/application-control/hostContracts'
 import {
   AGENT_INTENTS,
   AGENT_TOOL_DOMAINS,

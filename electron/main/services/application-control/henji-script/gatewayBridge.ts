@@ -1,7 +1,7 @@
 import { isDeepStrictEqual } from 'node:util'
 import type { ApplicationRef } from '../../../../../src/core/application-control'
-import type { HostContextSnapshot, HostScopeRevisions } from '../../../../../src/core/assistant/hostContracts'
-import type { AgentObservedEffect } from '../../../../../src/core/assistant/observedEffect'
+import type { HostContextSnapshot, HostScopeRevisions } from '../../../../../src/core/application-control/hostContracts'
+import type { ApplicationObservedEffect } from '../../../../../src/core/application-control/observedEffect'
 import { AgentToolGatewayError, type AgentToolGateway } from '../../agent-runtime/tools/gateway'
 import type { AgentToolRegistry } from '../../agent-runtime/tools/registry'
 import type { HenjiScriptApiLease } from '../../agent-runtime/context/script-api-lease'
@@ -133,7 +133,7 @@ export class HenjiScriptGatewayBridge {
     instruction: HenjiCallInstruction,
     scriptRunRef: string,
     context: ScriptExecutionContext,
-  ): Promise<{ output: unknown; effects: AgentObservedEffect[]; summary: string }> {
+  ): Promise<{ output: unknown; effects: ApplicationObservedEffect[]; summary: string }> {
     const definition = this.options.registry.get(toolName)
     if (!definition) throw new HenjiScriptError('SCRIPT_API_NOT_DISCOVERED', 'execute', `能力 ${toolName} 已不可用`, instruction.location, instruction.stepId)
     if (!definition.readOnly) {
@@ -210,11 +210,11 @@ export class HenjiScriptGatewayBridge {
     instruction: HenjiCallInstruction,
     args: unknown[],
     output: unknown,
-    observedEffects: AgentObservedEffect[],
+    observedEffects: ApplicationObservedEffect[],
     scriptRunRef: string,
     context: ScriptExecutionContext,
     evidence: string[],
-    effectLedger: AgentObservedEffect[],
+    effectLedger: ApplicationObservedEffect[],
     /** remove 成功并读回确认后登记；同段脚本内再读这个引用即视为已确认不存在。 */
     removedRefs?: Set<string>,
   ): Promise<void> {

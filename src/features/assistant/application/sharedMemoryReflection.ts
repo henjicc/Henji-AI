@@ -1,5 +1,5 @@
 import { getPlatform } from '@/platform/runtime'
-import { APPLICATION_CAPABILITY_CATALOG_VERSION } from '@/core/assistant/applicationCapabilities'
+import { APPLICATION_CAPABILITY_CATALOG_VERSION } from '@/core/application-control/applicationCapabilities'
 import type { SharedMemorySnapshot } from '@/core/assistant/memory'
 import { type ApplicationFieldDefinition, type ApplicationEntityRegistration, type ApplicationMutationExecutor, type ApplicationPlannedStep,
   type ApplicationCompletedStepResult, fieldDescriptors, fieldReadValues, fieldWriterTable, writableProperties, propertyOperations,

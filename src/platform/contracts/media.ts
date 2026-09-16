@@ -17,7 +17,7 @@ export interface MediaPlatform {
   importFromBytes(request: ImportMediaFromBytesRequest): Promise<LocalMediaImportResult>
   captureApplicationSurface(request: SurfaceCaptureRequest): Promise<SurfaceCaptureResult>
 }
-import type { SurfaceCaptureRequest, SurfaceCaptureResult } from '@/core/assistant/surfaceObservation'
+import type { SurfaceCaptureRequest, SurfaceCaptureResult } from '@/core/application-control/surfaceObservation'
 import type {
   ImportMediaFromBytesRequest,
   ImportMediaFromPathRequest,

@@ -5,14 +5,14 @@ import { loadRealModelsIntoRegistry } from '@/tests/loadRealModels'
 import {
   getApplicationControlExecutionEngine,
   getApplicationReflectionRegistry,
-} from '@/features/assistant/applicationCapabilities/applicationControlRegistry'
+} from '@/features/application-control/capabilities/applicationControlRegistry'
 import type { ApplicationMutationExecutor } from '@/core/application-control'
 import { createEmptyImageEditDocument, imageEditDocumentToMarkDoc } from '@/core/imageEdit'
 import {
   createImageEditDocumentV3,
   createImageEditEffectLayerV3,
 } from '@/core/imageEdit/v3/documentFactory'
-import { createHostContextSnapshot } from '@/features/assistant/hostContext/hostContext'
+import { createHostContextSnapshot } from '@/features/application-control/hostContext/hostContext'
 import { useCameraStageStore } from '@/features/cameraStage/store/cameraStageStore'
 import { ImageEditCommandBusV3 } from '@/features/imageEdit/v3/application/imageEditCommandBus'
 import { registerPersistedImageEditTestSession } from './imageEditPersistenceTestSession'

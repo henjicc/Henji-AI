@@ -7,10 +7,10 @@ import type { LlmModelConfig } from '@henjicc/ai-sdk'
 import { PiEngine } from './piEngine'
 import type { EngineEvent } from './contracts'
 import { z } from 'zod'
-import { buildMcpToolCatalog } from '../mcp/toolCatalog'
+import { buildMcpToolCatalog } from '../application-runtime/toolCatalog'
 import { MCP_CAPABILITY_IDS } from '../../../../src/core/application-control/localHostContracts'
-import { BUILTIN_APPLICATION_CAPABILITY_REGISTRY } from '../../../../src/core/assistant/builtinApplicationCapabilityRegistry'
-import { loadAssistantSkillCapability } from '../../../../src/core/assistant/capabilities/assistantSkillApplicationCapabilities'
+import { BUILTIN_APPLICATION_CAPABILITY_REGISTRY } from '../../../../src/core/application-control/builtinApplicationCapabilityRegistry'
+import { loadAssistantSkillCapability } from '../../../../src/core/application-control/domains/assistantSkill/assistantSkillApplicationCapabilities'
 import { loadAssistantSkillFrom } from '../assistant/skills/registry'
 vi.mock('../assistant/skills/registry', async importOriginal => {
   const actual = await importOriginal<typeof import('../assistant/skills/registry')>()
@@ -153,7 +153,7 @@ describe('Pi official SDK engine', () => {
     f.tool.mockImplementation(async (...args: unknown[]) => {
       expect(args[1]).toBe('load_assistant_skill')
       const input = definition.inputSchema.parse(args[2])
-      return loadAssistantSkillFrom({ builtinDir: path.resolve('resources/assistant-skills'), userDir: '', disabledNames: [] }, input.name, input.path)
+      return { ok: true, data: await loadAssistantSkillFrom({ builtinDir: path.resolve('resources/assistant-skills'), userDir: '', disabledNames: [] }, input.name, input.path) }
     })
     f.setToolPlan([
       { name: 'load_assistant_skill', arguments: { name: skill, reason: '当前创作任务' } },
@@ -358,7 +358,7 @@ describe('Pi official SDK engine', () => {
   it('MCP 拒绝写入被官方 SDK 保存为工具错误，模型收到单份恢复事实', async () => {
     const f = await fixture()
     const result = { ok: false, executionState: 'not_executed', message: '请读取项目列表后选择现有项目' }
-    f.tool.mockResolvedValue({ isError: true, structuredContent: result, content: [{ type: 'text', text: JSON.stringify(result) }] })
+    f.tool.mockResolvedValue(result)
     await f.engine.command({ action: 'prompt', input: { text: '读取项目', context: '' } })
     const reply = f.requests.at(-1)!.messages.find(message => message.role === 'tool')
     expect(reply?.content).toBe(JSON.stringify(result))

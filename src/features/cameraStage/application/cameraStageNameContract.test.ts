@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import {
   CAMERA_STAGE_NAME_MAX_LENGTH,
   cameraStageObjectUpdateSchema,
-} from '@/core/assistant/capabilities/cameraStageCapabilitySchemas'
+} from '@/core/application-control/domains/cameraStage/cameraStageCapabilitySchemas'
 
 import { createPrimitiveObject, pickDefaultColor } from '../domain/sceneDefaults'
 import { resolveUniqueCameraStageObjectName } from './cameraStageApplicationService'

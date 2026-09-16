@@ -1,7 +1,7 @@
 import { useCanvasStore } from '@/stores/canvasStore'
 import { createLogger } from '@/core/logging'
 
-import type { CanvasNodePlacement } from '@/core/assistant/capabilities/canvasMutationApplicationCapabilities'
+import type { CanvasNodePlacement } from '@/core/application-control/domains/canvas/canvasMutationApplicationCapabilities'
 import {
   isAssetGroupNode,
   isCameraStageNode,

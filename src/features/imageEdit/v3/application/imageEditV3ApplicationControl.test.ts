@@ -23,7 +23,7 @@ import { imageMarkRevision } from '@/features/imageMark/application/imageMarkSes
 import {
   getApplicationControlExecutionEngine,
   getApplicationReflectionRegistry,
-} from '@/features/assistant/applicationCapabilities/applicationControlRegistry'
+} from '@/features/application-control/capabilities/applicationControlRegistry'
 
 import { registerPersistedImageEditTestSession } from '@/tests/imageEditPersistenceTestSession'
 

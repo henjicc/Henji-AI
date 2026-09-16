@@ -6,7 +6,7 @@ import { createStoredCameraStageProject } from '@/features/cameraStage/projects/
 import {
   applyCameraStageRenderTask,
 } from '@/features/canvas/application/cameraStageRenderApplicationService'
-import { createCameraStageRenderTaskRef } from '@/features/assistant/applicationCapabilities/cameraStageRenderCapabilityAdapter'
+import { createCameraStageRenderTaskRef } from '@/features/application-control/capabilities/cameraStageRenderCapabilityAdapter'
 import { confirmCanvasPersistence } from '@/features/canvas/application/canvasPersistenceService'
 import { CANVAS_NODE_TYPES, type CanvasNode } from '@/features/canvas/domain/canvasNodes'
 import { cameraStageNodeDefinition } from '@/features/canvas/domain/nodeRegistryStandardDefinitions'

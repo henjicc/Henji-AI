@@ -3,7 +3,7 @@ import type {
   AgentBudgetContinuation,
   AgentStartRunRequest,
 } from '../../../../../src/core/assistant/runtimeContracts'
-import type { HostContextSnapshot } from '../../../../../src/core/assistant/hostContracts'
+import type { HostContextSnapshot } from '../../../../../src/core/application-control/hostContracts'
 import type { ModelStepEvent, ModelStepInput, ModelStepResult } from '@henjicc/ai-sdk'
 import type { AgentToolGateway } from '../tools/gateway'
 import type { AgentToolRegistry } from '../tools/registry'

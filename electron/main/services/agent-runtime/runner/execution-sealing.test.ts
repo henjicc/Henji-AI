@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest'
 
-import type { AgentEffectKind, AgentObservedEffect } from '../../../../../src/core/assistant/observedEffect'
+import type { ApplicationObservedEffectKind, ApplicationObservedEffect } from '../../../../../src/core/application-control/observedEffect'
 import { sealingSummary } from './execution-sealing'
 
-function effect(kind: AgentEffectKind, verified = false): AgentObservedEffect {
+function effect(kind: ApplicationObservedEffectKind, verified = false): ApplicationObservedEffect {
   return {
     effect: kind, entityTypes: [], propertyIds: [], targetRefs: [],
     count: 1, verified, evidence: [`${kind}:fixture`],

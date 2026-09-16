@@ -1,5 +1,5 @@
-import { isMutatingEffect } from '../../../../../src/core/assistant/observedEffect'
-import type { AgentObservedEffect } from '../../../../../src/core/assistant/observedEffect'
+import { isMutatingEffect } from '../../../../../src/core/application-control/observedEffect'
+import type { ApplicationObservedEffect } from '../../../../../src/core/application-control/observedEffect'
 import type { AgentWorkingSummary } from '../../../../../src/core/assistant/workingContext'
 
 /**
@@ -60,7 +60,7 @@ export function sealingCaveat(summary: AgentWorkingSummary | undefined): string 
  * 真正有信息量的是另一件事：写了却一次都没读回。所以这里报写入数与观察数，
  * 并在"有写入、零观察"时明说结果未经读回确认——那才是需要人看一眼的形状。
  */
-export function sealingSummary(effects: readonly AgentObservedEffect[]): string {
+export function sealingSummary(effects: readonly ApplicationObservedEffect[]): string {
   const mutations = effects.filter((effect) => isMutatingEffect(effect)).length
   const observations = effects.length - mutations
   if (mutations === 0) {

@@ -4,13 +4,13 @@ import {
   applicationSchemaReadInputSchema,
   applicationSchemaReadOutputSchema,
 } from '../capabilityDiscovery'
-import type { ApplicationCapabilityDefinition } from '../applicationCapabilities'
-import { capabilityControl, defineApplicationCapability } from './defineApplicationCapability'
+import type { ApplicationCapabilityDefinition } from '../../application-control/applicationCapabilities'
+import { capabilityControl, defineApplicationCapability } from '../../application-control/domains/shared/defineApplicationCapability'
 import {
   CAPABILITY_DISCOVERY_HISTORY_OMITTED_KEYS,
   omitRecordKeys,
   trimScriptApiDuplication,
-} from './historyProjection'
+} from '../../application-control/domains/shared/historyProjection'
 
 const schemaRefAiSchema = {
   type: 'object',

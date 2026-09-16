@@ -5,8 +5,8 @@ import { useProjectStore } from '@/stores/projectStore'
 import { maintainMultiLayerDocumentReleaseCandidates } from './multiLayerDocumentLifecycleService'
 import { createLogger } from '@/core/logging'
 
-import type { CanvasNodePlacement } from '@/core/assistant/capabilities/canvasMutationApplicationCapabilities'
-import type { HostErrorCode } from '@/core/assistant/hostContracts'
+import type { CanvasNodePlacement } from '@/core/application-control/domains/canvas/canvasMutationApplicationCapabilities'
+import type { HostErrorCode } from '@/core/application-control/hostContracts'
 import {
   CANVAS_NODE_TYPES,
   DEFAULT_NODE_WIDTH,

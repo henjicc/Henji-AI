@@ -13,7 +13,7 @@ import {
   type ApplicationCapabilityResult,
   type HostContextSnapshot,
   type HostErrorCode,
-} from '../../../../src/core/assistant/hostContracts'
+} from '../../../../src/core/application-control/hostContracts'
 import { createMainLogger } from '../logging'
 
 const logger = createMainLogger('main.assistant_frontend_tools')

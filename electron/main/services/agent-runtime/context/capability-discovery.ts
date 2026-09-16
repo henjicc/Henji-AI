@@ -4,7 +4,7 @@ import { z } from 'zod'
 import {
   AGENT_DISCOVERY_LEASE_TOOL_LIMIT,
 } from '../../../../../src/core/assistant/toolBudget'
-import type { HostContextSnapshot } from '../../../../../src/core/assistant/hostContracts'
+import type { HostContextSnapshot } from '../../../../../src/core/application-control/hostContracts'
 import type { AgentToolCatalogEntry } from '../../../../../src/core/assistant/toolContracts'
 import {
   APPLICATION_CAPABILITY_DISCOVERY_VERSION,
@@ -21,7 +21,7 @@ import {
 } from '../../../../../src/core/assistant/capabilityDiscovery'
 import {
   APPLICATION_CAPABILITY_CATALOG_VERSION,
-} from '../../../../../src/core/assistant/applicationCapabilities'
+} from '../../../../../src/core/application-control/applicationCapabilities'
 import type { ApplicationSchemaRef } from '../../../../../src/core/application-control'
 import type { AgentToolRegistry } from '../tools/registry'
 import { selectLeaseableToolNames } from './tool-activation'

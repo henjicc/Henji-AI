@@ -1,5 +1,5 @@
-import type { ApplicationCapabilityDefinition } from '../assistant/applicationCapabilities'
-import { BUILTIN_APPLICATION_CAPABILITY_REGISTRY } from '../assistant/builtinApplicationCapabilityRegistry'
+import type { ApplicationCapabilityDefinition } from './applicationCapabilities'
+import { BUILTIN_APPLICATION_CAPABILITY_REGISTRY } from './builtinApplicationCapabilityRegistry'
 
 /** 由能力原声明生成可调用集合；没有第二份 MCP 业务名单。未接好执行器由覆盖门禁报错。 */
 export function isExternalApplicationTool(definition: ApplicationCapabilityDefinition): boolean {

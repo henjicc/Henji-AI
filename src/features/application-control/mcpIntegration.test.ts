@@ -1,12 +1,12 @@
 // @vitest-environment node
 import { expect, it, vi } from 'vitest'
 import { createRequire } from 'node:module'
-import { Client } from '@modelcontextprotocol/sdk/client/index.js'
-import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js'
+import { Client } from '@modelcontextprotocol/client'
+import { StreamableHTTPClientTransport } from '@modelcontextprotocol/client'
 import { LocalMcpServer } from '../../../electron/main/services/mcp/server'
 import { McpConnections } from '../../../electron/main/services/mcp/connections'
-import { ApplicationHostBridge } from '../../../electron/main/services/mcp/applicationHostBridge'
-import { MCP_WRITE_CAPABILITY_IDS, type McpPlatform, type LocalHostRequest } from '@/core/application-control/localHostContracts'
+import { ApplicationHostBridge } from '../../../electron/main/services/application-runtime/applicationHostBridge'
+import { MCP_WRITE_CAPABILITY_IDS, type ApplicationHostPlatform, type LocalHostRequest } from '@/core/application-control/localHostContracts'
 const { JSDOM } = createRequire(import.meta.url)('jsdom') as { JSDOM: new (html: string, options: { url: string }) => { window: Window } }
 
 it('真实 MCP → 中立桥 → Session → 领域注册表读取正式设置，禁止内部实体与写入', async () => {
@@ -21,16 +21,15 @@ it('真实 MCP → 中立桥 → Session → 领域注册表读取正式设置�
   const identity = connections.create('集成客户端')
   const bridge = new ApplicationHostBridge((id) => connections.assertActive(id))
   let handler: (request: LocalHostRequest) => void = () => {}
-  const unused = async (): Promise<never> => { throw new Error('此管理路径不属于集成调用') }
-  const platform: McpPlatform = {
-    status: unused, configure: unused, authorize: unused, revoke: unused, connectionConfig: unused,
+  const platform: ApplicationHostPlatform = {
+    publishContext: async snapshot => bridge.publishContext(snapshot),
     onRequest: (value) => { handler = value; return () => {} }, onCancel: () => () => {}, onRevoke: () => () => {},
-    registerHost: async (registration) => bridge.register(registration, { send: (channel, payload) => { if (channel === 'mcp:host:request') handler(payload as LocalHostRequest) } }),
+    registerHost: async (registration) => bridge.register(registration, { send: (channel, payload) => { if (channel === 'application:host:request') handler(payload as LocalHostRequest) } }),
     complete: async (reply) => bridge.complete(reply),
   }
   const detach = attachLocalApplicationHost(platform, true)
   const server = new LocalMcpServer(connections, bridge)
-  const client = new Client({ name: '领域集成', version: '1' })
+  const client = new Client({ name: '领域集成', version: '1' }, { versionNegotiation: { mode: { pin: '2026-07-28' } } })
   try {
     await server.start(0)
     await client.connect(new StreamableHTTPClientTransport(new URL(`http://127.0.0.1:${server.listeningPort}/mcp`), { requestInit: { headers: { Authorization: `Bearer ${connections.token(identity.id)}` } } }))
@@ -51,7 +50,7 @@ it('真实 MCP → 中立桥 → Session → 领域注册表读取正式设置�
     expect(contract.isError, JSON.stringify(contract)).toBe(false)
     const discovered = (contract.structuredContent as { data: { domains: Array<{ id: string; writable: boolean }> } }).data.domains
     expect(discovered.filter((domain) => domain.writable).map((domain) => domain.id).sort())
-      .toEqual(['assets', 'camera_stage', 'canvas', 'generation', 'image_edit', 'image_mark', 'models', 'settings'])
+      .toEqual(['assets', 'camera_stage', 'canvas', 'generation', 'image_edit', 'image_mark', 'memory', 'models', 'settings'])
     expect(discovered.map((domain) => domain.id)).not.toContain('assistant_runtime')
     expect(discovered.every((domain) => !('entities' in domain))).toBe(true)
     const expanded = await client.callTool({ name: 'describe_application_contract', arguments: { domains: ['toolbox'] } })

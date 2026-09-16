@@ -2,7 +2,7 @@ import { z } from 'zod'
 import { describe, expect, it, vi } from 'vitest'
 
 import type { AgentEvent, AgentRunState } from '../../../../../src/core/assistant/events'
-import { AGENT_CONTRACT_VERSION, type HostContextSnapshot } from '../../../../../src/core/assistant/hostContracts'
+import { AGENT_CONTRACT_VERSION, type HostContextSnapshot } from '../../../../../src/core/application-control/hostContracts'
 import type { AgentPermissionAuditFact } from '../../../../../src/core/assistant/permissionAudit'
 import { AGENT_RUNTIME_SCHEMA_VERSION, type AgentStartRunRequest } from '../../../../../src/core/assistant/runtimeContracts'
 import type { ModelStepInput, ModelStepResult } from '@henjicc/ai-sdk'

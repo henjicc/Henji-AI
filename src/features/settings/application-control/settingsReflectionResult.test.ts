@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { applicationReflectionHandlers } from '@/features/assistant/applicationCapabilities/applicationReflectionAdapter'
+import { applicationReflectionHandlers } from '@/features/application-control/capabilities/applicationReflectionAdapter'
 import { registry } from '@/core/ModelRegistry'
 import type { ModelDefinition } from '@/core/types'
 import { modelDefaultsManager } from '@/features/settings/modelDefaultsManager'

@@ -1,3 +1,4 @@
+import { ApplicationToolDispatcher } from '../../../electron/main/services/application-runtime/applicationToolDispatcher'
 // @vitest-environment node
 import { expect, it, vi } from 'vitest'
 import Database from 'better-sqlite3'
@@ -8,14 +9,14 @@ import fs from 'node:fs/promises'
 import path from 'node:path'
 import os from 'node:os'
 import { PiEngine } from '../../../electron/main/services/embedded-agent/piEngine'
-import { Client } from '@modelcontextprotocol/sdk/client/index.js'
-import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js'
+import { Client } from '@modelcontextprotocol/client'
+import { StreamableHTTPClientTransport } from '@modelcontextprotocol/client'
 import { LocalMcpServer } from '../../../electron/main/services/mcp/server'
 import { McpConnections } from '../../../electron/main/services/mcp/connections'
-import { ApplicationHostBridge } from '../../../electron/main/services/mcp/applicationHostBridge'
-import { McpOperationStore } from '../../../electron/main/services/mcp/operationStore'
-import { McpOperationCoordinator } from '../../../electron/main/services/mcp/operationCoordinator'
-import type { McpPlatform, LocalHostRequest } from '@/core/application-control/localHostContracts'
+import { ApplicationHostBridge } from '../../../electron/main/services/application-runtime/applicationHostBridge'
+import { McpOperationStore } from '../../../electron/main/services/application-runtime/operationStore'
+import { McpOperationCoordinator } from '../../../electron/main/services/application-runtime/operationCoordinator'
+import type { ApplicationHostPlatform, LocalHostRequest } from '@/core/application-control/localHostContracts'
 if (!process.versions.electron) throw new Error('本测试必须由正式 Electron SQLite 原生运行器执行，不能跳过原生边界。')
 const { JSDOM } = createRequire(import.meta.url)('jsdom') as { JSDOM: new (html: string, options: { url: string }) => { window: Window } }
 
@@ -39,16 +40,15 @@ it('真实 MCP 与 Pi 写入经过授权、SQLite账本、正式Session及设置
   const operations = new McpOperationCoordinator(new McpOperationStore(db), undefined, () => bridge.writableEntityTypes())
   const bridge: ApplicationHostBridge = new ApplicationHostBridge((id) => connections.assertActive(id), operations)
   let handler: (request: LocalHostRequest) => void = () => {}
-  const unused = async (): Promise<never> => { throw new Error('不使用管理接口') }
-  const platform: McpPlatform = {
-    status: unused, configure: unused, authorize: unused, revoke: unused, connectionConfig: unused,
+  const platform: ApplicationHostPlatform = {
+    publishContext: async snapshot => bridge.publishContext(snapshot),
     onRequest: (value) => { handler = value; return () => {} }, onCancel: () => () => {}, onRevoke: () => () => {},
-    registerHost: async (registration) => bridge.register(registration, { send: (channel, payload) => { if (channel === 'mcp:host:request') handler(payload as LocalHostRequest) } }),
+    registerHost: async (registration) => bridge.register(registration, { send: (channel, payload) => { if (channel === 'application:host:request') handler(payload as LocalHostRequest) } }),
     complete: async (reply) => bridge.complete(reply),
   }
   const detach = attachLocalApplicationHost(platform, true)
   const server = new LocalMcpServer(connections, bridge, undefined, operations)
-  const client = new Client({ name: '写入集成', version: '1' })
+  const client = new Client({ name: '写入集成', version: '1' }, { versionNegotiation: { mode: { pin: '2026-07-28' } } })
   try {
     await server.start(0)
     await client.connect(new StreamableHTTPClientTransport(new URL(`http://127.0.0.1:${server.listeningPort}/mcp`), { requestInit: { headers: { Authorization: `Bearer ${connections.token(identity.id)}` } } }))
@@ -136,9 +136,10 @@ it('真实 MCP 与 Pi 写入经过授权、SQLite账本、正式Session及设置
     })
     const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'henji-pi-mcp-'))
     const calls: string[] = []
-    const engine = new PiEngine(() => undefined, async (_id, name, input) => {
+    const dispatcher = new ApplicationToolDispatcher(connections, bridge, operations, 0, 'embedded')
+    const engine = new PiEngine(() => undefined, async (_id, name, input, signal) => {
       calls.push(name)
-      return client.callTool({ name, arguments: input })
+      return dispatcher.call(identity.id, name, input, signal ?? new AbortController().signal)
     })
     try {
       await new Promise<void>(resolve => modelServer.listen(0, '127.0.0.1', resolve))

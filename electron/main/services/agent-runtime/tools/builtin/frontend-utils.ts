@@ -2,9 +2,9 @@ import type {
   FrontendToolOperation,
   ApplicationCapabilityResult,
   HostScopeRevisions,
-} from '../../../../../../src/core/assistant/hostContracts'
+} from '../../../../../../src/core/application-control/hostContracts'
 import type { AgentToolDefinition } from '../types'
-import { applicationTransactionFailureFactsSchema, ApplicationTransactionFactsError } from '../../../../../../src/core/assistant/applicationTransactionFailureFacts'
+import { applicationTransactionFailureFactsSchema, ApplicationTransactionFactsError } from '../../../../../../src/core/application-control/applicationTransactionFailureFacts'
 
 export type FrontendToolInvoker = (
   operation: FrontendToolOperation,

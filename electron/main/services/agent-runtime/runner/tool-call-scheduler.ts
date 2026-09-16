@@ -1,5 +1,5 @@
 import type { AgentApprovalRequest, AgentEventInput } from '../../../../../src/core/assistant/events'
-import type { HostScopeRevisions } from '../../../../../src/core/assistant/hostContracts'
+import type { HostScopeRevisions } from '../../../../../src/core/application-control/hostContracts'
 import {
   agentToolObservationSchema,
   type AgentToolErrorCode,
@@ -20,7 +20,7 @@ import {
 } from './runner-results'
 import { compileActionGroups, type CompiledActionGroup } from './action-plan-compiler'
 import { AgentStopPolicyExceededError } from './budget'
-import { failureObservedEffects } from '../../../../../src/core/assistant/applicationTransactionFailureFacts'
+import { failureObservedEffects } from '../../../../../src/core/application-control/applicationTransactionFailureFacts'
 
 type ApprovalDecision = 'approve' | 'reject' | 'expired'
 

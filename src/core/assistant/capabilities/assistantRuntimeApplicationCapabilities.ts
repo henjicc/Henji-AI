@@ -16,8 +16,8 @@ import {
   assistantUserInstructionsSchema,
   assistantUserInstructionsUpdateSchema,
 } from '../userInstructions'
-import type { ApplicationCapabilityDefinition } from '../applicationCapabilities'
-import { capabilityControl, defineApplicationCapability } from './defineApplicationCapability'
+import type { ApplicationCapabilityDefinition } from '../../application-control/applicationCapabilities'
+import { capabilityControl, defineApplicationCapability } from '../../application-control/domains/shared/defineApplicationCapability'
 import {
   CAPABILITY_DISCOVERY_APPLICATION_CAPABILITIES,
 } from './capabilityDiscoveryApplicationCapabilities'

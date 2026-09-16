@@ -3,8 +3,8 @@ import { describe, expect, it } from 'vitest'
 import {
   AGENT_CONTRACT_VERSION,
   type HostContextSnapshot,
-} from '../../../../../src/core/assistant/hostContracts'
-import type { AgentCapabilityKind } from '../../../../../src/core/assistant/observedEffect'
+} from '../../../../../src/core/application-control/hostContracts'
+import type { ApplicationCapabilityKind } from '../../../../../src/core/application-control/observedEffect'
 import { createBuiltinAgentToolRegistry } from '../tools/builtin'
 import { AGENT_CORE_TOOL_NAMES } from './tool-activation'
 import { AgentCapabilityDiscoveryCatalog } from './capability-discovery'
@@ -23,14 +23,14 @@ import { AgentCapabilityDiscoveryCatalog } from './capability-discovery'
  * 这条门禁就是那条规则的机器表述——任何一处重新变回硬过滤，这里当场变红。
  *
  * ── 与账本门禁的分工（两条合起来才是完整命题）──
- * `src/features/assistant/applicationCapabilities/storeActionCoverage.test.ts` 守的是
+ * `src/features/application-control/capabilities/storeActionCoverage.test.ts` 守的是
  * 「账本里 capability 绑定指向的 id 确实存在于目录」；这里守的是「目录里的能力确实找得到」。
  * 两条合起来 = **人在界面上能做的每件事，助手声明的那条路真的走得通**。分成两条是因为账本
  * 在渲染层、发现层在主进程，跨层 import 会破坏架构边界。任何一条被删掉，命题就断了。
  */
 
 /** 模型真实会填的 kinds 组合，含实测那次翻车的那一组。 */
-const KIND_SETS: readonly (readonly AgentCapabilityKind[])[] = [
+const KIND_SETS: readonly (readonly ApplicationCapabilityKind[])[] = [
   [],
   ['observe'],
   ['query'],

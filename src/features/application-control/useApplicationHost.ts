@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { getMcpConnectionService } from '@/commands/mcp'
+import { getApplicationHostService } from '@/commands/applicationControl'
 
 import {
   acknowledgeFrontendTool,
@@ -17,7 +17,7 @@ import {
   type FrontendToolRequest,
   type FrontendToolResult,
   type ApplicationCapabilityResult,
-} from '@/core/assistant/hostContracts'
+} from '@/core/application-control/hostContracts'
 import { createLogger } from '@/core/logging'
 import { registerVisibleGenerationStatusReporter } from '@/workspaces/GenerationWorkspace/application/visibleGenerationTaskCommand'
 
@@ -26,12 +26,12 @@ import {
   getRendererSessionId,
   retainHostContextTracking,
   subscribeHostContext,
-} from '@/features/assistant/hostContext/hostContext'
+} from '@/features/application-control/hostContext/hostContext'
 const logger = createLogger('features.assistant.frontend_tools')
 
 // 应用能力处理器依赖画布、3D 镜头和素材服务，仅在首次执行时加载。
-const loadApplicationCapabilityRegistry = (): Promise<typeof import('@/features/assistant/applicationCapabilities/registry')> =>
-  import('@/features/assistant/applicationCapabilities/registry')
+const loadApplicationCapabilityRegistry = (): Promise<typeof import('@/features/application-control/capabilities/registry')> =>
+  import('@/features/application-control/capabilities/registry')
 
 const completedLimit = 300
 
@@ -40,7 +40,7 @@ export function useApplicationHost(uiReady: boolean): void {
     let disposed = false
     let detach: (() => void) | undefined
     void import('./localApplicationHost').then(({ attachLocalApplicationHost }) => {
-      if (!disposed) detach = attachLocalApplicationHost(getMcpConnectionService(), uiReady)
+      if (!disposed) detach = attachLocalApplicationHost(getApplicationHostService(), uiReady)
     }).catch((error) => logger.error('初始化外部连接宿主失败', error, { event: 'mcp.host.initialize.failed' }))
     return () => { disposed = true; detach?.() }
   }, [uiReady])

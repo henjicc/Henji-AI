@@ -92,7 +92,7 @@ export interface HenjiMediaApi {
   /** 仅供剪贴板或合成 Blob 等没有真实路径的媒体使用。 */
   importFromBytes(request: import('../../src/core/media/localMediaImportContracts').ImportMediaFromBytesRequest): Promise<import('../../src/core/media/localMediaImportContracts').LocalMediaImportResult>
   /** 只截取当前 Henji-AI 窗口内、由渲染层注册的应用表面区域，并在主进程覆盖敏感字段。 */
-  captureApplicationSurface(request: import('../../src/core/assistant/surfaceObservation').SurfaceCaptureRequest): Promise<import('../../src/core/assistant/surfaceObservation').SurfaceCaptureResult>
+  captureApplicationSurface(request: import('../../src/core/application-control/surfaceObservation').SurfaceCaptureRequest): Promise<import('../../src/core/application-control/surfaceObservation').SurfaceCaptureResult>
 }
 
 export interface HenjiClipboardFileEntry {

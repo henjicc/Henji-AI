@@ -2,7 +2,7 @@ import { z } from 'zod'
 
 import { agentRunStateSchema } from './events'
 import { AGENT_ACTIVE_TOOL_LIMIT } from './toolBudget'
-import { hostScopeRevisionsSchema } from './hostContracts'
+import { hostScopeRevisionsSchema } from '../application-control/hostContracts'
 
 export const AGENT_TURN_SNAPSHOT_VERSION = 'agent-turn-snapshot/v1' as const
 export const AGENT_SAVE_POINT_VERSION = 'agent-save-point/v1' as const

@@ -7,7 +7,7 @@ import type { EngineCommand } from './contracts'
 
 const mocks = vi.hoisted(() => ({ memory: vi.fn(() => ({ content: '', enabled: false, revision: 1 })), skills: vi.fn(), loadSkill: vi.fn(), fork: vi.fn(), resolveModel: vi.fn(), prepare: vi.fn(), close: vi.fn(), call: vi.fn(), info: vi.fn(), error: vi.fn() }))
 vi.mock('electron', () => ({ utilityProcess: { fork: mocks.fork } }))
-vi.mock('../../ipc/mcp', () => ({ createEmbeddedApplicationClient: () => ({ catalog: () => [], close: mocks.close, call: mocks.call }) }))
+vi.mock('../application-runtime/runtime', () => ({ createEmbeddedApplicationClient: () => ({ catalog: () => [], close: mocks.close, call: mocks.call }) }))
 vi.mock('../system', () => ({ getAppLocalDataDir: () => '/fixture' }))
 vi.mock('../../window', () => ({ getMainWindow: () => undefined }))
 vi.mock('../assistant/user-instructions', () => ({ getAssistantUserInstructions: async () => ({ content: '' }) }))
@@ -141,7 +141,7 @@ describe('内置助手消息调度', () => {
     expect(config).toMatchObject({ input: { tools: [{ name: 'load_assistant_skill' }], instructions: expect.stringContaining('skills_index: prompt-optimization') } })
     const original = f.child.postMessage
     f.child.postMessage = vi.fn()
-    mocks.loadSkill.mockResolvedValue({ isError: false, structuredContent: { content: '技能正文' } })
+    mocks.loadSkill.mockResolvedValue({ ok: true, data: { content: '技能正文' } })
     f.child.emit('message', { type: 'tool', id: 'skill', name: 'load_assistant_skill', input: { name: 'prompt-optimization', reason: '图片' } })
     await vi.waitFor(() => expect(f.child.postMessage).toHaveBeenCalledWith(expect.objectContaining({ type: 'toolResult', id: 'skill' })))
     expect(mocks.loadSkill).toHaveBeenCalledWith({ name: 'prompt-optimization', reason: '图片' }, expect.any(AbortSignal))
@@ -157,7 +157,7 @@ describe('内置助手消息调度', () => {
     await f.send('消息正文不进日志')
     await vi.waitFor(() => expect(f.prompts).toHaveLength(1))
     const queued = mocks.info.mock.calls.find(call => call[1].event === 'embedded_agent.message.queued')![1] as { requestId: string }
-    mocks.call.mockResolvedValue({ isError: true, content: [{ type: 'text', text: '拒绝' }] })
+    mocks.call.mockResolvedValue({ ok: false, error: { code: 'DENIED', message: '拒绝' } })
     // 工具回执不经过本测试的 command 替身。
     const postMessage = f.child.postMessage
     f.child.postMessage = vi.fn()

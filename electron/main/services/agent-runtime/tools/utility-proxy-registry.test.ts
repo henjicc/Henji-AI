@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest'
 import {
   AGENT_CONTRACT_VERSION,
   type HostContextSnapshot,
-} from '../../../../../src/core/assistant/hostContracts'
+} from '../../../../../src/core/application-control/hostContracts'
 import type { ApplicationCapabilityDiscoveryOutput } from '../../../../../src/core/assistant/capabilityDiscovery'
 import { createUtilityProxyRegistries } from './utility-proxy-registry'
 

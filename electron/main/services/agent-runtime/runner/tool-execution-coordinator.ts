@@ -1,5 +1,5 @@
 import type { AgentApprovalRequest, AgentEventInput } from '../../../../../src/core/assistant/events'
-import type { HostScopeRevisions } from '../../../../../src/core/assistant/hostContracts'
+import type { HostScopeRevisions } from '../../../../../src/core/application-control/hostContracts'
 import type { AgentApprovalMode } from '../../../../../src/core/assistant/runtimeContracts'
 import type { ModelStepToolCall } from '@henjicc/ai-sdk'
 import type { AgentToolErrorCode, AgentToolObservation } from '../../../../../src/core/assistant/toolContracts'

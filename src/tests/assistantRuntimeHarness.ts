@@ -33,12 +33,12 @@
  */
 import { AGENT_RUNTIME_SCHEMA_VERSION, type AgentStartRunRequest } from '@/core/assistant/runtimeContracts'
 import type { AgentEvent, AgentRunState } from '@/core/assistant/events'
-import type { HostContextSnapshot } from '@/core/assistant/hostContracts'
+import type { HostContextSnapshot } from '@/core/application-control/hostContracts'
 import {
   createHostContextSnapshot,
   retainHostContextTracking,
-} from '@/features/assistant/hostContext/hostContext'
-import { executeApplicationCapabilityResult } from '@/features/assistant/applicationCapabilities/registry'
+} from '@/features/application-control/hostContext/hostContext'
+import { executeApplicationCapabilityResult } from '@/features/application-control/capabilities/registry'
 
 import type { ModelStepInput, ModelStepResult } from '@henjicc/ai-sdk'
 

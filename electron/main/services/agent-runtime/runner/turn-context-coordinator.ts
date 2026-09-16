@@ -1,4 +1,4 @@
-import type { HostContextSnapshot } from '../../../../../src/core/assistant/hostContracts'
+import type { HostContextSnapshot } from '../../../../../src/core/application-control/hostContracts'
 import type { AgentMemoryContextEntry } from '../../../../../src/core/assistant/memory'
 import type { AgentToolObservation } from '../../../../../src/core/assistant/toolContracts'
 import type { AgentWorkingSummary } from '../../../../../src/core/assistant/workingContext'

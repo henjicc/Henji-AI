@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto'
 
-import type { HostContextSnapshot } from '../../../../../src/core/assistant/hostContracts'
+import type { HostContextSnapshot } from '../../../../../src/core/application-control/hostContracts'
 import {
   AGENT_COMPACTION_VERSION,
   AGENT_PROJECTION_VERSION,

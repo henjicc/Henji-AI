@@ -10,7 +10,7 @@ import {
 } from '@/core/pricing/priceDisplay'
 import { validateParams, type ValidationError } from '@/core/request/paramValidator'
 import { getI18nText, type ModelDefinition, type ModelType, type ParamDef } from '@/core/types'
-import { APPLICATION_CAPABILITY_CATALOG_VERSION } from '@/core/assistant/applicationCapabilities'
+import { APPLICATION_CAPABILITY_CATALOG_VERSION } from '@/core/application-control/applicationCapabilities'
 
 export type GenerationMediaType = 'image' | 'video' | 'audio'
 export type GenerationModelSearchSort = 'registry' | 'recommended' | 'lowest_estimated_price'

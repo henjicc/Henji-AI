@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import {
   AGENT_CONTRACT_VERSION,
   type HostContextSnapshot,
-} from '../../../../../src/core/assistant/hostContracts'
+} from '../../../../../src/core/application-control/hostContracts'
 import { createBuiltinAgentToolRegistry } from '../tools/builtin'
 import { APPLICATION_CAPABILITY_CATEGORIES } from '../tools/builtin/backend'
 import { AGENT_ROUTE_POLICY } from './router'

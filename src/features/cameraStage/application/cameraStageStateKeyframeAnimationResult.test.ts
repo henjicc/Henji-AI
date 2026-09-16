@@ -15,13 +15,13 @@ vi.mock('../projects/cameraStageProjectService', () => ({
   loadProjectIntoScene: projectMocks.loadProjectIntoScene,
 }))
 
-vi.mock('@/features/assistant/applicationCapabilities/applicationControlRegistry', () => ({
+vi.mock('@/features/application-control/capabilities/applicationControlRegistry', () => ({
   getApplicationReflectionRegistry: () => reflectionRuntime.registry,
   getApplicationControlExecutionEngine: () => reflectionRuntime.engine,
 }))
 
 import { ApplicationControlExecutionEngine, ApplicationReflectionRegistry } from '@/core/application-control'
-import { applicationReflectionHandlers } from '@/features/assistant/applicationCapabilities/applicationReflectionAdapter'
+import { applicationReflectionHandlers } from '@/features/application-control/capabilities/applicationReflectionAdapter'
 
 import { createDefaultAnimation } from '../domain/animationTypes'
 import { createCameraObject, createDefaultSceneSettings, createPrimitiveObject, pickDefaultColor } from '../domain/sceneDefaults'

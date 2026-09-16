@@ -5,7 +5,7 @@ import {
 import {
   hostScopeRevisionsSchema,
   type HostScopeRevisions,
-} from '../../../../../src/core/assistant/hostContracts'
+} from '../../../../../src/core/application-control/hostContracts'
 import type { SerializedAgentError } from '../../../../../src/core/assistant/events'
 import type {
   ModelStepMessage,
@@ -16,7 +16,7 @@ import { resolveToolOffloadByteThreshold, shouldOffloadObservation } from '../co
 import { AGENT_DISCOVERY_LEASE_TOOL_LIMIT } from '../../../../../src/core/assistant/toolBudget'
 import { sanitizeObservationValue } from '../context/sanitize'
 import { AgentToolGatewayError } from '../tools/gateway'
-import { applicationTransactionFailureFactsSchema, type ApplicationTransactionFailureFacts } from '../../../../../src/core/assistant/applicationTransactionFailureFacts'
+import { applicationTransactionFailureFactsSchema, type ApplicationTransactionFailureFacts } from '../../../../../src/core/application-control/applicationTransactionFailureFacts'
 import { AgentBudgetExceededError } from './budget'
 
 export function errorCode(error: unknown): string {

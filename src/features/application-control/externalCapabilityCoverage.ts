@@ -1,9 +1,9 @@
-import type { ApplicationCapabilityDefinition } from '@/core/assistant/applicationCapabilities'
-import { BUILTIN_APPLICATION_CAPABILITY_REGISTRY } from '@/core/assistant/builtinApplicationCapabilityRegistry'
+import type { ApplicationCapabilityDefinition } from '@/core/application-control/applicationCapabilities'
+import { BUILTIN_APPLICATION_CAPABILITY_REGISTRY } from '@/core/application-control/builtinApplicationCapabilityRegistry'
 import { isExternalApplicationTool, projectExternalCapabilities } from '@/core/application-control/externalCapabilityPolicy'
 import type { ApplicationReflectionRegistry } from '@/core/application-control'
-import { listRendererApplicationCapabilityIds } from '@/features/assistant/applicationCapabilities/registry'
-import { getApplicationReflectionRegistry } from '@/features/assistant/applicationCapabilities/applicationControlRegistry'
+import { listRendererApplicationCapabilityIds } from '@/features/application-control/capabilities/registry'
+import { getApplicationReflectionRegistry } from '@/features/application-control/capabilities/applicationControlRegistry'
 
 /** 从软件能力全集向外核对，不能从已经成功发布的 MCP 子集反推“无遗漏”。 */
 export function auditExternalCapabilityCoverage(input: {

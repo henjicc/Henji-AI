@@ -1,4 +1,4 @@
-import type { HostContextSnapshot } from '../../../../../src/core/assistant/hostContracts'
+import type { HostContextSnapshot } from '../../../../../src/core/application-control/hostContracts'
 import type { AgentToolObservation } from '../../../../../src/core/assistant/toolContracts'
 import type { ModelStepMessage, ModelStepTool } from '@henjicc/ai-sdk'
 import type { AgentMemoryContextEntry } from '../../../../../src/core/assistant/memory'

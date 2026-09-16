@@ -1,60 +1,32 @@
-import { BrowserWindow, type IpcMainInvokeEvent } from 'electron'
+import { assertTrustedApplicationSender } from './application-control'
+import { getApplicationRuntime, registerExternalApplicationAuthority } from '../services/application-runtime/runtime'
 import { z } from 'zod'
-import { localHostRegistrationSchema, localHostReplySchema, mcpDefaultAccessSchema, DEFAULT_MCP_PREFERENCES, type McpStatus } from '../../../src/core/application-control/localHostContracts'
+import { mcpDefaultAccessSchema, DEFAULT_MCP_PREFERENCES, type McpStatus } from '../../../src/core/application-control/localHostContracts'
 import { readMcpPreferences, writeMcpPreferences } from '../services/mcp/preferences'
-import { getMainWindow } from '../window'
 import { getKey, setKey } from '../services/keystore'
 import { createMainLogger } from '../services/logging'
 import { McpConnections } from '../services/mcp/connections'
-import { ApplicationHostBridge } from '../services/mcp/applicationHostBridge'
+import { ApplicationHostBridge } from '../services/application-runtime/applicationHostBridge'
 import { LocalMcpServer } from '../services/mcp/server'
-import { McpOperationStore } from '../services/mcp/operationStore'
-import { McpOperationCoordinator } from '../services/mcp/operationCoordinator'
-import { recoverPersistedGenerationOperation } from '../services/mcp/persistedOperationRecovery'
-import { getDb } from '../services/db'
-import { ApplicationToolDispatcher } from '../services/mcp/applicationToolDispatcher'
-import type { McpAccess } from '../services/mcp/toolCatalog'
 import { parseVoid, registerIpcHandler } from './registry'
 
 const logger = createMainLogger('main.mcp')
 const connections = new McpConnections({ read: () => getKey('mcp', 'connections'), write: (value) => setKey('mcp', 'connections', value) })
 let host: ApplicationHostBridge
 let server: LocalMcpServer
-let embeddedDispatcher: ApplicationToolDispatcher
-const embeddedCallers = new Map<string, McpAccess>()
-
-export function createEmbeddedApplicationClient(callerId: string, access: McpAccess) {
-  embeddedCallers.set(callerId, access)
-  return {
-    catalog: () => embeddedDispatcher.catalog(callerId).tools,
-    call: (name: string, input: Record<string, unknown>, signal: AbortSignal) => embeddedDispatcher.call(callerId, name, input, signal),
-    close: () => { embeddedCallers.delete(callerId); host.revoke(callerId) },
-  }
-}
 let configuredPort = 43821
 let preferences = structuredClone(DEFAULT_MCP_PREFERENCES)
 let changing = false
-const watched = new WeakSet<Electron.WebContents>()
 
-export function assertTrustedApplicationSender(event: IpcMainInvokeEvent): void {
-  const window = getMainWindow()
-  if (!window || window.isDestroyed() || BrowserWindow.fromWebContents(event.sender) !== window || event.senderFrame !== event.sender.mainFrame) throw new Error('不可信的连接管理请求。')
-  const url = event.senderFrame.url
-  const developmentUrl = process.env.ELECTRON_RENDERER_URL
-  if (developmentUrl ? new URL(url).origin !== new URL(developmentUrl).origin : !url.startsWith('file://')) throw new Error('不可信的连接管理来源。')
-}
 const trusted = assertTrustedApplicationSender
 function status(): McpStatus { return { enabled: server.listening, ready: host.ready, port: configuredPort, connections: connections.list(), defaultAccess: preferences.defaultAccess } }
 
 export function registerMcpIpc(): void {
-  const operations = new McpOperationCoordinator(new McpOperationStore(getDb()), (record) => recoverPersistedGenerationOperation(getDb(), record), () => host.writableEntityTypes())
-  host = new ApplicationHostBridge((id) => { if (!embeddedCallers.has(id)) connections.assertActive(id) }, operations)
-  embeddedDispatcher = new ApplicationToolDispatcher({
-    assertActive: (id) => { if (!embeddedCallers.has(id)) throw new Error('助手操作授权已结束。') },
-    access: (id) => { const access = embeddedCallers.get(id); if (!access) throw new Error('助手操作授权已结束。'); return access },
-  }, host, operations, 0, 'embedded')
+  const { host: applicationHost, operations } = getApplicationRuntime()
+  host = applicationHost
+  registerExternalApplicationAuthority((id) => connections.assertActive(id))
   server = new LocalMcpServer(connections, host, (error) => logger.error('外部连接请求失败', { event: 'mcp.request.failed', error }), operations,
-    (info) => logger.info('外部客户端已建立协议会话', { event: 'mcp.session.opened', context: { callerId: info.callerId, clientName: info.client?.name, clientVersion: info.client?.version } }))
+    (info) => logger.info('外部请求已通过授权', { event: 'mcp.request.authorized', context: { callerId: info.callerId } }))
   try { preferences = readMcpPreferences() } catch (error) {
     preferences = { ...DEFAULT_MCP_PREFERENCES, enabled: false, defaultAccess: { allowWrites: false, allowDestructive: false, allowPaid: false } }
     logger.error('读取外部连接设置失败，已保持关闭', { event: 'mcp.preferences.read.failed', error })
@@ -101,14 +73,5 @@ export function registerMcpIpc(): void {
     logger.info('已撤销外部连接', { event: 'mcp.revoke.completed', context: { callerId: id } })
   }, trusted)
   registerIpcHandler('mcp:config', identity, ({ id }) => JSON.stringify({ mcpServers: { henji: { type: 'http', url: `http://127.0.0.1:${configuredPort}/mcp`, headers: { Authorization: `Bearer ${connections.token(id)}` } } } }, null, 2), trusted)
-  registerIpcHandler('mcp:host:register', (value) => localHostRegistrationSchema.parse(value), (input, event) => {
-    if (!watched.has(event.sender)) {
-      watched.add(event.sender)
-      event.sender.on('did-start-navigation', (_event, _url, _inPlace, isMainFrame) => { if (isMainFrame) host.disconnect() })
-      event.sender.once('destroyed', () => host.disconnect())
-    }
-    host.register(input, { send: (channel, payload) => { if (!event.sender.isDestroyed()) event.sender.send(channel, payload) } })
-  }, trusted)
-  registerIpcHandler('mcp:host:complete', (value) => localHostReplySchema.parse(value), (input) => host.complete(input), trusted)
 }
 export async function disposeMcp(): Promise<void> { await server?.stop() }

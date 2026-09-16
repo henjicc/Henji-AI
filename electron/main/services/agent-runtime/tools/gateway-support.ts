@@ -1,7 +1,7 @@
 import { z } from 'zod'
-import { ApplicationTransactionFactsError, type ApplicationTransactionFailureFacts } from '../../../../../src/core/assistant/applicationTransactionFailureFacts'
+import { ApplicationTransactionFactsError, type ApplicationTransactionFailureFacts } from '../../../../../src/core/application-control/applicationTransactionFailureFacts'
 
-import type { HostContextSnapshot, HostScope, HostScopeRevisions } from '../../../../../src/core/assistant/hostContracts'
+import type { HostContextSnapshot, HostScope, HostScopeRevisions } from '../../../../../src/core/application-control/hostContracts'
 import type { AgentToolErrorCode, AgentToolPreview } from '../../../../../src/core/assistant/toolContracts'
 import { AgentApprovalError } from './approval'
 import { AgentIdempotencyConflictError } from './idempotency'

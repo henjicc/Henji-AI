@@ -1,5 +1,5 @@
 import type { AgentSession, SessionManager, ToolDefinition } from '@earendil-works/pi-coding-agent'
-import { BUILTIN_APPLICATION_CAPABILITY_REGISTRY } from '../../../../src/core/assistant/builtinApplicationCapabilityRegistry'
+import { BUILTIN_APPLICATION_CAPABILITY_REGISTRY } from '../../../../src/core/application-control/builtinApplicationCapabilityRegistry'
 
 import { basicTools, disclosureSurface, surfaceProfile, taskProfiles } from './toolDisclosureProfiles'
 

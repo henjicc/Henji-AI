@@ -7,10 +7,10 @@ if (!process.versions.electron) throw new Error('本测试必须由正式 Electr
 const state = vi.hoisted(() => ({ db: null as Database.Database | null }))
 vi.mock('../db', () => ({ getDb: () => state.db! }))
 import { claimGenerationSubmission, completeGenerationSubmission, readGenerationSubmission } from './generation-submissions'
-import { recoverPersistedGenerationOperation } from '../mcp/persistedOperationRecovery'
-import type { OperationRecord } from '../mcp/operationStore'
-import { McpOperationStore } from '../mcp/operationStore'
-import { McpOperationCoordinator } from '../mcp/operationCoordinator'
+import { recoverPersistedGenerationOperation } from '../application-runtime/persistedOperationRecovery'
+import type { OperationRecord } from '../application-runtime/operationStore'
+import { McpOperationStore } from '../application-runtime/operationStore'
+import { McpOperationCoordinator } from '../application-runtime/operationCoordinator'
 afterEach(() => { state.db?.close(); state.db = null })
 
 describe('原生生成提交事实', () => {

@@ -1,13 +1,13 @@
 import { describe, expect, it } from 'vitest'
 
 import type { AgentRunState } from '../../../src/core/assistant/events'
-import type { AgentEffectKind } from '../../../src/core/assistant/observedEffect'
+import type { ApplicationObservedEffectKind } from '../../../src/core/application-control/observedEffect'
 import { evaluateAssistantCliAcceptance } from './acceptance'
 
 type SealedEffect = AgentRunState['executionOutcome']['effects'][number]
 
 /** 按 Effect Receipt 的完整形状造一条，别用只有 `effect` 一个键的字面量强转。 */
-function effect(kind: AgentEffectKind): SealedEffect {
+function effect(kind: ApplicationObservedEffectKind): SealedEffect {
   return {
     effect: kind, entityTypes: [], propertyIds: [], targetRefs: [],
     count: 1, verified: true, evidence: [`${kind}:fixture`],

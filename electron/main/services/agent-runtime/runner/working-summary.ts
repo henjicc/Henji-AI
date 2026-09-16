@@ -1,4 +1,4 @@
-import type { HostScopeRevisions } from '../../../../../src/core/assistant/hostContracts'
+import type { HostScopeRevisions } from '../../../../../src/core/application-control/hostContracts'
 import {
   agentWorkingSummarySchema,
   type AgentWorkingSummary,

@@ -7,7 +7,7 @@ import type {
   ApplicationSemanticOperationExecutor,
   JsonValue,
 } from '@/core/application-control'
-import { CAMERA_STAGE_NAME_MAX_LENGTH } from '@/core/assistant/capabilities/cameraStageCapabilitySchemas'
+import { CAMERA_STAGE_NAME_MAX_LENGTH } from '@/core/application-control/domains/cameraStage/cameraStageCapabilitySchemas'
 
 import { cameraStageApplicationService } from './cameraStageApplicationService'
 import type { CameraStageControlExecutorDependencies } from './cameraStageControlExecutors'

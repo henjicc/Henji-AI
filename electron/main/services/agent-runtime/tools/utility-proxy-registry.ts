@@ -4,7 +4,7 @@ import {
   applicationCapabilityResultSchema,
   hostContextSnapshotSchema,
   type HostContextSnapshot,
-} from '../../../../../src/core/assistant/hostContracts'
+} from '../../../../../src/core/application-control/hostContracts'
 import type { AgentArtifactToolAccess } from './builtin/artifacts'
 import { createBuiltinAgentToolRegistry } from './builtin'
 import type { FrontendToolInvoker } from './builtin/frontend-utils'

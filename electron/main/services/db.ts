@@ -3,7 +3,7 @@ import path from 'node:path'
 import fs from 'node:fs'
 import Database from 'better-sqlite3'
 import { runAgentSchemaMigrations } from './agent-runtime/persistence/migrations'
-import { migrateMcpOperations } from './mcp/operationStore'
+import { migrateMcpOperations } from './application-runtime/operationStore'
 
 export type SqlBindValue = string | number | boolean | null | Uint8Array
 

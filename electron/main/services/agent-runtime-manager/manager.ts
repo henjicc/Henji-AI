@@ -8,7 +8,7 @@ import {
   type AgentEvent,
   type AgentRunState,
 } from '../../../../src/core/assistant/events'
-import type { HostContextSnapshot } from '../../../../src/core/assistant/hostContracts'
+import type { HostContextSnapshot } from '../../../../src/core/application-control/hostContracts'
 import type {
   AgentBudgetContinuation,
   AgentStartRunRequest,

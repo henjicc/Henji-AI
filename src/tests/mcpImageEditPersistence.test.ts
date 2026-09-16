@@ -2,7 +2,7 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { createApplicationCallerGrant } from '@/core/application-control/callerContext'
 import { createApplicationCapabilitySession, listApplicationCapabilities } from '@/features/application-control/applicationCapabilityService'
-import { getHostScopeRevisions, retainHostContextTracking } from '@/features/assistant/hostContext/hostContext'
+import { getHostScopeRevisions, retainHostContextTracking } from '@/features/application-control/hostContext/hostContext'
 import { getProjectRecord } from '@/commands/projectState'
 import { ImageEditorV3CommandRepository } from '@/commands/imageEditorV3'
 import { ImageEditCommandBusV3 } from '@/features/imageEdit/v3/application/imageEditCommandBus'
@@ -10,7 +10,7 @@ import { createImageEditDocumentV3, createImageEditEffectLayerV3 } from '@/core/
 import { installHarnessNativeStorage, readHarnessImageEditDocument, uninstallHarnessNativeStorage } from './harnessNativeStorage'
 import { createAttachedImageEditPersistenceFixture } from './imageEditAttachedPersistenceFixture'
 import { registerPersistedImageEditTestSession } from './imageEditPersistenceTestSession'
-import { applicationTransactionFailureFactsSchema } from '@/core/assistant/applicationTransactionFailureFacts'
+import { applicationTransactionFailureFactsSchema } from '@/core/application-control/applicationTransactionFailureFacts'
 
 const disposers: Array<() => void> = []
 beforeEach(() => { installHarnessNativeStorage(); disposers.push(retainHostContextTracking()) })

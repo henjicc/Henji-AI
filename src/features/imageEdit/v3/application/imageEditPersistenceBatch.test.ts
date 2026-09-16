@@ -2,7 +2,7 @@
 import { afterEach, expect, it, vi } from 'vitest'
 import { createImageEditDocumentV3, createImageEditEffectLayerV3, createImageEditGroupLayerV3 } from '@/core/imageEdit/v3/documentFactory'
 import type { ImageEditDocumentV3 } from '@/core/imageEdit/v3/documentTypes'
-import { getApplicationControlExecutionEngine, getApplicationReflectionRegistry } from '@/features/assistant/applicationCapabilities/applicationControlRegistry'
+import { getApplicationControlExecutionEngine, getApplicationReflectionRegistry } from '@/features/application-control/capabilities/applicationControlRegistry'
 import { registerPersistedImageEditTestSession } from '@/tests/imageEditPersistenceTestSession'
 import { ImageEditCommandBusV3 } from './imageEditCommandBus'
 import { imageEditV3GroupRef, imageEditV3LayerRef } from './imageEditLiveSessionRegistry'

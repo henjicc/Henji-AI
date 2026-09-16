@@ -1,10 +1,10 @@
 import {
   BUILTIN_APPLICATION_CAPABILITY_REGISTRY,
-} from '../../../../../../src/core/assistant/builtinApplicationCapabilityRegistry'
+} from '../../../../../../src/core/application-control/builtinApplicationCapabilityRegistry'
 import type {
   ApplicationCapabilityDefinition,
   ApplicationRef,
-} from '../../../../../../src/core/assistant/applicationCapabilities'
+} from '../../../../../../src/core/application-control/applicationCapabilities'
 import { defineAgentTool } from '../define-tool'
 import type { AgentToolDefinition } from '../types'
 import {

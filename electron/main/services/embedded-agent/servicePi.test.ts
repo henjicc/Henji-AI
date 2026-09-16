@@ -13,7 +13,7 @@ import { PiEngine } from './piEngine'
 
 const mocks = vi.hoisted(() => ({ fork: vi.fn(), client: vi.fn(), model: vi.fn(), directory: '', info: vi.fn(), error: vi.fn() }))
 vi.mock('electron', () => ({ utilityProcess: { fork: mocks.fork } }))
-vi.mock('../../ipc/mcp', () => ({ createEmbeddedApplicationClient: mocks.client }))
+vi.mock('../application-runtime/runtime', () => ({ createEmbeddedApplicationClient: mocks.client }))
 vi.mock('../system', () => ({ getAppLocalDataDir: () => mocks.directory }))
 vi.mock('../../window', () => ({ getMainWindow: () => undefined }))
 vi.mock('../assistant/user-instructions', () => ({ getAssistantUserInstructions: async () => ({ content: '' }) }))
@@ -78,7 +78,7 @@ it.each(['model', 'tool'] as const)('宿主调度经官方 Pi SDK 在 %s 阶段�
       // 模拟已交给业务服务的操作晚于助手中断才返回，不能把回执归给下一条消息。
       if (input.prompt === '原请求') { originalSignal = signal; await original }
       if (input.prompt === '插入消息') await inserted
-      return { content: [{ type: 'text', text: JSON.stringify({ accepted: true, destination: input.destination }) }] }
+      return { ok: true, data: { accepted: true, destination: input.destination } }
     } }))
 
   // 只替换进程传输，命令配置、取消与模型工具循环均使用正式 PiEngine / 官方 SDK。

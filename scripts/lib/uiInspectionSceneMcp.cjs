@@ -1,6 +1,6 @@
 const assert = require('node:assert/strict')
-const { Client } = require('@modelcontextprotocol/sdk/client/index.js')
-const { StreamableHTTPClientTransport } = require('@modelcontextprotocol/sdk/client/streamableHttp.js')
+const { Client } = require('@modelcontextprotocol/client')
+const { StreamableHTTPClientTransport } = require('@modelcontextprotocol/client')
 
 // 只读连接必须始终看得到的读取工具，以及任何情况下都不得出现在只读清单里的写入工具。
 const REQUIRED_READ_TOOLS = ['describe_application_contract', 'describe_application_entities', 'list_application_entities', 'read_application_entity', 'read_application_media']
@@ -52,7 +52,7 @@ function createMcpScenes({ setupSettings, canvasFixtureProjectId }) {
         return { id: identity.id, config: JSON.parse(await window.henjiNative.mcp.connectionConfig({ id: identity.id })).mcpServers.henji }
       })
       const connect = async () => {
-        const client = new Client({ name: 'Henji Reality', version: '1' })
+        const client = new Client({ name: 'Henji Reality', version: '1' }, { versionNegotiation: { mode: { pin: '2026-07-28' } } })
         await client.connect(new StreamableHTTPClientTransport(new URL(connection.config.url), { requestInit: { headers: connection.config.headers } }))
         return client
       }
@@ -114,7 +114,7 @@ function createMcpScenes({ setupSettings, canvasFixtureProjectId }) {
         const connection = state.connections.find((item) => item.name === '受控写入验收')
         return JSON.parse(await window.henjiNative.mcp.connectionConfig({ id: connection.id })).mcpServers.henji
       })
-      const client = new Client({ name: 'Henji write Reality', version: '1' })
+      const client = new Client({ name: 'Henji write Reality', version: '1' }, { versionNegotiation: { mode: { pin: '2026-07-28' } } })
       const operations = []
       const call = async (name, args) => {
         const result = await client.callTool({ name, arguments: args })
@@ -212,7 +212,7 @@ function createMcpScenes({ setupSettings, canvasFixtureProjectId }) {
       })
       assert.equal(identity.allowPaid, false, '本场景必须使用未授权付费的连接')
       assert.equal(identity.allowDestructive, false)
-      const client = new Client({ name: 'Henji background Reality', version: '1' })
+      const client = new Client({ name: 'Henji background Reality', version: '1' }, { versionNegotiation: { mode: { pin: '2026-07-28' } } })
       const call = async (name, args) => {
         const result = await client.callTool({ name, arguments: args })
         assert.equal(result.isError, false, JSON.stringify(result))

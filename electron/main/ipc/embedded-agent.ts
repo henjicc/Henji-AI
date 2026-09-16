@@ -2,7 +2,7 @@ import { z } from 'zod'
 import { embeddedAgentPromptSchema } from '../../../src/core/assistant/embeddedAgent'
 import { EmbeddedAgentService } from '../services/embedded-agent/service'
 import { listEmbeddedModels } from '../services/embedded-agent/models'
-import { assertTrustedApplicationSender } from './mcp'
+import { assertTrustedApplicationSender } from './application-control'
 import { parseVoid, registerIpcHandler } from './registry'
 
 const service = new EmbeddedAgentService()

@@ -1,3 +1,4 @@
+import { registerApplicationControlIpc } from './ipc/application-control'
 import { app, BrowserWindow } from 'electron'
 import path from 'node:path'
 import { warmApiMartEndpointPreference, warmGrsaiEndpointPreference } from '@henjicc/ai-sdk'
@@ -114,6 +115,7 @@ app.whenReady().then(() => {
   registerUpdaterIpc()
   registerVideoIpc()
   registerWindowIpc()
+  registerApplicationControlIpc()
   registerMcpIpc()
   registerEmbeddedAgentIpc()
   initializeUpdater()

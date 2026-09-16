@@ -13,7 +13,7 @@ import {
 } from './context-test-fixtures'
 import type { AgentContextBuildInput } from './types'
 import { stableSystemPrompt } from './prompt-layers'
-import { BUILTIN_APPLICATION_CAPABILITIES } from '../../../../../src/core/assistant/builtinApplicationCapabilityRegistry'
+import { BUILTIN_APPLICATION_CAPABILITIES } from '../../../../../src/core/application-control/builtinApplicationCapabilityRegistry'
 
 const SYSTEM_PROTOCOL_CAPABILITY_IDS = new Set([
   'discover_application_capabilities',

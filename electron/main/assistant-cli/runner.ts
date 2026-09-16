@@ -13,7 +13,7 @@ import {
 } from '../../../src/core/assistant/runtimeContracts'
 import type { AgentEvent, AgentRunState } from '../../../src/core/assistant/events'
 import type { AgentTraceRunSummary } from '../../../src/core/assistant/trace'
-import type { ApplicationCapabilityResult } from '../../../src/core/assistant/hostContracts'
+import type { ApplicationCapabilityResult } from '../../../src/core/application-control/hostContracts'
 import {
   createFrontendToolRequest,
   getAssistantHostContext,

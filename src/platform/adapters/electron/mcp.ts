@@ -9,7 +9,5 @@ export function createElectronMcp(): McpPlatform {
   return {
     status: () => native().status(), configure: (input) => native().configure(input), authorize: (input) => native().authorize(input),
     revoke: (input) => native().revoke(input), connectionConfig: (input) => native().connectionConfig(input),
-    registerHost: (input) => native().registerHost(input), complete: (input) => native().complete(input),
-    onRequest: (handler) => native().onRequest(handler), onCancel: (handler) => native().onCancel(handler), onRevoke: (handler) => native().onRevoke(handler),
   }
 }

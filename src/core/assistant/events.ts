@@ -1,12 +1,12 @@
 import { z } from 'zod'
 
-import { hostScopeRevisionsSchema } from './hostContracts'
+import { hostScopeRevisionsSchema } from '../application-control/hostContracts'
 import { AGENT_ACTIVE_TOOL_LIMIT } from './toolBudget'
 import { modelStepUsageSchema } from '@henjicc/ai-sdk'
 import { modelProviderErrorCategorySchema } from '@henjicc/ai-sdk'
 import { agentWorkingSummarySchema } from './workingContext'
-import { agentObservedEffectSchema } from './observedEffect'
-import { applicationTransactionFailureFactsSchema } from './applicationTransactionFailureFacts'
+import { applicationObservedEffectSchema } from '../application-control/observedEffect'
+import { applicationTransactionFailureFactsSchema } from '../application-control/applicationTransactionFailureFacts'
 
 export const AGENT_EVENT_SCHEMA_VERSION = 'agent-event/v2' as const
 
@@ -102,7 +102,7 @@ export const agentRunStateSchema = z.object({
   error: serializedAgentErrorSchema.nullable(),
   executionOutcome: z.object({
     status: z.enum(['pending', 'sealed_success', 'failed']),
-    effects: z.array(agentObservedEffectSchema).max(512),
+    effects: z.array(applicationObservedEffectSchema).max(512),
     verificationSummary: z.object({
       summary: z.string().max(2_000),
       evidence: z.array(z.string().max(500)).max(24),
@@ -412,7 +412,7 @@ const runCompletedEventSchema = z.object({
 const executionOutcomeSealedEventSchema = z.object({
   ...eventBase,
   type: z.literal('ExecutionOutcomeSealed'),
-  effects: z.array(agentObservedEffectSchema).max(512),
+  effects: z.array(applicationObservedEffectSchema).max(512),
   summary: z.string().min(1).max(2_000),
   evidence: z.array(z.string().min(1).max(500)).max(24),
 }).strict()

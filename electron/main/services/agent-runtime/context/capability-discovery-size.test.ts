@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { AGENT_CONTRACT_VERSION, type HostContextSnapshot } from '../../../../../src/core/assistant/hostContracts'
+import { AGENT_CONTRACT_VERSION, type HostContextSnapshot } from '../../../../../src/core/application-control/hostContracts'
 import { applicationCapabilityDiscoveryInputSchema } from '../../../../../src/core/assistant/capabilityDiscovery'
 import { discoverApplicationCapabilitiesCapability } from '../../../../../src/core/assistant/capabilities/capabilityDiscoveryApplicationCapabilities'
 import { createBuiltinAgentToolRegistry } from '../tools/builtin'

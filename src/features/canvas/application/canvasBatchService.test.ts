@@ -8,7 +8,7 @@ import { runCanvasMutationStage } from './canvasPersistenceService'
 import {
   CANVAS_BATCH_APPLICATION_CAPABILITIES,
   type CanvasBatchOperation,
-} from '@/core/assistant/capabilities/canvasBatchApplicationCapabilities'
+} from '@/core/application-control/domains/canvas/canvasBatchApplicationCapabilities'
 import { CANVAS_NODE_TYPES } from '@/features/canvas/domain/canvasNodes'
 import { useCanvasStore, type CanvasNode } from '@/stores/canvasStore'
 import { useProjectStore, type Project } from '@/stores/projectStore'

@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { AGENT_CONTRACT_VERSION, type HostContextSnapshot } from '../../../../../src/core/assistant/hostContracts'
+import { AGENT_CONTRACT_VERSION, type HostContextSnapshot } from '../../../../../src/core/application-control/hostContracts'
 import type { AgentPermissionAuditEvent, AgentPermissionAuditFact } from '../../../../../src/core/assistant/permissionAudit'
 import type { AgentApprovalMode } from '../../../../../src/core/assistant/runtimeContracts'
 import type { AgentDataClass, AgentToolRisk } from '../../../../../src/core/assistant/toolContracts'

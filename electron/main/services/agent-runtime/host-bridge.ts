@@ -5,7 +5,7 @@ import type {
   FrontendToolOperation,
   ApplicationCapabilityResult,
   HostContextSnapshot,
-} from '../../../../src/core/assistant/hostContracts'
+} from '../../../../src/core/application-control/hostContracts'
 import {
   cancelAssistantFrontendTool,
   createFrontendToolRequest,

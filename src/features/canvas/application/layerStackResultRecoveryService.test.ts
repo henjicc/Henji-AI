@@ -5,9 +5,9 @@ import { resolveLayerStackRecoveryTask } from '../domain/layerStackResultRecover
 import { useCanvasStore } from '@/stores/canvasStore'
 import { useProjectStore, type Project } from '@/stores/projectStore'
 import { retryLayerStackResult } from './layerStackResultRecoveryService'
-import { registerCanvasCapabilityHandlers } from '@/features/assistant/applicationCapabilities/registerCanvasCapabilityHandlers'
-import type { CapabilityHandler } from '@/features/assistant/applicationCapabilities/handlerTypes'
-import { BUILTIN_APPLICATION_CAPABILITY_REGISTRY } from '@/core/assistant/builtinApplicationCapabilityRegistry'
+import { registerCanvasCapabilityHandlers } from '@/features/application-control/capabilities/registerCanvasCapabilityHandlers'
+import type { CapabilityHandler } from '@/features/application-control/capabilities/handlerTypes'
+import { BUILTIN_APPLICATION_CAPABILITY_REGISTRY } from '@/core/application-control/builtinApplicationCapabilityRegistry'
 
 const task = { taskId: 'existing-task', modelId: 'kie-seedream-5.0-pro' }
 const error = `Continue polling failed for ${task.modelId}: terminated`

@@ -3,7 +3,7 @@ import type { WorkspaceId } from '@/core/types/workspace'
 import {
   resolveSurfaceObservationProfile,
   type ApplicationSurfaceId,
-} from '@/core/assistant/applicationSurfaces'
+} from '@/core/application-control/applicationSurfaces'
 
 export type SurfaceOpenPolicy = 'immediate' | 'after_target_resolved' | 'background_preferred'
 export type SurfacePresentationDecision =

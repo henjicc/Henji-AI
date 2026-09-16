@@ -1,5 +1,5 @@
 import { HenjiScriptGatewayBridge, type ScriptExecutionContext, type HenjiScriptServiceOptions } from './gatewayBridge'
-import { failureObservedEffects } from '../../../../../src/core/assistant/applicationTransactionFailureFacts'
+import { failureObservedEffects } from '../../../../../src/core/application-control/applicationTransactionFailureFacts'
 import { randomUUID } from 'node:crypto'
 
 import type { ApplicationRef } from '../../../../../src/core/application-control'
@@ -7,7 +7,7 @@ import type {
   RunHenjiScriptInput,
   RunHenjiScriptOutput,
 } from '../../../../../src/core/assistant/capabilities/henjiScriptApplicationCapabilities'
-import type { AgentObservedEffect } from '../../../../../src/core/assistant/observedEffect'
+import type { ApplicationObservedEffect } from '../../../../../src/core/application-control/observedEffect'
 import {
   henjiScriptCheckpointSchema,
   type HenjiScriptCheckpoint,
@@ -45,7 +45,7 @@ interface ScriptRuntimeState {
   values: Map<string, unknown>
   parents: Map<string, ApplicationRef>
   refs: Map<string, ApplicationRef>
-  effects: AgentObservedEffect[]
+  effects: ApplicationObservedEffect[]
   receipts: RunHenjiScriptOutput['steps']
   verificationEvidence: string[]
   submittedTasks: RunHenjiScriptOutput['submittedTasks']

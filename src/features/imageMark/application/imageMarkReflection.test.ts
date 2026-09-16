@@ -8,7 +8,7 @@ import { useImageEditSessionStore } from '@/features/imageEdit/store/imageEditSe
 import {
   getApplicationControlExecutionEngine,
   getApplicationReflectionRegistry,
-} from '../../assistant/applicationCapabilities/applicationControlRegistry'
+} from '../../application-control/capabilities/applicationControlRegistry'
 
 const accessContext: ApplicationControlAccessContext = {
   exposure: 'assistant',

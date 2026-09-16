@@ -5,7 +5,7 @@ import {
   surfaceCaptureResultSchema,
   type SurfaceCaptureRequest,
   type SurfaceCaptureResult,
-} from '../../../../src/core/assistant/surfaceObservation'
+} from '../../../../src/core/application-control/surfaceObservation'
 import { createMainLogger } from '../logging'
 import { loadSharp } from '../image/sharp-loader'
 

@@ -1,5 +1,5 @@
 import type { AgentEventInput } from '../../../../../src/core/assistant/events'
-import type { HostContextSnapshot } from '../../../../../src/core/assistant/hostContracts'
+import type { HostContextSnapshot } from '../../../../../src/core/application-control/hostContracts'
 import type { ModelInputModality, ModelStepMessage, ModelStepResult } from '@henjicc/ai-sdk'
 import { createMainLogger } from '../../logging'
 import type { AgentContextBuilder } from '../context/builder'

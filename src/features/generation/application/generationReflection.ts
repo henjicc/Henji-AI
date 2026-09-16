@@ -10,7 +10,7 @@ import {
   unrestrictedCollectionAvailability,
 } from '@/core/application-control'
 import { normalizeGenerationTaskStatus } from '@/core/assistant/externalWait'
-import { APPLICATION_CAPABILITY_CATALOG_VERSION } from '@/core/assistant/applicationCapabilities'
+import { APPLICATION_CAPABILITY_CATALOG_VERSION } from '@/core/application-control/applicationCapabilities'
 import { databaseService, type HistoryRecord } from '@/services/database'
 
 import { useGenerationDraftStore } from '../store/generationDraftStore'

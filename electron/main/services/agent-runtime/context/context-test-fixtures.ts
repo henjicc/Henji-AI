@@ -1,4 +1,4 @@
-import { AGENT_CONTRACT_VERSION, type HostContextSnapshot } from '../../../../../src/core/assistant/hostContracts'
+import { AGENT_CONTRACT_VERSION, type HostContextSnapshot } from '../../../../../src/core/application-control/hostContracts'
 import type { AssistantSkillMetadata } from '../../../../../src/core/assistant/skills'
 import type { AgentToolObservation } from '../../../../../src/core/assistant/toolContracts'
 import type { AgentContextBuildInput } from './types'

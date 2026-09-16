@@ -1,3 +1,4 @@
+import { createApplicationControlApi } from './application-control-api'
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import type {
   HenjiAudioApi,
@@ -40,7 +41,7 @@ import type {
 import type {
   FrontendToolCancel,
   FrontendToolRequest,
-} from '../../src/core/assistant/hostContracts'
+} from '../../src/core/application-control/hostContracts'
 import {
   agentRuntimeEventPayloadSchema,
   type AgentRuntimeEventPayload,
@@ -474,6 +475,7 @@ const updaterApi: HenjiUpdaterApi = {
 const api: HenjiNativeApi = {
   embeddedAgent: createEmbeddedAgentApi(nativeInvoke),
   mcp: createMcpApi(nativeInvoke),
+  applicationControl: createApplicationControlApi(nativeInvoke),
   runtimeInfo: {
     uiInspectionActive: process.env['HENJI_UI_INSPECTION_ALLOW_OVERSIZE'] === '1',
     uiInspectionGpuInitializationFailure:

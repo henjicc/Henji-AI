@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
-import { AGENT_CONTRACT_VERSION, type HostContextSnapshot } from '@/core/assistant/hostContracts'
-import { applicationReflectionHandlers } from '@/features/assistant/applicationCapabilities/applicationReflectionAdapter'
+import { AGENT_CONTRACT_VERSION, type HostContextSnapshot } from '@/core/application-control/hostContracts'
+import { applicationReflectionHandlers } from '@/features/application-control/capabilities/applicationReflectionAdapter'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { HenjiScriptService } from '../../../../electron/main/services/application-control/henji-script/service'
 import { createBuiltinAgentToolRegistry } from '../../../../electron/main/services/agent-runtime/tools/builtin'

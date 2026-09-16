@@ -1,7 +1,7 @@
 import type { z } from 'zod'
 
 import type { AgentToolCompletionKind } from '../../../../../src/core/assistant/events'
-import type { HostContextSnapshot, HostScope, HostScopeRevisions } from '../../../../../src/core/assistant/hostContracts'
+import type { HostContextSnapshot, HostScope, HostScopeRevisions } from '../../../../../src/core/application-control/hostContracts'
 import type {
   AgentDataClass,
   AgentToolCatalogEntry,
@@ -12,7 +12,7 @@ import type {
 } from '../../../../../src/core/assistant/toolContracts'
 import type { AgentApprovalMode } from '../../../../../src/core/assistant/runtimeContracts'
 import type { ModelStepTool } from '@henjicc/ai-sdk'
-import type { ApplicationCapabilityDefinition } from '../../../../../src/core/assistant/applicationCapabilities'
+import type { ApplicationCapabilityDefinition } from '../../../../../src/core/application-control/applicationCapabilities'
 import type { ToolOutputLimitProfile } from './security'
 
 export interface AgentToolRetryPolicy {

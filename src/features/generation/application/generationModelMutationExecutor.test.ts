@@ -11,7 +11,7 @@ import { getGenerationModelsRevision } from './generationModelFields'
 import {
   getApplicationControlExecutionEngine,
   getApplicationReflectionRegistry,
-} from '../../assistant/applicationCapabilities/applicationControlRegistry'
+} from '../../application-control/capabilities/applicationControlRegistry'
 
 const testModel: ModelDefinition = {
   meta: {

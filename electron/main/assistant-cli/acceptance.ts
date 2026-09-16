@@ -1,5 +1,5 @@
 import type { AgentRunState } from '../../../src/core/assistant/events'
-import { isMutatingEffect } from '../../../src/core/assistant/observedEffect'
+import { isMutatingEffect } from '../../../src/core/application-control/observedEffect'
 
 export interface AssistantCliAcceptance {
   passed: boolean

@@ -8,7 +8,7 @@ import {
 } from '../../src/core/assistant/events'
 import {
   type HostContextSnapshot,
-} from '../../src/core/assistant/hostContracts'
+} from '../../src/core/application-control/hostContracts'
 import { agentMemoryRetrievalResultSchema } from '../../src/core/assistant/memory'
 import {
   agentSessionCompactionAppendSchema,

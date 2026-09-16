@@ -6,7 +6,7 @@ import {
   type ApplicationRef,
   unrestrictedCollectionAvailability,
 } from '@/core/application-control'
-import { APPLICATION_CAPABILITY_CATALOG_VERSION } from '@/core/assistant/applicationCapabilities'
+import { APPLICATION_CAPABILITY_CATALOG_VERSION } from '@/core/application-control/applicationCapabilities'
 import { imageEditDocumentToMarkDoc, type ImageMarkDoc, type MarkItem } from '@/core/imageEdit'
 import { useImageEditSessionStore } from '@/features/imageEdit/store/imageEditSessionStore'
 import {

@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { applicationRefSchema } from '../application-control'
-import { agentObservedEffectSchema } from './observedEffect'
+import { applicationObservedEffectSchema } from '../application-control/observedEffect'
 
 export const GENERATION_STATUS_EVENT_VERSION = 'generation-status/v1' as const
 export const AGENT_EXTERNAL_WAIT_VERSION = 'agent-external-wait/v2' as const
@@ -91,7 +91,7 @@ export const henjiScriptCheckpointSchema = z.object({
   }).strict()).max(128),
   parents: z.array(z.object({ ref: applicationRefSchema, parent: applicationRefSchema }).strict()).max(128),
   resultRefs: z.array(applicationRefSchema).max(128),
-  effects: z.array(agentObservedEffectSchema).max(512),
+  effects: z.array(applicationObservedEffectSchema).max(512),
   steps: z.array(checkpointStepReceiptSchema).max(128),
   verificationState: z.object({ evidence: z.array(z.string().max(500)).max(128) }).strict(),
 }).strict()
@@ -190,7 +190,7 @@ export const agentExternalContinuationSchema = z.object({
   sourceTotalTokens: z.number().int().nonnegative(),
   sourceKnownCostUsd: z.number().nonnegative().nullable(),
   /** 源执行段已经由网关校验的真实写入回执；续接只能继承，禁止从文本重建。 */
-  sourceEffects: z.array(agentObservedEffectSchema).max(512),
+  sourceEffects: z.array(applicationObservedEffectSchema).max(512),
   scriptCheckpoint: henjiScriptCheckpointSchema.nullable().optional(),
 }).strict()
 export type AgentExternalContinuation = z.infer<typeof agentExternalContinuationSchema>

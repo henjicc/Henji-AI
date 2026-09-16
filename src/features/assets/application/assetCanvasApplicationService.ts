@@ -1,7 +1,7 @@
 import { mediaSourceNodeData, mediaSourceNodeType } from '@/features/canvas/application/assetMediaAssignment'
 import { addTrustedMediaCanvasNode } from '@/features/canvas/application/canvasApplicationService'
 import type { AssetDragPayload } from '@/features/assets/drag/assetDragPayload'
-import type { CanvasNodePlacement } from '@/core/assistant/capabilities/canvasMutationApplicationCapabilities'
+import type { CanvasNodePlacement } from '@/core/application-control/domains/canvas/canvasMutationApplicationCapabilities'
 
 import { assetApplicationService } from './assetApplicationService'
 

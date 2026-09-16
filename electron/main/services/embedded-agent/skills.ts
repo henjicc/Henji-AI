@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { loadAssistantSkillCapability, loadAssistantSkillInputSchema } from '../../../../src/core/assistant/capabilities/assistantSkillApplicationCapabilities'
+import { loadAssistantSkillCapability, loadAssistantSkillInputSchema } from '../../../../src/core/application-control/domains/assistantSkill/assistantSkillApplicationCapabilities'
 import { listEnabledAssistantSkills, loadAssistantSkill } from '../assistant/skills/registry'
 import { wrapSkillContent } from '../assistant/skills/content'
 import type { EmbeddedTool } from './contracts'
@@ -32,9 +32,9 @@ export async function callEmbeddedSkill(input: Record<string, unknown>, signal: 
     const loaded = await loadAssistantSkill(args.name, args.path)
     signal.throwIfAborted()
     logger.info('创作技能读取完成', { event: 'embedded_agent.skill_load.completed', context: { ...context, bytes: loaded.bytes, source: loaded.source } })
-    return { isError: false, structuredContent: { ...loaded,
+    return { ok: true, data: { ...loaded,
       content: wrapSkillContent(loaded.name, loaded.source, loaded.path, loaded.content),
-    }, content: [] }
+    } }
   } catch (error) {
     logger.warn('创作技能读取失败', { event: 'embedded_agent.skill_load.failed', context, error })
     throw error

@@ -1,6 +1,6 @@
 import { z } from 'zod'
 
-import { hostScopeRevisionsSchema } from './hostContracts'
+import { hostScopeRevisionsSchema } from '../application-control/hostContracts'
 import { AGENT_DISCOVERY_LEASE_TOOL_LIMIT } from './toolBudget'
 
 export const AGENT_WORKING_SUMMARY_VERSION = 'agent-working-summary/v1' as const

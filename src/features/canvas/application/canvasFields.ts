@@ -7,7 +7,7 @@ import {
   type ApplicationPropertyValue,
   type JsonValue,
 } from '@/core/application-control'
-import { APPLICATION_CAPABILITY_CATALOG_VERSION } from '@/core/assistant/applicationCapabilities'
+import { APPLICATION_CAPABILITY_CATALOG_VERSION } from '@/core/application-control/applicationCapabilities'
 import type { CanvasNode } from '@/stores/canvasStore'
 
 import { isAssetGroupNode, isStoryboardSplitNode, isTextAnnotationNode } from '../domain/canvasNodes'

@@ -5,7 +5,7 @@ import type {
   FrontendToolRequest,
   FrontendToolResult,
   HostContextSnapshot,
-} from '@/core/assistant/hostContracts'
+} from '@/core/application-control/hostContracts'
 import type { AgentRunState } from '@/core/assistant/events'
 import type {
   AssistantUserInstructions,

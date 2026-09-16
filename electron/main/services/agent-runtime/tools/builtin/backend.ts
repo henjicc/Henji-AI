@@ -9,7 +9,7 @@ import { createAssistantSkillTools } from './assistant-skills'
 import { createUserInstructionTools } from './user-instructions'
 import { createAgentMemoryTools } from './memory'
 import { createAgentArtifactTools, type AgentArtifactToolAccess } from './artifacts'
-import { APPLICATION_CAPABILITY_CATALOG_VERSION } from '../../../../../../src/core/assistant/applicationCapabilities'
+import { APPLICATION_CAPABILITY_CATALOG_VERSION } from '../../../../../../src/core/application-control/applicationCapabilities'
 import {
   discoverApplicationCapabilitiesCapability,
   readApplicationSchemasCapability,

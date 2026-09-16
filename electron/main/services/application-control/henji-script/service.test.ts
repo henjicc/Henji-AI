@@ -1,13 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import { z } from 'zod'
 
-import { defineApplicationCapability } from '../../../../../src/core/assistant/capabilities/defineApplicationCapability'
+import { defineApplicationCapability } from '../../../../../src/core/application-control/domains/shared/defineApplicationCapability'
 import {
   HENJI_SCRIPT_LANGUAGE,
   runHenjiScriptCapability,
   runHenjiScriptOutputSchema,
 } from '../../../../../src/core/assistant/capabilities/henjiScriptApplicationCapabilities'
-import type { HostContextSnapshot } from '../../../../../src/core/assistant/hostContracts'
+import type { HostContextSnapshot } from '../../../../../src/core/application-control/hostContracts'
 import type { AgentToolGatewayResult } from '../../../../../src/core/assistant/toolContracts'
 import { createBackendCapabilityTool } from '../../agent-runtime/tools/backend-capability-tool'
 import { decideToolAuthorization } from '../../agent-runtime/tools/approval-policy'

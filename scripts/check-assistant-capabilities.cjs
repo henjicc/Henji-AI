@@ -19,7 +19,7 @@ const forbidden = [
   {
     pattern: /availableCommands|availableQueries/,
     label: 'v2 快照中的旧工具目录',
-    allow: ['src/core/assistant/hostContracts.ts'],
+    allow: ['src/core/application-control/hostContracts.ts'],
   },
   {
     pattern: /PLAYBACK_NOT_READY|ANIMATABLE_WRITE_REQUIRES_PRO_MODE|KEYFRAME_REQUIRES_PRO_MODE|SHOT_REQUIRES_SIMPLE_MODE|assertProModeForKeyframes|assertSimpleModeForShots/,
@@ -57,7 +57,8 @@ const forbidden = [
 const protectedExecutionRoots = [
   'src/core/application-control',
   'src/core/assistant',
-  'src/features/assistant/applicationCapabilities',
+  'src/features/application-control/capabilities',
+  'electron/main/services/application-runtime',
   'electron/main/services/agent-runtime',
 ]
 const protectedExecutionForbidden = [
@@ -149,7 +150,7 @@ for (const protectedRoot of protectedExecutionRoots) {
   }
 }
 
-for (const file of walk(path.join(root, 'src', 'core', 'assistant', 'capabilities'))) {
+for (const file of [...walk(path.join(root, 'src', 'core', 'assistant', 'capabilities')), ...walk(path.join(root, 'src', 'core', 'application-control', 'domains'))]) {
   if (file.endsWith('.test.ts')) continue
   const relative = path.relative(root, file).replaceAll('\\', '/')
   const source = fs.readFileSync(file, 'utf8')
@@ -316,7 +317,7 @@ for (const skillName of codexSkillNames.filter((name) => claudeSkillNames.includ
   }
 }
 
-const capabilitySources = walk(path.join(root, 'src', 'core', 'assistant'))
+const capabilitySources = [...walk(path.join(root, 'src', 'core', 'assistant')), ...walk(path.join(root, 'src', 'core', 'application-control'))]
   .map((file) => fs.readFileSync(file, 'utf8'))
   .join('\n')
 const backendRuntimeSources = walk(path.join(root, 'electron', 'main', 'services', 'agent-runtime'))

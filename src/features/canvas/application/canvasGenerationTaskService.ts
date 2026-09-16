@@ -1,7 +1,7 @@
 import { registry } from '@/core/ModelRegistry'
 import { ApplicationPreflightFailure } from '@/core/application-control/execution/transactionFailure'
 import { createLogger } from '@/core/logging'
-import type { CanvasGenerationResumeInput, CanvasNodeGenerationInput, GenerationDestination } from '@/core/assistant/capabilities/generationApplicationCapabilities'
+import type { CanvasGenerationResumeInput, CanvasNodeGenerationInput, GenerationDestination } from '@/core/application-control/domains/generation/generationApplicationCapabilities'
 import type { GenerationPreparationInput } from '@/features/generation/application/generationPreparationService'
 import { prepareGenerationModelInput } from '@/features/generation/application/generationPreparationService'
 import { databaseService } from '@/services/database/DatabaseService'

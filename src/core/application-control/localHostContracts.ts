@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import type { HostContextSnapshot } from './hostContracts'
 import { applicationVerificationConditionSchema, applicationEvidenceSchema } from './transactions'
 import { EXTERNAL_APPLICATION_CAPABILITIES } from './externalCapabilityPolicy'
 
@@ -67,19 +68,18 @@ export function externalWritableEntityTypes(domains: readonly LocalDomainSurface
  * 对外契约版本。协议版本、SDK 版本与应用能力目录版本三者分开管理，客户端按本字段判断兼容性，
  * **不要按工具数量、顺序或名称前缀判断**。
  *
- * 弃用规则：同一主版本内不删除对外工具名、不新增必填参数、不改变已公布错误码含义；新增字段
- * 一律可选。破坏性变更提升主版本，并在至少一个次版本内保留旧工具名且在 description 标注弃用。
+ * 当前只支持新应用契约，不提供旧工具或旧协议兼容入口。
  */
-export const EXTERNAL_CONTRACT_VERSION = '1.0.0' as const
-/** 实测握手通过的协议版本；未列出的版本由 SDK 回落到本服务支持的最新版本，不会直接失败。 */
-export const EXTERNAL_PROTOCOL_VERSIONS = ['2025-11-25', '2025-06-18', '2025-03-26'] as const
-export const EXTERNAL_SDK_VERSION = '1.30.0' as const
-export const EXTERNAL_SERVER_INFO = { name: 'henji', version: '1.0.0' } as const
+export const EXTERNAL_CONTRACT_VERSION = '2.0.0' as const
+/** 正式支持的现代协议；旧握手和其他版本拒绝，不降级。 */
+export const EXTERNAL_PROTOCOL_VERSIONS = ['2026-07-28'] as const
+export const EXTERNAL_SDK_VERSION = '2.0.0' as const
+export const EXTERNAL_SERVER_INFO = { name: 'henji', version: '2.0.0' } as const
 export const EXTERNAL_LIMITS = {
   requestBytes: 256 * 1024, resultBytes: 2 * 1024 * 1024, mediaChunkBytes: 256 * 1024,
-  concurrentRequests: 8, sessions: 16, idleSessionMs: 30 * 60_000, requestTimeoutMs: 30_000,
+  concurrentRequests: 8, requestTimeoutMs: 30_000,
 } as const
-export const EXTERNAL_DEPRECATION_POLICY = '同一 externalContractVersion 主版本内不删除工具名、不新增必填参数、不改变已公布错误码含义；新增字段一律可选。破坏性变更提升主版本，并在至少一个次版本内保留旧工具名并在 description 标注弃用。'
+export const EXTERNAL_DEPRECATION_POLICY = '当前仅支持 application contract 2 与 MCP 2026-07-28；旧工具接口和旧协议不兼容，客户端需按当前声明调用。'
 
 export interface McpConnectionInfo { id: string; name: string; expiresAt: number; allowWrites?: boolean; allowDestructive?: boolean; allowPaid?: boolean }
 export const mcpDefaultAccessSchema = z.object({ allowWrites: z.boolean(), allowDestructive: z.boolean(), allowPaid: z.boolean() }).strict()
@@ -93,6 +93,9 @@ export interface McpPlatform {
   authorize(input: { name: string; allowWrites?: boolean; allowDestructive?: boolean; allowPaid?: boolean }): Promise<McpConnectionInfo>
   revoke(input: { id: string }): Promise<void>
   connectionConfig(input: { id: string }): Promise<string>
+}
+export interface ApplicationHostPlatform {
+  publishContext(snapshot: HostContextSnapshot): Promise<void>
   registerHost(input: LocalHostRegistrationInput): Promise<void>
   complete(input: LocalHostReply): Promise<void>
   onRequest(handler: (request: LocalHostRequest) => void): () => void

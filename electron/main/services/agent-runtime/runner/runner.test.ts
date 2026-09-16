@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { AGENT_CONTRACT_VERSION, type HostContextSnapshot } from '../../../../../src/core/assistant/hostContracts'
+import { AGENT_CONTRACT_VERSION, type HostContextSnapshot } from '../../../../../src/core/application-control/hostContracts'
 import { AGENT_RUNTIME_SCHEMA_VERSION, type AgentStartRunRequest } from '../../../../../src/core/assistant/runtimeContracts'
 import type { AgentEvent, AgentRunState } from '../../../../../src/core/assistant/events'
 import { AGENT_SESSION_ENTRY_SCHEMA_VERSION, agentSessionEntrySchema } from '../../../../../src/core/assistant/session'

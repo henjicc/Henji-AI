@@ -1,7 +1,7 @@
-import type { HostScopeRevisions } from '../../../../../src/core/assistant/hostContracts'
+import type { HostScopeRevisions } from '../../../../../src/core/application-control/hostContracts'
 import type { ModelStepToolCall } from '@henjicc/ai-sdk'
-import type { CanvasBatchOperation } from '../../../../../src/core/assistant/capabilities/canvasBatchApplicationCapabilities'
-import type { CanvasNodePlacement } from '../../../../../src/core/assistant/capabilities/canvasMutationApplicationCapabilities'
+import type { CanvasBatchOperation } from '../../../../../src/core/application-control/domains/canvas/canvasBatchApplicationCapabilities'
+import type { CanvasNodePlacement } from '../../../../../src/core/application-control/domains/canvas/canvasMutationApplicationCapabilities'
 import type { AgentToolRegistry } from '../tools/registry'
 import { digestJson } from '../tools/security'
 

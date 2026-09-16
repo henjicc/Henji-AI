@@ -5,7 +5,7 @@ import { loadRealModelsIntoRegistry } from '@/tests/loadRealModels'
 import {
   getApplicationControlExecutionEngine,
   getApplicationReflectionRegistry,
-} from '@/features/assistant/applicationCapabilities/applicationControlRegistry'
+} from '@/features/application-control/capabilities/applicationControlRegistry'
 import type { ApplicationMutationExecutor } from '@/core/application-control'
 
 import { runAssistantHarness, type HarnessToolCall } from './assistantRuntimeHarness'

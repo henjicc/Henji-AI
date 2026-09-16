@@ -1,4 +1,4 @@
-import type { HostContextSnapshot } from '../../../../../src/core/assistant/hostContracts'
+import type { HostContextSnapshot } from '../../../../../src/core/application-control/hostContracts'
 import type { AgentToolRegistry } from '../tools/registry'
 import {
   activateAgentTools,

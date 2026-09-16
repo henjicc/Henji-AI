@@ -1,6 +1,6 @@
 import { z } from 'zod'
-import { agentObservedEffectSchema } from './observedEffect'
-import { applicationTransactionFailureFactsSchema } from './applicationTransactionFailureFacts'
+import { applicationObservedEffectSchema } from '../application-control/observedEffect'
+import { applicationTransactionFailureFactsSchema } from '../application-control/applicationTransactionFailureFacts'
 
 import {
   agentApprovalRequestSchema,
@@ -72,7 +72,7 @@ export const agentToolObservationSchema = z.object({
   summary: z.string().max(2_000),
   output: z.unknown(),
   /** 网关在执行器返回后立即解析并校验的世界变化；结算不得再从 output/evidence 猜。 */
-  effects: z.array(agentObservedEffectSchema).max(512).optional(),
+  effects: z.array(applicationObservedEffectSchema).max(512).optional(),
   artifactRef: z.string().min(1).optional(),
   undo: z.object({
     kind: z.string().min(1),

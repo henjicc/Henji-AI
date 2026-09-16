@@ -1,6 +1,6 @@
 import type {
   ApplicationCapabilityDefinition,
-} from '../../../../../src/core/assistant/applicationCapabilities'
+} from '../../../../../src/core/application-control/applicationCapabilities'
 import type { AgentToolDefinition, AgentToolExecutionContext } from './types'
 import { defineAgentTool } from './define-tool'
 

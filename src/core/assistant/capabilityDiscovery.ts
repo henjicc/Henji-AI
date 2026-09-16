@@ -5,8 +5,8 @@ import {
   applicationSchemaRefSchema,
   jsonValueSchema,
 } from '../application-control'
-import { APPLICATION_CAPABILITY_CATALOG_VERSION } from './applicationCapabilities'
-import { agentEffectKindSchema } from './observedEffect'
+import { APPLICATION_CAPABILITY_CATALOG_VERSION } from '../application-control/applicationCapabilities'
+import { applicationObservedEffectKindSchema } from '../application-control/observedEffect'
 import { AGENT_DISCOVERY_LEASE_TOOL_LIMIT } from './toolBudget'
 
 export const APPLICATION_CAPABILITY_DISCOVERY_VERSION = 'application-capability-discovery/v3' as const
@@ -161,7 +161,7 @@ export const henjiScriptApiProjectionSchema = z.object({
   language: z.literal('henji-ts/v1'),
   entryTool: z.literal('run_henji_script'),
   exactRecipe: z.boolean().optional(),
-  forbiddenEffects: z.array(agentEffectKindSchema).max(6).default([]),
+  forbiddenEffects: z.array(applicationObservedEffectKindSchema).max(6).default([]),
   rules: z.array(z.string().min(1).max(300)).length(HENJI_SCRIPT_LANGUAGE_RULES.length)
     .default([...HENJI_SCRIPT_LANGUAGE_RULES]),
   entities: z.object({

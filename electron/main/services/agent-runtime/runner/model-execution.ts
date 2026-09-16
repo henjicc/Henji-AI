@@ -5,7 +5,7 @@ import type {
   ModelStepTool,
   ModelStepTraceMetadata,
 } from '@henjicc/ai-sdk'
-import type { HostContextSnapshot } from '../../../../../src/core/assistant/hostContracts'
+import type { HostContextSnapshot } from '../../../../../src/core/application-control/hostContracts'
 import type { AgentContextBuilder } from '../context/builder'
 import { AGENT_INTENTS, AGENT_TOOL_DOMAINS } from '../context/types'
 import type { AgentRuntimeModel } from './models'

@@ -1,5 +1,5 @@
 import type { AgentEvent } from './events'
-import type { HostScopeRevisions } from './hostContracts'
+import type { HostScopeRevisions } from '../application-control/hostContracts'
 import {
   AGENT_WORKING_EVIDENCE_SUMMARY_MAX,
   AGENT_WORKING_STEP_EVIDENCE_MAX,

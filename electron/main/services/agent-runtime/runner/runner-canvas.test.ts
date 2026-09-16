@@ -5,7 +5,7 @@ import {
   AGENT_CONTRACT_VERSION,
   hostScopeRevisionsSchema,
   type HostContextSnapshot,
-} from '../../../../../src/core/assistant/hostContracts'
+} from '../../../../../src/core/application-control/hostContracts'
 import { AGENT_RUNTIME_SCHEMA_VERSION, type AgentStartRunRequest } from '../../../../../src/core/assistant/runtimeContracts'
 import type { AgentEvent, AgentRunState } from '../../../../../src/core/assistant/events'
 import {

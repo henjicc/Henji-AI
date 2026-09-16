@@ -1,5 +1,5 @@
 import type { AgentRunState } from '../../../src/core/assistant/events'
-import type { ApplicationCapabilityResult } from '../../../src/core/assistant/hostContracts'
+import type { ApplicationCapabilityResult } from '../../../src/core/application-control/hostContracts'
 import type { AgentRunSummary } from '../../../src/core/assistant/persistence'
 import {
   isGenerationTerminalStatus,

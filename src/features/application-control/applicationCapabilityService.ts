@@ -6,9 +6,9 @@ import {
 import {
   applicationCapabilityInvocationSchema,
   type ApplicationCapabilityDefinition,
-} from '@/core/assistant/applicationCapabilities'
-import { BUILTIN_APPLICATION_CAPABILITY_REGISTRY } from '@/core/assistant/builtinApplicationCapabilityRegistry'
-import { executeApplicationCapabilityResult, listRendererApplicationCapabilityIds } from '@/features/assistant/applicationCapabilities/registry'
+} from '@/core/application-control/applicationCapabilities'
+import { BUILTIN_APPLICATION_CAPABILITY_REGISTRY } from '@/core/application-control/builtinApplicationCapabilityRegistry'
+import { executeApplicationCapabilityResult, listRendererApplicationCapabilityIds } from '@/features/application-control/capabilities/registry'
 import { isExternalApplicationTool } from '@/core/application-control/externalCapabilityPolicy'
 
 /** 复用唯一注册源；助手内部后端工具不进入应用调用目录。 */

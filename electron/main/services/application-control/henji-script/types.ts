@@ -1,4 +1,4 @@
-import type { ApplicationTransactionFailureFacts } from '../../../../../src/core/assistant/applicationTransactionFailureFacts'
+import type { ApplicationTransactionFailureFacts } from '../../../../../src/core/application-control/applicationTransactionFailureFacts'
 
 export interface HenjiSourceLocation {
   line: number

@@ -9,7 +9,7 @@ import {
   type VgpuGlowOperationParams,
 } from '@/core/imageEdit'
 import { ANNOTATION_DEFAULT_STROKE_HEX } from '@/core/theme/colorTokens'
-import { createImageEditPreviewFromRef } from '@/features/assistant/applicationCapabilities/generationCapabilities'
+import { createImageEditPreviewFromRef } from '@/features/application-control/capabilities/generationCapabilities'
 
 const dependencies = vi.hoisted(() => ({
   readImageInfo: vi.fn(),

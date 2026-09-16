@@ -1,6 +1,6 @@
 import type { AgentEventInput } from '../../../../../src/core/assistant/events'
 import type { AgentExternalContinuation } from '../../../../../src/core/assistant/externalWait'
-import type { HostContextSnapshot, HostScopeRevisions } from '../../../../../src/core/assistant/hostContracts'
+import type { HostContextSnapshot, HostScopeRevisions } from '../../../../../src/core/application-control/hostContracts'
 import type { AgentTurnSnapshotDraft } from '../../../../../src/core/assistant/turn'
 import type { AgentToolObservation } from '../../../../../src/core/assistant/toolContracts'
 import type { ModelStepToolCall } from '@henjicc/ai-sdk'

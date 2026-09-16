@@ -1,5 +1,5 @@
 import type { AgentEventInput } from '../../../../../src/core/assistant/events'
-import type { HostContextSnapshot } from '../../../../../src/core/assistant/hostContracts'
+import type { HostContextSnapshot } from '../../../../../src/core/application-control/hostContracts'
 import { AgentIntentRouter } from '../context/router'
 import type { AgentThreadContinuation } from '../context/thread-continuation'
 import type { AgentRouteDecision } from '../context/types'

@@ -1,7 +1,7 @@
 import { createApplicationCallerGrant } from '@/core/application-control/callerContext'
 // @vitest-environment jsdom
 import { beforeEach, expect, it, vi } from 'vitest'
-import { applicationReflectionHandlers } from '../applicationCapabilities/applicationReflectionAdapter'
+import { applicationReflectionHandlers } from '../../application-control/capabilities/applicationReflectionAdapter'
 const memory = vi.hoisted(() => ({ content: '', enabled: true, revision: 1 }))
 vi.mock('@/platform/runtime', () => ({ getPlatform: () => ({ assistant: {
   getSharedMemory: async () => ({ ...memory }),

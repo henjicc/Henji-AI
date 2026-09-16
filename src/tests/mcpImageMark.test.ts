@@ -4,7 +4,7 @@ import { createEmptyImageEditDocument } from '@/core/imageEdit'
 import { createApplicationCallerGrant } from '@/core/application-control/callerContext'
 import { useImageEditSessionStore } from '@/features/imageEdit/store/imageEditSessionStore'
 import { createApplicationCapabilitySession, listApplicationCapabilities } from '@/features/application-control/applicationCapabilityService'
-import { retainHostContextTracking } from '@/features/assistant/hostContext/hostContext'
+import { retainHostContextTracking } from '@/features/application-control/hostContext/hostContext'
 
 let dispose: () => void
 beforeEach(() => { useImageEditSessionStore.setState({ sessions: {}, revision: 0 }); dispose = retainHostContextTracking() })

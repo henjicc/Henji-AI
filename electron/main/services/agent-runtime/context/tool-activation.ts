@@ -1,4 +1,4 @@
-import type { HostContextSnapshot } from '../../../../../src/core/assistant/hostContracts'
+import type { HostContextSnapshot } from '../../../../../src/core/application-control/hostContracts'
 import type { AgentToolRegistration } from '../tools/types'
 import type { AgentToolRegistry } from '../tools/registry'
 import type { AgentRouteDecision } from './types'

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 
-import { AGENT_CONTRACT_VERSION, type HostContextSnapshot } from '../../../../../src/core/assistant/hostContracts'
+import { AGENT_CONTRACT_VERSION, type HostContextSnapshot } from '../../../../../src/core/application-control/hostContracts'
 import type { AgentMemoryRetrievalResult } from '../../../../../src/core/assistant/memory'
 import { createAgentWorkingSummary } from '../../../../../src/core/assistant/workingContext'
 import type { AgentRouteDecision } from '../context/types'

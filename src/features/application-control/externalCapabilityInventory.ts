@@ -1,6 +1,6 @@
 import { externalWritable, type LocalDomainSurface, type LocalEntitySurface } from '@/core/application-control/localHostContracts'
 import type { ApplicationReflectionRegistry } from '@/core/application-control'
-import { getApplicationReflectionRegistry } from '@/features/assistant/applicationCapabilities/applicationControlRegistry'
+import { getApplicationReflectionRegistry } from '@/features/application-control/capabilities/applicationControlRegistry'
 
 /**
  * 外部能力面的唯一派生处。

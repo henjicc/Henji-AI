@@ -8,7 +8,7 @@ import type { AgentToolRegistry } from '../tools/registry'
 import type { AgentToolDefinition } from '../tools/types'
 import { createBackendCapabilityTool } from '../tools/backend-capability-tool'
 import { defineAgentTool } from '../tools/define-tool'
-import type { HostContextSnapshot } from '../../../../../src/core/assistant/hostContracts'
+import type { HostContextSnapshot } from '../../../../../src/core/application-control/hostContracts'
 import { getHenjiScriptApiLease } from '../context/script-api-lease'
 
 export interface HenjiScriptToolDependencies {

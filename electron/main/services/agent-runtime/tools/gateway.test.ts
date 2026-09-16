@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import { describe, expect, it } from 'vitest'
 
-import { AGENT_CONTRACT_VERSION, type HostContextSnapshot } from '../../../../../src/core/assistant/hostContracts'
+import { AGENT_CONTRACT_VERSION, type HostContextSnapshot } from '../../../../../src/core/application-control/hostContracts'
 import type { AgentPermissionAuditFact } from '../../../../../src/core/assistant/permissionAudit'
 import type { AgentDataClass, AgentToolPreview } from '../../../../../src/core/assistant/toolContracts'
 import { defineAgentTool } from './define-tool'

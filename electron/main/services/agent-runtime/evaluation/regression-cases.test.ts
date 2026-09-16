@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { BUILTIN_APPLICATION_CAPABILITY_REGISTRY } from '../../../../../src/core/assistant/builtinApplicationCapabilityRegistry'
+import { BUILTIN_APPLICATION_CAPABILITY_REGISTRY } from '../../../../../src/core/application-control/builtinApplicationCapabilityRegistry'
 
 import { AGENT_TOOL_DOMAINS } from '../context/types'
 import { createBuiltinAgentToolRegistry } from '../tools/builtin'

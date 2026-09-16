@@ -6,7 +6,7 @@ import {
   agentToolPreviewSchema,
   type AgentToolGatewayResult,
 } from '../../../../../src/core/assistant/toolContracts'
-import type { HostContextSnapshot } from '../../../../../src/core/assistant/hostContracts'
+import type { HostContextSnapshot } from '../../../../../src/core/application-control/hostContracts'
 import { AgentApprovalError, AgentApprovalManager, assertApprovalPreviewTargets } from './approval'
 import { AgentApprovalCoordinator } from './approval-coordinator'
 import { decideToolAuthorization } from './approval-policy'

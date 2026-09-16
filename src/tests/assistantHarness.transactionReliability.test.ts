@@ -8,7 +8,7 @@ import { installHarnessNativeStorage, readHarnessImageEditDocument, uninstallHar
 import { registerPersistedImageEditTestSession } from './imageEditPersistenceTestSession'
 import { createAttachedImageEditPersistenceFixture } from './imageEditAttachedPersistenceFixture'
 import { getProjectRecord } from '@/commands/projectState'
-import { applicationTransactionFailureFactsSchema } from '@/core/assistant/applicationTransactionFailureFacts'
+import { applicationTransactionFailureFactsSchema } from '@/core/application-control/applicationTransactionFailureFacts'
 
 const cleanup: Array<() => void> = []
 beforeEach(() => { installHarnessNativeStorage() })

@@ -6,7 +6,7 @@ import type {
   ApplicationRef,
   JsonValue,
 } from '@/core/application-control'
-import type { CanvasBatchOperation } from '@/core/assistant/capabilities/canvasBatchApplicationCapabilities'
+import type { CanvasBatchOperation } from '@/core/application-control/domains/canvas/canvasBatchApplicationCapabilities'
 import { useCanvasStore } from '@/stores/canvasStore'
 
 import { applyCanvasOperationsAtomically, undoCanvasBatch } from './canvasBatchService'

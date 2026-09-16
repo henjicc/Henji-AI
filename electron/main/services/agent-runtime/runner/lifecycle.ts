@@ -12,7 +12,7 @@ import { AgentEventStream } from './event-stream'
 import { serializeError } from './runner-results'
 import type { AgentStateMachine } from './state-machine'
 import { reduceAgentWorkingSummary } from './working-summary'
-import { agentObservedEffectSchema, type AgentObservedEffect } from '../../../../../src/core/assistant/observedEffect'
+import { applicationObservedEffectSchema, type ApplicationObservedEffect } from '../../../../../src/core/application-control/observedEffect'
 
 const logger = createMainLogger('main.agent_runtime')
 
@@ -72,7 +72,7 @@ export class AgentRunnerLifecycle {
     this.finishTerminal()
   }
 
-  recordExecutionEffects(effects: AgentObservedEffect[]): void {
+  recordExecutionEffects(effects: ApplicationObservedEffect[]): void {
     if (this.options.state.executionOutcome.status !== 'pending' || effects.length === 0) return
     const merged = [...this.options.state.executionOutcome.effects, ...effects]
     if (merged.length > 512) {
@@ -80,11 +80,11 @@ export class AgentRunnerLifecycle {
     }
     this.options.state.executionOutcome = {
       ...this.options.state.executionOutcome,
-      effects: merged.map((effect) => agentObservedEffectSchema.parse(effect)),
+      effects: merged.map((effect) => applicationObservedEffectSchema.parse(effect)),
     }
   }
 
-  sealExecution(input: { effects: AgentObservedEffect[]; summary: string; evidence: string[] }): void {
+  sealExecution(input: { effects: ApplicationObservedEffect[]; summary: string; evidence: string[] }): void {
     if (this.options.state.executionOutcome.status === 'sealed_success') return
     const sealedAt = new Date().toISOString()
     this.options.state.executionOutcome = {

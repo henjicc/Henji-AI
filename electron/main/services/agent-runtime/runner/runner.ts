@@ -8,7 +8,7 @@ import type {
 } from '../../../../../src/core/assistant/events'
 import type { AgentToolObservation } from '../../../../../src/core/assistant/toolContracts'
 import type { ModelStepMessage } from '@henjicc/ai-sdk'
-import type { HostContextSnapshot } from '../../../../../src/core/assistant/hostContracts'
+import type { HostContextSnapshot } from '../../../../../src/core/application-control/hostContracts'
 import { AgentArtifactStore } from '../context/offload'
 import { AgentContextBuilder } from '../context/builder'
 import { AgentToolCatalogPlanner } from '../context/catalog'
@@ -63,7 +63,7 @@ import { createRunnerModelOutputGuard, createRunnerThreadTitleCoordinator } from
 import { createRunnerConversation } from './runner-conversation'
 import { prepareAgentAttachmentContext } from './attachment-context'
 import { agentAttachmentSchema, type AgentAttachment } from '../../../../../src/core/assistant/attachments'
-import { readPendingVisualObservation } from '../../../../../src/core/assistant/surfaceObservation'
+import { readPendingVisualObservation } from '../../../../../src/core/application-control/surfaceObservation'
 import type { AgentWorkingSummary } from '../../../../../src/core/assistant/workingContext'
 import {
   AGENT_INTENTS,

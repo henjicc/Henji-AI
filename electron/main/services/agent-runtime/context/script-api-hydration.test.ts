@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest'
 
-import { AGENT_CONTRACT_VERSION } from '../../../../../src/core/assistant/hostContracts'
+import { AGENT_CONTRACT_VERSION } from '../../../../../src/core/application-control/hostContracts'
 import {
   applicationCapabilityDiscoveryOutputSchema,
   type ApplicationCapabilityDiscoveryOutput,
 } from '../../../../../src/core/assistant/capabilityDiscovery'
-import { APPLICATION_CAPABILITY_CATALOG_VERSION } from '../../../../../src/core/assistant/applicationCapabilities'
+import { APPLICATION_CAPABILITY_CATALOG_VERSION } from '../../../../../src/core/application-control/applicationCapabilities'
 import { createBuiltinAgentToolRegistry } from '../tools/builtin'
 import { AgentCapabilityDiscoveryCatalog } from './capability-discovery'
 import { hydrateHenjiScriptApi } from './script-api-hydration'

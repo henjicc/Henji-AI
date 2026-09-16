@@ -7,8 +7,8 @@
  */
 const assert = require('node:assert/strict')
 const { randomUUID } = require('node:crypto')
-const { Client } = require('@modelcontextprotocol/sdk/client/index.js')
-const { StreamableHTTPClientTransport } = require('@modelcontextprotocol/sdk/client/streamableHttp.js')
+const { Client } = require('@modelcontextprotocol/client')
+const { StreamableHTTPClientTransport } = require('@modelcontextprotocol/client')
 
 async function waitMcpReady(page, timeoutMs = 15000) {
   const deadline = Date.now() + timeoutMs
@@ -37,7 +37,7 @@ async function authorizeMcpConnection(page, { name, allowWrites = false, allowDe
 }
 
 async function connectMcpClient(config, name = 'Henji Reality') {
-  const client = new Client({ name, version: '1' })
+  const client = new Client({ name, version: '1' }, { versionNegotiation: { mode: { pin: '2026-07-28' } } })
   await client.connect(new StreamableHTTPClientTransport(new URL(config.url), { requestInit: { headers: config.headers } }))
   return client
 }

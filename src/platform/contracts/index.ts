@@ -21,10 +21,11 @@ import type { UpdaterPlatform } from './updater'
 import type { AssetLibraryPlatform } from './assetLibrary'
 import type { AssistantPlatform } from './assistant'
 import type { EmbeddedAgentPlatform } from '@/core/assistant/embeddedAgent'
-import type { McpPlatform } from '@/core/application-control/localHostContracts'
+import type { ApplicationHostPlatform, McpPlatform } from '@/core/application-control/localHostContracts'
 
 export interface PlatformRuntime {
   embeddedAgent: EmbeddedAgentPlatform
+  applicationControl: ApplicationHostPlatform
   mcp: McpPlatform
   aiRuntime: AiRuntimePlatform
   llmRuntime: LlmRuntimePlatform

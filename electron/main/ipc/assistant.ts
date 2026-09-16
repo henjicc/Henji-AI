@@ -5,7 +5,7 @@ import {
   frontendToolAcknowledgementSchema,
   frontendToolResultSchema,
   parseHostContextSnapshot,
-} from '../../../src/core/assistant/hostContracts'
+} from '../../../src/core/application-control/hostContracts'
 import { assistantUserInstructionsUpdateSchema } from '../../../src/core/assistant/userInstructions'
 import {
   agentMemoryClearSchema,

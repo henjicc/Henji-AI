@@ -4,7 +4,7 @@ import { utilityProcess, type UtilityProcess } from 'electron'
 import path from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { emptyEmbeddedAgentSnapshot, type EmbeddedAgentPrompt, type EmbeddedAgentSnapshot } from '../../../../src/core/assistant/embeddedAgent'
-import { createEmbeddedApplicationClient } from '../../ipc/mcp'
+import { createEmbeddedApplicationClient } from '../application-runtime/runtime'
 import { getAppLocalDataDir } from '../system'
 import { getMainWindow } from '../../window'
 import { getAssistantUserInstructions } from '../assistant/user-instructions'
@@ -110,7 +110,7 @@ export class EmbeddedAgentService {
           logger.info('内置助手开始调用工具', { event: 'embedded_agent.tool.start', requestId, context })
           void (client ? (message.name === 'load_assistant_skill' ? callEmbeddedSkill(message.input, controller.signal) : client.call(message.name, withGenerationOrigin(message.name, message.input, this.originContext), controller.signal)) : Promise.reject(new Error('操作未获授权')))
             .then((value) => {
-              const failed = typeof value === 'object' && value !== null && 'isError' in value && value.isError === true
+              const failed = typeof value === 'object' && value !== null && 'ok' in value && value.ok === false
               const fields = { event: `embedded_agent.tool.${failed ? 'failed' : 'completed'}`, requestId, context: { ...context, durationMs: Date.now() - startedAt } }
               if (failed) logger.error('内置助手工具返回失败', fields)
               else logger.info('内置助手工具调用完成', fields)

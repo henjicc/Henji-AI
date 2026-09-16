@@ -5,7 +5,7 @@ import {
   applicationRefSchema,
   type ApplicationRef,
 } from '../../../../../src/core/application-control'
-import type { HostContextSnapshot, HostScope } from '../../../../../src/core/assistant/hostContracts'
+import type { HostContextSnapshot, HostScope } from '../../../../../src/core/application-control/hostContracts'
 import type { HenjiScriptCheckpoint } from '../../../../../src/core/assistant/externalWait'
 import type { AgentToolDefinition } from '../../agent-runtime/tools/types'
 import {

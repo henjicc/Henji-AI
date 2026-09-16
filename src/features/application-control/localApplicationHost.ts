@@ -1,16 +1,16 @@
 import { z } from 'zod'
 import { createApplicationCallerGrant, revokeApplicationCallerGrant, type ApplicationCallerGrant } from '@/core/application-control/callerContext'
-import { localHostRequestSchema, MCP_CAPABILITY_IDS, MCP_READ_CAPABILITY_IDS, MCP_READ_PERMISSIONS, MCP_WRITE_PERMISSIONS, type McpPlatform, type LocalTool } from '@/core/application-control/localHostContracts'
+import { localHostRequestSchema, MCP_CAPABILITY_IDS, MCP_READ_CAPABILITY_IDS, MCP_READ_PERMISSIONS, MCP_WRITE_PERMISSIONS, type ApplicationHostPlatform, type LocalTool } from '@/core/application-control/localHostContracts'
 import { createLogger } from '@/core/logging'
 import { applicationCallerAccess } from '@/core/application-control/callerContext'
-import { getApplicationControlExecutionEngine } from '@/features/assistant/applicationCapabilities/applicationControlRegistry'
+import { getApplicationControlExecutionEngine } from '@/features/application-control/capabilities/applicationControlRegistry'
 import { createApplicationCapabilitySession, listApplicationCapabilities } from './applicationCapabilityService'
 import { buildExternalCapabilityInventory, externalReflectionPermissions } from './externalCapabilityInventory'
 
 const logger = createLogger('features.application_control.host')
 
 /** 仅由根宿主通过可信 preload 事件创建授权；网络调用参数不能抵达工厂。 */
-export function attachLocalApplicationHost(platform: McpPlatform, ready: boolean): () => void {
+export function attachLocalApplicationHost(platform: ApplicationHostPlatform, ready: boolean): () => void {
   const sessionId = crypto.randomUUID()
   const generation = performance.timeOrigin + performance.now()
   const grants = new Map<string, ApplicationCallerGrant>()

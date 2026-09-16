@@ -9,7 +9,7 @@ import {
 } from '../../../../../../src/core/assistant/skills'
 import {
   loadAssistantSkillCapability,
-} from '../../../../../../src/core/assistant/capabilities/assistantSkillApplicationCapabilities'
+} from '../../../../../../src/core/application-control/domains/assistantSkill/assistantSkillApplicationCapabilities'
 import { loadAssistantSkillFrom, type SkillDirectorySet } from '../../../assistant/skills/registry'
 import { stableSystemPrompt } from '../../context/prompt-layers'
 import { createAssistantSkillTools } from './assistant-skills'

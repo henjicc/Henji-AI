@@ -1,6 +1,6 @@
 import {
   loadAssistantSkillCapability,
-} from '../../../../../../src/core/assistant/capabilities/assistantSkillApplicationCapabilities'
+} from '../../../../../../src/core/application-control/domains/assistantSkill/assistantSkillApplicationCapabilities'
 import { wrapSkillContent } from '../../../assistant/skills/content'
 import { loadAssistantSkill } from '../../../assistant/skills/registry'
 import { createBackendCapabilityTool } from '../backend-capability-tool'

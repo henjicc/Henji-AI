@@ -4,7 +4,7 @@ import { z } from 'zod'
 import {
   AGENT_CONTRACT_VERSION,
   type HostContextSnapshot,
-} from '../../../../../src/core/assistant/hostContracts'
+} from '../../../../../src/core/application-control/hostContracts'
 import { createBuiltinAgentToolRegistry as createBaseBuiltinAgentToolRegistry } from '../tools/builtin'
 import { createBackendCapabilityTool } from '../tools/backend-capability-tool'
 import { createBackendBuiltinTools } from '../tools/builtin/backend'

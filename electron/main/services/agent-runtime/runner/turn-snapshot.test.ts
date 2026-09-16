@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import type { HostContextSnapshot } from '../../../../../src/core/assistant/hostContracts'
+import type { HostContextSnapshot } from '../../../../../src/core/application-control/hostContracts'
 import type { AgentRuntimeModelSet } from './models'
 import { buildAgentTurnSnapshotDraft } from './turn-snapshot'
 

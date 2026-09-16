@@ -1,6 +1,6 @@
 import { z } from 'zod'
 
-import { hostContextSnapshotSchema } from '../../src/core/assistant/hostContracts'
+import { hostContextSnapshotSchema } from '../../src/core/application-control/hostContracts'
 import { agentMemoryContextEntrySchema } from '../../src/core/assistant/memory'
 import {
   agentBudgetContinuationSchema,

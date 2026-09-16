@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 
 import type { AgentRunState } from '../../../../../src/core/assistant/events'
 import { AGENT_RUNTIME_SCHEMA_VERSION, type AgentStartRunRequest } from '../../../../../src/core/assistant/runtimeContracts'
-import type { HostContextSnapshot } from '../../../../../src/core/assistant/hostContracts'
+import type { HostContextSnapshot } from '../../../../../src/core/application-control/hostContracts'
 import type { ModelStepInput, ModelStepResult } from '@henjicc/ai-sdk'
 import { AgentToolGateway } from '../tools/gateway'
 import { AgentToolRegistry } from '../tools/registry'

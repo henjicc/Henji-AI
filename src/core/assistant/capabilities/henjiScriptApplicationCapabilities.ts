@@ -1,11 +1,11 @@
 import { z } from 'zod'
 
 import { applicationRefSchema } from '../../application-control'
-import type { ApplicationCapabilityDefinition } from '../applicationCapabilities'
+import type { ApplicationCapabilityDefinition } from '../../application-control/applicationCapabilities'
 import { henjiScriptCheckpointSchema } from '../externalWait'
-import { agentObservedEffectSchema } from '../observedEffect'
-import { applicationTransactionFailureFactsSchema } from '../applicationTransactionFailureFacts'
-import { defineApplicationCapability } from './defineApplicationCapability'
+import { applicationObservedEffectSchema } from '../../application-control/observedEffect'
+import { applicationTransactionFailureFactsSchema } from '../../application-control/applicationTransactionFailureFacts'
+import { defineApplicationCapability } from '../../application-control/domains/shared/defineApplicationCapability'
 
 export const HENJI_SCRIPT_LANGUAGE = 'henji-ts/v1' as const
 
@@ -52,7 +52,7 @@ export const runHenjiScriptOutputSchema = z.object({
   scriptRunRef: z.string().min(1),
   steps: z.array(henjiScriptStepReceiptSchema).max(128),
   resultRefs: z.array(applicationRefSchema).max(128),
-  effects: z.array(agentObservedEffectSchema).max(512),
+  effects: z.array(applicationObservedEffectSchema).max(512),
   verification: z.object({
     passed: z.boolean(),
     summary: z.string().max(2_000),

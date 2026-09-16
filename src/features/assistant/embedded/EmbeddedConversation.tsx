@@ -6,7 +6,7 @@ import type { EmbeddedAgentModel, EmbeddedAgentPrompt } from '@/core/assistant/e
 import { getPlatform } from '@/platform/runtime'
 import { useUiStore } from '@/stores/uiStore'
 import { useAssistantUiStore } from '../store/assistantUiStore'
-import { createHostContextSnapshot } from '../hostContext/hostContext'
+import { createHostContextSnapshot } from '../../application-control/hostContext/hostContext'
 import { EmbeddedTranscript, EmbeddedUserMessage } from './EmbeddedTranscript'
 import { useConversationAutoScroll } from '../conversation/useConversationAutoScroll'
 import { reportEmbeddedAgentError, useEmbeddedAgent } from './controller'
