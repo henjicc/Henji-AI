@@ -3,7 +3,6 @@ import type { NodeProps } from '@xyflow/react';
 
 import { ICON_NODE_ASSET_GROUP } from '@/core/theme/icons';
 import { CANVAS_IMAGE_CAPABILITY_IDS } from '@/features/canvas/capabilities';
-import { layerSeparationGenerationExecution } from '@/features/canvas/application/layerSeparationGenerationService';
 import {
   CANVAS_NODE_TYPES,
   type LayerSeparationGenerationNodeData,
@@ -38,10 +37,6 @@ export const LayerSeparationGenerationNode = memo(({
       capabilityId={CANVAS_IMAGE_CAPABILITY_IDS.layerSeparation}
       promptPlaceholderKey="node.layerSeparationGeneration.promptPlaceholder"
       promptRequiredKey="node.layerSeparationGeneration.promptRequired"
-      apiKeyRequiredKey="node.layerSeparationGeneration.apiKeyRequired"
-      resultTitleKey="node.layerSeparationGeneration.resultTitle"
-      requirePrompt={false}
-      {...layerSeparationGenerationExecution}
     />
   );
 });

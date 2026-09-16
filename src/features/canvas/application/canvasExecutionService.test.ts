@@ -1,6 +1,8 @@
 // @vitest-environment jsdom
 
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { useProjectStore } from '@/stores/projectStore'
+import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from '@/tests/harnessNativeStorage'
 
 import { useCanvasStore } from '@/stores/canvasStore'
 import { useCanvasExecutionStateStore } from '@/stores/canvasExecutionStateStore'
@@ -55,10 +57,15 @@ function registerText(nodeId: string, run: () => Promise<CanvasNodeExecutionResu
 }
 
 describe('canvasExecutionService', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
+    installHarnessNativeStorage()
+    await useProjectStore.getState().hydrate()
+    await useProjectStore.getState().createProject('调度测试')
     resetCanvasExecutionServiceForTests()
     useCanvasStore.getState().setCanvasData([], [], { past: [], future: [] })
   })
+
+  afterEach(() => uninstallHarnessNativeStorage())
 
   it('缺失节点以及依赖缺失节点的运行在调用执行器前拒绝', async () => {
     const unavailable = node('missing', 'removedNode' as CanvasNode['type']);

@@ -1,7 +1,6 @@
 import { memo } from 'react';
 import type { NodeProps } from '@xyflow/react';
 
-import { prepareUpscaleNodeRuntime } from '../application/upscaleGenerationPreparation';
 import { ICON_UPSCALE } from '@/core/theme/icons';
 import {
   CANVAS_IMAGE_CAPABILITY_IDS,
@@ -42,11 +41,7 @@ export const UpscaleGenerationNode = memo(({
       capabilityId={CANVAS_IMAGE_CAPABILITY_IDS.upscale}
       promptPlaceholderKey="node.upscaleGeneration.promptPlaceholder"
       promptRequiredKey="node.upscaleGeneration.promptRequired"
-      apiKeyRequiredKey="node.upscaleGeneration.apiKeyRequired"
-      resultTitleKey="node.upscaleGeneration.resultTitle"
       showPromptInput={false}
-      requirePrompt={false}
-      prepareRuntimeParams={prepareUpscaleNodeRuntime}
     />
   );
 });

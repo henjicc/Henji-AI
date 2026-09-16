@@ -27,8 +27,8 @@ export const AudioGenNode = memo(({ id, data, selected, width, height }: AudioGe
     icon={<AudioGenerationIcon className="h-4 w-4" />}
     promptPlaceholderKey="node.audioGen.promptPlaceholder"
     promptRequiredKey="node.audioGen.promptRequired"
-    apiKeyRequiredKey="node.imageEdit.apiKeyRequired"
-    resultTitleKey="node.audioGen.resultTitle"
+
+
   />
 ));
 

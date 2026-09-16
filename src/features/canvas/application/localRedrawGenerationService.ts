@@ -1,3 +1,4 @@
+import type { CanvasTransactionRuntime } from './canvasPersistenceService'
 import i18n from '@/i18n'
 import { registry } from '@/core/ModelRegistry'
 import { getSupportedAspectRatios } from '@/core/params/ratioResolution'
@@ -24,6 +25,7 @@ export function parseLocalRedrawContext(value: unknown): LocalRedrawContext | nu
 
 interface CommitLocalRedrawGenerationInput {
   projectId?: string
+  runtime?: CanvasTransactionRuntime
   signal?: AbortSignal
   sourceNodeId?: string
   placeholderNodeId: string
@@ -62,12 +64,11 @@ export async function commitLocalRedrawGeneration(input: CommitLocalRedrawGenera
       }),
     },
     completionId: input.completionId,
-  })
+  }, input.runtime)
 }
 
 /** 界面与无挂载任务共用裁剪、校验及原项目合成。 */
 export const localRedrawGenerationExecution = {
-  supportsBackgroundCompletion: true,
   prepareRuntimeParams: async ({
     data: runtimeData,
     images,
@@ -114,6 +115,7 @@ export const localRedrawGenerationExecution = {
     if (!localRedrawContext) throw new Error(i18n.t('node.elementEditGeneration.missingContext'))
     return await commitLocalRedrawGeneration({
       projectId: context.projectId,
+      runtime: context.runtime,
       signal: context.signal,
       sourceNodeId: context.sourceNodeId,
       placeholderNodeId: context.placeholderNodeId,
@@ -124,4 +126,4 @@ export const localRedrawGenerationExecution = {
     })
   },
 
-} satisfies Pick<GenerationNodeExecutionOptions, 'prepareRuntimeParams' | 'prepareGenerationRequest' | 'commitGenerationResult' | 'supportsBackgroundCompletion'>
+} satisfies Pick<GenerationNodeExecutionOptions, 'prepareRuntimeParams' | 'prepareGenerationRequest' | 'commitGenerationResult'>

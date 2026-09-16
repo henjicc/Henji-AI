@@ -13,6 +13,8 @@ import { CANVAS_NODE_TYPES } from '../domain/canvasNodes'
 import { createGenerationNodeExecutor, type GenerationNodeExecutionOptions } from './generationNodeExecutor'
 import { registerCanvasNodeExecutor, resetCanvasExecutionServiceForTests, runCanvasNode } from './canvasExecutionService'
 import { readPersistedCanvasProjectSnapshot } from './canvasQueryService'
+import { attachCanvasGenerationFeedback, getCanvasDomainExecutor } from './canvasDomainExecutors'
+import { findCanvasProjectInstance } from './canvasProjectInstances'
 
 // 媒体 I/O 与历史存储使用替身；任务登记、图执行、结果编排及工程保存走正式服务。
 vi.mock('./imageData', async (original) => ({
@@ -77,4 +79,47 @@ it('缺少提示词仍在提交前拒绝，不创建结果节点或调用供应�
   expect(generate).not.toHaveBeenCalled()
   expect(useCanvasStore.getState().nodes).toHaveLength(before)
   expect(options.setPromptInvalid).toHaveBeenCalledWith(true)
+})
+
+it('标准执行器由领域实例提供，页面关闭与反馈解除不会取消生成', async () => {
+  let finish!: () => void
+  const generate = vi.spyOn(GenerationService.getInstance(), 'generate').mockImplementation(async () => {
+    await new Promise<void>(resolve => { finish = resolve })
+    return { status: 'completed', url: 'C:/generated.png', filePath: 'C:/generated.png' }
+  })
+  const executor = getCanvasDomainExecutor(projectId, nodeId)
+  const releaseFeedback = attachCanvasGenerationFeedback(projectId, nodeId, vi.fn())
+  const running = runCanvasNode(nodeId)
+  await vi.waitFor(() => expect(finish).toBeTypeOf('function'))
+  await useProjectStore.getState().closeProject()
+  releaseFeedback()
+  expect(getCanvasDomainExecutor(projectId, nodeId)).toBe(executor)
+  expect(findCanvasProjectInstance(projectId)?.leases).toBeGreaterThan(0)
+  finish()
+  const result = await running
+  expect(generate).toHaveBeenCalledTimes(1)
+  expect(useProjectStore.getState().currentProjectId).toBeNull()
+  const saved = await readPersistedCanvasProjectSnapshot(projectId)
+  expect(saved.nodes.find(node => node.id === result.resultNodeIds[0])?.data.imageUrl).toBe('C:/generated.png')
+  expect(findCanvasProjectInstance(projectId)?.leases).toBe(0)
+})
+
+it('删除工程等待已提交生成回填和保存，关闭屏障不拒绝原任务的后续提交', async () => {
+  let finish!: () => void
+  vi.spyOn(GenerationService.getInstance(), 'generate').mockImplementation(async () => {
+    await new Promise<void>(resolve => { finish = resolve })
+    return { status: 'completed', url: 'C:/generated.png', filePath: 'C:/generated.png' }
+  })
+  const running = runCanvasNode(nodeId)
+  await vi.waitFor(() => expect(finish).toBeTypeOf('function'))
+  let deleted = false
+  const deleting = useProjectStore.getState().deleteProject(projectId).then(() => { deleted = true })
+  await vi.waitFor(() => expect(findCanvasProjectInstance(projectId)?.closing).toBe(true))
+  expect(deleted).toBe(false)
+  await expect(runCanvasNode(nodeId, undefined, projectId)).rejects.toThrow('PROJECT_CLOSING')
+  finish()
+  const result = await running
+  expect(result.resultNodeIds).toHaveLength(1)
+  await deleting
+  expect(findCanvasProjectInstance(projectId)).toBeUndefined()
 })

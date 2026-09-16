@@ -4,8 +4,7 @@ import { useTranslation } from 'react-i18next';
 
 import { UiEmpty } from '@/components/ui';
 import { CANVAS_NODE_TYPES, type ImageEditNodeData } from '@/features/canvas/domain/canvasNodes';
-import { prepareImageEditNodeRuntime, resolveImageEditGenerationUi } from '../application/imageEditNodePreparation';
-import type { GenerationNodeRuntimePreparationContext } from './shared/generationNodeExecutionTypes';
+import { resolveImageEditGenerationUi } from '../application/imageEditNodePreparation';
 import {
   GenerationNodeShell,
   type GenerationNodeShellData,
@@ -15,7 +14,6 @@ import { OutpaintStage } from './outpaint/OutpaintStage';
 import { OUTPAINT_FIELDS, type OutpaintMargins } from '../domain/outpaintGeometry';
 import { CANVAS_IMAGE_CAPABILITY_IDS } from '../capabilities';
 import { OUTPAINT_WORKSPACE_MAXIMUM, readOutpaintComposition } from '../domain/outpaintModelParams';
-import { prepareOutpaintGeneration } from '../application/outpaintGenerationPreparation';
 import { resolveOutpaintNodeLayout } from '../domain/outpaintNodeLayout';
 import { ICON_NODE_IMAGE_GENERATION } from '@/core/theme/icons';
 
@@ -42,9 +40,6 @@ export const ImageEditNode = memo(({ id, data, selected, width, height }: ImageE
     const store = useCanvasStore.getState();
     store.updateNodeData(id, { outpaintMargins: margins });
   }, [id]);
-  const prepareRuntimeParams = useCallback((context: GenerationNodeRuntimePreparationContext) =>
-    prepareImageEditNodeRuntime(context, { isOutpaint, excludeParamIds: generationUi.excludeParamIds, t }),
-  [generationUi.excludeParamIds, isOutpaint, t]);
   return (
     <GenerationNodeShell
       id={id}
@@ -56,18 +51,12 @@ export const ImageEditNode = memo(({ id, data, selected, width, height }: ImageE
       icon={<ImageGenerationIcon className="h-4 w-4" />}
       promptPlaceholderKey={isOutpaint ? "node.outpaint.promptPlaceholder" : "node.imageEdit.promptPlaceholder"}
       promptRequiredKey="node.imageEdit.promptRequired"
-      apiKeyRequiredKey="node.imageEdit.apiKeyRequired"
-      resultTitleKey="node.imageEdit.resultTitle"
-      resultNodeExtraData={{ resultKind: 'generic' }}
       capabilityId={isOutpaint ? CANVAS_IMAGE_CAPABILITY_IDS.outpaint : undefined}
       showPromptInput={generationUi.promptMode !== 'hidden'}
-      requirePrompt={generationUi.promptMode === 'required'}
       promptMaxCharacters={isOutpaint ? undefined : generationUi.promptMaxCharacters}
       showModelInput={isOutpaint || generationUi.modelMode !== 'locked'}
       hideAspectRatio={isOutpaint}
       excludeParamIds={isOutpaint ? [...generationUi.excludeParamIds, ...OUTPAINT_FIELDS, 'zoomOutPercentage'] : generationUi.excludeParamIds}
-      prepareRuntimeParams={prepareRuntimeParams}
-      prepareGenerationRequest={isOutpaint ? prepareOutpaintGeneration : undefined}
       layoutMode={generationUi.layoutMode}
       minWidth={isOutpaint ? outpaintLayout.minWidth : undefined}
       minHeight={isOutpaint ? outpaintLayout.minHeight : undefined}

@@ -7,9 +7,6 @@ import {
   CANVAS_IMAGE_CAPABILITY_IDS,
   normalizeLocalRedrawSettings,
 } from '@/features/canvas/capabilities'
-import {
-  localRedrawGenerationExecution,
-} from '@/features/canvas/application/localRedrawGenerationService'
 import { CANVAS_NODE_TYPES, type ElementEditGenerationNodeData } from '@/features/canvas/domain/canvasNodes'
 import {
   GenerationNodeShell,
@@ -93,9 +90,6 @@ export const ElementEditGenerationNode = memo(({
       capabilityId={CANVAS_IMAGE_CAPABILITY_IDS.elementEdit}
       promptPlaceholderKey="node.elementEditGeneration.promptPlaceholder"
       promptRequiredKey="node.elementEditGeneration.promptRequired"
-      apiKeyRequiredKey="node.elementEditGeneration.apiKeyRequired"
-      resultTitleKey="node.elementEditGeneration.resultTitle"
-      {...localRedrawGenerationExecution}
       additionalInputRows={settingsRows}
       layoutMode="workbench"
       workbenchMediaInput="image"

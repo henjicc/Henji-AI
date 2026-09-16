@@ -1,17 +1,15 @@
 import { useEffect, useRef } from 'react'
-import { registerCanvasNodeExecutor } from '@/features/canvas/application/canvasExecutionService'
-import {
-  createGenerationNodeExecutor,
-  type GenerationNodeExecutionOptions,
-} from '@/features/canvas/application/generationNodeExecutor'
+import { attachCanvasGenerationFeedback } from '@/features/canvas/application/canvasDomainExecutors'
+import type { GenerationNodeExecutionOptions } from '@/features/canvas/application/generationNodeExecutor'
+import { useProjectStore } from '@/stores/projectStore'
 
-export function useGenerationNodeExecution(options: GenerationNodeExecutionOptions): void {
-  // 普通重渲染只更新配置，不能替换在途执行器而造成重复生成。
-  const optionsRef = useRef(options)
-  optionsRef.current = options
+export function useGenerationNodeExecution(options: Pick<GenerationNodeExecutionOptions, 'nodeId' | 'setPromptInvalid'>): void {
+  const feedback = useRef(options.setPromptInvalid)
+  feedback.current = options.setPromptInvalid
   const nodeId = options.nodeId
-  useEffect(() => registerCanvasNodeExecutor(nodeId,
-    createGenerationNodeExecutor(() => optionsRef.current)), [nodeId])
+  const projectId = useProjectStore(state => state.currentProjectId)
+  useEffect(() => projectId ? attachCanvasGenerationFeedback(projectId, nodeId,
+    invalid => feedback.current(invalid)) : undefined, [nodeId, projectId])
 }
 
 export type {

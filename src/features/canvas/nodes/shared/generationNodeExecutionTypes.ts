@@ -1,3 +1,4 @@
+import type { CanvasTransactionRuntime } from '../../application/canvasPersistenceService'
 import type { CanvasNodeData, CanvasNodeType } from '@/features/canvas/domain/canvasNodes'
 import type { CanvasGenerationOutput } from '@/features/canvas/generation/runGeneration'
 
@@ -12,6 +13,7 @@ export interface GenerationNodeRuntimePreparationContext {
 
 export interface GenerationNodeResultCommitContext {
   projectId: string
+  runtime?: CanvasTransactionRuntime
   signal?: AbortSignal
   sourceNodeId: string
   placeholderNodeId: string

@@ -27,8 +27,8 @@ export const VideoGenNode = memo(({ id, data, selected, width, height }: VideoGe
     icon={<VideoGenerationIcon className="h-4 w-4" />}
     promptPlaceholderKey="node.videoGen.promptPlaceholder"
     promptRequiredKey="node.videoGen.promptRequired"
-    apiKeyRequiredKey="node.imageEdit.apiKeyRequired"
-    resultTitleKey="node.videoGen.resultTitle"
+
+
   />
 ));
 

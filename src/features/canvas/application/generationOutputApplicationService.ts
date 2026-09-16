@@ -37,7 +37,8 @@ class GenerationOutputContextChangedError extends GenerationOutputApplicationErr
 }
 
 /** Completion remains bound to the same project while its view attaches or detaches. */
-export async function commitCanvasGenerationOutputsInProject(projectId: string, input: CommitCanvasGenerationOutputsInput) {
+export async function commitCanvasGenerationOutputsInProject(projectId: string, input: CommitCanvasGenerationOutputsInput, runtime?: CanvasTransactionRuntime) {
+  if (runtime) return commitCanvasGenerationOutputs(input, { projectId, runtime });
   return withCanvasProjectRuntime(projectId, runtime => commitCanvasGenerationOutputs(input, { projectId, runtime }));
 }
 

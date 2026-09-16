@@ -10,7 +10,7 @@ import type { CanvasNodeType } from '../domain/canvasNodes';
 import type { CanvasGenerationOutputBatchContractV1 } from '../domain/generationOutputs';
 import type { LayerStackDocumentV1 } from '../domain/layerStack';
 import { GenerationOutputRollbackError } from './generationOutputApplicationContracts';
-import { retainsCanvasMutation } from './canvasPersistenceService';
+import { retainsCanvasMutation, type CanvasTransactionRuntime } from './canvasPersistenceService';
 import {
   commitCanvasGenerationOutputs,
   commitCanvasGenerationOutputsInProject,
@@ -23,6 +23,7 @@ import {
 
 export interface CommitLayerSeparationGenerationInput {
   projectId?: string;
+  runtime?: CanvasTransactionRuntime;
   sourceNodeId: string;
   placeholderNodeId: string;
   resultNodeType: CanvasNodeType;
@@ -114,7 +115,7 @@ export async function commitLayerSeparationGeneration(
     });
     input.signal?.throwIfAborted();
     const commitOutputs: typeof commitCanvasGenerationOutputs = input.commitOutputs ?? (projectId
-      ? payload => commitCanvasGenerationOutputsInProject(projectId, payload)
+      ? payload => commitCanvasGenerationOutputsInProject(projectId, payload, input.runtime)
       : commitCanvasGenerationOutputs);
     return await commitOutputs({
       sourceNodeId: input.sourceNodeId,
@@ -139,7 +140,6 @@ export async function commitLayerSeparationGeneration(
 
 /** 界面与无挂载任务共用结构化图层提交。 */
 export const layerSeparationGenerationExecution = {
-  supportsBackgroundCompletion: true,
   resultNodeExtraData: { resultKind: 'layer-stack' },
   prepareRuntimeParams: ({ images }: GenerationNodeRuntimePreparationContext) => {
     if (images.length !== 1) throw new Error('图层拆分必须且只能提供 1 张源图');
@@ -150,6 +150,7 @@ export const layerSeparationGenerationExecution = {
     if (!sourceImage) throw new Error('图层拆分结果缺少源图引用');
     return commitLayerSeparationGeneration({
       projectId: context.projectId,
+      runtime: context.runtime,
       signal: context.signal,
       sourceNodeId: context.sourceNodeId,
       placeholderNodeId: context.placeholderNodeId,
@@ -162,4 +163,4 @@ export const layerSeparationGenerationExecution = {
     });
   },
 
-} satisfies Pick<GenerationNodeExecutionOptions, 'prepareRuntimeParams' | 'commitGenerationResult' | 'supportsBackgroundCompletion' | 'resultNodeExtraData'>;
+} satisfies Pick<GenerationNodeExecutionOptions, 'prepareRuntimeParams' | 'commitGenerationResult' | 'resultNodeExtraData'>;
