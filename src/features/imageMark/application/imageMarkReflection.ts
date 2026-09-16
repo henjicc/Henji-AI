@@ -9,7 +9,8 @@ import {
 import { APPLICATION_CAPABILITY_CATALOG_VERSION } from '@/core/application-control/applicationCapabilities'
 import { imageEditDocumentToMarkDoc, type ImageMarkDoc, type MarkItem } from '@/core/imageEdit'
 import { useImageEditSessionStore } from '@/features/imageEdit/store/imageEditSessionStore'
-import { listImageEditDocumentInstancesV3, requireImageEditDocumentInstanceV3 } from '@/features/imageEdit/v3/application/imageEditDocumentInstances'
+import { requireImageEditDocumentInstanceV3 } from '@/features/imageEdit/v3/application/imageEditDocumentInstances'
+import { listImageEditDocumentEntitiesV3, listImageEditEntitySources } from '@/features/imageEdit/v3/application/imageEditDocumentCatalog'
 import { collectImageEditV3LiveLayers, findImageEditV3LiveLayer, imageEditV3AnnotationRef, isImageEditV3Ref, splitImageEditV3AnnotationRef, splitImageEditV3LayerRef } from '@/features/imageEdit/v3/application/imageEditDocumentRefs'
 import { ensureImageEditRefInstanceV3 } from '@/features/imageEdit/v3/application/imageEditDocumentLoading'
 
@@ -100,7 +101,7 @@ function findAnnotation(markDoc: ImageMarkDoc, annotationId: string): MarkItem {
   return item
 }
 
-/** 标注集合实体：跨全部当前打开的会话拉平列出，与 camera_stage.state_keyframe 跨全部工程拉平是同一惯例。 */
+/** 标注集合从保存文档及当前实例发现，文档无需先挂载编辑器。 */
 class ImageMarkAnnotationReflectionProvider implements ApplicationEntityProvider {
   readonly entityType = IMAGE_MARK_ENTITY_TYPES.annotation
 
@@ -109,16 +110,19 @@ class ImageMarkAnnotationReflectionProvider implements ApplicationEntityProvider
     const legacyRefs: ApplicationRef[] = Object.entries(sessions).flatMap(([sessionId, record]) =>
       imageEditDocumentToMarkDoc(record.document).items.map((item) => annotationRef(sessionId, item))
     )
-    const liveRefs = listImageEditDocumentInstancesV3().flatMap(({ documentId, bus }) =>
-      collectImageEditV3LiveLayers(bus.getSnapshot().document).flatMap(({ layer }) =>
-        layer.type === 'annotation'
-          ? layer.annotations.map((item) => imageEditV3AnnotationRef(documentId, layer.id, item.id))
-          : []
+    return listImageEditEntitySources(request, [async (pageRequest) => {
+      const { page, nextCursor } = paginate(legacyRefs, pageRequest)
+      return { refs: page, nextCursor, revisions: { image_mark: imageMarkRevision() } }
+    }, async (pageRequest) => {
+      const current = await listImageEditDocumentEntitiesV3(pageRequest, (document) =>
+        collectImageEditV3LiveLayers(document).flatMap(({ layer }) =>
+          layer.type === 'annotation'
+            ? layer.annotations.map((item) => imageEditV3AnnotationRef(document.id, layer.id, item.id))
+            : []
+        )
       )
-    )
-    const refs = [...legacyRefs, ...liveRefs]
-    const { page, nextCursor } = paginate(refs, request)
-    return { refs: page, nextCursor, revisions: { image_mark: imageMarkRevision() } }
+      return { ...current, revisions: { image_mark: imageMarkRevision() } }
+    }])
   }
 
   async readEntity(ref: ApplicationRef, request: { propertyIds?: string[] }) {

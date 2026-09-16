@@ -1,3 +1,4 @@
+import { listImageEditEntitySources } from '../v3/application/imageEditDocumentCatalog'
 import {
   type ApplicationEntityProvider,
   type ApplicationEntityRegistration,
@@ -279,18 +280,10 @@ class CombinedImageEditReflectionProvider implements ApplicationEntityProvider {
   }
 
   async listEntities(request: { cursor?: string; limit: number }) {
-    const [legacy, live] = await Promise.all([
-      this.v2?.listEntities({ limit: 100_000 }) ?? Promise.resolve({ refs: [], nextCursor: null, revisions: { image_edit: 0 } }),
-      this.v3?.listEntities({ limit: 100_000 }) ?? Promise.resolve({ refs: [], nextCursor: null, revisions: { image_edit: 0 } }),
+    return listImageEditEntitySources(request, [
+      ...this.v2 ? [(page: { cursor?: string; limit: number }) => this.v2!.listEntities(page)] : [],
+      ...this.v3 ? [(page: { cursor?: string; limit: number }) => this.v3!.listEntities(page)] : [],
     ])
-    const refs = [...legacy.refs, ...live.refs]
-    const offset = Math.max(0, Number.parseInt(request.cursor ?? '0', 10) || 0)
-    const page = refs.slice(offset, offset + request.limit)
-    return {
-      refs: page,
-      nextCursor: offset + page.length < refs.length ? String(offset + page.length) : null,
-      revisions: { image_edit: Math.max(legacy.revisions.image_edit ?? 0, live.revisions.image_edit ?? 0) },
-    }
   }
 
   async readEntity(ref: ApplicationRef, request: { propertyIds?: string[] }): Promise<ApplicationEntitySnapshot> {

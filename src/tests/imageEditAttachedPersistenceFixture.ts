@@ -10,6 +10,7 @@ import type { MultiLayerDocumentNodePort } from '@/features/canvas/application/m
 import { createMultiLayerDocumentProjectionCanvasPort } from '@/features/canvas/application/multiLayerDocumentNodeCanvasAdapter'
 import { createMultiLayerDocumentPersistenceConfirmation } from '@/features/canvas/application/multiLayerDocumentPersistenceConfirmation'
 import { confirmCanvasPersistence } from '@/features/canvas/application/canvasPersistenceService'
+import type { saveMultiLayerDocumentAfterEditing } from '@/features/canvas/application/multiLayerDocumentNodeGenerationAdapter'
 import { CANVAS_NODE_TYPES } from '@/features/canvas/domain/canvasNodes'
 import { createCanvasEditV3SessionReference } from '@/features/canvas/imageEditV3/canvasEditV3Session'
 import { useCanvasStore } from '@/stores/canvasStore'
@@ -45,14 +46,13 @@ export async function createAttachedImageEditPersistenceFixture() {
   const documentPort: MultiLayerDocumentNodePort = { createFromLayerStack: unavailable, inspectDocument: unavailable,
     saveAndMaterialize: materialize, rollbackMaterialization: unavailable, finalizeMaterialization: async () => true,
     forkDocument: unavailable, markReleaseCandidate: unavailable, materializeExportTarget: unavailable, releaseExportRaster: unavailable }
-  const confirmation = createMultiLayerDocumentPersistenceConfirmation({ projectId, nodeId: 'attached-node', documentRef: initialSession.documentRef }, {
-    saveProjection: (input, runtime) => createMultiLayerDocumentNodeApplicationService({ documentPort,
+  const saveProjection: typeof saveMultiLayerDocumentAfterEditing = (input, runtime) => createMultiLayerDocumentNodeApplicationService({ documentPort,
       canvasPort: { ...createMultiLayerDocumentProjectionCanvasPort({ runtime, releaseReplacedLocalImages: async () => undefined }),
-        createExportedImageNode: unavailable } }).saveMaterializedProjection(input),
-  })
+        createExportedImageNode: unavailable } }).saveMaterializedProjection(input)
+  const confirmation = createMultiLayerDocumentPersistenceConfirmation({ projectId, nodeId: 'attached-node', documentRef: initialSession.documentRef }, { saveProjection })
   const queue = new ImageEditPersistenceV3Queue({ repository, initialReference: initial, initialHistory: bus.getPersistenceSnapshot().history })
   const dispose = adoptImageEditDocumentInstanceForTestsV3('attached-session', bus, { getQueue: () => queue,
     projection: confirmation.projection,
     confirmProjection: (reference) => confirmation.confirm(createCanvasEditV3SessionReference(initialSession.sourceUrl, reference)) })
-  return { bus, projectId, document, queue, confirmation, materialize, dispose }
+  return { bus, projectId, document, queue, confirmation, materialize, saveProjection, dispose }
 }

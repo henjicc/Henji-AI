@@ -211,6 +211,12 @@ const NAMESPACES: Record<string, object> = {
   cameraStageProjects: cameraStageProjectsStorage,
   storyboardProjects: storyboardProjectsStorage,
   imageEditorV3: {
+    async listDocuments(request: Parameters<ImageEditorV3Platform['listDocuments']>[0]) {
+      const refs = [...imageDocuments.keys()].sort().map((id) => `image-edit-v3:${id}` as const)
+        .filter((ref) => request.cursor === undefined || ref > request.cursor)
+      const documentRefs = refs.slice(0, request.limit ?? 100)
+      return { documentRefs, nextCursor: refs.length > documentRefs.length ? documentRefs.at(-1)! : null }
+    },
     async saveDocument(request: Parameters<ImageEditorV3Platform['saveDocument']>[0]) {
       const previous = imageDocuments.get(request.document.id)
       if ((previous?.document.revision ?? 0) !== request.expectedRevision) throw new Error('REVISION_CONFLICT')

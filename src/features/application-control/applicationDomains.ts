@@ -9,6 +9,10 @@ import { toolboxApplicationDomain } from '@/features/toolbox/application/applica
 import { memoryApplicationDomain } from '@/features/assistant/application/applicationDomain'
 import { navigationApplicationDomain } from '@/features/navigation/application/applicationDomain'
 import type { ApplicationDomainModule } from './domainModule'
+import { configureImageEditDocumentProjectionResolverV3 } from '@/features/imageEdit/v3/application/imageEditDocumentBindings'
+import { resolveCanvasImageEditDocumentProjection } from '@/features/canvas/application/imageEditDocumentProjectionBinding'
+
+configureImageEditDocumentProjectionResolverV3(resolveCanvasImageEditDocumentProjection)
 
 export const APPLICATION_DOMAINS: readonly ApplicationDomainModule[] = [
   canvasApplicationDomain,

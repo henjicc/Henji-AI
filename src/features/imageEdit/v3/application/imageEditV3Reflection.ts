@@ -1,3 +1,4 @@
+import { listImageEditDocumentEntitiesV3 } from './imageEditDocumentCatalog'
 import {
   fieldDescriptors,
   fieldReadValues,
@@ -21,7 +22,7 @@ import {
   IMAGE_EDIT_V3_MASK_FIELDS,
   imageEditV3SchemaRef,
 } from './imageEditV3Fields'
-import { getImageEditDocumentCatalogRevisionV3, listImageEditDocumentInstancesV3, requireImageEditDocumentInstanceV3 } from './imageEditDocumentInstances'
+import { getImageEditDocumentCatalogRevisionV3, requireImageEditDocumentInstanceV3 } from './imageEditDocumentInstances'
 import { collectImageEditV3LiveLayers, findImageEditV3LiveLayer, imageEditV3DocumentRef, imageEditV3GroupRef, imageEditV3LayerRef, imageEditV3MaskRef, imageEditV3ResourceRef, splitImageEditV3DocumentRef, splitImageEditV3LayerRef, splitImageEditV3ResourceRef } from './imageEditDocumentRefs'
 
 export type ImageEditV3ReflectedEntityType =
@@ -131,15 +132,6 @@ function refForLayer(documentId: string, layer: { id: string; type: string }): A
     : imageEditV3LayerRef(documentId, layer.id)
 }
 
-function paginate(refs: ApplicationRef[], request: ApplicationEntityListRequest): ApplicationEntityListResult {
-  const offset = Math.max(0, Number.parseInt(request.cursor ?? '0', 10) || 0)
-  const page = refs.slice(offset, offset + request.limit)
-  return {
-    refs: page,
-    nextCursor: offset + page.length < refs.length ? String(offset + page.length) : null,
-    revisions: { image_edit: getImageEditDocumentCatalogRevisionV3() },
-  }
-}
 
 function layerSource(ref: ApplicationRef, kind: 'image_edit.layer' | 'image_edit.group' | 'image_edit.mask') {
   const { documentId, layerId } = splitImageEditV3LayerRef(ref, kind)
@@ -214,9 +206,9 @@ export class ImageEditV3ReflectionProvider {
   constructor(readonly entityType: ImageEditV3ReflectedEntityType) {}
 
   async listEntities(request: ApplicationEntityListRequest): Promise<ApplicationEntityListResult> {
-    const refs = listImageEditDocumentInstancesV3().flatMap(({ documentId, bus }) => {
-      const document = bus.getSnapshot().document
-      if (this.entityType === 'image_edit.document') return [imageEditV3DocumentRef(documentId)]
+    if (this.entityType === 'image_edit.document') return listImageEditDocumentEntitiesV3(request)
+    return listImageEditDocumentEntitiesV3(request, (document) => {
+      const documentId = document.id
       const locations = collectImageEditV3LiveLayers(document)
       if (this.entityType === 'image_edit.layer') {
         return locations.filter(({ layer }) => layer.type !== 'group')
@@ -233,7 +225,6 @@ export class ImageEditV3ReflectionProvider {
       return collectResources(document)
         .map(({ resourceId }) => imageEditV3ResourceRef(documentId, resourceId))
     })
-    return paginate(refs, request)
   }
 
   async readEntity(ref: ApplicationRef, request: { propertyIds?: string[] }): Promise<ApplicationEntitySnapshot> {

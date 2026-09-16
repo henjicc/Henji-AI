@@ -106,6 +106,13 @@ export function loadImageEditorV3Document(
   return runCancellable(request.requestId, signal, (platform) => platform.loadDocument(request))
 }
 
+export function listImageEditorV3Documents(
+  request: Parameters<ImageEditorV3Platform['listDocuments']>[0],
+  signal?: AbortSignal,
+): ReturnType<ImageEditorV3Platform['listDocuments']> {
+  return runCancellable(request.requestId, signal, (platform) => platform.listDocuments(request))
+}
+
 export function saveImageEditorV3Document(
   request: Parameters<ImageEditorV3Platform['saveDocument']>[0],
   signal?: AbortSignal,

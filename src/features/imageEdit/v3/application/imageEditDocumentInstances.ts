@@ -75,6 +75,7 @@ export function requireImageEditDocumentInstanceV3(documentId: string): ImageEdi
 }
 
 export function listImageEditDocumentInstancesV3(): ImageEditDocumentInstanceV3[] { return [...instances.values()] }
+export function isImageEditDocumentRetiredV3(documentId: string): boolean { return deleted.has(documentId) || deleting.has(documentId) }
 export function hasActiveImageEditDocumentWorkV3(): boolean {
   return deleting.size > 0 || [...instances.values()].some((instance) => instance.leases > 0 || instance.persistenceOwner?.isBusy())
 }

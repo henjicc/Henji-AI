@@ -67,6 +67,7 @@ export class ImageEditPersistenceOwnerV3 implements ApplicationPersistencePartic
 
   attachProjection(host: ImageEditPersistenceHostV3): void {
     if (this.confirmProjection || !host.confirmProjection) return
+    this.assertCurrent()
     if (this.isBusy()) throw new Error('图片文档正在提交修改，请等待完成后附着画布投影')
     this.confirmProjection = host.confirmProjection
     this.projection = host.projection
