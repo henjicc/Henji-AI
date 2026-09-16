@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { createStoreAttachment } from '@/stores/storeAttachment'
+import { withApplicationWriteBarrier } from '@/stores/applicationWriteBarrier'
 import type { StoreApi } from 'zustand'
 import { temporal } from 'zundo'
 import { v4 as uuidv4 } from 'uuid'
@@ -203,6 +204,7 @@ export const createCameraStageStore = () => {
     finally { if (tracking) history.resume() }
   }
   const store = create<CameraStageState>()(
+  withApplicationWriteBarrier(
   temporal(
     (set, get) => ({
   objects: [],
@@ -790,6 +792,8 @@ export const createCameraStageStore = () => {
         }
       },
     },
+  ),
+  ['objects', 'animation', 'stateKeyframes', 'sceneSettings', 'activeCameraId', 'currentProjectName'],
   ),
 )
 

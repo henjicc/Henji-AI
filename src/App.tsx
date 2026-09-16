@@ -36,10 +36,9 @@ import { onboardingManager } from '@/features/onboarding/application/onboardingM
 import { OnboardingModal } from '@/features/onboarding/components/OnboardingModal'
 import { OnboardingHints } from '@/features/onboarding/components/OnboardingHints'
 import { getPlatform } from '@/platform/runtime'
-import { useProjectStore } from '@/stores/projectStore'
 import { readDevelopmentLaunchOptions } from '@/core/development/developmentLaunch'
 import { openApplicationSurface } from '@/features/navigation/application/surfaceNavigationService'
-import { runApplicationCloseGuards } from '@/core/applicationLifecycle/applicationCloseGuards'
+import { showAlertDialog } from '@/stores/alertDialogStore'
 import { CameraStageRenderLifecycleHost } from '@/features/canvas/application/CameraStageRenderLifecycleHost'
 
 const logger = createLogger('App')
@@ -188,13 +187,14 @@ const App: React.FC = () => {
       closing = true
       void (async () => {
         try {
-          await runApplicationCloseGuards()
-          const projectStore = useProjectStore.getState()
-          if (projectStore.currentProjectId) await projectStore.closeProject()
-          await getPlatform().window.confirmClose()
+          const { closeApplication } = await import('@/features/application-control/applicationCloseService')
+          await closeApplication(() => getPlatform().window.confirmClose())
         } catch (error) {
           closing = false
-          logger.error('关闭应用前保存画布项目失败', error, { event: 'app.close.persistence.failed' })
+          logger.warn('应用尚未确认关闭，保留当前内容', { event: 'app.close.persistence.failed', error })
+          showAlertDialog({ title: '暂时无法关闭', type: 'warning',
+            message: '当前内容已保留。请确认后台操作已完成，并重试保存后再关闭。',
+            detail: error instanceof Error ? error.message : String(error) })
         }
       })()
     })

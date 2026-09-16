@@ -1,5 +1,6 @@
 import { ImageEditorV3CommandRepository, loadImageEditorV3Document } from '@/commands/imageEditorV3'
 import type { ApplicationRef } from '@/core/application-control'
+import { assertApplicationWritesAllowed } from '@/core/applicationLifecycle/applicationWriteBarrier'
 import { ImageEditCommandHistoryV3 } from '@/core/imageEdit/v3/commandHistory'
 import {
   findImageEditDocumentInstanceV3, getOrCreateImageEditDocumentInstanceV3,
@@ -9,9 +10,11 @@ import {
 } from './imageEditDocumentInstances'
 
 const loading = new Map<string, Promise<ImageEditDocumentInstanceV3>>()
+export function hasLoadingImageEditDocumentsV3(): boolean { return loading.size > 0 }
 
 /** 读取与执行共用同一个实例；并发调用只载入一次，单个等待者取消不取消共享载入。 */
 export async function ensureImageEditDocumentInstanceV3(documentId: string): Promise<ImageEditDocumentInstanceV3> {
+  assertApplicationWritesAllowed()
   assertImageEditDocumentAvailableV3(documentId)
   const existing = findImageEditDocumentInstanceV3(documentId)
   if (existing) return existing

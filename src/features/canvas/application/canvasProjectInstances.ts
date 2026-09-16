@@ -1,6 +1,7 @@
 import { canvasStoreAttachment, createCanvasStore } from '@/stores/canvasStore'
 import { fromProjectRecord, type Project } from '@/stores/projectStoreSerialization'
 import { getProjectRecord } from '@/commands/projectState'
+import { assertApplicationWritesAllowed } from '@/core/applicationLifecycle/applicationWriteBarrier'
 
 export interface CanvasProjectInstance {
   readonly id: string
@@ -24,6 +25,9 @@ let onChange: (project: Project) => void = () => undefined
 export function configureCanvasInstancePersistence(listener: (project: Project) => void): void { onChange = listener }
 export function findCanvasProjectInstance(id: string): CanvasProjectInstance | undefined { return instances.get(id) }
 export function listCanvasProjectInstances(): CanvasProjectInstance[] { return [...instances.values()] }
+export function hasActiveCanvasProjectWork(): boolean {
+  return loading.size > 0 || closing.size > 0 || [...instances.values()].some((instance) => instance.leases > 0)
+}
 export function requireCanvasProjectInstance(id: string): CanvasProjectInstance {
   const instance = instances.get(id)
   if (!instance) throw new Error('PROJECT_NOT_LOADED')
@@ -31,6 +35,7 @@ export function requireCanvasProjectInstance(id: string): CanvasProjectInstance 
 }
 
 export function registerCanvasProjectInstance(project: Project): CanvasProjectInstance {
+  assertApplicationWritesAllowed()
   const existing = instances.get(project.id)
   if (existing) return existing
   if (closing.has(project.id)) throw new Error('PROJECT_CLOSING')
@@ -68,6 +73,7 @@ export function registerCanvasProjectInstance(project: Project): CanvasProjectIn
 }
 
 export async function getCanvasProjectInstance(id: string): Promise<CanvasProjectInstance> {
+  assertApplicationWritesAllowed()
   if (closing.has(id)) throw new Error('PROJECT_CLOSING')
   const existing = instances.get(id)
   if (existing) return existing
@@ -92,6 +98,7 @@ export function attachCanvasProject(instance: CanvasProjectInstance): void {
 export function detachCanvasProject(): void { canvasStoreAttachment.attach(createCanvasStore()) }
 
 export function leaseCanvasProject(instance: CanvasProjectInstance): () => void {
+  assertApplicationWritesAllowed()
   if (instance.closing || closing.has(instance.id)) throw new Error('PROJECT_CLOSING')
   instance.leases += 1
   let released = false
@@ -105,6 +112,7 @@ export function leaseCanvasProject(instance: CanvasProjectInstance): () => void 
 
 /** Deletion blocks new work and waits for already submitted work before touching storage. */
 export async function closeCanvasProjectInstance(id: string, remove: () => Promise<void>): Promise<void> {
+  assertApplicationWritesAllowed()
   if (closing.has(id)) throw new Error('PROJECT_CLOSING')
   closing.add(id)
   const instance = instances.get(id)

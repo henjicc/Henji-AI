@@ -5,6 +5,7 @@ import { ImageEditPersistenceOwnerV3, type ImageEditPersistenceHostV3 } from './
 import { ImageEditPersistenceV3Queue, type ImageEditPersistenceV3Options } from './imageEditPersistenceQueue'
 import { createLogger } from '@/core/logging'
 import type { ImageEditorV3ResourceDescriptor } from '@/platform/contracts/imageEditorV3'
+import { assertApplicationWritesAllowed } from '@/core/applicationLifecycle/applicationWriteBarrier'
 
 const logger = createLogger('features.imageEdit.v3.document_instances')
 
@@ -43,6 +44,7 @@ export function getOrCreateImageEditPersistenceQueueV3(
   assertImageEditDocumentAvailableV3(id)
   const existing = queues.get(id)
   if (existing) return existing
+  assertApplicationWritesAllowed()
   const queue = new ImageEditPersistenceV3Queue(options)
   queues.set(id, queue)
   return queue
@@ -73,6 +75,9 @@ export function requireImageEditDocumentInstanceV3(documentId: string): ImageEdi
 }
 
 export function listImageEditDocumentInstancesV3(): ImageEditDocumentInstanceV3[] { return [...instances.values()] }
+export function hasActiveImageEditDocumentWorkV3(): boolean {
+  return deleting.size > 0 || [...instances.values()].some((instance) => instance.leases > 0 || instance.persistenceOwner?.isBusy())
+}
 export function getImageEditDocumentCatalogRevisionV3(): number { return revision }
 export function subscribeImageEditDocumentInstancesV3(listener: () => void): () => void {
   listeners.add(listener)
@@ -138,10 +143,12 @@ export function getOrCreateImageEditDocumentInstanceV3(
     installOwner(existing, host)
     return existing
   }
+  assertApplicationWritesAllowed()
   return adopt(new ImageEditCommandBusV3(document, options), host)
 }
 
 export function attachImageEditDocumentInstanceV3(documentId: string): () => void {
+  assertApplicationWritesAllowed()
   const instance = requireImageEditDocumentInstanceV3(documentId)
   if (instance.closing) throw new Error('图片文档正在关闭')
   instance.views += 1
@@ -183,6 +190,7 @@ export function assertImageEditDocumentAvailableV3(documentId: string): void {
 }
 
 export function leaseImageEditDocumentInstanceV3(documentId: string): () => void {
+  assertApplicationWritesAllowed()
   const instance = requireImageEditDocumentInstanceV3(documentId)
   instance.leases += 1
   let released = false
@@ -191,6 +199,7 @@ export function leaseImageEditDocumentInstanceV3(documentId: string): () => void
 
 /** 候选回收不抢占编辑者或任务。删除期间禁止新的载入、附着与写入，失败保留原实例。 */
 export async function deleteIdleImageEditDocumentV3(documentId: string, revision: number, remove: () => Promise<boolean>): Promise<boolean> {
+  assertApplicationWritesAllowed()
   if (deleted.has(documentId)) return true
   if (deleting.has(documentId)) return false
   const instance = instances.get(documentId)

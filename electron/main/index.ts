@@ -37,7 +37,8 @@ import { registerMediaProtocolHandler, registerMediaProtocolScheme, restoreAllow
 import { configureMacDockIcon } from './app-icon'
 import { sdkRuntimeContext } from './services/ai-runtime/sdk-runtime'
 import { getAiProviderApiKey } from './services/keystore'
-import { runLogRetention } from './services/logging'
+import { createMainLogger, runLogRetention } from './services/logging'
+import { bindApplicationShutdown } from './application-shutdown'
 import { initializeUpdater } from './services/updater'
 import { createWindow } from './window'
 import { resolveWindowPresentationMode } from './window-presentation'
@@ -173,8 +174,6 @@ app.on('window-all-closed', () => {
   }
 })
 
-app.on('before-quit', () => {
-  disposeEmbeddedAgent()
-  void disposeMcp()
-  void disposeImageEditorV3Ipc()
+bindApplicationShutdown(app, [disposeEmbeddedAgent, disposeMcp, disposeImageEditorV3Ipc], (error) => {
+  createMainLogger('application.shutdown').error('应用服务退出清理失败', { event: 'application.shutdown.failed', error })
 })

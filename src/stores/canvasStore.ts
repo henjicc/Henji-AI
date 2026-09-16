@@ -1,5 +1,6 @@
 import { create, type StoreApi } from 'zustand';
 import { createStoreAttachment } from './storeAttachment';
+import { withApplicationWriteBarrier } from './applicationWriteBarrier';
 import type {
   Connection,
   EdgeChange,
@@ -228,7 +229,7 @@ export type CanvasStructureActions = Pick<CanvasState,
   | 'clearCanvas'
 >;
 
-export const createCanvasStore = () => create<CanvasState>((set, get) => ({
+export const createCanvasStore = () => create<CanvasState>(withApplicationWriteBarrier((set, get) => ({
   nodes: [],
   edges: [],
   selectedNodeId: null,
@@ -244,7 +245,7 @@ export const createCanvasStore = () => create<CanvasState>((set, get) => ({
   ...createCanvasNodeCreationActions(set, get),
   ...createCanvasNodeUpdateActions(set, get),
   ...createCanvasStructureActions(set, get),
-}));
+}), ['nodes', 'edges', 'history', 'currentViewport']));
 
 export const canvasStoreAttachment = createStoreAttachment(createCanvasStore());
 export const useCanvasStore = canvasStoreAttachment.useAttachedStore;

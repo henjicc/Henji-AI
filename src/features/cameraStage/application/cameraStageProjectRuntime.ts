@@ -3,6 +3,7 @@ import { createLogger } from '@/core/logging'
 import { attachCameraStageStore, cameraStageStoreAttachment, createCameraStageStore, type CameraStageOwnedStore } from '../store/cameraStageStore'
 import { readProjectSnapshot, writeCameraStageProject, type CameraStageProjectSnapshot } from '../projects/cameraStageProjectPersistence'
 import { serializeScene } from '../domain/sceneSerialization'
+import { assertApplicationWritesAllowed } from '@/core/applicationLifecycle/applicationWriteBarrier'
 
 export type CameraStageSaveState = 'idle' | 'saving' | 'saved' | 'error'
 export interface CameraStageProjectInstance {
@@ -26,11 +27,17 @@ const instances = new Map<string, CameraStageProjectInstance>()
 const loading = new Map<string, Promise<void>>()
 const closing = new Map<string, Promise<void>>()
 
+export function listCameraStageProjectInstances(): CameraStageProjectInstance[] { return [...instances.values()] }
+export function hasActiveCameraStageProjectWork(): boolean {
+  return loading.size > 0 || closing.size > 0 || [...instances.values()].some((instance) => instance.leases > 0)
+}
+
 export function findCameraStageProjectInstance(projectId: string): CameraStageProjectInstance | undefined {
   return instances.get(projectId)
 }
 
 export function registerCameraStageProjectInstance(snapshot: CameraStageProjectSnapshot): CameraStageProjectInstance {
+  assertApplicationWritesAllowed()
   const previous = instances.get(snapshot.id)
   if (previous) return previous
   const store = createCameraStageStore()
@@ -65,6 +72,7 @@ export function cameraStageProjectStore(projectId: string): CameraStageOwnedStor
 }
 
 export async function ensureCameraStageProjectRuntime(projectId: string): Promise<void> {
+  assertApplicationWritesAllowed()
   if (instances.has(projectId)) return
   if (closing.has(projectId)) throw new Error('PROJECT_CLOSING')
   let pending = loading.get(projectId)
@@ -87,6 +95,7 @@ export async function attachCameraStageProject(projectId: string): Promise<void>
 }
 
 export async function leaseCameraStageProjectRuntime(projectId: string): Promise<() => void> {
+  assertApplicationWritesAllowed()
   if (!instances.has(projectId)) await ensureCameraStageProjectRuntime(projectId)
   const instance = instances.get(projectId)!
   if (instance.closing || closing.has(projectId)) throw new Error('PROJECT_CLOSING')
@@ -148,6 +157,7 @@ export async function saveCameraStageProjectRuntime(projectId: string): Promise<
 }
 
 export async function closeCameraStageProjectInstance(projectId: string, remove: () => Promise<void>): Promise<void> {
+  assertApplicationWritesAllowed()
   const previous = closing.get(projectId)
   if (previous) return previous
   const instance = instances.get(projectId)

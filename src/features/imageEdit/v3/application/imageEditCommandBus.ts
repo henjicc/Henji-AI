@@ -15,6 +15,7 @@ import type {
 import type { ImageEditCommandHistorySnapshotV3 } from '@/core/imageEdit/v3/commandHistoryCodec';
 import { isImageEditTransformInvertibleV3 } from '@/core/imageEdit/v3/execution/affineTransform';
 import { collectImageEditJsonResourceIdsV3 } from '@/core/imageEdit/v3/resourceReferences';
+import { assertApplicationWritesAllowed } from '@/core/applicationLifecycle/applicationWriteBarrier';
 
 export type ImageEditPreviewOverrideKindV3 =
   | 'parameter'
@@ -246,6 +247,7 @@ export class ImageEditCommandBusV3 {
   }
 
   private assertMutable(): void {
+    assertApplicationWritesAllowed();
     if (this.disposed) throw new Error('DOCUMENT_RELEASED：图片文档实例已释放');
     this.mutationGuard?.();
   }

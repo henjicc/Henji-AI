@@ -10,6 +10,10 @@ import {
 import { BUILTIN_APPLICATION_CAPABILITY_REGISTRY } from '@/core/application-control/builtinApplicationCapabilityRegistry'
 import { executeApplicationCapabilityResult, listRendererApplicationCapabilityIds } from '@/features/application-control/capabilities/registry'
 import { isExternalApplicationTool } from '@/core/application-control/externalCapabilityPolicy'
+import { assertApplicationWritesAllowed } from '@/core/applicationLifecycle/applicationWriteBarrier'
+
+let activeInvocations = 0
+export function hasActiveApplicationInvocations(): boolean { return activeInvocations > 0 }
 
 /** 复用唯一注册源；助手内部后端工具不进入应用调用目录。 */
 export function listApplicationCapabilities(): ApplicationCapabilityDefinition[] {
@@ -35,13 +39,16 @@ export function createApplicationCapabilitySession(grant: ApplicationCallerGrant
       })
     },
     execute: async (input, request) => {
+      assertApplicationWritesAllowed()
       assertApplicationCallerGrant(grant)
       const invocation = applicationCapabilityInvocationSchema.parse(input)
       const definition = listApplicationCapabilities().find((value) => value.id === invocation.id)
       if (!definition) throw new Error('NOT_FOUND:此能力未向外部连接开放，请重新读取应用能力目录。')
       assertApplicationCapabilityAllowed(grant, definition)
       if (!request.requestId.trim()) throw new Error('INVALID_INPUT:宿主必须提供操作请求标识。')
-      return executeApplicationCapabilityResult(invocation, { ...request, callerGrant: grant })
+      activeInvocations++
+      try { return await executeApplicationCapabilityResult(invocation, { ...request, callerGrant: grant }) }
+      finally { activeInvocations-- }
     },
   }
 }

@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import '@/tests/canvasProjectFixture'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { applicationCallerAccess, createApplicationCallerGrant, revokeApplicationCallerGrant } from '@/core/application-control/callerContext'
 import { SettingsMutationExecutor } from '@/features/settings/application-control/settingsMutationExecutor'
@@ -11,7 +12,8 @@ import { createApplicationCapabilitySession, listApplicationCapabilities } from 
 import { APPLICATION_READ_PERMISSIONS, APPLICATION_WRITE_PERMISSIONS } from '@/core/application-control/localHostContracts'
 import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from '@/tests/harnessNativeStorage'
 import { useProjectStore } from '@/stores/projectStore'
-import { useCanvasStore } from '@/stores/canvasStore'
+import { requireCanvasProjectInstance } from '@/features/canvas/application/canvasProjectInstances'
+import { freezeApplicationWrites } from '@/core/applicationLifecycle/applicationWriteBarrier'
 import { readPersistedCanvasProjectSnapshot } from '@/features/canvas/application/canvasQueryService'
 import { useNavigationStore } from '@/stores/navigationStore'
 
@@ -54,18 +56,26 @@ describe('独立应用调用入口', () => {
       await call('get_current_application_context', {})
       const project = await call('create_canvas_project', { name: 'MCP 自动对齐测试' })
       const projectId = String(project.projectId)
-      expect(useProjectStore.getState().currentProjectId).toBe(projectId)
-      const nodeId = useCanvasStore.getState().addNode('textAnnotationNode', { x: 0, y: 0 }, { text: '复制源', displayName: '原节点' })
+      expect(useProjectStore.getState().currentProjectId).toBeNull()
+      const nodeId = requireCanvasProjectInstance(projectId).store.getState().addNode('textAnnotationNode', { x: 0, y: 0 }, { text: '复制源', displayName: '原节点' })
       const duplicated = await call('duplicate_canvas_node', { projectId, nodeId, placement: { mode: 'absolute', x: 400, y: 0 } })
       const saved = await readPersistedCanvasProjectSnapshot(projectId)
       expect(saved.nodes.find(node => node.id === duplicated.nodeId)?.data.displayName).toContain('原节点')
       expect(saved.nodes).toHaveLength(2)
+      await call('open_canvas_project', { projectId })
       await call('select_canvas_node', { projectId, nodeId: null })
       await call('get_canvas_node_schema', { nodeType: 'textAnnotationNode' })
     } finally {
       useNavigationStore.getState().setActiveWorkspace(beforeWorkspace)
       uninstallHarnessNativeStorage()
     }
+  })
+  it('退出最终保存期间拒绝新调用，关闭失败恢复后同一授权仍可使用', async () => {
+    const session = createApplicationCapabilitySession(grant())
+    const unfreeze = freezeApplicationWrites()
+    try { await expect(session.execute(read, request('closing'))).rejects.toThrow('APPLICATION_CLOSING') }
+    finally { unfreeze() }
+    expect((await session.execute(read, request('resumed'))).ok).toBe(true)
   })
   it('普通修改省略基线时自动读取当前状态，仍经正式事务写入', async () => {
     const session = createApplicationCapabilitySession(grant(['application:read', 'application:write', 'settings:read', 'settings:write'], true))
