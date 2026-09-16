@@ -1,11 +1,10 @@
 # 智能助手应用能力覆盖
 
-## 当前适用范围（2026-09-12）
+## 当前适用范围
 
-产品同时提供外部 MCP 连接与内置 Pi 助手。内置入口使用官方 Pi SDK 和独立运行进程，旧自研助手源码及历史保留，但不再作为默认聊天运行时。领域服务、业务数据、权限、并发、保存及结果真实性约束继续适用于所有调用方。
+UI、内置 Pi 与现代 MCP 共用正式领域服务和应用运行实例。公共契约位于 `src/core/application-control/`，渲染层在 `src/features/application-control/` 装配各领域，Electron 的 `services/application-runtime/` 协调授权、执行、账本、费用与恢复，先于 Pi 和 MCP 初始化。
 
-MCP 通过 `src/features/application-control/applicationCapabilityService.ts` 调用唯一能力注册与领域执行器。授权由可信宿主创建，不能从工具输入提取；不需要助手会话、模型请求、Henji Script 或发现租约。本文中脚本、配方、模型预算、租约、提示词及助手终态规则只适用于保留的自研助手，不约束 MCP 协议与 Pi 的推理循环；两者共用受控应用工具入口。
-
+Pi 与 MCP 只负责工具和结果投影，不拥有业务状态。MCP 固定使用正式协议 `2026-07-28` 与拆分 SDK `2.0.0`，拒绝旧协议；授权逐请求核验，持久操作不随网络连接结束。旧自研助手、Henji Script、发现租约和旧前端工具桥已移除，不保留兼容执行链或旧数据迁移要求。
 
 > 读取时机：新增或修改工作区、页面、浮层、工具箱工具、设置项、用户可查询数据、业务操作、稳定引用、权限、宿主上下文或能力搜索。
 >
@@ -17,7 +16,7 @@ MCP 通过 `src/features/application-control/applicationCapabilityService.ts` �
 
 AI 输入 schema 顶层必须设置 `additionalProperties: false`。禁止 `patch`、`storePatch`、`executeScript`、`script`、`code` 等任意 Store Patch 或脚本执行字段；需要新增参数时先扩展正式领域 schema/注册表。
 
-**一次声明、多入口投影。** 同一份领域声明同时服务界面、自研助手与外部智能体（MCP）：工具参数由能力定义的 Zod 输入投影，域与实体的可读可写面由反射注册表的 `exposures`／`requiredPermissions.write`／`collectionWrite`／`writeExclusion.reason` 派生。**禁止在 `electron/main/services/mcp/**` 维护任何业务字段表、实体类型清单或前缀白名单**；那里只允许协议层自身的参数与信封。新增一个已登记的业务实体或属性后，外部调用方应立刻可用，不需要回到协议层登记。对外工具名、必填参数与错误码按 `EXTERNAL_CONTRACT_VERSION` 的弃用规则演进，破坏性变更必须先升主版本并保留旧调用样本。展开做法见 skill `henji-application-capability` 第 0.5 节。
+**一次声明、多入口投影。** 同一份领域声明同时服务界面、内置 Pi 与外部智能体（MCP）：工具参数由能力定义的 Zod 输入投影，域与实体的可读可写面由反射注册表的 `exposures`／`requiredPermissions.write`／`collectionWrite`／`writeExclusion.reason` 派生。**禁止在 `electron/main/services/mcp/**` 维护任何业务字段表、实体类型清单或前缀白名单**；那里只允许协议层自身的参数与信封。新增一个已登记的业务实体或属性后，外部调用方应立刻可用，不需要回到协议层登记。对外工具名、必填参数与错误码的变化必须同步正式消费者和契约测试；本轮以新格式验收，不保留旧客户端调用样本或兼容解码分支。展开做法见 skill `henji-application-capability` 第 0.5 节。
 
 MCP 工具集合与基础权限由正式前端能力声明自动派生，不再维护独立 ID 白名单。属性权限由反射注册表派生。普通操作复用通用实体；专用操作必须有正式执行器与目标绑定；内部或委托路径在原声明的 `external` 字段说明。`check:application-control-coverage` 从全部软件能力反向核对 MCP 路由，缺执行器、缺目标、失效委托均失败；与现有属性、集合及 store 动作门禁共同阻止新增功能遗漏。检查通过代表已登记能力的路径完整，不等于每个界面行为都已实测。
 
@@ -58,49 +57,14 @@ MCP 工具集合与基础权限由正式前端能力声明自动派生，不再�
 - feature 整体没接助手（既无 Reflection 也无账本）必须登记进 `check-assistant-capabilities.cjs` 的 `ASSISTANT_BLIND_FEATURES` 并写明原因——那是一张**会缩短的清单**，不是豁免表。这是 feature 级的检查，与下面 store 级的检查并存、互不替代。
 - **store 级清点按内容识别，不按目录约定**：任何文件只要导入 `zustand` 且调用 `create<...>(`，就算一个 store，不论它放在 `src/stores/`、`src/features/*/store/`，还是别的目录（例如 `src/services/largeUploadPolicy.ts` 里就藏着一个 store）。没有账本覆盖的 store 必须登记进 `ASSISTANT_BLIND_STORES` 并写明归属任务编号，同一张**会缩短的清单**。
 
-### 能力可达性：注册好的能力，模型必须找得到
+### 能力可达性：声明必须能被发现和调用
 
-覆盖判断只保证「能力存在」，不保证「模型能拿到它」。这一节管后半段——已经因此翻车四次，
-每次形状完全一样：发现层拿模型填的某个软信号做硬过滤，模型填得稍有出入，注册好的能力就从
-目录里整个消失，模型于是如实回答「应用没有这个能力」。它没说谎，用户看到的却是凭空的能力否认。
-
-- **发现层的准入只允许按域判断**（`capability-discovery.ts` 的 `structuralMatch`）。
-  `entityTypes` 只参与排序，**不得**用于过滤。它来自模型对任务的猜测，猜错的代价不该是能力
-  消失；域是注册表定义的、模型只是转述，所以只有它留下。想加新的过滤条件时，先读
-  `structuralMatch` 上方那四条事故记录——`targetSurfaceIds`、`capabilityKinds` 就是在那里被
-  当成硬过滤翻的车，它们已随请求扁平化一起删除。
-- 排序信号不够用时，改排序（`entityTypeScore`、语义查询命中）或补保底
-  （`pairReadAndWriteByEntity`），不要改回过滤：排错顺序只是慢一点，过滤错了是直接没有。
-- **发现请求是模型写的，运行时不改写**（v3：`queries` / `domains` / `entityTypes` / `writes`）。
-  曾经有一个 `normalizeCallInput` 把模型的请求整个覆盖成运行时算出的依赖前沿，理由是"运行时
-  自己就知道答案"。代价是主模型——唯一拿得到完整会话历史的角色——连"我要的东西在另一个领域"
-  都表达不了，只能把工具可用性当成意图证据反推自己判断错了。
-- **投影只能回答注册表知道的事，不能回声模型的提问。** `scriptApi.entities` 的实体与属性清单
-  只允许来自匹配到的能力，**不得**把请求里的 `entityTypes` 或从 `queries` 正则抠出的标识符并
-  进去——那等于模型问"有没有 X"、投影答"你的清单是：X、…"，模型照着写脚本必然撞
-  `ENTITY_TYPE_NOT_FOUND`，而且每次重新发现都在重复同一个谎。宁可少说，不能乱说。
-- **投影体积就是行为**。发现结果一旦越过卸载阈值就会被存成 artifact，模型只能分页回读——实测
-  一次运行 18 次 `read_agent_artifact`、25 个模型步不收敛。所以"把 action 和 recipe 都给出去让
-  模型自己选"是错的：给得越多，模型实际看到的越少。门禁在
-  `capability-discovery-size.test.ts`，直接判历史投影会不会触发卸载。
-- **卸载判定必须两处同尺子**，包括先裁再判。`runner-results.toolMessage` 与
-  `prompt-layers.formatObservation` 都调 `shouldOffloadObservation`，任何一处漏了
-  `projectForHistory`，同一份结果就会一边内联一边卸载，模型看到 artifactRef 就去回读一份它
-  已经有的内容。门禁在 `offload-same-ruler.test.ts`。
-- **能力声明的 `entityTypes` 必须与反射注册表登记的**同一个名字**。** 同一样东西两个名字不是
-  命名不整齐：发现层会把能力声明的那个名字投影进 `scriptApi.entities.entityTypes`，模型照着写
-  脚本就撞 `ENTITY_TYPE_NOT_FOUND`，而真正存在的那个因为没有能力声明它，读写配对保底也认不出。
-  实测设置域声明 `application.setting`、注册表登记 `settings.registry`，一次改设置因此从 5 回合
-  3.8 万 token 变成 18 回合 25 万 token。
-- **能力声明的 effect 必须覆盖它真正产生的全部 effect**，用 `alsoImpacts` 补齐。漏一条不报错，
-  但发现层排序按 effect 走，漏声明的能力会排到无关能力后面。名字里带
-  create/add/delete/remove/open/switch 的能力，`registry.test.ts` 会强制它声明对应 effect，
-  例外必须写进 `justifiedExceptions` 并说明理由。
-- 门禁在 `electron/main/services/agent-runtime/context/capability-reachability.test.ts`：
-  全部能力 × 全部域 × 故意填错的实体，任一能力从自己域里消失即红；另一条守
-  「模型把域和实体都说对时必须真的进租约」——发现得到却租不到，对模型是同一种结局。
-- 它与 `storeActionCoverage.test.ts` 合起来才是完整命题：账本守「绑定的能力 id 确实存在」，
-  可达性守「存在的能力确实找得到」。**两条缺一条，命题就断了**，删任何一条前先想清楚这件事。
+- 工具目录由领域声明派生，按授权过滤并稳定排序；业务宿主尚未就绪时仍可发现静态能力，执行返回准确的就绪状态和恢复办法。
+- 页面挂载、模型猜测的实体名或当前视图不能成为普通业务能力的隐藏条件。导航、聚焦和视口操作才依赖界面状态。
+- Pi 按需披露工具，披露后的工具必须在下一步真实可调用；不能在 Pi 或 MCP 目录维护第二份业务启用名单。
+- 实体、属性、enum、范围、引用、写 operation 和集合必填项只从正式反射注册表投影，禁止回声模型猜测或从提示词拼接 schema。
+- 能力声明的实体类型必须与反射注册表一致，实际副作用必须由 `control.impacts` 与 `resolveObservedEffects` 覆盖。
+- 通过正式公共入口验证发现、授权、执行、输出校验和回读结果。覆盖门禁证明声明完整，结果测试证明实际可用；两者不能互相替代。
 
 ### 拒绝要给改道，不要给死胡同
 
@@ -120,27 +84,21 @@ MCP 工具集合与基础权限由正式前端能力声明自动派生，不再�
 - **禁止**新增旧式 `HostCommand`、`HostQuery`、`kind: 'command'`、`kind: 'query'`、固定前端命令/查询执行表，或依赖兼容描述生成器的 Agent 工具
 - 能力处理器**必须调用正式业务服务**，不得复制业务逻辑
 - 后台可完成的操作，不得为了复用页面组件而强制切换页面
-- 跨模块传递实体必须用 `ApplicationRef` 或 artifact 引用，**不得**向模型暴露原始密钥、本地路径或不受控的大对象
+- 跨模块传递实体必须用 `ApplicationRef` 或正式任务／资源引用，**不得**向模型暴露原始密钥、本地路径或不受控的大对象
 - 新增内容来源或媒体消费功能时，同时核对“来源 → 下一步操作”，不能只登记单个工具。已有媒体来源清单在 `src/core/application-control/mediaReferenceKinds.ts`；新增来源须补正式解析和逐来源执行样例，准备／提交声明从清单派生。编辑预览必须经过正式合成，不能把原图当编辑结果；引用既有内容不得强制收藏、重上传或打开无关页面。关键连续操作加入现有 `check:application-control-invariants`，从下游实际媒体及正式状态断言结果，禁止仅检查测试标题或成功文字。本文要求不等于所有实体都是媒体；无法直接复用的文档、图层等应注明正式导出路径及对应验证。
 - **不得**以"助手已判断"为理由绕过安全边界
 - **禁止**从能力处理器直接调用 Store `setState` 做任意 Patch；仅允许正式领域服务内部对已声明字段执行确定性状态提交
-- **禁止**在 Application API、能力定义或 Agent Runtime 增加 `eval`、`new Function` 或任意脚本执行入口
+- **禁止**在 Application API、能力定义或应用运行时 增加 `eval`、`new Function` 或任意脚本执行入口
 
-## Henji Script 单一自动化内核
+## 公共执行与实例生命周期
 
-两个以上应用操作统一由模型可见的 `run_henji_script@1` 执行。模型只从能力发现的 `scriptApi` 使用 `app.entities` / `app.action` / `app.recipe` / `app.assert`；版本、revision、稳定引用和数据依赖全由宿主解析。
-
-- Henji Script 是 TypeScript 风格的受限子集：只用 TypeScript Compiler API 解析为自有 IR，永不运行转译后的 JavaScript。`import` / 文件 / 网络 / 进程 / DOM / Store / 反射 / 无界循环必须在首次写入前拒绝。
-- Henji Script 的引导分四层且不得互相复制：system prompt 只保留“应用操作必须先发现、只经 `run_henji_script` 执行”等不可选协议；`run_henji_script` 工具契约声明语言和安全边界；首次发现的 `scriptApi` 动态提供本轮真实 API/schema；内置领域 skill 只提供业务选择与已验证 Recipe。禁止在 system prompt 或通用 skill 静态抄写领域 action 参数。
-- 不新增泛化的“Henji Script 教程”内置 skill。语言语法和可调用 API 必须自描述于工具契约与 `scriptApi`，否则 skill 未触发或版本漂移时会形成旁路；领域 skill 只讲“何时用哪个 Recipe/业务顺序”，项目级 `henji-application-capability` skill 只指导开发者如何接入。
-- 只有 `run_henji_script@1` 可以声明 `source`；其他能力仍禁止 `source/script/executeScript` 类任意脚本入口。
-- Recipe 只生成同一份 Henji Script IR，不拥有第二套解释器、引用绑定、Effect、补偿或验证逻辑。任何具体步骤必须先通过正式结果测试。
-- 用户明确的负向执行约束（例如“不要切换界面”“不要删除”）由 Gateway 与审批边界承担；最终说明必须与 Effect Receipt 对账，禁止否认已经发生的副作用。
-- 脚本只能调用本轮 `scriptApi` 租约披露的 API；“全局注册了但本轮没发现”仍必须在执行器调用数为 0 时拒绝。
-- `scriptApi` 必须在首次发现时合并工具目录与渲染层真实反射注册表，只投影本轮实体定义及属性值约束；enum、范围、引用形状、nullable、写 operation、集合父类型和必填属性不得靠模型猜测或在提示词另抄。
-- 字面量、对象、数组及三元表达式等可静态确定的属性候选值必须在首次 Gateway 调用前按同一反射约束验证；任一分支非法就整段拒绝。依赖读取结果的值在脚本变量内流动，不为方便模型而把正式业务值塞进执行摘要。
-- 每个步骤仍通过唯一 Gateway 的 schema、权限、revision、动态 availability、Effect Receipt 与审计。完成只由 Effect 与正式状态验证决定，不信任脚本文本、`completed` 或 evidence。
-- 跨领域结果只通过完整 `ApplicationRef` 和正式桥梁能力传递，禁止拼接、截断或猜测引用。
+- 调用者、授权、请求身份、持久操作身份与渲染宿主代次分别建模，由可信宿主注入；工具参数不能覆盖授权。
+- 写入在业务执行前持久登记调用者范围内的幂等键。同键同输入返回原操作，参数变化拒绝；断线、超时或未知结果不能触发自动重放。
+- 多项实体写入使用正式 `change_application_entities` 事务；算法操作使用领域能力。跨领域只传完整稳定引用，不新增脚本解释器或第二套业务执行链。
+- 业务状态、撤销和保存归工程／文档唯一实例持有，页面仅附着。后台修改不得隐式切页；长任务持有原目标直到结果处理结束，网络等待不占用编辑提交锁。
+- 删除与退出经过实例生命周期屏障。只有无使用者、无活动任务且已保存的实例可释放；失败保存必须保留脏状态和恢复入口。
+- 应用结果区分业务数据、执行状态、保存状态、实际副作用和任务／恢复引用。MCP 的 `content/isError` 与 Pi 工具消息只属于适配器。
+- 长任务提供查询、等待、取消和恢复；取消等待不等于取消任务。恢复先查权威状态，只重试未完成的保存或续查，不重新提交已发生的生成。
 
 ## 必须接入的现有机制
 
@@ -152,11 +110,8 @@ MCP 工具集合与基础权限由正式前端能力声明自动派生，不再�
 - 播放头、播放开关等提交后会继续变化的会话控制属性必须声明 `verificationStrategy: 'execution'`，用正式执行器证据验收；持久状态仍默认用最终世界状态验收。
 - 输入中 `entityType` 与 `target.kind` 表达同一事实时，由适配器统一规范化；领域 provider 可将全局唯一的短引用补全成正式稳定引用，但存在歧义时必须拒绝。不得让模型为可无歧义消解的引用格式多空转一轮。
 - 一次正式写入产生领域级联副作用（例如对象动画属性自动创建状态关键帧）时，执行器必须返回强类型 Effect Receipt；`evidence` 只用于验证和人类说明，禁止承担副作用记账。级联 receipt 必须引用静态 `declarationId`，未声明的级联使事务失败并补偿。
-- 工具网关在执行器完成后立即运行 `resolveObservedEffects` 并把校验后的 Effect 固化进 observation；最终成功封存只消费这份结构化事实，不从输入、引用字段或 evidence 文本猜测。
+- 公共执行入口在执行器完成后立即运行 `resolveObservedEffects` 并把校验后的 Effect 固化进 observation；操作账本只记录这份结构化事实，不从输入、引用字段或 evidence 文本猜测。
 - 动态 availability 的阻断必须区分 structural、permission 与 state；只有 state 阻断且前序 direct/cascade Effect 可能满足条件时，才允许延迟到该步骤执行前复核。
-- 应用执行终态与最终语言说明终态必须分离。写事务、Effect 对账和正式验证完成后立即封存成功；封存后的模型失败、超时或文本事实校验失败只能进入 `completed_with_warning` 并使用确定性摘要，禁止产生 `RunFailed`。封存前失败仍按失败处理。
-- 外部等待前必须把经过 schema 校验的 Henji Script IR 断点、有限变量、完整稳定引用、Effect Receipt 与验证状态一起持久化；不得保存源码、模型文本或任意运行对象。自动续接固定执行“权威状态读取 → 同一解释器从断点继续”，禁止让模型重新生成剩余步骤，禁止从 working summary 或任务 ID 重建引用与 Effect；断点缺失或摘要不匹配时必须在后续写入前阻断。
-- **封存点是「模型自己决定收工」**：本轮不再调工具、给出最终答复，且有真实写入 Effect、运行客观上已经停下来（没有执行中的步骤、没有待批审批、恢复检查已完成、没有记下的未收敛事项）。不得在模型请求前用任何预测判它做完了并撤掉工具——旧实现按运行前猜出来的任务图结算，模型明知用户要的颜色还没设也只能收工。Effect Receipt 中的 `targetRefs` 必须来自执行器真实输出并保持完整稳定引用。
 - **拒绝必须能被自我修正。** 任何拒绝路径都要带上运行时已经知道的事实：实体类型写错就列出该域注册了哪些，属性写错就列出这个实体有哪些，参数被静默丢弃就说清丢了哪些键、可用的是哪些，容量不够就给出上限。只给一个错误码等于让模型继续猜，而它猜不中就是死循环。
 
 ## 迁移纪律
@@ -177,7 +132,7 @@ CI 必须显式运行该门禁；门禁同时验证双端技能同步、旧执�
 
 ### 覆盖门禁的断牙验证
 
-新增或修改覆盖门禁时，**必须实跑一遍红→恢复→绿**，否则等于没有门禁。已验证过的九个场景：
+新增或修改覆盖门禁时，**必须实跑一遍红→恢复→绿**，否则等于没有门禁。门禁场景包括：
 
 | 破坏 | 预期报错 |
 |---|---|
@@ -195,29 +150,27 @@ CI 必须显式运行该门禁；门禁同时验证双端技能同步、旧执�
 | 忽略 provider 的 `available:false` 或移除 describe 动态投影 | Registry/适配器测试看不到当前状态限制 |
 | 删除一个写域的结果场景登记 | `resultBehaviorCoverage` 点名缺失领域或数量不足 |
 
-再按 [testing.md](testing.md) 运行本次能力登记、处理器或正式业务服务的精确/相关测试。`npm run test:assistant-production` 只用于同时影响 runner、状态机、调度、审批、持久化或模型适配等多个助手运行时模块的改动，以及生产验收/发布前检查；不要因普通能力登记或界面适配运行整套助手测试。
+再按 [testing.md](testing.md) 运行本次能力登记、处理器或正式业务服务的精确/相关测试。`npm run test:assistant-production` 只用于同时影响应用运行时、Pi 调度、授权或持久化等多个模块的改动，以及生产验收/发布前检查；不要因普通能力登记或界面适配运行整套助手测试。
 
 只有改动跨越“模型决策 → 工具调用 → 业务落地 → 成功证据”完整链路，且精确测试不足以证明行为时，才无窗口执行真实助手端到端验证：
 
 ```bash
-npm run assistant:cli -- --goal "任务描述"
-# 仅验证旧自研助手时显式选择 legacy
-npm run assistant:cli -- --engine legacy --goal "任务描述" --trace detailed --await-generation
+npm run assistant:cli -- --goal "任务描述" --trace detailed
 ```
 
-普通入口默认 Pi，复用侧栏正式服务，结束时输出 `runId`（可用 `npm run logs:query -- --chain <runId>` 查整条链路）；默认只读，`businessVerified: false` 不冒充业务验收。旧 `assistant:live` 和 `assistant:live:suite` 显式使用 legacy，不能证明 Pi 入口可用。`--await-generation`、`--require-verified-write`、`--print-trace` 仅支持 legacy；Pi 每轮用量和体积进入统一日志。CLI 启动前核对产物新鲜度，过期先执行 `electron:bundle`。**涉及付费或写入操作时，必须由调用者显式确认 `--approval full_access`。**
+CLI 仅使用 Pi，复用侧栏正式服务，结束时输出 `runId`，可通过 `npm run logs:query -- --chain <runId>` 查询；默认只读，模型回复完成不等于业务验收。产物过期先执行 `electron:bundle`。真实资料目录的写入和付费调用必须有明确授权；本轮隔离资料验收允许受控写入，不进行真实付费生成。跨工程、退出重启与协议验收统一使用 `test:reality`，以实际领域状态和正式日志作为证据。
 
 ## Surface 视觉观察
 
 - 每个注册 Surface 都必须声明统一观察能力、领域提供者、捕获范围、数据等级、遮罩策略、支持模态、最大尺寸和失效条件，并通过覆盖清单门禁。
-- 提供者、数据等级、遮罩策略和支持模态的唯一判断入口是 `resolveSurfaceObservationProfile`（`src/core/assistant/applicationSurfaces.ts`）；`surfaceCatalog.ts` 与覆盖清单都从它派生，**禁止**在任何一侧另写一份判断。
+- 提供者、数据等级、遮罩策略和支持模态的唯一判断入口是 `resolveSurfaceObservationProfile`（`src/core/application-control/applicationSurfaces.ts`）；`surfaceCatalog.ts` 与覆盖清单都从它派生，**禁止**在任何一侧另写一份判断。
 - 界面标注 `data-application-surface-id` 时必须从目录反查（设置用 `resolveSettingsSurfaceId`），**禁止**在组件里复制分区到 Surface 的映射表；新增设置分区只改 `SETTINGS_SECTION_IDS` 与 `surfaceCatalog.ts`。
 - `observe_application_surface` 的 `target` 默认是 `window`：截取整个应用窗口，任何时候都可用，不需要先切页面。只有需要排除干扰、聚焦某一块时才传具体 surfaceId，且该 Surface 必须当前可见。
 - 生成结果、素材、视频和音频有稳定媒体引用时优先返回原件，不得退化为页面缩略图。
 - 通用截图只能由渲染层提交当前窗口内的可见边界和敏感矩形，主进程只调用当前 Henji-AI `webContents.capturePage` 并再次校验范围；**禁止 OS 桌面截图、其他应用窗口和越界回退**。整窗指的是本应用窗口，与桌面截图是两回事。
 - **遮罩只认显式标记 `data-observation-sensitive`**。不要再对所有输入控件一律涂黑：密钥输入框本身是 `type="password"`，界面上就显示圆点，截图同样是圆点；把提示词、参数、搜索框涂黑只会让整窗观察失去意义。
 - 因此：凡是把**明文**本地绝对路径、密钥、令牌渲染出来的节点（无论是不是输入框），必须自己标 `data-observation-sensitive`，否则会被原样截给模型。日志同样不得记录截图内容、密钥或原始路径。
-- `observe_application_surface` 是否开放由运行时 primary/observer 的真实媒体模态与权限共同决定；实际媒体仍要经过 provider 协议、大小、时长、编码和取消门禁。它是**唯一**会把像素送进模型的观察入口，本轮是否可用由 `tool_contracts.visualObservationAvailable` 显式告知模型。
+- 截图与媒体的投影必须遵守当前调用者授权和模型真实模态、大小、时长、编码及取消约束；只返回引用不代表模型已看到像素。应用内截图使用 `observe_application_surface`，原始媒体使用正式媒体读取入口。
 - **禁止**新增只返回媒体引用、预览 URL 或“已截图”标记的观察能力：模型看不到像素却会以为自己看过了。观察结果必须返回 `verificationKind: 'visual_pending_model'` 加合法附件（见 `readPendingVisualObservation`），否则不要声称产生了视觉证据。
 - 三维、画布这类空间写入完成后必须调用所属领域的结构化验证能力；视觉证据只是加成，不可替代结构化验证，且未真实读取媒体时必须标注“未做视觉验证”。
-- 最终答复必须区分结构化验证、主模型视觉验证、观察模型视觉验证和未验证；稳定媒体引用本身不是视觉验证证据。
+- 最终答复必须区分结构化验证、实际媒体视觉验证和未验证；稳定媒体引用本身不是视觉验证证据。

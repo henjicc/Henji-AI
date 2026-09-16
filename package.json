@@ -56,7 +56,6 @@
     "electron:dist": "npm run electron:build && electron-builder",
     "electron:publish": "npm run electron:build && electron-builder --publish always",
     "electron:smoke": "node scripts/electron-phase4-smoke.cjs",
-    "electron:assistant-utility-smoke": "node scripts/run-agent-utility-smoke.cjs",
     "electron:canvas-stress": "node scripts/electron-phase4-canvas-stress.cjs",
     "electron:pan-bench": "node scripts/electron-canvas-pan-bench.cjs",
     "electron:media-import-bench": "node scripts/electron-media-import-bench.cjs",
@@ -75,7 +74,7 @@
     "check:icons": "node scripts/check-icon-tokens.cjs",
     "check:icons:strict": "node scripts/check-icon-tokens.cjs --strict",
     "llm:verify": "node scripts/verify-llm-model.cjs",
-    "test:application-harness": "vitest run src/tests/applicationHarness.cameraStageRender.test.ts src/tests/applicationHarness.canvas.test.ts src/tests/applicationHarness.canvasPersistence.test.ts src/tests/applicationHarness.imageEditPersistence.test.ts src/tests/applicationHarness.rejection.test.ts src/tests/applicationHarness.transactionReliability.test.ts src/tests/applicationHarness.writeLoop.test.ts src/tests/harnessNativeStorage.test.ts src/features/application-control/hostContext/hostScopeCoverage.test.ts",
+    "test:application-harness": "vitest run src/tests/applicationHarness.cameraStageRender.test.ts src/tests/applicationHarness.canvas.test.ts src/tests/applicationHarness.canvasPersistence.test.ts src/tests/applicationHarness.imageEditPersistence.test.ts src/tests/applicationHarness.close.test.ts src/tests/applicationHarness.imageDocumentProject.test.ts src/tests/applicationHarness.unopenedImageDocument.test.ts src/tests/applicationHarness.resourceCatalog.test.ts src/tests/applicationHarness.rejection.test.ts src/tests/applicationHarness.transactionReliability.test.ts src/tests/applicationHarness.writeLoop.test.ts src/tests/harnessNativeStorage.test.ts src/features/application-control/hostContext/hostScopeCoverage.test.ts",
     "test:embedded-agent": "vitest run electron/main/services/embedded-agent/attachments.test.ts electron/main/services/embedded-agent/messagePresentation.test.ts electron/main/services/embedded-agent/models.test.ts electron/main/services/embedded-agent/piEngine.test.ts electron/main/services/embedded-agent/service.test.ts electron/main/services/embedded-agent/servicePi.test.ts electron/main/services/embedded-agent/skills.test.ts electron/main/services/embedded-agent/toolResult.test.ts electron/main/assistant-cli/arguments.test.ts electron/main/assistant-cli/embedded-runner.test.ts"
   },
   "dependencies": {
