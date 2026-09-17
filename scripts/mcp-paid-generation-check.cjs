@@ -356,9 +356,23 @@ async function main() {
       }
     }
     if (created.project) {
+      /*
+       * 删完必须回读确认，不能拿"调用没抛异常"当清理成功。
+       *
+       * 这里走的是原生 `deleteProjectRecord`，绕过了渲染层的工程持久化队列——正式删除
+       * （`useProjectStore.deleteProject`）会先取消定时器、等在途写入落定、把工程标记成
+       * deleted 再删，之后的保存一律拒绝；原生删除拿不到这层保护，后台落图排的那次防抖
+       * 保存可以在删除之后把整行写回来。2026-09-18 的付费复跑就这样留下了一个夹具工程，
+       * 而当时清理仍报成功。重试一次再断言，把静默残留变成硬失败。
+       */
       await attempt('project', async () => {
-        await page.evaluate((projectId) => window.henjiNative.storyboardProjects.deleteProjectRecord(projectId), FIXTURE_PROJECT_ID)
-        cleanup.project = true
+        const gone = async () => !(await page.evaluate((projectId) => window.henjiNative.storyboardProjects.getProjectRecord(projectId), FIXTURE_PROJECT_ID))
+        for (let round = 0; round < 3; round += 1) {
+          await page.evaluate((projectId) => window.henjiNative.storyboardProjects.deleteProjectRecord(projectId), FIXTURE_PROJECT_ID)
+          if (await gone()) { cleanup.project = true; return }
+          await page.waitForTimeout(600)
+        }
+        throw new Error('夹具工程删除后仍能读回，可能被在途保存写了回来')
       })
     }
     if (created.historyId) {
