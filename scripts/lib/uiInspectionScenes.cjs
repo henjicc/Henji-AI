@@ -30,6 +30,7 @@ const { createMcpScenes } = require('./uiInspectionSceneMcp.cjs')
 const { createEmbeddedAgentScenes } = require('./uiInspectionSceneEmbeddedAgent.cjs')
 const { createMcpDomainScenes } = require('./uiInspectionSceneMcpDomains.cjs')
 const { createMcpBackgroundDocumentScenes, createMcpResourceScenes } = require('./uiInspectionSceneMcpBackgroundDocument.cjs')
+const { createMcpMediaChainScenes } = require('./uiInspectionSceneMcpMediaChain.cjs')
 const { createNetworkScenes } = require('./uiInspectionSceneNetwork.cjs')
 
 const TAB_NAMES = Object.freeze({
@@ -69,6 +70,7 @@ function createUiInspectionScenes({ canvasFixtureProjectId, settlePage }) {
     ...createMcpDomainScenes(context),
     ...createMcpBackgroundDocumentScenes(context),
     ...createMcpResourceScenes(context),
+    ...createMcpMediaChainScenes(context),
     ...createGenerationSettingsScenes(context),
     ...createCanvasScenes(context),
     ...createToolboxScenes(context),
