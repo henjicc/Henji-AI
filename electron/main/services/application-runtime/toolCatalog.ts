@@ -6,6 +6,7 @@ import {
   type LocalDomainSurface, type LocalTool,
 } from '../../../../src/core/application-control/localHostContracts'
 import { APPLICATION_CAPABILITY_CATALOG_VERSION } from '../../../../src/core/application-control/applicationCapabilities'
+import { APPLICATION_READABLE_MEDIA_KINDS } from '../../../../src/core/application-control/mediaReferenceKinds'
 import { BUILTIN_APPLICATION_CAPABILITY_REGISTRY } from '../../../../src/core/application-control/builtinApplicationCapabilityRegistry'
 import { GENERATION_BUDGET } from './generationBudget'
 
@@ -50,8 +51,8 @@ export const PROTOCOL_TOOL_SPECS: readonly ProtocolToolSpec[] = [
   },
   {
     name: 'read_application_media', tier: 'any', readOnly: true,
-    description: '按稳定结果引用分块读取已落盘媒体。outputIndex 为结果或节点关联媒体（含输入、预览）去重后的顺序，从零开始。每块最多 256 KiB；不接受文件路径或网址。只支持文本的客户端可以只消费 totalBytes／eof／错误码。',
-    inputSchema: { type: 'object', properties: { ref: { type: 'object', properties: { kind: { type: 'string', enum: ['generation.result', 'asset', 'canvas.node'] }, id: { type: 'string' } }, required: ['kind', 'id'], additionalProperties: false }, outputIndex: { type: 'integer', minimum: 0 }, offset: { type: 'integer', minimum: 0 }, length: { type: 'integer', minimum: 1, maximum: EXTERNAL_LIMITS.mediaChunkBytes } }, required: ['ref'], additionalProperties: false },
+    description: '按稳定结果引用分块读取**已落盘**媒体；image_edit.preview 是尚未保存的中间产物，不可直接读取，先 commit_image_edit 落盘。outputIndex 为结果或节点关联媒体（含输入、预览）去重后的顺序，从零开始。每块最多 256 KiB；不接受文件路径或网址。只支持文本的客户端可以只消费 totalBytes／eof／错误码。',
+    inputSchema: { type: 'object', properties: { ref: { type: 'object', properties: { kind: { type: 'string', enum: [...APPLICATION_READABLE_MEDIA_KINDS] }, id: { type: 'string' } }, required: ['kind', 'id'], additionalProperties: false }, outputIndex: { type: 'integer', minimum: 0 }, offset: { type: 'integer', minimum: 0 }, length: { type: 'integer', minimum: 1, maximum: EXTERNAL_LIMITS.mediaChunkBytes } }, required: ['ref'], additionalProperties: false },
   },
   {
     name: 'get_application_operation', tier: 'write', readOnly: true, requiresOperations: true,
@@ -66,7 +67,7 @@ export const PROTOCOL_TOOL_SPECS: readonly ProtocolToolSpec[] = [
 ]
 
 export const readMediaInputSchema = z.object({
-  ref: z.object({ kind: z.enum(['generation.result', 'asset', 'canvas.node']), id: z.string().min(1).max(512) }).strict(),
+  ref: z.object({ kind: z.enum(APPLICATION_READABLE_MEDIA_KINDS), id: z.string().min(1).max(512) }).strict(),
   outputIndex: z.number().int().nonnegative().optional(),
   offset: z.number().int().nonnegative().optional(),
   length: z.number().int().min(1).max(EXTERNAL_LIMITS.mediaChunkBytes).optional(),

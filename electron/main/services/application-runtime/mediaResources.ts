@@ -10,6 +10,7 @@ import { getStoryboardProject } from '../storyboard-projects'
 import { resolveStoryboardProjectMediaSchema } from '../storyboard-project-validation'
 import { decodeCanvasProjectImageReference, parseCanvasProjectRecord } from '../../../../src/core/canvas/projectRecordCodec'
 import { mapCanvasNodeMediaReferences } from '../../../../src/core/canvas/nodeMediaReferences'
+import { APPLICATION_READABLE_MEDIA_KINDS } from '../../../../src/core/application-control/mediaReferenceKinds'
 
 const logger = createMainLogger('main.mcp.media')
 export class ApplicationMediaResourceError extends Error {
@@ -17,7 +18,7 @@ export class ApplicationMediaResourceError extends Error {
 }
 function failure(code: string, message: string): never { throw new ApplicationMediaResourceError(code, message) }
 const inputSchema = z.object({
-  ref: z.object({ kind: z.enum(['generation.result', 'asset', 'canvas.node']), id: z.string().min(1).max(512) }).strict(),
+  ref: z.object({ kind: z.enum(APPLICATION_READABLE_MEDIA_KINDS), id: z.string().min(1).max(512) }).strict(),
   outputIndex: z.number().int().min(0).max(10_000).default(0),
   offset: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER).default(0),
   length: z.number().int().min(1).max(256 * 1024).default(256 * 1024),
