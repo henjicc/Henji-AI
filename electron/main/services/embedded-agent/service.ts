@@ -111,7 +111,17 @@ export class EmbeddedAgentService {
           void (client ? (message.name === 'load_assistant_skill' ? callEmbeddedSkill(message.input, controller.signal) : client.call(message.name, withGenerationOrigin(message.name, message.input, this.originContext), controller.signal)) : Promise.reject(new Error('操作未获授权')))
             .then((value) => {
               const failed = typeof value === 'object' && value !== null && 'ok' in value && value.ok === false
-              const fields = { event: `embedded_agent.tool.${failed ? 'failed' : 'completed'}`, requestId, context: { ...context, durationMs: Date.now() - startedAt } }
+              /*
+               * 工具抛异常那一支记了 error，返回 { ok:false } 这一支以前只记"失败了"。真机排障时
+               * 这等于什么都没说：模型看得到拒绝原因，日志里却只有工具名和耗时，只能靠复现反推。
+               * 这里补上能力已经分类好的失败码和那句给调用方看的话（它本来就发给了模型，
+               * 且正式失败信息不含本机路径或凭据）。
+               */
+              const failure = failed ? (value as { error?: { code?: unknown; message?: unknown } }).error : undefined
+              const fields = { event: `embedded_agent.tool.${failed ? 'failed' : 'completed'}`, requestId,
+                context: { ...context, durationMs: Date.now() - startedAt,
+                  ...(failure ? { failureCode: typeof failure.code === 'string' ? failure.code : undefined,
+                    failureReason: String(failure.message ?? '').slice(0, 300) } : {}) } }
               if (failed) logger.error('内置助手工具返回失败', fields)
               else logger.info('内置助手工具调用完成', fields)
               child.postMessage({ type: 'toolResult', id: message.id, value })

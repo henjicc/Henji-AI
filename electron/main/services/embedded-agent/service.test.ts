@@ -164,7 +164,9 @@ describe('内置助手消息调度', () => {
     f.child.emit('message', { type: 'tool', id: 'tool-call', name: 'change_application_entities', input: { operationId: 'operation-original', secret: '不可记录的输入' } })
     await vi.waitFor(() => expect(mocks.error).toHaveBeenCalledWith('内置助手工具返回失败', expect.objectContaining({
       event: 'embedded_agent.tool.failed', requestId: queued.requestId,
-      context: expect.objectContaining({ toolCallId: 'tool-call', operationId: 'operation-original' }),
+      // 失败码和那句给调用方看的话必须进日志：只记"失败了"等于排障时什么都没说。
+      context: expect.objectContaining({ toolCallId: 'tool-call', operationId: 'operation-original',
+        failureCode: 'DENIED', failureReason: '拒绝' }),
     })))
     expect(JSON.stringify([...mocks.info.mock.calls, ...mocks.error.mock.calls])).not.toContain('不可记录的输入')
     f.child.postMessage = postMessage
