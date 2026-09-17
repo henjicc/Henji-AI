@@ -324,8 +324,15 @@ describe('TranscodingTileOutputSink', () => {
     const sink = new TranscodingTileOutputSink(targetPath, {
       format: 'avif10', tileSize: 16, inputByteOrder: 'little-endian',
     }, {
-      // Node 不接受 FFmpeg 的 -y 参数，会在健康检查窗口内稳定早退。
+      // Node 不接受 FFmpeg 的 -y 参数，必定早退；这里要验的是「早退被如实报成失败」。
       loadFfmpegPath: async () => process.execPath,
+      /*
+       * 窗口放宽到 5 秒，不是为了等得更久，而是为了**不和进程创建赛跑**。
+       * 生产的 100ms 够用，但整包跑满负载时 spawn 与 exit 事件可能超过它，
+       * 于是这条用例时红时绿，红的原因与被测行为无关。子进程照常立刻死，
+       * 断言照常在它死的那一刻成立；生产默认值没有改变。
+       */
+      startupHealthcheckMs: 5000,
     })
 
     await expect(sink.begin(pqDescription(16, 16))).rejects.toThrow('HDR AVIF encoder failed')

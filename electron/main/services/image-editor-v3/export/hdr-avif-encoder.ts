@@ -128,6 +128,15 @@ export class StreamingHdrAvifEncoder {
     private readonly description: TileOutputDescription,
     private readonly options: TranscodingExportOptions & { format: HdrAvifFormat },
     private readonly loadEncoderPath: () => Promise<string> = loadFfmpegPath,
+    /*
+     * 启动健康检查窗口。生产取 100ms：够捕获「编码器起不来就退」，又不拖慢正常导出。
+     *
+     * 留成可注入的原因是测试需要**确定性**而不是更长的等待：核对「早退被如实报成失败」
+     * 的用例靠的是子进程死在这个窗口之内，而整包跑满负载时进程创建与 exit 事件可能超过
+     * 100ms，于是同一条用例时而红时而绿，红的原因还和被测行为毫无关系。
+     * 生产默认值一个字没改。
+     */
+    private readonly startupHealthcheckMs: number = STARTUP_HEALTHCHECK_MS,
   ) {}
 
   async begin(): Promise<void> {
@@ -167,7 +176,7 @@ export class StreamingHdrAvifEncoder {
         throw new Error('HDR AVIF encoder exited before accepting pixel input')
       }),
       new Promise<void>((resolve) => {
-        timer = setTimeout(resolve, STARTUP_HEALTHCHECK_MS)
+        timer = setTimeout(resolve, this.startupHealthcheckMs)
         timer.unref()
       }),
     ])

@@ -33,6 +33,8 @@ export type TranscodingExportOptions = RasterExportOptions & { format: Transcode
 
 export interface TranscodingTileOutputSinkDependencies {
   loadFfmpegPath?: () => Promise<string>
+  /** 仅供测试注入：见 StreamingHdrAvifEncoder 构造参数上的说明。省略即生产默认值。 */
+  startupHealthcheckMs?: number
 }
 
 function createAbortError(): Error {
@@ -173,7 +175,7 @@ export class TranscodingTileOutputSink extends FileTileOutputSinkBase {
       const encoder = new StreamingHdrAvifEncoder(stagedPath, description, {
         ...this.exportOptions,
         format: this.exportOptions.format,
-      }, this.dependencies.loadFfmpegPath)
+      }, this.dependencies.loadFfmpegPath, this.dependencies.startupHealthcheckMs)
       this.hdrEncoder = encoder
       await encoder.begin()
       return
