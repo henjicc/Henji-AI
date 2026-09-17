@@ -72,7 +72,18 @@ export async function deleteCanvasProject(projectId: string): Promise<Record<str
     useCanvasStore.getState().setViewportState(EMPTY_VIEWPORT)
   }
   await useProjectStore.getState().deleteProject(projectId)
-  return { projectId, status: 'deleted', wasCurrent }
+  /*
+   * 回执必须带 verification：外部操作账本的 `ok` 只认 `data.verification.verified`，
+   * 缺了它，一次**真的删掉了**的删除会以 `ok:false` / `isError:true` 交给调用方。
+   * 删除是 R3 破坏性操作——把成功报成失败，客户端按常理会重试，而重试一个已经
+   * 完成的删除正是最不该发生的事。这里按正式存储读回来确认工程确实不在了再声明。
+   */
+  const remaining = await getProjectRecord(projectId)
+  return { projectId, status: 'deleted', wasCurrent, verification: {
+    verified: !remaining,
+    condition: '已按正式存储读回确认该画布工程不存在',
+    target: { kind: 'canvas.project', id: projectId },
+  } }
 }
 
 export async function openCanvasProjectWithSummary(

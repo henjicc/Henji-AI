@@ -74,3 +74,31 @@ it('公共入口连续创建节点和连线，位置与持久化结果一致，�
     expect(persisted.edges).toMatchObject([{ source: refs[0].id.split(':')[1], target: refs[1].id.split(':')[1] }])
   } finally { app.dispose() }
 })
+
+/*
+ * 删除是 R3 破坏性操作，回执必须自带核实结果。
+ *
+ * 外部操作账本的 `ok` 只认 `data.verification.verified`：少了它，一次**真的删掉了**的删除
+ * 会以 `ok:false` / `isError:true` 交给调用方，而客户端按常理会重试——重试一个已经完成的
+ * 删除正是最不该发生的事。这条盯的就是回执本身，不是删除逻辑。
+ */
+it('删除画布工程的回执带着按存储读回的核实结果', async () => {
+  setCanvasTestProjectState({ currentProjectId: null, currentProject: null, projects: [], isHydrated: true })
+  const app = createApplicationHarness()
+  try {
+    const created = await app.requireResult('create_canvas_project', { name: '待删工程' })
+    const projectId = String(created.projectId)
+    // 破坏性操作不自动取基线：先读原目标，拿它的 revision 当基线，与外部客户端同一口径。
+    const baseline = await app.read({ kind: 'canvas.project', id: projectId })
+    const deleted = await app.requireResult('delete_canvas_project', { projectId },
+      baseline.revisions as Record<string, number>)
+    expect(deleted).toMatchObject({ projectId, status: 'deleted' })
+    expect(deleted.verification).toMatchObject({
+      verified: true,
+      target: { kind: 'canvas.project', id: projectId },
+    })
+    expect(await readPersistedCanvasProjectSnapshot(projectId).catch(() => null)).toBeNull()
+  } finally {
+    useProjectStore.setState({ currentProjectId: null })
+  }
+})

@@ -136,7 +136,14 @@ async function main() {
     const providerBefore = await countProviderRequests(page, evidence.startedAt)
     assert.equal(providerBefore, 0, '运行开始前已存在本轮供应商请求，计数不可信')
 
-    const paid = await authorizeMcpConnection(page, { name: `链路付费验收-${randomUUID().slice(0, 8)}`, allowWrites: true, allowPaid: true })
+    /*
+     * 连删除授权一起要：夹具工程必须经正式的 delete_canvas_project 删掉。
+     * 原生 deleteProjectRecord 绕过渲染层的工程持久化队列——正式删除会先取消定时器、
+     * 等在途写入落定、把工程标记成 deleted 再删，此后的保存一律拒绝；原生删除没有这层
+     * 保护，后台落图排的保存会在删除之后把整行写回来。本轮 6 次运行就这样在真实库里
+     * 留下了 6 个夹具工程，而每次清理都因为"删完当场读不到"而报了成功。
+     */
+    const paid = await authorizeMcpConnection(page, { name: `链路付费验收-${randomUUID().slice(0, 8)}`, allowWrites: true, allowDestructive: true, allowPaid: true })
     created.connections.push(paid.id)
     await waitMcpReady(page)
     const client = await connectMcpClient({ url: `http://127.0.0.1:${port}/mcp`, headers: paid.config.headers }, 'Henji chain paid')
@@ -289,7 +296,21 @@ async function main() {
         evidence.actualSpendCny = estimatedCny
         evidence.passed = true
       }
-    } finally { await client.close().catch(() => undefined) }
+    } finally {
+      // 趁客户端还在，走正式能力删夹具工程；它会等在途保存落定并封住后续写入。
+      if (created.project) {
+        try {
+          const projectRead = await callTool(client, 'read_application_entity', { ref: { kind: 'canvas.project', id: FIXTURE_PROJECT_ID }, propertyIds: [] })
+          await callTool(client, 'delete_canvas_project', operationEnvelope([projectRead], { projectId: FIXTURE_PROJECT_ID }))
+          created.project = false
+          evidence.fixtureDeletedViaCapability = true
+        } catch (error) {
+          evidence.fixtureDeletedViaCapability = false
+          evidence.fixtureDeleteError = error instanceof Error ? error.message : String(error)
+        }
+      }
+      await client.close().catch(() => undefined)
+    }
   } catch (error) {
     evidence.failure = error instanceof Error ? error.message : String(error)
     evidence.passed = false
@@ -301,13 +322,17 @@ async function main() {
     }
     if (created.project) {
       await attempt('project', async () => {
+        /*
+         * 兜底路径：正式删除没跑成时才走到这里。原生删除挡不住在途保存，所以删完要
+         * **等一段时间再确认一次**——只看"删完当场读不到"会把随后被写回来的残留报成成功。
+         */
         const gone = async () => !(await page.evaluate((projectId) => window.henjiNative.storyboardProjects.getProjectRecord(projectId), FIXTURE_PROJECT_ID))
-        for (let round = 0; round < 3; round += 1) {
+        for (let round = 0; round < 4; round += 1) {
           await page.evaluate((projectId) => window.henjiNative.storyboardProjects.deleteProjectRecord(projectId), FIXTURE_PROJECT_ID)
+          await page.waitForTimeout(1500)
           if (await gone()) { cleanup.project = true; return }
-          await page.waitForTimeout(600)
         }
-        throw new Error('夹具工程删除后仍能读回，可能被在途保存写了回来')
+        throw new Error('夹具工程删除后仍能读回，被在途保存写了回来')
       })
     }
     for (const taskId of created.historyIds) {
