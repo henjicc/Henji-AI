@@ -29,6 +29,12 @@ function createMcpBackgroundDocumentScenes(context) {
   return [{
     id: 'mcp-background-image-document', surface: '画布', name: '外部连接-未打开图片文档跨工程编辑', writesUserData: true,
     setup: async (page, _app, { capture }) => {
+      /*
+       * 夹具工程是直写存储再打开的。前面跑过的场景可能把这个工程的实例留在了内存里，那时
+       * 打开看到的是旧节点，种进去的东西像是没生效。先重载一次，从没有任何保留实例的状态开始。
+       */
+      await page.reload()
+      await settlePage(page, 600)
       // B：种好带 V3 文档的画布工程，但一次都不打开编辑器。
       const seeded = await openCanvasImageEditorV3Fixture({
         page, context, width: 640, height: 400, label: '后台文档底图', openEditor: false,
@@ -155,4 +161,80 @@ function createMcpBackgroundDocumentScenes(context) {
   }]
 }
 
-module.exports = { createMcpBackgroundDocumentScenes }
+/**
+ * 现代 Resources 与订阅的真实回环。
+ *
+ * 精确测试用替身触发变更，证明的是协议实现；这里要证明的是接在真实应用上也成立：目录来自
+ * 真实领域实体、内容不带本机路径、订阅只收订的那一个、真实业务写入能推出通知、关闭即释放。
+ */
+function createMcpResourceScenes({ setupSettings, canvasFixtureProjectId }) {
+  return [{
+    id: 'mcp-resources-subscription', surface: '设置', name: '外部连接-资源目录与变化订阅', writesUserData: true,
+    setup: async (page) => {
+      await setupSettings(page)
+      const identity = await authorizeMcpConnection(page, { name: '资源与订阅验收', allowWrites: true })
+      const client = await connectMcpClient(identity.config, 'Henji resources Reality')
+      try {
+        const projectRef = { kind: 'canvas.project', id: canvasFixtureProjectId }
+        const projectUri = `henji://entity/canvas.project/${encodeURIComponent(canvasFixtureProjectId)}`
+        const settingsUri = 'henji://entity/settings.registry/singleton'
+
+        // 目录来自真实领域实体，不是给 MCP 单独维护的一份名单。
+        const listed = await client.listResources()
+        const uris = listed.resources.map((item) => item.uri)
+        for (const uri of [projectUri, settingsUri]) {
+          assert.ok(uris.includes(uri), `资源目录缺少 ${uri}：${uris.slice(0, 20).join('、')}`)
+        }
+        // SDK 默认自动翻页；逐页要显式给 cursor，这里核对首页确实是有界的。
+        const firstPage = await client.request({ method: 'resources/list', params: {} }, undefined, { timeout: 15000 })
+        assert.ok(firstPage.resources.length <= 50, `首页资源数量不受限：${firstPage.resources.length}`)
+        await assert.rejects(client.request({ method: 'resources/list', params: { cursor: '不是游标' } }, undefined, { timeout: 15000 }))
+
+        const read = await client.readResource({ uri: projectUri })
+        const text = read.contents[0].text
+        assert.equal(read.contents[0].mimeType, 'application/json')
+        assert.equal(/[A-Za-z]:\|henji-media:/.test(text), false, `资源内容泄漏了本机路径：${text.slice(0, 200)}`)
+
+        // 订阅只收订的那一个：同时盯着工程，改工程要收到，改设置不该混进来。
+        const updates = []
+        client.setNotificationHandler('notifications/resources/updated', (message) => { updates.push(message.params.uri) })
+        const subscription = await client.listen({ resourceSubscriptions: [projectUri] })
+        assert.deepEqual(subscription.honoredFilter.resourceSubscriptions, [projectUri])
+
+        const before = await callTool(client, 'read_application_entity', { ref: projectRef, propertyIds: ['canvas.project.name'] })
+        const renamed = `资源订阅验收-${Date.now()}`
+        const applied = await callTool(client, 'change_application_entities', operationEnvelope([before], {
+          summary: '真实改名以触发资源变化通知',
+          changes: [{ kind: 'set_properties', entityType: projectRef.kind, target: projectRef, properties: { 'canvas.project.name': renamed } }],
+        }))
+        assert.equal(applied.executionState, 'completed', JSON.stringify(applied))
+        for (const deadline = Date.now() + 15000; !updates.includes(projectUri);) {
+          if (Date.now() > deadline) throw new Error(`真实业务写入没有推出资源变化通知：${JSON.stringify(updates)}`)
+          await page.waitForTimeout(100)
+        }
+        assert.equal(updates.includes(settingsUri), false, `未订阅的资源也收到了通知：${JSON.stringify(updates)}`)
+
+        await subscription.close()
+        assert.equal(await subscription.closed, 'local')
+        const settled = updates.length
+        const after = await callTool(client, 'read_application_entity', { ref: projectRef, propertyIds: ['canvas.project.name'] })
+        assert.equal(after.data.properties['canvas.project.name'], renamed)
+        await callTool(client, 'change_application_entities', operationEnvelope([after], {
+          summary: '关闭订阅后再改一次',
+          changes: [{ kind: 'set_properties', entityType: projectRef.kind, target: projectRef, properties: { 'canvas.project.name': `${renamed}-2` } }],
+        }))
+        await page.waitForTimeout(1200)
+        assert.equal(updates.length, settled, `关闭订阅后仍在收通知：${JSON.stringify(updates)}`)
+      } finally {
+        await client.close()
+        await disableMcp(page)
+      }
+      await setupSettings(page)
+      await page.getByRole('button', { name: '外部智能体连接', exact: true }).click()
+      await page.locator('#general-mcp').scrollIntoViewIfNeeded()
+      await page.waitForTimeout(350)
+    },
+  }]
+}
+
+module.exports = { createMcpBackgroundDocumentScenes, createMcpResourceScenes }
