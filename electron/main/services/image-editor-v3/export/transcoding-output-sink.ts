@@ -4,6 +4,7 @@ import path from 'node:path'
 
 import type SharpType from 'sharp'
 
+import { createMainLogger } from '../../logging'
 import { loadSharp } from '../../image/sharp-loader'
 import type { OutputTile, TileOutputDescription } from '../contracts'
 import { readAssociatedNclxCicp } from '../isobmff-cicp'
@@ -20,6 +21,8 @@ import {
   requiresStreamingHdrAvifEncoder,
   StreamingHdrAvifEncoder,
 } from './hdr-avif-encoder'
+
+const logger = createMainLogger('main.image_editor_v3.export')
 
 type TranscodeFormat = Exclude<RasterExportFormat, 'bigtiff'>
 type SharpInstance = ReturnType<typeof SharpType>
@@ -315,6 +318,21 @@ export class TranscodingTileOutputSink extends FileTileOutputSinkBase {
   private async cleanupIntermediate(): Promise<void> {
     const intermediatePath = this.intermediatePath
     this.intermediatePath = undefined
-    if (intermediatePath) await fsp.rm(intermediatePath, { force: true }).catch(() => undefined)
+    if (!intermediatePath) return
+    try {
+      // 上面的 pipeline.destroy() 之后，libvips 的操作缓存仍可能握着这个中间文件的句柄。
+      // POSIX 允许删除仍被打开的文件，Windows 不允许：unlink 会抛 EBUSY，而 force 只吞
+      // ENOENT。maxRetries 是 Node 针对这一场景的官方解法，只对 EBUSY/EPERM/ENOTEMPTY
+      // 这类可恢复错误退避重试，其他错误照常抛出。
+      await fsp.rm(intermediatePath, { force: true, maxRetries: 10, retryDelay: 50 })
+    } catch (error) {
+      // 删不掉不影响已经导出成功的目标文件，所以不改变导出结果；但它会在用户的导出目录里
+      // 留下 BigTIFF 中间产物。原来这里直接吞掉异常，于是既没人清理也没人知道它发生过。
+      logger.warn('导出中间文件未能删除', {
+        event: 'image_editor_v3.export.intermediate_cleanup_failed',
+        context: { intermediatePath },
+        error,
+      })
+    }
   }
 }
