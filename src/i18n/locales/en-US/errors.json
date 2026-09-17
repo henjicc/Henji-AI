@@ -14,6 +14,7 @@
     "modelNotFound": "Model not found",
     "parameterInvalid": "Invalid parameter",
     "generationFailed": "Generation failed",
+    "generationInterrupted": "The previous generation was interrupted before the task was fully submitted and cannot continue. Please start it again.",
     "uploadFailed": "Upload failed",
     "downloadFailed": "Download failed"
   }

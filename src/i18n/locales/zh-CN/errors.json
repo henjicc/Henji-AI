@@ -14,6 +14,7 @@
     "modelNotFound": "模型未找到",
     "parameterInvalid": "参数无效",
     "generationFailed": "生成失败",
+    "generationInterrupted": "上次生成在任务提交完成前中断，已无法继续，请重新发起",
     "uploadFailed": "上传失败",
     "downloadFailed": "下载失败"
   }
