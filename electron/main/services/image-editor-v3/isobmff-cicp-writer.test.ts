@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 import { readAssociatedNclxCicp } from './isobmff-cicp'
 import { writeAssociatedNclxCicpAtomically } from './isobmff-cicp-writer'
+import { removeTemporaryDirectory } from '../../../../src/tests/removeTemporaryDirectory'
 
 interface Extent {
   length: number
@@ -246,7 +247,7 @@ beforeEach(async () => {
 })
 
 afterEach(async () => {
-  await fsp.rm(tempDir, { recursive: true, force: true })
+  await removeTemporaryDirectory(tempDir)
 })
 
 describe('writeAssociatedNclxCicpAtomically', () => {

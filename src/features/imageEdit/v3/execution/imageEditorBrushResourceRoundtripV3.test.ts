@@ -14,10 +14,11 @@ import { ImageEditDocumentRepository } from '../../../../../electron/main/servic
 import { describeImageEditorV3DocumentResources } from '../../../../../electron/main/services/image-editor-v3/snapshot-resources'
 import { SharpSourceProvider } from '../../../../../electron/main/services/image-editor-v3/source-provider'
 import { createImageEditSparseMaskReferenceV3 } from '@/core/imageEdit/v3/layerTypes'
+import { removeTemporaryDirectory } from '@/tests/removeTemporaryDirectory'
 
 let directory: string
 beforeEach(async () => { directory = await fsp.mkdtemp(path.join(os.tmpdir(), 'henji-snapshot-brush-')) })
-afterEach(async () => { await fsp.rm(directory, { recursive: true, force: true }) })
+afterEach(async () => { await removeTemporaryDirectory(directory) })
 
 it.each([16, 640])('真实资源和文档保存→新实例重开→预览规划及历史重做保持 %i 源的brush类型与存储几何', async (sourceSize) => {
   const store = new ContentAddressedResourceStore(path.join(directory, 'resources'))

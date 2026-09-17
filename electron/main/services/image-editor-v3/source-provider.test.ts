@@ -10,6 +10,7 @@ import { loadSharp } from '../image/sharp-loader'
 import { ContentAddressedResourceStore } from './resource-store'
 import { DerivedDiskCache } from './derived-disk-cache'
 import { SharpSourceProvider } from './source-provider'
+import { removeTemporaryDirectory } from '../../../../src/tests/removeTemporaryDirectory'
 
 let rootDir = ''
 let store: ContentAddressedResourceStore
@@ -37,7 +38,7 @@ beforeEach(async () => {
 })
 
 afterEach(async () => {
-  await fsp.rm(rootDir, { recursive: true, force: true })
+  await removeTemporaryDirectory(rootDir)
 })
 
 describe('SharpSourceProvider', () => {

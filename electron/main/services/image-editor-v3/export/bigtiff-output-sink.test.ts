@@ -11,6 +11,7 @@ import { BigTiffTileOutputSink } from './bigtiff-output-sink'
 import { planBigTiff } from './bigtiff-layout'
 import { IncrementalBigTiffWriter } from './bigtiff-writer'
 import { ImageExportCapabilityError } from './capabilities'
+import { removeTemporaryDirectory } from '../../../../../src/tests/removeTemporaryDirectory'
 
 interface ParsedTag {
   type: number
@@ -79,7 +80,7 @@ beforeEach(async () => {
 })
 
 afterEach(async () => {
-  await fsp.rm(rootDir, { recursive: true, force: true })
+  await removeTemporaryDirectory(rootDir)
 })
 
 describe('BigTiffTileOutputSink', () => {

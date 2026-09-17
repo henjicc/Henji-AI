@@ -33,6 +33,7 @@ vi.mock('./probe', () => ({
 }))
 
 import { importMediaFromBytes, importMediaFromPath, warmupMediaImportPipeline } from './index'
+import { removeTemporaryDirectory } from '../../../../src/tests/removeTemporaryDirectory'
 
 describe('main media import service', () => {
   beforeEach(async () => {
@@ -51,7 +52,7 @@ describe('main media import service', () => {
   })
 
   afterEach(async () => {
-    await fsp.rm(mocks.root, { recursive: true, force: true })
+    await removeTemporaryDirectory(mocks.root)
   })
 
   it('路径 managed 导入流式复制并按 SHA-256 去重', async () => {

@@ -10,6 +10,7 @@ import {
   savePanoramaImageSourceToPath,
 } from './ops'
 import { loadSharp } from './sharp-loader'
+import { removeTemporaryDirectorySync } from '../../../../src/tests/removeTemporaryDirectory'
 
 function dataUrl(mime: string, bytes: Buffer): string {
   return `data:${mime};base64,${bytes.toString('base64')}`
@@ -18,7 +19,7 @@ function dataUrl(mime: string, bytes: Buffer): string {
 const tempDirs: string[] = []
 
 afterEach(() => {
-  for (const dir of tempDirs.splice(0)) fs.rmSync(dir, { recursive: true, force: true })
+  for (const dir of tempDirs.splice(0)) removeTemporaryDirectorySync(dir)
 })
 
 describe('readImageInfo', () => {

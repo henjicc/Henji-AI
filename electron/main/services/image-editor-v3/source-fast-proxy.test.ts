@@ -10,12 +10,13 @@ import type { ResourceId, SourceImageMetadata } from './contracts'
 import type { DerivedDiskCache } from './derived-disk-cache'
 import { readFastSourceProxy } from './source-fast-proxy'
 import type { ManagedSourcePyramid } from './source-pyramid'
+import { removeTemporaryDirectory } from '../../../../src/tests/removeTemporaryDirectory'
 
 const temporaryRoots: string[] = []
 
 afterEach(async () => {
   for (const root of temporaryRoots.splice(0)) {
-    await fsp.rm(root, { recursive: true, force: true })
+    await removeTemporaryDirectory(root)
   }
 })
 

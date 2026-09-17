@@ -8,6 +8,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { ContentAddressedResourceStore } from './resource-store'
 import type { SourceExifOrientation } from './source-orientation'
 import { SharpSourceProvider } from './source-provider'
+import { removeTemporaryDirectory } from '../../../../src/tests/removeTemporaryDirectory'
 
 let rootDir = ''
 let store: ContentAddressedResourceStore
@@ -47,7 +48,7 @@ beforeEach(async () => {
 })
 
 afterEach(async () => {
-  await fsp.rm(rootDir, { recursive: true, force: true })
+  await removeTemporaryDirectory(rootDir)
 })
 
 describe('SharpSourceProvider EXIF orientation', () => {

@@ -11,6 +11,7 @@ import type { TileOutputDescription } from '../contracts'
 import { readAssociatedNclxCicp } from '../isobmff-cicp'
 import { ImageExportCapabilityError } from './capabilities'
 import { TranscodingTileOutputSink } from './transcoding-output-sink'
+import { removeTemporaryDirectory } from '../../../../../src/tests/removeTemporaryDirectory'
 
 const baseDescription: TileOutputDescription = {
   width: 16,
@@ -97,7 +98,7 @@ beforeEach(async () => {
 })
 
 afterEach(async () => {
-  await fsp.rm(rootDir, { recursive: true, force: true })
+  await removeTemporaryDirectory(rootDir)
 })
 
 describe('TranscodingTileOutputSink', () => {

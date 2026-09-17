@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { loadSharp } from '../../image/sharp-loader'
 import type { TileOutputDescription } from '../contracts'
 import { TranscodingTileOutputSink } from './transcoding-output-sink'
+import { removeTemporaryDirectory } from '../../../../../src/tests/removeTemporaryDirectory'
 
 const baseDescription: TileOutputDescription = {
   width: 1,
@@ -40,7 +41,7 @@ beforeEach(async () => {
 })
 
 afterEach(async () => {
-  await fsp.rm(rootDir, { recursive: true, force: true })
+  await removeTemporaryDirectory(rootDir)
 })
 
 describe('TranscodingTileOutputSink 小尺寸文档', () => {
