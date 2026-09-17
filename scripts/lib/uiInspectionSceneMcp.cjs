@@ -14,6 +14,26 @@ function createMcpScenes({ setupSettings, canvasFixtureProjectId }) {
     if ((await control.getAttribute('aria-checked')) !== String(value)) await control.click()
     await page.waitForFunction(({ index, value }) => document.querySelectorAll('#general-mcp [role="switch"]')[index]?.getAttribute('aria-checked') === String(value), { index, value })
   }
+  /** 进场前的默认授权快照；收尾要原样还回去。 */
+  const captureDefaultAccess = (page) => page.evaluate(async () => (await window.henjiNative.mcp.status()).defaultAccess)
+  /**
+   * 收尾：关掉对外服务，并把「默认授权」还原成本场景开始前的样子。
+   *
+   * 多个窗口尺寸共用同一份隔离资料目录，场景按同一顺序再跑一遍。本文件里三个场景都会改
+   * 默认授权开关，却只在收尾关服务、不还原这三项；于是第二个尺寸里 mcp-read-lifecycle
+   * 断言「出厂默认三项全开」时，读到的是上一轮别的场景留下的值，确定性失败。
+   * 还原成进场前的值之后，断言一个字都不用改。
+   */
+  const closeMcpRestoringAccess = (page, defaultAccess) => page.evaluate(async (restore) => {
+    const state = await window.henjiNative.mcp.status()
+    // 连接也要收掉。每个场景都会新建授权却没人撤销，跨尺寸重跑时它们会一直堆积：
+    // 第二个尺寸里「复制连接配置」按钮涨到 9 个，按名字定位的严格匹配当场失败。
+    // 在隔离资料目录里，场景本来就不该留下任何连接。
+    for (const connection of state.connections ?? []) {
+      await window.henjiNative.mcp.revoke({ id: connection.id })
+    }
+    await window.henjiNative.mcp.configure({ enabled: false, port: state.port, ...(restore ? { defaultAccess: restore } : {}) })
+  }, defaultAccess)
   const waitReady = async (page) => {
     const deadline = Date.now() + 15000
     while (Date.now() < deadline) {
@@ -29,10 +49,23 @@ function createMcpScenes({ setupSettings, canvasFixtureProjectId }) {
   }
   return [{ id: 'mcp-read-lifecycle', surface: '设置', name: '外部连接-只读与重载', writesUserData: true,
     setup: async (page) => {
-      await page.evaluate(() => window.henjiNative.assetLibrary.createLibrary('MCP隔离验收素材库'))
+      /*
+       * 同名已存在就直接复用，不能无条件创建。
+       *
+       * 多个窗口尺寸共用同一份隔离资料目录，setup 每个尺寸都会跑一遍；而这个只读夹具
+       * 从头到尾没人删——场景正文操作的是它自己经 MCP 新建再删掉的另一个集合。于是
+       * 第二个尺寸必然撞上「名称已被占用」的正式拒绝，整场失败。产品的拒绝文案本身就写着
+       * 「先用列表能力取到同名素材库的稳定引用直接使用它」，这里照做。
+       */
+      await page.evaluate(async () => {
+        const libraries = await window.henjiNative.assetLibrary.listLibraries()
+        if (libraries.some((item) => item.name === 'MCP隔离验收素材库')) return
+        await window.henjiNative.assetLibrary.createLibrary('MCP隔离验收素材库')
+      })
       await setupSettings(page)
       await page.getByRole('button', { name: '外部智能体连接', exact: true }).click()
       const initial = await page.evaluate(() => window.henjiNative.mcp.status())
+      const enteringAccess = initial.defaultAccess
       assert.deepEqual(initial.defaultAccess, { allowWrites: true, allowDestructive: true, allowPaid: true })
       const section = page.locator('#general-mcp')
       if (!initial.enabled) await section.getByRole('switch').first().click()
@@ -91,7 +124,7 @@ function createMcpScenes({ setupSettings, canvasFixtureProjectId }) {
         assert.equal(denied.status, 401)
       } finally {
         await client.close()
-        await page.evaluate(async () => { const state = await window.henjiNative.mcp.status(); await window.henjiNative.mcp.configure({ enabled: false, port: state.port }) })
+        await closeMcpRestoringAccess(page, enteringAccess)
       }
       await setupSettings(page)
       await page.getByRole('button', { name: '外部智能体连接', exact: true }).click()
@@ -103,6 +136,7 @@ function createMcpScenes({ setupSettings, canvasFixtureProjectId }) {
       await setupSettings(page)
       await page.getByRole('button', { name: '外部智能体连接', exact: true }).click()
       const section = page.locator('#general-mcp')
+      const enteringAccess = await captureDefaultAccess(page)
       await setSwitch(page, 0, true)
       await setSwitch(page, 1, true)
       await setSwitch(page, 2, true)
@@ -185,7 +219,7 @@ function createMcpScenes({ setupSettings, canvasFixtureProjectId }) {
         assert.equal(stale.isError, true)
       } finally {
         await client.close()
-        await page.evaluate(async () => { const state = await window.henjiNative.mcp.status(); await window.henjiNative.mcp.configure({ enabled: false, port: state.port }) })
+        await closeMcpRestoringAccess(page, enteringAccess)
       }
       await setupSettings(page)
       await page.getByRole('button', { name: '外部智能体连接', exact: true }).click()
@@ -196,6 +230,7 @@ function createMcpScenes({ setupSettings, canvasFixtureProjectId }) {
       await setupSettings(page)
       await page.getByRole('button', { name: '外部智能体连接', exact: true }).click()
       const section = page.locator('#general-mcp')
+      const enteringAccess = await captureDefaultAccess(page)
       // 只开「修改」，不开删除、不开付费生成：本场景禁止任何供应商请求。
       await setSwitch(page, 0, true)
       await setSwitch(page, 1, true)
@@ -296,7 +331,7 @@ function createMcpScenes({ setupSettings, canvasFixtureProjectId }) {
         assert.equal(afterReload.name, 'MCP后台已保存')
       } finally {
         await client.close()
-        await page.evaluate(async () => { const state = await window.henjiNative.mcp.status(); await window.henjiNative.mcp.configure({ enabled: false, port: state.port }) })
+        await closeMcpRestoringAccess(page, enteringAccess)
       }
       await setupSettings(page)
       await page.getByRole('button', { name: '外部智能体连接', exact: true }).click()

@@ -42,9 +42,19 @@ async function connectMcpClient(config, name = 'Henji Reality') {
   return client
 }
 
+/**
+ * 收尾：撤销本轮全部连接，再关掉对外服务。
+ *
+ * 撤销不是可选项。场景各自新建授权却没人收，跨窗口尺寸重跑时会一直堆积——第二个尺寸里
+ * 「复制连接配置」按钮涨到 9 个，按名字定位的严格匹配当场失败，而失败现场看起来
+ * 跟被测功能毫无关系。隔离资料目录里，场景本来就不该留下任何连接。
+ */
 async function disableMcp(page) {
   await page.evaluate(async () => {
     const state = await window.henjiNative.mcp.status()
+    for (const connection of state.connections ?? []) {
+      await window.henjiNative.mcp.revoke({ id: connection.id })
+    }
     await window.henjiNative.mcp.configure({ enabled: false, port: state.port })
   })
 }
