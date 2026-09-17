@@ -27,7 +27,7 @@ const fsp = require('node:fs/promises')
 const path = require('node:path')
 const { randomUUID } = require('node:crypto')
 const { launchElectronApp, waitForApp } = require('./lib/electronLaunch.cjs')
-const { authorizeMcpConnection, callTool, connectMcpClient, expectToolRefusal, operationEnvelope, waitMcpReady } = require('./lib/uiInspectionMcpClient.cjs')
+const { authorizeMcpConnection, callTool, connectMcpClient, expectToolRefusal, operationEnvelope, readAllMedia, waitMcpReady } = require('./lib/uiInspectionMcpClient.cjs')
 
 const ROOT = path.resolve(__dirname, '..')
 const MAIN_ENTRY = path.join(ROOT, 'out/main/index.cjs')
@@ -96,27 +96,6 @@ async function resolveDataRootDir(page) {
 }
 
 const toAbsoluteMediaPath = (dataRoot, value) => (path.isAbsolute(value) ? value : path.resolve(dataRoot, value))
-
-async function readAllMedia(client, ref) {
-  const chunks = []
-  let offset = 0
-  let mimeType = null
-  let totalBytes = 0
-  // 刻意用远小于 256 KiB 的块，逼出 offset/eof 续读协议本身；一次读完证明不了分块。
-  for (let guard = 0; guard < 4096; guard += 1) {
-    const chunk = await callTool(client, 'read_application_media', { ref, offset, length: 4096 })
-    mimeType = chunk.mimeType
-    totalBytes = chunk.totalBytes
-    const bytes = Buffer.from(chunk.base64, 'base64')
-    chunks.push(bytes)
-    assert.equal(chunk.offset, offset, `分块起点与请求不一致：${JSON.stringify({ ...chunk, base64: undefined })}`)
-    assert.equal(chunk.byteLength, bytes.length, '声明长度与实际字节数不一致')
-    offset += chunk.byteLength
-    if (chunk.eof) return { bytes: Buffer.concat(chunks), mimeType, totalBytes }
-    assert.ok(chunk.byteLength > 0, '未到 eof 却返回空块，续读会死循环')
-  }
-  throw new Error('分块读取没有在限定次数内到达 eof')
-}
 
 const sha256 = (bytes) => crypto.createHash('sha256').update(bytes).digest('hex')
 
@@ -404,7 +383,22 @@ async function main() {
       })
     }
     if (restoreMcp) {
-      await attempt('restore-service', () => page.evaluate(async (target) => { await window.henjiNative.mcp.configure({ enabled: target.enabled, port: target.port }) }, restoreMcp))
+      /*
+       * 还原必须分两步。正式守卫不允许在服务正在监听时直接换端口（`mcp:configure` 里那句
+       * "请先关闭外部连接，再更换端口"），而本脚本运行期间一定把服务挪到了自己的随机端口上。
+       * 原来这里一步到位地 configure，于是用户原本 enabled 的服务每跑一次就被留在随机端口上，
+       * 而且失败只记进 cleanup.errors，不会有人回头看——真实端口就是这样被改掉的。
+       */
+      await attempt('restore-service', () => page.evaluate(async (target) => {
+        const current = await window.henjiNative.mcp.status()
+        if (current.enabled === target.enabled && current.port === target.port) return
+        if (current.enabled) await window.henjiNative.mcp.configure({ enabled: false, port: current.port })
+        await window.henjiNative.mcp.configure({ enabled: target.enabled, port: target.port })
+        const restored = await window.henjiNative.mcp.status()
+        if (restored.enabled !== target.enabled || restored.port !== target.port) {
+          throw new Error(`对外服务未还原成运行前状态：${JSON.stringify({ target, restored: { enabled: restored.enabled, port: restored.port } })}`)
+        }
+      }, restoreMcp))
     }
     evidence.cleanup = cleanup
     if (cleanup.errors.length) evidence.passed = false

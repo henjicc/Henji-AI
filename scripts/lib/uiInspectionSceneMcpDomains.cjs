@@ -9,7 +9,7 @@ const assert = require('node:assert/strict')
 const crypto = require('node:crypto')
 const fsp = require('node:fs/promises')
 const path = require('node:path')
-const { authorizeMcpConnection, callTool, connectMcpClient, disableMcp, expectToolRefusal, operationEnvelope, waitMcpReady } = require('./uiInspectionMcpClient.cjs')
+const { authorizeMcpConnection, callTool, connectMcpClient, disableMcp, expectToolRefusal, operationEnvelope, readAllMedia, waitMcpReady } = require('./uiInspectionMcpClient.cjs')
 const { createPlaybackFixture } = require('./uiInspectionCameraStagePlayback.cjs')
 
 const CAMERA_STAGE_PROJECT_ID = '__mcp_reality_camera_stage__'
@@ -18,25 +18,6 @@ function marker() {
   return `n${Math.random().toString(36).slice(2, 8)}`
 }
 
-async function readAllMedia(client, ref) {
-  const chunks = []
-  let offset = 0
-  let mimeType = null
-  let totalBytes = 0
-  // 刻意用远小于 256 KiB 的块，逼出 offset/eof 续读协议本身；一次读完证明不了分块。
-  for (let guard = 0; guard < 512; guard += 1) {
-    const chunk = (await callTool(client, 'read_application_media', { ref, offset, length: 4096 })).data
-    mimeType = chunk.mimeType
-    totalBytes = chunk.totalBytes
-    chunks.push(Buffer.from(chunk.base64, 'base64'))
-    assert.equal(chunk.offset, offset, `分块起点与请求不一致：${JSON.stringify(chunk)}`)
-    assert.equal(chunk.byteLength, chunks[chunks.length - 1].length, '声明长度与实际字节数不一致')
-    offset += chunk.byteLength
-    if (chunk.eof) return { bytes: Buffer.concat(chunks), mimeType, totalBytes }
-    assert.ok(chunk.byteLength > 0, '未到 eof 却返回空块，续读会死循环')
-  }
-  throw new Error('分块读取没有在限定次数内到达 eof')
-}
 
 function createMcpDomainScenes({ setupSettings, canvasFixtureProjectId, REFERENCE_FIXTURE_IMAGE }) {
   const returnToSettings = async (page) => {

@@ -63,8 +63,37 @@ async function expectToolRefusal(client, name, args) {
   return (result.content ?? []).map((item) => item.text ?? '').join('')
 }
 
+/**
+ * 分块读回媒体并拼成完整字节。**这一份是唯一实现，调用方不要再抄。**
+ *
+ * `read_application_media` 的结果和其他能力一样包在 `{ ok, data }` 里，块字段在 `data` 上。
+ * 付费闭环脚本曾经各写一份，重构把结果投影收敛到 `data` 之后只改了场景那份，
+ * 于是付费脚本从此每次都在 `Buffer.from(undefined)` 上崩掉——而它平时不跑，
+ * 没人发现。两个调用方合到这里，形状再变就只会有一处要改。
+ */
+async function readAllMedia(client, ref, { chunkBytes = 4096, maxChunks = 4096 } = {}) {
+  const chunks = []
+  let offset = 0
+  let mimeType = null
+  let totalBytes = 0
+  // 刻意用远小于 256 KiB 的块，逼出 offset/eof 续读协议本身；一次读完证明不了分块。
+  for (let guard = 0; guard < maxChunks; guard += 1) {
+    const chunk = (await callTool(client, 'read_application_media', { ref, offset, length: chunkBytes })).data
+    mimeType = chunk.mimeType
+    totalBytes = chunk.totalBytes
+    const bytes = Buffer.from(chunk.base64, 'base64')
+    chunks.push(bytes)
+    assert.equal(chunk.offset, offset, `分块起点与请求不一致：${JSON.stringify({ ...chunk, base64: undefined })}`)
+    assert.equal(chunk.byteLength, bytes.length, '声明长度与实际字节数不一致')
+    offset += chunk.byteLength
+    if (chunk.eof) return { bytes: Buffer.concat(chunks), mimeType, totalBytes }
+    assert.ok(chunk.byteLength > 0, '未到 eof 却返回空块，续读会死循环')
+  }
+  throw new Error('分块读取没有在限定次数内到达 eof')
+}
+
 function operationEnvelope(baselines, extra = {}) {
   return { operationId: randomUUID(), baselineIds: baselines.map((item) => item.baselineId), ...extra }
 }
 
-module.exports = { authorizeMcpConnection, callTool, connectMcpClient, disableMcp, expectToolRefusal, operationEnvelope, waitMcpReady }
+module.exports = { authorizeMcpConnection, callTool, connectMcpClient, disableMcp, expectToolRefusal, operationEnvelope, readAllMedia, waitMcpReady }
