@@ -14,7 +14,12 @@ let runtime: { host: ApplicationHostBridge; operations: ApplicationOperationCoor
 export function initializeApplicationRuntime() {
   if (runtime) return runtime
   const operations: ApplicationOperationCoordinator = new ApplicationOperationCoordinator(new ApplicationOperationStore(getDb()),
-    record => recoverPersistedGenerationOperation(getDb(), record), () => host.writableEntityTypes())
+    // 第三个参数不是可选装饰：恢复回执必须带上 revision/scopeRevisions，否则按 schema
+    // 校验的标准 MCP 客户端会拒收整条结果。原回执没有时用宿主当前快照兜住。
+    record => recoverPersistedGenerationOperation(getDb(), record, () => {
+      const context = host.getContext()
+      return context ? { revision: context.revision, scopeRevisions: context.scopeRevisions } : undefined
+    }), () => host.writableEntityTypes())
   const host: ApplicationHostBridge = new ApplicationHostBridge(id => {
     if (embeddedCallers.has(id)) return
     if (!externalAuthority) throw new Error('调用者未获授权。')
