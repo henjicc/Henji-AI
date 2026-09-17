@@ -13,12 +13,14 @@ function task(overrides: Partial<GenerationTask>): GenerationTask {
 }
 
 function run(tasks: GenerationTask[]) {
-  const handleContinuePolling = vi.fn(async () => {})
-  const settleUnresumableTask = vi.fn()
+  // 替身必须带上参数签名：`vi.fn(async () => {})` 的 calls 是长度 0 的元组，
+  // 解构 [value] 在 tsc 下直接报错，而 vitest 单跑不做类型检查，会一路绿到 CI 才红。
+  const handleContinuePolling = vi.fn(async (_task: GenerationTask) => {})
+  const settleUnresumableTask = vi.fn((_task: GenerationTask) => {})
   renderHook(() => useAutoResumePolling({ tasks, isTasksLoaded: true, handleContinuePolling, settleUnresumableTask }))
   return {
-    resumed: handleContinuePolling.mock.calls.map(([value]) => (value as GenerationTask).id),
-    settled: settleUnresumableTask.mock.calls.map(([value]) => (value as GenerationTask).id),
+    resumed: handleContinuePolling.mock.calls.map(([value]) => value.id),
+    settled: settleUnresumableTask.mock.calls.map(([value]) => value.id),
   }
 }
 
@@ -53,8 +55,8 @@ describe('应用重启后的生成任务收敛', () => {
   })
 
   it('历史尚未加载完成时什么都不做，避免把在途任务误判成中断', () => {
-    const handleContinuePolling = vi.fn(async () => {})
-    const settleUnresumableTask = vi.fn()
+    const handleContinuePolling = vi.fn(async (_task: GenerationTask) => {})
+    const settleUnresumableTask = vi.fn((_task: GenerationTask) => {})
     renderHook(() => useAutoResumePolling({
       tasks: [task({ id: '未加载', serverTaskId: undefined })],
       isTasksLoaded: false, handleContinuePolling, settleUnresumableTask,
