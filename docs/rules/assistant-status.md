@@ -178,19 +178,24 @@
 
 数字带日期戳。看到日期久远又拿不准时，按「取数方式」重新跑一遍，不要直接引用。
 
-## 一、能力盘（快照：2026-08-31）
+## 一、能力盘（快照：2026-09-18）
 
 | 项 | 数 |
 |---|---|
-| 注册域 | 12 |
-| 实体类型 | 32 |
-| 属性 | 315 |
-| 可写实体 | 20 |
-| 写域 | 8：`assets` `camera_stage` `canvas` `generation` `image_edit` `image_mark` `models` `settings` |
-| 只读域 | 4：`artifacts` `assistant_runtime` `storyboard` `toolbox`（每个都有显式 `writeExclusion.reason`，是**有意只读**不是漏做） |
+| 注册域 | 11 |
+| 实体类型 | 31 |
+| 属性 | 310 |
+| 可写实体 | 21 |
+| 写域 | 9：`assets` `camera_stage` `canvas` `generation` `image_edit` `image_mark` `memory` `models` `settings` |
+| 只读域 | 2：`storyboard` `toolbox`（每个都有显式 `writeExclusion.reason`，是**有意只读**不是漏做） |
 
-取数方式：`getApplicationReflectionRegistry().describe()` 的结果。域清单与可路由性由
-`capability-domain-coverage.test.ts` 穷举守着，跌破会红。
+取数方式：`getApplicationReflectionRegistry().describe({}, ctx)`。`ctx` 必须照抄
+`propertyCoverage.test.ts` 里 `describeAll()` 的构造——权限来自 `listDeclaredPropertyPermissions()`，
+传空权限集会被 `canReadProperty` 全部滤掉，属性数会假成 0。域清单与可路由性由
+`applicationControlCoverage.test.ts` 穷举守着，跌破会红。
+
+与 2026-08-31 快照的差异来自应用能力重构，不是能力退化：`artifacts`、`assistant_runtime`
+两个只读域随旧自研助手运行时一并删除（域 12→11，只读域 4→2），`memory` 成为可写域（写域 8→9）。
 
 ## 二、已经通了的
 
@@ -205,9 +210,9 @@
 - **判据 2（唯一性）**：旧 `HostCommand` / `HostQuery` 执行入口**已删除**，助手与界面共用正式领域服务。
   `AGENTS.md` 明令禁止新增该类工具。双路径一致性由 `check:assistant-capabilities` 守。
 - **判据 3（走得通）**：四大覆盖门禁 `propertyCoverage` / `storeActionCoverage` / `collectionCoverage` /
-  `resultBehaviorCoverage` **零豁免清单**。8 个写域全部有脚本化模型替身驱动正式运行时的读改验回环
-  （`assistantHarness.writeLoop.test.ts`，L-B）；它证明给定操作链路可执行，不证明真实模型会选择该路线。
-- **判据 4（可自纠）**：拒绝路径的自我修正由 `assistantHarness.rejectionMatrix.test.ts` 守。
+  `resultBehaviorCoverage` **零豁免清单**。9 个写域全部有脚本化模型替身驱动正式运行时的读改验回环
+  （`applicationHarness.writeLoop.test.ts`，L-B）；它证明给定操作链路可执行，不证明真实模型会选择该路线。
+- **判据 4（可自纠）**：拒绝路径的自我修正由 `applicationHarness.rejection.test.ts` 守。
 
 2026-08-21 新增 `general.primary_provider` 与按媒体分类的 `generation.default_*_model`：默认供应商
 和图片、视频、音频默认模型由独立默认项管理器持有，界面与助手都通过同一个正式设置定义读写；
@@ -286,12 +291,15 @@ service/capability 建账，不能把容器开关误归给单一能力。本次�
 
 验证层（详见 [testing.md](testing.md) 第四节）：
 
-| 层 | 命令 | 规模（2026-08-31） |
+| 层 | 命令 | 规模（实测：2026-09-18） |
 |---|---|---|
-| L-A 静态不变量 | `npm run check:assistant-capabilities` | 结构检查 + 30 测试文件 / 170 用例 |
-| L-B 剧本 harness | `npm run test:assistant-harness` | 9 文件 / 35 用例 / 15 秒（验伪线 60 秒） |
-| 生产回归 | `npm run test:assistant-production` | 53 文件 / 395 用例 + 持久化进程 43/43 |
-| L-C 真机 | `npm run assistant:live:suite` | 分钟级、真实付费 |
+| L-A 静态不变量 | `npm run check:assistant-capabilities` | 结构检查 + 覆盖 1 文件 / 13 用例 + 不变量 31 文件 / 192 用例 |
+| L-B 剧本 harness | `npx vitest run src/tests/applicationHarness` | 11 文件 / 23 用例 / 18 秒 |
+| 生产回归 | `npm run test:assistant-production` | 30 文件 / 151 用例 + 原生 SQLite 8 文件 / 59 用例零跳过 |
+| L-C 真机 | `npm run assistant:cli`、`npm run test:reality` | 分钟级；只有显式 `--approval full_access` 才会真实付费 |
+
+L-B 已经没有独立 npm 脚本，harness 文件也从 `assistantHarness.*` 改名为 `applicationHarness.*`；
+`assistant:live:suite` 随旧自研助手 CLI 一起删除，真机验收改由上表最后一行的两条命令承担。
 
 **2026-08-18 真机全量实跑（真 Provider `mimo-v2.5-pro`，`assistant_decides`）：8 个场景全部 `passed`。**
 
@@ -315,12 +323,14 @@ service/capability 建账，不能把容器开关误归给单一能力。本次�
 当前没有挂在 `KNOWN_UNPUBLISHABLE` / `KNOWN_UNREACHABLE` 的“声明可写但实际走不通”结构性欠账；
 2026-08-18 真机验收登记的四条脚本空转问题也已全部注销。
 
-### 真机验收的数据卫生问题
+### 真机验收的数据卫生问题（2026-09-18 重新取数，已大幅缩小）
 
-`assistant:live:suite` **不清理自己造的数据**。截至 2026-08-18，真实库里堆着
-43 个 `自动验收-*` 三维工程、46 个画布工程、4 个素材集合、33 条助手会话，最早可追到 08-14。
-这让"跑一次真机"的隐性成本远高于 token 账单，也是真机验收让人不想跑的原因之一。
-要么给套件加收尾清理，要么给这批数据一个批量删除入口。
+登记这条欠账的 `assistant:live:suite` 已经删除，欠账随之改形。现在两个真机入口的数据行为不同：
+`test:reality` 用隔离资料目录，跑完不碰真实库；`assistant:cli` 跑在真实配置上，确实写真实库。
+
+按当前真实库重新取数（`henji.db`）：2026-08 登记的 43 个三维工程、46 个画布工程已不在库中
+（现存 28 个三维工程、1 个画布工程，均为人工命名），只剩 4 个 `自动验收-*` 素材库属于那批残留。
+成本量级已经不构成"让人不想跑真机"的理由，**但批量删除入口仍然没有**，这 4 条要用户手工删。
 
 ## 四、已确定不做（可以重新打开，但要在这里改）
 
@@ -328,13 +338,19 @@ service/capability 建账，不能把容器开关误归给单一能力。本次�
 
 - **复杂 swarm / team 多 Agent** —— 在没有真实需求和基线数据前不建设。
 - **技能市场或在线分发**、**技能内脚本执行**、**`allowed-tools`** —— 技能是数据不是权限，完全不携带工具授权语义。
-- **MCP、HTTP、插件等外部适配器** —— 助手的权限边界就是这个软件本身。
 - **5 项受保护设置**（涉及真实密钥或系统文件选择器）—— 渲染层技术上做不到，不是顾虑。
   另外 2 项无安全理由的（`models.visibility`、`updates.configuration`）已松绑。
 - **直接展示未经处理的模型原始思维链** —— 只展示供应商返回的 reasoning。
 - **删除数据分级（C0–C3）、暴露面、五档风险等级** —— 对单机应用偏重，但在跑且没添麻烦，拆除风险大于收益。
 
 ## 五、推翻记录
+
+2026-09-18：注销第四节里"**MCP、HTTP、插件等外部适配器**——助手的权限边界就是这个软件本身"这条
+"已确定不做"。它在 2026-09-12 转向外部 MCP 时就已经被实际推翻，只是台账一直没跟上：现代 MCP 已按
+`2026-07-28` 协议与拆分 SDK `2.0.0` 实现并通过真机验收，外部客户端可以调用工具、读取已授权资源、
+订阅变化并查询/等待/取消长任务。原判断里仍然成立的是**权限边界本身**：外部适配器没有带来任何新权限，
+它与内置 Pi 共用同一套业务能力、同一份授权与同一条审计路径，能做的事不超过这个软件自己能做的事。
+HTTP 与插件两类适配器仍然不做，理由不变。
 
 2026-09-12：按用户要求撤销“内置助手默认不开放付费生成、MCP 重启默认关闭”的策略，改为默认开放并保存用户后续选择。修复新连接授权勾选仅存在于设置组件临时状态的问题；内置助手契约明确指向聊天操作权限，不再误导用户新建 MCP 连接。
 
@@ -367,7 +383,7 @@ service/capability 建账，不能把容器开关误归给单一能力。本次�
   并在锁内复核 revision、幂等、消费状态、写权限与宿主；无关 scope 不串行，不给 UI 指针事件加锁。
   业务部分失败、保存失败和提交后验证失败的有界事实沿原 renderer/Gateway/脚本账本传输，保留
   实际 Effects、引用、revision、撤销和恢复信息，不透传文档或任意错误 details，不重放已执行命令。
-  `assistantHarness.transactionReliability.test.ts` 覆盖独立 Gateway 并发及附着图片双域 partial 回执；
+  `applicationHarness.transactionReliability.test.ts` 覆盖独立 Gateway 并发及附着图片双域 partial 回执；
   失败操作仍为失败、Effects 不伪装 verified。任务级 seal 继续表示封存事实而非全部成功，保留意见
   不消失；最终模型失败的兜底说明只复述已记录摘要，不笼统宣称全部完成或验证。权限仍沿用
   `application:write` 信任模型，scope 不是权限，也未新增细粒度授权体系。
@@ -381,7 +397,7 @@ service/capability 建账，不能把容器开关误归给单一能力。本次�
   只能证明内存变化。四类正式宿主现在复用同一保存队列登记 durable owner，预览宿主不开放写入；
   core 在整批修改或撤销末尾只确认一次，失败保留实际修改、部分补偿和恢复事实，不重放命令。
   附着画布节点通过原有唯一物化服务确认节点投影，普通工具草稿不自动 Apply；重试仅保存的节点
-  确认不得伪造第二次修改 Effect。`assistantHarness.imageEditPersistence.test.ts` 与
+  确认不得伪造第二次修改 Effect。`applicationHarness.imageEditPersistence.test.ts` 与
   `imageEditPersistenceRecovery.test.ts` 覆盖拒写恢复、双域存储回读和级联回执；异步宿主、跨组批次与
   撤销由精确测试补充。恢复能力沿用 `application:write` 信任边界；全部受影响 scope 的并发守卫与
   失败事实跨 Gateway 传输已由后续 `2dcc2a2a` 补齐，未新增细粒度授权体系。
@@ -389,7 +405,7 @@ service/capability 建账，不能把容器开关误归给单一能力。本次�
 - **2026-09-06 · `d5f973e0`** · 补正 2026-08-25「画布显式写入已等待存储」的结论：当时只覆盖工程操作，
   节点、素材组、批次与撤销仍把防抖入队当作成功。现在共用串行持久化确认屏障；失败保留当前修改和
   资源引用，`retry_canvas_project_save` 与界面重试均只保存、不重放业务，跨工程失败按原工程归属。
-  `assistantHarness.canvasPersistence.test.ts` 经正式发现、脚本、Gateway 与存储回读验证拒绝及恢复。
+  `applicationHarness.canvasPersistence.test.ts` 经正式发现、脚本、Gateway 与存储回读验证拒绝及恢复。
   这次画布改动不包含图片编辑 V3 宿主确认，不能据此宣称全部写域均已完成该保证。
 
 - **2026-08-25 · `0bc8c65e`** · 推翻画布项目“写入调用发出即算成功”以及 harness 只核对 Zustand
@@ -424,5 +440,5 @@ service/capability 建账，不能把容器开关误归给单一能力。本次�
 实机验收走完，好留下可比基线。
 
 > 注意：这条只关闭"等人点一遍"性质的验收。第三节那些挂在门禁上的欠账**不受影响**——
-> 那是 `hostScopeCoverage.test.ts` / `assistantHarness.writeLoop.test.ts` 里还实际登记着的
+> 那是 `hostScopeCoverage.test.ts` / `applicationHarness.writeLoop.test.ts` 里还实际登记着的
 > 结构性阻塞，改清单不改 provider 等于把台账写成比现实更好看，违反第零节的纪律。
