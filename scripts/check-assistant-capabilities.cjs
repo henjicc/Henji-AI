@@ -5,6 +5,8 @@ const root = path.resolve(__dirname, '..')
 const sourceRoots = ['src', 'electron']
 const sourceExtensions = new Set(['.ts', '.tsx'])
 const forbidden = [
+  { pattern: /from\s+['"][^'"]*(?:agent-runtime(?:-manager)?|frontend-tool-bridge|henji-script)\//, label: '重新引入旧助手执行链' },
+  { pattern: /\b(?:AgentRunner|AgentToolGateway|run_henji_script|discover_application_capabilities)\b/, label: '旧运行时或脚本工具入口' },
   { pattern: /kind:\s*['"]command['"]/, label: '旧式 command operation' },
   { pattern: /kind:\s*['"]query['"]/, label: '旧式 query operation' },
   { pattern: /createCompatibilityCapabilityDescriptor/, label: '能力兼容描述生成器' },
@@ -19,7 +21,7 @@ const forbidden = [
   {
     pattern: /availableCommands|availableQueries/,
     label: 'v2 快照中的旧工具目录',
-    allow: ['src/core/assistant/hostContracts.ts'],
+    allow: ['src/core/application-control/hostContracts.ts'],
   },
   {
     pattern: /PLAYBACK_NOT_READY|ANIMATABLE_WRITE_REQUIRES_PRO_MODE|KEYFRAME_REQUIRES_PRO_MODE|SHOT_REQUIRES_SIMPLE_MODE|assertProModeForKeyframes|assertSimpleModeForShots/,
@@ -43,7 +45,7 @@ const forbidden = [
   },
   {
     pattern: /execute_application_program|run_camera_stage_state_animation_program|run_canvas_image_pipeline_program|run_application_settings_program|DeterministicWorkflowService|PROGRAM_RECIPE_AVAILABLE/,
-    label: '重新引入 Henji Script 之外的第二套编排内核',
+    label: '重新引入自研脚本编排内核',
   },
   {
     pattern: /\bproducedRefs\b/,
@@ -57,8 +59,8 @@ const forbidden = [
 const protectedExecutionRoots = [
   'src/core/application-control',
   'src/core/assistant',
-  'src/features/assistant/applicationCapabilities',
-  'electron/main/services/agent-runtime',
+  'src/features/application-control/capabilities',
+  'electron/main/services/application-runtime',
 ]
 const protectedExecutionForbidden = [
   { pattern: /\beval\s*\(/, label: '任意 eval 执行' },
@@ -90,17 +92,7 @@ const obsoleteFiles = [
   'electron/main/services/application-control/workflows/service.ts',
   'electron/main/services/agent-runtime/workflows/tools.ts',
 ]
-const migratedBackendCapabilityIds = [
-  'read_agent_artifact',
-  'query_diagnostic_events',
-  'list_agent_memories',
-  'propose_agent_memory',
-  'confirm_agent_memory',
-  'reject_agent_memory',
-  'get_user_instructions',
-  'update_user_instructions',
-  'load_assistant_skill',
-]
+const migratedBackendCapabilityIds = ['load_assistant_skill']
 
 function walk(directory) {
   return fs.readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
@@ -149,13 +141,23 @@ for (const protectedRoot of protectedExecutionRoots) {
   }
 }
 
-for (const file of walk(path.join(root, 'src', 'core', 'assistant', 'capabilities'))) {
+for (const name of ['registry.ts', 'applicationControlRegistry.ts']) {
+  const file = path.join(root, 'src/features/application-control/capabilities', name)
+  const source = fs.readFileSync(file, 'utf8')
+  if (/from\s+['"]@\/(?:stores\/|features\/(?!application-control\/))/.test(source)) {
+    failures.push(`公共注册器直接依赖业务实现，须从领域模块装配：${name}`)
+  }
+  if (/exposures\.includes\(['"]assistant['"]\)/.test(source)) {
+    failures.push(`公共注册器隐式扩展调用面：${name}`)
+  }
+}
+
+for (const file of walk(path.join(root, 'src', 'core', 'application-control', 'domains'))) {
   if (file.endsWith('.test.ts')) continue
   const relative = path.relative(root, file).replaceAll('\\', '/')
   const source = fs.readFileSync(file, 'utf8')
-  if (/\b(?:source|script|executeScript)\s*:\s*z\./.test(source)
-    && relative !== 'src/core/assistant/capabilities/henjiScriptApplicationCapabilities.ts') {
-    failures.push(`非 run_henji_script 能力暴露任意脚本字段：${relative}`)
+  if (/\b(?:source|script|executeScript)\s*:\s*z\./.test(source)) {
+    failures.push(`应用能力暴露任意脚本字段：${relative}`)
   }
 }
 
@@ -179,14 +181,15 @@ for (const file of walk(path.join(root, 'src', 'core', 'application-control'))) 
  * 能做的事"的量化终点。条目要说清楚拦路的是什么、归到哪一期。
  */
 const ASSISTANT_BLIND_FEATURES = {
+  'application-control': '调用方中立的能力会话与根宿主协调层，没有独立业务实体或 Store；'
+    + '反射、写入与账本复用各正式领域注册源，MCP 权限不依赖助手运行。',
   logs: '日志面板是独立窗口里的内存环形缓冲，只有暂停与清空两个动作，且不进任何持久化状态；'
-    + '助手读日志走 query_diagnostic_events 直接查持久化事件，比读面板更全也更准。',
+    + '诊断读取由统一日志服务承接。',
   navigation: 'Surface 目录本身就是助手的导航契约，通过 open/close_application_surface 与 '
     + 'get_current_application_context 覆盖，不再另建实体。',
   project: '工程管理界面操作的数据由 canvas.project 与 camera_stage.project 两个领域各自注册，'
     + '这一层只是它们的共用 UI 外壳。',
-  assistant: '助手自身的运行时状态由 assistant.run / assistant.artifact 注册并写明 writeExclusion；'
-    + '让助手改写自己的运行状态会破坏结算与证据链。',
+  assistant: 'Pi 负责模型对话与消息队列；技能、共享记忆和用户指令有独立服务，模型不能写入自己的授权与执行状态。',
   settings: '设置项的实体与属性注册在 application-control 子目录下，由 settingsReflection 覆盖；'
     + '这一层没有独立 store。',
   onboarding: '首次引导是可跳过、可回退的界面编排状态，不是独立业务实体；主供应商已通过 '
@@ -314,22 +317,15 @@ for (const skillName of codexSkillNames.filter((name) => claudeSkillNames.includ
   }
 }
 
-const capabilitySources = walk(path.join(root, 'src', 'core', 'assistant'))
-  .map((file) => fs.readFileSync(file, 'utf8'))
-  .join('\n')
-const backendRuntimeSources = walk(path.join(root, 'electron', 'main', 'services', 'agent-runtime'))
-  .filter((file) => !file.endsWith('.test.ts'))
+const capabilitySources = [...walk(path.join(root, 'src', 'core', 'assistant')), ...walk(path.join(root, 'src', 'core', 'application-control'))]
   .map((file) => fs.readFileSync(file, 'utf8'))
   .join('\n')
 for (const id of migratedBackendCapabilityIds) {
   const definitionPattern = new RegExp(`['"]${id}['"]`)
-  const oldToolPattern = new RegExp(`\\bname:\\s*['"]${id}['"]`)
   if (!definitionPattern.test(capabilitySources)) {
     failures.push(`后端能力缺少原生定义：${id}`)
   }
-  if (oldToolPattern.test(backendRuntimeSources)) {
-    failures.push(`后端能力仍在手写旧工具元数据：${id}`)
-  }
+
 }
 
 const settingsNavigationSource = fs.readFileSync(
@@ -358,6 +354,11 @@ for (const sectionId of settingsSectionIds) {
 }
 
 const packageJson = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'))
+for (const [name, command] of Object.entries(packageJson.scripts ?? {})) {
+  for (const [testPath] of command.matchAll(/(?:src|electron)\/[\w./-]+\.test\.tsx?/g)) {
+    if (!fs.existsSync(path.join(root, testPath))) failures.push(`测试脚本 ${name} 引用不存在的文件：${testPath}`)
+  }
+}
 for (const scriptName of ['build', 'electron:build']) {
   if (!packageJson.scripts?.[scriptName]?.includes('check:assistant-capabilities')) {
     failures.push(`${scriptName} 未接入智能助手能力门禁`)

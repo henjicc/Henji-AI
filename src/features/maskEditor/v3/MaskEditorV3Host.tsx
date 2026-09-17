@@ -1,3 +1,4 @@
+import { getOrCreateImageEditPersistenceQueueV3, readImageEditDocumentInstanceV3 } from '@/features/imageEdit/v3/application/imageEditDocumentInstances'
 import {
   forwardRef,
   useCallback,
@@ -30,12 +31,11 @@ import {
 } from '@/features/imageEdit/v3/application/imageEditorResourceDescriptorsV3'
 import { ImageEditorV3 } from '@/features/imageEdit/v3/editor'
 import {
-  ImageMarkV3PersistenceQueue,
-  type ImageMarkV3PersistenceStatus,
-} from '@/features/imageMark/standalone/imageMarkV3Persistence'
+  type ImageEditPersistenceV3Queue,
+  type ImageEditPersistenceV3Status,
+} from '@/features/imageEdit/v3/application/imageEditPersistenceQueue'
 import type { ImageEditorV3ResourceDescriptor } from '@/platform/contracts/imageEditorV3'
 
-const AUTOSAVE_DELAY_MS = 500
 const logger = createLogger('features.mask_editor.v3.host')
 
 interface ReadyState {
@@ -114,10 +114,10 @@ export const MaskEditorV3Host = forwardRef<MaskEditorV3HostHandle, MaskEditorV3H
     const [attempt, setAttempt] = useState(0)
     const [saving, setSaving] = useState(false)
     const [saveError, setSaveError] = useState(false)
-    const queueRef = useRef<ImageMarkV3PersistenceQueue | null>(null)
+    const queueRef = useRef<ImageEditPersistenceV3Queue | null>(null)
     const persistenceHost = useMemo(() => ({ getQueue: () => queueRef.current }), [])
     const snapshotRef = useRef<ImageEditPersistenceSnapshotV3 | null>(null)
-    const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
     const persistedSessionRef = useRef(sessionReference)
     const effectiveSession = attempt > 0 ? persistedSessionRef.current : sessionReference
     const referenceDocumentRef = effectiveSession.documentRef
@@ -127,7 +127,7 @@ export const MaskEditorV3Host = forwardRef<MaskEditorV3HostHandle, MaskEditorV3H
     const onSessionChangeRef = useRef(onSessionChange)
     onSessionChangeRef.current = onSessionChange
 
-    const handleStatus = useCallback((status: ImageMarkV3PersistenceStatus): void => {
+    const handleStatus = useCallback((status: ImageEditPersistenceV3Status): void => {
       setSaving(status.kind === 'saving')
       if (status.kind === 'failed') {
         setSaveError(true)
@@ -149,6 +149,9 @@ export const MaskEditorV3Host = forwardRef<MaskEditorV3HostHandle, MaskEditorV3H
       onSessionChangeRef.current?.(reference)
     }, [referenceDocumentRef, sourceImageUrl])
 
+    const observedDocumentId = state.kind === 'ready' ? state.value.document.id : null
+    useEffect(() => observedDocumentId ? queueRef.current?.subscribe(handleStatus) : undefined, [observedDocumentId, handleStatus])
+
     useEffect(() => {
       const controller = new AbortController()
       setState({ kind: 'loading' })
@@ -165,19 +168,24 @@ export const MaskEditorV3Host = forwardRef<MaskEditorV3HostHandle, MaskEditorV3H
         event: 'mask_editor.v3.bootstrap.start',
         context: { documentRef: referenceDocumentRef, revision: referenceRevision },
       })
-      void loadSnapshot({
+      const current = readImageEditDocumentInstanceV3(referenceDocumentRef.slice('image-edit-v3:'.length))
+      const pending = current ? Promise.resolve({
+        documentRef: referenceDocumentRef, document: current.document, history: current.history,
+        revision: current.document.revision, previewRef: current.reference.previewRef, resources: current.resourceDescriptors,
+      }) : loadSnapshot({
         requestId: createImageEditorV3RequestId('mask-host-load'),
         documentRef: referenceDocumentRef,
-      }, controller.signal).then((snapshot) => {
+      }, controller.signal)
+      void pending.then((snapshot) => {
         if (controller.signal.aborted) return
         const documentId = referenceDocumentRef.slice('image-edit-v3:'.length)
         if (!snapshot
           || referenceSourceUrl !== sourceImageUrl
           || snapshot.documentRef !== referenceDocumentRef
           || snapshot.document.id !== documentId
-          || snapshot.revision !== referenceRevision
-          || snapshot.document.revision !== referenceRevision
-          || snapshot.previewRef !== referencePreviewRef) {
+          || (!current && (snapshot.revision !== referenceRevision
+            || snapshot.document.revision !== referenceRevision
+            || snapshot.previewRef !== referencePreviewRef))) {
           throw new Error('蒙版会话 source/ref/revision 与权威快照不一致')
         }
         if (!collectImageEditLayerIdsV3(snapshot.document.layers).includes(targetLayerId)) {
@@ -185,7 +193,7 @@ export const MaskEditorV3Host = forwardRef<MaskEditorV3HostHandle, MaskEditorV3H
         }
         const persistence = restorePersistence(snapshot.document, snapshot.history)
         snapshotRef.current = persistence
-        queueRef.current = new ImageMarkV3PersistenceQueue({
+        queueRef.current = getOrCreateImageEditPersistenceQueueV3({
           repository,
           initialReference: {
             documentId,
@@ -193,7 +201,7 @@ export const MaskEditorV3Host = forwardRef<MaskEditorV3HostHandle, MaskEditorV3H
             previewRef: snapshot.previewRef,
           },
           initialHistory: persistence.history,
-          onStatusChange: handleStatus,
+
         })
         setState({
           kind: 'ready',
@@ -227,10 +235,6 @@ export const MaskEditorV3Host = forwardRef<MaskEditorV3HostHandle, MaskEditorV3H
     ])
 
     const flush = useCallback(async (): Promise<ImageEditSessionReferenceV3> => {
-      if (timerRef.current) {
-        clearTimeout(timerRef.current)
-        timerRef.current = null
-      }
       const queue = queueRef.current
       const snapshot = snapshotRef.current
       if (!queue || !snapshot) throw new Error('V3 蒙版宿主尚未加载完成')
@@ -239,9 +243,6 @@ export const MaskEditorV3Host = forwardRef<MaskEditorV3HostHandle, MaskEditorV3H
     }, [])
 
     useImperativeHandle(ref, () => ({ flush }), [flush])
-    useEffect(() => () => {
-      if (timerRef.current) clearTimeout(timerRef.current)
-    }, [])
 
     const handlePersistenceChange = useCallback((snapshot: ImageEditPersistenceSnapshotV3): void => {
       snapshotRef.current = snapshot
@@ -257,12 +258,7 @@ export const MaskEditorV3Host = forwardRef<MaskEditorV3HostHandle, MaskEditorV3H
           value: { document: snapshot.document, persistence: snapshot, descriptors },
         }
       })
-      if (timerRef.current) clearTimeout(timerRef.current)
-      timerRef.current = setTimeout(() => {
-        timerRef.current = null
-        void flush().catch(() => undefined)
-      }, AUTOSAVE_DELAY_MS)
-    }, [flush])
+    }, [])
 
     if (state.kind === 'loading') return <UiLoading message="正在打开可编辑蒙版…" className={className} />
     if (state.kind === 'failed') {

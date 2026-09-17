@@ -1,6 +1,8 @@
-import { normalizeGenerationTaskStatus } from '@/core/assistant/externalWait'
+import { normalizeGenerationTaskStatus } from '@/core/application-control/domains/generation/taskStatus'
 import { registry } from '@/core/ModelRegistry'
+import { modelDefaultsManager } from '@/features/settings/modelDefaultsManager'
 import { generationService } from '@/core/services/GenerationService'
+import { databaseService } from '@/services/database/DatabaseService'
 import {
   cancelVisibleGenerationTask,
   getVisibleGenerationTask,
@@ -38,7 +40,7 @@ export interface ResolveGenerationModelInput extends Omit<GenerationPreparationI
 export interface ResolvedGenerationModel {
   modelId: string
   providerId: string
-  selection: 'requested' | 'preferred_provider' | 'current_draft' | 'configured_fallback'
+  selection: 'requested' | 'preferred_provider' | 'current_draft' | 'configured_fallback' | 'user_default'
 }
 
 function unique(values: readonly (string | undefined)[]): string[] {
@@ -48,6 +50,7 @@ function unique(values: readonly (string | undefined)[]): string[] {
 export function selectExecutableGenerationModel(
   input: ResolveGenerationModelInput,
   configuredProviderIds: readonly string[],
+  defaults?: { modelId: string; providerId: string },
 ): ResolvedGenerationModel {
   const configuredProviders = new Set(configuredProviderIds)
   const requested = input.requestedModelId
@@ -77,7 +80,10 @@ export function selectExecutableGenerationModel(
   const ordered = requested
     ? [requested]
     : [
-        ...preferredProviders.flatMap((providerId) => allCandidates.filter((model) => model.meta.provider === providerId)),
+        ...preferredProviders.flatMap((providerId) => allCandidates.filter((model) => model.meta.provider === providerId)
+          .sort((a, b) => Number(b.meta.id === defaults?.modelId) - Number(a.meta.id === defaults?.modelId))),
+        ...allCandidates.filter((model) => model.meta.id === defaults?.modelId),
+        ...allCandidates.filter((model) => model.meta.provider === defaults?.providerId),
         ...allCandidates.filter((model) => model.meta.id === input.currentModelId),
         ...allCandidates,
       ]
@@ -97,6 +103,8 @@ export function selectExecutableGenerationModel(
         ? 'requested'
         : preferredProviders.includes(model.meta.provider)
           ? 'preferred_provider'
+          : model.meta.id === defaults?.modelId
+            ? 'user_default'
           : model.meta.id === input.currentModelId
             ? 'current_draft'
             : 'configured_fallback'
@@ -116,7 +124,11 @@ export function selectExecutableGenerationModel(
 }
 
 async function resolveGenerationModel(input: ResolveGenerationModelInput): Promise<ResolvedGenerationModel> {
-  return selectExecutableGenerationModel(input, await generationService.getConfiguredProviders())
+  const providers = await generationService.getConfiguredProviders()
+  return selectExecutableGenerationModel(input, providers, {
+    modelId: modelDefaultsManager.resolveModelId(input.mediaType),
+    providerId: modelDefaultsManager.getSnapshot().providerId,
+  })
 }
 
 function taskRevision(task: VisibleGenerationTaskSummary): number {
@@ -155,18 +167,22 @@ export const generationApplicationService = {
     return prepareGenerationTask(input)
   },
 
-  async submit(input: GenerationPreparationInput): Promise<{ taskId: string; status: 'submitted'; taskRef: { kind: 'generation.task'; id: string } }> {
+  async submit(input: GenerationPreparationInput, operationId?: string) {
     const preparation = prepareGenerationTask(input)
     const taskId = await runVisibleGenerationTaskCommand({
       input: input.prompt,
       model: input.modelId,
       type: input.mediaType,
       options: preparation.options as DynamicValue,
+      operationId,
     })
     if (!taskId) {
       throw new GenerationPreparationError('INVALID_INPUT', '生成任务未创建，请检查输入和当前模式')
     }
-    return { taskId, status: 'submitted', taskRef: { kind: 'generation.task', id: taskId } }
+    const saved = await databaseService.getHistoryById(taskId)
+    const verified = saved?.modelId === input.modelId && saved.prompt === input.prompt
+    return { taskId, status: 'submitted', taskRef: { kind: 'generation.task', id: taskId },
+      verification: { verified, condition: '原任务已经持久登记；生成完成状态由该任务继续查询', target: { kind: 'generation.task', id: taskId } } }
   },
 
   listTasks(): GenerationTaskSnapshot[] {

@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   acknowledge: vi.fn(),
@@ -25,6 +25,9 @@ vi.mock('@/commands/cameraStageRender', () => ({
   startCameraStageRender: mocks.start,
 }));
 vi.mock('@/features/assets/services/cameraStageAssetCollection', () => ({ collectCameraStageAsset: mocks.collect }));
+vi.mock('@/features/cameraStage/application/cameraStageProjectRuntime', () => ({
+  leaseCameraStageProjectRuntime: async () => vi.fn(),
+}));
 vi.mock('@/features/cameraStage/projects/cameraStageProjectService', () => ({
   applyProjectEnvironmentImage: mocks.applyEnvironment,
   createStoredCameraStageProject: mocks.createProject,
@@ -48,6 +51,23 @@ vi.mock('./canvasPersistenceService', () => ({
   confirmCanvasPersistence: mocks.confirm,
   runCanvasMutationStage: (_options: unknown, mutation: () => unknown) => mutation(),
 }));
+vi.mock('./canvasProjectRuntime', () => ({
+  acquireCanvasProjectRuntime: async (projectId: string) => ({
+    release: vi.fn(),
+    runtime: {
+      store: { getState: () => ({ nodes: mocks.nodes, updateNodeData: mocks.updateNodeData }) },
+      isCurrent: () => mocks.projectState.currentProjectId === projectId,
+      persist: () => mocks.confirm(projectId),
+      pause: () => () => undefined,
+    },
+  }),
+  withCanvasProjectRuntime: async (projectId: string, execute: (runtime: unknown) => Promise<unknown>) => execute({
+    store: { getState: () => ({ nodes: mocks.nodes, updateNodeData: mocks.updateNodeData }) },
+    isCurrent: () => mocks.projectState.currentProjectId === projectId,
+    persist: () => mocks.confirm(projectId),
+    pause: () => () => undefined,
+  }),
+}));
 vi.mock('./generationOutputApplicationService', () => ({ commitCanvasGenerationOutputs: mocks.commit }));
 
 import {
@@ -55,6 +75,7 @@ import {
   cancelCameraStageNodeRenderTask,
   readCameraStageNodeRenderTask,
   reconcileCameraStageRenderTasks,
+  resetCameraStageRenderTasksForTests,
   startCameraStageNodeRender,
 } from './cameraStageRenderApplicationService';
 
@@ -103,6 +124,7 @@ function setupNode(renderTask: ReturnType<typeof descriptor> | null = null): voi
 }
 
 describe('cameraStageRenderApplicationService', () => {
+  afterEach(resetCameraStageRenderTasksForTests);
   beforeEach(() => {
     vi.clearAllMocks();
     setupNode();
@@ -159,7 +181,7 @@ describe('cameraStageRenderApplicationService', () => {
 
     await expect(startCameraStageNodeRender('node-1', 'image', {
       expectedOwner: { canvasProjectId: 'canvas-1', cameraStageProjectId: 'stage-1' },
-    })).rejects.toThrow('目标画布项目已经切换');
+    })).rejects.toThrow('当前画布项目已切换');
 
     expect(mocks.updateNodeData).not.toHaveBeenCalled();
     expect(mocks.start).not.toHaveBeenCalled();
@@ -224,12 +246,14 @@ describe('cameraStageRenderApplicationService', () => {
     mocks.acknowledge.mockImplementation(async () => { order.push('ack'); });
     await applyCameraStageRenderTask(task());
     await applyCameraStageRenderTask(task());
+    await applyCameraStageRenderTask(task('queued'));
+    expect(mocks.cancel).not.toHaveBeenCalled();
     expect(mocks.commit).toHaveBeenCalledTimes(1);
     expect(mocks.commit).toHaveBeenCalledWith(expect.objectContaining({
       completionId: 'camera-stage-render:request-1',
       resultNodeData: expect.objectContaining({ cameraStageRenderReceipt: descriptor() }),
-    }));
-    expect(order).toEqual(['persist', 'ack', 'persist', 'ack']);
+    }), expect.objectContaining({ projectId: 'canvas-1' }));
+    expect(order).toEqual(['persist', 'ack']);
     expect((mocks.nodes[0].data as Record<string, unknown>).imageUrl).toBe('managed://image.png');
   });
 

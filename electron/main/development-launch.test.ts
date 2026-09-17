@@ -1,7 +1,8 @@
 import { describe, expect, it, vi } from 'vitest'
+import path from 'node:path'
 
 vi.mock('node:fs', () => ({
-  existsSync: (value: string) => value.endsWith('/docs/ref/test01.jpg'),
+  existsSync: (value: string) => value.replaceAll('\\', '/').endsWith('/docs/ref/test01.jpg'),
   statSync: () => ({ isFile: () => true }),
 }))
 
@@ -25,7 +26,7 @@ describe('resolveDevelopmentLaunchQuery', () => {
       query: {
         henjiDevSkipOnboarding: '1',
         henjiDevSurface: 'tool.image_edit',
-        henjiDevMedia: '/project/docs/ref/test01.jpg',
+        henjiDevMedia: path.resolve('/project', 'docs/ref/test01.jpg'),
       },
       warnings: [],
     })

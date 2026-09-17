@@ -14,8 +14,7 @@ import type {
 } from '@/core/application-control'
 import { applyWriterTable, directOnlyEffectContract, fieldEffectContract, propertyOperations, writableProperties } from '@/core/application-control'
 
-import { saveCurrentProject } from '../projects/cameraStageProjectService'
-import { useCameraStageStore } from '../store/cameraStageStore'
+import { cameraStageProjectStore, leaseCameraStageProjectRuntime, ensureCameraStageProjectRuntime, saveCameraStageProjectRuntime } from './cameraStageProjectRuntime'
 import { cameraStageApplicationService } from './cameraStageApplicationService'
 import { applyCameraStageMotion } from './cameraMotionService'
 import { restoreCameraStageUndo, captureCameraStageUndo } from './cameraStageUndo'
@@ -79,7 +78,7 @@ function automaticStateKeyframeEvidence(
   beforeIds: ReadonlySet<string>,
   revision: number,
 ): { refs: ApplicationCompletedStepResult['directRefs']; effects: ApplicationEffectReceipt[]; evidence: ApplicationEvidence[] } {
-  const state = useCameraStageStore.getState()
+  const state = cameraStageProjectStore(projectId!).getState()
   const created = state.stateKeyframes.filter((item) => !beforeIds.has(item.id))
   const affected = created.length > 0
     ? created.map((item) => ({ item, effect: 'create' as const }))
@@ -131,12 +130,19 @@ export class CameraStageMutationExecutor implements ApplicationMutationExecutor 
   }
 
   async apply(step: MutationStep): Promise<ApplicationCompletedStepResult> {
+    const projectId = [CAMERA_STAGE_ENTITY_TYPES.project, CAMERA_STAGE_ENTITY_TYPES.scene, CAMERA_STAGE_ENTITY_TYPES.playback].some((type) => type === step.entityType) ? step.target.id : childTarget(step.target.id).projectId
+    const release = await leaseCameraStageProjectRuntime(projectId)
+    try { return await this.applyLeased(step) } finally { release() }
+  }
+
+  private async applyLeased(step: MutationStep): Promise<ApplicationCompletedStepResult> {
     if (step.entityType !== this.entityType || step.target.kind !== this.entityType) throw new Error('NOT_FOUND')
     const recordsAutomaticStateKeyframe = isAutomaticStateKeyframeMutation(step)
     const projectId = recordsAutomaticStateKeyframe ? childTarget(step.target.id).projectId : null
+    if (projectId) await ensureCameraStageProjectRuntime(projectId)
     const beforeStateKeyframeIds = new Set(
       recordsAutomaticStateKeyframe
-        ? useCameraStageStore.getState().stateKeyframes.map((item) => item.id)
+        ? cameraStageProjectStore(projectId!).getState().stateKeyframes.map((item) => item.id)
         : [],
     )
     const undoToken = await this.applyMutations(step)
@@ -193,7 +199,7 @@ export class CameraStageMutationExecutor implements ApplicationMutationExecutor 
 
   private async applyProject(step: MutationStep): Promise<string> {
     const projectId = step.target.id
-    await cameraStageApplicationService.openProject(projectId)
+    await ensureCameraStageProjectRuntime(projectId)
     const undoToken = captureCameraStageUndo(projectId)
     const draft: CameraStageProjectDraft = { projectId }
     await applyWriterTable(CAMERA_STAGE_PROJECT_WRITERS, draft, step.mutations)
@@ -203,10 +209,10 @@ export class CameraStageMutationExecutor implements ApplicationMutationExecutor 
 
   private async applyScene(step: MutationStep): Promise<string> {
     const projectId = step.target.id
-    await cameraStageApplicationService.openProject(projectId)
+    await ensureCameraStageProjectRuntime(projectId)
     const undoToken = captureCameraStageUndo(projectId)
-    await applyWriterTable(CAMERA_STAGE_SCENE_WRITERS, useCameraStageStore.getState(), step.mutations)
-    await saveCurrentProject()
+    await applyWriterTable(CAMERA_STAGE_SCENE_WRITERS, cameraStageProjectStore(projectId!).getState(), step.mutations)
+    await saveCameraStageProjectRuntime(projectId)
     return undoToken
   }
 
@@ -261,6 +267,7 @@ export class CameraStageMutationExecutor implements ApplicationMutationExecutor 
     const projectId = step.target.id
     // updatePlayback 自己会按需加载；工程已经打开时绝不能重复 loadSnapshot。
     // 连续 seek→改属性的事务若每次 seek 都重开工程，会制造无意义 revision 并用磁盘快照覆盖前序内存状态。
+    await ensureCameraStageProjectRuntime(projectId)
     const undoToken = captureCameraStageUndo(projectId)
     const draft: CameraStagePlaybackDraft = {}
     await applyWriterTable(CAMERA_STAGE_PLAYBACK_WRITERS, draft, step.mutations)

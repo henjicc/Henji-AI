@@ -1,6 +1,8 @@
 // @vitest-environment jsdom
 
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { useProjectStore } from '@/stores/projectStore'
+import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from '@/tests/harnessNativeStorage'
 
 import { useCanvasStore } from '@/stores/canvasStore'
 import { useCanvasExecutionStateStore } from '@/stores/canvasExecutionStateStore'
@@ -51,10 +53,14 @@ function registerText(nodeId: string, run: () => Promise<CanvasNodeExecutionResu
 }
 
 describe('canvasExecutionService 并发与一致性', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
+    installHarnessNativeStorage()
+    await useProjectStore.getState().hydrate()
+    await useProjectStore.getState().createProject('并发调度测试')
     resetCanvasExecutionServiceForTests()
     useCanvasStore.getState().setCanvasData([], [], { past: [], future: [] })
   })
+  afterEach(() => uninstallHarnessNativeStorage())
   it('排队期间输入变化时按新签名执行，等待与缓存命中不占生成名额', async () => {
     useCanvasStore.getState().setCanvasData([
       node('generator-a', CANVAS_NODE_TYPES.imageEdit),
@@ -148,10 +154,10 @@ describe('canvasExecutionService 并发与一致性', () => {
     const failure = expect(running).rejects.toThrow('第一分支失败')
     await vi.waitFor(() => expect(started).toHaveLength(2))
     rejectFirst?.()
-    await failure
-    await Promise.resolve()
+    await vi.waitFor(() => expect(useCanvasExecutionStateStore.getState().activeNodes['generator-a']).toBeUndefined())
     expect(queuedRun).not.toHaveBeenCalled()
     releaseSecond?.()
+    await failure
     await vi.waitFor(() => expect(useCanvasExecutionStateStore.getState().activeNodes).toEqual({}))
   })
 
@@ -244,7 +250,7 @@ describe('canvasExecutionService 并发与一致性', () => {
       .toBeUndefined()
   })
 
-  it('运行期间依赖结构变化时不让旧计划继续执行目标', async () => {
+  it.each([true, false])('运行期间依赖结构变化时不让旧计划继续执行目标（新增执行器已注册：%s）', async (registered) => {
     useCanvasStore.getState().setCanvasData([
       node('text-a', CANVAS_NODE_TYPES.textProcessing, { prompt: 'A' }),
       node('text-b', CANVAS_NODE_TYPES.textProcessing, { prompt: 'B' }),
@@ -254,7 +260,7 @@ describe('canvasExecutionService 并发与一致性', () => {
     const gate = new Promise<void>((resolve) => { release = resolve })
     const targetRun = vi.fn(async () => completed())
     registerText('text-a', async () => { await gate; return completed() })
-    registerText('text-b', async () => completed())
+    if (registered) registerText('text-b', async () => completed())
     registerRoot('image', targetRun)
 
     const running = runCanvasNode('image')

@@ -1,14 +1,13 @@
+import { setCanvasTestProjectState } from '@/tests/canvasProjectFixture';
 // @vitest-environment jsdom
 
+// @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import {
-  CANVAS_NODE_TYPES,
-  type CanvasNode,
-} from '@/features/canvas/domain/canvasNodes';
+import { CANVAS_NODE_TYPES, type CanvasNode } from '@/features/canvas/domain/canvasNodes';
 import { canvasNodeDefinitions } from '@/features/canvas/domain/nodeRegistry';
 import { useCanvasStore } from '@/stores/canvasStore';
-import { useProjectStore, type Project } from '@/stores/projectStore';
+import { type Project } from '@/stores/projectStore';
 
 import { resetCanvasBatchStateForTests } from './canvasBatchService';
 import { commitPanoramaViewSnapshot } from './panoramaSnapshotApplicationService';
@@ -79,7 +78,7 @@ describe('全景当前视角截图提交', () => {
       canvasViewportSize: { width: 1_200, height: 800 },
       selectedNodeId: sourceNodeId,
     });
-    useProjectStore.setState({
+    setCanvasTestProjectState({
       projects: [project],
       currentProjectId: projectId,
       currentProject: project,

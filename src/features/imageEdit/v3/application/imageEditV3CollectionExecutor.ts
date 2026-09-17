@@ -20,15 +20,8 @@ import type { ImageEditCommandV3 } from '@/core/imageEdit/v3/commandTypes'
 import type { ImageEditJsonObjectV3, ImageEditLayerV3 } from '@/core/imageEdit/v3/layerTypes'
 import { createLogger } from '@/core/logging'
 
-import {
-  findImageEditV3LiveLayer,
-  getImageEditV3LiveRevision,
-  imageEditV3GroupRef,
-  imageEditV3LayerRef,
-  requireImageEditV3LiveSession,
-  splitImageEditV3DocumentRef,
-  splitImageEditV3LayerRef,
-} from './imageEditLiveSessionRegistry'
+import { getImageEditDocumentCatalogRevisionV3, requireImageEditDocumentInstanceV3 } from './imageEditDocumentInstances'
+import { findImageEditV3LiveLayer, imageEditV3GroupRef, imageEditV3LayerRef, splitImageEditV3DocumentRef, splitImageEditV3LayerRef } from './imageEditDocumentRefs'
 
 import { runImageEditPersistedOperationV3 } from './imageEditPersistenceOperations'
 
@@ -118,7 +111,7 @@ function parentIdentity(parent: ApplicationRef): { documentId: string; parentId:
 }
 
 function containerLength(documentId: string, parentId: string | null): number {
-  const document = requireImageEditV3LiveSession(documentId).bus.getSnapshot().document
+  const document = requireImageEditDocumentInstanceV3(documentId).bus.getSnapshot().document
   if (parentId === null) return document.layers.length
   const location = findImageEditV3LiveLayer(document, parentId)
   if (!location || location.layer.type !== 'group') throw new Error('NOT_FOUND')
@@ -144,9 +137,9 @@ function decodeUndo(token: string): UndoPayload {
 }
 
 async function undoPayload(payload: UndoPayload): Promise<ApplicationCompletedStepResult> {
-  const { bus } = requireImageEditV3LiveSession(payload.documentId)
+  const { bus } = requireImageEditDocumentInstanceV3(payload.documentId)
   if (!bus.undoCommands(payload.commandIdsNewestFirst)) throw new Error('IMAGE_EDIT_V3_COLLECTION_UNDO_EMPTY')
-  const revision = getImageEditV3LiveRevision()
+  const revision = getImageEditDocumentCatalogRevisionV3()
   return {
     status: 'completed',
     resultingRevisions: { image_edit: revision },
@@ -160,11 +153,11 @@ async function undoPayload(payload: UndoPayload): Promise<ApplicationCompletedSt
 }
 
 async function rollbackPayload(payload: UndoPayload): Promise<ApplicationCompletedStepResult> {
-  const { bus } = requireImageEditV3LiveSession(payload.documentId)
+  const { bus } = requireImageEditDocumentInstanceV3(payload.documentId)
   if (!bus.rollbackCommands(payload.commandIdsNewestFirst)) {
     throw new Error('IMAGE_EDIT_V3_COLLECTION_ROLLBACK_EMPTY')
   }
-  const revision = getImageEditV3LiveRevision()
+  const revision = getImageEditDocumentCatalogRevisionV3()
   return {
     status: 'completed',
     resultingRevisions: { image_edit: revision },
@@ -190,7 +183,7 @@ export class ImageEditV3CollectionExecutor implements ApplicationCollectionExecu
   private async applyInMemory(step: CollectionStep, context: ApplicationExecutionContext): Promise<ApplicationCompletedStepResult> {
     if (context.signal?.aborted) throw new Error('CANCELLED')
     const { documentId, parentId } = parentIdentity(step.parent)
-    const { bus } = requireImageEditV3LiveSession(documentId)
+    const { bus } = requireImageEditDocumentInstanceV3(documentId)
     const commandIds: string[] = []
     const refs: ApplicationRef[] = []
     logger.info('图片编辑 V3 图层集合写入开始', {
@@ -246,7 +239,7 @@ export class ImageEditV3CollectionExecutor implements ApplicationCollectionExecu
           refs.push(target)
         }
       }
-      const revision = getImageEditV3LiveRevision()
+      const revision = getImageEditDocumentCatalogRevisionV3()
       logger.info('图片编辑 V3 图层集合写入完成', {
         event: 'image_edit.v3.application_collection.apply.completed',
         requestId: context.requestId,

@@ -107,7 +107,8 @@ function makeInitialSnapshot(input: {
     items: input.plan.map((plan) => {
       const cached = previousById.get(plan.viewId)
       const reusable = cached?.status === 'succeeded' && cached.mediaUrl && cached.providerRequestId
-      const resumable = cached?.status === 'running' && cached.providerRequestId
+      // Once accepted, a failed observation must keep the original provider request.
+      const resumable = cached?.providerRequestId
       return {
         viewId: plan.viewId,
         order: plan.order,
@@ -132,6 +133,7 @@ function readError(error: unknown): string {
 export async function executeMultiAngleBatch(
   input: ExecuteMultiAngleBatchInput,
 ): Promise<MultiAngleBatchExecutionResult> {
+  input.signal?.throwIfAborted()
   const now = input.now ?? Date.now
   const createBatchId = input.createBatchId ?? (() => `multi-angle-${crypto.randomUUID()}`)
   const plan = createMultiAngleBatchPlan(input.config, input.sourceImage)

@@ -3,13 +3,14 @@ import { ImageEditorV3CommandRepository } from '@/commands/imageEditorV3'
 import { getPlatform } from '@/platform/runtime'
 import { createImageEditDocumentV3, createImageEditEffectLayerV3 } from '@/core/imageEdit/v3/documentFactory'
 import { ImageEditCommandBusV3 } from '@/features/imageEdit/v3/application/imageEditCommandBus'
-import { registerImageEditV3LiveSession } from '@/features/imageEdit/v3/application/imageEditLiveSessionRegistry'
-import { ImageMarkV3PersistenceQueue } from '@/features/imageMark/standalone/imageMarkV3Persistence'
+import { adoptImageEditDocumentInstanceForTestsV3 } from '@/features/imageEdit/v3/application/imageEditDocumentInstances'
+import { ImageEditPersistenceV3Queue } from '@/features/imageEdit/v3/application/imageEditPersistenceQueue'
 import { createMultiLayerDocumentNodeApplicationService } from '@/features/canvas/application/multiLayerDocumentNodeApplicationService'
 import type { MultiLayerDocumentNodePort } from '@/features/canvas/application/multiLayerDocumentNodeApplicationContracts'
 import { createMultiLayerDocumentProjectionCanvasPort } from '@/features/canvas/application/multiLayerDocumentNodeCanvasAdapter'
 import { createMultiLayerDocumentPersistenceConfirmation } from '@/features/canvas/application/multiLayerDocumentPersistenceConfirmation'
 import { confirmCanvasPersistence } from '@/features/canvas/application/canvasPersistenceService'
+import type { saveMultiLayerDocumentAfterEditing } from '@/features/canvas/application/multiLayerDocumentNodeGenerationAdapter'
 import { CANVAS_NODE_TYPES } from '@/features/canvas/domain/canvasNodes'
 import { createCanvasEditV3SessionReference } from '@/features/canvas/imageEditV3/canvasEditV3Session'
 import { useCanvasStore } from '@/stores/canvasStore'
@@ -45,14 +46,13 @@ export async function createAttachedImageEditPersistenceFixture() {
   const documentPort: MultiLayerDocumentNodePort = { createFromLayerStack: unavailable, inspectDocument: unavailable,
     saveAndMaterialize: materialize, rollbackMaterialization: unavailable, finalizeMaterialization: async () => true,
     forkDocument: unavailable, markReleaseCandidate: unavailable, materializeExportTarget: unavailable, releaseExportRaster: unavailable }
-  const service = createMultiLayerDocumentNodeApplicationService({ documentPort,
-    canvasPort: { ...createMultiLayerDocumentProjectionCanvasPort({ releaseReplacedLocalImages: async () => undefined }), createExportedImageNode: unavailable } })
-  const confirmation = createMultiLayerDocumentPersistenceConfirmation({ projectId, nodeId: 'attached-node', documentRef: initialSession.documentRef }, {
-    saveProjection: service.saveMaterializedProjection,
-  })
-  const queue = new ImageMarkV3PersistenceQueue({ repository, initialReference: initial, initialHistory: bus.getPersistenceSnapshot().history })
-  const dispose = registerImageEditV3LiveSession('attached-session', bus, { getQueue: () => queue,
+  const saveProjection: typeof saveMultiLayerDocumentAfterEditing = (input, runtime) => createMultiLayerDocumentNodeApplicationService({ documentPort,
+      canvasPort: { ...createMultiLayerDocumentProjectionCanvasPort({ runtime, releaseReplacedLocalImages: async () => undefined }),
+        createExportedImageNode: unavailable } }).saveMaterializedProjection(input)
+  const confirmation = createMultiLayerDocumentPersistenceConfirmation({ projectId, nodeId: 'attached-node', documentRef: initialSession.documentRef }, { saveProjection })
+  const queue = new ImageEditPersistenceV3Queue({ repository, initialReference: initial, initialHistory: bus.getPersistenceSnapshot().history })
+  const dispose = adoptImageEditDocumentInstanceForTestsV3('attached-session', bus, { getQueue: () => queue,
     projection: confirmation.projection,
     confirmProjection: (reference) => confirmation.confirm(createCanvasEditV3SessionReference(initialSession.sourceUrl, reference)) })
-  return { bus, projectId, document, queue, confirmation, materialize, dispose }
+  return { bus, projectId, document, queue, confirmation, materialize, saveProjection, dispose }
 }

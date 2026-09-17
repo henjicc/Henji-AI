@@ -10,9 +10,11 @@ const mocks = vi.hoisted(() => ({
   apply: vi.fn(),
   reconcile: vi.fn(),
   start: vi.fn(),
+  list: vi.fn(),
 }));
 
 vi.mock('@/commands/cameraStageRender', () => ({
+  listCameraStageRenderTasks: mocks.list,
   onCameraStageRenderEvent: (handler: (task: unknown) => void) => {
     mocks.order.push('subscribe-event');
     mocks.eventHandler = handler;
@@ -58,6 +60,7 @@ describe('CameraStageRenderLifecycleHost', () => {
     mocks.canvasNodes = [];
     mocks.reconcile.mockResolvedValue(undefined);
     mocks.apply.mockResolvedValue(undefined);
+    mocks.list.mockResolvedValue([]);
     mocks.projectState = { currentProjectId: 'canvas-1', currentProject: { id: 'canvas-1', nodes: [] } };
   });
 
@@ -74,6 +77,21 @@ describe('CameraStageRenderLifecycleHost', () => {
     mocks.eventHandler?.({ requestId: 'request-1' });
     expect(mocks.apply).toHaveBeenCalledWith({ requestId: 'request-1' });
     dispose();
+  });
+
+  it('启动恢复未打开工程的结果，销毁后的迟到目录不再处理', async () => {
+    mocks.projectState = { currentProjectId: null, currentProject: null };
+    mocks.list.mockResolvedValueOnce([{ requestId: 'background-b' }]);
+    const dispose = installCameraStageRenderLifecycleHost();
+    await vi.waitFor(() => expect(mocks.apply).toHaveBeenCalledWith({ requestId: 'background-b' }));
+    dispose();
+    let resolve!: (tasks: unknown[]) => void;
+    mocks.list.mockImplementationOnce(() => new Promise(done => { resolve = done; }));
+    const close = installCameraStageRenderLifecycleHost();
+    close();
+    resolve([{ requestId: 'late' }]);
+    await Promise.resolve();
+    expect(mocks.apply).toHaveBeenCalledTimes(1);
   });
 
   it('does not query again when only render progress changes', async () => {

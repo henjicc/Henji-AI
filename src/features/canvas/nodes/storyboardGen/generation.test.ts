@@ -22,7 +22,7 @@ vi.mock('@/features/canvas/application/imageData', () => ({ prepareNodeImage }))
 vi.mock('@/commands/image', () => ({ embedStoryboardImageMetadata }))
 vi.mock('./shared', () => ({ generateGridImageDataUrl: () => 'data:image/png;base64,grid' }))
 
-import { buildStoryboardPrompt, generateStoryboardImage } from './generation'
+import { buildStoryboardPrompt, generateStoryboardImage } from '../../application/storyboardGeneration'
 import { createStoryboardGenerationResumeContext } from '@/features/canvas/application/storyboardGenerationOutputService'
 
 function nodeData(): StoryboardGenNodeData {

@@ -1,6 +1,8 @@
+import { findCanvasProjectInstance, getCanvasProjectInstance, requireCanvasProjectInstance } from './canvasProjectInstances'
 import { createLogger } from '@/core/logging'
 import { useCanvasStore } from '@/stores/canvasStore'
 import { flushCanvasProjectSnapshot, useProjectStore } from '@/stores/projectStore'
+import type { ApplicationTransactionResult } from '@/core/application-control/transactions'
 
 const logger = createLogger('features.canvas.persistence')
 
@@ -10,6 +12,13 @@ export interface CanvasMutationCheckpoint {
   edges: unknown
   history: unknown
   conflicted: boolean
+  runtime?: CanvasTransactionRuntime
+}
+export interface CanvasTransactionRuntime {
+  store: typeof useCanvasStore
+  isCurrent: () => boolean
+  persist: () => Promise<void>
+  pause: () => () => void
 }
 export interface CanvasCommitOptions {
   deferCommit?: boolean
@@ -40,14 +49,22 @@ export class CanvasTransactionConflictError extends Error {
   }
 }
 
-export function createCanvasMutationCheckpoint(projectId: string): CanvasMutationCheckpoint {
-  const { nodes, edges, history } = useCanvasStore.getState()
-  return { projectId, nodes, edges, history, conflicted: false }
+/** 原画布快照已恢复且保存确认；区别于未派发和仍有未保存修改。 */
+export class CanvasTransactionRolledBackError extends Error {
+  constructor(readonly cause: unknown) {
+    super(cause instanceof Error ? cause.message : String(cause))
+    this.name = 'CanvasTransactionRolledBackError'
+  }
+}
+
+export function createCanvasMutationCheckpoint(projectId: string, runtime?: CanvasTransactionRuntime): CanvasMutationCheckpoint {
+  const { nodes, edges, history } = (runtime?.store ?? requireCanvasProjectInstance(projectId).store).getState()
+  return { projectId, nodes, edges, history, conflicted: false, runtime }
 }
 
 export function isCanvasMutationCheckpointCurrent(checkpoint: CanvasMutationCheckpoint): boolean {
-  const canvas = useCanvasStore.getState()
-  return !checkpoint.conflicted && useProjectStore.getState().currentProjectId === checkpoint.projectId
+  const canvas = (checkpoint.runtime?.store ?? requireCanvasProjectInstance(checkpoint.projectId).store).getState()
+  return !checkpoint.conflicted && (checkpoint.runtime ? checkpoint.runtime.isCurrent() : true)
     && canvas.nodes === checkpoint.nodes && canvas.edges === checkpoint.edges && canvas.history === checkpoint.history
 }
 
@@ -65,7 +82,7 @@ export function runCanvasMutationStage<T>(options: CanvasCommitOptions, mutate: 
   try { return mutate() }
   finally {
     if (options.checkpoint) {
-      const { nodes, edges, history } = useCanvasStore.getState()
+      const { nodes, edges, history } = (options.checkpoint.runtime?.store ?? requireCanvasProjectInstance(options.checkpoint.projectId).store).getState()
       Object.assign(options.checkpoint, { nodes, edges, history })
     }
   }
@@ -76,6 +93,7 @@ export function retainsCanvasMutation(error: unknown): boolean {
 }
 
 export class CanvasPersistenceError extends Error {
+  transactionFacts?: Extract<ApplicationTransactionResult, { status: 'failed' }>
   readonly code = 'PERSISTENCE_FAILED'
   readonly retryable = true
   readonly recovery = { capabilityId: 'retry_canvas_project_save', replayMutation: false }
@@ -101,15 +119,12 @@ export async function confirmCanvasPersistence(
 ): Promise<void> {
   if (options.deferCommit) {
     if (options.checkpoint) {
-      const { nodes, edges, history } = useCanvasStore.getState()
+      const { nodes, edges, history } = (options.checkpoint.runtime?.store ?? requireCanvasProjectInstance(options.checkpoint.projectId).store).getState()
       Object.assign(options.checkpoint, { nodes, edges, history })
     }
     return
   }
-  if (useProjectStore.getState().currentProjectId !== projectId) {
-    throw new Error('当前画布项目已切换，请返回原项目后重试保存')
-  }
-  persistCanvasState()
+  if (!findCanvasProjectInstance(projectId)) await getCanvasProjectInstance(projectId)
   logger.debug('画布保存确认开始', { event: 'canvas.persistence.confirm.start', projectId })
   try {
     await flushCanvasProjectSnapshot(projectId)
@@ -128,19 +143,6 @@ function expirePendingUndo(token: string): void {
   pendingUndos.delete(token)
 }
 
-useCanvasStore.subscribe((canvas) => {
-  for (const [token, pending] of pendingUndos) {
-    if (pending.nodes !== canvas.nodes || pending.edges !== canvas.edges || pending.history !== canvas.history) {
-      expirePendingUndo(token)
-    }
-  }
-})
-useProjectStore.subscribe((project) => {
-  for (const [token, pending] of pendingUndos) {
-    if (pending.projectId !== project.currentProjectId) expirePendingUndo(token)
-  }
-})
-
 /** 保存失败后的同一撤销只重试写盘；新编辑使旧重试失效，不能再次撤销或覆盖新内容。 */
 export async function runPersistedCanvasUndo(
   projectId: string,
@@ -148,11 +150,12 @@ export async function runPersistedCanvasUndo(
   apply: () => void,
   owner: CanvasUndoPersistenceState,
 ): Promise<void> {
+  if (!findCanvasProjectInstance(projectId)) await getCanvasProjectInstance(projectId)
   const pending = pendingUndos.get(token)
   // 已应用事实由原撤销记录持有，不随有限资源缓存淘汰而遗忘。
   if (owner.persistenceUndoApplied && !pending) throw new Error('撤销引用已失效，请重试保存当前画布，不要重复撤销')
   if (pending) {
-    const canvas = useCanvasStore.getState()
+    const canvas = requireCanvasProjectInstance(projectId).store.getState()
     if (pending.projectId !== projectId || pending.nodes !== canvas.nodes
       || pending.edges !== canvas.edges || pending.history !== canvas.history) {
       throw new Error('撤销后画布已发生新的编辑，请使用重试保存保留当前内容，不要重复撤销')
@@ -160,7 +163,7 @@ export async function runPersistedCanvasUndo(
   } else {
     apply()
     owner.persistenceUndoApplied = true
-    const { nodes, edges, history } = useCanvasStore.getState()
+    const { nodes, edges, history } = requireCanvasProjectInstance(projectId).store.getState()
     pendingUndos.set(token, { projectId, nodes, edges, history })
     while (pendingUndos.size > MAX_PENDING_UNDOS) expirePendingUndo(pendingUndos.keys().next().value!)
   }

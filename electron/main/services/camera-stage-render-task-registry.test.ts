@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { CameraStageRenderTaskRegistry, type CameraStageRenderRequestDto } from './camera-stage-render-task-registry'
+import { CameraStageRenderTaskRegistry, type CameraStageRenderRequestDto, type CameraStageRenderTaskSnapshotDto } from './camera-stage-render-task-registry'
 
 function request(overrides: Partial<CameraStageRenderRequestDto> = {}): CameraStageRenderRequestDto {
   return {
@@ -15,6 +15,22 @@ function request(overrides: Partial<CameraStageRenderRequestDto> = {}): CameraSt
 }
 
 describe('CameraStageRenderTaskRegistry', () => {
+  it('持久身份在确认缓存过期及重启后仍防重，未完成任务不会重新排队', () => {
+    const rows = new Map<string, CameraStageRenderTaskSnapshotDto>()
+    const storage = { load: () => [...rows.values()], save: (task: CameraStageRenderTaskSnapshotDto) => { rows.set(task.requestId, structuredClone(task)) } }
+    const registry = new CameraStageRenderTaskRegistry(storage)
+    registry.register(request(), 7)
+    registry.applyEvent({ type: 'failed', requestId: 'request-1', nodeId: 'node-1', message: 'stopped' })
+    registry.acknowledge(request(), 7)
+    expect(rows.get('request-1')?.acknowledgedAt).toBeDefined()
+    vi.advanceTimersByTime(2 * 60 * 60 * 1000)
+    expect(registry.register(request(), 7)).toMatchObject({ idempotent: true, task: { status: 'failed' } })
+    registry.register(request({ requestId: 'in-flight' }), 7)
+    const restarted = new CameraStageRenderTaskRegistry(storage)
+    expect(restarted.register(request(), 99)).toMatchObject({ idempotent: true, task: { status: 'failed' } })
+    expect(restarted.register(request({ requestId: 'in-flight' }), 99)).toMatchObject({ idempotent: true, task: { status: 'failed' } })
+    expect(restarted.list('canvas-1', 99).map((task) => task.requestId)).toEqual(['in-flight'])
+  })
   beforeEach(() => {
     vi.useFakeTimers()
     vi.setSystemTime(100)
@@ -62,6 +78,8 @@ describe('CameraStageRenderTaskRegistry', () => {
     registry.register(request({ requestId: 'request-2', canvasProjectId: 'canvas-2' }), 7)
     expect(registry.list('canvas-1', 7).map((task) => task.requestId)).toEqual(['request-1'])
     expect(registry.list('canvas-1', 8)).toEqual([])
+    expect(registry.list(undefined, 7).map(task => task.requestId)).toEqual(['request-1', 'request-2'])
+    expect(registry.list(undefined, 8)).toEqual([])
     expect(() => registry.require({ requestId: 'request-1', canvasProjectId: 'canvas-1', nodeId: 'node-1' }, 8))
       .toThrow('does not belong')
     expect(registry.require({ requestId: 'missing', canvasProjectId: 'canvas-1', nodeId: 'node-1' }, 7)).toBeNull()

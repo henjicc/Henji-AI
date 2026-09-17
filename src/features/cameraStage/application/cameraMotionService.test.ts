@@ -1,12 +1,14 @@
+import { loadCameraStageTestProject } from '@/tests/cameraStageProjectFixture'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({
-  saveCurrentProject: vi.fn().mockResolvedValue(undefined),
+  writeProject: vi.fn().mockResolvedValue(undefined),
   loadProjectIntoScene: vi.fn().mockResolvedValue(true),
 }))
 
+vi.mock('@/commands/cameraStageProjects', () => ({ upsertCameraStageProjectRecord: mocks.writeProject }))
+
 vi.mock('../projects/cameraStageProjectService', () => ({
-  saveCurrentProject: mocks.saveCurrentProject,
   loadProjectIntoScene: mocks.loadProjectIntoScene,
 }))
 
@@ -22,7 +24,7 @@ describe('三维摄像机语义运镜', () => {
     const camera = createCameraObject('主摄像机', pickDefaultColor(0))
     const subject = createPrimitiveObject('sphere', '主体', pickDefaultColor(1))
     const objects = [camera, subject]
-    useCameraStageStore.getState().loadSnapshot({
+    loadCameraStageTestProject({
       objects,
       activeCameraId: camera.id,
       animation: createDefaultAnimation(),
@@ -56,7 +58,7 @@ describe('三维摄像机语义运镜', () => {
     expect(updatedCamera?.type).toBe('camera')
     if (updatedCamera?.type !== 'camera') throw new Error('测试摄像机不存在')
     expect(updatedCamera.lookAt).toMatchObject({ mode: 'object', objectId: subject.id })
-    expect(mocks.saveCurrentProject).toHaveBeenCalledOnce()
+    expect(mocks.writeProject).toHaveBeenCalledOnce()
     expect(mocks.loadProjectIntoScene).not.toHaveBeenCalled()
   })
 

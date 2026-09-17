@@ -120,9 +120,9 @@ export function registerCameraStageRenderIpc(): void {
     parseTaskScope,
     (scope, event) => getCameraStageRenderTask(scope, event.sender.id),
   )
-  registerIpcHandler<{ canvasProjectId: string }, CameraStageRenderTaskSnapshotDto[]>(
+  registerIpcHandler<{ canvasProjectId?: string }, CameraStageRenderTaskSnapshotDto[]>(
     'cameraStageRender:list',
-    (input) => ({ canvasProjectId: parseStringField(input, 'canvasProjectId') }),
+    (input) => ({ canvasProjectId: parseRecord(input).canvasProjectId === undefined ? undefined : parseStringField(input, 'canvasProjectId') }),
     ({ canvasProjectId }, event) => listCameraStageRenderTasks(canvasProjectId, event.sender.id),
   )
   registerIpcHandler<CameraStageRenderTaskScopeDto, void>(

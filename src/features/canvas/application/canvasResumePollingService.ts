@@ -1,0 +1,445 @@
+import { createLogger } from '@/core/logging';
+import { registry } from '@/core/ModelRegistry';
+import { useCanvasGenerationProgressStore } from '@/stores/canvasGenerationProgressStore';
+import { useCanvasStore } from '@/stores/canvasStore';
+import { getPlatform } from '@/platform';
+
+import {
+  resolveCanvasImageCapabilityExpectedOutputCount,
+  getRegisteredCanvasImageCapabilities,
+  validateCanvasCapabilityResultPatch,
+  type CanvasImageCapabilityDefinition,
+} from '../capabilities';
+import { getResultNodeMediaType } from '../domain/nodeRegistry';
+import type { CanvasNodeType } from '../domain/canvasNodes';
+import { createDefaultGenerationOutputItems } from '../domain/generationOutputs';
+import { readResumableServerTask } from '../domain/resumableTask';
+import { createCanvasGenerationFailurePatch, createCanvasGenerationCancelledPatch } from '../domain/generationFailure';
+import { resumeCanvasGeneration } from '../generation/runGeneration';
+import {
+  acquireCanvasGenerationResumeLease,
+  isCanvasGenerationResumeLeaseCurrent,
+  isCanvasGenerationTaskActive,
+  releaseCanvasGenerationResumeLease,
+} from '../generation/activeGenerationTasks';
+import {
+  commitCanvasGenerationOutputs,
+  commitCanvasGenerationOutputsInProject,
+  resolveGenerationOutputStrategy,
+} from './generationOutputApplicationService';
+import { isCanvasNodeInputSignatureCurrent } from './canvasExecutionService';
+import { publishCanvasSuccessfulExecution } from './canvasExecutionPublication';
+import { commitLayerSeparationGeneration } from './layerSeparationGenerationService';
+import {
+  commitLocalRedrawGeneration,
+  LOCAL_REDRAW_CONTEXT_FIELD,
+  parseLocalRedrawContext,
+} from './localRedrawGenerationService';
+import {
+  parseStoryboardGenerationResumeContext,
+  prepareStoryboardGenerationOutputContract,
+  STORYBOARD_GENERATION_RESUME_CONTEXT_FIELD,
+} from './storyboardGenerationOutputService';
+import { withCanvasProjectRuntime } from './canvasProjectRuntime';
+import { findCanvasProjectInstance } from './canvasProjectInstances';
+import type { CanvasTransactionRuntime } from './canvasPersistenceService';
+
+const logger = createLogger('features.canvas.resumePolling');
+const resumeControls = new Map<symbol, { taskId: string; controller: AbortController }>();
+
+export function getCanvasResumeControllers(taskId: string): AbortController[] {
+  return [...resumeControls.values()].filter(control => control.taskId === taskId).map(control => control.controller);
+}
+
+/**
+ * 应用重启后恢复未完成的异步生成。
+ *
+ * 画布上的异步任务（尤其视频）在供应商侧可能跑很久，用户完全可能中途关掉软件。
+ * 任务 ID 在创建时已写进结果节点并随项目持久化（见 GenerationNodeShell），
+ * 这里在画布加载后把这些任务接着轮询到出结果或明确失败为止——与对话模式的
+ * useAutoResumePolling 行为对齐。
+ */
+export function resumeCanvasProjectGeneration(
+  projectId: string, nodeIds?: ReadonlySet<string>, options: { retryFailed?: boolean } = {},
+): number {
+  const instance = findCanvasProjectInstance(projectId);
+  if (!instance || instance.closing) return 0;
+  return startCanvasProjectResume(projectId, nodeIds, options, instance.store);
+}
+
+export async function resumeCanvasGenerationInProject(projectId: string, nodeIds: ReadonlySet<string>): Promise<number> {
+  return withCanvasProjectRuntime(projectId, async runtime =>
+    startCanvasProjectResume(projectId, nodeIds, { retryFailed: true }, runtime.store));
+}
+
+function startCanvasProjectResume(
+  projectId: string, nodeIds: ReadonlySet<string> | undefined, options: { retryFailed?: boolean },
+  store: typeof useCanvasStore,
+): number {
+  const { nodes, edges } = store.getState();
+  let started = 0;
+  const setNodeGenerationProgress = useCanvasGenerationProgressStore.getState().setProgress;
+  for (const node of nodes) {
+    if (nodeIds && !nodeIds.has(node.id)) continue;
+    const task = readResumableServerTask(node.data as DynamicValueMap);
+    if (
+      !task
+      || isCanvasGenerationTaskActive(task.taskId)
+      || (!options.retryFailed && node.data.generationCancelled === true)
+      // 失败续查保留原任务，只在明确请求时重取，避免节点更新触发无限重试。
+      || (!options.retryFailed && Boolean(node.data.generationError))
+    ) {
+      continue;
+    }
+
+    const mediaType = getResultNodeMediaType(node.type);
+    if (!mediaType) {
+      continue;
+    }
+    const sourceCapabilityId = typeof node.data.sourceCapabilityId === 'string'
+      ? node.data.sourceCapabilityId
+      : null;
+    const sourceCapability = sourceCapabilityId
+      ? getRegisteredCanvasImageCapabilities().find(({ id }) => id === sourceCapabilityId)
+      : undefined;
+    const persistedSourceNodeId = typeof node.data.generationSourceNodeId === 'string'
+      && node.data.generationSourceNodeId.trim().length > 0
+      ? node.data.generationSourceNodeId
+      : undefined;
+    const sourceNodeId = persistedSourceNodeId
+      ?? edges.find((edge) => edge.target === node.id)?.source;
+
+    const resumeLease = acquireCanvasGenerationResumeLease(projectId, task.taskId);
+    if (!resumeLease) continue;
+    const controller = new AbortController();
+    if (typeof node.data.generationTaskId === 'string') {
+      resumeControls.set(resumeLease, { taskId: node.data.generationTaskId, controller });
+    }
+    started += 1;
+    logger.info('[CanvasResume] 恢复未完成的异步生成', {
+      event: 'canvas.resume_polling.start',
+      taskId: task.taskId,
+      modelId: task.modelId,
+      context: { nodeId: node.id, mediaType },
+    });
+
+    const releaseLease = () => {
+      resumeControls.delete(resumeLease);
+      releaseCanvasGenerationResumeLease(projectId, task.taskId, resumeLease);
+    };
+    void withCanvasProjectRuntime(projectId, runtime => resumeNodeTask({
+      projectId,
+      runtime,
+      signal: controller.signal,
+      nodeId: node.id,
+      sourceNodeId,
+      resultNodeType: node.type,
+      resultNodeData: node.data as DynamicValueMap,
+      mediaType,
+      taskId: task.taskId,
+      modelId: task.modelId,
+      sourceCapability,
+      updateNodeData: async (id, patch) => {
+        if (!isCanvasGenerationResumeLeaseCurrent(projectId, task.taskId, resumeLease)) return;
+        runtime.store.getState().updateNodeData(id, patch);
+        await runtime.persist();
+      },
+      setNodeGenerationProgress,
+      isContextCurrent: () => isCanvasGenerationResumeLeaseCurrent(projectId, task.taskId, resumeLease),
+      releaseLease,
+    })).catch(error => {
+      releaseLease();
+      logger.error('原工程续查无法启动或保存', error, {
+        event: 'canvas.resume_polling.runtime_failed', taskId: task.taskId, context: { projectId, nodeId: node.id },
+      });
+    });
+  }
+  return started;
+}
+
+interface ResumeNodeTaskInput {
+  projectId: string;
+  runtime: CanvasTransactionRuntime;
+  signal: AbortSignal;
+  nodeId: string;
+  sourceNodeId?: string;
+  resultNodeType: CanvasNodeType;
+  resultNodeData: DynamicValueMap;
+  mediaType: 'image' | 'video' | 'audio';
+  taskId: string;
+  modelId: string;
+  sourceCapability?: CanvasImageCapabilityDefinition;
+  updateNodeData: (id: string, patch: Parameters<ReturnType<typeof useCanvasStore.getState>['updateNodeData']>[1]) => void | Promise<void>;
+  setNodeGenerationProgress: ReturnType<
+    typeof useCanvasGenerationProgressStore.getState
+  >['setProgress'];
+  isContextCurrent: () => boolean;
+  releaseLease: () => void;
+}
+
+async function publishResumedExecution(input: {
+  projectId: string;
+  runtime: CanvasTransactionRuntime;
+  isContextCurrent: () => boolean;
+  sourceNodeId?: string;
+  resultNodeData: DynamicValueMap;
+  resultNodeIds: string[];
+}): Promise<void> {
+  const inputSignature = input.resultNodeData.generationInputSignature;
+  if (
+    !input.isContextCurrent() || !input.runtime.isCurrent()
+    || !input.sourceNodeId
+    || typeof inputSignature !== 'string'
+    || inputSignature.length === 0
+    || !input.runtime.store.getState().nodes.some((node) => node.id === input.sourceNodeId)
+  ) return;
+  try {
+    if (!await isCanvasNodeInputSignatureCurrent(input.sourceNodeId, inputSignature, input.projectId)) {
+      logger.info('[CanvasResume] 来源输入已变化，保留恢复结果但跳过发布', {
+        event: 'canvas.resume_polling.publication.skipped_stale',
+        context: { sourceNodeId: input.sourceNodeId, resultNodeIds: input.resultNodeIds },
+      });
+      return;
+    }
+    if (!input.isContextCurrent() || !input.runtime.isCurrent()) return;
+    publishCanvasSuccessfulExecution({
+      sourceNodeId: input.sourceNodeId,
+      inputSignature,
+      outputMode: 'result-nodes',
+      resultNodeIds: input.resultNodeIds,
+    }, input.runtime.store);
+    await input.runtime.persist();
+  } catch (error) {
+    logger.error('[CanvasResume] 恢复结果发布失败', error, {
+      event: 'canvas.resume_polling.publication.failed',
+      context: { sourceNodeId: input.sourceNodeId, resultNodeIds: input.resultNodeIds },
+    });
+  }
+}
+
+async function resumeNodeTask(input: ResumeNodeTaskInput): Promise<void> {
+  const {
+    nodeId,
+    projectId,
+    runtime,
+    signal,
+    sourceNodeId,
+    resultNodeType,
+    resultNodeData,
+    mediaType,
+    taskId,
+    modelId,
+    sourceCapability,
+    updateNodeData,
+    setNodeGenerationProgress,
+    isContextCurrent,
+    releaseLease,
+  } = input;
+  let createdFilePaths: string[] = [];
+  const commitOutputs = (value: Parameters<typeof commitCanvasGenerationOutputs>[0]) => commitCanvasGenerationOutputsInProject(projectId, value, runtime);
+  const publish = (resultNodeIds: string[], source = sourceNodeId) => publishResumedExecution({
+    projectId, runtime, isContextCurrent, sourceNodeId: source, resultNodeData, resultNodeIds,
+  });
+
+  try {
+    if (!isContextCurrent()) return;
+    await updateNodeData(nodeId, { isGenerating: true, generationError: null, generationCancelled: false });
+    const localRedrawContext = sourceCapability?.outputPolicy.postProcess === 'local-redraw-composite'
+      ? parseLocalRedrawContext(resultNodeData[LOCAL_REDRAW_CONTEXT_FIELD])
+      : null;
+    const result = await resumeCanvasGeneration({
+      modelId,
+      signal,
+      requestId: typeof resultNodeData.generationTaskId === 'string' ? resultNodeData.generationTaskId : localRedrawContext?.requestId,
+      mediaType,
+      taskId,
+      onProgress: (progress) => {
+        if (isContextCurrent()) setNodeGenerationProgress(nodeId, progress);
+      },
+    });
+    createdFilePaths = [...new Set(result.createdFilePaths ?? [])];
+    signal.throwIfAborted();
+    if (!isContextCurrent()) return;
+    const resultOutputs = result.outputs;
+
+    const storyboardContextValue = resultNodeData[STORYBOARD_GENERATION_RESUME_CONTEXT_FIELD];
+    if (storyboardContextValue !== undefined && storyboardContextValue !== null) {
+      const storyboardContext = parseStoryboardGenerationResumeContext(storyboardContextValue);
+      if (!storyboardContext) throw new Error('分镜生成恢复上下文无效或版本不受支持');
+      const contract = await prepareStoryboardGenerationOutputContract({
+        outputs: resultOutputs,
+        context: storyboardContext,
+      });
+      signal.throwIfAborted();
+      if (!isContextCurrent()) return;
+      const committed = await commitOutputs({
+        sourceNodeId,
+        placeholderNodeId: nodeId,
+        resultNodeType,
+        contract,
+        completionId: `storyboard-grid:${nodeId}`,
+        groupTitle: `${String(resultNodeData.displayName ?? '分镜输出')} · ${contract.outputs.length}`,
+      });
+      if (!isContextCurrent()) return;
+      await publish(committed.resultNodeIds);
+      logger.info('[CanvasResume] 分镜生成恢复完成', {
+        event: 'canvas.resume_polling.storyboard.completed',
+        taskId,
+        modelId,
+        context: { nodeId, outputCount: contract.outputs.length },
+      });
+      return;
+    }
+
+    if (sourceCapability?.outputPolicy.postProcess === 'local-redraw-composite') {
+      if (!localRedrawContext) throw new Error('局部重绘恢复缺少裁剪上下文');
+      const committed = await commitLocalRedrawGeneration({
+        projectId, runtime, signal,
+        sourceNodeId,
+        placeholderNodeId: nodeId,
+        resultNodeType,
+        completionId: `generation-output:${nodeId}`,
+        context: localRedrawContext,
+        result: { ...result, outputs: resultOutputs },
+      });
+      if (!isContextCurrent()) return;
+      await publish(committed.resultNodeIds);
+      logger.info('[CanvasResume] 局部重绘恢复完成', {
+        event: 'canvas.resume_polling.local_redraw.completed',
+        taskId,
+        modelId,
+        context: { nodeId },
+      });
+      return;
+    }
+
+    if (result.structuredOutput?.kind === 'layer-stack' || resultNodeData.resultKind === 'layer-stack') {
+      const persistedSourceNodeId = typeof resultNodeData.generationSourceNodeId === 'string'
+        && resultNodeData.generationSourceNodeId.trim().length > 0
+        ? resultNodeData.generationSourceNodeId
+        : undefined;
+      const sourceImage = Array.isArray(resultNodeData.generationInputImages)
+        ? resultNodeData.generationInputImages.find((value): value is string => typeof value === 'string' && value.trim().length > 0)
+        : undefined;
+      const model = registry.getModel(modelId);
+      const persistedProviderId = typeof resultNodeData.generationProviderId === 'string'
+        && resultNodeData.generationProviderId.trim().length > 0
+        ? resultNodeData.generationProviderId
+        : undefined;
+      const resolvedSourceNodeId = persistedSourceNodeId ?? sourceNodeId;
+      const providerId = persistedProviderId ?? model?.meta.provider;
+      if (!resolvedSourceNodeId || !sourceImage || !providerId) {
+        throw new Error('图层拆分恢复缺少来源节点、源图或模型信息');
+      }
+      const committed = await commitLayerSeparationGeneration({
+        projectId, runtime, signal,
+        sourceNodeId: resolvedSourceNodeId,
+        placeholderNodeId: nodeId,
+        resultNodeType,
+        completionId: `generation-output:${nodeId}`,
+        sourceImage,
+        providerId,
+        modelId,
+        result: { ...result, outputs: resultOutputs },
+      });
+      if (!isContextCurrent()) return;
+      await publish(committed.resultNodeIds, resolvedSourceNodeId);
+      logger.info('[CanvasResume] 结构化图层生成恢复完成', {
+        event: 'canvas.resume_polling.layer_stack.completed',
+        taskId,
+        modelId,
+        context: { nodeId },
+      });
+      return;
+    }
+
+    const outputResultKind = sourceCapability?.outputPolicy.resultKind;
+    const memberResultKind = outputResultKind === 'panorama' ? 'panorama' : mediaType;
+    const strategy = resolveGenerationOutputStrategy({
+      outputCount: resultOutputs.length,
+      resultKind: outputResultKind,
+    });
+    const batchResultKind = strategy === 'assetGroup'
+      ? mediaType === 'image' ? 'image-group' : 'media-group'
+      : memberResultKind;
+    const committed = await commitOutputs({
+      sourceNodeId,
+      placeholderNodeId: nodeId,
+      resultNodeType,
+      contract: {
+        version: 1,
+        strategy,
+        resultKind: outputResultKind ?? batchResultKind,
+        expectedOutputCount: sourceCapability
+          ? resolveCanvasImageCapabilityExpectedOutputCount(
+            sourceCapability.outputPolicy,
+            resultNodeData.generationMappedParams && typeof resultNodeData.generationMappedParams === 'object'
+              ? resultNodeData.generationMappedParams as DynamicValueMap
+              : {},
+          )
+          : undefined,
+        outputs: createDefaultGenerationOutputItems({
+          sources: resultOutputs,
+          mediaType,
+          resultKind: memberResultKind,
+          semanticKind: outputResultKind === 'panorama' ? 'panorama' : 'generated-media',
+        }),
+      },
+      completionId: `generation-output:${nodeId}`,
+      validateResultPatch: sourceCapability
+        ? (patch) => validateCanvasCapabilityResultPatch(
+            sourceCapability,
+            patch,
+            resultNodeData.panoramaProjectionMode,
+          )
+        : undefined,
+    });
+    if (!isContextCurrent()) return;
+    await publish(committed.resultNodeIds);
+    logger.info('[CanvasResume] 异步生成恢复完成', {
+      event: 'canvas.resume_polling.completed',
+      taskId,
+      modelId,
+      context: { nodeId },
+    });
+  } catch (error) {
+    if (!isContextCurrent()) return;
+    const message = error instanceof Error ? error.message : String(error);
+    try {
+      await updateNodeData(nodeId, signal.aborted ? createCanvasGenerationCancelledPatch()
+        : { ...createCanvasGenerationFailurePatch(error, resultNodeData.resultKind),
+          serverTaskId: taskId, serverTaskModelId: modelId });
+    } catch (saveError) {
+      logger.error('[CanvasResume] 续查状态保存未确认', saveError, {
+        event: 'canvas.resume_polling.state_save_failed', taskId, modelId, context: { nodeId },
+      });
+    }
+    if (signal.aborted) logger.info('[CanvasResume] 原任务续查已停止', {
+      event: 'canvas.resume_polling.cancelled', taskId, modelId, context: { nodeId },
+    });
+    else logger.error('[CanvasResume] 异步生成恢复失败', error, {
+      event: 'canvas.resume_polling.failed',
+      taskId,
+      modelId,
+      context: { nodeId, message },
+    });
+  } finally {
+    try {
+      if (mediaType === 'image' && createdFilePaths.length > 0) {
+        await getPlatform().image.releaseManagedGenerationMedia(createdFilePaths).catch((error) => {
+          logger.error('[CanvasResume] 恢复任务临时媒体释放失败', error, {
+            event: 'canvas.resume_polling.resources.release_failed',
+            taskId,
+            modelId,
+            context: { nodeId, createdFileCount: createdFilePaths.length },
+          });
+        });
+      }
+      if (isContextCurrent()) {
+        setNodeGenerationProgress(nodeId, null);
+      }
+    } finally {
+      releaseLease();
+    }
+  }
+}

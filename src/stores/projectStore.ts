@@ -1,25 +1,14 @@
-import { createLogger } from '@/core/logging'
+import { attachCanvasProject, closeCanvasProjectInstance, configureCanvasInstancePersistence, detachCanvasProject, findCanvasProjectInstance, getCanvasProjectInstance, registerCanvasProjectInstance } from '@/features/canvas/application/canvasProjectInstances';
+import { createLogger } from '@/core/logging';
+import { isUiInspectionReadOnly } from '@/platform/runtime';
 import { create } from 'zustand';
 import { v4 as uuidv4 } from 'uuid';
 import type { Viewport } from '@xyflow/react';
-import {
-  useCanvasStore,
-  type CanvasEdge,
-  type CanvasHistoryState,
-  type CanvasNode,
-} from './canvasStore';
-import {
-
-  deleteProjectRecord,
-  getProjectRecord,
-  listProjectSummaries,
-  renameProjectRecord,
-  updateProjectViewportRecord,
-  upsertProjectRecord,
-} from '@/commands/projectState';
+import { type CanvasEdge, type CanvasHistoryState, type CanvasNode } from './canvasStore';
+import { deleteProjectRecord, listProjectSummaries, updateProjectViewportRecord, upsertProjectRecord } from '@/commands/projectState';
 import { createProjectPersistenceQueue } from './projectPersistenceQueue';
 
-import { fromProjectRecord, toProjectRecord, toProjectSummary, type Project, type ProjectSummary } from './projectStoreSerialization';
+import { toProjectRecord, toProjectSummary, type Project, type ProjectSummary } from './projectStoreSerialization';
 export { decodeProjectRecord, encodeProjectAsRecord } from './projectStoreSerialization';
 export type { Project, ProjectSummary } from './projectStoreSerialization';
 
@@ -57,6 +46,10 @@ function yieldForProjectLoadingPaint(): Promise<void> {
 }
 
 const VIEWPORT_EPSILON = 0.001;
+/** Opening attaches the existing domain instance, including in-flight work and undo history. */
+function restoreProjectCanvas(project: Project): void {
+  attachCanvasProject(registerCanvasProjectInstance(project));
+}
 
 function hasViewportMeaningfulDelta(current: Viewport, next: Viewport): boolean {
   return (
@@ -85,6 +78,7 @@ const persistenceQueue = createProjectPersistenceQueue<Project>({
   getProjectId: (project) => project.id,
   upsertProject: async (project) => {
     await upsertProjectRecord(toProjectRecord(project))
+    findCanvasProjectInstance(project.id)?.markSaved(project)
     setProjectPersistenceError(project.id, null)
   },
   updateViewport: updateProjectViewportRecord,
@@ -112,7 +106,7 @@ interface ProjectState {
   persistenceErrors: Record<string, string>;
 
   hydrate: () => Promise<void>;
-  createProject: (name: string) => Promise<string>;
+  createProject: (name: string, options?: { attach?: boolean }) => Promise<string>;
   deleteProject: (id: string) => Promise<void>;
   renameProject: (id: string, name: string) => Promise<void>;
   setProjectCover: (id: string, coverPath: string | null) => void;
@@ -165,7 +159,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     }
   },
 
-  createProject: async (name) => {
+  createProject: async (name, options) => {
     const id = uuidv4();
     const now = Date.now();
     const project: Project = {
@@ -188,10 +182,12 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       setProjectPersistenceError(id, 'project.persistenceFailed')
       throw error
     }
+    registerCanvasProjectInstance(project);
+    if (options?.attach !== false) restoreProjectCanvas(project);
     set((state) => ({
       projects: [{ ...project }, ...state.projects],
-      currentProjectId: id,
-      currentProject: project,
+      currentProjectId: options?.attach === false ? state.currentProjectId : id,
+      currentProject: options?.attach === false ? state.currentProject : project,
       isOpeningProject: false,
       persistenceError: null,
       openError: null,
@@ -201,13 +197,14 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
 
   deleteProject: async (id) => {
     try {
-      await persistenceQueue.deleteProject(id)
+      await closeCanvasProjectInstance(id, () => persistenceQueue.deleteProject(id))
     } catch (error) {
       logger.error('Failed to delete project record', error)
       setProjectPersistenceError(id, 'project.persistenceFailed')
       throw error
     }
     setProjectPersistenceError(id, null)
+    if (get().currentProjectId === id) detachCanvasProject()
     set((state) => ({
       projects: state.projects.filter((project) => project.id !== id),
       currentProjectId: state.currentProjectId === id ? null : state.currentProjectId,
@@ -218,24 +215,10 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
   },
 
   renameProject: async (id, name) => {
-    const now = Date.now();
-    const currentProject = get().currentProject
-    const nextCurrentProject = currentProject?.id === id
-      ? { ...currentProject, name, updatedAt: now }
-      : null
-
-    set((state) => ({
-      projects: state.projects.map((summary) => summary.id === id
-        ? { ...summary, name, updatedAt: now }
-        : summary).sort((a, b) => b.updatedAt - a.updatedAt),
-      currentProject: state.currentProject?.id === id
-        ? { ...state.currentProject, name, updatedAt: now }
-        : state.currentProject,
-    }))
-
+    const instance = await getCanvasProjectInstance(id)
+    instance.updateMetadata({ name })
     try {
-      if (nextCurrentProject) await persistenceQueue.flushProject(nextCurrentProject)
-      else await renameProjectRecord(id, name, now)
+      await persistenceQueue.flushProject(instance.snapshot())
     } catch (error) {
       logger.error('Failed to rename project record', error)
       setProjectPersistenceError(id, 'project.persistenceFailed')
@@ -245,6 +228,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
   },
 
   setProjectCover: (id, coverPath) => {
+    findCanvasProjectInstance(id)?.updateMetadata({ coverPath });
     set((state) => ({
       projects: state.projects.map((summary) => (
         summary.id === id ? { ...summary, coverPath } : summary
@@ -264,18 +248,18 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       try {
         await yieldForProjectLoadingPaint();
         if (reqSeq !== openProjectRequestSeq) return;
-        const unsaved = persistenceQueue.getUnsavedProject(id);
-        const record = unsaved ? null : await getProjectRecord(id);
+        const instance = await getCanvasProjectInstance(id);
+        const project = instance.snapshot();
         if (reqSeq !== openProjectRequestSeq) {
           return;
         }
-        if (!record && !unsaved) {
+        if (!project) {
           logger.warn('工程记录不存在', { event: 'project.open.failed', context: { projectId: id } });
           set({ isOpeningProject: false, openError: 'project.openFailed' });
           return;
         }
 
-        const project = unsaved ?? fromProjectRecord(record!);
+        restoreProjectCanvas(project);
         set((state) => ({
           currentProjectId: id,
           currentProject: project,
@@ -309,16 +293,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     let persistedSummary: ProjectSummary | null = null;
 
     if (currentProjectId && currentProject && currentProject.id === currentProjectId) {
-      const canvasState = useCanvasStore.getState();
-      const nextProject: Project = {
-        ...currentProject,
-        nodes: canvasState.nodes,
-        edges: canvasState.edges,
-        viewport: canvasState.currentViewport ?? currentProject.viewport ?? DEFAULT_VIEWPORT,
-        history: canvasState.history ?? currentProject.history ?? createEmptyHistory(),
-        nodeCount: canvasState.nodes.length,
-        updatedAt: Date.now(),
-      };
+      const nextProject = (await getCanvasProjectInstance(currentProjectId)).snapshot();
 
       persistedSummary = {
         id: nextProject.id,
@@ -338,6 +313,8 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       setProjectPersistenceError(currentProjectId, null)
     }
 
+    if (get().currentProjectId !== currentProjectId) return;
+    detachCanvasProject();
     set((state) => ({
       projects: persistedSummary
         ? updateProjectSummary(state.projects, persistedSummary)
@@ -462,9 +439,26 @@ export function hasUnconfirmedCanvasProjectSnapshot(projectId: string): boolean 
   return persistenceQueue.getUnsavedProject(projectId) !== undefined
 }
 
+/** 后台领域操作也写入同一保存队列，打开工程时可恢复尚未落盘的原快照。 */
+export async function persistBackgroundCanvasProject(project: Project): Promise<void> {
+  persistenceQueue.queueProject(project)
+  try {
+    await persistenceQueue.flushProject(project)
+    setProjectPersistenceError(project.id, null)
+    useProjectStore.setState((state) => ({ projects: updateProjectSummary(state.projects, project) }))
+  } catch (error) {
+    setProjectPersistenceError(project.id, 'project.persistenceFailed')
+    throw error
+  }
+}
+
+export function readUnconfirmedCanvasProject(projectId: string): Project | undefined {
+  return persistenceQueue.getUnsavedProject(projectId)
+}
+
 export async function flushCanvasProjectSnapshot(projectId: string): Promise<void> {
-  const project = useProjectStore.getState().currentProject
-  if (!project || project.id !== projectId) throw new Error('当前画布项目已切换，请返回原项目后重试保存')
+  const project = findCanvasProjectInstance(projectId)?.snapshot() ?? persistenceQueue.getUnsavedProject(projectId)
+  if (!project || project.id !== projectId) throw new Error('画布工程实例不存在')
   try {
     await persistenceQueue.flushProject(project)
     setProjectPersistenceError(projectId, null)
@@ -478,3 +472,14 @@ export async function flushCanvasProjectSnapshot(projectId: string): Promise<voi
 export function pauseCanvasProjectPersistence(projectId: string): () => void {
   return persistenceQueue.pauseProject(projectId)
 }
+
+configureCanvasInstancePersistence(project => {
+  if (!isUiInspectionReadOnly()) {
+    persistenceQueue.clearViewport(project.id)
+    persistenceQueue.queueProject(project)
+  }
+  useProjectStore.setState(state => ({
+    currentProject: state.currentProjectId === project.id ? project : state.currentProject,
+    projects: updateProjectSummary(state.projects, project),
+  }))
+})

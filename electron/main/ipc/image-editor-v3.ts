@@ -29,6 +29,7 @@ import { registerImageEditorV3BrushTileIpc } from './image-editor-v3-brush-tiles
 import {
   normalizeImageEditorV3Document,
   parseImageEditorV3BasePayload,
+  parseImageEditorV3ListPayload,
   parseImageEditorV3GarbageCollectPayload,
   parseImageEditorV3DeleteIfRevisionPayload,
   parseImageEditorV3ForkPayload,
@@ -293,6 +294,14 @@ export function registerImageEditorV3Ipc(): void {
     runRequest,
   })
   registerImageEditorV3BrushTileIpc({ store: getRuntime().brushTiles, guard, runRequest })
+  registerIpcHandler('imageEditorV3:document:list', parseImageEditorV3ListPayload, (payload, event) => (
+    runRequest('document.list', payload.requestId, event.sender.id, async (signal) => {
+      throwIfAborted(signal)
+      const result = await getRuntime().documents.listReferences(payload.cursor, payload.limit)
+      throwIfAborted(signal)
+      return result
+    })
+  ), guard)
   registerIpcHandler('imageEditorV3:document:load', parseImageEditorV3LoadPayload, (payload, event) => (
     runRequest('document.load', payload.requestId, event.sender.id, async (signal) => {
       throwIfAborted(signal)

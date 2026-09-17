@@ -9,8 +9,8 @@ import {
   type JsonValue,
   unrestrictedCollectionAvailability,
 } from '@/core/application-control'
-import { normalizeGenerationTaskStatus } from '@/core/assistant/externalWait'
-import { APPLICATION_CAPABILITY_CATALOG_VERSION } from '@/core/assistant/applicationCapabilities'
+import { normalizeGenerationTaskStatus } from '@/core/application-control/domains/generation/taskStatus'
+import { APPLICATION_CAPABILITY_CATALOG_VERSION } from '@/core/application-control/applicationCapabilities'
 import { databaseService, type HistoryRecord } from '@/services/database'
 
 import { useGenerationDraftStore } from '../store/generationDraftStore'
@@ -118,8 +118,8 @@ function taskProperties(task: GenerationTaskStatusSnapshot): Record<string, Json
     'generation.task.model_ref': { kind: GENERATION_ENTITY_TYPES.model, id: task.modelId },
     'generation.task.status': status,
     'generation.task.progress': task.progress,
-    'generation.task.cancellable': active,
-    'generation.task.waiting_external': active,
+    'generation.task.cancellable': task.cancellable ?? active,
+    'generation.task.waiting_external': task.waitingExternal ?? active,
     'generation.task.result_ref': task.resultAvailable ? { kind: GENERATION_ENTITY_TYPES.result, id: task.taskId } : null,
     'generation.task.error_message': task.errorMessage,
   }
@@ -190,10 +190,18 @@ class GenerationReflectionProvider implements ApplicationEntityProvider {
       const source: GenerationModelFieldSource = { modelId: id, meta: schema.meta as Record<string, unknown>, schemaRef: schema.schemaRef }
       return { values: fieldReadValues(GENERATION_MODEL_FIELDS, source), revision: getGenerationModelsRevision() }
     }
-    const task = readGenerationTaskStatusSnapshot(id)
-    if (!task && this.entityType === GENERATION_ENTITY_TYPES.result) {
+    let task = readGenerationTaskStatusSnapshot(id)
+    let record: HistoryRecord | null | undefined
+    if (!task || task.origin === 'canvas') {
       await databaseService.init()
-      const record = await databaseService.getHistoryById(id)
+      record = await databaseService.getHistoryById(id)
+      // 普通历史结果不加载画布运行时；仅带画布身份的记录需要恢复任务事实。
+      if (record?.params.__canvasGeneration) {
+        const { getCanvasGenerationTask } = await import('@/features/canvas/application/canvasGenerationTaskService')
+        if (await getCanvasGenerationTask(id)) task = readGenerationTaskStatusSnapshot(id)
+      }
+    }
+    if (!task && this.entityType === GENERATION_ENTITY_TYPES.result) {
       if (!record || !historyHasResult(record)) throw new Error('NOT_FOUND')
       return { values: {
         'generation.result.task_ref': null,

@@ -1,7 +1,7 @@
 import Database from 'better-sqlite3'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
-import { runAgentSchemaMigrations } from '../agent-runtime/persistence/migrations'
+import { initializeModelTraceSchema } from './traceSchema'
 import { AgentTraceStore } from './agent-trace-store'
 
 const describeWithElectronSqlite = process.versions.electron ? describe : describe.skip
@@ -24,19 +24,8 @@ describeWithElectronSqlite('AgentTraceStore', () => {
   beforeEach(() => {
     database = new Database(':memory:')
     database.pragma('foreign_keys = ON')
-    runAgentSchemaMigrations(database)
-    const now = Date.now()
-    database.prepare(`
-      INSERT INTO agent_threads(thread_id, title, created_at, updated_at, last_run_id)
-      VALUES ('thread-1', '追踪测试', ?, ?, 'run-1')
-    `).run(now, now)
-    database.prepare(`
-      INSERT INTO agent_runs(
-        run_id, thread_id, goal, request_json, state_json, status,
-        checkpoint_version, checkpoint_json, recovery_status,
-        parent_run_id, created_at, updated_at
-      ) VALUES ('run-1', 'thread-1', '检查模型上下文', '{}', '{}', 'running', 'v1', '{}', 'none', NULL, ?, ?)
-    `).run(now, now)
+    initializeModelTraceSchema(database)
+    database.prepare(`INSERT INTO model_trace_contexts (run_id, thread_id, goal, status) VALUES ('run-1', 'thread-1', '检查模型上下文', 'running')`).run()
     store = new AgentTraceStore(database)
   })
 
@@ -154,7 +143,7 @@ describeWithElectronSqlite('AgentTraceStore', () => {
       traceId: 'trace-primary', completedAt: new Date(Date.parse(startedAt) + 20).toISOString(),
       elapsedMs: 20, finishReason: 'stop', usage,
     })
-    database?.prepare("UPDATE agent_runs SET status = 'completed' WHERE run_id = 'run-1'").run()
+    database?.prepare("UPDATE model_trace_contexts SET status = 'completed' WHERE run_id = 'run-1'").run()
 
     expect(store.query({ limit: 50 }).runs[0]).toMatchObject({
       status: 'completed', requestCount: 2, completedCount: 1, failedCount: 1,

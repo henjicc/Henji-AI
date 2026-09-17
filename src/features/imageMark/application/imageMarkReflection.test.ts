@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from '@/tests/harnessNativeStorage'
 
 import type { ApplicationControlAccessContext, ApplicationExecutionContext } from '@/core/application-control'
 import { createEmptyImageEditDocument } from '@/core/imageEdit'
@@ -8,7 +9,7 @@ import { useImageEditSessionStore } from '@/features/imageEdit/store/imageEditSe
 import {
   getApplicationControlExecutionEngine,
   getApplicationReflectionRegistry,
-} from '../../assistant/applicationCapabilities/applicationControlRegistry'
+} from '../../application-control/capabilities/applicationControlRegistry'
 
 const accessContext: ApplicationControlAccessContext = {
   exposure: 'assistant',
@@ -26,8 +27,10 @@ function resetStore(): void {
 }
 
 describe('image_mark 反射与执行器（6.2）', () => {
+  beforeEach(installHarnessNativeStorage)
   afterEach(() => {
     resetStore()
+    uninstallHarnessNativeStorage()
   })
 
   it('没有打开任何编辑器时，文档与标注列表都是空的', async () => {

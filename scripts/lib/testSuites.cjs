@@ -15,12 +15,10 @@ const IMAGE_EXPORT_TEST_FILES = [
 ]
 // 唯一原生 SQLite 清单：运行器与分层门禁共同消费，不以条件 skip 代替真实执行。
 const NATIVE_TEST_FILES = [
-  'electron/main/services/agent-runtime/persistence/permission-audit-store.test.ts',
-  'electron/main/services/agent-runtime/persistence/artifact-store.test.ts',
-  'electron/main/services/agent-runtime/persistence/store.test.ts',
-  'electron/main/services/agent-runtime/persistence/migration-13.test.ts',
-  'electron/main/services/agent-runtime/persistence/session-store.test.ts',
-  'electron/main/services/agent-runtime/persistence/external-wait-store.test.ts',
+  'electron/main/services/application-runtime/operationStore.test.ts',
+  'electron/main/services/application-runtime/mediaResources.native.test.ts',
+  'electron/main/services/ai-runtime/generation-submissions.test.ts',
+  'src/features/application-control/mcpWriteIntegration.test.ts',
   'electron/main/services/assistant/memory-store.test.ts',
   'electron/main/services/logging/agent-trace-store.test.ts',
   'electron/main/services/storyboard-projects.storage.test.ts',

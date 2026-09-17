@@ -11,12 +11,8 @@ import { createLogger } from '@/core/logging'
 import { imageEditDocumentToMarkDoc, replaceMarkDocInImageEditDocument, type ImageEditDocument, type MarkItem } from '@/core/imageEdit'
 import { useImageEditSessionStore } from '@/features/imageEdit/store/imageEditSessionStore'
 import { createImageEditIdV3 } from '@/core/imageEdit/v3/documentFactory'
-import {
-  findImageEditV3LiveLayer,
-  isImageEditV3Ref,
-  requireImageEditV3LiveSession,
-  splitImageEditV3AnnotationRef,
-} from '@/features/imageEdit/v3/application/imageEditLiveSessionRegistry'
+import { requireImageEditDocumentInstanceV3 } from '@/features/imageEdit/v3/application/imageEditDocumentInstances'
+import { findImageEditV3LiveLayer, isImageEditV3Ref, splitImageEditV3AnnotationRef } from '@/features/imageEdit/v3/application/imageEditDocumentRefs'
 
 import { IMAGE_MARK_ANNOTATION_FIELDS as FIELDS, IMAGE_MARK_ENTITY_TYPES } from './imageMarkFields'
 import { annotationRef, imageMarkRevision, requireSessionDocument, splitAnnotationRef } from './imageMarkSessionAccess'
@@ -112,7 +108,7 @@ export class ImageMarkAnnotationMutationExecutor implements ApplicationMutationE
     if (!result.undoToken) return []
     if (result.undoToken.startsWith(V3_UNDO_PREFIX)) {
       const payload = JSON.parse(result.undoToken.slice(V3_UNDO_PREFIX.length)) as V3UndoPayload
-      const { bus } = requireImageEditV3LiveSession(payload.documentId)
+      const { bus } = requireImageEditDocumentInstanceV3(payload.documentId)
       if (!bus.rollbackCommands([payload.commandId])) {
         throw new Error('IMAGE_MARK_V3_ANNOTATION_ROLLBACK_EMPTY')
       }
@@ -138,7 +134,7 @@ export class ImageMarkAnnotationMutationExecutor implements ApplicationMutationE
   private async undoInMemory(undoToken: string): Promise<ApplicationCompletedStepResult> {
     if (undoToken.startsWith(V3_UNDO_PREFIX)) {
       const payload = JSON.parse(undoToken.slice(V3_UNDO_PREFIX.length)) as V3UndoPayload
-      const { bus } = requireImageEditV3LiveSession(payload.documentId)
+      const { bus } = requireImageEditDocumentInstanceV3(payload.documentId)
       if (!bus.undoCommands([payload.commandId])) throw new Error('IMAGE_MARK_V3_ANNOTATION_UNDO_EMPTY')
       const revision = imageMarkRevision()
       return {
@@ -172,7 +168,7 @@ export class ImageMarkAnnotationMutationExecutor implements ApplicationMutationE
 
   private async applyV3(step: MutationStep): Promise<ApplicationCompletedStepResult> {
     const { documentId, layerId, annotationId } = splitImageEditV3AnnotationRef(step.target)
-    const { bus } = requireImageEditV3LiveSession(documentId)
+    const { bus } = requireImageEditDocumentInstanceV3(documentId)
     const location = findImageEditV3LiveLayer(bus.getSnapshot().document, layerId)
     if (!location || location.layer.type !== 'annotation') throw new Error('NOT_FOUND')
     const item = location.layer.annotations.find((candidate) => candidate.id === annotationId)

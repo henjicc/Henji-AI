@@ -2,7 +2,7 @@ import { v4 as uuidv4 } from 'uuid'
 import { z } from 'zod'
 
 import { fieldWriterTable, type ApplicationPropertyMutation, type ApplicationPropertyValue, type JsonValue } from '@/core/application-control'
-import { APPLICATION_CAPABILITY_CATALOG_VERSION } from '@/core/assistant/applicationCapabilities'
+import { APPLICATION_CAPABILITY_CATALOG_VERSION } from '@/core/application-control/applicationCapabilities'
 
 import type { StageVec3 } from '../domain/sceneTypes'
 import type { StageSpatialPath, StageSpatialPathKnot } from '../domain/stateKeyframeTypes'

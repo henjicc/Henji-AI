@@ -24,13 +24,8 @@ import {
   type ImageEditV3LayerMutationDraft,
   type ImageEditV3MaskMutationDraft,
 } from './imageEditV3Fields'
-import {
-  findImageEditV3LiveLayer,
-  getImageEditV3LiveRevision,
-  requireImageEditV3LiveSession,
-  splitImageEditV3DocumentRef,
-  splitImageEditV3LayerRef,
-} from './imageEditLiveSessionRegistry'
+import { getImageEditDocumentCatalogRevisionV3, requireImageEditDocumentInstanceV3 } from './imageEditDocumentInstances'
+import { findImageEditV3LiveLayer, splitImageEditV3DocumentRef, splitImageEditV3LayerRef } from './imageEditDocumentRefs'
 
 type MutationStep = Extract<ApplicationPlannedStep, { kind: 'mutation' }>
 
@@ -71,7 +66,7 @@ function completed(
   documentId: string,
   commandIds: string[],
 ): ApplicationCompletedStepResult {
-  const revision = getImageEditV3LiveRevision()
+  const revision = getImageEditDocumentCatalogRevisionV3()
   return {
     status: 'completed',
     resultingRevisions: { image_edit: revision },
@@ -93,9 +88,9 @@ function completed(
 }
 
 async function undoPayload(payload: UndoPayload): Promise<ApplicationCompletedStepResult> {
-  const { bus } = requireImageEditV3LiveSession(payload.documentId)
+  const { bus } = requireImageEditDocumentInstanceV3(payload.documentId)
   if (!bus.undoCommands(payload.commandIdsNewestFirst)) throw new Error('IMAGE_EDIT_V3_UNDO_EMPTY')
-  const revision = getImageEditV3LiveRevision()
+  const revision = getImageEditDocumentCatalogRevisionV3()
   return {
     status: 'completed',
     resultingRevisions: { image_edit: revision },
@@ -110,9 +105,9 @@ async function undoPayload(payload: UndoPayload): Promise<ApplicationCompletedSt
 }
 
 async function rollbackPayload(payload: UndoPayload): Promise<ApplicationCompletedStepResult> {
-  const { bus } = requireImageEditV3LiveSession(payload.documentId)
+  const { bus } = requireImageEditDocumentInstanceV3(payload.documentId)
   if (!bus.rollbackCommands(payload.commandIdsNewestFirst)) throw new Error('IMAGE_EDIT_V3_ROLLBACK_EMPTY')
-  const revision = getImageEditV3LiveRevision()
+  const revision = getImageEditDocumentCatalogRevisionV3()
   return {
     status: 'completed',
     resultingRevisions: { image_edit: revision },
@@ -148,7 +143,7 @@ abstract class ImageEditV3MutationExecutorBase implements ApplicationMutationExe
       targetId: step.target.id,
     })
     const { documentId, commands } = await this.createCommands(step)
-    const { bus } = requireImageEditV3LiveSession(documentId)
+    const { bus } = requireImageEditDocumentInstanceV3(documentId)
     const applied: string[] = []
     try {
       assertImageEditPersistenceCurrentV3(documentId)
@@ -236,7 +231,7 @@ function resolveMoveTarget(
   draft: ImageEditV3LayerMutationDraft,
 ): { parentId: string | null; index: number } | null {
   if (!draft.parentRef && draft.index === undefined) return null
-  const { bus } = requireImageEditV3LiveSession(documentId)
+  const { bus } = requireImageEditDocumentInstanceV3(documentId)
   const document = bus.getSnapshot().document
   const location = findImageEditV3LiveLayer(document, layerId)
   if (!location) throw new Error('NOT_FOUND')
@@ -273,7 +268,7 @@ function layerCommands(
   fields: typeof IMAGE_EDIT_V3_LAYER_FIELDS | typeof IMAGE_EDIT_V3_GROUP_FIELDS,
 ): Promise<{ documentId: string; commands: ImageEditCommandV3[] }> {
   const { documentId, layerId } = splitImageEditV3LayerRef(step.target, entityType)
-  const { bus } = requireImageEditV3LiveSession(documentId)
+  const { bus } = requireImageEditDocumentInstanceV3(documentId)
   const location = findImageEditV3LiveLayer(bus.getSnapshot().document, layerId)
   if (!location) throw new Error('NOT_FOUND')
   if (entityType === 'image_edit.layer' && location.layer.type === 'group') throw new Error('NOT_FOUND')
@@ -334,7 +329,7 @@ export class ImageEditV3MaskMutationExecutor extends ImageEditV3MutationExecutor
 
   async createCommands(step: MutationStep): Promise<{ documentId: string; commands: ImageEditCommandV3[] }> {
     const { documentId, layerId } = splitImageEditV3LayerRef(step.target, 'image_edit.mask')
-    const { bus } = requireImageEditV3LiveSession(documentId)
+    const { bus } = requireImageEditDocumentInstanceV3(documentId)
     const location = findImageEditV3LiveLayer(bus.getSnapshot().document, layerId)
     if (!location?.layer.mask) throw new Error('NOT_FOUND')
     const draft: ImageEditV3MaskMutationDraft = {}

@@ -2,6 +2,9 @@ import { BrowserWindow, powerSaveBlocker, webContents } from 'electron'
 import path from 'node:path'
 import { APP_WINDOW_BACKGROUND_HEX } from '../../../src/core/theme/colorTokens'
 import { cleanupAllVideoFrameExports } from './video/frame-export'
+import { cameraStageRenderTaskStorage } from './camera-stage-render-task-storage'
+import { getCameraStageProject } from './camera-stage-projects'
+import type { CameraStageRenderWorkerJob } from '../../../src/platform/contracts/cameraStageRender'
 import { createMainLogger } from './logging/main-logger'
 import {
   CameraStageRenderTaskRegistry,
@@ -20,12 +23,12 @@ export type {
   CameraStageRenderTaskSnapshotDto,
 } from './camera-stage-render-task-registry'
 
-interface QueuedRenderTask extends CameraStageRenderRequestDto {
+interface QueuedRenderTask extends CameraStageRenderWorkerJob {
   ownerWebContentsId: number
 }
 
 const logger = createMainLogger('main.camera-stage-render')
-const taskRegistry = new CameraStageRenderTaskRegistry()
+const taskRegistry = new CameraStageRenderTaskRegistry(cameraStageRenderTaskStorage)
 const queue: QueuedRenderTask[] = []
 let workerWindow: BrowserWindow | null = null
 let workerReady = false
@@ -213,7 +216,8 @@ function dispatchNextTask(): void {
     resolutionPreset: task.resolutionPreset,
     outputKind: task.outputKind,
     selectedTimeSec: task.selectedTimeSec,
-  } satisfies CameraStageRenderRequestDto)
+    sceneJson: task.sceneJson,
+  } satisfies CameraStageRenderWorkerJob)
 }
 
 export function startCameraStageRenderTask(
@@ -223,7 +227,18 @@ export function startCameraStageRenderTask(
   const registration = taskRegistry.register(request, ownerWebContentsId)
   if (registration.idempotent) return registration
 
-  const task: QueuedRenderTask = { ...request, ownerWebContentsId }
+  let sceneJson: string
+  try {
+    const project = getCameraStageProject(request.cameraStageProjectId)
+    if (!project) throw new Error('未找到需要渲染的三维工程')
+    sceneJson = project.sceneJson
+  } catch (error) {
+    logger.error('固定三维渲染快照失败', { event: 'camera_stage.background_render.snapshot_failed', requestId: request.requestId, error })
+    const failed = taskRegistry.applyEvent({ type: 'failed', requestId: request.requestId, nodeId: request.nodeId,
+      message: error instanceof Error ? error.message : String(error) })
+    return { task: failed, idempotent: false }
+  }
+  const task: QueuedRenderTask = { ...request, ownerWebContentsId, sceneJson }
   queue.push(task)
   sendToOwner(task, registration.task)
   ensureWorkerWindow()
@@ -239,7 +254,7 @@ export function getCameraStageRenderTask(
 }
 
 export function listCameraStageRenderTasks(
-  canvasProjectId: string,
+  canvasProjectId: string | undefined,
   ownerWebContentsId: number,
 ): CameraStageRenderTaskSnapshotDto[] {
   return taskRegistry.list(canvasProjectId, ownerWebContentsId)

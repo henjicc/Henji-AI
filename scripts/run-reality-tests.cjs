@@ -14,23 +14,24 @@ function printHelp() {
   npm run test:reality -- --suite integration
   npm run test:reality -- --build --suite ui --only 3D --size 1440x900
   npm run test:reality -- --build --suite ui --profile real --only 设置
-  npm run test:reality -- --build --suite live --profile real --allow-paid --allow-writes --only camera
+  npm run test:reality -- --build --suite restart
+  npm run test:reality -- --build --suite clients --only claude
 
 测试层：
   unit        精确、确定、零外部副作用的单元测试
-  integration 真注册表/真 Gateway/真执行器的助手运行时 harness，仅替换进程边界
+  integration 公共能力注册表、授权和领域执行器的集成测试，仅替换进程边界
   ui          真实 Electron + Playwright 操作与截图，并通过应用接口收集本场景日志
   ui-audit    真实 Electron DOM 规则审计，并收集同样的运行时证据
-  live        复用真实模型配置、API 密钥和业务数据的真机验收
+  restart     同一份隔离资料目录两次完整启动，核对外部连接在退出重启后的事实
+  clients     把真实外部 Agent 命令行接到真实应用上；协议测试客户端不算这一层
 
 数据与副作用：
-  --build                   UI / UI Audit / live 前只生成最新 Electron 产物，不跑完整质量门禁
+  --build                   UI / UI Audit / restart / clients 前只生成最新 Electron 产物，不跑完整质量门禁
   --profile temporary|real  默认 temporary；real 复用当前应用资料与系统密钥链
   --real-data               --profile real 的别名
   --allow-writes            允许真实资料模式写业务数据
-  --allow-paid              允许真实 API 付费请求（live 必需）
 
-场景缩小：--only、--size、--out；live 另支持 --probe、--skip-generation、--visible。
+场景缩小：--only、--size、--out；clients 用 --only 指定客户端（codex / claude）；
 可重复传入 --suite，但任一层失败后立即停止。
 `)
 }

@@ -1,0 +1,217 @@
+import { setCanvasTestProjectState } from '@/tests/canvasProjectFixture'
+// @vitest-environment jsdom
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { useCanvasStore } from '@/stores/canvasStore'
+import { decodeProjectRecord, encodeProjectAsRecord, useProjectStore, type Project } from '@/stores/projectStore'
+import type { ProjectRecord } from '@/commands/projectState'
+import { CANVAS_NODE_TYPES } from '../domain/canvasNodes'
+import { createDefaultGenerationOutputItems } from '../domain/generationOutputs'
+import { canvasNodeFactory } from './canvasServices'
+import { withCanvasProjectRuntime } from './canvasProjectRuntime'
+import { findCanvasProjectInstance, getCanvasProjectInstance, releaseCanvasProjectInstance } from './canvasProjectInstances'
+import { createCanvasProject } from './canvasProjectService'
+import { commitCanvasGenerationOutputs, commitCanvasGenerationOutputsInProject } from './generationOutputApplicationService'
+
+const disk = vi.hoisted(() => ({ records: new Map<string, ProjectRecord>(), write: vi.fn(), read: vi.fn() }))
+vi.mock('@/commands/projectState', () => ({
+  getProjectRecord: (id: string) => disk.read(id),
+  listProjectSummaries: async () => [],
+  upsertProjectRecord: async (record: ProjectRecord) => { await disk.write(record); disk.records.set(record.id, record) },
+  updateProjectViewportRecord: vi.fn(), deleteProjectRecord: vi.fn(), renameProjectRecord: vi.fn(),
+}))
+
+function project(id: string): Project {
+  const node = canvasNodeFactory.createNode(CANVAS_NODE_TYPES.cameraStage, { x: 10, y: 20 }, {})
+  node.id = `${id}-source`
+  return { id, name: id, createdAt: 1, updatedAt: 1, coverPath: null, nodeCount: 1,
+    nodes: [node], edges: [], history: { past: [], future: [] }, viewport: { x: 0, y: 0, zoom: 1 } }
+}
+
+async function output(id: string, completionId: string) {
+  return withCanvasProjectRuntime(id, (runtime) => commitCanvasGenerationOutputs({
+    sourceNodeId: `${id}-source`, resultNodeType: CANVAS_NODE_TYPES.exportImage, completionId,
+    contract: { version: 1, strategy: 'single', resultKind: 'image', expectedOutputCount: 1,
+      outputs: createDefaultGenerationOutputItems({ sources: ['media/result.png'], mediaType: 'image', resultKind: 'image', semanticKind: 'camera-stage-render' }) },
+    persistOutput: async () => ({ patch: { imageUrl: 'media/result.png' }, createdFilePaths: [] }),
+  }, { projectId: id, runtime }))
+}
+
+describe('跨工程画布使用原事务与落图服务', () => {
+  beforeEach(() => { disk.records.clear(); disk.write.mockReset(); disk.write.mockResolvedValue(undefined); disk.read.mockReset(); disk.read.mockImplementation(async (id: string) => disk.records.get(id)) })
+  it('后台新建和改名不切换页面，改名保存保留实例中的最新内容', async () => {
+    const a = project('creation-view')
+    setCanvasTestProjectState({ isHydrated: true, projects: [a], currentProjectId: a.id, currentProject: a })
+    const active = useCanvasStore.getState()
+    const created = await createCanvasProject('后台工程')
+    const id = String(created.projectId)
+    const instance = await getCanvasProjectInstance(id)
+    instance.store.getState().addNode(CANVAS_NODE_TYPES.textAnnotation, { x: 10, y: 10 }, { content: '保留新内容' })
+    await useProjectStore.getState().renameProject(id, '后台改名')
+    expect(decodeProjectRecord(disk.records.get(id)!)).toMatchObject({ name: '后台改名', nodeCount: 1 })
+    expect(useCanvasStore.getState()).toBe(active)
+    expect(useProjectStore.getState().currentProjectId).toBe(a.id)
+  })
+  it('等待外部结果不占用工程编辑锁；关闭页面后原实例继续保存且保留历史', async () => {
+    const b = project('detached-work')
+    disk.records.set(b.id, encodeProjectAsRecord(b))
+    let continueTask!: () => void
+    let entered = false
+    const task = withCanvasProjectRuntime(b.id, async runtime => {
+      entered = true
+      await new Promise<void>(resolve => { continueTask = resolve })
+      runtime.store.getState().updateNodeData(b.nodes[0].id, { displayName: '任务结果' })
+      await runtime.persist()
+    })
+    await vi.waitFor(() => expect(entered).toBe(true))
+    const instance = await getCanvasProjectInstance(b.id)
+    expect(releaseCanvasProjectInstance(b.id)).toBe(false)
+    await withCanvasProjectRuntime(b.id, async runtime => {
+      expect(runtime.store).toBe(instance.store)
+      runtime.store.getState().updateNodePosition(b.nodes[0].id, { x: 200, y: 300 })
+      await runtime.persist()
+    })
+    useProjectStore.getState().openProject(b.id)
+    await vi.waitFor(() => expect(useProjectStore.getState().currentProjectId).toBe(b.id))
+    await useProjectStore.getState().closeProject()
+    expect(useProjectStore.getState().currentProjectId).toBeNull()
+    continueTask()
+    await task
+    expect(findCanvasProjectInstance(b.id)).toBe(instance)
+    useProjectStore.getState().openProject(b.id)
+    await vi.waitFor(() => expect(useProjectStore.getState().currentProjectId).toBe(b.id))
+    expect(useCanvasStore.getState().nodes[0].data.displayName).toBe('任务结果')
+    expect(useCanvasStore.getState().nodes[0].position).toEqual({ x: 200, y: 300 })
+    expect(useCanvasStore.getState().undo()).toBe(true)
+    expect(useCanvasStore.getState().nodes[0].data.displayName).not.toBe('任务结果')
+  })
+
+  it('删除等待原任务租用释放，屏障期间拒绝新调用', async () => {
+    const b = project('delete-work')
+    disk.records.set(b.id, encodeProjectAsRecord(b))
+    let finish!: () => void
+    const task = withCanvasProjectRuntime(b.id, async runtime => {
+      await new Promise<void>(resolve => { finish = resolve })
+      runtime.store.getState().updateNodeData(b.nodes[0].id, { displayName: '已提交任务' })
+      await runtime.persist()
+    })
+    await vi.waitFor(() => expect(finish).toBeTypeOf('function'))
+    let deleted = false
+    const deleting = useProjectStore.getState().deleteProject(b.id).then(() => { deleted = true })
+    await expect(getCanvasProjectInstance(b.id)).rejects.toThrow('PROJECT_CLOSING')
+    expect(deleted).toBe(false)
+    finish(); await task; await deleting
+    expect(findCanvasProjectInstance(b.id)).toBeUndefined()
+  })
+  it('新建和打开项目发布时画布已经同步，订阅者不会读到上一个项目的节点', async () => {
+    const a = project('publish-a'); const b = project('publish-b')
+    disk.records.set(b.id, encodeProjectAsRecord(b))
+    setCanvasTestProjectState({ isHydrated: true, projects: [a, b], currentProjectId: a.id, currentProject: a })
+    useCanvasStore.getState().setCanvasData(a.nodes, a.edges, a.history)
+    const observed: { id: string | null; nodeIds: string[] }[] = []
+    const unsubscribe = useProjectStore.subscribe((state, previous) => {
+      if (state.currentProjectId !== previous.currentProjectId) observed.push({ id: state.currentProjectId,
+        nodeIds: useCanvasStore.getState().nodes.map(node => node.id) })
+    })
+    try {
+      const created = await useProjectStore.getState().createProject('empty')
+      expect(observed).toEqual([{ id: created, nodeIds: [] }])
+      useProjectStore.getState().openProject(b.id)
+      await vi.waitFor(() => expect(useProjectStore.getState().currentProjectId).toBe(b.id))
+      expect(observed[1]).toEqual({ id: b.id, nodeIds: [b.nodes[0].id] })
+    } finally { unsubscribe() }
+  })
+  it('落图准备期间离开原项目，重新获取后台实例只提交一次，不改当前画布', async () => {
+    const a = project('commit-a'); const b = project('commit-b')
+    disk.records.set(a.id, encodeProjectAsRecord(a)); disk.records.set(b.id, encodeProjectAsRecord(b))
+    setCanvasTestProjectState({ isHydrated: true, projects: [a, b], currentProjectId: a.id, currentProject: a })
+    useCanvasStore.getState().setCanvasData(a.nodes, a.edges, a.history)
+    let release!: () => void
+    const persistOutput = vi.fn(async () => {
+      if (persistOutput.mock.calls.length === 1) await new Promise<void>(resolve => { release = resolve })
+      return { patch: { imageUrl: 'media/result.png' }, createdFilePaths: [] }
+    })
+    const committing = commitCanvasGenerationOutputsInProject(a.id, { sourceNodeId: a.nodes[0].id,
+      resultNodeType: CANVAS_NODE_TYPES.exportImage, completionId: 'origin-completion', persistOutput,
+      contract: { version: 1, strategy: 'single', resultKind: 'image', expectedOutputCount: 1,
+        outputs: createDefaultGenerationOutputItems({ sources: ['media/result.png'], mediaType: 'image', resultKind: 'image', semanticKind: 'generated-media' }) },
+    })
+    await vi.waitFor(() => expect(release).toBeTypeOf('function'))
+    setCanvasTestProjectState({ currentProjectId: b.id, currentProject: b })
+    useCanvasStore.getState().setCanvasData(b.nodes, b.edges, b.history)
+    const active = useCanvasStore.getState()
+    release()
+    expect((await committing).resultNodeIds).toHaveLength(1)
+    expect(persistOutput).toHaveBeenCalledTimes(1)
+    expect(decodeProjectRecord(disk.records.get(a.id)!).nodes).toHaveLength(2)
+    expect(decodeProjectRecord(disk.records.get(b.id)!).nodes).toHaveLength(1)
+    expect(useCanvasStore.getState()).toBe(active)
+  })
+  it('当前 A 时结果只写 B，保存失败保留原快照，重试同完成键不重复节点', async () => {
+    const a = project('active-a')
+    const b = project('background-b')
+    disk.records.set(b.id, encodeProjectAsRecord(b))
+    setCanvasTestProjectState({ isHydrated: true, projects: [a, b], currentProjectId: a.id, currentProject: a })
+    useCanvasStore.getState().setCanvasData(a.nodes, a.edges, a.history)
+    useCanvasStore.getState().setSelectedNode(a.nodes[0].id)
+    const before = useCanvasStore.getState()
+    disk.write.mockRejectedValueOnce(new Error('disk-full'))
+    await expect(output(b.id, 'completion-b')).rejects.toThrow('保存未确认')
+    expect(decodeProjectRecord(disk.records.get(b.id)!).nodes).toHaveLength(1)
+    const recovered = await output(b.id, 'completion-b')
+    expect(recovered.idempotent).toBe(true)
+    expect(decodeProjectRecord(disk.records.get(b.id)!).nodes).toHaveLength(2)
+    expect(useCanvasStore.getState()).toBe(before)
+    expect(useProjectStore.getState().currentProjectId).toBe(a.id)
+  })
+  it('打开正在后台修改的工程立即附着同一实例，原任务继续保存', async () => {
+    const a = project('open-a')
+    const b = project('open-b')
+    disk.records.set(b.id, encodeProjectAsRecord(b))
+    setCanvasTestProjectState({ isHydrated: true, projects: [a, b], currentProjectId: a.id, currentProject: a })
+    useCanvasStore.getState().setCanvasData(a.nodes, a.edges, a.history)
+    let release!: () => void
+    const gate = new Promise<void>((resolve) => { release = resolve })
+    let entered = false
+    const background = withCanvasProjectRuntime(b.id, async (runtime) => {
+      entered = true
+      runtime.store.getState().updateNodeData(b.nodes[0].id, { displayName: '后台完成' })
+      await gate
+      await runtime.persist()
+    })
+    await vi.waitFor(() => expect(entered).toBe(true))
+    useProjectStore.getState().openProject(b.id)
+    await new Promise<void>((resolve) => setTimeout(resolve, 120))
+    expect(useProjectStore.getState().currentProjectId).toBe(b.id)
+    expect(useCanvasStore.getState().nodes[0].data.displayName).toBe('后台完成')
+    release()
+    await background
+    await vi.waitFor(() => expect(useProjectStore.getState().currentProjectId).toBe(b.id))
+    expect(useProjectStore.getState().currentProject?.nodes[0].data.displayName).toBe('后台完成')
+    expect(useCanvasStore.getState().nodes[0].data.displayName).toBe('后台完成')
+    await output(b.id, 'after-open')
+    expect(decodeProjectRecord(disk.records.get(b.id)!).nodes).toHaveLength(2)
+    expect(useCanvasStore.getState().nodes.some(node => node.id === a.nodes[0].id)).toBe(false)
+  })
+  it('并发打开和后台执行共享一次加载，不会覆盖新状态', async () => {
+    const a = project('slow-a')
+    const b = project('slow-b')
+    const oldRecord = encodeProjectAsRecord(b)
+    disk.records.set(b.id, oldRecord)
+    setCanvasTestProjectState({ isHydrated: true, projects: [a, b], currentProjectId: a.id, currentProject: a })
+    useCanvasStore.getState().setCanvasData(a.nodes, a.edges, a.history)
+    let returnOld!: (record: ProjectRecord) => void
+    disk.read.mockImplementationOnce(() => new Promise<ProjectRecord>((resolve) => { returnOld = resolve }))
+    useProjectStore.getState().openProject(b.id)
+    await vi.waitFor(() => expect(returnOld).toBeTypeOf('function'))
+    const background = withCanvasProjectRuntime(b.id, async (runtime) => {
+      runtime.store.getState().updateNodeData(b.nodes[0].id, { displayName: '新持久版本' })
+      await runtime.persist()
+    })
+    returnOld(oldRecord)
+    await background
+    await vi.waitFor(() => expect(useProjectStore.getState().currentProjectId).toBe(b.id))
+    expect(useProjectStore.getState().currentProject?.nodes[0].data.displayName).toBe('新持久版本')
+    expect(useCanvasStore.getState().nodes[0].data.displayName).toBe('新持久版本')
+    expect(disk.read).toHaveBeenCalledTimes(1)
+  })
+})

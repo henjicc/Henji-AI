@@ -39,10 +39,6 @@ export const PanoramaGenerationNode = memo(({
       capabilityId={CANVAS_IMAGE_CAPABILITY_IDS.panorama}
       promptPlaceholderKey="node.panoramaGeneration.promptPlaceholder"
       promptRequiredKey="node.panoramaGeneration.promptRequired"
-      apiKeyRequiredKey="node.panoramaGeneration.apiKeyRequired"
-      resultTitleKey="node.panoramaGeneration.resultTitle"
-      resultNodeExtraData={{ resultKind: 'panorama' }}
-      requirePrompt={false}
     />
   );
 });

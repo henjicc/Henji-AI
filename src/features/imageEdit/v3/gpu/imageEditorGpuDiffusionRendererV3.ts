@@ -143,25 +143,27 @@ export class ImageEditorGpuDiffusionRendererV3 {
 }
 
 function premultipliedDiffusionShaders(): { source: string; scatter: string; composite: string } {
-  const sourceStart = diffusionShader.indexOf('struct SourceUniforms')
-  const scatterStart = diffusionShader.indexOf('struct ScatterUniforms')
-  const compositeStart = diffusionShader.indexOf('struct CompositeUniforms')
+  // raw 导入保留工作区换行符；Windows 检出的 CRLF 不能改变入口匹配。
+  const shader = diffusionShader.replace(/\r\n?/g, '\n')
+  const sourceStart = shader.indexOf('struct SourceUniforms')
+  const scatterStart = shader.indexOf('struct ScatterUniforms')
+  const compositeStart = shader.indexOf('struct CompositeUniforms')
   if (sourceStart < 0 || scatterStart < 0 || compositeStart < 0) {
     throw new Error('Diffusion WGSL entry 边界失效')
   }
-  const common = diffusionShader.slice(0, sourceStart)
+  const common = shader.slice(0, sourceStart)
   const straightSample = 'let color = textureSampleLevel(source_input, source_sampler, uv, 0.0);'
   const premultSample = 'let sampled_color = textureSampleLevel(source_input, source_sampler, uv, 0.0);\n  let color = vec4<f32>(sampled_color.rgb / max(sampled_color.a, 0.000001), sampled_color.a);'
   const straightBase = 'let base = textureSampleLevel(composite_base, composite_sampler, uv, 0.0);'
   const premultBase = 'let sampled_base = textureSampleLevel(composite_base, composite_sampler, uv, 0.0);\n  let base = vec4<f32>(sampled_base.rgb / max(sampled_base.a, 0.000001), sampled_base.a);'
   const straightEntry = '@fragment\nfn fragment_composite(input: VertexOutput) -> @location(0) vec4<f32> {'
   const helperEntry = 'fn fragment_composite_straight(input: VertexOutput) -> vec4<f32> {'
-  const source = `${common}${diffusionShader.slice(sourceStart, scatterStart)}`
+  const source = `${common}${shader.slice(sourceStart, scatterStart)}`
     .replace(straightSample, premultSample)
-  const scatter = `${common}${diffusionShader.slice(scatterStart, compositeStart)}`
-  const compositeBody = `${common}${diffusionShader.slice(compositeStart)}`
+  const scatter = `${common}${shader.slice(scatterStart, compositeStart)}`
+  const compositeBody = `${common}${shader.slice(compositeStart)}`
     .replace(straightBase, premultBase).replace(straightEntry, helperEntry)
-  if (source === diffusionShader || !compositeBody.includes('fragment_composite_straight')) {
+  if (source === shader || !compositeBody.includes('fragment_composite_straight')) {
     throw new Error('Diffusion WGSL 共享 Target 预乘适配点失效')
   }
   const composite = `${compositeBody}\n@fragment\nfn fragment_composite(input: VertexOutput) -> @location(0) vec4<f32> {\n  let straight = fragment_composite_straight(input);\n  return vec4<f32>(straight.rgb * straight.a, straight.a);\n}`

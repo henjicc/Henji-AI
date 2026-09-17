@@ -10,7 +10,6 @@ import { createLogger } from '@/core/logging'
 import {
   exportMultiLayerDocumentTargetToCanvas,
   openMultiLayerDocumentForEditing,
-  registerMultiLayerDocumentExportSession,
 } from '@/features/canvas/application/multiLayerDocumentNodeGenerationAdapter'
 import { canvasEventBus } from '@/features/canvas/application/canvasServices'
 import type { CanvasNode } from '@/features/canvas/domain/canvasNodes'
@@ -137,12 +136,6 @@ export function MultiLayerDocumentEditorDialog({
 
   useEffect(() => registerApplicationCloseGuard(requestClose), [requestClose])
 
-  useEffect(() => registerMultiLayerDocumentExportSession(node.id, async () => {
-    const lifecycle = lifecycleRef.current
-    if (!lifecycle) throw new Error(t('toolDialog.imageEditorV3.stillOpening'))
-    return await lifecycle.flushPending()
-  }), [node.id, t])
-
   useEffect(() => {
     if (isOpen) {
       setCloseApproved(false)
@@ -165,7 +158,7 @@ export function MultiLayerDocumentEditorDialog({
     setExportFailed(false)
     void exportMultiLayerDocumentTargetToCanvas({
       projectRef: { kind: 'canvas.project', id: currentProjectId },
-      sourceNodeRef: { kind: 'canvas.node', id: node.id },
+      sourceNodeRef: { kind: 'canvas.node', id: `${currentProjectId}:${node.id}` },
       targetRef: exportSelection.targetRef,
     }).catch((error) => {
       setExportFailed(true)

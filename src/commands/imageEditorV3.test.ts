@@ -37,6 +37,7 @@ const PREVIEW_REF = `sha256:${'c'.repeat(64)}` as const
 function createPlatform(): ImageEditorV3Platform {
   return {
     loadDocument: vi.fn(async () => null),
+    listDocuments: vi.fn(async () => ({ documentRefs: [], nextCursor: null })),
     saveDocument: vi.fn(async (request) => ({
       documentRef: `image-edit-v3:${request.document.id}` as ImageEditorV3DocumentRef,
       revision: request.document.revision,

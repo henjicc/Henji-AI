@@ -3,7 +3,7 @@ import type { WorkspaceId } from '@/core/types/workspace'
 import {
   resolveSurfaceObservationProfile,
   type ApplicationSurfaceId,
-} from '@/core/assistant/applicationSurfaces'
+} from '@/core/application-control/applicationSurfaces'
 
 export type SurfaceOpenPolicy = 'immediate' | 'after_target_resolved' | 'background_preferred'
 export type SurfacePresentationDecision =
@@ -57,6 +57,7 @@ function observationPolicy(surfaceId: ApplicationSurfaceId): ApplicationSurfaceD
 }
 
 const surfaceDefinitions = [
+  { id: 'overlay.assistant', kind: 'overlay', ...immediate },
   { id: 'workspace.generation', kind: 'workspace', workspace: 'generation', ...immediate },
   {
     id: 'workspace.canvas', kind: 'workspace', workspace: 'nodes', ...immediate,
@@ -87,6 +88,7 @@ const surfaceDefinitions = [
   { id: 'settings.storage', kind: 'settings', settingsTarget: { tab: 'general', sectionId: 'general-storage' }, ...immediate },
   { id: 'settings.general.behavior', kind: 'settings', settingsTarget: { tab: 'general', sectionId: 'general-behavior' }, ...immediate },
   { id: 'settings.general.maintenance', kind: 'settings', settingsTarget: { tab: 'general', sectionId: 'general-maintenance' }, ...immediate },
+  { id: 'settings.general.mcp', kind: 'settings', settingsTarget: { tab: 'general', sectionId: 'general-mcp' }, ...immediate },
   { id: 'settings.providers_models', kind: 'settings', settingsTarget: { tab: 'models', sectionId: 'models-providers' }, ...immediate },
   { id: 'settings.models.assistant', kind: 'settings', settingsTarget: { tab: 'models', sectionId: 'models-assistant' }, ...immediate },
   { id: 'settings.upload', kind: 'settings', settingsTarget: { tab: 'models', sectionId: 'models-upload' }, ...immediate },

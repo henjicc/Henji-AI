@@ -1,10 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { CanvasPersistenceError } from './canvasPersistenceService'
 
-import {
-  imageEditV3GroupRef,
-  imageEditV3LayerRef,
-} from '@/features/imageEdit/v3/application/imageEditLiveSessionRegistry'
+import { imageEditV3GroupRef, imageEditV3LayerRef } from '@/features/imageEdit/v3/application/imageEditDocumentRefs'
 
 import type { LayerStackResultNodeData } from '../domain/canvasNodeData'
 import {
@@ -146,9 +143,11 @@ describe('多图层文档节点 application 服务', () => {
     expect(documentPort.createFromLayerStack).toHaveBeenCalledWith({ nodeId: 'node-a', document })
   })
 
-  it('打开时复核完整会话引用，版本不一致时返回可恢复冲突', async () => {
+  it('打开时接受同文档的新版本，拒绝文档回退', async () => {
     const { service, documentPort } = setup()
     vi.mocked(documentPort.inspectDocument).mockResolvedValueOnce({ ...sourceSession, revision: 3 })
+    await expect(service.openAndValidate({ nodeId: 'node-a', data: nodeData() })).resolves.toMatchObject({ revision: 3 })
+    vi.mocked(documentPort.inspectDocument).mockResolvedValueOnce({ ...sourceSession, revision: 1 })
     await expect(service.openAndValidate({ nodeId: 'node-a', data: nodeData() })).rejects.toMatchObject({
       code: 'DOCUMENT_CONFLICT',
       recoverable: true,
@@ -235,8 +234,9 @@ describe('多图层文档节点 application 服务', () => {
       sourceNodeId: 'node-a', targetNodeId: 'node-b', data: nodeData(),
     })
     expect(forked.imageEditSession.documentRef).toBe('image-edit-v3:document-b')
-    await service.markReleaseCandidate({ nodeId: 'node-a', data: nodeData() })
+    await service.markReleaseCandidate({ projectId: 'project-a', nodeId: 'node-a', data: nodeData() })
     expect(documentPort.markReleaseCandidate).toHaveBeenCalledWith({
+      projectId: 'project-a',
       nodeId: 'node-a', session: sourceSession, signal: undefined,
     })
 

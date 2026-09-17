@@ -107,6 +107,8 @@ export interface HenjiAiApi {
   getProgressEstimate(request: HenjiAiGetProgressEstimateRequest): Promise<HenjiAiProgressEstimate>
   recordProgressSample(request: HenjiAiRecordProgressSampleRequest): Promise<HenjiAiRecordProgressSampleResponse>
   consumePendingResult(serverTaskId: string): Promise<{
+    status?: string
+    taskId?: string
     url?: string
     filePath?: string
     createdFilePaths?: string[]

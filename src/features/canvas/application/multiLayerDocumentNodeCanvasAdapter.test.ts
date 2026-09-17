@@ -1,17 +1,16 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { setCanvasTestProjectState } from '@/tests/canvasProjectFixture';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { CANVAS_NODE_TYPES, type CanvasNode } from '../domain/canvasNodes'
-import { getNodeMediaOutputs } from '../domain/nodeRegistry'
-import { useCanvasStore } from '@/stores/canvasStore'
-import { useProjectStore, type Project } from '@/stores/projectStore'
-import { MULTI_LAYER_NODE_PROJECTION_HISTORY_POLICY } from './multiLayerDocumentNodeApplicationContracts'
-import { imageEditV3LayerRef } from '@/features/imageEdit/v3/application/imageEditLiveSessionRegistry'
-import {
-  createMultiLayerDocumentExportCanvasPort,
-  createMultiLayerDocumentProjectionCanvasPort,
-} from './multiLayerDocumentNodeCanvasAdapter'
+import { CANVAS_NODE_TYPES, type CanvasNode } from '../domain/canvasNodes';
+import { getNodeMediaOutputs } from '../domain/nodeRegistry';
+import { useCanvasStore } from '@/stores/canvasStore';
+import { type Project } from '@/stores/projectStore';
+import { MULTI_LAYER_NODE_PROJECTION_HISTORY_POLICY } from './multiLayerDocumentNodeApplicationContracts';
+import { imageEditV3LayerRef } from '@/features/imageEdit/v3/application/imageEditDocumentRefs';
+import { createMultiLayerDocumentExportCanvasPort, createMultiLayerDocumentProjectionCanvasPort } from './multiLayerDocumentNodeCanvasAdapter';
 
-import { upsertProjectRecord } from '@/commands/projectState'
+import { upsertProjectRecord } from '@/commands/projectState';
+import { requireCanvasProjectInstance } from './canvasProjectInstances';
 
 const oldSession = {
   kind: 'image-edit-v3' as const,
@@ -105,7 +104,7 @@ describe('多图层文档节点投影 CAS', () => {
       selectedNodeId: source.id,
       activeToolDialog: { nodeId: source.id, toolType: 'edit' },
     })
-    useProjectStore.setState({
+    setCanvasTestProjectState({
       currentProjectId: 'project-a',
       currentProject: project([source, downstream]),
     })
@@ -159,7 +158,6 @@ describe('多图层文档节点投影 CAS', () => {
   })
 
   it.each([
-    ['项目切换', () => useProjectStore.setState({ currentProjectId: 'project-b' })],
     ['节点删除', () => useCanvasStore.setState({ nodes: [] })],
     ['预期旧会话冲突', () => {
       const current = node()
@@ -197,7 +195,7 @@ describe('多图层文档目标导出画布事务', () => {
       selectedNodeId: source.id,
       activeToolDialog: { nodeId: source.id, toolType: 'edit' },
     })
-    useProjectStore.setState({
+    setCanvasTestProjectState({
       currentProjectId: 'project-a',
       currentProject: project([source]),
     })
@@ -207,6 +205,7 @@ describe('多图层文档目标导出画布事务', () => {
     return {
       projectId: 'project-a',
       sourceNodeId: 'document-node',
+      expectedDocumentRef: oldSession.documentRef,
       target: {
         kind: 'raster-layer' as const,
         ref: { ...imageEditV3LayerRef('canvas-document', 'raster'), kind: 'image_edit.layer' as const },
@@ -259,7 +258,17 @@ describe('多图层文档目标导出画布事务', () => {
     expect(state.history.past).toHaveLength(1)
   })
 
-  it('连线失败时回滚新节点，且项目切换时不开始事务', async () => {
+  it('来源节点关联变化时拒绝把旧文档结果连接到新文档', async () => {
+    const changed = node()
+    changed.data = { ...changed.data, imageEditSession: { ...oldSession, documentRef: 'image-edit-v3:other' } }
+    useCanvasStore.setState({ nodes: [changed] })
+    await expect(createMultiLayerDocumentExportCanvasPort().createExportedImageNode(exportInput()))
+      .rejects.toThrow('关联已变化')
+    expect(useCanvasStore.getState().nodes).toHaveLength(1)
+    expect(useCanvasStore.getState().edges).toHaveLength(0)
+  })
+
+  it('连线失败时回滚新节点；切换项目后仍向原工程提交', async () => {
     const originalAddEdge = useCanvasStore.getState().addEdge
     useCanvasStore.setState({ addEdge: vi.fn(() => null) })
     try {
@@ -273,11 +282,10 @@ describe('多图层文档目标导出画布事务', () => {
       useCanvasStore.setState({ addEdge: originalAddEdge })
     }
 
-    useProjectStore.setState({ currentProjectId: 'project-b' })
-    await expect(
-      createMultiLayerDocumentExportCanvasPort().createExportedImageNode(exportInput()),
-    ).rejects.toMatchObject({ code: 'DOCUMENT_CONFLICT' })
+    setCanvasTestProjectState({ currentProjectId: 'project-b', currentProject: { ...project([node()]), id: 'project-b' } })
+    await createMultiLayerDocumentExportCanvasPort().createExportedImageNode(exportInput())
     expect(useCanvasStore.getState().nodes).toHaveLength(1)
+    expect(requireCanvasProjectInstance('project-a').store.getState().nodes).toHaveLength(2)
   })
 })
 // 本文件验证图投影，真实存储拒绝与恢复由 canvasPersistenceService.test.ts 覆盖。

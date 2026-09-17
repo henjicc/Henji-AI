@@ -1,7 +1,7 @@
 import { z } from 'zod'
 
 import { fieldWriterTable, type ApplicationCascadeEffectDeclaration, type ApplicationRef, type ApplicationPropertyMutation, type ApplicationPropertyValue, type JsonValue } from '@/core/application-control'
-import { CAMERA_STAGE_NAME_MAX_LENGTH } from '@/core/assistant/capabilities/cameraStageCapabilitySchemas'
+import { CAMERA_STAGE_NAME_MAX_LENGTH } from '@/core/application-control/domains/cameraStage/cameraStageCapabilitySchemas'
 
 import { getAnimatablePropByPath, listAnimatablePropertyPaths } from '../domain/animatableProps'
 import type { StageAnimatableValueType, StageKeyframeValue } from '../domain/animationTypes'

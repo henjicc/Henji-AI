@@ -3,6 +3,8 @@
  * 实现并发控制，允许同时执行多个生成任务
  */
 
+import { readGenerationConcurrency, subscribeGenerationConcurrency } from '@/core/settings/generationConcurrency'
+
 export interface QueuedTask {
     id: string
     providerId?: string
@@ -19,20 +21,15 @@ class TaskQueueManager {
 
     constructor() {
         // 从 localStorage 加载保存的并发设置
-        const saved = localStorage.getItem('max_concurrent_tasks')
-        if (saved) {
-            const value = parseInt(saved, 10)
-            if (!isNaN(value) && value >= 1 && value <= 10) {
-                this.maxConcurrency = value
-            }
-        }
+        this.maxConcurrency = readGenerationConcurrency()
+        subscribeGenerationConcurrency(value => this.setMaxConcurrency(value))
     }
 
     /**
      * 设置最大并发数
      */
     setMaxConcurrency(value: number): void {
-        this.maxConcurrency = Math.max(1, Math.min(10, value))
+        this.maxConcurrency = Number.isFinite(value) ? Math.max(1, Math.min(20, Math.trunc(value))) : 2
         // 设置变更后立即尝试处理队列（可能有新的槽位可用）
         this.processQueue()
     }

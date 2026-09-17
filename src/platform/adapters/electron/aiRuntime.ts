@@ -12,6 +12,7 @@ function getNativeAi(): NonNullable<typeof window.henjiNative>['ai'] {
 
 export function createElectronAiRuntime(): AiRuntimePlatform {
   return {
+    readSavedResult: (requestId) => getNativeAi().consumePendingResult(requestId),
     setProviderApiKey: async (providerId, apiKey) => {
       await getNativeAi().setProviderApiKey(providerId, apiKey)
     },

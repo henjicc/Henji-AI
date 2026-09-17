@@ -15,6 +15,7 @@ import type {
 import type { ImageEditCommandHistorySnapshotV3 } from '@/core/imageEdit/v3/commandHistoryCodec';
 import { isImageEditTransformInvertibleV3 } from '@/core/imageEdit/v3/execution/affineTransform';
 import { collectImageEditJsonResourceIdsV3 } from '@/core/imageEdit/v3/resourceReferences';
+import { assertApplicationWritesAllowed } from '@/core/applicationLifecycle/applicationWriteBarrier';
 
 export type ImageEditPreviewOverrideKindV3 =
   | 'parameter'
@@ -58,7 +59,10 @@ export class ImageEditCommandBusV3 {
   private readonly onPersistentChange?: (snapshot: ImageEditPersistenceSnapshotV3) => void;
   private readonly previewOverrides = new Map<string, ImageEditPreviewOverrideV3>();
   private readonly listeners = new Set<ImageEditCommandBusListenerV3>();
+  private readonly persistenceListeners = new Set<(snapshot: ImageEditPersistenceSnapshotV3) => void>();
   private readonly resourceByteSizes = new Map<string, number>();
+  private disposed = false;
+  private mutationGuard: (() => void) | undefined;
 
   constructor(document: ImageEditDocumentV3, options: ImageEditCommandBusOptionsV3 = {}) {
     this.document = document;
@@ -99,7 +103,17 @@ export class ImageEditCommandBusV3 {
     };
   }
 
+  getResourceByteSizes(): Readonly<Record<string, number>> {
+    return Object.fromEntries(this.resourceByteSizes);
+  }
+
+  subscribePersistence(listener: (snapshot: ImageEditPersistenceSnapshotV3) => void): () => void {
+    this.persistenceListeners.add(listener);
+    return () => this.persistenceListeners.delete(listener);
+  }
+
   dispatch(command: ImageEditCommandV3): ImageEditDocumentV3 {
+    this.assertMutable();
     const previousRevision = this.document.revision;
     const nextByteSizes = new Map(this.resourceByteSizes);
     const prepared = prepareImageEditCommandResourceMetadataV3(
@@ -124,6 +138,7 @@ export class ImageEditCommandBusV3 {
   }
 
   setPreview(override: ImageEditPreviewOverrideV3): void {
+    this.assertMutable();
     if (override.baseRevision !== this.document.revision) {
       throw new Error(`预览覆盖版本过期：${override.baseRevision} !== ${this.document.revision}`);
     }
@@ -145,6 +160,7 @@ export class ImageEditCommandBusV3 {
   }
 
   commitPreview(id: string, command: ImageEditCommandV3): ImageEditDocumentV3 {
+    this.assertMutable();
     const preview = this.previewOverrides.get(id);
     if (!preview) throw new Error(`预览覆盖不存在：${id}`);
     if (preview.baseRevision !== this.document.revision) {
@@ -156,6 +172,7 @@ export class ImageEditCommandBusV3 {
   }
 
   undo(): boolean {
+    this.assertMutable();
     const previousRevision = this.document.revision;
     const transition = this.history.undo(this.document);
     if (!transition.changed) return false;
@@ -168,6 +185,7 @@ export class ImageEditCommandBusV3 {
   }
 
   undoCommands(commandIdsNewestFirst: readonly string[]): boolean {
+    this.assertMutable();
     const previousRevision = this.document.revision;
     const transition = this.history.undoCommands(this.document, commandIdsNewestFirst);
     if (!transition.changed) return false;
@@ -180,6 +198,7 @@ export class ImageEditCommandBusV3 {
   }
 
   rollbackCommands(commandIdsNewestFirst: readonly string[]): boolean {
+    this.assertMutable();
     const previousRevision = this.document.revision;
     const transition = this.history.rollbackCommands(this.document, commandIdsNewestFirst);
     if (!transition.changed) return false;
@@ -192,6 +211,7 @@ export class ImageEditCommandBusV3 {
   }
 
   redo(): boolean {
+    this.assertMutable();
     const previousRevision = this.document.revision;
     const transition = this.history.redo(this.document);
     if (!transition.changed) return false;
@@ -204,6 +224,7 @@ export class ImageEditCommandBusV3 {
   }
 
   clearHistory(): void {
+    this.assertMutable();
     this.history.clear(this.document);
     this.previewOverrides.clear();
     this.persistChange(this.document.revision);
@@ -212,9 +233,23 @@ export class ImageEditCommandBusV3 {
   }
 
   dispose(): void {
+    this.disposed = true;
     this.repository?.cancelAutosave(this.document.id);
     this.previewOverrides.clear();
     this.listeners.clear();
+    this.persistenceListeners.clear();
+  }
+
+  setMutationGuard(guard: () => void): void {
+    this.assertMutable();
+    if (this.mutationGuard) throw new Error('图片文档命令总线已绑定运行实例');
+    this.mutationGuard = guard;
+  }
+
+  private assertMutable(): void {
+    assertApplicationWritesAllowed();
+    if (this.disposed) throw new Error('DOCUMENT_RELEASED：图片文档实例已释放');
+    this.mutationGuard?.();
   }
 
   private persistChange(expectedRevision: number): void {
@@ -225,6 +260,7 @@ export class ImageEditCommandBusV3 {
       history: snapshot.history,
     });
     this.onPersistentChange?.(snapshot);
+    for (const listener of this.persistenceListeners) listener(snapshot);
   }
 
   private emit(): void {

@@ -9,14 +9,16 @@ import {
   type JsonValue,
   unrestrictedCollectionAvailability,
 } from '@/core/application-control'
-import { APPLICATION_CAPABILITY_CATALOG_VERSION } from '@/core/assistant/applicationCapabilities'
+import { APPLICATION_CAPABILITY_CATALOG_VERSION } from '@/core/application-control/applicationCapabilities'
 
 import type { CanvasEdge, CanvasNode } from '../domain/canvasNodes'
-import { NODE_FIELDS, PROJECT_FIELDS } from './canvasFields'
+import { isTextAnnotationNode } from '../domain/canvasNodes'
+import { CANVAS_NODE_SCHEMA_DOCUMENTS, NODE_FIELDS, PROJECT_FIELDS } from './canvasFields'
 import { useCanvasStore } from '@/stores/canvasStore'
 import { useProjectStore } from '@/stores/projectStore'
 import { listCanvasProjects } from './canvasProjectService'
 import { readCanvasProjectSnapshot } from './canvasQueryService'
+import { supportsCanvasNodeGenerationConfig } from './canvasNodeGenerationConfig'
 
 const DOMAIN = 'canvas'
 const REVISION_SCOPE = 'canvas'
@@ -176,7 +178,7 @@ class CanvasReflectionProvider implements ApplicationEntityProvider {
   }
 
   async readEntity(ref: ApplicationRef, request: { propertyIds?: string[] }) {
-    const properties = await this.readProperties(ref)
+    const properties = await this.readProperties(ref, request.propertyIds)
     const projectId = this.entityType === CANVAS_ENTITY_TYPES.project ? ref.id : splitChildRef(ref, this.entityType).projectId
     const snapshot = await readCanvasProjectSnapshot(projectId)
     return {
@@ -189,16 +191,34 @@ class CanvasReflectionProvider implements ApplicationEntityProvider {
   }
 
   async getPropertyAvailability(ref: ApplicationRef, propertyIds: string[]) {
-    await this.readProperties(ref)
+    await this.readProperties(ref, [])
+    let generationConfigSupported = false
+    let textContentSupported = false
+    if (this.entityType === CANVAS_ENTITY_TYPES.node && propertyIds.includes('canvas.node.text_content')) {
+      const { projectId, childId } = splitChildRef(ref, this.entityType)
+      const snapshot = await readCanvasProjectSnapshot(projectId)
+      const node = snapshot.nodes.find((item) => item.id === childId)
+      textContentSupported = Boolean(node && isTextAnnotationNode(node))
+    }
+    if (this.entityType === CANVAS_ENTITY_TYPES.node && propertyIds.includes('canvas.node.generation_config')) {
+      const { projectId, childId } = splitChildRef(ref, this.entityType)
+      const snapshot = await readCanvasProjectSnapshot(projectId)
+      const node = snapshot.nodes.find((item) => item.id === childId)
+      generationConfigSupported = Boolean(node && supportsCanvasNodeGenerationConfig(node))
+    }
     const descriptors = new Map(propertiesByEntity[this.entityType].map((item) => [item.id, item]))
     return propertyIds.map((propertyId) => {
       const descriptor = descriptors.get(propertyId)
       if (!descriptor) throw new Error(`PROPERTY_NOT_FOUND:${propertyId}`)
+      const reason = propertyId === 'canvas.node.generation_config' && !generationConfigSupported
+        ? '该节点不是可配置的生成节点。'
+        : propertyId === 'canvas.node.text_content' && !textContentSupported
+          ? '该节点不是文本节点。' : descriptor.readOnlyReason
       return {
         propertyId,
         readable: true,
-        writable: !descriptor.readOnlyReason,
-        reasons: descriptor.readOnlyReason ? [descriptor.readOnlyReason] : [],
+        writable: !reason,
+        reasons: reason ? [reason] : [],
         requiredPermissions: ['canvas:read'],
         revisions: { [REVISION_SCOPE]: 0 },
       }
@@ -215,7 +235,7 @@ class CanvasReflectionProvider implements ApplicationEntityProvider {
     )
   }
 
-  private async readProperties(ref: ApplicationRef): Promise<Record<string, JsonValue>> {
+  private async readProperties(ref: ApplicationRef, propertyIds?: string[]): Promise<Record<string, JsonValue>> {
     if (this.entityType === CANVAS_ENTITY_TYPES.project) {
       if (ref.kind !== this.entityType) throw new Error('NOT_FOUND')
       const project = await readCanvasProjectSnapshot(ref.id)
@@ -230,18 +250,18 @@ class CanvasReflectionProvider implements ApplicationEntityProvider {
     if (this.entityType === CANVAS_ENTITY_TYPES.node) {
       const node = project.nodes.find((item) => item.id === childId)
       if (!node) throw new Error('NOT_FOUND')
-      return this.nodeProperties(projectId, node)
+      return this.nodeProperties(projectId, node, propertyIds)
     }
     const edge = project.edges.find((item) => item.id === childId)
     if (!edge) throw new Error('NOT_FOUND')
     return this.edgeProperties(projectId, edge)
   }
 
-  private nodeProperties(projectId: string, node: CanvasNode): Record<string, JsonValue> {
+  private nodeProperties(projectId: string, node: CanvasNode, propertyIds?: string[]): Record<string, JsonValue> {
     return {
       [`${CANVAS_ENTITY_TYPES.node}.project_ref`]: { kind: CANVAS_ENTITY_TYPES.project, id: projectId },
       [`${CANVAS_ENTITY_TYPES.node}.node_type`]: node.type,
-      ...fieldReadValues(NODE_FIELDS, node),
+      ...fieldReadValues(propertyIds ? NODE_FIELDS.filter((field) => propertyIds.includes(field.propertyId)) : NODE_FIELDS, node),
     }
   }
 
@@ -304,6 +324,7 @@ export function createCanvasReflectionRegistrations(): ApplicationEntityRegistra
       } : {}),
     },
     properties: propertiesByEntity[entityType],
+    schemaDocuments: entityType === CANVAS_ENTITY_TYPES.node ? CANVAS_NODE_SCHEMA_DOCUMENTS : [],
     provider: new CanvasReflectionProvider(entityType),
   }))
 }

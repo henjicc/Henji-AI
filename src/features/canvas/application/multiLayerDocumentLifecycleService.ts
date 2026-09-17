@@ -4,8 +4,11 @@ import {
 import { createLogger } from '@/core/logging'
 import { parseImageEditSessionReferenceV3 } from '@/core/imageEdit/v3/sessionReference'
 import { getPlatform } from '@/platform/runtime'
-import { useCanvasStore, type CanvasHistorySnapshot, type CanvasState } from '@/stores/canvasStore'
-import { useProjectStore } from '@/stores/projectStore'
+import type { CanvasHistorySnapshot, CanvasState } from '@/stores/canvasStore'
+import { getProjectRecord, listProjectSummaries } from '@/commands/projectState'
+import { fromProjectRecord } from '@/stores/projectStoreSerialization'
+import { deleteIdleImageEditDocumentV3 } from '@/features/imageEdit/v3/application/imageEditDocumentInstances'
+import { listCanvasProjectInstances } from './canvasProjectInstances'
 
 import type { CanvasNode } from '../domain/canvasNodes'
 import type { MultiLayerDocumentNodePort } from './multiLayerDocumentNodeApplicationContracts'
@@ -23,6 +26,7 @@ interface ReleaseCandidate {
 
 const candidates = new Map<string, ReleaseCandidate>()
 const leases = new Map<string, Set<string>>()
+const cleaning = new Set<string>()
 
 function candidateKey(candidate: Pick<ReleaseCandidate, 'documentRef' | 'revision'>): string {
   return `${candidate.documentRef}@${candidate.revision}`
@@ -78,11 +82,28 @@ export function retainMultiLayerDocumentReferences(documentRefs: readonly string
 }
 
 export async function maintainMultiLayerDocumentReleaseCandidates(projectId: string): Promise<void> {
-  const project = useProjectStore.getState()
-  if (project.currentProjectId !== projectId || project.currentProject?.id !== projectId) return
-  const live = collectMultiLayerDocumentLiveReferences(useCanvasStore.getState())
+  if (![...candidates.values()].some((candidate) => candidate.projectId === projectId)) return
+  const persistedRefs = new Set<string>()
+  try {
+    for (const summary of await listProjectSummaries()) {
+      const record = await getProjectRecord(summary.id)
+      if (!record) continue
+      const project = fromProjectRecord(record)
+      const refs = collectMultiLayerDocumentLiveReferences({ ...project, dragHistorySnapshot: null, activeToolDialog: null })
+      for (const ref of refs) persistedRefs.add(ref)
+    }
+  } catch (error) {
+    logger.error('工程引用读取失败，保留图片文档候选', error, {
+      event: 'canvas.multi_layer_document.release_candidate.references.failed', projectId,
+    })
+    return
+  }
   for (const candidate of [...candidates.values()]) {
-    if (candidate.projectId !== projectId || live.has(candidate.documentRef)) continue
+    const key = candidateKey(candidate)
+    if (candidate.projectId !== projectId || cleaning.has(key) || persistedRefs.has(candidate.documentRef)) continue
+    if (listCanvasProjectInstances().some((instance) => collectMultiLayerDocumentLiveReferences(instance.store.getState()).has(candidate.documentRef))) continue
+    if ([...leases.values()].some((refs) => refs.has(candidate.documentRef))) continue
+    cleaning.add(key)
     logger.info('多图层文档候选清理开始', {
       event: 'canvas.multi_layer_document.release_candidate.cleanup.start',
       projectId,
@@ -91,13 +112,16 @@ export async function maintainMultiLayerDocumentReleaseCandidates(projectId: str
     })
     try {
       if (!candidate.documentDeleted) {
-        const result = await deleteImageEditorV3DocumentIfRevision({
-          requestId: `image-editor-v3:release-candidate:${crypto.randomUUID()}`,
-          documentRef: candidate.documentRef,
-          expectedRevision: candidate.revision,
-        })
-        if (!result.deleted) {
-          logger.warn('多图层文档候选版本已变化，保留候选等待后续维护', {
+        const removed = await deleteIdleImageEditDocumentV3(
+          candidate.documentRef.slice('image-edit-v3:'.length), candidate.revision,
+          async () => (await deleteImageEditorV3DocumentIfRevision({
+            requestId: `image-editor-v3:release-candidate:${crypto.randomUUID()}`,
+            documentRef: candidate.documentRef,
+            expectedRevision: candidate.revision,
+          })).deleted,
+        )
+        if (!removed) {
+          logger.info('图片文档仍在使用或版本已变化，保留回收候选', {
             event: 'canvas.multi_layer_document.release_candidate.cleanup.failed',
             projectId,
             nodeId: candidate.nodeId,
@@ -124,7 +148,7 @@ export async function maintainMultiLayerDocumentReleaseCandidates(projectId: str
         nodeId: candidate.nodeId,
         context: { documentRef: candidate.documentRef, revision: candidate.revision },
       })
-    }
+    } finally { cleaning.delete(key) }
   }
 }
 
@@ -134,8 +158,8 @@ export function createMultiLayerDocumentLifecyclePort(): Pick<
 > {
   return {
     async markReleaseCandidate(input): Promise<void> {
-      const projectId = useProjectStore.getState().currentProjectId
-      if (!projectId) throw new Error('当前没有可维护的画布项目')
+      const projectId = input.projectId
+      if (!projectId) throw new Error('文档回收缺少原画布工程')
       const candidate: ReleaseCandidate = {
         projectId,
         nodeId: input.nodeId,
@@ -155,4 +179,5 @@ export function createMultiLayerDocumentLifecyclePort(): Pick<
 export function resetMultiLayerDocumentLifecycleForTests(): void {
   candidates.clear()
   leases.clear()
+  cleaning.clear()
 }

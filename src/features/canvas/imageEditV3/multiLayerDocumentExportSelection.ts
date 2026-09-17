@@ -1,10 +1,6 @@
 import type { ApplicationRef } from '@/core/application-control'
 import type { ImageEditDocumentV3 } from '@/core/imageEdit/v3/documentTypes'
-import {
-  imageEditV3AnnotationRef,
-  imageEditV3GroupRef,
-  imageEditV3LayerRef,
-} from '@/features/imageEdit/v3/application/imageEditLiveSessionRegistry'
+import { imageEditV3AnnotationRef, imageEditV3GroupRef, imageEditV3LayerRef } from '@/features/imageEdit/v3/application/imageEditDocumentRefs'
 import type { ImageEditorAnnotationSelectionV3 } from '@/features/imageEdit/v3/store/imageEditorInteractionStoreV3'
 import { findImageEditLayerLocationV3 } from '@/features/imageEdit/v3/editor/layerTreeV3'
 

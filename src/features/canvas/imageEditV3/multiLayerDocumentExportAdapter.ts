@@ -10,10 +10,7 @@ import {
   type ImageEditExportTargetV3,
   type ImageEditExportTargetViewV3,
 } from '@/core/imageEdit/v3'
-import {
-  splitImageEditV3AnnotationRef,
-  splitImageEditV3LayerRef,
-} from '@/features/imageEdit/v3/application/imageEditLiveSessionRegistry'
+import { splitImageEditV3AnnotationRef, splitImageEditV3LayerRef } from '@/features/imageEdit/v3/application/imageEditDocumentRefs'
 import {
   prepareImageEditorV3ExportRender,
   renderImageEditorV3ExportTilesWithGpu,

@@ -8,7 +8,7 @@ vi.mock('electron', () => ({
   BrowserWindow: { fromWebContents: mocks.fromWebContents },
 }))
 
-import { SURFACE_OBSERVATION_SCHEMA_VERSION } from '../../../../src/core/assistant/surfaceObservation'
+import { SURFACE_OBSERVATION_SCHEMA_VERSION } from '../../../../src/core/application-control/surfaceObservation'
 import { captureApplicationSurface } from './surfaceCapture'
 
 describe('captureApplicationSurface', () => {

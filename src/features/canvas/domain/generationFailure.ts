@@ -1,6 +1,12 @@
 import type { CanvasNodeData } from './canvasNodes'
 
 export const LAYER_STACK_DOWNLOAD_FAILURE_MESSAGE = '图片已生成，但下载未完成。请重试获取结果。'
+export const CANVAS_GENERATION_CANCELLED_MESSAGE = '本地任务已停止；供应商是否停止执行尚未确认。'
+
+/** 保留原供应商任务号，只有明确续查才重新获取结果。 */
+export function createCanvasGenerationCancelledPatch(): Partial<CanvasNodeData> {
+  return { isGenerating: false, generationStartedAt: null, generationCancelled: true, generationError: CANVAS_GENERATION_CANCELLED_MESSAGE }
+}
 
 function isLayerDownloadFailureMessage(message: string): boolean {
   return message.includes('[media_download_failed]')

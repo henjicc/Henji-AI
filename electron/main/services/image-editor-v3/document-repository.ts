@@ -154,7 +154,7 @@ function serializeEnvelope(envelope: ImageEditDocumentEnvelope): Buffer {
   return Buffer.from(`${JSON.stringify(envelope)}\n`, 'utf8')
 }
 
-export function toDocumentRef(documentId: string): string {
+export function toDocumentRef(documentId: string): `image-edit-v3:${string}` {
   return `${IMAGE_EDIT_DOCUMENT_REF_PREFIX}${validateDocumentId(documentId)}`
 }
 
@@ -343,6 +343,21 @@ export class ImageEditDocumentRepository {
       }
     }
     return envelopes.sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))
+  }
+
+  /** 发现文档只读取目录，不把整份文档及媒体资源加载进主进程。 */
+  async listReferences(cursor: string | undefined, limit: number): Promise<{ documentRefs: `image-edit-v3:${string}`[]; nextCursor: string | null }> {
+    if (!Number.isSafeInteger(limit) || limit < 1 || limit > 100) throw new Error('Invalid document list limit')
+    const afterId = cursor === undefined ? undefined : parseDocumentRef(cursor)
+    const entries = await fsp.readdir(this.rootDir, { withFileTypes: true }).catch((error: unknown) => {
+      if (error && typeof error === 'object' && 'code' in error && error.code === 'ENOENT') return []
+      throw error
+    })
+    const ids = entries.filter((entry) => entry.isFile() && entry.name.endsWith('.json'))
+      .map((entry) => entry.name.slice(0, -5))
+      .filter((id) => DOCUMENT_ID_PATTERN.test(id) && (afterId === undefined || id > afterId)).sort()
+    const documentRefs = ids.slice(0, limit).map(toDocumentRef)
+    return { documentRefs, nextCursor: ids.length > limit ? documentRefs[documentRefs.length - 1] : null }
   }
 
   /**

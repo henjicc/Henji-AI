@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import {
   APPLICATION_SURFACE_IDS,
   resolveSurfaceObservationProfile,
-} from '@/core/assistant/applicationSurfaces'
+} from '@/core/application-control/applicationSurfaces'
 import { SETTINGS_SECTION_IDS } from '@/core/types/settingsNavigation'
 import {
   decideSurfacePresentation,

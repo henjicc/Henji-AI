@@ -2,6 +2,7 @@ import { getPlatform } from '@/platform'
 import type {
   CameraStageRenderEvent,
   CameraStageRenderRequest,
+  CameraStageRenderWorkerJob,
   CameraStageRenderTaskScope,
   CameraStageRenderTaskSnapshot,
 } from '@/platform/contracts/cameraStageRender'
@@ -16,7 +17,7 @@ export async function getCameraStageRenderTask(scope: CameraStageRenderTaskScope
   return await getPlatform().cameraStageRender.get(scope)
 }
 
-export async function listCameraStageRenderTasks(canvasProjectId: string): Promise<CameraStageRenderTaskSnapshot[]> {
+export async function listCameraStageRenderTasks(canvasProjectId?: string): Promise<CameraStageRenderTaskSnapshot[]> {
   return await getPlatform().cameraStageRender.list(canvasProjectId)
 }
 
@@ -39,7 +40,7 @@ export async function notifyCameraStageRenderWorkerReady(): Promise<void> {
 }
 
 export function onCameraStageRenderWorkerJob(
-  listener: (request: CameraStageRenderRequest) => void,
+  listener: (request: CameraStageRenderWorkerJob) => void,
 ): () => void {
   return getPlatform().cameraStageRender.onWorkerJob(listener)
 }

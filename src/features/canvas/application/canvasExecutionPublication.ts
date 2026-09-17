@@ -54,8 +54,8 @@ export function publishCanvasSuccessfulExecution(input: {
   inputSignature: string
   outputMode: CanvasDependencyOutputMode
   resultNodeIds: string[]
-}): void {
-  const canvas = useCanvasStore.getState()
+}, store = useCanvasStore): void {
+  const canvas = store.getState()
   const nodeById = getNodeIndexById(canvas.nodes)
   const sourceNode = nodeById.get(input.sourceNodeId)
   if (!sourceNode) throw new Error(`画布执行节点不存在：${input.sourceNodeId}`)

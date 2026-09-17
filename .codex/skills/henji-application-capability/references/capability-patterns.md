@@ -11,9 +11,9 @@
 
 ## 结构边界
 
-实体、属性和集合 CRUD 放在 Application Control 反射注册表；只有无法用 CRUD 表达的算法操作才放在 `src/core/assistant/` 的领域模块，并汇入统一 `ApplicationCapabilityRegistry`。两类定义都只包含跨层契约，不导入组件、Store 实现、Electron 主进程服务或业务处理器。
+实体、属性和集合 CRUD 放在 Application Control 反射注册表；只有无法用 CRUD 表达的算法操作才放在 `src/core/application-control/domains/` 的领域模块，并汇入统一 `ApplicationCapabilityRegistry`。两类定义都只包含跨层契约，不导入组件、Store 实现、Electron 主进程服务或业务处理器。
 
-渲染层和主进程分别维护模块级处理器注册。Agent Runtime 从同一份定义生成模型工具，不再手写第二份 `AgentToolDefinition` 元数据。
+渲染层和主进程分别维护模块级处理器注册。应用运行时提供统一目录，Pi 与 MCP 从同一份定义投影工具，不手写第二份业务元数据。
 
 ## 字段选择
 
@@ -35,7 +35,7 @@
 AI 输入 schema 还必须满足：
 
 - 顶层 `additionalProperties: false`，所有可执行参数均显式列出。
-- 除 `run_henji_script@1` 的受限 `source` 外，不得出现 `patch`、`storePatch`、`executeScript`、`script`、`code` 等开放式控制字段；`source` 只允许解析为自有 IR，永不执行 JavaScript。
+- 不得出现 `patch`、`storePatch`、`executeScript`、`script`、`code` 等开放式控制或源码执行字段。
 - 不得接受 Store 对象、组件状态、原始文件路径或任意键值对象来间接修改业务数据。
 - 需要扩展公开参数时，先扩展领域 schema/注册表，再由能力引用同一真相源。
 
@@ -48,23 +48,19 @@ AI 输入 schema 还必须满足：
 | 实体/属性 | 稳定 ID、schemaRef、权限、revision、正式反射提供者 |
 | 语义操作 | 输入/输出 schema、影响声明、风险、撤销/补偿、成功证据 |
 | Surface | 打开策略、稳定目标、观察提供者、捕获范围、数据等级、遮罩、模态与失效条件 |
-| 模型/媒体 | 唯一模态声明、provider 可表达性、primary/observer 路由、大小/时长/编码限制 |
-| 长任务 | 正式服务、等待/取消/恢复状态、Artifact 与结构化日志 |
+| 模型/媒体 | 唯一模态声明、provider 可表达性、调用方模态投影、大小/时长/编码限制 |
+| 长任务 | 正式服务、等待/取消/恢复状态、稳定任务／结果引用与结构化日志 |
 
-Application Control 反射注册表是实体、属性与集合 CRUD 的唯一真相源，`ApplicationCapabilityDefinition` 是算法操作的唯一真相源，领域注册表和 Surface 目录分别维护执行与界面事实；`scriptApi` 和覆盖清单只聚合、投影并验证，不复制第二份业务 schema。
+Application Control 反射注册表是实体、属性与集合 CRUD 的唯一真相源，`ApplicationCapabilityDefinition` 是算法操作的唯一真相源，领域注册表和 Surface 目录分别维护执行与界面事实；工具目录和覆盖清单只聚合、投影并验证，不复制第二份业务 schema。
 
-## Henji Script 编排与提交
+## 事务与提交
 
-模型侧的复杂或批量应用操作统一使用一次 `run_henji_script@1`：
+1. 通用实体写入进入同一事务；算法能力进入同一应用执行协调，再调用正式领域服务。
+2. 可信宿主注入调用者、授权、操作身份、目标与取消信号，输入不得覆盖授权。
+3. 执行前登记调用者范围内的幂等键和输入；重复同输入返回原操作，冲突拒绝，未知写入先查账本而不重放。
+4. 按正式状态和实际副作用验证结果，分别返回执行与保存状态；保存恢复只确认原修改，不重新生成。
 
-1. 能力发现返回当前租约允许的 `app.entities`、`app.action`、`app.recipe` 和 `app.assert`，并合并真实反射 schema。
-2. 模型只表达业务参数和数据依赖；宿主编译为受控 IR，注入版本、revision、权限、availability、Effect Contract 与验证契约。
-3. 无输出依赖的相邻实体写入自动合并到同一 Application Control 事务；算法操作经 `app.action` 进入相同 Gateway。
-4. 每个步骤从正式状态源读回验证，最终以 Effect Receipt 和状态差异双向对账。
-
-领域内部确需“预览/审批后提交”的高风险算法操作，可以保留不透明计划引用，但它是业务能力契约，不是模型逐步编排协议。禁止让模型手工管理能力版本、expected revision、输出路径或引用占位符。
-
-删除、覆盖、付费和外部写入继续经过统一审批，不在处理器内部自行降低风险等级。
+预览／审批后提交的算法可使用领域计划引用，不新增通用编排解释器。删除、覆盖、付费继续经过正式权限和审批。
 
 ## 稳定引用
 
@@ -84,7 +80,7 @@ Application Control 反射注册表是实体、属性与集合 CRUD 的唯一真
 - `revision` 在实体会变化时提供。
 - `label` 只供用户理解，不用于实体查找。
 
-大结果继续走 artifact offload，能力输出只返回摘要和引用。
+大结果返回摘要和稳定引用；媒体走受控分块读取，资源使用授权读取服务，不暴露原始路径。
 
 ## 前后端归属
 
@@ -98,7 +94,9 @@ Application Control 反射注册表是实体、属性与集合 CRUD 的唯一真
 
 - 文件、数据库、网络和系统设置。
 - 生成任务、导入导出和长耗时处理。
-- 跨页面复用的查询、校验、计划和持久化写入。
+- I/O、授权与生命周期协调。
+
+跨页面查询、校验、计划和状态修改由所属领域实例持有；页面只附着，CPU 重计算进入 Worker。
 
 不得为了复用现有组件状态，把本应属于业务服务的能力长期留在页面组件里。
 
@@ -112,6 +110,6 @@ Application Control 反射注册表是实体、属性与集合 CRUD 的唯一真
 - 搜索别名能找到目标能力，错误 Router 分类不阻断发现。
 - 处理器成功后输出包含成功证据；失败时返回稳定错误码。
 - 跨模块引用失效时重新读取来源，不创建无关项目。
-- 首次 `scriptApi` 投影能看到真实 enum、范围、引用形状和写 operation；非法字面量及条件分支候选在 Gateway 调用数为 0 时拒绝。
-- 多步骤脚本只通过同一 IR/解释器执行，Recipe 不得拥有第二套执行器、Effect、补偿或验证逻辑。
+- 工具与实体 schema 来自正式声明，输入错误在业务执行前拒绝。
+- 多项实体变更经过同一事务、补偿和验证实现；跨工程操作不依赖页面挂载。
 - 写入后的每项正式状态差异都有 Effect Receipt，每项 receipt 都能在最终状态找到对应变化；evidence 不能当成写入证据。

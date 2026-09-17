@@ -1,11 +1,14 @@
+import { loadCameraStageTestProject } from '@/tests/cameraStageProjectFixture'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({
-  saveCurrentProject: vi.fn().mockResolvedValue(undefined),
+  writeProject: vi.fn().mockResolvedValue(undefined),
   loadProjectIntoScene: vi.fn().mockResolvedValue(true),
 }))
 
-vi.mock('../projects/cameraStageProjectService', () => mocks)
+vi.mock('@/commands/cameraStageProjects', () => ({ upsertCameraStageProjectRecord: mocks.writeProject }))
+
+vi.mock('../projects/cameraStageProjectService', () => ({ loadProjectIntoScene: mocks.loadProjectIntoScene }))
 
 import type { ApplicationPlannedStep } from '@/core/application-control'
 
@@ -49,7 +52,7 @@ describe('三维姿态状态关键帧写入', () => {
     characterId = character.id
     primitiveId = primitive.id
     const objects = [camera, character, primitive]
-    useCameraStageStore.getState().loadSnapshot({
+    loadCameraStageTestProject({
       objects,
       activeCameraId: camera.id,
       animation: createDefaultAnimation(),

@@ -1,31 +1,22 @@
+import { upsertProjectRecord } from '@/commands/projectState';
+import { setCanvasTestProjectState } from '@/tests/canvasProjectFixture';
 // @vitest-environment jsdom
 
-import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
+// @vitest-environment jsdom
+import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import {
-  CANVAS_IMAGE_CAPABILITY_IDS,
-  getCanvasImageCapability,
-  type CanvasImageCapabilityDefinition,
-} from '@/features/canvas/capabilities'
-import {
-  CANVAS_NODE_TYPES,
-  type CanvasNode,
-  type CanvasNodeType,
-} from '@/features/canvas/domain/canvasNodes'
-import { useCanvasStore } from '@/stores/canvasStore'
-import { useProjectStore, type Project } from '@/stores/projectStore'
-import { useCanvasSpecialEditorController } from './specialEditorController'
-import { loadRealModelsIntoRegistry } from '@/tests/loadRealModels'
+import { CANVAS_IMAGE_CAPABILITY_IDS, getCanvasImageCapability, type CanvasImageCapabilityDefinition } from '@/features/canvas/capabilities';
+import { CANVAS_NODE_TYPES, type CanvasNode, type CanvasNodeType } from '@/features/canvas/domain/canvasNodes';
+import { useCanvasStore } from '@/stores/canvasStore';
+import { type Project } from '@/stores/projectStore';
+import { useCanvasSpecialEditorController } from './specialEditorController';
+import { loadRealModelsIntoRegistry } from '@/tests/loadRealModels';
 import i18n from '@/i18n'
 
-import { undoCanvasBatch, resetCanvasBatchStateForTests } from './canvasBatchService'
-import { resetCanvasApplicationStateForTests } from './canvasApplicationService'
-import { canvasEventBus } from './canvasServices'
-import {
-  createCanvasImageCapabilityExecutor,
-  executeCanvasImageCapabilityForProject,
-  resetCanvasImageCapabilityApplicationStateForTests,
-} from './canvasImageCapabilityApplicationService'
+import { undoCanvasBatch, resetCanvasBatchStateForTests } from './canvasBatchService';
+import { resetCanvasApplicationStateForTests } from './canvasApplicationService';
+import { canvasEventBus } from './canvasServices';
+import { createCanvasImageCapabilityExecutor, executeCanvasImageCapabilityForProject, resetCanvasImageCapabilityApplicationStateForTests } from './canvasImageCapabilityApplicationService';
 
 const projectId = 'image-capability-project'
 const sourceNodeId = 'source-image'
@@ -81,6 +72,7 @@ function capabilityForNode(nodeType: CanvasNodeType): CanvasImageCapabilityDefin
 
 describe('画布图片能力应用服务', () => {
   beforeEach(async () => {
+    vi.mocked(upsertProjectRecord).mockClear()
     await i18n.changeLanguage('zh-CN')
     resetCanvasApplicationStateForTests()
     resetCanvasBatchStateForTests()
@@ -94,7 +86,7 @@ describe('画布图片能力应用服务', () => {
       canvasViewportSize: { width: 1_200, height: 800 },
       selectedNodeId: sourceNodeId,
     })
-    useProjectStore.setState({
+    setCanvasTestProjectState({
       projects: [project],
       currentProjectId: projectId,
       currentProject: project,
@@ -189,7 +181,7 @@ describe('画布图片能力应用服务', () => {
     expect(canvas.selectedNodeId).toBe(result.nodeId)
     expect(canvas.nodes.find((node) => node.id === result.nodeId)?.selected).toBe(true)
     expect(canvas.history.past).toHaveLength(1)
-    expect(useProjectStore.getState().saveCurrentProject).toHaveBeenCalledTimes(1)
+    expect(vi.mocked(upsertProjectRecord)).toHaveBeenCalledTimes(1)
 
     expect(await undoCanvasBatch(projectId, result.undoRef)).toMatchObject({ status: 'undone' })
     expect(useCanvasStore.getState().nodes).toHaveLength(1)

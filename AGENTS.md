@@ -52,7 +52,7 @@ npm run logs:query -- --chain <runId>   # 按运行链路查日志
 
 # 真实环境跑助手（无窗口 Electron，复用正式助手与完整工具链，结束输出 runId）
 npm run assistant:cli -- --goal "任务描述" --trace detailed
-npm run assistant:live:suite -- --only camera --skip-generation
+npm run test:reality -- --suite integration
 ```
 
 其余检查命令按改动类型选用，见 [docs/rules/testing.md](docs/rules/testing.md)。日常真实窗口验收需要新产物时用 `electron:bundle`；`electron:build` / `electron:dist` 仅用于构建链本身、发布或 L3，禁止因为“产物旧了”升级到完整构建。

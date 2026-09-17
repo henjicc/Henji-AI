@@ -30,6 +30,7 @@ export interface ImageEditPersistenceHostV3 {
 }
 
 export class ImageEditPersistenceOwnerV3 implements ApplicationPersistenceParticipant {
+  readonly ownerId = crypto.randomUUID()
   readonly key: string
   private active = true
   private confirming: Promise<ImageEditDocumentReferenceV3> | null = null
@@ -49,20 +50,31 @@ export class ImageEditPersistenceOwnerV3 implements ApplicationPersistencePartic
     readonly documentId: string,
     private readonly queue: ImageEditPersistenceQueuePortV3,
     private readonly snapshot: () => ImageEditPersistenceSnapshotV3,
-    private readonly confirmProjection?: ImageEditPersistenceHostV3['confirmProjection'],
-    readonly projection?: ImageEditPersistenceHostV3['projection'],
+    private confirmProjection?: ImageEditPersistenceHostV3['confirmProjection'],
+    public projection?: ImageEditPersistenceHostV3['projection'],
+    private readonly canStart: () => boolean = () => true,
   ) {
     if (queue.getReference().documentId !== documentId) throw new Error('图片编辑保存宿主与文档不匹配')
     this.key = `image-edit-document:${documentId}`
   }
 
   dispose(): void { this.active = false }
+  isBusy(): boolean { return Boolean(this.confirming || this.batch) }
   get persistenceEffects() { return this.projection?.effects }
   getConfirmationReceipt(): ApplicationPersistenceReceipt | undefined { return this.receipt }
   ownsQueue(queue: ImageEditPersistenceQueuePortV3): boolean { return this.queue === queue }
+  getReference(): ImageEditDocumentReferenceV3 { return this.queue.getReference() }
+
+  attachProjection(host: ImageEditPersistenceHostV3): void {
+    if (this.confirmProjection || !host.confirmProjection) return
+    this.assertCurrent()
+    if (this.isBusy()) throw new Error('图片文档正在提交修改，请等待完成后附着画布投影')
+    this.confirmProjection = host.confirmProjection
+    this.projection = host.projection
+  }
 
   assertCurrent(): void {
-    if (!this.active) throw new Error('图片编辑会话已关闭或替换，请重新打开原文档后重试保存')
+    if (!this.active || !this.canStart()) throw new Error('图片文档实例已释放或正在关闭，请重新读取原文档后重试保存')
     if (this.expectedDocument && this.snapshot().document !== this.expectedDocument) {
       throw new Error('图片编辑期间出现新的编辑，请保留当前内容并重新读取后规划')
     }
@@ -101,6 +113,7 @@ export class ImageEditPersistenceOwnerV3 implements ApplicationPersistencePartic
   /** UI 重试和助手恢复只确认最新快照，从不 dispatch / undo 业务命令。 */
   confirm(includeProjection = this.projectionNeeded): Promise<ImageEditDocumentReferenceV3> {
     if (this.batchConfirmation) return this.batchConfirmation.promise
+    if (!this.canStart()) return Promise.reject(new Error('图片文档正在关闭，不能开始保存'))
     return this.performConfirmation(includeProjection)
   }
 
@@ -119,12 +132,12 @@ export class ImageEditPersistenceOwnerV3 implements ApplicationPersistencePartic
   private async drainConfirmation(): Promise<ImageEditDocumentReferenceV3> {
     let stage: 'document' | 'projection' = 'document'
     try {
-      if (!this.active) throw new Error('原编辑会话已关闭，不能借用新会话确认保存')
+      if (!this.active) throw new Error('原图片文档实例已释放，不能借用其他实例确认保存')
       for (;;) {
         const snapshot = this.snapshot()
         this.queue.enqueue(snapshot)
         const reference = await (this.batch ? this.batch.flush() : this.queue.flush())
-        if (!this.active) throw new Error('保存期间原编辑会话已关闭，请重新打开原文档核对')
+        if (!this.active) throw new Error('保存期间原图片文档实例已释放，请重新读取原文档核对')
         if (this.snapshot().document !== snapshot.document) continue
         if (this.projectionNeeded && this.confirmProjection) {
           stage = 'projection'
@@ -133,7 +146,7 @@ export class ImageEditPersistenceOwnerV3 implements ApplicationPersistencePartic
             this.receipt = { effects: receipt.effects, resultingRevisions: receipt.resultingRevisions }
             this.queue.confirmProjectionReference(receipt.reference)
           }
-          if (!this.active) throw new Error('节点同步期间编辑会话已被替换，请重新读取结果')
+          if (!this.active) throw new Error('节点同步期间图片文档实例已释放，请重新读取结果')
           if (this.snapshot().document !== snapshot.document) { stage = 'document'; continue }
           this.projectionNeeded = false
           this.projectedDocument = snapshot.document
@@ -152,7 +165,7 @@ export class ImageEditPersistenceOwnerV3 implements ApplicationPersistencePartic
       throw new ApplicationPersistenceFailure(
         '当前图片编辑内容已保留，但保存未确认。请重试保存，不要重复修改、新增、删除或撤销操作。',
         { memoryState: 'modified', persistenceState: 'unconfirmed', stage,
-          recovery: { capabilityId: 'retry_image_edit_document_save',
+          recovery: { capabilityId: 'retry_image_edit_document_save', ownerId: this.ownerId,
             target: { kind: 'image_edit.document', id: `v3:${encodeURIComponent(this.documentId)}` }, replayMutation: false } },
         cause,
         cause instanceof ApplicationPersistenceFailure ? cause.receipt : this.receipt,

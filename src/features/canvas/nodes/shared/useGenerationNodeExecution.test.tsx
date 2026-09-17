@@ -1,22 +1,21 @@
 // @vitest-environment jsdom
 
 import { renderHook } from '@testing-library/react'
-import type { TFunction } from 'i18next'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { CANVAS_NODE_TYPES } from '@/features/canvas/domain/canvasNodes'
 
-const { executorCleanup, registerCanvasNodeExecutor } = vi.hoisted(() => {
+const { feedbackCleanup, attachCanvasGenerationFeedback } = vi.hoisted(() => {
   const cleanup = vi.fn()
   return {
-    executorCleanup: cleanup,
-    registerCanvasNodeExecutor: vi.fn(() => cleanup),
+    feedbackCleanup: cleanup,
+    attachCanvasGenerationFeedback: vi.fn(() => cleanup),
   }
 })
 
-vi.mock('@/features/canvas/application/canvasExecutionService', () => ({
-  registerCanvasNodeExecutor,
+vi.mock('@/features/canvas/application/canvasDomainExecutors', () => ({
+  attachCanvasGenerationFeedback,
 }))
+vi.mock('@/stores/projectStore', () => ({ useProjectStore: (select: (state: { currentProjectId: string }) => unknown) => select({ currentProjectId: 'project' }) }))
 
 import { useGenerationNodeExecution } from './useGenerationNodeExecution'
 
@@ -25,37 +24,28 @@ describe('useGenerationNodeExecution', () => {
     vi.clearAllMocks()
   })
 
-  it('节点普通重渲染时保持同一个生成执行器，避免当前运行被重试并创建双占位节点', () => {
-    const t = vi.fn((key: string) => key) as unknown as TFunction
+  it('页面重渲染与卸载只更新校验反馈订阅，不持有执行器', () => {
     const setPromptInvalid = vi.fn()
-    const { rerender, unmount } = renderHook(({ revision }) => {
+    const { rerender, unmount } = renderHook(({ invalidHandler }) => {
       useGenerationNodeExecution({
         nodeId: 'generation-node',
-        modelType: 'image',
-        resultNodeType: CANVAS_NODE_TYPES.exportImage,
-        acceptedKinds: ['image'],
-        acceptedMediaKinds: ['image'],
-        capability: null,
-        showModelInput: true,
-        requirePrompt: true,
-        promptRequiredKey: 'promptRequired',
-        apiKeyRequiredKey: 'apiKeyRequired',
-        resultTitleKey: 'resultTitle',
-        resultNodeExtraData: { revision },
-        prepareGenerationRequest: async () => ({ resultNodeData: { revision } }),
-        setPromptInvalid,
-        t,
+        setPromptInvalid: invalidHandler,
       })
-    }, { initialProps: { revision: 0 } })
+    }, { initialProps: { invalidHandler: setPromptInvalid } })
 
-    expect(registerCanvasNodeExecutor).toHaveBeenCalledTimes(1)
+    expect(attachCanvasGenerationFeedback).toHaveBeenCalledTimes(1)
 
-    rerender({ revision: 1 })
+    const nextHandler = vi.fn()
+    rerender({ invalidHandler: nextHandler })
 
-    expect(registerCanvasNodeExecutor).toHaveBeenCalledTimes(1)
-    expect(executorCleanup).not.toHaveBeenCalled()
+    expect(attachCanvasGenerationFeedback).toHaveBeenCalledTimes(1)
+    expect(feedbackCleanup).not.toHaveBeenCalled()
 
+    const feedback = (attachCanvasGenerationFeedback.mock.calls[0] as unknown as [string, string, (invalid: boolean) => void])[2]
+    feedback(true)
+    expect(nextHandler).toHaveBeenCalledWith(true)
+    expect(setPromptInvalid).not.toHaveBeenCalled()
     unmount()
-    expect(executorCleanup).toHaveBeenCalledTimes(1)
+    expect(feedbackCleanup).toHaveBeenCalledTimes(1)
   })
 })

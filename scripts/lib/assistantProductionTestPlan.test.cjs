@@ -9,8 +9,8 @@ test('生产助手测试把重复 Vitest 文件合并为一次执行', () => {
   const packageJson = {
     scripts: {
       'test:assistant-model-compat': 'vitest run a.test.ts shared.test.ts',
-      'test:assistant-eval': 'vitest run shared.test.ts b.test.ts',
-      'test:assistant-settlement': 'vitest run c.test.ts',
+      'test:application-harness': 'vitest run shared.test.ts b.test.ts',
+      'test:embedded-agent': 'vitest run c.test.ts',
     },
   }
   const plan = buildAssistantProductionTestPlan(packageJson, '/workspace')

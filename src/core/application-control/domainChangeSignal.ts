@@ -1,9 +1,9 @@
-export type ApplicationDomainChangeScope = 'assets'
+export type ApplicationDomainChangeScope = 'assets' | 'canvas' | 'camera_stage'
 
-const revisions: Record<ApplicationDomainChangeScope, number> = { assets: 0 }
+const revisions: Record<ApplicationDomainChangeScope, number> = { assets: 0, canvas: 0, camera_stage: 0 }
 const listeners = new Set<(scope: ApplicationDomainChangeScope) => void>()
 
-/** 由领域唯一写入口在真实持久化成功后发出；失败操作不得推进。 */
+/** 由领域在权威状态发生变化时发出；不能把通知当作保存成功的回执。 */
 export function notifyApplicationDomainChanged(scope: ApplicationDomainChangeScope): void {
   revisions[scope] += 1
   for (const listener of listeners) listener(scope)

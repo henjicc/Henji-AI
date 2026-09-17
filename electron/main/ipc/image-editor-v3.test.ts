@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
+import { parseImageEditorV3ListPayload } from './image-editor-v3-payloads'
 
 import { ImageEditCommandHistoryV3 } from '../../../src/core/imageEdit/v3/commandHistory'
 import {
@@ -47,6 +48,12 @@ function document(revision: number): Record<string, unknown> {
 }
 
 describe('图片编辑 V3 IPC 边界', () => {
+  it('文档目录只接受受限页大小与文档引用游标', () => {
+    expect(parseImageEditorV3ListPayload({ requestId: 'catalog' })).toEqual({ requestId: 'catalog', limit: 100 })
+    expect(parseImageEditorV3ListPayload({ requestId: 'catalog', cursor: 'image-edit-v3:next', limit: 2 })).toEqual({ requestId: 'catalog', cursor: 'image-edit-v3:next', limit: 2 })
+    for (const limit of [0, -1, 101, 1.5, '2', null]) expect(() => parseImageEditorV3ListPayload({ requestId: 'catalog', limit })).toThrow()
+    expect(() => parseImageEditorV3ListPayload({ requestId: 'catalog', cursor: 'C:/secret' })).toThrow()
+  })
   it('为 load/package 共享快照按原顺序受控并发生成权威资源描述', async () => {
     const resourceRefs = Array.from({ length: 12 }, (_, index) => resourceRef(index + 1))
     const releases = new Map<string, () => void>()

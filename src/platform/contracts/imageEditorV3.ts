@@ -299,6 +299,11 @@ export interface ImageEditorV3StandaloneRasterExportResult extends ImageEditorV3
 export type ImageEditorV3RasterPublication = 'document-preview' | 'standalone-image'
 
 export interface ImageEditorV3Platform {
+  listDocuments(request: {
+    requestId: string
+    cursor?: string
+    limit?: number
+  }): Promise<{ documentRefs: ImageEditorV3DocumentRef[]; nextCursor: string | null }>
   loadDocument(request: {
     requestId: string
     documentRef: ImageEditorV3DocumentRef

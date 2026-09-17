@@ -1,15 +1,17 @@
+import { setCanvasTestProjectState } from '@/tests/canvasProjectFixture';
 // @vitest-environment jsdom
 
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+// @vitest-environment jsdom
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { ApplicationPlannedStep } from '@/core/application-control'
-import { CANVAS_NODE_TYPES } from '@/features/canvas/domain/canvasNodes'
-import { useCanvasStore } from '@/stores/canvasStore'
-import { useProjectStore, type Project } from '@/stores/projectStore'
+import type { ApplicationPlannedStep } from '@/core/application-control';
+import { CANVAS_NODE_TYPES } from '@/features/canvas/domain/canvasNodes';
+import { useCanvasStore } from '@/stores/canvasStore';
+import { type Project } from '@/stores/projectStore';
 
-import { resetCanvasBatchStateForTests } from './canvasBatchService'
-import { CanvasCollectionExecutor } from './canvasCollectionExecutor'
-import { CANVAS_ENTITY_TYPES } from './canvasReflection'
+import { resetCanvasBatchStateForTests } from './canvasBatchService';
+import { CanvasCollectionExecutor } from './canvasCollectionExecutor';
+import { CANVAS_ENTITY_TYPES } from './canvasReflection';
 
 const projectId = 'canvas-collection-project'
 
@@ -29,14 +31,13 @@ function project(): Project {
 }
 
 describe('画布集合写入执行器', () => {
-  let revision = 2
+  const revision = 2
 
   beforeEach(() => {
-    revision = 2
     resetCanvasBatchStateForTests()
     useCanvasStore.getState().setCanvasData([], [], { past: [], future: [] })
     const currentProject = project()
-    useProjectStore.setState({
+    setCanvasTestProjectState({
       projects: [currentProject],
       currentProjectId: projectId,
       currentProject,
@@ -47,10 +48,7 @@ describe('画布集合写入执行器', () => {
   })
 
   it('通过公共集合执行器创建节点并使用同一 token 完整撤销', async () => {
-    const executor = new CanvasCollectionExecutor(CANVAS_ENTITY_TYPES.node, {
-      readRevision: () => revision,
-      bumpRevision: () => { revision += 1 },
-    })
+    const executor = new CanvasCollectionExecutor(CANVAS_ENTITY_TYPES.node)
     const step: Extract<ApplicationPlannedStep, { kind: 'collection' }> = {
       kind: 'collection',
       parent: { kind: CANVAS_ENTITY_TYPES.project, id: projectId },
@@ -81,10 +79,7 @@ describe('画布集合写入执行器', () => {
     const edges = [{ id: 'edge-1', source: 'child', target: 'peer' }]
     useCanvasStore.setState({ nodes: nodes as never, edges: edges as never })
     expect(useCanvasStore.getState().edges).toHaveLength(1)
-    const executor = new CanvasCollectionExecutor(CANVAS_ENTITY_TYPES.node, {
-      readRevision: () => revision,
-      bumpRevision: () => { revision += 1 },
-    })
+    const executor = new CanvasCollectionExecutor(CANVAS_ENTITY_TYPES.node)
     const result = await executor.apply({
       kind: 'collection', parent: { kind: CANVAS_ENTITY_TYPES.project, id: projectId },
       entityType: CANVAS_ENTITY_TYPES.node, expectedRevisions: { canvas: revision },

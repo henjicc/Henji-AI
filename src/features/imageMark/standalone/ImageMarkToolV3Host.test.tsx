@@ -1,5 +1,6 @@
 /** @vitest-environment jsdom */
 
+import '@/tests/imageEditDocumentFixture'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { StrictMode } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'

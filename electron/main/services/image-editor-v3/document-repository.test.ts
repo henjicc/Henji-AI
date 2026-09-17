@@ -39,6 +39,17 @@ function documentAt(documentId: string, revision: number, marker = ''): ImageEdi
 }
 
 describe('ImageEditDocumentRepository', () => {
+  it('文档引用目录按稳定引用分页，不读取文档内容或暴露本地路径', async () => {
+    const repository = new ImageEditDocumentRepository(rootDir)
+    for (const id of ['b', 'a0', 'a']) await repository.create({ documentId: id, revision: 0, document: documentAt(id, 0) })
+    await fsp.writeFile(path.join(rootDir, 'incomplete.tmp'), 'temporary')
+    const first = await repository.listReferences(undefined, 2)
+    expect(first).toEqual({ documentRefs: ['image-edit-v3:a', 'image-edit-v3:a0'], nextCursor: 'image-edit-v3:a0' })
+    expect(await repository.listReferences(first.nextCursor!, 2)).toEqual({ documentRefs: ['image-edit-v3:b'], nextCursor: null })
+    await expect(repository.listReferences('image-edit-v3:../outside', 2)).rejects.toThrow()
+    await expect(repository.listReferences(undefined, 101)).rejects.toThrow('limit')
+  })
+
   it('从精确 revision fork 独立文档，后续编辑互不影响', async () => {
     const repository = new ImageEditDocumentRepository(rootDir)
     await repository.create({

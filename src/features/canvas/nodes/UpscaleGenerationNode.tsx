@@ -1,12 +1,9 @@
-import { memo, useCallback } from 'react';
+import { memo } from 'react';
 import type { NodeProps } from '@xyflow/react';
 
-import { readImageInfo } from '@/commands/image';
-import { registry } from '@/core/ModelRegistry';
 import { ICON_UPSCALE } from '@/core/theme/icons';
 import {
   CANVAS_IMAGE_CAPABILITY_IDS,
-  prepareUpscalePreflight,
 } from '@/features/canvas/capabilities';
 import {
   CANVAS_NODE_TYPES,
@@ -14,7 +11,6 @@ import {
 } from '@/features/canvas/domain/canvasNodes';
 import {
   GenerationNodeShell,
-  type GenerationNodeRuntimePreparationContext,
   type GenerationNodeShellData,
 } from '@/features/canvas/nodes/shared/GenerationNodeShell';
 
@@ -33,24 +29,6 @@ export const UpscaleGenerationNode = memo(({
   width,
   height,
 }: UpscaleGenerationNodeProps) => {
-  const prepareRuntimeParams = useCallback(async ({
-    images,
-    params,
-    modelId,
-  }: GenerationNodeRuntimePreparationContext): Promise<DynamicValueMap> => {
-    if (images.length !== 1) {
-      throw new Error('高清放大必须且只能提供 1 张源图');
-    }
-    const model = registry.getModel(modelId);
-    if (!model) throw new Error('当前高清放大模型不存在');
-    const info = await readImageInfo(images[0]);
-    return prepareUpscalePreflight(
-      info,
-      model,
-      params,
-    ).runtimeParams;
-  }, []);
-
   return (
     <GenerationNodeShell
       id={id}
@@ -63,11 +41,7 @@ export const UpscaleGenerationNode = memo(({
       capabilityId={CANVAS_IMAGE_CAPABILITY_IDS.upscale}
       promptPlaceholderKey="node.upscaleGeneration.promptPlaceholder"
       promptRequiredKey="node.upscaleGeneration.promptRequired"
-      apiKeyRequiredKey="node.upscaleGeneration.apiKeyRequired"
-      resultTitleKey="node.upscaleGeneration.resultTitle"
       showPromptInput={false}
-      requirePrompt={false}
-      prepareRuntimeParams={prepareRuntimeParams}
     />
   );
 });

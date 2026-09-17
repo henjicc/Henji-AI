@@ -1,4 +1,4 @@
-import type { CanvasDownloadDestination } from '@/core/assistant/capabilities/canvasExportApplicationCapabilities'
+import type { CanvasDownloadDestination } from '@/core/application-control/domains/canvas/canvasExportApplicationCapabilities'
 import { getProjectRecord } from '@/commands/projectState'
 import { useCanvasStore } from '@/stores/canvasStore'
 import { decodeProjectRecord, useProjectStore } from '@/stores/projectStore'

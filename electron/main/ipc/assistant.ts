@@ -1,10 +1,7 @@
+import { sharedMemoryUpdateSchema } from '../../../src/core/assistant/memory'
 import { BrowserWindow, type IpcMainInvokeEvent } from 'electron'
 
-import {
-  frontendToolAcknowledgementSchema,
-  frontendToolResultSchema,
-  parseHostContextSnapshot,
-} from '../../../src/core/assistant/hostContracts'
+
 import { assistantUserInstructionsUpdateSchema } from '../../../src/core/assistant/userInstructions'
 import {
   agentMemoryClearSchema,
@@ -13,11 +10,7 @@ import {
   agentMemorySettingsUpdateSchema,
   agentMemoryUpdateSchema,
 } from '../../../src/core/assistant/memory'
-import {
-  acknowledgeAssistantFrontendTool,
-  completeAssistantFrontendTool,
-  publishAssistantHostContext,
-} from '../services/assistant/frontend-tool-bridge'
+
 import {
   getAssistantUserInstructions,
   openAssistantUserInstructionsFile,
@@ -128,6 +121,8 @@ export function registerAssistantIpc(): void {
     },
     assertTrustedAssistantRenderer
   )
+  registerIpcHandler('assistant:memory:getShared', parseVoid, () => getAgentMemoryStore().getSharedMemory(), assertTrustedAssistantRenderer)
+  registerIpcHandler('assistant:memory:updateShared', input => sharedMemoryUpdateSchema.parse(input), input => getAgentMemoryStore().updateSharedMemory(input), assertTrustedAssistantRenderer)
   registerIpcHandler(
     'assistant:memory:getState',
     parseVoid,
@@ -170,13 +165,4 @@ export function registerAssistantIpc(): void {
     ({ scope }) => clearAgentMemories(scope),
     assertTrustedAssistantRenderer
   )
-  registerIpcHandler('assistant:publishHostContext', (input) => parseHostContextSnapshot(input), (snapshot, event) => {
-    publishAssistantHostContext(event.sender.id, snapshot)
-  }, assertTrustedAssistantRenderer)
-  registerIpcHandler('assistant:frontendTool:ack', (input) => frontendToolAcknowledgementSchema.parse(input), (acknowledgement, event) => {
-    acknowledgeAssistantFrontendTool(event.sender.id, acknowledgement)
-  }, assertTrustedAssistantRenderer)
-  registerIpcHandler('assistant:frontendTool:result', (input) => frontendToolResultSchema.parse(input), (result, event) => {
-    completeAssistantFrontendTool(event.sender.id, result)
-  }, assertTrustedAssistantRenderer)
 }

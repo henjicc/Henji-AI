@@ -7,12 +7,11 @@ import {
 } from '@/commands/cameraStageRender';
 import { createLogger } from '@/core/logging';
 import { collectCameraStageAsset } from '@/features/assets/services/cameraStageAssetCollection';
+import { leaseCameraStageProjectRuntime } from '@/features/cameraStage/application/cameraStageProjectRuntime';
 import {
   applyProjectEnvironmentImage,
   createStoredCameraStageProject,
-  saveCurrentProject,
 } from '@/features/cameraStage/projects/cameraStageProjectService';
-import { useCameraStageStore } from '@/features/cameraStage/store/cameraStageStore';
 import type {
   CameraStageRenderTaskScope,
   CameraStageRenderTaskSnapshot,
@@ -22,8 +21,10 @@ import { useProjectStore } from '@/stores/projectStore';
 
 import { CANVAS_NODE_TYPES, isCameraStageNode, type CameraStageRenderTaskDescriptor } from '../domain/canvasNodes';
 import { createDefaultGenerationOutputItems } from '../domain/generationOutputs';
-import { confirmCanvasPersistence, runCanvasMutationStage } from './canvasPersistenceService';
+import { confirmCanvasPersistence, runCanvasMutationStage, type CanvasTransactionRuntime } from './canvasPersistenceService';
 import { commitCanvasGenerationOutputs } from './generationOutputApplicationService';
+
+import { acquireCanvasProjectRuntime, withCanvasProjectRuntime } from './canvasProjectRuntime';
 
 const logger = createLogger('features.canvas.camera-stage-render');
 const processing = new Set<string>();
@@ -31,6 +32,38 @@ const activeTaskSnapshots = new Map<string, CameraStageRenderTaskSnapshot>();
 const deferredTaskSnapshots = new Map<string, CameraStageRenderTaskSnapshot>();
 const startingNodes = new Set<string>();
 const startingRequests = new Set<string>();
+type RetainedTask = { identity: string; runtime: CanvasTransactionRuntime; release: () => void };
+const retainedTasks = new Map<string, Promise<RetainedTask>>();
+const acknowledgedRequests = new Map<string, string>();
+
+function taskIdentity(task: CameraStageRenderTaskDescriptor | CameraStageRenderTaskSnapshot): string {
+  return JSON.stringify([task.canvasProjectId, task.nodeId, task.cameraStageProjectId, task.outputKind, task.resolutionPreset, task.selectedTimeSec ?? null]);
+}
+
+function retainRenderTask(task: CameraStageRenderTaskDescriptor): Promise<RetainedTask> {
+  const previous = retainedTasks.get(task.requestId);
+  if (previous) return previous.then(owned => {
+    if (owned.identity !== taskIdentity(task)) throw new Error('CONFLICT:三维任务目标或参数已经变化');
+    return owned;
+  });
+  const pending = (async () => {
+    const canvas = await acquireCanvasProjectRuntime(task.canvasProjectId);
+    try {
+      const releaseStage = await leaseCameraStageProjectRuntime(task.cameraStageProjectId);
+      return { identity: taskIdentity(task), runtime: canvas.runtime, release: () => { releaseStage(); canvas.release(); } };
+    } catch (error) { canvas.release(); throw error; }
+  })();
+  retainedTasks.set(task.requestId, pending);
+  void pending.catch(() => { if (retainedTasks.get(task.requestId) === pending) retainedTasks.delete(task.requestId); });
+  return pending;
+}
+
+async function releaseRenderTask(requestId: string): Promise<void> {
+  const retained = retainedTasks.get(requestId);
+  if (!retained) return;
+  retainedTasks.delete(requestId);
+  (await retained).release();
+}
 
 export type CameraStageNodeRenderTaskReference = CameraStageRenderTaskDescriptor;
 export type CameraStageNodeRenderTaskScopeReference = CameraStageRenderTaskScope;
@@ -88,12 +121,12 @@ function terminalPatch(task: CameraStageRenderTaskSnapshot): DynamicValueMap {
       };
 }
 
-function requireCurrentNode(projectId: string, nodeId: string, requestId?: string | null) {
+function requireCurrentNode(projectId: string, nodeId: string, requestId?: string | null, runtime?: CanvasTransactionRuntime) {
   const project = useProjectStore.getState();
-  if (project.currentProjectId !== projectId || project.currentProject?.id !== projectId) {
+  if (runtime ? !runtime.isCurrent() : project.currentProjectId !== projectId || project.currentProject?.id !== projectId) {
     throw new Error('当前画布项目已切换，请返回原项目后重试');
   }
-  const node = useCanvasStore.getState().nodes.find((candidate) => candidate.id === nodeId);
+  const node = (runtime?.store ?? useCanvasStore).getState().nodes.find((candidate) => candidate.id === nodeId);
   if (!isCameraStageNode(node)) throw new Error('3D 镜头节点已不存在');
   if (requestId !== undefined && (node.data.renderTask?.requestId ?? null) !== requestId) {
     throw new Error('3D 后台渲染任务身份已经变化');
@@ -106,15 +139,16 @@ async function persistNodePatch(
   nodeId: string,
   patch: DynamicValueMap,
   expectedRequestId?: string | null,
+  runtime?: CanvasTransactionRuntime,
 ): Promise<void> {
-  requireCurrentNode(projectId, nodeId, expectedRequestId);
-  runCanvasMutationStage({}, () => useCanvasStore.getState().updateNodeData(nodeId, patch));
-  await confirmCanvasPersistence(projectId);
+  requireCurrentNode(projectId, nodeId, expectedRequestId, runtime);
+  runCanvasMutationStage({}, () => (runtime?.store ?? useCanvasStore).getState().updateNodeData(nodeId, patch));
+  await (runtime ? runtime.persist() : confirmCanvasPersistence(projectId));
 }
 
-async function applyCompletedTask(task: CameraStageRenderTaskSnapshot): Promise<void> {
+async function applyCompletedTask(task: CameraStageRenderTaskSnapshot, runtime: CanvasTransactionRuntime): Promise<void> {
   if (!task.result || task.result.kind !== task.outputKind) throw new Error('3D 渲染结果类型与请求不一致');
-  const canvas = useCanvasStore.getState();
+  const canvas = (runtime?.store ?? useCanvasStore).getState();
   const sourceNode = canvas.nodes.find((node) => node.id === task.nodeId);
   if (!sourceNode || !matchesTask(sourceNode, task)) return;
   const mediaType = task.result.kind;
@@ -150,9 +184,9 @@ async function applyCompletedTask(task: CameraStageRenderTaskSnapshot): Promise<
         semanticKind: 'camera-stage-render',
       }),
     },
-  });
-  const latestSourceNode = requireCurrentNode(task.canvasProjectId, task.nodeId, task.requestId);
-  const resultNode = useCanvasStore.getState().nodes.find((node) => node.id === committed.resultNodeIds[0]);
+  }, { projectId: task.canvasProjectId, runtime });
+  const latestSourceNode = requireCurrentNode(task.canvasProjectId, task.nodeId, task.requestId, runtime);
+  const resultNode = (runtime?.store ?? useCanvasStore).getState().nodes.find((node) => node.id === committed.resultNodeIds[0]);
   if (!resultNode) throw new Error('3D 渲染结果节点没有完成落图');
   const patch = mediaType === 'image'
     ? {
@@ -181,12 +215,25 @@ async function applyCompletedTask(task: CameraStageRenderTaskSnapshot): Promise<
     requestId: task.requestId,
   });
   if (assetTarget.enabled && !asset) throw new Error('3D 渲染结果尚未完成资产收录，将在重入工程后重试');
-  await persistNodePatch(task.canvasProjectId, task.nodeId, patch, task.requestId);
+  await persistNodePatch(task.canvasProjectId, task.nodeId, patch, task.requestId, runtime);
 }
 
 export async function applyCameraStageRenderTask(task: CameraStageRenderTaskSnapshot): Promise<void> {
-  const project = useProjectStore.getState();
-  if (project.currentProjectId !== task.canvasProjectId || project.currentProject?.id !== task.canvasProjectId) return;
+  const confirmed = acknowledgedRequests.get(task.requestId);
+  if (confirmed !== undefined) {
+    if (confirmed !== taskIdentity(task)) throw new Error('CONFLICT:三维任务目标或参数已经变化');
+    return;
+  }
+  const retained = retainedTasks.has(task.requestId) || !isTerminalTask(task)
+    ? retainRenderTask({ version: 1, ...task }) : undefined;
+  if (retained) {
+    await applyTaskInRuntime(task, (await retained).runtime);
+    return;
+  }
+  await withCanvasProjectRuntime(task.canvasProjectId, (runtime) => applyTaskInRuntime(task, runtime));
+}
+
+async function applyTaskInRuntime(task: CameraStageRenderTaskSnapshot, runtime: CanvasTransactionRuntime): Promise<void> {
   if (processing.has(task.requestId)) {
     const latest = deferredTaskSnapshots.get(task.requestId) ?? activeTaskSnapshots.get(task.requestId);
     if (!latest || isNewerTaskSnapshot(latest, task)) deferredTaskSnapshots.set(task.requestId, task);
@@ -194,36 +241,37 @@ export async function applyCameraStageRenderTask(task: CameraStageRenderTaskSnap
   }
   processing.add(task.requestId);
   activeTaskSnapshots.set(task.requestId, task);
+  let acknowledged = false;
   try {
-    let node = useCanvasStore.getState().nodes.find((candidate) => candidate.id === task.nodeId);
+    let node = runtime.store.getState().nodes.find((candidate) => candidate.id === task.nodeId);
     if (!node || !matchesTask(node, task)) {
       // 删除可能只是批事务中的瞬时内存态。独立生命周期任务可以等待外层释放持久化租约；
       // 写盘完成后必须重新核对工程和任务身份，回滚恢复的任务继续接管，不能误取消。
-      await confirmCanvasPersistence(task.canvasProjectId);
-      const latestProject = useProjectStore.getState();
-      if (latestProject.currentProjectId !== task.canvasProjectId
-        || latestProject.currentProject?.id !== task.canvasProjectId) return;
-      node = useCanvasStore.getState().nodes.find((candidate) => candidate.id === task.nodeId);
+      await runtime.persist();
+      if (!runtime.isCurrent()) return;
+      node = runtime.store.getState().nodes.find((candidate) => candidate.id === task.nodeId);
       if (!node || !matchesTask(node, task)) {
         if (task.status === 'queued' || task.status === 'running') {
           await cancelCameraStageRenderCommand(scopeOf(task));
         } else {
           await acknowledgeCameraStageRender(scopeOf(task));
+          acknowledged = true;
         }
         return;
       }
     }
     if (task.status === 'queued' || task.status === 'running') {
-      if (task.outputKind === 'video') useCanvasStore.getState().updateNodeData(task.nodeId, {
+      if (task.outputKind === 'video') runtime.store.getState().updateNodeData(task.nodeId, {
         videoExporting: true,
         videoProgress: task.progress,
         videoRenderPhase: task.phase,
       }, { skipHistory: true });
       return;
     }
-    if (task.status === 'completed') await applyCompletedTask(task);
-    else await persistNodePatch(task.canvasProjectId, task.nodeId, terminalPatch(task), task.requestId);
+    if (task.status === 'completed') await applyCompletedTask(task, runtime);
+    else await persistNodePatch(task.canvasProjectId, task.nodeId, terminalPatch(task), task.requestId, runtime);
     await acknowledgeCameraStageRender(scopeOf(task));
+    acknowledged = true;
   } catch (error) {
     logger.error('3D 后台渲染终态接管失败', error, {
       event: 'canvas.camera_stage.background_render.apply.failed',
@@ -237,7 +285,12 @@ export async function applyCameraStageRenderTask(task: CameraStageRenderTaskSnap
     const deferred = deferredTaskSnapshots.get(task.requestId);
     if (deferred) {
       deferredTaskSnapshots.delete(task.requestId);
-      await applyCameraStageRenderTask(deferred);
+      await applyTaskInRuntime(deferred, runtime);
+    }
+    if (acknowledged) {
+      acknowledgedRequests.set(task.requestId, taskIdentity(task));
+      if (acknowledgedRequests.size > 1024) acknowledgedRequests.delete(acknowledgedRequests.keys().next().value!);
+      await releaseRenderTask(task.requestId);
     }
   }
 }
@@ -247,13 +300,17 @@ export async function startCameraStageNodeRender(
   outputKind: 'image' | 'video',
   options: CameraStageNodeRenderStartOptions = {},
 ): Promise<CameraStageNodeRenderTaskReference | null> {
-  const canvasProjectId = currentCanvasProjectId();
+  const canvasProjectId = options.expectedOwner?.canvasProjectId ?? currentCanvasProjectId();
+  return await withCanvasProjectRuntime(canvasProjectId, (runtime) => startRenderInRuntime(nodeId, outputKind, options, canvasProjectId, runtime));
+}
+
+async function startRenderInRuntime(nodeId: string, outputKind: 'image' | 'video', options: CameraStageNodeRenderStartOptions, canvasProjectId: string, runtime: CanvasTransactionRuntime): Promise<CameraStageNodeRenderTaskReference | null> {
   if (options.expectedOwner && options.expectedOwner.canvasProjectId !== canvasProjectId) {
     throw new Error('目标画布项目已经切换，请重新读取节点后再输出');
   }
   const startKey = `${canvasProjectId}:${nodeId}`;
   const requireUnchangedOwner = (expectedCameraStageProjectId: string | null) => {
-    const current = requireCurrentNode(canvasProjectId, nodeId);
+    const current = requireCurrentNode(canvasProjectId, nodeId, undefined, runtime);
     if (current.data.projectId !== expectedCameraStageProjectId) {
       throw new Error('3D 镜头节点绑定的工程已经变化，请重新读取节点后再输出');
     }
@@ -262,11 +319,11 @@ export async function startCameraStageNodeRender(
   if (startingNodes.has(startKey)) {
     const current = options.expectedOwner
       ? requireUnchangedOwner(options.expectedOwner.cameraStageProjectId)
-      : useCanvasStore.getState().nodes.find((candidate) => candidate.id === nodeId);
+      : runtime.store.getState().nodes.find((candidate) => candidate.id === nodeId);
     return isCameraStageNode(current) ? current.data.renderTask ?? null : null;
   }
   startingNodes.add(startKey);
-  const node = useCanvasStore.getState().nodes.find((candidate) => candidate.id === nodeId);
+  const node = (runtime?.store ?? useCanvasStore).getState().nodes.find((candidate) => candidate.id === nodeId);
   let ownedCameraStageProjectId = isCameraStageNode(node) ? node.data.projectId : null;
   try {
     if (!isCameraStageNode(node)) return null;
@@ -277,14 +334,12 @@ export async function startCameraStageNodeRender(
     let cameraStageProjectId = node.data.projectId;
     if (!cameraStageProjectId) {
       cameraStageProjectId = (await createStoredCameraStageProject(node.data.displayName || '3D 镜头参考')).id;
-    } else if (useCameraStageStore.getState().currentProjectId === cameraStageProjectId) {
-      await saveCurrentProject();
     }
     const latestNode = requireUnchangedOwner(ownedCameraStageProjectId);
-    requireCurrentNode(canvasProjectId, nodeId, null);
+    requireCurrentNode(canvasProjectId, nodeId, null, runtime);
     await applyProjectEnvironmentImage(cameraStageProjectId, latestNode.data.environmentImageUrl ?? null);
     requireUnchangedOwner(ownedCameraStageProjectId);
-    requireCurrentNode(canvasProjectId, nodeId, null);
+    requireCurrentNode(canvasProjectId, nodeId, null, runtime);
     const task: CameraStageRenderTaskDescriptor = {
       version: 1,
       requestId: options.requestId ?? crypto.randomUUID(),
@@ -311,11 +366,12 @@ export async function startCameraStageNodeRender(
           videoRenderError: null,
         };
     try {
-      await persistNodePatch(canvasProjectId, nodeId, pendingPatch, null);
+      await persistNodePatch(canvasProjectId, nodeId, pendingPatch, null, runtime);
       ownedCameraStageProjectId = cameraStageProjectId;
+      await retainRenderTask(task);
       try {
         const registration = await startCameraStageRender(task);
-        await applyCameraStageRenderTask(registration.task);
+        await applyTaskInRuntime(registration.task, runtime);
         return task;
       } catch (error) {
         let authoritative: CameraStageRenderTaskSnapshot | null;
@@ -333,19 +389,22 @@ export async function startCameraStageNodeRender(
         }
         if (preservePending) throw error;
         if (authoritative) {
-          await applyCameraStageRenderTask(authoritative);
+          await applyTaskInRuntime(authoritative, runtime);
           return task;
         }
         throw error;
       }
     } catch (error) {
       // 主进程尚未收到请求时，内存中的 pending 不是可恢复任务；明确清理，绝不盲重放。
-      if (!preservePending
-        && (requireCurrentNode(canvasProjectId, nodeId).data.renderTask?.requestId ?? null) === task.requestId) {
-        useCanvasStore.getState().updateNodeData(nodeId, terminalPatch({
-          ...task, status: 'failed', phase: null, progress: 0, result: null,
-          message: error instanceof Error ? error.message : String(error), createdAt: 0, updatedAt: 0,
-        }));
+      if (!preservePending) {
+        const current = runtime.store.getState().nodes.find(candidate => candidate.id === nodeId);
+        if (isCameraStageNode(current) && current.data.renderTask?.requestId === task.requestId) {
+          runtime.store.getState().updateNodeData(nodeId, terminalPatch({
+            ...task, status: 'failed', phase: null, progress: 0, result: null,
+            message: error instanceof Error ? error.message : String(error), createdAt: 0, updatedAt: 0,
+          }));
+        }
+        await releaseRenderTask(task.requestId);
       }
       throw error;
     } finally {
@@ -353,7 +412,7 @@ export async function startCameraStageNodeRender(
     }
   } catch (error) {
     try {
-      const current = requireCurrentNode(canvasProjectId, nodeId);
+      const current = requireCurrentNode(canvasProjectId, nodeId, undefined, runtime);
       if (!current.data.renderTask && current.data.projectId === ownedCameraStageProjectId) {
         const message = error instanceof Error ? error.message : String(error);
         await persistNodePatch(canvasProjectId, nodeId, outputKind === 'image'
@@ -364,7 +423,7 @@ export async function startCameraStageNodeRender(
               videoRenderPhase: null,
               videoRenderRequestId: null,
               videoRenderError: message,
-            }, null);
+            }, null, runtime);
       }
     } catch (persistenceError) {
       logger.error('3D 后台渲染启动失败状态尚未保存', persistenceError, {
@@ -396,24 +455,26 @@ export async function cancelCameraStageNodeRenderTask(
 }
 
 export async function reconcileCameraStageRenderTasks(canvasProjectId: string): Promise<void> {
-  const project = useProjectStore.getState();
-  const canvasNodeIds = useCanvasStore.getState().nodes.map((node) => node.id).sort();
-  const persistedNodeIds = project.currentProject?.nodes.map((node) => node.id).sort() ?? [];
-  if (project.currentProjectId !== canvasProjectId
-    || project.currentProject?.id !== canvasProjectId
-    || canvasNodeIds.length !== persistedNodeIds.length
-    || canvasNodeIds.some((nodeId, index) => nodeId !== persistedNodeIds[index])) return;
+  await withCanvasProjectRuntime(canvasProjectId, async runtime => {
   const tasks = await listCameraStageRenderTasks(canvasProjectId);
   const byId = new Map(tasks.map((task) => [task.requestId, task]));
-  for (const task of tasks) void applyCameraStageRenderTask(task);
-  for (const node of useCanvasStore.getState().nodes) {
+  for (const task of tasks) await applyCameraStageRenderTask(task);
+  for (const node of runtime.store.getState().nodes) {
     if (!isCameraStageNode(node) || !node.data.renderTask || node.data.renderTask.canvasProjectId !== canvasProjectId) continue;
     if (byId.has(node.data.renderTask.requestId) || startingRequests.has(node.data.renderTask.requestId)) continue;
     await persistNodePatch(canvasProjectId, node.id, {
       ...terminalPatch({ ...node.data.renderTask, status: 'failed', phase: null, progress: 0, result: null,
         message: '上一次 3D 渲染会话已中断，请重新输出', createdAt: 0, updatedAt: 0 }),
-    }, node.data.renderTask.requestId);
+    }, node.data.renderTask.requestId, runtime);
   }
+  });
+}
+
+export async function resetCameraStageRenderTasksForTests(): Promise<void> {
+  await Promise.all([...retainedTasks.keys()].map(releaseRenderTask));
+  processing.clear(); activeTaskSnapshots.clear(); deferredTaskSnapshots.clear();
+  acknowledgedRequests.clear();
+  startingNodes.clear(); startingRequests.clear();
 }
 
 export async function cancelCameraStageNodeTasks(projectId: string, descriptors: CameraStageRenderTaskDescriptor[]): Promise<void> {

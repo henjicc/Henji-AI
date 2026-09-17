@@ -1,15 +1,12 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react'
 
 import { createImageEditGroupLayerV3, createImageEditIdV3 } from '@/core/imageEdit/v3/documentFactory'
-import type { ImageEditDocumentV3 } from '@/core/imageEdit/v3/documentTypes'
-import type { ImageEditCommandHistorySnapshotV3 } from '@/core/imageEdit/v3/commandHistoryCodec'
-import type { ImageEditPersistenceSnapshotV3 } from '@/core/imageEdit/v3/serviceContracts'
 import {
   collectImageEditLayerIdsV3,
   type ImageEditLayerV3,
 } from '@/core/imageEdit/v3/layerTypes'
-import { ImageEditCommandBusV3 } from '../application/imageEditCommandBus'
-import { registerImageEditV3LiveSession } from '../application/imageEditLiveSessionRegistry'
+import type { ImageEditCommandBusV3 } from '../application/imageEditCommandBus'
+import { getOrCreateImageEditDocumentInstanceV3, attachImageEditDocumentInstanceV3 } from '../application/imageEditDocumentInstances'
 import {
   getImageEditorHostProfileV3,
   getReadyImageEditorToolIdsV3,
@@ -20,10 +17,6 @@ import {
 } from '../store'
 import { createImageEditDuplicateIdMapV3, findImageEditLayerLocationV3 } from './layerTreeV3'
 import type { ImageEditorV3Controller, ImageEditorV3Props } from './types'
-
-interface BusBinding {
-  bus: ImageEditCommandBusV3
-}
 
 interface DefaultLayerCandidateV3 {
   layer: ImageEditLayerV3
@@ -55,21 +48,6 @@ export function resolveImageEditorDefaultLayerIdV3(
     ?? null
 }
 
-function createBinding(
-  document: ImageEditDocumentV3,
-  historySnapshot: ImageEditCommandHistorySnapshotV3 | null | undefined,
-  onPersistentChange: (snapshot: ImageEditPersistenceSnapshotV3) => void,
-  resourceByteSizes: Readonly<Record<string, number>>,
-): BusBinding {
-  return {
-    bus: new ImageEditCommandBusV3(document, {
-      historySnapshot,
-      onPersistentChange,
-      resourceByteSizes,
-    }),
-  }
-}
-
 export function useImageEditorControllerV3(
   props: Pick<
     ImageEditorV3Props,
@@ -94,9 +72,6 @@ export function useImageEditorControllerV3(
   const readyToolIds = useMemo(() => getReadyImageEditorToolIdsV3(profile), [profile])
   const onPersistentChangeRef = useRef(props.onPersistenceChange)
   onPersistentChangeRef.current = props.onPersistenceChange
-  const notifyPersistentChange = useRef((snapshot: ImageEditPersistenceSnapshotV3): void => {
-    onPersistentChangeRef.current?.(snapshot)
-  }).current
   const initialResourceByteSizes = useMemo<Readonly<Record<string, number>>>(() => ({
     ...Object.fromEntries((props.resourceDescriptors ?? []).map((resource) => [
       resource.resourceRef,
@@ -104,52 +79,35 @@ export function useImageEditorControllerV3(
     ])),
     ...(props.resourceByteSizes ?? {}),
   }), [props.resourceByteSizes, props.resourceDescriptors])
-  const [binding, setBinding] = useState<BusBinding>(() => createBinding(
-    props.document,
-    props.historySnapshot,
-    notifyPersistentChange,
-    initialResourceByteSizes,
-  ))
-  const [document, setDocument] = useState(props.document)
-  const [historyState, setHistoryState] = useState(binding.bus.getSnapshot().history)
-  const documentRef = useRef(props.document)
+  const binding = getOrCreateImageEditDocumentInstanceV3(props.document, {
+    historySnapshot: props.historySnapshot, resourceByteSizes: initialResourceByteSizes,
+  }, props.persistenceHost)
+  const [snapshot, setSnapshot] = useState(binding.bus.getSnapshot())
+  const document = snapshot.document.id === binding.documentId ? snapshot.document : binding.bus.getSnapshot().document
+  const historyState = snapshot.document.id === binding.documentId ? snapshot.history : binding.bus.getSnapshot().history
   const onDocumentChangeRef = useRef(props.onDocumentChange)
   onDocumentChangeRef.current = props.onDocumentChange
+  const suppliedDocumentRef = useRef(props.document)
+  suppliedDocumentRef.current = props.document
+
+  useEffect(() => attachImageEditDocumentInstanceV3(binding.documentId), [binding.documentId])
 
   useEffect(() => {
-    const current = binding.bus.getSnapshot().document
-    if (current.id === props.document.id && current.revision === props.document.revision) return
-    const next = createBinding(
-      props.document,
-      props.historySnapshot,
-      notifyPersistentChange,
-      initialResourceByteSizes,
-    )
-    documentRef.current = props.document
-    setBinding(next)
-    setDocument(props.document)
-    setHistoryState(next.bus.getSnapshot().history)
-  }, [binding.bus, initialResourceByteSizes, notifyPersistentChange, props.document, props.historySnapshot])
-
-  useEffect(() => () => binding.bus.dispose(), [binding.bus])
-
-  useEffect(
-    () => registerImageEditV3LiveSession(sessionId, binding.bus, props.persistenceHost),
-    [binding.bus, sessionId, props.persistenceHost],
-  )
-
-  useEffect(() => binding.bus.subscribe((snapshot) => {
-    setHistoryState((current) => (
-      current.undoCount === snapshot.history.undoCount
-        && current.redoCount === snapshot.history.redoCount
-        ? current
-        : snapshot.history
-    ))
-    if (documentRef.current === snapshot.document) return
-    documentRef.current = snapshot.document
-    setDocument(snapshot.document)
-    onDocumentChangeRef.current(snapshot.document)
-  }), [binding.bus])
+    let previousDocument = binding.bus.getSnapshot().document
+    setSnapshot(binding.bus.getSnapshot())
+    // 重挂载以应用实例为准，旧 props 不能覆盖尚未保存的修改和撤销历史。
+    if (suppliedDocumentRef.current !== previousDocument) {
+      onDocumentChangeRef.current(previousDocument)
+      onPersistentChangeRef.current?.(binding.bus.getPersistenceSnapshot())
+    }
+    const unsubscribePersistence = binding.bus.subscribePersistence((persistence) => onPersistentChangeRef.current?.(persistence))
+    const unsubscribe = binding.bus.subscribe((next) => {
+      setSnapshot(next)
+      if (next.document !== previousDocument) onDocumentChangeRef.current(next.document)
+      previousDocument = next.document
+    })
+    return () => { unsubscribe(); unsubscribePersistence() }
+  }, [binding.bus])
 
   useEffect(() => {
     useImageEditorSessionStoreV3.getState().ensureSession(

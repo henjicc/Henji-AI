@@ -1,11 +1,11 @@
 import { z } from 'zod'
 
 import { fieldWriterTable, type ApplicationPropertyMutation, type ApplicationRef, type JsonValue } from '@/core/application-control'
-import { CAMERA_STAGE_NAME_MAX_LENGTH } from '@/core/assistant/capabilities/cameraStageCapabilitySchemas'
+import { CAMERA_STAGE_NAME_MAX_LENGTH } from '@/core/application-control/domains/cameraStage/cameraStageCapabilitySchemas'
 
 import type { StageObject } from '../domain/sceneTypes'
 import type { StageStateKeyframe } from '../domain/stateKeyframeTypes'
-import type { CameraStageProjectSnapshot } from '../projects/cameraStageProjectService'
+import type { CameraStageProjectSnapshot } from '../projects/cameraStageProjectPersistence'
 import type { CameraStageStateKeyframeUpdate } from './cameraStageApplicationService'
 import {
   booleanCodec, enumCodec, nameCodec, numberCodec, refIdCodec, stageDescriptor, stageField,

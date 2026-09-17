@@ -1,3 +1,11 @@
+import { AiRuntimeError, type AiGenerateResponseDto } from '@henjicc/ai-sdk'
+const submissions = vi.hoisted(() => new Map<string, { response: AiGenerateResponseDto; phase: string }>())
+vi.mock('./generation-submissions', () => ({
+  claimGenerationSubmission: (id: string) => submissions.get(id)?.response ?? null,
+  completeGenerationSubmission: (id: string, response: AiGenerateResponseDto, phase = 'completed') => submissions.set(id, { response, phase }),
+  readGenerationSubmission: (id: string) => submissions.get(id)?.response ?? null,
+  readGenerationSubmissionStage: (id: string) => submissions.has(id) ? { phase: submissions.get(id)!.phase, modelId: 'fal-ai-z-image-turbo' } : undefined,
+}))
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({
@@ -127,8 +135,19 @@ function mockCompletedGenerateResult(): void {
 }
 
 describe('ai-runtime continuePolling 日志闭环', () => {
+  it.each(['generate', 'continuePolling'] as const)('%s 保留供应商端点诊断并关联原请求', async phase => {
+    const details = { submissionState: 'not_sent', attempts: [{ host: 'api.apib.ai', code: 'ECONNRESET', stage: 'before_send', durationMs: 10 }] }
+    const failure = new AiRuntimeError('provider_network_error', '连接失败', details)
+    mocks[phase].mockRejectedValueOnce(failure)
+    const input = { ...request, requestId: `diagnostic-${phase}` }
+    await expect(phase === 'generate' ? generate(input) : continuePolling(input)).rejects.toBe(failure)
+    expect(mocks.logger.error).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({
+      requestId: input.requestId, error: expect.objectContaining({ code: 'provider_network_error', details }),
+    }))
+  })
   beforeEach(() => {
     vi.clearAllMocks()
+    submissions.clear()
     mocks.saveMediaFromUrlTracked.mockResolvedValue({
       filePath: '/tmp/result.png',
       created: true,
@@ -150,6 +169,19 @@ describe('ai-runtime continuePolling 日志闭环', () => {
     })
   })
 
+  it('供应商完成但媒体保存失败，只重试保存原响应，供应商仅执行一次', async () => {
+    mockCompletedGenerateResult()
+    mocks.saveMediaFromUrlTracked.mockRejectedValueOnce(new Error('media-disk-full'))
+    const input = { modelId: request.modelId, params: request.params, requestId: request.requestId }
+    await expect(generate(input)).rejects.toThrow('media-disk-full')
+    expect(submissions.get(request.requestId)?.phase).toBe('provider')
+    await expect(generate(input)).resolves.toMatchObject({ status: 'completed', filePath: '/tmp/result.png' })
+    expect(submissions.get(request.requestId)?.phase).toBe('completed')
+    expect(mocks.generate).toHaveBeenCalledTimes(1)
+    await generate(input)
+    expect(mocks.generate).toHaveBeenCalledTimes(1)
+    expect(mocks.saveMediaFromUrlTracked).toHaveBeenCalledTimes(2)
+  })
   it('成功链路记录 start/result，并使用规范化 taskId 保存 pending 结果', async () => {
     mockCompletedProviderResult()
 

@@ -15,7 +15,7 @@ export interface CameraStageHistory {
 export function useCameraStageHistory(): CameraStageHistory {
   const canUndo = useStore(useCameraStageStore.temporal, (state) => state.pastStates.length > 0)
   const canRedo = useStore(useCameraStageStore.temporal, (state) => state.futureStates.length > 0)
-  const undo = useCameraStageStore.temporal.getState().undo
-  const redo = useCameraStageStore.temporal.getState().redo
+  const undo = useStore(useCameraStageStore.temporal, state => state.undo)
+  const redo = useStore(useCameraStageStore.temporal, state => state.redo)
   return { canUndo, canRedo, undo, redo }
 }

@@ -8,14 +8,8 @@ test('默认不暗中选择昂贵测试层', () => {
   assert.equal(options.profile, 'temporary')
 })
 
-test('live 层要求真实资料、付费和写入三道显式开关', () => {
-  assert.throws(() => parseRealityTestArgs(['--suite', 'live']), /profile real/)
-  assert.throws(() => parseRealityTestArgs(['--suite', 'live', '--profile', 'real']), /allow-paid/)
-  assert.throws(() => parseRealityTestArgs(['--suite', 'live', '--profile', 'real', '--allow-paid']), /allow-writes/)
-  const options = parseRealityTestArgs([
-    '--suite', 'live', '--profile', 'real', '--allow-paid', '--allow-writes', '--only', 'camera',
-  ])
-  assert.deepEqual(options.only, ['camera'])
+test('拒绝已经移除的旧运行时验收入口', () => {
+  assert.throws(() => parseRealityTestArgs(['--suite', 'live']), /未知测试层/)
 })
 
 test('UI 计划把资料模式与写入授权传给既有真实 Electron 执行器', () => {
@@ -44,4 +38,17 @@ test('--build 只为需要 Electron 产物的层追加一次轻量构建', () =>
 
 test('unit 层拒绝无目标的全量测试', () => {
   assert.throws(() => parseRealityTestArgs(['--suite', 'unit']), /必须用 --test/)
+})
+
+test('退出重启与真实客户端两层都要真实 Electron 产物，且不暗中开启付费', () => {
+  const options = parseRealityTestArgs(['--build', '--suite', 'restart', '--suite', 'clients', '--only', 'claude'])
+  const plan = buildRealityTestPlan(options, '/workspace')
+  assert.equal(plan[0].label, '生成最新 Electron 运行产物')
+  assert.equal(plan.filter((step) => step.label === '生成最新 Electron 运行产物').length, 1)
+  assert.ok(plan[1].args.some((value) => String(value).includes('mcp-restart-check.cjs')))
+  assert.ok(plan[2].args.some((value) => String(value).includes('mcp-external-client-check.cjs')))
+  // --only 在客户端层是"跑哪个客户端"，不能被翻译成场景过滤而静默跑全部。
+  assert.deepEqual(plan[2].args.slice(-2), ['--client', 'claude'])
+  assert.equal(options.allowPaid, false)
+  assert.equal(options.profile, 'temporary')
 })

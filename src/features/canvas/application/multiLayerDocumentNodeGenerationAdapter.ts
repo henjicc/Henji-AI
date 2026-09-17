@@ -9,8 +9,8 @@ import type { ApplicationRef } from '@/core/application-control'
 import { ImageEditCommandHistoryV3 } from '@/core/imageEdit/v3/commandHistory'
 import { createImageEditRenderHash } from '@/core/imageEdit/v3/renderHash'
 import { getPlatform } from '@/platform/runtime'
-import { useCanvasStore } from '@/stores/canvasStore'
-import { useProjectStore } from '@/stores/projectStore'
+import { withImageEditDocumentInstanceV3 } from '@/features/imageEdit/v3/application/imageEditDocumentLoading'
+import { deleteIdleImageEditDocumentV3, readImageEditDocumentInstanceV3, saveImageEditDocumentInstanceV3 } from '@/features/imageEdit/v3/application/imageEditDocumentInstances'
 
 import type { LayerStackDocumentV1 } from '../domain/layerStack'
 import type { ImageEditSessionReferenceV3 } from '@/core/imageEdit/v3/sessionReference'
@@ -34,6 +34,8 @@ import {
   createMultiLayerDocumentProjectionCanvasPort,
 } from './multiLayerDocumentNodeCanvasAdapter'
 import { createMultiLayerDocumentLifecyclePort } from './multiLayerDocumentLifecycleService'
+import { withCanvasProjectRuntime } from './canvasProjectRuntime'
+import type { CanvasTransactionRuntime } from './canvasPersistenceService'
 
 const logger = createLogger('features.canvas.multi_layer_document_generation')
 
@@ -53,6 +55,8 @@ export async function inspectMultiLayerDocumentSession(input: {
 }, dependencies: {
   loadSnapshot?: typeof loadImageEditorV3Document
 } = {}): Promise<ImageEditSessionReferenceV3> {
+  const current = readImageEditDocumentInstanceV3(documentIdFromRef(input.session.documentRef))
+  if (current) return createCanvasEditV3SessionReference(input.session.sourceUrl, current.reference)
   const loadSnapshot = dependencies.loadSnapshot ?? loadImageEditorV3Document
   const snapshot = await loadSnapshot({
     requestId: `image-editor-v3:multi-layer-document-open:${crypto.randomUUID()}`,
@@ -63,13 +67,14 @@ export async function inspectMultiLayerDocumentSession(input: {
   if (
     snapshot.documentRef !== input.session.documentRef
     || snapshot.document.id !== expectedDocumentId
-    || snapshot.revision !== input.session.revision
-    || snapshot.document.revision !== input.session.revision
-    || snapshot.previewRef !== input.session.previewRef
+    || snapshot.revision < input.session.revision
+    || snapshot.document.revision !== snapshot.revision
   ) {
     throw new Error('多图层图片文档版本与节点记录不一致')
   }
-  return input.session
+  return createCanvasEditV3SessionReference(input.session.sourceUrl, {
+    documentId: expectedDocumentId, revision: snapshot.revision, previewRef: snapshot.previewRef,
+  })
 }
 
 function requireReadyPath(document: LayerStackDocumentV1, resourceId: string | null, label: string): string {
@@ -191,15 +196,14 @@ const generationDocumentPort: MultiLayerDocumentNodePort = {
   ...createMultiLayerDocumentExportPort(),
 }
 
-const generationCanvasPort: MultiLayerDocumentNodeCanvasPort = {
-  ...createMultiLayerDocumentProjectionCanvasPort(),
-  ...createMultiLayerDocumentExportCanvasPort(),
+function generationApplication(runtime?: CanvasTransactionRuntime) {
+  const canvasPort: MultiLayerDocumentNodeCanvasPort = {
+    ...createMultiLayerDocumentProjectionCanvasPort({ runtime }),
+    ...createMultiLayerDocumentExportCanvasPort(runtime),
+  }
+  return createMultiLayerDocumentNodeApplicationService({ documentPort: generationDocumentPort, canvasPort })
 }
-
-const generationApplicationService = createMultiLayerDocumentNodeApplicationService({
-  documentPort: generationDocumentPort,
-  canvasPort: generationCanvasPort,
-})
+const generationApplicationService = generationApplication()
 
 /** 新生成链路必须经过 1.1 冻结的唯一业务服务，不直接调用 V3 仓库。 */
 export function createMultiLayerDocumentFromLayerStack(input: {
@@ -238,6 +242,7 @@ export function forkMultiLayerDocumentNode(input: {
 }
 
 export function markMultiLayerDocumentReleaseCandidate(input: {
+  projectId: string
   nodeId: string
   data: LayerStackResultNodeData
   signal?: AbortSignal
@@ -252,18 +257,11 @@ export function saveMultiLayerDocumentAfterEditing(input: {
   data: LayerStackResultNodeData
   session: ImageEditSessionReferenceV3
   signal?: AbortSignal
-}): Promise<MultiLayerDocumentNodeProjection> {
-  return generationApplicationService.saveMaterializedProjection(input)
+}, runtime?: CanvasTransactionRuntime): Promise<MultiLayerDocumentNodeProjection> {
+  return runtime ? generationApplication(runtime).saveMaterializedProjection(input)
+    : withCanvasProjectRuntime(input.projectId, (owned) => generationApplication(owned).saveMaterializedProjection(input))
 }
 
-type ExportSessionPreparer = () => Promise<ImageEditSessionReferenceV3>
-
-interface ExportSessionRegistration {
-  token: symbol
-  prepare: ExportSessionPreparer
-}
-
-const exportSessionPreparers = new Map<string, ExportSessionRegistration>()
 const pendingExports = new Map<string, Promise<MultiLayerDocumentTargetExportResult>>()
 
 export interface MultiLayerDocumentTargetExportInput {
@@ -287,20 +285,6 @@ export interface MultiLayerDocumentTargetExportResult {
   mediaType: 'image/png'
 }
 
-/** 编辑器登记实时保存入口；助手和 UI 随后都走同一导出函数。 */
-export function registerMultiLayerDocumentExportSession(
-  sourceNodeId: string,
-  prepare: ExportSessionPreparer,
-): () => void {
-  const token = Symbol(sourceNodeId)
-  exportSessionPreparers.set(sourceNodeId, { token, prepare })
-  return () => {
-    if (exportSessionPreparers.get(sourceNodeId)?.token === token) {
-      exportSessionPreparers.delete(sourceNodeId)
-    }
-  }
-}
-
 function exportTargetFromRef(
   ref: MultiLayerDocumentTargetExportInput['targetRef'],
 ): MultiLayerDocumentExportTarget {
@@ -320,43 +304,44 @@ export function exportMultiLayerDocumentTargetToCanvas(
   const key = `${input.projectRef.id}\u0000${input.sourceNodeRef.id}\u0000${input.targetRef.kind}\u0000${input.targetRef.id}`
   const pending = pendingExports.get(key)
   if (pending) return pending
-  const operation: Promise<MultiLayerDocumentTargetExportResult> = (async (): Promise<MultiLayerDocumentTargetExportResult> => {
+  const operation = withCanvasProjectRuntime(input.projectRef.id, async (runtime): Promise<MultiLayerDocumentTargetExportResult> => {
     if (input.projectRef.kind !== 'canvas.project' || input.sourceNodeRef.kind !== 'canvas.node') {
       throw new Error('多图层文档导出的项目或节点引用无效')
     }
-    const project = useProjectStore.getState()
-    if (
-      project.currentProjectId !== input.projectRef.id
-      || project.currentProject?.id !== input.projectRef.id
-    ) {
-      throw new Error('当前画布项目已经切换，请返回原项目后重试')
+    const prefix = `${input.projectRef.id}:`
+    if (!input.sourceNodeRef.id.startsWith(prefix) || input.sourceNodeRef.id.length === prefix.length) {
+      throw new Error('来源节点必须使用所属工程的完整稳定引用')
     }
-    const node = useCanvasStore.getState().nodes.find((candidate) => candidate.id === input.sourceNodeRef.id)
-    if (!isEditableLayerStackResultNode(node)) {
-      throw new Error('目标节点不是可编辑的多图层图片文档')
-    }
-    const prepare = exportSessionPreparers.get(node.id)?.prepare
-    const session = prepare ? await prepare() : undefined
-    const exported = await generationApplicationService.exportTarget({
-      projectId: input.projectRef.id,
-      sourceNodeId: node.id,
-      data: node.data,
-      session,
-      target: exportTargetFromRef(input.targetRef),
-      signal: input.signal,
+    const nodeId = input.sourceNodeRef.id.slice(prefix.length)
+    const node = runtime.store.getState().nodes.find((candidate) => candidate.id === nodeId)
+    if (!isEditableLayerStackResultNode(node)) throw new Error('目标节点不是可编辑的多图层图片文档')
+    const originalSession = node.data.imageEditSession
+    if (!originalSession) throw new Error('来源节点缺少图片文档关联')
+    const documentId = documentIdFromRef(originalSession.documentRef)
+    return withImageEditDocumentInstanceV3(documentId, async () => {
+      const reference = await saveImageEditDocumentInstanceV3(documentId)
+      const session = createCanvasEditV3SessionReference(originalSession.sourceUrl, reference)
+      const exported = await generationApplication(runtime).exportTarget({
+        projectId: input.projectRef.id,
+        sourceNodeId: node.id,
+        data: node.data,
+        session,
+        target: exportTargetFromRef(input.targetRef),
+        signal: input.signal,
+      })
+      return {
+        projectRef: input.projectRef,
+        sourceNodeRef: input.sourceNodeRef,
+        targetRef: input.targetRef,
+        nodeRef: { kind: 'canvas.node' as const, id: `${input.projectRef.id}:${exported.nodeId}` },
+        edgeRef: { kind: 'canvas.edge' as const, id: `${input.projectRef.id}:${exported.edgeId}` },
+        undoRef: exported.undoRef,
+        width: exported.raster.width,
+        height: exported.raster.height,
+        mediaType: exported.raster.mediaType,
+      }
     })
-    return {
-      projectRef: input.projectRef,
-      sourceNodeRef: input.sourceNodeRef,
-      targetRef: input.targetRef,
-      nodeRef: { kind: 'canvas.node' as const, id: exported.nodeId },
-      edgeRef: { kind: 'canvas.edge' as const, id: exported.edgeId },
-      undoRef: exported.undoRef,
-      width: exported.raster.width,
-      height: exported.raster.height,
-      mediaType: exported.raster.mediaType,
-    }
-  })()
+  })
   pendingExports.set(key, operation)
   void operation.finally(() => {
     if (pendingExports.get(key) === operation) pendingExports.delete(key)
@@ -367,12 +352,15 @@ export function exportMultiLayerDocumentTargetToCanvas(
 export async function rollbackCreatedMultiLayerDocument(
   projection: MultiLayerDocumentNodeProjection,
 ): Promise<boolean> {
-  const result = await deleteImageEditorV3DocumentIfRevision({
-    requestId: `image-editor-v3:layer-stack-document-rollback:${crypto.randomUUID()}`,
-    documentRef: projection.imageEditSession.documentRef,
-    expectedRevision: projection.imageEditSession.revision,
-  })
-  if (!result.deleted) return false
+  const removed = await deleteIdleImageEditDocumentV3(
+    documentIdFromRef(projection.imageEditSession.documentRef), projection.imageEditSession.revision,
+    async () => (await deleteImageEditorV3DocumentIfRevision({
+      requestId: `image-editor-v3:layer-stack-document-rollback:${crypto.randomUUID()}`,
+      documentRef: projection.imageEditSession.documentRef,
+      expectedRevision: projection.imageEditSession.revision,
+    })).deleted,
+  )
+  if (!removed) return false
   await getPlatform().imageEditorV3.collectGarbage({
     requestId: `image-editor-v3:layer-stack-resource-rollback:${crypto.randomUUID()}`,
     retainedResourceRefs: [],

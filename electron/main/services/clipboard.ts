@@ -149,6 +149,8 @@ export async function writeImageFromPath(filePath: string): Promise<void> {
   await writeClipboardImage(() => fs.readFile(filePath), 'path')
 }
 
+export function writeClipboardText(text: string): void { clipboard.writeText(text) }
+
 export async function writeImageFromSource(source: string): Promise<void> {
   await writeClipboardImage(async () => (await resolveSourceBytes(source)).bytes, 'source')
 }

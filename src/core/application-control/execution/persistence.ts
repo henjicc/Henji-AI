@@ -11,6 +11,7 @@ export interface ApplicationPersistenceRecovery {
   capabilityId: string
   target: ApplicationRef
   replayMutation: false
+  ownerId?: string
 }
 
 export interface ApplicationPersistenceFacts {

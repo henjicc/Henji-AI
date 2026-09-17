@@ -9,6 +9,12 @@ if (!existsSync(mainEntry)) {
   process.stderr.write('未找到 Electron 构建产物。请先执行 npm run electron:bundle。\n')
   process.exitCode = 1
 } else {
+  try {
+    require('./lib/electronLaunch.cjs').assertBuildFreshness(mainEntry)
+  } catch (error) {
+    process.stderr.write(`${error.message}\n`)
+    process.exit(1)
+  }
   const electron = require('electron')
   const environment = { ...process.env }
   delete environment.ELECTRON_RUN_AS_NODE

@@ -238,6 +238,17 @@ export function parseImageEditorV3BasePayload(input: unknown): BasePayload {
   return { requestId: readRequestId(parseRecord(input)) }
 }
 
+export function parseImageEditorV3ListPayload(input: unknown): BasePayload & { cursor?: string; limit: number } {
+  const record = parseRecord(input)
+  const limit = record.limit === undefined ? 100 : record.limit
+  if (typeof limit !== 'number' || !Number.isSafeInteger(limit) || limit < 1 || limit > 100) throw new Error('Invalid document list limit')
+  if (record.cursor !== undefined) {
+    if (typeof record.cursor !== 'string') throw new Error('Invalid document list cursor')
+    parseDocumentRef(record.cursor)
+  }
+  return { requestId: readRequestId(record), limit, ...(record.cursor === undefined ? {} : { cursor: record.cursor as string }) }
+}
+
 export function parseImageEditorV3LoadPayload(input: unknown): LoadDocumentPayload {
   const record = parseRecord(input)
   const documentRef = record.documentRef

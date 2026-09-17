@@ -5,7 +5,7 @@ import type {
   ApplicationRef,
 } from '@/core/application-control'
 
-import type { CameraStageProjectSnapshot } from '../projects/cameraStageProjectService'
+import type { CameraStageProjectSnapshot } from '../projects/cameraStageProjectPersistence'
 
 const TYPES = {
   project: 'camera_stage.project',

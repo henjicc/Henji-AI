@@ -82,10 +82,14 @@ packages/ai-sdk/       # 可独立发布的模型 SDK：catalog、provider、协
 ## 内部 Application API 边界
 
 - `src/core/application-control/` 是调用方中立的反射、观察和事务契约；禁止导入组件、Store、助手适配器或 Electron 实现。
-- 正式领域服务是持久业务逻辑唯一入口；UI、助手和未来本地适配器只能委托同一服务，不得各自维护第二份 schema、校验、状态机或写入逻辑。
-- `ApplicationCapabilityDefinition` 是助手能力元数据唯一来源；禁止手写第二份 Agent 工具描述、旧 `HostCommand`/`HostQuery` 执行表或跨阶段兼容执行入口。
-- AI 输入必须是封闭 schema，禁止任意 Store Patch、任意 JavaScript/TypeScript 执行和原始路径参数。`run_henji_script` 只解析受限语法为自有 IR 并进入同一 Application Control 内核，不属于任意代码执行；复杂修改不得另建第二套脚本、计划或提交协议。
+- 正式领域服务是持久业务逻辑唯一入口；UI、Pi 和 MCP 适配器只能委托同一服务，不得各自维护第二份 schema、校验、状态机或写入逻辑。
+- `ApplicationCapabilityDefinition` 是应用语义能力元数据唯一来源；禁止手写第二份 Agent 工具描述、旧 `HostCommand`/`HostQuery` 执行表或跨阶段兼容执行入口。
+- AI 输入必须是封闭 schema，禁止任意 Store Patch、任意 JavaScript/TypeScript 执行和原始路径参数。多项实体修改使用现有通用事务，算法操作使用正式领域能力，不再引入脚本执行链。
 - 公开实体、属性、语义操作、Surface、模型/媒体模态或长任务发生变化时，必须更新真实注册源并通过 `npm run check:assistant-capabilities`，不得只修改助手提示词。
+
+- 跨进程领域声明放在 `core/application-control/domains/`，只依赖纯契约；反射与执行器归各领域，渲染层装配只做组合和依赖注入。
+- `electron/main/services/application-runtime/` 先于 Pi／MCP 启动，协调调用者身份、账本、费用、保存恢复与宿主桥。关闭 MCP 不得终止 Pi、业务实例或已提交任务。
+- 工程／文档实例持有业务状态、撤销和保存，页面只订阅或附着。普通内容修改显式绑定目标，禁止用当前页面决定后台任务归属。
 
 ## 文件体积与职责
 

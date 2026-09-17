@@ -2,8 +2,8 @@ const path = require('node:path')
 
 const VITEST_SCRIPT_NAMES = Object.freeze([
   'test:assistant-model-compat',
-  'test:assistant-eval',
-  'test:assistant-settlement',
+  'test:application-harness',
+  'test:embedded-agent',
 ])
 
 function extractVitestTargets(scriptName, script) {

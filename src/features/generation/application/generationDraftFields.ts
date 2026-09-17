@@ -3,7 +3,7 @@ import {
   type ApplicationPropertyDescriptor,
   type JsonValue,
 } from '@/core/application-control'
-import { APPLICATION_CAPABILITY_CATALOG_VERSION } from '@/core/assistant/applicationCapabilities'
+import { APPLICATION_CAPABILITY_CATALOG_VERSION } from '@/core/application-control/applicationCapabilities'
 import { registry } from '@/core/ModelRegistry'
 import {
   compactPromptMediaReferenceSpacing,

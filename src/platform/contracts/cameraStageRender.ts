@@ -11,6 +11,11 @@ export interface CameraStageRenderRequest {
   selectedTimeSec?: number
 }
 
+/** 宿主在接受任务时固定的渲染投影，不能由工具参数提供。 */
+export interface CameraStageRenderWorkerJob extends CameraStageRenderRequest {
+  sceneJson: string
+}
+
 export interface CameraStageImageRenderResult {
   kind: 'image'
   mediaUrl: string
@@ -70,6 +75,7 @@ export interface CameraStageRenderTaskScope {
 }
 
 export interface CameraStageRenderTaskSnapshot extends CameraStageRenderRequest {
+  acknowledgedAt?: number
   status: CameraStageRenderTaskStatus
   phase: 'preparing' | 'rendering' | 'encoding' | null
   progress: number
@@ -82,12 +88,12 @@ export interface CameraStageRenderTaskSnapshot extends CameraStageRenderRequest 
 export interface CameraStageRenderPlatform {
   start(request: CameraStageRenderRequest): Promise<{ task: CameraStageRenderTaskSnapshot; idempotent: boolean }>
   get(scope: CameraStageRenderTaskScope): Promise<CameraStageRenderTaskSnapshot | null>
-  list(canvasProjectId: string): Promise<CameraStageRenderTaskSnapshot[]>
+  list(canvasProjectId?: string): Promise<CameraStageRenderTaskSnapshot[]>
   cancel(scope: CameraStageRenderTaskScope): Promise<void>
   acknowledge(scope: CameraStageRenderTaskScope): Promise<void>
   onEvent(listener: (event: CameraStageRenderTaskSnapshot) => void): () => void
   workerReady(): Promise<void>
-  onWorkerJob(listener: (request: CameraStageRenderRequest) => void): () => void
+  onWorkerJob(listener: (request: CameraStageRenderWorkerJob) => void): () => void
   onWorkerCancel(listener: (requestId: string) => void): () => void
   reportWorkerEvent(event: CameraStageRenderEvent): Promise<void>
 }

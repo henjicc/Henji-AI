@@ -12,6 +12,7 @@ function getNativeImageEditorV3(): ImageEditorV3Platform {
 
 export function createElectronImageEditorV3(): ImageEditorV3Platform {
   return {
+    listDocuments: (request) => getNativeImageEditorV3().listDocuments(request),
     loadDocument: (request) => getNativeImageEditorV3().loadDocument(request),
     saveDocument: (request) => getNativeImageEditorV3().saveDocument(request),
     forkDocument: (request) => getNativeImageEditorV3().forkDocument(request),

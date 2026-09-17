@@ -7,9 +7,17 @@ export interface GenerationTaskStatusSnapshot {
   resultAvailable: boolean
   errorCode: string | null
   errorMessage: string | null
+  cancellable?: boolean
+  waitingExternal?: boolean
+  origin?: 'canvas'
 }
 
 const snapshots = new Map<string, GenerationTaskStatusSnapshot>()
+const canvasSnapshots = new Map<string, GenerationTaskStatusSnapshot>()
+
+export function publishCanvasGenerationTaskStatus(snapshot: GenerationTaskStatusSnapshot): void {
+  canvasSnapshots.set(snapshot.taskId, { ...structuredClone(snapshot), origin: 'canvas' })
+}
 
 export function replaceGenerationTaskStatusSnapshots(next: GenerationTaskStatusSnapshot[]): void {
   snapshots.clear()
@@ -17,10 +25,10 @@ export function replaceGenerationTaskStatusSnapshots(next: GenerationTaskStatusS
 }
 
 export function listGenerationTaskStatusSnapshots(): GenerationTaskStatusSnapshot[] {
-  return [...snapshots.values()].map((snapshot) => structuredClone(snapshot))
+  return [...new Map([...snapshots, ...canvasSnapshots]).values()].map((snapshot) => structuredClone(snapshot))
 }
 
 export function readGenerationTaskStatusSnapshot(taskId: string): GenerationTaskStatusSnapshot | null {
-  const snapshot = snapshots.get(taskId)
+  const snapshot = canvasSnapshots.get(taskId) ?? snapshots.get(taskId)
   return snapshot ? structuredClone(snapshot) : null
 }

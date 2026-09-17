@@ -1,21 +1,18 @@
+import { setCanvasTestProjectState } from '@/tests/canvasProjectFixture';
 // @vitest-environment jsdom
 
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+// @vitest-environment jsdom
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { z } from 'zod';
+import { addTrustedMediaCanvasNode } from './canvasApplicationService';
+import { runCanvasMutationStage } from './canvasPersistenceService';
 
-import {
-  CANVAS_BATCH_APPLICATION_CAPABILITIES,
-  type CanvasBatchOperation,
-} from '@/core/assistant/capabilities/canvasBatchApplicationCapabilities'
-import { CANVAS_NODE_TYPES } from '@/features/canvas/domain/canvasNodes'
-import { useCanvasStore, type CanvasNode } from '@/stores/canvasStore'
-import { useProjectStore, type Project } from '@/stores/projectStore'
+import { CANVAS_BATCH_APPLICATION_CAPABILITIES, type CanvasBatchOperation } from '@/core/application-control/domains/canvas/canvasBatchApplicationCapabilities';
+import { CANVAS_NODE_TYPES } from '@/features/canvas/domain/canvasNodes';
+import { useCanvasStore, type CanvasNode } from '@/stores/canvasStore';
+import { type Project } from '@/stores/projectStore';
 
-import {
-  commitCanvasBatch,
-  planCanvasBatch,
-  resetCanvasBatchStateForTests,
-  undoCanvasBatch,
-} from './canvasBatchService'
+import { commitCanvasBatch, planCanvasBatch, resetCanvasBatchStateForTests, undoCanvasBatch, runCanvasTransaction } from './canvasBatchService';
 
 const projectId = 'canvas-batch-project'
 const nodeId = 'text-node'
@@ -45,12 +42,37 @@ function createProject(node: CanvasNode): Project {
 }
 
 describe('canvas batch service', () => {
+  it('可信素材的前置字段错误明确未执行，修正后同一画布可继续追加', async () => {
+    const before = useCanvasStore.getState().nodes
+    await expect(runCanvasTransaction(projectId, 1, async options => [await addTrustedMediaCanvasNode({
+      projectId, nodeType: CANVAS_NODE_TYPES.upload, placement: { mode: 'viewport_center' },
+      data: { imageUrl: 'C:/reference.png', aspectRatio: '1:1', sourceFileName: 'x'.repeat(513) },
+    }, options)])).rejects.toMatchObject({ name: 'ApplicationPreflightFailure' })
+    expect(useCanvasStore.getState().nodes).toEqual(before)
+    const created = await runCanvasTransaction(projectId, 1, async options => [await addTrustedMediaCanvasNode({
+      projectId, nodeType: CANVAS_NODE_TYPES.upload, placement: { mode: 'viewport_center' },
+      data: { imageUrl: 'C:/reference.png', aspectRatio: '1:1', sourceFileName: '正常名称' },
+    }, options)])
+    expect(useCanvasStore.getState().nodes.find(node => node.id === created.appliedOperations[0].nodeId)?.data.sourceFileName).toBe('正常名称')
+  })
+
+  it('已经发生写入后再遇到字段错误，不能伪装成前置拒绝', async () => {
+    const before = useCanvasStore.getState().nodes
+    const error = await runCanvasTransaction(projectId, 2, options => {
+      runCanvasMutationStage(options, () => useCanvasStore.getState().addNode(CANVAS_NODE_TYPES.textAnnotation, { x: 0, y: 0 }, {}))
+      z.string().max(1).parse('too long')
+      return []
+    }).catch((failure: unknown) => failure)
+    expect(error).toMatchObject({ name: 'CanvasTransactionRolledBackError', cause: expect.any(z.ZodError) })
+    expect(useCanvasStore.getState().nodes).toEqual(before)
+  })
+
   beforeEach(() => {
     resetCanvasBatchStateForTests()
     const node = createNode()
     const project = createProject(node)
     useCanvasStore.getState().setCanvasData([node], [], { past: [], future: [] })
-    useProjectStore.setState({
+    setCanvasTestProjectState({
       projects: [project],
       currentProjectId: projectId,
       currentProject: project,

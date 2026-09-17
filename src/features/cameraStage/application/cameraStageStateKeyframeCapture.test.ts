@@ -1,12 +1,14 @@
+import { loadCameraStageTestProject } from '@/tests/cameraStageProjectFixture'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({
-  saveCurrentProject: vi.fn().mockResolvedValue(undefined),
+  writeProject: vi.fn().mockResolvedValue(undefined),
   loadProjectIntoScene: vi.fn().mockResolvedValue(true),
 }))
 
+vi.mock('@/commands/cameraStageProjects', () => ({ upsertCameraStageProjectRecord: mocks.writeProject }))
+
 vi.mock('../projects/cameraStageProjectService', () => ({
-  saveCurrentProject: mocks.saveCurrentProject,
   loadProjectIntoScene: mocks.loadProjectIntoScene,
 }))
 
@@ -65,7 +67,7 @@ describe('三维状态关键帧状态捕获（capture_object_refs）', () => {
     sphereId = sphere.id
     cubeDefaultPosition = { ...cube.transform.position }
     sphereDefaultPosition = { ...sphere.transform.position }
-    useCameraStageStore.getState().loadSnapshot({
+    loadCameraStageTestProject({
       objects: [camera, cube, sphere],
       activeCameraId: camera.id,
       animation: createDefaultAnimation(),

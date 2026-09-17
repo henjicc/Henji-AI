@@ -104,6 +104,7 @@ export interface MultiLayerDocumentNodePort {
     signal?: AbortSignal
   }): Promise<MultiLayerDocumentNodeProjection>
   markReleaseCandidate(input: {
+    projectId: string
     nodeId: string
     session: ImageEditSessionReferenceV3
     signal?: AbortSignal
@@ -142,6 +143,7 @@ export interface MultiLayerDocumentNodeCanvasPort {
   createExportedImageNode(input: {
     projectId: string
     sourceNodeId: string
+    expectedDocumentRef: ImageEditSessionReferenceV3['documentRef']
     target: MultiLayerDocumentExportTarget
     raster: MultiLayerDocumentExportRaster
   }): Promise<{ nodeId: string; edgeId: string; undoRef: string }>
@@ -179,6 +181,7 @@ export interface MultiLayerDocumentNodeApplicationService {
     signal?: AbortSignal
   }): Promise<MultiLayerDocumentNodeProjection>
   markReleaseCandidate(input: {
+    projectId: string
     nodeId: string
     data: LayerStackResultNodeData
     signal?: AbortSignal

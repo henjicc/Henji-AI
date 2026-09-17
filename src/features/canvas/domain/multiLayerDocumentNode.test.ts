@@ -1,10 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import {
-  imageEditV3AnnotationRef,
-  imageEditV3GroupRef,
-  imageEditV3LayerRef,
-} from '@/features/imageEdit/v3/application/imageEditLiveSessionRegistry'
+import { imageEditV3AnnotationRef, imageEditV3GroupRef, imageEditV3LayerRef } from '@/features/imageEdit/v3/application/imageEditDocumentRefs'
 
 import { CANVAS_NODE_TYPES, type CanvasNode } from './canvasNodes'
 import { isEditableLayerStackResultNode, isUploadNode } from './canvasNodeGuards'

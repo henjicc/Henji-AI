@@ -1,7 +1,8 @@
+import { loadCameraStageTestProject } from '@/tests/cameraStageProjectFixture'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const projectMocks = vi.hoisted(() => ({
-  saveCurrentProject: vi.fn().mockResolvedValue(undefined),
+  writeProject: vi.fn().mockResolvedValue(undefined),
   loadProjectIntoScene: vi.fn().mockResolvedValue(true),
 }))
 
@@ -10,18 +11,19 @@ const reflectionRuntime = vi.hoisted(() => ({
   engine: undefined as unknown,
 }))
 
+vi.mock('@/commands/cameraStageProjects', () => ({ upsertCameraStageProjectRecord: projectMocks.writeProject }))
+
 vi.mock('../projects/cameraStageProjectService', () => ({
-  saveCurrentProject: projectMocks.saveCurrentProject,
   loadProjectIntoScene: projectMocks.loadProjectIntoScene,
 }))
 
-vi.mock('@/features/assistant/applicationCapabilities/applicationControlRegistry', () => ({
+vi.mock('@/features/application-control/capabilities/applicationControlRegistry', () => ({
   getApplicationReflectionRegistry: () => reflectionRuntime.registry,
   getApplicationControlExecutionEngine: () => reflectionRuntime.engine,
 }))
 
 import { ApplicationControlExecutionEngine, ApplicationReflectionRegistry } from '@/core/application-control'
-import { applicationReflectionHandlers } from '@/features/assistant/applicationCapabilities/applicationReflectionAdapter'
+import { applicationReflectionHandlers } from '@/features/application-control/capabilities/applicationReflectionAdapter'
 
 import { createDefaultAnimation } from '../domain/animationTypes'
 import { createCameraObject, createDefaultSceneSettings, createPrimitiveObject, pickDefaultColor } from '../domain/sceneDefaults'
@@ -42,7 +44,7 @@ describe('状态关键帧模式动画的正式反射结果', () => {
     const camera = createCameraObject('摄像机01', pickDefaultColor(0))
     const object = createPrimitiveObject('sphere', '浮动球', pickDefaultColor(1))
     objectId = object.id
-    useCameraStageStore.getState().loadSnapshot({
+    loadCameraStageTestProject({
       objects: [camera, object],
       activeCameraId: camera.id,
       animation: createDefaultAnimation(),

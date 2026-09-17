@@ -4,9 +4,7 @@ import {
   createImageEditDocumentV3,
   createImageEditEffectLayerV3,
 } from '@/core/imageEdit/v3'
-import {
-  imageEditV3LayerRef,
-} from '@/features/imageEdit/v3/application/imageEditLiveSessionRegistry'
+import { imageEditV3LayerRef } from '@/features/imageEdit/v3/application/imageEditDocumentRefs'
 import type {
   ImageEditorV3DocumentSnapshot,
   ImageEditorV3StandaloneRasterExportResult,

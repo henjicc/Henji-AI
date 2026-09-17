@@ -4,21 +4,14 @@ import type {
   ApplicationRef,
   JsonValue,
 } from '@/core/application-control'
-import { APPLICATION_CAPABILITY_CATALOG_VERSION } from '@/core/assistant/applicationCapabilities'
+import { APPLICATION_CAPABILITY_CATALOG_VERSION } from '@/core/application-control/applicationCapabilities'
 import type { ImageEditLayerCommonPatchV3 } from '@/core/imageEdit/v3/commandTypes'
 import {
   collectImageEditMaskResourceIdsV3,
   type ImageEditLayerV3,
 } from '@/core/imageEdit/v3/layerTypes'
 
-import {
-  imageEditV3DocumentRef,
-  imageEditV3GroupRef,
-  imageEditV3LayerRef,
-  imageEditV3MaskRef,
-  imageEditV3ResourceRef,
-  type ImageEditLiveLayerLocationV3,
-} from './imageEditLiveSessionRegistry'
+import { imageEditV3DocumentRef, imageEditV3GroupRef, imageEditV3LayerRef, imageEditV3MaskRef, imageEditV3ResourceRef, type ImageEditLiveLayerLocationV3 } from './imageEditDocumentRefs'
 
 export const IMAGE_EDIT_V3_ENTITY_TYPES = {
   group: 'image_edit.group',

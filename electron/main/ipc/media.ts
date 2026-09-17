@@ -16,7 +16,7 @@ import {
   surfaceCaptureRequestSchema,
   type SurfaceCaptureRequest,
   type SurfaceCaptureResult,
-} from '../../../src/core/assistant/surfaceObservation'
+} from '../../../src/core/application-control/surfaceObservation'
 import { parseRecord, registerIpcHandler } from './registry'
 
 interface AllowRootPayload {

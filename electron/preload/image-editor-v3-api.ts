@@ -93,6 +93,7 @@ export function createImageEditorV3Api(
   nativePostMessage?: NativePostMessage,
 ): ImageEditorV3Platform {
   return {
+    listDocuments: (request) => nativeInvoke('imageEditorV3:document:list', request),
     loadDocument: (request) => nativeInvoke('imageEditorV3:document:load', request),
     saveDocument: (request) => nativeInvoke('imageEditorV3:document:save', request),
     deleteDocumentIfRevision: (request) => nativeInvoke(

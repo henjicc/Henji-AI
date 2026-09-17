@@ -82,7 +82,8 @@ function normalizeNonNullValue(
       return input
     case 'string': {
       if (typeof input !== 'string') return invalid(descriptor.id, 'EXPECTED_STRING')
-      const value = input.normalize('NFKC')
+      // 属性正文必须原样保存；兼容归一化会改写中文标点、全角文字和排版字符。
+      const value = input
       if (valueType.minLength !== undefined && value.length < valueType.minLength) {
         return invalid(descriptor.id, 'STRING_TOO_SHORT')
       }

@@ -83,7 +83,10 @@ export interface AiRecordProgressSampleResponseDto {
   estimate: AiProgressEstimateDto
 }
 
+export interface AiSavedResult { status?: string; taskId?: string; url?: string; filePath?: string; createdFilePaths?: string[]; metadata?: unknown; structuredOutput?: unknown }
+
 export interface AiRuntimePlatform {
+  readSavedResult(requestId: string): Promise<AiSavedResult | null>
   setProviderApiKey(providerId: string, apiKey: string): Promise<void>
   removeProviderApiKey(providerId: string): Promise<void>
   getProviderApiKey(providerId: string): Promise<string | null>

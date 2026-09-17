@@ -19,6 +19,7 @@ const SESSION_ID = '123e4567-e89b-42d3-a456-426614174000'
 function createPlatform(): ImageEditorV3Platform {
   return {
     loadDocument: vi.fn(async () => null),
+    listDocuments: vi.fn(async () => ({ documentRefs: [], nextCursor: null })),
     saveDocument: vi.fn(),
     forkDocument: vi.fn(),
     deleteDocumentIfRevision: vi.fn(async () => ({ deleted: true })),

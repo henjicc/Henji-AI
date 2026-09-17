@@ -1,12 +1,13 @@
 import type { ApplicationPlannedStep, ApplicationRef, ApplicationExecutionContext, ApplicationCollectionAvailability } from '@/core/application-control'
 import type { ApplicationPersistenceParticipant } from '@/core/application-control/execution/persistence'
-import { requireImageEditV3LiveSession } from './imageEditLiveSessionRegistry'
-import { listImageEditV3LiveSessions } from './imageEditLiveSessionRegistry'
+import { requireImageEditDocumentInstanceV3 } from './imageEditDocumentInstances'
+import { listImageEditDocumentInstancesV3 } from './imageEditDocumentInstances'
 import type { ImageEditPersistenceSnapshotV3 } from '@/core/imageEdit/v3/serviceContracts'
 import type { ImageEditPersistenceQueuePortV3 } from './imageEditPersistenceOwner'
+import { withImageEditDocumentInstanceV3 } from './imageEditDocumentLoading'
 
 export function requireImageEditPersistenceOwnerV3(documentId: string) {
-  const owner = requireImageEditV3LiveSession(documentId).persistenceOwner
+  const owner = requireImageEditDocumentInstanceV3(documentId).persistenceOwner
   if (!owner) throw new Error('此图片编辑界面仅供预览；请从原图片或画布文档节点打开可保存的编辑器后再修改')
   return owner
 }
@@ -14,7 +15,7 @@ export function requireImageEditPersistenceOwnerV3(documentId: string) {
 export const IMAGE_EDIT_PREVIEW_ONLY_REASON = '此界面仅供预览，请从原图片或画布文档节点打开可保存的编辑器'
 
 export function imageEditPersistenceAvailabilityV3(documentId: string, availability: ApplicationCollectionAvailability) {
-  const owner = requireImageEditV3LiveSession(documentId).persistenceOwner
+  const owner = requireImageEditDocumentInstanceV3(documentId).persistenceOwner
   if (owner) return { ...availability,
     revisions: { ...availability.revisions, ...owner.projection?.currentRevisions() },
     create: { ...availability.create, requiredPermissions: [...availability.create.requiredPermissions, ...(owner.projection?.requiredPermissions ?? [])] },
@@ -33,12 +34,12 @@ export function imageEditPersistenceDocumentId(ref: ApplicationRef): string | nu
 
 export function imageEditPersistenceRevisionsV3(ref: ApplicationRef): Record<string, number> {
   const id = imageEditPersistenceDocumentId(ref)
-  return id ? requireImageEditV3LiveSession(id).persistenceOwner?.projection?.currentRevisions() ?? {} : {}
+  return id ? requireImageEditDocumentInstanceV3(id).persistenceOwner?.projection?.currentRevisions() ?? {} : {}
 }
 
 export function imageEditPersistencePermissionsV3(ref: ApplicationRef): readonly string[] {
   const id = imageEditPersistenceDocumentId(ref)
-  return id ? requireImageEditV3LiveSession(id).persistenceOwner?.projection?.requiredPermissions ?? [] : []
+  return id ? requireImageEditDocumentInstanceV3(id).persistenceOwner?.projection?.requiredPermissions ?? [] : []
 }
 
 /** 由 core 单入口调用；跨图层/组/蒙版/标注按同一 owner 去重。 */
@@ -66,33 +67,36 @@ export async function runImageEditPersistedOperationV3<T>(
   context: ApplicationExecutionContext | undefined,
   execute: (context: ApplicationExecutionContext | undefined) => Promise<T>,
 ): Promise<T> {
-  const owner = requireImageEditPersistenceOwnerV3(documentId)
-  owner.assertCurrent()
-  if (context?.persistenceScopes?.has(owner.key)) {
-    try { return await execute(context) }
-    finally { owner.acceptCurrent() }
-  }
-  const batch = owner.begin()
-  const batchContext: ApplicationExecutionContext = {
-    ...(context ?? { requestId: 'image-edit-direct', exposure: 'local_adapter',
-      permissions: new Set<string>(), acceptedDataClasses: new Set(['C0', 'C1'] as const) }),
-    persistenceScopes: new Set([owner.key]),
-  }
-  try {
-    let result: T
-    try { result = await execute(batchContext) }
-    catch (error) { await batch.confirm(); throw error }
-    await batch.confirm()
-    return result
-  } finally { batch.release() }
+  return withImageEditDocumentInstanceV3(documentId, async () => {
+    const owner = requireImageEditPersistenceOwnerV3(documentId)
+    owner.assertCurrent()
+    if (context?.persistenceScopes?.has(owner.key)) {
+      try { return await execute(context) }
+      finally { owner.acceptCurrent() }
+    }
+    const batch = owner.begin()
+    const batchContext: ApplicationExecutionContext = {
+      ...(context ?? { requestId: 'image-edit-direct', exposure: 'local_adapter',
+        permissions: new Set<string>(), acceptedDataClasses: new Set(['C0', 'C1'] as const) }),
+      persistenceScopes: new Set([owner.key]),
+    }
+    try {
+      let result: T
+      try { result = await execute(batchContext) }
+      catch (error) { await batch.confirm(); throw error }
+      await batch.confirm()
+      return result
+    } finally { batch.release() }
+  })
 }
 
 export function assertImageEditPersistenceCurrentV3(documentId: string): void {
   requireImageEditPersistenceOwnerV3(documentId).assertCurrent()
 }
 
-export async function retryImageEditDocumentSaveV3(documentId: string) {
+export async function retryImageEditDocumentSaveV3(documentId: string, expectedOwnerId?: string) {
   const owner = requireImageEditPersistenceOwnerV3(documentId)
+  if (expectedOwnerId && owner.ownerId !== expectedOwnerId) throw new Error('RECOVERY_SESSION_LOST:原图片编辑保存宿主已被替换，请从原画布文档核对结果，不能借用其他宿主重试。')
   const reference = await owner.confirm(true)
   return { reference, receipt: owner.getConfirmationReceipt() }
 }
@@ -103,7 +107,7 @@ export function flushImageEditHostPersistenceV3(
   snapshot: ImageEditPersistenceSnapshotV3,
   includeProjection = false,
 ) {
-  const session = listImageEditV3LiveSessions().find((item) => item.documentId === snapshot.document.id)
+  const session = listImageEditDocumentInstancesV3().find((item) => item.documentId === snapshot.document.id)
   if (session?.persistenceOwner) {
     if (!session.persistenceOwner.ownsQueue(queue)) throw new Error('原图片编辑保存宿主已被替换，请回到原文档核对保存结果')
     return session.persistenceOwner.confirm(includeProjection)

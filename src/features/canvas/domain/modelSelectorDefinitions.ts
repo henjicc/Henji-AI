@@ -36,6 +36,7 @@ function createModelSelectorDefinition(
     menuLabelKey: options.menuLabelKey,
     menuIcon: options.menuIcon,
     visibleInMenu: true,
+    defaultParameterFields: ['modelId'],
     menuSection: 'models',
     menuOrder: options.mediaType === 'image' ? 10 : options.mediaType === 'video' ? 20 : 30,
     capabilities: {

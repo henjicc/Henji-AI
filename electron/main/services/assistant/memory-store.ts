@@ -1,3 +1,4 @@
+import { SHARED_MEMORY_ID, sharedMemoryUpdateSchema, type SharedMemoryUpdate, type SharedMemorySnapshot } from '../../../../src/core/assistant/memory'
 import { randomUUID } from 'node:crypto'
 import type Database from 'better-sqlite3'
 
@@ -101,6 +102,38 @@ function candidateFromRow(row: CandidateRow): AgentMemoryCandidate {
 export class AgentMemoryStore {
   constructor(private readonly database: Database.Database) {}
 
+  private nextMemoryRevision(): number {
+    const row = this.database.prepare('SELECT MAX(value) AS value FROM (SELECT MAX(updated_at) AS value FROM agent_memories UNION ALL SELECT updated_at AS value FROM agent_memory_settings WHERE id = 1)').get() as { value: number | null }
+    return Math.max(Date.now(), (row.value ?? 0) + 1)
+  }
+
+  getSharedMemory(): SharedMemorySnapshot {
+    // 仅迁移从未调整过的旧默认值；用户主动关闭后绝不重新开启。
+    this.database.prepare('UPDATE agent_memory_settings SET enabled = 1, updated_at = ? WHERE id = 1 AND updated_at = 0').run(Date.now())
+    const settings = this.database.prepare('SELECT enabled, updated_at FROM agent_memory_settings WHERE id = 1').get() as { enabled: number; updated_at: number }
+    const row = this.database.prepare('SELECT content, status, updated_at FROM agent_memories WHERE memory_id = ?').get(SHARED_MEMORY_ID) as { content: string; status: string; updated_at: number } | undefined
+    return { enabled: settings.enabled === 1, content: row?.status === 'active' ? row.content : '', revision: Math.max(settings.updated_at, row?.updated_at ?? 0) }
+  }
+
+  updateSharedMemory(input: SharedMemoryUpdate): SharedMemorySnapshot {
+    const update = sharedMemoryUpdateSchema.parse(input)
+    const result = this.database.transaction(() => {
+      const current = this.getSharedMemory()
+      if (update.expectedRevision !== current.revision) throw new Error('记忆已改变，请重新读取并合并，不能覆盖新的内容。')
+      if (!current.enabled && update.content.trim()) throw new Error('用户已关闭长期记忆，不能保存新内容。')
+      const content = update.content.trim()
+      if (content) evaluateAgentMemoryProposal({ content, scope: { type: 'global', id: null }, kind: 'preference' })
+      const now = Math.max(Date.now(), current.revision + 1)
+      this.database.prepare(`INSERT INTO agent_memories(memory_id, scope_type, scope_id, kind, content, source_run_id, source_label, sensitivity, status, conflict_key, expires_at, created_at, updated_at)
+        VALUES (?, 'global', NULL, 'preference', ?, NULL, '助手共享记忆', 'C1', ?, 'shared-summary', NULL, ?, ?)
+        ON CONFLICT(memory_id) DO UPDATE SET content = excluded.content, status = excluded.status, expires_at = NULL, updated_at = excluded.updated_at`)
+        .run(SHARED_MEMORY_ID, content, content ? 'active' : 'deleted', now, now)
+      return this.getSharedMemory()
+    })()
+    logger.info('共享记忆已更新', { event: 'agent_memory.shared.updated', context: { length: result.content.length } })
+    return result
+  }
+
   getSettings(): AgentMemorySettings {
     const row = this.database.prepare(`
       SELECT enabled, default_ttl_days, updated_at FROM agent_memory_settings WHERE id = 1
@@ -121,7 +154,7 @@ export class AgentMemoryStore {
       UPDATE agent_memory_settings
       SET enabled = ?, default_ttl_days = ?, updated_at = ?
       WHERE id = 1
-    `).run(enabled ? 1 : 0, defaultTtlDays, Date.now())
+    `).run(enabled ? 1 : 0, defaultTtlDays, this.nextMemoryRevision())
     logger.info('Agent 记忆设置已更新', {
       event: 'agent_memory.settings.updated',
       context: { enabled, defaultTtlDays },
@@ -274,6 +307,10 @@ export class AgentMemoryStore {
 
   update(updateInput: AgentMemoryUpdate): AgentMemoryRecord {
     const update = agentMemoryUpdateSchema.parse(updateInput)
+    if (update.memoryId === SHARED_MEMORY_ID && update.content !== undefined) {
+      this.updateSharedMemory({ content: update.content, expectedRevision: this.getSharedMemory().revision })
+      return this.requireMemory(update.memoryId)
+    }
     const current = this.requireMemory(update.memoryId)
     const content = update.content ?? current.content
     const policy = evaluateAgentMemoryProposal({
@@ -302,7 +339,7 @@ export class AgentMemoryStore {
     const result = this.database.prepare(`
       UPDATE agent_memories SET status = 'deleted', updated_at = ?
       WHERE memory_id = ? AND status = 'active'
-    `).run(Date.now(), memoryId)
+    `).run(this.nextMemoryRevision(), memoryId)
     if (result.changes === 0) throw new Error('[memory_not_found] 记忆不存在')
     logger.info('Agent 记忆已删除', {
       event: 'agent_memory.deleted',
@@ -311,7 +348,8 @@ export class AgentMemoryStore {
   }
 
   clear(scope?: AgentMemoryScope): number {
-    const now = Date.now()
+    const now = this.nextMemoryRevision()
+    this.database.prepare('UPDATE agent_memory_settings SET updated_at = ? WHERE id = 1').run(now)
     const result = scope
       ? this.database.prepare(`
           UPDATE agent_memories SET status = 'deleted', updated_at = ?

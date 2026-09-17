@@ -1,12 +1,14 @@
+import { loadCameraStageTestProject } from '@/tests/cameraStageProjectFixture'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({
-  saveCurrentProject: vi.fn().mockResolvedValue(undefined),
+  writeProject: vi.fn().mockResolvedValue(undefined),
   loadProjectIntoScene: vi.fn().mockResolvedValue(true),
 }))
 
+vi.mock('@/commands/cameraStageProjects', () => ({ upsertCameraStageProjectRecord: mocks.writeProject }))
+
 vi.mock('../projects/cameraStageProjectService', () => ({
-  saveCurrentProject: mocks.saveCurrentProject,
   loadProjectIntoScene: mocks.loadProjectIntoScene,
 }))
 
@@ -60,7 +62,7 @@ describe('三维轨迹手工编辑', () => {
     const stateKeyframeB = createStateKeyframe([camera], 'B', camera.id, 2)
     stateKeyframeAId = stateKeyframeA.id
     stateKeyframeBId = stateKeyframeB.id
-    useCameraStageStore.getState().loadSnapshot({
+    loadCameraStageTestProject({
       objects: [camera],
       activeCameraId: camera.id,
       animation: compileStateKeyframesToAnimation([stateKeyframeA, stateKeyframeB], [camera]),

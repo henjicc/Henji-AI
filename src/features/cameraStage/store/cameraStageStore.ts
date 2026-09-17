@@ -1,4 +1,6 @@
 import { create } from 'zustand'
+import { createStoreAttachment } from '@/stores/storeAttachment'
+import { withApplicationWriteBarrier } from '@/stores/applicationWriteBarrier'
 import type { StoreApi } from 'zustand'
 import { temporal } from 'zundo'
 import { v4 as uuidv4 } from 'uuid'
@@ -173,43 +175,6 @@ export const CAMERA_STAGE_DEFAULT_PROJECT_NAME = '未命名场景'
 /** 撤销历史跟踪场景数据切片（对象列表 + 动画轨道），界面态/播放态不入历史 */
 type TrackedState = Pick<CameraStageState, 'objects' | 'animation' | 'stateKeyframes'>
 
-/** 在暂停撤销跟踪的前提下把采样值落回对象（scrub/暂停/停止用，不污染历史与不自动打点） */
-function applySampledObjectsSilently(time: number): void {
-  const temporal = useCameraStageStore.temporal.getState()
-  const wasTracking = temporal.isTracking
-  if (wasTracking) temporal.pause()
-  useCameraStageStore.setState((state) => ({
-    objects: applyAnimationAtTime(state.objects, state.animation, time),
-  }))
-  if (wasTracking) temporal.resume()
-}
-
-/**
- * 会话式历史批处理：gizmo 拖拽、滑杆连续调整会触发大量 set，
- * 用会话把「一次连续交互」合并为一条撤销记录——会话内只记录首帧的前态，其余忽略。
- * 由交互组件在拖拽/聚焦开始时调用 begin、结束时调用 end。
- */
-let historyRecord: StoreApi<CameraStageState>['setState'] | null = null
-let historySessionActive = false
-let historySessionCaptured = false
-let historySessionPast: CameraStageState | null = null
-
-export function beginHistorySession(): void {
-  if (historySessionActive) return
-  historySessionActive = true
-  historySessionCaptured = false
-  historySessionPast = null
-}
-
-export function endHistorySession(): void {
-  if (historySessionActive && historySessionCaptured && historySessionPast && historyRecord) {
-    historyRecord(historySessionPast)
-  }
-  historySessionActive = false
-  historySessionCaptured = false
-  historySessionPast = null
-}
-
 /** 生成同类对象的递增序号名，如"摄像机01"；按已用最大编号 +1，避免删除中间对象后再新增撞号 */
 function nextName(objects: StageObject[], base: string): string {
   let maxN = 0
@@ -225,9 +190,21 @@ function firstCameraId(objects: StageObject[]): string | null {
   return getCameraObjects(objects)[0]?.id ?? null
 }
 
-const initialStateKeyframe = createStateKeyframe([], '关键帧 1')
-
-export const useCameraStageStore = create<CameraStageState>()(
+export const createCameraStageStore = () => {
+  const initialStateKeyframe = createStateKeyframe([], '关键帧 1')
+  let historyRecord: StoreApi<CameraStageState>['setState'] | null = null
+  let historySessionActive = false
+  let historySessionPast: CameraStageState | null = null
+  const isAttached = (): boolean => cameraStageStoreAttachment.getStore() === store
+  function applySampledObjectsSilently(time: number): void {
+    const history = store.temporal.getState()
+    const tracking = history.isTracking
+    if (tracking) history.pause()
+    try { store.setState(state => ({ objects: applyAnimationAtTime(state.objects, state.animation, time) })) }
+    finally { if (tracking) history.resume() }
+  }
+  const store = create<CameraStageState>()(
+  withApplicationWriteBarrier(
   temporal(
     (set, get) => ({
   objects: [],
@@ -274,7 +251,7 @@ export const useCameraStageStore = create<CameraStageState>()(
       const object = createCameraObject(
         nextName(state.objects, '摄像机'),
         pickDefaultColor(state.objects.length),
-        getDirectorView() ?? undefined,
+        isAttached() ? getDirectorView() ?? undefined : undefined,
       )
       // 重要记录 007：已存在其他摄像机时，新摄像机画幅直接继承首摄像机当前值，
       // 不给用户可独立编辑的初始值（画幅一致性从创建时就保证，不依赖导出时再校验）。
@@ -470,8 +447,7 @@ export const useCameraStageStore = create<CameraStageState>()(
 
   newScene: (name) => {
     // 新工程不继承上一次离开时的自由视角（跨工程共享的 localStorage 快照），回到标准正视角度
-    resetDirectorView()
-    resetCameraStagePlaybackRuntime(0, null)
+    if (isAttached()) { resetDirectorView(); resetCameraStagePlaybackRuntime(0, null) }
     set(() => {
       const snapshot = createDefaultCameraStageSceneSnapshot()
       return {
@@ -494,7 +470,7 @@ export const useCameraStageStore = create<CameraStageState>()(
   },
 
   loadSnapshot: (snapshot, project) => {
-    resetCameraStagePlaybackRuntime(0, project.id)
+    if (isAttached()) resetCameraStagePlaybackRuntime(0, project.id)
     set(() => {
       const activeCameraId = isCameraId(snapshot.objects, snapshot.activeCameraId)
         ? snapshot.activeCameraId
@@ -523,7 +499,7 @@ export const useCameraStageStore = create<CameraStageState>()(
 
   ...createStateKeyframeSlice(set),
 
-  ...createPlaybackSlice(set, get, applySampledObjectsSilently),
+  ...createPlaybackSlice(set, get, applySampledObjectsSilently, isAttached),
 
   setSceneGroundColor: (color) =>
     set((state) => ({
@@ -809,10 +785,7 @@ export const useCameraStageStore = create<CameraStageState>()(
         historyRecord = handleSet
         return (pastState) => {
           if (historySessionActive) {
-            if (!historySessionCaptured) {
-              historySessionPast = pastState as CameraStageState
-              historySessionCaptured = true
-            }
+            if (!historySessionPast) historySessionPast = pastState as CameraStageState
             return
           }
           handleSet(pastState)
@@ -820,7 +793,46 @@ export const useCameraStageStore = create<CameraStageState>()(
       },
     },
   ),
+  ['objects', 'animation', 'stateKeyframes', 'sceneSettings', 'activeCameraId', 'currentProjectName'],
+  ),
 )
+
+  return Object.assign(store, {
+    beginHistorySession() { historySessionActive = true },
+    endHistorySession() {
+      if (historySessionActive && historySessionPast && historyRecord) historyRecord(historySessionPast)
+      historySessionActive = false
+      historySessionPast = null
+    },
+  })
+}
+
+export type CameraStageOwnedStore = ReturnType<typeof createCameraStageStore>
+const initialStore = createCameraStageStore()
+export const cameraStageStoreAttachment = createStoreAttachment(initialStore)
+const historyAttachment = createStoreAttachment(initialStore.temporal)
+export const useCameraStageStore = Object.assign(cameraStageStoreAttachment.useAttachedStore, {
+  temporal: historyAttachment.useAttachedStore,
+})
+
+export function attachCameraStageStore(store: CameraStageOwnedStore): void {
+  if (cameraStageStoreAttachment.getStore() === store) return
+  endHistorySession()
+  const previous = cameraStageStoreAttachment.getStore()
+  if (previous.getState().playback.playing) previous.getState().pause()
+  cameraStageStoreAttachment.attach(store)
+  historyAttachment.attach(store.temporal)
+  resetDirectorView()
+  resetCameraStagePlaybackRuntime(store.getState().playback.currentTime, store.getState().currentProjectId)
+}
+
+export function beginHistorySession(): void {
+  (cameraStageStoreAttachment.getStore() as CameraStageOwnedStore).beginHistorySession()
+}
+
+export function endHistorySession(): void {
+  (cameraStageStoreAttachment.getStore() as CameraStageOwnedStore).endHistorySession()
+}
 
 /** 清空撤销/重做历史（加载工程、新建场景后调用，避免跨工程回退） */
 export function clearCameraStageHistory(): void {

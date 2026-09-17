@@ -51,6 +51,8 @@ export type ProviderFactory = never
 export interface GenerationExecutionOptions {
   progressSource?: 'generation' | 'canvas'
   requestId?: string
+  /** 宿主持有的业务任务信号；不传入模型参数或 IPC DTO。 */
+  signal?: AbortSignal
 }
 
 interface PendingProgressSampleContext {
@@ -79,6 +81,18 @@ export class GenerationService {
     return GenerationService.instance
   }
 
+  private async dispatchCancellable<T>(taskId: string, signal: AbortSignal | undefined, dispatch: () => Promise<T>): Promise<T> {
+    signal?.throwIfAborted()
+    // 先发送正式请求，再发送取消，避免取消标记在请求初始化时被清除。
+    const pending = dispatch()
+    const cancel = (): void => { void this.cancelTask(taskId).catch(error => {
+      logger.error('[GenerationService] 业务取消请求失败', error, { event: 'generation.cancel.signal_failed', taskId })
+    }) }
+    signal?.addEventListener('abort', cancel, { once: true })
+    if (signal?.aborted) cancel()
+    try { return await pending } finally { signal?.removeEventListener('abort', cancel) }
+  }
+
   async generate(
     modelId: string,
     params: DynamicValueMap,
@@ -92,6 +106,7 @@ export class GenerationService {
     const startedAtMs = Date.now()
 
     try {
+      options.signal?.throwIfAborted()
       const model = registry.getModel(modelId) ?? getControlledExecutionModel(modelId)
       if (!model) {
         throw new Error(`Model not found: ${modelId}`)
@@ -127,11 +142,11 @@ export class GenerationService {
         },
       })
 
-      const response = await aiGenerate({
+      const response = await this.dispatchCancellable(requestId, options.signal, () => aiGenerate({
         modelId,
         params: runtimeParams,
         requestId,
-      })
+      }))
       recordRuntimeTrace(modelId, runtimeParams, response.trace)
 
       if (response.status === 'pending') {
@@ -210,6 +225,11 @@ export class GenerationService {
       }
     } catch (error) {
       const message = getErrorMessage(error)
+      if (options.signal?.aborted) {
+        logger.info('[GenerationService] 本地生成已停止', { event: 'generation.generate.cancelled', requestId, modelId })
+        progressTracker?.stop()
+        throw error
+      }
       logger.error('[GenerationService] 生成异常', error, {
         event: 'generation.generate.failed',
         requestId,
@@ -261,6 +281,7 @@ export class GenerationService {
     const requestId = options.requestId?.trim() || createRequestId(`${modelId}-continue`)
 
     try {
+      options.signal?.throwIfAborted()
       const runtimeParams = stripDerivedMediaState(params)
       const model = registry.getModel(modelId) ?? getControlledExecutionModel(modelId)
       const estimate = model
@@ -282,12 +303,12 @@ export class GenerationService {
         modelId,
       })
 
-      const response = await aiContinuePolling({
+      const response = await this.dispatchCancellable(taskId, options.signal, () => aiContinuePolling({
         modelId,
         taskId,
         params: runtimeParams,
         requestId,
-      })
+      }))
       recordRuntimeTrace(modelId, runtimeParams, response.trace)
 
       if (response.status !== 'completed') {
@@ -351,6 +372,11 @@ export class GenerationService {
       }
     } catch (error) {
       const message = getErrorMessage(error)
+      if (options.signal?.aborted) {
+        logger.info('[GenerationService] 本地续查已停止', { event: 'generation.continue_polling.cancelled', requestId, taskId, modelId })
+        progressTracker?.stop()
+        throw error
+      }
       logger.error('[GenerationService] 继续轮询异常', error, {
         event: 'generation.continue_polling.failed',
         requestId,

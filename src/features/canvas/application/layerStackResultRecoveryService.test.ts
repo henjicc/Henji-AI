@@ -1,13 +1,15 @@
+import { setCanvasTestProjectState } from '@/tests/canvasProjectFixture';
 // @vitest-environment jsdom
-import { beforeEach, describe, expect, it } from 'vitest'
-import type { CanvasNode } from '../domain/canvasNodes'
-import { resolveLayerStackRecoveryTask } from '../domain/layerStackResultRecovery'
-import { useCanvasStore } from '@/stores/canvasStore'
-import { useProjectStore, type Project } from '@/stores/projectStore'
-import { retryLayerStackResult } from './layerStackResultRecoveryService'
-import { registerCanvasCapabilityHandlers } from '@/features/assistant/applicationCapabilities/registerCanvasCapabilityHandlers'
-import type { CapabilityHandler } from '@/features/assistant/applicationCapabilities/handlerTypes'
-import { BUILTIN_APPLICATION_CAPABILITY_REGISTRY } from '@/core/assistant/builtinApplicationCapabilityRegistry'
+// @vitest-environment jsdom
+import { beforeEach, describe, expect, it } from 'vitest';
+import type { CanvasNode } from '../domain/canvasNodes';
+import { resolveLayerStackRecoveryTask } from '../domain/layerStackResultRecovery';
+import { useCanvasStore } from '@/stores/canvasStore';
+import { type Project } from '@/stores/projectStore';
+import { retryLayerStackResult } from './layerStackResultRecoveryService';
+import { registerCanvasCapabilityHandlers } from '@/features/canvas/application/registerCanvasCapabilityHandlers';
+import type { CapabilityHandler } from '@/features/application-control/capabilities/handlerTypes';
+import { BUILTIN_APPLICATION_CAPABILITY_REGISTRY } from '@/core/application-control/builtinApplicationCapabilityRegistry';
 
 const task = { taskId: 'existing-task', modelId: 'kie-seedream-5.0-pro' }
 const error = `Continue polling failed for ${task.modelId}: terminated`
@@ -42,7 +44,7 @@ describe('多图层下载失败原任务恢复', () => {
     const project: Project = { id: 'project', name: '恢复测试', createdAt: 1, updatedAt: 1,
       nodeCount: 2, coverPath: null, nodes: [node, other], edges: [], viewport: { x: 0, y: 0, zoom: 1 },
       history: { ...history([pending()]), future: [] } }
-    useProjectStore.setState({ currentProjectId: project.id, currentProject: project, projects: [project] })
+    setCanvasTestProjectState({ currentProjectId: project.id, currentProject: project, projects: [project] })
   })
 
   it('从最近历史恢复原任务，只写结果节点且重复点击不重复提交', () => {

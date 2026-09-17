@@ -1,9 +1,14 @@
+import { setCanvasTestProjectState } from '@/tests/canvasProjectFixture'
 // @vitest-environment jsdom
 
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { useCanvasStore } from '@/stores/canvasStore';
 import { useProjectStore, type Project } from '@/stores/projectStore';
+import { toProjectRecord } from '@/stores/projectStoreSerialization';
+import { upsertProjectRecord } from '@/commands/projectState';
+import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from '@/tests/harnessNativeStorage';
+import { readPersistedCanvasProjectSnapshot } from './canvasQueryService';
 
 import {
   CANVAS_NODE_TYPES,
@@ -25,6 +30,7 @@ import { publishCanvasSuccessfulExecution } from './canvasExecutionPublication';
 import { collectInputMedia } from './graphMediaResolver';
 import {
   commitCanvasGenerationOutputs,
+  commitCanvasGenerationOutputsInProject,
   validateGenerationOutputBatchContract,
 } from './generationOutputApplicationService';
 import type { MultiLayerDocumentNodeProjection } from './multiLayerDocumentNodeApplicationContracts';
@@ -77,7 +83,7 @@ function setupCanvas(
     targetHandle: 'target',
   }], { past: [], future: [] });
   useCanvasStore.getState().setSelectedNode(source.id);
-  useProjectStore.setState({
+  setCanvasTestProjectState({
     projects: [project],
     currentProjectId: projectId,
     currentProject: project,
@@ -164,7 +170,55 @@ async function commit(
 
 describe('generationOutputApplicationService 图层栈', () => {
   beforeEach(() => {
+    installHarnessNativeStorage();
     setupCanvas();
+  });
+  afterEach(() => uninstallHarnessNativeStorage());
+
+  it.each(['background', 'switch', 'cancel', 'rollback-unknown', 'rollback-error'] as const)('图层原子提交使用原项目并正确补偿未提交文档（%s）', async mode => {
+    let release!: () => void;
+    const gate = new Promise<void>(resolve => { release = resolve; });
+    let running: Promise<unknown> | undefined;
+    try {
+      setupCanvas('image', CANVAS_NODE_TYPES.layerStackResult);
+      await upsertProjectRecord(toProjectRecord({ ...useProjectStore.getState().currentProject!,
+        nodes: useCanvasStore.getState().nodes, edges: useCanvasStore.getState().edges }));
+      const layerContract = contract(2, 'layer-stack');
+      layerContract.resultKind = 'layer-stack';
+      layerContract.outputs.forEach((item, index) => {
+        item.descriptor.semantic = { kind: 'layer', resultKind: 'image', label: `图层 ${index + 1}` };
+        item.descriptor.layer = { index, opacity: 1, blendMode: 'normal' };
+      });
+      const controller = new AbortController();
+      const createLayerStackDocument = vi.fn(async () => { await gate; return layerStackProjection(); });
+      const uncertain = mode === 'rollback-unknown' || mode === 'rollback-error';
+      const rollbackLayerStackDocument = vi.fn(async () => {
+        if (mode === 'rollback-error') throw new Error('文档删除失败');
+        return !uncertain;
+      });
+      let otherProject = mode === 'switch' || uncertain ? null : await useProjectStore.getState().createProject('后台文档测试');
+      const operation = commitCanvasGenerationOutputsInProject(projectId, {
+        sourceNodeId: 'source-node', placeholderNodeId: 'placeholder-node', resultNodeType: CANVAS_NODE_TYPES.layerStackResult,
+        completionId: 'background-layer', contract: layerContract, preparedLayerStack: layerStackDocument('background-layer'),
+        createLayerStackDocument, rollbackLayerStackDocument, signal: controller.signal,
+      });
+      running = operation.then(result => result, error => error);
+      await vi.waitFor(() => expect(createLayerStackDocument).toHaveBeenCalledOnce());
+      if (mode === 'switch' || uncertain) otherProject = await useProjectStore.getState().createProject('文档保存时切换');
+      if (mode === 'cancel' || uncertain) controller.abort(new Error('停止合成'));
+      release();
+      if (uncertain) await expect(operation).rejects.toThrow('回收未确认');
+      else if (mode === 'cancel') await expect(operation).rejects.toThrow('取消');
+      else expect(await operation).toMatchObject({ projectId, resultNodeIds: ['placeholder-node'] });
+      const saved = await readPersistedCanvasProjectSnapshot(projectId);
+      const placeholder = saved.nodes.find(node => node.id === 'placeholder-node')!;
+      if (mode === 'cancel' || uncertain) expect(placeholder.data.imageEditSession).toBeUndefined();
+      else expect(placeholder.data.imageEditSession).toMatchObject({ documentRef: 'image-edit-v3:layer-stack-document' });
+      expect(createLayerStackDocument).toHaveBeenCalledTimes(1);
+      expect(rollbackLayerStackDocument).toHaveBeenCalledTimes(mode === 'background' || mode === 'switch' ? 0 : 1);
+      expect(useProjectStore.getState().currentProjectId).toBe(otherProject);
+      expect(useCanvasStore.getState().nodes).toHaveLength(0);
+    } finally { release(); await running; }
   });
 
   it('多角度 profile 与 angle 可按顺序持久化，图层栈需预验证后原子提交', async () => {
@@ -365,9 +419,3 @@ describe('generationOutputApplicationService 图层栈', () => {
       .not.toHaveProperty('imageEditSession');
   });
 });
-
-// 本文件验证领域变换；仅替换最终存储边界，保存完成/拒绝由专门结果测试覆盖。
-vi.mock('@/commands/projectState', async (importOriginal) => ({
-  ...await importOriginal<typeof import('@/commands/projectState')>(),
-  upsertProjectRecord: vi.fn(async () => undefined),
-}))

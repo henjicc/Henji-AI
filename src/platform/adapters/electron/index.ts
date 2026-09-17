@@ -1,3 +1,4 @@
+import { createElectronApplicationControl } from './applicationControl'
 import type { PlatformRuntime } from '@/platform/contracts'
 import { createElectronAiRuntime } from './aiRuntime'
 import { createElectronLlmRuntime } from './llmRuntime'
@@ -21,9 +22,14 @@ import { createElectronLogging } from './logging'
 import { createElectronUpdater } from './updater'
 import { createElectronAssetLibrary } from './assetLibrary'
 import { createElectronAssistant } from './assistant'
+import { createElectronEmbeddedAgent } from './embeddedAgent'
+import { createElectronMcp } from './mcp'
 
 export function createElectronPlatform(): PlatformRuntime {
   return {
+    embeddedAgent: createElectronEmbeddedAgent(),
+    mcp: createElectronMcp(),
+    applicationControl: createElectronApplicationControl(),
     aiRuntime: createElectronAiRuntime(),
     llmRuntime: createElectronLlmRuntime(),
     db: createElectronDb(),

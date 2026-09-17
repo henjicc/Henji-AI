@@ -1,24 +1,13 @@
-import type {
-  ApplicationCollectionExecutor,
-  ApplicationCompletedStepResult,
-  ApplicationEvidence,
-  ApplicationPlannedStep,
-  ApplicationRef,
-  JsonValue,
-} from '@/core/application-control'
-import type { CanvasBatchOperation } from '@/core/assistant/capabilities/canvasBatchApplicationCapabilities'
-import { useCanvasStore } from '@/stores/canvasStore'
+import { findCanvasProjectInstance, getCanvasProjectInstance, requireCanvasProjectInstance } from './canvasProjectInstances';
+import type { ApplicationCollectionExecutor, ApplicationCompletedStepResult, ApplicationEvidence, ApplicationPlannedStep, ApplicationRef, JsonValue } from '@/core/application-control';
+import type { CanvasBatchOperation } from '@/core/application-control/domains/canvas/canvasBatchApplicationCapabilities';
 
-import { applyCanvasOperationsAtomically, undoCanvasBatch } from './canvasBatchService'
-import { CANVAS_ENTITY_TYPES } from './canvasReflection'
+
+import { applyCanvasOperationsAtomically, undoCanvasBatch } from './canvasBatchService';
+import { CANVAS_ENTITY_TYPES } from './canvasReflection';
 
 type CollectionStep = Extract<ApplicationPlannedStep, { kind: 'collection' }>
 const UNDO_PREFIX = 'canvas-collection-undo:'
-
-export interface CanvasCollectionDependencies {
-  readRevision: () => number
-  bumpRevision: () => void
-}
 
 /** 引用可能是 `projectId:nodeId` 形式的稳定引用，也可能是裸 id，两者都接受。 */
 function childId(value: JsonValue | undefined, label: string): string {
@@ -56,23 +45,20 @@ export class CanvasCollectionExecutor implements ApplicationCollectionExecutor {
       { declarationId: 'canvas.delete_connected_edges', effect: 'delete' as const, entityType: CANVAS_ENTITY_TYPES.edge, propertyIds: [], revisionScopes: ['canvas'] },
     ],
   }
-  constructor(
-    readonly entityType: string,
-    private readonly dependencies: CanvasCollectionDependencies,
-  ) {}
+  constructor(readonly entityType: string) {}
 
   async apply(step: CollectionStep): Promise<ApplicationCompletedStepResult> {
     const projectId = step.parent.id.includes(':')
       ? step.parent.id.slice(0, step.parent.id.indexOf(':'))
       : step.parent.id
+    if (!findCanvasProjectInstance(projectId)) await getCanvasProjectInstance(projectId)
     const operations = this.toOperations(step)
-    const beforeNodes = new Set(useCanvasStore.getState().nodes.map((item) => item.id))
-    const beforeEdges = new Set(useCanvasStore.getState().edges.map((item) => item.id))
+    const beforeNodes = new Set(requireCanvasProjectInstance(projectId).store.getState().nodes.map((item) => item.id))
+    const beforeEdges = new Set(requireCanvasProjectInstance(projectId).store.getState().edges.map((item) => item.id))
     const { appliedOperations, undoRef } = await applyCanvasOperationsAtomically(projectId, operations, {
       source: 'application_collection', entityType: this.entityType,
     })
-    this.dependencies.bumpRevision()
-    const revision = this.dependencies.readRevision()
+    const revision = requireCanvasProjectInstance(projectId).snapshot().updatedAt
     const resultRefs = appliedOperations.flatMap((result) => {
       const id = typeof result.nodeId === 'string'
         ? result.nodeId
@@ -114,8 +100,7 @@ export class CanvasCollectionExecutor implements ApplicationCollectionExecutor {
     if (!projectId || !undoRef) throw new Error('CANVAS_COLLECTION_UNDO_INVALID')
     const restored = await undoCanvasBatch(projectId, undoRef)
     if (!restored) throw new Error('CANVAS_COLLECTION_UNDO_NOT_FOUND')
-    this.dependencies.bumpRevision()
-    const revision = this.dependencies.readRevision()
+    const revision = requireCanvasProjectInstance(projectId).snapshot().updatedAt
     return {
       status: 'completed',
       resultingRevisions: { canvas: revision },
@@ -134,10 +119,16 @@ export class CanvasCollectionExecutor implements ApplicationCollectionExecutor {
     if (step.operation.kind === 'create') {
       return step.operation.items.map((item, index) => {
         if (isEdge) {
+          const sourceHandle = property(item.properties, CANVAS_ENTITY_TYPES.edge, 'source_handle')
+          const targetHandle = property(item.properties, CANVAS_ENTITY_TYPES.edge, 'target_handle')
+          if ((sourceHandle !== undefined && typeof sourceHandle !== 'string')
+            || (targetHandle !== undefined && typeof targetHandle !== 'string')) throw new Error('CANVAS_HANDLE_INVALID')
           return {
             kind: 'connect_nodes' as const,
             sourceNodeId: childId(property(item.properties, CANVAS_ENTITY_TYPES.edge, 'source_ref'), `SOURCE_REF[${index}]`),
             targetNodeId: childId(property(item.properties, CANVAS_ENTITY_TYPES.edge, 'target_ref'), `TARGET_REF[${index}]`),
+            ...(sourceHandle === undefined ? {} : { sourceHandle }),
+            ...(targetHandle === undefined ? {} : { targetHandle }),
           }
         }
         const nodeType = property(item.properties, CANVAS_ENTITY_TYPES.node, 'node_type')
@@ -175,7 +166,7 @@ export class CanvasCollectionExecutor implements ApplicationCollectionExecutor {
     revision: number,
     step: CollectionStep,
   ) {
-    const state = useCanvasStore.getState()
+    const state = requireCanvasProjectInstance(projectId).store.getState()
     const remainingNodes = new Set(state.nodes.map((item) => item.id))
     const remainingEdges = new Set(state.edges.map((item) => item.id))
     const requested = new Set(step.operation.kind === 'remove' ? step.operation.targets.map(refChildId) : [])

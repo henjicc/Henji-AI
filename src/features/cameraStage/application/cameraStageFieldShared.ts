@@ -6,7 +6,7 @@ import {
   type ApplicationPropertyValue,
   type JsonValue,
 } from '@/core/application-control'
-import { APPLICATION_CAPABILITY_CATALOG_VERSION } from '@/core/assistant/applicationCapabilities'
+import { APPLICATION_CAPABILITY_CATALOG_VERSION } from '@/core/application-control/applicationCapabilities'
 
 /*
  * 三维各实体统一字段定义共用的一小撮基础设施：描述符工厂、值编解码、通用字段构造器。

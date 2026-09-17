@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from '@/tests/harnessNativeStorage'
 
 import type { ApplicationControlAccessContext, ApplicationExecutionContext } from '@/core/application-control'
 import {
@@ -10,20 +11,13 @@ import {
 } from '@/core/imageEdit/v3/documentFactory'
 import { createImageEditSparseMaskReferenceV3 } from '@/core/imageEdit/v3/layerTypes'
 import { ImageEditCommandBusV3 } from '@/features/imageEdit/v3/application/imageEditCommandBus'
-import {
-  imageEditV3DocumentRef,
-  imageEditV3GroupRef,
-  imageEditV3LayerRef,
-  imageEditV3MaskRef,
-  imageEditV3ResourceRef,
-  splitImageEditV3LayerRef,
-} from '@/features/imageEdit/v3/application/imageEditLiveSessionRegistry'
+import { imageEditV3DocumentRef, imageEditV3GroupRef, imageEditV3LayerRef, imageEditV3MaskRef, imageEditV3ResourceRef, splitImageEditV3LayerRef } from '@/features/imageEdit/v3/application/imageEditDocumentRefs'
 import { imageMarkRevision } from '@/features/imageMark/application/imageMarkSessionAccess'
 
 import {
   getApplicationControlExecutionEngine,
   getApplicationReflectionRegistry,
-} from '@/features/assistant/applicationCapabilities/applicationControlRegistry'
+} from '@/features/application-control/capabilities/applicationControlRegistry'
 
 import { registerPersistedImageEditTestSession } from '@/tests/imageEditPersistenceTestSession'
 
@@ -40,8 +34,10 @@ const executionContext: ApplicationExecutionContext = {
 
 const disposers: Array<() => void> = []
 
+beforeEach(installHarnessNativeStorage)
 afterEach(() => {
   while (disposers.length > 0) disposers.pop()?.()
+  uninstallHarnessNativeStorage()
 })
 
 async function commitStep(

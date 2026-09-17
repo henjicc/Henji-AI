@@ -8,11 +8,11 @@ import {
   type ApplicationRef,
   type JsonValue,
 } from '@/core/application-control'
-import { APPLICATION_CAPABILITY_CATALOG_VERSION } from '@/core/assistant/applicationCapabilities'
+import { APPLICATION_CAPABILITY_CATALOG_VERSION } from '@/core/application-control/applicationCapabilities'
 
 import type { StageObject, StageSceneSettings } from '../domain/sceneTypes'
 import { getAnimatablePropByPath } from '../domain/animatableProps'
-import type { CameraStageProjectSnapshot } from '../projects/cameraStageProjectService'
+import type { CameraStageProjectSnapshot } from '../projects/cameraStageProjectPersistence'
 import { cameraStageApplicationService } from './cameraStageApplicationService'
 import {
   cameraStageCollectionAvailability,

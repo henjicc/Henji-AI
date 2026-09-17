@@ -1,3 +1,4 @@
+import { getCanvasProjectInstance } from './canvasProjectInstances'
 import { useCanvasStore } from '@/stores/canvasStore'
 import { decodeProjectRecord, useProjectStore, type Project, type ProjectSummary } from '@/stores/projectStore'
 import { getProjectRecord } from '@/commands/projectState'
@@ -15,7 +16,7 @@ function projectSummary(project: ProjectSummary): Record<string, unknown> {
   }
 }
 
-function safeNodeData(node: CanvasNode): Record<string, unknown> {
+function safeNodeData(node: CanvasNode, overview: boolean): Record<string, unknown> {
   let parsed: Record<string, unknown> = {}
   try {
     parsed = extractCanvasNodeData(node.type, node.data as Record<string, unknown>) as Record<string, unknown>
@@ -23,6 +24,7 @@ function safeNodeData(node: CanvasNode): Record<string, unknown> {
     parsed = {}
   }
   const safe = Object.fromEntries(Object.entries(parsed).filter(([key]) => {
+    if (overview) return ['modelId', 'status'].includes(key)
     const normalized = key.toLowerCase()
     return !normalized.includes('url')
       && !normalized.includes('path')
@@ -31,18 +33,19 @@ function safeNodeData(node: CanvasNode): Record<string, unknown> {
   }))
   return {
     ...safe,
+    ...(overview ? { displayName: String(node.data.displayName ?? '').slice(0, 160) } : {}),
     keys: Object.keys(parsed),
     hasMediaReference: Object.keys(parsed).some((key) => /url|path|source|media/i.test(key)),
   }
 }
 
-function nodeSummary(node: CanvasNode, selectedNodeId: string | null = null): Record<string, unknown> {
+function nodeSummary(node: CanvasNode, selectedNodeId: string | null = null, overview = false): Record<string, unknown> {
   return {
     id: node.id,
     type: node.type,
     position: { x: Math.round(node.position.x), y: Math.round(node.position.y) },
     selected: selectedNodeId === node.id,
-    data: safeNodeData(node),
+    data: safeNodeData(node, overview),
   }
 }
 
@@ -63,22 +66,7 @@ export async function listCanvasProjectSummaries(): Promise<Record<string, unkno
 }
 
 export async function readCanvasProjectSnapshot(projectId: string): Promise<Project> {
-  const projectStore = useProjectStore.getState()
-  if (!projectStore.isHydrated) await projectStore.hydrate()
-  if (projectStore.currentProject?.id === projectId) {
-    const canvas = useCanvasStore.getState()
-    return {
-      ...projectStore.currentProject,
-      nodes: canvas.nodes,
-      edges: canvas.edges,
-      viewport: canvas.currentViewport,
-      history: canvas.history,
-      nodeCount: canvas.nodes.length,
-    }
-  }
-  const record = await getProjectRecord(projectId)
-  if (!record) throw new Error('PROJECT_NOT_FOUND')
-  return decodeProjectRecord(record)
+  return (await getCanvasProjectInstance(projectId)).snapshot()
 }
 
 /** 只读取已落盘快照；后台任务终态不能用尚未确认的内存投影冒充持久结果。 */
@@ -106,7 +94,7 @@ export async function getCanvasProject(projectId: string): Promise<Record<string
       viewport: canvas?.currentViewport ?? project.viewport,
       selectedNodeId,
     },
-    nodes: nodes.slice(0, 100).map((node) => nodeSummary(node, selectedNodeId)),
+    nodes: nodes.slice(0, 100).map((node) => nodeSummary(node, selectedNodeId, true)),
     edges: edges.slice(0, 200).map(edgeSummary),
     truncated: nodes.length > 100 || edges.length > 200,
   }

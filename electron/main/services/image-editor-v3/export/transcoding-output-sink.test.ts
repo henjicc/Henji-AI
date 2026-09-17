@@ -360,6 +360,34 @@ describe('TranscodingTileOutputSink', () => {
     expect(Math.min(...decoded)).toBeGreaterThanOrEqual(250)
   })
 
+  it('深目录下的中间文件仍在 sharp 能读到的路径长度内', async () => {
+    /*
+     * 真实用户资料目录 + 资源名 + staged 后缀叠起来本来就接近 Windows 的 260 字符上限，
+     * 中间文件名再把 staged 的 basename 抄一遍就会越界：Node 写得进去，libvips 读不出来，
+     * 最终表现成"内容改了但保存未确认"。这里用同样深的目录跑一遍真实转码。
+     */
+    const deepDir = path.join(rootDir, 'd'.repeat(80))
+    await fsp.mkdir(deepDir, { recursive: true })
+    const targetPath = path.join(deepDir, `managed-${'r'.repeat(36)}.png`)
+    /*
+     * 深度按真实事故挑：staged 路径本身留在上限内（越界就是另一个问题了），只有旧命名多拼
+     * 出来的那段会越界。这样这条测试红了就只可能是中间文件名又变长了。
+     */
+    expect(`${targetPath}.tmp`.length).toBeLessThan(260)
+    const sink = new TranscodingTileOutputSink(targetPath, {
+      format: 'png8', tileSize: 16, inputByteOrder: 'little-endian',
+    })
+    await sink.begin(baseDescription)
+    await sink.writeTile({
+      x: 0, y: 0, width: 16, height: 16, rowStride: 64, pixels: tileFor(baseDescription),
+    })
+    await sink.complete()
+
+    const sharp = await loadSharp()
+    expect((await sharp(targetPath).metadata()).width).toBe(16)
+    expect(await fsp.readdir(deepDir)).toEqual([path.basename(targetPath)])
+  })
+
   it('取消时删除 staged 与 BigTIFF 中间文件并保留旧目标', async () => {
     const targetPath = path.join(rootDir, 'cancelled.png')
     await fsp.writeFile(targetPath, 'old')

@@ -13,6 +13,7 @@ export type HistoryStatus =
   | 'success'
   | 'error'
   | 'timeout'
+  | 'cancelled'
   // 兼容旧版本数据库字段值
   | 'completed'
   | 'failed'

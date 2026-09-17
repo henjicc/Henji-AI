@@ -5,9 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { useStoreWithEqualityFn } from 'zustand/traditional';
 
 import {
-  CANVAS_NODE_TYPES,
   type CanvasNodeData,
-  type CanvasNodeType,
 } from '@/features/canvas/domain/canvasNodes';
 import { getMainPortConnectionFlags } from '@/features/canvas/domain/connectionIndex';
 import { getDefaultModelId } from '@/features/canvas/domain/defaultModels';
@@ -89,19 +87,12 @@ export const GenerationNodeShell = memo(({
   icon,
   promptPlaceholderKey,
   promptRequiredKey,
-  apiKeyRequiredKey,
-  resultTitleKey,
-  resultNodeExtraData,
   capabilityId,
   showPromptInput = true,
-  requirePrompt = true,
   promptMaxCharacters,
   showModelInput = true,
   excludeParamIds,
   hideAspectRatio = false,
-  prepareRuntimeParams,
-  prepareGenerationRequest,
-  commitGenerationResult,
   additionalInputRows,
   layoutMode = 'stacked',
   workbenchStage,
@@ -136,7 +127,6 @@ export const GenerationNodeShell = memo(({
   );
   const generationSpec = definition.generation;
   const modelType = generationSpec?.modelType ?? 'image';
-  const resultNodeType = (generationSpec?.resultNodeType ?? CANVAS_NODE_TYPES.exportImage) as CanvasNodeType;
   const acceptedKinds = useMemo(
     () => definition.ports?.target?.accepts ?? [],
     [definition]
@@ -325,25 +315,7 @@ export const GenerationNodeShell = memo(({
     }, { skipHistory: true });
   }, [activePromptTemplateVersion, capability, data.capabilityId, data.promptTemplateVersion, id, updateNodeData]);
 
-  useGenerationNodeExecution({
-    nodeId: id,
-    modelType,
-    resultNodeType,
-    acceptedKinds,
-    acceptedMediaKinds,
-    capability,
-    showModelInput,
-    requirePrompt,
-    promptRequiredKey,
-    apiKeyRequiredKey,
-    resultTitleKey,
-    resultNodeExtraData,
-    prepareRuntimeParams,
-    prepareGenerationRequest,
-    commitGenerationResult,
-    setPromptInvalid,
-    t,
-  });
+  useGenerationNodeExecution({ nodeId: id, setPromptInvalid });
 
   const promptEditor = showPromptInput ? (
     <GenerationPromptEditor

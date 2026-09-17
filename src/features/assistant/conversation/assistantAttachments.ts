@@ -7,6 +7,31 @@ import {
 import { addMediaReferenceToLibrary } from '@/features/assets/services/assetCollectionService'
 import type { AssetMediaType, AssetRecord } from '@/platform/contracts/assetLibrary'
 import { saveUploadAudio, saveUploadImage, saveUploadVideo } from '@/utils/save/uploads'
+import type { HenjiDragTransferData } from '@/contexts/dragDataTransfer'
+import { resolveLocalAssetPath } from '@/features/assets/services/assetCollectionService'
+import { urlToFile } from '@/utils/imageConversion'
+import { toFetchableMediaUrl } from '@/services/imageSource'
+import { AGENT_ATTACHMENT_MAX_BYTES, AGENT_ATTACHMENT_FORMATS, AGENT_ATTACHMENT_MIME_TYPES } from '@/core/assistant/attachments'
+export const ALL_ATTACHMENT_MODALITIES: AgentAttachment['modality'][] = ['image', 'video', 'audio']
+export function validateAssistantAttachmentFile(file: Pick<File, 'name' | 'type' | 'size'>, modalities: AgentAttachment['modality'][]): void {
+  const modality = inferAssistantAttachmentModality(file)
+  if (!modality || !modalities.includes(modality)) throw new Error(`当前模型不支持“${file.name}”的附件类型，请切换模型。`)
+  const extension = `.${file.name.split('.').pop()?.toLowerCase()}`
+  if (!AGENT_ATTACHMENT_MIME_TYPES[modality].includes(file.type) && !AGENT_ATTACHMENT_FORMATS[modality].split(',').includes(extension)) throw new Error(`“${file.name}”格式暂不支持，可添加 ${AGENT_ATTACHMENT_FORMATS[modality]}。`)
+  if (file.size > AGENT_ATTACHMENT_MAX_BYTES[modality]) throw new Error(`“${file.name}”过大，最多支持 ${AGENT_ATTACHMENT_MAX_BYTES[modality] / 1024 / 1024} MB。`)
+}
+
+export async function importDroppedAssistantAttachment(data: HenjiDragTransferData): Promise<AssistantAttachmentDraft> {
+  let asset: AssetRecord
+  if (data.sourceType === 'asset' && data.assetId) asset = await inspectAsset(data.assetId)
+  else {
+    const filePath = resolveLocalAssetPath(data.filePath ?? data.imageUrl)
+    if (!filePath) return importAssistantAttachment(await urlToFile(toFetchableMediaUrl(data.imageUrl), data.displayName ?? `附件.${data.type === 'image' ? 'png' : data.type === 'video' ? 'mp4' : 'mp3'}`))
+    asset = await inspectAsset((await addMediaReferenceToLibrary({ filePath, mediaType: data.type, source: data.sourceType === 'history' ? 'generated' : 'imported', displayName: data.displayName })).id)
+  }
+  if (asset.inspectionStatus !== 'ready') throw new Error('附件源文件已经失效，请重新添加。')
+  return { attachment: assetToAgentAttachment(asset), previewSrc: asset.displayUrl }
+}
 
 export interface AssistantAttachmentDraft {
   attachment: AgentAttachment

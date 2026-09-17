@@ -1,6 +1,6 @@
 import { createLogger } from '@/core/logging'
 import type { ImageEditSessionReferenceV3 } from '@/core/imageEdit/v3/sessionReference'
-import { splitImageEditV3AnnotationRef, splitImageEditV3LayerRef } from '@/features/imageEdit/v3/application/imageEditLiveSessionRegistry'
+import { splitImageEditV3AnnotationRef, splitImageEditV3LayerRef } from '@/features/imageEdit/v3/application/imageEditDocumentRefs'
 import { parseMultiLayerDocumentExportTarget, type MultiLayerDocumentExportTarget } from '../domain/multiLayerDocumentNode'
 import { MultiLayerDocumentNodeApplicationError, type MultiLayerDocumentExportRaster, type MultiLayerDocumentNodeApplicationService, type MultiLayerDocumentNodeCanvasPort, type MultiLayerDocumentNodePort } from './multiLayerDocumentNodeApplicationContracts'
 import { retainsCanvasMutation } from './canvasPersistenceService'
@@ -104,6 +104,7 @@ export async function exportMultiLayerDocumentRaster(
     const created = await dependencies.canvasPort.createExportedImageNode({
       projectId: input.projectId,
       sourceNodeId: input.sourceNodeId,
+      expectedDocumentRef: session.documentRef,
       target,
       raster,
     })
