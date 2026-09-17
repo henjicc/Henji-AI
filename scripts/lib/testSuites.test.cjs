@@ -2,7 +2,7 @@ const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const path = require('node:path')
 const test = require('node:test')
-const { GPU_TEST_FILES, IMAGE_EXPORT_TEST_FILES, NATIVE_TEST_FILES, ALL_TEST_PATTERNS, testSuiteOptions, testSuiteForFile } = require('./testSuites.cjs')
+const { GPU_TEST_FILES, IMAGE_EXPORT_TEST_FILES, NATIVE_TEST_FILES, FORK_POOL_TEST_FILES, FORK_POOL_MATCH_GLOBS, ALL_TEST_PATTERNS, testSuiteOptions, testSuiteForFile } = require('./testSuites.cjs')
 
 const root = path.resolve(__dirname, '../..')
 const read = (file) => fs.readFileSync(path.join(root, file), 'utf8')
@@ -22,9 +22,9 @@ test('普通/真实 GPU/大图/原生 SQLite 互斥且覆盖完整清单，默�
   const special = [...GPU_TEST_FILES, ...IMAGE_EXPORT_TEST_FILES, ...NATIVE_TEST_FILES]
   assert.equal(new Set(special).size, special.length, '专项测试不能重复归类')
   for (const file of special) assert.ok(files.includes(file), `专项文件不存在：${file}`)
-  assert.deepEqual(testSuiteOptions('unit'), { include: ALL_TEST_PATTERNS, exclude: special })
+  assert.deepEqual(testSuiteOptions('unit'), { include: ALL_TEST_PATTERNS, exclude: special, poolMatchGlobs: FORK_POOL_MATCH_GLOBS })
   assert.deepEqual(testSuiteOptions('unit', ['**/node_modules/**']).exclude, ['**/node_modules/**', ...special])
-  assert.deepEqual(testSuiteOptions('test'), { include: ALL_TEST_PATTERNS })
+  assert.deepEqual(testSuiteOptions('test'), { include: ALL_TEST_PATTERNS, poolMatchGlobs: FORK_POOL_MATCH_GLOBS })
   assert.equal(scripts.test, 'vitest run')
   for (const file of files) {
     const matching = ['unit', 'gpu', 'image-export', 'native'].filter((suite) => {
@@ -32,6 +32,13 @@ test('普通/真实 GPU/大图/原生 SQLite 互斥且覆盖完整清单，默�
       return suite === 'unit' ? !options.exclude.includes(file) : options.include.includes(file)
     })
     assert.deepEqual(matching, [testSuiteForFile(file)], file)
+  }
+  // forks 清单只改池、不改归属：文件必须真实存在，且仍留在普通层里跑，
+  // 否则会出现"以为它跑了、实际被踢出清单"的静默漏测。
+  for (const file of FORK_POOL_TEST_FILES) {
+    assert.ok(files.includes(file), `forks 清单文件不存在：${file}`)
+    assert.equal(testSuiteForFile(file), 'unit', `forks 清单只改执行池，不得改变归属：${file}`)
+    assert.ok(!testSuiteOptions('unit').exclude.includes(file), `forks 清单文件不得被普通层排除：${file}`)
   }
 })
 
