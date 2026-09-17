@@ -160,9 +160,9 @@ async function main() {
         await paused
         evidence.firstRun.rendererPaused = true
         console.log('已暂停隔离渲染线程，提交待中断操作。')
-        await client.callTool({ name: 'change_application_entities', arguments: interrupted }, undefined, { timeout: 500 }).catch(() => undefined)
+        await client.callTool({ name: 'change_application_entities', arguments: interrupted }, { timeout: 500 }).catch(() => undefined)
         // 未解决的操作本来就以 isError 回应，这里只取状态本身，不把"被拒绝"当成查询失败。
-        const beforeExit = await client.callTool({ name: 'get_application_operation', arguments: { operationId: interrupted.operationId } }, undefined, { timeout: 5000 })
+        const beforeExit = await client.callTool({ name: 'get_application_operation', arguments: { operationId: interrupted.operationId } }, { timeout: 5000 })
         evidence.firstRun.interruptedFactBeforeExit = beforeExit.structuredContent?.executionState ?? null
         assert.ok(['unknown', 'executing'].includes(evidence.firstRun.interruptedFactBeforeExit),
           `崩溃前必须实际存在未解决的在途操作：${JSON.stringify(beforeExit.structuredContent)}`)

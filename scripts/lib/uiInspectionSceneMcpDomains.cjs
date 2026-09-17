@@ -25,7 +25,7 @@ async function readAllMedia(client, ref) {
   let totalBytes = 0
   // 刻意用远小于 256 KiB 的块，逼出 offset/eof 续读协议本身；一次读完证明不了分块。
   for (let guard = 0; guard < 512; guard += 1) {
-    const chunk = await callTool(client, 'read_application_media', { ref, offset, length: 4096 })
+    const chunk = (await callTool(client, 'read_application_media', { ref, offset, length: 4096 })).data
     mimeType = chunk.mimeType
     totalBytes = chunk.totalBytes
     chunks.push(Buffer.from(chunk.base64, 'base64'))
@@ -133,10 +133,10 @@ function createMcpDomainScenes({ setupSettings, canvasFixtureProjectId, REFERENC
         const before = await baseline(projectRef)
         const result = await baseline(resultRef)
         // 制造真实过期：仅改夹具工程，旧基线必须未执行，不能污染为 unknown。
-        await page.evaluate(async (id) => {
-          const record = await window.henjiNative.storyboardProjects.getProjectRecord(id)
-          await window.henjiNative.storyboardProjects.upsertProjectRecord({ ...record, updatedAt: record.updatedAt + 1000 })
-        }, projectId)
+        await callTool(client, 'change_application_entities', operationEnvelope([before], {
+          summary: '通过正式实例更新工程，使旧读取基线过期', changes: [{ kind: 'set_properties',
+            entityType: projectRef.kind, target: projectRef, properties: { 'canvas.project.name': '已修改的后台工程' } }],
+        }))
         const stale = operationEnvelope([before, result], { projectId, resultRef, placement: { mode: 'absolute', x: 0, y: 0 } })
         const refused = await client.callTool({ name: 'add_generation_result_to_canvas', arguments: stale })
         assert.equal(refused.isError, true)
@@ -314,7 +314,7 @@ function createMcpDomainScenes({ setupSettings, canvasFixtureProjectId, REFERENC
         })
         void page.evaluate(() => { const end = Date.now() + 2500; while (Date.now() < end) { /* 刻意占住渲染层主线程 */ } })
         await page.waitForTimeout(120)
-        const timedOut = await clientA.callTool({ name: 'change_application_entities', arguments: interrupted }, undefined, { timeout: 600 })
+        const timedOut = await clientA.callTool({ name: 'change_application_entities', arguments: interrupted }, { timeout: 600 })
           .then((result) => ({ timedOut: false, result }))
           .catch((error) => ({ timedOut: true, message: String(error) }))
         await page.waitForTimeout(3500)
@@ -350,9 +350,11 @@ function createMcpDomainScenes({ setupSettings, canvasFixtureProjectId, REFERENC
         assert.equal(denied.status, 401, `撤销后的令牌仍被接受，状态 ${denied.status}`)
         const survivor = await callTool(clientB, 'read_application_entity', { ref: projectRef, propertyIds: ['canvas.project.name'] })
         assert.equal(survivor.data.properties['canvas.project.name'], winner, '撤销一条连接影响了另一条连接的读取')
-        // 操作事实按调用方隔离：换一条连接查甲的操作是被拒绝，不是"查到了但是空的"。
+        // 操作键按调用者隔离，乙得到与不存在的键相同的结果，不能获知甲的操作事实。
         const isolated = await expectToolRefusal(clientB, 'get_application_operation', { operationId: interrupted.operationId })
-        assert.ok(/PERMISSION_DENIED/.test(isolated), `跨连接查询操作事实必须拒绝：${isolated}`)
+        const unknown = await expectToolRefusal(clientB, 'get_application_operation', { operationId: crypto.randomUUID() })
+        assert.equal(isolated, unknown, '另一调用者的操作不能通过错误差异泄漏')
+        assert.equal(JSON.parse(isolated).executionState, 'not_found')
 
         // 清理本次自己新建的集合；夹具工程名字留给 Reality 自身的清理逻辑。
         for (const library of (await page.evaluate(() => window.henjiNative.assetLibrary.listLibraries())).filter((item) => item.name.startsWith(libraryName))) {

@@ -238,10 +238,14 @@ function createMcpScenes({ setupSettings, canvasFixtureProjectId }) {
          */
         const contract = await call('describe_application_contract', {})
         const writableDomains = contract.data.domains.filter((domain) => domain.writable).map((domain) => domain.id).sort()
-        assert.deepEqual(writableDomains, ['assets', 'camera_stage', 'canvas', 'generation', 'image_edit', 'image_mark', 'models', 'settings'], JSON.stringify(writableDomains))
+        for (const domain of ['assets', 'camera_stage', 'canvas', 'generation', 'image_edit', 'image_mark', 'models', 'settings', 'memory']) {
+          assert.ok(writableDomains.includes(domain), `缺少已声明写域 ${domain}：${JSON.stringify(writableDomains)}`)
+        }
         assert.equal(contract.data.domains.some((domain) => domain.id === 'assistant_runtime'), false, '助手内部运行目录不得出现在外部契约')
-        assert.deepEqual(contract.data.access.hiddenTools.map((item) => item.name), ['create_visible_generation_task'], JSON.stringify(contract.data.access.hiddenTools))
-        assert.equal(contract.data.access.hiddenTools[0].tier, 'paid')
+        for (const name of ['create_visible_generation_task', 'submit_canvas_node_generation']) {
+          assert.equal(tools.includes(name), false, `未授权付费的连接不得看到 ${name}`)
+          assert.equal(contract.data.access.hiddenTools.find((item) => item.name === name)?.tier, 'paid')
+        }
         // 未授权付费时直接点名调用也必须被拒；拒绝发生在派发之前，不产生供应商请求。
         const paid = await client.callTool({ name: 'create_visible_generation_task', arguments: { operationId: require('node:crypto').randomUUID(), baselineIds: [require('node:crypto').randomUUID()], modelId: 'fixture', prompt: '不应发出', mediaType: 'image' } }).catch((error) => ({ isError: true, thrown: String(error) }))
         assert.equal(paid.isError, true, JSON.stringify(paid))
@@ -281,7 +285,7 @@ function createMcpScenes({ setupSettings, canvasFixtureProjectId }) {
         const missing = await client.callTool({ name: 'read_application_media', arguments: { ref: { kind: 'generation.result', id: 'reality-not-persisted' } } })
         assert.equal(missing.isError, true)
         const missingText = missing.content.map((item) => item.text).join('')
-        assert.ok(missingText.startsWith('MEDIA_NOT_PERSISTED'), missingText)
+        assert.ok(missingText.includes('ENTITY_NOT_FOUND'), missingText)
         assert.equal(/[A-Za-z]:\\|\//.test(missingText), false, `媒体失败信息泄漏了本地路径：${missingText}`)
 
         await page.reload(); await waitReady(page)

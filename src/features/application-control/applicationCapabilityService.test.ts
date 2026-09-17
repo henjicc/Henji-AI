@@ -16,6 +16,7 @@ import { requireCanvasProjectInstance } from '@/features/canvas/application/canv
 import { freezeApplicationWrites } from '@/core/applicationLifecycle/applicationWriteBarrier'
 import { readPersistedCanvasProjectSnapshot } from '@/features/canvas/application/canvasQueryService'
 import { useNavigationStore } from '@/stores/navigationStore'
+import { clearLogEvents, getLogEvents } from '@/core/logging'
 
 const originalTone = useSettingsStore.getState().themeTonePreset
 afterEach(() => useSettingsStore.getState().setThemeTonePreset(originalTone))
@@ -184,6 +185,34 @@ describe('独立应用调用入口', () => {
       expect(denied.ok).toBe(false)
       if (!denied.ok) expect(denied.error.message).toContain('ENTITY_TYPE_NOT_FOUND')
     }
+  })
+
+  it('引用不存在按可自纠的 NOT_FOUND 分类，日志不记成应用错误', async () => {
+    installHarnessNativeStorage()
+    try {
+    const session = createApplicationCapabilitySession(grant(['application:read', 'settings:read']))
+    clearLogEvents()
+    const missing = await session.execute(
+      { ...read, input: { ref: { kind: 'canvas.project', id: 'not-persisted-project' }, propertyIds: ['canvas.project.name'] } },
+      request('missing-ref')
+    )
+    expect(missing.ok).toBe(false)
+    if (!missing.ok) {
+      // 分类要落在"这个引用不存在"，并原样保留取稳定 id 的指引，不能退化成兜底的执行失败。
+      expect(missing.error.code).toBe('NOT_FOUND')
+      expect(missing.error.recoverable).toBe(true)
+      expect(missing.error.message).toContain('ENTITY_NOT_FOUND')
+      expect(missing.error.message).toContain('list_application_entities')
+    }
+    /*
+     * 外部调用方拿错引用是正常流量：失败事实照旧回传，但不得刷满用户的错误日志，也不得
+     * 让任何覆盖引用契约的真实验收永远变红。日志级别必须与上面看到的分类是同一个判断。
+     */
+    const failed = getLogEvents().filter((event) => event.event === 'application.capability.execute.failed')
+    expect(failed.length).toBe(1)
+    expect(failed[0].level).toBe('warn')
+    expect(getLogEvents().some((event) => event.level === 'error')).toBe(false)
+    } finally { uninstallHarnessNativeStorage() }
   })
 
   it('截断引用和过期并发基线不会被外部适配器自动修复', async () => {

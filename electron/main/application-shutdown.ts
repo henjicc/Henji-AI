@@ -20,7 +20,8 @@ export function bindApplicationShutdown(
       for (const result of results) if (result.status === 'rejected') reportFailure(result.reason)
     }).finally(() => {
       finished = true
-      application.quit()
+      // 原生 will-quit 尚未退出时，微任务内的 quit 可能被 Electron 的重入保护忽略。
+      setImmediate(() => application.quit())
     })
   })
 }

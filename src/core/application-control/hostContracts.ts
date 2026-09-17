@@ -103,3 +103,5 @@ export const applicationCapabilityResultSchema = z.discriminatedUnion('ok', [
   }),
 ])
 export type ApplicationCapabilityResult = z.infer<typeof applicationCapabilityResultSchema>
+/** 失败分支：分类器与各域的失败钩子只允许产出这一支，不允许把成功结果混进错误路径。 */
+export type ApplicationCapabilityFailure = Extract<ApplicationCapabilityResult, { ok: false }>

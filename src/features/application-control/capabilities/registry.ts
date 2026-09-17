@@ -3,7 +3,7 @@ import { APPLICATION_DOMAINS } from '../applicationDomains'
 import { BUILTIN_APPLICATION_CAPABILITY_REGISTRY } from '@/core/application-control/builtinApplicationCapabilityRegistry'
 
 import { applicationCapabilityInvocationSchema, isNavigationOnlyCapability, type ApplicationCapabilityDefinition, type ApplicationCapabilityInvocation } from '@/core/application-control/applicationCapabilities'
-import type { ApplicationCapabilityResult } from '@/core/application-control/hostContracts'
+import type { ApplicationCapabilityFailure, ApplicationCapabilityResult, HostErrorCode } from '@/core/application-control/hostContracts'
 
 import { createLogger } from '@/core/logging'
 
@@ -163,7 +163,14 @@ function describeSchemaIssues(error: ZodError): string {
   return `${issues.join('；')}${omitted > 0 ? `；另有 ${omitted} 处` : ''}`.slice(0, 600)
 }
 
-function toFailure(error: unknown): ApplicationCapabilityResult {
+/**
+ * 调用方读一次目标、改一次参数就能自己走通的拒绝码。其余失败一律按未预期执行异常处理。
+ */
+const CALLER_CORRECTABLE_ERROR_CODES = new Set<HostErrorCode>([
+  'CONFLICT', 'INVALID_INPUT', 'NOT_FOUND', 'PROJECT_NOT_FOUND',
+])
+
+function toFailure(error: unknown): ApplicationCapabilityFailure {
   for (const domain of APPLICATION_DOMAINS) {
     const failure = domain.failure?.(error, toFailure)
     if (failure) return failure
@@ -209,6 +216,15 @@ function toFailure(error: unknown): ApplicationCapabilityResult {
   }
   if (message === 'NOT_FOUND' || message.endsWith('_NOT_FOUND')) {
     return { ok: false, error: { code: 'NOT_FOUND', message: '请求的应用对象不存在', recoverable: true } }
+  }
+  /*
+   * 注册表读取层已经把 provider 光秃秃的 NOT_FOUND 包成一句自带修正指引的话，带上原样回显的
+   * ref 和取稳定 id 的入口。它形如 `ENTITY_NOT_FOUND:<实体>:<id>（…）`，既不等于 NOT_FOUND
+   * 也不以 _NOT_FOUND 收尾，以前一路掉进兜底分支，被报成不可恢复的执行失败——调用方收到的
+   * 是"能力执行失败"而不是"这个引用不存在、去 list 取原值"。这里按原样保留那句指引。
+   */
+  if (/^[A-Z][A-Z_]*NOT_FOUND:/.test(message)) {
+    return { ok: false, error: { code: 'NOT_FOUND', message, recoverable: true } }
   }
   if (message === 'INVALID_INPUT' || message === 'VERSION_MISMATCH') {
     return { ok: false, error: { code: 'INVALID_INPUT', message: '应用能力参数无效', recoverable: true } }
@@ -263,19 +279,23 @@ export async function executeApplicationCapabilityResult(
     }
   } catch (error) {
     /*
-     * 预检失败是调用方可以自己改正的拒绝：参数写错、基线过期、乐观并发落败。
-     * 外部智能体接进来之后这类拒绝就是正常流量，记成 error 会让用户的错误日志被别人的
-     * 重试刷满，也会让任何覆盖并发契约的验收永远变红。**只降日志级别，返回给调用方的
-     * 失败事实一个字都没变**，未预期的执行异常仍然是 error。
+     * 调用方可以自己改正的拒绝：参数写错、引用不存在、基线过期、乐观并发落败。外部智能体
+     * 接进来之后这类拒绝就是正常流量，记成 error 会让用户的错误日志被别人的重试刷满，也会
+     * 让任何覆盖并发或引用契约的验收永远变红。**只降日志级别，返回给调用方的失败事实一个
+     * 字都没变**，未预期的执行异常仍然是 error。
+     *
+     * 级别直接由分类后的失败码决定，不再另立一套 error instanceof 判断：同一次拒绝，调用方
+     * 看到的结论和日志里的严重程度必须是同一个判断，否则两边迟早各走各的。
      */
-    const level = error instanceof ApplicationPreflightFailure ? 'warn' : 'error'
+    const failure = toFailure(error)
+    const level = CALLER_CORRECTABLE_ERROR_CODES.has(failure.error.code) ? 'warn' : 'error'
     logger[level]('capability.execute.failed', error, {
       event: 'application.capability.execute.failed',
       requestId: context.requestId,
       taskId: context.taskId,
       capabilityId: invocation.id,
     })
-    return toFailure(error)
+    return failure
   }
 }
 
