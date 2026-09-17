@@ -34,10 +34,24 @@ function createEmbeddedAgentScenes(context) {
           await new Promise(resolve => { releaseFirst = resolve })
         } else if (requests.length === 2) await new Promise(resolve => { releaseAnswer = resolve })
         const called = body.messages.some((message) => message.role === 'tool')
-        const delta = canvasGeneration ? (called ? { content: '画布生成任务已提交。' } : { tool_calls: [{ index: 0, id: 'call_canvas_generation', type: 'function',
-          function: { name: 'create_visible_generation_task', arguments: JSON.stringify({ operationId: require('node:crypto').randomUUID(), modelId: 'kie-gpt-image-2.5', prompt: '画布节点生成验收', mediaType: 'image', params: {} }) } }] }) : called ? { content: '已读取当前主题设置。' } : { tool_calls: [{ index: 0, id: 'call_read_theme', type: 'function',
-          function: { name: 'read_application_entity', arguments: JSON.stringify({ ref: { kind: 'settings.registry', id: 'singleton' }, propertyIds: ['interface.theme_tone'] }) } }] }
-        for (const item of [{ delta, finish_reason: null }, { delta: {}, finish_reason: called ? 'stop' : 'tool_calls' }]) {
+        const issued = (id) => body.messages.some((message) => Array.isArray(message.tool_calls)
+          && message.tool_calls.some((call) => call.id === id))
+        const call = (id, name, args) => ({ tool_calls: [{ index: 0, id, type: 'function',
+          function: { name, arguments: JSON.stringify(args) } }] })
+        /*
+         * 画布生成这一路刻意照真实模型的走法来：首轮界面只给基础工具，付费生成要先经
+         * load_application_tools 按任务加载，下一轮才调得动。直接点名调用会被挡下——那正是
+         * 渐进加载该有的行为，替身绕过去就等于没验。
+         */
+        const delta = canvasGeneration
+          ? (!issued('call_canvas_load') ? call('call_canvas_load', 'load_application_tools', { task: 'canvas_generation' })
+            : !issued('call_canvas_generation') ? call('call_canvas_generation', 'create_visible_generation_task',
+              { operationId: require('node:crypto').randomUUID(), modelId: 'kie-gpt-image-2.5', prompt: '画布节点生成验收', mediaType: 'image', params: {} })
+              : { content: '画布生成任务已提交。' })
+          : called ? { content: '已读取当前主题设置。' } : call('call_read_theme', 'read_application_entity',
+            { ref: { kind: 'settings.registry', id: 'singleton' }, propertyIds: ['interface.theme_tone'] })
+        // 收尾原因跟着本轮实际产出走：多一轮加载工具之后仍然是工具调用，不是结论。
+        for (const item of [{ delta, finish_reason: null }, { delta: {}, finish_reason: delta.tool_calls ? 'tool_calls' : 'stop' }]) {
           response.write(`data: ${JSON.stringify({ id: 'fixture-reply', object: 'chat.completion.chunk', created: 1, model: 'fixture', choices: [{ index: 0, ...item }] })}\n\n`)
         }
         response.end('data: [DONE]\n\n')
@@ -63,6 +77,15 @@ function createEmbeddedAgentScenes(context) {
         await page.keyboard.press('Control+Shift+A')
         const panel = page.getByRole('complementary', { name: '智能助手' })
         await panel.waitFor()
+        /*
+         * 两个助手场景共用同一次应用启动，会话是持久的。前一个场景留下的对话会让这里的过程
+         * 断言从半截状态起跑（首轮请求带着旧消息、进度条已经是完成态）。每个场景自己先起一段
+         * 干净会话，不依赖跑在前面的是谁。
+         */
+        if ((await page.evaluate(() => window.henjiNative.embeddedAgent.snapshot())).messages.length) {
+          await page.getByRole('button', { name: '新建对话', exact: true }).click()
+          await panel.getByText('从当前工作开始', { exact: true }).waitFor()
+        }
         const memoryIdentity = await authorizeMcpConnection(page, { name: '共享记忆验收', allowWrites: true })
         const memoryClient = await connectMcpClient(memoryIdentity.config, 'Shared memory fixture')
         try {
@@ -126,7 +149,8 @@ function createEmbeddedAgentScenes(context) {
         await page.getByRole('button', { name: '新建对话', exact: true }).click()
         await panel.getByText('从当前工作开始', { exact: true }).waitFor()
         await page.getByRole('button', { name: '对话历史', exact: true }).click()
-        await panel.getByRole('button', { name: /验收读取主题/ }).click()
+        // 同名历史可能不止一条（另一个助手场景也发过这句）；取最新那条，下面的 sessionId 断言会兜底核对选中的就是刚结束的会话。
+        await panel.getByRole('button', { name: /验收读取主题/ }).first().click()
         await panel.getByText('已读取当前主题设置。', { exact: true }).waitFor()
         assert.equal((await page.evaluate(() => window.henjiNative.embeddedAgent.snapshot())).sessionId, before.sessionId)
         await page.reload()
@@ -205,7 +229,16 @@ function createEmbeddedAgentScenes(context) {
         await page.getByRole('button', { name: '发送', exact: true }).click()
         await page.getByRole('button', { name: '发送', exact: true }).waitFor({ timeout: 60000 })
         assert.ok(requests.length > requestStart)
-        assert.ok(requests[requestStart].tools.some(tool => tool.function.name === 'create_visible_generation_task'), '开放权限后生成工具必须送到模型')
+        /*
+         * 首轮按当前界面只送基础工具，专用工具由模型经 load_application_tools 按需加载，所以
+         * 助手界面这一轮本来就不该铺开付费生成工具。这里核对的是"延后提供"而不是"被授权挡掉"：
+         * 加载入口在，且生成领域列得出来。付费生成真的能跑，由本场景后面那次真实画布生成证明。
+         */
+        const initialTools = requests[requestStart].tools.map(tool => tool.function.name)
+        const loader = requests[requestStart].tools.find(tool => tool.function.name === 'load_application_tools')
+        assert.ok(loader, `渐进加载入口缺失：${initialTools.join('、')}`)
+        assert.ok(loader.function.description.includes('generation'), `开放权限后生成领域必须可加载：${loader.function.description}`)
+        assert.equal(initialTools.includes('create_visible_generation_task'), false, '首轮不应直接铺开付费生成工具')
         console.log('[embedded-agent] 首轮工具数量与定义字符数', requests[requestStart].tools.length, JSON.stringify(requests[requestStart].tools).length)
         const user = requests[requestStart].messages.find((message) => message.role === 'user' && Array.isArray(message.content) && message.content.some((part) => part.type === 'image_url'))
         assert.ok(user, '图片必须实际到达模型请求')
@@ -281,6 +314,14 @@ function createEmbeddedAgentScenes(context) {
         assert.equal(generatedRequest.modelId, 'kie-gpt-image-2.5')
         assert.equal(generatedRequest.params.images.length, 1, '同一参考图的连线与本地引用不能重复发送')
         await capture('canvas-generating')
+        /*
+         * 任务在途时离开画布，回到工程列表：这时原工程一个画布都没挂载。结果该归发起那条消息的
+         * 原工程，不该因为没人看着就丢，也不该跟着当前界面走。切走之后才放结果回来。
+         */
+        await page.getByRole('button', { name: /返回项目|Back to Projects/ }).click()
+        await page.locator(`[data-project-id="${projectId}"]:visible`).waitFor({ state: 'visible', timeout: 15000 })
+        assert.equal(await page.locator('.react-flow').count(), 0, '离开画布后不应还挂着画布')
+        await context.settlePage(page, 400)
         await app.evaluate(() => globalThis.__finishCanvasGeneration())
         let persisted
         const resultDeadline = Date.now() + 15000
@@ -299,6 +340,9 @@ function createEmbeddedAgentScenes(context) {
         const result = persisted.nodes.find(item => item.data.generationSourceNodeId === generator.id && item.data.imageUrl)
         assert.ok(result)
         assert.ok(persisted.edges.some(edge => edge.source === generator.id && edge.target === result.id), '结果必须连在生成节点后')
+        // 再打开原工程，确认结果真的在用户看得到的地方，而不是只躺在存储里。
+        await page.locator(`[data-project-id="${projectId}"]:visible`).click()
+        await page.locator(`.react-flow__node[data-id="${result.id}"]`).waitFor({ state: 'visible', timeout: 15000 })
         await capture('canvas-completed')
         // 真实节点按钮再次生成：验证 UI 与 MCP 读取的是同一份 SQLite 任务。
         await page.keyboard.press('Control+Shift+A')
