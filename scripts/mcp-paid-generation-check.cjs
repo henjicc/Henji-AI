@@ -75,7 +75,10 @@ async function countProviderRequests(page, afterTimestamp, { requestId = null } 
         ...(requestId ? { requestId } : {}),
       })
       assert.equal(result.hasMore, false, '供应商请求日志超出本轮查询上限，不能证明请求次数')
-      counts[key] += result.events.filter((entry) => entry.event === event).length
+      counts[key] += result.events.filter((entry) => entry.event === event
+        // built 只数提交：同一事件名也用于「后端发起轮询请求」（GET），轮询不计费。
+        // 轮询的 requestId 有时与任务同号，只靠 requestId 过滤会把一次生成数成两次。
+        && (key !== 'built' || String(entry.context?.method ?? '').toUpperCase() === 'POST')).length
     }
   }
   return counts
