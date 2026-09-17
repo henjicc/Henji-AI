@@ -176,9 +176,16 @@ export class TranscodingTileOutputSink extends FileTileOutputSinkBase {
       return
     }
     await loadRequiredSharp(this.exportOptions.format)
+    /*
+     * 中间文件名只需要在同一目录里唯一，一个 UUID 就够。曾经把 staged 的整个 basename
+     * （本身已经是"资源名 + UUID + .tmp"）再拼一遍，文件名 139 字符，实测把整条路径顶到
+     * 268 字符——Node 按长路径照样写得出来，下面 sharp/libvips 用原生 API 读，
+     * 直接报 "Input file is missing"，表现成保存莫名其妙地失败。名字里带不带来源对排障
+     * 没有帮助：这个路径全程记在字段里，清理也只认这个字段。
+     */
     const intermediatePath = path.join(
       path.dirname(stagedPath),
-      `.${path.basename(stagedPath)}.${crypto.randomUUID()}.source.btf`,
+      `.${crypto.randomUUID()}.source.btf`,
     )
     this.intermediatePath = intermediatePath
     const writer = new IncrementalBigTiffWriter(intermediatePath, {

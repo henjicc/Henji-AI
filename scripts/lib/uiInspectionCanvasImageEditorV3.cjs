@@ -9,6 +9,12 @@ async function openCanvasImageEditorV3Fixture({
   transform = [1, 0, 0, 1, 0, 0],
   solidColor = null,
   foreground = null,
+  /*
+   * 后台文档验收要的是"数据已经种好、编辑器从没挂载过"这个初始状态：置 false 时种完就返回，
+   * 不打开工程也不双击节点。调用方拿到 projectId 与 documentRef 后自行 reload，让直写存储的
+   * 结果不被这次种数据时留下的内存工程实例掩盖。
+   */
+  openEditor = true,
 }) {
   const { projectId } = await context.seedAndOpenCanvasPanoramaProject(page)
   await page.getByRole('button', { name: /返回项目|Back to Projects/ }).click()
@@ -146,6 +152,7 @@ async function openCanvasImageEditorV3Fixture({
       foregroundResourceRef: foregroundSource?.resource.resourceRef ?? null,
       sourceGeometry: { width: managed.metadata.width, height: managed.metadata.height } }
   }, { projectId, width, height, label, sourceWidth, sourceHeight, transform, solidColor, foreground })
+  if (!openEditor) return { dialog: null, editor: null, fixture, projectId }
   await page.locator(`[data-project-id="${projectId}"]:visible`).click()
   const node = page.locator(`[data-layer-stack-node-id="${fixture.nodeId}"][data-layer-stack-status="editable-v3"]`)
   await node.waitFor({ state: 'visible', timeout: 12000 })

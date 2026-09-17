@@ -206,7 +206,14 @@ test('拒绝格式错误或低于项目下限的尺寸', () => {
 test('only 同时匹配场景 id、界面与中文场景名', () => {
   const generationScenes = filterScenes(UI_INSPECTION_SCENES, ['生成'])
   const focusScenes = filterScenes(UI_INSPECTION_SCENES, ['focus'])
-  assert.equal(generationScenes.length, 11)
+  /*
+   * 这里要守的是"三条匹配线索都生效"，不是某个定值。写死数量的话，每加一个生成相关场景
+   * 都要回来改这行，改完还看不出到底守住了什么。
+   */
+  assert.ok(generationScenes.some((scene) => scene.surface === '生成'), '按界面匹配失效')
+  assert.ok(generationScenes.some((scene) => scene.id.startsWith('generation-')), '按场景 id 匹配失效')
+  assert.ok(generationScenes.some((scene) => scene.surface !== '生成' && !scene.id.startsWith('generation-') && scene.name.includes('生成')),
+    '按中文场景名匹配失效')
   assert.deepEqual(focusScenes.map((scene) => scene.id).sort(), [
     'assets-search-focus',
     'assistant-focus',
@@ -352,13 +359,16 @@ test('输出目录相对项目根解析且绝对路径保持不变', () => {
 })
 
 test('场景覆盖应用界面和原生窗口且规则数固定为十一条', () => {
+  // 界面名是固定词汇表：新增界面要在这里登记，拼错或漏登记必须红。
   assert.deepEqual([...new Set(UI_INSPECTION_SCENES.map((scene) => scene.surface))].sort(), [
+    '剪贴板',
     '助手',
     '工具箱',
     '生成',
     '画布',
     '窗口',
     '设置',
+    '诊断',
     '资产库',
   ])
   assert.equal(UI_AUDIT_RULES.length, 11)
