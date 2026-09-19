@@ -88,13 +88,17 @@ describe('export_image_edit_target_to_canvas contract', () => {
       nodeRef: { kind: 'canvas.node', id: 'export-node' },
       edgeRef: { kind: 'canvas.edge', id: 'export-edge' },
       undoRef: 'undo-export', width: 400, height: 300, mediaType: 'image/png',
+      verification: { verified: true, condition: '持久结果已核对', target: input.projectRef },
       revision: 1, scopeRevisions: { canvas: 2, image_edit: 1 },
     }
     expect(exportCapability?.outputSchema.safeParse(output).success).toBe(true)
     expect(exportCapability?.createUndo?.(output)).toEqual({ kind: 'canvas_history', token: 'undo-export' })
     expect(exportCapability?.resolveObservedEffects?.(input, output)).toEqual([
-      expect.objectContaining({ effect: 'create', targetRefs: [output.nodeRef] }),
-      expect.objectContaining({ effect: 'create', targetRefs: [output.edgeRef] }),
+      expect.objectContaining({ effect: 'create', targetRefs: [output.nodeRef], verified: true }),
+      expect.objectContaining({ effect: 'create', targetRefs: [output.edgeRef], verified: true }),
     ])
+    expect(exportCapability?.resolveObservedEffects?.(input, {
+      ...output, verification: { ...output.verification, verified: false },
+    }).every(effect => !effect.verified)).toBe(true)
   })
 })
