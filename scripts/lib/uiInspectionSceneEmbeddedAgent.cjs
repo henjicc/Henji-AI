@@ -22,6 +22,7 @@ function createEmbeddedAgentScenes(context) {
       let canvasGeneration = false
       let releaseFirst
       let releaseAnswer
+      let releaseCanvasSubmission
       const server = createServer(async (request, response) => {
         const chunks = []
         for await (const chunk of request) chunks.push(Buffer.from(chunk))
@@ -38,6 +39,9 @@ function createEmbeddedAgentScenes(context) {
           && message.tool_calls.some((call) => call.id === id))
         const call = (id, name, args) => ({ tool_calls: [{ index: 0, id, type: 'function',
           function: { name, arguments: JSON.stringify(args) } }] })
+        if (canvasGeneration && issued('call_canvas_load') && !issued('call_canvas_generation')) {
+          await new Promise(resolve => { releaseCanvasSubmission = resolve })
+        }
         /*
          * 画布生成这一路刻意照真实模型的走法来：首轮界面只给基础工具，付费生成要先经
          * load_application_tools 按任务加载，下一轮才调得动。直接点名调用会被挡下——那正是
@@ -296,8 +300,19 @@ function createEmbeddedAgentScenes(context) {
           })
         }, path.resolve('resources/icons/icon.png'))
         await page.evaluate(() => window.henjiNative.ai.setProviderApiKey('kie', 'isolated-generation-fixture'))
+        const projectA = await page.evaluate(async () => {
+          const id = crypto.randomUUID()
+          const now = Date.now()
+          await window.henjiNative.storyboardProjects.upsertProjectRecord({
+            id, name: 'Pi 原消息目标验收 A', createdAt: now, updatedAt: now, nodeCount: 0,
+            nodesJson: '[]', edgesJson: '[]', viewportJson: '{"x":0,"y":0,"zoom":1}',
+            historyJson: '{"past":[],"future":[],"imagePool":[]}',
+          })
+          return id
+        })
         await page.reload()
         const { projectId } = await context.seedAndOpenCanvasPanoramaProject(page)
+        assert.notEqual(projectA, projectId)
         if (!await panel.isVisible()) await page.keyboard.press('Control+Shift+A')
         await page.getByRole('button', { name: '新建对话', exact: true }).click()
         await panel.getByText('从当前工作开始', { exact: true }).waitFor()
@@ -305,6 +320,15 @@ function createEmbeddedAgentScenes(context) {
         canvasGeneration = true
         await editor.fill('画布生成验收：在选中参考图旁生成图片')
         await page.getByRole('button', { name: '发送', exact: true }).click()
+        await waitSnapshot(() => typeof releaseCanvasSubmission === 'function')
+        // 消息已绑定 B，模型还没提交生成；先真正打开 A，再放行模型的工具调用。
+        await page.getByRole('button', { name: /返回项目|Back to Projects/ }).click()
+        await page.locator(`[data-project-id="${projectA}"]:visible`).click()
+        await page.locator('.react-flow').waitFor({ state: 'visible', timeout: 15000 })
+        assert.equal(await page.locator('.react-flow__node').count(), 0, 'A 必须是独立的空画布')
+        assert.equal((await page.evaluate(() => window.henjiNative.mcp.status())).enabled, false,
+          'Pi 后台提交不能依赖 MCP 服务')
+        releaseCanvasSubmission()
         const deadline = Date.now() + 20000
         while (!await app.evaluate(() => Boolean(globalThis.__canvasGenerationRequest))) {
           if (Date.now() > deadline) throw new Error('标准画布节点未发出生成请求：' + JSON.stringify(await page.evaluate(() => window.henjiNative.embeddedAgent.snapshot())))
@@ -313,14 +337,11 @@ function createEmbeddedAgentScenes(context) {
         const generatedRequest = await app.evaluate(() => globalThis.__canvasGenerationRequest)
         assert.equal(generatedRequest.modelId, 'kie-gpt-image-2.5')
         assert.equal(generatedRequest.params.images.length, 1, '同一参考图的连线与本地引用不能重复发送')
+        assert.equal(await page.locator('.react-flow__node').count(), 0, '后台提交不得切回 B 或在 A 建节点')
         await capture('canvas-generating')
         /*
-         * 任务在途时离开画布，回到工程列表：这时原工程一个画布都没挂载。结果该归发起那条消息的
-         * 原工程，不该因为没人看着就丢，也不该跟着当前界面走。切走之后才放结果回来。
+         * 用户继续停在 A，B 没有挂载；结果和原参考图必须仍归发起消息的 B。
          */
-        await page.getByRole('button', { name: /返回项目|Back to Projects/ }).click()
-        await page.locator(`[data-project-id="${projectId}"]:visible`).waitFor({ state: 'visible', timeout: 15000 })
-        assert.equal(await page.locator('.react-flow').count(), 0, '离开画布后不应还挂着画布')
         await context.settlePage(page, 400)
         await app.evaluate(() => globalThis.__finishCanvasGeneration())
         let persisted
@@ -340,7 +361,13 @@ function createEmbeddedAgentScenes(context) {
         const result = persisted.nodes.find(item => item.data.generationSourceNodeId === generator.id && item.data.imageUrl)
         assert.ok(result)
         assert.ok(persisted.edges.some(edge => edge.source === generator.id && edge.target === result.id), '结果必须连在生成节点后')
+        assert.equal(await page.locator('.react-flow__node').count(), 0, 'B 的完成结果不能出现在 A')
+        const untouchedA = await page.evaluate(id => window.henjiNative.storyboardProjects.getProjectRecord(id), projectA)
+        assert.deepEqual(JSON.parse(untouchedA.nodesJson), [], '后台任务不得污染 A 的存储')
+        assert.deepEqual(JSON.parse(untouchedA.edgesJson), [])
+        await capture('canvas-result-while-editing-a')
         // 再打开原工程，确认结果真的在用户看得到的地方，而不是只躺在存储里。
+        await page.getByRole('button', { name: /返回项目|Back to Projects/ }).click()
         await page.locator(`[data-project-id="${projectId}"]:visible`).click()
         await page.locator(`.react-flow__node[data-id="${result.id}"]`).waitFor({ state: 'visible', timeout: 15000 })
         await capture('canvas-completed')
