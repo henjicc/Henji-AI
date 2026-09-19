@@ -54,6 +54,17 @@ describe('应用重启后的生成任务收敛', () => {
     expect(settled).toEqual([])
   })
 
+  it('画布任务由原工程核对恢复，不按生成页快照收敛或抢占续查', () => {
+    const options = { __canvasGeneration: { version: 2, projectId: 'background-b', nodeId: 'source' } }
+    const { resumed, settled } = run([
+      task({ id: '任务号保存在画布节点', options }),
+      task({ id: '历史也有任务号', options, serverTaskId: 'server-b' }),
+      task({ id: '生成页自己的任务', serverTaskId: 'server-workspace' }),
+    ])
+    expect(resumed).toEqual(['生成页自己的任务'])
+    expect(settled).toEqual([])
+  })
+
   it('历史尚未加载完成时什么都不做，避免把在途任务误判成中断', () => {
     const handleContinuePolling = vi.fn(async (_task: GenerationTask) => {})
     const settleUnresumableTask = vi.fn((_task: GenerationTask) => {})

@@ -36,6 +36,7 @@ import {
 import { createMultiLayerDocumentLifecyclePort } from './multiLayerDocumentLifecycleService'
 import { withCanvasProjectRuntime } from './canvasProjectRuntime'
 import type { CanvasTransactionRuntime } from './canvasPersistenceService'
+import { readPersistedCanvasProjectSnapshot } from './canvasQueryService'
 
 const logger = createLogger('features.canvas.multi_layer_document_generation')
 
@@ -283,6 +284,11 @@ export interface MultiLayerDocumentTargetExportResult {
   width: number
   height: number
   mediaType: 'image/png'
+  verification: {
+    verified: boolean
+    condition: string
+    target: ApplicationRef & { kind: 'canvas.project' }
+  }
 }
 
 function exportTargetFromRef(
@@ -329,6 +335,12 @@ export function exportMultiLayerDocumentTargetToCanvas(
         target: exportTargetFromRef(input.targetRef),
         signal: input.signal,
       })
+      const saved = await readPersistedCanvasProjectSnapshot(input.projectRef.id)
+      const savedNode = saved.nodes.find(candidate => candidate.id === exported.nodeId)
+      const savedSource = saved.nodes.find(candidate => candidate.id === node.id)
+      const verified = savedNode?.data.imageUrl === exported.raster.imageUrl
+        && savedSource?.data.imageEditSession?.documentRef === session.documentRef
+        && saved.edges.some(edge => edge.id === exported.edgeId && edge.source === node.id && edge.target === exported.nodeId)
       return {
         projectRef: input.projectRef,
         sourceNodeRef: input.sourceNodeRef,
@@ -339,6 +351,11 @@ export function exportMultiLayerDocumentTargetToCanvas(
         width: exported.raster.width,
         height: exported.raster.height,
         mediaType: exported.raster.mediaType,
+        verification: {
+          verified,
+          condition: '从原工程持久存储核对导出图片、来源文档和连线',
+          target: input.projectRef,
+        },
       }
     })
   })

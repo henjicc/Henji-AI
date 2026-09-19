@@ -9,6 +9,7 @@ async function openCanvasImageEditorV3Fixture({
   transform = [1, 0, 0, 1, 0, 0],
   solidColor = null,
   foreground = null,
+  annotations = [],
   /*
    * 后台文档验收要的是"数据已经种好、编辑器从没挂载过"这个初始状态：置 false 时种完就返回，
    * 不打开工程也不双击节点。调用方拿到 projectId 与 documentRef 后自行 reload，让直写存储的
@@ -102,6 +103,10 @@ async function openCanvasImageEditorV3Fixture({
           visible: true, locked: false, opacity: 1, blendMode: 'normal',
           transform: payload.foreground.transform, mask: null,
           source: { kind: 'resource', resourceId: foregroundSource.resource.resourceRef }, tiles: {},
+        }] : []), ...(payload.annotations.length ? [{
+          id: 'reality-annotation-layer', name: '后台标注', type: 'annotation',
+          visible: true, locked: false, opacity: 1, blendMode: 'normal',
+          transform: [1, 0, 0, 1, 0, 0], mask: null, annotations: payload.annotations,
         }] : [])],
       },
       expectedRevision: 0,
@@ -151,7 +156,7 @@ async function openCanvasImageEditorV3Fixture({
       sourceResourceRef: managed.resource.resourceRef,
       foregroundResourceRef: foregroundSource?.resource.resourceRef ?? null,
       sourceGeometry: { width: managed.metadata.width, height: managed.metadata.height } }
-  }, { projectId, width, height, label, sourceWidth, sourceHeight, transform, solidColor, foreground })
+  }, { projectId, width, height, label, sourceWidth, sourceHeight, transform, solidColor, foreground, annotations })
   if (!openEditor) return { dialog: null, editor: null, fixture, projectId }
   await page.locator(`[data-project-id="${projectId}"]:visible`).click()
   const node = page.locator(`[data-layer-stack-node-id="${fixture.nodeId}"][data-layer-stack-status="editable-v3"]`)

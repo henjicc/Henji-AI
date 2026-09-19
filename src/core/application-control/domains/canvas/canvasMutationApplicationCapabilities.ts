@@ -937,6 +937,7 @@ const exportImageEditTargetToCanvas = defineApplicationCapability({
     width: z.number().int().positive(),
     height: z.number().int().positive(),
     mediaType: z.literal('image/png'),
+    verification: z.object({ verified: z.boolean(), condition: z.string(), target: canvasProjectRefSchema }),
   }),
   concurrencyKey: 'image_edit_export',
   resolveConcurrencyKey: (input) => [
@@ -966,12 +967,12 @@ const exportImageEditTargetToCanvas = defineApplicationCapability({
   resolveObservedEffects: (_input, output) => [
     {
       effect: 'create', entityTypes: ['canvas.node'], propertyIds: [],
-      targetRefs: [output.nodeRef], count: 1, verified: false,
+      targetRefs: [output.nodeRef], count: 1, verified: output.verification.verified,
       evidence: [`node:${output.nodeRef.id}`, `png:${output.width}x${output.height}`],
     },
     {
       effect: 'create', entityTypes: ['canvas.edge'], propertyIds: [],
-      targetRefs: [output.edgeRef], count: 1, verified: false,
+      targetRefs: [output.edgeRef], count: 1, verified: output.verification.verified,
       evidence: [`edge:${output.edgeRef.id}`],
     },
   ],

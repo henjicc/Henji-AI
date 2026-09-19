@@ -11,6 +11,7 @@ import { useProjectStore } from '@/stores/projectStore'
 import { imageEditV3LayerRef } from '@/features/imageEdit/v3/application/imageEditDocumentRefs'
 import { deleteIdleImageEditDocumentV3, requireImageEditDocumentInstanceV3 } from '@/features/imageEdit/v3/application/imageEditDocumentInstances'
 import { getProjectRecord } from '@/commands/projectState'
+import * as canvasQueries from '@/features/canvas/application/canvasQueryService'
 import { CANVAS_NODE_TYPES } from '@/features/canvas/domain/canvasNodes'
 import { createImageEditRasterLayerV3 } from '@/core/imageEdit/v3/documentFactory'
 import type { MultiLayerDocumentNodePort } from '@/features/canvas/application/multiLayerDocumentNodeApplicationContracts'
@@ -23,7 +24,7 @@ vi.mock('@/features/canvas/imageEditV3/multiLayerDocumentExportAdapter', () => (
 
 const disposals: Array<() => void> = []
 beforeEach(installHarnessNativeStorage)
-afterEach(() => { disposals.splice(0).reverse().forEach((dispose) => dispose()); uninstallHarnessNativeStorage() })
+afterEach(() => { disposals.splice(0).reverse().forEach((dispose) => dispose()); vi.restoreAllMocks(); uninstallHarnessNativeStorage() })
 
 async function setup() {
   const fixture = await createAttachedImageEditPersistenceFixture()
@@ -80,7 +81,8 @@ it('工程删除等待图片物化和原工程投影保存，关闭页面不撤�
   expect(useProjectStore.getState().currentProjectId).toBe(state.visibleProject)
 })
 
-it('未打开编辑器时从 B 的当前文档导出，正式入口返回可回读的完整工程引用', async () => {
+it.each(['complete', 'missing-edge', 'wrong-image', 'wrong-document'] as const)(
+  '未打开编辑器时从 B 导出，按持久结果核实完整引用：%s', async (storedResult) => {
   const state = await setup()
   state.bus.dispatch({ type: 'layer.add', commandId: 'exportable-layer', expectedRevision: 0,
     parentId: null, index: 0, layer: createImageEditRasterLayerV3('raster', '可导出图层') })
@@ -97,6 +99,21 @@ it('未打开编辑器时从 B 的当前文档导出，正式入口返回可回�
   })
   const harness = createApplicationHarness()
   disposals.push(harness.dispose)
+  if (storedResult !== 'complete') {
+    const readSaved = canvasQueries.readPersistedCanvasProjectSnapshot
+    vi.spyOn(canvasQueries, 'readPersistedCanvasProjectSnapshot').mockImplementation(async projectId => {
+      const saved = await readSaved(projectId)
+      if (storedResult === 'missing-edge') saved.edges = []
+      if (storedResult === 'wrong-image') {
+        for (const node of saved.nodes) if (node.id !== 'attached-node') node.data.imageUrl = 'henji-media://fixture/other.png'
+      }
+      if (storedResult === 'wrong-document') {
+        const source = saved.nodes.find(node => node.id === 'attached-node')!
+        source.data.imageEditSession = { ...source.data.imageEditSession!, documentRef: 'image-edit-v3:another-document' }
+      }
+      return saved
+    })
+  }
   const result = await harness.requireResult('export_image_edit_target_to_canvas', {
     projectRef: { kind: 'canvas.project', id: state.projectId },
     sourceNodeRef: { kind: 'canvas.node', id: `${state.projectId}:attached-node` },
@@ -104,6 +121,9 @@ it('未打开编辑器时从 B 的当前文档导出，正式入口返回可回�
   })
   expect(result.nodeRef).toMatchObject({ kind: 'canvas.node', id: expect.stringMatching(`^${state.projectId}:`) })
   expect(result.edgeRef).toMatchObject({ kind: 'canvas.edge', id: expect.stringMatching(`^${state.projectId}:`) })
+  expect(result.verification).toMatchObject({
+    verified: storedResult === 'complete', target: { kind: 'canvas.project', id: state.projectId },
+  })
   const nodeRef = result.nodeRef as { kind: 'canvas.node'; id: string }
   await expect(harness.read(nodeRef)).resolves.toMatchObject({ ref: expect.objectContaining({ id: nodeRef.id }) })
   expect(requireCanvasProjectInstance(state.projectId).store.getState().nodes).toHaveLength(2)
