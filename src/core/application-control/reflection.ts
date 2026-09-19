@@ -98,6 +98,8 @@ export const applicationPropertyDescriptorSchema = z.object({
   readOnlyReason: z.string().min(1).max(500).optional(),
   /** 会话控制会在提交后继续变化；这类属性以执行器证据验收，不做最终状态等值断言。 */
   verificationStrategy: z.enum(['state', 'execution']).optional(),
+  /** 仅显式声明的集合忽略顺序；时间线、节点排序等数组仍按顺序核对。 */
+  valueComparison: z.literal('unordered_set').optional(),
   relation: z.object({
     targetEntityTypes: z.array(applicationEntityTypeIdSchema).min(1).max(32),
     cardinality: z.enum(['one', 'optional', 'many']),

@@ -2,6 +2,21 @@ import { describe, expect, it, vi } from 'vitest'
 import { createFixture, createEngine, context, mutationStep, collectionStep, removalStep } from './engineTestFixture'
 
 describe('ApplicationControlExecutionEngine', () => {
+  it('仅声明为无序集合的属性忽略顺序和重复，缺项与多项仍失败', async () => {
+    const fixture = createFixture()
+    const { engine } = createEngine(fixture)
+    const descriptor = fixture.registry.getProperty('sample.links')!
+    const first = { kind: 'sample.link', id: 'link-1' }
+    const second = { kind: 'sample.link', id: 'link-2' }
+    const verify = (expected: Array<{ kind: string; id: string }>) => engine.verifyRecovery([
+      { kind: 'property_equals', target: { kind: 'sample.item', id: 'one' }, propertyId: 'sample.links', expected },
+    ], [], context())
+    expect((await verify([second, first])).verified).toBe(false)
+    descriptor.valueComparison = 'unordered_set'
+    expect((await verify([second, first, first])).verified).toBe(true)
+    expect((await verify([first])).verified).toBe(false)
+    expect((await verify([first, second, { kind: 'sample.link', id: 'extra' }])).verified).toBe(false)
+  })
   it('把 ref_list 的整体 set 在计划阶段编译为最小 append/remove 差异', async () => {
     const fixture = createFixture()
     const { engine, executor } = createEngine(fixture)

@@ -319,6 +319,7 @@ function describedProperty(property: Record<string, unknown>, context?: Capabili
     description: property.description,
     // 取值类型与范围是模型填参数的唯一依据。
     value: property.value,
+    ...(property.valueComparison ? { valueComparison: property.valueComparison } : {}),
     ...(property.nullable === true ? { nullable: true } : {}),
     ...(property.defaultValue !== undefined ? { defaultValue: property.defaultValue } : {}),
     // 权限名对模型没有用，它只需要知道这一条能不能写；能不能通过由网关判定。

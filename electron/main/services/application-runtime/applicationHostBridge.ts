@@ -91,7 +91,7 @@ export class ApplicationHostBridge {
     this.pending.delete(reply.requestId)
   }
   execute(callerId: string, capabilityId: LocalHostRequest['capabilityId'], input: Record<string, unknown>, signal: AbortSignal,
-    options: { operation?: OperationRecord; allowWrites?: boolean; allowDestructive?: boolean; allowPaid?: boolean } = {}): Promise<Record<string, unknown>> {
+    options: { operation?: OperationRecord; recoveryVerification?: OperationRecord['recoveryVerification']; allowWrites?: boolean; allowDestructive?: boolean; allowPaid?: boolean } = {}): Promise<Record<string, unknown>> {
     this.assertAuthorized(callerId)
     if (!this.ready || !this.host) return Promise.reject(new Error('应用尚未就绪，请稍后重试。'))
     if (signal.aborted) return Promise.reject(new Error('请求已取消。'))
@@ -117,7 +117,7 @@ export class ApplicationHostBridge {
         host.transport.send('application:host:request', { requestId, rendererEpoch: host.registration.rendererEpoch, callerId, capabilityId, input,
           allowWrites: options.allowWrites, allowDestructive: options.allowDestructive, allowPaid: options.allowPaid,
           operationId: options.operation ? applicationInvocationId(callerId, options.operation.operationId) : undefined, expectedRevisions: options.operation?.expectedRevisions,
-          recoveryVerification: options.operation?.recoveryVerification } satisfies LocalHostRequest)
+          recoveryVerification: options.operation?.recoveryVerification ?? options.recoveryVerification } satisfies LocalHostRequest)
       } catch (error) {
         this.operations?.interrupted(requestId, host.registration.rendererEpoch)
         this.pending.get(requestId)?.cleanup()

@@ -56,12 +56,26 @@ export class ApplicationToolDispatcher {
         const parsed = z.object({ operationId: z.string().uuid() }).strict().safeParse(args)
         if (!parsed.success) return applicationFailure(invalidInputMessage(parsed.error)!)
         const operation = this.operations.store.get(parsed.data.operationId, callerId)
-        const result = operation ? this.operations.result(operation) : { ok: false, executionState: 'not_found', message: '未找到已登记操作；这不是业务未执行的证明。' }
+        if (operation) {
+          try { await this.reconcileVerification(callerId, operation, signal) } catch { /* 核实不可用时保留原事实与屏障。 */ }
+        }
+        const result = operation ? this.operations.result(this.operations.store.get(operation.operationId, callerId)!) : { ok: false, executionState: 'not_found', message: '未找到已登记操作；这不是业务未执行的证明。' }
         return { ...result, ok: result.ok === true }
       }
       if ([...APPLICATION_WRITE_CAPABILITY_IDS, 'retry_application_operation_save'].some((id) => id === name) && this.operations) {
         try {
           const access = this.connections.access(callerId)
+          if (name === 'change_application_entities' && access.allowWrites && Array.isArray(args?.changes)) {
+            const targets = args.changes.map(change => change && typeof change === 'object' ? (change as { target?: unknown }).target : undefined)
+            for (const unresolved of this.operations.store.unresolved()) {
+              if (unresolved.state !== 'partial' || !unresolved.targetRefs?.some(ref => targets.some(target => {
+                const value = target as { kind?: string; id?: string } | undefined
+                return value?.kind === ref.kind && value.id === ref.id
+              }))) continue
+              // 可由当前获授权的调用者回读核对，绝不披露另一调用者的账本或执行其原修改。
+              try { await this.reconcileVerification(callerId, unresolved, signal) } catch { /* 继续让原屏障准确拒绝。 */ }
+            }
+          }
           const operation = name === 'retry_application_operation_save'
             ? this.operations.prepareSaveRecovery(callerId, args ?? {}, this.host.rendererEpoch, access)
             : this.operations.prepare(callerId, args ?? {}, this.host.rendererEpoch, access, APPLICATION_WRITE_CAPABILITY_IDS.find((id) => id === name))
@@ -110,5 +124,15 @@ export class ApplicationToolDispatcher {
         if (Buffer.byteLength(text) > MAX_RESULT) throw new Error('读取结果过大，请缩小字段或分页读取。')
         return { ...result, ok: result.ok === true }
       } catch (error) { return applicationFailure(error instanceof Error ? error.message : '应用读取失败，请稍后重试。') }
+  }
+  private async reconcileVerification(callerId: string, record: import('./operationStore').OperationRecord, signal: AbortSignal): Promise<void> {
+    await this.operations?.reconcileVerification(record, async proof => {
+      const result = await this.host.execute(callerId, 'get_current_application_context', {}, signal,
+        { ...this.connections.access(callerId), recoveryVerification: proof })
+      this.connections.assertActive(callerId)
+      if (signal.aborted) throw new Error('核实已取消。')
+      logger.info('原事务最终状态已重新核对', { event: 'application.operation.verification_rechecked', context: { verified: (result.data as { verification?: { verified?: boolean } } | undefined)?.verification?.verified === true } })
+      return result
+    })
   }
 }

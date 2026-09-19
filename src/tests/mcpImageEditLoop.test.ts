@@ -24,6 +24,7 @@ vi.mock('@/commands/assetLibrary', async importOriginal => ({ ...await importOri
   inspectAsset: async (id: string) => {
     const asset = io.assets.get(id)
     if (!asset) throw new Error('NOT_FOUND')
+    asset.inspectionStatus = 'ready'
     return structuredClone(asset)
   },
 }))
@@ -54,6 +55,7 @@ it('MCP 授权目录通过正式服务创建、读取并保存编辑预览，原
   const assetId = String(saved.data.assetId)
   expect(io.assets.get(assetId)).toMatchObject({ displayName: '旋转后的图片', filePath: 'C:/fixture/edited.png' })
   expect(saved.data.resultRefs).toEqual([{ kind: 'asset', id: assetId }])
+  expect(saved.data.verification).toMatchObject({ verified: true, target: { kind: 'asset', id: assetId } })
   const assetRead = await execute('read_application_entity', 1, { ref: { kind: 'asset', id: assetId }, propertyIds: ['asset.display_name'] })
   expect(assetRead.ok, JSON.stringify(assetRead)).toBe(true)
   expect(JSON.stringify(assetRead)).toContain('旋转后的图片')

@@ -75,7 +75,12 @@ export class ApplicationTransactionVerifier {
           continue
         }
         const actual = snapshot.properties[condition.propertyId]
-        if (!jsonEqual(actual, condition.expected)) {
+        const unordered = this.registry.getProperty(condition.propertyId)?.valueComparison === 'unordered_set'
+        const matches = unordered && Array.isArray(actual) && Array.isArray(condition.expected)
+          ? actual.every(value => (condition.expected as JsonValue[]).some(expected => jsonEqual(value, expected)))
+            && condition.expected.every(expected => actual.some(value => jsonEqual(value, expected)))
+          : jsonEqual(actual, condition.expected)
+        if (!matches) {
           unmetConditions.push(`属性验证失败：${condition.propertyId}`)
         } else {
           evidence.push({

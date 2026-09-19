@@ -1,4 +1,5 @@
 import { persistImageSource, readImageInfo } from '@/commands/image'
+import { inspectAsset } from '@/commands/assetLibrary'
 import {
   createMarkId,
   hasImageEditEffect,
@@ -115,13 +116,23 @@ export async function commitImageEdit(previewRef: string, displayName?: string):
       source: 'canvas',
       displayName: displayName?.trim() || `编辑图片-${Date.now()}`,
     })
+    // 创建已经发生：核实失败仍保留素材引用，不能把它伪装成零执行并重复创建。
+    let verified = false
+    try {
+      const persisted = await inspectAsset(asset.id)
+      verified = persisted.id === asset.id && persisted.filePath === asset.filePath
+        && persisted.mediaType === 'image' && persisted.inspectionStatus === 'ready'
+    } catch (error) {
+      logger.warn('编辑素材已创建，回读核实未完成', { event: 'image_edit.preview.commit.verification_failed', assetId: asset.id, error })
+    }
     deleteStoredImageEditPreview(previewRef)
     logger.info('图片编辑提交完成', {
       event: 'image_edit.preview.commit.completed',
       previewRef,
       assetId: asset.id,
     })
-    return { previewRef, assetId: asset.id, status: 'committed', resultRefs: [{ kind: 'asset', id: asset.id }] }
+    return { previewRef, assetId: asset.id, status: 'committed', resultRefs: [{ kind: 'asset', id: asset.id }],
+      verification: { verified, condition: '编辑图片已从正式素材存储回读并确认媒体可用', target: { kind: 'asset', id: asset.id } } }
   } catch (error) {
     logger.error('图片编辑提交失败', error, {
       event: 'image_edit.preview.commit.failed',

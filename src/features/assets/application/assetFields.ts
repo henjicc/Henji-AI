@@ -112,7 +112,7 @@ export const ASSET_FIELDS: ApplicationFieldDefinition<Record<string, unknown>, A
   },
   {
     propertyId: `${ASSET_ENTITY_TYPE}.tags`,
-    descriptor: assetDescriptor(ASSET_ENTITY_TYPE, 'tags', '标签', {
+    descriptor: { ...assetDescriptor(ASSET_ENTITY_TYPE, 'tags', '标签', {
       kind: 'json',
       schemaRef: {
         catalogVersion: APPLICATION_CAPABILITY_CATALOG_VERSION,
@@ -121,7 +121,7 @@ export const ASSET_FIELDS: ApplicationFieldDefinition<Record<string, unknown>, A
         version: 1,
         digest: digest(`property:${ASSET_TAGS_SCHEMA_REF_ID}`),
       },
-    }),
+    }), valueComparison: 'unordered_set' },
     read: (asset) => asJson(asset.tags ?? []),
     writer: {
       async write(draft, mutation) {
@@ -133,7 +133,7 @@ export const ASSET_FIELDS: ApplicationFieldDefinition<Record<string, unknown>, A
   },
   {
     propertyId: `${ASSET_ENTITY_TYPE}.library_refs`,
-    descriptor: assetDescriptor(ASSET_ENTITY_TYPE, 'library_refs', '所属集合', { kind: 'ref_list', refKinds: [LIBRARY_ENTITY_TYPE] }),
+    descriptor: { ...assetDescriptor(ASSET_ENTITY_TYPE, 'library_refs', '所属集合', { kind: 'ref_list', refKinds: [LIBRARY_ENTITY_TYPE] }), valueComparison: 'unordered_set' },
     read: (asset) => asJson((Array.isArray(asset.libraryIds) ? asset.libraryIds : []).map((id) => ({ kind: LIBRARY_ENTITY_TYPE, id }))),
     writer: {
       // 集合归属是全项目唯一不走 set 的属性：整体替换要分别 remove 旧集合、append 新集合。

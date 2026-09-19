@@ -3,6 +3,7 @@ import { BUILTIN_APPLICATION_CAPABILITY_REGISTRY } from '../../../../src/core/ap
 import { z } from 'zod'
 import type { LocalHostReply } from '../../../../src/core/application-control/localHostContracts'
 import { ApplicationOperationStore, operationDigest, type OperationRecord } from './operationStore'
+import { operationVerificationRecovery } from './operationVerificationRecovery'
 
 const refSchema = z.object({ kind: z.string(), id: z.string() }).passthrough()
 const envelopeSchema = z.object({ operationId: z.string().uuid(), baselineIds: z.array(z.string().uuid()).max(32).default([]) })
@@ -51,7 +52,7 @@ function operationAccess(record: TargetRecord): Map<string, 'append' | 'write'> 
   return targets
 }
 
-/** 业务事实独立于 HTTP 等待；读取不会关闭任何写操作的未知/部分状态。 */
+/** 业务事实独立于 HTTP 等待；未知写入不靠读取猜测，仅完整的最终状态证明可收敛验证失败。 */
 export class ApplicationOperationCoordinator {
   /**
    * `writableEntityTypes` 是公开业务写入范围，由渲染宿主从反射注册表派生后经注册送来
@@ -145,6 +146,15 @@ export class ApplicationOperationCoordinator {
   interrupted(requestId: string, rendererEpoch: string): void {
     const record = this.store.byRequest(requestId, rendererEpoch)
     if (record?.state === 'executing') this.store.save({ ...record, state: 'unknown' })
+  }
+  async reconcileVerification(record: OperationRecord, verify: (proof: NonNullable<OperationRecord['recoveryVerification']>) => Promise<Record<string, unknown>>): Promise<void> {
+    const proof = operationVerificationRecovery(record)
+    if (!proof) return
+    const result = await verify(proof)
+    if (result.ok !== true || object(object(result.data).verification).verified !== true) return
+    const current = this.store.get(record.operationId, record.callerId)
+    if (!current || current.state !== 'partial' || current.inputDigest !== record.inputDigest) return
+    this.store.save({ ...current, state: 'completed', verificationState: 'verified', recoveryResult: result })
   }
   complete(reply: LocalHostReply): void {
     const record = this.store.byRequest(reply.requestId, reply.rendererEpoch)

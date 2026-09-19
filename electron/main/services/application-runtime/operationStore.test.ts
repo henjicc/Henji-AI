@@ -33,6 +33,55 @@ function input(baselineId: string): Record<string, unknown> {
 }
 
 describe('应用原生操作记录与恢复', () => {
+  it.each([false, true])('新连接仅在全部目标重新核实=%s 后才能继续修改，不会重放旧事务', async (verified) => {
+    const f = fixture()
+    const original = f.coordinator.prepare(f.callerId, input(f.baseline), f.rendererEpoch, access)
+    f.store.save({ ...original, state: 'partial', result: { ok: false, error: { details: { transaction: { code: 'VERIFICATION_FAILED', partial: { completedStepIndexes: [0], compensatedStepIndexes: [], uncompensatedStepIndexes: [0] } } } } } })
+    const host = new ApplicationHostBridge(() => undefined, f.coordinator)
+    const execute = vi.spyOn(host, 'execute').mockImplementation(async (_caller, capability, _input, _signal, options) => {
+      if (capability === 'get_current_application_context') return { ok: true, data: { verification: { verified } } }
+      if (!options?.operation || options.operation.operationId === original.operationId) throw new Error('不得重放原写入')
+      f.store.save({ ...options.operation, state: 'completed', verificationState: 'verified', result: { ok: true, data: { verification: { verified: true } } } })
+      return { ok: true }
+    })
+    const dispatcher = new ApplicationToolDispatcher({ assertActive: () => undefined, access: () => ({ ...access, allowPaid: false }) }, host, f.coordinator)
+    const raw = input(f.baseline)
+    delete raw.baselineIds
+    const next = await dispatcher.call('new-caller', 'change_application_entities', raw, new AbortController().signal)
+    expect(next.ok).toBe(verified)
+    expect(execute).toHaveBeenCalledTimes(verified ? 2 : 1)
+    expect(f.store.get(original.operationId, f.callerId)?.state).toBe(verified ? 'completed' : 'partial')
+    expect(JSON.stringify(next)).not.toContain(original.operationId)
+  })
+  it('完整执行后的核实失败只重新读取，成功才解除屏障并保留原失败事实', async () => {
+    const f = fixture()
+    const original = f.coordinator.prepare(f.callerId, input(f.baseline), f.rendererEpoch, access)
+    const result = { ok: false, error: { details: { transaction: { code: 'VERIFICATION_FAILED', partial: { completedStepIndexes: [0], compensatedStepIndexes: [], uncompensatedStepIndexes: [0] } } } } }
+    f.store.save({ ...original, state: 'partial', result })
+    const verify = vi.fn().mockResolvedValue({ ok: true, data: { verification: { verified: false } } })
+    await f.coordinator.reconcileVerification(f.store.get(original.operationId, f.callerId)!, verify)
+    expect(() => f.coordinator.prepare(f.callerId, input(f.baseline), f.rendererEpoch, access)).toThrow('RECOVERY_REQUIRED')
+    verify.mockResolvedValueOnce({ ok: true, data: { verification: { verified: true } } })
+    await f.coordinator.reconcileVerification(f.store.get(original.operationId, f.callerId)!, verify)
+    const recovered = f.store.get(original.operationId, f.callerId)!
+    expect(recovered).toMatchObject({ state: 'completed', verificationState: 'verified', result, recoveryResult: { data: { verification: { verified: true } } } })
+    expect(() => f.coordinator.prepare(f.callerId, input(f.baseline), f.rendererEpoch, access)).not.toThrow()
+    expect(verify).toHaveBeenCalledWith(expect.objectContaining({ conditions: [expect.objectContaining({ kind: 'property_equals', expected: 'dark' })], evidence: [] }))
+  })
+
+  it('查询核实复用只读宿主与权限，其他调用者查询不泄漏原操作', async () => {
+    const f = fixture()
+    const original = f.coordinator.prepare(f.callerId, input(f.baseline), f.rendererEpoch, access)
+    f.store.save({ ...original, state: 'partial', result: { ok: false, error: { details: { transaction: { code: 'VERIFICATION_FAILED', partial: { completedStepIndexes: [0], compensatedStepIndexes: [], uncompensatedStepIndexes: [0] } } } } } })
+    const host = new ApplicationHostBridge(() => undefined, f.coordinator)
+    const execute = vi.spyOn(host, 'execute').mockResolvedValue({ ok: true, data: { verification: { verified: true } } })
+    const dispatcher = new ApplicationToolDispatcher({ assertActive: () => undefined, access: () => ({ ...access, allowPaid: false }) }, host, f.coordinator)
+    expect(await dispatcher.call('another', 'get_application_operation', { operationId: original.operationId }, new AbortController().signal)).toMatchObject({ executionState: 'not_found' })
+    expect(execute).not.toHaveBeenCalled()
+    expect(await dispatcher.call(f.callerId, 'get_application_operation', { operationId: original.operationId }, new AbortController().signal)).toMatchObject({ ok: true, executionState: 'completed' })
+    expect(execute).toHaveBeenCalledOnce()
+    expect(execute).toHaveBeenCalledWith(f.callerId, 'get_current_application_context', {}, expect.any(AbortSignal), expect.objectContaining({ recoveryVerification: expect.objectContaining({ conditions: expect.any(Array) }) }))
+  })
   it('调用者范围内去重，同键跨调用者生成独立业务身份且不能读取对方回执', () => {
     const f = fixture()
     const other = randomUUID()

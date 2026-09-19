@@ -193,6 +193,26 @@ function createMcpMediaChainScenes(context) {
         assert.deepEqual(handedSize, { width: CROP.width, height: CROP.height },
           `交给供应商的图片尺寸不是裁剪后的编辑产物：${JSON.stringify({ handed: handed[0], handedSize, CROP })}`)
 
+        const saved = await callTool(client, 'commit_image_edit', operationEnvelope([], { previewRef: previewRef.id, displayName: '链路编辑首帧' }))
+        assert.equal(saved.verificationState, 'verified', '素材已保存时必须返回核实成功')
+        const assetRef = saved.result.data.resultRefs[0]
+        const projectRef = { kind: 'canvas.project', id: projectB }
+        const changed = await callTool(client, 'change_application_entities', operationEnvelope([], {
+          summary: '跨工程与素材一起整理', changes: [
+            { kind: 'set_properties', entityType: 'canvas.project', target: projectRef, properties: { 'canvas.project.name': '链路后台工程已整理' } },
+            { kind: 'set_properties', entityType: 'asset', target: assetRef, properties: { 'asset.tags': ['镜头首帧', 'MCP创作', '晨光咖啡馆'] } },
+          ],
+        }))
+        assert.equal(changed.verificationState, 'verified', '标签存储排序不能把已完成跨域事务误判为失败')
+        const assetRead = await callTool(client, 'read_application_entity', { ref: assetRef, propertyIds: ['asset.tags'] })
+        assert.deepEqual([...assetRead.data.properties['asset.tags']].sort(), ['镜头首帧', 'MCP创作', '晨光咖啡馆'].sort())
+        const next = await callTool(client, 'change_application_entities', operationEnvelope([], {
+          summary: '再次修改同一工程，确认没有遗留屏障', changes: [
+            { kind: 'set_properties', entityType: 'canvas.project', target: projectRef, properties: { 'canvas.project.name': 'MCP链路后台工程' } },
+          ],
+        }))
+        assert.equal(next.verificationState, 'verified')
+
         // 全程不许把用户从 A 带走。
         assert.equal(await page.locator('.react-flow__node').count(), nodesInA, '后台链路不得改变用户当前打开的工程')
       } finally {

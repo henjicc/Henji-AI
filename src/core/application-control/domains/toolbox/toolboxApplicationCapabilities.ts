@@ -202,6 +202,7 @@ const commitImageEdit = defineApplicationCapability({
     assetId: z.string(),
     status: z.literal('committed'),
     resultRefs: z.array(z.object({ kind: z.literal('asset'), id: z.string().min(1) }).strict()),
+    verification: z.object({ verified: z.boolean(), condition: z.string(), target: z.object({ kind: z.literal('asset'), id: z.string().min(1) }).strict() }).strict(),
   }),
   concurrencyKey: 'image_edit',
   resolveConcurrencyKey: (input) => `image_edit:${input.previewRef}`,

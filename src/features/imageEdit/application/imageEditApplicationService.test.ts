@@ -9,6 +9,7 @@ const dependencies = vi.hoisted(() => ({
   persistImageSource: vi.fn(),
   exportImageEditDocument: vi.fn(),
   addMediaReferenceToLibrary: vi.fn(),
+  inspectAsset: vi.fn(),
 }))
 
 vi.mock('@/commands/image', () => ({
@@ -21,6 +22,7 @@ vi.mock('@/features/imageEdit/execution/browserImageEditExecution', () => ({
 vi.mock('@/features/assets/services/assetCollectionService', () => ({
   addMediaReferenceToLibrary: dependencies.addMediaReferenceToLibrary,
 }))
+vi.mock('@/commands/assetLibrary', () => ({ inspectAsset: dependencies.inspectAsset }))
 
 import { commitImageEdit, createImageEditPreview, resetImageEditApplicationStateForTests } from './imageEditApplicationService'
 import { createImageEditReflectionRegistrations, IMAGE_EDIT_ENTITY_TYPES } from './imageEditReflection'
@@ -35,7 +37,8 @@ describe('image edit application service', () => {
     dependencies.readImageInfo.mockResolvedValue({ width: 800, height: 600 })
     dependencies.exportImageEditDocument.mockResolvedValue('data:image/png;base64,edited')
     dependencies.persistImageSource.mockResolvedValue('C:\\managed\\edited.png')
-    dependencies.addMediaReferenceToLibrary.mockResolvedValue({ id: 'asset-edited' })
+    dependencies.addMediaReferenceToLibrary.mockResolvedValue({ id: 'asset-edited', filePath: 'C:\\managed\\edited.png' })
+    dependencies.inspectAsset.mockResolvedValue({ id: 'asset-edited', filePath: 'C:\\managed\\edited.png', mediaType: 'image', inspectionStatus: 'ready' })
   })
 
   it('编辑后直接作为生成参考，实际合成编辑步骤且不收藏、不删除预览', async () => {
@@ -187,7 +190,17 @@ describe('image edit application service', () => {
       assetId: 'asset-edited',
       status: 'committed',
       resultRefs: [{ kind: 'asset', id: 'asset-edited' }],
+      verification: { verified: true, condition: '编辑图片已从正式素材存储回读并确认媒体可用', target: { kind: 'asset', id: 'asset-edited' } },
     })
     await expect(commitImageEdit(String(preview.previewRef))).rejects.toThrow('NOT_FOUND')
+  })
+
+  it.each(['missing', 'wrong-file', 'read-error'])('素材提交后的 %s 不得被报告为核实成功或再次创建', async (failure) => {
+    const preview = await createImageEditPreview({ sourceRef: 'asset:source-1', source: 'henji-media://local/source-1', operations: [{ kind: 'flip_h' }] })
+    if (failure === 'read-error') dependencies.inspectAsset.mockRejectedValueOnce(new Error('READ_FAILED'))
+    else dependencies.inspectAsset.mockResolvedValueOnce({ id: 'asset-edited', filePath: failure === 'wrong-file' ? 'other.png' : 'C:\\managed\\edited.png', mediaType: 'image', inspectionStatus: failure === 'missing' ? 'missing' : 'ready' })
+    const result = await commitImageEdit(String(preview.previewRef))
+    expect(result).toMatchObject({ assetId: 'asset-edited', verification: { verified: false } })
+    expect(dependencies.addMediaReferenceToLibrary).toHaveBeenCalledTimes(1)
   })
 })
