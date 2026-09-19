@@ -13,12 +13,12 @@
 | **智能助手的任何改动**（能力、运行时、提示词、验证、排障、路线判断） | [docs/rules/assistant-goal.md](docs/rules/assistant-goal.md) + [docs/rules/assistant-status.md](docs/rules/assistant-status.md) |
 | 新增模块/服务、跨层调用、不确定逻辑该放前端还是后端、目录重构 | [docs/rules/architecture.md](docs/rules/architecture.md) |
 | 写任何 `.tsx` 界面代码、调颜色/圆角/阴影/层级/动效、"改了样式没生效" | [docs/rules/frontend-ui.md](docs/rules/frontend-ui.md) |
-| 新建或改造界面/页面骨架/面板/弹窗/侧栏/设置分区、按钮层级、分隔线 | skill `henji-ui-surface` |
+| 新建或改造界面/页面骨架/面板/弹窗/侧栏/设置分区、按钮层级、分隔线 | skill `henji-ui-surface`；若同时新增业务状态、操作或入口，再按下方应用能力行分级 |
 | 改动 `src/features/canvas/**`、节点 DOM、画布卡顿 | [docs/rules/canvas.md](docs/rules/canvas.md) |
 | 新建或改造画布节点 | skill `canvas-node-builder` + 上面的 canvas.md |
 | 传递图片/视频/音频 URL 或路径、接入新媒体消费方、排查 `Failed to fetch` | [docs/rules/media-url.md](docs/rules/media-url.md) |
 | 新增供应商/模型、改参数 schema、改请求构建/轮询/流式协议、核对 API/价格、发布 SDK | [docs/rules/model-adaptation.md](docs/rules/model-adaptation.md) + [packages/ai-sdk/docs/model-adaptation/README.md](packages/ai-sdk/docs/model-adaptation/README.md)（资料总索引）+ [文档采集手册.md](packages/ai-sdk/docs/model-adaptation/文档采集手册.md)（官方资料、事件契约与 SDK 首发唯一详细规范）+ skill `henji-model-adaptation` |
-| 新增/改造工作区、页面、浮层、工具箱工具、设置项、用户可查询数据、业务操作、权限、宿主上下文 | [docs/rules/assistant-capability.md](docs/rules/assistant-capability.md) + skill `henji-application-capability` |
+| 新增/改造工作区、页面/工具入口、工具箱工具、设置项、用户可查询数据、业务操作、长任务、稳定引用、权限、宿主上下文 | [docs/rules/assistant-capability.md](docs/rules/assistant-capability.md) + skill `henji-application-capability`；先做覆盖分级，命中 skill 不等于新增 MCP 工具 |
 | 涉及网络请求、文件读写、长耗时任务、导入导出、状态流转、用户可见失败 | [docs/rules/logging.md](docs/rules/logging.md) |
 | 改动 `electron/main/**` 或 `electron/preload/**`、加 IPC、打包配置、自动更新 | [docs/rules/electron-desktop.md](docs/rules/electron-desktop.md) |
 | **准备收尾任何改动前** | [docs/rules/testing.md](docs/rules/testing.md) |
