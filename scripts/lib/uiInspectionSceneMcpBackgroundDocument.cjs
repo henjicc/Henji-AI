@@ -210,6 +210,15 @@ function createMcpBackgroundDocumentScenes(context) {
       }, seeded.fixture.documentRef)
       await editor.getByRole('button', { name: '撤销' }).click()
       await editor.locator(`[data-layer-id="${SOURCE_LAYER_ID}"]`).getByText('后台文档底图').waitFor({ state: 'visible', timeout: 15000 })
+      // 再按原顺序重做两步，证明后台写入进入的是 B 文档自己的持久历史，而不是一次性回放。
+      await editor.getByRole('button', { name: '重做' }).click()
+      await editor.locator(`[data-layer-id="${SOURCE_LAYER_ID}"]`).getByText(BACKGROUND_NAME).waitFor({ state: 'visible', timeout: 15000 })
+      await editor.getByRole('button', { name: '重做' }).click()
+      await page.waitForFunction(async documentRef => {
+        const loaded = await window.henjiNative.imageEditorV3.loadDocument({ requestId: `verify-redo-${crypto.randomUUID()}`, documentRef })
+        return loaded.document.layers.find(layer => layer.id === 'reality-annotation-layer').annotations[0].stroke === 'blue'
+      }, seeded.fixture.documentRef)
+      await capture('redone-b')
       await settlePage(page, 400)
     },
   }]

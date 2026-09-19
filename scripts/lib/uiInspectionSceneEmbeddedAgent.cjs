@@ -23,6 +23,11 @@ function createEmbeddedAgentScenes(context) {
       let releaseFirst
       let releaseAnswer
       let releaseCanvasSubmission
+      const enteringMcp = await page.evaluate(async () => {
+        const state = await window.henjiNative.mcp.status()
+        return { enabled: state.enabled === true, port: state.port,
+          connectionIds: (state.connections ?? []).map(connection => connection.id) }
+      })
       const server = createServer(async (request, response) => {
         const chunks = []
         for await (const chunk of request) chunks.push(Buffer.from(chunk))
@@ -433,7 +438,25 @@ function createEmbeddedAgentScenes(context) {
           assert.equal(saved.results[0].data.isGenerating, false)
           await capture('ui-task-completed')
         } finally { await client.close() }
-      } finally { server.closeAllConnections(); await new Promise((resolve) => server.close(resolve)) }
+      } finally {
+        server.closeAllConnections()
+        await new Promise((resolve) => server.close(resolve))
+        // 每个场景只撤销自己新建的授权，并恢复进场时的服务开关；不得污染同一 profile 的后续场景。
+        await page.evaluate(async (entering) => {
+          let state = await window.henjiNative.mcp.status()
+          const keep = new Set(entering.connectionIds)
+          for (const connection of state.connections ?? []) {
+            if (!keep.has(connection.id)) await window.henjiNative.mcp.revoke({ id: connection.id })
+          }
+          state = await window.henjiNative.mcp.status()
+          if (state.enabled !== entering.enabled || state.port !== entering.port) {
+            if (state.enabled && state.port !== entering.port) {
+              await window.henjiNative.mcp.configure({ enabled: false, port: state.port })
+            }
+            await window.henjiNative.mcp.configure({ enabled: entering.enabled, port: entering.port })
+          }
+        }, enteringMcp)
+      }
     },
   })
   return [scene(false), scene(true)]

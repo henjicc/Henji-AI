@@ -380,7 +380,15 @@ export async function cancelCameraStageRenderTask(
     nodeId: identity.nodeId,
   })
   const confirmed = await readLiveTask(identity)
-  return { taskRef, status: 'cancellation_requested', resultRefs: [], verification: { verified: confirmed?.status === 'cancelled', condition: '原输出任务取消状态已确认', target: taskRef } }
+  if (confirmed && ['queued', 'running', 'cancelled'].includes(confirmed.status)) {
+    return { taskRef, status: 'cancellation_requested', resultRefs: [], verification: {
+      verified: true,
+      condition: confirmed.status === 'cancelled' ? '原输出任务取消状态已确认' : '原输出任务取消请求已提交',
+      target: taskRef,
+    } }
+  }
+  // 取消与终态可能竞速；若任务已经结束，返回权威终态，不能把已完成结果说成仍在取消。
+  return observedCancellationReply(taskRef, await observe(identity))
 }
 
 function observedCancellationReply(taskRef: ApplicationRef & { kind: 'camera_stage.render_task' }, observation: RenderTaskObservation): Record<string, unknown> {

@@ -51,6 +51,20 @@ function createMcpDomainScenes({ setupSettings, canvasFixtureProjectId, REFERENC
       try {
         const projectRef = { kind: 'canvas.project', id: projectId }
         const nodeRef = { kind: 'canvas.node', id: `${projectId}:${nodeId}` }
+        const sceneRef = { kind: 'camera_stage.scene', id: stageId }
+        const sceneBefore = await callTool(client, 'read_application_entity', {
+          ref: sceneRef, propertyIds: ['camera_stage.scene.sky_color'],
+        })
+        const skyColor = sceneBefore.data.properties['camera_stage.scene.sky_color'] === '#1e293b' ? '#334155' : '#1e293b'
+        const sceneChanged = await callTool(client, 'change_application_entities', operationEnvelope([sceneBefore], {
+          summary: '后台修改三维场景天空颜色', changes: [{ kind: 'set_properties', entityType: sceneRef.kind,
+            target: sceneRef, properties: { 'camera_stage.scene.sky_color': skyColor } }],
+        }))
+        assert.equal(sceneChanged.executionState, 'completed', JSON.stringify(sceneChanged))
+        assert.equal(sceneChanged.verificationState, 'verified', JSON.stringify(sceneChanged))
+        assert.equal((await callTool(client, 'read_application_entity', {
+          ref: sceneRef, propertyIds: ['camera_stage.scene.sky_color'],
+        })).data.properties['camera_stage.scene.sky_color'], skyColor)
         const reads = []
         for (const ref of [projectRef, nodeRef]) reads.push(await callTool(client, 'read_application_entity', { ref, propertyIds: [] }))
         const args = operationEnvelope(reads, { projectRef, nodeRef, outputKind: 'image', resolutionPreset: '720p', selectedTimeSec: 0.25 })
@@ -77,6 +91,29 @@ function createMcpDomainScenes({ setupSettings, canvasFixtureProjectId, REFERENC
         const results = JSON.parse(stored.nodesJson).filter((node) => node.type === 'exportImageNode')
         assert.equal(results.length, 1, '重传不得创建第二个渲染结果')
         assert.equal(observation.resultRefs[0].id, `${projectId}:${results[0].id}`)
+
+        // 第二条任务使用真实视频输出路径，并在仍处于 queued/running 时通过正式 MCP 取消。
+        const cancelReads = []
+        for (const ref of [projectRef, nodeRef]) cancelReads.push(await callTool(client, 'read_application_entity', { ref, propertyIds: [] }))
+        const cancelSubmission = await callTool(client, 'render_camera_stage_output', operationEnvelope(cancelReads, {
+          projectRef, nodeRef, outputKind: 'video', resolutionPreset: '720p',
+        }))
+        const cancelTaskRef = cancelSubmission.result.data.taskRef
+        const active = await callTool(client, 'get_camera_stage_render_task', { taskRef: cancelTaskRef })
+        assert.ok(['queued', 'running'].includes(active.data.status), `取消前任务已经越过活动态：${JSON.stringify(active)}`)
+        const cancellation = await callTool(client, 'cancel_camera_stage_render_task', operationEnvelope([active], { taskRef: cancelTaskRef }))
+        assert.equal(cancellation.result.data.status, 'cancellation_requested', JSON.stringify(cancellation))
+        let activeCancelled
+        for (const deadline = Date.now() + 15000; Date.now() < deadline;) {
+          activeCancelled = (await callTool(client, 'get_camera_stage_render_task', { taskRef: cancelTaskRef })).data
+          if (activeCancelled.status === 'cancelled') break
+          await page.waitForTimeout(100)
+        }
+        assert.equal(activeCancelled?.status, 'cancelled', JSON.stringify(activeCancelled))
+        await page.waitForTimeout(750)
+        const afterCancel = await page.evaluate((id) => window.henjiNative.storyboardProjects.getProjectRecord(id), projectId)
+        assert.equal(JSON.parse(afterCancel.nodesJson).filter((node) => node.type === 'exportImageNode' || node.type === 'exportVideoNode').length,
+          1, '取消后的迟到结果不得新增输出节点')
       } finally {
         await client.close()
         await disableMcp(page)
