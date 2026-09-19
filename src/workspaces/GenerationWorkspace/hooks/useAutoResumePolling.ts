@@ -49,6 +49,8 @@ export function useAutoResumePolling({
      */
     for (const task of tasks) {
       if (!RUNNING_STATUSES.has(task.status) || task.result) continue
+      // 画布任务的供应商任务号和结果归原工程节点；历史列表不拥有其恢复与终态判断。
+      if (task.options?.__canvasGeneration) continue
       if (inflightTaskIdsRef.current.has(task.id)) continue
       if (!resumableServerTaskId(task)) {
         settleUnresumableTask?.(task)

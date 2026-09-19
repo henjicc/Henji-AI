@@ -9,7 +9,7 @@
  * 判据全部落在正式存储、正式能力返回值和真实界面上，不看任何中间日志文本。
  */
 const assert = require('node:assert/strict')
-const { authorizeMcpConnection, callTool, connectMcpClient, disableMcp, operationEnvelope } = require('./uiInspectionMcpClient.cjs')
+const { authorizeMcpConnection, callTool, connectMcpClient, disableMcp, operationEnvelope, readAllMedia } = require('./uiInspectionMcpClient.cjs')
 const { openCanvasImageEditorV3Fixture } = require('./uiInspectionCanvasImageEditorV3.cjs')
 
 const SOURCE_LAYER_ID = 'reality-gpu-source-layer'
@@ -38,6 +38,8 @@ function createMcpBackgroundDocumentScenes(context) {
       // B：种好带 V3 文档的画布工程，但一次都不打开编辑器。
       const seeded = await openCanvasImageEditorV3Fixture({
         page, context, width: 640, height: 400, label: '后台文档底图', openEditor: false,
+        annotations: [{ id: 'background-rect', type: 'rect', x: 20, y: 20, width: 100, height: 80,
+          stroke: 'red', lineWidth: 6 }],
       })
       const step = (text) => console.log(`[MCP Reality] 后台文档：${text}`)
       step('夹具已种入 B 工程')
@@ -124,6 +126,52 @@ function createMcpBackgroundDocumentScenes(context) {
         assert.ok(projected.session, `B 工程节点丢了编辑会话：${JSON.stringify(projected)}`)
         assert.equal(projected.session.revision, 1, `画布预览没有跟上文档修订：${JSON.stringify(projected.session)}`)
         assert.equal(projected.session.documentRef, seeded.fixture.documentRef)
+        // 标注也必须通过原文档引用发现、修改、保存，而不是借用当前编辑器的文档。
+        const annotationRef = { kind: 'image_mark.annotation', id: `v3:${documentId}:reality-annotation-layer:background-rect` }
+        const annotations = await callTool(client, 'list_application_entities', { entityType: 'image_mark.annotation', limit: 50 })
+        assert.ok(annotations.data.refs.some(ref => ref.id === annotationRef.id))
+        const annotationRead = await callTool(client, 'read_application_entity', { ref: annotationRef,
+          propertyIds: ['image_mark.annotation.data'] })
+        assert.equal(annotationRead.data.properties['image_mark.annotation.data'].stroke, 'red')
+        const marked = await callTool(client, 'change_application_entities', operationEnvelope([annotationRead], {
+          summary: '后台修改 B 文档标注', changes: [{ kind: 'set_properties', entityType: annotationRef.kind,
+            target: annotationRef, properties: { 'image_mark.annotation.data': {
+              x: 40, y: 30, width: 120, height: 90, stroke: 'blue', lineWidth: 6,
+            } } }],
+        }))
+        assert.equal(marked.executionState, 'completed', JSON.stringify(marked))
+        const markedDocument = await page.evaluate(documentRef => window.henjiNative.imageEditorV3.loadDocument({
+          requestId: `verify-mark-${crypto.randomUUID()}`, documentRef,
+        }), seeded.fixture.documentRef)
+        const persistedMark = markedDocument.document.layers.find(layer => layer.id === 'reality-annotation-layer').annotations[0]
+        assert.equal(persistedMark.stroke, 'blue')
+        assert.equal(persistedMark.x, 40)
+        assert.equal((await readNodeSession(page, projectB, nodeId)).session.revision, markedDocument.document.revision)
+
+        const exported = await callTool(client, 'export_image_edit_target_to_canvas', operationEnvelope([], {
+          projectRef: { kind: 'canvas.project', id: projectB },
+          sourceNodeRef: { kind: 'canvas.node', id: `${projectB}:${nodeId}` }, targetRef: annotationRef,
+        }))
+        assert.equal(exported.executionState, 'completed', JSON.stringify(exported))
+        const output = exported.result.data
+        assert.equal(output.targetRef.id, annotationRef.id)
+        assert.ok(output.nodeRef.id.startsWith(`${projectB}:`))
+        const exportedMedia = await readAllMedia(client, output.nodeRef)
+        const { data: pixels, info } = await require('sharp')(exportedMedia.bytes).ensureAlpha().raw().toBuffer({ resolveWithObject: true })
+        assert.deepEqual([info.width, info.height], [output.width, output.height])
+        let bluePixels = 0
+        let redPixels = 0
+        for (let index = 0; index < pixels.length; index += 4) {
+          if (pixels[index + 3] < 128) continue
+          if (pixels[index + 2] > 180 && pixels[index] < 80) bluePixels += 1
+          if (pixels[index] > 180 && pixels[index + 2] < 80) redPixels += 1
+        }
+        assert.ok(bluePixels > 100, '导出必须包含后台修改后的蓝色标注')
+        assert.equal(redPixels, 0, '导出不能使用修改前的红色标注')
+        const projectedExport = await page.evaluate(id => window.henjiNative.storyboardProjects.getProjectRecord(id), projectB)
+        const exportId = output.nodeRef.id.slice(projectB.length + 1)
+        assert.ok(JSON.parse(projectedExport.nodesJson).some(node => node.id === exportId))
+        assert.ok(JSON.parse(projectedExport.edgesJson).some(edge => edge.source === nodeId && edge.target === exportId))
         await onProjectA('落盘核对后')
         step('后台写入与落盘核对完成')
         await capture('editing-a')
@@ -154,6 +202,12 @@ function createMcpBackgroundDocumentScenes(context) {
        * 说明后台写入是记进了这份文档自己的历史，而不是绕过历史直接改存储。
        */
       step('B 编辑器已打开且内容是后台改完的那份')
+      // 先撤销标注写入，再撤销此前的图层写入；导出画布节点不应插入文档的撤销栈。
+      await editor.getByRole('button', { name: '撤销' }).click()
+      await page.waitForFunction(async documentRef => {
+        const loaded = await window.henjiNative.imageEditorV3.loadDocument({ requestId: `verify-undo-${crypto.randomUUID()}`, documentRef })
+        return loaded.document.layers.find(layer => layer.id === 'reality-annotation-layer').annotations[0].stroke === 'red'
+      }, seeded.fixture.documentRef)
       await editor.getByRole('button', { name: '撤销' }).click()
       await editor.locator(`[data-layer-id="${SOURCE_LAYER_ID}"]`).getByText('后台文档底图').waitFor({ state: 'visible', timeout: 15000 })
       await settlePage(page, 400)
