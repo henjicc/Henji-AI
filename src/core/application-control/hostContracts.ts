@@ -28,7 +28,7 @@ export const hostContextSnapshotSchema = z.object({
   }).strict().optional(),
   workspace: z.object({
     id: z.enum(['generation', 'nodes', 'tools', 'assets']),
-    activeToolId: z.enum(['cameraStage', 'imageMark']).nullable(),
+    activeToolId: z.enum(['audioEdit', 'cameraStage', 'imageMark']).nullable(),
   }),
   project: z.object({
     id: z.string().min(1).nullable(),

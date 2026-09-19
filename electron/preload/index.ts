@@ -386,6 +386,15 @@ const cameraStageRenderApi: HenjiCameraStageRenderApi = {
 
 const audioApi: HenjiAudioApi = {
   extractSamples: (payload) => nativeInvoke('audio:extractSamples', payload),
+  listEditProjects: () => nativeInvoke('audioEdit:projects:list'),
+  createEditProject: (payload) => nativeInvoke('audioEdit:projects:create', payload),
+  getEditProject: (projectId) => nativeInvoke('audioEdit:projects:get', { projectId }),
+  saveEditProject: (project) => nativeInvoke('audioEdit:projects:save', { project }),
+  listAsrModels: () => nativeInvoke('audioEdit:asr:list'),
+  transcribeEditProject: (payload) => nativeInvoke('audioEdit:asr:transcribe', payload),
+  exportEditProject: (payload) => nativeInvoke('audioEdit:export', payload),
+  listEditProcessors: () => nativeInvoke('audioEdit:processors:list'),
+  prepareEditPreviewChunk: (payload) => nativeInvoke('audioEdit:preview:chunk', payload),
 }
 
 const loggingApi: HenjiLoggingApi = {

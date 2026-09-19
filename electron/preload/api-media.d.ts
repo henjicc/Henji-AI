@@ -327,4 +327,31 @@ export interface HenjiAudioExtractSamplesResult {
 
 export interface HenjiAudioApi {
   extractSamples(payload: { source: string; bucketCount: number }): Promise<HenjiAudioExtractSamplesResult>
+  listEditProjects(): Promise<AudioEditProjectSummary[]>
+  createEditProject(payload: AudioEditProjectCreateRequest): Promise<AudioEditProjectDocument>
+  getEditProject(projectId: string): Promise<AudioEditProjectDocument | null>
+  saveEditProject(project: AudioEditProjectDocument): Promise<AudioEditProjectDocument>
+  listAsrModels(): Promise<Array<{
+    id: string
+    providerId: string
+    configured: boolean
+    timestamps: boolean
+    longAudio: boolean
+  }>>
+  transcribeEditProject(payload: AudioEditTranscriptionRequest): Promise<AudioEditTranscriptionResult>
+  exportEditProject(payload: AudioEditExportRequest): Promise<AudioEditExportResult>
+  listEditProcessors(): Promise<AudioEditProcessorDescriptor[]>
+  prepareEditPreviewChunk(payload: AudioEditPreviewChunkRequest): Promise<AudioEditPreviewChunk>
 }
+import type {
+  AudioEditExportRequest,
+  AudioEditExportResult,
+  AudioEditProcessorDescriptor,
+  AudioEditPreviewChunk,
+  AudioEditPreviewChunkRequest,
+  AudioEditProjectCreateRequest,
+  AudioEditProjectDocument,
+  AudioEditProjectSummary,
+  AudioEditTranscriptionRequest,
+  AudioEditTranscriptionResult,
+} from '../../src/core/audioEdit/types'

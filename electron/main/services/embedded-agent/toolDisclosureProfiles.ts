@@ -24,6 +24,7 @@ export function disclosureSurface(context: string): string {
     if (typeof value?.surface?.id === 'string') return value.surface.id
     if (value?.workspace?.activeToolId === 'cameraStage') return 'tool.camera_stage'
     if (value?.workspace?.activeToolId === 'imageMark') return 'tool.image_edit'
+    if (value?.workspace?.activeToolId === 'audioEdit') return 'tool.audio_edit'
     return value?.workspace?.id === 'nodes' ? 'workspace.canvas' : `workspace.${value?.workspace?.id ?? 'unknown'}`
   } catch { return 'workspace.unknown' }
 }
@@ -34,6 +35,7 @@ export function surfaceProfile(surface: string): { tools: string[]; guidance: st
   if (surface === 'workspace.generation') return { tools: ['search_models'], guidance: '当前为生成页。生成任务加载 task=generation；模型参数按所选模型读取。' }
   if (surface === 'tool.camera_stage') return { tools: ['get_camera_stage_project'], guidance: '当前为三维场景。普通属性走通用实体，场景算法与渲染按需加载 camera_stage 领域。' }
   if (surface === 'tool.image_edit') return { tools: [], guidance: '当前为图片编辑。图层普通读写走通用实体，编辑算法、预览及保存按需加载 image_edit 领域。' }
+  if (surface === 'tool.audio_edit') return { tools: [], guidance: '当前为口播剪辑。工程、词块与建议走通用实体，转写、分析、预览和导出按需加载 audio_edit 领域。' }
   if (surface.startsWith('settings.')) return { tools: ['search_application_settings'], guidance: '当前为设置。先定位需要的设置属性，再通过通用实体读取和修改。' }
   return { tools: [], guidance: '按当前界面与用户任务使用通用实体；缺少专用操作时再按领域或工具名加载。' }
 }

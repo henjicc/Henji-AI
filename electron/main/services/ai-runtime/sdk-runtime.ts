@@ -59,6 +59,9 @@ export const electronTransport: Transport = createDiagnosticTransport((url, init
 export const electronCredentialStore: CredentialStore = {
   get(scope: CredentialScope, providerId: string): string | undefined {
     if (scope === 'generation') return getAiProviderApiKey(providerId) ?? undefined
+    // 语音识别与生成同属供应商能力，复用用户已填写的供应商正式凭据。
+    // 不另造一套 speech-recognition 密钥槽，否则界面会显示“已配置”而执行时读不到。
+    if (scope === 'speech-recognition') return getAiProviderApiKey(providerId) ?? undefined
     if (scope === 'llm') return getLlmProviderApiKey(providerId) ?? undefined
     return getKey(scope, providerId) ?? undefined
   },

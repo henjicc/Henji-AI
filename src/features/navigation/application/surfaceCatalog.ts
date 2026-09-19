@@ -17,7 +17,7 @@ export interface ApplicationSurfaceDefinition {
   id: ApplicationSurfaceId
   kind: 'workspace' | 'tool' | 'settings' | 'overlay'
   workspace?: WorkspaceId
-  toolId?: 'cameraStage' | 'imageMark'
+  toolId?: 'audioEdit' | 'cameraStage' | 'imageMark'
   settingsTarget?: SettingsNavigationTarget
   acceptedRefKinds: readonly string[]
   openPolicy: SurfaceOpenPolicy
@@ -72,6 +72,11 @@ const surfaceDefinitions = [
   {
     id: 'tool.image_edit', kind: 'tool', workspace: 'tools', toolId: 'imageMark', ...immediate,
     acceptedRefKinds: ['image_edit.document', 'image_edit.layer', 'generation.result', 'asset'],
+    openPolicy: 'after_target_resolved',
+  },
+  {
+    id: 'tool.audio_edit', kind: 'tool', workspace: 'tools', toolId: 'audioEdit', ...immediate,
+    acceptedRefKinds: ['audio_edit.project', 'audio_edit.transcript_block', 'audio_edit.suggestion', 'audio_edit.render'],
     openPolicy: 'after_target_resolved',
   },
   {

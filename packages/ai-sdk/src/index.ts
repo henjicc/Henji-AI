@@ -43,3 +43,11 @@ export * from './llm'
 // 开放能力模块协议与生成/LLM 执行内核解耦；ASR/OCR 等新种类无需改动根 client switch。
 export * from './capabilities'
 export * from './discovery'
+
+// Electron 主进程使用经典 Node 模块解析，无法可靠解析 package exports 子路径。
+// 把已经公开在子路径的非实时 ASR 模块同时从根入口导出，供正式宿主组合使用。
+export * from './capabilities/speech-recognition'
+export * from './capabilities/speech-recognition/bailian'
+export * from './capabilities/speech-recognition/volcengine'
+export * from './capabilities/speech-recognition/siliconflow'
+export * from './capabilities/speech-recognition/groq'

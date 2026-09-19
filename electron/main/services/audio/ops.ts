@@ -1,60 +1,61 @@
-import { execFileAsyncBuffer, resolveLocalMediaPath } from '../media/shared'
-import { loadFfmpegPath } from '../video/ffmpeg-loader'
+import { execFile, spawn } from 'node:child_process'
+
+import { resolveLocalMediaPath } from '../media/shared'
+import { loadFfmpegPath, loadFfprobePath } from '../video/ffmpeg-loader'
 import type { ExtractAudioSamplesResultDto } from './types'
 
 const PCM_SAMPLE_RATE = 8000
 const PCM_MAX_AMPLITUDE = 32768
 
-/**
- * 重采样到 8kHz 单声道 PCM 后按 bucketCount 分桶算 RMS/峰值（÷32768 归一化到 0~1）。
- * 只做"重解码+分桶"这一步，百分位归一化/幂次/平滑等展示曲线调整留在渲染层
- * （见 useAudioWaveform.ts 的 postProcessWaveform），避免把浮点算法整体搬到 Node
- * 还要保证两边数值完全一致的风险。数值上与原渲染层 Web Audio 解码不完全等价
- * （重采样丢失了原始采样率/立体声细节），目标是视觉观感一致，不是逐比特一致。
- */
+function probeDuration(binary: string, source: string): Promise<number> {
+  return new Promise((resolve, reject) => {
+    execFile(binary, ['-v', 'error', '-show_entries', 'format=duration', '-of', 'default=nw=1:nk=1', source], { maxBuffer: 1024 * 1024 }, (error, stdout, stderr) => {
+      if (error) return reject(new Error(`ffprobe failed: ${error.message}\n${stderr}`))
+      const duration = Number(stdout.trim())
+      if (!Number.isFinite(duration) || duration <= 0) return reject(new Error('Audio source duration is unavailable'))
+      resolve(duration)
+    })
+  })
+}
+
+/** 流式降采样并直接聚合固定数量的峰值桶；一小时素材不会在主进程保留整段 PCM。 */
 export async function extractAudioSamples(source: string, bucketCount: number): Promise<ExtractAudioSamplesResultDto> {
-  const ffmpegPath = await loadFfmpegPath()
-  const localPath = await resolveLocalMediaPath(source)
-
-  const { stdout } = await execFileAsyncBuffer(ffmpegPath, [
-    '-i', localPath,
-    '-f', 's16le',
-    '-acodec', 'pcm_s16le',
-    '-ar', String(PCM_SAMPLE_RATE),
-    '-ac', '1',
-    '-v', 'quiet',
-    'pipe:1',
+  const [ffmpegPath, ffprobePath, localPath] = await Promise.all([
+    loadFfmpegPath(), loadFfprobePath(), resolveLocalMediaPath(source),
   ])
-
-  const sampleCount = Math.floor(stdout.length / 2)
-  if (sampleCount === 0) {
-    throw new Error('Audio source has no decodable samples')
-  }
-
+  const durationSeconds = await probeDuration(ffprobePath, localPath)
   const bucketCountSafe = Math.max(1, Math.floor(bucketCount))
-  const step = Math.max(1, Math.floor(sampleCount / bucketCountSafe))
-  const rms: number[] = []
-  const peak: number[] = []
+  const expectedSamples = Math.max(1, Math.round(durationSeconds * PCM_SAMPLE_RATE))
+  const sumSquares = new Float64Array(bucketCountSafe)
+  const peaks = new Float64Array(bucketCountSafe)
+  const counts = new Uint32Array(bucketCountSafe)
 
-  for (let bucket = 0; bucket < bucketCountSafe; bucket += 1) {
-    const start = bucket * step
-    const end = Math.min(sampleCount, start + step)
-    let sumSquares = 0
-    let peakValue = 0
-    let count = 0
-    for (let sampleIndex = start; sampleIndex < end; sampleIndex += 1) {
-      const value = Math.abs(stdout.readInt16LE(sampleIndex * 2)) / PCM_MAX_AMPLITUDE
-      sumSquares += value * value
-      count += 1
-      if (value > peakValue) peakValue = value
-    }
-    rms.push(count > 0 ? Math.sqrt(sumSquares / count) : 0)
-    peak.push(peakValue)
-  }
+  await new Promise<void>((resolve, reject) => {
+    const child = spawn(ffmpegPath, ['-i', localPath, '-f', 's16le', '-acodec', 'pcm_s16le', '-ar', String(PCM_SAMPLE_RATE), '-ac', '1', '-v', 'quiet', 'pipe:1'], { stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true })
+    let sampleIndex = 0
+    let remainder: Buffer | null = null
+    const stderr: Buffer[] = []
+    child.stderr.on('data', (chunk: Buffer) => stderr.push(chunk))
+    child.stdout.on('data', (chunk: Buffer) => {
+      const data = remainder ? Buffer.concat([remainder, chunk]) : chunk
+      const byteLength = data.byteLength - data.byteLength % 2
+      for (let offset = 0; offset < byteLength; offset += 2) {
+        const value = Math.abs(data.readInt16LE(offset)) / PCM_MAX_AMPLITUDE
+        const bucket = Math.min(bucketCountSafe - 1, Math.floor(sampleIndex * bucketCountSafe / expectedSamples))
+        sumSquares[bucket] += value * value
+        counts[bucket] += 1
+        if (value > peaks[bucket]) peaks[bucket] = value
+        sampleIndex += 1
+      }
+      remainder = byteLength < data.byteLength ? data.subarray(byteLength) : null
+    })
+    child.once('error', reject)
+    child.once('close', (code) => code === 0 ? resolve() : reject(new Error(`ffmpeg failed (${code}): ${Buffer.concat(stderr).toString('utf8')}`)))
+  })
 
   return {
-    rms,
-    peak,
-    durationSeconds: sampleCount / PCM_SAMPLE_RATE,
+    rms: Array.from(sumSquares, (sum, index) => counts[index] > 0 ? Math.sqrt(sum / counts[index]) : 0),
+    peak: Array.from(peaks),
+    durationSeconds,
   }
 }

@@ -131,3 +131,5 @@ nul
 .canvas-visual/
 /.starter-kit/
 /.artifacts/
+/.tmp/
+/native/**/target/

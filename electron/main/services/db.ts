@@ -4,6 +4,7 @@ import fs from 'node:fs'
 import Database from 'better-sqlite3'
 import { initializeAssistantMemorySchema } from './assistant/storageSchema'
 import { initializeApplicationOperationSchema } from './application-runtime/operationStore'
+import { initializeAudioEditSchema } from './audio-edit/schema'
 
 export type SqlBindValue = string | number | boolean | null | Uint8Array
 
@@ -234,6 +235,7 @@ export function initializeSchema(conn: Database.Database): void {
   ensureColumn(conn, 'camera_stage_projects', 'cover_path', 'TEXT')
   initializeAssistantMemorySchema(conn)
   initializeApplicationOperationSchema(conn)
+  initializeAudioEditSchema(conn)
 }
 
 /**

@@ -13,6 +13,8 @@ extraResources:
     to: resources/camera-stage
   - from: resources/assistant-skills
     to: resources/assistant-skills
+  - from: native/audio-worker/target/release/henji-audio-worker.exe
+    to: resources/henji-audio-worker.exe
 asarUnpack:
   - node_modules/better-sqlite3/**
   - node_modules/sharp/**

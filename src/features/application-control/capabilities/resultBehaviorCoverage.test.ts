@@ -48,6 +48,10 @@ const RESULT_SCENARIOS: Record<string, Scenario[]> = {
     { file: 'src/features/cameraStage/application/cameraStageStateKeyframeAnimationResult.test.ts', title: '摄像机位置、旋转与 fov 写入会自动记录完整状态关键帧，同一时间只更新不重复' },
     { file: 'src/features/cameraStage/application/cameraStageArchitectureResult.test.ts', title: '建模写入同步全部状态关键帧且不产生意外动画' },
   ],
+  audio_edit: [
+    { file: 'src/features/audioEdit/application/audioEditReflectionResult.test.ts', title: '通过通用 change 修改工程名并从正式口播工程状态读回' },
+    { file: 'src/features/audioEdit/application/audioEditReflectionResult.test.ts', title: '通过通用 change 删除词块并让成片映射同步缩短' },
+  ],
 }
 
 const RESULT_SCENARIO_BASELINE: Record<keyof typeof RESULT_SCENARIOS, number> = {
@@ -59,6 +63,7 @@ const RESULT_SCENARIO_BASELINE: Record<keyof typeof RESULT_SCENARIOS, number> = 
   image_mark: 3,
   image_edit: 3,
   camera_stage: 3,
+  audio_edit: 2,
 }
 
 function writableDomains(): string[] {

@@ -1,6 +1,6 @@
 export const APPLICATION_SURFACE_IDS = [
   'workspace.generation', 'workspace.canvas', 'workspace.tools', 'workspace.assets',
-  'tool.image_edit', 'tool.camera_stage',
+  'tool.image_edit', 'tool.camera_stage', 'tool.audio_edit',
   'settings.general', 'settings.general.basic', 'settings.general.onboarding', 'settings.storage', 'settings.providers_models', 'settings.upload',
   'settings.general.behavior', 'settings.general.maintenance', 'settings.general.mcp',
   'settings.models.assistant', 'settings.assistant_preferences', 'settings.assistant_skills',
@@ -52,7 +52,7 @@ const NATIVE_MEDIA_SURFACES: readonly string[] = [
   'workspace.generation', 'workspace.assets', 'overlay.assets',
 ]
 const SPECIALIZED_REGION_SURFACES: readonly string[] = [
-  'tool.camera_stage', 'tool.image_edit', 'workspace.canvas',
+  'tool.camera_stage', 'tool.image_edit', 'tool.audio_edit', 'workspace.canvas',
 ]
 // 助手偏好分区含用户指令编辑器和会带出本地路径的状态行，用户可能在其中写入凭据；
 // 文本链路的脱敏管不到截图，因此与密钥、存储路径同等对待。

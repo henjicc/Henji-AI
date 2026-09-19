@@ -15,7 +15,7 @@ import { useCameraStageStore } from '@/features/cameraStage/store/cameraStageSto
 import { getPlatform } from '@/platform/runtime';
 import { registerPersistedImageEditTestSession } from './imageEditPersistenceTestSession';
 import { loadRealModelsIntoRegistry } from './loadRealModels';
-import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from './harnessNativeStorage';
+import { installHarnessNativeStorage, registerHarnessAudioEditProject, uninstallHarnessNativeStorage } from './harnessNativeStorage';
 import { createApplicationHarness } from './applicationHarness';
 
 beforeAll(async () => { installHarnessNativeStorage(); await loadRealModelsIntoRegistry() })
@@ -37,6 +37,11 @@ it('所有已登记写域均经公共授权入口修改、正式读回并核对�
       kind: 'create_items', entityType: 'asset.library', parent: { kind: 'asset.catalog', id: 'default' },
       items: [{ properties: { 'asset.library.name': '公共素材回环' } }],
     }] })
+    registerHarnessAudioEditProject({
+      id: 'audio-loop', name: '公共口播回环', referenceScript: '', transcript: [], suggestions: [], vstEnabled: false,
+      source: { mediaType: 'audio', sourcePath: 'fixture.wav', audioPath: 'fixture.wav', durationFrames: 48_000, sampleRate: 48_000, channels: 1 },
+      createdAt: 1, updatedAt: 1, revision: 1,
+    })
     const first = async (entityType: string): Promise<ApplicationRef> => {
       const result = await app.requireResult('list_application_entities', { entityType })
       const refs = result.refs as ApplicationRef[]
@@ -52,6 +57,7 @@ it('所有已登记写域均经公共授权入口修改、正式读回并核对�
       { domain: 'image_mark', ref: await first('image_mark.document'), property: 'image_mark.document.orientation_rotate', value: '90' },
       { domain: 'image_edit', ref: { kind: 'image_edit.layer', id: `v3:${document.id}:effect` }, property: 'image_edit.layer.opacity', value: 0.42 },
       { domain: 'assets', ref: (library.resultRefs as ApplicationRef[])[0], property: 'asset.library.name', value: '公共素材已改名' },
+      { domain: 'audio_edit', ref: { kind: 'audio_edit.project', id: 'audio-loop' }, property: 'audio_edit.project.name', value: '公共口播已改名' },
     ]
     const registry = getApplicationReflectionRegistry()
     const engine = getApplicationControlExecutionEngine() as unknown as {

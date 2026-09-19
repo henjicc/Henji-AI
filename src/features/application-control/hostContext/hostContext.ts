@@ -225,7 +225,11 @@ export function createHostContextSnapshot(uiReady = true): HostContextSnapshot {
       }
     : navigation.activeWorkspace === 'tools' && navigation.activeToolId
       ? {
-          id: navigation.activeToolId === 'imageMark' ? 'tool.image_edit' : 'tool.camera_stage',
+          id: navigation.activeToolId === 'imageMark'
+            ? 'tool.image_edit'
+            : navigation.activeToolId === 'audioEdit'
+              ? 'tool.audio_edit'
+              : 'tool.camera_stage',
           kind: 'tool' as const,
           focusedRef: null,
           selectedRefs,
