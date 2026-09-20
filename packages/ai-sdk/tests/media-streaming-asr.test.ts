@@ -73,6 +73,15 @@ describe('ASR bounded media requests', () => {
     ...siliconFlowAsrPresets.map(p => createSiliconFlowAsrModule(p)),
   ]
   for (const module of multipartModules) {
+    it(`${module.descriptor.id}: default byte limit rejects before reading the body`, async () => {
+      const maxBytes = module.descriptor.id.startsWith('groq') ? 25_000_000 : 50_000_000
+      const rt = runtime(maxBytes + 1)
+      await expect(createCapabilityClient({ runtime: rt, modules: [module] }).execute(module.descriptor.id, { audio }))
+        .rejects.toMatchObject({ code: 'media_too_large', details: { actualBytes: maxBytes + 1, maxBytes } })
+      expect(rt.media.read).not.toHaveBeenCalled()
+      expect(rt.media.readChunk).not.toHaveBeenCalled()
+      expect(rt.transport.fetch).not.toHaveBeenCalled()
+    })
     it(`${module.descriptor.id}: >10 MiB streams without a whole-file allocation`, async () => {
       const size = 11 * 1024 * 1024 + 7
       const rt = runtime(size)
