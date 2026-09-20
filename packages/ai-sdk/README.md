@@ -48,10 +48,10 @@ try {
 
 百炼工厂必须传 `baseUrl` 为实际地域/工作空间的 API 根地址，不包含端点路径。其他供应商可以覆盖根地址与 `credentialId`；SDK 不自动切换地域或账号。不同模型的向量不能混用；切换模型通常需要重建向量索引。Rerank 分数仅在本次请求内比较。
 
-SDK `0.4.2` 的正式分发渠道为公共 npm，无需配置 registry 或访问令牌：
+SDK `0.5.0` 的正式分发渠道为公共 npm，无需配置 registry 或访问令牌：
 
 ```bash
-npm install @henjicc/ai-sdk@0.4.2
+npm install @henjicc/ai-sdk@0.5.0
 ```
 
 然后提供 4 个宿主能力（`Transport` / `CredentialStore` / `MediaReader` / `Logger`），创建客户端：
@@ -512,3 +512,17 @@ module 只发送 Token/ReasoningToken 增量并返回最终结果。`createGroqL
 - 重要决定记录：`docs/task/模型SDK抽离/重要记录.md`
 - 本包内的调研资料索引：[docs/README.md](docs/README.md)
 - 版本记录：[CHANGELOG.md](CHANGELOG.md)
+
+## 0.5.0 文件 ASR 宿主迁移
+
+- QuickJS 必须把 `media.describe(ref)` 和 `media.readChunk(ref, offset, length)` 暴露给 RuntimeContext；SDK 单次读取最多 48 KiB。原先只有 `read()` 的宿主仍使用整文件兼容路径，不能据此调大旧 10 MiB 限制。
+- `transport.fetchStream(url, {body, contentLength, ...init})` 按拉取顺序消费 `AsyncIterable<Uint8Array>`，必须有背压、支持 AbortSignal、禁止整段拼接及自动重试。`contentLength` 是精确请求体字节数；宿主负责把它交给 HTTP 栈。无需 Node 或 Web Streams 全局对象。
+- 百炼异步 `media-ref` 必须实现 `transport.uploadFile(url, {ref, fields, fileField, maxBytes, signal})`。宿主在受控文件作用域内 stat、校验大小、原生 multipart 直传，文件字段最后；不得回调 media API，不得把文件内容放入 QuickJS。上传策略与 oss:// 路径仍由 SDK 生成。缺失该能力返回 `native_upload_unsupported`，这是本次次版本的迁移要求。
+- 保留旧 `read()` 与显式 `bytes` 输入用于兼容；它们不具有恒定内存保证。要使用新流式路径，两个媒体方法及 fetchStream 必须一起接入。异步上传的公网 URL 输入完全不读取本地媒体。
+- 文件超限使用 `AiRuntimeError('media_too_large', ..., details)`，details 含 `actualBytes`、`maxBytes`、`estimatedDurationSeconds`。宿主若在 describe/readChunk/uploadFile 提前拒绝，也必须传递该结构，不能只传错误字符串。SDK 会保留跨 RPC 的同形错误。
+- 可选 `MediaDescription.audio` 提供采样率、声道、位深、PCM payload 字节数或实际时长。PCM 估算公式为 payloadBytes / (sampleRateHz × channels × bitsPerSample / 8)；WAV 应提供去掉容器头的 pcmBytes，压缩音频必须提供解析所得 durationSeconds，无法确定时返回 null，不冒充真实时长。宿主可复用 runtime 导出的 assertMediaSize 生成错误。
+- 新宿主的媒体分块总文件上限可按最大所用模型设为 2,000,000,000 字节（Fun-ASR Flash 官方文件上限），单块仍不得超过 64 KiB；这不是所有模型都允许 2 GB。Qwen Base64 原文件 ≤7,500,000 字节、Groq 附件 ≤25,000,000、硅基流动 ≤50,000,000；百炼异步原生临时上传 ≤min(1,000,000,000, policy MB ×1,000,000)。若宿主只将媒体通道用于 Qwen/Groq/硅基流动，可把分块总文件上限收紧为 50,000,000。不得修改整个旧 read 通道为同一大上限。
+- 所有 MB/GB 用十进制保守值；上限来自各模型及上传服务文档，实际可用值还受宿主作用域、账号、格式与时长限制。Fun-ASR Flash/Qwen 短音频最多5分钟、长音频最多12小时、硅基流动最多1小时；流式传输不绕过这些约束。远端 URL 的真实大小/时长需由宿主预检或供应商校验。
+
+验证入口：`node packages/ai-sdk/scripts/verify-asr-streaming-quickjs.cjs <临时安装的 quickjs-emscripten 绝对路径>`。
+该探针在真实 QuickJS 64 MiB 堆执行 50 MB multipart 与 7.5/12 MB JSON，禁止整文件 read，并用128 MiB分配失败验证内存限制；不代表真实供应商调用或 Tauri 原生上传已经验收。

@@ -2,7 +2,7 @@
 
 | 项目 | 内容 |
 |---|---|
-| 最后更新 | 2026-08-31 |
+| 最后更新 | 2026-09-21 |
 | 模态 | ASR（同步文件转写） |
 | 供应商 | SiliconFlow / SiliconCloud |
 | 平台模型 ID | `FunAudioLLM/SenseVoiceSmall` |
@@ -67,3 +67,7 @@ Say-It/SDK 接入是简单 Bearer + multipart HTTP，但不得透传硅基流动
 | 免费模型/实名/Rate Limits 规则 | https://docs.siliconflow.cn/cn/userguide/rate-limits/rate-limit-and-upgradation | 否 |
 | 错误处理 | https://docs.siliconflow.cn/cn/faqs/error-code | 否 |
 | API Key | https://cloud.siliconflow.cn/account/ak | **是** |
+
+## 2026-09-21 文件传输边界复核
+
+SDK 本地 multipart 默认上限为 50,000,000 字节（十进制保守解释官方 50 MB），仍受 1 小时时长限制。宿主 describe/readChunk + fetchStream 仅改变传输内存，不改变文件格式。

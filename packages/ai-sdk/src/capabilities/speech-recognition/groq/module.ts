@@ -1,4 +1,4 @@
-import { readCapabilityMediaSource } from '../../media'
+import { prepareMedia, multipartAudioRequest, sendMediaRequest, type MediaRequest } from '../../media-request'
 import type { CapabilityExecutionContext } from '../../types'
 import type {
   SpeechRecognitionEvent,
@@ -19,7 +19,7 @@ import type {
 type Context = CapabilityExecutionContext<SpeechRecognitionEvent>
 
 const DEFAULT_API_BASE = 'https://api.groq.com/openai/v1'
-const DEFAULT_MAX_FILE_BYTES = 25 * 1024 * 1024
+const DEFAULT_MAX_FILE_BYTES = 25_000_000
 
 function endpoint(value: string | undefined): string {
   const normalized = (value?.trim() || DEFAULT_API_BASE).replace(/\/+$/, '')
@@ -148,22 +148,14 @@ async function formData(
   input: SpeechRecognitionInput,
   maxFileBytes: number,
   context: Context
-): Promise<FormData> {
+): Promise<MediaRequest> {
   const provider = options(input)
   validateOptions(provider)
-  const form = new FormData()
+  const fields: [string, string][] = []
+  const form = { append: (key: string, value: string): void => { fields.push([key, value]) } }
   form.append('model', preset.modelId)
   if (input.audio.kind === 'remote-url') {
     form.append('url', remoteUrl(input.audio.url))
-  } else {
-    const media = await readCapabilityMediaSource(input.audio, context.runtime.media)
-    if (media.bytes.byteLength === 0) throw new AiRuntimeError('invalid_media', 'Groq transcription audio is empty')
-    if (media.bytes.byteLength > maxFileBytes) {
-      throw new AiRuntimeError('media_too_large', `Groq transcription audio exceeds ${maxFileBytes} bytes`)
-    }
-    const uploadBytes = new Uint8Array(media.bytes.byteLength)
-    uploadBytes.set(media.bytes)
-    form.append('file', new Blob([uploadBytes], { type: media.mimeType }), media.filename)
   }
   if (input.language?.trim()) form.append('language', input.language.trim())
   if (provider.prompt?.trim()) form.append('prompt', provider.prompt.trim())
@@ -173,7 +165,13 @@ async function formData(
   for (const granularity of timestampGranularities(input, provider)) {
     form.append('timestamp_granularities[]', granularity)
   }
-  return form
+  if (input.audio.kind === 'remote-url') {
+    const multipart = new FormData()
+    for (const [key, value] of fields) multipart.append(key, value)
+    return { body: multipart }
+  }
+  const media = await prepareMedia(input.audio, context.runtime, maxFileBytes, context.signal)
+  return multipartAudioRequest(media, fields)
 }
 
 function errorMessage(payload: unknown): string | undefined {
@@ -225,12 +223,12 @@ export function createGroqAsrModule(
       const provider = options(input)
       validateOptions(provider)
       const format = responseFormat(input, provider)
-      const response = await context.runtime.transport.fetch(`${apiBaseUrl}/audio/transcriptions`, {
+      const request = await formData(preset, input, maxFileBytes, context)
+      const response = await sendMediaRequest(context.runtime, `${apiBaseUrl}/audio/transcriptions`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${apiKey}` },
-        body: await formData(preset, input, maxFileBytes, context),
         signal: context.signal,
-      })
+      }, request)
       const output = await parseResponse(response, format)
       if (output.segments?.length) {
         for (const segment of output.segments) await context.emit({ type: 'final', text: segment.text, segment })

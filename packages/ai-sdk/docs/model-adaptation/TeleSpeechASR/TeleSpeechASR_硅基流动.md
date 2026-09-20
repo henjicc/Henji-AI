@@ -2,7 +2,7 @@
 
 | 项目 | 内容 |
 |---|---|
-| 最后更新 | 2026-08-31 |
+| 最后更新 | 2026-09-21 |
 | 模态 | ASR（同步文件转写） |
 | 供应商 | SiliconFlow / SiliconCloud |
 | 平台模型 ID | `TeleAI/TeleSpeechASR` |
@@ -70,3 +70,7 @@ Say-It/SDK 接入是简单 Bearer + multipart HTTP，但只能提交 `file/model
 | 客户端免费服务证据 | https://docs.siliconflow.cn/cn/usercases/use-siliconcloud-in-BiBiKeyboard | 否 |
 | 错误处理 | https://docs.siliconflow.cn/cn/faqs/error-code | 否 |
 | API Key | https://cloud.siliconflow.cn/account/ak | **是** |
+
+## 2026-09-21 文件传输边界复核
+
+SDK 本地 multipart 默认上限为 50,000,000 字节，仍受官方 1 小时时长限制。与 SenseVoiceSmall 共享分块上传路径。

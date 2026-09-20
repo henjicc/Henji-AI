@@ -91,7 +91,7 @@ describe('Groq 文件 ASR', () => {
     ])
     const [url, init] = fetch.mock.calls[0]
     expect(url).toBe('https://api.groq.com/openai/v1/audio/transcriptions')
-    expect(init?.headers).toEqual({ Authorization: 'Bearer fixture-key' })
+    expect(new Headers(init?.headers).get('Authorization')).toBe('Bearer fixture-key')
     const form = formFrom(init)
     expect(form.get('model')).toBe('whisper-large-v3-turbo')
     expect(form.get('language')).toBe('zh')

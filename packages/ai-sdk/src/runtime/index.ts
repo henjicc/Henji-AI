@@ -14,6 +14,7 @@ export {
   serializeModelProviderError,
 } from './errors'
 export { AiRuntimeError, cancelledError } from './AiRuntimeError'
+export { assertMediaSize } from './MediaReader'
 export type {
   ModelProviderError,
   ModelProviderErrorCategory,
@@ -38,7 +39,7 @@ export type {
 export { resolveRuntimeContext } from './RuntimeContext'
 export type { ResolvedRuntimeContext, RuntimeContext } from './RuntimeContext'
 export type { CredentialScope, CredentialStore } from './CredentialStore'
-export type { MediaBinary, MediaReader } from './MediaReader'
+export type { MediaBinary, MediaReader, MediaDescription } from './MediaReader'
 export type { LogContext, Logger } from './Logger'
 export { noopLogger } from './Logger'
 export type { TraceSpan, Tracer } from './Tracer'

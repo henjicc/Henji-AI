@@ -2,7 +2,7 @@
 
 | 项目 | 内容 |
 |---|---|
-| 最后更新 | 2026-08-31 |
+| 最后更新 | 2026-09-21 |
 | 模态 | ASR（同步文件转写 / 音频译英文） |
 | 供应商 | GroqCloud |
 | 平台模型 ID | `whisper-large-v3` |
@@ -74,3 +74,7 @@ HTTP 文件处理。
 | Free Plan 限流 | https://console.groq.com/docs/rate-limits | 否 |
 | 错误码 | https://console.groq.com/docs/errors | 否 |
 | API Key | https://console.groq.com/keys | **是** |
+
+## 2026-09-21 文件传输边界复核
+
+SDK 本地 multipart 默认上限为 25,000,000 字节（十进制保守解释官方 25 MB），付费账号也不能据 100 MB URL 限额扩大附件上传限制。分块上传不改变格式或模型参数。

@@ -1,6 +1,5 @@
-import { toDataUri } from '../../../upload/base64'
 import { AiRuntimeError, cancelledError } from '../../../runtime/AiRuntimeError'
-import { readCapabilityMediaSource } from '../../media'
+import { prepareMedia, jsonAudioRequest, sendMediaRequest, type MediaRequest } from '../../media-request'
 import type { CapabilityExecutionContext } from '../../types'
 import type {
   SpeechRecognitionEvent,
@@ -60,7 +59,7 @@ function checkAbort(context: Context): void {
   if (context.signal.aborted) throw cancelledError(context.requestId)
 }
 
-async function inlineAudio(input: SpeechRecognitionInput, preset: BailianAsrPreset, context: Context): Promise<string> {
+async function inlineAudio(input: SpeechRecognitionInput, preset: BailianAsrPreset, context: Context, build: (data: string) => unknown): Promise<MediaRequest> {
   if (input.audio.kind === 'remote-url') {
     let url: URL
     try { url = new URL(input.audio.url) } catch {
@@ -69,13 +68,10 @@ async function inlineAudio(input: SpeechRecognitionInput, preset: BailianAsrPres
     if (url.protocol !== 'https:' && url.protocol !== 'http:') {
       throw new AiRuntimeError('invalid_media_url', 'Bailian short ASR media URL must use HTTP(S)')
     }
-    return url.toString()
+    return { body: JSON.stringify(build(url.toString())), contentType: 'application/json' }
   }
-  const media = await readCapabilityMediaSource(input.audio, context.runtime.media)
-  if (preset.maxInlineBytes !== undefined && media.bytes.byteLength > preset.maxInlineBytes) {
-    throw new AiRuntimeError('media_too_large', `Bailian ${preset.modelId} inline audio exceeds ${preset.maxInlineBytes} bytes`)
-  }
-  return toDataUri(media.bytes, media.mimeType)
+  const media = await prepareMedia(input.audio, context.runtime, preset.maxInlineBytes ?? 10 * 1024 * 1024, context.signal)
+  return jsonAudioRequest(media, build)
 }
 
 function formatFrom(input: SpeechRecognitionInput, options: BailianAsrOptions): string {
@@ -97,23 +93,24 @@ async function executeFunShort(
   const options = providerOptions(input)
   const content: Array<Record<string, unknown>> = []
   if (options.context?.trim()) content.push({ type: 'text', text: options.context.trim() })
-  content.push({ type: 'input_audio', input_audio: { data: await inlineAudio(input, preset, context) } })
   const parameters: Record<string, unknown> = { format: formatFrom(input, options) }
   if (options.sampleRateHz !== undefined) parameters.sample_rate = options.sampleRateHz
   if (options.vocabularyId) parameters.vocabulary_id = options.vocabularyId
   const languageHints = [...new Set([...(input.hints ?? []), ...(input.language ? [input.language] : [])]
     .map((hint) => hint.trim()).filter(Boolean))]
   if (languageHints.length) parameters.language_hints = languageHints
-  const response = await context.runtime.transport.fetch(`${apiBaseUrl}/services/aigc/multimodal-generation/generation`, {
+  const request = await inlineAudio(input, preset, context, (data) => ({
+    model: preset.modelId, input: { messages: [{ role: 'user', content: [...content, { type: 'input_audio', input_audio: { data } }] }] }, parameters,
+  }))
+  const response = await sendMediaRequest(context.runtime, `${apiBaseUrl}/services/aigc/multimodal-generation/generation`, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${apiKey}`,
       'Content-Type': 'application/json',
       'X-DashScope-SSE': 'enable',
     },
-    body: JSON.stringify({ model: preset.modelId, input: { messages: [{ role: 'user', content }] }, parameters }),
     signal: context.signal,
-  })
+  }, request)
   if (!response.ok) throw new AiRuntimeError('provider_http_error', `Bailian Fun-ASR failed with HTTP ${response.status}`)
   const output = parseFunShortSse(await response.text())
   for (const segment of output.segments ?? []) await context.emit({ type: 'final', text: segment.text, segment })
@@ -125,19 +122,17 @@ async function executeQwenShort(
   preset: BailianAsrPreset, input: SpeechRecognitionInput, apiKey: string, compatibleBaseUrl: string, context: Context
 ): Promise<SpeechRecognitionOutput> {
   const options = providerOptions(input)
-  const response = await context.runtime.transport.fetch(`${compatibleBaseUrl}/chat/completions`, {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      model: preset.modelId,
-      messages: [{ role: 'user', content: [{ type: 'input_audio', input_audio: { data: await inlineAudio(input, preset, context) } }] }],
-      asr_options: {
-        ...(input.language ? { language: input.language } : {}),
-        ...(options.enableItn !== undefined ? { enable_itn: options.enableItn } : {}),
-      },
-    }),
-    signal: context.signal,
-  })
+  const request = await inlineAudio(input, preset, context, (data) => ({
+    model: preset.modelId,
+    messages: [{ role: 'user', content: [{ type: 'input_audio', input_audio: { data } }] }],
+    asr_options: {
+      ...(input.language ? { language: input.language } : {}),
+      ...(options.enableItn !== undefined ? { enable_itn: options.enableItn } : {}),
+    },
+  }))
+  const response = await sendMediaRequest(context.runtime, `${compatibleBaseUrl}/chat/completions`, {
+    method: 'POST', headers: { Authorization: `Bearer ${apiKey}` }, signal: context.signal,
+  }, request)
   const output = parseQwenShortResponse(await responseJson(response, 'Qwen short ASR'))
   await context.emit({ type: 'final', text: output.text })
   await context.emit({ type: 'completed', output })

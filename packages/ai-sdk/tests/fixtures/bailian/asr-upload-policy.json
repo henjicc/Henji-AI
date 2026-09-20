@@ -1,0 +1,19 @@
+{
+  "kind": "capability",
+  "source": "https://help.aliyun.com/zh/model-studio/get-temporary-file-url ; retrieved 2026-09-21; public/no login; official response example, identifiers redacted. Field table types max_file_size_mb as string while example uses number; tests exercise both.",
+  "payload": {
+    "request_id": "fixture-request",
+    "data": {
+      "policy": "fixture-policy",
+      "signature": "fixture-signature",
+      "upload_dir": "tmp",
+      "upload_host": "https://oss.example/upload",
+      "expire_in_seconds": 300,
+      "max_file_size_mb": 100,
+      "capacity_limit_mb": 999999999,
+      "oss_access_key_id": "fixture-key",
+      "x_oss_object_acl": "private",
+      "x_oss_forbid_overwrite": "true"
+    }
+  }
+}

@@ -1,3 +1,5 @@
+import { AiRuntimeError } from './AiRuntimeError'
+
 /**
  * 读取一段媒体二进制数据后的产物：字节内容 + 供上传/内联使用的元信息。
  */
@@ -9,8 +11,9 @@ export interface MediaBinary {
 
 /**
  * `MediaReader` 是 SDK 把「用户在界面上选中的媒体」转换成「可以放进供应商请求体的字节」
- * 的唯一入口。供应商适配器上传本地图片/视频/音频前，统一先经过这一步，再决定是转成
- * `data:` URI 内联、还是调用供应商的文件上传接口换一个公网 URL。
+ * 的读取入口。支持 describe/readChunk 的文件 ASR 宿主以有界分块生成请求体；
+ * 百炼异步文件使用 Transport.uploadFile 原生直传，完全绕过媒体读取通道。
+ * read() 保留给旧宿主与其他尚需完整字节的能力，不具有流式内存保证。
  *
  * 为什么必须由宿主提供：`ref` 指向的资源在三个目标运行时里对应完全不同的读取方式——
  * - **Electron**：`ref` 通常是本地文件系统绝对路径（如 `/Users/x/image.png`），读取即
@@ -35,6 +38,10 @@ export interface MediaBinary {
  * 是调用方（SDK 内部）的职责，不是 `MediaReader` 要处理的输入。
  */
 export interface MediaReader {
+  /** Metadata only: do not allocate/read the file. Size rejection must preserve media_too_large details. */
+  describe?(ref: string): Promise<MediaDescription>
+  /** At most length bytes (<= 64 KiB); short nonempty reads are allowed. */
+  readChunk?(ref: string, offset: number, length: number): Promise<Uint8Array>
   /**
    * 读取 `ref` 指向的媒体，返回字节与元信息。
    * @param ref 本地路径或 `data:` URI，语义见上方接口注释
@@ -43,4 +50,50 @@ export interface MediaReader {
    *         不要返回空字节——调用方无法安全地把"读取失败"和"空文件"区分开。
    */
   read(ref: string): Promise<MediaBinary>
+}
+
+export interface MediaDescription {
+  size: number
+  mimeType: string
+  filename: string
+  /** Decoded PCM metadata, when known. Never infer compressed duration from sample rate alone. */
+  audio?: { sampleRateHz: number; channels: number; bitsPerSample: number; pcmBytes?: number; durationSeconds?: number }
+}
+
+/** Shared by native hosts and SDK preflight. Compressed audio needs a measured duration. */
+export function assertMediaSize(media: MediaDescription, maxBytes: number): void {
+  if (!Number.isSafeInteger(maxBytes) || maxBytes <= 0) {
+    throw new AiRuntimeError('invalid_parameter', 'Media byte limit must be a positive safe integer')
+  }
+  if (!Number.isSafeInteger(media.size) || media.size < 0) {
+    throw new AiRuntimeError('invalid_media', 'Invalid media size')
+  }
+  if (media.size <= maxBytes) return
+  const audio = media.audio
+  const bytesPerSecond = audio && audio.sampleRateHz * audio.channels * audio.bitsPerSample / 8
+  const pcmBytes = audio?.pcmBytes ?? (/^audio\/(?:pcm|l16|l24)$/i.test(media.mimeType) ? media.size : undefined)
+  const duration = audio?.durationSeconds ?? (pcmBytes !== undefined && bytesPerSecond && bytesPerSecond > 0
+    ? pcmBytes / bytesPerSecond : undefined)
+  throw new AiRuntimeError('media_too_large', '录音文件过大，请分段后重试', {
+    actualBytes: media.size, maxBytes,
+    estimatedDurationSeconds: duration !== undefined && Number.isFinite(duration) && duration >= 0 ? duration : null,
+    sampleRateHz: audio?.sampleRateHz ?? null,
+    channels: audio?.channels ?? null,
+    bitsPerSample: audio?.bitsPerSample ?? null,
+  })
+}
+/** Preserve structured native/RPC size errors across realms; never guess sizes from an error string. */
+export function rethrowMediaError(error: unknown): never {
+  if (error && typeof error === 'object' && 'code' in error && error.code === 'media_too_large'
+    && 'details' in error && error.details && typeof error.details === 'object') {
+    const details = error.details as Record<string, unknown>
+    if (typeof details.actualBytes === 'number' && Number.isSafeInteger(details.actualBytes)
+      && typeof details.maxBytes === 'number' && Number.isSafeInteger(details.maxBytes)
+      && details.actualBytes > details.maxBytes && details.maxBytes > 0) {
+      throw new AiRuntimeError('media_too_large', '录音文件过大，请分段后重试', {
+        ...details, estimatedDurationSeconds: details.estimatedDurationSeconds ?? null,
+      })
+    }
+  }
+  throw error
 }

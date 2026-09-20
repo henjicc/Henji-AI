@@ -36,19 +36,21 @@ function definePreset(input: Omit<BailianAsrPreset, 'id' | 'descriptor'>): Baili
 export const bailianFunAsrFlash20260615 = definePreset({
   modelId: 'fun-asr-flash-2026-06-15',
   protocol: 'fun-short-sse',
-  maxInlineBytes: 10 * 1024 * 1024,
+  maxInlineBytes: 2_000_000_000,
 })
 
 export const bailianQwen3AsrFlash = definePreset({
   modelId: 'qwen3-asr-flash',
   protocol: 'qwen-short',
-  maxInlineBytes: 10 * 1024 * 1024,
+  // Official 10 MB encoded audio limit; raw bytes expand by 4/3.
+  maxInlineBytes: 7_500_000,
 })
 
 export const bailianQwen3AsrFlash20260210 = definePreset({
   modelId: 'qwen3-asr-flash-2026-02-10',
   protocol: 'qwen-short',
-  maxInlineBytes: 10 * 1024 * 1024,
+  // Official 10 MB encoded audio limit; raw bytes expand by 4/3.
+  maxInlineBytes: 7_500_000,
 })
 
 export const bailianFunAsr = definePreset({

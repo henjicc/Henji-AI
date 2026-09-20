@@ -2,7 +2,7 @@
 
 | 项目 | 内容 |
 |---|---|
-| 最后更新 | 2026-08-28 |
+| 最后更新 | 2026-09-21 |
 | 能力 | 长音频/录音文件异步识别 |
 | 平台模型 ID | `fun-asr`（稳定别名，官方当前等同 `fun-asr-2025-11-07`） |
 | 输入上限 | 12 小时 / 2 GB；单次 1 个 URL |
@@ -41,3 +41,7 @@ GET https://{WorkspaceId}.cn-beijing.maas.aliyuncs.com/api/v1/tasks/{task_id}
 | 临时上传 | https://help.aliyun.com/zh/model-studio/get-temporary-file-url | 否 |
 | 价格 | https://help.aliyun.com/zh/model-studio/model-pricing | 否 |
 | API Key | https://bailian.console.aliyun.com/?apiKey=1#/api-key | **是** |
+
+## 2026-09-21 文件传输边界复核
+
+模型 URL 输入限制为 12 小时 / 2 GB；百炼临时上传另有 1 GB 上限。SDK 本地文件直传上限取 min(1,000,000,000, floor(max_file_size_mb × 1,000,000)) 字节；凭证字段接受官方字段表的字符串及示例的数字。media-ref 只走 transport.uploadFile，完全不调用 media；上传后才提交 oss://。

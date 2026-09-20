@@ -74,7 +74,7 @@ describe('百炼非实时 ASR 按需模块', () => {
     const [, init] = fetch.mock.calls[0]
     const body = JSON.parse(String(init?.body)) as Record<string, unknown>
     expect(body).toMatchObject({ model: 'fun-asr-flash-2026-06-15' })
-    expect(init?.headers).toMatchObject({ 'X-DashScope-SSE': 'enable' })
+    expect(new Headers(init?.headers).get('X-DashScope-SSE')).toBe('enable')
     expect(events.map((event) => event.type)).toEqual(['final', 'final', 'completed'])
   })
 
@@ -157,7 +157,15 @@ describe('百炼非实时 ASR 按需模块', () => {
       throw new Error(`unexpected URL ${url}`)
     })
     const module = createBailianAsrModule(bailianQwen3AsrFlashFiletrans, { pollIntervalMs: 0 })
-    const client = createCapabilityClient({ runtime: runtime(fetch), modules: [module] })
+    const nativeRuntime = runtime(fetch)
+    nativeRuntime.media.read = async () => { throw new Error('OSS must not read media') }
+    nativeRuntime.transport.uploadFile = async (url, init) => {
+      expect(url).toBe('https://oss.example/upload')
+      expect(init).toMatchObject({ ref: 'tauri://recording', fileField: 'file', maxBytes: 10_000_000 })
+      expect(Object.fromEntries(init.fields)).toMatchObject({ OSSAccessKeyId: 'access-redacted', success_action_status: '200' })
+      return new Response('', { status: 200 })
+    }
+    const client = createCapabilityClient({ runtime: nativeRuntime, modules: [module] })
     await expect(client.execute(bailianQwen3AsrFlashFiletrans.id, {
       audio: { kind: 'media-ref', ref: 'tauri://recording' },
     }, { requestId: 'upload-safe-id' })).resolves.toMatchObject({ text: '你好世界' })

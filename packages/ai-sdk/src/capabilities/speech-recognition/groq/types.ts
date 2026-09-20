@@ -11,6 +11,6 @@ export interface GroqAsrOptions {
 export interface GroqAsrModuleOptions {
   /** Groq OpenAI-compatible API root. */
   apiBaseUrl?: string
-  /** Local upload guard. Defaults to the Free plan's documented 25 MB limit; paid hosts may raise it explicitly. */
+  /** Local upload guard. Defaults to the documented 25 MB attachment limit; larger files require a remote URL, even on paid plans. */
   maxFileBytes?: number
 }
