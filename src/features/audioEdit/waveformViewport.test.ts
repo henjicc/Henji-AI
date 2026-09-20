@@ -11,6 +11,7 @@ it('preserves the tail of short peak arrays and normalizes quiet audio with a st
   expect(sampleWaveform([0.01, 0.02], { start: 0, end: 100 }, 100, 10, 0.02).at(-1)).toBe(1)
   const peaks = [0.001, 0.002, 0.003, 0.004, 0.005]
   const reference = waveformReference(peaks)
-  expect(sampleWaveform(peaks, { start: 20, end: 40 }, 100, 1, reference)).toEqual([0.5])
+  expect(sampleWaveform(peaks, { start: 20, end: 40 }, 100, 1, reference)).toEqual([0.4])
+  expect(sampleWaveform(peaks, { start: 0, end: 100 }, 100, 5, reference)).toEqual([0.2, 0.4, 0.6, 0.8, 1])
   expect(sampleWaveform([], { start: 0, end: 100 }, 100, 10, 1)).toEqual([])
 })

@@ -1,7 +1,7 @@
 import { assistantErrorMessage } from '@/core/assistant/assistantErrorPresentation'
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Dropdown, UiButton, UiError, UiLoading } from '@/components/ui'
-import { createEmptyPromptDocument } from '@/core/inputs/promptDocument'
+import { createEmptyPromptDocument, createPlainTextPromptDocument } from '@/core/inputs/promptDocument'
 import type { EmbeddedAgentModel, EmbeddedAgentPrompt } from '@/core/assistant/embeddedAgent'
 import { getPlatform } from '@/platform/runtime'
 import { useUiStore } from '@/stores/uiStore'
@@ -21,6 +21,8 @@ export function EmbeddedConversation(): JSX.Element {
   const state = useEmbeddedAgent()
   const [document, setDocument] = useState(createEmptyPromptDocument)
   const [models, setModels] = useState<EmbeddedAgentModel[]>([])
+  const [modelsLoaded, setModelsLoaded] = useState(false)
+  const pendingGoal = useAssistantUiStore(store => store.pendingGoal)
   const [delivery, setDelivery] = useState<'wait' | 'interrupt'>('wait')
   const access = useAssistantUiStore(store => store.embeddedAccess)
   const setAccess = useAssistantUiStore(store => store.setEmbeddedAccess)
@@ -34,7 +36,10 @@ export function EmbeddedConversation(): JSX.Element {
   const selectedModel = models[0]
   useEffect(() => {
     let disposed = false
-    void getPlatform().embeddedAgent.models().then((items) => { if (!disposed) setModels(items) }, reportEmbeddedAgentError)
+    setModelsLoaded(false)
+    void getPlatform().embeddedAgent.models().then((items) => { if (!disposed) { setModels(items); setModelsLoaded(true) } }, error => {
+      if (!disposed) { setModels([]); setModelsLoaded(true); reportEmbeddedAgentError(error) }
+    })
     return () => { disposed = true }
   }, [settingsOpen])
   const busy = submitting || state.busy
@@ -44,7 +49,7 @@ export function EmbeddedConversation(): JSX.Element {
     }
     previousSession.current = state.sessionId
   }, [state.sessionId, busy])
-  const send = (text: string, submittedAttachments: AgentAttachment[]): void => {
+  const send = useCallback((text: string, submittedAttachments: AgentAttachment[], request?: { context?: string }): void => {
     if (!text || !selectedModel || submitting) return
     setSubmitting(true)
     const clientMessageId = crypto.randomUUID()
@@ -52,13 +57,26 @@ export function EmbeddedConversation(): JSX.Element {
     scroll.scrollToBottom()
     const sentDocument = document
     const sentAttachments = attachments
-    setDocument(createEmptyPromptDocument()); setAttachments([])
+    if (!request) { setDocument(createEmptyPromptDocument()); setAttachments([]) }
     const context = createHostContextSnapshot()
     void getPlatform().embeddedAgent.prompt({ text, clientMessageId, model: { providerId: selectedModel.providerId, modelId: selectedModel.modelId }, access,
-      context: JSON.stringify({ workspace: context.workspace, project: context.project, surface: context.surface }), attachments: submittedAttachments, delivery })
-      .catch(error => { setDocument(sentDocument); setAttachments(sentAttachments); reportEmbeddedAgentError(error) })
+      context: request?.context ?? JSON.stringify({ workspace: context.workspace, project: context.project, surface: context.surface }), attachments: submittedAttachments, delivery: request ? 'wait' : delivery })
+      .catch(error => {
+        if (!request) { setDocument(sentDocument); setAttachments(sentAttachments) }
+        reportEmbeddedAgentError(error)
+      })
       .finally(() => { setOptimistic(null); setSubmitting(false) })
-  }
+  }, [access, attachments, delivery, document, scroll, selectedModel, submitting])
+  useEffect(() => {
+    if (!pendingGoal || !modelsLoaded || submitting) return
+    const pending = useAssistantUiStore.getState()
+    if (pending.pendingGoal !== pendingGoal) return
+    const options = pending.pendingGoalOptions
+    // Consume before submission: StrictMode and snapshot updates must not resend.
+    pending.setPendingGoal(null)
+    if (options?.autoSend && selectedModel) send(pendingGoal, [], { context: options.context })
+    else setDocument(createPlainTextPromptDocument(pendingGoal))
+  }, [modelsLoaded, pendingGoal, selectedModel, send, submitting])
   return <div className="flex min-h-0 min-w-0 flex-1 flex-col">
     <div ref={scroll.viewportRef} onScroll={scroll.onScroll} onWheel={scroll.onWheel} onKeyDown={scroll.onKeyDown} className="ui-scrollbar min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-4 py-4" role="log" aria-label="助手对话">
       <div ref={scroll.contentRef} className="space-y-6">

@@ -28,6 +28,7 @@ import type { AudioEditAsrModel } from '@/platform/contracts/audioEdit'
 import type { AudioEditProcessorDescriptor, AudioEditProjectDocument, AudioEditProjectSummary } from '@/core/audioEdit/types'
 import { useNotification } from '@/contexts/NotificationContext'
 import { openAssistant } from '@/features/assistant/store/assistantUiStore'
+import { createHostContextSnapshot } from '@/features/application-control/hostContext/hostContext'
 import { getPlatform } from '@/platform/runtime'
 import { basename, openDialog, readTextFile, saveDialog } from '@/platform/desktopApi'
 import { useAudioEditPreview } from './preview/useAudioEditPreview'
@@ -305,7 +306,13 @@ export default function AudioEditApp({ onBack }: AudioEditAppProps): JSX.Element
         <div className="min-w-0 flex-1 truncate text-sm font-medium text-text-dark">{project.name}</div>
         <UiIconButton showBorder={false} appearance="hover-only" className="h-8 w-8" disabled={past.length === 0} onClick={undo} title="撤销"><Undo2 size={16} /></UiIconButton>
         <UiIconButton showBorder={false} appearance="hover-only" className="h-8 w-8" disabled={future.length === 0} onClick={redo} title="重做"><Redo2 size={16} /></UiIconButton>
-        <UiButton variant="ghost" size="sm" onClick={() => openAssistant(`请优化口播剪辑工程 ${project.id}。先读取转写和建议，再说明理由并通过 audio_edit 领域修改。`)}><Sparkles size={15} className="mr-1.5" />智能优化</UiButton>
+        <UiButton variant="ghost" size="sm" disabled={busy !== null || project.transcript.length === 0} onClick={() => {
+          const context = createHostContextSnapshot()
+          openAssistant(`请直接优化当前口播剪辑工程。目标工程引用：${JSON.stringify({ kind: 'audio_edit.project', id: project.id })}。先读取转写、参考稿和已有建议，再通过现有口播剪辑能力执行非破坏性删改，不要只给建议。保留完整语义及锁定内容；对明确的重复重录保留最佳版本，谨慎处理语气词和长静音，不确定的内容先保留。不要修改原始媒体、重新转写或自动导出。完成后回读工程，说明实际修改与理由。`, {
+            autoSend: true,
+            context: JSON.stringify({ workspace: context.workspace, project: context.project, surface: context.surface }),
+          })
+        }}><Sparkles size={15} className="mr-1.5" />智能优化</UiButton>
         <UiButton variant="primary" size="sm" disabled={busy !== null || project.transcript.length === 0} onClick={() => void exportProject()}><Download size={15} className="mr-1.5" />{busy === 'export' ? '导出中…' : '导出'}</UiButton>
       </div>
 

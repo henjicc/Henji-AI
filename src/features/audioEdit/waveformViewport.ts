@@ -14,8 +14,10 @@ export function zoomViewport(view: WaveformViewport, anchor: number, factor: num
 }
 
 export function waveformReference(peaks: readonly number[]): number {
-  const sorted = peaks.filter((value) => Number.isFinite(value) && value > 0).sort((a, b) => a - b)
-  return sorted[Math.floor((sorted.length - 1) * 0.95)] || 1
+  // One display-only scale for the entire source; never flatten strong peaks.
+  let maximum = 0
+  for (const peak of peaks) if (Number.isFinite(peak)) maximum = Math.max(maximum, peak)
+  return maximum || 1
 }
 
 /** Aggregate only visible samples; the number of drawn bars is bounded by pixels. */
