@@ -121,3 +121,26 @@ export function findTranscriptBlockAtSourceFrame(
     && frame < block.endFrame
   ) ?? null
 }
+
+/**
+ * Resolve the transcript block that should remain highlighted while audio plays.
+ * ASR word timestamps commonly leave tiny gaps between adjacent words, so retain
+ * the preceding block across a small, explicit tolerance instead of flickering.
+ */
+export function findTranscriptBlockForPlayback(
+  sourceFrame: number,
+  blocks: readonly AudioEditTranscriptBlock[],
+  includeRemoved: boolean,
+  gapToleranceFrames: number,
+): AudioEditTranscriptBlock | null {
+  const exact = findTranscriptBlockAtSourceFrame(sourceFrame, blocks, includeRemoved)
+  if (exact) return exact
+  const frame = Math.max(0, Math.round(sourceFrame))
+  const tolerance = Math.max(0, Math.round(gapToleranceFrames))
+  let previous: AudioEditTranscriptBlock | null = null
+  for (const block of blocks) {
+    if ((!includeRemoved && !block.included) || block.endFrame > frame) continue
+    if (!previous || block.endFrame > previous.endFrame) previous = block
+  }
+  return previous && frame - previous.endFrame <= tolerance ? previous : null
+}

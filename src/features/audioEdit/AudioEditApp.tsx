@@ -110,10 +110,10 @@ function Transcript({
                     variant="ghost"
                     size="sm"
                     className={`mx-0.5 inline min-h-8 h-auto rounded-md px-1.5 py-1 text-lg font-normal leading-relaxed ${
-                      !block.included
-                        ? '!border-transparent !bg-transparent text-text-muted line-through opacity-55'
-                        : isActive
-                          ? '!bg-accent text-white'
+                      isActive
+                        ? `!bg-accent text-white ${block.included ? '' : 'line-through'}`
+                        : !block.included
+                          ? '!border-transparent !bg-transparent text-text-muted line-through opacity-55'
                           : isSelected
                             ? '!bg-layer text-text-dark ring-1 ring-accent'
                             : '!border-transparent !bg-transparent text-text-dark hover:!bg-layer'
@@ -143,26 +143,39 @@ function Transcript({
 
 function Timeline({ project, peaks }: { project: AudioEditProjectDocument; peaks: number[] }) {
   const sourceFrame = useAudioEditPlaybackStore((state) => state.sourceFrame)
+  const containerRef = useRef<HTMLDivElement | null>(null)
+  const [width, setWidth] = useState(0)
   const spans = useMemo(() => buildAudioEditTimeline(project.source.durationFrames, project.transcript), [project])
+  const displayPeaks = useMemo(() => {
+    if (peaks.length === 0) return []
+    const target = Math.max(64, Math.min(800, Math.floor(width / 3) || 360))
+    const sampled = Array.from({ length: Math.min(target, peaks.length) }, (_, index) => {
+      const start = Math.floor(index * peaks.length / target)
+      const end = Math.max(start + 1, Math.floor((index + 1) * peaks.length / target))
+      return Math.max(...peaks.slice(start, end))
+    })
+    const sorted = [...sampled].sort((left, right) => left - right)
+    const reference = sorted[Math.floor((sorted.length - 1) * 0.95)] || 1
+    return sampled.map((peak) => Math.min(1, peak / reference))
+  }, [peaks, width])
   const percent = project.source.durationFrames > 0 ? sourceFrame / project.source.durationFrames * 100 : 0
+  useEffect(() => {
+    const element = containerRef.current
+    if (!element) return
+    const observer = new ResizeObserver(([entry]) => setWidth(entry.contentRect.width))
+    observer.observe(element)
+    return () => observer.disconnect()
+  }, [])
   return (
-    <div className="relative h-12 overflow-hidden rounded-lg border border-border-dark bg-bg-dark">
+    <div ref={containerRef} className="relative h-[clamp(5rem,11vh,9rem)] overflow-hidden rounded-lg border border-border-dark bg-bg-dark">
       <div className="absolute inset-y-0 left-0 bg-layer" style={{ width: `${Math.min(100, Math.max(0, percent))}%` }} />
-      <div className="absolute inset-0 flex items-center gap-px px-1 opacity-70">
-        {peaks.map((peak, index) => (
-          <div key={index} className="min-w-0 flex-1 rounded-sm bg-text-muted" style={{ height: `${Math.max(4, Math.min(100, peak * 100))}%` }} />
-        ))}
+      <div className="absolute inset-0 flex items-center gap-px px-1 py-2">
+        {displayPeaks.map((peak, index) => {
+          const frame = (index + 0.5) / displayPeaks.length * project.source.durationFrames
+          const retained = spans.some((span) => frame >= span.sourceStartFrame && frame < span.sourceEndFrame)
+          return <div key={index} className={`min-w-0 flex-1 rounded-sm ${retained ? 'bg-accent' : 'bg-text-muted opacity-35'}`} style={{ height: `${Math.max(4, peak * 100)}%` }} />
+        })}
       </div>
-      {spans.map((span) => (
-        <div
-          key={`${span.sourceStartFrame}-${span.sourceEndFrame}`}
-          className="absolute bottom-1 top-1 rounded bg-accent/30"
-          style={{
-            left: `${span.sourceStartFrame / project.source.durationFrames * 100}%`,
-            width: `${(span.sourceEndFrame - span.sourceStartFrame) / project.source.durationFrames * 100}%`,
-          }}
-        />
-      ))}
       <div className="absolute inset-y-0 w-px bg-white" style={{ left: `${percent}%` }} />
     </div>
   )
@@ -222,7 +235,7 @@ export default function AudioEditApp({ onBack }: AudioEditAppProps): JSX.Element
       return
     }
     let cancelled = false
-    void getPlatform().audioEdit.extractWaveform(waveformAudioPath, 360).then((waveform) => {
+    void getPlatform().audioEdit.extractWaveform(waveformAudioPath, 1600).then((waveform) => {
       if (!cancelled) setWaveformPeaks(waveform.peak)
     }).catch(() => {
       if (!cancelled) setWaveformPeaks([])
@@ -400,7 +413,7 @@ export default function AudioEditApp({ onBack }: AudioEditAppProps): JSX.Element
 
       <div className="shrink-0 border-t border-border-dark p-3">
         <div className="mb-2 flex items-center gap-3">
-          <UiIconButton className="h-9 w-9" disabled={!previewReady} onClick={() => void togglePlayback()} title={playing ? '暂停' : '播放'}>{playing ? <Pause size={16} /> : <Play size={16} />}</UiIconButton>
+          <UiIconButton className="h-9 w-9" disabled={!previewReady || preparing} onClick={() => void togglePlayback()} title={playing ? '暂停' : '播放'}>{playing ? <Pause size={16} /> : <Play size={16} />}</UiIconButton>
           <UiSwitch appearance="segmented" size="compact" checked={mode === 'source'} offLabel="成片" onLabel="原始" onCheckedChange={(checked) => setMode(checked ? 'source' : 'edited')} />
           <span className={UI_TEXT_BODY_CLASS}>{formatTime(outputFrame, project.source.sampleRate)} / {formatTime(duration, project.source.sampleRate)}</span>
           {preparing && <span className={UI_TEXT_META_CLASS}>正在准备预览…</span>}

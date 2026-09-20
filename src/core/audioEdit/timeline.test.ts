@@ -3,6 +3,7 @@ import {
   buildAudioEditTimeline,
   editedDurationFrames,
   findTranscriptBlockAtSourceFrame,
+  findTranscriptBlockForPlayback,
   nextRetainedSourceFrame,
   outputFrameToSourceFrame,
   sourceFrameToOutputFrame,
@@ -35,6 +36,14 @@ describe('audio edit timeline', () => {
     const blocks = [block('kept', 0, 10), block('removed', 10, 20, false)]
     expect(findTranscriptBlockAtSourceFrame(15, blocks, false)).toBeNull()
     expect(findTranscriptBlockAtSourceFrame(15, blocks, true)?.id).toBe('removed')
+  })
+
+  it('keeps playback highlighting stable across short timestamp gaps only', () => {
+    const blocks = [block('first', 0, 100), block('removed', 110, 180, false), block('next', 200, 300)]
+    expect(findTranscriptBlockForPlayback(105, blocks, false, 20)?.id).toBe('first')
+    expect(findTranscriptBlockForPlayback(185, blocks, false, 20)).toBeNull()
+    expect(findTranscriptBlockForPlayback(185, blocks, true, 20)?.id).toBe('removed')
+    expect(findTranscriptBlockForPlayback(150, blocks, false, 20)).toBeNull()
   })
 
   it('detects fillers and long gaps without applying them', () => {

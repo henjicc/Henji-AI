@@ -20,6 +20,7 @@ import { imageMarkRevision } from '@/features/imageMark/application/imageMarkSes
 import { getImageEditDocumentCatalogRevisionV3, subscribeImageEditDocumentInstancesV3 } from '@/features/imageEdit/v3/application/imageEditDocumentInstances'
 import { getGenerationModelsRevision } from '@/features/generation/application/generationModelFields'
 import { useGenerationDraftStore } from '@/features/generation/store/generationDraftStore'
+import { useAudioEditStore } from '@/features/audioEdit/store/audioEditStore'
 import {
   isVisibleGenerationTaskHandlerReady,
   subscribeVisibleGenerationTaskChanges,
@@ -44,6 +45,7 @@ const scopeRevisions: HostScopeRevisions = {
   models: 0,
   image_mark: 0,
   image_edit: 0,
+  audio_edit: 0,
 }
 
 const listeners = new Set<() => void>()
@@ -76,6 +78,7 @@ function syncPulledRevisions(): void {
   scopeRevisions.models = getGenerationModelsRevision()
   scopeRevisions.image_mark = imageMarkRevision()
   scopeRevisions.image_edit = getImageEditDocumentCatalogRevisionV3()
+  scopeRevisions.audio_edit = useAudioEditStore.getState().project?.revision ?? 0
 }
 
 /**
@@ -130,6 +133,12 @@ function startTracking(): () => void {
       // 素材库的浮层开合与选中同理，都属于呈现层。
       if (state.view !== previous.view || state.selectedAsset?.id !== previous.selectedAsset?.id) {
         bumpScope('surface')
+      }
+    }),
+    useAudioEditStore.subscribe((state, previous) => {
+      if (state.project !== previous.project || state.selectedBlockIds !== previous.selectedBlockIds) {
+        revision += 1
+        for (const listener of listeners) listener()
       }
     }),
     useSettingsStore.subscribe((state, previous) => {
@@ -207,11 +216,19 @@ export function createHostContextSnapshot(uiReady = true): HostContextSnapshot {
   const assets = useAssetLibraryStore.getState()
   const generationReady = isVisibleGenerationTaskHandlerReady()
   const ui = useUiStore.getState()
+  const audioEdit = useAudioEditStore.getState()
+  const isAudioEditSurface = navigation.activeWorkspace === 'tools' && navigation.activeToolId === 'audioEdit'
+  const activeAudioProjectRef = isAudioEditSurface && audioEdit.project
+    ? `audio_edit.project:${audioEdit.project.id}`
+    : null
   const selectedRefs = [
     assets.selectedAsset ? `asset:${assets.selectedAsset.id}` : null,
     project.currentProjectId && canvas.selectedNodeId
       ? `canvas.node:${project.currentProjectId}:${canvas.selectedNodeId}`
       : null,
+    ...isAudioEditSurface && audioEdit.project
+      ? audioEdit.selectedBlockIds.map((blockId) => `audio_edit.transcript_block:${audioEdit.project!.id}:${blockId}`)
+      : [],
   ].filter((value): value is string => typeof value === 'string')
   const settingsSurface = ui.settingsTarget
     ? `settings.${ui.settingsTarget.tab}.${ui.settingsTarget.sectionId ?? 'root'}`
@@ -231,7 +248,7 @@ export function createHostContextSnapshot(uiReady = true): HostContextSnapshot {
               ? 'tool.audio_edit'
               : 'tool.camera_stage',
           kind: 'tool' as const,
-          focusedRef: null,
+          focusedRef: activeAudioProjectRef,
           selectedRefs,
         }
       : assets.view === 'floating'

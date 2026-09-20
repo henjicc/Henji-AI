@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef } from 'react'
 
-import { buildAudioEditTimeline, findTranscriptBlockAtSourceFrame, nextRetainedSourceFrame, sourceFrameToOutputFrame } from '@/core/audioEdit/timeline'
+import { buildAudioEditTimeline, findTranscriptBlockForPlayback, nextRetainedSourceFrame, sourceFrameToOutputFrame } from '@/core/audioEdit/timeline'
 import type { AudioEditProjectDocument, AudioEditTimelineSpan } from '@/core/audioEdit/types'
 import { getPlatform } from '@/platform/runtime'
 import { createLogger } from '@/core/logging'
@@ -27,7 +27,7 @@ export function useAudioEditPreview(project: AudioEditProjectDocument | null) {
   const nodeRef = useRef<AudioWorkletNode | null>(null)
   const generationRef = useRef(0)
   const nextSourceFrameRef = useRef(0)
-  const fillingRef = useRef(false)
+  const fillingPromiseRef = useRef<Promise<void> | null>(null)
   const fillBufferRef = useRef<() => Promise<void>>(async () => undefined)
   const publishPositionRef = useRef<(sourceFrame: number) => void>(() => undefined)
   const resetAtRef = useRef<(sourceFrame: number) => void>(() => undefined)
@@ -42,49 +42,53 @@ export function useAudioEditPreview(project: AudioEditProjectDocument | null) {
   const publishPosition = useCallback((sourceFrame: number) => {
     if (!project) return
     const outputFrame = mode === 'source' ? sourceFrame : sourceFrameToOutputFrame(sourceFrame, timeline) ?? 0
-    const block = findTranscriptBlockAtSourceFrame(sourceFrame, project.transcript, mode === 'source')
+    const block = findTranscriptBlockForPlayback(sourceFrame, project.transcript, mode === 'source', project.source.sampleRate / 4)
     useAudioEditPlaybackStore.getState().updatePosition(sourceFrame, outputFrame, block?.id ?? null)
   }, [mode, project, timeline])
   publishPositionRef.current = publishPosition
 
   const fillBuffer = useCallback(async () => {
     const node = nodeRef.current
-    if (!node || !project || fillingRef.current) return
-    fillingRef.current = true
+    if (!node || !project) return
+    if (fillingPromiseRef.current) return fillingPromiseRef.current
     const generation = generationRef.current
-    try {
-      while (queuedFramesRef.current < project.source.sampleRate * BUFFER_SECONDS && generation === generationRef.current) {
-        const cursor = nextSourceFrameRef.current
-        const span = spansRef.current.find((candidate) => cursor >= candidate.sourceStartFrame && cursor < candidate.sourceEndFrame)
-          ?? spansRef.current.find((candidate) => candidate.sourceStartFrame >= cursor)
-        if (!span) {
-          playingRef.current = false
-          node.port.postMessage({ type: 'playing', value: false })
-          useAudioEditPlaybackStore.getState().setPlaying(false)
-          break
+    const filling = (async () => {
+      try {
+        while (queuedFramesRef.current < project.source.sampleRate * BUFFER_SECONDS && generation === generationRef.current) {
+          const cursor = nextSourceFrameRef.current
+          const span = spansRef.current.find((candidate) => cursor >= candidate.sourceStartFrame && cursor < candidate.sourceEndFrame)
+            ?? spansRef.current.find((candidate) => candidate.sourceStartFrame >= cursor)
+          if (!span) {
+            playingRef.current = false
+            node.port.postMessage({ type: 'playing', value: false })
+            useAudioEditPlaybackStore.getState().setPlaying(false)
+            break
+          }
+          const startFrame = Math.max(cursor, span.sourceStartFrame)
+          const frameCount = Math.min(project.source.sampleRate * CHUNK_SECONDS, span.sourceEndFrame - startFrame)
+          const chunk = await getPlatform().audioEdit.preparePreviewChunk({ projectId: project.id, sourceStartFrame: startFrame, frameCount })
+          if (generation !== generationRef.current) break
+          const decodedFrames = chunk.sourceEndFrame - chunk.sourceStartFrame
+          if (decodedFrames <= 0) break
+          queuedFramesRef.current += decodedFrames
+          nextSourceFrameRef.current = chunk.sourceEndFrame >= span.sourceEndFrame
+            ? spansRef.current.find((candidate) => candidate.sourceStartFrame >= span.sourceEndFrame)?.sourceStartFrame ?? project.source.durationFrames
+            : chunk.sourceEndFrame
+          node.port.postMessage({ type: 'chunk', generation, pcm: chunk.pcm, channels: chunk.channels, sourceStartFrame: chunk.sourceStartFrame, frameCount: decodedFrames }, [chunk.pcm])
         }
-        const startFrame = Math.max(cursor, span.sourceStartFrame)
-        const frameCount = Math.min(project.source.sampleRate * CHUNK_SECONDS, span.sourceEndFrame - startFrame)
-        const chunk = await getPlatform().audioEdit.preparePreviewChunk({ projectId: project.id, sourceStartFrame: startFrame, frameCount })
-        if (generation !== generationRef.current) break
-        const decodedFrames = chunk.sourceEndFrame - chunk.sourceStartFrame
-        if (decodedFrames <= 0) break
-        queuedFramesRef.current += decodedFrames
-        nextSourceFrameRef.current = chunk.sourceEndFrame >= span.sourceEndFrame
-          ? spansRef.current.find((candidate) => candidate.sourceStartFrame >= span.sourceEndFrame)?.sourceStartFrame ?? project.source.durationFrames
-          : chunk.sourceEndFrame
-        node.port.postMessage({ type: 'chunk', generation, pcm: chunk.pcm, channels: chunk.channels, sourceStartFrame: chunk.sourceStartFrame, frameCount: decodedFrames }, [chunk.pcm])
+        useAudioEditPlaybackStore.getState().setPreparing(false)
+      } catch (error) {
+        logger.error('audio_edit.preview.buffer.failed', error)
+        useAudioEditPlaybackStore.getState().setError(error instanceof Error ? error.message : '预览缓冲失败')
+        playingRef.current = false
+        node.port.postMessage({ type: 'playing', value: false })
+        useAudioEditPlaybackStore.setState({ preparing: false, playing: false })
       }
-      useAudioEditPlaybackStore.getState().setPreparing(false)
-    } catch (error) {
-      logger.error('audio_edit.preview.buffer.failed', error)
-      useAudioEditPlaybackStore.getState().setError(error instanceof Error ? error.message : '预览缓冲失败')
-      playingRef.current = false
-      node.port.postMessage({ type: 'playing', value: false })
-      useAudioEditPlaybackStore.setState({ preparing: false, playing: false })
-    } finally {
-      fillingRef.current = false
-    }
+    })()
+    fillingPromiseRef.current = filling
+    await filling.finally(() => {
+      if (fillingPromiseRef.current === filling) fillingPromiseRef.current = null
+    })
   }, [project])
   fillBufferRef.current = fillBuffer
 
@@ -126,8 +130,12 @@ export function useAudioEditPreview(project: AudioEditProjectDocument | null) {
         node.port.onmessage = (event: MessageEvent<WorkletMessage>) => {
           const message = event.data
           if (message.queuedFrames !== undefined) queuedFramesRef.current = message.queuedFrames
-          if (message.type === 'position' && message.sourceFrame !== undefined) publishPositionRef.current(message.sourceFrame)
-          if (message.type === 'starved') useAudioEditPlaybackStore.getState().setPreparing(true)
+          if (message.type === 'position' && message.sourceFrame !== undefined && playingRef.current) publishPositionRef.current(message.sourceFrame)
+          if (message.type === 'starved') {
+            playingRef.current = false
+            useAudioEditPlaybackStore.setState({ playing: false, preparing: true })
+            void context.suspend()
+          }
           if (message.type === 'need-data' || message.type === 'starved') void fillBufferRef.current()
         }
         useAudioEditPlaybackStore.getState().setReady(true)
@@ -158,12 +166,25 @@ export function useAudioEditPreview(project: AudioEditProjectDocument | null) {
     const context = contextRef.current
     const node = nodeRef.current
     if (!context || !node) return
+    if (playingRef.current) {
+      playingRef.current = false
+      node.port.postMessage({ type: 'playing', value: false })
+      useAudioEditPlaybackStore.getState().setPlaying(false)
+      if (context.state === 'running') await context.suspend()
+      return
+    }
+    if (!project) return
+    if (queuedFramesRef.current < project.source.sampleRate / 4) {
+      useAudioEditPlaybackStore.getState().setPreparing(true)
+      await fillBuffer()
+    }
+    if (queuedFramesRef.current <= 0) return
+    playingRef.current = true
+    node.port.postMessage({ type: 'playing', value: true })
+    useAudioEditPlaybackStore.setState({ playing: true, preparing: false })
     if (context.state === 'suspended') await context.resume()
-    playingRef.current = !playingRef.current
-    node.port.postMessage({ type: 'playing', value: playingRef.current })
-    useAudioEditPlaybackStore.getState().setPlaying(playingRef.current)
-    if (playingRef.current) void fillBuffer()
-  }, [fillBuffer])
+    void fillBuffer()
+  }, [fillBuffer, project])
 
   return { timeline, togglePlayback, seekSourceFrame: resetAt }
 }
