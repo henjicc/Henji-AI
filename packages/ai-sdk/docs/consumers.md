@@ -7,11 +7,19 @@
 
 Henji-AI 安装包的 GPT Image 2.5 高分辨率报错归属：宿主智能比例预处理曾忽略联动过滤，将 `smart` 转成 KIE 仅限 1K 的 `27:16`，SDK 在请求前正确拒绝。修复位于应用公共预处理，按当前分辨率/渠道的合法选项匹配；Flare/Sunburst 的 1K/2K/4K 及 APIMart、Grsai 同类筛选已有定向覆盖。无需放宽 SDK 契约或发布 SDK；安装包需随应用更新才包含修复，现有版本可手动选合法比例规避。
 
-当前仓内 SDK 版本：`0.5.0`（2026-09-21 本地发布门禁通过，等待当前提交 CI 与公共发布；公共版本仍为 `0.4.1`）
+当前仓内及公共 npm SDK 版本：`0.5.0`（2026-09-21 已发布并完成公共匿名回装）
+
+发布运行时代码提交 `1333422e`，补充边界回归提交 `da37e4bc`；后者必需 CI `35535140722` 全部成功。12组修复撤销验证均检测到失败，恢复后定向测试通过。固定候选包经仓外回装后发布，公共 registry 匿名安装的 shasum/integrity 与候选包一致；Vite公开入口和无TextEncoder/TextDecoder的受限宿主消费通过。npm网页登录与发布二次验证已完成；发布后等待公共索引可读才执行匿名验证，没有重复发布。
+
+- tarball：https://registry.npmjs.org/@henjicc/ai-sdk/-/ai-sdk-0.5.0.tgz
+- shasum：`1b66a7c54f4f86a01b73fdca68b1c63e53dcbe10`
+- integrity：`sha512-MaPS87wDnvGdeAkGZOQHV+q/XPsQv9WZSPKYTYhqYrDhLbGUKS+m6h1sQ2oPM0GVXuZXKsos9BTJH61NSHjzag==`
+
+本轮按用户SDK范围交付可安装包及宿主调整依据；未升级或修改外部say-it/Photoshop仓库。say-it必须实现新流式/原生文件上传桥并完成Tauri集成验收后再升级；不能只改10 MiB常量。
 
 `0.5.0` 文件 ASR：四族九模型已核对。SDK 新增 describe/readChunk + fetchStream 的有界请求体消费，百炼异步 media-ref 必须通过 uploadFile 原生直传 OSS；旧宿主 read 兼容路径不得提升原内存阈值。structured media_too_large 保留实际字节、上限与可得时长。官方 Qwen 编码后10 MB对应原始7,500,000字节，Fun Flash 2,000,000,000字节/5分钟，Groq附件25,000,000，硅基流动50,000,000，百炼临时上传取min(1,000,000,000,凭证MB×1,000,000)。
 
-本次完成SDK精确回归、10组修复撤销反向验证、全量发布门禁与真实QuickJS 64 MiB堆探针（50 MB multipart、7.5/12 MB JSON）；未执行付费请求。say-it 当前 Host API 虽有分块，适配器仍拼回完整Uint8Array，请求体也仍缓冲，必须接入新契约后才可调整分块总文件上限；原生OSS单独受凭证限制。当前任务交付SDK及宿主调整依据，未改写该外部仓库或声称完成Tauri验收。Henji-AI/Photoshop现有生成媒体读取未迁移到新ASR接口，不机械增加未使用能力。
+本次完成SDK精确回归、12组修复撤销反向验证、全量发布门禁与真实QuickJS 64 MiB堆探针（50 MB multipart、7.5/12 MB JSON）；未执行付费请求。say-it 当前 Host API 虽有分块，适配器仍拼回完整Uint8Array，请求体也仍缓冲，必须接入新契约后才可调整分块总文件上限；原生OSS单独受凭证限制。当前任务交付SDK及宿主调整依据，未改写该外部仓库或声称完成Tauri验收。Henji-AI/Photoshop现有生成媒体读取未迁移到新ASR接口，不机械增加未使用能力。
 
 2026-09-14 候选增量：安全网络失败在端点尝试耗尽后按 1/3/8 秒退避，每次失败重新判断重放安全性，取消立即结束退避。SDK 873 项测试、主进程定向测试与类型检查、可移植性及仓外 Vite／受限宿主消费通过；故意移除重试安全复核后，未知提交状态测试失败，恢复后通过。真实 Electron 主进程对本地服务及 KIE 无凭据只读查询，Node 与 Chromium 两栈均得到 HTTP 200；只证明当时连通，不代表付费生成成功，也未复现之前断连的外部原因。宿主增加关联原请求的脱敏 DNS／代理诊断，不更换网络栈。本机 npm 身份仍返回 401，本次候选变更尚未公共发布或同步外部消费者；下方旧候选包校验值仅对应此前版本内容。
 
