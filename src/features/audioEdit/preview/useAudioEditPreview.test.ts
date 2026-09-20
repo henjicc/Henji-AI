@@ -12,6 +12,9 @@ let node: FakeNode
 function captureNode(value: FakeNode) { node = value }
 class FakeContext {
   state = 'suspended'
+  currentTime = 0
+  createGain() { return { gain: { setTargetAtTime: vi.fn() }, connect: vi.fn(), disconnect: vi.fn() } }
+  createDynamicsCompressor() { return { threshold: { value: 0 }, knee: { value: 0 }, ratio: { value: 0 }, attack: { value: 0 }, release: { value: 0 }, connect: vi.fn(), disconnect: vi.fn() } }
   audioWorklet = { addModule: async () => undefined }
   destination = {}
   async resume() { this.state = 'running' }

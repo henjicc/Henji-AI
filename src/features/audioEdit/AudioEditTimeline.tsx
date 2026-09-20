@@ -1,6 +1,6 @@
 import { memo, useEffect, useMemo, useRef, useState } from 'react'
 import { Pause, Play } from 'lucide-react'
-import { UiButton, UiIconButton, UI_TEXT_META_CLASS } from '@/components/ui'
+import { UiButton, UiIconButton, UiRangeInput, UiSwitch, UI_TEXT_META_CLASS } from '@/components/ui'
 import { buildAudioEditTimeline, editedDurationFrames } from '@/core/audioEdit/timeline'
 import type { AudioEditProjectDocument } from '@/core/audioEdit/types'
 import { useAudioEditPlaybackStore } from './store/audioEditPlaybackStore'
@@ -24,6 +24,10 @@ export const AudioEditTimeline = memo(function AudioEditTimeline({ project, peak
   const preparing = useAudioEditPlaybackStore((state) => state.preparing)
   const ready = useAudioEditPlaybackStore((state) => state.ready)
   const error = useAudioEditPlaybackStore((state) => state.error)
+  const autoGain = useAudioEditPlaybackStore((state) => state.autoGain)
+  const volume = useAudioEditPlaybackStore((state) => state.volume)
+  const setAutoGain = useAudioEditPlaybackStore((state) => state.setAutoGain)
+  const setVolume = useAudioEditPlaybackStore((state) => state.setVolume)
   const [view, setView] = useState({ start: 0, end: duration })
   const [width, setWidth] = useState(800)
   const container = useRef<HTMLDivElement>(null)
@@ -81,7 +85,15 @@ export const AudioEditTimeline = memo(function AudioEditTimeline({ project, peak
         <span className={UI_TEXT_META_CLASS}>素材 {time(sourceFrame, rate)}</span>
         {preparing && <span className={UI_TEXT_META_CLASS}>正在准备预览…</span>}
         {error && <span className="text-sm text-red-400">{error}</span>}
-        <UiButton variant="ghost" size="sm" className="ml-auto" onClick={() => { pauseFollow(); setView({ start: 0, end: duration }) }}>显示全部</UiButton>
+        <label className={`ml-auto flex shrink-0 items-center gap-2 whitespace-nowrap ${UI_TEXT_META_CLASS}`} title="自动放大小声录音，仅影响试听，不改变导出音量">
+          <UiSwitch checked={autoGain} onCheckedChange={setAutoGain} aria-label="试听自动增益" />自动增益
+        </label>
+        <label className={`flex shrink-0 items-center gap-2 whitespace-nowrap ${UI_TEXT_META_CLASS}`}>
+          试听音量
+          <UiRangeInput className="!w-24 shrink-0" aria-label="试听音量" min={0} max={100} step={1} value={Math.round(volume * 100)} onChange={(event) => setVolume(Number(event.target.value) / 100)} />
+          <span className="w-9 tabular-nums">{Math.round(volume * 100)}%</span>
+        </label>
+        <UiButton variant="ghost" size="sm" onClick={() => { pauseFollow(); setView({ start: 0, end: duration }) }}>显示全部</UiButton>
       </div>
       <div ref={container} role="slider" tabIndex={0} aria-label="口播波形定位" aria-valuemin={0} aria-valuemax={duration} aria-valuenow={sourceFrame} aria-valuetext={time(sourceFrame, rate)}
         data-view-start={view.start} data-view-end={view.end}

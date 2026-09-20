@@ -5,6 +5,7 @@ import type { AudioEditProjectDocument, AudioEditTimelineSpan } from '@/core/aud
 import { getPlatform } from '@/platform/runtime'
 import { createLogger } from '@/core/logging'
 import { useAudioEditPlaybackStore } from '../store/audioEditPlaybackStore'
+import { createPreviewOutput } from './previewGain'
 
 const CHUNK_SECONDS = 1
 const BUFFER_SECONDS = 3
@@ -23,9 +24,15 @@ function playbackSpans(project: AudioEditProjectDocument, mode: 'edited' | 'sour
     : buildAudioEditTimeline(project.source.durationFrames, project.transcript)
 }
 
-export function useAudioEditPreview(project: AudioEditProjectDocument | null) {
+export function useAudioEditPreview(project: AudioEditProjectDocument | null, normalizationGain = 1) {
   const contextRef = useRef<AudioContext | null>(null)
   const nodeRef = useRef<AudioWorkletNode | null>(null)
+  const outputRef = useRef<ReturnType<typeof createPreviewOutput> | null>(null)
+  const autoGain = useAudioEditPlaybackStore((state) => state.autoGain)
+  const volume = useAudioEditPlaybackStore((state) => state.volume)
+  const levelsRef = useRef({ gain: 1, volume })
+  levelsRef.current = { gain: autoGain ? normalizationGain : 1, volume }
+  useEffect(() => { outputRef.current?.setLevels(levelsRef.current.gain, volume) }, [autoGain, normalizationGain, volume])
   const generationRef = useRef(0)
   const nextSourceFrameRef = useRef(0)
   const fillingPromiseRef = useRef<Promise<void> | null>(null)
@@ -140,7 +147,10 @@ export function useAudioEditPreview(project: AudioEditProjectDocument | null) {
         await context.audioWorklet.addModule(new URL('./audio-edit-preview-worklet.js', window.location.href).href)
         if (disposed) return void context.close()
         const node = new AudioWorkletNode(context, 'henji-audio-edit-preview', { numberOfInputs: 0, numberOfOutputs: 1, outputChannelCount: [Math.min(2, channelCount)] })
-        node.connect(context.destination)
+        const output = createPreviewOutput(context)
+        output.setLevels(levelsRef.current.gain, levelsRef.current.volume)
+        node.connect(output.input)
+        outputRef.current = output
         contextRef.current = context
         nodeRef.current = node
         node.port.onmessage = (event: MessageEvent<WorkletMessage>) => {
@@ -169,6 +179,8 @@ export function useAudioEditPreview(project: AudioEditProjectDocument | null) {
       disposed = true
       generationRef.current += 1
       nodeRef.current?.disconnect()
+      outputRef.current?.dispose()
+      outputRef.current = null
       void contextRef.current?.close()
       nodeRef.current = null
       contextRef.current = null

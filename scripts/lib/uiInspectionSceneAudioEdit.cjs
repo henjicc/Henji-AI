@@ -35,7 +35,27 @@ function createAudioEditScene({ setupToolbox, clickNamedButton }) {
       }
       await setupToolbox(page)
       await clickNamedButton(page, /^(口播剪辑)/)
-      await page.getByRole('button', { name: /波形交互验收/ }).click()
+      // Tap the actual speaker-bound signal, without replacing decoding or playback.
+      await page.evaluate(() => {
+        const original = AudioNode.prototype.connect
+        window.__audioEditRestoreTap = () => { AudioNode.prototype.connect = original }
+        AudioNode.prototype.connect = function (...args) {
+          const result = original.apply(this, args)
+          if (args[0] === this.context.destination) {
+            const analyser = this.context.createAnalyser()
+            analyser.fftSize = 2048
+            original.call(this, analyser)
+            window.__audioEditOutputTap = analyser
+          }
+          return result
+        }
+      })
+      try {
+        await page.getByRole('button', { name: /波形交互验收/ }).click()
+        await page.waitForFunction(() => Boolean(window.__audioEditOutputTap))
+      } finally {
+        await page.evaluate(() => { window.__audioEditRestoreTap(); delete window.__audioEditRestoreTap })
+      }
       const waveform = page.getByRole('slider', { name: '口播波形定位' })
       await waveform.waitFor({ state: 'visible' })
       await page.waitForFunction(() => document.querySelector('[aria-label="口播波形定位"] svg rect'))
@@ -51,6 +71,24 @@ function createAudioEditScene({ setupToolbox, clickNamedButton }) {
       await page.waitForFunction((rate) => Number(document.querySelector('[aria-label="口播波形定位"]').getAttribute('aria-valuenow')) > rate * 4.1, rate)
       assert.equal(await page.locator('[data-audio-word="middle"]').getAttribute('aria-current'), 'true')
       assert.ok(await electronApp.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().some((window) => window.webContents.isCurrentlyAudible())), '真实 Electron 应输出音频')
+      const outputRms = () => page.evaluate(() => {
+        const analyser = window.__audioEditOutputTap
+        const samples = new Float32Array(analyser.fftSize)
+        analyser.getFloatTimeDomainData(samples)
+        return Math.sqrt(samples.reduce((total, value) => total + value * value, 0) / samples.length)
+      })
+      const boosted = await outputRms()
+      assert.ok(boosted > 0.1, `小声素材应被实际放大，输出 RMS=${boosted}`)
+      await page.getByRole('switch', { name: '试听自动增益' }).click()
+      await page.waitForTimeout(300)
+      const originalLevel = await outputRms()
+      assert.ok(boosted > originalLevel * 3, '关闭自动增益应恢复较小音量')
+      await page.getByRole('switch', { name: '试听自动增益' }).click()
+      await page.getByRole('slider', { name: '试听音量', exact: true }).focus()
+      await page.keyboard.press('Home')
+      await page.waitForTimeout(400)
+      assert.ok(await outputRms() < 0.001, '音量归零后应静音')
+      await page.keyboard.press('End')
       await page.getByTitle('暂停', { exact: true }).click()
       const paused = await waveform.getAttribute('aria-valuenow')
       await page.waitForTimeout(250)

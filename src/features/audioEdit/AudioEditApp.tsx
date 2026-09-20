@@ -32,6 +32,7 @@ import { createHostContextSnapshot } from '@/features/application-control/hostCo
 import { getPlatform } from '@/platform/runtime'
 import { basename, openDialog, readTextFile, saveDialog } from '@/platform/desktopApi'
 import { useAudioEditPreview } from './preview/useAudioEditPreview'
+import { calculatePreviewGain } from './preview/previewGain'
 import { AudioEditTimeline } from './AudioEditTimeline'
 import { useAudioEditPlaybackStore } from './store/audioEditPlaybackStore'
 import { useAudioEditStore } from './store/audioEditStore'
@@ -167,7 +168,8 @@ export default function AudioEditApp({ onBack }: AudioEditAppProps): JSX.Element
   const saveSequenceRef = useRef(0)
   const savedContentRef = useRef('')
   const saveInFlightRef = useRef(false)
-  const { togglePlayback, seekSourceFrame } = useAudioEditPreview(project)
+  const normalizationGain = useMemo(() => calculatePreviewGain(waveformPeaks), [waveformPeaks])
+  const { togglePlayback, seekSourceFrame } = useAudioEditPreview(project, normalizationGain)
   const waveformSeconds = project ? project.source.durationFrames / project.source.sampleRate : 0
 
   const refreshHome = useCallback(async () => {

@@ -14,6 +14,8 @@ export const AUDIO_EDIT_PLAYBACK_STORE_LEDGER: ApplicationStoreActionLedger<Acti
   storeId: 'audioEditPlaybackStore',
   title: '口播剪辑试听状态',
   entries: {
+    setAutoGain: { kind: 'excluded', category: 'view_state', reason: '试听自动增益仅调节本机扬声器音量，不改变工程、媒体或导出；由用户在播放栏控制。' },
+    setVolume: { kind: 'excluded', category: 'view_state', reason: '本机试听音量由用户控制，不改变工程、媒体或导出。' },
     setMode: { kind: 'excluded', category: 'view_state', reason: PLAYBACK_REASON },
     setPlaying: { kind: 'excluded', category: 'view_state', reason: PLAYBACK_REASON },
     setPreparing: { kind: 'excluded', category: 'derived', reason: ENGINE_REASON },

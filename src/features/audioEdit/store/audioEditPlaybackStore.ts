@@ -11,6 +11,10 @@ interface AudioEditPlaybackState {
   sourceFrame: number
   outputFrame: number
   activeBlockId: string | null
+  autoGain: boolean
+  volume: number
+  setAutoGain: (enabled: boolean) => void
+  setVolume: (volume: number) => void
   setMode: (mode: AudioEditPreviewMode) => void
   setPlaying: (playing: boolean) => void
   setPreparing: (preparing: boolean) => void
@@ -28,6 +32,10 @@ export const useAudioEditPlaybackStore = create<AudioEditPlaybackState>((set) =>
   sourceFrame: 0,
   outputFrame: 0,
   activeBlockId: null,
+  autoGain: true,
+  volume: 0.8,
+  setAutoGain: (autoGain) => set({ autoGain }),
+  setVolume: (volume) => set({ volume: Number.isFinite(volume) ? Math.max(0, Math.min(1, volume)) : 0.8 }),
   setMode: (mode) => set({ mode }),
   setPlaying: (playing) => set({ playing }),
   setPreparing: (preparing) => set({ preparing }),
