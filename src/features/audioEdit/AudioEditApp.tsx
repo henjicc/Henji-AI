@@ -6,8 +6,6 @@ import {
   Download,
   FileAudio,
   FolderOpen,
-  Pause,
-  Play,
   Redo2,
   Sparkles,
   Undo2,
@@ -15,7 +13,6 @@ import {
 } from 'lucide-react'
 
 import {
-  UI_TEXT_BODY_CLASS,
   UI_TEXT_LABEL_CLASS,
   UI_TEXT_META_CLASS,
   UiButton,
@@ -23,12 +20,10 @@ import {
   UiLoading,
   UiOptionButton,
   UiPageHeader,
-  UiRangeInput,
   UiRegion,
   UiSwitch,
   UiTextArea,
 } from '@/components/ui'
-import { buildAudioEditTimeline, editedDurationFrames } from '@/core/audioEdit/timeline'
 import type { AudioEditAsrModel } from '@/platform/contracts/audioEdit'
 import type { AudioEditProcessorDescriptor, AudioEditProjectDocument, AudioEditProjectSummary } from '@/core/audioEdit/types'
 import { useNotification } from '@/contexts/NotificationContext'
@@ -36,6 +31,7 @@ import { openAssistant } from '@/features/assistant/store/assistantUiStore'
 import { getPlatform } from '@/platform/runtime'
 import { basename, openDialog, readTextFile, saveDialog } from '@/platform/desktopApi'
 import { useAudioEditPreview } from './preview/useAudioEditPreview'
+import { AudioEditTimeline } from './AudioEditTimeline'
 import { useAudioEditPlaybackStore } from './store/audioEditPlaybackStore'
 import { useAudioEditStore } from './store/audioEditStore'
 
@@ -61,13 +57,14 @@ function Transcript({
   const setSelected = useAudioEditStore((state) => state.setSelectedBlockIds)
   const listRef = useRef<VirtuosoHandle | null>(null)
   const followPausedUntilRef = useRef(0)
+  const transcript = project.transcript
   const rows = useMemo(() => {
-    const next: typeof project.transcript[] = []
-    for (let index = 0; index < project.transcript.length; index += 64) {
-      next.push(project.transcript.slice(index, index + 64))
+    const next: typeof transcript[] = []
+    for (let index = 0; index < transcript.length; index += 64) {
+      next.push(transcript.slice(index, index + 64))
     }
     return next
-  }, [project])
+  }, [transcript])
   const activeRow = useMemo(() => {
     if (!activeBlockId) return -1
     const index = project.transcript.findIndex((block) => block.id === activeBlockId)
@@ -77,12 +74,14 @@ function Transcript({
   useEffect(() => {
     if (activeRow < 0 || Date.now() < followPausedUntilRef.current) return
     listRef.current?.scrollIntoView({ index: activeRow, behavior: 'smooth', done: () => undefined })
-  }, [activeRow])
+  }, [activeRow, activeBlockId])
 
   return (
     <div
       className="h-full px-8 py-7"
       onPointerDown={() => { followPausedUntilRef.current = Date.now() + 2500 }}
+      onWheel={() => { followPausedUntilRef.current = Date.now() + 2500 }}
+      onTouchMove={() => { followPausedUntilRef.current = Date.now() + 2500 }}
     >
       {project.transcript.length === 0 ? (
         <div className="flex h-full flex-col items-center justify-center gap-3 text-center">
@@ -96,9 +95,6 @@ function Transcript({
           className="h-full"
           data={rows}
           increaseViewportBy={320}
-          isScrolling={(scrolling) => {
-            if (scrolling) followPausedUntilRef.current = Date.now() + 2500
-          }}
           itemContent={(_, row) => (
             <div className="mx-auto max-w-4xl pb-3 text-lg leading-[2.15]">
               {row.map((block) => {
@@ -107,6 +103,8 @@ function Transcript({
                 return (
                   <UiButton
                     key={block.id}
+                    data-audio-word={block.id}
+                    aria-current={isActive ? 'true' : undefined}
                     variant="ghost"
                     size="sm"
                     className={`mx-0.5 inline min-h-8 h-auto rounded-md px-1.5 py-1 text-lg font-normal leading-relaxed ${
@@ -141,46 +139,6 @@ function Transcript({
   )
 }
 
-function Timeline({ project, peaks }: { project: AudioEditProjectDocument; peaks: number[] }) {
-  const sourceFrame = useAudioEditPlaybackStore((state) => state.sourceFrame)
-  const containerRef = useRef<HTMLDivElement | null>(null)
-  const [width, setWidth] = useState(0)
-  const spans = useMemo(() => buildAudioEditTimeline(project.source.durationFrames, project.transcript), [project])
-  const displayPeaks = useMemo(() => {
-    if (peaks.length === 0) return []
-    const target = Math.max(64, Math.min(800, Math.floor(width / 3) || 360))
-    const sampled = Array.from({ length: Math.min(target, peaks.length) }, (_, index) => {
-      const start = Math.floor(index * peaks.length / target)
-      const end = Math.max(start + 1, Math.floor((index + 1) * peaks.length / target))
-      return Math.max(...peaks.slice(start, end))
-    })
-    const sorted = [...sampled].sort((left, right) => left - right)
-    const reference = sorted[Math.floor((sorted.length - 1) * 0.95)] || 1
-    return sampled.map((peak) => Math.min(1, peak / reference))
-  }, [peaks, width])
-  const percent = project.source.durationFrames > 0 ? sourceFrame / project.source.durationFrames * 100 : 0
-  useEffect(() => {
-    const element = containerRef.current
-    if (!element) return
-    const observer = new ResizeObserver(([entry]) => setWidth(entry.contentRect.width))
-    observer.observe(element)
-    return () => observer.disconnect()
-  }, [])
-  return (
-    <div ref={containerRef} className="relative h-[clamp(5rem,11vh,9rem)] overflow-hidden rounded-lg border border-border-dark bg-bg-dark">
-      <div className="absolute inset-y-0 left-0 bg-layer" style={{ width: `${Math.min(100, Math.max(0, percent))}%` }} />
-      <div className="absolute inset-0 flex items-center gap-px px-1 py-2">
-        {displayPeaks.map((peak, index) => {
-          const frame = (index + 0.5) / displayPeaks.length * project.source.durationFrames
-          const retained = spans.some((span) => frame >= span.sourceStartFrame && frame < span.sourceEndFrame)
-          return <div key={index} className={`min-w-0 flex-1 rounded-sm ${retained ? 'bg-accent' : 'bg-text-muted opacity-35'}`} style={{ height: `${Math.max(4, peak * 100)}%` }} />
-        })}
-      </div>
-      <div className="absolute inset-y-0 w-px bg-white" style={{ left: `${percent}%` }} />
-    </div>
-  )
-}
-
 export interface AudioEditAppProps { onBack?: () => void }
 
 export default function AudioEditApp({ onBack }: AudioEditAppProps): JSX.Element {
@@ -198,13 +156,6 @@ export default function AudioEditApp({ onBack }: AudioEditAppProps): JSX.Element
   const setVstEnabled = useAudioEditStore((state) => state.setVstEnabled)
   const applySuggestion = useAudioEditStore((state) => state.applySuggestion)
   const dismissSuggestion = useAudioEditStore((state) => state.dismissSuggestion)
-  const mode = useAudioEditPlaybackStore((state) => state.mode)
-  const playing = useAudioEditPlaybackStore((state) => state.playing)
-  const preparing = useAudioEditPlaybackStore((state) => state.preparing)
-  const previewReady = useAudioEditPlaybackStore((state) => state.ready)
-  const previewError = useAudioEditPlaybackStore((state) => state.error)
-  const outputFrame = useAudioEditPlaybackStore((state) => state.outputFrame)
-  const setMode = useAudioEditPlaybackStore((state) => state.setMode)
   const [projects, setProjects] = useState<AudioEditProjectSummary[]>([])
   const [asrModels, setAsrModels] = useState<AudioEditAsrModel[]>([])
   const [processors, setProcessors] = useState<AudioEditProcessorDescriptor[]>([])
@@ -215,7 +166,8 @@ export default function AudioEditApp({ onBack }: AudioEditAppProps): JSX.Element
   const saveSequenceRef = useRef(0)
   const savedContentRef = useRef('')
   const saveInFlightRef = useRef(false)
-  const { timeline, togglePlayback, seekSourceFrame } = useAudioEditPreview(project)
+  const { togglePlayback, seekSourceFrame } = useAudioEditPreview(project)
+  const waveformSeconds = project ? project.source.durationFrames / project.source.sampleRate : 0
 
   const refreshHome = useCallback(async () => {
     const platform = getPlatform().audioEdit
@@ -235,13 +187,14 @@ export default function AudioEditApp({ onBack }: AudioEditAppProps): JSX.Element
       return
     }
     let cancelled = false
-    void getPlatform().audioEdit.extractWaveform(waveformAudioPath, 1600).then((waveform) => {
+    setWaveformPeaks([])
+    void getPlatform().audioEdit.extractWaveform(waveformAudioPath, Math.max(1600, Math.min(360000, Math.ceil(waveformSeconds * 50)))).then((waveform) => {
       if (!cancelled) setWaveformPeaks(waveform.peak)
     }).catch(() => {
       if (!cancelled) setWaveformPeaks([])
     })
     return () => { cancelled = true }
-  }, [waveformAudioPath, waveformProjectId])
+  }, [waveformAudioPath, waveformProjectId, waveformSeconds])
 
   useEffect(() => {
     if (!project) return
@@ -341,7 +294,6 @@ export default function AudioEditApp({ onBack }: AudioEditAppProps): JSX.Element
     )
   }
 
-  const duration = mode === 'edited' ? editedDurationFrames(timeline) : project.source.durationFrames
   const configuredAsr = asrModels.some((model) => model.configured && model.timestamps)
   const compatibleProcessors = processors.filter((processor) => processor.available && processor.semanticRole)
   const pendingSuggestions = project.suggestions.filter((suggestion) => suggestion.status === 'pending')
@@ -411,24 +363,7 @@ export default function AudioEditApp({ onBack }: AudioEditAppProps): JSX.Element
         </aside>
       </div>
 
-      <div className="shrink-0 border-t border-border-dark p-3">
-        <div className="mb-2 flex items-center gap-3">
-          <UiIconButton className="h-9 w-9" disabled={!previewReady || preparing} onClick={() => void togglePlayback()} title={playing ? '暂停' : '播放'}>{playing ? <Pause size={16} /> : <Play size={16} />}</UiIconButton>
-          <UiSwitch appearance="segmented" size="compact" checked={mode === 'source'} offLabel="成片" onLabel="原始" onCheckedChange={(checked) => setMode(checked ? 'source' : 'edited')} />
-          <span className={UI_TEXT_BODY_CLASS}>{formatTime(outputFrame, project.source.sampleRate)} / {formatTime(duration, project.source.sampleRate)}</span>
-          {preparing && <span className={UI_TEXT_META_CLASS}>正在准备预览…</span>}
-          {previewError && <span className="text-sm text-red-400">{previewError}</span>}
-          <UiRangeInput className="ml-auto max-w-sm" min={0} max={Math.max(1, duration)} value={Math.min(duration, outputFrame)} onChange={(event) => {
-            const frame = Number(event.target.value)
-            if (mode === 'source') seekSourceFrame(frame)
-            else {
-              const span = timeline.find((item) => frame >= item.outputStartFrame && frame <= item.outputEndFrame)
-              if (span) seekSourceFrame(span.sourceStartFrame + frame - span.outputStartFrame)
-            }
-          }} />
-        </div>
-        <Timeline project={project} peaks={waveformPeaks} />
-      </div>
+      <AudioEditTimeline project={project} peaks={waveformPeaks} onSeek={seekSourceFrame} onToggle={togglePlayback} />
     </div>
   )
 }

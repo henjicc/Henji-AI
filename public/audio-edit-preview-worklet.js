@@ -8,6 +8,7 @@ class HenjiAudioEditPreviewProcessor extends AudioWorkletProcessor {
     this.starved = true
     this.framesSincePosition = 0
     this.requestedData = false
+    this.consumedFrames = 0
     this.port.onmessage = (event) => {
       const message = event.data
       if (message.type === 'reset') {
@@ -17,6 +18,7 @@ class HenjiAudioEditPreviewProcessor extends AudioWorkletProcessor {
         this.starved = true
         this.framesSincePosition = 0
         this.requestedData = false
+        this.consumedFrames = 0
       } else if (message.type === 'playing') {
         this.playing = message.value
       } else if (message.type === 'chunk' && message.generation === this.generation) {
@@ -46,21 +48,21 @@ class HenjiAudioEditPreviewProcessor extends AudioWorkletProcessor {
       chunk.frameOffset += take
       written += take
       this.queuedFrames -= take
+      this.consumedFrames += take
       finalSourceFrame = chunk.sourceStartFrame + chunk.frameOffset
       if (chunk.frameOffset >= chunk.pcm.length / chunk.channels) this.queue.shift()
     }
     this.framesSincePosition += written
-    if (finalSourceFrame !== null && this.framesSincePosition >= sampleRate / 30) {
+    if (finalSourceFrame !== null && (this.framesSincePosition >= sampleRate / 30 || this.queue.length === 0)) {
       this.framesSincePosition = 0
-      this.port.postMessage({ type: 'position', sourceFrame: finalSourceFrame, queuedFrames: this.queuedFrames })
+      this.port.postMessage({ type: 'position', generation: this.generation, sourceFrame: finalSourceFrame, consumedFrames: this.consumedFrames })
     }
     if (this.queue.length === 0 && !this.starved) {
       this.starved = true
-      this.playing = false
-      this.port.postMessage({ type: 'starved' })
+      this.port.postMessage({ type: 'starved', generation: this.generation, consumedFrames: this.consumedFrames })
     } else if (this.queuedFrames < sampleRate * 1.5 && !this.requestedData) {
       this.requestedData = true
-      this.port.postMessage({ type: 'need-data', queuedFrames: this.queuedFrames })
+      this.port.postMessage({ type: 'need-data', generation: this.generation, consumedFrames: this.consumedFrames })
     }
     return true
   }
