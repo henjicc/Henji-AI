@@ -68,7 +68,7 @@ describe('GPT Image 2.5 official request contracts', () => {
   it('applies Grsai version-specific pixels, quality and background', async () => {
     expect(await build(grsai, { gpt25Variant: 'standard', gpt25Resolution: '4K', gpt25Quality: 'max', gpt25Transparent: true })).toEqual({ model: 'gpt-image-2.5', prompt: 'A product photo', aspectRatio: '1:1' })
     expect(await build(grsai, { gpt25Variant: 'sunburst', gpt25Resolution: '4K', gpt25Quality: 'max', gpt25Transparent: true, gpt25AspectRatio: '3:2' })).toMatchObject({ model: 'gpt-image-2.5-sunburst', aspectRatio: '3504x2336', quality: 'max', background: 'transparent' })
-    expect(await build(grsai)).toMatchObject({ model: 'gpt-image-2.5-flare', quality: 'medium' })
+    expect(await build(grsai)).toEqual({ model: 'gpt-image-2.5', prompt: 'A product photo', aspectRatio: '1:1' })
   })
 
   it('keeps all explicit pixel sizes within the official constraints', () => {
@@ -87,6 +87,7 @@ describe('GPT Image 2.5 official request contracts', () => {
     expect(apimart.pricing!.calculator!({ gpt25Resolution: '2K', gpt25Count: 3 })).toBeCloseTo(0.042)
     expect(apimart.pricing!.calculator!({ gpt25Channel: 'official', gpt25Quality: 'high' })).toBeCloseTo(1756 * 24 / 1e6)
     expect(fal.pricing!.calculator!({ gpt25Quality: 'max', gpt25Resolution: '2K', gpt25Count: 2 })).toBeCloseTo(14272 * 30 / 1e6 * 2)
+    expect(grsai.pricing!.calculator!({})).toBe(0.06)
     expect(grsai.pricing!.calculator!({ gpt25Variant: 'sunburst' })).toBe(0.24)
   })
 

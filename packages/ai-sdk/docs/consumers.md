@@ -3,13 +3,19 @@
 本清单是 `@henjicc/ai-sdk` 消费方的唯一维护入口，用于 SDK 发布后的跨仓升级协调。
 绝对路径仅描述当前开发机上的仓库位置，不进入 SDK 运行时代码、发布包或用户配置。
 
-最后核对日期：2026-09-14
+最后核对日期：2026-09-21
 
 Henji-AI 安装包的 GPT Image 2.5 高分辨率报错归属：宿主智能比例预处理曾忽略联动过滤，将 `smart` 转成 KIE 仅限 1K 的 `27:16`，SDK 在请求前正确拒绝。修复位于应用公共预处理，按当前分辨率/渠道的合法选项匹配；Flare/Sunburst 的 1K/2K/4K 及 APIMart、Grsai 同类筛选已有定向覆盖。无需放宽 SDK 契约或发布 SDK；安装包需随应用更新才包含修复，现有版本可手动选合法比例规避。
 
-当前仓内及公共 npm SDK 版本：`0.5.0`（2026-09-21 已发布并完成公共匿名回装）
+当前仓内及公共 npm SDK 版本：`0.5.1`（2026-09-21 已发布并完成公共匿名回装）
 
-发布运行时代码提交 `1333422e`，补充边界回归提交 `da37e4bc`；后者必需 CI `35535140722` 全部成功。12组修复撤销验证均检测到失败，恢复后定向测试通过。固定候选包经仓外回装后发布，公共 registry 匿名安装的 shasum/integrity 与候选包一致；Vite公开入口和无TextEncoder/TextDecoder的受限宿主消费通过。npm网页登录与发布二次验证已完成；发布后等待公共索引可读才执行匿名验证，没有重复发布。
+`0.5.1` 将 Grsai GPT Image 2.5 未指定变体时的默认值从官方公告仍在维护的 Flare 改为 Standard，并同步默认价格；显式选择 Flare / Sunburst 的调用保持兼容。公共 DTO、请求协议、宿主边界和其余模型未变。发布前 77 个测试文件 / 899 项测试、可移植性、构建、49 个 Vite 公开入口和受限宿主门禁通过；公共索引可读后，已在隔离用户 npm 配置的仓外目录匿名安装并完成 ESM 导入。
+
+- `0.5.1` tarball：https://registry.npmjs.org/@henjicc/ai-sdk/-/ai-sdk-0.5.1.tgz
+- `0.5.1` shasum：`40087e680f1b7de63a601d12758acb7280de305f`
+- `0.5.1` integrity：`sha512-+L/mAmFU6zgJ0gdsIwy0T1Z9TDOABaxO3HgLsEvMUNbRQhs9K55golF1472EgSJsIDysScnUulFJfBVg0xsNBg==`
+
+`0.5.0` 发布运行时代码提交 `1333422e`，补充边界回归提交 `da37e4bc`；后者必需 CI `35535140722` 全部成功。12组修复撤销验证均检测到失败，恢复后定向测试通过。固定候选包经仓外回装后发布，公共 registry 匿名安装的 shasum/integrity 与候选包一致；Vite公开入口和无TextEncoder/TextDecoder的受限宿主消费通过。npm网页登录与发布二次验证已完成；发布后等待公共索引可读才执行匿名验证，没有重复发布。
 
 - tarball：https://registry.npmjs.org/@henjicc/ai-sdk/-/ai-sdk-0.5.0.tgz
 - shasum：`1b66a7c54f4f86a01b73fdca68b1c63e53dcbe10`

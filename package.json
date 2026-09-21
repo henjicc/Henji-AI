@@ -23,6 +23,8 @@
     "check:surface:strict": "node scripts/check-surface-tokens.cjs --strict",
     "check:model-i18n": "node scripts/check-model-i18n.cjs",
     "check:model-adaptation-skill-sync": "node scripts/check-model-adaptation-skill-sync.cjs",
+    "check:model-updates": "node scripts/check-provider-model-updates.cjs",
+    "check:model-updates:strict": "node scripts/check-provider-model-updates.cjs --strict",
     "check:main-imports": "node scripts/check-main-imports.cjs",
     "check:sdk": "node scripts/check-sdk-portability.cjs && node packages/ai-sdk/scripts/check-generation-iife.cjs && node packages/ai-sdk/scripts/check-modular-bundles.cjs && node packages/ai-sdk/scripts/check-uxp-llm-streaming.cjs",
     "check:application-control-coverage": "vitest run src/core/application-control/applicationControlCoverage.test.ts",
@@ -79,7 +81,7 @@
   },
   "dependencies": {
     "@earendil-works/pi-coding-agent": "0.85.1",
-    "@henjicc/ai-sdk": "0.5.0",
+    "@henjicc/ai-sdk": "0.5.1",
     "@modelcontextprotocol/client": "2.0.0",
     "@modelcontextprotocol/node": "2.0.0",
     "@modelcontextprotocol/server": "2.0.0",

@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.5.1 - 2026-09-21
+
+- Grsai GPT Image 2.5 默认变体从维护中的 Flare 切换为可用的 Standard；显式 Flare/Sunburst 参数保持兼容，等待官方恢复公告。
+- 默认请求体与默认价格估算同步使用 Standard，避免界面未选择变体时仍把任务提交到维护通道。
+
 ## 0.5.0 - 2026-09-21
 
 - 文件 ASR 支持分块 JSON/Base64 与 multipart，请求体不重组整文件；支持结构化大小错误、PCM 时长估算及取消清理。
