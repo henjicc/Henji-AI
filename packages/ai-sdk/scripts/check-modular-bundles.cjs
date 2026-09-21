@@ -535,7 +535,7 @@ llmModuleClient.register({
     },
     executionModes: ['request-response'],
   },
-  execute: async () => ({ output: '', reasoningOutput: '', usage: null, finishReason: null }),
+  execute: async () => ({ output: '', reasoningOutput: '', usage: null, finishReason: null, truncated: false }),
 })
 if (llmModuleClient.list().length !== 1) fail('LLM module 受限生命周期注册失败')
 for (const [name, artifact, globalName, expectedModelCount] of [

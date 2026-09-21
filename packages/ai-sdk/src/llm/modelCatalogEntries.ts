@@ -39,6 +39,7 @@ export const LLM_MODEL_CATALOG_ENTRIES: readonly LlmModelCatalogEntry[] = [
     toolCall: true,
     parallelTools: false,
     structuredOutputMode: 'json',
+    structuredOutputWithReasoning: true,
     reasoning: true,
     sampling: true,
     contextWindow: 131_072,
@@ -121,6 +122,7 @@ export const LLM_MODEL_CATALOG_ENTRIES: readonly LlmModelCatalogEntry[] = [
     toolCall: true,
     parallelTools: false,
     structuredOutputMode: 'schema',
+    structuredOutputWithReasoning: true,
     reasoning: true,
     // 官方文档把 temperature / top_p 等列为固定值并明确"建议不要显式传入"，
     // sampling=false 会让模型步骤不再下发这两个参数。

@@ -81,7 +81,7 @@
   },
   "dependencies": {
     "@earendil-works/pi-coding-agent": "0.85.1",
-    "@henjicc/ai-sdk": "0.5.1",
+    "@henjicc/ai-sdk": "0.5.2",
     "@modelcontextprotocol/client": "2.0.0",
     "@modelcontextprotocol/node": "2.0.0",
     "@modelcontextprotocol/server": "2.0.0",

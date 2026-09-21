@@ -48,10 +48,10 @@ try {
 
 百炼工厂必须传 `baseUrl` 为实际地域/工作空间的 API 根地址，不包含端点路径。其他供应商可以覆盖根地址与 `credentialId`；SDK 不自动切换地域或账号。不同模型的向量不能混用；切换模型通常需要重建向量索引。Rerank 分数仅在本次请求内比较。
 
-SDK `0.5.1` 的正式分发渠道为公共 npm，无需配置 registry 或访问令牌：
+SDK `0.5.2` 的正式分发渠道为公共 npm，无需配置 registry 或访问令牌：
 
 ```bash
-npm install @henjicc/ai-sdk@0.5.1
+npm install @henjicc/ai-sdk@0.5.2
 ```
 
 然后提供 4 个宿主能力（`Transport` / `CredentialStore` / `MediaReader` / `Logger`），创建客户端：
@@ -195,11 +195,47 @@ import {
 const request: LlmChatRequestDto = {
   requestId: 'chat-1', providerId: 'openai', modelId: 'gpt-5-mini',
   messages: [{ role: 'user', content: '你好' }],
+  capabilities: {
+    structuredOutputMode: 'schema',
+    reasoning: true,
+    structuredOutputWithReasoning: true,
+    maxOutputTokens: 32_000,
+  },
+  reasoning: { enabled: true, effort: 'high' },
+  structuredOutput: {
+    type: 'json_schema',
+    name: 'subtitle_segments',
+    strict: true,
+    schema: {
+      type: 'object',
+      properties: {
+        segments: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: { text: { type: 'string' } },
+            required: ['text'],
+            additionalProperties: false,
+          },
+        },
+      },
+      required: ['segments'],
+      additionalProperties: false,
+    },
+  },
+  maxOutputTokens: 24_000,
 }
 const result = await runLlmChatStream(request, 'chat-1', onStreamEvent, runtime as RuntimeContext)
-console.log(result.output, result.reasoningOutput, result.usage, result.finishReason)
+console.log(result.output, result.reasoningOutput, result.usage, result.finishReason, result.truncated)
 cancelLlmChatTask('chat-1')
 ```
+
+`structuredOutput` 支持 `text`、`json_object`、`json_schema`。轻量入口只执行 Chat Completions，
+所以这里会正式映射到最终请求体的 `response_format`；它不包含 Responses API 执行器，Responses
+路径的等价字段 `text.format` 由完整 `llm` 入口处理。JSON Object、JSON Schema 和“结构化输出 +
+思考”都必须由 `capabilities` 明确声明；未知或不支持的组合会在网络请求前返回结构化错误，不会静默
+降级。省略 `maxOutputTokens` 时 SDK 不再强加 4096 tokens，而是交给供应商默认值；省略执行参数里的
+`timeoutMs` 则没有请求总时限，宿主可在 `Transport` 中实现长时间无数据才超时。
 
 ### 可选模型分发包与统一能力筛选
 

@@ -7,7 +7,13 @@
 
 Henji-AI 安装包的 GPT Image 2.5 高分辨率报错归属：宿主智能比例预处理曾忽略联动过滤，将 `smart` 转成 KIE 仅限 1K 的 `27:16`，SDK 在请求前正确拒绝。修复位于应用公共预处理，按当前分辨率/渠道的合法选项匹配；Flare/Sunburst 的 1K/2K/4K 及 APIMart、Grsai 同类筛选已有定向覆盖。无需放宽 SDK 契约或发布 SDK；安装包需随应用更新才包含修复，现有版本可手动选合法比例规避。
 
-当前仓内及公共 npm SDK 版本：`0.5.1`（2026-09-21 已发布并完成公共匿名回装）
+当前仓内及公共 npm SDK 版本：`0.5.2`（2026-09-21 已发布并完成公共匿名回装）
+
+`0.5.2` 完善轻量 `@henjicc/ai-sdk/llm/streaming`：正式类型支持文本、JSON Object 与 JSON Schema，Chat Completions 的最终请求体写入 `response_format`，OpenAI 输出上限写入 `max_completion_tokens`；结构化输出、思考模式和模型能力的非法组合会在请求前返回结构化错误。流式正文与思考继续分离，保留外部 `AbortSignal`，不设置默认总时限；未显式配置输出上限时不再注入 4096，服务端以 `length` 等原因结束时返回 `truncated: true`。发布前 77 个测试文件 / 909 项测试、可移植性、构建、49 个 Vite 公开入口和受限宿主门禁通过；故意撤销结构化参数、输出上限、OpenAI 字段映射和截断标记后，8 项定向断言失败，恢复后通过。公共索引可读后，已使用隔离 npm 配置和缓存匿名安装精确版本，并从已发布的轻量入口验证最终请求体包含 JSON Schema、思考强度和 24,000 token 上限，SSE 正文/思考事件分离且未截断。
+
+- `0.5.2` tarball：https://registry.npmjs.org/@henjicc/ai-sdk/-/ai-sdk-0.5.2.tgz
+- `0.5.2` shasum：`f1c06ae12c9240b203f3ad310c4eec35b755db13`
+- `0.5.2` integrity：`sha512-ljb50njJ0bXWxwNmlgZ1+YDBoBgPiLhoNEDjsbhPbe4pc7aVZGcfvpDLh+zGdx9KsB7g7Xp3mqVM4MLpVQm15g==`
 
 `0.5.1` 将 Grsai GPT Image 2.5 未指定变体时的默认值从官方公告仍在维护的 Flare 改为 Standard，并同步默认价格；显式选择 Flare / Sunburst 的调用保持兼容。公共 DTO、请求协议、宿主边界和其余模型未变。发布前 77 个测试文件 / 899 项测试、可移植性、构建、49 个 Vite 公开入口和受限宿主门禁通过；公共索引可读后，已在隔离用户 npm 配置的仓外目录匿名安装并完成 ESM 导入。
 

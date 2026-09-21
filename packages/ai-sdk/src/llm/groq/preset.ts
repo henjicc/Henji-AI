@@ -45,6 +45,7 @@ export const GROQ_DEFAULT_MODEL_CONFIG: LlmModelConfig = {
     parallelTools: false,
     jsonOutput: true,
     structuredOutputMode: 'json',
+    structuredOutputWithReasoning: true,
     reasoning: true,
     sampling: true,
     contextWindow: 131_072,

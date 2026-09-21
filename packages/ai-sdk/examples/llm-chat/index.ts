@@ -68,7 +68,7 @@ async function main(): Promise<void> {
     reasoning: providerId === 'deepseek'
       ? { enabled: false, effort: 'high' }
       : undefined,
-    policy: { max_tokens: 16 },
+    maxOutputTokens: 16,
   }
   const taskId = resolveLlmTaskId(request)
   let output = ''

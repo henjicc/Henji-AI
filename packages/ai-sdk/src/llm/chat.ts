@@ -55,11 +55,12 @@ export interface LlmChatCompletedInfo {
   reasoningOutput: string
   usage: LlmUsageDto | null
   finishReason: string | null
+  truncated: boolean
   toolCalls?: LlmStreamToolCall[]
 }
 
 export interface LlmChatStreamHooks {
-  /** 请求体与 endpoint 已经构建好，即将发出网络请求前触发一次。 */
+  /** 请求体与 endpoint 已经构建好，即将发出网络请求前触发一次；requestPayload 是只用于观察的快照。 */
   onRequestBuilt?: (info: LlmChatRequestBuiltInfo) => void
   /** 流式响应正常读完（未被取消、未抛错）后触发一次。 */
   onCompleted?: (info: LlmChatCompletedInfo) => void
@@ -76,6 +77,7 @@ export interface LlmChatStreamOutcome {
   reasoningOutput: string
   usage: LlmUsageDto | null
   finishReason: string | null
+  truncated: boolean
   toolCalls?: LlmStreamToolCall[]
 }
 
@@ -146,12 +148,17 @@ export async function runLlmChatStream(
       : resolveOpenAiCompatibleEndpoint(processedRequest)
     const requestPayload = buildOpenAiCompatiblePayload(processedRequest)
 
-    hooks.onRequestBuilt?.({ endpoint, requestPayload, processedRequest })
+    hooks.onRequestBuilt?.({
+      endpoint,
+      requestPayload: cloneJsonObject(requestPayload),
+      processedRequest,
+    })
 
     const output = await streamOpenAiCompatibleChat({
       endpoint,
       apiKey,
-      request: processedRequest,
+      providerId: identity.providerFamilyId,
+      payload: requestPayload,
       signal: controller.signal,
       emit,
       transport: runtime.transport,
@@ -174,6 +181,7 @@ export async function runLlmChatStream(
       reasoningOutput: output.reasoningOutput,
       usage: output.usage,
       finishReason: output.finishReason,
+      truncated: output.truncated,
       toolCalls: output.toolCalls,
     })
 
@@ -189,6 +197,7 @@ export async function runLlmChatStream(
       reasoningOutput: output.reasoningOutput,
       usage: output.usage,
       finishReason: output.finishReason,
+      truncated: output.truncated,
       toolCalls: output.toolCalls,
     }
   } catch (error) {
@@ -249,4 +258,8 @@ function isAbortError(error: unknown): boolean {
 
 function isJsonObject(value: JsonValue): value is JsonObject {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function cloneJsonObject(value: JsonObject): JsonObject {
+  return JSON.parse(JSON.stringify(value)) as JsonObject
 }

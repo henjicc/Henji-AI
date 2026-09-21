@@ -32,7 +32,8 @@ import type {
 interface StreamChatOptions {
   endpoint: string
   apiKey: string
-  request: LlmChatRequestDto
+  providerId: string
+  payload: JsonObject
   signal: AbortSignal
   emit: LlmStreamEmitter
   transport: Transport
@@ -64,7 +65,6 @@ export function resolveOpenAiCompatibleEndpoint(request: LlmChatRequestDto): str
 }
 
 export function buildOpenAiCompatiblePayload(request: LlmChatRequestDto): JsonObject {
-  const policy = request.policy ?? {}
   const payload: JsonObject = {
     model: request.modelId,
     messages: request.messages.map(serializeMessage),
@@ -72,8 +72,8 @@ export function buildOpenAiCompatiblePayload(request: LlmChatRequestDto): JsonOb
     stream_options: { include_usage: true },
   }
 
-  const maxTokens = readNumber(policy.max_tokens ?? policy.maxTokens)
-  payload.max_tokens = maxTokens ?? 4096
+  const maxTokens = resolveMaxOutputTokens(request)
+  if (maxTokens !== undefined) payload.max_tokens = maxTokens
 
   if (request.tools !== undefined) {
     payload.tools = request.tools
@@ -87,25 +87,34 @@ export function buildOpenAiCompatiblePayload(request: LlmChatRequestDto): JsonOb
    * 用模型能力表兜一层，没标"支持思考"的模型仍然一个字段都不发。
    */
   const identity = resolveLlmEndpointIdentity(request)
+  const withStructuredOutput = applyStructuredOutputRequestBody(
+    request,
+    identity.providerFamilyId,
+    payload
+  )
   const reasoningCapable = request.capabilities?.reasoning === true
   const withReasoning = reasoningCapable
-    ? applyProviderReasoningRequestBody(identity.providerFamilyId, request.adapter, payload, request.reasoning)
-    : payload
+    ? applyProviderReasoningRequestBody(
+        identity.providerFamilyId,
+        request.adapter,
+        withStructuredOutput,
+        request.reasoning
+      )
+    : withStructuredOutput
 
   return applyProviderRequestBodyQuirks(identity.providerFamilyId, withReasoning) as JsonObject
 }
 
 export async function streamOpenAiCompatibleChat(options: StreamChatOptions): Promise<LlmStreamOutput> {
-  const identity = resolveLlmEndpointIdentity(options.request)
-  const response = await fetchProvider(identity.providerFamilyId, options.endpoint, {
+  const response = await fetchProvider(options.providerId, options.endpoint, {
     method: 'POST',
     headers: {
       Accept: 'text/event-stream',
       Authorization: `Bearer ${options.apiKey}`,
-      ...resolveProviderExtraAuthHeaders(identity.providerFamilyId, options.apiKey),
+      ...resolveProviderExtraAuthHeaders(options.providerId, options.apiKey),
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify(buildOpenAiCompatiblePayload(options.request)),
+    body: JSON.stringify(options.payload),
     signal: options.signal,
   }, {
     transport: options.transport,
@@ -200,7 +209,14 @@ async function readSseStream(body: ReadableStream<Uint8Array>, emit: LlmStreamEm
     for (const event of parsed.events) {
       const chunk = parseSseData(event)
       if (chunk.done) {
-        return { output, reasoningOutput, usage, finishReason, toolCalls: [...toolCalls.values()] }
+        return {
+          output,
+          reasoningOutput,
+          usage,
+          finishReason,
+          truncated: isOutputTruncated(finishReason),
+          toolCalls: [...toolCalls.values()],
+        }
       }
       usage = chunk.usage ?? usage
       finishReason = chunk.finishReason ?? finishReason
@@ -235,7 +251,115 @@ async function readSseStream(body: ReadableStream<Uint8Array>, emit: LlmStreamEm
       emit({ type: 'Token', data: chunk.content })
     }
   }
-  return { output, reasoningOutput, usage, finishReason, toolCalls: [...toolCalls.values()] }
+  return {
+    output,
+    reasoningOutput,
+    usage,
+    finishReason,
+    truncated: isOutputTruncated(finishReason),
+    toolCalls: [...toolCalls.values()],
+  }
+}
+
+function applyStructuredOutputRequestBody(
+  request: LlmChatRequestDto,
+  providerId: string,
+  body: JsonObject
+): JsonObject {
+  const output = request.structuredOutput
+  if (!output) return body
+  if (output.type === 'text') {
+    return { ...body, response_format: { type: 'text' } }
+  }
+
+  const supportedMode = request.capabilities?.structuredOutputMode ?? 'none'
+  if (output.type === 'json_object' && supportedMode === 'none') {
+    throw invalidRequest(
+      'STRUCTURED_OUTPUT_JSON_OBJECT_UNSUPPORTED',
+      `Model "${request.modelId}" is not declared to support JSON Object output.`
+    )
+  }
+  if (output.type === 'json_schema' && supportedMode !== 'schema') {
+    throw invalidRequest(
+      'STRUCTURED_OUTPUT_JSON_SCHEMA_UNSUPPORTED',
+      `Model "${request.modelId}" is not declared to support JSON Schema output.`
+    )
+  }
+  if (request.reasoning?.enabled === true) {
+    if (request.capabilities?.reasoning !== true) {
+      throw invalidRequest(
+        'REASONING_UNSUPPORTED',
+        `Model "${request.modelId}" is not declared to support reasoning.`
+      )
+    }
+    const compatibility = request.capabilities.structuredOutputWithReasoning
+    if (compatibility !== true) {
+      throw invalidRequest(
+        compatibility === false
+          ? 'STRUCTURED_OUTPUT_WITH_REASONING_UNSUPPORTED'
+          : 'STRUCTURED_OUTPUT_WITH_REASONING_CAPABILITY_REQUIRED',
+        compatibility === false
+          ? `Model "${request.modelId}" does not support structured output with reasoning enabled.`
+          : `Model "${request.modelId}" must explicitly declare structuredOutputWithReasoning before structured output and reasoning can be combined.`
+      )
+    }
+  }
+
+  if (output.type === 'json_object') {
+    return { ...body, response_format: { type: 'json_object' } }
+  }
+  if (providerId.trim().toLowerCase() === 'groq') {
+    throw invalidRequest(
+      'STRUCTURED_OUTPUT_STREAMING_UNSUPPORTED',
+      'Groq does not support JSON Schema structured output with streaming.'
+    )
+  }
+  if (!output.name.trim()) {
+    throw invalidRequest('INVALID_STRUCTURED_OUTPUT', 'JSON Schema output requires a non-empty name.')
+  }
+  if (!isRecord(output.schema)) {
+    throw invalidRequest('INVALID_STRUCTURED_OUTPUT', 'JSON Schema output requires schema to be an object.')
+  }
+  if (typeof output.strict !== 'boolean') {
+    throw invalidRequest('INVALID_STRUCTURED_OUTPUT', 'JSON Schema output requires an explicit strict boolean.')
+  }
+  return {
+    ...body,
+    response_format: {
+      type: 'json_schema',
+      json_schema: {
+        name: output.name.trim(),
+        schema: output.schema,
+        strict: output.strict,
+      },
+    },
+  }
+}
+
+function resolveMaxOutputTokens(request: LlmChatRequestDto): number | undefined {
+  const policy = request.policy ?? {}
+  const legacy = policy.max_tokens ?? policy.maxTokens
+  const candidate = request.maxOutputTokens ?? legacy
+  if (candidate === undefined) return undefined
+  if (typeof candidate !== 'number' || !Number.isInteger(candidate) || candidate <= 0) {
+    throw invalidRequest('INVALID_MAX_OUTPUT_TOKENS', 'maxOutputTokens must be a positive integer.')
+  }
+  const modelLimit = request.capabilities?.maxOutputTokens
+  if (typeof modelLimit === 'number' && candidate > modelLimit) {
+    throw invalidRequest(
+      'MAX_OUTPUT_TOKENS_EXCEEDED',
+      `Requested ${candidate} output tokens, but model "${request.modelId}" declares a limit of ${modelLimit}.`
+    )
+  }
+  return candidate
+}
+
+function invalidRequest(code: string, message: string): Error {
+  return Object.assign(new Error(message), { code, statusCode: 400 })
+}
+
+function isOutputTruncated(finishReason: string | null): boolean {
+  return finishReason === 'length' || finishReason === 'max_tokens' || finishReason === 'max_output_tokens'
 }
 
 function drainSseEvents(input: string): { events: string[]; remaining: string } {
@@ -362,10 +486,6 @@ function readDelta(value: unknown): Record<string, unknown> {
 
 function readString(value: unknown): string | undefined {
   return typeof value === 'string' && value.length > 0 ? value : undefined
-}
-
-function readNumber(value: JsonValue | undefined): number | undefined {
-  return typeof value === 'number' && Number.isFinite(value) ? value : undefined
 }
 
 function readTokenCount(value: unknown): number | null {

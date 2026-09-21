@@ -357,7 +357,7 @@ async function verify() {
         executionModes: ['request-response'],
       },
       execute: async () => ({
-        output: 'ok', reasoningOutput: '', finishReason: 'stop',
+        output: 'ok', reasoningOutput: '', finishReason: 'stop', truncated: false,
         usage: {
           inputTokens: 1, outputTokens: 1, reasoningTokens: null,
           cacheReadTokens: null, cacheWriteTokens: null, totalTokens: 2,
@@ -373,7 +373,7 @@ async function verify() {
         id: 'plugin.shadow.groq',
         source: { kind: 'plugin', namespace: 'com.example.shadow' },
       },
-      execute: async () => ({ output: '', reasoningOutput: '', usage: null, finishReason: null }),
+      execute: async () => ({ output: '', reasoningOutput: '', usage: null, finishReason: null, truncated: false }),
     })
   } catch (error) {
     rejectedGroqShadow = String(error).includes('com.example.shadow')

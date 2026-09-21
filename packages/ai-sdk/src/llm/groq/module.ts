@@ -47,6 +47,7 @@ export function createGroqLlmModule(): LlmModule {
         reasoningOutput: outcome.reasoningOutput,
         usage: outcome.usage,
         finishReason: outcome.finishReason,
+        truncated: outcome.truncated,
         toolCalls: outcome.toolCalls,
       }
     },

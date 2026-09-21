@@ -29,7 +29,11 @@ export type {
   LlmTraceDto,
   LlmUsageDto,
 } from '../chatTypes'
-export type { LlmReasoningConfig, LlmReasoningEffort } from '../reasoning'
+export type {
+  LlmReasoningConfig,
+  LlmReasoningEffort,
+  LlmStructuredOutputConfig,
+} from '../types'
 export {
   parseModelProviderError,
   ProviderModelStepError,

@@ -1,5 +1,6 @@
 import type { JsonObject, JsonValue } from '../types/runtime'
 import type { LlmReasoningConfig } from './reasoning'
+import type { LlmCapabilities, LlmStructuredOutputConfig } from './types'
 
 export type { JsonObject, JsonValue }
 
@@ -40,7 +41,10 @@ export interface LlmChatRequestDto {
   baseUrl?: string
   reasoning?: LlmReasoningConfig
   messages: LlmChatMessageDto[]
-  capabilities?: JsonObject
+  capabilities?: Partial<LlmCapabilities>
+  structuredOutput?: LlmStructuredOutputConfig
+  /** 正整数；不设置时不下发限制，由供应商或模型默认值决定。 */
+  maxOutputTokens?: number
   tools?: JsonValue
   policy?: JsonObject
   memory?: JsonObject
@@ -78,6 +82,8 @@ export interface LlmStreamOutput {
   reasoningOutput: string
   usage: LlmUsageDto | null
   finishReason: string | null
+  /** 供应商明确因输出 token 上限结束时为 true。 */
+  truncated: boolean
   toolCalls?: LlmStreamToolCall[]
 }
 

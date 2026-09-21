@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.5.2 - 2026-09-21
+
+- `llm/streaming` 新增有类型定义的文本、JSON Object 与 JSON Schema 输出配置，并把它正式写入 Chat Completions 的 `response_format`。
+- 模型能力现在可声明结构化输出与思考模式能否并用；不支持或尚未核实的组合在网络请求前返回可解析错误码，Groq 流式 JSON Schema 按官方限制明确拒绝。
+- 新增 `maxOutputTokens`，OpenAI/Groq/MiMo 使用 `max_completion_tokens`，其余兼容端点沿用 `max_tokens`；省略时不再强制 4096，流结束用 `truncated` 标记 token 上限截断。
+- 最终发送体复用正式构建结果，`onRequestBuilt` 只收到观察快照；保留正文/思考分流、AbortSignal、可选总时限与轻量受限宿主边界。
+
 ## 0.5.1 - 2026-09-21
 
 - Grsai GPT Image 2.5 默认变体从维护中的 Flare 切换为可用的 Standard；显式 Flare/Sunburst 参数保持兼容，等待官方恢复公告。
