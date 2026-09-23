@@ -24,6 +24,7 @@ function createCanvasScalePerformanceScenes(context) {
         staleBuildDiagnostic: process.env.HENJI_SKIP_BUILD_FRESHNESS === '1',
         debuggerDiagnostic: process.env.CANVAS_SCALE_DIAGNOSE === '1',
         cpuProfileDiagnostic: process.env.CANVAS_SCALE_CPU_PROFILE === '1',
+        traceDiagnostic: process.env.CANVAS_SCALE_TRACE === '1',
         checkHeaderInteraction: process.env.CANVAS_SCALE_HEADER_CHECK === '1',
         openOnly: process.env.CANVAS_SCALE_OPEN_ONLY === '1',
         build: createHash('sha256').update(await fs.readFile('out/main/index.cjs')).update(await fs.readFile('out/renderer/index.html')).digest('hex'),
@@ -101,11 +102,26 @@ function createCanvasScalePerformanceScenes(context) {
             const grab = await findPanePoint(page)
             if (!grab) throw new Error('画布基准找不到真实平移命中位置')
             const before = await diagnostics.startRound()
+            const traceRound = report.traceDiagnostic && round === 0
+            if (traceRound) await session.send('Tracing.start', { categories: 'devtools.timeline,disabled-by-default-devtools.timeline.frame', transferMode: 'ReturnAsStream' })
             if (report.cpuProfileDiagnostic) { await session.send('Profiler.enable'); await session.send('Profiler.start') }
             let sample
             try {
               sample = await sweep(page, session, { grab, durationMs: 1800, dx: -9, intervalMs: 10 })
             } finally {
+              if (traceRound) {
+                const completed = new Promise(resolve => session.once('Tracing.tracingComplete', resolve))
+                await session.send('Tracing.end')
+                const { stream } = await completed
+                const traceFile = await fs.open(`${out}.${count}.trace.json`, 'w')
+                try {
+                  let part
+                  do {
+                    part = await session.send('IO.read', { handle: stream })
+                    await traceFile.write(part.base64Encoded ? Buffer.from(part.data, 'base64') : part.data)
+                  } while (!part.eof)
+                } finally { await traceFile.close(); await session.send('IO.close', { handle: stream }) }
+              }
               if (report.cpuProfileDiagnostic) {
                 const { profile } = await session.send('Profiler.stop')
                 await fs.writeFile(`${out}.${count}.${round}.cpuprofile`, JSON.stringify(profile))
