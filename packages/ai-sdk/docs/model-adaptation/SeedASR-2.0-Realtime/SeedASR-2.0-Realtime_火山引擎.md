@@ -114,6 +114,8 @@ SDK 对音频保留一块延迟：收到下一块时才把上一块以正 sequen
 
 用户主动取消只关闭连接，不发送负 sequence 终帧，也不把取消伪装成正常完成。full request 默认在 15 秒内必须收到首个服务端响应，可用 `openTimeoutMs` 显式调整；超时会关闭半开连接。`finish()`、连接释放和显式 `close()` 都幂等；发送失败、服务端错误、断线、超时和取消都走同一个释放边界。
 
+同一响应帧可能同时产生 partial 与一个或多个 final。每次事件回调后重新检查取消/关闭，避免调用方在 partial 回调取消后，SDK 仍继续发出该帧的 final；该场景使用官方响应 payload 调整 last 标志构造，不代表新的供应商事件类型。
+
 2026-09-24 诊断复核：异常 details 保留实际 `modelId=seedasr-2.0-realtime`、`protocol=volcengine-binary-v1`、会话阶段、操作与最后一帧的序号/event/last 标志。原始服务端 message 和宿主异常可能包含识别内容或凭据，不进入默认诊断。握手失败后若关闭也失败，继续报告首个故障，并附 `cleanupFailed=true`。`volcengine-realtime-asr.test.ts` 使用既有官方帧结构、受控敏感文本错误与 Mock close 拒绝验证这些边界；不是额外真实服务实录。
 
 ## 5. 价格与免费额度

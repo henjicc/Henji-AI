@@ -248,6 +248,7 @@ async function readSseStream(body: ReadableStream<Uint8Array>, options: StreamCh
         if (chunk.reasoning) {
           reasoningOutput += chunk.reasoning
           emit({ type: 'ReasoningToken', data: chunk.reasoning })
+          checkAbort()
         }
         if (chunk.content) {
           output += chunk.content

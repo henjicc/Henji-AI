@@ -151,6 +151,17 @@ describe('Chat SSE lifecycle (official field-table fixture + synthetic-negative 
     expect(test.completed).not.toHaveBeenCalled()
   })
 
+  it('同一帧的思考回调取消后不再发送正文', async () => {
+    const test = setup(sse({ choices: [{ delta: { reasoning_content: 'thinking', content: 'text' }, finish_reason: null }] })
+      + sse(fixture.final) + done, true)
+    const controller = new AbortController()
+    test.emit.mockImplementation(() => controller.abort())
+    await expect(test.run(controller.signal)).rejects.toThrow('[task_cancelled]')
+    expect(test.emit.mock.calls.map(call => call[0].type)).toEqual(['ReasoningToken'])
+    expect(test.cancel).toHaveBeenCalledOnce()
+    expect(test.completed).not.toHaveBeenCalled()
+  })
+
   it('异常断连保留失败，回收锁且不完成', async () => {
     const test = setup(sse(fixture.partial), true)
     test.emit.mockImplementation(() => test.controller.error(new Error('synthetic disconnect')))

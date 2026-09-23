@@ -230,6 +230,31 @@ describe('火山 SeedASR 2.0 实时协议', () => {
 })
 
 describe('火山 SeedASR 2.0 实时会话', () => {
+  it('同一响应帧的 partial 回调取消后不再发出 final', async () => {
+    const official = fixture<OfficialFixture>('asr-seedasr-official.json')
+    const constructed = fixture<ConstructedFixture>('asr-seedasr-field-construction.json')
+    const connection = new ScriptedConnection(() => {
+      connection.push(serverFrame({ payload: official.realtime.handshake, sequence: 1 }))
+    })
+    const client = createCapabilityClient({ runtime: runtime(connection),
+      realtimeModules: [createVolcengineRealtimeAsrModule(volcengineSeedAsrRealtime, { requestIdFactory: () => constructed.taskId })],
+    })
+    const events: string[] = []
+    const session = await open(client, { mediaType: 'audio/pcm' }, {
+      requestId: 'cancel-in-partial', onEvent: event => {
+        events.push(event.type)
+        if (event.type === 'partial') client.cancel('cancel-in-partial')
+      },
+    })
+    connection.push(serverFrame({ payload: official.realtime.final, sequence: 2, last: false }))
+    await expect(session.result).rejects.toMatchObject({ code: 'cancelled' })
+    // Let the already-running frame handler resume after the callback.
+    await Promise.resolve()
+    expect(events).toEqual(['started', 'partial'])
+    expect(connection.close).toHaveBeenCalledOnce()
+    await client.dispose()
+  })
+
   it.each([false, true])('服务端失败保留模型/协议/阶段，握手清理失败不覆盖原因：%s', async closeFails => {
     const official = fixture<OfficialFixture>('asr-seedasr-official.json')
     const constructed = fixture<ConstructedFixture>('asr-seedasr-field-construction.json')

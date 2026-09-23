@@ -296,6 +296,11 @@ async function openDriver(
   const ready = deferred<void>()
   const finished = deferred<SpeechRecognitionOutput>()
   const onAbort = (): void => fail(cancelledError(context.requestId))
+  const checkStopped = (): void => {
+    if (context.signal.aborted) throw cancelledError(context.requestId)
+    if (terminalError) throw terminalError
+    if (phase === 'closed') throw new AiRuntimeError('realtime_session_closed', 'Volcengine realtime session was closed')
+  }
 
   const closeConnection = (): Promise<void> => {
     context.signal.removeEventListener('abort', onAbort)
@@ -347,6 +352,7 @@ async function openDriver(
       },
     }
     await context.emit({ type: 'completed', output })
+    checkStopped()
     phase = 'finished'
     finished.resolve(output)
     await closeConnection()
@@ -371,6 +377,7 @@ async function openDriver(
       }
       phase = 'active'
       await context.emit({ type: 'started', sessionId: requestId })
+      checkStopped()
       ready.resolve()
     } else if (phase !== 'active' && phase !== 'finishing') {
       throw new AiRuntimeError('protocol_event_out_of_order', 'Volcengine transcript arrived for an inactive session')
@@ -383,6 +390,7 @@ async function openDriver(
           ? (({ definite: _definite, ...segment }) => segment)(candidate)
           : undefined
         await context.emit({ type: 'partial', text: parsed.text, segment: partial })
+        checkStopped()
       }
     }
     for (const utterance of parsed.utterances) {
@@ -390,6 +398,7 @@ async function openDriver(
       const { definite: _definite, ...segment } = utterance
       if (upsertFinal(segments, segment)) {
         await context.emit({ type: 'final', text: segment.text, segment })
+        checkStopped()
       }
     }
     if (frame.last) await complete(parsed.text)
