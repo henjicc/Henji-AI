@@ -23,6 +23,8 @@ function createCanvasScalePerformanceScenes(context) {
       const report = { collectedAt: new Date().toISOString(), checkoutCommit: execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim(),
         staleBuildDiagnostic: process.env.HENJI_SKIP_BUILD_FRESHNESS === '1',
         debuggerDiagnostic: process.env.CANVAS_SCALE_DIAGNOSE === '1',
+        cpuProfileDiagnostic: process.env.CANVAS_SCALE_CPU_PROFILE === '1',
+        checkHeaderInteraction: process.env.CANVAS_SCALE_HEADER_CHECK === '1',
         openOnly: process.env.CANVAS_SCALE_OPEN_ONLY === '1',
         build: createHash('sha256').update(await fs.readFile('out/main/index.cjs')).update(await fs.readFile('out/renderer/index.html')).digest('hex'),
         hardware: { cpu: os.cpus()[0].model, threads: os.cpus().length, memoryBytes: os.totalmem(), gpu: await app.evaluate(({ app }) => app.getGPUInfo('basic')) },
@@ -99,7 +101,17 @@ function createCanvasScalePerformanceScenes(context) {
             const grab = await findPanePoint(page)
             if (!grab) throw new Error('画布基准找不到真实平移命中位置')
             const before = await diagnostics.startRound()
-            const sample = await sweep(page, session, { grab, durationMs: 1800, dx: -9, intervalMs: 10 })
+            if (report.cpuProfileDiagnostic) { await session.send('Profiler.enable'); await session.send('Profiler.start') }
+            let sample
+            try {
+              sample = await sweep(page, session, { grab, durationMs: 1800, dx: -9, intervalMs: 10 })
+            } finally {
+              if (report.cpuProfileDiagnostic) {
+                const { profile } = await session.send('Profiler.stop')
+                await fs.writeFile(`${out}.${count}.${round}.cpuprofile`, JSON.stringify(profile))
+                await session.send('Profiler.disable')
+              }
+            }
             samples.push({ round, ...sample, diagnostics: await diagnostics.endRound(before) })
             await fs.writeFile(out, JSON.stringify(report, null, 2))
             if (!sample.valid) {
@@ -113,6 +125,44 @@ function createCanvasScalePerformanceScenes(context) {
           await fs.writeFile(out, JSON.stringify(report, null, 2))
           console.log('[canvas-scale-performance]', JSON.stringify({ count, edgeCount, openMs, samples: samples.map(({ round, p95Ms, p99Ms, fps, maxMs, diagnostics }) => ({ round, p95Ms, p99Ms, fps, maxMs, scriptMs: diagnostics.cdp.scriptDurationMs, longTasks: diagnostics.longTasks })) }))
           await inspection.capture(`nodes-${count}`)
+          if (report.checkHeaderInteraction) {
+            await resetViewport(page, session, viewport)
+            const header = page.locator('[data-node-header-drag-surface="scale-0"]')
+            const node = page.locator('.react-flow__node[data-id="scale-0"]')
+            const before = await node.evaluate(element => {
+              const matrix = new DOMMatrixReadOnly(getComputedStyle(element).transform)
+              return { x: matrix.m41, y: matrix.m42 }
+            })
+            const box = await header.boundingBox()
+            if (!box) throw new Error('节点标题命中层缺失')
+            const point = { x: box.x + box.width / 2, y: box.y + box.height / 2 }
+            await page.mouse.move(point.x, point.y)
+            await page.mouse.down()
+            await page.mouse.move(point.x + 40, point.y + 20, { steps: 8 })
+            await page.mouse.up()
+            const after = await node.evaluate(element => {
+              const matrix = new DOMMatrixReadOnly(getComputedStyle(element).transform)
+              return { x: matrix.m41, y: matrix.m42, selected: element.classList.contains('selected') }
+            })
+            // 原生拖拽跨过启动阈值才建立起点，不能把首段激活位移也算进节点位移。
+            // 核对命中的确是节点、方向/距离正确，且没有把手势误交给画布平移。
+            const canvasAfterDrag = await readCanvasState(page)
+            if (!after.selected || after.x - before.x < 40 || after.y - before.y < 20
+              || Math.abs(canvasAfterDrag.x - viewport.x) > 4 || Math.abs(canvasAfterDrag.y - viewport.y) > 4) {
+              throw new Error(`标题拖动或选中异常：${JSON.stringify({ before, after })}`)
+            }
+            await header.dblclick()
+            const titleInput = node.locator('[data-node-header="true"] input')
+            await titleInput.waitFor({ state: 'visible' })
+            const originalTitle = await titleInput.inputValue()
+            await titleInput.fill('临时标题草稿')
+            await titleInput.press('Escape')
+            await titleInput.waitFor({ state: 'hidden' })
+            if (!await node.getByRole('button', { name: originalTitle, exact: true }).count()) throw new Error('取消标题编辑未恢复原名称')
+            run.headerInteraction = { before, after, titleEditCancelled: true }
+            await fs.writeFile(out, JSON.stringify(report, null, 2))
+            await inspection.capture(`nodes-${count}-header`)
+          }
         } finally { await diagnostics.dispose(); await session.detach() }
       }
     },

@@ -9,7 +9,8 @@ import {
   useRef,
   useState,
 } from 'react';
-import { useInternalNode, useNodeId, useStoreApi, ViewportPortal } from '@xyflow/react';
+import { createPortal } from 'react-dom';
+import { useInternalNode, useNodeId, useStore, useStoreApi } from '@xyflow/react';
 import {
   UI_FIELD_FOCUS_CLASS,
   UI_FIELD_SURFACE_CLASS,
@@ -124,6 +125,10 @@ export function NodeHeader({
   const nodeId = useNodeId();
   const internalNode = useInternalNode(nodeId ?? '');
   const storeApi = useStoreApi();
+  const flowRoot = useStore((state) => state.domNode);
+  // ViewportPortal 的 selector 会在每次视口更新时查找 DOM，节点越多重复扫描越多。
+  // 宿主就绪后该容器随 ReactFlow 根节点存活，仅在根节点变化时重新定位。
+  const viewportPortal = useMemo(() => flowRoot?.querySelector('.react-flow__viewport-portal'), [flowRoot]);
   const tone = toneClassName ?? NODE_HEADER_TONE_CLASS;
   const canEditTitle = editable && typeof titleText === 'string' && typeof onTitleChange === 'function';
   const inputRef = useRef<HTMLInputElement | null>(null);
@@ -321,9 +326,8 @@ export function NodeHeader({
   }, [canEditTitle]);
 
   const nodeWidth = internalNode?.measured.width ?? internalNode?.internals.userNode.width ?? 0;
-  const floatingDragSurface = nodeId && internalNode && nodeWidth > 0
-    ? (
-        <ViewportPortal>
+  const floatingDragSurface = nodeId && internalNode && nodeWidth > 0 && viewportPortal
+    ? createPortal(
           <div
             className="pointer-events-none absolute left-0 top-0"
             style={{
@@ -362,8 +366,8 @@ export function NodeHeader({
               }}
               onDoubleClick={handleDragSurfaceDoubleClick}
             />
-          </div>
-        </ViewportPortal>
+          </div>,
+          viewportPortal,
       )
     : null;
 

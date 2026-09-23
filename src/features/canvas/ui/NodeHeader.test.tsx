@@ -1,7 +1,6 @@
 /** @vitest-environment jsdom */
 
 import { cleanup, fireEvent, render } from '@testing-library/react';
-import type { ReactNode } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { useCanvasExecutionStateStore } from '@/stores/canvasExecutionStateStore';
@@ -38,7 +37,7 @@ vi.mock('@xyflow/react', () => ({
     },
   }),
   useStoreApi: () => ({ getState: storeApiGetState }),
-  ViewportPortal: ({ children }: { children: ReactNode }) => children,
+  useStore: (selector: (state: { domNode: HTMLElement }) => unknown) => selector({ domNode: document.body }),
 }));
 
 afterEach(() => {
@@ -52,6 +51,9 @@ function renderHeader(editable = false) {
   nodeElement.className = 'react-flow__node nopan';
   nodeElement.dataset.id = 'node-1';
   document.body.appendChild(nodeElement);
+  const portal = document.createElement('div');
+  portal.className = 'react-flow__viewport-portal';
+  document.body.appendChild(portal);
 
   const rendered = render(
     <NodeHeader
@@ -72,7 +74,7 @@ describe('NodeHeader', () => {
     const nodeMouseDown = vi.fn();
     nodeElement.addEventListener('mousedown', nodeMouseDown);
 
-    const dragSurface = rendered.container.querySelector<HTMLElement>('[data-node-header-drag-surface="node-1"]');
+    const dragSurface = rendered.baseElement.querySelector<HTMLElement>('[data-node-header-drag-surface="node-1"]');
     expect(dragSurface).not.toBeNull();
     expect(dragSurface?.classList.contains('nopan')).toBe(true);
     expect(dragSurface?.style.width).toBe('calc(100% - 2.5rem)');
@@ -92,7 +94,7 @@ describe('NodeHeader', () => {
 
   it('双击浮动标题进入编辑态时，仅临时解除当前节点的绘制隔离', () => {
     const { nodeElement, rendered } = renderHeader(true);
-    const dragSurface = rendered.container.querySelector<HTMLElement>('[data-node-header-drag-surface="node-1"]');
+    const dragSurface = rendered.baseElement.querySelector<HTMLElement>('[data-node-header-drag-surface="node-1"]');
 
     fireEvent.doubleClick(dragSurface!);
 
@@ -109,6 +111,9 @@ describe('NodeHeader', () => {
     nodeElement.className = 'react-flow__node nopan';
     nodeElement.dataset.id = 'node-1';
     document.body.appendChild(nodeElement);
+    const portal = document.createElement('div');
+    portal.className = 'react-flow__viewport-portal';
+    document.body.appendChild(portal);
 
     const rendered = render(
       <div onClick={onNodeSelect}>
@@ -120,7 +125,7 @@ describe('NodeHeader', () => {
         />
       </div>,
     );
-    const dragSurface = rendered.container.querySelector<HTMLElement>('[data-node-header-drag-surface="node-1"]');
+    const dragSurface = rendered.baseElement.querySelector<HTMLElement>('[data-node-header-drag-surface="node-1"]');
 
     fireEvent.click(dragSurface!);
     fireEvent.click(dragSurface!);
