@@ -145,13 +145,27 @@ export function parseRealtimeMessage(
   preset: BailianRealtimeAsrPreset,
   payload: string
 ): BailianRealtimeEvent {
-  let parsed: unknown
-  try { parsed = JSON.parse(payload) } catch {
-    throw new AiRuntimeError('invalid_response', 'Bailian realtime server returned invalid JSON')
+  let eventType: string | undefined
+  try {
+    let parsed: unknown
+    try { parsed = JSON.parse(payload) } catch {
+      throw new AiRuntimeError('invalid_response', 'Server returned invalid JSON')
+    }
+    const root = record(parsed)
+    if (!root) throw new AiRuntimeError('invalid_response', 'Server returned a non-object event')
+    const discriminator = preset.protocol === 'fun-duplex' ? record(root.header)?.event : root.type
+    if (typeof discriminator !== 'string' || !discriminator.trim()) {
+      throw new AiRuntimeError('invalid_response', 'Server event has no event type')
+    }
+    eventType = /^[a-zA-Z][\w.-]{0,127}$/.test(discriminator) ? discriminator : 'unrecognized-event'
+    return preset.protocol === 'fun-duplex' ? parseFunEvent(root) : parseQwenEvent(root)
+  } catch (error) {
+    if (!(error instanceof AiRuntimeError)) throw error
+    throw new AiRuntimeError(error.code, `${preset.modelId} (${preset.protocol}): ${error.message.replace(`[${error.code}] `, '')}`, {
+      providerId: 'bailian', modelId: preset.modelId, protocol: preset.protocol,
+      stage: 'parse', eventType,
+    })
   }
-  const root = record(parsed)
-  if (!root) throw new AiRuntimeError('invalid_response', 'Bailian realtime server returned a non-object event')
-  return preset.protocol === 'fun-duplex' ? parseFunEvent(root) : parseQwenEvent(root)
 }
 
 function parseFunEvent(root: UnknownRecord): BailianRealtimeEvent {
@@ -171,6 +185,9 @@ function parseFunEvent(root: UnknownRecord): BailianRealtimeEvent {
   if (eventType === 'result-generated') {
     const sentence = record(record(record(root.payload)?.output)?.sentence)
     if (sentence?.heartbeat === true) return { kind: 'ignored', eventType: 'heartbeat' }
+    if (typeof sentence?.text !== 'string' || typeof sentence.sentence_end !== 'boolean') {
+      throw new AiRuntimeError('invalid_response', 'Result requires text and boolean sentence_end')
+    }
     const segment = parseBailianSentence(sentence)
     const transcript = segment?.text ?? string(sentence?.text)
     if (!transcript) {
@@ -180,16 +197,16 @@ function parseFunEvent(root: UnknownRecord): BailianRealtimeEvent {
         return { kind: 'ignored', eventType: sentence.sentence_begin === true ? 'empty-sentence-begin' : 'empty-intermediate' }
       }
       if (sentence?.sentence_end === true) {
-        throw new AiRuntimeError('invalid_response', 'Bailian Fun-ASR final result has no text')
+        throw new AiRuntimeError('invalid_response', 'Final result has no text')
       }
-      throw new AiRuntimeError('invalid_response', 'Bailian Fun-ASR result has no text or sentence state')
+      throw new AiRuntimeError('invalid_response', 'Result has no text or sentence state')
     }
     const duration = number((record(root.usage) ?? record(record(root.payload)?.usage))?.duration)
     return sentence?.sentence_end === true
       ? { kind: 'final', text: transcript, segment, durationMs: duration === undefined ? undefined : duration * 1_000 }
       : { kind: 'partial', text: transcript, segment }
   }
-  return { kind: 'unknown', eventType: eventType || 'missing-event' }
+  return { kind: 'unknown', eventType: /^[a-zA-Z][\w.-]{0,127}$/.test(eventType) ? eventType : 'unrecognized-event' }
 }
 
 function parseQwenEvent(root: UnknownRecord): BailianRealtimeEvent {
@@ -201,16 +218,38 @@ function parseQwenEvent(root: UnknownRecord): BailianRealtimeEvent {
     return { kind: 'ready', sessionId: string(record(root.session)?.id) ?? string(root.session_id) }
   }
   if (eventType === 'conversation.item.input_audio_transcription.text') {
-    const transcript = `${string(root.text) ?? ''}${string(root.stash) ?? ''}`.trim()
-    if (!transcript) throw new AiRuntimeError('invalid_response', 'Bailian Qwen realtime partial event has no text')
+    if (typeof root.text !== 'string' || typeof root.stash !== 'string') {
+      throw new AiRuntimeError('invalid_response', 'Partial event requires string text and stash')
+    }
+    const transcript = root.text + root.stash
+    if (!transcript.trim()) throw new AiRuntimeError('invalid_response', 'Bailian Qwen realtime partial event has no text')
     return { kind: 'partial', text: transcript }
   }
   if (eventType === 'conversation.item.input_audio_transcription.completed') {
-    const transcript = string(root.transcript) ?? string(root.text)
+    const transcript = string(root.transcript)
     if (!transcript) throw new AiRuntimeError('invalid_response', 'Bailian Qwen realtime final event has no transcript')
     return { kind: 'final', text: transcript }
   }
   if (eventType === 'session.finished') return { kind: 'finished' }
+  if (eventType === 'input_audio_buffer.speech_started' || eventType === 'input_audio_buffer.speech_stopped') {
+    const timestamp = root[eventType.endsWith('speech_started') ? 'audio_start_ms' : 'audio_end_ms']
+    if (!string(root.item_id) || typeof timestamp !== 'number' || !Number.isInteger(timestamp) || timestamp < 0) {
+      throw new AiRuntimeError('invalid_response', 'Invalid speech activity notification')
+    }
+    return { kind: 'ignored', eventType }
+  }
+  if (eventType === 'input_audio_buffer.committed') {
+    if (!string(root.item_id)) throw new AiRuntimeError('invalid_response', 'Commit notification has no item_id')
+    return { kind: 'ignored', eventType }
+  }
+  if (eventType === 'conversation.item.created') {
+    const item = record(root.item)
+    if (!string(item?.id) || !Array.isArray(item?.content)
+      || !item.content.some(value => record(value)?.type === 'input_audio' && record(value)?.transcript === null)) {
+      throw new AiRuntimeError('invalid_response', 'Invalid audio item notification')
+    }
+    return { kind: 'ignored', eventType }
+  }
   if (eventType === 'error' || eventType === 'conversation.item.input_audio_transcription.failed') {
     const error = record(root.error)
     return {
@@ -218,5 +257,5 @@ function parseQwenEvent(root: UnknownRecord): BailianRealtimeEvent {
       message: string(error?.message) ?? string(root.message) ?? 'Bailian Qwen realtime task failed',
     }
   }
-  return { kind: 'unknown', eventType: eventType || 'missing-type' }
+  return { kind: 'unknown', eventType: /^[a-zA-Z][\w.-]{0,127}$/.test(eventType) ? eventType : 'unrecognized-event' }
 }

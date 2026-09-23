@@ -163,6 +163,7 @@ async function openDriver(
   let lastPartial = ''
   let durationMs: number | undefined
   let terminalError: AiRuntimeError | undefined
+  let lastEventKind: BailianRealtimeEvent['kind'] | undefined
   const segments: SpeechRecognitionSegment[] = []
   const created = deferred<void>()
   const ready = deferred<void>()
@@ -175,10 +176,19 @@ async function openDriver(
 
   const fail = (error: unknown): void => {
     if (phase === 'finished' || phase === 'closed' || phase === 'failed') return
+    const failedPhase = phase
     phase = 'failed'
-    const normalized = error instanceof AiRuntimeError
+    const original = error instanceof AiRuntimeError
       ? error
-      : new AiRuntimeError('provider_realtime_error', error instanceof Error ? error.message : 'Bailian realtime failed')
+      : new AiRuntimeError('provider_realtime_error', 'Realtime transport or event handler failed')
+    const message = original.message.replace(`[${original.code}] `, '')
+    const normalized = new AiRuntimeError(original.code,
+      original.details?.modelId === preset.modelId ? message : `${preset.modelId} (${preset.protocol}): ${message}`, {
+        providerId: 'bailian', modelId: preset.modelId, protocol: preset.protocol,
+        stage: failedPhase, operation: original.details?.stage,
+        eventType: original.details?.eventType ?? lastEventKind,
+        providerCode: original.details?.providerCode,
+      })
     terminalError = normalized
     created.reject(normalized)
     ready.reject(normalized)
@@ -207,6 +217,7 @@ async function openDriver(
   }
 
   const handle = async (event: BailianRealtimeEvent): Promise<void> => {
+    lastEventKind = event.kind
     if (event.kind === 'created') {
       if (preset.protocol !== 'qwen-realtime' || phase !== 'opening') {
         throw new AiRuntimeError('protocol_event_out_of_order', 'Unexpected Bailian realtime created event')
@@ -251,7 +262,10 @@ async function openDriver(
       return
     }
     if (event.kind === 'error') {
-      throw new AiRuntimeError('provider_task_failed', `${event.code ? `${event.code}: ` : ''}${event.message}`)
+      // Provider messages can echo request content. Retain the diagnostic code,
+      // never the full upstream message in the default error/logging path.
+      const providerCode = event.code && /^[\w.-]{1,80}$/.test(event.code) ? event.code : undefined
+      throw new AiRuntimeError('provider_task_failed', 'Server reported a realtime task failure', { providerCode })
     }
     if (event.kind === 'ignored') return
     context.runtime.logger.warn('忽略百炼实时未知事件', {

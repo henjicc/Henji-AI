@@ -2,7 +2,7 @@
 
 | 项目 | 内容 |
 |---|---|
-| 最后更新 | 2026-08-28 |
+| 最后更新 | 2026-09-24 |
 | 能力 | 实时语音识别（WebSocket） |
 | 平台模型 ID | `fun-asr-realtime`（稳定别名，官方当前等同 `fun-asr-realtime-2025-11-07`） |
 | 地域 | 华北2（北京）、新加坡 |
@@ -26,7 +26,25 @@
 
 Say-It 保留该稳定别名与 2026-02-28 快照供用户选择；SDK 不应自行把稳定别名锁定为某快照。空 `sentence_begin` 事件只推进状态，不产生 partial/final；重复 final 只累计一次。取消时主动关闭 socket，密钥和原始音频不记日志。
 
-## 4. 原始链接索引
+## 4. 服务端事件矩阵（fun-duplex 家族）
+
+2026-09-24 核对官方服务端事件页。此协议也服务于 `qwen-audio-3.1-asr-flash-streaming`，错误诊断必须标实际模型，不能统一叫 Fun-ASR。样本见 `tests/fixtures/bailian/asr-realtime-fun.json`，0.6.1 真实验证的空中间帧保持原语义。
+
+| 事件 | 前置阶段与字段语义 | 迁移 / 输出 | 结束与资源 |
+|---|---|---|---|
+| `task-started` | opening，run-task 已发 | active / started | 继续 |
+| `result-generated` 心跳 | sentence.heartbeat=true，官方明确可跳过 | 无文本、无完成迁移 | 继续 |
+| `result-generated` 中间帧 | active/finishing；text 字符串、sentence_end=false；仅首帧可有 sentence_begin | 空 text 等待，有文字 partial | 继续 |
+| `result-generated` 句终帧 | active/finishing；text 字符串、sentence_end=true | 非空 final，保存时间戳与用量；重复相同 final 不重复累计 | 继续等待任务结束 |
+| `task-finished` | finishing；payload 通常空，无须含 text | 使用累计 final；未收到有效 final 则 invalid_response | SDK 关闭；官方允许以新 task_id 复用 |
+| `task-failed` | 任一未终止阶段；header.error_code/error_message | provider_task_failed，保留 code，不默认记录完整 message | 关闭，不复用 |
+| 缺失事件名、text 或布尔 sentence_end | 不用非空文字掩盖缺失状态；心跳除外 | invalid_response | 失败并释放 |
+| 有名未知扩展 | 官方未定义行为 | 脱敏警告，无文本/完成输出 | 等待已知终态 |
+| 提前断开 / 取消 | 无最终完成证据 | 断连错误或取消 | 释放连接，不重放计费请求 |
+
+校验不要求中间帧带 sentence_begin，也不要求心跳带文本。合法空中间帧不会被当失败；空 final 和只有 partial 的任务仍不能成功。
+
+## 5. 原始链接索引
 
 | 信息 | 链接 | 登录 |
 |---|---|---|
