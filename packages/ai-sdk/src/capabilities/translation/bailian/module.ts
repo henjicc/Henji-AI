@@ -59,11 +59,15 @@ export function createBailianQwenMtTranslationModule(
       executionModes: ['request-response', 'event-stream'],
     },
     execute: async (input, context) => {
+      const checkAbort = (): void => {
+        if (context.signal.aborted) throw new AiRuntimeError('cancelled', 'Translation request cancelled')
+      }
       const source = normalizeSource(input)
       const options = normalizeOptions(input.options, defaultStream)
       const targetLanguage = normalizeBailianQwenMtLanguage(requireText(input.targetLanguage, 'targetLanguage'))
       const sourceLanguage = normalizeBailianQwenMtLanguage(input.sourceLanguage?.trim() || 'auto')
       const apiKey = await context.runtime.credentials.get('translation', 'bailian')
+      checkAbort()
       if (!apiKey?.trim()) {
         throw new AiRuntimeError('api_key_missing', 'Bailian translation API key is not configured')
       }
@@ -73,6 +77,7 @@ export function createBailianQwenMtTranslationModule(
       const metadata: QwenMtItemResult['metadata'][] = []
       let usage: TranslationUsage | undefined
       for (let index = 0; index < source.length; index += 1) {
+        checkAbort()
         const entry = source[index]
         const result = entry.text.length === 0
           ? { item: { text: '', sourceText: entry.text, id: entry.id }, metadata: {} }
@@ -80,11 +85,13 @@ export function createBailianQwenMtTranslationModule(
               apiKey: apiKey.trim(), endpoint, preset, input, options,
               sourceLanguage, targetLanguage, entry, index, context,
             })
+        checkAbort()
         translations.push(result.item)
         metadata.push(result.metadata)
         usage = addUsage(usage, result.usage)
         await context.emit({ type: 'item', index, item: result.item })
       }
+      checkAbort()
       const output: TranslationOutput = {
         translations,
         usage,
@@ -137,6 +144,7 @@ async function executeItem(input: {
     event: 'bailian.translation.request.start', requestId: context.requestId,
     providerId: 'bailian', modelId: preset.modelId, context: { itemIndex: index },
   })
+  let stage = 'request'
   try {
     const response = await fetchProvider('Bailian Qwen-MT', input.endpoint, {
       method: 'POST',
@@ -148,11 +156,14 @@ async function executeItem(input: {
       body: JSON.stringify(buildRequestBody(input)),
       signal: context.signal,
     }, { transport: context.runtime.transport, retryPreconnectOnce: true })
+    stage = 'http'
     if (!response.ok) throw await createHttpError(response)
 
+    stage = 'parse'
     const result = input.options.stream
       ? await parseStreamingResponse(response, input)
       : await parseCompleteResponse(response, entry)
+    if (context.signal.aborted) throw new AiRuntimeError('cancelled', 'Translation request cancelled')
     context.runtime.logger.info('百炼翻译请求完成', {
       event: 'bailian.translation.request.completed', requestId: context.requestId,
       providerId: 'bailian', modelId: preset.modelId,
@@ -161,12 +172,22 @@ async function executeItem(input: {
     span.end()
     return result
   } catch (error) {
+    const normalized = error instanceof AiRuntimeError && error.details?.protocol === 'qwen-mt-sse'
+      ? error
+      : new AiRuntimeError(error instanceof AiRuntimeError ? error.code : 'provider_request_failed',
+        error instanceof AiRuntimeError
+          ? `Bailian ${preset.modelId}: ${error.message.replace(/^\[[^\]]+\]\s*/, '')}`
+          : `Bailian ${preset.modelId}: Translation ${stage} failed`, {
+          ...(error instanceof AiRuntimeError ? error.details : {}),
+          providerId: 'bailian', modelId: preset.modelId,
+          protocol: input.options.stream ? 'qwen-mt-sse' : 'qwen-mt-json', stage,
+        })
     context.runtime.logger.error('百炼翻译请求失败', {
       event: 'bailian.translation.request.failed', requestId: context.requestId,
-      providerId: 'bailian', modelId: preset.modelId, context: { itemIndex: index }, error,
+      providerId: 'bailian', modelId: preset.modelId, context: { itemIndex: index }, error: normalized,
     })
-    span.end(error)
-    throw error
+    span.end(normalized)
+    throw normalized
   }
 }
 
@@ -207,7 +228,7 @@ async function parseStreamingResponse(
       onUsage: async (usage) => await input.context.emit({
         type: 'usage', index: input.index, id: input.entry.id, usage,
       }),
-    }
+    }, input.preset.modelId
   )
   return {
     item: { text: result.text, sourceText: input.entry.text, id: input.entry.id },
@@ -234,6 +255,12 @@ async function parseCompleteResponse(
   if (text === undefined) {
     throw new AiRuntimeError('empty_result', 'Bailian Qwen-MT response has no translated text')
   }
+  if (choice?.finish_reason === 'length') {
+    throw new AiRuntimeError('provider_task_failed', 'Bailian Qwen-MT translation was truncated by the output limit', { finishReason: 'length' })
+  }
+  if (choice?.finish_reason !== 'stop') {
+    throw new AiRuntimeError('provider_response_invalid', 'Bailian Qwen-MT response has no valid finish_reason')
+  }
   return {
     item: { text, sourceText: entry.text, id: entry.id },
     usage: readUsage(payload.usage),
@@ -248,9 +275,7 @@ async function parseCompleteResponse(
 async function createHttpError(response: Response): Promise<AiRuntimeError> {
   const payload = await readJson(response, true)
   const error = isRecord(payload.error) ? payload.error : undefined
-  const providerCode = readNonEmptyString(error?.code) ?? readNonEmptyString(payload.code)
-  const message = readNonEmptyString(error?.message) ?? readNonEmptyString(payload.message)
-    ?? `HTTP ${response.status}`
+  const providerCode = readProviderCode(error?.code ?? payload.code)
   const code = response.status === 401 || response.status === 403
     ? 'provider_auth_error'
     : response.status === 429
@@ -258,7 +283,7 @@ async function createHttpError(response: Response): Promise<AiRuntimeError> {
       : response.status >= 500
         ? 'provider_http_error'
         : 'provider_request_failed'
-  return new AiRuntimeError(code, `Bailian Qwen-MT ${providerCode ? `${providerCode}: ` : ''}${message}`)
+  return new AiRuntimeError(code, `Bailian Qwen-MT HTTP ${response.status}`, { providerCode, statusCode: response.status })
 }
 
 async function readJson(response: Response, allowInvalid = false): Promise<Record<string, unknown>> {
@@ -273,11 +298,14 @@ async function readJson(response: Response, allowInvalid = false): Promise<Recor
 }
 
 function throwPayloadError(payload: Record<string, unknown>): void {
+  if (payload.error == null && payload.code == null) return
   const error = isRecord(payload.error) ? payload.error : undefined
-  const code = readNonEmptyString(error?.code) ?? readNonEmptyString(payload.code)
-  if (!code) return
-  const message = readNonEmptyString(error?.message) ?? readNonEmptyString(payload.message) ?? code
-  throw new AiRuntimeError('provider_task_failed', `Bailian Qwen-MT ${code}: ${message}`)
+  const providerCode = readProviderCode(error?.code ?? payload.code)
+  throw new AiRuntimeError('provider_task_failed', 'Bailian Qwen-MT server rejected translation', { providerCode })
+}
+
+function readProviderCode(value: unknown): string | undefined {
+  return typeof value === 'string' && /^[\w.-]{1,128}$/.test(value) ? value : undefined
 }
 
 function normalizeSource(input: TranslationInput): Array<{ text: string; id?: string }> {
