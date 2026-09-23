@@ -5,13 +5,17 @@
 
 最后核对日期：2026-09-24
 
-`0.6.0` 候选版本：新增 MiMo 2.6、GLM-5.3-FlashX、KIE HappyHorse 1.1、火山 Seedream 5.0 Flash 和百炼 Qwen Audio 3.1 ASR；补齐 MiMo Responses 思考事件与 ASR JSON/说话人解析。SDK 79 个测试文件 / 933 项测试、类型构建、可移植性、49 个公开入口和受限宿主验证通过；痕迹 AI 目录、参数组合、模型发现与旧配置兼容验证通过。MiMo 思考事件、ASR JSON 回退、HappyHorse 图生字段的修复撤销验证均检测到失败，恢复后通过。未执行付费请求。等待发布提交 CI 和 npm 身份恢复，尚未公共发布。
+`0.6.0` 已发布：新增 MiMo 2.6、GLM-5.3-FlashX、KIE HappyHorse 1.1、火山 Seedream 5.0 Flash 和百炼 Qwen Audio 3.1 ASR；补齐 MiMo Responses 思考事件与 ASR JSON/说话人解析。SDK 79 个测试文件 / 933 项测试、类型构建、可移植性、49 个公开入口和受限宿主验证通过；痕迹 AI 目录、参数组合、模型发现与旧配置兼容验证通过。MiMo 思考事件、ASR JSON 回退、HappyHorse 图生字段的修复撤销验证均检测到失败，恢复后通过。未执行付费请求。发布提交 `d08ea8fa` 的必需 CI [35904531000](https://github.com/henjicc/Henji-AI/actions/runs/35904531000) 全部通过，npm 网页认证后发布固定候选包；公共索引可读后，隔离配置、缓存与令牌的仓外匿名安装、包校验、新模型请求探针、Vite 49 入口和受限宿主验证全部通过。
 
-本轮消费影响：Henji-AI 自动组合新增 generation pack，无需新增助手工具；三个仓内示例的精确依赖同步到 `0.6.0`，公共发布后的独立安装验证待完成。外部 `say-it` 仍需先完成 `0.5.0` 文件上传桥迁移；当前未引入这批模型，不机械升级。`henji-ai-ps` 本机未定位，不声称已完成外部宿主升级。
+本轮消费影响：Henji-AI 自动组合新增 generation pack，无需新增助手工具；三个仓内示例精确依赖同步到 `0.6.0`，均在仓外从公共 npm 匿名安装，minimal-node dry-run、llm-chat dry-run / bundle 边界和 form-renderer 构建 / 五类模型表单输出通过。外部 `say-it` 仍需先完成 `0.5.0` 文件上传桥迁移；当前未引入这批模型，不机械升级。`henji-ai-ps` 本机未定位，不声称已完成外部宿主升级。
+
+- `0.6.0` tarball：[公共 npm 包](https://registry.npmjs.org/@henjicc/ai-sdk/-/ai-sdk-0.6.0.tgz)
+- `0.6.0` shasum：`2d02f956d6addc9fb92580cda323bc9d0904607e`
+- `0.6.0` integrity：`sha512-GzhWnVkdv2NNZjf0diI9dRBRkc/cH0O5nCjbiQrast54f+ik4Q4LbKjytrMhyMawxaSkCoHVeNQuEUwnCDkcnA==`
 
 Henji-AI 安装包的 GPT Image 2.5 高分辨率报错归属：宿主智能比例预处理曾忽略联动过滤，将 `smart` 转成 KIE 仅限 1K 的 `27:16`，SDK 在请求前正确拒绝。修复位于应用公共预处理，按当前分辨率/渠道的合法选项匹配；Flare/Sunburst 的 1K/2K/4K 及 APIMart、Grsai 同类筛选已有定向覆盖。无需放宽 SDK 契约或发布 SDK；安装包需随应用更新才包含修复，现有版本可手动选合法比例规避。
 
-当前仓内候选 SDK：`0.6.0`；最近已确认公共 npm SDK：`0.5.2`（2026-09-21 已发布并完成公共匿名回装）。以下为历史发布证据。
+当前仓内及公共 npm SDK：`0.6.0`（2026-09-24 已发布并完成公共匿名回装）。以下为历史发布证据。
 
 `0.5.2` 完善轻量 `@henjicc/ai-sdk/llm/streaming`：正式类型支持文本、JSON Object 与 JSON Schema，Chat Completions 的最终请求体写入 `response_format`，OpenAI 输出上限写入 `max_completion_tokens`；结构化输出、思考模式和模型能力的非法组合会在请求前返回结构化错误。流式正文与思考继续分离，保留外部 `AbortSignal`，不设置默认总时限；未显式配置输出上限时不再注入 4096，服务端以 `length` 等原因结束时返回 `truncated: true`。发布前 77 个测试文件 / 909 项测试、可移植性、构建、49 个 Vite 公开入口和受限宿主门禁通过；故意撤销结构化参数、输出上限、OpenAI 字段映射和截断标记后，8 项定向断言失败，恢复后通过。公共索引可读后，已使用隔离 npm 配置和缓存匿名安装精确版本，并从已发布的轻量入口验证最终请求体包含 JSON Schema、思考强度和 24,000 token 上限，SSE 正文/思考事件分离且未截断。
 
@@ -73,20 +77,20 @@ Henji-AI workspace 与三个仓内示例 manifest 均锁定 `0.4.0`；下表原�
 
 | 仓库 / 开发路径 | 宿主类型 | 当前精确版本 | SDK 入口与构建方式 | 凭据 / transport 责任 | 需同步的变更类型 | 验证命令 | 同步证据与边界 | 最后核对 |
 |---|---|---|---|---|---|---|---|---|
-| `Henji-AI`<br>`/Users/henji/Documents/VibeCode/Henji-AI` | Electron 42 主进程 + React/Vite；SDK 主开发、首发验证宿主 | workspace 源码与公共 npm 均为 `0.2.8` | 包根、`provider-packs/*`、`tool-packs/*`；根构建先执行 `build:sdk`，再构建 Electron | Electron 主进程注入 HTTP transport、凭据、媒体读取、日志、trace、取消与落盘；渲染层不直接持有密钥 | 公共类型/目录、provider preset、凭据坐标、transport、媒体、包导出、LLM/生成执行协议 | `npm run check:sdk`；相关 Vitest；改主进程后 `npm run electron:build` | `e74fdf09`；公共发布 prepublish 全门禁通过，72 个测试文件 / 766 项测试；正式 tarball 已在无 npm/GitHub 凭据的仓外目录完成安装与 ESM 导入；全新安装后的 workspace 解析已修复 | 2026-08-31 |
+| `Henji-AI`<br>`D:/VibeCode/Henji-AI` | Electron 42 主进程 + React/Vite；SDK 主开发、首发验证宿主 | workspace 源码与公共 npm 均为 `0.6.0` | 包根、`provider-packs/*`、`tool-packs/*`；根构建先执行 `build:sdk`，再构建 Electron | Electron 主进程注入 HTTP transport、凭据、媒体读取、日志、trace、取消与落盘；渲染层不直接持有密钥 | 公共类型/目录、provider preset、凭据坐标、transport、媒体、包导出、LLM/生成执行协议 | SDK 发布门禁、相关宿主 Vitest、渲染层/主进程类型检查与模型 i18n | `d08ea8fa`；必需 CI `35904531000` 成功，SDK 933 项测试、公开入口及受限宿主验证通过；公共包匿名安装及校验值一致，未执行付费请求 | 2026-09-24 |
 | `henji-ai-ps`<br>`/Users/henji/Documents/VibeCode/henji-ai-ps` | Photoshop UXP 插件 + React/Vite IIFE（pnpm） | manifest/lock 均精确锁定公共 npm `0.2.8`；lock integrity 与上方正式产物一致 | `generation/core`、单模型/供应商 pack、LLM streaming；Vite 构建与 UXP smoke bundle | UXP 宿主注入受限 `fetch`、provider 凭据、媒体编码读取和脱敏日志；SDK 不读取 Node/文件系统 | 生成 pack/exports、受限环境可移植性、RuntimeContext、凭据 scope、媒体与流式 LLM；不因版本同步自动引入 GLM | `pnpm typecheck:uxp-smoke && pnpm check:uxp-sdk && pnpm smoke:uxp:build && pnpm check:uxp-smoke`；完整 `pnpm check` | `e509716`；无用户 npm 凭据的 frozen lock 安装通过；Node 22 下四项门禁通过，正式产品仍仅 39 个 generation/erase packs，网络调用与受限环境风险均为 0 | 2026-08-31 |
 | `say-it`<br>`/Users/henji/Documents/VibeCode/say-it` | Tauri 2 + Rust 管理 QuickJS；WebView 不运行 SDK | manifest/lock 均精确锁定公共 npm `0.2.8`；resolved、shasum、integrity 与上方正式产物一致 | 按需打包 capability、Bailian/火山实时 ASR、SiliconFlow/Groq 文件 ASR、translation、LLM modules 为相互隔离 IIFE；Rust 加载 bundle | Rust Host API 注入 HTTP 字节流、WS、media-ref、CredentialStore、日志/trace、Abort/timeout/cancel；QuickJS/插件/WebView 不直取密钥 | capability/LLM 协议、按需 exports、descriptor source/坐标、QuickJS 可移植性、bundle 隔离；不因版本同步自动增加未采用模型 | `npm run sdk-runtime:typecheck && npm run sdk-runtime:build`；`npm run test:ui`；Rust 定向/全量测试；`npm run ui:build` | SDK 迁移提交 `5eb4c8b`，0.2.8 基础验证 `df3107e`，Rust→QuickJS 可选字段省略修复 `9e70d32`；QuickJS multipart 内存修复 `3f00ea9` 属宿主传输实现问题，改为原生二进制句柄且保持 64 MiB 沙箱上限，10 MiB 音频边界回归、重定向/资源清理测试、SDK Runtime 类型检查与构建通过 | 2026-09-01 |
 
 ## SDK 仓内消费验证面
 
 这些目录是可独立安装、构建的真实示例，但与 SDK 同属 `Henji-AI` 仓库，不重复算外部仓库。
-它们的 manifest 均精确声明待发布的 `0.2.8`，且没有锁文件；公共 npm 发布后再从远端重新安装并回填验证证据。
+它们的 manifest 均精确声明公共 npm `0.6.0`，仓内不维护锁文件；本次在仓外临时副本重新安装并验证，未使用 workspace 或本地源码替代正式包。
 
 | 路径 | 用途 / 入口 | 当前版本 | 宿主责任 | 验证命令 | 同步证据 | 最后核对 |
 |---|---|---|---|---|---|---|
-| `/Users/henji/Documents/VibeCode/Henji-AI/packages/ai-sdk/examples/minimal-node` | `generation` + `runtime` 按需入口；完整 generation catalog、KIE dry-run/live 闸门，不带 LLM/BigModel | `0.2.8`（精确 manifest，无 lock、无 workspace alias） | Node transport、环境凭据、文件媒体读取、日志 | 在目录内 `npm install && npm run dry-run` | 已在无用户 npm 凭据的临时副本中从公共 npm 回装；dry-run 网络调用为 0 | 2026-08-31 |
-| `/Users/henji/Documents/VibeCode/Henji-AI/packages/ai-sdk/examples/llm-chat` | `llm/streaming` 按需入口；OpenAI-compatible SSE 对话，不带 generation、BigModel preset/models/pricing、Groq 或 LLM modules（保留通用身份解析所需 profiles） | `0.2.8`（精确 manifest，无 lock、无 workspace alias） | Node transport、环境凭据、流事件与取消 | 在目录内 `npm install && npm run dry-run && npm run check:bundle` | 已从公共 npm 回装；dry-run 网络调用为 0，bundle 38 个模块、无越界模块 | 2026-08-31 |
-| `/Users/henji/Documents/VibeCode/Henji-AI/packages/ai-sdk/examples/form-renderer` | `generation` + `catalog` + `runtime` 按需入口；完整 generation catalog/参数契约与最小 renderer，不带 LLM/BigModel | `0.2.8`（精确 manifest，无 lock、无 workspace alias） | 零网络 RuntimeContext；仅目录与 renderer | 在目录内 `npm install && npm run build && npm start` | 已从公共 npm 回装；构建与五类代表模型表单渲染通过 | 2026-08-31 |
+| `D:/VibeCode/Henji-AI/packages/ai-sdk/examples/minimal-node` | `generation` + `runtime` 按需入口；完整 generation catalog、KIE dry-run/live 闸门，不带 LLM/BigModel | `0.6.0`（精确 manifest，仓内无 lock） | Node transport、环境凭据、文件媒体读取、日志 | 在目录内 `npm install && npm run dry-run` | 公共 npm 匿名安装、类型构建与 dry-run 通过，模型网络调用为 0 | 2026-09-24 |
+| `D:/VibeCode/Henji-AI/packages/ai-sdk/examples/llm-chat` | `llm/streaming` 按需入口；OpenAI-compatible SSE 对话，不带 generation、BigModel preset/models/pricing、Groq 或 LLM modules（保留通用身份解析所需 profiles） | `0.6.0`（精确 manifest，仓内无 lock） | Node transport、环境凭据、流事件与取消 | 在目录内 `npm install && npm run dry-run && npm run check:bundle` | 公共 npm 匿名安装、类型构建、dry-run 和 bundle 边界检查通过 | 2026-09-24 |
+| `D:/VibeCode/Henji-AI/packages/ai-sdk/examples/form-renderer` | `generation` + `catalog` + `runtime` 按需入口；完整 generation catalog/参数契约与最小 renderer，不带 LLM/BigModel | `0.6.0`（精确 manifest，仓内无 lock） | 零网络 RuntimeContext；仅目录与 renderer | 在目录内 `npm install && npm run build && npm start` | 公共 npm 匿名安装、类型构建与五类代表模型表单输出通过 | 2026-09-24 |
 
 ## 非消费者证据
 
