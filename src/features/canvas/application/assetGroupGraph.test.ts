@@ -15,6 +15,7 @@ import {
   bindAssetGroupGraph,
   createAssetGroupGraph,
   removeAssetGroupMemberGraph,
+  reconcileAssetGroupGraph,
   reorderAssetGroupMembersWithinKind,
   setAssetGroupMemberExcludedGraph,
   summarizeAssetGroupBinding,
@@ -101,6 +102,25 @@ describe('assetGroupGraph', () => {
   });
 
   afterEach(() => registry.clear());
+
+  it('普通画布更新保持连线引用，避免使整图连接索引和订阅失效', () => {
+    const nodes = [node(CANVAS_NODE_TYPES.upload, 'source-1'), node(CANVAS_NODE_TYPES.imageEdit, 'target-1')];
+    const edges: CanvasEdge[] = [{ id: 'edge-1', source: 'source-1', target: 'target-1' }];
+    const graph = reconcileAssetGroupGraph(nodes, edges);
+    expect(graph.nodes).toBe(nodes);
+    expect(graph.edges).toBe(edges);
+  });
+
+  it('最后一个素材组消失后仍清理托管连线，保留普通连线和节点状态', () => {
+    const nodes = [node(CANVAS_NODE_TYPES.upload, 'source-1'), node(CANVAS_NODE_TYPES.imageEdit, 'target-1')];
+    const retained: CanvasEdge = { id: 'ordinary', source: 'source-1', target: 'target-1' };
+    const managed: CanvasEdge = { id: 'managed', source: 'source-1', target: 'target-1',
+      data: { managedByAssetGroup: { groupId: 'removed-group', bindingId: 'binding', memberId: 'source-1' } } };
+    const graph = reconcileAssetGroupGraph(nodes, [managed, retained]);
+    expect(graph.nodes).toBe(nodes);
+    expect(graph.edges).toEqual([retained]);
+    expect(graph.edges[0]).toBe(retained);
+  });
 
   it('混合素材建立持久绑定，按类型过滤并让超容量成员等待', () => {
     const graph = fixture();
