@@ -149,21 +149,24 @@ export const LLM_MODEL_CATALOG_ENTRIES: readonly LlmModelCatalogEntry[] = [
   },
 
   // ---------------- 智谱 GLM ----------------
-  {
-    id: 'glm-5.3-flash',
-    displayName: 'GLM-5.3-Flash',
+  ...[
+    { id: 'glm-5.3-flash', displayName: 'GLM-5.3-Flash' },
+    { id: 'glm-5.3-flashx', displayName: 'GLM-5.3-FlashX' },
+  ].map(model => ({
+    ...model,
     vendor: '智谱',
     input: { image: true, video: true, audio: false, file: true },
     toolCall: true,
     parallelTools: false,
-    structuredOutputMode: 'none',
+    structuredOutputMode: 'json' as const,
+    structuredOutputWithReasoning: true,
     reasoning: true,
     sampling: true,
     contextWindow: 1_000_000,
     maxOutputTokens: 131_072,
-    note: '国内与国际端点共用 Chat Completions 协议；文件只接受宿主已持有的 URL/内联内容，不声明上传与 file_id。结构化输出和 tool_stream 未确认，保持关闭。',
+    note: '始终开启思考；支持 JSON 输出。文件只接受宿主已持有的 URL/内联内容，不声明上传与 file_id。FlashX 仅核验中国大陆端点。',
     docs: 'docs/model-adaptation/GLM-5.3-Flash/GLM-5.3-Flash_智谱.md',
-  },
+  })),
   {
     id: 'glm-5.3',
     displayName: 'GLM-5.3',
@@ -246,6 +249,25 @@ export const LLM_MODEL_CATALOG_ENTRIES: readonly LlmModelCatalogEntry[] = [
   },
 
   // ---------------- 小米 MiMo ----------------
+  ...[
+    { id: 'mimo-v2.6-pro', displayName: 'MiMo-V2.6-Pro' },
+    { id: 'mimo-v2.6-flash', displayName: 'MiMo-V2.6-Flash' },
+    { id: 'mimo-v2.6-pro-ultraspeed', displayName: 'MiMo-V2.6-Pro-UltraSpeed' },
+  ].map(model => ({
+    ...model,
+    vendor: '小米',
+    input: { image: true, video: true, audio: true },
+    toolCall: true,
+    parallelTools: false,
+    structuredOutputMode: 'json' as const,
+    reasoning: true,
+    sampling: true,
+    contextWindow: 1_000_000,
+    maxOutputTokens: 131_072,
+    apiProtocols: ['openai-responses', 'openai-compatible'] as const,
+    note: '支持 Chat Completions 与 Responses；思考只有开关，无强度分级。UltraSpeed 需要联系供应商开通。',
+    docs: 'docs/llm-adaptation/供应商/小米MiMo.md',
+  })),
   {
     id: 'mimo-v2.5-pro',
     displayName: 'MiMo-V2.5-Pro',

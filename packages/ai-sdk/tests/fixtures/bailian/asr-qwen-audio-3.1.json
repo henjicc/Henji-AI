@@ -1,0 +1,71 @@
+{
+  "kind": "capability",
+  "source": {
+    "url": "https://help.aliyun.com/zh/model-studio/fun-asr-flash-recorded-speech-recognition-http-api",
+    "collectedAt": "2026-09-24",
+    "loginRequired": false,
+    "classification": "official-literal",
+    "note": "官方非流式 JSON 示例；不是付费调用日志"
+  },
+  "payload": {
+    "output": {
+      "sentence": {
+        "begin_time": 760,
+        "channel_id": 0,
+        "end_time": 3800,
+        "sentence_end": true,
+        "sentence_id": 1,
+        "text": "Hello World，这里是阿里巴巴语音实验室。",
+        "words": [
+          {
+            "begin_time": 760,
+            "end_time": 1040,
+            "fixed": true,
+            "punctuation": "",
+            "text": "Hello"
+          },
+          {
+            "begin_time": 1040,
+            "end_time": 1240,
+            "fixed": true,
+            "punctuation": "，",
+            "text": " World"
+          },
+          {
+            "begin_time": 1360,
+            "end_time": 1880,
+            "fixed": true,
+            "punctuation": "",
+            "text": "这里是"
+          },
+          {
+            "begin_time": 1880,
+            "end_time": 2520,
+            "fixed": true,
+            "punctuation": "",
+            "text": "阿里巴巴"
+          },
+          {
+            "begin_time": 2520,
+            "end_time": 2840,
+            "fixed": true,
+            "punctuation": "",
+            "text": "语音"
+          },
+          {
+            "begin_time": 2840,
+            "end_time": 3800,
+            "fixed": true,
+            "punctuation": "。",
+            "text": "实验室"
+          }
+        ]
+      },
+      "text": "Hello World，这里是阿里巴巴语音实验室。"
+    },
+    "usage": {
+      "duration": 4
+    },
+    "request_id": "40e0734d-096f-9ae3-86c1-a8c013287561"
+  }
+}

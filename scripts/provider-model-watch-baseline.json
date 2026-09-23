@@ -1,33 +1,424 @@
 {
   "version": 1,
-  "checkedAt": "2026-09-21T00:00:00.000Z",
+  "checkedAt": "2026-09-23T18:27:40.414Z",
   "sources": [
-    { "id": "apimart-pricing", "facets": { "models": { "count": 64, "hash": "539247a1655e28ef8c0e74739bb379df8bada335a23cfb8bcd618c7ebdedab65" }, "api": { "count": 11, "hash": "82ba7474ac4ed6e554f9f5efd92cd27dbe439a4bb9b54b8901e0615cb7bb6169" }, "pricing": { "count": 111, "hash": "67e5f39b945204e620a2d2293d16c5e7cf96b9ef2b13ef877d691528f4d03a69" } } },
-    { "id": "bailian-asr", "facets": { "models": { "count": 51, "hash": "22b53754cd76f324e97662c9bee25c374a620cd554e9f779d51d7ad46648c915" }, "api": { "count": 8, "hash": "e194b857efad08e38cfb4494cbd3947e31bbcfbe422ba1b811753cdd95ca7068" }, "pricing": { "count": 4, "hash": "abc79131996b975f2ab0e27cda2ef9684d85773b4c10bff7470b9236f4205731" } } },
-    { "id": "bailian-models", "facets": { "models": { "count": 39, "hash": "1c30276424847e0a4ad9b959615bf1c137f0e7c5eb166fc37251bee8ebfb8d44" }, "deprecation": { "count": 0, "hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855" }, "pricing": { "count": 5, "hash": "25ca0f5cbd7bd96bbe428c245051376f0c3e7915d7a56e4a7a64f715a7392416" } } },
-    { "id": "bigmodel-index", "facets": { "models": { "count": 22, "hash": "f6b9abd2f45692a30e6c84caf54864b07bed598be821d1a96b0605f84653f570" }, "deprecation": { "count": 0, "hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855" }, "api": { "count": 146, "hash": "54414d4c7aec6a3e9f6cea2fbc0a80c0c179596bc510a8eff3c161844d2e91ec" }, "pricing": { "count": 2, "hash": "ac5b9a44198510d26aec34c0b54f6d788b8a693c209c5cf96041a97bab2a7463" } } },
-    { "id": "deepseek-pricing", "facets": { "models": { "count": 8, "hash": "c19d1eb3952b7d0452c14537e9e0a3d0f54fd796da7cb23768596456dd09d154" }, "api": { "count": 13, "hash": "7da1afd854afc95d8639c59ed0d25b4f6c7eede5a77b570983f03d8853001ee7" }, "pricing": { "count": 7, "hash": "2aff1287f31b2e55d535742bd56de2c30baffef7c06611e124112654d63c9c36" } } },
-    { "id": "fal-index", "facets": { "models": { "count": 28, "hash": "723fb515dcfafb4365479624e491e67aa02dbe2a5f89999c5a72e943600e5989" }, "deprecation": { "count": 0, "hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855" }, "api": { "count": 13, "hash": "4dd5dbee180cce66d8866fbfc02fbf85fc836ba3f04e8fc658e0a5e50b6cd7e4" }, "pricing": { "count": 6, "hash": "1abaae7ef8d6f416ea5cf97254b81950b23f26e4b974f079bb3556ba5f464755" } } },
-    { "id": "groq-deprecations", "facets": { "models": { "count": 46, "hash": "6fb880671b80e2aa1e3d50024e7e70b6b8ba4f5b5266737c1ba4e03cc2df0813" }, "deprecation": { "count": 45, "hash": "925c8c5a86944689719ef75869ed042a0c364a98f950704c5fd36d978a93e34e" }, "api": { "count": 13, "hash": "113413566522287fbc1835cd486a63ae65a28f6a770f8bbd95b104ba756eed6c" } } },
-    { "id": "grsai-announcements", "facets": { "models": { "count": 34, "hash": "c0269b330791bd560305ac7f0279771588eccc3a7b34181d4e964099d1b160ff" }, "maintenance": { "count": 16, "hash": "f7c6ab30bc5a878967c78858135c9fd09c4f9f3e2cdb064e922c0022063801c9" }, "deprecation": { "count": 6, "hash": "7c603af9978b32984d9a0a3d28ea10eb1ffd2fce06fecf28a8004b0ab9c10e7e" }, "api": { "count": 28, "hash": "f38d4d92e5c69e42af40eff092aa03f3e474fd5f33c8fe06d0316b4fa251e629" }, "pricing": { "count": 26, "hash": "af9b7fbb12c0a1a9d03eac302fdb7c4fda61fe28a5ef40e8e03796f7ba6e1bbd" } } },
-    { "id": "kie-index", "facets": { "models": { "count": 270, "hash": "248f6fe8fd5ec1d08bd60b9bcd633092f86a242251b2686792dceb02e974736b" }, "deprecation": { "count": 1, "hash": "9225c4b240b997c2e1d350e879cc26fbd3091814d5bb9a4550297de4d30f3a3a" }, "api": { "count": 149, "hash": "aff4a73a1ee3e5e304a10a2bfb3d24ad31267c6f82b4cfc0caf24b59aada99a6" }, "pricing": { "count": 0, "hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855" } } },
-    { "id": "kimi-index", "facets": { "models": { "count": 31, "hash": "8e3c0d4b2ca7a384535876db52a32d00503e15d1fc6324fc6bcd2e42954382a8" }, "deprecation": { "count": 3, "hash": "864262c33a6c9cd82d1459976ea7efd3039168bf502634e1fbacd4cbb5c434a6" }, "api": { "count": 153, "hash": "dd9e6bc328446bdfa748def3559f264d7c48ec226429446db436f5b383ee56e9" }, "pricing": { "count": 11, "hash": "726abfc17c036cc786bce80c27f3fcb7c8eee92ab513fe7831ad3cf743d74ca1" } } },
-    { "id": "mimo-models", "facets": { "models": { "count": 52, "hash": "d020a2facd4a20efe1e90252bafa94936788eea0761bcdd1b3c7ad7a5001ca3b" }, "deprecation": { "count": 1, "hash": "a497c91f534f505e64ba464237377082ca661d797741f34065284fb79ef985d1" }, "api": { "count": 20, "hash": "ba998f57d874d4f6a057949284615c0fb292676deca0048256caad9fe625b9cf" }, "pricing": { "count": 5, "hash": "d79c7efd77e6880a196c290881768fd83d7b8def5c10b61c54de09103d649a95" } } },
-    { "id": "minimax-index", "facets": { "models": { "count": 56, "hash": "4bb09dadb45083efcb6059d09992664f991db14eeee2a7782769c01211eee193" }, "deprecation": { "count": 0, "hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855" }, "api": { "count": 98, "hash": "c570c6fcca317d29bd98369ea31723d48105a44d288f0e7ce0af2efca3b89c64" }, "pricing": { "count": 8, "hash": "6cd809b3c25249fe0b8af83e837ef2e0c4c555d2984405c7042adc59302025fa" } } },
-    { "id": "modelscope-inference", "facets": { "models": { "count": 16, "hash": "ea69fef029bc255100ec302eac405360c62cccc1d49d8ea74d1592b5dbf38222" }, "deprecation": { "count": 1, "hash": "f014cb92c7042c72842c408470eb383d03b9c8b2e55b720bf7c5df872dc7711f" }, "api": { "count": 43, "hash": "153e48458968e766ac058db8cb18bdc11d236e0bdc5e190a6354f7a36fc2ac21" }, "pricing": { "count": 1, "hash": "60173d88af7823db8fba2e21ddeaff59e80a3543ee5b8991268c49ede81bff3a" } } },
-    { "id": "ppio-models", "facets": { "models": { "count": 130, "hash": "ec35b407ef0d4b14627abe87fcd28657cfd415791b7c9b88c3f956ebededcc0b" }, "deprecation": { "count": 0, "hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855" }, "api": { "count": 123, "hash": "e3f3259aa0ce4b5f461bf7807d7e094ad0a3c50f4367c3081cf26ca6be711cd0" }, "pricing": { "count": 24, "hash": "bb688bc0d25556e05d3bef3998436dce122e6901d0622adbc122a2e3d84a0624" } } },
-    { "id": "siliconflow-pricing", "facets": { "models": { "count": 95, "hash": "df4ff85339655afe1177f977165c48f832563bac11931b2d1eded901ddc253fb" }, "deprecation": { "count": 0, "hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855" }, "api": { "count": 1, "hash": "3184f360d6d5032c9f16eb995803a2732292a882fd6f8e4c83c5582aa8a37010" }, "pricing": { "count": 14, "hash": "14dbfe427e5dca3c5b678a7fc6ded3de0c45279999e535bc522e228d71d43c2c" } } },
-    { "id": "volcengine-models", "facets": { "models": { "count": 65, "hash": "695aeaefaee40de15492cf2b8a89d6d1fa7213055cc2dc0e4f3ac27f60c999d1" }, "deprecation": { "count": 0, "hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855" }, "api": { "count": 60, "hash": "0380bdf88ffc66ecb1ed75ef8eb808ac21afd7eafb2dc6ed9733fc005ebc99f8" }, "pricing": { "count": 2, "hash": "883ac36dcb785140a74eac85316137e28e1a84ac4bc7dcba992917a629c0b0c7" } } }
+    {
+      "id": "apimart-pricing",
+      "facets": {
+        "models": {
+          "count": 64,
+          "hash": "539247a1655e28ef8c0e74739bb379df8bada335a23cfb8bcd618c7ebdedab65"
+        },
+        "api": {
+          "count": 11,
+          "hash": "82ba7474ac4ed6e554f9f5efd92cd27dbe439a4bb9b54b8901e0615cb7bb6169"
+        },
+        "pricing": {
+          "count": 111,
+          "hash": "67e5f39b945204e620a2d2293d16c5e7cf96b9ef2b13ef877d691528f4d03a69"
+        }
+      }
+    },
+    {
+      "id": "bailian-asr",
+      "facets": {
+        "models": {
+          "count": 57,
+          "hash": "2fc56f7d51dad98333e0d868d1961e064093838dcf4b4d67e54be1484754cd7f"
+        },
+        "api": {
+          "count": 9,
+          "hash": "161ba09aa0a39f1db936202e0ccb80c5ed8cd4e03634c26a06d7afc0a5765c56"
+        },
+        "pricing": {
+          "count": 4,
+          "hash": "22e1f0e80b740234a9cbd5a00399b8c3e2a254766e7e38210d40115723edc413"
+        }
+      }
+    },
+    {
+      "id": "bailian-models",
+      "facets": {
+        "models": {
+          "count": 39,
+          "hash": "faa26bde3d1f63b2f7b1d0a93b0e5c3e8c9bc3c430f41405cb9486661809ca0f"
+        },
+        "deprecation": {
+          "count": 0,
+          "hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "pricing": {
+          "count": 5,
+          "hash": "114caa19a90fdd2584cd24345d5788da4171d911e4cab6219bbb5c506d15548d"
+        }
+      }
+    },
+    {
+      "id": "bigmodel-index",
+      "facets": {
+        "models": {
+          "count": 23,
+          "hash": "9e3d0687bdfb9fe28083349e68adbfee5f8417eb5df67d48bd12cf891f87bfba"
+        },
+        "deprecation": {
+          "count": 0,
+          "hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "api": {
+          "count": 146,
+          "hash": "f273dfbb4863ad30625ed67e50d84f93b6ac5eff2a57e46517f9cc28f015eae9"
+        },
+        "pricing": {
+          "count": 2,
+          "hash": "ac5b9a44198510d26aec34c0b54f6d788b8a693c209c5cf96041a97bab2a7463"
+        }
+      }
+    },
+    {
+      "id": "deepseek-pricing",
+      "facets": {
+        "models": {
+          "count": 9,
+          "hash": "a60d2376fdfa594e45468141e7b44c2493cf1e0983b1c1b4c78642c7b94a3ab9"
+        },
+        "api": {
+          "count": 23,
+          "hash": "460284d19768946b3f768ddebb93c10d636e95ef27a68c75a52bae387c0e6181"
+        },
+        "pricing": {
+          "count": 2,
+          "hash": "d512823432c194ca7c79ecf2157f4c0f0fabff61cb2d24927bfc86f04234c06a"
+        }
+      }
+    },
+    {
+      "id": "fal-index",
+      "facets": {
+        "models": {
+          "count": 28,
+          "hash": "723fb515dcfafb4365479624e491e67aa02dbe2a5f89999c5a72e943600e5989"
+        },
+        "deprecation": {
+          "count": 0,
+          "hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "api": {
+          "count": 13,
+          "hash": "4dd5dbee180cce66d8866fbfc02fbf85fc836ba3f04e8fc658e0a5e50b6cd7e4"
+        },
+        "pricing": {
+          "count": 6,
+          "hash": "1abaae7ef8d6f416ea5cf97254b81950b23f26e4b974f079bb3556ba5f464755"
+        }
+      }
+    },
+    {
+      "id": "groq-deprecations",
+      "facets": {
+        "models": {
+          "count": 46,
+          "hash": "6fb880671b80e2aa1e3d50024e7e70b6b8ba4f5b5266737c1ba4e03cc2df0813"
+        },
+        "deprecation": {
+          "count": 45,
+          "hash": "925c8c5a86944689719ef75869ed042a0c364a98f950704c5fd36d978a93e34e"
+        },
+        "api": {
+          "count": 13,
+          "hash": "113413566522287fbc1835cd486a63ae65a28f6a770f8bbd95b104ba756eed6c"
+        }
+      }
+    },
+    {
+      "id": "grsai-announcements",
+      "facets": {
+        "models": {
+          "count": 34,
+          "hash": "c0269b330791bd560305ac7f0279771588eccc3a7b34181d4e964099d1b160ff"
+        },
+        "maintenance": {
+          "count": 16,
+          "hash": "f7c6ab30bc5a878967c78858135c9fd09c4f9f3e2cdb064e922c0022063801c9"
+        },
+        "deprecation": {
+          "count": 6,
+          "hash": "7c603af9978b32984d9a0a3d28ea10eb1ffd2fce06fecf28a8004b0ab9c10e7e"
+        },
+        "api": {
+          "count": 28,
+          "hash": "f38d4d92e5c69e42af40eff092aa03f3e474fd5f33c8fe06d0316b4fa251e629"
+        },
+        "pricing": {
+          "count": 26,
+          "hash": "af9b7fbb12c0a1a9d03eac302fdb7c4fda61fe28a5ef40e8e03796f7ba6e1bbd"
+        }
+      }
+    },
+    {
+      "id": "kie-index",
+      "facets": {
+        "models": {
+          "count": 274,
+          "hash": "25be62047ccd040b638cf59cce9af928b391c9bea636925cd5d397f34712e9c0"
+        },
+        "deprecation": {
+          "count": 1,
+          "hash": "9225c4b240b997c2e1d350e879cc26fbd3091814d5bb9a4550297de4d30f3a3a"
+        },
+        "api": {
+          "count": 152,
+          "hash": "6d24c1e35d4ac2e3a891e0ae46c4e0db3dfa18abc41be42e96497f740ab9a63f"
+        },
+        "pricing": {
+          "count": 0,
+          "hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        }
+      }
+    },
+    {
+      "id": "kimi-index",
+      "facets": {
+        "models": {
+          "count": 31,
+          "hash": "8e3c0d4b2ca7a384535876db52a32d00503e15d1fc6324fc6bcd2e42954382a8"
+        },
+        "deprecation": {
+          "count": 3,
+          "hash": "864262c33a6c9cd82d1459976ea7efd3039168bf502634e1fbacd4cbb5c434a6"
+        },
+        "api": {
+          "count": 153,
+          "hash": "d19c64690133076b5115865a6009169dc7cb7bd17792cf933760daa8aa693688"
+        },
+        "pricing": {
+          "count": 11,
+          "hash": "554f82aed89573e5d9518c3946322b4bc0f10fafa95d701714d45634dc2bee2c"
+        }
+      }
+    },
+    {
+      "id": "mimo-models",
+      "facets": {
+        "models": {
+          "count": 54,
+          "hash": "b3848c051c9340b0e833bfe0ea0b9871d5d69f4448191733799bc096061c6674"
+        },
+        "deprecation": {
+          "count": 1,
+          "hash": "a497c91f534f505e64ba464237377082ca661d797741f34065284fb79ef985d1"
+        },
+        "api": {
+          "count": 21,
+          "hash": "952d8d8b8786167bea74cf85b21edf0e9452dfd6de848209eecd805bf6491346"
+        },
+        "pricing": {
+          "count": 6,
+          "hash": "5d390a37a8c6e1043ca80afdf8b33303542dc76963ea58e5908998efefa7da7b"
+        }
+      }
+    },
+    {
+      "id": "minimax-index",
+      "facets": {
+        "models": {
+          "count": 56,
+          "hash": "4bb09dadb45083efcb6059d09992664f991db14eeee2a7782769c01211eee193"
+        },
+        "deprecation": {
+          "count": 0,
+          "hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "api": {
+          "count": 98,
+          "hash": "c570c6fcca317d29bd98369ea31723d48105a44d288f0e7ce0af2efca3b89c64"
+        },
+        "pricing": {
+          "count": 8,
+          "hash": "6cd809b3c25249fe0b8af83e837ef2e0c4c555d2984405c7042adc59302025fa"
+        }
+      }
+    },
+    {
+      "id": "modelscope-inference",
+      "facets": {
+        "models": {
+          "count": 16,
+          "hash": "ea69fef029bc255100ec302eac405360c62cccc1d49d8ea74d1592b5dbf38222"
+        },
+        "deprecation": {
+          "count": 1,
+          "hash": "f014cb92c7042c72842c408470eb383d03b9c8b2e55b720bf7c5df872dc7711f"
+        },
+        "api": {
+          "count": 43,
+          "hash": "153e48458968e766ac058db8cb18bdc11d236e0bdc5e190a6354f7a36fc2ac21"
+        },
+        "pricing": {
+          "count": 1,
+          "hash": "60173d88af7823db8fba2e21ddeaff59e80a3543ee5b8991268c49ede81bff3a"
+        }
+      }
+    },
+    {
+      "id": "ppio-models",
+      "facets": {
+        "models": {
+          "count": 130,
+          "hash": "ec35b407ef0d4b14627abe87fcd28657cfd415791b7c9b88c3f956ebededcc0b"
+        },
+        "deprecation": {
+          "count": 0,
+          "hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "api": {
+          "count": 123,
+          "hash": "e3f3259aa0ce4b5f461bf7807d7e094ad0a3c50f4367c3081cf26ca6be711cd0"
+        },
+        "pricing": {
+          "count": 24,
+          "hash": "bb688bc0d25556e05d3bef3998436dce122e6901d0622adbc122a2e3d84a0624"
+        }
+      }
+    },
+    {
+      "id": "siliconflow-pricing",
+      "facets": {
+        "models": {
+          "count": 95,
+          "hash": "df4ff85339655afe1177f977165c48f832563bac11931b2d1eded901ddc253fb"
+        },
+        "deprecation": {
+          "count": 0,
+          "hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "api": {
+          "count": 1,
+          "hash": "3184f360d6d5032c9f16eb995803a2732292a882fd6f8e4c83c5582aa8a37010"
+        },
+        "pricing": {
+          "count": 14,
+          "hash": "14dbfe427e5dca3c5b678a7fc6ded3de0c45279999e535bc522e228d71d43c2c"
+        }
+      }
+    },
+    {
+      "id": "volcengine-models",
+      "facets": {
+        "models": {
+          "count": 67,
+          "hash": "d6b0897a2df8a03094bc37eeb316fc55e94828b754fc6231ad1eaa36ab6b9bdc"
+        },
+        "deprecation": {
+          "count": 0,
+          "hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "api": {
+          "count": 62,
+          "hash": "9f1f21beadad61ce07508e5c283e078b021842ab34d157f742df60da62e2f978"
+        },
+        "pricing": {
+          "count": 2,
+          "hash": "883ac36dcb785140a74eac85316137e28e1a84ac4bc7dcba992917a629c0b0c7"
+        }
+      }
+    }
   ],
   "reviewedFindings": [
-    { "provider": "bailian", "category": "new_model", "disposition": "candidate", "summary": "Qwen-Audio-3.0-ASR-Flash、Filetrans 与 Streaming 已在官网出现，待按协议族分别适配。" },
-    { "provider": "grsai", "category": "maintenance", "disposition": "actioned", "summary": "GPT Image 2.5 Flare/Sunburst 维护中，SDK 默认已切到 Standard。" },
-    { "provider": "groq", "category": "deprecation", "disposition": "no_direct_impact", "summary": "Compound 系列退役及 Qwen 版本替换未命中当前默认 GPT-OSS 20B。" },
-    { "provider": "siliconflow", "category": "api_change", "disposition": "no_direct_impact", "summary": "repetition_penalty 与图片 batch_size 变更未命中当前内置请求构建。" },
-    { "provider": "volcengine", "category": "new_model", "disposition": "candidate", "summary": "官网模型清单于 2026-09-21 更新；Doubao Seed 2.1 Pro/Lite 260915 与 DeepSeek V4.1 Flash 260910 待单独核对能力和价格。" },
-    { "provider": "ppio", "category": "new_model", "disposition": "candidate", "summary": "DeepSeek V4.1 Flash 已上线，待核对聚合网关能力差异。" },
-    { "provider": "fal", "category": "new_model", "disposition": "candidate", "summary": "H3 Max、Wan 3.0、LTX 2.5、Ideogram V4、MiniMax Music 3 待按需求排期。" },
-    { "provider": "kie", "category": "new_model", "disposition": "candidate", "summary": "Wan 3.0 与 Prime 变体待核对端点和参数。" },
-    { "provider": "apimart", "category": "new_model", "disposition": "candidate", "summary": "Gemini Omni 1.1 Flash、PixVerse V6 等候选模型待逐项适配。" }
+    {
+      "provider": "bailian",
+      "category": "new_model",
+      "disposition": "candidate",
+      "summary": "Qwen-Audio-3.0-ASR-Flash、Filetrans 与 Streaming 已在官网出现，待按协议族分别适配。"
+    },
+    {
+      "provider": "grsai",
+      "category": "maintenance",
+      "disposition": "actioned",
+      "summary": "GPT Image 2.5 Flare/Sunburst 维护中，SDK 默认已切到 Standard。"
+    },
+    {
+      "provider": "groq",
+      "category": "deprecation",
+      "disposition": "no_direct_impact",
+      "summary": "Compound 系列退役及 Qwen 版本替换未命中当前默认 GPT-OSS 20B。"
+    },
+    {
+      "provider": "siliconflow",
+      "category": "api_change",
+      "disposition": "no_direct_impact",
+      "summary": "repetition_penalty 与图片 batch_size 变更未命中当前内置请求构建。"
+    },
+    {
+      "provider": "volcengine",
+      "category": "new_model",
+      "disposition": "candidate",
+      "summary": "官网模型清单于 2026-09-21 更新；Doubao Seed 2.1 Pro/Lite 260915 与 DeepSeek V4.1 Flash 260910 待单独核对能力和价格。"
+    },
+    {
+      "provider": "ppio",
+      "category": "new_model",
+      "disposition": "candidate",
+      "summary": "DeepSeek V4.1 Flash 已上线，待核对聚合网关能力差异。"
+    },
+    {
+      "provider": "fal",
+      "category": "new_model",
+      "disposition": "candidate",
+      "summary": "H3 Max、Wan 3.0、LTX 2.5、Ideogram V4、MiniMax Music 3 待按需求排期。"
+    },
+    {
+      "provider": "kie",
+      "category": "new_model",
+      "disposition": "candidate",
+      "summary": "Wan 3.0 与 Prime 变体待核对端点和参数。"
+    },
+    {
+      "provider": "apimart",
+      "category": "new_model",
+      "disposition": "candidate",
+      "summary": "Gemini Omni 1.1 Flash、PixVerse V6 等候选模型待逐项适配。"
+    },
+    {
+      "provider": "mimo",
+      "category": "new_model",
+      "disposition": "actioned",
+      "summary": "MiMo 2.6 Pro/Flash/Pro-UltraSpeed 与 Responses 已适配；2.5 保留 ID，2026-10-21 下线，推荐模型改为 2.6。"
+    },
+    {
+      "provider": "bigmodel",
+      "category": "api_change",
+      "disposition": "actioned",
+      "summary": "Flash/FlashX JSON 与始终思考已核验；FlashX 大陆预设和常规价格已登记。"
+    },
+    {
+      "provider": "kie",
+      "category": "new_model",
+      "disposition": "actioned",
+      "summary": "HappyHorse 1.1 文生、图生、参考三模式与秒级价格已适配。"
+    },
+    {
+      "provider": "volcengine",
+      "category": "new_model",
+      "disposition": "actioned",
+      "summary": "Seedream 5.0 Flash 260915 生成/编辑/拆分与 ¥0.12 输出单价已适配。"
+    },
+    {
+      "provider": "bailian",
+      "category": "new_model",
+      "disposition": "actioned",
+      "summary": "Qwen-Audio 3.1 Flash/Filetrans/Streaming 三种 ASR 已适配；保留旧预设顺序与 ID。"
+    },
+    {
+      "provider": "kimi",
+      "category": "pricing_change",
+      "disposition": "actioned",
+      "summary": "K3 缓存写入 5 分钟 ¥20 / 1 小时 ¥40 每百万 tokens 已补齐资料。"
+    },
+    {
+      "provider": "deepseek",
+      "category": "pricing_change",
+      "disposition": "actioned",
+      "summary": "2026-09-24 复核：独立 V4-Pro-0813 重新列于价格页，补充闲时/高峰价格并撤销旧文档的 Pro 必转发 Flash 说法；现有独立 Pro 无视觉目录正确。"
+    }
   ]
 }

@@ -11,11 +11,12 @@ import type {
 } from '../src/capabilities/speech-recognition'
 import {
   bailianFunAsrRealtime,
+  bailianQwenAudio31AsrFlashStreaming,
   bailianQwen3AsrFlashRealtime,
   bailianRealtimeAsrPresets,
   createBailianRealtimeAsrModule,
 } from '../src/capabilities/speech-recognition/bailian/realtime'
-import { parseRealtimeMessage } from '../src/capabilities/speech-recognition/bailian/realtime/protocol'
+import { buildFunStart, parseRealtimeMessage } from '../src/capabilities/speech-recognition/bailian/realtime/protocol'
 import type { Logger, RealtimeConnection, RealtimeMessage, RuntimeContext } from '../src/runtime'
 
 interface Fixture<T> {
@@ -106,17 +107,23 @@ async function open(
 }
 
 describe('百炼实时 ASR', () => {
-  it('4 个 preset 分属 Fun Duplex 与 Qwen Realtime，不混入非实时模型', () => {
+  it('3.1 streaming 新字段只送到已确认支持的模型', () => {
+    const input = { mediaType: 'audio/pcm', options: { keepDialect: true, vadModel: 'near_meeting_16k', vocabulary: { 张三: 5 } } }
+    expect(JSON.parse(buildFunStart(bailianQwenAudio31AsrFlashStreaming, input, 'task')).payload).toMatchObject({ model: 'qwen-audio-3.1-asr-flash-streaming', parameters: { keep_dialect: true, vad_model: 'near_meeting_16k', vocabulary: { 张三: 5 } } })
+    expect(JSON.parse(buildFunStart(bailianFunAsrRealtime, input, 'task')).payload.parameters).not.toHaveProperty('keep_dialect')
+  })
+  it('实时 preset 分属 Fun Duplex 与 Qwen Realtime，不混入非实时模型', () => {
     expect(bailianRealtimeAsrPresets.map((preset) => [preset.modelId, preset.protocol])).toEqual([
       ['fun-asr-realtime', 'fun-duplex'],
       ['fun-asr-realtime-2026-02-28', 'fun-duplex'],
       ['qwen3-asr-flash-realtime', 'qwen-realtime'],
       ['qwen3-asr-flash-realtime-2026-02-10', 'qwen-realtime'],
+      ['qwen-audio-3.1-asr-flash-streaming', 'fun-duplex'],
     ])
     expect(bailianRealtimeAsrPresets.every((preset) => preset.descriptor.executionModes?.includes('realtime'))).toBe(true)
   })
 
-  it('Fun Duplex 完整处理 start/二进制/partial/final/timestamps/finish，finish 与 close 幂等', async () => {
+  it.each([bailianFunAsrRealtime, bailianQwenAudio31AsrFlashStreaming])('$modelId 完整处理 start/二进制/partial/final/timestamps/finish，finish 与 close 幂等', async (preset) => {
     const official = fixture<{
       started: unknown; sentenceBegin: unknown; partial: unknown; final: unknown; finished: unknown
     }>('asr-realtime-fun.json')
@@ -137,11 +144,11 @@ describe('百炼实时 ASR', () => {
       }
     })
     const connect = vi.fn()
-    const module = createBailianRealtimeAsrModule(bailianFunAsrRealtime, {
+    const module = createBailianRealtimeAsrModule(preset, {
       taskIdFactory: () => '11111111-1111-4111-8111-111111111111',
     })
     const client = createCapabilityClient({ runtime: runtime(connection, connect, logger), realtimeModules: [module] })
-    const session = await open(client, bailianFunAsrRealtime.id, {
+    const session = await open(client, preset.id, {
       mediaType: 'audio/pcm', sampleRateHz: 16_000, channels: 1, language: 'zh',
       options: { maxSentenceSilenceMs: 900 },
     }, { requestId: 'fun-realtime', onEvent: (event) => { events.push(event) } })

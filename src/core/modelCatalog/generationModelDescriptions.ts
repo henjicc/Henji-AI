@@ -12,6 +12,8 @@ import type { I18nText } from '../types/I18nText'
  * 3. 若这里没有对应 key，先新增空描述，再由维护者补充文案。
  */
 export const GENERATION_MODEL_DESCRIPTIONS = {
+  'seedream-5.0-flash': { zh: '', en: '' },
+  'happyhorse-1.1': { zh: '', en: '' },
   // 图片模型
   'flux-1-krea-dev': { zh: 'Krea 与 Black Forest Labs 联合推出的 12B 开放权重模型，强调自然写实、设计感和较少的“AI 油亮感”；兼容 FLUX.1 Dev 生态，适合本地部署与微调。', en: '' },
   'flux-2-multiple-angles': { zh: '基于 FLUX.2 的连续镜头角度调整工具，可分别控制水平角度、垂直角度和缩放，适合商品与主体视角探索。', en: 'A FLUX.2 camera-angle tool with continuous horizontal, vertical, and zoom controls.' },

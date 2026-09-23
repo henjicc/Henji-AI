@@ -284,8 +284,8 @@ async function verify() {
   if (siliconflowApi.createSiliconflowChatRequest({ messages: [] }).providerFamilyId !== 'siliconflow') fail('硅基流动协议族丢失')
   const llmModuleApi = evaluate(context, llmModules, 'HenjiPackedLlmModules')
 
-  if (asrApi.bailianNonRealtimeAsrPresets.length !== 5) fail('非实时 ASR 不是 5 个')
-  if (realtimeApi.bailianRealtimeAsrPresets.length !== 4) fail('实时 ASR 不是 4 个')
+  if (asrApi.bailianNonRealtimeAsrPresets.length !== 7) fail('非实时 ASR 不是 7 个')
+  if (realtimeApi.bailianRealtimeAsrPresets.length !== 5) fail('实时 ASR 不是 5 个')
   if (volcengineAsrApi.volcengineFileAsrPresets.length !== 1) fail('火山文件 ASR 不是 1 个')
   if (volcengineRealtimeApi.volcengineRealtimeAsrPresets.length !== 1) fail('火山实时 ASR 不是 1 个')
   if (siliconFlowAsrApi.siliconFlowAsrPresets.length !== 2) fail('硅基流动 ASR 不是 2 个')
@@ -396,8 +396,8 @@ async function verify() {
     gptImage25,
     textEncoder: false,
     textDecoder: false,
-    asr: { models: 5, bytes: asr.bytes, modules: asr.inputs.length },
-    realtimeAsr: { models: 4, bytes: realtime.bytes, modules: realtime.inputs.length },
+    asr: { models: 7, bytes: asr.bytes, modules: asr.inputs.length },
+    realtimeAsr: { models: 5, bytes: realtime.bytes, modules: realtime.inputs.length },
     volcengineAsr: { models: 1, bytes: volcengineAsr.bytes, modules: volcengineAsr.inputs.length },
     volcengineRealtimeAsr: { models: 1, bytes: volcengineRealtime.bytes, modules: volcengineRealtime.inputs.length },
     siliconFlowAsr: { models: 2, bytes: siliconFlowAsr.bytes, modules: siliconFlowAsr.inputs.length },

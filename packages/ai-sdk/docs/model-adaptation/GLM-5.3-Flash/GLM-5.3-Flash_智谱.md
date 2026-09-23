@@ -205,3 +205,9 @@ Coding Plan 3 倍额度扣减是订阅用量规则，不是 token 单价。SDK/�
 - [国际 Quick Start](https://docs.z.ai/guides/overview/quick-start)：国际 Base URL、API Key 页面与 Flash 模型入口。
 - [国际 HTTP API](https://docs.z.ai/guides/develop/http/introduction)：国际通用端点与 Bearer 鉴权。
 - [国际价格](https://docs.z.ai/guides/overview/pricing)：USD 标准价、促销价和绝对截止时间。
+
+## 2026-09-24 官方更新
+
+[模型页](https://docs.bigmodel.cn/cn/guide/models/vlm/glm-5.3-flash.md) 现明确 Flash / FlashX 支持 JSON 结构化输出，thinking.type 只能 enabled。SDK 开放 JSON 与思考并用，未扩大到 JSON Schema；工具流仍沿标准 SSE。FlashX 仅加入大陆端点，不推断 Global 支持。上下文 1M、最大输出 128K，多模态与 Flash 相同。
+
+[官方价格](https://docs.bigmodel.cn/cn/guide/start/pricing.md)：FlashX 输入 ¥2、输出 ¥7、缓存命中 ¥0.57 / 百万 tokens；缓存写入限时免费，不登记为永久零价。公开无需登录，未执行付费调用。旧文中的“结构化输出未核验”由本节取代。

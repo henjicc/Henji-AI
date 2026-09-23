@@ -87,7 +87,7 @@ describe('catalog consumer contract', () => {
     expect(catalog.filter(model => model.meta.tags?.includes('reference-mode')).length).toBeGreaterThan(0)
   })
 
-  it('锁定真实 109 catalog 的 RuntimeParamDef type、数量与实际字段集合', () => {
+  it('锁定真实 111 catalog 的 RuntimeParamDef type、数量与实际字段集合', () => {
     const rows = new Map<string, { count: number; fields: Set<string> }>()
     for (const model of catalog) {
       for (const param of model.params) {
@@ -107,7 +107,7 @@ describe('catalog consumer contract', () => {
         fields: ['default', 'id', 'order', 'type', 'valueType'],
       },
       dropdown: {
-        count: 317,
+        count: 325,
         fields: ['apiField', 'default', 'id', 'options', 'order', 'required', 'transferKey', 'type', 'valueType', 'visible'],
       },
       'file-upload': {
@@ -119,7 +119,7 @@ describe('catalog consumer contract', () => {
         fields: ['accept', 'default', 'format', 'id', 'maxCount', 'maxSize', 'order', 'type', 'valueType', 'visible'],
       },
       number: {
-        count: 85,
+        count: 86,
         fields: ['apiField', 'default', 'id', 'max', 'min', 'order', 'step', 'transferKey', 'type', 'valueType', 'visible'],
       },
       switch: {
@@ -137,13 +137,13 @@ describe('catalog consumer contract', () => {
     })
   })
 
-  it('client.catalog 的 6 个公开查询函数直接消费真实 109 catalog', () => {
+  it('client.catalog 的 6 个公开查询函数直接消费真实 111 catalog', () => {
     const client = createAIClient({ runtime })
     try {
-      expect(client.catalog.listByType('image')).toHaveLength(59)
-      expect(client.catalog.listByType('video')).toHaveLength(49)
+      expect(client.catalog.listByType('image')).toHaveLength(60)
+      expect(client.catalog.listByType('video')).toHaveLength(50)
       expect(client.catalog.listByProvider('fal')).toHaveLength(38)
-      expect(client.catalog.listByProvider('volcengine')).toHaveLength(2)
+      expect(client.catalog.listByProvider('volcengine')).toHaveLength(3)
       expect(client.catalog.listByTag('voice-cloning').map((model) => model.meta.id))
         .toEqual(['ppio-minimax-speech'])
 
@@ -165,14 +165,14 @@ describe('catalog consumer contract', () => {
     }
   })
 
-  it('编译并执行真实 catalog 的全部 170 条显隐/inputLimits/requirement 条件', () => {
+  it('编译并执行真实 catalog 的全部 178 条显隐/inputLimits/requirement 条件', () => {
     const conditions = collectCatalogConditions()
     const stringConditions = conditions.filter((item) => typeof item.condition === 'string')
     const functionConditions = conditions.filter((item) => typeof item.condition === 'function')
 
-    expect(conditions).toHaveLength(170)
-    expect(stringConditions).toHaveLength(119)
-    expect(functionConditions).toHaveLength(51)
+    expect(conditions).toHaveLength(178)
+    expect(stringConditions).toHaveLength(126)
+    expect(functionConditions).toHaveLength(52)
 
     for (const { modelId, condition } of conditions) {
       if (typeof condition === 'string') expect(() => compileRuntimeCondition(condition)).not.toThrow()

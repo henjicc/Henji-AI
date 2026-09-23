@@ -39,7 +39,7 @@ export const BIGMODEL_ENDPOINT_PROFILE_FAMILY: LlmEndpointProfileFamily = {
       websiteUrl: BIGMODEL_CN_METADATA.websiteUrl,
       apiKeyUrl: BIGMODEL_CN_METADATA.apiKeyUrl,
       defaultCredentialId: BIGMODEL_CN_CREDENTIAL_ID,
-      modelIds: ['glm-5.3', 'glm-5v-turbo', 'glm-5.3-flash'],
+      modelIds: ['glm-5.3', 'glm-5v-turbo', 'glm-5.3-flash', 'glm-5.3-flashx'],
       docs: 'docs/llm-adaptation/供应商/智谱GLM.md',
     },
     {
@@ -81,4 +81,12 @@ export const BIGMODEL_GLM_5_3_FLASH_PRICING: Readonly<Record<'cn' | 'global', Bi
       observedAt: '2026-08-28',
     },
   },
+}
+
+/** 中国大陆常规单价，2026-09-24 核对官方价格页；不把限时免费缓存写入算作永久价格。 */
+export const BIGMODEL_GLM_5_3_FLASHX_PRICING: Readonly<BigmodelTokenPricing> = {
+  currency: 'CNY',
+  inputPerMillionTokens: 2,
+  outputPerMillionTokens: 7,
+  cacheReadPerMillionTokens: 0.57,
 }

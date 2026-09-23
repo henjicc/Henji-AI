@@ -11,6 +11,7 @@ import {
   resolveProviderExtraAuthHeaders,
 } from '../providerProtocol'
 import { applyProviderReasoningRequestBody } from '../providerReasoningRequest'
+import { adaptMimoResponses } from './mimoResponses'
 import { resolveOpenAiCompatibleEndpoint, resolvePpioChatEndpoint } from '../streaming'
 import {
   modelStepProviderAdapters,
@@ -156,7 +157,7 @@ function createOpenAiResponsesLanguageModel(
       transformRequestBody: body => applyProviderRequestBodyQuirks(
         identity.providerFamilyId,
         input.capabilities.reasoning
-          ? applyProviderReasoningRequestBody(identity.providerFamilyId, adapter, body, input.reasoning)
+          ? applyProviderReasoningRequestBody(identity.providerFamilyId, adapter, body, input.reasoning, 'openai-responses')
           : body,
       ),
     }),
@@ -246,7 +247,8 @@ function createModelStepFetch(
           if (usage) trace.deepSeekUsage = usage
         }).catch(() => undefined)
       }
-      return response
+      return providerId === 'mimo' && /\/responses(?:\?|$)/.test(request.url)
+        ? adaptMimoResponses(response) : response
     } catch (error) {
       if (options.captureHttp && trace) {
         trace.response = {

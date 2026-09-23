@@ -1,4 +1,5 @@
 import type { LlmReasoningConfig, LlmReasoningEffort } from './reasoning'
+import type { LlmApiProtocol } from './providerProtocolCore'
 
 /**
  * 把项目统一的「思考模式」设置翻译成各供应商实际接受的请求字段。
@@ -41,6 +42,7 @@ function pickEffort(
 type ReasoningBodyBuilder = (reasoning: LlmReasoningConfig, body: Record<string, unknown>) => Record<string, unknown>
 
 const PROVIDER_REASONING_BODY: Readonly<Record<string, ReasoningBodyBuilder>> = {
+  mimo: reasoning => ({ thinking: { type: reasoning.enabled ? 'enabled' : 'disabled' } }),
   // 硅基流动的思考开关与原厂不同；强度字段只发送给端点文档明确列举的模型。
   siliconflow: (reasoning, body) => ({
     enable_thinking: reasoning.enabled,
@@ -90,8 +92,6 @@ const PROVIDER_REASONING_BODY: Readonly<Record<string, ReasoningBodyBuilder>> = 
       }
     : { include_reasoning: false }),
 
-  // 小米 MiMo、MiniMax：官方文档只约定了思考内容怎么回传，没有给出请求侧的开关或强度字段，
-  // 因此不下发任何字段。等文档补齐再加，不要凭字段名相似猜。
 }
 
 /**
@@ -125,11 +125,33 @@ export function applyProviderReasoningRequestBody(
   providerId: string,
   adapter: string | undefined,
   body: Record<string, unknown>,
-  reasoning: LlmReasoningConfig | undefined
+  reasoning: LlmReasoningConfig | undefined,
+  protocol: LlmApiProtocol = 'openai-compatible',
 ): Record<string, unknown> {
-  if (!reasoning) return body
   const key = resolveReasoningKey(providerId, adapter)
+  if (!reasoning && key !== 'mimo') return body
+  reasoning ??= { enabled: true, effort: 'high' }
   const build = key ? PROVIDER_REASONING_BODY[key] : defaultReasoningBody
+  if (key === 'mimo') {
+    const { thinking: _thinking, reasoning_effort: _effort, reasoning: _reasoning, ...clean } = body
+    // MiMo 思考时采样参数固定为 1 / 0.95；省略可避免用户采样设置造成 400。
+    if (reasoning.enabled) {
+      delete clean.temperature
+      delete clean.top_p
+    }
+    if (protocol === 'openai-responses' && Array.isArray(clean.input)) {
+      clean.input = clean.input.map((item: unknown) => {
+        if (!item || typeof item !== 'object' || Array.isArray(item)) return item
+        const value = item as Record<string, unknown>
+        if (value.type !== 'reasoning' || !Array.isArray(value.summary)) return value
+        const { summary, encrypted_content: _encrypted, ...rest } = value
+        return { ...rest, content: summary.map((part: Record<string, unknown>) => ({ type: 'reasoning_text', text: part.text })) }
+      })
+    }
+    return protocol === 'openai-responses'
+      ? { ...clean, reasoning: { effort: reasoning.enabled ? 'high' : 'none' } }
+      : { ...clean, ...build(reasoning, clean) }
+  }
   if (key === 'siliconflow') {
     const { thinking: _thinking, reasoning_effort: _effort, ...clean } = body
     return { ...clean, ...build(reasoning, clean) }

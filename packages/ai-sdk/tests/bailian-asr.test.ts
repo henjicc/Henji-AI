@@ -11,7 +11,10 @@ import {
   bailianQwen3AsrFlash,
   bailianQwen3AsrFlashFiletrans,
   createBailianAsrModule,
+  bailianQwenAudio31AsrFlash,
+  bailianQwenAudio31AsrFlashFiletrans,
 } from '../src/capabilities/speech-recognition/bailian'
+import { parseFunShortSse } from '../src/capabilities/speech-recognition/bailian/parse'
 import type { RuntimeContext } from '../src/runtime'
 
 interface Fixture<T> {
@@ -46,13 +49,51 @@ const bytesInput = {
 }
 
 describe('百炼非实时 ASR 按需模块', () => {
-  it('只公开 Say-It 使用的 5 个非实时模型，不包含实时协议', () => {
+  it('3.1 短音频接受官方 JSON 回退，并发送新协议参数', async () => {
+    const official = fixture<unknown>('asr-qwen-audio-3.1.json')
+    const fetch = vi.fn(async () => json(official.payload))
+    const client = createCapabilityClient({ runtime: runtime(fetch), modules: [createBailianAsrModule(bailianQwenAudio31AsrFlash)] })
+    const output = await client.execute(bailianQwenAudio31AsrFlash.id, { ...bytesInput, options: { context: '领域词', sampleRateHz: 16000, keepDialect: true, vocabulary: { 张三: 5 }, diarizationEnabled: true } })
+    expect(output).toMatchObject({ text: 'Hello World，这里是阿里巴巴语音实验室。', durationMs: 4000, segments: [{ startMs: 760, endMs: 3800 }] })
+    const [, init] = fetch.mock.calls[0]
+    expect(JSON.parse(String(init?.body))).toMatchObject({ model: 'qwen-audio-3.1-asr-flash', input: { messages: [{ role: 'user', content: [{ type: 'input_text', text: '领域词' }, { type: 'input_audio' }] }] }, parameters: { sample_rate: '16000', keep_dialect: true, vocabulary: { 张三: 5 }, speaker_diarization_enabled: true } })
+  })
+
+  it('3.1 字段表构造分离结果：累计 sentences 去重并保留说话人；合成错误不伪装成功', () => {
+    const sentence = { text: '你好', sentence_end: true, begin_time: 0, end_time: 100, speaker_id: 0, words: [{ text: '你好', speaker_id: 0 }] }
+    const payload = JSON.stringify({ output: { sentences: [sentence] } })
+    expect(parseFunShortSse(`data:${payload}\n\ndata:${payload}\n\n`)).toMatchObject({ text: '你好', segments: [{ speakerId: 0, words: [{ speakerId: 0 }] }] })
+    expect(() => parseFunShortSse(`data:${payload}\n\ndata:{"code":"InvalidParameter","message":"failed"}\n\n`)).toThrow('failed')
+    expect(() => parseFunShortSse('data:{broken}')).toThrow('malformed')
+    expect(() => parseFunShortSse('data:{"output":{}}')).toThrow('no transcript')
+  })
+
+  it('3.1 文件转写沿用 file_urls，channelId 映射数组且 parameters 始终存在', async () => {
+    const calls: Array<Record<string, unknown>> = []
+    const fetch = vi.fn(async (url: string, init?: RequestInit) => {
+      if (init?.method === 'POST') {
+        calls.push(JSON.parse(String(init.body)))
+        return json({ output: { task_id: 'task', task_status: 'SUCCEEDED', results: [{ subtask_status: 'SUCCEEDED', transcription_url: 'https://media.invalid/transcript' }] } })
+      }
+      expect(url).toBe('https://media.invalid/transcript')
+      return json({ transcripts: [{ text: '完成' }] })
+    })
+    const client = createCapabilityClient({ runtime: runtime(fetch), modules: [createBailianAsrModule(bailianQwenAudio31AsrFlashFiletrans)] })
+    const audio = { kind: 'remote-url' as const, url: 'https://media.invalid/audio.wav' }
+    await client.execute(bailianQwenAudio31AsrFlashFiletrans.id, { audio, options: { channelId: 0, keepDialect: true, vocabulary: { 张三: 5 } } })
+    await client.execute(bailianQwenAudio31AsrFlashFiletrans.id, { audio })
+    expect(calls[0]).toMatchObject({ model: 'qwen-audio-3.1-asr-flash-filetrans', input: { file_urls: [audio.url] }, parameters: { channel_id: [0], keep_dialect: true, vocabulary: { 张三: 5 } } })
+    expect(calls[1].parameters).toEqual({})
+  })
+  it('登记新版与兼容旧版非实时模型，不包含实时协议', () => {
     expect(bailianNonRealtimeAsrPresets.map((preset) => preset.modelId)).toEqual([
       'fun-asr-flash-2026-06-15',
       'qwen3-asr-flash',
       'qwen3-asr-flash-2026-02-10',
       'fun-asr',
       'qwen3-asr-flash-filetrans',
+      'qwen-audio-3.1-asr-flash',
+      'qwen-audio-3.1-asr-flash-filetrans',
     ])
     expect(bailianNonRealtimeAsrPresets.every((preset) => preset.protocol !== 'realtime')).toBe(true)
   })

@@ -1,0 +1,161 @@
+/** 火山方舟官方 Seedream 5.0 Pro 图片生成与编辑模型（运行时契约） */
+
+import { defineModel } from '../defineModel'
+import type { JsonValue, JsonObject } from '../../types/runtime'
+import { parseSeedreamLayerStack } from '../../structured-output'
+import { countUploadedImages } from '../shared/mediaPresence'
+
+const ASPECT_RATIOS = ['1:1', '4:3', '3:4', '16:9', '9:16', '3:2', '2:3', '21:9'] as const
+
+interface Seedream50Config {
+  id: string
+  canonicalModelId: string
+  apiModel: string
+  paramPrefix: string
+  aliases: string[]
+  flash?: boolean
+}
+
+export function createSeedream50Model(config: Seedream50Config) {
+const key = (name: string): string => config.paramPrefix + name
+return defineModel({
+  meta: {
+    id: config.id, canonicalModelId: config.canonicalModelId, seriesId: 'seedream', seriesRank: 5.1,
+    provider: 'volcengine', type: 'image',
+    tags: ['text-to-image', 'image-to-image', 'supports-image-editing', 'supports-multi-image', 'supports-layer-decomposition', 'max-images-10', 'provider-volcengine'],
+    aliases: config.aliases
+  },
+  inputLimits: {
+    images: { max: 10 },
+    videos: { max: 0 },
+    rules: [
+      { when: `${key('Mode')} === "layer-decomposition"`, images: { min: 1, max: 1 } }
+    ]
+  },
+  requirements: [
+    {
+      id: `${config.id}-layer-single-image`,
+      when: `${key('Mode')} === "layer-decomposition"`,
+      require: { images: { exact: 1 } },
+      message: {
+        title: '需要一张图片',
+        message: '图层拆分模式必须且只能输入 1 张图片。',
+        type: 'warning'
+      }
+    }
+  ],
+  params: [
+    {
+      id: key('Mode'), type: 'dropdown', order: 1,
+      transferKey: 'layer-decomposition-mode',
+      default: 'generate',
+      options: [
+        { value: 'generate' },
+        { value: 'layer-decomposition' }
+      ]
+    },
+    {
+      id: key('AspectRatio'), type: 'dropdown', order: 2,
+      default: 'smart',
+      visible: { condition: `${key('Mode')} !== "layer-decomposition"` },
+      options: [{ value: 'smart' }, ...ASPECT_RATIOS.map((ratio) => ({ value: ratio }))]
+    },
+    {
+      id: key('Resolution'), type: 'dropdown', order: 3,
+      default: '2K',
+      visible: { condition: `${key('Mode')} !== "layer-decomposition"` },
+      options: ['1K', '1.5K', '2K'].map((value) => ({ value }))
+    },
+    {
+      id: key('LayerSize'), type: 'dropdown', order: 4,
+      transferKey: 'layer-output-size',
+      default: 'auto',
+      visible: { condition: `${key('Mode')} === "layer-decomposition"` },
+      options: [
+        { value: 'auto' },
+        ...['1K', '1.5K', '2K'].map((value) => ({ value }))
+      ]
+    },
+    {
+      id: key('Background'), type: 'dropdown', order: 5,
+      default: 'opaque',
+      visible: { condition: `${key('Mode')} !== "layer-decomposition"` },
+      options: [
+        { value: 'opaque' },
+        { value: 'transparent' }
+      ]
+    }
+  ],
+  endpoints: '/api/v3/images/generations',
+  request: {
+    builder: (params) => {
+      const filterSources = (value: JsonValue): string[] => Array.isArray(value)
+        ? value.filter((item): item is string => typeof item === 'string' && item.trim().length > 0) : []
+      const uploaded = filterSources(params.uploadedFilePaths)
+      const images = uploaded.length > 0 ? uploaded : filterSources(params.images)
+      if (images.length > 10) throw new Error('Seedream 5.0 最多接受 10 张图片')
+      if (params[key('Mode')] === 'layer-decomposition') {
+        if (images.length !== 1) throw new Error('Seedream 5.0 Pro 图层拆分模式必须且只能输入 1 张图片')
+        const rawLayerSize = String(params[key('LayerSize')] || 'auto')
+        return {
+          model: config.apiModel,
+          prompt: typeof params.prompt === 'string' ? params.prompt : '',
+          image: images[0],
+          layer_decomposition: true,
+          size: ['auto', '1K', '1.5K', '2K'].includes(rawLayerSize) ? rawLayerSize : 'auto',
+          response_format: 'url',
+          watermark: false
+        }
+      }
+      const ratios = ['1:1', '4:3', '3:4', '16:9', '9:16', '3:2', '2:3', '21:9']
+      const raw = String(params[key('AspectRatio')] || 'smart')
+      const hint = typeof params.__firstImageRatio === 'number' && Number.isFinite(params.__firstImageRatio) && params.__firstImageRatio > 0 ? params.__firstImageRatio : 1
+      let aspectRatio = ratios.includes(raw) ? raw : '1:1'
+      if (raw === 'smart' || raw === 'auto') {
+        let difference = Number.POSITIVE_INFINITY
+        for (const candidate of ratios) {
+          const pair = candidate.split(':').map(Number)
+          const next = Math.abs(pair[0] / pair[1] - hint)
+          if (next < difference) { difference = next; aspectRatio = candidate }
+        }
+      }
+      const pair = aspectRatio.split(':').map(Number)
+      const ratio = pair[0] / pair[1]
+      const resolution = String(params[key('Resolution')] || '2K')
+      const base = resolution === '2K' ? 2048 : (resolution === '1K' ? 1024 : 1536)
+      const width = Math.round(Math.sqrt(base * base * ratio) / 16) * 16
+      const height = Math.round(Math.sqrt(base * base / ratio) / 16) * 16
+      const body: JsonObject = {
+        model: config.apiModel,
+        prompt: typeof params.prompt === 'string' ? params.prompt : '',
+        size: `${width}x${height}`,
+        background: params[key('Background')] === 'transparent' ? 'transparent' : 'opaque',
+        response_format: 'url', watermark: false
+      }
+      if (images.length > 0) body.image = images
+      return body
+    }
+  },
+  response: {
+    structuredOutput: ({ metadata, params }) => params[key('Mode')] === 'layer-decomposition'
+      ? parseSeedreamLayerStack('volcengine', metadata)
+      : undefined
+  },
+  pricing: {
+    currency: '¥',
+    calculator: (params) => {
+      if (params[key('Mode')] === 'layer-decomposition') {
+        // 输出层数及每层实际像素档位都由模型结果决定，提交前不能给出可靠总价。
+        return Number.NaN
+      }
+      const output = params[key('Resolution')] === '1K' || params[key('Resolution')] === '1.5K'
+        ? 0.3
+        : 0.6
+      const inputs = countUploadedImages(params)
+      return config.flash ? 0.12 : output + Math.max(0, inputs - 1) * 0.02
+    },
+    description: config.flash ? '输入图片免费；输出 ¥0.12/张，图层拆分按实际输出计费，提交前总价暂不可估算' : '生成/编辑：1K/1.5K ¥0.30、2K ¥0.60/张，第 2 张起输入图 +¥0.02/张；图层拆分按实际输出图层与像素档位计费，提交前总价暂不可估算（单层 1K/1.5K ¥0.15、2K/自动 ¥0.30）'
+  }
+})
+
+}

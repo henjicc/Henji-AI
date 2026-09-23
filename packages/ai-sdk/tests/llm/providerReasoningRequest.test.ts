@@ -71,8 +71,8 @@ describe('applyProviderReasoningRequestBody', () => {
 
   it('文档没给出请求侧开关的供应商走通用兜底，不编造私有字段', () => {
     const mimo = apply('mimo', { enabled: true, effort: 'high' })
-    expect(mimo).toMatchObject({ reasoning_effort: 'high' })
-    expect(mimo).not.toHaveProperty('thinking')
+    expect(mimo).toMatchObject({ thinking: { type: 'enabled' } })
+    expect(mimo).not.toHaveProperty('reasoning_effort')
     expect(apply('minimax', { enabled: false, effort: 'high' })).toEqual({ model: 'm' })
   })
 
@@ -87,5 +87,16 @@ describe('applyProviderReasoningRequestBody', () => {
   it('没有思考配置时原样返回请求体', () => {
     expect(applyProviderReasoningRequestBody('deepseek', undefined, { model: 'm' }, undefined))
       .toEqual({ model: 'm' })
+  })
+
+  it('MiMo 两种协议使用各自思考开关并移除冲突采样字段', () => {
+    const body = { model: 'mimo-v2.6-pro', temperature: 0.2, top_p: 0.5, reasoning_effort: 'max', thinking: { type: 'enabled' } }
+    expect(applyProviderReasoningRequestBody('mimo', 'openai', body, { enabled: true, effort: 'max' }, 'openai-responses'))
+      .toEqual({ model: 'mimo-v2.6-pro', reasoning: { effort: 'high' } })
+    expect(applyProviderReasoningRequestBody('mimo', 'openai', body, { enabled: false, effort: 'max' }, 'openai-responses'))
+      .toEqual({ model: 'mimo-v2.6-pro', temperature: 0.2, top_p: 0.5, reasoning: { effort: 'none' } })
+    expect(apply('mimo', { enabled: false, effort: 'high' })).toEqual({ model: 'm', thinking: { type: 'disabled' } })
+    expect(applyProviderReasoningRequestBody('mimo', 'openai', { temperature: 0.1 }, undefined))
+      .toEqual({ thinking: { type: 'enabled' } })
   })
 })

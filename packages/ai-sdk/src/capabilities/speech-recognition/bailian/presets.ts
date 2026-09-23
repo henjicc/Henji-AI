@@ -65,10 +65,15 @@ export const bailianQwen3AsrFlashFiletrans = definePreset({
   asyncInputField: 'file_url',
 })
 
+export const bailianQwenAudio31AsrFlash = definePreset({ modelId: 'qwen-audio-3.1-asr-flash', protocol: 'fun-short-sse', maxInlineBytes: 7_500_000 })
+export const bailianQwenAudio31AsrFlashFiletrans = definePreset({ modelId: 'qwen-audio-3.1-asr-flash-filetrans', protocol: 'file-async', asyncInputField: 'file_urls' })
+
 export const bailianNonRealtimeAsrPresets = [
   bailianFunAsrFlash20260615,
   bailianQwen3AsrFlash,
   bailianQwen3AsrFlash20260210,
   bailianFunAsr,
   bailianQwen3AsrFlashFiletrans,
+  bailianQwenAudio31AsrFlash,
+  bailianQwenAudio31AsrFlashFiletrans,
 ] as const satisfies readonly BailianAsrPreset[]

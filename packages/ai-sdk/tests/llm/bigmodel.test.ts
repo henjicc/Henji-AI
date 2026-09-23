@@ -76,7 +76,7 @@ describe('BigModel endpoint profiles', () => {
   it('两区都可发现 Flash，只有国内保留旧模型，价格币种与促销时限分区', () => {
     const cnModels = createBigmodelModels(createBigmodelProvider()).map(model => model.modelId)
     const globalModels = createBigmodelModels(createBigmodelProvider({ endpointProfile: 'global' })).map(model => model.modelId)
-    expect(cnModels).toEqual(['glm-5.3', 'glm-5v-turbo', 'glm-5.3-flash'])
+    expect(cnModels).toEqual(['glm-5.3', 'glm-5v-turbo', 'glm-5.3-flash', 'glm-5.3-flashx'])
     expect(globalModels).toEqual(['glm-5.3-flash'])
     expect(BIGMODEL_GLM_5_3_FLASH_PRICING.cn.currency).toBe('CNY')
     expect(BIGMODEL_GLM_5_3_FLASH_PRICING.cn.promotion?.endsAt).toBeUndefined()
@@ -86,7 +86,11 @@ describe('BigModel endpoint profiles', () => {
 })
 
 describe('GLM-5.3-Flash contract', () => {
-  it('只声明已确认能力，不声明 audio、并行工具或结构化输出', () => {
+  it.each(['glm-5.3-flash', 'glm-5.3-flashx'])('%s 的 JSON 输出与始终开启的思考兼容', modelId => {
+    const payload = buildOpenAiCompatiblePayload({ providerId: 'bigmodel', modelId, messages: [{ role: 'user', content: '请返回 JSON' }], capabilities: createLlmCapabilitiesForModel(modelId), reasoning: { enabled: true, effort: 'max' }, structuredOutput: { type: 'json_object' } })
+    expect(payload).toMatchObject({ response_format: { type: 'json_object' }, thinking: { type: 'enabled' } })
+  })
+  it('只声明已确认能力，支持 JSON 输出但不声明 audio 或并行工具', () => {
     expect(createLlmCapabilitiesForModel('glm-5.3-flash')).toMatchObject({
       text: true,
       image: true,
@@ -96,8 +100,8 @@ describe('GLM-5.3-Flash contract', () => {
       streaming: true,
       toolCall: true,
       parallelTools: false,
-      structuredOutputMode: 'none',
-      jsonOutput: false,
+      structuredOutputMode: 'json',
+      jsonOutput: true,
       reasoning: true,
       contextWindow: 1_000_000,
       maxOutputTokens: 131_072,

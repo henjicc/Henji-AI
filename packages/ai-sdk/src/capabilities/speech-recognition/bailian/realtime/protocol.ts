@@ -90,6 +90,11 @@ export function buildFunStart(
   else if (options.multiThresholdModeEnabled) parameters.multi_threshold_mode_enabled = true
   if (options.heartbeat) parameters.heartbeat = true
   if (options.speechNoiseThreshold !== undefined) parameters.speech_noise_threshold = options.speechNoiseThreshold
+  if (preset.modelId === 'qwen-audio-3.1-asr-flash-streaming') {
+    if (options.keepDialect !== undefined) parameters.keep_dialect = options.keepDialect
+    if (options.vadModel !== undefined) parameters.vad_model = options.vadModel
+    if (options.vocabulary !== undefined) parameters.vocabulary = options.vocabulary
+  }
   return JSON.stringify({
     header: { action: 'run-task', task_id: taskId, streaming: 'duplex' },
     payload: {

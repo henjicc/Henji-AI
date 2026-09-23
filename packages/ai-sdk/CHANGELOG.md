@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.6.0 - 2026-09-24
+
+- 新增 MiMo 2.6 Pro / Flash / Pro-UltraSpeed 能力；默认推荐 Pro / Flash，保留 2.5 ID（官方计划 10 月 21 日下线），不自动替换用户选择。
+- MiMo Chat / Responses 思考字段分离，兼容完整 reasoning_text 事件及历史思考回传，流中断不再伪装完成。
+- 新增大陆 GLM-5.3-FlashX 与官方价格；Flash / FlashX 开放 JSON 输出并保留思考。
+- 新增 KIE HappyHorse 1.1 文生、图生、多图参考模式，以及火山 Seedream 5.0 Flash 生成/编辑和图层拆分；价格按最新官方单价。
+- 百炼新增 Qwen-Audio 3.1 短音频、文件与实时 ASR，支持方言/即时热词与说话人输出；修复短音频 JSON 回退、上下文字段及文件声道数组。
+- Kimi K3 资料补齐缓存写入 TTL 价格。新增公开入口保持向后兼容，既有外部 ASR 消费方从 0.2.x 升级仍须满足 0.5.0 的宿主流式上传要求。
+
+
 ## 0.5.2 - 2026-09-21
 
 - `llm/streaming` 新增有类型定义的文本、JSON Object 与 JSON Schema 输出配置，并把它正式写入 Chat Completions 的 `response_format`。
