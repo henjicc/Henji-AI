@@ -1,5 +1,6 @@
+import { useNodeHandlesSync } from '../hooks/useNodeHandlesSync';
 import { memo, useCallback, useEffect, useMemo, useRef } from 'react';
-import { Handle, Position, useUpdateNodeInternals, type NodeProps } from '@xyflow/react';
+import { Handle, Position, type NodeProps } from '@xyflow/react';
 import { ICON_TOOL_CAMERA_STAGE } from '@/core/theme/icons';
 import { useTranslation } from 'react-i18next';
 import { useStoreWithEqualityFn } from 'zustand/traditional';
@@ -47,7 +48,6 @@ function resolveNodeDimension(value: number | undefined, fallback: number): numb
 
 export const CameraStageNode = memo(({ id, data, selected, width, height }: CameraStageNodeProps) => {
   const { t } = useTranslation();
-  const updateNodeInternals = useUpdateNodeInternals();
   const updateNodeData = useCanvasStore((state) => state.updateNodeData);
   const setSelectedNode = useCanvasStore((state) => state.setSelectedNode);
   const edges = useCanvasStore((state) => state.edges);
@@ -102,9 +102,7 @@ export const CameraStageNode = memo(({ id, data, selected, width, height }: Came
     });
   }, [data.mediaInputs, id, updateNodeData]);
 
-  useEffect(() => {
-    updateNodeInternals(id);
-  }, [id, resolvedHeight, resolvedWidth, updateNodeInternals]);
+  useNodeHandlesSync(id, `${resolvedHeight}:${resolvedWidth}`);
 
   const openEditor = useCallback(() => {
     if (data.videoExporting || data.imageExporting) {

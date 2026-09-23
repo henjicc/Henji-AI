@@ -1,5 +1,31 @@
 import { useEffect } from 'react';
-import { useUpdateNodeInternals } from '@xyflow/react';
+import { useStoreApi, useUpdateNodeInternals } from '@xyflow/react';
+
+interface MeasurementBatch {
+  requests: Map<symbol, string>;
+  update: (ids: string[]) => void;
+}
+
+// getState 是底层 store 的稳定身份；useStoreApi 自身的包装对象在不同 hook 中不相同。
+const pendingMeasurements = new WeakMap<object, MeasurementBatch>();
+
+function scheduleMeasurement(store: object, nodeId: string, update: MeasurementBatch['update']): () => void {
+  let batch = pendingMeasurements.get(store);
+  if (!batch) {
+    batch = { requests: new Map(), update };
+    pendingMeasurements.set(store, batch);
+    const queued = batch;
+    // 合并本轮 React 提交，仍由 ReactFlow 在下一帧测量真实 DOM；不额外等待一帧。
+    queueMicrotask(() => {
+      pendingMeasurements.delete(store);
+      const ids = [...new Set(queued.requests.values())];
+      if (ids.length) queued.update(ids);
+    });
+  }
+  const token = Symbol(nodeId);
+  batch.requests.set(token, nodeId);
+  return () => { batch.requests.delete(token); };
+}
 
 /**
  * 逐行端口的行集合变化时，通知 React Flow 重新测量该节点的 Handle 位置。
@@ -12,8 +38,8 @@ import { useUpdateNodeInternals } from '@xyflow/react';
  */
 export function useNodeHandlesSync(nodeId: string, signature: string): void {
   const updateNodeInternals = useUpdateNodeInternals();
+  const { getState } = useStoreApi();
 
-  useEffect(() => {
-    updateNodeInternals(nodeId);
-  }, [nodeId, signature, updateNodeInternals]);
+  useEffect(() => scheduleMeasurement(getState, nodeId, updateNodeInternals),
+    [getState, nodeId, signature, updateNodeInternals]);
 }

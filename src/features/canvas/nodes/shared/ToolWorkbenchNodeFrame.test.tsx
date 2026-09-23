@@ -5,11 +5,14 @@ import type { ComponentProps } from 'react'
 import type { Handle } from '@xyflow/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
+const flowStore = vi.hoisted(() => ({ getState: vi.fn() }))
+
 vi.mock('@xyflow/react', async (importOriginal) => ({
   ...await importOriginal<typeof import('@xyflow/react')>(),
   Handle: ({ id, type }: ComponentProps<typeof Handle>) => <div data-testid={`${type}:${id}`} />,
   NodeResizeControl: () => null,
   useUpdateNodeInternals: () => vi.fn(),
+  useStoreApi: () => flowStore,
 }))
 vi.mock('@/features/canvas/ui/NodeHeader', () => ({
   NodeHeader: () => null,

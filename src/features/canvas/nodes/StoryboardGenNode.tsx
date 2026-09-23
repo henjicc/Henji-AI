@@ -1,5 +1,6 @@
+import { useNodeHandlesSync } from '../hooks/useNodeHandlesSync';
 import { memo, useCallback, useEffect, useMemo, useState } from 'react';
-import { Handle, Position, useUpdateNodeInternals } from '@xyflow/react';
+import { Handle, Position } from '@xyflow/react';
 import { useTranslation } from 'react-i18next';
 import { useProjectStore } from '@/stores/projectStore';
 import { attachCanvasGenerationFeedback } from '../application/canvasDomainExecutors';
@@ -58,7 +59,6 @@ type StoryboardGenNodeProps = {
 
 export const StoryboardGenNode = memo(({ id, data, selected, width, height }: StoryboardGenNodeProps) => {
   const { t } = useTranslation()
-  const updateNodeInternals = useUpdateNodeInternals()
   const setSelectedNode = useCanvasStore((state) => state.setSelectedNode)
   const updateNodeData = useCanvasStore((state) => state.updateNodeData)
   const hasSourceConnections = useCanvasStore((state) =>
@@ -195,9 +195,7 @@ export const StoryboardGenNode = memo(({ id, data, selected, width, height }: St
     [frameAspectRatioValue, nodeData.gridCols, nodeData.gridRows, resolvedNodeHeight, resolvedNodeWidth, paramsRowCount]
   )
 
-  useEffect(() => {
-    updateNodeInternals(id)
-  }, [id, resolvedNodeHeight, resolvedNodeWidth, updateNodeInternals])
+  useNodeHandlesSync(id, `${resolvedNodeHeight}:${resolvedNodeWidth}`);
 
   useEffect(() => {
     if (nodeData.modelId !== selectedModelId) {

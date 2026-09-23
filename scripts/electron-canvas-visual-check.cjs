@@ -13,6 +13,7 @@
  * VISUAL_SKIP_ONBOARDING=0（仅在需要检查引导本身时显示）、
  * VISUAL_FILL_ALL_TYPES=1（在临时 fixture 补齐缺失类型）、
  * VISUAL_REQUIRE_ALL_TYPES=1（源项目缺少注册类型时失败）。
+ * VISUAL_ISOLATED=1 使用临时资料目录，不读写用户工程。
  */
 
 const fs = require('node:fs')
@@ -350,6 +351,7 @@ async function main() {
     mainEntry: MAIN_ENTRY,
     cwd: ROOT,
     skipOnboarding: SKIP_ONBOARDING,
+    isolateUserData: process.env.VISUAL_ISOLATED === '1',
   })
   const page = app.page
   let fixture = null

@@ -1,5 +1,6 @@
+import { useNodeHandlesSync } from '../hooks/useNodeHandlesSync';
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Handle, Position, useUpdateNodeInternals, type NodeProps } from '@xyflow/react';
+import { Handle, Position, type NodeProps } from '@xyflow/react';
 import { useTranslation } from 'react-i18next';
 import { useStoreWithEqualityFn } from 'zustand/traditional';
 
@@ -66,7 +67,6 @@ export const PanoramaViewerNode = memo(({
   width,
 }: PanoramaViewerNodeProps) => {
   const { t } = useTranslation();
-  const updateNodeInternals = useUpdateNodeInternals();
   const setSelectedNode = useCanvasStore((state) => state.setSelectedNode);
   const updateNodeData = useCanvasStore((state) => state.updateNodeData);
   const openImageViewer = useCanvasStore((state) => state.openImageViewer);
@@ -269,9 +269,7 @@ export const PanoramaViewerNode = memo(({
     releaseInlineLease(id);
   }, [cancelScheduledFreeze, id, releaseInlineLease]);
 
-  useEffect(() => {
-    updateNodeInternals(id);
-  }, [id, resolvedHeight, resolvedWidth, updateNodeInternals]);
+  useNodeHandlesSync(id, `${resolvedHeight}:${resolvedWidth}`);
 
   const handleViewModeChange = useCallback((viewMode: PanoramaViewMode) => {
     cancelScheduledFreeze();
