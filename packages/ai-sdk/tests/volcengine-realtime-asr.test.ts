@@ -442,6 +442,7 @@ describe('火山 SeedASR 2.0 实时会话', () => {
     await vi.waitFor(() => expect(disconnected.close).toHaveBeenCalledOnce())
     await expect(disconnectedSession.send({ bytes: new Uint8Array([1, 2]) }))
       .rejects.toMatchObject({ code: 'provider_connection_closed' })
+    await expect(disconnectedSession.result).rejects.toMatchObject({ code: 'provider_connection_closed' })
 
     const textFrame = new ScriptedConnection(() => { textFrame.push('{"result":{}}') })
     const textClient = createCapabilityClient({

@@ -96,7 +96,7 @@ async function open(
   client: ReturnType<typeof createCapabilityClient>,
   moduleId: string,
   input: SpeechRecognitionRealtimeStart,
-  options: { requestId: string; timeoutMs?: number; onEvent?(event: SpeechRecognitionEvent): void }
+  options: { requestId: string; timeoutMs?: number; signal?: AbortSignal; onEvent?(event: SpeechRecognitionEvent): void }
 ) {
   return await client.openSession<
     SpeechRecognitionRealtimeStart,
@@ -362,8 +362,10 @@ describe('百炼实时 ASR', () => {
     const session = await open(client, bailianFunAsrRealtime.id, { mediaType: 'audio/pcm' }, {
       requestId: 'server-failure',
     })
-    await session.send({ bytes: new Uint8Array([1]) })
+    await expect(session.send({ bytes: new Uint8Array([1]) })).rejects.toMatchObject({ code: 'provider_task_failed' })
     await vi.waitFor(() => expect(connection.close).toHaveBeenCalledOnce())
+    await expect(session.result).rejects.toMatchObject({ code: 'provider_task_failed' })
+    expect(logger.error).toHaveBeenCalledOnce()
     await expect(session.finish()).rejects.toMatchObject({
       code: 'provider_task_failed',
       details: { modelId: 'fun-asr-realtime', protocol: 'fun-duplex', stage: 'active', providerCode: 'FIXTURE_FAILURE' },
@@ -384,6 +386,7 @@ describe('百炼实时 ASR', () => {
     })
     disconnect.end()
     await vi.waitFor(() => expect(disconnect.close).toHaveBeenCalledOnce())
+    await expect(disconnectedSession.result).rejects.toMatchObject({ code: 'provider_connection_closed' })
     await expect(disconnectedSession.send({ bytes: new Uint8Array([1]) }))
       .rejects.toMatchObject({ code: 'provider_connection_closed' })
   })
@@ -426,5 +429,34 @@ describe('百炼实时 ASR', () => {
       mediaType: 'audio/wav', sampleRateHz: 44_100, channels: 2,
     }, { requestId: 'invalid-audio' })).rejects.toMatchObject({ code: 'unsupported_audio_channels' })
     expect(connect).not.toHaveBeenCalled()
+  })
+
+  it('握手前取消和发送失败都会终止等待、释放连接，不遗留后台会话', async () => {
+    const controller = new AbortController()
+    const cancelledConnection = new ScriptedConnection(() => undefined)
+    const cancelledClient = createCapabilityClient({
+      runtime: runtime(cancelledConnection, () => controller.abort()),
+      realtimeModules: [createBailianRealtimeAsrModule(bailianQwen3AsrFlashRealtime)],
+    })
+    await expect(open(cancelledClient, bailianQwen3AsrFlashRealtime.id, { mediaType: 'audio/pcm' }, {
+      requestId: 'abort-connect', signal: controller.signal,
+    })).rejects.toMatchObject({ code: 'cancelled' })
+    expect(cancelledConnection.sent).toHaveLength(0)
+    expect(cancelledConnection.close).toHaveBeenCalledOnce()
+
+    const official = fixture<{ started: unknown }>('asr-realtime-fun.json')
+    const sendFailure = new ScriptedConnection(data => {
+      if (typeof data === 'string') sendFailure.push(stringify(official.events.started))
+      else throw new Error('synthetic transport failure')
+    })
+    const client = createCapabilityClient({
+      runtime: runtime(sendFailure), realtimeModules: [createBailianRealtimeAsrModule(bailianFunAsrRealtime)],
+    })
+    const session = await open(client, bailianFunAsrRealtime.id, { mediaType: 'audio/pcm' }, { requestId: 'send-failure' })
+    await expect(session.send({ bytes: new Uint8Array([1]) })).rejects.toMatchObject({ code: 'provider_realtime_error' })
+    await expect(session.result).rejects.toMatchObject({ code: 'provider_realtime_error' })
+    expect(sendFailure.close).toHaveBeenCalledOnce()
+    await client.dispose()
+    await cancelledClient.dispose()
   })
 })

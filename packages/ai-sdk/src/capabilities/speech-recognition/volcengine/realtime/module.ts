@@ -294,8 +294,10 @@ async function openDriver(
   const segments: SpeechRecognitionSegment[] = []
   const ready = deferred<void>()
   const finished = deferred<SpeechRecognitionOutput>()
+  const onAbort = (): void => fail(cancelledError(context.requestId))
 
   const closeConnection = (): Promise<void> => {
+    context.signal.removeEventListener('abort', onAbort)
     closePromise ??= Promise.resolve().then(async () => await connection.close(1000, 'session complete'))
     return closePromise
   }
@@ -412,7 +414,6 @@ async function openDriver(
   }
   void consume()
 
-  const onAbort = (): void => fail(cancelledError(context.requestId))
   context.signal.addEventListener('abort', onAbort, { once: true })
   let openTimer: ReturnType<typeof setTimeout> | undefined
   try {
@@ -440,6 +441,7 @@ async function openDriver(
   }
 
   return {
+    result: finished.promise,
     send: (chunk: SpeechRecognitionAudioChunk) => {
       if (terminalError) return Promise.reject(terminalError)
       if (phase !== 'active') {

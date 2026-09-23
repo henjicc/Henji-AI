@@ -493,6 +493,19 @@ await capabilities.dispose()
 - `llm/bigmodel`：智谱同一 provider family 下的中国大陆/Global 端点 profile、独立凭据槽与 GLM-5.3-Flash 能力。
 - `llm/modules`：外部包、插件与内置 LLM 共用的注册、执行、发现、取消和 namespace 卸载边界。
 
+实时会话仍使用 `openSession → send → finish/close`。由 client 创建的会话额外提供 `result` Promise：
+它不主动发送 finish；在最终结果到达或后台失败、取消、超时、主动关闭，并完成资源收尾后结算。
+调用方可以观察 `session.result` 以获知停止发送音频期间的后台失败，不必等到下一次 `send/finish`。
+`finish()` 幂等且返回同一结果；正常关闭但没有最终结果时 `result` 拒绝 `realtime_session_closed`，
+取消是 `cancelled`，超时是 `timeout`，供应商失败保留原错误。未订阅该 Promise 不产生未处理拒绝，
+SDK 仍按现有日志契约记录失败。
+
+外部实时驱动可以提供可选 `result` Promise，致命后台/发送错误必须拒绝它，成功则返回有效最终结果。
+输入校验等可恢复的单次 send 错误只拒绝该调用，不应结束 result。旧驱动无需新增字段即可继续使用；
+如果旧驱动没有提供结果通道，SDK 无法自行发现它的后台失败。公共类型中的可选属性用于兼容旧会话实现。
+完成、失败、取消与关闭竞争时只结算一次；清理失败不能覆盖首个失败，但成功路径清理失败不能报成功。
+连接、监听器与定时器回收后，原 requestId 可用于新会话；不会自动重连或重放已可能计费的音频。
+
 ASR module ID 固定为 `<providerId>.speech-recognition.<modelId>`，翻译固定为
 `bailian.translation.<modelId>`；供应商 ID 使用 `bailian` / `volcengine` / `siliconflow` / `groq`，
 没有 `funasr` 兼容供应商别名。火山文件标准版不会读取本地 bytes/media-ref；宿主必须先通过自己受控的

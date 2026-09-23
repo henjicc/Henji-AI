@@ -123,6 +123,7 @@ export function createBailianRealtimeAsrModule(
       validateRealtimeStart(preset, input)
       if (context.signal.aborted) throw cancelledError(context.requestId)
       const credential = await apiKey(context)
+      if (context.signal.aborted) throw cancelledError(context.requestId)
       const transport = context.runtime.realtime
       if (!transport) throw new AiRuntimeError('realtime_transport_missing', 'Host did not provide realtime transport')
       const taskId = preset.protocol === 'fun-duplex'
@@ -168,8 +169,10 @@ async function openDriver(
   const created = deferred<void>()
   const ready = deferred<void>()
   const finished = deferred<SpeechRecognitionOutput>()
+  const onAbort = (): void => fail(cancelledError(context.requestId))
 
   const closeConnection = (): Promise<void> => {
+    context.signal.removeEventListener('abort', onAbort)
     closePromise ??= Promise.resolve().then(async () => await connection.close(1000, 'session complete'))
     return closePromise
   }
@@ -296,9 +299,9 @@ async function openDriver(
   }
   void consume()
 
-  const onAbort = (): void => fail(cancelledError(context.requestId))
   context.signal.addEventListener('abort', onAbort, { once: true })
   try {
+    if (context.signal.aborted) throw cancelledError(context.requestId)
     if (preset.protocol === 'fun-duplex') {
       await connection.send(buildFunStart(preset, input, taskId))
     } else {
@@ -313,11 +316,16 @@ async function openDriver(
   }
 
   return {
+    result: finished.promise,
     send: async (chunk: SpeechRecognitionAudioChunk) => {
       if (terminalError) throw terminalError
       if (phase !== 'active') throw new AiRuntimeError('realtime_session_inactive', 'Bailian realtime session is not active')
       if (chunk.bytes.byteLength === 0) return
-      await connection.send(preset.protocol === 'fun-duplex' ? chunk.bytes : buildQwenAudio(chunk.bytes))
+      const data = preset.protocol === 'fun-duplex' ? chunk.bytes : buildQwenAudio(chunk.bytes)
+      try { await connection.send(data) } catch (error) {
+        fail(error)
+        throw terminalError ?? error
+      }
     },
     finish: () => {
       if (finishPromise) return finishPromise
@@ -337,6 +345,7 @@ async function openDriver(
         }
         return await finished.promise
       })()
+      void finishPromise.catch(error => fail(error))
       return finishPromise
     },
     close: async () => {
