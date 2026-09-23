@@ -1,6 +1,7 @@
 import { preprocessRequestBody } from '../upload/preprocess'
 import type { RuntimeContext } from '../runtime/RuntimeContext'
 import { normalizeProviderError } from '../runtime/error-classify'
+import { AiRuntimeError } from '../runtime/AiRuntimeError'
 import {
   cancelTask,
   clearCancelFlag,
@@ -208,11 +209,15 @@ export async function runLlmChatStream(
         })
       : error
     span?.end(normalizedInput)
-    throw new Error(normalizeLlmChatError(taskId, normalizedInput, {
+    const normalized = new Error(normalizeLlmChatError(taskId, normalizedInput, {
       providerId: request.providerId,
       modelId: request.modelId,
       requestId: taskId,
     }))
+    if (error instanceof AiRuntimeError && error.details?.protocol === 'openai-chat-sse') {
+      Object.assign(normalized, { details: error.details })
+    }
+    throw normalized
   } finally {
     execution.signal?.removeEventListener('abort', forwardAbort)
     if (timeout !== undefined) clearTimeout(timeout)
