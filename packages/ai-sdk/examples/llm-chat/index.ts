@@ -30,7 +30,7 @@ class DryRunTransport implements Transport {
   async fetch(): Promise<Response> {
     this.calls += 1
     return new Response(
-      'data: {"choices":[{"delta":{"content":"SDK OK"}}]}\n\ndata: [DONE]\n\n',
+      'data: {"choices":[{"delta":{"content":"SDK OK"},"finish_reason":"stop"}]}\n\ndata: [DONE]\n\n',
       { status: 200, headers: { 'Content-Type': 'text/event-stream' } },
     )
   }
