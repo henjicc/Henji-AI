@@ -214,7 +214,7 @@ async function readSseStream(body: ReadableStream<Uint8Array>, options: StreamCh
     checkAbort()
     if (!finishReason) throw new AiRuntimeError('STREAM_INCOMPLETE', 'Chat stream ended without finish_reason')
     return { output, reasoningOutput, usage, finishReason,
-      truncated: isOutputTruncated(finishReason), toolCalls: [...toolCalls.values()] }
+      truncated: isOutputTruncated(finishReason, options.providerId), toolCalls: [...toolCalls.values()] }
   }
   signal.addEventListener('abort', cancelReader, { once: true })
   try {
@@ -260,6 +260,7 @@ async function readSseStream(body: ReadableStream<Uint8Array>, options: StreamCh
       throw new AiRuntimeError(error.code, 'Chat streaming response failed', {
         providerId: options.providerId, modelId: options.payload.model,
         protocol: 'openai-chat-sse', stage, receivedFinish: finishReason !== null,
+        ...(error.details?.finishReason === 'network_error' ? { finishReason: 'network_error' } : {}),
       })
     }
     throw error
@@ -367,8 +368,9 @@ function invalidRequest(code: string, message: string): Error {
   return Object.assign(new Error(message), { code, statusCode: 400 })
 }
 
-function isOutputTruncated(finishReason: string | null): boolean {
+function isOutputTruncated(finishReason: string | null, providerId: string): boolean {
   return finishReason === 'length' || finishReason === 'max_tokens' || finishReason === 'max_output_tokens'
+    || (providerId === 'bigmodel' && finishReason === 'model_context_window_exceeded')
 }
 
 function parseSseData(event: string, providerId: string): {
@@ -390,9 +392,11 @@ function parseSseData(event: string, providerId: string): {
   if (eventName === 'error' && !data) throw new AiRuntimeError('PROVIDER_STREAM_ERROR', 'Server error event')
   if (!data) return { done: false }
   if (data === '[DONE]' && (!eventName || eventName === 'message')) return { done: true }
+  if (eventName && !['message', 'chat.completion.chunk', 'error'].includes(eventName)) return { done: false }
 
   let json: unknown
   try { json = JSON.parse(data) as unknown } catch {
+    if (eventName === 'error') throw new AiRuntimeError('PROVIDER_STREAM_ERROR', 'Server error event')
     throw new AiRuntimeError('INVALID_STREAM_RESPONSE', 'Invalid SSE JSON')
   }
   if (eventName === 'error' || (isRecord(json) && json.error != null)) {
@@ -401,7 +405,6 @@ function parseSseData(event: string, providerId: string): {
       ? error.code : 'PROVIDER_STREAM_ERROR'
     throw new AiRuntimeError(code, 'Server error event')
   }
-  if (eventName && eventName !== 'message' && eventName !== 'chat.completion.chunk') return { done: false }
   // BigModel's documented SDK consumer permits status-only chunks without
   // choices. This does not make them completion evidence or allow wrong types.
   const statusOnlyAllowed = providerId === 'bigmodel'
@@ -419,6 +422,9 @@ function parseSseData(event: string, providerId: string): {
   if (!isRecord(first) || !isRecord(first.delta)
     || (first.finish_reason != null && (typeof first.finish_reason !== 'string' || !first.finish_reason.trim()))) {
     throw new AiRuntimeError('INVALID_STREAM_RESPONSE', 'Invalid Chat choice')
+  }
+  if (providerId === 'bigmodel' && first.finish_reason === 'network_error') {
+    throw new AiRuntimeError('PROVIDER_STREAM_ERROR', 'Model inference failed', { finishReason: 'network_error' })
   }
   for (const field of ['content', 'reasoning_content', 'reasoning']) {
     if (first.delta[field] != null && typeof first.delta[field] !== 'string') {

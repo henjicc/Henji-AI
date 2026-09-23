@@ -146,6 +146,8 @@ schema 未暴露 `tool_stream`，通用字段说明列出的支持模型也未�
 但同页字段说明还提到 `model_context_window_exceeded`。这是官方页面内部不一致；解析器必须接受并保留
 未知字符串，不能用封闭枚举拒绝服务器返回。
 
+2026-09-24 复核：开放字符串不代表所有结束原因都成功。官方明确 `network_error` 为模型推理异常，SDK 原生流必须失败并保留该结束原因，不执行自动付费重放；`model_context_window_exceeded` 表示上下文窗口上限，沿用部分输出但标 `truncated=true`。`stop/tool_calls/sensitive` 及未知扩展字符串继续保留原值，供调用方依据语义处理。对应字段表 fixture 与负例位于 `tests/fixtures/llm/chat-stream-lifecycle.json` 和 `tests/llm/streaming-lifecycle.test.ts`；没有将这些构造样本声称为真实模型返回。
+
 ## 7. 结构化输出与流式能力
 
 - 普通文本流式已确认：SSE `data:` JSON 帧、最终 `finish_reason`/usage、`data: [DONE]`。

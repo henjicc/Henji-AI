@@ -91,10 +91,13 @@ Responses 请求统一下发 `store: false`：助手自己的会话存储仍是�
 | 未知命名事件 | 任一读取状态；保留扩展兼容空间 | 不把扩展通知当完成；含 error 仍失败 | 不输出、不改变完成状态 | 等待已知完成证据 |
 | 无名/message 数据缺 choices 或 delta | 已知 Chat 数据路径 | 必要结果结构缺失，不能按空通知处理 | INVALID_STREAM_RESPONSE | 取消并释放 |
 | DONE / EOF | 已收到有效 finish_reason | 未收到则 STREAM_INCOMPLETE；usage、partial 不能替代 | 完成，或明确失败 | 释放 reader；DONE 取消剩余流 |
+| 智谱 network_error / model_context_window_exceeded | 已开始流 | 前者为推理异常，后者为窗口限制 | 不能把异常当正常 stop | 前者 PROVIDER_STREAM_ERROR；后者 truncated=true，保留部分输出和结束原因 | 不自动重试 |
 | 未完成 SSE 块后 EOF | 空行才派发事件；官方 SSE 不派发残留块 | 不补空行伪造 final | 残块不产生结果；依据此前终态判断 | 释放 reader |
 | 取消 / 读取异常 | 任一非终态 | 不能当正常 EOF | 取消或失败，不调用 completed | 移除监听、取消并释放 reader |
 
 兼容边界：不新增非空文本要求，工具调用、拒绝或空模型结果可以带合法完成原因。官方未承诺所有兼容供应商都发送 DONE，因此 SDK 保留“已收到 finish_reason 后正常 EOF 可完成”的策略；无 finish_reason 的 DONE 不足以证明生成完成。未知命名事件不会自行成功或失败，但无名 Chat 数据必须具有可识别结构。[智谱契约第 6 节](供应商/智谱GLM.md) 允许缺省/空 choices 的状态块，按 provider family 保留该差异，这些块不改变完成状态；choices 错类型仍拒绝。新增此处校验不要求所有网关补齐无关的 id/created/model 元数据。SSE 连接不复用；SDK 不在断流后重放已可能计费的请求。
+
+未知具名扩展通知的 data 可以是普通文本，不强行 JSON 解析；已知 error 事件不论正文格式都失败，合法 Chat 数据仍严格校验 JSON。
 
 ## 三、本项目的协议接入优先级（产品决策，不是能力强弱排序）
 

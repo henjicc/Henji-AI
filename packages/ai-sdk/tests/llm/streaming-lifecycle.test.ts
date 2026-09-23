@@ -84,6 +84,33 @@ describe('Chat SSE lifecycle (official field-table fixture + synthetic-negative 
     expect(parseModelProviderError(error)?.code).toBe('STREAM_INCOMPLETE')
   })
 
+  it('未知具名普通文本通知不按 Chat JSON 解析，已知错误普通文本仍失败', async () => {
+    const notice = 'event: provider.notice\ndata: preparing\n\n'
+    await expect(setup(notice + sse(fixture.final) + done).run()).resolves.toMatchObject({ finishReason: 'stop' })
+    const incomplete = await setup(notice + done).run().catch(value => value)
+    expect(parseModelProviderError(incomplete)?.code).toBe('STREAM_INCOMPLETE')
+    const failed = setup('event: error\ndata: private-content\n\n', true)
+    const error = await failed.run().catch(value => value)
+    expect(parseModelProviderError(error)?.code).toBe('PROVIDER_STREAM_ERROR')
+    expect(String(error)).not.toContain('private-content')
+    expect(failed.cancel).toHaveBeenCalledOnce()
+    expect(failed.completed).not.toHaveBeenCalled()
+  })
+
+  it('智谱推理异常终态明确失败，上下文限制保留为截断结果，扩展字符串保持开放', async () => {
+    const failed = setup(sse(fixture.partial) + sse(fixture.bigmodelNetworkError) + done, true, 'bigmodel')
+    const error = await failed.run().catch(value => value)
+    expect(parseModelProviderError(error)?.code).toBe('PROVIDER_STREAM_ERROR')
+    expect(error).toMatchObject({ details: { finishReason: 'network_error', modelId: 'fixture-model' } })
+    expect(failed.completed).not.toHaveBeenCalled()
+    expect(failed.cancel).toHaveBeenCalledOnce()
+    expect(failed.fetch).toHaveBeenCalledOnce()
+    await expect(setup(sse(fixture.partial) + sse(fixture.bigmodelContextLimit) + done, false, 'bigmodel').run())
+      .resolves.toMatchObject({ output: 'Hello ', finishReason: 'model_context_window_exceeded', truncated: true })
+    await expect(setup(sse({ choices: [{ delta: {}, finish_reason: 'future-reason' }] }) + done, false, 'bigmodel').run())
+      .resolves.toMatchObject({ finishReason: 'future-reason' })
+  })
+
   it.each(['\r', '\r\n', '\n'])('接受官方 SSE 换行 %j', async (newline) => {
     const test = setup((sse(fixture.partial) + sse(fixture.final) + done).replaceAll('\n', newline))
     await expect(test.run()).resolves.toMatchObject({ output: 'Hello ', finishReason: 'stop' })

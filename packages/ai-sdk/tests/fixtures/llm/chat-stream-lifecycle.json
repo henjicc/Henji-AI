@@ -2,7 +2,8 @@
   "sources": [
     "https://developers.openai.com/api/reference/resources/chat/subresources/completions/streaming-events",
     "https://raw.githubusercontent.com/openai/openai-node/master/src/core/streaming.ts",
-    "https://html.spec.whatwg.org/multipage/server-sent-events.html#event-stream-interpretation"
+    "https://html.spec.whatwg.org/multipage/server-sent-events.html#event-stream-interpretation",
+    "https://docs.bigmodel.cn/api-reference/模型-api/对话补全"
   ],
   "capturedAt": "2026-09-24",
   "provenance": "依据官方字段表构造；省略无关元数据，文本为固定测试内容；error 依据官方 SDK 的错误分支构造。测试中删除字段、截断、改类型属于 synthetic-negative。",
@@ -11,5 +12,7 @@
   "partial": { "choices": [{ "index": 0, "delta": { "content": "Hello " }, "finish_reason": null }] },
   "final": { "choices": [{ "index": 0, "delta": {}, "finish_reason": "stop" }] },
   "usage": { "choices": [], "usage": { "prompt_tokens": 3, "completion_tokens": 2, "total_tokens": 5 } },
-  "error": { "error": { "code": "server_error", "message": "synthetic private content" } }
+  "error": { "error": { "code": "server_error", "message": "synthetic private content" } },
+  "bigmodelNetworkError": { "choices": [{ "index": 0, "delta": { "content": "" }, "finish_reason": "network_error" }] },
+  "bigmodelContextLimit": { "choices": [{ "index": 0, "delta": { "content": "" }, "finish_reason": "model_context_window_exceeded" }] }
 }
