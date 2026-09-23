@@ -174,10 +174,10 @@ function parseFunEvent(root: UnknownRecord): BailianRealtimeEvent {
     const segment = parseBailianSentence(sentence)
     const transcript = segment?.text ?? string(sentence?.text)
     if (!transcript) {
-      // 官方会用 text="" + sentence_begin=true/sentence_end=false 宣告新句开始；
-      // 这是合法的中间生命周期事件，不是识别结果。最终句仍必须带有效文本。
-      if (sentence?.sentence_begin === true && sentence?.sentence_end === false) {
-        return { kind: 'ignored', eventType: 'empty-sentence-begin' }
+      // 句首及后续中间帧均可能尚无文字；只有首帧带 sentence_begin。
+      // 必须有 text 字符串与明确的非终态，不能把缺字段的异常响应当作空帧。
+      if (typeof sentence?.text === 'string' && sentence.sentence_end === false) {
+        return { kind: 'ignored', eventType: sentence.sentence_begin === true ? 'empty-sentence-begin' : 'empty-intermediate' }
       }
       if (sentence?.sentence_end === true) {
         throw new AiRuntimeError('invalid_response', 'Bailian Fun-ASR final result has no text')

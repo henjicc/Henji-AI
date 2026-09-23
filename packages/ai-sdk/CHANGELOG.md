@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.6.1 - 2026-09-24
+
+- 修复百炼 Fun Duplex 实时识别把无句首标记的空文本中间帧误判为无效响应的问题；覆盖 Qwen Audio 3.1 streaming 与 Fun-ASR 共享协议。
+- 保持缺失文字字段、空最终结果、全程无有效 final 的严格校验及连接释放。
+
 ## 0.6.0 - 2026-09-24
 
 - 新增 MiMo 2.6 Pro / Flash / Pro-UltraSpeed 能力；默认推荐 Pro / Flash，保留 2.5 ID（官方计划 10 月 21 日下线），不自动替换用户选择。

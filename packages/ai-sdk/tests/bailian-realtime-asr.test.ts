@@ -125,7 +125,7 @@ describe('百炼实时 ASR', () => {
 
   it.each([bailianFunAsrRealtime, bailianQwenAudio31AsrFlashStreaming])('$modelId 完整处理 start/二进制/partial/final/timestamps/finish，finish 与 close 幂等', async (preset) => {
     const official = fixture<{
-      started: unknown; sentenceBegin: unknown; partial: unknown; final: unknown; finished: unknown
+      started: unknown; sentenceBegin: unknown; emptyIntermediate: unknown; partial: unknown; final: unknown; finished: unknown
     }>('asr-realtime-fun.json')
     const events: SpeechRecognitionEvent[] = []
     const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() }
@@ -154,6 +154,7 @@ describe('百炼实时 ASR', () => {
     }, { requestId: 'fun-realtime', onEvent: (event) => { events.push(event) } })
 
     connection.push(stringify(official.events.sentenceBegin))
+    connection.push(stringify(official.events.emptyIntermediate))
     await session.send({ bytes: new Uint8Array([1, 2, 3]) })
     const firstFinish = session.finish()
     const secondFinish = session.finish()
@@ -179,6 +180,7 @@ describe('百炼实时 ASR', () => {
     expect(events.map((event) => event.type)).toEqual(['started', 'partial', 'final', 'completed'])
     expect(logger.warn).toHaveBeenCalledOnce()
     expect(JSON.stringify(logger.warn.mock.calls)).not.toContain('empty-sentence-begin')
+    expect(JSON.stringify(logger.warn.mock.calls)).not.toContain('empty-intermediate')
     expect(JSON.stringify(logger.warn.mock.calls)).not.toContain('DO_NOT_LOG')
     expect(JSON.stringify(logger.warn.mock.calls)).not.toContain('fixture-secret-key')
   })
