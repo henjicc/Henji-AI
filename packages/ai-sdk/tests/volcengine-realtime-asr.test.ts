@@ -230,6 +230,54 @@ describe('火山 SeedASR 2.0 实时协议', () => {
 })
 
 describe('火山 SeedASR 2.0 实时会话', () => {
+  it.each([false, true])('服务端失败保留模型/协议/阶段，握手清理失败不覆盖原因：%s', async closeFails => {
+    const official = fixture<OfficialFixture>('asr-seedasr-official.json')
+    const constructed = fixture<ConstructedFixture>('asr-seedasr-field-construction.json')
+    const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() }
+    const failure = serverFrame({ payload: { message: 'private transcript fixture-api-key' }, errorCode: 1234, sequence: -2, last: true })
+    const connection = new ScriptedConnection(() => {
+      connection.push(closeFails ? failure : serverFrame({ payload: official.realtime.handshake, sequence: 1 }))
+    })
+    if (closeFails) connection.close.mockImplementation(async () => {
+      connection.end()
+      throw new Error('private cleanup fixture-api-key')
+    })
+    const client = createCapabilityClient({ runtime: runtime(connection, undefined, logger),
+      realtimeModules: [createVolcengineRealtimeAsrModule(volcengineSeedAsrRealtime, { requestIdFactory: () => constructed.taskId })],
+    })
+    let result: Promise<unknown>
+    if (closeFails) result = open(client, { mediaType: 'audio/pcm' }, { requestId: 'opening-error' })
+    else {
+      const session = await open(client, { mediaType: 'audio/pcm' }, { requestId: 'active-error' })
+      connection.push(failure)
+      result = session.result!
+    }
+    await expect(result).rejects.toMatchObject({ code: 'provider_task_failed', details: {
+      modelId: 'seedasr-2.0-realtime', protocol: 'volcengine-binary-v1',
+      stage: closeFails ? 'opening' : 'active', operation: 'receive', providerCode: 1234,
+      ...(closeFails ? { cleanupFailed: true } : {}),
+    } })
+    const logs = logger.error.mock.calls.map(call => ({ ...call[1], message: String(call[1]?.error) }))
+    expect(JSON.stringify(logs)).not.toMatch(/private transcript|private cleanup|fixture-api-key/)
+    expect(connection.close).toHaveBeenCalledOnce()
+    await client.dispose()
+  })
+
+  it('握手发送失败的原始异常不进入默认日志', async () => {
+    const constructed = fixture<ConstructedFixture>('asr-seedasr-field-construction.json')
+    const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() }
+    const connection = new ScriptedConnection(() => { throw new Error('private transport fixture-api-key') })
+    const client = createCapabilityClient({ runtime: runtime(connection, undefined, logger),
+      realtimeModules: [createVolcengineRealtimeAsrModule(volcengineSeedAsrRealtime, { requestIdFactory: () => constructed.taskId })],
+    })
+    await expect(open(client, { mediaType: 'audio/pcm' }, { requestId: 'send-error' })).rejects.toMatchObject({
+      code: 'provider_realtime_error', details: { modelId: 'seedasr-2.0-realtime', stage: 'opening', operation: 'open' },
+    })
+    expect(logger.error.mock.calls.map(call => String(call[1]?.error)).join('')).not.toContain('fixture-api-key')
+    expect(connection.close).toHaveBeenCalledOnce()
+    await client.dispose()
+  })
+
   it('握手后缓存最后一块，finish 发负序号，归一化 partial/final/terminal 且释放幂等', async () => {
     const official = fixture<OfficialFixture>('asr-seedasr-official.json')
     const constructed = fixture<ConstructedFixture>('asr-seedasr-field-construction.json')

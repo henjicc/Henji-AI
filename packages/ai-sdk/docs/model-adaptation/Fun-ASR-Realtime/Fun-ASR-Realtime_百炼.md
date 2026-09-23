@@ -30,6 +30,8 @@ Say-It 保留该稳定别名与 2026-02-28 快照供用户选择；SDK 不应自
 
 2026-09-24 核对官方服务端事件页。此协议也服务于 `qwen-audio-3.1-asr-flash-streaming`，错误诊断必须标实际模型，不能统一叫 Fun-ASR。样本见 `tests/fixtures/bailian/asr-realtime-fun.json`，0.6.1 真实验证的空中间帧保持原语义。
 
+共享百炼实时驱动在握手发送失败时也返回已归一化的模型/协议/阶段；关闭连接若再次失败，以 `cleanupFailed=true` 补充首个故障，不覆盖原因为原始宿主异常。该边界由 `bailian-realtime-asr.test.ts` 的双故障 Mock 回归保护，同时用于 `fun-duplex` 与 `qwen-realtime`。
+
 | 事件 | 前置阶段与字段语义 | 迁移 / 输出 | 结束与资源 |
 |---|---|---|---|
 | `task-started` | opening，run-task 已发 | active / started | 继续 |

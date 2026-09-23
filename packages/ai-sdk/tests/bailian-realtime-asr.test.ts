@@ -431,6 +431,23 @@ describe('百炼实时 ASR', () => {
     expect(connect).not.toHaveBeenCalled()
   })
 
+  it('握手首个发送失败不会被关闭失败覆盖，也不泄露宿主原始异常', async () => {
+    const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() }
+    const connection = new ScriptedConnection(() => { throw new Error('private transport fixture-secret') })
+    connection.close.mockImplementation(async () => { connection.end(); throw new Error('private cleanup fixture-secret') })
+    const client = createCapabilityClient({ runtime: runtime(connection, undefined, logger),
+      realtimeModules: [createBailianRealtimeAsrModule(bailianFunAsrRealtime)],
+    })
+    await expect(open(client, bailianFunAsrRealtime.id, { mediaType: 'audio/pcm' }, {
+      requestId: 'handshake-failure',
+    })).rejects.toMatchObject({ code: 'provider_realtime_error', details: {
+      modelId: 'fun-asr-realtime', protocol: 'fun-duplex', stage: 'opening', cleanupFailed: true,
+    } })
+    expect(logger.error.mock.calls.map(call => String(call[1]?.error)).join('')).not.toContain('fixture-secret')
+    expect(connection.close).toHaveBeenCalledOnce()
+    await client.dispose()
+  })
+
   it('握手前取消和发送失败都会终止等待、释放连接，不遗留后台会话', async () => {
     const controller = new AbortController()
     const cancelledConnection = new ScriptedConnection(() => undefined)

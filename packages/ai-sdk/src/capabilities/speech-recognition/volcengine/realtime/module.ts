@@ -287,6 +287,7 @@ async function openDriver(
   let closePromise: Promise<void> | undefined
   let finishPromise: Promise<SpeechRecognitionOutput> | undefined
   let terminalError: AiRuntimeError | undefined
+  let lastFrame: { sequence?: number; eventNumber?: number; last: boolean } | undefined
   let lastPartial = ''
   let durationMs: number | undefined
   let logId: string | undefined
@@ -302,15 +303,20 @@ async function openDriver(
     return closePromise
   }
 
-  const fail = (error: unknown): void => {
+  const fail = (error: unknown, operation = 'receive'): void => {
     if (phase === 'finished' || phase === 'closed' || phase === 'failed') return
+    const failedPhase = phase
     phase = 'failed'
-    const normalized = error instanceof AiRuntimeError
+    const original = error instanceof AiRuntimeError
       ? error
-      : new AiRuntimeError(
-        'provider_realtime_error',
-        error instanceof Error ? error.message : 'Volcengine realtime ASR failed'
-      )
+      : new AiRuntimeError('provider_realtime_error', 'Realtime transport or event handler failed')
+    const normalized = new AiRuntimeError(original.code,
+      `${preset.modelId} (volcengine-binary-v1): ${original.message.replace(`[${original.code}] `, '')}`, {
+        providerId: 'volcengine', modelId: preset.modelId, protocol: 'volcengine-binary-v1',
+        stage: failedPhase, operation,
+        providerCode: original.details?.providerCode,
+        lastSequence: lastFrame?.sequence, lastEventNumber: lastFrame?.eventNumber, lastFrame: lastFrame?.last,
+      })
     terminalError = normalized
     ready.reject(normalized)
     finished.reject(normalized)
@@ -393,12 +399,14 @@ async function openDriver(
     try {
       for await (const message of connection.messages) {
         if (context.signal.aborted) throw cancelledError(context.requestId)
+        lastFrame = undefined
         if (typeof message.data === 'string') {
           throw new AiRuntimeError('invalid_response', 'Volcengine realtime server returned a text WebSocket frame')
         }
         const frame = parseVolcengineServerFrame(message.data)
+        lastFrame = { sequence: frame.sequence, eventNumber: frame.event, last: frame.last }
         if (frame.kind === 'error') {
-          throw new AiRuntimeError('provider_task_failed', `${frame.code}: ${frame.message}`)
+          throw new AiRuntimeError('provider_task_failed', `Server reported a realtime task failure (${frame.code})`, { providerCode: frame.code })
         }
         await handle(frame)
       }
@@ -433,8 +441,13 @@ async function openDriver(
       deadline,
     ])
   } catch (error) {
-    fail(error)
-    await closeConnection()
+    fail(error, 'open')
+    try { await closeConnection() } catch {
+      const primary = terminalError!
+      throw new AiRuntimeError(primary.code, primary.message.replace(`[${primary.code}] `, ''), {
+        ...primary.details, cleanupFailed: true,
+      })
+    }
     throw terminalError ?? error
   } finally {
     if (openTimer !== undefined) clearTimeout(openTimer)
@@ -469,7 +482,7 @@ async function openDriver(
       })
       sendQueue = operation.catch(() => undefined)
       return operation.catch((error) => {
-        fail(error)
+        fail(error, 'send')
         throw terminalError ?? error
       })
     },
@@ -497,12 +510,12 @@ async function openDriver(
         try {
           await connection.send(encodeVolcengineAudioRequest(finalAudio, nextSequence, true))
         } catch (error) {
-          fail(error)
+          fail(error, 'finish')
           throw terminalError ?? error
         }
         return await finished.promise
       })()
-      void finishPromise.catch((error) => fail(error))
+      void finishPromise.catch((error) => fail(error, 'finish'))
       return finishPromise
     },
     close: async () => {

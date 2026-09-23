@@ -2,7 +2,7 @@
 
 | 项目 | 内容 |
 |---|---|
-| 最后更新 | 2026-08-31 |
+| 最后更新 | 2026-09-24 |
 | 能力 | 双向实时语音识别（二进制 WebSocket） |
 | SDK `modelId` | `seedasr-2.0-realtime` |
 | 火山请求模型 | `request.model_name="bigmodel"` + 2.0 资源 ID `volc.seedasr.sauc.duration` |
@@ -105,7 +105,7 @@ SDK 对音频保留一块延迟：收到下一块时才把上一块以正 sequen
 | type `9`，非空 `result.text` | `partial` | 否 | 文本变化才发，重复内容去重 |
 | `result.utterances[].definite=true` | `final` | 否 | 表示句段已确定，不等于整个连接结束；按时间范围/文本去重 |
 | flag bit `2`（last） | `completed` | 是 | 只有客户端已 `finish()` 后才合法；输出 `result.text/utterances/audio_info.duration` |
-| type `15` | 无 | 是（错误） | 读取 uint32 错误码；错误 payload 可为 JSON 或安全 UTF-8 文本 |
+| type `15` | 无 | 是（错误） | 读取 uint32 错误码；错误 payload 可为 JSON 或 UTF-8 文本，默认异常/日志只保留错误码，不带原始 message |
 | 未知 `event` 数字 | 无 | 否 | 只记脱敏 warning，仍按 type/payload 处理 |
 | WebSocket 提前断开 | 无 | 是（错误） | `provider_connection_closed`，不误报完成 |
 | text WebSocket frame | 无 | 是（错误） | 协议要求二进制，报 `invalid_response` |
@@ -113,6 +113,8 @@ SDK 对音频保留一块延迟：收到下一块时才把上一块以正 sequen
 `utterances[].definite=true` 只能判断句段 final，整个会话终态必须看帧头 last 标志。整个终帧仍无有效文本时严格报 `invalid_response`。
 
 用户主动取消只关闭连接，不发送负 sequence 终帧，也不把取消伪装成正常完成。full request 默认在 15 秒内必须收到首个服务端响应，可用 `openTimeoutMs` 显式调整；超时会关闭半开连接。`finish()`、连接释放和显式 `close()` 都幂等；发送失败、服务端错误、断线、超时和取消都走同一个释放边界。
+
+2026-09-24 诊断复核：异常 details 保留实际 `modelId=seedasr-2.0-realtime`、`protocol=volcengine-binary-v1`、会话阶段、操作与最后一帧的序号/event/last 标志。原始服务端 message 和宿主异常可能包含识别内容或凭据，不进入默认诊断。握手失败后若关闭也失败，继续报告首个故障，并附 `cleanupFailed=true`。`volcengine-realtime-asr.test.ts` 使用既有官方帧结构、受控敏感文本错误与 Mock close 拒绝验证这些边界；不是额外真实服务实录。
 
 ## 5. 价格与免费额度
 

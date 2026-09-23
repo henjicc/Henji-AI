@@ -311,8 +311,13 @@ async function openDriver(
     await ready.promise
   } catch (error) {
     fail(error)
-    await closeConnection()
-    throw error
+    try { await closeConnection() } catch {
+      const primary = terminalError!
+      throw new AiRuntimeError(primary.code, primary.message.replace(`[${primary.code}] `, ''), {
+        ...primary.details, cleanupFailed: true,
+      })
+    }
+    throw terminalError ?? error
   }
 
   return {
