@@ -1,6 +1,8 @@
 const assert = require('node:assert/strict')
 const { test } = require('node:test')
 const { createEditProbe } = require('./uiInspectionGenerationInputPerformance.cjs')
+const { holdGenerationResults } = require('./uiInspectionGenerationBackground.cjs')
+const vm = require('node:vm')
 
 async function harness(t, editable = false) {
   const { JSDOM } = await import('jsdom')
@@ -61,4 +63,39 @@ test('结果未同步、重复卡片和超时不能误判为通过，退出解�
   assert.equal((await h.probe.done).ok, false); h.clean()
   const other = await harness(t)
   other.fire(); other.probe.dispose(); other.clean()
+})
+
+function backgroundHarness(isolated) {
+  const handlers = new Map([['ai:continuePolling', () => { throw Error('不得调用真实供应商') }]])
+  const original = handlers.get('ai:continuePolling')
+  const ipcMain = { removeHandler: name => handlers.delete(name), handle: (name, callback) => handlers.set(name, callback) }
+  const app = { evaluateHandle: async (fn, args) => vm.runInNewContext(`(${fn.toString()})`, {
+    process: { env: isolated ? { HENJI_ISOLATED_APP_DATA: '/isolated-profile' } : {} },
+  })({ ipcMain }, args) }
+  return { app, handlers, original }
+}
+
+test('后台任务替身拒绝真实资料目录，在触碰 IPC 前失败', async () => {
+  const h = backgroundHarness(false)
+  await assert.rejects(holdGenerationResults(h.app, '/fixture.png', 2), /只允许隔离资料/)
+  assert.equal(h.handlers.get('ai:continuePolling'), h.original)
+})
+
+test('后台任务只接受约定模型和任务，每个请求仅释放一次，退出解除挂起与处理器', async () => {
+  const h = backgroundHarness(true)
+  const fixture = await holdGenerationResults(h.app, '/fixture.png', 2)
+  const request = h.handlers.get('ai:continuePolling')
+  await assert.rejects(request({}, { modelId: 'other', taskId: '__generation_background_0' }))
+  await assert.rejects(request({}, { modelId: 'kie-z-image', taskId: 'real-user-task' }))
+  const first = request({}, { modelId: 'kie-z-image', taskId: '__generation_background_0' })
+  await assert.rejects(request({}, { modelId: 'kie-z-image', taskId: '__generation_background_0' }))
+  assert.equal(fixture.snapshot().waiting, 1)
+  fixture.release()
+  assert.equal((await first).data.filePath, '/fixture.png')
+  assert.equal(fixture.snapshot().waiting, 0)
+  const second = request({}, { modelId: 'kie-z-image', taskId: '__generation_background_1' })
+  fixture.dispose()
+  assert.equal((await second).data.status, 'completed')
+  assert.equal(fixture.snapshot().waiting, 0)
+  assert.equal(h.handlers.size, 0)
 })
