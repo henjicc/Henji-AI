@@ -8,11 +8,15 @@ const { createPanDiagnostics, installPageDiagnostics } = require('./canvasPanDia
 const { checkCanvasViewport } = require('./uiInspectionCanvasViewport.cjs')
 const { withUnthrottledBenchmark } = require('./withUnthrottledBenchmark.cjs')
 const { checkCanvasNodeLayout } = require('./uiInspectionCanvasNodeLayout.cjs')
+const { checkCanvasBulkPerformance } = require('./uiInspectionCanvasBulkPerformance.cjs')
 
 function createCanvasScalePerformanceScenes(context) {
   if (process.env.CANVAS_SCALE_BENCH !== '1') return []
   const counts = (process.env.CANVAS_SCALE_COUNTS || '100,500,1000').split(',').map(Number)
   if (counts.some(count => !Number.isInteger(count) || count < 50 || count > 5000)) throw new Error('CANVAS_SCALE_COUNTS 必须在 50 到 5000 之间')
+  if (process.env.CANVAS_SCALE_BULK_BENCH === '1' && process.env.CANVAS_SCALE_OPEN_ONLY !== '1') {
+    throw new Error('批量操作基准需同时设置 CANVAS_SCALE_OPEN_ONLY=1，避免与平移诊断改变同一夹具')
+  }
   const offscreenDiagnostic = process.env.CANVAS_SCALE_OFFSCREEN_DIAGNOSE || null
   const diagnosticModes = ['hit-test', 'paint', 'opacity', 'edge-paint', 'header-bounds', 'layout', 'contents', 'node-layout']
   if (offscreenDiagnostic && !diagnosticModes.includes(offscreenDiagnostic)) throw new Error(`CANVAS_SCALE_OFFSCREEN_DIAGNOSE 只支持 ${diagnosticModes.join('、')}`)
@@ -37,6 +41,7 @@ function createCanvasScalePerformanceScenes(context) {
         checkHeaderInteraction: process.env.CANVAS_SCALE_HEADER_CHECK === '1',
         checkViewportInteraction: process.env.CANVAS_SCALE_VIEWPORT_CHECK === '1',
         checkNodeLayout: process.env.CANVAS_SCALE_LAYOUT_CHECK === '1',
+        checkBulkPerformance: process.env.CANVAS_SCALE_BULK_BENCH === '1',
         openOnly: process.env.CANVAS_SCALE_OPEN_ONLY === '1',
         build: createHash('sha256').update(await fs.readFile('out/main/index.cjs')).update(await fs.readFile('out/renderer/index.html')).digest('hex'),
         hardware: { cpu: os.cpus()[0].model, threads: os.cpus().length, memoryBytes: os.totalmem(), gpu: await app.evaluate(({ app }) => app.getGPUInfo('basic')) },
@@ -160,6 +165,22 @@ function createCanvasScalePerformanceScenes(context) {
         if (report.openOnly) {
           run.state = await readCanvasState(page)
           run.processes = await app.evaluate(({ app }) => app.getAppMetrics())
+          if (report.checkBulkPerformance) {
+            const profiler = report.cpuProfileDiagnostic ? await page.context().newCDPSession(page) : null
+            if (profiler) { await profiler.send('Profiler.enable'); await profiler.send('Profiler.start') }
+            try { run.bulkPerformance = await checkCanvasBulkPerformance(page, {
+              capture: suffix => inspection.capture(`${suffix}-r${report.runs.length}`),
+            }, projectId) }
+            finally {
+              if (profiler) {
+                try {
+                  const { profile } = await profiler.send('Profiler.stop')
+                  await fs.writeFile(`${out}.${count}.${report.runs.length}.bulk.cpuprofile`, JSON.stringify(profile))
+                } finally { await profiler.detach() }
+              }
+            }
+            run.processesAfterBulk = await app.evaluate(({ app }) => app.getAppMetrics())
+          }
           if (report.checkNodeLayout) {
             const session = await page.context().newCDPSession(page)
             try { run.nodeLayout = await checkCanvasNodeLayout(page, session, viewport, inspection) }

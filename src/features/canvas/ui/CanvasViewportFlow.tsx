@@ -4,12 +4,14 @@ import { ReactFlow, useStoreApi, type ReactFlowProps, type Viewport } from '@xyf
 import type { CanvasEdge, CanvasNode } from '../domain/canvasNodes';
 import { DEFAULT_VIEWPORT } from '../canvasUtils';
 import { createCanvasNodeLayout } from '../hooks/canvasNodeLayout';
+import { useCanvasFlowCallbacks } from '../hooks/useCanvasFlowCallbacks';
 
 type Props = Omit<ReactFlowProps<CanvasNode, CanvasEdge>, 'viewport' | 'onViewportChange'>;
 
 /** Canvas 专用视口调度；节点、边及持久化仍由原有入口负责。 */
 export function CanvasViewportFlow(props: Props): JSX.Element {
-  const { onMove: notifyMove, onMoveEnd: notifyMoveEnd } = props;
+  const callbacks = useCanvasFlowCallbacks(props);
+  const { onMove: notifyMove, onMoveEnd: notifyMoveEnd } = callbacks;
   const { getState, subscribe } = useStoreApi();
   useEffect(() => createCanvasNodeLayout({ getState, subscribe }), [getState, subscribe]);
   const [viewport, setViewport] = useState(props.defaultViewport ?? DEFAULT_VIEWPORT);
@@ -62,6 +64,7 @@ export function CanvasViewportFlow(props: Props): JSX.Element {
 
   return <ReactFlow<CanvasNode, CanvasEdge>
     {...props}
+    {...callbacks}
     viewport={viewport}
     onViewportChange={scheduleViewport}
     onMove={onMove}

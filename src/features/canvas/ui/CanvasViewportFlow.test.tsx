@@ -76,3 +76,36 @@ it('程序恢复不等待下一帧，卸载后丢弃未处理的帧和微任务'
   expect(frames.size).toBe(0);
   expect(flow.viewport).toEqual(next);
 });
+
+it('编辑后交互回调保持同一身份，调用时仍收到最新逻辑和原始参数', () => {
+  const first = vi.fn();
+  const latest = vi.fn();
+  const props = (callback: typeof first) => ({ onNodesChange: callback, onEdgesChange: callback,
+    onConnect: callback, onConnectStart: callback, onConnectEnd: callback,
+    onNodeDragStart: callback, onNodeDragStop: callback, onSelectionDragStart: callback,
+    onSelectionDragStop: callback, onMoveStart: callback, onMove: callback, onMoveEnd: callback,
+    onEdgeDoubleClick: callback, onNodeContextMenu: callback, onPaneClick: callback, onPaneContextMenu: callback });
+  const view = render(<CanvasViewportFlow {...props(first)} />);
+  const before = flow;
+  view.rerender(<CanvasViewportFlow {...props(latest)} />);
+  for (const key of Object.keys(props(latest)) as Array<keyof ReturnType<typeof props>>) expect(flow[key]).toBe(before[key]);
+  const changes = [{ id: 'new-selection', type: 'select' as const, selected: true }];
+  act(() => flow.onNodesChange?.(changes));
+  expect(latest).toHaveBeenCalledWith(changes);
+  expect(first).not.toHaveBeenCalled();
+});
+
+it('移除回调后已保存的代理不会继续执行旧逻辑，重新启用仍委托最新回调', () => {
+  const first = vi.fn();
+  const latest = vi.fn();
+  const view = render(<CanvasViewportFlow onNodesChange={first} />);
+  const retained = flow.onNodesChange;
+  view.rerender(<CanvasViewportFlow />);
+  expect(flow.onNodesChange).toBeUndefined();
+  act(() => retained?.([]));
+  expect(first).not.toHaveBeenCalled();
+  view.rerender(<CanvasViewportFlow onNodesChange={latest} />);
+  expect(flow.onNodesChange).toBe(retained);
+  act(() => retained?.([]));
+  expect(latest).toHaveBeenCalledOnce();
+});

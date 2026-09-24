@@ -85,7 +85,10 @@ function attachUiInspectionCanvasWorkspace(context) {
         [payload.nodes.length, JSON.stringify(payload.nodes), '[]', JSON.stringify({ x: payload.viewportX, y: 80, zoom: 0.65 }), JSON.stringify({ past: [], future: [], imagePool: [] }), payload.projectId]
       )
     }, { projectId, nodes, viewportX })
-    await projectCard.click()
+    // 相邻场景可能已打开并修改同一工程；直接换库后必须丢弃旧领域实例。
+    await page.reload({ waitUntil: 'domcontentloaded' })
+    await setupCanvas(page)
+    await page.locator(`[data-project-id="${projectId}"]:visible`).click()
     await page.locator('.react-flow__node[data-id="__ui_panorama_source"]').waitFor({ state: 'visible', timeout: 12000 })
     return { panoramaSource, projectId }
   }
