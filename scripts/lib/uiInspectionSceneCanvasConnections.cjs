@@ -47,6 +47,9 @@ function attachUiInspectionCanvasConnections(context) {
         [payload.nodes.length, JSON.stringify(payload.nodes), '[]', JSON.stringify({ x: 140, y: 70, zoom: 0.82 }), payload.projectId]
       )
     }, { projectId, nodes })
+    // 前一场景可能已缓存同一工程；重新装载数据库中的当前夹具。
+    await page.reload({ waitUntil: 'domcontentloaded' })
+    await setupCanvas(page)
     await projectCard.click()
     const first = page.locator('.react-flow__node[data-id="__batch_image_1"]')
     const second = page.locator('.react-flow__node[data-id="__batch_image_2"]')

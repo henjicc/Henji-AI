@@ -5,6 +5,7 @@ const { createHash } = require('node:crypto')
 const { execFileSync } = require('node:child_process')
 const { findPanePoint, readCanvasState, resetViewport, sweep } = require('./canvasPanBench.cjs')
 const { createPanDiagnostics, installPageDiagnostics } = require('./canvasPanDiagnostics.cjs')
+const { checkCanvasViewport } = require('./uiInspectionCanvasViewport.cjs')
 
 function createCanvasScalePerformanceScenes(context) {
   if (process.env.CANVAS_SCALE_BENCH !== '1') return []
@@ -28,7 +29,9 @@ function createCanvasScalePerformanceScenes(context) {
         cpuProfileDiagnostic: process.env.CANVAS_SCALE_CPU_PROFILE === '1',
         traceDiagnostic: process.env.CANVAS_SCALE_TRACE === '1',
         offscreenDiagnostic,
+        subscriptionDiagnostic: process.env.CANVAS_SCALE_SUBSCRIPTIONS === '1',
         checkHeaderInteraction: process.env.CANVAS_SCALE_HEADER_CHECK === '1',
+        checkViewportInteraction: process.env.CANVAS_SCALE_VIEWPORT_CHECK === '1',
         openOnly: process.env.CANVAS_SCALE_OPEN_ONLY === '1',
         build: createHash('sha256').update(await fs.readFile('out/main/index.cjs')).update(await fs.readFile('out/renderer/index.html')).digest('hex'),
         hardware: { cpu: os.cpus()[0].model, threads: os.cpus().length, memoryBytes: os.totalmem(), gpu: await app.evaluate(({ app }) => app.getGPUInfo('basic')) },
@@ -87,9 +90,61 @@ function createCanvasScalePerformanceScenes(context) {
         await fs.writeFile(out, JSON.stringify(report, null, 2))
         console.log('[canvas-scale-performance] opened', JSON.stringify({ count, openMs }))
         await page.waitForTimeout(1000)
+        if (report.subscriptionDiagnostic) run.viewportSubscribers = await page.evaluate(async () => {
+          const element = document.querySelector('.react-flow__node')
+          let fiber = element[Object.keys(element).find(key => key.startsWith('__reactFiber$'))]
+          let store
+          let root = fiber
+          while (fiber) {
+            for (let dependency = fiber.dependencies?.firstContext; dependency; dependency = dependency.next) {
+              const value = dependency.memoizedValue
+              if (value?.getState?.().nodeLookup && value?.getState?.().transform) store = value
+            }
+            root = fiber
+            fiber = fiber.return
+          }
+          if (!store) throw new Error('找不到 ReactFlow 诊断订阅源')
+          let changed
+          const unsubscribe = store.subscribe((state, previous) => {
+            if (state.transform === previous.transform) return
+            unsubscribe()
+            const counts = {}
+            const pending = [root]
+            while (pending.length) {
+              const item = pending.pop()
+              for (let hook = item.memoizedState; hook; hook = hook.next) {
+                const queue = hook.queue
+                if (typeof queue?.getSnapshot !== 'function') continue
+                if (!Object.is(queue.value, queue.getSnapshot())) {
+                  const type = item.type?.displayName || item.type?.name || item.type?.type?.name || 'unknown'
+                  counts[type] = (counts[type] || 0) + 1
+                }
+              }
+              if (item.child) pending.push(item.child)
+              if (item.sibling) pending.push(item.sibling)
+            }
+            changed = counts
+          })
+          const panZoom = store.getState().panZoom
+          const original = panZoom.getViewport()
+          try {
+            await panZoom.setViewport({ ...original, x: original.x + 1 })
+            await new Promise(resolve => setTimeout(resolve, 0))
+          } finally {
+            unsubscribe()
+            await panZoom.setViewport(original)
+          }
+          if (!changed) throw new Error('视口诊断未捕获订阅变化')
+          return changed
+        })
         if (report.openOnly) {
           run.state = await readCanvasState(page)
           run.processes = await app.evaluate(({ app }) => app.getAppMetrics())
+          if (report.checkViewportInteraction) {
+            const session = await page.context().newCDPSession(page)
+            try { run.viewportInteraction = await checkCanvasViewport(page, session, inspection, context, projectId) }
+            finally { await session.detach() }
+          }
           await fs.writeFile(out, JSON.stringify(report, null, 2))
           await inspection.capture(`nodes-${count}`)
           continue
@@ -213,6 +268,10 @@ function createCanvasScalePerformanceScenes(context) {
             run.headerInteraction = { before, after, titleEditCancelled: true }
             await fs.writeFile(out, JSON.stringify(report, null, 2))
             await inspection.capture(`nodes-${count}-header`)
+          }
+          if (report.checkViewportInteraction) {
+            run.viewportInteraction = await checkCanvasViewport(page, session, inspection, context, projectId)
+            await fs.writeFile(out, JSON.stringify(report, null, 2))
           }
         } finally {
           if (offscreenDiagnostic) await page.evaluate(() => {

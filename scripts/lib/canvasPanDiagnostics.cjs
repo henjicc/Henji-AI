@@ -64,11 +64,17 @@ async function installPageDiagnostics(page) {
         maxEntries: 0,
       },
       longTasks: [],
+      viewportClassMutations: 0,
       reset() {
         for (const metric of Object.keys(this.resizeObserver)) this.resizeObserver[metric] = 0
         this.longTasks.length = 0
+        this.viewportClassMutations = 0
       },
     }
+
+    const canvas = document.querySelector('[data-application-observation-region="canvas.viewport_observer"]')
+    if (canvas) new MutationObserver(records => { state.viewportClassMutations += records.length })
+      .observe(canvas, { attributes: true, attributeFilter: ['class'] })
 
     const NativeResizeObserver = window.ResizeObserver
     if (NativeResizeObserver) {
@@ -113,6 +119,7 @@ async function readPageDiagnostics(page) {
     const durations = [...state.longTasks]
     return {
       resizeObserver: { ...state.resizeObserver },
+      viewportClassMutations: state.viewportClassMutations,
       longTasks: {
         count: durations.length,
         durationMs: Number(durations.reduce((sum, value) => sum + value, 0).toFixed(2)),

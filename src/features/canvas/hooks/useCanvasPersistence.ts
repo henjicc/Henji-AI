@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef } from 'react';
-import type { ReactFlowInstance } from '@xyflow/react';
+import { useStoreApi, type ReactFlowInstance } from '@xyflow/react';
 
 import { isUiInspectionReadOnly } from '@/platform/runtime';
 import { useCanvasStore } from '@/stores/canvasStore';
@@ -10,6 +10,7 @@ export function useCanvasPersistence(
   wrapperRef: React.RefObject<HTMLDivElement>,
   reactFlow: ReactFlowInstance<CanvasNode, CanvasEdge>,
 ) {
+  const flowStore = useStoreApi<CanvasNode, CanvasEdge>();
   const nodes = useCanvasStore((state) => state.nodes);
   const edges = useCanvasStore((state) => state.edges);
   const history = useCanvasStore((state) => state.history);
@@ -26,8 +27,10 @@ export function useCanvasPersistence(
     if (inspectionReadOnly || isRestoringRef.current || !currentProjectId
       || getCurrentProject()?.id !== currentProjectId) return;
     const canvas = useCanvasStore.getState();
-    saveCurrentProject(canvas.nodes, canvas.edges, reactFlow.getViewport(), canvas.history);
-  }, [currentProjectId, getCurrentProject, inspectionReadOnly, reactFlow, saveCurrentProject]);
+    // 视口呈现按帧合并；切页/卸载可能发生在下一帧之前，落盘读取手势的最新位置。
+    const viewport = flowStore.getState().panZoom?.getViewport() ?? reactFlow.getViewport();
+    saveCurrentProject(canvas.nodes, canvas.edges, viewport, canvas.history);
+  }, [currentProjectId, flowStore, getCurrentProject, inspectionReadOnly, reactFlow, saveCurrentProject]);
 
   const schedulePersist = useCallback((delayMs = 140) => {
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);

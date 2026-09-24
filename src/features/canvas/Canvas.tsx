@@ -9,7 +9,6 @@ import {
   useState,
 } from 'react';
 import {
-  ReactFlow,
   Background,
   BackgroundVariant,
   SelectionMode,
@@ -56,6 +55,7 @@ import { useCanvasAssetGroups } from './hooks/useCanvasAssetGroups';
 import { useCanvasPersistence } from './hooks/useCanvasPersistence';
 import { deleteCanvasNodes } from './application/canvasMutationService';
 import { maintainMultiLayerDocumentReleaseCandidates } from './application/multiLayerDocumentLifecycleService';
+import { CanvasViewportFlow } from './ui/CanvasViewportFlow';
 
 interface CanvasToastState {
   message: string;
@@ -426,7 +426,7 @@ export function Canvas() {
       onDragOver={assetDrop.onDragOver}
       onDrop={assetDrop.onDrop}
     >
-      <ReactFlow
+      <CanvasViewportFlow
         nodes={renderGraph.nodes}
         edges={renderGraph.edges}
         onNodesChange={handleNodesChange}
@@ -475,7 +475,7 @@ export function Canvas() {
           onCreateAssetGroup={handleCreateAssetGroup}
           onAddToAssetGroup={handleAddToAssetGroup}
         />
-      </ReactFlow>
+      </CanvasViewportFlow>
 
       <NodeToolDialogRouter />
       {nodeContextMenu}
