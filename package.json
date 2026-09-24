@@ -11,7 +11,7 @@
     "packages/*"
   ],
   "scripts": {
-    "postinstall": "npm run prepare:media-binaries && npm run build:sdk",
+    "postinstall": "patch-package --error-on-fail && npm run prepare:media-binaries && npm run build:sdk",
     "prepare:media-binaries": "node scripts/ensure-media-binary-permissions.cjs",
     "dev": "npm run gen:progress-seeds && vite",
     "gen:progress-seeds": "node scripts/generate-progress-seeds.cjs",
@@ -44,7 +44,7 @@
     "test:suites": "node --test scripts/lib/testSuites.test.cjs",
     "verify:changed": "node scripts/run-changed-verification.cjs",
     "test:ui-inspection": "node --test scripts/lib/uiInspection.test.cjs scripts/lib/runtimeEvidence.test.cjs scripts/lib/realityTestPlan.test.cjs scripts/lib/canvasVisualDiff.test.cjs",
-    "test:validation-tools": "node --test scripts/lib/assistantProductionTestPlan.test.cjs scripts/lib/changedVerificationPlan.test.cjs scripts/lib/electronBundlePlan.test.cjs scripts/lib/realityTestPlan.test.cjs scripts/lib/sdkBuildFreshness.test.cjs scripts/lib/validationScripts.test.cjs",
+    "test:validation-tools": "node --test scripts/lib/assistantProductionTestPlan.test.cjs scripts/lib/changedVerificationPlan.test.cjs scripts/lib/electronBundlePlan.test.cjs scripts/lib/realityTestPlan.test.cjs scripts/lib/sdkBuildFreshness.test.cjs scripts/lib/validationScripts.test.cjs scripts/lib/xyflowStoreSubscriptions.test.cjs",
     "test:reality": "node scripts/run-reality-tests.cjs",
     "test:assistant-persistence": "node scripts/test-assistant-persistence.cjs",
     "test:assistant-model-compat": "vitest run packages/ai-sdk/tests/llm/sdk/model-step.test.ts packages/ai-sdk/tests/llm/sdk/provider-error.test.ts packages/ai-sdk/tests/llm/sdk/provider-adapter.test.ts packages/ai-sdk/tests/llm/sdk/retry-policy.test.ts electron/main/services/llm/sdk/scripted-model-step.test.ts electron/main/services/llm/sdk/trace.test.ts src/services/llm/LlmConfigService.test.ts",
@@ -153,6 +153,7 @@
     "eslint-plugin-react-refresh": "^0.4.3",
     "fast-check": "^4.9.0",
     "jsdom": "^29.1.1",
+    "patch-package": "8.0.1",
     "pixelmatch": "^7.2.0",
     "playwright": "^1.61.1",
     "postcss": "^8.4.31",

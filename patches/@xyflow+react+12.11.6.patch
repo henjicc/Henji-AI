@@ -1,0 +1,158 @@
+diff --git a/node_modules/@xyflow/react/dist/esm/henji-store-subscriptions.mjs b/node_modules/@xyflow/react/dist/esm/henji-store-subscriptions.mjs
+new file mode 100644
+index 0000000..7d3dee8
+--- /dev/null
++++ b/node_modules/@xyflow/react/dist/esm/henji-store-subscriptions.mjs
+@@ -0,0 +1,72 @@
++// Henji-AI: keep the source store synchronous. Only React's view notifications
++// during rectangle selection are coalesced; ending selection flushes immediately.
++const selectionStores = new WeakMap();
++const connectionStores = new WeakMap();
++
++export function getSelectionViewStore(store) {
++    let view = selectionStores.get(store);
++    if (view) return view;
++    const listeners = new Set();
++    let stop, queued = false, epoch = 0, previous;
++    view = { ...store, subscribe(listener) {
++        const notify = (state, before) => listener(state, before);
++        listeners.add(notify);
++        if (!stop) stop = store.subscribe((state, before) => {
++            if (!state.userSelectionActive) {
++                epoch++;
++                queued = false;
++                previous = undefined;
++                listeners.forEach(notify => notify(state, before));
++                return;
++            }
++            if (queued) return;
++            previous = before;
++            queued = true;
++            const ticket = epoch;
++            queueMicrotask(() => {
++                if (ticket !== epoch) return;
++                queued = false;
++                const beforeBatch = previous;
++                previous = undefined;
++                const state = store.getState();
++                listeners.forEach(notify => notify(state, beforeBatch));
++            });
++        });
++        return () => {
++            if (!listeners.delete(notify) || listeners.size) return;
++            stop?.();
++            stop = undefined;
++            epoch++;
++            queued = false;
++            previous = undefined;
++        };
++    } };
++    selectionStores.set(store, view);
++    return view;
++}
++
++// connectingSelector reads exactly these three fields. Share their subscription
++// across Handles without deferring connection feedback or retaining graph data.
++export function getHandleConnectionStore(store) {
++    let view = connectionStores.get(store);
++    if (view) return view;
++    const listeners = new Set();
++    let stop;
++    view = { ...store, subscribe(listener) {
++        const notify = (state, previous) => listener(state, previous);
++        listeners.add(notify);
++        if (!stop) stop = store.subscribe((state, previous) => {
++            if (state.connection === previous.connection &&
++                state.connectionClickStartHandle === previous.connectionClickStartHandle &&
++                state.connectionMode === previous.connectionMode) return;
++            listeners.forEach(notify => notify(state, previous));
++        });
++        return () => {
++            if (!listeners.delete(notify) || listeners.size) return;
++            stop?.();
++            stop = undefined;
++        };
++    } };
++    connectionStores.set(store, view);
++    return view;
++}
+diff --git a/node_modules/@xyflow/react/dist/esm/index.js b/node_modules/@xyflow/react/dist/esm/index.js
+index 422889f..fe3b30f 100644
+--- a/node_modules/@xyflow/react/dist/esm/index.js
++++ b/node_modules/@xyflow/react/dist/esm/index.js
+@@ -1,4 +1,5 @@
+ "use client"
++import { getSelectionViewStore, getHandleConnectionStore } from './henji-store-subscriptions.mjs';
+ import { jsxs, Fragment, jsx } from 'react/jsx-runtime';
+ import { createContext, useContext, useMemo, forwardRef, useEffect, useRef, useState, useLayoutEffect, useCallback, memo } from 'react';
+ import cc from 'classcat';
+@@ -40,7 +41,7 @@ function useStore(selector, equalityFn) {
+     if (store === null) {
+         throw new Error(zustandErrorMessage);
+     }
+-    return useStoreWithEqualityFn(store, selector, equalityFn);
++    return useStoreWithEqualityFn(getSelectionViewStore(store), selector, equalityFn);
+ }
+ /**
+  * In some cases, you might need to access the store directly. This hook returns the store object which can be used on demand to access the state or dispatch actions.
+@@ -1860,13 +1861,19 @@ const connectingSelector = (nodeId, handleId, type) => (state) => {
+         valid: connectingTo && isValid,
+     };
+ };
++function useHandleConnection(selector, equalityFn) {
++    const store = useContext(StoreContext);
++    if (store === null) throw new Error(zustandErrorMessage);
++    return useStoreWithEqualityFn(getHandleConnectionStore(store), selector, equalityFn);
++}
++
+ function HandleComponent({ type = 'source', position = Position.Top, isValidConnection, isConnectable = true, isConnectableStart = true, isConnectableEnd = true, id, onConnect, children, className, onMouseDown, onTouchStart, ...rest }, ref) {
+     const handleId = id || null;
+     const isTarget = type === 'target';
+     const store = useStoreApi();
+     const nodeId = useNodeId();
+     const { connectOnClick, noPanClassName, rfId } = useHandleConfig();
+-    const { connectingFrom, connectingTo, clickConnecting, isPossibleEndHandle, connectionInProcess, clickConnectionInProcess, valid, } = useStore(connectingSelector(nodeId, handleId, type), shallow);
++    const { connectingFrom, connectingTo, clickConnecting, isPossibleEndHandle, connectionInProcess, clickConnectionInProcess, valid, } = useHandleConnection(connectingSelector(nodeId, handleId, type), shallow);
+     if (!nodeId) {
+         store.getState().onError?.('010', errorMessages['error010']());
+     }
+diff --git a/node_modules/@xyflow/react/dist/esm/index.mjs b/node_modules/@xyflow/react/dist/esm/index.mjs
+index 422889f..fe3b30f 100644
+--- a/node_modules/@xyflow/react/dist/esm/index.mjs
++++ b/node_modules/@xyflow/react/dist/esm/index.mjs
+@@ -1,4 +1,5 @@
+ "use client"
++import { getSelectionViewStore, getHandleConnectionStore } from './henji-store-subscriptions.mjs';
+ import { jsxs, Fragment, jsx } from 'react/jsx-runtime';
+ import { createContext, useContext, useMemo, forwardRef, useEffect, useRef, useState, useLayoutEffect, useCallback, memo } from 'react';
+ import cc from 'classcat';
+@@ -40,7 +41,7 @@ function useStore(selector, equalityFn) {
+     if (store === null) {
+         throw new Error(zustandErrorMessage);
+     }
+-    return useStoreWithEqualityFn(store, selector, equalityFn);
++    return useStoreWithEqualityFn(getSelectionViewStore(store), selector, equalityFn);
+ }
+ /**
+  * In some cases, you might need to access the store directly. This hook returns the store object which can be used on demand to access the state or dispatch actions.
+@@ -1860,13 +1861,19 @@ const connectingSelector = (nodeId, handleId, type) => (state) => {
+         valid: connectingTo && isValid,
+     };
+ };
++function useHandleConnection(selector, equalityFn) {
++    const store = useContext(StoreContext);
++    if (store === null) throw new Error(zustandErrorMessage);
++    return useStoreWithEqualityFn(getHandleConnectionStore(store), selector, equalityFn);
++}
++
+ function HandleComponent({ type = 'source', position = Position.Top, isValidConnection, isConnectable = true, isConnectableStart = true, isConnectableEnd = true, id, onConnect, children, className, onMouseDown, onTouchStart, ...rest }, ref) {
+     const handleId = id || null;
+     const isTarget = type === 'target';
+     const store = useStoreApi();
+     const nodeId = useNodeId();
+     const { connectOnClick, noPanClassName, rfId } = useHandleConfig();
+-    const { connectingFrom, connectingTo, clickConnecting, isPossibleEndHandle, connectionInProcess, clickConnectionInProcess, valid, } = useStore(connectingSelector(nodeId, handleId, type), shallow);
++    const { connectingFrom, connectingTo, clickConnecting, isPossibleEndHandle, connectionInProcess, clickConnectionInProcess, valid, } = useHandleConnection(connectingSelector(nodeId, handleId, type), shallow);
+     if (!nodeId) {
+         store.getState().onError?.('010', errorMessages['error010']());
+     }
