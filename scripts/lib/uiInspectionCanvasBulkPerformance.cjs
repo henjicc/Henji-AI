@@ -1,66 +1,10 @@
 const { findPanePoint } = require('./canvasPanBench.cjs')
+const { createCanvasBulkProbe } = require('./canvasBulkProbe.cjs')
 
 // 输入事件到目标 DOM 状态稳定两帧的时间；不是屏幕实际呈现时间。
 // 通过正式鼠标/快捷键入口驱动，不直接写 ReactFlow 或业务 store。
 async function measureBulkAction(page, name, expected, action) {
-  const probe = await page.evaluateHandle(({ expected }) => {
-    const state = { result: null, dispose: null, done: null }
-    let resolve, start = null, releasedAt = null, previous = null, frame, timer, settled = 0
-    const frames = [], longTasks = []
-    const flow = document.querySelector('.react-flow')
-    const nodes = flow.getElementsByClassName('react-flow__node')
-    const edges = flow.getElementsByClassName('react-flow__edge')
-    const selected = flow.getElementsByClassName('react-flow__node selected')
-    const read = () => ({
-      nodes: nodes.length,
-      edges: edges.length,
-      selected: expected.selected ? [...selected].map(node => node.dataset.id).sort() : undefined,
-    })
-    const observer = new PerformanceObserver(list => {
-      for (const entry of list.getEntries()) if (start !== null && entry.startTime + entry.duration > start) longTasks.push(entry.duration)
-    })
-    observer.observe({ type: 'longtask' })
-    state.done = new Promise(callback => { resolve = callback })
-    const dispose = () => {
-      cancelAnimationFrame(frame); clearTimeout(timer); observer.disconnect()
-      document.removeEventListener('keydown', onInput, true)
-      document.removeEventListener('pointerdown', onInput, true)
-      document.removeEventListener('pointerup', onRelease, true)
-    }
-    const finish = (ok, actual) => {
-      for (const entry of observer.takeRecords()) if (start !== null && entry.startTime + entry.duration > start) longTasks.push(entry.duration)
-      const sorted = [...frames].sort((a, b) => a - b)
-      state.result = { ok, elapsedMs: start === null ? null : performance.now() - start, actual,
-        // 框选总时长包含自动化发送多段鼠标移动的时间，单独记录松手后的收敛耗时。
-        afterReleaseMs: releasedAt === null ? null : performance.now() - releasedAt,
-        frameCount: frames.length, p95Ms: sorted[Math.max(0, Math.ceil(sorted.length * 0.95) - 1)] ?? null,
-        maxMs: sorted.at(-1) ?? null, longTasksMs: longTasks }
-      dispose(); resolve(state.result)
-    }
-    const tick = now => {
-      if (previous !== null) frames.push(now - previous)
-      previous = now
-      const actual = read()
-      const matches = actual.nodes === expected.nodes && actual.edges === expected.edges
-        && (!expected.selected || JSON.stringify(actual.selected) === JSON.stringify(expected.selected))
-        && (!expected.pointer || releasedAt !== null)
-      settled = matches ? settled + 1 : 0
-      if (settled >= 3) finish(true, actual)
-      else frame = requestAnimationFrame(tick)
-    }
-    function onInput(event) {
-      if (start !== null || !event.isTrusted) return
-      if (expected.pointer ? event.type !== 'pointerdown' : event.type !== 'keydown' || event.key.toLowerCase() !== expected.key) return
-      start = performance.now(); previous = start; frame = requestAnimationFrame(tick)
-    }
-    function onRelease() { releasedAt = performance.now() }
-    state.dispose = dispose
-    document.addEventListener('keydown', onInput, true)
-    document.addEventListener('pointerdown', onInput, true)
-    document.addEventListener('pointerup', onRelease, true)
-    timer = setTimeout(() => finish(false, read()), 30000)
-    return state
-  }, { expected })
+  const probe = await page.evaluateHandle(createCanvasBulkProbe, { expected })
   try {
     await action()
     const result = await probe.evaluate(state => state.done)
@@ -177,7 +121,7 @@ async function checkCanvasBulkPerformance(page, inspection, projectId) {
     await page.waitForTimeout(100)
   } while (Date.now() < deadline)
   if (!persisted) throw new Error('批量操作后的工程未在期限内完成保存')
-  return { timing: 'trusted input event to expected DOM state plus two RAF intervals; not physical presentation', start, end, fixture, samples, persisted }
+  return { sampler: 'incremental-dom-v1', timing: 'trusted input event to expected DOM state plus two RAF intervals; not physical presentation', start, end, fixture, samples, persisted }
 }
 
 module.exports = { checkCanvasBulkPerformance }
