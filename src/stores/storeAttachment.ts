@@ -34,6 +34,8 @@ export function createStoreAttachment<T>(initial: StoreApi<T>) {
   )
   return {
     useAttachedStore,
+    /** 供带自定义相等比较的 React 订阅使用；领域订阅仍使用 useAttachedStore.subscribe。 */
+    viewStore: viewApi,
     getStore: () => target,
     /** 仅合并同步调用栈内的 React 通知；领域订阅、状态读取、历史与异步任务均不延迟。 */
     batchViewUpdates<R>(work: () => R): R {

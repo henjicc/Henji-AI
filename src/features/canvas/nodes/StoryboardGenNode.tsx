@@ -23,7 +23,7 @@ import { registry } from '@/core/ModelRegistry';
 import { analyzeRatioResolutionParams } from '@/core/params/ratioResolution';
 import { transferModelParamOverridesBetweenModels } from '@/core/params/modelParamTransfer';
 
-import { useCanvasStore } from '@/stores/canvasStore';
+import { canvasViewStore, useCanvasStore } from '@/stores/canvasStore';
 import { showAlertDialog } from '@/stores/alertDialogStore';
 import { NodeHeader, NODE_HEADER_FLOATING_POSITION_CLASS } from '@/features/canvas/ui/NodeHeader';
 import { NodeLodPlaceholder } from '@/features/canvas/ui/NodeLodPlaceholder';
@@ -79,7 +79,7 @@ export const StoryboardGenNode = memo(({ id, data, selected, width, height }: St
   )
 
   const incomingImageOutputs = useStoreWithEqualityFn(
-    useCanvasStore,
+    canvasViewStore,
     (state) => collectInputMediaByKind(id, state.nodes, state.edges, 'image'),
     areMediaOutputListsEqual
   )
@@ -97,12 +97,12 @@ export const StoryboardGenNode = memo(({ id, data, selected, width, height }: St
   })
 
   const connectedParamIds = useStoreWithEqualityFn(
-    useCanvasStore,
+    canvasViewStore,
     (state) => getConnectedParamIds(id, state.edges),
     areStringSetsEqual
   )
   const injectedValues = useStoreWithEqualityFn(
-    useCanvasStore,
+    canvasViewStore,
     (state) => collectInputValues(id, state.nodes, state.edges),
     areValueOverridesEqual
   )

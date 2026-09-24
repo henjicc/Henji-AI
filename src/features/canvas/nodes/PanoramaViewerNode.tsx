@@ -42,7 +42,7 @@ import {
 import { type PanoramaCaptureCurrentView } from '@/features/canvas/ui/specialInterfaces/panorama/PanoramaSphereCanvas';
 import { usePanoramaImageResource } from '@/features/canvas/ui/specialInterfaces/panorama/usePanoramaImageResource';
 import { canvasEventBus } from '@/features/canvas/application/canvasServices';
-import { useCanvasStore } from '@/stores/canvasStore';
+import { canvasViewStore, useCanvasStore } from '@/stores/canvasStore';
 import { usePanoramaInlineViewerStore } from '@/stores/panoramaInlineViewerStore';
 
 const logger = createLogger('features.canvas.panoramaViewerNode');
@@ -98,7 +98,7 @@ export const PanoramaViewerNode = memo(({
     () => persistedPanoramaPreview,
   );
   const upstreamImages = useStoreWithEqualityFn(
-    useCanvasStore,
+    canvasViewStore,
     (state) => collectInputMediaByKind(id, state.nodes, state.edges, 'image'),
     areMediaOutputListsEqual,
   );

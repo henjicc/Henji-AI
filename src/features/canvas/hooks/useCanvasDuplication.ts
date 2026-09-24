@@ -59,7 +59,7 @@ export function useCanvasDuplication(params: UseCanvasDuplicationParams) {
   } | null>(null)
 
   const duplicateNodes = useCallback(
-    async (sourceNodeIds: string[], options: DuplicateOptions = {}): Promise<DuplicateResult | null> => {
+    (sourceNodeIds: string[], options: DuplicateOptions = {}): Promise<DuplicateResult | null> => canvasStoreAttachment.batchViewUpdates(async () => {
       const dedupedIds = Array.from(new Set(sourceNodeIds))
       if (dedupedIds.length === 0) return null
 
@@ -173,7 +173,8 @@ export function useCanvasDuplication(params: UseCanvasDuplicationParams) {
           recordCopy(sourceNode, data, created)
         }
       })
-      await copyFrom(0)
+      const copying = copyFrom(0)
+      if (copying) await copying
 
       const sizeSyncChanges = Array.from(sizeMap.entries()).map(([nodeId, size]) => ({
         id: nodeId,
@@ -249,7 +250,7 @@ export function useCanvasDuplication(params: UseCanvasDuplicationParams) {
         scheduleCanvasPersist(0)
       }
       return { firstNodeId, idMap }
-    },
+    }),
     [addNode, applyNodesChange, connectNodes, edges, nodes, scheduleCanvasPersist, setSelectedNode]
   )
 

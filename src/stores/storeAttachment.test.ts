@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { act, cleanup, renderHook } from '@testing-library/react'
 import { createStore } from 'zustand/vanilla'
+import { useStoreWithEqualityFn } from 'zustand/traditional'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createStoreAttachment } from './storeAttachment'
 
@@ -16,6 +17,37 @@ function setup() {
 }
 
 describe('store attachment 的同步界面通知合并', () => {
+  it('自定义比较的界面订阅也只读取批次最终值，并保留等值投影和工程切换', () => {
+    const owner = createStore(() => ({ value: 0, unrelated: 0 }))
+    const attachment = createStoreAttachment(owner)
+    const selector = vi.fn((state: { value: number }) => [state.value])
+    const view = renderHook(() => useStoreWithEqualityFn(attachment.viewStore, selector,
+      (a, b) => a[0] === b[0]))
+    const transitions: number[] = []
+    const stop = attachment.useAttachedStore.subscribe(state => transitions.push(state.value))
+    selector.mockClear()
+    act(() => attachment.batchViewUpdates(() => {
+      owner.setState({ value: 1 })
+      owner.setState({ value: 2 })
+      expect(selector).not.toHaveBeenCalled()
+      expect(transitions).toEqual([1, 2])
+    }))
+    expect(view.result.current).toEqual([2])
+    const previous = view.result.current
+    act(() => owner.setState({ unrelated: 1 }))
+    expect(view.result.current).toBe(previous)
+    const next = createStore(() => ({ value: 40, unrelated: 0 }))
+    act(() => attachment.attach(next))
+    expect(view.result.current).toEqual([40])
+    act(() => owner.setState({ value: 3 }))
+    expect(view.result.current).toEqual([40])
+    stop()
+    view.unmount()
+    selector.mockClear()
+    act(() => next.setState({ value: 41 }))
+    expect(selector).not.toHaveBeenCalled()
+  })
+
   it('合并界面检查但保留每次领域通知和即时读取', () => {
     const { owner, attachment, selector, view } = setup()
     const transitions: number[] = []

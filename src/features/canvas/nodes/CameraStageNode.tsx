@@ -26,7 +26,7 @@ import { NodeHeader, NODE_HEADER_FLOATING_POSITION_CLASS } from '@/features/canv
 import { NodeResizeHandle } from '@/features/canvas/ui/NodeResizeHandle';
 import { NODE_IDLE_BORDER_CLASS, NODE_PORT_NODE_CLASS, NODE_PORT_VISIBLE_CLASS, NODE_SELECTED_BORDER_CLASS } from '@/features/canvas/ui/nodeControlStyles';
 import { getSocketColor } from '@/features/canvas/domain/socketTypes';
-import { useCanvasStore } from '@/stores/canvasStore';
+import { canvasViewStore, useCanvasStore } from '@/stores/canvasStore';
 import { createLogger } from '@/core/logging';
 import { MediaInputRow } from '@/features/canvas/params/MediaInputRow';
 import { applyProjectEnvironmentImage } from '@/features/cameraStage/projects/cameraStageProjectService';
@@ -52,7 +52,7 @@ export const CameraStageNode = memo(({ id, data, selected, width, height }: Came
   const setSelectedNode = useCanvasStore((state) => state.setSelectedNode);
   const edges = useCanvasStore((state) => state.edges);
   const upstreamImages = useStoreWithEqualityFn(
-    useCanvasStore,
+    canvasViewStore,
     (state) => collectInputMediaByKind(id, state.nodes, state.edges, 'image'),
     areMediaOutputListsEqual,
   );

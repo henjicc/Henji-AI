@@ -9,7 +9,7 @@ import {
   collectInputMediaUrls,
 } from '@/features/canvas/application/graphMediaResolver'
 import { MaskEditorModal, parseMaskEditorDocument, type MaskEditorResult } from '@/features/maskEditor'
-import { useCanvasStore } from '@/stores/canvasStore'
+import { canvasViewStore } from '@/stores/canvasStore'
 import type { CanvasSpecialEditorSurfaceProps } from './specialEditorRegistry'
 
 const logger = createLogger('features.canvas.local-redraw-mask-editor')
@@ -30,7 +30,7 @@ export default function ElementEditSpecialEditor({
   onCancel,
 }: CanvasSpecialEditorSurfaceProps): JSX.Element {
   const incomingImages = useStoreWithEqualityFn(
-    useCanvasStore,
+    canvasViewStore,
     (state) => collectInputMediaUrls(session.nodeId, state.nodes, state.edges, 'image'),
     areStringListsEqual,
   )
