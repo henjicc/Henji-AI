@@ -10,6 +10,8 @@ function createCanvasScalePerformanceScenes(context) {
   if (process.env.CANVAS_SCALE_BENCH !== '1') return []
   const counts = (process.env.CANVAS_SCALE_COUNTS || '100,500,1000').split(',').map(Number)
   if (counts.some(count => !Number.isInteger(count) || count < 50 || count > 5000)) throw new Error('CANVAS_SCALE_COUNTS 必须在 50 到 5000 之间')
+  const offscreenDiagnostic = process.env.CANVAS_SCALE_OFFSCREEN_DIAGNOSE || null
+  if (offscreenDiagnostic && !['hit-test', 'paint'].includes(offscreenDiagnostic)) throw new Error('CANVAS_SCALE_OFFSCREEN_DIAGNOSE 只支持 hit-test 或 paint')
   return [{
     id: 'canvas-scale-performance', surface: '画布', name: '画布-混合节点规模性能', writesUserData: true,
     async setup(page, app, inspection) {
@@ -25,6 +27,7 @@ function createCanvasScalePerformanceScenes(context) {
         debuggerDiagnostic: process.env.CANVAS_SCALE_DIAGNOSE === '1',
         cpuProfileDiagnostic: process.env.CANVAS_SCALE_CPU_PROFILE === '1',
         traceDiagnostic: process.env.CANVAS_SCALE_TRACE === '1',
+        offscreenDiagnostic,
         checkHeaderInteraction: process.env.CANVAS_SCALE_HEADER_CHECK === '1',
         openOnly: process.env.CANVAS_SCALE_OPEN_ONLY === '1',
         build: createHash('sha256').update(await fs.readFile('out/main/index.cjs')).update(await fs.readFile('out/renderer/index.html')).digest('hex'),
@@ -96,13 +99,34 @@ function createCanvasScalePerformanceScenes(context) {
         const diagnostics = await createPanDiagnostics(page, session)
         const samples = run.samples
         try {
-          for (let round = 0; round < 5; round++) {
+          for (let round = 0; round < (offscreenDiagnostic ? 10 : 5); round++) {
             const reset = await resetViewport(page, session, viewport)
             if (!reset.ok) throw new Error('画布基准视口无法复位')
+            // 仅用于归因：交替隔离整个扫掠区域之外的命中或绘制，不作为产品优化验收。
+            // 预留完整单向扫掠距离；节点内容和订阅保持原样。
+            const offscreenProbe = offscreenDiagnostic ? await page.evaluate(({ enabled, mode }) => {
+              document.querySelectorAll('[data-hit-test-probe]').forEach(element => element.removeAttribute('data-hit-test-probe'))
+              if (!document.getElementById('canvas-hit-test-probe-style')) {
+                const style = document.createElement('style')
+                style.id = 'canvas-hit-test-probe-style'
+                style.textContent = `[data-hit-test-probe], [data-hit-test-probe] * { ${mode === 'paint' ? 'visibility: hidden' : 'pointer-events: none'} !important; }`
+                document.head.append(style)
+              }
+              if (!enabled) return { enabled, excluded: 0 }
+              const bounds = document.querySelector('.react-flow').getBoundingClientRect()
+              const outside = [...document.querySelectorAll('.react-flow__node, [data-node-header-drag-surface]')].filter(element => {
+                const box = element.getBoundingClientRect()
+                return box.right < bounds.left - 200 || box.left > bounds.right + 2400
+                  || box.bottom < bounds.top - 200 || box.top > bounds.bottom + 200
+              })
+              outside.forEach(element => element.setAttribute('data-hit-test-probe', 'true'))
+              return { enabled, excluded: outside.length }
+            }, { enabled: round % 2 === 1, mode: offscreenDiagnostic }) : undefined
+            if (offscreenDiagnostic) await page.waitForTimeout(500)
             const grab = await findPanePoint(page)
             if (!grab) throw new Error('画布基准找不到真实平移命中位置')
             const before = await diagnostics.startRound()
-            const traceRound = report.traceDiagnostic && round === 0
+            const traceRound = report.traceDiagnostic && round < (offscreenDiagnostic ? 2 : 1)
             if (traceRound) await session.send('Tracing.start', { categories: 'devtools.timeline,disabled-by-default-devtools.timeline.frame', transferMode: 'ReturnAsStream' })
             if (report.cpuProfileDiagnostic) { await session.send('Profiler.enable'); await session.send('Profiler.start') }
             let sample
@@ -113,7 +137,7 @@ function createCanvasScalePerformanceScenes(context) {
                 const completed = new Promise(resolve => session.once('Tracing.tracingComplete', resolve))
                 await session.send('Tracing.end')
                 const { stream } = await completed
-                const traceFile = await fs.open(`${out}.${count}.trace.json`, 'w')
+                const traceFile = await fs.open(`${out}.${count}${offscreenDiagnostic ? `.${round}` : ''}.trace.json`, 'w')
                 try {
                   let part
                   do {
@@ -128,7 +152,18 @@ function createCanvasScalePerformanceScenes(context) {
                 await session.send('Profiler.disable')
               }
             }
-            samples.push({ round, ...sample, diagnostics: await diagnostics.endRound(before) })
+            samples.push({ round, offscreenProbe, ...sample, diagnostics: await diagnostics.endRound(before) })
+            if (offscreenProbe?.enabled) {
+              const visibleExcluded = await page.evaluate(() => {
+                const bounds = document.querySelector('.react-flow').getBoundingClientRect()
+                return [...document.querySelectorAll('[data-hit-test-probe]')].filter(element => {
+                  const box = element.getBoundingClientRect()
+                  return box.right > bounds.left && box.left < bounds.right && box.bottom > bounds.top && box.top < bounds.bottom
+                }).length
+              })
+              offscreenProbe.visibleExcluded = visibleExcluded
+              if (visibleExcluded) throw new Error(`屏外诊断误排除了 ${visibleExcluded} 个可见元素`)
+            }
             await fs.writeFile(out, JSON.stringify(report, null, 2))
             if (!sample.valid) {
               await inspection.capture(`nodes-${count}-failed`)
@@ -179,7 +214,13 @@ function createCanvasScalePerformanceScenes(context) {
             await fs.writeFile(out, JSON.stringify(report, null, 2))
             await inspection.capture(`nodes-${count}-header`)
           }
-        } finally { await diagnostics.dispose(); await session.detach() }
+        } finally {
+          if (offscreenDiagnostic) await page.evaluate(() => {
+            document.querySelectorAll('[data-hit-test-probe]').forEach(element => element.removeAttribute('data-hit-test-probe'))
+            document.getElementById('canvas-hit-test-probe-style')?.remove()
+          })
+          await diagnostics.dispose(); await session.detach()
+        }
       }
     },
   }]
