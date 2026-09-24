@@ -73,4 +73,52 @@ describe('微缩略图缓存生命周期', () => {
     expect(getCachedMicroThumbnail('encode-error')).toBe('encode-error');
     expect(await ensureMicroThumbnail('valid')).toMatch(/^data:image\/webp;base64,/);
   });
+
+  it('退出千图工程后跳过全部旧排队工作，新图片只等待已经开始的任务', async () => {
+    const { requestMicroThumbnail } = await import('./microThumbnail');
+    const finishers: Array<() => void> = [];
+    mocks.load.mockImplementation(() => new Promise(resolve => finishers.push(() => resolve({ naturalWidth: 200, naturalHeight: 100 }))));
+    const old = Array.from({ length: 1000 }, (_, i) => requestMicroThumbnail(`old-${i}`));
+    expect(mocks.load).toHaveBeenCalledTimes(2);
+    old.forEach(request => request.release());
+    const next = requestMicroThumbnail('new-project');
+    expect(mocks.load).toHaveBeenCalledTimes(2);
+    finishers[0]();
+    await old[0].promise;
+    expect(mocks.load).toHaveBeenCalledTimes(3);
+    expect(mocks.load).toHaveBeenLastCalledWith('new-project');
+    finishers[1](); finishers[2]();
+    await Promise.all(old.map(request => request.promise));
+    expect(await next.promise).toBe('new-project');
+    next.release();
+    expect(mocks.load.mock.calls.map(([src]) => src)).toEqual(['old-0', 'old-1', 'new-project']);
+  });
+
+  it('同图共享任务只在最后一个使用者释放后取消，重复释放不影响新请求', async () => {
+    const { requestMicroThumbnail } = await import('./microThumbnail');
+    const finishers: Array<() => void> = [];
+    mocks.load.mockImplementation(() => new Promise(resolve => finishers.push(() => resolve({ naturalWidth: 200, naturalHeight: 100 }))));
+    const busy = [requestMicroThumbnail('busy-1'), requestMicroThumbnail('busy-2')];
+    const first = requestMicroThumbnail('shared');
+    const other = requestMicroThumbnail('shared');
+    expect(other.promise).toBe(first.promise);
+    first.release(); first.release();
+    const cancelled = requestMicroThumbnail('cancelled');
+    cancelled.release();
+    expect(await cancelled.promise).toBe('cancelled');
+    const renewed = requestMicroThumbnail('cancelled');
+    cancelled.release();
+    finishers[0]();
+    await busy[0].promise;
+    expect(mocks.load).toHaveBeenLastCalledWith('shared');
+    finishers[1]();
+    await busy[1].promise;
+    expect(mocks.load).toHaveBeenLastCalledWith('cancelled');
+    other.release();
+    const joined = requestMicroThumbnail('shared');
+    expect(joined.promise).toBe(other.promise);
+    finishers[2](); finishers[3]();
+    expect(await Promise.all([other.promise, renewed.promise, joined.promise])).toEqual(['shared', 'cancelled', 'shared']);
+    [...busy, renewed, joined].forEach(request => request.release());
+  });
 });

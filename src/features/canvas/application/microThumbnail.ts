@@ -24,7 +24,20 @@ const microThumbCache = new Map<string, string>();
 const MAX_CACHE_ENTRIES = 1024;
 const MAX_CACHE_STRING_BYTES = 32 * 1024 * 1024;
 let cachedStringBytes = 0;
-const pendingGenerations = new Map<string, Promise<string>>();
+export interface MicroThumbnailRequest {
+  promise: Promise<string>;
+  release(): void;
+}
+
+interface GenerationTask {
+  src: string;
+  promise: Promise<string>;
+  resolve: (url: string) => void;
+  users: number;
+  running: boolean;
+}
+
+const pendingGenerations = new Map<string, GenerationTask>();
 
 function cacheThumbnail(src: string, url: string): void {
   const bytes = (src.length + url.length) * 2;
@@ -40,19 +53,8 @@ function cacheThumbnail(src: string, url: string): void {
 }
 
 let activeGenerations = 0;
-const generationWaiters: Array<() => void> = [];
-
-async function acquireGenerationSlot(): Promise<void> {
-  if (activeGenerations >= MAX_CONCURRENT_GENERATIONS) {
-    await new Promise<void>((resolve) => generationWaiters.push(resolve));
-  }
-  activeGenerations += 1;
-}
-
-function releaseGenerationSlot(): void {
-  activeGenerations -= 1;
-  generationWaiters.shift()?.();
-}
+// 按加入顺序调度，取消排队任务为 O(1)，避免切换大工程时逐项扫描队列。
+const generationWaiters = new Set<GenerationTask>();
 
 async function generateMicroThumbnail(src: string): Promise<string> {
   const image = await loadImageElement(src);
@@ -92,32 +94,71 @@ export function getCachedMicroThumbnail(src: string): string | null {
   return cached;
 }
 
-/** 确保 src 的微缩略图已生成（带并发限制与去重）；失败时缓存源图本身避免反复重试 */
-export function ensureMicroThumbnail(src: string): Promise<string> {
+async function runGeneration(task: GenerationTask): Promise<void> {
+  try {
+    const result = await generateMicroThumbnail(task.src);
+    cacheThumbnail(task.src, result);
+    task.resolve(result);
+  } catch (error) {
+    logger.debug('[microThumbnail] 生成失败，回退源图', { src: task.src, error: String(error) });
+    cacheThumbnail(task.src, task.src);
+    task.resolve(task.src);
+  } finally {
+    pendingGenerations.delete(task.src);
+    activeGenerations -= 1;
+    drainGenerationQueue();
+  }
+}
+
+function drainGenerationQueue(): void {
+  while (activeGenerations < MAX_CONCURRENT_GENERATIONS) {
+    const task = generationWaiters.values().next().value;
+    if (!task) return;
+    generationWaiters.delete(task);
+    task.running = true;
+    activeGenerations += 1;
+    void runGeneration(task);
+  }
+}
+
+/**
+ * 共用同源生成任务；调用方离开时 release。最后一个使用者释放尚未开始的任务时，
+ * 移除排队项并以源图结束 Promise。已开始的任务保持并发名额，完成后仍可复用结果。
+ */
+export function requestMicroThumbnail(src: string): MicroThumbnailRequest {
   const cached = getCachedMicroThumbnail(src);
   if (cached !== null) {
-    return Promise.resolve(cached);
+    return { promise: Promise.resolve(cached), release: () => undefined };
   }
-  const pending = pendingGenerations.get(src);
-  if (pending) {
-    return pending;
+  let task = pendingGenerations.get(src);
+  if (!task) {
+    let resolve!: (url: string) => void;
+    const promise = new Promise<string>((complete) => { resolve = complete; });
+    task = { src, promise, resolve, users: 0, running: false };
+    pendingGenerations.set(src, task);
+    generationWaiters.add(task);
   }
+  task.users += 1;
+  drainGenerationQueue();
+  let released = false;
+  const retained = task;
+  return {
+    promise: retained.promise,
+    release: () => {
+      if (released) return;
+      released = true;
+      retained.users -= 1;
+      if (retained.users === 0 && !retained.running && generationWaiters.delete(retained)) {
+        pendingGenerations.delete(src);
+        retained.resolve(src);
+      }
+    },
+  };
+}
 
-  const task = (async () => {
-    await acquireGenerationSlot();
-    try {
-      const result = await generateMicroThumbnail(src);
-      cacheThumbnail(src, result);
-      return result;
-    } catch (error) {
-      logger.debug('[microThumbnail] 生成失败，回退源图', { src, error: String(error) });
-      cacheThumbnail(src, src);
-      return src;
-    } finally {
-      releaseGenerationSlot();
-      pendingGenerations.delete(src);
-    }
-  })();
-  pendingGenerations.set(src, task);
-  return task;
+/** 无生命周期的调用保留请求到完成；带界面生命周期的调用使用 requestMicroThumbnail。 */
+export function ensureMicroThumbnail(src: string): Promise<string> {
+  const request = requestMicroThumbnail(src);
+  void request.promise.then(request.release);
+  return request.promise;
 }

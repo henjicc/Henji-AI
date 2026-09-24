@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 
 import {
-  ensureMicroThumbnail,
+  requestMicroThumbnail,
   getCachedMicroThumbnail,
 } from '@/features/canvas/application/microThumbnail';
 
@@ -35,13 +35,15 @@ export function useMicroThumbnail(src: string | null, active: boolean): string |
     }
 
     let cancelled = false;
-    void ensureMicroThumbnail(src).then((url) => {
+    const request = requestMicroThumbnail(src);
+    void request.promise.then((url) => {
       if (!cancelled) {
         setEntry({ src, url });
       }
     });
     return () => {
       cancelled = true;
+      request.release();
     };
   }, [src, active]);
 
