@@ -15,6 +15,8 @@ function createCanvasScalePerformanceScenes(context) {
   if (process.env.CANVAS_SCALE_BENCH !== '1') return []
   const counts = (process.env.CANVAS_SCALE_COUNTS || '100,500,1000').split(',').map(Number)
   if (counts.some(count => !Number.isInteger(count) || count < 50 || count > 5000)) throw new Error('CANVAS_SCALE_COUNTS 必须在 50 到 5000 之间')
+  const zoom = Number(process.env.CANVAS_SCALE_ZOOM ?? 0.5)
+  if (!Number.isFinite(zoom) || zoom < 0.1 || zoom > 5) throw new Error('CANVAS_SCALE_ZOOM 必须在 0.1 到 5 之间')
   if (process.env.CANVAS_SCALE_BULK_BENCH === '1' && process.env.CANVAS_SCALE_OPEN_ONLY !== '1') {
     throw new Error('批量操作基准需同时设置 CANVAS_SCALE_OPEN_ONLY=1，避免与平移诊断改变同一夹具')
   }
@@ -35,7 +37,7 @@ function createCanvasScalePerformanceScenes(context) {
       if (!imagePath) throw new Error('CANVAS_SCALE_IMAGE 必须指向真实内容图片')
       const bytes = [...await fs.readFile(imagePath)], extension = path.extname(imagePath).slice(1)
       const image = await page.evaluate(({ bytes, extension }) => window.henjiNative.image.persistImageBinary(new Uint8Array(bytes), extension), { bytes, extension })
-      const viewport = { x: 40, y: 80, zoom: 0.5 }
+      const viewport = { x: 40, y: 80, zoom }
       const out = path.resolve(process.env.CANVAS_SCALE_OUT || '.ui-tour/canvas-scale-performance.json')
       await fs.mkdir(path.dirname(out), { recursive: true })
       const report = { collectedAt: new Date().toISOString(), checkoutCommit: execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim(),

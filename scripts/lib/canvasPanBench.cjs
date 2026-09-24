@@ -235,6 +235,13 @@ function startFrameSampler(page, durationMs) {
   }) }), durationMs)
 }
 
+function readNodePositions(page) {
+  // 计时区间外读取内联布局变换；不逐帧扫描，也不触发几何布局。
+  return page.evaluate(function readNodePositions() {
+    return [...document.querySelectorAll('.react-flow__node')].map(node => [node.dataset.id, node.style.transform])
+  })
+}
+
 /**
  * 连续单向扫掠。走到边缘就「松手再抓」继续同向前进。
  *
@@ -257,6 +264,7 @@ async function sweep(page, session, {
     return { left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom }
   })
   if (!flowRect) throw new Error('未找到 .react-flow 容器')
+  const nodePositions = new Map(await readNodePositions(page))
 
   // selectionOnDrag 下左键默认框选；明确激活平移，不能依赖上一次复位残留的按键状态。
   await session.send('Input.dispatchKeyEvent', {
@@ -264,9 +272,11 @@ async function sweep(page, session, {
   })
   await sleep(30)
   const margin = 60
-  const sampleHandle = measure ? await startFrameSampler(page, durationMs) : null
+  let sampleHandle = null
+  let inputReleased = false
 
   try {
+    sampleHandle = measure ? await startFrameSampler(page, durationMs) : null
     let x = grab.x
     let y = grab.y
     let regrabs = 0
@@ -281,12 +291,14 @@ async function sweep(page, session, {
         nextY < flowRect.top + margin || nextY > flowRect.bottom - margin
 
       if (outOfBounds) {
-        dispatch(session, { type: 'mouseReleased', x, y, button: 'left', buttons: 0, clickCount: 1 })
+        // 等待前一段输入落地再命中测试，防止密集视口中旧空白位置已被节点占据。
+        await releasePointer(session, { x, y })
         const regrab = await findPanePoint(page, {
           preferRatioX: dx < 0 ? 0.86 : dx > 0 ? 0.14 : 0.5,
           preferRatioY: dy < 0 ? 0.82 : dy > 0 ? 0.18 : 0.5,
         })
-        const target = regrab || grab
+        if (!regrab) throw new Error('重新抓取时找不到画布空白位置，拒绝使用旧坐标拖动节点')
+        const target = regrab
         // 必须先发一次「未按下」的移动，让 d3-zoom 结束上一段拖动
         dispatch(session, { type: 'mouseMoved', x: target.x, y: target.y, button: 'none', buttons: 0 })
         await sleep(20)
@@ -310,9 +322,14 @@ async function sweep(page, session, {
     await session.send('Input.dispatchKeyEvent', {
       type: 'keyUp', key: ' ', code: 'Space', windowsVirtualKeyCode: 32, nativeVirtualKeyCode: 32,
     })
+    inputReleased = true
     await sleep(30)
+    const finalPositions = await readNodePositions(page)
+    const movedNodes = finalPositions.filter(([id, transform]) => nodePositions.get(id) !== transform)
+    const positionsPreserved = finalPositions.length === nodePositions.size && movedNodes.length === 0
 
     if (!measure) {
+      if (!positionsPreserved) throw new Error('预热平移改变了节点位置或集合')
       return { measured: false, regrabs }
     }
 
@@ -328,12 +345,17 @@ async function sweep(page, session, {
 
     const minVisible = Math.min(sample.startVisibleNodeCount, sample.endVisibleNodeCount)
     const invalidReasons = []
+    if (!positionsPreserved) {
+      invalidReasons.push(`平移改变了节点位置或集合（变化 ${movedNodes.length} 个）`)
+    }
     if (!finite) invalidReasons.push('视口坐标异常（可能发生指数爆炸）')
     if (!(netMove > 300)) invalidReasons.push(`净位移过小（${netMove.toFixed(1)}px）`)
     if (minVisible < 5) invalidReasons.push(`扫掠途中可见节点过少（最少 ${minVisible} 个，说明走到了空白区）`)
 
     return {
       measured: true,
+      inputDriver: 'settled-regrab-v1',
+      nodePositionsPreserved: positionsPreserved,
       valid: invalidReasons.length === 0,
       invalidReasons,
       regrabs,
@@ -352,7 +374,16 @@ async function sweep(page, session, {
       startViewport: sample.startViewport,
       endViewport: sample.endViewport,
     }
-  } finally { await sampleHandle?.dispose() }
+  } finally {
+    try {
+      if (!inputReleased) {
+        await releasePointer(session, grab)
+        await session.send('Input.dispatchKeyEvent', {
+          type: 'keyUp', key: ' ', code: 'Space', windowsVirtualKeyCode: 32, nativeVirtualKeyCode: 32,
+        })
+      }
+    } finally { await sampleHandle?.dispose() }
+  }
 }
 
 /**
