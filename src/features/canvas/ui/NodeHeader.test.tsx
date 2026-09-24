@@ -6,6 +6,10 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { useCanvasExecutionStateStore } from '@/stores/canvasExecutionStateStore';
 import { NODE_HEADER_FLOATING_POSITION_CLASS, NodeHeader } from './NodeHeader';
 
+vi.mock('../nodes/shared/useCanvasViewSubscriptions', () => ({
+  useCanvasViewportPortal: () => document.querySelector('.react-flow__viewport-portal'),
+}));
+
 vi.mock('react-i18next', async (importOriginal) => {
   const actual = await importOriginal<typeof import('react-i18next')>();
   return {
@@ -37,7 +41,6 @@ vi.mock('@xyflow/react', () => ({
     },
   }),
   useStoreApi: () => ({ getState: storeApiGetState }),
-  useStore: (selector: (state: { domNode: HTMLElement }) => unknown) => selector({ domNode: document.body }),
 }));
 
 afterEach(() => {

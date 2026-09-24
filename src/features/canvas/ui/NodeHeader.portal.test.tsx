@@ -33,9 +33,11 @@ it('标题命中层在宿主就绪和替换时挂载，平移不重复查找 DOM
     return { root, portal };
   };
   const first = createRoot();
+  const query = vi.spyOn(first.root, 'querySelector');
   act(() => store.setState({ domNode: first.root }));
   expect(first.portal.childElementCount).toBe(100);
-  const query = vi.spyOn(first.root, 'querySelector');
+  expect(query).toHaveBeenCalledTimes(1);
+  query.mockClear();
   for (let frame = 0; frame < 30; frame++) {
     act(() => store.setState({ transform: [frame * -9, 80, 0.5] }));
   }

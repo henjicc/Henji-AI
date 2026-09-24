@@ -10,7 +10,8 @@ import {
   useState,
 } from 'react';
 import { createPortal } from 'react-dom';
-import { useInternalNode, useNodeId, useStore, useStoreApi } from '@xyflow/react';
+import { useInternalNode, useNodeId, useStoreApi } from '@xyflow/react';
+import { useCanvasViewportPortal } from '../nodes/shared/useCanvasViewSubscriptions';
 import {
   UI_FIELD_FOCUS_CLASS,
   UI_FIELD_SURFACE_CLASS,
@@ -125,10 +126,7 @@ export function NodeHeader({
   const nodeId = useNodeId();
   const internalNode = useInternalNode(nodeId ?? '');
   const storeApi = useStoreApi();
-  const flowRoot = useStore((state) => state.domNode);
-  // ViewportPortal 的 selector 会在每次视口更新时查找 DOM，节点越多重复扫描越多。
-  // 宿主就绪后该容器随 ReactFlow 根节点存活，仅在根节点变化时重新定位。
-  const viewportPortal = useMemo(() => flowRoot?.querySelector('.react-flow__viewport-portal'), [flowRoot]);
+  const viewportPortal = useCanvasViewportPortal();
   const tone = toneClassName ?? NODE_HEADER_TONE_CLASS;
   const canEditTitle = editable && typeof titleText === 'string' && typeof onTitleChange === 'function';
   const inputRef = useRef<HTMLInputElement | null>(null);
