@@ -6,17 +6,18 @@ const { execFileSync } = require('node:child_process')
 const { findPanePoint, readCanvasState, resetViewport, sweep } = require('./canvasPanBench.cjs')
 const { createPanDiagnostics, installPageDiagnostics } = require('./canvasPanDiagnostics.cjs')
 const { checkCanvasViewport } = require('./uiInspectionCanvasViewport.cjs')
+const { withUnthrottledBenchmark } = require('./withUnthrottledBenchmark.cjs')
 
 function createCanvasScalePerformanceScenes(context) {
   if (process.env.CANVAS_SCALE_BENCH !== '1') return []
   const counts = (process.env.CANVAS_SCALE_COUNTS || '100,500,1000').split(',').map(Number)
   if (counts.some(count => !Number.isInteger(count) || count < 50 || count > 5000)) throw new Error('CANVAS_SCALE_COUNTS 必须在 50 到 5000 之间')
   const offscreenDiagnostic = process.env.CANVAS_SCALE_OFFSCREEN_DIAGNOSE || null
-  const diagnosticModes = ['hit-test', 'paint', 'opacity', 'edge-paint', 'header-bounds', 'layout']
+  const diagnosticModes = ['hit-test', 'paint', 'opacity', 'edge-paint', 'header-bounds', 'layout', 'contents']
   if (offscreenDiagnostic && !diagnosticModes.includes(offscreenDiagnostic)) throw new Error(`CANVAS_SCALE_OFFSCREEN_DIAGNOSE 只支持 ${diagnosticModes.join('、')}`)
   return [{
     id: 'canvas-scale-performance', surface: '画布', name: '画布-混合节点规模性能', writesUserData: true,
-    async setup(page, app, inspection) {
+    setup: withUnthrottledBenchmark(async (page, app, inspection) => {
       const imagePath = process.env.CANVAS_SCALE_IMAGE
       if (!imagePath) throw new Error('CANVAS_SCALE_IMAGE 必须指向真实内容图片')
       const bytes = [...await fs.readFile(imagePath)], extension = path.extname(imagePath).slice(1)
@@ -38,6 +39,9 @@ function createCanvasScalePerformanceScenes(context) {
         build: createHash('sha256').update(await fs.readFile('out/main/index.cjs')).update(await fs.readFile('out/renderer/index.html')).digest('hex'),
         hardware: { cpu: os.cpus()[0].model, threads: os.cpus().length, memoryBytes: os.totalmem(), gpu: await app.evaluate(({ app }) => app.getGPUInfo('basic')) },
         imagePath, window: inspection.windowEvidence, viewport, runs: [] }
+      report.backgroundThrottling = false
+      // 专用基准固定调度条件，避免窗口被遮挡时把后台 RAF 节流误判为布局卡顿。
+      // 只影响本场景的窗口，结束或失败时恢复；不改变正式应用的启动配置。
       await context.setupCanvas(page)
       for (const count of counts) {
         if (await page.locator('.react-flow').count()) await page.getByRole('button', { name: /返回项目|Back to Projects/ }).click()
@@ -99,7 +103,7 @@ function createCanvasScalePerformanceScenes(context) {
             } finally { await openProfiler.detach() }
           }
         }
-        const run = { count, edgeCount, openMs, samples: [] }
+        const run = { count, edgeCount, openMs, gpuFeatureStatus: await app.evaluate(({ app }) => app.getGPUFeatureStatus()), samples: [] }
         report.runs.push(run)
         await fs.writeFile(out, JSON.stringify(report, null, 2))
         console.log('[canvas-scale-performance] opened', JSON.stringify({ count, openMs }))
@@ -174,7 +178,11 @@ function createCanvasScalePerformanceScenes(context) {
             // 仅用于归因：交替隔离屏外命中/绘制/布局，或约束透明标题层的边界，不作为产品优化验收。
             // 屏外模式预留完整单向扫掠距离；标题模式检查命中盒几何不变，节点内容和订阅保持原样。
             const offscreenProbe = offscreenDiagnostic ? await page.evaluate(({ enabled, mode }) => {
-              document.querySelectorAll('[data-hit-test-probe]').forEach(element => element.removeAttribute('data-hit-test-probe'))
+              document.querySelectorAll('[data-hit-test-probe]').forEach(element => {
+                element.removeAttribute('data-hit-test-probe')
+                element.style.removeProperty('--canvas-probe-width')
+                element.style.removeProperty('--canvas-probe-height')
+              })
               document.querySelectorAll('[data-header-bounds-probe]').forEach(element => element.removeAttribute('data-header-bounds-probe'))
               if (!document.getElementById('canvas-hit-test-probe-style')) {
                 const style = document.createElement('style')
@@ -183,6 +191,8 @@ function createCanvasScalePerformanceScenes(context) {
                   ? '[data-header-bounds-probe] { height: 64px; translate: 0 -32px; contain: paint; } [data-header-bounds-probe] > [data-node-header-drag-surface] { translate: 0 32px; }'
                   : mode === 'layout'
                   ? '[data-hit-test-probe] { display: none !important; }'
+                  : mode === 'contents'
+                  ? '.react-flow__node[data-hit-test-probe] { content-visibility: hidden; contain-intrinsic-size: var(--canvas-probe-width) var(--canvas-probe-height); } [data-node-header-drag-surface][data-hit-test-probe] { visibility: hidden; }'
                   : mode === 'opacity'
                   ? '[data-hit-test-probe] { opacity: 0 !important; } [data-hit-test-probe], [data-hit-test-probe] * { pointer-events: none !important; }'
                   : `[data-hit-test-probe], [data-hit-test-probe] * { ${mode === 'paint' || mode === 'edge-paint' ? 'visibility: hidden' : 'pointer-events: none'} !important; }`
@@ -206,12 +216,42 @@ function createCanvasScalePerformanceScenes(context) {
                 return box.right < bounds.left - 200 || box.left > bounds.right + 2400
                   || box.bottom < bounds.top - 200 || box.top > bounds.bottom + 200
               })
-              outside.forEach(element => element.setAttribute('data-hit-test-probe', 'true'))
-              return { enabled, excluded: outside.length }
+              const sizes = mode === 'contents' ? outside.map(element => {
+                const style = getComputedStyle(element)
+                const horizontal = parseFloat(style.paddingLeft) + parseFloat(style.paddingRight) + parseFloat(style.borderLeftWidth) + parseFloat(style.borderRightWidth)
+                const vertical = parseFloat(style.paddingTop) + parseFloat(style.paddingBottom) + parseFloat(style.borderTopWidth) + parseFloat(style.borderBottomWidth)
+                return [Math.max(0, element.offsetWidth - (horizontal || 0)), Math.max(0, element.offsetHeight - (vertical || 0))]
+              }) : []
+              const dimensionsBefore = mode === 'contents' ? outside.filter(element => element.matches('.react-flow__node')).map(element => ({
+                id: element.dataset.id, width: element.offsetWidth, height: element.offsetHeight,
+                minimum: element.style.getPropertyValue('--generation-node-min-height'),
+              })) : undefined
+              outside.forEach((element, index) => {
+                if (mode === 'contents') {
+                  element.style.setProperty('--canvas-probe-width', `${sizes[index][0]}px`)
+                  element.style.setProperty('--canvas-probe-height', `${sizes[index][1]}px`)
+                }
+                element.setAttribute('data-hit-test-probe', 'true')
+              })
+              return { enabled, excluded: outside.length, dimensionsBefore }
             }, { enabled: round % 2 === 1, mode: offscreenDiagnostic }) : undefined
             if (offscreenDiagnostic) await page.waitForTimeout(500)
+            if (offscreenProbe?.dimensionsBefore) {
+              const changed = await page.evaluate(before => {
+                const elements = new Map([...document.querySelectorAll('.react-flow__node')].map(element => [element.dataset.id, element]))
+                return before.filter(record => {
+                  const element = elements.get(record.id)
+                  return !element || element.offsetWidth !== record.width || element.offsetHeight !== record.height
+                    || element.style.getPropertyValue('--generation-node-min-height') !== record.minimum
+                }).map(record => record.id)
+              }, offscreenProbe.dimensionsBefore)
+              offscreenProbe.dimensionsChecked = offscreenProbe.dimensionsBefore.length
+              delete offscreenProbe.dimensionsBefore
+              if (changed.length) throw new Error(`内容暂停诊断改变了 ${changed.length} 个节点的尺寸`)
+            }
             const grab = await findPanePoint(page)
             if (!grab) throw new Error('画布基准找不到真实平移命中位置')
+            const windowBefore = await page.evaluate(() => ({ visibility: document.visibilityState, focused: document.hasFocus() }))
             const before = await diagnostics.startRound()
             const traceRound = report.traceDiagnostic && round < (offscreenDiagnostic ? 2 : 1)
             if (traceRound) await session.send('Tracing.start', { categories: 'devtools.timeline,disabled-by-default-devtools.timeline.frame', transferMode: 'ReturnAsStream' })
@@ -239,22 +279,24 @@ function createCanvasScalePerformanceScenes(context) {
                 await session.send('Profiler.disable')
               }
             }
-            samples.push({ round, offscreenProbe, ...sample, diagnostics: await diagnostics.endRound(before) })
+            samples.push({ round, offscreenProbe, ...sample, diagnostics: await diagnostics.endRound(before), windowBefore,
+              windowAfter: await page.evaluate(() => ({ visibility: document.visibilityState, focused: document.hasFocus() })) })
             if (offscreenProbe?.enabled) {
               const visibleExcluded = await page.evaluate(mode => {
                 const bounds = document.querySelector('.react-flow').getBoundingClientRect()
                 const sheet = document.getElementById('canvas-hit-test-probe-style')?.sheet
                 // display:none 的几何恒为零，必须在计时区间外同步恢复布局后验证。
                 // 同一 JS 任务内恢复诊断样式，避免 ResizeObserver 看到额外的中间状态。
-                if (mode === 'layout' && !sheet) throw new Error('屏外布局诊断样式丢失')
+                const restoreLayout = mode === 'layout' || mode === 'contents'
+                if (restoreLayout && !sheet) throw new Error('屏外布局诊断样式丢失')
                 try {
-                  if (mode === 'layout') sheet.disabled = true
+                  if (restoreLayout) sheet.disabled = true
                   return [...document.querySelectorAll('[data-hit-test-probe]')].filter(element => {
                     const box = element.getBoundingClientRect()
                     return box.right > bounds.left && box.left < bounds.right && box.bottom > bounds.top && box.top < bounds.bottom
                   }).length
                 } finally {
-                  if (mode === 'layout') sheet.disabled = false
+                  if (restoreLayout) sheet.disabled = false
                 }
               }, offscreenDiagnostic)
               offscreenProbe.visibleExcluded = visibleExcluded
@@ -316,14 +358,18 @@ function createCanvasScalePerformanceScenes(context) {
           }
         } finally {
           if (offscreenDiagnostic) await page.evaluate(() => {
-            document.querySelectorAll('[data-hit-test-probe]').forEach(element => element.removeAttribute('data-hit-test-probe'))
+            document.querySelectorAll('[data-hit-test-probe]').forEach(element => {
+              element.removeAttribute('data-hit-test-probe')
+              element.style.removeProperty('--canvas-probe-width')
+              element.style.removeProperty('--canvas-probe-height')
+            })
             document.querySelectorAll('[data-header-bounds-probe]').forEach(element => element.removeAttribute('data-header-bounds-probe'))
             document.getElementById('canvas-hit-test-probe-style')?.remove()
           })
           await diagnostics.dispose(); await session.detach()
         }
       }
-    },
+    }),
   }]
 }
 
