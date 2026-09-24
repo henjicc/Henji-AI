@@ -158,6 +158,20 @@ function attachUiInspectionCanvasConnections(context) {
       return Math.round(element.scrollHeight / lineHeight)
     })
     if (promptLines < 2) throw new Error('长提示词没有换行，仍然渲染成单行')
+    // 用真实溢出内容验证静态/编辑态的滚动恢复，不能只检查 mock setter。
+    await page.keyboard.type(('\n滚动恢复验收：保留段落、引用和当前阅读位置。').repeat(12))
+    const editable = generated.locator('[contenteditable="true"]')
+    const savedScrollTop = await editable.evaluate((element) => {
+      element.scrollTop = 100
+      return element.scrollTop
+    })
+    if (savedScrollTop < 50) throw new Error('提示词滚动夹具未产生足够的溢出内容')
+    await page.keyboard.press('Tab')
+    await editable.waitFor({ state: 'hidden', timeout: 8000 })
+    const restoredScrollTop = await generated.getByRole('textbox').first().evaluate(element => element.scrollTop)
+    if (Math.abs(restoredScrollTop - savedScrollTop) > 1) {
+      throw new Error(`退出编辑后提示词滚动位置丢失：${savedScrollTop} → ${restoredScrollTop}`)
+    }
     await settlePage(page, 400)
   }
 

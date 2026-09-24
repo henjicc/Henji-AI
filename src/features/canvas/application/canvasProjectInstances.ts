@@ -3,6 +3,7 @@ import { fromProjectRecord, type Project } from '@/stores/projectStoreSerializat
 import { getProjectRecord } from '@/commands/projectState'
 import { assertApplicationWritesAllowed } from '@/core/applicationLifecycle/applicationWriteBarrier'
 import { notifyApplicationDomainChanged } from '@/core/application-control/domainChangeSignal'
+import { migrateCanvasGenerationPrompts } from './canvasGenerationPromptMigration'
 
 export interface CanvasProjectInstance {
   readonly id: string
@@ -95,6 +96,10 @@ export async function getCanvasProjectInstance(id: string): Promise<CanvasProjec
 
 export function attachCanvasProject(instance: CanvasProjectInstance): void {
   if (instance.closing) throw new Error('PROJECT_CLOSING')
+  const state = instance.store.getState()
+  const nodes = migrateCanvasGenerationPrompts(state.nodes, state.edges)
+  // 仍通过所属工程的写屏障和保存订阅提交，不新增撤销步骤，也不写当前页面的其他工程。
+  if (nodes !== state.nodes) instance.store.setState({ nodes })
   canvasStoreAttachment.attach(instance.store)
 }
 
