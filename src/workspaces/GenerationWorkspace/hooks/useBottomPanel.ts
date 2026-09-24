@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type RefObject } from 'react'
 import { COLLAPSE_SETTING_SPECS, COLLAPSE_WATCH_EVENTS, useLocalStorageSettings } from '@/hooks/useLocalStorageSetting'
 import { shouldUseCompactGenerationLayout } from '@/core/layout/uiAvailableSpace'
+import { useNavigationStore } from '@/stores/navigationStore'
 
 interface UseBottomPanelOptions {
   listContainerRef: RefObject<HTMLDivElement>
@@ -20,6 +21,7 @@ interface UseBottomPanelResult {
 }
 
 export function useBottomPanel({ listContainerRef }: UseBottomPanelOptions): UseBottomPanelResult {
+  const isActive = useNavigationStore(state => state.activeWorkspace === 'generation')
   const inputContainerRef = useRef<HTMLDivElement>(null)
   const [inputPadding, setInputPadding] = useState<number>(400)
   const [isCompactLayout, setIsCompactLayout] = useState(false)
@@ -32,6 +34,7 @@ export function useBottomPanel({ listContainerRef }: UseBottomPanelOptions): Use
   )
 
   const isPanelHoveredRef = useRef(false)
+  const mousePositionRef = useRef({ x: 0, y: 0 })
   const collapseTimerRef = useRef<number | null>(null)
   const collapseAnimationRef = useRef<number | null>(null)
   const lastScrollTopRef = useRef(0)
@@ -66,32 +69,32 @@ export function useBottomPanel({ listContainerRef }: UseBottomPanelOptions): Use
   }, [])
 
   useEffect(() => {
-    let lastMouseX = 0
-    let lastMouseY = 0
-
     const trackMousePosition = (e: MouseEvent) => {
-      lastMouseX = e.clientX
-      lastMouseY = e.clientY
+      mousePositionRef.current.x = e.clientX
+      mousePositionRef.current.y = e.clientY
     }
+    // 保留坐标，键盘切回生成页、鼠标尚未移动时也能恢复原有悬浮判断。
+    document.addEventListener('mousemove', trackMousePosition, { passive: true })
+    return () => document.removeEventListener('mousemove', trackMousePosition)
+  }, [])
 
+  useEffect(() => {
+    // 工作区保持挂载；隐藏或关闭自动收起时，不需要全页面命中检测。
+    if (!isActive || !enableAutoCollapse) return
     const checkMousePosition = () => {
       const panel = inputContainerRef.current
       if (!panel) return
-      const elements = document.elementsFromPoint(lastMouseX, lastMouseY)
+      const { x, y } = mousePositionRef.current
+      const elements = document.elementsFromPoint(x, y)
       const isInside = elements.some(el => panel.contains(el))
       if (isPanelHoveredRef.current !== isInside) {
         isPanelHoveredRef.current = isInside
       }
     }
 
-    document.addEventListener('mousemove', trackMousePosition, { passive: true })
     const interval = window.setInterval(checkMousePosition, 500)
-
-    return () => {
-      document.removeEventListener('mousemove', trackMousePosition)
-      clearInterval(interval)
-    }
-  }, [])
+    return () => clearInterval(interval)
+  }, [isActive, enableAutoCollapse])
 
   useEffect(() => {
     const inputEl = inputContainerRef.current
