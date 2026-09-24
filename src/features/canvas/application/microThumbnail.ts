@@ -1,6 +1,6 @@
 import { createLogger } from '@/core/logging';
 
-import { loadImageElement } from './imageData';
+import { blobToDataUrl, loadImageElement } from './imageData';
 
 const logger = createLogger('features.canvas.application.microThumbnail');
 
@@ -16,12 +16,28 @@ const MICRO_THUMB_SKIP_DIMENSION = Math.round(MICRO_THUMB_MAX_DIMENSION * 1.25);
 const MAX_CONCURRENT_GENERATIONS = 2;
 
 /**
- * src → 微缩略图地址（blob: URL，或源图本身已足够小时等于 src）。
- * 会话级缓存、不淘汰：单张 webp 微图约 5~15KB，数百媒体节点合计仅数 MB，
- * 淘汰反而有 blob URL 被在显节点引用后失效的风险。
+ * 用可独立持有的 data URL 缓存同一份 WebP 编码，避免永久注册 blob URL。
+ * 淘汰只释放缓存引用；节点及预解码切换仍可持有旧地址，不会因淘汰变成空白。
+ * 项数与字符串字节估算双重限额，防止长会话、失败源或长 data URL 持续累积。
  */
 const microThumbCache = new Map<string, string>();
+const MAX_CACHE_ENTRIES = 1024;
+const MAX_CACHE_STRING_BYTES = 32 * 1024 * 1024;
+let cachedStringBytes = 0;
 const pendingGenerations = new Map<string, Promise<string>>();
+
+function cacheThumbnail(src: string, url: string): void {
+  const bytes = (src.length + url.length) * 2;
+  if (bytes > MAX_CACHE_STRING_BYTES) return;
+  microThumbCache.set(src, url);
+  cachedStringBytes += bytes;
+  while (microThumbCache.size > MAX_CACHE_ENTRIES || cachedStringBytes > MAX_CACHE_STRING_BYTES) {
+    const oldest = microThumbCache.entries().next().value;
+    if (!oldest) break;
+    microThumbCache.delete(oldest[0]);
+    cachedStringBytes -= (oldest[0].length + oldest[1].length) * 2;
+  }
+}
 
 let activeGenerations = 0;
 const generationWaiters: Array<() => void> = [];
@@ -64,18 +80,22 @@ async function generateMicroThumbnail(src: string): Promise<string> {
   if (!blob) {
     return src;
   }
-  return URL.createObjectURL(blob);
+  return blobToDataUrl(blob);
 }
 
 /** 命中缓存时同步返回微缩略图地址，未生成过返回 null（不触发生成） */
 export function getCachedMicroThumbnail(src: string): string | null {
-  return microThumbCache.get(src) ?? null;
+  const cached = microThumbCache.get(src);
+  if (cached === undefined) return null;
+  microThumbCache.delete(src);
+  microThumbCache.set(src, cached);
+  return cached;
 }
 
 /** 确保 src 的微缩略图已生成（带并发限制与去重）；失败时缓存源图本身避免反复重试 */
 export function ensureMicroThumbnail(src: string): Promise<string> {
-  const cached = microThumbCache.get(src);
-  if (cached) {
+  const cached = getCachedMicroThumbnail(src);
+  if (cached !== null) {
     return Promise.resolve(cached);
   }
   const pending = pendingGenerations.get(src);
@@ -87,11 +107,11 @@ export function ensureMicroThumbnail(src: string): Promise<string> {
     await acquireGenerationSlot();
     try {
       const result = await generateMicroThumbnail(src);
-      microThumbCache.set(src, result);
+      cacheThumbnail(src, result);
       return result;
     } catch (error) {
       logger.debug('[microThumbnail] 生成失败，回退源图', { src, error: String(error) });
-      microThumbCache.set(src, src);
+      cacheThumbnail(src, src);
       return src;
     } finally {
       releaseGenerationSlot();
