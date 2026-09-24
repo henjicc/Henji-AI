@@ -1,7 +1,6 @@
 /** @vitest-environment jsdom */
 import { act, renderHook, cleanup } from '@testing-library/react'
 import { applyNodeChanges, type NodeChange } from '@xyflow/react'
-import type { MouseEvent } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { CanvasNode } from '../domain/canvasNodes'
 import { useCanvasDuplication } from './useCanvasDuplication'
@@ -26,7 +25,7 @@ vi.mock('../canvasUtils', () => ({
 }))
 
 type ForkInput = { data: Record<string, unknown>; createNode: (data: Record<string, unknown>) => string }
-const event = (altKey: boolean) => ({ altKey } as MouseEvent)
+const event = (altKey: boolean) => new MouseEvent('mousedown', { altKey })
 const source = (id: string, x: number): CanvasNode => ({
   id, type: 'uploadNode', position: { x, y: 40 }, selected: true, data: {},
 } as CanvasNode)

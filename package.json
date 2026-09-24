@@ -98,7 +98,7 @@
     "@tiptap/react": "^3.28.0",
     "@tiptap/suggestion": "^3.28.0",
     "@types/react-window": "^1.8.8",
-    "@xyflow/react": "^12.10.1",
+    "@xyflow/react": "12.11.6",
     "archiver": "^8.0.0",
     "better-sqlite3": "^12.5.0",
     "dockview-react": "^7.0.2",

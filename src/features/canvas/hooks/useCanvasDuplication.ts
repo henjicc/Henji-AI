@@ -1,4 +1,4 @@
-import { useCallback, useRef, type MouseEvent as ReactMouseEvent } from 'react'
+import { useCallback, useRef } from 'react'
 import type { Connection, NodeChange, NodePositionChange } from '@xyflow/react'
 import { useCanvasStore } from '@/stores/canvasStore'
 import { useProjectStore } from '@/stores/projectStore'
@@ -241,7 +241,7 @@ export function useCanvasDuplication(params: UseCanvasDuplicationParams) {
   )
 
   const handleNodeDragStart = useCallback(
-    (event: ReactMouseEvent, node: CanvasNode) => {
+    (event: Pick<MouseEvent, 'altKey'>, node: CanvasNode) => {
       if (!event.altKey) {
         altDragCopyRef.current = null
         return
@@ -331,7 +331,7 @@ export function useCanvasDuplication(params: UseCanvasDuplicationParams) {
   )
 
   const handleNodeDragStop = useCallback(
-    (_event: ReactMouseEvent, _node: CanvasNode): boolean => {
+    (_event: Pick<MouseEvent, 'altKey'>, _node: CanvasNode): boolean => {
       const session = altDragCopyRef.current
       if (!session) return false
       session.stopped = true
