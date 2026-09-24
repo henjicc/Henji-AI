@@ -109,6 +109,9 @@ function createCanvasFirstResizeScene(context) {
           'UPDATE storyboard_projects SET node_count = ?, nodes_json = ?, edges_json = ?, viewport_json = ?, history_json = ? WHERE id = ?',
           [nodes.length, JSON.stringify(nodes), '[]', JSON.stringify({ x: 90, y: 40, zoom: 0.65 }), JSON.stringify({ past: [], future: [], imagePool: [] }), projectId])
       }, { projectId, types })
+      // 与 Alt 复制夹具一致，清空旧工程实例后再读取已替换的数据库记录。
+      await page.reload({ waitUntil: 'domcontentloaded' })
+      await context.setupCanvas(page)
       await page.locator(`[data-project-id="${projectId}"]:visible`).click()
       const resizedBoxes = []
       for (const type of types) {
