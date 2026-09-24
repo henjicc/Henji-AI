@@ -9,6 +9,7 @@ const { checkCanvasViewport } = require('./uiInspectionCanvasViewport.cjs')
 const { withUnthrottledBenchmark } = require('./withUnthrottledBenchmark.cjs')
 const { checkCanvasNodeLayout } = require('./uiInspectionCanvasNodeLayout.cjs')
 const { checkCanvasBulkPerformance } = require('./uiInspectionCanvasBulkPerformance.cjs')
+const { findCanvasStore, withCanvasStoreDiagnostic } = require('./canvasStoreDiagnostic.cjs')
 
 function createCanvasScalePerformanceScenes(context) {
   if (process.env.CANVAS_SCALE_BENCH !== '1') return []
@@ -18,6 +19,8 @@ function createCanvasScalePerformanceScenes(context) {
     throw new Error('批量操作基准需同时设置 CANVAS_SCALE_OPEN_ONLY=1，避免与平移诊断改变同一夹具')
   }
   const profileAction = process.env.CANVAS_SCALE_PROFILE_ACTION || null
+  const storeDiagnostic = process.env.CANVAS_SCALE_STORE_DIAGNOSE === '1'
+  if (storeDiagnostic && process.env.CANVAS_SCALE_BULK_BENCH !== '1') throw new Error('状态更新诊断需启用 BULK_BENCH')
   if (profileAction && (!['rectangle-select', 'delete', 'undo-delete', 'redo-delete', 'restore-delete', 'paste'].includes(profileAction)
     || process.env.CANVAS_SCALE_BULK_BENCH !== '1' || process.env.CANVAS_SCALE_CPU_PROFILE === '1')) {
     throw new Error('CANVAS_SCALE_PROFILE_ACTION 需指定合法批量操作，启用 BULK_BENCH 且关闭全程 CPU_PROFILE')
@@ -40,6 +43,7 @@ function createCanvasScalePerformanceScenes(context) {
         debuggerDiagnostic: process.env.CANVAS_SCALE_DIAGNOSE === '1',
         cpuProfileDiagnostic: process.env.CANVAS_SCALE_CPU_PROFILE === '1',
         profileAction,
+        storeDiagnostic,
         openProfileDiagnostic: process.env.CANVAS_SCALE_OPEN_PROFILE === '1',
         traceDiagnostic: process.env.CANVAS_SCALE_TRACE === '1',
         offscreenDiagnostic,
@@ -121,53 +125,43 @@ function createCanvasScalePerformanceScenes(context) {
         await fs.writeFile(out, JSON.stringify(report, null, 2))
         console.log('[canvas-scale-performance] opened', JSON.stringify({ count, openMs }))
         await page.waitForTimeout(1000)
-        if (report.subscriptionDiagnostic) run.viewportSubscribers = await page.evaluate(async () => {
-          const element = document.querySelector('.react-flow__node')
-          let fiber = element[Object.keys(element).find(key => key.startsWith('__reactFiber$'))]
-          let store
-          let root = fiber
-          while (fiber) {
-            for (let dependency = fiber.dependencies?.firstContext; dependency; dependency = dependency.next) {
-              const value = dependency.memoizedValue
-              if (value?.getState?.().nodeLookup && value?.getState?.().transform) store = value
-            }
-            root = fiber
-            fiber = fiber.return
-          }
-          if (!store) throw new Error('找不到 ReactFlow 诊断订阅源')
-          let changed
-          const unsubscribe = store.subscribe((state, previous) => {
-            if (state.transform === previous.transform) return
-            unsubscribe()
-            const counts = {}
-            const pending = [root]
-            while (pending.length) {
-              const item = pending.pop()
-              for (let hook = item.memoizedState; hook; hook = hook.next) {
-                const queue = hook.queue
-                if (typeof queue?.getSnapshot !== 'function') continue
-                if (!Object.is(queue.value, queue.getSnapshot())) {
-                  const type = item.type?.displayName || item.type?.name || item.type?.type?.name || 'unknown'
-                  counts[type] = (counts[type] || 0) + 1
+        if (report.subscriptionDiagnostic) {
+          const source = await page.evaluateHandle(findCanvasStore)
+          try { run.viewportSubscribers = await source.evaluate(async ({ store, root }) => {
+            let changed
+            const unsubscribe = store.subscribe((state, previous) => {
+              if (state.transform === previous.transform) return
+              unsubscribe()
+              const counts = {}
+              const pending = [root]
+              while (pending.length) {
+                const item = pending.pop()
+                for (let hook = item.memoizedState; hook; hook = hook.next) {
+                  const queue = hook.queue
+                  if (typeof queue?.getSnapshot !== 'function') continue
+                  if (!Object.is(queue.value, queue.getSnapshot())) {
+                    const type = item.type?.displayName || item.type?.name || item.type?.type?.name || 'unknown'
+                    counts[type] = (counts[type] || 0) + 1
+                  }
                 }
+                if (item.child) pending.push(item.child)
+                if (item.sibling) pending.push(item.sibling)
               }
-              if (item.child) pending.push(item.child)
-              if (item.sibling) pending.push(item.sibling)
+              changed = counts
+            })
+            const panZoom = store.getState().panZoom
+            const original = panZoom.getViewport()
+            try {
+              await panZoom.setViewport({ ...original, x: original.x + 1 })
+              await new Promise(resolve => setTimeout(resolve, 0))
+            } finally {
+              unsubscribe()
+              await panZoom.setViewport(original)
             }
-            changed = counts
-          })
-          const panZoom = store.getState().panZoom
-          const original = panZoom.getViewport()
-          try {
-            await panZoom.setViewport({ ...original, x: original.x + 1 })
-            await new Promise(resolve => setTimeout(resolve, 0))
-          } finally {
-            unsubscribe()
-            await panZoom.setViewport(original)
-          }
-          if (!changed) throw new Error('视口诊断未捕获订阅变化')
-          return changed
-        })
+            if (!changed) throw new Error('视口诊断未捕获订阅变化')
+            return changed
+          }) } finally { await source.dispose() }
+        }
         if (report.openOnly) {
           run.state = await readCanvasState(page)
           run.processes = await app.evaluate(({ app }) => app.getAppMetrics())
@@ -176,13 +170,14 @@ function createCanvasScalePerformanceScenes(context) {
             if (profiler) { await profiler.send('Profiler.enable'); await profiler.send('Profiler.start') }
             try { run.bulkPerformance = await checkCanvasBulkPerformance(page, {
               capture: suffix => inspection.capture(`${suffix}-r${report.runs.length}`),
-              profileAction: profileAction ? async (name, measure) => {
-                if (name !== profileAction) return measure()
+              profileAction: profileAction || storeDiagnostic ? async (name, measure) => {
+                const measured = storeDiagnostic ? () => withCanvasStoreDiagnostic(page, measure) : measure
+                if (name !== profileAction) return measured()
                 const session = await page.context().newCDPSession(page)
                 try {
                   await session.send('Profiler.enable')
                   await session.send('Profiler.start')
-                  try { return await measure() }
+                  try { return await measured() }
                   finally {
                     const { profile } = await session.send('Profiler.stop')
                     await fs.writeFile(`${out}.${count}.${report.runs.length}.${name}.cpuprofile`, JSON.stringify(profile))
