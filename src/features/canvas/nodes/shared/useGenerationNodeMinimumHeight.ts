@@ -68,6 +68,7 @@ export function useGenerationNodeMinimumHeight(
     if (!element) return
 
     const measure = (): void => {
+      if (element.closest('[data-canvas-layout-suspended="true"]')) return
       const nextHeight = Math.max(0, Math.ceil(element.offsetHeight))
       setInputRowsHeight((currentHeight) => (
         currentHeight === nextHeight ? currentHeight : nextHeight

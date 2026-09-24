@@ -102,13 +102,13 @@ function attachUiInspectionCanvasMedia(context) {
     await projectCard.waitFor({ state: 'visible', timeout: 12000 })
     const projectId = await projectCard.getAttribute('data-project-id')
     if (!projectId) throw new Error('素材组视觉场景找不到临时画布工程')
-    const preview = (first, second, label) => `data:image/svg+xml,${encodeURIComponent([
+    const preview = (first, second, label) => `data:image/svg+xml;base64,${Buffer.from([
       '<svg xmlns="http://www.w3.org/2000/svg" width="320" height="220" viewBox="0 0 320 220">',
       `<defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop stop-color="${first}"/><stop offset="1" stop-color="${second}"/></linearGradient></defs>`,
       '<rect width="320" height="220" fill="url(#g)"/>',
       `<text x="24" y="190" fill="white" font-family="sans-serif" font-size="32" font-weight="700">${label}</text>`,
       '</svg>',
-    ].join(''))}`
+    ].join(''), 'utf8').toString('base64')}`
     const previews = {
       front: preview('midnightblue', 'cornflowerblue', 'FRONT'),
       outfit: preview('darkslateblue', 'mediumorchid', 'OUTFIT'),

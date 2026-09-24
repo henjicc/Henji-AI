@@ -5,8 +5,11 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import type { CanvasEdge, CanvasNode } from '../domain/canvasNodes';
 import { CanvasViewportFlow } from './CanvasViewportFlow';
 
+const store = vi.hoisted(() => ({ getState: () => ({ domNode: null }), subscribe: () => () => {} }));
+vi.mock('../hooks/canvasNodeLayout', () => ({ createCanvasNodeLayout: () => () => {} }));
 let flow: ReactFlowProps<CanvasNode, CanvasEdge>;
 vi.mock('@xyflow/react', () => ({
+  useStoreApi: () => store,
   ReactFlow: (props: ReactFlowProps<CanvasNode, CanvasEdge>) => {
     flow = props;
     return <div data-testid="flow" onPointerDownCapture={props.onPointerDownCapture} onKeyDownCapture={props.onKeyDownCapture} />;

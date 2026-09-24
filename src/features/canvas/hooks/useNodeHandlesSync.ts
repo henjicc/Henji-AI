@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import { useStoreApi } from '@xyflow/react';
+import { resumeCanvasNodeMeasurement } from './canvasNodeLayout';
 
 type FlowGetState = ReturnType<typeof useStoreApi>['getState'];
 
@@ -36,7 +37,10 @@ function scheduleMeasurement(store: FlowGetState, nodeId: string): () => void {
       // 保留原请求顺序，不因 DOM 顺序改变 ReactFlow 发出的尺寸变更顺序。
       for (const id of ids) {
         const nodeElement = elements.get(id);
-        if (nodeElement) updates.set(id, { id, nodeElement, force: true });
+        if (nodeElement) {
+          resumeCanvasNodeMeasurement(nodeElement);
+          updates.set(id, { id, nodeElement, force: true });
+        }
       }
       if (updates.size) requestAnimationFrame(() => updateNodeInternals(updates, { triggerFitView: false }));
     });

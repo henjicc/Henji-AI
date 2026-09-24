@@ -1,10 +1,43 @@
-import { describe, expect, it } from 'vitest'
+/** @vitest-environment jsdom */
+import { createElement } from 'react'
+import { act, render } from '@testing-library/react'
+import { describe, expect, it, vi } from 'vitest'
 
 import {
   GENERATION_PROMPT_MIN_HEIGHT_PX,
   resolveGenerationNodeManualDimension,
   resolveGenerationNodeMinimumHeight,
+  useGenerationNodeMinimumHeight,
 } from './useGenerationNodeMinimumHeight'
+
+it('屏外暂停的零尺寸不覆盖参数区高度，恢复后仍可正常收紧', () => {
+  let height = 200
+  let notify = () => {}
+  vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockImplementation(() => height)
+  vi.stubGlobal('ResizeObserver', class {
+    constructor(callback: () => void) { notify = callback }
+    observe() {}
+    disconnect() {}
+  })
+  function Fixture() {
+    const { rootRef, inputRowsRef } = useGenerationNodeMinimumHeight(160)
+    return createElement('div', { className: 'react-flow__node' },
+      createElement('div', { ref: rootRef }, createElement('div', { ref: inputRowsRef })))
+  }
+  const view = render(createElement(Fixture))
+  try {
+    const node = view.container.firstElementChild as HTMLElement
+    expect(node.style.getPropertyValue('--generation-node-min-height')).toBe('324px')
+    node.setAttribute('data-canvas-layout-suspended', 'true')
+    height = 0; act(notify)
+    expect(node.style.getPropertyValue('--generation-node-min-height')).toBe('324px')
+    node.removeAttribute('data-canvas-layout-suspended')
+    height = 40; act(notify)
+    expect(node.style.getPropertyValue('--generation-node-min-height')).toBe('164px')
+  } finally {
+    view.unmount(); vi.restoreAllMocks(); vi.unstubAllGlobals()
+  }
+})
 
 describe('resolveGenerationNodeMinimumHeight', () => {
   it('没有参数行测量值时保留调用方配置的最低高度', () => {

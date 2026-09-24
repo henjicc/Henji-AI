@@ -7,13 +7,14 @@ const { findPanePoint, readCanvasState, resetViewport, sweep } = require('./canv
 const { createPanDiagnostics, installPageDiagnostics } = require('./canvasPanDiagnostics.cjs')
 const { checkCanvasViewport } = require('./uiInspectionCanvasViewport.cjs')
 const { withUnthrottledBenchmark } = require('./withUnthrottledBenchmark.cjs')
+const { checkCanvasNodeLayout } = require('./uiInspectionCanvasNodeLayout.cjs')
 
 function createCanvasScalePerformanceScenes(context) {
   if (process.env.CANVAS_SCALE_BENCH !== '1') return []
   const counts = (process.env.CANVAS_SCALE_COUNTS || '100,500,1000').split(',').map(Number)
   if (counts.some(count => !Number.isInteger(count) || count < 50 || count > 5000)) throw new Error('CANVAS_SCALE_COUNTS 必须在 50 到 5000 之间')
   const offscreenDiagnostic = process.env.CANVAS_SCALE_OFFSCREEN_DIAGNOSE || null
-  const diagnosticModes = ['hit-test', 'paint', 'opacity', 'edge-paint', 'header-bounds', 'layout', 'contents']
+  const diagnosticModes = ['hit-test', 'paint', 'opacity', 'edge-paint', 'header-bounds', 'layout', 'contents', 'node-layout']
   if (offscreenDiagnostic && !diagnosticModes.includes(offscreenDiagnostic)) throw new Error(`CANVAS_SCALE_OFFSCREEN_DIAGNOSE 只支持 ${diagnosticModes.join('、')}`)
   return [{
     id: 'canvas-scale-performance', surface: '画布', name: '画布-混合节点规模性能', writesUserData: true,
@@ -35,6 +36,7 @@ function createCanvasScalePerformanceScenes(context) {
         subscriptionDiagnostic: process.env.CANVAS_SCALE_SUBSCRIPTIONS === '1',
         checkHeaderInteraction: process.env.CANVAS_SCALE_HEADER_CHECK === '1',
         checkViewportInteraction: process.env.CANVAS_SCALE_VIEWPORT_CHECK === '1',
+        checkNodeLayout: process.env.CANVAS_SCALE_LAYOUT_CHECK === '1',
         openOnly: process.env.CANVAS_SCALE_OPEN_ONLY === '1',
         build: createHash('sha256').update(await fs.readFile('out/main/index.cjs')).update(await fs.readFile('out/renderer/index.html')).digest('hex'),
         hardware: { cpu: os.cpus()[0].model, threads: os.cpus().length, memoryBytes: os.totalmem(), gpu: await app.evaluate(({ app }) => app.getGPUInfo('basic')) },
@@ -158,6 +160,11 @@ function createCanvasScalePerformanceScenes(context) {
         if (report.openOnly) {
           run.state = await readCanvasState(page)
           run.processes = await app.evaluate(({ app }) => app.getAppMetrics())
+          if (report.checkNodeLayout) {
+            const session = await page.context().newCDPSession(page)
+            try { run.nodeLayout = await checkCanvasNodeLayout(page, session, viewport, inspection) }
+            finally { await session.detach() }
+          }
           if (report.checkViewportInteraction) {
             const session = await page.context().newCDPSession(page)
             try { run.viewportInteraction = await checkCanvasViewport(page, session, inspection, context, projectId) }
@@ -189,6 +196,8 @@ function createCanvasScalePerformanceScenes(context) {
                 style.id = 'canvas-hit-test-probe-style'
                 style.textContent = mode === 'header-bounds'
                   ? '[data-header-bounds-probe] { height: 64px; translate: 0 -32px; contain: paint; } [data-header-bounds-probe] > [data-node-header-drag-surface] { translate: 0 32px; }'
+                  : mode === 'node-layout'
+                  ? '.react-flow__node[data-canvas-layout-suspended="true"], .react-flow__viewport-portal > [data-canvas-layout-suspended="true"] { display: block !important; }'
                   : mode === 'layout'
                   ? '[data-hit-test-probe] { display: none !important; }'
                   : mode === 'contents'
@@ -197,6 +206,10 @@ function createCanvasScalePerformanceScenes(context) {
                   ? '[data-hit-test-probe] { opacity: 0 !important; } [data-hit-test-probe], [data-hit-test-probe] * { pointer-events: none !important; }'
                   : `[data-hit-test-probe], [data-hit-test-probe] * { ${mode === 'paint' || mode === 'edge-paint' ? 'visibility: hidden' : 'pointer-events: none'} !important; }`
                 document.head.append(style)
+              }
+              if (mode === 'node-layout') {
+                document.getElementById('canvas-hit-test-probe-style').sheet.disabled = enabled
+                return { enabled, excluded: enabled ? document.querySelectorAll('.react-flow__node[data-canvas-layout-suspended="true"]').length : 0 }
               }
               if (!enabled) return { enabled, excluded: 0 }
               if (mode === 'header-bounds') {
@@ -287,16 +300,17 @@ function createCanvasScalePerformanceScenes(context) {
                 const sheet = document.getElementById('canvas-hit-test-probe-style')?.sheet
                 // display:none 的几何恒为零，必须在计时区间外同步恢复布局后验证。
                 // 同一 JS 任务内恢复诊断样式，避免 ResizeObserver 看到额外的中间状态。
-                const restoreLayout = mode === 'layout' || mode === 'contents'
+                const restoreLayout = mode === 'layout' || mode === 'contents' || mode === 'node-layout'
                 if (restoreLayout && !sheet) throw new Error('屏外布局诊断样式丢失')
+                const disabled = sheet?.disabled
                 try {
-                  if (restoreLayout) sheet.disabled = true
-                  return [...document.querySelectorAll('[data-hit-test-probe]')].filter(element => {
+                  if (restoreLayout) sheet.disabled = mode !== 'node-layout'
+                  return [...document.querySelectorAll(mode === 'node-layout' ? '.react-flow__node[data-canvas-layout-suspended="true"]' : '[data-hit-test-probe]')].filter(element => {
                     const box = element.getBoundingClientRect()
                     return box.right > bounds.left && box.left < bounds.right && box.bottom > bounds.top && box.top < bounds.bottom
                   }).length
                 } finally {
-                  if (restoreLayout) sheet.disabled = false
+                  if (restoreLayout) sheet.disabled = disabled
                 }
               }, offscreenDiagnostic)
               offscreenProbe.visibleExcluded = visibleExcluded
@@ -354,6 +368,10 @@ function createCanvasScalePerformanceScenes(context) {
           }
           if (report.checkViewportInteraction) {
             run.viewportInteraction = await checkCanvasViewport(page, session, inspection, context, projectId)
+            await fs.writeFile(out, JSON.stringify(report, null, 2))
+          }
+          if (report.checkNodeLayout) {
+            run.nodeLayout = await checkCanvasNodeLayout(page, session, viewport, inspection)
             await fs.writeFile(out, JSON.stringify(report, null, 2))
           }
         } finally {

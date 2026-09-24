@@ -14,6 +14,7 @@
  * VISUAL_FILL_ALL_TYPES=1（在临时 fixture 补齐缺失类型）、
  * VISUAL_REQUIRE_ALL_TYPES=1（源项目缺少注册类型时失败）。
  * VISUAL_ISOLATED=1 使用临时资料目录，不读写用户工程。
+ * VISUAL_LAYOUT_ROUNDTRIP=1 验证屏外暂停、空闲稳定与返回后的同帧画面/几何。
  */
 
 const fs = require('node:fs')
@@ -22,6 +23,7 @@ const { launchElectronApp, waitForApp } = require('./lib/electronLaunch.cjs')
 const {
   FIXTURE_PREFIX,
   createRealContentFixture,
+  findPanePoint,
   removeFixtures,
   resetViewport,
   sleep,
@@ -308,6 +310,43 @@ async function compareCapture(baseline, candidate, runDir) {
   return { passed, pixels, geometry, diffCrop }
 }
 
+async function captureLayoutRestoration(page, session, startViewport, runDir) {
+  await applyConfig(page, 'off')
+  if (!(await resetViewport(page, session, startViewport)).ok) throw new Error('节点布局恢复检查无法建立初始视口')
+  // 模型列表检查会留下按钮焦点；先用正式空白点击结束选择，避免 Space 平移改变 focus-visible。
+  const point = await findPanePoint(page)
+  if (!point) throw new Error('节点布局恢复检查找不到画布空白')
+  await page.mouse.click(point.x, point.y)
+  await sleep(CAPTURE_SETTLE_MS)
+  const baseline = { name: 'layout-before', geometry: await captureGeometry(page),
+    screenshot: await captureFlow(page, path.join(runDir, 'layout-before.png')) }
+  const nodes = await page.evaluateHandle(() => new Map([...document.querySelectorAll('.react-flow__node')].map(node => [node.dataset.id, node])))
+  try {
+    const away = { x: startViewport.x + 4000, y: startViewport.y + 3000 }
+    if (!(await resetViewport(page, session, away)).ok) throw new Error('节点布局恢复检查无法移出视口')
+    await page.waitForFunction(() => document.querySelector('.react-flow__node[data-canvas-layout-suspended="true"]'))
+    await sleep(500)
+    const idle = await page.evaluate(() => new Promise(resolve => {
+      let changes = 0
+      const observer = new MutationObserver(records => { changes += records.length })
+      observer.observe(document.querySelector('.react-flow'), { subtree: true, attributes: true, attributeFilter: ['data-canvas-layout-suspended'] })
+      setTimeout(() => {
+        observer.disconnect()
+        resolve({ changes, suspended: document.querySelectorAll('.react-flow__node[data-canvas-layout-suspended="true"]').length })
+      }, 750)
+    }))
+    if (idle.changes) throw new Error(`屏外节点空闲时反复切换布局：${JSON.stringify(idle)}`)
+    if (!(await resetViewport(page, session, startViewport)).ok) throw new Error('节点布局恢复检查无法返回原视口')
+    await sleep(CAPTURE_SETTLE_MS)
+    const sameElements = await page.evaluate(previous => [...document.querySelectorAll('.react-flow__node')].every(node => previous.get(node.dataset.id) === node), nodes)
+    const screenshotPath = path.join(runDir, 'layout-restored.png')
+    const comparison = await compareCapture(baseline, {
+      name: 'layout-restored', geometry: await captureGeometry(page), screenshot: await captureFlow(page, screenshotPath),
+    }, runDir)
+    return { ...comparison, passed: comparison.passed && sameElements, sameElements, idle, screenshotPath }
+  } finally { await nodes.dispose() }
+}
+
 async function captureGestureComparison(page, session, startViewport, runDir) {
   await applyConfig(page, 'off')
   await resetViewport(page, session, startViewport)
@@ -387,6 +426,8 @@ async function main() {
     const captures = {}
     for (const name of CONFIG_SET) captures[name] = await captureConfig(page, session, name, startViewport, runDir)
     const baseline = captures.off
+    const layoutRestoration = process.env.VISUAL_LAYOUT_ROUNDTRIP === '1'
+      ? await captureLayoutRestoration(page, session, startViewport, runDir) : null
     const comparisons = {}
     for (const name of CONFIG_SET.filter((item) => item !== 'off')) {
       comparisons[name] = await compareCapture(baseline, captures[name], runDir)
@@ -408,6 +449,7 @@ async function main() {
     const modelPickerSpacingOk = !modelPickerScrollbarSpacing
       || modelPickerScrollbarSpacing.differencePx <= 1
     const ok = Object.values(expectationResults).every(Boolean)
+      && (!layoutRestoration || layoutRestoration.passed)
       && gestureExpectationPassed
       && coverageOk
       && modelPickerSpacingOk
@@ -434,6 +476,7 @@ async function main() {
         missingTypes,
       },
       baselineGeometry: baseline.geometry,
+      layoutRestoration,
       comparisons,
       gesture,
       gestureExpectationPassed,

@@ -1,14 +1,17 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
-import { ReactFlow, type ReactFlowProps, type Viewport } from '@xyflow/react';
+import { ReactFlow, useStoreApi, type ReactFlowProps, type Viewport } from '@xyflow/react';
 import type { CanvasEdge, CanvasNode } from '../domain/canvasNodes';
 import { DEFAULT_VIEWPORT } from '../canvasUtils';
+import { createCanvasNodeLayout } from '../hooks/canvasNodeLayout';
 
 type Props = Omit<ReactFlowProps<CanvasNode, CanvasEdge>, 'viewport' | 'onViewportChange'>;
 
 /** Canvas 专用视口调度；节点、边及持久化仍由原有入口负责。 */
 export function CanvasViewportFlow(props: Props): JSX.Element {
   const { onMove: notifyMove, onMoveEnd: notifyMoveEnd } = props;
+  const { getState, subscribe } = useStoreApi();
+  useEffect(() => createCanvasNodeLayout({ getState, subscribe }), [getState, subscribe]);
   const [viewport, setViewport] = useState(props.defaultViewport ?? DEFAULT_VIEWPORT);
   const pending = useRef<Viewport | null>(null);
   const frame = useRef<number | null>(null);
