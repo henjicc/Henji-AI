@@ -110,28 +110,35 @@ function encodeProject(project: Project): PersistedProject {
   const imageIndexMap = new Map(imagePool.map((value, index) => [value, index]));
   const encode = (imageUrl: string | null | undefined) =>
     encodeImageReference(imageUrl, imagePool, imageIndexMap);
-  const resetRuntimeState = (nodes: CanvasNode[]): CanvasNode[] => nodes.map((node) => {
+  // 历史快照共享未修改的节点对象；同次编码只清理和遍历一次。
+  // 缓存属于本次媒体池，不能跨保存复用，否则会留下旧数据或错误的池索引。
+  const encodedNodes = new Map<CanvasNode, CanvasNode>();
+  const encodeNodes = (nodes: CanvasNode[]): CanvasNode[] => nodes.map((node) => {
+    const cached = encodedNodes.get(node);
+    if (cached) return cached;
     const data = { ...(node.data as DynamicValueMap) };
     resetTransientNodeRuntimeState(node.type, data);
-    return {
+    const encodedNode = {
       ...node,
-      data: data as CanvasNodeData,
+      data: mapCanvasNodeMediaReferences(data, (value) => encode(value) ?? value) as CanvasNodeData,
     };
+    encodedNodes.set(node, encodedNode);
+    return encodedNode;
   });
 
   return {
     ...project,
-    nodes: mapNodeImageReferences(resetRuntimeState(project.nodes), encode),
-    history: mapHistoryImageReferences({
+    nodes: encodeNodes(project.nodes),
+    history: {
       past: project.history.past.map((snapshot) => ({
         ...snapshot,
-        nodes: resetRuntimeState(snapshot.nodes),
+        nodes: encodeNodes(snapshot.nodes),
       })),
       future: project.history.future.map((snapshot) => ({
         ...snapshot,
-        nodes: resetRuntimeState(snapshot.nodes),
+        nodes: encodeNodes(snapshot.nodes),
       })),
-    }, encode),
+    },
     imagePool,
   };
 }
@@ -175,9 +182,10 @@ function assertNoPersistedBlobMedia(value: unknown, pathLabel = 'project'): void
 }
 
 export function toProjectRecord(project: Project): ProjectRecord {
-  const encodedProject = encodeProject(project);
+  // 保持原有落盘历史边界，先裁剪再编码，避免为不会写入的快照重复清理和收集媒体。
+  const encodedProject = encodeProject({ ...project, history: trimHistoryForPersistence(project.history) });
   const persistedNodes = encodedProject.nodes;
-  const persistedHistory = trimHistoryForPersistence(encodedProject.history);
+  const persistedHistory = encodedProject.history;
 
   if (import.meta.env.DEV) {
     assertNoPersistedBlobMedia({
