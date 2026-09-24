@@ -12,7 +12,8 @@ function createCanvasScalePerformanceScenes(context) {
   const counts = (process.env.CANVAS_SCALE_COUNTS || '100,500,1000').split(',').map(Number)
   if (counts.some(count => !Number.isInteger(count) || count < 50 || count > 5000)) throw new Error('CANVAS_SCALE_COUNTS 必须在 50 到 5000 之间')
   const offscreenDiagnostic = process.env.CANVAS_SCALE_OFFSCREEN_DIAGNOSE || null
-  if (offscreenDiagnostic && !['hit-test', 'paint'].includes(offscreenDiagnostic)) throw new Error('CANVAS_SCALE_OFFSCREEN_DIAGNOSE 只支持 hit-test 或 paint')
+  const diagnosticModes = ['hit-test', 'paint', 'opacity', 'edge-paint', 'header-bounds']
+  if (offscreenDiagnostic && !diagnosticModes.includes(offscreenDiagnostic)) throw new Error(`CANVAS_SCALE_OFFSCREEN_DIAGNOSE 只支持 ${diagnosticModes.join('、')}`)
   return [{
     id: 'canvas-scale-performance', surface: '画布', name: '画布-混合节点规模性能', writesUserData: true,
     async setup(page, app, inspection) {
@@ -157,19 +158,35 @@ function createCanvasScalePerformanceScenes(context) {
           for (let round = 0; round < (offscreenDiagnostic ? 10 : 5); round++) {
             const reset = await resetViewport(page, session, viewport)
             if (!reset.ok) throw new Error('画布基准视口无法复位')
-            // 仅用于归因：交替隔离整个扫掠区域之外的命中或绘制，不作为产品优化验收。
-            // 预留完整单向扫掠距离；节点内容和订阅保持原样。
+            // 仅用于归因：交替隔离屏外命中/绘制，或约束透明标题层的边界，不作为产品优化验收。
+            // 屏外模式预留完整单向扫掠距离；标题模式检查命中盒几何不变，节点内容和订阅保持原样。
             const offscreenProbe = offscreenDiagnostic ? await page.evaluate(({ enabled, mode }) => {
               document.querySelectorAll('[data-hit-test-probe]').forEach(element => element.removeAttribute('data-hit-test-probe'))
+              document.querySelectorAll('[data-header-bounds-probe]').forEach(element => element.removeAttribute('data-header-bounds-probe'))
               if (!document.getElementById('canvas-hit-test-probe-style')) {
                 const style = document.createElement('style')
                 style.id = 'canvas-hit-test-probe-style'
-                style.textContent = `[data-hit-test-probe], [data-hit-test-probe] * { ${mode === 'paint' ? 'visibility: hidden' : 'pointer-events: none'} !important; }`
+                style.textContent = mode === 'header-bounds'
+                  ? '[data-header-bounds-probe] { height: 64px; translate: 0 -32px; contain: paint; } [data-header-bounds-probe] > [data-node-header-drag-surface] { translate: 0 32px; }'
+                  : mode === 'opacity'
+                  ? '[data-hit-test-probe] { opacity: 0 !important; } [data-hit-test-probe], [data-hit-test-probe] * { pointer-events: none !important; }'
+                  : `[data-hit-test-probe], [data-hit-test-probe] * { ${mode === 'paint' || mode === 'edge-paint' ? 'visibility: hidden' : 'pointer-events: none'} !important; }`
                 document.head.append(style)
               }
               if (!enabled) return { enabled, excluded: 0 }
+              if (mode === 'header-bounds') {
+                const headers = [...document.querySelectorAll('[data-node-header-drag-surface]')]
+                const before = headers.map(header => header.getBoundingClientRect().toJSON())
+                headers.forEach(header => header.parentElement.setAttribute('data-header-bounds-probe', 'true'))
+                const changed = headers.some((header, index) => {
+                  const after = header.getBoundingClientRect()
+                  return ['x', 'y', 'width', 'height'].some(key => Math.abs(before[index][key] - after[key]) > 0.001)
+                })
+                if (changed) throw new Error('标题隔离诊断改变了命中盒几何')
+                return { enabled, excluded: 0, isolatedHeaders: headers.length }
+              }
               const bounds = document.querySelector('.react-flow').getBoundingClientRect()
-              const outside = [...document.querySelectorAll('.react-flow__node, [data-node-header-drag-surface]')].filter(element => {
+              const outside = [...document.querySelectorAll(mode === 'edge-paint' ? '.react-flow__edge' : '.react-flow__node, [data-node-header-drag-surface]')].filter(element => {
                 const box = element.getBoundingClientRect()
                 return box.right < bounds.left - 200 || box.left > bounds.right + 2400
                   || box.bottom < bounds.top - 200 || box.top > bounds.bottom + 200
@@ -276,6 +293,7 @@ function createCanvasScalePerformanceScenes(context) {
         } finally {
           if (offscreenDiagnostic) await page.evaluate(() => {
             document.querySelectorAll('[data-hit-test-probe]').forEach(element => element.removeAttribute('data-hit-test-probe'))
+            document.querySelectorAll('[data-header-bounds-probe]').forEach(element => element.removeAttribute('data-header-bounds-probe'))
             document.getElementById('canvas-hit-test-probe-style')?.remove()
           })
           await diagnostics.dispose(); await session.detach()
