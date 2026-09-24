@@ -399,7 +399,22 @@ function createCanvasScalePerformanceScenes(context) {
             await titleInput.press('Escape')
             await titleInput.waitFor({ state: 'hidden' })
             if (!await node.getByRole('button', { name: originalTitle, exact: true }).count()) throw new Error('取消标题编辑未恢复原名称')
-            run.headerInteraction = { before, after, titleEditCancelled: true }
+            const titleCases = [
+              { text: '这是需要保持尾部渐隐效果的长标题'.repeat(4), masked: true, capture: 'long' },
+              { text: '图', masked: false, capture: 'short' },
+              { text: originalTitle, masked: false, capture: null },
+            ]
+            for (const { text, masked, capture } of titleCases) {
+              await header.dblclick()
+              await titleInput.fill(text)
+              await titleInput.press('Enter')
+              await page.waitForFunction(({ masked, text }) => {
+                const title = document.querySelector('.react-flow__node[data-id="scale-0"] [data-node-header] [style*="mask"]')
+                return title?.textContent === text && (getComputedStyle(title).maskImage !== 'none') === masked
+              }, { masked, text })
+              if (capture) await inspection.capture(`nodes-${count}-title-${capture}`)
+            }
+            run.headerInteraction = { before, after, titleEditCancelled: true, titleFadeRoundtrip: true }
             await fs.writeFile(out, JSON.stringify(report, null, 2))
             await inspection.capture(`nodes-${count}-header`)
           }

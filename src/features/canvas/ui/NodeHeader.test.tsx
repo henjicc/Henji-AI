@@ -45,6 +45,7 @@ vi.mock('@xyflow/react', () => ({
 
 afterEach(() => {
   cleanup();
+  vi.unstubAllGlobals();
   useCanvasExecutionStateStore.getState().resetNodeExecutions();
   document.body.replaceChildren();
 });
@@ -72,6 +73,36 @@ function renderHeader(editable = false) {
 }
 
 describe('NodeHeader', () => {
+  it('改名、切换只读与进入编辑时重新判断标题遮罩并释放旧观察', () => {
+    const observe = vi.fn();
+    const unobserve = vi.fn();
+    const disconnect = vi.fn();
+    vi.stubGlobal('ResizeObserver', class {
+      observe = observe;
+      unobserve = unobserve;
+      disconnect = disconnect;
+    });
+    const change = vi.fn();
+    const view = render(<NodeHeader titleText="短标题" editable onTitleChange={change} />);
+    const button = view.getByRole('button', { name: '短标题' });
+    expect(observe).toHaveBeenLastCalledWith(button);
+    view.rerender(<NodeHeader titleText="改名后需要重新判断是否渐隐的较长标题" editable onTitleChange={change} />);
+    expect(unobserve).toHaveBeenCalledWith(button);
+    expect(observe.mock.calls.length).toBeGreaterThan(1);
+    fireEvent.doubleClick(button);
+    expect(view.getByRole('textbox')).toBeTruthy();
+    const observedDuringEditing = observe.mock.calls.length;
+    fireEvent.change(view.getByRole('textbox'), { target: { value: '正在输入' } });
+    expect(observe).toHaveBeenCalledTimes(observedDuringEditing);
+    fireEvent.keyDown(view.getByRole('textbox'), { key: 'Escape' });
+    expect(observe.mock.calls.length).toBeGreaterThan(observedDuringEditing);
+    view.rerender(<NodeHeader titleText="只读标题" />);
+    expect(observe).toHaveBeenLastCalledWith(view.getByText('只读标题'));
+    view.unmount();
+    expect(unobserve.mock.calls.length).toBe(observe.mock.calls.length);
+    expect(disconnect.mock.calls.length).toBe(observe.mock.calls.length);
+  });
+
   it('浮动标题按下时把事件交给真实节点，并阻止画布平移命中', () => {
     const { nodeElement, rendered } = renderHeader();
     const nodeMouseDown = vi.fn();
