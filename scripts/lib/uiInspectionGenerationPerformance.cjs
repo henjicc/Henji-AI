@@ -3,6 +3,7 @@ const path = require('node:path')
 const os = require('node:os')
 const { createHash } = require('node:crypto')
 const { execFileSync } = require('node:child_process')
+const { measureGenerationFiltering, measureGenerationPromptInput } = require('./uiInspectionGenerationInputPerformance.cjs')
 
 // 显式专项：隔离资料中走正式历史加载、媒体协议和任务卡，不请求供应商。
 function createGenerationPerformanceScenes(context) {
@@ -26,6 +27,8 @@ function createGenerationPerformanceScenes(context) {
         staleBuildDiagnostic: process.env.HENJI_SKIP_BUILD_FRESHNESS === '1',
         loadProfileDiagnostic: process.env.GENERATION_BENCH_LOAD_PROFILE === '1',
         scrollProfileDiagnostic: process.env.GENERATION_BENCH_SCROLL_PROFILE === '1',
+        checkFiltering: process.env.GENERATION_BENCH_FILTER === '1',
+        checkPromptInput: process.env.GENERATION_BENCH_PROMPT === '1',
         hardware: { cpu: os.cpus()[0].model, threads: os.cpus().length, memoryBytes: os.totalmem(),
           gpu: await app.evaluate(({ app }) => app.getGPUInfo('basic')) },
         imagePath, window: inspection.windowEvidence, runs: [] }
@@ -122,7 +125,9 @@ function createGenerationPerformanceScenes(context) {
               taskMs: (metric(after, 'TaskDuration') - metric(before, 'TaskDuration')) * 1000,
               heapBytes: metric(after, 'JSHeapUsedSize'), domNodes: metric(after, 'Nodes') })
           }
-          report.runs.push({ count, loadMs, samples,
+          const filtering = report.checkFiltering ? await measureGenerationFiltering(page, count, inspection) : undefined
+          const promptInput = report.checkPromptInput ? await measureGenerationPromptInput(page, count, inspection) : undefined
+          report.runs.push({ count, loadMs, samples, filtering, promptInput,
             processes: await app.evaluate(({ app }) => app.getAppMetrics()) })
           await fs.writeFile(out, JSON.stringify(report, null, 2))
           console.log('[generation-performance]', JSON.stringify(report.runs.at(-1)))

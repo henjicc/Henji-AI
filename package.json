@@ -44,7 +44,7 @@
     "test:suites": "node --test scripts/lib/testSuites.test.cjs",
     "verify:changed": "node scripts/run-changed-verification.cjs",
     "test:ui-inspection": "node --test scripts/lib/uiInspection.test.cjs scripts/lib/runtimeEvidence.test.cjs scripts/lib/realityTestPlan.test.cjs scripts/lib/canvasVisualDiff.test.cjs",
-    "test:validation-tools": "node --test scripts/lib/assistantProductionTestPlan.test.cjs scripts/lib/changedVerificationPlan.test.cjs scripts/lib/electronBundlePlan.test.cjs scripts/lib/realityTestPlan.test.cjs scripts/lib/sdkBuildFreshness.test.cjs scripts/lib/validationScripts.test.cjs scripts/lib/xyflowStoreSubscriptions.test.cjs scripts/lib/canvasBulkProbe.test.cjs",
+    "test:validation-tools": "node --test scripts/lib/assistantProductionTestPlan.test.cjs scripts/lib/changedVerificationPlan.test.cjs scripts/lib/electronBundlePlan.test.cjs scripts/lib/realityTestPlan.test.cjs scripts/lib/sdkBuildFreshness.test.cjs scripts/lib/validationScripts.test.cjs scripts/lib/xyflowStoreSubscriptions.test.cjs scripts/lib/canvasBulkProbe.test.cjs scripts/lib/generationInputProbe.test.cjs",
     "test:reality": "node scripts/run-reality-tests.cjs",
     "test:assistant-persistence": "node scripts/test-assistant-persistence.cjs",
     "test:assistant-model-compat": "vitest run packages/ai-sdk/tests/llm/sdk/model-step.test.ts packages/ai-sdk/tests/llm/sdk/provider-error.test.ts packages/ai-sdk/tests/llm/sdk/provider-adapter.test.ts packages/ai-sdk/tests/llm/sdk/retry-policy.test.ts electron/main/services/llm/sdk/scripted-model-step.test.ts electron/main/services/llm/sdk/trace.test.ts src/services/llm/LlmConfigService.test.ts",
