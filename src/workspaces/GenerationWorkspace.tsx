@@ -338,6 +338,7 @@ const GenerationWorkspace: React.FC = () => {
         >
           <div ref={contentRef}>
             <TaskList
+              scrollContainerRef={listContainerRef}
               tasks={filteredTasks}
               totalCount={tasks.length}
               matchedCount={matchedCount}

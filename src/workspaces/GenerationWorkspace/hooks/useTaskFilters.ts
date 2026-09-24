@@ -21,11 +21,11 @@ export interface UseTaskFiltersResult {
   hasActiveFilters: boolean
 }
 
-function toSubject(task: GenerationTask, locale: string): GenerationHistorySubject {
+function toSubject(task: GenerationTask, modelDisplayName: string): GenerationHistorySubject {
   return {
     prompt: task.prompt ?? null,
     modelId: task.model,
-    modelDisplayName: getModelDisplayName(task.model, locale),
+    modelDisplayName,
     providerId: task.provider ?? null,
     errorText: task.error ?? null,
     mediaType: task.type,
@@ -61,25 +61,28 @@ export function useTaskFilters(tasks: GenerationTask[], filters: TaskFilterState
   const { providerId, modelId, mediaType, timePreset, startDate, endDate } = filters
   const criteria = useMemo(() => toCriteria({ keyword, providerId, modelId, mediaType, timePreset, startDate, endDate }),
     [keyword, providerId, modelId, mediaType, timePreset, startDate, endDate])
+  const hasActiveFilters = keyword.length > 0 || providerId !== 'all' || modelId !== 'all'
+    || mediaType !== 'all' || timePreset !== 'all'
 
   const filteredTasks = useMemo(() => {
+    if (!hasActiveFilters) return tasks
     // 一次取当前时刻，供整批记录共用：逐条各取一次会让 7d 这类相对区间的边界在
     // 遍历过程中漂移，条数多时最早那几条与最后那几条的判定基准就不是同一个了。
     const now = Date.now()
     // 模型显示名称随语言变化；不能只缓存数据和条件而留下旧语言的搜索结果。
-    return tasks.filter((task) => matchesGenerationHistoryFilter(toSubject(task, currentLanguage), criteria, now))
+    const names = new Map<string, string>()
+    return tasks.filter((task) => {
+      // 只有关键词需要展示名称；同批记录的同一模型只解析一次语言与别名。
+      let name = ''
+      if (keyword) {
+        name = names.get(task.model) ?? getModelDisplayName(task.model, currentLanguage)
+        names.set(task.model, name)
+      }
+      return matchesGenerationHistoryFilter(toSubject(task, name), criteria, now)
+    })
     // 别名存在 localStorage；既有广播使 getModelDisplayName 的外部数据失效。
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tasks, criteria, currentLanguage, modelNamesRevision])
-
-  const hasCustomDateRange = filters.timePreset === 'custom' && (filters.startDate.length > 0 || filters.endDate.length > 0)
-  const hasActiveFilters =
-    keyword.length > 0 ||
-    filters.providerId !== 'all' ||
-    filters.modelId !== 'all' ||
-    filters.mediaType !== 'all' ||
-    filters.timePreset !== 'all' ||
-    hasCustomDateRange
+  }, [tasks, criteria, currentLanguage, modelNamesRevision, hasActiveFilters, keyword])
 
   return {
     filteredTasks,

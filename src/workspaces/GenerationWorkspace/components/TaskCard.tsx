@@ -33,6 +33,7 @@ import { FolderCheck, FolderPlus, MessageCircleQuestion, Play } from 'lucide-rea
 import { useAddToAssetLibrary } from '@/features/assets/hooks/useAddToAssetLibrary'
 import { checkAssetPaths } from '@/commands/assetLibrary'
 import { openAssistantForDiagnosis } from '@/features/assistant/diagnostics/openAssistantDiagnosis'
+import { TaskListRetentionContext } from '../hooks/useTaskListRetention'
 export interface TaskCardProps {
   task: GenerationTask
   onDownload: (filePath: string, fromButton?: boolean) => Promise<void>
@@ -90,6 +91,10 @@ const TaskCard = React.memo(function TaskCard({
   notify,
 }: TaskCardProps): JSX.Element {
   const { t, i18n } = useI18n()
+  const retention = React.useContext(TaskListRetentionContext)
+  const onAudioActivityChange = React.useCallback((active: boolean) => {
+    retention?.setActive(task.id, 'audio', active)
+  }, [retention, task.id])
   // 进度自订阅：只有本任务进度变化时才重渲染这一张卡，不牵动整个工作区
   const progressValue = useGenerationTaskProgressStore((state) => state.progress[task.id])
   const { addMedia, collecting } = useAddToAssetLibrary()
@@ -108,12 +113,15 @@ const TaskCard = React.memo(function TaskCard({
     : <FolderPlus className={className} />
   const collectResult = async (filePath: string | undefined, mediaType: 'image' | 'video' | 'audio'): Promise<void> => {
     if (!filePath) return
+    retention?.setActive(task.id, 'collect', true)
     try {
       const asset = await addMedia({ filePath, mediaType, source: 'generated' })
       setCollectedPaths((current) => new Set(current).add(filePath))
       notify(t(asset.wasExisting ? 'ui:assetLibrary.alreadyCollected' : 'ui:assetLibrary.collectSuccess'))
     } catch {
       notify(t('ui:assetLibrary.collectFailed'), 'error')
+    } finally {
+      retention?.setActive(task.id, 'collect', false)
     }
   }
   const {
@@ -381,6 +389,8 @@ const TaskCard = React.memo(function TaskCard({
         <AudioPlayer
           surface="plain"
           src={task.result.url}
+          initialPlaybackState={retention?.getAudio(task.id, task.result.url)}
+          onActivityChange={onAudioActivityChange}
           filePath={filePath}
           onContextMenu={(e) =>
             showMenu(e, [

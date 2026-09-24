@@ -25,6 +25,7 @@ function createGenerationPerformanceScenes(context) {
       const report = { collectedAt: new Date().toISOString(), checkoutCommit: execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim(), build,
         staleBuildDiagnostic: process.env.HENJI_SKIP_BUILD_FRESHNESS === '1',
         loadProfileDiagnostic: process.env.GENERATION_BENCH_LOAD_PROFILE === '1',
+        scrollProfileDiagnostic: process.env.GENERATION_BENCH_SCROLL_PROFILE === '1',
         hardware: { cpu: os.cpus()[0].model, threads: os.cpus().length, memoryBytes: os.totalmem(),
           gpu: await app.evaluate(({ app }) => app.getGPUInfo('basic')) },
         imagePath, window: inspection.windowEvidence, runs: [] }
@@ -72,6 +73,10 @@ function createGenerationPerformanceScenes(context) {
               scroller.scrollTop = scroller.scrollHeight * 0.45
             })
             await page.waitForTimeout(250)
+            if (report.scrollProfileDiagnostic && round === 0) {
+              await session.send('Profiler.enable')
+              await session.send('Profiler.start')
+            }
             const before = await session.send('Performance.getMetrics')
             const sample = await page.evaluate(async () => {
               const element = document.querySelector('.app-scroll-container')
@@ -98,7 +103,7 @@ function createGenerationPerformanceScenes(context) {
               await new Promise(resolve => setTimeout(resolve, 0))
               longTasks.push(...observer.takeRecords().map(entry => entry.duration))
               observer.disconnect()
-              if (element.scrollTop - startTop < 1000 || frames.length < 5) throw new Error('滚动采样无效')
+              if (element.scrollTop - startTop < 1000 || frames.length < 5) throw new Error(`滚动采样无效：${JSON.stringify({ startTop, endTop: element.scrollTop, height: element.scrollHeight, frames: frames.length, elapsedMs: endedAt - start, cards: document.querySelectorAll('[data-generation-task-id]').length })}`)
               frames.sort((a, b) => a - b)
               return { elapsedMs: endedAt - start, scrollDistance: element.scrollTop - startTop,
                 tailFrameGapMs, maxFrameGapMs: frames.at(-1),
@@ -107,6 +112,10 @@ function createGenerationPerformanceScenes(context) {
                 longTasks, mountedCards: document.querySelectorAll('[data-generation-task-id]').length }
             })
             const after = await session.send('Performance.getMetrics')
+            if (report.scrollProfileDiagnostic && round === 0) {
+              const { profile } = await session.send('Profiler.stop')
+              await fs.writeFile(`${out}.${count}.scroll.cpuprofile`, JSON.stringify(profile))
+            }
             const metric = (result, name) => result.metrics.find(item => item.name === name)?.value ?? null
             samples.push({ round, ...sample,
               scriptMs: (metric(after, 'ScriptDuration') - metric(before, 'ScriptDuration')) * 1000,

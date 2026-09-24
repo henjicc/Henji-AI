@@ -95,6 +95,26 @@ it('无关渲染不重复筛选；条件、数据及搜索字段变化仍正确�
   expect(result.current.filteredTasks).toEqual([])
 })
 
+it('未筛选时直接复用任务集合，搜索同一模型的万条任务只解析一次名称', () => {
+  const tasks = Array.from({ length: 10000 }, (_, i) => task(String(i)))
+  const { result, rerender } = renderHook(({ criteria }) => useTaskFilters(tasks, criteria), {
+    initialProps: { criteria: { ...filters } },
+  })
+  expect(result.current.filteredTasks).toBe(tasks)
+  expect(getModelDisplayName).not.toHaveBeenCalled()
+  rerender({ criteria: { ...filters, mediaType: 'image' } })
+  expect(result.current.filteredTasks).toHaveLength(10000)
+  expect(getModelDisplayName).not.toHaveBeenCalled()
+  vi.mocked(getModelDisplayName).mockReturnValue('同一模型')
+  rerender({ criteria: { ...filters, keyword: '同一模型' } })
+  expect(result.current.filteredTasks).toHaveLength(10000)
+  expect(getModelDisplayName).toHaveBeenCalledTimes(1)
+  vi.mocked(getModelDisplayName).mockReturnValue('新别名')
+  act(() => window.dispatchEvent(new Event('modelVisibilityChanged')))
+  expect(result.current.filteredTasks).toHaveLength(0)
+  expect(getModelDisplayName).toHaveBeenCalledTimes(2)
+})
+
 // 显式专项保留真实 Hook 路径；不把机器耗时阈值放进日常单测。
 if (process.env.GENERATION_UPDATE_BENCH === '1') {
   it('benchmark: 历史更新及无关重渲染', () => {
