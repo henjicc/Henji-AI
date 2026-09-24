@@ -44,6 +44,9 @@ export interface SeriesSortable {
   seriesRank?: number
 }
 
+// 排序会被大量画布节点重复调用；复用同一语言配置，避免每次比较重建排序器。
+const modelNameCollator = new Intl.Collator('en', { sensitivity: 'base' })
+
 /**
  * 同系列模型按版本号降序排列，系列之间按系列 key 字母序排列。
  * 未声明 seriesId 的模型各自用自身 id 当分组 key，等价于按名称字母序单独排列。
@@ -52,9 +55,9 @@ export function compareModelsBySeries(a: SeriesSortable, b: SeriesSortable): num
   const familyA = a.seriesId ?? a.id
   const familyB = b.seriesId ?? b.id
   if (familyA !== familyB) {
-    return familyA.localeCompare(familyB, 'en', { sensitivity: 'base' })
+    return modelNameCollator.compare(familyA, familyB)
   }
   const rankDiff = (b.seriesRank ?? 0) - (a.seriesRank ?? 0)
   if (rankDiff !== 0) return rankDiff
-  return a.name.localeCompare(b.name, 'en', { sensitivity: 'base' })
+  return modelNameCollator.compare(a.name, b.name)
 }

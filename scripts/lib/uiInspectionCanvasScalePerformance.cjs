@@ -28,6 +28,7 @@ function createCanvasScalePerformanceScenes(context) {
         staleBuildDiagnostic: process.env.HENJI_SKIP_BUILD_FRESHNESS === '1',
         debuggerDiagnostic: process.env.CANVAS_SCALE_DIAGNOSE === '1',
         cpuProfileDiagnostic: process.env.CANVAS_SCALE_CPU_PROFILE === '1',
+        openProfileDiagnostic: process.env.CANVAS_SCALE_OPEN_PROFILE === '1',
         traceDiagnostic: process.env.CANVAS_SCALE_TRACE === '1',
         offscreenDiagnostic,
         subscriptionDiagnostic: process.env.CANVAS_SCALE_SUBSCRIPTIONS === '1',
@@ -74,18 +75,30 @@ function createCanvasScalePerformanceScenes(context) {
           })
           pauseTimer = setTimeout(() => { void probe.send('Debugger.pause').catch(() => {}) }, 15000)
         }
+        const openProfiler = report.openProfileDiagnostic ? await page.context().newCDPSession(page) : null
+        if (openProfiler) { await openProfiler.send('Profiler.enable'); await openProfiler.send('Profiler.start') }
         const begin = performance.now()
-        console.log('[canvas-scale-performance] opening', count)
-        await page.locator(`[data-project-id="${projectId}"]`).click()
-        await page.waitForFunction(count => document.querySelectorAll('.react-flow__node').length === count, count, { timeout: 180000 }).catch(async error => {
-          const actual = await page.locator('.react-flow__node').count()
-          throw new Error(`节点规模不匹配：期望 ${count}，实际 ${actual}。${error.message}`)
-        })
-        console.log('[canvas-scale-performance] mounted', count)
-        clearTimeout(pauseTimer)
-        if (probe) { await probe.send('Debugger.disable'); await probe.detach() }
-        await page.waitForFunction(() => [...document.querySelectorAll('.react-flow__node img')].some(image => image.complete && image.naturalWidth > 0), undefined, { timeout: 30000 })
-        const openMs = performance.now() - begin
+        let openMs
+        try {
+          console.log('[canvas-scale-performance] opening', count)
+          await page.locator(`[data-project-id="${projectId}"]`).click()
+          await page.waitForFunction(count => document.querySelectorAll('.react-flow__node').length === count, count, { timeout: 180000 }).catch(async error => {
+            const actual = await page.locator('.react-flow__node').count()
+            throw new Error(`节点规模不匹配：期望 ${count}，实际 ${actual}。${error.message}`)
+          })
+          console.log('[canvas-scale-performance] mounted', count)
+          clearTimeout(pauseTimer)
+          if (probe) { await probe.send('Debugger.disable'); await probe.detach() }
+          await page.waitForFunction(() => [...document.querySelectorAll('.react-flow__node img')].some(image => image.complete && image.naturalWidth > 0), undefined, { timeout: 30000 })
+          openMs = performance.now() - begin
+        } finally {
+          if (openProfiler) {
+            try {
+              const { profile } = await openProfiler.send('Profiler.stop')
+              await fs.writeFile(`${out}.${count}.open.cpuprofile`, JSON.stringify(profile))
+            } finally { await openProfiler.detach() }
+          }
+        }
         const run = { count, edgeCount, openMs, samples: [] }
         report.runs.push(run)
         await fs.writeFile(out, JSON.stringify(report, null, 2))
