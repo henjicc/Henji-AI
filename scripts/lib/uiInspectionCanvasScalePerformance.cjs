@@ -83,6 +83,8 @@ function createCanvasScalePerformanceScenes(context) {
         // 每档重建渲染层状态，避免上一档已加载工程的会话缓存遮蔽数据库夹具。
         await page.reload({ waitUntil: 'domcontentloaded' })
         await context.setupCanvas(page)
+        // ResizeObserver 必须在节点创建前包装；挂载后才安装会把已有监听器漏记成零。
+        if (!report.openOnly) await installPageDiagnostics(page)
         let probe, pauseTimer
         if (process.env.CANVAS_SCALE_DIAGNOSE === '1') {
           probe = await page.context().newCDPSession(page)

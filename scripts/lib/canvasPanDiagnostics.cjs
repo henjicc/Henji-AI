@@ -20,6 +20,11 @@ const CDP_METRICS = [
   'JSEventListeners',
 ]
 
+// Chromium 在默认 timeTicks 域也返回这三个计数，无需另开采样器。
+// ThreadTime 只含当前 renderer 主线程的 CPU 时间，ProcessTime 含该 renderer 的全部线程。
+// 墙钟与 CPU 时间的差还包含正常空闲、IPC/GPU 等等待，不能直接归因给其他应用。
+const CPU_METRICS = ['Timestamp', 'ThreadTime', 'ProcessTime']
+
 function round(value, digits = 2) {
   if (!Number.isFinite(value)) return 0
   return Number(value.toFixed(digits))
@@ -27,12 +32,25 @@ function round(value, digits = 2) {
 
 function metricMap(response) {
   const metrics = new Map((response?.metrics || []).map((metric) => [metric.name, metric.value]))
-  return Object.fromEntries(CDP_METRICS.map((name) => [name, metrics.get(name) || 0]))
+  return Object.fromEntries([
+    ...CDP_METRICS.map((name) => [name, metrics.get(name) || 0]),
+    ...CPU_METRICS.map((name) => [name, Number.isFinite(metrics.get(name)) ? metrics.get(name) : null]),
+  ])
 }
 
 function diffMetrics(before, after) {
   const delta = (name) => (after[name] || 0) - (before[name] || 0)
+  const cpuDelta = (name) => Number.isFinite(before[name]) && Number.isFinite(after[name]) && after[name] >= before[name]
+    ? (after[name] - before[name]) * 1000 : null
+  const wallMs = cpuDelta('Timestamp')
+  const threadMs = cpuDelta('ThreadTime')
+  const processMs = cpuDelta('ProcessTime')
   return {
+    // 区间与下方 CDP 指标一致，含测量前后读取探针的成本；不冒充 RAF 取样区间。
+    wallDurationMs: wallMs === null ? null : round(wallMs),
+    rendererMainThreadCpuMs: threadMs === null ? null : round(threadMs),
+    rendererProcessCpuMs: processMs === null ? null : round(processMs),
+    rendererMainThreadCpuPercent: wallMs > 0 && threadMs !== null ? round(threadMs / wallMs * 100) : null,
     styleRecalcCount: round(delta('RecalcStyleCount'), 0),
     styleRecalcDurationMs: round(delta('RecalcStyleDuration') * 1000),
     layoutCount: round(delta('LayoutCount'), 0),
@@ -52,7 +70,7 @@ function diffMetrics(before, after) {
 async function installPageDiagnostics(page) {
   await page.evaluate(() => {
     const key = '__HENJI_PAN_DIAGNOSTICS__'
-    if (window[key]) return
+    if (window[key]) { window[key].observeCanvas(); return }
 
     const state = {
       resizeObserver: {
@@ -65,16 +83,26 @@ async function installPageDiagnostics(page) {
       },
       longTasks: [],
       viewportClassMutations: 0,
+      observedCanvas: null,
+      viewportObserver: null,
+      observeCanvas() {
+        const canvas = document.querySelector('[data-application-observation-region="canvas.viewport_observer"]')
+        if (canvas === this.observedCanvas) return
+        this.viewportObserver?.disconnect()
+        this.observedCanvas = canvas
+        this.viewportObserver = canvas ? new MutationObserver(records => { this.viewportClassMutations += records.length }) : null
+        this.viewportObserver?.observe(canvas, { attributes: true, attributeFilter: ['class'] })
+      },
       reset() {
+        // 探针先于节点挂载，画布容器可能尚不存在；每轮只核对一次当前容器。
+        this.observeCanvas()
         for (const metric of Object.keys(this.resizeObserver)) this.resizeObserver[metric] = 0
         this.longTasks.length = 0
         this.viewportClassMutations = 0
       },
     }
 
-    const canvas = document.querySelector('[data-application-observation-region="canvas.viewport_observer"]')
-    if (canvas) new MutationObserver(records => { state.viewportClassMutations += records.length })
-      .observe(canvas, { attributes: true, attributeFilter: ['class'] })
+    state.observeCanvas()
 
     const NativeResizeObserver = window.ResizeObserver
     if (NativeResizeObserver) {

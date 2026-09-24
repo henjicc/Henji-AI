@@ -2,11 +2,13 @@
 
 const assert = require('node:assert/strict')
 const test = require('node:test')
+const vm = require('node:vm')
 const {
   diffMetrics,
   diffTargetListeners,
   layerCounts,
   metricMap,
+  installPageDiagnostics,
 } = require('./canvasPanDiagnostics.cjs')
 
 test('metricMap 只提取画布诊断需要的指标并为缺失值补零', () => {
@@ -76,4 +78,72 @@ test('layerCounts 区分总层、绘制层和带 DOM 后端节点的层', () => 
     drawsContentCount: 2,
     backendNodeLayerCount: 1,
   })
+})
+
+test('CPU 计数区分墙钟、主线程与渲染进程，不按整机核心数稀释占用', () => {
+  const metrics = (timestamp, thread, process) => metricMap({ metrics: [
+    { name: 'Timestamp', value: timestamp },
+    { name: 'ThreadTime', value: thread },
+    { name: 'ProcessTime', value: process },
+  ] })
+  const result = diffMetrics(metrics(100, 5, 20), metrics(102, 6.5, 23))
+  assert.equal(result.wallDurationMs, 2000)
+  assert.equal(result.rendererMainThreadCpuMs, 1500)
+  assert.equal(result.rendererProcessCpuMs, 3000)
+  assert.equal(result.rendererMainThreadCpuPercent, 75)
+})
+
+test('CPU 计数缺失、非法或重置时标记不可用，不能伪装成空闲', () => {
+  const missing = metricMap({ metrics: [] })
+  const invalid = metricMap({ metrics: [{ name: 'ThreadTime', value: Number.NaN }] })
+  assert.equal(missing.ThreadTime, null)
+  assert.equal(invalid.ThreadTime, null)
+  for (const result of [
+    diffMetrics(missing, missing),
+    diffMetrics({ Timestamp: 2, ThreadTime: 5, ProcessTime: 8 }, { Timestamp: 1, ThreadTime: 1, ProcessTime: 2 }),
+  ]) {
+    assert.equal(result.wallDurationMs, null)
+    assert.equal(result.rendererMainThreadCpuMs, null)
+    assert.equal(result.rendererProcessCpuMs, null)
+    assert.equal(result.rendererMainThreadCpuPercent, null)
+  }
+  assert.equal(diffMetrics({ Timestamp: 1, ThreadTime: 0 }, { Timestamp: 1, ThreadTime: 0 }).rendererMainThreadCpuPercent, null)
+})
+
+test('节点挂载前安装尺寸探针，容器出现后补接监听且重复安装不叠加包装', async () => {
+  let canvas = null
+  const mutations = []
+  class NativeResizeObserver { constructor(callback) { this.callback = callback } }
+  class MutationObserver {
+    constructor(callback) { this.callback = callback; mutations.push(this) }
+    observe(target) { this.target = target }
+    disconnect() { this.target = null }
+  }
+  const window = { ResizeObserver: NativeResizeObserver }
+  const context = vm.createContext({ window, MutationObserver, document: {
+    querySelector: selector => selector.startsWith('[data-application') ? canvas : null,
+  } })
+  const page = { evaluate: fn => vm.runInContext(`(${fn.toString()})()`, context) }
+  await installPageDiagnostics(page)
+  const wrapped = window.ResizeObserver
+  let delivered = 0
+  const observer = new wrapped(entries => { delivered += entries.length })
+  observer.callback([{ target: { closest: () => ({}) } }], observer)
+  const state = window.__HENJI_PAN_DIAGNOSTICS__
+  assert.equal(delivered, 1)
+  assert.equal(state.resizeObserver.nodeEntries, 1)
+  assert.equal(mutations.length, 0)
+  canvas = {}
+  await installPageDiagnostics(page)
+  assert.equal(window.ResizeObserver, wrapped)
+  assert.equal(mutations.length, 1)
+  assert.equal(mutations[0].target, canvas)
+  mutations[0].callback([{}, {}])
+  assert.equal(state.viewportClassMutations, 2)
+  canvas = {}
+  state.reset()
+  assert.equal(mutations[0].target, null)
+  assert.equal(mutations[1].target, canvas)
+  assert.equal(state.resizeObserver.nodeEntries, 0)
+  assert.equal(state.viewportClassMutations, 0)
 })
