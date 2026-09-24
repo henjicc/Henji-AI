@@ -12,7 +12,7 @@ function createCanvasScalePerformanceScenes(context) {
   const counts = (process.env.CANVAS_SCALE_COUNTS || '100,500,1000').split(',').map(Number)
   if (counts.some(count => !Number.isInteger(count) || count < 50 || count > 5000)) throw new Error('CANVAS_SCALE_COUNTS 必须在 50 到 5000 之间')
   const offscreenDiagnostic = process.env.CANVAS_SCALE_OFFSCREEN_DIAGNOSE || null
-  const diagnosticModes = ['hit-test', 'paint', 'opacity', 'edge-paint', 'header-bounds']
+  const diagnosticModes = ['hit-test', 'paint', 'opacity', 'edge-paint', 'header-bounds', 'layout']
   if (offscreenDiagnostic && !diagnosticModes.includes(offscreenDiagnostic)) throw new Error(`CANVAS_SCALE_OFFSCREEN_DIAGNOSE 只支持 ${diagnosticModes.join('、')}`)
   return [{
     id: 'canvas-scale-performance', surface: '画布', name: '画布-混合节点规模性能', writesUserData: true,
@@ -171,7 +171,7 @@ function createCanvasScalePerformanceScenes(context) {
           for (let round = 0; round < (offscreenDiagnostic ? 10 : 5); round++) {
             const reset = await resetViewport(page, session, viewport)
             if (!reset.ok) throw new Error('画布基准视口无法复位')
-            // 仅用于归因：交替隔离屏外命中/绘制，或约束透明标题层的边界，不作为产品优化验收。
+            // 仅用于归因：交替隔离屏外命中/绘制/布局，或约束透明标题层的边界，不作为产品优化验收。
             // 屏外模式预留完整单向扫掠距离；标题模式检查命中盒几何不变，节点内容和订阅保持原样。
             const offscreenProbe = offscreenDiagnostic ? await page.evaluate(({ enabled, mode }) => {
               document.querySelectorAll('[data-hit-test-probe]').forEach(element => element.removeAttribute('data-hit-test-probe'))
@@ -181,6 +181,8 @@ function createCanvasScalePerformanceScenes(context) {
                 style.id = 'canvas-hit-test-probe-style'
                 style.textContent = mode === 'header-bounds'
                   ? '[data-header-bounds-probe] { height: 64px; translate: 0 -32px; contain: paint; } [data-header-bounds-probe] > [data-node-header-drag-surface] { translate: 0 32px; }'
+                  : mode === 'layout'
+                  ? '[data-hit-test-probe] { display: none !important; }'
                   : mode === 'opacity'
                   ? '[data-hit-test-probe] { opacity: 0 !important; } [data-hit-test-probe], [data-hit-test-probe] * { pointer-events: none !important; }'
                   : `[data-hit-test-probe], [data-hit-test-probe] * { ${mode === 'paint' || mode === 'edge-paint' ? 'visibility: hidden' : 'pointer-events: none'} !important; }`
@@ -239,13 +241,22 @@ function createCanvasScalePerformanceScenes(context) {
             }
             samples.push({ round, offscreenProbe, ...sample, diagnostics: await diagnostics.endRound(before) })
             if (offscreenProbe?.enabled) {
-              const visibleExcluded = await page.evaluate(() => {
+              const visibleExcluded = await page.evaluate(mode => {
                 const bounds = document.querySelector('.react-flow').getBoundingClientRect()
-                return [...document.querySelectorAll('[data-hit-test-probe]')].filter(element => {
-                  const box = element.getBoundingClientRect()
-                  return box.right > bounds.left && box.left < bounds.right && box.bottom > bounds.top && box.top < bounds.bottom
-                }).length
-              })
+                const sheet = document.getElementById('canvas-hit-test-probe-style')?.sheet
+                // display:none 的几何恒为零，必须在计时区间外同步恢复布局后验证。
+                // 同一 JS 任务内恢复诊断样式，避免 ResizeObserver 看到额外的中间状态。
+                if (mode === 'layout' && !sheet) throw new Error('屏外布局诊断样式丢失')
+                try {
+                  if (mode === 'layout') sheet.disabled = true
+                  return [...document.querySelectorAll('[data-hit-test-probe]')].filter(element => {
+                    const box = element.getBoundingClientRect()
+                    return box.right > bounds.left && box.left < bounds.right && box.bottom > bounds.top && box.top < bounds.bottom
+                  }).length
+                } finally {
+                  if (mode === 'layout') sheet.disabled = false
+                }
+              }, offscreenDiagnostic)
               offscreenProbe.visibleExcluded = visibleExcluded
               if (visibleExcluded) throw new Error(`屏外诊断误排除了 ${visibleExcluded} 个可见元素`)
             }
