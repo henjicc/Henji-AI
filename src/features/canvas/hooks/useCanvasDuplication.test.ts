@@ -9,7 +9,8 @@ const mocks = vi.hoisted(() => ({
   getState: vi.fn(), fork: vi.fn(), feedback: vi.fn(),
   project: { currentProjectId: 'project' as string | null },
 }))
-vi.mock('@/stores/canvasStore', () => ({ useCanvasStore: { getState: mocks.getState } }))
+vi.mock('@/stores/canvasStore', () => ({ useCanvasStore: { getState: mocks.getState },
+  canvasStoreAttachment: { batchViewUpdates: <T,>(work: () => T) => work() } }))
 vi.mock('@/stores/projectStore', () => ({ useProjectStore: { getState: () => mocks.project } }))
 vi.mock('../application/canvasMutationService', () => ({ commitCanvasNodeDuplication: mocks.fork }))
 vi.mock('../application/canvasOperationFeedback', () => ({ reportCanvasOperationFailure: mocks.feedback }))
@@ -24,14 +25,14 @@ vi.mock('../canvasUtils', () => ({
   hasRectCollision: () => false,
 }))
 
-type ForkInput = { data: Record<string, unknown>; createNode: (data: Record<string, unknown>) => string }
+type ForkInput = { sourceNodeId: string; data: Record<string, unknown>; createNode: (data: Record<string, unknown>) => string }
 const event = (altKey: boolean) => new MouseEvent('mousedown', { altKey })
 const source = (id: string, x: number): CanvasNode => ({
   id, type: 'uploadNode', position: { x, y: 40 }, selected: true, data: {},
 } as CanvasNode)
 
-function setup(multiple = false) {
-  let nodes = [source('a', 20), ...(multiple ? [source('b', 240)] : [])]
+function setup(multiple = false, withThird = false) {
+  let nodes = [source('a', 20), ...(multiple ? [source('b', 240)] : []), ...(withThird ? [source('c', 460)] : [])]
   const original = nodes.slice()
   const persist = vi.fn()
   mocks.getState.mockImplementation(() => ({ nodes, updateNodeData: vi.fn() }))
@@ -54,11 +55,44 @@ function setup(multiple = false) {
 beforeEach(() => {
   vi.clearAllMocks()
   mocks.project.currentProjectId = 'project'
-  mocks.fork.mockImplementation(async (input: ForkInput) => input.createNode(input.data))
+  mocks.fork.mockImplementation((input: ForkInput) => input.createNode(input.data))
 })
 afterEach(cleanup)
 
 describe('Alt 拖拽复制', () => {
+  it('普通节点在同一同步段创建，文档等待结束后按原顺序继续', async () => {
+    const view = setup(true, true)
+    let finish!: () => void
+    mocks.fork.mockImplementation((input: ForkInput) => input.sourceNodeId === 'b'
+      ? new Promise<string>(resolve => { finish = () => resolve(input.createNode(input.data)) })
+      : input.createNode(input.data))
+    let pending!: ReturnType<typeof view.result.current.duplicateNodes>
+    act(() => { pending = view.result.current.duplicateNodes(['a', 'b', 'c']) })
+    expect(view.nodes()).toHaveLength(4)
+    expect(view.nodes()[3].id).toBe('copy-3')
+    await act(async () => { finish(); await pending })
+    expect(view.nodes().slice(3).map(node => node.id)).toEqual(['copy-3', 'copy-4', 'copy-5'])
+    expect(view.persist).toHaveBeenCalledTimes(1)
+  })
+
+  it('文档等待期间切换工程拒绝接管，不继续创建后续节点', async () => {
+    const view = setup(true)
+    let finish!: () => void
+    mocks.fork.mockImplementation((input: ForkInput) => new Promise<string>((resolve, reject) => {
+      finish = () => { try { resolve(input.createNode(input.data)) } catch (error) { reject(error) } }
+    }))
+    let pending!: ReturnType<typeof view.result.current.duplicateNodes>
+    act(() => { pending = view.result.current.duplicateNodes(['a', 'b']) })
+    mocks.project.currentProjectId = 'other'
+    await act(async () => {
+      finish()
+      await expect(pending).rejects.toThrow('画布项目已切换')
+    })
+    expect(view.nodes()).toHaveLength(2)
+    expect(mocks.fork).toHaveBeenCalledTimes(1)
+    expect(view.persist).not.toHaveBeenCalled()
+  })
+
   it('按下并开始拖动就创建副本，位移只作用于选中的副本', async () => {
     const view = setup(true)
     await act(async () => { view.result.current.handleNodeDragStart(event(true), view.original[0]) })

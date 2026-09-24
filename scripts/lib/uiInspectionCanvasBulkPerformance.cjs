@@ -100,7 +100,8 @@ async function checkCanvasBulkPerformance(page, inspection, projectId) {
   if (fixture.selected.length < 6) throw new Error(`批量夹具只覆盖 ${fixture.selected.length} 个节点`)
   const samples = []
   const record = async (name, expected, action) => {
-    const sample = await measureBulkAction(page, name, expected, action)
+    const measure = () => measureBulkAction(page, name, expected, action)
+    const sample = inspection.profileAction ? await inspection.profileAction(name, measure) : await measure()
     samples.push(sample)
     return sample
   }

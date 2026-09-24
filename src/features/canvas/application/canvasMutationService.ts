@@ -10,6 +10,7 @@ import {
   isTextAnnotationNode,
   type CanvasNode,
   type CanvasNodeData,
+  type LayerStackResultNodeData,
   type StoryboardFrameItem,
 } from '../domain/canvasNodes'
 import { isEditableLayerStackResultNode } from '../domain/canvasNodeGuards'
@@ -168,16 +169,29 @@ export async function applyStoryboardFramePatches(
   await confirmCanvasPersistence(projectId, options)
 }
 
-export async function commitCanvasNodeDuplication<T>(input: {
+interface CanvasNodeDuplicationInput<T> {
   projectId: string
   sourceNodeId: string
   data: Record<string, unknown>
   createNode: (data: Record<string, unknown>) => T | Promise<T>
-}): Promise<T> {
-  if (!findCanvasProjectInstance(input.projectId)) await getCanvasProjectInstance(input.projectId)
-  const source = requireNode(input.projectId, input.sourceNodeId)
-  if (!isEditableLayerStackResultNode(source)) return input.createNode(input.data)
+}
 
+/** 已载入的普通节点同步提交；只有加载工程、复制文档或调用方自身需要时才异步等待。 */
+export function commitCanvasNodeDuplication<T>(input: CanvasNodeDuplicationInput<T>): T | Promise<T> {
+  const commit = () => {
+    const source = requireNode(input.projectId, input.sourceNodeId)
+    if (!isEditableLayerStackResultNode(source)) return input.createNode(input.data)
+    return commitCanvasDocumentNodeDuplication(input, source)
+  }
+  if (!findCanvasProjectInstance(input.projectId)) {
+    return getCanvasProjectInstance(input.projectId).then(commit)
+  }
+  return commit()
+}
+
+async function commitCanvasDocumentNodeDuplication<T>(
+  input: CanvasNodeDuplicationInput<T>, source: { id: string; data: LayerStackResultNodeData },
+): Promise<T> {
   // 延迟加载组合根，避免“导出画布事务 -> 批处理服务 -> 节点复制 -> 文档组合根”
   // 在模块初始化期形成环；UI、批处理和助手仍委托同一个正式服务实例。
   const documentAdapter = await import('./multiLayerDocumentNodeGenerationAdapter')

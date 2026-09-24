@@ -182,7 +182,6 @@ export function createCanvasConnectionActions(
   onConnect: (connection) => {
     const sourceHandle = normalizeHandleId(connection.sourceHandle) ?? 'source';
     const targetHandle = normalizeHandleId(connection.targetHandle) ?? 'target';
-    const bridgePosition = get().findNodePosition(connection.source, 360, 220)
     set((state) => {
       const sourceNode = state.nodes.find((node) => node.id === connection.source)
       const targetNode = state.nodes.find((node) => node.id === connection.target)
@@ -224,6 +223,7 @@ export function createCanvasConnectionActions(
         let nextEdges = state.edges
         let bridgeNodeId = existingBridgeEdge?.target
         if (!bridgeNodeId) {
+          const bridgePosition = get().findNodePosition(connection.source, 360, 220)
           const bridgeNode = canvasNodeFactory.createNode(
             CANVAS_NODE_TYPES.textAnnotation,
             bridgePosition,

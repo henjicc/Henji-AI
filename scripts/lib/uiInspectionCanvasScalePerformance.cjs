@@ -17,6 +17,11 @@ function createCanvasScalePerformanceScenes(context) {
   if (process.env.CANVAS_SCALE_BULK_BENCH === '1' && process.env.CANVAS_SCALE_OPEN_ONLY !== '1') {
     throw new Error('批量操作基准需同时设置 CANVAS_SCALE_OPEN_ONLY=1，避免与平移诊断改变同一夹具')
   }
+  const profileAction = process.env.CANVAS_SCALE_PROFILE_ACTION || null
+  if (profileAction && (!['rectangle-select', 'delete', 'undo-delete', 'redo-delete', 'restore-delete', 'paste'].includes(profileAction)
+    || process.env.CANVAS_SCALE_BULK_BENCH !== '1' || process.env.CANVAS_SCALE_CPU_PROFILE === '1')) {
+    throw new Error('CANVAS_SCALE_PROFILE_ACTION 需指定合法批量操作，启用 BULK_BENCH 且关闭全程 CPU_PROFILE')
+  }
   const offscreenDiagnostic = process.env.CANVAS_SCALE_OFFSCREEN_DIAGNOSE || null
   const diagnosticModes = ['hit-test', 'paint', 'opacity', 'edge-paint', 'header-bounds', 'layout', 'contents', 'node-layout']
   if (offscreenDiagnostic && !diagnosticModes.includes(offscreenDiagnostic)) throw new Error(`CANVAS_SCALE_OFFSCREEN_DIAGNOSE 只支持 ${diagnosticModes.join('、')}`)
@@ -34,6 +39,7 @@ function createCanvasScalePerformanceScenes(context) {
         staleBuildDiagnostic: process.env.HENJI_SKIP_BUILD_FRESHNESS === '1',
         debuggerDiagnostic: process.env.CANVAS_SCALE_DIAGNOSE === '1',
         cpuProfileDiagnostic: process.env.CANVAS_SCALE_CPU_PROFILE === '1',
+        profileAction,
         openProfileDiagnostic: process.env.CANVAS_SCALE_OPEN_PROFILE === '1',
         traceDiagnostic: process.env.CANVAS_SCALE_TRACE === '1',
         offscreenDiagnostic,
@@ -170,6 +176,19 @@ function createCanvasScalePerformanceScenes(context) {
             if (profiler) { await profiler.send('Profiler.enable'); await profiler.send('Profiler.start') }
             try { run.bulkPerformance = await checkCanvasBulkPerformance(page, {
               capture: suffix => inspection.capture(`${suffix}-r${report.runs.length}`),
+              profileAction: profileAction ? async (name, measure) => {
+                if (name !== profileAction) return measure()
+                const session = await page.context().newCDPSession(page)
+                try {
+                  await session.send('Profiler.enable')
+                  await session.send('Profiler.start')
+                  try { return await measure() }
+                  finally {
+                    const { profile } = await session.send('Profiler.stop')
+                    await fs.writeFile(`${out}.${count}.${report.runs.length}.${name}.cpuprofile`, JSON.stringify(profile))
+                  }
+                } finally { await session.detach() }
+              } : null,
             }, projectId) }
             finally {
               if (profiler) {

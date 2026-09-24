@@ -1,6 +1,6 @@
 import { useCallback, useRef } from 'react'
 import type { Connection, NodeChange, NodePositionChange } from '@xyflow/react'
-import { useCanvasStore } from '@/stores/canvasStore'
+import { canvasStoreAttachment, useCanvasStore } from '@/stores/canvasStore'
 import { useProjectStore } from '@/stores/projectStore'
 import {
   CANVAS_NODE_TYPES,
@@ -120,30 +120,7 @@ export function useCanvasDuplication(params: UseCanvasDuplicationParams) {
 
       const idMap = new Map<string, string>()
       const sizeMap = new Map<string, { width: number; height: number }>()
-      for (const sourceNode of sourceNodes) {
-        const data = cloneNodeData(sourceNode.data)
-        resetDuplicatedCanvasExecutionData(sourceNode.type, data as DynamicValueMap)
-
-        const projectId = useProjectStore.getState().currentProjectId
-        if (!projectId) throw new Error('当前没有可复制节点的项目')
-        const nextNodeId = await commitCanvasNodeDuplication({
-          projectId,
-          sourceNodeId: sourceNode.id,
-          data: { ...(data as DynamicValueMap) },
-          createNode: (forkedData) => {
-            if (useProjectStore.getState().currentProjectId !== projectId) {
-              throw new Error('画布项目已切换，已取消节点复制')
-            }
-            return addNode(
-            sourceNode.type as CanvasNodeType,
-            {
-              x: sourceNode.position.x + chosenOffset.x + offsetStep * 8,
-              y: sourceNode.position.y + chosenOffset.y + offsetStep * 6,
-            },
-            forkedData,
-            )
-          },
-        })
+      const recordCopy = (sourceNode: CanvasNode, data: DynamicValueMap, nextNodeId: string) => {
         idMap.set(sourceNode.id, nextNodeId)
         sizeMap.set(nextNodeId, getNodeSize(sourceNode))
         const promptPatch = rebaseCanvasLocalPromptData(
@@ -164,6 +141,40 @@ export function useCanvasDuplication(params: UseCanvasDuplicationParams) {
         }
       }
 
+      // 每段同步创建只通知一次界面；遇到文档 I/O 先发布已完成状态，
+      // 等文档接管成功再顺序继续。领域动作、历史和补偿仍走原有唯一入口。
+      const copyFrom = (startIndex: number): void | Promise<void> => canvasStoreAttachment.batchViewUpdates(() => {
+        for (let index = startIndex; index < sourceNodes.length; index++) {
+          const sourceNode = sourceNodes[index]
+          const data = cloneNodeData(sourceNode.data) as DynamicValueMap
+          resetDuplicatedCanvasExecutionData(sourceNode.type, data)
+          const projectId = useProjectStore.getState().currentProjectId
+          if (!projectId) throw new Error('当前没有可复制节点的项目')
+          const created = commitCanvasNodeDuplication({
+            projectId,
+            sourceNodeId: sourceNode.id,
+            data: { ...data },
+            createNode: (forkedData) => {
+              if (useProjectStore.getState().currentProjectId !== projectId) {
+                throw new Error('画布项目已切换，已取消节点复制')
+              }
+              return addNode(sourceNode.type as CanvasNodeType, {
+                x: sourceNode.position.x + chosenOffset.x + offsetStep * 8,
+                y: sourceNode.position.y + chosenOffset.y + offsetStep * 6,
+              }, forkedData)
+            },
+          })
+          if (typeof created !== 'string') {
+            return created.then((nextNodeId) => canvasStoreAttachment.batchViewUpdates(() => {
+              recordCopy(sourceNode, data, nextNodeId)
+              return copyFrom(index + 1)
+            }))
+          }
+          recordCopy(sourceNode, data, created)
+        }
+      })
+      await copyFrom(0)
+
       const sizeSyncChanges = Array.from(sizeMap.entries()).map(([nodeId, size]) => ({
         id: nodeId,
         type: 'dimensions' as const,
@@ -175,17 +186,19 @@ export function useCanvasDuplication(params: UseCanvasDuplicationParams) {
         applyNodesChange(sizeSyncChanges)
       }
 
-      for (const edge of internalEdges) {
-        const nextSource = idMap.get(edge.source)
-        const nextTarget = idMap.get(edge.target)
-        if (!nextSource || !nextTarget) continue
-        connectNodes({
-          source: nextSource,
-          target: nextTarget,
-          sourceHandle: edge.sourceHandle ?? 'source',
-          targetHandle: edge.targetHandle ?? 'target',
-        })
-      }
+      canvasStoreAttachment.batchViewUpdates(() => {
+        for (const edge of internalEdges) {
+          const nextSource = idMap.get(edge.source)
+          const nextTarget = idMap.get(edge.target)
+          if (!nextSource || !nextTarget) continue
+          connectNodes({
+            source: nextSource,
+            target: nextTarget,
+            sourceHandle: edge.sourceHandle ?? 'source',
+            targetHandle: edge.targetHandle ?? 'target',
+          })
+        }
+      })
 
       const copiedAssetGroups = sourceNodes.filter(isAssetGroupNode)
       if (copiedAssetGroups.length > 0) {
