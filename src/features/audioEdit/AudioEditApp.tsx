@@ -5,7 +5,6 @@ import {
   Check,
   Download,
   FileAudio,
-  FolderOpen,
   Redo2,
   Sparkles,
   Undo2,
@@ -17,9 +16,6 @@ import {
   UI_TEXT_META_CLASS,
   UiButton,
   UiIconButton,
-  UiOptionButton,
-  UiPageHeader,
-  UiRegion,
   UiSwitch,
   UiTextArea,
   UiInput,
@@ -35,6 +31,7 @@ import { basename, openDialog, readTextFile, saveDialog } from '@/platform/deskt
 import { useAudioEditPreview } from './preview/useAudioEditPreview'
 import { calculatePreviewGain } from './preview/previewGain'
 import { AudioEditTimeline } from './AudioEditTimeline'
+import { AudioEditHome } from './AudioEditHome'
 import { useAudioEditPlaybackStore } from './store/audioEditPlaybackStore'
 import { useAudioEditStore } from './store/audioEditStore'
 
@@ -159,8 +156,8 @@ export default function AudioEditApp({ onBack }: AudioEditAppProps): JSX.Element
   const [asrModels, setAsrModels] = useState<AudioEditAsrModel[]>([])
   const [processors, setProcessors] = useState<AudioEditProcessorDescriptor[]>([])
   const [busy, setBusy] = useState(false)
-  const [query, setQuery] = useState('')
-  const [page, setPage] = useState(0)
+  const [homeLoading, setHomeLoading] = useState(true)
+  const [homeLoadFailed, setHomeLoadFailed] = useState(false)
   const [search, setSearch] = useState('')
   const [tasks, setTasks] = useState<AudioEditTask[]>([])
   const [waveformPeaks, setWaveformPeaks] = useState<number[]>([])
@@ -182,8 +179,15 @@ export default function AudioEditApp({ onBack }: AudioEditAppProps): JSX.Element
   }, [notifyError])
   const refreshHome = useCallback(async () => {
     const api = getPlatform().audioEdit
-    const [items, models, plugins] = await Promise.all([api.listProjects(), api.listAsrModels(), api.listProcessors()])
-    setProjects(items); setAsrModels(models); setProcessors(plugins)
+    setHomeLoading(true); setHomeLoadFailed(false)
+    await Promise.all([
+      api.listProjects().then(setProjects).catch((error: unknown) => {
+        setHomeLoadFailed(true)
+        throw error
+      }).finally(() => setHomeLoading(false)),
+      api.listAsrModels().then(setAsrModels),
+      api.listProcessors().then(setProcessors),
+    ])
   }, [])
   useEffect(() => { void refreshHome().catch(notifyError) }, [refreshHome, notifyError])
   const projectId = project?.id
@@ -231,13 +235,7 @@ export default function AudioEditApp({ onBack }: AudioEditAppProps): JSX.Element
     showNotification(`已导出${format === 'xml' ? ' XML' : ' WAV'}，交付时长 ${formatTime(result.durationFrames, project.source.sampleRate)}`)
   })
   if (!project) {
-    const filtered = projects.filter((item) => item.name.toLocaleLowerCase().includes(query.toLocaleLowerCase()))
-    return <div className="h-full overflow-y-auto bg-app p-6"><UiRegion maxWidthClassName="max-w-6xl" className="mx-auto w-full">
-      <UiPageHeader title="口播剪辑" description="引用原素材，用文字和波形剪辑，再交给专业剪辑软件" onBack={onBack} backLabel="返回工具箱" />
-      <div className="mt-5 flex gap-3"><UiButton variant="primary" disabled={disabled} onClick={() => void importMedia()}><FolderOpen size={16} className="mr-2" />导入音频或视频</UiButton><UiInput aria-label="搜索工程" placeholder="搜索工程" value={query} onChange={(event) => { setQuery(event.target.value); setPage(0) }} /></div>
-      <div className="mt-5 grid grid-cols-1 gap-3 md:grid-cols-2">{filtered.slice(page * 12, page * 12 + 12).map((item) => <UiOptionButton key={item.id} variant="card" className="min-h-28 flex-col items-start gap-2 p-5" disabled={disabled} onClick={() => void run(async () => setProject((await loadAudioEditProject(item.id)).document))}><span className={UI_TEXT_LABEL_CLASS}>{item.name}</span><span className={UI_TEXT_META_CLASS}>{formatTime(item.durationFrames, item.sampleRate)} · 继续编辑</span></UiOptionButton>)}</div>
-      <div className="mt-4 flex items-center gap-3"><UiButton variant="ghost" disabled={page === 0} onClick={() => setPage(page - 1)}>上一页</UiButton><span className={UI_TEXT_META_CLASS}>{page + 1} / {Math.max(1, Math.ceil(filtered.length / 12))}</span><UiButton variant="ghost" disabled={(page + 1) * 12 >= filtered.length} onClick={() => setPage(page + 1)}>下一页</UiButton></div>
-    </UiRegion></div>
+    return <AudioEditHome projects={projects} loading={homeLoading} loadFailed={homeLoadFailed} disabled={disabled} onBack={onBack} onImport={() => void importMedia()} onRetry={() => void run(refreshHome)} onOpen={(id) => void run(async () => setProject((await loadAudioEditProject(id)).document))} />
   }
   const settings = project.batchSettings ?? DEFAULT_AUDIO_EDIT_SETTINGS
   const update = (patch: Partial<AudioEditProjectDocument>) => {
