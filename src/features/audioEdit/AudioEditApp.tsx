@@ -2,13 +2,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Virtuoso, type VirtuosoHandle } from 'react-virtuoso'
 import {
   ArrowLeft,
-  Check,
   Download,
   FileAudio,
   Redo2,
   Sparkles,
+  Search,
   Undo2,
-  X,
 } from 'lucide-react'
 
 import {
@@ -34,13 +33,15 @@ import { calculatePreviewGain } from './preview/previewGain'
 import { AudioEditTimeline } from './AudioEditTimeline'
 import { AudioEditHome } from './AudioEditHome'
 import { AudioEditViewSettings } from './AudioEditViewSettings'
+import { AudioEditSuggestions } from './AudioEditSuggestions'
+import { AudioEditFindReplace, AudioEditTextEditor, AudioEditTitle } from './AudioEditTextTools'
 import { useAudioEditSilencePreview } from './preview/useAudioEditSilencePreview'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { UI_SCALE_MODES } from '@/core/theme/uiScale'
 import { useAudioEditPlaybackStore } from './store/audioEditPlaybackStore'
 import { useAudioEditStore } from './store/audioEditStore'
 
-import { DEFAULT_AUDIO_EDIT_SETTINGS, DEFAULT_AUDIO_EDIT_VIEW_SETTINGS, editAudioEditRange } from '@/core/audioEdit/edits'
+import { applyAudioEditSuggestion, DEFAULT_AUDIO_EDIT_SETTINGS, DEFAULT_AUDIO_EDIT_VIEW_SETTINGS, editAudioEditRange, setAudioEditBlocks } from '@/core/audioEdit/edits'
 import { editAudioEditProject, flushAudioEditProject, loadAudioEditProject } from './application/audioEditProjectInstances'
 import { compressAudioEditSilence, cleanProjectAudioEditFillers, transcribeAudioEdit, exportAudioEdit, relinkAudioEdit, deleteAudioEdit, prepareAudioEditProcessing, quickProcessAudioEdit } from './application/audioEditApplicationService'
 
@@ -55,13 +56,18 @@ function formatTime(frames: number, sampleRate: number): string {
 function Transcript({
   project,
   onSeek,
+  onEdit,
+  onDelete,
+  disabled,
 }: {
   project: AudioEditProjectDocument
   onSeek: (frame: number) => void
+  onEdit: (id: string) => void
+  onDelete: (id: string) => void
+  disabled: boolean
 }) {
   const activeBlockId = useAudioEditPlaybackStore((state) => state.activeBlockId)
   const mode = useAudioEditPlaybackStore((state) => state.mode)
-  const toggleBlock = useAudioEditStore((state) => state.toggleBlock)
   const selected = useAudioEditStore((state) => state.selectedBlockIds)
   const setSelected = useAudioEditStore((state) => state.setSelectedBlockIds)
   const listRef = useRef<VirtuosoHandle | null>(null)
@@ -128,8 +134,9 @@ function Transcript({
                             ? '!bg-layer text-text-dark ring-1 ring-accent'
                             : '!border-transparent !bg-transparent text-text-dark hover:!bg-layer'
                     }`}
-                    disabled={useAudioEditStore.getState().busy}
-                    onDoubleClick={() => toggleBlock(block.id)}
+                    disabled={disabled}
+                    onDoubleClick={() => onEdit(block.id)}
+                    onContextMenu={(event) => { event.preventDefault(); setSelected([block.id]); onDelete(block.id) }}
                     onClick={(event) => {
                       if (event.shiftKey) {
                         const anchor = transcript.findIndex((item) => item.id === selected[0])
@@ -140,7 +147,7 @@ function Transcript({
                       setSelected([block.id])
                       if (block.included || mode === 'source') onSeek(block.startFrame)
                     }}
-                    title="单击定位，双击删除或恢复"
+                    title="单击选中，双击编辑，右键删除声音"
                   >
                     {block.locked ? '🔒 ' : ''}{block.text}
                   </UiButton>
@@ -166,7 +173,9 @@ export default function AudioEditApp({ onBack }: AudioEditAppProps): JSX.Element
   const [busy, setBusy] = useState(false)
   const [homeLoading, setHomeLoading] = useState(true)
   const [homeLoadFailed, setHomeLoadFailed] = useState(false)
-  const [search, setSearch] = useState('')
+  const [findOpen, setFindOpen] = useState(false)
+  const [editingBlockId, setEditingBlockId] = useState<string | null>(null)
+  const [navigationTarget, setNavigationTarget] = useState<{ frame: number } | null>(null)
   const [tasks, setTasks] = useState<AudioEditTask[]>([])
   const [waveformPeaks, setWaveformPeaks] = useState<number[]>([])
   const [format, setFormat] = useState<'xml' | 'wav'>('xml')
@@ -184,6 +193,7 @@ export default function AudioEditApp({ onBack }: AudioEditAppProps): JSX.Element
   const silencePreview = useAudioEditSilencePreview(project, range, Boolean(project) && !disabled && !sourceError)
   const normalizationGain = useMemo(() => calculatePreviewGain(waveformPeaks), [waveformPeaks])
   const { togglePlayback, seekSourceFrame } = useAudioEditPreview(project, normalizationGain)
+  const navigateToFrame = (frame: number) => { setNavigationTarget({ frame }); seekSourceFrame(frame) }
   const notifyError = useCallback((error: unknown) => showNotification(error instanceof Error ? error.message : '操作失败，请重试', 'error'), [showNotification])
   const run = useCallback(async (operation: () => Promise<unknown>) => {
     setBusy(true)
@@ -203,13 +213,13 @@ export default function AudioEditApp({ onBack }: AudioEditAppProps): JSX.Element
   }, [])
   useEffect(() => { void refreshHome().catch(notifyError) }, [refreshHome, notifyError])
   const projectId = project?.id
-  useEffect(() => { setWaveSelection(null); setSelectionOnly(false) }, [projectId])
+  useEffect(() => { setWaveSelection(null); setSelectionOnly(false); setEditingBlockId(null); setFindOpen(false); setNavigationTarget(null) }, [projectId])
   useEffect(() => {
     const element = editorRoot.current
     if (!element) return
     let lastZoom = 0
     const wheel = (event: WheelEvent) => {
-      if (!event.ctrlKey || (event.target instanceof Element && event.target.closest('[aria-label="口播波形定位"]'))) return
+      if (!event.ctrlKey || (event.target instanceof Element && event.target.closest('[data-audio-timeline]'))) return
       event.preventDefault()
       if (Date.now() - lastZoom < 150) return
       lastZoom = Date.now()
@@ -273,18 +283,33 @@ export default function AudioEditApp({ onBack }: AudioEditAppProps): JSX.Element
   }
   const configuredAsr = asrModels.some((model) => model.configured && model.timestamps)
   const plugins = processors.filter((item) => item.available && item.semanticRole)
-  const selectedBlock = selectedBlocks.length === 1 ? selectedBlocks[0] : null
+  const editingBlock = project.transcript.find((block) => block.id === editingBlockId)
+  const deleteBlock = (id: string) => {
+    try { editAudioEditProject(project.id, (current) => setAudioEditBlocks(current, [id], false)) } catch (error) { notifyError(error) }
+  }
+  const resolveSuggestions = (ids: string[], apply: boolean) => {
+    try {
+      const wanted = new Set(ids)
+      const next = editAudioEditProject(project.id, (current) => apply
+        ? ids.reduce((draft, id) => applyAudioEditSuggestion(draft, id), current)
+        : { ...current, suggestions: current.suggestions.map((item) => wanted.has(item.id) && item.status === 'pending' ? { ...item, status: 'dismissed' as const } : item) })
+      const count = next.suggestions.filter((item) => wanted.has(item.id) && item.status === (apply ? 'applied' : 'dismissed')).length
+      showNotification(count ? `${apply ? '已应用' : '已忽略'} ${count} 处，可整批撤销` : '没有可应用的修改，请检查锁定或文字时间戳')
+    } catch (error) { notifyError(error) }
+  }
   const editSelection = (mode: 'delete' | 'mute' | 'restore') => {
     if (!waveSelection || disabled) return
     try { editAudioEditProject(project.id, (current) => editAudioEditRange(current, waveSelection, mode)) } catch (error) { notifyError(error) }
   }
   return <div ref={editorRoot} className="flex h-full min-h-0 flex-col bg-app" onKeyDown={(event) => {
+    if ((event.ctrlKey || event.metaKey) && ['f', 'h'].includes(event.key.toLowerCase())) { event.preventDefault(); setFindOpen(true); return }
     if (event.target instanceof HTMLElement && (event.target.closest('input,textarea,[contenteditable="true"]'))) return
     if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'z') { event.preventDefault(); if (event.shiftKey) state.redo(); else state.undo() }
   }}>
     <div className="flex min-h-14 shrink-0 items-center gap-2 border-b border-border-dark px-3 py-2">
       <UiIconButton appearance="hover-only" showBorder={false} className="h-8 w-8" onClick={() => void leave()} title="返回工程列表"><ArrowLeft size={16} /></UiIconButton>
-      <UiInput aria-label="工程名" className="min-w-0 flex-1" value={project.name} disabled={disabled} onChange={(event) => update({ name: event.target.value })} />
+      <AudioEditTitle key={project.id} name={project.name} disabled={disabled} onChange={(name) => update({ name })} />
+      <UiIconButton appearance="hover-only" showBorder={false} title="查找与替换 · Ctrl+F" onClick={() => setFindOpen(true)}><Search size={16} /></UiIconButton>
       <UiIconButton appearance="hover-only" showBorder={false} disabled={disabled || !state.past.length} onClick={state.undo} title="撤销"><Undo2 size={16} /></UiIconButton>
       <UiIconButton appearance="hover-only" showBorder={false} disabled={disabled || !state.future.length} onClick={state.redo} title="重做"><Redo2 size={16} /></UiIconButton>
       <UiButton variant="plain" size="sm" disabled={disabled || !project.transcript.length} onClick={assistant}><Sparkles size={15} className="mr-1" />处理重复口播</UiButton>
@@ -295,8 +320,7 @@ export default function AudioEditApp({ onBack }: AudioEditAppProps): JSX.Element
     {tasks.some((task) => task.kind === 'transcription' && ['failed', 'cancelled'].includes(task.state)) && !project.transcript.length && <div className="flex items-center gap-3 px-4 py-2 text-sm text-text-muted"><span>上次转写未完成，优先查询原任务。</span><UiButton size="sm" variant="plain" disabled={disabled} onClick={() => void run(() => transcribeAudioEdit({ projectId: project.id }))}>恢复转写</UiButton></div>}
     <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_17rem]">
       <main className="flex min-h-0 flex-col border-r border-border-dark">
-        <div className="flex gap-2 px-6 pt-3"><UiInput aria-label="搜索转写" placeholder="查找转写内容" value={search} onChange={(event) => setSearch(event.target.value)} /><UiButton className="shrink-0 whitespace-nowrap" variant="plain" size="sm" onClick={() => { const matches = project.transcript.filter((block) => search && block.text.includes(search)); state.setSelectedBlockIds(matches.map((block) => block.id)); if (matches[0]) seekSourceFrame(matches[0].startFrame) }}>查找</UiButton></div>
-        <div className="min-h-0 flex-1"><Transcript project={project} onSeek={seekSourceFrame} /></div>
+        <div className="min-h-0 flex-1"><Transcript project={project} onSeek={navigateToFrame} onEdit={setEditingBlockId} onDelete={deleteBlock} disabled={disabled} /></div>
       </main>
       <aside className="min-h-0 overflow-y-auto p-4">
         <fieldset disabled={disabled} className="min-w-0 space-y-6">
@@ -319,9 +343,9 @@ export default function AudioEditApp({ onBack }: AudioEditAppProps): JSX.Element
           {selectedBlocks.length > 0 && <section className="space-y-2"><div className={UI_TEXT_LABEL_CLASS}>已选 {selectedBlocks.length} 个词块</div><div className="flex flex-wrap gap-1">
             <UiButton size="sm" variant="plain" onClick={() => state.setBlocksIncluded(selectedBlockIds, false)}>删除声音</UiButton><UiButton size="sm" variant="plain" onClick={() => state.setBlocksIncluded(selectedBlockIds, true)}>恢复</UiButton>
             <UiButton size="sm" variant="plain" onClick={() => update({ transcript: project.transcript.map((block) => selectedBlockIds.includes(block.id) ? { ...block, locked: !selectedBlocks.every((item) => item.locked) } : block) })}>{selectedBlocks.every((block) => block.locked) ? '解锁' : '锁定'}</UiButton>
-          </div>{selectedBlock && <label className="block text-sm text-text-muted">校正字幕（不改变声音）<UiInput value={selectedBlock.text} disabled={selectedBlock.locked} onChange={(event) => update({ transcript: project.transcript.map((block) => block.id === selectedBlock.id ? { ...block, text: event.target.value } : block) })} /></label>}</section>}
+          </div></section>}
           {(project.cuts ?? []).some((cut) => cut.enabled) && <details><summary className="cursor-pointer text-sm text-text-muted">已处理区间</summary>{(project.cuts ?? []).filter((cut) => cut.enabled).map((cut) => <div key={cut.id} className="flex items-center justify-between gap-2 text-sm text-text-muted"><UiButton size="sm" variant="plain" onClick={() => seekSourceFrame(Math.max(0, cut.startFrame - project.source.sampleRate))}>{formatTime(cut.startFrame, project.source.sampleRate)} · {cut.mode === 'mute' ? '静音' : '删除'}</UiButton><UiButton size="sm" variant="plain" onClick={() => update({ cuts: project.cuts?.map((item) => item.id === cut.id ? { ...item, enabled: false } : item) })}>恢复</UiButton></div>)}</details>}
-          {project.suggestions.some((item) => item.status === 'pending') && <section><div className={`mb-2 ${UI_TEXT_LABEL_CLASS}`}>待审建议</div>{project.suggestions.filter((item) => item.status === 'pending').map((item) => <div key={item.id} className="mb-4"><div className="text-sm text-text-dark">{item.title}</div><div className={UI_TEXT_META_CLASS}>{item.detail}</div><div className="mt-2 flex gap-2"><UiButton size="sm" variant="plain" onClick={() => state.applySuggestion(item.id)}><Check size={13} />应用</UiButton><UiButton size="sm" variant="plain" onClick={() => state.dismissSuggestion(item.id)}><X size={13} />忽略</UiButton></div></div>)}</section>}
+          <AudioEditSuggestions project={project} onSeek={navigateToFrame} onResolve={resolveSuggestions} />
           <details className="space-y-3"><summary className="cursor-pointer text-sm text-text-muted">参考逐字稿</summary><UiTextArea rows={4} placeholder="用于对齐内容，不替代真实识别文本" value={project.referenceScript} onChange={(event) => state.setReferenceScript(event.target.value)} /><UiButton size="sm" variant="plain" onClick={() => void run(async () => { const value = await openDialog({ multiple: false, filters: [{ name: '文本', extensions: ['txt', 'md'] }] }); const path = Array.isArray(value) ? value[0] : value; if (path) state.setReferenceScript(await readTextFile(path)) })}>导入参考稿</UiButton></details>
           <details className="space-y-3"><summary className="cursor-pointer text-sm text-text-muted">RX 声音处理</summary><label className="flex items-center justify-between text-sm text-text-muted">剪后试听启用<UiSwitch checked={project.vstEnabled} disabled={!plugins.length} onCheckedChange={(value) => void run(async () => { if (value) await prepareAudioEditProcessing(project.id, crypto.randomUUID()); state.setVstEnabled(value) })} /></label>{!plugins.length && <div className={UI_TEXT_META_CLASS}>未发现兼容插件，可继续基础剪辑。</div>}
             {plugins.map((plugin) => { const entry = project.processorChain?.find((item) => item.id === plugin.id); return <div key={plugin.id} className="space-y-2"><label className="flex items-center justify-between gap-2 text-sm text-text-dark">{plugin.name}<UiSwitch checked={Boolean(entry?.enabled)} onCheckedChange={(enabled) => update({ vstEnabled: false, processorChain: [...(project.processorChain ?? []).filter((item) => item.id !== plugin.id).map((item) => processors.find((p) => p.id === item.id)?.semanticRole === plugin.semanticRole ? { ...item, enabled: false } : item), { id: plugin.id, enabled, parameters: entry?.parameters ?? {} }] })} /></label>{entry?.enabled && plugin.parameters?.map((parameter) => <label key={parameter.id} className="block text-xs text-text-muted">{parameter.name}<UiInput type="number" min={0} max={1} step={0.01} value={entry.parameters[parameter.name] ?? parameter.normalizedValue} onChange={(event) => update({ vstEnabled: false, processorChain: project.processorChain?.map((item) => item.id === plugin.id ? { ...item, parameters: { ...item.parameters, [parameter.name]: Number(event.target.value) } } : item) })} /></label>)}</div> })}<div className={UI_TEXT_META_CLASS}>配方随工程保存。更改后重新启用试听；切换到原始试听可旁路对比。</div>
@@ -334,7 +358,11 @@ export default function AudioEditApp({ onBack }: AudioEditAppProps): JSX.Element
         </fieldset>
       </aside>
     </div>
-    <AudioEditTimeline project={project} peaks={waveformPeaks} onSeek={seekSourceFrame} onToggle={togglePlayback} selection={waveSelection} onSelection={setWaveSelection} onEditSelection={editSelection} previewRanges={silencePreview.ranges} previewPending={silencePreview.pending} previewError={silencePreview.error} disabled={disabled} onSettings={() => setViewSettingsOpen(true)} />
+    <AudioEditTimeline project={project} peaks={waveformPeaks} onSeek={seekSourceFrame} onToggle={togglePlayback} selection={waveSelection} onSelection={setWaveSelection} onEditSelection={editSelection} previewRanges={silencePreview.ranges} previewPending={silencePreview.pending} previewError={silencePreview.error} disabled={disabled} onSettings={() => setViewSettingsOpen(true)} selectedBlockIds={selectedBlockIds} onSelectBlock={(id) => { state.setSelectedBlockIds([id]); const block = project.transcript.find((item) => item.id === id); if (block) navigateToFrame(block.startFrame) }} onEditBlock={setEditingBlockId} onDeleteBlock={deleteBlock} navigationTarget={navigationTarget} />
     <AudioEditViewSettings open={viewSettingsOpen} onClose={() => setViewSettingsOpen(false)} value={project.viewSettings ?? DEFAULT_AUDIO_EDIT_VIEW_SETTINGS} onChange={(viewSettings) => update({ viewSettings })} />
+    {editingBlock && <AudioEditTextEditor key={editingBlock.id} block={editingBlock} disabled={disabled} onClose={() => setEditingBlockId(null)} onSave={(text) => {
+      try { editAudioEditProject(project.id, (current) => ({ ...current, transcript: current.transcript.map((block) => block.id === editingBlock.id ? { ...block, text } : block) })); setEditingBlockId(null) } catch (error) { notifyError(error) }
+    }} />}
+    {findOpen && <AudioEditFindReplace project={project} disabled={disabled} onClose={() => setFindOpen(false)} onError={notifyError} onSeek={(frame, ids) => { state.setSelectedBlockIds(ids); navigateToFrame(frame) }} />}
   </div>
 }

@@ -10,13 +10,14 @@ import { compileAudioEditXmlTimeline } from '@/core/audioEdit/xml'
 import type { AudioEditProjectDocument, AudioEditRange } from '@/core/audioEdit/types'
 import { useAudioEditPlaybackStore } from './store/audioEditPlaybackStore'
 import { clampViewport, sampleWaveform, waveformReference, zoomViewport } from './waveformViewport'
+import { AudioEditOverview } from './AudioEditOverview'
 
 function time(frame: number, rate: number) {
   const seconds = Math.max(0, frame / rate)
   return `${Math.floor(seconds / 60)}:${(seconds % 60).toFixed(1).padStart(4, '0')}`
 }
 
-export const AudioEditTimeline = memo(function AudioEditTimeline({ project, peaks, onSeek, onToggle, selection, onSelection, onEditSelection, previewRanges, previewPending, previewError, disabled, onSettings }: {
+export const AudioEditTimeline = memo(function AudioEditTimeline({ project, peaks, onSeek, onToggle, selection, onSelection, onEditSelection, previewRanges, previewPending, previewError, disabled, onSettings, selectedBlockIds, onSelectBlock, onEditBlock, onDeleteBlock, navigationTarget }: {
   project: AudioEditProjectDocument
   peaks: number[]
   onSeek: (frame: number) => void
@@ -29,6 +30,11 @@ export const AudioEditTimeline = memo(function AudioEditTimeline({ project, peak
   previewError?: string
   disabled: boolean
   onSettings: () => void
+  selectedBlockIds: string[]
+  onSelectBlock: (id: string) => void
+  onEditBlock: (id: string) => void
+  onDeleteBlock: (id: string) => void
+  navigationTarget: { frame: number } | null
 }) {
   const { durationFrames: duration, sampleRate: rate } = project.source
   const sourceFrame = useAudioEditPlaybackStore((state) => state.sourceFrame)
@@ -46,6 +52,7 @@ export const AudioEditTimeline = memo(function AudioEditTimeline({ project, peak
   const [view, setView] = useState({ start: 0, end: duration })
   const [width, setWidth] = useState(800)
   const container = useRef<HTMLDivElement>(null)
+  const wheelRegion = useRef<HTMLDivElement>(null)
   const drag = useRef<{ pointer: number; x: number; start: number; length: number; anchor: number; kind: 'pan' | 'select'; moved: boolean } | null>(null)
   const menu = useContextMenu()
   const followAfter = useRef(0)
@@ -78,24 +85,21 @@ export const AudioEditTimeline = memo(function AudioEditTimeline({ project, peak
     const rect = element.getBoundingClientRect()
     return Math.max(0, Math.min(duration, Math.round(view.start + Math.max(0, Math.min(1, (clientX - rect.left) / rect.width)) * length)))
   }
-  const captions = useMemo(() => {
-    const groups: Array<{ startFrame: number; endFrame: number; text: string }> = []
-    for (const block of project.transcript) {
-      if (block.endFrame <= view.start || block.startFrame >= view.end) continue
-      const previous = groups.at(-1)
-      if (previous && (previous.endFrame - previous.startFrame) / length * width < 90 && !/[。！？!?]$/.test(previous.text)) {
-        previous.endFrame = block.endFrame; previous.text += block.text
-      } else groups.push({ startFrame: block.startFrame, endFrame: block.endFrame, text: block.text })
-    }
-    return groups
-  }, [project.transcript, view, length, width])
+  const captions = useMemo(() => project.transcript.filter((block) => block.endFrame > view.start && block.startFrame < view.end), [project.transcript, view])
   const showCaptions = project.viewSettings?.timelineCaptions ?? true
   const pauseFollow = () => { followAfter.current = Date.now() + 3000 }
 
   useEffect(() => { setView({ start: 0, end: duration }) }, [duration, project.id])
   useEffect(() => {
+    if (!navigationTarget) return
+    followAfter.current = Date.now() + 3000
+    setView((current) => navigationTarget.frame < current.start || navigationTarget.frame >= current.end
+      ? clampViewport(navigationTarget.frame - (current.end - current.start) * 0.2, current.end - current.start, duration) : current)
+  }, [navigationTarget, duration])
+  useEffect(() => {
     const element = container.current
-    if (!element) return
+    const region = wheelRegion.current
+    if (!element || !region) return
     const observer = new ResizeObserver(([entry]) => setWidth(entry.contentRect.width))
     observer.observe(element)
     const wheel = (event: WheelEvent) => {
@@ -109,8 +113,8 @@ export const AudioEditTimeline = memo(function AudioEditTimeline({ project, peak
         ? zoomViewport(current, (event.clientX - rect.left) / Math.max(1, rect.width), Math.exp(Math.max(-1, Math.min(1, delta * 0.002))), duration, rate * 2)
         : clampViewport(current.start + delta / Math.max(1, rect.width) * (current.end - current.start), current.end - current.start, duration))
     }
-    element.addEventListener('wheel', wheel, { passive: false })
-    return () => { observer.disconnect(); element.removeEventListener('wheel', wheel) }
+    region.addEventListener('wheel', wheel, { passive: false })
+    return () => { observer.disconnect(); region.removeEventListener('wheel', wheel) }
   }, [duration, rate])
   useEffect(() => {
     if (!playing || drag.current || Date.now() < followAfter.current) return
@@ -118,7 +122,7 @@ export const AudioEditTimeline = memo(function AudioEditTimeline({ project, peak
   }, [duration, length, playing, sourceFrame, view])
 
   return (
-    <div className="shrink-0 border-t border-border-dark p-3">
+    <div ref={wheelRegion} data-audio-timeline className="shrink-0 border-t border-border-dark p-3">
       <div className="mb-2 flex flex-wrap items-center gap-3">
         <UiIconButton appearance="hover-only" showBorder={false} className="h-9 w-9" disabled={!ready || playDuration === 0} onClick={() => void onToggle()} title={playing ? '暂停' : '播放'}>{playing ? <Pause size={16} /> : <Play size={16} />}</UiIconButton>
         <span className="text-sm tabular-nums text-text-dark" data-audio-edit-time>{time(outputFrame, rate)} / {time(playDuration, rate)}</span>
@@ -190,7 +194,10 @@ export const AudioEditTimeline = memo(function AudioEditTimeline({ project, peak
         <div className="pointer-events-none absolute inset-x-0 top-0 flex justify-between px-1 text-xs tabular-nums text-text-muted">
           {Array.from({ length: 6 }, (_, index) => <span key={index}>{time(view.start + length * index / 5, rate)}</span>)}
         </div>
-        {showCaptions && <div className="pointer-events-none absolute inset-x-0 top-6 h-7 overflow-hidden" data-audio-captions>{captions.map((block) => <div key={block.startFrame} title={block.text} className="absolute h-7 truncate border-l border-border-dark bg-layer/40 px-1 text-sm leading-7 text-text-dark" style={{ left: `${position(Math.max(view.start, block.startFrame))}%`, width: `${(Math.min(view.end, block.endFrame) - Math.max(view.start, block.startFrame)) / length * 100}%` }}>{block.text}</div>)}</div>}
+        {showCaptions && <div className="absolute inset-x-0 top-6 h-7 overflow-hidden" data-audio-captions>{captions.map((block) => <UiButton key={block.id} variant="plain" disabled={disabled} title={`${block.text} · 单击选中，双击编辑，右键删除`} className={`!absolute !h-7 !min-h-0 !rounded-none border-l border-border-dark !px-1 !py-0 text-left text-sm ${selectedBlockIds.includes(block.id) ? '!bg-accent/25 text-text-dark' : '!bg-layer/40 text-text-muted'} ${block.included ? '' : 'line-through opacity-55'}`} style={{ left: `${position(Math.max(view.start, block.startFrame))}%`, width: `${(Math.min(view.end, block.endFrame) - Math.max(view.start, block.startFrame)) / length * 100}%` }}
+          onPointerDown={(event) => event.stopPropagation()} onKeyDown={(event) => event.stopPropagation()}
+          onClick={(event) => { event.stopPropagation(); onSelectBlock(block.id) }} onDoubleClick={(event) => { event.stopPropagation(); onEditBlock(block.id) }}
+          onContextMenu={(event) => { event.preventDefault(); event.stopPropagation(); onSelectBlock(block.id); onDeleteBlock(block.id) }}><span className="block w-full truncate">{block.text || '（空字幕）'}</span></UiButton>)}</div>}
         <svg className={`pointer-events-none absolute inset-x-0 bottom-2 w-full text-accent ${showCaptions ? 'top-14 h-[calc(100%-4rem)]' : 'top-6 h-[calc(100%-2rem)]'}`} viewBox={`0 0 ${Math.max(1, bars.length)} 100`} preserveAspectRatio="none" aria-hidden="true">
           {barElements}
         </svg>
@@ -201,6 +208,7 @@ export const AudioEditTimeline = memo(function AudioEditTimeline({ project, peak
         {sourceFrame >= view.start && sourceFrame <= view.end && <div className="pointer-events-none absolute inset-y-0 w-px bg-text-dark" style={{ left: `${Math.min(99.95, position(sourceFrame))}%` }} />}
         {!peaks.length && <div className="pointer-events-none absolute inset-0 flex items-center justify-center text-sm text-text-muted">正在准备波形…</div>}
       </div>
+      <AudioEditOverview duration={duration} sampleRate={rate} sourceFrame={sourceFrame} peaks={peaks} view={view} onChange={(next) => { pauseFollow(); setView(next) }} />
       <div className={`mt-1 flex flex-wrap items-center justify-between gap-3 ${UI_TEXT_META_CLASS}`}>
         <span>拖动选区 · Delete 删除 · M 静音 · 右键更多 · 滚轮或中键平移 · Ctrl / Alt + 滚轮缩放</span>
         <span aria-live="polite">{previewError || (previewPending ? '正在更新停顿预览…' : '黄色：待处理 · 红色：已删除 · 灰色：已静音')}</span>
