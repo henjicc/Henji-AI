@@ -103,11 +103,11 @@ describe('catalog consumer contract', () => {
       fields: [...row.fields].sort(),
     }]))).toEqual({
       composite: {
-        count: 4,
-        fields: ['default', 'id', 'order', 'type', 'valueType'],
+        count: 16,
+        fields: ['default', 'id', 'order', 'required', 'type', 'valueType'],
       },
       dropdown: {
-        count: 335,
+        count: 334,
         fields: ['apiField', 'default', 'id', 'options', 'order', 'required', 'transferKey', 'type', 'valueType', 'visible'],
       },
       'file-upload': {
@@ -127,8 +127,8 @@ describe('catalog consumer contract', () => {
         fields: ['apiField', 'default', 'id', 'order', 'transferKey', 'type', 'valueType', 'visible'],
       },
       text: {
-        count: 23,
-        fields: ['default', 'id', 'order', 'required', 'type', 'visible'],
+        count: 12,
+        fields: ['default', 'id', 'order', 'type', 'visible'],
       },
       textarea: {
         count: 3,

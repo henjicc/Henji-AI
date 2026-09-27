@@ -1,0 +1,342 @@
+[
+  {
+    "id": "longanhuan_v3.1",
+    "name": "龙安欢_v3.1",
+    "description": "女 · 重庆话 宁波话 韩语 印尼语"
+  },
+  {
+    "id": "longanlingxin_v3.1",
+    "name": "龙安灵心_v3.1",
+    "description": "女 · 云南话 陕西话 上海话 法语 意大利语"
+  },
+  {
+    "id": "longanfengyue_v3.1",
+    "name": "龙安风悦_v3.1",
+    "description": "女 · 东北话 越南语 日语"
+  },
+  {
+    "id": "xunanchuan_v3.1",
+    "name": "许南川",
+    "description": "男 · 甘肃话 东北话 法语 葡萄牙语"
+  },
+  {
+    "id": "yuxiaoyun_v3.1",
+    "name": "于小云",
+    "description": "女 · 元气、亲切、自然"
+  },
+  {
+    "id": "qiaoxiaojiao_v3.1",
+    "name": "乔小娇",
+    "description": "女 · 俏丽、可爱"
+  },
+  {
+    "id": "xiaxiaochen_v3.1",
+    "name": "夏小晨",
+    "description": "女 · 元气、明亮"
+  },
+  {
+    "id": "anmingyuan_v3.1",
+    "name": "安明远",
+    "description": "男 · 清亮、自然"
+  },
+  {
+    "id": "wenhuaiqing_v3.1",
+    "name": "温怀清",
+    "description": "女 · 清亮、柔和"
+  },
+  {
+    "id": "anxiaolan_v3.1",
+    "name": "安小岚",
+    "description": "女 · 清甜、纯净"
+  },
+  {
+    "id": "xieshurou_v3.1",
+    "name": "谢舒柔",
+    "description": "女 · 柔和、自然、知性"
+  },
+  {
+    "id": "baiqinglan_v3.1",
+    "name": "白清岚",
+    "description": "女 · 明亮、清纯"
+  },
+  {
+    "id": "xuyuyuan_v3.1",
+    "name": "许玉远",
+    "description": "女 · 知性、成熟、质感"
+  },
+  {
+    "id": "anruorou_v3.1",
+    "name": "安若柔",
+    "description": "女 · 气声、知性"
+  },
+  {
+    "id": "wenhuaizhi_v3.1",
+    "name": "闻怀之",
+    "description": "女 · 稳重、成熟"
+  },
+  {
+    "id": "xiaoxingzhi_v3.1",
+    "name": "萧行之",
+    "description": "女 · 端庄、贵气"
+  },
+  {
+    "id": "guyunshu_v3.1",
+    "name": "顾云舒",
+    "description": "女 · 成熟、稳重"
+  },
+  {
+    "id": "huozhuoshi_v3.1",
+    "name": "霍拙石",
+    "description": "男 · 清亮"
+  },
+  {
+    "id": "yeqinghe_v3.1",
+    "name": "叶清禾",
+    "description": "女 · 亲切、温柔"
+  },
+  {
+    "id": "yunhuanhuan_v3.1",
+    "name": "云欢欢",
+    "description": "女 · 高亢、热情"
+  },
+  {
+    "id": "xuxiaoqiao_v3.1",
+    "name": "徐小俏",
+    "description": "女 · 自然、俏皮"
+  },
+  {
+    "id": "baianran_v3.1",
+    "name": "白安然",
+    "description": "女 · 低沉、浑厚、气声"
+  },
+  {
+    "id": "xuyanchu_v3.1",
+    "name": "许言初",
+    "description": "女 · 沉稳、磁性"
+  },
+  {
+    "id": "yezhiqing_v3.1",
+    "name": "叶知晴",
+    "description": "女 · 轻快、自然"
+  },
+  {
+    "id": "andi_v3.1",
+    "name": "安迪",
+    "description": "男 · ABC口音"
+  },
+  {
+    "id": "anyuqing_v3.1",
+    "name": "安语晴",
+    "description": "女 · 甜妹"
+  },
+  {
+    "id": "Emily_v3.1",
+    "name": "Emily",
+    "description": "女 · 英式女声"
+  },
+  {
+    "id": "Luna_v3.1",
+    "name": "Luna",
+    "description": "女 · 英式女声"
+  },
+  {
+    "id": "Eric_v3.1",
+    "name": "Eric",
+    "description": "男 · 英式男声"
+  },
+  {
+    "id": "Luca_v3.1",
+    "name": "Luca",
+    "description": "男 · 英式男声"
+  },
+  {
+    "id": "Abby_v3.1",
+    "name": "Abby",
+    "description": "女 · 美式女声"
+  },
+  {
+    "id": "Annie_v3.1",
+    "name": "Annie",
+    "description": "女 · 美式女声"
+  },
+  {
+    "id": "Ava_v3.1",
+    "name": "Ava",
+    "description": "女 · 美式女声"
+  },
+  {
+    "id": "Beth_v3.1",
+    "name": "Beth",
+    "description": "女 · 美式女声"
+  },
+  {
+    "id": "Betty_v3.1",
+    "name": "Betty",
+    "description": "女 · 美式女声"
+  },
+  {
+    "id": "Cally_v3.1",
+    "name": "Cally",
+    "description": "女 · 美式女声"
+  },
+  {
+    "id": "Cindy_v3.1",
+    "name": "Cindy",
+    "description": "女 · 美式女声"
+  },
+  {
+    "id": "Donna_v3.1",
+    "name": "Donna",
+    "description": "女 · 美式女声"
+  },
+  {
+    "id": "Andy_v3.1",
+    "name": "Andy",
+    "description": "男 · 美式男声"
+  },
+  {
+    "id": "Brian_v3.1",
+    "name": "Brian",
+    "description": "男 · 美式男声"
+  },
+  {
+    "id": "David_v3.1",
+    "name": "David",
+    "description": "男 · 美式男声"
+  },
+  {
+    "id": "longanyuanfei_v3.1",
+    "name": "龙安元妃_v3.1",
+    "description": "女 · 高傲妃子音"
+  },
+  {
+    "id": "longjielidou_v3.1",
+    "name": "龙杰力豆_v3.1",
+    "description": "男 · 天真男童音"
+  },
+  {
+    "id": "longanlingxi_v3.1",
+    "name": "龙安灵希_v3.1",
+    "description": "女 · 可爱甜美音"
+  },
+  {
+    "id": "longhuohuo_v3.1",
+    "name": "龙火火_v3.1",
+    "description": "男 · 顽皮少年音"
+  },
+  {
+    "id": "longyingtao_v3.1",
+    "name": "龙应桃_v3.1",
+    "description": "女 · 温柔淡定女"
+  },
+  {
+    "id": "longanya_v3.1",
+    "name": "龙安雅_v3.1",
+    "description": "女 · 高雅气质女"
+  },
+  {
+    "id": "longwan_v3.1",
+    "name": "龙婉_v3.1",
+    "description": "女 · 细腻柔声女"
+  },
+  {
+    "id": "longxing_v3.1",
+    "name": "龙星_v3.1",
+    "description": "女 · 温婉邻家女"
+  },
+  {
+    "id": "longhua_v3.1",
+    "name": "龙华_v3.1",
+    "description": "女 · 元气甜美女"
+  },
+  {
+    "id": "longhan_v3.1",
+    "name": "龙寒_v3.1",
+    "description": "男 · 温暖痴情男"
+  },
+  {
+    "id": "longanzhi_v3.1",
+    "name": "龙安智_v3.1",
+    "description": "男 · 睿智轻熟男"
+  },
+  {
+    "id": "longzhe_v3.1",
+    "name": "龙哲_v3.1",
+    "description": "男 · 呆板大暖男"
+  },
+  {
+    "id": "longanyang_v3.1",
+    "name": "龙安洋_v3.1",
+    "description": "男 · 阳光大男孩"
+  },
+  {
+    "id": "libai_v3.1",
+    "name": "李白_v3.1",
+    "description": "男 · 古代诗仙男"
+  },
+  {
+    "id": "longling_v3.1",
+    "name": "龙铃_v3.1",
+    "description": "女 · 稚气呆板女"
+  },
+  {
+    "id": "longniuniu_v3.1",
+    "name": "龙牛牛_v3.1",
+    "description": "男 · 阳光男童声"
+  },
+  {
+    "id": "longshanshan_v3.1",
+    "name": "龙闪闪_v3.1",
+    "description": "男 · 戏剧化童声"
+  },
+  {
+    "id": "longpaopao_v3.1",
+    "name": "龙泡泡_v3.1",
+    "description": "女 · 飞天泡泡音"
+  },
+  {
+    "id": "loongstella_v3.1",
+    "name": "loongstella_v3.1",
+    "description": "女 · 飒爽利落女"
+  },
+  {
+    "id": "longyuan_v3.1",
+    "name": "龙媛_v3.1",
+    "description": "女 · 温暖治愈女"
+  },
+  {
+    "id": "longmiao_v3.1",
+    "name": "龙妙_v3.1",
+    "description": "女 · 抑扬顿挫女"
+  },
+  {
+    "id": "longsanshu_v3.1",
+    "name": "龙三叔_v3.1",
+    "description": "男 · 沉稳质感男"
+  },
+  {
+    "id": "longanli_v3.1",
+    "name": "龙安莉_v3.1",
+    "description": "女 · 利落从容女"
+  },
+  {
+    "id": "longanwen_v3.1",
+    "name": "龙安温_v3.1",
+    "description": "女 · 优雅知性女"
+  },
+  {
+    "id": "longanlang_v3.1",
+    "name": "龙安朗_v3.1",
+    "description": "男 · 清爽利落男"
+  },
+  {
+    "id": "longxiaoxia_v3.1",
+    "name": "龙小夏_v3.1",
+    "description": "女 · 沉稳权威女"
+  },
+  {
+    "id": "longanchong_v3.1",
+    "name": "龙安冲_v3.1",
+    "description": "男 · 激情推销男"
+  }
+]

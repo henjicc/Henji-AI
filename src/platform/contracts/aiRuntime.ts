@@ -1,5 +1,5 @@
 import type { AiRuntimeTrace } from '@/core/types'
-import type { StructuredGenerationOutput } from '@henjicc/ai-sdk'
+import type { StructuredGenerationOutput, TtsVoice } from '@henjicc/ai-sdk'
 
 export interface ProviderKeyStatusDto {
   providerId: string
@@ -92,6 +92,7 @@ export interface AiRuntimePlatform {
   getProviderApiKey(providerId: string): Promise<string | null>
   getProviderKeyStatus(): Promise<ProviderKeyStatusDto[]>
   testProviderConnection(providerId: string): Promise<ProviderConnectionTestResultDto>
+  listTtsVoices(modelId: string): Promise<TtsVoice[]>
   generate(request: AiGenerateRequestDto): Promise<AiGenerateResponseDto>
   continuePolling(request: AiContinuePollingRequestDto): Promise<AiGenerateResponseDto>
   cancelTask(taskId: string): Promise<void>

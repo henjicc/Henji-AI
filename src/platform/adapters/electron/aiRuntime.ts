@@ -28,6 +28,9 @@ export function createElectronAiRuntime(): AiRuntimePlatform {
     testProviderConnection: async (providerId) => {
       return await getNativeAi().testProviderConnection(providerId)
     },
+    listTtsVoices: async (modelId) => {
+      return await getNativeAi().listTtsVoices(modelId)
+    },
     generate: async (request) => {
       return await getNativeAi().generate(request)
     },

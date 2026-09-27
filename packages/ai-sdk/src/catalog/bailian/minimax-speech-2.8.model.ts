@@ -10,7 +10,7 @@ export const bailianMinimaxSpeech28Model = defineModel({
   inputLimits: { images: { max: 0 }, videos: { max: 0 } },
   params: [
     { id: 'bailianMinimaxSpeechSpec', type: 'dropdown', order: 1, default: 'hd', options: [{ value: 'hd' }, { value: 'turbo' }] },
-    { id: 'bailianMinimaxSpeechVoice', type: 'text', order: 2, default: 'male-qn-qingse' },
+    { id: 'bailianMinimaxSpeechVoice', type: 'composite', valueType: 'string', order: 2, default: 'male-qn-qingse' },
     { id: 'bailianMinimaxSpeechSpeed', type: 'number', order: 3, default: 1, min: 0.5, max: 2, step: 0.1 },
     { id: 'bailianMinimaxSpeechEmotion', type: 'dropdown', order: 4, default: '', options: ['', 'happy', 'sad', 'angry', 'fearful', 'disgusted', 'surprised', 'calm'].map(value => ({ value })) },
   ],

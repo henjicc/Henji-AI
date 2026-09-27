@@ -9,7 +9,7 @@ export const volcengineSeedTts20Model = defineModel({
   },
   inputLimits: { images: { max: 0 }, videos: { max: 0 } },
   params: [
-    { id: 'volcSeedTtsSpeaker', type: 'text', order: 1, default: 'zh_female_vv_uranus_bigtts' },
+    { id: 'volcSeedTtsSpeaker', type: 'composite', valueType: 'string', order: 1, default: 'zh_female_vv_uranus_bigtts' },
   ],
   endpoints: '/api/v3/tts/unidirectional',
   request: {

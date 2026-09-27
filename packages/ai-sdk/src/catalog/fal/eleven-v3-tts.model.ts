@@ -10,7 +10,7 @@ export const falElevenV3TtsModel = defineModel({
   },
   inputLimits: { images: { max: 0 }, videos: { max: 0 } },
   params: [
-    { id: 'falElevenV3Voice', type: 'text', order: 1, default: 'Rachel' },
+    { id: 'falElevenV3Voice', type: 'composite', valueType: 'string', order: 1, default: 'Rachel' },
     { id: 'falElevenV3Stability', type: 'number', order: 2, default: 0.5, min: 0, max: 1, step: 0.05 },
     { id: 'falElevenV3Language', type: 'text', order: 3, default: '' },
   ],

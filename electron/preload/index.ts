@@ -181,6 +181,7 @@ const aiApi: HenjiAiApi = {
   getProviderApiKey: (providerId) => nativeInvoke('ai:getProviderApiKey', { providerId }),
   getProviderKeyStatus: () => nativeInvoke('ai:getRuntimeProviderKeyStatus'),
   testProviderConnection: (providerId) => nativeInvoke('ai:testProviderConnection', { providerId }),
+  listTtsVoices: (modelId) => nativeInvoke('ai:listTtsVoices', { modelId }),
   generate: (request) => nativeInvoke('ai:generate', request),
   continuePolling: (request) => nativeInvoke('ai:continuePolling', request),
   cancelTask: (taskId) => nativeInvoke('ai:cancelTask', { taskId }),

@@ -10,7 +10,7 @@ export const kieElevenTurbo25TtsModel = defineModel({
   },
   inputLimits: { images: { max: 0 }, videos: { max: 0 } },
   params: [
-    { id: 'kieElevenTurboVoice', type: 'text', order: 1, default: 'Rachel' },
+    { id: 'kieElevenTurboVoice', type: 'composite', valueType: 'string', order: 1, default: 'Rachel' },
     { id: 'kieElevenTurboStability', type: 'number', order: 2, default: 0.5, min: 0, max: 1, step: 0.05 },
     { id: 'kieElevenTurboSpeed', type: 'number', order: 3, default: 1, min: 0.7, max: 1.2, step: 0.05 },
   ],

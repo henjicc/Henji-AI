@@ -9,7 +9,7 @@ export const volcengineSeedIcl20Model = defineModel({
   },
   inputLimits: { images: { max: 0 }, videos: { max: 0 } },
   params: [
-    { id: 'volcSeedIclSpeaker', type: 'text', required: true, order: 1, default: '' },
+    { id: 'volcSeedIclSpeaker', type: 'composite', valueType: 'string', required: true, order: 1, default: '' },
   ],
   endpoints: '/api/v3/tts/unidirectional',
   request: {

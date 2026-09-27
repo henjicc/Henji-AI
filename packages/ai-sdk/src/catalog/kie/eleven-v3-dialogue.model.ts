@@ -22,7 +22,7 @@ export const kieElevenV3DialogueModel = defineModel({
   },
   inputLimits: { images: { max: 0 }, videos: { max: 0 } },
   params: [
-    { id: 'kieElevenDialogueVoice', type: 'text', order: 1, default: 'EkK5I93UQWFDigLMpZcX' },
+    { id: 'kieElevenDialogueVoice', type: 'composite', valueType: 'string', order: 1, default: 'EkK5I93UQWFDigLMpZcX' },
   ],
   endpoints: '/api/v1/jobs/createTask',
   request: {

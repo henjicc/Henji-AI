@@ -12,7 +12,7 @@ export const falMinimaxSpeech28Model = defineModel({
   inputLimits: { images: { max: 0 }, videos: { max: 0 } },
   params: [
     { id: 'falMinimaxSpeechSpec', type: 'dropdown', order: 1, default: 'hd', options: [{ value: 'hd' }, { value: 'turbo' }] },
-    { id: 'falMinimaxSpeechVoice', type: 'text', order: 2, default: 'Wise_Woman' },
+    { id: 'falMinimaxSpeechVoice', type: 'composite', valueType: 'string', order: 2, default: 'Wise_Woman' },
     { id: 'falMinimaxSpeechSpeed', type: 'number', order: 3, default: 1, min: 0.5, max: 2, step: 0.1 },
     { id: 'falMinimaxSpeechEmotion', type: 'dropdown', order: 4, default: '', options: ['', 'happy', 'sad', 'angry', 'fearful', 'disgusted', 'surprised', 'neutral'].map(value => ({ value })) },
   ],

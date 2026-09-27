@@ -101,6 +101,7 @@ export interface HenjiAiApi {
   getProviderApiKey(providerId: string): Promise<string | null>
   getProviderKeyStatus(): Promise<HenjiProviderKeyStatus[]>
   testProviderConnection(providerId: string): Promise<HenjiProviderConnectionTestResult>
+  listTtsVoices(modelId: string): Promise<import('@henjicc/ai-sdk').TtsVoice[]>
   generate(request: HenjiAiGenerateRequest): Promise<HenjiAiGenerateResponse>
   continuePolling(request: HenjiAiContinuePollingRequest): Promise<HenjiAiGenerateResponse>
   cancelTask(taskId: string): Promise<void>

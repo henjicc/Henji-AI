@@ -10,7 +10,7 @@ export const bailianCosyVoice35Model = defineModel({
   inputLimits: { images: { max: 0 }, videos: { max: 0 } },
   params: [
     { id: 'bailianCosyVoiceSpec', type: 'dropdown', order: 1, default: 'flash', options: [{ value: 'flash' }, { value: 'plus' }] },
-    { id: 'bailianCosyVoiceId', type: 'text', order: 2, required: true, default: '' },
+    { id: 'bailianCosyVoiceId', type: 'composite', valueType: 'string', order: 2, required: true, default: '' },
     { id: 'bailianCosyVoiceInstruction', type: 'text', order: 3, default: '' },
     { id: 'bailianCosyVoiceSpeed', type: 'number', order: 4, default: 1, min: 0.5, max: 2, step: 0.1 },
   ],
