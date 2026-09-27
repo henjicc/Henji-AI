@@ -27,9 +27,10 @@ export function AudioEditTextEditor({ block, disabled, onSave, onClose }: { bloc
 export function AudioEditFindReplace({ search, disabled }: { search: AudioEditTextSearch; disabled: boolean }) {
   const inputRef = useRef<HTMLInputElement>(null)
   useEffect(() => { inputRef.current?.focus(); inputRef.current?.select() }, [search.focusVersion])
-  return <div role="search" aria-label="查找与替换" className="shrink-0 space-y-2 px-6 py-2" onKeyDown={(event) => {
+  return <div role="search" aria-label="查找与替换" className="relative ml-auto w-full max-w-2xl shrink-0 space-y-2 py-2 pl-3 pr-12" onKeyDown={(event) => {
     if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); search.close() }
   }}>
+    <UiIconButton appearance="hover-only" showBorder={false} aria-label="关闭查找替换" title="关闭查找替换 · Esc" className="absolute right-3 top-2" onClick={search.close}><X size={16} /></UiIconButton>
     <div className="flex flex-wrap items-center gap-2">
       <UiIconButton appearance="hover-only" showBorder={false} title={search.showReplace ? '收起替换' : '展开替换'} aria-expanded={search.showReplace} onClick={search.toggleReplace}>{search.showReplace ? <ChevronDown size={16} /> : <ChevronRight size={16} />}</UiIconButton>
       <UiInput ref={inputRef} autoFocus aria-label="查找文字" aria-invalid={Boolean(search.error)} className="min-w-32 max-w-md flex-1" placeholder={search.regex ? '正则表达式' : '查找文字'} value={search.query} onChange={(event) => search.setQuery(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); search.navigate(event.shiftKey ? -1 : 1) } }} />
@@ -37,7 +38,6 @@ export function AudioEditFindReplace({ search, disabled }: { search: AudioEditTe
       <span className="text-sm tabular-nums text-text-muted" aria-live="polite">{search.matches.length ? `${search.currentIndex + 1} / ${search.matches.length} 处` : search.query ? '无匹配' : ''}</span>
       <UiIconButton appearance="hover-only" showBorder={false} title="上一处 · Shift+Enter" disabled={!search.matches.length} onClick={() => search.navigate(-1)}><ArrowUp size={16} /></UiIconButton>
       <UiIconButton appearance="hover-only" showBorder={false} title="下一处 · Enter" disabled={!search.matches.length} onClick={() => search.navigate(1)}><ArrowDown size={16} /></UiIconButton>
-      <UiIconButton appearance="hover-only" showBorder={false} title="关闭查找 · Esc" className="ml-auto" onClick={search.close}><X size={16} /></UiIconButton>
     </div>
     {search.showReplace && <div className="flex flex-wrap items-center gap-2">
       <UiInput aria-label="替换为" className="min-w-32 max-w-md flex-1" placeholder={search.regex ? '替换为（支持 $1 等捕获组）' : '替换为'} value={search.replacement} onChange={(event) => search.setReplacement(event.target.value)} />

@@ -334,7 +334,7 @@ export default function AudioEditApp({ onBack }: AudioEditAppProps): JSX.Element
     <div className="flex min-h-14 shrink-0 items-center gap-2 border-b border-border-dark px-3 py-2">
       <UiIconButton appearance="hover-only" showBorder={false} className="h-8 w-8" onClick={() => void leave()} title="返回工程列表"><ArrowLeft size={16} /></UiIconButton>
       <AudioEditTitle key={project.id} name={project.name} disabled={disabled} onChange={(name) => update({ name })} />
-      <UiIconButton appearance="hover-only" showBorder={false} title="查找与替换 · Ctrl+F" onClick={() => textSearch.open()}><Search size={16} /></UiIconButton>
+      <UiIconButton appearance="hover-only" showBorder={false} aria-label="查找与替换" aria-expanded={textSearch.isOpen} title={textSearch.isOpen ? '关闭查找替换' : '查找与替换 · Ctrl+F'} onClick={() => textSearch.isOpen ? textSearch.close() : textSearch.open()}><Search size={16} /></UiIconButton>
       <UiIconButton appearance="hover-only" showBorder={false} disabled={disabled || !state.past.length} onClick={state.undo} title="撤销"><Undo2 size={16} /></UiIconButton>
       <UiIconButton appearance="hover-only" showBorder={false} disabled={disabled || !state.future.length} onClick={state.redo} title="重做"><Redo2 size={16} /></UiIconButton>
       <UiButton variant="plain" size="sm" disabled={disabled || !project.transcript.length} onClick={assistant}><Sparkles size={15} className="mr-1" />处理重复口播</UiButton>
@@ -343,9 +343,9 @@ export default function AudioEditApp({ onBack }: AudioEditAppProps): JSX.Element
     {(state.saveError || sourceError) && <div role="alert" className="flex items-center gap-3 border-b border-border-dark px-4 py-2 text-sm text-text-dark"><span>{state.saveError ? `保存失败，修改仍保留：${state.saveError}` : sourceError}</span>{state.saveError && <UiButton size="sm" variant="plain" onClick={() => void run(() => flushAudioEditProject(project.id))}>重试保存</UiButton>}</div>}
     {tasks.filter((task) => task.state === 'running' && (task.kind !== 'silence' || state.busy)).map((task) => <div key={task.requestId} role="status" className="flex items-center gap-3 px-4 py-2 text-sm text-text-muted"><span>正在处理{task.progress === undefined ? '…' : ` ${Math.round(task.progress * 100)}%`}</span><UiButton size="sm" variant="plain" onClick={() => void run(() => getPlatform().audioEdit.cancelTask(task.requestId))}>取消</UiButton></div>)}
     {tasks.some((task) => task.kind === 'transcription' && ['failed', 'cancelled'].includes(task.state)) && !project.transcript.length && <div className="flex items-center gap-3 px-4 py-2 text-sm text-text-muted"><span>上次转写未完成，优先查询原任务。</span><UiButton size="sm" variant="plain" disabled={disabled} onClick={() => void run(() => transcribeAudioEdit({ projectId: project.id }))}>恢复转写</UiButton></div>}
+    {textSearch.isOpen && <AudioEditFindReplace search={textSearch} disabled={disabled} />}
     <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_17rem]">
       <main className="flex min-h-0 flex-col border-r border-border-dark">
-        {textSearch.isOpen && <AudioEditFindReplace search={textSearch} disabled={disabled} />}
         <div className="min-h-0 flex-1"><Transcript project={project} onSeek={navigateToFrame} onEdit={setEditingBlockId} onDelete={deleteBlock} disabled={disabled} search={textSearch} /></div>
       </main>
       <aside className="min-h-0 overflow-y-auto p-4">
