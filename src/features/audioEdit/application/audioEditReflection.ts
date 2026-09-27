@@ -7,6 +7,7 @@ import {
   unrestrictedCollectionAvailability,
 } from '@/core/application-control'
 import type { AudioEditProjectDocument } from '@/core/audioEdit/types'
+import { audioEditSuggestionState } from '@/core/audioEdit/edits'
 import { getPlatform } from '@/platform/runtime'
 
 import { AUDIO_EDIT_ENTITY_TYPES, AUDIO_EDIT_FIELDS, audioEditSchemaRef as schemaRef, type AudioEditEntityType as EntityType } from './audioEditFields'
@@ -58,12 +59,14 @@ class AudioEditReflectionProvider implements ApplicationEntityProvider {
 
   async getPropertyAvailability(ref: ApplicationRef, propertyIds: string[]) {
     const { document } = await this.readValues(ref)
+    const clue = this.entityType === AUDIO_EDIT_ENTITY_TYPES.suggestion ? document.suggestions.find((item) => item.id === splitChild(ref).childId) : undefined
+    const clueState = clue ? audioEditSuggestionState(document, clue) : undefined
     const descriptors = new Map(propertiesByEntity[this.entityType].map((item) => [item.id, item]))
     return propertyIds.map((propertyId) => {
       const descriptor = descriptors.get(propertyId)
       if (!descriptor) throw new Error(`PROPERTY_NOT_FOUND:${propertyId}`)
       const locked = this.entityType === AUDIO_EDIT_ENTITY_TYPES.transcriptBlock && !propertyId.endsWith('.locked') && document.transcript.find((b) => b.id === splitChild(ref).childId)?.locked
-      const reason = descriptor.readOnlyReason || (locked ? '词块已锁定' : getAudioEditProjectInstance(document.id)?.busy ? '工程正在处理' : '')
+      const reason = descriptor.readOnlyReason || (locked ? '词块已锁定' : getAudioEditProjectInstance(document.id)?.busy ? '工程正在处理' : clueState && clueState !== 'available' ? '这条线索已处理、隐藏、失效或受锁定保护，请以当前工程内容为准。' : '')
       return { propertyId, readable: true, writable: !reason, reasons: reason ? [reason] : [], requiredPermissions: ['audio_edit:read'], revisions: { audio_edit: getAudioEditRevision() } }
     })
   }
@@ -87,7 +90,7 @@ class AudioEditReflectionProvider implements ApplicationEntityProvider {
 const entityMeta: Record<EntityType, { title: string; parents: EntityType[] }> = {
   [AUDIO_EDIT_ENTITY_TYPES.project]: { title: '口播剪辑工程', parents: [] },
   [AUDIO_EDIT_ENTITY_TYPES.transcriptBlock]: { title: '转写词块', parents: [AUDIO_EDIT_ENTITY_TYPES.project] },
-  [AUDIO_EDIT_ENTITY_TYPES.suggestion]: { title: '剪辑建议', parents: [AUDIO_EDIT_ENTITY_TYPES.project] },
+  [AUDIO_EDIT_ENTITY_TYPES.suggestion]: { title: '剪辑线索（辅助定位，非审批队列）', parents: [AUDIO_EDIT_ENTITY_TYPES.project] },
   [AUDIO_EDIT_ENTITY_TYPES.processorChain]: { title: '声音处理链', parents: [AUDIO_EDIT_ENTITY_TYPES.project] },
   [AUDIO_EDIT_ENTITY_TYPES.render]: { title: '成片映射', parents: [AUDIO_EDIT_ENTITY_TYPES.project] },
 }

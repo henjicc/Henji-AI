@@ -42,7 +42,7 @@ import { UI_SCALE_MODES } from '@/core/theme/uiScale'
 import { useAudioEditPlaybackStore } from './store/audioEditPlaybackStore'
 import { useAudioEditStore } from './store/audioEditStore'
 
-import { applyAudioEditSuggestion, DEFAULT_AUDIO_EDIT_SETTINGS, DEFAULT_AUDIO_EDIT_VIEW_SETTINGS, editAudioEditRange, setAudioEditBlocks } from '@/core/audioEdit/edits'
+import { applyAudioEditSuggestion, audioEditSuggestionStates, dismissAudioEditSuggestion, DEFAULT_AUDIO_EDIT_SETTINGS, DEFAULT_AUDIO_EDIT_VIEW_SETTINGS, editAudioEditRange, setAudioEditBlocks } from '@/core/audioEdit/edits'
 import { editAudioEditProject, flushAudioEditProject, loadAudioEditProject } from './application/audioEditProjectInstances'
 import { compressAudioEditSilence, cleanProjectAudioEditFillers, transcribeAudioEdit, exportAudioEdit, relinkAudioEdit, deleteAudioEdit, prepareAudioEditProcessing, quickProcessAudioEdit } from './application/audioEditApplicationService'
 
@@ -316,11 +316,18 @@ export default function AudioEditApp({ onBack }: AudioEditAppProps): JSX.Element
   const resolveSuggestions = (ids: string[], apply: boolean) => {
     try {
       const wanted = new Set(ids)
-      const next = editAudioEditProject(project.id, (current) => apply
-        ? ids.reduce((draft, id) => applyAudioEditSuggestion(draft, id), current)
-        : { ...current, suggestions: current.suggestions.map((item) => wanted.has(item.id) && item.status === 'pending' ? { ...item, status: 'dismissed' as const } : item) })
-      const count = next.suggestions.filter((item) => wanted.has(item.id) && item.status === (apply ? 'applied' : 'dismissed')).length
-      showNotification(count ? `${apply ? '已应用' : '已忽略'} ${count} 处，可整批撤销` : '没有可应用的修改，请检查锁定或文字时间戳')
+      let count = 0
+      editAudioEditProject(project.id, (current) => {
+        const states = audioEditSuggestionStates(current)
+        const eligible = current.suggestions.filter((item) => wanted.has(item.id) && states.get(item.id) === 'available')
+        const selected = new Set(eligible.map((item) => item.id))
+        const next = apply
+          ? eligible.reduce((draft, item) => applyAudioEditSuggestion(draft, item.id), current)
+          : eligible.reduce((draft, item) => dismissAudioEditSuggestion(draft, item.id), current)
+        count = next.suggestions.filter((item) => selected.has(item.id) && item.status === (apply ? 'applied' : 'dismissed')).length
+        return count ? next : current
+      })
+      showNotification(count ? `${apply ? '已处理' : '已隐藏'} ${count} 处，可整批撤销` : '这些线索已处理或失效，没有新增修改')
     } catch (error) { notifyError(error) }
   }
   const editSelection = (mode: 'delete' | 'mute' | 'restore') => {

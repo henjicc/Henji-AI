@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import type { AudioEditProjectDocument } from '@/core/audioEdit/types'
-import { applyAudioEditSuggestion, setAudioEditBlocks } from '@/core/audioEdit/edits'
+import { applyAudioEditSuggestion, dismissAudioEditSuggestion, setAudioEditBlocks } from '@/core/audioEdit/edits'
 import { attachAudioEditProject, editAudioEditProject, subscribeAudioEditInstances, undoAudioEditProject } from '../application/audioEditProjectInstances'
 
 interface AudioEditState {
@@ -38,7 +38,7 @@ export const useAudioEditStore = create<AudioEditState>((set, get) => {
     setReferenceScript: (referenceScript) => mutate((project) => ({ ...project, referenceScript })),
     setVstEnabled: (vstEnabled) => mutate((project) => ({ ...project, vstEnabled })),
     applySuggestion: (id) => mutate((project) => applyAudioEditSuggestion(project, id)),
-    dismissSuggestion: (id) => mutate((project) => ({ ...project, suggestions: project.suggestions.map((suggestion) => suggestion.id === id ? { ...suggestion, status: 'dismissed' } : suggestion) })),
+    dismissSuggestion: (id) => mutate((project) => dismissAudioEditSuggestion(project, id)),
     setSelectedBlockIds: (selectedBlockIds) => set({ selectedBlockIds }),
     undo: () => { const project = get().project; if (project) undoAudioEditProject(project.id) },
     redo: () => { const project = get().project; if (project) undoAudioEditProject(project.id, true) },

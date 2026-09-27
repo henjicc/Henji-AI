@@ -1,9 +1,52 @@
-import type { AudioEditBatchSettings, AudioEditProjectDocument, AudioEditRange } from './types'
+import type { AudioEditBatchSettings, AudioEditProjectDocument, AudioEditRange, AudioEditSuggestion, AudioEditTranscriptBlock } from './types'
+import { normalizeAudioEditFiller } from './analysis'
 
 export const DEFAULT_AUDIO_EDIT_SETTINGS: AudioEditBatchSettings = {
   silenceThresholdMs: 800, retainedSilenceMs: 350, noiseDb: -40, trimEdges: false, fillers: ['嗯', '呃', '额'],
 }
 export const DEFAULT_AUDIO_EDIT_VIEW_SETTINGS = { textSize: 20, sidePadding: 48, timelineCaptions: true }
+
+export type AudioEditSuggestionState = 'available' | 'removed' | 'dismissed' | 'locked' | 'stale'
+
+/** Suggestions are optional clues. Current edits, not a stored pending flag, determine applicability. */
+export function audioEditSuggestionState(project: AudioEditProjectDocument, suggestion: AudioEditSuggestion,
+  blocks = new Map(project.transcript.map((block) => [block.id, block])),
+  original = new Map(project.editBaseline?.transcript.map((block) => [block.id, block]) ?? []),
+): AudioEditSuggestionState {
+  const targets = suggestion.blockIds.map((id) => blocks.get(id)).filter((block): block is AudioEditTranscriptBlock => Boolean(block))
+  if (suggestion.kind !== 'long_silence' && (!targets.length || targets.length !== suggestion.blockIds.length)) return 'stale'
+  if (suggestion.kind === 'filler' && targets.some((block) => block.granularity !== 'word' || !normalizeAudioEditFiller(block.text)
+    || (original.has(block.id) && original.get(block.id)!.text !== block.text))) return 'stale'
+  if (suggestion.kind === 'filler') {
+    const expected = suggestion.title.match(/[「“](.*?)[」”]/)?.[1]
+    if (expected && normalizeAudioEditFiller(targets.map((block) => block.text).join('')) !== normalizeAudioEditFiller(expected)) return 'stale'
+  }
+  const retained = Math.round((project.batchSettings ?? DEFAULT_AUDIO_EDIT_SETTINGS).retainedSilenceMs * project.source.sampleRate / 1000)
+  const ranges = suggestion.kind === 'long_silence'
+    ? [{ startFrame: suggestion.startFrame + Math.floor(retained / 2), endFrame: suggestion.endFrame - Math.ceil(retained / 2) }]
+    : targets.map((block) => ({ startFrame: block.startFrame, endFrame: block.endFrame }))
+  if (suggestion.kind === 'long_silence' && suggestion.evidence !== 'audio') return 'stale'
+  if (ranges.some((range) => range.endFrame <= range.startFrame || range.startFrame < 0 || range.endFrame > project.source.durationFrames)) return 'stale'
+  if (project.transcript.some((block) => block.locked && ranges.some((range) => block.startFrame < range.endFrame && block.endFrame > range.startFrame))) return 'locked'
+  const inaudible = [...project.transcript.filter((block) => !block.included && !block.locked), ...(project.cuts ?? []).filter((cut) => cut.enabled)]
+  if (!subtractRanges(ranges, inaudible).length) return 'removed'
+  if (suggestion.status === 'dismissed') return 'dismissed'
+  // If the user restores any part of a previously applied edit, do not propose deleting it again.
+  if (suggestion.status === 'applied') return 'stale'
+  return 'available'
+}
+
+export function audioEditSuggestionStates(project: AudioEditProjectDocument): Map<string, AudioEditSuggestionState> {
+  const blocks = new Map(project.transcript.map((block) => [block.id, block]))
+  const original = new Map(project.editBaseline?.transcript.map((block) => [block.id, block]) ?? [])
+  return new Map(project.suggestions.map((suggestion) => [suggestion.id, audioEditSuggestionState(project, suggestion, blocks, original)]))
+}
+
+export function dismissAudioEditSuggestion(project: AudioEditProjectDocument, id: string): AudioEditProjectDocument {
+  const suggestion = project.suggestions.find((item) => item.id === id)
+  if (!suggestion || audioEditSuggestionState(project, suggestion) !== 'available') return project
+  return { ...project, suggestions: project.suggestions.map((item) => item.id === id ? { ...item, status: 'dismissed' } : item) }
+}
 
 export function editAudioEditRange(project: AudioEditProjectDocument, range: AudioEditRange, mode: 'delete' | 'mute' | 'restore'): AudioEditProjectDocument {
   const startFrame = Math.max(0, Math.round(Math.min(range.startFrame, range.endFrame)))
@@ -36,7 +79,7 @@ export function setAudioEditBlocks(project: AudioEditProjectDocument, ids: reado
 
 export function applyAudioEditSuggestion(project: AudioEditProjectDocument, id: string): AudioEditProjectDocument {
   const suggestion = project.suggestions.find((item) => item.id === id)
-  if (!suggestion || suggestion.status !== 'pending') return project
+  if (!suggestion || audioEditSuggestionState(project, suggestion) !== 'available') return project
   let next = project
   if (suggestion.kind === 'long_silence') {
     if (suggestion.evidence !== 'audio') return project
@@ -48,7 +91,9 @@ export function applyAudioEditSuggestion(project: AudioEditProjectDocument, id: 
     if (project.transcript.some((block) => block.locked && block.startFrame < range.endFrame && block.endFrame > range.startFrame)) return project
     const cuts = project.cuts ?? []
     if (cuts.some((cut) => cut.id === id && cut.enabled)) return project
-    next = { ...project, cuts: [...cuts.filter((cut) => cut.id !== id), { ...range, id, reason: 'silence', enabled: true }] }
+    const fresh = subtractRanges([range], [...cuts.filter((cut) => cut.enabled), ...project.transcript.filter((block) => !block.included)])
+    if (!fresh.length) return project
+    next = { ...project, cuts: [...cuts.filter((cut) => cut.id !== id), ...fresh.map((part, index) => ({ ...part, id: index ? `${id}:${part.startFrame}` : id, reason: 'silence' as const, enabled: true }))] }
   } else {
     const targets = project.transcript.filter((block) => suggestion.blockIds.includes(block.id))
     if (suggestion.kind === 'filler' && targets.some((block) => block.granularity !== 'word')) return project
@@ -59,10 +104,10 @@ export function applyAudioEditSuggestion(project: AudioEditProjectDocument, id: 
 }
 
 export function cleanAudioEditFillers(project: AudioEditProjectDocument, words: readonly string[], range?: AudioEditRange): AudioEditProjectDocument {
-  const fillers = new Set(words.map((word) => word.trim()))
+  const fillers = new Set(words.map(normalizeAudioEditFiller))
   const ids = project.transcript.filter((block) => block.granularity === 'word' && block.included && !block.locked
     && (!range || (block.startFrame >= range.startFrame && block.endFrame <= range.endFrame))
-    && fillers.has(block.text.trim().replace(/[，。！？、,.!?]/g, ''))).map((block) => block.id)
+    && fillers.has(normalizeAudioEditFiller(block.text))).map((block) => block.id)
   return ids.length ? setAudioEditBlocks(project, ids, false) : project
 }
 

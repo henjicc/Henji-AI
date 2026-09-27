@@ -1,7 +1,7 @@
 import { type ApplicationFieldDefinition, type ApplicationPropertyDescriptor, type JsonValue, fieldWriterTable } from '@/core/application-control'
 import { APPLICATION_CAPABILITY_CATALOG_VERSION } from '@/core/application-control/applicationCapabilities'
 import type { AudioEditProjectDocument, AudioEditProcessorDescriptor } from '@/core/audioEdit/types'
-import { applyAudioEditSuggestion, setAudioEditBlocks } from '@/core/audioEdit/edits'
+import { applyAudioEditSuggestion, audioEditSuggestionState, dismissAudioEditSuggestion, setAudioEditBlocks } from '@/core/audioEdit/edits'
 import { audioEditCutsSchema, audioEditSettingsSchema, audioEditFrameRateSchema, audioEditProcessorChainSchema, audioEditViewSettingsSchema } from '@/core/audioEdit/schema'
 import { DEFAULT_AUDIO_EDIT_VIEW_SETTINGS } from '@/core/audioEdit/edits'
 import { hasAudioEditModifications } from '@/core/audioEdit/baseline'
@@ -54,12 +54,14 @@ export const AUDIO_EDIT_FIELDS: Record<AudioEditEntityType, ApplicationFieldDefi
     field(E.transcriptBlock, 'granularity', '时间戳粒度', { kind: 'enum', values: [{ value: 'word', label: '逐词' }, { value: 'segment', label: '句段' }] }, (s) => block(s).granularity),
   ],
   [E.suggestion]: [
-    field(E.suggestion, 'title', '建议标题', TEXT, (s) => suggestion(s).title),
-    field(E.suggestion, 'detail', '建议说明', TEXT, (s) => suggestion(s).detail),
-    field(E.suggestion, 'status', '处理状态', { kind: 'enum', values: ['pending', 'applied', 'dismissed'].map((value) => ({ value, label: value })) }, (s) => suggestion(s).status, (s, v) => {
+    field(E.suggestion, 'project_id', '所属口播工程', TEXT, (s) => s.document.id),
+    field(E.suggestion, 'title', '线索标题', TEXT, (s) => suggestion(s).title),
+    field(E.suggestion, 'detail', '检测线索（非审批，不限制助手基于全文自行判断）', TEXT, (s) => suggestion(s).kind === 'filler' ? '关键词匹配，不代表必须删除；结合全文判断是否影响语义、语气或节奏。' : suggestion(s).detail),
+    field(E.suggestion, 'current_state', '当前实际状态（排除已删除、已静音、失效或锁定的线索）', { kind: 'enum', values: [ ['available', '可参考'], ['removed', '声音已处理'], ['dismissed', '已隐藏'], ['locked', '已锁定'], ['stale', '线索已失效'] ].map(([value, label]) => ({ value, label })) }, (s) => audioEditSuggestionState(s.document, suggestion(s))),
+    field(E.suggestion, 'status', '线索标记（不代表当前声音状态，也不是需要用户审批的队列）', { kind: 'enum', values: [ ['pending', '候选线索'], ['applied', '曾应用'], ['dismissed', '已隐藏'] ].map(([value, label]) => ({ value, label })) }, (s) => suggestion(s).status, (s, v) => {
       const item = suggestion(s)
       if (v === 'applied') { const next = applyAudioEditSuggestion(s.document, item.id); if (next === s.document) throw new Error('建议已处理、失效或受锁定保护'); s.document = next }
-      else if (v === 'dismissed' && item.status === 'pending') item.status = v
+      else if (v === 'dismissed') { const next = dismissAudioEditSuggestion(s.document, item.id); if (next === s.document) throw new Error('这条线索已处理、隐藏、失效或受锁定保护'); s.document = next }
       else throw new Error('该建议不能重复应用或直接恢复状态，请撤销剪辑。')
     }, ['applySuggestion', 'dismissSuggestion']),
   ],
