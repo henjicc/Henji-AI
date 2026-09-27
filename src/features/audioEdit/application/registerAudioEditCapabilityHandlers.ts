@@ -1,10 +1,11 @@
-import { AUDIO_EDIT_APPLICATION_CAPABILITIES, audioEditOperationInput } from '@/core/application-control/domains/audioEdit/audioEditApplicationCapabilities'
+import { AUDIO_EDIT_APPLICATION_CAPABILITIES, AUDIO_EDIT_VERIFIED_EDIT_OPERATIONS, audioEditOperationInput } from '@/core/application-control/domains/audioEdit/audioEditApplicationCapabilities'
+import { audioEditContentKey } from '@/core/audioEdit/baseline'
 import type { ApplicationCapabilityHandlerRegistrar } from '@/features/application-control/capabilities/handlerTypes'
 import { resolveConfiguredDestination } from '@/features/canvas/application/canvasDownloadService'
 import { getPlatform } from '@/platform/runtime'
 import { join } from '@/platform/desktopApi'
 import { loadAudioEditProject, flushAudioEditProject } from './audioEditProjectInstances'
-import { compressAudioEditSilence, cleanProjectAudioEditFillers, transcribeAudioEdit, exportAudioEdit, prepareAudioEditProcessing, quickProcessAudioEdit } from './audioEditApplicationService'
+import { compressAudioEditSilence, cleanProjectAudioEditFillers, transcribeAudioEdit, exportAudioEdit, prepareAudioEditProcessing, quickProcessAudioEdit, undoAllAudioEditChanges, formatProjectAudioEditCaptions } from './audioEditApplicationService'
 
 export function registerAudioEditCapabilityHandlers(registrar: ApplicationCapabilityHandlerRegistrar): void {
   for (const definition of AUDIO_EDIT_APPLICATION_CAPABILITIES) registrar.registerHandler(definition.id, async (raw, context) => {
@@ -22,6 +23,8 @@ export function registerAudioEditCapabilityHandlers(registrar: ApplicationCapabi
     try {
       const result: Record<string, unknown> = { resultRef: { kind: 'audio_edit.project', id }, message: '' }
       switch (definition.id) {
+        case 'reset_audio_edit': await undoAllAudioEditChanges(id); result.message = instance.document.editBaseline?.kind === 'original' ? '已恢复初始剪辑与识别原文，可撤销本次恢复。' : '已恢复全部声音、分段和处理设置。旧工程没有保存最初识别原文，保留已有文字，可撤销本次恢复。'; break
+        case 'format_audio_edit_subtitles': result.count = await formatProjectAudioEditCaptions(id); result.message = `已整理 ${result.count} 段字幕，文字区、波形区与 SRT 共用分段。`; break
         case 'quick_process_audio_edit': Object.assign(result, await quickProcessAudioEdit(id, input.range, requestId)); result.message = `已压缩停顿并清理所选语气词，缩短 ${result.shortenedMs} 毫秒，可整批撤销。`; break
         case 'compress_audio_edit_silence': Object.assign(result, await compressAudioEditSilence(id, input.range, requestId)); result.message = `处理 ${result.count} 处停顿，缩短 ${result.shortenedMs} 毫秒。`; break
         case 'clean_audio_edit_fillers': result.count = await cleanProjectAudioEditFillers(id, input.range); result.message = `清理 ${result.count} 处语气词。`; break
@@ -41,6 +44,11 @@ export function registerAudioEditCapabilityHandlers(registrar: ApplicationCapabi
           const exported = await exportAudioEdit({ projectId: id, targetPath, format, includeProcessing: input.includeProcessing ?? false, requestId, ...(input.includeSrt ? { subtitleTargetPath: targetPath.replace(/\.[^.]+$/, '.srt') } : {}) })
           result.durationFrames = exported.durationFrames; result.message = `已导出 ${format.toUpperCase()} 到所选目录。`; break
         }
+      }
+      if (AUDIO_EDIT_VERIFIED_EDIT_OPERATIONS.has(definition.id)) {
+        const persisted = await api.getProject(id)
+        if (!persisted || instance.dirty || audioEditContentKey(persisted) !== audioEditContentKey(instance.document)) throw new Error('修改已提交，但回读时发现工程有新变化。请重新读取工程，不要重复提交原修改。')
+        result.verified = true
       }
       return result
     } finally { context.signal.removeEventListener('abort', cancel) }

@@ -31,6 +31,14 @@ export interface AudioEditTranscriptBlock {
   included: boolean
   locked: boolean
   granularity: 'word' | 'segment'
+  /** Subtitle boundary; does not replace the recognized word timing. */
+  captionBreakAfter?: boolean
+}
+
+export interface AudioEditBaseline {
+  kind: 'original' | 'legacy'
+  transcript: AudioEditTranscriptBlock[]
+  suggestions: AudioEditSuggestion[]
 }
 
 export interface AudioEditTimelineSpan {
@@ -85,6 +93,7 @@ export interface AudioEditProjectDocument {
   processorChain?: AudioEditProcessorSetting[]
   xmlFrameRate?: AudioEditFrameRate
   viewSettings?: AudioEditViewSettings
+  editBaseline?: AudioEditBaseline
 }
 
 export interface AudioEditProjectSummary {

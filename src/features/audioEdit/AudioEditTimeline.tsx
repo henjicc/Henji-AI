@@ -12,6 +12,7 @@ import { useAudioEditPlaybackStore } from './store/audioEditPlaybackStore'
 import { clampViewport, sampleWaveform, waveformReference, zoomViewport } from './waveformViewport'
 import { AudioEditOverview } from './AudioEditOverview'
 import { AudioEditMatchedText } from './AudioEditTextTools'
+import { buildAudioEditCaptionGroups } from '@/core/audioEdit/captions'
 import type { AudioEditTextSearch } from './useAudioEditTextSearch'
 
 function time(frame: number, rate: number) {
@@ -88,7 +89,12 @@ export const AudioEditTimeline = memo(function AudioEditTimeline({ project, peak
     const rect = element.getBoundingClientRect()
     return Math.max(0, Math.min(duration, Math.round(view.start + Math.max(0, Math.min(1, (clientX - rect.left) / rect.width)) * length)))
   }
-  const captions = useMemo(() => project.transcript.filter((block) => block.endFrame > view.start && block.startFrame < view.end), [project.transcript, view])
+  const captions = useMemo(() => {
+    const groups = project.transcript.some((block) => block.captionBreakAfter !== undefined)
+      ? buildAudioEditCaptionGroups(project.transcript, rate)
+      : project.transcript.map((block) => ({ id: block.id, startFrame: block.startFrame, endFrame: block.endFrame, blocks: [block] }))
+    return groups.filter((group) => group.endFrame > view.start && group.startFrame < view.end)
+  }, [project.transcript, rate, view])
   const showCaptions = project.viewSettings?.timelineCaptions ?? true
   const pauseFollow = () => { followAfter.current = Date.now() + 3000 }
 
@@ -197,10 +203,10 @@ export const AudioEditTimeline = memo(function AudioEditTimeline({ project, peak
         <div className="pointer-events-none absolute inset-x-0 top-0 flex justify-between px-1 text-xs tabular-nums text-text-muted">
           {Array.from({ length: 6 }, (_, index) => <span key={index}>{time(view.start + length * index / 5, rate)}</span>)}
         </div>
-        {showCaptions && <div className="absolute inset-x-0 top-6 h-7 overflow-hidden" data-audio-captions>{captions.map((block) => <UiButton key={block.id} variant="plain" disabled={disabled} title={`${block.text} · 单击选中，双击编辑，右键删除`} className={`!absolute !h-7 !min-h-0 !rounded-none border-l border-border-dark !px-1 !py-0 text-left text-sm ${selectedBlockIds.includes(block.id) ? '!bg-accent/25 text-text-dark' : '!bg-layer/40 text-text-muted'} ${block.included ? '' : 'line-through opacity-55'}`} style={{ left: `${position(Math.max(view.start, block.startFrame))}%`, width: `${(Math.min(view.end, block.endFrame) - Math.max(view.start, block.startFrame)) / length * 100}%` }}
+        {showCaptions && <div className="absolute inset-x-0 top-6 h-7 overflow-hidden" data-audio-captions>{captions.map((group) => <div key={group.id} className="absolute flex h-7 overflow-hidden whitespace-nowrap border-l border-border-dark bg-layer/40" style={{ left: `${position(Math.max(view.start, group.startFrame))}%`, width: `${(Math.min(view.end, group.endFrame) - Math.max(view.start, group.startFrame)) / length * 100}%` }}>{group.blocks.map((block) => <UiButton key={block.id} variant="plain" disabled={disabled} title={`${block.text} · 单击选中，双击编辑，右键删除`} className={`!h-7 !min-h-0 shrink-0 !rounded-none !px-0.5 !py-0 text-left text-sm ${selectedBlockIds.includes(block.id) ? '!bg-accent/25 text-text-dark' : 'text-text-muted'} ${block.included ? '' : 'line-through opacity-55'}`}
           onPointerDown={(event) => event.stopPropagation()} onKeyDown={(event) => event.stopPropagation()}
           onClick={(event) => { event.stopPropagation(); onSelectBlock(block.id) }} onDoubleClick={(event) => { event.stopPropagation(); onEditBlock(block.id) }}
-          onContextMenu={(event) => { event.preventDefault(); event.stopPropagation(); onSelectBlock(block.id); onDeleteBlock(block.id) }}><span className="block w-full truncate">{block.text ? <AudioEditMatchedText block={block} search={textSearch} /> : '（空字幕）'}</span></UiButton>)}</div>}
+          onContextMenu={(event) => { event.preventDefault(); event.stopPropagation(); onSelectBlock(block.id); onDeleteBlock(block.id) }}><span className="block w-full truncate">{block.text ? <AudioEditMatchedText block={block} search={textSearch} /> : '（空字幕）'}</span></UiButton>)}</div>)}</div>}
         <svg className={`pointer-events-none absolute inset-x-0 bottom-2 w-full text-accent ${showCaptions ? 'top-14 h-[calc(100%-4rem)]' : 'top-6 h-[calc(100%-2rem)]'}`} viewBox={`0 0 ${Math.max(1, bars.length)} 100`} preserveAspectRatio="none" aria-hidden="true">
           {barElements}
         </svg>

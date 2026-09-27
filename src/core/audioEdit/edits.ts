@@ -73,6 +73,6 @@ export function assertAudioEditLocks(previous: AudioEditProjectDocument, next: A
   }
   for (const block of previous.transcript.filter((item) => item.locked)) {
     const changed = next.transcript.find((item) => item.id === block.id)
-    if (!changed || changed.text !== block.text || changed.included !== block.included || changed.startFrame !== block.startFrame || changed.endFrame !== block.endFrame) throw new Error('锁定内容不能修改，请先解锁。')
+    if (!changed || changed.text !== block.text || changed.included !== block.included || changed.startFrame !== block.startFrame || changed.endFrame !== block.endFrame || changed.captionBreakAfter !== block.captionBreakAfter) throw new Error('锁定内容不能修改，请先解锁。')
   }
 }

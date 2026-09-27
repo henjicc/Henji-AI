@@ -7,6 +7,7 @@ import { createAudioEditProject, deleteAudioEditProject, relinkAudioEditSource, 
 import { detectAudioEditSilence } from '../services/audio-edit/silence'
 import { cancelAudioEditTask, listAudioEditTasks, runAudioEditTask } from '../services/audio-edit/task-store'
 import { audioEditProjectSchema, audioEditSettingsSchema, audioEditRangeSchema, audioEditFrameRateSchema } from '../../../src/core/audioEdit/schema'
+import { hasAudioEditModifications } from '../../../src/core/audioEdit/baseline'
 import {
   getAudioEditProject,
   listAudioEditProjects,
@@ -52,7 +53,9 @@ export function registerAudioIpc(): void {
       if (!isDeepStrictEqual(project.source, current.source)) {
         throw new Error('IMMUTABLE_SOURCE：工程源媒体不能通过编辑接口修改。')
       }
-      assertAudioEditLocks(current, project)
+      // Explicit full restoration can restore lock state; arbitrary edits remain protected.
+      // Always use the host's immutable baseline, never one supplied by the caller.
+      if (hasAudioEditModifications({ ...project, editBaseline: current.editBaseline })) assertAudioEditLocks(current, project)
       return saveAudioEditProject(project)
     },
   )

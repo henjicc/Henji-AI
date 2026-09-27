@@ -7,7 +7,6 @@ import {
   Redo2,
   Sparkles,
   Search,
-  Undo2,
 } from 'lucide-react'
 
 import {
@@ -25,7 +24,6 @@ import type { AudioEditAsrModel } from '@/platform/contracts/audioEdit'
 import type { AudioEditProcessorDescriptor, AudioEditProjectDocument, AudioEditProjectSummary, AudioEditTask, AudioEditRange } from '@/core/audioEdit/types'
 import { useNotification } from '@/contexts/NotificationContext'
 import { openAssistant } from '@/features/assistant/store/assistantUiStore'
-import { createHostContextSnapshot } from '@/features/application-control/hostContext/hostContext'
 import { getPlatform } from '@/platform/runtime'
 import { basename, openDialog, readTextFile, saveDialog } from '@/platform/desktopApi'
 import { useAudioEditPreview } from './preview/useAudioEditPreview'
@@ -34,6 +32,8 @@ import { AudioEditTimeline } from './AudioEditTimeline'
 import { AudioEditHome } from './AudioEditHome'
 import { AudioEditViewSettings } from './AudioEditViewSettings'
 import { AudioEditSuggestions } from './AudioEditSuggestions'
+import { AudioEditUndoButton } from './AudioEditUndoButton'
+import { buildAudioEditCaptionGroups } from '@/core/audioEdit/captions'
 import { AudioEditFindReplace, AudioEditMatchedText, AudioEditTextEditor, AudioEditTitle } from './AudioEditTextTools'
 import { useAudioEditTextSearch, type AudioEditTextSearch } from './useAudioEditTextSearch'
 import { useAudioEditSilencePreview } from './preview/useAudioEditSilencePreview'
@@ -79,17 +79,18 @@ function Transcript({
   const transcript = project.transcript
   const viewSettings = project.viewSettings ?? DEFAULT_AUDIO_EDIT_VIEW_SETTINGS
   const rows = useMemo(() => {
+    if (transcript.some((block) => block.captionBreakAfter !== undefined)) return buildAudioEditCaptionGroups(transcript, project.source.sampleRate).map((group) => group.blocks)
     const next: typeof transcript[] = []
     for (let index = 0; index < transcript.length; index += 64) {
       next.push(transcript.slice(index, index + 64))
     }
     return next
-  }, [transcript])
+  }, [transcript, project.source.sampleRate])
+  const rowByBlock = useMemo(() => new Map(rows.flatMap((row, index) => row.map((block) => [block.id, index] as const))), [rows])
   const activeRow = useMemo(() => {
     if (!activeBlockId) return -1
-    const index = project.transcript.findIndex((block) => block.id === activeBlockId)
-    return index < 0 ? -1 : Math.floor(index / 64)
-  }, [activeBlockId, project.transcript])
+    return rowByBlock.get(activeBlockId) ?? -1
+  }, [activeBlockId, rowByBlock])
 
   useEffect(() => {
     if (search.currentMatch || activeRow < 0 || Date.now() < followPausedUntilRef.current) return
@@ -98,7 +99,7 @@ function Transcript({
 
   useEffect(() => {
     const id = search.currentMatch?.blockIds[0]
-    const index = transcript.findIndex((block) => block.id === id)
+    const index = id ? rowByBlock.get(id) ?? -1 : -1
     if (index < 0) return
     let disposed = false
     const reveal = () => {
@@ -106,9 +107,9 @@ function Transcript({
       containerRef.current?.querySelector('[data-audio-search-current="true"]')?.scrollIntoView({ block: 'center', inline: 'nearest' })
     }
     if (containerRef.current?.querySelector('[data-audio-search-current="true"]')) reveal()
-    else listRef.current?.scrollIntoView({ index: Math.floor(index / 64), behavior: 'auto', done: () => { requestAnimationFrame(reveal) } })
+    else listRef.current?.scrollIntoView({ index, behavior: 'auto', done: () => { requestAnimationFrame(reveal) } })
     return () => { disposed = true }
-  }, [search.navigationKey, search.currentMatch, transcript])
+  }, [search.navigationKey, search.currentMatch, rowByBlock])
 
   return (
     <div
@@ -186,6 +187,7 @@ export default function AudioEditApp({ onBack }: AudioEditAppProps): JSX.Element
   const { showNotification } = useNotification()
   const state = useAudioEditStore()
   const { project, setProject, selectedBlockIds } = state
+  useEffect(() => { if (project?.id) openAssistant() }, [project?.id])
   const [projects, setProjects] = useState<AudioEditProjectSummary[]>([])
   const [asrModels, setAsrModels] = useState<AudioEditAsrModel[]>([])
   const [processors, setProcessors] = useState<AudioEditProcessorDescriptor[]>([])
@@ -289,8 +291,7 @@ export default function AudioEditApp({ onBack }: AudioEditAppProps): JSX.Element
   })
   const assistant = () => {
     if (!project) return
-    const context = createHostContextSnapshot()
-    openAssistant(`请处理当前口播工程的重复口播。工程引用：${JSON.stringify({ kind: 'audio_edit.project', id: project.id })}。读取真实转写和参考稿进行内容对齐，明确重复重录只保留最佳版本，通过词块保留属性提交实际剪辑；锁定内容不能修改，不确定的内容保留并说明。参考稿不能替代识别文本，不要重新转写或导出。最后回读实际结果。`, { autoSend: true, context: JSON.stringify({ workspace: context.workspace, project: context.project, surface: context.surface }) })
+    openAssistant()
   }
   const exportProject = () => run(async () => {
     if (!project) return
@@ -335,9 +336,9 @@ export default function AudioEditApp({ onBack }: AudioEditAppProps): JSX.Element
       <UiIconButton appearance="hover-only" showBorder={false} className="h-8 w-8" onClick={() => void leave()} title="返回工程列表"><ArrowLeft size={16} /></UiIconButton>
       <AudioEditTitle key={project.id} name={project.name} disabled={disabled} onChange={(name) => update({ name })} />
       <UiIconButton appearance="hover-only" showBorder={false} aria-label="查找与替换" aria-expanded={textSearch.isOpen} title={textSearch.isOpen ? '关闭查找替换' : '查找与替换 · Ctrl+F'} onClick={() => textSearch.isOpen ? textSearch.close() : textSearch.open()}><Search size={16} /></UiIconButton>
-      <UiIconButton appearance="hover-only" showBorder={false} disabled={disabled || !state.past.length} onClick={state.undo} title="撤销"><Undo2 size={16} /></UiIconButton>
+      <AudioEditUndoButton key={project.id} project={project} canUndo={Boolean(state.past.length)} disabled={disabled} onUndo={state.undo} onError={notifyError} onRestored={() => { state.setSelectedBlockIds([]); setWaveSelection(null); showNotification('已撤销全部剪辑修改；可再次撤销以恢复操作前状态') }} />
       <UiIconButton appearance="hover-only" showBorder={false} disabled={disabled || !state.future.length} onClick={state.redo} title="重做"><Redo2 size={16} /></UiIconButton>
-      <UiButton variant="plain" size="sm" disabled={disabled || !project.transcript.length} onClick={assistant}><Sparkles size={15} className="mr-1" />处理重复口播</UiButton>
+      <UiButton variant="plain" size="sm" onClick={assistant}><Sparkles size={15} className="mr-1" />智能助手</UiButton>
       <UiButton variant="primary" size="sm" disabled={disabled || Boolean(sourceError)} onClick={() => void exportProject()}><Download size={15} className="mr-1" />导出</UiButton>
     </div>
     {(state.saveError || sourceError) && <div role="alert" className="flex items-center gap-3 border-b border-border-dark px-4 py-2 text-sm text-text-dark"><span>{state.saveError ? `保存失败，修改仍保留：${state.saveError}` : sourceError}</span>{state.saveError && <UiButton size="sm" variant="plain" onClick={() => void run(() => flushAudioEditProject(project.id))}>重试保存</UiButton>}</div>}

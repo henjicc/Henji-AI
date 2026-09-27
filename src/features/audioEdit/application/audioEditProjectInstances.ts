@@ -1,4 +1,5 @@
 import { assertAudioEditLocks } from '@/core/audioEdit/edits'
+import { createAudioEditBaseline, restoreAudioEditBaseline } from '@/core/audioEdit/baseline'
 import { audioEditProjectSchema } from '@/core/audioEdit/schema'
 import type { AudioEditProjectDocument } from '@/core/audioEdit/types'
 import { assertApplicationWritesAllowed } from '@/core/applicationLifecycle/applicationWriteBarrier'
@@ -33,7 +34,7 @@ export function getAudioEditProjectInstance(id: string): AudioEditProjectInstanc
 export function attachAudioEditProject(document: AudioEditProjectDocument): AudioEditProjectInstance {
   const current = instances.get(document.id)
   if (current) return current
-  const instance: AudioEditProjectInstance = { document, past: [], future: [], dirty: false, error: null, version: 0, persistedRevision: document.revision, busy: 0, batchDepth: 0 }
+  const instance: AudioEditProjectInstance = { document: { ...document, editBaseline: document.editBaseline ?? createAudioEditBaseline(document, 'legacy') }, past: [], future: [], dirty: false, error: null, version: 0, persistedRevision: document.revision, busy: 0, batchDepth: 0 }
   instances.set(document.id, instance)
   catalogRevision = Math.max(catalogRevision + 1, document.revision)
   return instance
@@ -69,6 +70,10 @@ export function editAudioEditProject(id: string, update: (document: AudioEditPro
   if (next === instance.document || JSON.stringify(next) === JSON.stringify(instance.document)) return instance.document
   audioEditProjectSchema.parse(next)
   assertAudioEditLocks(instance.document, next)
+  return commitEdit(instance, { ...next, editBaseline: instance.document.editBaseline })
+}
+
+function commitEdit(instance: AudioEditProjectInstance, next: AudioEditProjectDocument): AudioEditProjectDocument {
   if (hasUndoableChanges(instance.document, next)) {
     if (!instance.batchDepth) instance.past = [...instance.past.slice(-49), instance.document]
     instance.future = []
@@ -82,6 +87,18 @@ export function editAudioEditProject(id: string, update: (document: AudioEditPro
   schedule(instance)
   return instance.document
 }
+
+/** Explicit undo restores locks too, just like ordinary undo; normal edits still enforce them. */
+export function resetAudioEditProject(id: string, expectedVersion: number): AudioEditProjectDocument {
+  assertApplicationWritesAllowed()
+  const instance = instances.get(id)
+  if (!instance || instance.busy) throw new Error('请等待当前处理完成或取消后再撤销。')
+  if (instance.version !== expectedVersion) throw new Error('确认期间工程已修改，请重新确认撤销范围。')
+  const next = restoreAudioEditBaseline(instance.document)
+  audioEditProjectSchema.parse(next)
+  if (!hasUndoableChanges(instance.document, next)) return instance.document
+  return commitEdit(instance, next)
+}
 export function undoAudioEditProject(id: string, redo = false): void {
   assertApplicationWritesAllowed()
   const instance = instances.get(id)
@@ -91,7 +108,7 @@ export function undoAudioEditProject(id: string, redo = false): void {
   if (!previous) return
   if (redo) { instance.future = from.slice(1); instance.past = [...instance.past.slice(-49), instance.document] }
   else { instance.past = from.slice(0, -1); instance.future = [instance.document, ...instance.future.slice(0, 49)] }
-  instance.document = { ...previous, source: instance.document.source, viewSettings: instance.document.viewSettings, revision: instance.document.revision + 1 }
+  instance.document = { ...previous, source: instance.document.source, editBaseline: instance.document.editBaseline, viewSettings: instance.document.viewSettings, revision: instance.document.revision + 1 }
   catalogRevision += 1
   instance.version += 1
   instance.dirty = true
@@ -109,7 +126,7 @@ export async function flushAudioEditProject(id: string): Promise<void> {
       const version = instance.version
       const saved = await getPlatform().audioEdit.saveProject({ ...instance.document, revision: instance.persistedRevision })
       instance.persistedRevision = saved.revision
-      instance.document = { ...instance.document, updatedAt: saved.updatedAt, revision: Math.max(instance.document.revision, saved.revision) }
+      instance.document = { ...instance.document, editBaseline: saved.editBaseline ?? instance.document.editBaseline, updatedAt: saved.updatedAt, revision: Math.max(instance.document.revision, saved.revision) }
       instance.dirty = version !== instance.version
       instance.error = null
       publish(instance)

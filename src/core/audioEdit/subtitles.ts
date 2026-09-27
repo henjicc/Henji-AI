@@ -1,4 +1,5 @@
 import { sourceFrameToOutputFrame } from './timeline'
+import { buildAudioEditCaptionGroups, joinAudioEditText } from './captions'
 import type { AudioEditTimelineSpan, AudioEditTranscriptBlock } from './types'
 
 function formatSrtTimestamp(frame: number, sampleRate: number): string {
@@ -15,25 +16,22 @@ export function buildAudioEditSrt(
   spans: readonly AudioEditTimelineSpan[],
   sampleRate: number,
 ): string {
-  const words = blocks.flatMap((block) => {
-    if (!block.included) return []
-    const start = sourceFrameToOutputFrame(block.startFrame, spans)
-    const end = sourceFrameToOutputFrame(Math.max(block.startFrame, block.endFrame - 1), spans)
-    if (start === null || end === null) return []
-    return [{ text: block.text.trim(), start, end: Math.max(start + 1, end + 1) }]
-  }).filter((cue) => cue.text.length > 0)
-
-  const cues: typeof words = []
-  for (const word of words) {
-    const previous = cues.at(-1)
-    if (previous && !/[。！？.!?]$/.test(previous.text) && word.start - previous.end < sampleRate * 0.6 && word.end - previous.start <= sampleRate * 5 && previous.text.length + word.text.length <= 32) {
-      const space = /[a-z0-9]$/i.test(previous.text) && /^[a-z0-9]/i.test(word.text) ? ' ' : ''
-      previous.text += space + word.text; previous.end = word.end
-    } else cues.push({ ...word })
-  }
+  const cues = buildAudioEditCaptionGroups(blocks, sampleRate).flatMap((group) => {
+    const words = group.blocks.flatMap((block) => {
+      if (!block.included) return []
+      const start = sourceFrameToOutputFrame(block.startFrame, spans)
+      const end = sourceFrameToOutputFrame(Math.max(block.startFrame, block.endFrame - 1), spans)
+      if (start === null || end === null) return []
+      return [{ text: block.text.trim(), startFrame: start, endFrame: Math.max(start + 1, end + 1) }]
+    })
+    const first = words[0]
+    const last = words.at(-1)
+    const text = words.reduce((value, word) => joinAudioEditText(value, word.text), '')
+    return first && last && text ? [{ startFrame: first.startFrame, endFrame: last.endFrame, text }] : []
+  })
   return cues.map((cue, index) => [
     String(index + 1),
-    `${formatSrtTimestamp(cue.start, sampleRate)} --> ${formatSrtTimestamp(cue.end, sampleRate)}`,
+    `${formatSrtTimestamp(cue.startFrame, sampleRate)} --> ${formatSrtTimestamp(cue.endFrame, sampleRate)}`,
     cue.text,
     '',
   ].join('\n')).join('\n')

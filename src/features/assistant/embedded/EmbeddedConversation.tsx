@@ -13,6 +13,7 @@ import { reportEmbeddedAgentError, useEmbeddedAgent } from './controller'
 import type { AgentAttachment } from '@/core/assistant/attachments'
 import { AssistantComposer } from '../conversation/AssistantComposer'
 import type { AssistantAttachmentDraft } from '../conversation/assistantAttachments'
+import { AudioEditAssistantAction } from '@/features/audioEdit/AudioEditAssistantAction'
 
 const accessOptions: Array<{ value: EmbeddedAgentPrompt['access']; label: string }> = [
   { value: 'read', label: '只读访问' }, { value: 'write', label: '允许修改' }, { value: 'full', label: '完全访问' },
@@ -92,6 +93,7 @@ export function EmbeddedConversation(): JSX.Element {
         <p className="text-right text-xs text-text-muted">{message.error ? `发送未完成：${assistantErrorMessage(message.error)}` : '等待发送'}</p></div>)}
       </div>
     </div>
+    <AudioEditAssistantAction disabled={busy || !selectedModel} />
     <div className="space-y-2 px-3 pt-3">
       {state.error ? <UiError message={assistantErrorMessage(state.error)} size="xs" /> : null}
       {models.length === 0 ? <UiButton size="sm" onClick={() => useUiStore.getState().openSettings({ tab: 'models', sectionId: 'models-assistant' })}>设置可调用工具的模型</UiButton> : null}

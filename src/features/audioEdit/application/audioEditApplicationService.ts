@@ -2,7 +2,41 @@ import type { AudioEditExportRequest, AudioEditExportResult, AudioEditRange, Aud
 import { applyAudioEditSuggestion, cleanAudioEditFillers, DEFAULT_AUDIO_EDIT_SETTINGS } from '@/core/audioEdit/edits'
 import { buildProjectAudioEditTimeline, editedDurationFrames } from '@/core/audioEdit/timeline'
 import { getPlatform } from '@/platform/runtime'
-import { acceptAudioEditNativeResult, editAudioEditProject, flushAudioEditProject, loadAudioEditProject, releaseAudioEditProject, withAudioEditProjectOperation } from './audioEditProjectInstances'
+import { createLogger } from '@/core/logging'
+import { formatAudioEditCaptions, buildAudioEditCaptionGroups } from '@/core/audioEdit/captions'
+import { hasAudioEditModifications } from '@/core/audioEdit/baseline'
+import { acceptAudioEditNativeResult, editAudioEditProject, flushAudioEditProject, loadAudioEditProject, releaseAudioEditProject, resetAudioEditProject, withAudioEditProjectOperation } from './audioEditProjectInstances'
+
+const logger = createLogger('features.audioEdit.operations')
+
+export async function undoAllAudioEditChanges(projectId: string, expectedVersion?: number): Promise<void> {
+  const instance = await loadAudioEditProject(projectId)
+  logger.info('audio_edit.reset.start', { context: { projectId } })
+  try {
+    resetAudioEditProject(projectId, expectedVersion ?? instance.version)
+    await flushAudioEditProject(projectId)
+    if (hasAudioEditModifications(instance.document)) throw new Error('工程在保存期间发生了新修改，未将其覆盖，请重新查看。')
+    logger.info('audio_edit.reset.completed', { context: { projectId } })
+  } catch (error) {
+    logger.error('audio_edit.reset.failed', { context: { projectId }, error })
+    throw error
+  }
+}
+
+export async function formatProjectAudioEditCaptions(projectId: string): Promise<number> {
+  const instance = await loadAudioEditProject(projectId)
+  logger.info('audio_edit.captions.start', { context: { projectId } })
+  try {
+    editAudioEditProject(projectId, formatAudioEditCaptions)
+    await flushAudioEditProject(projectId)
+    const count = buildAudioEditCaptionGroups(instance.document.transcript, instance.document.source.sampleRate).filter((group) => group.text && group.blocks.some((block) => block.included)).length
+    logger.info('audio_edit.captions.completed', { context: { projectId, count } })
+    return count
+  } catch (error) {
+    logger.error('audio_edit.captions.failed', { context: { projectId }, error })
+    throw error
+  }
+}
 
 export async function compressAudioEditSilence(projectId: string, range?: AudioEditRange, requestId: string = crypto.randomUUID(), includeFillers = false): Promise<{ count: number; shortenedMs: number }> {
   return withAudioEditProjectOperation(projectId, async (instance, commit) => {

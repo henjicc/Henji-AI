@@ -1,5 +1,6 @@
 import { getDb } from '../db'
 import type { AudioEditProjectDocument, AudioEditProjectSummary } from '../../../../src/core/audioEdit/types'
+import { createAudioEditBaseline } from '../../../../src/core/audioEdit/baseline'
 
 interface ProjectRow {
   id: string
@@ -11,7 +12,7 @@ interface ProjectRow {
 
 function parseProject(row: ProjectRow): AudioEditProjectDocument {
   const project = JSON.parse(row.document_json) as AudioEditProjectDocument
-  return { ...project, id: row.id, name: row.name, createdAt: row.created_at, updatedAt: row.updated_at }
+  return { ...project, editBaseline: project.editBaseline ?? createAudioEditBaseline(project, 'legacy'), id: row.id, name: row.name, createdAt: row.created_at, updatedAt: row.updated_at }
 }
 
 export function listAudioEditProjects(): AudioEditProjectSummary[] {
@@ -54,6 +55,10 @@ export function saveAudioEditProject(project: AudioEditProjectDocument): AudioEd
   const now = Date.now()
   const next: AudioEditProjectDocument = {
     ...project,
+    // First recognition establishes the original text; ordinary writes cannot replace it.
+    editBaseline: !current || (!current.editBaseline?.transcript.length && !current.transcript.length && project.transcript.length)
+      ? createAudioEditBaseline(project, 'original')
+      : current.editBaseline,
     revision: current ? current.revision + 1 : Math.max(1, project.revision),
     createdAt: current?.createdAt ?? project.createdAt ?? now,
     updatedAt: now,

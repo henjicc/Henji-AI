@@ -4,6 +4,7 @@ import type { AudioEditProjectDocument, AudioEditProcessorDescriptor } from '@/c
 import { applyAudioEditSuggestion, setAudioEditBlocks } from '@/core/audioEdit/edits'
 import { audioEditCutsSchema, audioEditSettingsSchema, audioEditFrameRateSchema, audioEditProcessorChainSchema, audioEditViewSettingsSchema } from '@/core/audioEdit/schema'
 import { DEFAULT_AUDIO_EDIT_VIEW_SETTINGS } from '@/core/audioEdit/edits'
+import { hasAudioEditModifications } from '@/core/audioEdit/baseline'
 import { buildProjectAudioEditTimeline, editedDurationFrames } from '@/core/audioEdit/timeline'
 
 export const AUDIO_EDIT_ENTITY_TYPES = { project: 'audio_edit.project', transcriptBlock: 'audio_edit.transcript_block', suggestion: 'audio_edit.suggestion', processorChain: 'audio_edit.processor_chain', render: 'audio_edit.render' } as const
@@ -38,9 +39,14 @@ export const AUDIO_EDIT_FIELDS: Record<AudioEditEntityType, ApplicationFieldDefi
     field(E.project, 'selected_asr_model_id', '语音识别模型', TEXT, (s) => s.document.selectedAsrModelId ?? ''),
     field(E.project, 'duration_frames', '源时长帧数', INT, (s) => s.document.source.durationFrames),
     field(E.project, 'sample_rate', '采样率', INT, (s) => s.document.source.sampleRate),
+    field(E.project, 'has_modifications', '是否存在可全部撤销的修改', BOOL, (s) => hasAudioEditModifications(s.document)),
+    field(E.project, 'original_text_available', '是否保留原始识别文本（旧工程为否，不能恢复过去的文字纠正）', BOOL, (s) => s.document.editBaseline?.kind === 'original'),
   ],
   [E.transcriptBlock]: [
+    field(E.transcriptBlock, 'project_id', '所属口播工程（分页读取时可按此筛选）', TEXT, (s) => s.document.id),
+    field(E.transcriptBlock, 'original_text', '保留的初始文本（旧工程为升级时的文字）', TEXT, (s) => s.document.editBaseline?.transcript.find((item) => item.id === s.childId)?.text ?? block(s).text),
     field(E.transcriptBlock, 'text', '校正文本', TEXT, (s) => block(s).text, (s, v) => { const item = block(s); if (item.locked) throw new Error('词块已锁定'); item.text = string(v) }),
+    field(E.transcriptBlock, 'caption_break_after', '此词之后结束字幕段（不改变声音或时间戳）', BOOL, (s) => block(s).captionBreakAfter ?? false, (s, v) => { const item = block(s); if (item.locked) throw new Error('词块已锁定'); item.captionBreakAfter = boolean(v) }),
     field(E.transcriptBlock, 'start_frame', '开始帧', INT, (s) => block(s).startFrame),
     field(E.transcriptBlock, 'end_frame', '结束帧', INT, (s) => block(s).endFrame),
     field(E.transcriptBlock, 'included', '是否保留', BOOL, (s) => block(s).included, (s, v) => { if (block(s).locked) throw new Error('词块已锁定'); s.document = setAudioEditBlocks(s.document, [s.childId], boolean(v)) }, ['toggleBlock', 'setBlocksIncluded']),
