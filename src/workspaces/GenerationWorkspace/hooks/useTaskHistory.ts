@@ -3,15 +3,14 @@ import { aiReadSavedResult } from '@/commands/aiRuntime'
 import { createLogger } from '@/core/logging'
 import type React from 'react'
 import { useCallback, useEffect } from 'react'
-import { exists, toDisplaySrc } from '@/platform/desktopApi'
 import { databaseService } from '@/services/database/DatabaseService'
 import type { HistoryRecord } from '@/services/database/types'
-import { grantMediaAccessForReference } from '@/services/largeUploadPolicy'
 import { getDataRoot, convertPathArray, convertPathString } from '@/utils/dataPath'
 import { isDesktop } from '@/utils/save'
 import type { GenerationTask, GeneratorOptions, TaskStatus } from '../types'
 import { joinMulti, splitMulti } from '../utils/multiFile'
 import { isRecord, isStringArray } from '../utils/typeGuards'
+import { createHistoryMediaResolver } from '../application/historyMediaResolver'
 
 const logger = createLogger('workspaces.GenerationWorkspace.hooks.useTaskHistory')
 
@@ -21,54 +20,6 @@ function normalizeHistoryStatus(status: HistoryRecord['status']): TaskStatus {
   if (status === 'timeout') return 'error'
   if (status === 'cancelled') return 'error'
   return status
-}
-
-async function toDisplayUrl(fullPath: string, kind: 'image' | 'audio' | 'video'): Promise<string> {
-  // For images, try to use cached thumbnail first
-  if (kind === 'image') {
-    try {
-      const { getHistoryThumbnailCachePath } = await import('@/utils/historyThumbnail')
-      const cachePath = await getHistoryThumbnailCachePath(fullPath)
-      if (await exists(cachePath)) {
-        return toDisplaySrc(cachePath.replace(/\\/g, '/'))
-      }
-    } catch {
-      // Fall through to full URL
-    }
-  }
-  // For non-image or when thumbnail is unavailable, use the original file
-  return toDisplaySrc(fullPath.replace(/\\/g, '/'))
-}
-
-interface ResolvedDisplayUrls {
-  urls: string[]
-  skippedCount: number
-}
-
-async function resolveDisplayUrls(
-  paths: string[],
-  kind: 'image' | 'audio' | 'video'
-): Promise<ResolvedDisplayUrls> {
-  const resolved = await Promise.all(paths.map(async (filePath): Promise<string | null> => {
-    if (!await exists(filePath)) return null
-    try {
-      await grantMediaAccessForReference(filePath)
-      return await toDisplayUrl(filePath, kind)
-    } catch {
-      return null
-    }
-  }))
-  const urls = resolved.filter((url): url is string => url !== null)
-  return { urls, skippedCount: resolved.length - urls.length }
-}
-
-async function toDisplayUrlString(
-  absoluteFilePath: string,
-  kind: 'image' | 'audio' | 'video'
-): Promise<string | null> {
-  const paths = splitMulti(absoluteFilePath)
-  const { urls } = await resolveDisplayUrls(paths, kind)
-  return urls.length > 0 ? joinMulti(urls) : null
 }
 
 function parseHistoryTimestamp(value?: string | null): Date {
@@ -82,7 +33,11 @@ function parseHistoryTimestamp(value?: string | null): Date {
   return new Date(value)
 }
 
-async function mapHistoryRecordToTask(record: HistoryRecord, dataRoot: string): Promise<GenerationTask> {
+async function mapHistoryRecordToTask(
+  record: HistoryRecord,
+  dataRoot: string,
+  resolveDisplayUrls: ReturnType<typeof createHistoryMediaResolver>,
+): Promise<GenerationTask> {
   const createdAt = parseHistoryTimestamp(record.createdAt)
   const rawParams: DynamicValue = record.params
   const safeParams: DynamicValueMap = isRecord(rawParams) ? rawParams : {}
@@ -156,7 +111,8 @@ async function mapHistoryRecordToTask(record: HistoryRecord, dataRoot: string): 
   // They can be lazily computed when the user opens the viewer.
 
   const resolvedResultUrl = absoluteResultFilePath
-    ? await toDisplayUrlString(absoluteResultFilePath, record.type)
+    ? await resolveDisplayUrls(splitMulti(absoluteResultFilePath), record.type)
+      .then(({ urls }) => urls.length > 0 ? joinMulti(urls) : null)
     : resultUrlFromParams
 
   const result = resolvedResultUrl
@@ -241,7 +197,8 @@ export function useLoadTaskHistory({
     try {
       const historyRecords = await loadHistoryWithRetries()
       const dataRoot = await getDataRoot()
-      const loadedTasks = await Promise.all(historyRecords.map((r) => mapHistoryRecordToTask(r, dataRoot)))
+      const resolveMedia = createHistoryMediaResolver(dataRoot)
+      const loadedTasks = await Promise.all(historyRecords.map((r) => mapHistoryRecordToTask(r, dataRoot, resolveMedia)))
       setTasks(loadedTasks.reverse())
       logger.info('[Workspace] 历史记录加载完成', { count: loadedTasks.length })
     } catch (error) {
@@ -283,43 +240,24 @@ export function useSaveTaskHistory({ tasks, isTasksLoaded, isInitialLoadRef }: U
     if (!isDesktop()) return
     if (isInitialLoadRef.current) return
 
-    const saveHistory = async (): Promise<void> => {
-      try {
-        const tasksToSave = tasks.filter((t) =>
-          ['success', 'error', 'pending', 'queued', 'generating'].includes(t.status)
-        )
-
-
-        logger.info('[Workspace] 历史缩略图更新', { count: tasksToSave.length })
-
-        // Generate thumbnails for image results in background
-        ;(async () => {
-          try {
-            const { getOrCreateHistoryThumbnail } = await import('@/utils/historyThumbnail')
-            for (const task of tasksToSave) {
-              if (task.type === 'image' && task.result?.filePath) {
-                // Split multi-file paths and generate thumbnail for each file
-                const { splitMulti } = await import('../utils/multiFile')
-                const filePaths = splitMulti(task.result.filePath)
-                for (const fp of filePaths) {
-                  getOrCreateHistoryThumbnail(fp).catch(() => {/* silent */})
-                }
-              }
-            }
-          } catch {
-            // silent
-          }
-        })()
-      } catch (error) {
-        logger.error('[Workspace] 保存历史记录失败:', error)
-      }
-    }
-
+    let cancelled = false
     const timer = setTimeout(() => {
-      void saveHistory()
+      const paths = new Set<string>()
+      for (const task of tasks) {
+        if (task.type === 'image' && task.result?.filePath) {
+          for (const path of splitMulti(task.result.filePath)) paths.add(path)
+        }
+      }
+      if (paths.size === 0) return
+      void import('@/utils/historyThumbnail')
+        .then(({ prepareHistoryThumbnails }) => prepareHistoryThumbnails(paths, () => cancelled))
+        .catch((error: unknown) => logger.error('历史缩略图更新失败', {
+          event: 'generation.history.thumbnails_failed', error,
+        }))
     }, 1000)
 
-    return () => clearTimeout(timer)
+    return () => { cancelled = true; clearTimeout(timer) }
+
   }, [isInitialLoadRef, isTasksLoaded, tasks])
 }
 

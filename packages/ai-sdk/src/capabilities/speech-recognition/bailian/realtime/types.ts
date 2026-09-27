@@ -11,6 +11,9 @@ export interface BailianRealtimeAsrOptions {
   turnDetection?: 'server_vad' | 'manual'
   vadThreshold?: number
   vadSilenceDurationMs?: number
+  keepDialect?: boolean
+  vadModel?: 'near_meeting_16k' | 'far_field_meeting_16k'
+  vocabulary?: Readonly<Record<string, number>>
 }
 
 export interface BailianRealtimeModuleOptions {

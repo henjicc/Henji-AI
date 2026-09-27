@@ -1513,6 +1513,11 @@ input[type="password"]::-webkit-credentials-auto-fill-button {
   background: rgb(var(--accent-rgb));
 }
 
+.react-flow__node[data-canvas-layout-suspended="true"],
+.react-flow__viewport-portal > [data-canvas-layout-suspended="true"] {
+  display: none !important;
+}
+
 /*
  * 项目卡封面占位图：项目还没有任何内容时代替截图。
  * 颜色只用主题令牌里的品牌色，卡与卡之间的差异靠 --cover-x / --cover-y 两个内联变量

@@ -9,7 +9,7 @@ import { deriveSocketType, getSocketColor } from '@/core/types/SocketType';
 import { getI18nText } from '@/core/types/I18nText';
 import { ParamGroupTrigger } from '@/components/params/ParamGroupTrigger';
 import { isParamDisabled } from '@/components/params/paramVisibility';
-import { useCanvasStore } from '@/stores/canvasStore';
+import { canvasViewStore } from '@/stores/canvasStore';
 import {
   areStringSetsEqual,
   areValueOverridesEqual,
@@ -68,12 +68,12 @@ export const NodeParamRows = memo(({
 }: NodeParamRowsProps) => {
   const { i18n } = useTranslation();
   const connectedParamIds = useStoreWithEqualityFn(
-    useCanvasStore,
+    canvasViewStore,
     (state) => getConnectedParamIds(nodeId, state.edges),
     areStringSetsEqual
   );
   const connectedValues = useStoreWithEqualityFn(
-    useCanvasStore,
+    canvasViewStore,
     (state) => collectInputValues(nodeId, state.nodes, state.edges),
     areValueOverridesEqual
   );

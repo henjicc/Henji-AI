@@ -5,7 +5,7 @@ import { persist } from 'zustand/middleware';
 export const DOWNLOAD_PRESET_PATH_LIMIT = 8;
 
 import { setLogCaptureMode as syncLogCaptureMode, type LogCaptureMode } from '@/commands/logging';
-import type { UploadProvider } from '@/core/config/providers';
+import { API_KEY_PROVIDER_IDS, type UploadProvider } from '@/core/config/providers';
 import {
   LEGACY_DEFAULT_THEME_COLOR_SCHEME_HEX,
   LEGACY_THEME_PALETTE_PRESET_HEX,
@@ -35,7 +35,6 @@ export type AssetTabAction = 'floating' | 'workspace';
 export type AssetPanelPosition = 'top' | 'left' | 'right';
 export type AssetTriggerEdge = 'left' | 'right';
 export type AssetThumbnailFit = 'cover' | 'contain';
-const KNOWN_PROVIDER_IDS = ['ppio', 'fal', 'kie', 'apimart', 'bailian', 'volcengine', 'modelscope', 'grsai'] as const;
 const DEFAULT_UPLOAD_PROVIDER: UploadProvider = 'kie';
 
 interface SettingsState {
@@ -167,7 +166,7 @@ function mapLegacyPaletteTheme(input?: Partial<ThemeColorScheme>): ThemeColorSch
 }
 
 function createDefaultProviderKeyStatus(): ProviderKeyStatusMap {
-  return KNOWN_PROVIDER_IDS.reduce<ProviderKeyStatusMap>((acc, providerId) => {
+  return API_KEY_PROVIDER_IDS.reduce<ProviderKeyStatusMap>((acc, providerId) => {
     acc[providerId] = false;
     return acc;
   }, {});

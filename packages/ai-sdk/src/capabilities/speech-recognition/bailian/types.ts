@@ -8,6 +8,10 @@ export interface BailianAsrOptions {
   speakerCount?: number
   channelId?: number
   specialWordFilter?: string
+  /** Qwen-Audio 3.1 保留方言表达。 */
+  keepDialect?: boolean
+  /** Qwen-Audio 3.x 即时热词：权重 1–5 或 50（超级热词最多 50 个）。 */
+  vocabulary?: Readonly<Record<string, number>>
 }
 
 export interface BailianAsrModuleOptions {

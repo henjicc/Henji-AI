@@ -22,7 +22,7 @@ import { MediaInputRow } from '@/features/canvas/params/MediaInputRow';
 
 
 
-import { useCanvasStore } from '@/stores/canvasStore';
+import { canvasViewStore, useCanvasStore } from '@/stores/canvasStore';
 
 
 import { ToolWorkbenchNodeFrame } from './shared/ToolWorkbenchNodeFrame';
@@ -59,7 +59,7 @@ export const RelightGenerationNode = memo(({
     (state) => getMainPortConnectionFlags(state.edges).get(id)?.hasMainSource ?? false,
   )
   const incomingSourceMedia = useStoreWithEqualityFn(
-    useCanvasStore,
+    canvasViewStore,
     (state) => collectInputMediaByKind(id, state.nodes, state.edges, 'image'),
     areMediaOutputListsEqual,
   )

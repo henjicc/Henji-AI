@@ -136,7 +136,14 @@
       }
     },
     "kie-gpt-image-2.5": {
-      "meta": { "name": "GPT Image 2.5" }
+      "meta": {
+        "name": "GPT Image 2.5"
+      }
+    },
+    "kie-happyhorse-1.1": {
+      "meta": {
+        "name": "HappyHorse 1.1"
+      }
     }
   }
 }

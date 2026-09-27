@@ -23,7 +23,7 @@ Kimi 官方文档全文没有出现过 `responses.create`；`platform.kimi.com/d
 |---|---|---|---|---|
 | `kimi-k3` | 当前旗舰，2.8 万亿参数，KDA 混合线性注意力，全球首个开源 3 万亿级模型 | 文本、图片、视频 → 文本 | 1,048,576 tokens（1M） | 默认 131,072，最大可设 1,048,576 |
 
-价格（元/百万 tokens）：缓存命中 2、缓存未命中 20、输出 100。
+价格（2026-09-24 核对，元/百万 tokens）：缓存命中 2、缓存未命中 20、输出 100；另计缓存写入，TTL 5 分钟为 20、TTL 1 小时为 40，默认 5 分钟。命中仅按缓存命中单价计费，不重复收取缓存写入费用，命中后有效期续期。当前 SDK 未提供 Kimi 账单计算器，不从总输入 tokens 猜测缓存写入量。
 
 K3 是付费解锁模型：**充值后才能调用**，新用户认证赠送的 15 元代金券不能用于 K3。
 
@@ -70,6 +70,7 @@ K3 是付费解锁模型：**充值后才能调用**，新用户认证赠送的 
 - [使用 Kimi API 的联网搜索功能](https://platform.kimi.com/docs/guide/use-web-search)
 - [如何在 Kimi API 中使用官方工具](https://platform.kimi.com/docs/guide/use-official-tools)
 - [Kimi K3 定价](https://platform.kimi.com/docs/pricing/chat-k3)
+- [当前推理与缓存写入定价（2026-09-24）](https://platform.kimi.com/docs/pricing/chat.md)
 - [联网搜索定价](https://platform.kimi.com/docs/pricing/tools)
 - [使用思考模式](https://platform.kimi.com/docs/guide/use-thinking-models)
 - [Kimi 文档全量索引](https://platform.kimi.com/docs/llms.txt)

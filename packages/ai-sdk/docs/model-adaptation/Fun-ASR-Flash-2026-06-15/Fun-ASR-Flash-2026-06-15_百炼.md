@@ -2,7 +2,7 @@
 
 | 项目 | 内容 |
 |---|---|
-| 最后更新 | 2026-08-28 |
+| 最后更新 | 2026-09-21 |
 | 能力 | 短音频同步识别（HTTP） |
 | 平台模型 ID | `fun-asr-flash-2026-06-15` |
 | 输入上限 | 5 分钟 / 2 GB，单次 1 个音频 |
@@ -39,3 +39,7 @@ Content-Type: application/json
 | 临时上传 | https://help.aliyun.com/zh/model-studio/get-temporary-file-url | 否 |
 | 价格 | https://help.aliyun.com/zh/model-studio/model-pricing | 否 |
 | API Key | https://bailian.console.aliyun.com/?apiKey=1#/api-key | **是** |
+
+## 2026-09-21 文件传输边界复核
+
+SDK 分块 JSON 路径按官方 2 GB 文件限制取 2,000,000,000 原始字节；仍受 5 分钟时长限制。不能以流式上传突破模型时长限制。HTTP 详细页：https://help.aliyun.com/zh/model-studio/fun-asr-flash-recorded-speech-recognition-http-api 。

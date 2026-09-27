@@ -1,0 +1,50 @@
+{
+  "source": "https://developers.openai.com/api/reference/resources/chat/subresources/completions/methods/create",
+  "request": {
+    "response_format": {
+      "type": "json_schema",
+      "json_schema": {
+        "name": "subtitle_segments",
+        "strict": true,
+        "schema": {
+          "type": "object",
+          "properties": {
+            "segments": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "text": { "type": "string" }
+                },
+                "required": ["text"],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": ["segments"],
+          "additionalProperties": false
+        }
+      }
+    }
+  },
+  "events": [
+    { "choices": [{ "delta": { "reasoning_content": "整理" }, "finish_reason": null }] },
+    { "choices": [{ "delta": { "content": "{\"segments\":[" }, "finish_reason": null }] },
+    { "choices": [{ "delta": { "content": "{\"text\":\"完成\"}]}" }, "finish_reason": null }] },
+    {
+      "choices": [{ "delta": {}, "finish_reason": "stop" }],
+      "usage": {
+        "prompt_tokens": 12,
+        "completion_tokens": 8,
+        "total_tokens": 20,
+        "completion_tokens_details": { "reasoning_tokens": 2 }
+      }
+    }
+  ],
+  "rejection": {
+    "error": {
+      "code": "unsupported_response_format",
+      "message": "The selected model does not support response_format of type json_schema."
+    }
+  }
+}

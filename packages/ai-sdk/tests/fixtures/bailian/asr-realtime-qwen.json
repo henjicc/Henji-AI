@@ -1,6 +1,9 @@
 {
   "kind": "capability",
   "source": {
+    "url": "https://help.aliyun.com/zh/model-studio/qwen-asr-realtime-server-events",
+    "capturedAt": "2026-09-24",
+    "provenance": "依据官方字段表构造；status 事件保留官方 null transcript，ID 为稳定占位。partialBoundary 用固定英文验证 text + stash 原样拼接；缺字段/错类型负例由测试独立构造。",
     "protocol": "阿里云百炼 Qwen3-ASR Realtime 官方 session/transcription 事件字段",
     "evidence": "packages/ai-sdk/docs/model-adaptation/Qwen3-ASR-Flash-Realtime/Qwen3-ASR-Flash-Realtime_百炼.md；会话标识与文本为不可联网占位数据"
   },
@@ -8,6 +11,11 @@
     "created": { "type": "session.created", "session": { "id": "fixture_session_001" } },
     "updated": { "type": "session.updated", "session": { "id": "fixture_session_001" } },
     "partial": { "type": "conversation.item.input_audio_transcription.text", "text": "你", "stash": "好" },
+    "partialBoundary": { "type": "conversation.item.input_audio_transcription.text", "text": "Hello ", "stash": "world" },
+    "speechStarted": { "type": "input_audio_buffer.speech_started", "event_id": "fixture_event_1", "audio_start_ms": 64, "item_id": "fixture_item_1" },
+    "speechStopped": { "type": "input_audio_buffer.speech_stopped", "event_id": "fixture_event_2", "audio_end_ms": 400, "item_id": "fixture_item_1" },
+    "committed": { "type": "input_audio_buffer.committed", "event_id": "fixture_event_3", "previous_item_id": "fixture_item_0", "item_id": "fixture_item_1" },
+    "itemCreated": { "type": "conversation.item.created", "event_id": "fixture_event_4", "previous_item_id": "fixture_item_0", "item": { "id": "fixture_item_1", "object": "realtime.item", "type": "message", "status": "completed", "role": "user", "content": [{ "type": "input_audio", "transcript": null }] } },
     "final": { "type": "conversation.item.input_audio_transcription.completed", "transcript": "你好" },
     "finished": { "type": "session.finished", "session": { "id": "fixture_session_001" } }
   }

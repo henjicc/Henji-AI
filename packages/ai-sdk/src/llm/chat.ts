@@ -1,6 +1,7 @@
 import { preprocessRequestBody } from '../upload/preprocess'
 import type { RuntimeContext } from '../runtime/RuntimeContext'
 import { normalizeProviderError } from '../runtime/error-classify'
+import { AiRuntimeError } from '../runtime/AiRuntimeError'
 import {
   cancelTask,
   clearCancelFlag,
@@ -55,11 +56,12 @@ export interface LlmChatCompletedInfo {
   reasoningOutput: string
   usage: LlmUsageDto | null
   finishReason: string | null
+  truncated: boolean
   toolCalls?: LlmStreamToolCall[]
 }
 
 export interface LlmChatStreamHooks {
-  /** 请求体与 endpoint 已经构建好，即将发出网络请求前触发一次。 */
+  /** 请求体与 endpoint 已经构建好，即将发出网络请求前触发一次；requestPayload 是只用于观察的快照。 */
   onRequestBuilt?: (info: LlmChatRequestBuiltInfo) => void
   /** 流式响应正常读完（未被取消、未抛错）后触发一次。 */
   onCompleted?: (info: LlmChatCompletedInfo) => void
@@ -76,6 +78,7 @@ export interface LlmChatStreamOutcome {
   reasoningOutput: string
   usage: LlmUsageDto | null
   finishReason: string | null
+  truncated: boolean
   toolCalls?: LlmStreamToolCall[]
 }
 
@@ -146,12 +149,17 @@ export async function runLlmChatStream(
       : resolveOpenAiCompatibleEndpoint(processedRequest)
     const requestPayload = buildOpenAiCompatiblePayload(processedRequest)
 
-    hooks.onRequestBuilt?.({ endpoint, requestPayload, processedRequest })
+    hooks.onRequestBuilt?.({
+      endpoint,
+      requestPayload: cloneJsonObject(requestPayload),
+      processedRequest,
+    })
 
     const output = await streamOpenAiCompatibleChat({
       endpoint,
       apiKey,
-      request: processedRequest,
+      providerId: identity.providerFamilyId,
+      payload: requestPayload,
       signal: controller.signal,
       emit,
       transport: runtime.transport,
@@ -174,6 +182,7 @@ export async function runLlmChatStream(
       reasoningOutput: output.reasoningOutput,
       usage: output.usage,
       finishReason: output.finishReason,
+      truncated: output.truncated,
       toolCalls: output.toolCalls,
     })
 
@@ -189,6 +198,7 @@ export async function runLlmChatStream(
       reasoningOutput: output.reasoningOutput,
       usage: output.usage,
       finishReason: output.finishReason,
+      truncated: output.truncated,
       toolCalls: output.toolCalls,
     }
   } catch (error) {
@@ -199,11 +209,15 @@ export async function runLlmChatStream(
         })
       : error
     span?.end(normalizedInput)
-    throw new Error(normalizeLlmChatError(taskId, normalizedInput, {
+    const normalized = new Error(normalizeLlmChatError(taskId, normalizedInput, {
       providerId: request.providerId,
       modelId: request.modelId,
       requestId: taskId,
     }))
+    if (error instanceof AiRuntimeError && error.details?.protocol === 'openai-chat-sse') {
+      Object.assign(normalized, { details: error.details })
+    }
+    throw normalized
   } finally {
     execution.signal?.removeEventListener('abort', forwardAbort)
     if (timeout !== undefined) clearTimeout(timeout)
@@ -249,4 +263,8 @@ function isAbortError(error: unknown): boolean {
 
 function isJsonObject(value: JsonValue): value is JsonObject {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function cloneJsonObject(value: JsonObject): JsonObject {
+  return JSON.parse(JSON.stringify(value)) as JsonObject
 }

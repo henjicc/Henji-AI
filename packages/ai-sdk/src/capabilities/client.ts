@@ -273,105 +273,114 @@ export function createCapabilityClient(config: CreateCapabilityClientConfig): Ca
             ? new AiRuntimeError('timeout', `Capability session timed out: ${requestId}`)
             : cancelledError(requestId)
         }
-        let ended = false
         let closePromise: Promise<void> | undefined
         let finishPromise: Promise<TOutput> | undefined
+        type Outcome = { kind: 'completed'; output: TOutput }
+          | { kind: 'failed' | 'closed'; error: AiRuntimeError }
+        let outcome: Outcome | undefined
+        let settlement: Promise<void> | undefined
+        let cleanupError: AiRuntimeError | undefined
+        const pendingSends = new Set<(error: AiRuntimeError) => void>()
+        let resolveResult!: (value: TOutput) => void
+        let rejectResult!: (error: AiRuntimeError) => void
+        const result = new Promise<TOutput>((resolve, reject) => { resolveResult = resolve; rejectResult = reject })
+        // Observing is optional; the original promise remains rejected for callers.
+        void result.catch(() => undefined)
         const closeDriver = (): Promise<void> => {
           closePromise ??= Promise.resolve().then(async () => await driver.close?.())
           return closePromise
         }
-        const end = (error?: unknown): void => {
-          if (ended) return
-          ended = true
-          options.signal?.removeEventListener('abort', forwardAbort)
-          if (timeout !== undefined) clearTimeout(timeout)
-          active.delete(requestId)
-          markFinished()
-          span.end(error)
-        }
-        const closeAfterAbort = async (): Promise<void> => {
-          if (ended) return
-          const error = timedOut
-            ? new AiRuntimeError('timeout', `Capability session timed out: ${requestId}`)
-            : cancelledError(requestId)
-          try {
-            await closeDriver()
-          } finally {
-            runtime.logger.error('能力实时会话失败', {
-              event: 'capability.session.failed', requestId, context: { capabilityId: id }, error,
-            })
-            end(error)
-          }
-        }
-        controller.signal.addEventListener('abort', () => { void closeAfterAbort() }, { once: true })
-        const sessionInactiveError = (): AiRuntimeError => timedOut
+        const abortError = (): AiRuntimeError => timedOut
           ? new AiRuntimeError('timeout', `Capability session timed out: ${requestId}`)
           : cancelledError(requestId)
+        const normalize = (error: unknown): AiRuntimeError => controller.signal.aborted
+          ? abortError() : normalizeExecutionError(id, error)
+        const inactiveError = (): AiRuntimeError => outcome && outcome.kind !== 'completed'
+          ? outcome.error : new AiRuntimeError('realtime_session_inactive', `Capability session is inactive: ${requestId}`)
+        const settle = (next: Outcome): Promise<void> => {
+          if (settlement) return settlement
+          outcome = next
+          for (const reject of pendingSends) reject(inactiveError())
+          pendingSends.clear()
+          settlement = (async () => {
+            let terminal = next
+            try { await closeDriver() } catch (error) {
+              cleanupError = normalizeExecutionError(id, error)
+              // Keep the first failure/cancellation; failed cleanup cannot make
+              // a successful result or explicit close look successful.
+              if (terminal.kind !== 'failed') terminal = { kind: 'failed', error: cleanupError }
+            }
+            outcome = terminal
+            controller.signal.removeEventListener('abort', onAbort)
+            options.signal?.removeEventListener('abort', forwardAbort)
+            if (timeout !== undefined) clearTimeout(timeout)
+            active.delete(requestId)
+            markFinished()
+            if (terminal.kind === 'failed') {
+              runtime.logger.error('能力实时会话失败', {
+                event: 'capability.session.failed', requestId,
+                context: { capabilityId: id, ...(cleanupError ? { cleanupErrorCode: cleanupError.code } : {}) },
+                error: terminal.error,
+              })
+            } else {
+              runtime.logger.info(terminal.kind === 'completed' ? '能力实时会话完成' : '能力实时会话关闭', {
+                event: `capability.session.${terminal.kind}`, requestId, context: { capabilityId: id },
+              })
+            }
+            span.end(terminal.kind === 'failed' ? terminal.error : undefined)
+            if (terminal.kind === 'completed') resolveResult(terminal.output)
+            else rejectResult(terminal.error)
+          })()
+          return settlement
+        }
+        const onAbort = (): void => { void settle({ kind: 'failed', error: abortError() }) }
+        controller.signal.addEventListener('abort', onAbort, { once: true })
+        if (driver.result) {
+          void driver.result.then(
+            output => settle({ kind: 'completed', output }),
+            error => settle({ kind: 'failed', error: normalize(error) }),
+          )
+        }
 
         return {
           requestId,
           descriptor: registered.module.descriptor,
+          result,
           send: async (value) => {
-            if (ended || controller.signal.aborted) throw sessionInactiveError()
-            await driver.send(value)
+            if (outcome || finishPromise) throw inactiveError()
+            if (controller.signal.aborted) throw abortError()
+            let rejectSend!: (error: AiRuntimeError) => void
+            const pending = new Promise<void>((resolve, reject) => {
+              rejectSend = reject
+              pendingSends.add(reject)
+              void Promise.resolve().then(async () => {
+                if (outcome) throw inactiveError()
+                await driver.send(value)
+              }).then(resolve, reject)
+            })
+            try { await pending } finally { pendingSends.delete(rejectSend) }
           },
           finish: () => {
             if (finishPromise) return finishPromise
-            if (ended || controller.signal.aborted) return Promise.reject(sessionInactiveError())
-            finishPromise = (async (): Promise<TOutput> => {
-              let output: TOutput
-              try {
-                output = await driver.finish()
-                if (controller.signal.aborted) throw cancelledError(requestId)
-              } catch (error) {
-                const normalized = controller.signal.aborted
-                  ? cancelledError(requestId)
-                  : normalizeExecutionError(id, error)
+            finishPromise = result
+            if (!outcome) {
+              void Promise.resolve().then(async () => {
+                if (outcome) return
                 try {
-                  await closeDriver()
-                } catch {
-                  // 保留 finish 的首个失败；close 仅负责尽力释放连接。
+                  const output = await driver.finish()
+                  if (controller.signal.aborted) throw abortError()
+                  await settle({ kind: 'completed', output })
+                } catch (error) {
+                  await settle({ kind: 'failed', error: normalize(error) })
                 }
-                runtime.logger.error('能力实时会话失败', {
-                  event: 'capability.session.failed', requestId, context: { capabilityId: id }, error: normalized,
-                })
-                end(normalized)
-                throw normalized
-              }
-              try {
-                await closeDriver()
-              } catch (error) {
-                const normalized = normalizeExecutionError(id, error)
-                runtime.logger.error('能力实时会话失败', {
-                  event: 'capability.session.failed', requestId, context: { capabilityId: id }, error: normalized,
-                })
-                end(normalized)
-                throw normalized
-              }
-              runtime.logger.info('能力实时会话完成', {
-                event: 'capability.session.completed', requestId, context: { capabilityId: id },
               })
-              end()
-              return output
-            })()
+            }
             return finishPromise
           },
           close: async () => {
-            if (ended) return
-            try {
-              await closeDriver()
-              runtime.logger.info('能力实时会话关闭', {
-                event: 'capability.session.closed', requestId, context: { capabilityId: id },
-              })
-              end()
-            } catch (error) {
-              const normalized = normalizeExecutionError(id, error)
-              runtime.logger.error('能力实时会话失败', {
-                event: 'capability.session.failed', requestId, context: { capabilityId: id }, error: normalized,
-              })
-              end(normalized)
-              throw normalized
-            }
+            if (outcome) { await settlement; return }
+            await settle({ kind: 'closed', error: new AiRuntimeError('realtime_session_closed', `Capability session was closed: ${requestId}`) })
+            if (cleanupError) throw cleanupError
           },
         }
       } catch (error) {

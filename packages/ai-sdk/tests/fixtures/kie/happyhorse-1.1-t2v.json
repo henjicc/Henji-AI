@@ -1,0 +1,114 @@
+{
+  "kind": "capability",
+  "source": {
+    "url": "https://docs.kie.ai/38309290e0.md",
+    "collectedAt": "2026-09-24",
+    "loginRequired": false,
+    "classification": "official-literal",
+    "note": "官方 OpenAPI 请求、响应和回调示例；非真实调用日志"
+  },
+  "examples": [
+    {
+      "path": "operation.requestBody.content.application/json.schema.properties.input.properties.prompt.examples",
+      "value": [
+        ""
+      ]
+    },
+    {
+      "path": "operation.requestBody.content.application/json.schema.properties.input.properties.resolution.examples",
+      "value": [
+        "1080p"
+      ]
+    },
+    {
+      "path": "operation.requestBody.content.application/json.schema.properties.input.properties.aspect_ratio.examples",
+      "value": [
+        "16:9"
+      ]
+    },
+    {
+      "path": "operation.requestBody.content.application/json.schema.properties.input.properties.duration.examples",
+      "value": [
+        5
+      ]
+    },
+    {
+      "path": "operation.requestBody.content.application/json.example",
+      "value": {
+        "model": "happyhorse-1-1/text-to-video",
+        "input": {
+          "prompt": "A dog running on the earth",
+          "resolution": "1080p",
+          "aspect_ratio": "16:9",
+          "duration": 5
+        }
+      }
+    },
+    {
+      "path": "operation.responses.200.content.application/json.example",
+      "value": {
+        "code": 200,
+        "msg": "success",
+        "data": {
+          "taskId": "task_253_abc123"
+        }
+      }
+    },
+    {
+      "path": "operation.callbacks.videoTaskCompleted.{request.body#/callBackUrl}.post.requestBody.content.application/json.examples",
+      "value": {
+        "success": {
+          "summary": "任务成功完成",
+          "value": {
+            "code": 200,
+            "msg": "Playground task completed successfully.",
+            "data": {
+              "taskId": "task_example_video_webhook_001",
+              "model": "happyhorse-1-1/text-to-video",
+              "state": "success",
+              "param": "{\"input\":\"{\\\"prompt\\\":\\\"A dog running on the earth\\\",\\\"resolution\\\":\\\"1080p\\\",\\\"aspect_ratio\\\":\\\"16:9\\\",\\\"duration\\\":5}\",\"callBackUrl\":\"https://example.com/callback\",\"model\":\"happyhorse-1-1/text-to-video\"}",
+              "resultJson": "{\"resultUrls\":[\"https://example.com/generated-video.mp4\"]}",
+              "failCode": null,
+              "failMsg": null,
+              "costTime": 12,
+              "completeTime": 1234567890,
+              "createTime": 1234560000,
+              "updateTime": 1234567890,
+              "creditsConsumed": 1.23
+            }
+          }
+        },
+        "failure": {
+          "summary": "任务失败",
+          "value": {
+            "code": 501,
+            "msg": "Playground task failed.",
+            "data": {
+              "taskId": "task_example_video_webhook_001",
+              "model": "happyhorse-1-1/text-to-video",
+              "state": "fail",
+              "param": "{\"input\":\"{\\\"prompt\\\":\\\"A dog running on the earth\\\",\\\"resolution\\\":\\\"1080p\\\",\\\"aspect_ratio\\\":\\\"16:9\\\",\\\"duration\\\":5}\",\"callBackUrl\":\"https://example.com/callback\",\"model\":\"happyhorse-1-1/text-to-video\"}",
+              "failCode": "GENERATION_FAILED",
+              "failMsg": "The generation task failed."
+            }
+          }
+        }
+      }
+    },
+    {
+      "path": "operation.callbacks.videoTaskCompleted.{request.body#/callBackUrl}.post.responses.200.content.application/json.schema.properties.code.example",
+      "value": 200
+    },
+    {
+      "path": "operation.callbacks.videoTaskCompleted.{request.body#/callBackUrl}.post.responses.200.content.application/json.schema.properties.msg.example",
+      "value": "success"
+    },
+    {
+      "path": "operation.callbacks.videoTaskCompleted.{request.body#/callBackUrl}.post.responses.200.content.application/json.example",
+      "value": {
+        "code": 200,
+        "msg": "success"
+      }
+    }
+  ]
+}

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type MouseEvent as ReactMouseEvent } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { canvasEventBus } from '@/features/canvas/application/canvasServices';
 import { resolveAssetGroupMemberKind } from '@/features/canvas/application/assetGroupGraph';
@@ -11,7 +11,7 @@ interface UseCanvasAssetGroupsInput {
   edges: CanvasEdge[];
   selectedNodeId: string | null;
   selectedNodeIds: string[];
-  onNodeDragStop: (event: ReactMouseEvent, node: CanvasNode) => boolean;
+  onNodeDragStop: (event: Pick<MouseEvent, 'altKey'>, node: CanvasNode) => boolean;
   addToAssetGroup: (groupId: string, memberIds: string[]) => void;
 }
 
@@ -42,7 +42,7 @@ export function useCanvasAssetGroups(input: UseCanvasAssetGroupsInput) {
     if (selected && selected.id !== activeGroupId && selected.parentId !== activeGroupId) setActiveGroupId(null);
   }, [activeGroupId, nodes, selectedNodeId]);
 
-  const handleDragStop = useCallback((event: ReactMouseEvent, node: CanvasNode) => {
+  const handleDragStop = useCallback((event: Pick<MouseEvent, 'altKey'>, node: CanvasNode) => {
     if (onNodeDragStop(event, node)) return;
     if (event.altKey || isAssetGroupNode(node) || !resolveAssetGroupMemberKind(node)) return;
     const draggedElement = wrapperRef.current?.querySelector<HTMLElement>(`.react-flow__node[data-id="${node.id}"]`);

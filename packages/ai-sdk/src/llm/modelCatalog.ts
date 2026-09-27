@@ -25,6 +25,8 @@ export interface LlmModelCatalogEntry {
   toolCall: boolean
   parallelTools: boolean
   structuredOutputMode: LlmCapabilities['structuredOutputMode']
+  /** 结构化输出与思考模式能否同时启用；省略表示官方资料尚未核实。 */
+  structuredOutputWithReasoning?: boolean
   reasoning: boolean
   /** 是否接受 temperature / top_p；官方声明为固定值的模型要记 false */
   sampling: boolean
@@ -93,6 +95,7 @@ export function applyLlmModelCatalogEntry(
     toolCall: entry.toolCall,
     parallelTools: entry.parallelTools,
     structuredOutputMode: entry.structuredOutputMode,
+    structuredOutputWithReasoning: entry.structuredOutputWithReasoning ?? null,
     jsonOutput: entry.structuredOutputMode !== 'none',
     reasoning: entry.reasoning,
     sampling: entry.sampling,

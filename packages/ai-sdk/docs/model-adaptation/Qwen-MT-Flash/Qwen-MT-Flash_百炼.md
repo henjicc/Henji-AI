@@ -2,7 +2,7 @@
 
 | 项目 | 内容 |
 |---|---|
-| 最后更新 | 2026-08-28 |
+| 最后更新 | 2026-09-24 |
 | 能力 | 文本翻译（增量流式 / 非流式） |
 | 平台模型 ID | `qwen-mt-flash` |
 | 地域 | 北京、新加坡、美国（弗吉尼亚）、德国（法兰克福）；以区域模型实际开通为准 |
@@ -37,11 +37,32 @@ Authorization: Bearer <API Key>
 - Say-It 当前保存的常用语言代码会先映射为官方英文语言名；术语表映射到 `terms`，翻译记忆映射到 `tm_list`，通用 `context` 映射到英文领域提示 `domains`。
 - 未核实的独立最大输出数不设默认值，也不发送 `max_tokens`。当前只有官方示例 fixture/单测证据，尚无真实付费请求证据。
 
+### 三模型共享事件契约与回归矩阵（2026-09-24）
+
+本节只复核响应及生命周期，价格和输入上限未重新调研。依据同页 OpenAI 兼容 API 的流式/非流式响应定义：Flash/Lite 增量、Plus 累积；生成中 `finish_reason=null`，自然结束为 `stop`，长度截断为 `length`。官方样例包含空首帧、两次相同 `stop` 帧及 `choices=[]` 用量帧。
+
+| 事件/序列 | SDK 行为 | 回归依据 |
+|---|---|---|
+| 空 `content` 中间块、连续增量/累积内容 | 等待或更新部分结果，不报失败 | 官方 fixture；既有三模型测试 |
+| 重复 `stop` + 独立 usage + DONE/正常 EOF | 只产出一次完整 item；累计模型重复最终快照不重复追加 | fixture 补齐官方重复结束块；生命周期测试 |
+| 空 `choices` 且有用量 | 用量通知，不作为完成依据 | 官方 usage 块 |
+| 部分结果后 DONE/EOF、末块无空行 | 缺少可分发最终块时报 `provider_response_invalid`；不补造 SSE 空行 | 删除结束块/截断分隔符的受控变异 |
+| `length`（流式及非流式） | `provider_task_failed`，details 保留 `finishReason=length`；不把截断译文作为完整 item | 官方枚举的受控变异 |
+| 缺少 choices/content/结束原因，字段错类型，最终内容继续变化 | 明确拒绝，不作为空状态通知跳过 | 从官方结果块移除或替换字段 |
+| 错误对象缺少 code、SSE `event:error`、HTTP 错误 | 明确失败，保留实际模型/协议/阶段及安全错误码；不默认输出原始 message | 错误 envelope 的受控注入 |
+| 未知具名 SSE 扩展事件 | 不提供成功或失败依据；继续等已知协议结果 | 扩展通知 + 正常/缺失结束序列 |
+| 取消、断流、回调失败、DONE 后连接未关闭 | 中止或失败，取消剩余流并释放锁；取消后不再发送 item/completed | Mock 流与取消回放 |
+
+`content` 必须是字符串，但不凭经验添加“最终译文必须非空”的限制；空输入本地短路仍受取消约束。SSE 分帧与聊天共用 `src/protocols/sse-events.ts`，结果校验和增量/累积语义保持在各适配器内。
+
+证据：`tests/fixtures/bailian-translation/official-qwen-mt-examples.json`、`tests/bailian-qwen-mt.test.ts`、`tests/bailian-qwen-mt-lifecycle.test.ts`。负例是明确标注的受控变异，不声称来自真实付费请求。
+
 ## 5. 原始链接索引
 
 | 信息 | 链接 | 登录 |
 |---|---|---|
 | API/请求/响应 | https://help.aliyun.com/zh/model-studio/qwen-mt-api | 否 |
+| SSE 分帧与 EOF | https://html.spec.whatwg.org/multipage/server-sent-events.html#event-stream-interpretation | 否 |
 | 选型/语言/限制 | https://help.aliyun.com/zh/model-studio/machine-translation | 否（本次访问触发验证码，未取正文） |
 | 价格 | https://help.aliyun.com/zh/model-studio/model-pricing | 否 |
 | API Key | https://bailian.console.aliyun.com/?apiKey=1#/api-key | **是** |

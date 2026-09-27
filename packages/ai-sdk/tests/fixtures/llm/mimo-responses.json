@@ -1,0 +1,217 @@
+{
+  "kind": "capability",
+  "source": {
+    "url": "https://mimo.mi.com/static/docs/api/chat/responses.md",
+    "collectedAt": "2026-09-24",
+    "loginRequired": false,
+    "classification": "official-field-table",
+    "note": "依据官方字段表构造；公开页无完整 SSE 字面样本；非真实调用日志"
+  },
+  "events": [
+    {
+      "type": "response.created",
+      "response": {
+        "id": "resp_fixture",
+        "created_at": 1,
+        "model": "mimo-v2.6-pro",
+        "status": "in_progress",
+        "output": [],
+        "service_tier": null
+      },
+      "sequence_number": 0
+    },
+    {
+      "type": "response.in_progress",
+      "response": {
+        "id": "resp_fixture",
+        "created_at": 1,
+        "model": "mimo-v2.6-pro",
+        "status": "in_progress",
+        "output": [],
+        "service_tier": null
+      },
+      "sequence_number": 1
+    },
+    {
+      "type": "response.output_item.added",
+      "output_index": 0,
+      "item": {
+        "type": "reasoning",
+        "id": "rs_fixture",
+        "content": []
+      },
+      "sequence_number": 2
+    },
+    {
+      "type": "response.content_part.added",
+      "item_id": "rs_fixture",
+      "output_index": 0,
+      "content_index": 0,
+      "part": {
+        "type": "reasoning_text",
+        "text": ""
+      },
+      "sequence_number": 3
+    },
+    {
+      "type": "response.reasoning_text.delta",
+      "item_id": "rs_fixture",
+      "output_index": 0,
+      "content_index": 0,
+      "delta": "分析",
+      "sequence_number": 4
+    },
+    {
+      "type": "response.reasoning_text.done",
+      "item_id": "rs_fixture",
+      "output_index": 0,
+      "content_index": 0,
+      "text": "分析",
+      "sequence_number": 5
+    },
+    {
+      "type": "response.content_part.done",
+      "item_id": "rs_fixture",
+      "output_index": 0,
+      "content_index": 0,
+      "part": {
+        "type": "reasoning_text",
+        "text": "分析"
+      },
+      "sequence_number": 6
+    },
+    {
+      "type": "response.output_item.done",
+      "output_index": 0,
+      "item": {
+        "type": "reasoning",
+        "id": "rs_fixture",
+        "content": [
+          {
+            "type": "reasoning_text",
+            "text": "分析"
+          }
+        ]
+      },
+      "sequence_number": 7
+    },
+    {
+      "type": "response.output_item.added",
+      "output_index": 1,
+      "item": {
+        "type": "message",
+        "id": "msg_fixture",
+        "role": "assistant",
+        "status": "in_progress",
+        "content": []
+      },
+      "sequence_number": 8
+    },
+    {
+      "type": "response.content_part.added",
+      "item_id": "msg_fixture",
+      "output_index": 1,
+      "content_index": 0,
+      "part": {
+        "type": "output_text",
+        "text": "",
+        "annotations": []
+      },
+      "sequence_number": 9
+    },
+    {
+      "type": "response.output_text.delta",
+      "item_id": "msg_fixture",
+      "output_index": 1,
+      "content_index": 0,
+      "delta": "完成",
+      "sequence_number": 10
+    },
+    {
+      "type": "response.output_text.done",
+      "item_id": "msg_fixture",
+      "output_index": 1,
+      "content_index": 0,
+      "text": "完成",
+      "sequence_number": 11
+    },
+    {
+      "type": "response.content_part.done",
+      "item_id": "msg_fixture",
+      "output_index": 1,
+      "content_index": 0,
+      "part": {
+        "type": "output_text",
+        "text": "完成",
+        "annotations": []
+      },
+      "sequence_number": 12
+    },
+    {
+      "type": "response.output_item.done",
+      "output_index": 1,
+      "item": {
+        "type": "message",
+        "id": "msg_fixture",
+        "role": "assistant",
+        "status": "completed",
+        "content": [
+          {
+            "type": "output_text",
+            "text": "完成",
+            "annotations": []
+          }
+        ]
+      },
+      "sequence_number": 13
+    },
+    {
+      "type": "response.completed",
+      "response": {
+        "id": "resp_fixture",
+        "created_at": 1,
+        "model": "mimo-v2.6-pro",
+        "status": "completed",
+        "output": [
+          {
+            "type": "reasoning",
+            "id": "rs_fixture",
+            "content": [
+              {
+                "type": "reasoning_text",
+                "text": "分析"
+              }
+            ]
+          },
+          {
+            "type": "message",
+            "id": "msg_fixture",
+            "role": "assistant",
+            "status": "completed",
+            "content": [
+              {
+                "type": "output_text",
+                "text": "完成",
+                "annotations": []
+              }
+            ]
+          }
+        ],
+        "service_tier": null,
+        "incomplete_details": null,
+        "usage": {
+          "input_tokens": 3,
+          "input_tokens_details": {
+            "cached_tokens": 1
+          },
+          "output_tokens": 2,
+          "output_tokens_details": {
+            "reasoning_tokens": 1
+          },
+          "total_tokens": 5
+        }
+      },
+      "sequence_number": 14
+    }
+  ]
+}

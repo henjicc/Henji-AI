@@ -1,12 +1,18 @@
 // @vitest-environment jsdom
 import { act, cleanup, renderHook } from '@testing-library/react'
-import type { ReactFlowInstance } from '@xyflow/react'
+import type { ReactFlowInstance, Viewport } from '@xyflow/react'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { useCanvasStore, type CanvasEdge, type CanvasNode } from '@/stores/canvasStore'
 import { useProjectStore, type Project } from '@/stores/projectStore'
 import { useCanvasPersistence } from './useCanvasPersistence'
 
 vi.mock('@/platform/runtime', () => ({ isUiInspectionReadOnly: () => false }))
+const liveViewport = vi.hoisted(() => ({ current: undefined as Viewport | undefined }))
+const flowStore = { getState: () => ({ panZoom: liveViewport.current ? { getViewport: () => liveViewport.current } : undefined }) }
+vi.mock('@xyflow/react', async importOriginal => ({
+  ...await importOriginal<typeof import('@xyflow/react')>(),
+  useStoreApi: () => flowStore,
+}))
 
 function project(id: string): Project {
   return { id, name: id, createdAt: 1, updatedAt: 1, coverPath: null, nodeCount: 1,
@@ -15,6 +21,7 @@ function project(id: string): Project {
 }
 
 beforeEach(() => {
+  liveViewport.current = undefined
   vi.useFakeTimers()
   vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => setTimeout(() => callback(16), 16))
   vi.stubGlobal('cancelAnimationFrame', (id: number) => clearTimeout(id))
@@ -50,4 +57,21 @@ it('挂载保留已装载的后台结果，切项目取消旧保存和视口回�
   expect(save).toHaveBeenCalledWith(useCanvasStore.getState().nodes, b.edges, b.viewport, useCanvasStore.getState().history)
   expect(useCanvasStore.getState().nodes[0].data.displayName).toBe('用户新编辑')
   unmount()
+})
+
+it('自动保存和切页卸载读取最后输入的位置，不等待视口绘制帧', async () => {
+  const a = project('a')
+  useProjectStore.setState({ currentProjectId: a.id, currentProject: a })
+  useCanvasStore.getState().setCanvasData(a.nodes, a.edges, a.history)
+  const save = vi.spyOn(useProjectStore.getState(), 'saveCurrentProject').mockImplementation(() => undefined)
+  const flow = { getViewport: () => a.viewport, setViewport: vi.fn(async () => true) } as unknown as ReactFlowInstance<CanvasNode, CanvasEdge>
+  const { result, unmount } = renderHook(() => useCanvasPersistence({ current: null }, flow))
+  await act(async () => { await vi.advanceTimersByTimeAsync(20) })
+  liveViewport.current = { x: -290, y: 80, zoom: 0.5 }
+  act(() => result.current.schedulePersist(0))
+  await act(async () => { await vi.advanceTimersByTimeAsync(1) })
+  expect(save).toHaveBeenLastCalledWith(useCanvasStore.getState().nodes, a.edges, liveViewport.current, useCanvasStore.getState().history)
+  liveViewport.current = { x: -310, y: 90, zoom: 0.6 }
+  unmount()
+  expect(save).toHaveBeenLastCalledWith(useCanvasStore.getState().nodes, a.edges, liveViewport.current, useCanvasStore.getState().history)
 })

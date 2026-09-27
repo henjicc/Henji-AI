@@ -249,3 +249,4 @@ export const createCanvasStore = () => create<CanvasState>(withApplicationWriteB
 
 export const canvasStoreAttachment = createStoreAttachment(createCanvasStore());
 export const useCanvasStore = canvasStoreAttachment.useAttachedStore;
+export const canvasViewStore = canvasStoreAttachment.viewStore;

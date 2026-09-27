@@ -72,6 +72,7 @@ describe('applyLlmModelCatalogEntry', () => {
     const entry = findLlmModelCatalogEntry('kimi-k3')!
     const capabilities = applyLlmModelCatalogEntry(DEFAULT_LLM_CAPABILITIES, entry)
     expect(capabilities.structuredOutputMode).toBe('schema')
+    expect(capabilities.structuredOutputWithReasoning).toBe(true)
     expect(capabilities.jsonOutput).toBe(true)
     // 官方把 temperature/top_p 列为固定值并要求不要显式传入
     expect(capabilities.sampling).toBe(false)

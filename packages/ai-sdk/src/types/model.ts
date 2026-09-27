@@ -29,22 +29,24 @@ export type BuiltinModelType = 'image' | 'video' | 'audio'
 // eslint-disable-next-line @typescript-eslint/ban-types -- string & {} 保留内置字面量补全，同时允许第三方扩展值。
 export type ModelType = BuiltinModelType | (string & {})
 
-/** SDK 随包提供的 8 个供应商；同时作为初始化与测试的单一清单。 */
+/** SDK 随包提供的生成供应商；同时作为初始化与测试的单一清单。 */
 export const BUILTIN_PROVIDER_IDS = [
   'apimart',
   'bailian',
   'volcengine',
+  'volcengine-speech',
   'ppio',
   'kie',
   'modelscope',
   'fal',
   'grsai',
+  'siliconflow',
 ] as const
 
-/** 开放 ProviderId 仍保留这 8 个字面量的编辑器补全。 */
+/** 开放 ProviderId 仍保留内置供应商字面量的编辑器补全。 */
 export type BuiltinProviderId = (typeof BUILTIN_PROVIDER_IDS)[number]
 
-/** Provider ID：8 个内置供应商 + 第三方扩展字符串。 */
+/** Provider ID：内置供应商 + 第三方扩展字符串。 */
 // eslint-disable-next-line @typescript-eslint/ban-types -- string & {} 避免开放类型把内置 provider 字面量提示坍缩掉。
 export type ProviderId = BuiltinProviderId | (string & {})
 

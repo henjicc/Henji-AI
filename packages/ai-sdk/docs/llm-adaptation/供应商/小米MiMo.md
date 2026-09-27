@@ -1,6 +1,47 @@
 # 小米 MiMo
 
-> 核对时间：2026-08-26。信息来源见文末「原始链接索引」，均无需登录（文档站是 SPA，curl 拿不到正文，用浏览器渲染后取 `innerText`，见采集手册）。
+> 核对时间：2026-09-24。下方更新契约优先于历史记录；官方 Markdown 可公开读取，无需登录。
+
+## 2026-09-24 模型与协议更新
+
+官方模型 ID 为 `mimo-v2.6-pro`、`mimo-v2.6-flash`、`mimo-v2.6-pro-ultraspeed`；均支持文本/图片/音频/视频理解、思考、工具调用、结构化输出，上下文 1M、最大输出 131072 tokens。UltraSpeed 为需联系供应商开通的定制服务，仅登记能力，不加入默认推荐。旧 `mimo-v2.5-pro`、`mimo-v2.5` 于北京时间 2026-10-21 10:00 直接停用，不自动替换；SDK 保留旧 ID 的能力识别但新建预设使用 2.6，不能把旧 ID 作为新模型别名暗中重定向。
+
+价格（普通按量、元/百万 tokens）：Pro 缓存命中 0.025、未命中输入 3、输出 6；Flash 分别 0.02、1、2；UltraSpeed 分别 0.25、30、60。不把 Batch 半价或活动优惠当作基础价格。
+
+当前同时提供 `POST https://api.xiaomimimo.com/v1/chat/completions` 与 `POST https://api.xiaomimimo.com/v1/responses`；鉴权支持 `api-key` 或 Bearer。Chat 用 `thinking.type=enabled|disabled`（默认 enabled），输出限制 `max_completion_tokens`。Responses 用 `reasoning.effort`，none 关闭，其余合法档位均开启且不区分强度；输出限制 `max_output_tokens`。两协议思考开启时不能自定义 temperature/top_p（实际固定 1/0.95）；SDK 不下发无效采样值。Responses 不支持 background、previous_response_id、context_management；SDK 使用无服务端存储的完整历史请求。Chat 与 Responses 不混发私有思考字段。
+
+### Responses 事件契约
+
+官方仅提供字段表，未提供字面事件 JSON；fixture 必须标记为“依据官方字段表构造”。所有事件的 type 为对应事件名，sequence_number 为数字；下表列出的其余字段按官方字段表类型处理，官方未逐字段声明 required/nullable 的部分不补造保证。正常顺序 created → in_progress → 条目/片段 → completed 或 incomplete；重复、乱序、断线恢复和服务器取消接口未明确约定。SDK 不自动重放付费 POST，取消/断开释放流与 AbortSignal；没有有效最终输出不得视为成功。
+
+| 事件 | 字段 | 下一状态/对外行为 |
+|---|---|---|
+| response.created | response 对象 | 建立响应；空输出合法，不是 final |
+| response.in_progress | response 对象 | 继续等待，空输出合法 |
+| response.output_item.added | item 对象、output_index 数字 | 建立 message/reasoning/function_call 条目 |
+| response.output_item.done | item 对象、output_index 数字 | 条目完成；不结束整个响应 |
+| response.content_part.added | part 对象、item_id 字符串、output_index/content_index 数字 | 建立内容片段 |
+| response.content_part.done | 同 added | 片段完成；不重复输出已发 delta |
+| response.output_text.delta | delta 字符串、item_id、output_index/content_index | 增量正文 |
+| response.output_text.done | text 字符串、item_id、output_index/content_index | 正文完成 |
+| response.function_call_arguments.delta | delta 字符串、item_id、output_index | 追加工具 JSON 参数 |
+| response.function_call_arguments.done | arguments 字符串、item_id、output_index | 工具参数完成 |
+| response.reasoning_text.delta | delta 字符串、item_id、output_index/content_index | 增量思考，与正文分离 |
+| response.reasoning_text.done | text 字符串、item_id、output_index/content_index | 思考完成 |
+| response.custom_tool_call_input.delta | delta 字符串、item_id、output_index | 自定义工具输入；当前 SDK 公共工具仅支持 function，不声明此能力 |
+| response.custom_tool_call_input.done | input 字符串、item_id、output_index | 同上，不当成正文 |
+| response.completed | response 对象（output/usage/status） | 成功终态；统计用量并释放流 |
+| response.incomplete | response 对象（含 incomplete_details） | 截断终态，不伪报完整成功 |
+
+### 本轮原始链接（均公开）
+
+- 模型：https://mimo.mi.com/static/docs/quick-start/summary/model.md
+- 下线：https://mimo.mi.com/static/docs/updates/deprecate.md
+- 价格：https://mimo.mi.com/static/docs/price/pay-as-you-go.md
+- Chat 字段：https://mimo.mi.com/static/docs/api/chat/openai-api.md
+- Responses 字段及逐事件：https://mimo.mi.com/static/docs/api/chat/responses.md
+
+## 历史资料（2026-08-26，协议与模型以本轮更新为准）
 
 ## 1. 摘要
 

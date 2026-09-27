@@ -123,6 +123,7 @@ export function createBailianRealtimeAsrModule(
       validateRealtimeStart(preset, input)
       if (context.signal.aborted) throw cancelledError(context.requestId)
       const credential = await apiKey(context)
+      if (context.signal.aborted) throw cancelledError(context.requestId)
       const transport = context.runtime.realtime
       if (!transport) throw new AiRuntimeError('realtime_transport_missing', 'Host did not provide realtime transport')
       const taskId = preset.protocol === 'fun-duplex'
@@ -163,22 +164,34 @@ async function openDriver(
   let lastPartial = ''
   let durationMs: number | undefined
   let terminalError: AiRuntimeError | undefined
+  let lastEventKind: BailianRealtimeEvent['kind'] | undefined
   const segments: SpeechRecognitionSegment[] = []
   const created = deferred<void>()
   const ready = deferred<void>()
   const finished = deferred<SpeechRecognitionOutput>()
+  const onAbort = (): void => fail(cancelledError(context.requestId))
 
   const closeConnection = (): Promise<void> => {
+    context.signal.removeEventListener('abort', onAbort)
     closePromise ??= Promise.resolve().then(async () => await connection.close(1000, 'session complete'))
     return closePromise
   }
 
   const fail = (error: unknown): void => {
     if (phase === 'finished' || phase === 'closed' || phase === 'failed') return
+    const failedPhase = phase
     phase = 'failed'
-    const normalized = error instanceof AiRuntimeError
+    const original = error instanceof AiRuntimeError
       ? error
-      : new AiRuntimeError('provider_realtime_error', error instanceof Error ? error.message : 'Bailian realtime failed')
+      : new AiRuntimeError('provider_realtime_error', 'Realtime transport or event handler failed')
+    const message = original.message.replace(`[${original.code}] `, '')
+    const normalized = new AiRuntimeError(original.code,
+      original.details?.modelId === preset.modelId ? message : `${preset.modelId} (${preset.protocol}): ${message}`, {
+        providerId: 'bailian', modelId: preset.modelId, protocol: preset.protocol,
+        stage: failedPhase, operation: original.details?.stage,
+        eventType: original.details?.eventType ?? lastEventKind,
+        providerCode: original.details?.providerCode,
+      })
     terminalError = normalized
     created.reject(normalized)
     ready.reject(normalized)
@@ -207,6 +220,7 @@ async function openDriver(
   }
 
   const handle = async (event: BailianRealtimeEvent): Promise<void> => {
+    lastEventKind = event.kind
     if (event.kind === 'created') {
       if (preset.protocol !== 'qwen-realtime' || phase !== 'opening') {
         throw new AiRuntimeError('protocol_event_out_of_order', 'Unexpected Bailian realtime created event')
@@ -251,7 +265,10 @@ async function openDriver(
       return
     }
     if (event.kind === 'error') {
-      throw new AiRuntimeError('provider_task_failed', `${event.code ? `${event.code}: ` : ''}${event.message}`)
+      // Provider messages can echo request content. Retain the diagnostic code,
+      // never the full upstream message in the default error/logging path.
+      const providerCode = event.code && /^[\w.-]{1,80}$/.test(event.code) ? event.code : undefined
+      throw new AiRuntimeError('provider_task_failed', 'Server reported a realtime task failure', { providerCode })
     }
     if (event.kind === 'ignored') return
     context.runtime.logger.warn('忽略百炼实时未知事件', {
@@ -282,9 +299,9 @@ async function openDriver(
   }
   void consume()
 
-  const onAbort = (): void => fail(cancelledError(context.requestId))
   context.signal.addEventListener('abort', onAbort, { once: true })
   try {
+    if (context.signal.aborted) throw cancelledError(context.requestId)
     if (preset.protocol === 'fun-duplex') {
       await connection.send(buildFunStart(preset, input, taskId))
     } else {
@@ -294,16 +311,26 @@ async function openDriver(
     await ready.promise
   } catch (error) {
     fail(error)
-    await closeConnection()
-    throw error
+    try { await closeConnection() } catch {
+      const primary = terminalError!
+      throw new AiRuntimeError(primary.code, primary.message.replace(`[${primary.code}] `, ''), {
+        ...primary.details, cleanupFailed: true,
+      })
+    }
+    throw terminalError ?? error
   }
 
   return {
+    result: finished.promise,
     send: async (chunk: SpeechRecognitionAudioChunk) => {
       if (terminalError) throw terminalError
       if (phase !== 'active') throw new AiRuntimeError('realtime_session_inactive', 'Bailian realtime session is not active')
       if (chunk.bytes.byteLength === 0) return
-      await connection.send(preset.protocol === 'fun-duplex' ? chunk.bytes : buildQwenAudio(chunk.bytes))
+      const data = preset.protocol === 'fun-duplex' ? chunk.bytes : buildQwenAudio(chunk.bytes)
+      try { await connection.send(data) } catch (error) {
+        fail(error)
+        throw terminalError ?? error
+      }
     },
     finish: () => {
       if (finishPromise) return finishPromise
@@ -323,6 +350,7 @@ async function openDriver(
         }
         return await finished.promise
       })()
+      void finishPromise.catch(error => fail(error))
       return finishPromise
     },
     close: async () => {

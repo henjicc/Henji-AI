@@ -1,11 +1,14 @@
 /** @vitest-environment jsdom */
 
 import { cleanup, fireEvent, render } from '@testing-library/react';
-import type { ReactNode } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { useCanvasExecutionStateStore } from '@/stores/canvasExecutionStateStore';
 import { NODE_HEADER_FLOATING_POSITION_CLASS, NodeHeader } from './NodeHeader';
+
+vi.mock('../nodes/shared/useCanvasViewSubscriptions', () => ({
+  useCanvasViewportPortal: () => document.querySelector('.react-flow__viewport-portal'),
+}));
 
 vi.mock('react-i18next', async (importOriginal) => {
   const actual = await importOriginal<typeof import('react-i18next')>();
@@ -38,11 +41,11 @@ vi.mock('@xyflow/react', () => ({
     },
   }),
   useStoreApi: () => ({ getState: storeApiGetState }),
-  ViewportPortal: ({ children }: { children: ReactNode }) => children,
 }));
 
 afterEach(() => {
   cleanup();
+  vi.unstubAllGlobals();
   useCanvasExecutionStateStore.getState().resetNodeExecutions();
   document.body.replaceChildren();
 });
@@ -52,6 +55,9 @@ function renderHeader(editable = false) {
   nodeElement.className = 'react-flow__node nopan';
   nodeElement.dataset.id = 'node-1';
   document.body.appendChild(nodeElement);
+  const portal = document.createElement('div');
+  portal.className = 'react-flow__viewport-portal';
+  document.body.appendChild(portal);
 
   const rendered = render(
     <NodeHeader
@@ -67,12 +73,42 @@ function renderHeader(editable = false) {
 }
 
 describe('NodeHeader', () => {
+  it('改名、切换只读与进入编辑时重新判断标题遮罩并释放旧观察', () => {
+    const observe = vi.fn();
+    const unobserve = vi.fn();
+    const disconnect = vi.fn();
+    vi.stubGlobal('ResizeObserver', class {
+      observe = observe;
+      unobserve = unobserve;
+      disconnect = disconnect;
+    });
+    const change = vi.fn();
+    const view = render(<NodeHeader titleText="短标题" editable onTitleChange={change} />);
+    const button = view.getByRole('button', { name: '短标题' });
+    expect(observe).toHaveBeenLastCalledWith(button);
+    view.rerender(<NodeHeader titleText="改名后需要重新判断是否渐隐的较长标题" editable onTitleChange={change} />);
+    expect(unobserve).toHaveBeenCalledWith(button);
+    expect(observe.mock.calls.length).toBeGreaterThan(1);
+    fireEvent.doubleClick(button);
+    expect(view.getByRole('textbox')).toBeTruthy();
+    const observedDuringEditing = observe.mock.calls.length;
+    fireEvent.change(view.getByRole('textbox'), { target: { value: '正在输入' } });
+    expect(observe).toHaveBeenCalledTimes(observedDuringEditing);
+    fireEvent.keyDown(view.getByRole('textbox'), { key: 'Escape' });
+    expect(observe.mock.calls.length).toBeGreaterThan(observedDuringEditing);
+    view.rerender(<NodeHeader titleText="只读标题" />);
+    expect(observe).toHaveBeenLastCalledWith(view.getByText('只读标题'));
+    view.unmount();
+    expect(unobserve.mock.calls.length).toBe(observe.mock.calls.length);
+    expect(disconnect.mock.calls.length).toBe(observe.mock.calls.length);
+  });
+
   it('浮动标题按下时把事件交给真实节点，并阻止画布平移命中', () => {
     const { nodeElement, rendered } = renderHeader();
     const nodeMouseDown = vi.fn();
     nodeElement.addEventListener('mousedown', nodeMouseDown);
 
-    const dragSurface = rendered.container.querySelector<HTMLElement>('[data-node-header-drag-surface="node-1"]');
+    const dragSurface = rendered.baseElement.querySelector<HTMLElement>('[data-node-header-drag-surface="node-1"]');
     expect(dragSurface).not.toBeNull();
     expect(dragSurface?.classList.contains('nopan')).toBe(true);
     expect(dragSurface?.style.width).toBe('calc(100% - 2.5rem)');
@@ -92,7 +128,7 @@ describe('NodeHeader', () => {
 
   it('双击浮动标题进入编辑态时，仅临时解除当前节点的绘制隔离', () => {
     const { nodeElement, rendered } = renderHeader(true);
-    const dragSurface = rendered.container.querySelector<HTMLElement>('[data-node-header-drag-surface="node-1"]');
+    const dragSurface = rendered.baseElement.querySelector<HTMLElement>('[data-node-header-drag-surface="node-1"]');
 
     fireEvent.doubleClick(dragSurface!);
 
@@ -109,6 +145,9 @@ describe('NodeHeader', () => {
     nodeElement.className = 'react-flow__node nopan';
     nodeElement.dataset.id = 'node-1';
     document.body.appendChild(nodeElement);
+    const portal = document.createElement('div');
+    portal.className = 'react-flow__viewport-portal';
+    document.body.appendChild(portal);
 
     const rendered = render(
       <div onClick={onNodeSelect}>
@@ -120,7 +159,7 @@ describe('NodeHeader', () => {
         />
       </div>,
     );
-    const dragSurface = rendered.container.querySelector<HTMLElement>('[data-node-header-drag-surface="node-1"]');
+    const dragSurface = rendered.baseElement.querySelector<HTMLElement>('[data-node-header-drag-surface="node-1"]');
 
     fireEvent.click(dragSurface!);
     fireEvent.click(dragSurface!);

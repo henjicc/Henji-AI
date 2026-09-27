@@ -1,3 +1,5 @@
+const { findPanePoint, readCanvasState, resetViewport } = require('./canvasPanBench.cjs')
+
 function attachUiInspectionCanvasPanorama(context) {
   const {
     settlePage,
@@ -50,6 +52,9 @@ function attachUiInspectionCanvasPanorama(context) {
         [JSON.stringify(nodes), JSON.stringify({ x: -920, y: -510, zoom: 0.82 }), payload.projectId]
       )
     }, { projectId })
+    // 夹具直接替换了数据库；重建渲染层实例后读取，避免复用修改前的已打开工程。
+    await page.reload({ waitUntil: 'domcontentloaded' })
+    await context.setupCanvas(page)
     await page.locator(`[data-project-id="${projectId}"]:visible`).click()
     const resultNode = page.locator('.react-flow__node[data-id="__ui_panorama_result"]')
     const secondaryResultNode = page.locator('.react-flow__node[data-id="__ui_panorama_result_secondary"]')
@@ -204,6 +209,24 @@ function attachUiInspectionCanvasPanorama(context) {
     if (frozenFrameDiff.changedPct > 1) {
       throw new Error(`全景冻结帧不是所见即所得：变化像素 ${frozenFrameDiff.changedPct}%`)
     }
+
+    // 平移到屏外后保留同一冻结视角，返回时不能丢失预览或重新常驻 WebGL。
+    const panePoint = await findPanePoint(page)
+    if (!panePoint) throw new Error('全景布局恢复检查找不到画布空白')
+    await page.mouse.click(panePoint.x, panePoint.y)
+    const viewportBeforeSuspend = await readCanvasState(page)
+    const frozenBeforeSuspend = await screenshotPrimarySurface()
+    const layoutSession = await page.context().newCDPSession(page)
+    try {
+      const away = { x: viewportBeforeSuspend.x - 4500, y: viewportBeforeSuspend.y - 3000 }
+      if (!(await resetViewport(page, layoutSession, away)).ok) throw new Error('全景节点无法移到屏外')
+      await page.waitForFunction(() => document.querySelector('.react-flow__node[data-id="__ui_panorama_result"]')?.getAttribute('data-canvas-layout-suspended') === 'true')
+      if (await activeInlineCanvases.count()) throw new Error('全景节点屏外暂停期间重新创建了 WebGL Canvas')
+      if (!(await resetViewport(page, layoutSession, viewportBeforeSuspend)).ok) throw new Error('全景节点无法返回原视口')
+      await frozenPreview.waitFor({ state: 'visible' })
+      const restoredFrameDiff = await diffBuffers(frozenBeforeSuspend, await screenshotPrimarySurface())
+      if (restoredFrameDiff.changedPct > 1) throw new Error(`全景屏外恢复改变冻结视角：变化像素 ${restoredFrameDiff.changedPct}%`)
+    } finally { await layoutSession.detach() }
 
     // 项目重开后直接显示上次冻结视角，并从同一相机状态继续交互。
     await page.getByRole('button', { name: /返回项目|Back to Projects/ }).click()

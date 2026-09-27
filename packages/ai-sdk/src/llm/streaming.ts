@@ -1,4 +1,6 @@
+import { drainSseEvents } from '../protocols/sse-events'
 import type { Transport } from '../runtime/Transport'
+import { AiRuntimeError } from '../runtime/AiRuntimeError'
 import { fetchProvider } from '../providers/provider-fetch'
 import {
   applyProviderRequestBodyQuirks,
@@ -32,7 +34,8 @@ import type {
 interface StreamChatOptions {
   endpoint: string
   apiKey: string
-  request: LlmChatRequestDto
+  providerId: string
+  payload: JsonObject
   signal: AbortSignal
   emit: LlmStreamEmitter
   transport: Transport
@@ -64,7 +67,6 @@ export function resolveOpenAiCompatibleEndpoint(request: LlmChatRequestDto): str
 }
 
 export function buildOpenAiCompatiblePayload(request: LlmChatRequestDto): JsonObject {
-  const policy = request.policy ?? {}
   const payload: JsonObject = {
     model: request.modelId,
     messages: request.messages.map(serializeMessage),
@@ -72,8 +74,8 @@ export function buildOpenAiCompatiblePayload(request: LlmChatRequestDto): JsonOb
     stream_options: { include_usage: true },
   }
 
-  const maxTokens = readNumber(policy.max_tokens ?? policy.maxTokens)
-  payload.max_tokens = maxTokens ?? 4096
+  const maxTokens = resolveMaxOutputTokens(request)
+  if (maxTokens !== undefined) payload.max_tokens = maxTokens
 
   if (request.tools !== undefined) {
     payload.tools = request.tools
@@ -87,25 +89,34 @@ export function buildOpenAiCompatiblePayload(request: LlmChatRequestDto): JsonOb
    * 用模型能力表兜一层，没标"支持思考"的模型仍然一个字段都不发。
    */
   const identity = resolveLlmEndpointIdentity(request)
+  const withStructuredOutput = applyStructuredOutputRequestBody(
+    request,
+    identity.providerFamilyId,
+    payload
+  )
   const reasoningCapable = request.capabilities?.reasoning === true
   const withReasoning = reasoningCapable
-    ? applyProviderReasoningRequestBody(identity.providerFamilyId, request.adapter, payload, request.reasoning)
-    : payload
+    ? applyProviderReasoningRequestBody(
+        identity.providerFamilyId,
+        request.adapter,
+        withStructuredOutput,
+        request.reasoning
+      )
+    : withStructuredOutput
 
   return applyProviderRequestBodyQuirks(identity.providerFamilyId, withReasoning) as JsonObject
 }
 
 export async function streamOpenAiCompatibleChat(options: StreamChatOptions): Promise<LlmStreamOutput> {
-  const identity = resolveLlmEndpointIdentity(options.request)
-  const response = await fetchProvider(identity.providerFamilyId, options.endpoint, {
+  const response = await fetchProvider(options.providerId, options.endpoint, {
     method: 'POST',
     headers: {
       Accept: 'text/event-stream',
       Authorization: `Bearer ${options.apiKey}`,
-      ...resolveProviderExtraAuthHeaders(identity.providerFamilyId, options.apiKey),
+      ...resolveProviderExtraAuthHeaders(options.providerId, options.apiKey),
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify(buildOpenAiCompatiblePayload(options.request)),
+    body: JSON.stringify(options.payload),
     signal: options.signal,
   }, {
     transport: options.transport,
@@ -124,7 +135,7 @@ export async function streamOpenAiCompatibleChat(options: StreamChatOptions): Pr
     throw new Error('LLM streaming response body is empty')
   }
 
-  return await readSseStream(response.body, options.emit)
+  return await readSseStream(response.body, options)
 }
 
 export function serializeMessage(message: LlmChatMessageDto): JsonObject {
@@ -176,7 +187,8 @@ function serializeContentPart(part: LlmContentPart): JsonObject {
   return next
 }
 
-async function readSseStream(body: ReadableStream<Uint8Array>, emit: LlmStreamEmitter): Promise<LlmStreamOutput> {
+async function readSseStream(body: ReadableStream<Uint8Array>, options: StreamChatOptions): Promise<LlmStreamOutput> {
+  const { emit, signal } = options
   const reader = body.getReader()
   const decoder = createUtf8StreamDecoder()
   let pending = ''
@@ -186,85 +198,183 @@ async function readSseStream(body: ReadableStream<Uint8Array>, emit: LlmStreamEm
   let finishReason: string | null = null
   const toolCalls = new Map<number, LlmStreamToolCall>()
 
-  let streamDone = false
-  while (!streamDone) {
-    const result = await reader.read()
-    if (result.done) {
-      streamDone = true
-      continue
-    }
-    pending += decoder.decode(result.value, { stream: true })
-
-    const parsed = drainSseEvents(pending)
-    pending = parsed.remaining
-    for (const event of parsed.events) {
-      const chunk = parseSseData(event)
-      if (chunk.done) {
-        return { output, reasoningOutput, usage, finishReason, toolCalls: [...toolCalls.values()] }
-      }
-      usage = chunk.usage ?? usage
-      finishReason = chunk.finishReason ?? finishReason
-      mergeToolCallDeltas(toolCalls, chunk.toolCalls)
-      if (chunk.reasoning) {
-        reasoningOutput += chunk.reasoning
-        emit({ type: 'ReasoningToken', data: chunk.reasoning })
-      }
-      if (chunk.content) {
-        output += chunk.content
-        emit({ type: 'Token', data: chunk.content })
-      }
-    }
+  let eof = false
+  let stage = 'read'
+  let cancellation: Promise<void> | undefined
+  const cancelReader = (): void => {
+    // Cleanup may reject on an already errored stream. It must not replace the
+    // original protocol/transport failure or delay settlement on a custom host.
+    cancellation ??= reader.cancel().catch(() => undefined)
   }
-
-  const flushed = decoder.decode()
-  if (flushed) {
-    pending += flushed
+  const checkAbort = (): void => {
+    if (signal.aborted) throw Object.assign(new Error('LLM stream cancelled'), { name: 'AbortError' })
   }
-  const parsed = drainSseEvents(`${pending}\n\n`)
-  for (const event of parsed.events) {
-    const chunk = parseSseData(event)
-    usage = chunk.usage ?? usage
-    finishReason = chunk.finishReason ?? finishReason
-    mergeToolCallDeltas(toolCalls, chunk.toolCalls)
-    if (chunk.reasoning) {
-      reasoningOutput += chunk.reasoning
-      emit({ type: 'ReasoningToken', data: chunk.reasoning })
-    }
-    if (chunk.content) {
-      output += chunk.content
-      emit({ type: 'Token', data: chunk.content })
-    }
+  const complete = (): LlmStreamOutput => {
+    stage = 'completion'
+    checkAbort()
+    if (!finishReason) throw new AiRuntimeError('STREAM_INCOMPLETE', 'Chat stream ended without finish_reason')
+    return { output, reasoningOutput, usage, finishReason,
+      truncated: isOutputTruncated(finishReason, options.providerId), toolCalls: [...toolCalls.values()] }
   }
-  return { output, reasoningOutput, usage, finishReason, toolCalls: [...toolCalls.values()] }
+  signal.addEventListener('abort', cancelReader, { once: true })
+  try {
+    checkAbort()
+    for (;;) {
+      stage = 'read'
+      const result = await reader.read()
+      checkAbort()
+      if (result.done) {
+        eof = true
+        // SSE dispatch requires a blank line. Do not manufacture a final event
+        // from an unterminated block at EOF.
+        return complete()
+      }
+      pending += decoder.decode(result.value, { stream: true })
+      const parsed = drainSseEvents(pending)
+      pending = parsed.remaining
+      for (const event of parsed.events) {
+        checkAbort()
+        stage = 'parse'
+        const chunk = parseSseData(event, options.providerId)
+        if (chunk.done) return complete()
+        if (finishReason && (chunk.content || chunk.reasoning || chunk.toolCalls?.length
+          || (chunk.finishReason && chunk.finishReason !== finishReason))) {
+          throw new AiRuntimeError('INVALID_STREAM_RESPONSE', 'Chat result changed after finish_reason')
+        }
+        usage = chunk.usage ?? usage
+        finishReason = chunk.finishReason ?? finishReason
+        mergeToolCallDeltas(toolCalls, chunk.toolCalls)
+        stage = 'emit'
+        if (chunk.reasoning) {
+          reasoningOutput += chunk.reasoning
+          emit({ type: 'ReasoningToken', data: chunk.reasoning })
+          checkAbort()
+        }
+        if (chunk.content) {
+          output += chunk.content
+          emit({ type: 'Token', data: chunk.content })
+        }
+      }
+    }
+  } catch (error) {
+    if (error instanceof AiRuntimeError) {
+      throw new AiRuntimeError(error.code, 'Chat streaming response failed', {
+        providerId: options.providerId, modelId: options.payload.model,
+        protocol: 'openai-chat-sse', stage, receivedFinish: finishReason !== null,
+        ...(error.details?.finishReason === 'network_error' ? { finishReason: 'network_error' } : {}),
+      })
+    }
+    throw error
+  } finally {
+    signal.removeEventListener('abort', cancelReader)
+    if (!eof) cancelReader()
+    reader.releaseLock()
+  }
 }
 
-function drainSseEvents(input: string): { events: string[]; remaining: string } {
-  const events: string[] = []
-  let remaining = input
-  let hasSeparator = true
-  while (hasSeparator) {
-    const separator = findNextSeparator(remaining)
-    if (!separator) {
-      hasSeparator = false
-      continue
+function applyStructuredOutputRequestBody(
+  request: LlmChatRequestDto,
+  providerId: string,
+  body: JsonObject
+): JsonObject {
+  const output = request.structuredOutput
+  if (!output) return body
+  if (output.type === 'text') {
+    return { ...body, response_format: { type: 'text' } }
+  }
+
+  const supportedMode = request.capabilities?.structuredOutputMode ?? 'none'
+  if (output.type === 'json_object' && supportedMode === 'none') {
+    throw invalidRequest(
+      'STRUCTURED_OUTPUT_JSON_OBJECT_UNSUPPORTED',
+      `Model "${request.modelId}" is not declared to support JSON Object output.`
+    )
+  }
+  if (output.type === 'json_schema' && supportedMode !== 'schema') {
+    throw invalidRequest(
+      'STRUCTURED_OUTPUT_JSON_SCHEMA_UNSUPPORTED',
+      `Model "${request.modelId}" is not declared to support JSON Schema output.`
+    )
+  }
+  if (request.reasoning?.enabled === true) {
+    if (request.capabilities?.reasoning !== true) {
+      throw invalidRequest(
+        'REASONING_UNSUPPORTED',
+        `Model "${request.modelId}" is not declared to support reasoning.`
+      )
     }
-    if (separator) {
-      events.push(remaining.slice(0, separator.index))
-      remaining = remaining.slice(separator.index + separator.length)
+    const compatibility = request.capabilities.structuredOutputWithReasoning
+    if (compatibility !== true) {
+      throw invalidRequest(
+        compatibility === false
+          ? 'STRUCTURED_OUTPUT_WITH_REASONING_UNSUPPORTED'
+          : 'STRUCTURED_OUTPUT_WITH_REASONING_CAPABILITY_REQUIRED',
+        compatibility === false
+          ? `Model "${request.modelId}" does not support structured output with reasoning enabled.`
+          : `Model "${request.modelId}" must explicitly declare structuredOutputWithReasoning before structured output and reasoning can be combined.`
+      )
     }
   }
-  return { events, remaining }
+
+  if (output.type === 'json_object') {
+    return { ...body, response_format: { type: 'json_object' } }
+  }
+  if (providerId.trim().toLowerCase() === 'groq') {
+    throw invalidRequest(
+      'STRUCTURED_OUTPUT_STREAMING_UNSUPPORTED',
+      'Groq does not support JSON Schema structured output with streaming.'
+    )
+  }
+  if (!output.name.trim()) {
+    throw invalidRequest('INVALID_STRUCTURED_OUTPUT', 'JSON Schema output requires a non-empty name.')
+  }
+  if (!isRecord(output.schema)) {
+    throw invalidRequest('INVALID_STRUCTURED_OUTPUT', 'JSON Schema output requires schema to be an object.')
+  }
+  if (typeof output.strict !== 'boolean') {
+    throw invalidRequest('INVALID_STRUCTURED_OUTPUT', 'JSON Schema output requires an explicit strict boolean.')
+  }
+  return {
+    ...body,
+    response_format: {
+      type: 'json_schema',
+      json_schema: {
+        name: output.name.trim(),
+        schema: output.schema,
+        strict: output.strict,
+      },
+    },
+  }
 }
 
-function findNextSeparator(input: string): { index: number; length: number } | undefined {
-  const crlf = input.indexOf('\r\n\r\n')
-  const lf = input.indexOf('\n\n')
-  if (crlf === -1 && lf === -1) return undefined
-  if (crlf !== -1 && (lf === -1 || crlf < lf)) return { index: crlf, length: 4 }
-  return { index: lf, length: 2 }
+function resolveMaxOutputTokens(request: LlmChatRequestDto): number | undefined {
+  const policy = request.policy ?? {}
+  const legacy = policy.max_tokens ?? policy.maxTokens
+  const candidate = request.maxOutputTokens ?? legacy
+  if (candidate === undefined) return undefined
+  if (typeof candidate !== 'number' || !Number.isInteger(candidate) || candidate <= 0) {
+    throw invalidRequest('INVALID_MAX_OUTPUT_TOKENS', 'maxOutputTokens must be a positive integer.')
+  }
+  const modelLimit = request.capabilities?.maxOutputTokens
+  if (typeof modelLimit === 'number' && candidate > modelLimit) {
+    throw invalidRequest(
+      'MAX_OUTPUT_TOKENS_EXCEEDED',
+      `Requested ${candidate} output tokens, but model "${request.modelId}" declares a limit of ${modelLimit}.`
+    )
+  }
+  return candidate
 }
 
-function parseSseData(event: string): {
+function invalidRequest(code: string, message: string): Error {
+  return Object.assign(new Error(message), { code, statusCode: 400 })
+}
+
+function isOutputTruncated(finishReason: string | null, providerId: string): boolean {
+  return finishReason === 'length' || finishReason === 'max_tokens' || finishReason === 'max_output_tokens'
+    || (providerId === 'bigmodel' && finishReason === 'model_context_window_exceeded')
+}
+
+function parseSseData(event: string, providerId: string): {
   done: boolean
   content?: string
   reasoning?: string
@@ -272,17 +382,56 @@ function parseSseData(event: string): {
   finishReason?: string
   toolCalls?: LlmStreamToolCall[]
 } {
+  const eventName = event.split(/\r\n|\r|\n/)
+    .filter(line => line.startsWith('event:')).at(-1)?.slice(6).trim()
   const data = event
-    .split(/\r?\n/)
-    .map((line) => line.trim())
+    .split(/\r\n|\r|\n/)
     .filter((line) => line.startsWith('data:'))
     .map((line) => line.slice(5).trim())
     .join('\n')
 
+  if (eventName === 'error' && !data) throw new AiRuntimeError('PROVIDER_STREAM_ERROR', 'Server error event')
   if (!data) return { done: false }
-  if (data === '[DONE]') return { done: true }
+  if (data === '[DONE]' && (!eventName || eventName === 'message')) return { done: true }
+  if (eventName && !['message', 'chat.completion.chunk', 'error'].includes(eventName)) return { done: false }
 
-  const json = JSON.parse(data) as unknown
+  let json: unknown
+  try { json = JSON.parse(data) as unknown } catch {
+    if (eventName === 'error') throw new AiRuntimeError('PROVIDER_STREAM_ERROR', 'Server error event')
+    throw new AiRuntimeError('INVALID_STREAM_RESPONSE', 'Invalid SSE JSON')
+  }
+  if (eventName === 'error' || (isRecord(json) && json.error != null)) {
+    const error = isRecord(json) && isRecord(json.error) ? json.error : json
+    const code = isRecord(error) && typeof error.code === 'string' && /^[\w.-]{1,80}$/.test(error.code)
+      ? error.code : 'PROVIDER_STREAM_ERROR'
+    throw new AiRuntimeError(code, 'Server error event')
+  }
+  // BigModel's documented SDK consumer permits status-only chunks without
+  // choices. This does not make them completion evidence or allow wrong types.
+  const statusOnlyAllowed = providerId === 'bigmodel'
+  if (statusOnlyAllowed && isRecord(json) && json.choices === undefined) {
+    return { done: false, usage: readUsage(json) }
+  }
+  if (!isRecord(json) || !Array.isArray(json.choices)) {
+    throw new AiRuntimeError('INVALID_STREAM_RESPONSE', 'Chat chunk has no choices array')
+  }
+  if (json.choices.length === 0) {
+    if (!statusOnlyAllowed && !isRecord(json.usage)) throw new AiRuntimeError('INVALID_STREAM_RESPONSE', 'Empty choices without usage')
+    return { done: false, usage: readUsage(json) }
+  }
+  const first = json.choices[0]
+  if (!isRecord(first) || !isRecord(first.delta)
+    || (first.finish_reason != null && (typeof first.finish_reason !== 'string' || !first.finish_reason.trim()))) {
+    throw new AiRuntimeError('INVALID_STREAM_RESPONSE', 'Invalid Chat choice')
+  }
+  if (providerId === 'bigmodel' && first.finish_reason === 'network_error') {
+    throw new AiRuntimeError('PROVIDER_STREAM_ERROR', 'Model inference failed', { finishReason: 'network_error' })
+  }
+  for (const field of ['content', 'reasoning_content', 'reasoning']) {
+    if (first.delta[field] != null && typeof first.delta[field] !== 'string') {
+      throw new AiRuntimeError('INVALID_STREAM_RESPONSE', 'Invalid Chat text delta')
+    }
+  }
   const delta = readDelta(json)
   return {
     done: false,
@@ -362,10 +511,6 @@ function readDelta(value: unknown): Record<string, unknown> {
 
 function readString(value: unknown): string | undefined {
   return typeof value === 'string' && value.length > 0 ? value : undefined
-}
-
-function readNumber(value: JsonValue | undefined): number | undefined {
-  return typeof value === 'number' && Number.isFinite(value) ? value : undefined
 }
 
 function readTokenCount(value: unknown): number | null {

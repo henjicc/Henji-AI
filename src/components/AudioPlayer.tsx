@@ -6,6 +6,11 @@ import { useI18n } from '@/hooks/useI18n'
 import { useAudioWaveform } from '@/hooks/useAudioWaveform'
 import { Download, Pause, Play, Volume2, VolumeX } from 'lucide-react'
 
+export interface AudioPlaybackState {
+  currentTime: number
+  volume: number
+}
+
 interface AudioPlayerProps {
   src: string
   filePath?: string
@@ -17,6 +22,9 @@ interface AudioPlayerProps {
   rightActions?: React.ReactNode
   autoPlay?: boolean
   active?: boolean
+  /** 虚拟列表重新挂载暂停的播放器时恢复位置和音量。 */
+  initialPlaybackState?: AudioPlaybackState
+  onActivityChange?: (active: boolean) => void
   /**
    * 外壳表面由**宿主**决定，而不是播放器自己硬定：
    * - `card`（默认）：完整卡片表面，用于播放器是主体内容的场景（如音频查看器弹窗）
@@ -38,14 +46,20 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({
   rightActions,
   autoPlay = false,
   active = true,
+  initialPlaybackState,
+  onActivityChange,
   surface = 'card',
 }) => {
   const { t } = useI18n()
   const audioRef = useRef<HTMLAudioElement>(null)
+  const playerRef = useRef<HTMLDivElement>(null)
+  const visibleRef = useRef(true)
+  const [isVisible, setIsVisible] = useState(true)
+  const restoreRef = useRef({ src, state: initialPlaybackState })
   const [isPlaying, setIsPlaying] = useState(false)
-  const [currentTime, setCurrentTime] = useState(0)
+  const [currentTime, setCurrentTime] = useState(initialPlaybackState?.currentTime ?? 0)
   const [duration, setDuration] = useState(0)
-  const [volume, setVolume] = useState(1)
+  const [volume, setVolume] = useState(initialPlaybackState?.volume ?? 1)
   const [showVolumeSlider, setShowVolumeSlider] = useState(false)
   const [isAdjustingVolume, setIsAdjustingVolume] = useState(false)
   const [showVolumeValueTip, setShowVolumeValueTip] = useState(false)
@@ -61,19 +75,43 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({
   const volumeTipTimerRef = useRef<number | null>(null)
 
   useEffect(() => {
+    onActivityChange?.(isPlaying || isDownloading || isAdjustingVolume || showVolumeSlider)
+    return () => onActivityChange?.(false)
+  }, [isPlaying, isDownloading, isAdjustingVolume, showVolumeSlider, onActivityChange])
+
+  useEffect(() => {
+    if (!playerRef.current || typeof IntersectionObserver === 'undefined') return
+    const observer = new IntersectionObserver(([entry]) => {
+      visibleRef.current = entry.isIntersecting
+      setIsVisible(entry.isIntersecting)
+      if (entry.isIntersecting) setCurrentTime(audioRef.current?.currentTime ?? 0)
+    })
+    observer.observe(playerRef.current)
+    return () => observer.disconnect()
+  }, [])
+
+  useEffect(() => {
     const a = audioRef.current
     if (!a) return
     a.pause()
     setIsPlaying(false)
-    setCurrentTime(0)
+    if (restoreRef.current.src !== src) restoreRef.current = { src, state: undefined }
+    const restoreTime = restoreRef.current.state?.currentTime ?? 0
+    setCurrentTime(restoreTime)
     setDuration(0)
     try {
-      a.currentTime = 0
+      a.currentTime = restoreTime
     } catch {
       // Ignore media reset failures from unloaded audio elements.
     }
-    const onLoaded = () => setDuration(a.duration || 0)
-    const onTime = () => setCurrentTime(a.currentTime || 0)
+    const onLoaded = () => {
+      setDuration(a.duration || 0)
+      if (restoreTime > 0) {
+        a.currentTime = Math.min(restoreTime, Number.isFinite(a.duration) ? a.duration : restoreTime)
+        setCurrentTime(a.currentTime)
+      }
+    }
+    const onTime = () => { if (visibleRef.current) setCurrentTime(a.currentTime || 0) }
     const onEnd = () => setIsPlaying(false)
     a.addEventListener('loadedmetadata', onLoaded)
     a.addEventListener('timeupdate', onTime)
@@ -99,7 +137,7 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({
   useEffect(() => {
     const a = audioRef.current
     if (!a) return
-    if (isPlaying) {
+    if (isPlaying && isVisible) {
       const tick = () => {
         setCurrentTime(a.currentTime || 0)
         rafRef.current = requestAnimationFrame(tick)
@@ -114,7 +152,7 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({
       if (rafRef.current) cancelAnimationFrame(rafRef.current)
       rafRef.current = null
     }
-  }, [isPlaying, src])
+  }, [isPlaying, isVisible, src])
 
   useEffect(() => {
     const a = audioRef.current
@@ -264,6 +302,7 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({
 
   return (
     <div
+      ref={playerRef}
       className={`${compact ? 'w-full min-w-0' : 'w-[36rem]'} ${surface === 'card' ? `rounded-xl p-4 ${UI_PANEL_SURFACE_CLASS}` : 'p-0'} outline-none ${className || ''}`}
       onContextMenu={onContextMenu}
       tabIndex={0}

@@ -93,6 +93,8 @@ export interface CapabilityHandle<TInput, TOutput, TEvent = never> {
 }
 
 export interface CapabilityRealtimeSessionDriver<TInput, TOutput> {
+  /** 后台终态：成功返回最终结果，致命错误必须拒绝；可恢复的 send 输入错误不拒绝它。旧驱动可省略。 */
+  readonly result?: Promise<TOutput>
   send(input: TInput): void | Promise<void>
   finish(): Promise<TOutput>
   close?(): void | Promise<void>
@@ -110,6 +112,8 @@ export interface CapabilityRealtimeModule<TStart, TInput, TEvent, TOutput> {
 export interface CapabilityRealtimeSession<TInput, TOutput> {
   readonly requestId: string
   readonly descriptor: CapabilityDescriptor
+  /** client 创建的会话始终提供；终态并释放资源后结算。不主动触发 finish。可选以兼容旧会话实现。 */
+  readonly result?: Promise<TOutput>
   send(input: TInput): Promise<void>
   finish(): Promise<TOutput>
   close(): Promise<void>

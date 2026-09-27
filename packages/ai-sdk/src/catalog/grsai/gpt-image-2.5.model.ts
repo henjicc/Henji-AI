@@ -15,7 +15,7 @@ export const grsaiGptImage25Model = defineModel({
   // 应用本地上限；Grsai官方未声明参考图数量上限。
   inputLimits: { images: { max: 16 }, videos: { max: 0 } },
   params: [
-    { id: 'gpt25Variant', type: 'dropdown', order: 1, default: 'flare', options: gpt25Options(['standard', 'flare', 'sunburst']) },
+    { id: 'gpt25Variant', type: 'dropdown', order: 1, default: 'standard', options: gpt25Options(['standard', 'flare', 'sunburst']) },
     { id: 'gpt25AspectRatio', type: 'dropdown', order: 2, default: 'smart', options: gpt25Options(['smart', ...GPT25_RATIOS]) },
     { id: 'gpt25Resolution', type: 'dropdown', order: 3, default: '1K', options: gpt25Options(GPT25_RESOLUTIONS), visible: { condition: p => p.gpt25Variant !== 'standard' } },
     { id: 'gpt25Quality', type: 'dropdown', order: 4, default: 'medium', options: gpt25Options(['low', 'medium', 'high', 'xhigh', 'max']), visible: { condition: p => p.gpt25Variant !== 'standard' } },
@@ -23,7 +23,7 @@ export const grsaiGptImage25Model = defineModel({
   ],
   endpoints: '/v1/api/generate',
   request: { builder: params => {
-    const variant = gpt25Choice(params.gpt25Variant, ['standard', 'flare', 'sunburst'], 'flare')
+    const variant = gpt25Choice(params.gpt25Variant, ['standard', 'flare', 'sunburst'], 'standard')
     const standard = variant === 'standard'
     const resolution = standard ? '1K' : gpt25Choice(params.gpt25Resolution, GPT25_RESOLUTIONS, '1K')
     const candidates = standard || resolution === '2K' ? regularRatios : GPT25_RATIOS
@@ -46,7 +46,7 @@ export const grsaiGptImage25Model = defineModel({
   } },
   pricing: {
     currency: '¥',
-    calculator: params => ({ standard: 0.06, flare: 0.2, sunburst: 0.24 }[gpt25Choice(params.gpt25Variant, ['standard', 'flare', 'sunburst'], 'flare')] ?? 0.2),
+    calculator: params => ({ standard: 0.06, flare: 0.2, sunburst: 0.24 }[gpt25Choice(params.gpt25Variant, ['standard', 'flare', 'sunburst'], 'standard')] ?? 0.06),
     description: '每次600/2000/2400积分；基础充值档标准¥0.06、Flare¥0.20、Sunburst¥0.24；高额充值档低至¥0.03/0.10/0.12',
   },
 })

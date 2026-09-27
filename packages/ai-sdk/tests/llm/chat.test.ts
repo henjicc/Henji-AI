@@ -36,7 +36,7 @@ function createRuntime(fetch: RuntimeContext['transport']['fetch'], tracer?: Tra
 describe('runLlmChatStream 公共运行时抽象', () => {
   it('流式请求经统一 Transport，且通过公共 Tracer 记录 span', async () => {
     const fetch = vi.fn(async () => new Response([
-      'data: {"choices":[{"delta":{"content":"完成"}}]}',
+      'data: {"choices":[{"delta":{"content":"完成"},"finish_reason":"stop"}]}',
       '',
       'data: [DONE]',
       '',

@@ -94,4 +94,59 @@ export const volcenginePresentation: Record<string, ModelPresentation> = {
     },
     linkages: [],
   },
+  'volcengine-seedream-5.0-flash': {
+    meta: {
+      name: { key: 'meta.name', fallback: 'Seedream 5.0 Flash' },
+      i18nScope: 'models.defs.volcengine-seedream-5.0-flash',
+    },
+    params: {
+      volcengineSeedream50FlashMode: {
+        name: { zh: '模式', en: 'Mode' },
+        role: 'mode',
+        optionLabels: {
+          generate: { label: { zh: '生成 / 编辑', en: 'Generate / Edit' } },
+          'layer-decomposition': { label: { zh: '图层拆分', en: 'Layer Decomposition' } },
+        },
+      },
+      volcengineSeedream50FlashAspectRatio: {
+        name: sharedFieldText('aspectRatio'),
+        optionLabels: {
+          smart: { label: sharedOptionText('smart') },
+          '1:1': { label: '1:1' },
+          '4:3': { label: '4:3' },
+          '3:4': { label: '3:4' },
+          '16:9': { label: '16:9' },
+          '9:16': { label: '9:16' },
+          '3:2': { label: '3:2' },
+          '2:3': { label: '2:3' },
+          '21:9': { label: '21:9' },
+        },
+      },
+      volcengineSeedream50FlashResolution: {
+        name: sharedFieldText('resolution'),
+        optionLabels: {
+          '1K': { label: '1K' },
+          '1.5K': { label: '1.5K' },
+          '2K': { label: '2K' },
+        },
+      },
+      volcengineSeedream50FlashLayerSize: {
+        name: sharedFieldText('resolution'),
+        optionLabels: {
+          auto: { label: sharedOptionText('auto') },
+          '1K': { label: '1K' },
+          '1.5K': { label: '1.5K' },
+          '2K': { label: '2K' },
+        },
+      },
+      volcengineSeedream50FlashBackground: {
+        name: { zh: '背景', en: 'Background' },
+        optionLabels: {
+          opaque: { label: { zh: '不透明', en: 'Opaque' } },
+          transparent: { label: { zh: '透明', en: 'Transparent' } },
+        },
+      },
+    },
+    linkages: [],
+  },
 }

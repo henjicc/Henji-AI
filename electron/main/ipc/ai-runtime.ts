@@ -12,6 +12,7 @@ import { consumePendingResult } from '../services/ai-runtime/pending-results'
 import type { PendingResultPayload } from '../services/ai-runtime/pending-results'
 import {
   testProviderConnection,
+  listTtsVoices,
   type AiContinuePollingRequestDto,
   type AiGenerateRequestDto,
   type AiGenerateResponseDto,
@@ -72,6 +73,12 @@ export function registerAiRuntimeIpc(): void {
     'ai:testProviderConnection',
     (input) => parseStringField(input, 'providerId'),
     (providerId) => testProviderConnection(providerId, sdkRuntimeContext)
+  )
+
+  registerIpcHandler<string, import('@henjicc/ai-sdk').TtsVoice[]>(
+    'ai:listTtsVoices',
+    (input) => parseStringField(input, 'modelId'),
+    (modelId) => listTtsVoices(modelId, sdkRuntimeContext)
   )
 
   registerIpcHandler<AiGenerateRequestDto, AiGenerateResponseDto>('ai:generate', parseGenerateRequest, async (request) => {

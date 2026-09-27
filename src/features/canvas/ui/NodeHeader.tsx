@@ -9,7 +9,10 @@ import {
   useRef,
   useState,
 } from 'react';
-import { useInternalNode, useNodeId, useStoreApi, ViewportPortal } from '@xyflow/react';
+import { createPortal } from 'react-dom';
+import { useInternalNode, useNodeId, useStoreApi } from '@xyflow/react';
+import { useCanvasViewportPortal } from '../nodes/shared/useCanvasViewSubscriptions';
+import { observeNodeTitleFade } from './nodeTitleFade';
 import {
   UI_FIELD_FOCUS_CLASS,
   UI_FIELD_SURFACE_CLASS,
@@ -63,8 +66,10 @@ export const NODE_HEADER_FLOATING_POSITION_CLASS = 'absolute -top-8 left-2 right
 const NODE_HEADER_TITLE_FLEX_CLASS = 'min-w-0 flex-1';
 // 纯透明度遮罩，颜色值无意义，使用关键字避免颜色字面量
 const NODE_HEADER_TITLE_FADE_STYLE: CSSProperties = {
-  WebkitMaskImage: 'linear-gradient(to right, black 0%, black 82%, transparent 100%)',
-  maskImage: 'linear-gradient(to right, black 0%, black 82%, transparent 100%)',
+  // mask 本身建立绘制分组；省略短标题遮罩时保留分组，避免屏外返回后光栅边缘变化。
+  isolation: 'isolate',
+  WebkitMaskImage: 'var(--canvas-node-title-mask, linear-gradient(to right, black 0%, black 82%, transparent 100%))',
+  maskImage: 'var(--canvas-node-title-mask, linear-gradient(to right, black 0%, black 82%, transparent 100%))',
 };
 
 function composeTransformStyle(adjust?: HeaderAdjust): CSSProperties | undefined {
@@ -124,9 +129,14 @@ export function NodeHeader({
   const nodeId = useNodeId();
   const internalNode = useInternalNode(nodeId ?? '');
   const storeApi = useStoreApi();
+  const viewportPortal = useCanvasViewportPortal();
   const tone = toneClassName ?? NODE_HEADER_TONE_CLASS;
   const canEditTitle = editable && typeof titleText === 'string' && typeof onTitleChange === 'function';
   const inputRef = useRef<HTMLInputElement | null>(null);
+  const titleElementRef = useRef<HTMLElement | null>(null);
+  const setTitleElement = useCallback((element: HTMLElement | null) => {
+    titleElementRef.current = element;
+  }, []);
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [draftTitle, setDraftTitle] = useState(() => sanitizeTitle(titleText));
 
@@ -188,6 +198,7 @@ export function NodeHeader({
       if (titleText) {
         return (
           <span
+            ref={setTitleElement}
             title={titleText}
             className={joinClasses(
               'block overflow-hidden whitespace-nowrap cursor-grab select-none active:cursor-grabbing',
@@ -237,6 +248,7 @@ export function NodeHeader({
 
     return (
       <UiButton
+        ref={setTitleElement}
         type="button"
         variant="ghost"
         size="sm"
@@ -265,11 +277,16 @@ export function NodeHeader({
     commitTitle,
     draftTitle,
     isEditingTitle,
+    setTitleElement,
     title,
     titleClassName,
     titleText,
     tone,
   ]);
+
+  useLayoutEffect(() => {
+    if (titleElementRef.current) return observeNodeTitleFade(titleElementRef.current);
+  }, [resolvedTitle]);
 
   const resolvedMeta = metaText
     ? <span className={joinClasses(NODE_HEADER_META_CLASS, metaClassName)}>{metaText}</span>
@@ -321,9 +338,8 @@ export function NodeHeader({
   }, [canEditTitle]);
 
   const nodeWidth = internalNode?.measured.width ?? internalNode?.internals.userNode.width ?? 0;
-  const floatingDragSurface = nodeId && internalNode && nodeWidth > 0
-    ? (
-        <ViewportPortal>
+  const floatingDragSurface = nodeId && internalNode && nodeWidth > 0 && viewportPortal
+    ? createPortal(
           <div
             className="pointer-events-none absolute left-0 top-0"
             style={{
@@ -362,8 +378,8 @@ export function NodeHeader({
               }}
               onDoubleClick={handleDragSurfaceDoubleClick}
             />
-          </div>
-        </ViewportPortal>
+          </div>,
+          viewportPortal,
       )
     : null;
 

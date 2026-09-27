@@ -89,6 +89,16 @@ vi.mock('@/commands/projectState', async (importOriginal) => ({
 }))
 
 describe('多图层文档节点复制事务', () => {
+  it('已载入的普通节点同步创建，仍使用同一复制入口且不复制文档', () => {
+    const id = useCanvasStore.getState().addNode(CANVAS_NODE_TYPES.upload, { x: 0, y: 0 }, { imageUrl: '/ordinary.png' })
+    const createNode = vi.fn(() => 'ordinary-copy')
+    const result = commitCanvasNodeDuplication({ projectId, sourceNodeId: id,
+      data: { imageUrl: '/ordinary.png' }, createNode })
+    expect(result).toBe('ordinary-copy')
+    expect(createNode).toHaveBeenCalledWith({ imageUrl: '/ordinary.png' })
+    expect(mocks.fork).not.toHaveBeenCalled()
+  })
+
   it('副本获得独立 documentRef，源节点保持不变', async () => {
     const result = await duplicateCanvasNode({
       projectId,

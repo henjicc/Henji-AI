@@ -1,7 +1,7 @@
 # @henjicc/ai-sdk
 
-痕迹AI 的多供应商模型 SDK：内含 8 个生成供应商、109 个图片/视频/音频模型，以及
-10 个 LLM 供应商预设和 15 个按需 ASR 模型。另有 12 个 FAL 图片工具使用独立按需入口，不进入默认 109 模型目录。预制 LLM 会按供应商与具体模型自动选择 Responses API 或 Chat Completions，宿主不需要暴露逐模型协议设置。SDK 负责目录、请求构建、媒体预处理、
+痕迹AI 的多供应商模型 SDK：内含 8 个生成供应商、111 个图片/视频/音频模型，以及
+10 个 LLM 供应商预设和 18 个按需 ASR 模型。另有 12 个 FAL 图片工具使用独立按需入口，不进入默认 111 模型目录。预制 LLM 会按供应商与具体模型自动选择 Responses API 或 Chat Completions，宿主不需要暴露逐模型协议设置。SDK 负责目录、请求构建、媒体预处理、
 供应商调用、轮询、SSE 与错误归一化；宿主只需注入网络、凭据、媒体读取和日志。
 
 ## 5 分钟快速开始
@@ -48,10 +48,10 @@ try {
 
 百炼工厂必须传 `baseUrl` 为实际地域/工作空间的 API 根地址，不包含端点路径。其他供应商可以覆盖根地址与 `credentialId`；SDK 不自动切换地域或账号。不同模型的向量不能混用；切换模型通常需要重建向量索引。Rerank 分数仅在本次请求内比较。
 
-SDK `0.4.2` 的正式分发渠道为公共 npm，无需配置 registry 或访问令牌：
+SDK `0.8.0` 的正式分发渠道为公共 npm，无需配置 registry 或访问令牌：
 
 ```bash
-npm install @henjicc/ai-sdk@0.4.2
+npm install @henjicc/ai-sdk@0.8.0
 ```
 
 然后提供 4 个宿主能力（`Transport` / `CredentialStore` / `MediaReader` / `Logger`），创建客户端：
@@ -148,11 +148,11 @@ LLM 预设默认使用 SDK 维护的官方地址，并按具体模型选择 Chat
 SDK 源码不得依赖 `@/`、`node:`、Electron、`import.meta.glob`、`eval`/`new Function`/`node:vm`；
 `npm run check:sdk` 会守住这些边界。Photoshop/受限宿主只做生成时应从
 `@henjicc/ai-sdk/generation` 导入 `createGenerationClient`；该入口不静态带入 LLM、Vercel AI SDK、
-Node 内置模块或 Fal 官方客户端，发布门禁会把它打成 IIFE 并在无网络生命周期中核对 109 个模型。
+Node 内置模块或 Fal 官方客户端，发布门禁会把它打成 IIFE 并在无网络生命周期中核对 111 个模型。
 
 ## 按需装配生成模型
 
-`@henjicc/ai-sdk/generation` 是兼容入口，默认始终装入 109 个模型。真正需要缩小 Photoshop/Tauri
+`@henjicc/ai-sdk/generation` 是兼容入口，默认始终装入 111 个模型。真正需要缩小 Photoshop/Tauri
 包体时，从不含任何内置 catalog/provider 的 `generation/core` 创建模块化客户端，并只导入完整 pack：
 
 ```ts
@@ -165,12 +165,12 @@ console.log(client.catalog.list().map((model) => model.meta.id)) // ['kie-z-imag
 
 完整单模型 pack 同时携带该模型的唯一真实 schema、provider adapter 与 provider-scoped 媒体预处理/
 上传策略；宿主不需要知道内部上传模块。`@henjicc/ai-sdk/provider-packs/kie` 可一次装入 KIE 的全部
-28 个模型；`provider-adapters/kie` 只装入 KIE 执行与上传策略、不装任何模型。所有 109 个单模型路径和
+29 个模型；`provider-adapters/kie` 只装入 KIE 执行与上传策略、不装任何模型。所有 111 个单模型路径和
 8 个供应商路径由 catalog 生成器自动产出并由 bundle 门禁穷举，新增模型不会靠手工维护 exports。
 
 每个 `models/<provider>/<model>` 子路径也导出名为 `model` 的低层定义，供目录分析或高级自定义组合；
 直接传裸 `model` 而不传同文件的 `pack` 不保证媒体上传或供应商执行完整，普通宿主应使用 `pack`。
-包根 `createAIClient` 仍默认 109 模型；若确实需要根 client 的 chat 与按需生成共存，可显式传：
+包根 `createAIClient` 仍默认 111 模型；若确实需要根 client 的 chat 与按需生成共存，可显式传：
 
 ```ts
 const client = createAIClient({
@@ -195,15 +195,51 @@ import {
 const request: LlmChatRequestDto = {
   requestId: 'chat-1', providerId: 'openai', modelId: 'gpt-5-mini',
   messages: [{ role: 'user', content: '你好' }],
+  capabilities: {
+    structuredOutputMode: 'schema',
+    reasoning: true,
+    structuredOutputWithReasoning: true,
+    maxOutputTokens: 32_000,
+  },
+  reasoning: { enabled: true, effort: 'high' },
+  structuredOutput: {
+    type: 'json_schema',
+    name: 'subtitle_segments',
+    strict: true,
+    schema: {
+      type: 'object',
+      properties: {
+        segments: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: { text: { type: 'string' } },
+            required: ['text'],
+            additionalProperties: false,
+          },
+        },
+      },
+      required: ['segments'],
+      additionalProperties: false,
+    },
+  },
+  maxOutputTokens: 24_000,
 }
 const result = await runLlmChatStream(request, 'chat-1', onStreamEvent, runtime as RuntimeContext)
-console.log(result.output, result.reasoningOutput, result.usage, result.finishReason)
+console.log(result.output, result.reasoningOutput, result.usage, result.finishReason, result.truncated)
 cancelLlmChatTask('chat-1')
 ```
 
+`structuredOutput` 支持 `text`、`json_object`、`json_schema`。轻量入口只执行 Chat Completions，
+所以这里会正式映射到最终请求体的 `response_format`；它不包含 Responses API 执行器，Responses
+路径的等价字段 `text.format` 由完整 `llm` 入口处理。JSON Object、JSON Schema 和“结构化输出 +
+思考”都必须由 `capabilities` 明确声明；未知或不支持的组合会在网络请求前返回结构化错误，不会静默
+降级。省略 `maxOutputTokens` 时 SDK 不再强加 4096 tokens，而是交给供应商默认值；省略执行参数里的
+`timeoutMs` 则没有请求总时限，宿主可在 `Transport` 中实现长时间无数据才超时。
+
 ### 可选模型分发包与统一能力筛选
 
-当前 12 个 FAL 图片工具不会混入默认 109 模型。宿主可选择单个完整工具模型 pack，也可按用户任务装入三个聚合包：
+当前 12 个 FAL 图片工具不会混入默认 111 模型。宿主可选择单个完整工具模型 pack，也可按用户任务装入三个聚合包：
 
 - `tool-packs/fal-image-edit-tools`：3 个消除工具。
 - `tool-packs/fal-image-utility-tools`：6 个重打光、暗光增强、扩图、商品摄影、照片修复和背景移除工具。
@@ -238,9 +274,9 @@ console.log(utilities.map((item) => item.id))
 - 图片实用工具：`tool-models/fal/relighting`、`tool-models/fal/control-light`、`tool-models/fal/outpaint`、`tool-models/fal/product-photography`、`tool-models/fal/photo-restoration`、`tool-models/fal/pixelcut-background-removal`。
 - 多角度：`tool-models/fal/qwen-image-edit-2511-multiple-angles`、`tool-models/fal/perspective-change`、`tool-models/fal/flux-2-multiple-angles`。
 
-每个单模型入口只导出 `model`、`provider` 与完整 `pack`。三个聚合包只携带各自 3 / 6 / 3 个工具模型、Fal adapter 和 Fal CDN 上传，不携带其余 109 模型或 LLM。能力筛选与分发是两层：`search()` 只过滤已经导入的候选，不会让已经进入 bundle 的代码自动消失；缩小包体仍必须显式选择单模型/provider/collection pack。
+每个单模型入口只导出 `model`、`provider` 与完整 `pack`。三个聚合包只携带各自 3 / 6 / 3 个工具模型、Fal adapter 和 Fal CDN 上传，不携带其余 111 模型或 LLM。能力筛选与分发是两层：`search()` 只过滤已经导入的候选，不会让已经进入 bundle 的代码自动消失；缩小包体仍必须显式选择单模型/provider/collection pack。
 
-Henji-AI 在执行层按需装入工具 pack，但普通模型选择器、`@henjicc/ai-sdk/generation` 与默认能力发现仍只展示 109 个主目录模型。
+Henji-AI 在执行层按需装入工具 pack，但普通模型选择器、`@henjicc/ai-sdk/generation` 与默认能力发现仍只展示 111 个主目录模型。
 
 ## 两类模型的公共边界
 
@@ -288,14 +324,14 @@ SDK 统一处理媒体来源优先级、首个/求和聚合、固定倍率和参
 
 ### 参数类型 → 控件
 
-以下 13 种是 `RuntimeParamDef` 的完整公开联合；括号内是当前真实 109 catalog 的出现数量。未出现不代表
+以下 13 种是 `RuntimeParamDef` 的完整公开联合；括号内是当前真实 111 catalog 的出现数量。未出现不代表
 类型无效，而是当前目录没有对应模型。
 
-| type | 109 catalog | 消费方控件 | 关键运行时字段 |
+| type | 111 catalog | 消费方控件 | 关键运行时字段 |
 |---|---:|---|---|
-| `dropdown` | 317 | 下拉选择 | `options[].value`、`default`、`required?` |
+| `dropdown` | 325 | 下拉选择 | `options[].value`、`default`、`required?` |
 | `switch` | 93 | 布尔开关 | `default` |
-| `number` | 85 | 数值输入/步进器 | `min?`、`max?`、`step?`、`default` |
+| `number` | 86 | 数值输入/步进器 | `min?`、`max?`、`step?`、`default` |
 | `text` | 7 | 单行文本 | `maxLength?`、`default` |
 | `image-upload` | 6 | 图片上传 | `maxCount?`、`accept?`、`maxSize?`、`format?` |
 | `composite` | 4 | 宿主自定义组件钩子 | `valueType?`、`default`；panel/config 不在 SDK |
@@ -308,7 +344,7 @@ SDK 统一处理媒体来源优先级、首个/求和聚合、固定倍率和参
 | `aspect-ratio` | 0 | 比例选择 | `options[].value` |
 
 所有参数共有 `id`、`type`、`order`、`default`，并可带 `required`、`valueType`、API 映射、
-`transferKey`、`visible`、`disabled`。实际 109 catalog 的字段集合与数量由
+`transferKey`、`visible`、`disabled`。实际 111 catalog 的字段集合与数量由
 `packages/ai-sdk/tests/catalog-consumer-contract.test.ts` 穷举锁定，不以旧 ParamDef 文件或示例推断。
 
 ### 条件与媒体输入
@@ -407,7 +443,7 @@ features 与原始 tags。顶层查询维度默认 AND，也可设 `mode: 'any'`
 调用方随后交给对应执行 handle；SDK 不提供一个掩盖协议差异的通用 `generate()`。
 
 能力画像是运行时选择层，不是打包器。`createModelCapabilityDiscovery({ generationPacks: [...] })` 只会看
-传入的 pack；它既不会隐式导入默认 109，也不会从 bundle 删除已导入代码。真正的按需分发仍以 import
+传入的 pack；它既不会隐式导入默认 111，也不会从 bundle 删除已导入代码。真正的按需分发仍以 import
 单模型/provider/collection pack 为边界。
 
 ### ASR/OCR 等开放能力
@@ -456,6 +492,19 @@ await capabilities.dispose()
 - `llm/groq`：Groq GPT-OSS 20B 默认配置、流式聊天和模型发现。
 - `llm/bigmodel`：智谱同一 provider family 下的中国大陆/Global 端点 profile、独立凭据槽与 GLM-5.3-Flash 能力。
 - `llm/modules`：外部包、插件与内置 LLM 共用的注册、执行、发现、取消和 namespace 卸载边界。
+
+实时会话仍使用 `openSession → send → finish/close`。由 client 创建的会话额外提供 `result` Promise：
+它不主动发送 finish；在最终结果到达或后台失败、取消、超时、主动关闭，并完成资源收尾后结算。
+调用方可以观察 `session.result` 以获知停止发送音频期间的后台失败，不必等到下一次 `send/finish`。
+`finish()` 幂等且返回同一结果；正常关闭但没有最终结果时 `result` 拒绝 `realtime_session_closed`，
+取消是 `cancelled`，超时是 `timeout`，供应商失败保留原错误。未订阅该 Promise 不产生未处理拒绝，
+SDK 仍按现有日志契约记录失败。
+
+外部实时驱动可以提供可选 `result` Promise，致命后台/发送错误必须拒绝它，成功则返回有效最终结果。
+输入校验等可恢复的单次 send 错误只拒绝该调用，不应结束 result。旧驱动无需新增字段即可继续使用；
+如果旧驱动没有提供结果通道，SDK 无法自行发现它的后台失败。公共类型中的可选属性用于兼容旧会话实现。
+完成、失败、取消与关闭竞争时只结算一次；清理失败不能覆盖首个失败，但成功路径清理失败不能报成功。
+连接、监听器与定时器回收后，原 requestId 可用于新会话；不会自动重连或重放已可能计费的音频。
 
 ASR module ID 固定为 `<providerId>.speech-recognition.<modelId>`，翻译固定为
 `bailian.translation.<modelId>`；供应商 ID 使用 `bailian` / `volcengine` / `siliconflow` / `groq`，
@@ -512,3 +561,17 @@ module 只发送 Token/ReasoningToken 增量并返回最终结果。`createGroqL
 - 重要决定记录：`docs/task/模型SDK抽离/重要记录.md`
 - 本包内的调研资料索引：[docs/README.md](docs/README.md)
 - 版本记录：[CHANGELOG.md](CHANGELOG.md)
+
+## 0.5.0 文件 ASR 宿主迁移
+
+- QuickJS 必须把 `media.describe(ref)` 和 `media.readChunk(ref, offset, length)` 暴露给 RuntimeContext；SDK 单次读取最多 48 KiB。原先只有 `read()` 的宿主仍使用整文件兼容路径，不能据此调大旧 10 MiB 限制。
+- `transport.fetchStream(url, {body, contentLength, ...init})` 按拉取顺序消费 `AsyncIterable<Uint8Array>`，必须有背压、支持 AbortSignal、禁止整段拼接及自动重试。`contentLength` 是精确请求体字节数；宿主负责把它交给 HTTP 栈。无需 Node 或 Web Streams 全局对象。
+- 百炼异步 `media-ref` 必须实现 `transport.uploadFile(url, {ref, fields, fileField, maxBytes, signal})`。宿主在受控文件作用域内 stat、校验大小、原生 multipart 直传，文件字段最后；不得回调 media API，不得把文件内容放入 QuickJS。上传策略与 oss:// 路径仍由 SDK 生成。缺失该能力返回 `native_upload_unsupported`，这是本次次版本的迁移要求。
+- 保留旧 `read()` 与显式 `bytes` 输入用于兼容；它们不具有恒定内存保证。要使用新流式路径，两个媒体方法及 fetchStream 必须一起接入。异步上传的公网 URL 输入完全不读取本地媒体。
+- 文件超限使用 `AiRuntimeError('media_too_large', ..., details)`，details 含 `actualBytes`、`maxBytes`、`estimatedDurationSeconds`。宿主若在 describe/readChunk/uploadFile 提前拒绝，也必须传递该结构，不能只传错误字符串。SDK 会保留跨 RPC 的同形错误。
+- 可选 `MediaDescription.audio` 提供采样率、声道、位深、PCM payload 字节数或实际时长。PCM 估算公式为 payloadBytes / (sampleRateHz × channels × bitsPerSample / 8)；WAV 应提供去掉容器头的 pcmBytes，压缩音频必须提供解析所得 durationSeconds，无法确定时返回 null，不冒充真实时长。宿主可复用 runtime 导出的 assertMediaSize 生成错误。
+- 新宿主的媒体分块总文件上限可按最大所用模型设为 2,000,000,000 字节（Fun-ASR Flash 官方文件上限），单块仍不得超过 64 KiB；这不是所有模型都允许 2 GB。Qwen Base64 原文件 ≤7,500,000 字节、Groq 附件 ≤25,000,000、硅基流动 ≤50,000,000；百炼异步原生临时上传 ≤min(1,000,000,000, policy MB ×1,000,000)。若宿主只将媒体通道用于 Qwen/Groq/硅基流动，可把分块总文件上限收紧为 50,000,000。不得修改整个旧 read 通道为同一大上限。
+- 所有 MB/GB 用十进制保守值；上限来自各模型及上传服务文档，实际可用值还受宿主作用域、账号、格式与时长限制。Fun-ASR Flash/Qwen 短音频最多5分钟、长音频最多12小时、硅基流动最多1小时；流式传输不绕过这些约束。远端 URL 的真实大小/时长需由宿主预检或供应商校验。
+
+验证入口：`node packages/ai-sdk/scripts/verify-asr-streaming-quickjs.cjs <临时安装的 quickjs-emscripten 绝对路径>`。
+该探针在真实 QuickJS 64 MiB 堆执行 50 MB multipart 与 7.5/12 MB JSON，禁止整文件 read，并用128 MiB分配失败验证内存限制；不代表真实供应商调用或 Tauri 原生上传已经验收。

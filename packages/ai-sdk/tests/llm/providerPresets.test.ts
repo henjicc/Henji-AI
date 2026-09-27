@@ -157,8 +157,8 @@ describe('createProviderFromPreset / createModelsFromPreset', () => {
     const preset = findLlmProviderPreset('mimo')!
     const provider = createProviderFromPreset(preset)
     const models = createModelsFromPreset(preset, provider)
-    const omni = models.find(model => model.modelId === 'mimo-v2.5')
-    expect(omni?.catalogId).toBe('mimo-v2.5')
+    const omni = models.find(model => model.modelId === 'mimo-v2.6-flash')
+    expect(omni?.catalogId).toBe('mimo-v2.6-flash')
     expect(omni?.capabilities).toMatchObject({ image: true, video: true, audio: true })
     expect(models.every(model => model.providerId === 'mimo' && model.baseUrl === provider.baseUrl)).toBe(true)
   })

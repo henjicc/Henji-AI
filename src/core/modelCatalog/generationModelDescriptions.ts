@@ -12,6 +12,8 @@ import type { I18nText } from '../types/I18nText'
  * 3. 若这里没有对应 key，先新增空描述，再由维护者补充文案。
  */
 export const GENERATION_MODEL_DESCRIPTIONS = {
+  'seedream-5.0-flash': { zh: '', en: '' },
+  'happyhorse-1.1': { zh: '', en: '' },
   // 图片模型
   'flux-1-krea-dev': { zh: 'Krea 与 Black Forest Labs 联合推出的 12B 开放权重模型，强调自然写实、设计感和较少的“AI 油亮感”；兼容 FLUX.1 Dev 生态，适合本地部署与微调。', en: '' },
   'flux-2-multiple-angles': { zh: '基于 FLUX.2 的连续镜头角度调整工具，可分别控制水平角度、垂直角度和缩放，适合商品与主体视角探索。', en: 'A FLUX.2 camera-angle tool with continuous horizontal, vertical, and zoom controls.' },
@@ -82,6 +84,17 @@ export const GENERATION_MODEL_DESCRIPTIONS = {
 
   // 音频模型
   'minimax-speech-2.8': { zh: 'MiniMax 新一代多语言语音合成模型，重点提升情绪控制、呼吸和笑声等语气标签及 10 秒高相似度音色克隆；HD 侧重拟真表现，Turbo 侧重速度和自然流畅度。', en: '' },
+  'qwen3-tts-1.7b': { zh: 'Qwen3 的多语言语音合成模型，可选择音色、语言和演绎风格。', en: 'Multilingual speech synthesis with voice and delivery controls.' },
+  'eleven-v3-tts': { zh: 'ElevenLabs 的表现力语音合成模型，适合有情绪变化的朗读。', en: 'Expressive speech synthesis for natural narration.' },
+  'qwen-audio-3.1-tts-flash': { zh: '通义千问快速语音合成模型，支持系统音色与演绎指令。', en: 'Fast speech synthesis with built-in voices and delivery instructions.' },
+  'cosyvoice-v3.5': { zh: '百炼自定义音色语音合成，需要预先创建复刻或设计音色。', en: 'Speech synthesis using a previously created custom voice.' },
+  'eleven-turbo-2.5-tts': { zh: 'ElevenLabs 快速语音合成模型，侧重生成速度与较低费用。', en: 'Fast speech synthesis with a lower per-character price.' },
+  'eleven-v3-dialogue': { zh: 'ElevenLabs 对话语音合成，支持按说话人组织台词。', en: 'Dialogue speech synthesis with per-turn voices.' },
+  'gemini-3.1-flash-tts': { zh: 'Gemini 语音合成，可通过结构化说话人和台词生成对话。', en: 'Speech synthesis using structured speakers and dialogue turns.' },
+  'cosyvoice2-0.5b': { zh: '硅基流动托管的 CosyVoice2 语音合成模型。', en: 'CosyVoice2 speech synthesis hosted by SiliconFlow.' },
+  'moss-ttsd-v0.5': { zh: '硅基流动托管的多说话人对话语音模型。', en: 'Multi-speaker dialogue speech synthesis hosted by SiliconFlow.' },
+  'seed-tts-2.0': { zh: '豆包新一代语音合成模型，可选择平台音色。', en: 'Doubao speech synthesis with platform voices.' },
+  'seed-icl-2.0': { zh: '豆包复刻音色语音合成，需要预先创建音色。', en: 'Doubao speech synthesis using a previously cloned voice.' },
 } as const satisfies Record<string, I18nText>
 
 export type CanonicalGenerationModelId = keyof typeof GENERATION_MODEL_DESCRIPTIONS

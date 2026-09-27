@@ -191,7 +191,9 @@ async function readCanvasState(page) {
 }
 
 function startFrameSampler(page, durationMs) {
-  return page.evaluate((duration) => new Promise((resolve) => {
+  // 返回 Promise 的句柄外壳，先确认采样已在页面启动；直接 evaluate(Promise)
+  // 只能等待最终结果，输入可能抢在 Runtime.evaluate 执行前进入繁忙的渲染线程。
+  return page.evaluateHandle((duration) => ({ result: new Promise((resolve) => {
     const readViewport = () => {
       const el = document.querySelector('.react-flow__viewport')
       if (!el) return { x: Number.NaN, y: Number.NaN, zoom: Number.NaN }
@@ -230,7 +232,14 @@ function startFrameSampler(page, durationMs) {
       requestAnimationFrame(tick)
     }
     requestAnimationFrame(tick)
-  }), durationMs)
+  }) }), durationMs)
+}
+
+function readNodePositions(page) {
+  // 计时区间外读取内联布局变换；不逐帧扫描，也不触发几何布局。
+  return page.evaluate(function readNodePositions() {
+    return [...document.querySelectorAll('.react-flow__node')].map(node => [node.dataset.id, node.style.transform])
+  })
 }
 
 /**
@@ -255,6 +264,7 @@ async function sweep(page, session, {
     return { left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom }
   })
   if (!flowRect) throw new Error('未找到 .react-flow 容器')
+  const nodePositions = new Map(await readNodePositions(page))
 
   // selectionOnDrag 下左键默认框选；明确激活平移，不能依赖上一次复位残留的按键状态。
   await session.send('Input.dispatchKeyEvent', {
@@ -262,92 +272,117 @@ async function sweep(page, session, {
   })
   await sleep(30)
   const margin = 60
-  const samplePromise = measure ? startFrameSampler(page, durationMs) : null
+  let sampleHandle = null
+  let inputReleased = false
 
-  let x = grab.x
-  let y = grab.y
-  let regrabs = 0
-  dispatch(session, { type: 'mousePressed', x, y, button: 'left', buttons: 1, clickCount: 1 })
+  try {
+    sampleHandle = measure ? await startFrameSampler(page, durationMs) : null
+    let x = grab.x
+    let y = grab.y
+    let regrabs = 0
+    dispatch(session, { type: 'mousePressed', x, y, button: 'left', buttons: 1, clickCount: 1 })
 
-  const startedAt = Date.now()
-  while (Date.now() - startedAt < durationMs) {
-    let nextX = x + dx
-    let nextY = y + dy
-    const outOfBounds =
-      nextX < flowRect.left + margin || nextX > flowRect.right - margin ||
-      nextY < flowRect.top + margin || nextY > flowRect.bottom - margin
+    const startedAt = Date.now()
+    while (Date.now() - startedAt < durationMs) {
+      let nextX = x + dx
+      let nextY = y + dy
+      const outOfBounds =
+        nextX < flowRect.left + margin || nextX > flowRect.right - margin ||
+        nextY < flowRect.top + margin || nextY > flowRect.bottom - margin
 
-    if (outOfBounds) {
-      dispatch(session, { type: 'mouseReleased', x, y, button: 'left', buttons: 0, clickCount: 1 })
-      const regrab = await findPanePoint(page, {
-        preferRatioX: dx < 0 ? 0.86 : dx > 0 ? 0.14 : 0.5,
-        preferRatioY: dy < 0 ? 0.82 : dy > 0 ? 0.18 : 0.5,
-      })
-      const target = regrab || grab
-      // 必须先发一次「未按下」的移动，让 d3-zoom 结束上一段拖动
-      dispatch(session, { type: 'mouseMoved', x: target.x, y: target.y, button: 'none', buttons: 0 })
-      await sleep(20)
-      dispatch(session, { type: 'mousePressed', x: target.x, y: target.y, button: 'left', buttons: 1, clickCount: 1 })
-      x = target.x
-      y = target.y
-      regrabs += 1
-      nextX = x + dx
-      nextY = y + dy
+      if (outOfBounds) {
+        // 等待前一段输入落地再命中测试，防止密集视口中旧空白位置已被节点占据。
+        await releasePointer(session, { x, y })
+        const regrab = await findPanePoint(page, {
+          preferRatioX: dx < 0 ? 0.86 : dx > 0 ? 0.14 : 0.5,
+          preferRatioY: dy < 0 ? 0.82 : dy > 0 ? 0.18 : 0.5,
+        })
+        if (!regrab) throw new Error('重新抓取时找不到画布空白位置，拒绝使用旧坐标拖动节点')
+        const target = regrab
+        // 必须先发一次「未按下」的移动，让 d3-zoom 结束上一段拖动
+        dispatch(session, { type: 'mouseMoved', x: target.x, y: target.y, button: 'none', buttons: 0 })
+        await sleep(20)
+        dispatch(session, { type: 'mousePressed', x: target.x, y: target.y, button: 'left', buttons: 1, clickCount: 1 })
+        x = target.x
+        y = target.y
+        regrabs += 1
+        nextX = x + dx
+        nextY = y + dy
+      }
+
+      x = nextX
+      y = nextY
+      dispatch(session, { type: 'mouseMoved', x, y, button: 'left', buttons: 1 })
+      await sleep(intervalMs)
     }
 
-    x = nextX
-    y = nextY
-    dispatch(session, { type: 'mouseMoved', x, y, button: 'left', buttons: 1 })
-    await sleep(intervalMs)
-  }
+    // 最终松手必须 await：前面的 move 为了保持输入频率没有逐个等待，如果这里也不等，
+    // 下一次复位可能在 CDP 输入队列尚未结束时再次按下，d3-zoom 会停在拖动状态。
+    await releasePointer(session, { x, y })
+    await session.send('Input.dispatchKeyEvent', {
+      type: 'keyUp', key: ' ', code: 'Space', windowsVirtualKeyCode: 32, nativeVirtualKeyCode: 32,
+    })
+    inputReleased = true
+    await sleep(30)
+    const finalPositions = await readNodePositions(page)
+    const movedNodes = finalPositions.filter(([id, transform]) => nodePositions.get(id) !== transform)
+    const positionsPreserved = finalPositions.length === nodePositions.size && movedNodes.length === 0
 
-  // 最终松手必须 await：前面的 move 为了保持输入频率没有逐个等待，如果这里也不等，
-  // 下一次复位可能在 CDP 输入队列尚未结束时再次按下，d3-zoom 会停在拖动状态。
-  await releasePointer(session, { x, y })
-  await session.send('Input.dispatchKeyEvent', {
-    type: 'keyUp', key: ' ', code: 'Space', windowsVirtualKeyCode: 32, nativeVirtualKeyCode: 32,
-  })
-  await sleep(30)
+    if (!measure) {
+      if (!positionsPreserved) throw new Error('预热平移改变了节点位置或集合')
+      return { measured: false, regrabs }
+    }
 
-  if (!measure) {
-    return { measured: false, regrabs }
-  }
+    const sample = await sampleHandle.evaluate((state) => state.result)
+    const sorted = [...sample.intervals].sort((left, right) => left - right)
+    const pick = (ratio) => sorted[Math.min(sorted.length - 1, Math.max(0, Math.ceil(sorted.length * ratio) - 1))] || 0
+    const netMove = Math.hypot(
+      sample.endViewport.x - sample.startViewport.x,
+      sample.endViewport.y - sample.startViewport.y
+    )
+    const finite = Number.isFinite(sample.endViewport.x) && Number.isFinite(sample.endViewport.y) &&
+      Math.abs(sample.endViewport.x) < 1e7 && Math.abs(sample.endViewport.y) < 1e7
 
-  const sample = await samplePromise
-  const sorted = [...sample.intervals].sort((left, right) => left - right)
-  const pick = (ratio) => sorted[Math.min(sorted.length - 1, Math.max(0, Math.ceil(sorted.length * ratio) - 1))] || 0
-  const netMove = Math.hypot(
-    sample.endViewport.x - sample.startViewport.x,
-    sample.endViewport.y - sample.startViewport.y
-  )
-  const finite = Number.isFinite(sample.endViewport.x) && Number.isFinite(sample.endViewport.y) &&
-    Math.abs(sample.endViewport.x) < 1e7 && Math.abs(sample.endViewport.y) < 1e7
+    const minVisible = Math.min(sample.startVisibleNodeCount, sample.endVisibleNodeCount)
+    const invalidReasons = []
+    if (!positionsPreserved) {
+      invalidReasons.push(`平移改变了节点位置或集合（变化 ${movedNodes.length} 个）`)
+    }
+    if (!finite) invalidReasons.push('视口坐标异常（可能发生指数爆炸）')
+    if (!(netMove > 300)) invalidReasons.push(`净位移过小（${netMove.toFixed(1)}px）`)
+    if (minVisible < 5) invalidReasons.push(`扫掠途中可见节点过少（最少 ${minVisible} 个，说明走到了空白区）`)
 
-  const minVisible = Math.min(sample.startVisibleNodeCount, sample.endVisibleNodeCount)
-  const invalidReasons = []
-  if (!finite) invalidReasons.push('视口坐标异常（可能发生指数爆炸）')
-  if (!(netMove > 300)) invalidReasons.push(`净位移过小（${netMove.toFixed(1)}px）`)
-  if (minVisible < 5) invalidReasons.push(`扫掠途中可见节点过少（最少 ${minVisible} 个，说明走到了空白区）`)
-
-  return {
-    measured: true,
-    valid: invalidReasons.length === 0,
-    invalidReasons,
-    regrabs,
-    fps: Number(((sample.frames / sample.elapsedMs) * 1000).toFixed(1)),
-    frames: sample.frames,
-    elapsedMs: Number(sample.elapsedMs.toFixed(1)),
-    p50Ms: Number(pick(0.5).toFixed(2)),
-    p95Ms: Number(pick(0.95).toFixed(2)),
-    p99Ms: Number(pick(0.99).toFixed(2)),
-    maxMs: Number((sorted.at(-1) || 0).toFixed(2)),
-    droppedOver25Ms: sorted.filter((value) => value > 25).length,
-    droppedOver50Ms: sorted.filter((value) => value > 50).length,
-    netMove: Number(netMove.toFixed(1)),
-    startVisibleNodeCount: sample.startVisibleNodeCount,
-    endVisibleNodeCount: sample.endVisibleNodeCount,
-    startViewport: sample.startViewport,
-    endViewport: sample.endViewport,
+    return {
+      measured: true,
+      inputDriver: 'settled-regrab-v1',
+      nodePositionsPreserved: positionsPreserved,
+      valid: invalidReasons.length === 0,
+      invalidReasons,
+      regrabs,
+      fps: Number(((sample.frames / sample.elapsedMs) * 1000).toFixed(1)),
+      frames: sample.frames,
+      elapsedMs: Number(sample.elapsedMs.toFixed(1)),
+      p50Ms: Number(pick(0.5).toFixed(2)),
+      p95Ms: Number(pick(0.95).toFixed(2)),
+      p99Ms: Number(pick(0.99).toFixed(2)),
+      maxMs: Number((sorted.at(-1) || 0).toFixed(2)),
+      droppedOver25Ms: sorted.filter((value) => value > 25).length,
+      droppedOver50Ms: sorted.filter((value) => value > 50).length,
+      netMove: Number(netMove.toFixed(1)),
+      startVisibleNodeCount: sample.startVisibleNodeCount,
+      endVisibleNodeCount: sample.endVisibleNodeCount,
+      startViewport: sample.startViewport,
+      endViewport: sample.endViewport,
+    }
+  } finally {
+    try {
+      if (!inputReleased) {
+        await releasePointer(session, grab)
+        await session.send('Input.dispatchKeyEvent', {
+          type: 'keyUp', key: ' ', code: 'Space', windowsVirtualKeyCode: 32, nativeVirtualKeyCode: 32,
+        })
+      }
+    } finally { await sampleHandle?.dispose() }
   }
 }
 

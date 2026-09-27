@@ -1,0 +1,1152 @@
+[
+  {
+    "id": "zh_female_vv_uranus_bigtts",
+    "name": "Vivi 2.0",
+    "description": "通用场景 · 语种：中文、日文、印尼、墨西哥西班牙语、支持30+语种识别 方言：粤语、上海、河南、北京、天津、四川、陕西、东北"
+  },
+  {
+    "id": "zh_female_xiaohe_uranus_bigtts",
+    "name": "小何 2.0",
+    "description": "通用场景 · 语种：中文、支持30+语种识别 方言：粤语、上海、河南、北京、天津、四川、陕西、东北"
+  },
+  {
+    "id": "zh_male_m191_uranus_bigtts",
+    "name": "云舟 2.0",
+    "description": "通用场景 · 语种：中文、支持30+语种识别 方言：粤语、上海、河南、北京、天津、四川、陕西、东北"
+  },
+  {
+    "id": "zh_male_taocheng_uranus_bigtts",
+    "name": "小天 2.0",
+    "description": "通用场景 · 语种：中文、支持30+语种识别 方言：粤语、上海、河南、北京、天津、四川、陕西、东北"
+  },
+  {
+    "id": "zh_male_liufei_uranus_bigtts",
+    "name": "刘飞 2.0",
+    "description": "通用场景 · 中文、支持30+语种识别"
+  },
+  {
+    "id": "zh_female_sophie_uranus_bigtts",
+    "name": "魅力苏菲 2.0",
+    "description": "通用场景 · 中文、支持30+语种识别"
+  },
+  {
+    "id": "zh_female_qingxinnvsheng_uranus_bigtts",
+    "name": "清新女声 2.0",
+    "description": "通用场景 · 中文、支持30+语种识别"
+  },
+  {
+    "id": "zh_female_cancan_uranus_bigtts",
+    "name": "知性灿灿 2.0",
+    "description": "角色扮演 · 中文、支持30+语种识别"
+  },
+  {
+    "id": "zh_female_sajiaoxuemei_uranus_bigtts",
+    "name": "撒娇学妹 2.0",
+    "description": "角色扮演 · 中文、支持30+语种识别"
+  },
+  {
+    "id": "zh_female_tianmeixiaoyuan_uranus_bigtts",
+    "name": "甜美小源 2.0",
+    "description": "通用场景 · 中文、支持30+语种识别"
+  },
+  {
+    "id": "zh_female_tianmeitaozi_uranus_bigtts",
+    "name": "甜美桃子 2.0",
+    "description": "通用场景 · 中文、支持30+语种识别"
+  },
+  {
+    "id": "zh_female_shuangkuaisisi_uranus_bigtts",
+    "name": "爽快思思 2.0",
+    "description": "通用场景 · 中文、支持30+语种识别"
+  },
+  {
+    "id": "zh_female_peiqi_uranus_bigtts",
+    "name": "佩奇猪 2.0",
+    "description": "视频配音 · 中文、支持30+语种识别"
+  },
+  {
+    "id": "zh_female_linjianvhai_uranus_bigtts",
+    "name": "邻家女孩 2.0",
+    "description": "通用场景 · 中文、支持30+语种识别"
+  },
+  {
+    "id": "zh_male_shaonianzixin_uranus_bigtts",
+    "name": "少年梓辛 2.0",
+    "description": "通用场景 · 中文、支持30+语种识别"
+  },
+  {
+    "id": "zh_male_sunwukong_uranus_bigtts",
+    "name": "猴哥 2.0",
+    "description": "视频配音 · 中文、支持30+语种识别"
+  },
+  {
+    "id": "zh_female_yingyujiaoxue_uranus_bigtts",
+    "name": "Tina老师 2.0",
+    "description": "教育场景 · 中文、支持30+语种识别"
+  },
+  {
+    "id": "zh_female_kefunvsheng_uranus_bigtts",
+    "name": "暖阳女声 2.0",
+    "description": "客服场景 · 中文、支持30+语种识别"
+  },
+  {
+    "id": "zh_female_xiaoxue_uranus_bigtts",
+    "name": "儿童绘本 2.0",
+    "description": "有声阅读 · 中文、支持30+语种识别"
+  },
+  {
+    "id": "zh_male_dayi_uranus_bigtts",
+    "name": "大壹 2.0",
+    "description": "视频配音 · 中文、支持30+语种识别"
+  },
+  {
+    "id": "zh_female_mizai_uranus_bigtts",
+    "name": "黑猫侦探社咪仔 2.0",
+    "description": "视频配音 · 中文、支持30+语种识别"
+  },
+  {
+    "id": "zh_female_jitangnv_uranus_bigtts",
+    "name": "鸡汤女 2.0",
+    "description": "视频配音 · 中文、支持30+语种识别"
+  },
+  {
+    "id": "zh_female_meilinvyou_uranus_bigtts",
+    "name": "魅力女友 2.0",
+    "description": "通用场景 · 中文、支持30+语种识别"
+  },
+  {
+    "id": "zh_female_liuchangnv_uranus_bigtts",
+    "name": "流畅女声 2.0",
+    "description": "视频配音 · 中文、支持30+语种识别"
+  },
+  {
+    "id": "zh_male_ruyayichen_uranus_bigtts",
+    "name": "儒雅逸辰 2.0",
+    "description": "视频配音 · 中文、支持30+语种识别"
+  },
+  {
+    "id": "en_male_tim_uranus_bigtts",
+    "name": "Tim",
+    "description": "外语音色 · 美式英语"
+  },
+  {
+    "id": "en_female_dacey_uranus_bigtts",
+    "name": "Dacey",
+    "description": "外语音色 · 美式英语"
+  },
+  {
+    "id": "en_female_stokie_uranus_bigtts",
+    "name": "Stokie",
+    "description": "外语音色 · 美式英语"
+  },
+  {
+    "id": "zh_female_wenroumama_uranus_bigtts",
+    "name": "温柔妈妈 2.0",
+    "description": "通用场景 · 中文、支持30+语种识别"
+  },
+  {
+    "id": "zh_male_jieshuoxiaoming_uranus_bigtts",
+    "name": "解说小明 2.0",
+    "description": "通用场景 · 中文、支持30+语种识别"
+  },
+  {
+    "id": "zh_female_tvbnv_uranus_bigtts",
+    "name": "TVB女声 2.0",
+    "description": "通用场景 · 中文、支持30+语种识别"
+  },
+  {
+    "id": "zh_male_yizhipiannan_uranus_bigtts",
+    "name": "译制片男 2.0",
+    "description": "通用场景 · 中文、支持30+语种识别"
+  },
+  {
+    "id": "zh_female_qiaopinv_uranus_bigtts",
+    "name": "俏皮女声 2.0",
+    "description": "通用场景 · 中文、支持30+语种识别"
+  },
+  {
+    "id": "zh_female_zhishuaiyingzi_uranus_bigtts",
+    "name": "直率英子 2.0",
+    "description": "角色扮演 · 中文、支持30+语种识别"
+  },
+  {
+    "id": "zh_male_linjiananhai_uranus_bigtts",
+    "name": "邻家男孩 2.0",
+    "description": "通用场景 · 中文、支持30+语种识别"
+  },
+  {
+    "id": "zh_male_silang_uranus_bigtts",
+    "name": "四郎 2.0",
+    "description": "角色扮演 · 中文、支持30+语种识别"
+  },
+  {
+    "id": "zh_male_ruyaqingnian_uranus_bigtts",
+    "name": "儒雅青年 2.0",
+    "description": "通用场景 · 中文、支持30+语种识别"
+  },
+  {
+    "id": "zh_male_qingcang_uranus_bigtts",
+    "name": "擎苍 2.0",
+    "description": "角色扮演 · 中文、支持30+语种识别"
+  },
+  {
+    "id": "zh_male_xionger_uranus_bigtts",
+    "name": "熊二 2.0",
+    "description": "角色扮演 · 中文、支持30+语种识别"
+  },
+  {
+    "id": "zh_female_yingtaowanzi_uranus_bigtts",
+    "name": "樱桃丸子 2.0",
+    "description": "角色扮演 · 中文、支持30+语种识别"
+  },
+  {
+    "id": "zh_male_wennuanahu_uranus_bigtts",
+    "name": "温暖阿虎 2.0",
+    "description": "通用场景 · 中文、支持30+语种识别"
+  },
+  {
+    "id": "zh_male_naiqimengwa_uranus_bigtts",
+    "name": "奶气萌娃 2.0",
+    "description": "通用场景 · 中文、支持30+语种识别"
+  },
+  {
+    "id": "zh_female_popo_uranus_bigtts",
+    "name": "婆婆 2.0",
+    "description": "通用场景 · 中文、支持30+语种识别"
+  },
+  {
+    "id": "zh_female_gaolengyujie_uranus_bigtts",
+    "name": "高冷御姐 2.0",
+    "description": "通用场景 · 中文、支持30+语种识别"
+  },
+  {
+    "id": "zh_male_aojiaobazong_uranus_bigtts",
+    "name": "傲娇霸总 2.0",
+    "description": "通用场景 · 中文、支持30+语种识别"
+  },
+  {
+    "id": "zh_male_lanyinmianbao_uranus_bigtts",
+    "name": "懒音绵宝 2.0",
+    "description": "角色扮演 · 中文、支持30+语种识别"
+  },
+  {
+    "id": "zh_male_fanjuanqingnian_uranus_bigtts",
+    "name": "反卷青年 2.0",
+    "description": "通用场景 · 中文、支持30+语种识别"
+  },
+  {
+    "id": "zh_female_wenroushunv_uranus_bigtts",
+    "name": "温柔淑女 2.0",
+    "description": "通用场景 · 中文、支持30+语种识别"
+  },
+  {
+    "id": "zh_female_gufengshaoyu_uranus_bigtts",
+    "name": "古风少御 2.0",
+    "description": "角色扮演 · 中文、支持30+语种识别"
+  },
+  {
+    "id": "zh_male_huolixiaoge_uranus_bigtts",
+    "name": "活力小哥 2.0",
+    "description": "通用场景 · 中文、支持30+语种识别"
+  },
+  {
+    "id": "zh_male_baqiqingshu_uranus_bigtts",
+    "name": "霸气青叔 2.0",
+    "description": "有声阅读 · 中文、支持30+语种识别"
+  },
+  {
+    "id": "zh_male_xuanyijieshuo_uranus_bigtts",
+    "name": "悬疑解说 2.0",
+    "description": "有声阅读 · 中文、支持30+语种识别"
+  },
+  {
+    "id": "zh_female_mengyatou_uranus_bigtts",
+    "name": "萌丫头 2.0",
+    "description": "通用场景 · 中文、支持30+语种识别"
+  },
+  {
+    "id": "zh_female_tiexinnvsheng_uranus_bigtts",
+    "name": "贴心女声 2.0",
+    "description": "通用场景 · 中文、支持30+语种识别"
+  },
+  {
+    "id": "zh_female_jitangmei_uranus_bigtts",
+    "name": "鸡汤妹妹 2.0",
+    "description": "通用场景 · 中文、支持30+语种识别"
+  },
+  {
+    "id": "zh_male_cixingjieshuonan_uranus_bigtts",
+    "name": "磁性解说男声 2.0",
+    "description": "通用场景 · 中文、支持30+语种识别"
+  },
+  {
+    "id": "zh_male_liangsangmengzai_uranus_bigtts",
+    "name": "亮嗓萌仔 2.0",
+    "description": "通用场景 · 中文、支持30+语种识别"
+  },
+  {
+    "id": "zh_female_kailangjiejie_uranus_bigtts",
+    "name": "开朗姐姐 2.0",
+    "description": "通用场景 · 中文、支持30+语种识别"
+  },
+  {
+    "id": "zh_male_gaolengchenwen_uranus_bigtts",
+    "name": "高冷沉稳 2.0",
+    "description": "通用场景 · 中文、支持30+语种识别"
+  },
+  {
+    "id": "zh_male_shenyeboke_uranus_bigtts",
+    "name": "深夜播客 2.0",
+    "description": "通用场景 · 中文、支持30+语种识别"
+  },
+  {
+    "id": "zh_male_lubanqihao_uranus_bigtts",
+    "name": "鲁班七号 2.0",
+    "description": "角色扮演 · 中文、支持30+语种识别"
+  },
+  {
+    "id": "zh_female_jiaochuannv_uranus_bigtts",
+    "name": "娇喘女声 2.0",
+    "description": "通用场景 · 中文、支持30+语种识别"
+  },
+  {
+    "id": "zh_female_linxiao_uranus_bigtts",
+    "name": "林潇 2.0",
+    "description": "角色扮演 · 中文、支持30+语种识别"
+  },
+  {
+    "id": "zh_female_lingling_uranus_bigtts",
+    "name": "玲玲姐姐 2.0",
+    "description": "角色扮演 · 中文、支持30+语种识别"
+  },
+  {
+    "id": "zh_female_chunribu_uranus_bigtts",
+    "name": "春日部姐姐 2.0",
+    "description": "角色扮演 · 中文、支持30+语种识别"
+  },
+  {
+    "id": "zh_male_tangseng_uranus_bigtts",
+    "name": "唐僧 2.0",
+    "description": "角色扮演 · 中文、支持30+语种识别"
+  },
+  {
+    "id": "zh_male_zhuangzhou_uranus_bigtts",
+    "name": "庄周 2.0",
+    "description": "角色扮演 · 中文、支持30+语种识别"
+  },
+  {
+    "id": "zh_male_kailangdidi_uranus_bigtts",
+    "name": "开朗弟弟 2.0",
+    "description": "通用场景 · 中文、支持30+语种识别"
+  },
+  {
+    "id": "zh_male_zhubajie_uranus_bigtts",
+    "name": "猪八戒 2.0",
+    "description": "角色扮演 · 中文、支持30+语种识别"
+  },
+  {
+    "id": "zh_female_ganmaodianyin_uranus_bigtts",
+    "name": "感冒电音姐姐 2.0",
+    "description": "角色扮演 · 中文、支持30+语种识别"
+  },
+  {
+    "id": "zh_female_chanmeinv_uranus_bigtts",
+    "name": "谄媚女声 2.0",
+    "description": "通用场景 · 中文、支持30+语种识别"
+  },
+  {
+    "id": "zh_female_nvleishen_uranus_bigtts",
+    "name": "女雷神 2.0",
+    "description": "角色扮演 · 中文、支持30+语种识别"
+  },
+  {
+    "id": "zh_female_qinqienv_uranus_bigtts",
+    "name": "亲切女声 2.0",
+    "description": "通用场景 · 中文、支持30+语种识别"
+  },
+  {
+    "id": "zh_male_kuailexiaodong_uranus_bigtts",
+    "name": "快乐小东 2.0",
+    "description": "通用场景 · 中文、支持30+语种识别"
+  },
+  {
+    "id": "zh_male_kailangxuezhang_uranus_bigtts",
+    "name": "开朗学长 2.0",
+    "description": "通用场景 · 中文、支持30+语种识别"
+  },
+  {
+    "id": "zh_male_youyoujunzi_uranus_bigtts",
+    "name": "悠悠君子 2.0",
+    "description": "通用场景 · 中文、支持30+语种识别"
+  },
+  {
+    "id": "zh_female_wenjingmaomao_uranus_bigtts",
+    "name": "文静毛毛 2.0",
+    "description": "通用场景 · 中文、支持30+语种识别"
+  },
+  {
+    "id": "zh_female_zhixingnv_uranus_bigtts",
+    "name": "知性女声 2.0",
+    "description": "通用场景 · 中文、支持30+语种识别"
+  },
+  {
+    "id": "zh_male_qingshuangnanda_uranus_bigtts",
+    "name": "清爽男大 2.0",
+    "description": "通用场景 · 中文、支持30+语种识别"
+  },
+  {
+    "id": "zh_male_yuanboxiaoshu_uranus_bigtts",
+    "name": "渊博小叔 2.0",
+    "description": "通用场景 · 中文、支持30+语种识别"
+  },
+  {
+    "id": "zh_male_yangguangqingnian_uranus_bigtts",
+    "name": "阳光青年 2.0",
+    "description": "通用场景 · 中文、支持30+语种识别"
+  },
+  {
+    "id": "zh_female_qingchezizi_uranus_bigtts",
+    "name": "清澈梓梓 2.0",
+    "description": "通用场景 · 中文、支持30+语种识别"
+  },
+  {
+    "id": "zh_female_tianmeiyueyue_uranus_bigtts",
+    "name": "甜美悦悦 2.0",
+    "description": "通用场景 · 中文、支持30+语种识别"
+  },
+  {
+    "id": "zh_female_xinlingjitang_uranus_bigtts",
+    "name": "心灵鸡汤 2.0",
+    "description": "通用场景 · 中文、支持30+语种识别"
+  },
+  {
+    "id": "zh_male_wenrouxiaoge_uranus_bigtts",
+    "name": "温柔小哥 2.0",
+    "description": "通用场景 · 中文、支持30+语种识别"
+  },
+  {
+    "id": "zh_female_roumeinvyou_uranus_bigtts",
+    "name": "柔美女友 2.0",
+    "description": "通用场景 · 中文、支持30+语种识别"
+  },
+  {
+    "id": "zh_male_dongfanghaoran_uranus_bigtts",
+    "name": "东方浩然 2.0",
+    "description": "通用场景 · 中文、支持30+语种识别"
+  },
+  {
+    "id": "zh_female_wenrouxiaoya_uranus_bigtts",
+    "name": "温柔小雅 2.0",
+    "description": "通用场景 · 中文、支持30+语种识别"
+  },
+  {
+    "id": "zh_male_tiancaitongsheng_uranus_bigtts",
+    "name": "天才童声 2.0",
+    "description": "通用场景 · 中文、支持30+语种识别"
+  },
+  {
+    "id": "zh_female_wuzetian_uranus_bigtts",
+    "name": "武则天 2.0",
+    "description": "角色扮演 · 中文、支持30+语种识别"
+  },
+  {
+    "id": "zh_female_gujie_uranus_bigtts",
+    "name": "顾姐 2.0",
+    "description": "角色扮演 · 中文、支持30+语种识别"
+  },
+  {
+    "id": "zh_male_guanggaojieshuo_uranus_bigtts",
+    "name": "广告解说 2.0",
+    "description": "通用场景 · 中文、支持30+语种识别"
+  },
+  {
+    "id": "zh_female_shaoergushi_uranus_bigtts",
+    "name": "少儿故事 2.0",
+    "description": "有声阅读 · 中文、支持30+语种识别"
+  },
+  {
+    "id": "ar_female_dina_uranus_bigtts",
+    "name": "Dina",
+    "description": "通用场景, 视频配音,外语音色,阿拉伯语 · 阿拉伯语（埃及口音）"
+  },
+  {
+    "id": "ar_female_fatma_uranus_bigtts",
+    "name": "Fatma",
+    "description": "趣味口音,外语音色,阿拉伯语 · 阿拉伯语"
+  },
+  {
+    "id": "ar_male_youssef_uranus_bigtts",
+    "name": "Youssef",
+    "description": "通用场景,有声阅读,外语音色,阿拉伯语 · 阿拉伯语"
+  },
+  {
+    "id": "de_female_bv081_uranus_bigtts",
+    "name": "Stella",
+    "description": "教学场景, 客服场景,外语音色,德语 · 德语"
+  },
+  {
+    "id": "de_male_sven_uranus_bigtts",
+    "name": "Sven",
+    "description": "通用场景, 教学场景,外语音色,德语 · 德语"
+  },
+  {
+    "id": "en_male_alberto_uranus_bigtts",
+    "name": "Alberto",
+    "description": "通用场景, 教学场景,美式英语,外语音色 · 美式英语"
+  },
+  {
+    "id": "en_male_alex_uranus_bigtts",
+    "name": "Alex",
+    "description": "通用场景, 视频配音,美式英语,外语音色 · 美式英语"
+  },
+  {
+    "id": "en_female_allison_uranus_bigtts",
+    "name": "Allison",
+    "description": "视频配音,美式英语,外语音色 · 美式英语"
+  },
+  {
+    "id": "en_male_bill_jones_corey_uranus_bigtts",
+    "name": "Bill",
+    "description": "通用场景, 视频配音,美式英语,外语音色 · 美式英语"
+  },
+  {
+    "id": "en_male_brad_pitt_p1_uranus_bigtts",
+    "name": "Brad_Pitt",
+    "description": "通用场景, 视频配音,美式英语,外语音色 · 美式英语"
+  },
+  {
+    "id": "en_female_brittney_uranus_bigtts",
+    "name": "Brittney",
+    "description": "通用场景, 视频配音,美式英语,外语音色 · 美式英语"
+  },
+  {
+    "id": "en_female_brittney_pimintel_uranus_bigtts",
+    "name": "Zoe",
+    "description": "有声阅读, 客服场景,美式英语,外语音色 · 美式英语"
+  },
+  {
+    "id": "en_male_bruce_uranus_bigtts",
+    "name": "Adrian",
+    "description": "通用场景, 视频配音,美式英语,外语音色 · 美式英语"
+  },
+  {
+    "id": "en_male_chandler_p1_uranus_bigtts",
+    "name": "Leo",
+    "description": "趣味口音,美式英语,外语音色 · 美式英语"
+  },
+  {
+    "id": "en_male_cowboy_john_b_uranus_bigtts",
+    "name": "John",
+    "description": "趣味口音, 角色扮演,美式英语,外语音色 · 美式英语"
+  },
+  {
+    "id": "en_male_david_uranus_bigtts",
+    "name": "David",
+    "description": "通用场景,有声阅读,美式英语,外语音色 · 美式英语"
+  },
+  {
+    "id": "en_male_diyuwenrounan_uranus_bigtts",
+    "name": "Julian",
+    "description": "有声阅读,美式英语,外语音色 · 美式英语"
+  },
+  {
+    "id": "en_male_godfather_uranus_bigtts",
+    "name": "Godfather",
+    "description": "有声阅读, 角色扮演,美式英语,外语音色 · 美式英语"
+  },
+  {
+    "id": "en_male_gollum_uranus_bigtts",
+    "name": "Gollum",
+    "description": "角色扮演,美式英语,外语音色 · 美式英语"
+  },
+  {
+    "id": "en_male_hades_uranus_bigtts",
+    "name": "Beau",
+    "description": "通用场景, 视频配音,美式英语,外语音色 · 美式英语"
+  },
+  {
+    "id": "en_female_hayley_uranus_bigtts",
+    "name": "Hayley",
+    "description": "教学场景, 视频配音,美式英语,外语音色 · 美式英语"
+  },
+  {
+    "id": "en_male_jamie_uranus_bigtts",
+    "name": "Jamie",
+    "description": "通用场景, 教学场景, 视频配音,美式英语,外语音色 · 美式英语"
+  },
+  {
+    "id": "en_female_jane_uranus_bigtts",
+    "name": "Jane",
+    "description": "视频配音,美式英语,外语音色 · 美式英语"
+  },
+  {
+    "id": "en_female_jenny_uranus_bigtts",
+    "name": "Jenny",
+    "description": "通用场景, 客服场景,美式英语,外语音色 · 美式英语"
+  },
+  {
+    "id": "en_male_jidongchuanjiaoshi_uranus_bigtts",
+    "name": "Blaze",
+    "description": "趣味口音, 角色扮演,美式英语,外语音色 · 美式英语"
+  },
+  {
+    "id": "en_male_jimmy_uranus_bigtts",
+    "name": "Jimmy",
+    "description": "通用场景, 视频配音,美式英语,外语音色 · 美式英语"
+  },
+  {
+    "id": "en_female_joanne_uranus_bigtts",
+    "name": "Joanne",
+    "description": "通用场景,有声阅读, 视频配音,美式英语,外语音色 · 美式英语"
+  },
+  {
+    "id": "en_male_joker_uranus_bigtts",
+    "name": "Joker",
+    "description": "趣味口音, 视频配音,美式英语,外语音色 · 美式英语"
+  },
+  {
+    "id": "en_male_josh_uranus_bigtts",
+    "name": "Josh",
+    "description": "视频配音,美式英语,外语音色 · 美式英语"
+  },
+  {
+    "id": "en_male_josh_coery_uranus_bigtts",
+    "name": "Josiah",
+    "description": "教学场景, 视频配音,美式英语,外语音色 · 美式英语"
+  },
+  {
+    "id": "en_male_kevin_uranus_bigtts",
+    "name": "Kevin",
+    "description": "教学场景, 视频配音,美式英语,外语音色 · 美式英语"
+  },
+  {
+    "id": "en_male_knightley_uranus_bigtts",
+    "name": "Knightley",
+    "description": "有声阅读,英式英语,外语音色 · 英式英语"
+  },
+  {
+    "id": "en_female_lana_del_rey_kelley_d_p1_uranus_bigtts",
+    "name": "Lynn",
+    "description": "角色扮演,美式英语,外语音色 · 美式英语"
+  },
+  {
+    "id": "en_female_lana_del_rey_parky_s_p1_uranus_bigtts",
+    "name": "Ivy",
+    "description": "客服场景,美式英语,外语音色 · 美式英语"
+  },
+  {
+    "id": "en_male_marcus_uranus_bigtts",
+    "name": "Marcus",
+    "description": "通用场景,有声阅读,美式英语,外语音色 · 美式英语"
+  },
+  {
+    "id": "en_female_mel_uranus_bigtts",
+    "name": "Mel",
+    "description": "教学场景, 客服场景,美式英语,外语音色 · 美式英语"
+  },
+  {
+    "id": "en_male_michael_uranus_bigtts",
+    "name": "Hank",
+    "description": "通用场景, 教学场景,美式英语,外语音色 · 美式英语"
+  },
+  {
+    "id": "en_male_michael_kevin_uranus_bigtts",
+    "name": "Michael_Kevin",
+    "description": "通用场景, 教学场景,美式英语,外语音色 · 美式英语"
+  },
+  {
+    "id": "en_female_myra_uranus_bigtts",
+    "name": "Myra",
+    "description": "教学场景,美式英语,外语音色 · 美式英语"
+  },
+  {
+    "id": "en_female_myra_cmb_uranus_bigtts",
+    "name": "Sunny",
+    "description": "教学场景, 客服场景,美式英语,外语音色 · 美式英语"
+  },
+  {
+    "id": "en_female_nadia_uranus_bigtts",
+    "name": "Blair",
+    "description": "通用场景, 视频配音,美式英语,外语音色 · 美式英语"
+  },
+  {
+    "id": "en_female_natasha_uranus_bigtts",
+    "name": "Natasha",
+    "description": "通用场景, 视频配音,美式英语,外语音色 · 美式英语"
+  },
+  {
+    "id": "en_female_rachel_p1_uranus_bigtts",
+    "name": "Rachel",
+    "description": "趣味口音,美式英语,外语音色 · 美式英语"
+  },
+  {
+    "id": "en_male_ronald_uranus_bigtts",
+    "name": "Ronald",
+    "description": "有声阅读,美式英语,外语音色 · 美式英语"
+  },
+  {
+    "id": "en_male_russell_uranus_bigtts",
+    "name": "Russell",
+    "description": "通用场景, 教学场景,英式英语,外语音色 · 英式英语"
+  },
+  {
+    "id": "en_female_scarlet_p1_uranus_bigtts",
+    "name": "Scarlet",
+    "description": "客服场景,美式英语,外语音色 · 美式英语"
+  },
+  {
+    "id": "en_female_sharron_uranus_bigtts",
+    "name": "Sharron",
+    "description": "趣味口音,美式英语,外语音色 · 美式英语"
+  },
+  {
+    "id": "en_male_simba_p1_uranus_bigtts",
+    "name": "Simba",
+    "description": "通用场景, 视频配音,美式英语,外语音色 · 美式英语"
+  },
+  {
+    "id": "en_female_skye_uranus_bigtts",
+    "name": "Skye",
+    "description": "通用场景,美式英语,外语音色 · 美式英语"
+  },
+  {
+    "id": "en_male_tom_hiddleston_p1_uranus_bigtts",
+    "name": "Tom",
+    "description": "通用场景,有声阅读,美式英语,外语音色 · 美式英语"
+  },
+  {
+    "id": "en_male_valentino_uranus_bigtts",
+    "name": "Valentino",
+    "description": "通用场景, 视频配音,美式英语,外语音色 · 美式英语"
+  },
+  {
+    "id": "en_male_valentino_corey_uranus_bigtts",
+    "name": "Clark",
+    "description": "视频配音,美式英语,外语音色 · 美式英语"
+  },
+  {
+    "id": "en_female_wenrouzhishijieshuonv_uranus_bigtts",
+    "name": "Megan",
+    "description": "客服场景,美式英语,外语音色 · 美式英语"
+  },
+  {
+    "id": "en_female_xinwenjieshuonv_uranus_bigtts",
+    "name": "Kayla",
+    "description": "角色扮演,美式英语,外语音色 · 美式英语"
+  },
+  {
+    "id": "en_male_yangguangjieshuonan_uranus_bigtts",
+    "name": "Dylan",
+    "description": "通用场景, 视频配音,美式英语,外语音色 · 美式英语"
+  },
+  {
+    "id": "en_female_zendaya_p1_uranus_bigtts",
+    "name": "Zendaya",
+    "description": "教学场景, 客服场景,美式英语,外语音色 · 美式英语"
+  },
+  {
+    "id": "es_female_bv084_uranus_bigtts",
+    "name": "Gracie",
+    "description": "通用场景, 客服场景,外语音色,西班牙语 · 西班牙语"
+  },
+  {
+    "id": "es_male_dani_uranus_bigtts",
+    "name": "Dani",
+    "description": "有声阅读,视频配音,外语音色,西班牙语 · 西班牙语"
+  },
+  {
+    "id": "es_male_guillem_uranus_bigtts",
+    "name": "Guillem",
+    "description": "有声阅读,外语音色,西班牙语 · 西班牙语"
+  },
+  {
+    "id": "es_female_ht_mx_f6_uranus_bigtts",
+    "name": "Marisol",
+    "description": "通用场景, 视频配音,外语音色,西班牙语 · 西班牙语"
+  },
+  {
+    "id": "fr_female_fr_bv078_uranus_bigtts",
+    "name": "Simone",
+    "description": "通用场景, 视频配音,外语音色,法语 · 法语"
+  },
+  {
+    "id": "fr_female_fr_f47_uranus_bigtts",
+    "name": "Camille",
+    "description": "教学场景, 客服场景,外语音色,法语 · 法语"
+  },
+  {
+    "id": "fr_male_fr_m29_uranus_bigtts",
+    "name": "Maurice",
+    "description": "有声阅读,视频配音,外语音色,法语 · 法语"
+  },
+  {
+    "id": "fr_male_usseau_uranus_bigtts",
+    "name": "Usseau",
+    "description": "通用场景, 客服场景,外语音色,法语 · 法语"
+  },
+  {
+    "id": "id_male_bv160_uranus_bigtts",
+    "name": "Rocco",
+    "description": "通用场景, 视频配音,外语音色,印尼语 · 印尼语"
+  },
+  {
+    "id": "id_male_bv160dialogue_uranus_bigtts",
+    "name": "Jude",
+    "description": "通用场景, 视频配音,外语音色,印尼语 · 印尼语"
+  },
+  {
+    "id": "id_male_bv160narration_uranus_bigtts",
+    "name": "Hugo",
+    "description": "有声阅读,视频配音,外语音色,印尼语 · 印尼语"
+  },
+  {
+    "id": "id_female_bv161_uranus_bigtts",
+    "name": "Clara",
+    "description": "通用场景, 视频配音,外语音色,印尼语 · 印尼语"
+  },
+  {
+    "id": "id_female_bv161dialogue_uranus_bigtts",
+    "name": "Sylvia",
+    "description": "通用场景, 视频配音,外语音色,印尼语 · 印尼语"
+  },
+  {
+    "id": "id_female_bv161narration_uranus_bigtts",
+    "name": "Celeste",
+    "description": "通用场景, 视频配音,外语音色,印尼语 · 印尼语"
+  },
+  {
+    "id": "id_female_bv164_uranus_bigtts",
+    "name": "Crew",
+    "description": "通用场景, 视频配音,外语音色,印尼语 · 印尼语"
+  },
+  {
+    "id": "id_male_bv164dialogue_uranus_bigtts",
+    "name": "Elian",
+    "description": "视频配音,外语音色,印尼语 · 印尼语"
+  },
+  {
+    "id": "id_male_bv164narration_uranus_bigtts",
+    "name": "Ronan",
+    "description": "有声阅读,视频配音,外语音色,印尼语 · 印尼语"
+  },
+  {
+    "id": "id_female_f20_uranus_bigtts",
+    "name": "Chloe",
+    "description": "视频配音,外语音色,印尼语 · 印尼语"
+  },
+  {
+    "id": "id_male_han_uranus_bigtts",
+    "name": "Han",
+    "description": "通用场景,外语音色,印尼语 · 印尼语"
+  },
+  {
+    "id": "id_male_m08_uranus_bigtts",
+    "name": "Kyle",
+    "description": "通用场景, 教学场景,外语音色,印尼语 · 印尼语"
+  },
+  {
+    "id": "id_female_phulia_uranus_bigtts",
+    "name": "Phulia",
+    "description": "通用场景, 视频配音,外语音色,印尼语 · 印尼语"
+  },
+  {
+    "id": "ja_female_bv024_uranus_bigtts",
+    "name": "Bonnie",
+    "description": "通用场景, 教学场景,外语音色,日语 · 日语"
+  },
+  {
+    "id": "ja_female_bv520_uranus_bigtts",
+    "name": "Poppy",
+    "description": "视频配音, 角色扮演,外语音色,日语 · 日语"
+  },
+  {
+    "id": "ja_female_bv521_uranus_bigtts",
+    "name": "Aoi",
+    "description": "趣味口音, 角色扮演,外语音色,日语 · 日语"
+  },
+  {
+    "id": "ja_female_bv522_uranus_bigtts",
+    "name": "Hana",
+    "description": "通用场景, 教学场景, 客服场景,外语音色,日语 · 日语"
+  },
+  {
+    "id": "ja_female_bv523_uranus_bigtts",
+    "name": "Lily",
+    "description": "趣味口音, 角色扮演,外语音色,日语 · 日语"
+  },
+  {
+    "id": "ja_male_bv524_uranus_bigtts",
+    "name": "Ken",
+    "description": "通用场景, 视频配音,外语音色,日语 · 日语"
+  },
+  {
+    "id": "ja_female_minimi_uranus_bigtts",
+    "name": "Minimi",
+    "description": "通用场景, 视频配音,外语音色,日语 · 日语"
+  },
+  {
+    "id": "ja_female_shirou_uranus_bigtts",
+    "name": "Shirou",
+    "description": "视频配音, 角色扮演,外语音色,日语 · 日语"
+  },
+  {
+    "id": "ko_male_bv545_uranus_bigtts",
+    "name": "Jay",
+    "description": "通用场景, 视频配音,外语音色,韩语 · 韩语"
+  },
+  {
+    "id": "ko_female_bv546_uranus_bigtts",
+    "name": "Momo",
+    "description": "视频配音, 角色扮演,外语音色,韩语 · 韩语"
+  },
+  {
+    "id": "ko_male_m03_uranus_bigtts",
+    "name": "Minho",
+    "description": "通用场景, 客服场景,外语音色,韩语 · 韩语"
+  },
+  {
+    "id": "ko_male_shane_uranus_bigtts",
+    "name": "Shane",
+    "description": "有声阅读, 教学场景, 视频配音,外语音色,韩语 · 韩语"
+  },
+  {
+    "id": "ms_male_ham_uranus_bigtts",
+    "name": "Ham",
+    "description": "通用场景, 教学场景,外语音色,马来语 · 马来语"
+  },
+  {
+    "id": "ms_male_naim_uranus_bigtts",
+    "name": "Naim",
+    "description": "通用场景, 客服场景,外语音色,马来语 · 马来语"
+  },
+  {
+    "id": "mx_female_bv065_uranus_bigtts",
+    "name": "Irene",
+    "description": "教学场景, 视频配音,外语音色,墨西哥西语 · 墨西哥西语"
+  },
+  {
+    "id": "mx_male_bv165dialogue_uranus_bigtts",
+    "name": "Diego",
+    "description": "有声阅读,视频配音,外语音色,墨西哥西语 · 墨西哥西语"
+  },
+  {
+    "id": "mx_male_bv165narrator_uranus_bigtts",
+    "name": "Marcos",
+    "description": "有声阅读,视频配音,外语音色,墨西哥西语 · 墨西哥西语"
+  },
+  {
+    "id": "mx_female_bv166dialogue_uranus_bigtts",
+    "name": "Lucy",
+    "description": "通用场景, 视频配音,外语音色,墨西哥西语 · 墨西哥西语"
+  },
+  {
+    "id": "mx_female_bv166emotion_uranus_bigtts",
+    "name": "Rosa",
+    "description": "通用场景, 视频配音,外语音色,墨西哥西语 · 墨西哥西语"
+  },
+  {
+    "id": "mx_female_bv166narrator_uranus_bigtts",
+    "name": "Freya",
+    "description": "有声阅读, 视频配音, 客服场景,外语音色,墨西哥西语 · 墨西哥西语"
+  },
+  {
+    "id": "mx_male_felipe_uranus_bigtts",
+    "name": "Felipe",
+    "description": "通用场景,有声阅读,外语音色,墨西哥西语 · 墨西哥西语"
+  },
+  {
+    "id": "mx_male_ht_mx_m012_uranus_bigtts",
+    "name": "Derek",
+    "description": "教学场景, 视频配音,外语音色,墨西哥西语 · 墨西哥西语"
+  },
+  {
+    "id": "mx_female_leslie_uranus_bigtts",
+    "name": "Leslie",
+    "description": "通用场景, 客服场景,外语音色,墨西哥西语 · 墨西哥西语"
+  },
+  {
+    "id": "mx_male_marcelo_uranus_bigtts",
+    "name": "Marcelo",
+    "description": "通用场景, 视频配音,外语音色,墨西哥西语 · 墨西哥西语"
+  },
+  {
+    "id": "pt_male_bv172_uranus_bigtts",
+    "name": "Sam",
+    "description": "通用场景, 客服场景,外语音色,巴西葡萄牙语 · 巴西葡萄牙语"
+  },
+  {
+    "id": "pt_male_bv172dialogue_uranus_bigtts",
+    "name": "Walter",
+    "description": "视频配音,外语音色,巴西葡萄牙语 · 巴西葡萄牙语"
+  },
+  {
+    "id": "pt_male_bv172emotion_uranus_bigtts",
+    "name": "Vincent",
+    "description": "教学场景, 视频配音,外语音色,巴西葡萄牙语 · 巴西葡萄牙语"
+  },
+  {
+    "id": "pt_male_bv172narrator_uranus_bigtts",
+    "name": "Miles",
+    "description": "有声阅读, 角色扮演,外语音色,巴西葡萄牙语 · 巴西葡萄牙语"
+  },
+  {
+    "id": "pt_female_bv173_uranus_bigtts",
+    "name": "Diana",
+    "description": "通用场景, 教学场景,外语音色,巴西葡萄牙语 · 巴西葡萄牙语"
+  },
+  {
+    "id": "pt_female_bv173dialogue_uranus_bigtts",
+    "name": "Elena",
+    "description": "视频配音, 客服场景,外语音色,巴西葡萄牙语 · 巴西葡萄牙语"
+  },
+  {
+    "id": "pt_female_bv173emotion_uranus_bigtts",
+    "name": "Lola",
+    "description": "通用场景, 教学场景,外语音色,巴西葡萄牙语 · 巴西葡萄牙语"
+  },
+  {
+    "id": "pt_female_bv173narrator_uranus_bigtts",
+    "name": "Emma",
+    "description": "视频配音, 客服场景,外语音色,巴西葡萄牙语 · 巴西葡萄牙语"
+  },
+  {
+    "id": "pt_female_bv530_uranus_bigtts",
+    "name": "Sofia",
+    "description": "通用场景, 视频配音,外语音色,巴西葡萄牙语 · 巴西葡萄牙语"
+  },
+  {
+    "id": "pt_male_bv531_uranus_bigtts",
+    "name": "Arthur",
+    "description": "通用场景, 教学场景,外语音色,巴西葡萄牙语 · 巴西葡萄牙语"
+  },
+  {
+    "id": "pt_female_mari_uranus_bigtts",
+    "name": "Mari",
+    "description": "教学场景, 视频配音,外语音色,巴西葡萄牙语 · 巴西葡萄牙语"
+  },
+  {
+    "id": "pt_male_martins_uranus_bigtts",
+    "name": "Toby",
+    "description": "通用场景, 教学场景,外语音色,巴西葡萄牙语 · 巴西葡萄牙语"
+  },
+  {
+    "id": "pt_male_rael_uranus_bigtts",
+    "name": "Rael",
+    "description": "教学场景, 视频配音,外语音色,巴西葡萄牙语 · 巴西葡萄牙语"
+  },
+  {
+    "id": "ru_female_af07_uranus_bigtts",
+    "name": "Amelia",
+    "description": "有声阅读,视频配音,外语音色,俄语 · 俄语"
+  },
+  {
+    "id": "ru_female_irinae_uranus_bigtts",
+    "name": "Irinae",
+    "description": "有声阅读,视频配音,外语音色,俄语 · 俄语"
+  },
+  {
+    "id": "ru_male_pavel_uranus_bigtts",
+    "name": "Pavel",
+    "description": "通用场景, 视频配音,外语音色,俄语 · 俄语"
+  },
+  {
+    "id": "ru_female_sophie_uranus_bigtts",
+    "name": "Ksenia",
+    "description": "通用场景,外语音色,俄语 · 俄语"
+  },
+  {
+    "id": "ru_male_vlad_uranus_bigtts",
+    "name": "Silas",
+    "description": "趣味口音,外语音色,俄语 · 俄语"
+  },
+  {
+    "id": "th_female_bv568_angry_uranus_bigtts",
+    "name": "Valeria",
+    "description": "教学场景, 视频配音,外语音色,泰语 · 泰语"
+  },
+  {
+    "id": "th_female_bv568_fear_uranus_bigtts",
+    "name": "Iris",
+    "description": "有声阅读,视频配音,外语音色,泰语 · 泰语"
+  },
+  {
+    "id": "th_female_bv568_happy_uranus_bigtts",
+    "name": "Zara",
+    "description": "通用场景, 视频配音,外语音色,泰语 · 泰语"
+  },
+  {
+    "id": "th_female_bv568_hate_uranus_bigtts",
+    "name": "Valentina",
+    "description": "通用场景, 视频配音,外语音色,泰语 · 泰语"
+  },
+  {
+    "id": "th_female_bv568_neutral_uranus_bigtts",
+    "name": "Mildred",
+    "description": "通用场景, 视频配音,外语音色,泰语 · 泰语"
+  },
+  {
+    "id": "th_female_bv568_sad_uranus_bigtts",
+    "name": "Lydia",
+    "description": "视频配音, 客服场景,外语音色,泰语 · 泰语"
+  },
+  {
+    "id": "th_female_bv568_suprise_uranus_bigtts",
+    "name": "Phoebe",
+    "description": "有声阅读,视频配音,外语音色,泰语 · 泰语"
+  },
+  {
+    "id": "tl_female_annika_uranus_bigtts",
+    "name": "Annika",
+    "description": "通用场景, 视频配音,外语音色,菲律宾语 · 菲律宾语"
+  },
+  {
+    "id": "tl_male_ed_uranus_bigtts",
+    "name": "Ed",
+    "description": "通用场景, 视频配音,外语音色,菲律宾语 · 菲律宾语"
+  },
+  {
+    "id": "tl_female_hervie_uranus_bigtts",
+    "name": "Hervie",
+    "description": "有声阅读, 视频配音, 客服场景,外语音色,菲律宾语 · 菲律宾语"
+  },
+  {
+    "id": "vi_female_hong_uranus_bigtts",
+    "name": "Hong",
+    "description": "通用场景, 客服场景,外语音色,越南语 · 越南语"
+  },
+  {
+    "id": "vi_female_ling_uranus_bigtts",
+    "name": "Ling",
+    "description": "通用场景, 视频配音,外语音色,越南语 · 越南语"
+  },
+  {
+    "id": "vi_female_linh_uranus_bigtts",
+    "name": "Linh",
+    "description": "视频配音,外语音色,越南语 · 越南语"
+  },
+  {
+    "id": "vi_female_partner_uranus_bigtts",
+    "name": "Partner",
+    "description": "视频配音, 客服场景,外语音色,越南语 · 越南语"
+  },
+  {
+    "id": "vi_female_ruan_uranus_bigtts",
+    "name": "Ruan",
+    "description": "通用场景,有声阅读, 角色扮演,外语音色,越南语 · 越南语"
+  },
+  {
+    "id": "vi_female_wu_uranus_bigtts",
+    "name": "Wu",
+    "description": "通用场景, 视频配音,外语音色,越南语 · 越南语"
+  },
+  {
+    "id": "vi_male_wumg_uranus_bigtts",
+    "name": "Wumg",
+    "description": "通用场景, 客服场景,外语音色,越南语 · 越南语"
+  },
+  {
+    "id": "it_male_enzo_uranus_bigtts",
+    "name": "Enzo",
+    "description": "通用场景, 教学场景,外语音色,意大利语 · 意大利语"
+  }
+]

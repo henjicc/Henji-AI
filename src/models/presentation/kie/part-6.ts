@@ -5,6 +5,25 @@ import type { I18nText } from '@/core/types/I18nText'
 import type { ModelPresentation } from '@/core/types/ModelPresentation'
 
 export const kiePresentationPart6: Record<string, ModelPresentation> = {
+  'kie-happyhorse-1.1': {
+    meta: { name: { key: 'meta.name', fallback: 'HappyHorse 1.1' }, i18nScope: 'models.defs.kie-happyhorse-1.1' },
+    params: {
+      kieHappyHorse11Mode: {
+        name: sharedFieldText('mode'), role: 'mode',
+        optionLabels: {
+          'text-image-to-video': { label: { zh: '文生 / 图生视频', en: 'Text / Image to Video' } },
+          'reference-to-video': { label: { zh: '多图参考', en: 'Reference to Video' } },
+        },
+      },
+      kieHappyHorse11AspectRatio: {
+        name: sharedFieldText('aspectRatio'),
+        optionLabels: Object.fromEntries(['smart', '16:9', '9:16', '1:1', '4:3', '3:4', '4:5', '5:4', '9:21', '21:9'].map(value => [value, { label: value === 'smart' ? sharedOptionText('smart') : value }])),
+      },
+      kieHappyHorse11Resolution: { name: sharedFieldText('resolution'), optionLabels: { '720p': { label: '720p' }, '1080p': { label: '1080p' } } },
+      kieHappyHorse11Duration: { name: sharedFieldText('duration') },
+    },
+    linkages: [],
+  },
   "kie-seedream-4.5": {
     meta: {
       name: { key: 'meta.name', fallback: 'Seedream 4.5' },

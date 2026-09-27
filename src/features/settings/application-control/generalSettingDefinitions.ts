@@ -14,6 +14,7 @@ import { changeLanguage, getCurrentLanguage } from '@/utils/language'
 import { getUpdateConfig, setUpdateEnabled, setUpdateFrequency } from '@/utils/updateConfig'
 import { z } from 'zod'
 import { GENERATION_MODEL_DESCRIPTIONS } from '@/core/modelCatalog/generationModelDescriptions'
+import { API_KEY_PROVIDER_IDS } from '@/core/config/providers'
 import { modelDefaultsManager } from '@/features/settings/modelDefaultsManager'
 
 import { storageSetting, storeSetting } from './definitionFactories'
@@ -27,7 +28,7 @@ const DEFAULT_MODEL_ID_SCHEMA = z.enum([
 export const GENERAL_APPLICATION_SETTING_DEFINITIONS: ApplicationSettingDefinition[] = [
   storeSetting({
     id: 'general.primary_provider', title: '默认供应商', description: '设置新节点与首次任务优先使用的模型供应商，不会隐藏其他供应商。',
-    aliases: ['主供应商', '首选供应商', '默认平台', 'primary provider', 'default provider'], schema: z.enum(['ppio', 'fal', 'modelscope', 'kie', 'apimart', 'bailian', 'volcengine', 'grsai']), defaultValue: 'kie',
+    aliases: ['主供应商', '首选供应商', '默认平台', 'primary provider', 'default provider'], schema: z.enum(API_KEY_PROVIDER_IDS), defaultValue: 'kie',
     target: { tab: 'general', sectionId: 'general-onboarding' }, requiresReload: false, requiresRestart: false, sensitive: false,
   }, () => modelDefaultsManager.getSnapshot().providerId,
   (value) => { modelDefaultsManager.setProvider(value) }),

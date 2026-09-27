@@ -18,7 +18,9 @@ export function applyProviderRequestBodyQuirks(
   body: Record<string, unknown>
 ): Record<string, unknown> {
   const normalizedProviderId = providerId.trim().toLowerCase()
-  if (normalizedProviderId === 'mimo') return renameMaxCompletionTokens(body)
+  if (normalizedProviderId === 'mimo' || normalizedProviderId === 'openai') {
+    return renameMaxCompletionTokens(body)
+  }
   if (normalizedProviderId !== 'groq') return body
 
   const withTokenLimit = renameMaxCompletionTokens(body)

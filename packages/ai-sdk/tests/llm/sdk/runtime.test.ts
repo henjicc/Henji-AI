@@ -39,6 +39,20 @@ function responsesInput(patch: Partial<ModelStepInput> = {}): ModelStepInput {
 }
 
 describe('classifyModelStepError', () => {
+  it('MiMo Responses 保留完整思考和文本，发送协议正确的关闭/开启参数', async () => {
+    const fixture = JSON.parse(readFileSync(path.resolve(__dirname, '../../fixtures/llm/mimo-responses.json'), 'utf8')) as { events: Array<Record<string, unknown>> }
+    const fetch = vi.fn(async () => new Response(
+      fixture.events.map(event => `data: ${JSON.stringify(event)}\r\n\r\n`).join(''),
+      { headers: { 'content-type': 'text/event-stream' } },
+    ))
+    const runtime: RuntimeContext = { transport: { fetch }, credentials: { get: () => 'fixture-key' }, media: { read: async () => { throw new Error('unused') } } }
+    const output = await runModelStep(responsesInput({ providerId: 'mimo', adapter: 'openai', modelId: 'mimo-v2.6-pro', baseUrl: 'https://api.xiaomimimo.com/v1' }), () => undefined, runtime)
+    expect(output).toMatchObject({ text: '完成', reasoningText: '分析', finishReason: 'stop', usage: { inputTokens: 3, outputTokens: 2 } })
+    const body = JSON.parse(String(fetch.mock.calls[0]?.[1]?.body)) as Record<string, unknown>
+    expect(body).toMatchObject({ model: 'mimo-v2.6-pro', reasoning: { effort: 'high' } })
+    expect(body).not.toHaveProperty('thinking')
+    expect(body).not.toHaveProperty('reasoning_effort')
+  })
   it('把显式取消归一化为 task_cancelled', () => {
     const controller = new AbortController()
     registerAbortController('llm', 'request-cancel', controller)
@@ -167,7 +181,7 @@ describe('classifyModelStepError', () => {
     consoleError.mockRestore()
   })
 
-  it('Responses 工具调用保持助手既有 ToolCall 契约', async () => {
+  it.each(['deepseek', 'mimo'])('%s Responses 工具调用保持助手既有 ToolCall 契约', async (providerId) => {
     const events = [
       { type: 'response.created', response: { id: 'resp_tool', created_at: 1, model: 'deepseek-v4-pro', service_tier: null } },
       {
@@ -201,6 +215,7 @@ describe('classifyModelStepError', () => {
       media: { read: async () => { throw new Error('fixture does not read media') } },
     }
     const input = responsesInput({
+      providerId,
       capabilities: { ...responsesInput().capabilities, toolCall: true },
       tools: [{ name: 'lookup', inputSchema: { type: 'object', properties: { q: { type: 'string' } } } }],
     })
@@ -210,7 +225,7 @@ describe('classifyModelStepError', () => {
     })
   })
 
-  it('取消 Responses 请求会传递 AbortSignal 并统一成 task_cancelled', async () => {
+  it.each(['deepseek', 'mimo'])('取消 %s Responses 请求会传递 AbortSignal 并统一成 task_cancelled', async (providerId) => {
     let aborted = false
     const fetch = vi.fn((_url: string, init?: RequestInit) => new Promise<Response>((_resolve, reject) => {
       init?.signal?.addEventListener('abort', () => {
@@ -223,7 +238,7 @@ describe('classifyModelStepError', () => {
       credentials: { get: () => 'responses-key' },
       media: { read: async () => { throw new Error('fixture does not read media') } },
     }
-    const promise = runModelStep(responsesInput({ requestId: 'responses-cancelled' }), () => undefined, runtime)
+    const promise = runModelStep(responsesInput({ providerId, requestId: 'responses-cancelled' }), () => undefined, runtime)
     await vi.waitFor(() => expect(fetch).toHaveBeenCalledOnce())
     cancelModelStepTask('responses-cancelled')
     await expect(promise).rejects.toThrow('MODEL_STEP_CANCELLED')

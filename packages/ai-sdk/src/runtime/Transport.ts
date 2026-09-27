@@ -32,6 +32,22 @@
  *    返回一个 `Response`，任何网络层都能满足。
  */
 export interface Transport {
+  /** Consume lazily with backpressure; never collect the body. Close the iterator on failure/cancel.
+   * No automatic replay. Implementations may use native streams; no Web Streams global is required.
+   */
+  fetchStream?(url: string, init: Omit<RequestInit, 'body'> & { body: AsyncIterable<Uint8Array>; contentLength: number }): Promise<Response>
+  /** Native scoped-file multipart upload. Stat and enforce maxBytes BEFORE opening the network;
+   * stream outside the JS heap, file part last. No media.read/describe/readChunk calls.
+   * On size rejection throw media_too_large with actualBytes, maxBytes and known audio metadata.
+   * Preserve cancellation, scope checks and file identity/size throughout upload. Never replay.
+   */
+  uploadFile?(url: string, init: {
+    ref: string
+    fields: readonly (readonly [string, string])[]
+    fileField: string
+    maxBytes: number
+    signal: AbortSignal
+  }): Promise<Response>
   /**
    * 发起一次网络请求，语义与标准 `fetch(url, init)` 完全一致：
    * - 网络失败（DNS、连接被拒绝、超时等）应该 `throw`，而不是返回一个“失败态”的 `Response`。

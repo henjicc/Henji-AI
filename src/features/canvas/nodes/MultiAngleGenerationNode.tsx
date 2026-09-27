@@ -19,7 +19,7 @@ import { normalizeMultiAngleConfig, resolveMultiAngleExecutionTarget } from '@/f
 import { getMainPortConnectionFlags } from '@/features/canvas/domain/connectionIndex';
 
 import { MediaInputRow } from '@/features/canvas/params/MediaInputRow';
-import { useCanvasStore } from '@/stores/canvasStore';
+import { canvasViewStore, useCanvasStore } from '@/stores/canvasStore';
 
 
 import { MultiAngleWorkbench } from '@/features/canvas/ui/specialInterfaces/multiAngle/MultiAngleSpecialEditor';
@@ -48,7 +48,7 @@ export const MultiAngleGenerationNode = memo(({
     (state) => getMainPortConnectionFlags(state.edges).get(id)?.hasMainSource ?? false,
   )
   const incomingSourceMedia = useStoreWithEqualityFn(
-    useCanvasStore,
+    canvasViewStore,
     (state) => collectInputMediaByKind(id, state.nodes, state.edges, 'image'),
     areMediaOutputListsEqual,
   )

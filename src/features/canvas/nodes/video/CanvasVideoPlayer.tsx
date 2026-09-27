@@ -66,6 +66,8 @@ export function CanvasVideoPlayer({
     if (!player) return undefined;
 
     const updateControlsDensity = (width: number): void => {
+      // 屏外暂停布局会产生零宽度；保留上次布局，避免控件增删反过来反复唤醒节点。
+      if (width <= 0) return;
       setCompactControls(width < 220);
     };
     updateControlsDensity(player.getBoundingClientRect().width);

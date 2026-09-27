@@ -2,7 +2,7 @@
 
 | 项目 | 内容 |
 |---|---|
-| 最后更新 | 2026-08-28 |
+| 最后更新 | 2026-09-21 |
 | 能力 | 短音频同步识别（OpenAI 兼容 / DashScope HTTP） |
 | 平台模型 ID | `qwen3-asr-flash`（稳定别名，官方当前等同 `qwen3-asr-flash-2025-09-08`） |
 | 输入上限 | 5 分钟 / 10 MB，单次 1 个音频 |
@@ -38,3 +38,7 @@ Authorization: Bearer <API Key>
 | 模型/音频规格 | https://help.aliyun.com/zh/model-studio/asr-model/ | 否 |
 | 价格 | https://help.aliyun.com/zh/model-studio/model-pricing | 否 |
 | API Key | https://bailian.console.aliyun.com/?apiKey=1#/api-key | **是** |
+
+## 2026-09-21 文件传输边界复核
+
+官方 API 的 Base64 输入说明明确要求编码后不超过 10 MB。SDK 按十进制保守折算原始音频最大 7,500,000 字节（4 × ceil(n/3) ≤ 10,000,000），仍受 5 分钟限制；不能把原始字节的 10 MiB 当作 Base64 上限。

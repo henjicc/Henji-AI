@@ -1,5 +1,6 @@
+import { useNodeHandlesSync } from '../hooks/useNodeHandlesSync';
 import { memo, useCallback, useEffect, useMemo, useState } from 'react';
-import { Handle, Position, useUpdateNodeInternals } from '@xyflow/react';
+import { Handle, Position } from '@xyflow/react';
 import { useTranslation } from 'react-i18next';
 import { useProjectStore } from '@/stores/projectStore';
 import { attachCanvasGenerationFeedback } from '../application/canvasDomainExecutors';
@@ -22,7 +23,7 @@ import { registry } from '@/core/ModelRegistry';
 import { analyzeRatioResolutionParams } from '@/core/params/ratioResolution';
 import { transferModelParamOverridesBetweenModels } from '@/core/params/modelParamTransfer';
 
-import { useCanvasStore } from '@/stores/canvasStore';
+import { canvasViewStore, useCanvasStore } from '@/stores/canvasStore';
 import { showAlertDialog } from '@/stores/alertDialogStore';
 import { NodeHeader, NODE_HEADER_FLOATING_POSITION_CLASS } from '@/features/canvas/ui/NodeHeader';
 import { NodeLodPlaceholder } from '@/features/canvas/ui/NodeLodPlaceholder';
@@ -58,7 +59,6 @@ type StoryboardGenNodeProps = {
 
 export const StoryboardGenNode = memo(({ id, data, selected, width, height }: StoryboardGenNodeProps) => {
   const { t } = useTranslation()
-  const updateNodeInternals = useUpdateNodeInternals()
   const setSelectedNode = useCanvasStore((state) => state.setSelectedNode)
   const updateNodeData = useCanvasStore((state) => state.updateNodeData)
   const hasSourceConnections = useCanvasStore((state) =>
@@ -79,7 +79,7 @@ export const StoryboardGenNode = memo(({ id, data, selected, width, height }: St
   )
 
   const incomingImageOutputs = useStoreWithEqualityFn(
-    useCanvasStore,
+    canvasViewStore,
     (state) => collectInputMediaByKind(id, state.nodes, state.edges, 'image'),
     areMediaOutputListsEqual
   )
@@ -97,12 +97,12 @@ export const StoryboardGenNode = memo(({ id, data, selected, width, height }: St
   })
 
   const connectedParamIds = useStoreWithEqualityFn(
-    useCanvasStore,
+    canvasViewStore,
     (state) => getConnectedParamIds(id, state.edges),
     areStringSetsEqual
   )
   const injectedValues = useStoreWithEqualityFn(
-    useCanvasStore,
+    canvasViewStore,
     (state) => collectInputValues(id, state.nodes, state.edges),
     areValueOverridesEqual
   )
@@ -195,9 +195,7 @@ export const StoryboardGenNode = memo(({ id, data, selected, width, height }: St
     [frameAspectRatioValue, nodeData.gridCols, nodeData.gridRows, resolvedNodeHeight, resolvedNodeWidth, paramsRowCount]
   )
 
-  useEffect(() => {
-    updateNodeInternals(id)
-  }, [id, resolvedNodeHeight, resolvedNodeWidth, updateNodeInternals])
+  useNodeHandlesSync(id, `${resolvedNodeHeight}:${resolvedNodeWidth}`);
 
   useEffect(() => {
     if (nodeData.modelId !== selectedModelId) {

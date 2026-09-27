@@ -12,6 +12,8 @@ import { getI18nText, type I18nText } from '@/core/types'
 import { createLogger } from '@/core/logging'
 import type { VoiceSelectorConfig } from '@/core/types/PanelTypes'
 import { voiceLibraryService } from '@/services/voiceLibrary/VoiceLibraryService'
+import { rememberTtsVoiceNames } from '@/services/voiceLibrary/ttsVoiceNameCache'
+import { aiListTtsVoices } from '@/commands/aiRuntime'
 
 const logger = createLogger('components.params.panels.VoiceSelectorPanel')
 
@@ -190,9 +192,52 @@ export const VoiceSelectorPanel: React.FC<VoiceSelectorPanelProps> = ({
   const [keyword, setKeyword] = useState('')
   const [hoveredVoiceId, setHoveredVoiceId] = useState<string | null>(null)
   const [customVoices, setCustomVoices] = useState<VoiceSelectorConfig['voices']>([])
+  const [remoteVoices, setRemoteVoices] = useState<VoiceSelectorConfig['voices']>([])
+  const remoteRequestRef = useRef(0)
+  const [remoteStatus, setRemoteStatus] = useState<'idle' | 'loading' | 'ready' | 'failed'>('idle')
+  const [remoteError, setRemoteError] = useState('')
+  const [customIdOpen, setCustomIdOpen] = useState(false)
+  const [customId, setCustomId] = useState('')
   const [deletingVoiceId, setDeletingVoiceId] = useState<string | null>(null)
   const configuredVoices = useMemo(() => config?.voices ?? [], [config?.voices])
   const voiceLibraryScope = config?.voiceLibrary
+  const remoteModelId = config?.remoteModelId
+
+  const loadRemoteVoices = useCallback(async (): Promise<void> => {
+    if (!remoteModelId) return
+    const requestId = ++remoteRequestRef.current
+    setRemoteStatus('loading')
+    setRemoteError('')
+    try {
+      const records = await aiListTtsVoices(remoteModelId)
+      if (requestId !== remoteRequestRef.current) return
+      rememberTtsVoiceNames(remoteModelId, records)
+      setRemoteVoices(records.map((item) => ({
+        id: item.id,
+        name: item.name,
+        description: item.description,
+        tags: buildVoiceFeatureTags({
+          voiceId: item.id,
+          voiceName: item.name,
+          description: item.description,
+          source: item.source ?? 'clone',
+        }),
+      })))
+      setRemoteStatus('ready')
+    } catch (error) {
+      if (requestId !== remoteRequestRef.current) return
+      logger.warn('load remote voices failed', { modelId: remoteModelId, error })
+      setRemoteError(error instanceof Error ? error.message : '音色列表加载失败')
+      setRemoteStatus('failed')
+    }
+  }, [remoteModelId])
+
+  useEffect(() => {
+    setRemoteVoices([])
+    setRemoteStatus('idle')
+    void loadRemoteVoices()
+    return () => { remoteRequestRef.current += 1 }
+  }, [loadRemoteVoices])
 
   useEffect(() => {
     let cancelled = false
@@ -238,11 +283,14 @@ export const VoiceSelectorPanel: React.FC<VoiceSelectorPanelProps> = ({
     for (const voice of configuredVoices) {
       merged.set(voice.id, voice)
     }
+    for (const voice of remoteVoices) {
+      merged.set(voice.id, voice)
+    }
     for (const voice of customVoices) {
       merged.set(voice.id, voice)
     }
     return Array.from(merged.values())
-  }, [configuredVoices, customVoices])
+  }, [configuredVoices, customVoices, remoteVoices])
 
   const voiceItems = useMemo((): VoiceViewItem[] => {
     return voices.map((voice) => {
@@ -320,8 +368,9 @@ export const VoiceSelectorPanel: React.FC<VoiceSelectorPanelProps> = ({
         return true
       }
       const nameMatched = voice.name.toLowerCase().includes(normalizedKeyword)
+      const idMatched = voice.id.toLowerCase().includes(normalizedKeyword)
       const descriptionMatched = voice.description.toLowerCase().includes(normalizedKeyword)
-      return nameMatched || descriptionMatched
+      return nameMatched || idMatched || descriptionMatched
     })
   }, [normalizedKeyword, selectedAge, selectedGender, selectedLanguage, selectedSource, voiceItems])
 
@@ -417,14 +466,25 @@ export const VoiceSelectorPanel: React.FC<VoiceSelectorPanelProps> = ({
       </div>
 
       {config?.allowSearch !== false && (
-        <div className="mb-3 shrink-0">
+        <div className="mb-3 flex shrink-0 items-center gap-2">
           <UiInput
             value={keyword}
             onChange={(event) => setKeyword(event.target.value)}
             placeholder="搜索音色名称或描述"
-            className={`${UI_FIELD_CONTROL_HEIGHT_SM_CLASS} w-full`}
+            className={`${UI_FIELD_CONTROL_HEIGHT_SM_CLASS} min-w-0 flex-1`}
           />
+          {remoteModelId && (
+            <UiButton type="button" variant="ghost" size="sm" disabled={remoteStatus === 'loading'} onClick={() => void loadRemoteVoices()}>
+              刷新音色
+            </UiButton>
+          )}
         </div>
+      )}
+
+      {remoteStatus === 'loading' && <p className="mb-2 text-xs text-text-muted">正在读取账号音色…</p>}
+      {remoteStatus === 'failed' && <p className="mb-2 text-xs text-text-muted">{remoteError}</p>}
+      {config?.customIdHint && voices.length === 0 && remoteStatus !== 'loading' && (
+        <p className="mb-2 text-xs text-text-muted">{config.customIdHint}</p>
       )}
 
       <div className="min-h-0 flex-1 overflow-hidden">
@@ -484,6 +544,31 @@ export const VoiceSelectorPanel: React.FC<VoiceSelectorPanelProps> = ({
           )}
         </div>
       </div>
+
+      {config?.allowCustomId && (
+        <div className="mt-3 shrink-0">
+          {customIdOpen ? (
+            <div className="flex items-center gap-2">
+              <UiInput
+                value={customId}
+                onChange={(event) => setCustomId(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' && customId.trim()) onChange(customId.trim())
+                }}
+                placeholder="输入列表中没有的音色 ID"
+                className={`${UI_FIELD_CONTROL_HEIGHT_SM_CLASS} min-w-0 flex-1`}
+              />
+              <UiButton type="button" variant="primary" size="sm" disabled={!customId.trim()} onClick={() => onChange(customId.trim())}>
+                使用 ID
+              </UiButton>
+            </div>
+          ) : (
+            <UiButton type="button" variant="ghost" size="sm" onClick={() => { setCustomId(value); setCustomIdOpen(true) }}>
+              使用其他音色 ID
+            </UiButton>
+          )}
+        </div>
+      )}
     </div>
   )
 }

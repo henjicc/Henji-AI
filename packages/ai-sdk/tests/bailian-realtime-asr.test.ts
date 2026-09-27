@@ -11,11 +11,12 @@ import type {
 } from '../src/capabilities/speech-recognition'
 import {
   bailianFunAsrRealtime,
+  bailianQwenAudio31AsrFlashStreaming,
   bailianQwen3AsrFlashRealtime,
   bailianRealtimeAsrPresets,
   createBailianRealtimeAsrModule,
 } from '../src/capabilities/speech-recognition/bailian/realtime'
-import { parseRealtimeMessage } from '../src/capabilities/speech-recognition/bailian/realtime/protocol'
+import { buildFunStart, parseRealtimeMessage } from '../src/capabilities/speech-recognition/bailian/realtime/protocol'
 import type { Logger, RealtimeConnection, RealtimeMessage, RuntimeContext } from '../src/runtime'
 
 interface Fixture<T> {
@@ -95,7 +96,7 @@ async function open(
   client: ReturnType<typeof createCapabilityClient>,
   moduleId: string,
   input: SpeechRecognitionRealtimeStart,
-  options: { requestId: string; timeoutMs?: number; onEvent?(event: SpeechRecognitionEvent): void }
+  options: { requestId: string; timeoutMs?: number; signal?: AbortSignal; onEvent?(event: SpeechRecognitionEvent): void }
 ) {
   return await client.openSession<
     SpeechRecognitionRealtimeStart,
@@ -106,19 +107,25 @@ async function open(
 }
 
 describe('百炼实时 ASR', () => {
-  it('4 个 preset 分属 Fun Duplex 与 Qwen Realtime，不混入非实时模型', () => {
+  it('3.1 streaming 新字段只送到已确认支持的模型', () => {
+    const input = { mediaType: 'audio/pcm', options: { keepDialect: true, vadModel: 'near_meeting_16k', vocabulary: { 张三: 5 } } }
+    expect(JSON.parse(buildFunStart(bailianQwenAudio31AsrFlashStreaming, input, 'task')).payload).toMatchObject({ model: 'qwen-audio-3.1-asr-flash-streaming', parameters: { keep_dialect: true, vad_model: 'near_meeting_16k', vocabulary: { 张三: 5 } } })
+    expect(JSON.parse(buildFunStart(bailianFunAsrRealtime, input, 'task')).payload.parameters).not.toHaveProperty('keep_dialect')
+  })
+  it('实时 preset 分属 Fun Duplex 与 Qwen Realtime，不混入非实时模型', () => {
     expect(bailianRealtimeAsrPresets.map((preset) => [preset.modelId, preset.protocol])).toEqual([
       ['fun-asr-realtime', 'fun-duplex'],
       ['fun-asr-realtime-2026-02-28', 'fun-duplex'],
       ['qwen3-asr-flash-realtime', 'qwen-realtime'],
       ['qwen3-asr-flash-realtime-2026-02-10', 'qwen-realtime'],
+      ['qwen-audio-3.1-asr-flash-streaming', 'fun-duplex'],
     ])
     expect(bailianRealtimeAsrPresets.every((preset) => preset.descriptor.executionModes?.includes('realtime'))).toBe(true)
   })
 
-  it('Fun Duplex 完整处理 start/二进制/partial/final/timestamps/finish，finish 与 close 幂等', async () => {
+  it.each([bailianFunAsrRealtime, bailianQwenAudio31AsrFlashStreaming])('$modelId 完整处理 start/二进制/partial/final/timestamps/finish，finish 与 close 幂等', async (preset) => {
     const official = fixture<{
-      started: unknown; sentenceBegin: unknown; partial: unknown; final: unknown; finished: unknown
+      started: unknown; sentenceBegin: unknown; emptyIntermediate: unknown; partial: unknown; final: unknown; finished: unknown
     }>('asr-realtime-fun.json')
     const events: SpeechRecognitionEvent[] = []
     const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() }
@@ -137,16 +144,17 @@ describe('百炼实时 ASR', () => {
       }
     })
     const connect = vi.fn()
-    const module = createBailianRealtimeAsrModule(bailianFunAsrRealtime, {
+    const module = createBailianRealtimeAsrModule(preset, {
       taskIdFactory: () => '11111111-1111-4111-8111-111111111111',
     })
     const client = createCapabilityClient({ runtime: runtime(connection, connect, logger), realtimeModules: [module] })
-    const session = await open(client, bailianFunAsrRealtime.id, {
+    const session = await open(client, preset.id, {
       mediaType: 'audio/pcm', sampleRateHz: 16_000, channels: 1, language: 'zh',
       options: { maxSentenceSilenceMs: 900 },
     }, { requestId: 'fun-realtime', onEvent: (event) => { events.push(event) } })
 
     connection.push(stringify(official.events.sentenceBegin))
+    connection.push(stringify(official.events.emptyIntermediate))
     await session.send({ bytes: new Uint8Array([1, 2, 3]) })
     const firstFinish = session.finish()
     const secondFinish = session.finish()
@@ -172,6 +180,7 @@ describe('百炼实时 ASR', () => {
     expect(events.map((event) => event.type)).toEqual(['started', 'partial', 'final', 'completed'])
     expect(logger.warn).toHaveBeenCalledOnce()
     expect(JSON.stringify(logger.warn.mock.calls)).not.toContain('empty-sentence-begin')
+    expect(JSON.stringify(logger.warn.mock.calls)).not.toContain('empty-intermediate')
     expect(JSON.stringify(logger.warn.mock.calls)).not.toContain('DO_NOT_LOG')
     expect(JSON.stringify(logger.warn.mock.calls)).not.toContain('fixture-secret-key')
   })
@@ -184,7 +193,7 @@ describe('百炼实时 ASR', () => {
     expect(parseRealtimeMessage(bailianFunAsrRealtime, stringify(official.events.sentenceBegin)))
       .toEqual({ kind: 'ignored', eventType: 'empty-sentence-begin' })
     expect(() => parseRealtimeMessage(bailianFunAsrRealtime, stringify(official.events.malformedPartial)))
-      .toThrowError('Bailian Fun-ASR result has no text or sentence state')
+      .toThrowError(expect.objectContaining({ code: 'invalid_response', details: expect.objectContaining({ stage: 'parse' }) }))
     expect(() => parseRealtimeMessage(bailianFunAsrRealtime, stringify(official.events.emptyFinal)))
       .toThrowError(expect.objectContaining({ code: 'invalid_response' }))
 
@@ -247,12 +256,20 @@ describe('百炼实时 ASR', () => {
   it('Qwen Realtime 等 session.created 后 update，Manual 模式 commit 后 finish 并关闭', async () => {
     const official = fixture<{
       created: unknown; updated: unknown; partial: unknown; final: unknown; finished: unknown
+      speechStarted: unknown; speechStopped: unknown; committed: unknown; itemCreated: unknown; partialBoundary: unknown
     }>('asr-realtime-qwen.json')
+    const events: SpeechRecognitionEvent[] = []
+    const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() }
     const connection = new ScriptedConnection((data) => {
       if (typeof data !== 'string') throw new Error('Qwen audio must be Base64 JSON')
       const message = JSON.parse(data) as { type?: string; audio?: string }
       if (message.type === 'session.update') connection.push(stringify(official.events.updated))
-      if (message.type === 'input_audio_buffer.append') connection.push(stringify(official.events.partial))
+      if (message.type === 'input_audio_buffer.append') {
+        for (const event of [official.events.speechStarted, official.events.partialBoundary,
+          official.events.partial, official.events.speechStopped, official.events.committed, official.events.itemCreated]) {
+          connection.push(stringify(event))
+        }
+      }
       if (message.type === 'session.finish') {
         connection.push(stringify(official.events.final))
         connection.push(stringify(official.events.finished))
@@ -260,11 +277,11 @@ describe('百炼实时 ASR', () => {
     })
     const connect = vi.fn((_url: string) => { connection.push(stringify(official.events.created)) })
     const module = createBailianRealtimeAsrModule(bailianQwen3AsrFlashRealtime)
-    const client = createCapabilityClient({ runtime: runtime(connection, connect), realtimeModules: [module] })
+    const client = createCapabilityClient({ runtime: runtime(connection, connect, logger), realtimeModules: [module] })
     const session = await open(client, bailianQwen3AsrFlashRealtime.id, {
       mediaType: 'audio/pcm', sampleRateHz: 16_000, channels: 1, language: 'zh',
       options: { turnDetection: 'manual' },
-    }, { requestId: 'qwen-realtime' })
+    }, { requestId: 'qwen-realtime', onEvent: event => { events.push(event) } })
 
     await session.send({ bytes: new Uint8Array([1, 2, 3]) })
     await expect(session.finish()).resolves.toMatchObject({ text: '你好' })
@@ -282,6 +299,9 @@ describe('百炼实时 ASR', () => {
       } })
     )
     expect(connection.close).toHaveBeenCalledOnce()
+    expect(logger.warn).not.toHaveBeenCalled()
+    expect(events.map(event => event.type)).toEqual(['started', 'partial', 'partial', 'final', 'completed'])
+    expect(events[1]).toMatchObject({ text: 'Hello world' })
   })
 
   it('Qwen 无时间戳的连续同文 final 不会被 Fun 去重规则静默合并', async () => {
@@ -337,13 +357,20 @@ describe('百炼实时 ASR', () => {
       else connection.push(stringify(errors.events.fun))
     })
     const module = createBailianRealtimeAsrModule(bailianFunAsrRealtime)
-    const client = createCapabilityClient({ runtime: runtime(connection), realtimeModules: [module] })
+    const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() }
+    const client = createCapabilityClient({ runtime: runtime(connection, undefined, logger), realtimeModules: [module] })
     const session = await open(client, bailianFunAsrRealtime.id, { mediaType: 'audio/pcm' }, {
       requestId: 'server-failure',
     })
-    await session.send({ bytes: new Uint8Array([1]) })
+    await expect(session.send({ bytes: new Uint8Array([1]) })).rejects.toMatchObject({ code: 'provider_task_failed' })
     await vi.waitFor(() => expect(connection.close).toHaveBeenCalledOnce())
-    await expect(session.finish()).rejects.toMatchObject({ code: 'provider_task_failed' })
+    await expect(session.result).rejects.toMatchObject({ code: 'provider_task_failed' })
+    expect(logger.error).toHaveBeenCalledOnce()
+    await expect(session.finish()).rejects.toMatchObject({
+      code: 'provider_task_failed',
+      details: { modelId: 'fun-asr-realtime', protocol: 'fun-duplex', stage: 'active', providerCode: 'FIXTURE_FAILURE' },
+    })
+    expect(JSON.stringify(logger.error.mock.calls)).not.toContain('fixture realtime failure')
 
     expect(parseRealtimeMessage(bailianQwen3AsrFlashRealtime, stringify(errors.events.qwen)))
       .toMatchObject({ kind: 'error', code: 'FIXTURE_FAILURE' })
@@ -359,6 +386,7 @@ describe('百炼实时 ASR', () => {
     })
     disconnect.end()
     await vi.waitFor(() => expect(disconnect.close).toHaveBeenCalledOnce())
+    await expect(disconnectedSession.result).rejects.toMatchObject({ code: 'provider_connection_closed' })
     await expect(disconnectedSession.send({ bytes: new Uint8Array([1]) }))
       .rejects.toMatchObject({ code: 'provider_connection_closed' })
   })
@@ -401,5 +429,51 @@ describe('百炼实时 ASR', () => {
       mediaType: 'audio/wav', sampleRateHz: 44_100, channels: 2,
     }, { requestId: 'invalid-audio' })).rejects.toMatchObject({ code: 'unsupported_audio_channels' })
     expect(connect).not.toHaveBeenCalled()
+  })
+
+  it('握手首个发送失败不会被关闭失败覆盖，也不泄露宿主原始异常', async () => {
+    const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() }
+    const connection = new ScriptedConnection(() => { throw new Error('private transport fixture-secret') })
+    connection.close.mockImplementation(async () => { connection.end(); throw new Error('private cleanup fixture-secret') })
+    const client = createCapabilityClient({ runtime: runtime(connection, undefined, logger),
+      realtimeModules: [createBailianRealtimeAsrModule(bailianFunAsrRealtime)],
+    })
+    await expect(open(client, bailianFunAsrRealtime.id, { mediaType: 'audio/pcm' }, {
+      requestId: 'handshake-failure',
+    })).rejects.toMatchObject({ code: 'provider_realtime_error', details: {
+      modelId: 'fun-asr-realtime', protocol: 'fun-duplex', stage: 'opening', cleanupFailed: true,
+    } })
+    expect(logger.error.mock.calls.map(call => String(call[1]?.error)).join('')).not.toContain('fixture-secret')
+    expect(connection.close).toHaveBeenCalledOnce()
+    await client.dispose()
+  })
+
+  it('握手前取消和发送失败都会终止等待、释放连接，不遗留后台会话', async () => {
+    const controller = new AbortController()
+    const cancelledConnection = new ScriptedConnection(() => undefined)
+    const cancelledClient = createCapabilityClient({
+      runtime: runtime(cancelledConnection, () => controller.abort()),
+      realtimeModules: [createBailianRealtimeAsrModule(bailianQwen3AsrFlashRealtime)],
+    })
+    await expect(open(cancelledClient, bailianQwen3AsrFlashRealtime.id, { mediaType: 'audio/pcm' }, {
+      requestId: 'abort-connect', signal: controller.signal,
+    })).rejects.toMatchObject({ code: 'cancelled' })
+    expect(cancelledConnection.sent).toHaveLength(0)
+    expect(cancelledConnection.close).toHaveBeenCalledOnce()
+
+    const official = fixture<{ started: unknown }>('asr-realtime-fun.json')
+    const sendFailure = new ScriptedConnection(data => {
+      if (typeof data === 'string') sendFailure.push(stringify(official.events.started))
+      else throw new Error('synthetic transport failure')
+    })
+    const client = createCapabilityClient({
+      runtime: runtime(sendFailure), realtimeModules: [createBailianRealtimeAsrModule(bailianFunAsrRealtime)],
+    })
+    const session = await open(client, bailianFunAsrRealtime.id, { mediaType: 'audio/pcm' }, { requestId: 'send-failure' })
+    await expect(session.send({ bytes: new Uint8Array([1]) })).rejects.toMatchObject({ code: 'provider_realtime_error' })
+    await expect(session.result).rejects.toMatchObject({ code: 'provider_realtime_error' })
+    expect(sendFailure.close).toHaveBeenCalledOnce()
+    await client.dispose()
+    await cancelledClient.dispose()
   })
 })

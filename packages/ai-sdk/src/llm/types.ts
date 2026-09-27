@@ -1,7 +1,19 @@
 import type { LlmApiProtocol } from './providerProtocol'
 import type { LlmReasoningConfig } from './reasoning'
+import type { JsonObject } from '../types/runtime'
 
 export type { LlmReasoningConfig, LlmReasoningEffort } from './reasoning'
+
+/** Chat Completions 的正式输出格式配置；省略时由供应商使用默认文本格式。 */
+export type LlmStructuredOutputConfig =
+  | { type: 'text' }
+  | { type: 'json_object' }
+  | {
+      type: 'json_schema'
+      name: string
+      schema: JsonObject
+      strict: boolean
+    }
 
 export interface LlmCapabilities {
   text: boolean
@@ -15,6 +27,11 @@ export interface LlmCapabilities {
   parallelTools: boolean
   jsonOutput: boolean
   structuredOutputMode: 'none' | 'json' | 'schema'
+  /**
+   * 结构化输出能否与思考模式同时启用。`null` / 缺省表示尚未核实；
+   * 轻量流式入口在调用方明确开启两者时会拒绝未知组合，避免静默丢参数。
+   */
+  structuredOutputWithReasoning?: boolean | null
   reasoning: boolean
   sampling: boolean
   contextWindow: number | null
@@ -300,6 +317,8 @@ export interface LlmChatRequest {
   reasoning?: LlmReasoningConfig
   messages: LlmChatMessage[]
   capabilities?: Partial<LlmCapabilities>
+  structuredOutput?: LlmStructuredOutputConfig
+  maxOutputTokens?: number
   tools?: LlmToolSchema[]
   policy?: Partial<LlmPolicy>
   memory?: LlmMemoryScope

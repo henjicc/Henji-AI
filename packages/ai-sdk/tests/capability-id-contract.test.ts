@@ -78,14 +78,14 @@ function moduleOf(value: CapabilityDescriptor, dispose = vi.fn()): CapabilityMod
 }
 
 describe('能力 ID、来源命名空间与按需注册收口', () => {
-  it('15 个 ASR、3 个 Qwen-MT 与 Groq 默认模型均可发现且坐标唯一', () => {
+  it('18 个 ASR、3 个 Qwen-MT 与 Groq 默认模型均可发现且坐标唯一', () => {
     const discovery = createModelCapabilityDiscovery({
       extensions: [...asrDescriptors, ...translationDescriptors],
       llmModels: [GROQ_DEFAULT_MODEL_CONFIG],
     })
     const items = discovery.list()
     const ids = items.map((item) => item.id)
-    expect(items).toHaveLength(19)
+    expect(items).toHaveLength(22)
     expect(new Set(ids)).toHaveLength(ids.length)
 
     const asr = discovery.search({
@@ -93,11 +93,11 @@ describe('能力 ID、来源命名空间与按需注册收口', () => {
       operations: 'speech-to-text',
       acceptedInputContentKinds: 'audio',
     })
-    expect(asr).toHaveLength(9)
+    expect(asr).toHaveLength(12)
     expect(asr.every((item) => item.id.startsWith('bailian.speech-recognition.'))).toBe(true)
     expect(discovery.search({
       providerIds: 'bailian', operations: 'speech-to-text', features: 'realtime',
-    })).toHaveLength(4)
+    })).toHaveLength(5)
     expect(discovery.search({
       providerIds: 'bailian', operations: 'text-translation', outputContentKinds: 'text',
     })).toHaveLength(3)

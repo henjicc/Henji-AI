@@ -53,11 +53,17 @@ describe('applyProviderRequestBodyQuirks', () => {
     expect(applyProviderRequestBodyQuirks('mimo', body)).toEqual(body)
   })
 
-  it('其他供应商的请求体不被改动', () => {
+  it('未声明差异的其他供应商请求体不被改动', () => {
     const body = { model: 'deepseek-v4-flash', max_tokens: 4096 }
-    for (const providerId of ['deepseek', 'ppio', 'openai']) {
+    for (const providerId of ['deepseek', 'ppio']) {
       expect(applyProviderRequestBodyQuirks(providerId, body), providerId).toEqual(body)
     }
+  })
+
+  it('OpenAI Chat Completions 使用当前的 max_completion_tokens', () => {
+    expect(applyProviderRequestBodyQuirks('openai', { max_tokens: 24_000 })).toEqual({
+      max_completion_tokens: 24_000,
+    })
   })
 
   it('groq 统一改用 max_completion_tokens 并剔除不支持的 messages[].name', () => {

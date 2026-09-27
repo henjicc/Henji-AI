@@ -29,6 +29,7 @@ export {
 } from './metadata'
 export { testProviderConnection } from './connection'
 export { fetchProvider } from './provider-fetch'
+export { listTtsVoices, type TtsVoice } from './tts-voices'
 export {
   buildApiMartEndpoints,
   markApiMartEndpointReachable,
@@ -123,15 +124,19 @@ import * as grsai from './grsai'
 import * as kie from './kie'
 import * as modelscope from './modelscope'
 import * as ppio from './ppio'
+import * as siliconflow from './siliconflow'
 import * as volcengine from './volcengine'
+import * as volcengineSpeech from './volcengine-speech'
 
 const builtinProviders: Record<BuiltinProviderId, ProviderAdapter> = {
   apimart,
   bailian,
   volcengine,
+  'volcengine-speech': volcengineSpeech,
   ppio,
   kie,
   modelscope,
   fal,
   grsai,
+  siliconflow,
 }

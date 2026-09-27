@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "sources": [
+    { "id": "apimart-pricing", "provider": "apimart", "url": "https://apimart.ai/zh/pricing", "facets": ["models", "api", "pricing"] },
+    { "id": "bailian-models", "provider": "bailian", "url": "https://help.aliyun.com/zh/model-studio/models", "facets": ["models", "deprecation", "pricing"] },
+    { "id": "bailian-asr", "provider": "bailian", "url": "https://help.aliyun.com/zh/model-studio/asr-model/", "facets": ["models", "api", "pricing"] },
+    { "id": "bigmodel-index", "provider": "bigmodel", "url": "https://docs.bigmodel.cn/llms.txt", "facets": ["models", "deprecation", "api", "pricing"] },
+    { "id": "deepseek-pricing", "provider": "deepseek", "url": "https://api-docs.deepseek.com/quick_start/pricing", "facets": ["models", "api", "pricing"] },
+    { "id": "fal-index", "provider": "fal", "url": "https://fal.ai/llms.txt", "facets": ["models", "deprecation", "api", "pricing"] },
+    { "id": "groq-deprecations", "provider": "groq", "url": "https://console.groq.com/docs/deprecations", "facets": ["models", "deprecation", "api"] },
+    { "id": "grsai-announcements", "provider": "grsai", "url": "https://grsai.ai/dashboard/announcements", "facets": ["models", "maintenance", "deprecation", "api", "pricing"], "loginPatterns": ["需要登录才能查看公告"] },
+    { "id": "kie-index", "provider": "kie", "url": "https://docs.kie.ai/llms.txt", "facets": ["models", "deprecation", "api", "pricing"] },
+    { "id": "kimi-index", "provider": "kimi", "url": "https://platform.kimi.com/docs/llms.txt", "facets": ["models", "deprecation", "api", "pricing"] },
+    { "id": "minimax-index", "provider": "minimax", "url": "https://platform.minimaxi.com/docs/llms.txt", "facets": ["models", "deprecation", "api", "pricing"] },
+    { "id": "mimo-models", "provider": "mimo", "url": "https://mimo.mi.com/llms.txt", "facets": ["models", "deprecation", "api", "pricing"] },
+    { "id": "modelscope-inference", "provider": "modelscope", "url": "https://www.modelscope.cn/api/v1/document/main_doc_CN_prod", "resolve": { "type": "json-url", "path": ["Data", "TargetPrefix"], "suffix": "dist/model-service/API-Inference/intro/intro_CN.md" }, "facets": ["models", "deprecation", "api", "pricing"] },
+    { "id": "ppio-models", "provider": "ppio", "url": "https://api-server.ppio.com/v1/product/multimodal-model/list?returnSchema=true", "facets": ["models", "deprecation", "api", "pricing"] },
+    { "id": "siliconflow-pricing", "provider": "siliconflow", "url": "https://siliconflow.cn/pricing", "facets": ["models", "deprecation", "api", "pricing"] },
+    { "id": "volcengine-models", "provider": "volcengine", "url": "https://docs.volcengine.com/api/doc/getDocDetail?LibraryID=82379&DocumentID=1330310&type=online", "facets": ["models", "deprecation", "api", "pricing"], "ignoreModelPatterns": ["^a\\d", "^cn-beijing/docs/"] }
+  ]
+}

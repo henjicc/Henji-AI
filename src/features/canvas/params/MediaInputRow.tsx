@@ -20,7 +20,7 @@ import {
 } from '@/features/canvas/ui/nodeControlStyles';
 import { importLocalMedia } from '@/services/localMediaImport';
 import { UiIconButton, UiInput } from '@/components/ui';
-import { useCanvasStore } from '@/stores/canvasStore';
+import { canvasViewStore, useCanvasStore } from '@/stores/canvasStore';
 import { CanvasNodeImage } from '@/features/canvas/ui/CanvasNodeImage';
 import { VideoViewerModal } from '@/components/mediaViewer/VideoViewerModal';
 import { VideoTrimModal, type VideoTrimRange } from '@/components/videoTrim/VideoTrimModal';
@@ -127,7 +127,7 @@ export function MediaInputRow({
   const mediaHandleId = mediaPortId(mediaKind);
 
   const upstreamMedia = useStoreWithEqualityFn(
-    useCanvasStore,
+    canvasViewStore,
     (state) => collectInputMediaByKind(nodeId, state.nodes, state.edges, mediaKind),
     areMediaOutputListsEqual
   );

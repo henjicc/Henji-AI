@@ -31,6 +31,7 @@ export const DEFAULT_LLM_CAPABILITIES: LlmCapabilities = {
   parallelTools: false,
   jsonOutput: false,
   structuredOutputMode: 'none',
+  structuredOutputWithReasoning: null,
   reasoning: false,
   sampling: true,
   contextWindow: null,

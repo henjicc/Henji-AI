@@ -155,7 +155,7 @@ async function main() {
     { type: 'ReasoningToken', data: '思考' },
     { type: 'Token', data: '完成✅' },
   ])) fail(`stream events 不匹配：${JSON.stringify(events)}`)
-  if (outcome.output !== '完成✅' || outcome.reasoningOutput !== '思考' || outcome.finishReason !== 'stop') {
+  if (outcome.output !== '完成✅' || outcome.reasoningOutput !== '思考' || outcome.finishReason !== 'stop' || outcome.truncated !== false) {
     fail(`text/reasoning/stop 不匹配：${JSON.stringify(outcome)}`)
   }
   if (outcome.usage?.inputTokens !== 3 || outcome.usage?.outputTokens !== 4

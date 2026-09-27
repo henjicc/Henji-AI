@@ -15,16 +15,39 @@ vi.mock('@/services/database/DatabaseService', () => ({ databaseService: {
 vi.mock('@/utils/save', () => ({ isDesktop: () => true }))
 vi.mock('@/utils/dataPath', () => ({ getDataRoot: async () => '/data', convertPathArray: async (value: string[]) => value, convertPathString: async (value: string) => value }))
 vi.mock('@/core/logging', () => ({ createLogger: () => ({ info: vi.fn(), error: vi.fn() }) }))
-vi.mock('@/utils/historyThumbnail', () => ({ getOrCreateHistoryThumbnail: vi.fn(async () => '') }))
+vi.mock('@/utils/historyThumbnail', () => ({ prepareHistoryThumbnails: vi.fn(async () => undefined) }))
 import { databaseService } from '@/services/database/DatabaseService'
 import { useTaskState } from './useTaskState'
 import { awaitGenerationTaskPersistence, createPersistedGenerationTask, deletePersistedGenerationTask, persistGenerationTask, useSaveTaskHistory, useLoadTaskHistory } from './useTaskHistory'
 import { applicationGenerationTaskId } from '@/core/application-control/operationIdentity'
+import { prepareHistoryThumbnails } from '@/utils/historyThumbnail'
 
 function gate() { let release!: () => void; const promise = new Promise<void>((resolve) => { release = resolve }); return { promise, release } }
 function task(id = crypto.randomUUID()): GenerationTask { return { id, createdAt: new Date(), type: 'image', prompt: '保存测试', model: 'model', status: 'queued', options: { size: 'small' } } }
 function saved(id: string) { return storage.rows.get(id) as HistoryRecord | undefined }
 afterEach(() => { cleanup(); storage.beforeWrite = undefined; vi.useRealTimers(); vi.clearAllMocks(); storage.rows.clear(); storage.writes.length = 0 })
+
+it('后台缩略图按唯一结果路径提交，更新或卸载会取消旧批次', async () => {
+  vi.useFakeTimers()
+  const a = task()
+  a.result = { id: a.id, type: 'image', prompt: '', createdAt: a.createdAt, url: '/a.png', filePath: '/a.png' }
+  const { rerender, unmount } = renderHook(({ tasks }) => useSaveTaskHistory({
+    tasks, isTasksLoaded: true, isInitialLoadRef: { current: false },
+  }), { initialProps: { tasks: [a, { ...a, id: 'thumbnail-b' }] } })
+  await act(async () => { await vi.advanceTimersByTimeAsync(1000); await vi.dynamicImportSettled() })
+  expect(prepareHistoryThumbnails).toHaveBeenCalledTimes(1)
+  const [paths, isCancelled] = vi.mocked(prepareHistoryThumbnails).mock.calls[0]
+  expect([...paths]).toEqual(['/a.png'])
+  expect(isCancelled()).toBe(false)
+  rerender({ tasks: [a] })
+  expect(isCancelled()).toBe(true)
+  await act(async () => { await vi.advanceTimersByTimeAsync(1000); await vi.dynamicImportSettled() })
+  const secondCancelled = vi.mocked(prepareHistoryThumbnails).mock.calls[1][1]
+  expect(secondCancelled()).toBe(false)
+  unmount()
+  expect(secondCancelled()).toBe(true)
+  expect(databaseService.insertHistory).not.toHaveBeenCalled()
+})
 
 it('已停止画布任务加载为非活动历史，保留说明且不重新保存或排队', async () => {
   const value = task()

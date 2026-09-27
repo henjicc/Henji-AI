@@ -1,4 +1,4 @@
-import { readCapabilityMediaSource } from '../../media'
+import { prepareMedia, multipartAudioRequest, sendMediaRequest, type MediaRequest } from '../../media-request'
 import type { CapabilityExecutionContext } from '../../types'
 import type {
   SpeechRecognitionEvent,
@@ -14,7 +14,7 @@ type Context = CapabilityExecutionContext<SpeechRecognitionEvent>
 type UnknownRecord = Record<string, unknown>
 
 const DEFAULT_API_BASE = 'https://api.siliconflow.cn/v1'
-const DEFAULT_MAX_FILE_BYTES = 50 * 1024 * 1024
+const DEFAULT_MAX_FILE_BYTES = 50_000_000
 
 function endpoint(value: string | undefined): string {
   const normalized = (value?.trim() || DEFAULT_API_BASE).replace(/\/+$/, '')
@@ -153,21 +153,12 @@ async function formData(
   input: SpeechRecognitionInput,
   maxFileBytes: number,
   context: Context
-): Promise<FormData> {
+): Promise<MediaRequest> {
   if (input.audio.kind === 'remote-url') {
     throw new AiRuntimeError('unsupported_media_source', 'SiliconFlow transcription requires uploaded audio bytes')
   }
-  const media = await readCapabilityMediaSource(input.audio, context.runtime.media)
-  if (media.bytes.byteLength === 0) throw new AiRuntimeError('invalid_media', 'SiliconFlow transcription audio is empty')
-  if (media.bytes.byteLength > maxFileBytes) {
-    throw new AiRuntimeError('media_too_large', `SiliconFlow transcription audio exceeds ${maxFileBytes} bytes`)
-  }
-  const uploadBytes = new Uint8Array(media.bytes.byteLength)
-  uploadBytes.set(media.bytes)
-  const form = new FormData()
-  form.append('file', new Blob([uploadBytes], { type: media.mimeType }), media.filename)
-  form.append('model', preset.modelId)
-  return form
+  const media = await prepareMedia(input.audio, context.runtime, maxFileBytes, context.signal)
+  return multipartAudioRequest(media, [['model', preset.modelId]])
 }
 
 /** Create an on-demand SiliconFlow file transcription module. */
@@ -186,12 +177,12 @@ export function createSiliconFlowAsrModule(
       if (context.signal.aborted) throw cancelledError(context.requestId)
       validateInput(input)
       const apiKey = await credential(context)
-      const response = await context.runtime.transport.fetch(`${apiBaseUrl}/audio/transcriptions`, {
+      const request = await formData(preset, input, maxFileBytes, context)
+      const response = await sendMediaRequest(context.runtime, `${apiBaseUrl}/audio/transcriptions`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${apiKey}` },
-        body: await formData(preset, input, maxFileBytes, context),
         signal: context.signal,
-      })
+      }, request)
       const output = await parseResponse(response)
       await context.emit({ type: 'final', text: output.text })
       await context.emit({ type: 'completed', output })

@@ -1,5 +1,6 @@
+import { useNodeHandlesSync } from '../hooks/useNodeHandlesSync';
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type DragEvent } from 'react';
-import { Handle, Position, useUpdateNodeInternals, type NodeProps } from '@xyflow/react';
+import { Handle, Position, type NodeProps } from '@xyflow/react';
 import { Play } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
@@ -64,7 +65,6 @@ function resolveNodeDimension(value: number | undefined, fallback: number): numb
 /** 视频展示节点：服务于结果视频与上传视频两种类型，poster 优先、点击播放才挂载 video */
 export const VideoNode = memo(({ id, data, selected, type, width, height }: VideoNodeProps) => {
   const { t } = useTranslation();
-  const updateNodeInternals = useUpdateNodeInternals();
   const setSelectedNode = useCanvasStore((state) => state.setSelectedNode);
   const updateNodeData = useCanvasStore((state) => state.updateNodeData);
   const useUploadFilenameAsNodeTitle = useSettingsStore((state) => state.useUploadFilenameAsNodeTitle);
@@ -94,9 +94,7 @@ export const VideoNode = memo(({ id, data, selected, type, width, height }: Vide
   const resolvedWidth = resolveNodeDimension(width, compactSize.width);
   const resolvedHeight = resolveNodeDimension(height, compactSize.height);
 
-  useEffect(() => {
-    updateNodeInternals(id);
-  }, [id, resolvedWidth, resolvedHeight, updateNodeInternals]);
+  useNodeHandlesSync(id, `${resolvedWidth}:${resolvedHeight}`);
 
   const resolvedTitle = useMemo(() => {
     const nodeType = type as CanvasNodeType;

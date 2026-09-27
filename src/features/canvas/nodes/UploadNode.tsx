@@ -1,3 +1,4 @@
+import { useNodeHandlesSync } from '../hooks/useNodeHandlesSync';
 import { createLogger } from '@/core/logging'
 import { resolveMediaFileKind } from '@/features/canvas/canvasUtils'
 import {
@@ -11,7 +12,7 @@ import {
   type DragEvent,
   type SyntheticEvent,
 } from 'react';
-import { Handle, Position, useUpdateNodeInternals, type NodeProps } from '@xyflow/react';
+import { Handle, Position, type NodeProps } from '@xyflow/react';
 import { useTranslation } from 'react-i18next';
 
 const logger = createLogger('features.canvas.nodes.UploadNode')
@@ -73,7 +74,6 @@ function resolveNodeDimension(value: number | undefined, fallback: number): numb
 
 export const UploadNode = memo(({ id, data, selected, width, height }: UploadNodeProps) => {
   const { t } = useTranslation();
-  const updateNodeInternals = useUpdateNodeInternals();
   const setSelectedNode = useCanvasStore((state) => state.setSelectedNode);
   const updateNodeData = useCanvasStore((state) => state.updateNodeData);
   const hasSourceConnections = useCanvasStore(
@@ -103,9 +103,7 @@ export const UploadNode = memo(({ id, data, selected, width, height }: UploadNod
   const resizeMinWidth = resizeConstraints.minWidth;
   const resizeMinHeight = resizeConstraints.minHeight;
 
-  useEffect(() => {
-    updateNodeInternals(id);
-  }, [id, resolvedWidth, resolvedHeight, updateNodeInternals]);
+  useNodeHandlesSync(id, `${resolvedWidth}:${resolvedHeight}`);
 
   const resolvedTitle = useMemo(() => {
     const sourceFileName = typeof data.sourceFileName === 'string' ? data.sourceFileName.trim() : '';

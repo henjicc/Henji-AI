@@ -29,9 +29,12 @@ export function useTaskState(): UseTaskStateReturn {
   const setTasks = useCallback<React.Dispatch<React.SetStateAction<GenerationTask[]>>>((input) => {
     const previous = latest.current
     const next = typeof input === 'function' ? input(previous) : input
+    if (next === previous) return
+    // 对象身份仍是“需要保存”的依据；建一次索引，避免 N 项各自扫描旧列表。
+    const previousTasks = new Set(previous)
     const ids = new Set(next.map((task) => task.id))
     const report = (error: unknown): void => createLogger('features.generation.persistence').error('生成任务保存失败，保留内存结果', error, { event: 'generation.history.failed' })
-    for (const task of next) if (!previous.includes(task)) void persistGenerationTask(task).catch(report)
+    for (const task of next) if (!previousTasks.has(task)) void persistGenerationTask(task).catch(report)
     for (const task of previous) if (!ids.has(task.id)) void deletePersistedGenerationTask(task.id).catch(report)
     latest.current = next
     setReactTasks(next)

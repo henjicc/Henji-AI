@@ -123,6 +123,16 @@ function normalizeStructure(nodes: CanvasNode[]): CanvasNode[] {
 }
 
 export function reconcileAssetGroupGraph(nodes: CanvasNode[], edges: CanvasEdge[]): AssetGroupGraph {
+  // 普通节点的每次数据编辑也会进入这里。没有素材组时不复制图，保留边索引缓存。
+  // 旧工程或删除最后一个组后仍可能残留托管边，不能直接跳过清理。
+  if (!nodes.some(isAssetGroupNode)) {
+    return {
+      nodes,
+      edges: edges.some((edge) => edge.data?.managedByAssetGroup)
+        ? edges.filter((edge) => !edge.data?.managedByAssetGroup)
+        : edges,
+    };
+  }
   let nextNodes = normalizeStructure(nodes);
   let nextEdges = edges.filter((edge) => !edge.data?.managedByAssetGroup);
   const nodeById = new Map(nextNodes.map((node) => [node.id, node] as const));

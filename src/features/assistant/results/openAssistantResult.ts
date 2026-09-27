@@ -5,6 +5,7 @@ import {
 } from '@/features/canvas/application/canvasApplicationService'
 import { switchWorkspace } from '@/stores/navigationStore'
 import { getVisibleGenerationTask } from '@/workspaces/GenerationWorkspace/application/visibleGenerationTaskCommand'
+import { revealGenerationTask } from '@/workspaces/GenerationWorkspace/application/generationTaskNavigation'
 
 const logger = createLogger('features.assistant.ui')
 
@@ -17,6 +18,7 @@ function waitForTaskElement(taskId: string, attemptsLeft = 12): Promise<HTMLElem
         resolve(element)
         return
       }
+      revealGenerationTask(taskId)
       requestAnimationFrame(() => {
         void waitForTaskElement(taskId, attemptsLeft - 1).then(resolve)
       })

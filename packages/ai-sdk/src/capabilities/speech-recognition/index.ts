@@ -16,6 +16,7 @@ export interface SpeechRecognitionInput {
 
 export interface SpeechRecognitionWord {
   text: string
+  speakerId?: number
   startMs?: number
   endMs?: number
   confidence?: number
@@ -23,6 +24,7 @@ export interface SpeechRecognitionWord {
 
 export interface SpeechRecognitionSegment {
   text: string
+  speakerId?: number
   startMs?: number
   endMs?: number
   confidence?: number

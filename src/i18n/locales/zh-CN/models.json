@@ -31,7 +31,9 @@
     "apimart": "APIMart",
     "bailian": "百炼",
     "volcengine": "火山引擎",
-    "grsai": "Grsai"
+    "grsai": "Grsai",
+    "siliconflow": "硅基流动",
+    "volcengine-speech": "火山引擎（豆包语音）"
   },
   "tags": {
     "text-to-image": "图片生成",

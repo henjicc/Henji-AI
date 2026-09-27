@@ -50,7 +50,7 @@ import {
   resolveGenerationNodeManualDimension,
   useGenerationNodeMinimumHeight,
 } from './useGenerationNodeMinimumHeight';
-import { useCanvasStore } from '@/stores/canvasStore';
+import { canvasViewStore, useCanvasStore } from '@/stores/canvasStore';
 import { PROMPT_PARAM_IDS, ROW_MEDIA_KINDS } from './generationNodeGuards';
 import { useNodeVideoTrimRange } from './useNodeVideoTrimRange';
 import {
@@ -137,12 +137,12 @@ export const GenerationNodeShell = memo(({
   );
 
   const connectedParamIds = useStoreWithEqualityFn(
-    useCanvasStore,
+    canvasViewStore,
     (state) => getConnectedParamIds(id, state.edges),
     areStringSetsEqual
   );
   const injectedValues = useStoreWithEqualityFn(
-    useCanvasStore,
+    canvasViewStore,
     (state) => collectInputValues(id, state.nodes, state.edges),
     areValueOverridesEqual
   );
@@ -157,7 +157,7 @@ export const GenerationNodeShell = memo(({
 
   // 内容相等比较的细粒度订阅：仅在上游媒体实际变化时重渲染，避免全画布节点联动刷新
   const incomingMedia = useStoreWithEqualityFn(
-    useCanvasStore,
+    canvasViewStore,
     (state) => collectInputMedia(id, state.nodes, state.edges)
       .filter((output) => acceptedKinds.includes(output.kind)),
     areMediaOutputListsEqual

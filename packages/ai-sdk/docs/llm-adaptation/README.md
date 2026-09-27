@@ -54,7 +54,7 @@ docs/llm-adaptation/
 - 协议不是供应商级一刀切：例如智谱国内只有 `glm-5.3` 默认 Responses，`glm-5.3-flash` / `glm-5v-turbo` 保持 Chat；派欧云聚合网关也不会因为底层模型原厂支持 Responses 就被误切换。
 - 预制供应商的协议控件不在界面显示；自定义未知端点才允许选择 Chat / Responses。Anthropic 没有运行时实现，也不在界面显示，存量伪配置继续归一化成 OpenAI Chat。
 
-当前已自动走 Responses 的预制组合：DeepSeek V4 Pro / Flash / Vision、火山引擎目录内三款 Doubao、百炼 Qwen3.8-Max、MiniMax-M3、智谱中国大陆 GLM-5.3。Kimi、MiMo、Groq、派欧云以及未确认的智谱模型继续走 Chat。
+当前已自动走 Responses 的预制组合：DeepSeek V4 Pro / Flash / Vision、火山引擎目录内三款 Doubao、百炼 Qwen3.8-Max、MiniMax-M3、智谱中国大陆 GLM-5.3。MiMo 2.6 Pro / Flash / Pro-UltraSpeed 也支持并默认走 Responses；Kimi、Groq、派欧云以及未确认的智谱模型继续走 Chat。
 
 ### 2.3 Responses 事件契约与验证证据
 
@@ -76,6 +76,31 @@ Responses 请求统一下发 `store: false`：助手自己的会话存储仍是�
 
 所以模型能力目录里的 `input` 记的是"**本项目当前请求路径下真实可用**"的模态，不是模型宣传的模态。DeepSeek 视觉模型已经因 Responses 接通而开放图片；智能助手的视频输入仍会在协议边界明确阻断，不会降级成文本地址造成静默失效。
 
+### 2.5 原生 Chat Completions 事件矩阵（2026-09-24 核对）
+
+适用 `llm/streaming` 的 `runLlmChatStream`，与 Responses / Vercel model-step 路径分别验证。来源：[OpenAI 字段契约](https://developers.openai.com/api/reference/resources/chat/subresources/completions/streaming-events)、[官方 SDK 错误事件处理](https://raw.githubusercontent.com/openai/openai-node/master/src/core/streaming.ts)、[WHATWG SSE 分帧](https://html.spec.whatwg.org/multipage/server-sent-events.html#event-stream-interpretation)。字段表构造样本及采集日期见 [chat-stream-lifecycle.json](../../tests/fixtures/llm/chat-stream-lifecycle.json)，截断、删除字段和改类型的负例在对应 lifecycle 测试中独立标记。
+
+| 事件/状态 | 前置状态与字段契约 | 空值/缺字段语义 | 下一状态 / 对外输出 | 终态与资源 |
+|---|---|---|---|---|
+| SSE 注释、无 data 通知 | 等待/生成；SSE 字段可省略 | 不含结果 | 状态不变，无 token | 继续读取 |
+| 角色/内容增量 | choices 数组；选中项 delta 对象；content 可省略/null/字符串 | 空 content、空 delta 合法；有值但错类型拒绝 | 等待或部分结果；仅非空文本发 token | 继续读取 |
+| reasoning / tool_calls | Chat 兼容扩展；按已接入供应商契约 | 无 content 不代表失败 | 累加推理或工具参数 | 仍需完成标记 |
+| finish_reason | null 表示继续；非空字符串表示模型结束（stop/length/tool_calls/content_filter/function_call 等） | 不能拿空结果、任意对象替代完成标记 | 保存结束原因；length 保持 truncated | 等待 usage / DONE / EOF |
+| usage | choices 可为空数组；usage 对象 | 无文本合法；本身不能证明完成 | 更新用量，无 token | 继续读取 |
+| SSE error / JSON error | 任一读取状态；官方 SDK 将两种形状都作为错误 | 即使前面已收到文字仍失败 | provider error；不发 completed | 取消剩余流，释放 reader |
+| 未知命名事件 | 任一读取状态；保留扩展兼容空间 | 不把扩展通知当完成；含 error 仍失败 | 不输出、不改变完成状态 | 等待已知完成证据 |
+| 无名/message 数据缺 choices 或 delta | 已知 Chat 数据路径 | 必要结果结构缺失，不能按空通知处理 | INVALID_STREAM_RESPONSE | 取消并释放 |
+| DONE / EOF | 已收到有效 finish_reason | 未收到则 STREAM_INCOMPLETE；usage、partial 不能替代 | 完成，或明确失败 | 释放 reader；DONE 取消剩余流 |
+| 智谱 network_error / model_context_window_exceeded | 已开始流 | 前者为推理异常，后者为窗口限制 | 不能把异常当正常 stop | 前者 PROVIDER_STREAM_ERROR；后者 truncated=true，保留部分输出和结束原因 | 不自动重试 |
+| 未完成 SSE 块后 EOF | 空行才派发事件；官方 SSE 不派发残留块 | 不补空行伪造 final | 残块不产生结果；依据此前终态判断 | 释放 reader |
+| 取消 / 读取异常 | 任一非终态 | 不能当正常 EOF | 取消或失败，不调用 completed | 移除监听、取消并释放 reader |
+
+兼容边界：不新增非空文本要求，工具调用、拒绝或空模型结果可以带合法完成原因。官方未承诺所有兼容供应商都发送 DONE，因此 SDK 保留“已收到 finish_reason 后正常 EOF 可完成”的策略；无 finish_reason 的 DONE 不足以证明生成完成。未知命名事件不会自行成功或失败，但无名 Chat 数据必须具有可识别结构。[智谱契约第 6 节](供应商/智谱GLM.md) 允许缺省/空 choices 的状态块，按 provider family 保留该差异，这些块不改变完成状态；choices 错类型仍拒绝。新增此处校验不要求所有网关补齐无关的 id/created/model 元数据。SSE 连接不复用；SDK 不在断流后重放已可能计费的请求。
+
+未知具名扩展通知的 data 可以是普通文本，不强行 JSON 解析；已知 error 事件不论正文格式都失败，合法 Chat 数据仍严格校验 JSON。
+
+回调也是取消边界：同一 Chat 帧同时含思考与正文时，思考回调取消后不得继续发正文；对应受控变异回放进入生命周期测试。
+
 ## 三、本项目的协议接入优先级（产品决策，不是能力强弱排序）
 
 新写协议适配器、给某个供应商挑协议时，按下面顺序取舍——这是本项目的既定优先级，**不因某家供应商官方推荐哪个协议就单独提高它的顺序**（MiniMax 官方推荐 Anthropic，但本项目仍按下表顺序执行，见 [MiniMax.md 第 6 节](供应商/MiniMax.md)）：
@@ -84,7 +109,7 @@ Responses 请求统一下发 `store: false`：助手自己的会话存储仍是�
 2. **Chat Completions 兜底**。Responses 未确认的供应商/模型继续用它，不阻塞可用性。
 3. **Anthropic Messages API 暂不实现、不显示**。官方支持面只作为未来资料保留，不向用户暴露一个不能工作的选项。
 
-每个供应商文件的「摘要」表里都有一行"接入优先级"，按这三条给出该供应商的具体落点（例如 Kimi/百炼没有 Anthropic，MiMo 没有 Responses API，落点就相应收窄）。
+每个供应商文件的「摘要」表里都有一行"接入优先级"，按这三条给出该供应商的具体落点（例如 Kimi/百炼没有 Anthropic，MiMo 已有 Responses API，落点就相应收窄）。
 
 ## 四、协议矩阵（官方支持面，供路线图参考）
 
@@ -93,15 +118,15 @@ Responses 请求统一下发 `store: false`：助手自己的会话存储仍是�
 | [火山引擎](供应商/火山引擎.md) | ✅ | ✅ | ❌ 官方未提供 | **仅 Responses API**（Chat API 完全不支持内置工具） |
 | [Kimi](供应商/Kimi.md) | ✅ | ❌ 官方未提供 | ❌ 官方未提供 | Chat Completions（`$web_search`，官方标注"近期不建议用于生产"） |
 | [智谱 GLM](供应商/智谱GLM.md) | ✅（`glm-5.3-flash` 目前仅确认此协议） | ✅（仅 `glm-5.3`） | ✅（仅 `glm-5.3`） | Chat Completions 工具 / 独立 Web Search API 均可，GLM-Coding-Plan 订阅账号暂时只能走 Chat Completions |
-| [DeepSeek](供应商/DeepSeek.md) | ✅ | ✅ | ✅ | **仅 Responses API**（Chat Completions 不支持 `web_search`） |
-| [小米 MiMo](供应商/小米MiMo.md) | ✅ | ❌ 官方未提供 | ✅ | **仅 Chat Completions**（官方原文："其他 API 协议暂不支持"），且需先在控制台激活插件 |
+| [DeepSeek](供应商/DeepSeek.md) | ✅ | ✅ | ✅ | 当前仅 function 工具；内置 web_search 不可据旧资料声明可用 |
+| [小米 MiMo](供应商/小米MiMo.md) | ✅ | ✅（2.6 系列已接入） | ✅ | **仅 Chat Completions**（官方原文："其他 API 协议暂不支持"），且需先在控制台激活插件 |
 | [百炼 Qwen](供应商/百炼Qwen.md) | ✅ | ✅ | ❌ 官方未提供 | 两条协议都支持，但 Responses 路径能力更全（额外有 `web_extractor`/`code_interpreter`） |
 | [MiniMax](供应商/MiniMax.md) | ✅ | ✅ | ✅（**官方推荐首选**） | Anthropic Messages + Responses API 均支持，纯 Chat Completions 不支持 |
 
 **两条对制定路线图有直接影响的结论**：
 
-1. **7 家里有 6 家原生支持 Responses API 或与之等价的能力**（火山引擎、GLM-5.3、DeepSeek、百炼、MiniMax 直接支持 Responses API；Kimi、小米 MiMo 没有 Responses API，只能走 Chat Completions）——这与第三节"Responses API 优先"的既定优先级吻合，先做 Responses API 适配器能覆盖到的供应商数量最多，也是联网搜索等内置工具最主要的解锁路径。
-2. **联网搜索能不能用，很大程度上取决于选了哪个协议**，不是"这家供应商支不支持"这么简单：火山引擎和 DeepSeek 的联网搜索**必须**走 Responses API，MiMo 的联网搜索**必须**走 Chat Completions，MiniMax 的联网搜索 Anthropic/Responses 都行但纯 Chat Completions 不行。做 Responses API 适配器时可以顺带核对一下能不能同时把对应供应商的联网搜索也接上，性价比更高。
+1. **7 家里有 6 家原生支持 Responses API 或与之等价的能力**（火山引擎、GLM-5.3、DeepSeek、百炼、MiniMax 直接支持 Responses API；MiMo 也直接支持；Kimi 没有 Responses API，只能走 Chat Completions）——这与第三节"Responses API 优先"的既定优先级吻合，先做 Responses API 适配器能覆盖到的供应商数量最多，也是联网搜索等内置工具最主要的解锁路径。
+2. **联网搜索能不能用，很大程度上取决于选了哪个协议**，不是"这家供应商支不支持"这么简单：火山引擎的联网搜索**必须**走 Responses API，DeepSeek 当前文档只确认 function 工具，MiMo 的联网搜索**必须**走 Chat Completions，MiniMax 的联网搜索 Anthropic/Responses 都行但纯 Chat Completions 不行。做 Responses API 适配器时可以顺带核对一下能不能同时把对应供应商的联网搜索也接上，性价比更高。
 3. **4 家（DeepSeek、GLM、MiMo、MiniMax）原生支持 Anthropic Messages API，MiniMax 官方甚至推荐它作为首选**——这是资料记录，供未来"顺手就能接"时参考，**不代表应该优先做**：按第三节的既定优先级，Anthropic 排在 Responses API 和 Chat Completions 之后，不单独立项。
 
 ## 五、供应商速查表
@@ -112,7 +137,7 @@ Responses 请求统一下发 `store: false`：助手自己的会话存储仍是�
 | Kimi | `https://api.moonshot.cn/v1` | `kimi-k3` | 1,048,576 | 20 / 100 |
 | 智谱 GLM | 国内 `https://open.bigmodel.cn/api/paas/v4`；国际 `https://api.z.ai/api/paas/v4` | `glm-5.3` / `glm-5.3-flash`（原生多模态） | 1M | 国内 GLM-5.3：8 / 28；Flash：CNY 0.8 / 2.8、USD 0.15 / 0.50 |
 | DeepSeek | `https://api.deepseek.com` | `deepseek-v4-pro` | 1M | 4.5 / 13.5（闲时） |
-| 小米 MiMo | `https://api.xiaomimimo.com/v1` | `mimo-v2.5-pro` | 1M | 3 / 6 |
+| 小米 MiMo | `https://api.xiaomimimo.com/v1` | `mimo-v2.6-pro` / `mimo-v2.6-flash` | 1M | Pro 3 / 6，Flash 1 / 2 |
 | 百炼 Qwen | `https://{WorkspaceId}.cn-beijing.maas.aliyuncs.com/compatible-mode/v1` | `qwen3.8-max` | ~1M | 12 / 36 |
 | MiniMax | `https://api.minimaxi.com/v1` | `MiniMax-M3` | 1,000,000 | 2.10 / 8.40（≤512K，促销价） |
 
@@ -126,7 +151,7 @@ Responses 请求统一下发 `store: false`：助手自己的会话存储仍是�
 | Kimi | `reasoning_effort` | `low`/`high`/`max` | `max` | **不可以**，K3 始终思考 |
 | 智谱 GLM | `reasoning_effort` + `thinking` | `low`/`high`/`max`（`glm-5.3`、`glm-5.3-flash`） | `max` | GLM-5.3 / Flash 不可以；GLM-5V-Turbo 可以 |
 | DeepSeek | `reasoning_effort` + `thinking.type` | 字符串透传，无固定枚举 | — | 可以 |
-| 小米 MiMo | 无强度分级，仅 `reasoning_content` 回传约定 | — | — | 未见明确开关文档 |
+| 小米 MiMo | Chat `thinking.type`；Responses `reasoning.effort` | 开 / 关，无强度分级 | 开启 | 可以；Chat disabled / Responses none |
 | 百炼 Qwen | `enable_thinking`（布尔） | `true`/`false` | 视模型而定 | 可以 |
 | MiniMax | 仅 Anthropic 协议下确认为原生 `thinking` 内容块；Chat/Responses 路径的思考强度字段未在公开文档中找到，接入 Responses API 时需要单独实测确认 | — | — | 视协议而定 |
 

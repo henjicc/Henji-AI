@@ -22,6 +22,8 @@ import kieProviderPack from '@henjicc/ai-sdk/provider-packs/kie'
 import modelscopeProviderPack from '@henjicc/ai-sdk/provider-packs/modelscope'
 import ppioProviderPack from '@henjicc/ai-sdk/provider-packs/ppio'
 import volcengineProviderPack from '@henjicc/ai-sdk/provider-packs/volcengine'
+import siliconflowProviderPack from '@henjicc/ai-sdk/provider-packs/siliconflow'
+import volcengineSpeechProviderPack from '@henjicc/ai-sdk/provider-packs/volcengine-speech'
 
 export const HENJI_GENERATION_PROVIDER_IDS = [
   'volcengine',
@@ -32,6 +34,8 @@ export const HENJI_GENERATION_PROVIDER_IDS = [
   'apimart',
   'kie',
   'fal',
+  'siliconflow',
+  'volcengine-speech',
 ] as const
 
 export const HENJI_GENERATION_PROVIDER_PACKS: readonly GenerationPack[] = [
@@ -43,6 +47,8 @@ export const HENJI_GENERATION_PROVIDER_PACKS: readonly GenerationPack[] = [
   apimartProviderPack,
   kieProviderPack,
   falProviderPack,
+  siliconflowProviderPack,
+  volcengineSpeechProviderPack,
 ]
 
 /** 运行时额外装载的受控工具模型；不进入普通模型选择器与能力发现。 */
@@ -74,9 +80,9 @@ export function assertHenjiGenerationSelection(
       `received ${[...selectedProviders].join(', ') || '(none)'}`
     )
   }
-  if (models.length !== 109 || modelIds.size !== 109) {
+  if (models.length !== 124 || modelIds.size !== 124) {
     throw new Error(
-      `Henji generation model selection mismatch: expected 109 unique models, ` +
+      `Henji generation model selection mismatch: expected 124 unique models, ` +
       `received ${models.length} entries/${modelIds.size} unique`
     )
   }
@@ -105,7 +111,7 @@ export function createHenjiAIClient(runtime: RuntimeContext): AIClient {
 }
 
 /**
- * 应用统一能力发现入口。筛选只作用于本应用已选的 109 个生成模型和真实 LLM 目录，
+ * 应用统一能力发现入口。筛选只作用于本应用已选的 124 个生成模型和真实 LLM 目录，
  * 不会隐式引入默认目录之外的 Fal 工具 pack。
  */
 export const henjiModelCapabilityDiscovery: ModelCapabilityDiscovery = createModelCapabilityDiscovery({

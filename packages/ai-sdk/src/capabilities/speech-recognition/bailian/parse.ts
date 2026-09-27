@@ -37,6 +37,7 @@ function parseWord(value: UnknownRecord): SpeechRecognitionWord | undefined {
   if (!wordText) return undefined
   return {
     text: `${wordText}${text(value.punctuation) ?? ''}`,
+    ...(numberValue(value.speaker_id) !== undefined ? { speakerId: numberValue(value.speaker_id) } : {}),
     startMs: numberValue(value.begin_time),
     endMs: numberValue(value.end_time),
   }
@@ -51,6 +52,7 @@ export function parseBailianSentence(value: unknown): SpeechRecognitionSegment |
   const words = records(sentence.words).map(parseWord).filter((word): word is SpeechRecognitionWord => word !== undefined)
   return {
     text: sentenceText,
+    ...(numberValue(sentence.speaker_id) !== undefined ? { speakerId: numberValue(sentence.speaker_id) } : {}),
     startMs: numberValue(sentence.begin_time),
     endMs: numberValue(sentence.end_time),
     ...(words.length ? { words } : {}),
@@ -59,6 +61,8 @@ export function parseBailianSentence(value: unknown): SpeechRecognitionSegment |
 
 /** 解析 Fun-ASR 短音频 SSE，去重供应商可能回显的累计句子。 */
 export function parseFunShortSse(payload: string): SpeechRecognitionOutput {
+  // 短于一分钟时供应商可能忽略 SSE 请求头并直接返回 JSON。
+  if (payload.trimStart().startsWith('{')) payload = `data:${payload.replace(/\r?\n/g, '')}`
   const segments: SpeechRecognitionSegment[] = []
   let latestText = ''
   let durationMs: number | undefined
@@ -74,16 +78,18 @@ export function parseFunShortSse(payload: string): SpeechRecognitionOutput {
       throw new AiRuntimeError('invalid_response', 'Bailian Fun-ASR returned malformed SSE JSON')
     }
     const root = record(parsed)
+    if (text(root?.code)) throw new AiRuntimeError('provider_task_failed', text(root?.message) ?? String(root?.code))
     const output = record(root?.output)
     latestText = text(output?.text) ?? latestText
     const durationSeconds = numberValue(record(root?.usage)?.duration)
     if (durationSeconds !== undefined) durationMs = durationSeconds * 1_000
-    for (const sentence of recordsOrOne(output?.sentence)) {
+    for (const sentence of recordsOrOne(output?.sentences ?? output?.sentence)) {
       if (sentence.sentence_end !== true) continue
       const segment = parseBailianSentence(sentence)
       if (!segment) continue
       const duplicate = segments.find((candidate) =>
         candidate.startMs === segment.startMs
+        && candidate.speakerId === segment.speakerId
         && (candidate.text === segment.text
           || candidate.text.startsWith(segment.text)
           || segment.text.startsWith(candidate.text)))

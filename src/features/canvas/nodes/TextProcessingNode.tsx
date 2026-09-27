@@ -69,7 +69,7 @@ import {
 import { llmConfigService } from '@/services/llm/LlmConfigService'
 import { showAlertDialog } from '@/stores/alertDialogStore'
 import { UiSwitch } from '@/components/ui'
-import { useCanvasStore } from '@/stores/canvasStore'
+import { canvasViewStore, useCanvasStore } from '@/stores/canvasStore'
 import type { LlmConfigState } from '@henjicc/ai-sdk'
 
 const TextProcessingIcon = ICON_NODE_TEXT_PROCESSING
@@ -149,12 +149,12 @@ export const TextProcessingNode = memo(({
   }, [data.modelId, data.providerId, id, selectedChoice, updateNodeData])
 
   const connectedParamIds = useStoreWithEqualityFn(
-    useCanvasStore,
+    canvasViewStore,
     (state) => getConnectedParamIds(id, state.edges),
     areStringSetsEqual,
   )
   const injectedValues = useStoreWithEqualityFn(
-    useCanvasStore,
+    canvasViewStore,
     (state) => collectInputValues(id, state.nodes, state.edges),
     areValueOverridesEqual,
   )
@@ -163,7 +163,7 @@ export const TextProcessingNode = memo(({
     ? injectedValues[PROMPT_PARAM_ID] as string
     : null
   const incomingMedia = useStoreWithEqualityFn(
-    useCanvasStore,
+    canvasViewStore,
     (state) => collectInputMedia(id, state.nodes, state.edges)
       .filter((output) => acceptedMediaKinds.includes(output.kind as RowMediaKind)),
     areMediaOutputListsEqual,

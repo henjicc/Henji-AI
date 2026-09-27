@@ -1,4 +1,5 @@
 import { createUtf8StreamDecoder } from '../../../protocols/utf8-stream-decoder'
+import { drainSseEvents } from '../../../protocols/sse-events'
 import { AiRuntimeError } from '../../../runtime/AiRuntimeError'
 import type { TranslationUsage } from '../index'
 import type { BailianQwenMtStreamingContent } from './types'
@@ -24,7 +25,8 @@ export async function readQwenMtSse(
   body: ReadableStream<Uint8Array>,
   streamingContent: BailianQwenMtStreamingContent,
   signal: AbortSignal,
-  callbacks: QwenMtStreamCallbacks
+  callbacks: QwenMtStreamCallbacks,
+  modelId: string
 ): Promise<QwenMtStreamResult> {
   const reader = body.getReader()
   const decoder = createUtf8StreamDecoder()
@@ -35,18 +37,33 @@ export async function readQwenMtSse(
   let responseModel: string | undefined
   let finishReason: string | undefined
   let ended = false
+  let eof = false
+  let stage = 'read'
+  let cancellation: Promise<void> | undefined
+  const failure = (code: string, reason: string, details?: Record<string, unknown>): AiRuntimeError =>
+    new AiRuntimeError(code, `Bailian ${modelId}: ${reason}`, {
+      providerId: 'bailian', modelId, protocol: 'qwen-mt-sse', stage,
+      receivedFinish: finishReason !== undefined, ...details,
+    })
+  const checkAbort = (): void => {
+    if (signal.aborted) throw failure('cancelled', 'Translation stream cancelled')
+  }
 
-  const cancelReader = (): void => { void reader.cancel() }
-  if (signal.aborted) cancelReader()
-  else signal.addEventListener('abort', cancelReader, { once: true })
+  // A host cleanup rejection must not replace the original failure or escape
+  // as an unhandled rejection; never wait indefinitely for host cancellation.
+  const cancelReader = (): void => { cancellation ??= reader.cancel().catch(() => undefined) }
+  signal.addEventListener('abort', cancelReader, { once: true })
 
   const consume = async (event: string): Promise<void> => {
-    const data = event
-      .split(/\r?\n/)
-      .map((line) => line.trim())
+    const lines = event.split(/\r\n|\r|\n/)
+    const eventName = lines.filter(line => line.startsWith('event:')).at(-1)?.slice(6).trim()
+    const data = lines
       .filter((line) => line.startsWith('data:'))
       .map((line) => line.slice(5).trim())
       .join('\n')
+    if (eventName === 'error') throw failure('provider_task_failed', 'Server sent an error event')
+    // SSE extension notifications are not translation results or completion evidence.
+    if (eventName && eventName !== 'message') return
     if (!data || data === '[DONE]') {
       if (data === '[DONE]') ended = true
       return
@@ -56,26 +73,53 @@ export async function readQwenMtSse(
     try {
       payload = JSON.parse(data)
     } catch {
-      throw new AiRuntimeError('provider_response_invalid', 'Bailian Qwen-MT SSE contains invalid JSON')
+      throw failure('provider_response_invalid', 'SSE contains invalid JSON')
     }
     if (!isRecord(payload)) {
-      throw new AiRuntimeError('provider_response_invalid', 'Bailian Qwen-MT SSE payload is not an object')
+      throw failure('provider_response_invalid', 'SSE payload is not an object')
     }
-    throwPayloadError(payload)
+    if (payload.error != null || payload.code != null) {
+      const error = isRecord(payload.error) ? payload.error : undefined
+      const code = error?.code ?? payload.code
+      const providerCode = typeof code === 'string' && /^[\w.-]{1,128}$/.test(code) ? code : undefined
+      throw failure('provider_task_failed', 'Server rejected translation', { providerCode })
+    }
+    if (!Array.isArray(payload.choices)) {
+      throw failure('provider_response_invalid', 'SSE payload is missing choices')
+    }
     requestId = readNonEmptyString(payload.id) ?? requestId
     responseModel = readNonEmptyString(payload.model) ?? responseModel
     const nextUsage = readUsage(payload.usage)
+    if (payload.choices.length === 0 && !nextUsage) {
+      throw failure('provider_response_invalid', 'Empty choices requires usage')
+    }
     if (nextUsage) {
       usage = nextUsage
+      stage = 'callback'
       await callbacks.onUsage(nextUsage)
+      checkAbort()
+      stage = 'parse'
     }
-    const choice = Array.isArray(payload.choices) && isRecord(payload.choices[0])
-      ? payload.choices[0]
-      : undefined
-    finishReason = readNonEmptyString(choice?.finish_reason) ?? finishReason
-    const delta = isRecord(choice?.delta) ? readString(choice.delta.content) : undefined
-    if (delta === undefined || delta.length === 0) return
+    if (payload.choices.length === 0) return
+    const choice: unknown = payload.choices[0]
+    if (!isRecord(choice) || !isRecord(choice.delta) || typeof choice.delta.content !== 'string') {
+      throw failure('provider_response_invalid', 'SSE choice requires delta.content')
+    }
+    const nextFinish = choice.finish_reason
+    if (nextFinish !== null && nextFinish !== 'stop' && nextFinish !== 'length') {
+      throw failure('provider_response_invalid', 'SSE choice has invalid finish_reason')
+    }
+    if (nextFinish === 'length') {
+      throw failure('provider_task_failed', 'Translation was truncated by the output limit', { finishReason: 'length' })
+    }
+    const delta = choice.delta.content
+    if (finishReason && (nextFinish !== finishReason || (streamingContent === 'incremental' ? delta !== '' : delta !== text))) {
+      throw failure('provider_response_invalid', 'Translation changed after finish_reason')
+    }
+    finishReason = nextFinish ?? finishReason
+    if (delta.length === 0) return
 
+    stage = 'callback'
     if (streamingContent === 'incremental') {
       text += delta
       await callbacks.onDelta({ mode: 'append', text: delta, accumulatedText: text })
@@ -93,46 +137,36 @@ export async function readQwenMtSse(
   }
 
   try {
+    checkAbort()
     while (!ended) {
+      stage = 'read'
       const result = await reader.read()
-      if (result.done) break
+      checkAbort()
+      if (result.done) { eof = true; break }
       pending += decoder.decode(result.value, { stream: true })
-      const drained = drainEvents(pending)
+      const drained = drainSseEvents(pending)
       pending = drained.remaining
       for (const event of drained.events) {
+        checkAbort()
+        stage = 'parse'
         await consume(event)
         if (ended) break
       }
     }
-    pending += decoder.decode()
-    const drained = drainEvents(`${pending}\n\n`)
-    for (const event of drained.events) await consume(event)
+    stage = 'completion'
+    checkAbort()
+    if (!finishReason) throw failure('provider_response_invalid', 'Translation stream ended without finish_reason')
+  } catch (error) {
+    if (error instanceof AiRuntimeError && error.details?.protocol === 'qwen-mt-sse') throw error
+    throw failure(stage === 'callback' ? 'capability_execution_failed' : 'provider_response_invalid',
+      stage === 'callback' ? 'Translation event callback failed' : 'Translation stream read failed')
   } finally {
     signal.removeEventListener('abort', cancelReader)
+    if (!eof) cancelReader()
     reader.releaseLock()
   }
 
   return { text, usage, requestId, responseModel, finishReason }
-}
-
-function drainEvents(input: string): { events: string[]; remaining: string } {
-  const events: string[] = []
-  let remaining = input
-  let hasSeparator = true
-  while (hasSeparator) {
-    const crlf = remaining.indexOf('\r\n\r\n')
-    const lf = remaining.indexOf('\n\n')
-    if (crlf === -1 && lf === -1) {
-      hasSeparator = false
-      continue
-    }
-    const useCrlf = crlf !== -1 && (lf === -1 || crlf < lf)
-    const index = useCrlf ? crlf : lf
-    const length = useCrlf ? 4 : 2
-    events.push(remaining.slice(0, index))
-    remaining = remaining.slice(index + length)
-  }
-  return { events, remaining }
 }
 
 function readUsage(value: unknown): TranslationUsage | undefined {
@@ -144,24 +178,12 @@ function readUsage(value: unknown): TranslationUsage | undefined {
   return { inputTokens, outputTokens, totalTokens }
 }
 
-function throwPayloadError(payload: Record<string, unknown>): void {
-  const error = isRecord(payload.error) ? payload.error : undefined
-  const code = readNonEmptyString(error?.code) ?? readNonEmptyString(payload.code)
-  if (!code) return
-  const message = readNonEmptyString(error?.message) ?? readNonEmptyString(payload.message) ?? code
-  throw new AiRuntimeError('provider_task_failed', `Bailian Qwen-MT ${code}: ${message}`)
-}
-
 function readTokenCount(value: unknown): number | undefined {
   return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : undefined
 }
 
 function readNonEmptyString(value: unknown): string | undefined {
   return typeof value === 'string' && value.length > 0 ? value : undefined
-}
-
-function readString(value: unknown): string | undefined {
-  return typeof value === 'string' ? value : undefined
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

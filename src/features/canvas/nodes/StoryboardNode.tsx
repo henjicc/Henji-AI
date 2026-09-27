@@ -23,7 +23,7 @@ import {
   NODE_SELECTED_BORDER_CLASS,
 } from '@/features/canvas/ui/nodeControlStyles';
 import { getSocketColor, mediaPortId } from '@/features/canvas/domain/socketTypes';
-import { useCanvasStore } from '@/stores/canvasStore';
+import { canvasViewStore, useCanvasStore } from '@/stores/canvasStore';
 import { FrameCard } from '@/features/canvas/nodes/storyboardSplit/FrameCard';
 import { StoryboardExportSettingsPanel } from '@/features/canvas/nodes/storyboardSplit/ExportSettingsPanel';
 import { IncomingImagePicker } from '@/features/canvas/nodes/storyboardSplit/IncomingImagePicker';
@@ -56,7 +56,7 @@ export const StoryboardNode = memo(({ id, data, selected, width, height }: Story
   // 本节点只需要"上游连了哪些图片"这一派生结果，不需要整个 nodes/edges 数组；
   // 用内容相等比较订阅，避免画布上任意其他节点的无关编辑都触发本节点重渲染。
   const incomingImageOutputs = useStoreWithEqualityFn(
-    useCanvasStore,
+    canvasViewStore,
     (state) => collectInputMediaByKind(id, state.nodes, state.edges, 'image'),
     areMediaOutputListsEqual
   );
