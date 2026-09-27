@@ -11,13 +11,15 @@ import type { AudioEditProjectDocument, AudioEditRange } from '@/core/audioEdit/
 import { useAudioEditPlaybackStore } from './store/audioEditPlaybackStore'
 import { clampViewport, sampleWaveform, waveformReference, zoomViewport } from './waveformViewport'
 import { AudioEditOverview } from './AudioEditOverview'
+import { AudioEditMatchedText } from './AudioEditTextTools'
+import type { AudioEditTextSearch } from './useAudioEditTextSearch'
 
 function time(frame: number, rate: number) {
   const seconds = Math.max(0, frame / rate)
   return `${Math.floor(seconds / 60)}:${(seconds % 60).toFixed(1).padStart(4, '0')}`
 }
 
-export const AudioEditTimeline = memo(function AudioEditTimeline({ project, peaks, onSeek, onToggle, selection, onSelection, onEditSelection, previewRanges, previewPending, previewError, disabled, onSettings, selectedBlockIds, onSelectBlock, onEditBlock, onDeleteBlock, navigationTarget }: {
+export const AudioEditTimeline = memo(function AudioEditTimeline({ project, peaks, onSeek, onToggle, selection, onSelection, onEditSelection, previewRanges, previewPending, previewError, disabled, onSettings, selectedBlockIds, onSelectBlock, onEditBlock, onDeleteBlock, navigationTarget, textSearch }: {
   project: AudioEditProjectDocument
   peaks: number[]
   onSeek: (frame: number) => void
@@ -35,6 +37,7 @@ export const AudioEditTimeline = memo(function AudioEditTimeline({ project, peak
   onEditBlock: (id: string) => void
   onDeleteBlock: (id: string) => void
   navigationTarget: { frame: number } | null
+  textSearch: AudioEditTextSearch
 }) {
   const { durationFrames: duration, sampleRate: rate } = project.source
   const sourceFrame = useAudioEditPlaybackStore((state) => state.sourceFrame)
@@ -197,7 +200,7 @@ export const AudioEditTimeline = memo(function AudioEditTimeline({ project, peak
         {showCaptions && <div className="absolute inset-x-0 top-6 h-7 overflow-hidden" data-audio-captions>{captions.map((block) => <UiButton key={block.id} variant="plain" disabled={disabled} title={`${block.text} · 单击选中，双击编辑，右键删除`} className={`!absolute !h-7 !min-h-0 !rounded-none border-l border-border-dark !px-1 !py-0 text-left text-sm ${selectedBlockIds.includes(block.id) ? '!bg-accent/25 text-text-dark' : '!bg-layer/40 text-text-muted'} ${block.included ? '' : 'line-through opacity-55'}`} style={{ left: `${position(Math.max(view.start, block.startFrame))}%`, width: `${(Math.min(view.end, block.endFrame) - Math.max(view.start, block.startFrame)) / length * 100}%` }}
           onPointerDown={(event) => event.stopPropagation()} onKeyDown={(event) => event.stopPropagation()}
           onClick={(event) => { event.stopPropagation(); onSelectBlock(block.id) }} onDoubleClick={(event) => { event.stopPropagation(); onEditBlock(block.id) }}
-          onContextMenu={(event) => { event.preventDefault(); event.stopPropagation(); onSelectBlock(block.id); onDeleteBlock(block.id) }}><span className="block w-full truncate">{block.text || '（空字幕）'}</span></UiButton>)}</div>}
+          onContextMenu={(event) => { event.preventDefault(); event.stopPropagation(); onSelectBlock(block.id); onDeleteBlock(block.id) }}><span className="block w-full truncate">{block.text ? <AudioEditMatchedText block={block} search={textSearch} /> : '（空字幕）'}</span></UiButton>)}</div>}
         <svg className={`pointer-events-none absolute inset-x-0 bottom-2 w-full text-accent ${showCaptions ? 'top-14 h-[calc(100%-4rem)]' : 'top-6 h-[calc(100%-2rem)]'}`} viewBox={`0 0 ${Math.max(1, bars.length)} 100`} preserveAspectRatio="none" aria-hidden="true">
           {barElements}
         </svg>

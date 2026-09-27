@@ -1,8 +1,8 @@
-import { useMemo, useState } from 'react'
-import { UiButton, UiInput, UiModal, UiTextArea } from '@/components/ui'
-import type { AudioEditProjectDocument, AudioEditTranscriptBlock } from '@/core/audioEdit/types'
-import { findAudioEditText, replaceAudioEditText } from '@/core/audioEdit/text'
-import { editAudioEditProject } from './application/audioEditProjectInstances'
+import { useEffect, useRef, useState } from 'react'
+import { ArrowDown, ArrowUp, ChevronDown, ChevronRight, X } from 'lucide-react'
+import { UiButton, UiIconButton, UiInput, UiModal, UiTextArea } from '@/components/ui'
+import type { AudioEditTranscriptBlock } from '@/core/audioEdit/types'
+import type { AudioEditTextSearch } from './useAudioEditTextSearch'
 
 export function AudioEditTitle({ name, disabled, onChange }: { name: string; disabled: boolean; onChange: (value: string) => void }) {
   const [editing, setEditing] = useState(false)
@@ -24,42 +24,40 @@ export function AudioEditTextEditor({ block, disabled, onSave, onClose }: { bloc
   </UiModal>
 }
 
-export function AudioEditFindReplace({ project, disabled, onSeek, onClose, onError }: {
-  project: AudioEditProjectDocument; disabled: boolean; onSeek: (frame: number, ids: string[]) => void; onClose: () => void; onError: (error: unknown) => void
-}) {
-  const [query, setQuery] = useState('')
-  const [replacement, setReplacement] = useState('')
-  const [index, setIndex] = useState(0)
-  const [message, setMessage] = useState('')
-  const matches = useMemo(() => findAudioEditText(project.transcript, query), [project.transcript, query])
-  const current = Math.min(index, Math.max(0, matches.length - 1))
-  const navigate = (next: number) => {
-    if (!matches.length) return
-    const selected = (next + matches.length) % matches.length
-    setIndex(selected)
-    const match = matches[selected]
-    const block = project.transcript.find((entry) => entry.id === match.blockIds[0])
-    if (block) onSeek(block.startFrame, match.blockIds)
-  }
-  const replace = (all: boolean) => {
-    try {
-      let count = 0
-      editAudioEditProject(project.id, (document) => {
-        const latest = findAudioEditText(document.transcript, query)
-        const targets = (all ? latest : latest.slice(current, current + 1)).filter((match) => !document.transcript.some((block) => block.locked && match.blockIds.includes(block.id)))
-        count = targets.length
-        return { ...document, transcript: replaceAudioEditText(document.transcript, targets, replacement) }
-      })
-      setMessage(count ? `已替换 ${count} 处，可撤销` : '没有可替换内容，锁定文字已跳过')
-    } catch (error) { onError(error) }
-  }
-  return <UiModal isOpen onClose={onClose} title="查找与替换" size="compact">
-    <div className="space-y-3">
-      <UiInput autoFocus aria-label="查找文字" placeholder="查找文字" value={query} onChange={(event) => { setQuery(event.target.value); setIndex(0); setMessage('') }} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); navigate(event.shiftKey ? current - 1 : current + 1) } }} />
-      <div className="flex items-center gap-2 text-sm text-text-muted"><span className="mr-auto">{matches.length ? `${current + 1} / ${matches.length}` : '无匹配'}</span><UiButton variant="plain" size="sm" disabled={!matches.length} onClick={() => navigate(current - 1)}>上一处</UiButton><UiButton variant="plain" size="sm" disabled={!matches.length} onClick={() => navigate(current)}>定位</UiButton><UiButton variant="plain" size="sm" disabled={!matches.length} onClick={() => navigate(current + 1)}>下一处</UiButton></div>
-      <UiInput aria-label="替换为" placeholder="替换为" value={replacement} onChange={(event) => setReplacement(event.target.value)} />
-      <div className="flex justify-end gap-2"><UiButton variant="plain" size="sm" disabled={disabled || !matches.length} onClick={() => replace(false)}>替换当前</UiButton><UiButton variant="primary" size="sm" disabled={disabled || !matches.length} onClick={() => replace(true)}>全部替换</UiButton></div>
-      <p className="text-xs text-text-muted" aria-live="polite">{message || '只替换文字和字幕，声音保持不变；锁定文字会跳过。'}</p>
+export function AudioEditFindReplace({ search, disabled }: { search: AudioEditTextSearch; disabled: boolean }) {
+  const inputRef = useRef<HTMLInputElement>(null)
+  useEffect(() => { inputRef.current?.focus(); inputRef.current?.select() }, [search.focusVersion])
+  return <div role="search" aria-label="查找与替换" className="shrink-0 space-y-2 px-6 py-2" onKeyDown={(event) => {
+    if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); search.close() }
+  }}>
+    <div className="flex flex-wrap items-center gap-2">
+      <UiIconButton appearance="hover-only" showBorder={false} title={search.showReplace ? '收起替换' : '展开替换'} aria-expanded={search.showReplace} onClick={search.toggleReplace}>{search.showReplace ? <ChevronDown size={16} /> : <ChevronRight size={16} />}</UiIconButton>
+      <UiInput ref={inputRef} autoFocus aria-label="查找文字" aria-invalid={Boolean(search.error)} className="min-w-32 max-w-md flex-1" placeholder={search.regex ? '正则表达式' : '查找文字'} value={search.query} onChange={(event) => search.setQuery(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); search.navigate(event.shiftKey ? -1 : 1) } }} />
+      <UiButton variant="plain" size="sm" title="使用正则表达式" aria-pressed={search.regex} className={search.regex ? 'text-accent underline underline-offset-4' : ''} onClick={search.toggleRegex}>.*</UiButton>
+      <span className="text-sm tabular-nums text-text-muted" aria-live="polite">{search.matches.length ? `${search.currentIndex + 1} / ${search.matches.length} 处` : search.query ? '无匹配' : ''}</span>
+      <UiIconButton appearance="hover-only" showBorder={false} title="上一处 · Shift+Enter" disabled={!search.matches.length} onClick={() => search.navigate(-1)}><ArrowUp size={16} /></UiIconButton>
+      <UiIconButton appearance="hover-only" showBorder={false} title="下一处 · Enter" disabled={!search.matches.length} onClick={() => search.navigate(1)}><ArrowDown size={16} /></UiIconButton>
+      <UiIconButton appearance="hover-only" showBorder={false} title="关闭查找 · Esc" className="ml-auto" onClick={search.close}><X size={16} /></UiIconButton>
     </div>
-  </UiModal>
+    {search.showReplace && <div className="flex flex-wrap items-center gap-2">
+      <UiInput aria-label="替换为" className="min-w-32 max-w-md flex-1" placeholder={search.regex ? '替换为（支持 $1 等捕获组）' : '替换为'} value={search.replacement} onChange={(event) => search.setReplacement(event.target.value)} />
+      {!search.preview ? <UiButton variant="plain" size="sm" disabled={!search.matches.length || disabled} onClick={search.startPreview}>预览替换</UiButton> : <>
+        <UiButton variant="plain" size="sm" disabled={disabled || !search.currentCanChange} onClick={() => search.confirm(false)}>确认当前</UiButton>
+        <UiButton variant="primary" size="sm" disabled={disabled || !search.changeCount} onClick={() => search.confirm(true)}>确认全部 {search.changeCount} 处</UiButton>
+        <UiButton variant="plain" size="sm" onClick={search.cancelPreview}>取消预览</UiButton>
+      </>}
+    </div>}
+    {search.error && <p role="alert" className="text-xs text-warning">{search.error}</p>}
+    {(search.message || search.preview) && <p className="text-xs text-text-muted" aria-live="polite">{search.message || `正在预览，确认后才修改文字；声音不变${search.lockedCount ? `，跳过 ${search.lockedCount} 处锁定文字` : ''}`}</p>}
+  </div>
+}
+
+export function AudioEditMatchedText({ block, search }: { block: AudioEditTranscriptBlock; search: AudioEditTextSearch }) {
+  const fragments = search.fragments.get(block.id)
+  if (!fragments) return <>{block.text}</>
+  return <>{fragments.map((fragment, index) => fragment.matchIndex === undefined ? <span key={index}>{fragment.text}</span> : <span key={index}
+    data-audio-search-current={fragment.matchIndex === search.currentIndex ? 'true' : undefined}
+    className={fragment.matchIndex === search.currentIndex ? 'bg-warning/30 text-text-dark ring-1 ring-accent' : 'bg-warning/20 text-text-dark'}>
+    {fragment.replacement === undefined ? fragment.text : <><del className="text-text-muted">{fragment.text}</del>{fragment.replacement && <ins className="ml-1 bg-accent/20 font-medium text-accent no-underline">{fragment.replacement}</ins>}</>}
+  </span>)}</>
 }
