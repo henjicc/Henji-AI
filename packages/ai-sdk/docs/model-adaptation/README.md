@@ -5,18 +5,22 @@
 
 | 项目 | 内容 |
 |---|---|
-| 最后更新 | 2026-09-24 |
+| 最后更新 | 2026-09-27 |
 | 模型数量 | 生成主清单 20（图片 11 / 视频 9）+ 主清单外存量 12 + SDK 跨项目能力模型 20（ASR 15 / 翻译 3 / LLM 2） |
 | 模型供应商文档数量 | 生成/存量 84 + SDK 跨项目能力 20（另有 Fal 工具 12） |
 | 覆盖供应商 | 火山引擎（官方生成/ASR）、百炼（官方）、硅基流动（官方 ASR）、智谱（官方 LLM）、Groq（官方 LLM/ASR）、APIMart、KIE、Fal、派欧云、魔搭、Grsai |
 
-另有 12 个按能力按需分发的 Fal 图像工具，不进入默认 111 模型兼容目录：
+另有 12 个按能力按需分发的 Fal 图像工具，不进入默认 124 模型兼容目录：
 
 - 消除：[Flux Pro Erase](Flux-Pro-Erase/Flux-Pro-Erase_Fal.md)、[Bria Eraser](Bria-Eraser/Bria-Eraser_Fal.md)、[Finegrain Eraser](Finegrain-Eraser/Finegrain-Eraser_Fal.md)。
 - 图片实用工具：[Image Apps v2 重打光](Image-Apps-v2-重打光/Image-Apps-v2-重打光_Fal.md)、[ControlLight](ControlLight/ControlLight_Fal.md)、[Image Apps v2 扩图](Image-Apps-v2-扩图/Image-Apps-v2-扩图_Fal.md)、[Image Apps v2 商品摄影](Image-Apps-v2-商品摄影/Image-Apps-v2-商品摄影_Fal.md)、[Image Apps v2 照片修复](Image-Apps-v2-照片修复/Image-Apps-v2-照片修复_Fal.md)、[Pixelcut 背景移除](Pixelcut-背景移除/Pixelcut-背景移除_Fal.md)。
 - 多角度：[Qwen Image Edit 2511 多角度](Qwen-Image-Edit-2511-多角度/Qwen-Image-Edit-2511-多角度_Fal.md)、[透视变换](透视变换/透视变换_Fal.md)、[FLUX 2 多角度](FLUX-2-多角度/FLUX-2-多角度_Fal.md)。
 
-工具均复用 Fal 队列、上传与结果解析；它们是独立的按需 SDK 入口，不是新的执行内核。Henji-AI 运行客户端显式装载三个 pack，但普通模型选择器仍固定为 111 个默认模型：六个图片实用工具通过图片能力菜单创建固定模型节点，三个多角度工具由专用多角度节点选择，消除工具保留给后续遮罩能力接入。真实质量、延迟和账单仍待获得付费授权后验证。
+工具均复用 Fal 队列、上传与结果解析；它们是独立的按需 SDK 入口，不是新的执行内核。Henji-AI 运行客户端显式装载三个 pack，但普通模型选择器为 124 个默认模型：六个图片实用工具通过图片能力菜单创建固定模型节点，三个多角度工具由专用多角度节点选择，消除工具保留给后续遮罩能力接入。真实质量、延迟和账单仍待获得付费授权后验证。
+
+## 2026-09-27 TTS 适配
+
+[TTS 多供应商适配契约](TTS-多供应商-2026-09.md)：新增 13 个文字转语音模型，覆盖 Fal、百炼、KIE、硅基流动与火山语音；派欧云 MiniMax Speech 2.8 继续使用已有接入。记录官方接口、价格、音色前提、流式响应和测试样本来源。
 
 ## 2026-09-24 已适配更新
 

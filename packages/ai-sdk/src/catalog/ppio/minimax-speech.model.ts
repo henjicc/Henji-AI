@@ -52,6 +52,7 @@ export const minimaxSpeechModel = defineModel({
       type: 'dropdown',
       order: 3,
       default: '',
+      visible: { condition: () => false },
       options: [
         { value: '' },
         { value: 'happy' },
@@ -284,7 +285,6 @@ export const minimaxSpeechModel = defineModel({
       const audioSpeed = pickNumber(advanced.audioSpeed, params.minimaxAudioSpeed, params.speed)
       const audioVol = pickNumber(advanced.audioVol, params.minimaxAudioVol, params.vol)
       const audioPitch = pickNumber(advanced.audioPitch, params.minimaxAudioPitch, params.pitch)
-      const audioEmotion = pickString(params.minimaxAudioEmotion, params.emotion)
       const englishNormalization = pickBoolean(
         advanced.englishNormalization,
         params.minimaxTextNormalization,
@@ -314,7 +314,6 @@ export const minimaxSpeechModel = defineModel({
       if (audioSpeed !== undefined) voiceSetting.speed = audioSpeed
       if (audioVol !== undefined) voiceSetting.vol = audioVol
       if (audioPitch !== undefined) voiceSetting.pitch = audioPitch
-      if (audioEmotion) voiceSetting.emotion = audioEmotion
       if (englishNormalization !== undefined) {
         voiceSetting.english_normalization = englishNormalization
       }
