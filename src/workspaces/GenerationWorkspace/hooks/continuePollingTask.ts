@@ -1,6 +1,9 @@
 import { aiReadSavedResult } from '@/commands/aiRuntime'
 import { awaitGenerationTaskPersistence } from './useTaskHistory'
 import { createLogger } from '@/core/logging'
+import { clonedVoiceCompletion } from '@/services/voiceLibrary/clonedVoiceResult'
+import { captureClonedVoice } from '@/services/voiceLibrary/captureClonedVoice'
+import { registry } from '@/core/ModelRegistry'
 import { GenerationService } from '@/core/services/GenerationService'
 import { getMediaDimensions, getMediaDurationFormatted } from '@/utils/mediaDimensions'
 import type { GenerationTask } from '../types'
@@ -72,6 +75,8 @@ export async function continuePollingTask({
     const cached = await aiReadSavedResult(serverTaskId)
     let resultObj: DynamicValueMap
     if (cached) {
+      const provider = registry.getModel(task.model)?.meta.provider
+      if (provider) await captureClonedVoice(task.model, provider, cached)
       logger.info('[Workspace] 命中缓存轮询结果，跳过重新轮询', { taskId: task.id, serverTaskId })
       createdFilePaths = normalizeCreatedFilePaths(cached.createdFilePaths)
       resultObj = {
@@ -114,6 +119,13 @@ export async function continuePollingTask({
     const { url, filePath } = normalized
 
     if (!url) {
+      const completion = clonedVoiceCompletion(resultObj.metadata)
+      if (completion) {
+        await saveUpdate({ status: 'success', progress: 100, options: { ...options, __completionMessage: completion } })
+        ownershipTransferred = true
+        useGenerationTaskProgressStore.getState().clearProgress(task.id)
+        return
+      }
       logger.error('[Workspace] 继续轮询响应缺少 URL', { model: task.model, result: resultObj })
       throw new Error(genericGenerateFailed)
     }

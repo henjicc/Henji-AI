@@ -23,12 +23,12 @@ function attachUiInspectionGeneration(context) {
     return searchInput
   }
 
-  async function selectGenerationModel(page, modelName, modelId) {
+  async function selectGenerationModel(page, modelName, modelId, providerId = 'apimart') {
     const searchInput = await openGenerationModelPanel(page)
     await searchInput.fill(modelName)
     const modelPanel = page.locator('[data-model-selector-panel]:visible')
     const modelButton = modelId
-      ? modelPanel.locator(`[data-model-id="${modelId}"][data-provider-id="apimart"]`).first()
+      ? modelPanel.locator(`[data-model-id="${modelId}"][data-provider-id="${providerId}"]`).first()
       : modelPanel.getByRole('button').filter({ hasText: modelName }).first()
     await modelButton.waitFor({ state: 'visible', timeout: 8000 })
     await modelButton.click()

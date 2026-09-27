@@ -10,6 +10,7 @@ import type { CanvasModelMediaType } from '@/features/canvas/domain/defaultModel
 import { resolveCanvasCapabilityModelCandidates } from '@/features/canvas/capabilities/modelCompatibility';
 import type { CanvasImageCapabilityModelPolicy } from '@/features/canvas/capabilities/types';
 import { getProviderDisplayName, resolveModelName } from '@/utils/modelHelpers';
+import { providerBrandId } from '@/core/config/providerBrands';
 
 export interface ProviderFilterOption {
   id: string;
@@ -69,13 +70,14 @@ export function useModelPickerOptions({ options, selectedKey }: UseModelPickerOp
   const providerOptions = useMemo<ProviderFilterOption[]>(() => {
     const providers = new Map<string, ProviderFilterOption>();
     for (const option of options) {
-      const existing = providers.get(option.providerId);
+      const brandId = providerBrandId(option.providerId);
+      const existing = providers.get(brandId);
       if (existing) {
         existing.count += 1;
         continue;
       }
-      providers.set(option.providerId, {
-        id: option.providerId,
+      providers.set(brandId, {
+        id: brandId,
         label: option.providerName,
         count: 1,
       });
@@ -86,7 +88,7 @@ export function useModelPickerOptions({ options, selectedKey }: UseModelPickerOp
   const providerModels = useMemo(
     () => providerFilter === 'all'
       ? options
-      : options.filter((option) => option.providerId === providerFilter),
+      : options.filter((option) => providerBrandId(option.providerId) === providerBrandId(providerFilter)),
     [options, providerFilter]
   );
   const filteredModels = useMemo(

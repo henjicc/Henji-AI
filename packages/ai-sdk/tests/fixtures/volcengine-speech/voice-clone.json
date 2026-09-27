@@ -1,0 +1,18 @@
+{
+  "kind": "capability",
+  "source": {
+    "urls": ["https://docs.volcengine.com/docs/DoubaoVoice/tone-training-http?lang=zh", "https://docs.volcengine.com/docs/DoubaoVoice/tone-query-http?lang=zh"],
+    "collectedAt": "2026-09-28",
+    "loginRequired": false,
+    "classification": "official-literal",
+    "notes": "训练页面嵌入 apiSampleData 的 outputCode 原样字段；仅替换 speaker_id 和 demo_audio，不是真实付费调用。状态变体在测试内依据字段表构造。"
+  },
+  "response": {
+    "available_training_times": 15,
+    "create_time": 1772026663000,
+    "language": 1,
+    "speaker_id": "S_fixture",
+    "speaker_status": [{ "demo_audio": "https://media.invalid/voice-preview.mp3", "model_type": 5 }],
+    "status": 2
+  }
+}

@@ -12,6 +12,26 @@ function createGenerationSettingsScenes(context) {
   } = context
 
   return [
+    {
+      id: 'generation-voice-clone',
+      surface: '生成',
+      name: '生成-豆包声音复刻',
+      setup: async (page) => {
+        await context.selectGenerationModel(page, '声音复刻', 'volcengine-seed-icl-2.0', 'volcengine-speech')
+        const mode = paramFieldFromLabel(page, /^(模式|Mode)$/i)
+        await mode.locator('[data-dropdown-button]').click()
+        await page.getByRole('option', { name: /^(克隆声音|Clone voice)$/i }).click()
+        const name = page.getByText(/^(音色名称|Voice name)\s*\*?$/i).filter({ visible: true }).first().locator('xpath=ancestor::div[.//input][1]')
+        await name.locator('input').fill('我的解说声音')
+        const audio = page.getByText(/^(声音样本|Voice sample)\s*\*?$/i).filter({ visible: true }).first().locator('xpath=ancestor::div[.//input[@type="file"]][1]')
+        await audio.locator('input[type="file"]').setInputFiles({ name: 'voice-sample.wav', mimeType: 'audio/wav', buffer: Buffer.from('RIFFfixture') })
+        await page.getByText('voice-sample.wav', { exact: true }).or(page.getByText('文件 1', { exact: true })).waitFor({ state: 'visible', timeout: 8000 })
+        await page.locator('[data-param-group-id="voice-clone-options"] [data-panel-trigger-button]').click()
+        await page.getByText(/^(录音原文（可选）|Transcript \(optional\))$/i).first().waitFor({ state: 'visible', timeout: 8000 })
+        await page.keyboard.press('Escape')
+        await settlePage(page)
+      },
+    },
     { id: 'generation-empty', surface: '生成', name: '生成-空态', setup: setupGeneration },
     {
       id: 'generation-model-panel',

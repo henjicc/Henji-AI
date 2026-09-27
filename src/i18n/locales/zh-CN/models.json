@@ -45,6 +45,7 @@
     "motion-control": "动作控制",
     "video-to-video": "视频编辑",
     "video-extension": "视频延长",
-    "text-to-audio": "语音合成"
+    "text-to-audio": "语音合成",
+    "voice-clone": "语音克隆"
   }
 }

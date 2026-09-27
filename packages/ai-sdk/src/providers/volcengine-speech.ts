@@ -6,6 +6,7 @@ import { fromBase64 } from '../upload/base64'
 import { audioBytesToDataUri } from './audio-data'
 import { isJsonObject, normalizeEndpoint } from './helpers'
 import { fetchProvider } from './provider-fetch'
+import { executeVoiceClone, pollVoiceClone } from './volcengine-voice-clone'
 
 const BASE_URL = 'https://openspeech.bytedance.com'
 const ENDPOINT = '/api/v3/tts/unidirectional'
@@ -67,6 +68,7 @@ function consumeFrames(buffer: string, audio: Uint8Array[], usage: { textWords?:
 }
 
 export async function execute(input: ProviderExecutionInput): Promise<ProviderExecutionResult> {
+  if (input.route === '/api/v3/tts/voice_clone') return executeVoiceClone(input)
   if (!isJsonObject(input.body) || !isJsonObject(input.body.req_params)) {
     throw new AiRuntimeError('invalid_request', 'Volcengine speech requires req_params')
   }
@@ -119,10 +121,13 @@ export async function execute(input: ProviderExecutionInput): Promise<ProviderEx
   return {
     status: 'completed',
     url: audioBytesToDataUri(joined, 'mp3'),
-    metadata: { byteLength: total, ...(usage.textWords === undefined ? {} : { textWords: usage.textWords }) },
+    metadata: { byteLength: total, ...(usage.textWords === undefined ? {} : { textWords: usage.textWords }),
+      ...(resourceId === 'seed-icl-2.0' && typeof input.body.req_params.speaker === 'string'
+        ? { activatedVoiceId: input.body.req_params.speaker } : {}),
+    },
   }
 }
 
-export async function continuePolling(_input: ProviderContinuePollingInput): Promise<ProviderExecutionResult> {
-  throw new AiRuntimeError('unsupported_provider', 'Volcengine speech uses one HTTP stream')
+export async function continuePolling(input: ProviderContinuePollingInput): Promise<ProviderExecutionResult> {
+  return pollVoiceClone(input)
 }

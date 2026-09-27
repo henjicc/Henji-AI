@@ -1,6 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { UI_FIELD_CONTROL_HEIGHT_SM_CLASS, UiButton, UiEmpty, UiInput, UiOptionButton } from '@/components/ui'
+import { UI_FIELD_CONTROL_HEIGHT_SM_CLASS, UiButton, UiEmpty, UiError, UiLoading, UiInput, UiOptionButton } from '@/components/ui'
+import AudioPlayer from '@/components/AudioPlayer'
+import { toFetchableMediaUrl, isLikelyLocalImagePath } from '@/services/imageSource'
+import { GenerationService } from '@/core/services/GenerationService'
 import {
   buildVoiceFeatureTags,
   resolveVoiceFeatureTags,
@@ -11,7 +14,7 @@ import {
 import { getI18nText, type I18nText } from '@/core/types'
 import { createLogger } from '@/core/logging'
 import type { VoiceSelectorConfig } from '@/core/types/PanelTypes'
-import { voiceLibraryService } from '@/services/voiceLibrary/VoiceLibraryService'
+import { voiceLibraryService, type VoiceLibraryRecord } from '@/services/voiceLibrary/VoiceLibraryService'
 import { rememberTtsVoiceNames } from '@/services/voiceLibrary/ttsVoiceNameCache'
 import { aiListTtsVoices } from '@/commands/aiRuntime'
 
@@ -192,6 +195,11 @@ export const VoiceSelectorPanel: React.FC<VoiceSelectorPanelProps> = ({
   const [keyword, setKeyword] = useState('')
   const [hoveredVoiceId, setHoveredVoiceId] = useState<string | null>(null)
   const [customVoices, setCustomVoices] = useState<VoiceSelectorConfig['voices']>([])
+  const [libraryRecords, setLibraryRecords] = useState<VoiceLibraryRecord[]>([])
+  const [libraryError, setLibraryError] = useState('')
+  const [refreshingVoiceId, setRefreshingVoiceId] = useState<string | null>(null)
+  const [previewVoiceId, setPreviewVoiceId] = useState<string | null>(null)
+  const refreshController = useRef<AbortController | null>(null)
   const [remoteVoices, setRemoteVoices] = useState<VoiceSelectorConfig['voices']>([])
   const remoteRequestRef = useRef(0)
   const [remoteStatus, setRemoteStatus] = useState<'idle' | 'loading' | 'ready' | 'failed'>('idle')
@@ -244,6 +252,7 @@ export const VoiceSelectorPanel: React.FC<VoiceSelectorPanelProps> = ({
     const loadCustomVoices = async (): Promise<void> => {
       if (!voiceLibraryScope?.providerId) {
         setCustomVoices([])
+        setLibraryRecords([])
         return
       }
       const records = await voiceLibraryService.listVoices({
@@ -253,6 +262,8 @@ export const VoiceSelectorPanel: React.FC<VoiceSelectorPanelProps> = ({
       if (cancelled) {
         return
       }
+      setLibraryRecords(records)
+      setLibraryError('')
       const mapped: VoiceSelectorConfig['voices'] = records.map((item) => ({
         id: item.voiceId,
         name: item.voiceName,
@@ -267,14 +278,19 @@ export const VoiceSelectorPanel: React.FC<VoiceSelectorPanelProps> = ({
       setCustomVoices(mapped)
     }
 
-    loadCustomVoices().catch((error) => {
-      if (import.meta.env.DEV) {
+    const reload = (): void => { void loadCustomVoices().catch((error) => {
+      if (!cancelled) {
         logger.warn('load custom voices failed', error)
+        setLibraryError(error instanceof Error ? error.message : '音色库读取失败')
       }
-    })
+    }) }
+    reload()
+    const unsubscribe = voiceLibraryService.subscribe(reload)
 
     return () => {
       cancelled = true
+      unsubscribe()
+      refreshController.current?.abort()
     }
   }, [voiceLibraryScope?.modelId, voiceLibraryScope?.providerId])
 
@@ -393,10 +409,36 @@ export const VoiceSelectorPanel: React.FC<VoiceSelectorPanelProps> = ({
         const fallback = configuredVoices[0]?.id ?? ''
         onChange(fallback)
       }
+    } catch (error) {
+      logger.warn('remove local voice failed', error)
+      setLibraryError(error instanceof Error ? error.message : '移除音色失败')
     } finally {
       setDeletingVoiceId(null)
     }
   }
+
+  const refreshVoice = async (record: VoiceLibraryRecord): Promise<void> => {
+    if (!record.taskId || !record.modelId || refreshingVoiceId) return
+    const controller = new AbortController()
+    refreshController.current = controller
+    setRefreshingVoiceId(record.voiceId)
+    setLibraryError('')
+    try {
+      await GenerationService.getInstance().continuePolling(record.modelId, record.taskId, {}, undefined, { signal: controller.signal })
+    } catch (error) {
+      if (!controller.signal.aborted) {
+        logger.warn('refresh cloned voice failed', error)
+        setLibraryError(error instanceof Error ? error.message : '音色状态查询失败，请稍后重试')
+      }
+    } finally {
+      if (refreshController.current === controller) {
+        refreshController.current = null
+        setRefreshingVoiceId(null)
+      }
+    }
+  }
+
+  const preview = libraryRecords.find(item => item.voiceId === previewVoiceId)?.previewPath
 
   return (
     <div
@@ -481,8 +523,9 @@ export const VoiceSelectorPanel: React.FC<VoiceSelectorPanelProps> = ({
         </div>
       )}
 
-      {remoteStatus === 'loading' && <p className="mb-2 text-xs text-text-muted">正在读取账号音色…</p>}
-      {remoteStatus === 'failed' && <p className="mb-2 text-xs text-text-muted">{remoteError}</p>}
+      {remoteStatus === 'loading' && <UiLoading size="xs" message="正在读取账号音色…" />}
+      {remoteStatus === 'failed' && <UiError size="xs" message={remoteError} onRetry={() => void loadRemoteVoices()} />}
+      {libraryError && <UiError size="xs" message={libraryError} />}
       {config?.customIdHint && voices.length === 0 && remoteStatus !== 'loading' && (
         <p className="mb-2 text-xs text-text-muted">{config.customIdHint}</p>
       )}
@@ -493,13 +536,18 @@ export const VoiceSelectorPanel: React.FC<VoiceSelectorPanelProps> = ({
             {filteredVoices.map((voice) => {
               const active = value === voice.id
               const hasDescription = voice.description.length > 0
-              const canDelete = voice.isCustom && voiceLibraryScope?.allowDelete === true
+              const record = libraryRecords.find(item => item.voiceId === voice.id)
+              const canDelete = Boolean(record) && voice.isCustom && voiceLibraryScope?.allowDelete === true
+              const training = record?.status === 'training'
+              const failed = record?.status === 'failed'
+              const expired = !record?.activated && Boolean(record?.expiresAt && Date.parse(record.expiresAt) <= Date.now())
               return (
                 <div key={voice.id} className="relative">
                   <UiOptionButton
                     type="button"
                     variant="menu"
                     active={active}
+                    disabled={training || failed || expired}
                     onClick={() => onChange(voice.id)}
                     onMouseEnter={() => setHoveredVoiceId(voice.id)}
                     onMouseLeave={() => setHoveredVoiceId(null)}
@@ -511,6 +559,7 @@ export const VoiceSelectorPanel: React.FC<VoiceSelectorPanelProps> = ({
                     }`}
                   >
                     <span className="w-full truncate text-left text-sm leading-tight">{voice.name}</span>
+                    {(training || failed || expired) && <span className="text-xs text-text-muted">{failed ? '训练失败或音色已失效' : expired ? '有效期已过，请刷新确认' : '等待训练结果'}</span>}
                     {hasDescription && (
                       <HoverScrollText
                         text={voice.description}
@@ -524,6 +573,7 @@ export const VoiceSelectorPanel: React.FC<VoiceSelectorPanelProps> = ({
                       variant="ghost"
                       size="sm"
                       disabled={deletingVoiceId === voice.id}
+                      title="仅从本地列表移除，不删除供应商音色或取消计费"
                       className="absolute right-1 top-1 !h-6 !px-2 text-2xs"
                       onClick={(event) => {
                         event.preventDefault()
@@ -531,9 +581,16 @@ export const VoiceSelectorPanel: React.FC<VoiceSelectorPanelProps> = ({
                         void handleDeleteCustomVoice(voice.id)
                       }}
                     >
-                      删除
+                      移除
                     </UiButton>
                   )}
+                  {record && <div className="flex flex-wrap gap-1">
+                    {record.previewPath && !training && <UiButton type="button" variant="ghost" size="sm" onClick={() => setPreviewVoiceId(previewVoiceId === voice.id ? null : voice.id)}>试听</UiButton>}
+                    {record.taskId && <UiButton type="button" variant="ghost" size="sm" disabled={refreshingVoiceId !== null} onClick={() => void refreshVoice(record)}>
+                      {refreshingVoiceId === voice.id ? '正在查询…' : training ? '查看训练结果' : '刷新状态'}
+                    </UiButton>}
+                    {refreshingVoiceId === voice.id && <UiButton type="button" variant="ghost" size="sm" onClick={() => refreshController.current?.abort()}>停止等待</UiButton>}
+                  </div>}
                 </div>
               )
             })}
@@ -544,6 +601,8 @@ export const VoiceSelectorPanel: React.FC<VoiceSelectorPanelProps> = ({
           )}
         </div>
       </div>
+
+      {preview && <div className="mt-2 shrink-0"><AudioPlayer compact surface="plain" src={toFetchableMediaUrl(preview)} filePath={isLikelyLocalImagePath(preview) ? preview : undefined} /></div>}
 
       {config?.allowCustomId && (
         <div className="mt-3 shrink-0">

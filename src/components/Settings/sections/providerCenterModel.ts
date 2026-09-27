@@ -1,5 +1,6 @@
 import type { LlmModelConfig, LlmProviderConfig } from '@henjicc/ai-sdk'
 import type { Provider } from '@/config/providers'
+import { providerBrandId } from '@/core/config/providerBrands'
 
 export type ProviderCenterCategory =
   | 'image-generation'
@@ -28,6 +29,7 @@ export interface ProviderCenterGroup {
   displayName: string
   credentialId: string
   generationProvider?: Provider
+  generationProviders?: Provider[]
   llmProvider?: LlmProviderConfig
   llmProviderIds: string[]
   models: ProviderCenterModelItem[]
@@ -138,7 +140,28 @@ export function buildProviderCenterGroups(input: BuildProviderCenterGroupsInput)
     })
   }
 
-  return groups
+  const brands = new Map<string, ProviderCenterGroup>()
+  for (const group of groups) {
+    if (!group.generationProvider) { brands.set(group.id, group); continue }
+    const brandId = providerBrandId(group.canonicalProviderId)
+    const key = `provider:${brandId}`
+    const existing = brands.get(key)
+    if (existing) {
+      existing.generationProviders!.push(group.generationProvider)
+      existing.models.push(...group.models)
+      existing.llmProvider ??= group.llmProvider
+      existing.llmProviderIds.push(...group.llmProviderIds)
+      existing.enabled ||= group.enabled
+      if (group.canonicalProviderId === brandId) {
+        existing.generationProvider = group.generationProvider
+        existing.credentialId = group.credentialId
+        existing.displayName = group.displayName
+      }
+    } else {
+      brands.set(key, { ...group, id: key, canonicalProviderId: brandId, generationProviders: [group.generationProvider] })
+    }
+  }
+  return [...brands.values()]
 }
 
 export function countProviderCategories(models: readonly ProviderCenterModelItem[]): Record<string, number> {

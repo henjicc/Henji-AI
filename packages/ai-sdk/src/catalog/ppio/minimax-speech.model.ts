@@ -14,7 +14,7 @@ export const minimaxSpeechModel = defineModel({
     canonicalModelId: 'minimax-speech-2.8',
     provider: 'ppio',
     type: 'audio',
-    tags: ['audio', 'text-to-speech', 'voice-synthesis', 'voice-cloning', 'provider-ppio'],
+    tags: ['audio', 'text-to-speech', 'voice-synthesis', 'voice-cloning', 'voice-clone', 'provider-ppio'],
     polling: {
       interval: 3000,
       maxAttempts: 120,

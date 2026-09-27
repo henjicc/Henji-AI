@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.9.0 - 2026-09-28
+
+- Seed-ICL 2.0 新增 `volcIclMode: 'clone'`：使用 V3 上传录音、自动生成后付费音色编号、训练与按任务恢复查询。音色名称用 `volcCloneName`，音频用 `volcCloneAudio`，统一 `prompt` 为 4–300 字试听文本；完成响应中的 `metadata.clonedVoice` 供宿主持久保存，试听 URL 可为空。
+- 提交网络结果不确定时保留可查询任务，不自动重放训练；已激活或正在训练的预付费槽位禁止覆盖。
+- Seed-TTS / Seed-ICL 2.0 的公开后付费字符估价更新为 ¥3/万字符；首次正式调用后付费复刻音色另收 ¥138 并锁定音色。
+- 迁移：使用非 `S_` 音色进行正式合成时需显式传入 `volcIclActivationConsent: true`，表示已向用户说明首次激活收费。已有预付费 `S_` 音色与语音供应商凭据 ID 保持兼容。消费者应处理克隆成功但无试听 URL 的元数据结果，不能将其视为合成音频。
+
 ## 0.8.0 - 2026-09-27
 
 - TTS 音色参数统一支持选择器；公开 `listTtsVoices` 查询百炼 MiniMax、Qwen Audio 3.1、CosyVoice 3.5 和硅基流动 CosyVoice2 的账号音色。

@@ -6,6 +6,7 @@ import type { GenerateResult, ProgressStatus } from '@/core/providers/base';
 import type { StructuredGenerationOutput } from '@henjicc/ai-sdk';
 import { persistImageLocally } from '@/features/canvas/application/imageData';
 import { extractServerTaskIdFromMetadata } from '@/features/generation/application/taskServerId';
+import { clonedVoiceCompletion } from '@/services/voiceLibrary/clonedVoiceResult';
 
 const logger = createLogger('features.canvas.generation.runGeneration');
 
@@ -225,6 +226,8 @@ export async function resumeCanvasGeneration(
 function toGenerationOutput(result: GenerateResult): CanvasGenerationOutput {
   const outputs = collectOutputs(result);
   if (outputs.length === 0) {
+    const voiceMessage = clonedVoiceCompletion(result.metadata);
+    if (voiceMessage) throw new Error(`${voiceMessage}供应商未返回试听音频，当前节点没有音频输出。`);
     throw new Error('生成结果为空');
   }
 

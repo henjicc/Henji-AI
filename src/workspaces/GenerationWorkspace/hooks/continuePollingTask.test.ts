@@ -74,6 +74,15 @@ function installNativePendingResult(): void {
 }
 
 describe('GenerationWorkspace 缓存续查媒体所有权', () => {
+  it('voice completion without optional preview remains successful and never reads nonexistent media', async () => {
+    mocks.consumePendingResult.mockResolvedValue({ status: 'completed', url: '', metadata: { clonedVoice: { id: 'voice', name: '我的声音', status: 'ready' } } })
+    mocks.normalizeMediaResultForDesktop.mockResolvedValue({ url: '' })
+    const updateTask = vi.fn()
+    await continuePollingTask({ task: createTask(), genericGenerateFailed: '生成失败', notify: vi.fn(), updateTask, updateProgress: vi.fn(), toUserMessage: String })
+    expect(updateTask).toHaveBeenLastCalledWith('task-1', expect.objectContaining({ status: 'success', options: { __completionMessage: expect.stringContaining('我的声音') } }))
+    expect(mocks.getMediaDimensions).not.toHaveBeenCalled()
+    expect(mocks.continuePolling).not.toHaveBeenCalled()
+  })
   beforeEach(() => {
     vi.clearAllMocks()
     installNativePendingResult()

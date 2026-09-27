@@ -13,6 +13,7 @@ import {
   UiSwitch,
 } from '@/components/ui'
 import { API_KEY_PROVIDERS, type ApiKeyProvider } from '@/core/config/providers'
+import { providerServiceLabel } from '@/core/config/providerBrands'
 import { getProviders } from '@/config/providers'
 import type { LlmCredentialMutationDto } from '@/platform/contracts/llmRuntime'
 import type { LlmModelConfig, LlmProviderConfig } from '@henjicc/ai-sdk'
@@ -115,7 +116,7 @@ const ProviderCenterSection = ({ llm }: ProviderCenterSectionProps): JSX.Element
 
   const setProviderEnabled = async (enabled: boolean): Promise<void> => {
     if (!selected) return
-    if (selected.generationProvider) generationVisibility.setProviderEnabled(selected.generationProvider.id, enabled)
+    for (const provider of selected.generationProviders ?? []) generationVisibility.setProviderEnabled(provider.id, enabled)
     if (selected.llmProvider) {
       await llm.commitProviderSettings({ ...selected.llmProvider, enabled }, [], { kind: 'unchanged' })
     }
@@ -259,7 +260,7 @@ const ProviderCenterSection = ({ llm }: ProviderCenterSectionProps): JSX.Element
               <ProviderCredentialGuide
                 providerName={selected.displayName}
                 websiteUrl={metadata?.websiteUrl}
-                apiKeyUrl={metadata?.apiKeyUrl ?? (selected.llmProvider?.setup?.kind === 'custom'
+                apiKeyUrl={(selected.generationProviders?.length ?? 0) > 1 ? undefined : metadata?.apiKeyUrl ?? (selected.llmProvider?.setup?.kind === 'custom'
                   ? selected.llmProvider.setup.apiKeyManagementUrl
                   : undefined)}
                 onOpenUrl={(url) => { void openExternal(url) }}
@@ -269,7 +270,24 @@ const ProviderCenterSection = ({ llm }: ProviderCenterSectionProps): JSX.Element
 
           <div className="border-t border-border-dark pt-5">
             <div className={`mb-3 ${UI_TEXT_LABEL_CLASS}`}>{t('providerCenter.apiKey')}</div>
-            {generationCredential || credentialProvider ? (
+            {(selected.generationProviders?.length ?? 0) > 1 ? (
+              <div className="space-y-4">
+                {selected.generationProviders!.map(provider => {
+                  const id = provider.id as ApiKeyProvider
+                  const service = providerServiceLabel(id, currentLanguage.startsWith('en'))
+                  const serviceMetadata = findProviderMetadata(id)
+                  return <div key={id} className="space-y-2">
+                    <div className={UI_TEXT_LABEL_CLASS}>{service}</div>
+                    <ApiKeyInput value={generationKeys.keys[id]} visible={generationKeys.visibility[id]}
+                      onChange={value => generationKeys.updateKey(id, value)}
+                      onToggleVisibility={() => generationKeys.toggleVisibility(id)}
+                      placeholder={t('providerCenter.apiKeyPlaceholder', { provider: service })}
+                      showLabel={t('apiKeys.visibility.show')} hideLabel={t('apiKeys.visibility.hide')} />
+                    <ProviderCredentialGuide providerName={service} apiKeyUrl={serviceMetadata?.apiKeyUrl} onOpenUrl={openExternal} />
+                  </div>
+                })}
+              </div>
+            ) : generationCredential || credentialProvider ? (
               <ApiKeyInput
                 value={credentialValue}
                 visible={credentialVisible}

@@ -50,6 +50,7 @@ export function inferMimeFromPath(filePath: string, mediaKind: MediaKind = 'unkn
     case 'webm': return 'video/webm'
     case 'mov': return 'video/quicktime'
     case 'mp3': return 'audio/mpeg'
+    case 'aac': return 'audio/aac'
     case 'm4a': return 'audio/mp4'
     case 'wav': return 'audio/wav'
     case 'flac': return 'audio/flac'

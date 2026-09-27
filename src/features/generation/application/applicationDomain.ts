@@ -6,13 +6,15 @@ import { GenerationModelMutationExecutor } from './generationModelMutationExecut
 import { registerGenerationCapabilityHandlers } from './registerGenerationCapabilityHandlers'
 import { listGenerationHistoryCapability } from '@/core/application-control/builtinApplicationCapabilities'
 import { listGenerationHistory } from './generationHistoryCapabilityService'
+import { createVoiceLibraryReflectionRegistration, VoiceLibraryCollectionExecutor } from './voiceLibraryReflection'
 
 export const generationApplicationDomain: ApplicationDomainModule = {
   id: 'generation',
-  entities: () => [...createGenerationReflectionRegistrations(), createGenerationDraftReflectionRegistration()],
+  entities: () => [...createGenerationReflectionRegistrations(), createGenerationDraftReflectionRegistration(), createVoiceLibraryReflectionRegistration()],
   registerExecutors(engine) {
     engine.registerMutationExecutor(new GenerationDraftMutationExecutor())
     engine.registerMutationExecutor(new GenerationModelMutationExecutor())
+    engine.registerCollectionExecutor(new VoiceLibraryCollectionExecutor())
   },
   registerCapabilities(registrar) {
     registerGenerationCapabilityHandlers(registrar)

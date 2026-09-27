@@ -29,6 +29,19 @@ const llmModel: LlmModelConfig = {
 }
 
 describe('providerCenterModel', () => {
+  it('groups Volcengine services without mixing model routing, credentials or hidden state', () => {
+    const [group] = buildProviderCenterGroups({
+      generationProviders: [
+        { ...generation, id: 'volcengine-speech', models: [{ ...generation.models[0], id: 'voice', type: 'audio' }] },
+        { ...generation, id: 'volcengine', name: '火山引擎' },
+      ], llmProviders: [], llmModels: [], hiddenProviders: new Set(['volcengine']), hiddenModels: new Set(),
+    })
+    expect(group.id).toBe('provider:volcengine')
+    expect(group.credentialId).toBe('volcengine')
+    expect(group.generationProviders?.map(provider => provider.id)).toEqual(['volcengine-speech', 'volcengine'])
+    expect(group.models.map(model => [model.providerId, model.enabled])).toEqual([['volcengine-speech', true], ['volcengine', false]])
+    expect(group.enabled).toBe(true)
+  })
   it('把同一预设供应商的生成模型与 LLM 合并到一个凭据槽', () => {
     const [group] = buildProviderCenterGroups({
       generationProviders: [generation], llmProviders: [llmProvider()], llmModels: [llmModel],

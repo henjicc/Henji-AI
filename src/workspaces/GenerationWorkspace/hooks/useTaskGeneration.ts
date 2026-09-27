@@ -1,5 +1,6 @@
 import { createPersistedGenerationTask, awaitGenerationTaskPersistence } from './useTaskHistory'
 import { createLogger } from '@/core/logging'
+import { clonedVoiceCompletion } from '@/services/voiceLibrary/clonedVoiceResult'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { GenerationService } from '@/core/services/GenerationService'
 import { showAlertDialog } from '@/stores/alertDialogStore'
@@ -280,6 +281,11 @@ export function useTaskGeneration({
       const { url, filePath } = normalized
 
       if (!url) {
+        const completion = clonedVoiceCompletion(metadata)
+        if (completion) {
+          await saveUpdate({ status: 'success', progress: 100, options: { ...options, __completionMessage: completion } })
+          return
+        }
         logger.error('[Workspace] 生成响应缺少 URL', { model: task.model, result: resultObj })
         throw new Error(messages.genericGenerateFailed)
       }

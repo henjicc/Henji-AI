@@ -3,6 +3,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { registry } from '@/core/ModelRegistry'
 import { aiCancelTask, aiContinuePolling, aiGenerate } from '@/commands/aiRuntime'
 import { GenerationService } from './GenerationService'
+import { voiceLibraryService } from '@/services/voiceLibrary/VoiceLibraryService'
 
 vi.mock('@/commands/aiRuntime', () => ({
   aiCancelTask: vi.fn(async () => undefined), aiGenerate: vi.fn(), aiContinuePolling: vi.fn(),
@@ -57,4 +58,15 @@ it('正常结束后信号不再取消已完成请求', async () => {
   await service.generate('cancel-fixture', { prompt: 'test' }, undefined, { requestId: 'completed', signal: controller.signal })
   controller.abort()
   expect(aiCancelTask).not.toHaveBeenCalled()
+})
+
+it('仅将供应商确认的训练失败写回音色库，网络错误仍可重试', async () => {
+  const save = vi.spyOn(voiceLibraryService, 'markTaskFailed').mockResolvedValue(undefined)
+  vi.mocked(aiContinuePolling).mockRejectedValueOnce(new Error('[voice_training_failed] 训练失败'))
+  await expect(service.continuePolling('cancel-fixture', 'voice-task')).rejects.toThrow('训练失败')
+  expect(save).toHaveBeenCalledWith('voice-task')
+  save.mockClear()
+  vi.mocked(aiContinuePolling).mockRejectedValueOnce(new Error('网络暂不可用'))
+  await expect(service.continuePolling('cancel-fixture', 'voice-task')).rejects.toThrow('网络暂不可用')
+  expect(save).not.toHaveBeenCalled()
 })

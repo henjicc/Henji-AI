@@ -85,6 +85,7 @@ export const TTS_VOICE_SELECTORS: Record<string, VoiceSelectorConfig> = {
     voices: [],
     allowSearch: true,
     allowCustomId: true,
-    customIdHint: '请先在火山引擎创建复刻音色；当前新版接口只支持按已知 ID 查询状态',
+    customIdHint: '切换到“克隆声音”模式创建音色，完成后会自动加入此列表',
+    voiceLibrary: { providerId: 'volcengine-speech', modelId: 'volcengine-seed-icl-2.0', allowDelete: true },
   },
 }
