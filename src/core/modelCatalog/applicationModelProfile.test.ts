@@ -9,6 +9,7 @@ import {
   type RuntimeContext,
 } from '@henjicc/ai-sdk'
 import falImageEditTools from '@henjicc/ai-sdk/tool-packs/fal-image-edit-tools'
+import { API_KEY_PROVIDER_IDS, API_KEY_PROVIDERS } from '@/core/config/providers'
 
 import {
   assertHenjiGenerationSelection,
@@ -51,6 +52,8 @@ describe('Henji-AI 显式模型选择', () => {
     )
     expect(new Set(HENJI_GENERATION_PROVIDER_PACKS.flatMap((pack) => pack.providers.map((item) => item.id))))
       .toEqual(new Set(HENJI_GENERATION_PROVIDER_IDS))
+    expect(new Set(API_KEY_PROVIDER_IDS)).toEqual(new Set(HENJI_GENERATION_PROVIDER_IDS))
+    expect(API_KEY_PROVIDERS.every(provider => provider.websiteUrl && provider.apiKeyUrl)).toBe(true)
     const modelWithAlias = HENJI_GENERATION_MODELS.find((model) => (model.meta.aliases?.length ?? 0) > 0)
     expect(modelWithAlias).toBeTruthy()
     const alias = modelWithAlias?.meta.aliases?.[0]

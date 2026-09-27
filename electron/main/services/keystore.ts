@@ -20,7 +20,10 @@ const KEYSTORE_FILE_NAME = 'provider-keys.enc.json'
  */
 export const PROVIDER_KEY_NAMESPACE = 'provider'
 export const AI_KEY_NAMESPACE = PROVIDER_KEY_NAMESPACE
-export const KNOWN_AI_PROVIDER_IDS = ['ppio', 'fal', 'kie', 'apimart', 'bailian', 'volcengine', 'modelscope', 'grsai'] as const
+export const KNOWN_AI_PROVIDER_IDS = [
+  'ppio', 'fal', 'kie', 'apimart', 'bailian', 'volcengine', 'modelscope', 'grsai',
+  'siliconflow', 'volcengine-speech',
+] as const
 export const LLM_KEY_NAMESPACE = PROVIDER_KEY_NAMESPACE
 
 const LEGACY_AI_KEY_NAMESPACE = 'ai'

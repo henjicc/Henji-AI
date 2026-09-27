@@ -120,6 +120,8 @@ describe('ModelPickerList 供应商横向导航', () => {
     expect(getProviderDisplayName('PPIO', 'zh-CN')).toBe('派欧云');
     expect(getProviderDisplayName('bailian', 'zh-CN')).toBe('百炼');
     expect(getProviderDisplayName('bailian', 'en-US')).toBe('Alibaba Cloud Model Studio');
+    expect(getProviderDisplayName('siliconflow', 'zh-CN')).toBe('硅基流动');
+    expect(getProviderDisplayName('volcengine-speech', 'en-US')).toBe('Volcengine Speech');
     expect(getProviderDisplayName('custom-provider', 'zh-CN')).toBe('custom-provider');
   });
 });
